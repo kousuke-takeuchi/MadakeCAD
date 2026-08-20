@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, provide, reactive } from "vue";
 import { useFileActions } from "../composables/fileActions";
 import { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
+import { useUiStore } from "../stores/ui";
 import CanvasView from "./CanvasView.vue";
 import CommandBar from "./CommandBar.vue";
 import FileTabs from "./FileTabs.vue";
@@ -15,6 +16,7 @@ import SymbolPickerDialog from "./SymbolPickerDialog.vue";
 import TitleBar from "./TitleBar.vue";
 
 const store = useDocumentStore();
+const ui = useUiStore();
 const controller = reactive(new EditorController(store)) as EditorController;
 provide("controller", controller);
 const files = useFileActions();
@@ -25,6 +27,11 @@ function isEditableTarget(ev: KeyboardEvent) {
 }
 
 async function onKeyDown(ev: KeyboardEvent) {
+  if (ev.key === "Escape" && ui.symbolPickerOpen) {
+    ui.symbolPickerOpen = false;
+    ev.preventDefault();
+    return;
+  }
   if (isEditableTarget(ev)) return;
   if (await controller.onKeyDown(ev)) ev.preventDefault();
 }
