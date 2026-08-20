@@ -174,7 +174,23 @@ export interface Net {
   wire_ids: string[];
 }
 
-export const ipc = {
+interface Ipc {
+  getProject(): Promise<ProjectSnapshot>;
+  listSymbols(): Promise<SymbolDef[]>;
+  executeCommand(command: Command): Promise<Patch>;
+  undo(): Promise<Patch | null>;
+  redo(): Promise<Patch | null>;
+  saveProject(path: string): Promise<void>;
+  loadProject(path: string): Promise<Patch>;
+  newProject(name: string): Promise<Patch>;
+  getNetlist(sheetId: string): Promise<Net[]>;
+  exportSvg(sheetId: string, path: string): Promise<void>;
+  exportBom(path: string): Promise<void>;
+  exportWireList(path: string): Promise<void>;
+  onPatch(handler: (patch: Patch) => void): Promise<UnlistenFn>;
+}
+
+const tauriIpc: Ipc = {
   getProject: () => invoke<ProjectSnapshot>("get_project"),
   listSymbols: () => invoke<SymbolDef[]>("list_symbols"),
   executeCommand: (command: Command) => invoke<Patch>("execute_command", { command }),
@@ -190,3 +206,60 @@ export const ipc = {
   onPatch: (handler: (patch: Patch) => void): Promise<UnlistenFn> =>
     listen<Patch>("doc:patch", (e) => handler(e.payload)),
 };
+
+// Tauri外(ブラウザでのUI開発・E2E検証)では、起動中のMadakeCADのLink APIに接続する。
+const API_BASE = "http://127.0.0.1:9310/api/v1";
+
+async function http<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  });
+  if (!res.ok) throw new Error(`Link API ${res.status}: ${await res.text()}`);
+  return (await res.json()) as T;
+}
+
+const httpIpc: Ipc = {
+  getProject: () => http<ProjectSnapshot>("/project"),
+  listSymbols: () => http<SymbolDef[]>("/symbols"),
+  executeCommand: async (command) => {
+    const patches = await http<Patch[]>("/commands", {
+      method: "POST",
+      body: JSON.stringify([command]),
+    });
+    return patches[0];
+  },
+  undo: () => http<Patch | null>("/undo", { method: "POST", body: "{}" }),
+  redo: () => http<Patch | null>("/redo", { method: "POST", body: "{}" }),
+  saveProject: async (path) => {
+    await http("/save", { method: "POST", body: JSON.stringify({ path }) });
+  },
+  loadProject: (path) => http<Patch>("/load", { method: "POST", body: JSON.stringify({ path }) }),
+  newProject: () => Promise.reject(new Error("browser mode: not supported")),
+  getNetlist: (sheetId) => http<Net[]>(`/netlist?sheet_id=${sheetId}`),
+  exportSvg: async (sheetId, path) => {
+    await http("/export/svg", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
+  },
+  exportBom: async (path) => {
+    await http("/export/bom", { method: "POST", body: JSON.stringify({ path }) });
+  },
+  exportWireList: async (path) => {
+    await http("/export/wire-list", { method: "POST", body: JSON.stringify({ path }) });
+  },
+  onPatch: (handler) => {
+    const es = new EventSource(`${API_BASE}/events`);
+    es.addEventListener("patch", (e) => {
+      try {
+        handler(JSON.parse((e as MessageEvent).data) as Patch);
+      } catch {
+        // 不正なイベントは無視
+      }
+    });
+    return Promise.resolve(() => es.close());
+  },
+};
+
+/** Tauri内で動作しているか。falseならLink API経由(ブラウザ検証モード)。 */
+export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+export const ipc: Ipc = inTauri ? tauriIpc : httpIpc;
