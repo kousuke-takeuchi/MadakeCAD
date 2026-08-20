@@ -1,0 +1,33 @@
+//! madake-core: MadakeCADのドキュメントモデルとCommandエンジン。
+//!
+//! UIにもTauriにも依存しない。全ての編集はシリアライズ可能な [`command::Command`] として
+//! [`command::Engine`] で実行され、UI(Tauri IPC)とAI(MCPサーバー)が同じAPIを共有する。
+
+pub mod command;
+pub mod geometry;
+pub mod io;
+pub mod model;
+pub mod symbol;
+
+pub use command::{Command, Engine, Patch, PatchOp};
+pub use geometry::Point;
+pub use model::*;
+pub use symbol::{builtin_symbols, PinDef, Primitive, SymbolDef};
+
+#[derive(Debug, thiserror::Error)]
+pub enum CoreError {
+    #[error("sheet not found: {0}")]
+    SheetNotFound(uuid::Uuid),
+    #[error("entity not found: {0}")]
+    EntityNotFound(uuid::Uuid),
+    #[error("symbol not found in library: {0}")]
+    SymbolNotFound(String),
+    #[error("invalid command: {0}")]
+    InvalidCommand(String),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("serialization error: {0}")]
+    Serde(#[from] serde_json::Error),
+}
+
+pub type Result<T> = std::result::Result<T, CoreError>;
