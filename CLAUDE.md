@@ -22,6 +22,7 @@ UI操作/MCPツール → Command(JSON) → Engine(madake-core) → Patch(JSON) 
 
 - `src-tauri/crates/madake-core` — ドキュメントモデル、Commandエンジン(undo/redo)、JISシンボルライブラリ、ファイルIO。UI非依存。ロジックは原則ここに置く
 - `src-tauri/crates/madake-mcp` — 内蔵MCPサーバー(rmcp 3.x / Streamable HTTP、127.0.0.1:9310/mcp)。`SharedDoc`がUIとMCP共通の編集入口
+- `src-tauri/crates/madake-cli` — `madake` コマンド(bin名`madake`)。Link APIを叩くだけの薄いクライアントで、ロジックは持たない
 - `src-tauri/src` — Tauri本体(IPCハンドラ、MCP起動、patchのwebview転送)
 - `src/` — Vue 3 + TypeScript + Pinia。図面キャンバスはCanvas2D自作レンダラ(SVG/WebGL不使用)
 
@@ -32,6 +33,19 @@ npm run tauri dev                 # アプリ起動(vite + cargo)
 cd src-tauri && cargo test        # Rustテスト(コアはここに集中)
 npx vue-tsc --noEmit              # フロント型チェック
 ```
+
+ターミナルから起動中のアプリを操作する`madake` CLI(廃止したコマンドラインUIの代替):
+
+```bash
+cargo run -p madake-cli -- status                    # 接続確認+概要 (cargo install --path crates/madake-cli で madake として常用)
+cargo run -p madake-cli -- netlist [--sheet <ID>]
+cargo run -p madake-cli -- export svg|bom|wire-list <path> [--sheet <ID>]
+cargo run -p madake-cli -- save|open <path.mdkproj>
+cargo run -p madake-cli -- exec <commands.json>      # Command配列JSON → POST /api/v1/commands
+cargo run -p madake-cli -- undo|redo
+```
+
+共通オプション`--port`(既定9310)/`--json`(生JSON)。使い方の詳細は`README.md`。
 
 Rustは`~/.cargo/bin`にある(rustup)。PATHに無ければ `export PATH="$HOME/.cargo/bin:$PATH"`。
 

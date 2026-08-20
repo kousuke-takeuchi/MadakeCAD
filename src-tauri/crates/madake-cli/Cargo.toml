@@ -1,0 +1,19 @@
+[package]
+name = "madake-cli"
+version = "0.1.0"
+edition = "2021"
+description = "madake - MadakeCADのターミナルクライアント (Link API シンクライアント)"
+
+[lib]
+name = "madake_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "madake"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json"] }
+serde = { workspace = true }
+serde_json = { workspace = true }

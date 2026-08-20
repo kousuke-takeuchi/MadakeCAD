@@ -11,7 +11,8 @@ UI操作/MCPツール → Command(JSON) → madake-core → patch(JSON) → UI�
 ```
 
 - `src-tauri/crates/madake-core` — ドキュメントモデル、Commandエンジン(undo/redo)、シンボルライブラリ、ファイルIO
-- `src-tauri/crates/madake-mcp` — 内蔵MCPサーバー(rmcp / Streamable HTTP)
+- `src-tauri/crates/madake-mcp` — 内蔵MCPサーバー(rmcp / Streamable HTTP)とLink API(/api/v1)
+- `src-tauri/crates/madake-cli` — `madake` コマンド(Link APIのターミナルクライアント)
 - `src-tauri/src` — Tauri本体(IPCハンドラ、MCP起動、patch転送)
 - `src/` — Vue 3 + TypeScript フロントエンド(現在は仮画面。UIデザインはPencilで作成中)
 
@@ -38,6 +39,36 @@ cd src-tauri && cargo test
 - `place_symbol` / `draw_wire` — 配置・配線
 - `execute_commands` — 任意コマンド列(シート追加、表題欄設定、移動、削除など)
 - `undo` / `redo`
+
+## madake CLI (ターミナル)
+
+起動中のアプリにLink API(`http://127.0.0.1:9310/api/v1`)で接続する薄いクライアント。編集系は必ずCommandエンジンを通るので、CLIからの変更もundo/redoでき、画面に即反映される。
+
+```bash
+cd src-tauri && cargo install --path crates/madake-cli   # madake がPATHに入る
+# または開発中は: cargo run -p madake-cli -- <サブコマンド>
+```
+
+```bash
+madake status                       # 接続確認 + 図面の概要
+madake project                      # シート一覧・電線品番
+madake netlist [--sheet <シートID>]  # ネットリスト
+madake export svg|bom|wire-list <出力パス> [--sheet <シートID>]  # --sheetはsvgのみ
+madake save <path.mdkproj>          # 保存
+madake open <path.mdkproj>          # 読み込み
+madake exec <commands.json>         # Command配列を実行(Commandエンジン経由)
+madake undo / madake redo
+```
+
+共通オプション: `--port <番号>`(既定9310。`MADAKE_MCP_PORT`で起動した場合に指定)、`--json`(整形せず生JSONを出力。jq等との連携用)。
+
+`exec`に渡すJSONは`Command`の配列。例:
+
+```json
+[{ "type": "add_sheet", "name": "動力系統", "size": "A3", "orientation": "Landscape" }]
+```
+
+アプリ未起動時は「MadakeCADアプリが起動していません」と表示して終了コード1を返す。
 
 ## 保存形式
 
