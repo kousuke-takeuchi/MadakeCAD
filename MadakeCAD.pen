@@ -6,13 +6,4427 @@
       "id": "bi8Au",
       "x": 0,
       "y": 0,
-      "name": "Frame",
+      "name": "メイン画面 - エディタ",
       "clip": true,
-      "width": 800,
-      "height": 600,
-      "fill": "#FFFFFF",
-      "layout": "none"
+      "width": 1440,
+      "height": 900,
+      "fill": "$ribbon-bg",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "QTqTk",
+          "name": "タイトルバー",
+          "width": "fill_container",
+          "height": 34,
+          "fill": "$tb-bg",
+          "gap": 2,
+          "padding": [
+            0,
+            8
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "b4xSyb",
+              "name": "アプリロゴ",
+              "width": 26,
+              "height": 22,
+              "fill": "#C0392B",
+              "cornerRadius": 3,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "m19qAZ",
+                  "name": "ロゴ文字",
+                  "fill": "#FFFFFF",
+                  "content": "M",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "800"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "hnQVw",
+              "name": "QAT余白1",
+              "width": 8,
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "R9Kp4L",
+              "name": "QAT file-plus",
+              "width": 26,
+              "height": 24,
+              "cornerRadius": 3,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "o2ynK",
+                  "name": "QATアイコン file-plus",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "file-plus",
+                  "library": "lucide",
+                  "fill": "$tb-text"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Mx8zZ",
+              "name": "QAT folder-open",
+              "width": 26,
+              "height": 24,
+              "cornerRadius": 3,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Snq5x",
+                  "name": "QATアイコン folder-open",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "folder-open",
+                  "library": "lucide",
+                  "fill": "$tb-text"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "JP2JV",
+              "name": "QAT save",
+              "width": 26,
+              "height": 24,
+              "cornerRadius": 3,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "vMyC6",
+                  "name": "QATアイコン save",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "save",
+                  "library": "lucide",
+                  "fill": "$tb-text"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Z6wUq",
+              "name": "QAT printer",
+              "width": 26,
+              "height": 24,
+              "cornerRadius": 3,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "s86VU",
+                  "name": "QATアイコン printer",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "printer",
+                  "library": "lucide",
+                  "fill": "$tb-text"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "WR1LG",
+              "name": "QAT undo-2",
+              "width": 26,
+              "height": 24,
+              "cornerRadius": 3,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Efz0k",
+                  "name": "QATアイコン undo-2",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "undo-2",
+                  "library": "lucide",
+                  "fill": "$tb-text"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "nPh4v",
+              "name": "QAT redo-2",
+              "width": 26,
+              "height": 24,
+              "cornerRadius": 3,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "xGvTD",
+                  "name": "QATアイコン redo-2",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "redo-2",
+                  "library": "lucide",
+                  "fill": "$tb-text"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "p3umD",
+              "name": "QAT余白2",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "text",
+              "id": "Hj3H2",
+              "name": "文書名",
+              "fill": "$tb-text",
+              "content": "MadakeCAD - [TB1_前部ボックス.mdkproj]",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "oYOKs",
+              "name": "QAT余白3",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "OwCe3",
+              "name": "窓 minus",
+              "width": 30,
+              "height": 24,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Zr5Ac",
+                  "name": "窓アイコン minus",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "minus",
+                  "library": "lucide",
+                  "fill": "$tb-text"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "bnh7j",
+              "name": "窓 square",
+              "width": 30,
+              "height": 24,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "aaNGg",
+                  "name": "窓アイコン square",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "square",
+                  "library": "lucide",
+                  "fill": "$tb-text"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "q8tEcT",
+              "name": "窓 x",
+              "width": 30,
+              "height": 24,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "DIpMz",
+                  "name": "窓アイコン x",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "$tb-text"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "KYQol",
+          "name": "リボンタブ行",
+          "width": "fill_container",
+          "height": 28,
+          "fill": "$ribbon-strip",
+          "padding": [
+            0,
+            10
+          ],
+          "alignItems": "end",
+          "children": [
+            {
+              "type": "frame",
+              "id": "zRcWU",
+              "name": "Rタブ ホーム",
+              "fill": "#00000000",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "padding": [
+                5,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ol1QB",
+                  "name": "Rタブ名 ホーム",
+                  "fill": "$ui-text",
+                  "content": "ホーム",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "V6NwY",
+              "name": "Rタブ プロジェクト",
+              "fill": "#00000000",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "padding": [
+                5,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "JhPIS",
+                  "name": "Rタブ名 プロジェクト",
+                  "fill": "$ui-text",
+                  "content": "プロジェクト",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "G2dEX",
+              "name": "Rタブ 回路図",
+              "fill": "$ribbon-bg",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "padding": [
+                5,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Sw3m2",
+                  "name": "Rタブ名 回路図",
+                  "fill": "$acad-blue",
+                  "content": "回路図",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "700"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "A3VrIH",
+              "name": "Rタブ パネル",
+              "fill": "#00000000",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "padding": [
+                5,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "SgHyu",
+                  "name": "Rタブ名 パネル",
+                  "fill": "$ui-text",
+                  "content": "パネル",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "xs6VA",
+              "name": "Rタブ レポート",
+              "fill": "#00000000",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "padding": [
+                5,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "X3LDEY",
+                  "name": "Rタブ名 レポート",
+                  "fill": "$ui-text",
+                  "content": "レポート",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Gx8o6",
+              "name": "Rタブ 読み込み/書き出し",
+              "fill": "#00000000",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "padding": [
+                5,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "yoYh1",
+                  "name": "Rタブ名 読み込み/書き出し",
+                  "fill": "$ui-text",
+                  "content": "読み込み/書き出し",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "q8NDw",
+              "name": "Rタブ 表示",
+              "fill": "#00000000",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "padding": [
+                5,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "rHSTx",
+                  "name": "Rタブ名 表示",
+                  "fill": "$ui-text",
+                  "content": "表示",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "YRlEJ",
+              "name": "Rタブ 管理",
+              "fill": "#00000000",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "padding": [
+                5,
+                13
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "MUda3",
+                  "name": "Rタブ名 管理",
+                  "fill": "$ui-text",
+                  "content": "管理",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "QIcVW",
+          "name": "リボン本体",
+          "width": "fill_container",
+          "height": 96,
+          "fill": "$ribbon-bg",
+          "stroke": "$ribbon-line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "padding": [
+            4,
+            6,
+            2,
+            6
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "t6l9Vi",
+              "name": "Rグループ 配線",
+              "height": "fill_container",
+              "layout": "vertical",
+              "padding": [
+                2,
+                4,
+                0,
+                4
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "c6bfEA",
+                  "name": "Rグループ内容 配線",
+                  "height": "fill_container",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Ln2LH",
+                      "name": "R大 配線",
+                      "fill": "$sel-blue",
+                      "cornerRadius": 3,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [
+                        6,
+                        7
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "JoM2h",
+                          "name": "R大アイコン 配線",
+                          "width": 26,
+                          "height": 26,
+                          "icon": "route",
+                          "library": "lucide",
+                          "fill": "#C0392B"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PZhGs",
+                          "name": "R大名 配線",
+                          "fill": "$ui-text",
+                          "content": "配線",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "z0v7RT",
+                      "name": "R小列 配線",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "padding": [
+                        3,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "j5ersR",
+                          "name": "R小 複数母線",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "KByoY",
+                              "name": "R小アイコン 複数母線",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "align-justify",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "h5HsQ",
+                              "name": "R小名 複数母線",
+                              "fill": "$ui-text",
+                              "content": "複数母線",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "OEeWw",
+                          "name": "R小 線番挿入",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "b2K9A",
+                              "name": "R小アイコン 線番挿入",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "hash",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "jv3ps",
+                              "name": "R小名 線番挿入",
+                              "fill": "$ui-text",
+                              "content": "線番挿入",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "e0OQPO",
+                          "name": "R小 信号矢印",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "k5bub",
+                              "name": "R小アイコン 信号矢印",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "move-right",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "FwgWp",
+                              "name": "R小名 信号矢印",
+                              "fill": "$ui-text",
+                              "content": "信号矢印",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "IOipH",
+                  "name": "Rグループラベル 配線",
+                  "gap": 3,
+                  "padding": [
+                    1,
+                    4
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "PMk0U",
+                      "name": "Rグループ名 配線",
+                      "fill": "$ribbon-label",
+                      "content": "配線",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "wzYfh",
+                      "name": "Rグループ矢印 配線",
+                      "width": 9,
+                      "height": 9,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$ribbon-label"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "rectangle",
+              "id": "lNBvv",
+              "name": "R区切り0",
+              "fill": "$ribbon-line",
+              "width": 1,
+              "height": 82
+            },
+            {
+              "type": "frame",
+              "id": "bnTxx",
+              "name": "Rグループ 部品を挿入",
+              "height": "fill_container",
+              "layout": "vertical",
+              "padding": [
+                2,
+                4,
+                0,
+                4
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "bR0Mm",
+                  "name": "Rグループ内容 部品を挿入",
+                  "height": "fill_container",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "utjbs",
+                      "name": "R大 部品挿入",
+                      "fill": "#00000000",
+                      "cornerRadius": 3,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [
+                        6,
+                        7
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "icoNL",
+                          "name": "R大アイコン 部品挿入",
+                          "width": 26,
+                          "height": 26,
+                          "icon": "cpu",
+                          "library": "lucide",
+                          "fill": "#1F6FBF"
+                        },
+                        {
+                          "type": "text",
+                          "id": "gkKLa",
+                          "name": "R大名 部品挿入",
+                          "fill": "$ui-text",
+                          "content": "部品挿入",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "U9BoDv",
+                      "name": "R小列 部品を挿入",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "padding": [
+                        3,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "ueFil",
+                          "name": "R小 端子台",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "ksqX9",
+                              "name": "R小アイコン 端子台",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "layout-grid",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "yvQNF",
+                              "name": "R小名 端子台",
+                              "fill": "$ui-text",
+                              "content": "端子台",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "rjdgp",
+                          "name": "R小 回路コピー",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "S6NHO",
+                              "name": "R小アイコン 回路コピー",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "copy",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "b4ggc",
+                              "name": "R小名 回路コピー",
+                              "fill": "$ui-text",
+                              "content": "回路コピー",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "B2j1gf",
+                  "name": "Rグループラベル 部品を挿入",
+                  "gap": 3,
+                  "padding": [
+                    1,
+                    4
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "YUeiG",
+                      "name": "Rグループ名 部品を挿入",
+                      "fill": "$ribbon-label",
+                      "content": "部品を挿入",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "lGtTx",
+                      "name": "Rグループ矢印 部品を挿入",
+                      "width": 9,
+                      "height": 9,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$ribbon-label"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "rectangle",
+              "id": "qsSbD",
+              "name": "R区切り1",
+              "fill": "$ribbon-line",
+              "width": 1,
+              "height": 82
+            },
+            {
+              "type": "frame",
+              "id": "Eoi7G",
+              "name": "Rグループ 回路図を編集",
+              "height": "fill_container",
+              "layout": "vertical",
+              "padding": [
+                2,
+                4,
+                0,
+                4
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "zEJEl",
+                  "name": "Rグループ内容 回路図を編集",
+                  "height": "fill_container",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "u0hSG",
+                      "name": "R大 編集",
+                      "fill": "#00000000",
+                      "cornerRadius": 3,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [
+                        6,
+                        7
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "f5FTd",
+                          "name": "R大アイコン 編集",
+                          "width": 26,
+                          "height": 26,
+                          "icon": "pencil",
+                          "library": "lucide",
+                          "fill": "#B7791F"
+                        },
+                        {
+                          "type": "text",
+                          "id": "lVfN3",
+                          "name": "R大名 編集",
+                          "fill": "$ui-text",
+                          "content": "編集",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "I74irt",
+                      "name": "R小列 回路図を編集",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "padding": [
+                        3,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "fBmiY",
+                          "name": "R小 移動",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "KFyJD",
+                              "name": "R小アイコン 移動",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "move",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "S63dFR",
+                              "name": "R小名 移動",
+                              "fill": "$ui-text",
+                              "content": "移動",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "k6xE2e",
+                          "name": "R小 トリム",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "kGmCA",
+                              "name": "R小アイコン トリム",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "scissors",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "d1MZpY",
+                              "name": "R小名 トリム",
+                              "fill": "$ui-text",
+                              "content": "トリム",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "berjl",
+                          "name": "R小 削除",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "jIMKk",
+                              "name": "R小アイコン 削除",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "trash-2",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "py16s",
+                              "name": "R小名 削除",
+                              "fill": "$ui-text",
+                              "content": "削除",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "m0VCj",
+                  "name": "Rグループラベル 回路図を編集",
+                  "gap": 3,
+                  "padding": [
+                    1,
+                    4
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "IodX5",
+                      "name": "Rグループ名 回路図を編集",
+                      "fill": "$ribbon-label",
+                      "content": "回路図を編集",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "wxP54",
+                      "name": "Rグループ矢印 回路図を編集",
+                      "width": 9,
+                      "height": 9,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$ribbon-label"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "rectangle",
+              "id": "fOIAe",
+              "name": "R区切り2",
+              "fill": "$ribbon-line",
+              "width": 1,
+              "height": 82
+            },
+            {
+              "type": "frame",
+              "id": "fCe56",
+              "name": "Rグループ 検証/レポート",
+              "height": "fill_container",
+              "layout": "vertical",
+              "padding": [
+                2,
+                4,
+                0,
+                4
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "f8UtNx",
+                  "name": "Rグループ内容 検証/レポート",
+                  "height": "fill_container",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "QvqAZ",
+                      "name": "R大 検証",
+                      "fill": "#00000000",
+                      "cornerRadius": 3,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [
+                        6,
+                        7
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "yUfMn",
+                          "name": "R大アイコン 検証",
+                          "width": 26,
+                          "height": 26,
+                          "icon": "shield-check",
+                          "library": "lucide",
+                          "fill": "#1F8A4C"
+                        },
+                        {
+                          "type": "text",
+                          "id": "d8RbM",
+                          "name": "R大名 検証",
+                          "fill": "$ui-text",
+                          "content": "検証",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ApKBJ",
+                      "name": "R小列 検証/レポート",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "padding": [
+                        3,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "n1HP6a",
+                          "name": "R小 部品表",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "zsoG8",
+                              "name": "R小アイコン 部品表",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "file-text",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "bcxbY",
+                              "name": "R小名 部品表",
+                              "fill": "$ui-text",
+                              "content": "部品表",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "IqXkq",
+                          "name": "R小 電線リスト",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "eaY8D",
+                              "name": "R小アイコン 電線リスト",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "cable",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "t16mF",
+                              "name": "R小名 電線リスト",
+                              "fill": "$ui-text",
+                              "content": "電線リスト",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "aKJ20",
+                  "name": "Rグループラベル 検証/レポート",
+                  "gap": 3,
+                  "padding": [
+                    1,
+                    4
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "eLDXm",
+                      "name": "Rグループ名 検証/レポート",
+                      "fill": "$ribbon-label",
+                      "content": "検証/レポート",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "eaeNm",
+                      "name": "Rグループ矢印 検証/レポート",
+                      "width": 9,
+                      "height": 9,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$ribbon-label"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "be1R6",
+          "name": "図面タブ行",
+          "width": "fill_container",
+          "height": 26,
+          "fill": "$ribbon-strip",
+          "gap": 2,
+          "padding": [
+            0,
+            6
+          ],
+          "alignItems": "end",
+          "children": [
+            {
+              "type": "frame",
+              "id": "S34kP",
+              "name": "図面タブ スタート",
+              "fill": "#E9ECEF",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "stroke": "$ribbon-line",
+              "strokeWidth": {
+                "top": 1,
+                "right": 1,
+                "left": 1
+              },
+              "gap": 6,
+              "padding": [
+                4,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "RXjGx",
+                  "name": "図面タブ名 スタート",
+                  "fill": "$ui-muted",
+                  "content": "スタート",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "hFnJn",
+              "name": "図面タブ TB1_前部ボックス",
+              "fill": "$model-bg",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "stroke": "$ribbon-line",
+              "gap": 6,
+              "padding": [
+                4,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "m0krd",
+                  "name": "図面タブ名 TB1_前部ボックス",
+                  "fill": "#E8EAEC",
+                  "content": "TB1_前部ボックス",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon",
+                  "id": "L38J7T",
+                  "name": "図面タブ閉 TB1_前部ボックス",
+                  "width": 10,
+                  "height": 10,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "#8A9099"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "fxRHG",
+              "name": "図面タブ TB2_底部ボックス",
+              "fill": "#E9ECEF",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "stroke": "$ribbon-line",
+              "strokeWidth": {
+                "top": 1,
+                "right": 1,
+                "left": 1
+              },
+              "gap": 6,
+              "padding": [
+                4,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "pcvpr",
+                  "name": "図面タブ名 TB2_底部ボックス",
+                  "fill": "$ui-muted",
+                  "content": "TB2_底部ボックス",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ACxRR",
+              "name": "図面タブ 後部",
+              "fill": "#E9ECEF",
+              "cornerRadius": [
+                4,
+                4,
+                0,
+                0
+              ],
+              "stroke": "$ribbon-line",
+              "strokeWidth": {
+                "top": 1,
+                "right": 1,
+                "left": 1
+              },
+              "gap": 6,
+              "padding": [
+                4,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ZGRjf",
+                  "name": "図面タブ名 後部",
+                  "fill": "$ui-muted",
+                  "content": "後部",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "QGGhU",
+              "name": "図面タブ追加",
+              "width": 22,
+              "height": 22,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "OvU1i",
+                  "name": "図面タブ追加アイコン",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "plus",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "g0mB03",
+          "name": "メイン行",
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "vK3zW",
+              "name": "プロジェクトマネージャー",
+              "clip": true,
+              "width": 252,
+              "height": 614,
+              "fill": "$palette-bg",
+              "stroke": "$ribbon-line",
+              "strokeWidth": {
+                "right": 1
+              },
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "sfkX5",
+                  "name": "PMヘッダ",
+                  "width": "fill_container",
+                  "fill": "$palette-head",
+                  "gap": 5,
+                  "padding": [
+                    5,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "eGIrr",
+                      "name": "PMヘッダ名",
+                      "fill": "$ui-text",
+                      "content": "プロジェクト マネージャー",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "a5PJj2",
+                      "name": "PMヘッダ余白",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "icon",
+                      "id": "UDZ2S",
+                      "name": "PMピン",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "pin",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "y10WqS",
+                      "name": "PM閉じる",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "x",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "HORKd",
+                  "name": "PMツールバー",
+                  "width": "fill_container",
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "gap": 3,
+                  "padding": [
+                    4,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ue2VR",
+                      "name": "PMツール folder-plus",
+                      "width": 22,
+                      "height": 20,
+                      "cornerRadius": 2,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "z8YCd",
+                          "name": "PMツールアイコン folder-plus",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "folder-plus",
+                          "library": "lucide",
+                          "fill": "#4A6FA5"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "zkn3Q",
+                      "name": "PMツール folder-open",
+                      "width": 22,
+                      "height": 20,
+                      "cornerRadius": 2,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "Ms2KH",
+                          "name": "PMツールアイコン folder-open",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "folder-open",
+                          "library": "lucide",
+                          "fill": "#4A6FA5"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "eDL3R",
+                      "name": "PMツール refresh-cw",
+                      "width": 22,
+                      "height": 20,
+                      "cornerRadius": 2,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "hj9XY",
+                          "name": "PMツールアイコン refresh-cw",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "refresh-cw",
+                          "library": "lucide",
+                          "fill": "#4A6FA5"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "AMuAb",
+                      "name": "PMツール printer",
+                      "width": 22,
+                      "height": 20,
+                      "cornerRadius": 2,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "nySrt",
+                          "name": "PMツールアイコン printer",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "printer",
+                          "library": "lucide",
+                          "fill": "#4A6FA5"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "T4haa",
+                      "name": "PMツール settings",
+                      "width": 22,
+                      "height": 20,
+                      "cornerRadius": 2,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "yjsE8",
+                          "name": "PMツールアイコン settings",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "settings",
+                          "library": "lucide",
+                          "fill": "#4A6FA5"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "jZebA",
+                  "name": "PMプロジェクト行",
+                  "width": "fill_container",
+                  "gap": 6,
+                  "padding": [
+                    6,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "T4q4TU",
+                      "name": "PMプロジェクト折畳",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "XGDAq",
+                      "name": "PMプロジェクトアイコン",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "folder",
+                      "library": "lucide",
+                      "fill": "#D9A422"
+                    },
+                    {
+                      "type": "text",
+                      "id": "q3W0E",
+                      "name": "PMプロジェクト名",
+                      "fill": "$ui-text",
+                      "content": "***REMOVED***_ROBOT",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "xl3f5",
+                  "name": "PM図面 TB1_前部ボックス.mdkproj",
+                  "width": "fill_container",
+                  "fill": "$sel-blue",
+                  "gap": 6,
+                  "padding": [
+                    3,
+                    9,
+                    3,
+                    28
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "rBQsx",
+                      "name": "PM図面アイコン TB1_前部ボックス.mdkproj",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "file",
+                      "library": "lucide",
+                      "fill": "$acad-blue"
+                    },
+                    {
+                      "type": "text",
+                      "id": "dHzn8",
+                      "name": "PM図面名 TB1_前部ボックス.mdkproj",
+                      "fill": "$ui-text",
+                      "content": "TB1_前部ボックス.mdkproj",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Dxpw2",
+                  "name": "PM図面 TB2_底部ボックス.mdkproj",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "gap": 6,
+                  "padding": [
+                    3,
+                    9,
+                    3,
+                    28
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "Ra7Ja",
+                      "name": "PM図面アイコン TB2_底部ボックス.mdkproj",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "file",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "pqLAt",
+                      "name": "PM図面名 TB2_底部ボックス.mdkproj",
+                      "fill": "$ui-text",
+                      "content": "TB2_底部ボックス.mdkproj",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "iiSxM",
+                  "name": "PM図面 前部.mdkproj",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "gap": 6,
+                  "padding": [
+                    3,
+                    9,
+                    3,
+                    28
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "cN915",
+                      "name": "PM図面アイコン 前部.mdkproj",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "file",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "y4u9x",
+                      "name": "PM図面名 前部.mdkproj",
+                      "fill": "$ui-text",
+                      "content": "前部.mdkproj",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "qcpRh",
+                  "name": "PM図面 底部.mdkproj",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "gap": 6,
+                  "padding": [
+                    3,
+                    9,
+                    3,
+                    28
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "YWkLb",
+                      "name": "PM図面アイコン 底部.mdkproj",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "file",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "nQ3CM",
+                      "name": "PM図面名 底部.mdkproj",
+                      "fill": "$ui-text",
+                      "content": "底部.mdkproj",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Of5KK",
+                  "name": "PM図面 後部.mdkproj",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "gap": 6,
+                  "padding": [
+                    3,
+                    9,
+                    3,
+                    28
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "nnETL",
+                      "name": "PM図面アイコン 後部.mdkproj",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "file",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "g2iTF",
+                      "name": "PM図面名 後部.mdkproj",
+                      "fill": "$ui-text",
+                      "content": "後部.mdkproj",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "J3gBR",
+                  "name": "PM余白",
+                  "width": "fill_container",
+                  "height": "fill_container"
+                },
+                {
+                  "type": "frame",
+                  "id": "VenoA",
+                  "name": "PM詳細ヘッダ",
+                  "width": "fill_container",
+                  "fill": "$palette-head",
+                  "padding": [
+                    4,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "J5spRb",
+                      "name": "PM詳細ヘッダ名",
+                      "fill": "$ui-text",
+                      "content": "詳細",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "isZSR",
+                  "name": "PM詳細 図面",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "padding": [
+                    2,
+                    9
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "l1Qxw",
+                      "name": "PM詳細名 図面",
+                      "fill": "$ui-muted",
+                      "content": "図面",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "gYsK3",
+                      "name": "PM詳細値 図面",
+                      "fill": "$ui-text",
+                      "content": "TB1_前部ボックス",
+                      "fontFamily": "Inter",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "eBMgB",
+                  "name": "PM詳細 図番",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "padding": [
+                    2,
+                    9
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "MBEpu",
+                      "name": "PM詳細名 図番",
+                      "fill": "$ui-muted",
+                      "content": "図番",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "N0Xt0",
+                      "name": "PM詳細値 図番",
+                      "fill": "$ui-text",
+                      "content": "MDK-0001",
+                      "fontFamily": "Inter",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "C7t2ug",
+                  "name": "PM詳細 シート",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "padding": [
+                    2,
+                    9
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "neeA5",
+                      "name": "PM詳細名 シート",
+                      "fill": "$ui-muted",
+                      "content": "シート",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "CXfo8",
+                      "name": "PM詳細値 シート",
+                      "fill": "$ui-text",
+                      "content": "1 / 5",
+                      "fontFamily": "Inter",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Z73VVy",
+                  "name": "PM詳細 最終保存",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "padding": [
+                    2,
+                    9
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "NPn0W",
+                      "name": "PM詳細名 最終保存",
+                      "fill": "$ui-muted",
+                      "content": "最終保存",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "s56NwI",
+                      "name": "PM詳細値 最終保存",
+                      "fill": "$ui-text",
+                      "content": "2026-08-20 18:22",
+                      "fontFamily": "Inter",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "G2Hj5Z",
+                  "name": "PM下余白",
+                  "width": "fill_container",
+                  "height": 6
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "fzjBy",
+              "name": "作図領域",
+              "clip": true,
+              "width": "fill_container",
+              "height": 614,
+              "fill": "$model-bg",
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "AL5rq",
+                  "x": 0,
+                  "y": 0,
+                  "name": "図枠",
+                  "geometry": "M60 25h792v560h-792z",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.4
+                },
+                {
+                  "type": "text",
+                  "id": "I7Iwr",
+                  "x": 156,
+                  "y": 8,
+                  "name": "ゾーン上1",
+                  "fill": "$draw-dim",
+                  "content": "1",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "wpzmS",
+                  "x": 156,
+                  "y": 592,
+                  "name": "ゾーン下1",
+                  "fill": "$draw-dim",
+                  "content": "1",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "path",
+                  "id": "JPzPq",
+                  "x": 0,
+                  "y": 0,
+                  "name": "ゾーン刻み1",
+                  "geometry": "M258 19v6",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-dim",
+                  "strokeWidth": 0.8
+                },
+                {
+                  "type": "text",
+                  "id": "V8odwl",
+                  "x": 354,
+                  "y": 8,
+                  "name": "ゾーン上2",
+                  "fill": "$draw-dim",
+                  "content": "2",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "YHjpE",
+                  "x": 354,
+                  "y": 592,
+                  "name": "ゾーン下2",
+                  "fill": "$draw-dim",
+                  "content": "2",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "path",
+                  "id": "HgZvh",
+                  "x": 0,
+                  "y": 0,
+                  "name": "ゾーン刻み2",
+                  "geometry": "M456 19v6",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-dim",
+                  "strokeWidth": 0.8
+                },
+                {
+                  "type": "text",
+                  "id": "xvig1",
+                  "x": 552,
+                  "y": 8,
+                  "name": "ゾーン上3",
+                  "fill": "$draw-dim",
+                  "content": "3",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "gv2vL",
+                  "x": 552,
+                  "y": 592,
+                  "name": "ゾーン下3",
+                  "fill": "$draw-dim",
+                  "content": "3",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "path",
+                  "id": "GJAY8",
+                  "x": 0,
+                  "y": 0,
+                  "name": "ゾーン刻み3",
+                  "geometry": "M654 19v6",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-dim",
+                  "strokeWidth": 0.8
+                },
+                {
+                  "type": "text",
+                  "id": "Wu6Lp",
+                  "x": 750,
+                  "y": 8,
+                  "name": "ゾーン上4",
+                  "fill": "$draw-dim",
+                  "content": "4",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "oPBvM",
+                  "x": 750,
+                  "y": 592,
+                  "name": "ゾーン下4",
+                  "fill": "$draw-dim",
+                  "content": "4",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "ffKEg",
+                  "x": 46,
+                  "y": 65.66666666666666,
+                  "name": "ゾーン左A",
+                  "fill": "$draw-dim",
+                  "content": "A",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "FbTuf",
+                  "x": 858,
+                  "y": 65.66666666666666,
+                  "name": "ゾーン右A",
+                  "fill": "$draw-dim",
+                  "content": "A",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "w9N4p",
+                  "x": 46,
+                  "y": 159,
+                  "name": "ゾーン左B",
+                  "fill": "$draw-dim",
+                  "content": "B",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "kZhPz",
+                  "x": 858,
+                  "y": 159,
+                  "name": "ゾーン右B",
+                  "fill": "$draw-dim",
+                  "content": "B",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "sY6dM",
+                  "x": 46,
+                  "y": 252.33333333333331,
+                  "name": "ゾーン左C",
+                  "fill": "$draw-dim",
+                  "content": "C",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "SVYl4",
+                  "x": 858,
+                  "y": 252.33333333333331,
+                  "name": "ゾーン右C",
+                  "fill": "$draw-dim",
+                  "content": "C",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "JUA6a",
+                  "x": 46,
+                  "y": 345.6666666666667,
+                  "name": "ゾーン左D",
+                  "fill": "$draw-dim",
+                  "content": "D",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "nQt49",
+                  "x": 858,
+                  "y": 345.6666666666667,
+                  "name": "ゾーン右D",
+                  "fill": "$draw-dim",
+                  "content": "D",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "w4JmtN",
+                  "x": 46,
+                  "y": 439,
+                  "name": "ゾーン左E",
+                  "fill": "$draw-dim",
+                  "content": "E",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "uuOae",
+                  "x": 858,
+                  "y": 439,
+                  "name": "ゾーン右E",
+                  "fill": "$draw-dim",
+                  "content": "E",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "oU350",
+                  "x": 46,
+                  "y": 532.3333333333333,
+                  "name": "ゾーン左F",
+                  "fill": "$draw-dim",
+                  "content": "F",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "vxVu9",
+                  "x": 858,
+                  "y": 532.3333333333333,
+                  "name": "ゾーン右F",
+                  "fill": "$draw-dim",
+                  "content": "F",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "path",
+                  "id": "YIaSk",
+                  "x": 0,
+                  "y": 0,
+                  "name": "表題欄枠",
+                  "geometry": "M602 525h250v60h-250z m0 15h250m-250 15h250m-250 15h250m-190-45v60m98-30v30",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 0.9
+                },
+                {
+                  "type": "text",
+                  "id": "QaI7f",
+                  "x": 608,
+                  "y": 528,
+                  "name": "表題図番L",
+                  "fill": "$draw-dim",
+                  "content": "図番",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 8,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "khqdb",
+                  "x": 670,
+                  "y": 528,
+                  "name": "表題図番",
+                  "fill": "$draw-line",
+                  "content": "MDK-0001",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "dmEaH",
+                  "x": 608,
+                  "y": 543,
+                  "name": "表題品名L",
+                  "fill": "$draw-dim",
+                  "content": "品名",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 8,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "K1PYoD",
+                  "x": 670,
+                  "y": 542,
+                  "name": "表題品名",
+                  "fill": "$draw-line",
+                  "content": "48V 電源系統図",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "CkxJN",
+                  "x": 608,
+                  "y": 558,
+                  "name": "表題尺度",
+                  "fill": "$draw-dim",
+                  "content": "尺度 1:5",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 8,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "q785SX",
+                  "x": 766,
+                  "y": 558,
+                  "name": "表題日付",
+                  "fill": "$draw-dim",
+                  "content": "2026-08-20",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 8,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "aarm8",
+                  "x": 608,
+                  "y": 573,
+                  "name": "表題設計",
+                  "fill": "$draw-dim",
+                  "content": "設計 K.T   検図 -   承認 -",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 8,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "path",
+                  "id": "U2BnMs",
+                  "x": 0,
+                  "y": 0,
+                  "name": "母線48V",
+                  "geometry": "M140 120h560",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$w-red",
+                  "strokeWidth": 2
+                },
+                {
+                  "type": "path",
+                  "id": "sqybt",
+                  "x": 0,
+                  "y": 0,
+                  "name": "母線0V",
+                  "geometry": "M140 430h560",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 2
+                },
+                {
+                  "type": "text",
+                  "id": "gtjIU",
+                  "x": 140,
+                  "y": 100,
+                  "name": "ラベル48V",
+                  "fill": "$w-red",
+                  "content": "+48V",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "k2C0ku",
+                  "x": 140,
+                  "y": 438,
+                  "name": "ラベル0V",
+                  "fill": "$draw-line",
+                  "content": "0V",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "path",
+                  "id": "UtsBe",
+                  "x": 0,
+                  "y": 0,
+                  "name": "枝1上",
+                  "geometry": "M240 120v50",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$w-red",
+                  "strokeWidth": 1.6
+                },
+                {
+                  "type": "path",
+                  "id": "F4XiQ",
+                  "x": 0,
+                  "y": 0,
+                  "name": "F1本体",
+                  "geometry": "M220 170h40v16h-40z m0 8h40",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.4
+                },
+                {
+                  "type": "path",
+                  "id": "NuyPC",
+                  "x": 0,
+                  "y": 0,
+                  "name": "枝1中1",
+                  "geometry": "M240 186v50",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$w-red",
+                  "strokeWidth": 1.6
+                },
+                {
+                  "type": "path",
+                  "id": "RTZDJ",
+                  "x": 0,
+                  "y": 0,
+                  "name": "SW1レバー",
+                  "geometry": "M240 240l-14 32",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.4
+                },
+                {
+                  "type": "ellipse",
+                  "id": "pwLxA",
+                  "x": 237,
+                  "y": 236,
+                  "name": "SW1端子上",
+                  "fill": "$model-bg",
+                  "width": 6,
+                  "height": 6,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.2
+                },
+                {
+                  "type": "ellipse",
+                  "id": "iAndo",
+                  "x": 237,
+                  "y": 272,
+                  "name": "SW1端子下",
+                  "fill": "$model-bg",
+                  "width": 6,
+                  "height": 6,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.2
+                },
+                {
+                  "type": "path",
+                  "id": "mDPQc",
+                  "x": 0,
+                  "y": 0,
+                  "name": "枝1中2",
+                  "geometry": "M240 278v32",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$w-red",
+                  "strokeWidth": 1.6
+                },
+                {
+                  "type": "path",
+                  "id": "W4Z9ql",
+                  "x": 0,
+                  "y": 0,
+                  "name": "K1コイル",
+                  "geometry": "M222 310h36v28h-36z",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.4
+                },
+                {
+                  "type": "path",
+                  "id": "SD8EY",
+                  "x": 0,
+                  "y": 0,
+                  "name": "枝1下",
+                  "geometry": "M240 338v92",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.6
+                },
+                {
+                  "type": "path",
+                  "id": "rXhdy",
+                  "x": 0,
+                  "y": 0,
+                  "name": "枝2上",
+                  "geometry": "M470 120v58",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$w-red",
+                  "strokeWidth": 1.6
+                },
+                {
+                  "type": "path",
+                  "id": "ytXh6",
+                  "x": 0,
+                  "y": 0,
+                  "name": "K1a接点",
+                  "geometry": "M470 182l-14 32",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.4
+                },
+                {
+                  "type": "ellipse",
+                  "id": "FZEmf",
+                  "x": 467,
+                  "y": 178,
+                  "name": "K1a端子上",
+                  "fill": "$model-bg",
+                  "width": 6,
+                  "height": 6,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.2
+                },
+                {
+                  "type": "ellipse",
+                  "id": "X8kMe9",
+                  "x": 467,
+                  "y": 214,
+                  "name": "K1a端子下",
+                  "fill": "$model-bg",
+                  "width": 6,
+                  "height": 6,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.2
+                },
+                {
+                  "type": "path",
+                  "id": "NResY",
+                  "x": 0,
+                  "y": 0,
+                  "name": "枝2中",
+                  "geometry": "M470 220v86",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$w-cyan",
+                  "strokeWidth": 1.6
+                },
+                {
+                  "type": "ellipse",
+                  "id": "DLoHY",
+                  "x": 446,
+                  "y": 306,
+                  "name": "M1本体",
+                  "fill": "#00000000",
+                  "width": 48,
+                  "height": 48,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.4
+                },
+                {
+                  "type": "text",
+                  "id": "Kodc9",
+                  "x": 462,
+                  "y": 320,
+                  "name": "M1文字",
+                  "fill": "$draw-line",
+                  "content": "M",
+                  "fontFamily": "Inter",
+                  "fontSize": 15,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "path",
+                  "id": "DH29W",
+                  "x": 0,
+                  "y": 0,
+                  "name": "枝2下",
+                  "geometry": "M470 354v76",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1.6
+                },
+                {
+                  "type": "ellipse",
+                  "id": "hfeXR",
+                  "x": 237,
+                  "y": 117,
+                  "name": "接続点1",
+                  "fill": "$draw-line",
+                  "width": 6,
+                  "height": 6
+                },
+                {
+                  "type": "ellipse",
+                  "id": "EXpTU",
+                  "x": 467,
+                  "y": 117,
+                  "name": "接続点2",
+                  "fill": "$draw-line",
+                  "width": 6,
+                  "height": 6
+                },
+                {
+                  "type": "ellipse",
+                  "id": "bJee6",
+                  "x": 237,
+                  "y": 427,
+                  "name": "接続点3",
+                  "fill": "$draw-line",
+                  "width": 6,
+                  "height": 6
+                },
+                {
+                  "type": "ellipse",
+                  "id": "qNWxM",
+                  "x": 467,
+                  "y": 427,
+                  "name": "接続点4",
+                  "fill": "$draw-line",
+                  "width": 6,
+                  "height": 6
+                },
+                {
+                  "type": "text",
+                  "id": "Qj2Yt",
+                  "x": 268,
+                  "y": 172,
+                  "name": "LF1",
+                  "fill": "$w-yellow",
+                  "content": "F1 5A",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "PRdTR",
+                  "x": 256,
+                  "y": 250,
+                  "name": "LSW1",
+                  "fill": "$w-yellow",
+                  "content": "SW1",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "Yjbee",
+                  "x": 266,
+                  "y": 318,
+                  "name": "LK1",
+                  "fill": "$w-yellow",
+                  "content": "K1 JZX-22F",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "Y3YIe",
+                  "x": 484,
+                  "y": 190,
+                  "name": "LK1a",
+                  "fill": "$w-yellow",
+                  "content": "K1a",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "IbAUK",
+                  "x": 502,
+                  "y": 324,
+                  "name": "LM1",
+                  "fill": "$w-yellow",
+                  "content": "M1",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "qsOjV",
+                  "x": 250,
+                  "y": 142,
+                  "name": "L線1",
+                  "fill": "$w-green",
+                  "content": "0.75sq 赤 0.4m",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 8,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "TVE6P",
+                  "x": 480,
+                  "y": 258,
+                  "name": "L線2",
+                  "fill": "$w-green",
+                  "content": "0.75sq 青 0.6m",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 8,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "V7GkN",
+                  "x": 156,
+                  "y": 104,
+                  "name": "ネットラベル24P1",
+                  "fill": "#00000000",
+                  "stroke": "$w-yellow",
+                  "strokeWidth": 1,
+                  "padding": [
+                    1,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "tPIyl",
+                      "name": "ネットラベル文字",
+                      "fill": "$w-yellow",
+                      "content": "24-P1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "path",
+                  "id": "XTqfj",
+                  "x": 0,
+                  "y": 0,
+                  "name": "クロスヘア縦",
+                  "geometry": "M560 0v614",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "#5A626C",
+                  "strokeWidth": 0.7
+                },
+                {
+                  "type": "path",
+                  "id": "d49xth",
+                  "x": 0,
+                  "y": 0,
+                  "name": "クロスヘア横",
+                  "geometry": "M0 300h948",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "#5A626C",
+                  "strokeWidth": 0.7
+                },
+                {
+                  "type": "rectangle",
+                  "id": "JmjNW",
+                  "x": 555,
+                  "y": 295,
+                  "name": "ピックボックス",
+                  "fill": "#00000000",
+                  "width": 10,
+                  "height": 10,
+                  "stroke": "$draw-line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "path",
+                  "id": "U42pqk",
+                  "x": 0,
+                  "y": 0,
+                  "name": "UCS-X",
+                  "geometry": "M80 560h44m0 0l-8-4m8 4l-8 4",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "#E05252",
+                  "strokeWidth": 1.6
+                },
+                {
+                  "type": "path",
+                  "id": "DBjIS",
+                  "x": 0,
+                  "y": 0,
+                  "name": "UCS-Y",
+                  "geometry": "M80 560v-44m0 0l-4 8m4-8l4 8",
+                  "viewBox": [
+                    0,
+                    0,
+                    948,
+                    614
+                  ],
+                  "fill": "#00000000",
+                  "width": 948,
+                  "height": 614,
+                  "stroke": "#43D675",
+                  "strokeWidth": 1.6
+                },
+                {
+                  "type": "text",
+                  "id": "coNJG",
+                  "x": 128,
+                  "y": 553,
+                  "name": "UCS-Xラベル",
+                  "fill": "#E05252",
+                  "content": "X",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "iNG1F",
+                  "x": 74,
+                  "y": 500,
+                  "name": "UCS-Yラベル",
+                  "fill": "#43D675",
+                  "content": "Y",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "smSDN",
+                  "x": 872,
+                  "y": 18,
+                  "name": "ViewCube",
+                  "width": 52,
+                  "height": 52,
+                  "fill": "#FFFFFF14",
+                  "cornerRadius": 6,
+                  "stroke": "#6A7280",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "vQQ7R",
+                      "name": "ViewCube文字",
+                      "fill": "#B8BEC6",
+                      "content": "上",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "F24Ph",
+              "name": "プロパティパレット",
+              "clip": true,
+              "width": 240,
+              "height": 614,
+              "fill": "$palette-bg",
+              "stroke": "$ribbon-line",
+              "strokeWidth": {
+                "left": 1
+              },
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "tspCK",
+                  "name": "Pヘッダ",
+                  "width": "fill_container",
+                  "fill": "$palette-head",
+                  "gap": 5,
+                  "padding": [
+                    5,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "vJV2M",
+                      "name": "Pヘッダ名",
+                      "fill": "$ui-text",
+                      "content": "プロパティ",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Caxuw",
+                      "name": "Pヘッダ余白",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "icon",
+                      "id": "d4o6M6",
+                      "name": "Pピン",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "pin",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "QJwtT",
+                  "name": "P選択種別",
+                  "width": "fill_container",
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "gap": 6,
+                  "padding": [
+                    5,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "VlloM",
+                      "name": "P選択種別値",
+                      "fill": "$ui-text",
+                      "content": "配線 (1)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "DkOVj",
+                      "name": "P選択余白",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "icon",
+                      "id": "XDToT",
+                      "name": "P選択矢印",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MwNrm",
+                  "name": "Pセクション 一般",
+                  "width": "fill_container",
+                  "fill": "#E7EAED",
+                  "gap": 4,
+                  "padding": [
+                    4,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "ZjRCx",
+                      "name": "Pセクション矢印 一般",
+                      "width": 10,
+                      "height": 10,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "g1KuY",
+                      "name": "Pセクション名 一般",
+                      "fill": "$ui-text",
+                      "content": "一般",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "gGxQ0",
+                  "name": "P行 一般色",
+                  "width": "fill_container",
+                  "stroke": "#E3E6EA",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "PmaPt",
+                      "name": "P行名枠 一般色",
+                      "width": 96,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "YZvH8",
+                          "name": "P行名 一般色",
+                          "fill": "$ui-muted",
+                          "content": "色",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Bbev2",
+                      "name": "P行値枠 一般色",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "SAggS",
+                          "name": "P行値 一般色",
+                          "fill": "#C0392B",
+                          "content": "■ 赤",
+                          "fontFamily": "Inter",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Hd5Y9",
+                  "name": "P行 一般線種",
+                  "width": "fill_container",
+                  "stroke": "#E3E6EA",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "QjhKn",
+                      "name": "P行名枠 一般線種",
+                      "width": 96,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "N7EaAa",
+                          "name": "P行名 一般線種",
+                          "fill": "$ui-muted",
+                          "content": "線種",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "p7jrrn",
+                      "name": "P行値枠 一般線種",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "X7j6av",
+                          "name": "P行値 一般線種",
+                          "fill": "$ui-text",
+                          "content": "Continuous",
+                          "fontFamily": "Inter",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "rdxZV",
+                  "name": "P行 一般線の太さ",
+                  "width": "fill_container",
+                  "stroke": "#E3E6EA",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "mE9gy",
+                      "name": "P行名枠 一般線の太さ",
+                      "width": 96,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "wI8VL",
+                          "name": "P行名 一般線の太さ",
+                          "fill": "$ui-muted",
+                          "content": "線の太さ",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "bIzCs",
+                      "name": "P行値枠 一般線の太さ",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "QBLoB",
+                          "name": "P行値 一般線の太さ",
+                          "fill": "$ui-text",
+                          "content": "0.35 mm",
+                          "fontFamily": "Inter",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "c61rzo",
+                  "name": "Pセクション 電気属性",
+                  "width": "fill_container",
+                  "fill": "#E7EAED",
+                  "gap": 4,
+                  "padding": [
+                    4,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "tlAeI",
+                      "name": "Pセクション矢印 電気属性",
+                      "width": 10,
+                      "height": 10,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$ui-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "tFgU7",
+                      "name": "Pセクション名 電気属性",
+                      "fill": "$ui-text",
+                      "content": "電気属性",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "KfNXA",
+                  "name": "P行 電気属性線径",
+                  "width": "fill_container",
+                  "stroke": "#E3E6EA",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "z3YVP",
+                      "name": "P行名枠 電気属性線径",
+                      "width": 96,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "s3vlxP",
+                          "name": "P行名 電気属性線径",
+                          "fill": "$ui-muted",
+                          "content": "線径",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "X2LRFC",
+                      "name": "P行値枠 電気属性線径",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lrbd3",
+                          "name": "P行値 電気属性線径",
+                          "fill": "$ui-text",
+                          "content": "0.75 sq",
+                          "fontFamily": "Inter",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "zqzwP",
+                  "name": "P行 電気属性線色",
+                  "width": "fill_container",
+                  "stroke": "#E3E6EA",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "VJQSr",
+                      "name": "P行名枠 電気属性線色",
+                      "width": 96,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "H9Zay",
+                          "name": "P行名 電気属性線色",
+                          "fill": "$ui-muted",
+                          "content": "線色",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "u7IVUp",
+                      "name": "P行値枠 電気属性線色",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "w2dd3S",
+                          "name": "P行値 電気属性線色",
+                          "fill": "$ui-text",
+                          "content": "赤 (red)",
+                          "fontFamily": "Inter",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "UDMtT",
+                  "name": "P行 電気属性電線品番",
+                  "width": "fill_container",
+                  "stroke": "#E3E6EA",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "bLpyI",
+                      "name": "P行名枠 電気属性電線品番",
+                      "width": 96,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "vR03J",
+                          "name": "P行名 電気属性電線品番",
+                          "fill": "$ui-muted",
+                          "content": "電線品番",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "fCOIx",
+                      "name": "P行値枠 電気属性電線品番",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "bV85f",
+                          "name": "P行値 電気属性電線品番",
+                          "fill": "$ui-text",
+                          "content": "SAMPLE0001",
+                          "fontFamily": "Inter",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "UpXXu",
+                  "name": "P行 電気属性長さ",
+                  "width": "fill_container",
+                  "stroke": "#E3E6EA",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "wIDEI",
+                      "name": "P行名枠 電気属性長さ",
+                      "width": 96,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "U8Y8Fw",
+                          "name": "P行名 電気属性長さ",
+                          "fill": "$ui-muted",
+                          "content": "長さ",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dVa8S",
+                      "name": "P行値枠 電気属性長さ",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "i9SrG",
+                          "name": "P行値 電気属性長さ",
+                          "fill": "$ui-text",
+                          "content": "0.4 m",
+                          "fontFamily": "Inter",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "CD82Y",
+                  "name": "P行 電気属性ネット",
+                  "width": "fill_container",
+                  "stroke": "#E3E6EA",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "YN2wG",
+                      "name": "P行名枠 電気属性ネット",
+                      "width": 96,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "MOnxU",
+                          "name": "P行名 電気属性ネット",
+                          "fill": "$ui-muted",
+                          "content": "ネット",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "zFf9u",
+                      "name": "P行値枠 電気属性ネット",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "U1RTcL",
+                          "name": "P行値 電気属性ネット",
+                          "fill": "$ui-text",
+                          "content": "24-P1",
+                          "fontFamily": "Inter",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "bUwcd",
+          "name": "モデルタブ行",
+          "width": "fill_container",
+          "height": 22,
+          "fill": "$ribbon-strip",
+          "stroke": "$ribbon-line",
+          "strokeWidth": {
+            "top": 1
+          },
+          "gap": 2,
+          "padding": [
+            0,
+            8
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "euDDa",
+              "name": "モデルタブ モデル",
+              "fill": "#FFFFFF",
+              "stroke": "$acad-blue",
+              "strokeWidth": {
+                "bottom": 2
+              },
+              "padding": [
+                2,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "KkZry",
+                  "name": "モデルタブ名 モデル",
+                  "fill": "$acad-blue",
+                  "content": "モデル",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Th2Dw",
+              "name": "モデルタブ レイアウト1",
+              "fill": "#00000000",
+              "stroke": "#00000000",
+              "padding": [
+                2,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "IgbLm",
+                  "name": "モデルタブ名 レイアウト1",
+                  "fill": "$ui-muted",
+                  "content": "レイアウト1",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "HXkGD",
+              "name": "モデルタブ レイアウト2",
+              "fill": "#00000000",
+              "stroke": "#00000000",
+              "padding": [
+                2,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "mjegJ",
+                  "name": "モデルタブ名 レイアウト2",
+                  "fill": "$ui-muted",
+                  "content": "レイアウト2",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "icon",
+              "id": "TCJeK",
+              "name": "モデルタブ追加",
+              "width": 11,
+              "height": 11,
+              "icon": "plus",
+              "library": "lucide",
+              "fill": "$ui-muted"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "r4PC5",
+          "name": "コマンドライン",
+          "width": "fill_container",
+          "height": 54,
+          "fill": "#F4F5F6",
+          "stroke": "$ribbon-line",
+          "strokeWidth": {
+            "top": 1
+          },
+          "layout": "vertical",
+          "gap": 1,
+          "padding": [
+            3,
+            8
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "fZaP5",
+              "name": "コマンド履歴1",
+              "fill": "$ui-muted",
+              "content": "コマンド: WIRE  配線の始点を指定:",
+              "fontFamily": "JetBrains Mono",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "gbjVu",
+              "name": "コマンド履歴2",
+              "fill": "$ui-muted",
+              "content": "次の点を指定 または [元に戻す(U)]:",
+              "fontFamily": "JetBrains Mono",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "Bo9oZ",
+              "name": "コマンド入力行",
+              "width": "fill_container",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "eQ5MZ",
+                  "name": "コマンド入力アイコン",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "chevrons-right",
+                  "library": "lucide",
+                  "fill": "$acad-blue"
+                },
+                {
+                  "type": "text",
+                  "id": "Ty7JS",
+                  "name": "コマンド入力",
+                  "fill": "$ui-text",
+                  "content": "コマンドを入力",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "rectangle",
+                  "id": "tGpWd",
+                  "name": "コマンドカーソル",
+                  "fill": "$acad-blue",
+                  "width": 7,
+                  "height": 13
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "okB9T",
+          "name": "ステータスバー",
+          "width": "fill_container",
+          "height": 26,
+          "fill": "$status-bg",
+          "stroke": "$ribbon-line",
+          "strokeWidth": {
+            "top": 1
+          },
+          "gap": 10,
+          "padding": [
+            0,
+            10
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "gCmka",
+              "name": "座標表示",
+              "fill": "$ui-text",
+              "content": "152.5000, 80.0000, 0.0000",
+              "fontFamily": "JetBrains Mono",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "rectangle",
+              "id": "DVDqA",
+              "name": "状態区切り1",
+              "fill": "$ribbon-line",
+              "width": 1,
+              "height": 16
+            },
+            {
+              "type": "frame",
+              "id": "xdOre",
+              "name": "トグル グリッド",
+              "width": 26,
+              "height": 20,
+              "fill": "$sel-blue",
+              "cornerRadius": 2,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "WyB42",
+                  "name": "トグルアイコン グリッド",
+                  "width": 13,
+                  "height": 13,
+                  "icon": "grid-3x3",
+                  "library": "lucide",
+                  "fill": "$acad-blue"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "j8srNN",
+              "name": "トグル スナップ",
+              "width": 26,
+              "height": 20,
+              "fill": "$sel-blue",
+              "cornerRadius": 2,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "ena6j",
+                  "name": "トグルアイコン スナップ",
+                  "width": 13,
+                  "height": 13,
+                  "icon": "magnet",
+                  "library": "lucide",
+                  "fill": "$acad-blue"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ts5l0",
+              "name": "トグル 直交",
+              "width": 26,
+              "height": 20,
+              "fill": "$sel-blue",
+              "cornerRadius": 2,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "aJSxf",
+                  "name": "トグルアイコン 直交",
+                  "width": 13,
+                  "height": 13,
+                  "icon": "move-vertical",
+                  "library": "lucide",
+                  "fill": "$acad-blue"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "w2Pf8O",
+              "name": "トグル 極",
+              "width": 26,
+              "height": 20,
+              "fill": "#00000000",
+              "cornerRadius": 2,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "c7uIX",
+                  "name": "トグルアイコン 極",
+                  "width": 13,
+                  "height": 13,
+                  "icon": "compass",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "GP6Yn",
+              "name": "トグル OSNAP",
+              "width": 26,
+              "height": 20,
+              "fill": "$sel-blue",
+              "cornerRadius": 2,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Fo6oB",
+                  "name": "トグルアイコン OSNAP",
+                  "width": 13,
+                  "height": 13,
+                  "icon": "crosshair",
+                  "library": "lucide",
+                  "fill": "$acad-blue"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cgH6H",
+              "name": "トグル 線太",
+              "width": 26,
+              "height": 20,
+              "fill": "#00000000",
+              "cornerRadius": 2,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "JCnaE",
+                  "name": "トグルアイコン 線太",
+                  "width": 13,
+                  "height": 13,
+                  "icon": "pen-line",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ubNka",
+              "name": "状態余白",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "text",
+              "id": "EcQfc",
+              "name": "注釈尺度",
+              "fill": "$ui-text",
+              "content": "1:5 ▾",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "S8IUmz",
+              "name": "モード表示",
+              "fill": "$ui-text",
+              "content": "モデル",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "iJlTp",
+              "name": "MCP状態",
+              "gap": 4,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "kPAcC",
+                  "name": "MCPドット",
+                  "fill": "#1F8A4C",
+                  "width": 6,
+                  "height": 6
+                },
+                {
+                  "type": "text",
+                  "id": "jYQoB",
+                  "name": "MCP文字",
+                  "fill": "$ui-text",
+                  "content": "MCP 9310",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "icon",
+              "id": "a6OzOb",
+              "name": "設定歯車",
+              "width": 12,
+              "height": 12,
+              "icon": "settings",
+              "library": "lucide",
+              "fill": "$ui-muted"
+            }
+          ]
+        }
+      ]
     }
   ],
+  "variables": {
+    "bg-app": {
+      "type": "color",
+      "value": "#1E2126"
+    },
+    "bg-panel": {
+      "type": "color",
+      "value": "#262A31"
+    },
+    "bg-elevated": {
+      "type": "color",
+      "value": "#2E333B"
+    },
+    "bg-input": {
+      "type": "color",
+      "value": "#1A1D22"
+    },
+    "border": {
+      "type": "color",
+      "value": "#3A404A"
+    },
+    "text": {
+      "type": "color",
+      "value": "#E6E9ED"
+    },
+    "text-muted": {
+      "type": "color",
+      "value": "#98A0AB"
+    },
+    "text-faint": {
+      "type": "color",
+      "value": "#6A7280"
+    },
+    "accent": {
+      "type": "color",
+      "value": "#4A9EFF"
+    },
+    "accent-soft": {
+      "type": "color",
+      "value": "#4A9EFF26"
+    },
+    "ok": {
+      "type": "color",
+      "value": "#3FB950"
+    },
+    "paper": {
+      "type": "color",
+      "value": "#FBFBF8"
+    },
+    "paper-line": {
+      "type": "color",
+      "value": "#20242B"
+    },
+    "canvas-bg": {
+      "type": "color",
+      "value": "#43474E"
+    },
+    "wire-red": {
+      "type": "color",
+      "value": "#C42B2B"
+    },
+    "wire-black": {
+      "type": "color",
+      "value": "#22262B"
+    },
+    "wire-blue": {
+      "type": "color",
+      "value": "#2857C8"
+    },
+    "font-ui": {
+      "type": "string",
+      "value": "Inter"
+    },
+    "font-jp": {
+      "type": "string",
+      "value": "Noto Sans JP"
+    },
+    "font-mono": {
+      "type": "string",
+      "value": "JetBrains Mono"
+    },
+    "tb-bg": {
+      "type": "color",
+      "value": "#2A2E34"
+    },
+    "tb-text": {
+      "type": "color",
+      "value": "#D8DBDE"
+    },
+    "ribbon-strip": {
+      "type": "color",
+      "value": "#DFE3E7"
+    },
+    "ribbon-bg": {
+      "type": "color",
+      "value": "#F2F4F5"
+    },
+    "ribbon-line": {
+      "type": "color",
+      "value": "#C6CBD1"
+    },
+    "ribbon-label": {
+      "type": "color",
+      "value": "#5A6068"
+    },
+    "ui-text": {
+      "type": "color",
+      "value": "#2B2F33"
+    },
+    "ui-muted": {
+      "type": "color",
+      "value": "#6B7178"
+    },
+    "palette-bg": {
+      "type": "color",
+      "value": "#F7F8F9"
+    },
+    "palette-head": {
+      "type": "color",
+      "value": "#D9DDE1"
+    },
+    "sel-blue": {
+      "type": "color",
+      "value": "#CCE4F7"
+    },
+    "acad-blue": {
+      "type": "color",
+      "value": "#1F6FBF"
+    },
+    "model-bg": {
+      "type": "color",
+      "value": "#212830"
+    },
+    "draw-line": {
+      "type": "color",
+      "value": "#E8EAEC"
+    },
+    "draw-dim": {
+      "type": "color",
+      "value": "#9AA2AB"
+    },
+    "w-red": {
+      "type": "color",
+      "value": "#FF5252"
+    },
+    "w-cyan": {
+      "type": "color",
+      "value": "#29D3E6"
+    },
+    "w-green": {
+      "type": "color",
+      "value": "#43D675"
+    },
+    "w-yellow": {
+      "type": "color",
+      "value": "#E8D44D"
+    },
+    "status-bg": {
+      "type": "color",
+      "value": "#D8DCE0"
+    }
+  },
   "fileToken": "7875ac10-d0f9-472c-bdca-990154f31ab6"
 }

@@ -27,7 +27,8 @@
 | AI連携 | 内蔵MCPサーバー (rmcp 3.x, Streamable HTTP) | Claude Code/Desktopから直接編集 |
 | 部品DB | SQLite (rusqlite) ※フェーズ2 | ローカル完結 |
 | シミュレーション | 配線検証(自作)→ngspice(フェーズ3) | 配線図用途を優先 |
-| UIデザイン | Pencil (pen.dev) で design-first | ユーザー方針 |
+| UIデザイン | Pencil (pen.dev) で design-first | ユーザー方針(AutoCAD Electrical風UI) |
+| メカ連携 | FreeCAD 1.1+ (アドオンWB + Link API) | SOLIDWORKS Electrical⇔SOLIDWORKS相当の電気・機械連携 |
 
 ## 3. アーキテクチャ
 
@@ -93,8 +94,51 @@ AutoCADをベースにした画面構成の想定(Pencilデザインで詳細を
 - フェーズ1: Canvas2DエディタUI(Pencilデザイン準拠)、ネットリスト、BOM/電線リストCSV、PDF/SVG出力、端子台動的シンボル、AutoCAD風コマンドライン
 - フェーズ2: 検証エンジン、部品DB(SQLite+購入先URL)、KiCadインポート
 - フェーズ3: ngspiceシミュレーション、アプリ内AIチャット(検討)
+- フェーズM(フェーズ2完了後、3と並行可): FreeCAD連携(§7参照。Link API→3Dモデル挿入→経路長還元→盤レイアウト)
 
-## 7. 非目標(現時点)
+## 7. FreeCAD連携(メカCAD連携)
+
+SOLIDWORKS Electrical⇔SOLIDWORKSの関係に相当する、電気(MadakeCAD)⇔機械(FreeCAD)の双方向連携を設計の柱として組み込む。対象はFreeCAD 1.1系以降(2026-03リリース、アセンブリWB標準搭載、Python API刷新)。
+
+### 7.1 提供する連携機能
+
+1. **部品の対応付け**: 回路図の部品(参照記号+型番)をFreeCADアセンブリ内の3D部品と1対1で紐付ける。部品DB(フェーズ2)の各部品に3Dモデル参照(`model_3d`: STEP/FCStdパス)を持たせ、FreeCAD側へ挿入できるようにする
+2. **3D配線ルーティング**: MadakeCADのネットリスト(どのピンとどのピンが繋がるか)をFreeCAD側で参照し、筐体内の配線経路を3Dで引く
+3. **電線長の還元**: FreeCADで確定した経路長を`Wire.length_m`へ書き戻し、BOM/電線リストに反映する(SOLIDWORKS Electricalの目玉機能に相当)
+4. **盤レイアウト**: 将来、パネル図(2D盤面レイアウト)と3D筐体配置の同期
+
+### 7.2 アーキテクチャ
+
+```
+MadakeCAD (Tauri)                         FreeCAD 1.1+
+┌─────────────────────────┐               ┌──────────────────────────┐
+│ madake-core (Command)   │   HTTP/JSON   │ アドオンWB「MadakeCAD Link」 │
+│ 内蔵サーバー (axum)       │◄─────────────►│  - Link APIクライアント     │
+│  ├ /mcp     (AI用MCP)   │  localhost    │  - 部品挿入/経路計測UI      │
+│  └ /api/v1  (Link API)  │               │  - madake_idプロパティ管理  │
+└─────────────────────────┘               └──────────────────────────┘
+```
+
+- **Link API**: 既存の内蔵HTTPサーバー(127.0.0.1:9310)に`/api/v1`(素のJSON REST)を追加。MCPはAIエージェント用、Link APIは機械連携用と役割を分ける。ただし**書き込みは全て既存Commandエンジンを通す**ため、FreeCADからの変更もundo/redo・patch配信・AI編集と完全に整合する(アーキテクチャの絶対原則を維持)
+  - 読み: `GET /api/v1/project` / `GET /api/v1/netlist?sheet=` / `GET /api/v1/parts`
+  - 書き: `POST /api/v1/commands`(Command列)。主用途: `UpdateEntity`での電線長更新、mech_link登録
+- **FreeCADアドオン**: Pythonワークベンチとして別リポジトリまたは`freecad-addon/`配下で開発。機能: 接続設定、部品リスト表示→アセンブリへ3Dモデル挿入、ネットリストビュー、経路オブジェクト(Draft Wire/スケッチ)の長さ計測と一括書き戻し
+- **対応付けのキー**: MadakeCADのentity UUIDが軸。FreeCADオブジェクト側にカスタムプロパティ`madake_id`を保存し、MadakeCAD側は`Project.mech_links`(entity_id → {fcstd_path, object_name})を保存。両側にキーを持つことでファイルを別々に開いても再同期できる
+- **マスタ権の原則**: 電気データ(参照記号・型番・ピン接続)はMadakeCADがマスタ。ジオメトリ(3D配置・経路・実測長)はFreeCADがマスタ。同期は明示操作(同期ボタン)で行い、暗黙の自動上書きはしない
+
+### 7.3 データモデルへの影響(先行して設計に織り込む)
+
+- `Project.mech_links: Vec<MechLink { entity_id, fcstd_path, object_name, synced_at }>`(フェーズM1で追加)
+- 部品DBスキーマに`model_3d`(STEP/FCStdパス)と取付情報(DINレール/ねじ等)を予約
+- `Wire`に長さの出所(手入力かFreeCAD実測か)を示す属性を追加し、FreeCAD由来の値を手入力で誤って上書きしない
+
+### 7.4 実装フェーズ(フェーズM: フェーズ2完了後、フェーズ3と並行可)
+
+- **M1**: Link API(読み取り+Command書き込み)、FreeCADアドオン骨格(接続・プロジェクト/ネットリスト表示)
+- **M2**: 部品DBの3Dモデル挿入+`madake_id`バインド、経路長の一括書き戻し(電線リストへ反映)
+- **M3**: 経路3D表示の同期、盤レイアウト(パネル図⇔3D筐体)
+
+## 8. 非目標(現時点)
 
 - PCBレイアウト・ガーバー出力(電子基板CADではない)
 - クラウド同期・同時編集(ローカルファースト)
