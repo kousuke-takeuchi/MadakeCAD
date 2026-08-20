@@ -6,7 +6,7 @@
 
 - 全体設計(スペック): `docs/superpowers/specs/2026-08-20-madakecad-design.md`
 - 実装計画: `docs/superpowers/plans/` 配下(日付順)
-- 開発方針の原点と参考図面: `docs/references/README.md`(PDF本体は社外秘のためgit管理外)
+- 開発方針の原点と参考図面: `docs/references/README.md`(社外秘情報を含むためREADMEごとgit管理外。各自ローカルに保持)
 - ロードマップ概要: `README.md`
 
 ## アーキテクチャの絶対原則
@@ -44,7 +44,7 @@ Rustは`~/.cargo/bin`にある(rustup)。PATHに無ければ `export PATH="$HOME
 ## ドメイン用語(参照図面の慣習)
 
 - 線径は「sq」(mm2断面積: 0.3sq, 0.75sq, 3.5sq等)、線色+sqから電線品番を引く(`Project::wire_parts`)
-- 図枠=JIS(表題欄・改訂欄・ゾーン番号)。目標品質は***REMOVED***社の機器構成図(ユーザー提供PDF)
+- 図枠=JIS(表題欄・改訂欄・ゾーン番号)。目標品質はユーザー提供の参考図面(社外秘、`docs/references/README.md`参照)
 - シンボルはJIS C 0617系。参照記号接頭辞: R/F/C/D/SW/PB/K(リレー)/J(コネクタ)等
 
 ## デザインシステム
