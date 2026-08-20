@@ -52,6 +52,14 @@ pub enum AgentEvent {
         result: String,
         usage: Option<Usage>,
     },
+    /// ターンで確定した編集が図面に適用されたことの通知。
+    ///
+    /// CLIの出力には存在しない合成イベントで、[`crate::AgentManager`]だけが発行する
+    /// (ターン開始/終了時のEngine revision。差が「元に戻す」に必要なundo回数)。
+    TurnApplied {
+        start_revision: u64,
+        end_revision: u64,
+    },
     /// CLI側のエラー(プロセス異常終了・result(is_error)など)
     Error { message: String },
 }

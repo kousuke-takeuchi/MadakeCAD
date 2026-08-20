@@ -8,10 +8,15 @@
 pub mod backend;
 pub mod conversation;
 pub mod events;
+pub mod manager;
 
 pub use backend::{ClaudeCodeCliBackend, DetectResult};
-pub use conversation::{AppliedRevisions, ChatMessage, Conversation, Role, ToolCall};
+pub use conversation::{
+    chat_path_for, load_chat, save_chat, AppliedRevisions, ChatMessage, Conversation, Role,
+    ToolCall,
+};
 pub use events::{parse_stream_events, parse_stream_line, AgentEvent, StreamParser, Usage};
+pub use manager::{AgentManager, ConversationEvent, DocBridge};
 
 /// madake-agentのエラー。
 #[derive(Debug, thiserror::Error)]
@@ -28,6 +33,14 @@ pub enum AgentError {
         "このビルドが対応していないチャット履歴フォーマット版です: {found} (対応: {supported}以下)"
     )]
     UnsupportedChatFormat { found: u32, supported: u32 },
+    #[error("この会話は送信中です")]
+    Busy,
+    #[error("会話が見つかりません: {0}")]
+    NoConversation(uuid::Uuid),
+    #[error("メッセージが見つかりません: {0}")]
+    NoMessage(usize),
+    #[error("ドキュメント操作に失敗しました: {0}")]
+    Doc(String),
 }
 
 pub type Result<T> = std::result::Result<T, AgentError>;

@@ -23,6 +23,7 @@ fn kinds(events: &[AgentEvent]) -> Vec<&str> {
             AgentEvent::ToolUseStarted { .. } => "tool_start",
             AgentEvent::ToolUseFinished { .. } => "tool_end",
             AgentEvent::TurnCompleted { .. } => "completed",
+            AgentEvent::TurnApplied { .. } => "applied",
             AgentEvent::Error { .. } => "error",
         })
         .collect()
@@ -197,4 +198,45 @@ async fn detect_reads_version_from_configured_executable() {
 async fn detect_fails_for_missing_executable() {
     let path = fixtures_dir().join("no_such_claude");
     assert!(ClaudeCodeCliBackend::detect(Some(path)).await.is_err());
+}
+
+/// GUI起動時のPATHは最小構成なので、PATHで見つからなくても候補を順に試す。
+#[tokio::test]
+async fn detect_falls_back_to_later_candidates() {
+    let candidates = vec![
+        PathBuf::from("madake-no-such-command-xyz"),
+        fixtures_dir().join("no_such_claude"),
+        fixtures_dir().join("fake_claude.sh"),
+    ];
+    let found = ClaudeCodeCliBackend::detect_from(&candidates)
+        .await
+        .expect("後ろの候補で検出できる");
+    assert_eq!(found.path, candidates[2]);
+}
+
+#[tokio::test]
+async fn detect_from_reports_error_when_no_candidate_works() {
+    let candidates = vec![PathBuf::from("madake-no-such-command-xyz")];
+    assert!(ClaudeCodeCliBackend::detect_from(&candidates)
+        .await
+        .is_err());
+}
+
+/// 既定候補はPATH上の`claude`を先頭に、既知のインストール先を含む。
+#[test]
+fn default_candidates_include_known_install_paths() {
+    let candidates = ClaudeCodeCliBackend::default_candidates();
+    assert_eq!(candidates[0], PathBuf::from("claude"));
+    for expected in ["/usr/local/bin/claude", "/opt/homebrew/bin/claude"] {
+        assert!(
+            candidates.iter().any(|c| c == Path::new(expected)),
+            "{expected} が候補に無い: {candidates:?}"
+        );
+    }
+    if std::env::var_os("HOME").is_some() {
+        assert!(
+            candidates.iter().any(|c| c.ends_with(".local/bin/claude")),
+            "{candidates:?}"
+        );
+    }
 }
