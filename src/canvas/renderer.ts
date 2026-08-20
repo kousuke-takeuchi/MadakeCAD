@@ -161,14 +161,16 @@ function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet) {
   });
 }
 
-function drawSymbol(
+/** シンボル1個を描画する。colorOverride指定時は配置プレビュー等のゴースト描画用。 */
+export function drawSymbol(
   ctx: CanvasRenderingContext2D,
   vp: Viewport,
   inst: SymbolInstance,
   def: SymbolDef,
   selected: boolean,
+  colorOverride?: string,
 ) {
-  ctx.strokeStyle = selected ? theme.selection : theme.line;
+  ctx.strokeStyle = colorOverride ?? (selected ? theme.selection : theme.line);
   ctx.fillStyle = ctx.strokeStyle;
   ctx.lineWidth = Math.max(1, 0.3 * vp.scale);
   for (const prim of def.primitives) {
@@ -232,7 +234,7 @@ function drawSymbol(
     }
   }
   // 参照記号・型番
-  ctx.fillStyle = selected ? theme.selection : theme.annotation;
+  ctx.fillStyle = colorOverride ?? (selected ? theme.selection : theme.annotation);
   ctx.font = `${Math.max(9, 2.5 * vp.scale)}px monospace`;
   ctx.textAlign = "center";
   if (inst.reference) {

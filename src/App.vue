@@ -1,103 +1,65 @@
-<!--
-  仮のデバッグ画面。本UIはPencil(pen.dev)でのデザイン確定後に実装する。
-  バックエンド(Commandエンジン+MCPサーバー)の動作確認用:
-  MCP経由の編集がdoc:patchイベントでリアルタイムに反映されることを確認できる。
--->
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { onMounted, ref } from "vue";
+import EditorLayout from "./components/EditorLayout.vue";
+import { useDocumentStore } from "./stores/document";
 
-interface ProjectSnapshot {
-  revision: number;
-  project: {
-    name: string;
-    sheets: Array<{
-      id: string;
-      name: string;
-      size: string;
-      orientation: string;
-      entities: Record<string, unknown>;
-    }>;
-  };
-  can_undo: boolean;
-  can_redo: boolean;
-}
-
-const snapshot = ref<ProjectSnapshot | null>(null);
-const patchLog = ref<string[]>([]);
-let unlisten: UnlistenFn | null = null;
-
-async function refresh() {
-  snapshot.value = await invoke<ProjectSnapshot>("get_project");
-}
+const store = useDocumentStore();
+const ready = ref(false);
+const error = ref<string | null>(null);
 
 onMounted(async () => {
-  await refresh();
-  unlisten = await listen("doc:patch", (event) => {
-    const patch = event.payload as { revision: number; ops: Array<{ op: string }> };
-    patchLog.value.unshift(
-      `rev ${patch.revision}: ${patch.ops.map((o) => o.op).join(", ")}`
-    );
-    if (patchLog.value.length > 50) patchLog.value.pop();
-    refresh();
-  });
-});
-
-onUnmounted(() => {
-  unlisten?.();
+  try {
+    await store.bootstrap();
+    ready.value = true;
+  } catch (e) {
+    error.value = String(e);
+  }
 });
 </script>
 
 <template>
-  <main class="debug">
-    <h1>MadakeCAD</h1>
-    <p class="note">
-      バックエンド動作確認画面(仮)。UIデザインはPencilで作成後に実装します。
-    </p>
-    <section v-if="snapshot">
-      <h2>{{ snapshot.project.name }}</h2>
-      <p>revision: {{ snapshot.revision }} / undo: {{ snapshot.can_undo }} / redo: {{ snapshot.can_redo }}</p>
-      <ul>
-        <li v-for="sheet in snapshot.project.sheets" :key="sheet.id">
-          {{ sheet.name }} ({{ sheet.size }} {{ sheet.orientation }}) -
-          エンティティ {{ Object.keys(sheet.entities).length }} 件
-        </li>
-      </ul>
-    </section>
-    <section>
-      <h3>MCP接続</h3>
-      <p><code>http://127.0.0.1:9310/mcp</code> (Claude Codeからは .mcp.json の "madakecad")</p>
-      <h3>patchログ</h3>
-      <ol class="log">
-        <li v-for="(line, i) in patchLog" :key="i">{{ line }}</li>
-      </ol>
-    </section>
-  </main>
+  <EditorLayout v-if="ready" />
+  <div v-else class="boot">
+    <p v-if="error" class="boot-error">起動エラー: {{ error }}</p>
+    <p v-else>読み込み中...</p>
+  </div>
 </template>
 
 <style>
-body {
+/* AutoCAD Electrical風ライトテーマのUIトークン (Pencilデザイン準拠) */
+:root {
+  --ribbon-strip: #dfe3e7;
+  --ribbon-bg: #f2f4f5;
+  --ribbon-line: #c6cbd1;
+  --ribbon-label: #5a6068;
+  --ui-text: #2b2f33;
+  --ui-muted: #6b7178;
+  --palette-bg: #f7f8f9;
+  --palette-head: #d9dde1;
+  --sel-blue: #cce4f7;
+  --acad-blue: #1f6fbf;
+  --status-bg: #d8dce0;
+  --hover-bg: #e4e8ec;
+}
+html, body, #app {
   margin: 0;
+  padding: 0;
+  height: 100%;
   font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
-  background: #1e1e1e;
-  color: #ddd;
+  background: var(--ribbon-bg);
+  color: var(--ui-text);
 }
-.debug {
-  padding: 2rem;
-  max-width: 720px;
+* { box-sizing: border-box; }
+</style>
+
+<style scoped>
+.boot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-size: 13px;
+  color: var(--ui-muted);
 }
-.note {
-  color: #999;
-}
-.log {
-  font-family: monospace;
-  font-size: 12px;
-  color: #8c8;
-}
-code {
-  background: #333;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
+.boot-error { color: #c0392b; }
 </style>
