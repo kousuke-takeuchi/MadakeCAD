@@ -1,0 +1,433 @@
+import { setActivePinia, createPinia } from "pinia";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
+import {
+  useChatStore,
+  agentApi,
+  summarizeToolUse,
+  shortToolName,
+  appliedCommandCount,
+  normalizeConversation,
+  type AgentEvent,
+} from "./chat";
+
+const CONV = "11111111-1111-4111-8111-111111111111";
+const CONV2 = "22222222-2222-4222-8222-222222222222";
+
+function feed(store: ReturnType<typeof useChatStore>, events: AgentEvent[], id = CONV) {
+  for (const event of events) store.applyAgentEvent({ conversation_id: id, event });
+}
+
+describe("chat store: applyAgentEvent", () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  it("会話を自動生成し、text_deltaを進行中メッセージへ連結する", () => {
+    const store = useChatStore();
+    feed(store, [
+      { type: "session_started", session_id: "sess-1" },
+      { type: "text_delta", text: "ヒューズ" },
+      { type: "text_delta", text: "を追加します" },
+    ]);
+
+    expect(store.conversations).toHaveLength(1);
+    expect(store.activeId).toBe(CONV);
+    expect(store.conversations[0].session_id).toBe("sess-1");
+    expect(store.messages).toHaveLength(1);
+    expect(store.messages[0].role).toBe("assistant");
+    expect(store.messages[0].text).toBe("ヒューズを追加します");
+    expect(store.messages[0].streaming).toBe(true);
+    expect(store.streaming).toBe(true);
+    expect(store.streamingMessage).toBe(store.messages[0]);
+  });
+
+  it("turn_completedでストリーミングを解除し、usageを確定する", () => {
+    const store = useChatStore();
+    feed(store, [
+      { type: "text_delta", text: "done" },
+      {
+        type: "turn_completed",
+        result: "done",
+        usage: {
+          input_tokens: 10,
+          output_tokens: 20,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 5,
+          total_cost_usd: 0.01,
+        },
+      },
+    ]);
+
+    expect(store.streaming).toBe(false);
+    expect(store.messages[0].streaming).toBe(false);
+    expect(store.messages[0].usage?.output_tokens).toBe(20);
+    expect(store.streamingMessage).toBeNull();
+  });
+
+  it("デルタが来なかった場合はturn_completedのresultで本文を埋める", () => {
+    const store = useChatStore();
+    feed(store, [{ type: "turn_completed", result: "配置しました", usage: null }]);
+
+    expect(store.messages).toHaveLength(1);
+    expect(store.messages[0].text).toBe("配置しました");
+    expect(store.messages[0].streaming).toBe(false);
+    expect(store.streaming).toBe(false);
+  });
+
+  it("ツール呼び出しをチップ化し、成功/失敗をidで確定する", () => {
+    const store = useChatStore();
+    feed(store, [
+      {
+        type: "tool_use_started",
+        id: "t1",
+        tool: "mcp__madakecad__place_symbol",
+        input: { symbol_id: "fuse", reference: "F2", value: "5A", x: 140, y: 90 },
+      },
+      {
+        type: "tool_use_started",
+        id: "t2",
+        tool: "mcp__madakecad__export_svg",
+        input: { path: "/tmp/a.svg" },
+      },
+      { type: "tool_use_finished", id: "t1", tool: "mcp__madakecad__place_symbol", is_error: false },
+      { type: "tool_use_finished", id: "t2", tool: "mcp__madakecad__export_svg", is_error: true },
+    ]);
+
+    const calls = store.messages[0].tool_calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0].status).toBe("ok");
+    expect(calls[0].summary).toBe("fuse F2 5A を (140,90) に配置");
+    expect(calls[1].status).toBe("error");
+  });
+
+  it("同じtool_use_idの重複開始は無視する", () => {
+    const store = useChatStore();
+    const started: AgentEvent = {
+      type: "tool_use_started",
+      id: "t1",
+      tool: "mcp__madakecad__get_project",
+      input: {},
+    };
+    feed(store, [started, started]);
+
+    expect(store.messages[0].tool_calls).toHaveLength(1);
+  });
+
+  it("id無しのtool_use_finishedは同名の実行中チップに対応づける", () => {
+    const store = useChatStore();
+    feed(store, [
+      { type: "tool_use_started", id: "", tool: "mcp__madakecad__undo", input: {} },
+      { type: "tool_use_finished", id: "", tool: "mcp__madakecad__undo", is_error: false },
+    ]);
+
+    expect(store.messages[0].tool_calls[0].status).toBe("ok");
+  });
+
+  it("errorイベントでメッセージにエラーを付与しストリーミングを解除する", () => {
+    const store = useChatStore();
+    feed(store, [
+      { type: "text_delta", text: "途中" },
+      { type: "error", message: "claude が異常終了しました" },
+    ]);
+
+    expect(store.messages[0].error).toBe("claude が異常終了しました");
+    expect(store.messages[0].streaming).toBe(false);
+    expect(store.streaming).toBe(false);
+  });
+
+  it("turn_appliedでrevision範囲を記録する", () => {
+    const store = useChatStore();
+    feed(store, [
+      { type: "text_delta", text: "追加しました" },
+      { type: "turn_completed", result: "追加しました", usage: null },
+      { type: "turn_applied", start_revision: 7, end_revision: 10 },
+    ]);
+
+    expect(store.messages[0].applied_revisions).toEqual({ start: 7, end: 10 });
+    expect(appliedCommandCount(store.messages[0])).toBe(3);
+    expect(store.messages[0].undone).toBe(false);
+  });
+
+  it("完了後の新しいデルタは新しいターンを開始する", () => {
+    const store = useChatStore();
+    feed(store, [
+      { type: "text_delta", text: "1回目" },
+      { type: "turn_completed", result: "1回目", usage: null },
+      { type: "text_delta", text: "2回目" },
+    ]);
+
+    expect(store.messages.map((m) => m.text)).toEqual(["1回目", "2回目"]);
+    expect(store.streaming).toBe(true);
+  });
+
+  it("複数会話を独立に畳み込み、片方が進行中ならstreamingを保つ", () => {
+    const store = useChatStore();
+    feed(store, [{ type: "text_delta", text: "A" }], CONV);
+    feed(store, [{ type: "text_delta", text: "B" }], CONV2);
+    feed(store, [{ type: "turn_completed", result: "A", usage: null }], CONV);
+
+    expect(store.conversations.map((c) => c.id)).toEqual([CONV, CONV2]);
+    expect(store.activeId).toBe(CONV);
+    expect(store.conversations[0].messages[0].text).toBe("A");
+    expect(store.conversations[1].messages[0].text).toBe("B");
+    expect(store.streaming).toBe(true);
+
+    feed(store, [{ type: "turn_completed", result: "B", usage: null }], CONV2);
+    expect(store.streaming).toBe(false);
+  });
+});
+
+describe("chat store: アクション", () => {
+  beforeEach(() => {
+    // agentApiはモジュールレベルの共有オブジェクト。テスト間でスパイを戻す
+    vi.restoreAllMocks();
+    setActivePinia(createPinia());
+  });
+
+  it("sendは会話を新規作成し、サーバー採番のidを引き取る", async () => {
+    const send = vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
+    const store = useChatStore();
+    store.setModel("claude-opus-4");
+
+    const id = await store.send("  F2を追加して  ");
+
+    expect(id).toBe(CONV);
+    expect(send).toHaveBeenCalledWith(null, "F2を追加して", "claude-opus-4");
+    expect(store.conversations).toHaveLength(1);
+    expect(store.activeId).toBe(CONV);
+    expect(store.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(store.messages[0].text).toBe("F2を追加して");
+    expect(store.streaming).toBe(true);
+
+    // 2通目は既存の会話idで送る
+    send.mockResolvedValue(CONV);
+    feed(store, [{ type: "turn_completed", result: "ok", usage: null }]);
+    await store.send("次の指示");
+    expect(send).toHaveBeenLastCalledWith(CONV, "次の指示", "claude-opus-4");
+    expect(store.conversations).toHaveLength(1);
+  });
+
+  it("send解決前に届いたイベントも同じ会話へ入る", async () => {
+    let resolveSend: (id: string) => void = () => {};
+    vi.spyOn(agentApi, "send").mockImplementation(
+      () => new Promise<string>((r) => (resolveSend = r)),
+    );
+    const store = useChatStore();
+
+    const pending = store.send("配線して");
+    feed(store, [{ type: "text_delta", text: "はい" }]);
+    resolveSend(CONV);
+    await pending;
+
+    expect(store.conversations).toHaveLength(1);
+    expect(store.conversations[0].id).toBe(CONV);
+    expect(store.activeId).toBe(CONV);
+    expect(store.messages.map((m) => m.text)).toEqual(["配線して", "はい"]);
+  });
+
+  it("空プロンプトとストリーミング中の送信は無視する", async () => {
+    const send = vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
+    const store = useChatStore();
+
+    expect(await store.send("   ")).toBeNull();
+    expect(send).not.toHaveBeenCalled();
+
+    await store.send("1通目");
+    expect(await store.send("2通目")).toBeNull();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("send失敗時はメッセージにエラーを載せてストリーミングを解除する", async () => {
+    vi.spyOn(agentApi, "send").mockRejectedValue(new Error("claude が見つかりません"));
+    const store = useChatStore();
+
+    expect(await store.send("やって")).toBeNull();
+    expect(store.messages[1].error).toBe("claude が見つかりません");
+    expect(store.streaming).toBe(false);
+  });
+
+  it("cancelで全メッセージのストリーミングを解除する", async () => {
+    const cancel = vi.spyOn(agentApi, "cancel").mockResolvedValue();
+    const store = useChatStore();
+    feed(store, [{ type: "text_delta", text: "途中" }]);
+
+    await store.cancel();
+
+    expect(cancel).toHaveBeenCalledWith(CONV);
+    expect(store.streaming).toBe(false);
+    expect(store.messages[0].streaming).toBe(false);
+  });
+
+  it("undoTurnはAPIを呼び、適用済み表示を取り下げる", async () => {
+    const undoTurn = vi.spyOn(agentApi, "undoTurn").mockResolvedValue();
+    const store = useChatStore();
+    feed(store, [
+      { type: "turn_completed", result: "追加しました", usage: null },
+      { type: "turn_applied", start_revision: 4, end_revision: 6 },
+    ]);
+
+    await store.undoTurn(CONV, 0);
+
+    expect(undoTurn).toHaveBeenCalledWith(CONV, 0);
+    expect(store.messages[0].undone).toBe(true);
+    expect(appliedCommandCount(store.messages[0])).toBe(0);
+
+    // 編集の無いターンではAPIを呼ばない
+    await store.undoTurn(CONV, 0);
+    expect(undoTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("loadConversationsはRust表現を表示用モデルへ正規化する", async () => {
+    vi.spyOn(agentApi, "listConversations").mockResolvedValue([
+      {
+        id: CONV,
+        session_id: "sess-1",
+        model: null,
+        messages: [
+          { role: "user", text: "F2を追加", applied_revisions: { start: 3, end: 3 } },
+          {
+            role: "assistant",
+            text: "追加しました",
+            applied_revisions: { start: 3, end: 5 },
+            tool_calls: [
+              {
+                id: "t1",
+                tool: "mcp__madakecad__place_symbol",
+                input: { symbol_id: "fuse", reference: "F2", x: 140, y: 90 },
+                finished: true,
+                is_error: false,
+              },
+            ],
+            error: null,
+          },
+        ],
+      },
+    ]);
+    const store = useChatStore();
+
+    await store.loadConversations();
+
+    expect(store.activeId).toBe(CONV);
+    expect(store.messages).toHaveLength(2);
+    expect(store.messages[1].tool_calls[0].status).toBe("ok");
+    expect(store.messages[1].tool_calls[0].summary).toBe("fuse F2 を (140,90) に配置");
+    expect(appliedCommandCount(store.messages[1])).toBe(2);
+    expect(store.streaming).toBe(false);
+  });
+
+  it("normalizeConversationは未完了ツールをrunningとして扱う", () => {
+    const conv = normalizeConversation({
+      id: CONV,
+      session_id: null,
+      model: null,
+      messages: [
+        {
+          role: "assistant",
+          text: "",
+          tool_calls: [
+            { id: "t1", tool: "draw_wire", input: {}, finished: false, is_error: false },
+          ],
+        },
+      ],
+    });
+
+    expect(conv.messages[0].tool_calls[0].status).toBe("running");
+    expect(conv.messages[0].applied_revisions).toEqual({ start: 0, end: 0 });
+  });
+
+  it("setModel / togglePanel / newConversation", async () => {
+    vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
+    const store = useChatStore();
+
+    expect(store.panelOpen).toBe("collapsed");
+    store.togglePanel();
+    expect(store.panelOpen).toBe("expanded");
+    store.setPanel("collapsed");
+    expect(store.panelOpen).toBe("collapsed");
+
+    await store.send("こんにちは");
+    store.setModel("claude-sonnet-4");
+    expect(store.activeConversation?.model).toBe("claude-sonnet-4");
+
+    store.newConversation();
+    expect(store.activeId).toBeNull();
+    expect(store.messages).toEqual([]);
+  });
+});
+
+describe("summarizeToolUse", () => {
+  it("MCPのプレフィックスを外す", () => {
+    expect(shortToolName("mcp__madakecad__place_symbol")).toBe("place_symbol");
+    expect(shortToolName("place_symbol")).toBe("place_symbol");
+  });
+
+  it("place_symbol", () => {
+    expect(
+      summarizeToolUse("mcp__madakecad__place_symbol", {
+        symbol_id: "fuse",
+        reference: "F2",
+        value: "5A",
+        x: 140,
+        y: 90,
+      }),
+    ).toBe("fuse F2 5A を (140,90) に配置");
+    expect(summarizeToolUse("place_symbol", { x: 12.5, y: 7.25 })).toBe(
+      "シンボルを (12.5,7.25) に配置",
+    );
+  });
+
+  it("draw_wire", () => {
+    expect(
+      summarizeToolUse("mcp__madakecad__draw_wire", {
+        points: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 20 },
+        ],
+        color: "red",
+        sq: 0.75,
+      }),
+    ).toBe("0.75sq 赤 2本を接続");
+    expect(
+      summarizeToolUse("draw_wire", {
+        points: [
+          { x: 0, y: 0 },
+          { x: 5, y: 0 },
+        ],
+      }),
+    ).toBe("1本を接続");
+  });
+
+  it("update_entity / execute_commands", () => {
+    expect(
+      summarizeToolUse("update_entity", { entity: { kind: "symbol", reference: "K1" } }),
+    ).toBe("シンボル K1 を更新");
+    expect(
+      summarizeToolUse("mcp__madakecad__execute_commands", {
+        commands: [{ type: "move_entities" }],
+      }),
+    ).toBe("要素移動 を実行");
+    expect(
+      summarizeToolUse("execute_commands", { commands: [{ type: "add_entity" }, { type: "undo" }] }),
+    ).toBe("編集コマンド 2件を実行");
+  });
+
+  it("読み取り系と書き出し系", () => {
+    expect(summarizeToolUse("mcp__madakecad__get_netlist", {})).toBe("ネットリストを取得");
+    expect(summarizeToolUse("mcp__madakecad__get_project", {})).toBe("図面全体を読み取り");
+    expect(summarizeToolUse("export_svg", { path: "/tmp/out/a.svg" })).toBe(
+      "SVGを書き出し (a.svg)",
+    );
+    expect(summarizeToolUse("export_bom", { path: "/tmp/bom.csv" })).toBe(
+      "部品表CSVを書き出し (bom.csv)",
+    );
+    expect(summarizeToolUse("export_wire_list", { path: "/tmp/w.csv" })).toBe(
+      "電線リストCSVを書き出し (w.csv)",
+    );
+  });
+
+  it("未知のツールはツール名のみ", () => {
+    expect(summarizeToolUse("mcp__madakecad__future_tool", { a: 1 })).toBe("future_tool");
+    expect(summarizeToolUse("Bash", null)).toBe("Bash");
+  });
+});
