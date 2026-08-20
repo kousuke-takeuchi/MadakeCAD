@@ -8,6 +8,7 @@
 //! undo/redo・patch配信・UI/AI編集と完全に整合する。
 
 use std::convert::Infallible;
+use std::sync::Arc;
 
 use axum::extract::{Query, State};
 use axum::response::sse::{Event, Sse};
@@ -15,6 +16,7 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{http::StatusCode, Json, Router};
 use futures::stream::Stream;
+use madake_agent::{AgentManager, Conversation, DetectResult};
 use madake_core::{builtin_symbols, Command, Patch};
 use serde::Deserialize;
 use tower_http::cors::CorsLayer;
@@ -57,10 +59,9 @@ async fn get_netlist(
         None => engine.project().sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    Ok(Json(serde_json::json!(madake_core::netlist::extract_netlist(
-        sheet,
-        &builtin_symbols()
-    ))))
+    Ok(Json(serde_json::json!(
+        madake_core::netlist::extract_netlist(sheet, &builtin_symbols())
+    )))
 }
 
 async fn post_commands(
@@ -144,8 +145,11 @@ async fn post_export_wire_list(
     Json(body): Json<PathBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let engine = doc.engine.lock().unwrap();
-    std::fs::write(&body.path, madake_core::reports::wire_list_csv(engine.project()))
-        .map_err(bad_request)?;
+    std::fs::write(
+        &body.path,
+        madake_core::reports::wire_list_csv(engine.project()),
+    )
+    .map_err(bad_request)?;
     Ok(Json(serde_json::json!({ "written": body.path })))
 }
 
@@ -171,13 +175,126 @@ async fn get_events(
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
 }
 
+/// エージェントAPIの状態(ドキュメント + マネージャ)。
+#[derive(Clone)]
+struct AgentApi {
+    doc: SharedDoc,
+    agent: Arc<AgentManager>,
+}
+
+#[derive(Deserialize)]
+struct AgentSendBody {
+    /// 継続する会話。省略時は新規会話を作る。
+    conversation_id: Option<Uuid>,
+    prompt: String,
+    model: Option<String>,
+}
+
+async fn post_agent_send(
+    State(state): State<AgentApi>,
+    Json(body): Json<AgentSendBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let context = crate::agent::drawing_context(&state.doc);
+    let id = state
+        .agent
+        .send(
+            body.conversation_id,
+            &body.prompt,
+            body.model,
+            Some(context),
+        )
+        .await
+        .map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "conversation_id": id })))
+}
+
+#[derive(Deserialize)]
+struct ConversationRefBody {
+    conversation_id: Uuid,
+}
+
+async fn post_agent_cancel(
+    State(state): State<AgentApi>,
+    Json(body): Json<ConversationRefBody>,
+) -> Json<serde_json::Value> {
+    let cancelled = state.agent.cancel(body.conversation_id);
+    Json(serde_json::json!({ "cancelled": cancelled }))
+}
+
+async fn get_agent_conversations(State(state): State<AgentApi>) -> Json<Vec<Conversation>> {
+    Json(state.agent.conversations())
+}
+
+#[derive(Deserialize)]
+struct UndoTurnBody {
+    conversation_id: Uuid,
+    /// 対象のアシスタントメッセージの位置(`conversations`の`messages`添字)。
+    message_index: usize,
+}
+
+async fn post_agent_undo_turn(
+    State(state): State<AgentApi>,
+    Json(body): Json<UndoTurnBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let revision = state
+        .agent
+        .undo_turn(body.conversation_id, body.message_index)
+        .map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "revision": revision })))
+}
+
+async fn get_agent_detect(State(state): State<AgentApi>) -> Result<Json<DetectResult>, ApiError> {
+    state.agent.detect().await.map(Json).map_err(bad_request)
+}
+
+/// エージェントイベントのSSEストリーム。
+///
+/// イベント名は`agent`、データはTauriの`agent:event`と同一のJSON
+/// (`{"conversation_id": "...", "event": {"type": ...}}`)。
+async fn get_agent_events(
+    State(state): State<AgentApi>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let rx = state.agent.subscribe();
+    let stream = futures::stream::unfold(rx, |mut rx| async move {
+        loop {
+            match rx.recv().await {
+                Ok(event) => {
+                    let event = Event::default()
+                        .event("agent")
+                        .data(serde_json::to_string(&event).unwrap_or_default());
+                    return Some((Ok(event), rx));
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    });
+    Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
+}
+
+/// /api/v1/agent 配下のRouter(ブラウザ検証用。Tauri IPCと同じマネージャを共有)。
+fn agent_router(state: AgentApi) -> Router {
+    Router::new()
+        .route("/api/v1/agent/send", post(post_agent_send))
+        .route("/api/v1/agent/cancel", post(post_agent_cancel))
+        .route("/api/v1/agent/conversations", get(get_agent_conversations))
+        .route("/api/v1/agent/undo-turn", post(post_agent_undo_turn))
+        .route("/api/v1/agent/detect", get(get_agent_detect))
+        .route("/api/v1/agent/events", get(get_agent_events))
+        .with_state(state)
+}
+
 async fn health() -> impl IntoResponse {
     Json(serde_json::json!({ "name": "MadakeCAD Link API", "version": 1 }))
 }
 
 /// /api/v1 のRouterを構築する。CORSはローカル開発・ツール連携用に全許可
 /// (サーバーは127.0.0.1バインドのため外部公開はされない)。
-pub fn router(doc: SharedDoc) -> Router {
+pub fn router(doc: SharedDoc, agent: Arc<AgentManager>) -> Router {
+    let agent_routes = agent_router(AgentApi {
+        doc: doc.clone(),
+        agent,
+    });
     Router::new()
         .route("/api/v1", get(health))
         .route("/api/v1/project", get(get_project))
@@ -192,6 +309,7 @@ pub fn router(doc: SharedDoc) -> Router {
         .route("/api/v1/export/bom", post(post_export_bom))
         .route("/api/v1/export/wire-list", post(post_export_wire_list))
         .route("/api/v1/events", get(get_events))
-        .layer(CorsLayer::permissive())
         .with_state(doc)
+        .merge(agent_routes)
+        .layer(CorsLayer::permissive())
 }

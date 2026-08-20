@@ -5,6 +5,7 @@
 //! 全ての編集はmadake-coreのCommandエンジンを通るため、UI操作と同じundo/redo履歴に乗り、
 //! patchブロードキャスト経由でUIにリアルタイム反映される。
 
+pub mod agent;
 pub mod link_api;
 
 use std::net::SocketAddr;
@@ -254,17 +255,17 @@ impl MadakeMcp {
     #[tool(
         description = "シートのネットリスト(電気的接続グラフ)を返す。各ネットは名前・所属ピン(参照記号+ピン番号)・配線idを持つ"
     )]
-    fn get_netlist(
-        &self,
-        Parameters(p): Parameters<SheetRefParams>,
-    ) -> Result<String, ErrorData> {
+    fn get_netlist(&self, Parameters(p): Parameters<SheetRefParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
         let engine = self.doc.engine.lock().unwrap();
         let sheet = engine
             .project()
             .sheet(sheet_id)
             .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
-        json_ok(&madake_core::netlist::extract_netlist(sheet, &builtin_symbols()))
+        json_ok(&madake_core::netlist::extract_netlist(
+            sheet,
+            &builtin_symbols(),
+        ))
     }
 
     #[tool(description = "部品表(BOM)CSVを指定パスに書き出す")]
@@ -287,10 +288,7 @@ impl MadakeMcp {
     }
 
     #[tool(description = "シートをJIS図枠つきSVGとして指定パスに書き出す")]
-    fn export_svg(
-        &self,
-        Parameters(p): Parameters<ExportSvgParams>,
-    ) -> Result<String, ErrorData> {
+    fn export_svg(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
         let engine = self.doc.engine.lock().unwrap();
         let sheet = engine
@@ -332,7 +330,14 @@ impl ServerHandler for MadakeMcp {
 
 /// 内蔵サーバーを起動する(127.0.0.1:port)。/mcp = AI用MCP、/api/v1 = Link API。
 /// Tauriのasyncランタイム上でspawnして使う。
-pub async fn serve(doc: SharedDoc, port: u16) -> std::io::Result<()> {
+///
+/// `agent`はUI(Tauri IPC)と共有するエージェントマネージャ。Link APIの
+/// `/api/v1/agent/*`は同じマネージャを叩くので、ブラウザ検証でもUIと同じ会話を見る。
+pub async fn serve(
+    doc: SharedDoc,
+    agent: std::sync::Arc<madake_agent::AgentManager>,
+    port: u16,
+) -> std::io::Result<()> {
     let mcp_doc = doc.clone();
     let service = StreamableHttpService::new(
         move || Ok(MadakeMcp::new(mcp_doc.clone())),
@@ -341,7 +346,7 @@ pub async fn serve(doc: SharedDoc, port: u16) -> std::io::Result<()> {
     );
     let router = axum::Router::new()
         .nest_service("/mcp", service)
-        .merge(link_api::router(doc));
+        .merge(link_api::router(doc, agent));
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, router).await
