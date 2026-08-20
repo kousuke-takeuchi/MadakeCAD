@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-20-madakecad-design.md`
 
+**進捗 (2026-08-20):** Task 1〜9 実装・コミット済み。cargo test 20件 + vitest 9件グリーン。MCP経由のエンドツーエンド(place_symbol→draw_wire→get_netlist→export_svg)確認済み。残: 実機UIの目視スモーク(ユーザー確認待ち)、PDF出力(別プラン)、端子台動的シンボル・レイヤ(フェーズ1後半)。
+
 ## Global Constraints
 
 - 全編集はCommand経由。モデル直接変更禁止(CLAUDE.md「アーキテクチャの絶対原則」)
