@@ -29,16 +29,18 @@ function scheduleDraw() {
   if (!raf) raf = requestAnimationFrame(draw);
 }
 
+let fitted = false;
+
 function resize() {
   const canvas = canvasRef.value;
   const wrap = wrapRef.value;
   if (!canvas || !wrap) return;
-  const first = canvas.width === 0;
   canvas.width = wrap.clientWidth;
   canvas.height = wrap.clientHeight;
-  if (first && store.activeSheet) {
+  if (!fitted && canvas.width > 0 && store.activeSheet) {
     const { w, h } = paperSize();
     controller.vp.fit(w, h, canvas.width, canvas.height);
+    fitted = true;
   }
   scheduleDraw();
 }

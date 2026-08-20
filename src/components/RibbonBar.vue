@@ -1,100 +1,94 @@
 <script setup lang="ts">
+// リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
+import {
+  AlignJustify, Cable, Copy, Cpu, FileText, Hash, Image, LayoutGrid, Move, MoveRight,
+  Pencil, Route, Scissors, ShieldCheck, Trash2, type LucideIcon,
+} from "lucide-vue-next";
 import { inject, ref } from "vue";
-import { open as dialogOpen, save as dialogSave } from "@tauri-apps/plugin-dialog";
-import { inTauri, ipc } from "../ipc";
-
-// ブラウザ検証モードではネイティブダイアログが無いためprompt入力にフォールバック
-async function save(opts: { defaultPath: string; filters: { name: string; extensions: string[] }[] }) {
-  if (inTauri) return dialogSave(opts);
-  return window.prompt("保存先の絶対パス:", `/tmp/${opts.defaultPath}`);
-}
-async function open(opts: { multiple: boolean; filters: { name: string; extensions: string[] }[] }) {
-  if (inTauri) return dialogOpen(opts);
-  return window.prompt("開くファイルの絶対パス:");
-}
+import { useFileActions } from "../composables/fileActions";
 import type { EditorController } from "../tools/controller";
-import { useDocumentStore } from "../stores/document";
+import { useUiStore } from "../stores/ui";
 
-const store = useDocumentStore();
 const controller = inject<EditorController>("controller")!;
+const ui = useUiStore();
+const files = useFileActions();
+
 const activeTab = ref("回路図");
-const tabs = ["ホーム", "プロジェクト", "回路図", "パネル", "レポート", "表示", "管理"];
+const tabs = ["ホーム", "プロジェクト", "回路図", "パネル", "レポート", "読み込み/書き出し", "表示", "管理"];
 
-async function exportSvg() {
-  const sheet = store.activeSheet;
-  if (!sheet) return;
-  const path = await save({
-    defaultPath: `${sheet.name}.svg`,
-    filters: [{ name: "SVG", extensions: ["svg"] }],
-  });
-  if (path) await ipc.exportSvg(sheet.id, path);
+function todo(name: string) {
+  ui.log(`${name}: 未実装 (今後のフェーズで対応予定)`);
 }
 
-async function exportBom() {
-  const path = await save({
-    defaultPath: "部品表.csv",
-    filters: [{ name: "CSV", extensions: ["csv"] }],
-  });
-  if (path) await ipc.exportBom(path);
+interface RibbonItem {
+  label: string;
+  icon: LucideIcon;
+  action: () => void;
+  isActive?: () => boolean;
+}
+interface RibbonGroup {
+  name: string;
+  big: RibbonItem & { color: string };
+  small: RibbonItem[];
 }
 
-async function exportWireList() {
-  const path = await save({
-    defaultPath: "電線リスト.csv",
-    filters: [{ name: "CSV", extensions: ["csv"] }],
-  });
-  if (path) await ipc.exportWireList(path);
-}
-
-async function openProject() {
-  const path = await open({
-    multiple: false,
-    filters: [{ name: "MadakeCADプロジェクト", extensions: ["mdkproj"] }],
-  });
-  if (typeof path === "string") {
-    const patch = await ipc.loadProject(path);
-    store.applyPatch(patch);
-    controller.requestRedraw();
-  }
-}
-
-async function saveProject() {
-  const path = await save({
-    defaultPath: `${store.project?.name ?? "project"}.mdkproj`,
-    filters: [{ name: "MadakeCADプロジェクト", extensions: ["mdkproj"] }],
-  });
-  if (path) await ipc.saveProject(path);
-}
-
-const groups = [
-  {
-    name: "ファイル",
-    big: { label: "保存", icon: "💾", action: saveProject, toolId: "" },
-    small: [
-      { label: "開く", action: openProject },
-    ],
-  },
+const groups: RibbonGroup[] = [
   {
     name: "配線",
-    big: { label: "配線", icon: "〜", action: () => controller.setTool("wire"), toolId: "wire" },
+    big: {
+      label: "配線",
+      icon: Route,
+      color: "#c0392b",
+      action: () => controller.setTool("wire"),
+      isActive: () => controller.tool === "wire",
+    },
     small: [
-      { label: "選択", action: () => controller.setTool("select") },
-      { label: "削除", action: () => controller.deleteSelection() },
+      { label: "複数母線", icon: AlignJustify, action: () => todo("複数母線") },
+      { label: "線番挿入", icon: Hash, action: () => todo("線番挿入") },
+      { label: "信号矢印", icon: MoveRight, action: () => todo("信号矢印") },
     ],
   },
   {
-    name: "編集",
-    big: { label: "元に戻す", icon: "↩", action: () => store.undo().then(() => controller.requestRedraw()), toolId: "" },
+    name: "部品を挿入",
+    big: {
+      label: "部品挿入",
+      icon: Cpu,
+      color: "#1f6fbf",
+      action: () => (ui.symbolPickerOpen = true),
+      isActive: () => controller.tool === "place",
+    },
     small: [
-      { label: "やり直し", action: () => store.redo().then(() => controller.requestRedraw()) },
+      { label: "端子台", icon: LayoutGrid, action: () => todo("端子台") },
+      { label: "回路コピー", icon: Copy, action: () => todo("回路コピー") },
     ],
   },
   {
-    name: "出力",
-    big: { label: "SVG出力", icon: "▤", action: exportSvg, toolId: "" },
+    name: "回路図を編集",
+    big: {
+      label: "編集",
+      icon: Pencil,
+      color: "#b7791f",
+      action: () => controller.setTool("select"),
+      isActive: () => controller.tool === "select",
+    },
     small: [
-      { label: "部品表", action: exportBom },
-      { label: "電線リスト", action: exportWireList },
+      { label: "移動", icon: Move, action: () => { controller.setTool("select"); ui.log("移動: 選択してドラッグ (グリッドスナップ)"); } },
+      { label: "トリム", icon: Scissors, action: () => todo("トリム") },
+      { label: "削除", icon: Trash2, action: () => controller.deleteSelection() },
+    ],
+  },
+  {
+    name: "検証/レポート",
+    big: {
+      label: "検証",
+      icon: ShieldCheck,
+      color: "#1f8a4c",
+      action: () => todo("検証 (ERC)"),
+    },
+    small: [
+      { label: "部品表", icon: FileText, action: () => files.exportBom() },
+      { label: "電線リスト", icon: Cable, action: () => files.exportWireList() },
+      { label: "SVG出力", icon: Image, action: () => files.exportSvg() },
     ],
   },
 ];
@@ -114,27 +108,31 @@ const groups = [
       </button>
     </div>
     <div class="ribbon-body">
-      <template v-for="(g, i) in groups" :key="g.name">
-        <div v-if="i > 0" class="ribbon-sep" />
-        <div class="ribbon-group">
-          <div class="ribbon-group-body">
-            <button
-              class="ribbon-big"
-              :class="{ active: g.big.toolId && controller.tool === g.big.toolId }"
-              @click="g.big.action()"
-            >
-              <span class="ribbon-big-icon">{{ g.big.icon }}</span>
-              <span>{{ g.big.label }}</span>
-            </button>
-            <div class="ribbon-smalls">
-              <button v-for="s in g.small" :key="s.label" class="ribbon-small" @click="s.action()">
-                {{ s.label }}
+      <template v-if="activeTab === '回路図'">
+        <template v-for="(g, i) in groups" :key="g.name">
+          <div v-if="i > 0" class="ribbon-sep" />
+          <div class="ribbon-group">
+            <div class="ribbon-group-body">
+              <button
+                class="ribbon-big"
+                :class="{ active: g.big.isActive?.() }"
+                @click="g.big.action()"
+              >
+                <component :is="g.big.icon" :size="26" :color="g.big.color" />
+                <span>{{ g.big.label }}</span>
               </button>
+              <div class="ribbon-smalls">
+                <button v-for="s in g.small" :key="s.label" class="ribbon-small" @click="s.action()">
+                  <component :is="s.icon" :size="13" class="small-icon" />
+                  {{ s.label }}
+                </button>
+              </div>
             </div>
+            <div class="ribbon-group-label">{{ g.name }} ▾</div>
           </div>
-          <div class="ribbon-group-label">{{ g.name }}</div>
-        </div>
+        </template>
       </template>
+      <div v-else class="ribbon-placeholder">「{{ activeTab }}」タブは今後のフェーズで実装予定です</div>
     </div>
   </div>
 </template>
@@ -144,10 +142,11 @@ const groups = [
   background: var(--ribbon-bg);
   border-bottom: 1px solid var(--ribbon-line);
   user-select: none;
+  flex: none;
 }
 .ribbon-tabs {
   display: flex;
-  gap: 2px;
+  gap: 0;
   padding: 2px 10px 0;
   background: var(--ribbon-strip);
 }
@@ -169,7 +168,14 @@ const groups = [
   display: flex;
   align-items: stretch;
   padding: 4px 6px 2px;
-  min-height: 84px;
+  height: 96px;
+}
+.ribbon-placeholder {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 11px;
+  color: var(--ui-muted);
 }
 .ribbon-group {
   display: flex;
@@ -208,7 +214,6 @@ const groups = [
 }
 .ribbon-big:hover { background: var(--hover-bg); }
 .ribbon-big.active { background: var(--sel-blue); }
-.ribbon-big-icon { font-size: 22px; line-height: 1; color: var(--acad-blue); }
 .ribbon-smalls {
   display: flex;
   flex-direction: column;
@@ -216,6 +221,9 @@ const groups = [
   padding-top: 3px;
 }
 .ribbon-small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   border: none;
   background: transparent;
   text-align: left;
@@ -226,4 +234,5 @@ const groups = [
   cursor: pointer;
 }
 .ribbon-small:hover { background: var(--hover-bg); }
+.small-icon { color: #4a6fa5; flex: none; }
 </style>

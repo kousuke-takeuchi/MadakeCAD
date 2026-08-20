@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// プロパティパレット (Pencilデザイン準拠): セクション見出し + ラベル列(灰)/値列(白)のグリッド。
+import { ChevronDown, Pin } from "lucide-vue-next";
 import { computed, reactive, watch } from "vue";
 import type { Entity } from "../ipc";
 import { useDocumentStore } from "../stores/document";
@@ -19,7 +21,6 @@ const wireColors = [
 ] as const;
 const sqValues = [0.2, 0.3, 0.5, 0.75, 1.25, 2.0, 3.5, 5.5];
 
-// 編集バッファ (適用ボタンでCommand発行)
 const buf = reactive({
   color: "red",
   sq: 0.75,
@@ -83,55 +84,73 @@ const kindLabel: Record<string, string> = {
 
 <template>
   <aside class="panel">
-    <div class="panel-head">プロパティ</div>
+    <div class="panel-head">
+      <span>プロパティ</span>
+      <Pin :size="11" class="muted" />
+    </div>
     <div class="type-row">
       <span v-if="selected">{{ kindLabel[selected.kind] }} (1)</span>
       <span v-else-if="store.selection.size > 1">{{ store.selection.size }} 個選択</span>
       <span v-else class="muted">選択なし</span>
+      <ChevronDown :size="11" class="muted" />
     </div>
 
     <template v-if="selected?.kind === 'wire'">
-      <div class="sec">電気属性</div>
-      <label class="field">
-        <span>線色</span>
-        <select v-model="buf.color">
-          <option v-for="[v, label] in wireColors" :key="v" :value="v">{{ label }} ({{ v }})</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>線径 sq</span>
-        <select v-model.number="buf.sq">
-          <option v-for="v in sqValues" :key="v" :value="v">{{ v }} sq</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>電線品番</span>
-        <input v-model="buf.part_no" placeholder="例: SAMPLE0001" />
-      </label>
-      <label class="field">
-        <span>長さ m</span>
-        <input v-model="buf.length_m" placeholder="例: 0.4" />
-      </label>
+      <div class="sec"><ChevronDown :size="10" /> 一般</div>
+      <div class="prow">
+        <span class="plabel">色</span>
+        <span class="pvalue">
+          <span class="swatch" :data-color="buf.color" />
+          <select v-model="buf.color" class="bare">
+            <option v-for="[v, label] in wireColors" :key="v" :value="v">{{ label }} ({{ v }})</option>
+          </select>
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">線種</span>
+        <span class="pvalue">Continuous</span>
+      </div>
+      <div class="sec"><ChevronDown :size="10" /> 電気属性</div>
+      <div class="prow">
+        <span class="plabel">線径</span>
+        <span class="pvalue">
+          <select v-model.number="buf.sq" class="bare">
+            <option v-for="v in sqValues" :key="v" :value="v">{{ v }} sq</option>
+          </select>
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">電線品番</span>
+        <span class="pvalue"><input v-model="buf.part_no" class="bare" placeholder="SAMPLE0001" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">長さ m</span>
+        <span class="pvalue"><input v-model="buf.length_m" class="bare" placeholder="0.4" /></span>
+      </div>
     </template>
 
     <template v-else-if="selected?.kind === 'symbol'">
-      <div class="sec">識別</div>
-      <label class="field">
-        <span>参照記号</span>
-        <input v-model="buf.reference" />
-      </label>
-      <label class="field">
-        <span>型番/値</span>
-        <input v-model="buf.value" placeholder="例: JZX-22F" />
-      </label>
+      <div class="sec"><ChevronDown :size="10" /> 識別</div>
+      <div class="prow">
+        <span class="plabel">参照記号</span>
+        <span class="pvalue"><input v-model="buf.reference" class="bare" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">型番/値</span>
+        <span class="pvalue"><input v-model="buf.value" class="bare" placeholder="JZX-22F" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">シンボル</span>
+        <span class="pvalue">{{ selected.symbol_id }}</span>
+      </div>
     </template>
 
     <template v-else-if="selected?.kind === 'net_label'">
-      <div class="sec">ネット</div>
-      <label class="field">
-        <span>ネット名</span>
-        <input v-model="buf.name" />
-      </label>
+      <div class="sec"><ChevronDown :size="10" /> ネット</div>
+      <div class="prow">
+        <span class="plabel">ネット名</span>
+        <span class="pvalue"><input v-model="buf.name" class="bare" /></span>
+      </div>
     </template>
 
     <div v-if="selected" class="apply-row">
@@ -142,7 +161,7 @@ const kindLabel: Record<string, string> = {
 
 <style scoped>
 .panel {
-  width: 232px;
+  width: 240px;
   flex: none;
   background: var(--palette-bg);
   border-left: 1px solid var(--ribbon-line);
@@ -152,45 +171,82 @@ const kindLabel: Record<string, string> = {
   user-select: none;
 }
 .panel-head {
-  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 9px;
   background: var(--palette-head);
   font-size: 11px;
   font-weight: 600;
   color: var(--ui-text);
 }
 .type-row {
-  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 9px;
   font-size: 11px;
   color: var(--ui-text);
   border-bottom: 1px solid var(--ribbon-line);
 }
 .muted { color: var(--ui-muted); }
 .sec {
-  padding: 5px 10px 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
   font-size: 10px;
   font-weight: 600;
   color: var(--ui-text);
   background: #e7eaed;
 }
-.field {
-  display: grid;
-  grid-template-columns: 72px 1fr;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+.prow {
+  display: flex;
+  border-bottom: 1px solid #e3e6ea;
   font-size: 10px;
+}
+.plabel {
+  width: 88px;
+  flex: none;
+  padding: 5px 9px;
   color: var(--ui-muted);
 }
-.field input,
-.field select {
-  width: 100%;
-  font-size: 11px;
-  padding: 3px 6px;
-  border: 1px solid var(--ribbon-line);
-  border-radius: 3px;
+.pvalue {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
   background: #fff;
   color: var(--ui-text);
 }
+.bare {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 10px;
+  color: var(--ui-text);
+  padding: 2px 0;
+}
+.swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  flex: none;
+  background: #c00000;
+}
+.swatch[data-color="black"] { background: #202020; }
+.swatch[data-color="white"] { background: #f0f0f0; border: 1px solid #ccc; }
+.swatch[data-color="blue"] { background: #0000c0; }
+.swatch[data-color="yellow"] { background: #c8a800; }
+.swatch[data-color="green"] { background: #008040; }
+.swatch[data-color="orange"] { background: #d07010; }
+.swatch[data-color="purple"] { background: #8020a0; }
+.swatch[data-color="brown"] { background: #805020; }
+.swatch[data-color="gray"] { background: #808080; }
+.swatch[data-color="pink"] { background: #d06090; }
+.swatch[data-color="light_blue"] { background: #2090c0; }
 .apply-row {
   display: flex;
   justify-content: flex-end;
