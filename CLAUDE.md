@@ -63,4 +63,5 @@ superpowersプラグインの方法論に従う: brainstorming→spec、writing-
 
 - `.mdkproj`は整形JSON。フォーマット変更時は`format_version`を上げてマイグレーションを書く
 - rmcp/Tauri等のAPIはバージョン差が大きい。推測せずローカルの`~/.cargo/registry/src`かdocs.rsで確認
-- アプリ起動中はMCP(ポート9310)が生きている。テストで同時起動する場合は`MADAKE_MCP_PORT`で回避
+- アプリ起動中はMCP(/mcp)とLink API(/api/v1、REST+SSE)がポート9310で生きている。テストで同時起動する場合は`MADAKE_MCP_PORT`で回避
+- **UIの実機検証**: `npm run tauri dev`起動中に http://localhost:1420 をブラウザ(Playwright/Browserツール)で開くと、フロントがLink API経由で実バックエンドに接続される。スクリーンショット確認・クリック操作テストはこの経路で行う(ネイティブウィンドウのキャプチャは不要)
