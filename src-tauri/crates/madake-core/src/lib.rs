@@ -7,6 +7,7 @@ pub mod command;
 pub mod geometry;
 pub mod io;
 pub mod model;
+pub mod netlist;
 pub mod symbol;
 
 pub use command::{Command, Engine, Patch, PatchOp};
