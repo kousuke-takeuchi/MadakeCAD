@@ -8,4 +8,7 @@ if [ "$1" = "--version" ]; then
   exit 0
 fi
 
+# プロンプトはstdin経由で渡ってくる。読み捨てないと書き手側がEPIPEになる
+cat >/dev/null
+
 cat "$dir/stream_tooluse.jsonl"

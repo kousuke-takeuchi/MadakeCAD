@@ -150,3 +150,24 @@ fn stream_parser_fills_tool_name_on_finish() {
     assert_eq!(finished, "Bash");
     assert_eq!(evs.len(), 5);
 }
+
+#[test]
+fn stream_parser_drops_duplicate_tool_use_started() {
+    // CLIが同じtool_useブロックを複数行(assistant再送等)で出しても、
+    // 既知のtool_use_idならToolUseStartedは1回だけ発火する
+    let line = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_dup","name":"Bash","input":{"command":"ls"}}]}}"#;
+    let mut parser = StreamParser::new();
+    assert_eq!(parser.push(line).len(), 1);
+    assert!(parser.push(line).is_empty(), "2回目は重複として捨てる");
+
+    // 補完は引き続き効くこと
+    let result = r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_dup","is_error":false}]}}"#;
+    assert_eq!(
+        parser.push(result),
+        vec![AgentEvent::ToolUseFinished {
+            id: "toolu_dup".to_string(),
+            tool: "Bash".to_string(),
+            is_error: false,
+        }]
+    );
+}

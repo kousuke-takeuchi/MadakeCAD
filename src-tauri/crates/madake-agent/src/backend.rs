@@ -7,7 +7,7 @@
 use crate::{AgentError, AgentEvent, Result, StreamParser};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
@@ -58,16 +58,17 @@ impl ClaudeCodeCliBackend {
     }
 
     /// claude CLIへ渡す引数列を組み立てる。
+    ///
+    /// プロンプトはここには含めない。`-` 始まりのプロンプトがフラグとして解釈される
+    /// のを避けるため、stdin経由で渡す(`echo <prompt> | claude -p ...`と同じ形)。
     pub fn build_args(
         &self,
-        prompt: &str,
         session: Option<&str>,
         mcp_config_path: &Path,
         append_system_prompt: Option<&str>,
     ) -> Vec<String> {
         let mut args = vec![
             "-p".to_string(),
-            prompt.to_string(),
             "--output-format".to_string(),
             "stream-json".to_string(),
             "--verbose".to_string(),
@@ -106,6 +107,11 @@ impl ClaudeCodeCliBackend {
     }
 
     /// [`Self::send`]の図面コンテキスト明示版(ターンごとに内容が変わるため)。
+    ///
+    /// エラーの扱いは一本化してある: 失敗は種類を問わず必ず
+    /// [`AgentEvent::Error`] として`tx`へ流れる。呼び出し側はイベントだけを見て
+    /// UI表示すればよい。戻り値の`Err`は「そのうえで異常終了した」ことを示す
+    /// (CLIの非0終了はイベントのみでOkを返す)。
     pub async fn send_with_context(
         &self,
         prompt: &str,
@@ -113,17 +119,52 @@ impl ClaudeCodeCliBackend {
         append_system_prompt: Option<&str>,
         tx: mpsc::Sender<AgentEvent>,
     ) -> Result<()> {
+        let error_tx = tx.clone();
+        match self
+            .stream_turn(prompt, session, append_system_prompt, tx)
+            .await
+        {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let _ = error_tx
+                    .send(AgentEvent::Error {
+                        message: e.to_string(),
+                    })
+                    .await;
+                Err(e)
+            }
+        }
+    }
+
+    /// 1ターンの実処理。エラーイベント化は[`Self::send_with_context`]が受け持つ。
+    async fn stream_turn(
+        &self,
+        prompt: &str,
+        session: Option<&str>,
+        append_system_prompt: Option<&str>,
+        tx: mpsc::Sender<AgentEvent>,
+    ) -> Result<()> {
         let config = TempMcpConfig::create(&self.mcp_config_json())?;
-        let args = self.build_args(prompt, session, config.path(), append_system_prompt);
+        let args = self.build_args(session, config.path(), append_system_prompt);
 
         let mut child = Command::new(&self.executable)
             .args(&args)
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| AgentError::Spawn(format!("{}: {e}", self.executable.display())))?;
+
+        // プロンプトはstdin経由(`-`始まりでもフラグ扱いされない)。書き終えたら閉じる。
+        // stdoutの読み出しと並行させないと、長いプロンプトでデッドロックし得る
+        let stdin_task = child.stdin.take().map(|mut stdin| {
+            let prompt = prompt.to_string();
+            tokio::spawn(async move {
+                stdin.write_all(prompt.as_bytes()).await?;
+                stdin.shutdown().await
+            })
+        });
 
         let stdout = child
             .stdout
@@ -143,17 +184,41 @@ impl ClaudeCodeCliBackend {
 
         let mut parser = StreamParser::new();
         let mut lines = BufReader::new(stdout).lines();
-        'read: while let Some(line) = lines.next_line().await? {
-            for event in parser.push(&line) {
-                if tx.send(event).await.is_err() {
-                    // 受信側が閉じた(キャンセル等)。プロセスはdropでkillされる
-                    break 'read;
+        let mut read_error = None;
+        'read: loop {
+            match lines.next_line().await {
+                Ok(Some(line)) => {
+                    for event in parser.push(&line) {
+                        if tx.send(event).await.is_err() {
+                            // 受信側が閉じた(キャンセル等)。読み手が居なくなるので
+                            // killしないとパイプが詰まってwait()が返らなくなる
+                            let _ = child.start_kill();
+                            break 'read;
+                        }
+                    }
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    // 不正UTF-8等。以降は読めないのでkillして終わらせる
+                    let _ = child.start_kill();
+                    read_error = Some(e);
+                    break;
                 }
             }
         }
 
         let status = child.wait().await?;
         let stderr_text = stderr_task.await.unwrap_or_default();
+        if let Some(e) = read_error {
+            return Err(e.into());
+        }
+        if let Some(task) = stdin_task {
+            match task.await {
+                // CLIがstdinを読まずに終了した場合(BrokenPipe)は無視してよい
+                Ok(Err(e)) if e.kind() != std::io::ErrorKind::BrokenPipe => return Err(e.into()),
+                _ => {}
+            }
+        }
         if !status.success() {
             let code = status
                 .code()
@@ -166,6 +231,9 @@ impl ClaudeCodeCliBackend {
                 format!("claude CLIが異常終了しました (exit {code}): {detail}")
             };
             let _ = tx.send(AgentEvent::Error { message }).await;
+        } else if !stderr_text.trim().is_empty() {
+            // 正常終了時の警告はイベントにせず標準エラーへ転記するだけ(捨てはしない)
+            eprintln!("claude CLI stderr: {}", stderr_text.trim());
         }
         Ok(())
     }

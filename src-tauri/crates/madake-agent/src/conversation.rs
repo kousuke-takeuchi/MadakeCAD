@@ -6,7 +6,7 @@
 //!
 //! 履歴はプロジェクトファイルの隣に`<stem>.chat.json`(整形JSON)として保存する。
 
-use crate::{AgentEvent, Result};
+use crate::{AgentError, AgentEvent, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -20,6 +20,30 @@ pub const CHAT_FORMAT_VERSION: u32 = 1;
 pub enum Role {
     User,
     Assistant,
+}
+
+/// ターンの前後で挟んだEngineのrevision範囲。
+///
+/// `end - start`がこのターンで確定した編集コマンド数(= 元に戻すのに必要なundo回数)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct AppliedRevisions {
+    /// ターン開始時のrevision
+    pub start: u64,
+    /// ターン終了時のrevision
+    pub end: u64,
+}
+
+impl AppliedRevisions {
+    pub fn at(revision: u64) -> Self {
+        Self {
+            start: revision,
+            end: revision,
+        }
+    }
+
+    pub fn count(&self) -> u64 {
+        self.end.saturating_sub(self.start)
+    }
 }
 
 /// 1回のツール呼び出し(UIのツールチップ表示に使う)。
@@ -40,8 +64,8 @@ pub struct ChatMessage {
     pub text: String,
     #[serde(default)]
     pub tool_calls: Vec<ToolCall>,
-    /// (ターン開始時のrevision, ターン終了時のrevision)
-    pub applied_revisions: (u64, u64),
+    /// ターン開始/終了時のEngine revision
+    pub applied_revisions: AppliedRevisions,
     #[serde(default)]
     pub error: Option<String>,
 }
@@ -52,16 +76,14 @@ impl ChatMessage {
             role,
             text,
             tool_calls: Vec::new(),
-            applied_revisions: (revision, revision),
+            applied_revisions: AppliedRevisions::at(revision),
             error: None,
         }
     }
 
     /// このターンで確定した編集コマンド数(= 元に戻すのに必要なundo回数)。
     pub fn applied_command_count(&self) -> u64 {
-        self.applied_revisions
-            .1
-            .saturating_sub(self.applied_revisions.0)
+        self.applied_revisions.count()
     }
 
     pub fn has_edits(&self) -> bool {
@@ -141,11 +163,11 @@ impl Conversation {
                 if message.text.is_empty() {
                     message.text = result.clone();
                 }
-                message.applied_revisions.1 = revision;
+                message.applied_revisions.end = revision;
             }
             AgentEvent::Error { message: err } => {
                 message.error = Some(err.clone());
-                message.applied_revisions.1 = revision;
+                message.applied_revisions.end = revision;
             }
         }
     }
@@ -178,21 +200,44 @@ pub fn chat_path_for(project_path: &Path) -> PathBuf {
     project_path.with_extension("chat.json")
 }
 
-/// チャット履歴を整形JSONで保存する。
+/// チャット履歴を整形JSONで保存する(同ディレクトリの一時ファイル→renameでアトミックに)。
 pub fn save_chat(path: &Path, conversations: &[Conversation]) -> Result<()> {
     let file = ChatFile {
         format_version: CHAT_FORMAT_VERSION,
         conversations: conversations.to_vec(),
     };
-    std::fs::write(path, serde_json::to_string_pretty(&file)?)?;
+    let json = serde_json::to_string_pretty(&file)?;
+
+    // renameを同一ファイルシステム内に閉じるため、一時ファイルは保存先と同じ親へ置く
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let temp = dir.join(format!(".{}.tmp", Uuid::new_v4()));
+    if let Err(e) = std::fs::write(&temp, &json) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(e.into());
+    }
+    if let Err(e) = std::fs::rename(&temp, path) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(e.into());
+    }
     Ok(())
 }
 
 /// チャット履歴を読み込む。ファイルが無ければ空(新規プロジェクト)。
+///
+/// このビルドより新しい`format_version`のファイルは、黙って読み違えるより
+/// 明示エラーにする(未知フィールドを落として上書き保存する事故を防ぐ)。
 pub fn load_chat(path: &Path) -> Result<Vec<Conversation>> {
-    match std::fs::read_to_string(path) {
-        Ok(json) => Ok(serde_json::from_str::<ChatFile>(&json)?.conversations),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
-        Err(e) => Err(e.into()),
+    let json = match std::fs::read_to_string(path) {
+        Ok(json) => json,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e.into()),
+    };
+    let file: ChatFile = serde_json::from_str(&json)?;
+    if file.format_version > CHAT_FORMAT_VERSION {
+        return Err(AgentError::UnsupportedChatFormat {
+            found: file.format_version,
+            supported: CHAT_FORMAT_VERSION,
+        });
     }
+    Ok(file.conversations)
 }
