@@ -1,0 +1,56 @@
+use std::path::Path;
+
+use crate::model::Project;
+use crate::Result;
+
+/// プロジェクトを整形JSONで保存する(git差分が読める形式)。
+pub fn save_project(path: &Path, project: &Project) -> Result<()> {
+    let json = serde_json::to_string_pretty(project)?;
+    std::fs::write(path, json)?;
+    Ok(())
+}
+
+pub fn load_project(path: &Path) -> Result<Project> {
+    let json = std::fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&json)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::command::{Command, Engine};
+    use crate::geometry::Point;
+    use crate::model::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn project_file_roundtrip() {
+        let mut engine = Engine::new(Project::new("roundtrip"));
+        let sheet_id = engine.project().sheets[0].id;
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: Entity::Symbol(SymbolInstance {
+                    id: Uuid::new_v4(),
+                    symbol_id: "relay_coil".into(),
+                    at: Point::new(100.0, 50.0),
+                    rotation: 90,
+                    mirror: false,
+                    reference: "K1".into(),
+                    value: "JZX-22F".into(),
+                    attrs: Default::default(),
+                }),
+            })
+            .unwrap();
+
+        let dir = std::env::temp_dir().join("madake_core_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("roundtrip.mdkproj");
+        save_project(&path, engine.project()).unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.name, "roundtrip");
+        assert_eq!(loaded.sheets.len(), 1);
+        assert_eq!(loaded.sheets[0].entities.len(), 1);
+        std::fs::remove_file(&path).ok();
+    }
+}

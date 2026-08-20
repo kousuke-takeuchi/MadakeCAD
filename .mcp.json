@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "madakecad": {
+      "type": "http",
+      "url": "http://127.0.0.1:9310/mcp"
+    },
+    "pencil": {
+      "command": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "args": ["-agent", "Claude Code"]
+    }
+  }
+}
