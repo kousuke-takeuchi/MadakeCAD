@@ -9,6 +9,7 @@ pub mod io;
 pub mod model;
 pub mod netlist;
 pub mod reports;
+pub mod svg;
 pub mod symbol;
 
 pub use command::{Command, Engine, Patch, PatchOp};

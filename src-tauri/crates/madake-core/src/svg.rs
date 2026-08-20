@@ -1,0 +1,330 @@
+//! 印刷品質のSVGエクスポート。JIS図枠(枠線・ゾーン番号・表題欄)+全エンティティを描く。
+
+use std::fmt::Write as _;
+
+use crate::geometry::Point;
+use crate::model::{Entity, Sheet};
+use crate::netlist::transform_local;
+use crate::symbol::{Primitive, SymbolDef};
+
+/// 図枠の用紙端からのマージン (mm)。
+const FRAME_MARGIN: f64 = 10.0;
+/// 配線の線幅 (mm)。
+const WIRE_STROKE: f64 = 0.35;
+/// シンボルの線幅 (mm)。
+const SYMBOL_STROKE: f64 = 0.3;
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// 数値整形: 無駄な小数を出さない。
+fn n(v: f64) -> String {
+    if (v - v.round()).abs() < 1e-9 {
+        format!("{}", v.round() as i64)
+    } else {
+        format!("{:.3}", v)
+    }
+}
+
+/// 線色名→表示色。白地の紙に見える色を割り当てる。#始まりはそのまま。
+pub fn color_hex(color: &str) -> &str {
+    match color {
+        "red" | "赤" => "#c00000",
+        "black" | "黒" => "#000000",
+        "white" | "白" => "#a0a0a0",
+        "blue" | "青" => "#0000c0",
+        "yellow" | "黄" => "#b89000",
+        "green" | "緑" => "#008040",
+        "orange" | "橙" => "#d07010",
+        "purple" | "紫" => "#8020a0",
+        "brown" | "茶" => "#805020",
+        "gray" | "grey" | "灰" => "#808080",
+        "pink" | "桃" => "#d06090",
+        "light_blue" | "sky" | "水" | "水色" => "#2090c0",
+        c if c.starts_with('#') => color,
+        _ => "#000000",
+    }
+}
+
+fn text_el(out: &mut String, x: f64, y: f64, size: f64, fill: &str, anchor: &str, s: &str) {
+    let _ = write!(
+        out,
+        "<text x=\"{}\" y=\"{}\" font-size=\"{}\" fill=\"{}\" text-anchor=\"{}\" font-family=\"sans-serif\">{}</text>\n",
+        n(x), n(y), n(size), fill, anchor, xml_escape(s)
+    );
+}
+
+fn line_el(out: &mut String, x1: f64, y1: f64, x2: f64, y2: f64, w: f64, stroke: &str) {
+    let _ = write!(
+        out,
+        "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"{}\" stroke-width=\"{}\"/>\n",
+        n(x1), n(y1), n(x2), n(y2), stroke, n(w)
+    );
+}
+
+fn polyline_points(pts: &[Point]) -> String {
+    pts.iter()
+        .map(|p| format!("{},{}", n(p.x), n(p.y)))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn frame_and_title_block(out: &mut String, sheet: &Sheet) {
+    let (pw, ph) = sheet.paper_mm();
+    let (x0, y0) = (FRAME_MARGIN, FRAME_MARGIN);
+    let (x1, y1) = (pw - FRAME_MARGIN, ph - FRAME_MARGIN);
+    let _ = write!(
+        out,
+        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"0.5\"/>\n",
+        n(x0), n(y0), n(x1 - x0), n(y1 - y0)
+    );
+    // ゾーン番号: 横=数字、縦=英字
+    let cols = sheet.zone_cols.max(1) as f64;
+    let rows = sheet.zone_rows.max(1) as f64;
+    let zw = (x1 - x0) / cols;
+    let zh = (y1 - y0) / rows;
+    for i in 0..sheet.zone_cols.max(1) {
+        let cx = x0 + zw * (i as f64 + 0.5);
+        text_el(out, cx, y0 - 3.0, 3.0, "#000", "middle", &(i + 1).to_string());
+        text_el(out, cx, y1 + 6.0, 3.0, "#000", "middle", &(i + 1).to_string());
+        if i > 0 {
+            let tx = x0 + zw * i as f64;
+            line_el(out, tx, y0 - 2.0, tx, y0, 0.25, "#000");
+            line_el(out, tx, y1, tx, y1 + 2.0, 0.25, "#000");
+        }
+    }
+    for i in 0..sheet.zone_rows.max(1) {
+        let cy = y0 + zh * (i as f64 + 0.5) + 1.0;
+        let letter = char::from(b'A' + (i % 26) as u8).to_string();
+        text_el(out, x0 - 3.0, cy, 3.0, "#000", "middle", &letter);
+        text_el(out, x1 + 3.0, cy, 3.0, "#000", "middle", &letter);
+    }
+    // 表題欄 (右下、120x32mm、4行)
+    let (tw, th) = (120.0, 32.0);
+    let (tx, ty) = (x1 - tw, y1 - th);
+    let tb = &sheet.title_block;
+    let _ = write!(
+        out,
+        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"#fff\" stroke=\"#000\" stroke-width=\"0.5\"/>\n",
+        n(tx), n(ty), n(tw), n(th)
+    );
+    for r in 1..4 {
+        line_el(out, tx, ty + 8.0 * r as f64, tx + tw, ty + 8.0 * r as f64, 0.25, "#000");
+    }
+    line_el(out, tx + 24.0, ty, tx + 24.0, ty + th, 0.25, "#000");
+    let rows4: [(&str, String); 4] = [
+        ("図番", format!("{}  Rev {}", tb.drawing_no, if tb.rev.is_empty() { "-" } else { &tb.rev })),
+        ("品名", tb.title.clone()),
+        ("尺度", format!("{}    日付 {}", tb.scale, tb.date)),
+        (
+            "設計",
+            format!(
+                "{}  製図 {}  検図 {}  承認 {}",
+                tb.designed, tb.drawn, tb.checked, tb.approved
+            ),
+        ),
+    ];
+    for (i, (label, value)) in rows4.iter().enumerate() {
+        let cy = ty + 8.0 * i as f64 + 5.5;
+        text_el(out, tx + 2.0, cy, 3.0, "#000", "start", label);
+        text_el(out, tx + 26.0, cy, 3.0, "#000", "start", value);
+    }
+    if !tb.company.is_empty() {
+        text_el(out, tx - 2.0, y1 - 2.0, 3.0, "#000", "end", &tb.company);
+    }
+}
+
+fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &SymbolDef) {
+    for prim in &def.primitives {
+        match prim {
+            Primitive::Line { pts } => {
+                let tp: Vec<Point> = pts.iter().map(|p| transform_local(*p, inst)).collect();
+                let _ = write!(
+                    out,
+                    "<polyline points=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+                    polyline_points(&tp),
+                    n(SYMBOL_STROKE)
+                );
+            }
+            Primitive::Circle { center, r, filled } => {
+                let c = transform_local(*center, inst);
+                let _ = write!(
+                    out,
+                    "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"{}\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+                    n(c.x), n(c.y), n(*r),
+                    if *filled { "#000" } else { "none" },
+                    n(SYMBOL_STROKE)
+                );
+            }
+            Primitive::Arc { center, r, start_deg, end_deg } => {
+                // 単純化: 開始/終了角の弧をパスで描く(回転はtransform_localで中心のみ反映)
+                let c = transform_local(*center, inst);
+                let (a0, a1) = (start_deg.to_radians(), end_deg.to_radians());
+                let (sx, sy) = (c.x + r * a0.cos(), c.y + r * a0.sin());
+                let (ex, ey) = (c.x + r * a1.cos(), c.y + r * a1.sin());
+                let large = if (end_deg - start_deg).abs() > 180.0 { 1 } else { 0 };
+                let _ = write!(
+                    out,
+                    "<path d=\"M {} {} A {} {} 0 {} 1 {} {}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+                    n(sx), n(sy), n(*r), n(*r), large, n(ex), n(ey), n(SYMBOL_STROKE)
+                );
+            }
+            Primitive::Rect { p1, p2, filled } => {
+                let corners = [
+                    Point::new(p1.x, p1.y),
+                    Point::new(p2.x, p1.y),
+                    Point::new(p2.x, p2.y),
+                    Point::new(p1.x, p2.y),
+                ];
+                let tp: Vec<Point> = corners.iter().map(|p| transform_local(*p, inst)).collect();
+                let _ = write!(
+                    out,
+                    "<polygon points=\"{}\" fill=\"{}\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+                    polyline_points(&tp),
+                    if *filled { "#000" } else { "none" },
+                    n(SYMBOL_STROKE)
+                );
+            }
+            Primitive::Text { at, text, height } => {
+                let p = transform_local(*at, inst);
+                text_el(out, p.x, p.y + height / 2.0, *height, "#000", "middle", text);
+            }
+        }
+    }
+    // 参照記号と型番/値をシンボル上部に併記
+    if !inst.reference.is_empty() {
+        text_el(out, inst.at.x, inst.at.y - 9.0, 2.5, "#000", "middle", &inst.reference);
+    }
+    if !inst.value.is_empty() {
+        text_el(out, inst.at.x, inst.at.y - 5.5, 2.5, "#000", "middle", &inst.value);
+    }
+}
+
+/// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。
+pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
+    let (pw, ph) = sheet.paper_mm();
+    let mut out = String::new();
+    let _ = write!(
+        out,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}mm\" height=\"{}mm\" viewBox=\"0 0 {} {}\">\n",
+        n(pw), n(ph), n(pw), n(ph)
+    );
+    let _ = write!(
+        out,
+        "<rect x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" fill=\"#ffffff\"/>\n",
+        n(pw), n(ph)
+    );
+    frame_and_title_block(&mut out, sheet);
+    let defs: std::collections::BTreeMap<&str, &SymbolDef> =
+        symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    for entity in sheet.entities.values() {
+        match entity {
+            Entity::Wire(w) => {
+                let _ = write!(
+                    out,
+                    "<polyline points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{}\"/>\n",
+                    polyline_points(&w.points),
+                    color_hex(&w.color),
+                    n(WIRE_STROKE)
+                );
+            }
+            Entity::Symbol(s) => {
+                if let Some(def) = defs.get(s.symbol_id.as_str()) {
+                    render_symbol(&mut out, s, def);
+                }
+            }
+            Entity::Junction(j) => {
+                let _ = write!(
+                    out,
+                    "<circle cx=\"{}\" cy=\"{}\" r=\"0.6\" fill=\"#000\"/>\n",
+                    n(j.at.x), n(j.at.y)
+                );
+            }
+            Entity::NetLabel(l) => {
+                text_el(&mut out, l.at.x, l.at.y - 1.0, 2.5, "#000", "start", &l.name);
+            }
+            Entity::Text(t) => {
+                text_el(&mut out, t.at.x, t.at.y, t.height, "#000", "start", &t.text);
+            }
+        }
+    }
+    out.push_str("</svg>\n");
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geometry::Point;
+    use crate::model::*;
+    use crate::symbol::builtin_symbols;
+    use uuid::Uuid;
+
+    #[test]
+    fn svg_contains_frame_wire_and_symbol() {
+        let mut sheet = Sheet::new("TB1", PaperSize::A3, Orientation::Landscape);
+        sheet.title_block.drawing_no = "MDK-001".into();
+        let w = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(50.0, 50.0), Point::new(100.0, 50.0)],
+            color: "red".into(),
+            sq: 0.3,
+            length_m: None,
+            part_no: None,
+            net: None,
+        });
+        let s = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "fuse".into(),
+            at: Point::new(120.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "F1".into(),
+            value: "5A".into(),
+            attrs: Default::default(),
+        });
+        for e in [w, s] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(svg.starts_with("<svg"));
+        assert!(svg.contains("viewBox=\"0 0 420 297\""));
+        assert!(svg.contains("MDK-001"));
+        assert!(svg.contains("polyline"));
+        assert!(svg.contains(">F1<"));
+        assert!(svg.matches("<text").count() >= 3);
+        assert!(svg.trim_end().ends_with("</svg>"));
+    }
+
+    #[test]
+    fn svg_escapes_xml_special_chars() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        sheet.title_block.title = "A<B> & \"C\"".into();
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(svg.contains("A&lt;B&gt; &amp; &quot;C&quot;"));
+        assert!(!svg.contains("A<B>"));
+    }
+
+    #[test]
+    fn svg_renders_rotated_symbol_primitives() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let s = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "resistor".into(),
+            at: Point::new(100.0, 100.0),
+            rotation: 90,
+            mirror: false,
+            reference: "R1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        });
+        sheet.entities.insert(s.id(), s);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        // 90度回転で本体矩形は縦長になる: 頂点(±5,±2)→(100∓2, 100±5) を含む
+        assert!(svg.contains("98,95") || svg.contains("98,105"), "{svg}");
+    }
+}
