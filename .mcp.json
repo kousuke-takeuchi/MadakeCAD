@@ -6,7 +6,7 @@
     },
     "pencil": {
       "command": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
-      "args": ["-agent", "Claude Code"]
+      "args": ["--app", "desktop", "--agent", "Claude Code"]
     }
   }
 }

@@ -48,7 +48,7 @@ Rustは`~/.cargo/bin`にある(rustup)。PATHに無ければ `export PATH="$HOME
 
 ## UIデザインワークフロー
 
-UIはPencil(pen.dev)で先にデザインし、確定後に実装する。`.pen`ファイルはリポジトリ内 `design/` に置く。PencilのMCPサーバーは`.mcp.json`の`pencil`(Pen.app起動中のみ接続可)。UIの見た目に関わる実装はデザイン確定前に進めないこと。
+UIはPencil(pen.dev)で先にデザインし、確定後に実装する。デザインファイルはリポジトリ直下の`MadakeCAD.pen`(Pen.appで開く。暗号化されておりRead/Grep不可、必ずpencil MCPツールで読む)。PencilのMCPサーバーは`.mcp.json`の`pencil`(Pen.app起動中のみ接続可)。UIの見た目に関わる実装はデザイン確定前に進めないこと。
 
 ## 開発プロセス
 
