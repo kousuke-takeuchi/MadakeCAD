@@ -6,9 +6,11 @@
 //! madake-coreのCommandエンジンを通る。
 
 pub mod backend;
+pub mod conversation;
 pub mod events;
 
 pub use backend::{ClaudeCodeCliBackend, DetectResult};
+pub use conversation::{ChatMessage, Conversation, Role, ToolCall};
 pub use events::{parse_stream_events, parse_stream_line, AgentEvent, StreamParser, Usage};
 
 /// madake-agentのエラー。
