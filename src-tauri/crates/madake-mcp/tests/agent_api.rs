@@ -1,0 +1,279 @@
+//! Link APIのエージェントエンドポイント(/api/v1/agent/*)のテスト。
+//!
+//! サーバーは立てず、axumのRouterへ直接リクエストを流す(ポート競合を避けるため)。
+//! claudeは呼ばず、madake-agentのフェイクCLIフィクスチャを使う。
+
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use axum::Router;
+use http_body_util::BodyExt;
+use madake_agent::AgentManager;
+use madake_core::{Engine, Project};
+use madake_mcp::SharedDoc;
+use serde_json::{json, Value};
+use tower::ServiceExt;
+use uuid::Uuid;
+
+fn fake_claude(script: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../madake-agent/tests/fixtures")
+        .join(script)
+}
+
+fn setup(script: &str) -> (SharedDoc, Arc<AgentManager>, Router) {
+    let doc = SharedDoc::new(Engine::new(Project::new("テストプロジェクト")));
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude(script)));
+    let router = madake_mcp::link_api::router(doc.clone(), Arc::clone(&agent));
+    (doc, agent, router)
+}
+
+async fn call(
+    router: &Router,
+    method: &str,
+    path: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    let request = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("content-type", "application/json")
+        .body(match &body {
+            Some(v) => Body::from(v.to_string()),
+            None => Body::empty(),
+        })
+        .unwrap();
+    let response = router.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, value)
+}
+
+/// ターンが終わる(送信中フラグが下りる)まで待つ。
+async fn wait_idle(agent: &AgentManager, id: Uuid) {
+    for _ in 0..200 {
+        if !agent.is_sending(id) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("ターンが終わらない");
+}
+
+#[tokio::test]
+async fn send_runs_a_turn_and_conversations_reflects_it() {
+    let (_doc, agent, router) = setup("fake_claude.sh");
+
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/v1/agent/send",
+        Some(json!({ "prompt": "ヒューズを追加して" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let id: Uuid = serde_json::from_value(body["conversation_id"].clone()).expect("会話IDが返る");
+    wait_idle(&agent, id).await;
+
+    let (status, body) = call(&router, "GET", "/api/v1/agent/conversations", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let conversations = body.as_array().expect("配列");
+    assert_eq!(conversations.len(), 1);
+    assert_eq!(conversations[0]["id"], json!(id));
+    let messages = conversations[0]["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 2, "user + assistant: {body}");
+    assert_eq!(messages[0]["role"], "user");
+    assert_eq!(messages[0]["text"], "ヒューズを追加して");
+    assert_eq!(messages[1]["role"], "assistant");
+    assert!(!messages[1]["tool_calls"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn send_to_unknown_conversation_is_400() {
+    let (_doc, _agent, router) = setup("fake_claude.sh");
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/v1/agent/send",
+        Some(json!({ "conversation_id": Uuid::new_v4(), "prompt": "hi" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn cancel_and_undo_turn_respond() {
+    let (doc, agent, router) = setup("fake_claude.sh");
+
+    let (_, body) = call(
+        &router,
+        "POST",
+        "/api/v1/agent/send",
+        Some(json!({ "prompt": "hi" })),
+    )
+    .await;
+    let id: Uuid = serde_json::from_value(body["conversation_id"].clone()).unwrap();
+    wait_idle(&agent, id).await;
+
+    // 実行中でない会話のcancelは何もしない
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/v1/agent/cancel",
+        Some(json!({ "conversation_id": id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["cancelled"], json!(false));
+
+    // 編集の無いターンのundo-turnは現在のrevisionを返すだけ
+    let revision = doc.engine.lock().unwrap().revision();
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/v1/agent/undo-turn",
+        Some(json!({ "conversation_id": id, "message_index": 1 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["revision"], json!(revision));
+
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/v1/agent/undo-turn",
+        Some(json!({ "conversation_id": id, "message_index": 0 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "ユーザー発話は対象外");
+}
+
+/// undo-turnはSharedDocの既存undoを回すだけ(patchも通常どおり配信される)。
+#[tokio::test]
+async fn undo_turn_rolls_back_agent_edits_through_the_command_engine() {
+    let (doc, agent, _router) = setup("fake_claude.sh");
+    let sheet_id = doc.engine.lock().unwrap().project().sheets[0].id;
+    let mut patches = doc.patches.subscribe();
+
+    // ターン中にエージェントがMCP経由で2コマンド実行した状況を再現する
+    let start = doc.engine.lock().unwrap().revision();
+    let conversations = {
+        let mut c = madake_agent::Conversation::new();
+        c.begin_turn("2つ置いて", start);
+        vec![c]
+    };
+    agent.set_conversations(conversations);
+    let id = agent.conversations()[0].id;
+    for i in 0..2 {
+        doc.execute(madake_core::Command::AddEntity {
+            sheet_id,
+            entity: madake_core::Entity::Text(madake_core::TextEntity {
+                id: Uuid::new_v4(),
+                at: madake_core::Point::new(10.0 * f64::from(i), 10.0),
+                text: format!("T{i}"),
+                height: 3.5,
+                rotation: 0,
+            }),
+        })
+        .unwrap();
+    }
+    let end = doc.engine.lock().unwrap().revision();
+    {
+        let mut restored = agent.conversations();
+        restored[0]
+            .current_turn_mut()
+            .unwrap()
+            .applied_revisions
+            .end = end;
+        agent.set_conversations(restored);
+    }
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len(),
+        2
+    );
+
+    let revision = agent.undo_turn(id, 1).expect("巻き戻し成功");
+    assert!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .is_empty(),
+        "ターンの編集が全て戻る"
+    );
+    assert_eq!(revision, end + 2, "undoもrevisionを進める");
+
+    // patchが配信されている(2件のadd + 2件のundo)
+    let mut count = 0;
+    while patches.try_recv().is_ok() {
+        count += 1;
+    }
+    assert_eq!(count, 4);
+}
+
+/// SSEはTauriの`agent:event`と同じ`{conversation_id, event}`を`agent`イベントで流す。
+#[tokio::test]
+async fn events_endpoint_streams_agent_events() {
+    let (_doc, _agent, router) = setup("fake_claude.sh");
+    let request = Request::builder()
+        .uri("/api/v1/agent/events")
+        .body(Body::empty())
+        .unwrap();
+    let response = router.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("text/event-stream")
+    );
+
+    let (_, body) = call(
+        &router,
+        "POST",
+        "/api/v1/agent/send",
+        Some(json!({ "prompt": "hi" })),
+    )
+    .await;
+    let id: Uuid = serde_json::from_value(body["conversation_id"].clone()).unwrap();
+
+    // 最初のイベント(SessionStarted)がSSEフレームとして届く
+    let mut stream = response.into_body().into_data_stream();
+    let frame = tokio::time::timeout(Duration::from_secs(10), stream.frame())
+        .await
+        .expect("SSEが届かない")
+        .expect("ストリームが閉じた")
+        .expect("フレーム取得失敗");
+    let text = String::from_utf8(frame.into_data().unwrap().to_vec()).unwrap();
+    assert!(text.starts_with("event: agent\n"), "{text}");
+    let data = text
+        .lines()
+        .find_map(|l| l.strip_prefix("data: "))
+        .expect("dataが無い");
+    let payload: Value = serde_json::from_str(data).unwrap();
+    assert_eq!(payload["conversation_id"], json!(id));
+    assert_eq!(payload["event"]["type"], "session_started");
+}
+
+#[test]
+fn drawing_context_summarizes_the_active_sheet() {
+    let doc = SharedDoc::new(Engine::new(Project::new("盤A")));
+    let sheet = doc.engine.lock().unwrap().project().sheets[0].clone();
+    let context = madake_mcp::agent::drawing_context(&doc);
+
+    assert!(context.contains("盤A"), "{context}");
+    assert!(
+        context.contains(&format!("アクティブシート: {}", sheet.id)),
+        "{context}"
+    );
+    assert!(context.contains("Sheet1"), "{context}");
+    assert!(context.contains("ネット数"), "{context}");
+    assert!(context.contains("2.5mm"), "{context}");
+    assert!(context.contains("mcp__madakecad__*"), "{context}");
+}

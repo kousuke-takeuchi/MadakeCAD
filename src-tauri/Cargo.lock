@@ -2259,6 +2259,7 @@ dependencies = [
 name = "madake-cad"
 version = "0.1.0"
 dependencies = [
+ "madake-agent",
  "madake-core",
  "madake-mcp",
  "serde",
@@ -2268,6 +2269,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -2297,12 +2299,15 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "futures",
+ "http-body-util",
+ "madake-agent",
  "madake-core",
  "rmcp",
  "schemars 1.2.2",
  "serde",
  "serde_json",
  "tokio",
+ "tower",
  "tower-http",
  "uuid",
 ]
