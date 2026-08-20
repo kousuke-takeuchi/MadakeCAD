@@ -135,6 +135,7 @@ MadakeCAD (Tauri)                         FreeCAD 1.1+
 ### 7.4 実装フェーズ(フェーズM: フェーズ2完了後、フェーズ3と並行可)
 
 - **M1**: Link API(読み取り+Command書き込み)、FreeCADアドオン骨格(接続・プロジェクト/ネットリスト表示)
+  - Link API本体は実装済み(2026-08-20前倒し)。`madake-mcp/src/link_api.rs`。REST + SSEパッチストリーム。フロントエンドもTauri外ではこのAPIに自動フォールバックし、ブラウザ(Playwright等)でのUI検証に使える
 - **M2**: 部品DBの3Dモデル挿入+`madake_id`バインド、経路長の一括書き戻し(電線リストへ反映)
 - **M3**: 経路3D表示の同期、盤レイアウト(パネル図⇔3D筐体)
 
