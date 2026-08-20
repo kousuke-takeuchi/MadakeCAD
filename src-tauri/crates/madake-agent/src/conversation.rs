@@ -165,6 +165,8 @@ impl Conversation {
                 }
                 message.applied_revisions.end = revision;
             }
+            // マネージャがターン確定後に合成するだけの通知。会話状態は既に更新済み
+            AgentEvent::TurnApplied { .. } => {}
             AgentEvent::Error { message: err } => {
                 message.error = Some(err.clone());
                 message.applied_revisions.end = revision;

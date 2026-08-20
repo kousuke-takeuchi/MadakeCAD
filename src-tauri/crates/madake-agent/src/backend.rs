@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 const ALLOWED_TOOLS: &str = "mcp__madakecad__*";
 
 /// `claude --version`による検出結果。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DetectResult {
     pub path: PathBuf,
     pub version: String,
@@ -238,9 +238,45 @@ impl ClaudeCodeCliBackend {
         Ok(())
     }
 
-    /// claude CLIを検出する。パス指定があればそれのみ、無ければPATH上の`claude`。
+    /// claude CLIを検出する。
+    ///
+    /// パス指定があればそれのみを試す。無指定なら[`Self::default_candidates`]を順に試す
+    /// (PATH上の`claude` → 既知のインストール先)。
     pub async fn detect(executable: Option<PathBuf>) -> Result<DetectResult> {
-        let path = executable.unwrap_or_else(|| PathBuf::from("claude"));
+        match executable {
+            Some(path) => Self::detect_one(path).await,
+            None => Self::detect_from(&Self::default_candidates()).await,
+        }
+    }
+
+    /// 検出候補を順に試し、最初に成功したものを返す。
+    pub async fn detect_from(candidates: &[PathBuf]) -> Result<DetectResult> {
+        let mut last_error = None;
+        for candidate in candidates {
+            match Self::detect_one(candidate.clone()).await {
+                Ok(found) => return Ok(found),
+                Err(e) => last_error = Some(e),
+            }
+        }
+        Err(last_error.unwrap_or_else(|| AgentError::NotFound("検出候補がありません".to_string())))
+    }
+
+    /// claude CLIの検出候補(先頭から順に試す)。
+    ///
+    /// macOSのGUI起動アプリはPATHが最小構成(`/usr/bin:/bin:/usr/sbin:/sbin`)のため、
+    /// PATH解決に失敗しても既知のインストール先を直接見に行く。
+    pub fn default_candidates() -> Vec<PathBuf> {
+        let mut candidates = vec![PathBuf::from("claude")];
+        if let Some(home) = std::env::var_os("HOME") {
+            candidates.push(PathBuf::from(home).join(".local/bin/claude"));
+        }
+        candidates.push(PathBuf::from("/usr/local/bin/claude"));
+        candidates.push(PathBuf::from("/opt/homebrew/bin/claude"));
+        candidates
+    }
+
+    /// 単一のパスに対して`claude --version`を実行する。
+    async fn detect_one(path: PathBuf) -> Result<DetectResult> {
         let output = Command::new(&path)
             .arg("--version")
             .stdin(Stdio::null())

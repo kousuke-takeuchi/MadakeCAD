@@ -125,6 +125,7 @@ fn full_event_sequence_of_tooluse_fixture() {
             AgentEvent::ToolUseStarted { .. } => "tool_start",
             AgentEvent::ToolUseFinished { .. } => "tool_end",
             AgentEvent::TurnCompleted { .. } => "completed",
+            AgentEvent::TurnApplied { .. } => "applied",
             AgentEvent::Error { .. } => "error",
         })
         .collect();
