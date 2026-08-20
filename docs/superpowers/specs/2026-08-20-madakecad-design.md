@@ -85,15 +85,24 @@ AutoCADをベースにした画面構成の想定(Pencilデザインで詳細を
 
 ## 5. MCP API(実装済み、フェーズ1で拡張)
 
-実装済みツール: `get_project` / `list_symbols` / `place_symbol` / `draw_wire` / `execute_commands`(全Commandスキーマ公開) / `undo` / `redo`
-フェーズ1追加予定: `get_netlist` / `run_checks` / `export_bom` / `export_pdf`
+実装済みツール: `get_project` / `list_symbols` / `place_symbol` / `draw_wire` / `execute_commands`(全Commandスキーマ公開) / `undo` / `redo` / `get_netlist` / `export_bom` / `export_wire_list` / `export_svg`
+
+### 5.2 アプリ内AIエージェント(チャットパネル)
+
+Pencil(pen.dev)のエージェントUIを手本に、アプリ内でLLMと対話しながら図面を操作できるようにする。デザインは`MadakeCAD.pen`の「AIチャット(展開状態)」「AI連携設定」フレーム参照(2026-08-20作成、Pencilのデザイン言語準拠: 白カード・角丸・黒アクセント)。
+
+- **UI**: 作図領域左下のフローティングチャットパネル(折りたたみ=入力バーのみ/展開=会話履歴)。入力欄+添付+トークン使用量+モデル選択(Claude Fable 5等)+送信。エージェントの各ツール実行は会話内にチップ(✓ place_symbol ...)で表示し、「図面に適用済み (rev N)/元に戻す」を添える
+- **アーキテクチャ**: エージェントループはRust側(`madake-agent`クレート、フェーズAで新設)に実装。Claude Messages API(tool use+ストリーミング)を直接呼び、ツールセットはMCPサーバーと同一定義を`SharedDoc`経由で内部実行する。**編集は全てCommandエンジンを通る**ため、AI編集もundo/redo・patch配信・rev番号と完全に整合し、「元に戻す」はundo Nと等価
+- **設定画面**: プロバイダ(Anthropic Claude: APIキー or Claudeアカウントログイン)、既定モデル、動作(編集の自動適用/コマンドラインへのログ/図面自動読み取り許可)、外部エージェント(MCP/Link APIの待受表示と許可トグル)。APIキーはOSキーチェーンに保存し、設定ファイルには置かない
+- **フェーズA**(フェーズ2と並行可): A1=チャットUI+APIキー認証+基本ループ、A2=ストリーミング表示+ツールチップUI+元に戻す統合、A3=Claudeアカウントログイン・使用量表示
 
 ## 6. フェーズ計画
 
 - フェーズ0(完了): Commandエンジン+モデル+シンボル+IO、MCPサーバー、Tauri足場、スモークテスト
 - フェーズ1: Canvas2DエディタUI(Pencilデザイン準拠)、ネットリスト、BOM/電線リストCSV、PDF/SVG出力、端子台動的シンボル、AutoCAD風コマンドライン
 - フェーズ2: 検証エンジン、部品DB(SQLite+購入先URL)、KiCadインポート
-- フェーズ3: ngspiceシミュレーション、アプリ内AIチャット(検討)
+- フェーズ3: ngspiceシミュレーション
+- フェーズA(フェーズ2と並行可): アプリ内AIエージェント(§5.2。チャットUI→ツールチップ表示→Claudeログイン)
 - フェーズM(フェーズ2完了後、3と並行可): FreeCAD連携(§7参照。Link API→3Dモデル挿入→経路長還元→盤レイアウト)
 
 ## 7. FreeCAD連携(メカCAD連携)
