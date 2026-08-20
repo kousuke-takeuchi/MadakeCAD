@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { inject, ref } from "vue";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { ipc } from "../ipc";
+import { open as dialogOpen, save as dialogSave } from "@tauri-apps/plugin-dialog";
+import { inTauri, ipc } from "../ipc";
+
+// ブラウザ検証モードではネイティブダイアログが無いためprompt入力にフォールバック
+async function save(opts: { defaultPath: string; filters: { name: string; extensions: string[] }[] }) {
+  if (inTauri) return dialogSave(opts);
+  return window.prompt("保存先の絶対パス:", `/tmp/${opts.defaultPath}`);
+}
+async function open(opts: { multiple: boolean; filters: { name: string; extensions: string[] }[] }) {
+  if (inTauri) return dialogOpen(opts);
+  return window.prompt("開くファイルの絶対パス:");
+}
 import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
 

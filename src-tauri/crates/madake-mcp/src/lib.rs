@@ -5,6 +5,8 @@
 //! 全ての編集はmadake-coreのCommandエンジンを通るため、UI操作と同じundo/redo履歴に乗り、
 //! patchブロードキャスト経由でUIにリアルタイム反映される。
 
+pub mod link_api;
+
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
@@ -328,14 +330,18 @@ impl ServerHandler for MadakeMcp {
     }
 }
 
-/// MCPサーバーを起動する(127.0.0.1:port/mcp)。Tauriのasyncランタイム上でspawnして使う。
+/// 内蔵サーバーを起動する(127.0.0.1:port)。/mcp = AI用MCP、/api/v1 = Link API。
+/// Tauriのasyncランタイム上でspawnして使う。
 pub async fn serve(doc: SharedDoc, port: u16) -> std::io::Result<()> {
+    let mcp_doc = doc.clone();
     let service = StreamableHttpService::new(
-        move || Ok(MadakeMcp::new(doc.clone())),
+        move || Ok(MadakeMcp::new(mcp_doc.clone())),
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
-    let router = axum::Router::new().nest_service("/mcp", service);
+    let router = axum::Router::new()
+        .nest_service("/mcp", service)
+        .merge(link_api::router(doc));
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, router).await
