@@ -105,6 +105,9 @@ Pencil(pen.dev)のエージェントUIを手本に、アプリ内でLLMと対話
   - 一般: 外観(ライト/ダーク)、グリッド/スナップ/ホイールズーム/直交などのキャンバス設定、文字サイズ・座標精度・単位
   - チャット: 通知、危険:確認スキップ、会話履歴のプロジェクト保存
   - MCP: 外部CLI(Claude Code/Codex/Gemini CLI/Claude Desktop/FreeCAD)への自動MCP設定トグル+カスタムMCP設定のコピー(JSON表示)
+- プロバイダ一覧はPencil同等のフルラインナップ: Anthropic / OpenAI(Codex CLI連携) / Gemini / xAI / OpenRouter / GitHub Copilot(デバイスコード認証) / Ollama(ローカル、サーバーURL+モデル一覧) / Moonshot / Kimi For Coding / DeepSeek / Together / Fireworks / Z.AI / OpenCode Zen。認証アーキタイプは4種: CLI再利用(サブスク)、APIキー、デバイスコードOAuth、ローカルURL
+- チャットのポップアップ(モデルピッカー/並列エージェント[作業分担・比較案]/自動反復[配置整理・配線整理・ラベル整頓]/コンテキスト追加[データシートPDF・図面・部品DB・規格])は`MadakeCAD.pen`「AIチャット - ポップアップ集」参照
+- **共通デザインシステム**: `docs/design-system.md`と`.pen`の「デザインシステム - 共通コンポーネント」が正。メイン画面のCAD調トークン(ribbon-bg背景+白カード+acad-blueアクセント)を全UI(設定・チャット含む)で使用する。モデル/レイアウトタブ行はチャットパネル導入に伴い廃止
 - APIキー・OAuthトークンはOSキーチェーンに保存し、設定ファイルには置かない
 - **フェーズA**(フェーズ2と並行可): A1=チャットUI+ClaudeCodeCliBackend(サブスク利用・キー不要)、A2=ストリーミング表示+ツールチップUI+元に戻す統合、A3=APIキー系バックエンド(Anthropic/OpenAI互換/Gemini)+設定画面フル実装
 
