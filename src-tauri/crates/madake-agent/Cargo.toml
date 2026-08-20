@@ -1,0 +1,15 @@
+[package]
+name = "madake-agent"
+version = "0.1.0"
+edition = "2021"
+description = "AIエージェント基盤: Claude Code CLIのstream-json駆動と会話管理"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["process", "io-util", "sync", "macros", "rt"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }

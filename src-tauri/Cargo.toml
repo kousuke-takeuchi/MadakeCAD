@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/madake-core", "crates/madake-mcp"]
+members = [".", "crates/madake-core", "crates/madake-mcp", "crates/madake-agent"]
 resolver = "2"
 
 [workspace.dependencies]
