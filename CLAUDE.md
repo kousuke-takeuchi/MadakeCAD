@@ -51,6 +51,10 @@ Rustは`~/.cargo/bin`にある(rustup)。PATHに無ければ `export PATH="$HOME
 
 UIはPencil(pen.dev)で先にデザインし、確定後に実装する。デザインファイルはリポジトリ直下の`MadakeCAD.pen`(Pen.appで開く。暗号化されておりRead/Grep不可、必ずpencil MCPツールで読む)。PencilのMCPサーバーは`.mcp.json`の`pencil`(Pen.app起動中のみ接続可)。UIの見た目に関わる実装はデザイン確定前に進めないこと。
 
+## FreeCAD連携(将来フェーズM、設計済み)
+
+内蔵HTTPサーバーにLink API(`/api/v1`、素のJSON REST)を追加し、FreeCADアドオンWB「MadakeCAD Link」から部品対応付け・3D配線ルーティング・電線長の書き戻しを行う(spec §7)。**Link API経由の書き込みも必ずCommandエンジンを通すこと。** entity UUIDが対応付けのキーで、FreeCAD側は`madake_id`カスタムプロパティ、MadakeCAD側は`Project.mech_links`に保存する。電気データはMadakeCAD、ジオメトリ(配置・経路長)はFreeCADがマスタ。
+
 ## 開発プロセス
 
 superpowersプラグインの方法論に従う: brainstorming→spec、writing-plans→plan、TDD(red/green)、タスクごとに小さくコミット。仕様変更時はspec/planを先に更新する。

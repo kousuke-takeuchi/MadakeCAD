@@ -49,3 +49,4 @@ cd src-tauri && cargo test
 2. フェーズ1: Canvas2DエディタUI(Pencilデザイン確定後)、ネットリスト、BOM/電線リスト、PDF/SVG出力
 3. フェーズ2: 配線検証(電圧降下・線径適合)、部品DB(SQLite)、KiCadインポート
 4. フェーズ3: ngspiceシミュレーション
+5. フェーズM: FreeCAD連携 — SOLIDWORKS Electrical⇔SOLIDWORKS相当の電気・機械連携。内蔵サーバーのLink API(/api/v1)+FreeCADアドオンWBで、部品の3D対応付け・3D配線ルーティング・電線長の還元を行う(spec §7)
