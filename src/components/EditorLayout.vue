@@ -5,7 +5,6 @@ import { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import CanvasView from "./CanvasView.vue";
-import CommandBar from "./CommandBar.vue";
 import FileTabs from "./FileTabs.vue";
 import ProjectPanel from "./ProjectPanel.vue";
 import PropertiesPanel from "./PropertiesPanel.vue";
@@ -59,7 +58,6 @@ onBeforeUnmount(() => {
       <CanvasView />
       <PropertiesPanel />
     </div>
-    <CommandBar />
     <StatusBar />
     <SymbolPickerDialog />
   </div>
