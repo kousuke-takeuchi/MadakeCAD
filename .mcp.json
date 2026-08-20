@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
     "madakecad": {
       "type": "http",
       "url": "http://127.0.0.1:9310/mcp"

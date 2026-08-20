@@ -6,6 +6,7 @@
 
 - 全体設計(スペック): `docs/superpowers/specs/2026-08-20-madakecad-design.md`
 - 実装計画: `docs/superpowers/plans/` 配下(日付順)
+- 開発方針の原点と参考図面: `docs/references/README.md`(PDF本体は社外秘のためgit管理外)
 - ロードマップ概要: `README.md`
 
 ## アーキテクチャの絶対原則

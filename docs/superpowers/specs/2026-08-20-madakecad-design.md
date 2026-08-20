@@ -14,6 +14,8 @@
 
 将来目標: Amazon等で買える市販部品を含む部品DB、配線検証(電圧降下・線径適合・ヒューズ協調)、SPICEシミュレーション、AIによる自動作図。
 
+参考図面PDFの一覧と方針の原点は `docs/references/README.md` を参照(PDF本体は社外秘・git管理外)。UIはAutoCAD Electrical等の産業用電気CADの慣習的デザインに寄せる。
+
 ## 2. 技術選定(確定済み)
 
 | 項目 | 選定 | 理由 |
