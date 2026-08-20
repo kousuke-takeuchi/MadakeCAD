@@ -41,6 +41,7 @@ const controller = inject<EditorController>("controller")!;
     <button class="toggle" title="線の太さ表示 (未実装)" @click="ui.log('線の太さ表示: 未実装')">
       <PenLine :size="13" />
     </button>
+    <span class="message">{{ ui.lastMessage }}</span>
     <span class="grow" />
     <span class="info">{{ store.activeSheet?.title_block.scale || "1:1" }} ▾</span>
     <span class="info">ズーム {{ Math.round((controller.vp.scale / 4) * 100) }}%</span>
@@ -84,6 +85,14 @@ const controller = inject<EditorController>("controller")!;
   color: var(--acad-blue);
 }
 .grow { flex: 1; }
+.message {
+  color: var(--ui-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 380px;
+  margin-left: 8px;
+}
 .info { color: var(--ui-muted); }
 .mcp {
   display: flex;

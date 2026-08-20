@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// AutoCAD風コマンド入力バー (1行)。履歴表示は持たず、直近メッセージはステータスバーに出す。
 import { ChevronsRight } from "lucide-vue-next";
 import { inject, ref } from "vue";
 import type { EditorController } from "../tools/controller";
@@ -15,14 +16,13 @@ async function run() {
   input.value = "";
   if (!raw) return;
   const [cmd] = raw.toUpperCase().split(/\s+/);
-  ui.log(`コマンド: ${raw}`);
   switch (cmd) {
     case "L":
     case "LINE":
     case "W":
     case "WIRE":
       controller.setTool("wire");
-      ui.log("配線の始点を指定 (ダブルクリックまたはEnterで確定)");
+      ui.log("WIRE: 始点を指定 (ダブルクリックまたはEnterで確定)");
       break;
     case "I":
     case "INSERT":
@@ -56,44 +56,32 @@ async function run() {
 
 <template>
   <div class="cmdline">
-    <div class="history">
-      <div v-for="(line, i) in ui.commandHistory.slice(-2)" :key="i">{{ line }}</div>
-    </div>
-    <div class="input-row">
-      <ChevronsRight :size="12" class="prompt" />
-      <input
-        v-model="input"
-        placeholder="コマンドを入力"
-        spellcheck="false"
-        @keydown.enter="run"
-        @keydown.esc="input = ''"
-      />
-    </div>
+    <ChevronsRight :size="12" class="prompt" />
+    <input
+      v-model="input"
+      placeholder="コマンドを入力 (L=配線 I=部品挿入 E=削除 U=元に戻す)"
+      spellcheck="false"
+      @keydown.enter="run"
+      @keydown.esc="input = ''"
+    />
   </div>
 </template>
 
 <style scoped>
 .cmdline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
   background: #f4f5f6;
   border-top: 1px solid var(--ribbon-line);
-  padding: 3px 8px;
   font-family: "SF Mono", Menlo, monospace;
   user-select: none;
   flex: none;
 }
-.history {
-  font-size: 10px;
-  color: var(--ui-muted);
-  line-height: 1.5;
-  min-height: 30px;
-}
-.input-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 .prompt { color: var(--acad-blue); flex: none; }
-.input-row input {
+input {
   flex: 1;
   border: none;
   background: transparent;
