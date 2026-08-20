@@ -28,6 +28,9 @@ onMounted(async () => {
 <style>
 /* AutoCAD Electrical風ライトテーマのUIトークン (Pencilデザイン準拠) */
 :root {
+  --tb-bg: #2a2e34;
+  --tb-text: #d8dbde;
+  --model-bg: #212830;
   --ribbon-strip: #dfe3e7;
   --ribbon-bg: #f2f4f5;
   --ribbon-line: #c6cbd1;
