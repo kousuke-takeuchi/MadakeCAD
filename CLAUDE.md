@@ -47,6 +47,10 @@ Rustは`~/.cargo/bin`にある(rustup)。PATHに無ければ `export PATH="$HOME
 - 図枠=JIS(表題欄・改訂欄・ゾーン番号)。目標品質は***REMOVED***社の機器構成図(ユーザー提供PDF)
 - シンボルはJIS C 0617系。参照記号接頭辞: R/F/C/D/SW/PB/K(リレー)/J(コネクタ)等
 
+## デザインシステム
+
+`docs/design-system.md`が共通デザインルールの正(メイン画面のCAD調トークン: ribbon-bg背景+白カード+acad-blueアクセント)。実装の色定義は`src/App.vue`のCSS変数と`src/canvas/theme.ts`のみ。コンポーネントへの生色コード直書き禁止。
+
 ## UIデザインワークフロー
 
 UIはPencil(pen.dev)で先にデザインし、確定後に実装する。デザインファイルはリポジトリ直下の`MadakeCAD.pen`(Pen.appで開く。暗号化されておりRead/Grep不可、必ずpencil MCPツールで読む)。PencilのMCPサーバーは`.mcp.json`の`pencil`(Pen.app起動中のみ接続可)。UIの見た目に関わる実装はデザイン確定前に進めないこと。
