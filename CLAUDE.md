@@ -51,6 +51,11 @@ Rustは`~/.cargo/bin`にある(rustup)。PATHに無ければ `export PATH="$HOME
 
 `docs/design-system.md`が共通デザインルールの正(メイン画面のCAD調トークン: ribbon-bg背景+白カード+acad-blueアクセント)。実装の色定義は`src/App.vue`のCSS変数と`src/canvas/theme.ts`のみ。コンポーネントへの生色コード直書き禁止。
 
+**デザイン作業の手順(必須)**: 新しい画面・UIをデザインするときは、
+1. まず`MadakeCAD.pen`の「デザインシステム - 共通コンポーネント」ボードと`docs/design-system.md`を参照し、既存のトークン・コンポーネントを再利用する
+2. 足りないコンポーネントがあれば、**先にデザインシステムボードへ追加**(命名・状態バリエーション含む)してから画面で使用する
+3. 追加したコンポーネントは`docs/design-system.md`にも同時に記載する(両者は常に同期)
+
 ## UIデザインワークフロー
 
 UIはPencil(pen.dev)で先にデザインし、確定後に実装する。デザインファイルはリポジトリ直下の`MadakeCAD.pen`(Pen.appで開く。暗号化されておりRead/Grep不可、必ずpencil MCPツールで読む)。PencilのMCPサーバーは`.mcp.json`の`pencil`(Pen.app起動中のみ接続可)。UIの見た目に関わる実装はデザイン確定前に進めないこと。
