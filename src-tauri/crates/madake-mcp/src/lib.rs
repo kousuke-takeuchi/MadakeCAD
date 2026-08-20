@@ -106,6 +106,26 @@ pub struct DrawWireParams {
     pub part_no: Option<String>,
 }
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SheetRefParams {
+    /// 対象シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ExportPathParams {
+    /// 出力先ファイルパス(絶対パス)。
+    pub path: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ExportSvgParams {
+    /// 対象シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 出力先ファイルパス(絶対パス)。
+    pub path: String,
+}
+
 #[derive(Clone)]
 pub struct MadakeMcp {
     doc: SharedDoc,
@@ -227,6 +247,57 @@ impl MadakeMcp {
             .execute(Command::AddEntity { sheet_id, entity })
             .map_err(internal)?;
         json_ok(&serde_json::json!({ "entity_id": id, "revision": patch.revision }))
+    }
+
+    #[tool(
+        description = "シートのネットリスト(電気的接続グラフ)を返す。各ネットは名前・所属ピン(参照記号+ピン番号)・配線idを持つ"
+    )]
+    fn get_netlist(
+        &self,
+        Parameters(p): Parameters<SheetRefParams>,
+    ) -> Result<String, ErrorData> {
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let engine = self.doc.engine.lock().unwrap();
+        let sheet = engine
+            .project()
+            .sheet(sheet_id)
+            .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+        json_ok(&madake_core::netlist::extract_netlist(sheet, &builtin_symbols()))
+    }
+
+    #[tool(description = "部品表(BOM)CSVを指定パスに書き出す")]
+    fn export_bom(&self, Parameters(p): Parameters<ExportPathParams>) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let csv = madake_core::reports::bom_csv(engine.project());
+        std::fs::write(&p.path, csv).map_err(internal)?;
+        json_ok(&serde_json::json!({ "written": p.path }))
+    }
+
+    #[tool(description = "電線リストCSVを指定パスに書き出す")]
+    fn export_wire_list(
+        &self,
+        Parameters(p): Parameters<ExportPathParams>,
+    ) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let csv = madake_core::reports::wire_list_csv(engine.project());
+        std::fs::write(&p.path, csv).map_err(internal)?;
+        json_ok(&serde_json::json!({ "written": p.path }))
+    }
+
+    #[tool(description = "シートをJIS図枠つきSVGとして指定パスに書き出す")]
+    fn export_svg(
+        &self,
+        Parameters(p): Parameters<ExportSvgParams>,
+    ) -> Result<String, ErrorData> {
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let engine = self.doc.engine.lock().unwrap();
+        let sheet = engine
+            .project()
+            .sheet(sheet_id)
+            .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+        let svg = madake_core::svg::sheet_to_svg(sheet, &builtin_symbols());
+        std::fs::write(&p.path, svg).map_err(internal)?;
+        json_ok(&serde_json::json!({ "written": p.path }))
     }
 
     #[tool(description = "直前の編集を取り消す")]

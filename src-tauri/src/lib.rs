@@ -78,6 +78,51 @@ fn new_project(state: State<AppState>, name: String) -> Result<Patch, String> {
     Ok(patch)
 }
 
+#[tauri::command]
+fn get_netlist(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+) -> Result<Vec<madake_core::netlist::Net>, String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let sheet = engine
+        .project()
+        .sheet(sheet_id)
+        .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+    Ok(madake_core::netlist::extract_netlist(
+        sheet,
+        &builtin_symbols(),
+    ))
+}
+
+#[tauri::command]
+fn export_svg(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+    path: String,
+) -> Result<(), String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let sheet = engine
+        .project()
+        .sheet(sheet_id)
+        .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+    let svg = madake_core::svg::sheet_to_svg(sheet, &builtin_symbols());
+    std::fs::write(&path, svg).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_bom(state: State<AppState>, path: String) -> Result<(), String> {
+    let engine = state.doc.engine.lock().unwrap();
+    std::fs::write(&path, madake_core::reports::bom_csv(engine.project()))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_wire_list(state: State<AppState>, path: String) -> Result<(), String> {
+    let engine = state.doc.engine.lock().unwrap();
+    std::fs::write(&path, madake_core::reports::wire_list_csv(engine.project()))
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let doc = SharedDoc::new(Engine::new(Project::new("無題プロジェクト")));
@@ -123,7 +168,11 @@ pub fn run() {
             redo,
             save_project,
             load_project,
-            new_project
+            new_project,
+            get_netlist,
+            export_svg,
+            export_bom,
+            export_wire_list
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
