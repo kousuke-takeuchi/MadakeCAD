@@ -21,7 +21,8 @@
 ## Global Constraints
 
 - 全編集はCommandエンジン経由(CLAUDE.md絶対原則)。エージェントのツールはMCP(9310)の既存ツールを使い、二重実装しない
-- Claude Code CLIのフラグは実装開始時に`claude --help`で必ず検証する(想定: `-p` `--output-format stream-json` `--verbose` `--resume` `--model` `--mcp-config` `--allowedTools` `--append-system-prompt`)。検証結果が異なればこのプランを更新
+- Claude Code CLIのフラグは検証済み(2026-08-21、claude 2.1.237)。想定フラグ(`-p` `--output-format stream-json` `--verbose` `--resume <id>` `--model` `--mcp-config` `--allowedTools` `--append-system-prompt`)は全て存在。**追加**: テキストのデルタ配信には`--include-partial-messages`が必須(無指定だと完成メッセージ単位でしか出ない)。`--strict-mcp-config`でユーザー設定のMCPを除外し自前mcp-configのみ読ませる
+- stream-json実出力の構造(実測): `system/init`(session_id)、`stream_event`(生APIイベント: content_block_delta の delta.type=text_delta がテキスト、thinking_delta は無視)、`assistant`(完成content block毎に発火。tool_useブロックは完全なinputを持つ=ToolUseStartedのトリガに使う)、`user`(tool_result。is_errorでToolUseFinished)、`result`(subtype=success、result/usage)。`system/status` `system/thinking_tokens` `rate_limit_event` `system/task_summary`等の未知タイプはスキップ
 - APIキー等の秘密情報は扱わない(A1はCLIのOAuthセッションに委譲)。A3まで設定ファイルにトークンを置かない
 - テスト: `cd src-tauri && cargo test` / `npx vitest run`。CLIは本物のclaudeを呼ばず、フィクスチャを吐くフェイクスクリプトで統合テストする
 - デザイン準拠: `MadakeCAD.pen`の「AIチャットパネル」「AIチャット(展開状態)」「AIチャット - ポップアップ集」「エージェント編集オーバーレイ」+ `docs/design-system.md`
