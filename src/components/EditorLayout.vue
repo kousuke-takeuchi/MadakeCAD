@@ -7,7 +7,6 @@ import { useUiStore } from "../stores/ui";
 import CanvasView from "./CanvasView.vue";
 import CommandBar from "./CommandBar.vue";
 import FileTabs from "./FileTabs.vue";
-import ModelTabs from "./ModelTabs.vue";
 import ProjectPanel from "./ProjectPanel.vue";
 import PropertiesPanel from "./PropertiesPanel.vue";
 import RibbonBar from "./RibbonBar.vue";
@@ -60,7 +59,6 @@ onBeforeUnmount(() => {
       <CanvasView />
       <PropertiesPanel />
     </div>
-    <ModelTabs />
     <CommandBar />
     <StatusBar />
     <SymbolPickerDialog />
