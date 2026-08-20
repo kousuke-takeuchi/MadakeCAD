@@ -1,6 +1,8 @@
 //! 会話マネージャ(revision追跡)とチャット履歴永続化のテスト。
 
-use madake_agent::conversation::{chat_path_for, load_chat, save_chat, Conversation, Role};
+use madake_agent::conversation::{
+    chat_path_for, load_chat, save_chat, AppliedRevisions, Conversation, Role, CHAT_FORMAT_VERSION,
+};
 use madake_agent::AgentEvent;
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -81,7 +83,10 @@ fn turn_records_engine_revision_range() {
 
     let assistant = conv.messages.last().unwrap();
     assert_eq!(assistant.role, Role::Assistant);
-    assert_eq!(assistant.applied_revisions, (7, 10));
+    assert_eq!(
+        assistant.applied_revisions,
+        AppliedRevisions { start: 7, end: 10 }
+    );
     // 「元に戻す」= (end - start)回のundo
     assert_eq!(assistant.applied_command_count(), 3);
     assert!(assistant.has_edits());
@@ -136,7 +141,10 @@ fn second_turn_appends_messages_and_reuses_session() {
     run_turn(&mut conv, 10, 12);
 
     assert_eq!(conv.messages.len(), 4);
-    assert_eq!(conv.messages[3].applied_revisions, (10, 12));
+    assert_eq!(
+        conv.messages[3].applied_revisions,
+        AppliedRevisions { start: 10, end: 12 }
+    );
     assert_eq!(conv.messages[3].applied_command_count(), 2);
     assert_eq!(conv.session_id.as_deref(), Some("sess-1"));
 }
@@ -156,7 +164,10 @@ fn error_event_is_recorded_on_current_turn() {
         assistant.error.as_deref(),
         Some("claude CLIが異常終了しました (exit 3)")
     );
-    assert_eq!(assistant.applied_revisions, (3, 3));
+    assert_eq!(
+        assistant.applied_revisions,
+        AppliedRevisions { start: 3, end: 3 }
+    );
 }
 
 #[test]
@@ -176,6 +187,48 @@ fn chat_file_roundtrip_is_pretty_json() {
 
     let loaded = load_chat(&path).unwrap();
     assert_eq!(loaded, vec![a, b]);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn load_chat_rejects_newer_format_version() {
+    let dir = temp_dir();
+    let path = dir.join("future.chat.json");
+    let future = CHAT_FORMAT_VERSION + 1;
+    std::fs::write(
+        &path,
+        format!(r#"{{"format_version":{future},"conversations":[]}}"#),
+    )
+    .unwrap();
+
+    let err = load_chat(&path).expect_err("新しいフォーマット版は明示エラー");
+    let message = err.to_string();
+    assert!(
+        message.contains(&future.to_string()),
+        "版番号が伝わること: {message}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// 保存中にクラッシュしても既存ファイルが壊れないよう、一時ファイル→renameで書く。
+#[test]
+fn save_chat_writes_atomically_and_leaves_no_temp_file() {
+    let dir = temp_dir();
+    let path = dir.join("plant.chat.json");
+
+    let mut a = Conversation::new();
+    run_turn(&mut a, 0, 1);
+    save_chat(&path, &[a.clone()]).unwrap();
+    save_chat(&path, &[a.clone(), Conversation::new()]).unwrap();
+
+    let files: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(files, vec!["plant.chat.json".to_string()], "{files:?}");
+    assert_eq!(load_chat(&path).unwrap().len(), 2);
 
     std::fs::remove_dir_all(&dir).ok();
 }

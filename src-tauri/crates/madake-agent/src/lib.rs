@@ -10,7 +10,7 @@ pub mod conversation;
 pub mod events;
 
 pub use backend::{ClaudeCodeCliBackend, DetectResult};
-pub use conversation::{ChatMessage, Conversation, Role, ToolCall};
+pub use conversation::{AppliedRevisions, ChatMessage, Conversation, Role, ToolCall};
 pub use events::{parse_stream_events, parse_stream_line, AgentEvent, StreamParser, Usage};
 
 /// madake-agentのエラー。
@@ -24,6 +24,10 @@ pub enum AgentError {
     Io(#[from] std::io::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error(
+        "このビルドが対応していないチャット履歴フォーマット版です: {found} (対応: {supported}以下)"
+    )]
+    UnsupportedChatFormat { found: u32, supported: u32 },
 }
 
 pub type Result<T> = std::result::Result<T, AgentError>;

@@ -3,6 +3,7 @@
 use madake_agent::backend::ClaudeCodeCliBackend;
 use madake_agent::AgentEvent;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 fn fixtures_dir() -> PathBuf {
@@ -30,10 +31,9 @@ fn kinds(events: &[AgentEvent]) -> Vec<&str> {
 #[test]
 fn args_contain_required_flags() {
     let backend = backend("fake_claude.sh");
-    let args = backend.build_args("ヒューズを追加して", None, Path::new("/tmp/mcp.json"), None);
+    let args = backend.build_args(None, Path::new("/tmp/mcp.json"), None);
 
     assert_eq!(args[0], "-p");
-    assert_eq!(args[1], "ヒューズを追加して");
     for pair in [
         ("--output-format", Some("stream-json")),
         ("--mcp-config", Some("/tmp/mcp.json")),
@@ -63,7 +63,6 @@ fn args_include_resume_model_and_system_prompt_when_given() {
     let mut backend = backend("fake_claude.sh");
     backend.model = Some("claude-opus-4-6".to_string());
     let args = backend.build_args(
-        "続き",
         Some("39628e1e-925e-42e5-9619-7cda7c2671f1"),
         Path::new("/tmp/mcp.json"),
         Some("アクティブシート: S1"),
@@ -95,7 +94,7 @@ fn mcp_config_points_at_local_mcp_server() {
 #[tokio::test]
 async fn send_streams_events_from_fake_cli() {
     let backend = backend("fake_claude.sh");
-    let (tx, mut rx) = mpsc::channel(64);
+    let (tx, mut rx) = mpsc::channel(1024);
     backend.send("hi", None, tx).await.expect("send成功");
 
     let mut events = Vec::new();
@@ -118,7 +117,7 @@ async fn send_streams_events_from_fake_cli() {
 #[tokio::test]
 async fn send_reports_nonzero_exit_as_error_event() {
     let backend = backend("fake_claude_fail.sh");
-    let (tx, mut rx) = mpsc::channel(64);
+    let (tx, mut rx) = mpsc::channel(1024);
     backend.send("hi", None, tx).await.expect("send自体は成功");
 
     let mut events = Vec::new();
@@ -134,6 +133,54 @@ async fn send_reports_nonzero_exit_as_error_event() {
         }
         other => panic!("最後はErrorのはず: {other:?}"),
     }
+}
+
+/// プロンプトはargvではなくstdinで渡す(先頭が`-`でもフラグ扱いされないため)。
+#[tokio::test]
+async fn prompt_is_passed_through_stdin_not_argv() {
+    let backend = backend("fake_claude_echo_prompt.sh");
+    let prompt = "--dangerously-skip-permissions について説明して";
+    let (tx, mut rx) = mpsc::channel(1024);
+    backend.send(prompt, None, tx).await.expect("send成功");
+
+    let mut events = Vec::new();
+    while let Some(ev) = rx.recv().await {
+        events.push(ev);
+    }
+    match events.last() {
+        Some(AgentEvent::TurnCompleted { result, .. }) => assert_eq!(result, prompt),
+        other => panic!("最後はTurnCompletedのはず(引数解釈エラーの可能性): {other:?}"),
+    }
+}
+
+/// 受信側がdrop(キャンセル)したら、書き続ける子プロセスをkillしてすぐ抜けること。
+#[tokio::test]
+async fn send_returns_promptly_when_receiver_is_dropped() {
+    let backend = backend("fake_claude_flood.sh");
+    let (tx, rx) = mpsc::channel(1);
+    drop(rx);
+
+    let result = tokio::time::timeout(Duration::from_secs(10), backend.send("hi", None, tx)).await;
+    assert!(result.is_ok(), "キャンセル後にsendが返らない(パイプ詰まり)");
+    result.unwrap().expect("send自体は成功");
+}
+
+/// 行読みのIOエラー(不正UTF-8等)もErrorイベントとして流してからErrを返す。
+#[tokio::test]
+async fn io_error_while_reading_is_reported_as_error_event() {
+    let backend = backend("fake_claude_badutf8.sh");
+    let (tx, mut rx) = mpsc::channel(1024);
+    let result = backend.send("hi", None, tx).await;
+    assert!(result.is_err(), "IOエラーはErrで返る");
+
+    let mut events = Vec::new();
+    while let Some(ev) = rx.recv().await {
+        events.push(ev);
+    }
+    assert!(
+        matches!(events.last(), Some(AgentEvent::Error { .. })),
+        "Errorイベントが流れること: {events:?}"
+    );
 }
 
 #[tokio::test]

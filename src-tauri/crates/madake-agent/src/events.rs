@@ -177,12 +177,13 @@ fn parse_usage(v: &Value) -> Option<Usage> {
     })
 }
 
-fn content_blocks(v: &Value) -> Vec<Value> {
+/// `message.content`の配列を参照で返す(無ければ空)。
+fn content_blocks(v: &Value) -> &[Value] {
     v.get("message")
         .and_then(|m| m.get("content"))
         .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
 }
 
 fn str_field(v: &Value, key: &str) -> String {
@@ -200,6 +201,8 @@ fn u64_field(v: &Value, key: &str) -> u64 {
 ///
 /// `tool_result`行にはツール名が含まれないため、直前の`tool_use`の名前を
 /// [`AgentEvent::ToolUseFinished`]へ補完する。
+/// あわせて、同じtool_use_idの[`AgentEvent::ToolUseStarted`]が複数行にまたがって
+/// 出た場合(CLIの再送等)は2回目以降を捨てる。
 #[derive(Debug, Default)]
 pub struct StreamParser {
     tool_names: HashMap<String, String>,
@@ -212,20 +215,25 @@ impl StreamParser {
 
     /// 1行を処理し、0個以上のイベントを返す。
     pub fn push(&mut self, line: &str) -> Vec<AgentEvent> {
-        let mut events = parse_stream_events(line);
-        for ev in &mut events {
-            match ev {
+        let mut out = Vec::new();
+        for mut ev in parse_stream_events(line) {
+            match &mut ev {
                 AgentEvent::ToolUseStarted { id, tool, .. } => {
+                    // 既知idの再送は捨てる(UIに同じツール呼び出しが二重に並ばないように)
+                    if !id.is_empty() && self.tool_names.contains_key(id.as_str()) {
+                        continue;
+                    }
                     self.tool_names.insert(id.clone(), tool.clone());
                 }
                 AgentEvent::ToolUseFinished { id, tool, .. } if tool.is_empty() => {
-                    if let Some(name) = self.tool_names.get(id) {
+                    if let Some(name) = self.tool_names.get(id.as_str()) {
                         *tool = name.clone();
                     }
                 }
                 _ => {}
             }
+            out.push(ev);
         }
-        events
+        out
     }
 }
