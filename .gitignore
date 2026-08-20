@@ -23,5 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# 社外秘の参考図面PDF (コミット禁止)
+# 社外秘の参考資料 (コミット禁止。READMEも企業名を含むためローカル専用)
 docs/references/*.pdf
+docs/references/README.md
