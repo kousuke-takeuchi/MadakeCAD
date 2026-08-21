@@ -2,7 +2,8 @@
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
   Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileText, Frame, Grid3x3, Hash,
-  Image, LayoutGrid, Move, MoveRight, Pencil, Route, Scissors, ShieldCheck, Tag, Trash2, Type,
+  Image, LayoutGrid, ListOrdered, Move, MoveRight, Pencil, Route, Scissors, ShieldCheck, Tag,
+  Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
 import { computed, inject, ref } from "vue";
@@ -11,6 +12,7 @@ import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
 import { useDocumentStore } from "../stores/document";
 import { useFileActions } from "../composables/fileActions";
 import { useRevisionsStore } from "../stores/revisions";
+import { useWireNumbersStore } from "../stores/wireNumbers";
 import { useSimulationStore } from "../stores/simulation";
 import { useVerificationStore } from "../stores/verification";
 import type { EditorController } from "../tools/controller";
@@ -22,13 +24,15 @@ const files = useFileActions();
 const verification = useVerificationStore();
 const simulation = useSimulationStore();
 const revisions = useRevisionsStore();
+const wireNumbers = useWireNumbersStore();
 const { t } = useI18n();
 
 const activeTab = ref("回路図");
 
 // 表示タブ: 表示クラストグル (レイヤ、spec §4)。3個ずつの縦列に分ける
 const viewIcons: Record<ViewClass, LucideIcon> = {
-  wires: Route, symbols: Cpu, refs: Tag, net_labels: Hash, texts: Type, frame: Frame, grid: Grid3x3,
+  wires: Route, symbols: Cpu, refs: Tag, net_labels: Hash, wire_numbers: ListOrdered, texts: Type,
+  frame: Frame, grid: Grid3x3,
 };
 const viewClassColumns = Array.from(
   { length: Math.ceil(VIEW_CLASSES.length / 3) },
@@ -63,6 +67,17 @@ function openRevisions() {
   ui.log(t("revisions.openLog", { sheet: sheet.name }));
 }
 
+/** 線番の自動採番ダイアログを開く (リボン「配線」グループ)。 */
+function openWireNumbers() {
+  const sheet = useDocumentStore().activeSheet;
+  if (!sheet) {
+    ui.log(t("wireNumbers.noSheetLog"));
+    return;
+  }
+  wireNumbers.openFor(sheet);
+  ui.log(t("wireNumbers.openLog", { sheet: sheet.name }));
+}
+
 function todo(name: string) {
   ui.log(`${name}: 未実装 (今後のフェーズで対応予定)`);
 }
@@ -92,7 +107,7 @@ const groups = computed<RibbonGroup[]>(() => [
     },
     small: [[
       { label: "複数母線", icon: AlignJustify, action: () => todo("複数母線") },
-      { label: "線番挿入", icon: Hash, action: () => todo("線番挿入") },
+      { label: t("wireNumbers.ribbonButton"), icon: ListOrdered, action: () => openWireNumbers() },
       { label: "信号矢印", icon: MoveRight, action: () => todo("信号矢印") },
     ]],
   },

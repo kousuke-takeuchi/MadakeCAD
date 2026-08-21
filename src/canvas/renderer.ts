@@ -6,6 +6,7 @@ import type { Region } from "./agentOverlay";
 import { resolveSymbolDef } from "./dynamicSymbol";
 import { entityViewClass, type ViewClass } from "./viewClasses";
 import { agentRgba, theme, wireColorScreen } from "./theme";
+import { WIRE_NO_FONT, wireNumberLabels } from "./wireNumbers";
 import { GRID_PITCH, type Viewport } from "./viewport";
 
 /** 図枠の用紙端からのマージン (mm)。svg.rsのFRAME_MARGINと一致させること。 */
@@ -538,6 +539,23 @@ export function drawAgentOverlay(
   drawAgentChip(ctx, cx, cy, 0.92);
 }
 
+/**
+ * 線番 (IEC 62491) を描く。位置は wireNumberLabels が決める
+ * (ネットごとに最長線分の中点、横線は上・縦線は左へ2.5mm)。Rust側svg.rsと同一ルール。
+ */
+function drawWireNumbers(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet) {
+  const labels = wireNumberLabels(sheet);
+  if (labels.length === 0) return;
+  ctx.fillStyle = theme.wireNumber;
+  ctx.font = `${Math.max(9, WIRE_NO_FONT * vp.scale)}px monospace`;
+  for (const label of labels) {
+    const s = vp.toScreen(label.at);
+    ctx.textAlign = label.align === "center" ? "center" : "right";
+    ctx.fillText(label.number, s.x, s.y);
+  }
+  ctx.textAlign = "left";
+}
+
 export function renderSheet(
   ctx: CanvasRenderingContext2D,
   sheet: Sheet,
@@ -598,6 +616,9 @@ export function renderSheet(
       ctx.fillText(e.text, s.x, s.y);
     }
   }
+
+  // 線番 (表示クラス "wire_numbers")。SVG出力と同じ位置・等幅フォントで描く
+  if (!hidden.has("wire_numbers")) drawWireNumbers(ctx, vp, sheet);
 
   // エージェント編集オーバーレイ(図面の上、クロスヘアの下)
   if (opts.agent) drawAgentOverlay(ctx, vp, opts.agent);

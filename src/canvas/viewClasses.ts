@@ -7,6 +7,7 @@ export type ViewClass =
   | "symbols"
   | "refs"
   | "net_labels"
+  | "wire_numbers"
   | "texts"
   | "frame"
   | "grid";
@@ -17,6 +18,7 @@ export const VIEW_CLASSES: ReadonlyArray<{ id: ViewClass; label: string; icon: s
   { id: "symbols", label: "シンボル", icon: "cpu" },
   { id: "refs", label: "参照記号", icon: "tag" },
   { id: "net_labels", label: "ネットラベル", icon: "hash" },
+  { id: "wire_numbers", label: "線番", icon: "list-ordered" },
   { id: "texts", label: "注記", icon: "type" },
   { id: "frame", label: "図枠", icon: "frame" },
   { id: "grid", label: "グリッド", icon: "grid-3x3" },
@@ -24,7 +26,8 @@ export const VIEW_CLASSES: ReadonlyArray<{ id: ViewClass; label: string; icon: s
 
 /**
  * エンティティが属する表示クラス。ジャンクションは配線の一部として扱う。
- * "refs"(参照記号・型番)はシンボル内の注記テキストのみを指すため、ここには現れない。
+ * "refs"(参照記号・型番)と "wire_numbers"(線番)はエンティティではなく
+ * 描画時に生成する注記なので、ここには現れない。
  */
 export function entityViewClass(e: Entity): ViewClass {
   switch (e.kind) {

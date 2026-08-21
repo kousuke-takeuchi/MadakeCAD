@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**343 specification clauses** across 5 areas.
+**366 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -364,6 +364,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - entity kinds map to view classes (junctions count as wires) <sub>`entityViewClass`</sub>
 - VIEW_CLASSES enumerates every class exactly once <sub>`entityViewClass`</sub>
+- shows every view class, including wire numbers, until it is switched off <sub>`view class visibility`</sub>
 
 ### viewport
 
@@ -371,6 +372,34 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - panning moves the view in screen pixels <sub>`Viewport`</sub>
 - snapping rounds to the 2.5 mm grid by default <sub>`Viewport`</sub>
 - zoom is clamped to sane bounds <sub>`Viewport`</sub>
+
+### wireNumbers
+
+- puts the number of a horizontal wire 2.5mm above the midpoint, centred <sub>`wireNumberLabels`</sub>
+- puts the number of a vertical wire 2.5mm to the left of the midpoint, right aligned <sub>`wireNumberLabels`</sub>
+- draws one net's number only once, at the midpoint of its longest segment <sub>`wireNumberLabels`</sub>
+- skips wires without a number and numbers that are only whitespace <sub>`wireNumberLabels`</sub>
+- returns every number in a stable order <sub>`wireNumberLabels`</sub>
+- places a diagonal wire's number above when it runs wide and to the left when it runs tall <sub>`wireNumberLabels`</sub>
+- ignores entities that are not wires <sub>`wireNumberLabels`</sub>
+- opens with sequential numbering from 1 over the current sheet, keeping existing numbers <sub>`wire numbering dialog store`</sub>
+- numbers only the current sheet in append mode when keeping existing numbers <sub>`wire numbering dialog store`</sub>
+- renumbers only the current sheet when all numbers are reassigned <sub>`wire numbering dialog store`</sub>
+- omits the sheet id for the whole project so numbers stay unique across sheets <sub>`wire numbering dialog store`</sub>
+- accepts only whole numbers of 1 or more as the start number <sub>`wire numbering dialog store`</sub>
+- does not offer zone-based numbering yet <sub>`wire numbering dialog store`</sub>
+- runs one command, reports how many nets were numbered and closes <sub>`wire numbering dialog store`</sub>
+- refuses to run while the start number is invalid <sub>`wire numbering dialog store`</sub>
+- sends nothing when the dialog is cancelled <sub>`wire numbering dialog store`</sub>
+- keeps the dialog open and reports the error when numbering fails <sub>`wire numbering dialog store`</sub>
+
+### propertyCommands
+
+- builds a single set_wire_numbers command for an edited wire number <sub>`wireNumberCommand`</sub>
+- clears the wire number when the field is emptied <sub>`wireNumberCommand`</sub>
+- trims the entered number and treats whitespace as clearing it <sub>`wireNumberCommand`</sub>
+- sends nothing when the wire number did not change <sub>`wireNumberCommand`</sub>
+- builds nothing for entities other than wires <sub>`wireNumberCommand`</sub>
 
 ### drawingContext
 
