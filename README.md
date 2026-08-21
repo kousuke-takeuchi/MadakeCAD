@@ -39,6 +39,7 @@ cd src-tauri && cargo test
 - `place_symbol` / `draw_wire` — 配置・配線
 - `execute_commands` — 任意コマンド列(シート追加、表題欄設定、移動、削除など)
 - `export_svg` / `export_pdf` / `export_bom` / `export_wire_list` / `get_netlist` — 出力・ネットリスト
+- `run_verification` — 図面検証(ERC+電気検証)。Diagnostic配列を返す
 - `undo` / `redo`
 
 ## madake CLI (ターミナル)
@@ -54,6 +55,7 @@ cd src-tauri && cargo install --path crates/madake-cli   # madake がPATHに入�
 madake status                       # 接続確認 + 図面の概要
 madake project                      # シート一覧・電線品番
 madake netlist [--sheet <シートID>]  # ネットリスト
+madake verify [--sheet <シートID>]   # 図面検証 (ERC+電気検証。省略時は全シート)
 madake export svg|pdf|bom|wire-list <出力パス> [--sheet <シートID>]  # --sheetはsvg/pdfのみ
 madake save <path.mdkproj>          # 保存
 madake open <path.mdkproj>          # 読み込み

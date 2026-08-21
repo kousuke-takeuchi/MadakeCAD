@@ -40,6 +40,12 @@ pub enum Commands {
         #[arg(long, value_name = "ID")]
         sheet: Option<String>,
     },
+    /// 図面検証 (ERC+電気検証)
+    Verify {
+        /// シートID (省略時は全シート)
+        #[arg(long, value_name = "ID")]
+        sheet: Option<String>,
+    },
     /// SVG / 部品表 / 電線リストの書き出し
     Export {
         /// 種別
@@ -105,6 +111,13 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
                 return Ok(pretty(&nets));
             }
             Ok(format::netlist(&nets))
+        }
+        Commands::Verify { sheet } => {
+            let diags = api.verify(sheet.as_deref())?;
+            if cli.json {
+                return Ok(pretty(&diags));
+            }
+            Ok(format::diagnostics(&diags))
         }
         Commands::Export { kind, path, sheet } => {
             let result = api.export(*kind, path, sheet.as_deref())?;
@@ -206,6 +219,10 @@ mod tests {
         fn project(&self) -> Result<Value, CliError> {
             self.record("project".into());
             Ok(self.project.clone())
+        }
+        fn verify(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
+            self.record(format!("verify({sheet_id:?})"));
+            Ok(json!([]))
         }
         fn netlist(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
             self.record(format!("netlist({sheet_id:?})"));

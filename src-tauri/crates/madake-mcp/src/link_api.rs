@@ -135,6 +135,26 @@ async fn post_export_svg(
     Ok(Json(serde_json::json!({ "written": body.path })))
 }
 
+async fn get_verify(
+    State(doc): State<SharedDoc>,
+    Query(q): Query<NetlistQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let engine = doc.engine.lock().unwrap();
+    let project = engine.project();
+    let sheets: Vec<_> = match q.sheet_id {
+        Some(id) => vec![project.sheet(id).ok_or_else(|| bad_request("sheet not found"))?],
+        None => project.sheets.iter().collect(),
+    };
+    let mut diags = Vec::new();
+    for sheet in sheets {
+        diags.extend(madake_core::verify::verify_sheet(
+            sheet,
+            &sheet_symbol_defs(sheet),
+        ));
+    }
+    Ok(Json(serde_json::json!(diags)))
+}
+
 async fn post_export_pdf(
     State(doc): State<SharedDoc>,
     Json(body): Json<ExportSvgBody>,
@@ -397,6 +417,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>) -> Router {
         .route("/api/v1/project", get(get_project))
         .route("/api/v1/symbols", get(get_symbols))
         .route("/api/v1/netlist", get(get_netlist))
+        .route("/api/v1/verify", get(get_verify))
         .route("/api/v1/commands", post(post_commands))
         .route("/api/v1/undo", post(post_undo))
         .route("/api/v1/redo", post(post_redo))

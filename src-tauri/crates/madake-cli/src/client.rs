@@ -99,6 +99,14 @@ pub fn netlist_url(port: u16, sheet_id: Option<&str>) -> String {
     }
 }
 
+/// `/verify` のURL。シート指定時は `?sheet_id=<uuid>` を付ける。
+pub fn verify_url(port: u16, sheet_id: Option<&str>) -> String {
+    match sheet_id {
+        Some(id) => format!("{}?sheet_id={}", endpoint(port, "/verify"), id),
+        None => endpoint(port, "/verify"),
+    }
+}
+
 /// Link APIの呼び出し口。テストではフェイク実装に差し替える。
 pub trait LinkApi {
     /// `GET /api/v1`
@@ -107,6 +115,8 @@ pub trait LinkApi {
     fn project(&self) -> Result<Value, CliError>;
     /// `GET /api/v1/netlist[?sheet_id=..]`
     fn netlist(&self, sheet_id: Option<&str>) -> Result<Value, CliError>;
+    /// `GET /api/v1/verify[?sheet_id=..]`
+    fn verify(&self, sheet_id: Option<&str>) -> Result<Value, CliError>;
     /// `POST /api/v1/commands` (Command配列 → Patch配列)
     fn exec(&self, commands: Value) -> Result<Value, CliError>;
     /// `POST /api/v1/undo`
@@ -185,6 +195,10 @@ impl LinkApi for HttpClient {
 
     fn netlist(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
         self.get(netlist_url(self.port, sheet_id))
+    }
+
+    fn verify(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
+        self.get(verify_url(self.port, sheet_id))
     }
 
     fn exec(&self, commands: Value) -> Result<Value, CliError> {
