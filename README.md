@@ -12,7 +12,7 @@ with an AI assistant that edits through the same undoable command engine as you,
 and verification grounded in a real circuit solver (ngspice).
 
 [![CI](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml)
-[![Spec clauses](https://img.shields.io/badge/spec_clauses-300_tested-blue)](docs/13-specification.md)
+[![Spec clauses](https://img.shields.io/badge/spec_clauses-428_tested-blue)](docs/13-specification.md)
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
 ![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)
@@ -21,9 +21,9 @@ and verification grounded in a real circuit solver (ngspice).
 
 [Overview](docs/01-overview.md) · [Getting Started](docs/02-getting-started.md) · [Documentation](#documentation) · [Specification](docs/13-specification.md) · [Roadmap](docs/12-roadmap.md) · [日本語](README.ja.md)
 
-<img src="docs/images/sample-drawing.svg" alt="Sample drawing: 48V power distribution on a JIS A3 frame" width="820">
+<img src="docs/images/sample-drawing.svg" alt="Sample drawing: 48V power and control diagram on a JIS A3 frame" width="820">
 
-*A drawing produced by MadakeCAD: JIS A3 frame with zone references and title block.*
+*A drawing produced by MadakeCAD: JIS A3 frame with zone references and title block, a revision table, net-based wire numbers, a dashed harness boundary, and cross-sheet references next to the net labels.*
 
 </div>
 
@@ -90,7 +90,7 @@ Every edit from every entry point is an undoable command against a single engine
 
 ## Status & Roadmap
 
-**Alpha.** Milestone M1 (foundation) is essentially complete; see the [roadmap](docs/12-roadmap.md) for M2 (reference-drawing parity) through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
+**Alpha.** Milestones M1 (foundation) and M2 (reference-drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references) are essentially complete; see the [roadmap](docs/12-roadmap.md) for M3 (AI-first drafting) through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
 
 ## Contributing
 

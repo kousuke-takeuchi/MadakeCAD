@@ -9,6 +9,7 @@ UIでできることはすべてスクリプト化できる。3つの入口が�
 ### MCPサーバー(AIクライアント向け)
 `127.0.0.1:9310/mcp`(Streamable HTTP、`MADAKE_MCP_PORT`で変更可)。ツール:
 `get_project`・`list_symbols`・`place_symbol`・`draw_wire`・`execute_commands`(Command全スキーマ公開)・`get_netlist`・`run_verification`・`simulate_op`・`search_parts`・`upsert_part`・`delete_part`・`import_kicad`・`export_svg`・`export_pdf`・`export_bom`・`export_wire_list`・`undo`・`redo`。
+専用ツールが無い編集は`execute_commands`から実行する。M2で増えたコマンドもここに含まれる: `set_revisions`(改訂欄)、`renumber_wires`(`mode: append | renumber`・`sheet_id`任意・`start`)と`set_wire_numbers`(線番)、ハーネス境界は`add_entity`で`harness`エンティティを追加する。
 Claude Codeはリポジトリの`.mcp.json`で自動接続。
 
 ### Link API(REST+SSE、外部ツール向け)
@@ -19,7 +20,7 @@ Claude Codeはリポジトリの`.mcp.json`で自動接続。
 - ローカルオリジンガード(外部Webオリジンからのアクセスを拒否)
 
 ### madake CLI
-Link APIの薄いターミナルクライアント: `status`・`project`・`netlist`・`verify`・`sim`・`parts`・`export`・`save`/`open`(`.kicad_sch`対応)・`exec`(JSONのCommand配列)・`undo`/`redo`。`--json`で機械可読出力。
+Link APIの薄いターミナルクライアント: `status`・`project`・`netlist`・`verify`・`sim`・`parts`・`export`・`save`/`open`(`.kicad_sch`対応)・`renumber`(線番採番: `--sheet`・`--mode append|renumber`・`--start`)・`exec`(JSONのCommand配列)・`undo`/`redo`。`--json`で機械可読出力。
 
 ## 計画中
 

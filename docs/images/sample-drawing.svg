@@ -27,55 +27,128 @@
 <text x="413" y="218.750" font-size="3" fill="#000" text-anchor="middle" font-family="sans-serif">E</text>
 <text x="7" y="264.917" font-size="3" fill="#000" text-anchor="middle" font-family="sans-serif">F</text>
 <text x="413" y="264.917" font-size="3" fill="#000" text-anchor="middle" font-family="sans-serif">F</text>
-<rect x="290" y="255" width="120" height="32" fill="#fff" stroke="#000" stroke-width="0.5"/>
+<rect x="290" y="231" width="120" height="24" fill="#fff" stroke="#000" stroke-width="0.500"/>
+<line x1="290" y1="239" x2="410" y2="239" stroke="#000" stroke-width="0.250"/>
+<line x1="290" y1="247" x2="410" y2="247" stroke="#000" stroke-width="0.250"/>
+<line x1="304" y1="231" x2="304" y2="255" stroke="#000" stroke-width="0.250"/>
+<line x1="332" y1="231" x2="332" y2="255" stroke="#000" stroke-width="0.250"/>
+<line x1="388" y1="231" x2="388" y2="255" stroke="#000" stroke-width="0.250"/>
+<text x="292" y="252.100" font-size="2.200" fill="#000" text-anchor="start" font-family="sans-serif">記号</text>
+<text x="306" y="252.100" font-size="2.200" fill="#000" text-anchor="start" font-family="sans-serif">日付</text>
+<text x="334" y="252.100" font-size="2.200" fill="#000" text-anchor="start" font-family="sans-serif">内容</text>
+<text x="390" y="252.100" font-size="2.200" fill="#000" text-anchor="start" font-family="sans-serif">承認</text>
+<text x="292" y="244.250" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">A</text>
+<text x="306" y="244.250" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">2026-08-01</text>
+<text x="334" y="244.250" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">初版</text>
+<text x="390" y="244.250" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">S.M</text>
+<text x="292" y="236.250" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">B</text>
+<text x="306" y="236.250" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">2026-08-22</text>
+<text x="334" y="236.250" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">モータ回路とハーネスW1を追加</text>
+<text x="390" y="236.250" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">S.M</text>
+<rect x="290" y="255" width="120" height="32" fill="#fff" stroke="#000" stroke-width="0.500"/>
 <line x1="290" y1="263" x2="410" y2="263" stroke="#000" stroke-width="0.250"/>
 <line x1="290" y1="271" x2="410" y2="271" stroke="#000" stroke-width="0.250"/>
 <line x1="290" y1="279" x2="410" y2="279" stroke="#000" stroke-width="0.250"/>
 <line x1="314" y1="255" x2="314" y2="287" stroke="#000" stroke-width="0.250"/>
 <text x="292" y="260.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">図番</text>
-<text x="316" y="260.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">MDK-0001  Rev A</text>
+<text x="316" y="260.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">MDK-0001  Rev B</text>
 <text x="292" y="268.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">品名</text>
-<text x="316" y="268.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">48V 電源系統図</text>
+<text x="316" y="268.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">48V 電源・制御系統図  (1/2)</text>
 <text x="292" y="276.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">尺度</text>
-<text x="316" y="276.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">1:5    日付 2026-08-20</text>
+<text x="316" y="276.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">1:1    日付 2026-08-22</text>
 <text x="292" y="284.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">設計</text>
-<text x="316" y="284.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">K.T  製図 K.T  検図 -  承認 -</text>
+<text x="316" y="284.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">K.T  製図 K.T  検図 S.M  承認 S.M</text>
 <text x="288" y="285" font-size="3" fill="#000" text-anchor="end" font-family="sans-serif">MadakeCAD</text>
-<polyline points="60,220 300,220" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="100,172.500 100,220" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="100,97.500 100,117.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
-<polyline points="200,107.500 200,152.500" fill="none" stroke="#0000c0" stroke-width="0.350"/>
-<polyline points="100,60 100,82.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
-<polygon points="103,160 103,170 97,170 97,160" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="100,157.500 100,160" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="100,170 100,172.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="100" y="153" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">K1</text>
-<text x="100" y="156.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">JZX-22F</text>
-<polyline points="100,132.500 100,157.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
-<polyline points="200,167.500 200,220" fill="none" stroke="#000000" stroke-width="0.350"/>
-<circle cx="100" cy="60" r="0.6" fill="#000"/>
+<polygon points="165,95 197.500,95 197.500,245 165,245" fill="none" stroke="#000" stroke-width="0.250" stroke-dasharray="3 2"/>
+<text x="166" y="94" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">W1</text>
+<polyline points="60,240 300,240" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="60,152.500 60,240" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="100,55 100,77.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
+<polyline points="180,55 180,82.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
+<polyline points="245,55 245,102.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
+<circle cx="245" cy="240" r="0.6" fill="#000"/>
+<circle cx="100" cy="55" r="0.6" fill="#000"/>
+<circle cx="245" cy="110" r="4" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="247.830,107.170 242.170,112.830" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="242.170,107.170 247.830,112.830" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="245,102.500 245,106" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="245,114 245,117.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="245" y="98" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">L1</text>
+<text x="245" y="101.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">48V</text>
+<polyline points="312.500,137.500 340,137.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
+<circle cx="180" cy="165" r="5" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="180" y="167" font-size="4" fill="#000" text-anchor="middle" font-family="sans-serif">M</text>
+<polyline points="180,157.500 180,160" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="180,170 180,172.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="180" y="153" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">M1</text>
+<text x="180" y="156.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">BLM6400</text>
+<polyline points="180,172.500 180,240" fill="none" stroke="#000000" stroke-width="0.350"/>
+<circle cx="245" cy="55" r="0.6" fill="#000"/>
+<polyline points="100,182.500 100,240" fill="none" stroke="#000000" stroke-width="0.350"/>
+<text x="60" y="258" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">注記1: 電線は KIV。線番はネット単位で図面全体に一意。</text>
+<text x="60" y="265" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">注記2: ハーネスW1は制御盤内で束線する。</text>
+<polygon points="307.500,135 312.500,135 312.500,155 307.500,155" fill="none" stroke="#000" stroke-width="0.300"/>
+<circle cx="310" cy="137.500" r="1.800" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="310" y="137.500" font-size="2" fill="#000" text-anchor="middle" font-family="sans-serif">1</text>
+<polyline points="307.500,137.500 308.200,137.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="311.800,137.500 312.500,137.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<circle cx="310" cy="142.500" r="1.800" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="310" y="142.500" font-size="2" fill="#000" text-anchor="middle" font-family="sans-serif">2</text>
+<polyline points="307.500,142.500 308.200,142.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="311.800,142.500 312.500,142.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<circle cx="310" cy="147.500" r="1.800" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="310" y="147.500" font-size="2" fill="#000" text-anchor="middle" font-family="sans-serif">3</text>
+<polyline points="307.500,147.500 308.200,147.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="311.800,147.500 312.500,147.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<circle cx="310" cy="152.500" r="1.800" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="310" y="152.500" font-size="2" fill="#000" text-anchor="middle" font-family="sans-serif">4</text>
+<polyline points="307.500,152.500 308.200,152.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="311.800,152.500 312.500,152.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="310" y="130.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">TB1</text>
+<polyline points="100,132.500 100,167.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
+<polyline points="60,137.500 60,144" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="60,146 60,152.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="64,144 56,144" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="62,146 58,146" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="65.500" y="143.500" font-size="3" fill="#000" text-anchor="middle" font-family="sans-serif">+</text>
+<text x="60" y="133" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">BT1</text>
+<text x="60" y="136.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">48V</text>
+<polygon points="102,80 102,90 98,90 98,80" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="100,77.500 100,92.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="100" y="73" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">F1</text>
+<text x="100" y="76.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">5A</text>
+<polyline points="312.500,152.500 340,152.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="60,55 60,137.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
+<polygon points="103,170 103,180 97,180 97,170" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="100,167.500 100,170" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="100,180 100,182.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="100" y="163" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">K1</text>
+<text x="100" y="166.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">JZX-22F</text>
+<polyline points="300,240 300,152.500 307.500,152.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="180,97.500 180,157.500" fill="none" stroke="#0000c0" stroke-width="0.350"/>
+<circle cx="180" cy="55" r="0.6" fill="#000"/>
+<polyline points="180,82.500 180,87.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="180,92.500 180,97.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="180,87.500 183.500,92.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="180" y="78" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">K1a</text>
+<text x="340" y="136.500" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">48-P1</text>
+<text x="348.500" y="136.500" font-size="2" fill="#000" text-anchor="start" font-family="monospace">/2.B1</text>
+<polyline points="100,92.500 100,117.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
+<circle cx="180" cy="240" r="0.6" fill="#000"/>
+<polyline points="300,55 300,137.500 307.500,137.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
+<polyline points="245,117.500 245,240" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="100,117.500 100,122.500" fill="none" stroke="#000" stroke-width="0.300"/>
 <polyline points="100,127.500 100,132.500" fill="none" stroke="#000" stroke-width="0.300"/>
 <polyline points="100,122.500 103.500,127.500" fill="none" stroke="#000" stroke-width="0.300"/>
 <circle cx="100" cy="122.500" r="0.500" fill="none" stroke="#000" stroke-width="0.300"/>
 <circle cx="100" cy="127.500" r="0.500" fill="none" stroke="#000" stroke-width="0.300"/>
 <text x="100" y="113" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">SW1</text>
-<polyline points="60,60 300,60" fill="none" stroke="#c00000" stroke-width="0.350"/>
-<circle cx="200" cy="60" r="0.6" fill="#000"/>
-<polygon points="102,85 102,95 98,95 98,85" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="100,82.500 100,97.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="100" y="78" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">F1</text>
-<text x="100" y="81.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">5A</text>
-<circle cx="200" cy="160" r="5" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="200" y="162" font-size="4" fill="#000" text-anchor="middle" font-family="sans-serif">M</text>
-<polyline points="200,152.500 200,155" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="200,165 200,167.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="200" y="148" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">M1</text>
-<text x="200" y="151.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">BLM6400</text>
-<polyline points="200,60 200,92.500" fill="none" stroke="#c00000" stroke-width="0.350"/>
-<text x="62" y="57" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">48-P1</text>
-<polyline points="200,92.500 200,97.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="200,102.500 200,107.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="200,97.500 203.500,102.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="200" y="88" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">K1a</text>
+<text x="100" y="116.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">運転</text>
+<polyline points="60,55 300,55" fill="none" stroke="#c00000" stroke-width="0.350"/>
+<text x="340" y="151.500" font-size="2.500" fill="#000" text-anchor="start" font-family="sans-serif">0V</text>
+<text x="344" y="151.500" font-size="2" fill="#000" text-anchor="start" font-family="monospace">/2.E1</text>
+<circle cx="100" cy="240" r="0.6" fill="#000"/>
+<text x="97.500" y="150" font-size="2.500" fill="#000" text-anchor="end" font-family="monospace">3</text>
+<text x="177.500" y="127.500" font-size="2.500" fill="#000" text-anchor="end" font-family="monospace">2</text>
+<text x="97.500" y="105" font-size="2.500" fill="#000" text-anchor="end" font-family="monospace">1</text>
 </svg>

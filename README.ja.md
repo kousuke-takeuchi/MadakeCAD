@@ -12,7 +12,7 @@ AIアシスタントは人間と同じundo可能なコマンドエンジンで�
 検証は実回路ソルバ(ngspice)の解に基づく。
 
 [![CI](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml)
-[![仕様項目](https://img.shields.io/badge/spec_clauses-300_tested-blue)](docs/13-specification.ja.md)
+[![仕様項目](https://img.shields.io/badge/spec_clauses-428_tested-blue)](docs/13-specification.ja.md)
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
 ![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)
@@ -21,9 +21,9 @@ AIアシスタントは人間と同じundo可能なコマンドエンジンで�
 
 [概要](docs/01-overview.ja.md) · [はじめに](docs/02-getting-started.ja.md) · [ドキュメント](#ドキュメント) · [詳細仕様](docs/13-specification.ja.md) · [ロードマップ](docs/12-roadmap.ja.md) · [English](README.md)
 
-<img src="docs/images/sample-drawing.svg" alt="サンプル図面: JIS A3図枠の48V電源系統図" width="820">
+<img src="docs/images/sample-drawing.svg" alt="サンプル図面: JIS A3図枠の48V電源・制御系統図" width="820">
 
-*MadakeCADで出力した図面: ゾーン番号・表題欄付きJIS A3図枠*
+*MadakeCADで出力した図面: ゾーン番号・表題欄付きJIS A3図枠、改訂欄、ネット単位の線番、ハーネス境界(破線囲み)、ネットラベル脇のシート間クロスリファレンス*
 
 </div>
 
@@ -90,7 +90,7 @@ UI · AIチャット · CLI · REST  →  Command(JSON)  →  エンジン(Rust)
 
 ## ステータスとロードマップ
 
-**アルファ版。** マイルストーンM1(基盤)は概ね完了。M2(参考図面の完全再現)〜M6(OSS公開)は[ロードマップ](docs/12-roadmap.ja.md)参照。Tauri 2 + Vue 3 + Rust製。
+**アルファ版。** マイルストーンM1(基盤)とM2(参考図面の完全再現: 改訂欄・線番・ハーネス境界・シート間クロスリファレンス)は概ね完了。M3(AI-first作図)〜M6(OSS公開)は[ロードマップ](docs/12-roadmap.ja.md)参照。Tauri 2 + Vue 3 + Rust製。
 
 ## コントリビュート
 

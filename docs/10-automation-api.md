@@ -9,6 +9,7 @@ Everything the UI can do is scriptable. Three surfaces expose the same Command e
 ### MCP server (for AI clients)
 Streamable HTTP at `127.0.0.1:9310/mcp` (`MADAKE_MCP_PORT` to change). Tools:
 `get_project`, `list_symbols`, `place_symbol`, `draw_wire`, `execute_commands` (full Command schema exposed), `get_netlist`, `run_verification`, `simulate_op`, `search_parts`, `upsert_part`, `delete_part`, `import_kicad`, `export_svg`, `export_pdf`, `export_bom`, `export_wire_list`, `undo`, `redo`.
+Drawing edits that have no dedicated tool go through `execute_commands`, including the M2 additions: `set_revisions` (revision table), `renumber_wires` (`mode: append | renumber`, optional `sheet_id`, `start`) and `set_wire_numbers` for wire numbers, and `add_entity` with a `harness` entity for harness boundaries.
 Claude Code connects automatically via this repository's `.mcp.json`.
 
 ### Link API (REST + SSE, for external tools)
@@ -19,7 +20,7 @@ Claude Code connects automatically via this repository's `.mcp.json`.
 - Local-origin guard: requests from non-local web origins are rejected
 
 ### madake CLI
-Thin terminal client over the Link API: `status`, `project`, `netlist`, `verify`, `sim`, `parts`, `export`, `save`/`open` (incl. `.kicad_sch`), `exec` (Command array from JSON), `undo`/`redo`. `--json` for machine-readable output.
+Thin terminal client over the Link API: `status`, `project`, `netlist`, `verify`, `sim`, `parts`, `export`, `save`/`open` (incl. `.kicad_sch`), `renumber` (wire numbering: `--sheet`, `--mode append|renumber`, `--start`), `exec` (Command array from JSON), `undo`/`redo`. `--json` for machine-readable output.
 
 ## Planned
 
