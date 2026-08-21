@@ -267,6 +267,8 @@ const COMMAND_JA: Record<string, string> = {
   delete_entities: "要素削除",
   move_entities: "要素移動",
   set_wire_parts: "電線品番表設定",
+  renumber_wires: "線番自動採番",
+  set_wire_numbers: "線番設定",
 };
 
 function rec(input: unknown): Record<string, unknown> {

@@ -32,9 +32,16 @@
 
 ### Task 3: 線番コア (madake-core)
 
-- [ ] Step 1 (red): テスト: renumber_wires(Append)が未採番ネットのみへ連番/Renumberが全振り直し/手動線番・ネットラベルは優先保持/undoで旧線番復元/線番はネット内全Wireへ同値
-- [ ] Step 2 (green): Command実装。コミット
-- [ ] Step 3 (red/green): 電線リストCSVに線番列、ネットリストのNet.name線番優先。SVGに線番テキスト(代表位置・mono)。表示クラス「線番」。コミット
+- [x] Step 1 (red): テスト: renumber_wires(Append)が未採番ネットのみへ連番/Renumberが全振り直し/手動線番・ネットラベルは優先保持/undoで旧線番復元/線番はネット内全Wireへ同値
+- [x] Step 2 (green): Command実装。コミット
+- [x] Step 3 (red/green): 電線リストCSVに線番列、ネットリストのNet.name線番優先。SVGに線番テキスト(代表位置・mono)。表示クラス「線番」。コミット
+
+実装メモ(確定): 線番は`madake-core/src/wire_no.rs`。Command は `renumber_wires { sheet_id?, mode: append|renumber, start }` と
+`set_wire_numbers { sheet_id, numbers: [{wire_id, number}] }`(後者が逆コマンド兼個別編集)。採番順は**上→下、同じ高さなら左→右**
+(同値はwire idで安定化)。番号は既存の線番・ネットラベルと衝突しないよう予約表でスキップし、sheet_id省略時は図面全体で一意。
+ネットラベル付きネットは採番しない(`Net.name`優先順=ラベル>線番>自動名、`Net`に`label`/`wire_no`を追加)。
+SVGの代表位置=ネット内で最長の線分の中点、横線は上方2.5mm・縦線は左方2.5mm、font-family=monospace 2.5mm。
+表示クラス「線番」はキャンバス描画とセットのTask 4で追加する。
 
 ### Task 4: 線番UI (ダイアログ+キャンバス)
 

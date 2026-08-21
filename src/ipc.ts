@@ -116,7 +116,20 @@ export type Command =
   | { type: "update_entity"; sheet_id: string; entity: Entity }
   | { type: "delete_entities"; sheet_id: string; ids: string[] }
   | { type: "move_entities"; sheet_id: string; ids: string[]; dx: number; dy: number }
-  | { type: "set_wire_parts"; wire_parts: WirePart[] };
+  | { type: "set_wire_parts"; wire_parts: WirePart[] }
+  /** 線番のネット単位自動採番。sheet_id省略(null)で全シート。 */
+  | {
+      type: "renumber_wires";
+      sheet_id?: string | null;
+      mode: "append" | "renumber";
+      start: number;
+    }
+  /** 線番の直接指定(個別編集)。numberがnullなら線番を消す。 */
+  | {
+      type: "set_wire_numbers";
+      sheet_id: string;
+      numbers: { wire_id: string; number: string | null }[];
+    };
 
 export type PatchOp =
   | { op: "project_replaced"; project: Project }
@@ -217,9 +230,14 @@ export interface NetPin {
 }
 
 export interface Net {
+  /** 表示名。優先順は ネットラベル > 線番 > 自動名 (N001…)。 */
   name: string;
   pins: NetPin[];
   wire_ids: string[];
+  /** ネットラベル由来の名前(手動指定)。 */
+  label?: string | null;
+  /** 線番。ネット内の全Wireで同値。 */
+  wire_no?: string | null;
 }
 
 interface Ipc {
