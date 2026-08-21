@@ -1,0 +1,441 @@
+//! 部品DB (SQLite、グローバル共有マスタ)。ドキュメント外なのでCommandエンジンは通らない。
+//!
+//! パス解決: 環境変数 `MADAKE_PARTS_DB` → OSのアプリデータdir/MadakeCAD/parts.sqlite。
+//! 図面(.mdkproj)には型番・定格が書き込まれ自己完結を維持する(DBはマスタ、図面はスナップショット)。
+
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+/// スキーマバージョン (metaテーブルに保存。変更時はマイグレーションを書く)。
+pub const SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, thiserror::Error)]
+pub enum PartsError {
+    #[error("db error: {0}")]
+    Db(#[from] rusqlite::Error),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// 部品マスタの1行。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Part {
+    /// 型番 (一意キー)。
+    pub part_no: String,
+    #[serde(default)]
+    pub maker: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub category: String,
+    /// 既定シンボルid (動的ID可。例: "fuse", "terminal_block_8p")。
+    #[serde(default)]
+    pub symbol_id: String,
+    /// 定格電圧 (表記のまま。例: "DC24V")。
+    #[serde(default)]
+    pub rated_voltage: String,
+    /// 定格電流 (A)。検証エンジンのattrs.current_aと連動。
+    #[serde(default)]
+    pub rated_current_a: Option<f64>,
+    #[serde(default)]
+    pub purchase_url: String,
+    #[serde(default)]
+    pub datasheet_url: String,
+    /// 参考価格。
+    #[serde(default)]
+    pub price: Option<f64>,
+    #[serde(default = "default_currency")]
+    pub currency: String,
+    #[serde(default)]
+    pub note: String,
+    /// 3Dモデル参照 (STEP/FCStdパス。フェーズM用の予約)。
+    #[serde(default)]
+    pub model_3d: String,
+    /// 取付情報 (DINレール/ねじ等。予約)。
+    #[serde(default)]
+    pub mounting: String,
+}
+
+fn default_currency() -> String {
+    "JPY".into()
+}
+
+/// 電線品番マスタの1行 (線色+sq→品番)。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct WirePartRow {
+    pub part_no: String,
+    pub color: String,
+    pub sq: f64,
+    #[serde(default)]
+    pub purchase_url: String,
+    #[serde(default)]
+    pub price_per_m: Option<f64>,
+    #[serde(default)]
+    pub note: String,
+}
+
+/// 部品DB接続。
+pub struct PartsDb {
+    conn: rusqlite::Connection,
+}
+
+/// 既定のDBパス (env MADAKE_PARTS_DB優先)。
+pub fn default_db_path() -> PathBuf {
+    if let Some(p) = std::env::var_os("MADAKE_PARTS_DB") {
+        return PathBuf::from(p);
+    }
+    dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("MadakeCAD")
+        .join("parts.sqlite")
+}
+
+const PART_COLUMNS: &str = "part_no, maker, name, category, symbol_id, rated_voltage, \
+     rated_current_a, purchase_url, datasheet_url, price, currency, note, model_3d, mounting";
+
+fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
+    Ok(Part {
+        part_no: row.get(0)?,
+        maker: row.get(1)?,
+        name: row.get(2)?,
+        category: row.get(3)?,
+        symbol_id: row.get(4)?,
+        rated_voltage: row.get(5)?,
+        rated_current_a: row.get(6)?,
+        purchase_url: row.get(7)?,
+        datasheet_url: row.get(8)?,
+        price: row.get(9)?,
+        currency: row.get(10)?,
+        note: row.get(11)?,
+        model_3d: row.get(12)?,
+        mounting: row.get(13)?,
+    })
+}
+
+impl PartsDb {
+    /// 開く (無ければスキーマ作成+サンプル投入)。
+    pub fn open(path: &Path) -> Result<Self, PartsError> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let conn = rusqlite::Connection::open(path)?;
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS parts (
+               part_no TEXT PRIMARY KEY,
+               maker TEXT NOT NULL DEFAULT '',
+               name TEXT NOT NULL DEFAULT '',
+               category TEXT NOT NULL DEFAULT '',
+               symbol_id TEXT NOT NULL DEFAULT '',
+               rated_voltage TEXT NOT NULL DEFAULT '',
+               rated_current_a REAL,
+               purchase_url TEXT NOT NULL DEFAULT '',
+               datasheet_url TEXT NOT NULL DEFAULT '',
+               price REAL,
+               currency TEXT NOT NULL DEFAULT 'JPY',
+               note TEXT NOT NULL DEFAULT '',
+               model_3d TEXT NOT NULL DEFAULT '',
+               mounting TEXT NOT NULL DEFAULT ''
+             );
+             CREATE TABLE IF NOT EXISTS wire_parts (
+               part_no TEXT PRIMARY KEY,
+               color TEXT NOT NULL,
+               sq REAL NOT NULL,
+               purchase_url TEXT NOT NULL DEFAULT '',
+               price_per_m REAL,
+               note TEXT NOT NULL DEFAULT ''
+             );",
+        )?;
+        let db = Self { conn };
+        // schema_versionが無い = 新規作成。バージョンを記録しサンプルを投入する
+        let fresh: bool = !db
+            .conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM meta WHERE key='schema_version')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if fresh {
+            db.conn.execute(
+                "INSERT INTO meta (key, value) VALUES ('schema_version', ?1)",
+                [SCHEMA_VERSION.to_string()],
+            )?;
+            db.seed_samples()?;
+        }
+        Ok(db)
+    }
+
+    /// サンプル部品 (ダミー型番)。新規作成時のみ呼ばれる。
+    fn seed_samples(&self) -> Result<(), PartsError> {
+        let samples = [
+            Part {
+                part_no: "MDK-FUSE-5A".into(),
+                name: "ガラス管ヒューズ 5A".into(),
+                category: "protection".into(),
+                symbol_id: "fuse".into(),
+                rated_voltage: "AC250V".into(),
+                rated_current_a: Some(5.0),
+                price: Some(50.0),
+                ..Default::default()
+            },
+            Part {
+                part_no: "MDK-RLY-24V".into(),
+                name: "パワーリレー DC24Vコイル".into(),
+                category: "relay".into(),
+                symbol_id: "relay_coil".into(),
+                rated_voltage: "DC24V".into(),
+                rated_current_a: Some(0.05),
+                price: Some(900.0),
+                ..Default::default()
+            },
+            Part {
+                part_no: "MDK-TB-8P".into(),
+                name: "端子台 8極".into(),
+                category: "connector".into(),
+                symbol_id: "terminal_block_8p".into(),
+                rated_voltage: "AC600V".into(),
+                rated_current_a: Some(20.0),
+                price: Some(450.0),
+                ..Default::default()
+            },
+            Part {
+                part_no: "MDK-LAMP-24V".into(),
+                name: "表示灯 DC24V".into(),
+                category: "output".into(),
+                symbol_id: "lamp".into(),
+                rated_voltage: "DC24V".into(),
+                rated_current_a: Some(0.02),
+                price: Some(600.0),
+                ..Default::default()
+            },
+            Part {
+                part_no: "MDK-CONN-3P".into(),
+                name: "コネクタ 3極".into(),
+                category: "connector".into(),
+                symbol_id: "connector_3p".into(),
+                rated_current_a: Some(3.0),
+                price: Some(120.0),
+                ..Default::default()
+            },
+        ];
+        for p in &samples {
+            let mut sample = p.clone();
+            sample.maker = "サンプル".into();
+            sample.note = "同梱サンプル (ダミー型番)".into();
+            self.upsert_part(&sample)?;
+        }
+        for (part_no, color, sq) in [
+            ("MDK-W-03SB", "light_blue", 0.3),
+            ("MDK-W-075RD", "red", 0.75),
+            ("MDK-W-075BK", "black", 0.75),
+            ("MDK-W-20WH", "white", 2.0),
+        ] {
+            self.upsert_wire_part(&WirePartRow {
+                part_no: part_no.into(),
+                color: color.into(),
+                sq,
+                purchase_url: String::new(),
+                price_per_m: None,
+                note: "同梱サンプル".into(),
+            })?;
+        }
+        Ok(())
+    }
+
+    pub fn upsert_part(&self, part: &Part) -> Result<(), PartsError> {
+        self.conn.execute(
+            &format!(
+                "INSERT INTO parts ({PART_COLUMNS}) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14) \
+                 ON CONFLICT(part_no) DO UPDATE SET \
+                 maker=?2, name=?3, category=?4, symbol_id=?5, rated_voltage=?6, \
+                 rated_current_a=?7, purchase_url=?8, datasheet_url=?9, price=?10, \
+                 currency=?11, note=?12, model_3d=?13, mounting=?14"
+            ),
+            rusqlite::params![
+                part.part_no,
+                part.maker,
+                part.name,
+                part.category,
+                part.symbol_id,
+                part.rated_voltage,
+                part.rated_current_a,
+                part.purchase_url,
+                part.datasheet_url,
+                part.price,
+                part.currency,
+                part.note,
+                part.model_3d,
+                part.mounting,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_part(&self, part_no: &str) -> Result<Option<Part>, PartsError> {
+        let mut stmt = self
+            .conn
+            .prepare(&format!("SELECT {PART_COLUMNS} FROM parts WHERE part_no=?1"))?;
+        let mut rows = stmt.query_map([part_no], row_to_part)?;
+        Ok(rows.next().transpose()?)
+    }
+
+    /// 型番・名称・メーカの部分一致検索。categoryは完全一致で絞り込み。空クエリは全件。
+    pub fn search_parts(&self, query: &str, category: Option<&str>) -> Result<Vec<Part>, PartsError> {
+        let like = format!("%{}%", query.trim());
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {PART_COLUMNS} FROM parts \
+             WHERE (part_no LIKE ?1 OR name LIKE ?1 OR maker LIKE ?1) \
+             AND (?2 IS NULL OR category = ?2) \
+             ORDER BY part_no"
+        ))?;
+        let rows = stmt.query_map(rusqlite::params![like, category], row_to_part)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn delete_part(&self, part_no: &str) -> Result<bool, PartsError> {
+        Ok(self
+            .conn
+            .execute("DELETE FROM parts WHERE part_no=?1", [part_no])?
+            > 0)
+    }
+
+    pub fn upsert_wire_part(&self, row: &WirePartRow) -> Result<(), PartsError> {
+        self.conn.execute(
+            "INSERT INTO wire_parts (part_no, color, sq, purchase_url, price_per_m, note) \
+             VALUES (?1,?2,?3,?4,?5,?6) \
+             ON CONFLICT(part_no) DO UPDATE SET \
+             color=?2, sq=?3, purchase_url=?4, price_per_m=?5, note=?6",
+            rusqlite::params![
+                row.part_no,
+                row.color,
+                row.sq,
+                row.purchase_url,
+                row.price_per_m,
+                row.note
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_wire_parts(&self) -> Result<Vec<WirePartRow>, PartsError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT part_no, color, sq, purchase_url, price_per_m, note \
+             FROM wire_parts ORDER BY part_no",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(WirePartRow {
+                part_no: row.get(0)?,
+                color: row.get(1)?,
+                sq: row.get(2)?,
+                purchase_url: row.get(3)?,
+                price_per_m: row.get(4)?,
+                note: row.get(5)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// 線色+sqから品番を引く。
+    pub fn find_wire_part(&self, color: &str, sq: f64) -> Result<Option<WirePartRow>, PartsError> {
+        Ok(self
+            .list_wire_parts()?
+            .into_iter()
+            .find(|w| w.color == color && (w.sq - sq).abs() < 1e-9))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp_db(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join("madake-parts-tests");
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join(format!("{name}-{}.sqlite", std::process::id()));
+        std::fs::remove_file(&p).ok();
+        p
+    }
+
+    #[test]
+    fn open_creates_schema_and_seeds_samples_once() {
+        let path = tmp_db("seed");
+        let db = PartsDb::open(&path).unwrap();
+        let all = db.search_parts("", None).unwrap();
+        assert!(all.len() >= 5, "サンプル部品が入る: {}", all.len());
+        assert!(!db.list_wire_parts().unwrap().is_empty(), "電線サンプルも入る");
+        // 1件消して開き直してもサンプルは再投入されない
+        let first = all[0].part_no.clone();
+        assert!(db.delete_part(&first).unwrap());
+        drop(db);
+        let db = PartsDb::open(&path).unwrap();
+        assert!(db.get_part(&first).unwrap().is_none(), "再投入されない");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn upsert_get_and_search() {
+        let path = tmp_db("crud");
+        let db = PartsDb::open(&path).unwrap();
+        let part = Part {
+            part_no: "OMR-MY2N-D2-DC24".into(),
+            maker: "オムロン".into(),
+            name: "ミニパワーリレー 2極".into(),
+            category: "relay".into(),
+            symbol_id: "relay_coil".into(),
+            rated_voltage: "DC24V".into(),
+            rated_current_a: Some(0.05),
+            purchase_url: "https://example.com/buy".into(),
+            datasheet_url: "https://example.com/ds.pdf".into(),
+            price: Some(880.0),
+            currency: "JPY".into(),
+            note: "テスト".into(),
+            ..Default::default()
+        };
+        db.upsert_part(&part).unwrap();
+        assert_eq!(db.get_part("OMR-MY2N-D2-DC24").unwrap().as_ref(), Some(&part));
+        // 上書き
+        let mut updated = part.clone();
+        updated.price = Some(920.0);
+        db.upsert_part(&updated).unwrap();
+        assert_eq!(db.get_part("OMR-MY2N-D2-DC24").unwrap().unwrap().price, Some(920.0));
+        // 検索: 名称部分一致 + カテゴリ絞り込み
+        let hits = db.search_parts("ミニパワー", None).unwrap();
+        assert_eq!(hits.len(), 1);
+        let hits = db.search_parts("", Some("relay")).unwrap();
+        assert!(hits.iter().any(|p| p.part_no == "OMR-MY2N-D2-DC24"));
+        assert!(db.search_parts("存在しない部品", None).unwrap().is_empty());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn wire_parts_crud_and_lookup() {
+        let path = tmp_db("wire");
+        let db = PartsDb::open(&path).unwrap();
+        // サンプルに無い 色+sq の組で登録・検索する
+        db.upsert_wire_part(&WirePartRow {
+            part_no: "TEST-W-125GN".into(),
+            color: "green".into(),
+            sq: 1.25,
+            purchase_url: String::new(),
+            price_per_m: Some(35.0),
+            note: String::new(),
+        })
+        .unwrap();
+        let hit = db.find_wire_part("green", 1.25).unwrap().unwrap();
+        assert_eq!(hit.part_no, "TEST-W-125GN");
+        assert!(db.find_wire_part("green", 2.0).unwrap().is_none());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn default_path_respects_env_override() {
+        // 環境変数が設定されていればそれを使う (プロセス全体に影響するのでキーは専用に)
+        std::env::set_var("MADAKE_PARTS_DB", "/tmp/custom-parts.sqlite");
+        assert_eq!(default_db_path(), PathBuf::from("/tmp/custom-parts.sqlite"));
+        std::env::remove_var("MADAKE_PARTS_DB");
+        assert!(default_db_path().ends_with("MadakeCAD/parts.sqlite"));
+    }
+}
