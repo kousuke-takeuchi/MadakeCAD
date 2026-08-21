@@ -92,7 +92,7 @@ fn segment_distance(p: &Point, a: &Point, b: &Point) -> f64 {
 }
 
 /// 点がWireのいずれかの線分上(許容誤差内)にあるか。
-fn on_wire(w: &crate::model::Wire, p: &Point) -> bool {
+pub(crate) fn on_wire(w: &crate::model::Wire, p: &Point) -> bool {
     w.points
         .windows(2)
         .any(|seg| segment_distance(p, &seg[0], &seg[1]) < CONNECT_EPS)
