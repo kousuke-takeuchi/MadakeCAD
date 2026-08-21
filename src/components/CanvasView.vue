@@ -3,6 +3,7 @@ import { inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
 import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
+import ChatPanel from "./chat/ChatPanel.vue";
 
 const store = useDocumentStore();
 const controller = inject<EditorController>("controller")!;
@@ -95,6 +96,7 @@ watch(() => store.activeSheetId, () => {
       @dblclick="() => controller.onDoubleClick()"
       @contextmenu.prevent
     />
+    <ChatPanel />
   </div>
 </template>
 

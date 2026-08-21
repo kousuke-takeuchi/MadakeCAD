@@ -18,11 +18,17 @@
 | `--model-bg` | #212830 | 作図領域(ダーク) |
 | `--ui-text` | #2B2F33 | 本文 |
 | `--ui-muted` | #6B7178 | 補助文 |
-| `--hover-bg` | #E4E8EC | ホバー |
-| 成功/接続 | #1F8A4C (背景 #F0FDF4) | バッジ・接続状態 |
+| `--hover-bg` | #E4E8EC | ホバー・ユーザー発話吹き出し |
+| `--card-bg` | #FFFFFF | カード・ポップアップ |
+| `--input-bg` | #FAFAFA | 入力欄・ツールチップ |
+| `--ui-placeholder` | #8A9099 | プレースホルダ・進行中テキスト・グループ見出し |
+| 成功/接続 `--ok-fg`/`--ok-bg` | #1F8A4C / #F0FDF4 | バッジ・接続状態・適用済み表示 |
 | 情報 | #1D4ED8 (背景 #EFF6FF) | サインイン済みバッジ |
-| 警告 | #D97706 (背景 #FFF7ED) | 未接続(要対応)・危険設定 |
-| 無効 | #9CA3AF (背景 #F3F4F6) | 未接続(中立) |
+| 警告 `--warn-fg`/`--warn-bg` | #D97706 / #FFF7ED | 未接続(要対応)・危険設定・⚡トークンバッジ |
+| エラー `--err-fg`/`--err-bg` | #DC2626 / #FEF2F2 | ツール失敗・エージェントエラー |
+| 無効 `--off-fg`/`--off-bg` | #9CA3AF / #F3F4F6 | 未接続(中立)・今後追加の枠 |
+
+影とフォントもトークン化する: `--shadow-popup` (0 6px 18px #00000028) / `--shadow-panel` (0 6px 22px #00000030) / `--shadow-panel-lg` (0 8px 28px #00000038) / `--mono-font` (JetBrains Mono → SF Mono → Menlo)。
 
 作図領域の配線色は`src/canvas/theme.ts`の`wireColorScreen()`(黒背景用)と`madake-core/src/svg.rs`の`color_hex()`(白紙印刷用)の2表で管理。
 
@@ -43,6 +49,10 @@
 - **タブ(設定)**: ピル型コンテナ+選択タブは hover-bg 塗り+枠。**タブ(リボン)**: 選択タブは ribbon-bg 塗り+acad-blue太字
 - **バッジ**: ドット+文字、上記セマンティック色
 - **ポップアップ**: 白 / 角丸 12 / シャドウ 0 6 18 #00000028
+- **チャットパネル**(作図領域左下オーバーレイ): 折りたたみ 330x148 / 角丸 12 / `--shadow-panel`、展開 380x640 / 角丸 14 / `--shadow-panel-lg`。背景 ribbon-bg + ribbon-line枠
+- **ユーザー発話吹き出し**: hover-bg / 角丸 12 12 4 12 / padding 8 12 / 12px
+- **ツールチップ**(エージェントのツール実行行): input-bg / 角丸 7 / ribbon-line枠 / padding 5 9。✓=ok-fg、✗=err-fg、実行中=回転スピナー(ui-placeholder)。ツール名は`--mono-font` 10px、要約は 10px muted
+- **状態バッジ**: ドット6px+10px文字。接続中=ok、未接続=無効(off)
 - 未実装機能のUIは表示したままにし、操作時にコマンドラインへ「未実装」をログする
 
 ## 運用ルール

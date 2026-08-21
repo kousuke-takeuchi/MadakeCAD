@@ -43,6 +43,21 @@ onMounted(async () => {
   --acad-blue: #1f6fbf;
   --status-bg: #d8dce0;
   --hover-bg: #e4e8ec;
+  --card-bg: #ffffff;
+  --input-bg: #fafafa;
+  --ui-placeholder: #8a9099;
+  --ok-fg: #1f8a4c;
+  --ok-bg: #f0fdf4;
+  --warn-fg: #d97706;
+  --warn-bg: #fff7ed;
+  --err-fg: #dc2626;
+  --err-bg: #fef2f2;
+  --off-fg: #9ca3af;
+  --off-bg: #f3f4f6;
+  --mono-font: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --shadow-popup: 0 6px 18px #00000028;
+  --shadow-panel: 0 6px 22px #00000030;
+  --shadow-panel-lg: 0 8px 28px #00000038;
 }
 html, body, #app {
   margin: 0;
