@@ -99,7 +99,7 @@ pub fn build_deck(sheet: &Sheet, symbols: &[SymbolDef]) -> Result<SpiceDeck, Spi
     let mut seq = 0usize;
     let mut wire_elements = Vec::new();
     let mut component_elements = Vec::new();
-    let mut next_name = |seq: &mut usize| {
+    let next_name = |seq: &mut usize| {
         *seq += 1;
         format!("R{seq}")
     };

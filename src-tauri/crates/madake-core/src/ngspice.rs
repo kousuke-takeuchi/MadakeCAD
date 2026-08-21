@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, thiserror::Error)]
 pub enum NgspiceError {
@@ -96,8 +97,14 @@ pub fn parse_print_all(output: &str) -> BTreeMap<String, f64> {
 
 /// デッキを`.op`で実行し、ノード電圧(+枝電流)マップを返す。
 pub fn run_op(exe: &Path, deck: &str) -> Result<BTreeMap<String, f64>, NgspiceError> {
+    // 並列実行(テスト含む)で衝突しないよう、PID+連番で一意にする
+    static SEQ: AtomicU64 = AtomicU64::new(0);
     let dir = std::env::temp_dir();
-    let file = dir.join(format!("madake-verify-{}.cir", std::process::id()));
+    let file = dir.join(format!(
+        "madake-verify-{}-{}.cir",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
     let full = format!("{deck}.control\nop\nprint all\n.endc\n.end\n");
     std::fs::write(&file, full)?;
     let result = std::process::Command::new(exe)
