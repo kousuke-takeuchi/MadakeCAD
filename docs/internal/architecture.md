@@ -102,11 +102,13 @@ madake-cli (独立バイナリ) ──> reqwestでLink APIを叩くだけ(コア
 | `stores/document.ts` | **patchミラー**(唯一の真実はRust側。patchだけ適用、直接変更禁止)。選択・アクティブシート |
 | `stores/ui.ts` | UI状態(ダイアログ開閉・左パネルタブ・表示クラス・ログ) |
 | `stores/verification.ts` `simulation.ts` `parts.ts` `chat.ts` `settings.ts` | 各機能の取得結果・パネル状態 |
+| `stores/revisions.ts` `wireNumbers.ts` | 改訂欄編集・線番自動採番ダイアログの下書き状態(確定時にCommandを1回実行) |
 | `tools/controller.ts` | **ツール状態機械**(select/wire/place)。ポインタ/キー入力→ローカルプレビュー→確定時にCommand発行。reveal(選択+ズーム) |
 | `canvas/renderer.ts` | 純関数レンダラ(グリッド・図枠・エンティティ・選択・表示クラスフィルタ) |
 | `canvas/viewport.ts` | mm⇔px変換・ズーム・スナップ |
 | `canvas/dynamicSymbol.ts` | 動的シンボルのTS版生成(Rustと座標一致、テストで突き合わせ) |
 | `canvas/viewClasses.ts` | 表示クラス(レイヤ)定義 |
+| `canvas/wireNumbers.ts` | 線番テキストの配置計算(svg.rsと同一ルール) |
 | `canvas/agentOverlay.ts` `theme.ts` | AI編集領域パルス・色トークン |
 | `components/` | 画面部品(EditorLayoutが全体、CanvasViewが描画ループ+入力、他は一覧表=ui-screens廃止につき`MadakeCAD.pen`参照) |
 | `composables/` | ファイル操作(fileActions)・ポップオーバー・チャット入力 |
