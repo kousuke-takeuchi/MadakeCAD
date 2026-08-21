@@ -401,6 +401,25 @@ describe("chat store: アクション", () => {
     expect(store.messages[1].streaming).toBe(false);
   });
 
+  it("採番前のcancelは採番後にサーバーへ中断を送る", async () => {
+    const cancel = vi.spyOn(agentApi, "cancel").mockResolvedValue();
+    let resolveSend: (id: string) => void = () => undefined;
+    vi.spyOn(agentApi, "send").mockImplementation(
+      () => new Promise<string>((resolve) => (resolveSend = resolve)),
+    );
+    const store = useChatStore();
+
+    const sending = store.send("配線して");
+    await store.cancel();
+    expect(cancel).not.toHaveBeenCalled();
+
+    // send解決(採番) → 走り続けているサーバー側ターンへ中断が飛ぶ
+    resolveSend(CONV);
+    await sending;
+    expect(cancel).toHaveBeenCalledWith(CONV);
+    expect(store.cancelRequested).toBe(false);
+  });
+
   it("cancel APIが失敗してもストリーミング解除は完了する", async () => {
     vi.spyOn(agentApi, "cancel").mockRejectedValue(new Error("Link API 400"));
     const store = useChatStore();

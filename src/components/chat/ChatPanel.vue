@@ -74,7 +74,8 @@ function onKeydown(ev: KeyboardEvent) {
 /** 最新の適用済みターンを巻き戻す。実行前にサーバーの会話状態へ再同期する。 */
 async function onUndo() {
   const id = store.activeId;
-  if (!id) return;
+  // ストリーミング中の再同期は進行中ターンの表示を壊すため不可 (サーバー側もBusyで拒否する)
+  if (!id || store.streaming) return;
   try {
     await store.loadConversations();
     const index = lastAppliedIndex.value;
@@ -170,7 +171,7 @@ onBeforeUnmount(() => store.unsubscribe());
           v-for="(message, index) in store.messages"
           :key="index"
           :message="message"
-          :can-undo="index === lastAppliedIndex"
+          :can-undo="index === lastAppliedIndex && !store.streaming"
           @undo="onUndo()"
         />
         <p v-if="!store.messages.length" class="empty">

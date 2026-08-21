@@ -116,7 +116,11 @@ impl AgentManager {
     /// `auto_read_drawing`が`false`なら[`Self::send`]は図面コンテキストを渡さない。
     pub fn apply_settings(&self, settings: AppSettings) {
         let mut state = self.state.lock().unwrap();
-        state.executable = settings.claude_path.clone();
+        // 明示パスなしの設定保存(トグル変更等)で検出済みパスのキャッシュを捨てない。
+        // 明示パス→自動検出へ戻す場合はresolve_executableが次回送信時に再検出する
+        if settings.claude_path.is_some() || state.settings.claude_path.is_some() {
+            state.executable = settings.claude_path.clone();
+        }
         state.settings = settings;
     }
 

@@ -593,6 +593,15 @@ async fn claude_path_setting_becomes_the_backend_executable() {
     manager.apply_settings(AppSettings::default());
     assert_eq!(manager.executable(), None);
     assert_eq!(manager.settings(), AppSettings::default());
+
+    // claude_pathなしの設定保存(トグル変更等)は検出済みパスのキャッシュを消さない
+    let cached = fixtures_dir().join("fake_claude.sh");
+    manager.set_executable(Some(cached.clone()));
+    manager.apply_settings(AppSettings {
+        auto_read_drawing: false,
+        ..AppSettings::default()
+    });
+    assert_eq!(manager.executable(), Some(cached));
 }
 
 /// 会話の差し替え(プロジェクト読込)で履歴が復元され、送信中ターンは中断される。
