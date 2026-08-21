@@ -56,9 +56,19 @@ SVGの代表位置=ネット内で最長の線分の中点、横線は上方2.5m
 
 ### Task 5: ハーネス境界
 
-- [ ] Step 1 (red): Rustテスト: Harness entityのadd/update/remove+undo/内包判定(全点内包のみ所属・境界上・部分内包は非所属)/電線リストにハーネス列/SVGに破線+名前
-- [ ] Step 2 (green): モデル+svg.rs実装。コミット
-- [ ] Step 3 (red/green): UI: リボン「配線」に「ハーネス」ツール(矩形ドラッグ)、renderer.ts破線描画、プロパティパネル(名前編集・含む電線数表示)、表示クラス追加。実機確認+コミット
+- [x] Step 1 (red): Rustテスト: Harness entityのadd/update/remove+undo/内包判定(全点内包のみ所属・境界上は所属・部分内包と外は非所属)/電線リストにハーネス列/SVGに破線+名前
+- [x] Step 2 (green): モデル+svg.rs実装。コミット
+- [x] Step 3 (red/green): UI: リボン「配線」に「ハーネス」ツール(矩形ドラッグ)、renderer.ts破線描画、プロパティパネル(名前編集・含む電線数表示)、表示クラス追加。実機確認+コミット
+
+実装メモ(確定): コアは`madake-core/src/harness.rs`。Entityは`Harness { points, name, note }`(kind:"harness")で、
+**新Commandは作らず**既存の add/update/delete/move_entity で扱う(逆コマンドも既存のまま)。所属判定は外接矩形への
+全点内包(境界線上は内側・許容誤差1e-9mm)、入れ子の囲みは**最も小さい囲みを優先**。名前は参照記号と同じ規則で
+`W1, W2 …`(既存W番号の最大+1を自動提案)。電線リストCSVは線番の次に「ハーネス」列を追加(旧列の並びは不変)。
+SVGは破線ポリゴン(`stroke-dasharray="3 2"`・線幅0.25mm)を配線の**背面**に描き、名前は囲み左上角の外側
+(右へ1mm・上へ1mm、2.5mm)。フロントは`canvas/harness.ts`(同一ルールの純関数)+`renderer.ts`の`drawHarness`
+(`theme.harness`)、ツールは`controller.ts`の`tool="harness"`(矩形ドラッグ・ドラッグ中も同じ破線でプレビュー)。
+名前・備考の編集は`components/propertyCommands.ts`の`harnessUpdateCommand`→`update_entity`。表示クラス
+「ハーネス」(9クラス目)は画面のみでSVG/PDFへは非反映。`format_version`は据え置き(旧ファイルに新kindは現れないため互換)。
 
 ### Task 6: シート間クロスリファレンス
 

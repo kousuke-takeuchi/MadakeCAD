@@ -227,8 +227,8 @@ const kindLabel = computed<Record<string, string>>(() => ({
       </div>
       <div class="prow">
         <span class="plabel">{{ t("harness.wireCountRow") }}</span>
-        <span class="pvalue">
-          {{ t("harness.wireCount", { count: harnessWires }) }}
+        <span class="pvalue stacked">
+          <span>{{ t("harness.wireCount", { count: harnessWires }) }}</span>
           <span class="hint">
             {{
               buf.name.trim()
@@ -337,6 +337,11 @@ const kindLabel = computed<Record<string, string>>(() => ({
 }
 .mono { font-family: var(--mono-font); }
 .hint { color: var(--ui-muted); }
+.pvalue.stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
 .swatch {
   width: 11px;
   height: 11px;
