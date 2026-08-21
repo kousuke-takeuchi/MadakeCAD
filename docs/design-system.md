@@ -30,6 +30,7 @@
 
 影とフォントもトークン化する: `--shadow-popup` (0 6px 18px #00000028) / `--shadow-panel` (0 6px 22px #00000030) / `--shadow-panel-lg` (0 8px 28px #00000038) / `--mono-font` (JetBrains Mono → SF Mono → Menlo)。
 - `--scrim`: #00000059 — モーダルダイアログの背面スクリム(設定/シンボルピッカー共通)
+- `--logo-bulb` / `--logo-bamboo`: ロゴ(電球×真竹)の2色。既定はダーク背景用(#4A9EFF / #2CA866)、ライト背景では #1F6FBF / #1F8A4C に上書き。ロゴの正は`MadakeCAD.pen`「ロゴ - 電球×真竹」N1案、実装は`src/components/AppLogo.vue`
 
 作図領域の配線色は`src/canvas/theme.ts`の`wireColorScreen()`(黒背景用)と`madake-core/src/svg.rs`の`color_hex()`(白紙印刷用)の2表で管理。
 
