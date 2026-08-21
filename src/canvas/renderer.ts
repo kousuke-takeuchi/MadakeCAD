@@ -2,7 +2,8 @@
 // 描画順: 背景 → グリッド → JIS図枠 → 配線 → シンボル → ジャンクション → ラベル → 選択
 
 import type { Point, Sheet, SymbolDef, SymbolInstance } from "../ipc";
-import { theme, wireColorScreen } from "./theme";
+import type { Region } from "./agentOverlay";
+import { agentRgba, theme, wireColorScreen } from "./theme";
 import { GRID_PITCH, type Viewport } from "./viewport";
 
 /** 図枠の用紙端からのマージン (mm)。svg.rsのFRAME_MARGINと一致させること。 */
@@ -12,6 +13,16 @@ export interface RenderOptions {
   selection: Set<string>;
   /** クロスヘア位置(スクリーンpx)。nullで非表示。 */
   cursor: { x: number; y: number } | null;
+  /** エージェント編集オーバーレイ。省略時は描かない。 */
+  agent?: AgentPaint;
+}
+
+/** エージェント編集オーバーレイの描画入力。 */
+export interface AgentPaint {
+  /** パルス表示する領域(用紙mm)。AgentOverlay.activeRegions()の戻り。 */
+  regions: Region[];
+  /** ターン進行中か。領域が無くてもラベルチップだけ出す。 */
+  active: boolean;
 }
 
 export function paperSizeMm(sheet: Sheet): { w: number; h: number } {
@@ -247,6 +258,107 @@ export function drawSymbol(
   }
 }
 
+// --- エージェント編集オーバーレイ -------------------------------------------
+
+/** 領域の角丸 (px)。デザイン: border-radius 8px。 */
+const OVERLAY_RADIUS = 8;
+const CHIP_LABEL = "⚡ エージェントが編集中...";
+const CHIP_FONT = '600 11px "Noto Sans JP", system-ui, sans-serif';
+const CHIP_PAD_X = 9;
+const CHIP_PAD_Y = 5;
+const CHIP_HEIGHT = 11 + CHIP_PAD_Y * 2;
+const CHIP_INSET = 4;
+
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.arcTo(x + w, y, x + w, y + rr, rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.arcTo(x + w, y + h, x + w - rr, y + h, rr);
+  ctx.lineTo(x + rr, y + h);
+  ctx.arcTo(x, y + h, x, y + h - rr, rr);
+  ctx.lineTo(x, y + rr);
+  ctx.arcTo(x, y, x + rr, y, rr);
+  ctx.closePath();
+}
+
+function drawAgentChip(ctx: CanvasRenderingContext2D, x: number, y: number, alpha: number) {
+  ctx.font = CHIP_FONT;
+  ctx.textAlign = "left";
+  const textW = ctx.measureText(CHIP_LABEL).width;
+  const w = textW + CHIP_PAD_X * 2;
+  ctx.fillStyle = agentRgba(alpha);
+  roundRectPath(ctx, x, y, w, CHIP_HEIGHT, CHIP_HEIGHT / 2);
+  ctx.fill();
+  ctx.fillStyle = theme.agentInk;
+  ctx.fillText(CHIP_LABEL, x + CHIP_PAD_X, y + CHIP_HEIGHT / 2 + 4);
+}
+
+/** チップの幅 (px)。fontを設定した状態で呼ぶこと。 */
+function chipWidth(ctx: CanvasRenderingContext2D): number {
+  ctx.font = CHIP_FONT;
+  return ctx.measureText(CHIP_LABEL).width + CHIP_PAD_X * 2;
+}
+
+/** 編集中領域のパルスとラベルチップを、既存の描画の上に重ねる。 */
+export function drawAgentOverlay(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  paint: AgentPaint,
+): void {
+  const { regions, active } = paint;
+  if (!active && regions.length === 0) return;
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+
+  let primary: { x: number; y: number; w: number; h: number } | null = null;
+  for (const region of regions) {
+    const a = vp.toScreen(region.min);
+    const b = vp.toScreen(region.max);
+    const rect = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+    ctx.fillStyle = agentRgba(region.opacity * region.strength);
+    roundRectPath(ctx, rect.x, rect.y, rect.w, rect.h, OVERLAY_RADIUS);
+    ctx.fill();
+    ctx.strokeStyle = agentRgba(region.strength);
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // ラベルは最も上(同率なら左)の領域に添える
+    if (!primary || rect.y < primary.y || (rect.y === primary.y && rect.x < primary.x)) {
+      primary = rect;
+    }
+  }
+
+  if (!active) return;
+  const cw = chipWidth(ctx);
+  let cx: number;
+  let cy: number;
+  if (primary && primary.w >= cw + CHIP_INSET * 2 && primary.h >= CHIP_HEIGHT + CHIP_INSET * 2) {
+    cx = primary.x + CHIP_INSET;
+    cy = primary.y + CHIP_INSET;
+  } else if (primary) {
+    cx = primary.x;
+    cy = primary.y - CHIP_HEIGHT - CHIP_INSET;
+  } else {
+    cx = (w - cw) / 2;
+    cy = 16;
+  }
+  // 画面外へはみ出す場合はキャンバス上部中央へ逃がす
+  if (cx < 4 || cy < 4 || cx + cw > w - 4 || cy + CHIP_HEIGHT > h - 4) {
+    cx = Math.max(4, (w - cw) / 2);
+    cy = 16;
+  }
+  drawAgentChip(ctx, cx, cy, 0.92);
+}
+
 export function renderSheet(
   ctx: CanvasRenderingContext2D,
   sheet: Sheet,
@@ -305,6 +417,9 @@ export function renderSheet(
       ctx.fillText(e.text, s.x, s.y);
     }
   }
+
+  // エージェント編集オーバーレイ(図面の上、クロスヘアの下)
+  if (opts.agent) drawAgentOverlay(ctx, vp, opts.agent);
 
   // クロスヘア
   if (opts.cursor) {

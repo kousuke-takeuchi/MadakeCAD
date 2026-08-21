@@ -17,7 +17,21 @@ export const theme = {
   crosshair: "#5a626c",
   /** 参照記号などの注記。 */
   annotation: "#e8d44d",
+  /** エージェント編集オーバーレイ(シアン)。 */
+  agent: "#29d3e6",
+  /** オーバーレイのラベルチップ上の文字色。 */
+  agentInk: "#0b3540",
 } as const;
+
+function hexToRgba(hex: string, alpha: number): string {
+  const v = Number.parseInt(hex.slice(1), 16);
+  return `rgba(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}, ${alpha})`;
+}
+
+/** エージェント色に不透明度を付ける(パルス塗り・枠線用)。 */
+export function agentRgba(alpha: number): string {
+  return hexToRgba(theme.agent, alpha);
+}
 
 /** 線色名→画面表示色(黒背景用)。SVG出力(白地)とは別テーブル。 */
 export function wireColorScreen(color: string): string {
