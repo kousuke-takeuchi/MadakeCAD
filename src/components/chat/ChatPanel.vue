@@ -60,6 +60,8 @@ async function submit() {
   if (!canSend.value) return;
   const text = input.value;
   input.value = "";
+  // 折りたたみ状態には会話エリアが無く、送信しても何も見えない。展開して応答を見せる
+  store.setPanel("expanded");
   const id = await store.send(text);
   if (!id) ui.log("AGENT   送信に失敗しました (詳細はチャットのエラー表示を参照)");
   void scrollToBottom();
