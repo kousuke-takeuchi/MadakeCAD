@@ -59,6 +59,12 @@ pub enum AgentEvent {
     TurnApplied {
         start_revision: u64,
         end_revision: u64,
+        /// ターン開始/終了時のundoスタック深さ。差が「元に戻す」に必要なundo回数
+        /// (revision差はundo/redo混入で狂うため、こちらが正)
+        #[serde(default)]
+        start_undo_depth: u64,
+        #[serde(default)]
+        end_undo_depth: u64,
     },
     /// CLI側のエラー(プロセス異常終了・result(is_error)など)
     Error { message: String },

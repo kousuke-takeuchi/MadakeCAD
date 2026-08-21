@@ -175,6 +175,26 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.messages[0].undone).toBe(false);
   });
 
+  it("turn_appliedにundo深さが乗っていれば正確な件数を記録する", () => {
+    const store = useChatStore();
+    seed(store);
+    feed(store, [
+      { type: "text_delta", text: "追加しました" },
+      { type: "turn_completed", result: "追加しました", usage: null },
+      {
+        type: "turn_applied",
+        start_revision: 7,
+        end_revision: 12,
+        start_undo_depth: 3,
+        end_undo_depth: 6,
+      },
+    ]);
+
+    // revision差(5)ではなくundo深さの増分(3)が件数
+    expect(appliedCommandCount(store.messages[0])).toBe(3);
+    expect(store.messages[0].applied_undo_depth).toEqual({ start: 3, end: 6 });
+  });
+
   it("完了後の新しいデルタは新しいターンを開始する", () => {
     const store = useChatStore();
     seed(store);

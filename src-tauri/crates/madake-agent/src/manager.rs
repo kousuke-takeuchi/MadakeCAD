@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::backend::{ClaudeCodeCliBackend, DetectResult};
-use crate::conversation::{AppliedRevisions, Conversation, DocState, Role};
+use crate::conversation::{AppliedRevisions, AppliedUndoDepth, Conversation, DocState, Role};
 use crate::events::AgentEvent;
 use crate::settings::AppSettings;
 use crate::{AgentError, Result};
@@ -261,7 +261,9 @@ impl AgentManager {
                 let message = c.current_turn_mut()?;
                 message.error = Some(CANCELLED_MESSAGE.to_string());
                 message.finish_turn(doc_state);
-                message.has_edits().then_some(message.applied_revisions)
+                message
+                    .has_edits()
+                    .then_some((message.applied_revisions, message.applied_undo_depth))
             })
         };
         // abortされたタスクは後片付けを実行できないので、終了イベントはここで流す
@@ -271,8 +273,8 @@ impl AgentManager {
                 message: CANCELLED_MESSAGE.to_string(),
             },
         );
-        if let Some(applied) = applied {
-            self.broadcast_applied(conversation_id, applied);
+        if let Some((revisions, depth)) = applied {
+            self.broadcast_applied(conversation_id, revisions, depth);
         }
         true
     }
@@ -361,12 +363,19 @@ impl AgentManager {
         });
     }
 
-    fn broadcast_applied(&self, conversation_id: Uuid, applied: AppliedRevisions) {
+    fn broadcast_applied(
+        &self,
+        conversation_id: Uuid,
+        revisions: AppliedRevisions,
+        depth: AppliedUndoDepth,
+    ) {
         self.broadcast(
             conversation_id,
             AgentEvent::TurnApplied {
-                start_revision: applied.start,
-                end_revision: applied.end,
+                start_revision: revisions.start,
+                end_revision: revisions.end,
+                start_undo_depth: depth.start,
+                end_undo_depth: depth.end,
             },
         );
     }
@@ -440,15 +449,19 @@ impl Turn {
                     if let Some(doc_state) = final_state {
                         message.finish_turn(doc_state);
                     }
-                    message.has_edits().then_some(message.applied_revisions)
+                    message
+                        .has_edits()
+                        .then_some((message.applied_revisions, message.applied_undo_depth))
                 })
         };
-        if let Some(applied) = applied {
+        if let Some((revisions, depth)) = applied {
             let _ = self.events.send(ConversationEvent {
                 conversation_id: self.conversation_id,
                 event: AgentEvent::TurnApplied {
-                    start_revision: applied.start,
-                    end_revision: applied.end,
+                    start_revision: revisions.start,
+                    end_revision: revisions.end,
+                    start_undo_depth: depth.start,
+                    end_undo_depth: depth.end,
                 },
             });
         }

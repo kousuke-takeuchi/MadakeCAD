@@ -30,7 +30,13 @@ export type AgentEvent =
   | { type: "turn_completed"; result: string; usage: Usage | null }
   | { type: "error"; message: string }
   /** ターンの編集が図面へ適用された時にマネージャが合成するイベント。 */
-  | { type: "turn_applied"; start_revision: number; end_revision: number };
+  | {
+      type: "turn_applied";
+      start_revision: number;
+      end_revision: number;
+      start_undo_depth?: number;
+      end_undo_depth?: number;
+    };
 
 /** `agent:event` / SSE `agent` のpayload。 */
 export interface AgentEventPayload {
@@ -601,11 +607,17 @@ export const useChatStore = defineStore("chat", {
               start: event.start_revision,
               end: event.end_revision,
             };
-            // このイベントは「編集が入ったターン」にだけ流れるが、undo深さの増分は
-            // 運ばれてこない(revision差はundo/redo混在で過大になるため使えない)。
-            // 表示側は「適用済みか」しか見ないので1件として記録し、正確な件数は
-            // loadConversations()の再取得で上書きする。
-            if (appliedCommandCount(turn) === 0) turn.applied_undo_depth = { start: 0, end: 1 };
+            if (event.start_undo_depth != null && event.end_undo_depth != null) {
+              turn.applied_undo_depth = {
+                start: event.start_undo_depth,
+                end: event.end_undo_depth,
+              };
+            } else if (appliedCommandCount(turn) === 0) {
+              // 旧形式イベント(undo深さなし)への後方互換。このイベントは
+              // 「編集が入ったターン」にだけ流れるので1件として記録し、
+              // 正確な件数はloadConversations()の再取得で上書きする。
+              turn.applied_undo_depth = { start: 0, end: 1 };
+            }
             turn.undone = false;
           }
           break;
