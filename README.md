@@ -19,7 +19,7 @@ and verification grounded in a real circuit solver (ngspice).
 ![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
 ![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)
 ![Docs](https://img.shields.io/badge/docs-EN_%7C_JA-informational)
-![License](https://img.shields.io/badge/license-TBD_(M6)-lightgrey)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green)](#license)
 
 [Overview](docs/01-overview.md) · [Getting Started](docs/02-getting-started.md) · [Documentation](#documentation) · [Specification](docs/13-specification.md) · [Roadmap](docs/12-roadmap.md) · [日本語](README.ja.md)
 
@@ -100,4 +100,11 @@ The project follows a docs-first, design-first (Pencil), TDD workflow. Start wit
 
 ## License
 
-To be determined ahead of the open-source release (tracked in [M6](docs/internal/specs/m6-oss.md)). All dependencies are permissively licensed.
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.

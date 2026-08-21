@@ -19,7 +19,7 @@ AIアシスタントは人間と同じundo可能なコマンドエンジンで�
 ![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
 ![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)
 ![Docs](https://img.shields.io/badge/docs-EN_%7C_JA-informational)
-![License](https://img.shields.io/badge/license-TBD_(M6)-lightgrey)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green)](#ライセンス)
 
 [概要](docs/01-overview.ja.md) · [はじめに](docs/02-getting-started.ja.md) · [ドキュメント](#ドキュメント) · [詳細仕様](docs/13-specification.ja.md) · [ロードマップ](docs/12-roadmap.ja.md) · [English](README.md)
 
@@ -100,4 +100,9 @@ docs-first・design-first(Pencil)・TDDのワークフロー。[`docs/internal/`
 
 ## ライセンス
 
-OSS公開までに決定予定([M6](docs/internal/specs/m6-oss.md)で管理)。依存は全てpermissiveライセンス。
+以下のいずれかを選択できます(デュアルライセンス):
+
+- Apache License 2.0([LICENSE-APACHE](LICENSE-APACHE))
+- MITライセンス([LICENSE-MIT](LICENSE-MIT))
+
+明示的な表明がない限り、このプロジェクトへ意図的に提出されたコントリビュートは、追加条件なしに上記デュアルライセンスで提供されるものとします。

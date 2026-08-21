@@ -2,6 +2,7 @@
 name = "madake-core"
 version = "0.1.0"
 edition = "2021"
+license = "MIT OR Apache-2.0"
 description = "MadakeCAD document model, command engine, and verification core (UI-independent)"
 
 [dependencies]
