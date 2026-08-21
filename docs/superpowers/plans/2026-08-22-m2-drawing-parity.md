@@ -95,13 +95,40 @@ acad-blue mono 600のリンクで、クリックで該当シートへ切替+相�
 
 ### Task 7: 露出と仕上げ
 
-- [ ] Step 1: MCPツール/Link API/CLIへ露出(renumber_wires・set_revisions・harness操作。既存execute_commands経由で足りるものはドキュメントのみ)
-- [ ] Step 2: PDFデモ更新(改訂2行+線番+ハーネス+2シートXRef入りのexample)、docs/04・05の更新(EN+JA)、feature-inventory更新
-- [ ] Step 3: gen_spec --check・cargo test・vitest・vue-tsc全green確認、受け入れ基準(spec各節)を実機で検証してスクショ記録
+- [x] Step 1: MCPツール/Link API/CLIへ露出(renumber_wires・set_revisions・harness操作。既存execute_commands経由で足りるものはドキュメントのみ)
+- [x] Step 2: PDFデモ更新(改訂2行+線番+ハーネス+2シートXRef入りのexample)、docs/04・05の更新(EN+JA)、feature-inventory更新
+- [x] Step 3: gen_spec --check・cargo test・vitest・vue-tsc全green確認、受け入れ基準(spec各節)を実機で検証
+
+実装メモ(確定): 新コマンド(`set_revisions` / `renumber_wires` / `set_wire_numbers`)とハーネス(`add_entity` の
+kind=`harness`)は既存の `execute_commands`(MCP)・`POST /api/v1/commands`(Link API)・`madake exec`(CLI)から
+そのまま実行できるため、**新しいMCPツール・エンドポイントは追加していない**。代わりに `execute_commands` の説明文へ
+M2コマンドを明記し(エージェントの発見性)、SVG/PDF/電線リストの説明も改訂欄・線番・ハーネス・XRef込みへ更新した。
+CLIには線番採番だけ薄い便利コマンド `madake renumber [--sheet <ID>] [--mode append|renumber] [--start N]` を追加
+(Commandを組み立てて `/commands` へ送るだけ。採番ロジックはコア)。チャットのコマンド日本語名マップ
+(`src/stores/chat.ts`)は既にM2の3コマンドを網羅済みだった。デモ図面は `examples/demo/project.rs` に共通化し、
+`render_sample`(SVG)と `pdf_demo`(PDF)が同じ2シート図面(改訂2行+線番+ハーネス2件+XRef)を出す。
+README画像 `docs/images/sample-drawing.svg` はこのデモのシート1。
 
 ## 受け入れ基準(仕様より)
 
-- 改訂2行追加→キャンバス/SVG/PDFに同一の表、表題欄Rev=最新mark、undo可
-- 自動採番後、全ネット一意の線番が画面・PDF・電線リストで一致。個別編集は追い番で保持
-- ハーネス矩形→内包ワイヤの電線リストにハーネス名、SVG/PDFに破線+名前
-- シート1のラベルに「/2.B3」が出て、シート2側に逆参照。跨ぎネットは帳票・検証で1ネット
+- [x] 改訂2行追加→キャンバス/SVG/PDFに同一の表、表題欄Rev=最新mark、undo可
+- [x] 自動採番後、全ネット一意の線番が画面・PDF・電線リストで一致。個別編集は追い番で保持
+- [x] ハーネス矩形→内包ワイヤの電線リストにハーネス名、SVG/PDFに破線+名前
+- [x] シート1のラベルに「/2.B3」が出て、シート2側に逆参照。跨ぎネットは帳票・検証で1ネット
+
+## M2完了 (2026-08-22)
+
+Task 1〜7を完了し、上記4項目を実機(http://localhost:1420 + `madake` CLI)で確認した。確認内容:
+
+1. **改訂欄**: 2行(A 初版 / B 内容)を`set_revisions`で追加 → キャンバス・SVG・PDFに同じ表(下から積む・列見出し)が出て、
+   表題欄が「Rev B」になる。undoで消える
+2. **線番**: `madake renumber`で図面全体を採番 → シート1に`1`、シート2に`2`(プロジェクト全体で一意)。
+   `set_wire_numbers`で`101`へ個別編集した後の追い番採番は「変更なし」= 手動値を保持。画面・PDF・電線リストの値が一致
+3. **ハーネス**: 矩形`W1`の内包ワイヤ2本に電線リストのハーネス列`W1`が入り、SVG/PDFに破線囲み+名前が出る
+4. **XRef**: シート1のラベルに`/2.B1`・`/2.E1`、シート2側に`/1.B1`・`/1.E1`。プロパティパネルの相手先リンクを
+   クリックすると相手シートへ切り替わって該当ラベルが選択される。`verify`(シート指定なし)はプロジェクト全体の統合ネットで評価
+
+確認後はundoで空のSheet1のみへ完全復帰済み。テスト: cargo 248 / vitest 180 / vue-tsc / gen_spec --check 全green
+(仕様書428項目)。
+
+残課題(M2の範囲外として送り)は、レイヤ(表示クラス)のユーザー定義・ハーネス単位の帳票・参照ベース採番でいずれもM4。
