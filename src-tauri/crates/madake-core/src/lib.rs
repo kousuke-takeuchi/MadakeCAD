@@ -10,6 +10,7 @@ pub mod model;
 pub mod netlist;
 pub mod pdf;
 pub mod reports;
+pub mod spice;
 pub mod svg;
 pub mod symbol;
 pub mod verify;

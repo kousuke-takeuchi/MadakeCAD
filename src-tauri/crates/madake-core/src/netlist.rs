@@ -81,7 +81,7 @@ fn near(a: &Point, b: &Point) -> bool {
 }
 
 /// 点pから線分ab までの距離。
-fn segment_distance(p: &Point, a: &Point, b: &Point) -> f64 {
+pub(crate) fn segment_distance(p: &Point, a: &Point, b: &Point) -> f64 {
     let (dx, dy) = (b.x - a.x, b.y - a.y);
     let len2 = dx * dx + dy * dy;
     if len2 < 1e-12 {
