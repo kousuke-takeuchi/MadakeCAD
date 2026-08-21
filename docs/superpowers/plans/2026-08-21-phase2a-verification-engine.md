@@ -98,6 +98,32 @@ pub fn verify_project(project: &Project) -> Vec<Diagnostic>  // 全シート分�
 - [x] Step 2 (red): vitest: 診断ストア(取得・選択連動)
 - [x] Step 3 (green): 実装(リボン「検証」→パネル表示、行クリックで選択+ズーム)、実機ブラウザ検証、コミット
 
+### Task 5: SPICEネットリスト生成 (madake-core/spice.rs)
+
+ユーザー決定(2026-08-21): 電気検証の電流計算を枯れたOSS(ngspice)ベースへ。OS非依存で。
+
+- ノード = 接続点クラスタ(ピン・ジャンクション・ワイヤ端点の座標一致)。ネット単位ではない(ワイヤ抵抗でノードが分かれるため)
+- ワイヤ = 抵抗素子。R = ρ×L/sq(length_m未設定は1mΩ)。ピン/ジャンクションがワイヤ途中に乗る場合はそこでノード分割し、ポリライン長比でRを按分
+- battery = 電圧源(value解釈、既定24V)。負極ピンのノードをGND(0)
+- 負荷 = 等価抵抗 V/current_a(current_a未設定の負荷は1MΩで存在だけ表現)
+- 導通部品(ヒューズ/スイッチ/接点)と端子台の左右貫通 = 1mΩ抵抗
+- 出力: SPICEデッキ文字列 + ワイヤid→(素子名, 両端ノード, R)の対応表(電流はノード電圧差/Rで算出)
+
+- [ ] Step 1 (red): テスト: 直列回路のデッキ(V源・R素子・GND)、ワイヤ途中ジャンクションの分割按分、length未設定の既定R
+- [ ] Step 2 (green): 実装、cargo test グリーン、コミット
+
+### Task 6: ngspiceランナー (OS非依存)
+
+- [ ] Step 1 (red): テスト: `.op`出力フィクスチャのパース(ノード電圧表)、実行ファイル探索の優先順位(env→PATH→既定パス)
+- [ ] Step 2 (green): `find_ngspice()`+`run_op(deck) -> ノード電圧マップ`(std::process::Command、一時ファイル、シェル不使用)。ngspice検出時のみ走る実機テスト
+- [ ] Step 3: cargo test グリーン、コミット
+
+### Task 7: verify統合+フォールバック
+
+- [ ] Step 1 (red): テスト: ngspice結果(モック電圧マップ)から電圧降下・許容電流・ヒューズ判定が出る、未導入時は近似+`elec.approximate_mode` Info
+- [ ] Step 2 (green): `electrical()`をシミュレーション優先+近似フォールバックに再構成。実機(ngspice-47)でCLI/`madake verify`確認
+- [ ] Step 3: 全テストグリーン、ドキュメント(README: ngspice導入は任意)更新、コミット
+
 ## 進捗
 
 - 2026-08-21: プラン作成。Task 1〜4完了。cargo test 19スイート+vitest 101件+vue-tscグリーン。
