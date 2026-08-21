@@ -8,6 +8,7 @@
 - 実装計画: `docs/superpowers/plans/` 配下(日付順)
 - 開発方針の原点と参考図面: `docs/references/README.md`(社外秘情報を含むためREADMEごとgit管理外。各自ローカルに保持)
 - ロードマップ概要: `README.md`
+- 機能インベントリ(実装済み・未実装の棚卸し): `docs/features.md`
 
 ## アーキテクチャの絶対原則
 

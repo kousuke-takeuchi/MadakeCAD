@@ -93,5 +93,5 @@ KiCad 8/9の回路図(`.kicad_sch`)は`madake open <path.kicad_sch>`・UIの「�
 1. フェーズ0(完了): Commandエンジン、MCPサーバー、Tauri足場
 2. フェーズ1(完了): Canvas2DエディタUI、ネットリスト、BOM/電線リスト、PDF/SVG出力、動的シンボル、表示クラス
 3. フェーズ2(完了): 検証エンジン(ERC+ngspice電気検証)、部品DB(SQLite)、KiCadインポート
-4. フェーズ3: ngspiceシミュレーション
+4. フェーズ3(完了): DC動作点シミュレーション(ngspice)+スイッチ開閉what-if。過渡解析は保留
 5. フェーズM: FreeCAD連携 — SOLIDWORKS Electrical⇔SOLIDWORKS相当の電気・機械連携。内蔵サーバーのLink API(/api/v1)+FreeCADアドオンWBで、部品の3D対応付け・3D配線ルーティング・電線長の還元を行う(spec §7)
