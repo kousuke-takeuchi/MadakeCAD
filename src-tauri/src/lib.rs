@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use madake_agent::{AgentManager, AppSettings, Conversation, DetectResult};
-use madake_core::{builtin_symbols, Command, Engine, Patch, Project, SymbolDef};
+use madake_core::{builtin_symbols, sheet_symbol_defs, Command, Engine, Patch, Project, SymbolDef};
 use madake_mcp::SharedDoc;
 use tauri::{Emitter, State};
 use uuid::Uuid;
@@ -91,7 +91,7 @@ fn get_netlist(
         .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
     Ok(madake_core::netlist::extract_netlist(
         sheet,
-        &builtin_symbols(),
+        &sheet_symbol_defs(sheet),
     ))
 }
 
@@ -106,8 +106,24 @@ fn export_svg(
         .project()
         .sheet(sheet_id)
         .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
-    let svg = madake_core::svg::sheet_to_svg(sheet, &builtin_symbols());
+    let svg = madake_core::svg::sheet_to_svg(sheet, &sheet_symbol_defs(sheet));
     std::fs::write(&path, svg).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_pdf(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+    path: String,
+) -> Result<(), String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let sheet = engine
+        .project()
+        .sheet(sheet_id)
+        .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+    let pdf = madake_core::pdf::sheet_to_pdf(sheet, &sheet_symbol_defs(sheet))
+        .map_err(|e| e.to_string())?;
+    std::fs::write(&path, pdf).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -257,6 +273,7 @@ pub fn run() {
             new_project,
             get_netlist,
             export_svg,
+            export_pdf,
             export_bom,
             export_wire_list,
             agent_send,
