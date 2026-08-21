@@ -15,6 +15,8 @@ pub const DEFAULT_PORT: u16 = 9310;
 pub enum ExportKind {
     /// シート1枚をSVGで出力。
     Svg,
+    /// シート1枚をPDFで出力 (印刷品質)。
+    Pdf,
     /// 部品表 (CSV)。
     Bom,
     /// 電線リスト (CSV)。
@@ -27,6 +29,7 @@ impl ExportKind {
     pub fn path(self) -> &'static str {
         match self {
             ExportKind::Svg => "/export/svg",
+            ExportKind::Pdf => "/export/pdf",
             ExportKind::Bom => "/export/bom",
             ExportKind::WireList => "/export/wire-list",
         }
@@ -36,6 +39,7 @@ impl ExportKind {
     pub fn label(self) -> &'static str {
         match self {
             ExportKind::Svg => "SVG",
+            ExportKind::Pdf => "PDF",
             ExportKind::Bom => "部品表(BOM)",
             ExportKind::WireList => "電線リスト",
         }
@@ -113,7 +117,7 @@ pub trait LinkApi {
     fn save(&self, path: &str) -> Result<Value, CliError>;
     /// `POST /api/v1/load` (`{"path": ...}`)
     fn open(&self, path: &str) -> Result<Value, CliError>;
-    /// `POST /api/v1/export/{svg,bom,wire-list}`
+    /// `POST /api/v1/export/{svg,pdf,bom,wire-list}`
     fn export(
         &self,
         kind: ExportKind,
@@ -209,9 +213,9 @@ impl LinkApi for HttpClient {
         path: &str,
         sheet_id: Option<&str>,
     ) -> Result<Value, CliError> {
-        // SVGのみシート指定を受け付ける (Link API: ExportSvgBody)。
+        // SVG/PDFのみシート指定を受け付ける (Link API: ExportSvgBody)。
         let body = match kind {
-            ExportKind::Svg => json!({ "sheet_id": sheet_id, "path": path }),
+            ExportKind::Svg | ExportKind::Pdf => json!({ "sheet_id": sheet_id, "path": path }),
             _ => json!({ "path": path }),
         };
         self.post(kind.path(), body)
@@ -259,6 +263,7 @@ mod tests {
     #[test]
     fn export_kind_paths_match_link_api_routes() {
         assert_eq!(ExportKind::Svg.path(), "/export/svg");
+        assert_eq!(ExportKind::Pdf.path(), "/export/pdf");
         assert_eq!(ExportKind::Bom.path(), "/export/bom");
         assert_eq!(ExportKind::WireList.path(), "/export/wire-list");
     }

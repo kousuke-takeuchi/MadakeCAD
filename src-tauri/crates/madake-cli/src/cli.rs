@@ -47,7 +47,7 @@ pub enum Commands {
         kind: ExportKind,
         /// 出力先パス
         path: String,
-        /// シートID (svgのみ有効。省略時は先頭シート)
+        /// シートID (svg/pdfのみ有効。省略時は先頭シート)
         #[arg(long, value_name = "ID")]
         sheet: Option<String>,
     },
