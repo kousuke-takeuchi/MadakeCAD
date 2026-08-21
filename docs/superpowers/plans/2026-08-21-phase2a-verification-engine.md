@@ -72,32 +72,34 @@ pub fn verify_project(project: &Project) -> Vec<Diagnostic>  // 全シート分�
 
 **Files:** Create `src-tauri/crates/madake-core/src/verify.rs`。Modify `lib.rs`
 
-- [ ] Step 1 (red): テスト: 未接続ピン/空参照/重複参照(リレー除外含む)/宙ぶらりんワイヤ/ラベル競合の5ルール+問題なしシートで空
-- [ ] Step 2 (green): `verify_sheet`実装(ERCのみ)
-- [ ] Step 3: cargo test グリーン、コミット
+- [x] Step 1 (red): テスト: 未接続ピン/空参照/重複参照(リレー除外含む)/宙ぶらりんワイヤ/ラベル競合の5ルール+問題なしシートで空
+- [x] Step 2 (green): `verify_sheet`実装(ERCのみ)
+- [x] Step 3: cargo test グリーン、コミット
 
 ### Task 2: 電気検証 (madake-core)
 
 **Files:** Modify `verify.rs`
 
-- [ ] Step 1 (red): テスト: 到達性(スイッチ経由で届く/断線で届かない)、許容電流超過、電圧降下、ヒューズ定格、current_a未設定Info
-- [ ] Step 2 (green): 導通グラフ(ネット+2ピン部品の橋渡し)と各チェック実装
-- [ ] Step 3: cargo test グリーン、コミット
+- [x] Step 1 (red): テスト: 到達性(スイッチ経由で届く/断線で届かない)、許容電流超過、電圧降下、ヒューズ定格、current_a未設定Info
+- [x] Step 2 (green): 導通グラフ(ネット+2ピン部品の橋渡し)と各チェック実装
+- [x] Step 3: cargo test グリーン、コミット
 
 ### Task 3: API/CLI露出
 
 **Files:** Modify `madake-mcp/src/lib.rs`・`link_api.rs`、`madake-cli`(verifyサブコマンド)、README/CLAUDE.md
 
-- [ ] Step 1 (red): link_api統合テスト: `/api/v1/verify`が診断JSONを返す
-- [ ] Step 2 (green): MCP `run_verification` / Link API / CLI `madake verify` 実装、ドキュメント更新
-- [ ] Step 3: 全テストグリーン、コミット
+- [x] Step 1 (red): link_api統合テスト: `/api/v1/verify`が診断JSONを返す
+- [x] Step 2 (green): MCP `run_verification` / Link API / CLI `madake verify` 実装、ドキュメント更新
+- [x] Step 3: 全テストグリーン、コミット
 
 ### Task 4: UI: 検証結果パネル(デザイン先行)
 
-- [ ] Step 1: Pencilデザイン: 検証結果パネル(場所・行構成・severity色は状態色トークン)+リボン検証ボタンの結果バッジ
-- [ ] Step 2 (red): vitest: 診断ストア(取得・選択連動)
-- [ ] Step 3 (green): 実装(リボン「検証」→パネル表示、行クリックで選択+ズーム)、実機ブラウザ検証、コミット
+- [x] Step 1: Pencilデザイン: 検証結果パネル(場所・行構成・severity色は状態色トークン)+リボン検証ボタンの結果バッジ
+- [x] Step 2 (red): vitest: 診断ストア(取得・選択連動)
+- [x] Step 3 (green): 実装(リボン「検証」→パネル表示、行クリックで選択+ズーム)、実機ブラウザ検証、コミット
 
 ## 進捗
 
-- 2026-08-21: プラン作成
+- 2026-08-21: プラン作成。Task 1〜4完了。cargo test 19スイート+vitest 101件+vue-tscグリーン。
+  実機検証済み: CLI `madake verify` とリボン「検証」→結果パネル→行クリックで選択+ズームを確認。
+  割り切り(第一版): 電流はattrs[current_a]の合計+導通部品越しmax伝播の近似。ヒューズ協調は部品DB後
