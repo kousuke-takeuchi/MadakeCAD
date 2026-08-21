@@ -21573,6 +21573,270 @@
                   ]
                 }
               ]
+            },
+            {
+              "type": "text",
+              "id": "w9bfM",
+              "name": "SPカテゴリ 部品DB",
+              "fill": "$ui-muted",
+              "content": "部品DB (グローバルマスタ)",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "hzFFj",
+              "name": "SP部品DBリスト",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "TUGGm",
+                  "name": "SP部品行 1",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 4,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "gap": 8,
+                  "padding": [
+                    5,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "A3L7G5",
+                      "name": "SP部品型番 1",
+                      "fill": "$ui-text",
+                      "content": "MDK-FUSE-5A",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "bCM5k",
+                      "name": "SP部品名称 1",
+                      "fill": "$ui-text",
+                      "content": "ガラス管ヒューズ 5A",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "JO7Fq",
+                      "name": "SP部品メーカ 1",
+                      "fill": "$ui-muted",
+                      "content": "サンプル",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "V4KzB",
+                      "name": "SP部品スペーサ 1",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "N72dF7",
+                      "name": "SP部品定格 1",
+                      "fill": "$pw-chip",
+                      "cornerRadius": 6,
+                      "padding": [
+                        1,
+                        7
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "XptnA",
+                          "name": "SP部品定格値 1",
+                          "fill": "$ui-muted",
+                          "content": "AC250V 5A",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n5vocG",
+                  "name": "SP部品行 2",
+                  "width": "fill_container",
+                  "fill": "$sel-blue",
+                  "cornerRadius": 4,
+                  "stroke": "$acad-blue",
+                  "strokeWidth": 1,
+                  "gap": 8,
+                  "padding": [
+                    5,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "SP7tB",
+                      "name": "SP部品型番 2",
+                      "fill": "$ui-text",
+                      "content": "MDK-RLY-24V",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "U5ERT",
+                      "name": "SP部品名称 2",
+                      "fill": "$ui-text",
+                      "content": "パワーリレー DC24Vコイル",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "FNTyd",
+                      "name": "SP部品メーカ 2",
+                      "fill": "$ui-muted",
+                      "content": "サンプル",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "PckHM",
+                      "name": "SP部品スペーサ 2",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dEnX0",
+                      "name": "SP部品定格 2",
+                      "fill": "$pw-chip",
+                      "cornerRadius": 6,
+                      "padding": [
+                        1,
+                        7
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "wSAaO",
+                          "name": "SP部品定格値 2",
+                          "fill": "$ui-muted",
+                          "content": "DC24V 0.05A",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "FBezr",
+                  "name": "SP部品行 3",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 4,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "gap": 8,
+                  "padding": [
+                    5,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "P3JSGi",
+                      "name": "SP部品型番 3",
+                      "fill": "$ui-text",
+                      "content": "MDK-TB-8P",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "kAv7G",
+                      "name": "SP部品名称 3",
+                      "fill": "$ui-text",
+                      "content": "端子台 8極",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "MyzMb",
+                      "name": "SP部品メーカ 3",
+                      "fill": "$ui-muted",
+                      "content": "サンプル",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ipod3",
+                      "name": "SP部品スペーサ 3",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "MXMOo",
+                      "name": "SP部品定格 3",
+                      "fill": "$pw-chip",
+                      "cornerRadius": 6,
+                      "padding": [
+                        1,
+                        7
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "v4rvek",
+                          "name": "SP部品定格値 3",
+                          "fill": "$ui-muted",
+                          "content": "AC600V 20A",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "pgmBs",
+                  "name": "SP部品DBヒント",
+                  "fill": "$ui-muted",
+                  "content": "選択して配置すると型番・定格が図面に設定されます (登録は madake parts / AIチャットから)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                }
+              ]
             }
           ]
         },
@@ -21636,6 +21900,803 @@
                   "content": "配置"
                 }
               }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "f4DTQq",
+      "x": 720,
+      "y": 2020,
+      "name": "リボン - 表示タブ",
+      "width": 560,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "OlHNp",
+          "name": "V表示タブ行",
+          "width": "fill_container",
+          "height": 28,
+          "fill": "$ribbon-strip",
+          "alignItems": "end",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Q3Wcs",
+              "name": "Vタブ ホーム",
+              "fill": "#00000000",
+              "cornerRadius": 4,
+              "padding": [
+                5,
+                13
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "j0nCNe",
+                  "name": "Vタブ名 ホーム",
+                  "fill": "$ui-text",
+                  "content": "ホーム",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "d555d",
+              "name": "Vタブ 回路図",
+              "fill": "#00000000",
+              "cornerRadius": 4,
+              "padding": [
+                5,
+                13
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "hrlO5",
+                  "name": "Vタブ名 回路図",
+                  "fill": "$ui-text",
+                  "content": "回路図",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "fpsIp",
+              "name": "Vタブ レポート",
+              "fill": "#00000000",
+              "cornerRadius": 4,
+              "padding": [
+                5,
+                13
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "e7fF0",
+                  "name": "Vタブ名 レポート",
+                  "fill": "$ui-text",
+                  "content": "レポート",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ZjoWI",
+              "name": "Vタブ 表示",
+              "fill": "$ribbon-bg",
+              "cornerRadius": 4,
+              "padding": [
+                5,
+                13
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Js2UC",
+                  "name": "Vタブ名 表示",
+                  "fill": "$acad-blue",
+                  "content": "表示",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "700"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "gRzo3",
+          "name": "V本体",
+          "width": "fill_container",
+          "height": 96,
+          "fill": "$ribbon-bg",
+          "padding": [
+            4,
+            6,
+            2,
+            6
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "vmTeM",
+              "name": "Vグループ 表示クラス",
+              "height": "fill_container",
+              "layout": "vertical",
+              "padding": [
+                2,
+                6,
+                0,
+                6
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "QIMix",
+                  "name": "Vグループ内容 表示クラス",
+                  "height": "fill_container",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "OTsRu",
+                      "name": "V小列 表示1",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "padding": [
+                        3,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "ClNCr",
+                          "name": "V表示 配線",
+                          "fill": "$sel-blue",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "B9z2n",
+                              "name": "V表示アイコン 配線",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "route",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "A1h8Zy",
+                              "name": "V表示名 配線",
+                              "fill": "$ui-text",
+                              "content": "配線",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "s40cy",
+                          "name": "V表示 シンボル",
+                          "fill": "$sel-blue",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "wdxe6",
+                              "name": "V表示アイコン シンボル",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "cpu",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "lnWtp",
+                              "name": "V表示名 シンボル",
+                              "fill": "$ui-text",
+                              "content": "シンボル",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Guyc6",
+                          "name": "V表示 参照記号",
+                          "fill": "$sel-blue",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "J37zlf",
+                              "name": "V表示アイコン 参照記号",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "tag",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "gnUf2",
+                              "name": "V表示名 参照記号",
+                              "fill": "$ui-text",
+                              "content": "参照記号",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ZPE9c",
+                      "name": "V小列 表示2",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "padding": [
+                        3,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "R0ir6M",
+                          "name": "V表示 ネットラベル",
+                          "fill": "$sel-blue",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "AEptE",
+                              "name": "V表示アイコン ネットラベル",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "hash",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "vEAgw",
+                              "name": "V表示名 ネットラベル",
+                              "fill": "$ui-text",
+                              "content": "ネットラベル",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "YfYDA",
+                          "name": "V表示 注記",
+                          "fill": "#00000000",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "fY8yk",
+                              "name": "V表示アイコン 注記",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "type",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            },
+                            {
+                              "type": "text",
+                              "id": "hg9Kc",
+                              "name": "V表示名 注記",
+                              "fill": "$ui-muted",
+                              "content": "注記",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "iCRml",
+                          "name": "V表示 図枠",
+                          "fill": "$sel-blue",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "V0X24G",
+                              "name": "V表示アイコン 図枠",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "frame",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Q0HITp",
+                              "name": "V表示名 図枠",
+                              "fill": "$ui-text",
+                              "content": "図枠",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "J4RNR",
+                      "name": "V小列 表示3",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "padding": [
+                        3,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "r1huq",
+                          "name": "V表示 グリッド",
+                          "fill": "$sel-blue",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "OxRjY",
+                              "name": "V表示アイコン グリッド",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "grid-3x3",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "mKdyl",
+                              "name": "V表示名 グリッド",
+                              "fill": "$ui-text",
+                              "content": "グリッド",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n9ndeN",
+                  "name": "Vグループラベル 表示クラス",
+                  "gap": 3,
+                  "padding": [
+                    1,
+                    4
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "LljoS",
+                      "name": "Vグループ名 表示クラス",
+                      "fill": "$ribbon-label",
+                      "content": "表示クラス",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "GUQyd",
+      "x": 0,
+      "y": 2500,
+      "name": "検証結果パネル",
+      "width": 900,
+      "fill": "$palette-bg",
+      "stroke": "$ribbon-line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "i3uZ2L",
+          "name": "VPヘッダ",
+          "width": "fill_container",
+          "fill": "$palette-head",
+          "gap": 10,
+          "padding": [
+            6,
+            10
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "JDkrz",
+              "name": "VPタイトル",
+              "fill": "$ui-text",
+              "content": "検証結果",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 11,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "lJq8k",
+              "name": "VPバッジ エラー",
+              "fill": "#FEF2F2",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "FCCaq",
+                  "name": "VPバッジ文字 エラー",
+                  "fill": "#DC2626",
+                  "content": "✗ 1",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "INriu",
+              "name": "VPバッジ 警告",
+              "fill": "#FFF7ED",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "md3Qj",
+                  "name": "VPバッジ文字 警告",
+                  "fill": "#D97706",
+                  "content": "⚠ 2",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "RDbKY",
+              "name": "VPバッジ 情報",
+              "fill": "#EFF6FF",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "x2Nz36",
+                  "name": "VPバッジ文字 情報",
+                  "fill": "#1D4ED8",
+                  "content": "ℹ 1",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cqflA",
+              "name": "VPスペーサ",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "text",
+              "id": "s62azJ",
+              "name": "VP再実行",
+              "fill": "$acad-blue",
+              "content": "再検証",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "600"
+            },
+            {
+              "type": "icon",
+              "id": "dg4Fy",
+              "name": "VP閉じる",
+              "width": 12,
+              "height": 12,
+              "icon": "x",
+              "library": "lucide",
+              "fill": "$ui-muted"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "tunKe",
+          "name": "VP行リスト",
+          "width": "fill_container",
+          "layout": "vertical",
+          "padding": [
+            4,
+            0
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "sMh3s",
+              "name": "VP行 1",
+              "width": "fill_container",
+              "fill": "#00000000",
+              "gap": 8,
+              "padding": [
+                4,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "eaCOp",
+                  "name": "VP行マーク 1",
+                  "fill": "#DC2626",
+                  "content": "✗",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "JCs4r",
+                  "name": "VP行コード 1",
+                  "fill": "$ui-muted",
+                  "content": "erc.duplicate_reference",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "S2nxxK",
+                  "name": "VP行文 1",
+                  "fill": "$ui-text",
+                  "content": "参照記号 R1 が2回使われています",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "VWfN1",
+              "name": "VP行 2",
+              "width": "fill_container",
+              "fill": "#E4E8EC",
+              "gap": 8,
+              "padding": [
+                4,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "z8vHEN",
+                  "name": "VP行マーク 2",
+                  "fill": "#D97706",
+                  "content": "⚠",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "iZGpp",
+                  "name": "VP行コード 2",
+                  "fill": "$ui-muted",
+                  "content": "erc.unconnected_pin",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "E3uA0w",
+                  "name": "VP行文 2",
+                  "fill": "$ui-text",
+                  "content": "TB1: 未接続のピン: 3, 4",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "MAi9f",
+              "name": "VP行 3",
+              "width": "fill_container",
+              "fill": "#00000000",
+              "gap": 8,
+              "padding": [
+                4,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "kTFxs",
+                  "name": "VP行マーク 3",
+                  "fill": "#D97706",
+                  "content": "⚠",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "c4QrPX",
+                  "name": "VP行コード 3",
+                  "fill": "$ui-muted",
+                  "content": "elec.voltage_drop",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "D7VrI",
+                  "name": "VP行文 3",
+                  "fill": "$ui-text",
+                  "content": "電圧降下 1.40V が許容値 0.72V (24Vの3%) を超えています (ワイヤ 10m 0.75sq, 3A)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "dmpC9",
+              "name": "VP行 4",
+              "width": "fill_container",
+              "fill": "#00000000",
+              "gap": 8,
+              "padding": [
+                4,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "cytnL",
+                  "name": "VP行マーク 4",
+                  "fill": "#1D4ED8",
+                  "content": "ℹ",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "tI8ll",
+                  "name": "VP行コード 4",
+                  "fill": "$ui-muted",
+                  "content": "elec.no_current_attr",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "EVl4Z",
+                  "name": "VP行文 4",
+                  "fill": "$ui-text",
+                  "content": "L1: 属性 current_a が未設定のため電流計算から除外しました",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
             }
           ]
         }
