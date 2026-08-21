@@ -50,8 +50,24 @@ fn node_key(p: Point) -> (i64, i64) {
     (((p.x * 100.0).round()) as i64, ((p.y * 100.0).round()) as i64)
 }
 
+/// デッキ生成オプション。
+#[derive(Debug, Default, Clone)]
+pub struct DeckOptions {
+    /// 開路として扱う導通部品の参照記号 (スイッチ/接点のwhat-if)。
+    pub open_switches: Vec<String>,
+}
+
 /// シートからSPICEデッキを組み立てる。
 pub fn build_deck(sheet: &Sheet, symbols: &[SymbolDef]) -> Result<SpiceDeck, SpiceError> {
+    build_deck_with(sheet, symbols, &DeckOptions::default())
+}
+
+/// オプション付きでSPICEデッキを組み立てる。
+pub fn build_deck_with(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    opts: &DeckOptions,
+) -> Result<SpiceDeck, SpiceError> {
     use crate::model::Entity;
     use crate::netlist::{pin_positions, segment_distance, CONNECT_EPS};
     use crate::verify::{is_conductor, is_load, parse_number};
@@ -198,8 +214,11 @@ pub fn build_deck(sheet: &Sheet, symbols: &[SymbolDef]) -> Result<SpiceDeck, Spi
         let reps: Vec<crate::geometry::Point> =
             by_no.values().map(|pts| pts[0]).collect();
         if is_conductor(def) {
-            for p in reps.iter().skip(1) {
-                push(reps[0], *p, BRIDGE_OHMS);
+            // what-if: 指定された参照記号の導通部品は開路扱い(橋を張らない)
+            if !opts.open_switches.iter().any(|r| r == &s.reference) {
+                for p in reps.iter().skip(1) {
+                    push(reps[0], *p, BRIDGE_OHMS);
+                }
             }
         } else if is_load(def) && reps.len() >= 2 {
             let ohms = match s.attrs.get("current_a").and_then(|v| parse_number(v)) {
