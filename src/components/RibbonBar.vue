@@ -1,12 +1,15 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  AlignJustify, Cable, Copy, Cpu, FileDown, FileText, Frame, Grid3x3, Hash, Image, LayoutGrid,
-  Move, MoveRight, Pencil, Route, Scissors, ShieldCheck, Tag, Trash2, Type, type LucideIcon,
+  Activity, AlignJustify, Cable, Copy, Cpu, FileDown, FileText, Frame, Grid3x3, Hash, Image,
+  LayoutGrid, Move, MoveRight, Pencil, Route, Scissors, ShieldCheck, Tag, Trash2, Type,
+  type LucideIcon,
 } from "lucide-vue-next";
 import { inject, ref } from "vue";
 import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
+import { useDocumentStore } from "../stores/document";
 import { useFileActions } from "../composables/fileActions";
+import { useSimulationStore } from "../stores/simulation";
 import { useVerificationStore } from "../stores/verification";
 import type { EditorController } from "../tools/controller";
 import { useUiStore } from "../stores/ui";
@@ -15,6 +18,7 @@ const controller = inject<EditorController>("controller")!;
 const ui = useUiStore();
 const files = useFileActions();
 const verification = useVerificationStore();
+const simulation = useSimulationStore();
 
 const activeTab = ref("回路図");
 
@@ -27,6 +31,13 @@ const viewClassColumns = Array.from(
   (_, i) => VIEW_CLASSES.slice(i * 3, i * 3 + 3),
 );
 const tabs = ["ホーム", "プロジェクト", "回路図", "パネル", "レポート", "読み込み/書き出し", "表示", "管理"];
+
+async function runSimulation() {
+  const doc = useDocumentStore();
+  await simulation.run(doc.activeSheetId);
+  if (simulation.error) ui.log(`SIM  失敗: ${simulation.error}`);
+  else ui.log(`SIM  DC動作点を計算しました (部品 ${simulation.result?.components.length ?? 0}件)`);
+}
 
 async function runVerification() {
   await verification.run(null);
@@ -108,6 +119,7 @@ const groups: RibbonGroup[] = [
       [
         { label: "部品表", icon: FileText, action: () => files.exportBom() },
         { label: "電線リスト", icon: Cable, action: () => files.exportWireList() },
+        { label: "シミュレーション", icon: Activity, action: () => runSimulation() },
       ],
       [
         { label: "SVG出力", icon: Image, action: () => files.exportSvg() },
