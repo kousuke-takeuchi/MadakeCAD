@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  AlignJustify, Cable, Copy, Cpu, FileDown, FileText, Hash, Image, LayoutGrid, Move, MoveRight,
-  Pencil, Route, Scissors, ShieldCheck, Trash2, type LucideIcon,
+  AlignJustify, Cable, Copy, Cpu, FileDown, FileText, Frame, Grid3x3, Hash, Image, LayoutGrid,
+  Move, MoveRight, Pencil, Route, Scissors, ShieldCheck, Tag, Trash2, Type, type LucideIcon,
 } from "lucide-vue-next";
 import { inject, ref } from "vue";
+import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
 import { useFileActions } from "../composables/fileActions";
 import type { EditorController } from "../tools/controller";
 import { useUiStore } from "../stores/ui";
@@ -14,6 +15,15 @@ const ui = useUiStore();
 const files = useFileActions();
 
 const activeTab = ref("回路図");
+
+// 表示タブ: 表示クラストグル (レイヤ、spec §4)。3個ずつの縦列に分ける
+const viewIcons: Record<ViewClass, LucideIcon> = {
+  wires: Route, symbols: Cpu, refs: Tag, net_labels: Hash, texts: Type, frame: Frame, grid: Grid3x3,
+};
+const viewClassColumns = Array.from(
+  { length: Math.ceil(VIEW_CLASSES.length / 3) },
+  (_, i) => VIEW_CLASSES.slice(i * 3, i * 3 + 3),
+);
 const tabs = ["ホーム", "プロジェクト", "回路図", "パネル", "レポート", "読み込み/書き出し", "表示", "管理"];
 
 function todo(name: string) {
@@ -138,6 +148,25 @@ const groups: RibbonGroup[] = [
           </div>
         </template>
       </template>
+      <template v-else-if="activeTab === '表示'">
+        <div class="ribbon-group">
+          <div class="ribbon-group-body">
+            <div v-for="(col, ci) in viewClassColumns" :key="ci" class="ribbon-smalls">
+              <button
+                v-for="c in col"
+                :key="c.id"
+                class="ribbon-small view-toggle"
+                :class="{ on: ui.isClassVisible(c.id) }"
+                @click="ui.toggleViewClass(c.id)"
+              >
+                <component :is="viewIcons[c.id]" :size="13" class="small-icon" />
+                {{ c.label }}
+              </button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">表示クラス ▾</div>
+        </div>
+      </template>
       <div v-else class="ribbon-placeholder">「{{ activeTab }}」タブは今後のフェーズで実装予定です</div>
     </div>
   </div>
@@ -241,4 +270,8 @@ const groups: RibbonGroup[] = [
 }
 .ribbon-small:hover { background: var(--hover-bg); }
 .small-icon { color: #4a6fa5; flex: none; }
+.view-toggle { color: var(--ui-muted); }
+.view-toggle .small-icon { color: var(--ui-muted); }
+.view-toggle.on { background: var(--sel-blue); color: var(--ui-text); }
+.view-toggle.on .small-icon { color: #4a6fa5; }
 </style>

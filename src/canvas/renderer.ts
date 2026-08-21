@@ -4,6 +4,7 @@
 import type { Point, Sheet, SymbolDef, SymbolInstance } from "../ipc";
 import type { Region } from "./agentOverlay";
 import { resolveSymbolDef } from "./dynamicSymbol";
+import { entityViewClass, type ViewClass } from "./viewClasses";
 import { agentRgba, theme, wireColorScreen } from "./theme";
 import { GRID_PITCH, type Viewport } from "./viewport";
 
@@ -12,6 +13,8 @@ const FRAME_MARGIN = 10;
 
 export interface RenderOptions {
   selection: Set<string>;
+  /** 非表示中の表示クラス (レイヤ、spec §4)。省略時は全表示。 */
+  hidden?: ReadonlySet<ViewClass>;
   /** クロスヘア位置(スクリーンpx)。nullで非表示。 */
   cursor: { x: number; y: number } | null;
   /** エージェント編集オーバーレイ。省略時は描かない。 */
@@ -181,6 +184,8 @@ export function drawSymbol(
   def: SymbolDef,
   selected: boolean,
   colorOverride?: string,
+  /** falseで参照記号・型番の注記を描かない (表示クラス "refs")。 */
+  showLabels = true,
 ) {
   ctx.strokeStyle = colorOverride ?? (selected ? theme.selection : theme.line);
   ctx.fillStyle = ctx.strokeStyle;
@@ -245,6 +250,7 @@ export function drawSymbol(
       }
     }
   }
+  if (!showLabels) return;
   // 参照記号・型番: シンボル外形の上に併記(縦長シンボルでも重ならない。Rust側svg.rsと同ルール)
   const top = symbolTopY(inst, def);
   ctx.fillStyle = colorOverride ?? (selected ? theme.selection : theme.annotation);
@@ -406,12 +412,13 @@ export function renderSheet(
   ctx.fillRect(0, 0, w, h);
 
   const { w: pw, h: ph } = paperSizeMm(sheet);
-  drawGrid(ctx, vp, w, h, pw, ph);
-  drawFrame(ctx, vp, sheet);
+  const hidden = opts.hidden ?? new Set<ViewClass>();
+  if (!hidden.has("grid")) drawGrid(ctx, vp, w, h, pw, ph);
+  if (!hidden.has("frame")) drawFrame(ctx, vp, sheet);
 
   const defs = new Map(symbols.map((d) => [d.id, d]));
   const resolve = (id: string) => resolveSymbolDef(id, defs);
-  const entities = Object.values(sheet.entities);
+  const entities = Object.values(sheet.entities).filter((e) => !hidden.has(entityViewClass(e)));
 
   for (const e of entities) {
     if (e.kind !== "wire") continue;
@@ -429,7 +436,7 @@ export function renderSheet(
   for (const e of entities) {
     if (e.kind !== "symbol") continue;
     const def = resolve(e.symbol_id);
-    if (def) drawSymbol(ctx, vp, e, def, opts.selection.has(e.id));
+    if (def) drawSymbol(ctx, vp, e, def, opts.selection.has(e.id), undefined, !hidden.has("refs"));
   }
   for (const e of entities) {
     if (e.kind === "junction") {

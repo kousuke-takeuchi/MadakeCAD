@@ -1,6 +1,7 @@
 // エディタUIの共有状態: コマンドライン履歴、モーダル表示など。
 
 import { defineStore } from "pinia";
+import type { ViewClass } from "../canvas/viewClasses";
 import { useChatStore } from "./chat";
 
 /** 左ドックのタブ。"chat" は chat store の panelOpen="expanded" と対で同期する。 */
@@ -17,8 +18,13 @@ export const useUiStore = defineStore("ui", {
      * 別コンポーネントなので、下書きはここに置いて双方から共有する。
      */
     chatDraft: "",
+    /** 非表示中の表示クラス (レイヤ、spec §4)。画面表示のみで出力へは非反映。 */
+    hiddenViewClasses: new Set<ViewClass>(),
   }),
   getters: {
+    isClassVisible(state): (c: ViewClass) => boolean {
+      return (c) => !state.hiddenViewClasses.has(c);
+    },
     /** ステータスバーに出す直近メッセージ。 */
     lastMessage(state): string {
       return state.commandHistory[state.commandHistory.length - 1] ?? "";
@@ -43,6 +49,10 @@ export const useUiStore = defineStore("ui", {
     closeAgentTab() {
       if (this.leftPanelTab === "chat") this.leftPanelTab = "project";
       useChatStore().setPanel("collapsed");
+    },
+    toggleViewClass(c: ViewClass) {
+      if (this.hiddenViewClasses.has(c)) this.hiddenViewClasses.delete(c);
+      else this.hiddenViewClasses.add(c);
     },
     log(line: string) {
       this.commandHistory.push(line);
