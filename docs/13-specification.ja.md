@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**414仕様項目**。
+全5領域・**425仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -444,6 +444,20 @@
 - 開始番号が不正なままでは採番せず、ダイアログは開いたまま残る <sub>`wire numbering dialog store`</sub>
 - キャンセルするとコマンドは送られずに閉じる <sub>`wire numbering dialog store`</sub>
 - 採番に失敗したらダイアログは開いたままエラーを表示する <sub>`wire numbering dialog store`</sub>
+
+### xref
+
+- ゾーンアドレスは行の英字(上から)と列の数字(左から)を組み合わせた「B3」形式になる <sub>`zoneAt`</sub>
+- 図枠の外にある点は、無効なアドレスにはならず最も近いゾーンに丸められる <sub>`zoneAt`</sub>
+- ラベルの相手先は、他のシートにある同名ラベルの住所「/シート.ゾーン」になる <sub>`cross references`</sub>
+- 相手側のシートのラベルからも元のシートが見えるので、双方に相手先が表示される <sub>`cross references`</sub>
+- 同じネットが複数のシートに続くときは、相手先の住所が全て列挙される <sub>`cross references`</sub>
+- 自分のシート内の所在は、同名ラベルが2つあっても相手先には出ない <sub>`cross references`</sub>
+- 他のシートに相手がいないラベルには、クロスリファレンスが一切表示されない <sub>`cross references`</sub>
+- 相手先の一覧はジャンプ先のシートidとラベルidを持つので、クリックで飛べる <sub>`cross references`</sub>
+- シートごとのクロスリファレンス表は、各ラベルのidを脇に描くテキストへ対応付ける <sub>`cross references`</sub>
+- 相手先をクリックすると、相手のシートへ切り替えて相手のラベルを選択・ズームする指示になる <sub>`xrefJumpTarget`</sub>
+- クロスリファレンスのテキストは、ラベル本文の右側に同じベースラインで並ぶ <sub>`xrefTextAt`</sub>
 
 ### propertyCommands
 

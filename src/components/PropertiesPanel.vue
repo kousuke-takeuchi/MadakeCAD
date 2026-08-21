@@ -1,17 +1,20 @@
 <script setup lang="ts">
 // プロパティパレット (Pencilデザイン準拠): セクション見出し + ラベル列(灰)/値列(白)のグリッド。
 import { ChevronDown, Pin } from "lucide-vue-next";
-import { computed, reactive, watch } from "vue";
+import { computed, inject, reactive, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { harnessWireCount } from "../canvas/harness";
+import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import type { Entity } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
+import type { EditorController } from "../tools/controller";
 import { harnessUpdateCommand, wireNumberCommand } from "./propertyCommands";
 
 const store = useDocumentStore();
 const ui = useUiStore();
 const { t } = useI18n();
+const controller = inject<EditorController>("controller")!;
 
 const selected = computed<Entity | null>(() => {
   const sheet = store.activeSheet;
@@ -40,6 +43,25 @@ const buf = reactive({
   /** ハーネスの備考。 */
   note: "",
 });
+
+/**
+ * 選択中のネットラベルの相手先 (同名ラベルが置かれている他シートの所在)。
+ * 相手がいなければ空 (プロパティには「なし」と出す)。
+ */
+const xrefTargets = computed<NetSite[]>(() => {
+  const sheet = store.activeSheet;
+  const e = selected.value;
+  if (!sheet || !store.project || e?.kind !== "net_label") return [];
+  return xrefSites(store.project, sheet.id, e.name);
+});
+
+/** 相手先クリック: 相手のシートへ切り替えて、相手のラベルを選択+ズームする。 */
+function jumpToXref(site: NetSite) {
+  const { sheetId, entityIds } = xrefJumpTarget(site);
+  if (store.activeSheetId !== sheetId) store.activeSheetId = sheetId;
+  controller.reveal(entityIds);
+  ui.log(t("xref.jumpLog", { address: site.address, sheet: site.sheet_name }));
+}
 
 /** 選択中のハーネスが囲んでいる電線の本数 (幾何学的な内包で決まる)。 */
 const harnessWires = computed(() => {
@@ -255,7 +277,27 @@ const kindLabel = computed<Record<string, string>>(() => ({
       <div class="sec"><ChevronDown :size="10" /> ネット</div>
       <div class="prow">
         <span class="plabel">ネット名</span>
-        <span class="pvalue"><input v-model="buf.name" class="bare" /></span>
+        <span class="pvalue"><input v-model="buf.name" class="bare" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("xref.propertyLabel") }}</span>
+        <span class="pvalue stacked" :title="t('xref.propertyHint')">
+          <template v-if="xrefTargets.length">
+            <button
+              v-for="site in xrefTargets"
+              :key="site.label_id"
+              class="xref-link"
+              :title="site.sheet_name"
+              @click="jumpToXref(site)"
+            >
+              {{ site.address }}
+            </button>
+          </template>
+          <template v-else>
+            <span class="muted">{{ t("xref.none") }}</span>
+            <span class="hint">{{ t("xref.noneHint") }}</span>
+          </template>
+        </span>
       </div>
     </template>
 
@@ -342,6 +384,16 @@ const kindLabel = computed<Record<string, string>>(() => ({
   align-items: flex-start;
   gap: 1px;
 }
+/* 参照リンク値 (XRef相手先「/2.B3」): acad-blue mono 600、クリックでジャンプ */
+.xref-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: 600 10px var(--mono-font);
+  color: var(--acad-blue);
+  cursor: pointer;
+}
+.xref-link:hover { text-decoration: underline; }
 .swatch {
   width: 11px;
   height: 11px;

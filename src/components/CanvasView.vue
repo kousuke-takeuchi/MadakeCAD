@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
+import { sheetXrefs } from "../canvas/xref";
 import { AgentOverlay } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
 import type { Patch } from "../ipc";
@@ -41,6 +42,8 @@ function draw() {
     cursor: controller.cursorScreen,
     // チップ・パルスは実際に編集領域があるときだけ出す(テキスト応答だけのターンでは出さない)
     agent: regions.length > 0 ? { regions, active: chat.streaming } : undefined,
+    // シート間クロスリファレンス「/2.B3」(表示クラスは「ネットラベル」に含める)
+    xrefs: sheetXrefs(store.project, sheet.id),
   });
   controller.renderPreview(ctx);
 }

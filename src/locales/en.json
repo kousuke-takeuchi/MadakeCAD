@@ -126,5 +126,12 @@
     "noteRow": "Note",
     "notePlaceholder": "Build instructions, etc.",
     "renamedLog": "Harness: renamed to {name} (undo with Cmd+Z)"
+  },
+  "xref": {
+    "propertyLabel": "Cross-ref",
+    "propertyHint": "Sheets and zones where the same net label continues. Click an address to jump there.",
+    "none": "none",
+    "noneHint": "no same-named net label on another sheet",
+    "jumpLog": "Cross-reference: jumped to {address} ({sheet})"
   }
 }
