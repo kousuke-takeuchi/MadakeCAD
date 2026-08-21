@@ -75,7 +75,7 @@ function pick(d: Diagnostic) {
 }
 .badge.error { color: var(--err-fg); background: var(--err-bg); }
 .badge.warning { color: var(--warn-fg); background: var(--warn-bg); }
-.badge.info { color: #1d4ed8; background: #eff6ff; }
+.badge.info { color: var(--info-fg); background: var(--info-bg); }
 .ok-note { font-size: 10px; color: var(--ok-fg); }
 .spacer { flex: 1; }
 .rerun {
@@ -109,7 +109,7 @@ function pick(d: Diagnostic) {
 .mark { font-size: 11px; font-weight: 600; }
 .mark.error { color: var(--err-fg); }
 .mark.warning { color: var(--warn-fg); }
-.mark.info { color: #1d4ed8; }
+.mark.info { color: var(--info-fg); }
 .code {
   font-family: var(--mono-font);
   font-size: 10px;

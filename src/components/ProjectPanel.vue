@@ -121,8 +121,8 @@ const toolButtons = [
   height: 20px;
   border: none;
   background: transparent;
-  border-radius: 2px;
-  color: #4a6fa5;
+  border-radius: 4px;
+  color: var(--ribbon-icon);
   display: flex;
   align-items: center;
   justify-content: center;

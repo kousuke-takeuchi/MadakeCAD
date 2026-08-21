@@ -184,7 +184,7 @@ watch(
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 9px;
+  border-radius: 999px;
   background: var(--ok-bg);
   font-size: 10px;
   color: var(--ok-fg);

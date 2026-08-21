@@ -54,6 +54,11 @@ onMounted(async () => {
   --err-bg: #fef2f2;
   --off-fg: #9ca3af;
   --off-bg: #f3f4f6;
+  --info-fg: #1d4ed8;
+  --info-bg: #eff6ff;
+  --ribbon-icon: #4a6fa5;
+  --icon-wire: #c0392b;
+  --icon-edit: #b7791f;
   --mono-font: "JetBrains Mono", "SF Mono", Menlo, monospace;
   --shadow-popup: 0 6px 18px #00000028;
   --shadow-panel: 0 6px 22px #00000030;

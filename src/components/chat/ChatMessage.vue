@@ -103,7 +103,7 @@ const showProgress = computed(
   width: 100%;
   padding: 5px 9px;
   border: 1px solid var(--err-fg);
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--err-bg);
   font-size: 10px;
   color: var(--err-fg);

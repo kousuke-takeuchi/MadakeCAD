@@ -108,7 +108,7 @@ function onPick(id: string) {
   flex-shrink: 0;
   padding: 3px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--hover-bg);
   color: var(--ui-text);
   font: inherit;

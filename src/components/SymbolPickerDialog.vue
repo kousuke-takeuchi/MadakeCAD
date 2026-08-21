@@ -194,7 +194,7 @@ function pickPart(part: Part) {
   max-height: 70vh;
   background: var(--ribbon-bg);
   border: 1px solid var(--ribbon-line);
-  border-radius: 6px;
+  border-radius: 4px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
@@ -294,11 +294,11 @@ function pickPart(part: Part) {
   font-size: 10px;
   color: var(--ui-muted);
   background: var(--hover-bg);
-  border-radius: 6px;
+  border-radius: 4px;
   padding: 1px 7px;
 }
 .parts-hint {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--ui-muted);
   padding: 2px 0;
 }

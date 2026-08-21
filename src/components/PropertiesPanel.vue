@@ -198,11 +198,11 @@ const kindLabel: Record<string, string> = {
   font-size: 10px;
   font-weight: 600;
   color: var(--ui-text);
-  background: #e7eaed;
+  background: var(--hover-bg);
 }
 .prow {
   display: flex;
-  border-bottom: 1px solid #e3e6ea;
+  border-bottom: 1px solid var(--ribbon-line);
   font-size: 10px;
 }
 .plabel {

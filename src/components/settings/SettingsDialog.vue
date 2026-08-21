@@ -236,7 +236,7 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
   height: min(820px, 90vh);
   background: var(--ribbon-bg);
   border: 1px solid var(--ribbon-line);
-  border-radius: 16px;
+  border-radius: 12px;
   box-shadow: var(--shadow-panel-lg);
   display: flex;
   flex-direction: column;
@@ -257,7 +257,7 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
   gap: 2px;
   padding: 4px 6px;
   border: 1px solid var(--ribbon-line);
-  border-radius: 12px;
+  border-radius: 999px;
 }
 .tab {
   display: flex;
@@ -265,7 +265,7 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
   gap: 6px;
   padding: 6px 12px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: 999px;
   background: transparent;
   font-size: 12px;
   color: var(--ui-text);
@@ -328,9 +328,9 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
 .adv {
   background: var(--hover-bg);
   color: var(--ui-muted);
-  border-radius: 5px;
+  border-radius: 4px;
   padding: 2px 7px;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 1px;
 }
@@ -356,7 +356,7 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
   display: flex;
   align-items: center;
   gap: 5px;
-  border-radius: 10px;
+  border-radius: 999px;
   padding: 3px 10px;
   font-size: 10px;
   flex: none;
@@ -426,7 +426,7 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
   height: 22px;
   flex: none;
   border: none;
-  border-radius: 11px;
+  border-radius: 999px;
   background: var(--off-fg);
   cursor: pointer;
   padding: 0;
