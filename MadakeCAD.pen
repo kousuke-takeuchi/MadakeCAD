@@ -39539,7 +39539,7 @@
           "fill": "$ui-muted",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "SymbolDef(プリミティブ+ピン)のGUI編集。白紙面+2.5mmグリッド、ピンは必ずグリッド上。保存先=ユーザーライブラリ(MadakeCAD/symbols/)で、部品挿入ダイアログに「ユーザー」カテゴリとして出る。用途はJIS C 0617の不足記号追記(コンタクタ・遮断器・変圧器・センサ類)。",
+          "content": "ACADE Symbol Builder+EPLANシンボルエディタ準拠。シンボル=図形+属性スロット(参照記号・定格・型番等の流し込み位置)+方向付きピン。既存シンボルの複製から開始が既定動線。0/90/180/270の回転バリアントを自動生成(接続点・属性位置が追従、個別上書き可)。保存先=ユーザーライブラリ、保存時に グリッド外ピン/番号重複/必須スロット欠落 をチェック。",
           "fontFamily": "Noto Sans JP",
           "fontSize": 12,
           "fontWeight": "normal"
@@ -40320,6 +40320,66 @@
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "I0AhY",
+                      "x": 340,
+                      "y": 44,
+                      "name": "TAGスロット",
+                      "fill": "#1F6FBF",
+                      "content": "K?",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "VR6zA",
+                      "x": 334,
+                      "y": 40,
+                      "name": "TAGスロット枠",
+                      "fill": "#00000000",
+                      "width": 34,
+                      "height": 20,
+                      "stroke": "#1F6FBF",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "WtttM",
+                      "x": 376,
+                      "y": 46,
+                      "name": "TAG注",
+                      "fill": "#8A9099",
+                      "content": "属性スロット: 参照記号 (配置時にK1等が入る)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "zKVGP",
+                      "x": 330,
+                      "y": 210,
+                      "name": "定格スロット",
+                      "fill": "#1F6FBF",
+                      "content": "{定格}",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "w7fWqr",
+                      "x": 324,
+                      "y": 206,
+                      "name": "定格スロット枠",
+                      "fill": "#00000000",
+                      "width": 52,
+                      "height": 18,
+                      "stroke": "#1F6FBF",
+                      "strokeWidth": 1
                     }
                   ]
                 },
@@ -40670,6 +40730,16 @@
                               "fontFamily": "Noto Sans JP",
                               "fontSize": 9,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "GaMSe",
+                              "name": "dir",
+                              "fill": "#6B7178",
+                              "content": "方向:上",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -40713,6 +40783,16 @@
                               "name": "grid",
                               "fill": "#1F8A4C",
                               "content": "2.5mm ✓",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "pU32E",
+                              "name": "dir",
+                              "fill": "#6B7178",
+                              "content": "方向:下",
                               "fontFamily": "Noto Sans JP",
                               "fontSize": 9,
                               "fontWeight": "normal"
@@ -40762,6 +40842,16 @@
                               "fontFamily": "Noto Sans JP",
                               "fontSize": 9,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "GMfZY",
+                              "name": "dir",
+                              "fill": "#6B7178",
+                              "content": "方向:上",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -40808,12 +40898,365 @@
                               "fontFamily": "Noto Sans JP",
                               "fontSize": 9,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "sdsyz",
+                              "name": "dir",
+                              "fill": "#6B7178",
+                              "content": "方向:下",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "X24hS",
+                      "name": "GB 属性スロット",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 5,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "YfFrN",
+                          "name": "gh",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "oEFBx",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "属性スロット",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "mYUmk",
+                              "name": "罫",
+                              "fill": "#C6CBD1",
+                              "width": "fill_container",
+                              "height": 1
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "seGNF",
+                          "name": "slot 参照記号",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "padding": [
+                            2,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "OkEsM",
+                              "name": "n",
+                              "fill": "#2B2F33",
+                              "content": "参照記号",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "vddKG",
+                              "name": "sp",
+                              "width": "fill_container",
+                              "height": 1
+                            },
+                            {
+                              "type": "text",
+                              "id": "zjv4n",
+                              "name": "p",
+                              "fill": "#6B7178",
+                              "content": "上中央",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "RmceH",
+                          "name": "slot 定格",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "padding": [
+                            2,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "S4cImh",
+                              "name": "n",
+                              "fill": "#2B2F33",
+                              "content": "定格",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "a2ARL",
+                              "name": "sp",
+                              "width": "fill_container",
+                              "height": 1
+                            },
+                            {
+                              "type": "text",
+                              "id": "AQZIz",
+                              "name": "p",
+                              "fill": "#6B7178",
+                              "content": "下中央",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "whFdC",
+                          "name": "slot 型番",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "padding": [
+                            2,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "HgfQS",
+                              "name": "n",
+                              "fill": "#2B2F33",
+                              "content": "型番",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "dNdFN",
+                              "name": "sp",
+                              "width": "fill_container",
+                              "height": 1
+                            },
+                            {
+                              "type": "text",
+                              "id": "b2sROW",
+                              "name": "p",
+                              "fill": "#8A9099",
+                              "content": "(非表示)",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
                       ]
                     }
                   ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "U9Stj",
+              "name": "バリアント帯",
+              "width": "fill_container",
+              "stroke": "#C6CBD1",
+              "strokeWidth": {
+                "top": 1
+              },
+              "gap": 10,
+              "padding": [
+                8,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "LjuqL",
+                  "name": "l",
+                  "fill": "#2B2F33",
+                  "content": "回転バリアント:",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "z50N61",
+                  "name": "v 0°",
+                  "fill": "#CCE4F7",
+                  "cornerRadius": 4,
+                  "stroke": "#1F6FBF",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 2,
+                  "padding": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 2,
+                      "id": "i5FSw",
+                      "name": "pv",
+                      "fill": "#FFFFFF",
+                      "width": 44,
+                      "height": 32,
+                      "stroke": "#C6CBD1",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "CQBHK",
+                      "name": "d",
+                      "fill": "#2B2F33",
+                      "content": "0°",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "yd1dV",
+                  "name": "v 90°",
+                  "fill": "#FFFFFF00",
+                  "cornerRadius": 4,
+                  "stroke": "#C6CBD1",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 2,
+                  "padding": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 2,
+                      "id": "wEm1x",
+                      "name": "pv",
+                      "fill": "#FFFFFF",
+                      "width": 44,
+                      "height": 32,
+                      "stroke": "#C6CBD1",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "y7NlzX",
+                      "name": "d",
+                      "fill": "#2B2F33",
+                      "content": "90°",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "cV8Bg",
+                  "name": "v 180°",
+                  "fill": "#FFFFFF00",
+                  "cornerRadius": 4,
+                  "stroke": "#C6CBD1",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 2,
+                  "padding": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 2,
+                      "id": "rVXnS",
+                      "name": "pv",
+                      "fill": "#FFFFFF",
+                      "width": 44,
+                      "height": 32,
+                      "stroke": "#C6CBD1",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "SoCRA",
+                      "name": "d",
+                      "fill": "#2B2F33",
+                      "content": "180°",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "IUP5N",
+                  "name": "v 270°",
+                  "fill": "#FFFFFF00",
+                  "cornerRadius": 4,
+                  "stroke": "#C6CBD1",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 2,
+                  "padding": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 2,
+                      "id": "ZfIZO",
+                      "name": "pv",
+                      "fill": "#FFFFFF",
+                      "width": 44,
+                      "height": 32,
+                      "stroke": "#C6CBD1",
+                      "strokeWidth": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "Y6PsP2",
+                      "name": "d",
+                      "fill": "#2B2F33",
+                      "content": "270°",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "gwyND",
+                  "name": "n",
+                  "fill": "#6B7178",
+                  "content": "自動生成(接続点番号・属性位置が追従)。崩れる向きのみ個別上書き — EPLANのA〜Hバリアントの簡略版",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -41660,6 +42103,1067 @@
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
                   "content": "盤レイアウトシートは種別を持ち、部品挿入の代わりに未配置部品パネルが出る。バルーン(①〜)=アイテム番号でBOM・配置表と連動。選択部品のプロパティで座標・レール割付・銘板を編集",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "z6lmqs",
+          "name": "P行2",
+          "width": "fill_container",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "eSXm4",
+              "name": "フットプリントルックアップ",
+              "clip": true,
+              "width": 560,
+              "fill": "#F2F4F5",
+              "cornerRadius": 8,
+              "stroke": "#C6CBD1",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "eKClc",
+                  "name": "ヘッダ",
+                  "width": "fill_container",
+                  "fill": "#D9DDE1",
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "WKA0q",
+                      "name": "題",
+                      "fill": "#2B2F33",
+                      "content": "フットプリントルックアップ (型番 → フットプリント)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "WsXW7",
+                      "name": "X",
+                      "fill": "#6B7178",
+                      "content": "✕",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "CApbG",
+                  "name": "本体",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Lud2l",
+                      "name": "表",
+                      "clip": true,
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "#C6CBD1",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "buV5E",
+                          "name": "th",
+                          "width": "fill_container",
+                          "fill": "#FAFAFA",
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "m3dAWn",
+                              "name": "h",
+                              "width": 90,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "qaMhR",
+                                  "name": "t",
+                                  "fill": "#8A9099",
+                                  "content": "メーカ",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ysqDJ",
+                              "name": "h",
+                              "width": 130,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "fNbMq",
+                                  "name": "t",
+                                  "fill": "#8A9099",
+                                  "content": "型番",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Zs6Du",
+                              "name": "h",
+                              "width": 130,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "bWUJn",
+                                  "name": "t",
+                                  "fill": "#8A9099",
+                                  "content": "フットプリント",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "XXkSe",
+                              "name": "h",
+                              "width": 90,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "WaucS",
+                                  "name": "t",
+                                  "fill": "#8A9099",
+                                  "content": "W×H (mm)",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "QnUpd",
+                              "name": "h",
+                              "width": 70,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "kfN3F",
+                                  "name": "t",
+                                  "fill": "#8A9099",
+                                  "content": "状態",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ZFiyi",
+                          "name": "r",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF00",
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "NZbKr",
+                              "name": "c",
+                              "width": 90,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "S5bhf2",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "OMRON",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "QbvkW",
+                              "name": "c",
+                              "width": 130,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Sawts",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "MY2N",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "z9KOue",
+                              "name": "c",
+                              "width": 130,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "v3KGni",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "fp_my2n (定義済み)",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "bs520",
+                              "name": "c",
+                              "width": 90,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "HRNK9",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "21.5×28",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "vP78n",
+                              "name": "c",
+                              "width": 70,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "t9Mh7",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "✓",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "iWvMv",
+                          "name": "r",
+                          "width": "fill_container",
+                          "fill": "#CCE4F7",
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "i0ZiFj",
+                              "name": "c",
+                              "width": 90,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ZSonJ",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "IDEC",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "kL5TO",
+                              "name": "c",
+                              "width": 130,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "fnKQQ",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "HW1B-M1",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "pk9LU",
+                              "name": "c",
+                              "width": 130,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "b5bdY",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "fp_hw1b (定義済み)",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "a8TeQ",
+                              "name": "c",
+                              "width": 90,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "r3PUD",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "29×29",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "wvlDY",
+                              "name": "c",
+                              "width": 70,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "yYpxb",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "✓",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "DrM9c",
+                          "name": "r",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF00",
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Zr6qZ",
+                              "name": "c",
+                              "width": 90,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "tDwQn",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "Phoenix",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "dSjI3",
+                              "name": "c",
+                              "width": 130,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Y92iqv",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "UK 2.5N",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "u9IpI",
+                              "name": "c",
+                              "width": 130,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "RzG92",
+                                  "name": "t",
+                                  "fill": "#8A9099",
+                                  "content": "(寸法から自動生成)",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "w6lqqo",
+                              "name": "c",
+                              "width": 90,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "DLCH3",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "5.2×43",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Y4X7T",
+                              "name": "c",
+                              "width": 70,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "GelkD",
+                                  "name": "t",
+                                  "fill": "#8A9099",
+                                  "content": "自動",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "dzAwL",
+                      "name": "注",
+                      "fill": "#6B7178",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "部品DBのfootprint_ref列。未登録型番はW×H寸法から簡易矩形を自動生成。挿入経路は3つ: ①未配置部品パネル ②アイコンメニュー(回路図に無い盤部品: レール/ダクト/筐体) ③型番検索",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "D2RZw",
+                  "name": "フッタ",
+                  "width": "fill_container",
+                  "stroke": "#C6CBD1",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 8,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "justifyContent": "end",
+                  "children": [
+                    {
+                      "id": "aYfOn",
+                      "type": "ref",
+                      "ref": "x4Qvxy",
+                      "name": "追加",
+                      "descendants": {
+                        "jkIc9": {
+                          "content": "対応を追加…"
+                        }
+                      }
+                    },
+                    {
+                      "id": "hw6YL",
+                      "type": "ref",
+                      "ref": "Axj7d",
+                      "name": "閉じる",
+                      "descendants": {
+                        "gsbC2": {
+                          "content": "OK"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "KkpdZ",
+              "name": "紙 盤内配線図",
+              "width": 420,
+              "fill": "#FFFFFF",
+              "cornerRadius": 4,
+              "stroke": "#C6CBD1",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 8,
+              "padding": 14,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "hOSXM",
+                  "name": "題",
+                  "fill": "#000000",
+                  "content": "盤内配線図 (配線注記) と凡例",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "frame",
+                  "id": "X03zSI",
+                  "name": "見本",
+                  "width": 380,
+                  "height": 170,
+                  "fill": "#FFFFFF",
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "id": "Rel1R",
+                      "x": 150,
+                      "y": 30,
+                      "name": "fp",
+                      "fill": "#F7F8F9",
+                      "width": 60,
+                      "height": 90,
+                      "stroke": "#000000",
+                      "strokeWidth": 1.2
+                    },
+                    {
+                      "type": "text",
+                      "id": "ATjYp",
+                      "x": 166,
+                      "y": 66,
+                      "name": "ref",
+                      "fill": "#000000",
+                      "content": "K1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "path",
+                      "id": "yeDOo",
+                      "x": 210,
+                      "y": 40,
+                      "name": "wl0",
+                      "geometry": "M0 0h40",
+                      "viewBox": [
+                        0,
+                        0,
+                        40,
+                        1
+                      ],
+                      "width": 40,
+                      "height": 0,
+                      "stroke": "#000000",
+                      "strokeWidth": 0.8
+                    },
+                    {
+                      "type": "text",
+                      "id": "eckXL",
+                      "x": 254,
+                      "y": 34,
+                      "name": "wt0",
+                      "fill": "#000000",
+                      "content": "A1 ← TB1:1   12",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 8,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "path",
+                      "id": "F2rpnT",
+                      "x": 210,
+                      "y": 66,
+                      "name": "wl1",
+                      "geometry": "M0 0h40",
+                      "viewBox": [
+                        0,
+                        0,
+                        40,
+                        1
+                      ],
+                      "width": 40,
+                      "height": 0,
+                      "stroke": "#000000",
+                      "strokeWidth": 0.8
+                    },
+                    {
+                      "type": "text",
+                      "id": "R0s250",
+                      "x": 254,
+                      "y": 60,
+                      "name": "wt1",
+                      "fill": "#000000",
+                      "content": "A2 ← TB1:2   12",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 8,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "path",
+                      "id": "vsSLy",
+                      "x": 210,
+                      "y": 92,
+                      "name": "wl2",
+                      "geometry": "M0 0h40",
+                      "viewBox": [
+                        0,
+                        0,
+                        40,
+                        1
+                      ],
+                      "width": 40,
+                      "height": 0,
+                      "stroke": "#000000",
+                      "strokeWidth": 0.8
+                    },
+                    {
+                      "type": "text",
+                      "id": "KsJOg",
+                      "x": 254,
+                      "y": 86,
+                      "name": "wt2",
+                      "fill": "#000000",
+                      "content": "13 → PB1:3   15",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 8,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "P3KUPW",
+                      "x": 16,
+                      "y": 120,
+                      "name": "凡例",
+                      "stroke": "#000000",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Eioq5",
+                          "name": "lh",
+                          "fill": "#F2F2F2",
+                          "stroke": "#000000",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "L91pJK",
+                              "name": "h",
+                              "width": 26,
+                              "stroke": "#000000",
+                              "strokeWidth": {
+                                "right": 1
+                              },
+                              "padding": [
+                                2,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "PBDaD",
+                                  "name": "t",
+                                  "fill": "#000000",
+                                  "content": "①",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 8,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "M7NDq",
+                              "name": "h",
+                              "width": 40,
+                              "stroke": "#000000",
+                              "strokeWidth": {
+                                "right": 1
+                              },
+                              "padding": [
+                                2,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "M0wqAL",
+                                  "name": "t",
+                                  "fill": "#000000",
+                                  "content": "参照",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 8,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "BiQZR",
+                              "name": "h",
+                              "width": 80,
+                              "stroke": "#000000",
+                              "strokeWidth": {
+                                "right": 1
+                              },
+                              "padding": [
+                                2,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "z1n8c",
+                                  "name": "t",
+                                  "fill": "#000000",
+                                  "content": "型番",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 8,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Qhr6u",
+                          "name": "lr①",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "gGvAy",
+                              "name": "c",
+                              "width": 26,
+                              "stroke": "#000000",
+                              "strokeWidth": {
+                                "right": 1
+                              },
+                              "padding": [
+                                2,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "X0S23i",
+                                  "name": "t",
+                                  "fill": "#000000",
+                                  "content": "①",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 8,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "CteY4",
+                              "name": "c",
+                              "width": 40,
+                              "stroke": "#000000",
+                              "strokeWidth": {
+                                "right": 1
+                              },
+                              "padding": [
+                                2,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "PKSwW",
+                                  "name": "t",
+                                  "fill": "#000000",
+                                  "content": "K1",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 8,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "hxZF9",
+                              "name": "c",
+                              "width": 80,
+                              "stroke": "#000000",
+                              "strokeWidth": {
+                                "right": 1
+                              },
+                              "padding": [
+                                2,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "H1WFv",
+                                  "name": "t",
+                                  "fill": "#000000",
+                                  "content": "MY2N",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 8,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "FVSK6",
+                          "name": "lr②",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "PM5LI",
+                              "name": "c",
+                              "width": 26,
+                              "stroke": "#000000",
+                              "strokeWidth": {
+                                "right": 1
+                              },
+                              "padding": [
+                                2,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "xMKQa",
+                                  "name": "t",
+                                  "fill": "#000000",
+                                  "content": "②",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 8,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "xVqQe",
+                              "name": "c",
+                              "width": 40,
+                              "stroke": "#000000",
+                              "strokeWidth": {
+                                "right": 1
+                              },
+                              "padding": [
+                                2,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "XCgWO",
+                                  "name": "t",
+                                  "fill": "#000000",
+                                  "content": "K2",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 8,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "iizsa",
+                              "name": "c",
+                              "width": 80,
+                              "stroke": "#000000",
+                              "strokeWidth": {
+                                "right": 1
+                              },
+                              "padding": [
+                                2,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Ep0vO",
+                                  "name": "t",
+                                  "fill": "#000000",
+                                  "content": "MY2N",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 8,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "art6n",
+                  "name": "注",
+                  "fill": "#6B7178",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "回路図の結線データからフットプリント脇に接続先・線番を自動注記(ACADE wire annotation相当)。凡例=バルーン↔型番の対応表を盤シートへ自動配置",
                   "fontFamily": "Noto Sans JP",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -43952,7 +45456,7 @@
           "fill": "$ui-muted",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "ハードコードのJIS図枠をJSONテンプレート化(枠寸法・ゾーン分割・表題欄セル定義+フィールドバインド・改訂欄位置)。選択UIは プロジェクト>図枠テンプレート。エディタは当面作らず、JSON手書き+このプレビューで確認する(仕様§9の提案どおり)。",
+          "content": "EPLANプロットフレーム+ACADEタイトルブロック機構準拠。テンプレート=枠図形+プロパティプレースホルダ(特殊テキスト: {project.name} {sheet.no}/{sheet.total} 等が描画時に実値へ)。ゾーン(列/行数・ゾーン文字)、表題欄セル+フィールドバインド+ロゴ画像枠、改訂欄位置もテンプレートで定義。差し替え時は全シートへ一括適用。編集は当面JSON手書き+このプレビュー(エディタはM6以降)。",
           "fontFamily": "Noto Sans JP",
           "fontSize": 12,
           "fontWeight": "normal"
@@ -43962,7 +45466,7 @@
           "id": "j4mSU",
           "name": "図枠テンプレートダイアログ",
           "clip": true,
-          "width": 860,
+          "width": 1120,
           "fill": "#F2F4F5",
           "cornerRadius": 8,
           "stroke": "#C6CBD1",
@@ -44637,6 +46141,66 @@
                           "fontFamily": "Noto Sans JP",
                           "fontSize": 8,
                           "fontWeight": "normal"
+                        },
+                        {
+                          "type": "rectangle",
+                          "id": "hX1kp",
+                          "x": 392,
+                          "y": 228,
+                          "name": "ロゴ枠",
+                          "fill": "#FFFFFF00",
+                          "width": 52,
+                          "height": 24,
+                          "stroke": "#1F6FBF",
+                          "strokeWidth": 1
+                        },
+                        {
+                          "type": "text",
+                          "id": "VVdQ3",
+                          "x": 398,
+                          "y": 234,
+                          "name": "ロゴt",
+                          "fill": "#1F6FBF",
+                          "content": "{logo}",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 8,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "pgYNw",
+                          "x": 452,
+                          "y": 230,
+                          "name": "bind1",
+                          "fill": "#1F6FBF",
+                          "content": "{project.name}",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 7,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "XS8r1",
+                          "x": 512,
+                          "y": 258,
+                          "name": "bind2",
+                          "fill": "#1F6FBF",
+                          "content": "{sheet.no}/{sheet.total}",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 7,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "t8cri",
+                          "x": 452,
+                          "y": 246,
+                          "name": "bind3",
+                          "fill": "#1F6FBF",
+                          "content": "{rev.latest}",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 7,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -44730,6 +46294,487 @@
                               "fontWeight": "normal"
                             }
                           ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "u5bhK",
+                  "name": "バインド側",
+                  "width": 250,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    14,
+                    14,
+                    14,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "VaiPJ",
+                      "name": "GB フィールドバインド",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "yJvNF",
+                          "name": "gh",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "kGhr1",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "フィールドバインド",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "KUf8J",
+                              "name": "罫",
+                              "fill": "#C6CBD1",
+                              "width": "fill_container",
+                              "height": 1
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "zMQRl",
+                          "name": "b 図番",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "ZWvq2",
+                              "name": "k",
+                              "width": 70,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "n9wsd",
+                                  "name": "t",
+                                  "fill": "#6B7178",
+                                  "content": "図番",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "QteH3",
+                              "name": "v",
+                              "fill": "#2B2F33",
+                              "content": "{project.no}",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "R1bF8J",
+                          "name": "b シート",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "kuNtS",
+                              "name": "k",
+                              "width": 70,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "KLZ0u",
+                                  "name": "t",
+                                  "fill": "#6B7178",
+                                  "content": "シート",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "A8T8Dr",
+                              "name": "v",
+                              "fill": "#2B2F33",
+                              "content": "{sheet.no}/{sheet.total}",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Egdgx",
+                          "name": "b 改訂",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "ELjrH",
+                              "name": "k",
+                              "width": 70,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Dj4Fi",
+                                  "name": "t",
+                                  "fill": "#6B7178",
+                                  "content": "改訂",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "BJpbJ",
+                              "name": "v",
+                              "fill": "#2B2F33",
+                              "content": "{rev.latest}",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "xGZZc",
+                          "name": "b 設計/承認",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "wag83",
+                              "name": "k",
+                              "width": 70,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ez9PI",
+                                  "name": "t",
+                                  "fill": "#6B7178",
+                                  "content": "設計/承認",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "BgMWm",
+                              "name": "v",
+                              "fill": "#2B2F33",
+                              "content": "{designer}/{approver}",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "f4X3A",
+                          "name": "b 尺度",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "X9fLJx",
+                              "name": "k",
+                              "width": 70,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "T6EYUp",
+                                  "name": "t",
+                                  "fill": "#6B7178",
+                                  "content": "尺度",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "dOBvW",
+                              "name": "v",
+                              "fill": "#2B2F33",
+                              "content": "{sheet.scale}",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "akRlg",
+                          "name": "b ロゴ",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "dRtc3",
+                              "name": "k",
+                              "width": 70,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "YLtvK",
+                                  "name": "t",
+                                  "fill": "#6B7178",
+                                  "content": "ロゴ",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "uuhSW",
+                              "name": "v",
+                              "fill": "#2B2F33",
+                              "content": "logo.png (画像枠)",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 9,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Chihy",
+                      "name": "GB ゾーン設定",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "WB0pZ",
+                          "name": "gh",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "nFulG",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "ゾーン設定",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "q4lw5",
+                              "name": "罫",
+                              "fill": "#C6CBD1",
+                              "width": "fill_container",
+                              "height": 1
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "hJYP4",
+                          "name": "z行",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "VBlxk",
+                              "name": "列",
+                              "gap": 5,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "A5s4P",
+                                  "name": "l",
+                                  "fill": "#2B2F33",
+                                  "content": "列",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "EMJQm",
+                                  "name": "in",
+                                  "width": 40,
+                                  "fill": "#FFFFFF",
+                                  "cornerRadius": 4,
+                                  "stroke": "#C6CBD1",
+                                  "strokeWidth": 1,
+                                  "padding": [
+                                    3,
+                                    6
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "J62i2",
+                                      "name": "v",
+                                      "fill": "#2B2F33",
+                                      "content": "8",
+                                      "fontFamily": "JetBrains Mono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "PKlnK",
+                              "name": "行",
+                              "gap": 5,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "z7AJx2",
+                                  "name": "l",
+                                  "fill": "#2B2F33",
+                                  "content": "行",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "XCHNQ",
+                                  "name": "in",
+                                  "width": 40,
+                                  "fill": "#FFFFFF",
+                                  "cornerRadius": 4,
+                                  "stroke": "#C6CBD1",
+                                  "strokeWidth": 1,
+                                  "padding": [
+                                    3,
+                                    6
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "Q4cyud",
+                                      "name": "v",
+                                      "fill": "#2B2F33",
+                                      "content": "4",
+                                      "fontFamily": "JetBrains Mono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "bXOwP",
+                          "name": "zn",
+                          "fill": "#6B7178",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "ゾーン文字: 列=数字 1〜 / 行=英字 A〜(IEC 61082-1)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 9,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ItCpf",
+                      "name": "GB 一括適用",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "b3cEwP",
+                          "name": "gh",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "H3kbB",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "一括適用",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "oegPF",
+                              "name": "罫",
+                              "fill": "#C6CBD1",
+                              "width": "fill_container",
+                              "height": 1
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "U5liNY",
+                          "name": "n",
+                          "fill": "#6B7178",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "テンプレート変更・差し替え時は全シートの図枠・表題欄・改訂欄へ一括反映(ACADE Title Block Update相当)。自由フィールドはプロジェクト変数として追加可",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 9,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
