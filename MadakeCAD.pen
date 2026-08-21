@@ -13311,10 +13311,10 @@
               "name": "DSボタン主",
               "reusable": true,
               "fill": "$pw-accent",
-              "cornerRadius": 8,
+              "cornerRadius": 4,
               "padding": [
-                7,
-                16
+                5,
+                14
               ],
               "alignItems": "center",
               "children": [
@@ -13336,12 +13336,12 @@
               "name": "DSボタン副",
               "reusable": true,
               "fill": "#FFFFFF",
-              "cornerRadius": 8,
+              "cornerRadius": 4,
               "stroke": "$pw-border",
               "strokeWidth": 1,
               "padding": [
-                7,
-                16
+                5,
+                14
               ],
               "alignItems": "center",
               "children": [
@@ -26112,7 +26112,7 @@
                       "id": "k26Py2",
                       "name": "用途",
                       "fill": "#6B7178",
-                      "content": "スウォッチ等 ≤12px",
+                      "content": "スウォッチ・チェック",
                       "fontFamily": "Noto Sans JP",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -26153,7 +26153,7 @@
                       "id": "SP50F",
                       "name": "用途",
                       "fill": "#6B7178",
-                      "content": "チップ・小ボタン・行",
+                      "content": "ボタン・入力欄・チップ・行",
                       "fontFamily": "Noto Sans JP",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -26194,7 +26194,7 @@
                       "id": "bciAX",
                       "name": "用途",
                       "fill": "#6B7178",
-                      "content": "ボタン・入力欄",
+                      "content": "ダイアログ・メニュー項目",
                       "fontFamily": "Noto Sans JP",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -26235,7 +26235,7 @@
                       "id": "Gb5cJ",
                       "name": "用途",
                       "fill": "#6B7178",
-                      "content": "カード・ダイアログ",
+                      "content": "ポップアップ・チャット系",
                       "fontFamily": "Noto Sans JP",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -26276,7 +26276,7 @@
                       "id": "wfqEp",
                       "name": "用途",
                       "fill": "#6B7178",
-                      "content": "バッジ・トグル",
+                      "content": "バッジ・円形ボタン",
                       "fontFamily": "Noto Sans JP",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -27000,7 +27000,7 @@
                       "id": "L3W7s",
                       "name": "btn",
                       "fill": "#1F6FBF",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "padding": [
                         6,
                         14
@@ -27032,7 +27032,7 @@
                       "id": "x0womc",
                       "name": "btn",
                       "fill": "#1A5FA5",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "padding": [
                         6,
                         14
@@ -27064,7 +27064,7 @@
                       "id": "hf1a6",
                       "name": "btn",
                       "fill": "#17548F",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "padding": [
                         6,
                         14
@@ -27096,7 +27096,7 @@
                       "id": "T9VVJ",
                       "name": "btn",
                       "fill": "#F3F4F6",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "padding": [
                         6,
                         14
@@ -27155,7 +27155,7 @@
                       "id": "zjL1h",
                       "name": "btn",
                       "fill": "#FFFFFF",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "stroke": "#C6CBD1",
                       "strokeWidth": 1,
                       "padding": [
@@ -27189,7 +27189,7 @@
                       "id": "gtmE2",
                       "name": "btn",
                       "fill": "#E4E8EC",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "stroke": "#C6CBD1",
                       "strokeWidth": 1,
                       "padding": [
@@ -27223,7 +27223,7 @@
                       "id": "gNBVc",
                       "name": "btn",
                       "fill": "#CCE4F7",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "stroke": "#1F6FBF",
                       "strokeWidth": 1,
                       "padding": [
@@ -27257,7 +27257,7 @@
                       "id": "kLTCS",
                       "name": "btn",
                       "fill": "#FFFFFF",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "stroke": "#C6CBD1",
                       "strokeWidth": 1,
                       "padding": [
@@ -27319,7 +27319,7 @@
                       "name": "inp",
                       "width": 150,
                       "fill": "#FAFAFA",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "stroke": "#C6CBD1",
                       "strokeWidth": 1,
                       "padding": [
@@ -27354,7 +27354,7 @@
                       "name": "inp",
                       "width": 150,
                       "fill": "#FAFAFA",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "stroke": "#AEB6BE",
                       "strokeWidth": 1,
                       "padding": [
@@ -27389,7 +27389,7 @@
                       "name": "inp",
                       "width": 150,
                       "fill": "#FAFAFA",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "stroke": "#1F6FBF",
                       "strokeWidth": 1.5,
                       "padding": [
@@ -27424,7 +27424,7 @@
                       "name": "inp",
                       "width": 150,
                       "fill": "#FAFAFA",
-                      "cornerRadius": 8,
+                      "cornerRadius": 4,
                       "stroke": "#C6CBD1",
                       "strokeWidth": 1,
                       "padding": [
@@ -28073,6 +28073,930 @@
               "fontFamily": "Noto Sans JP",
               "fontSize": 10,
               "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "jCHug",
+      "x": 0,
+      "y": 5268,
+      "name": "DS チェックボックス",
+      "fill": "#FFFFFF",
+      "cornerRadius": 8,
+      "stroke": "#C6CBD1",
+      "strokeWidth": 1,
+      "gap": 24,
+      "padding": 16,
+      "children": [
+        {
+          "type": "frame",
+          "id": "eib89",
+          "name": "DSチェックON",
+          "reusable": true,
+          "width": 14,
+          "height": 14,
+          "fill": "#1F6FBF",
+          "cornerRadius": 2,
+          "layout": "none",
+          "children": [
+            {
+              "type": "path",
+              "id": "Mkrrf",
+              "x": 2,
+              "y": 3,
+              "name": "DSチェックONマーク",
+              "geometry": "M1 4l3 3 5-6",
+              "viewBox": [
+                0,
+                0,
+                10,
+                8
+              ],
+              "width": 10,
+              "height": 8,
+              "stroke": "#FFFFFF",
+              "strokeWidth": 1.8,
+              "strokeLinejoin": "round",
+              "strokeLinecap": "round"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "pOoG9",
+          "name": "DSチェックOFF",
+          "reusable": true,
+          "width": 14,
+          "height": 14,
+          "fill": "#FFFFFF",
+          "cornerRadius": 2,
+          "stroke": "#C6CBD1",
+          "strokeWidth": 1
+        },
+        {
+          "type": "text",
+          "id": "oUKoY",
+          "name": "l",
+          "fill": "#6B7178",
+          "content": "ON / OFF: ダイアログ内のon/off設定はトグルでなくチェックボックス(CAD慣習)",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 10,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "eapsB",
+      "x": 0,
+      "y": 5434,
+      "name": "設定ダイアログ - CAD調リデザイン",
+      "width": 1000,
+      "fill": "$ribbon-bg",
+      "cornerRadius": 12,
+      "layout": "vertical",
+      "gap": 16,
+      "padding": 28,
+      "children": [
+        {
+          "type": "text",
+          "id": "A5yDtx",
+          "name": "設タイトル",
+          "fill": "$ui-text",
+          "content": "設定ダイアログ (EPLAN/ACADE調: 左カテゴリツリー+グループボックス+OK/キャンセル/適用)",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 17,
+          "fontWeight": "700"
+        },
+        {
+          "type": "text",
+          "id": "GREo1",
+          "name": "設説明",
+          "fill": "$ui-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "Web調(ピルタブ・トグル・角丸16)を廃止。左ツリーでカテゴリ選択、右は「見出し+罫線」のグループボックス、on/offはチェックボックス、右下にOK/キャンセル/適用。角丸はダイアログ8・コントロール4。",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "PNCcq",
+          "name": "設定D",
+          "clip": true,
+          "width": 900,
+          "fill": "#F2F4F5",
+          "cornerRadius": 8,
+          "stroke": "#C6CBD1",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "R1FItG",
+              "name": "設定D タイトルバー",
+              "width": "fill_container",
+              "fill": "#D9DDE1",
+              "padding": [
+                8,
+                12
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ONWra",
+                  "name": "題",
+                  "fill": "#2B2F33",
+                  "content": "設定",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "OsT1b",
+                  "name": "X",
+                  "fill": "#6B7178",
+                  "content": "✕",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "FYN6p",
+              "name": "設定D 本体",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "nrNtX",
+                  "name": "設定D ツリー",
+                  "width": 180,
+                  "fill": "#F7F8F9",
+                  "stroke": "#C6CBD1",
+                  "strokeWidth": {
+                    "right": 1
+                  },
+                  "layout": "vertical",
+                  "padding": [
+                    8,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "m8mpc",
+                      "name": "ツリー行 一般",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF00",
+                      "padding": [
+                        6,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "K0K0ZB",
+                          "name": "l",
+                          "fill": "#6B7178",
+                          "content": "一般",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "gmAae",
+                      "name": "ツリー行 エージェント",
+                      "width": "fill_container",
+                      "fill": "#CCE4F7",
+                      "padding": [
+                        6,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "p03ZQi",
+                          "name": "l",
+                          "fill": "#2B2F33",
+                          "content": "エージェント",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "DiHz0",
+                      "name": "ツリー行 チャット",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF00",
+                      "padding": [
+                        6,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "N2flkh",
+                          "name": "l",
+                          "fill": "#6B7178",
+                          "content": "チャット",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "y8KXD6",
+                      "name": "ツリー行 MCP",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF00",
+                      "padding": [
+                        6,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "a4NbZ5",
+                          "name": "l",
+                          "fill": "#6B7178",
+                          "content": "MCP",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "EO76s",
+                      "name": "ツリー行 アカウント",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF00",
+                      "padding": [
+                        6,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "x4VTg0",
+                          "name": "l",
+                          "fill": "#6B7178",
+                          "content": "アカウント",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DAIMs",
+                  "name": "設定D 内容",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 14,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "gkJuM",
+                      "name": "GB プロバイダ",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 9,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "rL7Qx",
+                          "name": "GB見出し プロバイダ",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "meAIG",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "プロバイダ",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "i4VNVe",
+                              "name": "罫",
+                              "fill": "#C6CBD1",
+                              "width": "fill_container",
+                              "height": 1
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "MxvA0",
+                          "name": "P行",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "q3Szpj",
+                              "name": "L枠",
+                              "width": 130,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "G10vFf",
+                                  "name": "l",
+                                  "fill": "#2B2F33",
+                                  "content": "プロバイダ:",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "IDtKP",
+                              "name": "箱 Anthropic Claude (Claude Code CLI)",
+                              "width": 300,
+                              "fill": "#FFFFFF",
+                              "cornerRadius": 4,
+                              "stroke": "#C6CBD1",
+                              "strokeWidth": 1,
+                              "padding": [
+                                5,
+                                8
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "j6xSZR",
+                                  "name": "v",
+                                  "fill": "#2B2F33",
+                                  "content": "Anthropic Claude (Claude Code CLI)",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "UxHYT",
+                                  "name": "▾",
+                                  "fill": "#6B7178",
+                                  "content": "▾",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "nL52R",
+                              "name": "状態",
+                              "gap": 5,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "ellipse",
+                                  "id": "TaMz4",
+                                  "name": "dot",
+                                  "fill": "#1F8A4C",
+                                  "width": 6,
+                                  "height": 6
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "a8FD5W",
+                                  "name": "t",
+                                  "fill": "#1F8A4C",
+                                  "content": "検出済み",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "y6mrj",
+                          "name": "cap枠",
+                          "width": "fill_container",
+                          "padding": [
+                            0,
+                            0,
+                            0,
+                            140
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "t12VW",
+                              "name": "cap",
+                              "fill": "#6B7178",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "サブスクリプションのサインインをそのまま利用します。APIキーの入力は不要です (認証はClaude Code CLIのサインインに委譲)。",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "r9Ks4A",
+                      "name": "GB 検出",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 9,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Jk1w5",
+                          "name": "GB見出し 検出",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "u9GJfT",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "検出",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "BtYYX",
+                              "name": "罫",
+                              "fill": "#C6CBD1",
+                              "width": "fill_container",
+                              "height": 1
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "l53cH9",
+                          "name": "検行",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "P6HTz",
+                              "name": "L枠",
+                              "width": 130,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Q6Umjq",
+                                  "name": "l",
+                                  "fill": "#2B2F33",
+                                  "content": "実行ファイル:",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "zULWh",
+                              "name": "箱 claude 2.1.237 (Claude Code)",
+                              "width": 300,
+                              "fill": "#FFFFFF",
+                              "cornerRadius": 4,
+                              "stroke": "#C6CBD1",
+                              "strokeWidth": 1,
+                              "padding": [
+                                5,
+                                8
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "AGmtZ",
+                                  "name": "v",
+                                  "fill": "#2B2F33",
+                                  "content": "claude 2.1.237 (Claude Code)",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "XzeuO",
+                              "name": "検出結果",
+                              "gap": 5,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "fsCYD",
+                                  "name": "✓",
+                                  "fill": "#1F8A4C",
+                                  "content": "✓",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 11,
+                                  "fontWeight": "700"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "TbKHP",
+                                  "name": "t",
+                                  "fill": "#2B2F33",
+                                  "content": "検出しました",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Kf8EX",
+                              "name": "sp",
+                              "width": "fill_container",
+                              "height": 1
+                            },
+                            {
+                              "id": "crRyY",
+                              "type": "ref",
+                              "ref": "x4Qvxy",
+                              "name": "再検出",
+                              "descendants": {
+                                "jkIc9": {
+                                  "content": "再検出"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "NUbIO",
+                      "name": "GB エージェント設定",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 9,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "vtqPB",
+                          "name": "GB見出し エージェント設定",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "IDJdz",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "エージェント設定",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "N2BMJm",
+                              "name": "罫",
+                              "fill": "#C6CBD1",
+                              "width": "fill_container",
+                              "height": 1
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "V1F8M",
+                          "name": "CK 自動許可モード",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "p714D",
+                              "type": "ref",
+                              "ref": "eib89",
+                              "name": "ck"
+                            },
+                            {
+                              "type": "text",
+                              "id": "vfvav",
+                              "name": "l",
+                              "fill": "#2B2F33",
+                              "content": "自動許可モード",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "IB6jd",
+                          "name": "cap枠",
+                          "width": "fill_container",
+                          "padding": [
+                            0,
+                            0,
+                            0,
+                            22
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "AH9bz",
+                              "name": "cap",
+                              "fill": "#6B7178",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "確認なしでClaudeが図面編集を続行します。全編集はundoで戻せます (AIでは常に自動調停)",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "GlIiM",
+                          "name": "CK 図面の自動読み取り",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "gVe4Z",
+                              "type": "ref",
+                              "ref": "eib89",
+                              "name": "ck"
+                            },
+                            {
+                              "type": "text",
+                              "id": "E9P1iV",
+                              "name": "l",
+                              "fill": "#2B2F33",
+                              "content": "図面の自動読み取り",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "n8ZGz5",
+                          "name": "cap枠",
+                          "width": "fill_container",
+                          "padding": [
+                            0,
+                            0,
+                            0,
+                            22
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Ldv6q",
+                              "name": "cap",
+                              "fill": "#6B7178",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "会話開始時にプロジェクトとネットリストを共有します",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "G7naBR",
+                      "name": "GB 詳細設定",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 9,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "TNApE",
+                          "name": "GB見出し 詳細設定",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "RlcCt",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "詳細設定",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "JZxhW",
+                              "name": "罫",
+                              "fill": "#C6CBD1",
+                              "width": "fill_container",
+                              "height": 1
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mTNvU",
+                          "name": "詳行",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "BrY13",
+                              "name": "L枠",
+                              "width": 130,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "v2DrWw",
+                                  "name": "l",
+                                  "fill": "#2B2F33",
+                                  "content": "Claude実行ファイル:",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "yqTsR",
+                              "name": "箱 /usr/local/bin/claude",
+                              "width": 300,
+                              "fill": "#FFFFFF",
+                              "cornerRadius": 4,
+                              "stroke": "#C6CBD1",
+                              "strokeWidth": 1,
+                              "padding": [
+                                5,
+                                8
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "kodRS",
+                                  "name": "v",
+                                  "fill": "#2B2F33",
+                                  "content": "/usr/local/bin/claude",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "pOtWf",
+                              "type": "ref",
+                              "ref": "x4Qvxy",
+                              "name": "参照",
+                              "descendants": {
+                                "jkIc9": {
+                                  "content": "参照..."
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "UH4N2",
+                          "name": "cap枠",
+                          "width": "fill_container",
+                          "padding": [
+                            0,
+                            0,
+                            0,
+                            140
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "JLOnB",
+                              "name": "cap",
+                              "fill": "#6B7178",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "自動検出の代わりに使うClaude実行ファイルのパス。空にすると自動検出に戻ります。",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "TESsi",
+              "name": "設定D フッタ",
+              "width": "fill_container",
+              "stroke": "#C6CBD1",
+              "strokeWidth": {
+                "top": 1
+              },
+              "gap": 8,
+              "padding": [
+                10,
+                14
+              ],
+              "justifyContent": "end",
+              "children": [
+                {
+                  "id": "pGcUb",
+                  "type": "ref",
+                  "ref": "Axj7d",
+                  "name": "OK",
+                  "descendants": {
+                    "gsbC2": {
+                      "content": "OK"
+                    }
+                  }
+                },
+                {
+                  "id": "jrVqL",
+                  "type": "ref",
+                  "ref": "x4Qvxy",
+                  "name": "キャンセル",
+                  "descendants": {
+                    "jkIc9": {
+                      "content": "キャンセル"
+                    }
+                  }
+                },
+                {
+                  "id": "c7VLTy",
+                  "type": "ref",
+                  "ref": "x4Qvxy",
+                  "name": "適用",
+                  "descendants": {
+                    "jkIc9": {
+                      "content": "適用"
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
