@@ -171,6 +171,14 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
             }
         }
     }
+    // 同一シンボル内の同一ピン番号の接続点は内部短絡(端子台の左右貫通)
+    for (p, (eid, _, no, _)) in pins.iter().enumerate() {
+        for (p2, (eid2, _, no2, _)) in pins.iter().enumerate().skip(p + 1) {
+            if eid == eid2 && no == no2 {
+                ds.union(pi + p, pi + p2);
+            }
+        }
+    }
     // ラベル ⇔ Wire上の任意点、同名ラベル同士
     for (l, lab) in labels.iter().enumerate() {
         for (a, w) in wires.iter().enumerate() {
@@ -199,11 +207,14 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
     for (p, (eid, reference, no, _)) in pins.iter().enumerate() {
         let root = ds.find(pi + p);
         if let Some(g) = groups.get_mut(&root) {
-            g.pins.push(NetPin {
-                reference: reference.clone(),
-                entity_id: *eid,
-                pin: no.clone(),
-            });
+            // 同一シンボル同一番号の接続点(内部短絡済み)は1エントリに集約
+            if !g.pins.iter().any(|np| np.entity_id == *eid && np.pin == *no) {
+                g.pins.push(NetPin {
+                    reference: reference.clone(),
+                    entity_id: *eid,
+                    pin: no.clone(),
+                });
+            }
         }
     }
     for (l, lab) in labels.iter().enumerate() {
@@ -356,6 +367,46 @@ mod tests {
         let mut names: Vec<_> = nets.iter().map(|n| n.name.clone()).collect();
         names.sort();
         assert_eq!(names, vec!["N001", "N002"]);
+    }
+
+    #[test]
+    fn same_pin_number_points_short_internally() {
+        // 貫通端子: 同一シンボル内の同一ピン番号の接続点(左右)は内部短絡される
+        let def = SymbolDef {
+            id: "tb_test".into(),
+            name: "TB test".into(),
+            name_ja: "端子台テスト".into(),
+            category: "connector".into(),
+            ref_prefix: "T".into(),
+            primitives: vec![],
+            pins: vec![
+                crate::symbol::PinDef {
+                    number: "1".into(),
+                    name: String::new(),
+                    at: Point::new(-2.5, 0.0),
+                },
+                crate::symbol::PinDef {
+                    number: "1".into(),
+                    name: String::new(),
+                    at: Point::new(2.5, 0.0),
+                },
+            ],
+        };
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        for e in [
+            symbol("tb_test", "T1", 100.0, 50.0),
+            wire(&[(80.0, 50.0), (97.5, 50.0)]),
+            wire(&[(102.5, 50.0), (120.0, 50.0)]),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &[def]);
+        assert_eq!(nets.len(), 1, "左右のワイヤは端子貫通で1ネット: {nets:?}");
+        assert_eq!(nets[0].wire_ids.len(), 2);
+        // pinsは重複排除され1エントリ
+        assert_eq!(nets[0].pins.len(), 1);
+        assert_eq!(nets[0].pins[0].reference, "T1");
+        assert_eq!(nets[0].pins[0].pin, "1");
     }
 
     #[test]
