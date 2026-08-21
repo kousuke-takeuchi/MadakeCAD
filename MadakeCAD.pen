@@ -28999,6 +28999,1203 @@
               ]
             }
           ]
+        },
+        {
+          "type": "text",
+          "id": "T9z9a",
+          "name": "設一般見出し",
+          "fill": "$ui-text",
+          "content": "「一般」カテゴリ: 言語設定 (i18n仕様 F1。既定=English、変更は即時反映)",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 12,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "w7LgJh",
+          "name": "設定D 一般",
+          "clip": true,
+          "width": 900,
+          "fill": "#F2F4F5",
+          "cornerRadius": 8,
+          "stroke": "#C6CBD1",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "H2wGqx",
+              "name": "タイトルバー",
+              "width": "fill_container",
+              "fill": "#D9DDE1",
+              "padding": [
+                8,
+                12
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "a7Ujx",
+                  "name": "題",
+                  "fill": "#2B2F33",
+                  "content": "設定",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "S83y1",
+                  "name": "X",
+                  "fill": "#6B7178",
+                  "content": "✕",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "KpLCy",
+              "name": "本体",
+              "width": "fill_container",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "b1m05",
+                  "name": "ツリー",
+                  "width": 180,
+                  "fill": "#F7F8F9",
+                  "stroke": "#C6CBD1",
+                  "strokeWidth": {
+                    "right": 1
+                  },
+                  "layout": "vertical",
+                  "padding": [
+                    8,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "EjACZ",
+                      "name": "行 一般",
+                      "width": "fill_container",
+                      "fill": "#CCE4F7",
+                      "padding": [
+                        6,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "q2CIqa",
+                          "name": "l",
+                          "fill": "#2B2F33",
+                          "content": "一般",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "FNdcB",
+                      "name": "行 エージェント",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF00",
+                      "padding": [
+                        6,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "NIeq1",
+                          "name": "l",
+                          "fill": "#6B7178",
+                          "content": "エージェント",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "l16qKd",
+                      "name": "行 チャット",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF00",
+                      "padding": [
+                        6,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "nNQtl",
+                          "name": "l",
+                          "fill": "#6B7178",
+                          "content": "チャット",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wLS1l",
+                      "name": "行 MCP",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF00",
+                      "padding": [
+                        6,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lOch3",
+                          "name": "l",
+                          "fill": "#6B7178",
+                          "content": "MCP",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "r9cMiY",
+                      "name": "行 アカウント",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF00",
+                      "padding": [
+                        6,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "voIb5",
+                          "name": "l",
+                          "fill": "#6B7178",
+                          "content": "アカウント",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "YCqTv",
+                  "name": "内容",
+                  "width": "fill_container",
+                  "height": 220,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 14,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "F0JvMF",
+                      "name": "GB 言語",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 9,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "P2jtA",
+                          "name": "GB見出し",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "PJblp",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "言語",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "hVCHw",
+                              "name": "罫",
+                              "fill": "#C6CBD1",
+                              "width": "fill_container",
+                              "height": 1
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "jJAD9",
+                          "name": "言語行",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "ujnsj",
+                              "name": "L枠",
+                              "width": 130,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "rSGmr",
+                                  "name": "l",
+                                  "fill": "#2B2F33",
+                                  "content": "表示言語:",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "HI4eA",
+                              "name": "DD",
+                              "width": 220,
+                              "fill": "#FFFFFF",
+                              "cornerRadius": 4,
+                              "stroke": "#C6CBD1",
+                              "strokeWidth": 1,
+                              "padding": [
+                                5,
+                                8
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "iRq3v",
+                                  "name": "v",
+                                  "fill": "#2B2F33",
+                                  "content": "English",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "knODi",
+                                  "name": "▾",
+                                  "fill": "#6B7178",
+                                  "content": "▾",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "JvI1n",
+                          "name": "cap枠",
+                          "width": "fill_container",
+                          "padding": [
+                            0,
+                            0,
+                            0,
+                            140
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "KL5M0",
+                              "name": "cap",
+                              "fill": "#6B7178",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "既定はEnglish。変更は即時反映されます(再起動不要)。選択肢: English / 日本語。中国語・スペイン語・フランス語・ドイツ語を追加予定。",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Sz1Nl",
+              "name": "フッタ",
+              "width": "fill_container",
+              "stroke": "#C6CBD1",
+              "strokeWidth": {
+                "top": 1
+              },
+              "gap": 8,
+              "padding": [
+                10,
+                14
+              ],
+              "justifyContent": "end",
+              "children": [
+                {
+                  "id": "IVo4f",
+                  "type": "ref",
+                  "ref": "Axj7d",
+                  "name": "OK",
+                  "descendants": {
+                    "gsbC2": {
+                      "content": "OK"
+                    }
+                  }
+                },
+                {
+                  "id": "C8BGC",
+                  "type": "ref",
+                  "ref": "x4Qvxy",
+                  "name": "キャンセル",
+                  "descendants": {
+                    "jkIc9": {
+                      "content": "キャンセル"
+                    }
+                  }
+                },
+                {
+                  "id": "NDLua",
+                  "type": "ref",
+                  "ref": "x4Qvxy",
+                  "name": "適用",
+                  "descendants": {
+                    "jkIc9": {
+                      "content": "適用"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "K4byE",
+      "x": 0,
+      "y": 6540,
+      "name": "M2デザイン - ハーネス/XRef操作UI",
+      "width": 1000,
+      "fill": "$ribbon-bg",
+      "cornerRadius": 12,
+      "layout": "vertical",
+      "gap": 16,
+      "padding": 28,
+      "children": [
+        {
+          "type": "text",
+          "id": "tE7Nu",
+          "name": "HXタイトル",
+          "fill": "$ui-text",
+          "content": "M2 ハーネス境界とクロスリファレンスの操作UI",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 17,
+          "fontWeight": "700"
+        },
+        {
+          "type": "text",
+          "id": "ZmbUR",
+          "name": "HX説明",
+          "fill": "$ui-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "作成=リボン配線グループの「ハーネス」で矩形ドラッグ(Escで解除)。破線囲みはIEC 61082-1様式で印刷にも出る。名前・所属はプロパティパネルで編集。XRefは自動表示で、プロパティの相手先クリックでジャンプ。",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "d1mASn",
+          "name": "HX行",
+          "width": "fill_container",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "KTIsW",
+              "name": "C リボン: 配線グループ(ハーネス追加)",
+              "clip": true,
+              "width": 300,
+              "fill": "#FFFFFF",
+              "cornerRadius": 8,
+              "stroke": "#C6CBD1",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "U1NUC",
+                  "name": "Ch",
+                  "width": "fill_container",
+                  "fill": "#D9DDE1",
+                  "padding": [
+                    6,
+                    10
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "sJpIg",
+                      "name": "t",
+                      "fill": "#2B2F33",
+                      "content": "リボン: 配線グループ(ハーネス追加)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "yy4US",
+                  "name": "Cb",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ce9M2",
+                      "name": "Rグループ",
+                      "width": 150,
+                      "fill": "#F2F4F5",
+                      "cornerRadius": 4,
+                      "stroke": "#C6CBD1",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "RBmFN",
+                          "name": "R小列",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "RndO0",
+                              "name": "R小 複数母線",
+                              "fill": "#FFFFFF00",
+                              "cornerRadius": 4,
+                              "gap": 5,
+                              "padding": [
+                                3,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "t8zVI",
+                                  "name": "ic",
+                                  "fill": "#6B7178",
+                                  "width": 13,
+                                  "height": 13
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "EQgbO",
+                                  "name": "l",
+                                  "fill": "#6B7178",
+                                  "content": "複数母線",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "NpJIc",
+                              "name": "R小 線番挿入",
+                              "fill": "#FFFFFF00",
+                              "cornerRadius": 4,
+                              "gap": 5,
+                              "padding": [
+                                3,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "Wd7Pm",
+                                  "name": "ic",
+                                  "fill": "#6B7178",
+                                  "width": 13,
+                                  "height": 13
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "X7v3k",
+                                  "name": "l",
+                                  "fill": "#6B7178",
+                                  "content": "線番挿入",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "gyMfh",
+                              "name": "R小 信号矢印",
+                              "fill": "#FFFFFF00",
+                              "cornerRadius": 4,
+                              "gap": 5,
+                              "padding": [
+                                3,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "bmTkQ",
+                                  "name": "ic",
+                                  "fill": "#6B7178",
+                                  "width": 13,
+                                  "height": 13
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "RWX8w",
+                                  "name": "l",
+                                  "fill": "#6B7178",
+                                  "content": "信号矢印",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "a0ucK",
+                              "name": "R小 ハーネス",
+                              "fill": "#CCE4F7",
+                              "cornerRadius": 4,
+                              "gap": 5,
+                              "padding": [
+                                3,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "al0eZ",
+                                  "name": "ic",
+                                  "fill": "#4A6FA5",
+                                  "width": 13,
+                                  "height": 13
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "pyObr",
+                                  "name": "l",
+                                  "fill": "#2B2F33",
+                                  "content": "ハーネス",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "cu8xH",
+                                  "name": "new",
+                                  "fill": "#1F6FBF",
+                                  "content": "← 追加",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "kOMnO",
+                          "name": "Rグループ名枠",
+                          "width": "fill_container",
+                          "justifyContent": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "fR13H",
+                              "name": "n",
+                              "fill": "#5A6068",
+                              "content": "配線 ▾",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "U7qd0N",
+                      "name": "注",
+                      "fill": "#6B7178",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "操作: クリック→矩形ドラッグで破線囲み生成。既存配線を跨いで囲むと自動で所属",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "OkamR",
+              "name": "C プロパティ: ハーネス境界選択時",
+              "clip": true,
+              "width": 300,
+              "fill": "#FFFFFF",
+              "cornerRadius": 8,
+              "stroke": "#C6CBD1",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "oEL04",
+                  "name": "Ch",
+                  "width": "fill_container",
+                  "fill": "#D9DDE1",
+                  "padding": [
+                    6,
+                    10
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "V4TFXB",
+                      "name": "t",
+                      "fill": "#2B2F33",
+                      "content": "プロパティ: ハーネス境界選択時",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "JFTQ5",
+                  "name": "Cb",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Xr8gW",
+                      "name": "Pパネル",
+                      "clip": true,
+                      "width": "fill_container",
+                      "cornerRadius": 4,
+                      "stroke": "#C6CBD1",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "S7NQ6",
+                          "name": "Ph",
+                          "width": "fill_container",
+                          "fill": "#E4E8EC",
+                          "padding": [
+                            4,
+                            9
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "G2Iw6a",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "ハーネス境界 (W1)",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "gYd5N",
+                          "name": "p 種別",
+                          "width": "fill_container",
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "GwzcC",
+                              "name": "pl",
+                              "width": 88,
+                              "padding": [
+                                5,
+                                9
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "GA2bz",
+                                  "name": "k",
+                                  "fill": "#6B7178",
+                                  "content": "種別",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "PinK3",
+                              "name": "pv",
+                              "width": "fill_container",
+                              "gap": 6,
+                              "padding": [
+                                4,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "D2Anf",
+                                  "name": "v",
+                                  "fill": "#2B2F33",
+                                  "content": "ハーネス境界",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Lw0Ox",
+                          "name": "p 名前",
+                          "width": "fill_container",
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "JdNhB",
+                              "name": "pl",
+                              "width": 88,
+                              "padding": [
+                                5,
+                                9
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "bSARF",
+                                  "name": "k",
+                                  "fill": "#6B7178",
+                                  "content": "名前",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "X7T1s4",
+                              "name": "pv",
+                              "width": "fill_container",
+                              "gap": 6,
+                              "padding": [
+                                4,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "q870V",
+                                  "name": "in",
+                                  "width": 120,
+                                  "fill": "#FFFFFF",
+                                  "cornerRadius": 4,
+                                  "stroke": "#C6CBD1",
+                                  "strokeWidth": 1,
+                                  "padding": [
+                                    3,
+                                    6
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "txvet",
+                                      "name": "v",
+                                      "fill": "#2B2F33",
+                                      "content": "W1",
+                                      "fontFamily": "JetBrains Mono",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "rh7oD",
+                          "name": "p 含む電線",
+                          "width": "fill_container",
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "lx4V7",
+                              "name": "pl",
+                              "width": 88,
+                              "padding": [
+                                5,
+                                9
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ExThw",
+                                  "name": "k",
+                                  "fill": "#6B7178",
+                                  "content": "含む電線",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "TWUDQ",
+                              "name": "pv",
+                              "width": "fill_container",
+                              "gap": 6,
+                              "padding": [
+                                4,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "SfRYp",
+                                  "name": "v",
+                                  "fill": "#2B2F33",
+                                  "content": "6本 (電線リストにW1列で出力)",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "v0cq7",
+                      "name": "注",
+                      "fill": "#6B7178",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "名前は参照記号と同じ命名規則(W1, W2, …)。囲みのリサイズで所属が再計算される",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "kwvRZ",
+              "name": "C プロパティ: ネット選択時 (XRef)",
+              "clip": true,
+              "width": 300,
+              "fill": "#FFFFFF",
+              "cornerRadius": 8,
+              "stroke": "#C6CBD1",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "pJFb3",
+                  "name": "Ch",
+                  "width": "fill_container",
+                  "fill": "#D9DDE1",
+                  "padding": [
+                    6,
+                    10
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "LX11g",
+                      "name": "t",
+                      "fill": "#2B2F33",
+                      "content": "プロパティ: ネット選択時 (XRef)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n42Vkv",
+                  "name": "Cb",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "iY3ay",
+                      "name": "Pパネル",
+                      "clip": true,
+                      "width": "fill_container",
+                      "cornerRadius": 4,
+                      "stroke": "#C6CBD1",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "NGJ09",
+                          "name": "Ph",
+                          "width": "fill_container",
+                          "fill": "#E4E8EC",
+                          "padding": [
+                            4,
+                            9
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "qSuxE",
+                              "name": "t",
+                              "fill": "#2B2F33",
+                              "content": "ネット 24V_1",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "aI5nG",
+                          "name": "p 線番",
+                          "width": "fill_container",
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "NQBiN",
+                              "name": "pl",
+                              "width": 88,
+                              "padding": [
+                                5,
+                                9
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "b2Lq9Z",
+                                  "name": "k",
+                                  "fill": "#6B7178",
+                                  "content": "線番",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "W50PWe",
+                              "name": "pv",
+                              "width": "fill_container",
+                              "gap": 6,
+                              "padding": [
+                                4,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "y7Z9K4",
+                                  "name": "v",
+                                  "fill": "#2B2F33",
+                                  "content": "12",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "TQVDk",
+                          "name": "p 相手先",
+                          "width": "fill_container",
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "mZXhY",
+                              "name": "pl",
+                              "width": 88,
+                              "padding": [
+                                5,
+                                9
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "E2L8X",
+                                  "name": "k",
+                                  "fill": "#6B7178",
+                                  "content": "相手先",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "B9NagG",
+                              "name": "pv",
+                              "width": "fill_container",
+                              "gap": 6,
+                              "padding": [
+                                4,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "m5BHzH",
+                                  "name": "v",
+                                  "fill": "#1F6FBF",
+                                  "content": "/2.B3",
+                                  "fontFamily": "JetBrains Mono",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "Frsxk",
+                                  "name": "j",
+                                  "fill": "#8A9099",
+                                  "content": "(クリックでシート2 B3へジャンプ)",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 9,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "h3aDC",
+                      "name": "注",
+                      "fill": "#6B7178",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "相手先はプロジェクト全体ネットから自動算出(IEC 61082-1「/シート.ゾーン」)。図面上のXRefラベルは自動描画で手編集しない",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
       ]
     }
