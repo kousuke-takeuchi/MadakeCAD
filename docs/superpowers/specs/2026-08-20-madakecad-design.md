@@ -119,7 +119,9 @@ Pencil(pen.dev)のエージェントUIを手本に、アプリ内でLLMと対話
 - **madake CLI**: Link APIのシンクライアントとしてターミナルから操作(`madake netlist` / `madake export svg` / `madake exec`等)。廃止したコマンドラインUIの代替
 - **フェーズA**(フェーズ2と並行可): A1=チャットフルUI+ClaudeCodeCliBackend+編集オーバーレイ+madake CLI(プラン: `docs/superpowers/plans/2026-08-20-phaseA1-ai-chat-and-cli.md`)、A2=並列エージェント・自動反復、A3=APIキー系バックエンド(OpenAI互換/Gemini/Ollama)+設定画面フル実装
 
-## 6. フェーズ計画
+## 6. フェーズ計画(履歴。現在はマイルストーンM1〜M6が正: `docs/requirements.md` §2)
+
+フェーズ0〜3・A1は完了(2026-08-21)。以降の計画は`docs/specs/`の機能仕様集を参照。
 
 - フェーズ0(完了): Commandエンジン+モデル+シンボル+IO、MCPサーバー、Tauri足場、スモークテスト
 - フェーズ1: Canvas2DエディタUI(Pencilデザイン準拠)、ネットリスト、BOM/電線リストCSV、PDF/SVG出力、端子台動的シンボル、AutoCAD風コマンドライン
