@@ -185,6 +185,7 @@ interface Ipc {
   newProject(name: string): Promise<Patch>;
   getNetlist(sheetId: string): Promise<Net[]>;
   exportSvg(sheetId: string, path: string): Promise<void>;
+  exportPdf(sheetId: string, path: string): Promise<void>;
   exportBom(path: string): Promise<void>;
   exportWireList(path: string): Promise<void>;
   onPatch(handler: (patch: Patch) => void): Promise<UnlistenFn>;
@@ -201,6 +202,7 @@ const tauriIpc: Ipc = {
   newProject: (name: string) => invoke<Patch>("new_project", { name }),
   getNetlist: (sheetId: string) => invoke<Net[]>("get_netlist", { sheetId }),
   exportSvg: (sheetId: string, path: string) => invoke<void>("export_svg", { sheetId, path }),
+  exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
   exportBom: (path: string) => invoke<void>("export_bom", { path }),
   exportWireList: (path: string) => invoke<void>("export_wire_list", { path }),
   onPatch: (handler: (patch: Patch) => void): Promise<UnlistenFn> =>
@@ -239,6 +241,9 @@ const httpIpc: Ipc = {
   getNetlist: (sheetId) => http<Net[]>(`/netlist?sheet_id=${sheetId}`),
   exportSvg: async (sheetId, path) => {
     await http("/export/svg", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
+  },
+  exportPdf: async (sheetId, path) => {
+    await http("/export/pdf", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
   },
   exportBom: async (path) => {
     await http("/export/bom", { method: "POST", body: JSON.stringify({ path }) });

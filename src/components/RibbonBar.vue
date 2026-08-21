@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  AlignJustify, Cable, Copy, Cpu, FileText, Hash, Image, LayoutGrid, Move, MoveRight,
+  AlignJustify, Cable, Copy, Cpu, FileDown, FileText, Hash, Image, LayoutGrid, Move, MoveRight,
   Pencil, Route, Scissors, ShieldCheck, Trash2, type LucideIcon,
 } from "lucide-vue-next";
 import { inject, ref } from "vue";
@@ -29,7 +29,8 @@ interface RibbonItem {
 interface RibbonGroup {
   name: string;
   big: RibbonItem & { color: string };
-  small: RibbonItem[];
+  /** 小ボタンの列(リボンの縦列)。 */
+  small: RibbonItem[][];
 }
 
 const groups: RibbonGroup[] = [
@@ -42,11 +43,11 @@ const groups: RibbonGroup[] = [
       action: () => controller.setTool("wire"),
       isActive: () => controller.tool === "wire",
     },
-    small: [
+    small: [[
       { label: "複数母線", icon: AlignJustify, action: () => todo("複数母線") },
       { label: "線番挿入", icon: Hash, action: () => todo("線番挿入") },
       { label: "信号矢印", icon: MoveRight, action: () => todo("信号矢印") },
-    ],
+    ]],
   },
   {
     name: "部品を挿入",
@@ -57,10 +58,10 @@ const groups: RibbonGroup[] = [
       action: () => (ui.symbolPickerOpen = true),
       isActive: () => controller.tool === "place",
     },
-    small: [
-      { label: "端子台", icon: LayoutGrid, action: () => todo("端子台") },
+    small: [[
+      { label: "端子台", icon: LayoutGrid, action: () => (ui.symbolPickerOpen = true) },
       { label: "回路コピー", icon: Copy, action: () => todo("回路コピー") },
-    ],
+    ]],
   },
   {
     name: "回路図を編集",
@@ -71,11 +72,11 @@ const groups: RibbonGroup[] = [
       action: () => controller.setTool("select"),
       isActive: () => controller.tool === "select",
     },
-    small: [
+    small: [[
       { label: "移動", icon: Move, action: () => { controller.setTool("select"); ui.log("移動: 選択してドラッグ (グリッドスナップ)"); } },
       { label: "トリム", icon: Scissors, action: () => todo("トリム") },
       { label: "削除", icon: Trash2, action: () => controller.deleteSelection() },
-    ],
+    ]],
   },
   {
     name: "検証/レポート",
@@ -86,9 +87,14 @@ const groups: RibbonGroup[] = [
       action: () => todo("検証 (ERC)"),
     },
     small: [
-      { label: "部品表", icon: FileText, action: () => files.exportBom() },
-      { label: "電線リスト", icon: Cable, action: () => files.exportWireList() },
-      { label: "SVG出力", icon: Image, action: () => files.exportSvg() },
+      [
+        { label: "部品表", icon: FileText, action: () => files.exportBom() },
+        { label: "電線リスト", icon: Cable, action: () => files.exportWireList() },
+      ],
+      [
+        { label: "SVG出力", icon: Image, action: () => files.exportSvg() },
+        { label: "PDF出力", icon: FileDown, action: () => files.exportPdf() },
+      ],
     ],
   },
 ];
@@ -121,8 +127,8 @@ const groups: RibbonGroup[] = [
                 <component :is="g.big.icon" :size="26" :color="g.big.color" />
                 <span>{{ g.big.label }}</span>
               </button>
-              <div class="ribbon-smalls">
-                <button v-for="s in g.small" :key="s.label" class="ribbon-small" @click="s.action()">
+              <div v-for="(col, ci) in g.small" :key="ci" class="ribbon-smalls">
+                <button v-for="s in col" :key="s.label" class="ribbon-small" @click="s.action()">
                   <component :is="s.icon" :size="13" class="small-icon" />
                   {{ s.label }}
                 </button>

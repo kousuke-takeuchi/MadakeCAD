@@ -52,6 +52,14 @@ export function useFileActions() {
       await ipc.exportSvg(sheet.id, path);
       ui.log(`EXPORT  SVGを ${path} に書き出しました`);
     },
+    async exportPdf() {
+      const sheet = store.activeSheet;
+      if (!sheet) return;
+      const path = await pickSave(`${sheet.name}.pdf`, [{ name: "PDF", extensions: ["pdf"] }]);
+      if (!path) return;
+      await ipc.exportPdf(sheet.id, path);
+      ui.log(`EXPORT  PDFを ${path} に書き出しました`);
+    },
     async exportBom() {
       const path = await pickSave("部品表.csv", [{ name: "CSV", extensions: ["csv"] }]);
       if (!path) return;
