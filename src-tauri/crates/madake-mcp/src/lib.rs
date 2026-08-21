@@ -124,6 +124,15 @@ pub struct SheetRefParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SimulateOpParams {
+    /// 対象シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 開路として扱うスイッチ/接点の参照記号 (what-if)。
+    #[serde(default)]
+    pub open_switches: Vec<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct SearchPartsParams {
     /// 型番・名称・メーカの部分一致。空で全件。
     pub query: Option<String>,
@@ -359,6 +368,25 @@ impl MadakeMcp {
             .map_err(internal)?;
         std::fs::write(&p.path, pdf).map_err(internal)?;
         json_ok(&serde_json::json!({ "written": p.path }))
+    }
+
+    #[tool(
+        description = "DC動作点シミュレーション(ngspice)を実行し、各ネットの電圧(min/max)・各部品の電流/電力を返す。open_switchesでスイッチ/接点を開路にしたwhat-if解析ができる。負荷電流はシンボル属性current_a、電源はbattery"
+    )]
+    fn simulate_op(
+        &self,
+        Parameters(p): Parameters<SimulateOpParams>,
+    ) -> Result<String, ErrorData> {
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let engine = self.doc.engine.lock().unwrap();
+        let sheet = engine
+            .project()
+            .sheet(sheet_id)
+            .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+        let result =
+            madake_core::sim::simulate_op(sheet, &sheet_symbol_defs(sheet), &p.open_switches)
+                .map_err(internal)?;
+        json_ok(&result)
     }
 
     #[tool(

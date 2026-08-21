@@ -149,6 +149,28 @@ async fn post_export_svg(
     Ok(Json(serde_json::json!({ "written": body.path })))
 }
 
+#[derive(Deserialize)]
+struct SimulateBody {
+    sheet_id: Option<Uuid>,
+    #[serde(default)]
+    open_switches: Vec<String>,
+}
+
+async fn post_simulate_op(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<SimulateBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let engine = doc.engine.lock().unwrap();
+    let sheet = match body.sheet_id {
+        Some(id) => engine.project().sheet(id),
+        None => engine.project().sheets.first(),
+    }
+    .ok_or_else(|| bad_request("sheet not found"))?;
+    let result = madake_core::sim::simulate_op(sheet, &sheet_symbol_defs(sheet), &body.open_switches)
+        .map_err(bad_request)?;
+    Ok(Json(serde_json::json!(result)))
+}
+
 async fn get_verify(
     State(doc): State<SharedDoc>,
     Query(q): Query<NetlistQuery>,
@@ -489,6 +511,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/symbols", get(get_symbols))
         .route("/api/v1/netlist", get(get_netlist))
         .route("/api/v1/verify", get(get_verify))
+        .route("/api/v1/simulate/op", post(post_simulate_op))
         .route("/api/v1/commands", post(post_commands))
         .route("/api/v1/undo", post(post_undo))
         .route("/api/v1/redo", post(post_redo))

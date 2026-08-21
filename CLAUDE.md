@@ -41,6 +41,7 @@ cargo run -p madake-cli -- status                    # 接続確認+概要 (carg
 cargo run -p madake-cli -- netlist [--sheet <ID>]
 cargo run -p madake-cli -- verify [--sheet <ID>]     # 図面検証 (ERC+電気検証)
 cargo run -p madake-cli -- parts [<検索語>] [--category <c>]  # 部品DB検索
+cargo run -p madake-cli -- sim [--open SW1,K1]       # DC動作点シミュレーション
 cargo run -p madake-cli -- export svg|pdf|bom|wire-list <path> [--sheet <ID>]
 cargo run -p madake-cli -- save|open <path.mdkproj>
 cargo run -p madake-cli -- exec <commands.json>      # Command配列JSON → POST /api/v1/commands

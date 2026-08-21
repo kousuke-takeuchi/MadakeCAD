@@ -172,6 +172,96 @@ async fn import_kicad_replaces_project_and_reports() {
 }
 
 #[tokio::test]
+async fn simulate_op_returns_result() {
+    if madake_core::ngspice::find_ngspice().is_none() {
+        eprintln!("ngspice未検出のためスキップ");
+        return;
+    }
+    let mut project = Project::new("simテスト");
+    let sheet_id = project.sheets[0].id;
+    // battery + lamp(2A) を直結した最小回路
+    let bt = madake_core::Entity::Symbol(madake_core::SymbolInstance {
+        id: uuid::Uuid::new_v4(),
+        symbol_id: "battery".into(),
+        at: madake_core::Point::new(60.0, 100.0),
+        rotation: 0,
+        mirror: false,
+        reference: "BT1".into(),
+        value: "DC24V".into(),
+        attrs: Default::default(),
+    });
+    let mut attrs = std::collections::BTreeMap::new();
+    attrs.insert("current_a".to_string(), "2".to_string());
+    let lamp = madake_core::Entity::Symbol(madake_core::SymbolInstance {
+        id: uuid::Uuid::new_v4(),
+        symbol_id: "lamp".into(),
+        at: madake_core::Point::new(110.0, 100.0),
+        rotation: 0,
+        mirror: false,
+        reference: "L1".into(),
+        value: String::new(),
+        attrs,
+    });
+    let w1 = madake_core::Entity::Wire(madake_core::Wire {
+        id: uuid::Uuid::new_v4(),
+        points: vec![madake_core::Point::new(67.5, 100.0), madake_core::Point::new(102.5, 100.0)],
+        color: "red".into(),
+        sq: 0.75,
+        length_m: None,
+        part_no: None,
+        net: None,
+    });
+    let w2 = madake_core::Entity::Wire(madake_core::Wire {
+        id: uuid::Uuid::new_v4(),
+        points: vec![
+            madake_core::Point::new(117.5, 100.0),
+            madake_core::Point::new(130.0, 100.0),
+            madake_core::Point::new(130.0, 130.0),
+            madake_core::Point::new(52.5, 130.0),
+            madake_core::Point::new(52.5, 100.0),
+        ],
+        color: "black".into(),
+        sq: 0.75,
+        length_m: None,
+        part_no: None,
+        net: None,
+    });
+    for e in [bt, lamp, w1, w2] {
+        project.sheets[0].entities.insert(e.id(), e);
+    }
+    let _ = sheet_id;
+    let doc = SharedDoc::new(Engine::new(project));
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude()));
+    let parts = madake_mcp::open_parts(
+        &std::env::temp_dir().join(format!("madake-parts-sim-{}.sqlite", std::process::id())),
+    )
+    .expect("parts db");
+    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/simulate/op")
+        .header("content-type", "application/json")
+        .body(Body::from(json!({ "open_switches": [] }).to_string()))
+        .unwrap();
+    let response = router.oneshot(request).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["voltage"], 24.0);
+    let l1 = body["components"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["reference"] == "L1")
+        .expect("L1");
+    let amps = l1["amps"].as_f64().unwrap();
+    assert!((amps - 2.0).abs() < 0.05, "{amps}");
+}
+
+#[tokio::test]
 async fn export_pdf_writes_pdf_file() {
     let doc = SharedDoc::new(Engine::new(Project::new("PDFテスト")));
     let agent = madake_mcp::agent::manager(&doc, 9310);
