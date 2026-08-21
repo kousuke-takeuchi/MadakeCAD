@@ -2,6 +2,7 @@
 name = "madake-agent"
 version = "0.1.0"
 edition = "2021"
+license = "MIT OR Apache-2.0"
 description = "AIエージェント基盤: Claude Code CLIのstream-json駆動と会話管理"
 
 [dependencies]
