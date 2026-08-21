@@ -92,8 +92,16 @@
 
 ## 7. シンボルエディタ
 
-- SymbolDef(JSONプリミティブ+ピン)のGUIエディタ: グリッド上で線/円/矩形/テキスト/ピンを編集し、ユーザーライブラリ(`MadakeCAD/symbols/`)へ保存。部品挿入ダイアログに「ユーザー」カテゴリ追加
-- 当面はJIS記号の不足分を追記する用途(コンタクタ・遮断器・変圧器・センサ類)。**同梱ライブラリ自体の拡充も本仕様に含む**(JIS C 0617の主要記号を50種程度へ)
+**ベンチマーク: ACADE Symbol Builder+EPLANシンボルエディタ。**
+
+- **図形+属性プレースホルダ**: シンボル定義は図形プリミティブに加えて**属性スロット**(参照記号TAG・説明・型番/メーカ・定格・端子番号ラベル等)の位置・スタイルを持ち、配置時に実値が流し込まれる(ACADEのTAG1/DESC/MFG/CAT属性に相当)。`SymbolDef.text_slots`を追加
+- **ピン(接続点)**: 番号+**接続方向**(上/下/左/右 — 配線の自動接続・引き出し方向に使用)+名前/説明(ACADEのX?TERM##方向付き接続属性、EPLANの接続点ロジックの簡略版)。必ず2.5mmグリッド上
+- **回転バリアント**: EPLANは1シンボル最大8バリアント(A〜H)を持つ。MadakeCADは0/90/180/270を自動生成し、接続点番号・属性位置の追従を既定にして、変になる向きだけ手動上書き
+- **ファミリ・命名**: 参照接頭辞(K/PB/F…)・カテゴリ・検索キーワード。既存シンボルを複製して開始する流儀(ACADEチュートリアル方式)を既定動線に
+- **ライブラリ管理**: 同梱ライブラリ(JIS C 0617主要50種へ拡充)+ユーザーライブラリ(`MadakeCAD/symbols/`)。部品挿入ダイアログに「ユーザー」カテゴリ
+- 検証: ピンのグリッド外・番号重複・必須属性スロット欠落を保存時チェック
+
+受け入れ基準: コンタクタ3Pを既存シンボル複製から作成(ピン6+TAG/定格スロット)→4方向バリアント自動生成→配置・配線・BOM・SVG出力まで既存シンボルと同等に動く。
 
 ## 8. 2D盤レイアウト(ギャップ分析 2026-08-21で追加)
 
@@ -101,6 +109,9 @@
 
 - **フットプリント**: 部品DBの外形寸法(W×H×D)から簡易矩形+参照記号で生成(カタログルックアップで型番→寸法)。回路図の部品一覧から「未配置部品」をドラッグ配置(EPLANのナビゲータからの配置に相当)
 - **DINレール・ダクト**: 専用エンティティ。レールへのスナップ配置、レール充填率の表示、部品間隔チェック(放熱クリアランス)
+- **フットプリントルックアップ**: 型番(メーカ+カタログ番号)→フットプリント定義の対応表(ACADEのfootprint lookup DB相当)。部品DBに`footprint_ref`を追加し、未登録型番は寸法から簡易矩形を自動生成。**挿入経路は3つ**: ①回路図部品リスト(未配置部品パネル) ②アイコンメニュー(回路図に無い盤部品: レール・ダクト・盤筐体等) ③型番検索
+- **配線注記(盤内配線図)**: 回路図の結線データからフットプリント脇に接続先・線番を自動注記し、盤内配線図として出図できる(ACADEのwire annotation相当)
+- **凡例・寸法**: バルーン↔型番の凡例表を盤シートへ自動配置。寸法線・取付穴(M5では3D筐体と同期)
 - **バルーン(アイテム番号)**: 部品に連番のアイテム番号を振り、バルーン(円/多角形)を自動配置。BOMのアイテム番号列と連動
 - **銘板(ネームプレート)**: フットプリントに銘板を関連付け、銘板一覧レポートを出力
 - 帳票: 盤内部品配置表(アイテム番号/参照記号/型番/位置)。FreeCADの3D筐体との同期はM5-3
@@ -109,9 +120,14 @@
 
 ## 9. 図枠・表題欄テンプレート(ギャップ分析 2026-08-21で追加)
 
-- 現状ハードコードのJIS図枠(svg.rs/renderer.ts)を**テンプレートデータ化**: 枠寸法・表題欄レイアウト(セル定義+フィールドバインド)・改訂欄位置をJSONで定義し、プロジェクト/グローバルで差し替え可能に
-- 同梱テンプレート: JIS標準+参考図面様式。OSS利用者が自社様式を作れることがM6普及の前提
-- 未決: テンプレートエディタUIの要否(まずJSON手書き+プレビューで開始する提案)
+**ベンチマーク: EPLANプロットフレーム+ACADEタイトルブロック機構。**
+
+- **テンプレート=プロットフレーム**: 枠図形+**プロパティプレースホルダ**(特殊テキスト)で構成。プロジェクト/シートのプロパティ(プロジェクト名・図番・シート番号/総数・改訂・作成/承認者・日付・尺度・会社名)を`{project.name}` `{sheet.no}/{sheet.total}`のようなバインドで配置し、描画時に実値が入る(EPLANのplaceholder texts、ACADEのWD_TB属性マッピングに相当)
+- **ゾーン設定**: 列数・行数・ゾーン文字(数字/英字)・目盛線をテンプレート側で定義(EPLANのrow/column texts)
+- **表題欄**: セル罫線+フィールドバインド+自由プロジェクト変数(ACADEの複数行説明DESC1..3相当)。**ロゴ画像枠**(PNG/SVG埋め込み)対応
+- **改訂欄**: 位置・行数・成長方向(下から上)をテンプレートで定義(M2改訂欄と連動)
+- **一括適用**: テンプレート差し替え・変更時に全シートへ一括反映(ACADE Title Block Update相当)。プロジェクト/グローバルの2階層
+- 編集: まずJSON手書き+ライブプレビュー(確定済み)。**将来**: グラフィカルなプロットフレームエディタ(EPLANフォームエディタ相当)をM6以降に検討
 
 ## 10. プロジェクト内検索・ナビゲーション(ギャップ分析 2026-08-21で追加)
 
@@ -123,6 +139,9 @@
 
 - [EPLAN: Edit terminal strip dialog](https://www.eplan.help/en-us/Infoportal/Content/Plattform/2024/Content/htm/stripmanagementgui_d_klemmenleistebearbeiten.htm)(列構成・並べ替え・多段・サドルジャンパ・アクセサリ)
 - [ACADE: Terminal Strip Editor](https://help.autodesk.com/view/ACAD_E/2023/ENU/?guid=GUID-D2DDB196-DC73-44C4-AE68-51337272F89A) / [Spreadsheet to PLC I/O Utility](https://help.autodesk.com/cloudhelp/2015/ENU/AutoCAD-Electrical/files/GUID-6C873C2B-E65C-4B8F-8ECA-2104825B3694.htm) / [Panel Layouts](https://help.autodesk.com/cloudhelp/2020/ENU/AutoCAD-Electrical/files/GUID-A1FB1F84-14F1-46D2-A6F5-6F0F515602A7.htm) / [Surfer](https://help.autodesk.com/view/ACAD_E/2024/ENU/?guid=GUID-3740374C-2326-4EEB-A377-F0CC26FB65E8)
+- シンボル: [ACADE Symbol Builder](https://help.autodesk.com/cloudhelp/2019/ENU/AutoCAD-Electrical/files/GUID-AEDA48B3-7BFE-4AAF-BDB8-DF95C10A6089.htm)(TAG/DESC/MFG/CAT属性・方向付き接続点X?TERM##)/ [EPLAN Symbol variants](https://www.eplan.help/en-us/Infoportal/Content/Plattform/2.9/Content/htm/symboleditorgui_h_mitsymbolvariantenarbeiten.htm)(A〜H 8バリアント・接続点ロジック)
+- 盤: [ACADE Footprint Database](https://help.autodesk.com/cloudhelp/2021/ENU/AutoCAD-Electrical/files/GUID-E0C1E7EB-3984-47B5-A03F-238FA3E14729.htm)(型番→フットプリント対応・アイコンメニュー・配線注記)
+- 図枠: [EPLAN Placeholders in Forms and Plot Frames](https://www.eplan.help/en-us/Infoportal/Content/Plattform/2022/Content/htm/formeditorgui_k_platzhalter.htm) / [ACADE Title Block Setup/Update](https://help.autodesk.com/cloudhelp/2018/ENU/AutoCAD-Electrical/files/GUID-DABD91D7-EFFD-4444-A935-8EDE3451F475.htm)(WD_TB属性マッピング・複数行説明)
 - [EPLAN: マクロのバリアント・値セット](https://www.eplan.help/en-us/Infoportal/Content/Plattform/2022/Content/htm/macrosgui_h_makrosauswaehlen.htm) / [端子図フォーム(外部左・内部右+ケーブルチャート)](https://eplan.help/en-us/Infoportal/Content/Plattform/2.9/Content/htm/formeditorgui_k_klemmenplan.htm) / [デバイスナビゲータ](https://blog.eplan.co.uk/why-you-should-use-device-navigators-4)
 
 ## デザイン対象(M4全体)
