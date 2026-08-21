@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**300仕様項目**。
+全5領域・**304仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -112,6 +112,10 @@
 
 - 出力SVGにはJIS図枠・表題欄の文字・配線・参照記号が含まれる。 <sub>`svg_contains_frame_wire_and_symbol`</sub>
 - 品名などの特殊文字(<, >, &, 引用符)はSVG内でXMLエスケープされる。 <sub>`svg_escapes_xml_special_chars`</sub>
+- 改訂が2件あると表題欄の真上に改訂表が描かれ、古い行が下・新しい行が上に積まれ、最下段に列見出し(記号/日付/内容/承認)が出る。 <sub>`svg_draws_revision_table_above_title_block`</sub>
+- 改訂が0件のシートには改訂欄をまったく描かない(空の枠だけも描かない)。 <sub>`svg_omits_revision_table_when_no_revisions`</sub>
+- 表題欄のRev欄には最新改訂の記号が出る。改訂が無いときは表題欄に保存された値がそのまま出る。 <sub>`svg_title_block_rev_follows_latest_revision`</sub>
+- 改訂が7件あると新しい6行だけが描かれ、最も古い行は図面から省かれる(データとしては残る)。 <sub>`svg_revision_table_shows_only_newest_six_rows`</sub>
 - 回転したシンボルは形状ごと回転して描かれる(90度で抵抗の本体が縦長になる)。 <sub>`svg_renders_rotated_symbol_primitives`</sub>
 
 ### シンボルライブラリ
