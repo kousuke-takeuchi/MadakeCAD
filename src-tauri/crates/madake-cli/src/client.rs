@@ -46,6 +46,25 @@ impl ExportKind {
     }
 }
 
+/// `madake renumber` の採番方式 (madake-coreの `RenumberMode` と同じJSON表記)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum RenumberMode {
+    /// 追い番: 既存の線番・ネットラベルを保持し、未採番のネットにだけ番号を振る。
+    Append,
+    /// 振り直し: 自動採番済みの番号を捨てて全ネットを振り直す (手動で付けた名前は保持)。
+    Renumber,
+}
+
+impl RenumberMode {
+    /// `renumber_wires` コマンドへ載せるJSON表記。
+    pub fn as_json(self) -> &'static str {
+        match self {
+            RenumberMode::Append => "append",
+            RenumberMode::Renumber => "renumber",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum CliError {
     /// 接続拒否 = アプリ未起動。
