@@ -12,7 +12,7 @@ with an AI assistant that edits through the same undoable command engine as you,
 and verification grounded in a real circuit solver (ngspice).
 
 [![CI](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml)
-[![Spec clauses](https://img.shields.io/badge/spec_clauses-291_tested-blue)](docs/13-specification.md)
+[![Spec clauses](https://img.shields.io/badge/spec_clauses-300_tested-blue)](docs/13-specification.md)
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
 ![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)

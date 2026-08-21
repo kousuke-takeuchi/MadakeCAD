@@ -30,6 +30,9 @@ pub struct AppSettings {
     pub auto_apply: bool,
     /// 送信のたびに図面コンテキストを`--append-system-prompt`で渡す。
     pub auto_read_drawing: bool,
+    /// UI表示言語(BCP 47の言語タグ小文字。既定は`"en"`)。
+    /// 未知の値はフロントエンド側で`en`へフォールバックする。
+    pub language: String,
 }
 
 impl Default for AppSettings {
@@ -38,6 +41,7 @@ impl Default for AppSettings {
             claude_path: None,
             auto_apply: true,
             auto_read_drawing: true,
+            language: "en".into(),
         }
     }
 }
@@ -55,6 +59,8 @@ impl AppSettings {
             // 非UTF-8パスはそのまま使う(trimできないだけで有効なパス)
             None => Some(path),
         });
+        let language = self.language.trim().to_ascii_lowercase();
+        self.language = if language.is_empty() { "en".into() } else { language };
         self
     }
 }

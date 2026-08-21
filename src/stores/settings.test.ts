@@ -12,6 +12,7 @@ describe("settings store", () => {
       claude_path: null,
       auto_apply: true,
       auto_read_drawing: true,
+      language: "en",
     });
     expect(useSettingsStore().settings).toEqual(defaultSettings());
   });
@@ -22,6 +23,7 @@ describe("settings store", () => {
       claude_path: "/opt/homebrew/bin/claude",
       auto_apply: false,
       auto_read_drawing: false,
+      language: "ja",
     };
     vi.spyOn(settingsApi, "get").mockResolvedValue(stored);
 
@@ -37,7 +39,7 @@ describe("settings store", () => {
   it("save merges the changes, sends them, and adopts the normalized response", async () => {
     const set = vi
       .spyOn(settingsApi, "set")
-      .mockResolvedValue({ claude_path: "/usr/local/bin/claude", auto_apply: true, auto_read_drawing: false });
+      .mockResolvedValue({ claude_path: "/usr/local/bin/claude", auto_apply: true, auto_read_drawing: false, language: "en" });
 
     const store = useSettingsStore();
     const ok = await store.save({ claude_path: "  /usr/local/bin/claude  ", auto_read_drawing: false });
@@ -47,6 +49,7 @@ describe("settings store", () => {
       claude_path: "  /usr/local/bin/claude  ",
       auto_apply: true,
       auto_read_drawing: false,
+      language: "en",
     });
     // サーバー側で空白を落とした値がそのまま表示に使われる
     expect(store.settings.claude_path).toBe("/usr/local/bin/claude");

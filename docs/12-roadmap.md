@@ -39,7 +39,7 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 
 - License decision, repository hygiene audit
 - Windows/Linux builds + CI, installers
-- English/Japanese UI (i18n), contributor docs and community setup
+- Remaining i18n sweep + Chinese/Spanish/French/German catalogs (the i18n foundation — English default + Japanese, message catalog, language setting — lands early, before M6), contributor docs and community setup
 
 ## Long term
 
