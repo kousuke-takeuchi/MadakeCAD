@@ -3,6 +3,7 @@
 
 import type { Point, Sheet, SymbolDef, SymbolInstance } from "../ipc";
 import type { Region } from "./agentOverlay";
+import { resolveSymbolDef } from "./dynamicSymbol";
 import { agentRgba, theme, wireColorScreen } from "./theme";
 import { GRID_PITCH, type Viewport } from "./viewport";
 
@@ -376,6 +377,7 @@ export function renderSheet(
   drawFrame(ctx, vp, sheet);
 
   const defs = new Map(symbols.map((d) => [d.id, d]));
+  const resolve = (id: string) => resolveSymbolDef(id, defs);
   const entities = Object.values(sheet.entities);
 
   for (const e of entities) {
@@ -393,7 +395,7 @@ export function renderSheet(
   }
   for (const e of entities) {
     if (e.kind !== "symbol") continue;
-    const def = defs.get(e.symbol_id);
+    const def = resolve(e.symbol_id);
     if (def) drawSymbol(ctx, vp, e, def, opts.selection.has(e.id));
   }
   for (const e of entities) {
