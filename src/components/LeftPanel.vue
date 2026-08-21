@@ -16,18 +16,18 @@ import ProjectPanel from "./ProjectPanel.vue";
 const chat = useChatStore();
 const ui = useUiStore();
 
-const tabs: { id: LeftPanelTab; label: string; width: number }[] = [
-  { id: "project", label: "プロジェクト", width: 86 },
-  { id: "chat", label: "エージェント", width: 92 },
+const tabs: { id: LeftPanelTab; label: string }[] = [
+  { id: "project", label: "プロジェクト" },
+  { id: "chat", label: "エージェント" },
 ];
 
 const connected = computed(() => chat.detect !== null);
 const chatTab = computed(() => ui.leftPanelTab === "chat");
 
 function selectTab(tab: LeftPanelTab) {
-  ui.setLeftPanelTab(tab);
   // プロジェクトタブへ戻ったら浮き入力カードを出す (入力欄の二重表示を避ける)
-  chat.setPanel(tab === "chat" ? "expanded" : "collapsed");
+  if (tab === "chat") ui.openAgentTab();
+  else ui.closeAgentTab();
 }
 
 function minimize() {
@@ -56,7 +56,6 @@ watch(
         :key="t.id"
         class="tab"
         :class="{ active: ui.leftPanelTab === t.id }"
-        :style="{ width: `${t.width}px` }"
         @click="selectTab(t.id)"
       >
         <span class="tab-label">{{ t.label }}</span>

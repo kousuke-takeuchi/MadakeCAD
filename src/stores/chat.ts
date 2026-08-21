@@ -797,7 +797,7 @@ export const useChatStore = defineStore("chat", {
      *
      * サーバー側でも「最新の適用済みターンか」「送信中でないか」を検証しており、
      * 条件を外れると400が返る。**エラーはそのまま呼び出し元へ投げる**
-     * (ChatPanelがui.logへ「元に戻す失敗: ...」として出す)。失敗時はローカルの
+     * (ChatDockがui.logへ「元に戻す失敗: ...」として出す)。失敗時はローカルの
      * 適用済み表示も変更しない。
      */
     async undoTurn(conversationId: string, messageIndex: number) {
@@ -833,10 +833,9 @@ export const useChatStore = defineStore("chat", {
       this.pendingLocalId = null;
     },
 
-    togglePanel() {
-      this.panelOpen = this.panelOpen === "expanded" ? "collapsed" : "expanded";
-    },
-
+    // panelOpen="expanded" は「左ドックのエージェントタブ表示」の意味。
+    // タブ状態(ui.leftPanelTab)との同期はuiストアのopenAgentTab/closeAgentTabが行うので、
+    // UIコンポーネントは直接これを呼ばずそちらを使うこと。
     setPanel(state: PanelState) {
       this.panelOpen = state;
     },
