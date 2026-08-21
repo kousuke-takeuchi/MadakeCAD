@@ -33,20 +33,77 @@
               "name": "アプリロゴ",
               "width": 26,
               "height": 22,
-              "fill": "#C0392B",
+              "fill": "#00000000",
               "cornerRadius": 3,
               "justifyContent": "center",
               "alignItems": "center",
               "children": [
                 {
-                  "type": "text",
-                  "id": "m19qAZ",
-                  "name": "ロゴ文字",
-                  "fill": "#FFFFFF",
-                  "content": "M",
-                  "fontFamily": "Inter",
-                  "fontSize": 13,
-                  "fontWeight": "800"
+                  "type": "frame",
+                  "id": "xh2x2",
+                  "name": "ロゴマーク",
+                  "width": 20,
+                  "height": 20,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "path",
+                      "id": "J1nak",
+                      "x": 0,
+                      "y": 0,
+                      "name": "竹",
+                      "geometry": "M12 20v-11l12-5.5v16.5z m2.5 3.5h7a2.5 2.5 0 0 1 2.5 2.5v8a2.5 2.5 0 0 1-2.5 2.5h-7a2.5 2.5 0 0 1-2.5-2.5v-8a2.5 2.5 0 0 1 2.5-2.5z m0 16.5h7a2.5 2.5 0 0 1 2.5 2.5v15a2.5 2.5 0 0 1-2.5 2.5h-7a2.5 2.5 0 0 1-2.5-2.5v-15a2.5 2.5 0 0 1 2.5-2.5z m10.7-18q3.8-6.5 9.8-9-1.5 7-7.5 10.2-1.5-0.2-2.3-1.2z",
+                      "viewBox": [
+                        0,
+                        0,
+                        64,
+                        64
+                      ],
+                      "fill": "#2CA866",
+                      "width": 46,
+                      "height": 46
+                    },
+                    {
+                      "type": "path",
+                      "id": "Nd1kO",
+                      "x": 0,
+                      "y": 0,
+                      "name": "電球",
+                      "geometry": "M30 47v-4q0-4-2.64-7.51a15 15 0 1 1 19.28 0q-2.64 3.51-2.64 7.51v4m-13 3.5h12m-10 4h8",
+                      "viewBox": [
+                        0,
+                        0,
+                        64,
+                        64
+                      ],
+                      "fill": "#00000000",
+                      "width": 46,
+                      "height": 46,
+                      "stroke": "#4A9EFF",
+                      "strokeWidth": 2.15625,
+                      "strokeLinejoin": "round",
+                      "strokeLinecap": "round"
+                    },
+                    {
+                      "type": "path",
+                      "id": "U0S6CY",
+                      "x": 0,
+                      "y": 0,
+                      "name": "端子",
+                      "geometry": "M34.6 60a2.4 2.4 0 1 0 4.8 0 2.4 2.4 0 1 0-4.8 0z",
+                      "viewBox": [
+                        0,
+                        0,
+                        64,
+                        64
+                      ],
+                      "fill": "#00000000",
+                      "width": 46,
+                      "height": 46,
+                      "stroke": "#4A9EFF",
+                      "strokeWidth": 1.7249999999999999
+                    }
+                  ]
                 }
               ]
             },
@@ -1286,6 +1343,87 @@
                               "name": "R小名 電線リスト",
                               "fill": "$ui-text",
                               "content": "電線リスト",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wRr1q",
+                      "name": "R小列 出力",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "padding": [
+                        3,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "M1nuP",
+                          "name": "R小 SVG出力",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "fQHxL",
+                              "name": "R小アイコン SVG出力",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "image",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "DjX5Z",
+                              "name": "R小名 SVG出力",
+                              "fill": "$ui-text",
+                              "content": "SVG出力",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "wc4WM",
+                          "name": "R小 PDF出力",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "E4n1f1",
+                              "name": "R小アイコン PDF出力",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "file-down",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "hZSV2",
+                              "name": "R小名 PDF出力",
+                              "fill": "$ui-text",
+                              "content": "PDF出力",
                               "fontFamily": "Noto Sans JP",
                               "fontSize": 10,
                               "fontWeight": "normal"
@@ -13320,6 +13458,85 @@
                   "fill": "$pw-muted"
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "hM7B6",
+              "name": "DSステッパー",
+              "reusable": true,
+              "fill": "#FAFAFA",
+              "cornerRadius": 8,
+              "stroke": "$pw-border",
+              "strokeWidth": 1,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "v3HLsV",
+                  "name": "DSステッパー減",
+                  "width": 26,
+                  "height": 28,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "gUdL1",
+                      "name": "DSステッパー減アイコン",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "minus",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "J6xdD",
+                  "name": "DSステッパー値枠",
+                  "width": 40,
+                  "height": 28,
+                  "fill": "#FFFFFF",
+                  "stroke": "$pw-border",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "wEVYN",
+                      "name": "DSステッパー値",
+                      "fill": "$pw-text",
+                      "content": "8",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "OsmoU",
+                  "name": "DSステッパー増",
+                  "width": 26,
+                  "height": 28,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "H95AgF",
+                      "name": "DSステッパー増アイコン",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "plus",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                }
+              ]
             }
           ]
         },
@@ -16640,20 +16857,77 @@
               "name": "アプリロゴ",
               "width": 26,
               "height": 22,
-              "fill": "#C0392B",
+              "fill": "#00000000",
               "cornerRadius": 3,
               "justifyContent": "center",
               "alignItems": "center",
               "children": [
                 {
-                  "type": "text",
-                  "id": "SfrsZ",
-                  "name": "ロゴ文字",
-                  "fill": "#FFFFFF",
-                  "content": "M",
-                  "fontFamily": "Inter",
-                  "fontSize": 13,
-                  "fontWeight": "800"
+                  "type": "frame",
+                  "id": "aEE6I",
+                  "name": "ロゴマーク",
+                  "width": 20,
+                  "height": 20,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "path",
+                      "id": "OBuO1",
+                      "x": 0,
+                      "y": 0,
+                      "name": "竹",
+                      "geometry": "M12 20v-11l12-5.5v16.5z m2.5 3.5h7a2.5 2.5 0 0 1 2.5 2.5v8a2.5 2.5 0 0 1-2.5 2.5h-7a2.5 2.5 0 0 1-2.5-2.5v-8a2.5 2.5 0 0 1 2.5-2.5z m0 16.5h7a2.5 2.5 0 0 1 2.5 2.5v15a2.5 2.5 0 0 1-2.5 2.5h-7a2.5 2.5 0 0 1-2.5-2.5v-15a2.5 2.5 0 0 1 2.5-2.5z m10.7-18q3.8-6.5 9.8-9-1.5 7-7.5 10.2-1.5-0.2-2.3-1.2z",
+                      "viewBox": [
+                        0,
+                        0,
+                        64,
+                        64
+                      ],
+                      "fill": "#2CA866",
+                      "width": 46,
+                      "height": 46
+                    },
+                    {
+                      "type": "path",
+                      "id": "BM8nn",
+                      "x": 0,
+                      "y": 0,
+                      "name": "電球",
+                      "geometry": "M30 47v-4q0-4-2.64-7.51a15 15 0 1 1 19.28 0q-2.64 3.51-2.64 7.51v4m-13 3.5h12m-10 4h8",
+                      "viewBox": [
+                        0,
+                        0,
+                        64,
+                        64
+                      ],
+                      "fill": "#00000000",
+                      "width": 46,
+                      "height": 46,
+                      "stroke": "#4A9EFF",
+                      "strokeWidth": 2.15625,
+                      "strokeLinejoin": "round",
+                      "strokeLinecap": "round"
+                    },
+                    {
+                      "type": "path",
+                      "id": "f18ztw",
+                      "x": 0,
+                      "y": 0,
+                      "name": "端子",
+                      "geometry": "M34.6 60a2.4 2.4 0 1 0 4.8 0 2.4 2.4 0 1 0-4.8 0z",
+                      "viewBox": [
+                        0,
+                        0,
+                        64,
+                        64
+                      ],
+                      "fill": "#00000000",
+                      "width": 46,
+                      "height": 46,
+                      "stroke": "#4A9EFF",
+                      "strokeWidth": 1.7249999999999999
+                    }
+                  ]
                 }
               ]
             },
@@ -17893,6 +18167,87 @@
                               "name": "R小名 電線リスト",
                               "fill": "$ui-text",
                               "content": "電線リスト",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Xt3Es",
+                      "name": "R小列 出力 D",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "padding": [
+                        3,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "O8unwn",
+                          "name": "R小 SVG出力 D",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "Bg606",
+                              "name": "R小アイコン SVG出力 D",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "image",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "sBiPo",
+                              "name": "R小名 SVG出力 D",
+                              "fill": "$ui-text",
+                              "content": "SVG出力",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "gdyfq",
+                          "name": "R小 PDF出力 D",
+                          "cornerRadius": 2,
+                          "gap": 5,
+                          "padding": [
+                            2,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "d2stmV",
+                              "name": "R小アイコン PDF出力 D",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "file-down",
+                              "library": "lucide",
+                              "fill": "#4A6FA5"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Thc0t",
+                              "name": "R小名 PDF出力 D",
+                              "fill": "$ui-text",
+                              "content": "PDF出力",
                               "fontFamily": "Noto Sans JP",
                               "fontSize": 10,
                               "fontWeight": "normal"
@@ -20863,6 +21218,424 @@
               "icon": "settings",
               "library": "lucide",
               "fill": "$ui-muted"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "vxfw7",
+      "x": 0,
+      "y": 2020,
+      "name": "部品挿入ダイアログ",
+      "width": 640,
+      "fill": "$ribbon-bg",
+      "cornerRadius": 6,
+      "stroke": "$ribbon-line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "FesuM",
+          "name": "SPヘッダ",
+          "width": "fill_container",
+          "fill": "$palette-head",
+          "padding": [
+            8,
+            12
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "Z3KFyq",
+              "name": "SPタイトル",
+              "fill": "$ui-text",
+              "content": "挿入する部品を選択",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "icon",
+              "id": "jLqvo",
+              "name": "SP閉じる",
+              "width": 14,
+              "height": 14,
+              "icon": "x",
+              "library": "lucide",
+              "fill": "$ui-muted"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "bJnNa",
+          "name": "SP検索行外",
+          "width": "fill_container",
+          "padding": [
+            8,
+            12,
+            0,
+            12
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "xt5OG",
+              "name": "SP検索行",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 4,
+              "stroke": "$ribbon-line",
+              "strokeWidth": 1,
+              "gap": 6,
+              "padding": [
+                5,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "M48Ze",
+                  "name": "SP検索アイコン",
+                  "width": 13,
+                  "height": 13,
+                  "icon": "search",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                },
+                {
+                  "type": "text",
+                  "id": "Qbvat",
+                  "name": "SP検索プレースホルダ",
+                  "fill": "$ui-muted",
+                  "content": "検索 (名称・記号)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ZWo58",
+          "name": "SP本体",
+          "width": "fill_container",
+          "layout": "vertical",
+          "padding": [
+            0,
+            12,
+            12,
+            12
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "AsNnH",
+              "name": "SPカテゴリ コネクタ",
+              "fill": "$ui-muted",
+              "content": "コネクタ",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "m3shi",
+              "name": "SPグリッド コネクタ",
+              "width": "fill_container",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ca6db",
+                  "name": "SPセル 端子",
+                  "width": 97,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 4,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 3,
+                  "padding": [
+                    6,
+                    2,
+                    4,
+                    2
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "a7Rel",
+                      "name": "SPプレビュー 端子",
+                      "width": 72,
+                      "height": 40,
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "tQXtX",
+                          "x": 0,
+                          "y": 0,
+                          "name": "SP図 端子円",
+                          "fill": "#00000000",
+                          "width": 12,
+                          "height": 12,
+                          "stroke": "$ui-text",
+                          "strokeWidth": 1.5
+                        },
+                        {
+                          "type": "path",
+                          "id": "PFUAr",
+                          "x": 12,
+                          "y": 0,
+                          "name": "SP図 端子線",
+                          "geometry": "M0 1l18 0",
+                          "width": 18,
+                          "height": 2,
+                          "stroke": "$ui-text",
+                          "strokeWidth": 1.5
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "V3ZuVI",
+                      "name": "SPセル名 端子",
+                      "fill": "$ui-text",
+                      "content": "端子",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "GivZX",
+                  "name": "SPセル コネクタ",
+                  "width": 97,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 4,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 3,
+                  "padding": [
+                    6,
+                    2,
+                    4,
+                    2
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "OXkVG",
+                      "name": "SPプレビュー コネクタ",
+                      "width": 72,
+                      "height": 40,
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "id": "sq77X",
+                          "x": 0,
+                          "y": 0,
+                          "name": "SP図 コネクタ枠",
+                          "fill": "#00000000",
+                          "width": 20,
+                          "height": 32,
+                          "stroke": "$ui-text",
+                          "strokeWidth": 1.5
+                        },
+                        {
+                          "type": "path",
+                          "id": "k2Jlrb",
+                          "x": 20,
+                          "y": 0,
+                          "name": "SP図 コネクタ線",
+                          "geometry": "M0 1l12 0m-12 10l12 0m-12 10l12 0",
+                          "width": 12,
+                          "height": 22,
+                          "stroke": "$ui-text",
+                          "strokeWidth": 1.5
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "FRBDv",
+                      "name": "SPセル名 コネクタ",
+                      "fill": "$ui-text",
+                      "content": "コネクタ(N極)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "R1j9QP",
+                  "name": "SPセル 端子台",
+                  "width": 97,
+                  "fill": "$sel-blue",
+                  "cornerRadius": 4,
+                  "stroke": "$acad-blue",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 3,
+                  "padding": [
+                    6,
+                    2,
+                    4,
+                    2
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "cmwT3",
+                      "name": "SPプレビュー 端子台",
+                      "width": 72,
+                      "height": 40,
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "id": "oqg33",
+                          "x": 0,
+                          "y": 0,
+                          "name": "SP図 端子台枠",
+                          "fill": "#FFFFFF",
+                          "width": 18,
+                          "height": 36,
+                          "stroke": "$ui-text",
+                          "strokeWidth": 1.5
+                        },
+                        {
+                          "type": "ellipse",
+                          "id": "SXgXd",
+                          "x": 18,
+                          "y": 0,
+                          "name": "SP図 端子台円1",
+                          "fill": "#00000000",
+                          "width": 10,
+                          "height": 10,
+                          "stroke": "$ui-text",
+                          "strokeWidth": 1.2
+                        },
+                        {
+                          "type": "ellipse",
+                          "id": "DaJGu",
+                          "x": 28,
+                          "y": 0,
+                          "name": "SP図 端子台円2",
+                          "fill": "#00000000",
+                          "width": 10,
+                          "height": 10,
+                          "stroke": "$ui-text",
+                          "strokeWidth": 1.2
+                        },
+                        {
+                          "type": "ellipse",
+                          "id": "q80PJJ",
+                          "x": 38,
+                          "y": 0,
+                          "name": "SP図 端子台円3",
+                          "fill": "#00000000",
+                          "width": 10,
+                          "height": 10,
+                          "stroke": "$ui-text",
+                          "strokeWidth": 1.2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "gqkll",
+                      "name": "SPセル名 端子台",
+                      "fill": "$ui-text",
+                      "content": "端子台(N極)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "fUvPz",
+          "name": "SP極数バー",
+          "width": "fill_container",
+          "fill": "$palette-bg",
+          "stroke": "$ribbon-line",
+          "strokeWidth": {
+            "top": 1
+          },
+          "gap": 8,
+          "padding": [
+            8,
+            12
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "XHv43",
+              "name": "SP極数ラベル",
+              "fill": "$ui-text",
+              "content": "極数",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "id": "EGnJo",
+              "type": "ref",
+              "ref": "hM7B6",
+              "name": "SP極数ステッパー"
+            },
+            {
+              "type": "text",
+              "id": "tNsYS",
+              "name": "SP極数範囲",
+              "fill": "$ui-muted",
+              "content": "1〜50 (5mmピッチ・中央揃え)",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "N0TmI",
+              "name": "SP極数スペーサ",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "id": "bdy1W",
+              "type": "ref",
+              "ref": "Axj7d",
+              "name": "SP配置ボタン",
+              "descendants": {
+                "gsbC2": {
+                  "content": "配置"
+                }
+              }
             }
           ]
         }
