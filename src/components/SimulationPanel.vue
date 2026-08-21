@@ -69,7 +69,7 @@ function volts(n: { volts_min: number; volts_max: number }): string {
   font-weight: 600;
   color: var(--ui-muted);
   background: var(--hover-bg);
-  border-radius: 8px;
+  border-radius: 999px;
   padding: 1px 8px;
 }
 .chip.open { color: var(--warn-fg); background: var(--warn-bg); }

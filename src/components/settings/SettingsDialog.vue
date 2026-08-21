@@ -1,11 +1,8 @@
 <script setup lang="ts">
-// 設定ダイアログ (Pencilデザイン「AI設定 - Claude詳細」準拠)。
-// A1範囲は「エージェント」タブのClaude欄(検出状態・実行パス・動作トグル)のみ。
-// 他タブはタブだけ出してプレースホルダを表示する。
-import {
-  Asterisk, CheckCircle2, FolderOpen, MessageSquare, RefreshCw, Settings, Sparkles,
-  Terminal, TriangleAlert, User, X, type LucideIcon,
-} from "lucide-vue-next";
+// 設定ダイアログ (Pencilデザイン「設定ダイアログ - CAD調リデザイン」準拠)。
+// EPLAN/ACADEのオプションダイアログ様式: 左カテゴリツリー+グループボックス+OK/キャンセル/適用。
+// 実装済みは「エージェント」カテゴリのみで、他カテゴリはプレースホルダを表示する。
+import { Check, RefreshCw, X } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
 import { useChatStore } from "../../stores/chat";
 import { useSettingsStore } from "../../stores/settings";
@@ -17,23 +14,23 @@ const settings = useSettingsStore();
 const chat = useChatStore();
 
 type TabId = "general" | "agent" | "chat" | "mcp" | "account";
-const tabs: { id: TabId; label: string; icon: LucideIcon }[] = [
-  { id: "general", label: "一般", icon: Settings },
-  { id: "agent", label: "エージェント", icon: Sparkles },
-  { id: "chat", label: "チャット", icon: MessageSquare },
-  { id: "mcp", label: "MCP", icon: Terminal },
-  { id: "account", label: "アカウント", icon: User },
+const tabs: { id: TabId; label: string }[] = [
+  { id: "general", label: "一般" },
+  { id: "agent", label: "エージェント" },
+  { id: "chat", label: "チャット" },
+  { id: "mcp", label: "MCP" },
+  { id: "account", label: "アカウント" },
 ];
 const activeTab = ref<TabId>("agent");
 
-/** パス入力欄(保存するまでは設定に反映しない)。 */
+/** パス入力欄(適用/OKするまでは設定に反映しない)。 */
 const pathInput = ref("");
 const detecting = ref(false);
 
 const detected = computed(() => chat.detect);
 const pathDirty = computed(() => pathInput.value.trim() !== (settings.settings.claude_path ?? ""));
 
-const toggles = computed(() => [
+const checks = computed(() => [
   {
     key: "auto_apply" as const,
     label: "自動許可モード",
@@ -73,15 +70,20 @@ async function redetect() {
   }
 }
 
-/** 実行パスを保存し、そのパスで検出し直す。 */
-async function savePath(ev?: Event) {
-  if (settings.saving || !pathDirty.value) return;
-  if (ev instanceof KeyboardEvent && ev.isComposing) return;
+/** 実行パスを保存し、そのパスで検出し直す(適用)。 */
+async function apply(): Promise<boolean> {
+  if (settings.saving || !pathDirty.value) return true;
   const path = pathInput.value.trim();
-  if (!(await settings.save({ claude_path: path || null }))) return;
+  if (!(await settings.save({ claude_path: path || null }))) return false;
   pathInput.value = settings.settings.claude_path ?? "";
   ui.log(path ? `設定: claude実行パスを ${path} に変更` : "設定: claude実行パスを自動検出に戻しました");
   await redetect();
+  return true;
+}
+
+/** OK = 適用して閉じる。 */
+async function confirm() {
+  if (await apply()) close();
 }
 
 async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
@@ -95,127 +97,116 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
 <template>
   <div v-if="ui.settingsOpen" class="overlay" @click.self="close">
     <div class="dialog">
-      <div class="tab-row">
-        <div class="tab-group">
+      <div class="titlebar">
+        <span class="title">設定</span>
+        <button class="close" title="閉じる" @click="close"><X :size="14" /></button>
+      </div>
+
+      <div class="body-row">
+        <div class="tree">
           <button
             v-for="t in tabs"
             :key="t.id"
-            class="tab"
+            class="tree-item"
             :class="{ active: t.id === activeTab }"
             @click="activeTab = t.id"
           >
-            <component :is="t.icon" :size="13" />
             {{ t.label }}
           </button>
         </div>
-        <div class="tab-space" />
-        <button class="close" title="閉じる" @click="close"><X :size="15" /></button>
-      </div>
 
-      <div class="body">
-        <template v-if="activeTab === 'agent'">
-          <div class="card provider-head">
-            <Asterisk :size="22" class="provider-icon" />
-            <div class="provider-text">
-              <div class="provider-name">Anthropic Claude</div>
-              <div class="provider-sub">Claude Code CLI (サブスクリプションのサインインをそのまま利用)</div>
-            </div>
-            <span v-if="detected" class="badge ok"><i /> 検出済み</span>
-            <span v-else class="badge off"><i /> 未検出</span>
-          </div>
-
-          <div class="columns">
-            <div class="col-main">
-              <div class="card">
-                <div class="card-title">はじめに</div>
-                <p class="card-text">
-                  ターミナルで <code>claude</code> にサインイン済みなら、そのままチャットから図面を編集できます。
-                  APIキーの入力は不要です (認証はClaude Code CLIのサインインに委譲します)。
-                </p>
+        <div class="content">
+          <template v-if="activeTab === 'agent'">
+            <div class="group">
+              <div class="group-head"><span>プロバイダ</span><i /></div>
+              <div class="form-row">
+                <label class="form-label">プロバイダ:</label>
+                <div class="field static">
+                  <span>Anthropic Claude (Claude Code CLI)</span>
+                  <span class="caret">▾</span>
+                </div>
+                <span v-if="detected" class="status ok"><i /> 検出済み</span>
+                <span v-else class="status off"><i /> 未検出</span>
               </div>
+              <p class="caption indent-label">
+                サブスクリプションのサインインをそのまま利用します。APIキーの入力は不要です
+                (認証はClaude Code CLIのサインインに委譲します)。
+              </p>
+            </div>
 
-              <div class="card">
-                <div class="card-title">検出結果</div>
-                <div v-if="detected" class="detect ok-box">
-                  <CheckCircle2 :size="15" class="detect-icon ok-fg" />
-                  <div class="detect-text">
-                    <div class="detect-line">claude CLI を検出しました</div>
-                    <div class="detect-meta">
-                      <span class="mono">{{ detected.path }}</span>
-                      <span class="mono ver">{{ detected.version }}</span>
-                    </div>
-                  </div>
+            <div class="group">
+              <div class="group-head"><span>検出</span><i /></div>
+              <div class="form-row">
+                <label class="form-label">実行ファイル:</label>
+                <div class="field mono-field">
+                  <span v-if="detected">{{ detected.path }} · {{ detected.version }}</span>
+                  <span v-else class="muted">見つかりません</span>
                 </div>
-                <div v-else class="detect warn-box">
-                  <TriangleAlert :size="15" class="detect-icon warn-fg" />
-                  <div class="detect-text">
-                    <div class="detect-line">claude CLI が見つかりません</div>
-                    <div class="detect-meta">
-                      ターミナルで <span class="mono">claude --version</span> が通るか確認するか、
-                      右の「Claude実行ファイル」にパスを指定してください
-                    </div>
-                  </div>
-                </div>
+                <span v-if="detected" class="detect-ok"><Check :size="12" /> 検出しました</span>
+                <span v-else class="detect-warn">claude CLI が見つかりません</span>
+                <span class="spacer" />
                 <button class="btn secondary" :disabled="detecting" @click="redetect">
-                  <RefreshCw :size="13" :class="{ spin: detecting }" />
+                  <RefreshCw :size="12" :class="{ spin: detecting }" />
                   {{ detecting ? "検出中..." : "再検出" }}
                 </button>
               </div>
-
-              <p v-if="settings.error" class="error">{{ settings.error }}</p>
+              <p v-if="!detected" class="caption indent-label">
+                ターミナルで <span class="mono">claude --version</span> が通るか確認するか、
+                下の「Claude実行ファイル」にパスを指定してください。
+              </p>
             </div>
 
-            <div class="col-side">
-              <div class="card">
-                <div class="section-title">エージェント設定</div>
-                <div v-for="t in toggles" :key="t.key" class="toggle-row">
-                  <div class="toggle-text">
-                    <div class="toggle-label">{{ t.label }}</div>
-                    <div class="toggle-desc">{{ t.description }}</div>
-                  </div>
+            <div class="group">
+              <div class="group-head"><span>エージェント設定</span><i /></div>
+              <template v-for="c in checks" :key="c.key">
+                <label class="check-row">
                   <button
-                    class="toggle"
-                    :class="{ on: t.value }"
+                    class="checkbox"
+                    :class="{ on: c.value }"
+                    role="checkbox"
+                    :aria-checked="c.value"
                     :disabled="settings.saving"
-                    :title="t.value ? 'ON' : 'OFF'"
-                    @click="toggle(t.key, !t.value)"
+                    @click="toggle(c.key, !c.value)"
                   >
-                    <span class="knob" />
+                    <Check v-if="c.value" :size="11" :stroke-width="3" />
                   </button>
-                </div>
-              </div>
-
-              <div class="card">
-                <div class="card-title-row">
-                  <span class="card-title plain">Claude実行ファイル</span>
-                  <span class="adv">ADVANCED</span>
-                </div>
-                <p class="card-text small">
-                  自動検出の代わりに使うclaude実行ファイルのパス。空にすると自動検出へ戻ります。
-                </p>
-                <div class="path-row">
-                  <label class="path-input">
-                    <FolderOpen :size="12" class="path-icon" />
-                    <input
-                      v-model="pathInput"
-                      class="mono"
-                      placeholder="/usr/local/bin/claude"
-                      spellcheck="false"
-                      @keydown.enter="savePath"
-                    />
-                  </label>
-                  <button class="btn primary" :disabled="settings.saving || !pathDirty" @click="savePath">
-                    保存
-                  </button>
-                </div>
-              </div>
+                  <span class="check-label">{{ c.label }}</span>
+                </label>
+                <p class="caption indent-check">{{ c.description }}</p>
+              </template>
             </div>
-          </div>
-        </template>
 
-        <div v-else class="card placeholder">
-          「{{ tabs.find((t) => t.id === activeTab)?.label }}」の設定は今後のフェーズで実装予定です
+            <div class="group">
+              <div class="group-head"><span>詳細設定</span><i /></div>
+              <div class="form-row">
+                <label class="form-label" for="claude-path">Claude実行ファイル:</label>
+                <input
+                  id="claude-path"
+                  v-model="pathInput"
+                  class="field input mono"
+                  placeholder="/usr/local/bin/claude"
+                  spellcheck="false"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
+                />
+              </div>
+              <p class="caption indent-label">
+                自動検出の代わりに使うClaude実行ファイルのパス。空にすると自動検出に戻ります。
+              </p>
+            </div>
+
+            <p v-if="settings.error" class="error">{{ settings.error }}</p>
+          </template>
+
+          <p v-else class="placeholder">
+            「{{ tabs.find((t) => t.id === activeTab)?.label }}」の設定は今後のフェーズで実装予定です
+          </p>
         </div>
+      </div>
+
+      <div class="footer">
+        <button class="btn primary" :disabled="settings.saving" @click="confirm">OK</button>
+        <button class="btn secondary" @click="close">キャンセル</button>
+        <button class="btn secondary" :disabled="settings.saving || !pathDirty" @click="apply">適用</button>
       </div>
     </div>
   </div>
@@ -232,181 +223,155 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
   z-index: 100;
 }
 .dialog {
-  width: min(1000px, 94vw);
-  height: min(820px, 90vh);
+  width: min(900px, 94vw);
+  height: min(620px, 90vh);
   background: var(--ribbon-bg);
   border: 1px solid var(--ribbon-line);
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow: var(--shadow-panel-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-/* --- タブ --- */
-.tab-row {
+/* --- タイトルバー --- */
+.titlebar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 10px 16px;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--palette-head);
   flex: none;
 }
-.tab-group {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
-  border: 1px solid var(--ribbon-line);
-  border-radius: 999px;
-}
-.tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  font-size: 12px;
-  color: var(--ui-text);
-  cursor: pointer;
-}
-.tab:hover { background: var(--hover-bg); }
-.tab.active {
-  background: var(--hover-bg);
-  border-color: var(--ribbon-line);
-}
-.tab-space { flex: 1; }
+.title { font-size: 12px; font-weight: 600; color: var(--ui-text); }
 .close {
   border: none;
   background: transparent;
   color: var(--ui-muted);
   display: flex;
   cursor: pointer;
+  padding: 0;
 }
 
-/* --- 本体 --- */
-.body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 6px 24px 24px;
+/* --- 左カテゴリツリー --- */
+.body-row { flex: 1; min-height: 0; display: flex; }
+.tree {
+  width: 180px;
+  flex: none;
+  background: var(--palette-bg);
+  border-right: 1px solid var(--ribbon-line);
+  padding: 8px 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  overflow-y: auto;
 }
-.card {
+.tree-item {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--ui-muted);
+  cursor: pointer;
+}
+.tree-item:hover { background: var(--hover-bg); }
+.tree-item.active {
+  background: var(--sel-blue);
+  color: var(--ui-text);
+  font-weight: 600;
+}
+
+/* --- 内容・グループボックス --- */
+.content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.group { display: flex; flex-direction: column; gap: 9px; }
+.group-head { display: flex; align-items: center; gap: 8px; }
+.group-head span { font-size: 11px; font-weight: 600; color: var(--ui-text); flex: none; }
+.group-head i { flex: 1; height: 1px; background: var(--ribbon-line); }
+
+.form-row { display: flex; align-items: center; gap: 10px; }
+.form-label { width: 130px; flex: none; font-size: 11px; color: var(--ui-text); }
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 300px;
+  padding: 5px 8px;
   background: var(--card-bg);
   border: 1px solid var(--ribbon-line);
-  border-radius: 12px;
-  padding: 12px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.card-title {
+  border-radius: 4px;
   font-size: 12px;
-  font-weight: 600;
   color: var(--ui-text);
 }
-.card-title-row { display: flex; align-items: center; gap: 7px; }
-.card-title.plain { margin: 0; }
-.section-title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  color: var(--ui-muted);
-}
-.card-text {
-  margin: 0;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--ui-muted);
-}
-.card-text.small { font-size: 10px; line-height: 15px; }
-.card-text code, .mono { font-family: var(--mono-font); }
-.adv {
-  background: var(--hover-bg);
-  color: var(--ui-muted);
-  border-radius: 4px;
-  padding: 2px 7px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1px;
-}
-.placeholder {
-  font-size: 12px;
-  color: var(--ui-muted);
-  align-items: center;
-  padding: 28px 16px;
-}
+.field.static { cursor: default; }
+.field .caret { font-size: 10px; color: var(--ui-muted); }
+.field.mono-field { font-family: var(--mono-font); font-size: 11px; }
+.field.mono-field .muted { color: var(--ui-placeholder); }
+.field.input { outline: none; font-size: 11px; }
+.field.input:focus { border-color: var(--acad-blue); }
+.mono { font-family: var(--mono-font); }
+.spacer { flex: 1; }
 
-/* --- プロバイダ見出し --- */
-.provider-head {
-  flex-direction: row;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-}
-.provider-icon { color: var(--acad-blue); flex: none; }
-.provider-text { flex: 1; display: flex; flex-direction: column; gap: 3px; }
-.provider-name { font-size: 17px; font-weight: 700; color: var(--ui-text); }
-.provider-sub { font-size: 12px; color: var(--ui-placeholder); }
-.badge {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 10px;
+.caption { margin: 0; font-size: 10px; line-height: 15px; color: var(--ui-muted); }
+.indent-label { padding-left: 140px; }
+.indent-check { padding-left: 22px; margin-top: -3px; }
+
+/* --- 状態表示 --- */
+.status { display: flex; align-items: center; gap: 5px; font-size: 10px; flex: none; }
+.status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status.ok { color: var(--ok-fg); }
+.status.off { color: var(--off-fg); }
+.detect-ok { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ok-fg); flex: none; }
+.detect-warn { font-size: 11px; color: var(--warn-fg); flex: none; }
+
+/* --- チェックボックス --- */
+.check-row { display: flex; align-items: center; gap: 8px; cursor: pointer; width: fit-content; }
+.checkbox {
+  width: 14px;
+  height: 14px;
   flex: none;
-}
-.badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.badge.ok { background: var(--ok-bg); color: var(--ok-fg); }
-.badge.off { background: var(--off-bg); color: var(--off-fg); }
-
-/* --- 2カラム --- */
-.columns { display: flex; align-items: flex-start; gap: 12px; }
-.col-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
-.col-side { width: 320px; flex: none; display: flex; flex-direction: column; gap: 12px; }
-
-/* --- 検出結果 --- */
-.detect {
+  border: 1px solid var(--ribbon-line);
+  border-radius: 2px;
+  background: var(--card-bg);
+  color: #ffffff;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.checkbox.on { background: var(--acad-blue); border-color: var(--acad-blue); }
+.checkbox:disabled { opacity: 0.6; cursor: default; }
+.check-label { font-size: 12px; color: var(--ui-text); }
+
+/* --- フッタ・ボタン --- */
+.footer {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
   gap: 8px;
-  border-radius: 8px;
-  padding: 9px 11px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--ribbon-line);
 }
-.detect.ok-box { background: var(--ok-bg); }
-.detect.warn-box { background: var(--warn-bg); }
-.detect-icon { flex: none; margin-top: 1px; }
-.ok-fg { color: var(--ok-fg); }
-.warn-fg { color: var(--warn-fg); }
-.detect-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.detect-line { font-size: 12px; font-weight: 600; color: var(--ui-text); }
-.detect-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  font-size: 10px;
-  line-height: 15px;
-  color: var(--ui-muted);
-  word-break: break-all;
-}
-.detect-meta .ver { color: var(--ui-placeholder); }
-
-/* --- ボタン --- */
 .btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  border-radius: 8px;
-  padding: 6px 12px;
+  min-width: 72px;
+  border-radius: 4px;
+  padding: 5px 14px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  width: fit-content;
 }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.primary { background: var(--acad-blue); border: 1px solid var(--acad-blue); color: var(--card-bg); }
@@ -415,58 +380,6 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* --- トグル --- */
-.toggle-row { display: flex; align-items: flex-start; gap: 10px; }
-.toggle-text { flex: 1; display: flex; flex-direction: column; gap: 3px; }
-.toggle-label { font-size: 12px; font-weight: 600; color: var(--ui-text); }
-.toggle-desc { font-size: 10px; line-height: 15px; color: var(--ui-muted); }
-.toggle {
-  position: relative;
-  width: 38px;
-  height: 22px;
-  flex: none;
-  border: none;
-  border-radius: 999px;
-  background: var(--off-fg);
-  cursor: pointer;
-  padding: 0;
-}
-.toggle.on { background: var(--acad-blue); }
-.toggle:disabled { opacity: 0.6; cursor: default; }
-.knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--card-bg);
-  transition: left 0.12s ease;
-}
-.toggle.on .knob { left: 18px; }
-
-/* --- パス入力 --- */
-.path-row { display: flex; align-items: center; gap: 7px; }
-.path-input {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--input-bg);
-  border: 1px solid var(--ribbon-line);
-  border-radius: 8px;
-  padding: 7px 10px;
-}
-.path-icon { color: var(--ui-placeholder); flex: none; }
-.path-input input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: 10px;
-  color: var(--ui-text);
-}
+.placeholder { margin: 0; font-size: 12px; color: var(--ui-muted); padding: 14px 0; }
 .error { margin: 0; font-size: 11px; color: var(--err-fg); }
 </style>
