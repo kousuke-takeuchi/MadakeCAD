@@ -16,7 +16,7 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{http::StatusCode, Json, Router};
 use futures::stream::Stream;
-use madake_agent::{AgentManager, Conversation, DetectResult};
+use madake_agent::{AgentManager, AppSettings, Conversation, DetectResult};
 use madake_core::{builtin_symbols, Command, Patch};
 use serde::Deserialize;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
@@ -252,6 +252,21 @@ async fn get_agent_detect(State(state): State<AgentApi>) -> Result<Json<DetectRe
     state.agent.detect().await.map(Json).map_err(bad_request)
 }
 
+/// 現在のアプリ設定(`~/.madakecad/settings.json`の内容)。
+async fn get_settings(State(state): State<AgentApi>) -> Json<AppSettings> {
+    Json(state.agent.settings())
+}
+
+/// アプリ設定を保存し、エージェントへ反映する。戻り値は正規化後の設定。
+async fn put_settings(
+    State(state): State<AgentApi>,
+    Json(body): Json<AppSettings>,
+) -> Result<Json<AppSettings>, ApiError> {
+    crate::agent::update_settings(&state.agent, body)
+        .map(Json)
+        .map_err(bad_request)
+}
+
 /// エージェントイベントのSSEストリーム。
 ///
 /// イベント名は`agent`、データはTauriの`agent:event`と同一のJSON
@@ -279,6 +294,7 @@ async fn get_agent_events(
 
 /// エージェントマネージャを必要とするRouter(ブラウザ検証用。Tauri IPCと同じ
 /// マネージャを共有)。`/save`・`/load`もチャット履歴を伴うためここに置く。
+/// `/settings`はマネージャへ反映するため同様。
 fn agent_router(state: AgentApi) -> Router {
     Router::new()
         .route("/api/v1/save", post(post_save))
@@ -289,6 +305,7 @@ fn agent_router(state: AgentApi) -> Router {
         .route("/api/v1/agent/undo-turn", post(post_agent_undo_turn))
         .route("/api/v1/agent/detect", get(get_agent_detect))
         .route("/api/v1/agent/events", get(get_agent_events))
+        .route("/api/v1/settings", get(get_settings).put(put_settings))
         .with_state(state)
 }
 

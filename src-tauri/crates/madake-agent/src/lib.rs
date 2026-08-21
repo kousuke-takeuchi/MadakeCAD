@@ -9,6 +9,7 @@ pub mod backend;
 pub mod conversation;
 pub mod events;
 pub mod manager;
+pub mod settings;
 
 pub use backend::{ClaudeCodeCliBackend, DetectResult};
 pub use conversation::{
@@ -17,6 +18,7 @@ pub use conversation::{
 };
 pub use events::{parse_stream_events, parse_stream_line, AgentEvent, StreamParser, Usage};
 pub use manager::{AgentManager, ConversationEvent, DocBridge};
+pub use settings::{load_settings, save_settings, settings_path, AppSettings};
 
 /// madake-agentのエラー。
 #[derive(Debug, thiserror::Error)]
@@ -46,6 +48,29 @@ pub enum AgentError {
     NotLatestTurn(usize),
     #[error("ドキュメント操作に失敗しました: {0}")]
     Doc(String),
+    #[error("設定ファイルの場所を特定できません(ホームディレクトリが不明です)")]
+    NoSettingsPath,
 }
 
 pub type Result<T> = std::result::Result<T, AgentError>;
+
+/// 一時ファイル→renameでアトミックに書き出す。
+///
+/// 途中で失敗しても、書きかけの内容で既存ファイルを壊さない。renameを同一
+/// ファイルシステム内に閉じるため、一時ファイルは保存先と同じ親ディレクトリへ置く。
+pub(crate) fn write_atomic(path: &std::path::Path, contents: &str) -> Result<()> {
+    let dir = path
+        .parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let temp = dir.join(format!(".{}.tmp", uuid::Uuid::new_v4()));
+    if let Err(e) = std::fs::write(&temp, contents) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(e.into());
+    }
+    if let Err(e) = std::fs::rename(&temp, path) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(e.into());
+    }
+    Ok(())
+}

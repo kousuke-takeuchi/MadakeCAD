@@ -6,6 +6,7 @@ export const useUiStore = defineStore("ui", {
   state: () => ({
     commandHistory: ["MadakeCAD コマンドライン (L=配線 E=削除 U=元に戻す)"] as string[],
     symbolPickerOpen: false,
+    settingsOpen: false,
   }),
   getters: {
     /** ステータスバーに出す直近メッセージ。 */

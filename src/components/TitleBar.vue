@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { FilePlus, FolderOpen, Save, Printer, Undo2, Redo2 } from "lucide-vue-next";
+import { FilePlus, FolderOpen, Save, Printer, Settings, Undo2, Redo2 } from "lucide-vue-next";
 import { inject } from "vue";
 import { inTauri } from "../ipc";
 import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
+import { useUiStore } from "../stores/ui";
 
 const store = useDocumentStore();
+const ui = useUiStore();
 const controller = inject<EditorController>("controller")!;
 
 const emit = defineEmits<{ (e: "open"): void; (e: "save"): void }>();
@@ -37,7 +39,9 @@ async function redo() {
     <div class="doc-name" data-tauri-drag-region>
       MadakeCAD - [{{ store.activeSheet?.name ?? "無題" }}.mdkproj]
     </div>
-    <div class="right-space" />
+    <div class="right-space">
+      <button class="gear" title="設定" @click="ui.settingsOpen = true"><Settings :size="14" /></button>
+    </div>
   </div>
 </template>
 
@@ -91,5 +95,24 @@ async function redo() {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.right-space { width: 120px; flex: none; }
+.right-space {
+  width: 120px;
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+.gear {
+  width: 26px;
+  height: 24px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--tb-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.gear:hover { background: rgba(255, 255, 255, 0.1); }
 </style>

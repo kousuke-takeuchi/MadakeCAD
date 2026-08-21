@@ -282,20 +282,7 @@ pub fn save_chat(path: &Path, conversations: &[Conversation]) -> Result<()> {
         format_version: CHAT_FORMAT_VERSION,
         conversations: conversations.to_vec(),
     };
-    let json = serde_json::to_string_pretty(&file)?;
-
-    // renameを同一ファイルシステム内に閉じるため、一時ファイルは保存先と同じ親へ置く
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    let temp = dir.join(format!(".{}.tmp", Uuid::new_v4()));
-    if let Err(e) = std::fs::write(&temp, &json) {
-        let _ = std::fs::remove_file(&temp);
-        return Err(e.into());
-    }
-    if let Err(e) = std::fs::rename(&temp, path) {
-        let _ = std::fs::remove_file(&temp);
-        return Err(e.into());
-    }
-    Ok(())
+    crate::write_atomic(path, &serde_json::to_string_pretty(&file)?)
 }
 
 /// チャット履歴を読み込む。ファイルが無ければ空(新規プロジェクト)。

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use madake_agent::{AgentManager, Conversation, DetectResult};
+use madake_agent::{AgentManager, AppSettings, Conversation, DetectResult};
 use madake_core::{builtin_symbols, Command, Engine, Patch, Project, SymbolDef};
 use madake_mcp::SharedDoc;
 use tauri::{Emitter, State};
@@ -172,6 +172,20 @@ async fn agent_detect(state: State<'_, AppState>) -> Result<DetectResult, String
     state.agent.detect().await.map_err(|e| e.to_string())
 }
 
+/// アプリ設定(`~/.madakecad/settings.json`)を取得する。
+#[tauri::command]
+fn get_settings(state: State<AppState>) -> AppSettings {
+    state.agent.settings()
+}
+
+/// アプリ設定を保存し、エージェントへ反映する(次の送信から有効)。
+///
+/// 戻り値は正規化後の設定(空パスは未指定に畳まれる)。
+#[tauri::command]
+fn set_settings(state: State<AppState>, settings: AppSettings) -> Result<AppSettings, String> {
+    madake_mcp::agent::update_settings(&state.agent, settings)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let doc = SharedDoc::new(Engine::new(Project::new("無題プロジェクト")));
@@ -181,6 +195,8 @@ pub fn run() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_MCP_PORT);
     let agent = madake_mcp::agent::manager(&doc, mcp_port);
+    // 保存済みのアプリ設定(claude実行パス・図面の自動読み取り)を反映してから起動する
+    madake_mcp::agent::load_and_apply_settings(&agent);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -247,7 +263,9 @@ pub fn run() {
             agent_cancel,
             agent_list_conversations,
             agent_undo_turn,
-            agent_detect
+            agent_detect,
+            get_settings,
+            set_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

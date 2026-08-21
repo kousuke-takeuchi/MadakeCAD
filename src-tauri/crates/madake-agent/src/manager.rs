@@ -19,6 +19,7 @@ use uuid::Uuid;
 use crate::backend::{ClaudeCodeCliBackend, DetectResult};
 use crate::conversation::{AppliedRevisions, Conversation, DocState, Role};
 use crate::events::AgentEvent;
+use crate::settings::AppSettings;
 use crate::{AgentError, Result};
 
 /// ユーザーがターンを中断したときにメッセージへ記録する理由。
@@ -60,6 +61,8 @@ struct ManagerState {
     running: HashMap<Uuid, (u64, JoinHandle<()>)>,
     /// 検出済み(または設定済み)のclaude実行パス
     executable: Option<PathBuf>,
+    /// アプリ設定(`~/.madakecad/settings.json`由来)。次の送信から効く
+    settings: AppSettings,
     next_seq: u64,
 }
 
@@ -100,6 +103,21 @@ impl AgentManager {
 
     pub fn executable(&self) -> Option<PathBuf> {
         self.state.lock().unwrap().executable.clone()
+    }
+
+    /// 現在のアプリ設定。
+    pub fn settings(&self) -> AppSettings {
+        self.state.lock().unwrap().settings.clone()
+    }
+
+    /// アプリ設定を反映する(**次の送信から有効**。再起動は不要)。
+    ///
+    /// `claude_path`はそのまま検出の明示パスになる(`None`で自動検出へ戻す)。
+    /// `auto_read_drawing`が`false`なら[`Self::send`]は図面コンテキストを渡さない。
+    pub fn apply_settings(&self, settings: AppSettings) {
+        let mut state = self.state.lock().unwrap();
+        state.executable = settings.claude_path.clone();
+        state.settings = settings;
     }
 
     /// 全会話のスナップショット。
@@ -148,6 +166,9 @@ impl AgentManager {
     /// 1ターンを開始する。`conversation_id`が`None`なら新規会話を作る。
     ///
     /// 戻り値は対象の会話ID。イベントは購読者へ非同期に流れる。
+    ///
+    /// `context`(図面コンテキスト)は設定の「図面の自動読み取り」がOFFなら捨てる。
+    /// 呼び出し側は設定を気にせず毎回渡してよい。
     pub async fn send(
         &self,
         conversation_id: Option<Uuid>,
@@ -157,7 +178,7 @@ impl AgentManager {
     ) -> Result<Uuid> {
         let executable = self.resolve_executable().await?;
 
-        let (id, seq, session, turn_model) = {
+        let (id, seq, session, turn_model, context) = {
             let mut state = self.state.lock().unwrap();
             let id = match conversation_id {
                 Some(id) => {
@@ -179,6 +200,12 @@ impl AgentManager {
             let doc_state = self.doc.state();
             state.next_seq += 1;
             let seq = state.next_seq;
+            // 「図面の自動読み取り」OFFなら図面の内容をCLIへ渡さない
+            let context = state
+                .settings
+                .auto_read_drawing
+                .then_some(context)
+                .flatten();
             let conversation = state
                 .conversation_mut(id)
                 .expect("直前に存在確認済みの会話が消えることはない");
@@ -188,7 +215,7 @@ impl AgentManager {
             conversation.begin_turn(prompt, doc_state);
             let session = conversation.session_id.clone();
             let turn_model = conversation.model.clone();
-            (id, seq, session, turn_model)
+            (id, seq, session, turn_model, context)
         };
 
         let mut backend = ClaudeCodeCliBackend::new(executable, self.mcp_port);
