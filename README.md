@@ -2,6 +2,32 @@
 
 産業用電気図面CAD。JIS準拠の電気配線図(図枠・表題欄・改訂欄・ゾーン番号、電線品番/線色/線径管理)の作成と、配線検証・回路シミュレーション、AIによる自動作図を目標とする。
 
+## 主要機能
+
+- **作図**: JIS C 0617系シンボル+ピン数可変の端子台/コネクタ、直交配線、グリッド/ピンスナップ、参照記号の自動採番、複数シート、表示クラス(レイヤ)
+- **図枠・出力**: JIS図枠(ゾーン番号・表題欄)、SVG/PDF(日本語フォント埋め込み)、部品表CSV、電線リストCSV
+- **検証**: ERC(未接続・重複参照・宙ぶらりん配線・ラベル競合)+電気検証(電源到達性・線径許容電流・電圧降下・ヒューズ定格。ngspice実解ベース)
+- **シミュレーション**: DC動作点(ネット電圧・部品電流/電力、スイッチ開閉のwhat-if)
+- **部品管理**: グローバル部品DB(SQLite。型番・定格・購入先URL)+電線品番マスタ。ダイアログから型番・定格つき配置
+- **インポート**: KiCad `.kicad_sch`
+- **AI・自動化**: 内蔵MCPサーバー、アプリ内AIチャット(Claude Code連携、ターン単位undo)、`madake` CLI、Link API(REST+SSE)
+
+実装状況の詳細は[機能インベントリ](docs/features.md)。
+
+## ドキュメント
+
+| ドキュメント | 内容 |
+|---|---|
+| [要件定義書](docs/requirements.md) | 背景・成功基準・機能/非機能要件・制約 |
+| [技術スタック](docs/tech-stack.md) | 使用技術・バージョン・選定理由 |
+| [データ設計書](docs/data-model.md) | ドキュメントモデル・部品DB ER図・派生データ |
+| [画面設計書](docs/ui-screens.md) | 画面一覧・レイアウト・.pen対応表 |
+| [画面遷移図](docs/ui-flows.md) | ユーザーフロー・ツール状態遷移・エラーフロー |
+| [環境構築手順](docs/setup.md) | 必要ソフト・セットアップ・トラブルシューティング |
+| [機能インベントリ](docs/features.md) | 実装済み/未実装の棚卸しと次期計画候補 |
+| [全体設計スペック](docs/superpowers/specs/2026-08-20-madakecad-design.md) | 設計判断の記録(アーキテクチャ・フェーズ計画) |
+| [デザインシステム](docs/design-system.md) | UIトークン・コンポーネント規約 |
+
 ## アーキテクチャ
 
 全ての編集操作はシリアライズ可能なCommandとして単一のエンジン(madake-core)で実行される。UI(Tauri IPC)とAI(内蔵MCPサーバー)は同じCommand APIを共有し、編集結果はpatchイベントとして全クライアントに配信される。
@@ -18,7 +44,7 @@ UI操作/MCPツール → Command(JSON) → madake-core → patch(JSON) → UI�
 
 ## 開発
 
-前提: Rust(rustup)、Node.js。任意: [ngspice](https://ngspice.sourceforge.io/)(図面検証の電流・電圧をDC動作点解析で判定する。macOS: `brew install ngspice` / Linux: `apt install ngspice` / Windows: 公式インストーラ。未導入でも検証はグラフ近似で動作し、Info診断で近似モードと表示される。実行ファイルは環境変数`MADAKE_NGSPICE`→PATH→OS既定パスの順で探索)。
+詳細は[環境構築手順](docs/setup.md)。前提: Rust(rustup)、Node.js。任意: [ngspice](https://ngspice.sourceforge.io/)(検証・シミュレーションの回路解析。未導入でも検証は近似モードで動作)。
 
 ```bash
 npm install
