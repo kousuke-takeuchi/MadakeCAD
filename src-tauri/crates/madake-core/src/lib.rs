@@ -12,6 +12,7 @@ pub mod pdf;
 pub mod reports;
 pub mod svg;
 pub mod symbol;
+pub mod verify;
 
 pub use command::{Command, Engine, Patch, PatchOp};
 pub use geometry::Point;
