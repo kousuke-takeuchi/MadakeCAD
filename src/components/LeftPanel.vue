@@ -1,0 +1,182 @@
+<script setup lang="ts">
+// 左ドック (デザイン: 「左パネル(タブ式)」)。幅340px・全高。
+// タブ行 + 「プロジェクト」= ProjectPanel / 「エージェント」= ChatDock。
+// 中身はどちらも v-show で常時マウントし、タブ切替で会話やストリーミングを壊さない。
+//
+// chat.panelOpen="expanded" の意味は「左ドックのエージェントタブ表示」。
+// 浮き入力カード (CanvasView の ChatPanel) の送信/展開もこの状態を立てるので、
+// ここで panelOpen ⇔ leftPanelTab を同期する。
+import { History, Minus } from "lucide-vue-next";
+import { computed, watch } from "vue";
+import { useChatStore } from "../stores/chat";
+import { useUiStore, type LeftPanelTab } from "../stores/ui";
+import ChatDock from "./chat/ChatDock.vue";
+import ProjectPanel from "./ProjectPanel.vue";
+
+const chat = useChatStore();
+const ui = useUiStore();
+
+const tabs: { id: LeftPanelTab; label: string; width: number }[] = [
+  { id: "project", label: "プロジェクト", width: 86 },
+  { id: "chat", label: "エージェント", width: 92 },
+];
+
+const connected = computed(() => chat.detect !== null);
+const chatTab = computed(() => ui.leftPanelTab === "chat");
+
+function selectTab(tab: LeftPanelTab) {
+  ui.setLeftPanelTab(tab);
+  // プロジェクトタブへ戻ったら浮き入力カードを出す (入力欄の二重表示を避ける)
+  chat.setPanel(tab === "chat" ? "expanded" : "collapsed");
+}
+
+function minimize() {
+  selectTab("project");
+}
+
+function notImplemented(label: string) {
+  ui.log(`AGENT   ${label}は未実装です (フェーズA2以降)`);
+}
+
+// 浮きカードからの送信/展開など、外から panelOpen が変わった場合もタブを合わせる。
+watch(
+  () => chat.panelOpen,
+  (state) => {
+    if (state === "expanded") ui.setLeftPanelTab("chat");
+    else if (ui.leftPanelTab === "chat") ui.setLeftPanelTab("project");
+  },
+);
+</script>
+
+<template>
+  <aside class="left-panel">
+    <div class="tabs">
+      <button
+        v-for="t in tabs"
+        :key="t.id"
+        class="tab"
+        :class="{ active: ui.leftPanelTab === t.id }"
+        :style="{ width: `${t.width}px` }"
+        @click="selectTab(t.id)"
+      >
+        <span class="tab-label">{{ t.label }}</span>
+        <span class="underline" />
+      </button>
+      <span class="spacer" />
+
+      <template v-if="chatTab">
+        <span class="badge" :class="{ off: !connected }">
+          <span class="dot" />
+          {{ connected ? "接続中" : "未接続" }}
+        </span>
+        <button class="icon-btn" title="履歴" @click="notImplemented('会話履歴')">
+          <History :size="13" />
+        </button>
+        <button class="icon-btn" title="最小化" @click="minimize">
+          <Minus :size="13" />
+        </button>
+      </template>
+    </div>
+
+    <ProjectPanel v-show="!chatTab" />
+    <ChatDock v-show="chatTab" />
+  </aside>
+</template>
+
+<style scoped>
+.left-panel {
+  width: 340px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ribbon-bg);
+  border-right: 1px solid var(--ribbon-line);
+  color: var(--ui-text);
+  user-select: none;
+}
+
+/* タブ行 */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 0 6px;
+  background: var(--palette-head);
+}
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 7px 10px 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.tab-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ui-muted);
+  white-space: nowrap;
+}
+.tab.active .tab-label {
+  font-weight: 700;
+  color: var(--acad-blue);
+}
+.underline {
+  width: 100%;
+  height: 2px;
+  background: transparent;
+}
+.tab.active .underline {
+  background: var(--acad-blue);
+}
+.tab:hover .tab-label {
+  color: var(--ui-text);
+}
+.tab.active:hover .tab-label {
+  color: var(--acad-blue);
+}
+.spacer {
+  flex: 1;
+}
+.icon-btn {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--ui-muted);
+  cursor: pointer;
+}
+.icon-btn:hover {
+  color: var(--ui-text);
+}
+.badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9px;
+  background: var(--ok-bg);
+  font-size: 10px;
+  color: var(--ok-fg);
+  white-space: nowrap;
+}
+.badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok-fg);
+}
+.badge.off {
+  background: var(--off-bg);
+  color: var(--off-fg);
+}
+.badge.off .dot {
+  background: var(--off-fg);
+}
+</style>

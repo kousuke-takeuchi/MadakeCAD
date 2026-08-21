@@ -88,11 +88,12 @@ const toolButtons = [
 </template>
 
 <style scoped>
+/* 左ドック (LeftPanel) のタブ内容。幅と右境界はドック側が持つ */
 .panel {
-  width: 252px;
-  flex: none;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
   background: var(--palette-bg);
-  border-right: 1px solid var(--ribbon-line);
   display: flex;
   flex-direction: column;
   overflow: hidden;
