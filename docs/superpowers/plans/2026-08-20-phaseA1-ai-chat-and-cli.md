@@ -163,3 +163,48 @@
 - spec §5.2のA1範囲(チャットUI+ClaudeCodeCliBackend)+ユーザー追加要望(オーバーレイ・CLI・コマンドラインUI廃止)を全てタスク化した
 - モデルピッカーのマルチプロバイダ表示はA3の設定実装と依存するため、A1はAnthropicグループのみ表示に留める(Task 6に明記)
 - 型整合: AgentEvent(Task 1)をTask 2/4/5が同名で使用。applied_revisions(Task 3)をTask 6の「元に戻す」が参照
+
+## 既知の制限 (A2持ち越し)
+
+Task 4のレビュー指摘のうち、A1では設計変更が大きいため意図的に見送った項目。
+
+### 1. ターン安定IDが無い(`message_index`指定の脆さ)
+
+`agent_undo_turn` / `POST /api/v1/agent/undo-turn` は対象ターンを
+「会話内の`messages`添字」で指定する。添字はメッセージ追加・履歴移行で容易にずれるため、
+本来はターンごとの安定ID(UUID)を持たせるべき。
+
+A1での防御:
+- サーバー側で「最新の適用済みアシスタントターンでなければ`NotLatestTurn`エラー」ガードを掛けた
+  (後続ターンに編集が残っている場合・ドキュメントのundoスタックがターン終了時と食い違う場合・
+  実行中ターンは拒否)。誤った添字を渡しても別ターンを巻き戻すことはない
+- UIも「元に戻す」ボタンを最新ターンにのみ出す
+
+A2で`ChatMessage`にターンIDを追加し、`undo_turn(turn_id)`へ移行する
+(`chat.json`の`format_version`を上げる)。
+
+### 2. ユーザー編集がターン中に混ざった場合のundo境界
+
+undo回数は「ターン前後のundoスタック深さの増分」(`ChatMessage::applied_undo_depth`)で決める。
+revision差分はundo/redoでも進むため使えない。ただし深さ増分は
+「そのターンの間にドキュメントへ積まれた編集」であって「エージェントが行った編集」ではない。
+ターン中にユーザーがUIで編集すると、その編集もターンの巻き戻し対象に含まれる。
+
+正確に切り分けるにはCommandエンジン側で編集の出所(origin: user / agent / mcp)を
+履歴エントリに持たせる必要がある。A2で`Engine`の`HistoryEntry`にoriginを追加して対応する。
+`applied_revisions`は表示・デバッグ用に残してある。
+
+### 3. キャンセル遅延イベントの誤着弾(broadcast側のターンseq未導入)
+
+`AgentManager::cancel`はターンタスクをabortするが、`ConversationEvent`は
+`{conversation_id, event}`しか持たないため、キャンセル直前にbroadcastされたイベントが
+次のターンのものとしてUIに着弾し得る(現実装ではrxのdropで即座に止まるので窓は狭い)。
+配信ペイロードにターンseqを載せ、購読側が古いseqを捨てられるようにするのがA2の対応。
+
+### 4. broadcast Lagged時の再同期通知が無い
+
+`/api/v1/agent/events`(SSE)とTauriの`agent:event`転送は、
+`broadcast::error::RecvError::Lagged`を`continue`で読み飛ばしている。
+遅い購読者はイベントを取りこぼしたまま気付けない(テキストが欠けたチャットが残る)。
+A2で「取りこぼし通知イベント」を流し、UIが`agent_list_conversations`で会話を
+まるごと再取得して再同期できるようにする。
