@@ -28,7 +28,11 @@ fn setup(script: &str) -> (SharedDoc, Arc<AgentManager>, Router) {
     let doc = SharedDoc::new(Engine::new(Project::new("テストプロジェクト")));
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude(script)));
-    let router = madake_mcp::link_api::router(doc.clone(), Arc::clone(&agent));
+    let parts = madake_mcp::open_parts(
+        &std::env::temp_dir().join(format!("madake-parts-agent-{}.sqlite", std::process::id())),
+    )
+    .expect("parts db");
+    let router = madake_mcp::link_api::router(doc.clone(), Arc::clone(&agent), parts);
     (doc, agent, router)
 }
 
