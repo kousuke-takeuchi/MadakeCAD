@@ -8,6 +8,7 @@ pub mod geometry;
 pub mod io;
 pub mod model;
 pub mod netlist;
+pub mod ngspice;
 pub mod pdf;
 pub mod reports;
 pub mod spice;
