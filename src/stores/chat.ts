@@ -450,6 +450,8 @@ interface ChatState {
   detect: AgentDetect | null;
   /** サーバー採番待ちのローカル会話id(イベントが先に届いた場合の引き取り用) */
   pendingLocalId: string | null;
+  /** 採番前(local-)の会話でキャンセルが押された印。採番後にサーバーへ中断を送る */
+  cancelRequested: boolean;
   unlisten: UnlistenFn | null;
   /** 購読処理そのもの(解決前にunsubscribeされても確実に閉じるため保持する) */
   subscription: Promise<UnlistenFn> | null;
@@ -466,6 +468,7 @@ export const useChatStore = defineStore("chat", {
     model: null,
     detect: null,
     pendingLocalId: null,
+    cancelRequested: false,
     unlisten: null,
     subscription: null,
     reloading: false,
@@ -714,6 +717,7 @@ export const useChatStore = defineStore("chat", {
       // (ローカルidをAPIへ渡すとRust側のUuidデシリアライズで必ず失敗する)
       const pending = isLocalId(conv.id);
       this.pendingLocalId = pending ? conv.id : null;
+      this.cancelRequested = false;
 
       conv.messages.push(newMessage("user", text, false));
       conv.messages.push(newMessage("assistant", "", true));
@@ -742,10 +746,16 @@ export const useChatStore = defineStore("chat", {
       if (!this.pendingLocalId) return;
       const pending = this.conversations.find((c) => c.id === this.pendingLocalId);
       this.pendingLocalId = null;
-      if (!pending || pending.id === id) return;
-      if (this.conversations.some((c) => c.id === id)) return;
-      if (this.activeId === pending.id) this.activeId = id;
-      pending.id = id;
+      if (pending && pending.id !== id && !this.conversations.some((c) => c.id === id)) {
+        if (this.activeId === pending.id) this.activeId = id;
+        pending.id = id;
+      }
+      // 採番前にキャンセルが押されていた場合、サーバー側のターンはまだ走っている
+      // のでここで中断を送る(失敗は握りつぶす: ターンは自然完了するだけ)
+      if (this.cancelRequested) {
+        this.cancelRequested = false;
+        void agentApi.cancel(id).catch(() => undefined);
+      }
     },
 
     /**
@@ -758,6 +768,10 @@ export const useChatStore = defineStore("chat", {
     async cancel() {
       const conv = this.conversations.find((c) => c.id === this.activeId) ?? null;
       const remoteId = conv && !isLocalId(conv.id) ? conv.id : null;
+      if (conv && !remoteId && streamingTurn(conv)) {
+        // 採番前: サーバー側ターンはsend解決後にadoptConversationIdが中断する
+        this.cancelRequested = true;
+      }
       if (remoteId) {
         try {
           await agentApi.cancel(remoteId);

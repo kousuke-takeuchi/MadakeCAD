@@ -58,6 +58,7 @@ onMounted(async () => {
   --shadow-popup: 0 6px 18px #00000028;
   --shadow-panel: 0 6px 22px #00000030;
   --shadow-panel-lg: 0 8px 28px #00000038;
+  --scrim: #00000059;
 }
 html, body, #app {
   margin: 0;

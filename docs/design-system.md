@@ -29,6 +29,7 @@
 | 無効 `--off-fg`/`--off-bg` | #9CA3AF / #F3F4F6 | 未接続(中立)・今後追加の枠 |
 
 影とフォントもトークン化する: `--shadow-popup` (0 6px 18px #00000028) / `--shadow-panel` (0 6px 22px #00000030) / `--shadow-panel-lg` (0 8px 28px #00000038) / `--mono-font` (JetBrains Mono → SF Mono → Menlo)。
+- `--scrim`: #00000059 — モーダルダイアログの背面スクリム(設定/シンボルピッカー共通)
 
 作図領域の配線色は`src/canvas/theme.ts`の`wireColorScreen()`(黒背景用)と`madake-core/src/svg.rs`の`color_hex()`(白紙印刷用)の2表で管理。
 

@@ -74,7 +74,9 @@ async function redetect() {
 }
 
 /** 実行パスを保存し、そのパスで検出し直す。 */
-async function savePath() {
+async function savePath(ev?: Event) {
+  if (settings.saving || !pathDirty.value) return;
+  if (ev instanceof KeyboardEvent && ev.isComposing) return;
   const path = pathInput.value.trim();
   if (!(await settings.save({ claude_path: path || null }))) return;
   pathInput.value = settings.settings.claude_path ?? "";
@@ -223,7 +225,7 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
