@@ -642,6 +642,9 @@ export const useChatStore = defineStore("chat", {
       const conv = this.ensureConversation(payload.conversation_id);
       // 未知の会話(別クライアントが開始したターン)は捏造せず捨てる
       if (!conv) return;
+      // Rust側touch()のミラー: イベントを畳み込んだ会話は「今」更新されたことにする
+      // (正確な値はloadConversations()の再取得で上書きされる)
+      conv.updated_at = Date.now();
       const event = payload.event;
       switch (event.type) {
         case "session_started":
@@ -808,6 +811,7 @@ export const useChatStore = defineStore("chat", {
       const pending = isLocalId(conv.id);
       this.pendingLocalId = pending ? conv.id : null;
       this.cancelRequested = false;
+      conv.updated_at = Date.now();
 
       conv.messages.push(newMessage("user", text, false));
       conv.messages.push(newMessage("assistant", "", true));
@@ -917,10 +921,15 @@ export const useChatStore = defineStore("chat", {
       this.activeId = conversationId;
     },
 
-    /** 新しい空の会話へ切り替える(送信時にサーバーがidを採番する)。 */
+    /**
+     * 新しい空の会話へ切り替える(送信時にサーバーがidを採番する)。
+     *
+     * `pendingLocalId`には触らない: 採番待ちの会話をここでクリアすると、
+     * 進行中のsend()の採番結果を引き取れず孤立会話がstreamingのまま残り、
+     * 以降の送信が永久にブロックされる。
+     */
     newConversation() {
       this.activeId = null;
-      this.pendingLocalId = null;
     },
 
     // panelOpen="expanded" は「左ドックのエージェントタブ表示」の意味。

@@ -202,6 +202,15 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.messages[0].applied_undo_depth).toEqual({ start: 3, end: 6 });
   });
 
+  it("イベントを畳み込んだ会話はupdated_atが進む(履歴の最新順に反映)", () => {
+    const store = useChatStore();
+    seed(store);
+    expect(store.conversations[0].updated_at).toBe(0);
+    const before = Date.now();
+    feed(store, [{ type: "text_delta", text: "作業中" }]);
+    expect(store.conversations[0].updated_at).toBeGreaterThanOrEqual(before);
+  });
+
   it("完了後の新しいデルタは新しいターンを開始する", () => {
     const store = useChatStore();
     seed(store);
@@ -644,6 +653,26 @@ describe("chat store: アクション", () => {
     await store.subscribe();
     expect(onEvent).toHaveBeenCalledTimes(2);
     expect(store.unlisten).not.toBeNull();
+  });
+
+  it("newConversationは採番待ち(pendingLocalId)を巻き込まない", async () => {
+    let resolveSend: (id: string) => void = () => undefined;
+    vi.spyOn(agentApi, "send").mockImplementation(
+      () => new Promise<string>((resolve) => (resolveSend = resolve)),
+    );
+    const store = useChatStore();
+    const sending = store.send("配線して");
+    const localId = store.pendingLocalId;
+    expect(localId).not.toBeNull();
+
+    // 採番前に新規会話を押しても、進行中のsendの採番引き取りは生きている
+    store.newConversation();
+    expect(store.activeId).toBeNull();
+    expect(store.pendingLocalId).toBe(localId);
+
+    resolveSend(CONV);
+    await sending;
+    expect(store.conversations.some((c) => c.id === CONV)).toBe(true);
   });
 
   it("setModel / setPanel / newConversation", async () => {

@@ -262,6 +262,7 @@ impl AgentManager {
             handle.abort();
             let doc_state = self.doc.state();
             state.conversation_mut(conversation_id).and_then(|c| {
+                c.touch();
                 let message = c.current_turn_mut()?;
                 message.error = Some(CANCELLED_MESSAGE.to_string());
                 message.finish_turn(doc_state);
@@ -339,11 +340,11 @@ impl AgentManager {
         // 失敗しても「実行できた回数」だけは必ず記録する(リトライで戻しすぎないため)
         {
             let mut state = self.state.lock().unwrap();
-            if let Some(message) = state
-                .conversation_mut(conversation_id)
-                .and_then(|c| c.messages.get_mut(message_index))
-            {
-                message.record_undone(undone);
+            if let Some(conversation) = state.conversation_mut(conversation_id) {
+                conversation.touch();
+                if let Some(message) = conversation.messages.get_mut(message_index) {
+                    message.record_undone(undone);
+                }
             }
         }
         match failure {
@@ -448,7 +449,12 @@ impl Turn {
             }
             state
                 .conversation_mut(self.conversation_id)
-                .and_then(|c| c.current_turn_mut())
+                .and_then(|c| {
+                    if final_state.is_some() {
+                        c.touch();
+                    }
+                    c.current_turn_mut()
+                })
                 .and_then(|message| {
                     if let Some(doc_state) = final_state {
                         message.finish_turn(doc_state);
