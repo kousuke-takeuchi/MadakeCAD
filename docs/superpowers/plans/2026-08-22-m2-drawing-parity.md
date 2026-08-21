@@ -72,9 +72,26 @@ SVGは破線ポリゴン(`stroke-dasharray="3 2"`・線幅0.25mm)を配線の**�
 
 ### Task 6: シート間クロスリファレンス
 
-- [ ] Step 1 (red): Rustテスト: extract_netlist_projectが同名ラベルをシート横断統合/相手先アドレス算出(「/2.B3」書式・複数列挙・自シート除外)/シート跨ぎネットの電線リスト・ERC統合
-- [ ] Step 2 (green): コア実装+SVGのXRefラベル描画。コミット
-- [ ] Step 3 (red/green): UI: renderer.ts描画+プロパティパネル「相手先」リンク(クリックでreveal)。実機確認+コミット
+- [x] Step 1 (red): Rustテスト: extract_netlist_projectが同名ラベルをシート横断統合/相手先アドレス算出(「/2.B3」書式・複数列挙・自シート除外)/シート跨ぎネットの電線リスト・ERC統合
+- [x] Step 2 (green): コア実装+SVGのXRefラベル描画。コミット
+- [x] Step 3 (red/green): UI: renderer.ts描画+プロパティパネル「相手先」リンク(クリックでreveal)。実機確認+コミット
+
+実装メモ(確定): コアは`madake-core/src/xref.rs`。**統合キーはネットラベル名**で、`extract_netlist_project`が
+シートごとのネットリストを取り、同名ラベルを共有するネット同士をシートを跨いで1ネットに統合する
+(`ProjectNet { name, label_names, sites, members }`)。**相手先アドレスは同名ラベルの他シートでの所在**
+(`NetSite { sheet_id, sheet_no(1始まり), sheet_name, zone, label_id, name }` の `/シート.ゾーン`)で、
+自シート内の所在は除外・同一住所は重複排除・相手がいなければ何も表示しない。この定義なら
+Rust(`xref.rs`)とTS(`canvas/xref.ts`)で同じ計算を持てるので、キャンバスとSVGが必ず一致する。
+ゾーンは図枠(FRAME_MARGIN=10mm)を`zone_cols`×`zone_rows`で割り、行=英字を上から・列=数字を左から
+(図枠外の点は最も近いゾーンへ丸める)。**表示位置はネットラベル本文の右脇**(本文幅を文字数×2.5mm×0.6で
+見積り+間隔1mm、ベースラインは本文と同じ)で、等幅・文字高2.0mm、複数は半角空白区切り。
+SVG/PDFは`svg::project_sheet_to_svg` / `pdf::project_sheet_to_pdf`(シート単体の`sheet_to_svg`は
+従来どおりXRefなし)。ERCは`verify::verify_project`を追加し、`erc.label_conflict`をシートを跨いだ
+統合ネットで評価する(2枚に跨る競合も1件にまとまる)。Tauri IPC / MCP / Link APIのSVG・PDF出力と
+全体検証をプロジェクト文脈へ切替。フロントは`canvas/xref.ts`+`renderer.ts`(`theme.xref`)、
+表示クラスは**「ネットラベル」に含める**(新クラスは作らない)。プロパティパネルの「相手先」行は
+acad-blue mono 600のリンクで、クリックで該当シートへ切替+相手ラベルを選択+ズーム
+(検証結果パネルと同じ`controller.reveal`)。
 
 ### Task 7: 露出と仕上げ
 
