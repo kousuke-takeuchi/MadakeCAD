@@ -95,7 +95,7 @@ const { open: contextOpen, toggle: toggleContext, close: closeContext } = usePop
   height: 26px;
   flex-shrink: 0;
   border: none;
-  border-radius: 13px;
+  border-radius: 999px;
   background: var(--hover-bg);
   color: var(--ui-placeholder);
   cursor: pointer;

@@ -71,7 +71,7 @@ async function redo() {
   width: 26px;
   height: 24px;
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
   color: var(--tb-text);
   display: flex;
@@ -102,7 +102,7 @@ async function redo() {
   width: 26px;
   height: 24px;
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
   color: var(--tb-text);
   display: flex;

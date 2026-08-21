@@ -29,7 +29,7 @@ const name = computed(() => shortToolName(props.call.tool));
   width: 100%;
   padding: 5px 9px;
   border: 1px solid var(--ribbon-line);
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--input-bg);
   min-width: 0;
 }

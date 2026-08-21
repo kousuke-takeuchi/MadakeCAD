@@ -68,7 +68,7 @@ const groups: RibbonGroup[] = [
     big: {
       label: "配線",
       icon: Route,
-      color: "#c0392b",
+      color: "var(--icon-wire)",
       action: () => controller.setTool("wire"),
       isActive: () => controller.tool === "wire",
     },
@@ -83,7 +83,7 @@ const groups: RibbonGroup[] = [
     big: {
       label: "部品挿入",
       icon: Cpu,
-      color: "#1f6fbf",
+      color: "var(--acad-blue)",
       action: () => (ui.symbolPickerOpen = true),
       isActive: () => controller.tool === "place",
     },
@@ -97,7 +97,7 @@ const groups: RibbonGroup[] = [
     big: {
       label: "編集",
       icon: Pencil,
-      color: "#b7791f",
+      color: "var(--icon-edit)",
       action: () => controller.setTool("select"),
       isActive: () => controller.tool === "select",
     },
@@ -112,7 +112,7 @@ const groups: RibbonGroup[] = [
     big: {
       label: "検証",
       icon: ShieldCheck,
-      color: "#1f8a4c",
+      color: "var(--ok-fg)",
       action: () => runVerification(),
     },
     small: [
@@ -245,7 +245,7 @@ const groups: RibbonGroup[] = [
   flex: 1;
 }
 .ribbon-group-label {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--ribbon-label);
   padding: 1px 4px;
 }
@@ -264,7 +264,7 @@ const groups: RibbonGroup[] = [
   padding: 6px 8px;
   font-size: 10px;
   color: var(--ui-text);
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
 }
 .ribbon-big:hover { background: var(--hover-bg); }
@@ -285,13 +285,13 @@ const groups: RibbonGroup[] = [
   font-size: 10px;
   color: var(--ui-text);
   padding: 3px 6px;
-  border-radius: 2px;
+  border-radius: 4px;
   cursor: pointer;
 }
 .ribbon-small:hover { background: var(--hover-bg); }
-.small-icon { color: #4a6fa5; flex: none; }
+.small-icon { color: var(--ribbon-icon); flex: none; }
 .view-toggle { color: var(--ui-muted); }
 .view-toggle .small-icon { color: var(--ui-muted); }
 .view-toggle.on { background: var(--sel-blue); color: var(--ui-text); }
-.view-toggle.on .small-icon { color: #4a6fa5; }
+.view-toggle.on .small-icon { color: var(--ribbon-icon); }
 </style>

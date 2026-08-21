@@ -87,7 +87,7 @@ function pick(option: ModelOption) {
   gap: 4px;
   padding: 3px 8px;
   border: none;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   cursor: pointer;
   color: var(--ui-text);
@@ -182,7 +182,7 @@ function pick(option: ModelOption) {
 }
 .option-sub {
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: 10px;
   color: var(--ui-placeholder);
 }
 .empty {

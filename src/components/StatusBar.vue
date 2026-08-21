@@ -80,7 +80,7 @@ const controller = inject<EditorController>("controller")!;
   height: 20px;
   border: none;
   background: transparent;
-  border-radius: 2px;
+  border-radius: 4px;
   color: var(--ui-muted);
   display: flex;
   align-items: center;
@@ -107,6 +107,6 @@ const controller = inject<EditorController>("controller")!;
   gap: 4px;
   font-family: "SF Mono", Menlo, monospace;
 }
-.dot { width: 6px; height: 6px; border-radius: 50%; background: #1f8a4c; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok-fg); }
 .gear { color: var(--ui-muted); }
 </style>

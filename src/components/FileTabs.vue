@@ -78,7 +78,7 @@ async function closeSheet(id: string) {
   color: #e8eaec;
   border-color: var(--model-bg);
 }
-.close { color: #8a9099; }
+.close { color: var(--ui-placeholder); }
 .close:hover { color: #fff; }
 .add {
   width: 22px;
@@ -91,7 +91,7 @@ async function closeSheet(id: string) {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 .add:hover { background: var(--hover-bg); }
 </style>
