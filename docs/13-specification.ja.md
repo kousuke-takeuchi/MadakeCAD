@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**291仕様項目**。
+全5領域・**300仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -243,6 +243,10 @@
 - 保存時に設定ディレクトリが無ければ作成される。 <sub>`save_creates_the_settings_directory`</sub>
 - 空白の実行ファイルパスは保存されず正規化で除去される。 <sub>`normalized_drops_blank_paths`</sub>
 - 設定ファイルパスは環境変数の上書きに従う。 <sub>`settings_path_honors_the_env_override`</sub>
+- UIの既定言語は英語 (en)。 <sub>`default_language_is_english`</sub>
+- 言語フィールド追加前に保存された設定ファイルは英語 (en) として読み込まれる。 <sub>`old_settings_file_without_language_loads_as_english`</sub>
+- 言語タグは正規化で小文字になり、空白だけの入力は英語 (en) に戻る。 <sub>`language_is_normalized_to_lowercase_and_blank_becomes_english`</sub>
+- 言語の選択は保存して読み直しても保持される。 <sub>`language_round_trips_through_save_and_load`</sub>
 
 
 ## madake CLI
@@ -341,6 +345,14 @@
 - アクティブシートに無い選択idは無視される(全て外れれば全体扱い) <sub>`drawingContextTag`</sub>
 - 空の下書きにはそのまま挿入される <sub>`appendContextTag`</sub>
 - 既存の下書きとは改行で区切る(改行済みなら重ねない) <sub>`appendContextTag`</sub>
+
+### i18n
+
+- UIの既定言語は英語で、フォールバックも英語 <sub>`i18n`</sub>
+- 実装済みロケールは英語と日本語 <sub>`i18n`</sub>
+- 英語と日本語のカタログはキーが完全に一致する(訳し漏れをCIで検出) <sub>`i18n`</sub>
+- カタログの文字列は空にできない(キーだけ足して訳し忘れることを防ぐ) <sub>`i18n`</sub>
+- 言語タグは大文字・余白があっても解決でき、未知・空の値は英語になる <sub>`i18n`</sub>
 
 ### chat
 

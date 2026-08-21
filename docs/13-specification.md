@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**291 specification clauses** across 5 areas.
+**300 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -243,6 +243,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Saving creates the settings directory if needed. <sub>`save_creates_the_settings_directory`</sub>
 - Blank executable paths are normalized away instead of being stored. <sub>`normalized_drops_blank_paths`</sub>
 - The settings path honors its environment-variable override. <sub>`settings_path_honors_the_env_override`</sub>
+- The default UI language is English. <sub>`default_language_is_english`</sub>
+- A settings file saved before the language field existed loads with English. <sub>`old_settings_file_without_language_loads_as_english`</sub>
+- Normalization lowercases the language tag and turns blank input into English. <sub>`language_is_normalized_to_lowercase_and_blank_becomes_english`</sub>
+- The language choice survives a save/load round trip. <sub>`language_round_trips_through_save_and_load`</sub>
 
 
 ## madake CLI
@@ -341,6 +345,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - selection ids absent from the active sheet are ignored <sub>`drawingContextTag`</sub>
 - an empty draft receives the context as-is <sub>`appendContextTag`</sub>
 - an existing draft is separated by a newline (without doubling) <sub>`appendContextTag`</sub>
+
+### i18n
+
+- defaults to English and falls back to English <sub>`i18n`</sub>
+- ships English and Japanese catalogs <sub>`i18n`</sub>
+- keeps the English and Japanese catalogs key-identical <sub>`i18n`</sub>
+- rejects empty strings in either catalog <sub>`i18n`</sub>
+- resolves language tags leniently and falls back to English for unknown values <sub>`i18n`</sub>
 
 ### chat
 

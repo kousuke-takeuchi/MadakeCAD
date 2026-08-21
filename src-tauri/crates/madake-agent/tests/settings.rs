@@ -45,6 +45,7 @@ fn saved_settings_round_trip() {
         claude_path: Some(PathBuf::from("/opt/homebrew/bin/claude")),
         auto_apply: false,
         auto_read_drawing: false,
+        language: "ja".into(),
     };
 
     save_settings(&path, &settings).unwrap();
@@ -138,5 +139,47 @@ fn settings_path_honors_the_env_override() {
             Some(PathBuf::from(home).join(".madakecad/settings.json"))
         );
     }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// The default UI language is English.
+/// UIの既定言語は英語 (en)。
+#[test]
+fn default_language_is_english() {
+    assert_eq!(AppSettings::default().language, "en");
+}
+
+/// A settings file saved before the language field existed loads with English.
+/// 言語フィールド追加前に保存された設定ファイルは英語 (en) として読み込まれる。
+#[test]
+fn old_settings_file_without_language_loads_as_english() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    std::fs::write(&path, r#"{ "claude_path": null, "auto_apply": false }"#).unwrap();
+    let settings = load_settings(&path).unwrap();
+    assert_eq!(settings.language, "en");
+    assert!(!settings.auto_apply);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Normalization lowercases the language tag and turns blank input into English.
+/// 言語タグは正規化で小文字になり、空白だけの入力は英語 (en) に戻る。
+#[test]
+fn language_is_normalized_to_lowercase_and_blank_becomes_english() {
+    let upper = AppSettings { language: " JA ".into(), ..AppSettings::default() };
+    assert_eq!(upper.normalized().language, "ja");
+    let blank = AppSettings { language: "   ".into(), ..AppSettings::default() };
+    assert_eq!(blank.normalized().language, "en");
+}
+
+/// The language choice survives a save/load round trip.
+/// 言語の選択は保存して読み直しても保持される。
+#[test]
+fn language_round_trips_through_save_and_load() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    let settings = AppSettings { language: "ja".into(), ..AppSettings::default() };
+    save_settings(&path, &settings).unwrap();
+    assert_eq!(load_settings(&path).unwrap().language, "ja");
     std::fs::remove_dir_all(&dir).ok();
 }

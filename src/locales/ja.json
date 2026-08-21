@@ -1,0 +1,55 @@
+{
+  "language": {
+    "en": "English",
+    "ja": "日本語"
+  },
+  "settings": {
+    "title": "設定",
+    "close": "閉じる",
+    "ok": "OK",
+    "cancel": "キャンセル",
+    "apply": "適用",
+    "placeholder": "「{category}」の設定は今後のフェーズで実装予定です",
+    "category": {
+      "general": "一般",
+      "agent": "エージェント",
+      "chat": "チャット",
+      "mcp": "MCP",
+      "account": "アカウント"
+    },
+    "general": {
+      "languageGroup": "言語",
+      "displayLanguage": "表示言語:",
+      "languageHint": "既定はEnglish。変更は即時反映されます(再起動不要)。中国語・スペイン語・フランス語・ドイツ語を追加予定。",
+      "languageChangedLog": "設定: 表示言語を{language}にしました"
+    },
+    "agent": {
+      "providerGroup": "プロバイダ",
+      "providerLabel": "プロバイダ:",
+      "providerValue": "Anthropic Claude (Claude Code CLI)",
+      "detectedBadge": "検出済み",
+      "notDetectedBadge": "未検出",
+      "providerHint": "サブスクリプションのサインインをそのまま利用します。APIキーの入力は不要です (認証はClaude Code CLIのサインインに委譲します)。",
+      "detectionGroup": "検出",
+      "executableLabel": "実行ファイル:",
+      "notFound": "見つかりません",
+      "detectedOk": "検出しました",
+      "cliMissing": "claude CLI が見つかりません",
+      "cliMissingHint": "ターミナルで {command} が通るか確認するか、下の「Claude実行ファイル」にパスを指定してください。",
+      "redetect": "再検出",
+      "detecting": "検出中...",
+      "settingsGroup": "エージェント設定",
+      "autoApprove": "自動許可モード",
+      "autoApproveDesc": "確認なしでClaudeが図面編集を続行します。全編集はundoで戻せます (A1では常に自動適用)",
+      "autoRead": "図面の自動読み取り",
+      "autoReadDesc": "会話開始時にプロジェクトとネットリストを共有します",
+      "advancedGroup": "詳細設定",
+      "claudePathLabel": "Claude実行ファイル:",
+      "claudePathHint": "自動検出の代わりに使うClaude実行ファイルのパス。空にすると自動検出に戻ります。",
+      "pathSetLog": "設定: claude実行パスを {path} に変更",
+      "pathClearedLog": "設定: claude実行パスを自動検出に戻しました",
+      "toggleOnLog": "設定: {label}をONにしました",
+      "toggleOffLog": "設定: {label}をOFFにしました"
+    }
+  }
+}

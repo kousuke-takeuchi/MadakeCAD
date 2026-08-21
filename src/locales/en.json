@@ -1,0 +1,55 @@
+{
+  "language": {
+    "en": "English",
+    "ja": "日本語"
+  },
+  "settings": {
+    "title": "Settings",
+    "close": "Close",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "apply": "Apply",
+    "placeholder": "\"{category}\" settings are planned for a later phase",
+    "category": {
+      "general": "General",
+      "agent": "Agent",
+      "chat": "Chat",
+      "mcp": "MCP",
+      "account": "Account"
+    },
+    "general": {
+      "languageGroup": "Language",
+      "displayLanguage": "Display language:",
+      "languageHint": "English is the default. Changes apply immediately (no restart). Chinese, Spanish, French, and German are planned.",
+      "languageChangedLog": "Settings: display language set to {language}"
+    },
+    "agent": {
+      "providerGroup": "Provider",
+      "providerLabel": "Provider:",
+      "providerValue": "Anthropic Claude (Claude Code CLI)",
+      "detectedBadge": "Detected",
+      "notDetectedBadge": "Not detected",
+      "providerHint": "Uses your existing subscription sign-in. No API key is needed (authentication is delegated to the Claude Code CLI sign-in).",
+      "detectionGroup": "Detection",
+      "executableLabel": "Executable:",
+      "notFound": "not found",
+      "detectedOk": "Detected",
+      "cliMissing": "claude CLI was not found",
+      "cliMissingHint": "Check that {command} works in a terminal, or set a path in \"Claude executable\" below.",
+      "redetect": "Re-detect",
+      "detecting": "Detecting...",
+      "settingsGroup": "Agent settings",
+      "autoApprove": "Auto-approve mode",
+      "autoApproveDesc": "Claude keeps editing the drawing without confirmation. Every edit can be undone (always on in A1)",
+      "autoRead": "Auto-read drawing",
+      "autoReadDesc": "Shares the project and netlist when a conversation starts",
+      "advancedGroup": "Advanced",
+      "claudePathLabel": "Claude executable:",
+      "claudePathHint": "Path to the claude executable used instead of auto-detection. Leave empty to return to auto-detection.",
+      "pathSetLog": "Settings: claude path set to {path}",
+      "pathClearedLog": "Settings: claude path reset to auto-detection",
+      "toggleOnLog": "Settings: {label} turned ON",
+      "toggleOffLog": "Settings: {label} turned OFF"
+    }
+  }
+}

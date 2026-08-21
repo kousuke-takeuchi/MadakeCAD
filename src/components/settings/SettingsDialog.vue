@@ -1,9 +1,12 @@
 <script setup lang="ts">
 // 設定ダイアログ (Pencilデザイン「設定ダイアログ - CAD調リデザイン」準拠)。
 // EPLAN/ACADEのオプションダイアログ様式: 左カテゴリツリー+グループボックス+OK/キャンセル/適用。
-// 実装済みは「エージェント」カテゴリのみで、他カテゴリはプレースホルダを表示する。
+// 実装済みは「一般」(言語) と「エージェント」カテゴリで、他カテゴリはプレースホルダを表示する。
+// 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
 import { Check, RefreshCw, X } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { SUPPORTED_LOCALES, resolveLocale, setLocale } from "../../i18n";
 import { useChatStore } from "../../stores/chat";
 import { useSettingsStore } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
@@ -12,15 +15,10 @@ const ui = useUiStore();
 const settings = useSettingsStore();
 // claude CLIの検出状態はチャットストアが持つ(チャットパネルの接続バッジと共通)
 const chat = useChatStore();
+const { t } = useI18n();
 
 type TabId = "general" | "agent" | "chat" | "mcp" | "account";
-const tabs: { id: TabId; label: string }[] = [
-  { id: "general", label: "一般" },
-  { id: "agent", label: "エージェント" },
-  { id: "chat", label: "チャット" },
-  { id: "mcp", label: "MCP" },
-  { id: "account", label: "アカウント" },
-];
+const tabs: TabId[] = ["general", "agent", "chat", "mcp", "account"];
 const activeTab = ref<TabId>("agent");
 
 /** パス入力欄(適用/OKするまでは設定に反映しない)。 */
@@ -29,18 +27,19 @@ const detecting = ref(false);
 
 const detected = computed(() => chat.detect);
 const pathDirty = computed(() => pathInput.value.trim() !== (settings.settings.claude_path ?? ""));
+const activeLocale = computed(() => resolveLocale(settings.settings.language));
 
 const checks = computed(() => [
   {
     key: "auto_apply" as const,
-    label: "自動許可モード",
-    description: "確認なしでClaudeが図面編集を続行します。全編集はundoで戻せます (A1では常に自動適用)",
+    label: t("settings.agent.autoApprove"),
+    description: t("settings.agent.autoApproveDesc"),
     value: settings.settings.auto_apply,
   },
   {
     key: "auto_read_drawing" as const,
-    label: "図面の自動読み取り",
-    description: "会話開始時にプロジェクトとネットリストを共有します",
+    label: t("settings.agent.autoRead"),
+    description: t("settings.agent.autoReadDesc"),
     value: settings.settings.auto_read_drawing,
   },
 ]);
@@ -76,7 +75,7 @@ async function apply(): Promise<boolean> {
   const path = pathInput.value.trim();
   if (!(await settings.save({ claude_path: path || null }))) return false;
   pathInput.value = settings.settings.claude_path ?? "";
-  ui.log(path ? `設定: claude実行パスを ${path} に変更` : "設定: claude実行パスを自動検出に戻しました");
+  ui.log(path ? t("settings.agent.pathSetLog", { path }) : t("settings.agent.pathClearedLog"));
   await redetect();
   return true;
 }
@@ -89,8 +88,16 @@ async function confirm() {
 async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
   const patch = key === "auto_apply" ? { auto_apply: value } : { auto_read_drawing: value };
   if (!(await settings.save(patch))) return;
-  const label = key === "auto_apply" ? "自動許可モード" : "図面の自動読み取り";
-  ui.log(`設定: ${label}を${value ? "ON" : "OFF"}にしました`);
+  const label = t(key === "auto_apply" ? "settings.agent.autoApprove" : "settings.agent.autoRead");
+  ui.log(t(value ? "settings.agent.toggleOnLog" : "settings.agent.toggleOffLog", { label }));
+}
+
+/** 表示言語を保存して即時切替する。 */
+async function changeLanguage(ev: Event) {
+  const language = (ev.target as HTMLSelectElement).value;
+  if (!(await settings.save({ language }))) return;
+  setLocale(settings.settings.language);
+  ui.log(t("settings.general.languageChangedLog", { language: t(`language.${activeLocale.value}`) }));
 }
 </script>
 
@@ -98,66 +105,87 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
   <div v-if="ui.settingsOpen" class="overlay" @click.self="close">
     <div class="dialog">
       <div class="titlebar">
-        <span class="title">設定</span>
-        <button class="close" title="閉じる" @click="close"><X :size="14" /></button>
+        <span class="title">{{ t("settings.title") }}</span>
+        <button class="close" :title="t('settings.close')" @click="close"><X :size="14" /></button>
       </div>
 
       <div class="body-row">
         <div class="tree">
           <button
-            v-for="t in tabs"
-            :key="t.id"
+            v-for="id in tabs"
+            :key="id"
             class="tree-item"
-            :class="{ active: t.id === activeTab }"
-            @click="activeTab = t.id"
+            :class="{ active: id === activeTab }"
+            @click="activeTab = id"
           >
-            {{ t.label }}
+            {{ t(`settings.category.${id}`) }}
           </button>
         </div>
 
         <div class="content">
-          <template v-if="activeTab === 'agent'">
+          <template v-if="activeTab === 'general'">
             <div class="group">
-              <div class="group-head"><span>プロバイダ</span><i /></div>
+              <div class="group-head"><span>{{ t("settings.general.languageGroup") }}</span><i /></div>
               <div class="form-row">
-                <label class="form-label">プロバイダ:</label>
+                <label class="form-label" for="ui-language">{{ t("settings.general.displayLanguage") }}</label>
+                <select
+                  id="ui-language"
+                  class="field select"
+                  :value="activeLocale"
+                  :disabled="settings.saving"
+                  @change="changeLanguage"
+                >
+                  <option v-for="l in SUPPORTED_LOCALES" :key="l" :value="l">{{ t(`language.${l}`) }}</option>
+                </select>
+              </div>
+              <p class="caption indent-label">{{ t("settings.general.languageHint") }}</p>
+            </div>
+            <p v-if="settings.error" class="error">{{ settings.error }}</p>
+          </template>
+
+          <template v-else-if="activeTab === 'agent'">
+            <div class="group">
+              <div class="group-head"><span>{{ t("settings.agent.providerGroup") }}</span><i /></div>
+              <div class="form-row">
+                <label class="form-label">{{ t("settings.agent.providerLabel") }}</label>
                 <div class="field static">
-                  <span>Anthropic Claude (Claude Code CLI)</span>
+                  <span>{{ t("settings.agent.providerValue") }}</span>
                   <span class="caret">▾</span>
                 </div>
-                <span v-if="detected" class="status ok"><i /> 検出済み</span>
-                <span v-else class="status off"><i /> 未検出</span>
+                <span v-if="detected" class="status ok"><i /> {{ t("settings.agent.detectedBadge") }}</span>
+                <span v-else class="status off"><i /> {{ t("settings.agent.notDetectedBadge") }}</span>
               </div>
-              <p class="caption indent-label">
-                サブスクリプションのサインインをそのまま利用します。APIキーの入力は不要です
-                (認証はClaude Code CLIのサインインに委譲します)。
-              </p>
+              <p class="caption indent-label">{{ t("settings.agent.providerHint") }}</p>
             </div>
 
             <div class="group">
-              <div class="group-head"><span>検出</span><i /></div>
+              <div class="group-head"><span>{{ t("settings.agent.detectionGroup") }}</span><i /></div>
               <div class="form-row">
-                <label class="form-label">実行ファイル:</label>
+                <label class="form-label">{{ t("settings.agent.executableLabel") }}</label>
                 <div class="field mono-field">
                   <span v-if="detected">{{ detected.path }} · {{ detected.version }}</span>
-                  <span v-else class="muted">見つかりません</span>
+                  <span v-else class="muted">{{ t("settings.agent.notFound") }}</span>
                 </div>
-                <span v-if="detected" class="detect-ok"><Check :size="12" /> 検出しました</span>
-                <span v-else class="detect-warn">claude CLI が見つかりません</span>
+                <span v-if="detected" class="detect-ok"><Check :size="12" /> {{ t("settings.agent.detectedOk") }}</span>
+                <span v-else class="detect-warn">{{ t("settings.agent.cliMissing") }}</span>
                 <span class="spacer" />
                 <button class="btn secondary" :disabled="detecting" @click="redetect">
                   <RefreshCw :size="12" :class="{ spin: detecting }" />
-                  {{ detecting ? "検出中..." : "再検出" }}
+                  {{ detecting ? t("settings.agent.detecting") : t("settings.agent.redetect") }}
                 </button>
               </div>
-              <p v-if="!detected" class="caption indent-label">
-                ターミナルで <span class="mono">claude --version</span> が通るか確認するか、
-                下の「Claude実行ファイル」にパスを指定してください。
-              </p>
+              <i18n-t
+                v-if="!detected"
+                keypath="settings.agent.cliMissingHint"
+                tag="p"
+                class="caption indent-label"
+              >
+                <template #command><span class="mono">claude --version</span></template>
+              </i18n-t>
             </div>
 
             <div class="group">
-              <div class="group-head"><span>エージェント設定</span><i /></div>
+              <div class="group-head"><span>{{ t("settings.agent.settingsGroup") }}</span><i /></div>
               <template v-for="c in checks" :key="c.key">
                 <label class="check-row">
                   <button
@@ -177,9 +205,9 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
             </div>
 
             <div class="group">
-              <div class="group-head"><span>詳細設定</span><i /></div>
+              <div class="group-head"><span>{{ t("settings.agent.advancedGroup") }}</span><i /></div>
               <div class="form-row">
-                <label class="form-label" for="claude-path">Claude実行ファイル:</label>
+                <label class="form-label" for="claude-path">{{ t("settings.agent.claudePathLabel") }}</label>
                 <input
                   id="claude-path"
                   v-model="pathInput"
@@ -189,24 +217,24 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
                   @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
                 />
               </div>
-              <p class="caption indent-label">
-                自動検出の代わりに使うClaude実行ファイルのパス。空にすると自動検出に戻ります。
-              </p>
+              <p class="caption indent-label">{{ t("settings.agent.claudePathHint") }}</p>
             </div>
 
             <p v-if="settings.error" class="error">{{ settings.error }}</p>
           </template>
 
           <p v-else class="placeholder">
-            「{{ tabs.find((t) => t.id === activeTab)?.label }}」の設定は今後のフェーズで実装予定です
+            {{ t("settings.placeholder", { category: t(`settings.category.${activeTab}`) }) }}
           </p>
         </div>
       </div>
 
       <div class="footer">
-        <button class="btn primary" :disabled="settings.saving" @click="confirm">OK</button>
-        <button class="btn secondary" @click="close">キャンセル</button>
-        <button class="btn secondary" :disabled="settings.saving || !pathDirty" @click="apply">適用</button>
+        <button class="btn primary" :disabled="settings.saving" @click="confirm">{{ t("settings.ok") }}</button>
+        <button class="btn secondary" @click="close">{{ t("settings.cancel") }}</button>
+        <button class="btn secondary" :disabled="settings.saving || !pathDirty" @click="apply">
+          {{ t("settings.apply") }}
+        </button>
       </div>
     </div>
   </div>
@@ -317,6 +345,8 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
 .field.mono-field .muted { color: var(--ui-placeholder); }
 .field.input { outline: none; font-size: 11px; }
 .field.input:focus { border-color: var(--acad-blue); }
+.field.select { width: 220px; outline: none; cursor: pointer; }
+.field.select:focus { border-color: var(--acad-blue); }
 .mono { font-family: var(--mono-font); }
 .spacer { flex: 1; }
 

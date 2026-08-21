@@ -15,10 +15,12 @@ export interface AppSettings {
   auto_apply: boolean;
   /** 送信のたびに図面コンテキストをエージェントへ渡す */
   auto_read_drawing: boolean;
+  /** UI表示言語 (BCP 47小文字。既定は "en"。未知の値はenへフォールバック) */
+  language: string;
 }
 
 export function defaultSettings(): AppSettings {
-  return { claude_path: null, auto_apply: true, auto_read_drawing: true };
+  return { claude_path: null, auto_apply: true, auto_read_drawing: true, language: "en" };
 }
 
 interface SettingsApi {

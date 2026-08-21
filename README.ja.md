@@ -12,7 +12,7 @@ AIアシスタントは人間と同じundo可能なコマンドエンジンで�
 検証は実回路ソルバ(ngspice)の解に基づく。
 
 [![CI](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml)
-[![仕様項目](https://img.shields.io/badge/spec_clauses-291_tested-blue)](docs/13-specification.ja.md)
+[![仕様項目](https://img.shields.io/badge/spec_clauses-300_tested-blue)](docs/13-specification.ja.md)
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
 ![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)
