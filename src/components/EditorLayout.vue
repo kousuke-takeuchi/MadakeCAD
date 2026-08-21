@@ -6,7 +6,7 @@ import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import CanvasView from "./CanvasView.vue";
 import FileTabs from "./FileTabs.vue";
-import ProjectPanel from "./ProjectPanel.vue";
+import LeftPanel from "./LeftPanel.vue";
 import PropertiesPanel from "./PropertiesPanel.vue";
 import RibbonBar from "./RibbonBar.vue";
 import StatusBar from "./StatusBar.vue";
@@ -60,7 +60,7 @@ onBeforeUnmount(() => {
     <RibbonBar />
     <FileTabs />
     <div class="main-row">
-      <ProjectPanel />
+      <LeftPanel />
       <CanvasView />
       <PropertiesPanel />
     </div>

@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
 import { AgentOverlay } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
 import type { Patch } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useChatStore } from "../stores/chat";
+import { useUiStore } from "../stores/ui";
 import ChatPanel from "./chat/ChatPanel.vue";
 
 const store = useDocumentStore();
 const chat = useChatStore();
+const ui = useUiStore();
+
+// 左ドックのエージェントタブが開いている間は入力欄が二重になるので浮きカードを出さない。
+const dockChatOpen = computed(() => chat.panelOpen === "expanded" || ui.leftPanelTab === "chat");
 const controller = inject<EditorController>("controller")!;
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const wrapRef = ref<HTMLDivElement | null>(null);
@@ -166,7 +171,7 @@ watch(() => store.activeSheetId, () => {
       @dblclick="() => controller.onDoubleClick()"
       @contextmenu.prevent
     />
-    <ChatPanel />
+    <ChatPanel v-if="!dockChatOpen" />
   </div>
 </template>
 
