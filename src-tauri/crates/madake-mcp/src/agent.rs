@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use madake_agent::{AgentManager, AppSettings, Conversation, DocBridge, DocState};
-use madake_core::{builtin_symbols, Entity, Patch};
+use madake_core::{sheet_symbol_defs, Entity, Patch};
 
 use crate::SharedDoc;
 
@@ -157,7 +157,7 @@ pub fn drawing_context(doc: &SharedDoc) -> String {
                 "- アクティブシート: {} ({})\n",
                 active.id, active.name
             ));
-            let nets = madake_core::netlist::extract_netlist(active, &builtin_symbols());
+            let nets = madake_core::netlist::extract_netlist(active, &sheet_symbol_defs(active));
             out.push_str(&format!(
                 "- アクティブシートのネット数: {} / エンティティ数: {}\n",
                 nets.len(),

@@ -309,34 +309,111 @@ pub fn builtin_symbols() -> Vec<SymbolDef> {
             ],
             pins: vec![pin("1", "", 5.0, 0.0)],
         },
-        SymbolDef {
-            id: "connector_2p".into(),
-            name: "Connector 2P".into(),
-            name_ja: "コネクタ(2極)".into(),
+    ]
+}
+
+/// 動的シンボルの最大極数。
+pub const DYNAMIC_PIN_MAX: usize = 50;
+
+/// `connector_{n}p` / `terminal_block_{n}p` 形式のIDからピン数可変シンボルを生成する。
+/// 端子は縦並び・ピッチ5mm・中央揃え(オフセットは常に2.5mmグリッド倍数)。
+pub fn dynamic_symbol(id: &str) -> Option<SymbolDef> {
+    let parse = |rest: &str| -> Option<usize> {
+        let n: usize = rest.strip_suffix('p')?.parse().ok()?;
+        (1..=DYNAMIC_PIN_MAX).contains(&n).then_some(n)
+    };
+    let offset = |i: usize, n: usize| (i as f64 - (n - 1) as f64 / 2.0) * 5.0;
+
+    if let Some(n) = id.strip_prefix("connector_").and_then(parse) {
+        let mut primitives = vec![Primitive::Rect {
+            p1: p(-4.0, offset(0, n) - 2.5),
+            p2: p(4.0, offset(n - 1, n) + 2.5),
+            filled: false,
+        }];
+        let mut pins = Vec::with_capacity(n);
+        for i in 0..n {
+            let y = offset(i, n);
+            primitives.push(Primitive::Text {
+                at: p(-2.0, y),
+                text: (i + 1).to_string(),
+                height: 2.0,
+            });
+            primitives.push(line(&[(4.0, y), (7.5, y)]));
+            pins.push(pin(&(i + 1).to_string(), "", 7.5, y));
+        }
+        return Some(SymbolDef {
+            id: id.into(),
+            name: format!("Connector {n}P"),
+            name_ja: format!("コネクタ({n}極)"),
             category: "connector".into(),
             ref_prefix: "J".into(),
-            primitives: vec![
-                Primitive::Rect {
-                    p1: p(-4.0, -5.0),
-                    p2: p(4.0, 5.0),
-                    filled: false,
-                },
-                Primitive::Text {
-                    at: p(-2.0, -2.5),
-                    text: "1".into(),
-                    height: 2.0,
-                },
-                Primitive::Text {
-                    at: p(-2.0, 2.5),
-                    text: "2".into(),
-                    height: 2.0,
-                },
-                line(&[(4.0, -2.5), (7.5, -2.5)]),
-                line(&[(4.0, 2.5), (7.5, 2.5)]),
-            ],
-            pins: vec![pin("1", "P", 7.5, -2.5), pin("2", "N", 7.5, 2.5)],
-        },
-    ]
+            primitives,
+            pins,
+        });
+    }
+    if let Some(n) = id.strip_prefix("terminal_block_").and_then(parse) {
+        let mut primitives = vec![Primitive::Rect {
+            p1: p(-2.5, offset(0, n) - 2.5),
+            p2: p(2.5, offset(n - 1, n) + 2.5),
+            filled: false,
+        }];
+        let mut pins = Vec::with_capacity(n * 2);
+        for i in 0..n {
+            let y = offset(i, n);
+            let no = (i + 1).to_string();
+            primitives.push(Primitive::Circle {
+                center: p(0.0, y),
+                r: 1.8,
+                filled: false,
+            });
+            primitives.push(Primitive::Text {
+                at: p(0.0, y - 1.0),
+                text: no.clone(),
+                height: 2.0,
+            });
+            primitives.push(line(&[(-2.5, y), (-1.8, y)]));
+            primitives.push(line(&[(1.8, y), (2.5, y)]));
+            // 貫通端子: 左右2接続点に同一ピン番号(ネットリストで内部短絡)
+            pins.push(pin(&no, "", -2.5, y));
+            pins.push(pin(&no, "", 2.5, y));
+        }
+        return Some(SymbolDef {
+            id: id.into(),
+            name: format!("Terminal block {n}P"),
+            name_ja: format!("端子台({n}極)"),
+            category: "connector".into(),
+            ref_prefix: "TB".into(),
+            primitives,
+            pins,
+        });
+    }
+    None
+}
+
+/// symbol_idから定義を解決する。静的ライブラリ優先、なければ動的生成。
+pub fn resolve_symbol(id: &str) -> Option<SymbolDef> {
+    builtin_symbols()
+        .into_iter()
+        .find(|s| s.id == id)
+        .or_else(|| dynamic_symbol(id))
+}
+
+/// シートの描画・ネットリストに必要な全シンボル定義(静的+使用中の動的)を集める。
+pub fn sheet_symbol_defs(sheet: &crate::model::Sheet) -> Vec<SymbolDef> {
+    let mut defs = builtin_symbols();
+    let mut seen: std::collections::BTreeSet<&str> =
+        defs.iter().map(|d| d.id.as_str()).collect();
+    let mut ids: Vec<&str> = Vec::new();
+    for e in sheet.entities.values() {
+        if let crate::model::Entity::Symbol(s) = e {
+            if !seen.contains(s.symbol_id.as_str()) {
+                seen.insert(s.symbol_id.as_str());
+                ids.push(s.symbol_id.as_str());
+            }
+        }
+    }
+    defs.extend(ids.into_iter().filter_map(dynamic_symbol));
+    defs
 }
 
 #[cfg(test)]
@@ -354,6 +431,72 @@ mod tests {
         for s in &syms {
             assert!(!s.pins.is_empty(), "symbol {} has no pins", s.id);
         }
+    }
+
+    #[test]
+    fn dynamic_terminal_block_has_through_pins_on_grid() {
+        let def = resolve_symbol("terminal_block_8p").expect("dynamic terminal block");
+        assert_eq!(def.ref_prefix, "TB");
+        // 8端子 x 左右2接続点 = 16ピン、各番号がちょうど2回
+        assert_eq!(def.pins.len(), 16);
+        for i in 1..=8 {
+            let same: Vec<_> = def
+                .pins
+                .iter()
+                .filter(|p| p.number == i.to_string())
+                .collect();
+            assert_eq!(same.len(), 2, "terminal {i}");
+            // 左右対称
+            assert!((same[0].at.x + same[1].at.x).abs() < 1e-9);
+            assert!((same[0].at.y - same[1].at.y).abs() < 1e-9);
+        }
+        // 全ピン2.5mmグリッド上、中央揃え(y合計=0)
+        let mut ysum: f64 = 0.0;
+        for p in &def.pins {
+            assert!((p.at.x / 2.5 - (p.at.x / 2.5).round()).abs() < 1e-9, "{:?}", p.at);
+            assert!((p.at.y / 2.5 - (p.at.y / 2.5).round()).abs() < 1e-9, "{:?}", p.at);
+            ysum += p.at.y;
+        }
+        assert!(ysum.abs() < 1e-9);
+    }
+
+    #[test]
+    fn dynamic_connector_2p_matches_legacy_static_def() {
+        // 旧静的connector_2pと同一のピン座標(既存図面の互換性)
+        let def = resolve_symbol("connector_2p").expect("dynamic connector");
+        assert_eq!(def.ref_prefix, "J");
+        let pins: Vec<_> = def.pins.iter().map(|p| (p.number.as_str(), p.at.x, p.at.y)).collect();
+        assert_eq!(pins, vec![("1", 7.5, -2.5), ("2", 7.5, 2.5)]);
+    }
+
+    #[test]
+    fn resolve_symbol_rejects_invalid_ids_and_finds_builtins() {
+        assert!(resolve_symbol("resistor").is_some());
+        assert!(resolve_symbol("connector_0p").is_none());
+        assert!(resolve_symbol("connector_51p").is_none());
+        assert!(resolve_symbol("connector_p").is_none());
+        assert!(resolve_symbol("terminal_block_xp").is_none());
+        assert!(resolve_symbol("unknown").is_none());
+    }
+
+    #[test]
+    fn sheet_symbol_defs_includes_dynamic_ids_in_use() {
+        use crate::model::*;
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let s = Entity::Symbol(SymbolInstance {
+            id: uuid::Uuid::new_v4(),
+            symbol_id: "terminal_block_3p".into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        });
+        sheet.entities.insert(s.id(), s);
+        let defs = sheet_symbol_defs(&sheet);
+        assert!(defs.iter().any(|d| d.id == "resistor"), "builtin含む");
+        assert!(defs.iter().any(|d| d.id == "terminal_block_3p"), "使用中の動的ID含む");
     }
 
     #[test]
