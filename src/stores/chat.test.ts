@@ -625,12 +625,12 @@ describe("chat store: アクション", () => {
     expect(store.unlisten).not.toBeNull();
   });
 
-  it("setModel / togglePanel / newConversation", async () => {
+  it("setModel / setPanel / newConversation", async () => {
     vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
     const store = useChatStore();
 
     expect(store.panelOpen).toBe("collapsed");
-    store.togglePanel();
+    store.setPanel("expanded");
     expect(store.panelOpen).toBe("expanded");
     store.setPanel("collapsed");
     expect(store.panelOpen).toBe("collapsed");

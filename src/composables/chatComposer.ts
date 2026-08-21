@@ -14,9 +14,7 @@ export function useChatComposer() {
   /** 入力途中テキスト。ドックと浮きカードで共有する (uiストアが保持)。 */
   const draft = computed({
     get: () => ui.chatDraft,
-    set: (v: string) => {
-      ui.chatDraft = v;
-    },
+    set: (v: string) => ui.setChatDraft(v),
   });
 
   const canSend = computed(() => draft.value.trim().length > 0 && !store.streaming);
@@ -41,8 +39,7 @@ export function useChatComposer() {
     if (!canSend.value) return;
     const text = draft.value;
     draft.value = "";
-    store.setPanel("expanded");
-    ui.setLeftPanelTab("chat");
+    ui.openAgentTab();
     const id = await store.send(text);
     if (!id) ui.log("AGENT   送信に失敗しました (詳細はチャットのエラー表示を参照)");
   }

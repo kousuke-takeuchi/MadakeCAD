@@ -58,10 +58,13 @@ onBeforeUnmount(() => {
   <div class="editor">
     <TitleBar @open="files.openProject()" @save="files.saveProject()" />
     <RibbonBar />
-    <FileTabs />
     <div class="main-row">
       <LeftPanel />
-      <CanvasView />
+      <!-- 図面タブはキャンバスの切り替え用なので、キャンバス直上に置く -->
+      <div class="center-col">
+        <FileTabs />
+        <CanvasView />
+      </div>
       <PropertiesPanel />
     </div>
     <StatusBar />
@@ -80,6 +83,13 @@ onBeforeUnmount(() => {
 .main-row {
   display: flex;
   flex: 1;
+  min-height: 0;
+}
+.center-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 </style>

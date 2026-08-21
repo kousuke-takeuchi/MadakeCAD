@@ -17,8 +17,7 @@ const title = computed(() => (store.messages.length ? "回路エージェント"
 /** 左ドックのエージェントタブを開く。 */
 function expand() {
   minimized.value = false;
-  store.setPanel("expanded");
-  ui.setLeftPanelTab("chat");
+  ui.openAgentTab();
 }
 </script>
 

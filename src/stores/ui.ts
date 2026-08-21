@@ -1,6 +1,7 @@
 // エディタUIの共有状態: コマンドライン履歴、モーダル表示など。
 
 import { defineStore } from "pinia";
+import { useChatStore } from "./chat";
 
 /** 左ドックのタブ。"chat" は chat store の panelOpen="expanded" と対で同期する。 */
 export type LeftPanelTab = "project" | "chat";
@@ -26,6 +27,22 @@ export const useUiStore = defineStore("ui", {
   actions: {
     setLeftPanelTab(tab: LeftPanelTab) {
       this.leftPanelTab = tab;
+    },
+    setChatDraft(text: string) {
+      this.chatDraft = text;
+    },
+    /**
+     * 左ドックのエージェントタブを開く。「panelOpen="expanded" ⇔ leftPanelTab="chat"」の
+     * 不変条件はこの2アクションだけが両状態を書いて維持する(呼び出し側での両建て禁止)。
+     */
+    openAgentTab() {
+      this.leftPanelTab = "chat";
+      useChatStore().setPanel("expanded");
+    },
+    /** エージェントタブを閉じ、浮き入力カードへ戻す。 */
+    closeAgentTab() {
+      if (this.leftPanelTab === "chat") this.leftPanelTab = "project";
+      useChatStore().setPanel("collapsed");
     },
     log(line: string) {
       this.commandHistory.push(line);
