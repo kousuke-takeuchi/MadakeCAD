@@ -9,6 +9,7 @@ pub mod io;
 pub mod model;
 pub mod netlist;
 pub mod ngspice;
+pub mod parts;
 pub mod pdf;
 pub mod reports;
 pub mod spice;
