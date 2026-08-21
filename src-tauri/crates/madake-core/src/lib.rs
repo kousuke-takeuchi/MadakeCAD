@@ -6,6 +6,7 @@
 pub mod command;
 pub mod geometry;
 pub mod io;
+pub mod kicad;
 pub mod model;
 pub mod netlist;
 pub mod ngspice;
