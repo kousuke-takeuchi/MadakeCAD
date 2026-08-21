@@ -402,6 +402,16 @@ pub fn exec_result(command_count: usize, patches: &Value) -> String {
     }
 }
 
+/// `madake renumber` (Patch配列)
+pub fn renumbered(patches: &Value) -> String {
+    match patches_summary(patches) {
+        Some((_, 0)) | None => "線番の変更はありません (対象のネットは全て採番済みです)".to_string(),
+        Some((revision, wires)) => {
+            format!("線番を採番しました (revision {revision}, 線番を書いた配線 {wires} 本)")
+        }
+    }
+}
+
 /// `madake undo` / `madake redo` (Patch or null)
 pub fn history_result(patch: &Value, done: &str, empty: &str) -> String {
     if patch.is_null() {

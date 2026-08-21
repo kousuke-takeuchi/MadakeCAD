@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**425 specification clauses** across 5 areas.
+**428 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -329,6 +329,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake exec reads a JSON file containing a Command array and posts it to /commands. <sub>`exec_posts_command_array_from_file`</sub>
 - madake exec rejects JSON that is not an array, with a clear message. <sub>`exec_rejects_non_array_json`</sub>
 - A missing input file is reported as a file error, not a panic. <sub>`exec_reports_missing_file`</sub>
+- madake renumber numbers every sheet from 1 in top-up mode unless told otherwise. <sub>`renumber_defaults_to_whole_project_append_from_one`</sub>
+- madake renumber passes the target sheet, the numbering mode and the start number through. <sub>`renumber_forwards_sheet_mode_and_start`</sub>
+- madake renumber says so when every net already had a wire number. <sub>`renumber_reports_when_nothing_changed`</sub>
 - madake undo tells the user when there is nothing to undo. <sub>`undo_reports_empty_history`</sub>
 - madake redo reports the new document revision on success. <sub>`redo_reports_revision`</sub>
 - madake save/open report the file path they acted on. <sub>`save_and_open_report_path`</sub>

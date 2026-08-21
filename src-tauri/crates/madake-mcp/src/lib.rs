@@ -213,7 +213,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "任意の編集コマンド列を実行する(シート追加、エンティティ追加/更新/削除/移動、表題欄設定など)。各コマンドの完全なスキーマは入力スキーマを参照。実行結果のpatchを返す"
+        description = "任意の編集コマンド列を実行する。シート追加/削除/改名、エンティティ追加(add_entity)/更新/削除/移動、表題欄設定(set_title_block)のほか、改訂欄の書き換え(set_revisions: 記号/日付/内容/承認の行リスト。表題欄のRevは最新行に連動)、線番のネット単位自動採番(renumber_wires: mode=append で未採番のネットだけ追い番、mode=renumber で全振り直し、sheet_id省略で図面全体、start=開始番号)、線番の個別指定(set_wire_numbers)が使える。ハーネス境界は専用コマンドではなくadd_entityでkind=\"harness\"のエンティティ(points=矩形4点・name・note)を追加する(内包した配線が電線リストのハーネス列に載る)。各コマンドの完全なスキーマは入力スキーマを参照。実行結果のpatchを返す"
     )]
     fn execute_commands(
         &self,
@@ -329,7 +329,7 @@ impl MadakeMcp {
         json_ok(&serde_json::json!({ "written": p.path }))
     }
 
-    #[tool(description = "電線リストCSVを指定パスに書き出す")]
+    #[tool(description = "電線リストCSVを指定パスに書き出す(列: シート/線番/ハーネス/電線品番/線色/sq/長さ)")]
     fn export_wire_list(
         &self,
         Parameters(p): Parameters<ExportPathParams>,
@@ -340,7 +340,7 @@ impl MadakeMcp {
         json_ok(&serde_json::json!({ "written": p.path }))
     }
 
-    #[tool(description = "シートをJIS図枠つきSVGとして指定パスに書き出す")]
+    #[tool(description = "シートをJIS図枠つきSVGとして指定パスに書き出す(改訂欄・線番・ハーネス破線囲み・ネットラベルのシート間クロスリファレンス「/2.B3」を含む)")]
     fn export_svg(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
         let engine = self.doc.engine.lock().unwrap();
@@ -355,7 +355,7 @@ impl MadakeMcp {
         json_ok(&serde_json::json!({ "written": p.path }))
     }
 
-    #[tool(description = "シートをJIS図枠つきPDF(印刷品質、フォント埋め込み)として指定パスに書き出す")]
+    #[tool(description = "シートをJIS図枠つきPDF(印刷品質、フォント埋め込み)として指定パスに書き出す。内容はSVG出力と同一(改訂欄・線番・ハーネス・シート間クロスリファレンス込み)")]
     fn export_pdf(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
         let engine = self.doc.engine.lock().unwrap();

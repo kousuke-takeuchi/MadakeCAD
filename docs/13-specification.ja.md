@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**425仕様項目**。
+全5領域・**428仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -329,6 +329,9 @@
 - madake execはCommand配列のJSONファイルを読み、/commandsへ送信する。 <sub>`exec_posts_command_array_from_file`</sub>
 - madake execは配列でないJSONを明確なメッセージで拒否する。 <sub>`exec_rejects_non_array_json`</sub>
 - 入力ファイルが無い場合はパニックせずファイルエラーとして報告する。 <sub>`exec_reports_missing_file`</sub>
+- madake renumberは既定でプロジェクト全体を1から追い番で採番する。 <sub>`renumber_defaults_to_whole_project_append_from_one`</sub>
+- madake renumberは対象シート・採番方式・開始番号をそのままコマンドへ載せる。 <sub>`renumber_forwards_sheet_mode_and_start`</sub>
+- madake renumberは全ネットが採番済みで変更が無かったことを伝える。 <sub>`renumber_reports_when_nothing_changed`</sub>
 - madake undoは戻す操作が無いことをユーザーに伝える。 <sub>`undo_reports_empty_history`</sub>
 - madake redoは成功時に新しいドキュメントrevisionを報告する。 <sub>`redo_reports_revision`</sub>
 - madake save/openは対象のファイルパスを報告する。 <sub>`save_and_open_report_path`</sub>

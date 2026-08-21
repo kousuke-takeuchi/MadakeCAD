@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 
-use crate::client::{base_url, CliError, ExportKind, LinkApi, DEFAULT_PORT};
+use crate::client::{base_url, CliError, ExportKind, LinkApi, RenumberMode, DEFAULT_PORT};
 use crate::format;
 
 #[derive(Debug, Parser)]
@@ -83,6 +83,18 @@ pub enum Commands {
     Open {
         /// 読み込むファイル (.kicad_schはKiCadインポート)
         path: String,
+    },
+    /// 線番をネット単位で自動採番する (renumber_wiresコマンド。undo可)
+    Renumber {
+        /// シートID (省略時はプロジェクト全体で一意に採番)
+        #[arg(long, value_name = "ID")]
+        sheet: Option<String>,
+        /// 採番方式: append=未採番のネットだけ追い番 / renumber=全て振り直し
+        #[arg(long, value_enum, default_value_t = RenumberMode::Append)]
+        mode: RenumberMode,
+        /// 開始番号
+        #[arg(long, default_value_t = 1)]
+        start: u32,
     },
     /// Command配列のJSONファイルを実行する (Commandエンジン経由)
     Exec {
@@ -177,6 +189,22 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
                 return Ok(pretty(&patch));
             }
             Ok(format::opened(&patch, path))
+        }
+        Commands::Renumber { sheet, mode, start } => {
+            // 薄いクライアント: 採番ロジックはコア側。ここはCommandを組み立てて送るだけ
+            let mut cmd = serde_json::json!({
+                "type": "renumber_wires",
+                "mode": mode.as_json(),
+                "start": start,
+            });
+            if let Some(id) = sheet {
+                cmd["sheet_id"] = Value::String(id.clone());
+            }
+            let patches = api.exec(Value::Array(vec![cmd]))?;
+            if cli.json {
+                return Ok(pretty(&patches));
+            }
+            Ok(format::renumbered(&patches))
         }
         Commands::Exec { file } => {
             let text = std::fs::read_to_string(file)
@@ -470,6 +498,72 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, CliError::Io(_)), "{err:?}");
+    }
+
+    /// madake renumber numbers every sheet from 1 in top-up mode unless told otherwise.
+    /// madake renumberは既定でプロジェクト全体を1から追い番で採番する。
+    #[test]
+    fn renumber_defaults_to_whole_project_append_from_one() {
+        let api = FakeApi {
+            result: json!([{ "revision": 5, "ops": [{ "op": "entity_upserted" }] }]),
+            ..Default::default()
+        };
+        let out = run(&parse(&["madake", "renumber"]), &api).unwrap();
+        let calls = api.calls();
+        let sent: Value = serde_json::from_str(
+            calls[0].trim_start_matches("exec(").trim_end_matches(')'),
+        )
+        .expect("送信したCommand");
+        assert_eq!(
+            sent,
+            json!([{ "type": "renumber_wires", "mode": "append", "start": 1 }])
+        );
+        assert!(out.contains("線番を採番しました"), "{out}");
+    }
+
+    /// madake renumber passes the target sheet, the numbering mode and the start number through.
+    /// madake renumberは対象シート・採番方式・開始番号をそのままコマンドへ載せる。
+    #[test]
+    fn renumber_forwards_sheet_mode_and_start() {
+        let api = FakeApi {
+            result: json!([{ "revision": 6, "ops": [] }]),
+            ..Default::default()
+        };
+        run(
+            &parse(&[
+                "madake",
+                "renumber",
+                "--sheet",
+                "s1",
+                "--mode",
+                "renumber",
+                "--start",
+                "100",
+            ]),
+            &api,
+        )
+        .unwrap();
+        let calls = api.calls();
+        let sent: Value = serde_json::from_str(
+            calls[0].trim_start_matches("exec(").trim_end_matches(')'),
+        )
+        .expect("送信したCommand");
+        assert_eq!(
+            sent,
+            json!([{ "type": "renumber_wires", "sheet_id": "s1", "mode": "renumber", "start": 100 }])
+        );
+    }
+
+    /// madake renumber says so when every net already had a wire number.
+    /// madake renumberは全ネットが採番済みで変更が無かったことを伝える。
+    #[test]
+    fn renumber_reports_when_nothing_changed() {
+        let api = FakeApi {
+            result: json!([{ "revision": 7, "ops": [] }]),
+            ..Default::default()
+        };
+        let out = run(&parse(&["madake", "renumber"]), &api).unwrap();
+        assert!(out.contains("線番の変更はありません"), "{out}");
     }
 
     /// madake undo tells the user when there is nothing to undo.
