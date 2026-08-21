@@ -65,7 +65,7 @@ fn ampacity(sq: f64) -> f64 {
 }
 
 /// 文字列先頭付近の数値を読む (例: "5A"→5, "DC24V"→24)。
-fn parse_number(s: &str) -> Option<f64> {
+pub(crate) fn parse_number(s: &str) -> Option<f64> {
     let start = s.find(|c: char| c.is_ascii_digit())?;
     let rest = &s[start..];
     let end = rest
@@ -75,12 +75,12 @@ fn parse_number(s: &str) -> Option<f64> {
 }
 
 /// 導通扱いの2ピン部品 (静的検証なのでスイッチ・接点は閉として扱う)。
-fn is_conductor(def: &SymbolDef) -> bool {
+pub(crate) fn is_conductor(def: &SymbolDef) -> bool {
     def.category == "switch" || def.category == "protection" || def.id.contains("contact")
 }
 
 /// 負荷 (電流を消費する部品)。
-fn is_load(def: &SymbolDef) -> bool {
+pub(crate) fn is_load(def: &SymbolDef) -> bool {
     def.category == "output" || def.id == "relay_coil" || def.id == "led"
 }
 
