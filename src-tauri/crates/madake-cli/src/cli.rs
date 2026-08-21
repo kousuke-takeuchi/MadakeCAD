@@ -40,6 +40,14 @@ pub enum Commands {
         #[arg(long, value_name = "ID")]
         sheet: Option<String>,
     },
+    /// 部品DBを検索する (グローバル共有マスタ)
+    Parts {
+        /// 型番・名称・メーカの部分一致 (省略時は全件)
+        query: Option<String>,
+        /// カテゴリ完全一致 (例: relay, connector)
+        #[arg(long)]
+        category: Option<String>,
+    },
     /// 図面検証 (ERC+電気検証)
     Verify {
         /// シートID (省略時は全シート)
@@ -111,6 +119,13 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
                 return Ok(pretty(&nets));
             }
             Ok(format::netlist(&nets))
+        }
+        Commands::Parts { query, category } => {
+            let parts = api.parts(query.as_deref(), category.as_deref())?;
+            if cli.json {
+                return Ok(pretty(&parts));
+            }
+            Ok(format::parts(&parts))
         }
         Commands::Verify { sheet } => {
             let diags = api.verify(sheet.as_deref())?;
@@ -222,6 +237,10 @@ mod tests {
         }
         fn verify(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
             self.record(format!("verify({sheet_id:?})"));
+            Ok(json!([]))
+        }
+        fn parts(&self, query: Option<&str>, category: Option<&str>) -> Result<Value, CliError> {
+            self.record(format!("parts({query:?}, {category:?})"));
             Ok(json!([]))
         }
         fn netlist(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {

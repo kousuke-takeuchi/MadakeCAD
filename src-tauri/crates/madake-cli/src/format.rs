@@ -221,6 +221,35 @@ pub fn project(snapshot: &Value) -> String {
 }
 
 /// `madake netlist`
+/// `madake parts`
+pub fn parts(parts: &Value) -> String {
+    let rows = parts.as_array().cloned().unwrap_or_default();
+    if rows.is_empty() {
+        return "該当する部品がありません。".to_string();
+    }
+    let lines: Vec<String> = rows
+        .iter()
+        .map(|p| {
+            let current = p["rated_current_a"]
+                .as_f64()
+                .map(|a| format!("{a}A"))
+                .unwrap_or_default();
+            format!(
+                "{:<20} {:<10} {} [{}] {} {}",
+                text(p, "part_no"),
+                text(p, "maker"),
+                text(p, "name"),
+                text(p, "symbol_id"),
+                text(p, "rated_voltage"),
+                current
+            )
+            .trim_end()
+            .to_string()
+        })
+        .collect();
+    format!("部品: {}件\n\n{}", rows.len(), lines.join("\n"))
+}
+
 /// `madake verify`
 pub fn diagnostics(diags: &Value) -> String {
     let diags = diags.as_array().cloned().unwrap_or_default();

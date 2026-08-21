@@ -22,6 +22,14 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 /// UI(Tauri)とMCPが共有するドキュメント状態。
+/// 部品DB (グローバル共有マスタ)。UI/MCP/Link API共通。
+pub type SharedParts = Arc<Mutex<madake_core::parts::PartsDb>>;
+
+/// 部品DBを開いて共有ハンドルにする。
+pub fn open_parts(path: &std::path::Path) -> Result<SharedParts, madake_core::parts::PartsError> {
+    Ok(Arc::new(Mutex::new(madake_core::parts::PartsDb::open(path)?)))
+}
+
 #[derive(Clone)]
 pub struct SharedDoc {
     pub engine: Arc<Mutex<Engine>>,
@@ -116,6 +124,19 @@ pub struct SheetRefParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SearchPartsParams {
+    /// 型番・名称・メーカの部分一致。空で全件。
+    pub query: Option<String>,
+    /// カテゴリ完全一致 (例: "relay", "connector")。
+    pub category: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PartNoParams {
+    pub part_no: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ExportPathParams {
     /// 出力先ファイルパス(絶対パス)。
     pub path: String,
@@ -132,11 +153,12 @@ pub struct ExportSvgParams {
 #[derive(Clone)]
 pub struct MadakeMcp {
     doc: SharedDoc,
+    parts: SharedParts,
 }
 
 impl MadakeMcp {
-    pub fn new(doc: SharedDoc) -> Self {
-        Self { doc }
+    pub fn new(doc: SharedDoc, parts: SharedParts) -> Self {
+        Self { doc, parts }
     }
 
     fn resolve_sheet(&self, sheet_id: Option<Uuid>) -> Result<Uuid, ErrorData> {
@@ -339,6 +361,37 @@ impl MadakeMcp {
         json_ok(&serde_json::json!({ "written": p.path }))
     }
 
+    #[tool(
+        description = "部品DB(グローバル共有マスタ)を検索する。queryは型番・名称・メーカの部分一致、categoryは完全一致。部品のsymbol_id/rated_current_aはplace_symbolやexecute_commandsでの配置に使える"
+    )]
+    fn search_parts(
+        &self,
+        Parameters(p): Parameters<SearchPartsParams>,
+    ) -> Result<String, ErrorData> {
+        let db = self.parts.lock().unwrap();
+        json_ok(
+            &db.search_parts(p.query.as_deref().unwrap_or(""), p.category.as_deref())
+                .map_err(internal)?,
+        )
+    }
+
+    #[tool(description = "部品DBへ部品を登録・更新する(part_noが一意キー)")]
+    fn upsert_part(
+        &self,
+        Parameters(p): Parameters<madake_core::parts::Part>,
+    ) -> Result<String, ErrorData> {
+        let db = self.parts.lock().unwrap();
+        db.upsert_part(&p).map_err(internal)?;
+        json_ok(&serde_json::json!({ "ok": true, "part_no": p.part_no }))
+    }
+
+    #[tool(description = "部品DBから部品を削除する")]
+    fn delete_part(&self, Parameters(p): Parameters<PartNoParams>) -> Result<String, ErrorData> {
+        let db = self.parts.lock().unwrap();
+        let deleted = db.delete_part(&p.part_no).map_err(internal)?;
+        json_ok(&serde_json::json!({ "deleted": deleted }))
+    }
+
     #[tool(description = "直前の編集を取り消す")]
     fn undo(&self) -> Result<String, ErrorData> {
         let patch = self.doc.undo().map_err(internal)?;
@@ -375,17 +428,19 @@ impl ServerHandler for MadakeMcp {
 pub async fn serve(
     doc: SharedDoc,
     agent: std::sync::Arc<madake_agent::AgentManager>,
+    parts: SharedParts,
     port: u16,
 ) -> std::io::Result<()> {
     let mcp_doc = doc.clone();
+    let mcp_parts = parts.clone();
     let service = StreamableHttpService::new(
-        move || Ok(MadakeMcp::new(mcp_doc.clone())),
+        move || Ok(MadakeMcp::new(mcp_doc.clone(), mcp_parts.clone())),
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
     let router = axum::Router::new()
         .nest_service("/mcp", service)
-        .merge(link_api::router(doc, agent));
+        .merge(link_api::router(doc, agent, parts));
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, router).await

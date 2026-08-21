@@ -22,7 +22,7 @@ use serde::Deserialize;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
-use crate::SharedDoc;
+use crate::{SharedDoc, SharedParts};
 
 type ApiError = (StatusCode, String);
 
@@ -392,6 +392,57 @@ async fn guard_origin(
     }
 }
 
+#[derive(Deserialize)]
+struct PartsQuery {
+    query: Option<String>,
+    category: Option<String>,
+}
+
+async fn get_parts(
+    State(parts): State<SharedParts>,
+    Query(q): Query<PartsQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let db = parts.lock().unwrap();
+    let hits = db
+        .search_parts(q.query.as_deref().unwrap_or(""), q.category.as_deref())
+        .map_err(bad_request)?;
+    Ok(Json(serde_json::json!(hits)))
+}
+
+async fn post_part(
+    State(parts): State<SharedParts>,
+    Json(part): Json<madake_core::parts::Part>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let db = parts.lock().unwrap();
+    db.upsert_part(&part).map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "ok": true, "part_no": part.part_no })))
+}
+
+async fn delete_part(
+    State(parts): State<SharedParts>,
+    axum::extract::Path(part_no): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let db = parts.lock().unwrap();
+    let deleted = db.delete_part(&part_no).map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "deleted": deleted })))
+}
+
+async fn get_wire_parts(
+    State(parts): State<SharedParts>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let db = parts.lock().unwrap();
+    Ok(Json(serde_json::json!(db.list_wire_parts().map_err(bad_request)?)))
+}
+
+async fn post_wire_part(
+    State(parts): State<SharedParts>,
+    Json(row): Json<madake_core::parts::WirePartRow>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let db = parts.lock().unwrap();
+    db.upsert_wire_part(&row).map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
 async fn health() -> impl IntoResponse {
     Json(serde_json::json!({ "name": "MadakeCAD Link API", "version": 1 }))
 }
@@ -401,11 +452,16 @@ async fn health() -> impl IntoResponse {
 /// アクセスはローカルオリジンに限定する(サーバーは127.0.0.1バインドだが、
 /// 外部Webページのブラウザからは到達できてしまうため)。ブラウザ以外
 /// (curl・madake CLI・FreeCADアドオン)はOriginを付けないので影響を受けない。
-pub fn router(doc: SharedDoc, agent: Arc<AgentManager>) -> Router {
+pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> Router {
     let agent_routes = agent_router(AgentApi {
         doc: doc.clone(),
         agent,
     });
+    let parts_routes = Router::new()
+        .route("/api/v1/parts", get(get_parts).post(post_part))
+        .route("/api/v1/parts/{part_no}", axum::routing::delete(delete_part))
+        .route("/api/v1/wire-parts", get(get_wire_parts).post(post_wire_part))
+        .with_state(parts);
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin, _| {
             origin.to_str().map(is_local_origin).unwrap_or(false)
@@ -427,6 +483,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>) -> Router {
         .route("/api/v1/export/wire-list", post(post_export_wire_list))
         .route("/api/v1/events", get(get_events))
         .with_state(doc)
+        .merge(parts_routes)
         .merge(agent_routes)
         .layer(cors)
         // CORSより外側。プリフライトもここを通す(外部オリジンはここで403)

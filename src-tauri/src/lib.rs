@@ -226,6 +226,12 @@ fn set_settings(state: State<AppState>, settings: AppSettings) -> Result<AppSett
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let doc = SharedDoc::new(Engine::new(Project::new("無題プロジェクト")));
+    let parts = madake_mcp::open_parts(&madake_core::parts::default_db_path())
+        .unwrap_or_else(|e| {
+            eprintln!("部品DBを開けませんでした ({e})。一時DBで継続します");
+            let tmp = std::env::temp_dir().join("madake-parts-fallback.sqlite");
+            madake_mcp::open_parts(&tmp).expect("一時部品DB")
+        });
     // MCPサーバーの待受ポート。エージェントのCLIもこのポートの/mcpへ自己接続する
     let mcp_port = std::env::var("MADAKE_MCP_PORT")
         .ok()
@@ -246,8 +252,9 @@ pub fn run() {
             // MCPサーバー起動 (127.0.0.1:port/mcp)。Link API(/api/v1)も同じポート
             let mcp_doc = doc.clone();
             let mcp_agent = Arc::clone(&agent);
+            let mcp_parts = parts.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = madake_mcp::serve(mcp_doc, mcp_agent, mcp_port).await {
+                if let Err(e) = madake_mcp::serve(mcp_doc, mcp_agent, mcp_parts, mcp_port).await {
                     eprintln!("MCP server error: {e}");
                 }
             });

@@ -80,6 +80,18 @@ impl fmt::Display for CliError {
 
 impl std::error::Error for CliError {}
 
+/// 最小限のURLエンコード (クエリ値用)。
+fn urlencoding_encode(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
 /// `http://127.0.0.1:<port>/api/v1`
 pub fn base_url(port: u16) -> String {
     format!("http://127.0.0.1:{port}/api/v1")
@@ -117,6 +129,8 @@ pub trait LinkApi {
     fn netlist(&self, sheet_id: Option<&str>) -> Result<Value, CliError>;
     /// `GET /api/v1/verify[?sheet_id=..]`
     fn verify(&self, sheet_id: Option<&str>) -> Result<Value, CliError>;
+    /// `GET /api/v1/parts[?query=..&category=..]`
+    fn parts(&self, query: Option<&str>, category: Option<&str>) -> Result<Value, CliError>;
     /// `POST /api/v1/commands` (Command配列 → Patch配列)
     fn exec(&self, commands: Value) -> Result<Value, CliError>;
     /// `POST /api/v1/undo`
@@ -199,6 +213,17 @@ impl LinkApi for HttpClient {
 
     fn verify(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
         self.get(verify_url(self.port, sheet_id))
+    }
+
+    fn parts(&self, query: Option<&str>, category: Option<&str>) -> Result<Value, CliError> {
+        let mut url = format!("{}?", endpoint(self.port, "/parts"));
+        if let Some(q) = query {
+            url.push_str(&format!("query={}&", urlencoding_encode(q)));
+        }
+        if let Some(cat) = category {
+            url.push_str(&format!("category={}", urlencoding_encode(cat)));
+        }
+        self.get(url.trim_end_matches(['?', '&']).to_string())
     }
 
     fn exec(&self, commands: Value) -> Result<Value, CliError> {

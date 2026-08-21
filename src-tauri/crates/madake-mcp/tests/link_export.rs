@@ -18,6 +18,75 @@ fn fake_claude() -> PathBuf {
 }
 
 #[tokio::test]
+async fn parts_endpoints_search_upsert_delete() {
+    let doc = SharedDoc::new(Engine::new(Project::new("部品テスト")));
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude()));
+    let db_path = std::env::temp_dir().join(format!("madake-parts-api-{}.sqlite", std::process::id()));
+    std::fs::remove_file(&db_path).ok();
+    let parts = madake_mcp::open_parts(&db_path).expect("parts db");
+    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
+
+    let call = |method: &'static str, uri: String, body: Option<Value>| {
+        let router = router.clone();
+        async move {
+            let mut b = Request::builder().method(method).uri(uri);
+            if body.is_some() {
+                b = b.header("content-type", "application/json");
+            }
+            let req = b
+                .body(match body {
+                    Some(v) => Body::from(v.to_string()),
+                    None => Body::empty(),
+                })
+                .unwrap();
+            let res = router.oneshot(req).await.unwrap();
+            let status = res.status();
+            let bytes = res.into_body().collect().await.unwrap().to_bytes();
+            (status, serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null))
+        }
+    };
+
+    // サンプルが検索できる
+    let (status, body) = call("GET", "/api/v1/parts?query=MDK-FUSE".into(), None).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body.as_array().unwrap().len(), 1);
+    assert_eq!(body[0]["symbol_id"], "fuse");
+
+    // upsert → 検索でヒット
+    let (status, _) = call(
+        "POST",
+        "/api/v1/parts".into(),
+        Some(json!({
+            "part_no": "TEST-PB-01", "name": "押しボタン", "category": "switch",
+            "symbol_id": "pushbutton_no", "rated_current_a": 3.0
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, body) = call("GET", "/api/v1/parts?query=TEST-PB".into(), None).await;
+    assert_eq!(body[0]["name"], "押しボタン");
+
+    // カテゴリ絞り込み
+    let (_, body) = call("GET", "/api/v1/parts?category=switch".into(), None).await;
+    assert!(body.as_array().unwrap().iter().all(|p| p["category"] == "switch"));
+
+    // 削除
+    let (status, body) = call("DELETE", "/api/v1/parts/TEST-PB-01".into(), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["deleted"], true);
+    let (_, body) = call("GET", "/api/v1/parts?query=TEST-PB".into(), None).await;
+    assert!(body.as_array().unwrap().is_empty());
+
+    // 電線品番マスタ
+    let (status, body) = call("GET", "/api/v1/wire-parts".into(), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!body.as_array().unwrap().is_empty(), "電線サンプル");
+
+    std::fs::remove_file(&db_path).ok();
+}
+
+#[tokio::test]
 async fn verify_returns_diagnostics() {
     let mut project = Project::new("検証テスト");
     // 参照記号なしの抵抗を1個置く → erc.empty_reference と erc.unconnected_pin が出る
@@ -36,7 +105,11 @@ async fn verify_returns_diagnostics() {
     let doc = SharedDoc::new(Engine::new(project));
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude()));
-    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent));
+    let parts = madake_mcp::open_parts(
+        &std::env::temp_dir().join(format!("madake-parts-export-{}.sqlite", std::process::id())),
+    )
+    .expect("parts db");
+    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
 
     let request = Request::builder()
         .method("GET")
@@ -59,7 +132,11 @@ async fn export_pdf_writes_pdf_file() {
     let doc = SharedDoc::new(Engine::new(Project::new("PDFテスト")));
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude()));
-    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent));
+    let parts = madake_mcp::open_parts(
+        &std::env::temp_dir().join(format!("madake-parts-export-{}.sqlite", std::process::id())),
+    )
+    .expect("parts db");
+    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
 
     let dir = std::env::temp_dir().join(format!("madake-pdf-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
