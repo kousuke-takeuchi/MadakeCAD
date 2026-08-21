@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 
 use crate::geometry::Point;
-use crate::model::{Entity, Sheet};
+use crate::model::{Entity, Revision, Sheet};
 use crate::netlist::transform_local;
 use crate::symbol::{Primitive, SymbolDef};
 
@@ -13,6 +13,47 @@ const FRAME_MARGIN: f64 = 10.0;
 const WIRE_STROKE: f64 = 0.35;
 /// シンボルの線幅 (mm)。
 const SYMBOL_STROKE: f64 = 0.3;
+/// 表題欄の外形 (幅, 高さ) mm。右下に置く。
+const TITLE_W: f64 = 120.0;
+const TITLE_H: f64 = 32.0;
+/// 表題欄・改訂欄の共通行高 (mm)。
+const ROW_H: f64 = 8.0;
+/// 枠線の線幅 (mm)。
+const FRAME_STROKE: f64 = 0.5;
+/// 罫線の線幅 (mm)。
+const RULE_STROKE: f64 = 0.25;
+/// 表題欄の文字高さ (mm)。
+const TITLE_FONT: f64 = 3.0;
+/// 改訂欄の列幅 (記号 / 日付 / 内容 / 承認) mm。合計は表題欄の幅と一致させる。
+const REV_COL_W: [f64; 4] = [14.0, 28.0, 56.0, 22.0];
+/// 改訂欄の列見出し (ISO 7200 / JIS Z 8311)。
+const REV_HEADERS: [&str; 4] = ["記号", "日付", "内容", "承認"];
+/// 改訂欄に描く最大行数。溢れた分は古い行から省略する (データは保持)。
+const REV_MAX_ROWS: usize = 6;
+/// 改訂欄の本文・列見出しの文字高さ (mm)。
+const REV_FONT: f64 = 2.5;
+const REV_HEADER_FONT: f64 = 2.2;
+/// セル内テキストの左余白 (mm)。
+const CELL_PAD: f64 = 2.0;
+
+/// 図面に描く改訂行(古い順)。上限を超えた分は古い行から省く。
+pub fn visible_revisions(revisions: &[Revision]) -> &[Revision] {
+    &revisions[revisions.len().saturating_sub(REV_MAX_ROWS)..]
+}
+
+/// 表題欄のRev欄に出す改訂記号。改訂があれば最新のmarkを優先する。
+pub fn effective_rev(sheet: &Sheet) -> String {
+    let latest = sheet
+        .revisions
+        .last()
+        .map(|r| r.mark.trim())
+        .filter(|m| !m.is_empty());
+    match latest {
+        Some(m) => m.to_string(),
+        None if sheet.title_block.rev.is_empty() => "-".to_string(),
+        None => sheet.title_block.rev.clone(),
+    }
+}
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -104,20 +145,22 @@ fn frame_and_title_block(out: &mut String, sheet: &Sheet) {
         text_el(out, x1 + 3.0, cy, 3.0, "#000", "middle", &letter);
     }
     // 表題欄 (右下、120x32mm、4行)
-    let (tw, th) = (120.0, 32.0);
+    let (tw, th) = (TITLE_W, TITLE_H);
     let (tx, ty) = (x1 - tw, y1 - th);
     let tb = &sheet.title_block;
+    revision_block(out, sheet, tx, ty);
     let _ = write!(
         out,
-        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"#fff\" stroke=\"#000\" stroke-width=\"0.5\"/>\n",
-        n(tx), n(ty), n(tw), n(th)
+        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"#fff\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+        n(tx), n(ty), n(tw), n(th), n(FRAME_STROKE)
     );
     for r in 1..4 {
-        line_el(out, tx, ty + 8.0 * r as f64, tx + tw, ty + 8.0 * r as f64, 0.25, "#000");
+        let ry = ty + ROW_H * r as f64;
+        line_el(out, tx, ry, tx + tw, ry, RULE_STROKE, "#000");
     }
-    line_el(out, tx + 24.0, ty, tx + 24.0, ty + th, 0.25, "#000");
+    line_el(out, tx + 24.0, ty, tx + 24.0, ty + th, RULE_STROKE, "#000");
     let rows4: [(&str, String); 4] = [
-        ("図番", format!("{}  Rev {}", tb.drawing_no, if tb.rev.is_empty() { "-" } else { &tb.rev })),
+        ("図番", format!("{}  Rev {}", tb.drawing_no, effective_rev(sheet))),
         ("品名", tb.title.clone()),
         ("尺度", format!("{}    日付 {}", tb.scale, tb.date)),
         (
@@ -129,12 +172,64 @@ fn frame_and_title_block(out: &mut String, sheet: &Sheet) {
         ),
     ];
     for (i, (label, value)) in rows4.iter().enumerate() {
-        let cy = ty + 8.0 * i as f64 + 5.5;
-        text_el(out, tx + 2.0, cy, 3.0, "#000", "start", label);
-        text_el(out, tx + 26.0, cy, 3.0, "#000", "start", value);
+        let cy = ty + ROW_H * i as f64 + 5.5;
+        text_el(out, tx + CELL_PAD, cy, TITLE_FONT, "#000", "start", label);
+        text_el(out, tx + 26.0, cy, TITLE_FONT, "#000", "start", value);
     }
     if !tb.company.is_empty() {
-        text_el(out, tx - 2.0, y1 - 2.0, 3.0, "#000", "end", &tb.company);
+        text_el(out, tx - 2.0, y1 - 2.0, TITLE_FONT, "#000", "end", &tb.company);
+    }
+}
+
+/// 改訂欄 (ISO 7200 / JIS Z 8311)。表題欄の直上に同じ右端・同じ幅で描き、
+/// 最下段を列見出し、その上に古い改訂から順に積む (最新が最上段)。0行なら何も描かない。
+fn revision_block(out: &mut String, sheet: &Sheet, tx: f64, ty: f64) {
+    let rows = visible_revisions(&sheet.revisions);
+    if rows.is_empty() {
+        return;
+    }
+    // 高さ = (改訂行 + 列見出し1行) × 行高。下端は表題欄の上端。
+    let h = (rows.len() as f64 + 1.0) * ROW_H;
+    let top = ty - h;
+    let _ = write!(
+        out,
+        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"#fff\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+        n(tx), n(top), n(TITLE_W), n(h), n(FRAME_STROKE)
+    );
+    for r in 1..=rows.len() {
+        let ry = top + ROW_H * r as f64;
+        line_el(out, tx, ry, tx + TITLE_W, ry, RULE_STROKE, "#000");
+    }
+    let mut cx = tx;
+    for w in REV_COL_W.iter().take(REV_COL_W.len() - 1) {
+        cx += w;
+        line_el(out, cx, top, cx, ty, RULE_STROKE, "#000");
+    }
+    // セル左端 (記号 / 日付 / 内容 / 承認)
+    let mut lefts = [0.0f64; 4];
+    let mut x = tx;
+    for (i, w) in REV_COL_W.iter().enumerate() {
+        lefts[i] = x;
+        x += w;
+    }
+    let baseline = |row_top: f64, font: f64| row_top + ROW_H / 2.0 + font / 2.0;
+    // 列見出しは最下段 (表題欄側)
+    let head_top = ty - ROW_H;
+    for (i, label) in REV_HEADERS.iter().enumerate() {
+        let cy = baseline(head_top, REV_HEADER_FONT);
+        text_el(out, lefts[i] + CELL_PAD, cy, REV_HEADER_FONT, "#000", "start", label);
+    }
+    // 改訂行: 古い行 (rows[0]) が見出しの直上、新しい行ほど上へ積む
+    for (i, rev) in rows.iter().enumerate() {
+        let row_top = ty - (i as f64 + 2.0) * ROW_H;
+        let cy = baseline(row_top, REV_FONT);
+        let cells = [&rev.mark, &rev.date, &rev.description, &rev.by];
+        for (c, value) in cells.iter().enumerate() {
+            if value.is_empty() {
+                continue;
+            }
+            text_el(out, lefts[c] + CELL_PAD, cy, REV_FONT, "#000", "start", value);
+        }
     }
 }
 
@@ -344,6 +439,118 @@ mod tests {
         let svg = sheet_to_svg(&sheet, &builtin_symbols());
         assert!(svg.contains("A&lt;B&gt; &amp; &quot;C&quot;"));
         assert!(!svg.contains("A<B>"));
+    }
+
+    /// 属性値を1つ読む(テスト用の素朴なパーサ)。
+    fn attr(line: &str, name: &str) -> Option<f64> {
+        let pat = format!("{name}=\"");
+        let i = line.find(&pat)? + pat.len();
+        let rest = &line[i..];
+        let j = rest.find('"')?;
+        rest[..j].parse().ok()
+    }
+
+    /// SVG中の`<text>`を (x, y, 文字列) で列挙する。
+    fn texts(svg: &str) -> Vec<(f64, f64, String)> {
+        svg.lines()
+            .filter(|l| l.trim_start().starts_with("<text "))
+            .filter_map(|l| {
+                let x = attr(l, "x")?;
+                let y = attr(l, "y")?;
+                let body = l.split_once('>')?.1.rsplit_once("</text>")?.0.to_string();
+                Some((x, y, body))
+            })
+            .collect()
+    }
+
+    /// 改訂欄の領域 (表題欄と同じ右下ブロック) にある指定文字列のY座標。
+    /// ゾーン記号の "A"/"B" と紛れないようX範囲で絞る。
+    fn text_y(svg: &str, content: &str) -> Option<f64> {
+        texts(svg)
+            .into_iter()
+            .find(|(x, _, s)| s == content && (290.0..=410.0).contains(x))
+            .map(|(_, y, _)| y)
+    }
+
+    fn sheet_with_revisions(marks: &[&str]) -> Sheet {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        sheet.revisions = marks
+            .iter()
+            .map(|m| Revision {
+                mark: (*m).into(),
+                date: format!("26-08-{m}"),
+                description: format!("変更{m}"),
+                by: "K.T".into(),
+            })
+            .collect();
+        sheet
+    }
+
+    /// Two revisions draw a table right above the title block, oldest at the bottom and newest on top, with a column header row.
+    /// 改訂が2件あると表題欄の真上に改訂表が描かれ、古い行が下・新しい行が上に積まれ、最下段に列見出し(記号/日付/内容/承認)が出る。
+    #[test]
+    fn svg_draws_revision_table_above_title_block() {
+        let sheet = sheet_with_revisions(&["A", "B"]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        // 列見出しと2行分の内容が出る
+        assert!(svg.contains("記号"), "{svg}");
+        assert!(svg.contains("変更A") && svg.contains("変更B"), "{svg}");
+        let y_a = text_y(&svg, "A").expect("改訂Aの記号");
+        let y_b = text_y(&svg, "B").expect("改訂Bの記号");
+        let y_head = text_y(&svg, "記号").expect("列見出し");
+        // 新しい改訂ほど上 (Yが小さい)、見出しは最下段
+        assert!(y_b < y_a, "B({y_b}) は A({y_a}) より上");
+        assert!(y_a < y_head, "見出し({y_head}) は改訂行より下");
+        // 表題欄(右下120x32mm)の真上・同じ右端・同じ幅・行高8mm×(2行+見出し)
+        assert!(
+            svg.contains("<rect x=\"290\" y=\"231\" width=\"120\" height=\"24\""),
+            "{svg}"
+        );
+    }
+
+    /// A sheet with no revisions draws no revision table at all, not even an empty frame.
+    /// 改訂が0件のシートには改訂欄をまったく描かない(空の枠だけも描かない)。
+    #[test]
+    fn svg_omits_revision_table_when_no_revisions() {
+        let sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(!svg.contains("記号"), "{svg}");
+        // 表題欄より上に120mm幅の枠が増えていない
+        assert!(!svg.contains("<rect x=\"290\" y=\"231\""), "{svg}");
+    }
+
+    /// The Rev field of the title block shows the mark of the newest revision, and falls back to the stored value when there are no revisions.
+    /// 表題欄のRev欄には最新改訂の記号が出る。改訂が無いときは表題欄に保存された値がそのまま出る。
+    #[test]
+    fn svg_title_block_rev_follows_latest_revision() {
+        let mut sheet = sheet_with_revisions(&["A", "B", "C"]);
+        sheet.title_block.rev = "A".into();
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(svg.contains("Rev C"), "{svg}");
+        assert!(!svg.contains("Rev A"), "{svg}");
+
+        let mut plain = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        plain.title_block.rev = "A".into();
+        let svg2 = sheet_to_svg(&plain, &builtin_symbols());
+        assert!(svg2.contains("Rev A"), "{svg2}");
+    }
+
+    /// With seven revisions only the newest six rows are drawn; the oldest row is dropped from the drawing while the data keeps it.
+    /// 改訂が7件あると新しい6行だけが描かれ、最も古い行は図面から省かれる(データとしては残る)。
+    #[test]
+    fn svg_revision_table_shows_only_newest_six_rows() {
+        let sheet = sheet_with_revisions(&["A", "B", "C", "D", "E", "F", "G"]);
+        assert_eq!(sheet.revisions.len(), 7);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(!svg.contains("変更A"), "最も古い行は省略される: {svg}");
+        for m in ["B", "C", "D", "E", "F", "G"] {
+            assert!(svg.contains(&format!("変更{m}")), "{m}行が無い: {svg}");
+        }
+        // 6行+見出し=7行分の高さ (8mm×7=56mm)
+        assert!(
+            svg.contains("<rect x=\"290\" y=\"199\" width=\"120\" height=\"56\""),
+            "{svg}"
+        );
     }
 
     /// Rotated symbols are drawn with their shapes actually rotated (90 deg makes a resistor body vertical).
