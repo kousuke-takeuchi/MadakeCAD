@@ -12,6 +12,7 @@ import RibbonBar from "./RibbonBar.vue";
 import StatusBar from "./StatusBar.vue";
 import SymbolPickerDialog from "./SymbolPickerDialog.vue";
 import TitleBar from "./TitleBar.vue";
+import SettingsDialog from "./settings/SettingsDialog.vue";
 
 const store = useDocumentStore();
 const ui = useUiStore();
@@ -25,6 +26,11 @@ function isEditableTarget(ev: KeyboardEvent) {
 }
 
 async function onKeyDown(ev: KeyboardEvent) {
+  if (ev.key === "Escape" && ui.settingsOpen) {
+    ui.settingsOpen = false;
+    ev.preventDefault();
+    return;
+  }
   if (ev.key === "Escape" && ui.symbolPickerOpen) {
     ui.symbolPickerOpen = false;
     ev.preventDefault();
@@ -60,6 +66,7 @@ onBeforeUnmount(() => {
     </div>
     <StatusBar />
     <SymbolPickerDialog />
+    <SettingsDialog />
   </div>
 </template>
 

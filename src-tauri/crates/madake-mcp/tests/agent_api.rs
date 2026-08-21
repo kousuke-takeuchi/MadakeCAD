@@ -465,3 +465,62 @@ fn drawing_context_summarizes_the_active_sheet() {
     assert!(context.contains("2.5mm"), "{context}");
     assert!(context.contains("mcp__madakecad__*"), "{context}");
 }
+
+/// `GET/PUT /api/v1/settings`: 保存はファイルへ、反映はマネージャへ。
+///
+/// ユーザーの`~/.madakecad/settings.json`を書き換えないよう、保存先は
+/// `MADAKE_SETTINGS_PATH`で一時ディレクトリへ逃がす(このテストのみが触る)。
+#[test]
+fn settings_endpoints_persist_and_apply() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    std::env::set_var(madake_agent::settings::SETTINGS_PATH_ENV, &path);
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let (_doc, agent, router) = setup("fake_claude.sh");
+
+        let (status, body) = call(&router, "GET", "/api/v1/settings", None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["auto_apply"], json!(true));
+        assert_eq!(body["auto_read_drawing"], json!(true));
+        assert_eq!(body["claude_path"], Value::Null);
+
+        let (status, body) = call(
+            &router,
+            "PUT",
+            "/api/v1/settings",
+            Some(json!({
+                // 空白は落として保存される(UIのテキスト欄対策)
+                "claude_path": "  /opt/homebrew/bin/claude  ",
+                "auto_apply": false,
+                "auto_read_drawing": false,
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["claude_path"], json!("/opt/homebrew/bin/claude"));
+
+        // マネージャへ反映済み(次の送信から有効)
+        assert_eq!(
+            agent.executable(),
+            Some(std::path::PathBuf::from("/opt/homebrew/bin/claude"))
+        );
+        assert!(!agent.settings().auto_read_drawing);
+
+        // ファイルにも書かれている
+        let saved: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(saved["claude_path"], json!("/opt/homebrew/bin/claude"));
+        assert_eq!(saved["auto_read_drawing"], json!(false));
+
+        // GETは保存後の値を返す
+        let (_, body) = call(&router, "GET", "/api/v1/settings", None).await;
+        assert_eq!(body["auto_apply"], json!(false));
+    });
+
+    std::env::remove_var(madake_agent::settings::SETTINGS_PATH_ENV);
+    std::fs::remove_dir_all(&dir).ok();
+}

@@ -1,0 +1,64 @@
+import { setActivePinia, createPinia } from "pinia";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+import { useSettingsStore, settingsApi, defaultSettings, type AppSettings } from "./settings";
+
+describe("settings store", () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  it("既定値は自動適用・図面自動読み取りがON", () => {
+    expect(defaultSettings()).toEqual({
+      claude_path: null,
+      auto_apply: true,
+      auto_read_drawing: true,
+    });
+    expect(useSettingsStore().settings).toEqual(defaultSettings());
+  });
+
+  it("loadでバックエンドの設定を取り込む", async () => {
+    const stored: AppSettings = {
+      claude_path: "/opt/homebrew/bin/claude",
+      auto_apply: false,
+      auto_read_drawing: false,
+    };
+    vi.spyOn(settingsApi, "get").mockResolvedValue(stored);
+
+    const store = useSettingsStore();
+    await store.load();
+
+    expect(store.settings).toEqual(stored);
+    expect(store.loaded).toBe(true);
+    expect(store.error).toBeNull();
+  });
+
+  it("saveは変更分をマージして送り、正規化後の戻り値を採用する", async () => {
+    const set = vi
+      .spyOn(settingsApi, "set")
+      .mockResolvedValue({ claude_path: "/usr/local/bin/claude", auto_apply: true, auto_read_drawing: false });
+
+    const store = useSettingsStore();
+    const ok = await store.save({ claude_path: "  /usr/local/bin/claude  ", auto_read_drawing: false });
+
+    expect(ok).toBe(true);
+    expect(set).toHaveBeenCalledWith({
+      claude_path: "  /usr/local/bin/claude  ",
+      auto_apply: true,
+      auto_read_drawing: false,
+    });
+    // サーバー側で空白を落とした値がそのまま表示に使われる
+    expect(store.settings.claude_path).toBe("/usr/local/bin/claude");
+    expect(store.saving).toBe(false);
+  });
+
+  it("save失敗時はエラーを保持し、表示中の設定を変えない", async () => {
+    vi.spyOn(settingsApi, "set").mockRejectedValue(new Error("Link API 400: だめ"));
+
+    const store = useSettingsStore();
+    const ok = await store.save({ auto_read_drawing: false });
+
+    expect(ok).toBe(false);
+    expect(store.settings).toEqual(defaultSettings());
+    expect(store.error).toContain("だめ");
+    expect(store.saving).toBe(false);
+  });
+});

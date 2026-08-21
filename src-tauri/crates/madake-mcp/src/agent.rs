@@ -6,11 +6,13 @@
 //! - [`drawing_context`][]: 送信のたびに`--append-system-prompt`へ渡す図面サマリ。
 //! - [`load_project_with_chat`][] / [`save_project_with_chat`][]: 図面とチャット履歴を
 //!   セットで読み書きする共通処理(Tauri IPCとLink APIの両方がこれを呼ぶ)。
+//! - [`load_and_apply_settings`][] / [`update_settings`][]: アプリ設定
+//!   (`~/.madakecad/settings.json`)とマネージャの同期。
 
 use std::path::Path;
 use std::sync::Arc;
 
-use madake_agent::{AgentManager, Conversation, DocBridge, DocState};
+use madake_agent::{AgentManager, AppSettings, Conversation, DocBridge, DocState};
 use madake_core::{builtin_symbols, Entity, Patch};
 
 use crate::SharedDoc;
@@ -46,6 +48,28 @@ pub fn manager(doc: &SharedDoc, mcp_port: u16) -> Arc<AgentManager> {
         Arc::new(SharedDocBridge(doc.clone())),
         mcp_port,
     ))
+}
+
+/// 設定ファイルを読み、エージェントへ反映する(起動時に1回呼ぶ)。
+///
+/// 読めない設定でアプリが起動できなくなるのは困るため、失敗しても既定値で続行する。
+pub fn load_and_apply_settings(agent: &AgentManager) -> AppSettings {
+    let settings = madake_agent::settings::load_default_settings().unwrap_or_else(|e| {
+        eprintln!("設定の読込に失敗しました(既定値で続行します): {e}");
+        AppSettings::default()
+    });
+    agent.apply_settings(settings.clone());
+    settings
+}
+
+/// 設定を保存し、エージェントへ反映する(Tauri IPCとLink APIの共通処理)。
+///
+/// 戻り値は正規化後の設定(UIはこれで表示を更新する)。反映は次の送信から有効。
+pub fn update_settings(agent: &AgentManager, settings: AppSettings) -> Result<AppSettings, String> {
+    let settings = settings.normalized();
+    madake_agent::settings::save_default_settings(&settings).map_err(|e| e.to_string())?;
+    agent.apply_settings(settings.clone());
+    Ok(settings)
 }
 
 /// プロジェクトを読み込み、隣のチャット履歴(`<stem>.chat.json`)へ会話を差し替える。

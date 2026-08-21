@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use madake_agent::manager::{AgentManager, ConversationEvent, DocBridge};
-use madake_agent::{AgentEvent, DocState};
+use madake_agent::{AgentEvent, AppSettings, DocState};
 use tokio::sync::broadcast::Receiver;
 use uuid::Uuid;
 
@@ -134,6 +134,19 @@ async fn collect_turn(rx: &mut Receiver<ConversationEvent>) -> Vec<AgentEvent> {
             return events;
         }
     }
+}
+
+/// ターンを1本受け切り、`TurnCompleted`の本文を返す
+/// (`fake_claude_echo_args.sh`はCLIへ渡った引数をここへ載せる)。
+async fn turn_result(rx: &mut Receiver<ConversationEvent>) -> String {
+    collect_turn(rx)
+        .await
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::TurnCompleted { result, .. } => Some(result.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 fn kinds(events: &[AgentEvent]) -> Vec<&'static str> {
@@ -497,15 +510,7 @@ async fn context_and_model_are_forwarded_to_the_cli() {
         )
         .await
         .unwrap();
-    let events = collect_turn(&mut rx).await;
-
-    let text: String = events
-        .iter()
-        .filter_map(|e| match e {
-            AgentEvent::TurnCompleted { result, .. } => Some(result.clone()),
-            _ => None,
-        })
-        .collect();
+    let text = turn_result(&mut rx).await;
     assert!(text.contains("--model=claude-opus-4-6"), "{text}");
     assert!(
         text.contains("--append-system-prompt=アクティブシート: S1"),
@@ -515,6 +520,75 @@ async fn context_and_model_are_forwarded_to_the_cli() {
         manager.conversations()[0].model.as_deref(),
         Some("claude-opus-4-6")
     );
+}
+
+/// 設定「図面の自動読み取り」OFFなら、図面コンテキストはCLIへ渡らない。
+/// 設定の反映は次の送信から有効(再起動不要)であること。
+#[tokio::test]
+async fn auto_read_drawing_off_suppresses_the_drawing_context() {
+    let doc = FakeDoc::new(0);
+    let manager = manager(doc, "fake_claude_echo_args.sh");
+    let mut rx = manager.subscribe();
+
+    manager.apply_settings(AppSettings {
+        claude_path: Some(fixtures_dir().join("fake_claude_echo_args.sh")),
+        auto_apply: true,
+        auto_read_drawing: false,
+    });
+    manager
+        .send(None, "hi", None, Some("アクティブシート: S1".to_string()))
+        .await
+        .unwrap();
+    assert!(
+        !turn_result(&mut rx)
+            .await
+            .contains("--append-system-prompt"),
+        "自動読み取りOFFでは図面コンテキストを渡さない"
+    );
+
+    // 設定を戻せば、そのまま次の送信から復活する
+    manager.apply_settings(AppSettings {
+        claude_path: Some(fixtures_dir().join("fake_claude_echo_args.sh")),
+        auto_apply: true,
+        auto_read_drawing: true,
+    });
+    manager
+        .send(None, "hi", None, Some("アクティブシート: S1".to_string()))
+        .await
+        .unwrap();
+    assert!(turn_result(&mut rx)
+        .await
+        .contains("--append-system-prompt=アクティブシート: S1"));
+}
+
+/// 設定のclaude実行パスが、そのままバックエンドの実行ファイルになる。
+#[tokio::test]
+async fn claude_path_setting_becomes_the_backend_executable() {
+    let doc = FakeDoc::new(0);
+    // set_executableは使わず、設定だけで実行パスを与える
+    let manager = Arc::new(AgentManager::new(doc, 9310));
+    let mut rx = manager.subscribe();
+    manager.apply_settings(AppSettings {
+        claude_path: Some(fixtures_dir().join("fake_claude_echo_args.sh")),
+        ..AppSettings::default()
+    });
+    assert_eq!(
+        manager.executable(),
+        Some(fixtures_dir().join("fake_claude_echo_args.sh"))
+    );
+
+    manager
+        .send(None, "hi", Some("claude-opus-4-6".to_string()), None)
+        .await
+        .unwrap();
+    assert!(turn_result(&mut rx)
+        .await
+        .contains("--model=claude-opus-4-6"));
+
+    // パスを消すと自動検出へ戻る
+    manager.apply_settings(AppSettings::default());
+    assert_eq!(manager.executable(), None);
+    assert_eq!(manager.settings(), AppSettings::default());
 }
 
 /// 会話の差し替え(プロジェクト読込)で履歴が復元され、送信中ターンは中断される。
