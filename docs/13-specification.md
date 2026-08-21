@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**414 specification clauses** across 5 areas.
+**425 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -444,6 +444,20 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - refuses to run while the start number is invalid <sub>`wire numbering dialog store`</sub>
 - sends nothing when the dialog is cancelled <sub>`wire numbering dialog store`</sub>
 - keeps the dialog open and reports the error when numbering fails <sub>`wire numbering dialog store`</sub>
+
+### xref
+
+- combines the row letter (top to bottom) with the column number (left to right) <sub>`zoneAt`</sub>
+- rounds points outside the drawing frame to the nearest zone <sub>`zoneAt`</sub>
+- addresses a counterpart as /sheet.zone <sub>`cross references`</sub>
+- shows the counterpart on both sides <sub>`cross references`</sub>
+- lists every counterpart when the net continues onto several sheets <sub>`cross references`</sub>
+- never lists the label's own sheet as a counterpart <sub>`cross references`</sub>
+- shows nothing for a label without a counterpart <sub>`cross references`</sub>
+- returns the target sheet and label id so the panel can jump to it <sub>`cross references`</sub>
+- maps each label id to the text drawn beside it <sub>`cross references`</sub>
+- names the sheet to switch to and the label to select and zoom <sub>`xrefJumpTarget`</sub>
+- places the text right of the label text on the same baseline <sub>`xrefTextAt`</sub>
 
 ### propertyCommands
 

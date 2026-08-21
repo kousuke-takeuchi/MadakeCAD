@@ -126,5 +126,12 @@
     "noteRow": "備考",
     "notePlaceholder": "製作指示など",
     "renamedLog": "ハーネス: 名前を {name} にしました (Cmd+Zで元に戻せます)"
+  },
+  "xref": {
+    "propertyLabel": "相手先",
+    "propertyHint": "同じネットラベルが続くシートとゾーン。住所をクリックするとそこへ飛びます",
+    "none": "なし",
+    "noneHint": "他のシートに同名のネットラベルがありません",
+    "jumpLog": "クロスリファレンス: {address} ({sheet}) へジャンプしました"
   }
 }

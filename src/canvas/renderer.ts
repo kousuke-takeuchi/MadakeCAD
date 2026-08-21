@@ -8,6 +8,7 @@ import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
 import { entityViewClass, type ViewClass } from "./viewClasses";
 import { agentRgba, theme, wireColorScreen } from "./theme";
 import { WIRE_NO_FONT, wireNumberLabels } from "./wireNumbers";
+import { XREF_FONT, xrefTextAt } from "./xref";
 import { GRID_PITCH, type Viewport } from "./viewport";
 
 /** 図枠の用紙端からのマージン (mm)。svg.rsのFRAME_MARGINと一致させること。 */
@@ -100,6 +101,11 @@ export interface RenderOptions {
   cursor: { x: number; y: number } | null;
   /** エージェント編集オーバーレイ。省略時は描かない。 */
   agent?: AgentPaint;
+  /**
+   * シート間クロスリファレンス (ネットラベルのid → 「/2.B3」等の相手先テキスト)。
+   * `sheetXrefs()` の戻り。省略時は描かない。表示クラスは「ネットラベル」に含まれる。
+   */
+  xrefs?: ReadonlyMap<string, string>;
 }
 
 /** エージェント編集オーバーレイの描画入力。 */
@@ -648,6 +654,14 @@ export function renderSheet(
       ctx.font = `${Math.max(9, 2.5 * vp.scale)}px monospace`;
       ctx.textAlign = "left";
       ctx.fillText(e.name, s.x, s.y - 2);
+      // シート間クロスリファレンス (IEC 61082-1)。相手のいるラベルだけ右脇に添える
+      const xref = opts.xrefs?.get(e.id);
+      if (xref) {
+        const at = vp.toScreen(xrefTextAt(e));
+        ctx.fillStyle = theme.xref;
+        ctx.font = `${Math.max(8, XREF_FONT * vp.scale)}px monospace`;
+        ctx.fillText(xref, at.x, at.y);
+      }
     } else if (e.kind === "text") {
       const s = vp.toScreen(e.at);
       ctx.fillStyle = theme.line;
