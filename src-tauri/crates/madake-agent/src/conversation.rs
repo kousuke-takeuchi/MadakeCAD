@@ -1,8 +1,13 @@
 //! 会話・ターン管理と、チャット履歴の永続化。
 //!
-//! ターン中にエージェントがMCP経由で実行した編集はCommandエンジンのrevisionを進める。
-//! ターン開始/終了時のrevisionを [`ChatMessage::applied_revisions`] に記録しておくと、
-//! 「元に戻す」は差分回数だけ`undo`を呼べばよい。
+//! ターン中にエージェントがMCP経由で実行した編集はCommandエンジンのundo履歴に積まれる。
+//! ターン開始/終了時のundoスタック深さを [`ChatMessage::applied_undo_depth`] に記録して
+//! おけば、「元に戻す」は増分の回数だけ`undo`を呼べばよい。
+//!
+//! **revisionではなく深さを使う理由**: エンジンの`revision`はundo/redoでも進むため、
+//! ターン中にエージェントがMCPのundo/redoツールを使ったり、ユーザーがUIで編集+undoを
+//! 挟んだりすると、revision差分は実際に積まれたコマンド数より大きくなる。
+//! [`ChatMessage::applied_revisions`] は表示用に残してあるが、undo回数の正は深さ増分。
 //!
 //! 履歴はプロジェクトファイルの隣に`<stem>.chat.json`(整形JSON)として保存する。
 
@@ -22,9 +27,10 @@ pub enum Role {
     Assistant,
 }
 
-/// ターンの前後で挟んだEngineのrevision範囲。
+/// ターンの前後で挟んだEngineのrevision範囲(表示・デバッグ用)。
 ///
-/// `end - start`がこのターンで確定した編集コマンド数(= 元に戻すのに必要なundo回数)。
+/// undo/redoでもrevisionは進むため、`end - start`は「積まれたコマンド数」ではない。
+/// 巻き戻し回数には [`AppliedUndoDepth`] を使うこと。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct AppliedRevisions {
     /// ターン開始時のrevision
@@ -46,6 +52,49 @@ impl AppliedRevisions {
     }
 }
 
+/// ターンの前後で挟んだundoスタックの深さ。
+///
+/// `end - start`がこのターンで新たに積まれた編集コマンド数
+/// (= 元に戻すのに必要なundo回数)。ターン中にundoが混ざっても正しい値になる。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct AppliedUndoDepth {
+    /// ターン開始時のundoスタック深さ
+    pub start: u64,
+    /// ターン終了時のundoスタック深さ
+    pub end: u64,
+}
+
+impl AppliedUndoDepth {
+    pub fn at(depth: u64) -> Self {
+        Self {
+            start: depth,
+            end: depth,
+        }
+    }
+
+    pub fn count(&self) -> u64 {
+        self.end.saturating_sub(self.start)
+    }
+}
+
+/// ある時点のドキュメント状態(revisionとundoスタック深さ)。
+///
+/// 両方を1回のロックで取れるよう、[`crate::DocBridge`]がまとめて返す。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct DocState {
+    pub revision: u64,
+    pub undo_depth: u64,
+}
+
+impl DocState {
+    pub fn new(revision: u64, undo_depth: u64) -> Self {
+        Self {
+            revision,
+            undo_depth,
+        }
+    }
+}
+
 /// 1回のツール呼び出し(UIのツールチップ表示に使う)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCall {
@@ -64,30 +113,55 @@ pub struct ChatMessage {
     pub text: String,
     #[serde(default)]
     pub tool_calls: Vec<ToolCall>,
-    /// ターン開始/終了時のEngine revision
+    /// ターン開始/終了時のEngine revision(表示用)
     pub applied_revisions: AppliedRevisions,
+    /// ターン開始/終了時のundoスタック深さ(巻き戻し回数の正)
+    #[serde(default)]
+    pub applied_undo_depth: AppliedUndoDepth,
     #[serde(default)]
     pub error: Option<String>,
 }
 
 impl ChatMessage {
-    fn new(role: Role, text: String, revision: u64) -> Self {
+    fn new(role: Role, text: String, state: DocState) -> Self {
         Self {
             role,
             text,
             tool_calls: Vec::new(),
-            applied_revisions: AppliedRevisions::at(revision),
+            applied_revisions: AppliedRevisions::at(state.revision),
+            applied_undo_depth: AppliedUndoDepth::at(state.undo_depth),
             error: None,
         }
     }
 
     /// このターンで確定した編集コマンド数(= 元に戻すのに必要なundo回数)。
+    ///
+    /// undo履歴の深さの増分。ターン中にundo/redoが混ざっても過不足なく数えられる。
     pub fn applied_command_count(&self) -> u64 {
-        self.applied_revisions.count()
+        self.applied_undo_depth.count()
     }
 
     pub fn has_edits(&self) -> bool {
         self.applied_command_count() > 0
+    }
+
+    /// ターン終了時点のドキュメント状態を記録する。
+    pub fn finish_turn(&mut self, state: DocState) {
+        self.applied_revisions.end = state.revision;
+        self.applied_undo_depth.end = state.undo_depth;
+    }
+
+    /// `count`回分の巻き戻しを記録に反映する(全部戻せば「適用済み」でなくなる)。
+    ///
+    /// undoが途中で失敗しても、実行できた回数だけ反映してから返すことで
+    /// リトライ時に過剰undoにならないようにする。
+    pub fn record_undone(&mut self, count: u64) {
+        self.applied_undo_depth.end = self.applied_undo_depth.end.saturating_sub(count);
+        if self.applied_command_count() == 0 {
+            self.applied_revisions = AppliedRevisions::at(self.applied_revisions.start);
+        } else {
+            self.applied_revisions.end = self.applied_revisions.end.saturating_sub(count);
+        }
     }
 }
 
@@ -119,18 +193,18 @@ impl Conversation {
 
     /// ターンを開始する。ユーザー発話と、これから埋めるアシスタント応答を積む。
     ///
-    /// `revision`は送信直前のEngineのrevision。
-    pub fn begin_turn(&mut self, prompt: &str, revision: u64) {
+    /// `state`は送信直前のドキュメント状態。
+    pub fn begin_turn(&mut self, prompt: &str, state: DocState) {
         self.messages
-            .push(ChatMessage::new(Role::User, prompt.to_string(), revision));
+            .push(ChatMessage::new(Role::User, prompt.to_string(), state));
         self.messages
-            .push(ChatMessage::new(Role::Assistant, String::new(), revision));
+            .push(ChatMessage::new(Role::Assistant, String::new(), state));
     }
 
     /// ストリーム中のイベントを現在のターンへ反映する。
     ///
-    /// `revision`はイベント受信時点のEngineのrevision(ターン終了時の記録に使う)。
-    pub fn apply_event(&mut self, event: &AgentEvent, revision: u64) {
+    /// `state`はイベント受信時点のドキュメント状態(ターン終了時の記録に使う)。
+    pub fn apply_event(&mut self, event: &AgentEvent, state: DocState) {
         if let AgentEvent::SessionStarted { session_id } = event {
             self.session_id = Some(session_id.clone());
             return;
@@ -163,13 +237,13 @@ impl Conversation {
                 if message.text.is_empty() {
                     message.text = result.clone();
                 }
-                message.applied_revisions.end = revision;
+                message.finish_turn(state);
             }
             // マネージャがターン確定後に合成するだけの通知。会話状態は既に更新済み
             AgentEvent::TurnApplied { .. } => {}
             AgentEvent::Error { message: err } => {
                 message.error = Some(err.clone());
-                message.applied_revisions.end = revision;
+                message.finish_turn(state);
             }
         }
     }

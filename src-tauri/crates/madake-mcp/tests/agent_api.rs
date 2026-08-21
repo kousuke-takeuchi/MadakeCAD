@@ -38,10 +38,24 @@ async fn call(
     path: &str,
     body: Option<Value>,
 ) -> (StatusCode, Value) {
-    let request = Request::builder()
+    call_with_origin(router, method, path, body, None).await
+}
+
+async fn call_with_origin(
+    router: &Router,
+    method: &str,
+    path: &str,
+    body: Option<Value>,
+    origin: Option<&str>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder()
         .method(method)
         .uri(path)
-        .header("content-type", "application/json")
+        .header("content-type", "application/json");
+    if let Some(origin) = origin {
+        builder = builder.header("origin", origin);
+    }
+    let request = builder
         .body(match &body {
             Some(v) => Body::from(v.to_string()),
             None => Body::empty(),
@@ -52,6 +66,12 @@ async fn call(
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     (status, value)
+}
+
+fn temp_dir() -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("madake_link_api_test_{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
 }
 
 /// ターンが終わる(送信中フラグが下りる)まで待つ。
@@ -161,7 +181,10 @@ async fn undo_turn_rolls_back_agent_edits_through_the_command_engine() {
     let mut patches = doc.patches.subscribe();
 
     // ターン中にエージェントがMCP経由で2コマンド実行した状況を再現する
-    let start = doc.engine.lock().unwrap().revision();
+    let start = {
+        let engine = doc.engine.lock().unwrap();
+        madake_agent::DocState::new(engine.revision(), engine.undo_depth() as u64)
+    };
     let conversations = {
         let mut c = madake_agent::Conversation::new();
         c.begin_turn("2つ置いて", start);
@@ -182,14 +205,13 @@ async fn undo_turn_rolls_back_agent_edits_through_the_command_engine() {
         })
         .unwrap();
     }
-    let end = doc.engine.lock().unwrap().revision();
+    let end = {
+        let engine = doc.engine.lock().unwrap();
+        madake_agent::DocState::new(engine.revision(), engine.undo_depth() as u64)
+    };
     {
         let mut restored = agent.conversations();
-        restored[0]
-            .current_turn_mut()
-            .unwrap()
-            .applied_revisions
-            .end = end;
+        restored[0].current_turn_mut().unwrap().finish_turn(end);
         agent.set_conversations(restored);
     }
     assert_eq!(
@@ -206,7 +228,7 @@ async fn undo_turn_rolls_back_agent_edits_through_the_command_engine() {
             .is_empty(),
         "ターンの編集が全て戻る"
     );
-    assert_eq!(revision, end + 2, "undoもrevisionを進める");
+    assert_eq!(revision, end.revision + 2, "undoもrevisionを進める");
 
     // patchが配信されている(2件のadd + 2件のundo)
     let mut count = 0;
@@ -259,6 +281,172 @@ async fn events_endpoint_streams_agent_events() {
     let payload: Value = serde_json::from_str(data).unwrap();
     assert_eq!(payload["conversation_id"], json!(id));
     assert_eq!(payload["event"]["type"], "session_started");
+}
+
+/// /saveと/loadはTauri側と同じくチャット履歴(`<stem>.chat.json`)も伴う。
+#[tokio::test]
+async fn save_and_load_carry_the_chat_history() {
+    let dir = temp_dir();
+    let project_path = dir.join("plant.mdkproj");
+    let (_doc, agent, router) = setup("fake_claude.sh");
+
+    // 会話を1本作ってから保存 → 図面とチャット履歴の両方が書かれる
+    let (_, body) = call(
+        &router,
+        "POST",
+        "/api/v1/agent/send",
+        Some(json!({ "prompt": "ヒューズを追加して" })),
+    )
+    .await;
+    let id: Uuid = serde_json::from_value(body["conversation_id"].clone()).unwrap();
+    wait_idle(&agent, id).await;
+
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/v1/save",
+        Some(json!({ "path": project_path.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let chat_path = madake_agent::chat_path_for(&project_path);
+    assert!(chat_path.exists(), "チャット履歴も保存される");
+
+    // 別の会話に差し替えてから読み込むと、保存時の会話へ戻る
+    agent.set_conversations(vec![madake_agent::Conversation::new()]);
+    assert_ne!(agent.conversations()[0].id, id);
+
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/v1/load",
+        Some(json!({ "path": project_path.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let conversations = agent.conversations();
+    assert_eq!(conversations.len(), 1);
+    assert_eq!(conversations[0].id, id, "chat.jsonの会話が復元される");
+    assert_eq!(conversations[0].messages[0].text, "ヒューズを追加して");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// 読み込み時に実行中のターンがあれば中断する(古い図面前提のCLIが編集を続けないように)。
+#[tokio::test]
+async fn load_cancels_a_running_turn() {
+    let dir = temp_dir();
+    let project_path = dir.join("plant.mdkproj");
+    {
+        let (_doc, _agent, router) = setup("fake_claude.sh");
+        let (status, _) = call(
+            &router,
+            "POST",
+            "/api/v1/save",
+            Some(json!({ "path": project_path.to_str().unwrap() })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+    }
+
+    let (_doc, agent, router) = setup("fake_claude_flood.sh");
+    let (_, body) = call(
+        &router,
+        "POST",
+        "/api/v1/agent/send",
+        Some(json!({ "prompt": "延々と出力するやつ" })),
+    )
+    .await;
+    let id: Uuid = serde_json::from_value(body["conversation_id"].clone()).unwrap();
+    for _ in 0..200 {
+        if agent.is_sending(id) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(agent.is_sending(id), "ターンが走っている");
+
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/v1/load",
+        Some(json!({ "path": project_path.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(!agent.is_sending(id), "読込で実行中ターンが中断される");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// 外部WebページのJSからエージェントを走らせられないこと(Origin検証)。
+#[tokio::test]
+async fn external_origins_are_rejected_but_local_and_originless_pass() {
+    let (_doc, _agent, router) = setup("fake_claude.sh");
+
+    for origin in [
+        "https://evil.example",
+        "http://evil.example:1420",
+        "http://localhost.evil.example",
+        "http://127.0.0.1.evil.example",
+    ] {
+        let (status, _) = call_with_origin(
+            &router,
+            "POST",
+            "/api/v1/agent/send",
+            Some(json!({ "prompt": "全部消して" })),
+            Some(origin),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{origin} は拒否されること");
+    }
+
+    // Origin無し(curl・madake CLI・FreeCADアドオン)は従来どおり通る
+    let (status, _) = call(&router, "GET", "/api/v1/project", None).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // ローカルオリジン(vite開発サーバー・Tauri webview)は通る
+    for origin in [
+        "http://localhost:1420",
+        "http://127.0.0.1:9310",
+        "http://[::1]:1420",
+        "tauri://localhost",
+        "http://tauri.localhost",
+    ] {
+        let (status, _) =
+            call_with_origin(&router, "GET", "/api/v1/project", None, Some(origin)).await;
+        assert_eq!(status, StatusCode::OK, "{origin} は許可されること");
+    }
+}
+
+#[test]
+fn local_origin_predicate_matches_only_loopback_hosts() {
+    use madake_mcp::link_api::is_local_origin;
+
+    for origin in [
+        "http://localhost",
+        "http://localhost:1420",
+        "https://localhost:8443",
+        "http://127.0.0.1:9310",
+        "http://[::1]",
+        "http://[::1]:1420",
+        "tauri://localhost",
+        "http://tauri.localhost",
+    ] {
+        assert!(is_local_origin(origin), "{origin}");
+    }
+    for origin in [
+        "https://evil.example",
+        "http://localhost.evil.example",
+        "http://127.0.0.1.evil.example",
+        "http://127.0.0.2:9310",
+        "http://user@localhost",
+        "http://localhost:1420/path",
+        "null",
+        "",
+    ] {
+        assert!(!is_local_origin(origin), "{origin}");
+    }
 }
 
 #[test]

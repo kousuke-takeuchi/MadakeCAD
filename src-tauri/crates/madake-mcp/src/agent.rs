@@ -4,11 +4,14 @@
 //!   **新しい編集経路は作らない**: undoは既存の[`SharedDoc::undo`](crate::SharedDoc::undo)を
 //!   呼ぶだけで、patch配信・undo履歴はUI/MCPと完全に共通。
 //! - [`drawing_context`][]: 送信のたびに`--append-system-prompt`へ渡す図面サマリ。
+//! - [`load_project_with_chat`][] / [`save_project_with_chat`][]: 図面とチャット履歴を
+//!   セットで読み書きする共通処理(Tauri IPCとLink APIの両方がこれを呼ぶ)。
 
+use std::path::Path;
 use std::sync::Arc;
 
-use madake_agent::{AgentManager, DocBridge};
-use madake_core::{builtin_symbols, Entity};
+use madake_agent::{AgentManager, Conversation, DocBridge, DocState};
+use madake_core::{builtin_symbols, Entity, Patch};
 
 use crate::SharedDoc;
 
@@ -18,6 +21,15 @@ pub struct SharedDocBridge(pub SharedDoc);
 impl DocBridge for SharedDocBridge {
     fn revision(&self) -> u64 {
         self.0.engine.lock().unwrap().revision()
+    }
+
+    fn undo_depth(&self) -> u64 {
+        self.0.engine.lock().unwrap().undo_depth() as u64
+    }
+
+    fn state(&self) -> DocState {
+        let engine = self.0.engine.lock().unwrap();
+        DocState::new(engine.revision(), engine.undo_depth() as u64)
     }
 
     fn undo(&self) -> Result<bool, String> {
@@ -34,6 +46,70 @@ pub fn manager(doc: &SharedDoc, mcp_port: u16) -> Arc<AgentManager> {
         Arc::new(SharedDocBridge(doc.clone())),
         mcp_port,
     ))
+}
+
+/// プロジェクトを読み込み、隣のチャット履歴(`<stem>.chat.json`)へ会話を差し替える。
+///
+/// 実行中のターンは先に中断する。走っているCLIが「読み込む前の図面」を前提に
+/// 新しいプロジェクトを編集してしまうため、プロジェクト置換より前に止める必要がある。
+pub fn load_project_with_chat(
+    doc: &SharedDoc,
+    agent: &AgentManager,
+    path: &Path,
+) -> Result<Patch, String> {
+    let project = madake_core::io::load_project(path).map_err(|e| e.to_string())?;
+    agent.cancel_all();
+    let patch = doc.engine.lock().unwrap().replace_project(project);
+    let _ = doc.patches.send(patch.clone());
+    agent.set_conversations(load_chat_beside(path));
+    Ok(patch)
+}
+
+/// プロジェクトを保存し、隣へチャット履歴も書き出す。
+pub fn save_project_with_chat(
+    doc: &SharedDoc,
+    agent: &AgentManager,
+    path: &Path,
+) -> Result<(), String> {
+    {
+        let engine = doc.engine.lock().unwrap();
+        madake_core::io::save_project(path, engine.project()).map_err(|e| e.to_string())?;
+    }
+    save_chat_beside(agent, path);
+    Ok(())
+}
+
+/// プロジェクトの隣(`<stem>.chat.json`)へチャット履歴を保存する。
+///
+/// 会話が1本も無ければファイルを作らない(空ファイルを撒かない)。
+pub fn save_chat_beside(agent: &AgentManager, project_path: &Path) {
+    let conversations = agent.conversations();
+    if conversations.is_empty() {
+        return;
+    }
+    let chat_path = madake_agent::chat_path_for(project_path);
+    if let Err(e) = madake_agent::save_chat(&chat_path, &conversations) {
+        // 図面本体の保存は成功しているので、失敗しても保存操作自体は失敗させない
+        eprintln!(
+            "チャット履歴の保存に失敗しました ({}): {e}",
+            chat_path.display()
+        );
+    }
+}
+
+/// プロジェクトの隣のチャット履歴を読む(無ければ空)。
+pub fn load_chat_beside(project_path: &Path) -> Vec<Conversation> {
+    let chat_path = madake_agent::chat_path_for(project_path);
+    match madake_agent::load_chat(&chat_path) {
+        Ok(conversations) => conversations,
+        Err(e) => {
+            eprintln!(
+                "チャット履歴の読込に失敗しました ({}): {e}",
+                chat_path.display()
+            );
+            Vec::new()
+        }
+    }
 }
 
 /// エージェントへ毎ターン渡す図面コンテキスト(`--append-system-prompt`)。

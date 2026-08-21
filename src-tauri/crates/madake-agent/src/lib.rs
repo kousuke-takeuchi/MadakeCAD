@@ -12,8 +12,8 @@ pub mod manager;
 
 pub use backend::{ClaudeCodeCliBackend, DetectResult};
 pub use conversation::{
-    chat_path_for, load_chat, save_chat, AppliedRevisions, ChatMessage, Conversation, Role,
-    ToolCall,
+    chat_path_for, load_chat, save_chat, AppliedRevisions, AppliedUndoDepth, ChatMessage,
+    Conversation, DocState, Role, ToolCall,
 };
 pub use events::{parse_stream_events, parse_stream_line, AgentEvent, StreamParser, Usage};
 pub use manager::{AgentManager, ConversationEvent, DocBridge};
@@ -39,6 +39,11 @@ pub enum AgentError {
     NoConversation(uuid::Uuid),
     #[error("メッセージが見つかりません: {0}")]
     NoMessage(usize),
+    #[error(
+        "最新の適用済みターンではないため巻き戻せません: {0} \
+         (後続の編集を先に取り消してください)"
+    )]
+    NotLatestTurn(usize),
     #[error("ドキュメント操作に失敗しました: {0}")]
     Doc(String),
 }

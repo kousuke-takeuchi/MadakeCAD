@@ -142,6 +142,15 @@ impl Engine {
         !self.undo_stack.is_empty()
     }
 
+    /// undo履歴に積まれている編集の数。
+    ///
+    /// `revision`はundo/redoでも進むため「ある区間で何コマンド積まれたか」を測るのに
+    /// 使えない。区間の前後でこの深さを比べれば、増分がそのまま巻き戻しに必要な
+    /// undo回数になる(AIエージェントのターン単位undoが利用する)。
+    pub fn undo_depth(&self) -> usize {
+        self.undo_stack.len()
+    }
+
     pub fn can_redo(&self) -> bool {
         !self.redo_stack.is_empty()
     }

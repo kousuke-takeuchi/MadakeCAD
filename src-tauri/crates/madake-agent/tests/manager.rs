@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use madake_agent::manager::{AgentManager, ConversationEvent, DocBridge};
-use madake_agent::AgentEvent;
+use madake_agent::{AgentEvent, DocState};
 use tokio::sync::broadcast::Receiver;
 use uuid::Uuid;
 
@@ -14,42 +14,95 @@ fn fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
-/// テスト用のドキュメント。
+/// テスト用のドキュメント。実エンジンと同じく、編集はrevisionと深さの両方を進め、
+/// undoはrevisionを進めつつ深さを1減らす。
 ///
-/// `edits_per_event`を1以上にすると`revision()`が呼ばれるたびにrevisionが進み、
+/// `edits_per_event`を1以上にすると`state()`が読まれるたびに編集が起き、
 /// 「エージェントがターン中にMCP経由で編集した」状況を再現できる。
+/// `pending_undos`はその編集に混ぜるundoの残り回数(MCPのundoツール/ユーザーのUI undo)。
 struct FakeDoc {
     revision: AtomicU64,
+    undo_depth: AtomicU64,
     edits_per_event: u64,
+    pending_undos: AtomicU64,
     undo_calls: AtomicU64,
     undo_fails: Mutex<Option<String>>,
+    /// この回数だけ成功したあとundoを失敗させる(途中失敗の再現)。
+    undo_fails_after: AtomicU64,
 }
 
 impl FakeDoc {
     fn new(edits_per_event: u64) -> Arc<Self> {
         Arc::new(Self {
             revision: AtomicU64::new(0),
+            undo_depth: AtomicU64::new(0),
             edits_per_event,
+            pending_undos: AtomicU64::new(0),
             undo_calls: AtomicU64::new(0),
             undo_fails: Mutex::new(None),
+            undo_fails_after: AtomicU64::new(u64::MAX),
         })
+    }
+
+    /// 1コマンド実行(revision+1・深さ+1)。
+    fn record_edit(&self) {
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        self.undo_depth.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 1回undo(revision+1・深さ-1)。戻せる編集が無ければ何もしない。
+    fn record_undo(&self) -> bool {
+        if self
+            .undo_depth
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |d| d.checked_sub(1))
+            .is_err()
+        {
+            return false;
+        }
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        true
+    }
+
+    fn snapshot(&self) -> DocState {
+        DocState::new(
+            self.revision.load(Ordering::SeqCst),
+            self.undo_depth.load(Ordering::SeqCst),
+        )
     }
 }
 
 impl DocBridge for FakeDoc {
     fn revision(&self) -> u64 {
-        self.revision
-            .fetch_add(self.edits_per_event, Ordering::SeqCst)
+        self.revision.load(Ordering::SeqCst)
+    }
+
+    fn undo_depth(&self) -> u64 {
+        self.undo_depth.load(Ordering::SeqCst)
+    }
+
+    fn state(&self) -> DocState {
+        for _ in 0..self.edits_per_event {
+            self.record_edit();
+        }
+        if self
+            .pending_undos
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+            .is_ok()
+        {
+            self.record_undo();
+        }
+        self.snapshot()
     }
 
     fn undo(&self) -> Result<bool, String> {
         if let Some(e) = self.undo_fails.lock().unwrap().clone() {
             return Err(e);
         }
+        if self.undo_calls.load(Ordering::SeqCst) >= self.undo_fails_after.load(Ordering::SeqCst) {
+            return Err("engine busy".to_string());
+        }
         self.undo_calls.fetch_add(1, Ordering::SeqCst);
-        // 実エンジンと同じくundoもrevisionを進める
-        self.revision.fetch_add(1, Ordering::SeqCst);
-        Ok(true)
+        Ok(self.record_undo())
     }
 }
 
@@ -148,8 +201,8 @@ async fn turn_records_applied_revisions_and_emits_turn_applied() {
     let turn = manager.conversations()[0].last_turn().cloned().unwrap();
     assert!(
         turn.applied_command_count() > 0,
-        "ターン中の編集がrevision差として残る: {:?}",
-        turn.applied_revisions
+        "ターン中の編集がundoスタック深さの増分として残る: {:?}",
+        turn.applied_undo_depth
     );
 
     match events.last() {
@@ -176,6 +229,162 @@ async fn turn_records_applied_revisions_and_emits_turn_applied() {
             .applied_command_count(),
         0,
         "巻き戻し後は適用済みではなくなる"
+    );
+}
+
+/// ターン中にundoが混ざっても、巻き戻し回数はundoスタック深さの増分で決まる。
+///
+/// (a) エージェントがMCPのundoツールを使ったターン、(b) ユーザーがUIで編集+undoを
+/// 挟んだターン — どちらもrevision差は実際に積まれたコマンド数より大きくなる。
+/// revision差をundo回数に使うと戻しすぎて、直前の無関係な編集まで消える。
+#[tokio::test]
+async fn undo_turn_counts_stack_growth_not_revision_delta() {
+    let doc = FakeDoc::new(1);
+    // ターン開始前に「以前の編集」を2つ積んでおく(戻しすぎたらこれが消える)
+    doc.record_edit();
+    doc.record_edit();
+    // ターン中に2回undoが混ざる
+    doc.pending_undos.store(2, Ordering::SeqCst);
+
+    let manager = manager(Arc::clone(&doc), "fake_claude.sh");
+    let mut rx = manager.subscribe();
+    let id = manager
+        .send(None, "置いてから1つ戻して", None, None)
+        .await
+        .unwrap();
+    collect_turn(&mut rx).await;
+
+    let turn = manager.conversations()[0].last_turn().cloned().unwrap();
+    let stack_growth = turn.applied_undo_depth.end - turn.applied_undo_depth.start;
+    assert!(
+        turn.applied_revisions.count() > stack_growth,
+        "undoが混ざるとrevision差の方が大きくなる: {:?} / {:?}",
+        turn.applied_revisions,
+        turn.applied_undo_depth
+    );
+    assert_eq!(
+        turn.applied_command_count(),
+        stack_growth,
+        "undo回数は深さ増分"
+    );
+
+    let depth_before = doc.undo_depth.load(Ordering::SeqCst);
+    manager.undo_turn(id, 1).expect("undo成功");
+    assert_eq!(
+        doc.undo_calls.load(Ordering::SeqCst),
+        stack_growth,
+        "深さ増分ぶんだけundoされる"
+    );
+    assert_eq!(
+        doc.undo_depth.load(Ordering::SeqCst),
+        depth_before - stack_growth,
+        "ターン開始前の編集は残る"
+    );
+    assert!(
+        doc.undo_depth.load(Ordering::SeqCst) >= 2,
+        "ターン外(開始前)の編集まで戻していない"
+    );
+}
+
+/// 後続の編集が上に積まれている状態では巻き戻せない(別ターンを戻す事故を防ぐ)。
+#[tokio::test]
+async fn undo_turn_rejects_targets_that_are_not_the_latest_applied_turn() {
+    let doc = FakeDoc::new(1);
+    let manager = manager(Arc::clone(&doc), "fake_claude.sh");
+    let mut rx = manager.subscribe();
+    let id = manager.send(None, "1回目", None, None).await.unwrap();
+    collect_turn(&mut rx).await;
+    let first_turn_index = 1;
+
+    // 同じ会話で2ターン目(後続ターンに編集がある)
+    manager.send(Some(id), "2回目", None, None).await.unwrap();
+    collect_turn(&mut rx).await;
+    let err = manager.undo_turn(id, first_turn_index).unwrap_err();
+    assert!(
+        matches!(err, madake_agent::AgentError::NotLatestTurn(_)),
+        "{err}"
+    );
+    assert_eq!(doc.undo_calls.load(Ordering::SeqCst), 0, "undoは呼ばれない");
+
+    // 最新ターンは戻せる
+    let latest = manager.conversations()[0].messages.len() - 1;
+    manager.undo_turn(id, latest).expect("最新ターンは戻せる");
+
+    // ユーザーがUIで編集したあとは、その最新ターンも戻せない
+    let id2 = manager.send(Some(id), "3回目", None, None).await.unwrap();
+    collect_turn(&mut rx).await;
+    let latest = manager.conversations()[0].messages.len() - 1;
+    doc.record_edit();
+    let err = manager.undo_turn(id2, latest).unwrap_err();
+    assert!(
+        matches!(err, madake_agent::AgentError::NotLatestTurn(_)),
+        "ターン後のユーザー編集が積まれていたら拒否: {err}"
+    );
+}
+
+/// 実行中のターンは巻き戻せない(まだ編集が増えるため)。
+#[tokio::test]
+async fn undo_turn_rejects_a_running_turn() {
+    let doc = FakeDoc::new(0);
+    let manager = manager(Arc::clone(&doc), "fake_claude_flood.sh");
+    let mut rx = manager.subscribe();
+    let id = manager.send(None, "hi", None, None).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), rx.recv())
+        .await
+        .expect("イベントが来ない")
+        .unwrap();
+
+    let err = manager.undo_turn(id, 1).unwrap_err();
+    assert!(matches!(err, madake_agent::AgentError::Busy), "{err}");
+    manager.cancel(id);
+}
+
+/// undoが途中で失敗したら、実行できた回数だけ記録してから返す(リトライで戻しすぎない)。
+#[tokio::test]
+async fn undo_turn_records_partial_progress_when_undo_fails_midway() {
+    let doc = FakeDoc::new(1);
+    let manager = manager(Arc::clone(&doc), "fake_claude.sh");
+    let mut rx = manager.subscribe();
+    let id = manager
+        .send(None, "いくつか置いて", None, None)
+        .await
+        .unwrap();
+    collect_turn(&mut rx).await;
+
+    let total = manager.conversations()[0]
+        .last_turn()
+        .unwrap()
+        .applied_command_count();
+    assert!(total >= 2, "複数コマンド積まれている前提: {total}");
+
+    // 1回成功したところで失敗させる
+    doc.undo_fails_after.store(1, Ordering::SeqCst);
+    let err = manager.undo_turn(id, 1).unwrap_err().to_string();
+    assert!(err.contains("engine busy"), "{err}");
+    assert_eq!(doc.undo_calls.load(Ordering::SeqCst), 1, "成功したのは1回");
+    assert_eq!(
+        manager.conversations()[0]
+            .last_turn()
+            .unwrap()
+            .applied_command_count(),
+        total - 1,
+        "残り回数だけが記録に残る(リトライしても戻しすぎない)"
+    );
+
+    // 復旧後のリトライは残り回数だけ実行する
+    doc.undo_fails_after.store(u64::MAX, Ordering::SeqCst);
+    manager.undo_turn(id, 1).expect("リトライ成功");
+    assert_eq!(
+        doc.undo_calls.load(Ordering::SeqCst),
+        total,
+        "合計で積まれた分だけ"
+    );
+    assert_eq!(
+        manager.conversations()[0]
+            .last_turn()
+            .unwrap()
+            .applied_command_count(),
+        0
     );
 }
 

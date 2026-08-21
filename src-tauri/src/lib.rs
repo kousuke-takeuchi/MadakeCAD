@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use madake_agent::{AgentManager, Conversation, DetectResult};
@@ -56,23 +56,13 @@ fn redo(state: State<AppState>) -> Result<Option<Patch>, String> {
 
 #[tauri::command]
 fn save_project(state: State<AppState>, path: String) -> Result<(), String> {
-    let path = PathBuf::from(path);
-    {
-        let engine = state.doc.engine.lock().unwrap();
-        madake_core::io::save_project(&path, engine.project()).map_err(|e| e.to_string())?;
-    }
-    save_chat_beside(&state.agent, &path);
-    Ok(())
+    // 実処理はmadake-mcp側の共通関数(Link APIの/api/v1/saveと同一)
+    madake_mcp::agent::save_project_with_chat(&state.doc, &state.agent, &PathBuf::from(path))
 }
 
 #[tauri::command]
 fn load_project(state: State<AppState>, path: String) -> Result<Patch, String> {
-    let path = PathBuf::from(path);
-    let project = madake_core::io::load_project(&path).map_err(|e| e.to_string())?;
-    let patch = state.doc.engine.lock().unwrap().replace_project(project);
-    let _ = state.doc.patches.send(patch.clone());
-    state.agent.set_conversations(load_chat_beside(&path));
-    Ok(patch)
+    madake_mcp::agent::load_project_with_chat(&state.doc, &state.agent, &PathBuf::from(path))
 }
 
 #[tauri::command]
@@ -87,39 +77,6 @@ fn new_project(state: State<AppState>, name: String) -> Result<Patch, String> {
     // 無題(未保存)プロジェクトの会話は保存先が無いため、履歴も新規から始める
     state.agent.set_conversations(Vec::new());
     Ok(patch)
-}
-
-/// プロジェクトの隣(`<stem>.chat.json`)へチャット履歴を保存する。
-///
-/// 会話が1本も無ければファイルを作らない(空ファイルを撒かない)。
-fn save_chat_beside(agent: &AgentManager, project_path: &Path) {
-    let conversations = agent.conversations();
-    if conversations.is_empty() {
-        return;
-    }
-    let chat_path = madake_agent::chat_path_for(project_path);
-    if let Err(e) = madake_agent::save_chat(&chat_path, &conversations) {
-        // 図面本体の保存は成功しているので、失敗しても保存操作自体は失敗させない
-        eprintln!(
-            "チャット履歴の保存に失敗しました ({}): {e}",
-            chat_path.display()
-        );
-    }
-}
-
-/// プロジェクトの隣のチャット履歴を読む(無ければ空)。
-fn load_chat_beside(project_path: &Path) -> Vec<Conversation> {
-    let chat_path = madake_agent::chat_path_for(project_path);
-    match madake_agent::load_chat(&chat_path) {
-        Ok(conversations) => conversations,
-        Err(e) => {
-            eprintln!(
-                "チャット履歴の読込に失敗しました ({}): {e}",
-                chat_path.display()
-            );
-            Vec::new()
-        }
-    }
 }
 
 #[tauri::command]

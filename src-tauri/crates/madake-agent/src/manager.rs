@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::backend::{ClaudeCodeCliBackend, DetectResult};
-use crate::conversation::{AppliedRevisions, Conversation, Role};
+use crate::conversation::{AppliedRevisions, Conversation, DocState, Role};
 use crate::events::AgentEvent;
 use crate::{AgentError, Result};
 
@@ -35,8 +35,15 @@ const EVENT_CHANNEL_CAPACITY: usize = 1024;
 pub trait DocBridge: Send + Sync + 'static {
     /// 現在のドキュメントrevision。
     fn revision(&self) -> u64;
+    /// 現在のundoスタック深さ(積まれている編集コマンド数)。
+    fn undo_depth(&self) -> u64;
     /// undoを1回実行する。戻せる編集が無ければ`false`。
     fn undo(&self) -> std::result::Result<bool, String>;
+
+    /// revisionと深さの組。両方を1回のロックで取れるなら上書きすること。
+    fn state(&self) -> DocState {
+        DocState::new(self.revision(), self.undo_depth())
+    }
 }
 
 /// 購読者へ配信する1件。JSONは`{"conversation_id": "...", "event": {"type": ...}}`。
@@ -104,15 +111,21 @@ impl AgentManager {
     ///
     /// 送信中のターンがあれば中断する(別プロジェクトの会話へイベントが混ざらないように)。
     pub fn set_conversations(&self, conversations: Vec<Conversation>) {
+        self.cancel_all();
+        let mut state = self.state.lock().unwrap();
+        state.conversations = conversations;
+    }
+
+    /// 実行中の全ターンを中断する。戻り値は中断した本数。
+    ///
+    /// プロジェクトを差し替える前に呼ぶこと(走っているCLIが新しい図面を
+    /// 編集し始めるのを防ぐ)。
+    pub fn cancel_all(&self) -> usize {
         let running: Vec<Uuid> = {
             let state = self.state.lock().unwrap();
             state.running.keys().copied().collect()
         };
-        for id in running {
-            self.cancel(id);
-        }
-        let mut state = self.state.lock().unwrap();
-        state.conversations = conversations;
+        running.into_iter().filter(|id| self.cancel(*id)).count()
     }
 
     /// 指定会話がターン実行中か。
@@ -163,7 +176,7 @@ impl AgentManager {
             if state.running.contains_key(&id) {
                 return Err(AgentError::Busy);
             }
-            let revision = self.doc.revision();
+            let doc_state = self.doc.state();
             state.next_seq += 1;
             let seq = state.next_seq;
             let conversation = state
@@ -172,7 +185,7 @@ impl AgentManager {
             if model.is_some() {
                 conversation.model = model;
             }
-            conversation.begin_turn(prompt, revision);
+            conversation.begin_turn(prompt, doc_state);
             let session = conversation.session_id.clone();
             let turn_model = conversation.model.clone();
             (id, seq, session, turn_model)
@@ -216,12 +229,12 @@ impl AgentManager {
                 return false;
             };
             handle.abort();
-            let revision = self.doc.revision();
+            let doc_state = self.doc.state();
             state.conversation_mut(conversation_id).and_then(|c| {
                 let message = c.current_turn_mut()?;
                 message.error = Some(CANCELLED_MESSAGE.to_string());
-                message.applied_revisions.end = revision;
-                Some(message.applied_revisions)
+                message.finish_turn(doc_state);
+                message.has_edits().then_some(message.applied_revisions)
             })
         };
         // abortされたタスクは後片付けを実行できないので、終了イベントはここで流す
@@ -239,13 +252,22 @@ impl AgentManager {
 
     /// 指定メッセージのターンで入った編集を巻き戻す。戻り値は巻き戻し後のrevision。
     ///
-    /// エンジンのundoはLIFOなので、そのターンより後に別の編集が入っていた場合は
-    /// 後の編集から戻る(redoで復帰可能)。UIは直近ターンにのみ「元に戻す」を出す想定。
+    /// エンジンのundoはLIFOなので、**巻き戻せるのは最新の適用済みターンだけ**。
+    /// 後続ターンやユーザー操作の編集が上に積まれている状態で実行すると、指定した
+    /// ターンとは無関係の編集を戻してしまうため、ここで拒否する
+    /// (`message_index`はUI側の添字であり、安定したターンIDではないので、
+    /// サーバー側でも整合を確かめる必要がある)。
     pub fn undo_turn(&self, conversation_id: Uuid, message_index: usize) -> Result<u64> {
         let count = {
-            let mut state = self.state.lock().unwrap();
+            let state = self.state.lock().unwrap();
+            if state.running.contains_key(&conversation_id) {
+                // 実行中ターンはまだ編集が増える。確定してから戻す
+                return Err(AgentError::Busy);
+            }
             let conversation = state
-                .conversation_mut(conversation_id)
+                .conversations
+                .iter()
+                .find(|c| c.id == conversation_id)
                 .ok_or(AgentError::NoConversation(conversation_id))?;
             let message = conversation
                 .messages
@@ -254,27 +276,47 @@ impl AgentManager {
             if message.role != Role::Assistant {
                 return Err(AgentError::NoMessage(message_index));
             }
+            // 同じ会話の後続ターンに編集が残っていないこと
+            if conversation.messages[message_index + 1..]
+                .iter()
+                .any(|m| m.role == Role::Assistant && m.has_edits())
+            {
+                return Err(AgentError::NotLatestTurn(message_index));
+            }
+            // 他の会話やユーザーのUI操作による編集が上に積まれていないこと
+            if self.doc.undo_depth() != message.applied_undo_depth.end {
+                return Err(AgentError::NotLatestTurn(message_index));
+            }
             message.applied_command_count()
         };
 
+        let mut undone = 0u64;
+        let mut failure = None;
         for _ in 0..count {
-            if !self.doc.undo().map_err(AgentError::Doc)? {
-                break;
+            match self.doc.undo() {
+                Ok(true) => undone += 1,
+                Ok(false) => break,
+                Err(e) => {
+                    failure = Some(AgentError::Doc(e));
+                    break;
+                }
             }
         }
 
-        let revision = self.doc.revision();
+        // 失敗しても「実行できた回数」だけは必ず記録する(リトライで戻しすぎないため)
         {
             let mut state = self.state.lock().unwrap();
             if let Some(message) = state
                 .conversation_mut(conversation_id)
                 .and_then(|c| c.messages.get_mut(message_index))
             {
-                // 巻き戻し済み。以降このターンは「適用済み」ではない
-                message.applied_revisions = AppliedRevisions::at(message.applied_revisions.start);
+                message.record_undone(undone);
             }
         }
-        Ok(revision)
+        match failure {
+            Some(e) => Err(e),
+            None => Ok(self.doc.revision()),
+        }
     }
 
     /// 設定済みパス、無ければ検出結果(キャッシュ)を返す。
@@ -293,9 +335,6 @@ impl AgentManager {
     }
 
     fn broadcast_applied(&self, conversation_id: Uuid, applied: AppliedRevisions) {
-        if applied.count() == 0 {
-            return;
-        }
         self.broadcast(
             conversation_id,
             AgentEvent::TurnApplied {
@@ -334,7 +373,7 @@ impl Turn {
 
         let mut terminated = false;
         while let Some(event) = rx.recv().await {
-            let revision = self.doc.revision();
+            let doc_state = self.doc.state();
             if matches!(
                 event,
                 AgentEvent::TurnCompleted { .. } | AgentEvent::Error { .. }
@@ -344,7 +383,7 @@ impl Turn {
             {
                 let mut state = self.state.lock().unwrap();
                 if let Some(conversation) = state.conversation_mut(self.conversation_id) {
-                    conversation.apply_event(&event, revision);
+                    conversation.apply_event(&event, doc_state);
                 }
             }
             let _ = self.events.send(ConversationEvent {
@@ -355,7 +394,9 @@ impl Turn {
         let _ = backend_task.await;
 
         let applied = {
-            let revision = self.doc.revision();
+            // 正常終了ならTurnCompleted/Error受信時の状態が既に記録済み。
+            // result行が来ないまま終わった場合だけ、ここで取り直す
+            let final_state = (!terminated).then(|| self.doc.state());
             let mut state = self.state.lock().unwrap();
             if state
                 .running
@@ -368,24 +409,21 @@ impl Turn {
             state
                 .conversation_mut(self.conversation_id)
                 .and_then(|c| c.current_turn_mut())
-                .map(|message| {
-                    if !terminated {
-                        // result行が来ないまま終わった場合の保険
-                        message.applied_revisions.end = revision;
+                .and_then(|message| {
+                    if let Some(doc_state) = final_state {
+                        message.finish_turn(doc_state);
                     }
-                    message.applied_revisions
+                    message.has_edits().then_some(message.applied_revisions)
                 })
         };
         if let Some(applied) = applied {
-            if applied.count() > 0 {
-                let _ = self.events.send(ConversationEvent {
-                    conversation_id: self.conversation_id,
-                    event: AgentEvent::TurnApplied {
-                        start_revision: applied.start,
-                        end_revision: applied.end,
-                    },
-                });
-            }
+            let _ = self.events.send(ConversationEvent {
+                conversation_id: self.conversation_id,
+                event: AgentEvent::TurnApplied {
+                    start_revision: applied.start,
+                    end_revision: applied.end,
+                },
+            });
         }
     }
 }
