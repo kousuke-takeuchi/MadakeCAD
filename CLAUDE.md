@@ -6,17 +6,19 @@
 
 - **英語を正本**とする: `README.md`は英語、日本語版は`README.ja.md`のように同名+`.ja.md`
 - 新規ドキュメントは英語+日本語版をセットで作成し、内容を同期させる
-- 既存の日本語のみのdocs(requirements等)は段階的に英語正本へ移行する(移行までは日本語版が正)。公開用ドキュメント(`README`・`docs/features/`)は移行済み
+- **公開用**は`docs/`直下に読み順の連番(`01-overview.md`〜`12-roadmap.md`、目次=README.md)。**内部資料**(開発用)は`docs/internal/`
+- 既存の日本語のみの内部資料は段階的に英語正本へ移行する(移行までは日本語版が正)
 
 ## 必読ドキュメント
 
-- 要件定義書: `docs/requirements.md`(ビジョンG1-G5・マイルストーンM1-M6)
-- 機能仕様集(未実装機能M2〜M6の仕様): `docs/specs/`(進行方針: 仕様→全体デザイン→計画→実装)
+- 内部資料の索引: `docs/internal/README.md`
+- 要件定義書: `docs/internal/requirements.md`(ビジョンG1-G5・マイルストーンM1-M6)
+- 機能仕様集(未実装機能M2〜M6の仕様): `docs/internal/specs/`(進行方針: 仕様→全体デザイン→計画→実装)
 - 全体設計(スペック): `docs/superpowers/specs/2026-08-20-madakecad-design.md`(設計判断の記録)
-- システム設計(構成図・ファイルマップ・状態遷移・変更レシピ): `docs/architecture.md`
-- 技術スタック: `docs/tech-stack.md` / データ設計: `docs/data-model.md`
-- 機能インベントリ(実装済み・未実装の棚卸し): `docs/features.md`
-- 環境構築: `docs/setup.md`
+- システム設計(構成図・ファイルマップ・状態遷移・変更レシピ): `docs/internal/architecture.md`
+- 技術スタック: `docs/internal/tech-stack.md` / データ設計: `docs/internal/data-model.md`
+- 機能インベントリ(実装済み・未実装の棚卸し): `docs/internal/feature-inventory.md`
+- 公開用ドキュメント(連番): `docs/01-overview.md`〜`12-roadmap.md`(環境構築=02)
 - 実装計画: `docs/superpowers/plans/` 配下(日付順)
 - 開発方針の原点と参考図面: `docs/references/README.md`(社外秘情報を含むためREADMEごとgit管理外。各自ローカルに保持)
 
@@ -77,12 +79,12 @@ Rustは`~/.cargo/bin`にある(rustup)。PATHに無ければ `export PATH="$HOME
 
 ## デザインシステム
 
-`docs/design-system.md`が共通デザインルールの正(メイン画面のCAD調トークン: ribbon-bg背景+白カード+acad-blueアクセント)。実装の色定義は`src/App.vue`のCSS変数と`src/canvas/theme.ts`のみ。コンポーネントへの生色コード直書き禁止。
+`docs/internal/design-system.md`が共通デザインルールの正(メイン画面のCAD調トークン: ribbon-bg背景+白カード+acad-blueアクセント)。実装の色定義は`src/App.vue`のCSS変数と`src/canvas/theme.ts`のみ。コンポーネントへの生色コード直書き禁止。
 
 **デザイン作業の手順(必須)**: 新しい画面・UIをデザインするときは、
-1. まず`MadakeCAD.pen`の「デザインシステム - 共通コンポーネント」ボードと`docs/design-system.md`を参照し、既存のトークン・コンポーネントを再利用する
+1. まず`MadakeCAD.pen`の「デザインシステム - 共通コンポーネント」ボードと`docs/internal/design-system.md`を参照し、既存のトークン・コンポーネントを再利用する
 2. 足りないコンポーネントがあれば、**先にデザインシステムボードへ追加**(命名・状態バリエーション含む)してから画面で使用する
-3. 追加したコンポーネントは`docs/design-system.md`にも同時に記載する(両者は常に同期)
+3. 追加したコンポーネントは`docs/internal/design-system.md`にも同時に記載する(両者は常に同期)
 
 ## UIデザインワークフロー
 

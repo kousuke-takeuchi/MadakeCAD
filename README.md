@@ -1,109 +1,90 @@
+<div align="center">
+
 # MadakeCAD
 
-**日本語版: [README.ja.md](README.ja.md)**
+**An AI-first, standards-compliant electrical CAD for industrial equipment.**
 
-An industrial electrical schematic CAD (aiming for open source). MadakeCAD lets you create electrical drawings for industrial equipment — robots, factory machinery, control panels — that comply with industrial standards (JIS). The goal is twofold: **LLM integration so that non-experts can produce correct drawings**, and **an industrial-grade CAD experience that veterans find comfortable** (benchmarked against AutoCAD Electrical and EPLAN). Wiring verification, circuit simulation, and mechanical CAD (FreeCAD) integration are part of the design. See the [requirements document](docs/requirements.md) (Japanese) for the full vision.
+Draw JIS-compliant wiring diagrams for robots, machinery, and control panels —
+with an AI assistant that edits through the same undoable command engine as you,
+and verification grounded in a real circuit solver (ngspice).
 
-## Key Features
+[Overview](docs/01-overview.md) · [Getting Started](docs/02-getting-started.md) · [Documentation](#documentation) · [Roadmap](docs/12-roadmap.md) · [日本語](README.ja.md)
 
-- **Schematic editing**: JIS C 0617 symbols plus parametric terminal blocks/connectors (1–50 poles), orthogonal wiring, grid/pin snapping, automatic reference designators, multi-sheet, view classes (layers)
-- **Standards & output**: JIS drawing frame (zones, title block), print-quality SVG/PDF with embedded CJK fonts, BOM CSV, wire list CSV
-- **Verification**: ERC (unconnected pins, duplicate references, dangling wires, label conflicts) and electrical checks (source reachability, wire ampacity, voltage drop, fuse rating) backed by real ngspice DC analysis
-- **Simulation**: DC operating point (net voltages, component currents/power) with open-switch what-if analysis
-- **Parts management**: global parts database (SQLite; part numbers, ratings, procurement URLs) and wire part master; place parts with ratings applied automatically
-- **Import**: KiCad `.kicad_sch`
-- **AI & automation**: built-in MCP server, in-app AI chat (Claude Code integration with per-turn undo), `madake` CLI, REST Link API with SSE
+<img src="docs/images/sample-drawing.svg" alt="Sample drawing: 48V power distribution on a JIS A3 frame" width="820">
 
-Feature documentation by category: [docs/features/](docs/features/README.md). Implementation status: [docs/features.md](docs/features.md) (Japanese).
+*A drawing produced by MadakeCAD: JIS A3 frame with zone references and title block.*
 
-## Documentation
+</div>
 
-| Document | Contents |
-|---|---|
-| [Feature docs](docs/features/README.md) | Public feature descriptions by category (EN/JA) |
-| [Requirements](docs/requirements.md) | Vision (5 pillars), milestones, requirements (JA) |
-| [Architecture](docs/architecture.md) | System diagrams, file map, data flow, state machines, change recipes (JA) |
-| [Tech stack](docs/tech-stack.md) | Technologies, versions, selection rationale (JA) |
-| [Data model](docs/data-model.md) | Document model, parts DB ER diagram (JA) |
-| [Setup](docs/setup.md) | Prerequisites, setup, troubleshooting (JA) |
-| [Feature inventory](docs/features.md) | Implemented/planned checklist (JA) |
-| [Feature specs](docs/specs/README.md) | Detailed specs for upcoming milestones M2–M6 (JA) |
-| Screen designs | `MadakeCAD.pen` (Pencil) is the source of truth |
+---
 
-Japanese-only documents are being migrated to English-canonical progressively.
+## Why MadakeCAD?
 
-## Architecture
+- 🏭 **PCB CADs are the wrong tool for equipment wiring** — no JIS frames, no wire part management, no terminal-block-centric connections, no wire lists
+- 💰 **Industrial CADs (AutoCAD Electrical, EPLAN) are closed and heavyweight** — and have no meaningful AI integration
+- 🤝 **Expertise shouldn't be the entry ticket** — with an LLM in the loop, non-experts produce correct drawings while veterans keep a fast, conventional CAD workflow
 
-Every edit is executed as a serializable Command by a single engine (madake-core). The UI (Tauri IPC) and AI (built-in MCP server) share the same Command API; results are broadcast to all clients as patches.
+## Highlights
 
-```
-UI action / MCP tool → Command(JSON) → madake-core → patch(JSON) → UI re-render
-```
+- ✏️ **Purpose-built schematic editor** — JIS C 0617 symbols, parametric terminal blocks & connectors (1–50 poles), orthogonal wiring with grid/pin snap, auto reference designators, multi-sheet, layers
+- 📐 **Standards-true output** — JIS frame (zones, title block), print-quality SVG/PDF with embedded CJK fonts, BOM & wire-list CSV
+- ✅ **Solver-grounded verification** — ERC plus electrical checks (reachability, ampacity, voltage drop, fuse rating) judged from an actual ngspice DC solution
+- ⚡ **DC simulation** — net voltages, component currents/power, open-switch what-if analysis
+- 🗄️ **Parts database** — local SQLite master with ratings, procurement links, and a wire part master; place parts with ratings applied automatically
+- 🤖 **AI assistant built in** — chat drafts and edits your drawing via MCP; every AI turn is undoable, with live edit-region highlighting
+- 🔌 **Automate everything** — MCP server, REST API + SSE, and a `madake` CLI, all driving the same command engine
+- 📥 **KiCad import** — migrate existing `.kicad_sch` schematics with a detailed import report
 
-- `src-tauri/crates/madake-core` — document model, Command engine (undo/redo), symbol library, netlist, verification, simulation, file I/O
-- `src-tauri/crates/madake-mcp` — built-in MCP server (rmcp / Streamable HTTP) and Link API (/api/v1)
-- `src-tauri/crates/madake-agent` — in-app AI chat backends
-- `src-tauri/crates/madake-cli` — `madake` command (thin Link API client)
-- `src-tauri/src` — Tauri shell (IPC handlers, MCP startup, patch forwarding)
-- `src/` — Vue 3 + TypeScript frontend (custom Canvas2D renderer)
+## Quick Start
 
-## Development
-
-See the [setup guide](docs/setup.md). Prerequisites: Rust (rustup) and Node.js. Optional: [ngspice](https://ngspice.sourceforge.io/) for circuit analysis (verification falls back to a graph approximation without it).
+Prerequisites: [Rust](https://rustup.rs), Node.js 20+. Optional: [ngspice](https://ngspice.sourceforge.io/) (circuit-solved verification), [Claude Code](https://claude.com/claude-code) (AI chat).
 
 ```bash
+git clone <this repository>
+cd MadakeCAD
 npm install
 npm run tauri dev
 ```
 
-Tests:
+Full instructions, optional components, and troubleshooting: **[Getting Started](docs/02-getting-started.md)**.
 
-```bash
-cd src-tauri && cargo test
-npx vitest run
+## Documentation
+
+Read in order — files are numbered:
+
+| # | Document | What you'll learn |
+|---|---|---|
+| 01 | [Overview](docs/01-overview.md) | What MadakeCAD is, why it exists, design goals |
+| 02 | [Getting Started](docs/02-getting-started.md) | Install, build, run, troubleshoot |
+| 03 | [Schematic Editor](docs/03-schematic-editor.md) | Canvas, tools, symbols, sheets, layers |
+| 04 | [Standards & Output](docs/04-standards-output.md) | JIS frame, PDF/SVG, BOM, wire list |
+| 05 | [Wire Management](docs/05-wire-management.md) | Colors, gauges, part numbers, harnesses |
+| 06 | [Verification & Simulation](docs/06-verification-simulation.md) | ERC, electrical checks, DC analysis |
+| 07 | [Parts Database](docs/07-parts-database.md) | Part master, ratings, procurement |
+| 08 | [Import & Export](docs/08-import-export.md) | KiCad import, file formats |
+| 09 | [AI Assistant](docs/09-ai-assistant.md) | Chat drafting, per-turn undo, providers |
+| 10 | [Automation & APIs](docs/10-automation-api.md) | MCP tools, REST API, CLI |
+| 11 | [Mechanical Integration](docs/11-mechanical-integration.md) | FreeCAD linkage |
+| 12 | [Roadmap](docs/12-roadmap.md) | Milestones M1–M6 |
+
+Each page has a Japanese twin (`*.ja.md`). Contributor/internal materials (architecture, data model, feature specs, design system) live in [`docs/internal/`](docs/internal/README.md).
+
+## Architecture in one line
+
+```
+UI · AI chat · CLI · REST  →  Command(JSON)  →  engine (Rust)  →  patch  →  every client updates live
 ```
 
-## MCP Integration
+Every edit from every entry point is an undoable command against a single engine — that's what makes AI edits safe. Details: [internal/architecture.md](docs/internal/architecture.md).
 
-While the app is running, an MCP server listens at `http://127.0.0.1:9310/mcp` (configurable via `MADAKE_MCP_PORT`). Claude Code connects automatically through this repository's `.mcp.json` and can edit drawings directly via tools such as `get_project`, `place_symbol`, `draw_wire`, `execute_commands`, `run_verification`, `simulate_op`, `search_parts`, `import_kicad`, and `export_svg|pdf|bom|wire_list`. Dynamic symbol IDs `connector_{n}p` / `terminal_block_{n}p` allow variable pole counts.
+## Status & Roadmap
 
-## madake CLI
+**Alpha.** Milestone M1 (foundation) is essentially complete; see the [roadmap](docs/12-roadmap.md) for M2 (reference-drawing parity) through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
 
-A thin client that talks to the running app over the Link API (`http://127.0.0.1:9310/api/v1`). All edits go through the Command engine, so CLI changes are undoable and appear in the UI immediately.
+## Contributing
 
-```bash
-cd src-tauri && cargo install --path crates/madake-cli   # installs `madake`
-```
+The project follows a docs-first, design-first (Pencil), TDD workflow. Start with [`docs/internal/`](docs/internal/README.md) — architecture, change recipes, and feature specs are all there. English is canonical for documentation; Japanese versions are provided as `*.ja.md`.
 
-```bash
-madake status                        # connectivity + project summary
-madake netlist [--sheet <ID>]
-madake verify [--sheet <ID>]         # ERC + electrical checks
-madake sim [--open SW1,K1]           # DC operating point (requires ngspice)
-madake parts [<query>] [--category <c>]
-madake export svg|pdf|bom|wire-list <path> [--sheet <ID>]
-madake save|open <path>              # .mdkproj, or .kicad_sch to import
-madake exec <commands.json>          # arbitrary Command array
-madake undo / madake redo
-```
+## License
 
-Common options: `--port` (default 9310), `--json` (raw JSON for jq etc.).
-
-## Parts Database
-
-A global SQLite master stored in the OS app-data folder (override with `MADAKE_PARTS_DB`). Holds part numbers, makers, ratings (linked to verification), procurement/datasheet URLs, prices, and a wire part master (color + gauge → part number). Sample data is seeded on first creation.
-
-## File Format
-
-`.mdkproj` is pretty-printed JSON (git-diffable). KiCad `.kicad_sch` files can be imported via `madake open`, the app's Open dialog, or the `import_kicad` MCP tool.
-
-## Roadmap
-
-Milestones (see [requirements](docs/requirements.md) §2):
-
-1. **M1 Foundation** — ✅ mostly complete: Command engine, editor, JIS frame, PDF/BOM/wire list, verification, DC simulation, KiCad import, AI chat
-2. **M2 Reference-drawing parity** — revision table, wire numbers, harness boundaries, cross-sheet references
-3. **M3 AI-first drafting** — standards knowledge + verification loop, tidy-up automation, multi-provider LLM support
-4. **M4 Industrial CAD core** — terminal charts, circuit macros, PLC I/O, report sheets, symbol editor (benchmarked against AutoCAD Electrical / EPLAN)
-5. **M5 Mechanical CAD integration** — FreeCAD workbench, part linking, wire-length write-back
-6. **M6 Open-source release** — licensing, cross-platform builds, i18n, community docs
+To be determined ahead of the open-source release (tracked in [M6](docs/internal/specs/m6-oss.md)). All dependencies are permissively licensed.
