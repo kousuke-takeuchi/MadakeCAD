@@ -32,10 +32,8 @@ function draw() {
   renderSheet(ctx, sheet, store.symbols, controller.vp, {
     selection: store.selection,
     cursor: controller.cursorScreen,
-    agent:
-      chat.streaming || regions.length > 0
-        ? { regions, active: chat.streaming }
-        : undefined,
+    // チップ・パルスは実際に編集領域があるときだけ出す(テキスト応答だけのターンでは出さない)
+    agent: regions.length > 0 ? { regions, active: chat.streaming } : undefined,
   });
   controller.renderPreview(ctx);
 }
@@ -46,9 +44,9 @@ function scheduleDraw() {
 
 // --- オーバーレイの駆動 -----------------------------------------------------
 
-/** アニメーションを続ける必要があるか(アイドル時はループを止める)。 */
+/** アニメーションを続ける必要があるか(編集領域が残っている間だけ回す)。 */
 function overlayRunning(): boolean {
-  return chat.streaming || overlay.hasActive();
+  return overlay.hasActive();
 }
 
 function overlayTick() {
