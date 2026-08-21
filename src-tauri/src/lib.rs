@@ -103,11 +103,13 @@ fn export_svg(
     path: String,
 ) -> Result<(), String> {
     let engine = state.doc.engine.lock().unwrap();
-    let sheet = engine
-        .project()
+    let project = engine.project();
+    let sheet = project
         .sheet(sheet_id)
         .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
-    let svg = madake_core::svg::sheet_to_svg(sheet, &sheet_symbol_defs(sheet));
+    // プロジェクト文脈で描くとネットラベルにシート間クロスリファレンスが入る
+    let svg = madake_core::svg::project_sheet_to_svg(project, sheet_id, &sheet_symbol_defs(sheet))
+        .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
     std::fs::write(&path, svg).map_err(|e| e.to_string())
 }
 
@@ -159,18 +161,12 @@ fn run_verification(
 ) -> Result<Vec<madake_core::verify::Diagnostic>, String> {
     let engine = state.doc.engine.lock().unwrap();
     let project = engine.project();
-    let sheets: Vec<_> = match sheet_id {
-        Some(id) => vec![project.sheet(id).ok_or_else(|| format!("sheet not found: {id}"))?],
-        None => project.sheets.iter().collect(),
+    // シート指定なし=プロジェクト全体。ネットラベル関連はシートを跨いだ統合ネットで評価する
+    let Some(id) = sheet_id else {
+        return Ok(madake_core::verify::verify_project(project));
     };
-    let mut diags = Vec::new();
-    for sheet in sheets {
-        diags.extend(madake_core::verify::verify_sheet(
-            sheet,
-            &sheet_symbol_defs(sheet),
-        ));
-    }
-    Ok(diags)
+    let sheet = project.sheet(id).ok_or_else(|| format!("sheet not found: {id}"))?;
+    Ok(madake_core::verify::verify_sheet(sheet, &sheet_symbol_defs(sheet)))
 }
 
 #[tauri::command]
@@ -180,11 +176,12 @@ fn export_pdf(
     path: String,
 ) -> Result<(), String> {
     let engine = state.doc.engine.lock().unwrap();
-    let sheet = engine
-        .project()
+    let project = engine.project();
+    let sheet = project
         .sheet(sheet_id)
         .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
-    let pdf = madake_core::pdf::sheet_to_pdf(sheet, &sheet_symbol_defs(sheet))
+    let pdf = madake_core::pdf::project_sheet_to_pdf(project, sheet_id, &sheet_symbol_defs(sheet))
+        .ok_or_else(|| format!("sheet not found: {sheet_id}"))?
         .map_err(|e| e.to_string())?;
     std::fs::write(&path, pdf).map_err(|e| e.to_string())
 }

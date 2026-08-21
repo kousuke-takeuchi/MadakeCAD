@@ -308,20 +308,17 @@ impl MadakeMcp {
     ) -> Result<String, ErrorData> {
         let engine = self.doc.engine.lock().unwrap();
         let project = engine.project();
-        let sheets: Vec<_> = match p.sheet_id {
-            Some(id) => vec![project
-                .sheet(id)
-                .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?],
-            None => project.sheets.iter().collect(),
+        // シート指定なし=プロジェクト全体。ネットラベル関連はシートを跨いだ統合ネットで評価する
+        let Some(id) = p.sheet_id else {
+            return json_ok(&madake_core::verify::verify_project(project));
         };
-        let mut diags = Vec::new();
-        for sheet in sheets {
-            diags.extend(madake_core::verify::verify_sheet(
-                sheet,
-                &sheet_symbol_defs(sheet),
-            ));
-        }
-        json_ok(&diags)
+        let sheet = project
+            .sheet(id)
+            .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+        json_ok(&madake_core::verify::verify_sheet(
+            sheet,
+            &sheet_symbol_defs(sheet),
+        ))
     }
 
     #[tool(description = "部品表(BOM)CSVを指定パスに書き出す")]
@@ -347,11 +344,13 @@ impl MadakeMcp {
     fn export_svg(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
         let engine = self.doc.engine.lock().unwrap();
-        let sheet = engine
-            .project()
+        let project = engine.project();
+        let sheet = project
             .sheet(sheet_id)
             .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
-        let svg = madake_core::svg::sheet_to_svg(sheet, &sheet_symbol_defs(sheet));
+        // プロジェクト文脈で描くとネットラベルにシート間クロスリファレンスが入る
+        let svg = madake_core::svg::project_sheet_to_svg(project, sheet_id, &sheet_symbol_defs(sheet))
+            .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
         std::fs::write(&p.path, svg).map_err(internal)?;
         json_ok(&serde_json::json!({ "written": p.path }))
     }
@@ -360,12 +359,14 @@ impl MadakeMcp {
     fn export_pdf(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
         let engine = self.doc.engine.lock().unwrap();
-        let sheet = engine
-            .project()
+        let project = engine.project();
+        let sheet = project
             .sheet(sheet_id)
             .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
-        let pdf = madake_core::pdf::sheet_to_pdf(sheet, &sheet_symbol_defs(sheet))
-            .map_err(internal)?;
+        let pdf =
+            madake_core::pdf::project_sheet_to_pdf(project, sheet_id, &sheet_symbol_defs(sheet))
+                .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?
+                .map_err(internal)?;
         std::fs::write(&p.path, pdf).map_err(internal)?;
         json_ok(&serde_json::json!({ "written": p.path }))
     }

@@ -37,6 +37,56 @@ pub fn verify_sheet(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
     verify_sheet_with(sheet, symbols, sim.as_ref())
 }
 
+/// プロジェクト全体のERC+電気検証。シートごとの検証に加え、ネットラベル関連のチェック
+/// (`erc.label_conflict`) は**シートを跨いだ統合ネット** ([`crate::xref`]) で評価する。
+/// これにより、同名ラベルで繋がった複数シートのネットは1ネットとして扱われ、
+/// 1件の指摘にまとまる。
+pub fn verify_project(project: &crate::model::Project) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    for sheet in &project.sheets {
+        diags.extend(
+            verify_sheet(sheet, &crate::symbol::sheet_symbol_defs(sheet))
+                .into_iter()
+                // ラベル競合はシート単位ではなくプロジェクト全体で評価し直す
+                .filter(|d| d.code != LABEL_CONFLICT),
+        );
+    }
+    diags.extend(project_label_conflicts(project));
+    diags
+}
+
+/// 1つのネットに異なるネットラベルが混在している状態 (異電位ネットの直結) を
+/// プロジェクト全体の統合ネットで探す。シートを跨いで繋がったネットも1件にまとまる。
+fn project_label_conflicts(project: &crate::model::Project) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    for net in crate::xref::extract_netlist_project(project).nets {
+        if net.label_names.len() < 2 {
+            continue;
+        }
+        let sheet_id = net
+            .members
+            .first()
+            .map(|m| m.sheet_id)
+            .unwrap_or_else(uuid::Uuid::nil);
+        let entity_ids: Vec<EntityId> =
+            net.members.iter().flat_map(|m| m.label_ids.clone()).collect();
+        diags.push(Diagnostic {
+            severity: Severity::Error,
+            code: LABEL_CONFLICT.into(),
+            message: format!(
+                "1つのネットに異なるネットラベルが混在しています: {}",
+                net.label_names.join(", ")
+            ),
+            sheet_id,
+            entity_ids,
+        });
+    }
+    diags
+}
+
+/// ネットラベル競合の診断コード。シート単位・プロジェクト全体で共通。
+const LABEL_CONFLICT: &str = "erc.label_conflict";
+
 pub(crate) fn verify_sheet_with(
     sheet: &Sheet,
     symbols: &[SymbolDef],
@@ -571,7 +621,7 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
         if names.len() >= 2 {
             diags.push(diag(
                 Severity::Error,
-                "erc.label_conflict",
+                LABEL_CONFLICT,
                 format!(
                     "1つのネットに異なるネットラベルが混在しています: {}",
                     names.into_iter().collect::<Vec<_>>().join(", ")
@@ -958,5 +1008,94 @@ mod tests {
         assert_eq!(conflicts.len(), 1, "{conflicts:?}");
         assert_eq!(conflicts[0].severity, Severity::Error);
         assert!(conflicts[0].message.contains("24-P1") && conflicts[0].message.contains("0V"));
+    }
+
+    fn net_label(name: &str, x: f64, y: f64) -> Entity {
+        Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(x, y),
+            name: name.into(),
+            rotation: 0,
+        })
+    }
+
+    /// A single-sheet label conflict is reported exactly once when the whole project is verified.
+    /// シート1枚の中のラベル競合は、プロジェクト全体を検証しても1件だけ報告される。
+    #[test]
+    fn project_verification_reports_a_single_sheet_label_conflict_once() {
+        let mut project = crate::model::Project::new("t");
+        let sid = project.sheets[0].id;
+        for e in [
+            wire(&[(20.0, 20.0), (60.0, 20.0)]),
+            net_label("24V", 20.0, 20.0),
+            net_label("0V", 60.0, 20.0),
+        ] {
+            project.sheet_mut(sid).unwrap().entities.insert(e.id(), e);
+        }
+        let conflicts: Vec<_> = verify_project(&project)
+            .into_iter()
+            .filter(|d| d.code == LABEL_CONFLICT)
+            .collect();
+        assert_eq!(conflicts.len(), 1, "{conflicts:?}");
+        assert!(conflicts[0].message.contains("0V") && conflicts[0].message.contains("24V"));
+    }
+
+    /// Nets joined across sheets by a shared label name are checked as one net, so a conflict spanning two sheets is reported once with all offending labels.
+    /// 同名ラベルでシートを跨いで繋がったネットは1ネットとして検査されるので、2枚に跨る競合も全ラベルを挙げた1件として報告される。
+    #[test]
+    fn project_verification_merges_label_conflicts_across_sheets() {
+        let mut project = crate::model::Project::new("t");
+        project
+            .sheets
+            .push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let (s1, s2) = (project.sheets[0].id, project.sheets[1].id);
+        // シート1: 24V と BRIDGE が同じネットに乗る
+        for e in [
+            wire(&[(20.0, 20.0), (60.0, 20.0)]),
+            net_label("24V", 20.0, 20.0),
+            net_label("BRIDGE", 60.0, 20.0),
+        ] {
+            project.sheet_mut(s1).unwrap().entities.insert(e.id(), e);
+        }
+        // シート2: BRIDGE と 0V が同じネットに乗る → 全体では 24V/BRIDGE/0V が1ネット
+        for e in [
+            wire(&[(20.0, 20.0), (60.0, 20.0)]),
+            net_label("BRIDGE", 20.0, 20.0),
+            net_label("0V", 60.0, 20.0),
+        ] {
+            project.sheet_mut(s2).unwrap().entities.insert(e.id(), e);
+        }
+        let conflicts: Vec<_> = verify_project(&project)
+            .into_iter()
+            .filter(|d| d.code == LABEL_CONFLICT)
+            .collect();
+        assert_eq!(conflicts.len(), 1, "跨ぎネットは1件にまとまる: {conflicts:?}");
+        for name in ["0V", "24V", "BRIDGE"] {
+            assert!(conflicts[0].message.contains(name), "{:?}", conflicts[0]);
+        }
+        assert_eq!(conflicts[0].entity_ids.len(), 4, "両シートのラベルを指す");
+    }
+
+    /// A net continued onto another sheet with the same label name is not a conflict.
+    /// 同じラベル名でシートを跨いで続くネットは、競合ではない。
+    #[test]
+    fn project_verification_accepts_a_net_continued_onto_another_sheet() {
+        let mut project = crate::model::Project::new("t");
+        project
+            .sheets
+            .push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let (s1, s2) = (project.sheets[0].id, project.sheets[1].id);
+        for sid in [s1, s2] {
+            for e in [wire(&[(20.0, 20.0), (60.0, 20.0)]), net_label("24V_1", 20.0, 20.0)] {
+                project.sheet_mut(sid).unwrap().entities.insert(e.id(), e);
+            }
+        }
+        assert!(
+            !verify_project(&project).iter().any(|d| d.code == LABEL_CONFLICT),
+            "{:?}",
+            verify_project(&project)
+        );
+        // 帳票・検証では1ネットとして数える
+        assert_eq!(crate::xref::extract_netlist_project(&project).nets.len(), 1);
     }
 }

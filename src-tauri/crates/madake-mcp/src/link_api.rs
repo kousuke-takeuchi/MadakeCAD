@@ -139,12 +139,15 @@ async fn post_export_svg(
     Json(body): Json<ExportSvgBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let engine = doc.engine.lock().unwrap();
+    let project = engine.project();
     let sheet = match body.sheet_id {
-        Some(id) => engine.project().sheet(id),
-        None => engine.project().sheets.first(),
+        Some(id) => project.sheet(id),
+        None => project.sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    let svg = madake_core::svg::sheet_to_svg(sheet, &sheet_symbol_defs(sheet));
+    // プロジェクト文脈で描くとネットラベルにシート間クロスリファレンスが入る
+    let svg = madake_core::svg::project_sheet_to_svg(project, sheet.id, &sheet_symbol_defs(sheet))
+        .ok_or_else(|| bad_request("sheet not found"))?;
     std::fs::write(&body.path, svg).map_err(bad_request)?;
     Ok(Json(serde_json::json!({ "written": body.path })))
 }
@@ -177,17 +180,14 @@ async fn get_verify(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let engine = doc.engine.lock().unwrap();
     let project = engine.project();
-    let sheets: Vec<_> = match q.sheet_id {
-        Some(id) => vec![project.sheet(id).ok_or_else(|| bad_request("sheet not found"))?],
-        None => project.sheets.iter().collect(),
+    // シート指定なし=プロジェクト全体。ネットラベル関連はシートを跨いだ統合ネットで評価する
+    let diags = match q.sheet_id {
+        Some(id) => {
+            let sheet = project.sheet(id).ok_or_else(|| bad_request("sheet not found"))?;
+            madake_core::verify::verify_sheet(sheet, &sheet_symbol_defs(sheet))
+        }
+        None => madake_core::verify::verify_project(project),
     };
-    let mut diags = Vec::new();
-    for sheet in sheets {
-        diags.extend(madake_core::verify::verify_sheet(
-            sheet,
-            &sheet_symbol_defs(sheet),
-        ));
-    }
     Ok(Json(serde_json::json!(diags)))
 }
 
@@ -196,12 +196,14 @@ async fn post_export_pdf(
     Json(body): Json<ExportSvgBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let engine = doc.engine.lock().unwrap();
+    let project = engine.project();
     let sheet = match body.sheet_id {
-        Some(id) => engine.project().sheet(id),
-        None => engine.project().sheets.first(),
+        Some(id) => project.sheet(id),
+        None => project.sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    let pdf = madake_core::pdf::sheet_to_pdf(sheet, &sheet_symbol_defs(sheet))
+    let pdf = madake_core::pdf::project_sheet_to_pdf(project, sheet.id, &sheet_symbol_defs(sheet))
+        .ok_or_else(|| bad_request("sheet not found"))?
         .map_err(bad_request)?;
     std::fs::write(&body.path, pdf).map_err(bad_request)?;
     Ok(Json(serde_json::json!({ "written": body.path })))

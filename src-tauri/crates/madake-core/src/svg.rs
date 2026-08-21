@@ -8,7 +8,7 @@ use crate::netlist::transform_local;
 use crate::symbol::{Primitive, SymbolDef};
 
 /// 図枠の用紙端からのマージン (mm)。
-const FRAME_MARGIN: f64 = 10.0;
+pub const FRAME_MARGIN: f64 = 10.0;
 /// 配線の線幅 (mm)。
 const WIRE_STROKE: f64 = 0.35;
 /// シンボルの線幅 (mm)。
@@ -446,7 +446,31 @@ fn render_harnesses(out: &mut String, sheet: &Sheet) {
 }
 
 /// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。
+/// シート単体の出力なのでシート間クロスリファレンスは描かない
+/// (描くには [`project_sheet_to_svg`] を使う)。
 pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
+    sheet_to_svg_with_xrefs(sheet, symbols, &std::collections::BTreeMap::new())
+}
+
+/// プロジェクト内の1シートをSVGとして書き出す。ネットラベルの脇には、他シートにある
+/// 同名ラベルの住所「/シート.ゾーン」([`crate::xref`]) を自動で添える。
+/// シートが見つからなければNone。
+pub fn project_sheet_to_svg(
+    project: &crate::model::Project,
+    sheet_id: crate::model::SheetId,
+    symbols: &[SymbolDef],
+) -> Option<String> {
+    let sheet = project.sheet(sheet_id)?;
+    let xrefs = crate::xref::sheet_xrefs(project, sheet_id);
+    Some(sheet_to_svg_with_xrefs(sheet, symbols, &xrefs))
+}
+
+/// [`sheet_to_svg`] の本体。`xrefs`はネットラベルのentity id → 脇に描くXRefテキスト。
+fn sheet_to_svg_with_xrefs(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    xrefs: &std::collections::BTreeMap<crate::model::EntityId, String>,
+) -> String {
     let (pw, ph) = sheet.paper_mm();
     let mut out = String::new();
     let _ = write!(
@@ -489,6 +513,20 @@ pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
             }
             Entity::NetLabel(l) => {
                 text_el(&mut out, l.at.x, l.at.y - 1.0, 2.5, "#000", "start", &l.name);
+                // シート間クロスリファレンス (IEC 61082-1)。相手がいるラベルだけ脇に添える
+                if let Some(text) = xrefs.get(&l.id) {
+                    let at = crate::xref::xref_text_at(l);
+                    text_family_el(
+                        &mut out,
+                        at.x,
+                        at.y,
+                        crate::xref::XREF_FONT,
+                        "#000",
+                        "start",
+                        "monospace",
+                        text,
+                    );
+                }
             }
             Entity::Text(t) => {
                 text_el(&mut out, t.at.x, t.at.y, t.height, "#000", "start", &t.text);
@@ -820,5 +858,79 @@ mod tests {
         let svg = sheet_to_svg(&sheet, &builtin_symbols());
         // 90度回転で本体矩形は縦長になる: 頂点(±5,±2)→(100∓2, 100±5) を含む
         assert!(svg.contains("98,95") || svg.contains("98,105"), "{svg}");
+    }
+
+    /// 2枚のA3シートに同名ネットラベル付きの配線を1本ずつ置いたプロジェクト。
+    fn two_sheet_project() -> Project {
+        let mut project = Project::new("t");
+        project
+            .sheets
+            .push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let put = |sheet: &mut Sheet, x: f64, y: f64| {
+            let w = Entity::Wire(Wire {
+                id: Uuid::new_v4(),
+                points: vec![Point::new(x, y), Point::new(x + 40.0, y)],
+                color: "black".into(),
+                sq: 0.75,
+                length_m: None,
+                part_no: None,
+                net: None,
+            });
+            let l = Entity::NetLabel(NetLabel {
+                id: Uuid::new_v4(),
+                at: Point::new(x, y),
+                name: "24V_1".into(),
+                rotation: 0,
+            });
+            for e in [w, l] {
+                sheet.entities.insert(e.id(), e);
+            }
+        };
+        let (s1, s2) = project.sheets.split_at_mut(1);
+        put(&mut s1[0], 20.0, 20.0);
+        put(&mut s2[0], 250.0, 70.0);
+        project
+    }
+
+    /// A sheet exported as part of its project shows, next to each net label, the "/sheet.zone" address of the same-named label on the other sheet.
+    /// プロジェクトの一部として書き出したシートには、各ネットラベルの脇に他シートの同名ラベルの住所「/シート.ゾーン」が出る。
+    #[test]
+    fn svg_draws_cross_reference_address_next_to_net_label() {
+        let project = two_sheet_project();
+        let svg = project_sheet_to_svg(&project, project.sheets[0].id, &builtin_symbols()).unwrap();
+        assert!(svg.contains(">/2.B3<"), "相手先の住所が出る: {svg}");
+        assert!(svg.contains(">24V_1<"), "ラベル本文も残る");
+        // XRefは等幅・ラベル本文より小さい文字で、ラベルの右脇に置く
+        assert!(
+            svg.contains(&format!("font-size=\"{}\"", n(crate::xref::XREF_FONT))),
+            "小さめの文字: {svg}"
+        );
+        let (x, y, _) = texts(&svg)
+            .into_iter()
+            .find(|(_, _, t)| t == "/2.B3")
+            .expect("XRefテキスト");
+        assert!(x > 20.0, "ラベル(x=20)の右: {x}");
+        assert!((y - 19.0).abs() < 1e-9, "ラベル本文と同じベースライン: {y}");
+    }
+
+    /// A net label with no counterpart on another sheet gets no cross-reference text.
+    /// 他のシートに相手がいないネットラベルには、クロスリファレンスの文字が出ない。
+    #[test]
+    fn svg_omits_cross_reference_when_there_is_no_counterpart() {
+        let mut project = two_sheet_project();
+        project.sheets.truncate(1);
+        let svg = project_sheet_to_svg(&project, project.sheets[0].id, &builtin_symbols()).unwrap();
+        assert!(svg.contains(">24V_1<"));
+        assert!(!svg.contains(">/"), "相手先が無ければ何も描かない: {svg}");
+    }
+
+    /// Exporting a single sheet on its own (no project context) never draws cross-references.
+    /// プロジェクトの文脈なしにシート単体を書き出したときは、クロスリファレンスを描かない。
+    #[test]
+    fn svg_of_a_lone_sheet_has_no_cross_reference() {
+        let project = two_sheet_project();
+        let svg = sheet_to_svg(&project.sheets[0], &builtin_symbols());
+        assert!(svg.contains(">24V_1<"));
+        assert!(!svg.contains("/2.B3"), "{svg}");
     }
 }
