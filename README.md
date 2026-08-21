@@ -20,6 +20,7 @@
 |---|---|
 | [要件定義書](docs/requirements.md) | 背景・成功基準・機能/非機能要件・制約 |
 | [技術スタック](docs/tech-stack.md) | 使用技術・バージョン・選定理由 |
+| [システム設計書](docs/architecture.md) | 構成図・フォルダ/ファイルマップ・データフロー・状態遷移・変更レシピ |
 | [データ設計書](docs/data-model.md) | ドキュメントモデル・部品DB ER図・派生データ |
 | 画面設計・画面遷移 | `MadakeCAD.pen`(Pencil)が正。Pen.appで開く |
 | [環境構築手順](docs/setup.md) | 必要ソフト・セットアップ・トラブルシューティング |
