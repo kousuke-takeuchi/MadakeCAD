@@ -85,8 +85,9 @@
 
 ### Task 6: UI(デザイン確定後・別途)
 
-- [ ] Pencilデザイン: 部品挿入ダイアログの「ピン数」入力(端子台/コネクタ選択時)、リボン「PDF出力」ボタン、レイヤ表示トグルの要否検討
-- [ ] デザイン確定後に実装(SymbolPickerDialog.vue / RibbonBar.vue)
+- [x] Pencilデザイン: 部品挿入ダイアログ(極数バー)・DSステッパー・リボン出力列(SVG/PDF)を.penとdesign-system.mdへ追加
+- [x] 実装(SymbolPickerDialog.vue / RibbonBar.vue / ipc / Tauri export_pdf)。実機ブラウザ検証済み(端子台8極配置→PDF出力)
+- [ ] レイヤ表示トグル: 要否未決(specに詳細なし)。必要ならユーザーと要件を決めてから別途
 
 ## 進捗
 
@@ -95,3 +96,4 @@
   確認用example: `cargo run -p madake-core --example pdf_demo -- out.pdf`)。
   追加改善: 参照記号・型番をシンボル外形上端基準で配置(svg.rs/renderer.ts)。
   Task 6(UI: 部品挿入ダイアログのピン数入力・リボンPDFボタン・レイヤ)はPencilデザイン待ち
+- 2026-08-21 (続き): Task 6完了(レイヤのみ要否未決で保留)。フェーズ1後半これにて完了
