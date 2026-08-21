@@ -13,6 +13,7 @@ pub mod ngspice;
 pub mod parts;
 pub mod pdf;
 pub mod reports;
+pub mod sim;
 pub mod spice;
 pub mod svg;
 pub mod symbol;
