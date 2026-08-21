@@ -40,6 +40,7 @@ cd src-tauri && cargo test
 - `execute_commands` — 任意コマンド列(シート追加、表題欄設定、移動、削除など)
 - `export_svg` / `export_pdf` / `export_bom` / `export_wire_list` / `get_netlist` — 出力・ネットリスト
 - `run_verification` — 図面検証(ERC+電気検証)。Diagnostic配列を返す
+- `search_parts` / `upsert_part` / `delete_part` — 部品DB(グローバル共有マスタ)の検索・登録・削除
 - `undo` / `redo`
 
 ## madake CLI (ターミナル)
@@ -56,6 +57,7 @@ madake status                       # 接続確認 + 図面の概要
 madake project                      # シート一覧・電線品番
 madake netlist [--sheet <シートID>]  # ネットリスト
 madake verify [--sheet <シートID>]   # 図面検証 (ERC+電気検証。省略時は全シート)
+madake parts [<検索語>] [--category <カテゴリ>]  # 部品DB検索
 madake export svg|pdf|bom|wire-list <出力パス> [--sheet <シートID>]  # --sheetはsvg/pdfのみ
 madake save <path.mdkproj>          # 保存
 madake open <path.mdkproj>          # 読み込み
@@ -72,6 +74,10 @@ madake undo / madake redo
 ```
 
 アプリ未起動時は「MadakeCADアプリが起動していません」と表示して終了コード1を返す。
+
+## 部品DB
+
+グローバル共有の部品マスタ(SQLite)。既定の場所はOSのアプリデータフォルダ(`~/Library/Application Support/MadakeCAD/parts.sqlite`等)で、環境変数`MADAKE_PARTS_DB`で変更できる。型番・メーカ・定格(検証エンジンのcurrent_aと連動)・購入先/データシートURL・価格と、電線品番マスタ(線色+sq→品番)を持つ。初回作成時にダミー型番のサンプルが数件入る。部品挿入ダイアログ・`madake parts`・MCP・`/api/v1/parts`から利用できる。
 
 ## 保存形式
 
