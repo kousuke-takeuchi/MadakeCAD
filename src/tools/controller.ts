@@ -30,6 +30,8 @@ export class EditorController {
   /** placeツールで配置するシンボルid。 */
   placeSymbolId: string | null = null;
   placeRotation = 0;
+  /** 部品DBから選択した部品情報 (配置時にvalue/attrsへ反映)。 */
+  placePart: { value: string; attrs: Record<string, string> } | null = null;
   /** 配線ツールの既定属性。 */
   wireColor = "red";
   wireSq = 0.75;
@@ -54,9 +56,14 @@ export class EditorController {
 
   constructor(private store: DocumentStore) {}
 
-  setTool(tool: ToolId, symbolId?: string) {
+  setTool(
+    tool: ToolId,
+    symbolId?: string,
+    part?: { value: string; attrs: Record<string, string> },
+  ) {
     this.tool = tool;
     this.placeSymbolId = tool === "place" ? (symbolId ?? this.placeSymbolId) : null;
+    this.placePart = tool === "place" ? (part ?? null) : null;
     this.wirePoints = [];
     this.dragMode = "none";
     this.requestRedraw();
@@ -325,8 +332,8 @@ export class EditorController {
       rotation: this.placeRotation,
       mirror: false,
       reference: this.nextReference(def.ref_prefix),
-      value: "",
-      attrs: {},
+      value: this.placePart?.value ?? "",
+      attrs: this.placePart?.attrs ?? {},
     };
     await this.store.execute({ type: "add_entity", sheet_id: sheet.id, entity });
     this.requestRedraw();
