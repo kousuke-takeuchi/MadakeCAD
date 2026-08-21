@@ -1,7 +1,7 @@
 // Canvas2Dレンダラ本体。純関数でDOM非依存(ctxとviewportを受け取るだけ)。
 // 描画順: 背景 → グリッド → JIS図枠 → 配線 → シンボル → ジャンクション → ラベル → 選択
 
-import type { Point, Sheet, SymbolDef, SymbolInstance } from "../ipc";
+import type { Point, Revision, Sheet, SymbolDef, SymbolInstance } from "../ipc";
 import type { Region } from "./agentOverlay";
 import { resolveSymbolDef } from "./dynamicSymbol";
 import { entityViewClass, type ViewClass } from "./viewClasses";
@@ -10,6 +10,85 @@ import { GRID_PITCH, type Viewport } from "./viewport";
 
 /** 図枠の用紙端からのマージン (mm)。svg.rsのFRAME_MARGINと一致させること。 */
 const FRAME_MARGIN = 10;
+/** 表題欄の外形 (mm)。svg.rsのTITLE_W/TITLE_Hと一致させること。 */
+const TITLE_W = 120;
+const TITLE_H = 32;
+/** 表題欄・改訂欄の共通行高 (mm)。 */
+const ROW_H = 8;
+/** セル内テキストの左余白 (mm)。 */
+const CELL_PAD = 2;
+/** 改訂欄の列幅 (記号 / 日付 / 内容 / 承認) mm。合計は表題欄の幅と一致する。 */
+export const REV_COL_W = [14, 28, 56, 22];
+/** 改訂欄の列見出し (ISO 7200 / JIS Z 8311)。 */
+export const REV_HEADERS = ["記号", "日付", "内容", "承認"];
+/** 改訂欄に描く最大行数。溢れた分は古い行から省略する (データは保持)。 */
+export const REV_MAX_ROWS = 6;
+/** 改訂欄の本文・列見出しの文字高さ (mm)。 */
+const REV_FONT = 2.5;
+const REV_HEADER_FONT = 2.2;
+
+/** 図面に描く改訂行(古い順)。上限を超えた分は古い行から省く。 */
+export function visibleRevisions(revisions: Revision[]): Revision[] {
+  return revisions.slice(Math.max(0, revisions.length - REV_MAX_ROWS));
+}
+
+/** 表題欄のRev欄に出す改訂記号。改訂があれば最新のmarkを優先する。 */
+export function effectiveRev(sheet: Sheet): string {
+  const list = sheet.revisions ?? [];
+  const latest = list[list.length - 1]?.mark?.trim();
+  if (latest) return latest;
+  return sheet.title_block?.rev || "-";
+}
+
+/** 改訂欄1行分の配置。topは行上端の用紙Y (mm)。 */
+export interface RevisionRowLayout {
+  rev: Revision;
+  top: number;
+}
+
+/** 改訂欄の配置 (用紙mm)。表題欄の直上・同じ右端・同じ幅。 */
+export interface RevisionLayout {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** 各列の左端X (記号 / 日付 / 内容 / 承認)。 */
+  colLefts: number[];
+  /** 列見出し行の上端Y (最下段=表題欄側)。 */
+  headerTop: number;
+  /** 改訂行(古い順)。古い行ほど下、新しい行ほど上。 */
+  rows: RevisionRowLayout[];
+}
+
+/**
+ * 改訂欄の配置を計算する (svg.rsのrevision_blockと同一ルール)。
+ * 改訂が0件なら描画しないのでnullを返す。
+ */
+export function revisionLayout(sheet: Sheet): RevisionLayout | null {
+  const rows = visibleRevisions(sheet.revisions ?? []);
+  if (rows.length === 0) return null;
+  const { w: pw, h: ph } = paperSizeMm(sheet);
+  // 表題欄は図枠の右下。改訂欄はその真上に同じ右端・同じ幅で積む
+  const tx = pw - FRAME_MARGIN - TITLE_W;
+  const ty = ph - FRAME_MARGIN - TITLE_H;
+  const h = (rows.length + 1) * ROW_H;
+  const colLefts: number[] = [];
+  let x = tx;
+  for (const w of REV_COL_W) {
+    colLefts.push(x);
+    x += w;
+  }
+  return {
+    x: tx,
+    y: ty - h,
+    w: TITLE_W,
+    h,
+    colLefts,
+    headerTop: ty - ROW_H,
+    // 古い行 (rows[0]) が列見出しの直上、新しい行ほど上へ
+    rows: rows.map((rev, i) => ({ rev, top: ty - (i + 2) * ROW_H })),
+  };
+}
 
 export interface RenderOptions {
   selection: Set<string>;
@@ -141,9 +220,12 @@ function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet) {
   ctx.lineWidth = 1;
   ctx.stroke();
 
+  // 改訂欄 (表題欄の直上)
+  drawRevisionBlock(ctx, vp, sheet);
+
   // 表題欄 (120x32mm、右下)
-  const tw = 120;
-  const th = 32;
+  const tw = TITLE_W;
+  const th = TITLE_H;
   const tx = x1 - tw;
   const ty = y1 - th;
   const t0 = vp.toScreen({ x: tx, y: ty });
@@ -152,14 +234,14 @@ function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet) {
   ctx.strokeRect(t0.x, t0.y, t1.x - t0.x, t1.y - t0.y);
   ctx.beginPath();
   for (let r = 1; r < 4; r++) {
-    line(ctx, vp, { x: tx, y: ty + 8 * r }, { x: x1, y: ty + 8 * r });
+    line(ctx, vp, { x: tx, y: ty + ROW_H * r }, { x: x1, y: ty + ROW_H * r });
   }
   line(ctx, vp, { x: tx + 24, y: ty }, { x: tx + 24, y: y1 });
   ctx.lineWidth = 1;
   ctx.stroke();
   const tb = sheet.title_block;
   const rows4: [string, string][] = [
-    ["図番", `${tb.drawing_no ?? ""}  Rev ${tb.rev || "-"}`],
+    ["図番", `${tb.drawing_no ?? ""}  Rev ${effectiveRev(sheet)}`],
     ["品名", tb.title ?? ""],
     ["尺度", `${tb.scale ?? ""}    日付 ${tb.date ?? ""}`],
     ["設計", `${tb.designed ?? ""}  製図 ${tb.drawn ?? ""}  検図 ${tb.checked ?? ""}  承認 ${tb.approved ?? ""}`],
@@ -168,12 +250,69 @@ function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet) {
   ctx.textAlign = "left";
   ctx.font = `${Math.max(8, 2.8 * vp.scale)}px sans-serif`;
   rows4.forEach(([label, value], i) => {
-    const ly = ty + 8 * i + 5.5;
-    const lp = vp.toScreen({ x: tx + 2, y: ly });
+    const ly = ty + ROW_H * i + 5.5;
+    const lp = vp.toScreen({ x: tx + CELL_PAD, y: ly });
     const vpos = vp.toScreen({ x: tx + 26, y: ly });
     ctx.fillText(label, lp.x, lp.y);
     ctx.fillText(value, vpos.x, vpos.y);
   });
+}
+
+/**
+ * 改訂欄 (ISO 7200 / JIS Z 8311) を描く。表題欄の直上に同じ右端・同じ幅で置き、
+ * 最下段が列見出し、その上に古い改訂から順に積む (最新が最上段)。0行なら何も描かない。
+ * Rust側 svg.rs の revision_block と同一ルール。
+ */
+function drawRevisionBlock(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet) {
+  const l = revisionLayout(sheet);
+  if (!l) return;
+  const bottom = l.y + l.h;
+  const right = l.x + l.w;
+
+  // 外枠
+  ctx.strokeStyle = theme.line;
+  ctx.lineWidth = Math.max(1, 0.5 * vp.scale);
+  const a = vp.toScreen({ x: l.x, y: l.y });
+  const b = vp.toScreen({ x: right, y: bottom });
+  ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+
+  // 罫線 (行境界+列境界)
+  ctx.beginPath();
+  for (let r = 1; r <= l.rows.length; r++) {
+    const ry = l.y + ROW_H * r;
+    line(ctx, vp, { x: l.x, y: ry }, { x: right, y: ry });
+  }
+  for (const cx of l.colLefts.slice(1)) {
+    line(ctx, vp, { x: cx, y: l.y }, { x: cx, y: bottom });
+  }
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.textAlign = "left";
+  // 列見出し (最下段、表題欄側)
+  ctx.fillStyle = theme.dim;
+  ctx.font = `${Math.max(8, REV_HEADER_FONT * vp.scale)}px sans-serif`;
+  REV_HEADERS.forEach((label, i) => {
+    const p = vp.toScreen({
+      x: l.colLefts[i] + CELL_PAD,
+      y: l.headerTop + ROW_H / 2 + REV_HEADER_FONT / 2,
+    });
+    ctx.fillText(label, p.x, p.y);
+  });
+  // 改訂行
+  ctx.fillStyle = theme.line;
+  ctx.font = `${Math.max(8, REV_FONT * vp.scale)}px sans-serif`;
+  for (const row of l.rows) {
+    const cells = [row.rev.mark, row.rev.date, row.rev.description, row.rev.by];
+    cells.forEach((value, c) => {
+      if (!value) return;
+      const p = vp.toScreen({
+        x: l.colLefts[c] + CELL_PAD,
+        y: row.top + ROW_H / 2 + REV_FONT / 2,
+      });
+      ctx.fillText(value, p.x, p.y);
+    });
+  }
 }
 
 /** シンボル1個を描画する。colorOverride指定時は配置プレビュー等のゴースト描画用。 */

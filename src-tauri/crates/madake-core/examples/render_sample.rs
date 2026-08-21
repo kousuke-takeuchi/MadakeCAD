@@ -19,6 +19,21 @@ fn main() {
         approved: "-".into(),
         rev: "A".into(),
     };
+    // 改訂欄 (表題欄の直上に、古い行から下→上へ積まれる)
+    sheet.revisions = vec![
+        Revision {
+            mark: "A".into(),
+            date: "2026-08-01".into(),
+            description: "初版".into(),
+            by: "K.T".into(),
+        },
+        Revision {
+            mark: "B".into(),
+            date: "2026-08-21".into(),
+            description: "モータ回路追加".into(),
+            by: "K.T".into(),
+        },
+    ];
     let mut add = |e: Entity| {
         sheet.entities.insert(e.id(), e);
     };

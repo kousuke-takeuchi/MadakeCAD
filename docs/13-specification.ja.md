@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**304仕様項目**。
+全5領域・**311仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -327,6 +327,16 @@
 - terminal_block_3pは3端子×左右2接続点で、中央揃え・2.5mmグリッド上にある <sub>`dynamicSymbol`</sub>
 - 不正な動的IDはnullになる <sub>`dynamicSymbol`</sub>
 - 静的定義を優先し、無ければ動的生成にフォールバックする <sub>`resolveSymbolDef`</sub>
+
+### renderer
+
+- 改訂欄は表題欄の真上に同じ右端・同じ幅で置かれ、行高は表題欄と同じ8mmになる <sub>`revisionLayout`</sub>
+- 改訂行は古い行が下・新しい行が上に積まれ、列見出しは最下段(表題欄側)に置かれる <sub>`revisionLayout`</sub>
+- 改訂が無いシートには改訂欄を作らない(空の枠も描かない) <sub>`revisionLayout`</sub>
+- 改訂が7件あると新しい6件だけが描かれ、最も古い行は省略される(データは残る) <sub>`revisionLayout`</sub>
+- 列は記号・日付・内容・承認の4つで、合計幅は表題欄の幅と一致する <sub>`revisionLayout`</sub>
+- 表示対象の改訂は新しい方から6件までで、古い順のまま返る <sub>`visibleRevisions / effectiveRev`</sub>
+- 表題欄のRev欄は最新改訂の記号を出し、改訂が無ければ表題欄の値、それも空ならハイフンを出す <sub>`visibleRevisions / effectiveRev`</sub>
 
 ### viewClasses
 
