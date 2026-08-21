@@ -1,10 +1,15 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
+  <img src="docs/images/logo-light.svg" alt="MadakeCAD logo" width="96" height="96">
+</picture>
+
 # MadakeCAD
 
-**An AI-first, standards-compliant electrical CAD for industrial equipment.**
+**An AI-first electrical CAD for industrial equipment, built for JIS / IEC / ISO compliance.**
 
-Draw JIS-compliant wiring diagrams for robots, machinery, and control panels —
+Draw standards-compliant wiring diagrams for robots, machinery, and control panels —
 with an AI assistant that edits through the same undoable command engine as you,
 and verification grounded in a real circuit solver (ngspice).
 
@@ -28,20 +33,19 @@ and verification grounded in a real circuit solver (ngspice).
 
 ## Why MadakeCAD?
 
-- 🏭 **PCB CADs are the wrong tool for equipment wiring** — no JIS frames, no wire part management, no terminal-block-centric connections, no wire lists
+- 🏭 **PCB CADs are the wrong tool for equipment wiring** — no standard drawing frames (JIS/ISO), no wire part management, no terminal-block-centric connections, no wire lists
 - 💰 **Industrial CADs (AutoCAD Electrical, EPLAN) are closed and heavyweight** — and have no meaningful AI integration
 - 🤝 **Expertise shouldn't be the entry ticket** — with an LLM in the loop, non-experts produce correct drawings while veterans keep a fast, conventional CAD workflow
 
 ## Highlights
 
 - ✏️ **Purpose-built schematic editor** — JIS C 0617 symbols, parametric terminal blocks & connectors (1–50 poles), orthogonal wiring with grid/pin snap, auto reference designators, multi-sheet, layers
-- 📐 **Standards-true output** — JIS frame (zones, title block), print-quality SVG/PDF with embedded CJK fonts, BOM & wire-list CSV
+- 📐 **Standards-true output** — JIS drawing frame today (zones, title block), IEC 60617 / IEC 81346 / ISO 7200-series variants on the roadmap; print-quality SVG/PDF with embedded CJK fonts, BOM & wire-list CSV
 - ✅ **Solver-grounded verification** — ERC plus electrical checks (reachability, ampacity, voltage drop, fuse rating) judged from an actual ngspice DC solution
 - ⚡ **DC simulation** — net voltages, component currents/power, open-switch what-if analysis
 - 🗄️ **Parts database** — local SQLite master with ratings, procurement links, and a wire part master; place parts with ratings applied automatically
 - 🤖 **AI assistant built in** — chat drafts and edits your drawing via MCP; every AI turn is undoable, with live edit-region highlighting
 - 🔌 **Automate everything** — MCP server, REST API + SSE, and a `madake` CLI, all driving the same command engine
-- 📥 **KiCad import** — migrate existing `.kicad_sch` schematics with a detailed import report
 
 ## Quick Start
 

@@ -41,4 +41,8 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - Windows/Linux builds + CI, installers
 - English/Japanese UI (i18n), contributor docs and community setup
 
+## Long term
+
+- IEC / ISO standard variants: IEC 60617 symbols, IEC 81346 structure designations, ISO 7200 title blocks, ISO 5457 sheet frames
+
 Deliberately deferred (with rationale recorded in the gap analysis): transient simulation, single-line diagrams, DWG/DXF export, multi-user editing.
