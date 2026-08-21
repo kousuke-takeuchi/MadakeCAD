@@ -27,21 +27,27 @@ export function usePopover(options: PopoverOptions = {}) {
   }
 
   function onWindowKeydown(ev: KeyboardEvent) {
-    if (ev.key === "Escape") close();
+    if (ev.key !== "Escape") return;
+    // Escはポップアップを閉じるだけで消費する。バブリングまで流すと
+    // EditorLayoutのwindowリスナ経由でキャンバスツールのEsc処理
+    // (作画キャンセル/ツールリセット)まで同時に発火してしまう
+    ev.preventDefault();
+    ev.stopPropagation();
+    close();
   }
 
   watch(open, (isOpen) => {
     if (isOpen) {
-      window.addEventListener("keydown", onWindowKeydown);
+      window.addEventListener("keydown", onWindowKeydown, { capture: true });
       void options.onOpen?.();
     } else {
-      window.removeEventListener("keydown", onWindowKeydown);
+      window.removeEventListener("keydown", onWindowKeydown, { capture: true });
       options.onClose?.();
     }
   });
 
   // 開いたままアンマウントされてもリスナを残さない
-  onBeforeUnmount(() => window.removeEventListener("keydown", onWindowKeydown));
+  onBeforeUnmount(() => window.removeEventListener("keydown", onWindowKeydown, { capture: true }));
 
   return { open, toggle, close };
 }
