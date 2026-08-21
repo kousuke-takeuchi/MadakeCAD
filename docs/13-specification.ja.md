@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**382仕様項目**。
+全5領域・**397仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -369,6 +369,19 @@
 - 不正な動的IDはnullになる <sub>`dynamicSymbol`</sub>
 - 静的定義を優先し、無ければ動的生成にフォールバックする <sub>`resolveSymbolDef`</sub>
 
+### ハーネス境界
+
+- 矩形ドラッグはどの向きに引いても同じ4隅の頂点になる <sub>`harness geometry`</sub>
+- 全ての点が囲みの内側にある配線だけがハーネスに所属する(境界線上は内側) <sub>`harness geometry`</sub>
+- 入れ子の囲みでは、その配線を囲む最も小さいハーネスに所属する <sub>`harness geometry`</sub>
+- ハーネスの「含む電線」本数は、その囲みが今いくつの配線を囲んでいるかを表す <sub>`harness geometry`</sub>
+- 囲みの外接矩形は左上と右下の点を返し、頂点が無ければnullになる <sub>`harness geometry`</sub>
+- 名前ラベルは囲みの左上角の外側(右へ1mm・上へ1mm)に置く <sub>`harness geometry`</sub>
+- 新しいハーネスの名前は、何も無いシートではW1、既にあるときはその次の番号になる <sub>`harness naming`</sub>
+- ハーネス以外のエンティティ(参照記号など)は名前の採番に影響しない <sub>`harness naming`</sub>
+- 矩形ドラッグはadd_entityコマンド1回(kind=harness・自動採番した名前)になる <sub>`harnessAddCommand`</sub>
+- つぶれた矩形(クリックしただけ)ではハーネスを作らない <sub>`harnessAddCommand`</sub>
+
 ### renderer
 
 - 改訂欄は表題欄の真上に同じ右端・同じ幅で置かれ、行高は表題欄と同じ8mmになる <sub>`revisionLayout`</sub>
@@ -382,8 +395,8 @@
 ### viewClasses
 
 - エンティティ種別を表示クラスへ対応付ける(ジャンクションは配線扱い) <sub>`entityViewClass`</sub>
-- VIEW_CLASSESは全クラスを一意に列挙する(線番を加えて8クラス) <sub>`entityViewClass`</sub>
-- 表示クラスは初期状態で全て表示ONになっている(線番も最初から見える) <sub>`view class visibility`</sub>
+- VIEW_CLASSESは全クラスを一意に列挙する(線番・ハーネスを加えて9クラス) <sub>`entityViewClass`</sub>
+- 表示クラスは初期状態で全て表示ONになっている(線番・ハーネスも最初から見える) <sub>`view class visibility`</sub>
 
 ### viewport
 
@@ -419,6 +432,11 @@
 - 前後の空白は落とされ、空白だけの入力は線番を消す扱いになる <sub>`wireNumberCommand`</sub>
 - 線番が変わっていなければコマンドを送らない(無駄なundo履歴を作らない) <sub>`wireNumberCommand`</sub>
 - 配線以外を選んでいるときは線番コマンドを作らない <sub>`wireNumberCommand`</sub>
+- ハーネス名を書き換えるとupdate_entityコマンドになり、囲みの形はそのまま残る <sub>`harnessUpdateCommand`</sub>
+- 備考だけを変えたときもコマンドになる <sub>`harnessUpdateCommand`</sub>
+- 名前の前後の空白は落とされる <sub>`harnessUpdateCommand`</sub>
+- 名前も備考も変わっていなければコマンドを送らない(無駄なundo履歴を作らない) <sub>`harnessUpdateCommand`</sub>
+- ハーネス以外を選んでいるときはハーネスコマンドを作らない <sub>`harnessUpdateCommand`</sub>
 
 ### drawingContext
 

@@ -4,6 +4,7 @@
 import type { Point, Revision, Sheet, SymbolDef, SymbolInstance } from "../ipc";
 import type { Region } from "./agentOverlay";
 import { resolveSymbolDef } from "./dynamicSymbol";
+import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
 import { entityViewClass, type ViewClass } from "./viewClasses";
 import { agentRgba, theme, wireColorScreen } from "./theme";
 import { WIRE_NO_FONT, wireNumberLabels } from "./wireNumbers";
@@ -556,6 +557,40 @@ function drawWireNumbers(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: She
   ctx.textAlign = "left";
 }
 
+/**
+ * ハーネス境界 (IEC 61082-1) を描く。破線の閉じた多角形+左上角の外側にハーネス名。
+ * Rust側 svg.rs の render_harnesses と同一ルール (破線3mm/間隔2mm、名前は右へ1mm・上へ1mm)。
+ * 配線より先に描いて背面に置く。
+ */
+export function drawHarness(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  points: Point[],
+  name: string,
+  selected: boolean,
+): void {
+  if (points.length < 2) return;
+  ctx.strokeStyle = selected ? theme.selection : theme.harness;
+  ctx.lineWidth = selected ? 2 : 1;
+  ctx.setLineDash(HARNESS_DASH.map((d) => Math.max(2, d * vp.scale)));
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const s = vp.toScreen(p);
+    if (i === 0) ctx.moveTo(s.x, s.y);
+    else ctx.lineTo(s.x, s.y);
+  });
+  ctx.closePath();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const at = name ? harnessLabelAt(points) : null;
+  if (!at) return;
+  const s = vp.toScreen(at);
+  ctx.fillStyle = selected ? theme.selection : theme.harness;
+  ctx.font = `${Math.max(9, HARNESS_FONT * vp.scale)}px monospace`;
+  ctx.textAlign = "left";
+  ctx.fillText(name, s.x, s.y);
+}
+
 export function renderSheet(
   ctx: CanvasRenderingContext2D,
   sheet: Sheet,
@@ -577,6 +612,11 @@ export function renderSheet(
   const resolve = (id: string) => resolveSymbolDef(id, defs);
   const entities = Object.values(sheet.entities).filter((e) => !hidden.has(entityViewClass(e)));
 
+  // ハーネス境界は配線・シンボルの背面
+  for (const e of entities) {
+    if (e.kind !== "harness") continue;
+    drawHarness(ctx, vp, e.points, e.name, opts.selection.has(e.id));
+  }
   for (const e of entities) {
     if (e.kind !== "wire") continue;
     const selected = opts.selection.has(e.id);

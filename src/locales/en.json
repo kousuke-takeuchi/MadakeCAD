@@ -109,5 +109,22 @@
     "propertyHint": "Number of this net",
     "setLog": "Wire numbers: wire number set to {number} (undo with Cmd+Z)",
     "clearedLog": "Wire numbers: wire number cleared (undo with Cmd+Z)"
+  },
+  "harness": {
+    "ribbonButton": "Harness",
+    "kindLabel": "Harness boundary",
+    "startLog": "Harness: drag a rectangle around the wires to enclose (Esc to cancel)",
+    "noSheetLog": "Harness: no sheet is open",
+    "createdLog": "Harness: created {name} enclosing {count} wire(s) (undo with Cmd+Z)",
+    "kindRow": "Type",
+    "nameRow": "Name",
+    "nameHint": "Harness name (W1, W2 ...). It appears in the harness column of the wire list.",
+    "wireCountRow": "Wires",
+    "wireCount": "{count} wire(s)",
+    "wireCountHint": "exported in the wire list as {name}",
+    "wireCountHintUnnamed": "name it to have it exported in the wire list",
+    "noteRow": "Note",
+    "notePlaceholder": "Build instructions, etc.",
+    "renamedLog": "Harness: renamed to {name} (undo with Cmd+Z)"
   }
 }

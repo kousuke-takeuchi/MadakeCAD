@@ -1,12 +1,15 @@
 // 対話ツールの状態機械。ドラッグ中はローカルプレビュー、確定時にCommandを発行する。
 
-import { drawSymbol, transformLocal } from "../canvas/renderer";
+import { harnessAddCommand, harnessRectPoints, harnessWireCount } from "../canvas/harness";
+import { drawHarness, drawSymbol, transformLocal } from "../canvas/renderer";
 import { theme, wireColorScreen } from "../canvas/theme";
 import { Viewport, type Pt } from "../canvas/viewport";
+import { i18n } from "../i18n";
 import type { Entity, Point, SymbolInstance } from "../ipc";
 import { useDocumentStore } from "../stores/document";
+import { useUiStore } from "../stores/ui";
 
-export type ToolId = "select" | "wire" | "place";
+export type ToolId = "select" | "wire" | "place" | "harness";
 
 type DocumentStore = ReturnType<typeof useDocumentStore>;
 
@@ -47,7 +50,7 @@ export class EditorController {
   viewSize = { w: 0, h: 0 };
 
   private wirePoints: Pt[] = [];
-  private dragMode: "none" | "pan" | "move" | "rubber" = "none";
+  private dragMode: "none" | "pan" | "move" | "rubber" | "harness" = "none";
   private dragStartWorld: Pt = { x: 0, y: 0 };
   private dragStartScreen: Pt = { x: 0, y: 0 };
   private moveDelta: Pt = { x: 0, y: 0 };
@@ -99,6 +102,15 @@ export class EditorController {
         if (segmentDistance(world, e.points[i], e.points[i + 1]) <= HIT_TOLERANCE) return e.id;
       }
     }
+    // ハーネス境界は最後 (囲みの中身を選びたいことのほうが多い)。破線そのものを掴む
+    for (const e of entities) {
+      if (e.kind !== "harness" || e.points.length < 2) continue;
+      for (let i = 0; i < e.points.length; i++) {
+        const a = e.points[i];
+        const b = e.points[(i + 1) % e.points.length];
+        if (segmentDistance(world, a, b) <= HIT_TOLERANCE) return e.id;
+      }
+    }
     return null;
   }
 
@@ -143,6 +155,13 @@ export class EditorController {
       case "place":
         void this.commitPlace(this.snap(world));
         break;
+      case "harness": {
+        // ハーネス境界は矩形ドラッグ。押した点をグリッドに乗せて始点にする
+        this.dragStartWorld = this.snap(world);
+        this.rubberEnd = this.dragStartWorld;
+        this.dragMode = "harness";
+        break;
+      }
     }
     this.requestRedraw();
   }
@@ -166,6 +185,9 @@ export class EditorController {
       }
       case "rubber":
         this.rubberEnd = world;
+        break;
+      case "harness":
+        this.rubberEnd = this.snap(world);
         break;
     }
     this.requestRedraw();
@@ -197,12 +219,26 @@ export class EditorController {
             const sel = new Set(this.store.selection);
             for (const e of Object.values(sheet.entities)) {
               const pts: Point[] =
-                e.kind === "wire" ? e.points : "at" in e ? [e.at] : [];
+                e.kind === "wire" || e.kind === "harness" ? e.points : "at" in e ? [e.at] : [];
               if (pts.length && pts.every((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1)) {
                 sel.add(e.id);
               }
             }
             this.store.selection = sel;
+          }
+        }
+        break;
+      }
+      case "harness": {
+        // 囲みを1回のadd_entityコマンドで作る (undo一発で消える)
+        if (sheet) {
+          const command = harnessAddCommand(sheet, this.dragStartWorld, this.rubberEnd);
+          if (command && command.type === "add_entity" && command.entity.kind === "harness") {
+            const { id, name } = command.entity;
+            await this.store.execute(command);
+            const after = this.store.activeSheet;
+            const count = after ? harnessWireCount(after, id) : 0;
+            useUiStore().log(i18n.global.t("harness.createdLog", { name, count }));
           }
         }
         break;
@@ -225,7 +261,7 @@ export class EditorController {
     const first = entityIds.map((id) => sheet.entities[id]).find(Boolean);
     if (!first) return;
     const target: Pt | null =
-      first.kind === "wire"
+      first.kind === "wire" || first.kind === "harness"
         ? first.points.length
           ? {
               x: (first.points[0].x + first.points[first.points.length - 1].x) / 2,
@@ -409,13 +445,14 @@ export class EditorController {
         for (const id of this.store.selection) {
           const e = sheet.entities[id];
           if (!e) continue;
-          if (e.kind === "wire") {
+          if (e.kind === "wire" || e.kind === "harness") {
             ctx.beginPath();
             e.points.forEach((p, i) => {
               const s = vp.toScreen({ x: p.x + this.moveDelta.x, y: p.y + this.moveDelta.y });
               if (i === 0) ctx.moveTo(s.x, s.y);
               else ctx.lineTo(s.x, s.y);
             });
+            if (e.kind === "harness") ctx.closePath();
             ctx.stroke();
           } else if (e.kind === "symbol") {
             const def = this.store.resolveSymbol(e.symbol_id);
@@ -432,6 +469,11 @@ export class EditorController {
         }
         ctx.setLineDash([]);
       }
+    }
+    // ハーネス境界のドラッグプレビュー (確定後と同じ破線で見せる)
+    if (this.dragMode === "harness") {
+      const preview = harnessRectPoints(this.dragStartWorld, this.rubberEnd);
+      drawHarness(ctx, vp, preview, "", false);
     }
     // 矩形選択
     if (this.dragMode === "rubber") {

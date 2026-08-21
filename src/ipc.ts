@@ -73,12 +73,24 @@ export interface TextEntity {
   rotation: number;
 }
 
+/** ハーネス境界 (IEC 61082-1 のグループ囲み)。所属配線は幾何学的な内包で決まる。 */
+export interface Harness {
+  id: string;
+  /** 囲みの頂点 (現状は矩形の4点)。 */
+  points: Point[];
+  /** ハーネス名 (参照記号と同じ命名規則: W1, W2 …)。 */
+  name: string;
+  /** 備考 (製作指示など)。 */
+  note: string;
+}
+
 export type Entity =
   | ({ kind: "symbol" } & SymbolInstance)
   | ({ kind: "wire" } & Wire)
   | ({ kind: "junction" } & Junction)
   | ({ kind: "net_label" } & NetLabel)
-  | ({ kind: "text" } & TextEntity);
+  | ({ kind: "text" } & TextEntity)
+  | ({ kind: "harness" } & Harness);
 
 export interface Sheet {
   id: string;

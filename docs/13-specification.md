@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**382 specification clauses** across 5 areas.
+**397 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -369,6 +369,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - malformed dynamic ids return null <sub>`dynamicSymbol`</sub>
 - static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
 
+### Harness boundaries
+
+- normalizes a rectangle drag into the same four corners in any direction <sub>`harness geometry`</sub>
+- assigns a wire to a harness only when all of its points are inside (the boundary counts as inside) <sub>`harness geometry`</sub>
+- prefers the smallest enclosing harness when boundaries are nested <sub>`harness geometry`</sub>
+- counts how many wires a harness currently encloses <sub>`harness geometry`</sub>
+- returns the bounding box of a harness and null when it has no points <sub>`harness geometry`</sub>
+- places the name label just outside the top-left corner of the boundary <sub>`harness geometry`</sub>
+- suggests W1 on an empty sheet and continues the W series afterwards <sub>`harness naming`</sub>
+- ignores non-harness entities when suggesting the next name <sub>`harness naming`</sub>
+- builds one add_entity command with the auto-suggested name <sub>`harnessAddCommand`</sub>
+- creates nothing for a degenerate rectangle (a plain click) <sub>`harnessAddCommand`</sub>
+
 ### renderer
 
 - places the revision table directly above the title block with the same width and row height <sub>`revisionLayout`</sub>
@@ -383,7 +396,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - entity kinds map to view classes (junctions count as wires) <sub>`entityViewClass`</sub>
 - VIEW_CLASSES enumerates every class exactly once <sub>`entityViewClass`</sub>
-- shows every view class, including wire numbers, until it is switched off <sub>`view class visibility`</sub>
+- shows every view class, including wire numbers and harnesses, until it is switched off <sub>`view class visibility`</sub>
 
 ### viewport
 
@@ -419,6 +432,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - trims the entered number and treats whitespace as clearing it <sub>`wireNumberCommand`</sub>
 - sends nothing when the wire number did not change <sub>`wireNumberCommand`</sub>
 - builds nothing for entities other than wires <sub>`wireNumberCommand`</sub>
+- builds an update_entity command for a renamed harness and keeps its shape <sub>`harnessUpdateCommand`</sub>
+- builds a command when only the note changed <sub>`harnessUpdateCommand`</sub>
+- trims the entered harness name <sub>`harnessUpdateCommand`</sub>
+- sends nothing when neither the name nor the note changed <sub>`harnessUpdateCommand`</sub>
+- builds nothing for entities other than harnesses <sub>`harnessUpdateCommand`</sub>
 
 ### drawingContext
 

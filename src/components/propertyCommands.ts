@@ -23,3 +23,25 @@ export function wireNumberCommand(
     numbers: [{ wire_id: entity.id, number: next === "" ? null : next }],
   };
 }
+
+/**
+ * ハーネス境界の名前・備考の編集コマンド (docs/internal/specs/m2-drawing-parity.md §3)。
+ * 名前は前後の空白を落とす。名前も備考も変わっていなければnull (コマンドを送らない)。
+ * ハーネス以外のエンティティにはnullを返す。
+ */
+export function harnessUpdateCommand(
+  sheetId: string,
+  entity: Entity,
+  name: string,
+  note: string,
+): Command | null {
+  if (entity.kind !== "harness") return null;
+  const nextName = name.trim();
+  const nextNote = note.trim();
+  if (nextName === (entity.name ?? "") && nextNote === (entity.note ?? "")) return null;
+  return {
+    type: "update_entity",
+    sheet_id: sheetId,
+    entity: { ...entity, name: nextName, note: nextNote },
+  };
+}
