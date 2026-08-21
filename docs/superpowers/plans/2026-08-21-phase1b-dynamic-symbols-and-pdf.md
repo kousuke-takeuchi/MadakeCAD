@@ -87,7 +87,16 @@
 
 - [x] Pencilデザイン: 部品挿入ダイアログ(極数バー)・DSステッパー・リボン出力列(SVG/PDF)を.penとdesign-system.mdへ追加
 - [x] 実装(SymbolPickerDialog.vue / RibbonBar.vue / ipc / Tauri export_pdf)。実機ブラウザ検証済み(端子台8極配置→PDF出力)
-- [ ] レイヤ表示トグル: 要否未決(specに詳細なし)。必要ならユーザーと要件を決めてから別途
+- [x] レイヤ: 要件確定(2026-08-21、spec §4に反映)→ Task 7として実装
+
+### Task 7: レイヤ=固定の表示クラス (spec §4)
+
+要件(ユーザー決定): 固定の表示クラスのみ / 画面表示のみ(出力へ非反映) / ロック無し / UIはリボン「表示」タブ。
+
+- [ ] Step 1: Pencilデザイン: リボン「表示」タブの内容(表示クラストグル群。押下状態=sel-blue)を.penへ追加、design-system.mdへ記載
+- [ ] Step 2 (red): vitest: uiストアの表示クラス状態(既定全表示・トグル・グリッド連動)、エンティティ→クラス対応の純関数
+- [ ] Step 3 (green): uiストア実装、renderer/CanvasViewで非表示クラスを描画スキップ(図枠・グリッド含む)、ステータスバーのグリッドボタン配線
+- [ ] Step 4: リボン「表示」タブ実装(RibbonBar)、実機ブラウザ検証、コミット
 
 ## 進捗
 
