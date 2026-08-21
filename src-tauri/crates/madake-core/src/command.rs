@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::*;
+use crate::wire_no::{plan_sheet, reserve_sheet, Numberer, RenumberMode};
 use crate::{CoreError, Result};
 
 /// シリアライズ可能な編集コマンド。UI(Tauri IPC)とAI(MCP)の両方がこれを発行する。
@@ -53,6 +54,19 @@ pub enum Command {
     },
     SetWireParts {
         wire_parts: Vec<WirePart>,
+    },
+    /// 線番のネット単位自動採番。sheet_id省略時はプロジェクトの全シートが対象。
+    RenumberWires {
+        #[serde(default)]
+        sheet_id: Option<SheetId>,
+        mode: RenumberMode,
+        #[serde(default = "crate::wire_no::default_start")]
+        start: u32,
+    },
+    /// 線番の直接指定 (個別編集・自動採番の逆コマンド)。numberがnullなら線番を消す。
+    SetWireNumbers {
+        sheet_id: SheetId,
+        numbers: Vec<WireNumber>,
     },
 }
 
@@ -391,7 +405,89 @@ impl Engine {
                     vec![Command::SetWireParts { wire_parts: old }],
                 ))
             }
+            Command::RenumberWires {
+                sheet_id,
+                mode,
+                start,
+            } => {
+                let targets: Vec<SheetId> = match sheet_id {
+                    Some(id) => {
+                        if self.project.sheet(*id).is_none() {
+                            return Err(CoreError::SheetNotFound(*id));
+                        }
+                        vec![*id]
+                    }
+                    None => self.project.sheets.iter().map(|s| s.id).collect(),
+                };
+                // 1周目: 対象シート全体で保持される名前・線番を予約 (図面全体で番号が重複しない)
+                let mut numberer = Numberer::new(*start);
+                for id in &targets {
+                    let sheet = self.project.sheet(*id).expect("checked above");
+                    reserve_sheet(sheet, *mode, &mut numberer);
+                }
+                // 2周目: シート順に採番して書き込む
+                let mut ops = Vec::new();
+                let mut inverse = Vec::new();
+                for id in &targets {
+                    let sheet = self.project.sheet(*id).expect("checked above");
+                    let plan = plan_sheet(sheet, *mode, &mut numberer);
+                    let numbers: Vec<WireNumber> = plan
+                        .into_iter()
+                        .map(|(wire_id, number)| WireNumber {
+                            wire_id,
+                            number: Some(number),
+                        })
+                        .collect();
+                    let (mut o, mut inv) = self.apply_wire_numbers(*id, &numbers)?;
+                    ops.append(&mut o);
+                    inverse.append(&mut inv);
+                }
+                Ok((ops, inverse))
+            }
+            Command::SetWireNumbers { sheet_id, numbers } => {
+                self.apply_wire_numbers(*sheet_id, numbers)
+            }
         }
+    }
+
+    /// 指定Wireの線番を書き換える。値が変わるものだけをpatch・逆コマンドに含める。
+    fn apply_wire_numbers(
+        &mut self,
+        sheet_id: SheetId,
+        numbers: &[WireNumber],
+    ) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let sheet = self
+            .project
+            .sheet_mut(sheet_id)
+            .ok_or(CoreError::SheetNotFound(sheet_id))?;
+        let mut ops = Vec::new();
+        let mut old = Vec::new();
+        for WireNumber { wire_id, number } in numbers {
+            let Some(Entity::Wire(w)) = sheet.entities.get_mut(wire_id) else {
+                continue;
+            };
+            if w.net == *number {
+                continue;
+            }
+            old.push(WireNumber {
+                wire_id: *wire_id,
+                number: w.net.clone(),
+            });
+            w.net = number.clone();
+            ops.push(PatchOp::EntityUpserted {
+                sheet_id,
+                entity: Entity::Wire(w.clone()),
+            });
+        }
+        let inverse = if old.is_empty() {
+            Vec::new()
+        } else {
+            vec![Command::SetWireNumbers {
+                sheet_id,
+                numbers: old,
+            }]
+        };
+        Ok((ops, inverse))
     }
 }
 

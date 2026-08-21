@@ -232,6 +232,15 @@ pub struct Wire {
     pub net: Option<String>,
 }
 
+/// 1本のワイヤへの線番の割り当て (`set_wire_numbers` コマンドの要素)。
+/// numberがNoneなら線番を消す。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct WireNumber {
+    pub wire_id: EntityId,
+    #[serde(default)]
+    pub number: Option<String>,
+}
+
 /// 配線の交差接続点。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Junction {

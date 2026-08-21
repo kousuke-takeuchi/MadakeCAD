@@ -46,9 +46,16 @@ pub struct NetPin {
 /// 電気的に接続された1ネット。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Net {
+    /// 表示名。優先順は ネットラベル > 線番 > 自動名 (N001…)。
     pub name: String,
     pub pins: Vec<NetPin>,
     pub wire_ids: Vec<EntityId>,
+    /// ネットラベル由来の名前 (手動指定)。
+    #[serde(default)]
+    pub label: Option<String>,
+    /// 線番 (`Wire::net`)。ネット内の全Wireで同値になる。
+    #[serde(default)]
+    pub wire_no: Option<String>,
 }
 
 struct DisjointSet {
@@ -199,10 +206,16 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
         wire_ids: Vec<EntityId>,
         pins: Vec<NetPin>,
         label: Option<String>,
+        /// グループ内のWireに書かれた線番 (重複可)。
+        wire_nos: Vec<String>,
     }
     let mut groups: BTreeMap<usize, Group> = BTreeMap::new();
     for (a, w) in wires.iter().enumerate() {
-        groups.entry(ds.find(wi + a)).or_default().wire_ids.push(w.id);
+        let g = groups.entry(ds.find(wi + a)).or_default();
+        g.wire_ids.push(w.id);
+        if let Some(no) = w.net.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            g.wire_nos.push(no.to_string());
+        }
     }
     for (p, (eid, reference, no, _)) in pins.iter().enumerate() {
         let root = ds.find(pi + p);
@@ -236,14 +249,29 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
         .map(|mut g| {
             g.wire_ids.sort();
             g.pins.sort_by(|a, b| (&a.reference, &a.pin).cmp(&(&b.reference, &b.pin)));
-            let name = g.label.unwrap_or_else(|| {
-                seq += 1;
-                format!("N{seq:03}")
-            });
+            // 線番: 混在時は手動の名前 (数字以外) を優先し、以降は辞書順で決定的に選ぶ
+            let wire_no = g
+                .wire_nos
+                .iter()
+                .min_by(|a, b| {
+                    (crate::wire_no::is_generated_number(a), *a)
+                        .cmp(&(crate::wire_no::is_generated_number(b), *b))
+                })
+                .cloned();
+            let name = g
+                .label
+                .clone()
+                .or_else(|| wire_no.clone())
+                .unwrap_or_else(|| {
+                    seq += 1;
+                    format!("N{seq:03}")
+                });
             Net {
                 name,
                 pins: g.pins,
                 wire_ids: g.wire_ids,
+                label: g.label,
+                wire_no,
             }
         })
         .collect()
@@ -417,6 +445,50 @@ mod tests {
         assert_eq!(nets[0].pins.len(), 1);
         assert_eq!(nets[0].pins[0].reference, "T1");
         assert_eq!(nets[0].pins[0].pin, "1");
+    }
+
+    /// A wire number written on the wires becomes the net's displayed name when the net has no net label.
+    /// ワイヤに書かれた線番は、ネットラベルが無いネットの表示名になる。
+    #[test]
+    fn wire_number_names_a_net_without_a_label() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let mut w = wire(&[(0.0, 0.0), (10.0, 0.0)]);
+        if let Entity::Wire(inner) = &mut w {
+            inner.net = Some("12".into());
+        }
+        sheet.entities.insert(w.id(), w);
+        let nets = extract_netlist(&sheet, &builtin_symbols());
+        assert_eq!(nets[0].name, "12");
+        assert_eq!(nets[0].wire_no.as_deref(), Some("12"));
+        assert_eq!(nets[0].label, None);
+    }
+
+    /// A net label always wins over the wire number, which in turn wins over the automatic N001 name.
+    /// ネットラベルは常に線番より優先され、線番は自動名 (N001) より優先される。
+    #[test]
+    fn net_name_prefers_label_then_wire_number_then_auto_name() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let mut labeled = wire(&[(0.0, 0.0), (10.0, 0.0)]);
+        if let Entity::Wire(inner) = &mut labeled {
+            inner.net = Some("12".into());
+        }
+        let label = Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(0.0, 0.0),
+            name: "24-P1".into(),
+            rotation: 0,
+        });
+        let plain = wire(&[(0.0, 50.0), (10.0, 50.0)]);
+        let plain_id = plain.id();
+        for e in [labeled, label, plain] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &builtin_symbols());
+        let labeled_net = nets.iter().find(|n| n.label.is_some()).unwrap();
+        assert_eq!(labeled_net.name, "24-P1", "ラベルが線番に勝つ");
+        assert_eq!(labeled_net.wire_no.as_deref(), Some("12"), "線番自体は保持される");
+        let plain_net = nets.iter().find(|n| n.wire_ids == vec![plain_id]).unwrap();
+        assert_eq!(plain_net.name, "N001", "名前も線番も無ければ自動名");
     }
 
     /// Pin positions honor the symbol's rotation (clockwise in the Y-down paper coordinate system) and placement.
