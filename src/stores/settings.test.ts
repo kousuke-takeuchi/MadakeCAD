@@ -6,7 +6,8 @@ import { useSettingsStore, settingsApi, defaultSettings, type AppSettings } from
 describe("settings store", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it("既定値は自動適用・図面自動読み取りがON", () => {
+  // ja: 既定値は自動適用・図面自動読み取りがON
+  it("defaults enable auto-apply and auto-read-drawing", () => {
     expect(defaultSettings()).toEqual({
       claude_path: null,
       auto_apply: true,
@@ -15,7 +16,8 @@ describe("settings store", () => {
     expect(useSettingsStore().settings).toEqual(defaultSettings());
   });
 
-  it("loadでバックエンドの設定を取り込む", async () => {
+  // ja: loadでバックエンドの設定を取り込む
+  it("load pulls the settings from the backend", async () => {
     const stored: AppSettings = {
       claude_path: "/opt/homebrew/bin/claude",
       auto_apply: false,
@@ -31,7 +33,8 @@ describe("settings store", () => {
     expect(store.error).toBeNull();
   });
 
-  it("saveは変更分をマージして送り、正規化後の戻り値を採用する", async () => {
+  // ja: saveは変更分をマージして送り、正規化後の戻り値を採用する
+  it("save merges the changes, sends them, and adopts the normalized response", async () => {
     const set = vi
       .spyOn(settingsApi, "set")
       .mockResolvedValue({ claude_path: "/usr/local/bin/claude", auto_apply: true, auto_read_drawing: false });
@@ -50,7 +53,8 @@ describe("settings store", () => {
     expect(store.saving).toBe(false);
   });
 
-  it("save失敗時はエラーを保持し、表示中の設定を変えない", async () => {
+  // ja: save失敗時はエラーを保持し、表示中の設定を変えない
+  it("a failed save keeps the error and leaves the shown settings untouched", async () => {
     vi.spyOn(settingsApi, "set").mockRejectedValue(new Error("Link API 400: だめ"));
 
     const store = useSettingsStore();

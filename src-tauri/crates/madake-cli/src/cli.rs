@@ -334,6 +334,8 @@ mod tests {
         })
     }
 
+    /// The default port is 9310 and --json is off unless requested.
+    /// 既定ポートは9310で、--jsonは指定しない限り無効。
     #[test]
     fn default_port_is_9310_and_json_is_off() {
         let cli = parse(&["madake", "status"]);
@@ -341,6 +343,8 @@ mod tests {
         assert!(!cli.json);
     }
 
+    /// --port and --json are global options and may appear after the subcommand.
+    /// --portと--jsonはグローバルオプションで、サブコマンドの後にも書ける。
     #[test]
     fn port_and_json_are_global_options_after_subcommand() {
         let cli = parse(&["madake", "netlist", "--port", "19310", "--json"]);
@@ -348,6 +352,8 @@ mod tests {
         assert!(cli.json);
     }
 
+    /// The export kind accepts the 'wire-list' spelling used in documentation.
+    /// エクスポート種別はドキュメント表記どおりの'wire-list'を受け付ける。
     #[test]
     fn export_kind_accepts_wire_list_spelling() {
         let cli = parse(&["madake", "export", "wire-list", "/tmp/w.csv"]);
@@ -361,6 +367,8 @@ mod tests {
         }
     }
 
+    /// madake status calls the health endpoint and the project snapshot.
+    /// madake statusはヘルスチェックとプロジェクト概要を取得する。
     #[test]
     fn status_queries_health_and_project() {
         let api = FakeApi {
@@ -373,6 +381,8 @@ mod tests {
         assert!(out.contains("Sheet1"));
     }
 
+    /// --json prints raw pretty-printed JSON for piping into jq and similar tools.
+    /// --jsonはjq等へ渡せる整形JSONをそのまま出力する。
     #[test]
     fn json_flag_emits_raw_json() {
         let api = FakeApi {
@@ -384,6 +394,8 @@ mod tests {
         assert_eq!(parsed[0]["name"], "N001");
     }
 
+    /// madake netlist forwards the --sheet option to the API.
+    /// madake netlistは--sheetオプションをAPIへ引き渡す。
     #[test]
     fn netlist_forwards_sheet_option() {
         let api = FakeApi {
@@ -394,6 +406,8 @@ mod tests {
         assert_eq!(api.calls(), vec![r#"netlist(Some("abc"))"#]);
     }
 
+    /// madake export forwards kind, output path and optional sheet to the API.
+    /// madake exportは種別・出力パス・シート指定をAPIへ引き渡す。
     #[test]
     fn export_forwards_kind_path_and_sheet() {
         let api = FakeApi::default();
@@ -406,6 +420,8 @@ mod tests {
         assert!(out.contains("/tmp/a.svg"));
     }
 
+    /// madake exec reads a JSON file containing a Command array and posts it to /commands.
+    /// madake execはCommand配列のJSONファイルを読み、/commandsへ送信する。
     #[test]
     fn exec_posts_command_array_from_file() {
         let dir = std::env::temp_dir().join("madake-cli-test-exec");
@@ -428,6 +444,8 @@ mod tests {
         assert!(out.contains("revision 4"));
     }
 
+    /// madake exec rejects JSON that is not an array, with a clear message.
+    /// madake execは配列でないJSONを明確なメッセージで拒否する。
     #[test]
     fn exec_rejects_non_array_json() {
         let dir = std::env::temp_dir().join("madake-cli-test-exec");
@@ -442,6 +460,8 @@ mod tests {
         assert!(matches!(err, CliError::Json(_)), "{err:?}");
     }
 
+    /// A missing input file is reported as a file error, not a panic.
+    /// 入力ファイルが無い場合はパニックせずファイルエラーとして報告する。
     #[test]
     fn exec_reports_missing_file() {
         let err = run(
@@ -452,6 +472,8 @@ mod tests {
         assert!(matches!(err, CliError::Io(_)), "{err:?}");
     }
 
+    /// madake undo tells the user when there is nothing to undo.
+    /// madake undoは戻す操作が無いことをユーザーに伝える。
     #[test]
     fn undo_reports_empty_history() {
         let api = FakeApi {
@@ -463,6 +485,8 @@ mod tests {
         assert!(out.contains("元に戻せる操作がありません"));
     }
 
+    /// madake redo reports the new document revision on success.
+    /// madake redoは成功時に新しいドキュメントrevisionを報告する。
     #[test]
     fn redo_reports_revision() {
         let api = FakeApi {
@@ -473,6 +497,8 @@ mod tests {
         assert!(out.contains("revision 9"));
     }
 
+    /// madake save/open report the file path they acted on.
+    /// madake save/openは対象のファイルパスを報告する。
     #[test]
     fn save_and_open_report_path() {
         let api = FakeApi {

@@ -389,6 +389,8 @@ mod tests {
         p
     }
 
+    /// Opening a new database creates the schema and seeds sample parts exactly once; reopening never re-seeds.
+    /// 新規DBを開くとスキーマ作成とサンプル投入が一度だけ行われ、開き直しても再投入されない。
     #[test]
     fn open_creates_schema_and_seeds_samples_once() {
         let path = tmp_db("seed");
@@ -405,6 +407,8 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 
+    /// Parts can be inserted, updated by part number, fetched, and searched by partial name match or exact category.
+    /// 部品は登録・型番キーでの更新・取得ができ、名称の部分一致やカテゴリ完全一致で検索できる。
     #[test]
     fn upsert_get_and_search() {
         let path = tmp_db("crud");
@@ -440,6 +444,8 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 
+    /// Wire parts are registered and looked up by exact color + gauge combination.
+    /// 電線品番は登録でき、線色+線径の完全一致で引き当てられる。
     #[test]
     fn wire_parts_crud_and_lookup() {
         let path = tmp_db("wire");
@@ -460,6 +466,8 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 
+    /// An old schema-v1 database migrates to v2 on open, preserving existing rows and gaining the spice_model column.
+    /// 旧スキーマv1のDBは開いた時点でv2へ移行され、既存データを保持したままspice_model列が使えるようになる。
     #[test]
     fn v1_database_migrates_to_v2_preserving_data() {
         let path = tmp_db("migrate");
@@ -506,6 +514,8 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 
+    /// The database path defaults to the OS app-data folder and can be overridden with MADAKE_PARTS_DB.
+    /// DBパスの既定はOSのアプリデータフォルダで、MADAKE_PARTS_DBで上書きできる。
     #[test]
     fn default_path_respects_env_override() {
         // 環境変数が設定されていればそれを使う (プロセス全体に影響するのでキーは専用に)

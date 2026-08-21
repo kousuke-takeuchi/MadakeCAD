@@ -15,6 +15,8 @@ fn temp_dir() -> PathBuf {
     dir
 }
 
+/// Default AI settings enable auto-apply and auto-read-drawing.
+/// AI設定の既定は自動適用と図面自動読み取りが有効。
 #[test]
 fn default_settings_are_auto_apply_and_auto_read() {
     let settings = AppSettings::default();
@@ -23,6 +25,8 @@ fn default_settings_are_auto_apply_and_auto_read() {
     assert!(settings.auto_read_drawing);
 }
 
+/// A missing settings file yields the defaults.
+/// 設定ファイルが無ければ既定値になる。
 #[test]
 fn missing_file_yields_defaults() {
     let dir = temp_dir();
@@ -31,6 +35,8 @@ fn missing_file_yields_defaults() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Saved settings load back identically.
+/// 保存した設定は同一内容で読み戻せる。
 #[test]
 fn saved_settings_round_trip() {
     let dir = temp_dir();
@@ -57,6 +63,8 @@ fn saved_settings_round_trip() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Unknown/missing fields in the settings file fall back to defaults (forward compatible).
+/// 設定ファイルに無い項目は既定値へフォールバックする(前方互換)。
 #[test]
 fn missing_fields_fall_back_to_defaults() {
     let dir = temp_dir();
@@ -82,6 +90,8 @@ fn missing_fields_fall_back_to_defaults() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Saving creates the settings directory if needed.
+/// 保存時に設定ディレクトリが無ければ作成される。
 #[test]
 fn save_creates_the_settings_directory() {
     let dir = temp_dir();
@@ -91,6 +101,8 @@ fn save_creates_the_settings_directory() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Blank executable paths are normalized away instead of being stored.
+/// 空白の実行ファイルパスは保存されず正規化で除去される。
 #[test]
 fn normalized_drops_blank_paths() {
     let blank = AppSettings {
@@ -109,8 +121,8 @@ fn normalized_drops_blank_paths() {
     );
 }
 
-/// 設定ファイルの場所は環境変数で差し替えられる(テスト・検証用)。
-/// この1件だけが環境変数を触る(同一プロセス内の他テストと競合しないこと)。
+/// The settings path honors its environment-variable override.
+/// 設定ファイルパスは環境変数の上書きに従う。
 #[test]
 fn settings_path_honors_the_env_override() {
     let dir = temp_dir();

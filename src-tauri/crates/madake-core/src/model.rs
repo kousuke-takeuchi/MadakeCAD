@@ -260,3 +260,70 @@ pub struct TextEntity {
     #[serde(default)]
     pub rotation: u16,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Paper sizes follow ISO A-series dimensions, and portrait orientation swaps width and height.
+    /// 用紙サイズはISO A列の寸法に従い、縦置きでは幅と高さが入れ替わる。
+    #[test]
+    fn paper_sizes_match_iso_and_orientation_swaps() {
+        assert_eq!(PaperSize::A3.dimensions_mm(), (420.0, 297.0));
+        assert_eq!(PaperSize::A0.dimensions_mm(), (1189.0, 841.0));
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        assert_eq!(sheet.paper_mm(), (297.0, 210.0));
+        sheet.orientation = Orientation::Portrait;
+        assert_eq!(sheet.paper_mm(), (210.0, 297.0));
+    }
+
+    /// A new project starts with one sheet named "Sheet1" and format_version 1.
+    /// 新規プロジェクトは「Sheet1」という1枚のシートとformat_version 1で始まる。
+    #[test]
+    fn new_project_has_one_default_sheet() {
+        let p = Project::new("demo");
+        assert_eq!(p.format_version, 1);
+        assert_eq!(p.sheets.len(), 1);
+        assert_eq!(p.sheets[0].name, "Sheet1");
+        assert_eq!(p.sheets[0].zone_cols, 4);
+        assert_eq!(p.sheets[0].zone_rows, 6);
+    }
+
+    /// Entity::translate moves every coordinate of the entity: all wire points, or the anchor of symbols/labels/text.
+    /// Entity::translateはエンティティの全座標を動かす: ワイヤは全頂点、シンボル/ラベル/テキストは基準点。
+    #[test]
+    fn translate_moves_all_coordinates() {
+        let mut wire = Entity::Wire(Wire {
+            id: uuid::Uuid::new_v4(),
+            points: vec![Point::new(0.0, 0.0), Point::new(10.0, 0.0)],
+            color: "red".into(),
+            sq: 0.3,
+            length_m: None,
+            part_no: None,
+            net: None,
+        });
+        wire.translate(5.0, 2.5);
+        let Entity::Wire(w) = &wire else { panic!() };
+        assert_eq!(w.points[0], Point::new(5.0, 2.5));
+        assert_eq!(w.points[1], Point::new(15.0, 2.5));
+
+        let mut label = Entity::NetLabel(NetLabel {
+            id: uuid::Uuid::new_v4(),
+            at: Point::new(1.0, 1.0),
+            name: "24V".into(),
+            rotation: 0,
+        });
+        label.translate(-1.0, -1.0);
+        let Entity::NetLabel(l) = &label else { panic!() };
+        assert_eq!(l.at, Point::new(0.0, 0.0));
+    }
+
+    /// Entity::id() returns the inner entity's UUID regardless of the entity kind.
+    /// Entity::id()は種別によらず内側エンティティのUUIDを返す。
+    #[test]
+    fn entity_id_is_uniform_across_kinds() {
+        let id = uuid::Uuid::new_v4();
+        let j = Entity::Junction(Junction { id, at: Point::new(0.0, 0.0) });
+        assert_eq!(j.id(), id);
+    }
+}

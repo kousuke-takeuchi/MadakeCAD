@@ -7,7 +7,8 @@ import { entityViewClass, VIEW_CLASSES } from "./viewClasses";
 const e = (kind: string): Entity => ({ kind }) as unknown as Entity;
 
 describe("entityViewClass", () => {
-  it("エンティティ種別を表示クラスへ対応付ける (ジャンクションは配線扱い)", () => {
+  // ja: エンティティ種別を表示クラスへ対応付ける(ジャンクションは配線扱い)
+  it("entity kinds map to view classes (junctions count as wires)", () => {
     expect(entityViewClass(e("wire"))).toBe("wires");
     expect(entityViewClass(e("junction"))).toBe("wires");
     expect(entityViewClass(e("symbol"))).toBe("symbols");
@@ -15,7 +16,8 @@ describe("entityViewClass", () => {
     expect(entityViewClass(e("text"))).toBe("texts");
   });
 
-  it("VIEW_CLASSESは全クラスを一意に列挙する", () => {
+  // ja: VIEW_CLASSESは全クラスを一意に列挙する
+  it("VIEW_CLASSES enumerates every class exactly once", () => {
     expect(VIEW_CLASSES.map((c) => c.id)).toEqual([
       "wires",
       "symbols",

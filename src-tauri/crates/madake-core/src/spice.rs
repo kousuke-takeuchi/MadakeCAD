@@ -343,6 +343,8 @@ mod tests {
         sheet
     }
 
+    /// A series circuit converts to a SPICE deck: one voltage source, ground at the battery minus pin, one resistor per wire (rho*L/A) plus component bridges and the load's equivalent resistance.
+    /// 直列回路はSPICEデッキに変換される: 電圧源1つ・battery負極がGND・ワイヤごとの抵抗(ρL/A)・部品の橋・負荷の等価抵抗。
     #[test]
     fn series_circuit_builds_deck_with_source_ground_and_resistors() {
         let mut lamp = SymbolInstance {
@@ -396,6 +398,8 @@ mod tests {
         assert_eq!(elems, 8, "{}", deck.deck);
     }
 
+    /// A junction resting mid-wire splits that wire's resistance proportionally to the geometric length on each side.
+    /// ワイヤ途中のジャンクションは、その位置の幾何学的長さ比でワイヤ抵抗を分割する。
     #[test]
     fn junction_splits_wire_resistance_proportionally() {
         let j = Entity::Junction(Junction {
@@ -426,6 +430,8 @@ mod tests {
         );
     }
 
+    /// Same-named net labels in different places are bridged with a milliohm resistor, preserving their logical connection.
+    /// 離れた場所の同名ネットラベルはmΩ抵抗で橋渡しされ、論理接続が保たれる。
     #[test]
     fn same_name_labels_are_bridged() {
         let mk_label = |x: f64, y: f64| {
@@ -452,6 +458,8 @@ mod tests {
         );
     }
 
+    /// A drawing without a power source cannot be converted (explicit NoSource error).
+    /// 電源の無い図面は変換できない(明示的なNoSourceエラー)。
     #[test]
     fn no_battery_is_an_error() {
         let sheet = sheet_with(vec![wire(&[(0.0, 0.0), (10.0, 0.0)], 0.75, None)]);
@@ -461,6 +469,8 @@ mod tests {
         );
     }
 
+    /// Deck output is deterministic across runs, and the ground node 0 is the battery's minus pin.
+    /// デッキ出力は毎回同一(決定的)で、GNDノード0はbatteryの負極ピンになる。
     #[test]
     fn node_names_are_deterministic_and_ground_is_battery_minus() {
         let sheet = sheet_with(vec![

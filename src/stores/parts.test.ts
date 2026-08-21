@@ -25,7 +25,8 @@ const part = (part_no: string): Part => ({
 describe("parts store", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it("searchで結果を保持する", async () => {
+  // ja: searchは部品APIの結果を保持する
+  it("search stores the results from the parts API", async () => {
     const store = usePartsStore();
     vi.spyOn(ipc, "searchParts").mockResolvedValue([part("MDK-RLY-24V")]);
     await store.search("RLY");
@@ -34,7 +35,8 @@ describe("parts store", () => {
     expect(store.loading).toBe(false);
   });
 
-  it("検索失敗時は結果を空にしloadingを戻す", async () => {
+  // ja: 検索失敗時は結果を空にしloadingを戻す
+  it("a failed search clears the results and resets loading", async () => {
     const store = usePartsStore();
     vi.spyOn(ipc, "searchParts").mockResolvedValue([part("A")]);
     await store.search("");

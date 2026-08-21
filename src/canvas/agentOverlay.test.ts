@@ -44,14 +44,16 @@ function symbol(id: string, x: number, y: number): Entity {
 }
 
 describe("toolBox", () => {
-  it("place_symbolのx/yからシンボル概寸の領域を作る", () => {
+  // ja: place_symbolのx/yからシンボル概寸の領域を作る
+  it("place_symbol's x/y produces a region around the approximate symbol size", () => {
     expect(toolBox(PLACE, { symbol_id: "fuse", x: 100, y: 50, reference: "F2" })).toEqual({
       min: { x: 100 - SYMBOL_EXTENT_MM, y: 50 - SYMBOL_EXTENT_MM },
       max: { x: 100 + SYMBOL_EXTENT_MM, y: 50 + SYMBOL_EXTENT_MM },
     });
   });
 
-  it("draw_wireのpoints列のbboxを作る", () => {
+  // ja: draw_wireのpoints列のバウンディングボックスを作る
+  it("draw_wire's point list produces its bounding box", () => {
     const b = toolBox(WIRE, {
       points: [
         { x: 40, y: 100 },
@@ -64,7 +66,8 @@ describe("toolBox", () => {
     expect(b).toEqual({ min: { x: 40, y: 70 }, max: { x: 90, y: 100 } });
   });
 
-  it("execute_commandsのadd_entityを合成する", () => {
+  // ja: execute_commands内のadd_entityを合成した領域になる
+  it("execute_commands regions merge the add_entity commands inside", () => {
     const b = toolBox("mcp__madakecad__execute_commands", {
       commands: [
         { type: "add_entity", sheet_id: "s1", entity: wire("w1", [{ x: 10, y: 10 }, { x: 30, y: 10 }]) },
@@ -75,7 +78,8 @@ describe("toolBox", () => {
     expect(b).toEqual({ min: { x: 10, y: 10 }, max: { x: 70, y: 50 } });
   });
 
-  it("座標を持たないツールと不正なinputはnull", () => {
+  // ja: 座標を持たないツールや不正なinputは領域を作らない
+  it("tools without coordinates and malformed input produce no region", () => {
     expect(toolBox("mcp__madakecad__get_netlist", { sheet_id: "s1" })).toBeNull();
     expect(toolBox("mcp__madakecad__export_svg", { path: "/tmp/a.svg" })).toBeNull();
     expect(toolBox("mcp__madakecad__undo", {})).toBeNull();
@@ -86,7 +90,8 @@ describe("toolBox", () => {
 });
 
 describe("entityBox", () => {
-  it("wireは頂点列のbbox、symbolはat±概寸", () => {
+  // ja: ワイヤは頂点列のbbox、シンボルは基準点±概寸で領域を作る
+  it("wires use their vertex bbox; symbols use the anchor plus approximate size", () => {
     expect(entityBox(wire("w1", [{ x: 20, y: 30 }, { x: 20, y: 80 }]))).toEqual({
       min: { x: 20, y: 30 },
       max: { x: 20, y: 80 },
@@ -97,7 +102,8 @@ describe("entityBox", () => {
     });
   });
 
-  it("junction/text/net_labelも領域を持つ", () => {
+  // ja: ジャンクション・テキスト・ネットラベルも領域を持つ
+  it("junctions, texts and net labels also get regions", () => {
     const junction: Entity = { kind: "junction", id: "j1", at: { x: 50, y: 50 } };
     expect(entityBox(junction)).toEqual({ min: { x: 48.5, y: 48.5 }, max: { x: 51.5, y: 51.5 } });
     const text: Entity = {
@@ -113,7 +119,8 @@ describe("entityBox", () => {
 });
 
 describe("AgentOverlay", () => {
-  it("ツール開始でマージン込みの領域が出る", () => {
+  // ja: ツール開始でマージン込みの領域が表示される
+  it("a tool start shows a region with margin included", () => {
     const ov = new AgentOverlay();
     ov.noteToolStart(PLACE, { x: 100, y: 50 }, { id: "t1", now: 1000 });
     const regions = ov.activeRegions(1000);
@@ -123,27 +130,31 @@ describe("AgentOverlay", () => {
     expect(regions[0].strength).toBe(1);
   });
 
-  it("領域を作らないツールは無視される", () => {
+  // ja: 領域を作らないツールは無視される
+  it("tools that yield no region are ignored", () => {
     const ov = new AgentOverlay();
     ov.noteToolStart("mcp__madakecad__get_project", {}, { id: "t1", now: 0 });
     expect(ov.activeRegions(0)).toHaveLength(0);
     expect(ov.hasActive(0)).toBe(false);
   });
 
-  it("同一idの再通知では領域が重複しない", () => {
+  // ja: 同一idの再通知では領域が重複しない
+  it("re-notifying the same tool id does not duplicate the region", () => {
     const ov = new AgentOverlay();
     ov.noteToolStart(WIRE, { points: [{ x: 0, y: 0 }, { x: 10, y: 0 }] }, { id: "t1", now: 0 });
     ov.noteToolStart(WIRE, { points: [{ x: 0, y: 0 }, { x: 10, y: 0 }] }, { id: "t1", now: 10 });
     expect(ov.activeRegions(10)).toHaveLength(1);
   });
 
-  it("完了していないツールの領域は残り続ける", () => {
+  // ja: 完了していないツールの領域は残り続ける
+  it("regions of unfinished tools persist", () => {
     const ov = new AgentOverlay();
     ov.noteToolStart(PLACE, { x: 10, y: 10 }, { id: "t1", now: 0 });
     expect(ov.activeRegions(10_000)).toHaveLength(1);
   });
 
-  it("完了後HOLD_MSで消滅する", () => {
+  // ja: 完了後HOLD_MS経過で領域は消える
+  it("regions fade out HOLD_MS after completion", () => {
     const ov = new AgentOverlay();
     ov.noteToolStart(PLACE, { x: 10, y: 10 }, { id: "t1", now: 0 });
     ov.noteToolFinish("t1", { now: 500 });
@@ -153,14 +164,16 @@ describe("AgentOverlay", () => {
     expect(ov.hasActive(500 + HOLD_MS)).toBe(false);
   });
 
-  it("idが無い完了通知はツール名で畳む", () => {
+  // ja: idの無い完了通知はツール名で対応付けて畳む
+  it("completions without an id are matched by tool name", () => {
     const ov = new AgentOverlay();
     ov.noteToolStart(WIRE, { points: [{ x: 0, y: 0 }, { x: 5, y: 5 }] }, { now: 0 });
     ov.noteToolFinish(WIRE, { now: 100 });
     expect(ov.activeRegions(100 + HOLD_MS)).toHaveLength(0);
   });
 
-  it("entity upsertから領域を作り、HOLD_MSで消える", () => {
+  // ja: エンティティのupsertから領域を作り、HOLD_MSで消える
+  it("entity upserts create regions that expire after HOLD_MS", () => {
     const ov = new AgentOverlay();
     ov.noteEntityUpserted(symbol("k1", 200, 100), { now: 0 });
     const regions = ov.activeRegions(0);
@@ -173,7 +186,8 @@ describe("AgentOverlay", () => {
     expect(ov.activeRegions(HOLD_MS)).toHaveLength(0);
   });
 
-  it("同一entityの再upsertで表示期限が延びる", () => {
+  // ja: 同一エンティティの再upsertで表示期限が延びる
+  it("re-upserting the same entity extends its display deadline", () => {
     const ov = new AgentOverlay();
     ov.noteEntityUpserted(wire("w1", [{ x: 0, y: 0 }, { x: 10, y: 0 }]), { now: 0 });
     ov.noteEntityUpserted(wire("w1", [{ x: 0, y: 0 }, { x: 40, y: 0 }]), { now: 1000 });
@@ -182,7 +196,8 @@ describe("AgentOverlay", () => {
     expect(regions[0].max.x).toBe(40 + REGION_MARGIN_MM);
   });
 
-  it("finishAllで進行中の領域も期限切れになる", () => {
+  // ja: finishAllで進行中の領域も期限切れになる
+  it("finishAll expires even in-progress regions", () => {
     const ov = new AgentOverlay();
     ov.noteToolStart(PLACE, { x: 10, y: 10 }, { id: "t1", now: 0 });
     ov.noteToolStart(WIRE, { points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] }, { id: "t2", now: 0 });
@@ -191,7 +206,8 @@ describe("AgentOverlay", () => {
     expect(ov.activeRegions(200 + HOLD_MS)).toHaveLength(0);
   });
 
-  it("clearで全領域が消える", () => {
+  // ja: clearで全領域が消える
+  it("clear removes every region", () => {
     const ov = new AgentOverlay();
     ov.noteToolStart(PLACE, { x: 1, y: 1 }, { id: "t1", now: 0 });
     ov.clear();
@@ -200,7 +216,8 @@ describe("AgentOverlay", () => {
 });
 
 describe("pulseAlpha", () => {
-  it("常に0.1〜0.25の範囲でsin波を描く", () => {
+  // ja: パルスの透明度は常に0.1〜0.25のsin波に収まる
+  it("the pulse alpha stays within 0.1-0.25 following a sine wave", () => {
     for (let t = 0; t <= 3200; t += 37) {
       const a = pulseAlpha(t);
       expect(a).toBeGreaterThanOrEqual(PULSE_MIN_ALPHA - 1e-9);
@@ -214,7 +231,8 @@ describe("pulseAlpha", () => {
 });
 
 describe("expandBox", () => {
-  it("元の箱を変更せずマージンを足す", () => {
+  // ja: 元の矩形を変更せずマージンを足す
+  it("margin is added without mutating the original box", () => {
     const src = { min: { x: 0, y: 0 }, max: { x: 10, y: 10 } };
     const out = expandBox(src, 2);
     expect(out).toEqual({ min: { x: -2, y: -2 }, max: { x: 12, y: 12 } });

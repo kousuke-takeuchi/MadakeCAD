@@ -420,6 +420,8 @@ pub fn sheet_symbol_defs(sheet: &crate::model::Sheet) -> Vec<SymbolDef> {
 mod tests {
     use super::*;
 
+    /// Every bundled symbol has a unique id and at least one pin.
+    /// 同梱シンボルはすべて一意のidを持ち、最低1つのピンを持つ。
     #[test]
     fn builtin_symbols_have_unique_ids_and_pins() {
         let syms = builtin_symbols();
@@ -433,6 +435,8 @@ mod tests {
         }
     }
 
+    /// A parametric terminal block (e.g. 8 poles) has one left and one right connection point per terminal, all on the 2.5 mm grid and vertically centered.
+    /// ピン数可変の端子台(例: 8極)は端子ごとに左右1点ずつの接続点を持ち、すべて2.5mmグリッド上・上下中央揃えになる。
     #[test]
     fn dynamic_terminal_block_has_through_pins_on_grid() {
         let def = resolve_symbol("terminal_block_8p").expect("dynamic terminal block");
@@ -460,6 +464,8 @@ mod tests {
         assert!(ysum.abs() < 1e-9);
     }
 
+    /// connector_2p generated dynamically has exactly the same pin coordinates as the old static definition, so existing drawings are unaffected.
+    /// 動的生成のconnector_2pは旧静的定義と完全に同じピン座標を持ち、既存図面に影響しない。
     #[test]
     fn dynamic_connector_2p_matches_legacy_static_def() {
         // 旧静的connector_2pと同一のピン座標(既存図面の互換性)
@@ -469,6 +475,8 @@ mod tests {
         assert_eq!(pins, vec![("1", 7.5, -2.5), ("2", 7.5, 2.5)]);
     }
 
+    /// resolve_symbol finds built-in ids, and rejects malformed or out-of-range dynamic ids (0 poles, 51 poles, missing count).
+    /// resolve_symbolは同梱idを見つけ、不正・範囲外の動的ID(0極・51極・数値なし)は拒否する。
     #[test]
     fn resolve_symbol_rejects_invalid_ids_and_finds_builtins() {
         assert!(resolve_symbol("resistor").is_some());
@@ -479,6 +487,8 @@ mod tests {
         assert!(resolve_symbol("unknown").is_none());
     }
 
+    /// sheet_symbol_defs returns the built-in library plus definitions for every dynamic symbol actually used on the sheet.
+    /// sheet_symbol_defsは同梱ライブラリに加え、シートで実際に使われている動的シンボルの定義を返す。
     #[test]
     fn sheet_symbol_defs_includes_dynamic_ids_in_use() {
         use crate::model::*;
@@ -499,6 +509,8 @@ mod tests {
         assert!(defs.iter().any(|d| d.id == "terminal_block_3p"), "使用中の動的ID含む");
     }
 
+    /// Symbol definitions serialize to JSON and back without loss.
+    /// シンボル定義はJSONに往復変換しても失われない。
     #[test]
     fn symbol_json_roundtrip() {
         let syms = builtin_symbols();

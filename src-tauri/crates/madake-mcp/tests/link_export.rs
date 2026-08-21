@@ -17,6 +17,8 @@ fn fake_claude() -> PathBuf {
         .join("fake_claude.sh")
 }
 
+/// The REST parts endpoints support searching (sample data included), upserting, category filtering, deleting, and listing wire parts.
+/// RESTの部品エンドポイントは検索(サンプル含む)・登録更新・カテゴリ絞り込み・削除・電線品番一覧に対応する。
 #[tokio::test]
 async fn parts_endpoints_search_upsert_delete() {
     let doc = SharedDoc::new(Engine::new(Project::new("部品テスト")));
@@ -86,6 +88,8 @@ async fn parts_endpoints_search_upsert_delete() {
     std::fs::remove_file(&db_path).ok();
 }
 
+/// GET /api/v1/verify returns the drawing's diagnostics as JSON (e.g. empty reference and unconnected pins).
+/// GET /api/v1/verify は図面の診断(空参照・未接続ピンなど)をJSONで返す。
 #[tokio::test]
 async fn verify_returns_diagnostics() {
     let mut project = Project::new("検証テスト");
@@ -127,6 +131,8 @@ async fn verify_returns_diagnostics() {
     assert!(codes.contains(&"erc.unconnected_pin"), "{codes:?}");
 }
 
+/// POST /api/v1/import/kicad replaces the open project with the converted schematic and returns a patch plus an import report.
+/// POST /api/v1/import/kicad は開いているプロジェクトを変換結果で置き換え、patchとインポートレポートを返す。
 #[tokio::test]
 async fn import_kicad_replaces_project_and_reports() {
     let doc = SharedDoc::new(Engine::new(Project::new("元プロジェクト")));
@@ -171,6 +177,8 @@ async fn import_kicad_replaces_project_and_reports() {
     std::fs::remove_file(&sch).ok();
 }
 
+/// POST /api/v1/simulate/op solves the DC operating point and returns net voltages and component currents (requires ngspice; skipped otherwise).
+/// POST /api/v1/simulate/op はDC動作点を解き、ネット電圧と部品電流を返す(ngspice必須。未導入時はスキップ)。
 #[tokio::test]
 async fn simulate_op_returns_result() {
     if madake_core::ngspice::find_ngspice().is_none() {
@@ -261,6 +269,8 @@ async fn simulate_op_returns_result() {
     assert!((amps - 2.0).abs() < 0.05, "{amps}");
 }
 
+/// POST /api/v1/export/pdf writes a valid PDF file to the requested path.
+/// POST /api/v1/export/pdf は指定パスへ正しいPDFファイルを書き出す。
 #[tokio::test]
 async fn export_pdf_writes_pdf_file() {
     let doc = SharedDoc::new(Engine::new(Project::new("PDFテスト")));

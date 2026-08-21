@@ -1,0 +1,436 @@
+# Detailed Specification
+
+**日本語: [13-specification.ja.md](13-specification.ja.md)** | ← [Roadmap](12-roadmap.md)
+
+> **Generated from the test suite — do not edit by hand.**
+> Every clause below is enforced by an automated test; the test id is shown in gray.
+> Regenerate with `python3 scripts/gen_spec.py` after changing tests.
+
+This document is the living, always-verified specification of MadakeCAD:
+if a behavior is listed here, a test proves it on every run of the suite.
+
+
+**291 specification clauses** across 5 areas.
+
+
+## Core domain (madake-core)
+
+
+### Command engine (undo/redo)
+
+- Adding an entity can be undone (the entity disappears) and redone (it comes back). <sub>`add_undo_redo_entity`</sub>
+- Moving entities shifts their coordinates; undo restores the original position exactly. <sub>`move_and_undo_restores_position`</sub>
+- Deleting several entities at once is a single undo step that restores all of them. <sub>`delete_multiple_and_undo`</sub>
+- Sheets can be added and removed; undoing a removal restores the sheet with its original id and position. <sub>`sheet_add_remove_undo`</sub>
+- Commands serialize to JSON and back without loss, so any client can send them over the wire. <sub>`command_json_roundtrip`</sub>
+- UpdateEntity replaces an entity wholesale; undo brings back the previous version. <sub>`update_entity_undo_restores_previous_version`</sub>
+- SetTitleBlock updates the sheet's title block; undo restores the previous fields. <sub>`set_title_block_is_undoable`</sub>
+- SetRevisions replaces the revision-table rows; undo restores the previous list. <sub>`set_revisions_is_undoable`</sub>
+- Every execute/undo/redo increases the document revision, so clients can discard stale patches. <sub>`revision_increases_monotonically`</sub>
+- Commands targeting a non-existent sheet fail with an error and change nothing. <sub>`unknown_sheet_is_rejected`</sub>
+- Undo with an empty history returns None instead of an error. <sub>`undo_on_empty_history_returns_none`</sub>
+- A new edit after undo clears the redo history (standard editor behavior). <sub>`new_edit_after_undo_clears_redo`</sub>
+
+### Geometry & coordinates
+
+- snapped() rounds a coordinate to the nearest grid pitch (default 2.5 mm), so everything lands on the pin grid. <sub>`snapped_rounds_to_grid_pitch`</sub>
+- translated() returns a shifted copy and never mutates the original point. <sub>`translated_shifts_without_mutation`</sub>
+- distance_to() is the Euclidean distance (a 3-4-5 triangle measures 5). <sub>`distance_is_euclidean`</sub>
+
+### Project file I/O (.mdkproj)
+
+- A project saved to .mdkproj and loaded back is identical, including all entities. <sub>`project_file_roundtrip`</sub>
+- The saved .mdkproj file is pretty-printed JSON with a format_version field, so it diffs well in git. <sub>`saved_file_is_pretty_json_with_format_version`</sub>
+- Loading a missing file returns an error instead of panicking. <sub>`loading_missing_file_is_an_error`</sub>
+
+### KiCad import
+
+- KiCad import converts paper size, title block, wires, junctions, labels (power symbols become net labels) and text. <sub>`imports_paper_title_block_and_geometry`</sub>
+- Known lib_ids map to our symbols (Device:R -> resistor, Conn_01x03 -> connector_3p) keeping designator/value/rotation/mirror; unknown symbols are skipped and itemized in the report. <sub>`maps_symbols_and_reports_skipped`</sub>
+- A file that is not a kicad_sch document is rejected with a clear error. <sub>`rejects_non_schematic`</sub>
+- The S-expression parser reads atoms, quoted strings, numbers and nested lists with typed accessors. <sub>`parses_atoms_strings_numbers_and_nesting`</sub>
+- Escaped quotes/newlines and multibyte (Japanese) text inside strings parse correctly. <sub>`parses_escaped_strings_and_multibyte`</sub>
+- children(name) iterates every child list with the given head symbol. <sub>`children_iterates_all_matches`</sub>
+- Unbalanced parentheses and unterminated strings are reported as syntax errors with a position. <sub>`syntax_errors_are_reported`</sub>
+
+### Document model
+
+- Paper sizes follow ISO A-series dimensions, and portrait orientation swaps width and height. <sub>`paper_sizes_match_iso_and_orientation_swaps`</sub>
+- A new project starts with one sheet named "Sheet1" and format_version 1. <sub>`new_project_has_one_default_sheet`</sub>
+- Entity::translate moves every coordinate of the entity: all wire points, or the anchor of symbols/labels/text. <sub>`translate_moves_all_coordinates`</sub>
+- Entity::id() returns the inner entity's UUID regardless of the entity kind. <sub>`entity_id_is_uniform_across_kinds`</sub>
+
+### Netlist extraction
+
+- A wire whose endpoints touch two symbol pins joins those pins into one net. <sub>`wires_connect_symbol_pins_into_one_net`</sub>
+- Wires that merely cross do NOT connect; a net label attached to a wire names its net. <sub>`crossing_without_junction_stays_separate_and_label_names_net`</sub>
+- A junction dot connects crossing wires, and same-named labels merge distant nets into one. <sub>`junction_connects_crossing_wires_and_same_labels_merge`</sub>
+- Unnamed nets receive deterministic sequential names (N001, N002, ...). <sub>`unnamed_nets_get_deterministic_sequential_names`</sub>
+- Two connection points of the same symbol sharing a pin number (a feed-through terminal) are internally shorted, and appear once in the net's pin list. <sub>`same_pin_number_points_short_internally`</sub>
+- Pin positions honor the symbol's rotation (clockwise in the Y-down paper coordinate system) and placement. <sub>`pin_positions_apply_rotation_and_translation`</sub>
+- Mirroring flips pins across the vertical axis before rotation is applied. <sub>`pin_positions_apply_mirror_before_rotation`</sub>
+
+### ngspice runner
+
+- The ngspice 'print all' output parses into node voltages (v(n1) -> n1) and branch currents (v1#branch), ignoring noise lines. <sub>`parse_print_all_reads_nodes_and_branches`</sub>
+- The ngspice executable is located by priority: MADAKE_NGSPICE env var, then PATH, then OS default install paths; a missing env path falls through. <sub>`find_in_prefers_env_then_path_then_candidates`</sub>
+- Running a DC operating point on a 24 V / 6+6 ohm divider yields 12 V at the midpoint and 2 A of source current (requires ngspice; skipped otherwise). <sub>`run_op_solves_a_divider_when_ngspice_is_installed`</sub>
+
+### Parts database
+
+- Opening a new database creates the schema and seeds sample parts exactly once; reopening never re-seeds. <sub>`open_creates_schema_and_seeds_samples_once`</sub>
+- Parts can be inserted, updated by part number, fetched, and searched by partial name match or exact category. <sub>`upsert_get_and_search`</sub>
+- Wire parts are registered and looked up by exact color + gauge combination. <sub>`wire_parts_crud_and_lookup`</sub>
+- An old schema-v1 database migrates to v2 on open, preserving existing rows and gaining the spice_model column. <sub>`v1_database_migrates_to_v2_preserving_data`</sub>
+- The database path defaults to the OS app-data folder and can be overridden with MADAKE_PARTS_DB. <sub>`default_path_respects_env_override`</sub>
+
+### PDF output
+
+- PDF export produces a valid PDF document (%PDF- header) of non-trivial size, including Japanese text. <sub>`sheet_to_pdf_produces_pdf_bytes`</sub>
+
+### Reports (BOM / wire list)
+
+- The BOM groups symbols by part number and counts quantities per group. <sub>`bom_groups_by_value_and_counts`</sub>
+- BOM fields containing commas are quoted so the CSV stays valid. <sub>`bom_escapes_fields_with_commas`</sub>
+- The wire list contains each wire's part number, color, gauge and length. <sub>`wire_list_contains_attributes`</sub>
+
+### DC simulation
+
+- Simulation with an invalid ngspice binary fails with an explicit error (no silent fallback). <sub>`missing_ngspice_is_an_explicit_error`</sub>
+- The DC operating point reports per-net voltages (0-24 V here) and per-component current and power (a 2 A lamp shows ~2 A / ~48 W). <sub>`op_reports_net_voltages_and_component_currents`</sub>
+- Declaring a switch open in the what-if analysis drops the load current to zero, and the result notes which switches were opened. <sub>`open_switch_cuts_the_current`</sub>
+
+### SPICE netlist generation
+
+- A series circuit converts to a SPICE deck: one voltage source, ground at the battery minus pin, one resistor per wire (rho*L/A) plus component bridges and the load's equivalent resistance. <sub>`series_circuit_builds_deck_with_source_ground_and_resistors`</sub>
+- A junction resting mid-wire splits that wire's resistance proportionally to the geometric length on each side. <sub>`junction_splits_wire_resistance_proportionally`</sub>
+- Same-named net labels in different places are bridged with a milliohm resistor, preserving their logical connection. <sub>`same_name_labels_are_bridged`</sub>
+- A drawing without a power source cannot be converted (explicit NoSource error). <sub>`no_battery_is_an_error`</sub>
+- Deck output is deterministic across runs, and the ground node 0 is the battery's minus pin. <sub>`node_names_are_deterministic_and_ground_is_battery_minus`</sub>
+
+### SVG output (JIS frame)
+
+- The exported SVG contains the JIS frame, the title block text, wires and reference designators. <sub>`svg_contains_frame_wire_and_symbol`</sub>
+- Special characters in titles (<, >, &, quotes) are XML-escaped in the SVG. <sub>`svg_escapes_xml_special_chars`</sub>
+- Rotated symbols are drawn with their shapes actually rotated (90 deg makes a resistor body vertical). <sub>`svg_renders_rotated_symbol_primitives`</sub>
+
+### Symbol library
+
+- Every bundled symbol has a unique id and at least one pin. <sub>`builtin_symbols_have_unique_ids_and_pins`</sub>
+- A parametric terminal block (e.g. 8 poles) has one left and one right connection point per terminal, all on the 2.5 mm grid and vertically centered. <sub>`dynamic_terminal_block_has_through_pins_on_grid`</sub>
+- connector_2p generated dynamically has exactly the same pin coordinates as the old static definition, so existing drawings are unaffected. <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
+- resolve_symbol finds built-in ids, and rejects malformed or out-of-range dynamic ids (0 poles, 51 poles, missing count). <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
+- sheet_symbol_defs returns the built-in library plus definitions for every dynamic symbol actually used on the sheet. <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
+- Symbol definitions serialize to JSON and back without loss. <sub>`symbol_json_roundtrip`</sub>
+
+### Verification (ERC & electrical)
+
+- A fully wired circuit produces no ERC findings. <sub>`fully_wired_pair_has_no_erc_findings`</sub>
+- Unconnected pins are reported as one warning per symbol, listing the affected pin numbers. <sub>`unconnected_pins_are_reported_per_symbol`</sub>
+- A terminal-block terminal counts as connected if either its left or right side is wired. <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
+- Missing and duplicate reference designators are flagged, but relay coil + contacts legitimately share one designator. <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
+- Wire ends attached to nothing are flagged, including an endpoint resting mid-wire without a junction dot. <sub>`dangling_wire_end_is_flagged_including_missing_junction`</sub>
+- A healthy series circuit (source, fuse, switch, lamp) raises no electrical findings. <sub>`healthy_series_circuit_has_no_elec_findings`</sub>
+- A load cut off from the power source (broken wire or open path) is reported as unreachable. <sub>`load_cut_off_from_source_is_unreachable`</sub>
+- A load current exceeding the wire's ampacity is an error, and exceeding the fuse rating is a warning. <sub>`overloaded_wire_and_fuse_are_flagged`</sub>
+- Voltage drop above 3 % of the supply voltage on a long wire is flagged; a short wire passes. <sub>`excessive_voltage_drop_is_flagged`</sub>
+- A load without a current_a attribute is excluded from current checks and reported as an Info note. <sub>`load_without_current_attr_gets_info_and_no_current_checks`</sub>
+- With ngspice installed, electrical findings carry solver-measured values and no approximate-mode note appears. <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
+- Without a solver result, checks fall back to a graph approximation and say so with an Info note. <sub>`fallback_mode_emits_approximate_info`</sub>
+- Two different net labels on one net (a short between potentials) is an error. <sub>`conflicting_net_labels_on_one_net_are_an_error`</sub>
+
+
+## Automation APIs (MCP / REST)
+
+
+### Agent REST endpoints
+
+- POST /agent/send runs an assistant turn and the conversation list reflects the new messages. <sub>`send_runs_a_turn_and_conversations_reflects_it`</sub>
+- Sending to a non-existent conversation id returns 400 instead of creating garbage. <sub>`send_to_unknown_conversation_is_400`</sub>
+- Cancel and undo-turn endpoints respond correctly for the latest applied turn. <sub>`cancel_and_undo_turn_respond`</sub>
+- Undoing a turn rolls back exactly the document edits that the turn produced, via the same undo history as manual edits. <sub>`undo_turn_rolls_back_agent_edits_through_the_command_engine`</sub>
+- GET /agent/events streams conversation events over SSE, in the same shape as the Tauri agent:event. <sub>`events_endpoint_streams_agent_events`</sub>
+- Saving and loading a project carries the chat history alongside (.chat.json). <sub>`save_and_load_carry_the_chat_history`</sub>
+- Loading a project cancels any running turn first, so the agent never edits the wrong document. <sub>`load_cancels_a_running_turn`</sub>
+- Requests from external web origins are rejected; local origins and non-browser clients (no Origin header) pass. <sub>`external_origins_are_rejected_but_local_and_originless_pass`</sub>
+- The origin guard treats only loopback hosts (localhost/127.0.0.1) as local. <sub>`local_origin_predicate_matches_only_loopback_hosts`</sub>
+- The drawing context given to the agent summarizes the active sheet (name, nets, entity count). <sub>`drawing_context_summarizes_the_active_sheet`</sub>
+- AI settings endpoints persist changes and apply them to the agent manager. <sub>`settings_endpoints_persist_and_apply`</sub>
+
+### REST Link API
+
+- The REST parts endpoints support searching (sample data included), upserting, category filtering, deleting, and listing wire parts. <sub>`parts_endpoints_search_upsert_delete`</sub>
+- GET /api/v1/verify returns the drawing's diagnostics as JSON (e.g. empty reference and unconnected pins). <sub>`verify_returns_diagnostics`</sub>
+- POST /api/v1/import/kicad replaces the open project with the converted schematic and returns a patch plus an import report. <sub>`import_kicad_replaces_project_and_reports`</sub>
+- POST /api/v1/simulate/op solves the DC operating point and returns net voltages and component currents (requires ngspice; skipped otherwise). <sub>`simulate_op_returns_result`</sub>
+- POST /api/v1/export/pdf writes a valid PDF file to the requested path. <sub>`export_pdf_writes_pdf_file`</sub>
+
+
+## AI assistant (madake-agent)
+
+
+### Claude CLI backend
+
+- The Claude CLI is launched headless with the required flags (-p, stream-json output, partial messages, strict MCP config). <sub>`args_contain_required_flags`</sub>
+- Resume session id, model choice and an appended system prompt are passed through when provided. <sub>`args_include_resume_model_and_system_prompt_when_given`</sub>
+- The agent's MCP config points at MadakeCAD's own local MCP server, so it uses the same tools as any client. <sub>`mcp_config_points_at_local_mcp_server`</sub>
+- A turn streams events (text deltas, tool use, completion) parsed from the CLI's stream-json output. <sub>`send_streams_events_from_fake_cli`</sub>
+- A CLI exiting non-zero is reported as an error event instead of hanging. <sub>`send_reports_nonzero_exit_as_error_event`</sub>
+- The prompt is passed via stdin, never via argv (avoids OS argument-length and quoting issues). <sub>`prompt_is_passed_through_stdin_not_argv`</sub>
+- If the event receiver goes away, the turn finishes promptly instead of blocking forever. <sub>`send_returns_promptly_when_receiver_is_dropped`</sub>
+- Output consisting only of unknown lines still terminates the turn promptly. <sub>`send_returns_promptly_when_only_non_event_lines_flow`</sub>
+- An I/O error while reading CLI output becomes an error event. <sub>`io_error_while_reading_is_reported_as_error_event`</sub>
+- Claude CLI detection reads the version from the configured executable. <sub>`detect_reads_version_from_configured_executable`</sub>
+- Detection fails cleanly when the executable does not exist. <sub>`detect_fails_for_missing_executable`</sub>
+- Detection falls back through the candidate path list until one works. <sub>`detect_falls_back_to_later_candidates`</sub>
+- When no candidate works, detection reports an error listing what was tried. <sub>`detect_from_reports_error_when_no_candidate_works`</sub>
+- Default candidates include the well-known Claude CLI install locations. <sub>`default_candidates_include_known_install_paths`</sub>
+
+### Conversations & history
+
+- Each turn records the engine revision range it spanned, for display and debugging. <sub>`turn_records_engine_revision_range`</sub>
+- The turn's undo count is the undo-stack depth delta, not the revision delta (undo/redo also advance revisions). <sub>`undo_count_uses_undo_stack_depth_not_revision_delta`</sub>
+- A turn whose edits were all undone during the turn counts as having no edits. <sub>`turn_whose_edits_were_all_undone_has_no_edits`</sub>
+- When an undo rollback stops midway, only the completed undo count is recorded. <sub>`record_undone_applies_only_the_completed_count`</sub>
+- A text-only turn (no document edits) has an undo count of zero. <sub>`turn_without_edits_has_zero_undo_count`</sub>
+- A turn collects the streamed text, the tool calls, and the CLI session id. <sub>`turn_collects_text_tool_calls_and_session`</sub>
+- A second turn appends to the conversation and resumes the same CLI session. <sub>`second_turn_appends_messages_and_reuses_session`</sub>
+- An error event is recorded on the current turn's message. <sub>`error_event_is_recorded_on_current_turn`</sub>
+- Chat history saves as pretty JSON and loads back identically. <sub>`chat_file_roundtrip_is_pretty_json`</sub>
+- A chat file from a newer format version is rejected rather than silently mangled. <sub>`load_chat_rejects_newer_format_version`</sub>
+- Chat saving writes atomically (temp file + rename) and leaves no temp file behind. <sub>`save_chat_writes_atomically_and_leaves_no_temp_file`</sub>
+- Loading chat history when no file exists yields an empty history. <sub>`load_chat_of_missing_file_is_empty`</sub>
+- Conversations get an updated_at timestamp on creation that advances with each turn. <sub>`updated_at_is_set_on_creation_and_advances_with_the_turn`</sub>
+- Legacy chat files without updated_at load with a sensible default. <sub>`load_chat_defaults_updated_at_for_legacy_files`</sub>
+- The chat file lives next to the project file as <name>.chat.json. <sub>`chat_path_sits_next_to_project_file`</sub>
+
+### Agent manager (turns)
+
+- Sending without a conversation id creates a conversation and broadcasts its events. <sub>`send_creates_conversation_and_broadcasts_events`</sub>
+- A turn that edits the document records the applied revisions and emits a turn-applied event with the undo depth. <sub>`turn_records_applied_revisions_and_emits_turn_applied`</sub>
+- Turn undo counts are based on undo-stack growth, so user undos during the turn don't corrupt the count. <sub>`undo_turn_counts_stack_growth_not_revision_delta`</sub>
+- Only the latest applied turn may be reverted; older targets are rejected (safety guard). <sub>`undo_turn_rejects_targets_that_are_not_the_latest_applied_turn`</sub>
+- A running turn cannot be reverted. <sub>`undo_turn_rejects_a_running_turn`</sub>
+- If undo fails midway, the partial progress is recorded so the state stays truthful. <sub>`undo_turn_records_partial_progress_when_undo_fails_midway`</sub>
+- Document errors and unknown turn targets are reported as distinct errors. <sub>`undo_turn_reports_doc_errors_and_unknown_targets`</sub>
+- Sending to a conversation that is already running a turn is rejected. <sub>`second_send_while_running_is_rejected`</sub>
+- Cancel kills the CLI process and marks the message as cancelled. <sub>`cancel_stops_the_turn_and_marks_the_message`</sub>
+- Sending to an unknown conversation id fails cleanly. <sub>`send_to_unknown_conversation_fails`</sub>
+- The drawing context and selected model are forwarded to the CLI invocation. <sub>`context_and_model_are_forwarded_to_the_cli`</sub>
+- Turning off auto-read-drawing suppresses the drawing context. <sub>`auto_read_drawing_off_suppresses_the_drawing_context`</sub>
+- The claude-path setting overrides which executable the backend runs. <sub>`claude_path_setting_becomes_the_backend_executable`</sub>
+- Replacing the conversation history (project load) cancels any running turn first. <sub>`set_conversations_replaces_history_and_cancels_running_turn`</sub>
+
+### stream-json parser
+
+- The CLI's system/init line yields a session-started event carrying the session id. <sub>`init_line_yields_session_started`</sub>
+- Only text deltas become text events; thinking deltas are ignored. <sub>`only_text_deltas_become_text_events`</sub>
+- A completed assistant tool_use block (with full input) starts a tool-use event. <sub>`assistant_tool_use_block_yields_tool_use_started`</sub>
+- A user tool_result line finishes the matching tool use, carrying the error flag. <sub>`tool_result_yields_tool_use_finished`</sub>
+- The result line completes the turn with token usage attached. <sub>`result_line_yields_turn_completed_with_usage`</sub>
+- Unknown message types and noise lines produce no events (forward compatible). <sub>`unknown_and_noise_lines_are_none`</sub>
+- An error result becomes an error event with the message. <sub>`error_result_yields_error_event`</sub>
+- A real recorded stream parses into the expected full event sequence. <sub>`full_event_sequence_of_tooluse_fixture`</sub>
+- The parser fills in the tool name when a tool use finishes. <sub>`stream_parser_fills_tool_name_on_finish`</sub>
+- Duplicate tool-use-started events for the same id are dropped. <sub>`stream_parser_drops_duplicate_tool_use_started`</sub>
+
+### AI settings
+
+- Default AI settings enable auto-apply and auto-read-drawing. <sub>`default_settings_are_auto_apply_and_auto_read`</sub>
+- A missing settings file yields the defaults. <sub>`missing_file_yields_defaults`</sub>
+- Saved settings load back identically. <sub>`saved_settings_round_trip`</sub>
+- Unknown/missing fields in the settings file fall back to defaults (forward compatible). <sub>`missing_fields_fall_back_to_defaults`</sub>
+- Saving creates the settings directory if needed. <sub>`save_creates_the_settings_directory`</sub>
+- Blank executable paths are normalized away instead of being stored. <sub>`normalized_drops_blank_paths`</sub>
+- The settings path honors its environment-variable override. <sub>`settings_path_honors_the_env_override`</sub>
+
+
+## madake CLI
+
+
+### Argument parsing & dispatch
+
+- The default port is 9310 and --json is off unless requested. <sub>`default_port_is_9310_and_json_is_off`</sub>
+- --port and --json are global options and may appear after the subcommand. <sub>`port_and_json_are_global_options_after_subcommand`</sub>
+- The export kind accepts the 'wire-list' spelling used in documentation. <sub>`export_kind_accepts_wire_list_spelling`</sub>
+- madake status calls the health endpoint and the project snapshot. <sub>`status_queries_health_and_project`</sub>
+- --json prints raw pretty-printed JSON for piping into jq and similar tools. <sub>`json_flag_emits_raw_json`</sub>
+- madake netlist forwards the --sheet option to the API. <sub>`netlist_forwards_sheet_option`</sub>
+- madake export forwards kind, output path and optional sheet to the API. <sub>`export_forwards_kind_path_and_sheet`</sub>
+- madake exec reads a JSON file containing a Command array and posts it to /commands. <sub>`exec_posts_command_array_from_file`</sub>
+- madake exec rejects JSON that is not an array, with a clear message. <sub>`exec_rejects_non_array_json`</sub>
+- A missing input file is reported as a file error, not a panic. <sub>`exec_reports_missing_file`</sub>
+- madake undo tells the user when there is nothing to undo. <sub>`undo_reports_empty_history`</sub>
+- madake redo reports the new document revision on success. <sub>`redo_reports_revision`</sub>
+- madake save/open report the file path they acted on. <sub>`save_and_open_report_path`</sub>
+
+### Link API client
+
+- The CLI talks to http://127.0.0.1:<port>/api/v1 (loopback only). <sub>`base_url_uses_loopback_and_api_v1`</sub>
+- endpoint() joins the base URL with a relative path. <sub>`endpoint_appends_path`</sub>
+- The netlist URL has no query string when no sheet is specified. <sub>`netlist_url_omits_query_without_sheet`</sub>
+- Sheet selection uses the sheet_id query parameter, matching the server. <sub>`netlist_url_uses_sheet_id_query_name`</sub>
+- Each export kind (svg/pdf/bom/wire-list) maps to its REST route. <sub>`export_kind_paths_match_link_api_routes`</sub>
+- When the app is not running, the CLI explains it explicitly (with the port) instead of a cryptic error. <sub>`not_running_error_is_explicit`</sub>
+
+### Human-readable output
+
+- Display width counts full-width (Japanese) characters as two columns for correct table alignment. <sub>`disp_width_counts_fullwidth_as_two`</sub>
+- Padding is based on display width, so Japanese and ASCII cells align. <sub>`pad_uses_display_width`</sub>
+- Tables align columns to the widest cell. <sub>`table_aligns_columns`</sub>
+- madake status output summarizes the endpoint and the document (sheets, entities). <sub>`status_summarizes_connection_and_document`</sub>
+- madake project lists each sheet with its entity count. <sub>`project_lists_sheets_with_entity_counts`</sub>
+- madake netlist renders a table of nets with their pin references (K1:2 style). <sub>`netlist_renders_table_with_pin_references`</sub>
+- An empty netlist prints a friendly message instead of an empty table. <sub>`netlist_handles_empty`</sub>
+- madake exec reports how many commands ran and the resulting revision. <sub>`exec_result_reports_revision_and_op_count`</sub>
+- Undo/redo formatting handles the 'nothing to do' (null patch) case. <sub>`history_result_handles_null_patch`</sub>
+- Undo/redo formatting reports the revision and change count. <sub>`history_result_reports_revision`</sub>
+- Save/export messages include the written file path. <sub>`saved_and_exported_report_written_path`</sub>
+- Open messages include the loaded path and resulting revision. <sub>`opened_reports_path_and_revision`</sub>
+
+
+## Frontend (editor UI)
+
+
+### agentOverlay
+
+- place_symbol's x/y produces a region around the approximate symbol size <sub>`toolBox`</sub>
+- draw_wire's point list produces its bounding box <sub>`toolBox`</sub>
+- execute_commands regions merge the add_entity commands inside <sub>`toolBox`</sub>
+- tools without coordinates and malformed input produce no region <sub>`toolBox`</sub>
+- wires use their vertex bbox; symbols use the anchor plus approximate size <sub>`entityBox`</sub>
+- junctions, texts and net labels also get regions <sub>`entityBox`</sub>
+- a tool start shows a region with margin included <sub>`AgentOverlay`</sub>
+- tools that yield no region are ignored <sub>`AgentOverlay`</sub>
+- re-notifying the same tool id does not duplicate the region <sub>`AgentOverlay`</sub>
+- regions of unfinished tools persist <sub>`AgentOverlay`</sub>
+- regions fade out HOLD_MS after completion <sub>`AgentOverlay`</sub>
+- completions without an id are matched by tool name <sub>`AgentOverlay`</sub>
+- entity upserts create regions that expire after HOLD_MS <sub>`AgentOverlay`</sub>
+- re-upserting the same entity extends its display deadline <sub>`AgentOverlay`</sub>
+- finishAll expires even in-progress regions <sub>`AgentOverlay`</sub>
+- clear removes every region <sub>`AgentOverlay`</sub>
+- the pulse alpha stays within 0.1-0.25 following a sine wave <sub>`pulseAlpha`</sub>
+- margin is added without mutating the original box <sub>`expandBox`</sub>
+
+### dynamicSymbol
+
+- connector_2p has the same pin coordinates as the legacy static definition <sub>`dynamicSymbol`</sub>
+- terminal_block_3p has 3 terminals with left/right points, centered on the 2.5 mm grid <sub>`dynamicSymbol`</sub>
+- malformed dynamic ids return null <sub>`dynamicSymbol`</sub>
+- static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
+
+### viewClasses
+
+- entity kinds map to view classes (junctions count as wires) <sub>`entityViewClass`</sub>
+- VIEW_CLASSES enumerates every class exactly once <sub>`entityViewClass`</sub>
+
+### viewport
+
+- world<->screen conversion round-trips and zoom keeps the anchor fixed <sub>`Viewport`</sub>
+- panning moves the view in screen pixels <sub>`Viewport`</sub>
+- snapping rounds to the 2.5 mm grid by default <sub>`Viewport`</sub>
+- zoom is clamped to sane bounds <sub>`Viewport`</sub>
+
+### drawingContext
+
+- with no selection the context covers the whole sheet <sub>`drawingContextTag`</sub>
+- with no sheet the string stays well-formed <sub>`drawingContextTag`</sub>
+- a selection lists reference designators (falling back to entity kinds) <sub>`drawingContextTag`</sub>
+- selections beyond 10 items collapse into +N more <sub>`drawingContextTag`</sub>
+- selection ids absent from the active sheet are ignored <sub>`drawingContextTag`</sub>
+- an empty draft receives the context as-is <sub>`appendContextTag`</sub>
+- an existing draft is separated by a newline (without doubling) <sub>`appendContextTag`</sub>
+
+### chat
+
+- text deltas append to the in-progress message of a known conversation <sub>`chat store: applyAgentEvent`</sub>
+- turn_completed stops streaming and finalizes the token usage <sub>`chat store: applyAgentEvent`</sub>
+- when no deltas arrived, the body is filled from turn_completed's result <sub>`chat store: applyAgentEvent`</sub>
+- tool calls become chips, resolved to success/failure by id <sub>`chat store: applyAgentEvent`</sub>
+- duplicate tool starts with the same id are ignored <sub>`chat store: applyAgentEvent`</sub>
+- tool completions without an id match the running chip of the same name <sub>`chat store: applyAgentEvent`</sub>
+- an error event marks the message and stops streaming <sub>`chat store: applyAgentEvent`</sub>
+- turn_applied records the revision range and marks the turn applied <sub>`chat store: applyAgentEvent`</sub>
+- an undo depth on turn_applied records the exact edit count <sub>`chat store: applyAgentEvent`</sub>
+- folding events advances the conversation's updated_at (newest-first history) <sub>`chat store: applyAgentEvent`</sub>
+- a delta after completion starts a new turn <sub>`chat store: applyAgentEvent`</sub>
+- multiple conversations fold independently; streaming stays on while any is running <sub>`chat store: applyAgentEvent`</sub>
+- an unknown conversation id refetches the list instead of creating a ghost <sub>`chat store: applyAgentEvent`</sub>
+- while our own turn is running, unknown-conversation events do not trigger a refetch <sub>`chat store: applyAgentEvent`</sub>
+- turn_completed/error for a conversation with no running turn is dropped <sub>`chat store: applyAgentEvent`</sub>
+- send creates a conversation and adopts the server-assigned id <sub>`chat store: アクション`</sub>
+- events arriving before send resolves still land in the same conversation <sub>`chat store: アクション`</sub>
+- empty prompts and sends during streaming are ignored <sub>`chat store: アクション`</sub>
+- a failed send marks the message with the error and stops streaming <sub>`chat store: アクション`</sub>
+- after a failed first send, retrying sends as new without leaking the local id <sub>`chat store: アクション`</sub>
+- cancel stops only the target conversation, leaving others streaming <sub>`chat store: アクション`</sub>
+- cancel on a not-yet-assigned (local-) conversation skips the API and cleans up locally <sub>`chat store: アクション`</sub>
+- a cancel issued before id assignment is sent to the server once the id arrives <sub>`chat store: アクション`</sub>
+- streaming stops even if the cancel API fails <sub>`chat store: アクション`</sub>
+- cancel with no conversation does nothing and never crashes <sub>`chat store: アクション`</sub>
+- undoTurn calls the API and withdraws the applied badge <sub>`chat store: アクション`</sub>
+- a server-rejected undoTurn propagates the error and keeps the applied badge <sub>`chat store: アクション`</sub>
+- undoTurn never calls the API for a not-yet-assigned (local-) conversation <sub>`chat store: アクション`</sub>
+- loadConversations normalizes the Rust representation into the display model <sub>`chat store: アクション`</sub>
+- normalizeConversation treats unfinished tools as running <sub>`chat store: アクション`</sub>
+- normalizeConversation carries updated_at through unchanged <sub>`chat store: アクション`</sub>
+- concurrent subscribe calls result in a single subscription <sub>`chat store: アクション`</sub>
+- unsubscribing before the subscription resolves still closes it cleanly <sub>`chat store: アクション`</sub>
+- after a failed subscription, the next subscribe re-establishes it <sub>`chat store: アクション`</sub>
+- newConversation does not disturb a pending local id <sub>`chat store: アクション`</sub>
+- setModel / setPanel / newConversation update their state <sub>`chat store: アクション`</sub>
+- the MCP tool-name prefix is stripped for display <sub>`summarizeToolUse`</sub>
+- place_symbol calls summarize as symbol, reference and position <sub>`summarizeToolUse`</sub>
+- draw_wire calls summarize as color, gauge and point count <sub>`summarizeToolUse`</sub>
+- update_entity and execute_commands summarize by command content <sub>`summarizeToolUse`</sub>
+- read and export tools get appropriate summaries <sub>`summarizeToolUse`</sub>
+- tools without a summary show the tool name only <sub>`summarizeToolUse`</sub>
+- the conversation title is the first 40 chars of the first user message <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
+- without any user message the title is '(empty conversation)' <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
+- relative time renders as just now / N min / N h / yesterday / M-D <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
+- unknown timestamps (legacy updated_at=0) show no relative time <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
+- the meta line joins time, message count and applied rev with a middle dot <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
+- conversations sort newest-first (unknown times last, in insertion order) <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
+
+### document
+
+- entity_upserted / entity_removed patches update the mirrored sheet <sub>`document store`</sub>
+- project_replaced swaps the whole mirrored project <sub>`document store`</sub>
+- sheet add/remove patches keep sheet order <sub>`document store`</sub>
+- sheet-meta patches never touch the entities <sub>`document store`</sub>
+- patches with an older revision are discarded (duplicate delivery is safe) <sub>`document store`</sub>
+
+### Parts database
+
+- search stores the results from the parts API <sub>`parts store`</sub>
+- a failed search clears the results and resets loading <sub>`parts store`</sub>
+
+### AI settings
+
+- defaults enable auto-apply and auto-read-drawing <sub>`settings store`</sub>
+- load pulls the settings from the backend <sub>`settings store`</sub>
+- save merges the changes, sends them, and adopts the normalized response <sub>`settings store`</sub>
+- a failed save keeps the error and leaves the shown settings untouched <sub>`settings store`</sub>
+
+### simulation
+
+- run fetches the DC result and opens the panel <sub>`simulation store`</sub>
+- toggled switches are passed as open_switches on the next run <sub>`simulation store`</sub>
+- failures (e.g. ngspice missing) keep the error message and still open the panel <sub>`simulation store`</sub>
+
+### ui
+
+- defaults are the project tab with the chat collapsed <sub>`ui store: 左ドックのタブとチャット下書き`</sub>
+- openAgentTab switches to the agent tab and expands the chat together <sub>`ui store: 左ドックのタブとチャット下書き`</sub>
+- closeAgentTab returns to the project tab and collapses the chat <sub>`ui store: 左ドックのタブとチャット下書き`</sub>
+- the chat draft is shared between the dock and the floating card <sub>`ui store: 左ドックのタブとチャット下書き`</sub>
+- all view classes are visible by default <sub>`表示クラス (レイヤ)`</sub>
+- toggleViewClass hides and re-shows a class <sub>`表示クラス (レイヤ)`</sub>
+
+### verification
+
+- run fetches diagnostics, opens the panel, and counts by severity <sub>`verification store`</sub>
+- close hides the panel but keeps the diagnostics <sub>`verification store`</sub>
+- a failed run resets the running flag and leaves diagnostics empty <sub>`verification store`</sub>
+

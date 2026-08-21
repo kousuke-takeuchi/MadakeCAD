@@ -496,6 +496,8 @@ mod tests {
         ])
     }
 
+    /// Display width counts full-width (Japanese) characters as two columns for correct table alignment.
+    /// 表示幅は全角文字を2桁として数え、表の桁揃えを正しくする。
     #[test]
     fn disp_width_counts_fullwidth_as_two() {
         assert_eq!(disp_width("abc"), 3);
@@ -503,6 +505,8 @@ mod tests {
         assert_eq!(disp_width("K1相"), 4);
     }
 
+    /// Padding is based on display width, so Japanese and ASCII cells align.
+    /// パディングは表示幅基準で、日本語とASCIIのセルが揃う。
     #[test]
     fn pad_uses_display_width() {
         assert_eq!(pad("abc", 5), "abc  ");
@@ -511,6 +515,8 @@ mod tests {
         assert_eq!(pad("abcdef", 3), "abcdef");
     }
 
+    /// Tables align columns to the widest cell.
+    /// 表は最も広いセルに合わせて列を揃える。
     #[test]
     fn table_aligns_columns() {
         let out = table(
@@ -535,6 +541,8 @@ mod tests {
         assert!(lines.iter().all(|l| !l.ends_with(' ')));
     }
 
+    /// madake status output summarizes the endpoint and the document (sheets, entities).
+    /// madake statusの出力は接続先とドキュメント(シート・要素数)を要約する。
     #[test]
     fn status_summarizes_connection_and_document() {
         let health = json!({ "name": "MadakeCAD Link API", "version": 1 });
@@ -548,6 +556,8 @@ mod tests {
         assert!(out.contains("可 / 不可")); // undo可 / redo不可
     }
 
+    /// madake project lists each sheet with its entity count.
+    /// madake projectは各シートを要素数付きで一覧する。
     #[test]
     fn project_lists_sheets_with_entity_counts() {
         let out = project(&sample_snapshot());
@@ -567,6 +577,8 @@ mod tests {
         assert_eq!(cols[cols.len() - 4], "2"); // wire
     }
 
+    /// madake netlist renders a table of nets with their pin references (K1:2 style).
+    /// madake netlistはネットの表をピン参照(K1:2形式)付きで描画する。
     #[test]
     fn netlist_renders_table_with_pin_references() {
         let out = netlist(&sample_netlist());
@@ -578,11 +590,15 @@ mod tests {
         assert!(gnd.contains('2')); // wire_ids 2本
     }
 
+    /// An empty netlist prints a friendly message instead of an empty table.
+    /// ネットが無い場合は空の表ではなく分かりやすいメッセージを出す。
     #[test]
     fn netlist_handles_empty() {
         assert!(netlist(&json!([])).contains("ネットがありません"));
     }
 
+    /// madake exec reports how many commands ran and the resulting revision.
+    /// madake execは実行したコマンド数と結果のrevisionを報告する。
     #[test]
     fn exec_result_reports_revision_and_op_count() {
         let patches = json!([
@@ -595,6 +611,8 @@ mod tests {
         assert!(out.contains("3")); // 変更op合計
     }
 
+    /// Undo/redo formatting handles the 'nothing to do' (null patch) case.
+    /// undo/redoの整形は「対象なし」(nullパッチ)の場合を扱う。
     #[test]
     fn history_result_handles_null_patch() {
         let out = history_result(
@@ -605,6 +623,8 @@ mod tests {
         assert_eq!(out, "元に戻せる操作がありません。");
     }
 
+    /// Undo/redo formatting reports the revision and change count.
+    /// undo/redoの整形はrevisionと変更件数を報告する。
     #[test]
     fn history_result_reports_revision() {
         let patch = json!({ "revision": 11, "ops": [{ "op": "entity_removed" }] });
@@ -613,6 +633,8 @@ mod tests {
         assert!(out.contains("revision 11"));
     }
 
+    /// Save/export messages include the written file path.
+    /// 保存・エクスポートのメッセージには書き出したパスが含まれる。
     #[test]
     fn saved_and_exported_report_written_path() {
         let res = json!({ "written": "/tmp/a.mdkproj" });
@@ -625,6 +647,8 @@ mod tests {
         assert!(exported(ExportKind::WireList, &wl).contains("電線リスト"));
     }
 
+    /// Open messages include the loaded path and resulting revision.
+    /// openのメッセージには読み込んだパスと結果のrevisionが含まれる。
     #[test]
     fn opened_reports_path_and_revision() {
         let patch = json!({ "revision": 1, "ops": [{ "op": "project_replaced" }] });

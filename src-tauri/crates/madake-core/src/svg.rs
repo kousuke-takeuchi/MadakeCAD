@@ -297,6 +297,8 @@ mod tests {
     use crate::symbol::builtin_symbols;
     use uuid::Uuid;
 
+    /// The exported SVG contains the JIS frame, the title block text, wires and reference designators.
+    /// 出力SVGにはJIS図枠・表題欄の文字・配線・参照記号が含まれる。
     #[test]
     fn svg_contains_frame_wire_and_symbol() {
         let mut sheet = Sheet::new("TB1", PaperSize::A3, Orientation::Landscape);
@@ -333,6 +335,8 @@ mod tests {
         assert!(svg.trim_end().ends_with("</svg>"));
     }
 
+    /// Special characters in titles (<, >, &, quotes) are XML-escaped in the SVG.
+    /// 品名などの特殊文字(<, >, &, 引用符)はSVG内でXMLエスケープされる。
     #[test]
     fn svg_escapes_xml_special_chars() {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
@@ -342,6 +346,8 @@ mod tests {
         assert!(!svg.contains("A<B>"));
     }
 
+    /// Rotated symbols are drawn with their shapes actually rotated (90 deg makes a resistor body vertical).
+    /// 回転したシンボルは形状ごと回転して描かれる(90度で抵抗の本体が縦長になる)。
     #[test]
     fn svg_renders_rotated_symbol_primitives() {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);

@@ -426,6 +426,8 @@ mod tests {
         })
     }
 
+    /// Adding an entity can be undone (the entity disappears) and redone (it comes back).
+    /// エンティティの追加はundoで消え、redoで復活する。
     #[test]
     fn add_undo_redo_entity() {
         let (mut engine, sheet_id) = test_engine();
@@ -448,6 +450,8 @@ mod tests {
         assert!(engine.project().sheets[0].entities.contains_key(&id));
     }
 
+    /// Moving entities shifts their coordinates; undo restores the original position exactly.
+    /// 移動でエンティティの座標が動き、undoで元の位置に正確に戻る。
     #[test]
     fn move_and_undo_restores_position() {
         let (mut engine, sheet_id) = test_engine();
@@ -478,6 +482,8 @@ mod tests {
         assert_eq!(w.points[0].x, 10.0);
     }
 
+    /// Deleting several entities at once is a single undo step that restores all of them.
+    /// 複数エンティティの一括削除は1回のundoで全て復元される。
     #[test]
     fn delete_multiple_and_undo() {
         let (mut engine, sheet_id) = test_engine();
@@ -509,6 +515,8 @@ mod tests {
         assert!(engine.project().sheets[0].entities.contains_key(&idb));
     }
 
+    /// Sheets can be added and removed; undoing a removal restores the sheet with its original id and position.
+    /// シートは追加・削除でき、削除のundoは元のid・位置のままシートを復元する。
     #[test]
     fn sheet_add_remove_undo() {
         let (mut engine, _) = test_engine();
@@ -530,6 +538,8 @@ mod tests {
         assert_eq!(engine.project().sheets[1].id, new_id);
     }
 
+    /// Commands serialize to JSON and back without loss, so any client can send them over the wire.
+    /// CommandはJSONに往復変換でき、どのクライアントからも送信できる。
     #[test]
     fn command_json_roundtrip() {
         let (_, sheet_id) = test_engine();
@@ -540,5 +550,91 @@ mod tests {
         let json = serde_json::to_string(&cmd).unwrap();
         let back: Command = serde_json::from_str(&json).unwrap();
         assert!(matches!(back, Command::AddEntity { .. }));
+    }
+
+    /// UpdateEntity replaces an entity wholesale; undo brings back the previous version.
+    /// UpdateEntityはエンティティを丸ごと置換し、undoで置換前の状態に戻る。
+    #[test]
+    fn update_entity_undo_restores_previous_version() {
+        let (mut engine, sheet_id) = test_engine();
+        let wire = sample_wire();
+        let id = wire.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: wire.clone() }).unwrap();
+        let mut updated = wire.clone();
+        if let Entity::Wire(w) = &mut updated { w.color = "blue".into(); }
+        engine.execute(Command::UpdateEntity { sheet_id, entity: updated }).unwrap();
+        let Entity::Wire(w) = &engine.project().sheets[0].entities[&id] else { panic!() };
+        assert_eq!(w.color, "blue");
+        engine.undo().unwrap().unwrap();
+        let Entity::Wire(w) = &engine.project().sheets[0].entities[&id] else { panic!() };
+        assert_eq!(w.color, "red");
+    }
+
+    /// SetTitleBlock updates the sheet's title block; undo restores the previous fields.
+    /// SetTitleBlockはシートの表題欄を更新し、undoで以前の内容に戻る。
+    #[test]
+    fn set_title_block_is_undoable() {
+        let (mut engine, sheet_id) = test_engine();
+        let mut tb = TitleBlock::default();
+        tb.title = "動力系統図".into();
+        engine.execute(Command::SetTitleBlock { sheet_id, title_block: tb }).unwrap();
+        assert_eq!(engine.project().sheets[0].title_block.title, "動力系統図");
+        engine.undo().unwrap().unwrap();
+        assert_eq!(engine.project().sheets[0].title_block.title, "");
+    }
+
+    /// SetRevisions replaces the revision-table rows; undo restores the previous list.
+    /// SetRevisionsは改訂欄の行を置き換え、undoで以前のリストに戻る。
+    #[test]
+    fn set_revisions_is_undoable() {
+        let (mut engine, sheet_id) = test_engine();
+        let rev = Revision { mark: "A".into(), date: "2026-08-21".into(), description: "初版".into(), by: "K.T".into() };
+        engine.execute(Command::SetRevisions { sheet_id, revisions: vec![rev] }).unwrap();
+        assert_eq!(engine.project().sheets[0].revisions.len(), 1);
+        engine.undo().unwrap().unwrap();
+        assert!(engine.project().sheets[0].revisions.is_empty());
+    }
+
+    /// Every execute/undo/redo increases the document revision, so clients can discard stale patches.
+    /// execute/undo/redoのたびにドキュメントrevisionが増加し、クライアントは古いpatchを破棄できる。
+    #[test]
+    fn revision_increases_monotonically() {
+        let (mut engine, sheet_id) = test_engine();
+        let r0 = engine.revision();
+        let p1 = engine.execute(Command::AddEntity { sheet_id, entity: sample_wire() }).unwrap();
+        let p2 = engine.undo().unwrap().unwrap();
+        let p3 = engine.redo().unwrap().unwrap();
+        assert!(r0 < p1.revision && p1.revision < p2.revision && p2.revision < p3.revision);
+    }
+
+    /// Commands targeting a non-existent sheet fail with an error and change nothing.
+    /// 存在しないシートへのCommandはエラーになり、何も変更されない。
+    #[test]
+    fn unknown_sheet_is_rejected() {
+        let (mut engine, _) = test_engine();
+        let missing = Uuid::new_v4();
+        let err = engine.execute(Command::AddEntity { sheet_id: missing, entity: sample_wire() });
+        assert!(err.is_err());
+        assert_eq!(engine.project().sheets[0].entities.len(), 0);
+    }
+
+    /// Undo with an empty history returns None instead of an error.
+    /// 履歴が空のときのundoはエラーではなくNoneを返す。
+    #[test]
+    fn undo_on_empty_history_returns_none() {
+        let (mut engine, _) = test_engine();
+        assert!(engine.undo().unwrap().is_none());
+        assert!(engine.redo().unwrap().is_none());
+    }
+
+    /// A new edit after undo clears the redo history (standard editor behavior).
+    /// undo後に新しい編集をするとredo履歴は消える(一般的なエディタと同じ挙動)。
+    #[test]
+    fn new_edit_after_undo_clears_redo() {
+        let (mut engine, sheet_id) = test_engine();
+        engine.execute(Command::AddEntity { sheet_id, entity: sample_wire() }).unwrap();
+        engine.undo().unwrap().unwrap();
+        engine.execute(Command::AddEntity { sheet_id, entity: sample_wire() }).unwrap();
+        assert!(engine.redo().unwrap().is_none());
     }
 }

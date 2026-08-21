@@ -204,6 +204,8 @@ mod tests {
         sheet
     }
 
+    /// Simulation with an invalid ngspice binary fails with an explicit error (no silent fallback).
+    /// 不正なngspice実行ファイルでのシミュレーションは明示的なエラーになる(暗黙のフォールバックはしない)。
     #[test]
     fn missing_ngspice_is_an_explicit_error() {
         let sheet = series_circuit("2");
@@ -217,6 +219,8 @@ mod tests {
         assert!(matches!(err, SimError::Ngspice(_)), "{err:?}");
     }
 
+    /// The DC operating point reports per-net voltages (0-24 V here) and per-component current and power (a 2 A lamp shows ~2 A / ~48 W).
+    /// DC動作点はネットごとの電圧(この例では0〜24V)と部品ごとの電流・電力を報告する(2Aランプは約2A/約48W)。
     #[test]
     fn op_reports_net_voltages_and_component_currents() {
         let Some(exe) = crate::ngspice::find_ngspice() else {
@@ -238,6 +242,8 @@ mod tests {
         assert!((vmax - 24.0).abs() < 0.01, "{vmax}");
     }
 
+    /// Declaring a switch open in the what-if analysis drops the load current to zero, and the result notes which switches were opened.
+    /// what-ifでスイッチを開路指定すると負荷電流はゼロになり、結果にどのスイッチを開いたかが明記される。
     #[test]
     fn open_switch_cuts_the_current() {
         let Some(exe) = crate::ngspice::find_ngspice() else {

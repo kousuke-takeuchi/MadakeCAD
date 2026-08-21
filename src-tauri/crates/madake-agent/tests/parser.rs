@@ -19,6 +19,8 @@ fn joined_text(events: &[AgentEvent]) -> String {
         .collect()
 }
 
+/// The CLI's system/init line yields a session-started event carrying the session id.
+/// CLIのsystem/init行はセッションIDを載せたセッション開始イベントになる。
 #[test]
 fn init_line_yields_session_started() {
     let evs = events(TOOLUSE);
@@ -30,6 +32,8 @@ fn init_line_yields_session_started() {
     );
 }
 
+/// Only text deltas become text events; thinking deltas are ignored.
+/// テキスト差分のみがテキストイベントになり、thinking差分は無視される。
 #[test]
 fn only_text_deltas_become_text_events() {
     // thinking_delta / signature_delta は無視され、text_deltaのみ連結される
@@ -37,6 +41,8 @@ fn only_text_deltas_become_text_events() {
     assert_eq!(joined_text(&events(TEXT)), "hello");
 }
 
+/// A completed assistant tool_use block (with full input) starts a tool-use event.
+/// assistantのtool_useブロック(完全な入力付き)がツール実行開始イベントになる。
 #[test]
 fn assistant_tool_use_block_yields_tool_use_started() {
     let evs = events(TOOLUSE);
@@ -54,6 +60,8 @@ fn assistant_tool_use_block_yields_tool_use_started() {
     assert_eq!(input["command"], "echo madake-test");
 }
 
+/// A user tool_result line finishes the matching tool use, carrying the error flag.
+/// userのtool_result行が対応するツール実行を完了させ、エラーフラグを伝える。
 #[test]
 fn tool_result_yields_tool_use_finished() {
     let evs = events(TOOLUSE);
@@ -69,6 +77,8 @@ fn tool_result_yields_tool_use_finished() {
     assert!(!finished[0].1);
 }
 
+/// The result line completes the turn with token usage attached.
+/// result行はトークン使用量付きでターンを完了させる。
 #[test]
 fn result_line_yields_turn_completed_with_usage() {
     let evs = events(TOOLUSE);
@@ -86,6 +96,8 @@ fn result_line_yields_turn_completed_with_usage() {
     }
 }
 
+/// Unknown message types and noise lines produce no events (forward compatible).
+/// 未知のメッセージ種別やノイズ行はイベントを生まない(前方互換)。
 #[test]
 fn unknown_and_noise_lines_are_none() {
     for line in [
@@ -103,6 +115,8 @@ fn unknown_and_noise_lines_are_none() {
     }
 }
 
+/// An error result becomes an error event with the message.
+/// エラーのresultはメッセージ付きのエラーイベントになる。
 #[test]
 fn error_result_yields_error_event() {
     let line = r#"{"type":"result","subtype":"error_during_execution","is_error":true,"result":"boom","session_id":"s"}"#;
@@ -114,6 +128,8 @@ fn error_result_yields_error_event() {
     );
 }
 
+/// A real recorded stream parses into the expected full event sequence.
+/// 実際に採取したストリームが期待どおりの完全なイベント列に解釈される。
 #[test]
 fn full_event_sequence_of_tooluse_fixture() {
     let evs = events(TOOLUSE);
@@ -135,6 +151,8 @@ fn full_event_sequence_of_tooluse_fixture() {
     );
 }
 
+/// The parser fills in the tool name when a tool use finishes.
+/// パーサはツール実行の完了時にツール名を補完する。
 #[test]
 fn stream_parser_fills_tool_name_on_finish() {
     let mut parser = StreamParser::new();
@@ -152,6 +170,8 @@ fn stream_parser_fills_tool_name_on_finish() {
     assert_eq!(evs.len(), 5);
 }
 
+/// Duplicate tool-use-started events for the same id are dropped.
+/// 同じIDの重複したツール開始イベントは破棄される。
 #[test]
 fn stream_parser_drops_duplicate_tool_use_started() {
     // CLIが同じtool_useブロックを複数行(assistant再送等)で出しても、

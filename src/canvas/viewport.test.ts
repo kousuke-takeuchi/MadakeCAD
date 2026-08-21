@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { Viewport } from "./viewport";
 
 describe("Viewport", () => {
-  it("roundtrips world<->screen and zooms around anchor", () => {
+  // ja: ワールド⇔スクリーン変換は往復可能で、ズームはアンカー点を固定する
+  it("world<->screen conversion round-trips and zoom keeps the anchor fixed", () => {
     const vp = new Viewport();
     vp.scale = 4;
     vp.originX = 10;
@@ -20,7 +21,8 @@ describe("Viewport", () => {
     expect(after.y).toBeCloseTo(before.y);
   });
 
-  it("pans in screen pixels", () => {
+  // ja: パンはスクリーンpx単位でビューを動かす
+  it("panning moves the view in screen pixels", () => {
     const vp = new Viewport();
     vp.scale = 2;
     const before = vp.toScreen({ x: 0, y: 0 });
@@ -30,13 +32,15 @@ describe("Viewport", () => {
     expect(after.y - before.y).toBeCloseTo(-10);
   });
 
-  it("snaps to 2.5mm grid by default", () => {
+  // ja: スナップは既定で2.5mmグリッドへ丸める
+  it("snapping rounds to the 2.5 mm grid by default", () => {
     const vp = new Viewport();
     expect(vp.snap({ x: 101.2, y: 48.9 })).toEqual({ x: 100, y: 50 });
     expect(vp.snap({ x: 3.7, y: -1.3 }, 5)).toEqual({ x: 5, y: -0 });
   });
 
-  it("clamps zoom to sane bounds", () => {
+  // ja: ズーム倍率は妥当な範囲に制限される
+  it("zoom is clamped to sane bounds", () => {
     const vp = new Viewport();
     vp.zoomAt({ x: 0, y: 0 }, 1e9);
     expect(vp.scale).toBeLessThanOrEqual(200);

@@ -164,6 +164,8 @@ fn kinds(events: &[AgentEvent]) -> Vec<&'static str> {
         .collect()
 }
 
+/// Sending without a conversation id creates a conversation and broadcasts its events.
+/// 会話IDなしの送信は会話を新規作成し、そのイベントを配信する。
 #[tokio::test]
 async fn send_creates_conversation_and_broadcasts_events() {
     let doc = FakeDoc::new(0);
@@ -199,6 +201,8 @@ async fn send_creates_conversation_and_broadcasts_events() {
     assert_eq!(turn.applied_command_count(), 0);
 }
 
+/// A turn that edits the document records the applied revisions and emits a turn-applied event with the undo depth.
+/// 図面を編集したターンは適用revisionを記録し、undo深さ付きのターン適用イベントを発行する。
 #[tokio::test]
 async fn turn_records_applied_revisions_and_emits_turn_applied() {
     let doc = FakeDoc::new(1);
@@ -249,11 +253,8 @@ async fn turn_records_applied_revisions_and_emits_turn_applied() {
     );
 }
 
-/// ターン中にundoが混ざっても、巻き戻し回数はundoスタック深さの増分で決まる。
-///
-/// (a) エージェントがMCPのundoツールを使ったターン、(b) ユーザーがUIで編集+undoを
-/// 挟んだターン — どちらもrevision差は実際に積まれたコマンド数より大きくなる。
-/// revision差をundo回数に使うと戻しすぎて、直前の無関係な編集まで消える。
+/// Turn undo counts are based on undo-stack growth, so user undos during the turn don't corrupt the count.
+/// ターンのundo回数はundoスタックの増分基準で、ターン中のユーザーundoが数を狂わせない。
 #[tokio::test]
 async fn undo_turn_counts_stack_growth_not_revision_delta() {
     let doc = FakeDoc::new(1);
@@ -303,7 +304,8 @@ async fn undo_turn_counts_stack_growth_not_revision_delta() {
     );
 }
 
-/// 後続の編集が上に積まれている状態では巻き戻せない(別ターンを戻す事故を防ぐ)。
+/// Only the latest applied turn may be reverted; older targets are rejected (safety guard).
+/// 巻き戻せるのは最新の適用済みターンのみで、古い対象は拒否される(安全ガード)。
 #[tokio::test]
 async fn undo_turn_rejects_targets_that_are_not_the_latest_applied_turn() {
     let doc = FakeDoc::new(1);
@@ -339,7 +341,8 @@ async fn undo_turn_rejects_targets_that_are_not_the_latest_applied_turn() {
     );
 }
 
-/// 実行中のターンは巻き戻せない(まだ編集が増えるため)。
+/// A running turn cannot be reverted.
+/// 実行中のターンは巻き戻せない。
 #[tokio::test]
 async fn undo_turn_rejects_a_running_turn() {
     let doc = FakeDoc::new(0);
@@ -356,7 +359,8 @@ async fn undo_turn_rejects_a_running_turn() {
     manager.cancel(id);
 }
 
-/// undoが途中で失敗したら、実行できた回数だけ記録してから返す(リトライで戻しすぎない)。
+/// If undo fails midway, the partial progress is recorded so the state stays truthful.
+/// undoが途中で失敗した場合も進んだ分だけ記録し、状態を正直に保つ。
 #[tokio::test]
 async fn undo_turn_records_partial_progress_when_undo_fails_midway() {
     let doc = FakeDoc::new(1);
@@ -405,6 +409,8 @@ async fn undo_turn_records_partial_progress_when_undo_fails_midway() {
     );
 }
 
+/// Document errors and unknown turn targets are reported as distinct errors.
+/// ドキュメントエラーと不明なターン指定は区別されたエラーとして報告される。
 #[tokio::test]
 async fn undo_turn_reports_doc_errors_and_unknown_targets() {
     let doc = FakeDoc::new(1);
@@ -422,6 +428,8 @@ async fn undo_turn_reports_doc_errors_and_unknown_targets() {
     assert!(err.contains("engine busy"), "{err}");
 }
 
+/// Sending to a conversation that is already running a turn is rejected.
+/// ターン実行中の会話への追加送信は拒否される。
 #[tokio::test]
 async fn second_send_while_running_is_rejected() {
     let doc = FakeDoc::new(0);
@@ -444,6 +452,8 @@ async fn second_send_while_running_is_rejected() {
     manager.cancel(id);
 }
 
+/// Cancel kills the CLI process and marks the message as cancelled.
+/// キャンセルはCLIプロセスを停止し、メッセージをキャンセル済みにする。
 #[tokio::test]
 async fn cancel_stops_the_turn_and_marks_the_message() {
     let doc = FakeDoc::new(0);
@@ -486,6 +496,8 @@ async fn cancel_stops_the_turn_and_marks_the_message() {
     assert!(saw_cancel, "キャンセルのErrorイベントが流れること");
 }
 
+/// Sending to an unknown conversation id fails cleanly.
+/// 不明な会話IDへの送信は明確に失敗する。
 #[tokio::test]
 async fn send_to_unknown_conversation_fails() {
     let doc = FakeDoc::new(0);
@@ -498,7 +510,8 @@ async fn send_to_unknown_conversation_fails() {
     assert!(manager.conversations().is_empty(), "会話は作られない");
 }
 
-/// 図面コンテキストは`--append-system-prompt`としてCLIへ渡る。
+/// The drawing context and selected model are forwarded to the CLI invocation.
+/// 図面コンテキストと選択モデルはCLI起動へ引き渡される。
 #[tokio::test]
 async fn context_and_model_are_forwarded_to_the_cli() {
     let doc = FakeDoc::new(0);
@@ -526,8 +539,8 @@ async fn context_and_model_are_forwarded_to_the_cli() {
     );
 }
 
-/// 設定「図面の自動読み取り」OFFなら、図面コンテキストはCLIへ渡らない。
-/// 設定の反映は次の送信から有効(再起動不要)であること。
+/// Turning off auto-read-drawing suppresses the drawing context.
+/// 図面自動読み取りをオフにすると図面コンテキストは付かない。
 #[tokio::test]
 async fn auto_read_drawing_off_suppresses_the_drawing_context() {
     let doc = FakeDoc::new(0);
@@ -565,7 +578,8 @@ async fn auto_read_drawing_off_suppresses_the_drawing_context() {
         .contains("--append-system-prompt=アクティブシート: S1"));
 }
 
-/// 設定のclaude実行パスが、そのままバックエンドの実行ファイルになる。
+/// The claude-path setting overrides which executable the backend runs.
+/// claude実行ファイルパス設定がバックエンドの実行ファイルを上書きする。
 #[tokio::test]
 async fn claude_path_setting_becomes_the_backend_executable() {
     let doc = FakeDoc::new(0);
@@ -604,7 +618,8 @@ async fn claude_path_setting_becomes_the_backend_executable() {
     assert_eq!(manager.executable(), Some(cached));
 }
 
-/// 会話の差し替え(プロジェクト読込)で履歴が復元され、送信中ターンは中断される。
+/// Replacing the conversation history (project load) cancels any running turn first.
+/// 会話履歴の置き換え(プロジェクト読込)は実行中ターンを先にキャンセルする。
 #[tokio::test]
 async fn set_conversations_replaces_history_and_cancels_running_turn() {
     let doc = FakeDoc::new(0);
