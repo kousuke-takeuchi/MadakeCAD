@@ -15,7 +15,10 @@ pub mod symbol;
 pub use command::{Command, Engine, Patch, PatchOp};
 pub use geometry::Point;
 pub use model::*;
-pub use symbol::{builtin_symbols, PinDef, Primitive, SymbolDef};
+pub use symbol::{
+    builtin_symbols, dynamic_symbol, resolve_symbol, sheet_symbol_defs, PinDef, Primitive,
+    SymbolDef,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {

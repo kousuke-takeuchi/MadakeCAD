@@ -11,7 +11,7 @@ pub mod link_api;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use madake_core::{builtin_symbols, Command, Engine, Entity, Patch, Point, SymbolInstance, Wire};
+use madake_core::{builtin_symbols, resolve_symbol, sheet_symbol_defs, Command, Engine, Entity, Patch, Point, SymbolInstance, Wire};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{ErrorData, ServerCapabilities, ServerInfo};
 use rmcp::transport::streamable_http_server::{
@@ -176,7 +176,7 @@ impl MadakeMcp {
         json_ok(&out)
     }
 
-    #[tool(description = "シンボルライブラリの一覧(id・名称・カテゴリ・ピン定義)を返す")]
+    #[tool(description = "シンボルライブラリの一覧(id・名称・カテゴリ・ピン定義)を返す。これに加え、動的ID `connector_{n}p` / `terminal_block_{n}p`(n=1..50、例: terminal_block_8p)でピン数可変のコネクタ・端子台を配置できる")]
     fn list_symbols(&self) -> Result<String, ErrorData> {
         json_ok(&builtin_symbols())
     }
@@ -201,7 +201,7 @@ impl MadakeMcp {
         &self,
         Parameters(p): Parameters<PlaceSymbolParams>,
     ) -> Result<String, ErrorData> {
-        if !builtin_symbols().iter().any(|s| s.id == p.symbol_id) {
+        if resolve_symbol(&p.symbol_id).is_none() {
             return Err(ErrorData::invalid_params(
                 format!("unknown symbol_id: {}", p.symbol_id),
                 None,
@@ -264,7 +264,7 @@ impl MadakeMcp {
             .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
         json_ok(&madake_core::netlist::extract_netlist(
             sheet,
-            &builtin_symbols(),
+            &sheet_symbol_defs(sheet),
         ))
     }
 
@@ -295,7 +295,7 @@ impl MadakeMcp {
             .project()
             .sheet(sheet_id)
             .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
-        let svg = madake_core::svg::sheet_to_svg(sheet, &builtin_symbols());
+        let svg = madake_core::svg::sheet_to_svg(sheet, &sheet_symbol_defs(sheet));
         std::fs::write(&p.path, svg).map_err(internal)?;
         json_ok(&serde_json::json!({ "written": p.path }))
     }

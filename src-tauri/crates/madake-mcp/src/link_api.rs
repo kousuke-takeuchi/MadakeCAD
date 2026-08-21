@@ -17,7 +17,7 @@ use axum::routing::{get, post};
 use axum::{http::StatusCode, Json, Router};
 use futures::stream::Stream;
 use madake_agent::{AgentManager, AppSettings, Conversation, DetectResult};
-use madake_core::{builtin_symbols, Command, Patch};
+use madake_core::{builtin_symbols, sheet_symbol_defs, Command, Patch};
 use serde::Deserialize;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 use uuid::Uuid;
@@ -60,7 +60,7 @@ async fn get_netlist(
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
     Ok(Json(serde_json::json!(
-        madake_core::netlist::extract_netlist(sheet, &builtin_symbols())
+        madake_core::netlist::extract_netlist(sheet, &sheet_symbol_defs(sheet))
     )))
 }
 
@@ -130,7 +130,7 @@ async fn post_export_svg(
         None => engine.project().sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    let svg = madake_core::svg::sheet_to_svg(sheet, &builtin_symbols());
+    let svg = madake_core::svg::sheet_to_svg(sheet, &sheet_symbol_defs(sheet));
     std::fs::write(&body.path, svg).map_err(bad_request)?;
     Ok(Json(serde_json::json!({ "written": body.path })))
 }
