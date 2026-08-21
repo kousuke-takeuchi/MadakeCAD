@@ -245,18 +245,51 @@ export function drawSymbol(
       }
     }
   }
-  // 参照記号・型番
+  // 参照記号・型番: シンボル外形の上に併記(縦長シンボルでも重ならない。Rust側svg.rsと同ルール)
+  const top = symbolTopY(inst, def);
   ctx.fillStyle = colorOverride ?? (selected ? theme.selection : theme.annotation);
   ctx.font = `${Math.max(9, 2.5 * vp.scale)}px monospace`;
   ctx.textAlign = "center";
   if (inst.reference) {
-    const p = vp.toScreen({ x: inst.at.x, y: inst.at.y - 9 });
+    const p = vp.toScreen({ x: inst.at.x, y: top - 4.5 });
     ctx.fillText(inst.reference, p.x, p.y);
   }
   if (inst.value) {
-    const p = vp.toScreen({ x: inst.at.x, y: inst.at.y - 5.5 });
+    const p = vp.toScreen({ x: inst.at.x, y: top - 1 });
     ctx.fillText(inst.value, p.x, p.y);
   }
+}
+
+/** 配置後のシンボル外形の上端Y(用紙座標)。円・弧は回転対称なので中心±rで安全側に評価。 */
+export function symbolTopY(inst: SymbolInstance, def: SymbolDef): number {
+  let top = inst.at.y;
+  const visit = (p: Point) => {
+    const t = transformLocal(p, inst);
+    if (t.y < top) top = t.y;
+  };
+  for (const prim of def.primitives) {
+    switch (prim.type) {
+      case "line":
+        prim.pts.forEach(visit);
+        break;
+      case "circle":
+      case "arc":
+        visit({ x: prim.center.x - prim.r, y: prim.center.y - prim.r });
+        visit({ x: prim.center.x + prim.r, y: prim.center.y + prim.r });
+        break;
+      case "rect":
+        visit(prim.p1);
+        visit({ x: prim.p2.x, y: prim.p1.y });
+        visit(prim.p2);
+        visit({ x: prim.p1.x, y: prim.p2.y });
+        break;
+      case "text":
+        visit(prim.at);
+        break;
+    }
+  }
+  for (const pin of def.pins) visit(pin.at);
+  return top;
 }
 
 // --- エージェント編集オーバーレイ -------------------------------------------

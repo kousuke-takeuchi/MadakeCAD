@@ -138,6 +138,38 @@ fn frame_and_title_block(out: &mut String, sheet: &Sheet) {
     }
 }
 
+/// 配置後のシンボル外形の上端Y(用紙座標)。参照記号・型番の重なり回避用。
+fn symbol_top_y(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> f64 {
+    let mut top = inst.at.y;
+    let mut visit = |p: Point| {
+        let t = transform_local(p, inst);
+        if t.y < top {
+            top = t.y;
+        }
+    };
+    for prim in &def.primitives {
+        match prim {
+            Primitive::Line { pts } => pts.iter().copied().for_each(&mut visit),
+            // 円・弧は回転対称なので中心±rで安全側に評価
+            Primitive::Circle { center, r, .. } | Primitive::Arc { center, r, .. } => {
+                visit(Point::new(center.x - r, center.y - r));
+                visit(Point::new(center.x + r, center.y + r));
+            }
+            Primitive::Rect { p1, p2, .. } => {
+                visit(*p1);
+                visit(Point::new(p2.x, p1.y));
+                visit(*p2);
+                visit(Point::new(p1.x, p2.y));
+            }
+            Primitive::Text { at, .. } => visit(*at),
+        }
+    }
+    for pin in &def.pins {
+        visit(pin.at);
+    }
+    top
+}
+
 fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &SymbolDef) {
     for prim in &def.primitives {
         match prim {
@@ -195,12 +227,13 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
             }
         }
     }
-    // 参照記号と型番/値をシンボル上部に併記
+    // 参照記号と型番/値をシンボル外形の上に併記(縦長シンボルでも重ならない)
+    let top = symbol_top_y(inst, def);
     if !inst.reference.is_empty() {
-        text_el(out, inst.at.x, inst.at.y - 9.0, 2.5, "#000", "middle", &inst.reference);
+        text_el(out, inst.at.x, top - 4.5, 2.5, "#000", "middle", &inst.reference);
     }
     if !inst.value.is_empty() {
-        text_el(out, inst.at.x, inst.at.y - 5.5, 2.5, "#000", "middle", &inst.value);
+        text_el(out, inst.at.x, top - 1.0, 2.5, "#000", "middle", &inst.value);
     }
 }
 
