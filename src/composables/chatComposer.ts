@@ -59,9 +59,5 @@ export function useChatComposer() {
     }
   }
 
-  function notImplemented(label: string) {
-    ui.log(`AGENT   ${label}は未実装です (フェーズA2以降)`);
-  }
-
-  return { store, ui, draft, canSend, tokenBadge, submit, onKeydown, onCancel, notImplemented };
+  return { store, ui, draft, canSend, tokenBadge, submit, onKeydown, onCancel };
 }

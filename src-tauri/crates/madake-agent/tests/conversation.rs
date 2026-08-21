@@ -308,6 +308,53 @@ fn load_chat_of_missing_file_is_empty() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// 会話履歴の相対時刻表示("8分前"等)の元になる値。作成時に入り、
+/// ターンの開始・イベント反映のたびに進む。
+#[test]
+fn updated_at_is_set_on_creation_and_advances_with_the_turn() {
+    let mut conv = Conversation::new();
+    assert!(conv.updated_at > 0, "作成時に時刻が入ること");
+
+    // ミリ秒分解能なので「進むこと」は0へ戻してから確かめる
+    conv.updated_at = 0;
+    conv.begin_turn("24V系にヒューズF2を追加して", edits(0));
+    assert!(conv.updated_at > 0, "ターン開始で更新されること");
+
+    conv.updated_at = 0;
+    conv.apply_event(
+        &AgentEvent::TextDelta {
+            text: "配置しました".to_string(),
+        },
+        edits(1),
+    );
+    assert!(conv.updated_at > 0, "イベント反映で更新されること");
+}
+
+/// `updated_at`を持たない旧`chat.json`も読めること(時刻不明の`0`になる)。
+#[test]
+fn load_chat_defaults_updated_at_for_legacy_files() {
+    let dir = temp_dir();
+    let path = dir.join("legacy.chat.json");
+    std::fs::write(
+        &path,
+        format!(
+            r#"{{"format_version":{CHAT_FORMAT_VERSION},"conversations":[{{
+                "id":"6f1b7f2e-6a3a-4a1f-9d4e-2b0c9d5a1e77",
+                "session_id":null,
+                "messages":[],
+                "model":null
+            }}]}}"#
+        ),
+    )
+    .unwrap();
+
+    let loaded = load_chat(&path).unwrap();
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].updated_at, 0);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn chat_path_sits_next_to_project_file() {
     assert_eq!(

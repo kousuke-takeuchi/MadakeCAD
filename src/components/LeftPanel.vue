@@ -8,13 +8,17 @@
 // ここで panelOpen ⇔ leftPanelTab を同期する。
 import { History, Minus } from "lucide-vue-next";
 import { computed, watch } from "vue";
+import { usePopover } from "../composables/popover";
 import { useChatStore } from "../stores/chat";
 import { useUiStore, type LeftPanelTab } from "../stores/ui";
 import ChatDock from "./chat/ChatDock.vue";
+import ChatHistoryPopup from "./chat/ChatHistoryPopup.vue";
 import ProjectPanel from "./ProjectPanel.vue";
 
 const chat = useChatStore();
 const ui = useUiStore();
+
+const { open: historyOpen, toggle: toggleHistory, close: closeHistory } = usePopover();
 
 const tabs: { id: LeftPanelTab; label: string }[] = [
   { id: "project", label: "プロジェクト" },
@@ -34,10 +38,6 @@ function minimize() {
   selectTab("project");
 }
 
-function notImplemented(label: string) {
-  ui.log(`AGENT   ${label}は未実装です (フェーズA2以降)`);
-}
-
 // 浮きカードからの送信/展開など、外から panelOpen が変わった場合もタブを合わせる。
 watch(
   () => chat.panelOpen,
@@ -50,11 +50,13 @@ watch(
 
 <template>
   <aside class="left-panel">
-    <div class="tabs">
+    <div class="tabs" role="tablist" aria-label="左パネル">
       <button
         v-for="t in tabs"
         :key="t.id"
         class="tab"
+        role="tab"
+        :aria-selected="ui.leftPanelTab === t.id"
         :class="{ active: ui.leftPanelTab === t.id }"
         @click="selectTab(t.id)"
       >
@@ -68,12 +70,22 @@ watch(
           <span class="dot" />
           {{ connected ? "接続中" : "未接続" }}
         </span>
-        <button class="icon-btn" title="履歴" @click="notImplemented('会話履歴')">
+        <button
+          class="icon-btn"
+          title="履歴"
+          :aria-expanded="historyOpen"
+          @click="toggleHistory()"
+        >
           <History :size="13" />
         </button>
         <button class="icon-btn" title="最小化" @click="minimize">
           <Minus :size="13" />
         </button>
+      </template>
+
+      <template v-if="historyOpen">
+        <div class="backdrop" @click="closeHistory()" />
+        <ChatHistoryPopup class="history-popup" @close="closeHistory()" />
       </template>
     </div>
 
@@ -97,12 +109,25 @@ watch(
 
 /* タブ行 */
 .tabs {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
   padding: 0 6px;
   background: var(--palette-head);
+}
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+/* タブ行の直下、履歴ボタン側 (右端) にぶら下げる */
+.history-popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 6px;
+  z-index: 21;
 }
 .tab {
   display: flex;

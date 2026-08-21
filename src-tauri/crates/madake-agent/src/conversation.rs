@@ -165,6 +165,14 @@ impl ChatMessage {
     }
 }
 
+/// UNIXエポックからのミリ秒。システム時計が1970より前を指す異常時は`0`(=不明)。
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// 1本の会話(CLIセッションと1:1)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Conversation {
@@ -173,6 +181,12 @@ pub struct Conversation {
     pub session_id: Option<String>,
     pub messages: Vec<ChatMessage>,
     pub model: Option<String>,
+    /// 最終更新時刻(unixミリ秒)。会話履歴の相対時刻表示に使う。
+    ///
+    /// この項目が無い旧`chat.json`は`0`になる。UI側は`0`を「時刻不明」として
+    /// 扱い、相対時刻の表示を省く(1970年と表示させない)。
+    #[serde(default)]
+    pub updated_at: u64,
 }
 
 impl Default for Conversation {
@@ -188,13 +202,20 @@ impl Conversation {
             session_id: None,
             messages: Vec::new(),
             model: None,
+            updated_at: now_millis(),
         }
+    }
+
+    /// 最終更新時刻を現在時刻にする。会話の内容が変わる操作は必ずこれを通す。
+    pub fn touch(&mut self) {
+        self.updated_at = now_millis();
     }
 
     /// ターンを開始する。ユーザー発話と、これから埋めるアシスタント応答を積む。
     ///
     /// `state`は送信直前のドキュメント状態。
     pub fn begin_turn(&mut self, prompt: &str, state: DocState) {
+        self.touch();
         self.messages
             .push(ChatMessage::new(Role::User, prompt.to_string(), state));
         self.messages
@@ -205,6 +226,7 @@ impl Conversation {
     ///
     /// `state`はイベント受信時点のドキュメント状態(ターン終了時の記録に使う)。
     pub fn apply_event(&mut self, event: &AgentEvent, state: DocState) {
+        self.touch();
         if let AgentEvent::SessionStarted { session_id } = event {
             self.session_id = Some(session_id.clone());
             return;
