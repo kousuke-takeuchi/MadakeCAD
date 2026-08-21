@@ -59,6 +59,10 @@ onMounted(async () => {
   --shadow-panel: 0 6px 22px #00000030;
   --shadow-panel-lg: 0 8px 28px #00000038;
   --scrim: #00000059;
+  /* ロゴ (電球×真竹)。ダーク背景(タイトルバー)用。ライト背景では
+     --logo-bulb: #1F6FBF / --logo-bamboo: #1F8A4C を上書きする */
+  --logo-bulb: #4a9eff;
+  --logo-bamboo: #2ca866;
 }
 html, body, #app {
   margin: 0;

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { FilePlus, FolderOpen, Save, Printer, Settings, Undo2, Redo2 } from "lucide-vue-next";
+import AppLogo from "./AppLogo.vue";
 import { inject } from "vue";
 import { inTauri } from "../ipc";
 import type { EditorController } from "../tools/controller";
@@ -26,7 +27,7 @@ async function redo() {
   <div class="titlebar" data-tauri-drag-region>
     <!-- macOSのトラフィックライト分の余白 (Tauri実行時のみ) -->
     <div v-if="inTauri" class="traffic-space" />
-    <div class="logo">M</div>
+    <div class="logo"><AppLogo :size="20" /></div>
     <div class="qat">
       <button title="新規"><FilePlus :size="14" /></button>
       <button title="開く" @click="emit('open')"><FolderOpen :size="14" /></button>
@@ -60,11 +61,6 @@ async function redo() {
 .logo {
   width: 26px;
   height: 22px;
-  border-radius: 3px;
-  background: #c0392b;
-  color: #fff;
-  font-weight: 800;
-  font-size: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
