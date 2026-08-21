@@ -1,6 +1,6 @@
 # MadakeCAD 機能インベントリ
 
-作成: 2026-08-21(フェーズ0〜3完了時点)。全機能の棚卸しと、未実装バックログの一覧。
+作成: 2026-08-21(フェーズ0〜3完了時点)。更新: 2026-08-22(M2 参考図面の完全再現 完了)。全機能の棚卸しと、未実装バックログの一覧。
 specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は`docs/superpowers/plans/`の各プラン。
 
 ## 1. コア・アーキテクチャ(madake-core)
@@ -8,7 +8,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 機能 | 状態 | 備考 |
 |---|---|---|
 | Commandエンジン | ✅ | 全編集がCommand経由。逆コマンドによるundo/redo、Patch(revision付き)のbroadcast |
-| ドキュメントモデル | ✅ | Project / Sheet(JIS図枠・表題欄・改訂欄データ・ゾーン) / Entity(Symbol・Wire・Junction・NetLabel・Text) |
+| ドキュメントモデル | ✅ | Project / Sheet(JIS図枠・表題欄・改訂欄・ゾーン) / Entity(Symbol・Wire・Junction・NetLabel・Text・Harness) |
 | 保存形式 `.mdkproj` | ✅ | 整形JSON(git差分可読)。チャット履歴は`<名前>.chat.json`を併存 |
 | シンボルライブラリ | ✅ | JIS C 0617系の静的13種+動的シンボル`connector_{n}p`/`terminal_block_{n}p`(n=1..50、5mmピッチ中央揃え)。端子台は左右貫通端子 |
 | 座標系 | ✅ | mm・左上原点・Y下向き。2.5mmグリッド、回転0/90/180/270 |
@@ -19,14 +19,14 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 機能 | 状態 | 備考 |
 |---|---|---|
 | リボン(回路図タブ) | ✅ | 配線 / 部品を挿入 / 回路図を編集 / 検証・レポート(部品表・電線リスト・シミュレーション・SVG/PDF出力) |
-| リボン(表示タブ) | ✅ | 表示クラス8種(配線/シンボル/参照記号/ネットラベル/線番/注記/図枠/グリッド)のトグル(レイヤ。画面のみ、出力へ非反映) |
+| リボン(表示タブ) | ✅ | 表示クラス9種(配線/シンボル/参照記号/ネットラベル/線番/ハーネス/注記/図枠/グリッド)のトグル(レイヤ。画面のみ、出力へ非反映) |
 | リボン(他タブ) | ⬜ | ホーム/プロジェクト/パネル/レポート/読み込み・書き出し/管理はプレースホルダ |
 | キャンバス操作 | ✅ | パン(中ボタン/Space)・ホイールズーム・グリッド・スナップ・直交拘束・ピンスナップ(菱形マーカー) |
 | 選択・編集 | ✅ | クリック選択・Shift追加・矩形選択・ドラッグ移動(Command化)・削除・⌘Z/⇧⌘Z |
 | 配線ツール | ✅ | 直交ポリライン、ダブルクリック/Escで確定。線色・sq既定値 |
 | 配置ツール | ✅ | ゴーストプレビュー、Rで回転、参照記号の自動採番(接頭辞+連番) |
 | 部品挿入ダイアログ | ✅ | 検索(名称/記号)、カテゴリ別グリッド、動的シンボルの極数バー(1..50ステッパー)、部品DB検索セクション(選択で型番・定格つき配置) |
-| プロパティパネル | ✅ | 選択シンボルの参照記号・型番編集 |
+| プロパティパネル | ✅ | シンボルの参照記号・型番、ワイヤの線番(ネット単位)、ハーネスの名前・備考(含む電線数)、ネットラベルの相手先リンク(クリックでシート切替+ズーム) |
 | プロジェクトマネージャ(左) | ✅ | ツリー+詳細。エージェントタブと切替 |
 | 図面タブ | ✅ | シート切替・追加(add_sheet) |
 | ステータスバー | ✅ | 座標、スナップ/直交/グリッドトグル、直近ログ、ズーム、MCPポート表示 |
@@ -42,11 +42,11 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 機能 | 状態 | 備考 |
 |---|---|---|
 | JIS図枠描画 | ✅ | 枠線・ゾーン番号(横=数字/縦=英字)・表題欄(図番/品名/尺度/日付/設計〜承認/社名)。画面とSVG/PDFで同一 |
-| 改訂欄 | 🔶 | データモデル(`Sheet::revisions`)とCommandはあるが、**描画(画面/SVG/PDF)と編集UIが未実装** |
+| 改訂欄 | ✅ | ISO 7200様式(表題欄直上・古い行が下・最大6行・列=記号/日付/内容/承認)。キャンバス/SVG/PDFで同一、表題欄Revは最新行に連動。編集ダイアログ(`set_revisions`コマンド1回=undo1回) |
 | SVG出力 | ✅ | 印刷品質、mm 1:1、XMLエスケープ |
 | PDF出力 | ✅ | svg2pdfでベクタ変換、日本語フォント埋め込み(macOS=Hiragino。Win/Linuxのフォント割当は未調整) |
 | BOM(部品表)CSV | ✅ | 参照記号+型番の集計 |
-| 電線リストCSV | ✅ | 品番・色・sq・長さ |
+| 電線リストCSV | ✅ | シート・線番・ハーネス・品番・色・sq・長さ |
 | 印刷(OSダイアログ) | ⬜ | PDF経由で代替 |
 
 ## 4. ネットリスト・検証・シミュレーション
@@ -86,9 +86,9 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール: get_project / list_symbols / place_symbol / draw_wire / execute_commands / get_netlist / run_verification / simulate_op / search_parts / upsert_part / delete_part / import_kicad / export_svg・pdf・bom・wire_list / undo / redo |
+| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加もここから) / get_netlist / run_verification / simulate_op / search_parts / upsert_part / delete_part / import_kicad / export_svg・pdf・bom・wire_list / undo / redo |
 | Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols / netlist / verify / simulate/op / commands / undo / redo / save / load / import/kicad / export/* / parts / wire-parts / agent/* / events |
-| madake CLI | ✅ | status / project / netlist / verify / sim / parts / export / save / open(.kicad_sch対応) / exec / undo / redo |
+| madake CLI | ✅ | status / project / netlist / verify / sim / parts / export / save / open(.kicad_sch対応) / renumber / exec / undo / redo |
 | AIチャット(A1) | ✅ | 左ドック+浮きカード、Claude Code CLIバックエンド(Pro/Max OAuth再利用)、ツールチップ表示、ターン単位undo、編集オーバーレイ(シアンパルス)、会話履歴のプロジェクト保存 |
 | A1の持ち越し負債 | ⚠ | ターン安定ID(添字指定の脆さ)・編集origin(user/agent区別)・キャンセルseq(プランに詳細) |
 | 並列エージェント・自動反復(A2) | ⬜ | UIポップアップのみデザイン済み |
@@ -101,11 +101,11 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 |---|---|---|
 | 端子台・コネクタ(ピン番号単位の結線) | ✅ | 動的シンボル+貫通端子+ネットリスト |
 | 電線管理(色・sq・長さ・品番) | ✅ | Wire属性+電線品番マスタ |
-| 線番(ワイヤ番号)の挿入・自動採番 | ⬜ | リボンにボタンのみ(todo)。参考図面の線番表現に必要 |
-| ハーネス境界(破線囲み) | ⬜ | spec §1に記載。モデル・描画とも未 |
+| 線番(ワイヤ番号)の挿入・自動採番 | ✅ | ネット単位。`renumber_wires`(追い番/振り直し・開始番号・シート指定/全体)+`set_wire_numbers`(個別編集)。キャンバス/SVG/PDF描画、電線リスト連動、CLI `madake renumber` |
+| ハーネス境界(破線囲み) | ✅ | Entity `Harness`(矩形・名前・備考)。所属は全点内包(入れ子は最小優先)、破線描画+名前、電線リストのハーネス列、リボンのハーネスツール |
 | 複数母線・信号矢印 | ⬜ | リボンにボタンのみ(todo) |
 | 回路コピー・トリム | ⬜ | リボンにボタンのみ(todo) |
-| シート間クロスリファレンス | ⬜ | ネットラベルは同一シート内のみ結合(モデル上は全シート走査可能だが未対応) |
+| シート間クロスリファレンス | ✅ | `extract_netlist_project`が同名ラベルでシート横断統合。ラベル脇に「/シート.ゾーン」(キャンバス/SVG/PDF)、プロパティパネルの相手先リンク、ERC(`verify_project`)・帳票も統合ネットで評価 |
 | シンボルエディタ(ユーザー定義シンボル) | ⬜ | SymbolDefはJSONなので手書きは可能。UIなし |
 | 計測ツール | ⬜ | 未実装 |
 
@@ -113,7 +113,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| テスト | ✅ | cargo 19スイート(コア61)+vitest 106+vue-tsc。TDD運用 |
+| テスト | ✅ | cargo 248件+vitest 180件+vue-tsc。全テストに対訳仕様文が付き、`docs/13-specification.md`(428項目)を自動生成。TDD運用 |
 | macOSビルド | ✅ | 開発は`npm run tauri dev` |
 | Windows/Linuxビルド | ⬜ | 非目標(現時点)。コードはOS非依存を維持(ngspice探索・PDFフォントに一部OS別処理あり) |
 | 配布パッケージ/自動更新 | ⬜ | 未着手 |

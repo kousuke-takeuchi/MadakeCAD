@@ -12,7 +12,7 @@ A purpose-built editor for industrial electrical schematics, modeled on the conv
 - **Wiring**: orthogonal polyline tool with grid snap and pin snap (diamond marker); junctions; net labels; free text annotations
 - **Editing**: click/shift/marquee selection, drag-move (grid-snapped), delete, full undo/redo (⌘Z / ⇧⌘Z) — every edit from every entry point (UI, AI, CLI, API) shares one history
 - **Sheets**: multiple sheets per project with tab switching and adding
-- **View classes (layers)**: seven display toggles — wires, symbols, reference designators, net labels, annotations, frame, grid — on the ribbon View tab (display-only; outputs always contain everything)
+- **View classes (layers)**: nine display toggles — wires, symbols, reference designators, net labels, wire numbers, harnesses, annotations, frame, grid — on the ribbon View tab (display-only; outputs always contain everything)
 - **Properties panel**: edit reference designator and part number/value of the selection
 
 ## Planned

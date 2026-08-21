@@ -8,12 +8,12 @@ Milestones toward the vision (standards-compliant, AI-first, veteran-grade, mech
 
 Command engine with full undo/redo · Canvas editor · JIS frame · parametric terminal blocks/connectors · netlist · ERC + ngspice-backed electrical verification · DC operating-point simulation · SVG/PDF/BOM/wire-list output · parts database · KiCad import · AI chat (Claude Code) · MCP/REST/CLI automation
 
-## M2 — Reference-drawing parity
+## M2 — Reference-drawing parity ✅ (mostly complete)
 
-- Revision table rendering and editing
-- Wire numbers (auto-numbering, on-drawing labels, wire-list integration)
-- Harness boundaries (dashed enclosures feeding the wire list)
-- Cross-sheet references (project-wide nets, destination zone labels)
+- Revision table rendering (canvas, SVG, PDF) and the editing dialog, with the title-block revision mark following the newest row
+- Wire numbers: net-scoped numbering (top-up / renumber), on-drawing labels with their own view class, per-net editing, wire-list column, `madake renumber` on the CLI
+- Harness boundaries: dashed enclosures with a name; enclosed wires get a harness column in the wire list
+- Cross-sheet references: project-wide nets from same-named labels, destination `/sheet.zone` addresses on the drawing, click-through in the properties panel, one net in reports and ERC
 
 ## M3 — AI-first drafting
 
