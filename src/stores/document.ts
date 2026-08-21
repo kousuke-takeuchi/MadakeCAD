@@ -3,6 +3,7 @@
 // 適用するミラーで、モデルを直接書き換えるコードを置いてはならない。
 
 import { defineStore } from "pinia";
+import { resolveSymbolDef } from "../canvas/dynamicSymbol";
 import { ipc, type Command, type Patch, type Project, type SymbolDef } from "../ipc";
 
 interface DocumentState {
@@ -29,6 +30,14 @@ export const useDocumentStore = defineStore("document", {
   }),
 
   getters: {
+    /** 静的ライブラリのid→定義Map。 */
+    symbolDefs(state): Map<string, SymbolDef> {
+      return new Map(state.symbols.map((d) => [d.id, d]));
+    },
+    /** symbol_id→定義。静的ライブラリ優先、動的ID(terminal_block_{n}p等)にフォールバック。 */
+    resolveSymbol(): (id: string) => SymbolDef | undefined {
+      return (id) => resolveSymbolDef(id, this.symbolDefs);
+    },
     activeSheet(state) {
       return (
         state.project?.sheets.find((s) => s.id === state.activeSheetId) ??

@@ -288,7 +288,7 @@ export class EditorController {
 
   private async commitPlace(at: Pt) {
     const sheet = this.store.activeSheet;
-    const def = this.store.symbols.find((s) => s.id === this.placeSymbolId);
+    const def = this.placeSymbolId ? this.store.resolveSymbol(this.placeSymbolId) : undefined;
     if (!sheet || !def) return;
     const entity: Entity = {
       kind: "symbol",
@@ -348,7 +348,7 @@ export class EditorController {
     }
     // 配置ゴースト
     if (this.tool === "place" && this.placeSymbolId) {
-      const def = this.store.symbols.find((s) => s.id === this.placeSymbolId);
+      const def = this.store.resolveSymbol(this.placeSymbolId);
       if (def) {
         const ghost: SymbolInstance = {
           id: "ghost",
@@ -384,7 +384,7 @@ export class EditorController {
             });
             ctx.stroke();
           } else if (e.kind === "symbol") {
-            const def = this.store.symbols.find((d) => d.id === e.symbol_id);
+            const def = this.store.resolveSymbol(e.symbol_id);
             const moved = { ...e, at: { x: e.at.x + this.moveDelta.x, y: e.at.y + this.moveDelta.y } };
             if (def) {
               ctx.globalAlpha = 0.5;
@@ -414,7 +414,7 @@ export class EditorController {
     if (sheet && (this.tool === "wire" || this.tool === "place")) {
       for (const e of Object.values(sheet.entities)) {
         if (e.kind !== "symbol") continue;
-        const def = this.store.symbols.find((d) => d.id === e.symbol_id);
+        const def = this.store.resolveSymbol(e.symbol_id);
         if (!def) continue;
         for (const pin of def.pins) {
           const wp = transformLocal(pin.at, e);
