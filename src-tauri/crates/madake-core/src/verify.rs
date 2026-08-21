@@ -513,7 +513,8 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
             Entity::Junction(j) => junctions.push(j.at),
             Entity::NetLabel(l) => labels.push(l.at),
             Entity::Wire(w) => wires.push(w),
-            Entity::Text(_) => {}
+            // 注記とハーネス境界は電気的な接続を持たない
+            Entity::Text(_) | Entity::Harness(_) => {}
         }
     }
     for w in &wires {

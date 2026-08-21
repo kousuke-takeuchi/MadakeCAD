@@ -160,6 +160,7 @@ pub enum Entity {
     Junction(Junction),
     NetLabel(NetLabel),
     Text(TextEntity),
+    Harness(Harness),
 }
 
 impl Entity {
@@ -170,6 +171,7 @@ impl Entity {
             Entity::Junction(e) => e.id,
             Entity::NetLabel(e) => e.id,
             Entity::Text(e) => e.id,
+            Entity::Harness(e) => e.id,
         }
     }
 
@@ -184,6 +186,11 @@ impl Entity {
             Entity::Junction(e) => e.at = e.at.translated(dx, dy),
             Entity::NetLabel(e) => e.at = e.at.translated(dx, dy),
             Entity::Text(e) => e.at = e.at.translated(dx, dy),
+            Entity::Harness(e) => {
+                for p in &mut e.points {
+                    *p = p.translated(dx, dy);
+                }
+            }
         }
     }
 }
@@ -256,6 +263,21 @@ pub struct NetLabel {
     pub name: String,
     #[serde(default)]
     pub rotation: u16,
+}
+
+/// ハーネス境界 (IEC 61082-1 のグループ囲み)。まとめて製作・購入する電線束の範囲を
+/// 破線で囲んで名前を付ける。所属するワイヤは幾何学的な内包で決まる ([`crate::harness`])。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Harness {
+    pub id: EntityId,
+    /// 囲みの頂点 (現状は矩形の4点。多角形は将来)。
+    pub points: Vec<Point>,
+    /// ハーネス名 (参照記号と同じ命名規則: W1, W2 …)。
+    #[serde(default)]
+    pub name: String,
+    /// 備考 (製作指示など)。
+    #[serde(default)]
+    pub note: String,
 }
 
 /// 自由テキスト注記。

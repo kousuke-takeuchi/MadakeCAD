@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**366仕様項目**。
+全5領域・**382仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -26,6 +26,9 @@
 - UpdateEntityはエンティティを丸ごと置換し、undoで置換前の状態に戻る。 <sub>`update_entity_undo_restores_previous_version`</sub>
 - SetTitleBlockはシートの表題欄を更新し、undoで以前の内容に戻る。 <sub>`set_title_block_is_undoable`</sub>
 - SetRevisionsは改訂欄の行を置き換え、undoで以前のリストに戻る。 <sub>`set_revisions_is_undoable`</sub>
+- ハーネス境界は通常のエンティティ用コマンドで追加・改名・削除でき、どの操作もundoで戻せる。 <sub>`harness_add_rename_delete_are_undoable`</sub>
+- ハーネス境界を移動すると4隅すべてが動き、undoで元の位置に正確に戻る。 <sub>`harness_move_and_undo_restores_every_corner`</sub>
+- ハーネス境界は kind="harness" としてJSONに往復変換でき、どのクライアントからも送れる。 <sub>`harness_command_json_roundtrip_uses_the_harness_kind`</sub>
 - execute/undo/redoのたびにドキュメントrevisionが増加し、クライアントは古いpatchを破棄できる。 <sub>`revision_increases_monotonically`</sub>
 - 存在しないシートへのCommandはエラーになり、何も変更されない。 <sub>`unknown_sheet_is_rejected`</sub>
 - 履歴が空のときのundoはエラーではなくNoneを返す。 <sub>`undo_on_empty_history_returns_none`</sub>
@@ -36,6 +39,18 @@
 - snapped()は座標を最も近いグリッドピッチ(既定2.5mm)へ丸め、すべてがピングリッドに乗る。 <sub>`snapped_rounds_to_grid_pitch`</sub>
 - translated()は平行移動したコピーを返し、元の点を変更しない。 <sub>`translated_shifts_without_mutation`</sub>
 - distance_to()はユークリッド距離である(3-4-5の直角三角形で5になる)。 <sub>`distance_is_euclidean`</sub>
+
+### ハーネス境界
+
+- ワイヤは、その全ての点が囲みの内側にあるときだけハーネスに所属する。 <sub>`a_fully_enclosed_wire_belongs_to_the_harness`</sub>
+- 境界線上に乗っているワイヤも内側として扱う (境界線そのものはハーネスに含まれる)。 <sub>`a_wire_on_the_boundary_line_still_belongs`</sub>
+- 囲みに一部だけ入っているワイヤはハーネスに所属しない。 <sub>`a_partly_overlapping_wire_does_not_belong`</sub>
+- 囲みの外に描かれたワイヤはハーネスに所属しない。 <sub>`a_wire_outside_the_boundary_does_not_belong`</sub>
+- ワイヤの所属ハーネスを引くと名前が返り、どこにも属さないワイヤでは空文字になる。 <sub>`harness_name_lookup_is_empty_for_unassigned_wires`</sub>
+- 囲みが入れ子になっているときは、そのワイヤを囲む最も小さいハーネスに所属する。 <sub>`a_nested_harness_wins_over_the_outer_one`</sub>
+- ハーネスの「含む電線」本数は、その囲みが今いくつのワイヤを囲んでいるかを表す。 <sub>`wire_count_reports_the_enclosed_wires`</sub>
+- 新しいハーネスの名前は、何も無いシートではW1、既にあるときはその次の番号になる。 <sub>`the_next_harness_name_continues_the_w_series`</sub>
+- 矩形ドラッグはどの向きに引いても同じ4隅の頂点になる。 <sub>`rect_points_normalize_the_drag_direction`</sub>
 
 ### プロジェクトファイルI/O (.mdkproj)
 
@@ -95,6 +110,7 @@
 - 部品表はシンボルを型番でまとめ、数量を集計する。 <sub>`bom_groups_by_value_and_counts`</sub>
 - カンマを含む項目は引用符で囲まれ、CSVが壊れない。 <sub>`bom_escapes_fields_with_commas`</sub>
 - 電線リストには線番の列があり、そのワイヤのネットに振られた線番が入る (未採番なら空欄)。 <sub>`wire_list_has_a_wire_number_column`</sub>
+- 電線リストにはハーネス列があり、そのワイヤを囲んでいるハーネス境界の名前が入る。 <sub>`wire_list_has_a_harness_column`</sub>
 - 電線リストには各ワイヤの品番・線色・線径・長さが載る。 <sub>`wire_list_contains_attributes`</sub>
 
 ### DCシミュレーション
@@ -123,6 +139,9 @@
 - 縦向きの配線の線番は、配線の中点の2.5mm左に描かれる。 <sub>`svg_draws_wire_number_left_of_a_vertical_wire`</sub>
 - 1つのネットの線番は、何本のワイヤで描かれていても、最も長い線分の中点に1回だけ描かれる。 <sub>`svg_draws_the_wire_number_once_on_the_longest_segment`</sub>
 - 線番の無いネットには線番テキストを一切描かない。 <sub>`svg_omits_wire_number_for_unnumbered_nets`</sub>
+- ハーネス境界は、囲んだ配線のまわりに破線の矩形 (IEC 61082-1のグループ囲み) として描かれる。 <sub>`svg_draws_a_harness_as_a_dashed_rectangle`</sub>
+- ハーネス名は囲みの左上角のすぐ外側に描かれる。 <sub>`svg_labels_the_harness_at_its_top_left_corner`</sub>
+- 名前の無いハーネスは破線の囲みだけを描き、ラベルは出さない。 <sub>`svg_omits_the_label_of_an_unnamed_harness`</sub>
 - 回転したシンボルは形状ごと回転して描かれる(90度で抵抗の本体が縦長になる)。 <sub>`svg_renders_rotated_symbol_primitives`</sub>
 
 ### シンボルライブラリ

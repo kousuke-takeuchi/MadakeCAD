@@ -691,6 +691,119 @@ mod tests {
         assert!(engine.project().sheets[0].revisions.is_empty());
     }
 
+    fn sample_harness(name: &str) -> Entity {
+        Entity::Harness(Harness {
+            id: Uuid::new_v4(),
+            points: crate::harness::rect_points(Point::new(50.0, 50.0), Point::new(150.0, 100.0)),
+            name: name.into(),
+            note: String::new(),
+        })
+    }
+
+    /// A harness boundary is added, renamed and deleted with the ordinary entity commands, and every step can be undone.
+    /// ハーネス境界は通常のエンティティ用コマンドで追加・改名・削除でき、どの操作もundoで戻せる。
+    #[test]
+    fn harness_add_rename_delete_are_undoable() {
+        let (mut engine, sheet_id) = test_engine();
+        let harness = sample_harness("W1");
+        let id = harness.id();
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: harness.clone(),
+            })
+            .unwrap();
+        assert!(engine.project().sheets[0].entities.contains_key(&id));
+
+        let mut renamed = harness.clone();
+        if let Entity::Harness(h) = &mut renamed {
+            h.name = "W2".into();
+        }
+        engine
+            .execute(Command::UpdateEntity {
+                sheet_id,
+                entity: renamed,
+            })
+            .unwrap();
+        let Entity::Harness(h) = &engine.project().sheets[0].entities[&id] else {
+            panic!("ハーネスであること")
+        };
+        assert_eq!(h.name, "W2");
+
+        engine
+            .execute(Command::DeleteEntities {
+                sheet_id,
+                ids: vec![id],
+            })
+            .unwrap();
+        assert!(!engine.project().sheets[0].entities.contains_key(&id));
+
+        engine.undo().unwrap().unwrap(); // 削除を戻す
+        engine.undo().unwrap().unwrap(); // 改名を戻す
+        let Entity::Harness(h) = &engine.project().sheets[0].entities[&id] else {
+            panic!("ハーネスであること")
+        };
+        assert_eq!(h.name, "W1");
+        engine.undo().unwrap().unwrap(); // 追加を戻す
+        assert!(engine.project().sheets[0].entities.is_empty());
+    }
+
+    /// Moving a harness boundary shifts all of its corners, and undo puts them back exactly.
+    /// ハーネス境界を移動すると4隅すべてが動き、undoで元の位置に正確に戻る。
+    #[test]
+    fn harness_move_and_undo_restores_every_corner() {
+        let (mut engine, sheet_id) = test_engine();
+        let harness = sample_harness("W1");
+        let id = harness.id();
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: harness,
+            })
+            .unwrap();
+        engine
+            .execute(Command::MoveEntities {
+                sheet_id,
+                ids: vec![id],
+                dx: 10.0,
+                dy: -5.0,
+            })
+            .unwrap();
+        let Entity::Harness(h) = &engine.project().sheets[0].entities[&id] else {
+            panic!()
+        };
+        assert_eq!(h.points[0], Point::new(60.0, 45.0));
+        assert_eq!(h.points[2], Point::new(160.0, 95.0));
+        engine.undo().unwrap().unwrap();
+        let Entity::Harness(h) = &engine.project().sheets[0].entities[&id] else {
+            panic!()
+        };
+        assert_eq!(h.points[0], Point::new(50.0, 50.0));
+    }
+
+    /// A harness boundary survives a JSON round trip with the kind tag "harness", so any client can send it.
+    /// ハーネス境界は kind="harness" としてJSONに往復変換でき、どのクライアントからも送れる。
+    #[test]
+    fn harness_command_json_roundtrip_uses_the_harness_kind() {
+        let (_, sheet_id) = test_engine();
+        let cmd = Command::AddEntity {
+            sheet_id,
+            entity: sample_harness("W1"),
+        };
+        let json = serde_json::to_string(&cmd).unwrap();
+        assert!(json.contains("\"kind\":\"harness\""), "{json}");
+        let back: Command = serde_json::from_str(&json).unwrap();
+        let Command::AddEntity {
+            entity: Entity::Harness(h),
+            ..
+        } = back
+        else {
+            panic!("ハーネスの追加コマンドに戻ること")
+        };
+        assert_eq!(h.name, "W1");
+        assert_eq!(h.points.len(), 4);
+    }
+
     /// Every execute/undo/redo increases the document revision, so clients can discard stale patches.
     /// execute/undo/redoのたびにドキュメントrevisionが増加し、クライアントは古いpatchを破棄できる。
     #[test]

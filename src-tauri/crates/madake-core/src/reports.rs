@@ -59,15 +59,17 @@ pub fn bom_csv(project: &Project) -> String {
     out
 }
 
-/// 電線リストCSV。Wireごとに1行(線番・品番なしは空欄)。
+/// 電線リストCSV。Wireごとに1行(線番・ハーネス・品番なしは空欄)。
+/// ハーネス列は、そのワイヤを完全に囲んでいるハーネス境界の名前 ([`crate::harness`])。
 pub fn wire_list_csv(project: &Project) -> String {
-    let mut out = String::from("シート,線番,電線品番,線色,線径sq,長さm\n");
+    let mut out = String::from("シート,線番,ハーネス,電線品番,線色,線径sq,長さm\n");
     for sheet in &project.sheets {
         for entity in sheet.entities.values() {
             if let Entity::Wire(w) = entity {
                 out.push_str(&csv_row(&[
                     sheet.name.clone(),
                     w.net.clone().unwrap_or_default(),
+                    crate::harness::harness_name_of_wire(sheet, w),
                     w.part_no.clone().unwrap_or_default(),
                     w.color.clone(),
                     fmt_num(w.sq),
@@ -154,9 +156,49 @@ mod tests {
             sheet.entities.insert(e.id(), e);
         }
         let csv = wire_list_csv(&project);
-        assert_eq!(csv.lines().next().unwrap(), "シート,線番,電線品番,線色,線径sq,長さm");
+        assert_eq!(csv.lines().next().unwrap(), "シート,線番,ハーネス,電線品番,線色,線径sq,長さm");
         assert!(csv.lines().any(|l| l.starts_with("Sheet1,12,")), "線番12の行: {csv}");
         assert!(csv.lines().any(|l| l.starts_with("Sheet1,,")), "未採番は空欄: {csv}");
+    }
+
+    /// The wire list has a harness column carrying the name of the harness boundary that encloses the wire.
+    /// 電線リストにはハーネス列があり、そのワイヤを囲んでいるハーネス境界の名前が入る。
+    #[test]
+    fn wire_list_has_a_harness_column() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        let inside = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(60.0, 60.0), Point::new(140.0, 60.0)],
+            color: "red".into(),
+            sq: 0.75,
+            length_m: None,
+            part_no: None,
+            net: Some("1".into()),
+        });
+        let outside = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(200.0, 200.0), Point::new(250.0, 200.0)],
+            color: "blue".into(),
+            sq: 0.75,
+            length_m: None,
+            part_no: None,
+            net: Some("2".into()),
+        });
+        let h = Entity::Harness(Harness {
+            id: Uuid::new_v4(),
+            points: crate::harness::rect_points(Point::new(50.0, 50.0), Point::new(150.0, 100.0)),
+            name: "W1".into(),
+            note: String::new(),
+        });
+        for e in [inside, outside, h] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let csv = wire_list_csv(&project);
+        assert!(csv.lines().next().unwrap().contains(",ハーネス,"), "{csv}");
+        assert!(csv.lines().any(|l| l.starts_with("Sheet1,1,W1,")), "囲まれた線: {csv}");
+        assert!(csv.lines().any(|l| l.starts_with("Sheet1,2,,")), "囲みの外は空欄: {csv}");
     }
 
     /// The wire list contains each wire's part number, color, gauge and length.
