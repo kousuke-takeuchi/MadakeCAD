@@ -1,14 +1,16 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  Activity, AlignJustify, Cable, Copy, Cpu, FileDown, FileText, Frame, Grid3x3, Hash, Image,
-  LayoutGrid, Move, MoveRight, Pencil, Route, Scissors, ShieldCheck, Tag, Trash2, Type,
+  Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileText, Frame, Grid3x3, Hash,
+  Image, LayoutGrid, Move, MoveRight, Pencil, Route, Scissors, ShieldCheck, Tag, Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
-import { inject, ref } from "vue";
+import { computed, inject, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
 import { useDocumentStore } from "../stores/document";
 import { useFileActions } from "../composables/fileActions";
+import { useRevisionsStore } from "../stores/revisions";
 import { useSimulationStore } from "../stores/simulation";
 import { useVerificationStore } from "../stores/verification";
 import type { EditorController } from "../tools/controller";
@@ -19,6 +21,8 @@ const ui = useUiStore();
 const files = useFileActions();
 const verification = useVerificationStore();
 const simulation = useSimulationStore();
+const revisions = useRevisionsStore();
+const { t } = useI18n();
 
 const activeTab = ref("回路図");
 
@@ -45,6 +49,20 @@ async function runVerification() {
   ui.log(`検証完了: エラー ${c.error} / 警告 ${c.warning} / 情報 ${c.info}`);
 }
 
+/**
+ * 改訂欄編集ダイアログを開く (IAでは「プロジェクト」タブ>シート>改訂欄。
+ * 同タブは未実装のため、実装済みの「回路図」タブの編集グループから起動する)。
+ */
+function openRevisions() {
+  const sheet = useDocumentStore().activeSheet;
+  if (!sheet) {
+    ui.log(t("revisions.noSheetLog"));
+    return;
+  }
+  revisions.openFor(sheet);
+  ui.log(t("revisions.openLog", { sheet: sheet.name }));
+}
+
 function todo(name: string) {
   ui.log(`${name}: 未実装 (今後のフェーズで対応予定)`);
 }
@@ -62,7 +80,7 @@ interface RibbonGroup {
   small: RibbonItem[][];
 }
 
-const groups: RibbonGroup[] = [
+const groups = computed<RibbonGroup[]>(() => [
   {
     name: "配線",
     big: {
@@ -101,11 +119,16 @@ const groups: RibbonGroup[] = [
       action: () => controller.setTool("select"),
       isActive: () => controller.tool === "select",
     },
-    small: [[
-      { label: "移動", icon: Move, action: () => { controller.setTool("select"); ui.log("移動: 選択してドラッグ (グリッドスナップ)"); } },
-      { label: "トリム", icon: Scissors, action: () => todo("トリム") },
-      { label: "削除", icon: Trash2, action: () => controller.deleteSelection() },
-    ]],
+    small: [
+      [
+        { label: "移動", icon: Move, action: () => { controller.setTool("select"); ui.log("移動: 選択してドラッグ (グリッドスナップ)"); } },
+        { label: "トリム", icon: Scissors, action: () => todo("トリム") },
+        { label: "削除", icon: Trash2, action: () => controller.deleteSelection() },
+      ],
+      [
+        { label: t("revisions.ribbonButton"), icon: FileClock, action: () => openRevisions() },
+      ],
+    ],
   },
   {
     name: "検証/レポート",
@@ -127,7 +150,7 @@ const groups: RibbonGroup[] = [
       ],
     ],
   },
-];
+]);
 </script>
 
 <template>

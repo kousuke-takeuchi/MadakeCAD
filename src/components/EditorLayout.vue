@@ -12,12 +12,15 @@ import LeftPanel from "./LeftPanel.vue";
 import PropertiesPanel from "./PropertiesPanel.vue";
 import RibbonBar from "./RibbonBar.vue";
 import StatusBar from "./StatusBar.vue";
+import RevisionsDialog from "./RevisionsDialog.vue";
 import SymbolPickerDialog from "./SymbolPickerDialog.vue";
 import TitleBar from "./TitleBar.vue";
 import SettingsDialog from "./settings/SettingsDialog.vue";
+import { useRevisionsStore } from "../stores/revisions";
 
 const store = useDocumentStore();
 const ui = useUiStore();
+const revisions = useRevisionsStore();
 const controller = reactive(new EditorController(store)) as EditorController;
 provide("controller", controller);
 const files = useFileActions();
@@ -38,7 +41,14 @@ async function onKeyDown(ev: KeyboardEvent) {
     ev.preventDefault();
     return;
   }
+  if (ev.key === "Escape" && revisions.open) {
+    revisions.cancel();
+    ev.preventDefault();
+    return;
+  }
   if (isEditableTarget(ev)) return;
+  // モーダル表示中はキャンバスのショートカットを走らせない
+  if (revisions.open) return;
   if (await controller.onKeyDown(ev)) ev.preventDefault();
 }
 function onKeyUp(ev: KeyboardEvent) {
@@ -74,6 +84,7 @@ onBeforeUnmount(() => {
     <StatusBar />
     <SymbolPickerDialog />
     <SettingsDialog />
+    <RevisionsDialog />
   </div>
 </template>
 

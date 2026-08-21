@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**311 specification clauses** across 5 areas.
+**324 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -431,6 +431,22 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - search stores the results from the parts API <sub>`parts store`</sub>
 - a failed search clears the results and resets loading <sub>`parts store`</sub>
+
+### revisions
+
+- adds the first row with mark A and today's date <sub>`revisions dialog store`</sub>
+- numbers a new row with the alphabet letter after the highest existing mark <sub>`revisions dialog store`</sub>
+- carries the mark from Z to AA <sub>`revisions dialog store`</sub>
+- ignores blank or non-alphabetic marks when picking the next one <sub>`revisions dialog store`</sub>
+- formats today's date as YYYY-MM-DD <sub>`revisions dialog store`</sub>
+- lists the newest revision at the top of the table <sub>`revisions dialog store`</sub>
+- edits a private draft and never touches the sheet itself <sub>`revisions dialog store`</sub>
+- saves the edited list with a single set_revisions command <sub>`revisions dialog store`</sub>
+- sends nothing when the dialog is cancelled <sub>`revisions dialog store`</sub>
+- reflects row edits and deletions in the saved list <sub>`revisions dialog store`</sub>
+- skips the command when nothing was edited <sub>`revisions dialog store`</sub>
+- drops rows left completely blank and trims the remaining text <sub>`revisions dialog store`</sub>
+- keeps the dialog open and reports the error when saving fails <sub>`revisions dialog store`</sub>
 
 ### AI settings
 
