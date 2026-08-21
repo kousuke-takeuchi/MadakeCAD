@@ -32,7 +32,265 @@ pub struct Diagnostic {
 
 /// シート1枚のERC+電気検証。
 pub fn verify_sheet(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
-    erc(sheet, symbols)
+    let mut diags = erc(sheet, symbols);
+    diags.extend(electrical(sheet, symbols));
+    diags
+}
+
+/// 銅の抵抗率 (Ω·mm²/m)。
+const COPPER_RESISTIVITY: f64 = 0.0175;
+/// 電圧降下の許容率 (電源電圧比)。
+const VOLTAGE_DROP_RATIO: f64 = 0.03;
+/// 電源電圧が読み取れないときの既定値 (V)。
+const DEFAULT_VOLTAGE: f64 = 24.0;
+
+/// sq→許容電流(A) の第一版テーブル (AVS系の慣用値)。表にないsqは直近下位を使う。
+const AMPACITY: &[(f64, f64)] = &[
+    (0.3, 7.0),
+    (0.5, 9.0),
+    (0.75, 12.0),
+    (1.25, 16.0),
+    (2.0, 22.0),
+    (3.5, 33.0),
+];
+
+fn ampacity(sq: f64) -> f64 {
+    let mut amps = AMPACITY[0].1;
+    for &(s, a) in AMPACITY {
+        if sq + 1e-9 >= s {
+            amps = a;
+        }
+    }
+    amps
+}
+
+/// 文字列先頭付近の数値を読む (例: "5A"→5, "DC24V"→24)。
+fn parse_number(s: &str) -> Option<f64> {
+    let start = s.find(|c: char| c.is_ascii_digit())?;
+    let rest = &s[start..];
+    let end = rest
+        .find(|c: char| !c.is_ascii_digit() && c != '.')
+        .unwrap_or(rest.len());
+    rest[..end].parse().ok()
+}
+
+/// 導通扱いの2ピン部品 (静的検証なのでスイッチ・接点は閉として扱う)。
+fn is_conductor(def: &SymbolDef) -> bool {
+    def.category == "switch" || def.category == "protection" || def.id.contains("contact")
+}
+
+/// 負荷 (電流を消費する部品)。
+fn is_load(def: &SymbolDef) -> bool {
+    def.category == "output" || def.id == "relay_coil" || def.id == "led"
+}
+
+fn electrical(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
+    let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let nets = extract_netlist(sheet, symbols);
+    let mut diags = Vec::new();
+    let diag = |severity: Severity, code: &str, message: String, ids: Vec<EntityId>| Diagnostic {
+        severity,
+        code: code.into(),
+        message,
+        sheet_id: sheet.id,
+        entity_ids: ids,
+    };
+
+    // (シンボルid, ピン番号) → ネット番号
+    let mut pin_net: BTreeMap<(EntityId, &str), usize> = BTreeMap::new();
+    for (ni, net) in nets.iter().enumerate() {
+        for p in &net.pins {
+            pin_net.insert((p.entity_id, p.pin.as_str()), ni);
+        }
+    }
+    // シンボルの接続先ネット一覧 (重複除去)
+    let nets_of = |s: &crate::model::SymbolInstance, def: &SymbolDef| -> Vec<usize> {
+        let mut out = BTreeSet::new();
+        for pin in &def.pins {
+            if let Some(ni) = pin_net.get(&(s.id, pin.number.as_str())) {
+                out.insert(*ni);
+            }
+        }
+        out.into_iter().collect()
+    };
+
+    // ネットごとの負荷電流合計 + 電流不明の負荷をInfo
+    let mut net_current = vec![0.0f64; nets.len()];
+    let mut source_voltage = None;
+    for e in sheet.entities.values() {
+        let Entity::Symbol(s) = e else { continue };
+        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        if def.id == "battery" && source_voltage.is_none() {
+            source_voltage = parse_number(&s.value);
+        }
+        if !is_load(def) {
+            continue;
+        }
+        let label = if s.reference.is_empty() { def.id.as_str() } else { s.reference.as_str() };
+        match s.attrs.get("current_a").and_then(|v| parse_number(v)) {
+            Some(amps) => {
+                for ni in nets_of(s, def) {
+                    net_current[ni] += amps;
+                }
+            }
+            None => diags.push(diag(
+                Severity::Info,
+                "elec.no_current_attr",
+                format!("{label}: 属性 current_a が未設定のため電流計算から除外しました"),
+                vec![s.id],
+            )),
+        }
+    }
+    let voltage = source_voltage.unwrap_or(DEFAULT_VOLTAGE);
+
+    // 電源到達性: 電源(battery)のネットから導通部品を橋渡しにBFS
+    let mut reachable = vec![false; nets.len()];
+    let mut queue: Vec<usize> = Vec::new();
+    for e in sheet.entities.values() {
+        let Entity::Symbol(s) = e else { continue };
+        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        if def.id == "battery" {
+            for ni in nets_of(s, def) {
+                if !reachable[ni] {
+                    reachable[ni] = true;
+                    queue.push(ni);
+                }
+            }
+        }
+    }
+    // 導通部品の (ネット, ネット) 橋
+    let mut bridges: Vec<Vec<usize>> = Vec::new();
+    for e in sheet.entities.values() {
+        let Entity::Symbol(s) = e else { continue };
+        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        if is_conductor(def) {
+            let ns = nets_of(s, def);
+            if ns.len() >= 2 {
+                bridges.push(ns);
+            }
+        }
+    }
+    while let Some(ni) = queue.pop() {
+        for bridge in &bridges {
+            if bridge.contains(&ni) {
+                for &other in bridge {
+                    if !reachable[other] {
+                        reachable[other] = true;
+                        queue.push(other);
+                    }
+                }
+            }
+        }
+    }
+    for e in sheet.entities.values() {
+        let Entity::Symbol(s) = e else { continue };
+        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        if !is_load(def) {
+            continue;
+        }
+        let ns = nets_of(s, def);
+        // 全く配線されていない負荷はERC(未接続ピン)に任せる
+        if ns.is_empty() {
+            continue;
+        }
+        let label = if s.reference.is_empty() { def.id.as_str() } else { s.reference.as_str() };
+        let mut pin_count = BTreeSet::new();
+        for pin in &def.pins {
+            pin_count.insert(pin.number.as_str());
+        }
+        let all_pins_wired = ns.len() >= pin_count.len().min(2);
+        if !all_pins_wired || ns.iter().any(|&ni| !reachable[ni]) {
+            diags.push(diag(
+                Severity::Warning,
+                "elec.unreachable_load",
+                format!("{label}: 電源から到達できません (断線または開路)"),
+                vec![s.id],
+            ));
+        }
+    }
+
+    // 直列経路の近似: 導通部品(ヒューズ・スイッチ・接点)越しに電流を伝播する。
+    // 橋の両側は同じ電流が流れるとみなしmaxを採る(並列分岐では過小評価になり得る第一版の割り切り)
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for bridge in &bridges {
+            let m = bridge.iter().map(|&ni| net_current[ni]).fold(0.0, f64::max);
+            for &ni in bridge {
+                if net_current[ni] + 1e-12 < m {
+                    net_current[ni] = m;
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    // ワイヤの許容電流と電圧降下
+    for (ni, net) in nets.iter().enumerate() {
+        let amps = net_current[ni];
+        if amps <= 0.0 {
+            continue;
+        }
+        for wid in &net.wire_ids {
+            let Some(Entity::Wire(w)) = sheet.entities.get(wid) else { continue };
+            if w.sq > 0.0 {
+                let cap = ampacity(w.sq);
+                if amps > cap + 1e-9 {
+                    diags.push(diag(
+                        Severity::Error,
+                        "elec.wire_ampacity",
+                        format!(
+                            "ワイヤ {}sq の許容電流 {cap}A を負荷電流 {amps}A が超えています (ネット {})",
+                            w.sq, net.name
+                        ),
+                        vec![w.id],
+                    ));
+                }
+                if let Some(len) = w.length_m {
+                    let drop = 2.0 * COPPER_RESISTIVITY * len / w.sq * amps;
+                    let limit = voltage * VOLTAGE_DROP_RATIO;
+                    if drop > limit {
+                        diags.push(diag(
+                            Severity::Warning,
+                            "elec.voltage_drop",
+                            format!(
+                                "電圧降下 {drop:.2}V が許容値 {limit:.2}V ({}Vの{}%) を超えています (ワイヤ {}m {}sq, {}A)",
+                                voltage,
+                                (VOLTAGE_DROP_RATIO * 100.0) as u32,
+                                len, w.sq, amps
+                            ),
+                            vec![w.id],
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // ヒューズ定格の簡易チェック
+    for e in sheet.entities.values() {
+        let Entity::Symbol(s) = e else { continue };
+        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        if def.id != "fuse" {
+            continue;
+        }
+        let Some(rating) = parse_number(&s.value) else { continue };
+        let label = if s.reference.is_empty() { "fuse" } else { s.reference.as_str() };
+        let max_amps = nets_of(s, def)
+            .into_iter()
+            .map(|ni| net_current[ni])
+            .fold(0.0f64, f64::max);
+        if max_amps > rating + 1e-9 {
+            diags.push(diag(
+                Severity::Warning,
+                "elec.fuse_rating",
+                format!("{label}: 負荷電流 {max_amps}A がヒューズ定格 {rating}A を超えています"),
+                vec![s.id],
+            ));
+        }
+    }
+
+    diags
 }
 
 fn near(a: &Point, b: &Point) -> bool {
@@ -352,6 +610,151 @@ mod tests {
             .collect();
         // w1右端 / w2両端(40,60側は完全に浮き) / w3左端 + w3右端(ジャンクション無しでw2の途中) 相当
         assert!(dangling.len() >= 3, "{dangling:?}");
+    }
+
+    /// battery→fuse→switch→lamp→(戻り)battery の直列回路。
+    /// lamp_attrs/fuse_value/wire_sq/戻り以外のワイヤを差し替えて各検証を試す。
+    fn series_circuit(
+        lamp_current: Option<&str>,
+        fuse_value: &str,
+        sq: f64,
+        length_m: Option<f64>,
+        skip_fuse_to_switch: bool,
+    ) -> Sheet {
+        let mut lamp = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "lamp".into(),
+            at: Point::new(190.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "L1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        if let Some(c) = lamp_current {
+            lamp.attrs.insert("current_a".into(), c.into());
+        }
+        let mut fuse = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "fuse".into(),
+            at: Point::new(100.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "F1".into(),
+            value: fuse_value.into(),
+            attrs: Default::default(),
+        };
+        fuse.value = fuse_value.into();
+        let mut entities = vec![
+            Entity::Symbol(SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: "battery".into(),
+                at: Point::new(60.0, 100.0),
+                rotation: 0,
+                mirror: false,
+                reference: "BT1".into(),
+                value: "DC24V".into(),
+                attrs: Default::default(),
+            }),
+            Entity::Symbol(fuse),
+            Entity::Symbol(SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: "switch_spst".into(),
+                at: Point::new(140.0, 100.0),
+                rotation: 0,
+                mirror: false,
+                reference: "SW1".into(),
+                value: String::new(),
+                attrs: Default::default(),
+            }),
+            Entity::Symbol(lamp),
+        ];
+        let mk_wire = |pts: &[(f64, f64)]| {
+            Entity::Wire(Wire {
+                id: Uuid::new_v4(),
+                points: pts.iter().map(|&(x, y)| Point::new(x, y)).collect(),
+                color: "red".into(),
+                sq,
+                length_m,
+                part_no: None,
+                net: None,
+            })
+        };
+        entities.push(mk_wire(&[(67.5, 100.0), (92.5, 100.0)]));
+        if !skip_fuse_to_switch {
+            entities.push(mk_wire(&[(107.5, 100.0), (132.5, 100.0)]));
+        }
+        entities.push(mk_wire(&[(147.5, 100.0), (182.5, 100.0)]));
+        entities.push(mk_wire(&[
+            (197.5, 100.0),
+            (220.0, 100.0),
+            (220.0, 140.0),
+            (40.0, 140.0),
+            (40.0, 100.0),
+            (52.5, 100.0),
+        ]));
+        sheet_with(entities)
+    }
+
+    #[test]
+    fn healthy_series_circuit_has_no_elec_findings() {
+        let diags = run(&series_circuit(Some("1.0"), "5A", 0.75, None, false));
+        let elec: Vec<_> = diags.iter().filter(|d| d.code.starts_with("elec.")).collect();
+        assert!(elec.is_empty(), "{elec:?}");
+    }
+
+    #[test]
+    fn load_cut_off_from_source_is_unreachable() {
+        // fuse→switch間のワイヤを外す: lampの両ピンは配線済みだが電源から届かない
+        let diags = run(&series_circuit(Some("1.0"), "5A", 0.75, None, true));
+        let unreachable: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code == "elec.unreachable_load")
+            .collect();
+        assert_eq!(unreachable.len(), 1, "{unreachable:?}");
+        assert!(unreachable[0].message.contains("L1"));
+    }
+
+    #[test]
+    fn overloaded_wire_and_fuse_are_flagged() {
+        // 8A負荷: 0.3sq(許容7A)超過 + ヒューズ5A定格超過
+        let diags = run(&series_circuit(Some("8"), "5A", 0.3, None, false));
+        assert!(
+            diags.iter().filter(|d| d.code == "elec.wire_ampacity").count() >= 1,
+            "{diags:?}"
+        );
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "elec.fuse_rating" && d.message.contains("F1")),
+            "{diags:?}"
+        );
+    }
+
+    #[test]
+    fn excessive_voltage_drop_is_flagged() {
+        // 10m x 0.75sq x 3A: 往復 2*0.0175*10/0.75*3 = 1.4V > 24Vの3% (0.72V)
+        let diags = run(&series_circuit(Some("3"), "10A", 0.75, Some(10.0), false));
+        assert!(
+            diags.iter().any(|d| d.code == "elec.voltage_drop"),
+            "{diags:?}"
+        );
+        // 0.5mなら降下0.07Vで問題なし
+        let ok = run(&series_circuit(Some("3"), "10A", 0.75, Some(0.5), false));
+        assert!(!ok.iter().any(|d| d.code == "elec.voltage_drop"), "{ok:?}");
+    }
+
+    #[test]
+    fn load_without_current_attr_gets_info_and_no_current_checks() {
+        let diags = run(&series_circuit(None, "5A", 0.3, Some(10.0), false));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "elec.no_current_attr" && d.severity == Severity::Info),
+            "{diags:?}"
+        );
+        assert!(!diags.iter().any(|d| d.code == "elec.wire_ampacity"));
+        assert!(!diags.iter().any(|d| d.code == "elec.voltage_drop"));
     }
 
     #[test]
