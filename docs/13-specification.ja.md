@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**311仕様項目**。
+全5領域・**324仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -431,6 +431,22 @@
 
 - searchは部品APIの結果を保持する <sub>`parts store`</sub>
 - 検索失敗時は結果を空にしloadingを戻す <sub>`parts store`</sub>
+
+### revisions
+
+- 改訂が1件も無いシートで行を追加すると、記号Aと今日の日付が入る <sub>`revisions dialog store`</sub>
+- 既に改訂がある場合、追加行の記号は既存の最大記号の次のアルファベットになる <sub>`revisions dialog store`</sub>
+- 記号がZまで進んだらAAへ繰り上がる <sub>`revisions dialog store`</sub>
+- 記号が空欄や数字だけの行があっても採番は壊れず、アルファベットの続きが入る <sub>`revisions dialog store`</sub>
+- 今日の日付はYYYY-MM-DD形式で入る <sub>`revisions dialog store`</sub>
+- 表は最新の改訂が一番上に並ぶ(図枠の改訂欄と同じ並び) <sub>`revisions dialog store`</sub>
+- ダイアログを開いてもシートの改訂は書き換わらない(編集は下書きの上だけ) <sub>`revisions dialog store`</sub>
+- 保存すると編集後の一覧を積んだset_revisionsコマンドが1回だけ送られる <sub>`revisions dialog store`</sub>
+- キャンセルするとコマンドは送られず、編集内容は捨てられる <sub>`revisions dialog store`</sub>
+- 行の削除と内容の書き換えは保存する一覧に反映される <sub>`revisions dialog store`</sub>
+- 何も編集せずに保存したときはコマンドを送らない(無駄なundo履歴を作らない) <sub>`revisions dialog store`</sub>
+- 全欄が空のまま残った行は保存時に取り除かれ、前後の空白も落とされる <sub>`revisions dialog store`</sub>
+- 保存に失敗したらダイアログは開いたままエラーを表示する <sub>`revisions dialog store`</sub>
 
 ### AI設定
 

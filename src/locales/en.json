@@ -51,5 +51,30 @@
       "toggleOnLog": "Settings: {label} turned ON",
       "toggleOffLog": "Settings: {label} turned OFF"
     }
+  },
+  "revisions": {
+    "ribbonButton": "Revisions",
+    "title": "Edit revision table",
+    "close": "Close",
+    "note": "ISO 7200 / JIS Z 8311: the table sits directly above the title block and stacks from old at the bottom to newest at the top.",
+    "hint": "Marks advance automatically (A, B, C ...). Saving runs one command (undoable) and updates the revision table and the title block Rev.",
+    "col": {
+      "mark": "Mark",
+      "date": "Date",
+      "description": "Description",
+      "by": "Approved"
+    },
+    "descriptionPlaceholder": "What changed",
+    "byPlaceholder": "Name",
+    "deleteRow": "Delete this revision",
+    "add": "+ Add revision",
+    "empty": "No revisions yet. Use \"+ Add revision\" to add the first one.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving...",
+    "openLog": "Revision table: editing \"{sheet}\"",
+    "savedLog": "Revision table: saved {count} row(s) (undo with Cmd+Z)",
+    "unchangedLog": "Revision table: closed without changes",
+    "noSheetLog": "Revision table: no sheet is open"
   }
 }

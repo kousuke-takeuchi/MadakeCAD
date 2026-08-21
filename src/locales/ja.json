@@ -51,5 +51,30 @@
       "toggleOnLog": "設定: {label}をONにしました",
       "toggleOffLog": "設定: {label}をOFFにしました"
     }
+  },
+  "revisions": {
+    "ribbonButton": "改訂欄",
+    "title": "改訂欄の編集",
+    "close": "閉じる",
+    "note": "ISO 7200 / JIS Z 8311: 表題欄の直上に、古い改訂から下へ積む(最新が最上段)",
+    "hint": "記号は自動で次のアルファベット。保存でCommand実行(undo可)、図枠の改訂欄と表題欄Rev.が更新される",
+    "col": {
+      "mark": "記号",
+      "date": "日付",
+      "description": "内容",
+      "by": "承認"
+    },
+    "descriptionPlaceholder": "変更内容",
+    "byPlaceholder": "氏名",
+    "deleteRow": "この改訂を削除",
+    "add": "+ 改訂を追加",
+    "empty": "改訂はまだありません。「+ 改訂を追加」で1件目を追加してください。",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "saving": "保存中...",
+    "openLog": "改訂欄: 「{sheet}」を編集します",
+    "savedLog": "改訂欄: {count}行を保存しました (⌘Zで元に戻せます)",
+    "unchangedLog": "改訂欄: 変更なしで閉じました",
+    "noSheetLog": "改訂欄: シートが開かれていません"
   }
 }
