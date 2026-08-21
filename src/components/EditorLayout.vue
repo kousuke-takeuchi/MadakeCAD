@@ -5,6 +5,7 @@ import { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import CanvasView from "./CanvasView.vue";
+import SimulationPanel from "./SimulationPanel.vue";
 import VerificationPanel from "./VerificationPanel.vue";
 import FileTabs from "./FileTabs.vue";
 import LeftPanel from "./LeftPanel.vue";
@@ -65,6 +66,7 @@ onBeforeUnmount(() => {
       <div class="center-col">
         <FileTabs />
         <CanvasView />
+        <SimulationPanel />
         <VerificationPanel />
       </div>
       <PropertiesPanel />

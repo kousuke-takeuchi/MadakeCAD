@@ -194,6 +194,14 @@ export interface KicadImportResult {
   };
 }
 
+/** DC動作点シミュレーションの結果。 */
+export interface SimOpResult {
+  voltage: number;
+  nets: { name: string; volts_min: number; volts_max: number; wire_ids: string[] }[];
+  components: { reference: string; entity_id: string; amps: number; watts: number }[];
+  warnings: string[];
+}
+
 export interface Diagnostic {
   severity: "error" | "warning" | "info";
   code: string;
@@ -229,6 +237,8 @@ interface Ipc {
   verify(sheetId: string | null): Promise<Diagnostic[]>;
   /** 部品DB検索 (query: 部分一致、category: 完全一致)。 */
   searchParts(query: string, category?: string): Promise<Part[]>;
+  /** DC動作点シミュレーション。openSwitchesの参照記号は開路扱い。 */
+  simulateOp(sheetId: string | null, openSwitches: string[]): Promise<SimOpResult>;
   exportSvg(sheetId: string, path: string): Promise<void>;
   exportPdf(sheetId: string, path: string): Promise<void>;
   exportBom(path: string): Promise<void>;
@@ -250,6 +260,8 @@ const tauriIpc: Ipc = {
   verify: (sheetId: string | null) => invoke<Diagnostic[]>("run_verification", { sheetId }),
   searchParts: (query: string, category?: string) =>
     invoke<Part[]>("search_parts", { query, category }),
+  simulateOp: (sheetId: string | null, openSwitches: string[]) =>
+    invoke<SimOpResult>("simulate_op", { sheetId, openSwitches }),
   exportSvg: (sheetId: string, path: string) => invoke<void>("export_svg", { sheetId, path }),
   exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
   exportBom: (path: string) => invoke<void>("export_bom", { path }),
@@ -291,6 +303,11 @@ const httpIpc: Ipc = {
   newProject: () => Promise.reject(new Error("browser mode: not supported")),
   getNetlist: (sheetId) => http<Net[]>(`/netlist?sheet_id=${sheetId}`),
   verify: (sheetId) => http<Diagnostic[]>(sheetId ? `/verify?sheet_id=${sheetId}` : "/verify"),
+  simulateOp: (sheetId, openSwitches) =>
+    http<SimOpResult>("/simulate/op", {
+      method: "POST",
+      body: JSON.stringify({ sheet_id: sheetId, open_switches: openSwitches }),
+    }),
   searchParts: (query, category) => {
     const params = new URLSearchParams();
     if (query) params.set("query", query);

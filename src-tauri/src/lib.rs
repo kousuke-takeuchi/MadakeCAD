@@ -125,6 +125,23 @@ fn import_kicad(
 }
 
 #[tauri::command]
+fn simulate_op(
+    state: State<AppState>,
+    sheet_id: Option<madake_core::SheetId>,
+    open_switches: Vec<String>,
+) -> Result<madake_core::sim::SimOpResult, String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let project = engine.project();
+    let sheet = match sheet_id {
+        Some(id) => project.sheet(id),
+        None => project.sheets.first(),
+    }
+    .ok_or("sheet not found")?;
+    madake_core::sim::simulate_op(sheet, &sheet_symbol_defs(sheet), &open_switches)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn search_parts(
     state: State<AppState>,
     query: Option<String>,
@@ -328,6 +345,7 @@ pub fn run() {
             get_netlist,
             run_verification,
             search_parts,
+            simulate_op,
             import_kicad,
             export_svg,
             export_pdf,
