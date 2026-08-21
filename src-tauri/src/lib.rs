@@ -111,6 +111,27 @@ fn export_svg(
 }
 
 #[tauri::command]
+fn run_verification(
+    state: State<AppState>,
+    sheet_id: Option<madake_core::SheetId>,
+) -> Result<Vec<madake_core::verify::Diagnostic>, String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let project = engine.project();
+    let sheets: Vec<_> = match sheet_id {
+        Some(id) => vec![project.sheet(id).ok_or_else(|| format!("sheet not found: {id}"))?],
+        None => project.sheets.iter().collect(),
+    };
+    let mut diags = Vec::new();
+    for sheet in sheets {
+        diags.extend(madake_core::verify::verify_sheet(
+            sheet,
+            &sheet_symbol_defs(sheet),
+        ));
+    }
+    Ok(diags)
+}
+
+#[tauri::command]
 fn export_pdf(
     state: State<AppState>,
     sheet_id: madake_core::SheetId,
@@ -272,6 +293,7 @@ pub fn run() {
             load_project,
             new_project,
             get_netlist,
+            run_verification,
             export_svg,
             export_pdf,
             export_bom,

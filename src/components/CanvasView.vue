@@ -32,6 +32,7 @@ function draw() {
   if (!canvas || !sheet) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
+  controller.viewSize = { w: canvas.width, h: canvas.height };
   const now = Date.now();
   const regions = overlay.activeRegions(now);
   renderSheet(ctx, sheet, store.symbols, controller.vp, {

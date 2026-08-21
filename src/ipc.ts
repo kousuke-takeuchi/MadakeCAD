@@ -162,6 +162,14 @@ export interface SymbolDef {
   pins: PinDef[];
 }
 
+export interface Diagnostic {
+  severity: "error" | "warning" | "info";
+  code: string;
+  message: string;
+  sheet_id: string;
+  entity_ids: string[];
+}
+
 export interface NetPin {
   reference: string;
   entity_id: string;
@@ -184,6 +192,8 @@ interface Ipc {
   loadProject(path: string): Promise<Patch>;
   newProject(name: string): Promise<Patch>;
   getNetlist(sheetId: string): Promise<Net[]>;
+  /** 図面検証 (ERC+電気検証)。sheetId=nullで全シート。 */
+  verify(sheetId: string | null): Promise<Diagnostic[]>;
   exportSvg(sheetId: string, path: string): Promise<void>;
   exportPdf(sheetId: string, path: string): Promise<void>;
   exportBom(path: string): Promise<void>;
@@ -201,6 +211,7 @@ const tauriIpc: Ipc = {
   loadProject: (path: string) => invoke<Patch>("load_project", { path }),
   newProject: (name: string) => invoke<Patch>("new_project", { name }),
   getNetlist: (sheetId: string) => invoke<Net[]>("get_netlist", { sheetId }),
+  verify: (sheetId: string | null) => invoke<Diagnostic[]>("run_verification", { sheetId }),
   exportSvg: (sheetId: string, path: string) => invoke<void>("export_svg", { sheetId, path }),
   exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
   exportBom: (path: string) => invoke<void>("export_bom", { path }),
@@ -239,6 +250,7 @@ const httpIpc: Ipc = {
   loadProject: (path) => http<Patch>("/load", { method: "POST", body: JSON.stringify({ path }) }),
   newProject: () => Promise.reject(new Error("browser mode: not supported")),
   getNetlist: (sheetId) => http<Net[]>(`/netlist?sheet_id=${sheetId}`),
+  verify: (sheetId) => http<Diagnostic[]>(sheetId ? `/verify?sheet_id=${sheetId}` : "/verify"),
   exportSvg: async (sheetId, path) => {
     await http("/export/svg", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
   },
