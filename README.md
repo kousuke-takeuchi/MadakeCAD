@@ -81,12 +81,14 @@ madake undo / madake redo
 
 ## 保存形式
 
-`.mdkproj` = 整形JSON(git差分可読)。KiCad `.kicad_sch` インポートはフェーズ2で対応予定。
+`.mdkproj` = 整形JSON(git差分可読)。
+
+KiCad 8/9の回路図(`.kicad_sch`)は`madake open <path.kicad_sch>`・UIの「開く」・MCPツール`import_kicad`で読み込める(ジオメトリ・表題欄・ワイヤ・ラベル・主要シンボルを変換し、未対応シンボルはスキップ報告)。KiCadと本ライブラリはシンボルのピン形状が異なるため、取り込み後は検証(ERC)で未接続を洗い出して手直しする運用。
 
 ## ロードマップ
 
 1. フェーズ0(完了): Commandエンジン、MCPサーバー、Tauri足場
-2. フェーズ1: Canvas2DエディタUI(Pencilデザイン確定後)、ネットリスト、BOM/電線リスト、PDF/SVG出力
-3. フェーズ2: 配線検証(電圧降下・線径適合)、部品DB(SQLite)、KiCadインポート
+2. フェーズ1(完了): Canvas2DエディタUI、ネットリスト、BOM/電線リスト、PDF/SVG出力、動的シンボル、表示クラス
+3. フェーズ2(完了): 検証エンジン(ERC+ngspice電気検証)、部品DB(SQLite)、KiCadインポート
 4. フェーズ3: ngspiceシミュレーション
 5. フェーズM: FreeCAD連携 — SOLIDWORKS Electrical⇔SOLIDWORKS相当の電気・機械連携。内蔵サーバーのLink API(/api/v1)+FreeCADアドオンWBで、部品の3D対応付け・3D配線ルーティング・電線長の還元を行う(spec §7)

@@ -70,9 +70,9 @@ pub enum Commands {
         /// 保存先 .mdkproj
         path: String,
     },
-    /// プロジェクトを読み込む
+    /// プロジェクトを読み込む (.mdkproj / .kicad_sch)
     Open {
-        /// 読み込む .mdkproj
+        /// 読み込むファイル (.kicad_schはKiCadインポート)
         path: String,
     },
     /// Command配列のJSONファイルを実行する (Commandエンジン経由)
@@ -149,6 +149,13 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
             Ok(format::saved(&result))
         }
         Commands::Open { path } => {
+            if path.ends_with(".kicad_sch") {
+                let result = api.import_kicad(path)?;
+                if cli.json {
+                    return Ok(pretty(&result));
+                }
+                return Ok(format::kicad_imported(&result, path));
+            }
             let patch = api.open(path)?;
             if cli.json {
                 return Ok(pretty(&patch));
@@ -262,6 +269,10 @@ mod tests {
         fn save(&self, path: &str) -> Result<Value, CliError> {
             self.record(format!("save({path})"));
             Ok(json!({ "written": path }))
+        }
+        fn import_kicad(&self, path: &str) -> Result<Value, CliError> {
+            self.record(format!("import_kicad({path})"));
+            Ok(json!({"patch": {"revision": 1}, "report": {"symbols": 0, "wires": 0, "skipped": [], "warnings": []}}))
         }
         fn open(&self, path: &str) -> Result<Value, CliError> {
             self.record(format!("open({path})"));

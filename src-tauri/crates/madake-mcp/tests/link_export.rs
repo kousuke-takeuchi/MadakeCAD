@@ -128,6 +128,50 @@ async fn verify_returns_diagnostics() {
 }
 
 #[tokio::test]
+async fn import_kicad_replaces_project_and_reports() {
+    let doc = SharedDoc::new(Engine::new(Project::new("元プロジェクト")));
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude()));
+    let parts = madake_mcp::open_parts(
+        &std::env::temp_dir().join(format!("madake-parts-kicad-{}.sqlite", std::process::id())),
+    )
+    .expect("parts db");
+    let router = madake_mcp::link_api::router(doc.clone(), Arc::clone(&agent), parts);
+
+    let sch = std::env::temp_dir().join(format!("madake-import-{}.kicad_sch", std::process::id()));
+    std::fs::write(
+        &sch,
+        r#"(kicad_sch (version 20250114) (paper "A4")
+  (title_block (title "KiCadから"))
+  (wire (pts (xy 10 10) (xy 50 10)))
+  (symbol (lib_id "Device:R") (at 60 10 0)
+    (property "Reference" "R9") (property "Value" "1k")))"#,
+    )
+    .unwrap();
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/import/kicad")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({ "path": sch.to_string_lossy() }).to_string(),
+        ))
+        .unwrap();
+    let response = router.oneshot(request).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["report"]["symbols"], 1);
+    assert_eq!(body["report"]["wires"], 1);
+    assert!(body["patch"]["revision"].is_number());
+
+    let engine = doc.engine.lock().unwrap();
+    assert_eq!(engine.project().sheets[0].title_block.title, "KiCadから");
+    std::fs::remove_file(&sch).ok();
+}
+
+#[tokio::test]
 async fn export_pdf_writes_pdf_file() {
     let doc = SharedDoc::new(Engine::new(Project::new("PDFテスト")));
     let agent = madake_mcp::agent::manager(&doc, 9310);

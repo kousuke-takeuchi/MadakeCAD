@@ -29,8 +29,20 @@ export function useFileActions() {
 
   return {
     async openProject() {
-      const path = await pickOpen([{ name: "MadakeCADプロジェクト", extensions: ["mdkproj"] }]);
+      const path = await pickOpen([
+        { name: "MadakeCADプロジェクト", extensions: ["mdkproj"] },
+        { name: "KiCad回路図", extensions: ["kicad_sch"] },
+      ]);
       if (!path) return;
+      if (path.endsWith(".kicad_sch")) {
+        const { patch, report } = await ipc.importKicad(path);
+        store.applyPatch(patch);
+        const skipped = report.skipped.length ? ` (スキップ ${report.skipped.length}種)` : "";
+        ui.log(
+          `IMPORT  KiCad回路図を読み込みました: シンボル${report.symbols} 配線${report.wires} ラベル${report.labels}${skipped}。接続は検証で確認してください`,
+        );
+        return;
+      }
       const patch = await ipc.loadProject(path);
       store.applyPatch(patch);
       ui.log(`OPEN  ${path} を開きました`);

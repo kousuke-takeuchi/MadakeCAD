@@ -221,6 +221,31 @@ pub fn project(snapshot: &Value) -> String {
 }
 
 /// `madake netlist`
+/// `madake open <path.kicad_sch>` (KiCadインポート)
+pub fn kicad_imported(result: &Value, path: &str) -> String {
+    let r = &result["report"];
+    let count = |k: &str| r[k].as_u64().unwrap_or(0);
+    let mut out = format!(
+        "KiCad回路図を読み込みました: {path}\nシンボル {} / 配線 {} / ラベル {} / ジャンクション {} / 注記 {}",
+        count("symbols"),
+        count("wires"),
+        count("labels"),
+        count("junctions"),
+        count("texts"),
+    );
+    let skipped = r["skipped"].as_array().cloned().unwrap_or_default();
+    if !skipped.is_empty() {
+        out.push_str("\nスキップ:");
+        for s in &skipped {
+            out.push_str(&format!("\n  - {}", s.as_str().unwrap_or("?")));
+        }
+    }
+    for w in r["warnings"].as_array().cloned().unwrap_or_default() {
+        out.push_str(&format!("\n⚠ {}", w.as_str().unwrap_or("")));
+    }
+    out
+}
+
 /// `madake parts`
 pub fn parts(parts: &Value) -> String {
     let rows = parts.as_array().cloned().unwrap_or_default();

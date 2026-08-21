@@ -392,6 +392,22 @@ impl MadakeMcp {
         json_ok(&serde_json::json!({ "deleted": deleted }))
     }
 
+    #[tool(
+        description = "KiCad回路図(.kicad_sch)を読み込み、現在のプロジェクトを置き換える。変換結果の要約(スキップしたシンボル等)を返す"
+    )]
+    fn import_kicad(&self, Parameters(p): Parameters<ExportPathParams>) -> Result<String, ErrorData> {
+        let input = std::fs::read_to_string(&p.path).map_err(internal)?;
+        let name = std::path::Path::new(&p.path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "KiCadインポート".into());
+        let (project, report) =
+            madake_core::kicad::import_kicad_sch(&input, &name).map_err(internal)?;
+        let patch = self.doc.engine.lock().unwrap().replace_project(project);
+        let _ = self.doc.patches.send(patch.clone());
+        json_ok(&serde_json::json!({ "patch": patch, "report": report }))
+    }
+
     #[tool(description = "直前の編集を取り消す")]
     fn undo(&self) -> Result<String, ErrorData> {
         let patch = self.doc.undo().map_err(internal)?;
