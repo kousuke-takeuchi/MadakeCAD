@@ -5,7 +5,7 @@
 // 表は最新の改訂が最上段 (図枠の改訂欄と同じ並び)。編集は下書きの上だけで行い、
 // 保存で set_revisions コマンドを1回実行する (undo一発で戻る)。
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
-import { Plus, Trash2, X } from "lucide-vue-next";
+import { Trash2, X } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { useRevisionsStore } from "../stores/revisions";
 import { useUiStore } from "../stores/ui";
@@ -102,10 +102,7 @@ async function save() {
           </div>
         </div>
 
-        <button class="btn add" @click="addRow">
-          <Plus :size="12" />
-          {{ t("revisions.add") }}
-        </button>
+        <button class="btn add" @click="addRow">{{ t("revisions.add") }}</button>
 
         <p class="caption">{{ t("revisions.hint") }}</p>
         <p v-if="revisions.error" class="error">{{ revisions.error }}</p>
