@@ -22,21 +22,23 @@
 
 ### Task 1: PartsDbコア (madake-core/parts.rs)
 
-- [ ] Step 1 (red): テスト: open→スキーマ作成+サンプル投入(新規時のみ)、upsert/get/search(部分一致・カテゴリ)、delete、wire_parts CRUD+色sq検索、再open冪等
-- [ ] Step 2 (green): rusqlite実装、cargo test グリーン、コミット
+- [x] Step 1 (red): テスト: open→スキーマ作成+サンプル投入(新規時のみ)、upsert/get/search(部分一致・カテゴリ)、delete、wire_parts CRUD+色sq検索、再open冪等
+- [x] Step 2 (green): rusqlite実装、cargo test グリーン、コミット
 
 ### Task 2: API/CLI露出
 
-- [ ] Step 1 (red): link_api統合テスト: GET/POST/DELETE /parts(一時DBパス)
-- [ ] Step 2 (green): SharedParts状態をLink API/MCP/Tauriへ配線、MCPツール、CLI `madake parts`
-- [ ] Step 3: 全テストグリーン、README/CLAUDE.md更新、コミット
+- [x] Step 1 (red): link_api統合テスト: GET/POST/DELETE /parts(一時DBパス)
+- [x] Step 2 (green): SharedParts状態をLink API/MCP/Tauriへ配線、MCPツール、CLI `madake parts`
+- [x] Step 3: 全テストグリーン、README/CLAUDE.md更新、コミット
 
 ### Task 3: UI: 部品DB検索から配置 (デザイン先行)
 
-- [ ] Step 1: Pencilデザイン: 部品挿入ダイアログに「部品DB」セクション(検索結果行: 型番・名称・メーカ・定格。選択で配置)
-- [ ] Step 2 (red): vitest: partsストア(検索)、controllerの部品付き配置(value/attrs反映)
-- [ ] Step 3 (green): ipc(parts_search)+ダイアログ実装、実機ブラウザ検証(DB部品を配置→プロパティに型番・定格)、コミット
+- [x] Step 1: Pencilデザイン: 部品挿入ダイアログに「部品DB」セクション(検索結果行: 型番・名称・メーカ・定格。選択で配置)
+- [x] Step 2 (red): vitest: partsストア(検索)、controllerの部品付き配置(value/attrs反映)
+- [x] Step 3 (green): ipc(parts_search)+ダイアログ実装、実機ブラウザ検証(DB部品を配置→プロパティに型番・定格)、コミット
 
 ## 進捗
 
-- 2026-08-21: プラン作成
+- 2026-08-21: プラン作成。Task 1〜3完了。cargo test 19スイート(コア51件)+vitest 103件+vue-tscグリーン。
+  実機検証済み: `/api/v1/parts`でサンプル検索、部品挿入ダイアログの検索「リレー」→MDK-RLY-24V行→
+  クリック配置でK1に型番MDK-RLY-24V・attrs.current_a=0.05が設定されることを確認(検証エンジンと連動)
