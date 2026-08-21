@@ -39,11 +39,11 @@
 **Interfaces:**
 - Produces: `pub enum AgentEvent { SessionStarted { session_id: String }, TextDelta { text: String }, ToolUseStarted { tool: String, input: serde_json::Value }, ToolUseFinished { tool: String, is_error: bool }, TurnCompleted { result: String, usage: Option<Usage> }, Error { message: String } }` と `pub fn parse_stream_line(line: &str) -> Option<AgentEvent>`(claude CLIのstream-json 1行→イベント。未知タイプはNone)
 
-- [ ] **Step 1: 失敗するテストを書く** — 実物のclaude出力(実装時に`claude -p "hi" --output-format stream-json --verbose`で採取してfixtures化)から: system/initでSessionStarted、assistantメッセージのtext/tool_useブロック、resultでTurnCompletedが得られること。未知行はNone
-- [ ] **Step 2: cargo test で失敗確認**
-- [ ] **Step 3: 実装**(serde_json::Valueで緩くパースし、必要フィールドのみ取り出す)
-- [ ] **Step 4: cargo test 成功確認**
-- [ ] **Step 5: コミット** `feat(agent): stream-jsonイベントパーサ`
+- [x] **Step 1: 失敗するテストを書く** — 実物のclaude出力(実装時に`claude -p "hi" --output-format stream-json --verbose`で採取してfixtures化)から: system/initでSessionStarted、assistantメッセージのtext/tool_useブロック、resultでTurnCompletedが得られること。未知行はNone
+- [x] **Step 2: cargo test で失敗確認**
+- [x] **Step 3: 実装**(serde_json::Valueで緩くパースし、必要フィールドのみ取り出す)
+- [x] **Step 4: cargo test 成功確認**
+- [x] **Step 5: コミット** `feat(agent): stream-jsonイベントパーサ`
 
 ### Task 2: ClaudeCodeCliBackend (プロセス起動+ストリーミング)
 
@@ -56,10 +56,10 @@
 - コマンド構築: `claude -p <prompt> --output-format stream-json --verbose [--resume <session>] [--model <m>] --mcp-config <一時ファイル> --allowedTools "mcp__madakecad__*" --append-system-prompt <図面コンテキスト>`。mcp-config一時ファイルは`{"mcpServers":{"madakecad":{"type":"http","url":"http://127.0.0.1:<port>/mcp"}}}`
 - 検出: `pub async fn detect(executable: Option<PathBuf>) -> Result<DetectResult>`(`claude --version`実行。PATH→設定パスの順)
 
-- [ ] **Step 1: コマンド構築の単体テスト**(引数列が正しいこと。resume/model有無の分岐)
-- [ ] **Step 2: フェイクCLIでの統合テスト**(executableをfake_claude.shにしてsend→イベント列がchannelに届く)
-- [ ] **Step 3: 実装**(tokio::process、stdout行読み→parse_stream_line→tx.send。stderrはエラーイベント化)
-- [ ] **Step 4: cargo test 成功、コミット** `feat(agent): Claude Code CLIバックエンド`
+- [x] **Step 1: コマンド構築の単体テスト**(引数列が正しいこと。resume/model有無の分岐)
+- [x] **Step 2: フェイクCLIでの統合テスト**(executableをfake_claude.shにしてsend→イベント列がchannelに届く)
+- [x] **Step 3: 実装**(tokio::process、stdout行読み→parse_stream_line→tx.send。stderrはエラーイベント化)
+- [x] **Step 4: cargo test 成功、コミット** `feat(agent): Claude Code CLIバックエンド`
 
 ### Task 3: 会話マネージャ (セッション・undo追跡・履歴永続化)
 
@@ -70,8 +70,8 @@
 - Produces: `pub struct Conversation { pub id: Uuid, pub session_id: Option<String>, pub messages: Vec<ChatMessage>, pub model: Option<String> }`、`ChatMessage { role, text, tool_calls: Vec<ToolCall>, applied_revisions: (u64, u64) }`(ターン開始/終了時のEngine revisionを記録→「元に戻す」= (end-start)回undo)
 - 永続化: `save_chat(path, &[Conversation])` / `load_chat(path)`(整形JSON。プロジェクト保存パスの隣に`<stem>.chat.json`)
 
-- [ ] **Step 1: 失敗するテスト**(revision追跡: ターン中に3コマンド→applied_revisions差が3。JSONラウンドトリップ)
-- [ ] **Step 2-4: 赤→実装→緑、コミット** `feat(agent): 会話マネージャとチャット履歴永続化`
+- [x] **Step 1: 失敗するテスト**(revision追跡: ターン中に3コマンド→applied_revisions差が3。JSONラウンドトリップ)
+- [x] **Step 2-4: 赤→実装→緑、コミット** `feat(agent): 会話マネージャとチャット履歴永続化`
 
 ### Task 4: Tauri/Link API統合 (agentコマンドとイベント配信)
 
@@ -84,8 +84,8 @@
 - AgentEventは`agent:event`イベント(Tauri emit)+SSEで配信。payload: `{conversation_id, event}`
 - 図面コンテキスト: send時に`--append-system-prompt`へ「アクティブシートid・シート一覧・ネット数」を要約して渡す(設定「図面自動読み取り」ON時)
 
-- [ ] **Step 1: ビルド+フェイクCLIでのスモーク**(agent_send→agent:eventが流れる)
-- [ ] **Step 2: コミット** `feat: エージェントをIPC/Link APIに公開`
+- [x] **Step 1: ビルド+フェイクCLIでのスモーク**(agent_send→agent:eventが流れる)
+- [x] **Step 2: コミット** `feat: エージェントをIPC/Link APIに公開`
 
 ### Task 5: フロント チャットストア (イベントリデューサ)
 
@@ -97,7 +97,7 @@
 - `applyAgentEvent(event)`: TextDelta連結、ToolUseStarted→チップ(running)、Finished→✓/✗、TurnCompleted→applied表示
 - vitestでイベント列→メッセージ状態を検証(ストリーミング途中/完了/エラー)
 
-- [ ] TDD一式、コミット `feat(ui): チャットストア`
+- [x] TDD一式、コミット `feat(ui): チャットストア`
 
 ### Task 6: ChatPanel UI (デザイン準拠フル実装)
 
@@ -112,7 +112,7 @@
 - ModelPicker: プロバイダ別グループ(A1はAnthropicのみ+今後の枠)。`--model`へ反映
 - Enter送信/Shift+Enter改行。ストリーミング中はローダ表示+キャンセル
 
-- [ ] 実装→ブラウザ検証(localhost:1420+フェイクCLI)でスクリーンショット確認、コミット `feat(ui): AIチャットパネル`
+- [x] 実装→ブラウザ検証(localhost:1420+フェイクCLI)でスクリーンショット確認、コミット `feat(ui): AIチャットパネル`
 
 ### Task 7: エージェント編集オーバーレイ (キャンバスアニメーション)
 
@@ -124,7 +124,7 @@
 - `class AgentOverlay { noteToolStart(tool, input): void; noteEntityUpserted(entity): void; activeRegions(now): Region[] }` — ToolUseStarted/patchから対象領域(bbox+マージン)を算出し、開始〜完了+1.5秒までパルス表示(sinで透明度0.1〜0.25)。ラベルチップ「⚡ エージェントが編集中...」
 - requestAnimationFrameはストリーミング中のみ回す(アイドル時のGPU消費ゼロ)
 
-- [ ] bbox算出の単体テスト(wire/symbolから領域)→実装→ブラウザ検証、コミット `feat(ui): エージェント編集オーバーレイ`
+- [x] bbox算出の単体テスト(wire/symbolから領域)→実装→ブラウザ検証、コミット `feat(ui): エージェント編集オーバーレイ`
 
 ### Task 8: madake CLI (ターミナルツール)
 
@@ -138,8 +138,8 @@
 - 接続先は`--port`(既定9310)。アプリ未起動時は明確なエラー
 - reqwest blockingでLink APIを叩くだけの薄いクライアント。出力はJSON(--json)または表形式
 
-- [ ] コマンド構築/出力整形の単体テスト→実機アプリ相手のスモーク(status/netlist/export svg)→コミット `feat(cli): madakeコマンド`
-- [ ] README/CLAUDE.mdにCLIの使い方を追記
+- [x] コマンド構築/出力整形の単体テスト→実機アプリ相手のスモーク(status/netlist/export svg)→コミット `feat(cli): madakeコマンド`
+- [x] README/CLAUDE.mdにCLIの使い方を追記
 
 ### Task 9: 設定の最小実装 (A1範囲)
 
@@ -147,7 +147,7 @@
 - Modify: `src-tauri/src/lib.rs`(アプリ設定: claude実行パス・自動適用・図面自動読み取り。`~/.madakecad/settings.json`)
 - Create: `src/components/settings/`(設定ダイアログはA1では「エージェント」タブのClaude欄+動作トグルのみ。他タブはプレースホルダ)
 
-- [ ] 設定の保存/読込テスト→UI接続→コミット `feat: AI設定(最小)`
+- [x] 設定の保存/読込テスト→UI接続→コミット `feat: AI設定(最小)`
 
 ## 検証 (受け入れ条件)
 

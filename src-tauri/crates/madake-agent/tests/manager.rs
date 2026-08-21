@@ -222,9 +222,13 @@ async fn turn_records_applied_revisions_and_emits_turn_applied() {
         Some(AgentEvent::TurnApplied {
             start_revision,
             end_revision,
+            start_undo_depth,
+            end_undo_depth,
         }) => {
             assert_eq!(*start_revision, turn.applied_revisions.start);
             assert_eq!(*end_revision, turn.applied_revisions.end);
+            assert_eq!(*start_undo_depth, turn.applied_undo_depth.start);
+            assert_eq!(*end_undo_depth, turn.applied_undo_depth.end);
         }
         other => panic!("最後はTurnAppliedのはず: {other:?}"),
     }
