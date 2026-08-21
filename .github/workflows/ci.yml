@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # madake-cad (Tauri shell) is excluded: it needs webkit system libs and has no tests of its own
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test -p madake-core -p madake-mcp -p madake-agent -p madake-cli
+
+  frontend:
+    name: Frontend tests & types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run
+      - run: npx vue-tsc --noEmit
+
+  spec:
+    name: Spec docs freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The Detailed Specification is generated from tests; it must be committed up to date
+      - run: python3 scripts/gen_spec.py --check

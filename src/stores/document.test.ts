@@ -23,7 +23,8 @@ function testProject(): Project {
 describe("document store", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it("applies entity_upserted and entity_removed patches", () => {
+  // ja: entity_upserted / entity_removed パッチがミラーのシートを更新する
+  it("entity_upserted / entity_removed patches update the mirrored sheet", () => {
     const store = useDocumentStore();
     store.project = testProject();
     store.applyPatch({
@@ -45,7 +46,8 @@ describe("document store", () => {
     expect(store.project!.sheets[0].entities["e1"]).toBeUndefined();
   });
 
-  it("replaces whole project on project_replaced", () => {
+  // ja: project_replacedでミラーのプロジェクト全体が置き換わる
+  it("project_replaced swaps the whole mirrored project", () => {
     const store = useDocumentStore();
     store.applyPatch({
       revision: 5,
@@ -60,7 +62,8 @@ describe("document store", () => {
     expect(store.revision).toBe(5);
   });
 
-  it("adds and removes sheets, preserving order", () => {
+  // ja: シート追加・削除のパッチは並び順を保つ
+  it("sheet add/remove patches keep sheet order", () => {
     const store = useDocumentStore();
     store.project = testProject();
     const s2: Sheet = { ...testProject().sheets[0], id: "s2", name: "TB2" };
@@ -70,7 +73,8 @@ describe("document store", () => {
     expect(store.project!.sheets.map((s) => s.id)).toEqual(["s2"]);
   });
 
-  it("updates sheet meta without touching entities", () => {
+  // ja: シートメタ更新のパッチはエンティティに触れない
+  it("sheet-meta patches never touch the entities", () => {
     const store = useDocumentStore();
     store.project = testProject();
     store.project.sheets[0].entities["e1"] = {
@@ -84,7 +88,8 @@ describe("document store", () => {
     expect(store.project!.sheets[0].entities["e1"]).toBeTruthy();
   });
 
-  it("ignores stale patches with older revision", () => {
+  // ja: 古いrevisionのパッチは破棄される(二重配信しても安全)
+  it("patches with an older revision are discarded (duplicate delivery is safe)", () => {
     const store = useDocumentStore();
     store.project = testProject();
     store.applyPatch({

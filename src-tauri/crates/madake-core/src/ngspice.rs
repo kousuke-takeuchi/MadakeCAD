@@ -128,6 +128,8 @@ pub fn run_op(exe: &Path, deck: &str) -> Result<BTreeMap<String, f64>, NgspiceEr
 mod tests {
     use super::*;
 
+    /// The ngspice 'print all' output parses into node voltages (v(n1) -> n1) and branch currents (v1#branch), ignoring noise lines.
+    /// ngspiceの'print all'出力はノード電圧(v(n1)→n1)と枝電流(v1#branch)に解釈され、無関係な行は無視される。
     #[test]
     fn parse_print_all_reads_nodes_and_branches() {
         let out = "\
@@ -144,6 +146,8 @@ some noise line
         assert_eq!(map.len(), 3, "{map:?}");
     }
 
+    /// The ngspice executable is located by priority: MADAKE_NGSPICE env var, then PATH, then OS default install paths; a missing env path falls through.
+    /// ngspiceの実行ファイルは MADAKE_NGSPICE環境変数→PATH→OS既定パス の優先順で探索され、存在しないenv指定は次へフォールバックする。
     #[test]
     fn find_in_prefers_env_then_path_then_candidates() {
         let dir = std::env::temp_dir().join(format!("madake-ng-{}", std::process::id()));
@@ -172,6 +176,8 @@ some noise line
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// Running a DC operating point on a 24 V / 6+6 ohm divider yields 12 V at the midpoint and 2 A of source current (requires ngspice; skipped otherwise).
+    /// 24V・6+6Ωの分圧回路のDC動作点は中点12V・電源電流2Aになる(ngspice必須。未導入時はスキップ)。
     #[test]
     fn run_op_solves_a_divider_when_ngspice_is_installed() {
         let Some(exe) = find_ngspice() else {

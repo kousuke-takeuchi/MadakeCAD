@@ -16,7 +16,8 @@ const diag = (severity: Diagnostic["severity"], code: string): Diagnostic => ({
 describe("verification store", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it("runで診断を取得しパネルを開く。件数はseverity別に数える", async () => {
+  // ja: runで診断を取得してパネルを開き、severity別に件数を数える
+  it("run fetches diagnostics, opens the panel, and counts by severity", async () => {
     const store = useVerificationStore();
     vi.spyOn(ipc, "verify").mockResolvedValue([
       diag("error", "erc.duplicate_reference"),
@@ -30,7 +31,8 @@ describe("verification store", () => {
     expect(store.counts).toEqual({ error: 1, warning: 2, info: 1 });
   });
 
-  it("closeでパネルを閉じ、診断は保持する", async () => {
+  // ja: closeはパネルを閉じるが診断は保持する
+  it("close hides the panel but keeps the diagnostics", async () => {
     const store = useVerificationStore();
     vi.spyOn(ipc, "verify").mockResolvedValue([diag("error", "x")]);
     await store.run(null);
@@ -39,7 +41,8 @@ describe("verification store", () => {
     expect(store.diagnostics).toHaveLength(1);
   });
 
-  it("取得失敗時はrunningが戻り診断は空のまま", async () => {
+  // ja: 取得失敗時はrunningが戻り、診断は空のまま
+  it("a failed run resets the running flag and leaves diagnostics empty", async () => {
     const store = useVerificationStore();
     vi.spyOn(ipc, "verify").mockRejectedValue(new Error("down"));
     await expect(store.run(null)).rejects.toThrow("down");

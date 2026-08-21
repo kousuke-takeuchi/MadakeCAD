@@ -483,6 +483,8 @@ mod tests {
         sheet.entities.values().collect()
     }
 
+    /// KiCad import converts paper size, title block, wires, junctions, labels (power symbols become net labels) and text.
+    /// KiCadインポートは用紙サイズ・表題欄・配線・ジャンクション・ラベル(電源シンボルはネットラベル化)・テキストを変換する。
     #[test]
     fn imports_paper_title_block_and_geometry() {
         let (project, report) = import_kicad_sch(FIXTURE, "テスト").unwrap();
@@ -516,6 +518,8 @@ mod tests {
         );
     }
 
+    /// Known lib_ids map to our symbols (Device:R -> resistor, Conn_01x03 -> connector_3p) keeping designator/value/rotation/mirror; unknown symbols are skipped and itemized in the report.
+    /// 既知のlib_idは本ライブラリへ対応付けられ(Device:R→抵抗、Conn_01x03→connector_3p)、参照記号・値・回転・ミラーが保たれる。未知のシンボルはスキップされレポートに列挙される。
     #[test]
     fn maps_symbols_and_reports_skipped() {
         let (project, report) = import_kicad_sch(FIXTURE, "t").unwrap();
@@ -547,6 +551,8 @@ mod tests {
         );
     }
 
+    /// A file that is not a kicad_sch document is rejected with a clear error.
+    /// kicad_sch文書でないファイルは明確なエラーで拒否される。
     #[test]
     fn rejects_non_schematic() {
         assert_eq!(
@@ -555,6 +561,8 @@ mod tests {
         );
     }
 
+    /// The S-expression parser reads atoms, quoted strings, numbers and nested lists with typed accessors.
+    /// S式パーサはアトム・クォート文字列・数値・入れ子リストを読み、型付きアクセサで取り出せる。
     #[test]
     fn parses_atoms_strings_numbers_and_nesting() {
         let e = parse_sexpr(r#"(kicad_sch (version 20250114) (paper "A4") (at 12.7 -25.4 90))"#)
@@ -568,6 +576,8 @@ mod tests {
         assert_eq!(at.arg_num(2), Some(90.0));
     }
 
+    /// Escaped quotes/newlines and multibyte (Japanese) text inside strings parse correctly.
+    /// 文字列内のエスケープ(引用符・改行)と日本語などのマルチバイト文字を正しく解釈する。
     #[test]
     fn parses_escaped_strings_and_multibyte() {
         let e = parse_sexpr(r#"(title_block (title "動力\"系統\"図") (comment 1 "改訂\nA"))"#)
@@ -579,6 +589,8 @@ mod tests {
         assert_eq!(e.child("comment").unwrap().arg_str(1), Some("改訂\nA"));
     }
 
+    /// children(name) iterates every child list with the given head symbol.
+    /// children(name)は指定した先頭シンボルを持つ子リストをすべて列挙する。
     #[test]
     fn children_iterates_all_matches() {
         let e = parse_sexpr("(root (wire (a)) (junction) (wire (b)))").unwrap();
@@ -587,6 +599,8 @@ mod tests {
         assert_eq!(e.children("label").count(), 0);
     }
 
+    /// Unbalanced parentheses and unterminated strings are reported as syntax errors with a position.
+    /// 括弧の不整合や閉じていない文字列は、位置付きの構文エラーとして報告される。
     #[test]
     fn syntax_errors_are_reported() {
         assert!(matches!(parse_sexpr("(a (b)"), Err(KicadError::Syntax(_, _))));

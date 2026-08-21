@@ -5,7 +5,8 @@ import type { SymbolDef } from "../ipc";
 import { dynamicSymbol, resolveSymbolDef } from "./dynamicSymbol";
 
 describe("dynamicSymbol", () => {
-  it("connector_2p は旧静的定義と同一のピン座標", () => {
+  // ja: connector_2pは旧静的定義と同一のピン座標を持つ
+  it("connector_2p has the same pin coordinates as the legacy static definition", () => {
     const def = dynamicSymbol("connector_2p");
     expect(def).not.toBeNull();
     expect(def!.ref_prefix).toBe("J");
@@ -15,7 +16,8 @@ describe("dynamicSymbol", () => {
     ]);
   });
 
-  it("terminal_block_3p は3端子x左右2接続点、中央揃え・2.5mmグリッド上", () => {
+  // ja: terminal_block_3pは3端子×左右2接続点で、中央揃え・2.5mmグリッド上にある
+  it("terminal_block_3p has 3 terminals with left/right points, centered on the 2.5 mm grid", () => {
     const def = dynamicSymbol("terminal_block_3p");
     expect(def).not.toBeNull();
     expect(def!.ref_prefix).toBe("TB");
@@ -32,7 +34,8 @@ describe("dynamicSymbol", () => {
     }
   });
 
-  it("不正なIDはnull", () => {
+  // ja: 不正な動的IDはnullになる
+  it("malformed dynamic ids return null", () => {
     expect(dynamicSymbol("connector_0p")).toBeNull();
     expect(dynamicSymbol("connector_51p")).toBeNull();
     expect(dynamicSymbol("connector_p")).toBeNull();
@@ -42,7 +45,8 @@ describe("dynamicSymbol", () => {
 });
 
 describe("resolveSymbolDef", () => {
-  it("静的Mapを優先し、無ければ動的生成にフォールバックする", () => {
+  // ja: 静的定義を優先し、無ければ動的生成にフォールバックする
+  it("static definitions win; unknown ids fall back to dynamic generation", () => {
     const staticDef = { id: "resistor" } as SymbolDef;
     const defs = new Map([["resistor", staticDef]]);
     expect(resolveSymbolDef("resistor", defs)).toBe(staticDef);

@@ -87,6 +87,8 @@ fn run_turn_between(conv: &mut Conversation, start: DocState, end: DocState) {
     );
 }
 
+/// Each turn records the engine revision range it spanned, for display and debugging.
+/// 各ターンは跨いだエンジンrevision範囲を記録する(表示・デバッグ用)。
 #[test]
 fn turn_records_engine_revision_range() {
     let mut conv = Conversation::new();
@@ -107,11 +109,8 @@ fn turn_records_engine_revision_range() {
     assert!(assistant.has_edits());
 }
 
-/// ターン中にundoが混ざるとrevisionは進むが深さは戻る。undo回数は深さ増分が正。
-///
-/// 例: エージェントが3コマンド実行し、うち1回をMCPのundoツールで戻した
-/// (あるいはユーザーがUIで1編集+1undoを挟んだ)ターン。
-/// revision差は4だが、実際に積まれているのは2コマンドしかない。
+/// The turn's undo count is the undo-stack depth delta, not the revision delta (undo/redo also advance revisions).
+/// ターンのundo回数はrevision差分ではなくundoスタック深さの増分で数える(undo/redoでもrevisionは進むため)。
 #[test]
 fn undo_count_uses_undo_stack_depth_not_revision_delta() {
     let mut conv = Conversation::new();
@@ -130,7 +129,8 @@ fn undo_count_uses_undo_stack_depth_not_revision_delta() {
     );
 }
 
-/// ターン中の編集が全てundoされていれば「編集なし」扱いになる。
+/// A turn whose edits were all undone during the turn counts as having no edits.
+/// ターン中に編集がすべてundoされた場合、そのターンは編集なしとして扱われる。
 #[test]
 fn turn_whose_edits_were_all_undone_has_no_edits() {
     let mut conv = Conversation::new();
@@ -141,7 +141,8 @@ fn turn_whose_edits_were_all_undone_has_no_edits() {
     assert!(!assistant.has_edits());
 }
 
-/// 巻き戻しの記録は実行できた回数だけ反映される(途中失敗時の過剰undo防止)。
+/// When an undo rollback stops midway, only the completed undo count is recorded.
+/// 巻き戻しが途中で止まった場合、完了したundo回数だけが記録される。
 #[test]
 fn record_undone_applies_only_the_completed_count() {
     let mut conv = Conversation::new();
@@ -159,6 +160,8 @@ fn record_undone_applies_only_the_completed_count() {
     );
 }
 
+/// A text-only turn (no document edits) has an undo count of zero.
+/// テキストのみのターン(図面編集なし)のundo回数はゼロ。
 #[test]
 fn turn_without_edits_has_zero_undo_count() {
     let mut conv = Conversation::new();
@@ -181,6 +184,8 @@ fn turn_without_edits_has_zero_undo_count() {
     assert!(!assistant.has_edits());
 }
 
+/// A turn collects the streamed text, the tool calls, and the CLI session id.
+/// ターンはストリームされたテキスト・ツール実行・CLIセッションIDを収集する。
 #[test]
 fn turn_collects_text_tool_calls_and_session() {
     let mut conv = Conversation::new();
@@ -201,6 +206,8 @@ fn turn_collects_text_tool_calls_and_session() {
     assert!(assistant.error.is_none());
 }
 
+/// A second turn appends to the conversation and resumes the same CLI session.
+/// 2回目のターンは会話に追記され、同じCLIセッションを再開する。
 #[test]
 fn second_turn_appends_messages_and_reuses_session() {
     let mut conv = Conversation::new();
@@ -216,6 +223,8 @@ fn second_turn_appends_messages_and_reuses_session() {
     assert_eq!(conv.session_id.as_deref(), Some("sess-1"));
 }
 
+/// An error event is recorded on the current turn's message.
+/// エラーイベントは現在ターンのメッセージに記録される。
 #[test]
 fn error_event_is_recorded_on_current_turn() {
     let mut conv = Conversation::new();
@@ -237,6 +246,8 @@ fn error_event_is_recorded_on_current_turn() {
     );
 }
 
+/// Chat history saves as pretty JSON and loads back identically.
+/// チャット履歴は整形JSONで保存され、同一内容で読み戻せる。
 #[test]
 fn chat_file_roundtrip_is_pretty_json() {
     let dir = temp_dir();
@@ -258,6 +269,8 @@ fn chat_file_roundtrip_is_pretty_json() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// A chat file from a newer format version is rejected rather than silently mangled.
+/// 新しいformat_versionのチャットファイルは黙って壊さず拒否する。
 #[test]
 fn load_chat_rejects_newer_format_version() {
     let dir = temp_dir();
@@ -279,7 +292,8 @@ fn load_chat_rejects_newer_format_version() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// 保存中にクラッシュしても既存ファイルが壊れないよう、一時ファイル→renameで書く。
+/// Chat saving writes atomically (temp file + rename) and leaves no temp file behind.
+/// チャット保存はアトミック(一時ファイル+リネーム)で、一時ファイルを残さない。
 #[test]
 fn save_chat_writes_atomically_and_leaves_no_temp_file() {
     let dir = temp_dir();
@@ -300,6 +314,8 @@ fn save_chat_writes_atomically_and_leaves_no_temp_file() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Loading chat history when no file exists yields an empty history.
+/// チャットファイルが無い場合は空の履歴として読み込まれる。
 #[test]
 fn load_chat_of_missing_file_is_empty() {
     let dir = temp_dir();
@@ -308,8 +324,8 @@ fn load_chat_of_missing_file_is_empty() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// 会話履歴の相対時刻表示("8分前"等)の元になる値。作成時に入り、
-/// ターンの開始・イベント反映のたびに進む。
+/// Conversations get an updated_at timestamp on creation that advances with each turn.
+/// 会話は作成時にupdated_atを持ち、ターンごとに進む。
 #[test]
 fn updated_at_is_set_on_creation_and_advances_with_the_turn() {
     let mut conv = Conversation::new();
@@ -330,7 +346,8 @@ fn updated_at_is_set_on_creation_and_advances_with_the_turn() {
     assert!(conv.updated_at > 0, "イベント反映で更新されること");
 }
 
-/// `updated_at`を持たない旧`chat.json`も読めること(時刻不明の`0`になる)。
+/// Legacy chat files without updated_at load with a sensible default.
+/// updated_atの無い旧チャットファイルは妥当な既定値で読み込まれる。
 #[test]
 fn load_chat_defaults_updated_at_for_legacy_files() {
     let dir = temp_dir();
@@ -355,6 +372,8 @@ fn load_chat_defaults_updated_at_for_legacy_files() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// The chat file lives next to the project file as <name>.chat.json.
+/// チャットファイルはプロジェクトの隣に<名前>.chat.jsonとして置かれる。
 #[test]
 fn chat_path_sits_next_to_project_file() {
     assert_eq!(

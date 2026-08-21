@@ -8,14 +8,16 @@ describe("ui store: 左ドックのタブとチャット下書き", () => {
     setActivePinia(createPinia());
   });
 
-  it("既定はプロジェクトタブ + チャット折りたたみ", () => {
+  // ja: 既定はプロジェクトタブ+チャット折りたたみ
+  it("defaults are the project tab with the chat collapsed", () => {
     const ui = useUiStore();
     const chat = useChatStore();
     expect(ui.leftPanelTab).toBe("project");
     expect(chat.panelOpen).toBe("collapsed");
   });
 
-  it("openAgentTabでエージェントタブとpanelOpen=expandedが同時に立つ", () => {
+  // ja: openAgentTabでエージェントタブ切替とチャット展開が同時に行われる
+  it("openAgentTab switches to the agent tab and expands the chat together", () => {
     const ui = useUiStore();
     const chat = useChatStore();
     ui.openAgentTab();
@@ -23,7 +25,8 @@ describe("ui store: 左ドックのタブとチャット下書き", () => {
     expect(chat.panelOpen).toBe("expanded");
   });
 
-  it("closeAgentTabでプロジェクトタブへ戻り、panelOpenも畳まれる", () => {
+  // ja: closeAgentTabでプロジェクトタブへ戻り、チャットも畳まれる
+  it("closeAgentTab returns to the project tab and collapses the chat", () => {
     const ui = useUiStore();
     const chat = useChatStore();
     ui.openAgentTab();
@@ -32,7 +35,8 @@ describe("ui store: 左ドックのタブとチャット下書き", () => {
     expect(chat.panelOpen).toBe("collapsed");
   });
 
-  it("chatDraftはsetChatDraftで更新され、ドックと浮きカードで共有される", () => {
+  // ja: チャット下書きはドックと浮きカードで共有される
+  it("the chat draft is shared between the dock and the floating card", () => {
     const ui = useUiStore();
     ui.setChatDraft("24V系にヒューズを追加して");
     expect(ui.chatDraft).toBe("24V系にヒューズを追加して");
@@ -42,14 +46,16 @@ describe("ui store: 左ドックのタブとチャット下書き", () => {
 });
 
 describe("表示クラス (レイヤ)", () => {
-  it("既定は全クラス表示", () => {
+  // ja: 既定では全表示クラスが表示される
+  it("all view classes are visible by default", () => {
     const ui = useUiStore();
     expect(ui.isClassVisible("wires")).toBe(true);
     expect(ui.isClassVisible("grid")).toBe(true);
     expect(ui.isClassVisible("frame")).toBe(true);
   });
 
-  it("toggleViewClassで非表示と再表示を切り替える", () => {
+  // ja: toggleViewClassで表示クラスの非表示・再表示を切り替える
+  it("toggleViewClass hides and re-shows a class", () => {
     const ui = useUiStore();
     ui.toggleViewClass("texts");
     expect(ui.isClassVisible("texts")).toBe(false);

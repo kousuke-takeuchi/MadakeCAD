@@ -628,6 +628,8 @@ mod tests {
         verify_sheet(sheet, &sheet_symbol_defs(sheet))
     }
 
+    /// A fully wired circuit produces no ERC findings.
+    /// 完全に結線された回路ではERCの指摘は出ない。
     #[test]
     fn fully_wired_pair_has_no_erc_findings() {
         // R1-R2を両端とも配線: ERC指摘なし
@@ -643,6 +645,8 @@ mod tests {
         assert!(erc.is_empty(), "{erc:?}");
     }
 
+    /// Unconnected pins are reported as one warning per symbol, listing the affected pin numbers.
+    /// 未接続ピンはシンボルごとに1件の警告として、該当ピン番号を列挙して報告される。
     #[test]
     fn unconnected_pins_are_reported_per_symbol() {
         // R1のピン2のみ配線 → ピン1が未接続。ワイヤの反対側は R2 ピン1 に接続
@@ -662,6 +666,8 @@ mod tests {
         assert!(unconn.iter().any(|d| d.message.contains("R1") && d.message.contains("1")));
     }
 
+    /// A terminal-block terminal counts as connected if either its left or right side is wired.
+    /// 端子台の端子は左右どちらか一方が結線されていれば接続済みとみなす。
     #[test]
     fn terminal_block_terminal_counts_connected_if_either_side_wired() {
         // 端子台2極: 端子1は左側のみ配線(接続扱い)、端子2は未配線(未接続)
@@ -685,6 +691,8 @@ mod tests {
         assert!(!unconn[0].message.contains("端子番号 1"), "{}", unconn[0].message);
     }
 
+    /// Missing and duplicate reference designators are flagged, but relay coil + contacts legitimately share one designator.
+    /// 参照記号の未設定・重複は指摘されるが、リレーのコイル+接点が同じ記号を共有するのは正当として許容される。
     #[test]
     fn empty_and_duplicate_references_are_flagged_but_relays_allowed() {
         let sheet = sheet_with(vec![
@@ -711,6 +719,8 @@ mod tests {
         assert!(!diags.iter().any(|d| d.code == "erc.duplicate_reference" && d.message.contains("K1")));
     }
 
+    /// Wire ends attached to nothing are flagged, including an endpoint resting mid-wire without a junction dot.
+    /// どこにも接続されていないワイヤ端点は指摘される(ジャンクション無しで他ワイヤの途中に乗る端点も含む)。
     #[test]
     fn dangling_wire_end_is_flagged_including_missing_junction() {
         // w1は左端がR1ピンに接続、右端が空中 → 宙ぶらりん
@@ -814,6 +824,8 @@ mod tests {
         sheet_with(entities)
     }
 
+    /// A healthy series circuit (source, fuse, switch, lamp) raises no electrical findings.
+    /// 健全な直列回路(電源・ヒューズ・スイッチ・ランプ)では電気検証の指摘は出ない。
     #[test]
     fn healthy_series_circuit_has_no_elec_findings() {
         let diags = run(&series_circuit(Some("1.0"), "5A", 0.75, None, false));
@@ -825,6 +837,8 @@ mod tests {
         assert!(elec.is_empty(), "{elec:?}");
     }
 
+    /// A load cut off from the power source (broken wire or open path) is reported as unreachable.
+    /// 電源から切り離された負荷(断線・開路)は「到達不能」として報告される。
     #[test]
     fn load_cut_off_from_source_is_unreachable() {
         // fuse→switch間のワイヤを外す: lampの両ピンは配線済みだが電源から届かない
@@ -837,6 +851,8 @@ mod tests {
         assert!(unreachable[0].message.contains("L1"));
     }
 
+    /// A load current exceeding the wire's ampacity is an error, and exceeding the fuse rating is a warning.
+    /// 負荷電流がワイヤの許容電流を超えるとエラー、ヒューズ定格を超えると警告になる。
     #[test]
     fn overloaded_wire_and_fuse_are_flagged() {
         // 10A負荷: 等価抵抗モデルの実電流(約8.4A)でも0.3sq(許容7A)超過 + ヒューズ5A定格超過
@@ -853,6 +869,8 @@ mod tests {
         );
     }
 
+    /// Voltage drop above 3 % of the supply voltage on a long wire is flagged; a short wire passes.
+    /// 長い配線で電源電圧の3%を超える電圧降下は指摘され、短い配線では出ない。
     #[test]
     fn excessive_voltage_drop_is_flagged() {
         // 15m x 0.75sq x 3A負荷: 近似(往復2.1V)でもシミュレーション(実電流~2.55Aで1本0.89V)でも
@@ -867,6 +885,8 @@ mod tests {
         assert!(!ok.iter().any(|d| d.code == "elec.voltage_drop"), "{ok:?}");
     }
 
+    /// A load without a current_a attribute is excluded from current checks and reported as an Info note.
+    /// current_a属性が無い負荷は電流計算から除外され、Infoとして通知される。
     #[test]
     fn load_without_current_attr_gets_info_and_no_current_checks() {
         let diags = run(&series_circuit(None, "5A", 0.3, Some(10.0), false));
@@ -880,6 +900,8 @@ mod tests {
         assert!(!diags.iter().any(|d| d.code == "elec.voltage_drop"));
     }
 
+    /// With ngspice installed, electrical findings carry solver-measured values and no approximate-mode note appears.
+    /// ngspiceがあれば電気検証はソルバの実測値で報告され、近似モードの通知は出ない。
     #[test]
     fn simulation_mode_reports_measured_values_when_ngspice_installed() {
         if crate::ngspice::find_ngspice().is_none() {
@@ -896,6 +918,8 @@ mod tests {
         assert!(!diags.iter().any(|d| d.code == "elec.approximate_mode"));
     }
 
+    /// Without a solver result, checks fall back to a graph approximation and say so with an Info note.
+    /// ソルバ結果が無い場合はグラフ近似にフォールバックし、その旨をInfoで明示する。
     #[test]
     fn fallback_mode_emits_approximate_info() {
         let sheet = series_circuit(Some("1.0"), "5A", 0.75, None, false);
@@ -908,6 +932,8 @@ mod tests {
         );
     }
 
+    /// Two different net labels on one net (a short between potentials) is an error.
+    /// 1つのネットに異なるネットラベルが混在する状態(異電位の短絡)はエラーになる。
     #[test]
     fn conflicting_net_labels_on_one_net_are_an_error() {
         let l1 = Entity::NetLabel(NetLabel {

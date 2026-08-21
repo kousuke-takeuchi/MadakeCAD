@@ -8,7 +8,15 @@
 AIアシスタントは人間と同じundo可能なコマンドエンジンで編集し、
 検証は実回路ソルバ(ngspice)の解に基づく。
 
-[概要](docs/01-overview.ja.md) · [はじめに](docs/02-getting-started.ja.md) · [ドキュメント](#ドキュメント) · [ロードマップ](docs/12-roadmap.ja.md) · [English](README.md)
+[![CI](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml)
+[![仕様項目](https://img.shields.io/badge/spec_clauses-291_tested-blue)](docs/13-specification.ja.md)
+![Status](https://img.shields.io/badge/status-alpha-orange)
+![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
+![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)
+![Docs](https://img.shields.io/badge/docs-EN_%7C_JA-informational)
+![License](https://img.shields.io/badge/license-TBD_(M6)-lightgrey)
+
+[概要](docs/01-overview.ja.md) · [はじめに](docs/02-getting-started.ja.md) · [ドキュメント](#ドキュメント) · [詳細仕様](docs/13-specification.ja.md) · [ロードマップ](docs/12-roadmap.ja.md) · [English](README.md)
 
 <img src="docs/images/sample-drawing.svg" alt="サンプル図面: JIS A3図枠の48V電源系統図" width="820">
 
@@ -66,6 +74,7 @@ npm run tauri dev
 | 10 | [自動化・API](docs/10-automation-api.ja.md) | MCPツール・REST API・CLI |
 | 11 | [機械CAD連携](docs/11-mechanical-integration.ja.md) | FreeCAD連携 |
 | 12 | [ロードマップ](docs/12-roadmap.ja.md) | マイルストーンM1〜M6 |
+| 13 | [詳細仕様設計書](docs/13-specification.ja.md) | **テストスイートから自動生成** — 全項目が機械検証済み |
 
 各ページは英語が正本(`.md`)で日本語版(`.ja.md`)を併設。開発者向け内部資料(アーキテクチャ・データモデル・機能仕様・デザインシステム)は[`docs/internal/`](docs/internal/README.md)。
 

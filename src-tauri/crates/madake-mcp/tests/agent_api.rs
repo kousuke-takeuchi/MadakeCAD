@@ -89,6 +89,8 @@ async fn wait_idle(agent: &AgentManager, id: Uuid) {
     panic!("ターンが終わらない");
 }
 
+/// POST /agent/send runs an assistant turn and the conversation list reflects the new messages.
+/// POST /agent/send はアシスタントのターンを実行し、会話一覧に新しいメッセージが反映される。
 #[tokio::test]
 async fn send_runs_a_turn_and_conversations_reflects_it() {
     let (_doc, agent, router) = setup("fake_claude.sh");
@@ -117,6 +119,8 @@ async fn send_runs_a_turn_and_conversations_reflects_it() {
     assert!(!messages[1]["tool_calls"].as_array().unwrap().is_empty());
 }
 
+/// Sending to a non-existent conversation id returns 400 instead of creating garbage.
+/// 存在しない会話IDへの送信は400を返し、不正なデータを作らない。
 #[tokio::test]
 async fn send_to_unknown_conversation_is_400() {
     let (_doc, _agent, router) = setup("fake_claude.sh");
@@ -130,6 +134,8 @@ async fn send_to_unknown_conversation_is_400() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
+/// Cancel and undo-turn endpoints respond correctly for the latest applied turn.
+/// キャンセルとターン巻き戻しのエンドポイントは、最新の適用済みターンに対して正しく応答する。
 #[tokio::test]
 async fn cancel_and_undo_turn_respond() {
     let (doc, agent, router) = setup("fake_claude.sh");
@@ -177,7 +183,8 @@ async fn cancel_and_undo_turn_respond() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "ユーザー発話は対象外");
 }
 
-/// undo-turnはSharedDocの既存undoを回すだけ(patchも通常どおり配信される)。
+/// Undoing a turn rolls back exactly the document edits that the turn produced, via the same undo history as manual edits.
+/// ターンの巻き戻しは、そのターンが行った編集だけを手動編集と同じundo履歴経由で戻す。
 #[tokio::test]
 async fn undo_turn_rolls_back_agent_edits_through_the_command_engine() {
     let (doc, agent, _router) = setup("fake_claude.sh");
@@ -242,7 +249,8 @@ async fn undo_turn_rolls_back_agent_edits_through_the_command_engine() {
     assert_eq!(count, 4);
 }
 
-/// SSEはTauriの`agent:event`と同じ`{conversation_id, event}`を`agent`イベントで流す。
+/// GET /agent/events streams conversation events over SSE, in the same shape as the Tauri agent:event.
+/// GET /agent/events は会話イベントをTauriのagent:eventと同じ形でSSE配信する。
 #[tokio::test]
 async fn events_endpoint_streams_agent_events() {
     let (_doc, _agent, router) = setup("fake_claude.sh");
@@ -287,7 +295,8 @@ async fn events_endpoint_streams_agent_events() {
     assert_eq!(payload["event"]["type"], "session_started");
 }
 
-/// /saveと/loadはTauri側と同じくチャット履歴(`<stem>.chat.json`)も伴う。
+/// Saving and loading a project carries the chat history alongside (.chat.json).
+/// プロジェクトの保存・読込はチャット履歴(.chat.json)を一緒に運ぶ。
 #[tokio::test]
 async fn save_and_load_carry_the_chat_history() {
     let dir = temp_dir();
@@ -336,7 +345,8 @@ async fn save_and_load_carry_the_chat_history() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// 読み込み時に実行中のターンがあれば中断する(古い図面前提のCLIが編集を続けないように)。
+/// Loading a project cancels any running turn first, so the agent never edits the wrong document.
+/// プロジェクト読込は実行中のターンを先に中断し、エージェントが古い図面を編集し続けないようにする。
 #[tokio::test]
 async fn load_cancels_a_running_turn() {
     let dir = temp_dir();
@@ -383,7 +393,8 @@ async fn load_cancels_a_running_turn() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// 外部WebページのJSからエージェントを走らせられないこと(Origin検証)。
+/// Requests from external web origins are rejected; local origins and non-browser clients (no Origin header) pass.
+/// 外部Webオリジンからのリクエストは拒否され、ローカルオリジンとブラウザ以外(Originヘッダなし)は通る。
 #[tokio::test]
 async fn external_origins_are_rejected_but_local_and_originless_pass() {
     let (_doc, _agent, router) = setup("fake_claude.sh");
@@ -423,6 +434,8 @@ async fn external_origins_are_rejected_but_local_and_originless_pass() {
     }
 }
 
+/// The origin guard treats only loopback hosts (localhost/127.0.0.1) as local.
+/// オリジンガードはループバックホスト(localhost/127.0.0.1)のみをローカル扱いする。
 #[test]
 fn local_origin_predicate_matches_only_loopback_hosts() {
     use madake_mcp::link_api::is_local_origin;
@@ -453,6 +466,8 @@ fn local_origin_predicate_matches_only_loopback_hosts() {
     }
 }
 
+/// The drawing context given to the agent summarizes the active sheet (name, nets, entity count).
+/// エージェントへ渡す図面コンテキストはアクティブシートの要約(名前・ネット数・要素数)を含む。
 #[test]
 fn drawing_context_summarizes_the_active_sheet() {
     let doc = SharedDoc::new(Engine::new(Project::new("盤A")));
@@ -470,10 +485,8 @@ fn drawing_context_summarizes_the_active_sheet() {
     assert!(context.contains("mcp__madakecad__*"), "{context}");
 }
 
-/// `GET/PUT /api/v1/settings`: 保存はファイルへ、反映はマネージャへ。
-///
-/// ユーザーの`~/.madakecad/settings.json`を書き換えないよう、保存先は
-/// `MADAKE_SETTINGS_PATH`で一時ディレクトリへ逃がす(このテストのみが触る)。
+/// AI settings endpoints persist changes and apply them to the agent manager.
+/// AI設定のエンドポイントは変更を永続化し、エージェントマネージャへ適用する。
 #[test]
 fn settings_endpoints_persist_and_apply() {
     let dir = temp_dir();

@@ -99,6 +99,8 @@ mod tests {
         })
     }
 
+    /// The BOM groups symbols by part number and counts quantities per group.
+    /// 部品表はシンボルを型番でまとめ、数量を集計する。
     #[test]
     fn bom_groups_by_value_and_counts() {
         let mut project = Project::new("t");
@@ -118,6 +120,8 @@ mod tests {
         assert!(lines.iter().any(|l| l.contains("JZX-22F") && l.ends_with(",1")));
     }
 
+    /// BOM fields containing commas are quoted so the CSV stays valid.
+    /// カンマを含む項目は引用符で囲まれ、CSVが壊れない。
     #[test]
     fn bom_escapes_fields_with_commas() {
         let mut project = Project::new("t");
@@ -129,6 +133,8 @@ mod tests {
         assert!(csv.contains("\"JZX-22F(D), 24VDC\""), "カンマ入りはクォート: {csv}");
     }
 
+    /// The wire list contains each wire's part number, color, gauge and length.
+    /// 電線リストには各ワイヤの品番・線色・線径・長さが載る。
     #[test]
     fn wire_list_contains_attributes() {
         let mut project = Project::new("t");

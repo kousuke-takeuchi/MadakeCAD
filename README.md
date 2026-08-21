@@ -8,7 +8,15 @@ Draw JIS-compliant wiring diagrams for robots, machinery, and control panels —
 with an AI assistant that edits through the same undoable command engine as you,
 and verification grounded in a real circuit solver (ngspice).
 
-[Overview](docs/01-overview.md) · [Getting Started](docs/02-getting-started.md) · [Documentation](#documentation) · [Roadmap](docs/12-roadmap.md) · [日本語](README.ja.md)
+[![CI](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml)
+[![Spec clauses](https://img.shields.io/badge/spec_clauses-291_tested-blue)](docs/13-specification.md)
+![Status](https://img.shields.io/badge/status-alpha-orange)
+![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
+![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)
+![Docs](https://img.shields.io/badge/docs-EN_%7C_JA-informational)
+![License](https://img.shields.io/badge/license-TBD_(M6)-lightgrey)
+
+[Overview](docs/01-overview.md) · [Getting Started](docs/02-getting-started.md) · [Documentation](#documentation) · [Specification](docs/13-specification.md) · [Roadmap](docs/12-roadmap.md) · [日本語](README.ja.md)
 
 <img src="docs/images/sample-drawing.svg" alt="Sample drawing: 48V power distribution on a JIS A3 frame" width="820">
 
@@ -66,6 +74,7 @@ Read in order — files are numbered:
 | 10 | [Automation & APIs](docs/10-automation-api.md) | MCP tools, REST API, CLI |
 | 11 | [Mechanical Integration](docs/11-mechanical-integration.md) | FreeCAD linkage |
 | 12 | [Roadmap](docs/12-roadmap.md) | Milestones M1–M6 |
+| 13 | [Detailed Specification](docs/13-specification.md) | **Generated from the test suite** — every clause is machine-verified |
 
 Each page has a Japanese twin (`*.ja.md`). Contributor/internal materials (architecture, data model, feature specs, design system) live in [`docs/internal/`](docs/internal/README.md).
 

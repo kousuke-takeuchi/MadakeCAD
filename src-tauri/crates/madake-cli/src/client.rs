@@ -284,12 +284,16 @@ impl LinkApi for HttpClient {
 mod tests {
     use super::*;
 
+    /// The CLI talks to http://127.0.0.1:<port>/api/v1 (loopback only).
+    /// CLIは http://127.0.0.1:<ポート>/api/v1(ループバックのみ)へ接続する。
     #[test]
     fn base_url_uses_loopback_and_api_v1() {
         assert_eq!(base_url(9310), "http://127.0.0.1:9310/api/v1");
         assert_eq!(base_url(19310), "http://127.0.0.1:19310/api/v1");
     }
 
+    /// endpoint() joins the base URL with a relative path.
+    /// endpoint()はベースURLに相対パスを連結する。
     #[test]
     fn endpoint_appends_path() {
         assert_eq!(
@@ -302,6 +306,8 @@ mod tests {
         );
     }
 
+    /// The netlist URL has no query string when no sheet is specified.
+    /// シート未指定のときnetlist URLにクエリは付かない。
     #[test]
     fn netlist_url_omits_query_without_sheet() {
         assert_eq!(
@@ -310,6 +316,8 @@ mod tests {
         );
     }
 
+    /// Sheet selection uses the sheet_id query parameter, matching the server.
+    /// シート指定はサーバー側と同じsheet_idクエリ名を使う。
     #[test]
     fn netlist_url_uses_sheet_id_query_name() {
         assert_eq!(
@@ -318,6 +326,8 @@ mod tests {
         );
     }
 
+    /// Each export kind (svg/pdf/bom/wire-list) maps to its REST route.
+    /// 各エクスポート種別(svg/pdf/bom/wire-list)は対応するRESTルートへ対応付く。
     #[test]
     fn export_kind_paths_match_link_api_routes() {
         assert_eq!(ExportKind::Svg.path(), "/export/svg");
@@ -326,6 +336,8 @@ mod tests {
         assert_eq!(ExportKind::WireList.path(), "/export/wire-list");
     }
 
+    /// When the app is not running, the CLI explains it explicitly (with the port) instead of a cryptic error.
+    /// アプリ未起動時は不可解なエラーではなく、ポート付きの明快なメッセージを出す。
     #[test]
     fn not_running_error_is_explicit() {
         let msg = CliError::NotRunning { port: 9310 }.to_string();

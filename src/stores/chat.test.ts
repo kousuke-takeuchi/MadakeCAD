@@ -45,7 +45,8 @@ describe("chat store: applyAgentEvent", () => {
     setActivePinia(createPinia());
   });
 
-  it("既知の会話でtext_deltaを進行中メッセージへ連結する", () => {
+  // ja: 既知の会話ではtext_deltaが進行中メッセージへ連結される
+  it("text deltas append to the in-progress message of a known conversation", () => {
     const store = useChatStore();
     seed(store);
     feed(store, [
@@ -65,7 +66,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.streamingMessage).toBe(store.messages[0]);
   });
 
-  it("turn_completedでストリーミングを解除し、usageを確定する", () => {
+  // ja: turn_completedでストリーミングを解除し、トークン使用量を確定する
+  it("turn_completed stops streaming and finalizes the token usage", () => {
     const store = useChatStore();
     seed(store);
     feed(store, [
@@ -89,7 +91,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.streamingMessage).toBeNull();
   });
 
-  it("デルタが来なかった場合はturn_completedのresultで本文を埋める", async () => {
+  // ja: デルタが来なかった場合はturn_completedのresultで本文を埋める
+  it("when no deltas arrived, the body is filled from turn_completed's result", async () => {
     // 送信時に積まれる空のアシスタントターンを再現する
     vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
     const store = useChatStore();
@@ -102,7 +105,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.streaming).toBe(false);
   });
 
-  it("ツール呼び出しをチップ化し、成功/失敗をidで確定する", () => {
+  // ja: ツール呼び出しはチップになり、idで成功/失敗が確定する
+  it("tool calls become chips, resolved to success/failure by id", () => {
     const store = useChatStore();
     seed(store);
     feed(store, [
@@ -129,7 +133,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(calls[1].status).toBe("error");
   });
 
-  it("同じtool_use_idの重複開始は無視する", () => {
+  // ja: 同じtool_use_idの重複開始は無視される
+  it("duplicate tool starts with the same id are ignored", () => {
     const store = useChatStore();
     seed(store);
     const started: AgentEvent = {
@@ -143,7 +148,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.messages[0].tool_calls).toHaveLength(1);
   });
 
-  it("id無しのtool_use_finishedは同名の実行中チップに対応づける", () => {
+  // ja: id無しのtool_use_finishedは同名の実行中チップへ対応付けられる
+  it("tool completions without an id match the running chip of the same name", () => {
     const store = useChatStore();
     seed(store);
     feed(store, [
@@ -154,7 +160,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.messages[0].tool_calls[0].status).toBe("ok");
   });
 
-  it("errorイベントでメッセージにエラーを付与しストリーミングを解除する", () => {
+  // ja: errorイベントはメッセージにエラーを付与し、ストリーミングを解除する
+  it("an error event marks the message and stops streaming", () => {
     const store = useChatStore();
     seed(store);
     feed(store, [
@@ -167,7 +174,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.streaming).toBe(false);
   });
 
-  it("turn_appliedでrevision範囲を記録し、適用済みとして扱う", () => {
+  // ja: turn_appliedでrevision範囲を記録し、適用済みとして扱う
+  it("turn_applied records the revision range and marks the turn applied", () => {
     const store = useChatStore();
     seed(store);
     feed(store, [
@@ -182,7 +190,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.messages[0].undone).toBe(false);
   });
 
-  it("turn_appliedにundo深さが乗っていれば正確な件数を記録する", () => {
+  // ja: turn_appliedにundo深さがあれば正確な編集件数を記録する
+  it("an undo depth on turn_applied records the exact edit count", () => {
     const store = useChatStore();
     seed(store);
     feed(store, [
@@ -202,7 +211,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.messages[0].applied_undo_depth).toEqual({ start: 3, end: 6 });
   });
 
-  it("イベントを畳み込んだ会話はupdated_atが進む(履歴の最新順に反映)", () => {
+  // ja: イベントを畳み込んだ会話はupdated_atが進む(履歴の最新順に反映)
+  it("folding events advances the conversation's updated_at (newest-first history)", () => {
     const store = useChatStore();
     seed(store);
     expect(store.conversations[0].updated_at).toBe(0);
@@ -211,7 +221,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.conversations[0].updated_at).toBeGreaterThanOrEqual(before);
   });
 
-  it("完了後の新しいデルタは新しいターンを開始する", () => {
+  // ja: 完了後の新しいデルタは新しいターンを開始する
+  it("a delta after completion starts a new turn", () => {
     const store = useChatStore();
     seed(store);
     feed(store, [
@@ -224,7 +235,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.streaming).toBe(true);
   });
 
-  it("複数会話を独立に畳み込み、片方が進行中ならstreamingを保つ", () => {
+  // ja: 複数会話は独立に畳み込まれ、片方が進行中ならstreamingを保つ
+  it("multiple conversations fold independently; streaming stays on while any is running", () => {
     const store = useChatStore();
     seed(store, CONV);
     seed(store, CONV2);
@@ -242,7 +254,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.streaming).toBe(false);
   });
 
-  it("未知のconversation_idでは幽霊会話を作らず、一覧を取り直す", async () => {
+  // ja: 未知のconversation_idでは幽霊会話を作らず一覧を取り直す
+  it("an unknown conversation id refetches the list instead of creating a ghost", async () => {
     const list = vi.spyOn(agentApi, "listConversations").mockResolvedValue([]);
     const store = useChatStore();
 
@@ -263,7 +276,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
-  it("自分のターンが進行中の間は、未知会話のイベントで一覧を取り直さない", () => {
+  // ja: 自分のターンが進行中の間は、未知会話のイベントで一覧を取り直さない
+  it("while our own turn is running, unknown-conversation events do not trigger a refetch", () => {
     const list = vi.spyOn(agentApi, "listConversations").mockResolvedValue([]);
     const store = useChatStore();
     seed(store);
@@ -277,7 +291,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.messages[0].streaming).toBe(true);
   });
 
-  it("進行中のターンが無い会話へのturn_completed/errorは捨てる", () => {
+  // ja: 進行中ターンの無い会話へのturn_completed/errorは捨てられる
+  it("turn_completed/error for a conversation with no running turn is dropped", () => {
     const store = useChatStore();
     seed(store);
 
@@ -299,7 +314,8 @@ describe("chat store: アクション", () => {
     setActivePinia(createPinia());
   });
 
-  it("sendは会話を新規作成し、サーバー採番のidを引き取る", async () => {
+  // ja: sendは会話を新規作成し、サーバー採番のidを引き取る
+  it("send creates a conversation and adopts the server-assigned id", async () => {
     const send = vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
     const store = useChatStore();
     store.setModel("claude-opus-4");
@@ -322,7 +338,8 @@ describe("chat store: アクション", () => {
     expect(store.conversations).toHaveLength(1);
   });
 
-  it("send解決前に届いたイベントも同じ会話へ入る", async () => {
+  // ja: send解決前に届いたイベントも同じ会話へ入る
+  it("events arriving before send resolves still land in the same conversation", async () => {
     let resolveSend: (id: string) => void = () => {};
     vi.spyOn(agentApi, "send").mockImplementation(
       () => new Promise<string>((r) => (resolveSend = r)),
@@ -340,7 +357,8 @@ describe("chat store: アクション", () => {
     expect(store.messages.map((m) => m.text)).toEqual(["配線して", "はい"]);
   });
 
-  it("空プロンプトとストリーミング中の送信は無視する", async () => {
+  // ja: 空プロンプトとストリーミング中の送信は無視される
+  it("empty prompts and sends during streaming are ignored", async () => {
     const send = vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
     const store = useChatStore();
 
@@ -352,7 +370,8 @@ describe("chat store: アクション", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
-  it("send失敗時はメッセージにエラーを載せてストリーミングを解除する", async () => {
+  // ja: send失敗時はメッセージにエラーを載せてストリーミングを解除する
+  it("a failed send marks the message with the error and stops streaming", async () => {
     vi.spyOn(agentApi, "send").mockRejectedValue(new Error("claude が見つかりません"));
     const store = useChatStore();
 
@@ -361,7 +380,8 @@ describe("chat store: アクション", () => {
     expect(store.streaming).toBe(false);
   });
 
-  it("初回送信に失敗した会話でも、再送はローカルidを渡さず新規扱いで送れる", async () => {
+  // ja: 初回送信に失敗した会話でも、再送はローカルidを渡さず新規として送れる
+  it("after a failed first send, retrying sends as new without leaking the local id", async () => {
     const send = vi
       .spyOn(agentApi, "send")
       .mockRejectedValueOnce(new Error("claude が見つかりません"));
@@ -384,7 +404,8 @@ describe("chat store: アクション", () => {
     expect(store.pendingLocalId).toBeNull();
   });
 
-  it("cancelは対象の会話だけを止め、他会話のストリーミングは残す", async () => {
+  // ja: cancelは対象の会話だけを止め、他会話のストリーミングは残す
+  it("cancel stops only the target conversation, leaving others streaming", async () => {
     const cancel = vi.spyOn(agentApi, "cancel").mockResolvedValue();
     const store = useChatStore();
     seed(store, CONV);
@@ -402,7 +423,8 @@ describe("chat store: アクション", () => {
     expect(store.streaming).toBe(true);
   });
 
-  it("採番前(local-)の会話ではcancel APIを呼ばず、ローカル整理だけ行う", async () => {
+  // ja: 採番前(local-)の会話ではcancel APIを呼ばずローカル整理だけ行う
+  it("cancel on a not-yet-assigned (local-) conversation skips the API and cleans up locally", async () => {
     const cancel = vi.spyOn(agentApi, "cancel").mockResolvedValue();
     vi.spyOn(agentApi, "send").mockImplementation(() => new Promise<string>(() => {}));
     const store = useChatStore();
@@ -417,7 +439,8 @@ describe("chat store: アクション", () => {
     expect(store.messages[1].streaming).toBe(false);
   });
 
-  it("採番前のcancelは採番後にサーバーへ中断を送る", async () => {
+  // ja: 採番前のcancelは採番後にサーバーへ中断を送る
+  it("a cancel issued before id assignment is sent to the server once the id arrives", async () => {
     const cancel = vi.spyOn(agentApi, "cancel").mockResolvedValue();
     let resolveSend: (id: string) => void = () => undefined;
     vi.spyOn(agentApi, "send").mockImplementation(
@@ -436,7 +459,8 @@ describe("chat store: アクション", () => {
     expect(store.cancelRequested).toBe(false);
   });
 
-  it("cancel APIが失敗してもストリーミング解除は完了する", async () => {
+  // ja: cancel APIが失敗してもストリーミング解除は完了する
+  it("streaming stops even if the cancel API fails", async () => {
     vi.spyOn(agentApi, "cancel").mockRejectedValue(new Error("Link API 400"));
     const store = useChatStore();
     seed(store);
@@ -448,7 +472,8 @@ describe("chat store: アクション", () => {
     expect(store.messages[0].streaming).toBe(false);
   });
 
-  it("会話が無い状態のcancelは何もせず落ちない", async () => {
+  // ja: 会話が無い状態のcancelは何もせず落ちない
+  it("cancel with no conversation does nothing and never crashes", async () => {
     const cancel = vi.spyOn(agentApi, "cancel").mockResolvedValue();
     const store = useChatStore();
 
@@ -458,7 +483,8 @@ describe("chat store: アクション", () => {
     expect(store.streaming).toBe(false);
   });
 
-  it("undoTurnはAPIを呼び、適用済み表示を取り下げる", async () => {
+  // ja: undoTurnはAPIを呼び、適用済み表示を取り下げる
+  it("undoTurn calls the API and withdraws the applied badge", async () => {
     const undoTurn = vi.spyOn(agentApi, "undoTurn").mockResolvedValue();
     const store = useChatStore();
     seed(store);
@@ -482,7 +508,8 @@ describe("chat store: アクション", () => {
     expect(undoTurn).toHaveBeenCalledTimes(1);
   });
 
-  it("undoTurnのサーバー拒否は呼び出し元へ投げ、適用済み表示は変えない", async () => {
+  // ja: undoTurnのサーバー拒否は呼び出し元へ投げられ、適用済み表示は変わらない
+  it("a server-rejected undoTurn propagates the error and keeps the applied badge", async () => {
     // 最新の適用済みターンでない/送信中などのガードは400で返る
     vi.spyOn(agentApi, "undoTurn").mockRejectedValue(
       new Error("Link API 400: 最新の適用済みターンではないため巻き戻せません"),
@@ -502,7 +529,8 @@ describe("chat store: アクション", () => {
     expect(store.messages[0].applied_revisions).toEqual({ start: 4, end: 6 });
   });
 
-  it("採番前(local-)の会話ではundoTurn APIを呼ばない", async () => {
+  // ja: 採番前(local-)の会話ではundoTurn APIを呼ばない
+  it("undoTurn never calls the API for a not-yet-assigned (local-) conversation", async () => {
     const undoTurn = vi.spyOn(agentApi, "undoTurn").mockResolvedValue();
     vi.spyOn(agentApi, "send").mockImplementation(() => new Promise<string>(() => {}));
     const store = useChatStore();
@@ -517,7 +545,8 @@ describe("chat store: アクション", () => {
     expect(store.messages[1].undone).toBe(false);
   });
 
-  it("loadConversationsはRust表現を表示用モデルへ正規化する", async () => {
+  // ja: loadConversationsはRust表現を表示用モデルへ正規化する
+  it("loadConversations normalizes the Rust representation into the display model", async () => {
     vi.spyOn(agentApi, "listConversations").mockResolvedValue([
       {
         id: CONV,
@@ -564,7 +593,8 @@ describe("chat store: アクション", () => {
     expect(store.streaming).toBe(false);
   });
 
-  it("normalizeConversationは未完了ツールをrunningとして扱う", () => {
+  // ja: normalizeConversationは未完了ツールをrunningとして扱う
+  it("normalizeConversation treats unfinished tools as running", () => {
     const conv = normalizeConversation({
       id: CONV,
       session_id: null,
@@ -589,7 +619,8 @@ describe("chat store: アクション", () => {
     expect(conv.updated_at).toBe(0);
   });
 
-  it("normalizeConversationはupdated_atをそのまま引き継ぐ", () => {
+  // ja: normalizeConversationはupdated_atをそのまま引き継ぐ
+  it("normalizeConversation carries updated_at through unchanged", () => {
     const conv = normalizeConversation({
       id: CONV,
       session_id: null,
@@ -601,7 +632,8 @@ describe("chat store: アクション", () => {
     expect(conv.updated_at).toBe(1_700_000_000_000);
   });
 
-  it("subscribeを同時に呼んでも購読は1本だけ", async () => {
+  // ja: subscribeを同時に呼んでも購読は1本だけになる
+  it("concurrent subscribe calls result in a single subscription", async () => {
     const unlisten = vi.fn();
     let resolveOn: (fn: () => void) => void = () => {};
     const onEvent = vi
@@ -622,7 +654,8 @@ describe("chat store: アクション", () => {
     expect(store.subscription).toBeNull();
   });
 
-  it("購読の解決前にunsubscribeしても取りこぼさず閉じる", async () => {
+  // ja: 購読の解決前にunsubscribeしても取りこぼさず閉じられる
+  it("unsubscribing before the subscription resolves still closes it cleanly", async () => {
     const unlisten = vi.fn();
     let resolveOn: (fn: () => void) => void = () => {};
     vi.spyOn(agentApi, "onEvent").mockImplementation(
@@ -640,7 +673,8 @@ describe("chat store: アクション", () => {
     expect(store.subscription).toBeNull();
   });
 
-  it("購読に失敗したら次のsubscribeで張り直せる", async () => {
+  // ja: 購読に失敗しても次のsubscribeで張り直せる
+  it("after a failed subscription, the next subscribe re-establishes it", async () => {
     const onEvent = vi
       .spyOn(agentApi, "onEvent")
       .mockRejectedValueOnce(new Error("SSE接続失敗"))
@@ -655,7 +689,8 @@ describe("chat store: アクション", () => {
     expect(store.unlisten).not.toBeNull();
   });
 
-  it("newConversationは採番待ち(pendingLocalId)を巻き込まない", async () => {
+  // ja: newConversationは採番待ち(pendingLocalId)を巻き込まない
+  it("newConversation does not disturb a pending local id", async () => {
     let resolveSend: (id: string) => void = () => undefined;
     vi.spyOn(agentApi, "send").mockImplementation(
       () => new Promise<string>((resolve) => (resolveSend = resolve)),
@@ -675,7 +710,8 @@ describe("chat store: アクション", () => {
     expect(store.conversations.some((c) => c.id === CONV)).toBe(true);
   });
 
-  it("setModel / setPanel / newConversation", async () => {
+  // ja: setModel / setPanel / newConversationがそれぞれの状態を更新する
+  it("setModel / setPanel / newConversation update their state", async () => {
     vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
     const store = useChatStore();
 
@@ -696,12 +732,14 @@ describe("chat store: アクション", () => {
 });
 
 describe("summarizeToolUse", () => {
-  it("MCPのプレフィックスを外す", () => {
+  // ja: 表示時にMCPツール名のプレフィックスを外す
+  it("the MCP tool-name prefix is stripped for display", () => {
     expect(shortToolName("mcp__madakecad__place_symbol")).toBe("place_symbol");
     expect(shortToolName("place_symbol")).toBe("place_symbol");
   });
 
-  it("place_symbol", () => {
+  // ja: place_symbolはシンボル・参照記号・位置で要約される
+  it("place_symbol calls summarize as symbol, reference and position", () => {
     expect(
       summarizeToolUse("mcp__madakecad__place_symbol", {
         symbol_id: "fuse",
@@ -716,7 +754,8 @@ describe("summarizeToolUse", () => {
     );
   });
 
-  it("draw_wire", () => {
+  // ja: draw_wireは線色・線径・頂点数で要約される
+  it("draw_wire calls summarize as color, gauge and point count", () => {
     expect(
       summarizeToolUse("mcp__madakecad__draw_wire", {
         points: [
@@ -739,7 +778,8 @@ describe("summarizeToolUse", () => {
     ).toBe("1区間を接続");
   });
 
-  it("update_entity / execute_commands", () => {
+  // ja: update_entity / execute_commandsはコマンド内容で要約される
+  it("update_entity and execute_commands summarize by command content", () => {
     expect(
       summarizeToolUse("update_entity", { entity: { kind: "symbol", reference: "K1" } }),
     ).toBe("シンボル K1 を更新");
@@ -753,7 +793,8 @@ describe("summarizeToolUse", () => {
     ).toBe("編集コマンド 2件を実行");
   });
 
-  it("読み取り系と書き出し系", () => {
+  // ja: 読み取り系・書き出し系ツールも適切に要約される
+  it("read and export tools get appropriate summaries", () => {
     expect(summarizeToolUse("mcp__madakecad__get_netlist", {})).toBe("ネットリストを取得");
     expect(summarizeToolUse("mcp__madakecad__get_project", {})).toBe("図面全体を読み取り");
     expect(summarizeToolUse("export_svg", { path: "/tmp/out/a.svg" })).toBe(
@@ -769,7 +810,8 @@ describe("summarizeToolUse", () => {
 
   // チップはツール名を別途描くので、要約側は空を返す(両方返すと
   // 「ToolSearch ToolSearch」のような二重表示になる)。
-  it("要約を作れないツールは空文字(表示はツール名のみ)", () => {
+  // ja: 要約を作れないツールは空文字になり、表示はツール名のみ
+  it("tools without a summary show the tool name only", () => {
     expect(summarizeToolUse("mcp__madakecad__future_tool", { a: 1 })).toBe("");
     expect(summarizeToolUse("Bash", null)).toBe("");
     expect(summarizeToolUse("ToolSearch", { query: "select:Read" })).toBe("");
@@ -805,7 +847,8 @@ describe("会話履歴ポップアップの表示ヘルパー", () => {
     };
   }
 
-  it("タイトルは最初のユーザー発話の先頭40字", () => {
+  // ja: 会話タイトルは最初のユーザー発話の先頭40字
+  it("the conversation title is the first 40 chars of the first user message", () => {
     expect(conversationTitle(conv("a", 0, [{ role: "user", text: "リレーK2のb接点を追加" }]))).toBe(
       "リレーK2のb接点を追加",
     );
@@ -828,14 +871,16 @@ describe("会話履歴ポップアップの表示ヘルパー", () => {
     );
   });
 
-  it("ユーザー発話が無ければ「(空の会話)」", () => {
+  // ja: ユーザー発話が無ければ「(空の会話)」になる
+  it("without any user message the title is '(empty conversation)'", () => {
     expect(conversationTitle(conv("a", 0))).toBe(EMPTY_CONVERSATION_TITLE);
     expect(conversationTitle(conv("a", 0, [{ role: "user", text: "   " }]))).toBe(
       EMPTY_CONVERSATION_TITLE,
     );
   });
 
-  it("相対時刻はたった今/N分前/N時間前/昨日/M-D", () => {
+  // ja: 相対時刻は たった今/N分前/N時間前/昨日/M-D で表示される
+  it("relative time renders as just now / N min / N h / yesterday / M-D", () => {
     const now = new Date(2026, 7, 21, 14, 0, 0).getTime();
     expect(formatRelativeTime(now - 30_000, now)).toBe("たった今");
     expect(formatRelativeTime(now - 8 * 60_000, now)).toBe("8分前");
@@ -844,13 +889,15 @@ describe("会話履歴ポップアップの表示ヘルパー", () => {
     expect(formatRelativeTime(new Date(2026, 7, 19, 9, 0, 0).getTime(), now)).toBe("8/19");
   });
 
-  it("時刻不明(旧履歴のupdated_at=0)は相対時刻を出さない", () => {
+  // ja: 時刻不明(旧履歴のupdated_at=0)は相対時刻を出さない
+  it("unknown timestamps (legacy updated_at=0) show no relative time", () => {
     const now = Date.now();
     expect(formatRelativeTime(0, now)).toBe("");
     expect(conversationMeta(conv("a", 0, [{ role: "user", text: "x" }]), now)).toBe("1メッセージ");
   });
 
-  it("メタ行は時刻・件数・適用済みrevを中黒で連ねる", () => {
+  // ja: メタ行は時刻・件数・適用済みrevを中黒で連ねる
+  it("the meta line joins time, message count and applied rev with a middle dot", () => {
     const now = new Date(2026, 7, 21, 14, 0, 0).getTime();
     const applied = conv("a", now - 8 * 60_000, [
       { role: "user", text: "F2を追加" },
@@ -868,7 +915,8 @@ describe("会話履歴ポップアップの表示ヘルパー", () => {
     expect(conversationMeta(applied, now)).toBe("8分前 · 2メッセージ");
   });
 
-  it("並びは更新の新しい順(時刻不明は後ろの登録順)", () => {
+  // ja: 会話は更新の新しい順に並ぶ(時刻不明は後ろに登録順)
+  it("conversations sort newest-first (unknown times last, in insertion order)", () => {
     const list = [conv("old", 100), conv("legacy", 0), conv("new", 300), conv("legacy2", 0)];
     expect(sortedConversations(list).map((c) => c.id)).toEqual([
       "new",

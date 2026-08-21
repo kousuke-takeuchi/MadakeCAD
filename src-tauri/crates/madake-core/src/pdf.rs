@@ -51,6 +51,8 @@ mod tests {
     use crate::symbol::sheet_symbol_defs;
     use uuid::Uuid;
 
+    /// PDF export produces a valid PDF document (%PDF- header) of non-trivial size, including Japanese text.
+    /// PDF出力は日本語を含む正しいPDF文書(%PDF-ヘッダ)を非自明なサイズで生成する。
     #[test]
     fn sheet_to_pdf_produces_pdf_bytes() {
         let mut sheet = Sheet::new("TB1", PaperSize::A3, Orientation::Landscape);

@@ -282,6 +282,8 @@ mod tests {
         })
     }
 
+    /// A wire whose endpoints touch two symbol pins joins those pins into one net.
+    /// 両端がシンボルのピンに一致するワイヤは、それらのピンを1つのネットに結合する。
     #[test]
     fn wires_connect_symbol_pins_into_one_net() {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
@@ -304,6 +306,8 @@ mod tests {
         assert_eq!(refs, vec!["R1:2", "R2:1"]);
     }
 
+    /// Wires that merely cross do NOT connect; a net label attached to a wire names its net.
+    /// 単に交差しただけのワイヤは接続されない。ワイヤに付いたネットラベルはそのネットの名前になる。
     #[test]
     fn crossing_without_junction_stays_separate_and_label_names_net() {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
@@ -324,6 +328,8 @@ mod tests {
         assert!(nets.iter().any(|n| n.name == "24-P1"));
     }
 
+    /// A junction dot connects crossing wires, and same-named labels merge distant nets into one.
+    /// ジャンクションは交差ワイヤを接続し、同名ラベルは離れたネットを1つに統合する。
     #[test]
     fn junction_connects_crossing_wires_and_same_labels_merge() {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
@@ -356,6 +362,8 @@ mod tests {
         assert_eq!(nets[0].wire_ids.len(), 3);
     }
 
+    /// Unnamed nets receive deterministic sequential names (N001, N002, ...).
+    /// 無名ネットには決定的な連番名(N001, N002, …)が付く。
     #[test]
     fn unnamed_nets_get_deterministic_sequential_names() {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
@@ -369,6 +377,8 @@ mod tests {
         assert_eq!(names, vec!["N001", "N002"]);
     }
 
+    /// Two connection points of the same symbol sharing a pin number (a feed-through terminal) are internally shorted, and appear once in the net's pin list.
+    /// 同一シンボルで同じピン番号を持つ2つの接続点(貫通端子)は内部短絡され、ネットのピン一覧には1回だけ載る。
     #[test]
     fn same_pin_number_points_short_internally() {
         // 貫通端子: 同一シンボル内の同一ピン番号の接続点(左右)は内部短絡される
@@ -409,6 +419,8 @@ mod tests {
         assert_eq!(nets[0].pins[0].pin, "1");
     }
 
+    /// Pin positions honor the symbol's rotation (clockwise in the Y-down paper coordinate system) and placement.
+    /// ピン座標はシンボルの回転(Y下向き座標系で時計回り)と配置位置を反映する。
     #[test]
     fn pin_positions_apply_rotation_and_translation() {
         let def = builtin_symbols()
@@ -434,6 +446,8 @@ mod tests {
         assert!((pins[1].1.y - (50.0 + 7.5)).abs() < 1e-9);
     }
 
+    /// Mirroring flips pins across the vertical axis before rotation is applied.
+    /// ミラーは回転より先に、縦軸に対してピンを反転する。
     #[test]
     fn pin_positions_apply_mirror_before_rotation() {
         let def = builtin_symbols()

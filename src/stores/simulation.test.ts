@@ -15,7 +15,8 @@ const result: SimOpResult = {
 describe("simulation store", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it("runで結果を取得しパネルを開く", async () => {
+  // ja: runでDC解析結果を取得してパネルを開く
+  it("run fetches the DC result and opens the panel", async () => {
     const store = useSimulationStore();
     vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
     await store.run(null);
@@ -24,7 +25,8 @@ describe("simulation store", () => {
     expect(store.error).toBeNull();
   });
 
-  it("開閉トグルは再実行時にopen_switchesへ渡る", async () => {
+  // ja: 開閉トグルは再実行時にopen_switchesとして渡される
+  it("toggled switches are passed as open_switches on the next run", async () => {
     const store = useSimulationStore();
     const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
     store.toggleOpen("SW1");
@@ -35,7 +37,8 @@ describe("simulation store", () => {
     expect(spy).toHaveBeenLastCalledWith(null, []);
   });
 
-  it("失敗時(ngspice未導入等)はエラーメッセージを保持しパネルを開く", async () => {
+  // ja: 失敗時(ngspice未導入等)はエラーメッセージを保持したままパネルを開く
+  it("failures (e.g. ngspice missing) keep the error message and still open the panel", async () => {
     const store = useSimulationStore();
     vi.spyOn(ipc, "simulateOp").mockRejectedValue(new Error("ngspiceが見つかりません"));
     await store.run(null);
