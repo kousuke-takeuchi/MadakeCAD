@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**343仕様項目**。
+全5領域・**366仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -363,7 +363,8 @@
 ### viewClasses
 
 - エンティティ種別を表示クラスへ対応付ける(ジャンクションは配線扱い) <sub>`entityViewClass`</sub>
-- VIEW_CLASSESは全クラスを一意に列挙する <sub>`entityViewClass`</sub>
+- VIEW_CLASSESは全クラスを一意に列挙する(線番を加えて8クラス) <sub>`entityViewClass`</sub>
+- 表示クラスは初期状態で全て表示ONになっている(線番も最初から見える) <sub>`view class visibility`</sub>
 
 ### viewport
 
@@ -371,6 +372,34 @@
 - パンはスクリーンpx単位でビューを動かす <sub>`Viewport`</sub>
 - スナップは既定で2.5mmグリッドへ丸める <sub>`Viewport`</sub>
 - ズーム倍率は妥当な範囲に制限される <sub>`Viewport`</sub>
+
+### wireNumbers
+
+- 横向きの配線の線番は、配線の中点の2.5mm上に中央揃えで置かれる <sub>`wireNumberLabels`</sub>
+- 縦向きの配線の線番は、配線の中点の2.5mm左に右揃えで置かれる <sub>`wireNumberLabels`</sub>
+- 1つの線番は、何本のワイヤに分かれていても最も長い線分の中点に1回だけ置かれる <sub>`wireNumberLabels`</sub>
+- 線番の無い配線、空白だけの線番は描かない <sub>`wireNumberLabels`</sub>
+- 複数の線番があると線番順に並んで返り、同じ図面なら常に同じ並びになる <sub>`wireNumberLabels`</sub>
+- 斜めの配線は、横に長ければ上、縦に長ければ左に線番を置く <sub>`wireNumberLabels`</sub>
+- 配線以外のエンティティは線番の計算に影響しない <sub>`wireNumberLabels`</sub>
+- 既定は「連番・開始1・現在のシート・既存の線番は保持」で開く <sub>`wire numbering dialog store`</sub>
+- 「現在のシート」+「保持する」は、そのシートだけを追い番で採番するコマンドになる <sub>`wire numbering dialog store`</sub>
+- 「現在のシート」+「すべて振り直す」は、そのシートを振り直すコマンドになる <sub>`wire numbering dialog store`</sub>
+- 「プロジェクト全体」はシート指定を省いたコマンドになり、図面全体で一意の線番が振られる <sub>`wire numbering dialog store`</sub>
+- 開始番号は1以上の整数だけを受け付ける(0・負数・小数・文字は入力エラー) <sub>`wire numbering dialog store`</sub>
+- 参照ベースの「ゾーン基準」はまだ選べない(M4予定) <sub>`wire numbering dialog store`</sub>
+- 採番実行はコマンドを1回だけ送り、採番したネット数を返して閉じる <sub>`wire numbering dialog store`</sub>
+- 開始番号が不正なままでは採番せず、ダイアログは開いたまま残る <sub>`wire numbering dialog store`</sub>
+- キャンセルするとコマンドは送られずに閉じる <sub>`wire numbering dialog store`</sub>
+- 採番に失敗したらダイアログは開いたままエラーを表示する <sub>`wire numbering dialog store`</sub>
+
+### propertyCommands
+
+- 線番を書き換えて確定するとset_wire_numbersコマンドが1件だけ組み立てられる(undoで戻せる) <sub>`wireNumberCommand`</sub>
+- 線番を空にして確定すると、その配線の線番を消すコマンドになる <sub>`wireNumberCommand`</sub>
+- 前後の空白は落とされ、空白だけの入力は線番を消す扱いになる <sub>`wireNumberCommand`</sub>
+- 線番が変わっていなければコマンドを送らない(無駄なundo履歴を作らない) <sub>`wireNumberCommand`</sub>
+- 配線以外を選んでいるときは線番コマンドを作らない <sub>`wireNumberCommand`</sub>
 
 ### drawingContext
 

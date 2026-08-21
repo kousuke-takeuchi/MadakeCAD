@@ -111,12 +111,16 @@ export const useDocumentStore = defineStore("document", {
       this.revision = patch.revision;
     },
 
-    /** コマンドを実行する。patchは戻り値で即時適用(イベントは重複適用されない)。 */
-    async execute(command: Command) {
+    /**
+     * コマンドを実行する。patchは戻り値で即時適用(イベントは重複適用されない)。
+     * 呼び出し側が結果 (変更されたエンティティ) を要約できるよう、適用したpatchを返す。
+     */
+    async execute(command: Command): Promise<Patch> {
       const patch = await ipc.executeCommand(command);
       this.applyPatch(patch);
       this.canUndo = true;
       this.canRedo = false;
+      return patch;
     },
 
     async undo() {

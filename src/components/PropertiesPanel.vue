@@ -2,10 +2,15 @@
 // プロパティパレット (Pencilデザイン準拠): セクション見出し + ラベル列(灰)/値列(白)のグリッド。
 import { ChevronDown, Pin } from "lucide-vue-next";
 import { computed, reactive, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import type { Entity } from "../ipc";
 import { useDocumentStore } from "../stores/document";
+import { useUiStore } from "../stores/ui";
+import { wireNumberCommand } from "./propertyCommands";
 
 const store = useDocumentStore();
+const ui = useUiStore();
+const { t } = useI18n();
 
 const selected = computed<Entity | null>(() => {
   const sheet = store.activeSheet;
@@ -26,6 +31,8 @@ const buf = reactive({
   sq: 0.75,
   part_no: "",
   length_m: "",
+  /** 線番 (ネット単位。確定でset_wire_numbersコマンドを送る)。 */
+  wire_no: "",
   reference: "",
   value: "",
   name: "",
@@ -40,6 +47,7 @@ watch(
       buf.sq = e.sq;
       buf.part_no = e.part_no ?? "";
       buf.length_m = e.length_m?.toString() ?? "";
+      buf.wire_no = e.net ?? "";
     } else if (e.kind === "symbol") {
       buf.reference = e.reference;
       buf.value = e.value;
@@ -63,6 +71,24 @@ async function apply() {
       part_no: buf.part_no || null,
       length_m: buf.length_m === "" ? null : Number(buf.length_m),
     };
+    // 線番はネット単位の属性なので、専用のset_wire_numbersコマンドで書き換える
+    const numberCommand = wireNumberCommand(sheet.id, e, buf.wire_no);
+    const otherChanged =
+      entity.color !== e.color ||
+      entity.sq !== e.sq ||
+      entity.part_no !== e.part_no ||
+      entity.length_m !== e.length_m;
+    if (otherChanged) await store.execute({ type: "update_entity", sheet_id: sheet.id, entity });
+    if (numberCommand) {
+      await store.execute(numberCommand);
+      const number = buf.wire_no.trim();
+      ui.log(
+        number
+          ? t("wireNumbers.setLog", { number })
+          : t("wireNumbers.clearedLog"),
+      );
+    }
+    return;
   } else if (e.kind === "symbol") {
     entity = { ...e, reference: buf.reference, value: buf.value };
   } else if (e.kind === "net_label") {
@@ -126,6 +152,19 @@ const kindLabel: Record<string, string> = {
       <div class="prow">
         <span class="plabel">長さ m</span>
         <span class="pvalue"><input v-model="buf.length_m" class="bare" placeholder="0.4" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("wireNumbers.propertyLabel") }}</span>
+        <span class="pvalue">
+          <input
+            v-model="buf.wire_no"
+            class="bare mono"
+            :title="t('wireNumbers.propertyHint')"
+            placeholder="1"
+            spellcheck="false"
+            @keyup.enter="apply"
+          />
+        </span>
       </div>
     </template>
 
@@ -229,6 +268,7 @@ const kindLabel: Record<string, string> = {
   color: var(--ui-text);
   padding: 2px 0;
 }
+.mono { font-family: var(--mono-font); }
 .swatch {
   width: 11px;
   height: 11px;
