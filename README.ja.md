@@ -1,11 +1,9 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
-  <img src="docs/images/logo-light.svg" alt="MadakeCAD logo" width="96" height="96">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/lockup-dark.png">
+  <img src="docs/images/lockup-light.png" alt="MadakeCAD" width="300">
 </picture>
-
-# MadakeCAD
 
 **AI-firstな産業設備向け電気CAD — JIS / IEC / ISO 準拠を目指して**
 
