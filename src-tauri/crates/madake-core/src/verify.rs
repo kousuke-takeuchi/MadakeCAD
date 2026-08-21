@@ -30,11 +30,46 @@ pub struct Diagnostic {
     pub entity_ids: Vec<EntityId>,
 }
 
-/// シート1枚のERC+電気検証。
+/// シート1枚のERC+電気検証。電流・電圧はngspiceのDC動作点解析を優先し、
+/// ngspice未導入(またはSPICE化不能)ならグラフ近似へフォールバックする。
 pub fn verify_sheet(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
+    let sim = simulate(sheet, symbols);
+    verify_sheet_with(sheet, symbols, sim.as_ref())
+}
+
+pub(crate) fn verify_sheet_with(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    sim: Option<&SimResult>,
+) -> Vec<Diagnostic> {
     let mut diags = erc(sheet, symbols);
-    diags.extend(electrical(sheet, symbols));
+    diags.extend(electrical(sheet, symbols, sim));
     diags
+}
+
+/// ngspiceによるDC動作点の解。
+pub(crate) struct SimResult {
+    /// ノード名(小文字)→電圧。枝電流("v1#branch")も含む。
+    pub voltages: std::collections::BTreeMap<String, f64>,
+    pub deck: crate::spice::SpiceDeck,
+}
+
+impl SimResult {
+    fn volt(&self, node: &str) -> f64 {
+        if node == "0" {
+            0.0
+        } else {
+            self.voltages.get(node).copied().unwrap_or(0.0)
+        }
+    }
+}
+
+/// SPICE化してngspiceで解く。ngspice未検出・電源なし・実行失敗はNone。
+fn simulate(sheet: &Sheet, symbols: &[SymbolDef]) -> Option<SimResult> {
+    let deck = crate::spice::build_deck(sheet, symbols).ok()?;
+    let exe = crate::ngspice::find_ngspice()?;
+    let voltages = crate::ngspice::run_op(&exe, &deck.deck).ok()?;
+    Some(SimResult { voltages, deck })
 }
 
 /// 銅の抵抗率 (Ω·mm²/m)。
@@ -84,7 +119,7 @@ pub(crate) fn is_load(def: &SymbolDef) -> bool {
     def.category == "output" || def.id == "relay_coil" || def.id == "led"
 }
 
-fn electrical(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
+fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> Vec<Diagnostic> {
     let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
     let nets = extract_netlist(sheet, symbols);
     let mut diags = Vec::new();
@@ -117,11 +152,15 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
     // ネットごとの負荷電流合計 + 電流不明の負荷をInfo
     let mut net_current = vec![0.0f64; nets.len()];
     let mut source_voltage = None;
+    let mut has_battery = false;
     for e in sheet.entities.values() {
         let Entity::Symbol(s) = e else { continue };
         let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
-        if def.id == "battery" && source_voltage.is_none() {
-            source_voltage = parse_number(&s.value);
+        if def.id == "battery" {
+            has_battery = true;
+            if source_voltage.is_none() {
+                source_voltage = parse_number(&s.value);
+            }
         }
         if !is_load(def) {
             continue;
@@ -207,6 +246,89 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 vec![s.id],
             ));
         }
+    }
+
+    // ngspiceのDC動作点が得られた場合: 実解の電流・電圧で判定する
+    if let Some(sim) = sim {
+        // ワイヤごとの電流(分割素子の最大)と電圧降下(素子の合計)
+        let mut per_wire: BTreeMap<EntityId, (f64, f64)> = BTreeMap::new();
+        for el in &sim.deck.wire_elements {
+            let dv = (sim.volt(&el.node_a) - sim.volt(&el.node_b)).abs();
+            let amps = if el.ohms > 0.0 { dv / el.ohms } else { 0.0 };
+            let e = per_wire.entry(el.entity_id).or_insert((0.0, 0.0));
+            e.0 = e.0.max(amps);
+            e.1 += dv;
+        }
+        for (wid, (amps, drop)) in &per_wire {
+            let Some(Entity::Wire(w)) = sheet.entities.get(wid) else { continue };
+            if w.sq > 0.0 && *amps > 1e-6 {
+                let cap = ampacity(w.sq);
+                if *amps > cap + 1e-9 {
+                    diags.push(diag(
+                        Severity::Error,
+                        "elec.wire_ampacity",
+                        format!(
+                            "ワイヤ {}sq の許容電流 {cap}A を電流 {amps:.2}A が超えています (シミュレーション値)",
+                            w.sq
+                        ),
+                        vec![w.id],
+                    ));
+                }
+            }
+            if w.length_m.is_some() {
+                let limit = voltage * VOLTAGE_DROP_RATIO;
+                if *drop > limit {
+                    diags.push(diag(
+                        Severity::Warning,
+                        "elec.voltage_drop",
+                        format!(
+                            "電圧降下 {drop:.2}V が許容値 {limit:.2}V ({voltage}Vの{}%) を超えています (シミュレーション値)",
+                            (VOLTAGE_DROP_RATIO * 100.0) as u32
+                        ),
+                        vec![w.id],
+                    ));
+                }
+            }
+        }
+        // ヒューズの実電流
+        let mut comp_amps: BTreeMap<EntityId, f64> = BTreeMap::new();
+        for el in &sim.deck.component_elements {
+            let dv = (sim.volt(&el.node_a) - sim.volt(&el.node_b)).abs();
+            let amps = if el.ohms > 0.0 { dv / el.ohms } else { 0.0 };
+            let e = comp_amps.entry(el.entity_id).or_insert(0.0);
+            *e = e.max(amps);
+        }
+        for e in sheet.entities.values() {
+            let Entity::Symbol(s) = e else { continue };
+            let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+            if def.id != "fuse" {
+                continue;
+            }
+            let Some(rating) = parse_number(&s.value) else { continue };
+            let amps = comp_amps.get(&s.id).copied().unwrap_or(0.0);
+            let label = if s.reference.is_empty() { "fuse" } else { s.reference.as_str() };
+            if amps > rating + 1e-9 {
+                diags.push(diag(
+                    Severity::Warning,
+                    "elec.fuse_rating",
+                    format!(
+                        "{label}: 電流 {amps:.2}A がヒューズ定格 {rating}A を超えています (シミュレーション値)"
+                    ),
+                    vec![s.id],
+                ));
+            }
+        }
+        return diags;
+    }
+
+    // ngspice未検出時のフォールバック: グラフ近似で判定 (Infoで明示)
+    if has_battery {
+        diags.push(diag(
+            Severity::Info,
+            "elec.approximate_mode",
+            "ngspice未検出のため電流・電圧はグラフ近似で判定しました (ngspiceを導入すると実回路解析になります)".into(),
+            Vec::new(),
+        ));
     }
 
     // 直列経路の近似: 導通部品(ヒューズ・スイッチ・接点)越しに電流を伝播する。
@@ -506,10 +628,6 @@ mod tests {
         verify_sheet(sheet, &sheet_symbol_defs(sheet))
     }
 
-    fn codes(diags: &[Diagnostic]) -> Vec<&str> {
-        diags.iter().map(|d| d.code.as_str()).collect()
-    }
-
     #[test]
     fn fully_wired_pair_has_no_erc_findings() {
         // R1-R2を両端とも配線: ERC指摘なし
@@ -699,7 +817,11 @@ mod tests {
     #[test]
     fn healthy_series_circuit_has_no_elec_findings() {
         let diags = run(&series_circuit(Some("1.0"), "5A", 0.75, None, false));
-        let elec: Vec<_> = diags.iter().filter(|d| d.code.starts_with("elec.")).collect();
+        // 近似モードのInfo(ngspice未導入環境)は「問題」ではないので除外して判定
+        let elec: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code.starts_with("elec.") && d.code != "elec.approximate_mode")
+            .collect();
         assert!(elec.is_empty(), "{elec:?}");
     }
 
@@ -717,8 +839,8 @@ mod tests {
 
     #[test]
     fn overloaded_wire_and_fuse_are_flagged() {
-        // 8A負荷: 0.3sq(許容7A)超過 + ヒューズ5A定格超過
-        let diags = run(&series_circuit(Some("8"), "5A", 0.3, None, false));
+        // 10A負荷: 等価抵抗モデルの実電流(約8.4A)でも0.3sq(許容7A)超過 + ヒューズ5A定格超過
+        let diags = run(&series_circuit(Some("10"), "5A", 0.3, None, false));
         assert!(
             diags.iter().filter(|d| d.code == "elec.wire_ampacity").count() >= 1,
             "{diags:?}"
@@ -733,8 +855,9 @@ mod tests {
 
     #[test]
     fn excessive_voltage_drop_is_flagged() {
-        // 10m x 0.75sq x 3A: 往復 2*0.0175*10/0.75*3 = 1.4V > 24Vの3% (0.72V)
-        let diags = run(&series_circuit(Some("3"), "10A", 0.75, Some(10.0), false));
+        // 15m x 0.75sq x 3A負荷: 近似(往復2.1V)でもシミュレーション(実電流~2.55Aで1本0.89V)でも
+        // 24Vの3% (0.72V) を超える
+        let diags = run(&series_circuit(Some("3"), "10A", 0.75, Some(15.0), false));
         assert!(
             diags.iter().any(|d| d.code == "elec.voltage_drop"),
             "{diags:?}"
@@ -755,6 +878,34 @@ mod tests {
         );
         assert!(!diags.iter().any(|d| d.code == "elec.wire_ampacity"));
         assert!(!diags.iter().any(|d| d.code == "elec.voltage_drop"));
+    }
+
+    #[test]
+    fn simulation_mode_reports_measured_values_when_ngspice_installed() {
+        if crate::ngspice::find_ngspice().is_none() {
+            eprintln!("ngspice未検出のためスキップ");
+            return;
+        }
+        let diags = run(&series_circuit(Some("3"), "10A", 0.75, Some(15.0), false));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "elec.voltage_drop" && d.message.contains("シミュレーション値")),
+            "{diags:?}"
+        );
+        assert!(!diags.iter().any(|d| d.code == "elec.approximate_mode"));
+    }
+
+    #[test]
+    fn fallback_mode_emits_approximate_info() {
+        let sheet = series_circuit(Some("1.0"), "5A", 0.75, None, false);
+        let diags = verify_sheet_with(&sheet, &sheet_symbol_defs(&sheet), None);
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "elec.approximate_mode" && d.severity == Severity::Info),
+            "{diags:?}"
+        );
     }
 
     #[test]
