@@ -70,7 +70,7 @@ function pick(d: Diagnostic) {
 .badge {
   font-size: 10px;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: 999px;
   padding: 1px 8px;
 }
 .badge.error { color: var(--err-fg); background: var(--err-bg); }

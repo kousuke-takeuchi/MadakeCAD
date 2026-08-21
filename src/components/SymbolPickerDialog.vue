@@ -360,8 +360,8 @@ function pickPart(part: Part) {
   color: #fff;
   font-size: 12px;
   font-weight: 600;
-  padding: 7px 16px;
-  border-radius: 8px;
+  padding: 5px 14px;
+  border-radius: 4px;
   cursor: pointer;
 }
 </style>
