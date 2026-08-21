@@ -7,7 +7,6 @@
 - 要件定義書: `docs/requirements.md`(背景・成功基準・機能/非機能要件)
 - 全体設計(スペック): `docs/superpowers/specs/2026-08-20-madakecad-design.md`(設計判断の記録)
 - 技術スタック: `docs/tech-stack.md` / データ設計: `docs/data-model.md`
-- 画面設計: `docs/ui-screens.md` / 画面遷移: `docs/ui-flows.md`
 - 機能インベントリ(実装済み・未実装の棚卸し): `docs/features.md`
 - 環境構築: `docs/setup.md`
 - 実装計画: `docs/superpowers/plans/` 配下(日付順)

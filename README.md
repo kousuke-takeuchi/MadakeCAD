@@ -21,8 +21,7 @@
 | [要件定義書](docs/requirements.md) | 背景・成功基準・機能/非機能要件・制約 |
 | [技術スタック](docs/tech-stack.md) | 使用技術・バージョン・選定理由 |
 | [データ設計書](docs/data-model.md) | ドキュメントモデル・部品DB ER図・派生データ |
-| [画面設計書](docs/ui-screens.md) | 画面一覧・レイアウト・.pen対応表 |
-| [画面遷移図](docs/ui-flows.md) | ユーザーフロー・ツール状態遷移・エラーフロー |
+| 画面設計・画面遷移 | `MadakeCAD.pen`(Pencil)が正。Pen.appで開く |
 | [環境構築手順](docs/setup.md) | 必要ソフト・セットアップ・トラブルシューティング |
 | [機能インベントリ](docs/features.md) | 実装済み/未実装の棚卸しと次期計画候補 |
 | [全体設計スペック](docs/superpowers/specs/2026-08-20-madakecad-design.md) | 設計判断の記録(アーキテクチャ・フェーズ計画) |
