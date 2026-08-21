@@ -53,6 +53,8 @@ export interface WireChatMessage {
   text: string;
   tool_calls?: WireToolCall[];
   applied_revisions?: AppliedRevisions;
+  /** 旧`chat.json`には無いフィールド(Rust側は`serde(default)`で{0,0})。 */
+  applied_undo_depth?: AppliedUndoDepth;
   error?: string | null;
 }
 
@@ -78,8 +80,24 @@ export type ChatRole = "user" | "assistant";
 export type ToolStatus = "running" | "ok" | "error";
 export type PanelState = "collapsed" | "expanded";
 
-/** ターンの前後で挟んだEngineのrevision範囲(`end - start`が巻き戻しに必要なundo回数)。 */
+/**
+ * ターンの前後で挟んだEngineのrevision範囲(表示専用: 「rev N」の表示に使う)。
+ *
+ * undo/redoでもrevisionは進むため、`end - start`は積まれたコマンド数ではない。
+ * 巻き戻し可否・件数の正は [`AppliedUndoDepth`]。
+ */
 export interface AppliedRevisions {
+  start: number;
+  end: number;
+}
+
+/**
+ * ターンの前後で挟んだundoスタックの深さ。
+ *
+ * `end - start`がこのターンで新たに積まれた編集コマンド数(= 必要なundo回数)。
+ * ターン中にエージェントがundo/redoを混ぜても過不足なく数えられる。
+ */
+export interface AppliedUndoDepth {
   start: number;
   end: number;
 }
@@ -99,7 +117,10 @@ export interface ChatMessage {
   role: ChatRole;
   text: string;
   tool_calls: ChatToolCall[];
+  /** 表示用のrevision範囲 */
   applied_revisions: AppliedRevisions;
+  /** 「元に戻す」可否・適用済み表示の判定に使う(`end - start > 0`が適用済み) */
+  applied_undo_depth: AppliedUndoDepth;
   error: string | null;
   usage: Usage | null;
   /** ストリーミング進行中(ローダ表示用) */
@@ -284,7 +305,8 @@ export function summarizeToolUse(tool: string, input: unknown): string {
       ]
         .filter(Boolean)
         .join(" ");
-      return spec ? `${spec} ${segments}本を接続` : `${segments}本を接続`;
+      // pointsは折れ線の頂点列。数えているのは電線本数ではなく区間数
+      return spec ? `${spec} ${segments}区間を接続` : `${segments}区間を接続`;
     }
     case "update_entity": {
       const entity = rec(p.entity);
@@ -329,12 +351,17 @@ function emptyRevisions(): AppliedRevisions {
   return { start: 0, end: 0 };
 }
 
+function emptyUndoDepth(): AppliedUndoDepth {
+  return { start: 0, end: 0 };
+}
+
 function newMessage(role: ChatRole, text: string, streaming: boolean): ChatMessage {
   return {
     role,
     text,
     tool_calls: [],
     applied_revisions: emptyRevisions(),
+    applied_undo_depth: emptyUndoDepth(),
     error: null,
     usage: null,
     streaming,
@@ -358,6 +385,7 @@ function normalizeMessage(message: WireChatMessage): ChatMessage {
     text: message.text,
     tool_calls: (message.tool_calls ?? []).map(normalizeToolCall),
     applied_revisions: message.applied_revisions ?? emptyRevisions(),
+    applied_undo_depth: message.applied_undo_depth ?? emptyUndoDepth(),
     error: message.error ?? null,
     usage: null,
     streaming: false,
@@ -375,12 +403,33 @@ export function normalizeConversation(conversation: WireConversation): ChatConve
   };
 }
 
-/** このターンで確定した編集コマンド数(= 元に戻すのに必要なundo回数)。 */
+/**
+ * このターンで確定した編集コマンド数(= 元に戻すのに必要なundo回数)。
+ *
+ * revisionではなくundoスタックの深さ増分で数える(revisionはundo/redoでも進むため、
+ * 差分は積まれたコマンド数と一致しない)。Rust側`ChatMessage::applied_command_count`と同じ定義。
+ */
 export function appliedCommandCount(message: ChatMessage): number {
-  return Math.max(message.applied_revisions.end - message.applied_revisions.start, 0);
+  return Math.max(message.applied_undo_depth.end - message.applied_undo_depth.start, 0);
 }
 
 let localSeq = 0;
+
+/** サーバー採番前のローカル会話idの接頭辞。 */
+const LOCAL_ID_PREFIX = "local-";
+
+/**
+ * サーバー採番前のローカルidか。
+ *
+ * Rust側の`conversation_id`はUuidなので、この形のidをAPIへ渡すと必ず
+ * デシリアライズに失敗する。境界で必ず弾くこと。
+ */
+function isLocalId(id: string | null): boolean {
+  return typeof id === "string" && id.startsWith(LOCAL_ID_PREFIX);
+}
+
+/** ユーザーが中断したターンに載せるラベル(Rust側`CANCELLED_MESSAGE`と同文言)。 */
+const CANCELLED_MESSAGE = "キャンセルされました";
 
 // ---------------------------------------------------------------------------
 // ストア
@@ -396,6 +445,10 @@ interface ChatState {
   /** サーバー採番待ちのローカル会話id(イベントが先に届いた場合の引き取り用) */
   pendingLocalId: string | null;
   unlisten: UnlistenFn | null;
+  /** 購読処理そのもの(解決前にunsubscribeされても確実に閉じるため保持する) */
+  subscription: Promise<UnlistenFn> | null;
+  /** 未知の会話を検知して一覧を取り直している最中か(再取得の多重起動よけ) */
+  reloading: boolean;
 }
 
 export const useChatStore = defineStore("chat", {
@@ -408,6 +461,8 @@ export const useChatStore = defineStore("chat", {
     detect: null,
     pendingLocalId: null,
     unlisten: null,
+    subscription: null,
+    reloading: false,
   }),
 
   getters: {
@@ -432,14 +487,41 @@ export const useChatStore = defineStore("chat", {
       await Promise.all([this.loadConversations(), this.detectCli()]);
     },
 
+    /**
+     * エージェントイベントを購読する(多重購読しない)。
+     *
+     * `unlisten`だけを見張ると、guardと`await`の間に入った2回目の呼び出しが
+     * 二重購読を張ってしまう。購読Promise自体を同期的に保持して塞ぐ。
+     */
     async subscribe() {
-      if (this.unlisten) return;
-      this.unlisten = await agentApi.onEvent((payload) => this.applyAgentEvent(payload));
+      if (this.subscription) {
+        await this.subscription;
+        return;
+      }
+      const subscribing = agentApi.onEvent((payload) => this.applyAgentEvent(payload));
+      this.subscription = subscribing;
+      let unlisten: UnlistenFn;
+      try {
+        unlisten = await subscribing;
+      } catch (e) {
+        // 失敗した購読を残すと以降の再購読が永久に塞がる
+        if (this.subscription === subscribing) this.subscription = null;
+        throw e;
+      }
+      if (this.subscription !== subscribing) {
+        // 解決までにunsubscribeされていた。張ってしまった購読はここで閉じる
+        unlisten();
+        return;
+      }
+      this.unlisten = unlisten;
     },
 
     unsubscribe() {
-      this.unlisten?.();
+      const settled = this.unlisten;
       this.unlisten = null;
+      // 解決前ならsubscribe()側がこの取り消しに気づいて閉じる
+      this.subscription = null;
+      settled?.();
     },
 
     async detectCli() {
@@ -465,6 +547,8 @@ export const useChatStore = defineStore("chat", {
     /** エージェントイベントを会話へ畳み込む(唯一の状態更新経路)。 */
     applyAgentEvent(payload: AgentEventPayload) {
       const conv = this.ensureConversation(payload.conversation_id);
+      // 未知の会話(別クライアントが開始したターン)は捏造せず捨てる
+      if (!conv) return;
       const event = payload.event;
       switch (event.type) {
         case "session_started":
@@ -500,7 +584,8 @@ export const useChatStore = defineStore("chat", {
         }
 
         case "turn_completed": {
-          const turn = lastAssistant(conv) ?? this.openTurn(conv);
+          const turn = streamingTurn(conv);
+          if (!turn) break;
           // デルタが来ない構成でも本文を埋める
           if (!turn.text) turn.text = event.result;
           turn.usage = event.usage;
@@ -516,13 +601,19 @@ export const useChatStore = defineStore("chat", {
               start: event.start_revision,
               end: event.end_revision,
             };
+            // このイベントは「編集が入ったターン」にだけ流れるが、undo深さの増分は
+            // 運ばれてこない(revision差はundo/redo混在で過大になるため使えない)。
+            // 表示側は「適用済みか」しか見ないので1件として記録し、正確な件数は
+            // loadConversations()の再取得で上書きする。
+            if (appliedCommandCount(turn) === 0) turn.applied_undo_depth = { start: 0, end: 1 };
             turn.undone = false;
           }
           break;
         }
 
         case "error": {
-          const turn = lastAssistant(conv) ?? this.openTurn(conv);
+          const turn = streamingTurn(conv);
+          if (!turn) break;
           turn.error = event.message;
           turn.streaming = false;
           this.recomputeStreaming();
@@ -532,10 +623,15 @@ export const useChatStore = defineStore("chat", {
     },
 
     /**
-     * 会話を取得する(無ければ作る)。
-     * サーバー採番待ちのローカル会話があれば、そのidを差し替えて引き取る。
+     * イベントの宛先会話を解決する。
+     *
+     * サーバー採番待ちのローカル会話があれば、そのidを差し替えて引き取る
+     * (send()の解決より先にイベントが届くケース)。
+     * どちらでもない未知のidは**会話を作らずnullを返す**。ここで空の会話を作ると、
+     * madake CLIやMCPなど別クライアントが始めたターンのたびに、ユーザー発話を欠いた
+     * 幽霊会話がUIへ並んでしまう。Rust側が正なので一覧の再取得だけ促す。
      */
-    ensureConversation(id: string): ChatConversation {
+    ensureConversation(id: string): ChatConversation | null {
       const found = this.conversations.find((c) => c.id === id);
       if (found) return found;
 
@@ -549,15 +645,26 @@ export const useChatStore = defineStore("chat", {
         }
       }
 
-      const created: ChatConversation = {
-        id,
-        session_id: null,
-        messages: [],
-        model: this.model,
-      };
-      this.conversations.push(created);
-      if (!this.activeId) this.activeId = id;
-      return created;
+      this.scheduleReload();
+      return null;
+    },
+
+    /**
+     * 未知の会話を見つけたときに、Rust側の一覧を1回だけ取り直す。
+     *
+     * 自分のターンが進行中の間は取り直さない(一覧の再取得は会話を丸ごと差し替えるため、
+     * 進行中メッセージのstreaming/usageが消える)。次の機会に拾えばよい。
+     */
+    scheduleReload() {
+      if (this.reloading || this.streaming) return;
+      this.reloading = true;
+      void this.loadConversations()
+        .catch(() => {
+          // 取得失敗時は次のイベントで再試行する
+        })
+        .finally(() => {
+          this.reloading = false;
+        });
     },
 
     /** 進行中のアシスタントメッセージ(無ければ新しいターンを開始する)。 */
@@ -585,24 +692,29 @@ export const useChatStore = defineStore("chat", {
       if (!text || this.streaming) return null;
 
       let conv = this.conversations.find((c) => c.id === this.activeId) ?? null;
-      let localId: string | null = null;
       if (!conv) {
-        localId = `local-${++localSeq}`;
+        const localId = `${LOCAL_ID_PREFIX}${++localSeq}`;
         conv = { id: localId, session_id: null, messages: [], model: this.model };
         this.conversations.push(conv);
         this.activeId = localId;
-        this.pendingLocalId = localId;
       }
+      // 採番前のローカル会話は、初回送信が失敗した後の再送でも「新規扱い」で送る。
+      // (ローカルidをAPIへ渡すとRust側のUuidデシリアライズで必ず失敗する)
+      const pending = isLocalId(conv.id);
+      this.pendingLocalId = pending ? conv.id : null;
+
       conv.messages.push(newMessage("user", text, false));
       conv.messages.push(newMessage("assistant", "", true));
       this.streaming = true;
 
       try {
-        const id = await agentApi.send(localId ? null : conv.id, text, this.model);
+        const id = await agentApi.send(pending ? null : conv.id, text, this.model);
         this.adoptConversationId(id);
         return id;
       } catch (e) {
-        this.pendingLocalId = null;
+        // 失敗してもローカル会話はpendingのまま維持する。ここでクリアすると会話idが
+        // `local-N`のまま確定し、以降の送信が延々とUuidデシリアライズで落ちる
+        this.pendingLocalId = isLocalId(conv.id) ? conv.id : null;
         const turn = lastAssistant(conv);
         if (turn) {
           turn.error = e instanceof Error ? e.message : String(e);
@@ -624,26 +736,55 @@ export const useChatStore = defineStore("chat", {
       pending.id = id;
     },
 
-    /** ストリーミング中のターンを中断する。 */
+    /**
+     * 現在の会話のストリーミング中のターンを中断する。
+     *
+     * 採番前(`local-`)の会話やアクティブな会話が無い場合、Rustへ渡せるidが無いので
+     * APIは呼ばずローカルの整理だけ行う。API呼び出しが失敗しても整理は必ず済ませる
+     * (UIをストリーミング表示のまま固めない)。
+     */
     async cancel() {
       const conv = this.conversations.find((c) => c.id === this.activeId) ?? null;
-      try {
-        await agentApi.cancel(conv && conv.id !== this.pendingLocalId ? conv.id : null);
-      } finally {
-        for (const c of this.conversations) {
-          for (const m of c.messages) m.streaming = false;
+      const remoteId = conv && !isLocalId(conv.id) ? conv.id : null;
+      if (remoteId) {
+        try {
+          await agentApi.cancel(remoteId);
+        } catch {
+          // 中断要求の失敗は握りつぶす(ローカル整理は下で必ず行う)
         }
-        this.streaming = false;
       }
+      if (!conv) {
+        this.recomputeStreaming();
+        return;
+      }
+      // 中断するのは対象の会話だけ。他会話のターンは走り続けている
+      const turn = streamingTurn(conv);
+      // Rust側もキャンセル理由をErrorイベントで流すが、下のガード(進行中でない
+      // ターンへのerrorは捨てる)で落ちるため、ラベルはここで載せる
+      if (turn && !turn.error) turn.error = CANCELLED_MESSAGE;
+      for (const m of conv.messages) m.streaming = false;
+      this.recomputeStreaming();
     },
 
-    /** そのターンの編集を全て巻き戻す(revision差の回数だけundoする)。 */
+    /**
+     * そのターンの編集を全て巻き戻す(undo深さの増分だけundoする)。
+     *
+     * サーバー側でも「最新の適用済みターンか」「送信中でないか」を検証しており、
+     * 条件を外れると400が返る。**エラーはそのまま呼び出し元へ投げる**
+     * (ChatPanelがui.logへ「元に戻す失敗: ...」として出す)。失敗時はローカルの
+     * 適用済み表示も変更しない。
+     */
     async undoTurn(conversationId: string, messageIndex: number) {
       const conv = this.conversations.find((c) => c.id === conversationId);
       const message = conv?.messages[messageIndex];
-      if (!conv || !message || appliedCommandCount(message) === 0) return;
+      if (!conv || !message || isLocalId(conv.id) || appliedCommandCount(message) === 0) return;
       await agentApi.undoTurn(conversationId, messageIndex);
       message.undone = true;
+      // Rust側`record_undone`と同じ後始末(全部戻したのでrevision範囲も畳む)
+      message.applied_undo_depth = {
+        start: message.applied_undo_depth.start,
+        end: message.applied_undo_depth.start,
+      };
       message.applied_revisions = {
         start: message.applied_revisions.start,
         end: message.applied_revisions.start,
@@ -675,6 +816,20 @@ export const useChatStore = defineStore("chat", {
     },
   },
 });
+
+/**
+ * 進行中のターン(末尾のストリーミング中アシスタントメッセージ)。
+ *
+ * `turn_completed`/`error`の宛先判定に使う。Rust側のイベントにはターン識別子が無いため、
+ * キャンセル直後に遅れて届いた前ターンの`error`と、いま進行中のターンの`error`を
+ * 区別できない。せめて「進行中のターンが無い会話」への終了系イベントは捨てて、
+ * 発話の無い空ターンが生えるのを防ぐ(取りこぼしはloadConversations()で回復する)。
+ * 恒久対策はイベントへのターン通し番号の追加(Rust側`ManagerState::next_seq`が既にある)。
+ */
+function streamingTurn(conv: ChatConversation): ChatMessage | undefined {
+  const last = conv.messages[conv.messages.length - 1];
+  return last && last.role === "assistant" && last.streaming ? last : undefined;
+}
 
 /** 直近のアシスタントメッセージ(ストリーミング中かどうかは問わない)。 */
 function lastAssistant(conv: ChatConversation): ChatMessage | undefined {
