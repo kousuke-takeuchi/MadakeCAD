@@ -51,6 +51,7 @@ MODULES = {
     "symbol": ("Symbol library", "シンボルライブラリ"),
     "netlist": ("Netlist extraction", "ネットリスト抽出"),
     "wire_no": ("Wire numbering", "線番採番"),
+    "harness": ("Harness boundaries", "ハーネス境界"),
     "svg": ("SVG output (JIS frame)", "SVG出力 (JIS図枠)"),
     "pdf": ("PDF output", "PDF出力"),
     "reports": ("Reports (BOM / wire list)", "帳票 (部品表 / 電線リスト)"),

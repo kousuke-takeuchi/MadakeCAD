@@ -5,6 +5,7 @@
 
 pub mod command;
 pub mod geometry;
+pub mod harness;
 pub mod io;
 pub mod kicad;
 pub mod model;

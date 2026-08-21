@@ -39,6 +39,15 @@ const CELL_PAD: f64 = 2.0;
 const WIRE_NO_FONT: f64 = 2.5;
 /// 線番テキストと配線の間隔 (mm)。グリッドピッチと同じ。
 const WIRE_NO_GAP: f64 = 2.5;
+/// ハーネス境界の破線 (IEC 61082-1 のグループ囲み)。線の長さと間隔 mm。
+const HARNESS_DASH: (f64, f64) = (3.0, 2.0);
+/// ハーネス境界の線幅 (mm)。図面の主線より細い補助線。
+const HARNESS_STROKE: f64 = 0.25;
+/// ハーネス名の文字高さ (mm)。
+const HARNESS_FONT: f64 = 2.5;
+/// ハーネス名の位置: 囲みの左上角から右へ / 上へ (mm)。
+const HARNESS_LABEL_DX: f64 = 1.0;
+const HARNESS_LABEL_DY: f64 = 1.0;
 
 /// 図面に描く改訂行(古い順)。上限を超えた分は古い行から省く。
 pub fn visible_revisions(revisions: &[Revision]) -> &[Revision] {
@@ -399,6 +408,43 @@ fn render_wire_numbers(out: &mut String, sheet: &Sheet, symbols: &[SymbolDef]) {
     }
 }
 
+/// ハーネス境界 (IEC 61082-1 のグループ囲み)。破線の閉じた多角形と、その左上角の外側に
+/// 置いたハーネス名を描く。配線より先に描いて背面に置く。名前が空なら囲みだけを描く。
+fn render_harnesses(out: &mut String, sheet: &Sheet) {
+    for entity in sheet.entities.values() {
+        let Entity::Harness(h) = entity else {
+            continue;
+        };
+        if h.points.len() < 2 {
+            continue;
+        }
+        let _ = write!(
+            out,
+            "<polygon points=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\" stroke-dasharray=\"{} {}\"/>\n",
+            polyline_points(&h.points),
+            n(HARNESS_STROKE),
+            n(HARNESS_DASH.0),
+            n(HARNESS_DASH.1)
+        );
+        let name = h.name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let Some((min, _)) = crate::harness::bounds(h) else {
+            continue;
+        };
+        text_el(
+            out,
+            min.x + HARNESS_LABEL_DX,
+            min.y - HARNESS_LABEL_DY,
+            HARNESS_FONT,
+            "#000",
+            "start",
+            name,
+        );
+    }
+}
+
 /// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。
 pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
     let (pw, ph) = sheet.paper_mm();
@@ -414,6 +460,8 @@ pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
         n(pw), n(ph)
     );
     frame_and_title_block(&mut out, sheet);
+    // ハーネス境界は配線・シンボルの背面に置く
+    render_harnesses(&mut out, sheet);
     let defs: std::collections::BTreeMap<&str, &SymbolDef> =
         symbols.iter().map(|d| (d.id.as_str(), d)).collect();
     for entity in sheet.entities.values() {
@@ -445,6 +493,8 @@ pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
             Entity::Text(t) => {
                 text_el(&mut out, t.at.x, t.at.y, t.height, "#000", "start", &t.text);
             }
+            // ハーネス境界は背面のrender_harnessesで描き済み
+            Entity::Harness(_) => {}
         }
     }
     render_wire_numbers(&mut out, sheet, symbols);
@@ -698,6 +748,57 @@ mod tests {
         let sheet = sheet_with(vec![numbered_wire(&[(50.0, 100.0), (90.0, 100.0)], None)]);
         let svg = sheet_to_svg(&sheet, &builtin_symbols());
         assert!(!svg.contains("monospace"), "{svg}");
+    }
+
+    /// テスト用のハーネス境界 (矩形)。
+    fn harness_entity(name: &str, x0: f64, y0: f64, x1: f64, y1: f64) -> Entity {
+        Entity::Harness(Harness {
+            id: Uuid::new_v4(),
+            points: crate::harness::rect_points(Point::new(x0, y0), Point::new(x1, y1)),
+            name: name.into(),
+            note: String::new(),
+        })
+    }
+
+    /// A harness boundary is drawn as a dashed rectangle (IEC 61082-1 group enclosure) around the wires it holds.
+    /// ハーネス境界は、囲んだ配線のまわりに破線の矩形 (IEC 61082-1のグループ囲み) として描かれる。
+    #[test]
+    fn svg_draws_a_harness_as_a_dashed_rectangle() {
+        let sheet = sheet_with(vec![harness_entity("W1", 50.0, 50.0, 150.0, 100.0)]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let line = svg
+            .lines()
+            .find(|l| l.starts_with("<polygon") && l.contains("stroke-dasharray"))
+            .unwrap_or_else(|| panic!("ハーネスの破線囲みが無い: {svg}"));
+        assert!(line.contains("points=\"50,50 150,50 150,100 50,100\""), "{line}");
+        assert!(line.contains("fill=\"none\""), "{line}");
+        assert!(line.contains("stroke-dasharray=\"3 2\""), "{line}");
+    }
+
+    /// The harness name is printed just outside the top-left corner of the boundary.
+    /// ハーネス名は囲みの左上角のすぐ外側に描かれる。
+    #[test]
+    fn svg_labels_the_harness_at_its_top_left_corner() {
+        let sheet = sheet_with(vec![harness_entity("W1", 50.0, 50.0, 150.0, 100.0)]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let label = texts(&svg)
+            .into_iter()
+            .find(|(_, _, s)| s == "W1")
+            .unwrap_or_else(|| panic!("ハーネス名が無い: {svg}"));
+        assert_eq!((label.0, label.1), (51.0, 49.0), "左上角の外側: {label:?}");
+    }
+
+    /// A harness with no name draws only its dashed boundary, without a label.
+    /// 名前の無いハーネスは破線の囲みだけを描き、ラベルは出さない。
+    #[test]
+    fn svg_omits_the_label_of_an_unnamed_harness() {
+        let sheet = sheet_with(vec![harness_entity("", 50.0, 50.0, 150.0, 100.0)]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(svg.contains("stroke-dasharray"), "囲みは描く: {svg}");
+        assert!(
+            !texts(&svg).iter().any(|&(x, y, _)| x == 51.0 && y == 49.0),
+            "囲みの左上角にラベルは描かない: {svg}"
+        );
     }
 
     /// Rotated symbols are drawn with their shapes actually rotated (90 deg makes a resistor body vertical).
