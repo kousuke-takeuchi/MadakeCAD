@@ -46,42 +46,42 @@
 
 **Files:** Modify `src-tauri/crates/madake-core/src/netlist.rs`
 
-- [ ] Step 1 (red): テスト「同一シンボルの同番号ピン2点が別ワイヤに繋がるとき同一ネットになる」
-- [ ] Step 2 (green): `extract_netlist`で同一entity_id+同一pin番号のピンノードをunion。Netの`pins`には重複排除して1つだけ載せる
-- [ ] Step 3: `cargo test -p madake-core` グリーン、コミット
+- [x] Step 1 (red): テスト「同一シンボルの同番号ピン2点が別ワイヤに繋がるとき同一ネットになる」
+- [x] Step 2 (green): `extract_netlist`で同一entity_id+同一pin番号のピンノードをunion。Netの`pins`には重複排除して1つだけ載せる
+- [x] Step 3: `cargo test -p madake-core` グリーン、コミット
 
 ### Task 2: 動的シンボル解決 (madake-core)
 
 **Files:** Modify `symbol.rs`(生成関数+resolve)、`lib.rs`(re-export)、`svg.rs`/`netlist.rs`は変更不要(`&[SymbolDef]`のまま)。Modify `madake-mcp/src/lib.rs`・`link_api.rs`・`agent.rs`(builtin_symbols直参照を置換)
 
-- [ ] Step 1 (red): テスト: `resolve_symbol("terminal_block_8p")`が8端子・左右16接続点・グリッド上・中央揃え、`resolve_symbol("connector_2p")`が旧静的定義と同一座標、`resolve_symbol("connector_0p")`/`"connector_51p"`/`"connector_p"`はNone
-- [ ] Step 2 (green): `dynamic_symbol()`+`resolve_symbol()`+`sheet_symbol_defs()`実装。静的`connector_2p`を削除
-- [ ] Step 3: MCP `place_symbol`のID検証と`get_netlist`/`export_svg`/Link API/agentの`builtin_symbols()`を`resolve_symbol`/`sheet_symbol_defs`へ置換。`list_symbols`の説明文に動的ID規則を追記
-- [ ] Step 4: 全cargo testグリーン、コミット
+- [x] Step 1 (red): テスト: `resolve_symbol("terminal_block_8p")`が8端子・左右16接続点・グリッド上・中央揃え、`resolve_symbol("connector_2p")`が旧静的定義と同一座標、`resolve_symbol("connector_0p")`/`"connector_51p"`/`"connector_p"`はNone
+- [x] Step 2 (green): `dynamic_symbol()`+`resolve_symbol()`+`sheet_symbol_defs()`実装。静的`connector_2p`を削除
+- [x] Step 3: MCP `place_symbol`のID検証と`get_netlist`/`export_svg`/Link API/agentの`builtin_symbols()`を`resolve_symbol`/`sheet_symbol_defs`へ置換。`list_symbols`の説明文に動的ID規則を追記
+- [x] Step 4: 全cargo testグリーン、コミット
 
 ### Task 3: フロントの動的シンボル解決 (Vue/TS)
 
 **Files:** Modify `src/canvas/renderer.ts`(defs Map→resolver)、`src/stores/document.ts`。Create `src/canvas/dynamicSymbol.ts` + vitest
 
-- [ ] Step 1 (red): vitest: TS版`resolveSymbol`がRustと同じ座標を返す(terminal_block_3p / connector_2p の代表値)
-- [ ] Step 2 (green): Rust生成ロジックをTSへ移植(単純な純関数)。レンダラ・SymbolPreviewの定義解決を静的Map+動的フォールバックに変更
-- [ ] Step 3: `npx vitest run` + `npx vue-tsc --noEmit` グリーン、コミット
+- [x] Step 1 (red): vitest: TS版`resolveSymbol`がRustと同じ座標を返す(terminal_block_3p / connector_2p の代表値)
+- [x] Step 2 (green): Rust生成ロジックをTSへ移植(単純な純関数)。レンダラ・SymbolPreviewの定義解決を静的Map+動的フォールバックに変更
+- [x] Step 3: `npx vitest run` + `npx vue-tsc --noEmit` グリーン、コミット
 
 ### Task 4: PDF出力コア (madake-core)
 
 **Files:** Create `src/pdf.rs`。Modify `Cargo.toml`(svg2pdf/usvg/fontdb追加)、`lib.rs`
 
-- [ ] Step 1 (red): テスト: `sheet_to_pdf`の出力が`%PDF-`で始まり非自明なサイズ、表題欄テキスト入りシートで成功する
-- [ ] Step 2 (green): svg2pdf変換実装(フォントDB初期化は`OnceLock`で1回)
-- [ ] Step 3: cargo test グリーン、コミット
+- [x] Step 1 (red): テスト: `sheet_to_pdf`の出力が`%PDF-`で始まり非自明なサイズ、表題欄テキスト入りシートで成功する
+- [x] Step 2 (green): svg2pdf変換実装(フォントDB初期化は`OnceLock`で1回)
+- [x] Step 3: cargo test グリーン、コミット
 
 ### Task 5: PDFのAPI/CLI露出
 
 **Files:** Modify `madake-mcp/src/lib.rs`(`export_pdf`ツール)、`link_api.rs`(`/export/pdf`)、`madake-cli`(`export pdf`)、`README.md`・CLAUDE.mdのコマンド一覧
 
-- [ ] Step 1 (red): link_apiの統合テスト(既存export系テストに倣う)で`/api/v1/export/pdf`が`application/pdf`を返す
-- [ ] Step 2 (green): 実装(SVG export系のコードパスに並べる)
-- [ ] Step 3: CLI `madake export pdf out.pdf [--sheet <ID>]`実装+README更新、全テストグリーン、コミット
+- [x] Step 1 (red): link_apiの統合テスト(既存export系テストに倣う)で`/api/v1/export/pdf`が`application/pdf`を返す
+- [x] Step 2 (green): 実装(SVG export系のコードパスに並べる)
+- [x] Step 3: CLI `madake export pdf out.pdf [--sheet <ID>]`実装+README更新、全テストグリーン、コミット
 
 ### Task 6: UI(デザイン確定後・別途)
 
@@ -90,4 +90,8 @@
 
 ## 進捗
 
-- 2026-08-21: プラン作成。実装開始
+- 2026-08-21: プラン作成。Task 1〜5実装・コミット済み。cargo test全ワークスペース+vitest 94件+vue-tscグリーン。
+  PDF実出力を目視確認済み(JIS図枠・日本語表題欄・端子台terminal_block_4p・コネクタconnector_3p、
+  確認用example: `cargo run -p madake-core --example pdf_demo -- out.pdf`)。
+  追加改善: 参照記号・型番をシンボル外形上端基準で配置(svg.rs/renderer.ts)。
+  Task 6(UI: 部品挿入ダイアログのピン数入力・リボンPDFボタン・レイヤ)はPencilデザイン待ち
