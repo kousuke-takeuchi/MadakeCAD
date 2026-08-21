@@ -551,6 +551,7 @@ async fn auto_read_drawing_off_suppresses_the_drawing_context() {
         claude_path: Some(fixtures_dir().join("fake_claude_echo_args.sh")),
         auto_apply: true,
         auto_read_drawing: false,
+        language: "en".into(),
     });
     manager
         .send(None, "hi", None, Some("アクティブシート: S1".to_string()))
@@ -568,6 +569,7 @@ async fn auto_read_drawing_off_suppresses_the_drawing_context() {
         claude_path: Some(fixtures_dir().join("fake_claude_echo_args.sh")),
         auto_apply: true,
         auto_read_drawing: true,
+        language: "en".into(),
     });
     manager
         .send(None, "hi", None, Some("アクティブシート: S1".to_string()))
