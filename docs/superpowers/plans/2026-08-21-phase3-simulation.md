@@ -28,25 +28,27 @@
 
 ### Task 1: シミュレーションコア (madake-core/sim.rs + spice.rs拡張)
 
-- [ ] Step 1 (red): テスト: 直列回路のsimulate_op(ネット電圧・F1/L1の電流と電力)、open_switches=["SW1"]で負荷電流≈0、ngspice未導入エラー(env偽装)
-- [ ] Step 2 (green): DeckOptions+simulate_op実装、コミット
+- [x] Step 1 (red): テスト: 直列回路のsimulate_op(ネット電圧・F1/L1の電流と電力)、open_switches=["SW1"]で負荷電流≈0、ngspice未導入エラー(env偽装)
+- [x] Step 2 (green): DeckOptions+simulate_op実装、コミット
 
 ### Task 2: API/CLI露出
 
-- [ ] Step 1 (red): link_api統合テスト: POST /simulate/op が結果JSONを返す(ngspice検出時のみ実行)
-- [ ] Step 2 (green): MCP/Link API/CLI実装、README/CLAUDE.md更新、コミット
+- [x] Step 1 (red): link_api統合テスト: POST /simulate/op が結果JSONを返す(ngspice検出時のみ実行)
+- [x] Step 2 (green): MCP/Link API/CLI実装、README/CLAUDE.md更新、コミット
 
 ### Task 3: 部品DB spice_model列 (スキーマv2)
 
-- [ ] Step 1 (red): テスト: v1のDBを開くとv2へマイグレーションされ既存データ保持、spice_modelのCRUD
-- [ ] Step 2 (green): 実装、コミット
+- [x] Step 1 (red): テスト: v1のDBを開くとv2へマイグレーションされ既存データ保持、spice_modelのCRUD
+- [x] Step 2 (green): 実装、コミット
 
 ### Task 4: UI: シミュレーション結果パネル(デザイン先行)
 
-- [ ] Step 1: Pencilデザイン: リボン「シミュレーション」ボタン+結果パネル(ネット電圧・部品電流の表、スイッチ開閉チップ)
-- [ ] Step 2 (red): vitest: simストア(実行・結果・開閉トグル)
-- [ ] Step 3 (green): 実装+実機ブラウザ検証、コミット
+- [x] Step 1: Pencilデザイン: リボン「シミュレーション」ボタン+結果パネル(ネット電圧・部品電流の表、スイッチ開閉チップ)
+- [x] Step 2 (red): vitest: simストア(実行・結果・開閉トグル)
+- [x] Step 3 (green): 実装+実機ブラウザ検証、コミット
 
 ## 進捗
 
-- 2026-08-21: プラン作成
+- 2026-08-21: プラン作成。Task 1〜4完了。cargo test 19スイート(コア61件)+vitest 106件+vue-tscグリーン。
+  実機検証済み: `madake sim`が5m配線の直列回路で1.925A・配線降下つきネット電圧を返し、`--open SW1`で電流0。
+  リボン「シミュレーション」→結果パネル(ネット電圧/部品電流)をブラウザで確認。フェーズ3完了(過渡解析は保留)
