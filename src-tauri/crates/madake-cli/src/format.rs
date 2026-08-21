@@ -246,6 +246,48 @@ pub fn kicad_imported(result: &Value, path: &str) -> String {
     out
 }
 
+/// `madake sim`
+pub fn sim_op(result: &Value) -> String {
+    let voltage = result["voltage"].as_f64().unwrap_or(0.0);
+    let mut out = format!("DC動作点 (電源 {voltage}V)\n");
+    let nets = result["nets"].as_array().cloned().unwrap_or_default();
+    if !nets.is_empty() {
+        out.push_str("\nネット電圧:\n");
+        for n in &nets {
+            let (lo, hi) = (
+                n["volts_min"].as_f64().unwrap_or(0.0),
+                n["volts_max"].as_f64().unwrap_or(0.0),
+            );
+            if (hi - lo).abs() < 0.005 {
+                out.push_str(&format!("  {:<10} {:>7.2} V\n", text(n, "name"), hi));
+            } else {
+                out.push_str(&format!(
+                    "  {:<10} {:>7.2} 〜 {:.2} V (配線降下)\n",
+                    text(n, "name"),
+                    lo,
+                    hi
+                ));
+            }
+        }
+    }
+    let comps = result["components"].as_array().cloned().unwrap_or_default();
+    if !comps.is_empty() {
+        out.push_str("\n部品電流:\n");
+        for c in &comps {
+            out.push_str(&format!(
+                "  {:<8} {:>7.3} A  {:>8.2} W\n",
+                text(c, "reference"),
+                c["amps"].as_f64().unwrap_or(0.0),
+                c["watts"].as_f64().unwrap_or(0.0)
+            ));
+        }
+    }
+    for w in result["warnings"].as_array().cloned().unwrap_or_default() {
+        out.push_str(&format!("⚠ {}\n", w.as_str().unwrap_or("")));
+    }
+    out.trim_end().to_string()
+}
+
 /// `madake parts`
 pub fn parts(parts: &Value) -> String {
     let rows = parts.as_array().cloned().unwrap_or_default();

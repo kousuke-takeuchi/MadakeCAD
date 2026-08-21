@@ -48,6 +48,15 @@ pub enum Commands {
         #[arg(long)]
         category: Option<String>,
     },
+    /// DC動作点シミュレーション (ngspice)
+    Sim {
+        /// シートID (省略時は先頭シート)
+        #[arg(long, value_name = "ID")]
+        sheet: Option<String>,
+        /// 開路にするスイッチ/接点の参照記号 (カンマ区切り。例: SW1,K1)
+        #[arg(long, value_delimiter = ',')]
+        open: Vec<String>,
+    },
     /// 図面検証 (ERC+電気検証)
     Verify {
         /// シートID (省略時は全シート)
@@ -126,6 +135,13 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
                 return Ok(pretty(&parts));
             }
             Ok(format::parts(&parts))
+        }
+        Commands::Sim { sheet, open } => {
+            let result = api.simulate_op(sheet.as_deref(), open)?;
+            if cli.json {
+                return Ok(pretty(&result));
+            }
+            Ok(format::sim_op(&result))
         }
         Commands::Verify { sheet } => {
             let diags = api.verify(sheet.as_deref())?;
@@ -249,6 +265,14 @@ mod tests {
         fn parts(&self, query: Option<&str>, category: Option<&str>) -> Result<Value, CliError> {
             self.record(format!("parts({query:?}, {category:?})"));
             Ok(json!([]))
+        }
+        fn simulate_op(
+            &self,
+            sheet_id: Option<&str>,
+            open_switches: &[String],
+        ) -> Result<Value, CliError> {
+            self.record(format!("simulate_op({sheet_id:?}, {open_switches:?})"));
+            Ok(json!({"voltage": 24.0, "nets": [], "components": [], "warnings": []}))
         }
         fn netlist(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
             self.record(format!("netlist({sheet_id:?})"));

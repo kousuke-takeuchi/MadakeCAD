@@ -41,6 +41,8 @@ cd src-tauri && cargo test
 - `export_svg` / `export_pdf` / `export_bom` / `export_wire_list` / `get_netlist` — 出力・ネットリスト
 - `run_verification` — 図面検証(ERC+電気検証)。Diagnostic配列を返す
 - `search_parts` / `upsert_part` / `delete_part` — 部品DB(グローバル共有マスタ)の検索・登録・削除
+- `simulate_op` — DC動作点シミュレーション(ネット電圧・部品電流/電力、開路what-if)
+- `import_kicad` — KiCad回路図(.kicad_sch)の読み込み
 - `undo` / `redo`
 
 ## madake CLI (ターミナル)
@@ -57,6 +59,7 @@ madake status                       # 接続確認 + 図面の概要
 madake project                      # シート一覧・電線品番
 madake netlist [--sheet <シートID>]  # ネットリスト
 madake verify [--sheet <シートID>]   # 図面検証 (ERC+電気検証。省略時は全シート)
+madake sim [--open SW1,K1]          # DC動作点シミュレーション (ngspice必須。--openで開路what-if)
 madake parts [<検索語>] [--category <カテゴリ>]  # 部品DB検索
 madake export svg|pdf|bom|wire-list <出力パス> [--sheet <シートID>]  # --sheetはsvg/pdfのみ
 madake save <path.mdkproj>          # 保存
