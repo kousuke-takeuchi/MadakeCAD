@@ -59,14 +59,15 @@ pub fn bom_csv(project: &Project) -> String {
     out
 }
 
-/// 電線リストCSV。Wireごとに1行(品番なしは空欄)。
+/// 電線リストCSV。Wireごとに1行(線番・品番なしは空欄)。
 pub fn wire_list_csv(project: &Project) -> String {
-    let mut out = String::from("シート,電線品番,線色,線径sq,長さm\n");
+    let mut out = String::from("シート,線番,電線品番,線色,線径sq,長さm\n");
     for sheet in &project.sheets {
         for entity in sheet.entities.values() {
             if let Entity::Wire(w) = entity {
                 out.push_str(&csv_row(&[
                     sheet.name.clone(),
+                    w.net.clone().unwrap_or_default(),
                     w.part_no.clone().unwrap_or_default(),
                     w.color.clone(),
                     fmt_num(w.sq),
@@ -133,6 +134,31 @@ mod tests {
         assert!(csv.contains("\"JZX-22F(D), 24VDC\""), "カンマ入りはクォート: {csv}");
     }
 
+    /// The wire list has a wire-number column, filled with the number assigned to the wire's net (empty when unnumbered).
+    /// 電線リストには線番の列があり、そのワイヤのネットに振られた線番が入る (未採番なら空欄)。
+    #[test]
+    fn wire_list_has_a_wire_number_column() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for net in [Some("12".to_string()), None] {
+            let e = Entity::Wire(Wire {
+                id: Uuid::new_v4(),
+                points: vec![Point::new(0.0, 0.0), Point::new(10.0, 0.0)],
+                color: "red".into(),
+                sq: 0.75,
+                length_m: None,
+                part_no: None,
+                net,
+            });
+            sheet.entities.insert(e.id(), e);
+        }
+        let csv = wire_list_csv(&project);
+        assert_eq!(csv.lines().next().unwrap(), "シート,線番,電線品番,線色,線径sq,長さm");
+        assert!(csv.lines().any(|l| l.starts_with("Sheet1,12,")), "線番12の行: {csv}");
+        assert!(csv.lines().any(|l| l.starts_with("Sheet1,,")), "未採番は空欄: {csv}");
+    }
+
     /// The wire list contains each wire's part number, color, gauge and length.
     /// 電線リストには各ワイヤの品番・線色・線径・長さが載る。
     #[test]
@@ -151,7 +177,6 @@ mod tests {
         });
         sheet.entities.insert(e.id(), e);
         let csv = wire_list_csv(&project);
-        assert_eq!(csv.lines().next().unwrap(), "シート,電線品番,線色,線径sq,長さm");
         assert!(csv.lines().nth(1).unwrap().contains("SAMPLE0001,red,0.75,0.4"));
     }
 }

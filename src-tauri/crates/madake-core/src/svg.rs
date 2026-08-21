@@ -35,6 +35,10 @@ const REV_FONT: f64 = 2.5;
 const REV_HEADER_FONT: f64 = 2.2;
 /// セル内テキストの左余白 (mm)。
 const CELL_PAD: f64 = 2.0;
+/// 線番テキストの文字高さ (mm)。
+const WIRE_NO_FONT: f64 = 2.5;
+/// 線番テキストと配線の間隔 (mm)。グリッドピッチと同じ。
+const WIRE_NO_GAP: f64 = 2.5;
 
 /// 図面に描く改訂行(古い順)。上限を超えた分は古い行から省く。
 pub fn visible_revisions(revisions: &[Revision]) -> &[Revision] {
@@ -91,12 +95,25 @@ pub fn color_hex(color: &str) -> &str {
     }
 }
 
-fn text_el(out: &mut String, x: f64, y: f64, size: f64, fill: &str, anchor: &str, s: &str) {
+fn text_family_el(
+    out: &mut String,
+    x: f64,
+    y: f64,
+    size: f64,
+    fill: &str,
+    anchor: &str,
+    family: &str,
+    s: &str,
+) {
     let _ = write!(
         out,
-        "<text x=\"{}\" y=\"{}\" font-size=\"{}\" fill=\"{}\" text-anchor=\"{}\" font-family=\"sans-serif\">{}</text>\n",
-        n(x), n(y), n(size), fill, anchor, xml_escape(s)
+        "<text x=\"{}\" y=\"{}\" font-size=\"{}\" fill=\"{}\" text-anchor=\"{}\" font-family=\"{}\">{}</text>\n",
+        n(x), n(y), n(size), fill, anchor, family, xml_escape(s)
     );
+}
+
+fn text_el(out: &mut String, x: f64, y: f64, size: f64, fill: &str, anchor: &str, s: &str) {
+    text_family_el(out, x, y, size, fill, anchor, "sans-serif", s);
 }
 
 fn line_el(out: &mut String, x1: f64, y1: f64, x2: f64, y2: f64, w: f64, stroke: &str) {
@@ -332,6 +349,56 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
     }
 }
 
+/// ネットの代表線分 (最も長い線分)。同長なら上・左の線分を選ぶ。
+fn longest_segment(sheet: &Sheet, wire_ids: &[crate::model::EntityId]) -> Option<(Point, Point)> {
+    let mut best: Option<(f64, Point, Point)> = None;
+    for id in wire_ids {
+        let Some(Entity::Wire(w)) = sheet.entities.get(id) else {
+            continue;
+        };
+        for seg in w.points.windows(2) {
+            let (a, b) = (seg[0], seg[1]);
+            let len = a.distance_to(&b);
+            let mid = midpoint(&a, &b);
+            let better = match &best {
+                None => true,
+                Some((blen, ba, bb)) => {
+                    let bmid = midpoint(ba, bb);
+                    len > blen + 1e-9
+                        || ((len - blen).abs() <= 1e-9 && (mid.y, mid.x) < (bmid.y, bmid.x))
+                }
+            };
+            if better {
+                best = Some((len, a, b));
+            }
+        }
+    }
+    best.map(|(_, a, b)| (a, b))
+}
+
+fn midpoint(a: &Point, b: &Point) -> Point {
+    Point::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
+}
+
+/// 線番 (IEC 62491)。ネットごとに代表線分の中点へ1回だけ描く。
+/// 横向きの線分なら上へ、縦向きなら左へ [`WIRE_NO_GAP`] だけ離す。線番の無いネットは描かない。
+fn render_wire_numbers(out: &mut String, sheet: &Sheet, symbols: &[SymbolDef]) {
+    for net in crate::netlist::extract_netlist(sheet, symbols) {
+        let Some(no) = net.wire_no.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        let Some((a, b)) = longest_segment(sheet, &net.wire_ids) else {
+            continue;
+        };
+        let mid = midpoint(&a, &b);
+        if (b.x - a.x).abs() >= (b.y - a.y).abs() {
+            text_family_el(out, mid.x, mid.y - WIRE_NO_GAP, WIRE_NO_FONT, "#000", "middle", "monospace", no);
+        } else {
+            text_family_el(out, mid.x - WIRE_NO_GAP, mid.y, WIRE_NO_FONT, "#000", "end", "monospace", no);
+        }
+    }
+}
+
 /// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。
 pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
     let (pw, ph) = sheet.paper_mm();
@@ -380,6 +447,7 @@ pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
             }
         }
     }
+    render_wire_numbers(&mut out, sheet, symbols);
     out.push_str("</svg>\n");
     out
 }
@@ -551,6 +619,85 @@ mod tests {
             svg.contains("<rect x=\"290\" y=\"199\" width=\"120\" height=\"56\""),
             "{svg}"
         );
+    }
+
+    /// テスト用のワイヤ (線番付き)。
+    fn numbered_wire(points: &[(f64, f64)], net: Option<&str>) -> Entity {
+        Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: points.iter().map(|&(x, y)| Point::new(x, y)).collect(),
+            color: "black".into(),
+            sq: 0.3,
+            length_m: None,
+            part_no: None,
+            net: net.map(|s| s.to_string()),
+        })
+    }
+
+    fn sheet_with(entities: Vec<Entity>) -> Sheet {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        for e in entities {
+            sheet.entities.insert(e.id(), e);
+        }
+        sheet
+    }
+
+    /// The wire number of a horizontal wire is printed in a monospaced font 2.5 mm above the middle of the wire.
+    /// 横向きの配線の線番は、配線の中点の2.5mm上に等幅フォントで描かれる。
+    #[test]
+    fn svg_draws_wire_number_above_a_horizontal_wire() {
+        let sheet = sheet_with(vec![numbered_wire(&[(50.0, 100.0), (90.0, 100.0)], Some("12"))]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let line = svg
+            .lines()
+            .find(|l| l.contains("monospace") && l.contains(">12<"))
+            .unwrap_or_else(|| panic!("線番テキストが無い: {svg}"));
+        assert_eq!(attr(line, "x"), Some(70.0), "中点のx: {line}");
+        assert_eq!(attr(line, "y"), Some(97.5), "配線の2.5mm上: {line}");
+        assert!(line.contains("text-anchor=\"middle\""), "{line}");
+    }
+
+    /// The wire number of a vertical wire is printed 2.5 mm to the left of the middle of the wire.
+    /// 縦向きの配線の線番は、配線の中点の2.5mm左に描かれる。
+    #[test]
+    fn svg_draws_wire_number_left_of_a_vertical_wire() {
+        let sheet = sheet_with(vec![numbered_wire(&[(80.0, 40.0), (80.0, 80.0)], Some("7"))]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let line = svg
+            .lines()
+            .find(|l| l.contains("monospace") && l.contains(">7<"))
+            .unwrap_or_else(|| panic!("線番テキストが無い: {svg}"));
+        assert_eq!(attr(line, "x"), Some(77.5), "中点の2.5mm左: {line}");
+        assert_eq!(attr(line, "y"), Some(60.0), "中点のy: {line}");
+        assert!(line.contains("text-anchor=\"end\""), "{line}");
+    }
+
+    /// One net is labelled once, at the middle of its longest segment, however many wires it is drawn with.
+    /// 1つのネットの線番は、何本のワイヤで描かれていても、最も長い線分の中点に1回だけ描かれる。
+    #[test]
+    fn svg_draws_the_wire_number_once_on_the_longest_segment() {
+        // 短い縦線 (10mm) と長い横線 (60mm) が端点でつながった1ネット
+        let sheet = sheet_with(vec![
+            numbered_wire(&[(100.0, 50.0), (100.0, 60.0)], Some("3")),
+            numbered_wire(&[(100.0, 60.0), (160.0, 60.0)], Some("3")),
+        ]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let hits: Vec<_> = svg
+            .lines()
+            .filter(|l| l.contains("monospace") && l.contains(">3<"))
+            .collect();
+        assert_eq!(hits.len(), 1, "ネットにつき1つ: {svg}");
+        assert_eq!(attr(hits[0], "x"), Some(130.0), "長い横線の中点: {}", hits[0]);
+        assert_eq!(attr(hits[0], "y"), Some(57.5), "その2.5mm上: {}", hits[0]);
+    }
+
+    /// A net without a wire number gets no number text at all.
+    /// 線番の無いネットには線番テキストを一切描かない。
+    #[test]
+    fn svg_omits_wire_number_for_unnumbered_nets() {
+        let sheet = sheet_with(vec![numbered_wire(&[(50.0, 100.0), (90.0, 100.0)], None)]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(!svg.contains("monospace"), "{svg}");
     }
 
     /// Rotated symbols are drawn with their shapes actually rotated (90 deg makes a resistor body vertical).

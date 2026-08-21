@@ -24,7 +24,11 @@ fn fontdb() -> &'static usvg::fontdb::Database {
         db.load_system_fonts();
         // SVGはfont-family="sans-serif"。日本語グリフを持つ書体へ割り当てる
         #[cfg(target_os = "macos")]
-        db.set_sans_serif_family("Hiragino Sans");
+        {
+            db.set_sans_serif_family("Hiragino Sans");
+            // 線番は font-family="monospace"
+            db.set_monospace_family("Menlo");
+        }
         db
     })
 }

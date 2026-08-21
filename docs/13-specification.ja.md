@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**338仕様項目**。
+全5領域・**343仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -94,6 +94,7 @@
 
 - 部品表はシンボルを型番でまとめ、数量を集計する。 <sub>`bom_groups_by_value_and_counts`</sub>
 - カンマを含む項目は引用符で囲まれ、CSVが壊れない。 <sub>`bom_escapes_fields_with_commas`</sub>
+- 電線リストには線番の列があり、そのワイヤのネットに振られた線番が入る (未採番なら空欄)。 <sub>`wire_list_has_a_wire_number_column`</sub>
 - 電線リストには各ワイヤの品番・線色・線径・長さが載る。 <sub>`wire_list_contains_attributes`</sub>
 
 ### DCシミュレーション
@@ -118,6 +119,10 @@
 - 改訂が0件のシートには改訂欄をまったく描かない(空の枠だけも描かない)。 <sub>`svg_omits_revision_table_when_no_revisions`</sub>
 - 表題欄のRev欄には最新改訂の記号が出る。改訂が無いときは表題欄に保存された値がそのまま出る。 <sub>`svg_title_block_rev_follows_latest_revision`</sub>
 - 改訂が7件あると新しい6行だけが描かれ、最も古い行は図面から省かれる(データとしては残る)。 <sub>`svg_revision_table_shows_only_newest_six_rows`</sub>
+- 横向きの配線の線番は、配線の中点の2.5mm上に等幅フォントで描かれる。 <sub>`svg_draws_wire_number_above_a_horizontal_wire`</sub>
+- 縦向きの配線の線番は、配線の中点の2.5mm左に描かれる。 <sub>`svg_draws_wire_number_left_of_a_vertical_wire`</sub>
+- 1つのネットの線番は、何本のワイヤで描かれていても、最も長い線分の中点に1回だけ描かれる。 <sub>`svg_draws_the_wire_number_once_on_the_longest_segment`</sub>
+- 線番の無いネットには線番テキストを一切描かない。 <sub>`svg_omits_wire_number_for_unnumbered_nets`</sub>
 - 回転したシンボルは形状ごと回転して描かれる(90度で抵抗の本体が縦長になる)。 <sub>`svg_renders_rotated_symbol_primitives`</sub>
 
 ### シンボルライブラリ
