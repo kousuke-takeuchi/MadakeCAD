@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**397仕様項目**。
+全5領域・**414仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -143,6 +143,9 @@
 - ハーネス名は囲みの左上角のすぐ外側に描かれる。 <sub>`svg_labels_the_harness_at_its_top_left_corner`</sub>
 - 名前の無いハーネスは破線の囲みだけを描き、ラベルは出さない。 <sub>`svg_omits_the_label_of_an_unnamed_harness`</sub>
 - 回転したシンボルは形状ごと回転して描かれる(90度で抵抗の本体が縦長になる)。 <sub>`svg_renders_rotated_symbol_primitives`</sub>
+- プロジェクトの一部として書き出したシートには、各ネットラベルの脇に他シートの同名ラベルの住所「/シート.ゾーン」が出る。 <sub>`svg_draws_cross_reference_address_next_to_net_label`</sub>
+- 他のシートに相手がいないネットラベルには、クロスリファレンスの文字が出ない。 <sub>`svg_omits_cross_reference_when_there_is_no_counterpart`</sub>
+- プロジェクトの文脈なしにシート単体を書き出したときは、クロスリファレンスを描かない。 <sub>`svg_of_a_lone_sheet_has_no_cross_reference`</sub>
 
 ### シンボルライブラリ
 
@@ -168,6 +171,9 @@
 - ngspiceがあれば電気検証はソルバの実測値で報告され、近似モードの通知は出ない。 <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
 - ソルバ結果が無い場合はグラフ近似にフォールバックし、その旨をInfoで明示する。 <sub>`fallback_mode_emits_approximate_info`</sub>
 - 1つのネットに異なるネットラベルが混在する状態(異電位の短絡)はエラーになる。 <sub>`conflicting_net_labels_on_one_net_are_an_error`</sub>
+- シート1枚の中のラベル競合は、プロジェクト全体を検証しても1件だけ報告される。 <sub>`project_verification_reports_a_single_sheet_label_conflict_once`</sub>
+- 同名ラベルでシートを跨いで繋がったネットは1ネットとして検査されるので、2枚に跨る競合も全ラベルを挙げた1件として報告される。 <sub>`project_verification_merges_label_conflicts_across_sheets`</sub>
+- 同じラベル名でシートを跨いで続くネットは、競合ではない。 <sub>`project_verification_accepts_a_net_continued_onto_another_sheet`</sub>
 
 ### 線番採番
 
@@ -183,6 +189,20 @@
 - シートを指定しない採番はプロジェクトの全シートをシート順に処理し、番号は図面全体で重複しない。 <sub>`numbering_without_a_sheet_covers_the_whole_project`</sub>
 - 線番は1本ずつ直接編集でき、undoで以前の値に戻る。 <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - 採番コマンドは素のJSON ({"type":"renumber_wires","mode":"append","start":1}) で表現でき、AIやCLIから送れる。 <sub>`renumber_command_is_plain_json`</sub>
+
+### xref
+
+- ゾーンアドレスは行の英字(上から)と列の数字(左から)を組み合わせた「B3」形式になる。 <sub>`zone_address_combines_row_letter_and_column_number`</sub>
+- 図枠の外にある点は、無効なアドレスにはならず最も近いゾーンに丸められる。 <sub>`zone_address_clamps_points_outside_the_frame`</sub>
+- 別々のシートに置かれた同名のネットラベルは、プロジェクト全体では1つのネットに統合される。 <sub>`same_named_labels_merge_into_one_project_net`</sub>
+- ラベル名が違うネットは、シートを跨いでも統合されず別のネットのままになる。 <sub>`differently_named_labels_stay_separate_nets`</sub>
+- ラベルの相手先は、他のシートにある同名ラベルの住所「/シート.ゾーン」になる。 <sub>`cross_reference_address_uses_slash_sheet_dot_zone`</sub>
+- 相手側のシートのラベルからも元のシートが見えるので、双方に相手先が表示される。 <sub>`cross_reference_is_shown_on_both_sides`</sub>
+- 同じネットが複数のシートに続くときは、相手先の住所が全て列挙される。 <sub>`multiple_counterparts_are_all_listed`</sub>
+- 自分のシート内の所在は、同名ラベルが2つあっても相手先には出ない。 <sub>`own_sheet_is_excluded_from_counterparts`</sub>
+- 他のシートに相手がいないラベルには、クロスリファレンスが一切表示されない。 <sub>`label_without_counterpart_shows_nothing`</sub>
+- シートごとのクロスリファレンス表は、各ラベルのentity idを脇に描くテキストへ対応付ける。 <sub>`sheet_cross_reference_table_maps_labels_to_text`</sub>
+- クロスリファレンスのテキストは、ラベル本文の右側に同じベースラインで並ぶ。 <sub>`cross_reference_text_sits_right_of_the_label`</sub>
 
 
 ## 自動化API (MCP / REST)

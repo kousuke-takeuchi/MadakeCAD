@@ -20,6 +20,7 @@ pub mod svg;
 pub mod symbol;
 pub mod verify;
 pub mod wire_no;
+pub mod xref;
 
 pub use command::{Command, Engine, Patch, PatchOp};
 pub use geometry::Point;

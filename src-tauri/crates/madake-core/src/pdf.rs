@@ -34,8 +34,23 @@ fn fontdb() -> &'static usvg::fontdb::Database {
 }
 
 /// シート1枚をPDF文書(バイト列)として書き出す。用紙寸法はmm 1:1。
+/// シート単体の出力なのでシート間クロスリファレンスは描かない
+/// (描くには [`project_sheet_to_pdf`] を使う)。
 pub fn sheet_to_pdf(sheet: &Sheet, symbols: &[SymbolDef]) -> Result<Vec<u8>, PdfError> {
-    let svg = crate::svg::sheet_to_svg(sheet, symbols);
+    svg_to_pdf(crate::svg::sheet_to_svg(sheet, symbols))
+}
+
+/// プロジェクト内の1シートをPDFとして書き出す。ネットラベルの脇に他シートの同名ラベルの
+/// 住所「/シート.ゾーン」が入る。シートが見つからなければNone。
+pub fn project_sheet_to_pdf(
+    project: &crate::model::Project,
+    sheet_id: crate::model::SheetId,
+    symbols: &[SymbolDef],
+) -> Option<Result<Vec<u8>, PdfError>> {
+    crate::svg::project_sheet_to_svg(project, sheet_id, symbols).map(svg_to_pdf)
+}
+
+fn svg_to_pdf(svg: String) -> Result<Vec<u8>, PdfError> {
     let mut options = usvg::Options::default();
     *options.fontdb_mut() = fontdb().clone();
     let tree = usvg::Tree::from_str(&svg, &options).map_err(|e| PdfError::Svg(e.to_string()))?;
