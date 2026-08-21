@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 /// スキーマバージョン (metaテーブルに保存。変更時はマイグレーションを書く)。
-pub const SCHEMA_VERSION: u32 = 1;
+/// v2: partsに`spice_model`列を追加 (過渡解析・非線形モデル用のSPICE素子行)。
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PartsError {
@@ -55,6 +56,9 @@ pub struct Part {
     /// 取付情報 (DINレール/ねじ等。予約)。
     #[serde(default)]
     pub mounting: String,
+    /// SPICEモデル (素子行テンプレート。過渡解析・非線形モデル用、v2)。
+    #[serde(default)]
+    pub spice_model: String,
 }
 
 fn default_currency() -> String {
@@ -92,7 +96,8 @@ pub fn default_db_path() -> PathBuf {
 }
 
 const PART_COLUMNS: &str = "part_no, maker, name, category, symbol_id, rated_voltage, \
-     rated_current_a, purchase_url, datasheet_url, price, currency, note, model_3d, mounting";
+     rated_current_a, purchase_url, datasheet_url, price, currency, note, model_3d, mounting, \
+     spice_model";
 
 fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
     Ok(Part {
@@ -110,6 +115,7 @@ fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
         note: row.get(11)?,
         model_3d: row.get(12)?,
         mounting: row.get(13)?,
+        spice_model: row.get(14)?,
     })
 }
 
@@ -136,7 +142,8 @@ impl PartsDb {
                currency TEXT NOT NULL DEFAULT 'JPY',
                note TEXT NOT NULL DEFAULT '',
                model_3d TEXT NOT NULL DEFAULT '',
-               mounting TEXT NOT NULL DEFAULT ''
+               mounting TEXT NOT NULL DEFAULT '',
+               spice_model TEXT NOT NULL DEFAULT ''
              );
              CREATE TABLE IF NOT EXISTS wire_parts (
                part_no TEXT PRIMARY KEY,
@@ -149,22 +156,43 @@ impl PartsDb {
         )?;
         let db = Self { conn };
         // schema_versionが無い = 新規作成。バージョンを記録しサンプルを投入する
-        let fresh: bool = !db
+        let version: Option<u32> = db
             .conn
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM meta WHERE key='schema_version')",
+                "SELECT value FROM meta WHERE key='schema_version'",
                 [],
-                |r| r.get(0),
+                |r| r.get::<_, String>(0),
             )
-            .unwrap_or(false);
-        if fresh {
-            db.conn.execute(
-                "INSERT INTO meta (key, value) VALUES ('schema_version', ?1)",
-                [SCHEMA_VERSION.to_string()],
-            )?;
-            db.seed_samples()?;
+            .ok()
+            .and_then(|v| v.parse().ok());
+        match version {
+            None => {
+                db.conn.execute(
+                    "INSERT INTO meta (key, value) VALUES ('schema_version', ?1)",
+                    [SCHEMA_VERSION.to_string()],
+                )?;
+                db.seed_samples()?;
+            }
+            Some(v) if v < SCHEMA_VERSION => db.migrate(v)?,
+            _ => {}
         }
         Ok(db)
+    }
+
+    /// 旧スキーマからのマイグレーション。
+    fn migrate(&self, from: u32) -> Result<(), PartsError> {
+        if from < 2 {
+            // v1→v2: spice_model列を追加
+            self.conn.execute(
+                "ALTER TABLE parts ADD COLUMN spice_model TEXT NOT NULL DEFAULT ''",
+                [],
+            )?;
+        }
+        self.conn.execute(
+            "UPDATE meta SET value=?1 WHERE key='schema_version'",
+            [SCHEMA_VERSION.to_string()],
+        )?;
+        Ok(())
     }
 
     /// サンプル部品 (ダミー型番)。新規作成時のみ呼ばれる。
@@ -249,11 +277,11 @@ impl PartsDb {
         self.conn.execute(
             &format!(
                 "INSERT INTO parts ({PART_COLUMNS}) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15) \
                  ON CONFLICT(part_no) DO UPDATE SET \
                  maker=?2, name=?3, category=?4, symbol_id=?5, rated_voltage=?6, \
                  rated_current_a=?7, purchase_url=?8, datasheet_url=?9, price=?10, \
-                 currency=?11, note=?12, model_3d=?13, mounting=?14"
+                 currency=?11, note=?12, model_3d=?13, mounting=?14, spice_model=?15"
             ),
             rusqlite::params![
                 part.part_no,
@@ -270,6 +298,7 @@ impl PartsDb {
                 part.note,
                 part.model_3d,
                 part.mounting,
+                part.spice_model,
             ],
         )?;
         Ok(())
@@ -428,6 +457,52 @@ mod tests {
         let hit = db.find_wire_part("green", 1.25).unwrap().unwrap();
         assert_eq!(hit.part_no, "TEST-W-125GN");
         assert!(db.find_wire_part("green", 2.0).unwrap().is_none());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn v1_database_migrates_to_v2_preserving_data() {
+        let path = tmp_db("migrate");
+        // v1相当のDBを手で作る (spice_model列なし、version=1)
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO meta VALUES ('schema_version', '1');
+                 CREATE TABLE parts (
+                   part_no TEXT PRIMARY KEY,
+                   maker TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '',
+                   category TEXT NOT NULL DEFAULT '', symbol_id TEXT NOT NULL DEFAULT '',
+                   rated_voltage TEXT NOT NULL DEFAULT '', rated_current_a REAL,
+                   purchase_url TEXT NOT NULL DEFAULT '', datasheet_url TEXT NOT NULL DEFAULT '',
+                   price REAL, currency TEXT NOT NULL DEFAULT 'JPY',
+                   note TEXT NOT NULL DEFAULT '', model_3d TEXT NOT NULL DEFAULT '',
+                   mounting TEXT NOT NULL DEFAULT ''
+                 );
+                 INSERT INTO parts (part_no, name) VALUES ('OLD-1', '旧部品');
+                 CREATE TABLE wire_parts (
+                   part_no TEXT PRIMARY KEY, color TEXT NOT NULL, sq REAL NOT NULL,
+                   purchase_url TEXT NOT NULL DEFAULT '', price_per_m REAL,
+                   note TEXT NOT NULL DEFAULT ''
+                 );",
+            )
+            .unwrap();
+        }
+        let db = PartsDb::open(&path).unwrap();
+        // 既存データが残り、spice_modelは空文字で読める
+        let old = db.get_part("OLD-1").unwrap().unwrap();
+        assert_eq!(old.name, "旧部品");
+        assert_eq!(old.spice_model, "");
+        // spice_modelの書き込みも可能
+        let mut updated = old.clone();
+        updated.spice_model = "D1 {a} {k} DMOD".into();
+        db.upsert_part(&updated).unwrap();
+        assert_eq!(
+            db.get_part("OLD-1").unwrap().unwrap().spice_model,
+            "D1 {a} {k} DMOD"
+        );
+        // サンプルは再投入されない (v1で既にseed済みの想定)
+        assert!(db.get_part("MDK-FUSE-5A").unwrap().is_none());
         std::fs::remove_file(&path).ok();
     }
 
