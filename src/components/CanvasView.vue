@@ -1,16 +1,24 @@
 <script setup lang="ts">
 import { inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
+import { AgentOverlay } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
+import type { Patch } from "../ipc";
 import { useDocumentStore } from "../stores/document";
+import { useChatStore } from "../stores/chat";
 import ChatPanel from "./chat/ChatPanel.vue";
 
 const store = useDocumentStore();
+const chat = useChatStore();
 const controller = inject<EditorController>("controller")!;
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const wrapRef = ref<HTMLDivElement | null>(null);
 let observer: ResizeObserver | null = null;
 let raf = 0;
+
+// エージェント編集オーバーレイ。ストリーミング中だけアニメーションを回す。
+const overlay = new AgentOverlay();
+let overlayRaf = 0;
 
 function draw() {
   raf = 0;
@@ -19,9 +27,15 @@ function draw() {
   if (!canvas || !sheet) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
+  const now = Date.now();
+  const regions = overlay.activeRegions(now);
   renderSheet(ctx, sheet, store.symbols, controller.vp, {
     selection: store.selection,
     cursor: controller.cursorScreen,
+    agent:
+      chat.streaming || regions.length > 0
+        ? { regions, active: chat.streaming }
+        : undefined,
   });
   controller.renderPreview(ctx);
 }
@@ -29,6 +43,63 @@ function draw() {
 function scheduleDraw() {
   if (!raf) raf = requestAnimationFrame(draw);
 }
+
+// --- オーバーレイの駆動 -----------------------------------------------------
+
+/** アニメーションを続ける必要があるか(アイドル時はループを止める)。 */
+function overlayRunning(): boolean {
+  return chat.streaming || overlay.hasActive();
+}
+
+function overlayTick() {
+  overlayRaf = 0;
+  draw();
+  if (overlayRunning()) overlayRaf = requestAnimationFrame(overlayTick);
+}
+
+function startOverlayAnimation() {
+  if (!overlayRaf) overlayRaf = requestAnimationFrame(overlayTick);
+}
+
+/** ストリーミング中のターンのツール呼び出しを取り込む。 */
+function syncToolCalls() {
+  const calls = chat.streamingMessage?.tool_calls ?? [];
+  for (const call of calls) {
+    if (call.status === "running") overlay.noteToolStart(call.tool, call.input, { id: call.id });
+    else overlay.noteToolFinish(call.id || call.tool);
+  }
+  startOverlayAnimation();
+}
+
+watch(
+  () => chat.streamingMessage?.tool_calls.map((c) => `${c.id}:${c.status}`).join(",") ?? "",
+  () => syncToolCalls(),
+);
+
+watch(
+  () => chat.streaming,
+  (streaming) => {
+    if (streaming) syncToolCalls();
+    // ターン終了時は進行中の領域を畳む(完了イベントが来なかった場合の保険)
+    else overlay.finishAll();
+    startOverlayAnimation();
+  },
+);
+
+// エージェントのターン中に届いたpatchの対象要素も編集箇所として光らせる。
+// (document storeは書き換えず、適用済みpatchを覗くだけ)
+store.$onAction(({ name, args, after }) => {
+  if (name !== "applyPatch") return;
+  after(() => {
+    if (!chat.streaming) return;
+    const patch = args[0] as Patch | undefined;
+    if (!patch) return;
+    for (const op of patch.ops) {
+      if (op.op === "entity_upserted") overlay.noteEntityUpserted(op.entity);
+    }
+    startOverlayAnimation();
+  });
+});
 
 let fitted = false;
 
@@ -70,6 +141,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   observer?.disconnect();
   if (raf) cancelAnimationFrame(raf);
+  if (overlayRaf) cancelAnimationFrame(overlayRaf);
 });
 
 store.$subscribe(() => scheduleDraw());
