@@ -291,7 +291,10 @@ export function shortToolName(tool: string): string {
 
 /**
  * ツール呼び出しをツールチップ用の日本語1行に要約する。
- * 未知のツールはツール名のみを返す。
+ *
+ * 要約を作れないツール(MCP以外のCLI組み込みツール等)は**空文字**を返す。
+ * チップはツール名を別途表示するので、ここでツール名を返すと
+ * 「ToolSearch ToolSearch」のような二重表示になる。
  */
 export function summarizeToolUse(tool: string, input: unknown): string {
   const name = shortToolName(tool);
@@ -345,7 +348,7 @@ export function summarizeToolUse(tool: string, input: unknown): string {
     case "redo":
       return "取り消した編集をやり直し";
     default:
-      return name;
+      return "";
   }
 }
 
