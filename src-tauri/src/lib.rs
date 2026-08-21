@@ -112,6 +112,19 @@ fn export_svg(
 }
 
 #[tauri::command]
+fn import_kicad(
+    state: State<AppState>,
+    path: String,
+) -> Result<serde_json::Value, String> {
+    let (patch, report) = madake_mcp::agent::import_kicad_with_chat(
+        &state.doc,
+        &state.agent,
+        std::path::Path::new(&path),
+    )?;
+    Ok(serde_json::json!({ "patch": patch, "report": report }))
+}
+
+#[tauri::command]
 fn search_parts(
     state: State<AppState>,
     query: Option<String>,
@@ -315,6 +328,7 @@ pub fn run() {
             get_netlist,
             run_verification,
             search_parts,
+            import_kicad,
             export_svg,
             export_pdf,
             export_bom,

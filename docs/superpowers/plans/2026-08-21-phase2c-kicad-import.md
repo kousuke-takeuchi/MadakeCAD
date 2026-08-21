@@ -16,19 +16,21 @@
 
 ### Task 1: S式パーサ (madake-core/kicad.rs)
 
-- [ ] Step 1 (red): テスト: アトム/文字列(エスケープ)/数値/入れ子リストのパース、不正入力のエラー
-- [ ] Step 2 (green): 実装、コミット
+- [x] Step 1 (red): テスト: アトム/文字列(エスケープ)/数値/入れ子リストのパース、不正入力のエラー
+- [x] Step 2 (green): 実装、コミット
 
 ### Task 2: .kicad_sch → Project変換
 
-- [ ] Step 1 (red): テスト: 最小の.kicad_schフィクスチャ(paper/title_block/wire/junction/label/symbol R+Conn_01x03)→ Sheet内容・マッピング・Reference/Value・ImportReport(未対応lib_idのスキップ報告)
-- [ ] Step 2 (green): 実装、コミット
+- [x] Step 1 (red): テスト: 最小の.kicad_schフィクスチャ(paper/title_block/wire/junction/label/symbol R+Conn_01x03)→ Sheet内容・マッピング・Reference/Value・ImportReport(未対応lib_idのスキップ報告)
+- [x] Step 2 (green): 実装、コミット
 
 ### Task 3: 露出(Link API/MCP/CLI/UI)
 
-- [ ] Step 1 (red): link_api統合テスト: POST /import/kicad がプロジェクトを置き換えreportを返す
-- [ ] Step 2 (green): 実装+CLI open拡張+UIの開くフィルタ、実機検証(サンプル.kicad_schを開いて表示)、ドキュメント更新、コミット
+- [x] Step 1 (red): link_api統合テスト: POST /import/kicad がプロジェクトを置き換えreportを返す
+- [x] Step 2 (green): 実装+CLI open拡張+UIの開くフィルタ、実機検証(サンプル.kicad_schを開いて表示)、ドキュメント更新、コミット
 
 ## 進捗
 
-- 2026-08-21: プラン作成
+- 2026-08-21: プラン作成。Task 1〜3完了。cargo test全ワークスペース+vitest 103件+vue-tscグリーン。
+  実機検証済み: サンプル.kicad_schを`madake open`で読み込み(シンボル4/配線4/ラベル2、Q_NPNスキップ報告)、
+  ブラウザで表示確認、ERCが未接続を想定通り警告(F1はピン位置一致で接続再現)。フェーズ2完了

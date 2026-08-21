@@ -89,6 +89,27 @@ pub fn load_project_with_chat(
     Ok(patch)
 }
 
+/// KiCad回路図(.kicad_sch)を読み込み、プロジェクトを置き換える。
+/// 実行中のターンは中断し、チャット履歴は空になる(新規プロジェクト扱い)。
+pub fn import_kicad_with_chat(
+    doc: &SharedDoc,
+    agent: &AgentManager,
+    path: &Path,
+) -> Result<(Patch, madake_core::kicad::ImportReport), String> {
+    let input = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let name = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "KiCadインポート".into());
+    let (project, report) =
+        madake_core::kicad::import_kicad_sch(&input, &name).map_err(|e| e.to_string())?;
+    agent.cancel_all();
+    let patch = doc.engine.lock().unwrap().replace_project(project);
+    let _ = doc.patches.send(patch.clone());
+    agent.set_conversations(Vec::new());
+    Ok((patch, report))
+}
+
 /// プロジェクトを保存し、隣へチャット履歴も書き出す。
 pub fn save_project_with_chat(
     doc: &SharedDoc,

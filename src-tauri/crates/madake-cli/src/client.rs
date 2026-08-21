@@ -141,6 +141,8 @@ pub trait LinkApi {
     fn save(&self, path: &str) -> Result<Value, CliError>;
     /// `POST /api/v1/load` (`{"path": ...}`)
     fn open(&self, path: &str) -> Result<Value, CliError>;
+    /// `POST /api/v1/import/kicad` (`{"path": ...}`)
+    fn import_kicad(&self, path: &str) -> Result<Value, CliError>;
     /// `POST /api/v1/export/{svg,pdf,bom,wire-list}`
     fn export(
         &self,
@@ -244,6 +246,10 @@ impl LinkApi for HttpClient {
 
     fn open(&self, path: &str) -> Result<Value, CliError> {
         self.post("/load", json!({ "path": path }))
+    }
+
+    fn import_kicad(&self, path: &str) -> Result<Value, CliError> {
+        self.post("/import/kicad", json!({ "path": path }))
     }
 
     fn export(

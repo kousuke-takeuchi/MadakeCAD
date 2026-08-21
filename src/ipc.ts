@@ -180,6 +180,20 @@ export interface Part {
   mounting: string;
 }
 
+/** KiCadインポートの結果要約。 */
+export interface KicadImportResult {
+  patch: Patch;
+  report: {
+    symbols: number;
+    wires: number;
+    junctions: number;
+    labels: number;
+    texts: number;
+    skipped: string[];
+    warnings: string[];
+  };
+}
+
 export interface Diagnostic {
   severity: "error" | "warning" | "info";
   code: string;
@@ -208,6 +222,7 @@ interface Ipc {
   redo(): Promise<Patch | null>;
   saveProject(path: string): Promise<void>;
   loadProject(path: string): Promise<Patch>;
+  importKicad(path: string): Promise<KicadImportResult>;
   newProject(name: string): Promise<Patch>;
   getNetlist(sheetId: string): Promise<Net[]>;
   /** 図面検証 (ERC+電気検証)。sheetId=nullで全シート。 */
@@ -229,6 +244,7 @@ const tauriIpc: Ipc = {
   redo: () => invoke<Patch | null>("redo"),
   saveProject: (path: string) => invoke<void>("save_project", { path }),
   loadProject: (path: string) => invoke<Patch>("load_project", { path }),
+  importKicad: (path: string) => invoke<KicadImportResult>("import_kicad", { path }),
   newProject: (name: string) => invoke<Patch>("new_project", { name }),
   getNetlist: (sheetId: string) => invoke<Net[]>("get_netlist", { sheetId }),
   verify: (sheetId: string | null) => invoke<Diagnostic[]>("run_verification", { sheetId }),
@@ -270,6 +286,8 @@ const httpIpc: Ipc = {
     await http("/save", { method: "POST", body: JSON.stringify({ path }) });
   },
   loadProject: (path) => http<Patch>("/load", { method: "POST", body: JSON.stringify({ path }) }),
+  importKicad: (path) =>
+    http<KicadImportResult>("/import/kicad", { method: "POST", body: JSON.stringify({ path }) }),
   newProject: () => Promise.reject(new Error("browser mode: not supported")),
   getNetlist: (sheetId) => http<Net[]>(`/netlist?sheet_id=${sheetId}`),
   verify: (sheetId) => http<Diagnostic[]>(sheetId ? `/verify?sheet_id=${sheetId}` : "/verify"),

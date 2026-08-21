@@ -114,6 +114,20 @@ async fn post_load(
         .map_err(bad_request)
 }
 
+/// KiCad回路図を読み込みプロジェクトを置き換える。
+async fn post_import_kicad(
+    State(state): State<AgentApi>,
+    Json(body): Json<PathBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let (patch, report) = crate::agent::import_kicad_with_chat(
+        &state.doc,
+        &state.agent,
+        std::path::Path::new(&body.path),
+    )
+    .map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "patch": patch, "report": report })))
+}
+
 #[derive(Deserialize)]
 struct ExportSvgBody {
     sheet_id: Option<Uuid>,
@@ -335,6 +349,7 @@ fn agent_router(state: AgentApi) -> Router {
     Router::new()
         .route("/api/v1/save", post(post_save))
         .route("/api/v1/load", post(post_load))
+        .route("/api/v1/import/kicad", post(post_import_kicad))
         .route("/api/v1/agent/send", post(post_agent_send))
         .route("/api/v1/agent/cancel", post(post_agent_cancel))
         .route("/api/v1/agent/conversations", get(get_agent_conversations))
