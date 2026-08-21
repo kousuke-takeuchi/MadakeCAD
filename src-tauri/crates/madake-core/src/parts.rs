@@ -224,6 +224,7 @@ impl PartsDb {
             let mut sample = p.clone();
             sample.maker = "サンプル".into();
             sample.note = "同梱サンプル (ダミー型番)".into();
+            sample.currency = default_currency();
             self.upsert_part(&sample)?;
         }
         for (part_no, color, sq) in [

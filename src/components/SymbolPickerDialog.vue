@@ -4,13 +4,16 @@
 import { Minus, Plus, Search, X } from "lucide-vue-next";
 import { computed, inject, ref, watch } from "vue";
 import { DYNAMIC_PIN_MAX, dynamicSymbol } from "../canvas/dynamicSymbol";
+import type { Part } from "../ipc";
 import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
+import { usePartsStore } from "../stores/parts";
 import { useUiStore } from "../stores/ui";
 import SymbolPreview from "./SymbolPreview.vue";
 
 const store = useDocumentStore();
 const ui = useUiStore();
+const parts = usePartsStore();
 const controller = inject<EditorController>("controller")!;
 const query = ref("");
 
@@ -65,9 +68,19 @@ const dynPreview = (base: DynBase) =>
 watch(
   () => ui.symbolPickerOpen,
   (open) => {
-    if (open) selectedDyn.value = null;
+    if (open) {
+      selectedDyn.value = null;
+      void parts.search(query.value);
+    }
   },
 );
+
+// 検索語の変更を部品DB検索にも反映 (デバウンス)
+let partsTimer: ReturnType<typeof setTimeout> | undefined;
+watch(query, (q) => {
+  clearTimeout(partsTimer);
+  partsTimer = setTimeout(() => void parts.search(q), 200);
+});
 
 function clampPins(n: number) {
   pinCount.value = Math.min(DYNAMIC_PIN_MAX, Math.max(1, Math.round(n) || 1));
@@ -82,6 +95,19 @@ function pick(symbolId: string) {
 function placeDynamic() {
   if (!selectedDyn.value) return;
   pick(`${selectedDyn.value}_${pinCount.value}p`);
+}
+
+/** 部品DBの部品を配置: 既定シンボルを型番(value)・定格(attrs.current_a)付きで置く。 */
+function pickPart(part: Part) {
+  if (!part.symbol_id || !store.resolveSymbol(part.symbol_id)) {
+    ui.log(`部品 ${part.part_no}: 既定シンボルが未設定または不明です (symbol_id: ${part.symbol_id || "空"})`);
+    return;
+  }
+  const attrs: Record<string, string> = {};
+  if (part.rated_current_a != null) attrs.current_a = String(part.rated_current_a);
+  controller.setTool("place", part.symbol_id, { value: part.part_no, attrs });
+  ui.symbolPickerOpen = false;
+  ui.log(`INSERT  部品 [${part.part_no}] を配置: 位置をクリック (Rで回転, Escで解除)`);
 }
 </script>
 
@@ -116,6 +142,21 @@ function placeDynamic() {
                 <span>{{ d.label }}</span>
               </button>
             </template>
+          </div>
+        </template>
+        <template v-if="parts.results.length > 0">
+          <div class="cat">部品DB (グローバルマスタ)</div>
+          <div class="parts-list">
+            <button v-for="p in parts.results" :key="p.part_no" class="part-row" @click="pickPart(p)">
+              <span class="part-no">{{ p.part_no }}</span>
+              <span class="part-name">{{ p.name }}</span>
+              <span class="part-maker">{{ p.maker }}</span>
+              <span class="part-spacer" />
+              <span v-if="p.rated_voltage || p.rated_current_a != null" class="part-rating">
+                {{ p.rated_voltage }}{{ p.rated_current_a != null ? ` ${p.rated_current_a}A` : "" }}
+              </span>
+            </button>
+            <div class="parts-hint">選択して配置すると型番・定格が図面に設定されます (登録は madake parts / AIチャットから)</div>
           </div>
         </template>
       </div>
@@ -222,6 +263,45 @@ function placeDynamic() {
 }
 .cell:hover { border-color: var(--acad-blue); background: var(--sel-blue); }
 .cell.selected { border-color: var(--acad-blue); background: var(--sel-blue); }
+.parts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.part-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--ribbon-line);
+  border-radius: 4px;
+  background: #fff;
+  padding: 5px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.part-row:hover { border-color: var(--acad-blue); background: var(--sel-blue); }
+.part-no {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+.part-name { font-size: 11px; color: var(--ui-text); }
+.part-maker { font-size: 10px; color: var(--ui-muted); }
+.part-spacer { flex: 1; }
+.part-rating {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  color: var(--ui-muted);
+  background: var(--hover-bg);
+  border-radius: 6px;
+  padding: 1px 7px;
+}
+.parts-hint {
+  font-size: 9px;
+  color: var(--ui-muted);
+  padding: 2px 0;
+}
 .pins-bar {
   display: flex;
   align-items: center;

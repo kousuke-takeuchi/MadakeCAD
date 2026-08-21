@@ -162,6 +162,24 @@ export interface SymbolDef {
   pins: PinDef[];
 }
 
+/** 部品DB (グローバル共有マスタ) の1部品。 */
+export interface Part {
+  part_no: string;
+  maker: string;
+  name: string;
+  category: string;
+  symbol_id: string;
+  rated_voltage: string;
+  rated_current_a: number | null;
+  purchase_url: string;
+  datasheet_url: string;
+  price: number | null;
+  currency: string;
+  note: string;
+  model_3d: string;
+  mounting: string;
+}
+
 export interface Diagnostic {
   severity: "error" | "warning" | "info";
   code: string;
@@ -194,6 +212,8 @@ interface Ipc {
   getNetlist(sheetId: string): Promise<Net[]>;
   /** 図面検証 (ERC+電気検証)。sheetId=nullで全シート。 */
   verify(sheetId: string | null): Promise<Diagnostic[]>;
+  /** 部品DB検索 (query: 部分一致、category: 完全一致)。 */
+  searchParts(query: string, category?: string): Promise<Part[]>;
   exportSvg(sheetId: string, path: string): Promise<void>;
   exportPdf(sheetId: string, path: string): Promise<void>;
   exportBom(path: string): Promise<void>;
@@ -212,6 +232,8 @@ const tauriIpc: Ipc = {
   newProject: (name: string) => invoke<Patch>("new_project", { name }),
   getNetlist: (sheetId: string) => invoke<Net[]>("get_netlist", { sheetId }),
   verify: (sheetId: string | null) => invoke<Diagnostic[]>("run_verification", { sheetId }),
+  searchParts: (query: string, category?: string) =>
+    invoke<Part[]>("search_parts", { query, category }),
   exportSvg: (sheetId: string, path: string) => invoke<void>("export_svg", { sheetId, path }),
   exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
   exportBom: (path: string) => invoke<void>("export_bom", { path }),
@@ -251,6 +273,13 @@ const httpIpc: Ipc = {
   newProject: () => Promise.reject(new Error("browser mode: not supported")),
   getNetlist: (sheetId) => http<Net[]>(`/netlist?sheet_id=${sheetId}`),
   verify: (sheetId) => http<Diagnostic[]>(sheetId ? `/verify?sheet_id=${sheetId}` : "/verify"),
+  searchParts: (query, category) => {
+    const params = new URLSearchParams();
+    if (query) params.set("query", query);
+    if (category) params.set("category", category);
+    const qs = params.toString();
+    return http<Part[]>(`/parts${qs ? `?${qs}` : ""}`);
+  },
   exportSvg: async (sheetId, path) => {
     await http("/export/svg", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
   },

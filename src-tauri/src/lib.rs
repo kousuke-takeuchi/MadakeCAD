@@ -13,6 +13,7 @@ const DEFAULT_MCP_PORT: u16 = 9310;
 struct AppState {
     doc: SharedDoc,
     agent: Arc<AgentManager>,
+    parts: madake_mcp::SharedParts,
 }
 
 #[derive(serde::Serialize)]
@@ -108,6 +109,17 @@ fn export_svg(
         .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
     let svg = madake_core::svg::sheet_to_svg(sheet, &sheet_symbol_defs(sheet));
     std::fs::write(&path, svg).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn search_parts(
+    state: State<AppState>,
+    query: Option<String>,
+    category: Option<String>,
+) -> Result<Vec<madake_core::parts::Part>, String> {
+    let db = state.parts.lock().unwrap();
+    db.search_parts(query.as_deref().unwrap_or(""), category.as_deref())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -245,6 +257,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
+            parts: parts.clone(),
             doc: doc.clone(),
             agent: Arc::clone(&agent),
         })
@@ -301,6 +314,7 @@ pub fn run() {
             new_project,
             get_netlist,
             run_verification,
+            search_parts,
             export_svg,
             export_pdf,
             export_bom,
