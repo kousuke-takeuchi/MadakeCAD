@@ -279,7 +279,7 @@ pub fn import_kicad_sch(
         sheet.title_block.company = get("company");
     }
 
-    let mut push = |sheet: &mut Sheet, e: Entity| {
+    let push = |sheet: &mut Sheet, e: Entity| {
         sheet.entities.insert(e.id(), e);
     };
 
