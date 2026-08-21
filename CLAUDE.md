@@ -39,7 +39,7 @@ npx vue-tsc --noEmit              # フロント型チェック
 ```bash
 cargo run -p madake-cli -- status                    # 接続確認+概要 (cargo install --path crates/madake-cli で madake として常用)
 cargo run -p madake-cli -- netlist [--sheet <ID>]
-cargo run -p madake-cli -- export svg|bom|wire-list <path> [--sheet <ID>]
+cargo run -p madake-cli -- export svg|pdf|bom|wire-list <path> [--sheet <ID>]
 cargo run -p madake-cli -- save|open <path.mdkproj>
 cargo run -p madake-cli -- exec <commands.json>      # Command配列JSON → POST /api/v1/commands
 cargo run -p madake-cli -- undo|redo

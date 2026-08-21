@@ -135,6 +135,22 @@ async fn post_export_svg(
     Ok(Json(serde_json::json!({ "written": body.path })))
 }
 
+async fn post_export_pdf(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<ExportSvgBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let engine = doc.engine.lock().unwrap();
+    let sheet = match body.sheet_id {
+        Some(id) => engine.project().sheet(id),
+        None => engine.project().sheets.first(),
+    }
+    .ok_or_else(|| bad_request("sheet not found"))?;
+    let pdf = madake_core::pdf::sheet_to_pdf(sheet, &sheet_symbol_defs(sheet))
+        .map_err(bad_request)?;
+    std::fs::write(&body.path, pdf).map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "written": body.path })))
+}
+
 async fn post_export_bom(
     State(doc): State<SharedDoc>,
     Json(body): Json<PathBody>,
@@ -385,6 +401,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>) -> Router {
         .route("/api/v1/undo", post(post_undo))
         .route("/api/v1/redo", post(post_redo))
         .route("/api/v1/export/svg", post(post_export_svg))
+        .route("/api/v1/export/pdf", post(post_export_pdf))
         .route("/api/v1/export/bom", post(post_export_bom))
         .route("/api/v1/export/wire-list", post(post_export_wire_list))
         .route("/api/v1/events", get(get_events))

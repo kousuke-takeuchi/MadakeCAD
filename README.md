@@ -35,9 +35,10 @@ cd src-tauri && cargo test
 
 アプリ起動中、`http://127.0.0.1:9310/mcp`(環境変数`MADAKE_MCP_PORT`で変更可)でMCPサーバーが待ち受ける。Claude Codeはこのリポジトリの`.mcp.json`で自動接続され、以下のツールで図面を直接編集できる:
 
-- `get_project` / `list_symbols` — 読み取り
+- `get_project` / `list_symbols` — 読み取り(`connector_{n}p`/`terminal_block_{n}p`の動的IDでピン数可変シンボルも配置可)
 - `place_symbol` / `draw_wire` — 配置・配線
 - `execute_commands` — 任意コマンド列(シート追加、表題欄設定、移動、削除など)
+- `export_svg` / `export_pdf` / `export_bom` / `export_wire_list` / `get_netlist` — 出力・ネットリスト
 - `undo` / `redo`
 
 ## madake CLI (ターミナル)
@@ -53,7 +54,7 @@ cd src-tauri && cargo install --path crates/madake-cli   # madake がPATHに入�
 madake status                       # 接続確認 + 図面の概要
 madake project                      # シート一覧・電線品番
 madake netlist [--sheet <シートID>]  # ネットリスト
-madake export svg|bom|wire-list <出力パス> [--sheet <シートID>]  # --sheetはsvgのみ
+madake export svg|pdf|bom|wire-list <出力パス> [--sheet <シートID>]  # --sheetはsvg/pdfのみ
 madake save <path.mdkproj>          # 保存
 madake open <path.mdkproj>          # 読み込み
 madake exec <commands.json>         # Command配列を実行(Commandエンジン経由)

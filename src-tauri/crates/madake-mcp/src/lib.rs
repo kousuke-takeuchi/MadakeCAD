@@ -300,6 +300,20 @@ impl MadakeMcp {
         json_ok(&serde_json::json!({ "written": p.path }))
     }
 
+    #[tool(description = "シートをJIS図枠つきPDF(印刷品質、フォント埋め込み)として指定パスに書き出す")]
+    fn export_pdf(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let engine = self.doc.engine.lock().unwrap();
+        let sheet = engine
+            .project()
+            .sheet(sheet_id)
+            .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+        let pdf = madake_core::pdf::sheet_to_pdf(sheet, &sheet_symbol_defs(sheet))
+            .map_err(internal)?;
+        std::fs::write(&p.path, pdf).map_err(internal)?;
+        json_ok(&serde_json::json!({ "written": p.path }))
+    }
+
     #[tool(description = "直前の編集を取り消す")]
     fn undo(&self) -> Result<String, ErrorData> {
         let patch = self.doc.undo().map_err(internal)?;
