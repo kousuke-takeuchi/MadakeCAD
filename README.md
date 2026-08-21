@@ -18,7 +18,7 @@ UI操作/MCPツール → Command(JSON) → madake-core → patch(JSON) → UI�
 
 ## 開発
 
-前提: Rust(rustup)、Node.js。
+前提: Rust(rustup)、Node.js。任意: [ngspice](https://ngspice.sourceforge.io/)(図面検証の電流・電圧をDC動作点解析で判定する。macOS: `brew install ngspice` / Linux: `apt install ngspice` / Windows: 公式インストーラ。未導入でも検証はグラフ近似で動作し、Info診断で近似モードと表示される。実行ファイルは環境変数`MADAKE_NGSPICE`→PATH→OS既定パスの順で探索)。
 
 ```bash
 npm install
