@@ -15,7 +15,9 @@ const name = computed(() => shortToolName(props.call.tool));
     <CircleX v-else-if="call.status === 'error'" :size="12" class="icon err" />
     <LoaderCircle v-else :size="12" class="icon running" />
     <span class="name">{{ name }}</span>
-    <span class="summary">{{ call.summary }}</span>
+    <!-- 要約が作れないツール (MCP以外) はツール名だけ。空spanを描くと
+         「ToolSearch ToolSearch」のような重複や無駄な余白になる -->
+    <span v-if="call.summary" class="summary">{{ call.summary }}</span>
   </div>
 </template>
 

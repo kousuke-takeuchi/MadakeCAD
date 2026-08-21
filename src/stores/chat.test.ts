@@ -717,8 +717,13 @@ describe("summarizeToolUse", () => {
     );
   });
 
-  it("未知のツールはツール名のみ", () => {
-    expect(summarizeToolUse("mcp__madakecad__future_tool", { a: 1 })).toBe("future_tool");
-    expect(summarizeToolUse("Bash", null)).toBe("Bash");
+  // チップはツール名を別途描くので、要約側は空を返す(両方返すと
+  // 「ToolSearch ToolSearch」のような二重表示になる)。
+  it("要約を作れないツールは空文字(表示はツール名のみ)", () => {
+    expect(summarizeToolUse("mcp__madakecad__future_tool", { a: 1 })).toBe("");
+    expect(summarizeToolUse("Bash", null)).toBe("");
+    expect(summarizeToolUse("ToolSearch", { query: "select:Read" })).toBe("");
+    // ツール名そのものは shortToolName が出す
+    expect(shortToolName("mcp__madakecad__future_tool")).toBe("future_tool");
   });
 });
