@@ -9,7 +9,14 @@ import {
   shortToolName,
   appliedCommandCount,
   normalizeConversation,
+  conversationTitle,
+  conversationMeta,
+  formatRelativeTime,
+  sortedConversations,
+  EMPTY_CONVERSATION_TITLE,
   type AgentEvent,
+  type ChatConversation,
+  type ChatMessage,
 } from "./chat";
 
 const CONV = "11111111-1111-4111-8111-111111111111";
@@ -23,7 +30,7 @@ function feed(store: Store, events: AgentEvent[], id = CONV) {
 
 /** イベントの宛先となる既知の会話をストアへ用意する(未知idのイベントは無視されるため)。 */
 function seed(store: Store, id = CONV) {
-  store.conversations.push({ id, session_id: null, messages: [], model: null });
+  store.conversations.push({ id, session_id: null, messages: [], model: null, updated_at: 0 });
   if (!store.activeId) store.activeId = id;
 }
 
@@ -569,6 +576,20 @@ describe("chat store: アクション", () => {
     expect(conv.messages[0].applied_revisions).toEqual({ start: 0, end: 0 });
     expect(conv.messages[0].applied_undo_depth).toEqual({ start: 0, end: 0 });
     expect(appliedCommandCount(conv.messages[0])).toBe(0);
+    // updated_atも旧`chat.json`には無い。0は「時刻不明」で相対時刻を出さない印
+    expect(conv.updated_at).toBe(0);
+  });
+
+  it("normalizeConversationはupdated_atをそのまま引き継ぐ", () => {
+    const conv = normalizeConversation({
+      id: CONV,
+      session_id: null,
+      model: null,
+      messages: [],
+      updated_at: 1_700_000_000_000,
+    });
+
+    expect(conv.updated_at).toBe(1_700_000_000_000);
   });
 
   it("subscribeを同時に呼んでも購読は1本だけ", async () => {
@@ -725,5 +746,108 @@ describe("summarizeToolUse", () => {
     expect(summarizeToolUse("ToolSearch", { query: "select:Read" })).toBe("");
     // ツール名そのものは shortToolName が出す
     expect(shortToolName("mcp__madakecad__future_tool")).toBe("future_tool");
+  });
+});
+
+describe("会話履歴ポップアップの表示ヘルパー", () => {
+  /** 表示ヘルパーの入力に使う最小の会話。 */
+  function conv(
+    id: string,
+    updatedAt: number,
+    messages: Partial<ChatMessage>[] = [],
+  ): ChatConversation {
+    return {
+      id,
+      session_id: null,
+      model: null,
+      updated_at: updatedAt,
+      messages: messages.map((m) => ({
+        role: "user",
+        text: "",
+        tool_calls: [],
+        applied_revisions: { start: 0, end: 0 },
+        applied_undo_depth: { start: 0, end: 0 },
+        error: null,
+        usage: null,
+        streaming: false,
+        undone: false,
+        ...m,
+      })) as ChatMessage[],
+    };
+  }
+
+  it("タイトルは最初のユーザー発話の先頭40字", () => {
+    expect(conversationTitle(conv("a", 0, [{ role: "user", text: "リレーK2のb接点を追加" }]))).toBe(
+      "リレーK2のb接点を追加",
+    );
+    // アシスタントの発話しか無くてもユーザー発話を探す
+    expect(
+      conversationTitle(
+        conv("a", 0, [
+          { role: "assistant", text: "配置しました" },
+          { role: "user", text: "ありがとう" },
+        ]),
+      ),
+    ).toBe("ありがとう");
+    // 改行は空白へ畳む
+    expect(conversationTitle(conv("a", 0, [{ role: "user", text: "24V系に\nF2を追加" }]))).toBe(
+      "24V系に F2を追加",
+    );
+    const long = "あ".repeat(50);
+    expect(conversationTitle(conv("a", 0, [{ role: "user", text: long }]))).toBe(
+      `${"あ".repeat(40)}…`,
+    );
+  });
+
+  it("ユーザー発話が無ければ「(空の会話)」", () => {
+    expect(conversationTitle(conv("a", 0))).toBe(EMPTY_CONVERSATION_TITLE);
+    expect(conversationTitle(conv("a", 0, [{ role: "user", text: "   " }]))).toBe(
+      EMPTY_CONVERSATION_TITLE,
+    );
+  });
+
+  it("相対時刻はたった今/N分前/N時間前/昨日/M-D", () => {
+    const now = new Date(2026, 7, 21, 14, 0, 0).getTime();
+    expect(formatRelativeTime(now - 30_000, now)).toBe("たった今");
+    expect(formatRelativeTime(now - 8 * 60_000, now)).toBe("8分前");
+    expect(formatRelativeTime(now - 3 * 3_600_000, now)).toBe("3時間前");
+    expect(formatRelativeTime(new Date(2026, 7, 20, 22, 0, 0).getTime(), now)).toBe("昨日");
+    expect(formatRelativeTime(new Date(2026, 7, 19, 9, 0, 0).getTime(), now)).toBe("8/19");
+  });
+
+  it("時刻不明(旧履歴のupdated_at=0)は相対時刻を出さない", () => {
+    const now = Date.now();
+    expect(formatRelativeTime(0, now)).toBe("");
+    expect(conversationMeta(conv("a", 0, [{ role: "user", text: "x" }]), now)).toBe("1メッセージ");
+  });
+
+  it("メタ行は時刻・件数・適用済みrevを中黒で連ねる", () => {
+    const now = new Date(2026, 7, 21, 14, 0, 0).getTime();
+    const applied = conv("a", now - 8 * 60_000, [
+      { role: "user", text: "F2を追加" },
+      {
+        role: "assistant",
+        text: "追加しました",
+        applied_revisions: { start: 22, end: 24 },
+        applied_undo_depth: { start: 0, end: 2 },
+      },
+    ]);
+    expect(conversationMeta(applied, now)).toBe("8分前 · 2メッセージ · 適用済み rev 24");
+
+    // 巻き戻し済みのターンは「適用済み」に数えない
+    applied.messages[1].undone = true;
+    expect(conversationMeta(applied, now)).toBe("8分前 · 2メッセージ");
+  });
+
+  it("並びは更新の新しい順(時刻不明は後ろの登録順)", () => {
+    const list = [conv("old", 100), conv("legacy", 0), conv("new", 300), conv("legacy2", 0)];
+    expect(sortedConversations(list).map((c) => c.id)).toEqual([
+      "new",
+      "old",
+      "legacy2",
+      "legacy",
+    ]);
+    // 元の配列は破壊しない
+    expect(list.map((c) => c.id)).toEqual(["old", "legacy", "new", "legacy2"]);
   });
 });

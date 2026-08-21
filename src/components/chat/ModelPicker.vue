@@ -3,15 +3,25 @@
 // A1はAnthropicグループのみ。選択値はそのまま Claude Code CLI の `--model` へ渡る
 // (nullはCLI側の既定モデル)。
 import { ChevronDown, Plus, Search } from "lucide-vue-next";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, ref } from "vue";
+import { usePopover } from "../../composables/popover";
 import { ANTHROPIC_MODELS, type ModelOption } from "./models";
 
 const props = defineProps<{ modelValue: string | null }>();
 const emit = defineEmits<{ "update:modelValue": [string | null] }>();
 
-const open = ref(false);
 const query = ref("");
 const searchRef = ref<HTMLInputElement | null>(null);
+
+const { open, toggle, close } = usePopover({
+  onOpen: async () => {
+    await nextTick();
+    searchRef.value?.focus();
+  },
+  onClose: () => {
+    query.value = "";
+  },
+});
 
 const current = computed(
   () => ANTHROPIC_MODELS.find((m) => m.id === props.modelValue) ?? ANTHROPIC_MODELS[0],
@@ -25,38 +35,21 @@ const filtered = computed(() => {
   );
 });
 
-function onWindowKeydown(ev: KeyboardEvent) {
-  if (ev.key === "Escape") open.value = false;
-}
-
-watch(open, async (v) => {
-  if (!v) {
-    query.value = "";
-    window.removeEventListener("keydown", onWindowKeydown);
-    return;
-  }
-  window.addEventListener("keydown", onWindowKeydown);
-  await nextTick();
-  searchRef.value?.focus();
-});
-
-onBeforeUnmount(() => window.removeEventListener("keydown", onWindowKeydown));
-
 function pick(option: ModelOption) {
   emit("update:modelValue", option.id);
-  open.value = false;
+  close();
 }
 </script>
 
 <template>
   <div class="model-picker">
-    <button class="trigger" :title="current.id ?? 'CLIの既定モデル'" @click="open = !open">
+    <button class="trigger" :title="current.id ?? 'CLIの既定モデル'" @click="toggle()">
       <span class="label">{{ current.label }}</span>
       <ChevronDown :size="11" class="chevron" />
     </button>
 
     <template v-if="open">
-      <div class="backdrop" @click="open = false" />
+      <div class="backdrop" @click="close()" />
       <div class="popup">
         <div class="search-row">
           <Search :size="13" class="search-icon" />

@@ -70,6 +70,8 @@ export interface WireConversation {
   session_id: string | null;
   messages: WireChatMessage[];
   model: string | null;
+  /** 最終更新時刻(unixミリ秒)。旧`chat.json`には無い(Rust側は`serde(default)`で0)。 */
+  updated_at?: number;
 }
 
 /** `claude`実行ファイルの検出結果。 */
@@ -140,6 +142,8 @@ export interface ChatConversation {
   session_id: string | null;
   messages: ChatMessage[];
   model: string | null;
+  /** 最終更新時刻(unixミリ秒)。`0`は「時刻不明」(旧履歴)で、相対時刻を表示しない。 */
+  updated_at: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +251,11 @@ const ENTITY_KIND_JA: Record<string, string> = {
   text: "テキスト",
 };
 
+/** エンティティ種別の日本語名(未知の種別は「要素」)。 */
+export function entityKindLabel(kind: string): string {
+  return ENTITY_KIND_JA[kind] ?? "要素";
+}
+
 const COMMAND_JA: Record<string, string> = {
   add_sheet: "シート追加",
   remove_sheet: "シート削除",
@@ -319,7 +328,7 @@ export function summarizeToolUse(tool: string, input: unknown): string {
     }
     case "update_entity": {
       const entity = rec(p.entity);
-      const kind = ENTITY_KIND_JA[str(entity.kind)] ?? "要素";
+      const kind = entityKindLabel(str(entity.kind));
       const label = str(entity.reference) || str(entity.name) || str(entity.id);
       return label ? `${kind} ${label} を更新` : `${kind}を更新`;
     }
@@ -409,6 +418,7 @@ export function normalizeConversation(conversation: WireConversation): ChatConve
     session_id: conversation.session_id ?? null,
     messages: (conversation.messages ?? []).map(normalizeMessage),
     model: conversation.model ?? null,
+    updated_at: conversation.updated_at ?? 0,
   };
 }
 
@@ -420,6 +430,77 @@ export function normalizeConversation(conversation: WireConversation): ChatConve
  */
 export function appliedCommandCount(message: ChatMessage): number {
   return Math.max(message.applied_undo_depth.end - message.applied_undo_depth.start, 0);
+}
+
+// ---------------------------------------------------------------------------
+// 会話履歴ポップアップの表示ヘルパー(純関数。コンポーネントからも直接使う)
+// ---------------------------------------------------------------------------
+
+/** 会話履歴の行タイトルに使う最大文字数。 */
+const TITLE_MAX_CHARS = 40;
+
+/** 発話が無い会話のタイトル。 */
+export const EMPTY_CONVERSATION_TITLE = "(空の会話)";
+
+/**
+ * 会話履歴の行タイトル。最初のユーザー発話の先頭40字(改行は空白へ畳む)。
+ * ユーザー発話がまだ無い会話は「(空の会話)」。
+ */
+export function conversationTitle(conversation: ChatConversation): string {
+  const first = conversation.messages.find((m) => m.role === "user");
+  const text = (first?.text ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return EMPTY_CONVERSATION_TITLE;
+  return text.length > TITLE_MAX_CHARS ? `${text.slice(0, TITLE_MAX_CHARS)}…` : text;
+}
+
+/**
+ * 会話の更新時刻を相対表記にする(`0`は時刻不明で空文字)。
+ *
+ * デザインの例に合わせて「たった今 / N分前 / N時間前 / 昨日 / M/D」の5段階。
+ * `now`は暦日の比較にも使うため、テストから固定値を渡せるようにしてある。
+ */
+export function formatRelativeTime(updatedAt: number, now: number = Date.now()): string {
+  if (!updatedAt) return "";
+  const diffMin = Math.floor((now - updatedAt) / 60_000);
+  if (diffMin < 1) return "たった今";
+  if (diffMin < 60) return `${diffMin}分前`;
+
+  const at = new Date(updatedAt);
+  const today = new Date(now);
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dayDiff = Math.round((startOfDay(today) - startOfDay(at)) / 86_400_000);
+  if (dayDiff <= 0) return `${Math.floor(diffMin / 60)}時間前`;
+  if (dayDiff === 1) return "昨日";
+  return `${at.getMonth() + 1}/${at.getDate()}`;
+}
+
+/**
+ * 会話履歴の行メタ(「8分前 · 4メッセージ · 適用済み rev 24」)。
+ *
+ * 巻き戻し済み(`undone`)のターンは「適用済み」に数えない。
+ */
+export function conversationMeta(conversation: ChatConversation, now: number = Date.now()): string {
+  const parts: string[] = [];
+  const time = formatRelativeTime(conversation.updated_at, now);
+  if (time) parts.push(time);
+  parts.push(`${conversation.messages.length}メッセージ`);
+  // findLastはES2023。tsconfigのlibはES2020なので後ろから探す
+  for (let i = conversation.messages.length - 1; i >= 0; i--) {
+    const message = conversation.messages[i];
+    if (appliedCommandCount(message) > 0 && !message.undone) {
+      parts.push(`適用済み rev ${message.applied_revisions.end}`);
+      break;
+    }
+  }
+  return parts.join(" · ");
+}
+
+/** 会話履歴の表示順(更新が新しい順。時刻不明の旧履歴は後ろの登録順)。 */
+export function sortedConversations(conversations: ChatConversation[]): ChatConversation[] {
+  return conversations
+    .map((conversation, index) => ({ conversation, index }))
+    .sort((a, b) => b.conversation.updated_at - a.conversation.updated_at || b.index - a.index)
+    .map((entry) => entry.conversation);
 }
 
 let localSeq = 0;
@@ -712,7 +793,13 @@ export const useChatStore = defineStore("chat", {
       let conv = this.conversations.find((c) => c.id === this.activeId) ?? null;
       if (!conv) {
         const localId = `${LOCAL_ID_PREFIX}${++localSeq}`;
-        conv = { id: localId, session_id: null, messages: [], model: this.model };
+        conv = {
+          id: localId,
+          session_id: null,
+          messages: [],
+          model: this.model,
+          updated_at: Date.now(),
+        };
         this.conversations.push(conv);
         this.activeId = localId;
       }
