@@ -17,7 +17,14 @@ const controller = inject<EditorController>("controller")!;
       {{ controller.cursorWorld.x.toFixed(4) }}, {{ controller.cursorWorld.y.toFixed(4) }}, 0.0000
     </span>
     <span class="sep" />
-    <button class="toggle on" title="グリッド表示"><Grid3x3 :size="13" /></button>
+    <button
+      class="toggle"
+      :class="{ on: ui.isClassVisible('grid') }"
+      title="グリッド表示"
+      @click="ui.toggleViewClass('grid')"
+    >
+      <Grid3x3 :size="13" />
+    </button>
     <button
       class="toggle"
       :class="{ on: controller.snapEnabled }"

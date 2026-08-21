@@ -40,3 +40,21 @@ describe("ui store: 左ドックのタブとチャット下書き", () => {
     expect(ui.chatDraft).toBe("");
   });
 });
+
+describe("表示クラス (レイヤ)", () => {
+  it("既定は全クラス表示", () => {
+    const ui = useUiStore();
+    expect(ui.isClassVisible("wires")).toBe(true);
+    expect(ui.isClassVisible("grid")).toBe(true);
+    expect(ui.isClassVisible("frame")).toBe(true);
+  });
+
+  it("toggleViewClassで非表示と再表示を切り替える", () => {
+    const ui = useUiStore();
+    ui.toggleViewClass("texts");
+    expect(ui.isClassVisible("texts")).toBe(false);
+    expect(ui.isClassVisible("wires")).toBe(true);
+    ui.toggleViewClass("texts");
+    expect(ui.isClassVisible("texts")).toBe(true);
+  });
+});

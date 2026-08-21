@@ -36,6 +36,7 @@ function draw() {
   const regions = overlay.activeRegions(now);
   renderSheet(ctx, sheet, store.symbols, controller.vp, {
     selection: store.selection,
+    hidden: ui.hiddenViewClasses,
     cursor: controller.cursorScreen,
     // チップ・パルスは実際に編集領域があるときだけ出す(テキスト応答だけのターンでは出さない)
     agent: regions.length > 0 ? { regions, active: chat.streaming } : undefined,
@@ -148,6 +149,8 @@ onBeforeUnmount(() => {
 });
 
 store.$subscribe(() => scheduleDraw());
+// 表示クラス (レイヤ) の切替でも再描画する
+watch(() => [...ui.hiddenViewClasses], () => scheduleDraw());
 watch(() => store.activeSheetId, () => {
   const canvas = canvasRef.value;
   if (canvas && store.activeSheet) {
