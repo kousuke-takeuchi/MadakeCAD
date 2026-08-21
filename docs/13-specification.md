@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**304 specification clauses** across 5 areas.
+**311 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -327,6 +327,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - terminal_block_3p has 3 terminals with left/right points, centered on the 2.5 mm grid <sub>`dynamicSymbol`</sub>
 - malformed dynamic ids return null <sub>`dynamicSymbol`</sub>
 - static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
+
+### renderer
+
+- places the revision table directly above the title block with the same width and row height <sub>`revisionLayout`</sub>
+- stacks revisions oldest at the bottom and newest on top, with the column header row at the very bottom <sub>`revisionLayout`</sub>
+- lays out nothing for a sheet without revisions <sub>`revisionLayout`</sub>
+- keeps only the newest six revisions in the drawing and drops older rows <sub>`revisionLayout`</sub>
+- splits the title block width into the mark, date, description and approver columns <sub>`revisionLayout`</sub>
+- returns at most the newest six revisions, still in oldest-first order <sub>`visibleRevisions / effectiveRev`</sub>
+- shows the newest revision mark in the title block Rev cell, falling back to the stored value or a dash <sub>`visibleRevisions / effectiveRev`</sub>
 
 ### viewClasses
 
