@@ -4,7 +4,7 @@
 
 ## What is MadakeCAD?
 
-MadakeCAD is an electrical CAD for **industrial equipment wiring diagrams** — robots, factory machinery, control panels. It produces drawings that comply with industrial standards — JIS today, with IEC (60617 symbols, 81346 designations) and ISO (7200 title blocks, 5457 sheets) on the roadmap and treats an **AI assistant as a first-class user**: the assistant edits drawings through exactly the same command engine as you do, so every AI edit is undoable and rendered live.
+MadakeCAD is an electrical CAD for **industrial equipment wiring diagrams** — robots, factory machinery, control panels. It produces drawings that comply with industrial standards — JIS today, with IEC (60617 symbols, 81346 designations) and ISO (7200 title blocks, 5457 sheets) on the roadmap — and it treats an **AI assistant as a first-class user**: the assistant edits drawings through exactly the same command engine as you do, so every AI edit is undoable and rendered live.
 
 ## Why another CAD?
 
