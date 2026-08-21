@@ -63,12 +63,14 @@ async function run() {
             <span class="radio-label">{{ t("wireNumbers.sequential") }}</span>
             <span class="example mono">{{ t("wireNumbers.sequentialExample") }}</span>
           </label>
-          <label class="radio disabled" :title="t('wireNumbers.zoneDisabled')" @click="zoneUnavailable">
-            <input type="radio" value="zone" :checked="wireNumbers.method === 'zone'" disabled />
-            <span class="radio-label">{{ t("wireNumbers.zone") }}</span>
-            <span class="example mono">{{ t("wireNumbers.zoneExample") }}</span>
-            <span class="example">{{ t("wireNumbers.zoneDisabled") }}</span>
-          </label>
+          <div class="radio-block">
+            <label class="radio disabled" :title="t('wireNumbers.zoneDisabled')" @click="zoneUnavailable">
+              <input type="radio" value="zone" :checked="wireNumbers.method === 'zone'" disabled />
+              <span class="radio-label">{{ t("wireNumbers.zone") }}</span>
+              <span class="example mono">{{ t("wireNumbers.zoneExample") }}</span>
+            </label>
+            <span class="example indent">{{ t("wireNumbers.zoneDisabled") }}</span>
+          </div>
         </div>
 
         <div class="group">
@@ -192,7 +194,14 @@ async function run() {
   font-size: 12px;
   color: var(--ui-text);
   cursor: pointer;
+  white-space: nowrap;
 }
+.radio-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.indent { padding-left: 21px; }
 .radio input { accent-color: var(--acad-blue); margin: 0; }
 .radio.disabled { cursor: default; color: var(--ui-muted); }
 .radio-label { line-height: 16px; }

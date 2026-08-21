@@ -45,8 +45,14 @@ SVGの代表位置=ネット内で最長の線分の中点、横線は上方2.5m
 
 ### Task 4: 線番UI (ダイアログ+キャンバス)
 
-- [ ] Step 1 (red): vitest: 採番ダイアログ(方式/開始番号/対象/既存の扱い)がCommandを組み立てる/線番クリックで個別編集(update系Command)
-- [ ] Step 2 (green): デザイン(.pen「線番自動採番ダイアログ」)どおり実装。リボン「配線」の「線番挿入」todoを置換。renderer.tsに線番描画+表示トグル。実機確認+コミット
+- [x] Step 1 (red): vitest: 採番ダイアログ(方式/開始番号/対象/既存の扱い)がCommandを組み立てる/線番クリックで個別編集(update系Command)
+- [x] Step 2 (green): デザイン(.pen「線番自動採番ダイアログ」)どおり実装。リボン「配線」の「線番挿入」todoを置換。renderer.tsに線番描画+表示トグル。実機確認+コミット
+
+実装メモ(確定): ダイアログ=`components/WireNumberDialog.vue`+`stores/wireNumbers.ts`(対象=現在のシート→sheet_id指定 /
+プロジェクト全体→省略、既存=保持→append / 振り直す→renumber)。実行後は採番したネット数をステータスバーへ出す。
+ゾーン基準ラジオは無効表示(M4)。キャンバス描画は`canvas/wireNumbers.ts`の純関数(ネットごと最長線分の中点、
+横線は上・縦線は左へ2.5mm)+`renderer.ts`、色は`theme.wireNumber`。表示クラス「線番」(8クラス目)は画面のみでSVG/PDFへは非反映。
+個別編集はプロパティパネルの「線番」行→`components/propertyCommands.ts`が`set_wire_numbers`を組み立てる(undo可)。
 
 ### Task 5: ハーネス境界
 
