@@ -268,6 +268,31 @@ impl MadakeMcp {
         ))
     }
 
+    #[tool(
+        description = "図面を検証しDiagnostic配列を返す。ERC(未接続ピン・参照記号重複・宙ぶらりん配線・ネットラベル競合)と電気検証(電源到達性・線径許容電流・電圧降下・ヒューズ定格)。負荷電流はシンボル属性current_a、電源電圧はbatteryのvalue(既定24V)。sheet_id省略時は全シート"
+    )]
+    fn run_verification(
+        &self,
+        Parameters(p): Parameters<SheetRefParams>,
+    ) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let project = engine.project();
+        let sheets: Vec<_> = match p.sheet_id {
+            Some(id) => vec![project
+                .sheet(id)
+                .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?],
+            None => project.sheets.iter().collect(),
+        };
+        let mut diags = Vec::new();
+        for sheet in sheets {
+            diags.extend(madake_core::verify::verify_sheet(
+                sheet,
+                &sheet_symbol_defs(sheet),
+            ));
+        }
+        json_ok(&diags)
+    }
+
     #[tool(description = "部品表(BOM)CSVを指定パスに書き出す")]
     fn export_bom(&self, Parameters(p): Parameters<ExportPathParams>) -> Result<String, ErrorData> {
         let engine = self.doc.engine.lock().unwrap();

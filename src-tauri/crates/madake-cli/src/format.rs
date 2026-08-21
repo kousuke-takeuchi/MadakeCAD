@@ -221,6 +221,38 @@ pub fn project(snapshot: &Value) -> String {
 }
 
 /// `madake netlist`
+/// `madake verify`
+pub fn diagnostics(diags: &Value) -> String {
+    let diags = diags.as_array().cloned().unwrap_or_default();
+    if diags.is_empty() {
+        return "問題は見つかりませんでした。".to_string();
+    }
+    let mark = |sev: &str| match sev {
+        "error" => "✗",
+        "warning" => "⚠",
+        _ => "ℹ",
+    };
+    let mut errors = 0;
+    let mut warnings = 0;
+    let lines: Vec<String> = diags
+        .iter()
+        .map(|d| {
+            let sev = text(d, "severity");
+            match sev.as_str() {
+                "error" => errors += 1,
+                "warning" => warnings += 1,
+                _ => {}
+            }
+            format!("{} [{}] {}", mark(&sev), text(d, "code"), text(d, "message"))
+        })
+        .collect();
+    format!(
+        "検証結果: エラー {errors} / 警告 {warnings} / 情報 {}\n\n{}",
+        diags.len() - errors - warnings,
+        lines.join("\n")
+    )
+}
+
 pub fn netlist(nets: &Value) -> String {
     let nets = nets.as_array().cloned().unwrap_or_default();
     if nets.is_empty() {
