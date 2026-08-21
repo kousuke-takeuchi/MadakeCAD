@@ -41,6 +41,8 @@ export class EditorController {
 
   /** 再描画要求 (CanvasViewが設定する)。 */
   requestRedraw: () => void = () => {};
+  /** キャンバスの現在サイズ(px)。CanvasViewが描画時に更新する。 */
+  viewSize = { w: 0, h: 0 };
 
   private wirePoints: Pt[] = [];
   private dragMode: "none" | "pan" | "move" | "rubber" = "none";
@@ -205,6 +207,31 @@ export class EditorController {
 
   onWheel(screen: Pt, deltaY: number) {
     this.vp.zoomAt(screen, deltaY < 0 ? 1.15 : 1 / 1.15);
+    this.requestRedraw();
+  }
+
+  /** エンティティ群を選択し、先頭をキャンバス中央へ表示する (検証結果パネルの行クリック用)。 */
+  reveal(entityIds: string[]) {
+    const sheet = this.store.activeSheet;
+    if (!sheet || entityIds.length === 0) return;
+    this.store.selection = new Set(entityIds.filter((id) => id in sheet.entities));
+    const first = entityIds.map((id) => sheet.entities[id]).find(Boolean);
+    if (!first) return;
+    const target: Pt | null =
+      first.kind === "wire"
+        ? first.points.length
+          ? {
+              x: (first.points[0].x + first.points[first.points.length - 1].x) / 2,
+              y: (first.points[0].y + first.points[first.points.length - 1].y) / 2,
+            }
+          : null
+        : "at" in first
+          ? first.at
+          : null;
+    if (target && this.viewSize.w > 0) {
+      this.vp.originX = this.viewSize.w / 2 - target.x * this.vp.scale;
+      this.vp.originY = this.viewSize.h / 2 - target.y * this.vp.scale;
+    }
     this.requestRedraw();
   }
 

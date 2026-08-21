@@ -7,12 +7,14 @@ import {
 import { inject, ref } from "vue";
 import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
 import { useFileActions } from "../composables/fileActions";
+import { useVerificationStore } from "../stores/verification";
 import type { EditorController } from "../tools/controller";
 import { useUiStore } from "../stores/ui";
 
 const controller = inject<EditorController>("controller")!;
 const ui = useUiStore();
 const files = useFileActions();
+const verification = useVerificationStore();
 
 const activeTab = ref("回路図");
 
@@ -25,6 +27,12 @@ const viewClassColumns = Array.from(
   (_, i) => VIEW_CLASSES.slice(i * 3, i * 3 + 3),
 );
 const tabs = ["ホーム", "プロジェクト", "回路図", "パネル", "レポート", "読み込み/書き出し", "表示", "管理"];
+
+async function runVerification() {
+  await verification.run(null);
+  const c = verification.counts;
+  ui.log(`検証完了: エラー ${c.error} / 警告 ${c.warning} / 情報 ${c.info}`);
+}
 
 function todo(name: string) {
   ui.log(`${name}: 未実装 (今後のフェーズで対応予定)`);
@@ -94,7 +102,7 @@ const groups: RibbonGroup[] = [
       label: "検証",
       icon: ShieldCheck,
       color: "#1f8a4c",
-      action: () => todo("検証 (ERC)"),
+      action: () => runVerification(),
     },
     small: [
       [
