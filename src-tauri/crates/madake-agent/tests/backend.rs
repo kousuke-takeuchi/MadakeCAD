@@ -166,6 +166,24 @@ async fn send_returns_promptly_when_receiver_is_dropped() {
     result.unwrap().expect("send自体は成功");
 }
 
+/// イベントにならない行だけが流れ続けている場合でも、受信側のdropを検知して抜けること。
+///
+/// `tx.send()`が呼ばれないためsendの失敗ではcloseに気付けない。読み取りループが
+/// `tx.closed()`を直接監視していないと、キャンセル後もCLIが走り続けて編集を重ねる。
+#[tokio::test]
+async fn send_returns_promptly_when_only_non_event_lines_flow() {
+    let backend = backend("fake_claude_flood_noise.sh");
+    let (tx, rx) = mpsc::channel(1024);
+    drop(rx);
+
+    let result = tokio::time::timeout(Duration::from_secs(10), backend.send("hi", None, tx)).await;
+    assert!(
+        result.is_ok(),
+        "イベントにならない行が続くとキャンセルを検知できていない"
+    );
+    result.unwrap().expect("send自体は成功");
+}
+
 /// 行読みのIOエラー(不正UTF-8等)もErrorイベントとして流してからErrを返す。
 #[tokio::test]
 async fn io_error_while_reading_is_reported_as_error_event() {

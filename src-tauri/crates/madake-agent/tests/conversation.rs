@@ -1,7 +1,8 @@
 //! 会話マネージャ(revision追跡)とチャット履歴永続化のテスト。
 
 use madake_agent::conversation::{
-    chat_path_for, load_chat, save_chat, AppliedRevisions, Conversation, Role, CHAT_FORMAT_VERSION,
+    chat_path_for, load_chat, save_chat, AppliedRevisions, AppliedUndoDepth, Conversation,
+    DocState, Role, CHAT_FORMAT_VERSION,
 };
 use madake_agent::AgentEvent;
 use serde_json::json;
@@ -13,15 +14,25 @@ fn temp_dir() -> PathBuf {
     dir
 }
 
+/// 編集のみが起きた状態(revisionと深さが同じだけ進む素直なケース)。
+fn edits(n: u64) -> DocState {
+    DocState::new(n, n)
+}
+
 /// 1ターン: プロンプト → セッション開始 → ツール2回 → テキスト → 完了。
-/// 図面編集はEngineのrevisionを進めるので、開始/終了revisionを記録する。
+/// 図面編集はEngineのrevisionを進め、undo履歴も同じだけ深くなる。
 fn run_turn(conv: &mut Conversation, start_rev: u64, end_rev: u64) {
-    conv.begin_turn("24V系にヒューズF2を追加して", start_rev);
+    run_turn_between(conv, edits(start_rev), edits(end_rev));
+}
+
+/// 開始/終了のドキュメント状態を明示する版(ターン中にundoが混ざる検証用)。
+fn run_turn_between(conv: &mut Conversation, start: DocState, end: DocState) {
+    conv.begin_turn("24V系にヒューズF2を追加して", start);
     conv.apply_event(
         &AgentEvent::SessionStarted {
             session_id: "sess-1".to_string(),
         },
-        start_rev,
+        start,
     );
     conv.apply_event(
         &AgentEvent::ToolUseStarted {
@@ -29,7 +40,7 @@ fn run_turn(conv: &mut Conversation, start_rev: u64, end_rev: u64) {
             tool: "mcp__madakecad__place_symbol".to_string(),
             input: json!({ "symbol_id": "fuse", "reference": "F2" }),
         },
-        start_rev,
+        start,
     );
     conv.apply_event(
         &AgentEvent::ToolUseFinished {
@@ -37,7 +48,7 @@ fn run_turn(conv: &mut Conversation, start_rev: u64, end_rev: u64) {
             tool: "mcp__madakecad__place_symbol".to_string(),
             is_error: false,
         },
-        start_rev + 1,
+        DocState::new(start.revision + 1, start.undo_depth + 1),
     );
     conv.apply_event(
         &AgentEvent::ToolUseStarted {
@@ -45,7 +56,7 @@ fn run_turn(conv: &mut Conversation, start_rev: u64, end_rev: u64) {
             tool: "mcp__madakecad__draw_wire".to_string(),
             input: json!({ "from": "F2:1" }),
         },
-        start_rev + 1,
+        DocState::new(start.revision + 1, start.undo_depth + 1),
     );
     conv.apply_event(
         &AgentEvent::ToolUseFinished {
@@ -53,26 +64,26 @@ fn run_turn(conv: &mut Conversation, start_rev: u64, end_rev: u64) {
             tool: "mcp__madakecad__draw_wire".to_string(),
             is_error: false,
         },
-        end_rev,
+        end,
     );
     conv.apply_event(
         &AgentEvent::TextDelta {
             text: "F2を".to_string(),
         },
-        end_rev,
+        end,
     );
     conv.apply_event(
         &AgentEvent::TextDelta {
             text: "追加しました".to_string(),
         },
-        end_rev,
+        end,
     );
     conv.apply_event(
         &AgentEvent::TurnCompleted {
             result: "F2を追加しました".to_string(),
             usage: None,
         },
-        end_rev,
+        end,
     );
 }
 
@@ -87,27 +98,83 @@ fn turn_records_engine_revision_range() {
         assistant.applied_revisions,
         AppliedRevisions { start: 7, end: 10 }
     );
-    // 「元に戻す」= (end - start)回のundo
+    assert_eq!(
+        assistant.applied_undo_depth,
+        AppliedUndoDepth { start: 7, end: 10 }
+    );
+    // 「元に戻す」= undoスタック深さの増分だけundo
     assert_eq!(assistant.applied_command_count(), 3);
     assert!(assistant.has_edits());
+}
+
+/// ターン中にundoが混ざるとrevisionは進むが深さは戻る。undo回数は深さ増分が正。
+///
+/// 例: エージェントが3コマンド実行し、うち1回をMCPのundoツールで戻した
+/// (あるいはユーザーがUIで1編集+1undoを挟んだ)ターン。
+/// revision差は4だが、実際に積まれているのは2コマンドしかない。
+#[test]
+fn undo_count_uses_undo_stack_depth_not_revision_delta() {
+    let mut conv = Conversation::new();
+    run_turn_between(&mut conv, DocState::new(7, 7), DocState::new(11, 9));
+
+    let assistant = conv.messages.last().unwrap();
+    assert_eq!(
+        assistant.applied_revisions,
+        AppliedRevisions { start: 7, end: 11 },
+        "revision範囲は表示用にそのまま残る"
+    );
+    assert_eq!(
+        assistant.applied_command_count(),
+        2,
+        "revision差(4)ではなく深さ増分(2)がundo回数"
+    );
+}
+
+/// ターン中の編集が全てundoされていれば「編集なし」扱いになる。
+#[test]
+fn turn_whose_edits_were_all_undone_has_no_edits() {
+    let mut conv = Conversation::new();
+    run_turn_between(&mut conv, DocState::new(3, 1), DocState::new(9, 1));
+
+    let assistant = conv.messages.last().unwrap();
+    assert_eq!(assistant.applied_command_count(), 0);
+    assert!(!assistant.has_edits());
+}
+
+/// 巻き戻しの記録は実行できた回数だけ反映される(途中失敗時の過剰undo防止)。
+#[test]
+fn record_undone_applies_only_the_completed_count() {
+    let mut conv = Conversation::new();
+    run_turn(&mut conv, 7, 10);
+
+    let assistant = conv.current_turn_mut().unwrap();
+    assistant.record_undone(1);
+    assert_eq!(assistant.applied_command_count(), 2, "残り2回");
+    assistant.record_undone(2);
+    assert_eq!(assistant.applied_command_count(), 0);
+    assert_eq!(
+        assistant.applied_revisions,
+        AppliedRevisions { start: 7, end: 7 },
+        "全部戻したら適用済みではなくなる"
+    );
 }
 
 #[test]
 fn turn_without_edits_has_zero_undo_count() {
     let mut conv = Conversation::new();
-    conv.begin_turn("この図面の説明をして", 4);
+    conv.begin_turn("この図面の説明をして", edits(4));
     conv.apply_event(
         &AgentEvent::TextDelta {
             text: "24V系の制御盤です".to_string(),
         },
-        4,
+        edits(4),
     );
     conv.apply_event(
         &AgentEvent::TurnCompleted {
             result: "24V系の制御盤です".to_string(),
             usage: None,
         },
-        4,
+        edits(4),
     );
     let assistant = conv.messages.last().unwrap();
     assert_eq!(assistant.applied_command_count(), 0);
@@ -152,12 +219,12 @@ fn second_turn_appends_messages_and_reuses_session() {
 #[test]
 fn error_event_is_recorded_on_current_turn() {
     let mut conv = Conversation::new();
-    conv.begin_turn("落ちるやつ", 3);
+    conv.begin_turn("落ちるやつ", edits(3));
     conv.apply_event(
         &AgentEvent::Error {
             message: "claude CLIが異常終了しました (exit 3)".to_string(),
         },
-        3,
+        edits(3),
     );
     let assistant = conv.messages.last().unwrap();
     assert_eq!(

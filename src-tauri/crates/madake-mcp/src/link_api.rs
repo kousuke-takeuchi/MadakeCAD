@@ -19,7 +19,7 @@ use futures::stream::Stream;
 use madake_agent::{AgentManager, Conversation, DetectResult};
 use madake_core::{builtin_symbols, Command, Patch};
 use serde::Deserialize;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
 use crate::SharedDoc;
@@ -88,25 +88,30 @@ struct PathBody {
     path: String,
 }
 
+/// 図面とチャット履歴をまとめて保存する(Tauriの`save_project`と同じ処理)。
 async fn post_save(
-    State(doc): State<SharedDoc>,
+    State(state): State<AgentApi>,
     Json(body): Json<PathBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let engine = doc.engine.lock().unwrap();
-    madake_core::io::save_project(std::path::Path::new(&body.path), engine.project())
-        .map_err(bad_request)?;
+    crate::agent::save_project_with_chat(
+        &state.doc,
+        &state.agent,
+        std::path::Path::new(&body.path),
+    )
+    .map_err(bad_request)?;
     Ok(Json(serde_json::json!({ "written": body.path })))
 }
 
+/// 図面とチャット履歴をまとめて読み込む(Tauriの`load_project`と同じ処理)。
+///
+/// 実行中のターンは中断される。
 async fn post_load(
-    State(doc): State<SharedDoc>,
+    State(state): State<AgentApi>,
     Json(body): Json<PathBody>,
 ) -> Result<Json<Patch>, ApiError> {
-    let project =
-        madake_core::io::load_project(std::path::Path::new(&body.path)).map_err(bad_request)?;
-    let patch = doc.engine.lock().unwrap().replace_project(project);
-    let _ = doc.patches.send(patch.clone());
-    Ok(Json(patch))
+    crate::agent::load_project_with_chat(&state.doc, &state.agent, std::path::Path::new(&body.path))
+        .map(Json)
+        .map_err(bad_request)
 }
 
 #[derive(Deserialize)]
@@ -272,9 +277,12 @@ async fn get_agent_events(
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
 }
 
-/// /api/v1/agent 配下のRouter(ブラウザ検証用。Tauri IPCと同じマネージャを共有)。
+/// エージェントマネージャを必要とするRouter(ブラウザ検証用。Tauri IPCと同じ
+/// マネージャを共有)。`/save`・`/load`もチャット履歴を伴うためここに置く。
 fn agent_router(state: AgentApi) -> Router {
     Router::new()
+        .route("/api/v1/save", post(post_save))
+        .route("/api/v1/load", post(post_load))
         .route("/api/v1/agent/send", post(post_agent_send))
         .route("/api/v1/agent/cancel", post(post_agent_cancel))
         .route("/api/v1/agent/conversations", get(get_agent_conversations))
@@ -284,17 +292,73 @@ fn agent_router(state: AgentApi) -> Router {
         .with_state(state)
 }
 
+/// ローカル由来のOriginか。
+///
+/// 判定対象は`localhost` / `127.0.0.1` / `::1` / `*.localhost`(Tauri WindowsのWebView2は
+/// `http://tauri.localhost`、macOS/Linuxは`tauri://localhost`を送る)。
+/// ポート番号は任意(viteは1420、他ツールは任意ポートを使う)。
+pub fn is_local_origin(origin: &str) -> bool {
+    let Some(rest) = ["http://", "https://", "tauri://"]
+        .iter()
+        .find_map(|scheme| origin.strip_prefix(scheme))
+    else {
+        return false;
+    };
+    if rest.is_empty() || rest.contains('/') || rest.contains('@') {
+        return false;
+    }
+    // `host:port` / `[::1]:port` からホスト部を取り出す
+    let host = match rest.rsplit_once(':') {
+        Some((host, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => host,
+        _ => rest,
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    matches!(host, "localhost" | "127.0.0.1" | "::1") || host.ends_with(".localhost")
+}
+
+/// 外部WebページからのDNSリバインディング/CSRF的な呼び出しを弾む。
+///
+/// このサーバーは127.0.0.1バインドだが、任意のWebページのJSからは
+/// `http://127.0.0.1:9310/api/v1/agent/send`を叩けてしまう(それだけでAIに図面を
+/// 編集させられる)。Originが付かないリクエスト(curl・CLI・Tauri webview)は許可し、
+/// ローカル以外のOriginが付いていれば403で拒否する。
+async fn guard_origin(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    match request.headers().get(axum::http::header::ORIGIN) {
+        None => next.run(request).await,
+        Some(origin) if origin.to_str().map(is_local_origin).unwrap_or(false) => {
+            next.run(request).await
+        }
+        Some(_) => (
+            StatusCode::FORBIDDEN,
+            "MadakeCAD Link APIはローカルからのみ利用できます",
+        )
+            .into_response(),
+    }
+}
+
 async fn health() -> impl IntoResponse {
     Json(serde_json::json!({ "name": "MadakeCAD Link API", "version": 1 }))
 }
 
-/// /api/v1 のRouterを構築する。CORSはローカル開発・ツール連携用に全許可
-/// (サーバーは127.0.0.1バインドのため外部公開はされない)。
+/// /api/v1 のRouterを構築する。
+///
+/// アクセスはローカルオリジンに限定する(サーバーは127.0.0.1バインドだが、
+/// 外部Webページのブラウザからは到達できてしまうため)。ブラウザ以外
+/// (curl・madake CLI・FreeCADアドオン)はOriginを付けないので影響を受けない。
 pub fn router(doc: SharedDoc, agent: Arc<AgentManager>) -> Router {
     let agent_routes = agent_router(AgentApi {
         doc: doc.clone(),
         agent,
     });
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(|origin, _| {
+            origin.to_str().map(is_local_origin).unwrap_or(false)
+        }))
+        .allow_methods(AllowMethods::mirror_request())
+        .allow_headers(AllowHeaders::mirror_request());
     Router::new()
         .route("/api/v1", get(health))
         .route("/api/v1/project", get(get_project))
@@ -303,13 +367,13 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>) -> Router {
         .route("/api/v1/commands", post(post_commands))
         .route("/api/v1/undo", post(post_undo))
         .route("/api/v1/redo", post(post_redo))
-        .route("/api/v1/save", post(post_save))
-        .route("/api/v1/load", post(post_load))
         .route("/api/v1/export/svg", post(post_export_svg))
         .route("/api/v1/export/bom", post(post_export_bom))
         .route("/api/v1/export/wire-list", post(post_export_wire_list))
         .route("/api/v1/events", get(get_events))
         .with_state(doc)
         .merge(agent_routes)
-        .layer(CorsLayer::permissive())
+        .layer(cors)
+        // CORSより外側。プリフライトもここを通す(外部オリジンはここで403)
+        .layer(axum::middleware::from_fn(guard_origin))
 }

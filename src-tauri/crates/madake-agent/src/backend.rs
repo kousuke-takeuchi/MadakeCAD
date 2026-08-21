@@ -186,7 +186,19 @@ impl ClaudeCodeCliBackend {
         let mut lines = BufReader::new(stdout).lines();
         let mut read_error = None;
         'read: loop {
-            match lines.next_line().await {
+            // 受信側のcloseは`send`の失敗だけでは検知できない。イベントにならない行
+            // (thinking_delta・未知の行)が続く間はsendが呼ばれず、キャンセル後も
+            // CLIが走り続けて編集を重ねてしまうため、行の待ち受けと同時に監視する。
+            // どちらもキャンセル安全(`Lines::next_line` / `Sender::closed`)。
+            let line = tokio::select! {
+                biased;
+                _ = tx.closed() => {
+                    let _ = child.start_kill();
+                    break 'read;
+                }
+                line = lines.next_line() => line,
+            };
+            match line {
                 Ok(Some(line)) => {
                     for event in parser.push(&line) {
                         if tx.send(event).await.is_err() {
