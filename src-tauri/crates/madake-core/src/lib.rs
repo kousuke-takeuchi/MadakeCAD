@@ -8,6 +8,7 @@ pub mod geometry;
 pub mod io;
 pub mod model;
 pub mod netlist;
+pub mod pdf;
 pub mod reports;
 pub mod svg;
 pub mod symbol;
