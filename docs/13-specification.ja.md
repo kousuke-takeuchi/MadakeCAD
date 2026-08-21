@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**324仕様項目**。
+全5領域・**338仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -67,6 +67,8 @@
 - ジャンクションは交差ワイヤを接続し、同名ラベルは離れたネットを1つに統合する。 <sub>`junction_connects_crossing_wires_and_same_labels_merge`</sub>
 - 無名ネットには決定的な連番名(N001, N002, …)が付く。 <sub>`unnamed_nets_get_deterministic_sequential_names`</sub>
 - 同一シンボルで同じピン番号を持つ2つの接続点(貫通端子)は内部短絡され、ネットのピン一覧には1回だけ載る。 <sub>`same_pin_number_points_short_internally`</sub>
+- ワイヤに書かれた線番は、ネットラベルが無いネットの表示名になる。 <sub>`wire_number_names_a_net_without_a_label`</sub>
+- ネットラベルは常に線番より優先され、線番は自動名 (N001) より優先される。 <sub>`net_name_prefers_label_then_wire_number_then_auto_name`</sub>
 - ピン座標はシンボルの回転(Y下向き座標系で時計回り)と配置位置を反映する。 <sub>`pin_positions_apply_rotation_and_translation`</sub>
 - ミラーは回転より先に、縦軸に対してピンを反転する。 <sub>`pin_positions_apply_mirror_before_rotation`</sub>
 
@@ -142,6 +144,21 @@
 - ngspiceがあれば電気検証はソルバの実測値で報告され、近似モードの通知は出ない。 <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
 - ソルバ結果が無い場合はグラフ近似にフォールバックし、その旨をInfoで明示する。 <sub>`fallback_mode_emits_approximate_info`</sub>
 - 1つのネットに異なるネットラベルが混在する状態(異電位の短絡)はエラーになる。 <sub>`conflicting_net_labels_on_one_net_are_an_error`</sub>
+
+### 線番採番
+
+- 追い番モードは線番の無いネットにだけ番号を振り、すでに線番を持つネットはそのまま残す。 <sub>`append_numbers_only_unnumbered_nets`</sub>
+- 新しく振る番号は、図面ですでに使われている番号とは決して衝突しない。 <sub>`append_skips_numbers_already_in_use`</sub>
+- 振り直しモードは数字の線番を全て捨て、開始番号から順に新しい連番を振り直す。 <sub>`renumber_reassigns_every_numeric_wire_number`</sub>
+- 数字ではない手書きの名前 (例: "24V_1") は、全振り直しをしても消えずに残る。 <sub>`renumber_keeps_manual_non_numeric_names`</sub>
+- ネットラベルが付いたネットはラベル名がそのまま名前になり、線番は振られない。 <sub>`nets_with_a_net_label_are_never_numbered`</sub>
+- 1つのネットに属する全ワイヤには、別々に描かれていても同じ線番が入る。 <sub>`every_wire_of_a_net_gets_the_same_number`</sub>
+- 自動採番のundoは、線番が無かったワイヤも含めて全ての線番を元の状態へ戻す。 <sub>`undo_restores_previous_wire_numbers`</sub>
+- 採番は上から下へ、同じ高さなら左から右へ進むため、同じ図面なら常に同じ線番になる。 <sub>`numbering_order_is_top_to_bottom_then_left_to_right`</sub>
+- 開始番号は自由に指定でき、例えば2面目の盤を100番から始められる。 <sub>`numbering_starts_at_the_given_start_number`</sub>
+- シートを指定しない採番はプロジェクトの全シートをシート順に処理し、番号は図面全体で重複しない。 <sub>`numbering_without_a_sheet_covers_the_whole_project`</sub>
+- 線番は1本ずつ直接編集でき、undoで以前の値に戻る。 <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
+- 採番コマンドは素のJSON ({"type":"renumber_wires","mode":"append","start":1}) で表現でき、AIやCLIから送れる。 <sub>`renumber_command_is_plain_json`</sub>
 
 
 ## 自動化API (MCP / REST)

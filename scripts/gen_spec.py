@@ -50,6 +50,7 @@ MODULES = {
     "io": ("Project file I/O (.mdkproj)", "プロジェクトファイルI/O (.mdkproj)"),
     "symbol": ("Symbol library", "シンボルライブラリ"),
     "netlist": ("Netlist extraction", "ネットリスト抽出"),
+    "wire_no": ("Wire numbering", "線番採番"),
     "svg": ("SVG output (JIS frame)", "SVG出力 (JIS図枠)"),
     "pdf": ("PDF output", "PDF出力"),
     "reports": ("Reports (BOM / wire list)", "帳票 (部品表 / 電線リスト)"),
