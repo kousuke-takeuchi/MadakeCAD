@@ -109,5 +109,22 @@
     "propertyHint": "このネットの線番",
     "setLog": "線番: {number} に設定しました (Cmd+Zで元に戻せます)",
     "clearedLog": "線番: 線番を消しました (Cmd+Zで元に戻せます)"
+  },
+  "harness": {
+    "ribbonButton": "ハーネス",
+    "kindLabel": "ハーネス境界",
+    "startLog": "ハーネス: 囲みたい範囲をドラッグしてください (Escで解除)",
+    "noSheetLog": "ハーネス: シートが開かれていません",
+    "createdLog": "ハーネス: {name} を作成しました ({count}本の電線を含む・Cmd+Zで元に戻せます)",
+    "kindRow": "種別",
+    "nameRow": "名前",
+    "nameHint": "ハーネス名 (W1, W2 …)。電線リストのハーネス列に出ます",
+    "wireCountRow": "含む電線",
+    "wireCount": "{count}本",
+    "wireCountHint": "電線リストに{name}列で出力",
+    "wireCountHintUnnamed": "名前を付けると電線リストに出力されます",
+    "noteRow": "備考",
+    "notePlaceholder": "製作指示など",
+    "renamedLog": "ハーネス: 名前を {name} にしました (Cmd+Zで元に戻せます)"
   }
 }

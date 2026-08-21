@@ -2,8 +2,8 @@
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
   Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileText, Frame, Grid3x3, Hash,
-  Image, LayoutGrid, ListOrdered, Move, MoveRight, Pencil, Route, Scissors, ShieldCheck, Tag,
-  Trash2, Type,
+  Image, LayoutGrid, ListOrdered, Move, MoveRight, Pencil, Route, Scissors, ShieldCheck,
+  SquareDashed, Tag, Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
 import { computed, inject, ref } from "vue";
@@ -31,8 +31,8 @@ const activeTab = ref("回路図");
 
 // 表示タブ: 表示クラストグル (レイヤ、spec §4)。3個ずつの縦列に分ける
 const viewIcons: Record<ViewClass, LucideIcon> = {
-  wires: Route, symbols: Cpu, refs: Tag, net_labels: Hash, wire_numbers: ListOrdered, texts: Type,
-  frame: Frame, grid: Grid3x3,
+  wires: Route, symbols: Cpu, refs: Tag, net_labels: Hash, wire_numbers: ListOrdered,
+  harness: SquareDashed, texts: Type, frame: Frame, grid: Grid3x3,
 };
 const viewClassColumns = Array.from(
   { length: Math.ceil(VIEW_CLASSES.length / 3) },
@@ -78,6 +78,16 @@ function openWireNumbers() {
   ui.log(t("wireNumbers.openLog", { sheet: sheet.name }));
 }
 
+/** ハーネス境界の作図ツールに切り替える (リボン「配線」グループ)。矩形ドラッグで囲みを作る。 */
+function startHarness() {
+  if (!useDocumentStore().activeSheet) {
+    ui.log(t("harness.noSheetLog"));
+    return;
+  }
+  controller.setTool("harness");
+  ui.log(t("harness.startLog"));
+}
+
 function todo(name: string) {
   ui.log(`${name}: 未実装 (今後のフェーズで対応予定)`);
 }
@@ -109,6 +119,12 @@ const groups = computed<RibbonGroup[]>(() => [
       { label: "複数母線", icon: AlignJustify, action: () => todo("複数母線") },
       { label: t("wireNumbers.ribbonButton"), icon: ListOrdered, action: () => openWireNumbers() },
       { label: "信号矢印", icon: MoveRight, action: () => todo("信号矢印") },
+      {
+        label: t("harness.ribbonButton"),
+        icon: SquareDashed,
+        action: () => startHarness(),
+        isActive: () => controller.tool === "harness",
+      },
     ]],
   },
   {
@@ -196,7 +212,13 @@ const groups = computed<RibbonGroup[]>(() => [
                 <span>{{ g.big.label }}</span>
               </button>
               <div v-for="(col, ci) in g.small" :key="ci" class="ribbon-smalls">
-                <button v-for="s in col" :key="s.label" class="ribbon-small" @click="s.action()">
+                <button
+                  v-for="s in col"
+                  :key="s.label"
+                  class="ribbon-small"
+                  :class="{ active: s.isActive?.() }"
+                  @click="s.action()"
+                >
                   <component :is="s.icon" :size="13" class="small-icon" />
                   {{ s.label }}
                 </button>
@@ -327,6 +349,7 @@ const groups = computed<RibbonGroup[]>(() => [
   cursor: pointer;
 }
 .ribbon-small:hover { background: var(--hover-bg); }
+.ribbon-small.active { background: var(--sel-blue); }
 .small-icon { color: var(--ribbon-icon); flex: none; }
 .view-toggle { color: var(--ui-muted); }
 .view-toggle .small-icon { color: var(--ui-muted); }

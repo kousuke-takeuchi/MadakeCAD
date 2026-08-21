@@ -3,10 +3,11 @@
 import { ChevronDown, Pin } from "lucide-vue-next";
 import { computed, reactive, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { harnessWireCount } from "../canvas/harness";
 import type { Entity } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
-import { wireNumberCommand } from "./propertyCommands";
+import { harnessUpdateCommand, wireNumberCommand } from "./propertyCommands";
 
 const store = useDocumentStore();
 const ui = useUiStore();
@@ -36,6 +37,15 @@ const buf = reactive({
   reference: "",
   value: "",
   name: "",
+  /** ハーネスの備考。 */
+  note: "",
+});
+
+/** 選択中のハーネスが囲んでいる電線の本数 (幾何学的な内包で決まる)。 */
+const harnessWires = computed(() => {
+  const sheet = store.activeSheet;
+  const e = selected.value;
+  return sheet && e?.kind === "harness" ? harnessWireCount(sheet, e.id) : 0;
 });
 
 watch(
@@ -53,6 +63,9 @@ watch(
       buf.value = e.value;
     } else if (e.kind === "net_label") {
       buf.name = e.name;
+    } else if (e.kind === "harness") {
+      buf.name = e.name ?? "";
+      buf.note = e.note ?? "";
     }
   },
   { immediate: true },
@@ -93,19 +106,28 @@ async function apply() {
     entity = { ...e, reference: buf.reference, value: buf.value };
   } else if (e.kind === "net_label") {
     entity = { ...e, name: buf.name };
+  } else if (e.kind === "harness") {
+    // ハーネスは名前・備考だけを書き換える (囲みの形はキャンバス側の操作で変える)
+    const command = harnessUpdateCommand(sheet.id, e, buf.name, buf.note);
+    if (command) {
+      await store.execute(command);
+      ui.log(t("harness.renamedLog", { name: buf.name.trim() }));
+    }
+    return;
   } else {
     return;
   }
   await store.execute({ type: "update_entity", sheet_id: sheet.id, entity });
 }
 
-const kindLabel: Record<string, string> = {
+const kindLabel = computed<Record<string, string>>(() => ({
   wire: "配線",
   symbol: "シンボル",
   junction: "ジャンクション",
   net_label: "ネットラベル",
   text: "テキスト",
-};
+  harness: t("harness.kindLabel"),
+}));
 </script>
 
 <template>
@@ -181,6 +203,51 @@ const kindLabel: Record<string, string> = {
       <div class="prow">
         <span class="plabel">シンボル</span>
         <span class="pvalue">{{ selected.symbol_id }}</span>
+      </div>
+    </template>
+
+    <template v-else-if="selected?.kind === 'harness'">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("harness.kindLabel") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("harness.kindRow") }}</span>
+        <span class="pvalue">{{ t("harness.kindLabel") }}</span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("harness.nameRow") }}</span>
+        <span class="pvalue">
+          <input
+            v-model="buf.name"
+            class="bare mono"
+            :title="t('harness.nameHint')"
+            placeholder="W1"
+            spellcheck="false"
+            @keyup.enter="apply"
+          />
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("harness.wireCountRow") }}</span>
+        <span class="pvalue">
+          {{ t("harness.wireCount", { count: harnessWires }) }}
+          <span class="hint">
+            {{
+              buf.name.trim()
+                ? t("harness.wireCountHint", { name: buf.name.trim() })
+                : t("harness.wireCountHintUnnamed")
+            }}
+          </span>
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("harness.noteRow") }}</span>
+        <span class="pvalue">
+          <input
+            v-model="buf.note"
+            class="bare"
+            :placeholder="t('harness.notePlaceholder')"
+            @keyup.enter="apply"
+          />
+        </span>
       </div>
     </template>
 
@@ -269,6 +336,7 @@ const kindLabel: Record<string, string> = {
   padding: 2px 0;
 }
 .mono { font-family: var(--mono-font); }
+.hint { color: var(--ui-muted); }
 .swatch {
   width: 11px;
   height: 11px;
