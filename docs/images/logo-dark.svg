@@ -1,0 +1,5 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="MadakeCAD">
+  <path d="M12 20 V9 L24 3.5 V20 Z M14.5 23.5 h7 a2.5 2.5 0 0 1 2.5 2.5 v8 a2.5 2.5 0 0 1 -2.5 2.5 h-7 a2.5 2.5 0 0 1 -2.5 -2.5 v-8 a2.5 2.5 0 0 1 2.5 -2.5 Z M14.5 40 h7 a2.5 2.5 0 0 1 2.5 2.5 v15 a2.5 2.5 0 0 1 -2.5 2.5 h-7 a2.5 2.5 0 0 1 -2.5 -2.5 v-15 a2.5 2.5 0 0 1 2.5 -2.5 Z M25.2 22 Q29 15.5 35 13 Q33.5 20 27.5 23.2 Q26 23 25.2 22 Z" fill="#2CA866"/>
+  <path d="M30 47 V43 Q30 39 27.36 35.49 A15 15 0 1 1 46.64 35.49 Q44 39 44 43 V47 M31 50.5 H43 M33 54.5 H41" stroke="#4A9EFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M34.6 60 a2.4 2.4 0 1 0 4.8 0 a2.4 2.4 0 1 0 -4.8 0 Z" stroke="#4A9EFF" stroke-width="2.4" fill="none"/>
+</svg>
