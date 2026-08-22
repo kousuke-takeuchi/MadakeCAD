@@ -2513,6 +2513,7 @@ name = "madake-core"
 version = "0.1.0"
 dependencies = [
  "dirs",
+ "pdf-writer",
  "rusqlite",
  "schemars 1.2.2",
  "serde",
