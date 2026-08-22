@@ -6,6 +6,7 @@
 
 import { defineStore } from "pinia";
 import { ipc, type Template, type TemplateIssue } from "../ipc";
+import { useDocumentStore } from "./document";
 
 /** UI言語に合わせたテンプレート名 (日本語カタログ以外は英語名)。 */
 export function templateName(template: Template, locale: string): string {
@@ -111,7 +112,9 @@ export const useTemplatesStore = defineStore("templates", {
       this.running = true;
       this.error = null;
       try {
-        await ipc.applyTemplate(template.id, sheetId);
+        // 専用IPCなのでdocument.execute()を通らない。patchはここでミラーへ流す
+        // (undoボタンが有効になり、Cmd+Z一発で戻せる)
+        useDocumentStore().applyEdit(await ipc.applyTemplate(template.id, sheetId));
         this.open = false;
         return template;
       } catch (e) {

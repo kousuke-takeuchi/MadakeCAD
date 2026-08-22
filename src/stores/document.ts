@@ -117,10 +117,18 @@ export const useDocumentStore = defineStore("document", {
      */
     async execute(command: Command): Promise<Patch> {
       const patch = await ipc.executeCommand(command);
+      this.applyEdit(patch);
+      return patch;
+    },
+
+    /**
+     * 自分が起こした編集のpatchをミラーへ適用し、undo/redoの可否も更新する。
+     * `execute()`を通さない専用の編集入口(テンプレート適用など)もここを通す。
+     */
+    applyEdit(patch: Patch) {
       this.applyPatch(patch);
       this.canUndo = true;
       this.canRedo = false;
-      return patch;
     },
 
     async undo() {

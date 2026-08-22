@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**652 specification clauses** across 5 areas.
+**653 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -813,6 +813,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - opens with the first template selected <sub>`template picker store`</sub>
 - switches the selected template when another tile is picked <sub>`template picker store`</sub>
 - applies the selected template to the current sheet and closes <sub>`template picker store`</sub>
+- mirrors the applied template into the drawing and enables undo <sub>`template picker store`</sub>
 - applies nothing when the dialog is cancelled <sub>`template picker store`</sub>
 - keeps the dialog open and shows why when applying fails <sub>`template picker store`</sub>
 - reports template files it could not read <sub>`template picker store`</sub>

@@ -5,6 +5,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 import { ipc, type Patch, type Template } from "../ipc";
 import { entityBounds, fitPreview, templateEntities, templateSheet } from "../canvas/templatePreview";
+import { useDocumentStore } from "./document";
 import { templateDescription, templateName, useTemplatesStore } from "./templates";
 
 function template(id: string, nameJa: string): Template {
@@ -99,6 +100,48 @@ describe("template picker store", () => {
     expect(apply).toHaveBeenCalledWith("motor_starter", "sheet-1");
     expect(applied?.id).toBe("motor_starter");
     expect(store.open).toBe(false);
+  });
+
+  // ja: 適用したテンプレートは図面ミラーにも反映され、「元に戻す」が使える状態になる
+  it("mirrors the applied template into the drawing and enables undo", async () => {
+    vi.spyOn(ipc, "applyTemplate").mockResolvedValue({
+      revision: 1,
+      ops: [
+        {
+          op: "entity_upserted",
+          sheet_id: "s1",
+          entity: {
+            kind: "junction",
+            id: "j1",
+            at: { x: 10, y: 10 },
+          },
+        },
+      ],
+    });
+    const doc = useDocumentStore();
+    doc.project = {
+      format_version: 1,
+      name: "P",
+      wire_parts: [],
+      sheets: [
+        {
+          id: "s1",
+          name: "Sheet1",
+          size: "A3",
+          orientation: "Landscape",
+          zone_cols: 4,
+          zone_rows: 6,
+          title_block: {},
+          revisions: [],
+          entities: {},
+        },
+      ],
+    };
+    const store = useTemplatesStore();
+    await store.openDialog();
+    await store.apply("s1");
+    expect(Object.keys(doc.project!.sheets[0].entities)).toEqual(["j1"]);
+    expect(doc.canUndo).toBe(true);
   });
 
   // ja: キャンセルではダイアログが閉じるだけで、図面には何も適用されない

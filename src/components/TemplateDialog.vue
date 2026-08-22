@@ -67,7 +67,13 @@ async function apply() {
             :class="{ selected: template.id === templates.selectedId }"
             @click="templates.select(template.id)"
           >
-            <TemplatePreview class="thumb" :template="template" :width="96" :height="54" />
+            <TemplatePreview
+              class="thumb"
+              :template="template"
+              :width="96"
+              :height="54"
+              :labels="false"
+            />
             <span class="tile-text">
               <span class="tile-name">{{ templateName(template, locale) }}</span>
               <span class="tile-desc">{{ templateDescription(template, locale) }}</span>
