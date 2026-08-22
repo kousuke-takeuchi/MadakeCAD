@@ -32,6 +32,10 @@ const pathInput = ref("");
 const knowledgeInput = ref("");
 /** Anthropic API経由で使うモデルIDの入力欄。 */
 const apiModelInput = ref("");
+/** GitHub Copilot経由で使うモデルの入力欄 (`auto`でCopilotが選ぶ)。 */
+const copilotModelInput = ref("");
+/** copilot実行ファイルのパス入力欄 (空なら自動検出)。 */
+const copilotPathInput = ref("");
 /**
  * APIキーの入力欄。**保存したらすぐ空にする**(キーを画面にもメモリにも残さない)。
  * 保存済みのキーは伏せ字だけを表示し、値を読み戻すことはできない。
@@ -42,14 +46,30 @@ const detecting = ref(false);
 const detected = computed(() => chat.detect);
 const provider = computed(() => settings.settings.provider);
 const usingApi = computed(() => provider.value === "anthropic_api");
+const usingCopilot = computed(() => provider.value === "copilot_cli");
+/** claude CLIの検出結果を出すのはCLIプロバイダのときだけ。 */
+const usingClaudeCli = computed(() => provider.value === "claude_cli");
 /** いま選んでいるプロバイダで送信できる状態か(バッジ表示)。 */
-const providerReady = computed(() => (usingApi.value ? settings.apiKeySaved : !!detected.value));
+const providerReady = computed(() => settings.agentReady(!!detected.value));
 const pathDirty = computed(() => pathInput.value.trim() !== (settings.settings.claude_path ?? ""));
 const knowledgeDirty = computed(
   () => knowledgeInput.value.trim() !== (settings.settings.knowledge_path ?? ""),
 );
 const apiModelDirty = computed(() => apiModelInput.value.trim() !== settings.settings.api_model);
-const dirty = computed(() => pathDirty.value || knowledgeDirty.value || apiModelDirty.value);
+const copilotModelDirty = computed(
+  () => copilotModelInput.value.trim() !== settings.settings.copilot_model,
+);
+const copilotPathDirty = computed(
+  () => copilotPathInput.value.trim() !== (settings.settings.copilot_path ?? ""),
+);
+const dirty = computed(
+  () =>
+    pathDirty.value ||
+    knowledgeDirty.value ||
+    apiModelDirty.value ||
+    copilotModelDirty.value ||
+    copilotPathDirty.value,
+);
 const activeLocale = computed(() => resolveLocale(settings.settings.language));
 
 const checks = computed(() => [
@@ -77,6 +97,8 @@ watch(
     pathInput.value = settings.settings.claude_path ?? "";
     knowledgeInput.value = settings.settings.knowledge_path ?? "";
     apiModelInput.value = settings.settings.api_model;
+    copilotModelInput.value = settings.settings.copilot_model;
+    copilotPathInput.value = settings.settings.copilot_path ?? "";
     apiKeyInput.value = "";
     settings.testResult = null;
     await settings.loadProviderStatus();
@@ -105,19 +127,38 @@ async function apply(): Promise<boolean> {
   const knowledge = knowledgeInput.value.trim();
   const knowledgeChanged = knowledgeDirty.value;
   const modelChanged = apiModelDirty.value;
+  const copilotModelChanged = copilotModelDirty.value;
+  const copilotPathChanged = copilotPathDirty.value;
+  const copilotPath = copilotPathInput.value.trim();
   if (
     !(await settings.save({
       claude_path: path || null,
       knowledge_path: knowledge || null,
       api_model: apiModelInput.value.trim(),
+      copilot_model: copilotModelInput.value.trim(),
+      copilot_path: copilotPath || null,
     }))
   )
     return false;
   pathInput.value = settings.settings.claude_path ?? "";
   knowledgeInput.value = settings.settings.knowledge_path ?? "";
   apiModelInput.value = settings.settings.api_model;
+  copilotModelInput.value = settings.settings.copilot_model;
+  copilotPathInput.value = settings.settings.copilot_path ?? "";
   if (modelChanged) {
     ui.log(t("settings.agent.apiModelSetLog", { model: settings.settings.api_model }));
+  }
+  if (copilotModelChanged) {
+    ui.log(t("settings.agent.copilotModelSetLog", { model: settings.settings.copilot_model }));
+  }
+  if (copilotPathChanged) {
+    ui.log(
+      copilotPath
+        ? t("settings.agent.copilotPathSetLog", { path: copilotPath })
+        : t("settings.agent.copilotPathClearedLog"),
+    );
+    // 実行ファイルを変えたら検出をやり直す(バッジを実態に合わせる)
+    await settings.loadProviderStatus();
   }
   if (redetectAfter) {
     ui.log(path ? t("settings.agent.pathSetLog", { path }) : t("settings.agent.pathClearedLog"));
@@ -171,8 +212,27 @@ const settingsError = computed(() =>
 );
 
 function providerLabelKey(p: AgentProvider): string {
-  return p === "anthropic_api" ? "settings.agent.providerApi" : "settings.agent.providerCli";
+  if (p === "anthropic_api") return "settings.agent.providerApi";
+  if (p === "copilot_cli") return "settings.agent.providerCopilot";
+  return "settings.agent.providerCli";
 }
+
+/** プロバイダごとの説明文(選択直下のキャプション)。 */
+const providerHintKey = computed(() => {
+  if (usingApi.value) return "settings.agent.providerHintApi";
+  if (usingCopilot.value) return "settings.agent.providerHintCopilot";
+  return "settings.agent.providerHint";
+});
+
+/** プロバイダごとの接続バッジ文言。 */
+const providerBadgeKey = computed(() => {
+  if (usingApi.value) {
+    return providerReady.value
+      ? "settings.agent.keySavedBadge"
+      : "settings.agent.keyMissingBadge";
+  }
+  return providerReady.value ? "settings.agent.detectedBadge" : "settings.agent.notDetectedBadge";
+});
 
 /** 入力したAPIキーをOSキーチェーンへ保存する(保存後は入力欄を空にする)。 */
 async function saveApiKey() {
@@ -255,16 +315,80 @@ async function changeLanguage(ev: Event) {
                     {{ t(providerLabelKey(p)) }}
                   </option>
                 </select>
-                <span v-if="providerReady" class="status ok">
-                  <i /> {{ t(usingApi ? "settings.agent.keySavedBadge" : "settings.agent.detectedBadge") }}
-                </span>
-                <span v-else class="status off">
-                  <i /> {{ t(usingApi ? "settings.agent.keyMissingBadge" : "settings.agent.notDetectedBadge") }}
-                </span>
+                <span v-if="providerReady" class="status ok"><i /> {{ t(providerBadgeKey) }}</span>
+                <span v-else class="status off"><i /> {{ t(providerBadgeKey) }}</span>
               </div>
-              <p class="caption indent-label">
-                {{ t(usingApi ? "settings.agent.providerHintApi" : "settings.agent.providerHint") }}
+              <p class="caption indent-label">{{ t(providerHintKey) }}</p>
+            </div>
+
+            <div v-if="usingCopilot" class="group">
+              <div class="group-head"><span>{{ t("settings.agent.copilotGroup") }}</span><i /></div>
+              <div class="form-row">
+                <label class="form-label">{{ t("settings.agent.executableLabel") }}</label>
+                <div class="field mono-field">
+                  <span v-if="settings.copilotDetected">
+                    {{ settings.settings.copilot_path ?? "copilot" }}
+                    <template v-if="settings.copilotVersion"> · {{ settings.copilotVersion }}</template>
+                  </span>
+                  <span v-else class="muted">{{ t("settings.agent.notFound") }}</span>
+                </div>
+                <span v-if="settings.copilotDetected" class="detect-ok">
+                  <Check :size="12" /> {{ t("settings.agent.detectedOk") }}
+                </span>
+                <span v-else class="detect-warn">{{ t("settings.agent.copilotMissing") }}</span>
+              </div>
+              <i18n-t
+                v-if="!settings.copilotDetected"
+                keypath="settings.agent.copilotMissingHint"
+                tag="p"
+                class="caption indent-label"
+              >
+                <template #command><span class="mono">npm install -g @github/copilot</span></template>
+              </i18n-t>
+
+              <div class="form-row">
+                <label class="form-label" for="copilot-model">{{ t("settings.agent.copilotModelLabel") }}</label>
+                <input
+                  id="copilot-model"
+                  v-model="copilotModelInput"
+                  class="field input mono"
+                  spellcheck="false"
+                  placeholder="auto"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
+                />
+              </div>
+              <p class="caption indent-label">{{ t("settings.agent.copilotModelHint") }}</p>
+
+              <div class="form-row">
+                <label class="form-label" for="copilot-path">{{ t("settings.agent.copilotPathLabel") }}</label>
+                <input
+                  id="copilot-path"
+                  v-model="copilotPathInput"
+                  class="field input mono"
+                  placeholder="/usr/local/bin/copilot"
+                  spellcheck="false"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
+                />
+              </div>
+              <p class="caption indent-label">{{ t("settings.agent.copilotPathHint") }}</p>
+
+              <div class="form-row">
+                <span class="form-label" />
+                <button
+                  class="btn secondary test-btn"
+                  :disabled="settings.testing || !settings.copilotDetected"
+                  @click="settings.testConnection()"
+                >
+                  <RefreshCw :size="12" :class="{ spin: settings.testing }" />
+                  {{ settings.testing ? t("settings.agent.testing") : t("settings.agent.testConnection") }}
+                </button>
+              </div>
+              <p v-if="settings.testResult?.ok" class="caption indent-label ok">
+                <Check :size="11" />
+                {{ t("settings.agent.testOk", { model: settings.testResult.model ?? settings.settings.copilot_model }) }}
               </p>
+              <p v-else-if="settings.testResult" class="caption indent-label warn">{{ testErrorText }}</p>
+              <p v-else class="caption indent-label">{{ t("settings.agent.copilotTestHint") }}</p>
             </div>
 
             <div v-if="usingApi" class="group">
@@ -341,7 +465,7 @@ async function changeLanguage(ev: Event) {
               </p>
             </div>
 
-            <div v-if="!usingApi" class="group">
+            <div v-if="usingClaudeCli" class="group">
               <div class="group-head"><span>{{ t("settings.agent.detectionGroup") }}</span><i /></div>
               <div class="form-row">
                 <label class="form-label">{{ t("settings.agent.executableLabel") }}</label>
@@ -389,7 +513,7 @@ async function changeLanguage(ev: Event) {
 
             <div class="group">
               <div class="group-head"><span>{{ t("settings.agent.advancedGroup") }}</span><i /></div>
-              <template v-if="!usingApi">
+              <template v-if="usingClaudeCli">
                 <div class="form-row">
                   <label class="form-label" for="claude-path">{{ t("settings.agent.claudePathLabel") }}</label>
                   <input

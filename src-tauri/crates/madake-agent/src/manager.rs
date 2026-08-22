@@ -16,8 +16,11 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-use crate::backend::{AgentBackend, ClaudeCodeCliBackend, DetectResult, HistoryMessage, TurnRequest};
+use crate::backend::{
+    AgentBackend, ClaudeCodeCliBackend, DetectResult, HistoryMessage, TurnRequest,
+};
 use crate::conversation::{AppliedRevisions, AppliedUndoDepth, Conversation, DocState};
+use crate::copilot_cli::CopilotCliBackend;
 use crate::events::AgentEvent;
 use crate::settings::{AgentProvider, AppSettings};
 use crate::tools::ToolBridge;
@@ -124,6 +127,8 @@ struct ManagerState {
     running: HashMap<Uuid, (u64, JoinHandle<()>)>,
     /// 検出済み(または設定済み)のclaude実行パス
     executable: Option<PathBuf>,
+    /// 検出済み(または設定済み)のcopilot実行パス
+    copilot_executable: Option<PathBuf>,
     /// アプリ設定(`~/.madakecad/settings.json`由来)。次の送信から効く
     settings: AppSettings,
     next_seq: u64,
@@ -200,7 +205,58 @@ impl AgentManager {
         match self.settings().provider {
             AgentProvider::ClaudeCli => self.detect().await.is_ok(),
             AgentProvider::AnthropicApi => crate::secrets::has_anthropic_api_key(),
+            AgentProvider::CopilotCli => self.detect_copilot().await.is_ok(),
         }
+    }
+
+    /// copilot CLIを検出する(パス・バージョン)。成功したパスは以降のターンで再利用する。
+    ///
+    /// GitHubへサインイン済みかどうかはここでは分からない(`--version`は未認証でも
+    /// 成功する)。サインイン状態は[`Self::test_copilot_connection`]で確かめる。
+    pub async fn detect_copilot(&self) -> Result<DetectResult> {
+        let configured = self.state.lock().unwrap().copilot_executable.clone();
+        let found = CopilotCliBackend::detect(configured).await?;
+        self.state.lock().unwrap().copilot_executable = Some(found.path.clone());
+        Ok(found)
+    }
+
+    /// いま選んでいるプロバイダで疎通を試す(設定画面の「接続テスト」の入口)。
+    ///
+    /// 成功したら確かめたモデル名を返す。UI・Link API・Tauri IPCはこれだけを呼べばよく、
+    /// プロバイダごとの違い(APIキー / Copilotのサインイン)はここで吸収する。
+    pub async fn test_connection(
+        &self,
+    ) -> std::result::Result<String, crate::anthropic::ConnectionError> {
+        match self.settings().provider {
+            AgentProvider::CopilotCli => self.test_copilot_connection().await,
+            AgentProvider::ClaudeCli | AgentProvider::AnthropicApi => {
+                self.test_anthropic_connection().await
+            }
+        }
+    }
+
+    /// GitHub Copilot CLIへの疎通を試す(設定画面の「接続テスト」)。
+    ///
+    /// 成功したら使うモデル名を返す。失敗は種類つきの[`ConnectionError`]
+    /// (`copilot_missing`=CLIが無い / `copilot_auth`=GitHub未認証)。
+    /// **ごく短い1往復を投げるためAIクレジットを消費する**(ボタン操作時のみ)。
+    pub async fn test_copilot_connection(
+        &self,
+    ) -> std::result::Result<String, crate::anthropic::ConnectionError> {
+        let settings = self.settings().normalized();
+        let executable = match self.copilot_executable().await {
+            Ok(path) => path,
+            Err(e) => {
+                return Err(crate::anthropic::ConnectionError {
+                    kind: crate::copilot_cli::KIND_COPILOT_MISSING.to_string(),
+                    message: e.to_string(),
+                })
+            }
+        };
+        let mut backend = CopilotCliBackend::new(executable, self.mcp_port);
+        backend.model = Some(settings.copilot_model.clone());
+        backend.check_connection().await?;
+        Ok(settings.copilot_model)
     }
 
     /// Anthropic APIへの疎通を試す(設定画面の「接続テスト」)。
@@ -251,6 +307,9 @@ impl AgentManager {
         // 明示パス→自動検出へ戻す場合はresolve_executableが次回送信時に再検出する
         if settings.claude_path.is_some() || state.settings.claude_path.is_some() {
             state.executable = settings.claude_path.clone();
+        }
+        if settings.copilot_path.is_some() || state.settings.copilot_path.is_some() {
+            state.copilot_executable = settings.copilot_path.clone();
         }
         state.settings = settings;
     }
@@ -317,6 +376,7 @@ impl AgentManager {
         // プロバイダごとの前提を先に確かめる(claude CLIが無くてもAPIキーがあれば送れる)
         let executable = match settings.provider {
             AgentProvider::ClaudeCli => Some(self.resolve_executable().await?),
+            AgentProvider::CopilotCli => Some(self.copilot_executable().await?),
             AgentProvider::AnthropicApi => {
                 if !crate::secrets::has_anthropic_api_key() {
                     return Err(AgentError::NoApiKey);
@@ -376,6 +436,12 @@ impl AgentManager {
             (AgentProvider::ClaudeCli, Some(executable)) => {
                 let mut backend = ClaudeCodeCliBackend::new(executable, self.mcp_port);
                 backend.model = turn_model;
+                Box::new(backend)
+            }
+            (AgentProvider::CopilotCli, Some(executable)) => {
+                let mut backend = CopilotCliBackend::new(executable, self.mcp_port);
+                // 会話ごとのモデル指定はclaude CLI用のIDなのでCopilotには使わず、設定を使う
+                backend.model = Some(settings.normalized().copilot_model.clone());
                 Box::new(backend)
             }
             _ => {
@@ -525,6 +591,14 @@ impl AgentManager {
             return Ok(path);
         }
         Ok(self.detect().await?.path)
+    }
+
+    /// 使用するcopilot実行ファイル(設定の明示パス→検出の順)。
+    async fn copilot_executable(&self) -> Result<PathBuf> {
+        if let Some(path) = self.state.lock().unwrap().copilot_executable.clone() {
+            return Ok(path);
+        }
+        Ok(self.detect_copilot().await?.path)
     }
 
     fn broadcast(&self, conversation_id: Uuid, turn_seq: u64, event: AgentEvent) {

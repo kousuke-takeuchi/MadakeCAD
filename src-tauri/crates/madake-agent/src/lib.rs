@@ -14,6 +14,8 @@
 pub mod anthropic;
 pub mod backend;
 pub mod conversation;
+pub mod copilot_cli;
+pub mod copilot_events;
 pub mod events;
 pub mod knowledge;
 pub mod manager;
@@ -27,6 +29,8 @@ pub use conversation::{
     chat_path_for, load_chat, save_chat, AppliedRevisions, AppliedUndoDepth, ChatMessage,
     Conversation, DocState, Role, ToolCall,
 };
+pub use copilot_cli::{CopilotCliBackend, DEFAULT_COPILOT_MODEL};
+pub use copilot_events::{parse_copilot_events, CopilotParser};
 pub use events::{parse_stream_events, parse_stream_line, AgentEvent, StreamParser, Usage};
 pub use knowledge::{docs_dir, docs_guide, standards_text, system_prompt};
 pub use manager::{AgentManager, ConversationEvent, DocBridge, RevertError, RevertReport};
@@ -36,9 +40,9 @@ pub use tools::{ToolBridge, ToolDef, ToolOutcome};
 /// madake-agentのエラー。
 #[derive(Debug, thiserror::Error)]
 pub enum AgentError {
-    #[error("claude CLIが見つかりません: {0}")]
+    #[error("CLIが見つかりません: {0}")]
     NotFound(String),
-    #[error("claude CLIの起動に失敗しました: {0}")]
+    #[error("CLIの起動に失敗しました: {0}")]
     Spawn(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),

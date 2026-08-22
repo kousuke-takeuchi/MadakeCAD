@@ -496,12 +496,12 @@ async fn agent_clear_api_key(state: State<'_, AppState>) -> Result<serde_json::V
     Ok(madake_mcp::agent::provider_status_async(&state.agent).await)
 }
 
-/// Anthropic APIへの疎通を試す(設定画面の「接続テスト」)。
+/// いま選んでいるプロバイダへの疎通を試す(設定画面の「接続テスト」)。
 ///
 /// 失敗しても`{"ok": false, "error": "..."}`を返す(理由をそのまま表示する)。
 #[tauri::command]
 async fn agent_test_connection(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    Ok(match state.agent.test_anthropic_connection().await {
+    Ok(match state.agent.test_connection().await {
         Ok(model) => serde_json::json!({ "ok": true, "model": model }),
         // kind=UIが翻訳するための区分、error=翻訳が無いときにそのまま出せる説明
         Err(e) => serde_json::json!({ "ok": false, "error_kind": e.kind, "error": e.message }),
@@ -581,7 +581,9 @@ fn resolve_docs_resource(app: &tauri::AppHandle) {
     use tauri::Manager;
 
     let candidates = [
-        app.path().resolve("_up_/docs", BaseDirectory::Resource).ok(),
+        app.path()
+            .resolve("_up_/docs", BaseDirectory::Resource)
+            .ok(),
         app.path().resolve("docs", BaseDirectory::Resource).ok(),
         Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../docs")),
     ];

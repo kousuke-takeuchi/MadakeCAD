@@ -28,9 +28,11 @@
 
 ### Task 1: CopilotCliBackend
 
-- [ ] Step 1 (red): Rustテスト(フェイクcopilot CLIフィクスチャ): 起動引数(−p/JSONL/MCP設定ファイル/allow-all-tools/session-id)/継続ターンで--resume/JSONLイベント変換(text・ツール・完了・エラー)/未認証エラーの検知と日本語案内/システムプロンプトの前置/copilot_path・copilot_model設定
-- [ ] Step 2 (green): 実装+プロバイダUI追加(i18n)→全テストgreen→gen_spec→コミット
-- [ ] Step 3: 実機probe(**要ユーザー認証**: `copilot`起動→`/login`)。認証後にJSONL実形へパーサを合わせ、1ターン通し(作図+検証)を確認。未認証の間はここまでの状態で完了報告し、ユーザー確認事項として記録
+- [x] Step 1 (red): Rustテスト(フェイクcopilot CLIフィクスチャ): 起動引数(−p/JSONL/MCP設定ファイル/allow-all-tools/session-id)/継続ターンで--resume/JSONLイベント変換(text・ツール・完了・エラー)/未認証エラーの検知と日本語案内/システムプロンプトの前置/copilot_path・copilot_model設定
+- [x] Step 2 (green): 実装+プロバイダUI追加(i18n)→全テストgreen→gen_spec→コミット
+- [x] Step 3: 実機probe(2026-08-22実施)。`copilot -p "reply pong" --output-format json --allow-all-tools`は**未認証で失敗**(exit 1、stdout空、stderrに`Error: No authentication information found.`+`/login`等の手順)。実出力をフィクスチャ`fake_copilot_unauth.sh`と検知ロジックへ反映済み。起動フラグ一式(`--no-ask-user`/`--no-custom-instructions`/`--disable-builtin-mcps`/`--additional-mcp-config @file`/`--session-id`/`--model`/`--log-level error`)が実機CLIに受け付けられること、MCP設定JSONの形が`copilot mcp add --transport http`の書き出しと一致することも実機で確認済み
+
+  **ユーザー確認事項(未完)**: `copilot`を起動して`/login`でサインインしたうえで、(a) `--output-format json`のJSONL実形をパーサの別名表へ寄せる、(b) アプリで1ターン通し(作図+検証+undo後始末)。docs/09(EN/JA)に「確認できている範囲」として記載済み
 
 ### Task 2: OpenAI互換Backend(Ollamaプリセット含む)
 

@@ -31,6 +31,8 @@ pub enum AgentProvider {
     ClaudeCli,
     /// Anthropic Messages APIへ直接(APIキー)
     AnthropicApi,
+    /// ローカルのGitHub Copilot CLI(GitHubのサインインを利用。**キーは持たない**)
+    CopilotCli,
 }
 
 impl<'de> Deserialize<'de> for AgentProvider {
@@ -42,6 +44,7 @@ impl<'de> Deserialize<'de> for AgentProvider {
         let raw = String::deserialize(d)?;
         Ok(match raw.trim() {
             "anthropic_api" => Self::AnthropicApi,
+            "copilot_cli" => Self::CopilotCli,
             _ => Self::ClaudeCli,
         })
     }
@@ -74,6 +77,12 @@ pub struct AppSettings {
     pub provider: AgentProvider,
     /// [`AgentProvider::AnthropicApi`]で使うモデルID。空なら既定へ戻す。
     pub api_model: String,
+    /// copilot実行ファイルの明示パス。`None`なら自動検出(PATH→既知のインストール先)。
+    pub copilot_path: Option<PathBuf>,
+    /// [`AgentProvider::CopilotCli`]で使うモデル。`auto`ならCopilotが選ぶ。
+    ///
+    /// **GitHubの資格情報はここには入らない**(Copilot CLI自身のサインインを使う)。
+    pub copilot_model: String,
 }
 
 impl Default for AppSettings {
@@ -86,6 +95,8 @@ impl Default for AppSettings {
             knowledge_path: None,
             provider: AgentProvider::ClaudeCli,
             api_model: crate::anthropic::DEFAULT_API_MODEL.into(),
+            copilot_path: None,
+            copilot_model: crate::copilot_cli::DEFAULT_COPILOT_MODEL.into(),
         }
     }
 }
@@ -108,6 +119,13 @@ impl AppSettings {
             crate::anthropic::DEFAULT_API_MODEL.into()
         } else {
             api_model.into()
+        };
+        self.copilot_path = normalize_path(self.copilot_path);
+        let copilot_model = self.copilot_model.trim();
+        self.copilot_model = if copilot_model.is_empty() {
+            crate::copilot_cli::DEFAULT_COPILOT_MODEL.into()
+        } else {
+            copilot_model.into()
         };
         self
     }

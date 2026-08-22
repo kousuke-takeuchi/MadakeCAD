@@ -49,6 +49,8 @@ fn saved_settings_round_trip() {
         knowledge_path: Some(PathBuf::from("/home/me/house-rules.md")),
         provider: AgentProvider::AnthropicApi,
         api_model: "claude-sonnet-5".into(),
+        copilot_path: None,
+        copilot_model: "auto".into(),
     };
 
     save_settings(&path, &settings).unwrap();
@@ -169,9 +171,15 @@ fn old_settings_file_without_language_loads_as_english() {
 /// 言語タグは正規化で小文字になり、空白だけの入力は英語 (en) に戻る。
 #[test]
 fn language_is_normalized_to_lowercase_and_blank_becomes_english() {
-    let upper = AppSettings { language: " JA ".into(), ..AppSettings::default() };
+    let upper = AppSettings {
+        language: " JA ".into(),
+        ..AppSettings::default()
+    };
     assert_eq!(upper.normalized().language, "ja");
-    let blank = AppSettings { language: "   ".into(), ..AppSettings::default() };
+    let blank = AppSettings {
+        language: "   ".into(),
+        ..AppSettings::default()
+    };
     assert_eq!(blank.normalized().language, "en");
 }
 
@@ -181,7 +189,10 @@ fn language_is_normalized_to_lowercase_and_blank_becomes_english() {
 fn language_round_trips_through_save_and_load() {
     let dir = temp_dir();
     let path = dir.join("settings.json");
-    let settings = AppSettings { language: "ja".into(), ..AppSettings::default() };
+    let settings = AppSettings {
+        language: "ja".into(),
+        ..AppSettings::default()
+    };
     save_settings(&path, &settings).unwrap();
     assert_eq!(load_settings(&path).unwrap().language, "ja");
     std::fs::remove_dir_all(&dir).ok();
@@ -328,4 +339,116 @@ fn a_blank_api_model_falls_back_to_the_default() {
         ..AppSettings::default()
     };
     assert_eq!(padded.normalized().api_model, "claude-opus-4-6");
+}
+
+// ------------------------------------------------ プロバイダ (GitHub Copilot CLI)
+
+/// Out of the box GitHub Copilot is set to let Copilot pick the model, with the executable found on PATH.
+/// GitHub Copilotの既定はモデルをCopilotに選ばせる設定で、実行ファイルはPATHから探す。
+#[test]
+fn the_copilot_defaults_let_copilot_pick_the_model() {
+    let settings = AppSettings::default();
+    assert_eq!(settings.copilot_path, None);
+    assert_eq!(settings.copilot_model, "auto");
+}
+
+/// Choosing GitHub Copilot survives a save/load round trip together with its path and model.
+/// GitHub Copilotを選んだ設定は、パスとモデルと一緒に保存して読み直しても保持される。
+#[test]
+fn the_copilot_choice_round_trips_through_save_and_load() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    let settings = AppSettings {
+        provider: AgentProvider::CopilotCli,
+        copilot_path: Some(PathBuf::from("/usr/local/bin/copilot")),
+        copilot_model: "claude-sonnet-4.5".into(),
+        ..AppSettings::default()
+    };
+    save_settings(&path, &settings).unwrap();
+
+    let loaded = load_settings(&path).unwrap();
+    assert_eq!(loaded.provider, AgentProvider::CopilotCli);
+    assert_eq!(
+        loaded.copilot_path.as_deref(),
+        Some(Path::new("/usr/local/bin/copilot"))
+    );
+    assert_eq!(loaded.copilot_model, "claude-sonnet-4.5");
+    // 設定ファイルは手で読める名前で書かれる
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        written.contains("\"provider\": \"copilot_cli\""),
+        "読める名前で保存されていない: {written}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A settings file written before GitHub Copilot existed keeps working, with the Copilot fields at their defaults.
+/// GitHub Copilotの項目が無い旧い設定ファイルもそのまま動き、Copilotの項目は既定値になる。
+#[test]
+fn an_old_settings_file_without_copilot_fields_keeps_working() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    std::fs::write(
+        &path,
+        r#"{ "provider": "anthropic_api", "api_model": "claude-opus-4-6", "language": "ja" }"#,
+    )
+    .unwrap();
+
+    let settings = load_settings(&path).unwrap();
+    assert_eq!(settings.provider, AgentProvider::AnthropicApi);
+    assert_eq!(settings.api_model, "claude-opus-4-6");
+    assert_eq!(settings.copilot_path, None);
+    assert_eq!(settings.copilot_model, "auto");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A blank Copilot model box returns to "auto", and a blank path returns to auto-detection.
+/// Copilotのモデル欄を空にすると`auto`へ戻り、パス欄を空にすると自動検出へ戻る。
+#[test]
+fn blank_copilot_boxes_return_to_the_defaults() {
+    let blank = AppSettings {
+        copilot_model: "  ".into(),
+        copilot_path: Some(PathBuf::from("   ")),
+        ..AppSettings::default()
+    };
+    let blank = blank.normalized();
+    assert_eq!(blank.copilot_model, "auto");
+    assert_eq!(blank.copilot_path, None);
+
+    let padded = AppSettings {
+        copilot_model: " claude-sonnet-4.5 ".into(),
+        copilot_path: Some(PathBuf::from(" /opt/homebrew/bin/copilot ")),
+        ..AppSettings::default()
+    };
+    let padded = padded.normalized();
+    assert_eq!(padded.copilot_model, "claude-sonnet-4.5");
+    assert_eq!(
+        padded.copilot_path.as_deref(),
+        Some(Path::new("/opt/homebrew/bin/copilot"))
+    );
+}
+
+/// No GitHub credential is ever written to the settings file: Copilot uses its own sign-in.
+/// GitHubの資格情報は設定ファイルへ一切書かれない(Copilotは自身のサインインを使う)。
+#[test]
+fn no_github_credential_is_written_to_the_settings_file() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    save_settings(
+        &path,
+        &AppSettings {
+            provider: AgentProvider::CopilotCli,
+            ..AppSettings::default()
+        },
+    )
+    .unwrap();
+
+    let written = std::fs::read_to_string(&path).unwrap();
+    for secret in ["token", "GITHUB_TOKEN", "api_key", "password"] {
+        assert!(
+            !written.contains(secret),
+            "設定ファイルに資格情報の項目がある ({secret}): {written}"
+        );
+    }
+    std::fs::remove_dir_all(&dir).ok();
 }

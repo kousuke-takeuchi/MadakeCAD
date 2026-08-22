@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**952仕様項目**。
+全5領域・**999仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -553,6 +553,41 @@
 - チャット履歴の保存は現在のフォーマット版を記録する(移行済みファイルを再移行しない)。 <sub>`save_chat_stamps_the_current_format_version`</sub>
 - チャットファイルはプロジェクトの隣に<名前>.chat.jsonとして置かれる。 <sub>`chat_path_sits_next_to_project_file`</sub>
 
+### copilot_cli
+
+- Copilot CLIは、人が見ていなくても働ける設定(JSONL出力・ツール自動許可・質問しない)で非対話起動される。 <sub>`args_contain_required_flags`</sub>
+- 会話の最初のターンは新しいセッションIDを固定し、以降のターンが同じセッションを続けられるようにする。 <sub>`the_first_turn_pins_a_new_session_id`</sub>
+- 2ターン目以降は新しいセッションを作らず同じCopilotセッションを再開するので、エージェントは会話を覚えている。 <sub>`a_follow_up_turn_resumes_the_same_session`</sub>
+- 設定したCopilotのモデルはCLIへ渡される(`auto`ならCopilotが自動で選ぶ)。 <sub>`the_configured_model_is_passed_to_the_cli`</sub>
+- CopilotにはMadakeCAD自身のMCPサーバーを渡すので、他のクライアントと同じコマンド経由で図面を編集する。 <sub>`the_mcp_config_points_at_the_local_madakecad_server`</sub>
+- Copilot CLIにはシステムプロンプト用のフラグが無いため、MadakeCADの作図ルールは見出し付きでプロンプトの先頭へ前置される。 <sub>`the_system_prompt_is_prepended_to_the_user_prompt`</sub>
+- ターンはCopilotのJSONLから解釈したイベント(セッション・本文・ツール実行・完了)を流す。 <sub>`a_turn_streams_events_from_the_fake_cli`</sub>
+- 合成したプロンプトは実際に-p引数としてCLIへ届く。 <sub>`the_composed_prompt_reaches_the_cli`</sub>
+- Copilotへ渡すMCP設定ファイルはターン実行中に実在し、MadakeCADのサーバーを指している。 <sub>`the_mcp_config_file_exists_while_the_turn_runs`</sub>
+- GitHubへサインインしていない場合、チャットにその旨とサインイン手順が表示される。 <sub>`a_signed_out_cli_is_reported_with_login_guidance`</sub>
+- 実機CLIの未認証メッセージは、どこに出ても未認証として認識される。 <sub>`the_real_unauthenticated_message_is_recognised`</sub>
+- Copilotが理由(クレジット切れなど)を素のテキストで出して異常終了したとき、その理由がチャットのエラーに載る。 <sub>`a_plain_stdout_reason_reaches_the_error_message`</sub>
+- イベント受信側が消えた(ユーザーが中断した)場合、ターンは永久にブロックせず速やかに終わる。 <sub>`a_cancelled_turn_stops_promptly`</sub>
+- Copilot CLIの検出は、設定された実行ファイルからバージョンを読む。 <sub>`detect_reads_the_version_from_the_configured_executable`</sub>
+- Copilotの実行ファイルが入っていない場合、検出は明確に失敗する。 <sub>`detect_fails_when_copilot_is_not_installed`</sub>
+- 検出はPATHと、npmの一般的なインストール先からcopilotを探す。 <sub>`default_candidates_include_the_known_install_paths`</sub>
+- 接続テストは、CLIが応答すれば成功を、サインインしていなければサインイン案内を返す。 <sub>`the_connection_test_distinguishes_success_from_being_signed_out`</sub>
+
+### copilot_events
+
+- Copilotのセッション行は、同じ会話を続けるためのセッションイベントになる。 <sub>`session_line_becomes_a_session_event`</sub>
+- アシスタントの本文は、CLIがどのフィールド名で出してもチャットへ届く。 <sub>`assistant_text_is_delivered_under_any_of_the_known_field_names`</sub>
+- ツール呼び出しの行は、ツール名と引数を持つ「ツール開始」イベントになる。 <sub>`a_tool_call_line_becomes_a_tool_start_event`</sub>
+- ツール呼び出しは別のフィールド名(tool/input、function/parameters)でも認識される。 <sub>`tool_calls_are_recognised_under_alternative_field_names`</sub>
+- ツール結果の行は対応するツール呼び出しを閉じ、失敗したかどうかを伝える。 <sub>`a_tool_result_line_closes_the_call_and_reports_failure`</sub>
+- ツール名は呼び出しから結果へ補完され、チャットには何が終わったのかが表示される。 <sub>`the_tool_name_is_carried_from_the_call_to_its_result`</sub>
+- 最後の行は、回答とトークン使用量を伴ってターンを完了させる。 <sub>`the_final_line_completes_the_turn_with_usage`</sub>
+- トークン使用量はOpenAI流のフィールド名(prompt/completion tokens)でも読み取れる。 <sub>`token_usage_is_also_read_from_openai_style_names`</sub>
+- CLIのエラー行は、チャットにエラーとして表示される。 <sub>`an_error_line_becomes_an_error_event`</sub>
+- エラー扱いのresult行は、通常の完了ではなくエラーになる。 <sub>`a_failed_result_line_becomes_an_error`</sub>
+- 解釈できない行はターンを壊さず黙って無視される。 <sub>`unknown_and_broken_lines_are_ignored`</sub>
+- 同じツール呼び出しが二度流れても、チャットには一度だけ表示される。 <sub>`a_repeated_tool_call_is_shown_only_once`</sub>
+
 ### 規格知識の注入
 
 - 同梱の規格知識には図記号・参照記号・線色/sq・線番・配置の決まりが書かれている。 <sub>`bundled_standards_cover_the_drawing_conventions`</sub>
@@ -616,6 +651,14 @@
 - 接続テストはキーを保存する前は実行せず、「キーが無い」ことを理由として返す。 <sub>`the_connection_test_refuses_before_a_key_is_saved`</sub>
 - APIキーはUIへ流れるイベントに一切載らない。 <sub>`the_api_key_never_appears_in_the_event_stream`</sub>
 
+### manager_copilot_provider
+
+- GitHub Copilotを選んでおけば、Anthropicのキーが無くてもCopilot CLI経由でチャットのやりとりができる。 <sub>`a_turn_runs_through_the_copilot_cli`</sub>
+- 最初のターンで決めたセッションIDは記憶され、次のターンは同じCopilotセッションの続きになる。 <sub>`the_session_is_remembered_for_the_next_turn`</sub>
+- プロバイダのバッジは、Copilot CLIが実際に見つかるときだけ「使える」状態になる。 <sub>`the_provider_is_ready_only_while_copilot_is_found`</sub>
+- 設定したCopilotの実行ファイルが無い場合、黙って失敗せず理由がチャットに表示される。 <sub>`a_missing_copilot_executable_is_explained_in_the_chat`</sub>
+- Copilotを選んでいる間、接続テストはAnthropic APIではなくCopilotへ行く。 <sub>`the_connection_test_follows_the_chosen_provider`</sub>
+
 ### stream-jsonパーサ
 
 - CLIのsystem/init行はセッションIDを載せたセッション開始イベントになる。 <sub>`init_line_yields_session_started`</sub>
@@ -664,6 +707,11 @@
 - プロバイダの項目が無い旧い設定ファイルもそのまま動き、Claude Code CLIのままになる。 <sub>`an_old_settings_file_without_a_provider_stays_on_the_cli`</sub>
 - このビルドが知らないプロバイダ名は、設定ファイル全体を読めなくせずにCLIへ戻す。 <sub>`an_unknown_provider_name_falls_back_to_the_cli`</sub>
 - モデル名を空にすると既定のモデルへ戻り、前後の空白は取り除かれる。 <sub>`a_blank_api_model_falls_back_to_the_default`</sub>
+- GitHub Copilotの既定はモデルをCopilotに選ばせる設定で、実行ファイルはPATHから探す。 <sub>`the_copilot_defaults_let_copilot_pick_the_model`</sub>
+- GitHub Copilotを選んだ設定は、パスとモデルと一緒に保存して読み直しても保持される。 <sub>`the_copilot_choice_round_trips_through_save_and_load`</sub>
+- GitHub Copilotの項目が無い旧い設定ファイルもそのまま動き、Copilotの項目は既定値になる。 <sub>`an_old_settings_file_without_copilot_fields_keeps_working`</sub>
+- Copilotのモデル欄を空にすると`auto`へ戻り、パス欄を空にすると自動検出へ戻る。 <sub>`blank_copilot_boxes_return_to_the_defaults`</sub>
+- GitHubの資格情報は設定ファイルへ一切書かれない(Copilotは自身のサインインを使う)。 <sub>`no_github_credential_is_written_to_the_settings_file`</sub>
 
 ### tool_bridge
 
@@ -1111,6 +1159,14 @@
 - 接続テストの実行中はtestingが立ち、前回の結果は消える <sub>`AI provider settings`</sub>
 - 接続バッジはClaude Code CLIならCLIの検出、Anthropic APIならキーの保存状況を見る <sub>`AI provider settings`</sub>
 - 保存済みのキーは伏せ字で表す(値そのものは画面に出さない) <sub>`AI provider settings`</sub>
+- プロバイダの選択肢にGitHub Copilot CLIがある <sub>`GitHub Copilot CLI provider`</sub>
+- Copilotの既定はモデルをCopilotに任せる`auto`で、実行ファイルはPATHから探す <sub>`GitHub Copilot CLI provider`</sub>
+- GitHub Copilot CLIを選ぶと設定として保存される <sub>`GitHub Copilot CLI provider`</sub>
+- Copilotのモデルと実行ファイルのパスは設定として保存できる <sub>`GitHub Copilot CLI provider`</sub>
+- プロバイダの状態からCopilot CLIが見つかったか(とバージョン)が分かる <sub>`GitHub Copilot CLI provider`</sub>
+- Copilotを選んでいるときの接続バッジは、Copilot CLIが見つかったかどうかを見る <sub>`GitHub Copilot CLI provider`</sub>
+- Copilotが未認証のときは、接続テストがサインイン手順つきで失敗を返す <sub>`GitHub Copilot CLI provider`</sub>
+- Copilotの認証情報(GitHubトークン)はフロントの状態に一切持たない <sub>`GitHub Copilot CLI provider`</sub>
 
 ### 帳票 (部品表 / 電線リスト)
 
