@@ -13,11 +13,11 @@ Drawings comply with Japanese industrial conventions (JIS) and are rendered iden
 - **SVG export**: millimeter-true (1:1 viewBox), print-quality vector output; the SVG renderer is the single source of truth for printed appearance
 - **PDF export**: vector conversion of the SVG with embedded fonts (CJK-capable), one page per sheet
 - **Bill of materials (CSV)**: reference designators aggregated with part numbers
-- **Wire list (CSV)**: sheet, wire number, harness, wire part number, color, gauge (sq), length
+- **From–to wire list (CSV)**: sheet, from, to, wire number, color, gauge (sq), length, wire part number, harness
 
 ## Planned
 
 - **Terminal charts**: per-terminal-strip connection tables as reports and as generated drawing sheets (M4)
-- **Extended report set**: from–to wire lists, cable summaries, cross-reference reports, BOM enriched from the parts database; reports emitted as framed drawing sheets and combined PDF (M4)
+- **Extended report set**: cable summaries, cross-reference reports, BOM enriched from the parts database; reports emitted as framed drawing sheets and combined PDF (M4)
 - **Customizable frame/title-block templates** so organizations can match their own formats (M4)
 - IEC / ISO variants: IEC 60617 symbol styles, IEC 81346 structure designations, ISO 7200 title blocks and ISO 5457 sheet frames (long term)
