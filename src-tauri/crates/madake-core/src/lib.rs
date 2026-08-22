@@ -20,6 +20,7 @@ pub mod spice;
 pub mod svg;
 pub mod symbol;
 pub mod terminal_chart;
+pub mod terminal_diagram;
 pub mod verify;
 pub mod wire_no;
 pub mod xref;

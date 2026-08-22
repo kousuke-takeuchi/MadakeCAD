@@ -28,6 +28,7 @@ fn main() {
             include_reports: vec![
                 ReportKind::WireList,
                 ReportKind::TerminalChart,
+                ReportKind::TerminalDiagram,
                 ReportKind::Bom,
                 ReportKind::Xref,
             ],

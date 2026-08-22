@@ -61,6 +61,9 @@ pub enum ReportKind {
     /// 端子台チャート。
     #[value(name = "terminal-chart")]
     TerminalChart,
+    /// 端子接続図 (グラフィカル)。
+    #[value(name = "terminal-diagram")]
+    TerminalDiagram,
     /// 部品表。
     Bom,
     /// クロスリファレンス表。
@@ -73,6 +76,7 @@ impl ReportKind {
         match self {
             ReportKind::WireList => "wire-list",
             ReportKind::TerminalChart => "terminal-chart",
+            ReportKind::TerminalDiagram => "terminal-diagram",
             ReportKind::Bom => "bom",
             ReportKind::Xref => "xref",
         }
@@ -415,6 +419,7 @@ mod tests {
     fn report_kind_json_names_match_the_link_api() {
         assert_eq!(ReportKind::WireList.as_json(), "wire-list");
         assert_eq!(ReportKind::TerminalChart.as_json(), "terminal-chart");
+        assert_eq!(ReportKind::TerminalDiagram.as_json(), "terminal-diagram");
         assert_eq!(ReportKind::Bom.as_json(), "bom");
         assert_eq!(ReportKind::Xref.as_json(), "xref");
     }

@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::geometry::Point;
-use crate::model::{Entity, EntityId, Sheet, SymbolInstance, Wire};
+use crate::model::{Entity, EntityId, Project, Sheet, SymbolInstance, Wire};
 use crate::netlist::{transform_local, CONNECT_EPS};
 use crate::reports::{csv_row, endpoint_label, fmt_num};
 use crate::symbol::{resolve_symbol, sheet_symbol_defs, SymbolDef};
@@ -45,6 +45,17 @@ pub fn terminal_blocks(sheet: &Sheet) -> Vec<&SymbolInstance> {
     list
 }
 
+/// プロジェクト内の全端子台のID (シート順→シート内は参照記号順)。
+/// 端子台チャート・端子接続図をプロジェクト全体へ広げるときの並び順の正。
+pub fn terminal_block_ids(project: &Project) -> Vec<EntityId> {
+    project
+        .sheets
+        .iter()
+        .flat_map(terminal_blocks)
+        .map(|tb| tb.id)
+        .collect()
+}
+
 /// 端子台チャートの1行 = 端子1個。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TerminalRow {
@@ -58,6 +69,14 @@ pub struct TerminalRow {
     pub wire_no: String,
     /// 電線の仕様 (線色・線径sq・品番)。内部側と外部側で違えば " / " で両方並べる。
     pub wire: String,
+    /// 内部側の電線の仕様だけ (端子接続図の引出線の添え書きに使う)。
+    pub internal_wire: String,
+    /// 外部側の電線の仕様だけ。
+    pub external_wire: String,
+    /// 内部側の電線が属するハーネス名 (属さなければ空)。
+    pub internal_harness: String,
+    /// 外部側の電線が属するハーネス名。
+    pub external_harness: String,
     /// この端子に掛かっているジャンパ (例 "1-2")。
     pub jumper: String,
     /// 予備端子 (内部側・外部側とも電線が繋がっていない)。
@@ -307,12 +326,24 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
             .filter_map(|w| w.net.clone())
             .collect();
         numbers.sort();
+        let harness_of = |side: &Side| {
+            join_unique(
+                side.wires
+                    .iter()
+                    .map(|w| crate::harness::harness_name_of_wire(sheet, w)),
+                ", ",
+            )
+        };
         rows.push(TerminalRow {
             terminal,
             internal: inside.labels.join(", "),
             external: outside.labels.join(", "),
             wire_no: join_unique(numbers, "/"),
             wire: join_unique(all_wires().map(wire_desc), " / "),
+            internal_wire: join_unique(inside.wires.iter().copied().map(wire_desc), " / "),
+            external_wire: join_unique(outside.wires.iter().copied().map(wire_desc), " / "),
+            internal_harness: harness_of(&inside),
+            external_harness: harness_of(&outside),
             jumper,
             spare: inside.wires.is_empty() && outside.wires.is_empty(),
         });
@@ -545,6 +576,49 @@ mod tests {
         });
         let chart = terminal_chart(&sheet, id).expect("chart");
         assert_eq!(row(&chart, "1").wire, "black 0.3sq / red 0.75sq");
+    }
+
+    /// Besides the combined wire column, each row keeps the wire of the inside and of the outside separately.
+    /// 行はまとめた電線欄とは別に、内部側の電線と外部側の電線を分けて持つ。
+    #[test]
+    fn a_row_keeps_the_wire_of_each_side_separately() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        add_wire(&mut sheet, (92.5, 42.5), (97.5, 42.5), |w| {
+            w.color = "black".into();
+            w.sq = 0.3;
+        });
+        add_wire(&mut sheet, (102.5, 42.5), (107.5, 42.5), |w| {
+            w.color = "red".into();
+            w.sq = 0.75;
+        });
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        let r = row(&chart, "1");
+        assert_eq!(r.internal_wire, "black 0.3sq");
+        assert_eq!(r.external_wire, "red 0.75sq");
+        assert_eq!(row(&chart, "2").internal_wire, "", "未結線の端子は空欄");
+    }
+
+    /// Each row records the harness the wire of that side belongs to, and stays empty for a wire in no harness.
+    /// 行は各側の電線が属するハーネス名を持ち、どのハーネスにも属さない電線では空欄になる。
+    #[test]
+    fn a_row_records_the_harness_of_each_side() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        add_wire(&mut sheet, (102.5, 42.5), (107.5, 42.5), |_| {});
+        add_wire(&mut sheet, (92.5, 42.5), (97.5, 42.5), |_| {});
+        let h = Entity::Harness(Harness {
+            id: Uuid::new_v4(),
+            points: crate::harness::rect_points(
+                Point::new(101.0, 40.0),
+                Point::new(110.0, 45.0),
+            ),
+            name: "W10".into(),
+            note: String::new(),
+        });
+        sheet.entities.insert(h.id(), h);
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        let r = row(&chart, "1");
+        assert_eq!(r.external_harness, "W10", "外部側の電線だけが囲みの中");
+        assert_eq!(r.internal_harness, "");
     }
 
     /// Jumper text is normalized: each pair is written smaller-larger, duplicates are dropped and the pairs come out in ascending order.

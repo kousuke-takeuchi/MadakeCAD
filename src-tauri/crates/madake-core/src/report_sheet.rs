@@ -79,7 +79,7 @@ impl ReportMeta {
 }
 
 /// PDF一括出力に含められる帳票の種類。JSON表記はCLI・Link APIと同じケバブケース
-/// (`"wire-list"` / `"terminal-chart"` / `"bom"` / `"xref"`)。
+/// (`"wire-list"` / `"terminal-chart"` / `"terminal-diagram"` / `"bom"` / `"xref"`)。
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
 )]
@@ -89,6 +89,8 @@ pub enum ReportKind {
     WireList,
     /// 端子台チャート (端子台1つにつき1表)。
     TerminalChart,
+    /// 端子接続図 (端子台1つにつき1ページのグラフィカル図)。
+    TerminalDiagram,
     /// 部品表。
     Bom,
     /// クロスリファレンス表 (ネット所在一覧)。
@@ -101,6 +103,7 @@ impl ReportKind {
         match self {
             ReportKind::WireList => "From-To 電線リスト",
             ReportKind::TerminalChart => "端子台チャート",
+            ReportKind::TerminalDiagram => "端子接続図",
             ReportKind::Bom => "部品表 (BOM)",
             ReportKind::Xref => "クロスリファレンス表",
         }
@@ -111,6 +114,9 @@ impl ReportKind {
         match self {
             ReportKind::WireList => wire_list_sheet_svg(project),
             ReportKind::TerminalChart => terminal_charts_sheet_svg(project),
+            ReportKind::TerminalDiagram => {
+                crate::terminal_diagram::terminal_diagrams_svg(project)
+            }
             ReportKind::Bom => bom_sheet_svg(project),
             ReportKind::Xref => xref_table_sheet_svg(project),
         }
@@ -119,16 +125,19 @@ impl ReportKind {
 
 /// 表の1ページに入る本文行数。用紙・行高から決まる固定値。
 pub fn rows_per_page() -> usize {
-    let (_, ph) = REPORT_PAPER.dimensions_mm();
-    let top = table_top();
-    let bottom = ph - FRAME_MARGIN - ROW_H * REPORT_TITLE_ROWS - TABLE_BOTTOM_GAP;
-    let body = bottom - top - TABLE_HEADER_H;
+    let body = body_bottom() - table_top() - TABLE_HEADER_H;
     ((body / TABLE_ROW_H).floor() as usize).max(1)
 }
 
-/// 表の上端Y (mm)。
-fn table_top() -> f64 {
+/// 帳票ページの本文の上端Y (mm)。帳票名の下。
+pub(crate) fn table_top() -> f64 {
     FRAME_MARGIN + REPORT_TITLE_BASELINE + TITLE_GAP
+}
+
+/// 帳票ページの本文の下端Y (mm)。表題欄の上。ここより下には描かない。
+pub(crate) fn body_bottom() -> f64 {
+    let (_, ph) = REPORT_PAPER.dimensions_mm();
+    ph - FRAME_MARGIN - ROW_H * REPORT_TITLE_ROWS - TABLE_BOTTOM_GAP
 }
 
 /// 文字列の表示幅 (半角=1, 全角=2)。
@@ -137,7 +146,7 @@ fn text_units(s: &str) -> f64 {
 }
 
 /// セル内テキストを列幅に収める。溢れる場合は末尾を落として [`ELLIPSIS`] を付ける。
-fn fit_text(s: &str, max_w: f64, font: f64) -> String {
+pub(crate) fn fit_text(s: &str, max_w: f64, font: f64) -> String {
     let unit = font * HALF_CHAR_RATIO;
     if max_w <= 0.0 {
         return String::new();
@@ -230,8 +239,8 @@ fn draw_table(out: &mut String, x: f64, top: f64, width: f64, columns: &[&str], 
     }
 }
 
-/// ページ共通: SVGの開始タグ+白地+図枠。
-fn page_open(title: &str) -> String {
+/// ページ共通: SVGの開始タグ+白地+図枠。左上に帳票名を書く。
+pub(crate) fn page_open(title: &str) -> String {
     let (pw, ph) = REPORT_PAPER.dimensions_mm();
     let mut out = String::new();
     let _ = write!(
@@ -267,7 +276,13 @@ fn page_open(title: &str) -> String {
 }
 
 /// 帳票ページの表題欄 (右下)。プロジェクト名・帳票名・日付・ページ n/N を入れる。
-fn report_title_block(out: &mut String, title: &str, meta: &ReportMeta, page: usize, total: usize) {
+pub(crate) fn report_title_block(
+    out: &mut String,
+    title: &str,
+    meta: &ReportMeta,
+    page: usize,
+    total: usize,
+) {
     let (pw, ph) = REPORT_PAPER.dimensions_mm();
     let h = ROW_H * REPORT_TITLE_ROWS;
     let tx = pw - FRAME_MARGIN - TITLE_W;
@@ -371,12 +386,7 @@ pub fn terminal_chart_sheet_svg(project: &Project, tb_id: EntityId) -> Option<Ve
 /// プロジェクト内の全端子台チャートの図面ページ (1端子台=1表、シート順→参照記号順)。
 /// 端子台が1つも無ければ空の表を1ページ返す。
 pub fn terminal_charts_sheet_svg(project: &Project) -> Vec<String> {
-    let ids: Vec<EntityId> = project
-        .sheets
-        .iter()
-        .flat_map(|s| crate::terminal_chart::terminal_blocks(s))
-        .map(|tb| tb.id)
-        .collect();
+    let ids = crate::terminal_chart::terminal_block_ids(project);
     if ids.is_empty() {
         return report_sheet_svg(
             ReportKind::TerminalChart.title(),
@@ -487,9 +497,7 @@ pub fn cover_sheet_svg(project: &Project) -> String {
         .collect();
     // 表紙は1ページ。溢れる分は最終行にまとめて残数を記す
     let table_top = list_top + COVER_NOTE_FONT;
-    let (_, ph) = REPORT_PAPER.dimensions_mm();
-    let bottom = ph - FRAME_MARGIN - ROW_H * REPORT_TITLE_ROWS - TABLE_BOTTOM_GAP;
-    let cap = (((bottom - table_top - TABLE_HEADER_H) / TABLE_ROW_H).floor() as usize).max(1);
+    let cap = (((body_bottom() - table_top - TABLE_HEADER_H) / TABLE_ROW_H).floor() as usize).max(1);
     if rows.len() > cap {
         let rest = rows.len() - cap + 1;
         rows.truncate(cap - 1);

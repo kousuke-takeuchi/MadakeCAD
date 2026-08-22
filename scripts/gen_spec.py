@@ -57,6 +57,7 @@ MODULES = {
     "reports": ("Reports (BOM / wire list)", "帳票 (部品表 / 電線リスト)"),
     "report_sheet": ("Reports as drawing sheets", "帳票の図面シート化"),
     "terminal_chart": ("Terminal block charts", "端子台チャート"),
+    "terminal_diagram": ("Terminal connection diagrams", "端子接続図"),
     "verify": ("Verification (ERC & electrical)", "検証 (ERC・電気検証)"),
     "spice": ("SPICE netlist generation", "SPICEネットリスト生成"),
     "ngspice": ("ngspice runner", "ngspiceランナー"),

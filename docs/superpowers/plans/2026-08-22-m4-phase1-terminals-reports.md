@@ -39,8 +39,14 @@
 
 ### Task 4: 端子接続図(グラフィカル)
 
-- [ ] Step 1 (red): Rustテスト: 端子ストリップ縦並び/外部=左・内部=右の引出線/ケーブル・ハーネスのブラケットと名前/予備端子/ジャンパ表示/1端子台=1ページ
-- [ ] Step 2 (green): SVG実装(デザイン「紙 端子接続図」準拠)。gen_spec→コミット
+- [x] Step 1 (red): Rustテスト: 端子ストリップ縦並び/外部=左・内部=右の引出線/ケーブル・ハーネスのブラケットと名前/予備端子/ジャンパ表示/1端子台=1ページ
+- [x] Step 2 (green): SVG実装(デザイン「紙 端子接続図」準拠)。gen_spec→コミット
+  - `terminal_diagram.rs`: `terminal_diagram_svg(project, tb_id)` = 1端子台1ページ(A4横・端子15個/ページで自動分割、表題に「(端子 1〜15)」)。図枠・表題欄・`fit_text`は`report_sheet`と共有(`page_open`/`report_title_block`/`table_top`/`body_bottom`を`pub(crate)`化)
+  - レイアウト: 端子箱24×7mm・ピッチ10mm・引出線34mm・ハーネス帯20mm。**外部側=左・内部側=右**(チャートの内部/外部判定はそのまま、描画で左右を入れ替え)。予備端子は薄塗り+「(予備)」、ジャンパは端子箱の内部側の縁に縦線+「サドルジャンパ」
+  - ブラケット: 同一ハーネス名の電線をページ内の最初〜最後の端子で角括弧に括りハーネス名を記す(1本だけなら名前のみ、無所属は何も付けない)
+  - 情報源はチャートに一本化: `TerminalRow`に`internal_wire`/`external_wire`/`internal_harness`/`external_harness`を追加
+  - 露出: `ReportKind::TerminalDiagram`(JSON `terminal-diagram`)をPDF一括・CLI `--reports`・Link API・MCPへ追加
+  - 目視確認: `cargo run -p madake-core --example pdf_demo -- --book <path>`(表紙+回路2+帳票6=9ページ。デモ図面にハーネスW3とTB1のジャンパ1-2を追加)
 
 ### Task 5: 端子台エディタUI+リボン「レポート」タブ
 
