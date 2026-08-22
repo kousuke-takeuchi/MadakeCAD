@@ -1,6 +1,6 @@
 # MadakeCAD 機能インベントリ
 
-作成: 2026-08-21(フェーズ0〜3完了時点)。更新: 2026-08-22(M4フェーズ2 回路マクロ+コイル⇔接点XRef+検索/ナビゲータ 完了)。全機能の棚卸しと、未実装バックログの一覧。
+作成: 2026-08-21(フェーズ0〜3完了時点)。更新: 2026-08-22(M3フェーズ3 プロバイダ6経路 完了。M4フェーズ2 回路マクロ+コイル⇔接点XRef+検索/ナビゲータ 完了)。全機能の棚卸しと、未実装バックログの一覧。
 specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は`docs/superpowers/plans/`の各プラン。
 
 ## 1. コア・アーキテクチャ(madake-core)
@@ -38,7 +38,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | ステータスバー | ✅ | 座標、スナップ/直交/グリッドトグル、直近ログ、ズーム、MCPポート表示 |
 | 検証結果パネル | ✅ | severityバッジ、行クリックで該当エンティティ選択+ズーム、再検証 |
 | シミュレーション結果パネル | ✅ | ネット電圧(min/max)・部品電流/電力、開路チップ、再実行 |
-| 設定画面 | 🔶 | AI設定(プロバイダ・一般・チャット・MCPタブ)。プロバイダはClaude Code CLI / Anthropic API(キーはOSキーチェーン・接続テストつき)が実動。OpenAI互換・Geminiは未実装 |
+| 設定画面 | 🔶 | AI設定(プロバイダ・一般・チャット・MCPタブ)。プロバイダは**6経路すべて実動**(Claude Code CLI / Anthropic API / GitHub Copilot CLI / OpenAI互換 / Ollamaプリセット / Gemini)。経路ごとの詳細欄(パス・URL・モデル・伏せ字キー+保存/削除)と接続テストつき。残りはテーマ(ダーク)等 |
 | テーマ | ⬜ | ライトのみ(CAD調トークン)。ダーク切替は設定UIにあるが未実装 |
 
 ✅=実装済み / 🔶=部分実装 / ⬜=未実装
@@ -98,7 +98,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 機能 | 状態 | 備考 |
 |---|---|---|
 | 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール29種: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / get_tidy_metrics / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / list_templates / apply_template / list_macros / save_macro / apply_macro / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo。**検索・デバイスツリーはMCP未露出**(IPC+Link APIのみ。AIはget_projectで足りるため意図的) |
-| Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols / netlist / verify / tidy-metrics / search / devices / simulate/op / commands / undo / redo / save / load / import/kicad / terminals(+/chart・/check) / templates(+/apply) / macros(+/build・/save・/apply・/apply-inline) / export/*(svg・pdf・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/*(send・cancel・conversations・undo-turn・detect・events) / settings / events |
+| Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols / netlist / verify / tidy-metrics / search / devices / simulate/op / commands / undo / redo / save / load / import/kicad / terminals(+/chart・/check) / templates(+/apply) / macros(+/build・/save・/apply・/apply-inline) / export/*(svg・pdf・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/*(send・cancel・conversations・undo-turn・detect・provider・api-key(PUT/DELETE)・test-connection・events) / settings / events |
 | madake CLI | ✅ | status / project / netlist / verify / sim / parts / terminals / export(svg・pdf・pdf-book+帳票5種を`--format csv\|pdf`・`--terminal`付きで) / save / open(.kicad_sch対応) / renumber / exec / undo / redo。マクロ・検索のサブコマンドは未(Link APIを`exec`/curlで直接叩ける) |
 | AIチャット(A1) | ✅ | 左ドック+浮きカード、Claude Code CLIバックエンド(Pro/Max OAuth再利用)、ツールチップ表示、ターン単位undo、編集オーバーレイ(シアンパルス)、会話履歴のプロジェクト保存 |
 | A1の持ち越し負債(M3フェーズ1で解消) | ✅ | ターン安定ID(`turn_id`。chat.json format_version 2へ移行)・編集origin(`Engine::execute_as` / `revert_range`でagent編集だけを逆適用。衝突は`RevertConflict`)・キャンセルseq(`turn_seq`で遅延イベントを破棄) |
@@ -108,7 +108,10 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 自動反復=整えループ(M3フェーズ2) | ✅ | `madake-core::tidy`の決定的メトリクス(交差数・ラベル重なり・シンボル重なり・グリッド外)をMCP`get_tidy_metrics`/Link API`/tidy-metrics`で露出。チャット入力欄の杖ボタン→ポップアップ(配置整理/配線整理/ラベル整頓)が「測る→直す→測り直す(改善が止まる or 最大3回)」の定型プロンプトを**1ターン**として送る=undo一発。`knowledge.rs`のWORKFLOW_RULESにも同じループを記載(自然文依頼でも回る)。バリアント数(2〜4案)はフェーズ3 |
 | 並列エージェント(M3フェーズ2) | ✅ | 会話ごとに`tokio::spawn`で同時実行(Busy判定は会話単位)。フロントの送信ガードは**開いている会話**だけに効く(`chat.streaming` / `anyStreaming` / `runningIds`)。会話色=`theme.agentPalette`(#29D3E6 / #FFB454 / #B48CFF / #FF6FD8)を開始順に割当、編集オーバーレイ・会話一覧のドット/スピナー・タブ行の「N running」バッジで共有。**巻き戻し粒度**: 並行ターンの編集が混ざった区間は両方まとめて戻る(`mark_swept_turns`で巻き込まれたターンも巻き戻し済みに)。比較案UX(シート複製・パッチプレビュー)はフェーズ3 |
 | Anthropic APIプロバイダ+キーチェーン(M3フェーズ2) | ✅ | `AgentBackend`トレイト(`run_turn`1本)にCLI/API両実装。`AnthropicApiBackend`=Messages API直(SSE、ツール往復は上限16、`MADAKE_ANTHROPIC_BASE_URL`で接続先差し替え可)。ツールは`ToolBridge`が内蔵MCPサーバーをプロセス内パイプで呼ぶので**CLI経路とAPI経路で同一**。キーは`keyring 4.1.6`でOSキーチェーン(`MadakeCAD`/`anthropic_api_key`)。設定ファイルには項目自体を作らない。設定UIにプロバイダ選択・伏せ字のキー入力/保存/削除・モデル欄・接続テスト。**実キーでの通し確認はユーザー確認事項**(実キー無しの範囲=UI・401・キー未設定案内・平文非保存は確認済み) |
-| その他プロバイダ(A3の残り) | ⬜ | OpenAI互換(OpenAI/xAI/OpenRouter/Ollama)・Gemini。フェーズ3 |
+| Copilot CLI / OpenAI互換 / Ollama / Geminiプロバイダ(M3フェーズ3) | ✅ | 6経路そろう。`CopilotCliBackend`=`copilot -p … --output-format json`(JSONL)を実行。MCPは`--additional-mcp-config @一時ファイル`でセッション限定に渡し`--disable-builtin-mcps`。システムプロンプト用フラグが無いため`# システム指示`として前置(`--no-custom-instructions`)。**GitHubトークンは保存しない**(CLI側の`/login`)。`OpenAiCompatBackend`=`POST {base_url}/chat/completions`(SSE+`stream_options.include_usage`、`tool_calls`を`index`ごとに連結、失敗は`ERROR: `前置で返す)。設定は`openai_base_url`+`openai_model`(既定なし=必須入力)。**接続先がローカル(localhost/127.0.0.1/*.local等)ならAuthorizationヘッダごと省略**=Ollamaはキー不要。`GeminiBackend`=`models/{model}:streamGenerateContent?alt=sse`(キーは`x-goog-api-key`ヘッダのみ。`functionResponse`はrole`"user"`で返す。`usageMetadata`は累計置換)。ツールスキーマはOpenAPI部分集合へ削る`gemini_schema()`(`$schema`/`$ref`/`additionalProperties`等を送ると400)。ツール往復は各経路とも上限16 |
+| プロバイダの実機確認状況 | 🔶 | **Ollama(0.32.14)は通し確認済み**(実チャンク形一致・キー無しで接続テスト成功・`gemma4:26b`で作図1ターン=ツール往復3回→revision 0→1→`undo-turn`で後始末)。Copilot CLI 1.0.80は**未認証のまま**起動フラグ・MCP設定JSONの形・未認証エラー(`No authentication information found.`)検知まで(JSONLの実イベント形はフィクスチャ+寛容パーサ)。Geminiは無効キーで実APIの`API_KEY_INVALID`→`gemini_auth`変換まで。Anthropic APIは401・キー未設定案内まで。**Copilot(`/login`)・Gemini・Anthropicの実キー通しはユーザー確認事項** |
+| キーチェーン(全プロバイダ共通) | ✅ | `keyring 4.1.6`直用。`service="MadakeCAD"`、`account`=`anthropic_api_key`/`openai_compat_api_key`/`gemini_api_key`。設定ファイル(`~/.madakecad/settings.json`)には項目自体を作らない(平文非保存はテストで固定)。`SecretStore`トレイトでテストはメモリ保管、実キーチェーンのテストは`MADAKE_KEYCHAIN_TESTS=1`のときだけ。macOSは許可ダイアログ抑制のためプロセスに1回だけ読み出しをキャッシュ。CLI経路(Claude Code / Copilot)は資格情報を一切持たない |
+| プロバイダ接続テスト | ✅ | Link API `POST /api/v1/agent/test-connection` + `GET /api/v1/agent/provider`(モデル名・キー保存済みフラグ)。CLI経路は検出+バージョン、API経路は実エンドポイントへの疎通。失敗は種類つき(`*_auth`/`*_rate_limit`/`*_model_not_found`/`*_server`/`*_request`/`*_network`/`*_no_key`/`*_no_model`)で日本語の案内文を返す |
 | FreeCAD連携(フェーズM) | 🔶 | Link API(M1の土台)は実装済み。アドオンWB・3D対応付け・電線長書き戻し・盤レイアウトが未 |
 
 ## 8. ドメイン機能(参考図面の再現に必要な残り)
