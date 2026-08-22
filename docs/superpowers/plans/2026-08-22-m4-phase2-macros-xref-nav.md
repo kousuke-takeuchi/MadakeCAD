@@ -34,9 +34,18 @@
 
 ### Task 3: コイル⇔接点XRef
 
-- [ ] Step 1 (red): Rustテスト: リレーシンボル3種の定義/同一参照記号の関連付け/接点マップの導出(所在・未使用—)/接点数超過ERC(contact_config)/親無し接点・接点無しコイルの例外/SVG描画(コイル下の表・接点脇のコイル所在)
-- [ ] Step 2 (green): シンボル追加+`relay_xref.rs`+ERC+SVG実装。gen_spec→コミット
-- [ ] Step 3 (red/green): キャンバス描画+部品DB`contact_config`(スキーマv3マイグレーション+テスト)。コミット
+- [x] Step 1 (red): Rustテスト: リレーシンボル3種の定義/同一参照記号の関連付け/接点マップの導出(所在・未使用—)/接点数超過ERC(contact_config)/親無し接点・接点無しコイルの例外/SVG描画(コイル下の表・接点脇のコイル所在)
+- [x] Step 2 (green): シンボル追加+`relay_xref.rs`+ERC+SVG実装。gen_spec→コミット
+- [x] Step 3 (red/green): キャンバス描画+部品DB`contact_config`(スキーマv3マイグレーション+テスト)。コミット
+
+> **完了 (2026-08-22)**: `madake-core/src/relay_xref.rs`(コア21テスト)+SVG3テスト+シンボル2テスト+部品DB2テスト、`src/canvas/relayXref.ts`(vitest 13テスト)。
+> - **デバイス**: 同一参照記号のコイル+接点群=1デバイス(`relay_devices`)。接点はシート番号→ゾーン→idの読み順に並び、その連番が端子対になる
+> - **端子対**: IEC 60947-1(先頭=接点の連番、末尾=a接点3/4・b接点1/2 → 1個目a=13-14 / 2個目b=21-22 / 3個目b=31-32)。コイルはA1-A2
+> - **接点マップ**: コイル外形の下端+2.5mmに中央揃えの2列表(端子対|所在)。`contact_config`が読めるときは未使用接点も「—」行として続く。接点の脇(外形右端+1mm)にコイル所在「(/1.C2)」。SVGとキャンバスは`contact_map_layout`/`contactMapLayout`の同一数式
+> - **ERC(verify_project)**: `erc.contact_overflow`=Error / `erc.orphan_contact`=Error / `erc.coil_without_contact`=Warning / `erc.invalid_contact_config`=Warning(接点数検証が黙って無効になるため)
+> - **部品DB v3**: `contact_config`列+v2→v3マイグレーション(既存行保持)+サンプル2件に"2NO+2NC"付与。部品挿入時に`attrs.contact_config`へ写す(図面はDBのスナップショット)
+> - **シンボル**: `relay_contact_nc`(b接点)を追加。`relay_coil`(A1/A2)・`relay_contact_no`は既存
+> - **実機確認**: K1コイル+a接点2個を配置・結線 → 接点マップ(13-14 /1.B2・23-24 /1.B3)と接点脇の「(/1.C2)」が図面に出る → MY2N(2NO+2NC)割当て+3個目の接点でERC Error「a接点 3個 (実装 2個)」→ undoで空図面へ戻る
 
 ### Task 4: 検索+デバイスナビゲータ+Surfer
 
