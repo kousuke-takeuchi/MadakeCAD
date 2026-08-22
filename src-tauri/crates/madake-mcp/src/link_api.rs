@@ -212,7 +212,7 @@ async fn post_export_pdf(
 #[derive(Deserialize)]
 struct ExportPdfBookBody {
     path: String,
-    /// 回路図の後ろに付ける帳票 (`wire-list` / `terminal-chart` / `bom` / `xref`)。
+    /// 回路図の後ろに付ける帳票 (`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref`)。
     #[serde(default)]
     include_reports: Vec<madake_core::report_sheet::ReportKind>,
     /// 表紙を付けるか (既定: 付ける)。

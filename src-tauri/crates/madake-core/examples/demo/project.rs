@@ -43,6 +43,17 @@ fn wire(points: &[(f64, f64)], color: &str, sq: f64, length_m: f64) -> Entity {
     })
 }
 
+/// シンボルに属性を1つ付けて返す (端子台のジャンパ設定など)。
+fn with_attr(entity: Entity, key: &str, value: &str) -> Entity {
+    match entity {
+        Entity::Symbol(mut s) => {
+            s.attrs.insert(key.into(), value.into());
+            Entity::Symbol(s)
+        }
+        other => other,
+    }
+}
+
 fn junction(x: f64, y: f64) -> Entity {
     Entity::Junction(Junction {
         id: Uuid::new_v4(),
@@ -171,12 +182,17 @@ fn build_sheet1(engine: &mut Engine, sheet_id: SheetId) {
             wire(&[(245.0, 117.5), (245.0, 240.0)], "black", 0.3, 1.3),
             junction(245.0, 55.0),
             junction(245.0, 240.0),
-            // 端子台TB1 (シート2への送り出し)
-            symbol("terminal_block_4p", "TB1", "", 310.0, 145.0, 0),
+            // 端子台TB1 (シート2への送り出し)。端子1-2はサドルジャンパで渡り
+            with_attr(
+                symbol("terminal_block_4p", "TB1", "", 310.0, 145.0, 0),
+                "jumpers",
+                "1-2",
+            ),
             wire(&[(300.0, 55.0), (300.0, 137.5), (307.5, 137.5)], "red", 3.5, 1.0),
             wire(&[(300.0, 240.0), (300.0, 152.5), (307.5, 152.5)], "black", 3.5, 1.0),
             wire(&[(312.5, 137.5), (340.0, 137.5)], "red", 3.5, 0.3),
             wire(&[(312.5, 152.5), (340.0, 152.5)], "black", 3.5, 0.3),
+            harness("W3", "TB1 外部配線 (3.5sq×2)", 312.0, 136.0, 345.0, 156.0),
             label("48-P1", 340.0, 137.5),
             label("0V", 340.0, 152.5),
             note("注記1: 電線は KIV。線番はネット単位で図面全体に一意。", 60.0, 258.0),

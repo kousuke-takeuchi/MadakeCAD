@@ -155,7 +155,7 @@ pub struct ExportPathParams {
 pub struct ExportPdfBookParams {
     /// 出力先ファイルパス(絶対パス)。
     pub path: String,
-    /// 回路図の後ろに付ける帳票。`wire-list` / `terminal-chart` / `bom` / `xref`。省略時は帳票なし。
+    /// 回路図の後ろに付ける帳票。`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref`。省略時は帳票なし。
     #[serde(default)]
     pub include_reports: Vec<madake_core::report_sheet::ReportKind>,
     /// 表紙を付けるか。省略時は付ける。
@@ -384,7 +384,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "図面一式を1つのPDFにまとめて指定パスに書き出す。ページ順は 表紙(プロジェクト名・図面一覧・最新改訂) → 回路図の全シート → 選択した帳票。include_reportsに wire-list(From-To電線リスト) / terminal-chart(端子台チャート) / bom(部品表) / xref(クロスリファレンス表) を並べた順に帳票ページが付く。帳票はA4横の図枠付きページで、行が多ければ自動でページ分割される"
+        description = "図面一式を1つのPDFにまとめて指定パスに書き出す。ページ順は 表紙(プロジェクト名・図面一覧・最新改訂) → 回路図の全シート → 選択した帳票。include_reportsに wire-list(From-To電線リスト) / terminal-chart(端子台チャート) / terminal-diagram(端子接続図。端子台1つにつき1ページのグラフィカル図) / bom(部品表) / xref(クロスリファレンス表) を並べた順に帳票ページが付く。帳票はA4横の図枠付きページで、行が多ければ自動でページ分割される"
     )]
     fn export_pdf_book(
         &self,

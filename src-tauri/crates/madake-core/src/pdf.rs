@@ -327,6 +327,25 @@ mod tests {
         assert!(pages[4].contains("TB1"), "5枚目は端子台チャート");
     }
 
+    /// A PDF book can also carry the graphical terminal diagram, which lands among the report pages in the order it was listed.
+    /// PDF一括出力には端子接続図も入れられ、指定した順で帳票ページとして並ぶ。
+    #[test]
+    fn pdf_book_can_include_the_terminal_diagram() {
+        let project = book_project();
+        let options = PdfBookOptions {
+            include_reports: vec![ReportKind::TerminalDiagram, ReportKind::WireList],
+            cover: true,
+        };
+        let pages = project_pdf_pages(&project, &options);
+        assert_eq!(pages.len(), 5, "表紙1+回路2+端子接続図1+From-To1");
+        assert!(pages[3].contains("端子接続図 TB1"), "4枚目は端子接続図");
+        assert!(
+            pages[3].contains(crate::terminal_diagram::OUTSIDE_CAPTION),
+            "外部側の見出しが入る"
+        );
+        assert!(pages[4].contains("From-To"), "5枚目はFrom-Toリスト");
+    }
+
     /// With no reports selected a PDF book holds just the cover and the circuit sheets.
     /// 帳票を選ばなければPDF一括出力は表紙と回路図シートだけになる。
     #[test]
