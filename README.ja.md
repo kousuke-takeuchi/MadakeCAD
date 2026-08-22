@@ -42,12 +42,12 @@ AIアシスタントは人間と同じundo可能なコマンドエンジンで�
 - ✅ **ソルバ裏付けの検証** — ERC+電気チェック(到達性・許容電流・電圧降下・ヒューズ定格)をngspiceのDC解で判定
 - ⚡ **DCシミュレーション** — ネット電圧・部品電流/電力、スイッチ開閉のwhat-if
 - 🗄️ **部品データベース** — 定格・購入先リンク付きローカルSQLiteマスタ+電線品番マスタ。配置で定格が自動設定
-- 🤖 **AIアシスタント内蔵** — チャットがMCP経由で作図・編集。JIS/IECの作図慣習を内蔵し、ERC検証 → 修正 → 再検証を自走してから報告する。AIのターンは全てundo可能で、手編集を巻き込まない
+- 🤖 **AIアシスタント内蔵** — チャットがMCP経由で作図・編集。JIS/IECの作図慣習を内蔵し、ERC検証 → 修正 → 再検証を自走してから報告する。AIのターンは全てundo可能で、手編集を巻き込まない。ワンクリックの整えループ、複数会話の並列作業、Claude Code CLIとAnthropic APIキーの選択にも対応
 - 🔌 **全部自動化できる** — MCPサーバー・REST API+SSE・`madake` CLIが同じコマンドエンジンを駆動
 
 ## クイックスタート
 
-前提: [Rust](https://rustup.rs)、Node.js 20+。任意: [ngspice](https://ngspice.sourceforge.io/)(回路解析検証)、[Claude Code](https://claude.com/claude-code)(AIチャット)。
+前提: [Rust](https://rustup.rs)、Node.js 20+。任意: [ngspice](https://ngspice.sourceforge.io/)(回路解析検証)、[Claude Code](https://claude.com/claude-code)(AIチャット。代わりにAnthropic APIキーでも動く。キーはOSキーチェーンに保存)。
 
 ```bash
 git clone <このリポジトリ>
@@ -72,7 +72,7 @@ npm run tauri dev
 | 06 | [検証・シミュレーション](docs/06-verification-simulation.ja.md) | ERC・電気チェック・DC解析 |
 | 07 | [部品データベース](docs/07-parts-database.ja.md) | 部品マスタ・定格・購入先 |
 | 08 | [インポート/エクスポート](docs/08-import-export.ja.md) | KiCadインポート・ファイル形式 |
-| 09 | [AIアシスタント](docs/09-ai-assistant.ja.md) | チャット作図・規格知識・検証ループ・テンプレート・ターン巻き戻し |
+| 09 | [AIアシスタント](docs/09-ai-assistant.ja.md) | チャット作図・規格知識・検証ループ・テンプレート・ターン巻き戻し・整えループ・並列会話・プロバイダ設定 |
 | 10 | [自動化・API](docs/10-automation-api.ja.md) | MCPツール・REST API・CLI |
 | 11 | [機械CAD連携](docs/11-mechanical-integration.ja.md) | FreeCAD連携 |
 | 12 | [ロードマップ](docs/12-roadmap.ja.md) | マイルストーンM1〜M6 |

@@ -33,7 +33,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | ステータスバー | ✅ | 座標、スナップ/直交/グリッドトグル、直近ログ、ズーム、MCPポート表示 |
 | 検証結果パネル | ✅ | severityバッジ、行クリックで該当エンティティ選択+ズーム、再検証 |
 | シミュレーション結果パネル | ✅ | ネット電圧(min/max)・部品電流/電力、開路チップ、再実行 |
-| 設定画面 | 🔶 | AI設定(プロバイダ・一般・チャット・MCPタブ)。Claude Code CLI連携のみ実動、他プロバイダはUIのみ |
+| 設定画面 | 🔶 | AI設定(プロバイダ・一般・チャット・MCPタブ)。プロバイダはClaude Code CLI / Anthropic API(キーはOSキーチェーン・接続テストつき)が実動。OpenAI互換・Geminiは未実装 |
 | テーマ | ⬜ | ライトのみ(CAD調トークン)。ダーク切替は設定UIにあるが未実装 |
 
 ✅=実装済み / 🔶=部分実装 / ⬜=未実装
@@ -100,8 +100,10 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 規格知識+検証ループ(M3フェーズ1) | ✅ | 同梱`resources/knowledge/standards.md`を毎ターン注入(設定`knowledge_path`で追記可、後勝ち)。図面コンテキストに検証サマリ。プロンプトで「編集後は`run_verification`→修正→再検証(最大3回)→件数報告」を必須化 |
 | ナレッジ回答・AIレビュー・部品選定(M3フェーズ1) | ✅ | `docs/`目次+`--add-dir`+読み取り専用ツール(Read/Glob/Grep)で出典付き回答(未対応機能はroadmapで回答)。レビューは決定的検証+5観点チェックリストを重要度表に。検証計画は手順表。部品選定は`search_parts`の比較表(最大10件) |
 | 開始テンプレート(M3フェーズ1) | ✅ | 同梱3種(24V制御基本・モータ起動回路・非常停止回路。適用後ERCエラー/警告0)。`Engine::execute_batch`で履歴1エントリ=undo一発。IPC/Link API/MCPツール+リボン導線。`~/MadakeCAD/templates/*.json`でユーザーテンプレート |
-| 並列エージェント・自動反復(A2 = M3フェーズ2) | ⬜ | UIポップアップのみデザイン済み |
-| APIキー系プロバイダ(A3) | ⬜ | Anthropic API直/OpenAI互換/Gemini/Ollama等。設定UIは骨格あり |
+| 自動反復=整えループ(M3フェーズ2) | ✅ | `madake-core::tidy`の決定的メトリクス(交差数・ラベル重なり・シンボル重なり・グリッド外)をMCP`get_tidy_metrics`/Link API`/tidy-metrics`で露出。チャット入力欄の杖ボタン→ポップアップ(配置整理/配線整理/ラベル整頓)が「測る→直す→測り直す(改善が止まる or 最大3回)」の定型プロンプトを**1ターン**として送る=undo一発。`knowledge.rs`のWORKFLOW_RULESにも同じループを記載(自然文依頼でも回る)。バリアント数(2〜4案)はフェーズ3 |
+| 並列エージェント(M3フェーズ2) | ✅ | 会話ごとに`tokio::spawn`で同時実行(Busy判定は会話単位)。フロントの送信ガードは**開いている会話**だけに効く(`chat.streaming` / `anyStreaming` / `runningIds`)。会話色=`theme.agentPalette`(#29D3E6 / #FFB454 / #B48CFF / #FF6FD8)を開始順に割当、編集オーバーレイ・会話一覧のドット/スピナー・タブ行の「N running」バッジで共有。**巻き戻し粒度**: 並行ターンの編集が混ざった区間は両方まとめて戻る(`mark_swept_turns`で巻き込まれたターンも巻き戻し済みに)。比較案UX(シート複製・パッチプレビュー)はフェーズ3 |
+| Anthropic APIプロバイダ+キーチェーン(M3フェーズ2) | ✅ | `AgentBackend`トレイト(`run_turn`1本)にCLI/API両実装。`AnthropicApiBackend`=Messages API直(SSE、ツール往復は上限16、`MADAKE_ANTHROPIC_BASE_URL`で接続先差し替え可)。ツールは`ToolBridge`が内蔵MCPサーバーをプロセス内パイプで呼ぶので**CLI経路とAPI経路で同一**。キーは`keyring 4.1.6`でOSキーチェーン(`MadakeCAD`/`anthropic_api_key`)。設定ファイルには項目自体を作らない。設定UIにプロバイダ選択・伏せ字のキー入力/保存/削除・モデル欄・接続テスト。**実キーでの通し確認はユーザー確認事項**(実キー無しの範囲=UI・401・キー未設定案内・平文非保存は確認済み) |
+| その他プロバイダ(A3の残り) | ⬜ | OpenAI互換(OpenAI/xAI/OpenRouter/Ollama)・Gemini。フェーズ3 |
 | FreeCAD連携(フェーズM) | 🔶 | Link API(M1の土台)は実装済み。アドオンWB・3D対応付け・電線長書き戻し・盤レイアウトが未 |
 
 ## 8. ドメイン機能(参考図面の再現に必要な残り)

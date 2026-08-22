@@ -42,12 +42,12 @@ and verification grounded in a real circuit solver (ngspice).
 - ✅ **Solver-grounded verification** — ERC plus electrical checks (reachability, ampacity, voltage drop, fuse rating) judged from an actual ngspice DC solution
 - ⚡ **DC simulation** — net voltages, component currents/power, open-switch what-if analysis
 - 🗄️ **Parts database** — local SQLite master with ratings, procurement links, and a wire part master; place parts with ratings applied automatically
-- 🤖 **AI assistant built in** — chat drafts and edits your drawing via MCP, knows the JIS/IEC drafting conventions, and verifies its own work (ERC → fix → re-verify) before reporting back; every AI turn is undoable and never swallows your manual edits
+- 🤖 **AI assistant built in** — chat drafts and edits your drawing via MCP, knows the JIS/IEC drafting conventions, and verifies its own work (ERC → fix → re-verify) before reporting back; every AI turn is undoable and never swallows your manual edits. One-click tidy-up passes, several conversations working in parallel, and a choice of Claude Code CLI or Anthropic API key
 - 🔌 **Automate everything** — MCP server, REST API + SSE, and a `madake` CLI, all driving the same command engine
 
 ## Quick Start
 
-Prerequisites: [Rust](https://rustup.rs), Node.js 20+. Optional: [ngspice](https://ngspice.sourceforge.io/) (circuit-solved verification), [Claude Code](https://claude.com/claude-code) (AI chat).
+Prerequisites: [Rust](https://rustup.rs), Node.js 20+. Optional: [ngspice](https://ngspice.sourceforge.io/) (circuit-solved verification), [Claude Code](https://claude.com/claude-code) (AI chat — or use an Anthropic API key instead, stored in your OS keychain).
 
 ```bash
 git clone <this repository>
@@ -72,7 +72,7 @@ Read in order — files are numbered:
 | 06 | [Verification & Simulation](docs/06-verification-simulation.md) | ERC, electrical checks, DC analysis |
 | 07 | [Parts Database](docs/07-parts-database.md) | Part master, ratings, procurement |
 | 08 | [Import & Export](docs/08-import-export.md) | KiCad import, file formats |
-| 09 | [AI Assistant](docs/09-ai-assistant.md) | Chat drafting, standards knowledge, verification loop, templates, turn revert |
+| 09 | [AI Assistant](docs/09-ai-assistant.md) | Chat drafting, standards knowledge, verification loop, templates, turn revert, tidy-up passes, parallel conversations, providers |
 | 10 | [Automation & APIs](docs/10-automation-api.md) | MCP tools, REST API, CLI |
 | 11 | [Mechanical Integration](docs/11-mechanical-integration.md) | FreeCAD linkage |
 | 12 | [Roadmap](docs/12-roadmap.md) | Milestones M1–M6 |
