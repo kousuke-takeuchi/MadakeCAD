@@ -616,6 +616,59 @@ async fn get_settings(State(state): State<AgentApi>) -> Json<AppSettings> {
     Json(state.agent.settings())
 }
 
+/// プロバイダの状態(**APIキーそのものは返さない**。保存済みかどうかだけ)。
+///
+/// キーチェーンの読み出しはOSの許可ダイアログで止まることがあるため、非同期ランタイムの
+/// スレッドを塞がないようブロッキング用スレッドで行う(他のAPIは待たされない)。
+async fn get_agent_provider(State(state): State<AgentApi>) -> Json<serde_json::Value> {
+    Json(provider_status_blocking(&state.agent).await)
+}
+
+async fn provider_status_blocking(agent: &Arc<AgentManager>) -> serde_json::Value {
+    crate::agent::provider_status_async(agent).await
+}
+
+/// APIキーの保存リクエスト。
+#[derive(serde::Deserialize)]
+struct ApiKeyBody {
+    key: String,
+}
+
+/// Anthropic APIキーをOSキーチェーンへ保存する。**設定ファイルには書かない。**
+async fn put_agent_api_key(
+    State(state): State<AgentApi>,
+    Json(body): Json<ApiKeyBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let key = body.key;
+    tokio::task::spawn_blocking(move || madake_agent::secrets::set_anthropic_api_key(&key))
+        .await
+        .map_err(|e| bad_request(e.to_string()))?
+        .map_err(|e| bad_request(e.to_string()))?;
+    Ok(Json(provider_status_blocking(&state.agent).await))
+}
+
+/// 保存済みのAnthropic APIキーを消す。
+async fn delete_agent_api_key(
+    State(state): State<AgentApi>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    tokio::task::spawn_blocking(madake_agent::secrets::clear_anthropic_api_key)
+        .await
+        .map_err(|e| bad_request(e.to_string()))?
+        .map_err(|e| bad_request(e.to_string()))?;
+    Ok(Json(provider_status_blocking(&state.agent).await))
+}
+
+/// Anthropic APIへ小さなリクエストを投げて設定が使えるか確かめる。
+///
+/// 失敗しても200で`{"ok": false, "error": "..."}`を返す(UIがそのまま表示する)。
+async fn post_agent_test_connection(State(state): State<AgentApi>) -> Json<serde_json::Value> {
+    Json(match state.agent.test_anthropic_connection().await {
+        Ok(model) => serde_json::json!({ "ok": true, "model": model }),
+        // kind=UIが翻訳するための区分、error=翻訳が無いときにそのまま出せる説明
+        Err(e) => serde_json::json!({ "ok": false, "error_kind": e.kind, "error": e.message }),
+    })
+}
+
 /// アプリ設定を保存し、エージェントへ反映する。戻り値は正規化後の設定。
 async fn put_settings(
     State(state): State<AgentApi>,
@@ -664,6 +717,15 @@ fn agent_router(state: AgentApi) -> Router {
         .route("/api/v1/agent/conversations", get(get_agent_conversations))
         .route("/api/v1/agent/undo-turn", post(post_agent_undo_turn))
         .route("/api/v1/agent/detect", get(get_agent_detect))
+        .route("/api/v1/agent/provider", get(get_agent_provider))
+        .route(
+            "/api/v1/agent/api-key",
+            axum::routing::put(put_agent_api_key).delete(delete_agent_api_key),
+        )
+        .route(
+            "/api/v1/agent/test-connection",
+            post(post_agent_test_connection),
+        )
         .route("/api/v1/agent/events", get(get_agent_events))
         .route("/api/v1/settings", get(get_settings).put(put_settings))
         .with_state(state)

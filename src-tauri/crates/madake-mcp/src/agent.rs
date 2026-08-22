@@ -69,11 +69,29 @@ impl DocBridge for SharedDocBridge {
 }
 
 /// ドキュメントに結びついたエージェントマネージャを作る。
+///
+/// これだけではAnthropic API直結バックエンドが図面を編集できない
+/// (ツールの窓口が無い)。アプリ本体は[`manager_with_tools`]を使うこと。
 pub fn manager(doc: &SharedDoc, mcp_port: u16) -> Arc<AgentManager> {
     Arc::new(AgentManager::new(
         Arc::new(SharedDocBridge(doc.clone())),
         mcp_port,
     ))
+}
+
+/// 図面編集ツールの窓口までつないだエージェントマネージャを作る(アプリ本体用)。
+///
+/// 窓口([`crate::tool_bridge::McpToolBridge`])は内蔵MCPサーバーをプロセス内で呼ぶので、
+/// Anthropic API直結バックエンドの編集もCommandエンジン・undo履歴・patch配信を通る。
+/// Claude Code CLIバックエンドはCLI自身が`/mcp`へ接続するため窓口は使わない。
+pub fn manager_with_tools(
+    doc: &SharedDoc,
+    parts: &crate::SharedParts,
+    mcp_port: u16,
+) -> Arc<AgentManager> {
+    let manager = manager(doc, mcp_port);
+    manager.set_tool_bridge(crate::tool_bridge::McpToolBridge::shared(doc, parts));
+    manager
 }
 
 /// 設定ファイルを読み、エージェントへ反映する(起動時に1回呼ぶ)。
@@ -86,6 +104,58 @@ pub fn load_and_apply_settings(agent: &AgentManager) -> AppSettings {
     });
     agent.apply_settings(settings.clone());
     settings
+}
+
+/// プロバイダの状態(設定画面のバッジ・「保存済み」表示用)。
+///
+/// **APIキーそのものは絶対に含めない**。返すのは「保存されているか」だけ。
+/// UI・Link API・Tauri IPCが同じ形を見るように、組み立てはここに1本化する。
+pub fn provider_status(agent: &AgentManager) -> serde_json::Value {
+    let (key, keychain_error) = madake_agent::secrets::anthropic_api_key_checked();
+    provider_status_with(agent, key.is_some(), keychain_error)
+}
+
+/// キーチェーンを読まずに状態を組み立てる(読み出し結果は呼び出し側が渡す)。
+fn provider_status_with(
+    agent: &AgentManager,
+    api_key_saved: bool,
+    keychain_error: Option<String>,
+) -> serde_json::Value {
+    let settings = agent.settings().normalized();
+    serde_json::json!({
+        "provider": settings.provider,
+        "api_model": settings.api_model,
+        "api_key_saved": api_key_saved,
+        // キーチェーンが読めなかった理由(読めたときはnull)。保存したのに「未設定」と
+        // 出る状況を黙って放置しないため、設定画面へそのまま出す
+        "keychain_error": keychain_error,
+    })
+}
+
+/// キーチェーンの許可待ちで設定画面が固まらないよう、待つのをやめるまでの時間。
+pub const KEYCHAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// [`provider_status`]の非同期版(Link API・Tauri IPCが使う)。
+///
+/// キーチェーンの読み出しは**OSの許可ダイアログで止まることがある**ため、
+/// ブロッキング用スレッドで行い、返事が来なければ理由つきで諦める
+/// (待ち続けると設定画面が開いたまま固まる)。読み出しはプロセスに1回だけなので、
+/// 一度許可すれば以降は待ち時間なしで返る。
+pub async fn provider_status_async(agent: &Arc<AgentManager>) -> serde_json::Value {
+    let job = tokio::task::spawn_blocking(madake_agent::secrets::anthropic_api_key_checked);
+    match tokio::time::timeout(KEYCHAIN_TIMEOUT, job).await {
+        Ok(Ok((key, error))) => provider_status_with(agent, key.is_some(), error),
+        Ok(Err(e)) => provider_status_with(agent, false, Some(e.to_string())),
+        Err(_) => provider_status_with(
+            agent,
+            false,
+            Some(format!(
+                "OSキーチェーンの読み出しが{}秒たっても終わりませんでした(OSの許可を求める\
+                 ダイアログが出ていないか確認してください)",
+                KEYCHAIN_TIMEOUT.as_secs()
+            )),
+        ),
+    }
 }
 
 /// 設定を保存し、エージェントへ反映する(Tauri IPCとLink APIの共通処理)。

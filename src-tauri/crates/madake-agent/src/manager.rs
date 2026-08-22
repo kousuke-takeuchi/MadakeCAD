@@ -16,11 +16,12 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-use crate::backend::{ClaudeCodeCliBackend, DetectResult};
+use crate::backend::{AgentBackend, ClaudeCodeCliBackend, DetectResult, HistoryMessage, TurnRequest};
 use crate::conversation::{AppliedRevisions, AppliedUndoDepth, Conversation, DocState};
 use crate::events::AgentEvent;
-use crate::settings::AppSettings;
-use crate::{AgentError, Result};
+use crate::settings::{AgentProvider, AppSettings};
+use crate::tools::ToolBridge;
+use crate::{AgentError, AnthropicApiBackend, Result};
 
 /// ユーザーがターンを中断したときにメッセージへ記録する理由。
 pub const CANCELLED_MESSAGE: &str = "キャンセルされました";
@@ -164,6 +165,10 @@ pub struct AgentManager {
     state: Arc<Mutex<ManagerState>>,
     events: broadcast::Sender<ConversationEvent>,
     mcp_port: u16,
+    /// API直結バックエンドが図面編集ツールを呼ぶための窓口(madake-mcpが差す)。
+    ///
+    /// Claude Code CLIバックエンドはCLI自身がMCPサーバーへ接続するため使わない。
+    tools: Mutex<Option<Arc<dyn ToolBridge>>>,
 }
 
 impl AgentManager {
@@ -174,7 +179,47 @@ impl AgentManager {
             state: Arc::new(Mutex::new(ManagerState::default())),
             events,
             mcp_port,
+            tools: Mutex::new(None),
         }
+    }
+
+    /// 図面編集ツールの窓口をつなぐ(API直結バックエンド用)。
+    pub fn set_tool_bridge(&self, tools: Arc<dyn ToolBridge>) {
+        *self.tools.lock().unwrap() = Some(tools);
+    }
+
+    fn tool_bridge(&self) -> Option<Arc<dyn ToolBridge>> {
+        self.tools.lock().unwrap().clone()
+    }
+
+    /// いま選ばれているプロバイダで実際に送信できるか(UIのバッジ表示用)。
+    ///
+    /// - [`AgentProvider::ClaudeCli`]: CLIを検出できるか
+    /// - [`AgentProvider::AnthropicApi`]: APIキーが保管されているか(値は返さない)
+    pub async fn provider_ready(&self) -> bool {
+        match self.settings().provider {
+            AgentProvider::ClaudeCli => self.detect().await.is_ok(),
+            AgentProvider::AnthropicApi => crate::secrets::has_anthropic_api_key(),
+        }
+    }
+
+    /// Anthropic APIへの疎通を試す(設定画面の「接続テスト」)。
+    ///
+    /// 成功したら確かめたモデルIDを返す。失敗は種類つきの[`ConnectionError`]
+    /// (UIはkindで翻訳し、翻訳が無ければmessageをそのまま出す)。
+    /// **APIキーは戻り値にも含めない。**
+    pub async fn test_anthropic_connection(
+        &self,
+    ) -> std::result::Result<String, crate::anthropic::ConnectionError> {
+        let model = self.settings().normalized().api_model;
+        let key = crate::secrets::anthropic_api_key().ok_or_else(|| {
+            crate::anthropic::ConnectionError {
+                kind: "no_key".to_string(),
+                message: AgentError::NoApiKey.to_string(),
+            }
+        })?;
+        let backend = AnthropicApiBackend::new(key, model.clone());
+        backend.check_connection().await.map(|()| model)
     }
 
     /// イベント購読(接続以降のイベントのみ)。
@@ -268,9 +313,19 @@ impl AgentManager {
         model: Option<String>,
         context: Option<String>,
     ) -> Result<Uuid> {
-        let executable = self.resolve_executable().await?;
+        let settings = self.settings();
+        // プロバイダごとの前提を先に確かめる(claude CLIが無くてもAPIキーがあれば送れる)
+        let executable = match settings.provider {
+            AgentProvider::ClaudeCli => Some(self.resolve_executable().await?),
+            AgentProvider::AnthropicApi => {
+                if !crate::secrets::has_anthropic_api_key() {
+                    return Err(AgentError::NoApiKey);
+                }
+                None
+            }
+        };
 
-        let (id, seq, session, turn_model, context) = {
+        let (id, seq, session, turn_model, context, history) = {
             let mut state = self.state.lock().unwrap();
             let id = match conversation_id {
                 Some(id) => {
@@ -309,14 +364,32 @@ impl AgentManager {
             if model.is_some() {
                 conversation.model = model;
             }
+            // API直結は文脈をこちらで送り直すので、ターン開始より前の履歴を控えておく
+            let history = api_history(conversation);
             conversation.begin_turn(prompt, doc_state);
             let session = conversation.session_id.clone();
             let turn_model = conversation.model.clone();
-            (id, seq, session, turn_model, context)
+            (id, seq, session, turn_model, context, history)
         };
 
-        let mut backend = ClaudeCodeCliBackend::new(executable, self.mcp_port);
-        backend.model = turn_model;
+        let backend: Box<dyn AgentBackend> = match (settings.provider, executable) {
+            (AgentProvider::ClaudeCli, Some(executable)) => {
+                let mut backend = ClaudeCodeCliBackend::new(executable, self.mcp_port);
+                backend.model = turn_model;
+                Box::new(backend)
+            }
+            _ => {
+                // 直前にhas_anthropic_api_keyで確かめてあるが、その後に消された場合に備える
+                let key = crate::secrets::anthropic_api_key().ok_or(AgentError::NoApiKey)?;
+                // 会話ごとのモデル指定はCLI用のIDなのでAPIには使わず、設定のapi_modelを使う
+                let mut backend =
+                    AnthropicApiBackend::new(key, settings.normalized().api_model.clone());
+                if let Some(tools) = self.tool_bridge() {
+                    backend = backend.with_tools(tools);
+                }
+                Box::new(backend)
+            }
+        };
 
         // タスクの登録より先にターンが終わると`running`に完了済みハンドルが残るため、
         // 登録が済むまでoneshotで待たせる
@@ -330,6 +403,7 @@ impl AgentManager {
             prompt: prompt.to_string(),
             session,
             context,
+            history,
         };
         let handle = tokio::spawn(async move {
             if start_rx.await.is_err() {
@@ -493,10 +567,27 @@ struct Turn {
     prompt: String,
     session: Option<String>,
     context: Option<String>,
+    /// この会話の過去のやりとり(API直結バックエンドが文脈として送り直す)
+    history: Vec<HistoryMessage>,
+}
+
+/// 会話の過去のやりとりを、API直結バックエンドへ渡す形にする。
+///
+/// 本文のみ(ツール往復は送り直さない)。中断・失敗したターンの空応答は落とす。
+fn api_history(conversation: &Conversation) -> Vec<HistoryMessage> {
+    conversation
+        .messages
+        .iter()
+        .filter(|m| !m.text.trim().is_empty())
+        .map(|m| HistoryMessage {
+            role: m.role,
+            text: m.text.clone(),
+        })
+        .collect()
 }
 
 impl Turn {
-    async fn run(self, backend: ClaudeCodeCliBackend) {
+    async fn run(self, backend: Box<dyn AgentBackend>) {
         // この間にCommandエンジンへ届いた編集はエージェント由来として記録される。
         // 中断(abort)されてもdropは走るので、フラグは必ず下りる
         let _agent_turn = AgentTurnGuard::begin(Arc::clone(&self.doc));
@@ -504,11 +595,20 @@ impl Turn {
         let prompt = self.prompt.clone();
         let session = self.session.clone();
         let context = self.context.clone();
-        // CLIの駆動は別タスク。こちらがabortされるとrxが落ち、バックエンドは
-        // 子プロセスをkillして自然に終わる
+        let history = self.history.clone();
+        // バックエンドの駆動は別タスク。こちらがabortされるとrxが落ち、CLIバックエンドは
+        // 子プロセスをkillして、API直結バックエンドは送信をやめて自然に終わる
         let backend_task = tokio::spawn(async move {
             let _ = backend
-                .send_with_context(&prompt, session.as_deref(), context.as_deref(), tx)
+                .run_turn(
+                    TurnRequest {
+                        prompt: &prompt,
+                        session: session.as_deref(),
+                        system_prompt: context.as_deref(),
+                        history: &history,
+                    },
+                    tx,
+                )
                 .await;
         });
 

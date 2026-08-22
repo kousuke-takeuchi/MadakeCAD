@@ -7,6 +7,7 @@
 
 pub mod agent;
 pub mod link_api;
+pub mod tool_bridge;
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};

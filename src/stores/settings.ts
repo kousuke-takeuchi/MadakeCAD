@@ -7,7 +7,16 @@ import { defineStore } from "pinia";
 import { invoke } from "@tauri-apps/api/core";
 import { inTauri } from "../ipc";
 
-/** Rust側 `AppSettings` のJSON表現。 */
+/**
+ * エージェントの実行方式。
+ * - `claude_cli`: ローカルのClaude Code CLI (サブスクリプションのサインインを利用)
+ * - `anthropic_api`: Anthropic Messages APIへ直接 (APIキー。**キーはOSキーチェーン**)
+ */
+export type AgentProvider = "claude_cli" | "anthropic_api";
+
+export const AGENT_PROVIDERS: AgentProvider[] = ["claude_cli", "anthropic_api"];
+
+/** Rust側 `AppSettings` のJSON表現。**APIキーはここには入らない**(キーチェーンに置く)。 */
 export interface AppSettings {
   /** claude実行ファイルの明示パス。nullなら自動検出 */
   claude_path: string | null;
@@ -22,6 +31,10 @@ export interface AppSettings {
    * 内容は同梱ノートの後ろへ追記される (社内・顧客の流儀で上書きできる)。
    */
   knowledge_path: string | null;
+  /** エージェントの実行方式(既定はClaude Code CLI) */
+  provider: AgentProvider;
+  /** `anthropic_api` のときに使うモデルID */
+  api_model: string;
 }
 
 export function defaultSettings(): AppSettings {
@@ -31,7 +44,32 @@ export function defaultSettings(): AppSettings {
     auto_read_drawing: true,
     language: "en",
     knowledge_path: null,
+    provider: "claude_cli",
+    api_model: "claude-sonnet-5",
   };
+}
+
+/** プロバイダの状態。**APIキーそのものは含まない**(保存済みかどうかだけ)。 */
+export interface ProviderStatus {
+  provider: AgentProvider;
+  api_model: string;
+  api_key_saved: boolean;
+  /** OSキーチェーンが読めなかった理由(読めたときはnull) */
+  keychain_error?: string | null;
+}
+
+/** 接続テストの結果。 */
+export interface ConnectionTest {
+  ok: boolean;
+  model?: string;
+  /** 失敗理由の区分(UIが翻訳する。未知の区分はerrorをそのまま出す) */
+  error_kind?: string;
+  error?: string;
+}
+
+/** 保存済みAPIキーの伏せ字表示(値は画面に出さない)。 */
+export function maskedApiKey(): string {
+  return "••••••••••••••••";
 }
 
 interface SettingsApi {
@@ -39,9 +77,24 @@ interface SettingsApi {
   set(settings: AppSettings): Promise<AppSettings>;
 }
 
+/** APIキーとプロバイダ状態の入口(キーはここから先=OSキーチェーンへしか行かない)。 */
+interface ProviderApi {
+  status(): Promise<ProviderStatus>;
+  setKey(key: string): Promise<ProviderStatus>;
+  clearKey(): Promise<ProviderStatus>;
+  test(): Promise<ConnectionTest>;
+}
+
 const tauriSettingsApi: SettingsApi = {
   get: () => invoke<AppSettings>("get_settings"),
   set: (settings) => invoke<AppSettings>("set_settings", { settings }),
+};
+
+const tauriProviderApi: ProviderApi = {
+  status: () => invoke<ProviderStatus>("agent_provider_status"),
+  setKey: (key) => invoke<ProviderStatus>("agent_set_api_key", { key }),
+  clearKey: () => invoke<ProviderStatus>("agent_clear_api_key"),
+  test: () => invoke<ConnectionTest>("agent_test_connection"),
 };
 
 // Tauri外(ブラウザでのUI開発・E2E検証)では、起動中のMadakeCADのLink APIに接続する。
@@ -61,8 +114,17 @@ const httpSettingsApi: SettingsApi = {
   set: (settings) => http<AppSettings>("/settings", { method: "PUT", body: JSON.stringify(settings) }),
 };
 
+const httpProviderApi: ProviderApi = {
+  status: () => http<ProviderStatus>("/agent/provider"),
+  setKey: (key) =>
+    http<ProviderStatus>("/agent/api-key", { method: "PUT", body: JSON.stringify({ key }) }),
+  clearKey: () => http<ProviderStatus>("/agent/api-key", { method: "DELETE" }),
+  test: () => http<ConnectionTest>("/agent/test-connection", { method: "POST" }),
+};
+
 /** 差し替え可能なバックエンド入口(テストではここをスタブする)。 */
 export const settingsApi: SettingsApi = inTauri ? tauriSettingsApi : httpSettingsApi;
+export const providerApi: ProviderApi = inTauri ? tauriProviderApi : httpProviderApi;
 
 interface SettingsState {
   settings: AppSettings;
@@ -70,6 +132,22 @@ interface SettingsState {
   saving: boolean;
   /** 直近の保存・読込エラー(UIに表示する) */
   error: string | null;
+  /**
+   * Anthropic APIキーがOSキーチェーンに保存されているか。
+   * **キーそのものはフロントに持たない**(保存後は伏せ字だけを表示する)。
+   */
+  apiKeySaved: boolean;
+  /** APIキーの保存・削除の実行中 */
+  keySaving: boolean;
+  /** 接続テストの実行中 */
+  testing: boolean;
+  /** 直近の接続テストの結果(未実施ならnull) */
+  testResult: ConnectionTest | null;
+  /**
+   * OSキーチェーンが読めなかった理由(読めたときはnull)。
+   * 「保存したのにキー未設定と出る」ときに何が起きているかを画面へ出す。
+   */
+  keychainError: string | null;
 }
 
 export const useSettingsStore = defineStore("settings", {
@@ -78,7 +156,25 @@ export const useSettingsStore = defineStore("settings", {
     loaded: false,
     saving: false,
     error: null,
+    apiKeySaved: false,
+    keySaving: false,
+    testing: false,
+    testResult: null,
+    keychainError: null,
   }),
+
+  getters: {
+    /** Anthropic API直結を選んでいるか。 */
+    usingApiProvider: (state): boolean => state.settings.provider === "anthropic_api",
+    /**
+     * いま選んでいるプロバイダで送信できるか(接続バッジ用)。
+     * CLIの検出結果はチャットストアが持つので引数で受ける。
+     */
+    agentReady() {
+      return (cliDetected: boolean): boolean =>
+        this.usingApiProvider ? this.apiKeySaved : cliDetected;
+    },
+  },
 
   actions: {
     /** 設定を読み込む(ダイアログを開いたとき)。 */
@@ -109,6 +205,73 @@ export const useSettingsStore = defineStore("settings", {
         return false;
       } finally {
         this.saving = false;
+      }
+    },
+
+    /** プロバイダの状態(APIキーが保存済みか)を読み込む。 */
+    async loadProviderStatus() {
+      try {
+        const status = await providerApi.status();
+        this.apiKeySaved = status.api_key_saved;
+        this.keychainError = status.keychain_error ?? null;
+      } catch (e) {
+        this.error = messageOf(e);
+      }
+    },
+
+    /**
+     * APIキーをOSキーチェーンへ保存する。戻り値は保存できたか。
+     * **受け取った文字列はストアに残さない**(呼び出し側も入力欄を空にすること)。
+     */
+    async saveApiKey(key: string): Promise<boolean> {
+      if (!key.trim()) {
+        this.error = "empty-api-key";
+        return false;
+      }
+      this.keySaving = true;
+      try {
+        const status = await providerApi.setKey(key);
+        this.apiKeySaved = status.api_key_saved;
+        this.keychainError = status.keychain_error ?? null;
+        this.error = null;
+        this.testResult = null;
+        return true;
+      } catch (e) {
+        this.error = messageOf(e);
+        return false;
+      } finally {
+        this.keySaving = false;
+      }
+    },
+
+    /** 保存済みのAPIキーを消す。 */
+    async clearApiKey(): Promise<boolean> {
+      this.keySaving = true;
+      try {
+        const status = await providerApi.clearKey();
+        this.apiKeySaved = status.api_key_saved;
+        this.keychainError = status.keychain_error ?? null;
+        this.error = null;
+        this.testResult = null;
+        return true;
+      } catch (e) {
+        this.error = messageOf(e);
+        return false;
+      } finally {
+        this.keySaving = false;
+      }
+    },
+
+    /** 設定が実際に使えるかを小さなリクエストで確かめる。 */
+    async testConnection() {
+      this.testing = true;
+      this.testResult = null;
+      try {
+        this.testResult = await providerApi.test();
+      } catch (e) {
+        this.testResult = { ok: false, error: messageOf(e) };
+      } finally {
+        this.testing = false;
       }
     },
   },

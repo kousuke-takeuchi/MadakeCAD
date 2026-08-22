@@ -3,19 +3,24 @@
 // EPLAN/ACADEのオプションダイアログ様式: 左カテゴリツリー+グループボックス+OK/キャンセル/適用。
 // 実装済みは「一般」(言語) と「エージェント」カテゴリで、他カテゴリはプレースホルダを表示する。
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
-import { Check, RefreshCw, X } from "lucide-vue-next";
+import { Check, KeyRound, RefreshCw, X } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { SUPPORTED_LOCALES, resolveLocale, setLocale } from "../../i18n";
 import { useChatStore } from "../../stores/chat";
-import { useSettingsStore } from "../../stores/settings";
+import {
+  AGENT_PROVIDERS,
+  maskedApiKey,
+  useSettingsStore,
+  type AgentProvider,
+} from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
 
 const ui = useUiStore();
 const settings = useSettingsStore();
 // claude CLIの検出状態はチャットストアが持つ(チャットパネルの接続バッジと共通)
 const chat = useChatStore();
-const { t } = useI18n();
+const { t, te } = useI18n();
 
 type TabId = "general" | "agent" | "chat" | "mcp" | "account";
 const tabs: TabId[] = ["general", "agent", "chat", "mcp", "account"];
@@ -25,14 +30,26 @@ const activeTab = ref<TabId>("agent");
 const pathInput = ref("");
 /** 知識ファイル(エージェントへ追記で読ませるMarkdown)のパス入力欄。 */
 const knowledgeInput = ref("");
+/** Anthropic API経由で使うモデルIDの入力欄。 */
+const apiModelInput = ref("");
+/**
+ * APIキーの入力欄。**保存したらすぐ空にする**(キーを画面にもメモリにも残さない)。
+ * 保存済みのキーは伏せ字だけを表示し、値を読み戻すことはできない。
+ */
+const apiKeyInput = ref("");
 const detecting = ref(false);
 
 const detected = computed(() => chat.detect);
+const provider = computed(() => settings.settings.provider);
+const usingApi = computed(() => provider.value === "anthropic_api");
+/** いま選んでいるプロバイダで送信できる状態か(バッジ表示)。 */
+const providerReady = computed(() => (usingApi.value ? settings.apiKeySaved : !!detected.value));
 const pathDirty = computed(() => pathInput.value.trim() !== (settings.settings.claude_path ?? ""));
 const knowledgeDirty = computed(
   () => knowledgeInput.value.trim() !== (settings.settings.knowledge_path ?? ""),
 );
-const dirty = computed(() => pathDirty.value || knowledgeDirty.value);
+const apiModelDirty = computed(() => apiModelInput.value.trim() !== settings.settings.api_model);
+const dirty = computed(() => pathDirty.value || knowledgeDirty.value || apiModelDirty.value);
 const activeLocale = computed(() => resolveLocale(settings.settings.language));
 
 const checks = computed(() => [
@@ -59,6 +76,10 @@ watch(
     await settings.load();
     pathInput.value = settings.settings.claude_path ?? "";
     knowledgeInput.value = settings.settings.knowledge_path ?? "";
+    apiModelInput.value = settings.settings.api_model;
+    apiKeyInput.value = "";
+    settings.testResult = null;
+    await settings.loadProviderStatus();
     if (!chat.detect) await redetect();
   },
 );
@@ -83,10 +104,21 @@ async function apply(): Promise<boolean> {
   const path = pathInput.value.trim();
   const knowledge = knowledgeInput.value.trim();
   const knowledgeChanged = knowledgeDirty.value;
-  if (!(await settings.save({ claude_path: path || null, knowledge_path: knowledge || null })))
+  const modelChanged = apiModelDirty.value;
+  if (
+    !(await settings.save({
+      claude_path: path || null,
+      knowledge_path: knowledge || null,
+      api_model: apiModelInput.value.trim(),
+    }))
+  )
     return false;
   pathInput.value = settings.settings.claude_path ?? "";
   knowledgeInput.value = settings.settings.knowledge_path ?? "";
+  apiModelInput.value = settings.settings.api_model;
+  if (modelChanged) {
+    ui.log(t("settings.agent.apiModelSetLog", { model: settings.settings.api_model }));
+  }
   if (redetectAfter) {
     ui.log(path ? t("settings.agent.pathSetLog", { path }) : t("settings.agent.pathClearedLog"));
     await redetect();
@@ -111,6 +143,49 @@ async function toggle(key: "auto_apply" | "auto_read_drawing", value: boolean) {
   if (!(await settings.save(patch))) return;
   const label = t(key === "auto_apply" ? "settings.agent.autoApprove" : "settings.agent.autoRead");
   ui.log(t(value ? "settings.agent.toggleOnLog" : "settings.agent.toggleOffLog", { label }));
+}
+
+/** エージェントのプロバイダを切り替える(即時保存)。 */
+async function changeProvider(ev: Event) {
+  const next = (ev.target as HTMLSelectElement).value as AgentProvider;
+  if (!(await settings.save({ provider: next }))) return;
+  settings.testResult = null;
+  await settings.loadProviderStatus();
+  ui.log(t("settings.agent.providerChangedLog", { provider: t(providerLabelKey(next)) }));
+}
+
+/**
+ * 接続テストの失敗表示。バックエンドが返す区分(`error_kind`)に対訳があれば
+ * それを使い、無ければ説明文をそのまま出す。
+ */
+const testErrorText = computed(() => {
+  const result = settings.testResult;
+  if (!result || result.ok) return "";
+  const key = `settings.agent.testError.${result.error_kind ?? ""}`;
+  return te(key) ? t(key) : (result.error ?? "");
+});
+
+/** ストアが立てた合図(`empty-api-key`)は翻訳して出す。それ以外は原文のまま。 */
+const settingsError = computed(() =>
+  settings.error === "empty-api-key" ? t("settings.agent.apiKeyEmpty") : settings.error,
+);
+
+function providerLabelKey(p: AgentProvider): string {
+  return p === "anthropic_api" ? "settings.agent.providerApi" : "settings.agent.providerCli";
+}
+
+/** 入力したAPIキーをOSキーチェーンへ保存する(保存後は入力欄を空にする)。 */
+async function saveApiKey() {
+  if (!(await settings.saveApiKey(apiKeyInput.value))) return;
+  apiKeyInput.value = "";
+  ui.log(t("settings.agent.apiKeySavedLog"));
+}
+
+/** 保存済みのAPIキーを消す。 */
+async function removeApiKey() {
+  if (!(await settings.clearApiKey())) return;
+  apiKeyInput.value = "";
+  ui.log(t("settings.agent.apiKeyRemovedLog"));
 }
 
 /** 表示言語を保存して即時切替する。 */
@@ -168,18 +243,105 @@ async function changeLanguage(ev: Event) {
             <div class="group">
               <div class="group-head"><span>{{ t("settings.agent.providerGroup") }}</span><i /></div>
               <div class="form-row">
-                <label class="form-label">{{ t("settings.agent.providerLabel") }}</label>
-                <div class="field static">
-                  <span>{{ t("settings.agent.providerValue") }}</span>
-                  <span class="caret">▾</span>
-                </div>
-                <span v-if="detected" class="status ok"><i /> {{ t("settings.agent.detectedBadge") }}</span>
-                <span v-else class="status off"><i /> {{ t("settings.agent.notDetectedBadge") }}</span>
+                <label class="form-label" for="agent-provider">{{ t("settings.agent.providerLabel") }}</label>
+                <select
+                  id="agent-provider"
+                  class="field select wide"
+                  :value="provider"
+                  :disabled="settings.saving"
+                  @change="changeProvider"
+                >
+                  <option v-for="p in AGENT_PROVIDERS" :key="p" :value="p">
+                    {{ t(providerLabelKey(p)) }}
+                  </option>
+                </select>
+                <span v-if="providerReady" class="status ok">
+                  <i /> {{ t(usingApi ? "settings.agent.keySavedBadge" : "settings.agent.detectedBadge") }}
+                </span>
+                <span v-else class="status off">
+                  <i /> {{ t(usingApi ? "settings.agent.keyMissingBadge" : "settings.agent.notDetectedBadge") }}
+                </span>
               </div>
-              <p class="caption indent-label">{{ t("settings.agent.providerHint") }}</p>
+              <p class="caption indent-label">
+                {{ t(usingApi ? "settings.agent.providerHintApi" : "settings.agent.providerHint") }}
+              </p>
             </div>
 
-            <div class="group">
+            <div v-if="usingApi" class="group">
+              <div class="group-head"><span>{{ t("settings.agent.apiGroup") }}</span><i /></div>
+              <div class="form-row">
+                <label class="form-label" for="api-key">{{ t("settings.agent.apiKeyLabel") }}</label>
+                <div v-if="settings.apiKeySaved" class="field mono-field">
+                  <span><KeyRound :size="11" /> {{ maskedApiKey() }}</span>
+                </div>
+                <input
+                  v-else
+                  id="api-key"
+                  v-model="apiKeyInput"
+                  class="field input mono"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  :placeholder="t('settings.agent.apiKeyPlaceholder')"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && saveApiKey()"
+                />
+                <button
+                  v-if="settings.apiKeySaved"
+                  class="btn secondary"
+                  :disabled="settings.keySaving"
+                  @click="removeApiKey"
+                >
+                  {{ t("settings.agent.apiKeyRemove") }}
+                </button>
+                <button
+                  v-else
+                  class="btn secondary"
+                  :disabled="settings.keySaving || !apiKeyInput.trim()"
+                  @click="saveApiKey"
+                >
+                  {{ t("settings.agent.apiKeySave") }}
+                </button>
+              </div>
+              <p class="caption indent-label">{{ t("settings.agent.apiKeyHint") }}</p>
+              <p v-if="settings.keychainError" class="caption indent-label warn">
+                {{ t("settings.agent.keychainError", { reason: settings.keychainError }) }}
+              </p>
+
+              <div class="form-row">
+                <label class="form-label" for="api-model">{{ t("settings.agent.apiModelLabel") }}</label>
+                <input
+                  id="api-model"
+                  v-model="apiModelInput"
+                  class="field input mono"
+                  spellcheck="false"
+                  placeholder="claude-sonnet-5"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
+                />
+              </div>
+              <p class="caption indent-label">{{ t("settings.agent.apiModelHint") }}</p>
+
+              <div class="form-row">
+                <span class="form-label" />
+                <button
+                  class="btn secondary test-btn"
+                  :disabled="settings.testing || !settings.apiKeySaved"
+                  @click="settings.testConnection()"
+                >
+                  <RefreshCw :size="12" :class="{ spin: settings.testing }" />
+                  {{ settings.testing ? t("settings.agent.testing") : t("settings.agent.testConnection") }}
+                </button>
+              </div>
+              <p v-if="settings.testResult?.ok" class="caption indent-label ok">
+                <Check :size="11" />
+                {{ t("settings.agent.testOk", { model: settings.testResult.model ?? settings.settings.api_model }) }}
+              </p>
+              <p v-else-if="settings.testResult" class="caption indent-label warn">{{ testErrorText }}</p>
+              <p v-else-if="!settings.apiKeySaved" class="caption indent-label">
+                {{ t("settings.agent.testNeedsKey") }}
+              </p>
+            </div>
+
+            <div v-if="!usingApi" class="group">
               <div class="group-head"><span>{{ t("settings.agent.detectionGroup") }}</span><i /></div>
               <div class="form-row">
                 <label class="form-label">{{ t("settings.agent.executableLabel") }}</label>
@@ -227,18 +389,20 @@ async function changeLanguage(ev: Event) {
 
             <div class="group">
               <div class="group-head"><span>{{ t("settings.agent.advancedGroup") }}</span><i /></div>
-              <div class="form-row">
-                <label class="form-label" for="claude-path">{{ t("settings.agent.claudePathLabel") }}</label>
-                <input
-                  id="claude-path"
-                  v-model="pathInput"
-                  class="field input mono"
-                  placeholder="/usr/local/bin/claude"
-                  spellcheck="false"
-                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
-                />
-              </div>
-              <p class="caption indent-label">{{ t("settings.agent.claudePathHint") }}</p>
+              <template v-if="!usingApi">
+                <div class="form-row">
+                  <label class="form-label" for="claude-path">{{ t("settings.agent.claudePathLabel") }}</label>
+                  <input
+                    id="claude-path"
+                    v-model="pathInput"
+                    class="field input mono"
+                    placeholder="/usr/local/bin/claude"
+                    spellcheck="false"
+                    @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
+                  />
+                </div>
+                <p class="caption indent-label">{{ t("settings.agent.claudePathHint") }}</p>
+              </template>
               <div class="form-row">
                 <label class="form-label" for="knowledge-path">{{ t("settings.agent.knowledgeLabel") }}</label>
                 <input
@@ -253,7 +417,7 @@ async function changeLanguage(ev: Event) {
               <p class="caption indent-label">{{ t("settings.agent.knowledgeHint") }}</p>
             </div>
 
-            <p v-if="settings.error" class="error">{{ settings.error }}</p>
+            <p v-if="settings.error" class="error">{{ settingsError }}</p>
           </template>
 
           <p v-else class="placeholder">
@@ -379,11 +543,16 @@ async function changeLanguage(ev: Event) {
 .field.input { outline: none; font-size: 11px; }
 .field.input:focus { border-color: var(--acad-blue); }
 .field.select { width: 220px; outline: none; cursor: pointer; }
+.field.select.wide { width: 300px; }
 .field.select:focus { border-color: var(--acad-blue); }
+.field.mono-field span { display: flex; align-items: center; gap: 6px; }
 .mono { font-family: var(--mono-font); }
 .spacer { flex: 1; }
 
 .caption { margin: 0; font-size: 10px; line-height: 15px; color: var(--ui-muted); }
+.caption.warn { color: var(--warn-fg); }
+.caption.ok { color: var(--ok-fg); display: flex; align-items: center; gap: 4px; }
+.test-btn { flex: none; }
 .indent-label { padding-left: 140px; }
 .indent-check { padding-left: 22px; margin-top: -3px; }
 

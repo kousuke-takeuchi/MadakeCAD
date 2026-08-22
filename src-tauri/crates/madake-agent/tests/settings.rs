@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use madake_agent::settings::{
-    load_settings, save_settings, settings_path, AppSettings, SETTINGS_PATH_ENV,
+    load_settings, save_settings, settings_path, AgentProvider, AppSettings, SETTINGS_PATH_ENV,
 };
 use uuid::Uuid;
 
@@ -47,6 +47,8 @@ fn saved_settings_round_trip() {
         auto_read_drawing: false,
         language: "ja".into(),
         knowledge_path: Some(PathBuf::from("/home/me/house-rules.md")),
+        provider: AgentProvider::AnthropicApi,
+        api_model: "claude-sonnet-5".into(),
     };
 
     save_settings(&path, &settings).unwrap();
@@ -223,4 +225,107 @@ fn normalized_drops_a_blank_knowledge_path() {
         padded.normalized().knowledge_path.as_deref(),
         Some(Path::new("/home/me/house-rules.md"))
     );
+}
+
+// ------------------------------------------------ プロバイダ (Claude CLI / Anthropic API)
+
+/// Out of the box the agent runs through the Claude Code CLI, with Claude Sonnet 5 ready for the API route.
+/// 既定のエージェントはClaude Code CLI経由で、API経由に切り替えたときのモデルはClaude Sonnet 5。
+#[test]
+fn the_default_provider_is_the_claude_code_cli() {
+    let settings = AppSettings::default();
+    assert_eq!(settings.provider, AgentProvider::ClaudeCli);
+    assert_eq!(settings.api_model, "claude-sonnet-5");
+}
+
+/// Choosing the Anthropic API survives a save/load round trip together with the model name.
+/// Anthropic APIを選んだ設定は、モデル名と一緒に保存して読み直しても保持される。
+#[test]
+fn the_anthropic_api_choice_round_trips_through_save_and_load() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    let settings = AppSettings {
+        provider: AgentProvider::AnthropicApi,
+        api_model: "claude-opus-4-6".into(),
+        ..AppSettings::default()
+    };
+    save_settings(&path, &settings).unwrap();
+    let loaded = load_settings(&path).unwrap();
+    assert_eq!(loaded.provider, AgentProvider::AnthropicApi);
+    assert_eq!(loaded.api_model, "claude-opus-4-6");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// The provider is stored under readable names, so the settings file stays hand-editable.
+/// プロバイダは読める名前で保存される(設定ファイルを手で書き換えられる)。
+#[test]
+fn the_provider_is_stored_under_a_readable_name() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    save_settings(
+        &path,
+        &AppSettings {
+            provider: AgentProvider::AnthropicApi,
+            ..AppSettings::default()
+        },
+    )
+    .unwrap();
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        written.contains("\"provider\": \"anthropic_api\""),
+        "読める名前で保存されていない: {written}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A settings file written before providers existed keeps working and stays on the CLI.
+/// プロバイダの項目が無い旧い設定ファイルもそのまま動き、Claude Code CLIのままになる。
+#[test]
+fn an_old_settings_file_without_a_provider_stays_on_the_cli() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    std::fs::write(&path, r#"{ "language": "ja", "auto_apply": true }"#).unwrap();
+    let settings = load_settings(&path).unwrap();
+    assert_eq!(settings.provider, AgentProvider::ClaudeCli);
+    assert_eq!(settings.api_model, "claude-sonnet-5");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A provider name this build does not know falls back to the CLI instead of breaking the whole file.
+/// このビルドが知らないプロバイダ名は、設定ファイル全体を読めなくせずにCLIへ戻す。
+#[test]
+fn an_unknown_provider_name_falls_back_to_the_cli() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    std::fs::write(
+        &path,
+        r#"{ "provider": "gemini", "language": "ja", "knowledge_path": "/tmp/notes.md" }"#,
+    )
+    .unwrap();
+    let settings = load_settings(&path).unwrap();
+    assert_eq!(settings.provider, AgentProvider::ClaudeCli);
+    // 他の項目は失われない
+    assert_eq!(settings.language, "ja");
+    assert_eq!(
+        settings.knowledge_path.as_deref(),
+        Some(Path::new("/tmp/notes.md"))
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A blank model box falls back to the default model, and padding is trimmed.
+/// モデル名を空にすると既定のモデルへ戻り、前後の空白は取り除かれる。
+#[test]
+fn a_blank_api_model_falls_back_to_the_default() {
+    let blank = AppSettings {
+        api_model: "  ".into(),
+        ..AppSettings::default()
+    };
+    assert_eq!(blank.normalized().api_model, "claude-sonnet-5");
+
+    let padded = AppSettings {
+        api_model: " claude-opus-4-6 ".into(),
+        ..AppSettings::default()
+    };
+    assert_eq!(padded.normalized().api_model, "claude-opus-4-6");
 }

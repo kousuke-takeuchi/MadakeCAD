@@ -49,8 +49,17 @@
 
 ### Task 4: AnthropicApiBackend+キーチェーン
 
-- [ ] Step 1 (red): Rustテスト: AgentBackend実装のツールブリッジ(MCPツール定義→API tool定義)/ツール実行ループ(モック)/キーチェーン保存・取得・削除(テストはモック/スキップ可能に)/設定にキーが平文で残らない
-- [ ] Step 2 (green): 実装(keyringはレジストリでバージョン確認)。設定UI(プロバイダ選択+キー入力+接続テスト、i18n)。CLI無し環境での動作を実機確認+コミット
+- [x] Step 1 (red): Rustテスト: AgentBackend実装のツールブリッジ(MCPツール定義→API tool定義)/ツール実行ループ(モック)/キーチェーン保存・取得・削除(テストはモック/スキップ可能に)/設定にキーが平文で残らない
+- [x] Step 2 (green): 実装(keyringはレジストリでバージョン確認)。設定UI(プロバイダ選択+キー入力+接続テスト、i18n)。CLI無し環境での動作を実機確認+コミット
+
+**実装したもの**:
+- **`AgentBackend`トレイト** (`madake-agent::backend`): `run_turn(TurnRequest, tx) -> Result<()>`の1本だけ。`TurnRequest`は`{prompt, session, system_prompt, history}`で、出力は今までどおり`AgentEvent`のストリーム。既存の`ClaudeCodeCliBackend`をこのトレイトに載せ替え(`send_with_context`へ委譲)、`AgentManager`は`Box<dyn AgentBackend>`を回すだけになった。**UIはバックエンドの違いを知らない**
+- **`AnthropicApiBackend`** (`madake-agent::anthropic`): Messages API直結 (`POST /v1/messages`、`stream: true`のSSE)。`system`は`knowledge::system_prompt`(CLI経路と同一)。ツールは`ToolBridge`の定義をAPIの`tools`へ変換し、`stop_reason=tool_use`ならこちらでツールを実行して`tool_result`を積み直す往復をRust側で回す(上限16往復)。APIはステートレスなので会話の過去の本文を毎回送り直す。エラーは種類つき(`auth`/`overloaded`/`rate_limit`/`model_not_found`/`server`/`request`/`network`)で返し、UIが対訳を出す。接続先は`MADAKE_ANTHROPIC_BASE_URL`で差し替え可能(テスト・社内ゲートウェイ用)
+- **ツールブリッジ** (`madake-agent::tools` + `madake-mcp::tool_bridge`): ディスパッチを書き写さず、**内蔵MCPサーバーをプロセス内パイプ越しに呼ぶMCPクライアント**(rmcpの`serve_directly`×2 + `tokio::io::duplex`)。ツールを1つ足せばCLI経由でもAPI経由でも同時に増える。編集は当然Commandエンジン・undo履歴・patch配信を通る(テストで確認)
+- **キーチェーン** (`madake-agent::secrets`、`keyring 4.1.6`): `service="MadakeCAD"` / `account="anthropic_api_key"`。設定ファイルには項目自体を作らない。`SecretStore`トレイトで差し替え可能にしてCI・テストはメモリ保管、実キーチェーンのテストは`MADAKE_KEYCHAIN_TESTS=1`のときだけ走る。**読み出しはプロセスに1回だけキャッシュする**(macOSはアプリの署名が変わると許可ダイアログを出すため、状態取得のたびに聞かれると操作が止まる)。読めなかった理由は`keychain_error`として設定画面へ出し、3秒で諦めて画面を固めない
+- **設定**: `provider: "claude_cli" | "anthropic_api"`(既定はclaude_cli。知らない値はclaude_cliへフォールバック)+`api_model`(既定`claude-sonnet-5`)。設定UIはプロバイダを実選択のドロップダウンにし、API選択時だけ「Anthropic API」グループ(伏せ字のAPIキー欄+保存/削除+「キー保存済み」バッジ、モデル欄、接続テスト)を出す。接続バッジは CLI=検出結果 / API=キーの保存状況
+- **実機確認** (キー無しの範囲): プロバイダ切替→UIが切り替わる/ダミーキー保存→「キー保存済み」+伏せ字表示/接続テスト→本物のAPIから401→「APIキーが受け付けられませんでした」/削除→「キー未設定」へ戻る/キー未設定のまま送信→チャットに設定画面への案内。**実キーでの通し(作図・ツール往復)は未確認**
+- **ついでに直した既定バグ**: 新規会話の初回送信が失敗したとき、エラーが画面に出ず「作業しています...」のまま止まっていた(ストアへ入れる前の生オブジェクトを書き換えていてリアクティブに届いていなかった)
 
 ### Task 5: 受け入れと仕上げ
 

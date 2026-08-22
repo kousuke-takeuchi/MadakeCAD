@@ -452,6 +452,43 @@ async fn agent_detect(state: State<'_, AppState>) -> Result<DetectResult, String
     state.agent.detect().await.map_err(|e| e.to_string())
 }
 
+/// プロバイダの状態(選択中のプロバイダ・モデル・APIキーが保存済みか)。
+///
+/// **APIキーそのものは返さない**(保存済みかどうかだけ)。
+#[tauri::command]
+async fn agent_provider_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    Ok(madake_mcp::agent::provider_status_async(&state.agent).await)
+}
+
+/// Anthropic APIキーをOSキーチェーンへ保存する。**設定ファイルには書かない。**
+#[tauri::command]
+async fn agent_set_api_key(
+    state: State<'_, AppState>,
+    key: String,
+) -> Result<serde_json::Value, String> {
+    madake_agent::secrets::set_anthropic_api_key(&key).map_err(|e| e.to_string())?;
+    Ok(madake_mcp::agent::provider_status_async(&state.agent).await)
+}
+
+/// 保存済みのAnthropic APIキーを消す。
+#[tauri::command]
+async fn agent_clear_api_key(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    madake_agent::secrets::clear_anthropic_api_key().map_err(|e| e.to_string())?;
+    Ok(madake_mcp::agent::provider_status_async(&state.agent).await)
+}
+
+/// Anthropic APIへの疎通を試す(設定画面の「接続テスト」)。
+///
+/// 失敗しても`{"ok": false, "error": "..."}`を返す(理由をそのまま表示する)。
+#[tauri::command]
+async fn agent_test_connection(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    Ok(match state.agent.test_anthropic_connection().await {
+        Ok(model) => serde_json::json!({ "ok": true, "model": model }),
+        // kind=UIが翻訳するための区分、error=翻訳が無いときにそのまま出せる説明
+        Err(e) => serde_json::json!({ "ok": false, "error_kind": e.kind, "error": e.message }),
+    })
+}
+
 /// アプリ設定(`~/.madakecad/settings.json`)を取得する。
 #[tauri::command]
 fn get_settings(state: State<AppState>) -> AppSettings {
@@ -552,7 +589,7 @@ pub fn run() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_MCP_PORT);
-    let agent = madake_mcp::agent::manager(&doc, mcp_port);
+    let agent = madake_mcp::agent::manager_with_tools(&doc, &parts, mcp_port);
     // 保存済みのアプリ設定(claude実行パス・図面の自動読み取り)を反映してから起動する
     madake_mcp::agent::load_and_apply_settings(&agent);
 
@@ -651,6 +688,10 @@ pub fn run() {
             agent_list_conversations,
             agent_undo_turn,
             agent_detect,
+            agent_provider_status,
+            agent_set_api_key,
+            agent_clear_api_key,
+            agent_test_connection,
             get_settings,
             set_settings
         ])

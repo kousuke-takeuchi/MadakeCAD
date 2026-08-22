@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**810 specification clauses** across 5 areas.
+**872 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -432,6 +432,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The agent-turn marker nests and always clears, so edits after the turn are user edits again. <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
 - The bridge the agent manager uses reverts only agent edits and reports how many were rolled back. <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
 
+### provider_api
+
+- The settings screen learns which provider is selected and whether a key is saved, but never the key itself. <sub>`the_settings_screen_never_receives_the_api_key`</sub>
+- Removing the saved key flips the "saved" flag back, so the settings screen shows it is gone. <sub>`removing_the_saved_key_flips_the_saved_flag_back`</sub>
+- An empty key box is refused with an error instead of storing a useless entry. <sub>`an_empty_key_box_is_refused`</sub>
+- The connection test answers with a readable reason instead of failing the request itself. <sub>`the_connection_test_answers_with_a_readable_reason`</sub>
+- Choosing the Anthropic API through the settings endpoint is reflected in the provider status. <sub>`choosing_the_anthropic_api_is_reflected_in_the_provider_status`</sub>
+- If the OS keychain does not answer, the settings screen still opens and says why. <sub>`a_keychain_that_never_answers_does_not_freeze_the_settings_screen`</sub>
+
 ### Start templates (REST)
 
 - GET /templates lists the bundled start templates with their names in both languages. <sub>`the_link_api_lists_the_bundled_templates`</sub>
@@ -443,6 +452,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The tidy metrics tool tells the agent it is the target to aim at while tidying, and names the three things it counts. <sub>`the_tidy_metrics_tool_is_advertised_as_the_tidy_loop_target`</sub>
 - GET /api/v1/tidy-metrics returns the sheet's crossing, label overlap, symbol overlap and off-grid counts as JSON. <sub>`tidy_metrics_endpoint_returns_the_four_counts`</sub>
 
+### tool_bridge
+
+- The API route sees exactly the same tools as the Claude Code CLI route, so neither is missing a feature. <sub>`the_api_route_sees_the_same_tools_as_the_cli_route`</sub>
+- Every bridged tool carries a description and an object-shaped input schema. <sub>`every_bridged_tool_has_a_description_and_an_object_schema`</sub>
+- An edit made through the bridge lands in the document and can be undone like any other edit. <sub>`an_edit_through_the_bridge_lands_in_the_document_and_can_be_undone`</sub>
+- Reading tools work through the bridge too, so the agent can look at the drawing before editing. <sub>`reading_tools_work_through_the_bridge`</sub>
+- A tool name that does not exist comes back as an error result instead of killing the turn. <sub>`an_unknown_tool_name_comes_back_as_an_error_result`</sub>
+- Bad arguments come back as an error result carrying the reason, so the model can correct itself. <sub>`bad_arguments_come_back_with_a_reason`</sub>
+
 ### tools
 
 - The parts search tool advertises selection, comparison and alternative-part use, so the agent reaches for it when asked "what can replace this?". <sub>`the_parts_search_tool_advertises_selection_and_comparison`</sub>
@@ -452,6 +470,20 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ## AI assistant (madake-agent)
 
+
+### anthropic_api
+
+- Streamed assistant text arrives as text deltas and the turn ends with the assembled reply and its token usage. <sub>`streamed_text_becomes_deltas_and_a_completed_turn`</sub>
+- The request carries the configured model, a streaming flag, the system prompt and the user's message. <sub>`the_request_carries_the_model_system_prompt_and_user_message`</sub>
+- The bridged MCP tools are offered to the API on every request, so the agent can edit the drawing. <sub>`the_bridged_mcp_tools_are_offered_to_the_api`</sub>
+- A tool the model asks for is executed locally and its result is sent back so the model can continue. <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- A tool that fails is reported back to the model as an error result instead of aborting the turn. <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
+- The tool loop stops after a bounded number of rounds so a looping model cannot run forever. <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
+- A rejected API key produces a message that says the key is the problem, not a raw HTTP code. <sub>`a_rejected_api_key_is_explained_as_a_key_problem`</sub>
+- An overloaded API produces a "busy, try again" message rather than a bare error code. <sub>`an_overloaded_api_is_explained_as_a_busy_service`</sub>
+- An error event that arrives mid-stream is surfaced to the user too. <sub>`an_error_event_inside_the_stream_is_surfaced`</sub>
+- Earlier turns of the conversation are replayed so the model remembers what was said before. <sub>`earlier_turns_of_the_conversation_are_replayed`</sub>
+- The connection test reports success for a working key and a readable reason for a bad one. <sub>`the_connection_test_reports_success_or_a_readable_reason`</sub>
 
 ### Claude CLI backend
 
@@ -548,6 +580,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Each conversation gets its own turn sequence numbers, so cancelling one never discards the other's events. <sub>`each_conversation_keeps_its_own_turn_seq`</sub>
 - Undoing a turn that swallowed a parallel turn's edits marks that turn as reverted too, instead of leaving it looking applied. <sub>`undo_turn_marks_the_parallel_turn_whose_edits_it_swept`</sub>
 
+### manager_api_provider
+
+- With the Anthropic API selected, a chat turn runs even though no Claude Code CLI is installed. <sub>`a_turn_runs_on_the_api_without_any_claude_cli`</sub>
+- Choosing the API without saving a key refuses the send with a message pointing at the settings screen. <sub>`sending_without_a_saved_key_points_at_the_settings_screen`</sub>
+- The provider badge reports "ready" once a key is saved and "not ready" once it is removed. <sub>`the_provider_is_ready_only_while_a_key_is_saved`</sub>
+- The connection test refuses before a key is saved, naming the missing key as the reason. <sub>`the_connection_test_refuses_before_a_key_is_saved`</sub>
+- Nothing about the key is ever broadcast to the UI event stream. <sub>`the_api_key_never_appears_in_the_event_stream`</sub>
+
 ### stream-json parser
 
 - The CLI's system/init line yields a session-started event carrying the session id. <sub>`init_line_yields_session_started`</sub>
@@ -560,6 +600,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A real recorded stream parses into the expected full event sequence. <sub>`full_event_sequence_of_tooluse_fixture`</sub>
 - The parser fills in the tool name when a tool use finishes. <sub>`stream_parser_fills_tool_name_on_finish`</sub>
 - Duplicate tool-use-started events for the same id are dropped. <sub>`stream_parser_drops_duplicate_tool_use_started`</sub>
+
+### secrets
+
+- A saved API key can be read back, and deleting it makes it gone. <sub>`a_saved_api_key_can_be_read_back_and_deleted`</sub>
+- Deleting a key that was never stored is not an error, so the UI can always offer "remove". <sub>`deleting_a_key_that_was_never_stored_is_not_an_error`</sub>
+- Blank input is refused instead of storing an empty key that would fail later with a confusing error. <sub>`a_blank_api_key_is_refused`</sub>
+- Surrounding whitespace is trimmed, so a key pasted with a stray newline still works. <sub>`a_pasted_key_is_trimmed_before_it_is_stored`</sub>
+- The stored key never appears in the settings file, which stays free of any secret. <sub>`the_settings_file_never_contains_the_api_key`</sub>
+- A settings file that somehow carries an api key field loses it on the next save. <sub>`an_api_key_smuggled_into_the_settings_file_is_dropped_on_save`</sub>
+- The keychain entry is addressed by the app name and a fixed account, so the same key is found next launch. <sub>`the_keychain_entry_is_addressed_by_the_app_name`</sub>
+- Against the real OS keychain, a key round-trips and is removed again (opt-in; skipped by default). <sub>`the_real_os_keychain_round_trips_a_key`</sub>
+- The keychain is read once per app run, so the OS does not ask for permission again and again. <sub>`the_keychain_is_read_only_once_per_app_run`</sub>
+- When the OS keychain cannot be read, the reason is reported instead of a silent "no key". <sub>`a_keychain_that_cannot_be_read_reports_the_reason`</sub>
 
 ### AI settings
 
@@ -577,6 +630,21 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - By default no extra knowledge file is configured (only the bundled standards note is used). <sub>`default_knowledge_path_is_unset`</sub>
 - A settings file saved before the knowledge-file field existed loads with it unset. <sub>`old_settings_file_without_knowledge_path_loads_unset`</sub>
 - A blank knowledge-file path is normalized away, and padding is trimmed. <sub>`normalized_drops_a_blank_knowledge_path`</sub>
+- Out of the box the agent runs through the Claude Code CLI, with Claude Sonnet 5 ready for the API route. <sub>`the_default_provider_is_the_claude_code_cli`</sub>
+- Choosing the Anthropic API survives a save/load round trip together with the model name. <sub>`the_anthropic_api_choice_round_trips_through_save_and_load`</sub>
+- The provider is stored under readable names, so the settings file stays hand-editable. <sub>`the_provider_is_stored_under_a_readable_name`</sub>
+- A settings file written before providers existed keeps working and stays on the CLI. <sub>`an_old_settings_file_without_a_provider_stays_on_the_cli`</sub>
+- A provider name this build does not know falls back to the CLI instead of breaking the whole file. <sub>`an_unknown_provider_name_falls_back_to_the_cli`</sub>
+- A blank model box falls back to the default model, and padding is trimmed. <sub>`a_blank_api_model_falls_back_to_the_default`</sub>
+
+### tool_bridge
+
+- Each MCP tool becomes one API tool keeping its name, description and input schema. <sub>`every_mcp_tool_becomes_one_api_tool`</sub>
+- The JSON Schema `$schema` marker is dropped because the API only wants the shape itself. <sub>`the_schema_marker_is_dropped_from_the_input_schema`</sub>
+- A tool without a usable schema still gets an empty object schema, so the API accepts it. <sub>`a_tool_without_a_schema_gets_an_empty_object_schema`</sub>
+- A schema that forgot `"type": "object"` is repaired instead of being sent as-is. <sub>`a_schema_missing_its_object_type_is_repaired`</sub>
+- Every bridged tool name fits the API's allowed name pattern, so no tool is rejected. <sub>`bridged_tool_names_fit_the_api_name_rules`</sub>
+- A tool with an empty description keeps an explanatory placeholder rather than nothing. <sub>`a_tool_without_a_description_still_carries_some_text`</sub>
 
 
 ## madake CLI
@@ -855,6 +923,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - an unknown conversation id refetches the list instead of creating a ghost <sub>`chat store: applyAgentEvent`</sub>
 - while our own turn is running, unknown-conversation events do not trigger a refetch <sub>`chat store: applyAgentEvent`</sub>
 - turn_completed/error for a conversation with no running turn is dropped <sub>`chat store: applyAgentEvent`</sub>
+- a failed first send shows the reason in the chat right away <sub>`chat store: アクション`</sub>
 - send creates a conversation and adopts the server-assigned id <sub>`chat store: アクション`</sub>
 - events arriving before send resolves still land in the same conversation <sub>`chat store: アクション`</sub>
 - empty prompts and sends during streaming are ignored <sub>`chat store: アクション`</sub>
@@ -930,6 +999,20 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - search stores the results from the parts API <sub>`parts store`</sub>
 - a failed search clears the results and resets loading <sub>`parts store`</sub>
+
+### provider
+
+- defaults to the Claude Code CLI with Claude Sonnet 5 ready for the API route <sub>`AI provider settings`</sub>
+- choosing a provider saves it <sub>`AI provider settings`</sub>
+- loading the provider status tells whether a key is saved <sub>`AI provider settings`</sub>
+- the api key itself is never kept in the frontend state <sub>`AI provider settings`</sub>
+- a blank key box is refused without calling the backend <sub>`AI provider settings`</sub>
+- removing the key clears the saved badge <sub>`AI provider settings`</sub>
+- a successful connection test shows the model it reached <sub>`AI provider settings`</sub>
+- a failed connection test shows the reason <sub>`AI provider settings`</sub>
+- the previous test result is cleared while a new test runs <sub>`AI provider settings`</sub>
+- the connection badge follows the CLI for the CLI route and the saved key for the API route <sub>`AI provider settings`</sub>
+- a saved key is shown as dots, never as its value <sub>`AI provider settings`</sub>
 
 ### Reports (BOM / wire list)
 

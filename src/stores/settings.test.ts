@@ -14,6 +14,8 @@ describe("settings store", () => {
       auto_read_drawing: true,
       language: "en",
       knowledge_path: null,
+      provider: "claude_cli",
+      api_model: "claude-sonnet-5",
     });
     expect(useSettingsStore().settings).toEqual(defaultSettings());
   });
@@ -26,6 +28,8 @@ describe("settings store", () => {
       auto_read_drawing: false,
       language: "ja",
       knowledge_path: "/home/me/house-rules.md",
+      provider: "anthropic_api",
+      api_model: "claude-opus-4-6",
     };
     vi.spyOn(settingsApi, "get").mockResolvedValue(stored);
 
@@ -42,11 +46,9 @@ describe("settings store", () => {
     const set = vi
       .spyOn(settingsApi, "set")
       .mockResolvedValue({
+        ...defaultSettings(),
         claude_path: "/usr/local/bin/claude",
-        auto_apply: true,
         auto_read_drawing: false,
-        language: "en",
-        knowledge_path: null,
       });
 
     const store = useSettingsStore();
@@ -54,11 +56,9 @@ describe("settings store", () => {
 
     expect(ok).toBe(true);
     expect(set).toHaveBeenCalledWith({
+      ...defaultSettings(),
       claude_path: "  /usr/local/bin/claude  ",
-      auto_apply: true,
       auto_read_drawing: false,
-      language: "en",
-      knowledge_path: null,
     });
     // サーバー側で空白を落とした値がそのまま表示に使われる
     expect(store.settings.claude_path).toBe("/usr/local/bin/claude");
