@@ -64,13 +64,15 @@ async fn get_netlist(
     )))
 }
 
+/// 外部クライアント(madake CLI・FreeCADアドオン・ブラウザ検証)からの編集。
+/// 由来は`mcp`として履歴に残る(UI操作=`user`・エージェント=`agent`と区別する)。
 async fn post_commands(
     State(doc): State<SharedDoc>,
     Json(commands): Json<Vec<Command>>,
 ) -> Result<Json<Vec<Patch>>, ApiError> {
     let mut patches = Vec::new();
     for cmd in commands {
-        patches.push(doc.execute(cmd).map_err(bad_request)?);
+        patches.push(doc.execute_external(cmd).map_err(bad_request)?);
     }
     Ok(Json(patches))
 }

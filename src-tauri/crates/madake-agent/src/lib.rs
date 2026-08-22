@@ -17,7 +17,7 @@ pub use conversation::{
     Conversation, DocState, Role, ToolCall,
 };
 pub use events::{parse_stream_events, parse_stream_line, AgentEvent, StreamParser, Usage};
-pub use manager::{AgentManager, ConversationEvent, DocBridge};
+pub use manager::{AgentManager, ConversationEvent, DocBridge, RevertError, RevertReport};
 pub use settings::{load_settings, save_settings, settings_path, AppSettings};
 
 /// madake-agentのエラー。
@@ -44,10 +44,10 @@ pub enum AgentError {
     #[error("このターンには巻き戻せる編集がありません(既に巻き戻し済みです): {0}")]
     TurnNotApplied(uuid::Uuid),
     #[error(
-        "最新の適用済みターンではないため巻き戻せません: {0} \
-         (後続の編集を先に取り消してください)"
+        "このターンの編集は現在の図面と衝突するため巻き戻せません: {turn_id} \
+         (図面は変更していません: {detail})"
     )]
-    NotLatestTurn(uuid::Uuid),
+    TurnConflict { turn_id: uuid::Uuid, detail: String },
     #[error("ドキュメント操作に失敗しました: {0}")]
     Doc(String),
     #[error("設定ファイルの場所を特定できません(ホームディレクトリが不明です)")]

@@ -192,71 +192,152 @@ async fn cancel_and_undo_turn_respond() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "未知のターンIDは拒否");
 }
 
-/// Undoing a turn rolls back exactly the document edits that the turn produced, via the same undo history as manual edits.
-/// ターンの巻き戻しは、そのターンが行った編集だけを手動編集と同じundo履歴経由で戻す。
-#[tokio::test]
-async fn undo_turn_rolls_back_agent_edits_through_the_command_engine() {
-    let (doc, agent, _router) = setup("fake_claude.sh");
+/// ドキュメント状態(revision + undo深さ)のスナップショット。
+fn doc_state(doc: &SharedDoc) -> madake_agent::DocState {
+    let engine = doc.engine.lock().unwrap();
+    madake_agent::DocState::new(engine.revision(), engine.undo_depth() as u64)
+}
+
+/// テキスト要素を1つ追加するコマンド。
+fn add_text(doc: &SharedDoc, id: Uuid, label: &str) -> madake_core::Command {
     let sheet_id = doc.engine.lock().unwrap().project().sheets[0].id;
+    madake_core::Command::AddEntity {
+        sheet_id,
+        entity: madake_core::Entity::Text(madake_core::TextEntity {
+            id,
+            at: madake_core::Point::new(10.0, 10.0),
+            text: label.into(),
+            height: 3.5,
+            rotation: 0,
+        }),
+    }
+}
+
+/// 会話を1本用意し、ターンを開始する(戻り値は会話ID)。
+fn begin_turn(agent: &AgentManager, doc: &SharedDoc, prompt: &str) -> Uuid {
+    let mut conversation = madake_agent::Conversation::new();
+    conversation.begin_turn(prompt, doc_state(doc));
+    let id = conversation.id;
+    agent.set_conversations(vec![conversation]);
+    id
+}
+
+/// 進行中のターンを終了状態にする(マネージャが記録する処理と同じ)。
+fn finish_turn(agent: &AgentManager, doc: &SharedDoc) {
+    let mut conversations = agent.conversations();
+    conversations[0]
+        .current_turn_mut()
+        .unwrap()
+        .finish_turn(doc_state(doc));
+    agent.set_conversations(conversations);
+}
+
+/// Undoing a turn rolls back exactly the agent's edits through the command engine, keeping a manual edit the user made during the turn.
+/// ターンの巻き戻しはCommandエンジン経由でエージェントの編集だけを戻し、ターン中にユーザーが手で入れた編集は残す。
+#[tokio::test]
+async fn undo_turn_rolls_back_agent_edits_and_keeps_the_manual_edit() {
+    let (doc, agent, _router) = setup("fake_claude.sh");
     let mut patches = doc.patches.subscribe();
 
-    // ターン中にエージェントがMCP経由で2コマンド実行した状況を再現する
-    let start = {
-        let engine = doc.engine.lock().unwrap();
-        madake_agent::DocState::new(engine.revision(), engine.undo_depth() as u64)
-    };
-    let conversations = {
-        let mut c = madake_agent::Conversation::new();
-        c.begin_turn("2つ置いて", start);
-        vec![c]
-    };
-    agent.set_conversations(conversations);
-    let id = agent.conversations()[0].id;
-    for i in 0..2 {
-        doc.execute(madake_core::Command::AddEntity {
-            sheet_id,
-            entity: madake_core::Entity::Text(madake_core::TextEntity {
-                id: Uuid::new_v4(),
-                at: madake_core::Point::new(10.0 * f64::from(i), 10.0),
-                text: format!("T{i}"),
-                height: 3.5,
-                rotation: 0,
-            }),
-        })
-        .unwrap();
-    }
-    let end = {
-        let engine = doc.engine.lock().unwrap();
-        madake_agent::DocState::new(engine.revision(), engine.undo_depth() as u64)
-    };
-    {
-        let mut restored = agent.conversations();
-        restored[0].current_turn_mut().unwrap().finish_turn(end);
-        agent.set_conversations(restored);
-    }
+    // ターン中にエージェントがMCP経由で2コマンド実行し、間にユーザーが手で1つ描いた状況
+    let id = begin_turn(&agent, &doc, "2つ置いて");
+    doc.begin_agent_turn();
+    doc.execute(add_text(&doc, Uuid::new_v4(), "AI-1")).unwrap();
+    let manual = Uuid::new_v4();
+    doc.execute_user(add_text(&doc, manual, "手編集")).unwrap();
+    doc.execute(add_text(&doc, Uuid::new_v4(), "AI-2")).unwrap();
+    doc.end_agent_turn();
+    finish_turn(&agent, &doc);
+    let end = doc_state(&doc);
     assert_eq!(
         doc.engine.lock().unwrap().project().sheets[0]
             .entities
             .len(),
-        2
+        3
     );
 
     let turn_id = agent.conversations()[0].last_turn().unwrap().turn_id;
     let revision = agent.undo_turn(id, turn_id).expect("巻き戻し成功");
-    assert!(
-        doc.engine.lock().unwrap().project().sheets[0]
-            .entities
-            .is_empty(),
-        "ターンの編集が全て戻る"
-    );
-    assert_eq!(revision, end.revision + 2, "undoもrevisionを進める");
+    {
+        let engine = doc.engine.lock().unwrap();
+        let entities = &engine.project().sheets[0].entities;
+        assert_eq!(entities.len(), 1, "エージェントの編集だけが戻る");
+        assert!(entities.contains_key(&manual), "ユーザーの手編集は残る");
+    }
+    assert_eq!(revision, end.revision + 1, "巻き戻しもrevisionを進める");
 
-    // patchが配信されている(2件のadd + 2件のundo)
+    // patchが配信されている(3件の追加 + 巻き戻し1件)
     let mut count = 0;
     while patches.try_recv().is_ok() {
         count += 1;
     }
     assert_eq!(count, 4);
+
+    // 巻き戻しは通常の編集として履歴に乗るので、undoで取り消せる
+    doc.undo().unwrap().unwrap();
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len(),
+        3,
+        "巻き戻しの取り消しでエージェントの編集が戻る"
+    );
+}
+
+/// If a manual edit removed what the turn touched, the rollback is refused with a conflict error and the drawing is left untouched.
+/// ターンが触った要素を手編集で消していた場合、巻き戻しは衝突エラーで拒否され、図面は一切変更されない。
+#[tokio::test]
+async fn undo_turn_refuses_a_conflicting_rollback() {
+    let (doc, agent, _router) = setup("fake_claude.sh");
+
+    // エージェントが置いた要素を編集し、そのあとユーザーが手で削除した
+    let target = Uuid::new_v4();
+    doc.execute_user(add_text(&doc, target, "元の文字")).unwrap();
+    let id = begin_turn(&agent, &doc, "文字を直して");
+    doc.begin_agent_turn();
+    let sheet_id = doc.engine.lock().unwrap().project().sheets[0].id;
+    doc.execute(madake_core::Command::UpdateEntity {
+        sheet_id,
+        entity: madake_core::Entity::Text(madake_core::TextEntity {
+            id: target,
+            at: madake_core::Point::new(10.0, 10.0),
+            text: "AIが直した文字".into(),
+            height: 3.5,
+            rotation: 0,
+        }),
+    })
+    .unwrap();
+    doc.execute(add_text(&doc, Uuid::new_v4(), "AI-2")).unwrap();
+    doc.end_agent_turn();
+    finish_turn(&agent, &doc);
+    doc.execute_user(madake_core::Command::DeleteEntities {
+        sheet_id,
+        ids: vec![target],
+    })
+    .unwrap();
+    let before = doc_state(&doc);
+
+    let turn_id = agent.conversations()[0].last_turn().unwrap().turn_id;
+    let err = agent.undo_turn(id, turn_id).unwrap_err();
+    assert!(
+        matches!(err, madake_agent::AgentError::TurnConflict { .. }),
+        "{err}"
+    );
+    assert_eq!(doc_state(&doc), before, "図面も履歴も変わらない");
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len(),
+        1,
+        "戻せた分も戻さない(部分適用しない)"
+    );
+    assert!(
+        agent.conversations()[0]
+            .turn(turn_id)
+            .unwrap()
+            .has_edits(),
+        "適用済みのまま残るので、衝突を解消してから再試行できる"
+    );
 }
 
 /// GET /agent/events streams conversation events over SSE, in the same shape as the Tauri agent:event.

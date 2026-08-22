@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**584仕様項目**。
+全5領域・**591仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -306,7 +306,8 @@
 - POST /agent/send はアシスタントのターンを実行し、会話一覧に新しいメッセージが反映される。 <sub>`send_runs_a_turn_and_conversations_reflects_it`</sub>
 - 存在しない会話IDへの送信は400を返し、不正なデータを作らない。 <sub>`send_to_unknown_conversation_is_400`</sub>
 - キャンセルとターン巻き戻しのエンドポイントはターン安定IDを受け取り、戻せる編集が無いターンは拒否する。 <sub>`cancel_and_undo_turn_respond`</sub>
-- ターンの巻き戻しは、そのターンが行った編集だけを手動編集と同じundo履歴経由で戻す。 <sub>`undo_turn_rolls_back_agent_edits_through_the_command_engine`</sub>
+- ターンの巻き戻しはCommandエンジン経由でエージェントの編集だけを戻し、ターン中にユーザーが手で入れた編集は残す。 <sub>`undo_turn_rolls_back_agent_edits_and_keeps_the_manual_edit`</sub>
+- ターンが触った要素を手編集で消していた場合、巻き戻しは衝突エラーで拒否され、図面は一切変更されない。 <sub>`undo_turn_refuses_a_conflicting_rollback`</sub>
 - GET /agent/events は会話イベントをTauriのagent:eventと同じ形でSSE配信する。 <sub>`events_endpoint_streams_agent_events`</sub>
 - プロジェクトの保存・読込はチャット履歴(.chat.json)を一緒に運ぶ。 <sub>`save_and_load_carry_the_chat_history`</sub>
 - プロジェクト読込は実行中のターンを先に中断し、エージェントが古い図面を編集し続けないようにする。 <sub>`load_cancels_a_running_turn`</sub>
@@ -325,6 +326,12 @@
 - POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。 <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - 端子台エンドポイントは図面の端子台を一覧し、1台のチャートとチェック結果を返す。 <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report は帳票1種をCSVまたは図枠付きPDFで書き出し、図面である端子接続図のCSVは拒否する。 <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
+
+### 編集origin (ユーザー/エージェント/MCP)
+
+- 編集は入口ごとに由来が残る: UIはユーザー編集、エージェントのターン中はエージェント編集、外部クライアントはmcp編集。 <sub>`every_edit_path_records_who_made_the_change`</sub>
+- ターン実行中の印は入れ子でも数えられ、必ず解除されるため、ターン後の編集はまたユーザー編集になる。 <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
+- エージェントマネージャが使う窓口はエージェント編集だけを巻き戻し、戻した件数を報告する。 <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
 
 
 ## AIアシスタント (madake-agent)
@@ -352,7 +359,7 @@
 - 各ターンは跨いだエンジンrevision範囲を記録する(表示・デバッグ用)。 <sub>`turn_records_engine_revision_range`</sub>
 - ターンのundo回数はrevision差分ではなくundoスタック深さの増分で数える(undo/redoでもrevisionは進むため)。 <sub>`undo_count_uses_undo_stack_depth_not_revision_delta`</sub>
 - ターン中に編集がすべてundoされた場合、そのターンは編集なしとして扱われる。 <sub>`turn_whose_edits_were_all_undone_has_no_edits`</sub>
-- 巻き戻しが途中で止まった場合、完了したundo回数だけが記録される。 <sub>`record_undone_applies_only_the_completed_count`</sub>
+- 巻き戻しを記録するとターンの適用範囲が畳まれ、以降は「元に戻す」の対象にならない。 <sub>`record_reverted_clears_the_applied_range`</sub>
 - テキストのみのターン(図面編集なし)のundo回数はゼロ。 <sub>`turn_without_edits_has_zero_undo_count`</sub>
 - ターンはストリームされたテキスト・ツール実行・CLIセッションIDを収集する。 <sub>`turn_collects_text_tool_calls_and_session`</sub>
 - 2回目のターンは会話に追記され、同じCLIセッションを再開する。 <sub>`second_turn_appends_messages_and_reuses_session`</sub>
@@ -373,13 +380,16 @@
 
 - 会話IDなしの送信は会話を新規作成し、そのイベントを配信する。 <sub>`send_creates_conversation_and_broadcasts_events`</sub>
 - 図面を編集したターンは適用revisionを記録し、undo深さ付きのターン適用イベントを発行する。 <sub>`turn_records_applied_revisions_and_emits_turn_applied`</sub>
-- ターンのundo回数はundoスタックの増分基準で、ターン中のユーザーundoが数を狂わせない。 <sub>`undo_turn_counts_stack_growth_not_revision_delta`</sub>
-- 巻き戻せるのは最新の適用済みターンのみで、古い対象は拒否される(安全ガード)。 <sub>`undo_turn_rejects_targets_that_are_not_the_latest_applied_turn`</sub>
+- ターン実行中に入った編集はエージェント編集として記録され、ターン外の編集はユーザー編集のままになる。 <sub>`edits_during_a_turn_are_recorded_as_agent_edits`</sub>
+- ターンの巻き戻しはエージェントの編集だけを戻し、ターン中に入れたものも含めてユーザーの手編集は残す。 <sub>`undo_turn_reverts_only_the_agent_edits_of_the_turn`</sub>
+- 古いターンも後から巻き戻せて、そのあとに入った編集は保持される。 <sub>`undo_turn_can_revert_an_older_turn_and_keeps_later_edits`</sub>
+- 手編集と衝突する巻き戻しは拒否され、ターンは適用済みのまま残るので、後から再試行できる。 <sub>`undo_turn_reports_a_conflict_and_keeps_the_turn_rollbackable`</sub>
 - ターンIDは後続ターンが積まれても同じターンを指し続ける(添字と違いズレない)。 <sub>`a_turn_id_keeps_addressing_the_same_turn_after_more_turns`</sub>
 - 既に巻き戻したターンは二重に巻き戻せない(明示エラー)。 <sub>`undo_turn_rejects_an_already_undone_turn`</sub>
 - 実行中のターンは巻き戻せない。 <sub>`undo_turn_rejects_a_running_turn`</sub>
-- undoが途中で失敗した場合も進んだ分だけ記録し、状態を正直に保つ。 <sub>`undo_turn_records_partial_progress_when_undo_fails_midway`</sub>
 - ドキュメントエラーと不明なターン指定は区別されたエラーとして報告される。 <sub>`undo_turn_reports_doc_errors_and_unknown_targets`</sub>
+- 配信される全イベントに、それを生んだターンの通し番号が付き、送信のたびに増える。 <sub>`turn_events_carry_a_monotonic_turn_seq`</sub>
+- キャンセルは中断したターンの通し番号を伝え、次のターンはより大きい番号になるため、遅れて届くイベントを見分けられる。 <sub>`cancel_reports_the_cancelled_turn_seq`</sub>
 - ターン実行中の会話への追加送信は拒否される。 <sub>`second_send_while_running_is_rejected`</sub>
 - キャンセルはCLIプロセスを停止し、メッセージをキャンセル済みにする。 <sub>`cancel_stops_the_turn_and_marks_the_message`</sub>
 - 不明な会話IDへの送信は明確に失敗する。 <sub>`send_to_unknown_conversation_fails`</sub>

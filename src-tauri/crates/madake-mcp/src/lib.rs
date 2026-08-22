@@ -9,9 +9,10 @@ pub mod agent;
 pub mod link_api;
 
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use madake_core::{builtin_symbols, resolve_symbol, sheet_symbol_defs, Command, Engine, Entity, Patch, Point, SymbolInstance, Wire};
+use madake_core::{builtin_symbols, resolve_symbol, sheet_symbol_defs, Command, EditOrigin, Engine, Entity, Patch, Point, SymbolInstance, Wire};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{ErrorData, ServerCapabilities, ServerInfo};
 use rmcp::transport::streamable_http_server::{
@@ -35,6 +36,10 @@ pub struct SharedDoc {
     pub engine: Arc<Mutex<Engine>>,
     /// 全patchの配信チャネル。Tauri側が購読しwebviewへ転送する。
     pub patches: broadcast::Sender<Patch>,
+    /// 実行中のエージェントターン数。`>0`の間にMCP経由で届いた編集は
+    /// [`EditOrigin::Agent`]として記録する(入口はUI・外部クライアントと共通なので
+    /// 時間で見分ける)。
+    agent_turns: Arc<AtomicUsize>,
 }
 
 impl SharedDoc {
@@ -43,14 +48,74 @@ impl SharedDoc {
         Self {
             engine: Arc::new(Mutex::new(engine)),
             patches,
+            agent_turns: Arc::new(AtomicUsize::new(0)),
         }
     }
 
-    /// コマンドを実行しpatchをブロードキャストする。UI・MCP共通の入口。
+    /// MCPツール経由の編集の入口。
+    ///
+    /// 由来はエージェントのターン実行中なら[`EditOrigin::Agent`]、そうでなければ
+    /// 外部MCPクライアントとみなして[`EditOrigin::Mcp`]。
     pub fn execute(&self, cmd: Command) -> madake_core::Result<Patch> {
-        let patch = self.engine.lock().unwrap().execute(cmd)?;
+        self.execute_as(cmd, self.mcp_origin())
+    }
+
+    /// UI(Tauri IPC)からの編集の入口。由来は[`EditOrigin::User`]。
+    pub fn execute_user(&self, cmd: Command) -> madake_core::Result<Patch> {
+        self.execute_as(cmd, EditOrigin::User)
+    }
+
+    /// 外部クライアント(Link API・madake CLI・FreeCADアドオン)からの編集の入口。
+    /// 由来は[`EditOrigin::Mcp`]。
+    pub fn execute_external(&self, cmd: Command) -> madake_core::Result<Patch> {
+        self.execute_as(cmd, EditOrigin::Mcp)
+    }
+
+    /// 由来を明示してコマンドを実行し、patchをブロードキャストする。
+    pub fn execute_as(&self, cmd: Command, origin: EditOrigin) -> madake_core::Result<Patch> {
+        let patch = self.engine.lock().unwrap().execute_as(cmd, origin)?;
         let _ = self.patches.send(patch.clone());
         Ok(patch)
+    }
+
+    /// いまMCP経由で届いた編集に付ける由来。
+    pub fn mcp_origin(&self) -> EditOrigin {
+        if self.agent_turns.load(Ordering::SeqCst) > 0 {
+            EditOrigin::Agent
+        } else {
+            EditOrigin::Mcp
+        }
+    }
+
+    /// エージェントのターン実行が始まった([`madake_agent::DocBridge`]から呼ばれる)。
+    pub fn begin_agent_turn(&self) {
+        self.agent_turns.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// エージェントのターン実行が終わった(中断時も必ず呼ばれる)。
+    pub fn end_agent_turn(&self) {
+        let _ = self
+            .agent_turns
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
+    }
+
+    /// undo深さの区間`[start, end)`にあるエージェント編集だけを巻き戻す。
+    ///
+    /// 逆Commandの適用として実行されるためpatchも配信され、UIへそのまま反映される。
+    pub fn revert_agent_edits(
+        &self,
+        start_depth: usize,
+        end_depth: usize,
+    ) -> madake_core::Result<Option<madake_core::Reverted>> {
+        let reverted =
+            self.engine
+                .lock()
+                .unwrap()
+                .revert_range(start_depth, end_depth, EditOrigin::Agent)?;
+        if let Some(r) = &reverted {
+            let _ = self.patches.send(r.patch.clone());
+        }
+        Ok(reverted)
     }
 
     pub fn undo(&self) -> madake_core::Result<Option<Patch>> {

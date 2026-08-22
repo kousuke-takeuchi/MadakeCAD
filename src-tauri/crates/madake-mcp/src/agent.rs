@@ -12,7 +12,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use madake_agent::{AgentManager, AppSettings, Conversation, DocBridge, DocState};
+use madake_agent::{
+    AgentManager, AppSettings, Conversation, DocBridge, DocState, RevertError, RevertReport,
+};
 use madake_core::{sheet_symbol_defs, Entity, Patch};
 
 use crate::SharedDoc;
@@ -34,11 +36,35 @@ impl DocBridge for SharedDocBridge {
         DocState::new(engine.revision(), engine.undo_depth() as u64)
     }
 
-    fn undo(&self) -> Result<bool, String> {
-        self.0
-            .undo()
-            .map(|patch| patch.is_some())
-            .map_err(|e| e.to_string())
+    fn begin_agent_turn(&self) {
+        self.0.begin_agent_turn();
+    }
+
+    fn end_agent_turn(&self) {
+        self.0.end_agent_turn();
+    }
+
+    fn revert_agent_edits(
+        &self,
+        start_depth: u64,
+        end_depth: u64,
+    ) -> Result<RevertReport, RevertError> {
+        match self
+            .0
+            .revert_agent_edits(start_depth as usize, end_depth as usize)
+        {
+            Ok(reverted) => Ok(RevertReport {
+                reverted: reverted.as_ref().map(|r| r.commands as u64).unwrap_or(0),
+                revision: reverted
+                    .map(|r| r.patch.revision)
+                    .unwrap_or_else(|| self.revision()),
+            }),
+            // 逆適用が現在の図面と衝突した(対象が手編集で消えている等)。図面は無変更
+            Err(madake_core::CoreError::RevertConflict(detail)) => {
+                Err(RevertError::Conflict(detail))
+            }
+            Err(e) => Err(RevertError::Failed(e.to_string())),
+        }
     }
 }
 

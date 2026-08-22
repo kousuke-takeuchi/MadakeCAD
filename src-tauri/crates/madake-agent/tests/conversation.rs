@@ -141,22 +141,22 @@ fn turn_whose_edits_were_all_undone_has_no_edits() {
     assert!(!assistant.has_edits());
 }
 
-/// When an undo rollback stops midway, only the completed undo count is recorded.
-/// 巻き戻しが途中で止まった場合、完了したundo回数だけが記録される。
+/// Recording a rollback clears the turn's applied range, so it is no longer offered for undo.
+/// 巻き戻しを記録するとターンの適用範囲が畳まれ、以降は「元に戻す」の対象にならない。
 #[test]
-fn record_undone_applies_only_the_completed_count() {
+fn record_reverted_clears_the_applied_range() {
     let mut conv = Conversation::new();
     run_turn(&mut conv, 7, 10);
 
     let assistant = conv.current_turn_mut().unwrap();
-    assistant.record_undone(1);
-    assert_eq!(assistant.applied_command_count(), 2, "残り2回");
-    assistant.record_undone(2);
+    assert_eq!(assistant.applied_command_count(), 3);
+    assistant.record_reverted();
     assert_eq!(assistant.applied_command_count(), 0);
+    assert!(!assistant.has_edits());
     assert_eq!(
         assistant.applied_revisions,
         AppliedRevisions { start: 7, end: 7 },
-        "全部戻したら適用済みではなくなる"
+        "巻き戻したターンは適用済みではなくなる"
     );
 }
 

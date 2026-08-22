@@ -2,12 +2,13 @@
 //!
 //! ターン中にエージェントがMCP経由で実行した編集はCommandエンジンのundo履歴に積まれる。
 //! ターン開始/終了時のundoスタック深さを [`ChatMessage::applied_undo_depth`] に記録して
-//! おけば、「元に戻す」は増分の回数だけ`undo`を呼べばよい。
+//! おけば、その区間が「このターンの編集が入った範囲」になる。「元に戻す」はこの区間の
+//! **エージェント由来の編集だけ**を逆Commandとして戻す([`crate::DocBridge::revert_agent_edits`])。
 //!
 //! **revisionではなく深さを使う理由**: エンジンの`revision`はundo/redoでも進むため、
 //! ターン中にエージェントがMCPのundo/redoツールを使ったり、ユーザーがUIで編集+undoを
 //! 挟んだりすると、revision差分は実際に積まれたコマンド数より大きくなる。
-//! [`ChatMessage::applied_revisions`] は表示用に残してあるが、undo回数の正は深さ増分。
+//! [`ChatMessage::applied_revisions`] は表示用に残してあるが、対象区間の正は深さ。
 //!
 //! 履歴はプロジェクトファイルの隣に`<stem>.chat.json`(整形JSON)として保存する。
 
@@ -58,8 +59,9 @@ impl AppliedRevisions {
 
 /// ターンの前後で挟んだundoスタックの深さ。
 ///
-/// `end - start`がこのターンで新たに積まれた編集コマンド数
-/// (= 元に戻すのに必要なundo回数)。ターン中にundoが混ざっても正しい値になる。
+/// `[start, end)`がこのターンの編集が積まれたundo履歴の区間で、`end - start`は
+/// そこに積まれた編集コマンド数(エージェント編集+ターン中のユーザー手編集の合計)。
+/// 巻き戻しはこの区間のうちエージェント由来の編集だけを戻す。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct AppliedUndoDepth {
     /// ターン開始時のundoスタック深さ
@@ -149,9 +151,9 @@ impl ChatMessage {
         }
     }
 
-    /// このターンで確定した編集コマンド数(= 元に戻すのに必要なundo回数)。
+    /// このターンで確定した編集コマンド数(undo履歴の深さの増分)。
     ///
-    /// undo履歴の深さの増分。ターン中にundo/redoが混ざっても過不足なく数えられる。
+    /// 巻き戻し済みなら`0`。ターン中にundo/redoが混ざっても過不足なく数えられる。
     pub fn applied_command_count(&self) -> u64 {
         self.applied_undo_depth.count()
     }
@@ -166,17 +168,14 @@ impl ChatMessage {
         self.applied_undo_depth.end = state.undo_depth;
     }
 
-    /// `count`回分の巻き戻しを記録に反映する(全部戻せば「適用済み」でなくなる)。
+    /// このターンの編集を巻き戻したことを記録する(以降は「適用済み」でなくなる)。
     ///
-    /// undoが途中で失敗しても、実行できた回数だけ反映してから返すことで
-    /// リトライ時に過剰undoにならないようにする。
-    pub fn record_undone(&mut self, count: u64) {
-        self.applied_undo_depth.end = self.applied_undo_depth.end.saturating_sub(count);
-        if self.applied_command_count() == 0 {
-            self.applied_revisions = AppliedRevisions::at(self.applied_revisions.start);
-        } else {
-            self.applied_revisions.end = self.applied_revisions.end.saturating_sub(count);
-        }
+    /// 巻き戻しは全件成功か全件失敗のどちらかなので([`crate::DocBridge::revert_agent_edits`]は
+    /// 部分適用しない)、成功したときだけ呼んで範囲を畳む。失敗時は何も記録しないため、
+    /// 衝突を解消してからそのまま再試行できる。
+    pub fn record_reverted(&mut self) {
+        self.applied_undo_depth.end = self.applied_undo_depth.start;
+        self.applied_revisions = AppliedRevisions::at(self.applied_revisions.start);
     }
 }
 
