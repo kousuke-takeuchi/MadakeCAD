@@ -75,8 +75,24 @@
 
 ### Task 5: 受け入れと仕上げ
 
-- [ ] Step 1: 受け入れ: モータ回路をマクロ保存→別シートへ2回挿入で参照記号重複なし・ERC通過/K1コイル+接点2個で接点マップと逆参照が図面に出て、3個目でERC Error(contact_config=2NO時)/⌘FでK1検索→結果からreveal/デバイスタブのツリーからreveal/Surferで巡回
-- [ ] Step 2: docs(03/09等該当ページEN+JA)・feature-inventory・roadmap更新。CLI/MCP露出確認。全テストgreen+後始末
+- [x] Step 1: 受け入れ: モータ回路をマクロ保存→別シートへ2回挿入で参照記号重複なし・ERC通過/K1コイル+接点2個で接点マップと逆参照が図面に出て、3個目でERC Error(contact_config=2NO時)/⌘FでK1検索→結果からreveal/デバイスタブのツリーからreveal/Surferで巡回
+- [x] Step 2: docs(03/09等該当ページEN+JA)・feature-inventory・roadmap更新。CLI/MCP露出確認。全テストgreen+後始末
+
+> **完了 (2026-08-22) — M4フェーズ2完了。** 実機(`npm run tauri dev` + http://localhost:1420)での受け入れ:
+> - **マクロ**: Sheet1にテンプレート「モータ起動回路」(28エンティティ)→矩形選択→リボン「Save macro」→基準点「選択範囲の左下ピン (67.5, 120.0 mm)」・バリアントA・28エンティティのプレビューを確認して保存
+>   (`~/MadakeCAD/macros/motor_start_accept.json`) → Sheet2を追加し、部品挿入ダイアログの「マクロ」タブから2回挿入
+>   (1回目=無回転、`Tab`はバリアント1つのため不変を確認、2回目=`R`で90°回転)。参照記号は Sheet1=`*1` / コピー1=`*2` / コピー2=`*3` と一切重複せず、
+>   `verify`はエラー0・警告0。挿入直後から接点マップとXRefラベルが両コピーに描画される
+> - **コイル/接点**: 部品DBへ`contact_config="2NO+2NC"`の`MY2N-D2-DC24`を登録→配置(K1)し、a接点2個をK1に割り当て → コイル下に4行の接点マップ
+>   (`13-14 /2.E2` / `23-24 /2.E2` / `31-32 —` / `41-42 —`)、各接点の脇にコイル所在`(/2.E1)`が出る → 3個目のa接点でERC Error
+>   `erc.contact_overflow K1: 接点構成「2NO+2NC」の実装数を超えて使っています: a接点 3個 (実装 2個)`(検証パネルはエラー1/警告4=浮いた接点の未接続ピン)
+> - **ナビゲーション**: ⌘F→「KM1」3件→結果行クリックでSheet2→Sheet1へ切替+選択+ズーム(ログ`Search: showing KM1 (/1.C3) — 3 of 3`)、Enterで1→2→3巡回・Escで閉じる /
+>   デバイスタブ(19デバイス)の`KM2 コイル A1-A2 /2.C3`行クリックでSheet2へreveal / KM2コイルをAlt+クリック→Surfer「Where KM2 appears」3所在→↓↓+Enterで`/2.B3`へジャンプ
+> - **後始末**: ⌘Z連打で空のSheet1のみ(`can_undo=false`)へ戻し、保存したマクロファイルと受け入れ用の部品DB行を削除
+> - **仕上げ**: docs 03(EN+JA。マクロ・コイル接点XRef・検索/ナビゲータ/Surfer、ついでに実装済みだった線番・ハーネスを「利用できる機能」へ移動)・
+>   docs 07(EN+JA。`contact_config`とスキーマv3)・README(EN+JA)・feature-inventory・roadmap M4・本仕様(§2/§4/§10のステータス)を更新。
+>   露出の確認: MCP=`list_macros`/`save_macro`/`apply_macro`まで(検索・デバイスツリーはIPC+Link APIのみ。AIは`get_project`で足りるため意図的にMCP未露出)、CLIはマクロ・検索のサブコマンド未提供
+> - **全テスト**: cargo 561 / vitest 390 / vue-tsc clean / `gen_spec.py --check` up-to-date
 
 ## 受け入れ基準
 
