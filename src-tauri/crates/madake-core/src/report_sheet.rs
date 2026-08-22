@@ -95,6 +95,8 @@ pub enum ReportKind {
     Bom,
     /// クロスリファレンス表 (ネット所在一覧)。
     Xref,
+    /// PLC I/Oレポート (割付表+図面から読んだ接続先・線番)。
+    PlcIo,
 }
 
 impl ReportKind {
@@ -106,6 +108,7 @@ impl ReportKind {
             ReportKind::TerminalDiagram => "端子接続図",
             ReportKind::Bom => "部品表 (BOM)",
             ReportKind::Xref => "クロスリファレンス表",
+            ReportKind::PlcIo => "PLC I/Oレポート",
         }
     }
 
@@ -119,6 +122,7 @@ impl ReportKind {
             }
             ReportKind::Bom => bom_sheet_svg(project),
             ReportKind::Xref => xref_table_sheet_svg(project),
+            ReportKind::PlcIo => plc_io_sheet_svg(project),
         }
     }
 }
@@ -199,6 +203,7 @@ pub fn report_csv(
         (ReportKind::WireList, _) => Ok(crate::reports::wire_list_csv(project)),
         (ReportKind::Bom, _) => Ok(crate::reports::bom_csv(project)),
         (ReportKind::Xref, _) => Ok(crate::xref::xref_table_csv(project)),
+        (ReportKind::PlcIo, _) => Ok(crate::plc::plc_io_csv(project)),
         (ReportKind::TerminalChart, None) => {
             Ok(crate::terminal_chart::terminal_charts_csv(project))
         }
@@ -536,6 +541,18 @@ pub fn xref_table_sheet_svg(project: &Project) -> Vec<String> {
         ReportKind::Xref.title(),
         &crate::xref::XREF_TABLE_COLUMNS,
         &crate::xref::xref_table_rows(project),
+        &meta,
+    )
+}
+
+/// PLC I/Oレポート (モジュール・アドレス・信号名・接続先・線番・コメント) の図面ページ。
+pub fn plc_io_sheet_svg(project: &Project) -> Vec<String> {
+    let meta =
+        ReportMeta::from_project(project).with_col_ratios(&[12.0, 12.0, 26.0, 20.0, 8.0, 22.0]);
+    report_sheet_svg(
+        ReportKind::PlcIo.title(),
+        &crate::plc::PLC_IO_PROJECT_COLUMNS,
+        &crate::plc::plc_io_rows(project),
         &meta,
     )
 }
@@ -1033,6 +1050,34 @@ mod tests {
             csv.lines().next().expect("見出し"),
             crate::xref::XREF_TABLE_COLUMNS.join(",")
         );
+    }
+
+    /// The PLC I/O report is available as CSV and as a framed drawing sheet, with one row per assigned I/O point.
+    /// PLC I/Oレポートは割付済みの点ごとに1行で、CSVでも図枠付きの図面シートでも出せる。
+    #[test]
+    fn the_plc_io_report_has_one_row_per_assigned_point() {
+        let mut project = Project::new("t");
+        project.plc_assignments = vec![crate::model::PlcAssignment {
+            id: Uuid::new_v4(),
+            module_ref: "PLC1".into(),
+            address: "X0".into(),
+            signal_name: "起動押釦".into(),
+            comment: "PB1".into(),
+        }];
+        let (bytes, rows) = report_bytes(&project, ReportKind::PlcIo, ReportFormat::Csv, None)
+            .expect("CSV");
+        let csv = String::from_utf8(bytes).expect("UTF-8");
+        assert_eq!(
+            csv.lines().next().expect("見出し"),
+            crate::plc::PLC_IO_PROJECT_COLUMNS.join(",")
+        );
+        assert_eq!(rows, 1);
+        assert!(csv.contains("PLC1,X0,起動押釦"), "{csv}");
+        let pages = report_pages(&project, ReportKind::PlcIo, None).expect("図面ページ");
+        assert_eq!(pages.len(), 1);
+        let t = texts(&pages[0]);
+        assert!(t.contains(&"起動押釦".to_string()), "{t:?}");
+        assert!(t.iter().any(|s| s.contains("PLC I/O")), "帳票名: {t:?}");
     }
 
     /// Report kinds are serialized with the same kebab-case names the CLI and Link API use.

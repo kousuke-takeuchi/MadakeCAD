@@ -8,6 +8,13 @@ use crate::geometry::Point;
 pub type EntityId = Uuid;
 pub type SheetId = Uuid;
 
+/// `.mdkproj` のファイル形式バージョン。
+///
+/// - v1: 初版
+/// - v2: PLC I/O割付表 ([`Project::plc_assignments`]) を追加。旧ファイルは空の割付表で開き、
+///   読み込み時に現行版へ更新される ([`crate::io::load_project`])
+pub const FORMAT_VERSION: u32 = 2;
+
 /// プロジェクト全体。保存形式(.mdkproj)のルート。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Project {
@@ -17,15 +24,20 @@ pub struct Project {
     /// 電線品番マスタ: 線色+線径から品番を引く。
     #[serde(default)]
     pub wire_parts: Vec<WirePart>,
+    /// PLC I/O割付表 (M4仕様 §3)。信号名・コメントはここが正で、接続先・線番は
+    /// 図面の結線から導出する ([`crate::plc::plc_points`])。
+    #[serde(default)]
+    pub plc_assignments: Vec<PlcAssignment>,
 }
 
 impl Project {
     pub fn new(name: &str) -> Self {
         Self {
-            format_version: 1,
+            format_version: FORMAT_VERSION,
             name: name.to_string(),
             sheets: vec![Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape)],
             wire_parts: Vec::new(),
+            plc_assignments: Vec::new(),
         }
     }
 
@@ -36,6 +48,29 @@ impl Project {
     pub fn sheet_mut(&mut self, id: SheetId) -> Option<&mut Sheet> {
         self.sheets.iter_mut().find(|s| s.id == id)
     }
+}
+
+/// PLC I/O割付表の1行 = I/O点1つ (M4仕様 §3)。
+///
+/// 「どのモジュールの・どのアドレスが・何の信号か」を人が決めて書くところ。
+/// 接続先と線番は図面の結線から読み取って表示するだけなのでここには保存しない
+/// (図面を直せば表も変わる)。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PlcAssignment {
+    /// 行のid (並べ替え・編集の同一性判定用)。
+    pub id: Uuid,
+    /// PLCモジュールの参照記号 (例 "PLC1")。図面のモジュールシンボルと同じ記号。
+    #[serde(default)]
+    pub module_ref: String,
+    /// I/Oアドレス (例 "X0" / "%I0.0" / "I:0/0")。
+    #[serde(default)]
+    pub address: String,
+    /// 信号名 (例 "起動押釦")。
+    #[serde(default)]
+    pub signal_name: String,
+    /// コメント。
+    #[serde(default)]
+    pub comment: String,
 }
 
 /// 電線品番マスタの1行(例: 品番 SAMPLE0001 = 水色 0.3sq)。
@@ -308,16 +343,17 @@ mod tests {
         assert_eq!(sheet.paper_mm(), (210.0, 297.0));
     }
 
-    /// A new project starts with one sheet named "Sheet1" and format_version 1.
-    /// 新規プロジェクトは「Sheet1」という1枚のシートとformat_version 1で始まる。
+    /// A new project starts with one sheet named "Sheet1", the current file format version and an empty PLC assignment table.
+    /// 新規プロジェクトは「Sheet1」という1枚のシート・現行のファイル形式バージョン・空のPLC割付表で始まる。
     #[test]
     fn new_project_has_one_default_sheet() {
         let p = Project::new("demo");
-        assert_eq!(p.format_version, 1);
+        assert_eq!(p.format_version, FORMAT_VERSION);
         assert_eq!(p.sheets.len(), 1);
         assert_eq!(p.sheets[0].name, "Sheet1");
         assert_eq!(p.sheets[0].zone_cols, 4);
         assert_eq!(p.sheets[0].zone_rows, 6);
+        assert!(p.plc_assignments.is_empty());
     }
 
     /// Entity::translate moves every coordinate of the entity: all wire points, or the anchor of symbols/labels/text.

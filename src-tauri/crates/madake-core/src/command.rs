@@ -16,7 +16,9 @@ pub enum Command {
     RemoveSheet {
         sheet_id: SheetId,
     },
-    /// 削除の逆操作・復元用。位置(index)を保ってシートを戻す。
+    /// 位置(index)を指定して**組み立て済みのシートを丸ごと挿入する**。
+    /// 削除の逆操作(復元)であると同時に、生成した図面ページ(PLC I/O図面など)を
+    /// 1コマンドで入れる口でもある(エンティティ込みで入るのでundo一発で消える)。
     RestoreSheet {
         index: usize,
         sheet: Box<Sheet>,
@@ -55,6 +57,10 @@ pub enum Command {
     SetWireParts {
         wire_parts: Vec<WirePart>,
     },
+    /// PLC I/O割付表の置換 (プロジェクト単位)。逆コマンドは置換前のリスト。
+    SetPlcAssignments {
+        assignments: Vec<PlcAssignment>,
+    },
     /// 線番のネット単位自動採番。sheet_id省略時はプロジェクトの全シートが対象。
     RenumberWires {
         #[serde(default)]
@@ -90,6 +96,8 @@ pub enum PatchOp {
     EntityUpserted { sheet_id: SheetId, entity: Entity },
     EntityRemoved { sheet_id: SheetId, id: EntityId },
     WirePartsReplaced { wire_parts: Vec<WirePart> },
+    /// PLC I/O割付表が置き換わった。
+    PlcAssignmentsReplaced { assignments: Vec<PlcAssignment> },
 }
 
 /// 編集の由来(誰の操作か)。undo履歴の各エントリに記録する。
@@ -562,6 +570,16 @@ impl Engine {
                     vec![Command::SetWireParts { wire_parts: old }],
                 ))
             }
+            Command::SetPlcAssignments { assignments } => {
+                let old = self.project.plc_assignments.clone();
+                self.project.plc_assignments = assignments.clone();
+                Ok((
+                    vec![PatchOp::PlcAssignmentsReplaced {
+                        assignments: assignments.clone(),
+                    }],
+                    vec![Command::SetPlcAssignments { assignments: old }],
+                ))
+            }
             Command::RenumberWires {
                 sheet_id,
                 mode,
@@ -846,6 +864,35 @@ mod tests {
         assert_eq!(engine.project().sheets[0].revisions.len(), 1);
         engine.undo().unwrap().unwrap();
         assert!(engine.project().sheets[0].revisions.is_empty());
+    }
+
+    /// SetPlcAssignments replaces the whole PLC I/O assignment table of the project; undo restores the previous table.
+    /// SetPlcAssignmentsはプロジェクトのPLC I/O割付表を丸ごと置き換え、undoで以前の表に戻る。
+    #[test]
+    fn set_plc_assignments_is_undoable() {
+        let (mut engine, _) = test_engine();
+        let row = PlcAssignment {
+            id: Uuid::new_v4(),
+            module_ref: "PLC1".into(),
+            address: "X0".into(),
+            signal_name: "起動押釦".into(),
+            comment: "PB1".into(),
+        };
+        let patch = engine
+            .execute(Command::SetPlcAssignments {
+                assignments: vec![row],
+            })
+            .unwrap();
+        assert!(matches!(
+            patch.ops[0],
+            PatchOp::PlcAssignmentsReplaced { .. }
+        ));
+        assert_eq!(engine.project().plc_assignments.len(), 1);
+        assert_eq!(engine.project().plc_assignments[0].signal_name, "起動押釦");
+        engine.undo().unwrap().unwrap();
+        assert!(engine.project().plc_assignments.is_empty());
+        engine.redo().unwrap().unwrap();
+        assert_eq!(engine.project().plc_assignments.len(), 1);
     }
 
     fn sample_harness(name: &str) -> Entity {
