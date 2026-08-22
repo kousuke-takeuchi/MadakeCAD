@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1144仕様項目**。
+全5領域・**1183仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -26,6 +26,7 @@
 - UpdateEntityはエンティティを丸ごと置換し、undoで置換前の状態に戻る。 <sub>`update_entity_undo_restores_previous_version`</sub>
 - SetTitleBlockはシートの表題欄を更新し、undoで以前の内容に戻る。 <sub>`set_title_block_is_undoable`</sub>
 - SetRevisionsは改訂欄の行を置き換え、undoで以前のリストに戻る。 <sub>`set_revisions_is_undoable`</sub>
+- SetPlcAssignmentsはプロジェクトのPLC I/O割付表を丸ごと置き換え、undoで以前の表に戻る。 <sub>`set_plc_assignments_is_undoable`</sub>
 - ハーネス境界は通常のエンティティ用コマンドで追加・改名・削除でき、どの操作もundoで戻せる。 <sub>`harness_add_rename_delete_are_undoable`</sub>
 - ハーネス境界を移動すると4隅すべてが動き、undoで元の位置に正確に戻る。 <sub>`harness_move_and_undo_restores_every_corner`</sub>
 - ハーネス境界は kind="harness" としてJSONに往復変換でき、どのクライアントからも送れる。 <sub>`harness_command_json_roundtrip_uses_the_harness_kind`</sub>
@@ -66,6 +67,7 @@
 - .mdkprojへ保存して読み直したプロジェクトは、全エンティティを含めて同一である。 <sub>`project_file_roundtrip`</sub>
 - 保存された.mdkprojはformat_version付きの整形JSONで、gitの差分が読みやすい。 <sub>`saved_file_is_pretty_json_with_format_version`</sub>
 - 存在しないファイルの読み込みはパニックせずエラーを返す。 <sub>`loading_missing_file_is_an_error`</sub>
+- PLC割付表が無かった頃の古いプロジェクトファイルもそのまま開ける (割付表は空になり、現行のファイル形式へ更新される)。 <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
 
 ### KiCadインポート
 
@@ -110,7 +112,7 @@
 ### ドキュメントモデル
 
 - 用紙サイズはISO A列の寸法に従い、縦置きでは幅と高さが入れ替わる。 <sub>`paper_sizes_match_iso_and_orientation_swaps`</sub>
-- 新規プロジェクトは「Sheet1」という1枚のシートとformat_version 1で始まる。 <sub>`new_project_has_one_default_sheet`</sub>
+- 新規プロジェクトは「Sheet1」という1枚のシート・現行のファイル形式バージョン・空のPLC割付表で始まる。 <sub>`new_project_has_one_default_sheet`</sub>
 - Entity::translateはエンティティの全座標を動かす: ワイヤは全頂点、シンボル/ラベル/テキストは基準点。 <sub>`translate_moves_all_coordinates`</sub>
 - Entity::id()は種別によらず内側エンティティのUUIDを返す。 <sub>`entity_id_is_uniform_across_kinds`</sub>
 
@@ -141,6 +143,9 @@
 - 旧スキーマv1のDBは開いた時点でv2へ移行され、既存データを保持したままspice_model列が使えるようになる。 <sub>`v1_database_migrates_to_v2_preserving_data`</sub>
 - 旧スキーマv2のDBは開いた時点でv3へ移行され、既存データを保持したままcontact_config列が使えるようになる。 <sub>`v2_database_migrates_to_v3_preserving_data`</sub>
 - 同梱のサンプルリレーは接点構成を持っているので、配置直後から接点数超過の検証ができる。 <sub>`sample_relay_part_has_a_contact_configuration`</sub>
+- 旧スキーマv3のDBは開いた時点でv4へ移行され、既存データを保持したままplc_module列が使えるようになる。 <sub>`v3_database_migrates_to_v4_preserving_data`</sub>
+- 同梱サンプルには三菱・Siemens・Allen-Bradleyのアドレス体系をひと通り含む3種のPLCモジュールが入っている。 <sub>`sample_plc_modules_cover_the_three_address_styles`</sub>
+- PLCモジュールの一覧はモジュール定義を持つ部品だけを返すので、普通の部品がモジュールライブラリに紛れ込まない。 <sub>`the_plc_module_list_contains_only_parts_with_a_module_definition`</sub>
 - DBパスの既定はOSのアプリデータフォルダで、MADAKE_PARTS_DBで上書きできる。 <sub>`default_path_respects_env_override`</sub>
 
 ### PDF出力
@@ -153,6 +158,32 @@
 - 表紙は外すことができ、その場合は回路図シートが先頭になる。 <sub>`pdf_book_can_omit_the_cover`</sub>
 - 一括出力は全ページを1つのPDF文書にまとめ、回路図がA3でも帳票ページはA4になる。 <sub>`pdf_book_merges_every_page_into_one_document`</sub>
 - シートが1枚も無いプロジェクトでも、表紙だけの正しい1ページPDFになる。 <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
+
+### PLC I/O
+
+- 三菱式のアドレスは8進で数えるので、Xモジュールの8点目はX8ではなくX10になる。 <sub>`mitsubishi_addresses_count_up_in_octal`</sub>
+- Siemens式のアドレスは「バイト.ビット」で1バイト8点なので、9点目は%I1.0になる。 <sub>`siemens_addresses_are_written_as_byte_and_bit`</sub>
+- Allen-Bradley式のアドレスは「ワード/ビット」で1ワード16点なので、17点目はI:1/0になる。 <sub>`allen_bradley_addresses_are_written_as_word_and_bit`</sub>
+- アドレスの自動採番は開始点をずらせるので、2枚目のモジュールは1枚目の続きから振れる。 <sub>`auto_addresses_can_start_from_a_point_offset`</sub>
+- モジュール定義は置くべき動的シンボルを知っている (入力=plc_di_{n}p、出力=plc_do_{n}p)。 <sub>`a_module_definition_names_its_drawing_symbol`</sub>
+- モジュール定義は部品DBのJSON列を往復しても内容が変わらない。 <sub>`a_module_definition_round_trips_through_json`</sub>
+- 割付表はアドレス・信号名・コメントの3列でCSVになり、読み直すと同じ行に戻る。 <sub>`the_assignment_table_round_trips_through_csv`</sub>
+- 見出し行の無いCSVもデータとして読めるので、見出しを付けずに書き出した表もそのまま取り込める。 <sub>`a_csv_without_a_header_row_is_still_read`</sub>
+- CSVの取り込みは対象モジュールの行だけを置き換え、他のモジュールの割付はそのまま残る。undo一発で元の表に戻る。 <sub>`importing_a_csv_replaces_only_the_target_module`</sub>
+- 3列に足りない行があるCSVは拒否され、図面の割付表は元のまま変わらない。 <sub>`a_malformed_csv_row_is_refused_without_changing_the_table`</sub>
+- 割付表の各点は、図面の結線から接続先の機器と線番を拾ってくる。 <sub>`each_point_picks_up_its_target_and_wire_number_from_the_drawing`</sub>
+- 図面に置かれたPLCモジュールは点数と入出力の種別つきで一覧でき、エディタの選択肢にできる。 <sub>`placed_modules_are_listed_with_their_point_count_and_kind`</sub>
+- I/O図面の生成はシートを1枚増やし、そのラダーにはモジュールの点数ぶんのラングが並ぶ。 <sub>`generating_an_io_drawing_makes_one_rung_per_point`</sub>
+- ラングは指定したラング間隔で並び、先頭の指定本数ぶんの位置は空けられる。 <sub>`rungs_follow_the_requested_spacing_and_leading_skip`</sub>
+- 生成したページ全体が1回の編集なので、undo一発でシートごと消える。 <sub>`a_generated_io_page_is_undone_in_one_step`</sub>
+- 2回生成すると1枚目を上書きせず、2枚目のシートが増える。 <sub>`generating_twice_adds_a_second_sheet`</sub>
+- 生成したI/Oページには ERC の指摘が出ない (全ての点が結線され、電線の端はどこかに繋がっている)。 <sub>`a_generated_io_page_passes_the_electrical_rule_check`</sub>
+- 割付表が空のモジュールを生成すると、同じ1回の編集の中で自動採番したアドレスが表に入る。 <sub>`generating_fills_an_empty_assignment_table_with_auto_addresses`</sub>
+- 生成しても既存の信号名は保たれる (信号名・コメントは割付表が正)。 <sub>`generating_keeps_the_signal_names_already_in_the_table`</sub>
+- まだ実装していない2つのモジュール配置方針ははっきりしたエラーで断られ、図面には何も起きない。 <sub>`the_unimplemented_placement_policies_are_refused`</sub>
+- 横バス+縦ラングのラダー形式もまだ実装しておらず、同じように断られる。 <sub>`the_horizontal_bus_ladder_style_is_refused`</sub>
+- 2.5mmグリッドの正の倍数でないラング間隔は断られるので、生成したページは必ずグリッドに乗る。 <sub>`an_off_grid_rung_spacing_is_refused`</sub>
+- I/Oレポートは各点をアドレス・信号名・接続先・線番・コメントで並べ、プロジェクト全体版では先頭にモジュールの参照記号が付く。 <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
 
 ### relay_xref
 
@@ -200,6 +231,7 @@
 - 端子台ではないものを対象にすると、空のファイルを書かずにエラーになる。 <sub>`a_terminal_report_of_an_unknown_block_fails`</sub>
 - 端子台以外の帳票は端子台の指定を無視し、常にプロジェクト全体を対象にする。 <sub>`other_reports_always_cover_the_whole_project`</sub>
 - クロスリファレンス表のCSVの見出しは、図面シート版の列見出しと同じ。 <sub>`the_cross_reference_csv_has_the_same_columns_as_its_sheet`</sub>
+- PLC I/Oレポートは割付済みの点ごとに1行で、CSVでも図枠付きの図面シートでも出せる。 <sub>`the_plc_io_report_has_one_row_per_assigned_point`</sub>
 - 帳票の種類はCLI・Link APIと同じケバブケース表記でJSONへ入る。 <sub>`report_kind_json_names_match_cli_spelling`</sub>
 
 ### 帳票 (部品表 / 電線リスト)
@@ -282,6 +314,9 @@
 - 動的生成のconnector_2pは旧静的定義と完全に同じピン座標を持ち、既存図面に影響しない。 <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
 - resolve_symbolは同梱idを見つけ、不正・範囲外の動的ID(0極・51極・数値なし)は拒否する。 <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defsは同梱ライブラリに加え、シートで実際に使われている動的シンボルの定義を返す。 <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
+- PLC入力モジュールのシンボル (例: 16点) は縦長の箱で、左側に点数ぶんの接続点が2.5mmグリッド上に並ぶ。 <sub>`a_plc_input_module_has_one_connection_point_per_io_point`</sub>
+- PLCモジュールには入力用と出力用があり、どちらも参照記号の接頭辞はPLCになる。 <sub>`plc_modules_come_in_input_and_output_flavours`</sub>
+- PLCモジュールのシンボルは1〜64点まで作れ、その外の点数はシンボルとして存在しない。 <sub>`plc_module_point_counts_are_limited_to_one_through_sixty_four`</sub>
 - リレーコイルのシンボルは、JISのコイル端子記号A1・A2と参照記号の接頭辞Kを持つ。 <sub>`relay_coil_has_a1_a2_terminals`</sub>
 - リレー接点はa接点・b接点の2種類があり、コイルと同じ参照記号の接頭辞を持ち、2つの接続点が2.5mmグリッド上にある。 <sub>`relay_contacts_come_in_make_and_break_types`</sub>
 - シンボル定義はJSONに往復変換しても失われない。 <sub>`symbol_json_roundtrip`</sub>
@@ -496,6 +531,16 @@
 - 編集は入口ごとに由来が残る: UIはユーザー編集、エージェントのターン中はエージェント編集、外部クライアントはmcp編集。 <sub>`every_edit_path_records_who_made_the_change`</sub>
 - ターン実行中の印は入れ子でも数えられ、必ず解除されるため、ターン後の編集はまたユーザー編集になる。 <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
 - エージェントマネージャが使う窓口はエージェント編集だけを巻き戻し、戻した件数を報告する。 <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
+
+### PLC I/O (MCPツール / REST)
+
+- PUT /plc/assignments はI/O割付表を丸ごと置き換え、GETはモジュールごとの表として読み出す。 <sub>`the_assignment_table_can_be_written_and_read_over_the_link_api`</sub>
+- POST /plc/assignments/import はアドレス・信号名・コメントのCSVを1モジュールぶん取り込み、undo一発で取り込み前へ戻る。 <sub>`a_csv_of_signal_names_can_be_imported_and_undone`</sub>
+- 3列に足りない行のあるCSVは400で断られ、割付表は元のまま変わらない。 <sub>`a_malformed_csv_import_is_refused_with_a_bad_request`</sub>
+- POST /plc/generate はI/Oラダーページを1回の編集で作り、新しいシートにはモジュールのシンボルと点数ぶんのラングが載る。GET /plc/modules はその置かれたモジュールを一覧に返す。 <sub>`generating_an_io_page_over_the_link_api_is_one_undo_step`</sub>
+- まだ実装していない生成設定 (モジュールの同居) は400で断られ、図面には何も起きない。 <sub>`an_unimplemented_generation_setting_is_refused_with_a_bad_request`</sub>
+- PLC I/Oレポートは他の帳票と同じ書き出し口から`plc-io`として出力され、割付済みの点ごとに1行が並ぶ。 <sub>`the_plc_io_report_is_exported_like_any_other_report`</sub>
+- PLCのMCPツールの説明には、割付表が何のためのものか・ページ生成がundo一発であることが書かれている。 <sub>`the_plc_tools_explain_the_assignment_table_and_the_generated_page`</sub>
 
 ### provider_api
 
@@ -1328,7 +1373,7 @@
 
 ### 帳票 (部品表 / 電線リスト)
 
-- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・XRef表 の5つ <sub>`report generation dialog store`</sub>
+- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・XRef表・PLC I/Oレポート の6つ <sub>`report generation dialog store`</sub>
 - 部品表はプロジェクト全体が対象で、既定はCSV出力 <sub>`report generation dialog store`</sub>
 - 出力形式を図面シートPDFにすると、同じ帳票がPDF要求になる <sub>`report generation dialog store`</sub>
 - 端子台チャートは「プロジェクト全体」に加えて端子台1つを対象に選べる <sub>`report generation dialog store`</sub>
