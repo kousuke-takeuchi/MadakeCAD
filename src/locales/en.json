@@ -369,6 +369,17 @@
       "startedLog": "AGENT   Tidying up ({mode}) - one turn, undo with Cmd+Z",
       "busyLog": "AGENT   The agent is still answering; wait until the turn is done",
       "sendFailed": "AGENT   Could not send the tidy request (see the error in the chat)"
+    },
+    "history": {
+      "head": "CONVERSATIONS",
+      "new": "New conversation",
+      "empty": "No conversations yet",
+      "runningRow": "This conversation is still answering",
+      "colorDot": "Edit highlight color of this conversation"
+    },
+    "parallel": {
+      "runningBadge": "{count} running",
+      "runningBadgeTitle": "{count} conversation(s) are answering right now. Their edits are highlighted in the drawing, one color per conversation."
     }
   }
 }

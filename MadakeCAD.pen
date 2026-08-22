@@ -3541,6 +3541,30 @@
                             },
                             {
                               "type": "frame",
+                              "id": "l3TdQz",
+                              "name": "整えボタン",
+                              "width": 24,
+                              "height": 24,
+                              "cornerRadius": 12,
+                              "stroke": "$pw-border",
+                              "strokeWidth": 1,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "Q8GHqS",
+                                  "name": "整えボタンアイコン",
+                                  "width": 13,
+                                  "height": 13,
+                                  "icon": "wand-sparkles",
+                                  "library": "lucide",
+                                  "fill": "$pw-muted"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "wKi5Z",
                               "name": "チャットフッタ余白",
                               "width": "fill_container",
@@ -4711,6 +4735,41 @@
             },
             {
               "type": "frame",
+              "id": "FsWE8",
+              "name": "展開実行中バッジ",
+              "fill": "#E8F1FB",
+              "cornerRadius": 9,
+              "gap": 4,
+              "padding": [
+                2,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "T6Azii",
+                  "name": "展開実行中アイコン",
+                  "width": 10,
+                  "height": 10,
+                  "icon": "loader-circle",
+                  "library": "lucide",
+                  "fill": "$pw-accent"
+                },
+                {
+                  "type": "text",
+                  "id": "T3DRlB",
+                  "name": "展開実行中文字",
+                  "fill": "$pw-accent",
+                  "content": "2会話実行中",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
               "id": "QyYKp",
               "name": "展開ヘッダ余白",
               "width": "fill_container",
@@ -5175,6 +5234,30 @@
                       "width": 13,
                       "height": 13,
                       "icon": "plus",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DGR4D",
+                  "name": "整えボタン",
+                  "width": 24,
+                  "height": 24,
+                  "cornerRadius": 12,
+                  "stroke": "$pw-border",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "FNR0C",
+                      "name": "整えボタンアイコン",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "wand-sparkles",
                       "library": "lucide",
                       "fill": "$pw-muted"
                     }
@@ -14558,6 +14641,229 @@
           "fontFamily": "Noto Sans JP",
           "fontSize": 10,
           "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "THloU",
+          "name": "DSエージェント会話色見出し",
+          "fill": "$pw-muted",
+          "content": "エージェント会話色 (並列エージェント: 会話ごとの編集オーバーレイ色。開始順に割り当て、5会話目からは先頭へ戻る)",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 11,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "sdpxz",
+          "name": "DSエージェント会話色行",
+          "width": "fill_container",
+          "gap": 8,
+          "children": [
+            {
+              "type": "frame",
+              "id": "J76AN",
+              "name": "DS会話色 会話1",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 3,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "FS6pl",
+                  "name": "DS会話色見本枠 会話1",
+                  "width": "fill_container",
+                  "height": 34,
+                  "fill": "#212830",
+                  "cornerRadius": 6,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 4,
+                      "id": "t2iFD",
+                      "name": "DS会話色領域 会話1",
+                      "fill": "#29D3E633",
+                      "width": 72,
+                      "height": 20
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "QWeLg",
+                      "name": "DS会話色ドット 会話1",
+                      "fill": "#29D3E6",
+                      "width": 8,
+                      "height": 8
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "UvuN9",
+                  "name": "DS会話色名 会話1",
+                  "fill": "$pw-muted",
+                  "content": "会話1 #29D3E6",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "JtV99",
+              "name": "DS会話色 会話2",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 3,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Ba4OS",
+                  "name": "DS会話色見本枠 会話2",
+                  "width": "fill_container",
+                  "height": 34,
+                  "fill": "#212830",
+                  "cornerRadius": 6,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 4,
+                      "id": "Hi7Jo",
+                      "name": "DS会話色領域 会話2",
+                      "fill": "#FFB45433",
+                      "width": 72,
+                      "height": 20
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "b3u1l",
+                      "name": "DS会話色ドット 会話2",
+                      "fill": "#FFB454",
+                      "width": 8,
+                      "height": 8
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "R3YyVA",
+                  "name": "DS会話色名 会話2",
+                  "fill": "$pw-muted",
+                  "content": "会話2 #FFB454",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "xqqbQ",
+              "name": "DS会話色 会話3",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 3,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "M1qGJO",
+                  "name": "DS会話色見本枠 会話3",
+                  "width": "fill_container",
+                  "height": 34,
+                  "fill": "#212830",
+                  "cornerRadius": 6,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 4,
+                      "id": "CHiPE",
+                      "name": "DS会話色領域 会話3",
+                      "fill": "#B48CFF33",
+                      "width": 72,
+                      "height": 20
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "sVUia",
+                      "name": "DS会話色ドット 会話3",
+                      "fill": "#B48CFF",
+                      "width": 8,
+                      "height": 8
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "SaBeH",
+                  "name": "DS会話色名 会話3",
+                  "fill": "$pw-muted",
+                  "content": "会話3 #B48CFF",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "mL2Tt",
+              "name": "DS会話色 会話4",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 3,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "NeX9H",
+                  "name": "DS会話色見本枠 会話4",
+                  "width": "fill_container",
+                  "height": 34,
+                  "fill": "#212830",
+                  "cornerRadius": 6,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 4,
+                      "id": "ANDhU",
+                      "name": "DS会話色領域 会話4",
+                      "fill": "#FF6FD833",
+                      "width": 72,
+                      "height": 20
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "Y8w60z",
+                      "name": "DS会話色ドット 会話4",
+                      "fill": "#FF6FD8",
+                      "width": 8,
+                      "height": 8
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "AX4dv",
+                  "name": "DS会話色名 会話4",
+                  "fill": "$pw-muted",
+                  "content": "会話4 #FF6FD8",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
         }
       ]
     },
@@ -15995,20 +16301,48 @@
                   ],
                   "children": [
                     {
-                      "type": "text",
-                      "id": "fVY1R",
-                      "name": "P履歴行タイトル モータM1の回路に24V系のヒューズF2を追加して",
-                      "fill": "$pw-text",
-                      "textGrowth": "fixed-width",
+                      "type": "frame",
+                      "id": "b5Rt4J",
+                      "name": "P履歴行頭 モータM1の回路に24V系のヒューズF2を追加して",
                       "width": "fill_container",
-                      "content": "モータM1の回路に24V系のヒューズF2を追加して",
-                      "fontFamily": "Noto Sans JP",
-                      "fontSize": 12,
-                      "fontWeight": "600"
+                      "gap": 7,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "Q2VEbE",
+                          "name": "P履歴色ドット モータM1の回路に24V系のヒューズF2を追加して",
+                          "fill": "#29D3E6",
+                          "width": 8,
+                          "height": 8
+                        },
+                        {
+                          "type": "text",
+                          "id": "GvD7b",
+                          "name": "P履歴行タイトル モータM1の回路に24V系のヒューズF2を追加して",
+                          "fill": "$pw-text",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "モータM1の回路に24V系のヒューズF2を追加して",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "Z3yxy",
+                          "name": "P履歴実行中 モータM1の回路に24V系のヒューズF2を追加して",
+                          "width": 11,
+                          "height": 11,
+                          "icon": "loader-circle",
+                          "library": "lucide",
+                          "fill": "#29D3E6"
+                        }
+                      ]
                     },
                     {
                       "type": "text",
-                      "id": "sSaeo",
+                      "id": "D3uMR",
                       "name": "P履歴行メタ モータM1の回路に24V系のヒューズF2を追加して",
                       "fill": "$pw-faint",
                       "content": "8分前 · 4メッセージ · 適用済み rev 24",
@@ -16033,20 +16367,48 @@
                   ],
                   "children": [
                     {
-                      "type": "text",
-                      "id": "pbWfx",
-                      "name": "P履歴行タイトル 電線リストをCSVで書き出して",
-                      "fill": "$pw-text",
-                      "textGrowth": "fixed-width",
+                      "type": "frame",
+                      "id": "XIB0W",
+                      "name": "P履歴行頭 電線リストをCSVで書き出して",
                       "width": "fill_container",
-                      "content": "電線リストをCSVで書き出して",
-                      "fontFamily": "Noto Sans JP",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
+                      "gap": 7,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "iHNov",
+                          "name": "P履歴色ドット 電線リストをCSVで書き出して",
+                          "fill": "#FFB454",
+                          "width": 8,
+                          "height": 8
+                        },
+                        {
+                          "type": "text",
+                          "id": "VrJBx",
+                          "name": "P履歴行タイトル 電線リストをCSVで書き出して",
+                          "fill": "$pw-text",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "電線リストをCSVで書き出して",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "ZTNgn",
+                          "name": "P履歴実行中 電線リストをCSVで書き出して",
+                          "width": 11,
+                          "height": 11,
+                          "icon": "loader-circle",
+                          "library": "lucide",
+                          "fill": "#FFB454"
+                        }
+                      ]
                     },
                     {
                       "type": "text",
-                      "id": "LcDWz",
+                      "id": "C1j5S",
                       "name": "P履歴行メタ 電線リストをCSVで書き出して",
                       "fill": "$pw-faint",
                       "content": "昨日 · 2メッセージ",
@@ -16071,20 +16433,38 @@
                   ],
                   "children": [
                     {
-                      "type": "text",
-                      "id": "utNiD",
-                      "name": "P履歴行タイトル リレーK2のb接点を追加",
-                      "fill": "$pw-text",
-                      "textGrowth": "fixed-width",
+                      "type": "frame",
+                      "id": "Eegn7",
+                      "name": "P履歴行頭 リレーK2のb接点を追加",
                       "width": "fill_container",
-                      "content": "リレーK2のb接点を追加",
-                      "fontFamily": "Noto Sans JP",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
+                      "gap": 7,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "G8TS5O",
+                          "name": "P履歴色ドット リレーK2のb接点を追加",
+                          "fill": "#B48CFF",
+                          "width": 8,
+                          "height": 8
+                        },
+                        {
+                          "type": "text",
+                          "id": "wgnXD",
+                          "name": "P履歴行タイトル リレーK2のb接点を追加",
+                          "fill": "$pw-text",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "リレーK2のb接点を追加",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     },
                     {
                       "type": "text",
-                      "id": "ap3uD",
+                      "id": "acVX1",
                       "name": "P履歴行メタ リレーK2のb接点を追加",
                       "fill": "$pw-faint",
                       "content": "8/19 · 6メッセージ · 適用済み rev 11",
@@ -19000,6 +19380,30 @@
                               "width": 13,
                               "height": 13,
                               "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$pw-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "HEHaP",
+                          "name": "整えボタン",
+                          "width": 24,
+                          "height": 24,
+                          "cornerRadius": 12,
+                          "stroke": "$pw-border",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "ZeGrA",
+                              "name": "整えボタンアイコン",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "wand-sparkles",
                               "library": "lucide",
                               "fill": "$pw-muted"
                             }

@@ -2,8 +2,13 @@
 // 会話履歴ポップアップ (デザイン: 「AIチャット - ポップアップ集」P会話履歴)。
 // 左ドックのタブ行の履歴ボタンから開く。開閉は親が usePopover で持ち、
 // ここは中身と「選んだ / 新規」の通知だけを担当する。
-import { Plus } from "lucide-vue-next";
+//
+// 各行の色ドットは、その会話が図面へ入れる編集のハイライト色 (並列エージェント:
+// 複数の会話が同時に走るので色で見分ける)。応答中の会話にはスピナーが付き、
+// 開いていない会話が動いていることもここで分かる。
+import { LoaderCircle, Plus } from "lucide-vue-next";
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   conversationMeta,
   conversationTitle,
@@ -13,6 +18,7 @@ import {
 
 const emit = defineEmits<{ close: [] }>();
 
+const { t } = useI18n();
 const store = useChatStore();
 
 // 「N分前」の基準時刻はポップアップを開いた瞬間で固定する
@@ -25,6 +31,8 @@ const rows = computed(() =>
     title: conversationTitle(conversation),
     meta: conversationMeta(conversation, now),
     active: conversation.id === store.activeId,
+    color: store.conversationColors[conversation.id],
+    running: !!store.running[conversation.id],
   })),
 );
 
@@ -43,11 +51,11 @@ function onPick(id: string) {
   <div class="history-popup">
     <div class="body">
       <div class="head-row">
-        <span class="head">会話履歴</span>
+        <span class="head">{{ t("chat.history.head") }}</span>
         <span class="spacer" />
         <button class="new" @click="onNew">
           <Plus :size="11" />
-          <span>新規会話</span>
+          <span>{{ t("chat.history.new") }}</span>
         </button>
       </div>
 
@@ -58,10 +66,24 @@ function onPick(id: string) {
         :class="{ active: row.active }"
         @click="onPick(row.id)"
       >
-        <span class="row-title">{{ row.title }}</span>
+        <span class="row-head">
+          <span
+            class="row-dot"
+            :style="{ background: row.color }"
+            :title="t('chat.history.colorDot')"
+          />
+          <span class="row-title">{{ row.title }}</span>
+          <LoaderCircle
+            v-if="row.running"
+            class="row-spin"
+            :size="11"
+            :style="{ color: row.color }"
+            :aria-label="t('chat.history.runningRow')"
+          />
+        </span>
         <span class="row-meta">{{ row.meta }}</span>
       </button>
-      <div v-if="!rows.length" class="empty">会話はまだありません</div>
+      <div v-if="!rows.length" class="empty">{{ t("chat.history.empty") }}</div>
     </div>
   </div>
 </template>
@@ -140,14 +162,36 @@ function onPick(id: string) {
 .row.active {
   background: var(--hover-bg);
 }
-.row-title {
+/* 色ドット + タイトル + 応答中スピナー */
+.row-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   width: 100%;
+}
+.row-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.row-title {
+  flex: 1;
   font-size: 12px;
   color: var(--ui-text);
   overflow-wrap: anywhere;
 }
 .row.active .row-title {
   font-weight: 600;
+}
+.row-spin {
+  flex-shrink: 0;
+  animation: row-spin 1s linear infinite;
+}
+@keyframes row-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .row-meta {
   font-size: 10px;

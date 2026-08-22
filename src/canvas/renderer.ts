@@ -478,12 +478,18 @@ function roundRectPath(
   ctx.closePath();
 }
 
-function drawAgentChip(ctx: CanvasRenderingContext2D, x: number, y: number, alpha: number) {
+function drawAgentChip(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  alpha: number,
+  color: string,
+) {
   ctx.font = CHIP_FONT;
   ctx.textAlign = "left";
   const textW = ctx.measureText(CHIP_LABEL).width;
   const w = textW + CHIP_PAD_X * 2;
-  ctx.fillStyle = agentRgba(alpha);
+  ctx.fillStyle = agentRgba(alpha, color);
   roundRectPath(ctx, x, y, w, CHIP_HEIGHT, CHIP_HEIGHT / 2);
   ctx.fill();
   ctx.fillStyle = theme.agentInk;
@@ -507,15 +513,17 @@ export function drawAgentOverlay(
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
 
-  let primary: { x: number; y: number; w: number; h: number } | null = null;
+  // 会話ごとに色が違う (並列エージェント)。チップは代表領域の色に合わせる
+  let primary: { x: number; y: number; w: number; h: number; color: string } | null = null;
   for (const region of regions) {
     const a = vp.toScreen(region.min);
     const b = vp.toScreen(region.max);
-    const rect = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
-    ctx.fillStyle = agentRgba(region.opacity * region.strength);
+    const color = region.color || theme.agent;
+    const rect = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y, color };
+    ctx.fillStyle = agentRgba(region.opacity * region.strength, color);
     roundRectPath(ctx, rect.x, rect.y, rect.w, rect.h, OVERLAY_RADIUS);
     ctx.fill();
-    ctx.strokeStyle = agentRgba(region.strength);
+    ctx.strokeStyle = agentRgba(region.strength, color);
     ctx.lineWidth = 1.5;
     ctx.stroke();
     // ラベルは最も上(同率なら左)の領域に添える
@@ -543,7 +551,7 @@ export function drawAgentOverlay(
     cx = Math.max(4, (w - cw) / 2);
     cy = 16;
   }
-  drawAgentChip(ctx, cx, cy, 0.92);
+  drawAgentChip(ctx, cx, cy, 0.92, primary?.color ?? theme.agent);
 }
 
 /**

@@ -6,7 +6,7 @@ import { AgentOverlay } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
 import type { Patch } from "../ipc";
 import { useDocumentStore } from "../stores/document";
-import { useChatStore } from "../stores/chat";
+import { useChatStore, type ChatToolCall } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
 import ChatPanel from "./chat/ChatPanel.vue";
 
@@ -41,7 +41,7 @@ function draw() {
     hidden: ui.hiddenViewClasses,
     cursor: controller.cursorScreen,
     // チップ・パルスは実際に編集領域があるときだけ出す(テキスト応答だけのターンでは出さない)
-    agent: regions.length > 0 ? { regions, active: chat.streaming } : undefined,
+    agent: regions.length > 0 ? { regions, active: chat.anyStreaming } : undefined,
     // シート間クロスリファレンス「/2.B3」(表示クラスは「ネットラベル」に含める)
     xrefs: sheetXrefs(store.project, sheet.id),
   });
@@ -69,26 +69,49 @@ function startOverlayAnimation() {
   if (!overlayRaf) overlayRaf = requestAnimationFrame(overlayTick);
 }
 
+/**
+ * 実行中の全会話のターンと、その会話の編集オーバーレイ色。
+ *
+ * 並列エージェントでは開いていない会話も同時に編集するので、開いている会話だけ
+ * ではなく走っている会話をすべて見る(色で会話を見分ける)。
+ */
+function runningTurns(): { color: string; calls: ChatToolCall[] }[] {
+  const colors = chat.conversationColors;
+  return chat.conversations
+    .filter((c) => chat.running[c.id])
+    .map((c) => ({
+      color: colors[c.id],
+      calls: c.messages.filter((m) => m.streaming).flatMap((m) => m.tool_calls),
+    }));
+}
+
 /** ストリーミング中のターンのツール呼び出しを取り込む。 */
 function syncToolCalls() {
-  const calls = chat.streamingMessage?.tool_calls ?? [];
-  for (const call of calls) {
-    if (call.status === "running") overlay.noteToolStart(call.tool, call.input, { id: call.id });
-    else overlay.noteToolFinish(call.id || call.tool);
+  for (const { color, calls } of runningTurns()) {
+    for (const call of calls) {
+      if (call.status === "running") {
+        overlay.noteToolStart(call.tool, call.input, { id: call.id, color });
+      } else {
+        overlay.noteToolFinish(call.id || call.tool);
+      }
+    }
   }
   startOverlayAnimation();
 }
 
 watch(
-  () => chat.streamingMessage?.tool_calls.map((c) => `${c.id}:${c.status}`).join(",") ?? "",
+  () =>
+    runningTurns()
+      .map(({ color, calls }) => `${color}:${calls.map((c) => `${c.id}:${c.status}`).join(",")}`)
+      .join("|"),
   () => syncToolCalls(),
 );
 
 watch(
-  () => chat.streaming,
+  () => chat.anyStreaming,
   (streaming) => {
     if (streaming) syncToolCalls();
-    // ターン終了時は進行中の領域を畳む(完了イベントが来なかった場合の保険)
+    // 全ターン終了時は進行中の領域を畳む(完了イベントが来なかった場合の保険)
     else overlay.finishAll();
     startOverlayAnimation();
   },
@@ -99,11 +122,15 @@ watch(
 store.$onAction(({ name, args, after }) => {
   if (name !== "applyPatch") return;
   after(() => {
-    if (!chat.streaming) return;
+    if (!chat.anyStreaming) return;
     const patch = args[0] as Patch | undefined;
     if (!patch) return;
+    // patchは「どの会話の編集か」を持たない(Commandエンジンの入口は共通)。
+    // 走っている会話が1本だけならその色、複数走っているときは既定色で描く
+    const running = chat.runningIds;
+    const color = running.length === 1 ? chat.conversationColors[running[0]] : undefined;
     for (const op of patch.ops) {
-      if (op.op === "entity_upserted") overlay.noteEntityUpserted(op.entity);
+      if (op.op === "entity_upserted") overlay.noteEntityUpserted(op.entity, { color });
     }
     startOverlayAnimation();
   });

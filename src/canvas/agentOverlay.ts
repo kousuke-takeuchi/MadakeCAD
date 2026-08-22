@@ -4,6 +4,7 @@
 // 描画はrenderer.tsが担当(このファイルはDOM/Canvas非依存の純ロジック)。
 
 import type { Entity, Point } from "../ipc";
+import { theme } from "./theme";
 
 /** 領域の外側に足すマージン (mm)。 */
 export const REGION_MARGIN_MM = 4;
@@ -41,6 +42,13 @@ export interface Region {
   opacity: number;
   /** 残存強度。進行中は1、完了後はHOLD_MSかけて0へ落ちる(枠線・チップの濃さ)。 */
   strength: number;
+  /**
+   * 描画色 (会話ごとの編集オーバーレイ色)。
+   *
+   * 並列エージェントでは会話ごとに色を変えて「どの会話の編集か」を見分ける
+   * (色の決め方は`theme.agentPalette`)。指定なしの領域は既定色。
+   */
+  color: string;
 }
 
 /** ノート系メソッドの共通オプション。 */
@@ -49,12 +57,15 @@ export interface NoteOptions {
   id?: string;
   /** 現在時刻 (ms)。テストから固定するために外から渡せる。 */
   now?: number;
+  /** この編集を行った会話の色 (省略時は既定色)。 */
+  color?: string;
 }
 
 interface Entry {
   key: string;
   tool: string | null;
   box: Box;
+  color: string;
   startedAt: number;
   /** 完了時刻。nullなら進行中。 */
   endedAt: number | null;
@@ -206,6 +217,7 @@ export class AgentOverlay {
       key,
       tool,
       box: expandBox(raw),
+      color: opts.color ?? theme.agent,
       startedAt: existing?.startedAt ?? now,
       endedAt: null,
     });
@@ -245,6 +257,7 @@ export class AgentOverlay {
       key,
       tool: null,
       box: expandBox(raw),
+      color: opts.color ?? theme.agent,
       startedAt: existing?.startedAt ?? now,
       endedAt: now,
     });
@@ -265,6 +278,7 @@ export class AgentOverlay {
         max: entry.box.max,
         opacity: pulseAlpha(now - entry.startedAt),
         strength,
+        color: entry.color,
       });
     }
     return out;

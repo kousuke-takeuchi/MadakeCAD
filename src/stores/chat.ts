@@ -6,6 +6,7 @@
 import { defineStore } from "pinia";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { agentColorAt } from "../canvas/theme";
 import { inTauri } from "../ipc";
 
 // ---------------------------------------------------------------------------
@@ -523,6 +524,21 @@ export function conversationMeta(conversation: ChatConversation, now: number = D
   return parts.join(" · ");
 }
 
+/**
+ * 会話の編集オーバーレイ色 (並列エージェント。仕様: m3-ai-first.md §4)。
+ *
+ * 複数の会話が同時に図面を編集するので、会話ごとに色を変えて見分ける。色は
+ * **会話の開始順**(= 一覧の並び順。表示の並べ替えとは無関係)で決まるため、
+ * 会話が増えても既にある会話の色は動かない。知らない会話は既定色。
+ */
+export function conversationColor(
+  conversations: ChatConversation[],
+  id: string | null,
+): string {
+  const index = conversations.findIndex((c) => c.id === id);
+  return agentColorAt(index < 0 ? 0 : index);
+}
+
 /** 会話履歴の表示順(更新が新しい順。時刻不明の旧履歴は後ろの登録順)。 */
 export function sortedConversations(conversations: ChatConversation[]): ChatConversation[] {
   return conversations
@@ -556,7 +572,13 @@ const CANCELLED_MESSAGE = "キャンセルされました";
 interface ChatState {
   conversations: ChatConversation[];
   activeId: string | null;
-  streaming: boolean;
+  /**
+   * 会話id → ターン実行中か (並列エージェント: 複数の会話が同時に走る)。
+   *
+   * メッセージの`streaming`と違い会話一覧の取り直しで消えないので、
+   * 履歴ポップアップの実行中表示・タブ行の「N会話実行中」はこちらを見る。
+   */
+  running: Record<string, boolean>;
   panelOpen: PanelState;
   model: string | null;
   detect: AgentDetect | null;
@@ -579,7 +601,7 @@ export const useChatStore = defineStore("chat", {
   state: (): ChatState => ({
     conversations: [],
     activeId: null,
-    streaming: false,
+    running: {},
     panelOpen: "collapsed",
     model: null,
     detect: null,
@@ -595,6 +617,34 @@ export const useChatStore = defineStore("chat", {
   getters: {
     activeConversation(state): ChatConversation | null {
       return state.conversations.find((c) => c.id === state.activeId) ?? null;
+    },
+    /** ターン実行中の会話id(会話の開始順)。 */
+    runningIds(state): string[] {
+      return state.conversations.filter((c) => state.running[c.id]).map((c) => c.id);
+    },
+    /** ターン実行中の会話数(タブ行の「N会話実行中」バッジ)。 */
+    runningCount(): number {
+      return this.runningIds.length;
+    },
+    /**
+     * **開いている会話**が答えている最中か(送信ガード・停止ボタンの判定)。
+     *
+     * 別の会話が答えていてもここはfalse: 会話を切り替えれば同時に送信できる。
+     */
+    streaming(state): boolean {
+      return state.activeId ? !!state.running[state.activeId] : false;
+    },
+    /** どれか1つでも会話が答えている最中か。 */
+    anyStreaming(): boolean {
+      return this.runningIds.length > 0;
+    },
+    /** 会話id → 編集オーバーレイ色。 */
+    conversationColors(state): Record<string, string> {
+      const out: Record<string, string> = {};
+      state.conversations.forEach((c, index) => {
+        out[c.id] = agentColorAt(index);
+      });
+      return out;
     },
     messages(): ChatMessage[] {
       return this.activeConversation?.messages ?? [];
@@ -666,7 +716,18 @@ export const useChatStore = defineStore("chat", {
       if (!this.conversations.some((c) => c.id === this.activeId)) {
         this.activeId = this.conversations[this.conversations.length - 1]?.id ?? null;
       }
-      this.recomputeStreaming();
+      // サーバーの会話は「実行中」を持たない(ターンの進行はイベントで追う)。
+      // 取り直しで走っている会話の進行表示を落とさないよう、実行中の会話の
+      // 最後の応答へstreamingを付け直す
+      for (const conversation of this.conversations) {
+        if (!this.running[conversation.id]) continue;
+        const last = conversation.messages[conversation.messages.length - 1];
+        if (last && last.role === "assistant") last.streaming = true;
+      }
+      // 消えた会話の実行中フラグを残さない
+      for (const id of Object.keys(this.running)) {
+        if (!this.conversations.some((c) => c.id === id)) delete this.running[id];
+      }
     },
 
     // --- イベントリデューサ -------------------------------------------------
@@ -720,13 +781,13 @@ export const useChatStore = defineStore("chat", {
         }
 
         case "turn_completed": {
+          this.setRunning(conv.id, false);
           const turn = streamingTurn(conv);
           if (!turn) break;
           // デルタが来ない構成でも本文を埋める
           if (!turn.text) turn.text = event.result;
           turn.usage = event.usage;
           turn.streaming = false;
-          this.recomputeStreaming();
           break;
         }
 
@@ -757,11 +818,11 @@ export const useChatStore = defineStore("chat", {
         }
 
         case "error": {
+          this.setRunning(conv.id, false);
           const turn = streamingTurn(conv);
           if (!turn) break;
           turn.error = event.message;
           turn.streaming = false;
-          this.recomputeStreaming();
           break;
         }
       }
@@ -785,6 +846,7 @@ export const useChatStore = defineStore("chat", {
         this.pendingLocalId = null;
         if (pending) {
           if (this.activeId === pending.id) this.activeId = id;
+          this.rekeyRunning(pending.id, id);
           pending.id = id;
           return pending;
         }
@@ -801,7 +863,7 @@ export const useChatStore = defineStore("chat", {
      * 進行中メッセージのstreaming/usageが消える)。次の機会に拾えばよい。
      */
     scheduleReload() {
-      if (this.reloading || this.streaming) return;
+      if (this.reloading || this.anyStreaming) return;
       this.reloading = true;
       void this.loadConversations()
         .catch(() => {
@@ -814,16 +876,25 @@ export const useChatStore = defineStore("chat", {
 
     /** 進行中のアシスタントメッセージ(無ければ新しいターンを開始する)。 */
     openTurn(conv: ChatConversation): ChatMessage {
+      this.setRunning(conv.id, true);
       const last = conv.messages[conv.messages.length - 1];
       if (last && last.role === "assistant" && last.streaming) return last;
       const created = newMessage("assistant", "", true);
       conv.messages.push(created);
-      this.streaming = true;
       return created;
     },
 
-    recomputeStreaming() {
-      this.streaming = this.conversations.some((c) => c.messages.some((m) => m.streaming));
+    /** ローカルidからサーバー採番idへ実行中フラグを引き継ぐ。 */
+    rekeyRunning(from: string, to: string) {
+      if (!this.running[from]) return;
+      delete this.running[from];
+      this.running[to] = true;
+    },
+
+    /** 会話のターン実行中フラグを立てる/下ろす。 */
+    setRunning(conversationId: string, running: boolean) {
+      if (running) this.running[conversationId] = true;
+      else delete this.running[conversationId];
     },
 
     // --- アクション ---------------------------------------------------------
@@ -858,33 +929,41 @@ export const useChatStore = defineStore("chat", {
 
       conv.messages.push(newMessage("user", text, false));
       conv.messages.push(newMessage("assistant", "", true));
-      this.streaming = true;
+      this.setRunning(conv.id, true);
+      const localId = pending ? conv.id : null;
 
       try {
         const id = await agentApi.send(pending ? null : conv.id, text, this.model);
-        this.adoptConversationId(id);
+        this.adoptConversationId(id, localId);
         return id;
       } catch (e) {
         // 失敗してもローカル会話はpendingのまま維持する。ここでクリアすると会話idが
         // `local-N`のまま確定し、以降の送信が延々とUuidデシリアライズで落ちる
         this.pendingLocalId = isLocalId(conv.id) ? conv.id : null;
+        this.setRunning(conv.id, false);
         const turn = lastAssistant(conv);
         if (turn) {
           turn.error = e instanceof Error ? e.message : String(e);
           turn.streaming = false;
         }
-        this.recomputeStreaming();
         return null;
       }
     },
 
-    /** サーバー採番されたidをローカル会話へ反映する。 */
-    adoptConversationId(id: string) {
-      if (!this.pendingLocalId) return;
-      const pending = this.conversations.find((c) => c.id === this.pendingLocalId);
-      this.pendingLocalId = null;
+    /**
+     * サーバー採番されたidをローカル会話へ反映する。
+     *
+     * `localId`は採番待ちだった会話のローカルid。並列送信で`pendingLocalId`が
+     * 別の会話に取られていても、送信した本人の会話を取り違えない。
+     */
+    adoptConversationId(id: string, localId?: string | null) {
+      const local = localId === undefined ? this.pendingLocalId : localId;
+      if (!local) return;
+      if (this.pendingLocalId === local) this.pendingLocalId = null;
+      const pending = this.conversations.find((c) => c.id === local);
       if (pending && pending.id !== id && !this.conversations.some((c) => c.id === id)) {
         if (this.activeId === pending.id) this.activeId = id;
+        this.rekeyRunning(pending.id, id);
         pending.id = id;
       }
       // 採番前にキャンセルが押されていた場合、サーバー側のターンはまだ走っている
@@ -922,17 +1001,14 @@ export const useChatStore = defineStore("chat", {
           // 中断要求の失敗は握りつぶす(ローカル整理は下で必ず行う)
         }
       }
-      if (!conv) {
-        this.recomputeStreaming();
-        return;
-      }
+      if (!conv) return;
       // 中断するのは対象の会話だけ。他会話のターンは走り続けている
+      this.setRunning(conv.id, false);
       const turn = streamingTurn(conv);
       // Rust側もキャンセル理由をErrorイベントで流すが、下のガード(進行中でない
       // ターンへのerrorは捨てる)で落ちるため、ラベルはここで載せる
       if (turn && !turn.error) turn.error = CANCELLED_MESSAGE;
       for (const m of conv.messages) m.streaming = false;
-      this.recomputeStreaming();
     },
 
     /**
