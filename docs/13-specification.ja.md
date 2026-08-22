@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1218仕様項目**。
+全5領域・**1271仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -27,6 +27,8 @@
 - SetTitleBlockはシートの表題欄を更新し、undoで以前の内容に戻る。 <sub>`set_title_block_is_undoable`</sub>
 - SetRevisionsは改訂欄の行を置き換え、undoで以前のリストに戻る。 <sub>`set_revisions_is_undoable`</sub>
 - SetPlcAssignmentsはプロジェクトのPLC I/O割付表を丸ごと置き換え、undoで以前の表に戻る。 <sub>`set_plc_assignments_is_undoable`</sub>
+- SetFrameTemplateはプロジェクト全体の図枠テンプレートを1回の編集で差し替え、undoで元の図枠へ戻る(最初の差し替えをundoすると未指定=既定の図枠へ戻る)。 <sub>`set_frame_template_is_undoable`</sub>
+- SetFrameTemplateは知らないidも受け付ける(図面は既定の図枠で描かれ続けるので、他所で作ったプロジェクトも開ける)。 <sub>`set_frame_template_accepts_an_unknown_id`</sub>
 - ハーネス境界は通常のエンティティ用コマンドで追加・改名・削除でき、どの操作もundoで戻せる。 <sub>`harness_add_rename_delete_are_undoable`</sub>
 - ハーネス境界を移動すると4隅すべてが動き、undoで元の位置に正確に戻る。 <sub>`harness_move_and_undo_restores_every_corner`</sub>
 - ハーネス境界は kind="harness" としてJSONに往復変換でき、どのクライアントからも送れる。 <sub>`harness_command_json_roundtrip_uses_the_harness_kind`</sub>
@@ -43,6 +45,29 @@
 - バッチ内の1つでも失敗したらバッチ全体を拒否し、図面は変わらず履歴にも残らない。 <sub>`execute_batch_refuses_everything_when_one_command_fails`</sub>
 - 空のバッチは何も変えない(履歴も増えず、ドキュメントrevisionも進まない)。 <sub>`empty_batch_changes_nothing`</sub>
 - その由来の編集が1件も無い区間の巻き戻しは、図面に触れず「戻すものが無い」と報告する。 <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
+
+### 図枠テンプレート (プロットフレーム)
+
+- 同梱の図枠テンプレートは「JIS A3 横」「JIS A4 縦」の2種がこの順で並び、英語名と日本語名を持ち、どちらも定義として正しい。 <sub>`the_two_bundled_frame_templates_are_listed_in_both_languages`</sub>
+- リソースのディレクトリが無い環境でも、ビルドへ埋め込んだ同梱図枠が使える。 <sub>`frame_templates_are_available_without_the_resource_directory`</sub>
+- jis-a3テンプレートは現行のJIS図枠をそのまま表す: マージン10mm、ゾーンは4×6で列が数字・行が英字、表題欄は右下基準の120×32mm。 <sub>`the_jis_a3_template_describes_the_current_jis_frame`</sub>
+- jis-a4-portraitテンプレートは210×297の図枠で、表題欄のセル構成はjis-a3と同じまま幅だけ110mmへ詰めてあり、改訂欄の列幅の合計も表題欄の幅と一致する。 <sub>`the_a4_portrait_template_narrows_the_same_title_block`</sub>
+- 説明書きのバインドはすべて値になる: プロジェクト名・シート番号/総数・シート名・最新改訂・表題欄の全欄・{date}/{scale}/{designer}/{approver}の別名。 <sub>`every_documented_bind_resolves_to_its_value`</sub>
+- {rev.latest}は保存されたRev欄ではなく、最新の改訂行の記号に追従する。 <sub>`the_latest_revision_bind_follows_the_revision_table`</sub>
+- 知らないバインドはエラーではなく空文字になる(テンプレートに書き間違いがあっても図面は出せる)。 <sub>`an_unknown_bind_becomes_an_empty_string`</sub>
+- バインドの無い文字はそのまま出て、閉じ括弧の無い「{」は行の残りを飲み込まずそのまま残る。 <sub>`plain_text_and_unclosed_braces_are_left_alone`</sub>
+- シート単体では「1枚中1枚目・プロジェクト名は空」として解決され、プロジェクトの中では実際の位置が入る。 <sub>`a_lone_sheet_is_bound_as_sheet_one_of_one`</sub>
+- プロジェクト番号のバインドは名前としては知られているが、プロジェクトにまだ番号欄が無いので現状は常に空になる。 <sub>`the_project_number_bind_is_known_but_empty_for_now`</sub>
+- 固定文字のセルは中括弧も含めてそのまま出し、バインドのセルだけが値へ置き換わる。 <sub>`a_fixed_text_cell_is_printed_verbatim`</sub>
+- セルに text と bind を両方書いた(またはどちらも書かなかった)テンプレートは、セル番号を添えて拒否される。 <sub>`a_cell_must_have_either_text_or_bind`</sub>
+- 改訂欄の列はJISの4列で、幅の合計が表題欄の幅と一致していなければならない(ずれた表は表題欄と揃わない)。 <sub>`the_revision_columns_must_add_up_to_the_title_block_width`</sub>
+- ゾーンが0列・0行、マージンが負、表題欄の高さが0といった定義は拒否される。 <sub>`degenerate_frame_definitions_are_rejected`</sub>
+- 同じバインドを2つのセルに書くことも、表題欄の外にセルを置くことも許される(会社名は表題欄の左外に出す)。 <sub>`duplicate_binds_and_cells_outside_the_block_are_allowed`</sub>
+- ユーザーが`~/MadakeCAD/templates/frames`へ置いた図枠は同梱の後に並び、同梱と同じidを使えば差し替えられる。 <sub>`user_frame_templates_are_listed_after_the_bundled_ones`</sub>
+- JSONとして壊れた図枠ファイルや、読めても定義が不正な図枠ファイルは、パスと理由を添えて報告され、他の図枠はそのまま使える。 <sub>`a_broken_frame_template_file_is_reported_with_its_path`</sub>
+- 図枠を指定していないときも、誰も知らないidのときも、同梱のjis-a3へフォールバックするので図面は必ず出せる。 <sub>`an_unknown_frame_template_id_falls_back_to_jis_a3`</sub>
+- 図枠テンプレートは用紙に依存しない定義で、シートの用紙にそのまま描かれる(図枠を替えても用紙サイズは変わらない)。 <sub>`a_frame_template_does_not_change_the_paper_size`</sub>
+- ゾーンの目盛文字はテンプレートが決める: 数字は1,2,3…、英字はA,B,C…でZの次はAへ戻る。 <sub>`zone_labels_follow_the_configured_style`</sub>
 
 ### 座標・ジオメトリ
 
@@ -68,6 +93,8 @@
 - 保存された.mdkprojはformat_version付きの整形JSONで、gitの差分が読みやすい。 <sub>`saved_file_is_pretty_json_with_format_version`</sub>
 - 存在しないファイルの読み込みはパニックせずエラーを返す。 <sub>`loading_missing_file_is_an_error`</sub>
 - PLC割付表が無かった頃の古いプロジェクトファイルもそのまま開ける (割付表は空になり、現行のファイル形式へ更新される)。 <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
+- 図枠テンプレートが無かった頃のプロジェクトファイルは図枠未指定で開き、従来どおり既定のJIS A3図枠で描かれる。 <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
+- プロジェクトに選んだ図枠テンプレートはファイルへ保存され、読み直しても残っている。 <sub>`the_frame_template_survives_a_save_and_reload`</sub>
 
 ### KiCadインポート
 
@@ -112,7 +139,7 @@
 ### ドキュメントモデル
 
 - 用紙サイズはISO A列の寸法に従い、縦置きでは幅と高さが入れ替わる。 <sub>`paper_sizes_match_iso_and_orientation_swaps`</sub>
-- 新規プロジェクトは「Sheet1」という1枚のシート・現行のファイル形式バージョン・空のPLC割付表で始まる。 <sub>`new_project_has_one_default_sheet`</sub>
+- 新規プロジェクトは「Sheet1」という1枚のシート・現行のファイル形式バージョン・空のPLC割付表で始まり、図枠テンプレートは未指定(=既定のJIS A3図枠)である。 <sub>`new_project_has_one_default_sheet`</sub>
 - Entity::translateはエンティティの全座標を動かす: ワイヤは全頂点、シンボル/ラベル/テキストは基準点。 <sub>`translate_moves_all_coordinates`</sub>
 - Entity::id()は種別によらず内側エンティティのUUIDを返す。 <sub>`entity_id_is_uniform_across_kinds`</sub>
 
@@ -289,6 +316,13 @@
 ### SVG出力 (JIS図枠)
 
 - 出力SVGにはJIS図枠・表題欄の文字・配線・参照記号が含まれる。 <sub>`svg_contains_frame_wire_and_symbol`</sub>
+- jis-a3図枠テンプレートで描いた図枠は、これまで出力してきたJIS図枠とSVGの1文字まで同一である(外枠・ゾーン目盛・改訂欄・表題欄の全セル)。 <sub>`the_jis_a3_template_reproduces_the_previous_frame_exactly`</sub>
+- 改訂の無い空のA4シートも従来どおりの図枠を出す(改訂欄は描かれず、表題欄のセルは空欄のまま残る)。 <sub>`an_empty_sheet_reproduces_the_previous_frame_exactly`</sub>
+- A4縦テンプレートでは190×277の図枠が描かれ、110mm幅の表題欄が右下に、ゾーン目盛は同じ4×6で出る。 <sub>`the_a4_portrait_template_draws_a_narrower_frame_and_title_block`</sub>
+- 図面は図枠テンプレートに従う: プロジェクトをA4縦へ切り替えると全シートの図枠が変わり、undoで元へ戻る。 <sub>`switching_the_project_frame_template_changes_the_output`</sub>
+- 誰も知らない図枠テンプレートを指しているプロジェクトも、既定のJIS A3図枠で問題なく出力できる。 <sub>`an_unknown_frame_template_still_prints_with_the_default_frame`</sub>
+- 表題欄のセルにはバインドの解決結果が出る: 「何枚中の何枚目」・プロジェクト名・最新改訂がそのまま欄に入る。 <sub>`title_block_cells_print_resolved_binds`</sub>
+- ロゴ枠を持つ図枠テンプレートは、ロゴの位置に空の矩形を描く(画像を入れる前でも場所が確保される)。 <sub>`a_logo_frame_is_drawn_as_an_empty_rectangle`</sub>
 - 品名などの特殊文字(<, >, &, 引用符)はSVG内でXMLエスケープされる。 <sub>`svg_escapes_xml_special_chars`</sub>
 - 改訂が2件あると表題欄の真上に改訂表が描かれ、古い行が下・新しい行が上に積まれ、最下段に列見出し(記号/日付/内容/承認)が出る。 <sub>`svg_draws_revision_table_above_title_block`</sub>
 - 改訂が0件のシートには改訂欄をまったく描かない(空の枠だけも描かない)。 <sub>`svg_omits_revision_table_when_no_revisions`</sub>
@@ -507,6 +541,13 @@
 - 指摘の無い図面では、図面コンテキストの検証サマリがエラー0・警告0になる。 <sub>`drawing_context_reports_a_clean_drawing_as_no_diagnostics`</sub>
 - 図面コンテキストは検証サマリ(重要度ごとの件数と先頭数件のcode・メッセージ)を含む。 <sub>`drawing_context_summarizes_the_verification_result`</sub>
 - AI設定のエンドポイントは変更を永続化し、エージェントマネージャへ適用する。 <sub>`settings_endpoints_persist_and_apply`</sub>
+
+### 図枠テンプレート (REST)
+
+- GET /frame-templates は同梱の図枠テンプレートを英日の名前つきで返し、ユーザーが自分の図枠を置くフォルダの場所も添える。 <sub>`the_link_api_lists_the_bundled_frame_templates`</sub>
+- 一覧には図枠の定義一式(用紙・マージン・ゾーン・表題欄のセル・改訂欄の列幅)が入っているので、クライアントはファイルを読まずにプレビューできる。 <sub>`a_listed_frame_template_carries_its_whole_definition`</sub>
+- POST /commands の set_frame_template でプロジェクト全体の図枠が切り替わり、undo一発で元の図枠へ戻る。 <sub>`setting_the_frame_template_over_the_link_api_is_one_undo_step`</sub>
+- 書き出したSVGはプロジェクトの図枠テンプレートに従う: A4縦へ切り替えると表題欄が120mmではなく110mm幅で描かれる。 <sub>`the_exported_svg_follows_the_projects_frame_template`</sub>
 
 ### REST Link API
 
@@ -1009,6 +1050,27 @@
 - 不正な動的IDはnullになる <sub>`dynamicSymbol`</sub>
 - PLCモジュールのシンボルは1〜64点までで、その外の点数は存在しない <sub>`dynamicSymbol`</sub>
 - 静的定義を優先し、無ければ動的生成にフォールバックする <sub>`resolveSymbolDef`</sub>
+
+### 図枠テンプレートの配置計算 (キャンバス)
+
+- 既定の図枠テンプレートは現行のJIS図枠そのもので、マージン10mm・ゾーン4×6・右下の120×32mm表題欄を持つ <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
+- キャンバスが持つ既定の図枠は、同梱のjis-a3.jsonと一字一句同じ内容である(印刷とキャンバスで図枠がずれない) <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
+- ゾーンの目盛文字は数字なら1,2,3…、英字ならA,B,C…でZの次はAへ戻る <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
+- 説明書きのバインドはすべて値になる (プロジェクト名・シート番号/総数・シート名・最新改訂・表題欄の全欄) <sub>`表題欄のバインド解決`</sub>
+- {date} {scale} {designer} {approver} は表題欄の日付・尺度・設計・承認の別名として同じ値になる <sub>`表題欄のバインド解決`</sub>
+- 知らないバインドはエラーにならず空文字になる (テンプレートに書き間違いがあっても図面は出せる) <sub>`表題欄のバインド解決`</sub>
+- バインドの無い文字はそのまま出て、閉じ括弧の無い「{」は行の残りを飲み込まずそのまま残る <sub>`表題欄のバインド解決`</sub>
+- {rev.latest}は保存されたRev欄ではなく最新の改訂行に追従する <sub>`表題欄のバインド解決`</sub>
+- シート単体では「1枚中1枚目・プロジェクト名は空」として解決される <sub>`表題欄のバインド解決`</sub>
+- 固定文字のセルは中括弧も含めてそのまま出し、バインドのセルだけが値へ置き換わる <sub>`表題欄のバインド解決`</sub>
+- 既定の図枠をA3横へ当てると、外枠は10mmマージンの400×277、表題欄は右下(290,255)の120×32mmになる <sub>`frameLayout`</sub>
+- ゾーンの分割数はシートの設定に従い、目盛文字の種類はテンプレートが決める(図枠を替えても図面の住所は変わらない) <sub>`frameLayout`</sub>
+- 表題欄の罫線とセルは用紙座標へ移され、セルには解決済みの文字が入る <sub>`frameLayout`</sub>
+- 会社名のセルは表題欄の左外に右揃えで置かれ、会社名が空のシートでは描かれない <sub>`frameLayout`</sub>
+- A4縦の図枠へ差し替えると表題欄の幅が110mmへ縮み、改訂欄の列も同じ幅に収まる <sub>`frameLayout`</sub>
+- ロゴ枠を持つ図枠テンプレートでは、ロゴの位置がそのまま配置に出る(画像が無くても場所が決まる) <sub>`frameLayout`</sub>
+- 改訂欄は表題欄の真上に同じ右端・同じ幅で置かれ、行高は表題欄と同じ8mmになる <sub>`revisionLayout (図枠テンプレート版)`</sub>
+- 改訂欄の最大行数はテンプレートが決め、上限を超えた分は古い行から省かれる <sub>`revisionLayout (図枠テンプレート版)`</sub>
 
 ### ハーネス境界
 

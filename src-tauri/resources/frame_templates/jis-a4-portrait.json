@@ -1,0 +1,43 @@
+{
+  "id": "jis-a4-portrait",
+  "name": "JIS A4 portrait",
+  "name_ja": "JIS A4 縦",
+  "description": "A4 portrait frame with the same title-block cells as jis-a3, narrowed to 110 mm to fit the 190 mm frame.",
+  "description_ja": "A4縦の図枠。表題欄のセル構成はjis-a3と同じで、190mmの枠に収まるよう幅を110mmへ詰めてある。",
+  "paper": { "w": 210.0, "h": 297.0 },
+  "frame_margin": 10.0,
+  "zones": {
+    "cols": 4,
+    "rows": 6,
+    "col_labels": "numeric",
+    "row_labels": "alpha"
+  },
+  "title_block": {
+    "origin": "bottom_right",
+    "w": 110.0,
+    "h": 32.0,
+    "row_h": 8.0,
+    "grid_lines": [
+      { "x1": 0.0, "y1": 8.0, "x2": 110.0, "y2": 8.0 },
+      { "x1": 0.0, "y1": 16.0, "x2": 110.0, "y2": 16.0 },
+      { "x1": 0.0, "y1": 24.0, "x2": 110.0, "y2": 24.0 },
+      { "x1": 22.0, "y1": 0.0, "x2": 22.0, "y2": 32.0 }
+    ],
+    "cells": [
+      { "x": 2.0, "y": 5.5, "w": 20.0, "h": 8.0, "text": "図番", "size": 3.0 },
+      { "x": 24.0, "y": 5.5, "w": 84.0, "h": 8.0, "bind": "{title_block.drawing_no}  Rev {rev.latest}", "size": 3.0 },
+      { "x": 2.0, "y": 13.5, "w": 20.0, "h": 8.0, "text": "品名", "size": 3.0 },
+      { "x": 24.0, "y": 13.5, "w": 84.0, "h": 8.0, "bind": "{title_block.title}", "size": 3.0 },
+      { "x": 2.0, "y": 21.5, "w": 20.0, "h": 8.0, "text": "尺度", "size": 3.0 },
+      { "x": 24.0, "y": 21.5, "w": 84.0, "h": 8.0, "bind": "{scale}    日付 {date}", "size": 3.0 },
+      { "x": 2.0, "y": 29.5, "w": 20.0, "h": 8.0, "text": "設計", "size": 3.0 },
+      { "x": 24.0, "y": 29.5, "w": 84.0, "h": 8.0, "bind": "{title_block.designed}  製図 {title_block.drawn}  検図 {title_block.checked}  承認 {approver}", "size": 3.0 },
+      { "x": -2.0, "y": 30.0, "bind": "{title_block.company}", "size": 3.0, "align": "end", "omit_if_empty": true }
+    ]
+  },
+  "revision_block": {
+    "rows_max": 6,
+    "col_w": [13.0, 26.0, 51.0, 20.0]
+  },
+  "logo": null
+}

@@ -1,0 +1,43 @@
+{
+  "id": "jis-a3",
+  "name": "JIS A3 landscape",
+  "name_ja": "JIS A3 横",
+  "description": "JIS Z 8311 frame with a 120x32 mm title block in the bottom-right corner and the revision table stacked above it.",
+  "description_ja": "JIS Z 8311の図枠。右下に120×32mmの表題欄、その真上に改訂欄を積む。",
+  "paper": { "w": 420.0, "h": 297.0 },
+  "frame_margin": 10.0,
+  "zones": {
+    "cols": 4,
+    "rows": 6,
+    "col_labels": "numeric",
+    "row_labels": "alpha"
+  },
+  "title_block": {
+    "origin": "bottom_right",
+    "w": 120.0,
+    "h": 32.0,
+    "row_h": 8.0,
+    "grid_lines": [
+      { "x1": 0.0, "y1": 8.0, "x2": 120.0, "y2": 8.0 },
+      { "x1": 0.0, "y1": 16.0, "x2": 120.0, "y2": 16.0 },
+      { "x1": 0.0, "y1": 24.0, "x2": 120.0, "y2": 24.0 },
+      { "x1": 24.0, "y1": 0.0, "x2": 24.0, "y2": 32.0 }
+    ],
+    "cells": [
+      { "x": 2.0, "y": 5.5, "w": 22.0, "h": 8.0, "text": "図番", "size": 3.0 },
+      { "x": 26.0, "y": 5.5, "w": 92.0, "h": 8.0, "bind": "{title_block.drawing_no}  Rev {rev.latest}", "size": 3.0 },
+      { "x": 2.0, "y": 13.5, "w": 22.0, "h": 8.0, "text": "品名", "size": 3.0 },
+      { "x": 26.0, "y": 13.5, "w": 92.0, "h": 8.0, "bind": "{title_block.title}", "size": 3.0 },
+      { "x": 2.0, "y": 21.5, "w": 22.0, "h": 8.0, "text": "尺度", "size": 3.0 },
+      { "x": 26.0, "y": 21.5, "w": 92.0, "h": 8.0, "bind": "{scale}    日付 {date}", "size": 3.0 },
+      { "x": 2.0, "y": 29.5, "w": 22.0, "h": 8.0, "text": "設計", "size": 3.0 },
+      { "x": 26.0, "y": 29.5, "w": 92.0, "h": 8.0, "bind": "{title_block.designed}  製図 {title_block.drawn}  検図 {title_block.checked}  承認 {approver}", "size": 3.0 },
+      { "x": -2.0, "y": 30.0, "bind": "{title_block.company}", "size": 3.0, "align": "end", "omit_if_empty": true }
+    ]
+  },
+  "revision_block": {
+    "rows_max": 6,
+    "col_w": [14.0, 28.0, 56.0, 22.0]
+  },
+  "logo": null
+}

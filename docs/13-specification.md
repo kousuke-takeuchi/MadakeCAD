@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1218 specification clauses** across 5 areas.
+**1271 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -27,6 +27,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - SetTitleBlock updates the sheet's title block; undo restores the previous fields. <sub>`set_title_block_is_undoable`</sub>
 - SetRevisions replaces the revision-table rows; undo restores the previous list. <sub>`set_revisions_is_undoable`</sub>
 - SetPlcAssignments replaces the whole PLC I/O assignment table of the project; undo restores the previous table. <sub>`set_plc_assignments_is_undoable`</sub>
+- SetFrameTemplate switches the frame template of the whole project in one edit, and undo puts the previous one back (undoing the very first switch returns to the default frame). <sub>`set_frame_template_is_undoable`</sub>
+- SetFrameTemplate accepts an id nobody knows: the drawing keeps printing with the default frame, so a project made elsewhere still opens. <sub>`set_frame_template_accepts_an_unknown_id`</sub>
 - A harness boundary is added, renamed and deleted with the ordinary entity commands, and every step can be undone. <sub>`harness_add_rename_delete_are_undoable`</sub>
 - Moving a harness boundary shifts all of its corners, and undo puts them back exactly. <sub>`harness_move_and_undo_restores_every_corner`</sub>
 - A harness boundary survives a JSON round trip with the kind tag "harness", so any client can send it. <sub>`harness_command_json_roundtrip_uses_the_harness_kind`</sub>
@@ -43,6 +45,29 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - If any command in a batch fails, the whole batch is refused: the drawing is unchanged and nothing lands in the history. <sub>`execute_batch_refuses_everything_when_one_command_fails`</sub>
 - An empty batch changes nothing at all: no history entry and no new document revision. <sub>`empty_batch_changes_nothing`</sub>
 - Reverting a range with no edits of that origin reports "nothing to do" instead of touching the drawing. <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
+
+### Frame templates (plot frames)
+
+- The two bundled frame templates (JIS A3 landscape and JIS A4 portrait) are listed in that order with English and Japanese names, and both are valid. <sub>`the_two_bundled_frame_templates_are_listed_in_both_languages`</sub>
+- Even without the resource directory, the frame templates compiled into the build are still available. <sub>`frame_templates_are_available_without_the_resource_directory`</sub>
+- The jis-a3 template describes the current JIS frame: 10 mm margin, 4x6 zones with numeric columns and alphabetic rows, and a 120x32 mm title block anchored at the bottom-right corner. <sub>`the_jis_a3_template_describes_the_current_jis_frame`</sub>
+- The jis-a4-portrait template is a 210x297 frame whose title block keeps the same cells as jis-a3 but is narrowed to 110 mm, with revision columns that still add up to the title-block width. <sub>`the_a4_portrait_template_narrows_the_same_title_block`</sub>
+- Every documented bind resolves to its value: project name and sheet number/total, sheet name, latest revision, all title-block fields and the {date}/{scale}/{designer}/{approver} aliases. <sub>`every_documented_bind_resolves_to_its_value`</sub>
+- {rev.latest} follows the newest revision row rather than the stored Rev field. <sub>`the_latest_revision_bind_follows_the_revision_table`</sub>
+- An unknown bind becomes an empty string instead of an error, so a drawing with a typo in its template still prints. <sub>`an_unknown_bind_becomes_an_empty_string`</sub>
+- Text with no binds is printed as is, and an unclosed brace is left alone instead of swallowing the rest of the line. <sub>`plain_text_and_unclosed_braces_are_left_alone`</sub>
+- On its own, a sheet is bound as sheet 1 of 1 with an empty project name; inside a project it gets its real position. <sub>`a_lone_sheet_is_bound_as_sheet_one_of_one`</sub>
+- The project number bind is known but always empty for now, because the project model has no number field yet. <sub>`the_project_number_bind_is_known_but_empty_for_now`</sub>
+- A cell with fixed text prints it verbatim, braces included, while a cell with a bind resolves it. <sub>`a_fixed_text_cell_is_printed_verbatim`</sub>
+- A template whose cell has both text and bind, or neither, is rejected with a message naming the cell. <sub>`a_cell_must_have_either_text_or_bind`</sub>
+- The revision columns must be the four JIS columns and add up to the title-block width, otherwise the revision table would not line up with the title block. <sub>`the_revision_columns_must_add_up_to_the_title_block_width`</sub>
+- Zero zone columns or rows, a negative margin and a zero-height title block are all rejected. <sub>`degenerate_frame_definitions_are_rejected`</sub>
+- Two cells may carry the same bind and a cell may sit outside the title-block rectangle: both are normal (the company name is printed to the left of the block). <sub>`duplicate_binds_and_cells_outside_the_block_are_allowed`</sub>
+- Frame templates the user drops into ~/MadakeCAD/templates/frames are listed after the bundled ones, and one with a bundled id replaces it. <sub>`user_frame_templates_are_listed_after_the_bundled_ones`</sub>
+- A frame template file that is broken JSON, or valid JSON with an invalid definition, is reported with its path and reason while the other templates stay usable. <sub>`a_broken_frame_template_file_is_reported_with_its_path`</sub>
+- Resolving no id at all, or an id nobody knows, both fall back to the bundled jis-a3 frame so the drawing still prints. <sub>`an_unknown_frame_template_id_falls_back_to_jis_a3`</sub>
+- A frame template is a paper-independent definition: it is drawn on whatever paper the sheet uses, so switching frames never resizes the sheet. <sub>`a_frame_template_does_not_change_the_paper_size`</sub>
+- Zone labels come from the template: numeric columns count 1,2,3 and alphabetic rows run A,B,C wrapping back to A after Z. <sub>`zone_labels_follow_the_configured_style`</sub>
 
 ### Geometry & coordinates
 
@@ -68,6 +93,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The saved .mdkproj file is pretty-printed JSON with a format_version field, so it diffs well in git. <sub>`saved_file_is_pretty_json_with_format_version`</sub>
 - Loading a missing file returns an error instead of panicking. <sub>`loading_missing_file_is_an_error`</sub>
 - A project file saved before the PLC assignment table existed still opens: it gets an empty table and is brought up to the current format version. <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
+- A project file saved before frame templates existed opens with no frame template set, which means it is drawn with the default JIS A3 frame exactly as before. <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
+- The frame template chosen for a project is saved to the file and comes back on reload. <sub>`the_frame_template_survives_a_save_and_reload`</sub>
 
 ### KiCad import
 
@@ -112,7 +139,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### Document model
 
 - Paper sizes follow ISO A-series dimensions, and portrait orientation swaps width and height. <sub>`paper_sizes_match_iso_and_orientation_swaps`</sub>
-- A new project starts with one sheet named "Sheet1", the current file format version and an empty PLC assignment table. <sub>`new_project_has_one_default_sheet`</sub>
+- A new project starts with one sheet named "Sheet1", the current file format version, an empty PLC assignment table and no explicit frame template (so it uses the default JIS A3 frame). <sub>`new_project_has_one_default_sheet`</sub>
 - Entity::translate moves every coordinate of the entity: all wire points, or the anchor of symbols/labels/text. <sub>`translate_moves_all_coordinates`</sub>
 - Entity::id() returns the inner entity's UUID regardless of the entity kind. <sub>`entity_id_is_uniform_across_kinds`</sub>
 
@@ -289,6 +316,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### SVG output (JIS frame)
 
 - The exported SVG contains the JIS frame, the title block text, wires and reference designators. <sub>`svg_contains_frame_wire_and_symbol`</sub>
+- Drawing the jis-a3 frame template produces exactly the JIS frame this program has always printed, down to the last character of the SVG (frame, zone ticks, revision table and every title-block cell). <sub>`the_jis_a3_template_reproduces_the_previous_frame_exactly`</sub>
+- An empty A4 sheet with no revisions also prints exactly the frame it always did: no revision table, and the title-block cells left blank rather than dropped. <sub>`an_empty_sheet_reproduces_the_previous_frame_exactly`</sub>
+- The A4 portrait template prints a 190x277 frame with its 110 mm title block in the bottom-right corner, and the same 4x6 zone ticks. <sub>`the_a4_portrait_template_draws_a_narrower_frame_and_title_block`</sub>
+- The frame template is what the drawing follows: switching the project to A4 portrait changes every sheet's frame, and it goes back on undo. <sub>`switching_the_project_frame_template_changes_the_output`</sub>
+- A project pointing at a frame template nobody knows still prints, using the default JIS A3 frame. <sub>`an_unknown_frame_template_still_prints_with_the_default_frame`</sub>
+- Title-block cells print the resolved binds: the sheet number out of the total, the project name and the latest revision all land in the block. <sub>`title_block_cells_print_resolved_binds`</sub>
+- A frame template with a logo frame draws an empty rectangle where the logo goes, so the space is reserved even before an image is set. <sub>`a_logo_frame_is_drawn_as_an_empty_rectangle`</sub>
 - Special characters in titles (<, >, &, quotes) are XML-escaped in the SVG. <sub>`svg_escapes_xml_special_chars`</sub>
 - Two revisions draw a table right above the title block, oldest at the bottom and newest on top, with a column header row. <sub>`svg_draws_revision_table_above_title_block`</sub>
 - A sheet with no revisions draws no revision table at all, not even an empty frame. <sub>`svg_omits_revision_table_when_no_revisions`</sub>
@@ -507,6 +541,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A clean drawing reports zero errors and zero warnings in the drawing context. <sub>`drawing_context_reports_a_clean_drawing_as_no_diagnostics`</sub>
 - The drawing context summarizes verification: severity counts plus the first few findings. <sub>`drawing_context_summarizes_the_verification_result`</sub>
 - AI settings endpoints persist changes and apply them to the agent manager. <sub>`settings_endpoints_persist_and_apply`</sub>
+
+### Frame templates (REST)
+
+- GET /frame-templates lists the bundled frame templates with their names in both languages and the folder where the user can drop their own. <sub>`the_link_api_lists_the_bundled_frame_templates`</sub>
+- The listed frame template carries the whole frame definition (paper, margin, zones, title-block cells and revision columns), so a client can preview it without reading any file. <sub>`a_listed_frame_template_carries_its_whole_definition`</sub>
+- POST /commands with set_frame_template switches the whole project's frame, and one undo puts the previous frame back. <sub>`setting_the_frame_template_over_the_link_api_is_one_undo_step`</sub>
+- The exported SVG follows the project's frame template: after switching to A4 portrait the title block is drawn 110 mm wide instead of 120 mm. <sub>`the_exported_svg_follows_the_projects_frame_template`</sub>
 
 ### REST Link API
 
@@ -1009,6 +1050,27 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - malformed dynamic ids return null <sub>`dynamicSymbol`</sub>
 - PLC module symbols exist from 1 to 64 points only <sub>`dynamicSymbol`</sub>
 - static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
+
+### Frame template layout (canvas)
+
+- mirrors the JIS frame the drawings have always used: 10 mm margin, 4x6 zones and a 120x32 mm bottom-right title block <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
+- is a byte-for-byte copy of the bundled jis-a3.json, so the canvas and the print output never drift apart <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
+- numbers zone columns 1,2,3 and letters zone rows A,B,C, wrapping back to A after Z <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
+- resolves every documented bind to its value <sub>`表題欄のバインド解決`</sub>
+- treats {date}, {scale}, {designer} and {approver} as aliases of the title-block fields <sub>`表題欄のバインド解決`</sub>
+- turns an unknown bind into an empty string instead of failing <sub>`表題欄のバインド解決`</sub>
+- leaves plain text and an unclosed brace exactly as they are <sub>`表題欄のバインド解決`</sub>
+- follows the newest revision row for {rev.latest} rather than the stored Rev field <sub>`表題欄のバインド解決`</sub>
+- binds a lone sheet as sheet 1 of 1 with an empty project name <sub>`表題欄のバインド解決`</sub>
+- prints a fixed-text cell verbatim and resolves only bind cells <sub>`表題欄のバインド解決`</sub>
+- lays the default frame on an A3 sheet: a 400x277 frame inset by 10 mm and the title block at (290, 255) <sub>`frameLayout`</sub>
+- takes the zone counts from the sheet and only the label style from the template <sub>`frameLayout`</sub>
+- moves the title-block rules and cells into paper coordinates with their text resolved <sub>`frameLayout`</sub>
+- puts the company name outside the left edge of the title block and drops it when empty <sub>`frameLayout`</sub>
+- narrows the title block and the revision columns to 110 mm with the A4 portrait frame <sub>`frameLayout`</sub>
+- reports the logo frame rectangle so the space is reserved even without an image <sub>`frameLayout`</sub>
+- places the revision table directly above the title block with the same width and row height <sub>`revisionLayout (図枠テンプレート版)`</sub>
+- keeps only as many revision rows as the template allows, dropping the oldest <sub>`revisionLayout (図枠テンプレート版)`</sub>
 
 ### Harness boundaries
 

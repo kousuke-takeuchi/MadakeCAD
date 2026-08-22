@@ -82,6 +82,12 @@ async fn get_templates() -> Json<madake_core::templates::TemplateList> {
     Json(madake_core::templates::list())
 }
 
+/// 使える図枠テンプレートの一覧(同梱+ユーザーの`~/MadakeCAD/templates/frames`)。
+/// 差し替えは`set_frame_template`コマンド (`POST /api/v1/commands`)。
+async fn get_frame_templates() -> Json<madake_core::frame_template::FrameTemplateList> {
+    Json(madake_core::frame_template::list())
+}
+
 #[derive(Deserialize)]
 struct ApplyTemplateBody {
     template_id: String,
@@ -1051,6 +1057,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/simulate/op", post(post_simulate_op))
         .route("/api/v1/templates", get(get_templates))
         .route("/api/v1/templates/apply", post(post_apply_template))
+        .route("/api/v1/frame-templates", get(get_frame_templates))
         .route("/api/v1/macros", get(get_macros))
         .route("/api/v1/macros/build", post(post_build_macro))
         .route("/api/v1/macros/save", post(post_save_macro))

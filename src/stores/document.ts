@@ -109,6 +109,9 @@ export const useDocumentStore = defineStore("document", {
           case "plc_assignments_replaced":
             if (this.project) this.project.plc_assignments = op.assignments;
             break;
+          case "frame_template_changed":
+            if (this.project) this.project.frame_template = op.frame_template;
+            break;
         }
       }
       this.revision = patch.revision;

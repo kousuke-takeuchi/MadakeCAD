@@ -13,7 +13,9 @@ pub type SheetId = Uuid;
 /// - v1: 初版
 /// - v2: PLC I/O割付表 ([`Project::plc_assignments`]) を追加。旧ファイルは空の割付表で開き、
 ///   読み込み時に現行版へ更新される ([`crate::io::load_project`])
-pub const FORMAT_VERSION: u32 = 2;
+/// - v3: 図枠テンプレート ([`Project::frame_template`]) を追加。旧ファイルは未指定で開き、
+///   既定の`jis-a3`図枠で描かれる(見た目は従来と同じ)
+pub const FORMAT_VERSION: u32 = 3;
 
 /// プロジェクト全体。保存形式(.mdkproj)のルート。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -28,6 +30,11 @@ pub struct Project {
     /// 図面の結線から導出する ([`crate::plc::plc_points`])。
     #[serde(default)]
     pub plc_assignments: Vec<PlcAssignment>,
+    /// 図枠テンプレート(プロットフレーム)のid (M4仕様 §9)。全シートの図枠・表題欄・
+    /// 改訂欄がこの定義で描かれる。未指定・未知idは既定の`jis-a3`
+    /// ([`crate::frame_template::DEFAULT_FRAME_TEMPLATE_ID`])。
+    #[serde(default)]
+    pub frame_template: Option<String>,
 }
 
 impl Project {
@@ -38,6 +45,7 @@ impl Project {
             sheets: vec![Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape)],
             wire_parts: Vec::new(),
             plc_assignments: Vec::new(),
+            frame_template: None,
         }
     }
 
@@ -343,8 +351,8 @@ mod tests {
         assert_eq!(sheet.paper_mm(), (210.0, 297.0));
     }
 
-    /// A new project starts with one sheet named "Sheet1", the current file format version and an empty PLC assignment table.
-    /// 新規プロジェクトは「Sheet1」という1枚のシート・現行のファイル形式バージョン・空のPLC割付表で始まる。
+    /// A new project starts with one sheet named "Sheet1", the current file format version, an empty PLC assignment table and no explicit frame template (so it uses the default JIS A3 frame).
+    /// 新規プロジェクトは「Sheet1」という1枚のシート・現行のファイル形式バージョン・空のPLC割付表で始まり、図枠テンプレートは未指定(=既定のJIS A3図枠)である。
     #[test]
     fn new_project_has_one_default_sheet() {
         let p = Project::new("demo");
@@ -354,6 +362,7 @@ mod tests {
         assert_eq!(p.sheets[0].zone_cols, 4);
         assert_eq!(p.sheets[0].zone_rows, 6);
         assert!(p.plc_assignments.is_empty());
+        assert_eq!(p.frame_template, None);
     }
 
     /// Entity::translate moves every coordinate of the entity: all wire points, or the anchor of symbols/labels/text.

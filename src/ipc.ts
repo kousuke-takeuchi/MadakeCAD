@@ -118,6 +118,11 @@ export interface Project {
   wire_parts: WirePart[];
   /** PLC I/O割付表 (信号名・コメントの正。接続先・線番は図面から導出)。 */
   plc_assignments: PlcAssignment[];
+  /**
+   * 図枠テンプレート (プロットフレーム、M4 §9) のid。全シートの図枠・表題欄・改訂欄が
+   * この定義で描かれる。未指定・未知idは既定の`jis-a3`。
+   */
+  frame_template?: string | null;
 }
 
 /** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */
@@ -144,6 +149,7 @@ export type Command =
   | { type: "set_wire_parts"; wire_parts: WirePart[] }
   /** PLC I/O割付表の置換 (プロジェクト単位)。 */
   | { type: "set_plc_assignments"; assignments: PlcAssignment[] }
+  | { type: "set_frame_template"; frame_template: string | null }
   /** 線番のネット単位自動採番。sheet_id省略(null)で全シート。 */
   | {
       type: "renumber_wires";
@@ -166,7 +172,8 @@ export type PatchOp =
   | { op: "entity_upserted"; sheet_id: string; entity: Entity }
   | { op: "entity_removed"; sheet_id: string; id: string }
   | { op: "wire_parts_replaced"; wire_parts: WirePart[] }
-  | { op: "plc_assignments_replaced"; assignments: PlcAssignment[] };
+  | { op: "plc_assignments_replaced"; assignments: PlcAssignment[] }
+  | { op: "frame_template_changed"; frame_template: string | null };
 
 export interface Patch {
   revision: number;
@@ -428,6 +435,19 @@ export interface TemplateList {
   user_dir?: string | null;
 }
 
+// 図枠テンプレート (プロットフレーム、M4 §9) の型はレイアウト計算と同居させている
+// (型のみの参照なので実行時の循環は生じない)。
+import type { FrameTemplate } from "./canvas/frameTemplate";
+export type { FrameTemplate };
+
+/** 図枠テンプレート一覧と、読み込めなかったファイルの理由 (madake-coreの`FrameTemplateList`)。 */
+export interface FrameTemplateList {
+  templates: FrameTemplate[];
+  issues: TemplateIssue[];
+  /** ユーザー図枠の置き場 (`~/MadakeCAD/templates/frames`)。 */
+  user_dir?: string | null;
+}
+
 /**
  * 回路マクロ1件 (madake-coreの`Macro`)。
  *
@@ -591,6 +611,10 @@ interface Ipc {
   applyTemplate(templateId: string, sheetId: string): Promise<Patch>;
   /** ユーザーテンプレートの置き場をOSのファイラで開く (無ければ作る)。戻り値=そのパス。 */
   openTemplatesFolder(): Promise<string>;
+  /** 使える図枠テンプレートの一覧 (同梱+ユーザーの`~/MadakeCAD/templates/frames`)。 */
+  listFrameTemplates(): Promise<FrameTemplateList>;
+  /** ユーザー図枠の置き場をOSのファイラで開く (無ければ作る)。戻り値=そのパス。 */
+  openFrameTemplatesFolder(): Promise<string>;
   /** 使える回路マクロの一覧 (ユーザーの`~/MadakeCAD/macros`)。 */
   listMacros(): Promise<MacroList>;
   /** 選択範囲をマクロへ組み立てるだけ (ファイルに書かない)。プレビューと⌘Cが使う。 */
@@ -693,6 +717,8 @@ const tauriIpc: Ipc = {
   applyTemplate: (templateId: string, sheetId: string) =>
     invoke<Patch>("apply_template", { templateId, sheetId }),
   openTemplatesFolder: () => invoke<string>("open_templates_folder"),
+  listFrameTemplates: () => invoke<FrameTemplateList>("list_frame_templates"),
+  openFrameTemplatesFolder: () => invoke<string>("open_frame_templates_folder"),
   listMacros: () => invoke<MacroList>("list_macros"),
   buildMacro: (sheetId, entityIds, meta) =>
     invoke<Macro>("build_macro", { sheetId, entityIds, meta }),
@@ -779,6 +805,8 @@ const httpIpc: Ipc = {
     }),
   // ブラウザ検証モードではOSのファイラを開けない (呼び出し側がパスを案内する)
   openTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
+  listFrameTemplates: () => http<FrameTemplateList>("/frame-templates"),
+  openFrameTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
   listMacros: () => http<MacroList>("/macros"),
   buildMacro: (sheetId, entityIds, meta) =>
     http<Macro>("/macros/build", {

@@ -20,8 +20,44 @@
 
 ### Task 1: 図枠テンプレート(コア)
 
-- [ ] Step 1 (red): 現行jis-a3出力のゴールデン固定→テンプレJSON読み込み・検証/バインド解決(全種+未知バインドはそのまま表示しない)/jis-a3テンプレでの出力が現行と等価/A4縦/ユーザーテンプレ列挙/Project.frame_template(format_version互換)
-- [ ] Step 2 (green): svg.rs/renderer.tsのデータ駆動化(改訂欄・ゾーン・表題欄)。gen_spec→コミット
+- [x] Step 1 (red): 現行jis-a3出力のゴールデン固定→テンプレJSON読み込み・検証/バインド解決(全種+未知バインドはそのまま表示しない)/jis-a3テンプレでの出力が現行と等価/A4縦/ユーザーテンプレ列挙/Project.frame_template(format_version互換)
+- [x] Step 2 (green): svg.rs/renderer.tsのデータ駆動化(改訂欄・ゾーン・表題欄)。gen_spec→コミット
+
+#### 確定したテンプレートJSONの形(2026-08-23、Task 1で決定)
+
+```jsonc
+{
+  "id": "jis-a3", "name": "JIS A3 landscape", "name_ja": "JIS A3 横",
+  "description": "...", "description_ja": "...",
+  "paper": { "w": 420.0, "h": 297.0 },   // 想定用紙(一覧・プレビュー用)。描画はシートの用紙を使う
+  "frame_margin": 10.0,
+  "zones": { "cols": 4, "rows": 6, "col_labels": "numeric", "row_labels": "alpha" },
+  "title_block": {
+    "origin": "bottom_right",            // bottom_right | bottom_left | top_right | top_left
+    "w": 120.0, "h": 32.0, "row_h": 8.0,
+    // 罫線・セルの座標はすべて「表題欄の左上角からの相対mm」(負=枠の外)
+    "grid_lines": [ { "x1": 0, "y1": 8, "x2": 120, "y2": 8 }, … ],
+    "cells": [
+      { "x": 2, "y": 5.5, "w": 22, "h": 8, "text": "図番", "size": 3.0 },
+      { "x": 26, "y": 5.5, "w": 92, "h": 8, "bind": "{title_block.drawing_no}  Rev {rev.latest}", "size": 3.0 },
+      { "x": -2, "y": 30, "bind": "{title_block.company}", "size": 3.0, "align": "end", "omit_if_empty": true }
+    ]
+  },
+  "revision_block": { "rows_max": 6, "col_w": [14.0, 28.0, 56.0, 22.0] },
+  "logo": null                            // { x, y, w, h, path? } 用紙座標mm。未解決なら枠だけ描く
+}
+```
+
+決定事項:
+
+- **セルは`text`(固定文字)か`bind`(バインド入り)のどちらか一方**。`align`=start/middle/end、`weight`=normal/bold、`omit_if_empty`=値が空ならセルごと描かない(会社名)。`w`/`h`はプレビュー・将来の文字詰め用で描画には未使用
+- **バインド**: `{project.name}` `{project.no}`(モデル未実装のため常に空) `{sheet.no}` `{sheet.total}` `{sheet.name}` `{rev.latest}` `{title_block.*}`(company/title/drawing_no/scale/date/designed/drawn/checked/approved/rev)+別名`{date}` `{scale}` `{designer}` `{approver}`。**知らないバインドは空文字**(エラーにしない)
+- **ゾーンの分割数はシート(`Sheet.zone_cols/zone_rows`)が正**。テンプレートの`zones.cols/rows`は「そのテンプレートが想定する分割」=新規シートの既定値・プレビュー用。図枠を替えても既存図面のゾーン住所(XRef)が変わらないようにするため。文字種(数字/英字)だけはテンプレートが決める
+- **用紙はテンプレートで変わらない**。`paper`は想定用紙の記録で、描画は常にシートの用紙サイズ・向き
+- **検証(`validate`)でエラーにするのは図面が破綻する矛盾だけ**: セルのtext/bind同時指定・両方なし、`size<=0`、改訂欄の列数が4以外、列幅合計が表題欄の幅と不一致、ゾーン0、負のマージン、表題欄の寸法0。**許容するもの**: 同じバインドを複数セルに書く/表題欄の外に出るセル(会社名)/知らないバインド
+- **等価性の担保**: `tests/golden/frame-jis-a3.svg`・`frame-jis-a3-empty-a4.svg`(データ駆動化前の出力を固定)と**文字列完全一致**をテストで比較。キャンバス側は`src/canvas/frameTemplate.ts`が同じ計算を持ち、`DEFAULT_FRAME_TEMPLATE`は`jis-a3.json`と`toEqual`で同一を強制
+- **露出**: IPC`list_frame_templates`/`open_frame_templates_folder`、Link API`GET /api/v1/frame-templates`、変更は`set_frame_template`コマンド(逆コマンド=旧id)。PDFは既存SVG経由で自動
+- 未対応(将来): ロゴ画像の実描画(枠のみ)、テンプレートの`frame_margin`変更に`xref.rs`のゾーン住所計算が追従しない(同梱2種はどちらも10mm)
 
 ### Task 2: 図枠テンプレート(UI)
 

@@ -54,6 +54,7 @@ MODULES = {
     "netlist": ("Netlist extraction", "ネットリスト抽出"),
     "wire_no": ("Wire numbering", "線番採番"),
     "harness": ("Harness boundaries", "ハーネス境界"),
+    "frame_template": ("Frame templates (plot frames)", "図枠テンプレート (プロットフレーム)"),
     "svg": ("SVG output (JIS frame)", "SVG出力 (JIS図枠)"),
     "pdf": ("PDF output", "PDF出力"),
     "reports": ("Reports (BOM / wire list)", "帳票 (部品表 / 電線リスト)"),
@@ -72,6 +73,7 @@ MODULES = {
     "agent_api": ("Agent REST endpoints", "エージェントRESTエンドポイント"),
     "tidy_api": ("Tidy metrics (MCP tool / REST)", "整えメトリクス (MCPツール / REST)"),
     "templates_api": ("Start templates (REST)", "開始テンプレート (REST)"),
+    "frame_templates_api": ("Frame templates (REST)", "図枠テンプレート (REST)"),
     "macros_api": ("Circuit macros (REST)", "回路マクロ (REST)"),
     "plc_api": ("PLC I/O (MCP tool / REST)", "PLC I/O (MCPツール / REST)"),
     "origin": ("Edit origin (user / agent / mcp)", "編集origin (ユーザー/エージェント/MCP)"),
@@ -90,6 +92,7 @@ MODULES = {
     "cli": ("Argument parsing & dispatch", "引数解釈・ディスパッチ"),
     "client": ("Link API client", "Link APIクライアント"),
     "format": ("Human-readable output", "人間向け整形出力"),
+    "frameTemplate": ("Frame template layout (canvas)", "図枠テンプレートの配置計算 (キャンバス)"),
 }
 
 RUST_ATTR = re.compile(r"^\s*#\[(tokio::)?test\]")

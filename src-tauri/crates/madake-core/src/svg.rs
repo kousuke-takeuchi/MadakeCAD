@@ -1,22 +1,28 @@
 //! 印刷品質のSVGエクスポート。JIS図枠(枠線・ゾーン番号・表題欄)+全エンティティを描く。
+//!
+//! 図枠・表題欄・改訂欄の寸法と中身は**図枠テンプレート**([`crate::frame_template`])が
+//! 持つデータで、ここはそれを描くだけ。テンプレートを差し替えれば全シートの図枠が変わる。
 
 use std::fmt::Write as _;
 
+use crate::frame_template::{BindContext, FrameTemplate, Weight};
 use crate::geometry::Point;
 use crate::model::{Entity, Revision, Sheet};
 use crate::netlist::transform_local;
 use crate::symbol::{Primitive, SymbolDef};
 
-/// 図枠の用紙端からのマージン (mm)。
+/// 図枠の用紙端からのマージン (mm)。**図面シートは図枠テンプレートの`frame_margin`を使う**。
+/// この定数は帳票シート ([`crate::report_sheet`]) やゾーン住所の計算 ([`crate::xref`]) が
+/// 使う、JIS標準どおりの既定値。
 pub const FRAME_MARGIN: f64 = 10.0;
 /// 配線の線幅 (mm)。
 const WIRE_STROKE: f64 = 0.35;
 /// シンボルの線幅 (mm)。
 const SYMBOL_STROKE: f64 = 0.3;
-/// 表題欄の外形 (幅, 高さ) mm。右下に置く。
+/// 表題欄の外形 (幅, 高さ) mm。右下に置く。図面シートの表題欄は図枠テンプレートが決めるので、
+/// この定数は帳票シート ([`crate::report_sheet`]) 用の既定値。
 pub(crate) const TITLE_W: f64 = 120.0;
-const TITLE_H: f64 = 32.0;
-/// 表題欄・改訂欄の共通行高 (mm)。
+/// 表題欄・改訂欄の共通行高 (mm)。同上 (図面シートはテンプレートの`row_h`)。
 pub(crate) const ROW_H: f64 = 8.0;
 /// 枠線の線幅 (mm)。
 pub(crate) const FRAME_STROKE: f64 = 0.5;
@@ -24,11 +30,9 @@ pub(crate) const FRAME_STROKE: f64 = 0.5;
 pub(crate) const RULE_STROKE: f64 = 0.25;
 /// 表題欄の文字高さ (mm)。
 pub(crate) const TITLE_FONT: f64 = 3.0;
-/// 改訂欄の列幅 (記号 / 日付 / 内容 / 承認) mm。合計は表題欄の幅と一致させる。
-const REV_COL_W: [f64; 4] = [14.0, 28.0, 56.0, 22.0];
-/// 改訂欄の列見出し (ISO 7200 / JIS Z 8311)。
+/// 改訂欄の列見出し (ISO 7200 / JIS Z 8311)。列幅は図枠テンプレートの`revision_block.col_w`。
 const REV_HEADERS: [&str; 4] = ["記号", "日付", "内容", "承認"];
-/// 改訂欄に描く最大行数。溢れた分は古い行から省略する (データは保持)。
+/// 改訂欄に描く既定の最大行数 (図枠テンプレートの`revision_block.rows_max`が無いとき)。
 const REV_MAX_ROWS: usize = 6;
 /// 改訂欄の本文・列見出しの文字高さ (mm)。
 const REV_FONT: f64 = 2.5;
@@ -57,9 +61,14 @@ const HARNESS_FONT: f64 = 2.5;
 const HARNESS_LABEL_DX: f64 = 1.0;
 const HARNESS_LABEL_DY: f64 = 1.0;
 
-/// 図面に描く改訂行(古い順)。上限を超えた分は古い行から省く。
+/// 図面に描く改訂行(古い順)。既定の上限を超えた分は古い行から省く。
 pub fn visible_revisions(revisions: &[Revision]) -> &[Revision] {
-    &revisions[revisions.len().saturating_sub(REV_MAX_ROWS)..]
+    visible_revisions_max(revisions, REV_MAX_ROWS)
+}
+
+/// 図面に描く改訂行(古い順)。上限は図枠テンプレートが決める。
+pub fn visible_revisions_max(revisions: &[Revision], rows_max: usize) -> &[Revision] {
+    &revisions[revisions.len().saturating_sub(rows_max)..]
 }
 
 /// 表題欄のRev欄に出す改訂記号。改訂があれば最新のmarkを優先する。
@@ -141,6 +150,29 @@ pub(crate) fn text_el(
     text_family_el(out, x, y, size, fill, anchor, "sans-serif", s);
 }
 
+/// 表題欄のセル用。太字指定のときだけ`font-weight`を足す
+/// (通常の太さのセルは[`text_el`]と1バイトも変わらない出力にする)。
+fn text_weight_el(
+    out: &mut String,
+    x: f64,
+    y: f64,
+    size: f64,
+    fill: &str,
+    anchor: &str,
+    weight: Weight,
+    s: &str,
+) {
+    if weight == Weight::Normal {
+        text_el(out, x, y, size, fill, anchor, s);
+        return;
+    }
+    let _ = write!(
+        out,
+        "<text x=\"{}\" y=\"{}\" font-size=\"{}\" fill=\"{}\" text-anchor=\"{}\" font-family=\"sans-serif\" font-weight=\"bold\">{}</text>\n",
+        n(x), n(y), n(size), fill, anchor, xml_escape(s)
+    );
+}
+
 /// 矩形。属性の並び (x, y, width, height) は図枠のテストが依存しているので変えない。
 pub(crate) fn rect_el(
     out: &mut String,
@@ -174,20 +206,25 @@ fn polyline_points(pts: &[Point]) -> String {
         .join(" ")
 }
 
-fn frame_and_title_block(out: &mut String, sheet: &Sheet) {
+/// 図枠テンプレート ([`crate::frame_template`]) のとおりに図枠・ゾーン目盛・改訂欄・
+/// 表題欄・ロゴ枠を描く。表題欄のセルはバインドを解決してから描く。
+fn frame_and_title_block(out: &mut String, sheet: &Sheet, t: &FrameTemplate, ctx: &BindContext) {
     let (pw, ph) = sheet.paper_mm();
-    let (x0, y0) = (FRAME_MARGIN, FRAME_MARGIN);
-    let (x1, y1) = (pw - FRAME_MARGIN, ph - FRAME_MARGIN);
+    let m = t.frame_margin;
+    let (x0, y0) = (m, m);
+    let (x1, y1) = (pw - m, ph - m);
     rect_el(out, x0, y0, x1 - x0, y1 - y0, "none", "#000", FRAME_STROKE);
-    // ゾーン番号: 横=数字、縦=英字
+    // ゾーン目盛。分割数はシートごとの設定 (図枠を替えても図面の住所は変わらない)、
+    // 文字種 (数字/英字) はテンプレートが決める
     let cols = sheet.zone_cols.max(1) as f64;
     let rows = sheet.zone_rows.max(1) as f64;
     let zw = (x1 - x0) / cols;
     let zh = (y1 - y0) / rows;
     for i in 0..sheet.zone_cols.max(1) {
         let cx = x0 + zw * (i as f64 + 0.5);
-        text_el(out, cx, y0 - 3.0, 3.0, "#000", "middle", &(i + 1).to_string());
-        text_el(out, cx, y1 + 6.0, 3.0, "#000", "middle", &(i + 1).to_string());
+        let label = t.zones.col_labels.label(i);
+        text_el(out, cx, y0 - 3.0, 3.0, "#000", "middle", &label);
+        text_el(out, cx, y1 + 6.0, 3.0, "#000", "middle", &label);
         if i > 0 {
             let tx = x0 + zw * i as f64;
             line_el(out, tx, y0 - 2.0, tx, y0, 0.25, "#000");
@@ -196,80 +233,73 @@ fn frame_and_title_block(out: &mut String, sheet: &Sheet) {
     }
     for i in 0..sheet.zone_rows.max(1) {
         let cy = y0 + zh * (i as f64 + 0.5) + 1.0;
-        let letter = char::from(b'A' + (i % 26) as u8).to_string();
-        text_el(out, x0 - 3.0, cy, 3.0, "#000", "middle", &letter);
-        text_el(out, x1 + 3.0, cy, 3.0, "#000", "middle", &letter);
+        let label = t.zones.row_labels.label(i);
+        text_el(out, x0 - 3.0, cy, 3.0, "#000", "middle", &label);
+        text_el(out, x1 + 3.0, cy, 3.0, "#000", "middle", &label);
     }
-    // 表題欄 (右下、120x32mm、4行)
-    let (tw, th) = (TITLE_W, TITLE_H);
-    let (tx, ty) = (x1 - tw, y1 - th);
-    let tb = &sheet.title_block;
-    revision_block(out, sheet, tx, ty);
-    rect_el(out, tx, ty, tw, th, "#fff", "#000", FRAME_STROKE);
-    for r in 1..4 {
-        let ry = ty + ROW_H * r as f64;
-        line_el(out, tx, ry, tx + tw, ry, RULE_STROKE, "#000");
+    // 表題欄 (テンプレートの基準隅・寸法・セル)
+    let def = &t.title_block;
+    let (tx, ty) = t.title_block_origin(pw, ph);
+    revision_block(out, sheet, t, tx, ty);
+    rect_el(out, tx, ty, def.w, def.h, "#fff", "#000", FRAME_STROKE);
+    for g in &def.grid_lines {
+        line_el(out, tx + g.x1, ty + g.y1, tx + g.x2, ty + g.y2, RULE_STROKE, "#000");
     }
-    line_el(out, tx + 24.0, ty, tx + 24.0, ty + th, RULE_STROKE, "#000");
-    let rows4: [(&str, String); 4] = [
-        ("図番", format!("{}  Rev {}", tb.drawing_no, effective_rev(sheet))),
-        ("品名", tb.title.clone()),
-        ("尺度", format!("{}    日付 {}", tb.scale, tb.date)),
-        (
-            "設計",
-            format!(
-                "{}  製図 {}  検図 {}  承認 {}",
-                tb.designed, tb.drawn, tb.checked, tb.approved
-            ),
-        ),
-    ];
-    for (i, (label, value)) in rows4.iter().enumerate() {
-        let cy = ty + ROW_H * i as f64 + 5.5;
-        text_el(out, tx + CELL_PAD, cy, TITLE_FONT, "#000", "start", label);
-        text_el(out, tx + 26.0, cy, TITLE_FONT, "#000", "start", value);
+    for cell in &def.cells {
+        let value = cell.resolve(ctx);
+        if cell.omit_if_empty && value.is_empty() {
+            continue;
+        }
+        text_weight_el(
+            out,
+            tx + cell.x,
+            ty + cell.y,
+            cell.size,
+            "#000",
+            cell.align.anchor(),
+            cell.weight,
+            &value,
+        );
     }
-    if !tb.company.is_empty() {
-        text_el(out, tx - 2.0, y1 - 2.0, TITLE_FONT, "#000", "end", &tb.company);
+    // ロゴ枠 (画像の埋め込みは未対応。枠だけを描いて置き場所を示す)
+    if let Some(logo) = &t.logo {
+        rect_el(out, logo.x, logo.y, logo.w, logo.h, "none", "#000", RULE_STROKE);
     }
 }
 
 /// 改訂欄 (ISO 7200 / JIS Z 8311)。表題欄の直上に同じ右端・同じ幅で描き、
 /// 最下段を列見出し、その上に古い改訂から順に積む (最新が最上段)。0行なら何も描かない。
-fn revision_block(out: &mut String, sheet: &Sheet, tx: f64, ty: f64) {
-    let rows = visible_revisions(&sheet.revisions);
+/// 行高・列幅・最大行数は図枠テンプレートが決める。
+fn revision_block(out: &mut String, sheet: &Sheet, t: &FrameTemplate, tx: f64, ty: f64) {
+    let rows = visible_revisions_max(&sheet.revisions, t.revision_block.rows_max);
     if rows.is_empty() {
         return;
     }
+    let width = t.title_block.w;
+    let row_h = t.title_block.row_h;
     // 高さ = (改訂行 + 列見出し1行) × 行高。下端は表題欄の上端。
-    let h = (rows.len() as f64 + 1.0) * ROW_H;
+    let h = (rows.len() as f64 + 1.0) * row_h;
     let top = ty - h;
-    rect_el(out, tx, top, TITLE_W, h, "#fff", "#000", FRAME_STROKE);
+    rect_el(out, tx, top, width, h, "#fff", "#000", FRAME_STROKE);
     for r in 1..=rows.len() {
-        let ry = top + ROW_H * r as f64;
-        line_el(out, tx, ry, tx + TITLE_W, ry, RULE_STROKE, "#000");
+        let ry = top + row_h * r as f64;
+        line_el(out, tx, ry, tx + width, ry, RULE_STROKE, "#000");
     }
-    let mut cx = tx;
-    for w in REV_COL_W.iter().take(REV_COL_W.len() - 1) {
-        cx += w;
-        line_el(out, cx, top, cx, ty, RULE_STROKE, "#000");
+    // セル左端 (記号 / 日付 / 内容 / 承認) と、その間の仕切り線
+    let lefts = t.revision_col_lefts(tx);
+    for left in lefts.iter().skip(1) {
+        line_el(out, *left, top, *left, ty, RULE_STROKE, "#000");
     }
-    // セル左端 (記号 / 日付 / 内容 / 承認)
-    let mut lefts = [0.0f64; 4];
-    let mut x = tx;
-    for (i, w) in REV_COL_W.iter().enumerate() {
-        lefts[i] = x;
-        x += w;
-    }
-    let baseline = |row_top: f64, font: f64| row_top + ROW_H / 2.0 + font / 2.0;
+    let baseline = |row_top: f64, font: f64| row_top + row_h / 2.0 + font / 2.0;
     // 列見出しは最下段 (表題欄側)
-    let head_top = ty - ROW_H;
+    let head_top = ty - row_h;
     for (i, label) in REV_HEADERS.iter().enumerate() {
         let cy = baseline(head_top, REV_HEADER_FONT);
         text_el(out, lefts[i] + CELL_PAD, cy, REV_HEADER_FONT, "#000", "start", label);
     }
     // 改訂行: 古い行 (rows[0]) が見出しの直上、新しい行ほど上へ積む
     for (i, rev) in rows.iter().enumerate() {
-        let row_top = ty - (i as f64 + 2.0) * ROW_H;
+        let row_top = ty - (i as f64 + 2.0) * row_h;
         let cy = baseline(row_top, REV_FONT);
         let cells = [&rev.mark, &rev.date, &rev.description, &rev.by];
         for (c, value) in cells.iter().enumerate() {
@@ -536,15 +566,26 @@ fn render_harnesses(out: &mut String, sheet: &Sheet) {
     }
 }
 
-/// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。
+/// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。図枠は既定の`jis-a3`。
 /// シート単体の出力なのでシート間クロスリファレンスは描かない
 /// (描くには [`project_sheet_to_svg`] を使う)。
 pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
+    sheet_to_svg_with_frame(sheet, symbols, crate::frame_template::default_template())
+}
+
+/// 図枠テンプレートを指定してシート1枚を書き出す(図枠のプレビュー・テスト用)。
+pub fn sheet_to_svg_with_frame(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    frame: &FrameTemplate,
+) -> String {
     sheet_to_svg_with_xrefs(
         sheet,
         symbols,
         &std::collections::BTreeMap::new(),
         &RelayAnnotations::default(),
+        frame,
+        &BindContext::for_sheet(sheet),
     )
 }
 
@@ -561,7 +602,8 @@ pub struct RelayAnnotations {
     pub coil_locations: std::collections::BTreeMap<crate::model::EntityId, String>,
 }
 
-/// プロジェクト内の1シートをSVGとして書き出す。ネットラベルの脇には、他シートにある
+/// プロジェクト内の1シートをSVGとして書き出す。図枠はプロジェクトの図枠テンプレート
+/// ([`crate::model::Project::frame_template`])。ネットラベルの脇には、他シートにある
 /// 同名ラベルの住所「/シート.ゾーン」([`crate::xref`]) を自動で添える。
 /// シートが見つからなければNone。
 pub fn project_sheet_to_svg(
@@ -575,16 +617,27 @@ pub fn project_sheet_to_svg(
         contact_maps: crate::relay_xref::sheet_contact_maps(project, sheet_id),
         coil_locations: crate::relay_xref::sheet_coil_locations(project, sheet_id),
     };
-    Some(sheet_to_svg_with_xrefs(sheet, symbols, &xrefs, &relay))
+    let frame = crate::frame_template::for_project(project);
+    Some(sheet_to_svg_with_xrefs(
+        sheet,
+        symbols,
+        &xrefs,
+        &relay,
+        &frame,
+        &BindContext::for_project(project, sheet),
+    ))
 }
 
 /// [`sheet_to_svg`] の本体。`xrefs`はネットラベルのentity id → 脇に描くXRefテキスト、
-/// `relay`はコイル⇔接点のクロスリファレンス注記。
+/// `relay`はコイル⇔接点のクロスリファレンス注記、`frame`/`ctx`は図枠テンプレートと
+/// 表題欄バインドの文脈。
 fn sheet_to_svg_with_xrefs(
     sheet: &Sheet,
     symbols: &[SymbolDef],
     xrefs: &std::collections::BTreeMap<crate::model::EntityId, String>,
     relay: &RelayAnnotations,
+    frame: &FrameTemplate,
+    ctx: &BindContext,
 ) -> String {
     let (pw, ph) = sheet.paper_mm();
     let mut out = String::new();
@@ -598,7 +651,7 @@ fn sheet_to_svg_with_xrefs(
         "<rect x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" fill=\"#ffffff\"/>\n",
         n(pw), n(ph)
     );
-    frame_and_title_block(&mut out, sheet);
+    frame_and_title_block(&mut out, sheet, frame, ctx);
     // ハーネス境界は配線・シンボルの背面に置く
     render_harnesses(&mut out, sheet);
     let defs: std::collections::BTreeMap<&str, &SymbolDef> =
@@ -716,6 +769,191 @@ mod tests {
         assert!(svg.contains(">F1<"));
         assert!(svg.matches("<text").count() >= 3);
         assert!(svg.trim_end().ends_with("</svg>"));
+    }
+
+    /// 図枠部分だけを取り出す (SVGの外殻と用紙の下地を除いた、図枠・表題欄・改訂欄の行)。
+    fn frame_only(svg: &str) -> String {
+        let mut out = String::new();
+        for line in svg.lines() {
+            if line.starts_with("<svg")
+                || line.starts_with("</svg")
+                || line.starts_with("<rect x=\"0\" y=\"0\"")
+            {
+                continue;
+            }
+            out.push_str(line);
+            out.push('\n');
+        }
+        out
+    }
+
+    /// 表題欄を全欄埋めた改訂2件のA3シート (ゴールデンの素)。
+    fn golden_sheet() -> Sheet {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+        sheet.title_block = TitleBlock {
+            company: "まだけ電機".into(),
+            title: "制御盤 主回路".into(),
+            drawing_no: "MDK-001".into(),
+            scale: "1:1".into(),
+            date: "2026-08-23".into(),
+            designed: "K.T".into(),
+            drawn: "S.M".into(),
+            checked: "Y.N".into(),
+            approved: "H.I".into(),
+            rev: "A".into(),
+        };
+        sheet.revisions = vec![
+            Revision { mark: "A".into(), date: "26-08-01".into(), description: "初版".into(), by: "K.T".into() },
+            Revision { mark: "B".into(), date: "26-08-20".into(), description: "端子台追加".into(), by: "K.T".into() },
+        ];
+        sheet
+    }
+
+    /// Drawing the jis-a3 frame template produces exactly the JIS frame this program has always printed, down to the last character of the SVG (frame, zone ticks, revision table and every title-block cell).
+    /// jis-a3図枠テンプレートで描いた図枠は、これまで出力してきたJIS図枠とSVGの1文字まで同一である(外枠・ゾーン目盛・改訂欄・表題欄の全セル)。
+    #[test]
+    fn the_jis_a3_template_reproduces_the_previous_frame_exactly() {
+        let golden = include_str!("../tests/golden/frame-jis-a3.svg");
+        let got = frame_only(&sheet_to_svg(&golden_sheet(), &builtin_symbols()));
+        assert_eq!(got, golden, "図枠の出力が変わっている");
+    }
+
+    /// An empty A4 sheet with no revisions also prints exactly the frame it always did: no revision table, and the title-block cells left blank rather than dropped.
+    /// 改訂の無い空のA4シートも従来どおりの図枠を出す(改訂欄は描かれず、表題欄のセルは空欄のまま残る)。
+    #[test]
+    fn an_empty_sheet_reproduces_the_previous_frame_exactly() {
+        let golden = include_str!("../tests/golden/frame-jis-a3-empty-a4.svg");
+        let sheet = Sheet::new("Sheet1", PaperSize::A4, Orientation::Landscape);
+        let got = frame_only(&sheet_to_svg(&sheet, &builtin_symbols()));
+        assert_eq!(got, golden, "図枠の出力が変わっている");
+    }
+
+    /// The A4 portrait template prints a 190x277 frame with its 110 mm title block in the bottom-right corner, and the same 4x6 zone ticks.
+    /// A4縦テンプレートでは190×277の図枠が描かれ、110mm幅の表題欄が右下に、ゾーン目盛は同じ4×6で出る。
+    #[test]
+    fn the_a4_portrait_template_draws_a_narrower_frame_and_title_block() {
+        let mut sheet = golden_sheet();
+        sheet.size = PaperSize::A4;
+        sheet.orientation = Orientation::Portrait;
+        let frame = crate::frame_template::find("jis-a4-portrait").expect("A4縦");
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &frame);
+        assert!(svg.contains("viewBox=\"0 0 210 297\""), "{svg}");
+        // 外枠 (10mmマージン)
+        assert!(
+            svg.contains("<rect x=\"10\" y=\"10\" width=\"190\" height=\"277\""),
+            "{svg}"
+        );
+        // 表題欄 = 右下 (90, 255) の110x32
+        assert!(
+            svg.contains("<rect x=\"90\" y=\"255\" width=\"110\" height=\"32\""),
+            "{svg}"
+        );
+        // 改訂欄 = その真上、同じ幅
+        assert!(
+            svg.contains("<rect x=\"90\" y=\"231\" width=\"110\" height=\"24\""),
+            "{svg}"
+        );
+        // ゾーンは4列6行のまま (列=数字、行=英字)
+        for label in ["1", "2", "3", "4", "A", "F"] {
+            assert!(
+                texts(&svg).iter().any(|(_, _, s)| s == label),
+                "ゾーン{label}が無い: {svg}"
+            );
+        }
+        // 表題欄の中身はjis-a3と同じ (ラベル+バインドの解決結果)
+        assert!(svg.contains("MDK-001  Rev B"), "{svg}");
+        assert!(svg.contains(">制御盤 主回路<"), "{svg}");
+        assert!(svg.contains(">まだけ電機<"), "会社名は表題欄の左外: {svg}");
+    }
+
+    /// The frame template is what the drawing follows: switching the project to A4 portrait changes every sheet's frame, and it goes back on undo.
+    /// 図面は図枠テンプレートに従う: プロジェクトをA4縦へ切り替えると全シートの図枠が変わり、undoで元へ戻る。
+    #[test]
+    fn switching_the_project_frame_template_changes_the_output() {
+        use crate::command::{Command, Engine};
+        let mut project = Project::new("t");
+        project.sheets[0] = golden_sheet();
+        let mut engine = Engine::new(project);
+        let sheet_id = engine.project().sheets[0].id;
+        let before =
+            project_sheet_to_svg(engine.project(), sheet_id, &builtin_symbols()).unwrap();
+        assert!(before.contains("<rect x=\"290\" y=\"255\" width=\"120\""), "{before}");
+
+        engine
+            .execute(Command::SetFrameTemplate {
+                frame_template: Some("jis-a4-portrait".into()),
+            })
+            .unwrap();
+        let after = project_sheet_to_svg(engine.project(), sheet_id, &builtin_symbols()).unwrap();
+        assert!(
+            after.contains("<rect x=\"300\" y=\"255\" width=\"110\""),
+            "A3の用紙にA4縦の表題欄 (110mm幅) が入る: {after}"
+        );
+
+        engine.undo().unwrap().unwrap();
+        let undone = project_sheet_to_svg(engine.project(), sheet_id, &builtin_symbols()).unwrap();
+        assert_eq!(undone, before, "undoで元の図枠へ戻る");
+    }
+
+    /// A project pointing at a frame template nobody knows still prints, using the default JIS A3 frame.
+    /// 誰も知らない図枠テンプレートを指しているプロジェクトも、既定のJIS A3図枠で問題なく出力できる。
+    #[test]
+    fn an_unknown_frame_template_still_prints_with_the_default_frame() {
+        let mut project = Project::new("t");
+        project.sheets[0] = golden_sheet();
+        project.frame_template = Some("no-such-frame".into());
+        let sheet_id = project.sheets[0].id;
+        let svg = project_sheet_to_svg(&project, sheet_id, &builtin_symbols()).unwrap();
+        assert!(svg.contains("<rect x=\"290\" y=\"255\" width=\"120\" height=\"32\""), "{svg}");
+    }
+
+    /// Title-block cells print the resolved binds: the sheet number out of the total, the project name and the latest revision all land in the block.
+    /// 表題欄のセルにはバインドの解決結果が出る: 「何枚中の何枚目」・プロジェクト名・最新改訂がそのまま欄に入る。
+    #[test]
+    fn title_block_cells_print_resolved_binds() {
+        use crate::frame_template::{Align, Cell, Weight};
+        let mut project = Project::new("まだけ制御盤");
+        project.sheets[0] = golden_sheet();
+        project
+            .sheets
+            .push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let mut frame = crate::frame_template::default_template().clone();
+        frame.title_block.cells.push(Cell {
+            x: 60.0,
+            y: 4.0,
+            w: None,
+            h: None,
+            text: None,
+            bind: Some("{project.name} {sheet.no}/{sheet.total} Rev {rev.latest}".into()),
+            size: 2.5,
+            weight: Weight::Bold,
+            align: Align::Middle,
+            omit_if_empty: false,
+        });
+        let svg = sheet_to_svg_with_xrefs(
+            &project.sheets[0],
+            &builtin_symbols(),
+            &Default::default(),
+            &RelayAnnotations::default(),
+            &frame,
+            &BindContext::for_project(&project, &project.sheets[0]),
+        );
+        assert!(svg.contains(">まだけ制御盤 1/2 Rev B<"), "{svg}");
+        assert!(svg.contains("font-weight=\"bold\""), "太字指定が効く: {svg}");
+    }
+
+    /// A frame template with a logo frame draws an empty rectangle where the logo goes, so the space is reserved even before an image is set.
+    /// ロゴ枠を持つ図枠テンプレートは、ロゴの位置に空の矩形を描く(画像を入れる前でも場所が確保される)。
+    #[test]
+    fn a_logo_frame_is_drawn_as_an_empty_rectangle() {
+        use crate::frame_template::LogoFrame;
+        let mut frame = crate::frame_template::default_template().clone();
+        frame.logo = Some(LogoFrame { x: 15.0, y: 15.0, w: 40.0, h: 20.0, path: None });
+        let svg = sheet_to_svg_with_frame(&golden_sheet(), &builtin_symbols(), &frame);
+        assert!(
+            svg.contains("<rect x=\"15\" y=\"15\" width=\"40\" height=\"20\" fill=\"none\""),
+            "{svg}"
+        );
     }
 
     /// Special characters in titles (<, >, &, quotes) are XML-escaped in the SVG.

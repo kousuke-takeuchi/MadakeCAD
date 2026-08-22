@@ -113,4 +113,46 @@ mod tests {
         assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    /// A project file saved before frame templates existed opens with no frame template set, which means it is drawn with the default JIS A3 frame exactly as before.
+    /// 図枠テンプレートが無かった頃のプロジェクトファイルは図枠未指定で開き、従来どおり既定のJIS A3図枠で描かれる。
+    #[test]
+    fn an_old_project_file_opens_with_the_default_frame_template() {
+        let dir = std::env::temp_dir().join(format!("madake-io-frame-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.mdkproj");
+        // format_version 2の頃のファイル (frame_templateが無い)
+        std::fs::write(
+            &path,
+            r#"{"format_version":2,"name":"旧図面","sheets":[],"wire_parts":[],"plc_assignments":[]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.frame_template, None);
+        assert_eq!(
+            crate::frame_template::for_project(&loaded).id,
+            crate::frame_template::DEFAULT_FRAME_TEMPLATE_ID
+        );
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The frame template chosen for a project is saved to the file and comes back on reload.
+    /// プロジェクトに選んだ図枠テンプレートはファイルへ保存され、読み直しても残っている。
+    #[test]
+    fn the_frame_template_survives_a_save_and_reload() {
+        let mut engine = Engine::new(Project::new("frame"));
+        engine
+            .execute(crate::command::Command::SetFrameTemplate {
+                frame_template: Some("jis-a4-portrait".into()),
+            })
+            .unwrap();
+        let dir = std::env::temp_dir().join(format!("madake-io-frame2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.mdkproj");
+        save_project(&path, engine.project()).unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.frame_template.as_deref(), Some("jis-a4-portrait"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

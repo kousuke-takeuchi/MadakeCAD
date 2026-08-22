@@ -52,6 +52,28 @@ fn list_templates() -> madake_core::templates::TemplateList {
     madake_core::templates::list()
 }
 
+/// 使える図枠テンプレートの一覧(同梱+ユーザーの`~/MadakeCAD/templates/frames`)。
+/// 差し替えは`set_frame_template`コマンド(`execute_command`)。
+#[tauri::command]
+fn list_frame_templates() -> madake_core::frame_template::FrameTemplateList {
+    madake_core::frame_template::list()
+}
+
+/// ユーザー図枠の置き場(`~/MadakeCAD/templates/frames`)をOSのファイラで開く。
+/// 無ければ作ってから開く。
+#[tauri::command]
+fn open_frame_templates_folder(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let dir = madake_core::frame_template::user_dir().ok_or("home directory not found")?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.display().to_string();
+    app.opener()
+        .open_path(path.clone(), None::<&str>)
+        .map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
 /// ユーザーテンプレートの置き場(`~/MadakeCAD/templates`)をOSのファイラで開く。
 /// 無ければ作ってから開く(「ここへJSONを置けば一覧に並ぶ」を実物で示す)。
 #[tauri::command]
@@ -652,6 +674,27 @@ fn resolve_templates_resource(app: &tauri::AppHandle) {
     eprintln!("開始テンプレート({RELATIVE})が見つかりません。埋め込みの内容で続行します");
 }
 
+/// 同梱の図枠テンプレート(`resources/frame_templates/*.json`)のディレクトリを
+/// madake-coreへ渡す(`MADAKE_FRAME_TEMPLATES_PATH`)。解決の考え方は
+/// [`resolve_templates_resource`]と同じ。
+fn resolve_frame_templates_resource(app: &tauri::AppHandle) {
+    use tauri::path::BaseDirectory;
+    use tauri::Manager;
+
+    const RELATIVE: &str = "resources/frame_templates";
+    let candidates = [
+        app.path().resolve(RELATIVE, BaseDirectory::Resource).ok(),
+        Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(RELATIVE)),
+    ];
+    for path in candidates.into_iter().flatten() {
+        if path.is_dir() {
+            std::env::set_var(madake_core::frame_template::FRAME_TEMPLATES_PATH_ENV, &path);
+            return;
+        }
+    }
+    eprintln!("図枠テンプレート({RELATIVE})が見つかりません。埋め込みの内容で続行します");
+}
+
 /// 同梱ドキュメント(`docs/`の公開マニュアル01〜13)の場所をエージェントへ渡す
 /// (`MADAKE_DOCS_PATH`)。
 ///
@@ -712,6 +755,7 @@ pub fn run() {
             resolve_docs_resource(app.handle());
             // 同梱の開始テンプレート(編集可能なCommand列JSON)の場所も教える
             resolve_templates_resource(app.handle());
+            resolve_frame_templates_resource(app.handle());
 
             // MCPサーバー起動 (127.0.0.1:port/mcp)。Link API(/api/v1)も同じポート
             let mcp_doc = doc.clone();
@@ -761,6 +805,8 @@ pub fn run() {
             list_templates,
             apply_template,
             open_templates_folder,
+            list_frame_templates,
+            open_frame_templates_folder,
             list_macros,
             build_macro,
             save_macro,

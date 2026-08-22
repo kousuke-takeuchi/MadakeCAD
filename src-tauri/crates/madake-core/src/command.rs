@@ -61,6 +61,13 @@ pub enum Command {
     SetPlcAssignments {
         assignments: Vec<PlcAssignment>,
     },
+    /// 図枠テンプレートの差し替え (プロジェクト単位。M4仕様 §9)。全シートの図枠・
+    /// 表題欄・改訂欄が一括で変わる。nullで既定 (`jis-a3`) へ戻す。
+    /// 逆コマンドは差し替え前のid。
+    SetFrameTemplate {
+        #[serde(default)]
+        frame_template: Option<String>,
+    },
     /// 線番のネット単位自動採番。sheet_id省略時はプロジェクトの全シートが対象。
     RenumberWires {
         #[serde(default)]
@@ -98,6 +105,8 @@ pub enum PatchOp {
     WirePartsReplaced { wire_parts: Vec<WirePart> },
     /// PLC I/O割付表が置き換わった。
     PlcAssignmentsReplaced { assignments: Vec<PlcAssignment> },
+    /// 図枠テンプレートが差し替わった (全シートの図枠を描き直す)。
+    FrameTemplateChanged { frame_template: Option<String> },
 }
 
 /// 編集の由来(誰の操作か)。undo履歴の各エントリに記録する。
@@ -580,6 +589,18 @@ impl Engine {
                     vec![Command::SetPlcAssignments { assignments: old }],
                 ))
             }
+            Command::SetFrameTemplate { frame_template } => {
+                let old = self.project.frame_template.clone();
+                self.project.frame_template = frame_template.clone();
+                Ok((
+                    vec![PatchOp::FrameTemplateChanged {
+                        frame_template: frame_template.clone(),
+                    }],
+                    vec![Command::SetFrameTemplate {
+                        frame_template: old,
+                    }],
+                ))
+            }
             Command::RenumberWires {
                 sheet_id,
                 mode,
@@ -893,6 +914,47 @@ mod tests {
         assert!(engine.project().plc_assignments.is_empty());
         engine.redo().unwrap().unwrap();
         assert_eq!(engine.project().plc_assignments.len(), 1);
+    }
+
+    /// SetFrameTemplate switches the frame template of the whole project in one edit, and undo puts the previous one back (undoing the very first switch returns to the default frame).
+    /// SetFrameTemplateはプロジェクト全体の図枠テンプレートを1回の編集で差し替え、undoで元の図枠へ戻る(最初の差し替えをundoすると未指定=既定の図枠へ戻る)。
+    #[test]
+    fn set_frame_template_is_undoable() {
+        let (mut engine, _) = test_engine();
+        assert_eq!(engine.project().frame_template, None);
+        let patch = engine
+            .execute(Command::SetFrameTemplate {
+                frame_template: Some("jis-a4-portrait".into()),
+            })
+            .unwrap();
+        assert!(matches!(patch.ops[0], PatchOp::FrameTemplateChanged { .. }));
+        assert_eq!(
+            engine.project().frame_template.as_deref(),
+            Some("jis-a4-portrait")
+        );
+        engine.undo().unwrap().unwrap();
+        assert_eq!(engine.project().frame_template, None, "未指定 (既定の図枠) へ戻る");
+        engine.redo().unwrap().unwrap();
+        assert_eq!(
+            engine.project().frame_template.as_deref(),
+            Some("jis-a4-portrait")
+        );
+    }
+
+    /// SetFrameTemplate accepts an id nobody knows: the drawing keeps printing with the default frame, so a project made elsewhere still opens.
+    /// SetFrameTemplateは知らないidも受け付ける(図面は既定の図枠で描かれ続けるので、他所で作ったプロジェクトも開ける)。
+    #[test]
+    fn set_frame_template_accepts_an_unknown_id() {
+        let (mut engine, _) = test_engine();
+        engine
+            .execute(Command::SetFrameTemplate {
+                frame_template: Some("our-own-frame".into()),
+            })
+            .expect("未知のidでも失敗しない");
+        assert_eq!(
+            crate::frame_template::for_project(engine.project()).id,
+            crate::frame_template::DEFAULT_FRAME_TEMPLATE_ID
+        );
     }
 
     fn sample_harness(name: &str) -> Entity {

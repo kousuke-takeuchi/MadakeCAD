@@ -31,6 +31,7 @@
     "resources": [
       "resources/knowledge/standards.md",
       "resources/templates/*.json",
+      "resources/frame_templates/*.json",
       "../docs/*.md"
     ],
     "icon": [
