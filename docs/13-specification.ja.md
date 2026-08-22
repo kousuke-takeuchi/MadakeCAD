@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**591仕様項目**。
+全5領域・**594仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -653,6 +653,9 @@
 - cancelは対象の会話だけを止め、他会話のストリーミングは残す <sub>`chat store: アクション`</sub>
 - 採番前(local-)の会話ではcancel APIを呼ばずローカル整理だけ行う <sub>`chat store: アクション`</sub>
 - 採番前のcancelは採番後にサーバーへ中断を送る <sub>`chat store: アクション`</sub>
+- キャンセル後に遅れて届いた同じターンのイベントは捨てられる <sub>`chat store: アクション`</sub>
+- キャンセル後に始めた新しいターン(より大きい通し番号)のイベントは通る <sub>`chat store: アクション`</sub>
+- 通し番号の無いイベント(旧サーバー)はキャンセル後でも捨てない <sub>`chat store: アクション`</sub>
 - cancel APIが失敗してもストリーミング解除は完了する <sub>`chat store: アクション`</sub>
 - 会話が無い状態のcancelは何もせず落ちない <sub>`chat store: アクション`</sub>
 - undoTurnはターン安定IDでAPIを呼び、適用済み表示を取り下げる <sub>`chat store: アクション`</sub>

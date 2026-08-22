@@ -29,6 +29,13 @@ function feed(store: Store, events: AgentEvent[], id = CONV) {
   for (const event of events) store.applyAgentEvent({ conversation_id: id, event });
 }
 
+/** ターン通し番号つきでイベントを流す(キャンセル後の遅延イベント判定に使う)。 */
+function feedSeq(store: Store, turnSeq: number, events: AgentEvent[], id = CONV) {
+  for (const event of events) {
+    store.applyAgentEvent({ conversation_id: id, turn_seq: turnSeq, event });
+  }
+}
+
 /** イベントの宛先となる既知の会話をストアへ用意する(未知idのイベントは無視されるため)。 */
 function seed(store: Store, id = CONV) {
   store.conversations.push({ id, session_id: null, messages: [], model: null, updated_at: 0 });
@@ -473,6 +480,61 @@ describe("chat store: アクション", () => {
     expect(store.cancelRequested).toBe(false);
   });
 
+  // ja: キャンセル後に遅れて届いた同じターンのイベントは捨てられる
+  it("events that arrive late from a cancelled turn are discarded", async () => {
+    vi.spyOn(agentApi, "cancel").mockResolvedValue();
+    const store = useChatStore();
+    seed(store);
+    feedSeq(store, 7, [{ type: "text_delta", text: "途中まで" }]);
+
+    await store.cancel();
+
+    // CLIの停止が間に合わず、中断したターンの出力が遅れて届く
+    feedSeq(store, 7, [
+      { type: "text_delta", text: "遅れて届いた続き" },
+      { type: "turn_completed", result: "完了しました", usage: null },
+      { type: "turn_applied", turn_id: TURN, start_revision: 4, end_revision: 6 },
+    ]);
+
+    expect(store.messages).toHaveLength(1);
+    expect(store.messages[0].text).toBe("途中まで");
+    expect(store.messages[0].error).toBe("キャンセルされました");
+    expect(store.messages[0].streaming).toBe(false);
+    expect(appliedCommandCount(store.messages[0])).toBe(0);
+    expect(store.streaming).toBe(false);
+  });
+
+  // ja: キャンセル後に始めた新しいターン(より大きい通し番号)のイベントは通る
+  it("events of a new turn started after a cancel (higher sequence number) still apply", async () => {
+    vi.spyOn(agentApi, "cancel").mockResolvedValue();
+    const store = useChatStore();
+    seed(store);
+    feedSeq(store, 7, [{ type: "text_delta", text: "途中まで" }]);
+    await store.cancel();
+
+    feedSeq(store, 8, [
+      { type: "text_delta", text: "やり直しました" },
+      { type: "turn_completed", result: "やり直しました", usage: null },
+    ]);
+
+    expect(store.messages).toHaveLength(2);
+    expect(store.messages[1].text).toBe("やり直しました");
+    expect(store.messages[1].streaming).toBe(false);
+  });
+
+  // ja: 通し番号の無いイベント(旧サーバー)はキャンセル後でも捨てない
+  it("events without a sequence number (older server) are kept even after a cancel", async () => {
+    vi.spyOn(agentApi, "cancel").mockResolvedValue();
+    const store = useChatStore();
+    seed(store);
+    feedSeq(store, 7, [{ type: "text_delta", text: "途中まで" }]);
+    await store.cancel();
+
+    feed(store, [{ type: "text_delta", text: "旧サーバーの続き" }]);
+
+    expect(store.messages[store.messages.length - 1].text).toContain("旧サーバーの続き");
+  });
+
   // ja: cancel APIが失敗してもストリーミング解除は完了する
   it("streaming stops even if the cancel API fails", async () => {
     vi.spyOn(agentApi, "cancel").mockRejectedValue(new Error("Link API 400"));
@@ -542,9 +604,9 @@ describe("chat store: アクション", () => {
 
   // ja: undoTurnのサーバー拒否は呼び出し元へ投げられ、適用済み表示は変わらない
   it("a server-rejected undoTurn propagates the error and keeps the applied badge", async () => {
-    // 最新の適用済みターンでない/送信中などのガードは400で返る
+    // 手編集との衝突・送信中などのガードは400で返る
     vi.spyOn(agentApi, "undoTurn").mockRejectedValue(
-      new Error("Link API 400: 最新の適用済みターンではないため巻き戻せません"),
+      new Error("Link API 400: このターンの編集は現在の図面と衝突するため巻き戻せません"),
     );
     const store = useChatStore();
     seed(store);
@@ -554,7 +616,7 @@ describe("chat store: アクション", () => {
       { type: "turn_applied", turn_id: TURN, start_revision: 4, end_revision: 6 },
     ]);
 
-    await expect(store.undoTurn(CONV, TURN)).rejects.toThrow("最新の適用済みターンではない");
+    await expect(store.undoTurn(CONV, TURN)).rejects.toThrow("衝突するため巻き戻せません");
 
     expect(store.messages[0].undone).toBe(false);
     expect(appliedCommandCount(store.messages[0])).toBeGreaterThan(0);
