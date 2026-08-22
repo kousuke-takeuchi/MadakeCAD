@@ -17,7 +17,7 @@ use axum::routing::{get, post};
 use axum::{http::StatusCode, Json, Router};
 use futures::stream::Stream;
 use madake_agent::{AgentManager, AppSettings, Conversation, DetectResult};
-use madake_core::{builtin_symbols, sheet_symbol_defs, Command, Patch};
+use madake_core::{sheet_symbol_defs, Command, Patch};
 use serde::Deserialize;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 use uuid::Uuid;
@@ -40,8 +40,69 @@ async fn get_project(State(doc): State<SharedDoc>) -> Json<serde_json::Value> {
     }))
 }
 
+/// 部品挿入に並ぶ全シンボル = 同梱 + ユーザーの`~/MadakeCAD/symbols`(ユーザーが後ろ)。
 async fn get_symbols() -> Json<serde_json::Value> {
-    Json(serde_json::json!(builtin_symbols()))
+    Json(serde_json::json!(madake_core::symbol_library::all()))
+}
+
+/// ユーザーシンボルだけの一覧(置き場のパス・読めなかったファイルの理由つき)。
+async fn get_user_symbols() -> Json<madake_core::symbol_library::SymbolLibrary> {
+    Json(madake_core::symbol_library::list())
+}
+
+/// 保存できなかった理由の一覧 (400)。`{ "errors": [{ "code", "message" }] }`。
+type SymbolErrors = (StatusCode, Json<serde_json::Value>);
+
+fn symbol_errors(errors: Vec<madake_core::symbol_library::SymbolError>) -> SymbolErrors {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({ "errors": errors })),
+    )
+}
+
+/// ユーザーシンボルを保存する。検証に落ちたら**何も書かず**理由を全部返す。
+/// ライブラリはCommandエンジンの外なので、この保存はundo履歴に乗らない。
+async fn post_save_user_symbol(
+    Json(def): Json<madake_core::SymbolDef>,
+) -> Result<Json<serde_json::Value>, SymbolErrors> {
+    let (saved, path) = madake_core::symbol_library::save(&def).map_err(symbol_errors)?;
+    Ok(Json(
+        serde_json::json!({ "symbol": saved, "path": path.display().to_string() }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct DeleteUserSymbolBody {
+    id: String,
+    /// 図面で使われていても消す。既定はfalse(使用中なら拒否)。
+    #[serde(default)]
+    force: bool,
+}
+
+/// ユーザーシンボルを削除する。使用中は`force`なしでは消さない。**undoでは戻らない**。
+async fn post_delete_user_symbol(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<DeleteUserSymbolBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let (path, in_use) = doc
+        .delete_user_symbol(&body.id, body.force)
+        .map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "path": path, "in_use": in_use })))
+}
+
+#[derive(Deserialize)]
+struct DuplicateSymbolBody {
+    /// 複製元のシンボルid(同梱・ピン数可変・ユーザーのどれでもよい)。
+    source_id: String,
+}
+
+/// 既存シンボルを複製した**下書き**を返す(ファイルにはまだ書かない)。
+async fn post_duplicate_symbol(
+    Json(body): Json<DuplicateSymbolBody>,
+) -> Result<Json<madake_core::SymbolDef>, ApiError> {
+    madake_core::symbol_library::duplicate_from(&body.source_id)
+        .map(Json)
+        .map_err(bad_request)
 }
 
 #[derive(Deserialize)]
@@ -1039,6 +1100,10 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1", get(health))
         .route("/api/v1/project", get(get_project))
         .route("/api/v1/symbols", get(get_symbols))
+        .route("/api/v1/symbols/user", get(get_user_symbols))
+        .route("/api/v1/symbols/user/save", post(post_save_user_symbol))
+        .route("/api/v1/symbols/user/delete", post(post_delete_user_symbol))
+        .route("/api/v1/symbols/duplicate", post(post_duplicate_symbol))
         .route("/api/v1/netlist", get(get_netlist))
         .route("/api/v1/verify", get(get_verify))
         .route("/api/v1/tidy-metrics", get(get_tidy_metrics))

@@ -74,8 +74,21 @@
 
 ### Task 3: シンボルエディタ(コア)
 
-- [ ] Step 1 (red): ユーザーライブラリの読み書き・列挙/保存時検証3種/複製開始(既存defからコピー)/部品挿入への「ユーザー」カテゴリ合流/既存図面で使用中のユーザーシンボル定義変更の扱い(図面はスナップショット保持=影響なし、をテストで固定)
-- [ ] Step 2 (green): 実装+IPC/Link API。gen_spec→コミット
+- [x] Step 1 (red): ユーザーライブラリの読み書き・列挙/保存時検証3種/複製開始(既存defからコピー)/部品挿入への「ユーザー」カテゴリ合流/既存図面で使用中のユーザーシンボル定義変更の扱い
+- [x] Step 2 (green): 実装+IPC/Link API。gen_spec→コミット
+
+#### Task 3で決めたこと(2026-08-23)
+
+- **置き場と形式**: `~/MadakeCAD/symbols/{id}.json`(env `MADAKE_USER_SYMBOLS_PATH`で差し替え可)。中身は`SymbolDef`のJSONそのまま。実装は`madake-core/src/symbol_library.rs`
+- **分類は`user`固定**。ファイルに何と書いてあっても読み込み・保存時に`user`へ正規化する(小分類は採らない)。理由: 同梱の分類へ紛れ込むと「自分で作った記号がどこにあるか」が分からなくなる。`CATEGORY_ORDER`の末尾に`user`を追加したので、部品挿入では同梱の後ろに1グループとして並ぶ
+- **id衝突は拒否**(ユーザー優先にしない)。同梱シンボル・ピン数可変シンボル(`terminal_block_8p`等)と同じidは保存も列挙も拒否し、`SymbolIssue`(パス+理由)で報告する。理由: 後から置いたファイルが同梱の記号を乗っ取ると、**そのidを使っている既存図面の見た目が黙って変わる**。解決順は 同梱 → 動的 → ユーザー
+- **図面はスナップショットを持たない**(`SymbolInstance`は`symbol_id`だけ)。したがって**ユーザーシンボルを保存し直すと、すでに置いてある部品も新しい定義で描き直される**(`sheet_symbol_defs`が毎回ライブラリを読む)。これを仕様として固定した(`editing_a_user_symbol_changes_the_parts_already_placed`)。スナップショット化は.mdkprojの形式変更+全描画系の変更で大きく、かつライブラリ追従(ACADE/EPLANの「ライブラリから更新」常時ON)のほうが実務に合うため**採らない**
+  - 代わりの安全弁: **使用中のユーザーシンボルの削除は`force`なしでは拒否**し、使用数を返す(`SharedDoc::delete_user_symbol`)
+- **保存時検証**(`validate`。落ちたら**何も書かない**・理由は全部返す): id(空/使えない文字/衝突)・名称(英日とも空)・参照記号接頭辞・図形0個と潰れた図形・接続点0個/番号空/2.5mmグリッド外・**同じ点の接続点**(同番号の完全重複=`pin_duplicate`、別番号の重なり=`pin_overlap`)・属性スロット(TAG必須・知らないキー・重複・文字高0)。**同じ番号を離れた2点に置くのは正しい**(端子台の貫通端子=内部短絡)ので通す
+  - 名称は英日どちらか片方でよい(空のほうへコピーする正規化)
+- **複製開始**: `duplicate_from(source_id)`は同梱・動的・ユーザーのどれからでも作れ、id=`{source}_copy`(埋まっていれば`_copy2`…)・名前=`… (copy)`/`…のコピー`・分類=user の**下書き**を返す(ファイルには書かない)
+- **Commandとの関係**: シンボルライブラリは**ファイルのドメイン**でCommandエンジンの外。保存・削除は`doc:patch`にもundo履歴にも乗らない(テストで固定)。図面を変えるのは配置(`add_entity`)側だけ
+- **露出**: IPC `list_symbols`(同梱+ユーザー合流へ変更)/`list_user_symbols`/`save_user_symbol`/`delete_user_symbol`/`duplicate_symbol`/`open_symbols_folder`、Link API `GET /symbols`(合流)・`GET /symbols/user`・`POST /symbols/user/save`(400で`{errors:[{code,message}]}`)・`POST /symbols/user/delete`・`POST /symbols/duplicate`、MCPツール `duplicate_symbol`/`save_user_symbol`/`delete_user_symbol`(エージェントも記号を作れる)。i18nに`symbolPicker.category.user`
 
 ### Task 4: シンボルエディタ(UI)
 

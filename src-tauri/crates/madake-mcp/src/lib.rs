@@ -13,7 +13,7 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use madake_core::{builtin_symbols, resolve_symbol, sheet_symbol_defs, Command, EditOrigin, Engine, Entity, Patch, Point, SymbolInstance, Wire};
+use madake_core::{resolve_symbol, sheet_symbol_defs, Command, EditOrigin, Engine, Entity, Patch, Point, SymbolInstance, Wire};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{ErrorData, ServerCapabilities, ServerInfo};
 use rmcp::transport::streamable_http_server::{
@@ -149,6 +149,29 @@ impl SharedDoc {
         };
         let path = madake_core::macros::write_macro(&m)?;
         Ok((m, path.display().to_string()))
+    }
+
+    /// ユーザーシンボルを削除する(ファイルを消す)。
+    ///
+    /// ライブラリはファイルのドメインなので**undoでは戻らない**。まだ図面で使われて
+    /// いるシンボルは`force`なしでは消さず、使用数を添えて拒否する(消すと、置いてある
+    /// 部品が定義を失って描けなくなるため)。戻り値は(消したパス, 削除時点の使用数)。
+    pub fn delete_user_symbol(
+        &self,
+        id: &str,
+        force: bool,
+    ) -> madake_core::Result<(String, usize)> {
+        let in_use = {
+            let engine = self.engine.lock().unwrap();
+            madake_core::symbol_library::usage_count(engine.project(), id)
+        };
+        if in_use > 0 && !force {
+            return Err(madake_core::CoreError::InvalidCommand(format!(
+                "シンボル「{id}」は図面で{in_use}個使われています(force=trueで削除できます)"
+            )));
+        }
+        let path = madake_core::symbol_library::delete(id)?;
+        Ok((path.display().to_string(), in_use))
     }
 
     /// 回路マクロをシートへ挿入する(**1回の編集** = undo一発で戻る)。
@@ -349,6 +372,27 @@ pub struct ApplyTemplateParams {
     pub template_id: String,
     /// 適用先シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SaveUserSymbolParams {
+    /// 保存するシンボル定義 (`duplicate_symbol`の戻り値を直して渡すのが近道)。
+    pub symbol: madake_core::SymbolDef,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct DuplicateSymbolParams {
+    /// 複製元のシンボルid (同梱・ピン数可変・ユーザーのどれでもよい)。
+    pub source_id: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct DeleteUserSymbolParams {
+    /// 削除するユーザーシンボルのid。
+    pub id: String,
+    /// 図面で使われていても消す。省略時false (使用中なら使用数を添えて拒否)。
+    #[serde(default)]
+    pub force: bool,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -557,9 +601,57 @@ impl MadakeMcp {
         json_ok(&out)
     }
 
-    #[tool(description = "シンボルライブラリの一覧(id・名称・カテゴリ・ピン定義)を返す。これに加え、動的ID `connector_{n}p` / `terminal_block_{n}p`(n=1..50、例: terminal_block_8p)でピン数可変のコネクタ・端子台を配置できる")]
+    #[tool(description = "シンボルライブラリの一覧(id・名称・カテゴリ・ピン定義)を返す。同梱シンボルに続けて、ユーザーが作ったシンボル(~/MadakeCAD/symbols/。category=\"user\")も並ぶ。これに加え、動的ID `connector_{n}p` / `terminal_block_{n}p`(n=1..50、例: terminal_block_8p)でピン数可変のコネクタ・端子台を配置できる。欲しい記号が無いときはduplicate_symbolで似た記号を複製し、直してsave_user_symbolで保存すれば以後は同梱シンボルと同じように配置できる")]
     fn list_symbols(&self) -> Result<String, ErrorData> {
-        json_ok(&builtin_symbols())
+        json_ok(&madake_core::symbol_library::all())
+    }
+
+    #[tool(
+        description = "既存シンボル(同梱・ピン数可変・ユーザーのどれでも)を複製した下書きを返す。ファイルにはまだ書かない。新しいシンボルは白紙からではなくこれで始めるのが既定の作り方(idは空きへ自動採番、名前は「〜のコピー」、分類はuser)。直したらsave_user_symbolで保存する"
+    )]
+    fn duplicate_symbol(
+        &self,
+        Parameters(p): Parameters<DuplicateSymbolParams>,
+    ) -> Result<String, ErrorData> {
+        let def = madake_core::symbol_library::duplicate_from(&p.source_id).map_err(internal)?;
+        json_ok(&def)
+    }
+
+    #[tool(
+        description = "ユーザーシンボルを~/MadakeCAD/symbols/へ保存する(部品挿入の「ユーザー」分類に並び、以後は同梱シンボルと同じように配置・配線・BOM・SVG出力できる)。保存前に検証し、落ちたら理由を全部返して**何も書かない**: 接続点は2.5mmグリッド上・番号必須・同じ点に2つ置けない(同じ番号を離れた2点に置くのは貫通端子として正しい)、参照記号スロット(TAG)必須、図形と接続点は最低1つずつ、idは同梱シンボル/ピン数可変シンボルと重複禁止。**シンボルライブラリはファイルのドメインでundo履歴に乗らない**(保存はundoで戻らない)。同じidで保存し直すと、すでに図面に置いてある部品もその定義で描き直される"
+    )]
+    fn save_user_symbol(
+        &self,
+        Parameters(p): Parameters<SaveUserSymbolParams>,
+    ) -> Result<String, ErrorData> {
+        match madake_core::symbol_library::save(&p.symbol) {
+            Ok((symbol, path)) => json_ok(&serde_json::json!({
+                "symbol": symbol,
+                "path": path.display().to_string(),
+            })),
+            Err(errors) => Err(ErrorData::invalid_params(
+                errors
+                    .iter()
+                    .map(|e| format!("[{}] {}", e.code, e.message))
+                    .collect::<Vec<_>>()
+                    .join(" / "),
+                None,
+            )),
+        }
+    }
+
+    #[tool(
+        description = "ユーザーシンボルを削除する(ファイルを消す。undoでは戻らない)。まだ図面で使われているシンボルは使用数を添えて拒否するので、force=trueで押し切るか、先に配置を消すこと"
+    )]
+    fn delete_user_symbol(
+        &self,
+        Parameters(p): Parameters<DeleteUserSymbolParams>,
+    ) -> Result<String, ErrorData> {
+        let (path, in_use) = self
+            .doc
+            .delete_user_symbol(&p.id, p.force)
+            .map_err(internal)?;
+        json_ok(&serde_json::json!({ "path": path, "in_use": in_use }))
     }
 
     #[tool(

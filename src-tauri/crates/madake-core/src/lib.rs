@@ -24,6 +24,7 @@ pub mod sim;
 pub mod spice;
 pub mod svg;
 pub mod symbol;
+pub mod symbol_library;
 pub mod templates;
 pub mod terminal_chart;
 pub mod terminal_diagram;

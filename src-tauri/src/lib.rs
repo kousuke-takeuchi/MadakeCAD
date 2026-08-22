@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use madake_agent::{AgentManager, AppSettings, Conversation, DetectResult};
-use madake_core::{builtin_symbols, sheet_symbol_defs, Command, Engine, Patch, Project, SymbolDef};
+use madake_core::{sheet_symbol_defs, Command, Engine, Patch, Project, SymbolDef};
 use madake_mcp::SharedDoc;
 use tauri::{Emitter, State};
 use uuid::Uuid;
@@ -35,9 +35,63 @@ fn get_project(state: State<AppState>) -> ProjectSnapshot {
     }
 }
 
+/// 部品挿入に並ぶ全シンボル = 同梱 + ユーザーの`~/MadakeCAD/symbols`(ユーザーが後ろ)。
 #[tauri::command]
 fn list_symbols() -> Vec<SymbolDef> {
-    builtin_symbols()
+    madake_core::symbol_library::all()
+}
+
+/// ユーザーシンボルだけの一覧(置き場のパス・読めなかったファイルの理由つき)。
+#[tauri::command]
+fn list_user_symbols() -> madake_core::symbol_library::SymbolLibrary {
+    madake_core::symbol_library::list()
+}
+
+/// ユーザーシンボルを`~/MadakeCAD/symbols`へ保存する。
+///
+/// 検証に落ちたら**何も書かず**理由を全部返す(半分だけ直った定義を残さない)。
+/// シンボルライブラリはファイルのドメインで、**undo履歴には乗らない**。
+#[tauri::command]
+fn save_user_symbol(
+    symbol: SymbolDef,
+) -> Result<serde_json::Value, Vec<madake_core::symbol_library::SymbolError>> {
+    let (saved, path) = madake_core::symbol_library::save(&symbol)?;
+    Ok(serde_json::json!({ "symbol": saved, "path": path.display().to_string() }))
+}
+
+/// ユーザーシンボルを削除する。使用中は`force`なしでは消さない。**undoでは戻らない**。
+#[tauri::command]
+fn delete_user_symbol(
+    state: State<AppState>,
+    id: String,
+    force: bool,
+) -> Result<serde_json::Value, String> {
+    let (path, in_use) = state
+        .doc
+        .delete_user_symbol(&id, force)
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "path": path, "in_use": in_use }))
+}
+
+/// 既存シンボルを複製した**下書き**を返す(ファイルにはまだ書かない)。
+#[tauri::command]
+fn duplicate_symbol(source_id: String) -> Result<SymbolDef, String> {
+    madake_core::symbol_library::duplicate_from(&source_id).map_err(|e| e.to_string())
+}
+
+/// ユーザーシンボルの置き場(`~/MadakeCAD/symbols`)をOSのファイラで開く。
+/// 無ければ作ってから開く。
+#[tauri::command]
+fn open_symbols_folder(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let dir = madake_core::symbol_library::user_dir().ok_or("home directory not found")?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.display().to_string();
+    app.opener()
+        .open_path(path.clone(), None::<&str>)
+        .map_err(|e| e.to_string())?;
+    Ok(path)
 }
 
 /// UI操作の編集。由来は`user`として履歴に残り、AIのターン巻き戻しに巻き込まれない。
@@ -798,6 +852,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_project,
             list_symbols,
+            list_user_symbols,
+            save_user_symbol,
+            delete_user_symbol,
+            duplicate_symbol,
+            open_symbols_folder,
             execute_command,
             list_templates,
             apply_template,

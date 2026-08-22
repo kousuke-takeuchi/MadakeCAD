@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1331 specification clauses** across 5 areas.
+**1369 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -389,6 +389,35 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The plug and the socket of a connector pair face each other: the plug is a wedge, the socket the cup that receives it. <sub>`connector_plug_and_socket_face_each_other`</sub>
 - A multi-pole device conducts pole by pole (terminals 1-2, 3-4, 5-6), so the phases are never treated as connected to each other. <sub>`multipole_devices_conduct_pole_by_pole`</sub>
 
+### User symbol library
+
+- A folder with no symbol files yields an empty user library that still reports where the user should drop their JSON files. <sub>`an_empty_symbols_folder_lists_nothing_but_its_path`</sub>
+- A saved user symbol is written as one JSON file named after its id and comes back from the listing unchanged (shapes, pins and attribute slots). <sub>`a_saved_user_symbol_round_trips_through_the_folder`</sub>
+- Whatever category the file declares, a user symbol is always listed under the single "user" category so it appears as its own group in the insert dialog. <sub>`a_user_symbol_is_always_filed_under_the_user_category`</sub>
+- The insert list is the bundled library first and the user symbols after it, so the user's own group never breaks the bundled category order. <sub>`the_insert_list_puts_user_symbols_after_the_bundled_ones`</sub>
+- A file that is not valid JSON does not stop the listing: the rest of the library still loads and the broken file is reported with its path and the reason. <sub>`a_broken_json_file_is_reported_with_its_path_and_reason`</sub>
+- A file whose content is valid JSON but not a usable symbol (here: a pin off the 2.5 mm grid) is reported as an issue instead of being listed. <sub>`a_symbol_file_that_fails_validation_is_reported_instead_of_listed`</sub>
+- A user symbol may not take the id of a bundled symbol: otherwise dropping a file would silently change every drawing that already uses that symbol. <sub>`a_user_symbol_may_not_take_the_id_of_a_bundled_symbol`</sub>
+- A user symbol may not take the id of a parametric symbol either (for example terminal_block_8p), because that name is generated on demand. <sub>`a_user_symbol_may_not_take_a_parametric_symbol_id`</sub>
+- Two files declaring the same id keep the first one (file name order) and report the second, so which symbol wins never depends on the order the folder is read in. <sub>`two_files_with_the_same_id_keep_the_first_and_report_the_second`</sub>
+- Saving reports every problem at once and writes no file at all, so a half-fixed symbol never lands in the library. <sub>`saving_an_invalid_symbol_reports_every_problem_and_writes_nothing`</sub>
+- Connection points must sit on the 2.5 mm grid, so wires drawn on the grid always meet them exactly. <sub>`pins_must_sit_on_the_grid`</sub>
+- The same pin number at two different points is allowed: that is how a through terminal (internally shorted left and right side) is drawn. <sub>`the_same_pin_number_at_two_points_is_a_through_terminal`</sub>
+- Two connection points with the same number at the same place are rejected: the second one can never be reached. <sub>`the_same_pin_number_at_the_same_point_is_rejected`</sub>
+- Two connection points with different numbers at the same place are rejected: a wire ending there would not know which terminal it touches. <sub>`two_different_pin_numbers_at_the_same_point_are_rejected`</sub>
+- A connection point needs a number (it is what the netlist and the terminal chart print), but its name is optional. <sub>`a_pin_needs_a_number_but_not_a_name`</sub>
+- A symbol must carry the reference-designator slot (TAG): without it the placed part could never show its K1 / PB2 label. <sub>`a_symbol_without_a_tag_slot_is_rejected`</sub>
+- An attribute slot key the renderer does not know (a typo, say) is rejected instead of silently drawing nothing. <sub>`an_unknown_attribute_slot_key_is_rejected`</sub>
+- A symbol needs at least one shape and at least one connection point, otherwise there is nothing to see and nothing to wire. <sub>`a_symbol_needs_at_least_one_shape_and_one_pin`</sub>
+- The id is used as the file name, so only letters, digits, underscore and hyphen are allowed. <sub>`an_id_with_unusable_characters_is_rejected`</sub>
+- A symbol named only in Japanese is accepted and the Japanese name is copied into the English field, so it still shows up in an English UI. <sub>`a_japanese_only_name_fills_both_name_fields`</sub>
+- Duplicating a bundled symbol gives a draft with a new free id, a "copy" name and the user category, and writes nothing to disk yet. <sub>`duplicating_a_bundled_symbol_gives_a_free_id_and_a_copy_name`</sub>
+- Duplicating the same symbol twice never reuses an id: the second copy is numbered. <sub>`duplicating_twice_never_reuses_an_id`</sub>
+- A user symbol can be duplicated too (that is how a family of variants is built), and a parametric symbol can be the starting point as well. <sub>`a_user_symbol_and_a_parametric_symbol_can_both_be_duplicated`</sub>
+- Duplicating a symbol that does not exist fails instead of creating an empty one. <sub>`duplicating_an_unknown_symbol_fails`</sub>
+- Deleting a user symbol removes its file from the folder; deleting an unknown id fails and touches nothing. <sub>`deleting_a_user_symbol_removes_its_file`</sub>
+- The usage count tells how many placements of a symbol the project has, across every sheet, so the UI can warn before a symbol is deleted. <sub>`the_usage_count_counts_placements_across_every_sheet`</sub>
+
 ### Start templates
 
 - The three bundled templates (24 V control basics, motor starter, emergency stop) are listed in that order, each with an English and a Japanese name and description. <sub>`the_three_bundled_templates_are_listed_in_both_languages`</sub>
@@ -604,6 +633,21 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An empty query returns no hits at all, so the search bar never dumps the whole drawing. <sub>`an_empty_query_returns_nothing`</sub>
 - GET /devices returns the reference-designator tree the device navigator draws, with each function's terminals and location. <sub>`the_device_tree_comes_back_over_the_link_api`</sub>
 - A drawing with nothing on it has an empty device tree rather than an error. <sub>`an_empty_drawing_has_an_empty_device_tree`</sub>
+
+### User symbol library (REST)
+
+- GET /symbols lists the bundled library and the user's own symbols together, with the user symbols last and always in the "user" category. <sub>`the_link_api_lists_bundled_and_user_symbols_together`</sub>
+- GET /symbols/user lists only the user's symbols and says where the folder is, so a client can offer "open the symbols folder". <sub>`the_link_api_lists_the_user_symbols_with_their_folder`</sub>
+- A user symbol saved over the Link API is immediately placeable on a sheet and its pins take part in the checks, exactly like a bundled symbol. <sub>`a_saved_user_symbol_can_be_placed_like_a_bundled_one`</sub>
+- Editing a user symbol changes the parts already placed in the drawing: the drawing keeps no snapshot of the definition, it only stores the symbol id. <sub>`editing_a_user_symbol_changes_the_parts_already_placed`</sub>
+- Saving an invalid symbol answers with every reason at once and writes no file, so the library never holds a half-fixed definition. <sub>`saving_an_invalid_user_symbol_returns_every_reason_and_writes_nothing`</sub>
+- A symbol whose id is already taken by a bundled symbol is refused, so dropping a file can never silently change the drawings that use that symbol. <sub>`a_user_symbol_may_not_take_a_bundled_symbol_id`</sub>
+- The symbol library lives outside the undo history: undoing after a save takes back the last drawing edit, not the saved symbol. <sub>`the_symbol_library_is_outside_the_undo_history`</sub>
+- Deleting a user symbol that parts in the drawing still use is refused (and says how many), unless the caller insists with force. <sub>`deleting_a_user_symbol_in_use_is_refused_unless_forced`</sub>
+- An unused user symbol is deleted right away. <sub>`deleting_an_unused_user_symbol_succeeds`</sub>
+- Duplicating a symbol returns a draft with a free id and a "copy" name; nothing is written until the draft is saved. <sub>`duplicating_a_symbol_returns_a_draft_that_is_not_saved_yet`</sub>
+- Duplicating a symbol that does not exist answers with an error instead of an empty symbol. <sub>`duplicating_an_unknown_symbol_is_an_error`</sub>
+- A broken file in the symbols folder never stops the listing: the good symbols still load and the broken file is reported with its path and reason. <sub>`a_broken_file_in_the_symbols_folder_is_reported_by_the_api`</sub>
 
 ### Start templates (REST)
 

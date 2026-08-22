@@ -443,7 +443,8 @@
       "passive": "Passive",
       "output": "Outputs",
       "instrument": "Instruments",
-      "connector": "Connectors"
+      "connector": "Connectors",
+      "user": "User"
     }
   },
   "reports": {

@@ -388,6 +388,14 @@ export function summarizeToolUse(tool: string, input: unknown): string {
       return "図面全体を読み取り";
     case "list_symbols":
       return "シンボル一覧を取得";
+    case "duplicate_symbol":
+      return `シンボル ${str(p.source_id) || ""} を複製`.trim();
+    case "save_user_symbol": {
+      const id = str(rec(p.symbol).id);
+      return id ? `ユーザーシンボル ${id} を保存` : "ユーザーシンボルを保存";
+    }
+    case "delete_user_symbol":
+      return `ユーザーシンボル ${str(p.id) || ""} を削除`.trim();
     case "export_svg":
       return `SVGを書き出し (${baseName(p.path)})`;
     case "export_bom":

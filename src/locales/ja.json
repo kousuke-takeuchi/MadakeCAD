@@ -443,7 +443,8 @@
       "passive": "受動部品",
       "output": "出力",
       "instrument": "計測器",
-      "connector": "コネクタ"
+      "connector": "コネクタ",
+      "user": "ユーザー"
     }
   },
   "reports": {

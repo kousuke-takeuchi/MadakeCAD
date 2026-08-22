@@ -224,6 +224,35 @@ export interface SymbolDef {
   text_slots?: TextSlot[];
 }
 
+/** ユーザーシンボルの分類 (部品挿入ダイアログの「ユーザー」グループ)。 */
+export const USER_SYMBOL_CATEGORY = "user";
+
+/** 保存できない理由1件 (madake-coreの`SymbolError`)。`code`は`symbol.pin_off_grid`等。 */
+export interface SymbolError {
+  code: string;
+  message: string;
+}
+
+/** 読み込めなかったユーザーシンボル1件 (壊れたJSON・検証に落ちた・id重複)。 */
+export interface SymbolIssue {
+  path: string;
+  message: string;
+}
+
+/**
+ * ユーザーシンボルの一覧と、読み込めなかったファイルの理由 (madake-coreの`SymbolLibrary`)。
+ *
+ * ライブラリは**ファイルのドメイン**でCommandエンジンの外にあり、保存・削除は
+ * undo履歴に乗らない。図面はシンボル定義のスナップショットを持たず`symbol_id`で
+ * 参照するだけなので、定義を保存し直すとすでに置いてある部品も描き直される。
+ */
+export interface SymbolLibrary {
+  symbols: SymbolDef[];
+  issues: SymbolIssue[];
+  /** ユーザーシンボルの置き場 (`~/MadakeCAD/symbols`)。 */
+  user_dir?: string | null;
+}
+
 /** 部品DB (グローバル共有マスタ) の1部品。 */
 export interface Part {
   part_no: string;
@@ -597,7 +626,21 @@ export type ReportFormat = "csv" | "pdf";
 
 interface Ipc {
   getProject(): Promise<ProjectSnapshot>;
+  /** 部品挿入に並ぶ全シンボル (同梱+ユーザーの`~/MadakeCAD/symbols`。ユーザーが後ろ)。 */
   listSymbols(): Promise<SymbolDef[]>;
+  /** ユーザーシンボルだけの一覧 (置き場・読めなかったファイルの理由つき)。 */
+  listUserSymbols(): Promise<SymbolLibrary>;
+  /**
+   * ユーザーシンボルを保存する。検証に落ちたら**何も書かず**理由を全部投げる
+   * (`SymbolError[]`)。undo履歴には乗らない。
+   */
+  saveUserSymbol(symbol: SymbolDef): Promise<{ symbol: SymbolDef; path: string }>;
+  /** ユーザーシンボルを削除する。使用中は`force`なしでは消さない (undoで戻らない)。 */
+  deleteUserSymbol(id: string, force: boolean): Promise<{ path: string; in_use: number }>;
+  /** 既存シンボルを複製した**下書き**を返す (ファイルにはまだ書かない)。 */
+  duplicateSymbol(sourceId: string): Promise<SymbolDef>;
+  /** ユーザーシンボルの置き場をOSのファイラで開く (無ければ作る)。戻り値=そのパス。 */
+  openSymbolsFolder(): Promise<string>;
   executeCommand(command: Command): Promise<Patch>;
   undo(): Promise<Patch | null>;
   redo(): Promise<Patch | null>;
@@ -706,6 +749,13 @@ interface Ipc {
 const tauriIpc: Ipc = {
   getProject: () => invoke<ProjectSnapshot>("get_project"),
   listSymbols: () => invoke<SymbolDef[]>("list_symbols"),
+  listUserSymbols: () => invoke<SymbolLibrary>("list_user_symbols"),
+  saveUserSymbol: (symbol: SymbolDef) =>
+    invoke<{ symbol: SymbolDef; path: string }>("save_user_symbol", { symbol }),
+  deleteUserSymbol: (id: string, force: boolean) =>
+    invoke<{ path: string; in_use: number }>("delete_user_symbol", { id, force }),
+  duplicateSymbol: (sourceId: string) => invoke<SymbolDef>("duplicate_symbol", { sourceId }),
+  openSymbolsFolder: () => invoke<string>("open_symbols_folder"),
   executeCommand: (command: Command) => invoke<Patch>("execute_command", { command }),
   undo: () => invoke<Patch | null>("undo"),
   redo: () => invoke<Patch | null>("redo"),
@@ -781,6 +831,32 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 const httpIpc: Ipc = {
   getProject: () => http<ProjectSnapshot>("/project"),
   listSymbols: () => http<SymbolDef[]>("/symbols"),
+  listUserSymbols: () => http<SymbolLibrary>("/symbols/user"),
+  saveUserSymbol: async (symbol) => {
+    // 検証に落ちたときは`{ errors: SymbolError[] }`が400で返る (理由を全部拾って投げる)
+    const res = await fetch(`${API_BASE}/symbols/user/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(symbol),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const errors = (body?.errors ?? []) as SymbolError[];
+      throw new Error(errors.map((e) => e.message).join(" / ") || `Link API ${res.status}`);
+    }
+    return body as { symbol: SymbolDef; path: string };
+  },
+  deleteUserSymbol: (id, force) =>
+    http<{ path: string; in_use: number }>("/symbols/user/delete", {
+      method: "POST",
+      body: JSON.stringify({ id, force }),
+    }),
+  duplicateSymbol: (sourceId) =>
+    http<SymbolDef>("/symbols/duplicate", {
+      method: "POST",
+      body: JSON.stringify({ source_id: sourceId }),
+    }),
+  openSymbolsFolder: () => Promise.reject(new Error("browser mode: not supported")),
   executeCommand: async (command) => {
     const patches = await http<Patch[]>("/commands", {
       method: "POST",

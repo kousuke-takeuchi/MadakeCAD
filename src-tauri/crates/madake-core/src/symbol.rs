@@ -32,6 +32,8 @@ pub const SLOT_DESC: &str = "DESC";
 pub const SLOT_RATING: &str = "RATING";
 
 /// 部品挿入ダイアログでのカテゴリ表示順。同カテゴリの記号は連続して並べる。
+/// 最後の`user` ([`crate::symbol_library::USER_CATEGORY`]) はユーザーが自分で作った
+/// シンボル([`crate::symbol_library`])で、同梱の分類の後ろに1グループとして並ぶ。
 pub const CATEGORY_ORDER: &[&str] = &[
     "power",
     "protection",
@@ -43,6 +45,7 @@ pub const CATEGORY_ORDER: &[&str] = &[
     "instrument",
     "plc",
     "connector",
+    "user",
 ];
 
 /// 属性テキストの流し込み位置(シンボル外形の外側)。
@@ -1147,15 +1150,23 @@ pub fn dynamic_symbol(id: &str) -> Option<SymbolDef> {
     plc_module_symbol(id)
 }
 
-/// symbol_idから定義を解決する。静的ライブラリ優先、なければ動的生成。
+/// symbol_idから定義を解決する。**同梱 → 動的生成 → ユーザーライブラリ**の順。
+///
+/// 同梱を最優先にするのは、ユーザーが置いたファイルで同梱の記号が黙って
+/// 差し替わらないようにするため (id衝突は[`crate::symbol_library::validate`]が拒否する)。
 pub fn resolve_symbol(id: &str) -> Option<SymbolDef> {
     builtin_symbols()
         .into_iter()
         .find(|s| s.id == id)
         .or_else(|| dynamic_symbol(id))
+        .or_else(|| crate::symbol_library::find(id))
 }
 
-/// シートの描画・ネットリストに必要な全シンボル定義(静的+使用中の動的)を集める。
+/// シートの描画・ネットリストに必要な全シンボル定義
+/// (同梱+使用中の動的+使用中のユーザーシンボル)を集める。
+///
+/// 図面はシンボル定義のスナップショットを持たず`symbol_id`で参照するだけなので、
+/// ユーザーシンボルを編集すると**すでに置いてある部品もここから新しい定義で描かれる**。
 pub fn sheet_symbol_defs(sheet: &crate::model::Sheet) -> Vec<SymbolDef> {
     let mut defs = builtin_symbols();
     let mut seen: std::collections::BTreeSet<&str> =
@@ -1169,7 +1180,21 @@ pub fn sheet_symbol_defs(sheet: &crate::model::Sheet) -> Vec<SymbolDef> {
             }
         }
     }
-    defs.extend(ids.into_iter().filter_map(dynamic_symbol));
+    if ids.is_empty() {
+        return defs;
+    }
+    // 動的生成で解決できないidだけユーザーライブラリを1回読む
+    let mut user: Option<crate::symbol_library::SymbolLibrary> = None;
+    for id in ids {
+        if let Some(def) = dynamic_symbol(id) {
+            defs.push(def);
+            continue;
+        }
+        let library = user.get_or_insert_with(crate::symbol_library::list);
+        if let Some(def) = library.symbols.iter().find(|s| s.id == id) {
+            defs.push(def.clone());
+        }
+    }
     defs
 }
 

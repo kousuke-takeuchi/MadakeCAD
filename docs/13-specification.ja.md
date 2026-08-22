@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1331仕様項目**。
+全5領域・**1369仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -389,6 +389,35 @@
 - 差込接続器のプラグとソケットは向かい合う形で、プラグはくさび形、ソケットはそれを受ける半円形になる。 <sub>`connector_plug_and_socket_face_each_other`</sub>
 - 多極機器は極ごと(端子1-2・3-4・5-6)に導通するため、相どうしがつながっている扱いにはならない。 <sub>`multipole_devices_conduct_pole_by_pole`</sub>
 
+### ユーザーシンボルライブラリ
+
+- シンボルのファイルが1つも無いフォルダではユーザーシンボルは0件になり、「JSONをここへ置く」置き場のパスだけが返る。 <sub>`an_empty_symbols_folder_lists_nothing_but_its_path`</sub>
+- 保存したユーザーシンボルはidの名前のJSONファイル1つになり、図形・接続点・属性スロットがそのまま一覧に戻ってくる。 <sub>`a_saved_user_symbol_round_trips_through_the_folder`</sub>
+- ファイルにどの分類が書かれていても、ユーザーシンボルの分類は常に「user」になり、部品挿入ダイアログでは独立した「ユーザー」グループに並ぶ。 <sub>`a_user_symbol_is_always_filed_under_the_user_category`</sub>
+- 部品挿入の一覧は「同梱が先・ユーザーが後」の並びになり、ユーザーの記号が同梱の分類の並びに割り込まない。 <sub>`the_insert_list_puts_user_symbols_after_the_bundled_ones`</sub>
+- JSONとして壊れているファイルがあっても一覧は止まらず、残りのシンボルは読み込まれ、壊れたファイルはパスと理由つきで報告される。 <sub>`a_broken_json_file_is_reported_with_its_path_and_reason`</sub>
+- JSONとしては読めても使えないシンボル(ここでは2.5mmグリッドから外れた接続点)は、一覧に載らず理由つきで報告される。 <sub>`a_symbol_file_that_fails_validation_is_reported_instead_of_listed`</sub>
+- ユーザーシンボルは同梱シンボルと同じidを名乗れない。許すと、ファイルを置いただけで、そのシンボルを使っている既存図面の見た目が黙って変わってしまうため。 <sub>`a_user_symbol_may_not_take_the_id_of_a_bundled_symbol`</sub>
+- ピン数可変シンボル(例 terminal_block_8p)のidも名乗れない。その名前は必要に応じて自動生成されるものだから。 <sub>`a_user_symbol_may_not_take_a_parametric_symbol_id`</sub>
+- 同じidのファイルが2つあるときは先のファイル(ファイル名順)を採用し、後のファイルは理由つきで報告する。どちらが勝つかがフォルダの読み順で変わらないようにするため。 <sub>`two_files_with_the_same_id_keep_the_first_and_report_the_second`</sub>
+- 保存は問題を一度に全部返し、ファイルは1つも書かない。直しかけの定義がライブラリに残らないようにするため。 <sub>`saving_an_invalid_symbol_reports_every_problem_and_writes_nothing`</sub>
+- 接続点は2.5mmグリッドの上に無ければならない。グリッドに沿って引いた配線がぴったり接続するため。 <sub>`pins_must_sit_on_the_grid`</sub>
+- 同じ番号の接続点を離れた2点に置くのは正しい。貫通端子(左右が内部で短絡している端子)はこう描くため。 <sub>`the_same_pin_number_at_two_points_is_a_through_terminal`</sub>
+- 同じ番号の接続点が同じ位置に2つあるのは拒否する(2つ目には決して接続できないため)。 <sub>`the_same_pin_number_at_the_same_point_is_rejected`</sub>
+- 違う番号の接続点が同じ位置に重なっているのは拒否する(そこへ引いた配線がどちらの端子に繋がったのか決まらないため)。 <sub>`two_different_pin_numbers_at_the_same_point_are_rejected`</sub>
+- 接続点には番号が必要(ネットリストや端子台チャートに出るのはこの番号)。名前は空でもよい。 <sub>`a_pin_needs_a_number_but_not_a_name`</sub>
+- シンボルには参照記号のスロット(TAG)が必須。無いと、配置した部品にK1・PB2といった記号を表示できないため。 <sub>`a_symbol_without_a_tag_slot_is_rejected`</sub>
+- 描画側が知らない属性スロットのキー(打ち間違いなど)は、黙って何も描かれるより先に拒否する。 <sub>`an_unknown_attribute_slot_key_is_rejected`</sub>
+- シンボルには図形が最低1つ・接続点が最低1つ必要。無ければ何も見えないし、配線もできないため。 <sub>`a_symbol_needs_at_least_one_shape_and_one_pin`</sub>
+- idはそのままファイル名になるので、使えるのは英数字・アンダースコア・ハイフンだけ。 <sub>`an_id_with_unusable_characters_is_rejected`</sub>
+- 日本語だけで名前を付けたシンボルも保存でき、英語名には日本語名がコピーされる(英語UIでも名前が出るようにするため)。 <sub>`a_japanese_only_name_fills_both_name_fields`</sub>
+- 同梱シンボルを複製すると、空いている新しいid・「コピー」の名前・ユーザー分類を持った下書きが返る(この時点ではファイルには書かない)。 <sub>`duplicating_a_bundled_symbol_gives_a_free_id_and_a_copy_name`</sub>
+- 同じシンボルを2回複製してもidは重複しない(2つ目には番号が付く)。 <sub>`duplicating_twice_never_reuses_an_id`</sub>
+- ユーザーシンボルも複製できる(これで似た記号の一族を作る)。ピン数可変シンボルからも始められる。 <sub>`a_user_symbol_and_a_parametric_symbol_can_both_be_duplicated`</sub>
+- 存在しないシンボルの複製は、空のシンボルを作らずにエラーになる。 <sub>`duplicating_an_unknown_symbol_fails`</sub>
+- ユーザーシンボルを削除するとフォルダからファイルが消える。知らないidの削除はエラーになり、何も消えない。 <sub>`deleting_a_user_symbol_removes_its_file`</sub>
+- 使用数は、そのシンボルがプロジェクト全体(全シート)で何個置かれているかを返す。削除の前に警告を出すために使う。 <sub>`the_usage_count_counts_placements_across_every_sheet`</sub>
+
 ### 開始テンプレート
 
 - 同梱テンプレートは「24V制御基本・モータ起動回路・非常停止回路」の3種がこの順で並び、それぞれ英語と日本語の名前・説明を持つ。 <sub>`the_three_bundled_templates_are_listed_in_both_languages`</sub>
@@ -604,6 +633,21 @@
 - 空のクエリは1件も返さないので、検索バーが図面全体を並べてしまうことはない。 <sub>`an_empty_query_returns_nothing`</sub>
 - GET /devices はデバイスナビゲータが描く参照記号ツリーを、機能ごとの端子と所在つきで返す。 <sub>`the_device_tree_comes_back_over_the_link_api`</sub>
 - 何も置いていない図面のデバイスツリーは、エラーではなく空になる。 <sub>`an_empty_drawing_has_an_empty_device_tree`</sub>
+
+### ユーザーシンボルライブラリ (REST)
+
+- GET /symbols は同梱ライブラリとユーザーが作ったシンボルをまとめて返す。ユーザーのシンボルは最後に並び、分類は常に「user」になる。 <sub>`the_link_api_lists_bundled_and_user_symbols_together`</sub>
+- GET /symbols/user はユーザーのシンボルだけを返し、置き場のパスも添える(クライアントが「シンボルのフォルダを開く」を出せるように)。 <sub>`the_link_api_lists_the_user_symbols_with_their_folder`</sub>
+- Link APIで保存したユーザーシンボルは、すぐに図面へ配置でき、そのピンも同梱シンボルと同じように検証の対象になる。 <sub>`a_saved_user_symbol_can_be_placed_like_a_bundled_one`</sub>
+- ユーザーシンボルを編集すると、すでに図面に置いてある部品も変わる。図面はシンボル定義のスナップショットを持たず、シンボルidだけを持っているため。 <sub>`editing_a_user_symbol_changes_the_parts_already_placed`</sub>
+- おかしなシンボルの保存は理由を一度に全部返し、ファイルは書かない。直しかけの定義がライブラリに残らないようにするため。 <sub>`saving_an_invalid_user_symbol_returns_every_reason_and_writes_nothing`</sub>
+- 同梱シンボルと同じidのシンボルは保存を拒否する。ファイルを置いただけで、そのシンボルを使っている図面が黙って変わることが起きないようにするため。 <sub>`a_user_symbol_may_not_take_a_bundled_symbol_id`</sub>
+- シンボルライブラリはundo履歴の外にある。保存したあとにundoすると、戻るのは直前の図面の編集で、保存したシンボルは消えない。 <sub>`the_symbol_library_is_outside_the_undo_history`</sub>
+- まだ図面で使われているユーザーシンボルの削除は、使用数を添えて拒否される(強制指定したときだけ消える)。 <sub>`deleting_a_user_symbol_in_use_is_refused_unless_forced`</sub>
+- 使われていないユーザーシンボルはそのまま削除できる。 <sub>`deleting_an_unused_user_symbol_succeeds`</sub>
+- シンボルの複製は、空いているidと「コピー」の名前を持った下書きを返すだけで、保存するまでファイルは書かれない。 <sub>`duplicating_a_symbol_returns_a_draft_that_is_not_saved_yet`</sub>
+- 存在しないシンボルの複製は、空のシンボルではなくエラーを返す。 <sub>`duplicating_an_unknown_symbol_is_an_error`</sub>
+- シンボルのフォルダに壊れたファイルがあっても一覧は止まらない。正しいシンボルは読み込まれ、壊れたファイルはパスと理由つきで報告される。 <sub>`a_broken_file_in_the_symbols_folder_is_reported_by_the_api`</sub>
 
 ### 開始テンプレート (REST)
 
