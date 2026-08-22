@@ -342,6 +342,10 @@ pub struct PlaceSymbolParams {
     pub reference: Option<String>,
     /// 型番・値(例: "[redacted]")。
     pub value: Option<String>,
+    /// 追加属性。ブロック(`symbol_id="block"`)は
+    /// `block_pins` = `{"left":[{"no":"IN1","name":"入力1"}],"right":[…]}`(任意で`top`/`bottom`)、
+    /// 任意で `block_size` = `{"w":40,"h":30}` を渡して名前付きピンの機器を1回で作る。
+    pub attrs: Option<std::collections::BTreeMap<String, String>>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -871,7 +875,9 @@ impl MadakeMcp {
         }))
     }
 
-    #[tool(description = "シンボルをシートに配置する。作成されたエンティティidを返す")]
+    #[tool(
+        description = "シンボルをシートに配置する。作成されたエンティティidを返す。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る"
+    )]
     fn place_symbol(
         &self,
         Parameters(p): Parameters<PlaceSymbolParams>,
@@ -892,7 +898,7 @@ impl MadakeMcp {
             mirror: false,
             reference: p.reference.unwrap_or_default(),
             value: p.value.unwrap_or_default(),
-            attrs: Default::default(),
+            attrs: p.attrs.unwrap_or_default(),
         });
         let patch = self
             .doc

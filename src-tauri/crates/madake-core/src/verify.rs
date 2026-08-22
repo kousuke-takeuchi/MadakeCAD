@@ -173,7 +173,7 @@ pub(crate) fn is_load(def: &SymbolDef) -> bool {
 }
 
 fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> Vec<Diagnostic> {
-    let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let defs = crate::symbol::DefIndex::new(symbols);
     let nets = extract_netlist(sheet, symbols);
     let mut diags = Vec::new();
     let diag = |severity: Severity, code: &str, message: String, ids: Vec<EntityId>| Diagnostic {
@@ -208,20 +208,20 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> 
     let mut has_battery = false;
     for e in sheet.entities.values() {
         let Entity::Symbol(s) = e else { continue };
-        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        let Some(def) = defs.get(s) else { continue };
         if def.id == "battery" {
             has_battery = true;
             if source_voltage.is_none() {
                 source_voltage = parse_number(&s.value);
             }
         }
-        if !is_load(def) {
+        if !is_load(&def) {
             continue;
         }
         let label = if s.reference.is_empty() { def.id.as_str() } else { s.reference.as_str() };
         match s.attrs.get("current_a").and_then(|v| parse_number(v)) {
             Some(amps) => {
-                for ni in nets_of(s, def) {
+                for ni in nets_of(s, &def) {
                     net_current[ni] += amps;
                 }
             }
@@ -240,9 +240,9 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> 
     let mut queue: Vec<usize> = Vec::new();
     for e in sheet.entities.values() {
         let Entity::Symbol(s) = e else { continue };
-        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        let Some(def) = defs.get(s) else { continue };
         if def.id == "battery" {
-            for ni in nets_of(s, def) {
+            for ni in nets_of(s, &def) {
                 if !reachable[ni] {
                     reachable[ni] = true;
                     queue.push(ni);
@@ -254,9 +254,9 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> 
     let mut bridges: Vec<Vec<usize>> = Vec::new();
     for e in sheet.entities.values() {
         let Entity::Symbol(s) = e else { continue };
-        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
-        if is_conductor(def) {
-            for group in crate::symbol::conducting_pin_groups(def) {
+        let Some(def) = defs.get(s) else { continue };
+        if is_conductor(&def) {
+            for group in crate::symbol::conducting_pin_groups(&def) {
                 let mut ns = BTreeSet::new();
                 for no in group {
                     if let Some(ni) = pin_net.get(&(s.id, no)) {
@@ -283,11 +283,11 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> 
     }
     for e in sheet.entities.values() {
         let Entity::Symbol(s) = e else { continue };
-        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
-        if !is_load(def) {
+        let Some(def) = defs.get(s) else { continue };
+        if !is_load(&def) {
             continue;
         }
-        let ns = nets_of(s, def);
+        let ns = nets_of(s, &def);
         // 全く配線されていない負荷はERC(未接続ピン)に任せる
         if ns.is_empty() {
             continue;
@@ -360,7 +360,7 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> 
         }
         for e in sheet.entities.values() {
             let Entity::Symbol(s) = e else { continue };
-            let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+            let Some(def) = defs.get(s) else { continue };
             if def.id != "fuse" {
                 continue;
             }
@@ -452,13 +452,13 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> 
     // ヒューズ定格の簡易チェック
     for e in sheet.entities.values() {
         let Entity::Symbol(s) = e else { continue };
-        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        let Some(def) = defs.get(s) else { continue };
         if def.id != "fuse" {
             continue;
         }
         let Some(rating) = parse_number(&s.value) else { continue };
         let label = if s.reference.is_empty() { "fuse" } else { s.reference.as_str() };
-        let max_amps = nets_of(s, def)
+        let max_amps = nets_of(s, &def)
             .into_iter()
             .map(|ni| net_current[ni])
             .fold(0.0f64, f64::max);
@@ -480,7 +480,7 @@ fn near(a: &Point, b: &Point) -> bool {
 }
 
 fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
-    let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let defs = crate::symbol::DefIndex::new(symbols);
     let nets = extract_netlist(sheet, symbols);
     let mut diags = Vec::new();
     let diag = |severity: Severity, code: &str, message: String, ids: Vec<EntityId>| Diagnostic {
@@ -500,7 +500,7 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
     // 未接続ピン(シンボル単位に集約)+空参照
     for e in sheet.entities.values() {
         let Entity::Symbol(s) = e else { continue };
-        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        let Some(def) = defs.get(s) else { continue };
         let mut seen = BTreeSet::new();
         let mut unconnected = Vec::new();
         for pin in &def.pins {
@@ -534,21 +534,21 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
     }
 
     // 参照記号の重複。リレー同士(コイル+接点、多接点)は正当なので除外
-    let mut by_ref: BTreeMap<&str, Vec<(EntityId, &str)>> = BTreeMap::new();
+    let mut by_ref: BTreeMap<&str, Vec<(EntityId, String)>> = BTreeMap::new();
     for e in sheet.entities.values() {
         if let Entity::Symbol(s) = e {
             if s.reference.trim().is_empty() {
                 continue;
             }
             let category = defs
-                .get(s.symbol_id.as_str())
-                .map(|d| d.category.as_str())
-                .unwrap_or("");
+                .get(s)
+                .map(|d| d.category.clone())
+                .unwrap_or_default();
             by_ref.entry(s.reference.as_str()).or_default().push((s.id, category));
         }
     }
     for (reference, members) in &by_ref {
-        if members.len() >= 2 && !members.iter().all(|(_, cat)| *cat == "relay") {
+        if members.len() >= 2 && !members.iter().all(|(_, cat)| cat == "relay") {
             diags.push(diag(
                 Severity::Error,
                 "erc.duplicate_reference",
@@ -566,8 +566,8 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
     for e in sheet.entities.values() {
         match e {
             Entity::Symbol(s) => {
-                if let Some(def) = defs.get(s.symbol_id.as_str()) {
-                    pin_points.extend(pin_positions(s, def).into_iter().map(|(_, p)| p));
+                if let Some(def) = defs.get(s) {
+                    pin_points.extend(pin_positions(s, &def).into_iter().map(|(_, p)| p));
                 }
             }
             Entity::Junction(j) => junctions.push(j.at),
@@ -725,6 +725,31 @@ mod tests {
         assert_eq!(unconn.len(), 2, "{unconn:?}");
         assert!(unconn.iter().all(|d| d.severity == Severity::Warning));
         assert!(unconn.iter().any(|d| d.message.contains("R1") && d.message.contains("1")));
+    }
+
+    /// Unconnected pins of a block are listed by their pin names, so a controller's dangling input is named, not numbered.
+    /// ブロックの未接続ピンはピン名で列挙されるので、コントローラの未配線入力が番号ではなく名前で分かる。
+    #[test]
+    fn unconnected_block_pins_are_listed_by_pin_name() {
+        // 幅20mmのブロック: 右ピンOUT1 (112.5, 50) だけ配線、左ピンIN1は未接続
+        let sheet = sheet_with(vec![
+            crate::block::test_block(
+                "CTRL1",
+                "MainController",
+                100.0,
+                50.0,
+                r#"{"left":[{"no":"IN1","name":"入力1"}],"right":[{"no":"OUT1","name":"出力1"}]}"#,
+            ),
+            symbol("resistor", "R1", 150.0, 50.0),
+            wire(&[(112.5, 50.0), (142.5, 50.0)]),
+        ]);
+        let unconn: Vec<_> = run(&sheet)
+            .into_iter()
+            .filter(|d| d.code == "erc.unconnected_pin" && d.message.contains("CTRL1"))
+            .collect();
+        assert_eq!(unconn.len(), 1, "{unconn:?}");
+        assert!(unconn[0].message.contains("IN1"), "{}", unconn[0].message);
+        assert!(!unconn[0].message.contains("OUT1"), "{}", unconn[0].message);
     }
 
     /// A terminal-block terminal counts as connected if either its left or right side is wired.

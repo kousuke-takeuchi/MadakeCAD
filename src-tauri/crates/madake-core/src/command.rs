@@ -466,6 +466,7 @@ impl Engine {
                 ))
             }
             Command::AddEntity { sheet_id, entity } => {
+                validate_entity(entity)?;
                 let sheet = self
                     .project
                     .sheet_mut(*sheet_id)
@@ -489,6 +490,7 @@ impl Engine {
                 ))
             }
             Command::UpdateEntity { sheet_id, entity } => {
+                validate_entity(entity)?;
                 let sheet = self
                     .project
                     .sheet_mut(*sheet_id)
@@ -687,6 +689,20 @@ impl Engine {
     }
 }
 
+/// 図面へ入れる前のエンティティ検証。
+///
+/// 描けないもの・意味が壊れているものは**黙って受け取らず**、
+/// [`CoreError::InvalidCommand`]で断る(サイレント失敗の禁止)。今のところ対象は
+/// ブロックシンボル ([`crate::block`]) のピン表・外形寸法。
+fn validate_entity(entity: &Entity) -> Result<()> {
+    if let Entity::Symbol(s) = entity {
+        if s.symbol_id == crate::block::BLOCK_SYMBOL_ID {
+            crate::block::parse_block_spec(&s.attrs).map_err(CoreError::InvalidCommand)?;
+        }
+    }
+    Ok(())
+}
+
 /// entitiesを除いたシートのコピー(メタ更新patch用)。
 fn sheet_meta(sheet: &Sheet) -> Sheet {
     let mut meta = sheet.clone();
@@ -716,6 +732,78 @@ mod tests {
             part_no: None,
             net: None,
         })
+    }
+
+    /// A block whose pin table is broken (duplicate numbers) is refused when added, and the sheet is left untouched.
+    /// ピン表が壊れている(番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。
+    #[test]
+    fn a_block_with_a_broken_pin_table_is_refused_and_changes_nothing() {
+        let (mut engine, sheet_id) = test_engine();
+        let bad = crate::block::test_block(
+            "CTRL1",
+            "MainController",
+            100.0,
+            50.0,
+            r#"{"left":[{"no":"IN1"}],"right":[{"no":"IN1"}]}"#,
+        );
+        let err = engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: bad,
+            })
+            .expect_err("重複ピン番号は拒否される");
+        assert!(
+            matches!(&err, CoreError::InvalidCommand(m) if m.contains("duplicate")),
+            "{err:?}"
+        );
+        assert!(
+            engine.project().sheet(sheet_id).unwrap().entities.is_empty(),
+            "拒否されたのに図面へ入っている"
+        );
+        assert_eq!(engine.undo_depth(), 0, "undo履歴に積まれている");
+    }
+
+    /// Editing a good block into a broken one is refused too, so a block on the sheet always has a drawable pin table.
+    /// 正しいブロックを壊れた内容へ編集するのも拒否されるので、図面上のブロックは常に描けるピン表を持つ。
+    #[test]
+    fn editing_a_block_into_a_broken_one_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let good = crate::block::test_block(
+            "CTRL1",
+            "MainController",
+            100.0,
+            50.0,
+            r#"{"left":[{"no":"IN1"}]}"#,
+        );
+        let id = good.id();
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: good,
+            })
+            .expect("正しいブロックは追加できる");
+        let mut broken = match engine.project().sheet(sheet_id).unwrap().entities[&id].clone() {
+            Entity::Symbol(s) => s,
+            _ => unreachable!(),
+        };
+        broken
+            .attrs
+            .insert("block_pins".into(), "not json".into());
+        let err = engine
+            .execute(Command::UpdateEntity {
+                sheet_id,
+                entity: Entity::Symbol(broken),
+            })
+            .expect_err("壊れた属性への更新は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        let Entity::Symbol(kept) = &engine.project().sheet(sheet_id).unwrap().entities[&id] else {
+            unreachable!()
+        };
+        assert_eq!(
+            kept.attrs.get("block_pins").map(String::as_str),
+            Some(r#"{"left":[{"no":"IN1"}]}"#),
+            "拒否されたのに書き換わっている"
+        );
     }
 
     /// Adding an entity can be undone (the entity disappears) and redone (it comes back).

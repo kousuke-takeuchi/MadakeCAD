@@ -3,7 +3,7 @@
 // 適用するミラーで、モデルを直接書き換えるコードを置いてはならない。
 
 import { defineStore } from "pinia";
-import { resolveSymbolDef } from "../canvas/dynamicSymbol";
+import { resolveInstanceDef, resolveSymbolDef } from "../canvas/dynamicSymbol";
 import {
   DEFAULT_FRAME_TEMPLATE,
   DEFAULT_FRAME_TEMPLATE_ID,
@@ -20,6 +20,7 @@ import {
   type Project,
   type Sheet,
   type SymbolDef,
+  type SymbolInstance,
 } from "../ipc";
 
 interface DocumentState {
@@ -56,6 +57,13 @@ export const useDocumentStore = defineStore("document", {
     /** symbol_id→定義。静的ライブラリ優先、動的ID(terminal_block_{n}p等)にフォールバック。 */
     resolveSymbol(): (id: string) => SymbolDef | undefined {
       return (id) => resolveSymbolDef(id, this.symbolDefs);
+    },
+    /**
+     * 配置済みシンボル→定義。ブロック(symbol_id="block")は形がインスタンスの属性で
+     * 決まるので、symbol_idだけで引く`resolveSymbol`ではなくこちらを使う。
+     */
+    resolveInstance(): (inst: SymbolInstance) => SymbolDef | undefined {
+      return (inst) => resolveInstanceDef(inst, this.symbolDefs);
     },
     activeSheet(state) {
       return (

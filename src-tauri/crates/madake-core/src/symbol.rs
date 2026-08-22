@@ -44,6 +44,7 @@ pub const CATEGORY_ORDER: &[&str] = &[
     "output",
     "instrument",
     "plc",
+    "block",
     "connector",
     "user",
 ];
@@ -1072,10 +1073,17 @@ fn plc_module_symbol(id: &str) -> Option<SymbolDef> {
     Some(sym(id, &name, &name_ja, "plc", "PLC", &keywords, primitives, pins))
 }
 
-/// `connector_{n}p` / `terminal_block_{n}p` / `plc_di_{n}p` / `plc_do_{n}p` 形式のIDから
+/// `connector_{n}p` / `terminal_block_{n}p` / `plc_di_{n}p` / `plc_do_{n}p` / `block` から
 /// ピン数可変シンボルを生成する。
 /// 端子は縦並び・ピッチ5mm・中央揃え(オフセットは常に2.5mmグリッド倍数)。
+///
+/// `block` ([`crate::block`]) だけはピンをインスタンスの属性が決めるので、ここでは
+/// **ピンの無い見本**(部品挿入ダイアログ・id存在確認用)を返す。実際に描く定義は
+/// [`instance_symbol_def`] がインスタンスごとに生成する。
 pub fn dynamic_symbol(id: &str) -> Option<SymbolDef> {
+    if id == crate::block::BLOCK_SYMBOL_ID {
+        return Some(crate::block::block_template());
+    }
     let parse = |rest: &str| -> Option<usize> {
         let n: usize = rest.strip_suffix('p')?.parse().ok()?;
         (1..=DYNAMIC_PIN_MAX).contains(&n).then_some(n)
@@ -1160,6 +1168,61 @@ pub fn resolve_symbol(id: &str) -> Option<SymbolDef> {
         .find(|s| s.id == id)
         .or_else(|| dynamic_symbol(id))
         .or_else(|| crate::symbol_library::find(id))
+}
+
+/// 配置済みシンボル1個の定義を解決する。
+///
+/// ふつうは`symbol_id`でライブラリを引くだけだが、ブロック ([`crate::block`]) は
+/// 形がインスタンスの属性 (`block_pins` / `block_size`) で決まるので、そこから生成する。
+/// 属性が壊れていて生成できないブロックは`None`(描かれない)。
+/// 図面へ入る前に [`crate::command::Engine`] が同じ検証で弾くので、通常は起こらない。
+pub fn instance_symbol_def<'a>(
+    inst: &crate::model::SymbolInstance,
+    defs: &'a [SymbolDef],
+) -> Option<std::borrow::Cow<'a, SymbolDef>> {
+    if inst.symbol_id == crate::block::BLOCK_SYMBOL_ID {
+        return crate::block::block_symbol(&inst.attrs)
+            .ok()
+            .map(std::borrow::Cow::Owned);
+    }
+    defs.iter()
+        .find(|d| d.id == inst.symbol_id)
+        .map(std::borrow::Cow::Borrowed)
+}
+
+/// シンボル定義の索引。`symbol_id`引きを速くしつつ、ブロックだけはインスタンスの
+/// 属性から定義を作る ([`instance_symbol_def`] と同じ規則)。
+pub struct DefIndex<'a> {
+    by_id: std::collections::BTreeMap<&'a str, &'a SymbolDef>,
+}
+
+impl<'a> DefIndex<'a> {
+    pub fn new(defs: &'a [SymbolDef]) -> Self {
+        Self {
+            by_id: defs.iter().map(|d| (d.id.as_str(), d)).collect(),
+        }
+    }
+
+    /// 配置済みシンボルの定義。
+    pub fn get(
+        &self,
+        inst: &crate::model::SymbolInstance,
+    ) -> Option<std::borrow::Cow<'a, SymbolDef>> {
+        if inst.symbol_id == crate::block::BLOCK_SYMBOL_ID {
+            return crate::block::block_symbol(&inst.attrs)
+                .ok()
+                .map(std::borrow::Cow::Owned);
+        }
+        self.by_id
+            .get(inst.symbol_id.as_str())
+            .copied()
+            .map(std::borrow::Cow::Borrowed)
+    }
+
+    /// `symbol_id`だけで引く(ブロックは見本の定義になる)。
+    pub fn by_id(&self, id: &str) -> Option<&'a SymbolDef> {
+        self.by_id.get(id).copied()
+    }
 }
 
 /// シートの描画・ネットリストに必要な全シンボル定義

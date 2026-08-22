@@ -633,7 +633,7 @@ export class EditorController {
             if (e.kind === "harness") ctx.closePath();
             ctx.stroke();
           } else if (e.kind === "symbol") {
-            const def = this.store.resolveSymbol(e.symbol_id);
+            const def = this.store.resolveInstance(e);
             const moved = { ...e, at: { x: e.at.x + this.moveDelta.x, y: e.at.y + this.moveDelta.y } };
             if (def) {
               ctx.globalAlpha = 0.5;
@@ -668,7 +668,7 @@ export class EditorController {
     if (sheet && (this.tool === "wire" || this.tool === "place" || this.tool === "macro")) {
       for (const e of Object.values(sheet.entities)) {
         if (e.kind !== "symbol") continue;
-        const def = this.store.resolveSymbol(e.symbol_id);
+        const def = this.store.resolveInstance(e);
         if (!def) continue;
         for (const pin of def.pins) {
           const wp = transformLocal(pin.at, e);

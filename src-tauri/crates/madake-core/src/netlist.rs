@@ -136,8 +136,7 @@ pub(crate) fn on_wire(w: &crate::model::Wire, p: &Point) -> bool {
 /// - 同名NetLabelのネットは統合され、ネット名はラベル名(辞書順最小)になる
 /// - 無名ネットは決定的な順序で "N001" から連番
 pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
-    let defs: BTreeMap<&str, &SymbolDef> =
-        symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let defs = crate::symbol::DefIndex::new(symbols);
 
     // ノード列挙 (BTreeMap順なので決定的)
     let mut wires = Vec::new();
@@ -150,8 +149,8 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
             Entity::Junction(j) => junctions.push(j),
             Entity::NetLabel(l) => labels.push(l),
             Entity::Symbol(s) => {
-                if let Some(def) = defs.get(s.symbol_id.as_str()) {
-                    for (no, pos) in pin_positions(s, def) {
+                if let Some(def) = defs.get(s) {
+                    for (no, pos) in pin_positions(s, &def) {
                         pins.push((s.id, s.reference.clone(), no, pos));
                     }
                 }
@@ -356,6 +355,46 @@ mod tests {
             .collect();
         refs.sort();
         assert_eq!(refs, vec!["R1:2", "R2:1"]);
+    }
+
+    /// A wire that meets a block pin joins that pin to the net under the pin's own name, not a number.
+    /// ブロックのピンに届いた配線は、そのピンを番号ではなくピン名(例 "OUT1")でネットに参加させる。
+    #[test]
+    fn block_pins_join_nets_under_their_own_names() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let block = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: crate::block::BLOCK_SYMBOL_ID.into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "CTRL1".into(),
+            value: "MainController".into(),
+            attrs: [(
+                "block_pins".to_string(),
+                r#"{"left":[{"no":"IN1","name":"入力1"}],"right":[{"no":"OUT1","name":"出力1"}]}"#
+                    .to_string(),
+            )]
+            .into_iter()
+            .collect(),
+        });
+        // 幅20mm・左右1ピンずつ → 右ピンは (112.5, 50)。R1のピン1 (x=142.5) へ配線
+        for e in [
+            block,
+            symbol("resistor", "R1", 150.0, 50.0),
+            wire(&[(112.5, 50.0), (142.5, 50.0)]),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let net = nets.iter().find(|n| n.pins.len() == 2).expect("接続ネット");
+        let mut refs: Vec<_> = net
+            .pins
+            .iter()
+            .map(|p| format!("{}:{}", p.reference, p.pin))
+            .collect();
+        refs.sort();
+        assert_eq!(refs, vec!["CTRL1:OUT1", "R1:1"]);
     }
 
     /// Wires that merely cross do NOT connect; a net label attached to a wire names its net.

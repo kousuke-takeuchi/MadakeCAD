@@ -10,14 +10,30 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1369仕様項目**。
+全5領域・**1396仕様項目**。
 
 
 ## コアドメイン (madake-core)
 
 
+### block
+
+- ブロックシンボルは名前付きピンを箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並べ、ピンはそれぞれ外向きになる。 <sub>`block_pins_sit_on_both_sides_five_millimetres_apart`</sub>
+- ピン番号は外形の外側(リードの脇)に、ピン名は外形の内側に描かれる。 <sub>`pin_numbers_are_drawn_outside_and_pin_names_inside`</sub>
+- 外形はピン数とピン名の長さに応じて自動で大きくなり、寸法は必ず5mm刻みになる。 <sub>`auto_size_grows_with_pin_count_and_name_length`</sub>
+- ピン表がまったく無いブロックも、最小サイズの空の箱として有効に作られる。 <sub>`a_block_without_a_pin_table_is_an_empty_box`</sub>
+- 上辺・下辺のピンは左から右へ並び、文字を縦向きに描けないので番号・名前は箱の内側に置かれる。 <sub>`top_and_bottom_pins_run_left_to_right`</sub>
+- 外形寸法を明示しても5mm刻みへ切り上げられ、外形はグリッド上に載ったままになる。 <sub>`an_explicit_size_is_rounded_up_to_the_grid`</sub>
+- 同じピン番号が2つある、またはピン番号が空のブロックは、黙って描かれずにエラーになる。 <sub>`duplicate_or_empty_pin_numbers_are_rejected`</sub>
+- ピンが収まらない寸法は拒否され、JSONとして壊れたピン表や知らない辺名も同じく拒否される。 <sub>`a_size_too_small_or_a_malformed_pin_table_is_rejected`</sub>
+- ブロックのピン数には上限があり、桁違いのピン表ははっきりエラーになる。 <sub>`too_many_pins_are_rejected`</sub>
+- 属性スロット(参照記号・型番・機能・定格)は箱の中央に縦に積まれる。 <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
+- ブロックを回転・ミラーしてもピンは本体と一緒に動くだけで、番号は付け替わらない。 <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
+
 ### Commandエンジン (undo/redo)
 
+- ピン表が壊れている(番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。 <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
+- 正しいブロックを壊れた内容へ編集するのも拒否されるので、図面上のブロックは常に描けるピン表を持つ。 <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
 - エンティティの追加はundoで消え、redoで復活する。 <sub>`add_undo_redo_entity`</sub>
 - 移動でエンティティの座標が動き、undoで元の位置に正確に戻る。 <sub>`move_and_undo_restores_position`</sub>
 - 複数エンティティの一括削除は1回のundoで全て復元される。 <sub>`delete_multiple_and_undo`</sub>
@@ -146,6 +162,7 @@
 ### ネットリスト抽出
 
 - 両端がシンボルのピンに一致するワイヤは、それらのピンを1つのネットに結合する。 <sub>`wires_connect_symbol_pins_into_one_net`</sub>
+- ブロックのピンに届いた配線は、そのピンを番号ではなくピン名(例 "OUT1")でネットに参加させる。 <sub>`block_pins_join_nets_under_their_own_names`</sub>
 - 単に交差しただけのワイヤは接続されない。ワイヤに付いたネットラベルはそのネットの名前になる。 <sub>`crossing_without_junction_stays_separate_and_label_names_net`</sub>
 - ジャンクションは交差ワイヤを接続し、同名ラベルは離れたネットを1つに統合する。 <sub>`junction_connects_crossing_wires_and_same_labels_merge`</sub>
 - 無名ネットには決定的な連番名(N001, N002, …)が付く。 <sub>`unnamed_nets_get_deterministic_sequential_names`</sub>
@@ -269,6 +286,7 @@
 - カンマを含む項目は引用符で囲まれ、CSVが壊れない。 <sub>`bom_escapes_fields_with_commas`</sub>
 - 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先から始まる。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。 <sub>`wire_list_is_a_from_to_list`</sub>
 - シンボルのピンに届いているワイヤの端は「参照記号:ピン番号」(例 K1:A1) と書かれる。 <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
+- ブロックのピンに届いたワイヤの端はピン名つき(例 CTRL1:OUT1)で書かれ、ブロック自体も部品表に数えられる。 <sub>`a_wire_end_on_a_block_pin_uses_the_pin_name_and_the_block_is_in_the_parts_list`</sub>
 - ネットラベルが付いているワイヤの端は、そのラベル名で書かれる。 <sub>`a_wire_end_with_a_net_label_is_written_as_the_label_name`</sub>
 - 何にも接続していないワイヤの端は、リストでは空欄になる。 <sub>`an_unconnected_wire_end_is_empty`</sub>
 - 両端のうち表記の辞書順で小さい方がFromになるので、どちら向きに描いたワイヤでもFrom/Toは常に同じになる。 <sub>`from_is_the_alphabetically_smaller_of_the_two_ends`</sub>
@@ -316,6 +334,7 @@
 ### SVG出力 (JIS図枠)
 
 - 出力SVGにはJIS図枠・表題欄の文字・配線・参照記号が含まれる。 <sub>`svg_contains_frame_wire_and_symbol`</sub>
+- ブロックシンボルは、インスタンスの属性から外形・ピン番号・ピン名まで描かれる。 <sub>`svg_draws_block_outline_with_pin_numbers_and_names`</sub>
 - jis-a3図枠テンプレートで描いた図枠は、これまで出力してきたJIS図枠とSVGの1文字まで同一である(外枠・ゾーン目盛・改訂欄・表題欄の全セル)。 <sub>`the_jis_a3_template_reproduces_the_previous_frame_exactly`</sub>
 - 改訂の無い空のA4シートも従来どおりの図枠を出す(改訂欄は描かれず、表題欄のセルは空欄のまま残る)。 <sub>`an_empty_sheet_reproduces_the_previous_frame_exactly`</sub>
 - A4縦テンプレートでは190×277の図枠が描かれ、110mm幅の表題欄が右下に、ゾーン目盛は同じ4×6で出る。 <sub>`the_a4_portrait_template_draws_a_narrower_frame_and_title_block`</sub>
@@ -503,6 +522,7 @@
 
 - 完全に結線された回路ではERCの指摘は出ない。 <sub>`fully_wired_pair_has_no_erc_findings`</sub>
 - 未接続ピンはシンボルごとに1件の警告として、該当ピン番号を列挙して報告される。 <sub>`unconnected_pins_are_reported_per_symbol`</sub>
+- ブロックの未接続ピンはピン名で列挙されるので、コントローラの未配線入力が番号ではなく名前で分かる。 <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
 - 端子台の端子は左右どちらか一方が結線されていれば接続済みとみなす。 <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - 参照記号の未設定・重複は指摘されるが、リレーのコイル+接点が同じ記号を共有するのは正当として許容される。 <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
 - どこにも接続されていないワイヤ端点は指摘される(ジャンクション無しで他ワイヤの途中に乗る端点も含む)。 <sub>`dangling_wire_end_is_flagged_including_missing_junction`</sub>
@@ -665,6 +685,8 @@
 - API経由で見えるツールはCLI経由とまったく同じ顔ぶれで、片方だけ機能が欠けることがない。 <sub>`the_api_route_sees_the_same_tools_as_the_cli_route`</sub>
 - 窓口から見えるツールには全て説明が付き、入力スキーマはオブジェクト型になっている。 <sub>`every_bridged_tool_has_a_description_and_an_object_schema`</sub>
 - 窓口経由の編集は図面に入り、他の編集と同じように元に戻せる(Commandエンジンを通っている)。 <sub>`an_edit_through_the_bridge_lands_in_the_document_and_can_be_undone`</sub>
+- 名前付きピンを持つ多ピン機器は、ピン表をattrsで渡すだけの1回の呼び出しで配置できる。 <sub>`a_block_with_named_pins_is_placed_in_one_call`</sub>
+- ピン表が壊れているブロックは、図面に空の箱が置かれるのではなくエラーとして返る。 <sub>`a_block_with_a_broken_pin_table_is_refused`</sub>
 - 読み取り系のツールも窓口経由で動く(エージェントは編集の前に図面を見られる)。 <sub>`reading_tools_work_through_the_bridge`</sub>
 - 存在しないツール名は、ターンを落とさずにエラーの結果として返る(モデルが言い直せる)。 <sub>`an_unknown_tool_name_comes_back_as_an_error_result`</sub>
 - 引数が間違っているときも理由つきのエラーの結果として返り、モデルが自分で直せる。 <sub>`bad_arguments_come_back_with_a_reason`</sub>
@@ -1114,6 +1136,14 @@
 - 不正な動的IDはnullになる <sub>`dynamicSymbol`</sub>
 - PLCモジュールのシンボルは1〜64点までで、その外の点数は存在しない <sub>`dynamicSymbol`</sub>
 - 静的定義を優先し、無ければ動的生成にフォールバックする <sub>`resolveSymbolDef`</sub>
+- ブロックのピンは箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並ぶ(Rust側と同じ座標) <sub>`blockSymbol`</sub>
+- ピン番号は外形の外側に、ピン名は内側に描かれる <sub>`blockSymbol`</sub>
+- 外形はピン数とピン名の長さから自動で決まり、必ず5mm刻みになる <sub>`blockSymbol`</sub>
+- 外形寸法を明示すると5mm刻みへ切り上げられる <sub>`blockSymbol`</sub>
+- 番号の重複・空番号・小さすぎる寸法・壊れたピン表はエラーになる(黙って描かない) <sub>`blockSymbol`</sub>
+- ピン表の無いブロックは最小サイズの空の箱になる <sub>`blockSymbol`</sub>
+- 配置済みブロックの定義はインスタンスの属性から作られる(同じidでも中身が違う) <sub>`resolveInstanceDef`</sub>
+- 属性が壊れているブロックは描かれない(undefinedになる) <sub>`resolveInstanceDef`</sub>
 
 ### 図枠テンプレートの配置計算 (キャンバス)
 

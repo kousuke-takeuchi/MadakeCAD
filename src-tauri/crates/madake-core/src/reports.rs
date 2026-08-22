@@ -100,16 +100,16 @@ pub const WIRE_LIST_COLUMNS: [&str; 9] = [
 /// (出力を決定的にするため)。貫通端子台の左右の接続点は同じピン番号を持つので、
 /// 内側・外側どちらのワイヤも同じ `TB1:1` 表記になる。
 pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
-    let by_id: BTreeMap<&str, &SymbolDef> = defs.iter().map(|d| (d.id.as_str(), d)).collect();
+    let by_id = crate::symbol::DefIndex::new(defs);
     let mut pin_hit: Option<String> = None;
     let mut label_hit: Option<String> = None;
     for entity in sheet.entities.values() {
         match entity {
             Entity::Symbol(s) => {
-                let Some(def) = by_id.get(s.symbol_id.as_str()) else {
+                let Some(def) = by_id.get(s) else {
                     continue;
                 };
-                for (no, pos) in pin_positions(s, def) {
+                for (no, pos) in pin_positions(s, &def) {
                     if pos.distance_to(at) < CONNECT_EPS {
                         let text = format!("{}:{}", s.reference, no);
                         if pin_hit.as_ref().is_none_or(|cur| text < *cur) {
@@ -315,6 +315,37 @@ mod tests {
         }
         let row = data_rows(&wire_list_csv(&project))[0].clone();
         assert_eq!(&row[1..3], ["R1:2", "R2:1"]);
+    }
+
+    /// A wire end on a block pin is written with the pin's name (for example CTRL1:OUT1), and the block itself is counted in the parts list.
+    /// ブロックのピンに届いたワイヤの端はピン名つき(例 CTRL1:OUT1)で書かれ、ブロック自体も部品表に数えられる。
+    #[test]
+    fn a_wire_end_on_a_block_pin_uses_the_pin_name_and_the_block_is_in_the_parts_list() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        // 幅20mmのブロック: 右ピンOUT1は (112.5, 50)。R1のピン1 (142.5, 50) へ配線
+        for e in [
+            crate::block::test_block(
+                "CTRL1",
+                "MainController",
+                100.0,
+                50.0,
+                r#"{"left":[{"no":"IN1","name":"入力1"}],"right":[{"no":"OUT1","name":"出力1"}]}"#,
+            ),
+            resistor("R1", 150.0, 50.0),
+            wire_between((112.5, 50.0), (142.5, 50.0)),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let row = data_rows(&wire_list_csv(&project))[0].clone();
+        assert_eq!(&row[1..3], ["CTRL1:OUT1", "R1:1"]);
+        let bom = bom_rows(&project);
+        assert!(
+            bom.iter()
+                .any(|r| r[0] == "CTRL1" && r[1] == "MainController" && r[2] == "block" && r[3] == "1"),
+            "部品表にブロックが無い: {bom:?}"
+        );
     }
 
     /// An end of a wire that carries a net label is written as the label name.

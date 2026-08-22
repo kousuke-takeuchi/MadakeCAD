@@ -88,6 +88,83 @@ async fn an_edit_through_the_bridge_lands_in_the_document_and_can_be_undone() {
     );
 }
 
+/// A multi-pin device with named pins is placed in a single call by passing its pin table in attrs.
+/// 名前付きピンを持つ多ピン機器は、ピン表をattrsで渡すだけの1回の呼び出しで配置できる。
+#[tokio::test]
+async fn a_block_with_named_pins_is_placed_in_one_call() {
+    let (doc, _parts, bridge) = fixture();
+    let sheet_id = first_sheet(&doc);
+    let outcome = bridge
+        .call(
+            "place_symbol",
+            json!({
+                "sheet_id": sheet_id,
+                "symbol_id": "block",
+                "x": 100.0,
+                "y": 50.0,
+                "reference": "CTRL1",
+                "value": "MainController",
+                "attrs": {
+                    "block_pins": r#"{"left":[{"no":"IN1","name":"入力1"}],"right":[{"no":"OUT1","name":"出力1"}]}"#
+                }
+            }),
+        )
+        .await;
+    assert!(!outcome.is_error, "配置に失敗した: {}", outcome.content);
+
+    let engine = doc.engine.lock().unwrap();
+    let sheet = &engine.project().sheets[0];
+    let defs = madake_core::sheet_symbol_defs(sheet);
+    let inst = sheet
+        .entities
+        .values()
+        .find_map(|e| match e {
+            madake_core::Entity::Symbol(s) => Some(s),
+            _ => None,
+        })
+        .expect("ブロックが置かれている");
+    let def = madake_core::instance_symbol_def(inst, &defs).expect("ブロックの定義");
+    let pins: Vec<(&str, &str)> = def
+        .pins
+        .iter()
+        .map(|p| (p.number.as_str(), p.name.as_str()))
+        .collect();
+    assert_eq!(pins, vec![("IN1", "入力1"), ("OUT1", "出力1")]);
+}
+
+/// A block whose pin table is broken comes back as an error instead of a blank box on the sheet.
+/// ピン表が壊れているブロックは、図面に空の箱が置かれるのではなくエラーとして返る。
+#[tokio::test]
+async fn a_block_with_a_broken_pin_table_is_refused() {
+    let (doc, _parts, bridge) = fixture();
+    let sheet_id = first_sheet(&doc);
+    let outcome = bridge
+        .call(
+            "place_symbol",
+            json!({
+                "sheet_id": sheet_id,
+                "symbol_id": "block",
+                "x": 100.0,
+                "y": 50.0,
+                "reference": "CTRL1",
+                "attrs": { "block_pins": r#"{"left":[{"no":"IN1"},{"no":"IN1"}]}"# }
+            }),
+        )
+        .await;
+    assert!(outcome.is_error, "エラーになっていない: {}", outcome.content);
+    assert!(
+        outcome.content.contains("duplicate"),
+        "理由が分からない: {}",
+        outcome.content
+    );
+    assert!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .is_empty(),
+        "拒否されたのに図面へ入っている"
+    );
+}
+
 /// Reading tools work through the bridge too, so the agent can look at the drawing before editing.
 /// 読み取り系のツールも窓口経由で動く(エージェントは編集の前に図面を見られる)。
 #[tokio::test]

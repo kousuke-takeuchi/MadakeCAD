@@ -19,7 +19,7 @@ import {
   type RevisionLayout,
   type RevisionRowLayout,
 } from "./frameTemplate";
-import { resolveSymbolDef } from "./dynamicSymbol";
+import { resolveInstanceDef } from "./dynamicSymbol";
 import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
 import { entityViewClass, type ViewClass } from "./viewClasses";
 import { agentRgba, theme, wireColorScreen } from "./theme";
@@ -671,7 +671,6 @@ export function renderSheet(
   if (!hidden.has("frame")) drawFrame(ctx, vp, sheet, opts.frame, opts.bind);
 
   const defs = new Map(symbols.map((d) => [d.id, d]));
-  const resolve = (id: string) => resolveSymbolDef(id, defs);
   const entities = Object.values(sheet.entities).filter((e) => !hidden.has(entityViewClass(e)));
 
   // ハーネス境界は配線・シンボルの背面
@@ -694,7 +693,7 @@ export function renderSheet(
   }
   for (const e of entities) {
     if (e.kind !== "symbol") continue;
-    const def = resolve(e.symbol_id);
+    const def = resolveInstanceDef(e, defs);
     if (!def) continue;
     drawSymbol(ctx, vp, e, def, opts.selection.has(e.id), undefined, !hidden.has("refs"));
     // コイル⇔接点クロスリファレンス (表示クラスは「参照記号」に含める)

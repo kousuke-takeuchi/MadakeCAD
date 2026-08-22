@@ -216,15 +216,14 @@ pub fn symbol_bounds(inst: &SymbolInstance, def: &SymbolDef) -> Option<Rect> {
 
 /// シート上の全シンボルの外形矩形 (entity id付き)。id順で決定的。
 pub fn symbol_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<(EntityId, Rect)> {
-    let defs: std::collections::BTreeMap<&str, &SymbolDef> =
-        symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let defs = crate::symbol::DefIndex::new(symbols);
     sheet
         .entities
         .values()
         .filter_map(|e| match e {
             Entity::Symbol(s) => {
-                let def = defs.get(s.symbol_id.as_str())?;
-                Some((s.id, symbol_bounds(s, def)?))
+                let def = defs.get(s)?;
+                Some((s.id, symbol_bounds(s, &def)?))
             }
             _ => None,
         })
@@ -238,16 +237,15 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
     use crate::svg::{
         LABEL_FONT, NET_LABEL_DY, REF_LABEL_DY, VALUE_LABEL_DY, WIRE_NO_FONT, WIRE_NO_GAP,
     };
-    let defs: std::collections::BTreeMap<&str, &SymbolDef> =
-        symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let defs = crate::symbol::DefIndex::new(symbols);
     let mut boxes = Vec::new();
     for entity in sheet.entities.values() {
         match entity {
             Entity::Symbol(s) => {
-                let Some(def) = defs.get(s.symbol_id.as_str()) else {
+                let Some(def) = defs.get(s) else {
                     continue;
                 };
-                let top = crate::svg::symbol_top_y(s, def);
+                let top = crate::svg::symbol_top_y(s, &def);
                 if !s.reference.is_empty() {
                     boxes.push(TextBox {
                         rect: text_box(

@@ -17,8 +17,13 @@
 
 ### Task 1: G1 ブロックシンボル(コア)
 
-- [ ] Step 1 (red): attrsからの動的定義生成(左右ピン名・グリッド・サイズ自動/指定)/netlist・ERC・BOM・SVG(ピン名描画)/回転・ミラー/バリデーション(重複ピン番号・空名)
-- [ ] Step 2 (green): 実装+MCP/Link API経由の作成をテスト。gen_spec→コミット
+- [x] Step 1 (red): attrsからの動的定義生成(左右ピン名・グリッド・サイズ自動/指定)/netlist・ERC・BOM・SVG(ピン名描画)/回転・ミラー/バリデーション(重複ピン番号・空名)
+- [x] Step 2 (green): 実装+MCP/Link API経由の作成をテスト。gen_spec→コミット
+
+  実装メモ: `madake-core/src/block.rs`(attrs `block_pins`/`block_size` → SymbolDef生成・検証)、
+  `symbol::DefIndex`/`instance_symbol_def`(インスタンス単位の定義解決)を netlist/svg/reports/verify/tidy が使用。
+  不正なブロックは`Engine::execute`のAddEntity/UpdateEntityで`InvalidCommand`(G17先行適用)。
+  MCP `place_symbol`に`attrs`を追加。キャンバス側は`canvas/dynamicSymbol.ts`の`blockSymbol`/`resolveInstanceDef`。
 
 ### Task 2: G1 ブロックシンボル(UI)
 

@@ -1,8 +1,8 @@
 // Rust側 madake-core/src/symbol.rs の dynamic_symbol と同一座標を返すことを検証する。
 import { describe, expect, it } from "vitest";
 
-import type { SymbolDef } from "../ipc";
-import { dynamicSymbol, resolveSymbolDef } from "./dynamicSymbol";
+import type { SymbolDef, SymbolInstance } from "../ipc";
+import { blockSymbol, dynamicSymbol, resolveInstanceDef, resolveSymbolDef } from "./dynamicSymbol";
 
 describe("dynamicSymbol", () => {
   // ja: connector_2pは旧静的定義と同一のピン座標を持つ
@@ -86,5 +86,117 @@ describe("resolveSymbolDef", () => {
     expect(resolveSymbolDef("resistor", defs)).toBe(staticDef);
     expect(resolveSymbolDef("terminal_block_4p", defs)?.pins).toHaveLength(8);
     expect(resolveSymbolDef("unknown", defs)).toBeUndefined();
+  });
+});
+
+// Rust側 madake-core/src/block.rs と同一座標を返すことを検証する。
+describe("blockSymbol", () => {
+  const SAMPLE =
+    '{"left":[{"no":"IN1","name":"入力1"},{"no":"IN2","name":"入力2"}],"right":[{"no":"OUT1","name":"出力1"}]}';
+
+  const rectOf = (def: SymbolDef) => {
+    const r = def.primitives.find((p) => p.type === "rect");
+    if (!r || r.type !== "rect") throw new Error("外形の長方形が無い");
+    return r;
+  };
+  const textAt = (def: SymbolDef, needle: string) => {
+    const t = def.primitives.find((p) => p.type === "text" && p.text === needle);
+    if (!t || t.type !== "text") throw new Error(`文字 ${needle} が描かれていない`);
+    return t.at;
+  };
+
+  // ja: ブロックのピンは箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並ぶ(Rust側と同じ座標)
+  it("puts named pins on both sides of the box, 5 mm apart on the 2.5 mm grid", () => {
+    const def = blockSymbol({ block_pins: SAMPLE });
+    const rect = rectOf(def);
+    expect([rect.p1.x, rect.p1.y, rect.p2.x, rect.p2.y]).toEqual([-10, -7.5, 10, 7.5]);
+    expect(def.pins.map((p) => [p.number, p.at.x, p.at.y, p.dir])).toEqual([
+      ["IN1", -12.5, -2.5, "left"],
+      ["IN2", -12.5, 2.5, "left"],
+      ["OUT1", 12.5, 0, "right"],
+    ]);
+    expect(def.ref_prefix).toBe("U");
+    expect(def.category).toBe("block");
+  });
+
+  // ja: ピン番号は外形の外側に、ピン名は内側に描かれる
+  it("draws pin numbers outside the outline and pin names inside it", () => {
+    const def = blockSymbol({ block_pins: SAMPLE });
+    const rect = rectOf(def);
+    expect(textAt(def, "IN1").x).toBeLessThan(rect.p1.x);
+    expect(textAt(def, "入力1").x).toBeGreaterThan(rect.p1.x);
+    expect(textAt(def, "入力1").x).toBeLessThan(rect.p2.x);
+    expect(textAt(def, "入力1").y).toBe(-2.5);
+    expect(textAt(def, "OUT1").x).toBeGreaterThan(rect.p2.x);
+  });
+
+  // ja: 外形はピン数とピン名の長さから自動で決まり、必ず5mm刻みになる
+  it("sizes the box automatically from the pin count and the name length, in 5 mm steps", () => {
+    const many = blockSymbol({
+      block_pins: '{"left":[{"no":"1"},{"no":"2"},{"no":"3"},{"no":"4"},{"no":"5"},{"no":"6"}]}',
+    });
+    const r = rectOf(many);
+    expect([r.p2.x - r.p1.x, r.p2.y - r.p1.y]).toEqual([15, 35]);
+
+    const wide = rectOf(blockSymbol({ block_pins: '{"left":[{"no":"1","name":"MOTOR-DRIVE-ENABLE"}]}' }));
+    expect(wide.p2.x - wide.p1.x).toBe(30);
+  });
+
+  // ja: 外形寸法を明示すると5mm刻みへ切り上げられる
+  it("rounds an explicit size up to the 5 mm step", () => {
+    const def = blockSymbol({ block_pins: '{"left":[{"no":"1"}]}', block_size: '{"w":18,"h":11}' });
+    const r = rectOf(def);
+    expect([r.p2.x - r.p1.x, r.p2.y - r.p1.y]).toEqual([20, 15]);
+  });
+
+  // ja: 番号の重複・空番号・小さすぎる寸法・壊れたピン表はエラーになる(黙って描かない)
+  it("rejects duplicate or empty pin numbers, a size too small, and a malformed pin table", () => {
+    expect(() => blockSymbol({ block_pins: '{"left":[{"no":"A"}],"right":[{"no":"A"}]}' })).toThrow(
+      /duplicate/,
+    );
+    expect(() => blockSymbol({ block_pins: '{"left":[{"no":" "}]}' })).toThrow(/empty/);
+    expect(() =>
+      blockSymbol({
+        block_pins: '{"left":[{"no":"1"},{"no":"2"},{"no":"3"},{"no":"4"}]}',
+        block_size: '{"w":20,"h":15}',
+      }),
+    ).toThrow(/too small/);
+    expect(() => blockSymbol({ block_pins: "not json" })).toThrow(/not valid JSON/);
+    expect(() => blockSymbol({ block_pins: '{"lef":[{"no":"1"}]}' })).toThrow(/valid JSON/);
+  });
+
+  // ja: ピン表の無いブロックは最小サイズの空の箱になる
+  it("makes an empty minimum-sized box when there is no pin table", () => {
+    const def = blockSymbol({});
+    expect(def.pins).toHaveLength(0);
+    const r = rectOf(def);
+    expect([r.p2.x - r.p1.x, r.p2.y - r.p1.y]).toEqual([15, 10]);
+  });
+});
+
+describe("resolveInstanceDef", () => {
+  const inst = (attrs: Record<string, string>): SymbolInstance => ({
+    id: "e1",
+    symbol_id: "block",
+    at: { x: 100, y: 50 },
+    rotation: 0,
+    mirror: false,
+    reference: "CTRL1",
+    value: "MainController",
+    attrs,
+  });
+
+  // ja: 配置済みブロックの定義はインスタンスの属性から作られる(同じidでも中身が違う)
+  it("builds a block's definition from the instance attributes, not from its id", () => {
+    const defs = new Map<string, SymbolDef>();
+    const a = resolveInstanceDef(inst({ block_pins: '{"left":[{"no":"IN1"}]}' }), defs);
+    const b = resolveInstanceDef(inst({ block_pins: '{"left":[{"no":"A"},{"no":"B"}]}' }), defs);
+    expect(a?.pins.map((p) => p.number)).toEqual(["IN1"]);
+    expect(b?.pins.map((p) => p.number)).toEqual(["A", "B"]);
+  });
+
+  // ja: 属性が壊れているブロックは描かれない(undefinedになる)
+  it("returns nothing for a block whose attributes are broken", () => {
+    expect(resolveInstanceDef(inst({ block_pins: "not json" }), new Map())).toBeUndefined();
   });
 });

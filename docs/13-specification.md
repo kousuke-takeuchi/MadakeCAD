@@ -10,14 +10,30 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1369 specification clauses** across 5 areas.
+**1396 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
 
 
+### block
+
+- A block symbol puts its named pins on both sides of a box, 5 mm apart and centred on the 2.5 mm grid, each pointing outwards. <sub>`block_pins_sit_on_both_sides_five_millimetres_apart`</sub>
+- Pin numbers are drawn outside the outline next to the lead, and pin names inside it. <sub>`pin_numbers_are_drawn_outside_and_pin_names_inside`</sub>
+- The box grows automatically with the number of pins and the length of the pin names, always in 5 mm steps. <sub>`auto_size_grows_with_pin_count_and_name_length`</sub>
+- A block with no pin table at all is still a valid, minimum-sized empty box. <sub>`a_block_without_a_pin_table_is_an_empty_box`</sub>
+- Top and bottom pins run left to right, and their captions stay inside the box because text cannot be drawn sideways. <sub>`top_and_bottom_pins_run_left_to_right`</sub>
+- An explicit size is rounded up to the 5 mm step so the outline keeps sitting on the grid. <sub>`an_explicit_size_is_rounded_up_to_the_grid`</sub>
+- Two pins with the same number, or a pin with an empty number, are rejected instead of silently drawn. <sub>`duplicate_or_empty_pin_numbers_are_rejected`</sub>
+- A size too small for the pins is rejected, and so is a pin table that is not valid JSON or uses an unknown side. <sub>`a_size_too_small_or_a_malformed_pin_table_is_rejected`</sub>
+- A block cannot exceed the pin limit, so a runaway pin table fails loudly. <sub>`too_many_pins_are_rejected`</sub>
+- The attribute slots (tag, part number, function, rating) stack at the centre of the box. <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
+- Rotating or mirroring a block moves its pins with the body but never renumbers them. <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
+
 ### Command engine (undo/redo)
 
+- A block whose pin table is broken (duplicate numbers) is refused when added, and the sheet is left untouched. <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
+- Editing a good block into a broken one is refused too, so a block on the sheet always has a drawable pin table. <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
 - Adding an entity can be undone (the entity disappears) and redone (it comes back). <sub>`add_undo_redo_entity`</sub>
 - Moving entities shifts their coordinates; undo restores the original position exactly. <sub>`move_and_undo_restores_position`</sub>
 - Deleting several entities at once is a single undo step that restores all of them. <sub>`delete_multiple_and_undo`</sub>
@@ -146,6 +162,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### Netlist extraction
 
 - A wire whose endpoints touch two symbol pins joins those pins into one net. <sub>`wires_connect_symbol_pins_into_one_net`</sub>
+- A wire that meets a block pin joins that pin to the net under the pin's own name, not a number. <sub>`block_pins_join_nets_under_their_own_names`</sub>
 - Wires that merely cross do NOT connect; a net label attached to a wire names its net. <sub>`crossing_without_junction_stays_separate_and_label_names_net`</sub>
 - A junction dot connects crossing wires, and same-named labels merge distant nets into one. <sub>`junction_connects_crossing_wires_and_same_labels_merge`</sub>
 - Unnamed nets receive deterministic sequential names (N001, N002, ...). <sub>`unnamed_nets_get_deterministic_sequential_names`</sub>
@@ -269,6 +286,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - BOM fields containing commas are quoted so the CSV stays valid. <sub>`bom_escapes_fields_with_commas`</sub>
 - The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, and the older column order (sheet, wire number, harness, ...) is no longer produced. <sub>`wire_list_is_a_from_to_list`</sub>
 - An end of a wire that lands on a symbol pin is written as "reference:pin number" (for example K1:A1). <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
+- A wire end on a block pin is written with the pin's name (for example CTRL1:OUT1), and the block itself is counted in the parts list. <sub>`a_wire_end_on_a_block_pin_uses_the_pin_name_and_the_block_is_in_the_parts_list`</sub>
 - An end of a wire that carries a net label is written as the label name. <sub>`a_wire_end_with_a_net_label_is_written_as_the_label_name`</sub>
 - An end of a wire that touches nothing is left empty in the list. <sub>`an_unconnected_wire_end_is_empty`</sub>
 - Of the two ends, the one whose text sorts first alphabetically becomes From, so the same wire always yields the same From and To no matter which end was drawn first. <sub>`from_is_the_alphabetically_smaller_of_the_two_ends`</sub>
@@ -316,6 +334,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### SVG output (JIS frame)
 
 - The exported SVG contains the JIS frame, the title block text, wires and reference designators. <sub>`svg_contains_frame_wire_and_symbol`</sub>
+- A block symbol is drawn with its outline, its pin numbers and its pin names, taken from the instance attributes. <sub>`svg_draws_block_outline_with_pin_numbers_and_names`</sub>
 - Drawing the jis-a3 frame template produces exactly the JIS frame this program has always printed, down to the last character of the SVG (frame, zone ticks, revision table and every title-block cell). <sub>`the_jis_a3_template_reproduces_the_previous_frame_exactly`</sub>
 - An empty A4 sheet with no revisions also prints exactly the frame it always did: no revision table, and the title-block cells left blank rather than dropped. <sub>`an_empty_sheet_reproduces_the_previous_frame_exactly`</sub>
 - The A4 portrait template prints a 190x277 frame with its 110 mm title block in the bottom-right corner, and the same 4x6 zone ticks. <sub>`the_a4_portrait_template_draws_a_narrower_frame_and_title_block`</sub>
@@ -503,6 +522,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - A fully wired circuit produces no ERC findings. <sub>`fully_wired_pair_has_no_erc_findings`</sub>
 - Unconnected pins are reported as one warning per symbol, listing the affected pin numbers. <sub>`unconnected_pins_are_reported_per_symbol`</sub>
+- Unconnected pins of a block are listed by their pin names, so a controller's dangling input is named, not numbered. <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
 - A terminal-block terminal counts as connected if either its left or right side is wired. <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - Missing and duplicate reference designators are flagged, but relay coil + contacts legitimately share one designator. <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
 - Wire ends attached to nothing are flagged, including an endpoint resting mid-wire without a junction dot. <sub>`dangling_wire_end_is_flagged_including_missing_junction`</sub>
@@ -665,6 +685,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The API route sees exactly the same tools as the Claude Code CLI route, so neither is missing a feature. <sub>`the_api_route_sees_the_same_tools_as_the_cli_route`</sub>
 - Every bridged tool carries a description and an object-shaped input schema. <sub>`every_bridged_tool_has_a_description_and_an_object_schema`</sub>
 - An edit made through the bridge lands in the document and can be undone like any other edit. <sub>`an_edit_through_the_bridge_lands_in_the_document_and_can_be_undone`</sub>
+- A multi-pin device with named pins is placed in a single call by passing its pin table in attrs. <sub>`a_block_with_named_pins_is_placed_in_one_call`</sub>
+- A block whose pin table is broken comes back as an error instead of a blank box on the sheet. <sub>`a_block_with_a_broken_pin_table_is_refused`</sub>
 - Reading tools work through the bridge too, so the agent can look at the drawing before editing. <sub>`reading_tools_work_through_the_bridge`</sub>
 - A tool name that does not exist comes back as an error result instead of killing the turn. <sub>`an_unknown_tool_name_comes_back_as_an_error_result`</sub>
 - Bad arguments come back as an error result carrying the reason, so the model can correct itself. <sub>`bad_arguments_come_back_with_a_reason`</sub>
@@ -1114,6 +1136,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - malformed dynamic ids return null <sub>`dynamicSymbol`</sub>
 - PLC module symbols exist from 1 to 64 points only <sub>`dynamicSymbol`</sub>
 - static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
+- puts named pins on both sides of the box, 5 mm apart on the 2.5 mm grid <sub>`blockSymbol`</sub>
+- draws pin numbers outside the outline and pin names inside it <sub>`blockSymbol`</sub>
+- sizes the box automatically from the pin count and the name length, in 5 mm steps <sub>`blockSymbol`</sub>
+- rounds an explicit size up to the 5 mm step <sub>`blockSymbol`</sub>
+- rejects duplicate or empty pin numbers, a size too small, and a malformed pin table <sub>`blockSymbol`</sub>
+- makes an empty minimum-sized box when there is no pin table <sub>`blockSymbol`</sub>
+- builds a block's definition from the instance attributes, not from its id <sub>`resolveInstanceDef`</sub>
+- returns nothing for a block whose attributes are broken <sub>`resolveInstanceDef`</sub>
 
 ### Frame template layout (canvas)
 

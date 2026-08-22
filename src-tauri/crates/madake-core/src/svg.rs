@@ -654,8 +654,7 @@ fn sheet_to_svg_with_xrefs(
     frame_and_title_block(&mut out, sheet, frame, ctx);
     // ハーネス境界は配線・シンボルの背面に置く
     render_harnesses(&mut out, sheet);
-    let defs: std::collections::BTreeMap<&str, &SymbolDef> =
-        symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let defs = crate::symbol::DefIndex::new(symbols);
     for entity in sheet.entities.values() {
         match entity {
             Entity::Wire(w) => {
@@ -668,14 +667,14 @@ fn sheet_to_svg_with_xrefs(
                 );
             }
             Entity::Symbol(s) => {
-                if let Some(def) = defs.get(s.symbol_id.as_str()) {
-                    render_symbol(&mut out, s, def);
+                if let Some(def) = defs.get(s) {
+                    render_symbol(&mut out, s, &def);
                     // コイル⇔接点クロスリファレンス (M4 §4)
                     if let Some(rows) = relay.contact_maps.get(&s.id) {
-                        render_contact_map(&mut out, s, def, rows);
+                        render_contact_map(&mut out, s, &def, rows);
                     }
                     if let Some(location) = relay.coil_locations.get(&s.id) {
-                        let at = crate::relay_xref::coil_location_at(s, def);
+                        let at = crate::relay_xref::coil_location_at(s, &def);
                         text_family_el(
                             &mut out,
                             at.x,
@@ -769,6 +768,27 @@ mod tests {
         assert!(svg.contains(">F1<"));
         assert!(svg.matches("<text").count() >= 3);
         assert!(svg.trim_end().ends_with("</svg>"));
+    }
+
+    /// A block symbol is drawn with its outline, its pin numbers and its pin names, taken from the instance attributes.
+    /// ブロックシンボルは、インスタンスの属性から外形・ピン番号・ピン名まで描かれる。
+    #[test]
+    fn svg_draws_block_outline_with_pin_numbers_and_names() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let block = crate::block::test_block(
+            "CTRL1",
+            "MainController",
+            100.0,
+            50.0,
+            r#"{"left":[{"no":"IN1","name":"入力1"}],"right":[{"no":"OUT1","name":"出力1"}]}"#,
+        );
+        sheet.entities.insert(block.id(), block);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        assert!(svg.contains(">IN1<"), "ピン番号が描かれていない");
+        assert!(svg.contains(">入力1<"), "ピン名が描かれていない");
+        assert!(svg.contains(">OUT1<") && svg.contains(">出力1<"));
+        assert!(svg.contains(">CTRL1<"), "参照記号が描かれていない");
+        assert!(svg.contains("polygon"), "外形の長方形が描かれていない");
     }
 
     /// 図枠部分だけを取り出す (SVGの外殻と用紙の下地を除いた、図枠・表題欄・改訂欄の行)。

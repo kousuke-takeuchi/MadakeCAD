@@ -3,6 +3,7 @@
 //! UIにもTauriにも依存しない。全ての編集はシリアライズ可能な [`command::Command`] として
 //! [`command::Engine`] で実行され、UI(Tauri IPC)とAI(MCPサーバー)が同じAPIを共有する。
 
+pub mod block;
 pub mod command;
 pub mod frame_template;
 pub mod geometry;
@@ -37,9 +38,10 @@ pub use command::{Command, EditOrigin, Engine, Patch, PatchOp, Reverted};
 pub use geometry::Point;
 pub use model::*;
 pub use wire_no::RenumberMode;
+pub use block::{block_symbol, BLOCK_SYMBOL_ID};
 pub use symbol::{
-    builtin_symbols, dynamic_symbol, resolve_symbol, sheet_symbol_defs, PinDef, Primitive,
-    SymbolDef,
+    builtin_symbols, dynamic_symbol, instance_symbol_def, resolve_symbol, sheet_symbol_defs, DefIndex,
+    PinDef, Primitive, SymbolDef,
 };
 
 #[derive(Debug, thiserror::Error)]
