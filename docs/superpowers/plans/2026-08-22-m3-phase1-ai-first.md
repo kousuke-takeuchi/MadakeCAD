@@ -25,8 +25,15 @@
 
 ### Task 2: 編集origin+キャンセルseq (madake-core Engine + agent)
 
-- [ ] Step 1 (red): Rustテスト: execute_asでorigin記録/undo_turnがagent編集のみ逆適用しuser編集を保持/衝突時は明示エラー/turn_seq付きイベントとキャンセル後イベントの破棄(フロントはvitest)
-- [ ] Step 2 (green): 実装。IPC/MCP/Link APIの実行経路へoriginを配線(UI=user、エージェント=agent、外部API/CLI=mcp)。gen_spec→コミット
+- [x] Step 1 (red): Rustテスト: execute_asでorigin記録/undo_turnがagent編集のみ逆適用しuser編集を保持/衝突時は明示エラー/turn_seq付きイベントとキャンセル後イベントの破棄(フロントはvitest)
+- [x] Step 2 (green): 実装。IPC/MCP/Link APIの実行経路へoriginを配線(UI=user、エージェント=agent、外部API/CLI=mcp)。gen_spec→コミット
+
+実装メモ:
+- 巻き戻しは`Engine::revert_range(start_depth, end_depth, EditOrigin::Agent)`。ターンの記録した**undo深さ区間**の中でagent由来の履歴エントリだけを新しい逆Commandとして適用する。衝突判定は「逆コマンドの適用が`CoreError`になること」(手編集で対象が消えた`UpdateEntity`の戻し等)で、その場合は適用前のプロジェクトへ巻き戻して`RevertConflict`(部分適用しない)
+- 巻き戻し自体は通常の履歴エントリ(origin=user)として積むため、undoで「巻き戻しの取り消し」ができ、redo履歴は通常の編集と同じく破棄される
+- 「最新の適用済みターンのみ」制限(`NotLatestTurn`)は撤廃。ターン中・ターン後のユーザー手編集は保持されるため、古いターンも安全に戻せる(UIは従来どおり直前ターンの1ボタン)
+- MCPサーバーの入口はUI/外部と共通なので、originは`SharedDoc`の「エージェントターン実行中」カウンタ(RAIIガード。中断時も必ず解除)で見分ける
+- `turn_seq`は**エージェントイベント(ConversationEvent)にのみ**付与。patchへの付与は見送り: 遅延patchを捨てると図面ミラーがバックエンドと乖離するため、キャンセル後もpatchは必ず適用する(patchの重複・古さは既存の`revision`で判定)
 
 ### Task 3: 規格知識+検証ループ+図面コンテキスト拡張
 
