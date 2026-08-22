@@ -47,6 +47,15 @@ fn system_prompt_carries_the_standards_and_the_verification_loop() {
     assert!(prompt.contains("検証: エラー"), "{prompt}");
 }
 
+/// The system prompt tells the agent to start a blank drawing from a template instead of drawing everything by hand.
+/// システムプロンプトは、白紙から作り始めるときはまず開始テンプレートを使うよう指示する。
+#[test]
+fn system_prompt_points_at_the_start_templates() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    assert!(prompt.contains("list_templates"), "{prompt}");
+    assert!(prompt.contains("apply_template"), "{prompt}");
+}
+
 /// The drawing context comes first in the system prompt, with the knowledge behind it.
 /// システムプロンプトは図面コンテキストが先頭で、規格知識はその後ろに続く。
 #[test]

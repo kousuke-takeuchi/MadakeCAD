@@ -153,7 +153,31 @@
       "reports": "Reports",
       "terminals": "Terminal blocks",
       "output": "Output"
+    },
+    "projectGroup": {
+      "start": "Start"
     }
+  },
+  "templates": {
+    "title": "Start from a template",
+    "close": "Close",
+    "ribbonButton": "Templates",
+    "ribbonPick": "Pick a template",
+    "ribbonUserFolder": "Template folder",
+    "loading": "Loading templates...",
+    "empty": "No templates available",
+    "none": "No template selected",
+    "addUser": "+ Add your own template...",
+    "undoHint": "Applying is a single edit, so one Cmd+Z takes it back if it does not fit.",
+    "issue": "Template could not be read: {path} ({message})",
+    "cancel": "Cancel",
+    "apply": "Start from this template",
+    "applying": "Applying...",
+    "openLog": "Templates: the picker is open",
+    "appliedLog": "Templates: \"{template}\" placed on {sheet} (undo with Cmd+Z)",
+    "noSheetLog": "Templates: no sheet is open",
+    "folderOpenedLog": "Templates: opened {path} (drop .json files there to see them listed)",
+    "folderHintLog": "Templates: drop .json files into {path} to see them listed"
   },
   "reports": {
     "title": "Generate report",

@@ -191,6 +191,35 @@ impl Engine {
         })
     }
 
+    /// コマンド列を**まとめて1回の編集**として実行する(履歴エントリは1件)。
+    ///
+    /// テンプレートの適用のように「1操作で図面へ一式を入れる」編集に使う。
+    /// [`Self::execute`]をN回呼ぶとundoもN回必要になるが、これなら**undo一発**で
+    /// 全体が元へ戻る。
+    ///
+    /// 途中のコマンドが失敗したら適用前の図面へ戻して`Err`(部分適用しない・
+    /// 履歴も積まない)。空のコマンド列は何もしない(revisionも進めない)。
+    pub fn execute_batch(&mut self, cmds: Vec<Command>, origin: EditOrigin) -> Result<Patch> {
+        if cmds.is_empty() {
+            return Ok(Patch {
+                revision: self.revision,
+                ops: Vec::new(),
+            });
+        }
+        let (ops, inverse) = self.apply_all(&cmds)?;
+        self.undo_stack.push(HistoryEntry {
+            forward: cmds,
+            inverse,
+            origin,
+        });
+        self.redo_stack.clear();
+        self.revision += 1;
+        Ok(Patch {
+            revision: self.revision,
+            ops,
+        })
+    }
+
     /// undo履歴に積まれている編集の由来を古い順に返す(検査・テスト用)。
     pub fn history_origins(&self) -> Vec<EditOrigin> {
         self.undo_stack.iter().map(|e| e.origin).collect()
@@ -1182,6 +1211,74 @@ mod tests {
             "部分適用しない(戻せた分も戻さない)"
         );
         assert_eq!(engine.undo_depth(), depth_before, "履歴も増えない");
+    }
+
+    /// Commands run as one batch become a single history entry, so one undo removes all of them at once (and one redo brings them all back).
+    /// バッチとしてまとめて実行したコマンド列は履歴1件になり、undo一発で全部消え、redo一発で全部戻る。
+    #[test]
+    fn execute_batch_is_undone_in_one_step() {
+        let (mut engine, sheet_id) = test_engine();
+        let cmds = vec![
+            Command::AddEntity {
+                sheet_id,
+                entity: sample_wire(),
+            },
+            Command::AddEntity {
+                sheet_id,
+                entity: sample_wire(),
+            },
+            Command::AddEntity {
+                sheet_id,
+                entity: sample_wire(),
+            },
+        ];
+        engine.execute_batch(cmds, EditOrigin::User).unwrap();
+        assert_eq!(engine.project().sheets[0].entities.len(), 3);
+        assert_eq!(engine.undo_depth(), 1, "3コマンドでも履歴は1件");
+
+        engine.undo().unwrap().unwrap();
+        assert!(
+            engine.project().sheets[0].entities.is_empty(),
+            "undo一発で全部戻る"
+        );
+        engine.redo().unwrap().unwrap();
+        assert_eq!(engine.project().sheets[0].entities.len(), 3);
+    }
+
+    /// If any command in a batch fails, the whole batch is refused: the drawing is unchanged and nothing lands in the history.
+    /// バッチ内の1つでも失敗したらバッチ全体を拒否し、図面は変わらず履歴にも残らない。
+    #[test]
+    fn execute_batch_refuses_everything_when_one_command_fails() {
+        let (mut engine, sheet_id) = test_engine();
+        let missing = Uuid::new_v4();
+        let err = engine.execute_batch(
+            vec![
+                Command::AddEntity {
+                    sheet_id,
+                    entity: sample_wire(),
+                },
+                Command::AddEntity {
+                    sheet_id: missing,
+                    entity: sample_wire(),
+                },
+            ],
+            EditOrigin::User,
+        );
+        assert!(err.is_err());
+        assert!(engine.project().sheets[0].entities.is_empty(), "部分適用しない");
+        assert_eq!(engine.undo_depth(), 0, "履歴も増えない");
+    }
+
+    /// An empty batch changes nothing at all: no history entry and no new document revision.
+    /// 空のバッチは何も変えない(履歴も増えず、ドキュメントrevisionも進まない)。
+    #[test]
+    fn empty_batch_changes_nothing() {
+        let (mut engine, _) = test_engine();
+        let revision = engine.revision();
+        let patch = engine.execute_batch(Vec::new(), EditOrigin::User).unwrap();
+        assert!(patch.ops.is_empty());
+        assert_eq!(engine.revision(), revision);
+        assert_eq!(engine.undo_depth(), 0);
     }
 
     /// Reverting a range with no edits of that origin reports "nothing to do" instead of touching the drawing.

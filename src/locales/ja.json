@@ -153,7 +153,31 @@
       "reports": "帳票",
       "terminals": "端子台",
       "output": "出力"
+    },
+    "projectGroup": {
+      "start": "作図の開始"
     }
+  },
+  "templates": {
+    "title": "テンプレートから開始",
+    "close": "閉じる",
+    "ribbonButton": "テンプレート",
+    "ribbonPick": "テンプレートを選ぶ",
+    "ribbonUserFolder": "テンプレートフォルダ",
+    "loading": "テンプレートを読み込んでいます...",
+    "empty": "使えるテンプレートがありません",
+    "none": "テンプレートが選ばれていません",
+    "addUser": "+ ユーザーテンプレートを追加...",
+    "undoHint": "適用は1回の編集です。合わなければ Cmd+Z 一発で元に戻せます。",
+    "issue": "読み込めないテンプレート: {path} ({message})",
+    "cancel": "キャンセル",
+    "apply": "このテンプレートで開始",
+    "applying": "適用中...",
+    "openLog": "テンプレート: 選択ダイアログを開きました",
+    "appliedLog": "テンプレート: 「{template}」を{sheet}に入れました (Cmd+Zで元に戻せます)",
+    "noSheetLog": "テンプレート: シートが開かれていません",
+    "folderOpenedLog": "テンプレート: {path} を開きました (ここに .json を置くと一覧に並びます)",
+    "folderHintLog": "テンプレート: {path} に .json を置くと一覧に並びます"
   },
   "reports": {
     "title": "帳票の生成",

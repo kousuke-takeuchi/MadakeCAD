@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileSpreadsheet, FileText, Frame,
-  Grid3x3, Hash, Image, LayoutGrid, ListOrdered, ListChecks, Move, MoveRight, Network, Pencil,
-  Route, Scissors, ShieldCheck, SquareDashed, Table2, Tag, Trash2, Type,
+  Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileSpreadsheet, FileText,
+  FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid, LayoutTemplate, ListOrdered, ListChecks,
+  Move, MoveRight, Network, Pencil, Route, Scissors, ShieldCheck, SquareDashed, Table2, Tag,
+  Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
 import { computed, inject, ref } from "vue";
@@ -14,6 +15,7 @@ import { useDocumentStore } from "../stores/document";
 import { useFileActions } from "../composables/fileActions";
 import { useRevisionsStore } from "../stores/revisions";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
+import { useTemplatesStore } from "../stores/templates";
 import { useTerminalsStore } from "../stores/terminals";
 import { useWireNumbersStore } from "../stores/wireNumbers";
 import { useSimulationStore } from "../stores/simulation";
@@ -33,6 +35,7 @@ const { t } = useI18n();
 const reportDialog = useReportDialogStore();
 const pdfBook = usePdfBookStore();
 const terminals = useTerminalsStore();
+const templates = useTemplatesStore();
 
 /** タブのid (表示名はi18nカタログ)。 */
 type TabId = "home" | "project" | "schematic" | "panel" | "report" | "io" | "view" | "admin";
@@ -105,6 +108,22 @@ function todo(name: string) {
 async function openReport(kind: ReportKind, format?: ReportFormat) {
   await reportDialog.openFor(kind, format);
   ui.log(t("reports.openLog", { report: t(`reports.kind.${kind}`) }));
+}
+
+/**
+ * テンプレート選択ダイアログを開く (リボン「プロジェクト」タブ>作図の開始、
+ * および「回路図」タブ>部品を挿入の小ボタン)。
+ * 自動では開かない: 空図面でも勝手にモーダルを出さず、この導線からだけ開く。
+ */
+async function openTemplates() {
+  await templates.openDialog();
+  ui.log(t("templates.openLog"));
+}
+
+/** ユーザーテンプレートの置き場をファイラで開く (開けない環境ではパスを案内する)。 */
+async function openUserFolder() {
+  const { path, opened } = await templates.openUserFolder();
+  ui.log(t(opened ? "templates.folderOpenedLog" : "templates.folderHintLog", { path }));
 }
 
 /** PDF一括出力ダイアログを開く (レポートタブ>出力グループ)。 */
@@ -213,6 +232,25 @@ const reportGroups = computed<RibbonGroup[]>(() => [
   },
 ]);
 
+/** 「プロジェクト」タブ: 作図を始めるための導線 (テンプレート)。 */
+const projectGroups = computed<RibbonGroup[]>(() => [
+  {
+    name: t("ribbon.projectGroup.start"),
+    big: {
+      label: t("templates.ribbonButton"),
+      icon: LayoutTemplate,
+      color: "var(--acad-blue)",
+      action: () => openTemplates(),
+    },
+    small: [
+      [
+        { label: t("templates.ribbonPick"), icon: LayoutGrid, action: () => openTemplates() },
+        { label: t("templates.ribbonUserFolder"), icon: FolderPlus, action: () => openUserFolder() },
+      ],
+    ],
+  },
+]);
+
 interface RibbonItem {
   label: string;
   icon: LucideIcon;
@@ -259,6 +297,7 @@ const groups = computed<RibbonGroup[]>(() => [
     },
     small: [[
       { label: "端子台", icon: LayoutGrid, action: () => (ui.symbolPickerOpen = true) },
+      { label: t("templates.ribbonButton"), icon: LayoutTemplate, action: () => openTemplates() },
       { label: "回路コピー", icon: Copy, action: () => todo("回路コピー") },
     ]],
   },
@@ -307,6 +346,7 @@ const groups = computed<RibbonGroup[]>(() => [
 /** 表示中のタブのグループ。まだ実装していないタブはnull (プレースホルダを出す)。 */
 const activeGroups = computed<RibbonGroup[] | null>(() => {
   if (activeTab.value === "schematic") return groups.value;
+  if (activeTab.value === "project") return projectGroups.value;
   if (activeTab.value === "report") return reportGroups.value;
   return null;
 });

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**620 specification clauses** across 5 areas.
+**652 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -38,6 +38,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Reverting a range rolls back only the agent's edits in it and keeps the user's own edits, even when they were interleaved. <sub>`revert_range_rolls_back_agent_edits_and_keeps_user_edits`</sub>
 - A revert is a normal edit in the history, so undoing it brings the agent's work back. <sub>`revert_range_is_itself_undoable`</sub>
 - If the agent's edit cannot be undone against the current drawing (the user deleted the target), the whole revert is refused and nothing changes. <sub>`revert_range_refuses_conflicting_reverts_without_partial_changes`</sub>
+- Commands run as one batch become a single history entry, so one undo removes all of them at once (and one redo brings them all back). <sub>`execute_batch_is_undone_in_one_step`</sub>
+- If any command in a batch fails, the whole batch is refused: the drawing is unchanged and nothing lands in the history. <sub>`execute_batch_refuses_everything_when_one_command_fails`</sub>
+- An empty batch changes nothing at all: no history entry and no new document revision. <sub>`empty_batch_changes_nothing`</sub>
 - Reverting a range with no edits of that origin reports "nothing to do" instead of touching the drawing. <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
 
 ### Geometry & coordinates
@@ -203,6 +206,20 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sheet_symbol_defs returns the built-in library plus definitions for every dynamic symbol actually used on the sheet. <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
 - Symbol definitions serialize to JSON and back without loss. <sub>`symbol_json_roundtrip`</sub>
 
+### templates
+
+- The three bundled templates (24 V control basics, motor starter, emergency stop) are listed in that order, each with an English and a Japanese name and description. <sub>`the_three_bundled_templates_are_listed_in_both_languages`</sub>
+- Even without the resource directory, the templates bundled into the build are still available. <sub>`templates_are_available_without_the_resource_directory`</sub>
+- Applying "24 V control basics" puts its parts on the sheet: the DC source, the fuse, the 4-pole terminal block and the 24V/0V net labels. <sub>`applying_the_24v_template_places_its_parts_on_the_sheet`</sub>
+- A template is applied as one edit: a single undo empties the drawing again, and a single redo brings the whole template back. <sub>`applying_a_template_is_undone_in_one_step`</sub>
+- Every bundled template passes verification with zero errors and zero ERC warnings: they are fully wired starting points, not sketches with loose pins. <sub>`every_bundled_template_verifies_without_errors_or_erc_warnings`</sub>
+- The same template can be applied twice: the second copy gets fresh entity ids instead of colliding with the first. <sub>`the_same_template_can_be_applied_twice`</sub>
+- A template lands on the sheet it was asked for, even when the project has several sheets. <sub>`a_template_lands_on_the_requested_sheet`</sub>
+- An unknown template id is refused with an error naming the id, and the drawing is left untouched. <sub>`an_unknown_template_id_is_refused`</sub>
+- Templates the user drops into their own templates folder are listed after the bundled ones and can be applied the same way. <sub>`user_templates_are_listed_after_the_bundled_ones`</sub>
+- A template file that is not valid JSON (or holds an unknown command) is reported with its path and reason, and the other templates stay usable. <sub>`a_broken_template_file_is_reported_with_its_path`</sub>
+- A user template may replace a bundled one by reusing its id (the drawing office's own version wins). <sub>`a_user_template_replaces_the_bundled_one_with_the_same_id`</sub>
+
 ### Terminal block charts
 
 - The chart of a terminal block has exactly one row per terminal, listed in terminal-number order. <sub>`the_chart_has_one_row_per_terminal_in_number_order`</sub>
@@ -335,9 +352,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The agent-turn marker nests and always clears, so edits after the turn are user edits again. <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
 - The bridge the agent manager uses reverts only agent edits and reports how many were rolled back. <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
 
+### templates_api
+
+- GET /templates lists the bundled start templates with their names in both languages. <sub>`the_link_api_lists_the_bundled_templates`</sub>
+- POST /templates/apply drops the template on the sheet as a single edit that one undo takes back. <sub>`applying_a_template_over_the_link_api_is_one_undo_step`</sub>
+- Applying without a sheet id targets the first sheet, and an unknown template id is refused with 400. <sub>`the_link_api_defaults_to_the_first_sheet_and_refuses_unknown_templates`</sub>
+
 ### tools
 
 - The parts search tool advertises selection, comparison and alternative-part use, so the agent reaches for it when asked "what can replace this?". <sub>`the_parts_search_tool_advertises_selection_and_comparison`</sub>
+- The template tools explain that a template is a starting skeleton, that it lands ERC-clean, and that applying it is a single undo step. <sub>`the_template_tools_explain_what_a_template_is`</sub>
 - Every published tool carries a description, so no tool is offered to the agent unexplained. <sub>`every_published_tool_has_a_description`</sub>
 
 
@@ -388,6 +412,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - The bundled standards note covers symbols, reference designators, wire colors, numbering and layout. <sub>`bundled_standards_cover_the_drawing_conventions`</sub>
 - The system prompt carries the bundled standards and the verification-loop rule. <sub>`system_prompt_carries_the_standards_and_the_verification_loop`</sub>
+- The system prompt tells the agent to start a blank drawing from a template instead of drawing everything by hand. <sub>`system_prompt_points_at_the_start_templates`</sub>
 - The drawing context comes first in the system prompt, with the knowledge behind it. <sub>`system_prompt_puts_the_drawing_context_first`</sub>
 - A knowledge file set in the settings is appended after the bundled note. <sub>`user_knowledge_file_is_appended_to_the_prompt`</sub>
 - Without a knowledge file the prompt holds the bundled note only. <sub>`without_a_knowledge_file_only_the_bundled_note_is_used`</sub>
@@ -782,6 +807,22 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - run fetches the DC result and opens the panel <sub>`simulation store`</sub>
 - toggled switches are passed as open_switches on the next run <sub>`simulation store`</sub>
 - failures (e.g. ngspice missing) keep the error message and still open the panel <sub>`simulation store`</sub>
+
+### templates
+
+- opens with the first template selected <sub>`template picker store`</sub>
+- switches the selected template when another tile is picked <sub>`template picker store`</sub>
+- applies the selected template to the current sheet and closes <sub>`template picker store`</sub>
+- applies nothing when the dialog is cancelled <sub>`template picker store`</sub>
+- keeps the dialog open and shows why when applying fails <sub>`template picker store`</sub>
+- reports template files it could not read <sub>`template picker store`</sub>
+- opens with nothing selected when there are no templates <sub>`template picker store`</sub>
+- opens the user template folder in the file manager <sub>`template picker store`</sub>
+- falls back to naming the folder when it cannot be opened <sub>`template picker store`</sub>
+- shows names and descriptions in the UI language <sub>`template picker store`</sub>
+- builds a throwaway sheet from the template's commands <sub>`template preview`</sub>
+- centres the template's drawing in the preview canvas <sub>`template preview`</sub>
+- survives a template that draws nothing <sub>`template preview`</sub>
 
 ### terminals
 

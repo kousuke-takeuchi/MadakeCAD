@@ -23,6 +23,26 @@ fn the_parts_search_tool_advertises_selection_and_comparison() {
     }
 }
 
+/// The template tools explain that a template is a starting skeleton, that it lands ERC-clean, and that applying it is a single undo step.
+/// テンプレートのツール説明には「作図の雛形であること」「ERC指摘ゼロで入ること」「undo一発で戻せること」が書かれている。
+#[test]
+fn the_template_tools_explain_what_a_template_is() {
+    let list = description_of("list_templates");
+    for needle in ["雛形", "24V制御基本", "モータ起動回路", "非常停止回路"] {
+        assert!(
+            list.contains(needle),
+            "list_templatesの説明に「{needle}」が無い: {list}"
+        );
+    }
+    let apply = description_of("apply_template");
+    for needle in ["ERC", "undo一発", "run_verification"] {
+        assert!(
+            apply.contains(needle),
+            "apply_templateの説明に「{needle}」が無い: {apply}"
+        );
+    }
+}
+
 /// Every published tool carries a description, so no tool is offered to the agent unexplained.
 /// 公開ツールには全て説明文が付いており、説明の無いツールをエージェントへ見せない。
 #[test]

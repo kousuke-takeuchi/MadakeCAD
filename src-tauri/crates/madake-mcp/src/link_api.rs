@@ -77,6 +77,40 @@ async fn post_commands(
     Ok(Json(patches))
 }
 
+/// 使える開始テンプレートの一覧(同梱+ユーザーの`~/MadakeCAD/templates`)。
+async fn get_templates() -> Json<madake_core::templates::TemplateList> {
+    Json(madake_core::templates::list())
+}
+
+#[derive(Deserialize)]
+struct ApplyTemplateBody {
+    template_id: String,
+    #[serde(default)]
+    sheet_id: Option<Uuid>,
+}
+
+/// 開始テンプレートをシートへ適用する。**1回の編集**として履歴に乗る(undo一発)。
+async fn post_apply_template(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<ApplyTemplateBody>,
+) -> Result<Json<Patch>, ApiError> {
+    let sheet_id = match body.sheet_id {
+        Some(id) => id,
+        None => doc
+            .engine
+            .lock()
+            .unwrap()
+            .project()
+            .sheets
+            .first()
+            .map(|s| s.id)
+            .ok_or_else(|| bad_request("project has no sheets"))?,
+    };
+    doc.apply_template(&body.template_id, sheet_id, doc.mcp_origin())
+        .map(Json)
+        .map_err(bad_request)
+}
+
 async fn post_undo(State(doc): State<SharedDoc>) -> Result<Json<Option<Patch>>, ApiError> {
     doc.undo().map(Json).map_err(bad_request)
 }
@@ -638,6 +672,8 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/terminals/chart", get(get_terminal_chart))
         .route("/api/v1/terminals/check", get(get_terminal_check))
         .route("/api/v1/simulate/op", post(post_simulate_op))
+        .route("/api/v1/templates", get(get_templates))
+        .route("/api/v1/templates/apply", post(post_apply_template))
         .route("/api/v1/commands", post(post_commands))
         .route("/api/v1/undo", post(post_undo))
         .route("/api/v1/redo", post(post_redo))

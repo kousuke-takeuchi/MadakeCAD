@@ -305,6 +305,39 @@ export interface TerminalBlockInfo {
   jumpers: string;
 }
 
+/**
+ * 開始テンプレート1件 (madake-coreの`Template`)。
+ *
+ * `commands`のUUIDはプレースホルダで、適用時にRust側が差し替える
+ * (nil UUID=適用先シート、それ以外=新しいid)。ダイアログのプレビューはこの
+ * コマンド列をそのまま描く。
+ */
+export interface Template {
+  id: string;
+  /** 英語名 (UI言語=enで表示)。 */
+  name: string;
+  name_ja: string;
+  description: string;
+  description_ja: string;
+  commands: Command[];
+  /** 同梱テンプレートならtrue、ユーザーの`~/MadakeCAD/templates`由来ならfalse。 */
+  builtin: boolean;
+}
+
+/** 読み込めなかったテンプレートファイル1件。 */
+export interface TemplateIssue {
+  path: string;
+  message: string;
+}
+
+/** テンプレート一覧と、読み込めなかったファイルの理由。 */
+export interface TemplateList {
+  templates: Template[];
+  issues: TemplateIssue[];
+  /** ユーザーテンプレートの置き場 (「ここへJSONを置けば並ぶ」の案内に使う)。 */
+  user_dir?: string | null;
+}
+
 /** 帳票の種類 (Rustの`ReportKind`と同じケバブケース表記)。 */
 export type ReportKind = "wire-list" | "terminal-chart" | "terminal-diagram" | "bom" | "xref";
 /** 帳票の出力形式 (CSV or 図枠付き図面シートのPDF)。 */
@@ -320,6 +353,12 @@ interface Ipc {
   loadProject(path: string): Promise<Patch>;
   importKicad(path: string): Promise<KicadImportResult>;
   newProject(name: string): Promise<Patch>;
+  /** 使える開始テンプレートの一覧 (同梱+ユーザーの`~/MadakeCAD/templates`)。 */
+  listTemplates(): Promise<TemplateList>;
+  /** テンプレートをシートへ適用する。1回の編集なのでundo一発で戻る。 */
+  applyTemplate(templateId: string, sheetId: string): Promise<Patch>;
+  /** ユーザーテンプレートの置き場をOSのファイラで開く (無ければ作る)。戻り値=そのパス。 */
+  openTemplatesFolder(): Promise<string>;
   getNetlist(sheetId: string): Promise<Net[]>;
   /** 図面検証 (ERC+電気検証)。sheetId=nullで全シート。 */
   verify(sheetId: string | null): Promise<Diagnostic[]>;
@@ -362,6 +401,10 @@ const tauriIpc: Ipc = {
   loadProject: (path: string) => invoke<Patch>("load_project", { path }),
   importKicad: (path: string) => invoke<KicadImportResult>("import_kicad", { path }),
   newProject: (name: string) => invoke<Patch>("new_project", { name }),
+  listTemplates: () => invoke<TemplateList>("list_templates"),
+  applyTemplate: (templateId: string, sheetId: string) =>
+    invoke<Patch>("apply_template", { templateId, sheetId }),
+  openTemplatesFolder: () => invoke<string>("open_templates_folder"),
   getNetlist: (sheetId: string) => invoke<Net[]>("get_netlist", { sheetId }),
   verify: (sheetId: string | null) => invoke<Diagnostic[]>("run_verification", { sheetId }),
   searchParts: (query: string, category?: string) =>
@@ -417,6 +460,14 @@ const httpIpc: Ipc = {
   importKicad: (path) =>
     http<KicadImportResult>("/import/kicad", { method: "POST", body: JSON.stringify({ path }) }),
   newProject: () => Promise.reject(new Error("browser mode: not supported")),
+  listTemplates: () => http<TemplateList>("/templates"),
+  applyTemplate: (templateId, sheetId) =>
+    http<Patch>("/templates/apply", {
+      method: "POST",
+      body: JSON.stringify({ template_id: templateId, sheet_id: sheetId }),
+    }),
+  // ブラウザ検証モードではOSのファイラを開けない (呼び出し側がパスを案内する)
+  openTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
   getNetlist: (sheetId) => http<Net[]>(`/netlist?sheet_id=${sheetId}`),
   verify: (sheetId) => http<Diagnostic[]>(sheetId ? `/verify?sheet_id=${sheetId}` : "/verify"),
   simulateOp: (sheetId, openSwitches) =>
