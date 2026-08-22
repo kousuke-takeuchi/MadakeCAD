@@ -32,6 +32,8 @@ const bind = computed(() => (sheet.value ? doc.bindContextFor(sheet.value) : nul
 const binds = computed(() =>
   (frames.selected ? bindNames(frames.selected) : []).map((name) => ({
     name,
+    // 表題欄に書くのと同じ形 (テンプレートJSONへ写せる)
+    token: `{${name}}`,
     label: te(`frameTemplates.bind.${name}`) ? t(`frameTemplates.bind.${name}`) : name,
   })),
 );
@@ -157,7 +159,7 @@ async function ok() {
             <div class="group-head"><span>{{ t("frameTemplates.groupBinds") }}</span><i /></div>
             <div v-for="b in binds" :key="b.name" class="bind-row">
               <span class="bind-label">{{ b.label }}</span>
-              <span class="bind-value mono">{{ `{${b.name}}` }}</span>
+              <span class="bind-value mono">{{ b.token }}</span>
             </div>
             <p v-if="!binds.length" class="caption">{{ t("frameTemplates.noBinds") }}</p>
             <p class="caption">{{ t("frameTemplates.bindsHint") }}</p>
