@@ -10,6 +10,7 @@ import { useDocumentStore } from "../stores/document";
 import { useChatStore, type ChatToolCall } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
 import ChatPanel from "./chat/ChatPanel.vue";
+import SearchBar from "./SearchBar.vue";
 
 const store = useDocumentStore();
 const chat = useChatStore();
@@ -211,6 +212,7 @@ watch(() => store.activeSheetId, () => {
       @dblclick="() => controller.onDoubleClick()"
       @contextmenu.prevent
     />
+    <SearchBar />
     <ChatPanel v-if="!dockChatOpen" />
   </div>
 </template>

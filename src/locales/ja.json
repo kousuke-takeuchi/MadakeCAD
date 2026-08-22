@@ -385,6 +385,70 @@
     "chartLog": "端子台: {reference} のチャート{count}行を {path} に書き出しました",
     "diagramLog": "端子台: {reference} の端子接続図{count}ページを {path} に書き出しました"
   },
+  "search": {
+    "placeholder": "検索 (参照記号・型番・ネット)",
+    "count": "{count}件",
+    "hint": "Enter=次の結果へ、Shift+Enter=前へ、Esc=閉じる",
+    "close": "閉じる",
+    "panelTitle": "検索結果 「{query}」",
+    "empty": "「{query}」は見つかりませんでした",
+    "filter": {
+      "all": "すべて",
+      "reference": "参照記号",
+      "value": "型番",
+      "net": "ネット",
+      "text": "テキスト"
+    },
+    "kind": {
+      "reference": "参照記号",
+      "value": "型番",
+      "net": "ネット名",
+      "wireNo": "線番",
+      "text": "注記テキスト"
+    },
+    "function": {
+      "coil": "リレー コイル",
+      "contactNo": "リレー 接点 {terminals}",
+      "contactNc": "リレー 接点 {terminals}",
+      "terminal": "端子台 端子 {terminals}",
+      "body": "部品"
+    },
+    "revealLog": "検索: {text} ({address}) を表示しました ({index}/{count}件)"
+  },
+  "devices": {
+    "tab": "デバイス",
+    "empty": "図面にまだデバイスがありません。参照記号を付けた部品を配置すると並びます",
+    "hint": "行クリックで図面へジャンプ。右クリックでジャンプ/削除",
+    "count": "{count}件",
+    "head": {
+      "relay": "リレー",
+      "relayWithValue": "リレー {value}",
+      "terminalBlock": "端子台 {poles}極",
+      "other": "{name}",
+      "otherWithValue": "{name} {value}"
+    },
+    "function": {
+      "coil": "コイル {terminals}",
+      "contactNo": "接点 {terminals}",
+      "contactNc": "接点 {terminals}",
+      "terminal": "端子 {terminals}",
+      "body": "本体"
+    },
+    "menu": {
+      "reveal": "図面へジャンプ",
+      "delete": "削除"
+    },
+    "phase3Hint": "未配置機能のドラッグ配置はフェーズ3で対応予定",
+    "revealLog": "デバイス: {reference} の{function} ({address}) を表示しました",
+    "deletedLog": "デバイス: {reference} を図面から削除しました ({count}件。Cmd+Zで元に戻せます)"
+  },
+  "surfer": {
+    "titleDevice": "{title} の所在 (参照サーフィン)",
+    "titleNet": "ネット {title} の所在 (参照サーフィン)",
+    "titleWireNo": "線番 {title} の所在 (参照サーフィン)",
+    "hint": "Alt+クリックで表示。↑↓+Enterで巡回、Escで閉じる",
+    "jumpLog": "参照サーフィン: {title} の {address} へジャンプしました"
+  },
   "chat": {
     "tidy": {
       "button": "整える",

@@ -5,6 +5,7 @@ import { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import CanvasView from "./CanvasView.vue";
+import SearchResultsPanel from "./SearchResultsPanel.vue";
 import SimulationPanel from "./SimulationPanel.vue";
 import VerificationPanel from "./VerificationPanel.vue";
 import FileTabs from "./FileTabs.vue";
@@ -27,9 +28,11 @@ import { useWireNumbersStore } from "../stores/wireNumbers";
 import { useTerminalsStore } from "../stores/terminals";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
 import { useMacrosStore } from "../stores/macros";
+import { useSearchStore } from "../stores/search";
 
 const store = useDocumentStore();
 const ui = useUiStore();
+const search = useSearchStore();
 const revisions = useRevisionsStore();
 const wireNumbers = useWireNumbersStore();
 const terminals = useTerminalsStore();
@@ -46,6 +49,12 @@ function isEditableTarget(ev: KeyboardEvent) {
 }
 
 async function onKeyDown(ev: KeyboardEvent) {
+  // ⌘F: 浮き検索バー。入力欄に居ても効かせる (検索バー自身の入力欄から開き直せるように)
+  if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "f") {
+    ev.preventDefault();
+    search.openBar();
+    return;
+  }
   if (ev.key === "Escape" && ui.settingsOpen) {
     ui.settingsOpen = false;
     ev.preventDefault();
@@ -127,6 +136,7 @@ onBeforeUnmount(() => {
         <CanvasView />
         <SimulationPanel />
         <VerificationPanel />
+        <SearchResultsPanel />
       </div>
       <PropertiesPanel />
     </div>

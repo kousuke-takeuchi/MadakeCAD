@@ -307,6 +307,62 @@ export interface TerminalBlockInfo {
   jumpers: string;
 }
 
+/** 検索の対象種別 (madake-coreの`SearchKind`)。 */
+export type SearchKind = "reference" | "value" | "net" | "wire_no" | "text";
+
+/** デバイス (参照記号1つ) の種別。 */
+export type DeviceKind = "relay" | "terminal_block" | "other";
+
+/** デバイスを構成する機能1つの種別。 */
+export type DeviceFunctionKind = "coil" | "contact_no" | "contact_nc" | "terminal" | "body";
+
+/** 検索で見つかった1件 (madake-coreの`SearchHit`)。 */
+export interface SearchHit {
+  kind: SearchKind;
+  /** マッチした文字列そのもの (結果パネルの先頭列)。 */
+  text: string;
+  /** 補足 (型番のヒットなら参照記号、参照記号のヒットなら型番)。 */
+  detail: string;
+  /** シンボルのヒットのとき、そのシンボルがデバイスで果たす機能。 */
+  function: DeviceFunctionKind | null;
+  /** 機能の端子の呼び名 (例 "13-14")。 */
+  terminals: string;
+  sheet_id: string;
+  /** 1始まりのシート表示順。 */
+  sheet_no: number;
+  sheet_name: string;
+  /** ゾーンアドレス (例 "B3")。 */
+  zone: string;
+  /** クリックしたときに選択+ズームするエンティティ。 */
+  entity_id: string;
+}
+
+/** デバイスの機能1つ (コイル・接点・端子群・本体) と、その図面上の所在。 */
+export interface DeviceFunction {
+  kind: DeviceFunctionKind;
+  /** 端子の呼び名 (コイル "A1-A2" / 接点 "13-14" / 端子台 "1-8" / 本体は空)。 */
+  terminals: string;
+  entity_id: string;
+  sheet_id: string;
+  sheet_no: number;
+  sheet_name: string;
+  zone: string;
+}
+
+/** 参照記号1つ分のデバイス (デバイスナビゲータのツリーの1ノード)。 */
+export interface DeviceNode {
+  reference: string;
+  kind: DeviceKind;
+  /** 型番・値。 */
+  value: string;
+  symbol_id: string;
+  symbol_name: string;
+  symbol_name_ja: string;
+  /** 端子台の極数 (端子台以外は0)。 */
+  poles: number;
+  functions: DeviceFunction[];
+}
+
 /**
  * 開始テンプレート1件 (madake-coreの`Template`)。
  *
@@ -450,6 +506,13 @@ interface Ipc {
   exportPdf(sheetId: string, path: string): Promise<void>;
   exportBom(path: string): Promise<void>;
   exportWireList(path: string): Promise<void>;
+  /**
+   * プロジェクト内検索 (⌘F)。kindsが空なら全種別を対象にする。
+   * 結果は図面の読み順 (シート→ゾーン→id) で返る。
+   */
+  searchProject(query: string, kinds: SearchKind[]): Promise<SearchHit[]>;
+  /** デバイスナビゲータのツリー (参照記号 → 機能)。 */
+  getDeviceTree(): Promise<DeviceNode[]>;
   /** シート内 (nullでプロジェクト全体) の端子台一覧。 */
   listTerminalBlocks(sheetId: string | null): Promise<TerminalBlockInfo[]>;
   /** 端子台1つのチャート。端子台でなければnull。 */
@@ -505,6 +568,9 @@ const tauriIpc: Ipc = {
   exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
   exportBom: (path: string) => invoke<void>("export_bom", { path }),
   exportWireList: (path: string) => invoke<void>("export_wire_list", { path }),
+  searchProject: (query: string, kinds: SearchKind[]) =>
+    invoke<SearchHit[]>("search_project", { query, kinds }),
+  getDeviceTree: () => invoke<DeviceNode[]>("get_device_tree"),
   listTerminalBlocks: (sheetId: string | null) =>
     invoke<TerminalBlockInfo[]>("list_terminal_blocks", { sheetId }),
   getTerminalChart: (entityId: string) =>
@@ -606,6 +672,13 @@ const httpIpc: Ipc = {
   exportWireList: async (path) => {
     await http("/export/wire-list", { method: "POST", body: JSON.stringify({ path }) });
   },
+  searchProject: async (query, kinds) => {
+    const params = new URLSearchParams({ q: query });
+    if (kinds.length) params.set("kinds", kinds.join(","));
+    const res = await http<{ hits: SearchHit[] }>(`/search?${params.toString()}`);
+    return res.hits;
+  },
+  getDeviceTree: async () => (await http<{ devices: DeviceNode[] }>("/devices")).devices,
   listTerminalBlocks: (sheetId) =>
     http<TerminalBlockInfo[]>(`/terminals${sheetId ? `?sheet_id=${sheetId}` : ""}`),
   getTerminalChart: async (entityId) => {
