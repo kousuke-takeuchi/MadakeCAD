@@ -13,6 +13,8 @@ thiserror = { workspace = true }
 schemars = { version = "1", features = ["uuid1"] }
 # PDF出力: sheet_to_svgの出力をベクタのままPDF化(テキストはフォント埋め込み)
 svg2pdf = "0.13"
+# 複数ページPDFの組み立て。svg2pdf 0.13が使うのと同じバージョンに固定する
+pdf-writer = "0.12"
 # 部品DB (グローバル共有マスタ)。bundledでOS非依存にSQLiteを同梱
 rusqlite = { version = "0.40", features = ["bundled"] }
 dirs = "6"
