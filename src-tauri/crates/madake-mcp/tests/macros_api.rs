@@ -172,6 +172,82 @@ async fn applying_a_macro_over_the_link_api_is_one_undo_step() {
     );
 }
 
+/// POST /macros/build turns the selection into a macro without writing any file, which is what the save dialog previews and what Cmd+C keeps in memory.
+/// POST /macros/build は選択範囲をファイルに書かずにマクロへ組み立てる(保存ダイアログのプレビューと⌘Cの無名マクロが使う)。
+#[tokio::test]
+async fn building_a_macro_does_not_write_a_file() {
+    let (doc, router) = setup();
+    let sheet_id = doc.engine.lock().unwrap().project().sheets[0].id;
+    let ids = place_two_symbols(&router, sheet_id).await;
+
+    let (status, m) = post(
+        &router,
+        "/api/v1/macros/build",
+        json!({ "sheet_id": sheet_id, "entity_ids": ids, "name": "" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{m}");
+    assert_eq!(m["commands"].as_array().expect("commands").len(), 2);
+    assert_eq!(m["base_point"]["y"], 130.0);
+
+    let (status, list) = get(&router, "/api/v1/macros").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !list["macros"]
+            .as_array()
+            .expect("macros配列")
+            .iter()
+            .any(|m| m["name"] == ""),
+        "組み立てただけのマクロは一覧に出ない(ファイルを作っていない)"
+    );
+}
+
+/// POST /macros/apply-inline drops a macro handed over by value (the Cmd+C clipboard) as a single edit, renumbering its reference designators just like a stored macro.
+/// POST /macros/apply-inline は値で渡したマクロ(⌘Cのクリップボード)を1回の編集として入れ、参照記号も保存済みマクロと同じように振り直す。
+#[tokio::test]
+async fn applying_an_inline_macro_behaves_like_a_stored_one() {
+    let (doc, router) = setup();
+    let sheet_id = doc.engine.lock().unwrap().project().sheets[0].id;
+    let ids = place_two_symbols(&router, sheet_id).await;
+    let (_, m) = post(
+        &router,
+        "/api/v1/macros/build",
+        json!({ "sheet_id": sheet_id, "entity_ids": ids, "name": "" }),
+    )
+    .await;
+
+    let (status, patch) = post(
+        &router,
+        "/api/v1/macros/apply-inline",
+        json!({ "macro": m, "sheet_id": sheet_id, "at": { "x": 250.0, "y": 130.0 } }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{patch}");
+    assert_eq!(patch["ops"].as_array().expect("ops").len(), 2);
+
+    let references: Vec<String> = {
+        let engine = doc.engine.lock().unwrap();
+        engine.project().sheets[0]
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                madake_core::Entity::Symbol(s) => Some(s.reference.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    assert!(references.contains(&"K2".to_string()), "{references:?}");
+    assert!(references.contains(&"L2".to_string()), "{references:?}");
+
+    let (status, _) = post(&router, "/api/v1/undo", json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0].entities.len(),
+        2,
+        "undo一発で貼り付けた分だけが消える"
+    );
+}
+
 /// An unknown macro id, an unknown variant key and an empty selection are all refused with 400 and leave the drawing untouched.
 /// 知らないマクロid・知らないバリアントキー・空の選択はいずれも400で拒否され、図面は変わらない。
 #[tokio::test]

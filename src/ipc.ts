@@ -338,6 +338,56 @@ export interface TemplateList {
   user_dir?: string | null;
 }
 
+/**
+ * 回路マクロ1件 (madake-coreの`Macro`)。
+ *
+ * テンプレートと同じ「Command列のJSON」に、挿入時にカーソルへ来る`base_point`と
+ * 代替形の`variants`を足したもの。座標は`base_point`からの**相対**で入っている。
+ */
+export interface Macro {
+  id: string;
+  name: string;
+  name_ja: string;
+  description: string;
+  description_ja: string;
+  /** 挿入ダイアログの左ツリーで束ねる分類 (空=分類なし)。 */
+  category: string;
+  base_point: Point;
+  /** 既定バリアント("A")のCommand列。 */
+  commands: Command[];
+  variants: MacroVariant[];
+}
+
+/** マクロの代替バリアント1件 (EPLANのマクロバリアントA〜Hに相当)。 */
+export interface MacroVariant {
+  /** バリアントキー (例 "B")。 */
+  key: string;
+  name: string;
+  name_ja: string;
+  commands: Command[];
+}
+
+/** マクロ保存時に付ける情報 (idを空にすると名前から自動生成される)。 */
+export interface MacroMeta {
+  id?: string;
+  name: string;
+  name_ja?: string;
+  description?: string;
+  description_ja?: string;
+  category?: string;
+}
+
+/** 読み込めなかったマクロファイル1件 (形はテンプレートと同じ)。 */
+export type MacroIssue = TemplateIssue;
+
+/** マクロ一覧と、読み込めなかったファイルの理由。 */
+export interface MacroList {
+  macros: Macro[];
+  issues: MacroIssue[];
+  /** ユーザーマクロの置き場 (`~/MadakeCAD/macros`)。 */
+  user_dir?: string | null;
+}
+
 /** 帳票の種類 (Rustの`ReportKind`と同じケバブケース表記)。 */
 export type ReportKind = "wire-list" | "terminal-chart" | "terminal-diagram" | "bom" | "xref";
 /** 帳票の出力形式 (CSV or 図枠付き図面シートのPDF)。 */
@@ -359,6 +409,34 @@ interface Ipc {
   applyTemplate(templateId: string, sheetId: string): Promise<Patch>;
   /** ユーザーテンプレートの置き場をOSのファイラで開く (無ければ作る)。戻り値=そのパス。 */
   openTemplatesFolder(): Promise<string>;
+  /** 使える回路マクロの一覧 (ユーザーの`~/MadakeCAD/macros`)。 */
+  listMacros(): Promise<MacroList>;
+  /** 選択範囲をマクロへ組み立てるだけ (ファイルに書かない)。プレビューと⌘Cが使う。 */
+  buildMacro(sheetId: string, entityIds: string[], meta: MacroMeta): Promise<Macro>;
+  /** 選択範囲をマクロとしてユーザー領域へ保存する。図面は変わらない。 */
+  saveMacro(
+    sheetId: string,
+    entityIds: string[],
+    meta: MacroMeta,
+  ): Promise<{ macro: Macro; path: string }>;
+  /** ライブラリのマクロをidで挿入する。1回の編集なのでundo一発で戻る。 */
+  applyMacro(
+    macroId: string,
+    variant: string | null,
+    sheetId: string,
+    at: Point,
+    rotation: number,
+  ): Promise<Patch>;
+  /** マクロそのものを挿入する (⌘C/Vの無名マクロ。ライブラリのidを引かない)。 */
+  applyMacroInline(
+    macro: Macro,
+    variant: string | null,
+    sheetId: string,
+    at: Point,
+    rotation: number,
+  ): Promise<Patch>;
+  /** ユーザーマクロの置き場をOSのファイラで開く (無ければ作る)。戻り値=そのパス。 */
+  openMacrosFolder(): Promise<string>;
   getNetlist(sheetId: string): Promise<Net[]>;
   /** 図面検証 (ERC+電気検証)。sheetId=nullで全シート。 */
   verify(sheetId: string | null): Promise<Diagnostic[]>;
@@ -405,6 +483,16 @@ const tauriIpc: Ipc = {
   applyTemplate: (templateId: string, sheetId: string) =>
     invoke<Patch>("apply_template", { templateId, sheetId }),
   openTemplatesFolder: () => invoke<string>("open_templates_folder"),
+  listMacros: () => invoke<MacroList>("list_macros"),
+  buildMacro: (sheetId, entityIds, meta) =>
+    invoke<Macro>("build_macro", { sheetId, entityIds, meta }),
+  saveMacro: (sheetId, entityIds, meta) =>
+    invoke<{ macro: Macro; path: string }>("save_macro", { sheetId, entityIds, meta }),
+  applyMacro: (macroId, variant, sheetId, at, rotation) =>
+    invoke<Patch>("apply_macro", { macroId, variant, sheetId, at, rotation }),
+  applyMacroInline: (macro, variant, sheetId, at, rotation) =>
+    invoke<Patch>("apply_macro_inline", { macro, variant, sheetId, at, rotation }),
+  openMacrosFolder: () => invoke<string>("open_macros_folder"),
   getNetlist: (sheetId: string) => invoke<Net[]>("get_netlist", { sheetId }),
   verify: (sheetId: string | null) => invoke<Diagnostic[]>("run_verification", { sheetId }),
   searchParts: (query: string, category?: string) =>
@@ -468,6 +556,28 @@ const httpIpc: Ipc = {
     }),
   // ブラウザ検証モードではOSのファイラを開けない (呼び出し側がパスを案内する)
   openTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
+  listMacros: () => http<MacroList>("/macros"),
+  buildMacro: (sheetId, entityIds, meta) =>
+    http<Macro>("/macros/build", {
+      method: "POST",
+      body: JSON.stringify({ sheet_id: sheetId, entity_ids: entityIds, ...meta }),
+    }),
+  saveMacro: (sheetId, entityIds, meta) =>
+    http<{ macro: Macro; path: string }>("/macros/save", {
+      method: "POST",
+      body: JSON.stringify({ sheet_id: sheetId, entity_ids: entityIds, ...meta }),
+    }),
+  applyMacro: (macroId, variant, sheetId, at, rotation) =>
+    http<Patch>("/macros/apply", {
+      method: "POST",
+      body: JSON.stringify({ id: macroId, variant, sheet_id: sheetId, at, rotation }),
+    }),
+  applyMacroInline: (macro, variant, sheetId, at, rotation) =>
+    http<Patch>("/macros/apply-inline", {
+      method: "POST",
+      body: JSON.stringify({ macro, variant, sheet_id: sheetId, at, rotation }),
+    }),
+  openMacrosFolder: () => Promise.reject(new Error("browser mode: not supported")),
   getNetlist: (sheetId) => http<Net[]>(`/netlist?sheet_id=${sheetId}`),
   verify: (sheetId) => http<Diagnostic[]>(sheetId ? `/verify?sheet_id=${sheetId}` : "/verify"),
   simulateOp: (sheetId, openSwitches) =>

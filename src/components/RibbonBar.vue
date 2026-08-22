@@ -15,6 +15,7 @@ import { useDocumentStore } from "../stores/document";
 import { useFileActions } from "../composables/fileActions";
 import { useRevisionsStore } from "../stores/revisions";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
+import { useMacrosStore } from "../stores/macros";
 import { useTemplatesStore } from "../stores/templates";
 import { useTerminalsStore } from "../stores/terminals";
 import { useWireNumbersStore } from "../stores/wireNumbers";
@@ -36,6 +37,7 @@ const reportDialog = useReportDialogStore();
 const pdfBook = usePdfBookStore();
 const terminals = useTerminalsStore();
 const templates = useTemplatesStore();
+const macros = useMacrosStore();
 
 /** タブのid (表示名はi18nカタログ)。 */
 type TabId = "home" | "project" | "schematic" | "panel" | "report" | "io" | "view" | "admin";
@@ -118,6 +120,18 @@ async function openReport(kind: ReportKind, format?: ReportFormat) {
 async function openTemplates() {
   await templates.openDialog();
   ui.log(t("templates.openLog"));
+}
+
+/**
+ * 選択範囲を回路マクロとして保存する (リボン「回路図」タブ>部品を挿入)。
+ * 何も選択していなければダイアログを出さず、先に選ぶよう案内する。
+ */
+async function saveMacro() {
+  const doc = useDocumentStore();
+  const sheet = doc.activeSheet;
+  if (!sheet || !(await macros.openSave(sheet.id, [...doc.selection]))) {
+    ui.log(t("macros.noSelectionLog"));
+  }
 }
 
 /** ユーザーテンプレートの置き場をファイラで開く (開けない環境ではパスを案内する)。 */
@@ -298,7 +312,7 @@ const groups = computed<RibbonGroup[]>(() => [
     small: [[
       { label: "端子台", icon: LayoutGrid, action: () => (ui.symbolPickerOpen = true) },
       { label: t("templates.ribbonButton"), icon: LayoutTemplate, action: () => openTemplates() },
-      { label: "回路コピー", icon: Copy, action: () => todo("回路コピー") },
+      { label: t("macros.ribbonSave"), icon: Copy, action: () => saveMacro() },
     ]],
   },
   {

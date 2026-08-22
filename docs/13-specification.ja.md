@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**712仕様項目**。
+全5領域・**757仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -392,6 +392,8 @@
 
 - POST /macros/save は選択したエンティティをユーザーのマクロフォルダのファイルにし、GET /macros がそれを基準点つきで一覧に返す。 <sub>`saving_a_selection_over_the_link_api_stores_a_macro_in_the_user_folder`</sub>
 - POST /macros/apply はマクロを指定位置へ1回の編集として入れ(undo一発で戻る)、参照記号は衝突しないよう振り直される。 <sub>`applying_a_macro_over_the_link_api_is_one_undo_step`</sub>
+- POST /macros/build は選択範囲をファイルに書かずにマクロへ組み立てる(保存ダイアログのプレビューと⌘Cの無名マクロが使う)。 <sub>`building_a_macro_does_not_write_a_file`</sub>
+- POST /macros/apply-inline は値で渡したマクロ(⌘Cのクリップボード)を1回の編集として入れ、参照記号も保存済みマクロと同じように振り直す。 <sub>`applying_an_inline_macro_behaves_like_a_stored_one`</sub>
 - 知らないマクロid・知らないバリアントキー・空の選択はいずれも400で拒否され、図面は変わらない。 <sub>`the_link_api_refuses_unknown_macros_variants_and_empty_selections`</sub>
 
 ### 編集origin (ユーザー/エージェント/MCP)
@@ -656,6 +658,24 @@
 - 矩形ドラッグはadd_entityコマンド1回(kind=harness・自動採番した名前)になる <sub>`harnessAddCommand`</sub>
 - つぶれた矩形(クリックしただけ)ではハーネスを作らない <sub>`harnessAddCommand`</sub>
 
+### macroPreview
+
+- バリアントキーは既定の「A」が先頭で、そのあとにマクロが持つバリアントが並ぶ <sub>`macroVariantKeys`</sub>
+- バリアントを持たないマクロのキーは「A」の1つだけ <sub>`macroVariantKeys`</sub>
+- バリアントの表示名は「キー+名前」で、UI言語が日本語なら日本語名を使う <sub>`macroVariantLabel`</sub>
+- 名前の無いバリアント(既定のA)はキーだけを表示する <sub>`macroVariantLabel`</sub>
+- 「A」と未指定は既定のコマンド列、それ以外のキーはそのバリアントのコマンド列を読む <sub>`macroCommands / macroEntities`</sub>
+- 知らないバリアントキーを指定したときは既定のコマンド列に戻る(空表示にしない) <sub>`macroCommands / macroEntities`</sub>
+- マクロが置くエンティティだけを取り出す(add_entity以外のコマンドは描かない) <sub>`macroCommands / macroEntities`</sub>
+- 回転0のときは基準点からの相対座標をそのまま挿入位置へ足す <sub>`placePoint`</sub>
+- 90度回転は用紙座標系(Y下向き)で (x,y) → (-y,x) に写る <sub>`placePoint`</sub>
+- 配置後のシンボルはカーソル位置へ移り、シンボル自身の向きにも回転が加わる <sub>`placeMacroEntities`</sub>
+- 配線の頂点もシンボルと同じ変換で動くので、回転しても回路の形は崩れない <sub>`placeMacroEntities`</sub>
+- 配置は複製に対して行われ、元のマクロ定義は書き換えない(何度でも同じ形で置ける) <sub>`placeMacroEntities`</sub>
+- プレビューは選んだバリアントのエンティティだけを載せた仮のシートを描く <sub>`macroSheet`</sub>
+- マクロ名はUI言語が日本語なら日本語名、それ以外は英語名を出す <sub>`macroName`</sub>
+- 日本語名が空のマクロはどちらの言語でも英語名を出す(空欄にしない) <sub>`macroName`</sub>
+
 ### renderer
 
 - 改訂欄は表題欄の真上に同じ右端・同じ幅で置かれ、行高は表題欄と同じ8mmになる <sub>`revisionLayout`</sub>
@@ -827,6 +847,26 @@
 - シートメタ更新のパッチはエンティティに触れない <sub>`document store`</sub>
 - 古いrevisionのパッチは破棄される(二重配信しても安全) <sub>`document store`</sub>
 
+### 回路マクロ
+
+- 一覧を読み込むとマクロ・読めなかったファイル・置き場のパスがそろう <sub>`macro library listing`</sub>
+- カテゴリツリーは「すべて」が先頭で、分類の無いマクロは「ユーザー」に入る <sub>`macro library listing`</sub>
+- タイルにはバリアント数(既定のA+持っているバリアント)のバッジが付く <sub>`macro library listing`</sub>
+- カテゴリを選ぶとそのカテゴリのタイルだけが並ぶ <sub>`macro library listing`</sub>
+- 検索語は名前(英語・日本語)とidに部分一致し、大文字小文字は区別しない <sub>`macro library listing`</sub>
+- タイルを選ぶとバリアントは既定の「A」に戻り、右のプレビューが切り替わる <sub>`macro library listing`</sub>
+- 一覧の読み込みに失敗しても画面は壊れず、理由がエラーとして残る <sub>`macro library listing`</sub>
+- 選択範囲があるときだけ保存ダイアログが開き、選択範囲のプレビューを組み立てる <sub>`macro save dialog`</sub>
+- 何も選択していないときは保存ダイアログを開かない(マクロにする回路が無い) <sub>`macro save dialog`</sub>
+- 名前が空のあいだは保存できない(名前がマクロのidになるため) <sub>`macro save dialog`</sub>
+- 保存は選択範囲・名前・カテゴリをそのまま渡し、保存後は一覧を読み直して閉じる <sub>`macro save dialog`</sub>
+- 保存に失敗したらダイアログは開いたまま理由を出す(入力をやり直せる) <sub>`macro save dialog`</sub>
+- 基準点は選択範囲から自動で決まり(左下ピン)、保存ダイアログには表示だけする <sub>`macro save dialog`</sub>
+- ⌘Cは選択範囲を無名マクロとしてメモリに持ち、ファイルには書き出さない <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+- 何も選択していない状態の⌘Cは何もしない(前のコピー内容も消さない) <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+- コピーした無名マクロは何度でも貼り付けられる(貼り付けても消えない) <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+- 何もコピーしていないときの⌘Vは何も起こさない <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+
 ### 部品データベース
 
 - searchは部品APIの結果を保持する <sub>`parts store`</sub>
@@ -938,4 +978,18 @@
 - runで診断を取得してパネルを開き、severity別に件数を数える <sub>`verification store`</sub>
 - closeはパネルを閉じるが診断は保持する <sub>`verification store`</sub>
 - 取得失敗時はrunningが戻り、診断は空のまま <sub>`verification store`</sub>
+
+### macroPlacement
+
+- マクロを配置し始めるとマクロツールになり、バリアントAで回転0のゴーストが出る <sub>`starting macro placement`</sub>
+- Escでマクロ配置をやめると選択ツールへ戻り、ゴーストが消える <sub>`starting macro placement`</sub>
+- 配置中のRは90度ずつ回転し、4回で元の向きへ戻る <sub>`R and Tab during macro placement`</sub>
+- 配置中のTabはバリアントをA→B→C→Aと巡回し、ゴーストが差し替わる <sub>`R and Tab during macro placement`</sub>
+- バリアントが1つしか無いマクロではTabを押しても「A」のまま <sub>`R and Tab during macro placement`</sub>
+- マクロを配置していないときのTabは横取りしない(キャンバス外の操作を邪魔しない) <sub>`R and Tab during macro placement`</sub>
+- ライブラリのマクロはid・バリアント・クリック位置・回転を渡して挿入される <sub>`confirming a macro placement`</sub>
+- 貼り付けた無名マクロはidではなくマクロそのものを渡して挿入される(ファイルが無いため) <sub>`confirming a macro placement`</sub>
+- 確定してもマクロツールのままなので、同じマクロを続けて何個でも置ける <sub>`confirming a macro placement`</sub>
+- 選択範囲を⌘Cすると無名マクロとして覚え、⌘Vでそのまま配置モードに入る <sub>`Cmd+C / Cmd+V`</sub>
+- 何も選択していない⌘C・何もコピーしていない⌘Vはキー入力を横取りしない <sub>`Cmd+C / Cmd+V`</sub>
 

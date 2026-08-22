@@ -126,6 +126,18 @@ struct SaveMacroBody {
     meta: madake_core::macros::MacroMeta,
 }
 
+/// 選択したエンティティから回路マクロを**組み立てるだけ**返す(ファイルには書かない)。
+/// 保存ダイアログのプレビューと、⌘Cの無名マクロが使う。
+async fn post_build_macro(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<SaveMacroBody>,
+) -> Result<Json<madake_core::macros::Macro>, ApiError> {
+    let sheet_id = resolve_sheet(&doc, body.sheet_id)?;
+    doc.build_macro(sheet_id, &body.entity_ids, &body.meta)
+        .map(Json)
+        .map_err(bad_request)
+}
+
 /// 選択したエンティティを回路マクロとして保存する(座標は基準点からの相対、線番は除去)。
 async fn post_save_macro(
     State(doc): State<SharedDoc>,
@@ -162,6 +174,39 @@ async fn post_apply_macro(
     let sheet_id = resolve_sheet(&doc, body.sheet_id)?;
     doc.apply_macro(
         &body.id,
+        body.variant.as_deref(),
+        sheet_id,
+        body.at,
+        body.rotation,
+        doc.mcp_origin(),
+    )
+    .map(Json)
+    .map_err(bad_request)
+}
+
+#[derive(Deserialize)]
+struct ApplyMacroInlineBody {
+    /// 挿入するマクロそのもの (ライブラリに無い無名マクロ = ⌘C/Vのクリップボード)。
+    #[serde(rename = "macro")]
+    macro_def: madake_core::macros::Macro,
+    #[serde(default)]
+    variant: Option<String>,
+    #[serde(default)]
+    sheet_id: Option<Uuid>,
+    at: madake_core::Point,
+    #[serde(default)]
+    rotation: u16,
+}
+
+/// マクロ**そのもの**をシートへ挿入する(idを引かない)。`POST /macros/apply`と同じく
+/// **1回の編集**として履歴に乗る(undo一発)。
+async fn post_apply_macro_inline(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<ApplyMacroInlineBody>,
+) -> Result<Json<Patch>, ApiError> {
+    let sheet_id = resolve_sheet(&doc, body.sheet_id)?;
+    doc.insert_macro(
+        &body.macro_def,
         body.variant.as_deref(),
         sheet_id,
         body.at,
@@ -771,8 +816,10 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/templates", get(get_templates))
         .route("/api/v1/templates/apply", post(post_apply_template))
         .route("/api/v1/macros", get(get_macros))
+        .route("/api/v1/macros/build", post(post_build_macro))
         .route("/api/v1/macros/save", post(post_save_macro))
         .route("/api/v1/macros/apply", post(post_apply_macro))
+        .route("/api/v1/macros/apply-inline", post(post_apply_macro_inline))
         .route("/api/v1/commands", post(post_commands))
         .route("/api/v1/undo", post(post_undo))
         .route("/api/v1/redo", post(post_redo))

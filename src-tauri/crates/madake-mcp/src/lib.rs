@@ -119,6 +119,19 @@ impl SharedDoc {
         Ok(patch)
     }
 
+    /// 選択したエンティティから回路マクロを**組み立てるだけ**(ファイルには書かない)。
+    ///
+    /// 保存ダイアログのプレビューと、⌘Cの無名マクロ(メモリ上のクリップボード)が使う。
+    pub fn build_macro(
+        &self,
+        sheet_id: Uuid,
+        entity_ids: &[Uuid],
+        meta: &madake_core::macros::MacroMeta,
+    ) -> madake_core::Result<madake_core::macros::Macro> {
+        let engine = self.engine.lock().unwrap();
+        madake_core::macros::save_macro(engine.project(), sheet_id, entity_ids, meta)
+    }
+
     /// 選択したエンティティを回路マクロとして保存する(ユーザー領域へJSONを書き出す)。
     ///
     /// 図面は変更しない(読み取りのみ)ので履歴には乗らない。保存したマクロと
@@ -154,6 +167,33 @@ impl SharedDoc {
         let patch = madake_core::macros::apply(
             &mut self.engine.lock().unwrap(),
             macro_id,
+            variant,
+            sheet_id,
+            at,
+            rotation,
+            origin,
+        )?;
+        let _ = self.patches.send(patch.clone());
+        Ok(patch)
+    }
+
+    /// マクロ**そのもの**をシートへ挿入する(ライブラリのidを引かない)。
+    ///
+    /// ⌘C/Vの無名マクロのように、ファイルに無いマクロを置くための入口。挿入の中身は
+    /// [`Self::apply_macro`]と同じで、**1回の編集** = undo一発で戻る。
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_macro(
+        &self,
+        m: &madake_core::macros::Macro,
+        variant: Option<&str>,
+        sheet_id: Uuid,
+        at: Point,
+        rotation: u16,
+        origin: EditOrigin,
+    ) -> madake_core::Result<Patch> {
+        let patch = madake_core::macros::insert_macro(
+            &mut self.engine.lock().unwrap(),
+            m,
             variant,
             sheet_id,
             at,

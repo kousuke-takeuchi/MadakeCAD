@@ -101,6 +101,21 @@ fn open_macros_folder(app: tauri::AppHandle) -> Result<String, String> {
     Ok(path)
 }
 
+/// 選択したエンティティから回路マクロを**組み立てるだけ**返す(ファイルには書かない)。
+/// 保存ダイアログのプレビューと、⌘Cの無名マクロ(メモリ上のクリップボード)が使う。
+#[tauri::command]
+fn build_macro(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+    entity_ids: Vec<madake_core::EntityId>,
+    meta: madake_core::macros::MacroMeta,
+) -> Result<madake_core::macros::Macro, String> {
+    state
+        .doc
+        .build_macro(sheet_id, &entity_ids, &meta)
+        .map_err(|e| e.to_string())
+}
+
 /// 選択したエンティティを回路マクロとして保存する(図面は変更しない)。
 /// 保存したマクロと書き出し先パスを返す。
 #[tauri::command]
@@ -132,6 +147,30 @@ fn apply_macro(
         .doc
         .apply_macro(
             &macro_id,
+            variant.as_deref(),
+            sheet_id,
+            at,
+            rotation.unwrap_or(0),
+            madake_core::EditOrigin::User,
+        )
+        .map_err(|e| e.to_string())
+}
+
+/// マクロ**そのもの**をシートへ挿入する(ライブラリのidを引かない)。
+/// ⌘C/Vの無名マクロ用。`apply_macro`と同じく1回の編集なのでundo一発で戻る。
+#[tauri::command]
+fn apply_macro_inline(
+    state: State<AppState>,
+    r#macro: madake_core::macros::Macro,
+    variant: Option<String>,
+    sheet_id: madake_core::SheetId,
+    at: madake_core::Point,
+    rotation: Option<u16>,
+) -> Result<Patch, String> {
+    state
+        .doc
+        .insert_macro(
+            &r#macro,
             variant.as_deref(),
             sheet_id,
             at,
@@ -583,8 +622,10 @@ pub fn run() {
             apply_template,
             open_templates_folder,
             list_macros,
+            build_macro,
             save_macro,
             apply_macro,
+            apply_macro_inline,
             open_macros_folder,
             undo,
             redo,

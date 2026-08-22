@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**712 specification clauses** across 5 areas.
+**757 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -392,6 +392,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - POST /macros/save turns the selected entities into a macro file in the user's macros folder, and GET /macros lists it with its base point. <sub>`saving_a_selection_over_the_link_api_stores_a_macro_in_the_user_folder`</sub>
 - POST /macros/apply drops the macro at the requested point as a single edit that one undo takes back, renumbering its reference designators so they do not clash. <sub>`applying_a_macro_over_the_link_api_is_one_undo_step`</sub>
+- POST /macros/build turns the selection into a macro without writing any file, which is what the save dialog previews and what Cmd+C keeps in memory. <sub>`building_a_macro_does_not_write_a_file`</sub>
+- POST /macros/apply-inline drops a macro handed over by value (the Cmd+C clipboard) as a single edit, renumbering its reference designators just like a stored macro. <sub>`applying_an_inline_macro_behaves_like_a_stored_one`</sub>
 - An unknown macro id, an unknown variant key and an empty selection are all refused with 400 and leave the drawing untouched. <sub>`the_link_api_refuses_unknown_macros_variants_and_empty_selections`</sub>
 
 ### Edit origin (user / agent / mcp)
@@ -656,6 +658,24 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - builds one add_entity command with the auto-suggested name <sub>`harnessAddCommand`</sub>
 - creates nothing for a degenerate rectangle (a plain click) <sub>`harnessAddCommand`</sub>
 
+### macroPreview
+
+- lists the default variant A first, followed by the macro's own variants <sub>`macroVariantKeys`</sub>
+- gives a macro without variants the single key A <sub>`macroVariantKeys`</sub>
+- labels a variant with its key and name, in Japanese when the UI is Japanese <sub>`macroVariantLabel`</sub>
+- shows just the key for a variant that has no name, such as the default A <sub>`macroVariantLabel`</sub>
+- reads the default commands for A (or no key) and the variant's own commands otherwise <sub>`macroCommands / macroEntities`</sub>
+- falls back to the default commands when the variant key is unknown <sub>`macroCommands / macroEntities`</sub>
+- extracts only the entities the macro adds <sub>`macroCommands / macroEntities`</sub>
+- just shifts a point by the insertion position when the rotation is zero <sub>`placePoint`</sub>
+- maps a point to (-y, x) for a quarter turn, in the paper coordinate system <sub>`placePoint`</sub>
+- moves each symbol to the cursor and adds the placement rotation to its own <sub>`placeMacroEntities`</sub>
+- moves wire points through the same transform, so a rotated macro keeps its shape <sub>`placeMacroEntities`</sub>
+- works on copies, leaving the macro definition untouched so it can be placed again <sub>`placeMacroEntities`</sub>
+- builds a throwaway sheet holding only the chosen variant's entities <sub>`macroSheet`</sub>
+- shows the Japanese name when the UI is Japanese and the English name otherwise <sub>`macroName`</sub>
+- falls back to the English name when a macro has no Japanese name <sub>`macroName`</sub>
+
 ### renderer
 
 - places the revision table directly above the title block with the same width and row height <sub>`revisionLayout`</sub>
@@ -827,6 +847,26 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sheet-meta patches never touch the entities <sub>`document store`</sub>
 - patches with an older revision are discarded (duplicate delivery is safe) <sub>`document store`</sub>
 
+### Circuit macros
+
+- loads the macros, the unreadable files and the user folder path <sub>`macro library listing`</sub>
+- builds a category tree led by an all-macros entry, with uncategorized macros in their own group <sub>`macro library listing`</sub>
+- badges every tile with its variant count, counting the default A <sub>`macro library listing`</sub>
+- shows only the tiles of the selected category <sub>`macro library listing`</sub>
+- filters tiles by a case-insensitive substring of the name or the id <sub>`macro library listing`</sub>
+- selects a tile and resets the variant back to the default A <sub>`macro library listing`</sub>
+- keeps the dialog usable and records the reason when the list cannot be read <sub>`macro library listing`</sub>
+- opens the save dialog for a selection and builds a preview of it <sub>`macro save dialog`</sub>
+- refuses to open the save dialog when nothing is selected <sub>`macro save dialog`</sub>
+- keeps saving disabled until a name has been entered <sub>`macro save dialog`</sub>
+- saves the selection with the entered name and category, then reloads the library <sub>`macro save dialog`</sub>
+- leaves the dialog open with the reason when saving fails <sub>`macro save dialog`</sub>
+- shows the base point derived from the selection, which the user does not edit <sub>`macro save dialog`</sub>
+- copies the selection into an in-memory macro without writing any file <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+- does nothing on copy when nothing is selected, keeping the previous clipboard <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+- hands the copied macro back on every paste, so it can be pasted repeatedly <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+- pastes nothing when nothing has been copied yet <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+
 ### Parts database
 
 - search stores the results from the parts API <sub>`parts store`</sub>
@@ -938,4 +978,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - run fetches diagnostics, opens the panel, and counts by severity <sub>`verification store`</sub>
 - close hides the panel but keeps the diagnostics <sub>`verification store`</sub>
 - a failed run resets the running flag and leaves diagnostics empty <sub>`verification store`</sub>
+
+### macroPlacement
+
+- switches to the macro tool with variant A and no rotation <sub>`starting macro placement`</sub>
+- leaves macro placement on Escape, back to the select tool <sub>`starting macro placement`</sub>
+- rotates the ghost a quarter turn per R, back to the start after four <sub>`R and Tab during macro placement`</sub>
+- cycles the variants A, B, C and back to A on Tab <sub>`R and Tab during macro placement`</sub>
+- keeps the single variant A on Tab when the macro has no other variants <sub>`R and Tab during macro placement`</sub>
+- does not swallow Tab when no macro is being placed <sub>`R and Tab during macro placement`</sub>
+- applies a library macro by id at the clicked point with the current variant and rotation <sub>`confirming a macro placement`</sub>
+- applies a pasted macro by value instead of by id, since it has no file <sub>`confirming a macro placement`</sub>
+- stays in macro placement after a click, so the same macro can be placed again <sub>`confirming a macro placement`</sub>
+- copies the selection on Cmd+C and starts placing it on Cmd+V <sub>`Cmd+C / Cmd+V`</sub>
+- does not swallow Cmd+C with an empty selection nor Cmd+V with an empty clipboard <sub>`Cmd+C / Cmd+V`</sub>
 
