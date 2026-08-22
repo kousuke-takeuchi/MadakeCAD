@@ -369,6 +369,17 @@
       "startedLog": "AGENT   {mode}で整えます (1ターン。Cmd+Zで戻せます)",
       "busyLog": "AGENT   応答の途中です。ターンが終わってからもう一度実行してください",
       "sendFailed": "AGENT   整えの送信に失敗しました (詳細はチャットのエラー表示を参照)"
+    },
+    "history": {
+      "head": "会話履歴",
+      "new": "新規会話",
+      "empty": "会話はまだありません",
+      "runningRow": "この会話は応答中です",
+      "colorDot": "この会話の編集ハイライト色"
+    },
+    "parallel": {
+      "runningBadge": "{count}会話実行中",
+      "runningBadgeTitle": "いま{count}件の会話が応答中です。それぞれの編集は図面上に会話ごとの色でハイライトされます。"
     }
   }
 }

@@ -6,8 +6,9 @@
 // chat.panelOpen="expanded" の意味は「左ドックのエージェントタブ表示」。
 // 浮き入力カード (CanvasView の ChatPanel) の送信/展開もこの状態を立てるので、
 // ここで panelOpen ⇔ leftPanelTab を同期する。
-import { History, Minus } from "lucide-vue-next";
+import { History, LoaderCircle, Minus } from "lucide-vue-next";
 import { computed, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { usePopover } from "../composables/popover";
 import { useChatStore } from "../stores/chat";
 import { useUiStore, type LeftPanelTab } from "../stores/ui";
@@ -15,6 +16,7 @@ import ChatDock from "./chat/ChatDock.vue";
 import ChatHistoryPopup from "./chat/ChatHistoryPopup.vue";
 import ProjectPanel from "./ProjectPanel.vue";
 
+const { t } = useI18n();
 const chat = useChatStore();
 const ui = useUiStore();
 
@@ -27,6 +29,8 @@ const tabs: { id: LeftPanelTab; label: string }[] = [
 
 const connected = computed(() => chat.detect !== null);
 const chatTab = computed(() => ui.leftPanelTab === "chat");
+// 並列エージェント: 開いていない会話も動くので、実行中の本数をタブ行に出す
+const running = computed(() => chat.runningCount);
 
 function selectTab(tab: LeftPanelTab) {
   // プロジェクトタブへ戻ったら浮き入力カードを出す (入力欄の二重表示を避ける)
@@ -69,6 +73,14 @@ watch(
         <span class="badge" :class="{ off: !connected }">
           <span class="dot" />
           {{ connected ? "接続中" : "未接続" }}
+        </span>
+        <span
+          v-if="running > 0"
+          class="badge running"
+          :title="t('chat.parallel.runningBadgeTitle', { count: running })"
+        >
+          <LoaderCircle class="spin" :size="10" />
+          {{ t("chat.parallel.runningBadge", { count: running }) }}
         </span>
         <button
           class="icon-btn"
@@ -199,6 +211,19 @@ watch(
 .badge.off {
   background: var(--off-bg);
   color: var(--off-fg);
+}
+.badge.running {
+  background: var(--sel-blue);
+  color: var(--acad-blue);
+  font-weight: 600;
+}
+.spin {
+  animation: badge-spin 1s linear infinite;
+}
+@keyframes badge-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .badge.off .dot {
   background: var(--off-fg);

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**757 specification clauses** across 5 areas.
+**770 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -513,6 +513,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Turning off auto-read-drawing suppresses the drawing context but keeps the standards knowledge. <sub>`auto_read_drawing_off_suppresses_the_drawing_context`</sub>
 - The claude-path setting overrides which executable the backend runs. <sub>`claude_path_setting_becomes_the_backend_executable`</sub>
 - Replacing the conversation history (project load) cancels any running turn first. <sub>`set_conversations_replaces_history_and_cancels_running_turn`</sub>
+- Turns in two different conversations run at the same time instead of queuing behind each other. <sub>`turns_in_two_conversations_run_at_the_same_time`</sub>
+- Edits made by two conversations at once all land in the document, in revision order and without loss. <sub>`parallel_turns_keep_every_edit_in_revision_order`</sub>
+- Each conversation gets its own turn sequence numbers, so cancelling one never discards the other's events. <sub>`each_conversation_keeps_its_own_turn_seq`</sub>
+- Undoing a turn that swallowed a parallel turn's edits marks that turn as reverted too, instead of leaving it looking applied. <sub>`undo_turn_marks_the_parallel_turn_whose_edits_it_swept`</sub>
 
 ### stream-json parser
 
@@ -637,6 +641,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - clear removes every region <sub>`AgentOverlay`</sub>
 - the pulse alpha stays within 0.1-0.25 following a sine wave <sub>`pulseAlpha`</sub>
 - margin is added without mutating the original box <sub>`expandBox`</sub>
+- a region is painted in the color of the conversation that made the edit <sub>`並列エージェント: 会話ごとの色`</sub>
+- a region without a conversation color falls back to the default agent color <sub>`並列エージェント: 会話ごとの色`</sub>
+- regions of two conversations running at once keep their own colors side by side <sub>`並列エージェント: 会話ごとの色`</sub>
+- conversation colors follow the start order and wrap around after the fourth <sub>`並列エージェント: 会話ごとの色`</sub>
 
 ### dynamicSymbol
 
@@ -773,7 +781,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - runs one tidy as exactly one chat turn <sub>`runTidy`</sub>
 - opens the agent tab so the user can watch the tidy run <sub>`runTidy`</sub>
 - sends the selected entity ids when a selection is active <sub>`runTidy`</sub>
-- does not start a tidy while another turn is still streaming <sub>`runTidy`</sub>
+- does not start a tidy while the open conversation is still answering <sub>`runTidy`</sub>
 
 ### i18n
 
@@ -797,7 +805,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - an undo depth on turn_applied records the exact edit count <sub>`chat store: applyAgentEvent`</sub>
 - folding events advances the conversation's updated_at (newest-first history) <sub>`chat store: applyAgentEvent`</sub>
 - a delta after completion starts a new turn <sub>`chat store: applyAgentEvent`</sub>
-- multiple conversations fold independently; streaming stays on while any is running <sub>`chat store: applyAgentEvent`</sub>
+- multiple conversations fold independently; streaming reflects only the open conversation <sub>`chat store: applyAgentEvent`</sub>
 - an unknown conversation id refetches the list instead of creating a ghost <sub>`chat store: applyAgentEvent`</sub>
 - while our own turn is running, unknown-conversation events do not trigger a refetch <sub>`chat store: applyAgentEvent`</sub>
 - turn_completed/error for a conversation with no running turn is dropped <sub>`chat store: applyAgentEvent`</sub>
@@ -838,6 +846,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - unknown timestamps (legacy updated_at=0) show no relative time <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
 - the meta line joins time, message count and applied rev with a middle dot <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
 - conversations sort newest-first (unknown times last, in insertion order) <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
+- gives each conversation a stable overlay color in the order the conversations started <sub>`chat store: 並列エージェント`</sub>
+- allows sending in the open conversation while another conversation is still answering <sub>`chat store: 並列エージェント`</sub>
+- does not send again while the open conversation is still answering <sub>`chat store: 並列エージェント`</sub>
+- keeps conversations that are still answering marked as running across a history reload <sub>`chat store: 並列エージェント`</sub>
+- drops a conversation from the running list once its turn ends <sub>`chat store: 並列エージェント`</sub>
 
 ### document
 

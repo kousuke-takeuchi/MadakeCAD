@@ -17,7 +17,9 @@ import {
   type AgentEvent,
   type ChatConversation,
   type ChatMessage,
+  conversationColor,
 } from "./chat";
+import { agentColorAt } from "../canvas/theme";
 
 const CONV = "11111111-1111-4111-8111-111111111111";
 const TURN = "33333333-3333-4333-8333-333333333333";
@@ -256,8 +258,8 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.streaming).toBe(true);
   });
 
-  // ja: 複数会話は独立に畳み込まれ、片方が進行中ならstreamingを保つ
-  it("multiple conversations fold independently; streaming stays on while any is running", () => {
+  // ja: 複数会話は独立に畳み込まれ、streamingは開いている会話だけを表す
+  it("multiple conversations fold independently; streaming reflects only the open conversation", () => {
     const store = useChatStore();
     seed(store, CONV);
     seed(store, CONV2);
@@ -269,10 +271,14 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.activeId).toBe(CONV);
     expect(store.conversations[0].messages[0].text).toBe("A");
     expect(store.conversations[1].messages[0].text).toBe("B");
-    expect(store.streaming).toBe(true);
+    // 開いている会話(CONV)は答え終わった。別会話(CONV2)はまだ答えている
+    expect(store.streaming).toBe(false);
+    expect(store.anyStreaming).toBe(true);
+    expect(store.runningIds).toEqual([CONV2]);
 
     feed(store, [{ type: "turn_completed", result: "B", usage: null }], CONV2);
-    expect(store.streaming).toBe(false);
+    expect(store.anyStreaming).toBe(false);
+    expect(store.runningIds).toEqual([]);
   });
 
   // ja: 未知のconversation_idでは幽霊会話を作らず一覧を取り直す
@@ -440,8 +446,10 @@ describe("chat store: アクション", () => {
     expect(store.conversations[0].messages[0].streaming).toBe(false);
     expect(store.conversations[0].messages[0].error).toBe("キャンセルされました");
     expect(store.conversations[1].messages[0].streaming).toBe(true);
-    // 他会話がまだ進行中なのでグローバルなstreamingは立ったまま
-    expect(store.streaming).toBe(true);
+    // 開いている会話は止まったが、別会話はまだ答えている
+    expect(store.streaming).toBe(false);
+    expect(store.anyStreaming).toBe(true);
+    expect(store.runningIds).toEqual([CONV2]);
   });
 
   // ja: 採番前(local-)の会話ではcancel APIを呼ばずローカル整理だけ行う
@@ -1025,5 +1033,101 @@ describe("会話履歴ポップアップの表示ヘルパー", () => {
     ]);
     // 元の配列は破壊しない
     expect(list.map((c) => c.id)).toEqual(["old", "legacy", "new", "legacy2"]);
+  });
+});
+
+describe("chat store: 並列エージェント", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setActivePinia(createPinia());
+  });
+
+  // ja: 会話には開始順で編集オーバーレイ色が割り当てられ、表示順を変えても揺れない
+  it("gives each conversation a stable overlay color in the order the conversations started", () => {
+    const store = useChatStore();
+    seed(store, CONV);
+    seed(store, CONV2);
+
+    expect(store.conversationColors[CONV]).toBe(agentColorAt(0));
+    expect(store.conversationColors[CONV2]).toBe(agentColorAt(1));
+    expect(conversationColor(store.conversations, CONV2)).toBe(agentColorAt(1));
+
+    // 新しい会話が上に来る並べ替え(履歴ポップアップの表示順)でも色は変わらない
+    store.conversations[1].updated_at = Date.now();
+    expect(sortedConversations(store.conversations)[0].id).toBe(CONV2);
+    expect(store.conversationColors[CONV2]).toBe(agentColorAt(1));
+    // 知らない会話は既定色
+    expect(conversationColor(store.conversations, "unknown")).toBe(agentColorAt(0));
+  });
+
+  // ja: 別の会話が答えている最中でも、開いている会話からは送信できる
+  it("allows sending in the open conversation while another conversation is still answering", async () => {
+    const send = vi.spyOn(agentApi, "send").mockResolvedValue(CONV2);
+    const store = useChatStore();
+    seed(store, CONV);
+    seed(store, CONV2);
+    // CONVが答えている最中にCONV2へ切り替える
+    feed(store, [{ type: "text_delta", text: "作図中" }], CONV);
+    store.setActive(CONV2);
+
+    expect(store.streaming).toBe(false);
+    expect(await store.send("端子台を1個足して")).toBe(CONV2);
+
+    expect(send).toHaveBeenCalledWith(CONV2, "端子台を1個足して", null);
+    expect(store.runningIds).toEqual([CONV, CONV2]);
+    expect(store.runningCount).toBe(2);
+    // 先に走っている会話のターンは中断されない
+    expect(store.conversations[0].messages[0].streaming).toBe(true);
+  });
+
+  // ja: 開いている会話が答えている間は、その会話への追加送信をしない
+  it("does not send again while the open conversation is still answering", async () => {
+    const send = vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
+    const store = useChatStore();
+    seed(store, CONV);
+    feed(store, [{ type: "text_delta", text: "作図中" }], CONV);
+
+    expect(store.streaming).toBe(true);
+    expect(await store.send("もう1件")).toBeNull();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  // ja: 会話一覧を取り直しても、実行中の会話は実行中のまま表示できる
+  it("keeps conversations that are still answering marked as running across a history reload", async () => {
+    vi.spyOn(agentApi, "listConversations").mockResolvedValue([
+      { id: CONV, session_id: null, model: null, messages: [] },
+      {
+        id: CONV2,
+        session_id: null,
+        model: null,
+        messages: [{ role: "assistant", text: "途中まで", tool_calls: [] }],
+      },
+    ]);
+    const store = useChatStore();
+    seed(store, CONV);
+    seed(store, CONV2);
+    feed(store, [{ type: "text_delta", text: "途中まで" }], CONV2);
+    expect(store.runningIds).toEqual([CONV2]);
+
+    await store.loadConversations();
+
+    expect(store.runningIds).toEqual([CONV2]);
+    const running = store.conversations.find((c) => c.id === CONV2)!;
+    expect(running.messages[0].streaming).toBe(true);
+  });
+
+  // ja: ターンが終わった会話は実行中の一覧から外れる
+  it("drops a conversation from the running list once its turn ends", () => {
+    const store = useChatStore();
+    seed(store, CONV);
+    seed(store, CONV2);
+    feed(store, [{ type: "text_delta", text: "A" }], CONV);
+    feed(store, [{ type: "text_delta", text: "B" }], CONV2);
+    expect(store.runningCount).toBe(2);
+
+    feed(store, [{ type: "turn_completed", result: "A", usage: null }], CONV);
+    expect(store.runningIds).toEqual([CONV2]);
+    feed(store, [{ type: "error", message: "失敗" }], CONV2);
+    expect(store.runningIds).toEqual([]);
   });
 });

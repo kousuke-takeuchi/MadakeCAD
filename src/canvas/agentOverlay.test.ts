@@ -12,6 +12,7 @@ import {
   pulseAlpha,
   toolBox,
 } from "./agentOverlay";
+import { agentColorAt, agentPalette, theme } from "./theme";
 
 const PLACE = "mcp__madakecad__place_symbol";
 const WIRE = "mcp__madakecad__draw_wire";
@@ -237,5 +238,46 @@ describe("expandBox", () => {
     const out = expandBox(src, 2);
     expect(out).toEqual({ min: { x: -2, y: -2 }, max: { x: 12, y: 12 } });
     expect(src).toEqual({ min: { x: 0, y: 0 }, max: { x: 10, y: 10 } });
+  });
+});
+
+describe("並列エージェント: 会話ごとの色", () => {
+  // ja: 会話の色を指定すると、その会話の編集領域はその色で描かれる
+  it("a region is painted in the color of the conversation that made the edit", () => {
+    const ov = new AgentOverlay();
+    ov.noteToolStart(PLACE, { x: 10, y: 10 }, { id: "t1", now: 0, color: agentColorAt(1) });
+    expect(ov.activeRegions(0)[0].color).toBe(agentColorAt(1));
+  });
+
+  // ja: 色を指定しない編集領域は既定色(会話1本目の色)になる
+  it("a region without a conversation color falls back to the default agent color", () => {
+    const ov = new AgentOverlay();
+    ov.noteToolStart(PLACE, { x: 10, y: 10 }, { id: "t1", now: 0 });
+    expect(ov.activeRegions(0)[0].color).toBe(theme.agent);
+    expect(theme.agent).toBe(agentColorAt(0));
+  });
+
+  // ja: 同時に走る2会話の編集領域は、それぞれの色を保ったまま並ぶ
+  it("regions of two conversations running at once keep their own colors side by side", () => {
+    const ov = new AgentOverlay();
+    ov.noteToolStart(PLACE, { x: 10, y: 10 }, { id: "a1", now: 0, color: agentColorAt(0) });
+    ov.noteToolStart(WIRE, { points: [{ x: 60, y: 60 }, { x: 90, y: 60 }] }, {
+      id: "b1",
+      now: 0,
+      color: agentColorAt(1),
+    });
+    ov.noteEntityUpserted(symbol("k9", 120, 40), { now: 0, color: agentColorAt(2) });
+
+    const colors = ov.activeRegions(0).map((r) => r.color);
+    expect(colors).toEqual([agentColorAt(0), agentColorAt(1), agentColorAt(2)]);
+  });
+
+  // ja: 会話の色は開始順(0始まり)で決まり、5本目からは先頭の色へ戻る
+  it("conversation colors follow the start order and wrap around after the fourth", () => {
+    expect(agentPalette).toHaveLength(4);
+    expect(new Set(agentPalette).size).toBe(4);
+    expect(agentColorAt(4)).toBe(agentColorAt(0));
+    expect(agentColorAt(5)).toBe(agentColorAt(1));
+    expect(agentColorAt(-1)).toBe(agentColorAt(3));
   });
 });

@@ -198,11 +198,20 @@ describe("runTidy", () => {
     expect(send.mock.calls[0][1]).toContain("(id: b)");
   });
 
-  // ja: 応答の途中(ストリーミング中)は整えを二重に投げない
-  it("does not start a tidy while another turn is still streaming", async () => {
+  // ja: 開いている会話が答えている途中は整えを二重に投げない
+  it("does not start a tidy while the open conversation is still answering", async () => {
     seedDocument([symbol("a", "K1")]);
     const chat = useChatStore();
-    chat.streaming = true;
+    const conversationId = "11111111-1111-4111-8111-111111111111";
+    chat.conversations.push({
+      id: conversationId,
+      session_id: null,
+      messages: [],
+      model: null,
+      updated_at: 0,
+    });
+    chat.setActive(conversationId);
+    chat.setRunning(conversationId, true);
     const send = vi.spyOn(agentApi, "send").mockResolvedValue("11111111-1111-4111-8111-111111111111");
     expect(await runTidy("layout")).toBeNull();
     expect(send).not.toHaveBeenCalled();

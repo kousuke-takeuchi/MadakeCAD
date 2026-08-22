@@ -132,6 +132,30 @@ impl ManagerState {
     fn conversation_mut(&mut self, id: Uuid) -> Option<&mut Conversation> {
         self.conversations.iter_mut().find(|c| c.id == id)
     }
+
+    /// 巻き戻した区間`swept`に**すっぽり収まる**ターンを、全会話から探して
+    /// 巻き戻し済みにする。
+    ///
+    /// 会話をまたいでターンが同時に走ると、あとから巻き戻す区間に別会話のターンの
+    /// 編集が混ざる(エージェント編集は由来だけで選ぶため、会話別には戻せない)。
+    /// 巻き込まれたターンをそのままにすると、UIが「適用済み」と表示し続けたまま
+    /// 「元に戻す」が空振りするので、ここで実態に合わせる。
+    /// 区間から**はみ出す**ターン(まだ戻っていない編集が残るターン)は触らない。
+    fn mark_swept_turns(&mut self, swept: AppliedUndoDepth) {
+        for conversation in &mut self.conversations {
+            let mut changed = false;
+            for message in &mut conversation.messages {
+                let depth = message.applied_undo_depth;
+                if message.has_edits() && swept.start <= depth.start && depth.end <= swept.end {
+                    message.record_reverted();
+                    changed = true;
+                }
+            }
+            if changed {
+                conversation.touch();
+            }
+        }
+    }
 }
 
 /// 会話の保持とターン実行を受け持つ。`Arc`で共有して使う。
@@ -413,6 +437,11 @@ impl AgentManager {
                 conversation.messages[index].record_reverted();
             }
         }
+        // 並行して走っていた別会話のターンの編集も、区間に入っていれば一緒に戻っている
+        // (エージェント編集は由来だけを見て戻すため、会話ごとには選り分けられない)。
+        // まるごと戻ったターンはここで巻き戻し済みにして、UIが「適用済み」と表示したまま
+        // 実体の無い巻き戻しを勧めることのないようにする。
+        state.mark_swept_turns(range);
         Ok(report.revision)
     }
 

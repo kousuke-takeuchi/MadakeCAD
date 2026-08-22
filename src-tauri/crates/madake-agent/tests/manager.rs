@@ -271,6 +271,78 @@ fn last_turn_id(manager: &AgentManager) -> Uuid {
     manager.conversations()[0].last_turn().unwrap().turn_id
 }
 
+/// 待ち合わせ用の空ディレクトリを作る(`fake_claude_rendezvous.sh`が到着印を置く)。
+fn rendezvous_dir() -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("madake-parallel-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).expect("待ち合わせディレクトリを作れない");
+    dir
+}
+
+/// 2会話ぶんのターンを受け切り、会話ID → 受け取ったイベントに分けて返す。
+///
+/// 片方のターンが終わってももう片方を待ち続ける(並行実行の検証用)。
+async fn collect_two_turns(
+    rx: &mut Receiver<ConversationEvent>,
+    a: Uuid,
+    b: Uuid,
+) -> (Vec<ConversationEvent>, Vec<ConversationEvent>) {
+    let mut left = Vec::new();
+    let mut right = Vec::new();
+    let mut done = 0usize;
+    while done < 2 {
+        let next = tokio::time::timeout(Duration::from_secs(20), rx.recv())
+            .await
+            .expect("イベント待ちがタイムアウト")
+            .expect("配信チャネルが閉じた");
+        let terminal = matches!(
+            next.event,
+            AgentEvent::TurnCompleted { .. } | AgentEvent::Error { .. }
+        );
+        if next.conversation_id == a {
+            left.push(next);
+        } else if next.conversation_id == b {
+            right.push(next);
+        }
+        if terminal {
+            done += 1;
+        }
+    }
+    // 合成イベントTurnAppliedは終了イベントの直後に届く(無い場合もある)
+    for _ in 0..2 {
+        if let Ok(Ok(extra)) = tokio::time::timeout(Duration::from_secs(2), rx.recv()).await {
+            if extra.conversation_id == a {
+                left.push(extra);
+            } else if extra.conversation_id == b {
+                right.push(extra);
+            }
+        }
+    }
+    (left, right)
+}
+
+/// イベント列から`TurnCompleted`の本文を集める。
+fn results(events: &[ConversationEvent]) -> String {
+    events
+        .iter()
+        .filter_map(|e| match &e.event {
+            AgentEvent::TurnCompleted { result, .. } => Some(result.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// 会話のターン(アシスタント応答)を1件取り出す。
+fn turn_of(manager: &AgentManager, conversation_id: Uuid) -> madake_agent::ChatMessage {
+    manager
+        .conversations()
+        .into_iter()
+        .find(|c| c.id == conversation_id)
+        .expect("会話がある")
+        .last_turn()
+        .expect("ターンがある")
+        .clone()
+}
+
 fn kinds(events: &[AgentEvent]) -> Vec<&'static str> {
     events
         .iter()
@@ -957,4 +1029,141 @@ async fn set_conversations_replaces_history_and_cancels_running_turn() {
     let conversations = manager.conversations();
     assert_eq!(conversations.len(), 1);
     assert_eq!(conversations[0].id, restored_id);
+}
+
+// ---------------------------------------------------------------------------
+// 並列エージェント (M3 §4): 会話ごとのターンは同時に走る
+// ---------------------------------------------------------------------------
+
+/// Turns in two different conversations run at the same time instead of queuing behind each other.
+/// 別々の会話のターンは順番待ちにならず、同時に走る。
+#[tokio::test]
+async fn turns_in_two_conversations_run_at_the_same_time() {
+    let doc = FakeDoc::new(0);
+    let manager = manager(doc, "fake_claude_rendezvous.sh");
+    let mut rx = manager.subscribe();
+    let dir = rendezvous_dir();
+    let prompt = format!("rendezvous:{}", dir.display());
+
+    // 1本目が走っている最中に2本目を送れる(送信自体が塞がれない)
+    let a = manager.send(None, &prompt, None, None).await.expect("1本目");
+    let b = manager.send(None, &prompt, None, None).await.expect("2本目");
+    assert_ne!(a, b, "別々の会話になる");
+
+    let (left, right) = collect_two_turns(&mut rx, a, b).await;
+
+    // フェイクCLIは「相手のターンも走っている」ことを確認できたときだけ
+    // プロンプトをそのまま返す(直列化されていると "timeout" になる)
+    assert_eq!(results(&left), prompt, "1本目が相手を待ち合わせられた");
+    assert_eq!(results(&right), prompt, "2本目が相手を待ち合わせられた");
+    assert!(!manager.is_sending(a) && !manager.is_sending(b));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Edits made by two conversations at once all land in the document, in revision order and without loss.
+/// 2つの会話が同時に入れた編集は、どれも失われずrevisionの順に図面へ収まる。
+#[tokio::test]
+async fn parallel_turns_keep_every_edit_in_revision_order() {
+    let doc = FakeDoc::new(1);
+    let manager = manager(Arc::clone(&doc), "fake_claude_rendezvous.sh");
+    let mut rx = manager.subscribe();
+    let dir = rendezvous_dir();
+    let prompt = format!("rendezvous:{}", dir.display());
+
+    let a = manager.send(None, &prompt, None, None).await.unwrap();
+    let b = manager.send(None, &prompt, None, None).await.unwrap();
+    let _ = collect_two_turns(&mut rx, a, b).await;
+    wait_agent_idle(&doc).await;
+
+    let first = turn_of(&manager, a);
+    let second = turn_of(&manager, b);
+    // 先に送ったターンの区間が先に始まる(revisionもundo深さも単調増加)
+    assert!(first.applied_revisions.start <= second.applied_revisions.start);
+    assert!(first.applied_undo_depth.start <= second.applied_undo_depth.start);
+    for turn in [&first, &second] {
+        assert!(turn.applied_revisions.start <= turn.applied_revisions.end);
+        assert!(turn.has_edits(), "どちらのターンにも編集が記録される");
+        assert!(turn.applied_undo_depth.end <= doc.depth());
+    }
+    // 同時実行でも編集は1件も取りこぼされない(Commandエンジンが直列化する)
+    assert_eq!(doc.depth(), doc.revision(), "積んだ編集数=revision");
+    assert_eq!(
+        (doc.live_agent_edits() + doc.live_user_edits()) as u64,
+        doc.depth(),
+        "取りこぼした編集が無い"
+    );
+    assert!(
+        doc.live_agent_edits() >= 2,
+        "どちらのターンの編集もエージェント由来として残る"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Each conversation gets its own turn sequence numbers, so cancelling one never discards the other's events.
+/// ターン通し番号は会話ごとに独立しているので、片方を中断してももう片方のイベントは捨てられない。
+#[tokio::test]
+async fn each_conversation_keeps_its_own_turn_seq() {
+    let doc = FakeDoc::new(0);
+    let manager = manager(doc, "fake_claude_rendezvous.sh");
+    let mut rx = manager.subscribe();
+    let dir = rendezvous_dir();
+    let prompt = format!("rendezvous:{}", dir.display());
+
+    let a = manager.send(None, &prompt, None, None).await.unwrap();
+    let b = manager.send(None, &prompt, None, None).await.unwrap();
+    let (left, right) = collect_two_turns(&mut rx, a, b).await;
+
+    let left_seqs: Vec<u64> = left.iter().map(|e| e.turn_seq).collect();
+    let right_seqs: Vec<u64> = right.iter().map(|e| e.turn_seq).collect();
+    assert!(!left_seqs.is_empty() && !right_seqs.is_empty());
+    // 1ターンのイベントは同じ番号で揃う
+    assert!(left_seqs.iter().all(|s| *s == left_seqs[0]), "{left_seqs:?}");
+    assert!(
+        right_seqs.iter().all(|s| *s == right_seqs[0]),
+        "{right_seqs:?}"
+    );
+    // 会話をまたいで番号が衝突しない(片方の中断がもう片方のイベントを巻き込まない)
+    assert_ne!(left_seqs[0], right_seqs[0]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Undoing a turn that swallowed a parallel turn's edits marks that turn as reverted too, instead of leaving it looking applied.
+/// 並行していたターンの編集ごと巻き戻したときは、そのターンも巻き戻し済みになる(適用済みのまま残らない)。
+#[tokio::test]
+async fn undo_turn_marks_the_parallel_turn_whose_edits_it_swept() {
+    let doc = FakeDoc::new(1);
+    let manager = manager(Arc::clone(&doc), "fake_claude_rendezvous.sh");
+    let mut rx = manager.subscribe();
+    let dir = rendezvous_dir();
+    // 1本目は待ち合わせのあとも居残るので、2本目より後に終わる
+    // (= 2本目の編集は1本目の区間にすっぽり入る)
+    let long = format!("rendezvous:{} hold", dir.display());
+    let short = format!("rendezvous:{}", dir.display());
+
+    let a = manager.send(None, &long, None, None).await.unwrap();
+    let b = manager.send(None, &short, None, None).await.unwrap();
+    let _ = collect_two_turns(&mut rx, a, b).await;
+    wait_agent_idle(&doc).await;
+
+    let first = turn_of(&manager, a);
+    let second = turn_of(&manager, b);
+    assert!(
+        first.applied_undo_depth.start <= second.applied_undo_depth.start
+            && second.applied_undo_depth.end <= first.applied_undo_depth.end,
+        "2本目の区間が1本目に含まれる前提: {:?} / {:?}",
+        first.applied_undo_depth,
+        second.applied_undo_depth
+    );
+
+    manager.undo_turn(a, first.turn_id).expect("1本目を巻き戻す");
+
+    assert_eq!(doc.live_agent_edits(), 0, "エージェント編集は全て戻る");
+    assert!(
+        !turn_of(&manager, b).has_edits(),
+        "巻き込まれた2本目も巻き戻し済みになる"
+    );
+    // 巻き戻し済みのターンをもう一度戻そうとしても、二重取り消しにはならない
+    let err = manager.undo_turn(b, second.turn_id).unwrap_err().to_string();
+    assert!(err.contains("巻き戻し済み"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
 }

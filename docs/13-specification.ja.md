@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**757仕様項目**。
+全5領域・**770仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -513,6 +513,10 @@
 - 図面自動読み取りをオフにすると図面コンテキストは付かないが、規格知識は残る。 <sub>`auto_read_drawing_off_suppresses_the_drawing_context`</sub>
 - claude実行ファイルパス設定がバックエンドの実行ファイルを上書きする。 <sub>`claude_path_setting_becomes_the_backend_executable`</sub>
 - 会話履歴の置き換え(プロジェクト読込)は実行中ターンを先にキャンセルする。 <sub>`set_conversations_replaces_history_and_cancels_running_turn`</sub>
+- 別々の会話のターンは順番待ちにならず、同時に走る。 <sub>`turns_in_two_conversations_run_at_the_same_time`</sub>
+- 2つの会話が同時に入れた編集は、どれも失われずrevisionの順に図面へ収まる。 <sub>`parallel_turns_keep_every_edit_in_revision_order`</sub>
+- ターン通し番号は会話ごとに独立しているので、片方を中断してももう片方のイベントは捨てられない。 <sub>`each_conversation_keeps_its_own_turn_seq`</sub>
+- 並行していたターンの編集ごと巻き戻したときは、そのターンも巻き戻し済みになる(適用済みのまま残らない)。 <sub>`undo_turn_marks_the_parallel_turn_whose_edits_it_swept`</sub>
 
 ### stream-jsonパーサ
 
@@ -637,6 +641,10 @@
 - clearで全領域が消える <sub>`AgentOverlay`</sub>
 - パルスの透明度は常に0.1〜0.25のsin波に収まる <sub>`pulseAlpha`</sub>
 - 元の矩形を変更せずマージンを足す <sub>`expandBox`</sub>
+- 会話の色を指定すると、その会話の編集領域はその色で描かれる <sub>`並列エージェント: 会話ごとの色`</sub>
+- 色を指定しない編集領域は既定色(会話1本目の色)になる <sub>`並列エージェント: 会話ごとの色`</sub>
+- 同時に走る2会話の編集領域は、それぞれの色を保ったまま並ぶ <sub>`並列エージェント: 会話ごとの色`</sub>
+- 会話の色は開始順(0始まり)で決まり、5本目からは先頭の色へ戻る <sub>`並列エージェント: 会話ごとの色`</sub>
 
 ### dynamicSymbol
 
@@ -773,7 +781,7 @@
 - 整えの実行は普通のチャット送信1回(=undo一発で戻せる1ターン)になる <sub>`runTidy`</sub>
 - 整えを実行するとエージェントタブが開いて経過が見える <sub>`runTidy`</sub>
 - 選択中のエンティティがあれば、送るプロンプトにそのidが入る <sub>`runTidy`</sub>
-- 応答の途中(ストリーミング中)は整えを二重に投げない <sub>`runTidy`</sub>
+- 開いている会話が答えている途中は整えを二重に投げない <sub>`runTidy`</sub>
 
 ### i18n
 
@@ -797,7 +805,7 @@
 - turn_appliedにundo深さがあれば正確な編集件数を記録する <sub>`chat store: applyAgentEvent`</sub>
 - イベントを畳み込んだ会話はupdated_atが進む(履歴の最新順に反映) <sub>`chat store: applyAgentEvent`</sub>
 - 完了後の新しいデルタは新しいターンを開始する <sub>`chat store: applyAgentEvent`</sub>
-- 複数会話は独立に畳み込まれ、片方が進行中ならstreamingを保つ <sub>`chat store: applyAgentEvent`</sub>
+- 複数会話は独立に畳み込まれ、streamingは開いている会話だけを表す <sub>`chat store: applyAgentEvent`</sub>
 - 未知のconversation_idでは幽霊会話を作らず一覧を取り直す <sub>`chat store: applyAgentEvent`</sub>
 - 自分のターンが進行中の間は、未知会話のイベントで一覧を取り直さない <sub>`chat store: applyAgentEvent`</sub>
 - 進行中ターンの無い会話へのturn_completed/errorは捨てられる <sub>`chat store: applyAgentEvent`</sub>
@@ -838,6 +846,11 @@
 - 時刻不明(旧履歴のupdated_at=0)は相対時刻を出さない <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
 - メタ行は時刻・件数・適用済みrevを中黒で連ねる <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
 - 会話は更新の新しい順に並ぶ(時刻不明は後ろに登録順) <sub>`会話履歴ポップアップの表示ヘルパー`</sub>
+- 会話には開始順で編集オーバーレイ色が割り当てられ、表示順を変えても揺れない <sub>`chat store: 並列エージェント`</sub>
+- 別の会話が答えている最中でも、開いている会話からは送信できる <sub>`chat store: 並列エージェント`</sub>
+- 開いている会話が答えている間は、その会話への追加送信をしない <sub>`chat store: 並列エージェント`</sub>
+- 会話一覧を取り直しても、実行中の会話は実行中のまま表示できる <sub>`chat store: 並列エージェント`</sub>
+- ターンが終わった会話は実行中の一覧から外れる <sub>`chat store: 並列エージェント`</sub>
 
 ### document
 

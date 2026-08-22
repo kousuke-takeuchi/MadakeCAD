@@ -38,8 +38,14 @@
 
 ### Task 3: 並列エージェント
 
-- [ ] Step 1 (red): Rustテスト: 2会話の同時ターン実行(直列化されない)/図面編集の整合(revision順)/会話別turn_seq独立。TS: 会話別オーバーレイ色の割当
-- [ ] Step 2 (green): 排他解除+色割当+UI(会話切替中も他会話が動く表示)。実機確認+コミット
+- [x] Step 1 (red): Rustテスト: 2会話の同時ターン実行(直列化されない)/図面編集の整合(revision順)/会話別turn_seq独立。TS: 会話別オーバーレイ色の割当
+- [x] Step 2 (green): 排他解除+色割当+UI(会話切替中も他会話が動く表示)。実機確認+コミット
+
+**分かったこと・実装したもの**:
+- **Rust側の排他は元々無かった**: `AgentManager::send`のBusy判定は会話単位(`running: HashMap<Uuid, _>`)で、ターンは`tokio::spawn`。待ち合わせ用フェイクCLI(`fake_claude_rendezvous.sh`: 相手のターンが来るまで待ってから応答する)を足したテストで、2会話が実際に同時に走ることを確かめた。**塞いでいたのはフロント**(`chat.streaming`がグローバルで、どこか1会話でも走っていると送信不可だった)
+- **`AgentManager::undo_turn`**: 巻き戻した区間にすっぽり入る**他会話のターン**も巻き戻し済みにする(`ManagerState::mark_swept_turns`)。エージェント編集は由来だけを見て戻すため会話別には選り分けられず、並行ターンの編集は一緒に戻る。放置すると「適用済み」表示のまま空振りする「元に戻す」が残る
+- **フロント**: `chat.streaming`=**開いている会話**が答えているか(送信ガード・停止ボタン)、`anyStreaming`/`runningIds`/`runningCount`を追加。実行中は`running: Record<id, boolean>`で持つのでイベント由来のまま会話一覧を取り直しても消えない
+- **会話色**: `theme.agentPalette`(#29D3E6 / #FFB454 / #B48CFF / #FF6FD8)を会話の開始順に割当(`conversationColor`)。編集オーバーレイ(`Region.color`)と会話履歴ポップアップの行ドット・スピナー、タブ行の「N会話実行中」バッジで使う。patchは会話を持たないので、複数会話が同時に走っている間のpatch由来の領域は既定色
 
 ### Task 4: AnthropicApiBackend+キーチェーン
 
