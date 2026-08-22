@@ -20,6 +20,7 @@ import {
 } from "./chat";
 
 const CONV = "11111111-1111-4111-8111-111111111111";
+const TURN = "33333333-3333-4333-8333-333333333333";
 const CONV2 = "22222222-2222-4222-8222-222222222222";
 
 type Store = ReturnType<typeof useChatStore>;
@@ -188,6 +189,19 @@ describe("chat store: applyAgentEvent", () => {
     expect(store.messages[0].applied_revisions).toEqual({ start: 7, end: 10 });
     expect(appliedCommandCount(store.messages[0])).toBeGreaterThan(0);
     expect(store.messages[0].undone).toBe(false);
+  });
+
+  // ja: turn_appliedはターンの安定IDを載せ、「元に戻す」の対象指定に使える
+  it("turn_applied carries the stable turn id used to address the undo", () => {
+    const store = useChatStore();
+    seed(store);
+    feed(store, [
+      { type: "text_delta", text: "追加しました" },
+      { type: "turn_completed", result: "追加しました", usage: null },
+      { type: "turn_applied", turn_id: TURN, start_revision: 4, end_revision: 6 },
+    ]);
+
+    expect(store.messages[0].turn_id).toBe(TURN);
   });
 
   // ja: turn_appliedにundo深さがあれば正確な編集件数を記録する
@@ -483,29 +497,47 @@ describe("chat store: アクション", () => {
     expect(store.streaming).toBe(false);
   });
 
-  // ja: undoTurnはAPIを呼び、適用済み表示を取り下げる
-  it("undoTurn calls the API and withdraws the applied badge", async () => {
+  // ja: undoTurnはターン安定IDでAPIを呼び、適用済み表示を取り下げる
+  it("undoTurn calls the API with the stable turn id and withdraws the applied badge", async () => {
     const undoTurn = vi.spyOn(agentApi, "undoTurn").mockResolvedValue();
     const store = useChatStore();
     seed(store);
     feed(store, [
       { type: "text_delta", text: "追加しました" },
       { type: "turn_completed", result: "追加しました", usage: null },
-      { type: "turn_applied", start_revision: 4, end_revision: 6 },
+      { type: "turn_applied", turn_id: TURN, start_revision: 4, end_revision: 6 },
     ]);
 
-    await store.undoTurn(CONV, 0);
+    await store.undoTurn(CONV, TURN);
 
-    expect(undoTurn).toHaveBeenCalledWith(CONV, 0);
+    expect(undoTurn).toHaveBeenCalledWith(CONV, TURN);
     expect(store.messages[0].undone).toBe(true);
     expect(appliedCommandCount(store.messages[0])).toBe(0);
     expect(store.messages[0].applied_revisions.end).toBe(
       store.messages[0].applied_revisions.start,
     );
 
-    // 編集の無いターンではAPIを呼ばない
-    await store.undoTurn(CONV, 0);
+    // 巻き戻し済み(編集の残っていない)ターンではAPIを呼ばない
+    await store.undoTurn(CONV, TURN);
     expect(undoTurn).toHaveBeenCalledTimes(1);
+  });
+
+  // ja: 会話に無いターンIDのundoTurnはAPIを呼ばない
+  it("undoTurn never calls the API for a turn id the conversation does not have", async () => {
+    const undoTurn = vi.spyOn(agentApi, "undoTurn").mockResolvedValue();
+    const store = useChatStore();
+    seed(store);
+    feed(store, [
+      { type: "text_delta", text: "追加しました" },
+      { type: "turn_completed", result: "追加しました", usage: null },
+      { type: "turn_applied", turn_id: TURN, start_revision: 4, end_revision: 6 },
+    ]);
+
+    await store.undoTurn(CONV, "44444444-4444-4444-8444-444444444444");
+    await store.undoTurn(CONV, "");
+
+    expect(undoTurn).not.toHaveBeenCalled();
+    expect(store.messages[0].undone).toBe(false);
   });
 
   // ja: undoTurnのサーバー拒否は呼び出し元へ投げられ、適用済み表示は変わらない
@@ -519,10 +551,10 @@ describe("chat store: アクション", () => {
     feed(store, [
       { type: "text_delta", text: "追加しました" },
       { type: "turn_completed", result: "追加しました", usage: null },
-      { type: "turn_applied", start_revision: 4, end_revision: 6 },
+      { type: "turn_applied", turn_id: TURN, start_revision: 4, end_revision: 6 },
     ]);
 
-    await expect(store.undoTurn(CONV, 0)).rejects.toThrow("最新の適用済みターンではない");
+    await expect(store.undoTurn(CONV, TURN)).rejects.toThrow("最新の適用済みターンではない");
 
     expect(store.messages[0].undone).toBe(false);
     expect(appliedCommandCount(store.messages[0])).toBeGreaterThan(0);
@@ -538,8 +570,9 @@ describe("chat store: アクション", () => {
     void store.send("配線して");
     const localId = store.activeId as string;
     store.messages[1].applied_undo_depth = { start: 0, end: 2 };
+    store.messages[1].turn_id = TURN;
 
-    await store.undoTurn(localId, 1);
+    await store.undoTurn(localId, TURN);
 
     expect(undoTurn).not.toHaveBeenCalled();
     expect(store.messages[1].undone).toBe(false);
@@ -554,12 +587,14 @@ describe("chat store: アクション", () => {
         model: null,
         messages: [
           {
+            turn_id: TURN,
             role: "user",
             text: "F2を追加",
             applied_revisions: { start: 3, end: 3 },
             applied_undo_depth: { start: 1, end: 1 },
           },
           {
+            turn_id: TURN,
             role: "assistant",
             text: "追加しました",
             // ターン中にエージェントがundoを挟むとrevision差(4)は積まれた数と一致しない
@@ -587,6 +622,8 @@ describe("chat store: アクション", () => {
     expect(store.messages).toHaveLength(2);
     expect(store.messages[1].tool_calls[0].status).toBe("ok");
     expect(store.messages[1].tool_calls[0].summary).toBe("fuse F2 を (140,90) に配置");
+    // 1ターンの2メッセージは同じターンIDを持ち、巻き戻しの対象指定に使える
+    expect(store.messages.map((m) => m.turn_id)).toEqual([TURN, TURN]);
     // 巻き戻し回数はrevision差(4)ではなくundo深さの増分(2)
     expect(appliedCommandCount(store.messages[1])).toBe(2);
     expect(store.messages[1].applied_revisions).toEqual({ start: 3, end: 7 });

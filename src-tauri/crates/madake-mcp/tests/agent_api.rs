@@ -140,11 +140,11 @@ async fn send_to_unknown_conversation_is_400() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
-/// Cancel and undo-turn endpoints respond correctly for the latest applied turn.
-/// キャンセルとターン巻き戻しのエンドポイントは、最新の適用済みターンに対して正しく応答する。
+/// Cancel and undo-turn endpoints take a stable turn id and reject turns with nothing to roll back.
+/// キャンセルとターン巻き戻しのエンドポイントはターン安定IDを受け取り、戻せる編集が無いターンは拒否する。
 #[tokio::test]
 async fn cancel_and_undo_turn_respond() {
-    let (doc, agent, router) = setup("fake_claude.sh");
+    let (_doc, agent, router) = setup("fake_claude.sh");
 
     let (_, body) = call(
         &router,
@@ -167,26 +167,29 @@ async fn cancel_and_undo_turn_respond() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["cancelled"], json!(false));
 
-    // 編集の無いターンのundo-turnは現在のrevisionを返すだけ
-    let revision = doc.engine.lock().unwrap().revision();
+    // ターンの指定はメッセージ添字ではなくターン安定ID
+    let turn_id = agent.conversations()[0].last_turn().unwrap().turn_id;
     let (status, body) = call(
         &router,
         "POST",
         "/api/v1/agent/undo-turn",
-        Some(json!({ "conversation_id": id, "message_index": 1 })),
+        Some(json!({ "conversation_id": id, "turn_id": turn_id })),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["revision"], json!(revision));
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "編集の無いターンは戻すものが無い: {body}"
+    );
 
     let (status, _) = call(
         &router,
         "POST",
         "/api/v1/agent/undo-turn",
-        Some(json!({ "conversation_id": id, "message_index": 0 })),
+        Some(json!({ "conversation_id": id, "turn_id": Uuid::new_v4() })),
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "ユーザー発話は対象外");
+    assert_eq!(status, StatusCode::BAD_REQUEST, "未知のターンIDは拒否");
 }
 
 /// Undoing a turn rolls back exactly the document edits that the turn produced, via the same undo history as manual edits.
@@ -238,7 +241,8 @@ async fn undo_turn_rolls_back_agent_edits_through_the_command_engine() {
         2
     );
 
-    let revision = agent.undo_turn(id, 1).expect("巻き戻し成功");
+    let turn_id = agent.conversations()[0].last_turn().unwrap().turn_id;
+    let revision = agent.undo_turn(id, turn_id).expect("巻き戻し成功");
     assert!(
         doc.engine.lock().unwrap().project().sheets[0]
             .entities

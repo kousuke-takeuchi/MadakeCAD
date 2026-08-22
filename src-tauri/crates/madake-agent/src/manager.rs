@@ -266,9 +266,11 @@ impl AgentManager {
                 let message = c.current_turn_mut()?;
                 message.error = Some(CANCELLED_MESSAGE.to_string());
                 message.finish_turn(doc_state);
-                message
-                    .has_edits()
-                    .then_some((message.applied_revisions, message.applied_undo_depth))
+                message.has_edits().then_some((
+                    message.turn_id,
+                    message.applied_revisions,
+                    message.applied_undo_depth,
+                ))
             })
         };
         // abortされたタスクは後片付けを実行できないので、終了イベントはここで流す
@@ -278,20 +280,22 @@ impl AgentManager {
                 message: CANCELLED_MESSAGE.to_string(),
             },
         );
-        if let Some((revisions, depth)) = applied {
-            self.broadcast_applied(conversation_id, revisions, depth);
+        if let Some((turn_id, revisions, depth)) = applied {
+            self.broadcast_applied(conversation_id, turn_id, revisions, depth);
         }
         true
     }
 
-    /// 指定メッセージのターンで入った編集を巻き戻す。戻り値は巻き戻し後のrevision。
+    /// 指定ターンで入った編集を巻き戻す。戻り値は巻き戻し後のrevision。
+    ///
+    /// 対象はターンの安定ID([`crate::ChatMessage::turn_id`])で指定する。メッセージ添字と
+    /// 違い、後続ターンの追記や履歴移行でズレないため、別ターンを取り違えて戻すことがない。
     ///
     /// エンジンのundoはLIFOなので、**巻き戻せるのは最新の適用済みターンだけ**。
-    /// 後続ターンやユーザー操作の編集が上に積まれている状態で実行すると、指定した
-    /// ターンとは無関係の編集を戻してしまうため、ここで拒否する
-    /// (`message_index`はUI側の添字であり、安定したターンIDではないので、
-    /// サーバー側でも整合を確かめる必要がある)。
-    pub fn undo_turn(&self, conversation_id: Uuid, message_index: usize) -> Result<u64> {
+    /// 後続ターンやユーザー操作の編集が上に積まれている状態では拒否する。
+    /// 既に巻き戻したターン(戻せる編集が残っていないターン)も明示エラーにする
+    /// (黙って成功を返すと、UI側が「戻した」と表示したまま何も起きない)。
+    pub fn undo_turn(&self, conversation_id: Uuid, turn_id: Uuid) -> Result<u64> {
         let count = {
             let state = self.state.lock().unwrap();
             if state.running.contains_key(&conversation_id) {
@@ -303,23 +307,23 @@ impl AgentManager {
                 .iter()
                 .find(|c| c.id == conversation_id)
                 .ok_or(AgentError::NoConversation(conversation_id))?;
-            let message = conversation
-                .messages
-                .get(message_index)
-                .ok_or(AgentError::NoMessage(message_index))?;
-            if message.role != Role::Assistant {
-                return Err(AgentError::NoMessage(message_index));
+            let index = conversation
+                .turn_index(turn_id)
+                .ok_or(AgentError::UnknownTurn(turn_id))?;
+            let message = &conversation.messages[index];
+            if !message.has_edits() {
+                return Err(AgentError::TurnNotApplied(turn_id));
             }
             // 同じ会話の後続ターンに編集が残っていないこと
-            if conversation.messages[message_index + 1..]
+            if conversation.messages[index + 1..]
                 .iter()
                 .any(|m| m.role == Role::Assistant && m.has_edits())
             {
-                return Err(AgentError::NotLatestTurn(message_index));
+                return Err(AgentError::NotLatestTurn(turn_id));
             }
             // 他の会話やユーザーのUI操作による編集が上に積まれていないこと
             if self.doc.undo_depth() != message.applied_undo_depth.end {
-                return Err(AgentError::NotLatestTurn(message_index));
+                return Err(AgentError::NotLatestTurn(turn_id));
             }
             message.applied_command_count()
         };
@@ -342,8 +346,8 @@ impl AgentManager {
             let mut state = self.state.lock().unwrap();
             if let Some(conversation) = state.conversation_mut(conversation_id) {
                 conversation.touch();
-                if let Some(message) = conversation.messages.get_mut(message_index) {
-                    message.record_undone(undone);
+                if let Some(index) = conversation.turn_index(turn_id) {
+                    conversation.messages[index].record_undone(undone);
                 }
             }
         }
@@ -371,12 +375,14 @@ impl AgentManager {
     fn broadcast_applied(
         &self,
         conversation_id: Uuid,
+        turn_id: Uuid,
         revisions: AppliedRevisions,
         depth: AppliedUndoDepth,
     ) {
         self.broadcast(
             conversation_id,
             AgentEvent::TurnApplied {
+                turn_id,
                 start_revision: revisions.start,
                 end_revision: revisions.end,
                 start_undo_depth: depth.start,
@@ -459,15 +465,18 @@ impl Turn {
                     if let Some(doc_state) = final_state {
                         message.finish_turn(doc_state);
                     }
-                    message
-                        .has_edits()
-                        .then_some((message.applied_revisions, message.applied_undo_depth))
+                    message.has_edits().then_some((
+                        message.turn_id,
+                        message.applied_revisions,
+                        message.applied_undo_depth,
+                    ))
                 })
         };
-        if let Some((revisions, depth)) = applied {
+        if let Some((turn_id, revisions, depth)) = applied {
             let _ = self.events.send(ConversationEvent {
                 conversation_id: self.conversation_id,
                 event: AgentEvent::TurnApplied {
+                    turn_id,
                     start_revision: revisions.start,
                     end_revision: revisions.end,
                     start_undo_depth: depth.start,

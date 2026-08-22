@@ -32,6 +32,8 @@ export type AgentEvent =
   /** ターンの編集が図面へ適用された時にマネージャが合成するイベント。 */
   | {
       type: "turn_applied";
+      /** 適用されたターンの安定ID(「元に戻す」の対象指定に使う)。 */
+      turn_id?: string;
       start_revision: number;
       end_revision: number;
       start_undo_depth?: number;
@@ -55,6 +57,13 @@ export interface WireToolCall {
 
 /** Rust側 `ChatMessage` のJSON表現。 */
 export interface WireChatMessage {
+  /**
+   * このメッセージが属するターンの安定ID(ユーザー発話とアシスタント応答で共通)。
+   *
+   * Rust側は`chat.json`のformat_version 2で導入。旧履歴も読み込み時に採番されるので、
+   * サーバー由来のメッセージには必ず入る。
+   */
+  turn_id?: string;
   role: ChatRole;
   text: string;
   tool_calls?: WireToolCall[];
@@ -122,6 +131,13 @@ export interface ChatToolCall {
 }
 
 export interface ChatMessage {
+  /**
+   * ターンの安定ID(「元に戻す」の対象指定に使う)。
+   *
+   * サーバー採番前(送信直後のローカル表示・ストリーミング中)は空文字。
+   * `turn_applied`イベントか会話一覧の再取得でRust側のIDが入る。
+   */
+  turn_id: string;
   role: ChatRole;
   text: string;
   tool_calls: ChatToolCall[];
@@ -155,7 +171,7 @@ interface AgentApi {
   send(conversationId: string | null, prompt: string, model: string | null): Promise<string>;
   cancel(conversationId: string | null): Promise<void>;
   listConversations(): Promise<WireConversation[]>;
-  undoTurn(conversationId: string, messageIndex: number): Promise<void>;
+  undoTurn(conversationId: string, turnId: string): Promise<void>;
   detect(): Promise<AgentDetect>;
   onEvent(handler: (payload: AgentEventPayload) => void): Promise<UnlistenFn>;
 }
@@ -165,8 +181,8 @@ const tauriAgentApi: AgentApi = {
     invoke<string>("agent_send", { conversationId, prompt, model }),
   cancel: (conversationId) => invoke<void>("agent_cancel", { conversationId }),
   listConversations: () => invoke<WireConversation[]>("agent_list_conversations"),
-  undoTurn: (conversationId, messageIndex) =>
-    invoke<void>("agent_undo_turn", { conversationId, messageIndex }),
+  undoTurn: (conversationId, turnId) =>
+    invoke<void>("agent_undo_turn", { conversationId, turnId }),
   detect: () => invoke<AgentDetect>("agent_detect"),
   onEvent: (handler) => listen<AgentEventPayload>("agent:event", (e) => handler(e.payload)),
 };
@@ -199,10 +215,10 @@ const httpAgentApi: AgentApi = {
     });
   },
   listConversations: () => http<WireConversation[]>("/agent/conversations"),
-  undoTurn: async (conversationId, messageIndex) => {
+  undoTurn: async (conversationId, turnId) => {
     await http("/agent/undo-turn", {
       method: "POST",
-      body: JSON.stringify({ conversation_id: conversationId, message_index: messageIndex }),
+      body: JSON.stringify({ conversation_id: conversationId, turn_id: turnId }),
     });
   },
   detect: () => http<AgentDetect>("/agent/detect"),
@@ -377,6 +393,8 @@ function emptyUndoDepth(): AppliedUndoDepth {
 
 function newMessage(role: ChatRole, text: string, streaming: boolean): ChatMessage {
   return {
+    // ターンIDはRust側が採番する。届くまで(=巻き戻せるようになるまで)は空
+    turn_id: "",
     role,
     text,
     tool_calls: [],
@@ -401,6 +419,7 @@ function normalizeToolCall(call: WireToolCall): ChatToolCall {
 
 function normalizeMessage(message: WireChatMessage): ChatMessage {
   return {
+    turn_id: message.turn_id ?? "",
     role: message.role,
     text: message.text,
     tool_calls: (message.tool_calls ?? []).map(normalizeToolCall),
@@ -695,6 +714,9 @@ export const useChatStore = defineStore("chat", {
         case "turn_applied": {
           const turn = lastAssistant(conv);
           if (turn) {
+            // 「元に戻す」の対象指定はこの安定ID(添字ではない)。旧サーバー(ID無し)では
+            // 空のままになり、ChatDockが巻き戻し前に会話を再取得して補う
+            if (event.turn_id) turn.turn_id = event.turn_id;
             turn.applied_revisions = {
               start: event.start_revision,
               end: event.end_revision,
@@ -891,16 +913,19 @@ export const useChatStore = defineStore("chat", {
     /**
      * そのターンの編集を全て巻き戻す(undo深さの増分だけundoする)。
      *
+     * 対象はターンの安定ID(`turn_id`)で指定する。メッセージ添字と違い、後続ターンの
+     * 追記や履歴の再読込でズレないため、別ターンを巻き戻す事故が起きない。
      * サーバー側でも「最新の適用済みターンか」「送信中でないか」を検証しており、
      * 条件を外れると400が返る。**エラーはそのまま呼び出し元へ投げる**
      * (ChatDockがui.logへ「元に戻す失敗: ...」として出す)。失敗時はローカルの
      * 適用済み表示も変更しない。
      */
-    async undoTurn(conversationId: string, messageIndex: number) {
+    async undoTurn(conversationId: string, turnId: string) {
       const conv = this.conversations.find((c) => c.id === conversationId);
-      const message = conv?.messages[messageIndex];
-      if (!conv || !message || isLocalId(conv.id) || appliedCommandCount(message) === 0) return;
-      await agentApi.undoTurn(conversationId, messageIndex);
+      const message = conv?.messages.find((m) => m.turn_id === turnId && m.role === "assistant");
+      if (!conv || !turnId || !message || isLocalId(conv.id)) return;
+      if (appliedCommandCount(message) === 0) return;
+      await agentApi.undoTurn(conversationId, turnId);
       message.undone = true;
       // Rust側`record_undone`と同じ後始末(全部戻したのでrevision範囲も畳む)
       message.applied_undo_depth = {

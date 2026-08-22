@@ -39,13 +39,15 @@ pub enum AgentError {
     Busy,
     #[error("会話が見つかりません: {0}")]
     NoConversation(uuid::Uuid),
-    #[error("メッセージが見つかりません: {0}")]
-    NoMessage(usize),
+    #[error("ターンが見つかりません: {0}")]
+    UnknownTurn(uuid::Uuid),
+    #[error("このターンには巻き戻せる編集がありません(既に巻き戻し済みです): {0}")]
+    TurnNotApplied(uuid::Uuid),
     #[error(
         "最新の適用済みターンではないため巻き戻せません: {0} \
          (後続の編集を先に取り消してください)"
     )]
-    NotLatestTurn(usize),
+    NotLatestTurn(uuid::Uuid),
     #[error("ドキュメント操作に失敗しました: {0}")]
     Doc(String),
     #[error("設定ファイルの場所を特定できません(ホームディレクトリが不明です)")]
