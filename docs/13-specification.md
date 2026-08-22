@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**797 specification clauses** across 5 areas.
+**810 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -713,6 +713,22 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - builds a throwaway sheet holding only the chosen variant's entities <sub>`macroSheet`</sub>
 - shows the Japanese name when the UI is Japanese and the English name otherwise <sub>`macroName`</sub>
 - falls back to the English name when a macro has no Japanese name <sub>`macroName`</sub>
+
+### relayXref
+
+- groups the coil and contacts that share a reference into one device <sub>`relayXref`</sub>
+- ignores symbols that are neither relay coils nor relay contacts <sub>`relayXref`</sub>
+- orders the contacts of a device by sheet and then by zone <sub>`relayXref`</sub>
+- builds terminal pairs from the contact position and its function digits <sub>`relayXref`</sub>
+- lists every placed contact with its terminal pair and address <sub>`relayXref`</sub>
+- adds a dash row for every unused contact of the assigned part <sub>`relayXref`</sub>
+- lists only the drawn contacts when no contact configuration is known <sub>`relayXref`</sub>
+- keys the per-sheet contact maps by the coil on that sheet <sub>`relayXref`</sub>
+- shows the address of the driving coil beside each contact <sub>`relayXref`</sub>
+- shows no coil location for a contact whose coil is missing <sub>`relayXref`</sub>
+- parses make and break counts and ignores unreadable configurations <sub>`relayXref`</sub>
+- centres the contact map table under the coil <sub>`relayXref`</sub>
+- anchors both annotations to the symbol outline <sub>`relayXref`</sub>
 
 ### renderer
 

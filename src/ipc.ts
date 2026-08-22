@@ -203,6 +203,8 @@ export interface Part {
   note: string;
   model_3d: string;
   mounting: string;
+  /** 接点構成 (リレー・コンタクタの実装数。例 "2NO+2NC")。配置時にattrsへ写る。 */
+  contact_config?: string;
 }
 
 /** KiCadインポートの結果要約。 */
