@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1532仕様項目**。
+全5領域・**1568仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -169,6 +169,15 @@
 - 盤シートを動かすと盤エンティティも動く: 盤外形・ダクト・フットプリントは左上の角が動き、DINレールは左右にも上下にも動く。 <sub>`translate_moves_panel_entities`</sub>
 - 盤エンティティはそれぞれの種別タグでJSONを往復でき、どのクライアントからも送れる。 <sub>`panel_entities_have_their_own_json_kind_tags`</sub>
 - Entity::id()は種別によらず内側エンティティのUUIDを返す。 <sub>`entity_id_is_uniform_across_kinds`</sub>
+
+### net_tag
+
+- タグ「右」のネットラベルは、右へ先端が飛び出した五角形の旗として描かれる。 <sub>`tag_right_points_to_the_right`</sub>
+- タグ「左」のネットラベルは、先端が左にある左右反転した旗として描かれる。 <sub>`tag_left_points_to_the_left`</sub>
+- タグの文字は必ず旗の内側に収まり、旗の幅はネット名の長さに合わせて伸びる。 <sub>`tag_box_follows_the_text_width`</sub>
+- 左向きと右向きのタグは同じ大きさになるので、左右のラベルが並んでも高さと幅がそろう。 <sub>`both_directions_have_the_same_size`</sub>
+- タグ属性の無いネットラベルは、これまでどおり文字だけの見た目のままになる。 <sub>`label_without_tag_attribute_stays_plain_text`</sub>
+- 知らないタグの値(打ち間違いや "up")は無視され、失敗せずに文字だけの表示に戻る。 <sub>`unknown_tag_value_is_ignored`</sub>
 
 ### ネットリスト抽出
 
@@ -399,6 +408,13 @@
 - DINレールは取付線を中心にした横帯として描かれる。 <sub>`svg_of_a_panel_sheet_draws_the_din_rail`</sub>
 - フットプリントは外形の矩形として描かれ、その中に参照記号と型番が入る。 <sub>`svg_of_a_panel_sheet_draws_the_footprint_with_its_reference`</sub>
 - 90度回したフットプリントは横倒しに描かれる(幅と高さが入れ替わる)。 <sub>`svg_draws_a_rotated_footprint_lying_down`</sub>
+- 全ての配線は線径・線色・電線長を配線の下に印字する(現場が電線を作るのに必要な情報)。 <sub>`svg_annotates_each_wire_with_gauge_colour_and_length`</sub>
+- 配線注記は図面そのものの一部なので、何も設定しなくてもSVG・PDFに出る。 <sub>`wire_notes_are_exported_by_default`</sub>
+- 画面で表示クラスを消しても出力ファイルは変わらない(出力は常に図面の全部を描く)。 <sub>`export_ignores_screen_only_view_classes`</sub>
+- 線径も色も長さも無い配線には、注記が何も付かない。 <sub>`svg_omits_the_note_of_a_bare_wire`</sub>
+- タグ「右」のネットラベルは、右を向いた旗の枠として描かれ、ネット名はその中に入る。 <sub>`svg_draws_a_directional_flag_around_a_tagged_net_label`</sub>
+- タグの無いネットラベルは従来どおり文字だけで、周りに枠は描かれない。 <sub>`svg_draws_no_outline_for_an_untagged_net_label`</sub>
+- 知らないタグの値は無視され、出力が壊れるのではなく文字だけの表示に戻る。 <sub>`svg_ignores_an_unknown_tag_value`</sub>
 
 ### シンボルライブラリ
 
@@ -593,6 +609,17 @@
 - シートを指定しない採番はプロジェクトの全シートをシート順に処理し、番号は図面全体で重複しない。 <sub>`numbering_without_a_sheet_covers_the_whole_project`</sub>
 - 線番は1本ずつ直接編集でき、undoで以前の値に戻る。 <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - 採番コマンドは素のJSON ({"type":"renumber_wires","mode":"append","start":1}) で表現でき、AIやCLIから送れる。 <sub>`renumber_command_is_plain_json`</sub>
+
+### wire_note
+
+- 線径・線色・電線長がそろったワイヤには「0.75sq 白 0.4m」という注記が付く。 <sub>`note_shows_gauge_colour_and_length`</sub>
+- 欠けている属性は注記から省かれ、長さの無いワイヤは「0.75sq 白」と書かれる。 <sub>`note_omits_missing_attributes`</sub>
+- 線径も色も長さも無いワイヤには、空の注記ではなく注記そのものが付かない。 <sub>`wire_without_attributes_has_no_note`</sub>
+- 変換表に無い色名はそのまま書かれるので、入力した情報が消えることはない。 <sub>`unknown_colour_names_are_printed_unchanged`</sub>
+- 横向きのワイヤの注記は配線の下に置かれ、上に出る線番とは反対側になる。 <sub>`horizontal_wire_note_sits_below_the_wire`</sub>
+- 縦向きのワイヤの注記は配線の右に置かれ、左に出る線番とは反対側になる。 <sub>`vertical_wire_note_sits_right_of_the_wire`</sub>
+- 注記はワイヤ1本ごとに付く(ネットごとに1回だけ描かれる線番とは違う)。 <sub>`each_wire_gets_its_own_note`</sub>
+- 折れ曲がったワイヤの注記は、いちばん長い直線部分に置かれて読みやすくなる。 <sub>`note_is_placed_on_the_longest_straight_run`</sub>
 
 ### xref
 
@@ -1287,6 +1314,15 @@
 - マクロ名はUI言語が日本語なら日本語名、それ以外は英語名を出す <sub>`macroName`</sub>
 - 日本語名が空のマクロはどちらの言語でも英語名を出す(空欄にしない) <sub>`macroName`</sub>
 
+### netTag
+
+- タグ「右」のネットラベルは、右へ先端が飛び出した五角形の旗として描かれる <sub>`netTag`</sub>
+- タグ「左」のネットラベルは、先端が左にある左右反転した旗として描かれる <sub>`netTag`</sub>
+- タグの文字は必ず旗の内側に収まり、旗の幅はネット名の長さに合わせて伸びる <sub>`netTag`</sub>
+- 左向きと右向きのタグは同じ大きさになるので、左右のラベルが並んでも高さと幅がそろう <sub>`netTag`</sub>
+- タグ属性の無いネットラベルは、これまでどおり文字だけの見た目のままになる <sub>`netTag`</sub>
+- 知らないタグの値(打ち間違いや "up")は無視され、文字だけの表示に戻る <sub>`netTag`</sub>
+
 ### panel
 
 - フットプリントは自分の寸法どおりの矩形を占める。 <sub>`panel layout geometry`</sub>
@@ -1433,8 +1469,8 @@
 ### viewClasses
 
 - エンティティ種別を表示クラスへ対応付ける(ジャンクションは配線扱い) <sub>`entityViewClass`</sub>
-- VIEW_CLASSESは全クラスを一意に列挙する(線番・ハーネス・盤レイアウトを加えて10クラス) <sub>`entityViewClass`</sub>
-- 表示クラスは初期状態で全て表示ONになっている(線番・ハーネスも最初から見える) <sub>`view class visibility`</sub>
+- VIEW_CLASSESは全クラスを一意に列挙する(線番・配線注記・ハーネス・盤レイアウトを加えて11クラス) <sub>`entityViewClass`</sub>
+- 表示クラスは初期状態で全て表示ONになっている(線番・配線注記・ハーネスも最初から見える) <sub>`view class visibility`</sub>
 
 ### viewport
 
@@ -1442,6 +1478,18 @@
 - パンはスクリーンpx単位でビューを動かす <sub>`Viewport`</sub>
 - スナップは既定で2.5mmグリッドへ丸める <sub>`Viewport`</sub>
 - ズーム倍率は妥当な範囲に制限される <sub>`Viewport`</sub>
+
+### wireNotes
+
+- 線径・線色・電線長がそろったワイヤには「0.75sq 白 0.4m」という注記が付く <sub>`wireNoteText`</sub>
+- 欠けている属性は注記から省かれ、長さの無いワイヤは「0.75sq 白」と書かれる <sub>`wireNoteText`</sub>
+- 線径も色も長さも無いワイヤには、空の注記ではなく注記そのものが付かない <sub>`wireNoteText`</sub>
+- 変換表に無い色名はそのまま書かれるので、入力した情報が消えることはない <sub>`wireNoteText`</sub>
+- 横向きのワイヤの注記は配線の下に置かれ、上に出る線番とは反対側になる <sub>`wireNoteLabels`</sub>
+- 縦向きのワイヤの注記は配線の右に置かれ、左に出る線番とは反対側になる <sub>`wireNoteLabels`</sub>
+- 注記はワイヤ1本ごとに付く(ネットごとに1回だけ描かれる線番とは違う) <sub>`wireNoteLabels`</sub>
+- 折れ曲がったワイヤの注記は、いちばん長い直線部分に置かれて読みやすくなる <sub>`wireNoteLabels`</sub>
+- 属性の無いワイヤは注記の一覧に現れない <sub>`wireNoteLabels`</sub>
 
 ### wireNumbers
 

@@ -1041,12 +1041,14 @@ mod tests {
             at: Point::new(0.0, 10.0),
             name: "[redacted]".into(),
             rotation: 0,
+            attrs: Default::default(),
         });
         let l2 = Entity::NetLabel(NetLabel {
             id: Uuid::new_v4(),
             at: Point::new(20.0, 10.0),
             name: "0V".into(),
             rotation: 0,
+            attrs: Default::default(),
         });
         let sheet = sheet_with(vec![wire(&[(0.0, 10.0), (20.0, 10.0)]), l1, l2]);
         let diags = run(&sheet);
@@ -1065,6 +1067,7 @@ mod tests {
             at: Point::new(x, y),
             name: name.into(),
             rotation: 0,
+            attrs: Default::default(),
         })
     }
 

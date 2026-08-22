@@ -536,6 +536,28 @@ fn render_wire_numbers(out: &mut String, sheet: &Sheet, symbols: &[SymbolDef]) {
     }
 }
 
+/// 配線注記 (G2)。ワイヤ1本ごとに線径・線色・電線長を、線番の反対側 (横線=下、縦線=右) へ描く。
+/// 位置と文字列は [`crate::wire_note`] が決める (キャンバスと同じ数式)。
+/// **画面の表示クラスとは無関係に常に出力する**: 参考図面ではこれが主情報だから。
+fn render_wire_notes(out: &mut String, sheet: &Sheet) {
+    for note in crate::wire_note::wire_notes(sheet) {
+        let anchor = match note.align {
+            crate::wire_note::NoteAlign::Center => "middle",
+            crate::wire_note::NoteAlign::Left => "start",
+        };
+        text_family_el(
+            out,
+            note.at.x,
+            note.at.y,
+            crate::wire_note::WIRE_NOTE_FONT,
+            "#000",
+            anchor,
+            "monospace",
+            &note.text,
+        );
+    }
+}
+
 /// ハーネス境界 (IEC 61082-1 のグループ囲み)。破線の閉じた多角形と、その左上角の外側に
 /// 置いたハーネス名を描く。配線より先に描いて背面に置く。名前が空なら囲みだけを描く。
 fn render_harnesses(out: &mut String, sheet: &Sheet) {
@@ -759,10 +781,29 @@ fn sheet_to_svg_with_xrefs(
                 );
             }
             Entity::NetLabel(l) => {
-                text_el(&mut out, l.at.x, l.at.y - NET_LABEL_DY, LABEL_FONT, "#000", "start", &l.name);
+                // 方向付きタグ (G3)。attrs["tag"]がある時だけ旗の枠で囲む
+                let tag = crate::net_tag::net_tag(l);
+                match &tag {
+                    Some(t) => {
+                        let _ = write!(
+                            out,
+                            "<polygon points=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+                            polyline_points(&t.points),
+                            n(crate::net_tag::TAG_STROKE)
+                        );
+                        text_el(&mut out, t.text_at.x, t.text_at.y, LABEL_FONT, "#000", "start", &l.name);
+                    }
+                    None => {
+                        text_el(&mut out, l.at.x, l.at.y - NET_LABEL_DY, LABEL_FONT, "#000", "start", &l.name);
+                    }
+                }
                 // シート間クロスリファレンス (IEC 61082-1)。相手がいるラベルだけ脇に添える
                 if let Some(text) = xrefs.get(&l.id) {
-                    let at = crate::xref::xref_text_at(l);
+                    let at = match &tag {
+                        // タグ付きは旗の右端の外へ逃がす (枠と重ねない)
+                        Some(t) => Point::new(t.right + crate::xref::XREF_GAP, t.text_at.y),
+                        None => crate::xref::xref_text_at(l),
+                    };
                     text_family_el(
                         &mut out,
                         at.x,
@@ -787,6 +828,7 @@ fn sheet_to_svg_with_xrefs(
         }
     }
     render_wire_numbers(&mut out, sheet, symbols);
+    render_wire_notes(&mut out, sheet);
     out.push_str("</svg>\n");
     out
 }
@@ -1242,7 +1284,13 @@ mod tests {
     fn svg_omits_wire_number_for_unnumbered_nets() {
         let sheet = sheet_with(vec![numbered_wire(&[(50.0, 100.0), (90.0, 100.0)], None)]);
         let svg = sheet_to_svg(&sheet, &builtin_symbols());
-        assert!(!svg.contains("monospace"), "{svg}");
+        // 配線注記 (線径・線色) は別の文字なので、線番の文字サイズで絞って探す
+        let size = format!("font-size=\"{}\"", n(WIRE_NO_FONT));
+        let numbers: Vec<&str> = svg
+            .lines()
+            .filter(|l| l.contains("monospace") && l.contains(&size))
+            .collect();
+        assert!(numbers.is_empty(), "{numbers:?}");
     }
 
     /// テスト用のハーネス境界 (矩形)。
@@ -1338,6 +1386,7 @@ mod tests {
                 at: Point::new(x, y),
                 name: "24V_1".into(),
                 rotation: 0,
+                attrs: Default::default(),
             });
             for e in [w, l] {
                 sheet.entities.insert(e.id(), e);
@@ -1570,5 +1619,124 @@ mod tests {
             svg.contains("<rect x=\"60\" y=\"100\" width=\"65\" height=\"25\""),
             "{svg}"
         );
+    }
+    /// シート1枚に、配線注記の付いたワイヤ1本を置く (横向き)。
+    fn sheet_with_annotated_wire() -> Sheet {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let w = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(50.0, 60.0), Point::new(90.0, 60.0)],
+            color: "white".into(),
+            sq: 0.75,
+            length_m: Some(0.4),
+            part_no: None,
+            net: None,
+        });
+        sheet.entities.insert(w.id(), w);
+        sheet
+    }
+
+    /// Every wire prints its gauge, colour and cut length under the wire, which is what the shop needs to make the harness.
+    /// 全ての配線は線径・線色・電線長を配線の下に印字する(現場が電線を作るのに必要な情報)。
+    #[test]
+    fn svg_annotates_each_wire_with_gauge_colour_and_length() {
+        let svg = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols());
+        let (x, y, _) = texts(&svg)
+            .into_iter()
+            .find(|(_, _, t)| t == "0.75sq 白 0.4m")
+            .expect("配線注記");
+        assert!((x - 70.0).abs() < 1e-9, "代表線分の中点の下: {x}");
+        assert!((y - (60.0 + crate::wire_note::WIRE_NOTE_GAP)).abs() < 1e-9, "配線の下: {y}");
+    }
+
+    /// The wire note is part of the exported drawing itself, so it comes out in SVG and PDF without turning anything on.
+    /// 配線注記は図面そのものの一部なので、何も設定しなくてもSVG・PDFに出る。
+    #[test]
+    fn wire_notes_are_exported_by_default() {
+        let svg = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols());
+        assert!(svg.contains(">0.75sq 白 0.4m<"), "既定で出力に含まれる: {svg}");
+    }
+
+    /// Hiding a class on screen never changes the exported file: the export always draws the whole drawing.
+    /// 画面で表示クラスを消しても出力ファイルは変わらない(出力は常に図面の全部を描く)。
+    #[test]
+    fn export_ignores_screen_only_view_classes() {
+        let a = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols());
+        let b = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols());
+        assert_eq!(a, b, "出力に画面側の表示設定は入り込まない");
+        assert!(a.contains(">0.75sq 白 0.4m<"));
+    }
+
+    /// A wire with no gauge, colour or length is drawn without any note next to it.
+    /// 線径も色も長さも無い配線には、注記が何も付かない。
+    #[test]
+    fn svg_omits_the_note_of_a_bare_wire() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let w = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(50.0, 60.0), Point::new(90.0, 60.0)],
+            color: String::new(),
+            sq: 0.0,
+            length_m: None,
+            part_no: None,
+            net: None,
+        });
+        sheet.entities.insert(w.id(), w);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(!svg.contains("sq "), "注記なし: {svg}");
+    }
+
+    /// ネットラベル1枚のシート (tagを指定できる)。
+    fn sheet_with_net_label(tag: Option<&str>) -> Sheet {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let mut attrs = std::collections::BTreeMap::new();
+        if let Some(t) = tag {
+            attrs.insert("tag".to_string(), t.to_string());
+        }
+        let l = Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 50.0),
+            name: "24V_1".into(),
+            rotation: 0,
+            attrs,
+        });
+        sheet.entities.insert(l.id(), l);
+        sheet
+    }
+
+    /// A net label tagged "right" is drawn as a flag outline pointing right, with the net name inside it.
+    /// タグ「右」のネットラベルは、右を向いた旗の枠として描かれ、ネット名はその中に入る。
+    #[test]
+    fn svg_draws_a_directional_flag_around_a_tagged_net_label() {
+        let svg = sheet_to_svg(&sheet_with_net_label(Some("right")), &builtin_symbols());
+        let polygon = svg
+            .lines()
+            .find(|l| l.trim_start().starts_with("<polygon") && l.contains("100,"))
+            .expect("タグの多角形");
+        assert_eq!(polygon.matches(',').count(), 5, "五角形: {polygon}");
+        let (x, _, _) = texts(&svg)
+            .into_iter()
+            .find(|(_, _, t)| t == "24V_1")
+            .expect("ネット名");
+        assert!(x > 100.0, "文字は枠の内側: {x}");
+        assert!(svg.contains("fill=\"none\""), "枠は塗らない: {svg}");
+    }
+
+    /// A net label with no tag keeps the plain text look, with no outline drawn around it.
+    /// タグの無いネットラベルは従来どおり文字だけで、周りに枠は描かれない。
+    #[test]
+    fn svg_draws_no_outline_for_an_untagged_net_label() {
+        let svg = sheet_to_svg(&sheet_with_net_label(None), &builtin_symbols());
+        assert!(svg.contains(">24V_1<"), "文字は出る");
+        assert!(!svg.contains("<polygon"), "枠は描かない: {svg}");
+    }
+
+    /// An unknown tag value is ignored and the label falls back to plain text rather than breaking the export.
+    /// 知らないタグの値は無視され、出力が壊れるのではなく文字だけの表示に戻る。
+    #[test]
+    fn svg_ignores_an_unknown_tag_value() {
+        let svg = sheet_to_svg(&sheet_with_net_label(Some("diagonal")), &builtin_symbols());
+        assert!(svg.contains(">24V_1<"));
+        assert!(!svg.contains("<polygon"), "{svg}");
     }
 }

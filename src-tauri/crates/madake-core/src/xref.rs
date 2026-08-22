@@ -401,6 +401,7 @@ mod tests {
             at: Point::new(x, y),
             name: name.into(),
             rotation: 0,
+            attrs: Default::default(),
         })
     }
 
@@ -561,6 +562,7 @@ mod tests {
             at: Point::new(100.0, 50.0),
             name: "24V_1".into(),
             rotation: 0,
+            attrs: Default::default(),
         };
         let at = xref_text_at(&l);
         assert!(at.x > 100.0, "ラベルの右に置く: {at:?}");

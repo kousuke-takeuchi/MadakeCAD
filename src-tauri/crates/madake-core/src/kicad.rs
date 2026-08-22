@@ -330,6 +330,7 @@ pub fn import_kicad_sch(
                     at: Point::new(x, y),
                     name: name.to_string(),
                     rotation: (angle.rem_euclid(360.0) as u16) % 360,
+                    attrs: Default::default(),
                 }),
             );
             report.labels += 1;
@@ -383,6 +384,7 @@ pub fn import_kicad_sch(
                     at: Point::new(x, y),
                     name,
                     rotation: 0,
+                    attrs: Default::default(),
                 }),
             );
             report.labels += 1;

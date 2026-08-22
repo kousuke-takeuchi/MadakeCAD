@@ -32,6 +32,12 @@ const wireColors = [
   ["brown", "茶"], ["gray", "灰"], ["pink", "桃"], ["light_blue", "水色"],
 ] as const;
 const sqValues = [0.2, 0.3, 0.5, 0.75, 1.25, 2.0, 3.5, 5.5];
+/** ネットラベルのタグ向き (G3)。空 = 従来どおり文字だけ。 */
+const tagDirs = [
+  ["", "netLabel.tagNone"],
+  ["left", "netLabel.tagLeft"],
+  ["right", "netLabel.tagRight"],
+] as const;
 
 const buf = reactive({
   color: "red",
@@ -45,6 +51,8 @@ const buf = reactive({
   name: "",
   /** ハーネスの備考。 */
   note: "",
+  /** ネットラベルのタグ向き ("" / "left" / "right")。 */
+  tag: "",
 });
 
 /**
@@ -88,6 +96,7 @@ watch(
       buf.value = e.value;
     } else if (e.kind === "net_label") {
       buf.name = e.name;
+      buf.tag = e.attrs?.tag === "left" || e.attrs?.tag === "right" ? e.attrs.tag : "";
     } else if (e.kind === "harness") {
       buf.name = e.name ?? "";
       buf.note = e.note ?? "";
@@ -130,7 +139,15 @@ async function apply() {
   } else if (e.kind === "symbol") {
     entity = { ...e, reference: buf.reference, value: buf.value };
   } else if (e.kind === "net_label") {
-    entity = { ...e, name: buf.name };
+    // タグ向きはattrsに入れる。「なし」はキーごと消して従来の図面と同じ形に戻す
+    const attrs = { ...(e.attrs ?? {}) };
+    if (buf.tag) attrs.tag = buf.tag;
+    else delete attrs.tag;
+    entity = { ...e, name: buf.name, attrs };
+    if ((e.attrs?.tag ?? "") !== buf.tag) {
+      const tag = tagDirs.find(([v]) => v === buf.tag)?.[1] ?? "netLabel.tagNone";
+      ui.log(t("netLabel.tagChangedLog", { name: buf.name.trim(), tag: t(tag) }));
+    }
   } else if (e.kind === "harness") {
     // ハーネスは名前・備考だけを書き換える (囲みの形はキャンバス側の操作で変える)
     const command = harnessUpdateCommand(sheet.id, e, buf.name, buf.note);
@@ -313,6 +330,14 @@ const kindLabel = computed<Record<string, string>>(() => ({
       <div class="prow">
         <span class="plabel">ネット名</span>
         <span class="pvalue"><input v-model="buf.name" class="bare" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("netLabel.tagRow") }}</span>
+        <span class="pvalue" :title="t('netLabel.tagHint')">
+          <select v-model="buf.tag" class="bare" @change="apply">
+            <option v-for="[value, key] in tagDirs" :key="value" :value="value">{{ t(key) }}</option>
+          </select>
+        </span>
       </div>
       <div class="prow">
         <span class="plabel">{{ t("xref.propertyLabel") }}</span>

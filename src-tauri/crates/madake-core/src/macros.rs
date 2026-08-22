@@ -1090,6 +1090,7 @@ mod tests {
                 at: Point::new(80.0, 50.0),
                 name: "24V".into(),
                 rotation: 0,
+                attrs: Default::default(),
             }),
         );
 

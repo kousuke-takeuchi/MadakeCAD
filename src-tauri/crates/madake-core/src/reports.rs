@@ -360,6 +360,7 @@ mod tests {
             at: Point::new(0.0, 0.0),
             name: "24V".into(),
             rotation: 0,
+            attrs: Default::default(),
         });
         for e in [
             resistor("R1", 20.0, 0.0),

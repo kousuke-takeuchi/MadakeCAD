@@ -67,6 +67,7 @@ fn label(name: &str, x: f64, y: f64) -> Entity {
         at: Point::new(x, y),
         name: name.into(),
         rotation: 0,
+        attrs: Default::default(),
     })
 }
 

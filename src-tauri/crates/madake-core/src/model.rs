@@ -431,6 +431,10 @@ pub struct NetLabel {
     pub name: String,
     #[serde(default)]
     pub rotation: u16,
+    /// 表示の追加指定。現状のキーは`tag` (`left`/`right`) で、方向付きタグ形状で描く
+    /// ([`crate::net_tag`])。省略・未知の値なら従来どおり文字だけを描く。
+    #[serde(default)]
+    pub attrs: BTreeMap<String, String>,
 }
 
 /// ハーネス境界 (IEC 61082-1 のグループ囲み)。まとめて製作・購入する電線束の範囲を
@@ -513,6 +517,7 @@ mod tests {
             at: Point::new(1.0, 1.0),
             name: "24V".into(),
             rotation: 0,
+            attrs: Default::default(),
         });
         label.translate(-1.0, -1.0);
         let Entity::NetLabel(l) = &label else { panic!() };

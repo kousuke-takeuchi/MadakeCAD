@@ -451,6 +451,7 @@ mod tests {
                 at: Point::new(x, y),
                 name: "[redacted]".into(),
                 rotation: 0,
+                attrs: Default::default(),
             })
         };
         let sheet = sheet_with(vec![

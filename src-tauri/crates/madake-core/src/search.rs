@@ -477,6 +477,7 @@ mod tests {
             at: Point::new(x, y),
             name: name.into(),
             rotation: 0,
+            attrs: Default::default(),
         })
     }
 

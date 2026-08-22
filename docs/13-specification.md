@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1532 specification clauses** across 5 areas.
+**1568 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -169,6 +169,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Moving a panel sheet moves its panel entities too: outline, duct and footprint move by their top-left corner, and a DIN rail moves along both axes. <sub>`translate_moves_panel_entities`</sub>
 - Panel entities travel as JSON under their own kind tags, so any client can send them. <sub>`panel_entities_have_their_own_json_kind_tags`</sub>
 - Entity::id() returns the inner entity's UUID regardless of the entity kind. <sub>`entity_id_is_uniform_across_kinds`</sub>
+
+### net_tag
+
+- A net label with tag "right" is drawn as a five-cornered flag whose point sticks out to the right. <sub>`tag_right_points_to_the_right`</sub>
+- A net label with tag "left" is drawn as the mirrored flag, with the point on the left. <sub>`tag_left_points_to_the_left`</sub>
+- The tag text always sits inside the flag, and the flag grows with the length of the net name. <sub>`tag_box_follows_the_text_width`</sub>
+- Both tag directions produce a flag of the very same size, so left and right labels line up. <sub>`both_directions_have_the_same_size`</sub>
+- A net label without the tag attribute keeps the plain text look it has always had. <sub>`label_without_tag_attribute_stays_plain_text`</sub>
+- An unknown tag value (a typo, or "up") is ignored and the label falls back to plain text instead of failing. <sub>`unknown_tag_value_is_ignored`</sub>
 
 ### Netlist extraction
 
@@ -399,6 +408,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A DIN rail is drawn as a horizontal band centred on its mounting line. <sub>`svg_of_a_panel_sheet_draws_the_din_rail`</sub>
 - A footprint is drawn as its outline rectangle with the reference designator and the type number inside. <sub>`svg_of_a_panel_sheet_draws_the_footprint_with_its_reference`</sub>
 - A footprint turned 90 degrees is drawn lying down (its width and height swap). <sub>`svg_draws_a_rotated_footprint_lying_down`</sub>
+- Every wire prints its gauge, colour and cut length under the wire, which is what the shop needs to make the harness. <sub>`svg_annotates_each_wire_with_gauge_colour_and_length`</sub>
+- The wire note is part of the exported drawing itself, so it comes out in SVG and PDF without turning anything on. <sub>`wire_notes_are_exported_by_default`</sub>
+- Hiding a class on screen never changes the exported file: the export always draws the whole drawing. <sub>`export_ignores_screen_only_view_classes`</sub>
+- A wire with no gauge, colour or length is drawn without any note next to it. <sub>`svg_omits_the_note_of_a_bare_wire`</sub>
+- A net label tagged "right" is drawn as a flag outline pointing right, with the net name inside it. <sub>`svg_draws_a_directional_flag_around_a_tagged_net_label`</sub>
+- A net label with no tag keeps the plain text look, with no outline drawn around it. <sub>`svg_draws_no_outline_for_an_untagged_net_label`</sub>
+- An unknown tag value is ignored and the label falls back to plain text rather than breaking the export. <sub>`svg_ignores_an_unknown_tag_value`</sub>
 
 ### Symbol library
 
@@ -593,6 +609,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Without a sheet id every sheet of the project is numbered in sheet order with numbers unique across the whole project. <sub>`numbering_without_a_sheet_covers_the_whole_project`</sub>
 - A single wire number can be edited directly, and undo puts the previous value back. <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - The renumber command is plain JSON ({"type":"renumber_wires","mode":"append","start":1}), so AI agents and the CLI can send it. <sub>`renumber_command_is_plain_json`</sub>
+
+### wire_note
+
+- A wire that has a gauge, a colour and a cut length is annotated "0.75sq 白 0.4m" on the drawing. <sub>`note_shows_gauge_colour_and_length`</sub>
+- A missing attribute is simply left out of the note, so a wire without a length reads "0.75sq 白". <sub>`note_omits_missing_attributes`</sub>
+- A wire with no gauge, no colour and no length gets no note at all instead of an empty one. <sub>`wire_without_attributes_has_no_note`</sub>
+- A colour name the drawing does not know is printed as it was typed, so nothing is lost. <sub>`unknown_colour_names_are_printed_unchanged`</sub>
+- The note of a horizontal wire sits below the wire, on the opposite side from its wire number. <sub>`horizontal_wire_note_sits_below_the_wire`</sub>
+- The note of a vertical wire sits to the right of the wire, on the opposite side from its wire number. <sub>`vertical_wire_note_sits_right_of_the_wire`</sub>
+- Every wire gets its own note, unlike the wire number which is drawn once per net. <sub>`each_wire_gets_its_own_note`</sub>
+- On a bent wire the note is placed on the longest straight run, where there is room to read it. <sub>`note_is_placed_on_the_longest_straight_run`</sub>
 
 ### xref
 
@@ -1287,6 +1314,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - shows the Japanese name when the UI is Japanese and the English name otherwise <sub>`macroName`</sub>
 - falls back to the English name when a macro has no Japanese name <sub>`macroName`</sub>
 
+### netTag
+
+- draws a tag pointing right as a five-cornered flag with its point on the right <sub>`netTag`</sub>
+- draws a tag pointing left as the mirrored flag, with its point on the left <sub>`netTag`</sub>
+- keeps the text inside the flag and widens the flag for a longer net name <sub>`netTag`</sub>
+- gives both directions the same flag size <sub>`netTag`</sub>
+- leaves a label without the tag attribute as plain text <sub>`netTag`</sub>
+- ignores an unknown tag value instead of breaking <sub>`netTag`</sub>
+
 ### panel
 
 - gives a footprint the rectangle of its own size <sub>`panel layout geometry`</sub>
@@ -1442,6 +1478,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - panning moves the view in screen pixels <sub>`Viewport`</sub>
 - snapping rounds to the 2.5 mm grid by default <sub>`Viewport`</sub>
 - zoom is clamped to sane bounds <sub>`Viewport`</sub>
+
+### wireNotes
+
+- annotates a wire with its gauge, colour and cut length <sub>`wireNoteText`</sub>
+- leaves out attributes the wire does not have <sub>`wireNoteText`</sub>
+- gives a wire with no attributes no note at all <sub>`wireNoteText`</sub>
+- prints an unknown colour name exactly as it was typed <sub>`wireNoteText`</sub>
+- places the note of a horizontal wire below the wire, opposite its wire number <sub>`wireNoteLabels`</sub>
+- places the note of a vertical wire to the right of the wire, opposite its wire number <sub>`wireNoteLabels`</sub>
+- annotates every wire, unlike the wire number which is drawn once per net <sub>`wireNoteLabels`</sub>
+- puts the note on the longest straight run of a bent wire <sub>`wireNoteLabels`</sub>
+- skips wires that carry no attributes <sub>`wireNoteLabels`</sub>
 
 ### wireNumbers
 

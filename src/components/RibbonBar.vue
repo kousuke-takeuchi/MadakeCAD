@@ -4,7 +4,7 @@ import {
   Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileSpreadsheet, FileText,
   FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid, LayoutPanelTop, LayoutTemplate, ListOrdered,
   ListChecks,
-  Move, MoveRight, Network, Package, Pencil, Route, Scissors, Shapes, ShieldCheck, SquareDashed,
+  Move, MoveRight, Network, Package, Pencil, Route, Ruler, Scissors, Shapes, ShieldCheck, SquareDashed,
   Table2, Tag, Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
@@ -54,7 +54,8 @@ const activeTab = ref<TabId>("schematic");
 // 表示タブ: 表示クラストグル (レイヤ、spec §4)。3個ずつの縦列に分ける
 const viewIcons: Record<ViewClass, LucideIcon> = {
   wires: Route, symbols: Cpu, refs: Tag, net_labels: Hash, wire_numbers: ListOrdered,
-  harness: SquareDashed, panel: LayoutPanelTop, texts: Type, frame: Frame, grid: Grid3x3,
+  wire_notes: Ruler, harness: SquareDashed, panel: LayoutPanelTop, texts: Type,
+  frame: Frame, grid: Grid3x3,
 };
 const viewClassColumns = Array.from(
   { length: Math.ceil(VIEW_CLASSES.length / 3) },
@@ -529,14 +530,15 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
                 :key="c.id"
                 class="ribbon-small view-toggle"
                 :class="{ on: ui.isClassVisible(c.id) }"
+                :title="c.hintKey ? t(c.hintKey) : undefined"
                 @click="ui.toggleViewClass(c.id)"
               >
                 <component :is="viewIcons[c.id]" :size="13" class="small-icon" />
-                {{ c.label }}
+                {{ t(c.labelKey) }}
               </button>
             </div>
           </div>
-          <div class="ribbon-group-label">表示クラス ▾</div>
+          <div class="ribbon-group-label">{{ t("view.groupLabel") }} ▾</div>
         </div>
       </template>
       <div v-else class="ribbon-placeholder">

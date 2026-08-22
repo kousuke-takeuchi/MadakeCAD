@@ -668,6 +668,7 @@ fn build_ladder_sheet(
         at: Point::new(LADDER_BUS_X_MM, bus_top),
         name: LADDER_RAIL_NET.into(),
         rotation: 0,
+        attrs: Default::default(),
     }));
 
     for (i, row) in rows.iter().enumerate().take(n) {

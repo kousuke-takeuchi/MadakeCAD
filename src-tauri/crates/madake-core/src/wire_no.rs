@@ -269,6 +269,7 @@ mod tests {
             at: Point::new(0.0, 20.0),
             name: "[redacted]".into(),
             rotation: 0,
+            attrs: Default::default(),
         });
         let (mut engine, sid, ids) = engine_with(vec![
             wire(&[(0.0, 10.0), (20.0, 10.0)], None),

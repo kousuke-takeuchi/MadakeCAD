@@ -415,6 +415,7 @@ mod tests {
             at: Point::new(0.0, 10.0),
             name: "[redacted]".into(),
             rotation: 0,
+            attrs: Default::default(),
         });
         for e in [w1, w2, label] {
             sheet.entities.insert(e.id(), e);
@@ -442,12 +443,14 @@ mod tests {
             at: Point::new(0.0, 10.0),
             name: "48-P1".into(),
             rotation: 0,
+            attrs: Default::default(),
         });
         let l2 = Entity::NetLabel(NetLabel {
             id: Uuid::new_v4(),
             at: Point::new(100.0, 100.0),
             name: "48-P1".into(),
             rotation: 0,
+            attrs: Default::default(),
         });
         for e in [w1, w2, j, w3, l1, l2] {
             sheet.entities.insert(e.id(), e);
@@ -549,6 +552,7 @@ mod tests {
             at: Point::new(0.0, 0.0),
             name: "[redacted]".into(),
             rotation: 0,
+            attrs: Default::default(),
         });
         let plain = wire(&[(0.0, 50.0), (10.0, 50.0)]);
         let plain_id = plain.id();

@@ -24,7 +24,7 @@ describe("entityViewClass", () => {
     }
   });
 
-  // ja: VIEW_CLASSESは全クラスを一意に列挙する(線番・ハーネス・盤レイアウトを加えて10クラス)
+  // ja: VIEW_CLASSESは全クラスを一意に列挙する(線番・配線注記・ハーネス・盤レイアウトを加えて11クラス)
   it("VIEW_CLASSES enumerates every class exactly once", () => {
     expect(VIEW_CLASSES.map((c) => c.id)).toEqual([
       "wires",
@@ -32,25 +32,31 @@ describe("entityViewClass", () => {
       "refs",
       "net_labels",
       "wire_numbers",
+      "wire_notes",
       "harness",
       "panel",
       "texts",
       "frame",
       "grid",
     ]);
-    expect(VIEW_CLASSES).toHaveLength(10);
+    expect(VIEW_CLASSES).toHaveLength(11);
     for (const c of VIEW_CLASSES) {
-      expect(c.label.length).toBeGreaterThan(0);
+      expect(c.labelKey.startsWith("view.")).toBe(true);
     }
   });
 });
 
 describe("view class visibility", () => {
-  // ja: 表示クラスは初期状態で全て表示ONになっている(線番・ハーネスも最初から見える)
+  // ja: 表示クラスは初期状態で全て表示ONになっている(線番・配線注記・ハーネスも最初から見える)
   it("shows every view class, including wire numbers and harnesses, until it is switched off", () => {
     setActivePinia(createPinia());
     const ui = useUiStore();
     for (const c of VIEW_CLASSES) expect(ui.isClassVisible(c.id), c.id).toBe(true);
+    ui.toggleViewClass("wire_notes");
+    expect(ui.isClassVisible("wire_notes")).toBe(false);
+    expect(ui.isClassVisible("wires")).toBe(true);
+    ui.toggleViewClass("wire_notes");
+    expect(ui.isClassVisible("wire_notes")).toBe(true);
     ui.toggleViewClass("wire_numbers");
     expect(ui.isClassVisible("wire_numbers")).toBe(false);
     expect(ui.isClassVisible("wires")).toBe(true);

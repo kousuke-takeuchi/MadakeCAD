@@ -12,6 +12,7 @@ pub mod io;
 pub mod kicad;
 pub mod macros;
 pub mod model;
+pub mod net_tag;
 pub mod netlist;
 pub mod ngspice;
 pub mod panel;
@@ -33,12 +34,15 @@ pub mod terminal_diagram;
 pub mod tidy;
 pub mod verify;
 pub mod wire_no;
+pub mod wire_note;
 pub mod xref;
 
 pub use command::{Command, EditOrigin, Engine, Patch, PatchOp, Reverted};
 pub use geometry::Point;
 pub use model::*;
 pub use wire_no::RenumberMode;
+pub use net_tag::{net_tag, NetTag, TagDir};
+pub use wire_note::{wire_note_text, wire_notes, WireNote};
 pub use block::{block_symbol, BLOCK_SYMBOL_ID};
 pub use symbol::{
     builtin_symbols, dynamic_symbol, instance_symbol_def, resolve_symbol, sheet_symbol_defs, DefIndex,

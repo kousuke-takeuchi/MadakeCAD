@@ -36,7 +36,9 @@ import {
 } from "./panel";
 import { agentRgba, panelTheme, theme, wireColorScreen } from "./theme";
 import { WIRE_NO_FONT, wireNumberLabels } from "./wireNumbers";
-import { XREF_FONT, xrefTextAt } from "./xref";
+import { WIRE_NOTE_FONT, wireNoteLabels } from "./wireNotes";
+import { TAG_FONT, netTag } from "./netTag";
+import { XREF_FONT, XREF_GAP, xrefTextAt } from "./xref";
 import {
   CONTACT_MAP_FONT,
   coilLocationAt,
@@ -639,6 +641,23 @@ function drawWireNumbers(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: She
 }
 
 /**
+ * 配線注記 (G2) を描く。位置は wireNoteLabels が決める (ワイヤごとに最長線分の中点、
+ * 線番の反対側=横線は下・縦線は右へ2.5mm)。Rust側 wire_note.rs / svg.rs と同一ルール。
+ */
+function drawWireNotes(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet) {
+  const labels = wireNoteLabels(sheet);
+  if (labels.length === 0) return;
+  ctx.fillStyle = theme.wireNote;
+  ctx.font = `${Math.max(8, WIRE_NOTE_FONT * vp.scale)}px monospace`;
+  for (const label of labels) {
+    const s = vp.toScreen(label.at);
+    ctx.textAlign = label.align === "center" ? "center" : "left";
+    ctx.fillText(label.text, s.x, s.y);
+  }
+  ctx.textAlign = "left";
+}
+
+/**
  * ハーネス境界 (IEC 61082-1) を描く。破線の閉じた多角形+左上角の外側にハーネス名。
  * Rust側 svg.rs の render_harnesses と同一ルール (破線3mm/間隔2mm、名前は右へ1mm・上へ1mm)。
  * 配線より先に描いて背面に置く。
@@ -856,15 +875,35 @@ export function renderSheet(
       ctx.arc(s.x, s.y, Math.max(2, 0.6 * vp.scale), 0, Math.PI * 2);
       ctx.fill();
     } else if (e.kind === "net_label") {
-      const s = vp.toScreen(e.at);
+      // 方向付きタグ (G3)。attrs.tagがある時だけ旗の枠で囲む (Rust側 net_tag.rs と同形)
+      const tag = netTag(e);
       ctx.fillStyle = theme.annotation;
-      ctx.font = `${Math.max(9, 2.5 * vp.scale)}px monospace`;
+      ctx.font = `${Math.max(9, TAG_FONT * vp.scale)}px monospace`;
       ctx.textAlign = "left";
-      ctx.fillText(e.name, s.x, s.y - 2);
+      if (tag) {
+        ctx.strokeStyle = theme.annotation;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        tag.points.forEach((p, i) => {
+          const t = vp.toScreen(p);
+          if (i === 0) ctx.moveTo(t.x, t.y);
+          else ctx.lineTo(t.x, t.y);
+        });
+        ctx.closePath();
+        ctx.stroke();
+        const t = vp.toScreen(tag.textAt);
+        ctx.fillText(e.name, t.x, t.y);
+      } else {
+        const s = vp.toScreen(e.at);
+        ctx.fillText(e.name, s.x, s.y - 2);
+      }
       // シート間クロスリファレンス (IEC 61082-1)。相手のいるラベルだけ右脇に添える
       const xref = opts.xrefs?.get(e.id);
       if (xref) {
-        const at = vp.toScreen(xrefTextAt(e));
+        // タグ付きは旗の右端の外へ逃がす (枠と重ねない)
+        const at = vp.toScreen(
+          tag ? { x: tag.right + XREF_GAP, y: tag.textAt.y } : xrefTextAt(e),
+        );
         ctx.fillStyle = theme.xref;
         ctx.font = `${Math.max(8, XREF_FONT * vp.scale)}px monospace`;
         ctx.fillText(xref, at.x, at.y);
@@ -880,6 +919,8 @@ export function renderSheet(
 
   // 線番 (表示クラス "wire_numbers")。SVG出力と同じ位置・等幅フォントで描く
   if (!hidden.has("wire_numbers")) drawWireNumbers(ctx, vp, sheet);
+  // 配線注記 (表示クラス "wire_notes")。画面では消せるが、SVG/PDF出力には必ず出る
+  if (!hidden.has("wire_notes")) drawWireNotes(ctx, vp, sheet);
 
   // エージェント編集オーバーレイ(図面の上、クロスヘアの下)
   if (opts.agent) drawAgentOverlay(ctx, vp, opts.agent);

@@ -41,8 +41,18 @@
 
 ### Task 3: G2 配線注記+G3 タグ形状
 
-- [ ] Step 1 (red): Rust: 注記テキスト生成(書式・色名変換・欠落属性の省略)/代表位置(線番と反対側)/表示クラス10/SVG出力/タグ形状の五角形ジオメトリ(左右)/従来ラベルとの互換
-- [ ] Step 2 (green): SVG+キャンバス実装(共有数式)。表示タブ・プロパティ(タグ向き)配線。実機確認+コミット
+- [x] Step 1 (red): Rust: 注記テキスト生成(書式・色名変換・欠落属性の省略)/代表位置(線番と反対側)/表示クラス10/SVG出力/タグ形状の五角形ジオメトリ(左右)/従来ラベルとの互換
+- [x] Step 2 (green): SVG+キャンバス実装(共有数式)。表示タブ・プロパティ(タグ向き)配線。実機確認+コミット
+
+  実装メモ: `madake-core/src/wire_note.rs`(`{sq}sq {色} {長さ}m`の生成+代表位置。色は英語名→日本語の
+  変換表で、未知の色名はそのまま)、`madake-core/src/net_tag.rs`(`NetLabel.attrs["tag"]`=`left`/`right`の
+  五角形グリフ。枠幅は`tidy::text_width`×1.1+余白1mm)。SVGは`render_wire_notes`とネットラベル分岐で描画し、
+  **配線注記は表示クラスに関わらず常に出力**する(参考図面の主情報)。タグ付きラベルのXRefは旗の右端の外へ逃がす。
+  キャンバス側は同じ数式の`canvas/wireNotes.ts`/`canvas/netTag.ts`、色トークンは`theme.wireNote`。
+  表示クラスは11個になり、リボンのラベルをi18n化(`view.*`)。プロパティのネットラベルに「タグ形状」
+  (なし/左/右→`update_entity`)。`NetLabel`に`attrs`(serde default)を追加。既存ファイルはそのまま読める。
+  **未了**: `MadakeCAD.pen`へのデザイン反映(Pen.appのMCPが`.pen`スキーマを返さず`execute`を書けないため。
+  代わりに`docs/internal/design-system.md` §2.1/§6へ配線注記・タグ形状の規定を追記済み)。
 
 ### Task 4: G4 テキスト装飾+第3スロット
 

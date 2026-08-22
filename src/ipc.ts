@@ -63,6 +63,8 @@ export interface NetLabel {
   at: Point;
   name: string;
   rotation: number;
+  /** 表示の追加指定。`tag`(`left`/`right`)で方向付きタグ形状で描く (canvas/netTag.ts)。 */
+  attrs?: Record<string, string>;
 }
 
 export interface TextEntity {

@@ -898,5 +898,28 @@
   "leftPanel": {
     "project": "Project",
     "agent": "Agent"
+  },
+  "view": {
+    "groupLabel": "View classes",
+    "wires": "Wires",
+    "symbols": "Symbols",
+    "refs": "Designators",
+    "netLabels": "Net labels",
+    "wireNumbers": "Wire numbers",
+    "wireNotes": "Wire notes",
+    "harness": "Harness",
+    "panel": "Panel layout",
+    "texts": "Notes",
+    "frame": "Drawing frame",
+    "grid": "Grid",
+    "wireNotesHint": "Gauge, colour and cut length printed along every wire. Always exported to SVG/PDF; this toggle only hides it on screen."
+  },
+  "netLabel": {
+    "tagRow": "Tag shape",
+    "tagNone": "None (plain text)",
+    "tagLeft": "Flag pointing left",
+    "tagRight": "Flag pointing right",
+    "tagHint": "Draws the net label as a directional flag, so the reader sees at a glance which way the signal goes.",
+    "tagChangedLog": "Net label {name}: tag shape set to {tag}"
   }
 }

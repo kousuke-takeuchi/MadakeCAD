@@ -898,5 +898,28 @@
   "leftPanel": {
     "project": "プロジェクト",
     "agent": "エージェント"
+  },
+  "view": {
+    "groupLabel": "表示クラス",
+    "wires": "配線",
+    "symbols": "シンボル",
+    "refs": "参照記号",
+    "netLabels": "ネットラベル",
+    "wireNumbers": "線番",
+    "wireNotes": "配線注記",
+    "harness": "ハーネス",
+    "panel": "盤レイアウト",
+    "texts": "注記",
+    "frame": "図枠",
+    "grid": "グリッド",
+    "wireNotesHint": "配線ごとの線径・線色・電線長の注記。SVG/PDFには常に出力され、このトグルは画面表示だけを消します。"
+  },
+  "netLabel": {
+    "tagRow": "タグ形状",
+    "tagNone": "なし (文字だけ)",
+    "tagLeft": "左向きの旗",
+    "tagRight": "右向きの旗",
+    "tagHint": "ネットラベルを方向付きの旗で描きます。信号がどちら向きかが一目で分かります。",
+    "tagChangedLog": "ネットラベル {name}: タグ形状を {tag} にしました"
   }
 }
