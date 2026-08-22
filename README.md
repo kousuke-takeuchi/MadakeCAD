@@ -42,7 +42,7 @@ and verification grounded in a real circuit solver (ngspice).
 - ✅ **Solver-grounded verification** — ERC plus electrical checks (reachability, ampacity, voltage drop, fuse rating) judged from an actual ngspice DC solution
 - ⚡ **DC simulation** — net voltages, component currents/power, open-switch what-if analysis
 - 🗄️ **Parts database** — local SQLite master with ratings, procurement links, and a wire part master; place parts with ratings applied automatically
-- 🤖 **AI assistant built in** — chat drafts and edits your drawing via MCP; every AI turn is undoable, with live edit-region highlighting
+- 🤖 **AI assistant built in** — chat drafts and edits your drawing via MCP, knows the JIS/IEC drafting conventions, and verifies its own work (ERC → fix → re-verify) before reporting back; every AI turn is undoable and never swallows your manual edits
 - 🔌 **Automate everything** — MCP server, REST API + SSE, and a `madake` CLI, all driving the same command engine
 
 ## Quick Start
@@ -72,7 +72,7 @@ Read in order — files are numbered:
 | 06 | [Verification & Simulation](docs/06-verification-simulation.md) | ERC, electrical checks, DC analysis |
 | 07 | [Parts Database](docs/07-parts-database.md) | Part master, ratings, procurement |
 | 08 | [Import & Export](docs/08-import-export.md) | KiCad import, file formats |
-| 09 | [AI Assistant](docs/09-ai-assistant.md) | Chat drafting, per-turn undo, providers |
+| 09 | [AI Assistant](docs/09-ai-assistant.md) | Chat drafting, standards knowledge, verification loop, templates, turn revert |
 | 10 | [Automation & APIs](docs/10-automation-api.md) | MCP tools, REST API, CLI |
 | 11 | [Mechanical Integration](docs/11-mechanical-integration.md) | FreeCAD linkage |
 | 12 | [Roadmap](docs/12-roadmap.md) | Milestones M1–M6 |
@@ -90,7 +90,7 @@ Every edit from every entry point is an undoable command against a single engine
 
 ## Status & Roadmap
 
-**Alpha.** Milestones M1 (foundation) and M2 (reference-drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references) are essentially complete, and M4 phase 1 (terminal charts + the extended report set) has landed; see the [roadmap](docs/12-roadmap.md) for M3 (AI-first drafting) through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
+**Alpha.** Milestones M1 (foundation) and M2 (reference-drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references) are essentially complete, and M3 phase 1 (standards knowledge, self-verification loop, safe turn revert, start templates) and M4 phase 1 (terminal charts + the extended report set) have landed; see the [roadmap](docs/12-roadmap.md) for the rest of M3 through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
 
 ## Contributing
 
