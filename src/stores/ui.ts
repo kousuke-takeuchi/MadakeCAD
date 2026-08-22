@@ -4,8 +4,11 @@ import { defineStore } from "pinia";
 import type { ViewClass } from "../canvas/viewClasses";
 import { useChatStore } from "./chat";
 
-/** 左ドックのタブ。"chat" は chat store の panelOpen="expanded" と対で同期する。 */
-export type LeftPanelTab = "project" | "chat";
+/**
+ * 左ドックのタブ。"chat" は chat store の panelOpen="expanded" と対で同期する。
+ * "devices" = デバイスナビゲータ (spec §10)。
+ */
+export type LeftPanelTab = "project" | "devices" | "chat";
 
 export const useUiStore = defineStore("ui", {
   state: () => ({
