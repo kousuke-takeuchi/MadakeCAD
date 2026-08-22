@@ -149,6 +149,21 @@ async fn turn_result(rx: &mut Receiver<ConversationEvent>) -> String {
         .collect()
 }
 
+/// 会話(1本目)のターンID一覧(アシスタント応答の順)。巻き戻し対象の指定に使う。
+fn turn_ids(manager: &AgentManager) -> Vec<Uuid> {
+    manager.conversations()[0]
+        .messages
+        .iter()
+        .filter(|m| m.role == madake_agent::Role::Assistant)
+        .map(|m| m.turn_id)
+        .collect()
+}
+
+/// 会話(1本目)の最新ターンID。
+fn last_turn_id(manager: &AgentManager) -> Uuid {
+    manager.conversations()[0].last_turn().unwrap().turn_id
+}
+
 fn kinds(events: &[AgentEvent]) -> Vec<&'static str> {
     events
         .iter()
@@ -224,11 +239,13 @@ async fn turn_records_applied_revisions_and_emits_turn_applied() {
 
     match events.last() {
         Some(AgentEvent::TurnApplied {
+            turn_id,
             start_revision,
             end_revision,
             start_undo_depth,
             end_undo_depth,
         }) => {
+            assert_eq!(*turn_id, turn.turn_id, "巻き戻し対象のターンIDが載る");
             assert_eq!(*start_revision, turn.applied_revisions.start);
             assert_eq!(*end_revision, turn.applied_revisions.end);
             assert_eq!(*start_undo_depth, turn.applied_undo_depth.start);
@@ -239,8 +256,7 @@ async fn turn_records_applied_revisions_and_emits_turn_applied() {
 
     // 「元に戻す」= このターンのコマンド数だけundo
     let expected_undos = turn.applied_command_count();
-    let assistant_index = 1;
-    let revision = manager.undo_turn(id, assistant_index).expect("undo成功");
+    let revision = manager.undo_turn(id, turn.turn_id).expect("undo成功");
     assert_eq!(doc.undo_calls.load(Ordering::SeqCst), expected_undos);
     assert!(revision > 0);
     assert_eq!(
@@ -287,7 +303,9 @@ async fn undo_turn_counts_stack_growth_not_revision_delta() {
     );
 
     let depth_before = doc.undo_depth.load(Ordering::SeqCst);
-    manager.undo_turn(id, 1).expect("undo成功");
+    manager
+        .undo_turn(id, last_turn_id(&manager))
+        .expect("undo成功");
     assert_eq!(
         doc.undo_calls.load(Ordering::SeqCst),
         stack_growth,
@@ -313,12 +331,12 @@ async fn undo_turn_rejects_targets_that_are_not_the_latest_applied_turn() {
     let mut rx = manager.subscribe();
     let id = manager.send(None, "1回目", None, None).await.unwrap();
     collect_turn(&mut rx).await;
-    let first_turn_index = 1;
+    let first_turn = last_turn_id(&manager);
 
     // 同じ会話で2ターン目(後続ターンに編集がある)
     manager.send(Some(id), "2回目", None, None).await.unwrap();
     collect_turn(&mut rx).await;
-    let err = manager.undo_turn(id, first_turn_index).unwrap_err();
+    let err = manager.undo_turn(id, first_turn).unwrap_err();
     assert!(
         matches!(err, madake_agent::AgentError::NotLatestTurn(_)),
         "{err}"
@@ -326,18 +344,78 @@ async fn undo_turn_rejects_targets_that_are_not_the_latest_applied_turn() {
     assert_eq!(doc.undo_calls.load(Ordering::SeqCst), 0, "undoは呼ばれない");
 
     // 最新ターンは戻せる
-    let latest = manager.conversations()[0].messages.len() - 1;
+    let latest = last_turn_id(&manager);
     manager.undo_turn(id, latest).expect("最新ターンは戻せる");
 
     // ユーザーがUIで編集したあとは、その最新ターンも戻せない
     let id2 = manager.send(Some(id), "3回目", None, None).await.unwrap();
     collect_turn(&mut rx).await;
-    let latest = manager.conversations()[0].messages.len() - 1;
+    let latest = last_turn_id(&manager);
     doc.record_edit();
     let err = manager.undo_turn(id2, latest).unwrap_err();
     assert!(
         matches!(err, madake_agent::AgentError::NotLatestTurn(_)),
         "ターン後のユーザー編集が積まれていたら拒否: {err}"
+    );
+}
+
+/// A turn id keeps pointing at the same turn even after later turns are appended.
+/// ターンIDは後続ターンが積まれても同じターンを指し続ける(添字と違いズレない)。
+#[tokio::test]
+async fn a_turn_id_keeps_addressing_the_same_turn_after_more_turns() {
+    let doc = FakeDoc::new(1);
+    let manager = manager(Arc::clone(&doc), "fake_claude.sh");
+    let mut rx = manager.subscribe();
+    let id = manager.send(None, "1回目", None, None).await.unwrap();
+    collect_turn(&mut rx).await;
+    let first_turn = last_turn_id(&manager);
+
+    manager.send(Some(id), "2回目", None, None).await.unwrap();
+    collect_turn(&mut rx).await;
+    let ids = turn_ids(&manager);
+    assert_eq!(ids.len(), 2, "2ターン分");
+    assert_eq!(ids[0], first_turn, "1ターン目のIDは変わらない");
+    assert_ne!(ids[0], ids[1]);
+
+    // 2ターン目のIDで戻すと、その2ターン目の編集だけが戻る(1ターン目の編集は残る)
+    let second_count = manager.conversations()[0]
+        .turn(ids[1])
+        .unwrap()
+        .applied_command_count();
+    let depth_before = doc.undo_depth.load(Ordering::SeqCst);
+    manager.undo_turn(id, ids[1]).expect("2ターン目を戻す");
+    assert_eq!(doc.undo_calls.load(Ordering::SeqCst), second_count);
+    assert_eq!(
+        doc.undo_depth.load(Ordering::SeqCst),
+        depth_before - second_count,
+        "1ターン目の編集は残る"
+    );
+    assert_eq!(turn_ids(&manager), ids, "ターンIDは巻き戻し後も変わらない");
+}
+
+/// A turn that was already rolled back cannot be rolled back twice.
+/// 既に巻き戻したターンは二重に巻き戻せない(明示エラー)。
+#[tokio::test]
+async fn undo_turn_rejects_an_already_undone_turn() {
+    let doc = FakeDoc::new(1);
+    let manager = manager(Arc::clone(&doc), "fake_claude.sh");
+    let mut rx = manager.subscribe();
+    let id = manager.send(None, "置いて", None, None).await.unwrap();
+    collect_turn(&mut rx).await;
+
+    let turn = last_turn_id(&manager);
+    manager.undo_turn(id, turn).expect("1回目は成功");
+    let calls = doc.undo_calls.load(Ordering::SeqCst);
+
+    let err = manager.undo_turn(id, turn).unwrap_err();
+    assert!(
+        matches!(err, madake_agent::AgentError::TurnNotApplied(t) if t == turn),
+        "{err}"
+    );
+    assert_eq!(
+        doc.undo_calls.load(Ordering::SeqCst),
+        calls,
+        "2回目はundoを呼ばない"
     );
 }
 
@@ -354,7 +432,7 @@ async fn undo_turn_rejects_a_running_turn() {
         .expect("イベントが来ない")
         .unwrap();
 
-    let err = manager.undo_turn(id, 1).unwrap_err();
+    let err = manager.undo_turn(id, last_turn_id(&manager)).unwrap_err();
     assert!(matches!(err, madake_agent::AgentError::Busy), "{err}");
     manager.cancel(id);
 }
@@ -378,9 +456,11 @@ async fn undo_turn_records_partial_progress_when_undo_fails_midway() {
         .applied_command_count();
     assert!(total >= 2, "複数コマンド積まれている前提: {total}");
 
+    let turn = last_turn_id(&manager);
+
     // 1回成功したところで失敗させる
     doc.undo_fails_after.store(1, Ordering::SeqCst);
-    let err = manager.undo_turn(id, 1).unwrap_err().to_string();
+    let err = manager.undo_turn(id, turn).unwrap_err().to_string();
     assert!(err.contains("engine busy"), "{err}");
     assert_eq!(doc.undo_calls.load(Ordering::SeqCst), 1, "成功したのは1回");
     assert_eq!(
@@ -394,7 +474,7 @@ async fn undo_turn_records_partial_progress_when_undo_fails_midway() {
 
     // 復旧後のリトライは残り回数だけ実行する
     doc.undo_fails_after.store(u64::MAX, Ordering::SeqCst);
-    manager.undo_turn(id, 1).expect("リトライ成功");
+    manager.undo_turn(id, turn).expect("リトライ成功");
     assert_eq!(
         doc.undo_calls.load(Ordering::SeqCst),
         total,
@@ -418,13 +498,28 @@ async fn undo_turn_reports_doc_errors_and_unknown_targets() {
     let mut rx = manager.subscribe();
     let id = manager.send(None, "hi", None, None).await.unwrap();
     collect_turn(&mut rx).await;
+    let turn = last_turn_id(&manager);
 
-    assert!(manager.undo_turn(Uuid::new_v4(), 1).is_err(), "未知の会話");
-    assert!(manager.undo_turn(id, 99).is_err(), "範囲外のメッセージ");
-    assert!(manager.undo_turn(id, 0).is_err(), "ユーザー発話は対象外");
+    assert!(
+        matches!(
+            manager.undo_turn(Uuid::new_v4(), turn),
+            Err(madake_agent::AgentError::NoConversation(_))
+        ),
+        "未知の会話"
+    );
+    let unknown = Uuid::new_v4();
+    let err = manager.undo_turn(id, unknown).unwrap_err();
+    assert!(
+        matches!(err, madake_agent::AgentError::UnknownTurn(t) if t == unknown),
+        "未知のターンIDは明示エラー: {err}"
+    );
+    assert!(
+        err.to_string().contains(&unknown.to_string()),
+        "どのターンかがメッセージに出る: {err}"
+    );
 
     *doc.undo_fails.lock().unwrap() = Some("engine busy".to_string());
-    let err = manager.undo_turn(id, 1).unwrap_err().to_string();
+    let err = manager.undo_turn(id, turn).unwrap_err().to_string();
     assert!(err.contains("engine busy"), "{err}");
 }
 

@@ -57,6 +57,9 @@ pub enum AgentEvent {
     /// CLIの出力には存在しない合成イベントで、[`crate::AgentManager`]だけが発行する
     /// (ターン開始/終了時のEngine revision。差が「元に戻す」に必要なundo回数)。
     TurnApplied {
+        /// 適用されたターンの安定ID(`undo_turn`へ渡す対象)
+        #[serde(default)]
+        turn_id: uuid::Uuid,
         start_revision: u64,
         end_revision: u64,
         /// ターン開始/終了時のundoスタック深さ。差が「元に戻す」に必要なundo回数

@@ -20,8 +20,8 @@
 
 ### Task 1: ターン安定ID (madake-agent)
 
-- [ ] Step 1 (red): Rustテスト: ChatMessageにturn_idが付く/undo_turn(turn_id)が該当ターンのみ戻す/旧chat.json(format_version旧)が移行読み込みできる/存在しないturn_idはエラー
-- [ ] Step 2 (green): 実装(format_version++、migration)。フロントの巻き戻しUIをturn_id使用へ。gen_spec→コミット
+- [x] Step 1 (red): Rustテスト: ChatMessageにturn_idが付く/undo_turn(turn_id)が該当ターンのみ戻す/旧chat.json(format_version旧)が移行読み込みできる/存在しないturn_idはエラー
+- [x] Step 2 (green): 実装(format_version 1→2、読み込み時にターン境界からturn_idを採番して移行)。`undo_turn(conversation_id, turn_id)`へ移行し、IPC(`agent_undo_turn`)・Link API(`POST /agent/undo-turn`の`turn_id`)・フロント(chat store/ChatDock)を更新。`TurnApplied`イベントに`turn_id`を追加。既に巻き戻し済みのターンは`TurnNotApplied`、未知IDは`UnknownTurn`で明示エラー
 
 ### Task 2: 編集origin+キャンセルseq (madake-core Engine + agent)
 

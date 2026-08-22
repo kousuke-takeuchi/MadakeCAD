@@ -372,6 +372,115 @@ fn load_chat_defaults_updated_at_for_legacy_files() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// The user prompt and the agent reply of one turn share a single stable turn id.
+/// 1ターンのユーザー発話とエージェント応答には同じターンID(巻き戻しの目印)が付く。
+#[test]
+fn the_two_messages_of_a_turn_share_one_turn_id() {
+    let mut conv = Conversation::new();
+    run_turn(&mut conv, 7, 10);
+
+    let turn_id = conv.messages[0].turn_id;
+    assert!(!turn_id.is_nil(), "ターンIDが採番されること");
+    assert_eq!(
+        conv.messages[1].turn_id, turn_id,
+        "ユーザー発話とアシスタント応答は同じターン"
+    );
+    assert_eq!(
+        conv.turn(turn_id).map(|m| m.role),
+        Some(Role::Assistant),
+        "ターンIDからはアシスタント応答が引ける"
+    );
+}
+
+/// Each turn gets its own turn id, so a turn can be addressed after later turns are appended.
+/// ターンごとに別のターンIDが振られ、後続ターンが積まれても対象を指定できる。
+#[test]
+fn each_turn_gets_its_own_turn_id() {
+    let mut conv = Conversation::new();
+    run_turn(&mut conv, 7, 10);
+    run_turn(&mut conv, 10, 12);
+
+    let first = conv.messages[1].turn_id;
+    let second = conv.messages[3].turn_id;
+    assert_ne!(first, second, "ターンごとに別ID");
+    assert_eq!(conv.turn_index(first), Some(1));
+    assert_eq!(conv.turn_index(second), Some(3));
+    assert_eq!(
+        conv.turn_index(uuid::Uuid::new_v4()),
+        None,
+        "未知のターンIDは見つからない"
+    );
+}
+
+/// A legacy chat file (older format version, no turn ids) loads with turn ids assigned per turn boundary.
+/// 旧フォーマット(ターンID無し)のチャット履歴は、ターン境界からIDを採番して読み込まれる。
+#[test]
+fn load_chat_migrates_legacy_files_by_assigning_turn_ids() {
+    let dir = temp_dir();
+    let path = dir.join("legacy_turns.chat.json");
+    std::fs::write(
+        &path,
+        r#"{"format_version":1,"conversations":[{
+            "id":"6f1b7f2e-6a3a-4a1f-9d4e-2b0c9d5a1e77",
+            "session_id":"sess-1",
+            "model":null,
+            "messages":[
+                {"role":"user","text":"F2を追加","applied_revisions":{"start":3,"end":3}},
+                {"role":"assistant","text":"追加しました","applied_revisions":{"start":3,"end":5},
+                 "applied_undo_depth":{"start":3,"end":5}},
+                {"role":"user","text":"線番を振って","applied_revisions":{"start":5,"end":5}},
+                {"role":"assistant","text":"振りました","applied_revisions":{"start":5,"end":6},
+                 "applied_undo_depth":{"start":5,"end":6}}
+            ]
+        }]}"#,
+    )
+    .unwrap();
+
+    let loaded = load_chat(&path).expect("旧フォーマットも読める");
+    let conv = &loaded[0];
+    assert_eq!(conv.messages.len(), 4, "既存の会話が壊れない");
+    assert_eq!(conv.messages[1].text, "追加しました");
+    assert_eq!(conv.messages[1].applied_command_count(), 2);
+
+    assert!(conv.messages.iter().all(|m| !m.turn_id.is_nil()));
+    assert_eq!(
+        conv.messages[0].turn_id, conv.messages[1].turn_id,
+        "1ターン目の2メッセージは同じID"
+    );
+    assert_eq!(
+        conv.messages[2].turn_id, conv.messages[3].turn_id,
+        "2ターン目の2メッセージは同じID"
+    );
+    assert_ne!(
+        conv.messages[1].turn_id, conv.messages[3].turn_id,
+        "ターンをまたぐと別ID"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Saving chat history stamps the current format version so migrated files are not re-migrated.
+/// チャット履歴の保存は現在のフォーマット版を記録する(移行済みファイルを再移行しない)。
+#[test]
+fn save_chat_stamps_the_current_format_version() {
+    let dir = temp_dir();
+    let path = dir.join("stamped.chat.json");
+    let mut conv = Conversation::new();
+    run_turn(&mut conv, 0, 1);
+    save_chat(&path, &[conv.clone()]).unwrap();
+
+    let raw: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(raw["format_version"], json!(CHAT_FORMAT_VERSION));
+    assert_eq!(
+        raw["conversations"][0]["messages"][0]["turn_id"],
+        json!(conv.messages[0].turn_id.to_string()),
+        "ターンIDが保存される"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// The chat file lives next to the project file as <name>.chat.json.
 /// チャットファイルはプロジェクトの隣に<名前>.chat.jsonとして置かれる。
 #[test]

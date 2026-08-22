@@ -125,7 +125,9 @@ async fn post_import_kicad(
         std::path::Path::new(&body.path),
     )
     .map_err(bad_request)?;
-    Ok(Json(serde_json::json!({ "patch": patch, "report": report })))
+    Ok(Json(
+        serde_json::json!({ "patch": patch, "report": report }),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -169,8 +171,9 @@ async fn post_simulate_op(
         None => engine.project().sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    let result = madake_core::sim::simulate_op(sheet, &sheet_symbol_defs(sheet), &body.open_switches)
-        .map_err(bad_request)?;
+    let result =
+        madake_core::sim::simulate_op(sheet, &sheet_symbol_defs(sheet), &body.open_switches)
+            .map_err(bad_request)?;
     Ok(Json(serde_json::json!(result)))
 }
 
@@ -183,7 +186,9 @@ async fn get_verify(
     // シート指定なし=プロジェクト全体。ネットラベル関連はシートを跨いだ統合ネットで評価する
     let diags = match q.sheet_id {
         Some(id) => {
-            let sheet = project.sheet(id).ok_or_else(|| bad_request("sheet not found"))?;
+            let sheet = project
+                .sheet(id)
+                .ok_or_else(|| bad_request("sheet not found"))?;
             madake_core::verify::verify_sheet(sheet, &sheet_symbol_defs(sheet))
         }
         None => madake_core::verify::verify_project(project),
@@ -235,8 +240,8 @@ async fn post_export_pdf_book(
         cover: body.cover,
     };
     let pages = madake_core::pdf::project_pdf_pages(engine.project(), &options).len();
-    let pdf = madake_core::pdf::export_project_pdf(engine.project(), &options)
-        .map_err(bad_request)?;
+    let pdf =
+        madake_core::pdf::export_project_pdf(engine.project(), &options).map_err(bad_request)?;
     std::fs::write(&body.path, pdf).map_err(bad_request)?;
     Ok(Json(
         serde_json::json!({ "written": body.path, "pages": pages }),
@@ -278,10 +283,7 @@ async fn get_terminal_check(
 ) -> Json<serde_json::Value> {
     let engine = doc.engine.lock().unwrap();
     Json(serde_json::json!(
-        madake_core::terminal_chart::check_terminal_block_in_project(
-            engine.project(),
-            q.entity_id
-        )
+        madake_core::terminal_chart::check_terminal_block_in_project(engine.project(), q.entity_id)
     ))
 }
 
@@ -414,8 +416,8 @@ async fn get_agent_conversations(State(state): State<AgentApi>) -> Json<Vec<Conv
 #[derive(Deserialize)]
 struct UndoTurnBody {
     conversation_id: Uuid,
-    /// 対象のアシスタントメッセージの位置(`conversations`の`messages`添字)。
-    message_index: usize,
+    /// 巻き戻す対象のターンID(`conversations`の`messages[].turn_id`)。
+    turn_id: Uuid,
 }
 
 async fn post_agent_undo_turn(
@@ -424,7 +426,7 @@ async fn post_agent_undo_turn(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let revision = state
         .agent
-        .undo_turn(body.conversation_id, body.message_index)
+        .undo_turn(body.conversation_id, body.turn_id)
         .map_err(bad_request)?;
     Ok(Json(serde_json::json!({ "revision": revision })))
 }
@@ -561,7 +563,9 @@ async fn post_part(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let db = parts.lock().unwrap();
     db.upsert_part(&part).map_err(bad_request)?;
-    Ok(Json(serde_json::json!({ "ok": true, "part_no": part.part_no })))
+    Ok(Json(
+        serde_json::json!({ "ok": true, "part_no": part.part_no }),
+    ))
 }
 
 async fn delete_part(
@@ -577,7 +581,9 @@ async fn get_wire_parts(
     State(parts): State<SharedParts>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let db = parts.lock().unwrap();
-    Ok(Json(serde_json::json!(db.list_wire_parts().map_err(bad_request)?)))
+    Ok(Json(serde_json::json!(db
+        .list_wire_parts()
+        .map_err(bad_request)?)))
 }
 
 async fn post_wire_part(
@@ -605,8 +611,14 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
     });
     let parts_routes = Router::new()
         .route("/api/v1/parts", get(get_parts).post(post_part))
-        .route("/api/v1/parts/{part_no}", axum::routing::delete(delete_part))
-        .route("/api/v1/wire-parts", get(get_wire_parts).post(post_wire_part))
+        .route(
+            "/api/v1/parts/{part_no}",
+            axum::routing::delete(delete_part),
+        )
+        .route(
+            "/api/v1/wire-parts",
+            get(get_wire_parts).post(post_wire_part),
+        )
         .with_state(parts);
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin, _| {

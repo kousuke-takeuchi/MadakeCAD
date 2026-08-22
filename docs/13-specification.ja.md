@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**570仕様項目**。
+全5領域・**578仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -299,7 +299,7 @@
 
 - POST /agent/send はアシスタントのターンを実行し、会話一覧に新しいメッセージが反映される。 <sub>`send_runs_a_turn_and_conversations_reflects_it`</sub>
 - 存在しない会話IDへの送信は400を返し、不正なデータを作らない。 <sub>`send_to_unknown_conversation_is_400`</sub>
-- キャンセルとターン巻き戻しのエンドポイントは、最新の適用済みターンに対して正しく応答する。 <sub>`cancel_and_undo_turn_respond`</sub>
+- キャンセルとターン巻き戻しのエンドポイントはターン安定IDを受け取り、戻せる編集が無いターンは拒否する。 <sub>`cancel_and_undo_turn_respond`</sub>
 - ターンの巻き戻しは、そのターンが行った編集だけを手動編集と同じundo履歴経由で戻す。 <sub>`undo_turn_rolls_back_agent_edits_through_the_command_engine`</sub>
 - GET /agent/events は会話イベントをTauriのagent:eventと同じ形でSSE配信する。 <sub>`events_endpoint_streams_agent_events`</sub>
 - プロジェクトの保存・読込はチャット履歴(.chat.json)を一緒に運ぶ。 <sub>`save_and_load_carry_the_chat_history`</sub>
@@ -357,6 +357,10 @@
 - チャットファイルが無い場合は空の履歴として読み込まれる。 <sub>`load_chat_of_missing_file_is_empty`</sub>
 - 会話は作成時にupdated_atを持ち、ターンごとに進む。 <sub>`updated_at_is_set_on_creation_and_advances_with_the_turn`</sub>
 - updated_atの無い旧チャットファイルは妥当な既定値で読み込まれる。 <sub>`load_chat_defaults_updated_at_for_legacy_files`</sub>
+- 1ターンのユーザー発話とエージェント応答には同じターンID(巻き戻しの目印)が付く。 <sub>`the_two_messages_of_a_turn_share_one_turn_id`</sub>
+- ターンごとに別のターンIDが振られ、後続ターンが積まれても対象を指定できる。 <sub>`each_turn_gets_its_own_turn_id`</sub>
+- 旧フォーマット(ターンID無し)のチャット履歴は、ターン境界からIDを採番して読み込まれる。 <sub>`load_chat_migrates_legacy_files_by_assigning_turn_ids`</sub>
+- チャット履歴の保存は現在のフォーマット版を記録する(移行済みファイルを再移行しない)。 <sub>`save_chat_stamps_the_current_format_version`</sub>
 - チャットファイルはプロジェクトの隣に<名前>.chat.jsonとして置かれる。 <sub>`chat_path_sits_next_to_project_file`</sub>
 
 ### エージェントマネージャ (ターン)
@@ -365,6 +369,8 @@
 - 図面を編集したターンは適用revisionを記録し、undo深さ付きのターン適用イベントを発行する。 <sub>`turn_records_applied_revisions_and_emits_turn_applied`</sub>
 - ターンのundo回数はundoスタックの増分基準で、ターン中のユーザーundoが数を狂わせない。 <sub>`undo_turn_counts_stack_growth_not_revision_delta`</sub>
 - 巻き戻せるのは最新の適用済みターンのみで、古い対象は拒否される(安全ガード)。 <sub>`undo_turn_rejects_targets_that_are_not_the_latest_applied_turn`</sub>
+- ターンIDは後続ターンが積まれても同じターンを指し続ける(添字と違いズレない)。 <sub>`a_turn_id_keeps_addressing_the_same_turn_after_more_turns`</sub>
+- 既に巻き戻したターンは二重に巻き戻せない(明示エラー)。 <sub>`undo_turn_rejects_an_already_undone_turn`</sub>
 - 実行中のターンは巻き戻せない。 <sub>`undo_turn_rejects_a_running_turn`</sub>
 - undoが途中で失敗した場合も進んだ分だけ記録し、状態を正直に保つ。 <sub>`undo_turn_records_partial_progress_when_undo_fails_midway`</sub>
 - ドキュメントエラーと不明なターン指定は区別されたエラーとして報告される。 <sub>`undo_turn_reports_doc_errors_and_unknown_targets`</sub>
@@ -615,6 +621,7 @@
 - id無しのtool_use_finishedは同名の実行中チップへ対応付けられる <sub>`chat store: applyAgentEvent`</sub>
 - errorイベントはメッセージにエラーを付与し、ストリーミングを解除する <sub>`chat store: applyAgentEvent`</sub>
 - turn_appliedでrevision範囲を記録し、適用済みとして扱う <sub>`chat store: applyAgentEvent`</sub>
+- turn_appliedはターンの安定IDを載せ、「元に戻す」の対象指定に使える <sub>`chat store: applyAgentEvent`</sub>
 - turn_appliedにundo深さがあれば正確な編集件数を記録する <sub>`chat store: applyAgentEvent`</sub>
 - イベントを畳み込んだ会話はupdated_atが進む(履歴の最新順に反映) <sub>`chat store: applyAgentEvent`</sub>
 - 完了後の新しいデルタは新しいターンを開始する <sub>`chat store: applyAgentEvent`</sub>
@@ -632,7 +639,8 @@
 - 採番前のcancelは採番後にサーバーへ中断を送る <sub>`chat store: アクション`</sub>
 - cancel APIが失敗してもストリーミング解除は完了する <sub>`chat store: アクション`</sub>
 - 会話が無い状態のcancelは何もせず落ちない <sub>`chat store: アクション`</sub>
-- undoTurnはAPIを呼び、適用済み表示を取り下げる <sub>`chat store: アクション`</sub>
+- undoTurnはターン安定IDでAPIを呼び、適用済み表示を取り下げる <sub>`chat store: アクション`</sub>
+- 会話に無いターンIDのundoTurnはAPIを呼ばない <sub>`chat store: アクション`</sub>
 - undoTurnのサーバー拒否は呼び出し元へ投げられ、適用済み表示は変わらない <sub>`chat store: アクション`</sub>
 - 採番前(local-)の会話ではundoTurn APIを呼ばない <sub>`chat store: アクション`</sub>
 - loadConversationsはRust表現を表示用モデルへ正規化する <sub>`chat store: アクション`</sub>

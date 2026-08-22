@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**570 specification clauses** across 5 areas.
+**578 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -299,7 +299,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - POST /agent/send runs an assistant turn and the conversation list reflects the new messages. <sub>`send_runs_a_turn_and_conversations_reflects_it`</sub>
 - Sending to a non-existent conversation id returns 400 instead of creating garbage. <sub>`send_to_unknown_conversation_is_400`</sub>
-- Cancel and undo-turn endpoints respond correctly for the latest applied turn. <sub>`cancel_and_undo_turn_respond`</sub>
+- Cancel and undo-turn endpoints take a stable turn id and reject turns with nothing to roll back. <sub>`cancel_and_undo_turn_respond`</sub>
 - Undoing a turn rolls back exactly the document edits that the turn produced, via the same undo history as manual edits. <sub>`undo_turn_rolls_back_agent_edits_through_the_command_engine`</sub>
 - GET /agent/events streams conversation events over SSE, in the same shape as the Tauri agent:event. <sub>`events_endpoint_streams_agent_events`</sub>
 - Saving and loading a project carries the chat history alongside (.chat.json). <sub>`save_and_load_carry_the_chat_history`</sub>
@@ -357,6 +357,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Loading chat history when no file exists yields an empty history. <sub>`load_chat_of_missing_file_is_empty`</sub>
 - Conversations get an updated_at timestamp on creation that advances with each turn. <sub>`updated_at_is_set_on_creation_and_advances_with_the_turn`</sub>
 - Legacy chat files without updated_at load with a sensible default. <sub>`load_chat_defaults_updated_at_for_legacy_files`</sub>
+- The user prompt and the agent reply of one turn share a single stable turn id. <sub>`the_two_messages_of_a_turn_share_one_turn_id`</sub>
+- Each turn gets its own turn id, so a turn can be addressed after later turns are appended. <sub>`each_turn_gets_its_own_turn_id`</sub>
+- A legacy chat file (older format version, no turn ids) loads with turn ids assigned per turn boundary. <sub>`load_chat_migrates_legacy_files_by_assigning_turn_ids`</sub>
+- Saving chat history stamps the current format version so migrated files are not re-migrated. <sub>`save_chat_stamps_the_current_format_version`</sub>
 - The chat file lives next to the project file as <name>.chat.json. <sub>`chat_path_sits_next_to_project_file`</sub>
 
 ### Agent manager (turns)
@@ -365,6 +369,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A turn that edits the document records the applied revisions and emits a turn-applied event with the undo depth. <sub>`turn_records_applied_revisions_and_emits_turn_applied`</sub>
 - Turn undo counts are based on undo-stack growth, so user undos during the turn don't corrupt the count. <sub>`undo_turn_counts_stack_growth_not_revision_delta`</sub>
 - Only the latest applied turn may be reverted; older targets are rejected (safety guard). <sub>`undo_turn_rejects_targets_that_are_not_the_latest_applied_turn`</sub>
+- A turn id keeps pointing at the same turn even after later turns are appended. <sub>`a_turn_id_keeps_addressing_the_same_turn_after_more_turns`</sub>
+- A turn that was already rolled back cannot be rolled back twice. <sub>`undo_turn_rejects_an_already_undone_turn`</sub>
 - A running turn cannot be reverted. <sub>`undo_turn_rejects_a_running_turn`</sub>
 - If undo fails midway, the partial progress is recorded so the state stays truthful. <sub>`undo_turn_records_partial_progress_when_undo_fails_midway`</sub>
 - Document errors and unknown turn targets are reported as distinct errors. <sub>`undo_turn_reports_doc_errors_and_unknown_targets`</sub>
@@ -615,6 +621,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - tool completions without an id match the running chip of the same name <sub>`chat store: applyAgentEvent`</sub>
 - an error event marks the message and stops streaming <sub>`chat store: applyAgentEvent`</sub>
 - turn_applied records the revision range and marks the turn applied <sub>`chat store: applyAgentEvent`</sub>
+- turn_applied carries the stable turn id used to address the undo <sub>`chat store: applyAgentEvent`</sub>
 - an undo depth on turn_applied records the exact edit count <sub>`chat store: applyAgentEvent`</sub>
 - folding events advances the conversation's updated_at (newest-first history) <sub>`chat store: applyAgentEvent`</sub>
 - a delta after completion starts a new turn <sub>`chat store: applyAgentEvent`</sub>
@@ -632,7 +639,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - a cancel issued before id assignment is sent to the server once the id arrives <sub>`chat store: アクション`</sub>
 - streaming stops even if the cancel API fails <sub>`chat store: アクション`</sub>
 - cancel with no conversation does nothing and never crashes <sub>`chat store: アクション`</sub>
-- undoTurn calls the API and withdraws the applied badge <sub>`chat store: アクション`</sub>
+- undoTurn calls the API with the stable turn id and withdraws the applied badge <sub>`chat store: アクション`</sub>
+- undoTurn never calls the API for a turn id the conversation does not have <sub>`chat store: アクション`</sub>
 - a server-rejected undoTurn propagates the error and keeps the applied badge <sub>`chat store: アクション`</sub>
 - undoTurn never calls the API for a not-yet-assigned (local-) conversation <sub>`chat store: アクション`</sub>
 - loadConversations normalizes the Rust representation into the display model <sub>`chat store: アクション`</sub>

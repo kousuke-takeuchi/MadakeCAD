@@ -60,7 +60,11 @@ impl AppSettings {
             None => Some(path),
         });
         let language = self.language.trim().to_ascii_lowercase();
-        self.language = if language.is_empty() { "en".into() } else { language };
+        self.language = if language.is_empty() {
+            "en".into()
+        } else {
+            language
+        };
         self
     }
 }

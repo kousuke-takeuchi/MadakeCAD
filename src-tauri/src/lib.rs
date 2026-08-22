@@ -114,10 +114,7 @@ fn export_svg(
 }
 
 #[tauri::command]
-fn import_kicad(
-    state: State<AppState>,
-    path: String,
-) -> Result<serde_json::Value, String> {
+fn import_kicad(state: State<AppState>, path: String) -> Result<serde_json::Value, String> {
     let (patch, report) = madake_mcp::agent::import_kicad_with_chat(
         &state.doc,
         &state.agent,
@@ -165,8 +162,13 @@ fn run_verification(
     let Some(id) = sheet_id else {
         return Ok(madake_core::verify::verify_project(project));
     };
-    let sheet = project.sheet(id).ok_or_else(|| format!("sheet not found: {id}"))?;
-    Ok(madake_core::verify::verify_sheet(sheet, &sheet_symbol_defs(sheet)))
+    let sheet = project
+        .sheet(id)
+        .ok_or_else(|| format!("sheet not found: {id}"))?;
+    Ok(madake_core::verify::verify_sheet(
+        sheet,
+        &sheet_symbol_defs(sheet),
+    ))
 }
 
 #[tauri::command]
@@ -296,16 +298,16 @@ fn agent_list_conversations(state: State<AppState>) -> Vec<Conversation> {
     state.agent.conversations()
 }
 
-/// 指定ターンの編集を巻き戻す。戻り値は巻き戻し後のrevision。
+/// 指定ターン(ターン安定ID)の編集を巻き戻す。戻り値は巻き戻し後のrevision。
 #[tauri::command]
 fn agent_undo_turn(
     state: State<AppState>,
     conversation_id: Uuid,
-    message_index: usize,
+    turn_id: Uuid,
 ) -> Result<u64, String> {
     state
         .agent
-        .undo_turn(conversation_id, message_index)
+        .undo_turn(conversation_id, turn_id)
         .map_err(|e| e.to_string())
 }
 
@@ -332,8 +334,8 @@ fn set_settings(state: State<AppState>, settings: AppSettings) -> Result<AppSett
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let doc = SharedDoc::new(Engine::new(Project::new("無題プロジェクト")));
-    let parts = madake_mcp::open_parts(&madake_core::parts::default_db_path())
-        .unwrap_or_else(|e| {
+    let parts =
+        madake_mcp::open_parts(&madake_core::parts::default_db_path()).unwrap_or_else(|e| {
             eprintln!("部品DBを開けませんでした ({e})。一時DBで継続します");
             let tmp = std::env::temp_dir().join("madake-parts-fallback.sqlite");
             madake_mcp::open_parts(&tmp).expect("一時部品DB")

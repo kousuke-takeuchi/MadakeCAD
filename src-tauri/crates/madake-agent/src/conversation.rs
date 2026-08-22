@@ -18,7 +18,11 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 /// チャット履歴ファイルのフォーマット版(構造変更時に上げる)。
-pub const CHAT_FORMAT_VERSION: u32 = 1;
+///
+/// - `1`: 初版
+/// - `2`: [`ChatMessage::turn_id`](ターン安定ID)を追加。旧版は読み込み時に
+///   ターン境界からIDを採番して移行する([`assign_missing_turn_ids`])
+pub const CHAT_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -109,6 +113,16 @@ pub struct ToolCall {
 /// 会話中の1メッセージ。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChatMessage {
+    /// このメッセージが属するターンのID。
+    ///
+    /// 1ターン(ユーザー発話 + エージェント応答 + そのターンで入った編集)で共通。
+    /// 巻き戻し([`crate::AgentManager::undo_turn`])はこのIDで対象を指す。
+    /// メッセージ添字と違い、後続ターンの追記や履歴移行でズレない。
+    ///
+    /// `format_version`が1のチャット履歴には無いため、読み込み時に
+    /// [`assign_missing_turn_ids`]がターン境界から採番する(nilのまま残らない)。
+    #[serde(default)]
+    pub turn_id: Uuid,
     pub role: Role,
     pub text: String,
     #[serde(default)]
@@ -123,8 +137,9 @@ pub struct ChatMessage {
 }
 
 impl ChatMessage {
-    fn new(role: Role, text: String, state: DocState) -> Self {
+    fn new(turn_id: Uuid, role: Role, text: String, state: DocState) -> Self {
         Self {
+            turn_id,
             role,
             text,
             tool_calls: Vec::new(),
@@ -213,13 +228,24 @@ impl Conversation {
 
     /// ターンを開始する。ユーザー発話と、これから埋めるアシスタント応答を積む。
     ///
-    /// `state`は送信直前のドキュメント状態。
-    pub fn begin_turn(&mut self, prompt: &str, state: DocState) {
+    /// `state`は送信直前のドキュメント状態。戻り値はこのターンの安定ID
+    /// (巻き戻しの対象指定に使う)。2つのメッセージは同じIDを共有する。
+    pub fn begin_turn(&mut self, prompt: &str, state: DocState) -> Uuid {
         self.touch();
-        self.messages
-            .push(ChatMessage::new(Role::User, prompt.to_string(), state));
-        self.messages
-            .push(ChatMessage::new(Role::Assistant, String::new(), state));
+        let turn_id = Uuid::new_v4();
+        self.messages.push(ChatMessage::new(
+            turn_id,
+            Role::User,
+            prompt.to_string(),
+            state,
+        ));
+        self.messages.push(ChatMessage::new(
+            turn_id,
+            Role::Assistant,
+            String::new(),
+            state,
+        ));
+        turn_id
     }
 
     /// ストリーム中のイベントを現在のターンへ反映する。
@@ -284,6 +310,20 @@ impl Conversation {
             .rev()
             .find(|m| m.role == Role::Assistant)
     }
+
+    /// ターンIDに対応するアシスタント応答の位置(無ければ`None`)。
+    ///
+    /// ユーザー発話も同じ`turn_id`を持つが、編集の記録はアシスタント応答側にある。
+    pub fn turn_index(&self, turn_id: Uuid) -> Option<usize> {
+        self.messages
+            .iter()
+            .position(|m| m.turn_id == turn_id && m.role == Role::Assistant)
+    }
+
+    /// ターンIDに対応するアシスタント応答。
+    pub fn turn(&self, turn_id: Uuid) -> Option<&ChatMessage> {
+        self.turn_index(turn_id).map(|i| &self.messages[i])
+    }
 }
 
 /// チャット履歴ファイルの中身。
@@ -324,5 +364,31 @@ pub fn load_chat(path: &Path) -> Result<Vec<Conversation>> {
             supported: CHAT_FORMAT_VERSION,
         });
     }
-    Ok(file.conversations)
+    let mut conversations = file.conversations;
+    // format_version 1にはturn_idが無い(移行)。版が新しくても手編集等で欠けていれば同様に補う
+    assign_missing_turn_ids(&mut conversations);
+    Ok(conversations)
+}
+
+/// `turn_id`を持たないメッセージへ、ターン境界からIDを採番する(旧フォーマットの移行)。
+///
+/// ターンの切れ目は「アシスタント応答(または会話の先頭)の次に来るユーザー発話」。
+/// 同じターンのメッセージには同じIDを与えるので、移行後の履歴でもターン単位の
+/// 巻き戻しがそのまま効く。既にIDを持つメッセージには触れない。
+fn assign_missing_turn_ids(conversations: &mut [Conversation]) {
+    for conversation in conversations {
+        let mut current: Option<Uuid> = None;
+        let mut previous_role: Option<Role> = None;
+        for message in &mut conversation.messages {
+            if message.turn_id.is_nil() {
+                let starts_turn = message.role == Role::User && previous_role != Some(Role::User);
+                message.turn_id = match current {
+                    Some(id) if !starts_turn => id,
+                    _ => Uuid::new_v4(),
+                };
+            }
+            current = Some(message.turn_id);
+            previous_role = Some(message.role);
+        }
+    }
 }

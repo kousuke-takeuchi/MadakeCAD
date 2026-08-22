@@ -20,8 +20,8 @@ const listRef = ref<HTMLDivElement | null>(null);
 const connected = computed(() => store.detect !== null);
 
 /**
- * 「元に戻す」を出せるのは最新の適用済みターンだけ (古いターンはmessage_indexが
- * ずれて別ターンを巻き戻す可能性があるため)。該当なしは-1。
+ * 「元に戻す」を出せるのは最新の適用済みターンだけ (エンジンのundoはLIFOなので、
+ * 後続の編集が上に積まれた古いターンはサーバー側でも拒否される)。該当なしは-1。
  */
 const lastAppliedIndex = computed(() => {
   const messages = store.messages;
@@ -31,7 +31,10 @@ const lastAppliedIndex = computed(() => {
   return -1;
 });
 
-/** 最新の適用済みターンを巻き戻す。実行前にサーバーの会話状態へ再同期する。 */
+/**
+ * 最新の適用済みターンを巻き戻す。実行前にサーバーの会話状態へ再同期する
+ * (再取得でターン安定IDも埋まるため、添字のズレとは無関係に対象を指定できる)。
+ */
 async function onUndo() {
   const id = store.activeId;
   // ストリーミング中の再同期は進行中ターンの表示を壊すため不可 (サーバー側もBusyで拒否する)
@@ -40,7 +43,9 @@ async function onUndo() {
     await store.loadConversations();
     const index = lastAppliedIndex.value;
     if (store.activeId !== id || index < 0) return;
-    await store.undoTurn(id, index);
+    const turnId = store.messages[index].turn_id;
+    if (!turnId) return;
+    await store.undoTurn(id, turnId);
   } catch (e) {
     ui.log(`AGENT   元に戻す失敗: ${String(e)}`);
   }

@@ -183,6 +183,10 @@ A1での防御:
 A2で`ChatMessage`にターンIDを追加し、`undo_turn(turn_id)`へ移行する
 (`chat.json`の`format_version`を上げる)。
 
+**解消済み (2026-08-22, M3フェーズ1 Task 1)**: `ChatMessage::turn_id`を追加し、
+`undo_turn(conversation_id, turn_id)`へ移行(`message_index`指定は廃止)。
+`chat.json`は`format_version` 2、旧ファイルは読み込み時にターン境界から採番して移行する。
+
 ### 2. ユーザー編集がターン中に混ざった場合のundo境界
 
 undo回数は「ターン前後のundoスタック深さの増分」(`ChatMessage::applied_undo_depth`)で決める。
