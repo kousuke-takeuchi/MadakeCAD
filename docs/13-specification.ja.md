@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**547仕様項目**。
+全5領域・**568仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -317,6 +317,8 @@
 - POST /api/v1/simulate/op はDC動作点を解き、ネット電圧と部品電流を返す(ngspice必須。未導入時はスキップ)。 <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf は指定パスへ正しいPDFファイルを書き出す。 <sub>`export_pdf_writes_pdf_file`</sub>
 - POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。 <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
+- 端子台エンドポイントは図面の端子台を一覧し、1台のチャートとチェック結果を返す。 <sub>`terminal_endpoints_list_chart_and_check`</sub>
+- POST /api/v1/export/report は帳票1種をCSVまたは図枠付きPDFで書き出し、図面である端子接続図のCSVは拒否する。 <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
 
 
 ## AIアシスタント (madake-agent)
@@ -412,6 +414,16 @@
 - エクスポート種別はドキュメント表記どおりの'wire-list'を受け付ける。 <sub>`export_kind_accepts_wire_list_spelling`</sub>
 - madake export pdf-book は --reports に並べた帳票をその順で送り、既定では表紙付きで依頼する。 <sub>`export_pdf_book_sends_the_requested_reports_in_order`</sub>
 - --no-cover を付けると一括PDFから表紙が外れる。 <sub>`export_pdf_book_can_drop_the_cover`</sub>
+- madake terminalsは図面全体の端子台を一覧し、--sheetでシートを絞れる。 <sub>`terminals_lists_blocks_and_forwards_sheet`</sub>
+- madake export terminal-chart は図面全体のチャートを、拡張子.csvからCSVと判断して書き出す。 <sub>`export_terminal_chart_defaults_to_csv_for_the_whole_project`</sub>
+- 出力先が.pdfなら--format無しでも帳票のPDF(図枠付き図面シート)形式になる。 <sub>`export_report_picks_pdf_from_the_extension`</sub>
+- --formatは拡張子より優先される。 <sub>`export_report_format_option_overrides_the_extension`</sub>
+- --terminalは参照記号(TB1)を受け取り、端子台一覧からentity idを引く。 <sub>`export_terminal_diagram_resolves_a_reference_designator`</sub>
+- --terminalにentity idを渡した場合は一覧を引かずそのまま送る。 <sub>`export_terminal_chart_accepts_an_entity_id_directly`</sub>
+- 存在しない端子台を指定した場合は、図面にある端子台の一覧を添えて中断する。 <sub>`export_reports_unknown_terminal_with_candidates`</sub>
+- 図面全体が対象の帳票に--terminalを付けると拒否する。 <sub>`export_rejects_terminal_option_on_other_reports`</sub>
+- 帳票は常に図面全体が対象のため、--sheetだけの指定は--terminalを案内して拒否する。 <sub>`export_rejects_sheet_only_narrowing_for_reports`</sub>
+- 帳票ではない回路図の出力(svg/pdf/pdf-book)に--formatを付けると拒否する。 <sub>`export_rejects_format_option_on_schematic_exports`</sub>
 - madake statusはヘルスチェックとプロジェクト概要を取得する。 <sub>`status_queries_health_and_project`</sub>
 - --jsonはjq等へ渡せる整形JSONをそのまま出力する。 <sub>`json_flag_emits_raw_json`</sub>
 - madake netlistは--sheetオプションをAPIへ引き渡す。 <sub>`netlist_forwards_sheet_option`</sub>
@@ -432,7 +444,13 @@
 - endpoint()はベースURLに相対パスを連結する。 <sub>`endpoint_appends_path`</sub>
 - シート未指定のときnetlist URLにクエリは付かない。 <sub>`netlist_url_omits_query_without_sheet`</sub>
 - シート指定はサーバー側と同じsheet_idクエリ名を使う。 <sub>`netlist_url_uses_sheet_id_query_name`</sub>
-- 各エクスポート種別(svg/pdf/bom/wire-list)は対応するRESTルートへ対応付く。 <sub>`export_kind_paths_match_link_api_routes`</sub>
+- 回路図の出力(svg/pdf/pdf-book)は専用ルートを持ち、帳票は共通の/export/reportへまとまる。 <sub>`export_kind_paths_match_link_api_routes`</sub>
+- 帳票5種はLink APIの帳票名へ対応付き、回路図の出力は帳票ではない。 <sub>`export_kinds_map_to_the_five_reports`</sub>
+- 対象を1つの端子台に絞れるのは端子台チャートと端子接続図だけ。 <sub>`only_terminal_reports_take_a_terminal_option`</sub>
+- --format省略時は出力先の拡張子に従い、.pdfならPDF、それ以外はCSVになる。 <sub>`report_format_defaults_to_the_file_extension`</sub>
+- Link APIへ送る出力形式の綴りは "csv" と "pdf"。 <sub>`report_format_json_names`</sub>
+- 端子台一覧のURLも他のエンドポイントと同じsheet_idクエリ名を使う。 <sub>`terminals_url_uses_sheet_id_query_name`</sub>
+- --terminalの値はUUID表記のときだけentity idとして扱い、それ以外は参照記号とみなす。 <sub>`uuid_shaped_values_are_recognized`</sub>
 - PDF一括出力で送る帳票名の綴りは、Link API・MCPのJSON表記と同じになる。 <sub>`report_kind_json_names_match_the_link_api`</sub>
 - アプリ未起動時は不可解なエラーではなく、ポート付きの明快なメッセージを出す。 <sub>`not_running_error_is_explicit`</sub>
 
@@ -449,6 +467,9 @@
 - undo/redoの整形は「対象なし」(nullパッチ)の場合を扱う。 <sub>`history_result_handles_null_patch`</sub>
 - undo/redoの整形はrevisionと変更件数を報告する。 <sub>`history_result_reports_revision`</sub>
 - 保存・エクスポートのメッセージには書き出したパスが含まれる。 <sub>`saved_and_exported_report_written_path`</sub>
+- 帳票の書き出しメッセージは帳票名・形式・分量(CSVは行数、PDFはページ数)を伝える。 <sub>`exported_report_reports_format_and_count`</sub>
+- madake terminalsは端子台を極数・ジャンパ・シート・entity id付きで一覧する。 <sub>`terminals_lists_blocks_with_poles_and_jumpers`</sub>
+- 端子台が無い場合は空の表ではなく分かりやすいメッセージを出す。 <sub>`terminals_handles_empty`</sub>
 - openのメッセージには読み込んだパスと結果のrevisionが含まれる。 <sub>`opened_reports_path_and_revision`</sub>
 
 

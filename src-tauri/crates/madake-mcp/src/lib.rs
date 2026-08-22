@@ -164,6 +164,31 @@ pub struct ExportPdfBookParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct TerminalListParams {
+    /// 対象シートID。省略時はプロジェクト全体の端子台。
+    pub sheet_id: Option<Uuid>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct TerminalRefParams {
+    /// 端子台シンボルのentity id (list_terminal_blocksで取得)。
+    pub entity_id: Uuid,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ExportReportParams {
+    /// 出力先ファイルパス(絶対パス)。
+    pub path: String,
+    /// 帳票の種類。`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref`。
+    pub kind: madake_core::report_sheet::ReportKind,
+    /// 出力形式。`csv`(表計算用) / `pdf`(図枠+表題欄付きのA4横ページ)。
+    pub format: madake_core::report_sheet::ReportFormat,
+    /// 端子台チャート・端子接続図の対象を1つの端子台に絞る場合のentity id。省略時は全端子台。
+    #[serde(default)]
+    pub entity_id: Option<Uuid>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ExportSvgParams {
     /// 対象シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
@@ -225,7 +250,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "任意の編集コマンド列を実行する。シート追加/削除/改名、エンティティ追加(add_entity)/更新/削除/移動、表題欄設定(set_title_block)のほか、改訂欄の書き換え(set_revisions: 記号/日付/内容/承認の行リスト。表題欄のRevは最新行に連動)、線番のネット単位自動採番(renumber_wires: mode=append で未採番のネットだけ追い番、mode=renumber で全振り直し、sheet_id省略で図面全体、start=開始番号)、線番の個別指定(set_wire_numbers)が使える。ハーネス境界は専用コマンドではなくadd_entityでkind=\"harness\"のエンティティ(points=矩形4点・name・note)を追加する(内包した配線が電線リストのハーネス列に載る)。各コマンドの完全なスキーマは入力スキーマを参照。実行結果のpatchを返す"
+        description = "任意の編集コマンド列を実行する。シート追加/削除/改名、エンティティ追加(add_entity)/更新/削除/移動、表題欄設定(set_title_block)のほか、改訂欄の書き換え(set_revisions: 記号/日付/内容/承認の行リスト。表題欄のRevは最新行に連動)、線番のネット単位自動採番(renumber_wires: mode=append で未採番のネットだけ追い番、mode=renumber で全振り直し、sheet_id省略で図面全体、start=開始番号)、線番の個別指定(set_wire_numbers)が使える。ハーネス境界は専用コマンドではなくadd_entityでkind=\"harness\"のエンティティ(points=矩形4点・name・note)を追加する(内包した配線が電線リストのハーネス列に載る)。端子台のサドルジャンパも専用コマンドではなくupdate_entityで端子台シンボルのattrs[\"jumpers\"]を書き換える(値は隣接端子の対をカンマ区切りにした\"1-2,3-4\"。小-大順に正規化し、全て外すときは属性ごと削除)。ジャンパは端子台エディタ・端子台チャート・端子接続図の3か所に反映され、undoで戻る。各コマンドの完全なスキーマは入力スキーマを参照。実行結果のpatchを返す"
     )]
     fn execute_commands(
         &self,
@@ -333,6 +358,67 @@ impl MadakeMcp {
         ))
     }
 
+    #[tool(
+        description = "プロジェクト内の端子台の一覧(entity id・所在シート・参照記号・型番・極数・ジャンパ指定)を返す。sheet_id省略で全シート。get_terminal_chart / check_terminal_block / export_reportのentity_idはここで得る"
+    )]
+    fn list_terminal_blocks(
+        &self,
+        Parameters(p): Parameters<TerminalListParams>,
+    ) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        json_ok(&madake_core::terminal_chart::terminal_block_infos(
+            engine.project(),
+            p.sheet_id,
+        ))
+    }
+
+    #[tool(
+        description = "端子台1台のチャート(端子番号順の行: 内部側=盤内・外部側=盤外の接続先、線番、電線の色/sq/品番、ハーネス、未結線=予備端子、ジャンパ)を返す。内部/外部は端子台の左ピン接続=内部側・右ピン接続=外部側(回転後の左右)"
+    )]
+    fn get_terminal_chart(
+        &self,
+        Parameters(p): Parameters<TerminalRefParams>,
+    ) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let chart =
+            madake_core::terminal_chart::terminal_chart_in_project(engine.project(), p.entity_id)
+                .ok_or_else(|| ErrorData::invalid_params("terminal block not found", None))?;
+        json_ok(&chart)
+    }
+
+    #[tool(
+        description = "端子台チェックを実行しDiagnostic配列を返す(未結線の端子=予備端子の情報、存在しない端子番号を指すジャンパなどの不整合)"
+    )]
+    fn check_terminal_block(
+        &self,
+        Parameters(p): Parameters<TerminalRefParams>,
+    ) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        json_ok(&madake_core::terminal_chart::check_terminal_block_in_project(
+            engine.project(),
+            p.entity_id,
+        ))
+    }
+
+    #[tool(
+        description = "帳票1種を1ファイルへ書き出す。kind= wire-list(From-To電線リスト: From/To/線番/色/sq/長さ/品番/ハーネス) / terminal-chart(端子台チャート) / terminal-diagram(端子接続図。外部側=左・内部側=右のグラフィカル図) / bom(部品表) / xref(クロスリファレンス表)。format= csv または pdf(図枠+表題欄付きA4横。行が多ければ自動でページ分割)。端子接続図は図面のためCSV不可。entity_idで端子台1台に絞れる。戻り値のcountはCSVなら行数、PDFならページ数"
+    )]
+    fn export_report(
+        &self,
+        Parameters(p): Parameters<ExportReportParams>,
+    ) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let (bytes, count) = madake_core::report_sheet::report_bytes(
+            engine.project(),
+            p.kind,
+            p.format,
+            p.entity_id,
+        )
+        .map_err(|e| ErrorData::invalid_params(e.to_string(), None))?;
+        std::fs::write(&p.path, bytes).map_err(internal)?;
+        json_ok(&serde_json::json!({ "written": p.path, "count": count }))
+    }
+
     #[tool(description = "部品表(BOM)CSVを指定パスに書き出す")]
     fn export_bom(&self, Parameters(p): Parameters<ExportPathParams>) -> Result<String, ErrorData> {
         let engine = self.doc.engine.lock().unwrap();
@@ -341,7 +427,7 @@ impl MadakeMcp {
         json_ok(&serde_json::json!({ "written": p.path }))
     }
 
-    #[tool(description = "電線リストCSVを指定パスに書き出す(列: シート/線番/ハーネス/電線品番/線色/sq/長さ)")]
+    #[tool(description = "From-To電線リストCSVを指定パスに書き出す(列: シート/From/To/線番/線色/線径sq/長さm/電線品番/ハーネス)。export_report(kind=wire-list, format=csv)と同じ中身")]
     fn export_wire_list(
         &self,
         Parameters(p): Parameters<ExportPathParams>,
@@ -489,7 +575,9 @@ impl ServerHandler for MadakeMcp {
         info.instructions = Some(
             "MadakeCAD - 産業用電気図面CAD。開いているプロジェクトの図面(シンボル配置・配線)を \
              読み取り・編集できる。座標系は用紙mm単位・左上原点。編集はundo/redo履歴に乗り、\
-             UIへリアルタイム反映される。"
+             UIへリアルタイム反映される。帳票はFrom-To電線リスト・端子台チャート・端子接続図・\
+             部品表・クロスリファレンス表の5種で、export_report(CSV/図枠付きPDF)または\
+             export_pdf_book(表紙+回路図全シート+帳票を1PDFへ)で出力する。"
                 .into(),
         );
         info

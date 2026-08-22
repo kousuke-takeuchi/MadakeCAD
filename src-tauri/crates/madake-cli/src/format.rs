@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::client::ExportKind;
+use crate::client::{ExportKind, ReportFormat};
 
 /// 列の区切り。
 const GUTTER: &str = "  ";
@@ -459,6 +459,50 @@ pub fn exported(kind: ExportKind, result: &Value) -> String {
     )
 }
 
+/// `madake export <帳票>`。件数の単位はCSVなら行、PDFならページ。
+pub fn exported_report(kind: ExportKind, format: ReportFormat, result: &Value) -> String {
+    let count = match result["count"].as_u64() {
+        Some(n) => format!(" ({n} {})", format.count_unit()),
+        None => String::new(),
+    };
+    format!(
+        "{} を{}で書き出しました: {}{}",
+        kind.label(),
+        format.as_json().to_uppercase(),
+        written_path(result),
+        count
+    )
+}
+
+/// `madake terminals`
+pub fn terminals(list: &Value) -> String {
+    let blocks = list.as_array().cloned().unwrap_or_default();
+    if blocks.is_empty() {
+        return "端子台がありません。".to_string();
+    }
+    let rows: Vec<Vec<String>> = blocks
+        .iter()
+        .map(|b| {
+            vec![
+                text(b, "reference"),
+                format!("{}極", text(b, "terminal_count")),
+                text(b, "value"),
+                text(b, "jumpers"),
+                text(b, "sheet_name"),
+                text(b, "entity_id"),
+            ]
+        })
+        .collect();
+    format!(
+        "端子台: {} 台\n\n{}",
+        blocks.len(),
+        table(
+            &["参照記号", "極数", "型番", "ジャンパ", "シート", "entity id"],
+            &rows
+        )
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -660,6 +704,55 @@ mod tests {
         assert!(out.contains("/tmp/a.svg"));
         let wl = json!({ "written": "/tmp/w.csv" });
         assert!(exported(ExportKind::WireList, &wl).contains("電線リスト"));
+    }
+
+    /// A report export message names the report, the format and how much was written (CSV rows / PDF pages).
+    /// 帳票の書き出しメッセージは帳票名・形式・分量(CSVは行数、PDFはページ数)を伝える。
+    #[test]
+    fn exported_report_reports_format_and_count() {
+        let csv = json!({ "written": "/tmp/tb.csv", "count": 12 });
+        let out = exported_report(ExportKind::TerminalChart, ReportFormat::Csv, &csv);
+        assert!(out.contains("端子台チャート"), "{out}");
+        assert!(out.contains("CSV"), "{out}");
+        assert!(out.contains("/tmp/tb.csv"), "{out}");
+        assert!(out.contains("12 行"), "{out}");
+
+        let pdf = json!({ "written": "/tmp/tb.pdf", "count": 2 });
+        let out = exported_report(ExportKind::TerminalDiagram, ReportFormat::Pdf, &pdf);
+        assert!(out.contains("端子接続図"), "{out}");
+        assert!(out.contains("2 ページ"), "{out}");
+    }
+
+    /// madake terminals lists every terminal block with its pole count, jumpers, sheet and entity id.
+    /// madake terminalsは端子台を極数・ジャンパ・シート・entity id付きで一覧する。
+    #[test]
+    fn terminals_lists_blocks_with_poles_and_jumpers() {
+        let list = json!([
+            {
+                "entity_id": "2f4e0b9a-0000-4000-8000-000000000009",
+                "sheet_id": "2f4e0b9a-0000-4000-8000-000000000001",
+                "sheet_name": "Sheet1",
+                "reference": "TB1",
+                "value": "TB-4P",
+                "terminal_count": 4,
+                "jumpers": "1-2"
+            }
+        ]);
+        let out = terminals(&list);
+        assert!(out.contains("端子台: 1 台"), "{out}");
+        let row = out.lines().find(|l| l.contains("TB1")).expect("TB1の行");
+        assert!(row.contains("4極"), "{row}");
+        assert!(row.contains("TB-4P"), "{row}");
+        assert!(row.contains("1-2"), "{row}");
+        assert!(row.contains("Sheet1"), "{row}");
+        assert!(row.contains("2f4e0b9a-0000-4000-8000-000000000009"), "{row}");
+    }
+
+    /// An empty terminal list prints a friendly message instead of an empty table.
+    /// 端子台が無い場合は空の表ではなく分かりやすいメッセージを出す。
+    #[test]
+    fn terminals_handles_empty() {
+        assert!(terminals(&json!([])).contains("端子台がありません"));
     }
 
     /// Open messages include the loaded path and resulting revision.
