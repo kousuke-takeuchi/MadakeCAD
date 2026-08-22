@@ -23,10 +23,16 @@ const activeTab = ref<TabId>("agent");
 
 /** パス入力欄(適用/OKするまでは設定に反映しない)。 */
 const pathInput = ref("");
+/** 知識ファイル(エージェントへ追記で読ませるMarkdown)のパス入力欄。 */
+const knowledgeInput = ref("");
 const detecting = ref(false);
 
 const detected = computed(() => chat.detect);
 const pathDirty = computed(() => pathInput.value.trim() !== (settings.settings.claude_path ?? ""));
+const knowledgeDirty = computed(
+  () => knowledgeInput.value.trim() !== (settings.settings.knowledge_path ?? ""),
+);
+const dirty = computed(() => pathDirty.value || knowledgeDirty.value);
 const activeLocale = computed(() => resolveLocale(settings.settings.language));
 
 const checks = computed(() => [
@@ -52,6 +58,7 @@ watch(
     activeTab.value = "agent";
     await settings.load();
     pathInput.value = settings.settings.claude_path ?? "";
+    knowledgeInput.value = settings.settings.knowledge_path ?? "";
     if (!chat.detect) await redetect();
   },
 );
@@ -69,14 +76,28 @@ async function redetect() {
   }
 }
 
-/** 実行パスを保存し、そのパスで検出し直す(適用)。 */
+/** 変更したパス設定を保存する(適用)。実行パスを変えた場合は検出し直す。 */
 async function apply(): Promise<boolean> {
-  if (settings.saving || !pathDirty.value) return true;
+  if (settings.saving || !dirty.value) return true;
+  const redetectAfter = pathDirty.value;
   const path = pathInput.value.trim();
-  if (!(await settings.save({ claude_path: path || null }))) return false;
+  const knowledge = knowledgeInput.value.trim();
+  const knowledgeChanged = knowledgeDirty.value;
+  if (!(await settings.save({ claude_path: path || null, knowledge_path: knowledge || null })))
+    return false;
   pathInput.value = settings.settings.claude_path ?? "";
-  ui.log(path ? t("settings.agent.pathSetLog", { path }) : t("settings.agent.pathClearedLog"));
-  await redetect();
+  knowledgeInput.value = settings.settings.knowledge_path ?? "";
+  if (redetectAfter) {
+    ui.log(path ? t("settings.agent.pathSetLog", { path }) : t("settings.agent.pathClearedLog"));
+    await redetect();
+  }
+  if (knowledgeChanged) {
+    ui.log(
+      knowledge
+        ? t("settings.agent.knowledgeSetLog", { path: knowledge })
+        : t("settings.agent.knowledgeClearedLog"),
+    );
+  }
   return true;
 }
 
@@ -218,6 +239,18 @@ async function changeLanguage(ev: Event) {
                 />
               </div>
               <p class="caption indent-label">{{ t("settings.agent.claudePathHint") }}</p>
+              <div class="form-row">
+                <label class="form-label" for="knowledge-path">{{ t("settings.agent.knowledgeLabel") }}</label>
+                <input
+                  id="knowledge-path"
+                  v-model="knowledgeInput"
+                  class="field input mono"
+                  placeholder="/Users/me/madakecad/house-rules.md"
+                  spellcheck="false"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
+                />
+              </div>
+              <p class="caption indent-label">{{ t("settings.agent.knowledgeHint") }}</p>
             </div>
 
             <p v-if="settings.error" class="error">{{ settings.error }}</p>
@@ -232,7 +265,7 @@ async function changeLanguage(ev: Event) {
       <div class="footer">
         <button class="btn primary" :disabled="settings.saving" @click="confirm">{{ t("settings.ok") }}</button>
         <button class="btn secondary" @click="close">{{ t("settings.cancel") }}</button>
-        <button class="btn secondary" :disabled="settings.saving || !pathDirty" @click="apply">
+        <button class="btn secondary" :disabled="settings.saving || !dirty" @click="apply">
           {{ t("settings.apply") }}
         </button>
       </div>

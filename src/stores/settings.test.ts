@@ -13,6 +13,7 @@ describe("settings store", () => {
       auto_apply: true,
       auto_read_drawing: true,
       language: "en",
+      knowledge_path: null,
     });
     expect(useSettingsStore().settings).toEqual(defaultSettings());
   });
@@ -24,6 +25,7 @@ describe("settings store", () => {
       auto_apply: false,
       auto_read_drawing: false,
       language: "ja",
+      knowledge_path: "/home/me/house-rules.md",
     };
     vi.spyOn(settingsApi, "get").mockResolvedValue(stored);
 
@@ -39,7 +41,13 @@ describe("settings store", () => {
   it("save merges the changes, sends them, and adopts the normalized response", async () => {
     const set = vi
       .spyOn(settingsApi, "set")
-      .mockResolvedValue({ claude_path: "/usr/local/bin/claude", auto_apply: true, auto_read_drawing: false, language: "en" });
+      .mockResolvedValue({
+        claude_path: "/usr/local/bin/claude",
+        auto_apply: true,
+        auto_read_drawing: false,
+        language: "en",
+        knowledge_path: null,
+      });
 
     const store = useSettingsStore();
     const ok = await store.save({ claude_path: "  /usr/local/bin/claude  ", auto_read_drawing: false });
@@ -50,10 +58,25 @@ describe("settings store", () => {
       auto_apply: true,
       auto_read_drawing: false,
       language: "en",
+      knowledge_path: null,
     });
     // サーバー側で空白を落とした値がそのまま表示に使われる
     expect(store.settings.claude_path).toBe("/usr/local/bin/claude");
     expect(store.saving).toBe(false);
+  });
+
+  // ja: 知識ファイルのパスを保存でき、空文字はバックエンドが未設定へ正規化する
+  it("saves the knowledge-file path and adopts the backend's normalized value", async () => {
+    const set = vi
+      .spyOn(settingsApi, "set")
+      .mockResolvedValue({ ...defaultSettings(), knowledge_path: null });
+
+    const store = useSettingsStore();
+    const ok = await store.save({ knowledge_path: "  " });
+
+    expect(ok).toBe(true);
+    expect(set).toHaveBeenCalledWith({ ...defaultSettings(), knowledge_path: "  " });
+    expect(store.settings.knowledge_path).toBeNull();
   });
 
   // ja: save失敗時はエラーを保持し、表示中の設定を変えない

@@ -234,7 +234,9 @@ impl AgentManager {
     /// 戻り値は対象の会話ID。イベントは購読者へ非同期に流れる。
     ///
     /// `context`(図面コンテキスト)は設定の「図面の自動読み取り」がOFFなら捨てる。
-    /// 呼び出し側は設定を気にせず毎回渡してよい。
+    /// 呼び出し側は設定を気にせず毎回渡してよい。CLIへ渡すシステムプロンプトは
+    /// [`crate::knowledge::system_prompt`]が組み立てる(図面コンテキスト+作図ルール+
+    /// 規格知識+設定の知識ファイル)。
     pub async fn send(
         &self,
         conversation_id: Option<Uuid>,
@@ -266,12 +268,17 @@ impl AgentManager {
             let doc_state = self.doc.state();
             state.next_seq += 1;
             let seq = state.next_seq;
-            // 「図面の自動読み取り」OFFなら図面の内容をCLIへ渡さない
+            // 「図面の自動読み取り」OFFなら図面の内容をCLIへ渡さない。
+            // 規格知識と作図ルールはその場合も渡す(図面を伏せるだけで、規格を忘れさせない)
             let context = state
                 .settings
                 .auto_read_drawing
                 .then_some(context)
                 .flatten();
+            let context = Some(crate::knowledge::system_prompt(
+                &state.settings,
+                context.as_deref(),
+            ));
             let conversation = state
                 .conversation_mut(id)
                 .expect("直前に存在確認済みの会話が消えることはない");

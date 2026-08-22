@@ -46,6 +46,7 @@ fn saved_settings_round_trip() {
         auto_apply: false,
         auto_read_drawing: false,
         language: "ja".into(),
+        knowledge_path: Some(PathBuf::from("/home/me/house-rules.md")),
     };
 
     save_settings(&path, &settings).unwrap();
@@ -182,4 +183,44 @@ fn language_round_trips_through_save_and_load() {
     save_settings(&path, &settings).unwrap();
     assert_eq!(load_settings(&path).unwrap().language, "ja");
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// By default no extra knowledge file is configured (only the bundled standards note is used).
+/// 既定では追加の知識ファイルは未設定(同梱の規格ノートだけを使う)。
+#[test]
+fn default_knowledge_path_is_unset() {
+    assert_eq!(AppSettings::default().knowledge_path, None);
+}
+
+/// A settings file saved before the knowledge-file field existed loads with it unset.
+/// 知識ファイルの項目が無い旧い設定ファイルは、未設定として読み込まれる。
+#[test]
+fn old_settings_file_without_knowledge_path_loads_unset() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    std::fs::write(&path, r#"{ "claude_path": null, "language": "ja" }"#).unwrap();
+    let settings = load_settings(&path).unwrap();
+    assert_eq!(settings.knowledge_path, None);
+    assert_eq!(settings.language, "ja");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A blank knowledge-file path is normalized away, and padding is trimmed.
+/// 空白だけの知識ファイルパスは正規化で未設定になり、前後の空白は取り除かれる。
+#[test]
+fn normalized_drops_a_blank_knowledge_path() {
+    let blank = AppSettings {
+        knowledge_path: Some(PathBuf::from("   ")),
+        ..AppSettings::default()
+    };
+    assert_eq!(blank.normalized().knowledge_path, None);
+
+    let padded = AppSettings {
+        knowledge_path: Some(PathBuf::from(" /home/me/house-rules.md ")),
+        ..AppSettings::default()
+    };
+    assert_eq!(
+        padded.normalized().knowledge_path.as_deref(),
+        Some(Path::new("/home/me/house-rules.md"))
+    );
 }

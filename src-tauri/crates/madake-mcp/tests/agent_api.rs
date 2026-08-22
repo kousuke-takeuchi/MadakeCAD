@@ -576,6 +576,47 @@ fn drawing_context_summarizes_the_active_sheet() {
     assert!(context.contains("mcp__madakecad__*"), "{context}");
 }
 
+/// A clean drawing reports zero errors and zero warnings in the drawing context.
+/// 指摘の無い図面では、図面コンテキストの検証サマリがエラー0・警告0になる。
+#[test]
+fn drawing_context_reports_a_clean_drawing_as_no_diagnostics() {
+    let doc = SharedDoc::new(Engine::new(Project::new("盤A")));
+    let context = madake_mcp::agent::drawing_context(&doc);
+    assert!(context.contains("エラー 0件"), "{context}");
+    assert!(context.contains("警告 0件"), "{context}");
+}
+
+/// The drawing context summarizes verification: severity counts plus the first few findings.
+/// 図面コンテキストは検証サマリ(重要度ごとの件数と先頭数件のcode・メッセージ)を含む。
+#[test]
+fn drawing_context_summarizes_the_verification_result() {
+    let doc = SharedDoc::new(Engine::new(Project::new("盤A")));
+    let sheet_id = doc.engine.lock().unwrap().project().sheets[0].id;
+    // 同じ参照記号R1を2つ置く → erc.duplicate_reference (エラー) + 未接続ピン (警告)
+    for x in [100.0, 150.0] {
+        doc.execute_user(madake_core::Command::AddEntity {
+            sheet_id,
+            entity: madake_core::Entity::Symbol(madake_core::model::SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: "resistor".into(),
+                at: madake_core::geometry::Point::new(x, 50.0),
+                rotation: 0,
+                mirror: false,
+                reference: "R1".into(),
+                value: String::new(),
+                attrs: Default::default(),
+            }),
+        })
+        .unwrap();
+    }
+
+    let context = madake_mcp::agent::drawing_context(&doc);
+    assert!(context.contains("エラー 1件"), "{context}");
+    assert!(context.contains("erc.duplicate_reference"), "{context}");
+    // 先頭数件だけを載せ、全件はrun_verificationで取りに行かせる
+    assert!(context.contains("run_verification"), "{context}");
+}
+
 /// AI settings endpoints persist changes and apply them to the agent manager.
 /// AI設定のエンドポイントは変更を永続化し、エージェントマネージャへ適用する。
 #[test]

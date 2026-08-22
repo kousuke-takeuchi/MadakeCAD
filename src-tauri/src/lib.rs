@@ -332,6 +332,30 @@ fn set_settings(state: State<AppState>, settings: AppSettings) -> Result<AppSett
     madake_mcp::agent::update_settings(&state.agent, settings)
 }
 
+/// 同梱の規格ノート(`resources/knowledge/standards.md`)の実体パスを
+/// エージェントへ渡す(`MADAKE_STANDARDS_PATH`)。
+///
+/// 配布時はアプリバンドル内のリソース、開発時(`tauri dev`)はリポジトリの
+/// `src-tauri/resources/`を見る。どちらも見つからなければ何もしない
+/// (madake-agentがビルド時に埋め込んだ同内容へフォールバックする)。
+fn resolve_standards_resource(app: &tauri::AppHandle) {
+    use tauri::path::BaseDirectory;
+    use tauri::Manager;
+
+    const RELATIVE: &str = "resources/knowledge/standards.md";
+    let candidates = [
+        app.path().resolve(RELATIVE, BaseDirectory::Resource).ok(),
+        Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(RELATIVE)),
+    ];
+    for path in candidates.into_iter().flatten() {
+        if path.is_file() {
+            std::env::set_var(madake_agent::knowledge::STANDARDS_PATH_ENV, &path);
+            return;
+        }
+    }
+    eprintln!("規格ノート({RELATIVE})が見つかりません。埋め込みの内容で続行します");
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let doc = SharedDoc::new(Engine::new(Project::new("無題プロジェクト")));
@@ -359,6 +383,10 @@ pub fn run() {
             agent: Arc::clone(&agent),
         })
         .setup(move |app| {
+            // 同梱の規格ノート(編集可能なMarkdown)の実体をエージェントへ教える。
+            // 見つからなくてもビルドへ埋め込んだ同内容で動くので、失敗は警告だけ
+            resolve_standards_resource(app.handle());
+
             // MCPサーバー起動 (127.0.0.1:port/mcp)。Link API(/api/v1)も同じポート
             let mcp_doc = doc.clone();
             let mcp_agent = Arc::clone(&agent);

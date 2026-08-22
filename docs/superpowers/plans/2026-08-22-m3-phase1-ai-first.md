@@ -11,7 +11,7 @@
 - **ターン安定ID**: `ChatMessage`に`turn_id: Uuid`を追加し、`undo_turn(turn_id)`へ移行(message_index指定は廃止)。chat.jsonの`format_version`を上げ、旧ファイルは読み込み時にturn_idを採番して移行
 - **編集origin**: Engineの履歴エントリに`origin: user | agent | mcp`(既定user)。`Engine::execute_as(origin)`を追加し、ターン巻き戻しは「そのturnのagent編集のみ」を逆適用(間に挟まったユーザー編集は保持。逆適用が衝突する場合はターン巻き戻し不可としてエラー明示)
 - **キャンセルseq**: broadcastイベントに`turn_seq`を付与し、キャンセル済みturnの遅延イベントをフロントで破棄
-- **規格知識の管理形式(未決→決定)**: 編集可能なMarkdown同梱(`src-tauri/resources/knowledge/standards.md` — JIS C 0617記号の使い分け・参照記号接頭辞・線色/sq慣習・線番/ハーネス/XRefの決まり・作図手順のベストプラクティス)。設定`knowledge_path`でユーザー追記ファイルを追加可。エージェント起動時に`--append-system-prompt`へ注入
+- **規格知識の管理形式(未決→決定→実装済み)**: 編集可能なMarkdown同梱(`src-tauri/resources/knowledge/standards.md` — JIS C 0617記号の使い分け・参照記号接頭辞・線色/sq慣習・線番/ハーネス/XRefの決まり・作図手順のベストプラクティス)。設定`knowledge_path`でユーザー追記ファイルを追加可。エージェント起動時に`--append-system-prompt`へ注入
 - **検証ループ**: システムプロンプトで「図面編集後は必ず`run_verification`を実行し、Errorが残れば修正して再検証(最大3回)。最終結果を報告」と指示。図面コンテキストに検証サマリを含める(既存drawingContext拡張)
 - **テンプレート**: Command列JSON(`resources/templates/*.json`: 24V制御基本・モータ起動・非常停止の汎用3種。参考図面由来はユーザー確認待ちのため含めない)。適用=既存`execute_commands`で一括実行(1ターン=undo一発)。UI=新規作成時+リボン「プロジェクト」相当からのテンプレート選択(デザイン: .pen「M3デザイン - テンプレート選択」※本フェーズで作成)
 - **ナレッジサービス(2b)**: システムプロンプトにdocs/の構成(01〜13の目次と内部仕様の場所)と「操作・規格の質問にはドキュメントを読んで出典付きで答える」を記載。claude CLIはcwdのファイルを読めるため専用ツールは不要
@@ -37,8 +37,15 @@
 
 ### Task 3: 規格知識+検証ループ+図面コンテキスト拡張
 
-- [ ] Step 1 (red): Rustテスト: システムプロンプトにknowledge/standards.mdの内容と検証ループ指示が含まれる/knowledge_path設定の追記が反映/図面コンテキストに検証サマリ(Error/Warn件数と先頭数件)が入る
-- [ ] Step 2 (green): standards.md執筆(JIS/IEC要点・MadakeCAD作図手順)+注入実装+設定追加(AppSettings拡張はlanguageの前例に倣いテスト込み)。gen_spec→コミット
+- [x] Step 1 (red): Rustテスト: システムプロンプトにknowledge/standards.mdの内容と検証ループ指示が含まれる/knowledge_path設定の追記が反映/図面コンテキストに検証サマリ(Error/Warn件数と先頭数件)が入る
+- [x] Step 2 (green): standards.md執筆(JIS/IEC要点・MadakeCAD作図手順)+注入実装+設定追加(AppSettings拡張はlanguageの前例に倣いテスト込み)。gen_spec→コミット
+
+実装メモ:
+- **注入経路**: `AgentManager::send`が`madake_agent::knowledge::system_prompt(settings, drawing_context)`で`--append-system-prompt`を組み立てる。順は 図面コンテキスト → 作図・検証ループのルール → 同梱standards.md → 設定の知識ファイル(後勝ちで上書きできる)。**「図面の自動読み取り」OFFでも規格知識と検証ループ指示は必ず載る**(図面を伏せるだけで、規格を忘れさせない)
+- **standards.mdの解決**: 実体は`src-tauri/resources/knowledge/standards.md`(編集可能なMarkdown同梱)。Tauri起動時に`resolve_standards_resource`がリソース(配布時)→`CARGO_MANIFEST_DIR/resources`(開発時)の順に実体を探し、`MADAKE_STANDARDS_PATH`へ入れる。どちらも無い場合はビルド時に`include_str!`で埋め込んだ同内容へフォールバック(エージェントが無知にならない)
+- **図面コンテキストの検証サマリ**: `drawing_context`が`verify_project`を呼び「エラーN件/警告N件/情報N件」+重要度順の先頭3件(code・メッセージ)を載せる。全件は`run_verification`で取り直させる
+- 設定UI: 「エージェント > 詳細設定」に知識ファイルのパス入力行を追加(i18n済み)。ファイル選択ダイアログではなくパス直接入力(claude実行ファイル欄と同じ様式)
+- 残件: standards.mdは日本語のみ(エージェント向け。UI言語に応じた英語版はM3以降)。テンプレート(Task 5)からもこの知識を参照させるかは未検討
 
 ### Task 4: ナレッジ/AIレビュー/部品選定のプロンプト整備
 

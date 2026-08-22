@@ -33,6 +33,12 @@ pub struct AppSettings {
     /// UI表示言語(BCP 47の言語タグ小文字。既定は`"en"`)。
     /// 未知の値はフロントエンド側で`en`へフォールバックする。
     pub language: String,
+    /// エージェントへ追加で読ませる知識ファイル(Markdown)。`None`なら同梱ノートのみ。
+    ///
+    /// 内容は同梱の規格ノート([`crate::knowledge`])の**後ろ**へ追記されるので、
+    /// 社内・顧客の流儀で同梱の決まりを上書きできる。読めないパスは黙って無視する
+    /// (設定ミスでエージェントが起動しなくなるのを避けるため)。
+    pub knowledge_path: Option<PathBuf>,
 }
 
 impl Default for AppSettings {
@@ -42,6 +48,7 @@ impl Default for AppSettings {
             auto_apply: true,
             auto_read_drawing: true,
             language: "en".into(),
+            knowledge_path: None,
         }
     }
 }
@@ -51,14 +58,8 @@ impl AppSettings {
     ///
     /// UIのテキスト欄は空文字を送ってくるため、保存前に必ず通すこと。
     pub fn normalized(mut self) -> Self {
-        self.claude_path = self.claude_path.and_then(|path| match path.to_str() {
-            Some(s) => {
-                let trimmed = s.trim();
-                (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
-            }
-            // 非UTF-8パスはそのまま使う(trimできないだけで有効なパス)
-            None => Some(path),
-        });
+        self.claude_path = normalize_path(self.claude_path);
+        self.knowledge_path = normalize_path(self.knowledge_path);
         let language = self.language.trim().to_ascii_lowercase();
         self.language = if language.is_empty() {
             "en".into()
@@ -67,6 +68,20 @@ impl AppSettings {
         };
         self
     }
+}
+
+/// 空文字・空白だけのパスを「未指定」に潰し、前後の空白を取り除く。
+///
+/// UIのテキスト欄は空文字を送ってくるため、パス設定は必ずここを通す。
+fn normalize_path(path: Option<PathBuf>) -> Option<PathBuf> {
+    path.and_then(|path| match path.to_str() {
+        Some(s) => {
+            let trimmed = s.trim();
+            (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
+        }
+        // 非UTF-8パスはそのまま使う(trimできないだけで有効なパス)
+        None => Some(path),
+    })
 }
 
 /// 設定ファイルのパス。`MADAKE_SETTINGS_PATH`があればそれを優先する。
