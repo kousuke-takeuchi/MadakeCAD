@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**654 specification clauses** across 5 areas.
+**676 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -264,6 +264,29 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The terminal diagram is offered as a report named terminal-diagram, spelled the same way in the CLI, Link API and MCP. <sub>`the_terminal_diagram_is_a_report_named_terminal_diagram`</sub>
 - A project without any terminal block still yields one page, so the report is never empty. <sub>`a_project_without_terminal_blocks_still_yields_one_page`</sub>
 
+### Tidy metrics (crossings / overlaps / grid)
+
+- Two wires laid across each other in an X count as one crossing. <sub>`two_wires_laid_across_each_other_count_as_one_crossing`</sub>
+- Wires that never meet have no crossings. <sub>`wires_that_never_meet_have_no_crossings`</sub>
+- Two wires joined at a shared endpoint are a connection, not a crossing. <sub>`wires_joined_at_a_shared_endpoint_are_not_a_crossing`</sub>
+- A T branch, where one wire ends on the middle of another, is a connection point and is not a crossing. <sub>`a_t_branch_landing_on_another_wire_is_not_a_crossing`</sub>
+- The corner of one polyline wire is not a crossing: consecutive segments of the same wire are skipped. <sub>`the_corner_of_a_polyline_wire_is_not_a_crossing`</sub>
+- A wire routed back over itself so that two of its own separate segments cross does count as a crossing. <sub>`a_wire_crossing_its_own_route_counts_as_a_crossing`</sub>
+- Two wires drawn on top of each other along part of their length count as one crossing (the overlap is one place to fix). <sub>`wires_drawn_on_top_of_each_other_count_as_one_crossing`</sub>
+- Two wires that lie on the same line but only meet end to end are a connection, not an overlap. <sub>`wires_meeting_end_to_end_on_one_line_are_not_a_crossing`</sub>
+- Two notes printed over each other count as one label overlap. <sub>`two_notes_printed_over_each_other_overlap`</sub>
+- Two notes whose boxes only touch along an edge are not counted as overlapping. <sub>`notes_that_only_touch_along_an_edge_do_not_overlap`</sub>
+- Notes placed well apart do not overlap. <sub>`notes_placed_well_apart_do_not_overlap`</sub>
+- A note printed on top of a symbol's outline counts as a label overlap. <sub>`a_note_printed_over_a_symbol_outline_overlaps`</sub>
+- A note that stops exactly at the top edge of a symbol is touching, not overlapping. <sub>`a_note_stopping_at_the_symbol_edge_does_not_overlap`</sub>
+- Symbols placed on top of each other are counted separately from label overlaps. <sub>`symbols_placed_on_top_of_each_other_are_counted_separately`</sub>
+- A symbol's own reference designator never counts as overlapping the symbol it belongs to. <sub>`a_reference_designator_never_overlaps_its_own_symbol`</sub>
+- Symbol origins and wire vertices sitting on the 2.5 mm grid report no off-grid points. <sub>`entities_on_the_grid_report_no_off_grid_points`</sub>
+- A point shifted by 0.1 mm off the grid is counted, and each stray vertex counts once. <sub>`a_point_shifted_a_tenth_of_a_millimetre_is_off_grid`</sub>
+- An empty sheet is perfectly tidy: every metric is zero. <sub>`an_empty_sheet_scores_zero_on_every_metric`</sub>
+- tidy_metrics gathers the four counts of one sheet in a single value. <sub>`tidy_metrics_gathers_the_four_counts`</sub>
+- Measuring the same sheet twice gives exactly the same numbers, so the agent can compare before and after. <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
+
 ### Verification (ERC & electrical)
 
 - A fully wired circuit produces no ERC findings. <sub>`fully_wired_pair_has_no_erc_findings`</sub>
@@ -357,6 +380,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - GET /templates lists the bundled start templates with their names in both languages. <sub>`the_link_api_lists_the_bundled_templates`</sub>
 - POST /templates/apply drops the template on the sheet as a single edit that one undo takes back. <sub>`applying_a_template_over_the_link_api_is_one_undo_step`</sub>
 - Applying without a sheet id targets the first sheet, and an unknown template id is refused with 400. <sub>`the_link_api_defaults_to_the_first_sheet_and_refuses_unknown_templates`</sub>
+
+### Tidy metrics (MCP tool / REST)
+
+- The tidy metrics tool tells the agent it is the target to aim at while tidying, and names the three things it counts. <sub>`the_tidy_metrics_tool_is_advertised_as_the_tidy_loop_target`</sub>
+- GET /api/v1/tidy-metrics returns the sheet's crossing, label overlap, symbol overlap and off-grid counts as JSON. <sub>`tidy_metrics_endpoint_returns_the_four_counts`</sub>
 
 ### tools
 

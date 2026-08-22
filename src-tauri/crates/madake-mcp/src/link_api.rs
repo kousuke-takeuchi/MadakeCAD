@@ -232,6 +232,24 @@ async fn get_verify(
     Ok(Json(serde_json::json!(diags)))
 }
 
+/// 図面の整い具合 (配線交差数・ラベル/シンボルの重なり数・グリッド外の点数)。
+/// 整えループが編集の前後で比べる目標値。`sheet_id`省略で先頭シート。
+async fn get_tidy_metrics(
+    State(doc): State<SharedDoc>,
+    Query(q): Query<NetlistQuery>,
+) -> Result<Json<madake_core::tidy::TidyMetrics>, ApiError> {
+    let engine = doc.engine.lock().unwrap();
+    let sheet = match q.sheet_id {
+        Some(id) => engine.project().sheet(id),
+        None => engine.project().sheets.first(),
+    }
+    .ok_or_else(|| bad_request("sheet not found"))?;
+    Ok(Json(madake_core::tidy::tidy_metrics(
+        sheet,
+        &sheet_symbol_defs(sheet),
+    )))
+}
+
 async fn post_export_pdf(
     State(doc): State<SharedDoc>,
     Json(body): Json<ExportSvgBody>,
@@ -668,6 +686,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/symbols", get(get_symbols))
         .route("/api/v1/netlist", get(get_netlist))
         .route("/api/v1/verify", get(get_verify))
+        .route("/api/v1/tidy-metrics", get(get_tidy_metrics))
         .route("/api/v1/terminals", get(get_terminals))
         .route("/api/v1/terminals/chart", get(get_terminal_chart))
         .route("/api/v1/terminals/check", get(get_terminal_check))

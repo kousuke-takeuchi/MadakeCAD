@@ -512,6 +512,25 @@ impl MadakeMcp {
     }
 
     #[tool(
+        description = "図面の「整い具合」を数値で返す。crossings=配線の交差数(線分どうしが面で交わっている箇所。端点で出会う接続・T分岐は交差に含まない)、label_overlaps=文字の重なり数(文字が他の文字やシンボル外形に重なっている組の数。辺で接しているだけは数えない)、symbol_overlaps=シンボル外形どうしの重なり数、off_grid=2.5mmグリッドから外れているシンボル原点・配線頂点の数。全て0が理想。整えループの目標値として使う: 整える前に測り、編集したらもう一度測って数値が減ったか確かめ、改善が止まるか3回で終える。sheet_id省略時は先頭シート"
+    )]
+    fn get_tidy_metrics(
+        &self,
+        Parameters(p): Parameters<SheetRefParams>,
+    ) -> Result<String, ErrorData> {
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let engine = self.doc.engine.lock().unwrap();
+        let sheet = engine
+            .project()
+            .sheet(sheet_id)
+            .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+        json_ok(&madake_core::tidy::tidy_metrics(
+            sheet,
+            &sheet_symbol_defs(sheet),
+        ))
+    }
+
+    #[tool(
         description = "プロジェクト内の端子台の一覧(entity id・所在シート・参照記号・型番・極数・ジャンパ指定)を返す。sheet_id省略で全シート。get_terminal_chart / check_terminal_block / export_reportのentity_idはここで得る"
     )]
     fn list_terminal_blocks(

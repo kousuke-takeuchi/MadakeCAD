@@ -22,6 +22,7 @@ pub mod symbol;
 pub mod templates;
 pub mod terminal_chart;
 pub mod terminal_diagram;
+pub mod tidy;
 pub mod verify;
 pub mod wire_no;
 pub mod xref;
