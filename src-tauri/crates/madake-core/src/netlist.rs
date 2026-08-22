@@ -26,6 +26,21 @@ pub fn rotate_local(p: Point, rotation: u16, mirror: bool) -> Point {
     }
 }
 
+/// 弧の開始・終了角をミラー→回転する([`rotate_local`]と同じ規則)。
+///
+/// 描画は常に start→end を時計回りに描くので、ミラーのときは向きが反転する分だけ
+/// 始点と終点を入れ替える。
+pub fn rotate_arc_angles(start_deg: f64, end_deg: f64, rotation: u16, mirror: bool) -> (f64, f64) {
+    let (s, e) = if mirror {
+        (180.0 - end_deg, 180.0 - start_deg)
+    } else {
+        (start_deg, end_deg)
+    };
+    let span = e - s;
+    let start = (s + f64::from(rotation % 360)).rem_euclid(360.0);
+    (start, start + span)
+}
+
 /// ローカル座標をミラー→回転(0/90/180/270、時計回り、Y下向き座標系)→平行移動する。
 pub fn transform_local(p: Point, inst: &SymbolInstance) -> Point {
     let r = rotate_local(p, inst.rotation, inst.mirror);
@@ -425,19 +440,23 @@ mod tests {
             name_ja: "端子台テスト".into(),
             category: "connector".into(),
             ref_prefix: "T".into(),
+            keywords: vec![],
             primitives: vec![],
             pins: vec![
                 crate::symbol::PinDef {
                     number: "1".into(),
                     name: String::new(),
                     at: Point::new(-2.5, 0.0),
+                    dir: crate::symbol::PinDir::Left,
                 },
                 crate::symbol::PinDef {
                     number: "1".into(),
                     name: String::new(),
                     at: Point::new(2.5, 0.0),
+                    dir: crate::symbol::PinDir::Right,
                 },
             ],
+            text_slots: vec![],
         };
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         for e in [
@@ -549,5 +568,19 @@ mod tests {
         // ミラーでピン1(-7.5,0)は(+7.5,0)へ
         assert!((pins[0].1.x - 17.5).abs() < 1e-9);
         assert!((pins[0].1.y - 20.0).abs() < 1e-9);
+    }
+
+    /// An arc inside a symbol turns with the symbol, so the contactor's half circle keeps facing its moving contact at every rotation, and mirroring flips it without reversing the drawing direction.
+    /// シンボル内の弧はシンボルと一緒に回るので、電磁接触器の半円はどの回転角でも可動接点の側を向き続け、ミラーでは描画方向を保ったまま左右が入れ替わる。
+    #[test]
+    fn arc_angles_follow_symbol_rotation_and_mirror() {
+        // 下向きに開いた椀 (0→180) を90度ずつ回すと、開く向きも90度ずつ回る
+        assert_eq!(rotate_arc_angles(0.0, 180.0, 0, false), (0.0, 180.0));
+        assert_eq!(rotate_arc_angles(0.0, 180.0, 90, false), (90.0, 270.0));
+        assert_eq!(rotate_arc_angles(0.0, 180.0, 180, false), (180.0, 360.0));
+        assert_eq!(rotate_arc_angles(0.0, 180.0, 270, false), (270.0, 450.0));
+        // 左右反転: 下向きの椀はそのまま、右向きの半円 (270→450) は左向きになる
+        assert_eq!(rotate_arc_angles(0.0, 180.0, 0, true), (0.0, 180.0));
+        assert_eq!(rotate_arc_angles(270.0, 450.0, 0, true), (90.0, 270.0));
     }
 }

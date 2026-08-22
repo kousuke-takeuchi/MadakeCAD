@@ -343,8 +343,14 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
                 );
             }
             Primitive::Arc { center, r, start_deg, end_deg } => {
-                // 単純化: 開始/終了角の弧をパスで描く(回転はtransform_localで中心のみ反映)
+                // 開始→終了を時計回りに描く。回転・ミラーは中心と角度の両方に効く
                 let c = transform_local(*center, inst);
+                let (start_deg, end_deg) = crate::netlist::rotate_arc_angles(
+                    *start_deg,
+                    *end_deg,
+                    inst.rotation,
+                    inst.mirror,
+                );
                 let (a0, a1) = (start_deg.to_radians(), end_deg.to_radians());
                 let (sx, sy) = (c.x + r * a0.cos(), c.y + r * a0.sin());
                 let (ex, ey) = (c.x + r * a1.cos(), c.y + r * a1.sin());
