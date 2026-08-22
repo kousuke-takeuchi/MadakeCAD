@@ -33,6 +33,12 @@ pub enum AgentProvider {
     AnthropicApi,
     /// ローカルのGitHub Copilot CLI(GitHubのサインインを利用。**キーは持たない**)
     CopilotCli,
+    /// OpenAI互換のChat Completions API(OpenAI/xAI/OpenRouter/Ollama等。URL+モデル+キー)
+    ///
+    /// 自動のsnake_case変換だと`open_ai_compat`になってしまうため、設定ファイルへ
+    /// 書く名前を明示する(手で読める`openai_compat`にそろえる)。
+    #[serde(rename = "openai_compat")]
+    OpenAiCompat,
 }
 
 impl<'de> Deserialize<'de> for AgentProvider {
@@ -45,6 +51,7 @@ impl<'de> Deserialize<'de> for AgentProvider {
         Ok(match raw.trim() {
             "anthropic_api" => Self::AnthropicApi,
             "copilot_cli" => Self::CopilotCli,
+            "openai_compat" => Self::OpenAiCompat,
             _ => Self::ClaudeCli,
         })
     }
@@ -83,6 +90,17 @@ pub struct AppSettings {
     ///
     /// **GitHubの資格情報はここには入らない**(Copilot CLI自身のサインインを使う)。
     pub copilot_model: String,
+    /// [`AgentProvider::OpenAiCompat`]の接続先(`/chat/completions`の1つ上のURL)。
+    ///
+    /// 空なら既定([`crate::openai_compat::DEFAULT_OPENAI_BASE_URL`])へ戻す。
+    /// ローカルのOllamaは`http://localhost:11434/v1`(設定画面のプリセット)。
+    /// **APIキーはここには入らない**(キーチェーンだけに置く)。
+    pub openai_base_url: String,
+    /// [`AgentProvider::OpenAiCompat`]で使うモデル名。
+    ///
+    /// 接続先ごとに正解が違う(`gpt-4o` / `qwen3:4b` / `x-ai/grok-4`…)ため、
+    /// **既定値は置かず空のまま**にして、利用者に必ず選ばせる。
+    pub openai_model: String,
 }
 
 impl Default for AppSettings {
@@ -97,6 +115,8 @@ impl Default for AppSettings {
             api_model: crate::anthropic::DEFAULT_API_MODEL.into(),
             copilot_path: None,
             copilot_model: crate::copilot_cli::DEFAULT_COPILOT_MODEL.into(),
+            openai_base_url: crate::openai_compat::DEFAULT_OPENAI_BASE_URL.into(),
+            openai_model: String::new(),
         }
     }
 }
@@ -127,6 +147,14 @@ impl AppSettings {
         } else {
             copilot_model.into()
         };
+        let openai_base_url = self.openai_base_url.trim().trim_end_matches('/');
+        self.openai_base_url = if openai_base_url.is_empty() {
+            crate::openai_compat::DEFAULT_OPENAI_BASE_URL.into()
+        } else {
+            openai_base_url.into()
+        };
+        // モデル名には既定値を置かない(空=未選択のまま。UIがプレースホルダで例示する)
+        self.openai_model = self.openai_model.trim().to_string();
         self
     }
 }

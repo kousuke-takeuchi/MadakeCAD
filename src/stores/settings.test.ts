@@ -18,6 +18,8 @@ describe("settings store", () => {
       api_model: "claude-sonnet-5",
       copilot_path: null,
       copilot_model: "auto",
+      openai_base_url: "https://api.openai.com/v1",
+      openai_model: "",
     });
     expect(useSettingsStore().settings).toEqual(defaultSettings());
   });
@@ -34,6 +36,8 @@ describe("settings store", () => {
       api_model: "claude-opus-4-6",
       copilot_path: null,
       copilot_model: "auto",
+      openai_base_url: "https://api.openai.com/v1",
+      openai_model: "",
     };
     vi.spyOn(settingsApi, "get").mockResolvedValue(stored);
 

@@ -13,10 +13,42 @@ import { inTauri } from "../ipc";
  * - `anthropic_api`: Anthropic Messages APIへ直接 (APIキー。**キーはOSキーチェーン**)
  * - `copilot_cli`: ローカルのGitHub Copilot CLI (**MadakeCADは資格情報を持たない**。
  *   認証はCopilot自身のGitHubサインイン)
+ * - `openai_compat`: OpenAI互換のChat Completions API (OpenAI/xAI/OpenRouter/**Ollama**。
+ *   接続先URL+モデル名で切り替える。キーはOSキーチェーン。ローカルURLならキー不要)
  */
-export type AgentProvider = "claude_cli" | "anthropic_api" | "copilot_cli";
+export type AgentProvider = "claude_cli" | "anthropic_api" | "copilot_cli" | "openai_compat";
 
-export const AGENT_PROVIDERS: AgentProvider[] = ["claude_cli", "anthropic_api", "copilot_cli"];
+export const AGENT_PROVIDERS: AgentProvider[] = [
+  "claude_cli",
+  "anthropic_api",
+  "copilot_cli",
+  "openai_compat",
+];
+
+/** OpenAI互換APIの既定の接続先 (OpenAI本体)。 */
+export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+
+/** 「Ollama (ローカル)」プリセットの接続先。**APIキー不要**。 */
+export const OLLAMA_BASE_URL = "http://localhost:11434/v1";
+
+/** 接続先URLがこのPCの中を指しているか (=APIキー無しで使える前提か)。 */
+export function isLocalUrl(url: string): boolean {
+  const host = (url.split("://").pop() ?? "")
+    .split(/[/?#]/)[0]
+    .split("@")
+    .pop()!
+    .replace(/:\d+$/, "")
+    .replace(/[[\]]/g, "")
+    .toLowerCase();
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host === "0.0.0.0" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local")
+  );
+}
 
 /** Rust側 `AppSettings` のJSON表現。**APIキーはここには入らない**(キーチェーンに置く)。 */
 export interface AppSettings {
@@ -41,6 +73,10 @@ export interface AppSettings {
   copilot_path: string | null;
   /** `copilot_cli` のときに使うモデル ("auto" ならCopilotが選ぶ) */
   copilot_model: string;
+  /** `openai_compat` の接続先 (`/chat/completions` の1つ上のURL) */
+  openai_base_url: string;
+  /** `openai_compat` で使うモデル名 (接続先ごとに違うため既定値は無く、空=未選択) */
+  openai_model: string;
 }
 
 export function defaultSettings(): AppSettings {
@@ -54,6 +90,8 @@ export function defaultSettings(): AppSettings {
     api_model: "claude-sonnet-5",
     copilot_path: null,
     copilot_model: "auto",
+    openai_base_url: DEFAULT_OPENAI_BASE_URL,
+    openai_model: "",
   };
 }
 
@@ -73,6 +111,12 @@ export interface ProviderStatus {
   copilot_detected?: boolean | null;
   /** 見つかったcopilot CLIのバージョン表示 */
   copilot_version?: string | null;
+  /** `openai_compat` の接続先URL */
+  openai_base_url?: string;
+  /** `openai_compat` で使うモデル名 */
+  openai_model?: string;
+  /** OpenAI互換APIのキーが保存済みか (**値は返らない**) */
+  openai_key_saved?: boolean;
 }
 
 /** 接続テストの結果。 */
@@ -97,8 +141,9 @@ interface SettingsApi {
 /** APIキーとプロバイダ状態の入口(キーはここから先=OSキーチェーンへしか行かない)。 */
 interface ProviderApi {
   status(): Promise<ProviderStatus>;
-  setKey(key: string): Promise<ProviderStatus>;
-  clearKey(): Promise<ProviderStatus>;
+  /** `provider` はどのプロバイダのキーか (省略時はAnthropic)。 */
+  setKey(key: string, provider?: AgentProvider): Promise<ProviderStatus>;
+  clearKey(provider?: AgentProvider): Promise<ProviderStatus>;
   test(): Promise<ConnectionTest>;
 }
 
@@ -109,8 +154,8 @@ const tauriSettingsApi: SettingsApi = {
 
 const tauriProviderApi: ProviderApi = {
   status: () => invoke<ProviderStatus>("agent_provider_status"),
-  setKey: (key) => invoke<ProviderStatus>("agent_set_api_key", { key }),
-  clearKey: () => invoke<ProviderStatus>("agent_clear_api_key"),
+  setKey: (key, provider) => invoke<ProviderStatus>("agent_set_api_key", { key, provider }),
+  clearKey: (provider) => invoke<ProviderStatus>("agent_clear_api_key", { provider }),
   test: () => invoke<ConnectionTest>("agent_test_connection"),
 };
 
@@ -133,9 +178,15 @@ const httpSettingsApi: SettingsApi = {
 
 const httpProviderApi: ProviderApi = {
   status: () => http<ProviderStatus>("/agent/provider"),
-  setKey: (key) =>
-    http<ProviderStatus>("/agent/api-key", { method: "PUT", body: JSON.stringify({ key }) }),
-  clearKey: () => http<ProviderStatus>("/agent/api-key", { method: "DELETE" }),
+  setKey: (key, provider) =>
+    http<ProviderStatus>("/agent/api-key", {
+      method: "PUT",
+      body: JSON.stringify({ key, provider }),
+    }),
+  clearKey: (provider) =>
+    http<ProviderStatus>(`/agent/api-key${provider ? `?provider=${provider}` : ""}`, {
+      method: "DELETE",
+    }),
   test: () => http<ConnectionTest>("/agent/test-connection", { method: "POST" }),
 };
 
@@ -169,6 +220,11 @@ interface SettingsState {
   copilotDetected: boolean;
   /** 見つかったGitHub Copilot CLIのバージョン表示(未検出ならnull) */
   copilotVersion: string | null;
+  /**
+   * OpenAI互換APIのキーがOSキーチェーンに保存されているか。
+   * **キーそのものはフロントに持たない**(保存後は伏せ字だけを表示する)。
+   */
+  openaiKeySaved: boolean;
 }
 
 export const useSettingsStore = defineStore("settings", {
@@ -184,6 +240,7 @@ export const useSettingsStore = defineStore("settings", {
     keychainError: null,
     copilotDetected: false,
     copilotVersion: null,
+    openaiKeySaved: false,
   }),
 
   getters: {
@@ -191,6 +248,10 @@ export const useSettingsStore = defineStore("settings", {
     usingApiProvider: (state): boolean => state.settings.provider === "anthropic_api",
     /** GitHub Copilot CLIを選んでいるか。 */
     usingCopilotProvider: (state): boolean => state.settings.provider === "copilot_cli",
+    /** OpenAI互換APIを選んでいるか。 */
+    usingOpenAiProvider: (state): boolean => state.settings.provider === "openai_compat",
+    /** OpenAI互換APIの接続先がローカル (Ollama等。キー不要) か。 */
+    openaiIsLocal: (state): boolean => isLocalUrl(state.settings.openai_base_url),
     /**
      * いま選んでいるプロバイダで送信できるか(接続バッジ用)。
      * claude CLIの検出結果はチャットストアが持つので引数で受ける。
@@ -199,6 +260,11 @@ export const useSettingsStore = defineStore("settings", {
       return (cliDetected: boolean): boolean => {
         if (this.usingApiProvider) return this.apiKeySaved;
         if (this.usingCopilotProvider) return this.copilotDetected;
+        if (this.usingOpenAiProvider) {
+          // ローカル (Ollama) はキー不要。どちらの場合もモデル名は必須
+          if (!this.settings.openai_model.trim()) return false;
+          return this.openaiIsLocal || this.openaiKeySaved;
+        }
         return cliDetected;
       };
     },
@@ -245,6 +311,7 @@ export const useSettingsStore = defineStore("settings", {
         // null (まだ調べていない) は「未検出」として扱う
         this.copilotDetected = status.copilot_detected ?? false;
         this.copilotVersion = status.copilot_version ?? null;
+        this.openaiKeySaved = status.openai_key_saved ?? false;
       } catch (e) {
         this.error = messageOf(e);
       }
@@ -254,15 +321,16 @@ export const useSettingsStore = defineStore("settings", {
      * APIキーをOSキーチェーンへ保存する。戻り値は保存できたか。
      * **受け取った文字列はストアに残さない**(呼び出し側も入力欄を空にすること)。
      */
-    async saveApiKey(key: string): Promise<boolean> {
+    async saveApiKey(key: string, provider?: AgentProvider): Promise<boolean> {
       if (!key.trim()) {
         this.error = "empty-api-key";
         return false;
       }
       this.keySaving = true;
       try {
-        const status = await providerApi.setKey(key);
+        const status = await providerApi.setKey(key, provider);
         this.apiKeySaved = status.api_key_saved;
+        this.openaiKeySaved = status.openai_key_saved ?? this.openaiKeySaved;
         this.keychainError = status.keychain_error ?? null;
         this.error = null;
         this.testResult = null;
@@ -275,12 +343,13 @@ export const useSettingsStore = defineStore("settings", {
       }
     },
 
-    /** 保存済みのAPIキーを消す。 */
-    async clearApiKey(): Promise<boolean> {
+    /** 保存済みのAPIキーを消す(`provider`省略時はAnthropic)。 */
+    async clearApiKey(provider?: AgentProvider): Promise<boolean> {
       this.keySaving = true;
       try {
-        const status = await providerApi.clearKey();
+        const status = await providerApi.clearKey(provider);
         this.apiKeySaved = status.api_key_saved;
+        this.openaiKeySaved = status.openai_key_saved ?? false;
         this.keychainError = status.keychain_error ?? null;
         this.error = null;
         this.testResult = null;
