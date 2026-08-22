@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**591 specification clauses** across 5 areas.
+**594 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -653,6 +653,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - cancel stops only the target conversation, leaving others streaming <sub>`chat store: アクション`</sub>
 - cancel on a not-yet-assigned (local-) conversation skips the API and cleans up locally <sub>`chat store: アクション`</sub>
 - a cancel issued before id assignment is sent to the server once the id arrives <sub>`chat store: アクション`</sub>
+- events that arrive late from a cancelled turn are discarded <sub>`chat store: アクション`</sub>
+- events of a new turn started after a cancel (higher sequence number) still apply <sub>`chat store: アクション`</sub>
+- events without a sequence number (older server) are kept even after a cancel <sub>`chat store: アクション`</sub>
 - streaming stops even if the cancel API fails <sub>`chat store: アクション`</sub>
 - cancel with no conversation does nothing and never crashes <sub>`chat store: アクション`</sub>
 - undoTurn calls the API with the stable turn id and withdraws the applied badge <sub>`chat store: アクション`</sub>

@@ -20,8 +20,8 @@ const listRef = ref<HTMLDivElement | null>(null);
 const connected = computed(() => store.detect !== null);
 
 /**
- * 「元に戻す」を出せるのは最新の適用済みターンだけ (エンジンのundoはLIFOなので、
- * 後続の編集が上に積まれた古いターンはサーバー側でも拒否される)。該当なしは-1。
+ * 「元に戻す」を出すのは最新の適用済みターンだけ (サーバーは古いターンの巻き戻しも
+ * 受け付けるが、UIは直前のターンを取り消す1ボタンに絞る)。該当なしは-1。
  */
 const lastAppliedIndex = computed(() => {
   const messages = store.messages;

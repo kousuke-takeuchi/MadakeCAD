@@ -43,6 +43,13 @@ export type AgentEvent =
 /** `agent:event` / SSE `agent` のpayload。 */
 export interface AgentEventPayload {
   conversation_id: string;
+  /**
+   * このイベントを生んだターンの通し番号(送信のたびに単調増加。1始まり)。
+   *
+   * キャンセル済みターンの遅延イベントを捨てるための鍵。旧サーバーは付けてこないため
+   * 省略可(その場合は捨てずに畳み込む)。
+   */
+  turn_seq?: number;
   event: AgentEvent;
 }
 
@@ -557,6 +564,10 @@ interface ChatState {
   pendingLocalId: string | null;
   /** 採番前(local-)の会話でキャンセルが押された印。採番後にサーバーへ中断を送る */
   cancelRequested: boolean;
+  /** 会話id → 直近に受け取ったイベントのターン通し番号 */
+  lastTurnSeq: Record<string, number>;
+  /** 会話id → 中断したターンの通し番号(これ以下のseqのイベントは捨てる) */
+  cancelledTurnSeq: Record<string, number>;
   unlisten: UnlistenFn | null;
   /** 購読処理そのもの(解決前にunsubscribeされても確実に閉じるため保持する) */
   subscription: Promise<UnlistenFn> | null;
@@ -574,6 +585,8 @@ export const useChatStore = defineStore("chat", {
     detect: null,
     pendingLocalId: null,
     cancelRequested: false,
+    lastTurnSeq: {},
+    cancelledTurnSeq: {},
     unlisten: null,
     subscription: null,
     reloading: false,
@@ -660,9 +673,15 @@ export const useChatStore = defineStore("chat", {
 
     /** エージェントイベントを会話へ畳み込む(唯一の状態更新経路)。 */
     applyAgentEvent(payload: AgentEventPayload) {
+      const seq = payload.turn_seq ?? 0;
+      // 中断したターンの遅延イベントは捨てる。中断後もCLIの出力が数行遅れて届くこと
+      // があり、そのまま畳み込むと次のターンの表示へ前のターンの本文が混ざる
+      // (次のターンのseqは必ず大きいので取り違えない)。seq無し=旧サーバーは捨てない
+      if (seq > 0 && seq <= (this.cancelledTurnSeq[payload.conversation_id] ?? 0)) return;
       const conv = this.ensureConversation(payload.conversation_id);
       // 未知の会話(別クライアントが開始したターン)は捏造せず捨てる
       if (!conv) return;
+      if (seq > 0) this.lastTurnSeq[conv.id] = seq;
       // Rust側touch()のミラー: イベントを畳み込んだ会話は「今」更新されたことにする
       // (正確な値はloadConversations()の再取得で上書きされる)
       conv.updated_at = Date.now();
@@ -891,6 +910,12 @@ export const useChatStore = defineStore("chat", {
         this.cancelRequested = true;
       }
       if (remoteId) {
+        // 中断したターンの通し番号を控える(以降このseq以下のイベントは捨てる)。
+        // API呼び出しを待つ前に控えるので、待っている間の遅延イベントも落とせる
+        const seq = this.lastTurnSeq[remoteId] ?? 0;
+        if (seq > 0) {
+          this.cancelledTurnSeq[remoteId] = Math.max(this.cancelledTurnSeq[remoteId] ?? 0, seq);
+        }
         try {
           await agentApi.cancel(remoteId);
         } catch {
@@ -911,14 +936,15 @@ export const useChatStore = defineStore("chat", {
     },
 
     /**
-     * そのターンの編集を全て巻き戻す(undo深さの増分だけundoする)。
+     * そのターンの編集を巻き戻す(サーバーがそのターンの**エージェント編集だけ**を
+     * 逆Commandで戻す。ユーザーの手編集は残る)。
      *
      * 対象はターンの安定ID(`turn_id`)で指定する。メッセージ添字と違い、後続ターンの
      * 追記や履歴の再読込でズレないため、別ターンを巻き戻す事故が起きない。
-     * サーバー側でも「最新の適用済みターンか」「送信中でないか」を検証しており、
-     * 条件を外れると400が返る。**エラーはそのまま呼び出し元へ投げる**
-     * (ChatDockがui.logへ「元に戻す失敗: ...」として出す)。失敗時はローカルの
-     * 適用済み表示も変更しない。
+     * サーバー側は「送信中でないか」「まだ適用済みか」「逆適用が現在の図面と衝突
+     * しないか」を検証し、条件を外れると400を返す(衝突時は図面を一切変更しない)。
+     * **エラーはそのまま呼び出し元へ投げる**(ChatDockがui.logへ
+     * 「元に戻す失敗: ...」として出す)。失敗時はローカルの適用済み表示も変更しない。
      */
     async undoTurn(conversationId: string, turnId: string) {
       const conv = this.conversations.find((c) => c.id === conversationId);
@@ -927,7 +953,7 @@ export const useChatStore = defineStore("chat", {
       if (appliedCommandCount(message) === 0) return;
       await agentApi.undoTurn(conversationId, turnId);
       message.undone = true;
-      // Rust側`record_undone`と同じ後始末(全部戻したのでrevision範囲も畳む)
+      // Rust側`record_reverted`と同じ後始末(全部戻したのでrevision範囲も畳む)
       message.applied_undo_depth = {
         start: message.applied_undo_depth.start,
         end: message.applied_undo_depth.start,
@@ -971,11 +997,10 @@ export const useChatStore = defineStore("chat", {
 /**
  * 進行中のターン(末尾のストリーミング中アシスタントメッセージ)。
  *
- * `turn_completed`/`error`の宛先判定に使う。Rust側のイベントにはターン識別子が無いため、
- * キャンセル直後に遅れて届いた前ターンの`error`と、いま進行中のターンの`error`を
- * 区別できない。せめて「進行中のターンが無い会話」への終了系イベントは捨てて、
- * 発話の無い空ターンが生えるのを防ぐ(取りこぼしはloadConversations()で回復する)。
- * 恒久対策はイベントへのターン通し番号の追加(Rust側`ManagerState::next_seq`が既にある)。
+ * `turn_completed`/`error`の宛先判定に使う。「進行中のターンが無い会話」への終了系
+ * イベントは捨てて、発話の無い空ターンが生えるのを防ぐ(取りこぼしは
+ * loadConversations()で回復する)。中断済みターンの遅延イベントは、その手前で
+ * ターン通し番号(`turn_seq`)により`applyAgentEvent`が捨てている。
  */
 function streamingTurn(conv: ChatConversation): ChatMessage | undefined {
   const last = conv.messages[conv.messages.length - 1];
