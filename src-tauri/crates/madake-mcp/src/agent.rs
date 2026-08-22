@@ -117,14 +117,16 @@ pub fn provider_status(agent: &AgentManager) -> serde_json::Value {
 
 /// キーチェーンから「保存済みか」だけを読む。**値は持ち出さない。**
 ///
-/// 戻り値は`(Anthropicが保存済みか, OpenAI互換が保存済みか, 読めなかった理由)`。
+/// 戻り値はプロバイダごとの「保存済みか」と、読めなかった理由。
 pub fn read_saved_keys() -> SavedKeys {
     let (anthropic, anthropic_error) = madake_agent::secrets::anthropic_api_key_checked();
     let (openai, openai_error) = madake_agent::secrets::openai_compat_api_key_checked();
+    let (gemini, gemini_error) = madake_agent::secrets::gemini_api_key_checked();
     SavedKeys {
         api_key_saved: anthropic.is_some(),
         openai_key_saved: openai.is_some(),
-        keychain_error: anthropic_error.or(openai_error),
+        gemini_key_saved: gemini.is_some(),
+        keychain_error: anthropic_error.or(openai_error).or(gemini_error),
     }
 }
 
@@ -133,6 +135,7 @@ pub fn read_saved_keys() -> SavedKeys {
 pub struct SavedKeys {
     pub api_key_saved: bool,
     pub openai_key_saved: bool,
+    pub gemini_key_saved: bool,
     /// OSキーチェーンが読めなかった理由(読めたときはNone)
     pub keychain_error: Option<String>,
 }
@@ -164,6 +167,9 @@ fn provider_status_with(
         "openai_base_url": settings.openai_base_url,
         "openai_model": settings.openai_model,
         "openai_key_saved": keys.openai_key_saved,
+        // Google Gemini。**キーの値は返さない**(保存済みかどうかだけ)
+        "gemini_model": settings.gemini_model,
+        "gemini_key_saved": keys.gemini_key_saved,
     })
 }
 
@@ -200,10 +206,13 @@ pub async fn provider_status_async(agent: &Arc<AgentManager>) -> serde_json::Val
 
 /// 設定画面の「APIキー」欄がどのプロバイダのものかを表す名前 → キーチェーンの保管名。
 ///
+/// 対応する名前は`anthropic_api` / `openai_compat` / `gemini`。
+///
 /// 未知の名前(古いUI・省略時)はAnthropicとして扱う(これまでの動作のまま)。
 pub fn key_account_for(provider: Option<&str>) -> &'static str {
     match provider.map(str::trim) {
         Some("openai_compat") => madake_agent::secrets::OPENAI_COMPAT_ACCOUNT,
+        Some("gemini") => madake_agent::secrets::GEMINI_ACCOUNT,
         _ => madake_agent::secrets::ANTHROPIC_ACCOUNT,
     }
 }

@@ -683,12 +683,12 @@ async fn provider_status_blocking(agent: &Arc<AgentManager>) -> serde_json::Valu
 #[derive(serde::Deserialize)]
 struct ApiKeyBody {
     key: String,
-    /// どのプロバイダのキーか(`anthropic_api` / `openai_compat`)。省略時はAnthropic。
+    /// どのプロバイダのキーか(`anthropic_api` / `openai_compat` / `gemini`)。省略時はAnthropic。
     #[serde(default)]
     provider: Option<String>,
 }
 
-/// 削除するキーのプロバイダ指定(`?provider=openai_compat`)。省略時はAnthropic。
+/// 削除するキーのプロバイダ指定(`?provider=gemini`など)。省略時はAnthropic。
 #[derive(serde::Deserialize)]
 struct ApiKeyQuery {
     #[serde(default)]

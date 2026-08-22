@@ -65,8 +65,40 @@
 
 ### Task 3: GeminiBackend
 
-- [ ] Step 1 (red): モックHTTPでfunction callingループ/キーチェーン/エラー表示
-- [ ] Step 2 (green): 実装+UI。コミット
+- [x] Step 1 (red): モックHTTPでfunction callingループ/キーチェーン/エラー表示
+- [x] Step 2 (green): 実装+UI。コミット
+
+  **実装の要点**: `gemini.rs`(`POST {base}/models/{model}:streamGenerateContent?alt=sse`、
+  キーは**`x-goog-api-key`ヘッダのみ**でURLクエリには載せない)。systemは`systemInstruction`、
+  ツールは`tools[0].functionDeclarations[]`、`functionCall`が返ったら実行して
+  **role`"user"`の`functionResponse`**(`{id?, name, response:{result|error}}`)で返す
+  (上限16往復)。usageは`usageMetadata`(`promptTokenCount`/`candidatesTokenCount`/
+  `cachedContentTokenCount`)を**累計として置き換え**る(毎チャンクに載るため足し込まない)。
+  設定は`provider: "gemini"` + `gemini_model`(既定`gemini-2.5-flash`。空欄は既定へ戻す)、
+  キーはキーチェーン`account="gemini_api_key"`。ベースURLは`MADAKE_GEMINI_BASE_URL`で上書き可。
+  エラー区分は`gemini_auth`/`gemini_rate_limit`/`gemini_model_not_found`/`gemini_server`/
+  `gemini_request`/`gemini_network`/`gemini_unknown`/`gemini_no_key`/`gemini_no_model`。
+
+  **JSON Schemaの落とし穴**: GeminiのSchemaはOpenAPIの部分集合で、`$schema`/`$ref`/`$defs`/
+  `additionalProperties`/`allOf`等を送ると400になる。`gemini_schema()`が許可キー
+  (type/format/title/description/nullable/enum/maxItems/minItems/properties/required/
+  minProperties/maxProperties/minLength/maxLength/pattern/example/anyOf/propertyOrdering/
+  default/items/minimum/maximum)だけを再帰的に残し、`format`は受け付ける綴り
+  (date-time/enum/float/double/int32/int64)以外を落とす。削って型が消えたスキーマには
+  `type: "string"`を補い、`properties`が空なら`parameters`ごと省く。
+
+  **実機確認(2026-08-22、キー無し環境)**: プロバイダを`gemini`へ切替(Link API
+  `PUT /api/v1/settings`)→`gemini_model`の空欄が既定へ正規化、`GET /api/v1/agent/provider`が
+  `gemini_model`/`gemini_key_saved`を返すことを確認。キー未保存の接続テストは通信せず
+  `gemini_no_key`+案内文。**無効キーで実APIも確認**: 本物の
+  `generativelanguage.googleapis.com`が`400 INVALID_ARGUMENT`+`reason: API_KEY_INVALID`を返し、
+  アプリ側が`gemini_auth`+「APIキーが受け付けられませんでした…」へ変換できた(probe用キーは
+  確認後にキーチェーンから削除、設定も元に戻した)。ブラウザ(localhost:1420)からの
+  画面確認はこの環境のブラウザpaneがLink APIへ到達できず未実施。
+
+  **ユーザー確認事項(未完)**: 実キー(Google AI Studio発行)を設定 > エージェント へ保存し、
+  (a) 接続テストの成功表示、(b) アプリで1ターン通し(作図+検証+undo後始末)、
+  (c) 実際のfunction callingでMCPツールのスキーマが400にならないこと。
 
 ### Task 4: 仕上げ
 

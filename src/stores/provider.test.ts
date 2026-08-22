@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 import {
   AGENT_PROVIDERS,
+  DEFAULT_GEMINI_MODEL,
   DEFAULT_OPENAI_BASE_URL,
   OLLAMA_BASE_URL,
   isLocalUrl,
@@ -420,5 +421,124 @@ describe("OpenAI-compatible provider (incl. Ollama)", () => {
 
     expect(store.testResult?.ok).toBe(false);
     expect(store.testResult?.error_kind).toBe("openai_auth");
+  });
+});
+
+describe("Google Gemini provider", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setActivePinia(createPinia());
+  });
+
+  // ja: プロバイダの選択肢にGoogle Geminiがあり、既定のモデル名が入っている
+  it("offers Google Gemini as a provider with a default model", () => {
+    expect(AGENT_PROVIDERS).toContain("gemini");
+    expect(defaultSettings().gemini_model).toBe(DEFAULT_GEMINI_MODEL);
+    expect(DEFAULT_GEMINI_MODEL).toBe("gemini-2.5-flash");
+  });
+
+  // ja: Geminiのモデル名は設定として保存できる
+  it("saves the Gemini model name", async () => {
+    const saved = {
+      ...defaultSettings(),
+      provider: "gemini" as const,
+      gemini_model: "gemini-2.5-pro",
+    };
+    vi.spyOn(settingsApi, "set").mockResolvedValue(saved);
+
+    const store = useSettingsStore();
+    await store.save({ provider: "gemini", gemini_model: "gemini-2.5-pro" });
+
+    expect(store.settings.provider).toBe("gemini");
+    expect(store.settings.gemini_model).toBe("gemini-2.5-pro");
+  });
+
+  // ja: GeminiのキーはAnthropic・OpenAI互換とは別枠で保存され、値は状態に残らない
+  it("saves its key separately from the other providers and never keeps the value", async () => {
+    const KEY = "AIza-must-not-be-kept";
+    const setKey = vi.spyOn(providerApi, "setKey").mockResolvedValue({
+      provider: "gemini",
+      api_model: "claude-sonnet-5",
+      api_key_saved: false,
+      openai_key_saved: false,
+      gemini_key_saved: true,
+    });
+
+    const store = useSettingsStore();
+    const ok = await store.saveApiKey(KEY, "gemini");
+
+    expect(ok).toBe(true);
+    expect(setKey).toHaveBeenCalledWith(KEY, "gemini");
+    expect(store.geminiKeySaved).toBe(true);
+    // ほかのプロバイダの「保存済み」表示は動かない
+    expect(store.apiKeySaved).toBe(false);
+    expect(store.openaiKeySaved).toBe(false);
+    expect(JSON.stringify(store.$state)).not.toContain(KEY);
+  });
+
+  // ja: Geminiのキーを削除すると、そのプロバイダ指定で削除が呼ばれる
+  it("removing its key asks the backend for that provider's entry", async () => {
+    const clearKey = vi.spyOn(providerApi, "clearKey").mockResolvedValue({
+      provider: "gemini",
+      api_model: "claude-sonnet-5",
+      api_key_saved: false,
+      gemini_key_saved: false,
+    });
+
+    const store = useSettingsStore();
+    store.geminiKeySaved = true;
+    const ok = await store.clearApiKey("gemini");
+
+    expect(ok).toBe(true);
+    expect(clearKey).toHaveBeenCalledWith("gemini");
+    expect(store.geminiKeySaved).toBe(false);
+  });
+
+  // ja: 接続バッジは、キーが保存済みでモデル名が入っているときだけ「使えます」
+  it("the connection badge needs a saved key plus a model name", () => {
+    const store = useSettingsStore();
+    store.settings.provider = "gemini";
+    store.settings.gemini_model = "gemini-2.5-flash";
+
+    // キーが無いうちは、claude CLIが見つかっていても「使えない」
+    expect(store.agentReady(true)).toBe(false);
+    store.geminiKeySaved = true;
+    expect(store.agentReady(false)).toBe(true);
+
+    // モデル名が空なら、キーがあっても「使えない」
+    store.settings.gemini_model = "  ";
+    expect(store.agentReady(false)).toBe(false);
+  });
+
+  // ja: プロバイダの状態からGeminiのモデルとキーの保存状況が分かる
+  it("the provider status reports the Gemini model and whether a key is saved", async () => {
+    vi.spyOn(providerApi, "status").mockResolvedValue({
+      provider: "gemini",
+      api_model: "claude-sonnet-5",
+      api_key_saved: false,
+      gemini_model: "gemini-2.5-flash",
+      gemini_key_saved: true,
+    });
+
+    const store = useSettingsStore();
+    await store.loadProviderStatus();
+
+    expect(store.geminiKeySaved).toBe(true);
+    expect(JSON.stringify(store.$state)).not.toContain("AIza");
+  });
+
+  // ja: キーが弾かれたときは、接続テストがGemini用の区分つきで失敗を返す
+  it("a rejected key fails the connection test with its own error kind", async () => {
+    vi.spyOn(providerApi, "test").mockResolvedValue({
+      ok: false,
+      error_kind: "gemini_auth",
+      error: "APIキーが受け付けられませんでした。",
+    });
+
+    const store = useSettingsStore();
+    await store.testConnection();
+
+    expect(store.testResult?.ok).toBe(false);
+    expect(store.testResult?.error_kind).toBe("gemini_auth");
   });
 });

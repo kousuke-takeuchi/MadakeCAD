@@ -10,6 +10,8 @@
 //! - [`CopilotCliBackend`]: ローカルのGitHub Copilot CLIを起動する(認証はCopilot自身)
 //! - [`OpenAiCompatBackend`]: OpenAI互換のChat Completions API(OpenAI/xAI/OpenRouter/
 //!   **ローカルのOllama**)。URL+モデル名で切り替える
+//! - [`GeminiBackend`]: Google Gemini API(APIキーはOSキーチェーン)。ツールは
+//!   [`tools::ToolBridge`] 経由で内蔵MCPサーバーを呼ぶ
 //!
 //! どちらの経路でも図面の編集はmadake-coreのCommandエンジンを通り、出力は同じ
 //! [`events::AgentEvent`] のストリームになる(UIは違いを知らない)。
@@ -20,6 +22,7 @@ pub mod conversation;
 pub mod copilot_cli;
 pub mod copilot_events;
 pub mod events;
+pub mod gemini;
 pub mod knowledge;
 pub mod manager;
 pub mod openai_compat;
@@ -36,6 +39,7 @@ pub use conversation::{
 pub use copilot_cli::{CopilotCliBackend, DEFAULT_COPILOT_MODEL};
 pub use copilot_events::{parse_copilot_events, CopilotParser};
 pub use events::{parse_stream_events, parse_stream_line, AgentEvent, StreamParser, Usage};
+pub use gemini::{GeminiBackend, DEFAULT_GEMINI_BASE_URL, DEFAULT_GEMINI_MODEL};
 pub use knowledge::{docs_dir, docs_guide, standards_text, system_prompt};
 pub use manager::{AgentManager, ConversationEvent, DocBridge, RevertError, RevertReport};
 pub use openai_compat::{OpenAiCompatBackend, DEFAULT_OPENAI_BASE_URL, OLLAMA_BASE_URL};
@@ -90,6 +94,13 @@ pub enum AgentError {
          接続先で使えるモデル名を入力してください)"
     )]
     NoOpenAiModel,
+    #[error("Gemini APIキーが設定されていません(設定 > エージェント でAPIキーを入力してください)")]
+    NoGeminiKey,
+    #[error(
+        "Geminiのモデル名が設定されていません(設定 > エージェント の「モデル」に、\
+         使うGeminiのモデル名を入力してください)"
+    )]
+    NoGeminiModel,
     #[error("OSのキーチェーンを利用できません: {0}")]
     Keychain(String),
 }

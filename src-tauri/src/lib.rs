@@ -486,7 +486,7 @@ async fn agent_provider_status(state: State<'_, AppState>) -> Result<serde_json:
 
 /// APIキーをOSキーチェーンへ保存する。**設定ファイルには書かない。**
 ///
-/// `provider`はどのプロバイダのキーかの指定(`anthropic_api` / `openai_compat`)。
+/// `provider`はどのプロバイダのキーかの指定(`anthropic_api` / `openai_compat` / `gemini`)。
 /// 省略時はAnthropic(以前からの動作)。
 #[tauri::command]
 async fn agent_set_api_key(

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1106 specification clauses** across 5 areas.
+**1144 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -634,6 +634,29 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Lines the parser does not understand are ignored instead of breaking the turn. <sub>`unknown_and_broken_lines_are_ignored`</sub>
 - The same tool call reported twice is only shown once in the chat. <sub>`a_repeated_tool_call_is_shown_only_once`</sub>
 
+### gemini
+
+- Streamed model text arrives as text deltas and the turn ends with the assembled reply and its token usage. <sub>`streamed_text_becomes_deltas_and_a_completed_turn`</sub>
+- The repeated running totals Gemini puts on every chunk are not added up twice. <sub>`repeated_running_token_totals_are_not_counted_twice`</sub>
+- The request goes to the streaming endpoint of the configured model and carries the system instruction and the user's message. <sub>`the_request_goes_to_the_streaming_endpoint_with_the_system_instruction_and_message`</sub>
+- The bridged MCP tools are offered as Gemini function declarations so the agent can edit the drawing. <sub>`the_bridged_mcp_tools_are_offered_as_function_declarations`</sub>
+- Schema keywords Gemini does not accept are dropped from the tool definitions, and a property left without a type still gets one. <sub>`schema_keywords_gemini_rejects_are_dropped_from_tool_definitions`</sub>
+- A tool the model asks for is executed locally and its result is sent back as a functionResponse so the model can continue. <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- A model that omits the call id still gets its result back, matched by the function name. <sub>`a_call_without_an_id_is_answered_by_function_name`</sub>
+- A tool that fails is reported back to the model as an error field instead of aborting the turn. <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
+- The tool loop stops after a bounded number of rounds so a looping model cannot run forever. <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
+- The API key travels only in the x-goog-api-key header, never in the URL, the body, or anything shown to the user. <sub>`the_api_key_travels_only_in_the_header`</sub>
+- A rejected API key produces a message that says the key is the problem, not a raw HTTP code. <sub>`a_rejected_api_key_is_explained_as_a_key_problem`</sub>
+- Hitting the Gemini usage limit is explained as a usage limit with a "try again later" hint. <sub>`a_rate_limited_service_is_explained_as_a_usage_limit`</sub>
+- An unknown model name is explained as a model-name problem, naming the model that was tried. <sub>`an_unknown_model_name_is_explained_as_a_model_problem`</sub>
+- A server that cannot be reached names the URL that was tried instead of failing silently. <sub>`an_unreachable_server_names_the_url_that_was_tried`</sub>
+- Earlier turns of the conversation are replayed so the model remembers what was said before. <sub>`earlier_turns_of_the_conversation_are_replayed`</sub>
+- The connection test reports success for a working setup and a readable, machine-tagged reason for a broken one. <sub>`the_connection_test_reports_success_or_a_readable_reason`</sub>
+- The connection test uses the plain (non-streaming) endpoint of the configured model. <sub>`the_connection_test_uses_the_non_streaming_endpoint`</sub>
+- The endpoint and the default model match Google's published Gemini API. <sub>`the_defaults_match_the_published_gemini_api`</sub>
+- A model name pasted with the "models/" prefix still reaches the right endpoint exactly once. <sub>`a_model_name_with_the_models_prefix_still_works`</sub>
+- With no model name saved the turn stops before any request, telling the user which box to fill in. <sub>`an_empty_model_name_stops_before_any_request`</sub>
+
 ### Standards knowledge injection
 
 - The bundled standards note covers symbols, reference designators, wire colors, numbering and layout. <sub>`bundled_standards_cover_the_drawing_conventions`</sub>
@@ -704,6 +727,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The provider badge reports "ready" only while the Copilot CLI can actually be found. <sub>`the_provider_is_ready_only_while_copilot_is_found`</sub>
 - If the configured Copilot executable does not exist, the chat shows why instead of failing silently. <sub>`a_missing_copilot_executable_is_explained_in_the_chat`</sub>
 - The connection test goes to Copilot (not to the Anthropic API) while Copilot is the chosen provider. <sub>`the_connection_test_follows_the_chosen_provider`</sub>
+
+### manager_gemini_provider
+
+- With Google Gemini selected, a chat turn runs even though no Claude CLI is installed. <sub>`a_turn_runs_on_google_gemini`</sub>
+- Choosing Gemini without saving a key refuses the send with a message pointing at the settings screen. <sub>`sending_without_a_key_points_at_the_settings_screen`</sub>
+- The Gemini key lives in its own keychain entry, so an Anthropic or OpenAI key does not make Gemini ready. <sub>`the_gemini_key_is_stored_separately_from_the_other_providers`</sub>
+- Clearing the model box falls back to the recommended default model, so the provider stays usable. <sub>`a_blank_model_box_falls_back_to_the_default_model`</sub>
+- While Gemini is chosen, the connection test goes to Gemini instead of to the Anthropic API. <sub>`the_connection_test_follows_the_chosen_provider`</sub>
+- Nothing about the Gemini key is ever broadcast to the UI event stream or written into the chat history. <sub>`the_api_key_never_appears_in_the_event_stream`</sub>
 
 ### Provider: OpenAI-compatible / Ollama
 
@@ -795,6 +827,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A settings file written before the OpenAI-compatible route existed keeps working, with its fields at their defaults. <sub>`an_old_settings_file_without_openai_fields_keeps_working`</sub>
 - A blank URL box returns to OpenAI, a trailing slash is trimmed, and the model name keeps whatever was typed (minus spaces). <sub>`blank_openai_boxes_return_to_the_defaults`</sub>
 - No OpenAI key is ever written to the settings file: only the URL and the model name live there. <sub>`no_openai_key_is_written_to_the_settings_file`</sub>
+- Out of the box the Gemini route is preloaded with the recommended fast model. <sub>`the_gemini_default_model_is_the_recommended_fast_one`</sub>
+- Choosing Gemini survives a save/load round trip together with the model name. <sub>`the_gemini_choice_round_trips_through_save_and_load`</sub>
+- A settings file written before the Gemini route existed keeps working, with its fields at their defaults. <sub>`an_old_settings_file_without_gemini_fields_keeps_working`</sub>
+- A blank Gemini model box returns to the default model, and stray spaces are trimmed away. <sub>`a_blank_gemini_model_box_returns_to_the_default`</sub>
+- No Gemini key is ever written to the settings file: only the model name lives there. <sub>`no_gemini_key_is_written_to_the_settings_file`</sub>
 
 ### tool_bridge
 
@@ -1281,6 +1318,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - the connection badge needs a model plus either a saved key or a local URL <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
 - the provider status reports the endpoint, the model and whether a key is saved <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
 - a rejected key fails the connection test with its own error kind <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- offers Google Gemini as a provider with a default model <sub>`Google Gemini provider`</sub>
+- saves the Gemini model name <sub>`Google Gemini provider`</sub>
+- saves its key separately from the other providers and never keeps the value <sub>`Google Gemini provider`</sub>
+- removing its key asks the backend for that provider's entry <sub>`Google Gemini provider`</sub>
+- the connection badge needs a saved key plus a model name <sub>`Google Gemini provider`</sub>
+- the provider status reports the Gemini model and whether a key is saved <sub>`Google Gemini provider`</sub>
+- a rejected key fails the connection test with its own error kind <sub>`Google Gemini provider`</sub>
 
 ### Reports (BOM / wire list)
 
