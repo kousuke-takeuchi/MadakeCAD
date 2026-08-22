@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**428仕様項目**。
+全5領域・**437仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -109,9 +109,18 @@
 
 - 部品表はシンボルを型番でまとめ、数量を集計する。 <sub>`bom_groups_by_value_and_counts`</sub>
 - カンマを含む項目は引用符で囲まれ、CSVが壊れない。 <sub>`bom_escapes_fields_with_commas`</sub>
-- 電線リストには線番の列があり、そのワイヤのネットに振られた線番が入る (未採番なら空欄)。 <sub>`wire_list_has_a_wire_number_column`</sub>
-- 電線リストにはハーネス列があり、そのワイヤを囲んでいるハーネス境界の名前が入る。 <sub>`wire_list_has_a_harness_column`</sub>
-- 電線リストには各ワイヤの品番・線色・線径・長さが載る。 <sub>`wire_list_contains_attributes`</sub>
+- 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先から始まる。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。 <sub>`wire_list_is_a_from_to_list`</sub>
+- シンボルのピンに届いているワイヤの端は「参照記号:ピン番号」(例 K1:A1) と書かれる。 <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
+- ネットラベルが付いているワイヤの端は、そのラベル名で書かれる。 <sub>`a_wire_end_with_a_net_label_is_written_as_the_label_name`</sub>
+- 何にも接続していないワイヤの端は、リストでは空欄になる。 <sub>`an_unconnected_wire_end_is_empty`</sub>
+- 両端のうち表記の辞書順で小さい方がFromになるので、どちら向きに描いたワイヤでもFrom/Toは常に同じになる。 <sub>`from_is_the_alphabetically_smaller_of_the_two_ends`</sub>
+- 片側だけ接続しているワイヤでは、接続している方が必ずFrom、空欄の方が必ずToになる。 <sub>`a_connected_end_becomes_from_and_the_unconnected_end_becomes_to`</sub>
+- 貫通端子の左右は同じ端子番号なので、同じ端子の内側・外側につながる電線はどちらも「TB1:1」と書かれる。 <sub>`both_sides_of_a_feed_through_terminal_use_the_same_terminal_number`</sub>
+- 電線リストには線番採番で入った線番の列があり、そのワイヤに書かれた線番が入る (未採番なら空欄)。 <sub>`wire_list_has_a_wire_number_column`</sub>
+- 電線リストにはハーネス列があり、そのワイヤを完全に囲んでいるハーネス境界の名前が入る (どの囲みにも入らない線は空欄)。 <sub>`wire_list_has_a_harness_column`</sub>
+- 電線リストには各ワイヤの線色・線径・長さ・品番が載る。 <sub>`wire_list_contains_attributes`</sub>
+- 長さが決まっていないワイヤの長さ列は空欄になる (長さは後で3D配線から書き戻される)。 <sub>`wire_list_length_is_empty_until_it_is_known`</sub>
+- 行はシートごとにFrom→Toの順に並ぶので、同じ図面を2回出力すると全く同じファイルになる。 <sub>`rows_are_sorted_by_from_then_to`</sub>
 
 ### DCシミュレーション
 
