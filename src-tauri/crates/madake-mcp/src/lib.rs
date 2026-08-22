@@ -99,6 +99,26 @@ impl SharedDoc {
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
     }
 
+    /// 開始テンプレートをシートへ適用する(**1回の編集** = undo一発で戻る)。
+    ///
+    /// 由来は呼び出し経路で決まる: UI=[`EditOrigin::User`]、エージェント/外部=
+    /// [`Self::mcp_origin`]。
+    pub fn apply_template(
+        &self,
+        template_id: &str,
+        sheet_id: Uuid,
+        origin: EditOrigin,
+    ) -> madake_core::Result<Patch> {
+        let patch = madake_core::templates::apply(
+            &mut self.engine.lock().unwrap(),
+            template_id,
+            sheet_id,
+            origin,
+        )?;
+        let _ = self.patches.send(patch.clone());
+        Ok(patch)
+    }
+
     /// undo深さの区間`[start, end)`にあるエージェント編集だけを巻き戻す。
     ///
     /// 逆Commandの適用として実行されるためpatchも配信され、UIへそのまま反映される。
@@ -185,6 +205,14 @@ pub struct DrawWireParams {
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct SheetRefParams {
     /// 対象シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ApplyTemplateParams {
+    /// 適用するテンプレートのid (`list_templates`で得る)。
+    pub template_id: String,
+    /// 適用先シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
 }
 
@@ -344,6 +372,49 @@ impl MadakeMcp {
             patches.push(patch);
         }
         json_ok(&patches)
+    }
+
+    #[tool(
+        description = "開始テンプレート(白紙から作図を始めるための回路の雛形)の一覧を返す。各テンプレートはid・名称(英/日)・説明・入っているコマンド数を持つ。同梱は24V制御基本・モータ起動回路・非常停止回路で、ユーザーが~/MadakeCAD/templates/へ置いたテンプレートも含む。適用はapply_template"
+    )]
+    fn list_templates(&self) -> Result<String, ErrorData> {
+        let list = madake_core::templates::list();
+        let templates: Vec<serde_json::Value> = list
+            .templates
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "id": t.id,
+                    "name": t.name,
+                    "name_ja": t.name_ja,
+                    "description": t.description,
+                    "description_ja": t.description_ja,
+                    "builtin": t.builtin,
+                    "command_count": t.commands.len(),
+                })
+            })
+            .collect();
+        json_ok(&serde_json::json!({ "templates": templates, "issues": list.issues }))
+    }
+
+    #[tool(
+        description = "開始テンプレートをシートへ適用する(部品・配線・ネットラベル一式が入る)。テンプレートはERC指摘ゼロの状態で入るので、そこから編集を足していく。適用は1回の編集として履歴に乗るためundo一発で全体が戻る。適用後は必ずrun_verificationで確認する"
+    )]
+    fn apply_template(
+        &self,
+        Parameters(p): Parameters<ApplyTemplateParams>,
+    ) -> Result<String, ErrorData> {
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let patch = self
+            .doc
+            .apply_template(&p.template_id, sheet_id, self.doc.mcp_origin())
+            .map_err(internal)?;
+        json_ok(&serde_json::json!({
+            "template_id": p.template_id,
+            "sheet_id": sheet_id,
+            "revision": patch.revision,
+            "entities_added": patch.ops.len(),
+        }))
     }
 
     #[tool(description = "シンボルをシートに配置する。作成されたエンティティidを返す")]

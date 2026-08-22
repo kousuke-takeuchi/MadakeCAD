@@ -46,6 +46,41 @@ fn execute_command(state: State<AppState>, command: Command) -> Result<Patch, St
     state.doc.execute_user(command).map_err(|e| e.to_string())
 }
 
+/// 使える開始テンプレートの一覧(同梱+ユーザーの`~/MadakeCAD/templates`)。
+#[tauri::command]
+fn list_templates() -> madake_core::templates::TemplateList {
+    madake_core::templates::list()
+}
+
+/// ユーザーテンプレートの置き場(`~/MadakeCAD/templates`)をOSのファイラで開く。
+/// 無ければ作ってから開く(「ここへJSONを置けば一覧に並ぶ」を実物で示す)。
+#[tauri::command]
+fn open_templates_folder(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let dir = madake_core::templates::user_dir().ok_or("home directory not found")?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.display().to_string();
+    app.opener()
+        .open_path(path.clone(), None::<&str>)
+        .map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
+/// 開始テンプレートをシートへ適用する。UI操作なので由来は`user`、
+/// **1回の編集**として履歴に乗るのでundo一発で全体が戻る。
+#[tauri::command]
+fn apply_template(
+    state: State<AppState>,
+    template_id: String,
+    sheet_id: madake_core::SheetId,
+) -> Result<Patch, String> {
+    state
+        .doc
+        .apply_template(&template_id, sheet_id, madake_core::EditOrigin::User)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn undo(state: State<AppState>) -> Result<Option<Patch>, String> {
     state.doc.undo().map_err(|e| e.to_string())
@@ -356,6 +391,30 @@ fn resolve_standards_resource(app: &tauri::AppHandle) {
     eprintln!("規格ノート({RELATIVE})が見つかりません。埋め込みの内容で続行します");
 }
 
+/// 同梱の開始テンプレート(`resources/templates/*.json`)のディレクトリを
+/// madake-coreへ渡す(`MADAKE_TEMPLATES_PATH`)。
+///
+/// 配布時はアプリバンドル内のリソース、開発時(`tauri dev`)はリポジトリの
+/// `src-tauri/resources/`。どちらも見つからなければ何もしない
+/// (madake-coreがビルド時に埋め込んだ同内容へフォールバックする)。
+fn resolve_templates_resource(app: &tauri::AppHandle) {
+    use tauri::path::BaseDirectory;
+    use tauri::Manager;
+
+    const RELATIVE: &str = "resources/templates";
+    let candidates = [
+        app.path().resolve(RELATIVE, BaseDirectory::Resource).ok(),
+        Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(RELATIVE)),
+    ];
+    for path in candidates.into_iter().flatten() {
+        if path.is_dir() {
+            std::env::set_var(madake_core::templates::TEMPLATES_PATH_ENV, &path);
+            return;
+        }
+    }
+    eprintln!("開始テンプレート({RELATIVE})が見つかりません。埋め込みの内容で続行します");
+}
+
 /// 同梱ドキュメント(`docs/`の公開マニュアル01〜13)の場所をエージェントへ渡す
 /// (`MADAKE_DOCS_PATH`)。
 ///
@@ -412,6 +471,8 @@ pub fn run() {
             resolve_standards_resource(app.handle());
             // 同梱ドキュメント(操作方法・規格の出典)の場所も教える
             resolve_docs_resource(app.handle());
+            // 同梱の開始テンプレート(編集可能なCommand列JSON)の場所も教える
+            resolve_templates_resource(app.handle());
 
             // MCPサーバー起動 (127.0.0.1:port/mcp)。Link API(/api/v1)も同じポート
             let mcp_doc = doc.clone();
@@ -458,6 +519,9 @@ pub fn run() {
             get_project,
             list_symbols,
             execute_command,
+            list_templates,
+            apply_template,
+            open_templates_folder,
             undo,
             redo,
             save_project,

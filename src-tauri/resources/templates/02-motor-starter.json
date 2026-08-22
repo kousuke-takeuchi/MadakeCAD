@@ -1,0 +1,553 @@
+{
+  "id": "motor_starter",
+  "name": "Motor starter",
+  "name_ja": "モータ起動回路",
+  "description": "A self-holding motor starter: breaker, contactor main contact, thermal overload, motor, start pushbutton and the contactor coil with its own holding contact.",
+  "description_ja": "自己保持式のモータ起動回路。遮断器(QF1)・コンタクタ主接点・サーマル・モータの主回路と、起動押しボタン・コンタクタコイル・自己保持接点の制御回路が入ります。",
+  "commands": [
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "symbol",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "symbol_id": "battery",
+        "at": {
+          "x": 75,
+          "y": 120
+        },
+        "rotation": 0,
+        "mirror": false,
+        "reference": "BT1",
+        "value": "DC24V",
+        "attrs": {}
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "symbol",
+        "id": "00000000-0000-0000-0000-000000000002",
+        "symbol_id": "switch_spst",
+        "at": {
+          "x": 110,
+          "y": 70
+        },
+        "rotation": 0,
+        "mirror": false,
+        "reference": "QF1",
+        "value": "MCB 5A",
+        "attrs": {}
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "symbol",
+        "id": "00000000-0000-0000-0000-000000000003",
+        "symbol_id": "relay_contact_no",
+        "at": {
+          "x": 150,
+          "y": 95
+        },
+        "rotation": 90,
+        "mirror": false,
+        "reference": "KM1",
+        "value": "主接点",
+        "attrs": {}
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "symbol",
+        "id": "00000000-0000-0000-0000-000000000004",
+        "symbol_id": "switch_spst",
+        "at": {
+          "x": 150,
+          "y": 125
+        },
+        "rotation": 90,
+        "mirror": false,
+        "reference": "F1",
+        "value": "サーマル 2.5A",
+        "attrs": {}
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "symbol",
+        "id": "00000000-0000-0000-0000-000000000005",
+        "symbol_id": "motor",
+        "at": {
+          "x": 150,
+          "y": 155
+        },
+        "rotation": 90,
+        "mirror": false,
+        "reference": "M1",
+        "value": "DC24V 2.0A",
+        "attrs": {
+          "current_a": "2.0"
+        }
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "symbol",
+        "id": "00000000-0000-0000-0000-000000000006",
+        "symbol_id": "pushbutton_no",
+        "at": {
+          "x": 220,
+          "y": 95
+        },
+        "rotation": 90,
+        "mirror": false,
+        "reference": "PB1",
+        "value": "起動",
+        "attrs": {}
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "symbol",
+        "id": "00000000-0000-0000-0000-000000000007",
+        "symbol_id": "relay_coil",
+        "at": {
+          "x": 220,
+          "y": 140
+        },
+        "rotation": 90,
+        "mirror": false,
+        "reference": "KM1",
+        "value": "DC24V",
+        "attrs": {
+          "current_a": "0.05"
+        }
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "symbol",
+        "id": "00000000-0000-0000-0000-000000000008",
+        "symbol_id": "relay_contact_no",
+        "at": {
+          "x": 250,
+          "y": 95
+        },
+        "rotation": 90,
+        "mirror": false,
+        "reference": "KM1",
+        "value": "自己保持",
+        "attrs": {}
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "points": [
+          {
+            "x": 67.5,
+            "y": 120
+          },
+          {
+            "x": 60,
+            "y": 120
+          },
+          {
+            "x": 60,
+            "y": 70
+          },
+          {
+            "x": 102.5,
+            "y": 70
+          }
+        ],
+        "color": "blue",
+        "sq": 0.75,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000010",
+        "points": [
+          {
+            "x": 117.5,
+            "y": 70
+          },
+          {
+            "x": 300,
+            "y": 70
+          }
+        ],
+        "color": "blue",
+        "sq": 0.75,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000011",
+        "points": [
+          {
+            "x": 82.5,
+            "y": 120
+          },
+          {
+            "x": 90,
+            "y": 120
+          },
+          {
+            "x": 90,
+            "y": 180
+          },
+          {
+            "x": 300,
+            "y": 180
+          }
+        ],
+        "color": "blue",
+        "sq": 0.75,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000012",
+        "points": [
+          {
+            "x": 150,
+            "y": 70
+          },
+          {
+            "x": 150,
+            "y": 87.5
+          }
+        ],
+        "color": "black",
+        "sq": 2.0,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000013",
+        "points": [
+          {
+            "x": 150,
+            "y": 102.5
+          },
+          {
+            "x": 150,
+            "y": 117.5
+          }
+        ],
+        "color": "black",
+        "sq": 2.0,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000014",
+        "points": [
+          {
+            "x": 150,
+            "y": 132.5
+          },
+          {
+            "x": 150,
+            "y": 147.5
+          }
+        ],
+        "color": "black",
+        "sq": 2.0,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000015",
+        "points": [
+          {
+            "x": 150,
+            "y": 162.5
+          },
+          {
+            "x": 150,
+            "y": 180
+          }
+        ],
+        "color": "black",
+        "sq": 2.0,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000016",
+        "points": [
+          {
+            "x": 220,
+            "y": 70
+          },
+          {
+            "x": 220,
+            "y": 87.5
+          }
+        ],
+        "color": "blue",
+        "sq": 0.75,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000017",
+        "points": [
+          {
+            "x": 220,
+            "y": 102.5
+          },
+          {
+            "x": 220,
+            "y": 132.5
+          }
+        ],
+        "color": "blue",
+        "sq": 0.75,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000018",
+        "points": [
+          {
+            "x": 220,
+            "y": 147.5
+          },
+          {
+            "x": 220,
+            "y": 180
+          }
+        ],
+        "color": "blue",
+        "sq": 0.75,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000019",
+        "points": [
+          {
+            "x": 250,
+            "y": 70
+          },
+          {
+            "x": 250,
+            "y": 87.5
+          }
+        ],
+        "color": "blue",
+        "sq": 0.75,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "wire",
+        "id": "00000000-0000-0000-0000-000000000020",
+        "points": [
+          {
+            "x": 250,
+            "y": 102.5
+          },
+          {
+            "x": 250,
+            "y": 115
+          },
+          {
+            "x": 220,
+            "y": 115
+          }
+        ],
+        "color": "blue",
+        "sq": 0.75,
+        "length_m": null,
+        "part_no": null,
+        "net": null
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "junction",
+        "id": "00000000-0000-0000-0000-000000000021",
+        "at": {
+          "x": 150,
+          "y": 70
+        }
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "junction",
+        "id": "00000000-0000-0000-0000-000000000022",
+        "at": {
+          "x": 220,
+          "y": 70
+        }
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "junction",
+        "id": "00000000-0000-0000-0000-000000000023",
+        "at": {
+          "x": 250,
+          "y": 70
+        }
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "junction",
+        "id": "00000000-0000-0000-0000-000000000024",
+        "at": {
+          "x": 150,
+          "y": 180
+        }
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "junction",
+        "id": "00000000-0000-0000-0000-000000000025",
+        "at": {
+          "x": 220,
+          "y": 180
+        }
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "junction",
+        "id": "00000000-0000-0000-0000-000000000026",
+        "at": {
+          "x": 220,
+          "y": 115
+        }
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "net_label",
+        "id": "00000000-0000-0000-0000-000000000027",
+        "at": {
+          "x": 300,
+          "y": 70
+        },
+        "name": "24V",
+        "rotation": 0
+      }
+    },
+    {
+      "type": "add_entity",
+      "sheet_id": "00000000-0000-0000-0000-000000000000",
+      "entity": {
+        "kind": "net_label",
+        "id": "00000000-0000-0000-0000-000000000028",
+        "at": {
+          "x": 300,
+          "y": 180
+        },
+        "name": "0V",
+        "rotation": 0
+      }
+    }
+  ]
+}

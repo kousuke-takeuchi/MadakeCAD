@@ -61,9 +61,19 @@
 
 ### Task 5: テンプレート
 
-- [ ] Step 0 (design): .pen「M3デザイン - テンプレート選択」(メインエージェントが作成済みであること)
-- [ ] Step 1 (red): Rustテスト: テンプレートJSONの列挙・読み込み/適用が1ターン(undo一発)/3テンプレートがERCクリーン。TS: 選択UIのコマンド組み立て
-- [ ] Step 2 (green): 同梱テンプレ3種作成+UI実装(i18n)。実機確認+コミット
+- [x] Step 0 (design): .pen「M3デザイン - テンプレート選択」(メインエージェントが作成済みであること)
+- [x] Step 1 (red): Rustテスト: テンプレートJSONの列挙・読み込み/適用が1ターン(undo一発)/3テンプレートがERCクリーン。TS: 選択UIのコマンド組み立て
+- [x] Step 2 (green): 同梱テンプレ3種作成+UI実装(i18n)。実機確認+コミット
+
+実装メモ:
+- **undo一発の実現**: `Engine::execute_batch(cmds, origin)`を追加(Command列を**履歴エントリ1件**として適用。途中で失敗したら適用前へ戻して`Err`・履歴も積まない)。既存の`execute_commands`はコマンドごとに1履歴なので、テンプレート適用専用にこの入口を通す
+- **テンプレート形式**: `src-tauri/resources/templates/NN-*.json` = `{ id, name, name_ja, description, description_ja, commands: [Command…] }`。**コマンド中のUUIDはプレースホルダ**で、nil UUID=適用先シート、それ以外=適用のたびに新しいidへ振り直す(同じテンプレを何度でも適用でき、id衝突しない)。ファイル名の連番=一覧の並び順
+- **解決順(3段)**: `MADAKE_TEMPLATES_PATH`(Tauriが起動時にリソースの実体を入れる)→ リポジトリの`src-tauri/resources/templates`→ `include_str!`の埋め込み。加えて`~/MadakeCAD/templates/*.json`をユーザーテンプレとして列挙(同idは同梱を差し替え)。壊れたJSON・未知コマンドは**一覧を止めずに**`issues[]`(パス+理由)で持ち帰りUIに出す
+- **同梱3種**(いずれも適用後ERCエラー0・**ERC警告も0**=浮きピン無し。テストで担保): ①24V制御基本=BT1(DC24V)+F1(3A)+24V/0V母線(ネットラベル)+TB1(4極、全端子を母線へ結線) ②モータ起動回路=QF1(MCB代用のスイッチ)+KM1主接点+F1(サーマル代用)+M1(2.0A)の主回路 & PB1+KM1コイル+KM1自己保持接点の制御回路 ③非常停止回路=F1+ES1(非常停止NC)+PB1(リセット)+K1コイル+K1自己保持+K1出力接点→ネットラベル「EMG」
+  - **記号の代用**: MCB・サーマル・NC接点の専用JIS記号がライブラリに無いため、スイッチ記号+参照記号/型番(QF1「MCB 5A」・F1「サーマル 2.5A」・ES1「非常停止 (NC)」)で表す。専用記号の追加は図面記法のデザイン確定が要るためM4以降
+- **入口**: IPC(`list_templates`/`apply_template`/`open_templates_folder`)・Link API(`GET /templates`・`POST /templates/apply`)・MCPツール(`list_templates`/`apply_template`)。エージェントのシステムプロンプトにも「白紙から始めるときはまずテンプレート」を1行追加
+- **起動導線の判断**: **自動では開かない(ボタンのみ)**。現UIには「新規作成」の導線自体が無く(`new_project` IPCは未使用)、起動直後の空図面でモーダルを出すのは押し付けになるため。導線はリボン「プロジェクト」タブ>作図の開始(大ボタン=テンプレート/小=テンプレートを選ぶ・テンプレートフォルダ)と、「回路図」タブ>部品を挿入の小ボタン。新規作成UIを作るフェーズで「新規作成直後だけ自動で開く」を再検討する
+- **プレビュー**: サムネイル(96x54)も大プレビューも、テンプレートのCommand列から仮シートを組み立てて**通常の図面レンダラ`renderSheet`**で描く(`src/canvas/templatePreview.ts`)。プレースホルダ矩形ではなく実際の回路が出る
 
 ### Task 6: 受け入れ検証と仕上げ
 

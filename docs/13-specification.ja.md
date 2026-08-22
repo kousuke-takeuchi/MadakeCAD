@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**620仕様項目**。
+全5領域・**652仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -38,6 +38,9 @@
 - 区間の巻き戻しはその中のエージェント編集だけを戻し、間に挟まったユーザー編集はそのまま残す。 <sub>`revert_range_rolls_back_agent_edits_and_keeps_user_edits`</sub>
 - 巻き戻しも通常の編集として履歴に乗るため、undoすればエージェントの編集が戻ってくる。 <sub>`revert_range_is_itself_undoable`</sub>
 - エージェントの編集を現在の図面へ逆適用できない場合(対象をユーザーが消した等)、巻き戻し全体を拒否し何も変更しない。 <sub>`revert_range_refuses_conflicting_reverts_without_partial_changes`</sub>
+- バッチとしてまとめて実行したコマンド列は履歴1件になり、undo一発で全部消え、redo一発で全部戻る。 <sub>`execute_batch_is_undone_in_one_step`</sub>
+- バッチ内の1つでも失敗したらバッチ全体を拒否し、図面は変わらず履歴にも残らない。 <sub>`execute_batch_refuses_everything_when_one_command_fails`</sub>
+- 空のバッチは何も変えない(履歴も増えず、ドキュメントrevisionも進まない)。 <sub>`empty_batch_changes_nothing`</sub>
 - その由来の編集が1件も無い区間の巻き戻しは、図面に触れず「戻すものが無い」と報告する。 <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
 
 ### 座標・ジオメトリ
@@ -203,6 +206,20 @@
 - sheet_symbol_defsは同梱ライブラリに加え、シートで実際に使われている動的シンボルの定義を返す。 <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
 - シンボル定義はJSONに往復変換しても失われない。 <sub>`symbol_json_roundtrip`</sub>
 
+### templates
+
+- 同梱テンプレートは「24V制御基本・モータ起動回路・非常停止回路」の3種がこの順で並び、それぞれ英語と日本語の名前・説明を持つ。 <sub>`the_three_bundled_templates_are_listed_in_both_languages`</sub>
+- リソースのディレクトリが無い環境でも、ビルドへ埋め込んだ同梱テンプレートが使える。 <sub>`templates_are_available_without_the_resource_directory`</sub>
+- 「24V制御基本」を適用すると、直流電源・ヒューズ・4極端子台と24V/0Vのネットラベルが図面に入る。 <sub>`applying_the_24v_template_places_its_parts_on_the_sheet`</sub>
+- テンプレートの適用は1回の編集なので、undo一発で図面が空に戻り、redo一発で全部戻ってくる。 <sub>`applying_a_template_is_undone_in_one_step`</sub>
+- 同梱テンプレートはどれも検証でエラー0・ERC警告0になる(浮いたピンの無い、そのまま使える出発点)。 <sub>`every_bundled_template_verifies_without_errors_or_erc_warnings`</sub>
+- 同じテンプレートは2回適用できる(2回目は新しいidが振られ、1回目と衝突しない)。 <sub>`the_same_template_can_be_applied_twice`</sub>
+- テンプレートは複数シートのプロジェクトでも、指定したシートにだけ入る。 <sub>`a_template_lands_on_the_requested_sheet`</sub>
+- 知らないテンプレートidはidを添えたエラーで拒否され、図面は変わらない。 <sub>`an_unknown_template_id_is_refused`</sub>
+- ユーザーが自分のテンプレートフォルダに置いたテンプレートは同梱テンプレートの後に並び、同じように適用できる。 <sub>`user_templates_are_listed_after_the_bundled_ones`</sub>
+- JSONとして壊れている(または知らないコマンドを含む)テンプレートは、パスと理由を添えて報告され、他のテンプレートはそのまま使える。 <sub>`a_broken_template_file_is_reported_with_its_path`</sub>
+- ユーザーテンプレートは同梱テンプレートと同じidを使うことで差し替えられる(自社版が優先される)。 <sub>`a_user_template_replaces_the_bundled_one_with_the_same_id`</sub>
+
 ### 端子台チャート
 
 - 端子台のチャートは端子1個につき1行で、端子番号の順に並ぶ。 <sub>`the_chart_has_one_row_per_terminal_in_number_order`</sub>
@@ -335,9 +352,16 @@
 - ターン実行中の印は入れ子でも数えられ、必ず解除されるため、ターン後の編集はまたユーザー編集になる。 <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
 - エージェントマネージャが使う窓口はエージェント編集だけを巻き戻し、戻した件数を報告する。 <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
 
+### templates_api
+
+- GET /templates は同梱の開始テンプレートを英日の名前つきで返す。 <sub>`the_link_api_lists_the_bundled_templates`</sub>
+- POST /templates/apply はテンプレートを1回の編集としてシートへ入れ、undo一発で戻せる。 <sub>`applying_a_template_over_the_link_api_is_one_undo_step`</sub>
+- シートidを省くと先頭シートが対象になり、知らないテンプレートidは400で拒否される。 <sub>`the_link_api_defaults_to_the_first_sheet_and_refuses_unknown_templates`</sub>
+
 ### tools
 
 - 部品検索ツールの説明には選定・比較・代替品の用途が書かれており、「これの代替は?」と聞かれたエージェントがこれを使う。 <sub>`the_parts_search_tool_advertises_selection_and_comparison`</sub>
+- テンプレートのツール説明には「作図の雛形であること」「ERC指摘ゼロで入ること」「undo一発で戻せること」が書かれている。 <sub>`the_template_tools_explain_what_a_template_is`</sub>
 - 公開ツールには全て説明文が付いており、説明の無いツールをエージェントへ見せない。 <sub>`every_published_tool_has_a_description`</sub>
 
 
@@ -388,6 +412,7 @@
 
 - 同梱の規格知識には図記号・参照記号・線色/sq・線番・配置の決まりが書かれている。 <sub>`bundled_standards_cover_the_drawing_conventions`</sub>
 - システムプロンプトには同梱の規格知識と検証ループの指示が載る。 <sub>`system_prompt_carries_the_standards_and_the_verification_loop`</sub>
+- システムプロンプトは、白紙から作り始めるときはまず開始テンプレートを使うよう指示する。 <sub>`system_prompt_points_at_the_start_templates`</sub>
 - システムプロンプトは図面コンテキストが先頭で、規格知識はその後ろに続く。 <sub>`system_prompt_puts_the_drawing_context_first`</sub>
 - 設定の知識ファイルは同梱ノートの後ろへ追記される。 <sub>`user_knowledge_file_is_appended_to_the_prompt`</sub>
 - 知識ファイル未設定なら、プロンプトには同梱ノートだけが載る。 <sub>`without_a_knowledge_file_only_the_bundled_note_is_used`</sub>
@@ -782,6 +807,22 @@
 - runでDC解析結果を取得してパネルを開く <sub>`simulation store`</sub>
 - 開閉トグルは再実行時にopen_switchesとして渡される <sub>`simulation store`</sub>
 - 失敗時(ngspice未導入等)はエラーメッセージを保持したままパネルを開く <sub>`simulation store`</sub>
+
+### templates
+
+- ダイアログを開くとテンプレート一覧を読み込み、先頭を選んだ状態で表示する <sub>`template picker store`</sub>
+- タイルを選ぶと選択中のテンプレートが切り替わる (右のプレビューが変わる) <sub>`template picker store`</sub>
+- 「このテンプレートで開始」で選択中のテンプレートが現在のシートへ適用され、ダイアログが閉じる <sub>`template picker store`</sub>
+- キャンセルではダイアログが閉じるだけで、図面には何も適用されない <sub>`template picker store`</sub>
+- 適用に失敗したときは理由を表示し、ダイアログは開いたままにする (選択をやり直せる) <sub>`template picker store`</sub>
+- 読み込めなかったテンプレートファイルはパスと理由つきで持ち帰り、残りのテンプレートは選べる <sub>`template picker store`</sub>
+- テンプレートが1つも無いときは選択なしで開き、適用しても何も起きない <sub>`template picker store`</sub>
+- 「+ ユーザーテンプレートを追加...」はテンプレートフォルダをファイラで開く <sub>`template picker store`</sub>
+- ファイラを開けない環境では、テンプレートを置くフォルダのパスだけを案内する <sub>`template picker store`</sub>
+- 名前と説明はUI言語に従い、日本語以外では英語表記になる <sub>`template picker store`</sub>
+- プレビューはテンプレートが置くエンティティを仮のシートに組み立てて描く <sub>`template preview`</sub>
+- プレビューは図面の描画範囲を求め、その中心がキャンバスの中心に来るよう合わせる <sub>`template preview`</sub>
+- 空のテンプレートでもプレビューは既定のビューポートを返す (描画で落ちない) <sub>`template preview`</sub>
 
 ### terminals
 

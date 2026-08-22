@@ -17,6 +17,7 @@ import WireNumberDialog from "./WireNumberDialog.vue";
 import TerminalEditorDialog from "./TerminalEditorDialog.vue";
 import ReportDialog from "./ReportDialog.vue";
 import PdfBookDialog from "./PdfBookDialog.vue";
+import TemplateDialog from "./TemplateDialog.vue";
 import SymbolPickerDialog from "./SymbolPickerDialog.vue";
 import TitleBar from "./TitleBar.vue";
 import SettingsDialog from "./settings/SettingsDialog.vue";
@@ -120,6 +121,7 @@ onBeforeUnmount(() => {
     <TerminalEditorDialog />
     <ReportDialog />
     <PdfBookDialog />
+    <TemplateDialog />
   </div>
 </template>
 
