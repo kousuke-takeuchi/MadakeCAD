@@ -15,7 +15,9 @@ import {
   panelToolsAllowed,
   panelUpdateCommand,
   railOfFootprint,
+  panelLegendAddCommand,
   railSnapDelta,
+  renumberPanelItemsCommand,
   schematicToolsAllowed,
   unplacedRow,
 } from "./panelTools";
@@ -316,5 +318,43 @@ describe("tools allowed per sheet kind", () => {
   it("disables both tool sets when no sheet is open", () => {
     expect(schematicToolsAllowed(null)).toBe(false);
     expect(panelToolsAllowed(null)).toBe(false);
+  });
+});
+
+describe("balloon numbering and the legend table", () => {
+  const fp = (id: string, x: number): Entity & Footprint => ({
+    kind: "footprint",
+    id,
+    at: { x, y: 120 },
+    w: 20,
+    h: 40,
+    rotation: 0,
+    reference: id.toUpperCase(),
+    part_no: "",
+    item_no: null,
+  });
+
+  // ja: バルーン採番は renumber_panel_items コマンド1回 (undo一発で採番前へ戻せる)。
+  it("turns balloon numbering into one renumber_panel_items command", () => {
+    const sheet = panelSheet(fp("k1", 100), fp("k2", 200));
+    expect(renumberPanelItemsCommand(sheet)).toEqual({
+      type: "renumber_panel_items",
+      sheet_id: "panel-1",
+    });
+  });
+
+  // ja: 置く部品が1つも無い盤では採番のコマンドを送らない。
+  it("sends no command when there is nothing to number", () => {
+    expect(renumberPanelItemsCommand(panelSheet())).toBeNull();
+  });
+
+  // ja: 凡例表の挿入は add_entity コマンド1つで、決めるのは置き場所だけ。
+  it("inserts the legend table with one add_entity command carrying only its position", () => {
+    const command = panelLegendAddCommand(panelSheet(), { x: 300, y: 200 });
+    expect(command).toMatchObject({
+      type: "add_entity",
+      sheet_id: "panel-1",
+      entity: { kind: "panel_legend", at: { x: 300, y: 200 } },
+    });
   });
 });

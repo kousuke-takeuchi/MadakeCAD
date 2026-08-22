@@ -173,6 +173,7 @@ mod tests {
             rotation: 90,
             reference: "K1".into(),
             part_no: "MDK-RLY-24V".into(),
+            item_no: None,
         });
         panel.entities.insert(footprint.id(), footprint);
         project.sheets.push(panel);
@@ -219,15 +220,43 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 5, the version that added text styling.
-    /// 現行のファイル形式バージョンは5 (テキスト装飾を追加した版) である。
+    /// The current file format version is 6, the version that added panel item numbers and the legend table.
+    /// 現行のファイル形式バージョンは6 (盤のアイテム番号と凡例表を追加した版) である。
     #[test]
-    fn the_current_format_version_is_five() {
-        assert_eq!(FORMAT_VERSION, 5);
+    fn the_current_format_version_is_six() {
+        assert_eq!(FORMAT_VERSION, 6);
         let mut old = Project::new("x");
-        old.format_version = 4;
+        old.format_version = 5;
         migrate(&mut old);
-        assert_eq!(old.format_version, 5);
+        assert_eq!(old.format_version, 6);
+    }
+
+    /// A panel drawn before item numbers existed opens with no balloons at all: the footprints keep their place and can be numbered whenever the drawing is next tidied up.
+    /// アイテム番号が無かった頃の盤図面はバルーンの無い状態で開く。フットプリントの位置はそのままで、番号はいつでも振り直せる。
+    #[test]
+    fn an_old_panel_file_opens_without_item_numbers() {
+        let dir = std::env::temp_dir().join(format!("madake-io-item-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.mdkproj");
+        // format_version 5の頃のファイル (フットプリントに item_no が無い)
+        std::fs::write(
+            &path,
+            r#"{"format_version":5,"name":"旧盤図","wire_parts":[],"plc_assignments":[],
+                "sheets":[{"id":"66666666-6666-4666-8666-666666666666","name":"P1","size":"A3",
+                "orientation":"Landscape","kind":"panel","zone_cols":4,"zone_rows":6,"title_block":{},
+                "entities":{"77777777-7777-4777-8777-777777777777":{"kind":"footprint",
+                "id":"77777777-7777-4777-8777-777777777777","at":{"x":100.0,"y":100.0},
+                "w":20.0,"h":40.0,"rotation":0,"reference":"K1","part_no":"MDK-RLY-24V"}}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        let Some(Entity::Footprint(fp)) = loaded.sheets[0].entities.values().next() else {
+            panic!("フットプリントが残っていること")
+        };
+        assert_eq!(fp.item_no, None, "採番前として開く");
+        assert_eq!(fp.reference, "K1");
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// The frame template chosen for a project is saved to the file and comes back on reload.

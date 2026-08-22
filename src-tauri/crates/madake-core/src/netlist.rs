@@ -161,7 +161,8 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
             | Entity::PanelOutline(_)
             | Entity::DinRail(_)
             | Entity::Duct(_)
-            | Entity::Footprint(_) => {}
+            | Entity::Footprint(_)
+            | Entity::PanelLegend(_) => {}
         }
     }
 

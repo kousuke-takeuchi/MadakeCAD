@@ -21,7 +21,10 @@ pub type SheetId = Uuid;
 /// - v5: 注記テキストの装飾 ([`TextEntity::anchor`] / [`TextEntity::color`] / [`TextEntity::bold`])
 ///   を追加。装飾を持たない旧ファイルの注記は左揃え・既定色 (黒)・太字なしで開き、
 ///   出力される図面はこれまでと1文字も変わらない
-pub const FORMAT_VERSION: u32 = 5;
+/// - v6: 盤レイアウトのアイテム番号 ([`Footprint::item_no`]) と凡例表 ([`Entity::PanelLegend`])
+///   を追加。アイテム番号を持たない旧ファイルのフットプリントはバルーンを描かず、
+///   採番 (`renumber_panel_items`) すればいつでも振り直せる
+pub const FORMAT_VERSION: u32 = 6;
 
 /// プロジェクト全体。保存形式(.mdkproj)のルート。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -256,6 +259,8 @@ pub enum Entity {
     Duct(Duct),
     /// 部品のフットプリント (盤面に占める外形)。盤レイアウトシート専用。
     Footprint(Footprint),
+    /// 凡例表 (アイテム番号↔参照記号・型番)。盤レイアウトシート専用。
+    PanelLegend(PanelLegend),
 }
 
 impl Entity {
@@ -271,6 +276,7 @@ impl Entity {
             Entity::DinRail(e) => e.id,
             Entity::Duct(e) => e.id,
             Entity::Footprint(e) => e.id,
+            Entity::PanelLegend(e) => e.id,
         }
     }
 
@@ -298,6 +304,7 @@ impl Entity {
             }
             Entity::Duct(e) => e.at = e.at.translated(dx, dy),
             Entity::Footprint(e) => e.at = e.at.translated(dx, dy),
+            Entity::PanelLegend(e) => e.at = e.at.translated(dx, dy),
         }
     }
 }
@@ -364,6 +371,24 @@ pub struct Footprint {
     /// 型番。
     #[serde(default)]
     pub part_no: String,
+    /// バルーンに描くアイテム番号 (M4仕様 §8)。[`crate::command::Command::RenumberPanelItems`]
+    /// が盤シートの読み順で 1..N を振る。**Noneならバルーンを描かない** (まだ採番していない)。
+    /// 部品表 ([`crate::reports::bom_rows`]) と盤内部品配置表はこの番号で連動する。
+    #[serde(default)]
+    pub item_no: Option<u32>,
+}
+
+/// 凡例表 = アイテム番号と参照記号・型番の対応表 (M4仕様 §8)。盤レイアウトシート専用。
+///
+/// **中身は持たない**。表に並ぶ行は描画のたびに同じシートのフットプリントから導出する
+/// ([`crate::panel::legend_rows`]) ので、部品を足しても採番し直しても手直しが要らない
+/// (帳票と同じ「図面から導出する」原則)。このエンティティが決めるのは**置き場所だけ**で、
+/// 移動・削除・undoは他のエンティティと同じコマンドで効く。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PanelLegend {
+    pub id: EntityId,
+    /// 表の左上角 (用紙座標mm)。
+    pub at: Point,
 }
 
 /// ライブラリシンボルの配置インスタンス。
@@ -417,6 +442,15 @@ pub struct WireNumber {
     pub wire_id: EntityId,
     #[serde(default)]
     pub number: Option<String>,
+}
+
+/// 1つのフットプリントへのアイテム番号の割り当て (`set_panel_item_numbers` コマンドの要素)。
+/// item_noがNoneなら番号を消す (バルーンも消える)。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PanelItemNumber {
+    pub footprint_id: EntityId,
+    #[serde(default)]
+    pub item_no: Option<u32>,
 }
 
 /// 配線の交差接続点。
@@ -636,6 +670,7 @@ mod tests {
             rotation: 0,
             reference: "K1".into(),
             part_no: "MDK-RLY-24V".into(),
+            item_no: None,
         });
         fp.translate(-10.0, 0.0);
         let Entity::Footprint(f) = &fp else { panic!() };
@@ -686,6 +721,7 @@ mod tests {
                     rotation: 90,
                     reference: "K1".into(),
                     part_no: String::new(),
+                    item_no: None,
                 }),
                 "footprint",
             ),

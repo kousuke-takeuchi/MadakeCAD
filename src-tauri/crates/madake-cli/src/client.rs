@@ -34,6 +34,9 @@ pub enum ExportKind {
     /// PLC I/Oレポート (帳票)。
     #[value(name = "plc-io", alias = "plc")]
     PlcIo,
+    /// 盤内部品配置表 (帳票。アイテム番号・参照記号・型番・位置・レール)。
+    #[value(name = "panel-placement", alias = "panel")]
+    PanelPlacement,
     /// 図面一式を1つのPDFへ (表紙+回路図全シート+選択帳票)。
     #[value(name = "pdf-book")]
     PdfBook,
@@ -60,6 +63,7 @@ impl ExportKind {
             ExportKind::TerminalDiagram => Some(ReportKind::TerminalDiagram),
             ExportKind::XrefTable => Some(ReportKind::Xref),
             ExportKind::PlcIo => Some(ReportKind::PlcIo),
+            ExportKind::PanelPlacement => Some(ReportKind::PanelPlacement),
             ExportKind::Svg | ExportKind::Pdf | ExportKind::PdfBook => None,
         }
     }
@@ -83,6 +87,7 @@ impl ExportKind {
             ExportKind::TerminalDiagram => "端子接続図",
             ExportKind::XrefTable => "クロスリファレンス表",
             ExportKind::PlcIo => "PLC I/Oレポート",
+            ExportKind::PanelPlacement => "盤内部品配置表",
             ExportKind::PdfBook => "図面一式PDF",
         }
     }
@@ -144,6 +149,9 @@ pub enum ReportKind {
     /// PLC I/Oレポート。
     #[value(name = "plc-io")]
     PlcIo,
+    /// 盤内部品配置表 (盤レイアウトシートのフットプリント一覧)。
+    #[value(name = "panel-placement")]
+    PanelPlacement,
 }
 
 impl ReportKind {
@@ -156,6 +164,7 @@ impl ReportKind {
             ReportKind::Bom => "bom",
             ReportKind::Xref => "xref",
             ReportKind::PlcIo => "plc-io",
+            ReportKind::PanelPlacement => "panel-placement",
         }
     }
 }

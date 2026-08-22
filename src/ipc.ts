@@ -138,6 +138,21 @@ export interface Footprint {
   /** 回路図の参照記号 (例 "K1")。空なら盤だけの部品。 */
   reference: string;
   part_no: string;
+  /**
+   * バルーンに描くアイテム番号 (M4 §8)。`renumber_panel_items`が読み順で 1..N を振る。
+   * null/未設定ならバルーンを描かない (まだ採番していない)。
+   */
+  item_no?: number | null;
+}
+
+/**
+ * 凡例表 (アイテム番号↔参照記号・型番)。盤レイアウトシート専用。
+ * **中身は持たず**、描画のたびに同じシートのフットプリントから導出する。
+ */
+export interface PanelLegend {
+  id: string;
+  /** 表の左上角 (用紙座標mm)。 */
+  at: Point;
 }
 
 /**
@@ -169,7 +184,8 @@ export type Entity =
   | ({ kind: "panel_outline" } & PanelOutline)
   | ({ kind: "din_rail" } & DinRail)
   | ({ kind: "duct" } & Duct)
-  | ({ kind: "footprint" } & Footprint);
+  | ({ kind: "footprint" } & Footprint)
+  | ({ kind: "panel_legend" } & PanelLegend);
 
 /** シート種別。回路図 (既定) と2D盤レイアウト (M4 §8)。 */
 export type SheetKind = "schematic" | "panel";
@@ -253,6 +269,14 @@ export type Command =
       type: "set_wire_numbers";
       sheet_id: string;
       numbers: { wire_id: string; number: string | null }[];
+    }
+  /** 盤レイアウトシートのアイテム番号(バルーン)の自動採番。読み順に 1..N を振る。 */
+  | { type: "renumber_panel_items"; sheet_id: string }
+  /** アイテム番号の直接指定(自動採番の逆コマンド)。item_noがnullなら番号を消す。 */
+  | {
+      type: "set_panel_item_numbers";
+      sheet_id: string;
+      numbers: { footprint_id: string; item_no: number | null }[];
     };
 
 export type PatchOp =
@@ -711,7 +735,8 @@ export type ReportKind =
   | "terminal-diagram"
   | "bom"
   | "xref"
-  | "plc-io";
+  | "plc-io"
+  | "panel-placement";
 /** 帳票の出力形式 (CSV or 図枠付き図面シートのPDF)。 */
 export type ReportFormat = "csv" | "pdf";
 
@@ -914,7 +939,18 @@ const tauriIpc: Ipc = {
 };
 
 // Tauri外(ブラウザでのUI開発・E2E検証)では、起動中のMadakeCADのLink APIに接続する。
-const API_BASE = "http://127.0.0.1:9310/api/v1";
+// **接続先のホスト名はページと同じものを使う**: `localhost:1420` で開いたページから
+// `127.0.0.1:9310` へ繋ぐと、ブラウザによってはプライベートネットワーク扱いで
+// 応答が返ってこないため。ページのホスト名が取れない場合だけ 127.0.0.1 へ倒す。
+export const LINK_API_PORT = 9310;
+export const linkApiBase = (): string => {
+  const host =
+    typeof window !== "undefined" && window.location?.hostname
+      ? window.location.hostname
+      : "127.0.0.1";
+  return `http://${host}:${LINK_API_PORT}/api/v1`;
+};
+const API_BASE = linkApiBase();
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {

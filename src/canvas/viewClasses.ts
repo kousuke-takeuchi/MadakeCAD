@@ -61,6 +61,7 @@ export function entityViewClass(e: Entity): ViewClass {
     case "din_rail":
     case "duct":
     case "footprint":
+    case "panel_legend":
       return "panel";
   }
 }

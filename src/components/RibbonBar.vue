@@ -13,9 +13,11 @@ import { computed, inject } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   panelToolsAllowed,
+  renumberPanelItemsCommand,
   schematicToolsAllowed,
   type PanelToolId,
 } from "../canvas/panelTools";
+import { footprints } from "../canvas/panel";
 import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
 import type { ReportFormat, ReportKind } from "../ipc";
 import { useDocumentStore } from "../stores/document";
@@ -163,6 +165,50 @@ function startPanelTool(tool: PanelToolId) {
   }
   controller.setTool(tool);
   if (controller.tool === tool) ui.log(t(`panel.toolLog.${tool}`));
+}
+
+/**
+ * バルーン採番 (リボン「パネル」タブ>配置)。表示中の盤シートのフットプリントへ
+ * 読み順で 1..N のアイテム番号を振る (Command 1回なのでundo一発で戻せる)。
+ */
+async function renumberPanelItems() {
+  const sheet = useDocumentStore().activeSheet;
+  if (!sheet || !onPanelSheet.value) {
+    ui.log(t("panel.panelToolLog"));
+    return;
+  }
+  const command = renumberPanelItemsCommand(sheet);
+  if (!command) {
+    ui.log(t("panel.balloonEmptyLog"));
+    return;
+  }
+  await useDocumentStore().execute(command);
+  ui.log(t("panel.balloonDoneLog", { count: footprints(sheet).length }));
+}
+
+/**
+ * 「間隔チェック」= 図面検証の実行 (リボン「パネル」タブ>配置)。盤の重なり
+ * (`panel.overlap`)・吊り配置 (`panel.off_rail`)・レール充填率 (`panel.rail_fill`) は
+ * プロジェクト全体の検証に含まれるので、結果は下部の検証パネルに並ぶ。
+ */
+async function runPanelChecks() {
+  await verification.run(null);
+  const c = verification.counts;
+  ui.log(t("panel.clearanceDoneLog", { error: c.error, warning: c.warning, info: c.info }));
+}
+
+/**
+ * 凡例表の挿入モードに入る (リボン「パネル」タブ>帳票)。盤面をクリックすると
+ * そこへ表が乗る。中身は描画のたびにシートのフットプリントから導出する。
+ */
+function startPanelLegend() {
+  const sheet = useDocumentStore().activeSheet;
+  if (!sheet) {
+    ui.log(t("panel.noSheetLog"));
+    return;
+  }
+  controller.setTool("panel_legend");
+  if (controller.tool === "panel_legend") ui.log(t("panel.toolLog.panel_legend"));
 }
 
 /** 左ドックの「未配置部品」ビューを開く (リボン「パネル」タブ>フットプリントの大ボタン)。 */
@@ -520,22 +566,26 @@ const panelGroups = computed<RibbonGroup[]>(() => [
   {
     name: t("ribbon.panelGroup.placement"),
     big: {
-      label: t("ribbon.panelSmall.align"),
-      icon: AlignJustify,
+      label: t("ribbon.panelSmall.balloon"),
+      icon: Hash,
       color: "var(--ribbon-icon)",
-      action: () => todo(t("ribbon.panelSmall.align")),
-      isDisabled: () => true,
-      title: t("panel.todoPhase"),
+      action: () => void renumberPanelItems(),
+      isDisabled: () => !onPanelSheet.value,
     },
     small: [
       [
+        todoItem(t("ribbon.panelSmall.align"), AlignJustify),
         todoItem(t("ribbon.panelSmall.distribute"), Move),
         todoItem(t("ribbon.panelSmall.alignRail"), Rows3),
-        todoItem(t("ribbon.panelSmall.balloon"), Hash),
       ],
       [
         todoItem(t("ribbon.panelSmall.dimension"), Ruler),
-        todoItem(t("ribbon.panelSmall.clearance"), ListChecks),
+        {
+          // 「間隔チェック」= 検証の実行。盤の重なり・吊り配置・レール充填率が検証結果に出る
+          label: t("ribbon.panelSmall.clearance"),
+          icon: ListChecks,
+          action: () => void runPanelChecks(),
+        },
       ],
     ],
   },
@@ -545,14 +595,18 @@ const panelGroups = computed<RibbonGroup[]>(() => [
       label: t("panel.ribbonLayoutTable"),
       icon: Table2,
       color: "var(--ok-fg)",
-      action: () => todo(t("panel.ribbonLayoutTable")),
-      isDisabled: () => true,
-      title: t("panel.todoPhase"),
+      action: () => void openReport("panel-placement"),
     },
     small: [
       [
         todoItem(t("ribbon.panelSmall.panelWiring"), Route),
-        todoItem(t("ribbon.panelSmall.legend"), FileText),
+        {
+          label: t("ribbon.panelSmall.legend"),
+          icon: FileText,
+          action: () => startPanelLegend(),
+          isActive: () => controller.tool === "panel_legend",
+          isDisabled: () => !onPanelSheet.value,
+        },
       ],
     ],
   },

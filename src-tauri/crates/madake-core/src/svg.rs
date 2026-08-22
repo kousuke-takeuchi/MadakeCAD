@@ -652,6 +652,87 @@ fn render_panel(out: &mut String, sheet: &Sheet) {
             text_el(out, cx, cy + FOOTPRINT_PART_NO_DY, FOOTPRINT_PART_NO_FONT, "#000", "middle", part_no);
         }
     }
+    render_balloons(out, sheet);
+    render_legends(out, sheet);
+}
+
+/// バルーン (アイテム番号) を描く。採番済みのフットプリントだけに付き、
+/// **白丸の下は塗りつぶす** (下の図面が透けて番号が読めなくならないため)。
+fn render_balloons(out: &mut String, sheet: &Sheet) {
+    for fp in crate::panel::footprints(sheet) {
+        let Some(b) = crate::panel::balloon(fp) else {
+            continue;
+        };
+        line_el(
+            out,
+            b.leader_from.x,
+            b.leader_from.y,
+            b.leader_to.x,
+            b.leader_to.y,
+            RULE_STROKE,
+            "#000",
+        );
+        let _ = write!(
+            out,
+            "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"#fff\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+            n(b.center.x),
+            n(b.center.y),
+            n(crate::panel::BALLOON_R),
+            n(SYMBOL_STROKE)
+        );
+        text_family_el(
+            out,
+            b.center.x,
+            b.center.y + crate::panel::BALLOON_FONT / 2.0,
+            crate::panel::BALLOON_FONT,
+            "#000",
+            "middle",
+            "monospace",
+            &b.item_no.to_string(),
+        );
+    }
+}
+
+/// 凡例表 (アイテム番号↔参照記号・型番) を描く。中身は同じシートのフットプリントから
+/// 導出する ([`crate::panel::legend_rows`]) ので、図面と食い違わない。
+fn render_legends(out: &mut String, sheet: &Sheet) {
+    let rows = crate::panel::legend_rows(sheet);
+    for legend in crate::panel::legends(sheet) {
+        let (min, max) = crate::panel::legend_rect(sheet, legend);
+        let (w, h) = (max.x - min.x, max.y - min.y);
+        rect_el(out, min.x, min.y, w, h, "#fff", "#000", FRAME_STROKE);
+        let row_h = crate::panel::LEGEND_ROW_H;
+        let font = crate::panel::LEGEND_FONT;
+        // 列の区切り線
+        let mut x = min.x;
+        for cw in crate::panel::LEGEND_COL_W.iter().take(crate::panel::LEGEND_COL_W.len() - 1) {
+            x += cw;
+            line_el(out, x, min.y, x, max.y, RULE_STROKE, "#000");
+        }
+        // 列見出し + 本文 (見出しの下は太めの罫線で区切る)
+        line_el(out, min.x, min.y + row_h, max.x, min.y + row_h, FRAME_STROKE, "#000");
+        let cells = std::iter::once(
+            crate::panel::LEGEND_COLUMNS
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+        )
+        .chain(rows.iter().cloned());
+        for (r, row) in cells.enumerate() {
+            let top = min.y + row_h * r as f64;
+            if r > 1 {
+                line_el(out, min.x, top, max.x, top, RULE_STROKE, "#000");
+            }
+            let base = top + row_h / 2.0 + font / 2.0;
+            let mut cx = min.x;
+            for (i, cell) in row.iter().enumerate() {
+                if !cell.is_empty() {
+                    text_el(out, cx + CELL_PAD, base, font, "#000", "start", cell);
+                }
+                cx += crate::panel::LEGEND_COL_W[i];
+            }
+        }
+    }
 }
 
 /// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。図枠は既定の`jis-a3`。
@@ -839,7 +920,8 @@ fn sheet_to_svg_with_xrefs(
             | Entity::PanelOutline(_)
             | Entity::DinRail(_)
             | Entity::Duct(_)
-            | Entity::Footprint(_) => {}
+            | Entity::Footprint(_)
+            | Entity::PanelLegend(_) => {}
         }
     }
     render_wire_numbers(&mut out, sheet, symbols);
@@ -1673,6 +1755,7 @@ mod tests {
                 rotation: 0,
                 reference: "K1".into(),
                 part_no: "MDK-RLY-24V".into(),
+                item_no: None,
             }),
         ];
         for e in entities {
@@ -1751,12 +1834,76 @@ mod tests {
             rotation: 90,
             reference: "K2".into(),
             part_no: String::new(),
+            item_no: None,
         });
         sheet.entities.insert(fp.id(), fp);
         let svg = sheet_to_svg(&sheet, &builtin_symbols());
         assert!(
             svg.contains("<rect x=\"60\" y=\"100\" width=\"65\" height=\"25\""),
             "{svg}"
+        );
+    }
+
+    /// 盤シートに、指定したアイテム番号のフットプリントと凡例表を置く。
+    fn panel_sheet_with(item_no: Option<u32>, legend_at: Option<Point>) -> Sheet {
+        let mut sheet =
+            Sheet::new_kind("盤", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);
+        let fp = Entity::Footprint(Footprint {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 100.0),
+            w: 20.0,
+            h: 40.0,
+            rotation: 0,
+            reference: "K1".into(),
+            part_no: "MDK-RLY-24V".into(),
+            item_no,
+        });
+        sheet.entities.insert(fp.id(), fp);
+        if let Some(at) = legend_at {
+            let l = Entity::PanelLegend(PanelLegend {
+                id: Uuid::new_v4(),
+                at,
+            });
+            sheet.entities.insert(l.id(), l);
+        }
+        sheet
+    }
+
+    /// A numbered footprint carries a balloon: a white circle holding the item number, joined to the part by a short leader line.
+    /// 採番したフットプリントにはバルーンが付く(アイテム番号を入れた白丸と、部品へ伸びる短い引出線)。
+    #[test]
+    fn svg_draws_a_balloon_on_a_numbered_footprint() {
+        let svg = sheet_to_svg(&panel_sheet_with(Some(7), None), &builtin_symbols());
+        assert!(svg.contains(">7<"), "バルーンの番号: {svg}");
+        assert!(
+            svg.contains(&format!("r=\"{}\"", n(crate::panel::BALLOON_R))),
+            "白丸: {svg}"
+        );
+        assert!(svg.contains("fill=\"#fff\""), "丸の中は白で塗る (図面が透けない): {svg}");
+    }
+
+    /// A footprint that has not been numbered yet has no balloon on the drawing.
+    /// まだ採番していないフットプリントには図面にバルーンが出ない。
+    #[test]
+    fn svg_draws_no_balloon_before_numbering() {
+        let svg = sheet_to_svg(&panel_sheet_with(None, None), &builtin_symbols());
+        assert!(!svg.contains(&format!("r=\"{}\"", n(crate::panel::BALLOON_R))), "{svg}");
+    }
+
+    /// The legend table is drawn where it was placed, listing the item number, the reference and the type number of every part on the sheet.
+    /// 凡例表は置いた場所に描かれ、そのシートの部品のアイテム番号・参照記号・型番が並ぶ。
+    #[test]
+    fn svg_draws_the_legend_table() {
+        let svg = sheet_to_svg(
+            &panel_sheet_with(Some(1), Some(Point::new(300.0, 200.0))),
+            &builtin_symbols(),
+        );
+        assert!(svg.contains(">参照記号<"), "列見出し: {svg}");
+        assert!(svg.contains(">K1<"), "参照記号: {svg}");
+        assert!(svg.contains(">MDK-RLY-24V<"), "型番: {svg}");
+        assert!(
+            svg.contains("<rect x=\"300\" y=\"200\""),
+            "置いた場所に表がある: {svg}"
         );
     }
     /// シート1枚に、配線注記の付いたワイヤ1本を置く (横向き)。

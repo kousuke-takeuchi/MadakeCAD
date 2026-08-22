@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1657 specification clauses** across 5 areas.
+**1701 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -68,6 +68,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - If any command in a batch fails, the whole batch is refused: the drawing is unchanged and nothing lands in the history. <sub>`execute_batch_refuses_everything_when_one_command_fails`</sub>
 - An empty batch changes nothing at all: no history entry and no new document revision. <sub>`empty_batch_changes_nothing`</sub>
 - Reverting a range with no edits of that origin reports "nothing to do" instead of touching the drawing. <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
+- Numbering the panel gives every footprint on that sheet an item number in reading order. <sub>`renumbering_a_panel_numbers_every_footprint`</sub>
+- Undoing the numbering puts the previous item numbers back, including parts that had no number at all. <sub>`undoing_the_numbering_restores_the_previous_numbers`</sub>
+- Numbering the same panel a second time changes nothing on the drawing: the numbers are already the ones the reading order asks for. <sub>`numbering_an_already_numbered_panel_changes_nothing`</sub>
+- The numbering command is plain JSON, so agents and the CLI can send it. <sub>`the_panel_numbering_command_is_plain_json`</sub>
+- Numbering a sheet that does not exist is refused instead of silently doing nothing. <sub>`numbering_an_unknown_sheet_is_refused`</sub>
 
 ### Frame templates (plot frames)
 
@@ -120,7 +125,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project file saved before panel layouts existed opens with every sheet as a schematic sheet and is brought up to the current format version. <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 5, the version that added text styling. <sub>`the_current_format_version_is_five`</sub>
+- The current file format version is 6, the version that added panel item numbers and the legend table. <sub>`the_current_format_version_is_six`</sub>
+- A panel drawn before item numbers existed opens with no balloons at all: the footprints keep their place and can be numbered whenever the drawing is next tidied up. <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
 - The frame template chosen for a project is saved to the file and comes back on reload. <sub>`the_frame_template_survives_a_save_and_reload`</sub>
 
 ### KiCad import
@@ -223,6 +229,25 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Symbols with no reference designator yet (nothing to place on the panel) are left out of the unplaced list. <sub>`symbols_without_a_reference_are_not_listed`</sub>
 - A footprint whose reference does not exist on the schematic is reported as an orphan, so a renamed or deleted part is not forgotten on the panel. <sub>`a_footprint_with_no_matching_part_is_reported`</sub>
 - A footprint that is not linked to a reference designator (a panel-only part) is not reported as an orphan. <sub>`a_footprint_without_a_reference_is_not_reported`</sub>
+- Item numbers are handed out in reading order: the upper row first, and within a row from left to right. <sub>`item_numbers_follow_reading_order`</sub>
+- Parts mounted on the same DIN rail form one row even when their outlines have different heights. <sub>`parts_on_the_same_rail_form_one_row`</sub>
+- Renumbering gives 1..N in reading order, so the numbers on the drawing read from the top left down. <sub>`renumbering_hands_out_one_to_n`</sub>
+- A footprint with no item number yet has no balloon (nothing is drawn until the parts are numbered). <sub>`an_unnumbered_footprint_has_no_balloon`</sub>
+- The balloon is a small circle just outside the top-left corner of the footprint, joined to that corner by a short leader line. <sub>`the_balloon_sits_outside_the_top_left_corner`</sub>
+- Every reference designator placed on a panel carries its item number, so the parts list can show the same numbers. <sub>`item_numbers_can_be_looked_up_by_reference`</sub>
+- The legend lists the numbered parts of its own sheet in item-number order, as item number, reference and part number. <sub>`the_legend_lists_the_numbered_parts_in_order`</sub>
+- Parts that have not been numbered yet still appear at the end of the legend with an empty number column, so nothing on the panel is silently left out. <sub>`unnumbered_parts_come_last_in_the_legend`</sub>
+- The legend table grows downwards one row at a time, and its width is fixed by the column widths. <sub>`the_legend_table_grows_with_its_rows`</sub>
+- The panel placement table lists every footprint with its item number, reference, part number, position and rail. <sub>`the_placement_table_lists_position_and_rail`</sub>
+- A part hung between the rails leaves the rail column empty in the placement table. <sub>`a_part_off_the_rail_has_an_empty_rail_column`</sub>
+- Rails are numbered from the top of the panel down, so "rail 1" means the same thing in the placement table and in the properties panel. <sub>`rails_are_numbered_from_the_top_down`</sub>
+- Two footprints that overlap on the mounting plate are reported, because the parts cannot both be screwed there. <sub>`overlapping_footprints_are_reported`</sub>
+- Footprints that only touch along an edge are not reported: parts standing side by side on a rail are normal. <sub>`footprints_that_only_touch_are_not_reported`</sub>
+- A part that sits on no DIN rail is reported as a note, so a part left hanging between the rails is noticed. <sub>`a_part_hanging_off_the_rails_is_noted`</sub>
+- On a panel drawn without any DIN rail nothing is reported as hanging: everything on that panel is mounted directly on the plate. <sub>`a_panel_without_rails_reports_nothing_as_hanging`</sub>
+- Every DIN rail reports how much of its length is taken up by parts. <sub>`each_rail_reports_how_full_it_is`</sub>
+- A rail packed beyond 80 percent is raised to a warning: there is no room left to fit or to service the parts. <sub>`a_rail_packed_over_eighty_percent_becomes_a_warning`</sub>
+- The checks only look at panel sheets, so a schematic never produces panel diagnostics. <sub>`the_panel_checks_ignore_schematic_sheets`</sub>
 
 ### Parts database
 
@@ -253,6 +278,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Exporting the book writes one PDF document holding every page, with report pages on A4 even when the circuit is A3. <sub>`pdf_book_merges_every_page_into_one_document`</sub>
 - A book of a project with no sheet at all still produces a valid one-page PDF (the cover). <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
 - A panel-layout sheet is part of the book: exporting the project puts it in the PDF right after the schematic sheets. <sub>`the_pdf_book_includes_the_panel_sheet`</sub>
+- The panel placement table can be bound into the PDF book like any other report. <sub>`the_pdf_book_can_include_the_panel_placement_table`</sub>
 
 ### PLC I/O
 
@@ -329,10 +355,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The cross-reference CSV carries the same column headings as its drawing sheet. <sub>`the_cross_reference_csv_has_the_same_columns_as_its_sheet`</sub>
 - The PLC I/O report is available as CSV and as a framed drawing sheet, with one row per assigned I/O point. <sub>`the_plc_io_report_has_one_row_per_assigned_point`</sub>
 - Report kinds are serialized with the same kebab-case names the CLI and Link API use. <sub>`report_kind_json_names_match_cli_spelling`</sub>
+- The panel placement table can be written as CSV, one row per footprint with its item number, position and rail. <sub>`the_panel_placement_table_is_available_as_csv`</sub>
+- The panel placement table also comes as a framed A4 drawing sheet, so it can be bound with the drawings. <sub>`the_panel_placement_table_is_available_as_a_drawing_sheet`</sub>
+- A project with no panel sheet still produces the placement table, with the column headings and no rows. <sub>`the_panel_placement_table_of_a_project_without_panels_is_empty`</sub>
 
 ### Reports (BOM / wire list)
 
 - The BOM groups symbols by part number and counts quantities per group. <sub>`bom_groups_by_value_and_counts`</sub>
+- The parts list carries the panel item number as its first column, so the balloons on the panel drawing and the parts list line up. <sub>`bom_starts_with_the_panel_item_number`</sub>
+- Parts that are not on a panel yet leave the item number column empty; the rest of the parts list is unaffected. <sub>`bom_leaves_the_item_number_empty_for_unplaced_parts`</sub>
 - BOM fields containing commas are quoted so the CSV stays valid. <sub>`bom_escapes_fields_with_commas`</sub>
 - The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, and the older column order (sheet, wire number, harness, ...) is no longer produced. <sub>`wire_list_is_a_from_to_list`</sub>
 - An end of a wire that lands on a symbol pin is written as "reference:pin number" (for example K1:A1). <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
@@ -421,6 +452,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A DIN rail is drawn as a horizontal band centred on its mounting line. <sub>`svg_of_a_panel_sheet_draws_the_din_rail`</sub>
 - A footprint is drawn as its outline rectangle with the reference designator and the type number inside. <sub>`svg_of_a_panel_sheet_draws_the_footprint_with_its_reference`</sub>
 - A footprint turned 90 degrees is drawn lying down (its width and height swap). <sub>`svg_draws_a_rotated_footprint_lying_down`</sub>
+- A numbered footprint carries a balloon: a white circle holding the item number, joined to the part by a short leader line. <sub>`svg_draws_a_balloon_on_a_numbered_footprint`</sub>
+- A footprint that has not been numbered yet has no balloon on the drawing. <sub>`svg_draws_no_balloon_before_numbering`</sub>
+- The legend table is drawn where it was placed, listing the item number, the reference and the type number of every part on the sheet. <sub>`svg_draws_the_legend_table`</sub>
 - Every wire prints its gauge, colour and cut length under the wire, which is what the shop needs to make the harness. <sub>`svg_annotates_each_wire_with_gauge_colour_and_length`</sub>
 - The wire note is part of the exported drawing itself, so it comes out in SVG and PDF without turning anything on. <sub>`wire_notes_are_exported_by_default`</sub>
 - Hiding a class on screen never changes the exported file: the export always draws the whole drawing. <sub>`export_ignores_screen_only_view_classes`</sub>
@@ -1359,6 +1393,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - fills a duct with 45 degree hatch lines that stay inside it <sub>`panel layout geometry`</sub>
 - has no hatch lines for a flat duct <sub>`panel layout geometry`</sub>
 - snaps a part dropped near a rail onto its mounting line <sub>`panel layout geometry`</sub>
+- orders the parts for numbering top row first, then left to right <sub>`panel item numbers and legend`</sub>
+- keeps parts on the same rail in one row even with different heights <sub>`panel item numbers and legend`</sub>
+- draws no balloon before the part is numbered <sub>`panel item numbers and legend`</sub>
+- puts the balloon just outside the top-left corner with a short leader <sub>`panel item numbers and legend`</sub>
+- lists numbered parts in order and unnumbered ones last <sub>`panel item numbers and legend`</sub>
+- grows the legend table one row at a time <sub>`panel item numbers and legend`</sub>
+- numbers the rails from the top of the panel down <sub>`panel item numbers and legend`</sub>
 - loads the unplaced parts from the engine <sub>`unplaced parts store`</sub>
 - does not reload while the drawing has not changed <sub>`unplaced parts store`</sub>
 - drops a part from the list once it has been placed <sub>`unplaced parts store`</sub>
@@ -1392,6 +1433,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - disables the schematic tools on a panel sheet <sub>`tools allowed per sheet kind`</sub>
 - disables the panel tools on a schematic sheet <sub>`tools allowed per sheet kind`</sub>
 - disables both tool sets when no sheet is open <sub>`tools allowed per sheet kind`</sub>
+- turns balloon numbering into one renumber_panel_items command <sub>`balloon numbering and the legend table`</sub>
+- sends no command when there is nothing to number <sub>`balloon numbering and the legend table`</sub>
+- inserts the legend table with one add_entity command carrying only its position <sub>`balloon numbering and the legend table`</sub>
 
 ### relayXref
 
@@ -1882,7 +1926,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Reports (BOM / wire list)
 
-- offers the six report kinds of the reports tab <sub>`report generation dialog store`</sub>
+- offers the seven report kinds of the reports tab <sub>`report generation dialog store`</sub>
 - opens a project-wide report as a CSV export <sub>`report generation dialog store`</sub>
 - switches the same report to a framed drawing-sheet PDF <sub>`report generation dialog store`</sub>
 - lets the terminal chart target one terminal block as well as the whole project <sub>`report generation dialog store`</sub>

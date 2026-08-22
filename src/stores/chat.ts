@@ -7,7 +7,7 @@ import { defineStore } from "pinia";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { agentColorAt } from "../canvas/theme";
-import { inTauri } from "../ipc";
+import { inTauri, linkApiBase } from "../ipc";
 
 // ---------------------------------------------------------------------------
 // ワイヤ型 (madake-agent の serde 表現: 内部タグ`type`, snake_case)
@@ -202,7 +202,7 @@ const tauriAgentApi: AgentApi = {
 };
 
 // Tauri外(ブラウザでのUI開発・E2E検証)では、起動中のMadakeCADのLink APIに接続する。
-const API_BASE = "http://127.0.0.1:9310/api/v1";
+const API_BASE = linkApiBase();
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {

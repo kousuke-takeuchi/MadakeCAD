@@ -588,7 +588,8 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
             | Entity::PanelOutline(_)
             | Entity::DinRail(_)
             | Entity::Duct(_)
-            | Entity::Footprint(_) => {}
+            | Entity::Footprint(_)
+            | Entity::PanelLegend(_) => {}
         }
     }
     for w in &wires {
@@ -1193,6 +1194,7 @@ mod tests {
             rotation: 0,
             reference: reference.into(),
             part_no: "MDK-RLY-24V".into(),
+            item_no: None,
         })
     }
 

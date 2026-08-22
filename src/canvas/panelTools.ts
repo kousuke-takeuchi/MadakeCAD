@@ -8,11 +8,23 @@
 // `move_entities`にそのまま相乗りするので、undo/redoもpatch配信も従来どおり効く (Task 5の決定)。
 
 import type { Command, DinRail, Duct, Entity, Footprint, PanelOutline, Point, Sheet } from "../ipc";
-import { DEFAULT_FOOTPRINT_SIZE, footprintSize, rails, railSnapY } from "./panel";
+import {
+  DEFAULT_FOOTPRINT_SIZE,
+  footprints,
+  footprintSize,
+  numberedRails,
+  rails,
+  railSnapY,
+} from "./panel";
 import { isPanelSheet } from "./sheets";
 
 /** 盤の作図ツール (リボン「パネル」タブ)。 */
-export type PanelToolId = "panel_outline" | "din_rail" | "duct" | "footprint";
+export type PanelToolId =
+  | "panel_outline"
+  | "din_rail"
+  | "duct"
+  | "footprint"
+  | "panel_legend";
 
 /** これより小さいドラッグは作図にしない (クリックだけの誤操作を弾く) mm。 */
 export const MIN_PANEL_SIZE = 0.5;
@@ -184,6 +196,9 @@ export function railSnapDelta(sheet: Sheet, fp: Footprint, delta: Point): Point 
  * フットプリントが乗っているレール (プロパティの「所属レール」)。
  * 取付線が部品の外形を横切っていて、左右の範囲も重なっているものを採る。
  * 複数あれば部品の中心に一番近いもの。乗っていなければnull。
+ *
+ * レール番号は`numberedRails` (盤の上から順) なので、盤内部品配置表の
+ * 「レール」欄と同じレールを指す。
  */
 export function railOfFootprint(
   sheet: Sheet,
@@ -196,14 +211,35 @@ export function railOfFootprint(
   const right = fp.at.x + size.w;
   const center = fp.at.y + size.h / 2;
   let best: { rail: DinRail; index: number } | null = null;
-  rails(sheet).forEach((rail, i) => {
-    if (rail.y < top || rail.y > bottom) return;
-    if (Math.max(rail.x1, rail.x2) < left || Math.min(rail.x1, rail.x2) > right) return;
+  for (const { index, rail } of numberedRails(sheet)) {
+    if (rail.y < top || rail.y > bottom) continue;
+    if (Math.max(rail.x1, rail.x2) < left || Math.min(rail.x1, rail.x2) > right) continue;
     if (!best || Math.abs(rail.y - center) < Math.abs(best.rail.y - center)) {
-      best = { rail, index: i + 1 };
+      best = { rail, index };
     }
-  });
+  }
   return best;
+}
+
+/**
+ * バルーン採番コマンド: 盤シートのフットプリントへ読み順で 1..N を振る。
+ * 置く部品が1つも無ければnull (送っても何も起きないコマンドを積まない)。
+ */
+export function renumberPanelItemsCommand(sheet: Sheet): Command | null {
+  if (footprints(sheet).length === 0) return null;
+  return { type: "renumber_panel_items", sheet_id: sheet.id };
+}
+
+/**
+ * 凡例表を1つ置くコマンド。中身 (アイテム番号↔参照記号・型番) は描画のたびに
+ * 同じシートのフットプリントから導出するので、ここでは置き場所だけを決める。
+ */
+export function panelLegendAddCommand(sheet: Sheet, at: Point): Command {
+  return {
+    type: "add_entity",
+    sheet_id: sheet.id,
+    entity: { kind: "panel_legend", id: crypto.randomUUID(), at },
+  };
 }
 
 /** プロパティで編集できる値 (種別ごとに使える欄だけが効く)。 */

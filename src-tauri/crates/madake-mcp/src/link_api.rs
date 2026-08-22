@@ -569,7 +569,7 @@ async fn post_export_pdf(
 #[derive(Deserialize)]
 struct ExportPdfBookBody {
     path: String,
-    /// 回路図の後ろに付ける帳票 (`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref`)。
+    /// 回路図の後ろに付ける帳票 (`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref` / `panel-placement`)。
     #[serde(default)]
     include_reports: Vec<madake_core::report_sheet::ReportKind>,
     /// 表紙を付けるか (既定: 付ける)。
@@ -685,7 +685,7 @@ async fn get_terminal_check(
 #[derive(Deserialize)]
 struct ExportReportBody {
     path: String,
-    /// 帳票の種類 (`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref`)。
+    /// 帳票の種類 (`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref` / `panel-placement`)。
     kind: madake_core::report_sheet::ReportKind,
     /// 出力形式 (`csv` / `pdf`)。
     format: madake_core::report_sheet::ReportFormat,

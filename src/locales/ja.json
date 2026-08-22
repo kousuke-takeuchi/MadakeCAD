@@ -670,7 +670,8 @@
       "terminal-diagram": "端子接続図",
       "bom": "部品表 (BOM)",
       "xref": "クロスリファレンス表",
-      "plc-io": "PLC I/Oレポート"
+      "plc-io": "PLC I/Oレポート",
+      "panel-placement": "盤内部品配置表"
     },
     "targetLabel": "対象:",
     "targetProject": "プロジェクト全体",
@@ -992,12 +993,14 @@
     "tool": {
       "panel_outline": "盤筐体",
       "din_rail": "DINレール",
-      "duct": "ダクト"
+      "duct": "ダクト",
+      "panel_legend": "凡例表"
     },
     "toolLog": {
       "panel_outline": "盤筐体: 矩形にドラッグして盤の外形を描きます (Escで中止)",
       "din_rail": "DINレール: 取付線の高さで水平にドラッグします (Escで中止)",
-      "duct": "ダクト: 矩形にドラッグして配線ダクトを描きます (Escで中止)"
+      "duct": "ダクト: 矩形にドラッグして配線ダクトを描きます (Escで中止)",
+      "panel_legend": "凡例表: 盤面をクリックすると表を置きます (Escで中止)"
     },
     "added": {
       "panel_outline": "盤: 盤の外形を追加しました (Cmd+Zで戻せます)",
@@ -1012,7 +1015,8 @@
         "panel_outline": "盤の外形",
         "din_rail": "DINレール",
         "duct": "配線ダクト",
-        "footprint": "フットプリント"
+        "footprint": "フットプリント",
+        "panel_legend": "凡例表"
       },
       "reference": "参照記号",
       "referenceHint": "参照記号は回路図の部品との結び付きです。変えるときは回路図のシンボル側で変えます。",
@@ -1026,9 +1030,17 @@
       "railNone": "レールに乗っていません",
       "railY": "取付線 y",
       "railX1": "左端 x",
-      "railX2": "右端 x"
+      "railX2": "右端 x",
+      "itemNo": "アイテム番号",
+      "itemNoNone": "未採番",
+      "legendRows": "行数",
+      "legendHint": "凡例表の中身は描画のたびにこのシートの部品から作るので、手で直す必要はありません。"
     },
-    "todoPhase": "盤レイアウトの後半フェーズで実装予定"
+    "todoPhase": "盤レイアウトの後半フェーズで実装予定",
+    "legendPlacedLog": "盤: 凡例表を置きました (Cmd+Zで戻せます)",
+    "balloonDoneLog": "盤: {count}件の部品へ読み順にアイテム番号を振りました (Cmd+Zで戻せます)",
+    "balloonEmptyLog": "盤: このシートにはまだ採番する部品がありません。",
+    "clearanceDoneLog": "盤のチェック完了: エラー {error} / 警告 {warning} / お知らせ {info} (検証パネルに出ます)"
   },
   "sheets": {
     "addTitle": "シートを追加",

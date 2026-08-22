@@ -97,6 +97,8 @@ pub enum ReportKind {
     Xref,
     /// PLC I/Oレポート (割付表+図面から読んだ接続先・線番)。
     PlcIo,
+    /// 盤内部品配置表 (盤レイアウトシートのフットプリント一覧)。
+    PanelPlacement,
 }
 
 impl ReportKind {
@@ -109,6 +111,7 @@ impl ReportKind {
             ReportKind::Bom => "部品表 (BOM)",
             ReportKind::Xref => "クロスリファレンス表",
             ReportKind::PlcIo => "PLC I/Oレポート",
+            ReportKind::PanelPlacement => "盤内部品配置表",
         }
     }
 
@@ -123,6 +126,7 @@ impl ReportKind {
             ReportKind::Bom => bom_sheet_svg(project),
             ReportKind::Xref => xref_table_sheet_svg(project),
             ReportKind::PlcIo => plc_io_sheet_svg(project),
+            ReportKind::PanelPlacement => panel_placement_sheet_svg(project),
         }
     }
 }
@@ -204,6 +208,7 @@ pub fn report_csv(
         (ReportKind::Bom, _) => Ok(crate::reports::bom_csv(project)),
         (ReportKind::Xref, _) => Ok(crate::xref::xref_table_csv(project)),
         (ReportKind::PlcIo, _) => Ok(crate::plc::plc_io_csv(project)),
+        (ReportKind::PanelPlacement, _) => Ok(panel_placement_csv(project)),
         (ReportKind::TerminalChart, None) => {
             Ok(crate::terminal_chart::terminal_charts_csv(project))
         }
@@ -521,10 +526,34 @@ pub fn terminal_charts_sheet_svg(project: &Project) -> Vec<String> {
         .collect()
 }
 
+/// 盤内部品配置表のCSV (M4仕様 §8)。見出しは [`crate::panel::PANEL_PLACEMENT_COLUMNS`]。
+/// 盤レイアウトシートのフットプリント1つにつき1行。
+pub fn panel_placement_csv(project: &Project) -> String {
+    let mut out = crate::panel::PANEL_PLACEMENT_COLUMNS.join(",");
+    out.push('\n');
+    for row in crate::panel::panel_placement_rows(project) {
+        out.push_str(&crate::reports::csv_row(&row));
+        out.push('\n');
+    }
+    out
+}
+
+/// 盤内部品配置表の図面ページ。内容はCSV ([`panel_placement_csv`]) と同一。
+pub fn panel_placement_sheet_svg(project: &Project) -> Vec<String> {
+    let meta = ReportMeta::from_project(project)
+        .with_col_ratios(&[12.0, 14.0, 30.0, 10.0, 10.0, 14.0]);
+    report_sheet_svg(
+        ReportKind::PanelPlacement.title(),
+        &crate::panel::PANEL_PLACEMENT_COLUMNS,
+        &crate::panel::panel_placement_rows(project),
+        &meta,
+    )
+}
+
 /// 部品表の図面ページ。内容はCSV ([`crate::reports::bom_csv`]) と同一。
 pub fn bom_sheet_svg(project: &Project) -> Vec<String> {
     let meta =
-        ReportMeta::from_project(project).with_col_ratios(&[30.0, 24.0, 30.0, 8.0]);
+        ReportMeta::from_project(project).with_col_ratios(&[10.0, 26.0, 24.0, 30.0, 8.0]);
     report_sheet_svg(
         ReportKind::Bom.title(),
         &crate::reports::BOM_COLUMNS,
@@ -1089,6 +1118,89 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<ReportKind>("\"terminal-chart\"").expect("JSON"),
             ReportKind::TerminalChart
+        );
+        assert_eq!(
+            serde_json::to_string(&ReportKind::PanelPlacement).expect("JSON"),
+            "\"panel-placement\""
+        );
+    }
+
+    /// 盤シート1枚 (レール1本+採番済みのフットプリント1つ) だけのプロジェクト。
+    fn placement_project() -> Project {
+        let mut project = Project::new("盤テスト");
+        let mut panel = Sheet::new_kind(
+            "盤",
+            PaperSize::A3,
+            Orientation::Landscape,
+            SheetKind::Panel,
+        );
+        for e in [
+            Entity::DinRail(DinRail {
+                id: Uuid::new_v4(),
+                y: 120.0,
+                x1: 50.0,
+                x2: 400.0,
+            }),
+            Entity::Footprint(Footprint {
+                id: Uuid::new_v4(),
+                at: Point::new(100.0, 100.0),
+                w: 20.0,
+                h: 40.0,
+                rotation: 0,
+                reference: "K1".into(),
+                part_no: "MDK-RLY-24V".into(),
+                item_no: Some(1),
+            }),
+        ] {
+            panel.entities.insert(e.id(), e);
+        }
+        project.sheets.push(panel);
+        project
+    }
+
+    /// The panel placement table can be written as CSV, one row per footprint with its item number, position and rail.
+    /// 盤内部品配置表はCSVで出せる。フットプリント1つにつき1行で、アイテム番号・位置・レールが並ぶ。
+    #[test]
+    fn the_panel_placement_table_is_available_as_csv() {
+        let project = placement_project();
+        let (bytes, rows) =
+            report_bytes(&project, ReportKind::PanelPlacement, ReportFormat::Csv, None)
+                .expect("CSV");
+        let csv = String::from_utf8(bytes).expect("UTF-8");
+        assert_eq!(
+            csv.lines().next().expect("見出し"),
+            crate::panel::PANEL_PLACEMENT_COLUMNS.join(",")
+        );
+        assert_eq!(rows, 1);
+        assert!(csv.contains("1,K1,MDK-RLY-24V,100,100,レール1"), "{csv}");
+    }
+
+    /// The panel placement table also comes as a framed A4 drawing sheet, so it can be bound with the drawings.
+    /// 盤内部品配置表は図枠付きのA4図面ページとしても出せるので、図面と一緒に綴じられる。
+    #[test]
+    fn the_panel_placement_table_is_available_as_a_drawing_sheet() {
+        let pages = report_pages(&placement_project(), ReportKind::PanelPlacement, None)
+            .expect("図面ページ");
+        assert_eq!(pages.len(), 1);
+        let t = texts(&pages[0]);
+        assert!(t.iter().any(|s| s.contains("盤内部品配置表")), "帳票名: {t:?}");
+        assert!(t.contains(&"K1".to_string()), "{t:?}");
+        assert!(t.contains(&"レール1".to_string()), "{t:?}");
+    }
+
+    /// A project with no panel sheet still produces the placement table, with the column headings and no rows.
+    /// 盤シートが1枚も無いプロジェクトでも配置表は出る(列見出しだけで本文が空になる)。
+    #[test]
+    fn the_panel_placement_table_of_a_project_without_panels_is_empty() {
+        let project = Project::new("t");
+        let (_, rows) = report_bytes(&project, ReportKind::PanelPlacement, ReportFormat::Csv, None)
+            .expect("CSV");
+        assert_eq!(rows, 0);
+        assert_eq!(
+            report_pages(&project, ReportKind::PanelPlacement, None)
+                .expect("図面ページ")
+                .len(),
+            1
         );
     }
 }

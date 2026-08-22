@@ -6,6 +6,7 @@ import { useI18n } from "vue-i18n";
 import { BLOCK_SYMBOL_ID } from "../canvas/dynamicSymbol";
 import { harnessWireCount } from "../canvas/harness";
 import { panelUpdateCommand, railOfFootprint, type PanelPatch } from "../canvas/panelTools";
+import { legendRows } from "../canvas/panel";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import type { Entity, TextAnchor, TextColorToken } from "../ipc";
 import { FUNCTION_LABEL_ATTR, TEXT_ANCHORS, TEXT_COLOR_TOKENS } from "../canvas/textStyle";
@@ -172,6 +173,12 @@ const footprintRail = computed(() => {
   const e = selected.value;
   if (!sheet || e?.kind !== "footprint") return null;
   return railOfFootprint(sheet, e);
+});
+
+/** 選択中の凡例表に並ぶ行数 (中身はシートのフットプリントから導出する)。 */
+const legendRowCount = computed(() => {
+  const sheet = store.activeSheet;
+  return sheet ? legendRows(sheet).length : 0;
 });
 
 async function apply() {
@@ -465,12 +472,29 @@ const kindLabel = computed<Record<string, string>>(() => ({
         </span>
       </div>
       <div class="prow">
+        <span class="plabel">{{ t("panel.prop.itemNo") }}</span>
+        <span class="pvalue">
+          <span v-if="selected.item_no != null" class="mono">{{ selected.item_no }}</span>
+          <span v-else class="muted">{{ t("panel.prop.itemNoNone") }}</span>
+        </span>
+      </div>
+      <div class="prow">
         <span class="plabel">{{ t("panel.prop.rail") }}</span>
         <span class="pvalue">
           <span v-if="footprintRail">{{ t("panel.prop.railName", { index: footprintRail.index }) }}</span>
           <span v-else class="muted">{{ t("panel.prop.railNone") }}</span>
         </span>
       </div>
+    </template>
+
+    <!-- 盤レイアウト: 凡例表 (中身は図面から導出するので置き場所だけ) -->
+    <template v-else-if="selected?.kind === 'panel_legend'">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("panel.prop.kind.panel_legend") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.legendRows") }}</span>
+        <span class="pvalue mono">{{ legendRowCount }}</span>
+      </div>
+      <div class="hint">{{ t("panel.prop.legendHint") }}</div>
     </template>
 
     <!-- 盤レイアウト: 盤の外形 (取付板つき) -->

@@ -112,6 +112,16 @@ export const panelTheme = {
   partNo: "#6b7178",
   /** 盤の名前。 */
   label: "#6b7178",
+  /** バルーン (アイテム番号) の白丸・輪郭と引出線・番号。 */
+  balloon: "#ffffff",
+  balloonEdge: "#2b2f33",
+  balloonText: "#2b2f33",
+  /** 凡例表の面・輪郭・罫線と、列見出し・本文の文字。 */
+  legend: "#ffffff",
+  legendEdge: "#2b2f33",
+  legendRule: "#c8ccd2",
+  legendHead: "#6b7178",
+  legendText: "#2b2f33",
 } as const;
 
 /**

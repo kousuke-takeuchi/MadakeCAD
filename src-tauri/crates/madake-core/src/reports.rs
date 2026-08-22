@@ -36,11 +36,18 @@ pub(crate) fn fmt_num(v: f64) -> String {
 }
 
 /// 部品表の列見出し。
-pub const BOM_COLUMNS: [&str; 4] = ["参照記号", "型番/値", "シンボル", "数量"];
+///
+/// 先頭の「アイテム番号」は**盤レイアウトのバルーンと同じ番号** (M4仕様 §8)。
+/// 盤へ置いた部品だけが埋まり、まだ置いていない部品は空欄になる。
+/// この列が入ったぶん、盤レイアウト以前 (4列) のCSVとは列の並びが変わっている。
+pub const BOM_COLUMNS: [&str; 5] = ["アイテム番号", "参照記号", "型番/値", "シンボル", "数量"];
 
 /// 部品表の行 ([`BOM_COLUMNS`] と同じ並び)。図面シート化からも使う。
 /// 全シート横断で (型番/値, シンボル) ごとに集計し、参照記号を昇順で列挙する。
+/// アイテム番号は参照記号ごとに [`crate::panel::item_numbers`] から引き、
+/// 1行に複数の部品がまとまっているときは番号を小さい順に並べる。
 pub fn bom_rows(project: &Project) -> Vec<Vec<String>> {
+    let item_numbers = crate::panel::item_numbers(project);
     let mut groups: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
     for sheet in &project.sheets {
         for entity in sheet.entities.values() {
@@ -56,7 +63,18 @@ pub fn bom_rows(project: &Project) -> Vec<Vec<String>> {
         .into_iter()
         .map(|((value, symbol_id), mut refs)| {
             refs.sort();
+            let mut items: Vec<u32> = refs
+                .iter()
+                .filter_map(|r| item_numbers.get(r.trim()).copied())
+                .collect();
+            items.sort_unstable();
+            items.dedup();
             vec![
+                items
+                    .iter()
+                    .map(|n| n.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 refs.join(", "),
                 value,
                 symbol_id,
@@ -264,12 +282,59 @@ mod tests {
         }
         let csv = bom_csv(&project);
         let lines: Vec<_> = csv.lines().collect();
-        assert_eq!(lines[0], "参照記号,型番/値,シンボル,数量");
+        assert_eq!(lines[0], "アイテム番号,参照記号,型番/値,シンボル,数量");
         assert!(
             lines.iter().any(|l| l.contains("R1, R2") && l.contains("10k") && l.ends_with(",2")),
             "10kが2個に集計される: {csv}"
         );
         assert!(lines.iter().any(|l| l.contains("[redacted]") && l.ends_with(",1")));
+    }
+
+    /// The parts list carries the panel item number as its first column, so the balloons on the panel drawing and the parts list line up.
+    /// 部品表の先頭列は盤のアイテム番号なので、盤図面のバルーンと部品表が突き合わせられる。
+    #[test]
+    fn bom_starts_with_the_panel_item_number() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        for (r, v) in [("K1", "[redacted]"), ("K9", "[redacted]")] {
+            let e = sym(r, v);
+            project.sheet_mut(sid).unwrap().entities.insert(e.id(), e);
+        }
+        let mut panel = Sheet::new_kind("盤", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);
+        let fp = Entity::Footprint(Footprint {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 100.0),
+            w: 20.0,
+            h: 40.0,
+            rotation: 0,
+            reference: "K1".into(),
+            part_no: "[redacted]".into(),
+            item_no: Some(3),
+        });
+        panel.entities.insert(fp.id(), fp);
+        project.sheets.push(panel);
+
+        assert_eq!(BOM_COLUMNS[0], "アイテム番号");
+        assert_eq!(BOM_COLUMNS.len(), 5, "列が1本増えた (旧4列のCSVとは非互換)");
+        let row = bom_rows(&project)
+            .into_iter()
+            .find(|r| r[1].contains("K1"))
+            .expect("K1の行");
+        assert_eq!(row[0], "3", "盤に置いた部品はバルーンの番号が入る");
+        assert_eq!(row[1], "K1, K9");
+    }
+
+    /// Parts that are not on a panel yet leave the item number column empty; the rest of the parts list is unaffected.
+    /// まだ盤に置いていない部品はアイテム番号の欄が空欄になり、部品表の他の欄はそのまま出る。
+    #[test]
+    fn bom_leaves_the_item_number_empty_for_unplaced_parts() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let e = sym("R1", "10k");
+        project.sheet_mut(sid).unwrap().entities.insert(e.id(), e);
+        let row = bom_rows(&project).into_iter().next().expect("1行");
+        assert_eq!(row[0], "");
+        assert_eq!(&row[1..], ["R1", "10k", "resistor", "1"]);
     }
 
     /// BOM fields containing commas are quoted so the CSV stays valid.
@@ -343,7 +408,7 @@ mod tests {
         let bom = bom_rows(&project);
         assert!(
             bom.iter()
-                .any(|r| r[0] == "CTRL1" && r[1] == "MainController" && r[2] == "block" && r[3] == "1"),
+                .any(|r| r[1] == "CTRL1" && r[2] == "MainController" && r[3] == "block" && r[4] == "1"),
             "部品表にブロックが無い: {bom:?}"
         );
     }

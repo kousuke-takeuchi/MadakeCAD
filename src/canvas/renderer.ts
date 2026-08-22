@@ -23,10 +23,20 @@ import { resolveInstanceDef } from "./dynamicSymbol";
 import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
 import { entityViewClass, type ViewClass } from "./viewClasses";
 import {
+  BALLOON_FONT,
+  BALLOON_R,
+  balloon,
   ductHatch,
   ducts,
   footprintRect,
   footprints,
+  LEGEND_COLUMNS,
+  LEGEND_COL_W,
+  LEGEND_FONT,
+  LEGEND_ROW_H,
+  legendRect,
+  legendRows,
+  panelLegends,
   panelOutlineRect,
   panelOutlines,
   panelPlateRect,
@@ -825,6 +835,96 @@ export function drawPanel(
       ctx.fillText(partNo, center.x, center.y + Math.max(9, FOOTPRINT_PART_NO_DY * vp.scale));
     }
     ctx.textAlign = "left";
+  }
+
+  drawBalloons(ctx, vp, sheet);
+  drawLegends(ctx, vp, sheet, selection);
+}
+
+/**
+ * バルーン (アイテム番号) を描く。採番済みのフットプリントだけに付き、
+ * 白丸の下は塗りつぶす (盤面が透けて番号が読めなくならないため)。
+ */
+function drawBalloons(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet): void {
+  for (const fp of footprints(sheet)) {
+    const b = balloon(fp);
+    if (!b) continue;
+    const from = vp.toScreen(b.leaderFrom);
+    const to = vp.toScreen(b.leaderTo);
+    ctx.strokeStyle = panelTheme.balloonEdge;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+
+    const center = vp.toScreen(b.center);
+    const r = Math.max(6, BALLOON_R * vp.scale);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = panelTheme.balloon;
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = panelTheme.balloonText;
+    ctx.font = `600 ${Math.max(9, BALLOON_FONT * vp.scale)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.fillText(String(b.itemNo), center.x, center.y + Math.max(3, (BALLOON_FONT / 2) * vp.scale));
+    ctx.textAlign = "left";
+  }
+}
+
+/**
+ * 凡例表 (アイテム番号↔参照記号・型番) を描く。中身は同じシートのフットプリントから
+ * 導出する (`legendRows`) ので、部品を足しても採番し直しても図面と食い違わない。
+ */
+function drawLegends(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  sheet: Sheet,
+  selection: Set<string>,
+): void {
+  const legends = panelLegends(sheet);
+  if (legends.length === 0) return;
+  const rows: string[][] = [LEGEND_COLUMNS.map((c) => c), ...legendRows(sheet)];
+  for (const legend of legends) {
+    const rect = legendRect(sheet, legend);
+    const edge = selection.has(legend.id) ? theme.selection : panelTheme.legendEdge;
+    paintRect(ctx, vp, rect, panelTheme.legend, edge, selection.has(legend.id) ? 2 : 1);
+    ctx.strokeStyle = panelTheme.legendRule;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    let x = rect.x;
+    for (const cw of LEGEND_COL_W.slice(0, -1)) {
+      x += cw;
+      const a = vp.toScreen({ x, y: rect.y });
+      const b = vp.toScreen({ x, y: rect.y + rect.h });
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
+    for (let r = 1; r < rows.length; r += 1) {
+      const y = rect.y + LEGEND_ROW_H * r;
+      const a = vp.toScreen({ x: rect.x, y });
+      const b = vp.toScreen({ x: rect.x + rect.w, y });
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
+
+    const font = Math.max(8, LEGEND_FONT * vp.scale);
+    rows.forEach((row, r) => {
+      const baseline = rect.y + LEGEND_ROW_H * r + LEGEND_ROW_H / 2 + LEGEND_FONT / 2;
+      let cx = rect.x;
+      row.forEach((cell, i) => {
+        if (cell) {
+          const p = vp.toScreen({ x: cx + 1, y: baseline });
+          ctx.fillStyle = r === 0 ? panelTheme.legendHead : panelTheme.legendText;
+          ctx.font = `${r === 0 ? "600 " : ""}${font}px ${i === 2 ? "sans-serif" : "monospace"}`;
+          ctx.fillText(cell, p.x, p.y);
+        }
+        cx += LEGEND_COL_W[i];
+      });
+    });
   }
 }
 

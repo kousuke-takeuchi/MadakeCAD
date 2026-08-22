@@ -12,6 +12,7 @@ import {
   DIN_RAIL_H,
   footprintRect,
   footprintSize,
+  legendRect,
   panelOutlineRect,
   railRect,
 } from "../canvas/panel";
@@ -20,6 +21,7 @@ import {
   ductAddCommand,
   footprintAddCommand,
   footprintPlaceAt,
+  panelLegendAddCommand,
   panelOutlineAddCommand,
   panelToolsAllowed,
   railSnapDelta,
@@ -53,7 +55,13 @@ export type ToolId = "select" | "wire" | "place" | "harness" | "macro" | PanelTo
 /** 回路図シートでしか使えないツール。 */
 const SCHEMATIC_TOOLS: ToolId[] = ["wire", "place", "harness", "macro"];
 /** 盤レイアウトシートでしか使えないツール。 */
-const PANEL_TOOLS: ToolId[] = ["panel_outline", "din_rail", "duct", "footprint"];
+const PANEL_TOOLS: ToolId[] = [
+  "panel_outline",
+  "din_rail",
+  "duct",
+  "footprint",
+  "panel_legend",
+];
 
 /** 配置中のマクロ。`fromLibrary=false`は⌘Vの無名マクロ (ファイルに無いのでidを引けない)。 */
 export interface MacroPlacement {
@@ -363,8 +371,11 @@ export class EditorController {
         if (segmentDistance(world, a, b) <= HIT_TOLERANCE) return e.id;
       }
     }
-    // 盤の要素は描いた順の逆 (フットプリント→レール→ダクト→盤外形) に拾う。
+    // 盤の要素は描いた順の逆 (凡例表→フットプリント→レール→ダクト→盤外形) に拾う。
     // 盤外形は中身を選びたいことのほうが多いので最後に見る
+    for (const e of entities) {
+      if (e.kind === "panel_legend" && inRect(world, legendRect(sheet, e))) return e.id;
+    }
     for (const e of entities) {
       if (e.kind === "footprint" && inRect(world, footprintRect(e))) return e.id;
     }
@@ -442,6 +453,9 @@ export class EditorController {
       }
       case "footprint":
         void this.commitFootprint(this.snap(world));
+        break;
+      case "panel_legend":
+        void this.commitPanelLegend(this.snap(world));
         break;
     }
     this.requestRedraw();
@@ -740,6 +754,19 @@ export class EditorController {
         part: component.part_no,
       }),
     );
+    this.setTool("select");
+    this.requestRedraw();
+  }
+
+  /**
+   * 凡例表を1つ置いて選択ツールへ戻る。中身は描画のたびにシートのフットプリントから
+   * 導出するので、ここで決めるのは置き場所だけ。
+   */
+  private async commitPanelLegend(at: Pt) {
+    const sheet = this.store.activeSheet;
+    if (!sheet) return;
+    await this.store.execute(panelLegendAddCommand(sheet, at));
+    useUiStore().log(i18n.global.t("panel.legendPlacedLog"));
     this.setTool("select");
     this.requestRedraw();
   }

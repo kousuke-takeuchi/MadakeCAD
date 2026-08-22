@@ -425,4 +425,32 @@ mod tests {
         let pdf = export_project_pdf(&project, &PdfBookOptions::default()).expect("PDF");
         assert_eq!(page_count(&pdf), 3);
     }
+
+    /// The panel placement table can be bound into the PDF book like any other report.
+    /// 盤内部品配置表も他の帳票と同じようにPDF一括出力へ綴じられる。
+    #[test]
+    fn the_pdf_book_can_include_the_panel_placement_table() {
+        let mut project = Project::new("盤入りブック");
+        let mut panel =
+            Sheet::new_kind("盤", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);
+        let fp = Entity::Footprint(Footprint {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 100.0),
+            w: 20.0,
+            h: 40.0,
+            rotation: 0,
+            reference: "K1".into(),
+            part_no: "MDK-RLY-24V".into(),
+            item_no: Some(1),
+        });
+        panel.entities.insert(fp.id(), fp);
+        project.sheets.push(panel);
+        let options = PdfBookOptions {
+            include_reports: vec![ReportKind::PanelPlacement],
+            cover: false,
+        };
+        let pages = project_pdf_pages(&project, &options);
+        assert_eq!(pages.len(), 3, "回路図1枚 + 盤1枚 + 配置表1枚");
+        assert!(pages[2].contains("盤内部品配置表"), "{}", pages[2]);
+    }
 }

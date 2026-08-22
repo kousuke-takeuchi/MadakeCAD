@@ -19,7 +19,7 @@ describe("entityViewClass", () => {
     expect(entityViewClass(e("net_label"))).toBe("net_labels");
     expect(entityViewClass(e("text"))).toBe("texts");
     expect(entityViewClass(e("harness"))).toBe("harness");
-    for (const kind of ["panel_outline", "din_rail", "duct", "footprint"]) {
+    for (const kind of ["panel_outline", "din_rail", "duct", "footprint", "panel_legend"]) {
       expect(entityViewClass(e(kind))).toBe("panel");
     }
   });

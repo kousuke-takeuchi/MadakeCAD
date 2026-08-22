@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1657仕様項目**。
+全5領域・**1701仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -68,6 +68,11 @@
 - バッチ内の1つでも失敗したらバッチ全体を拒否し、図面は変わらず履歴にも残らない。 <sub>`execute_batch_refuses_everything_when_one_command_fails`</sub>
 - 空のバッチは何も変えない(履歴も増えず、ドキュメントrevisionも進まない)。 <sub>`empty_batch_changes_nothing`</sub>
 - その由来の編集が1件も無い区間の巻き戻しは、図面に触れず「戻すものが無い」と報告する。 <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
+- 盤の採番は、そのシートのフットプリント全てに読み順のアイテム番号を振る。 <sub>`renumbering_a_panel_numbers_every_footprint`</sub>
+- 採番のundoは元のアイテム番号を戻す(番号が無かった部品は番号の無い状態へ戻る)。 <sub>`undoing_the_numbering_restores_the_previous_numbers`</sub>
+- 同じ盤をもう一度採番しても図面は何も変わらない(すでに読み順どおりの番号が入っているため)。 <sub>`numbering_an_already_numbered_panel_changes_nothing`</sub>
+- 採番コマンドは素のJSONで表現できるので、AIやCLIから送れる。 <sub>`the_panel_numbering_command_is_plain_json`</sub>
+- 存在しないシートの採番は、黙って何もせずに断られる。 <sub>`numbering_an_unknown_sheet_is_refused`</sub>
 
 ### 図枠テンプレート (プロットフレーム)
 
@@ -120,7 +125,8 @@
 - 盤レイアウトが無かった頃のプロジェクトファイルは全シートが回路図シートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは5 (テキスト装飾を追加した版) である。 <sub>`the_current_format_version_is_five`</sub>
+- 現行のファイル形式バージョンは6 (盤のアイテム番号と凡例表を追加した版) である。 <sub>`the_current_format_version_is_six`</sub>
+- アイテム番号が無かった頃の盤図面はバルーンの無い状態で開く。フットプリントの位置はそのままで、番号はいつでも振り直せる。 <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
 - プロジェクトに選んだ図枠テンプレートはファイルへ保存され、読み直しても残っている。 <sub>`the_frame_template_survives_a_save_and_reload`</sub>
 
 ### KiCadインポート
@@ -223,6 +229,25 @@
 - まだ参照記号が付いていないシンボル(盤へ置くものが決まっていない)は未配置の一覧に出ない。 <sub>`symbols_without_a_reference_are_not_listed`</sub>
 - 回路図に無い参照記号のフットプリントは「みなしご」として報告される(参照記号を変えた・部品を消したときに盤へ置き去りにしないため)。 <sub>`a_footprint_with_no_matching_part_is_reported`</sub>
 - 参照記号を結び付けていないフットプリント(盤だけの部品)はみなしごとして報告しない。 <sub>`a_footprint_without_a_reference_is_not_reported`</sub>
+- アイテム番号は読み順(上の段から先に、段の中は左から右へ)に振られる。 <sub>`item_numbers_follow_reading_order`</sub>
+- 同じDINレールに乗った部品は、外形の高さが違っても同じ段として左から右へ数える。 <sub>`parts_on_the_same_rail_form_one_row`</sub>
+- 採番は読み順で 1..N を振るので、図面のバルーンは左上から順に読める。 <sub>`renumbering_hands_out_one_to_n`</sub>
+- アイテム番号がまだ無いフットプリントにはバルーンが出ない(採番するまで何も描かない)。 <sub>`an_unnumbered_footprint_has_no_balloon`</sub>
+- バルーンはフットプリントの左上角のすぐ外の小さな円で、短い引出線で角と結ばれる。 <sub>`the_balloon_sits_outside_the_top_left_corner`</sub>
+- 盤に置いた参照記号ごとのアイテム番号が引けるので、部品表にも同じ番号を出せる。 <sub>`item_numbers_can_be_looked_up_by_reference`</sub>
+- 凡例表は同じシートの採番済み部品を番号順に「アイテム番号・参照記号・型番」で並べる。 <sub>`the_legend_lists_the_numbered_parts_in_order`</sub>
+- まだ採番していない部品も番号欄を空けて末尾に並ぶので、盤の上の部品が黙って抜け落ちない。 <sub>`unnumbered_parts_come_last_in_the_legend`</sub>
+- 凡例表は行が増えるぶんだけ下へ伸び、幅は列幅で決まった固定値になる。 <sub>`the_legend_table_grows_with_its_rows`</sub>
+- 盤内部品配置表は、フットプリントをアイテム番号・参照記号・型番・位置・レールで並べる。 <sub>`the_placement_table_lists_position_and_rail`</sub>
+- レールに乗せずに吊った部品は、配置表のレール欄が空欄になる。 <sub>`a_part_off_the_rail_has_an_empty_rail_column`</sub>
+- レールは盤の上から順に番号を振るので、「レール1」は配置表でもプロパティでも同じレールを指す。 <sub>`rails_are_numbered_from_the_top_down`</sub>
+- 取付板の上で重なっている2つのフットプリントは、両方を留められないので指摘される。 <sub>`overlapping_footprints_are_reported`</sub>
+- 辺が触れているだけのフットプリントは指摘しない(レールに並べた部品どうしは普通に接する)。 <sub>`footprints_that_only_touch_are_not_reported`</sub>
+- どのDINレールにも乗っていない部品は「お知らせ」として出るので、レールの間に浮いた部品に気づける。 <sub>`a_part_hanging_off_the_rails_is_noted`</sub>
+- DINレールを1本も描いていない盤では吊り配置を報告しない(その盤は取付板へ直付けする設計のため)。 <sub>`a_panel_without_rails_reports_nothing_as_hanging`</sub>
+- DINレールごとに、長さのどれだけが部品で埋まっているか(充填率)が出る。 <sub>`each_rail_reports_how_full_it_is`</sub>
+- 充填率が80%を超えたレールは注意になる(部品を足す・触る余地が残っていないため)。 <sub>`a_rail_packed_over_eighty_percent_becomes_a_warning`</sub>
+- これらの検査は盤シートだけを見るので、回路図シートから盤の指摘は出ない。 <sub>`the_panel_checks_ignore_schematic_sheets`</sub>
 
 ### 部品データベース
 
@@ -253,6 +278,7 @@
 - 一括出力は全ページを1つのPDF文書にまとめ、回路図がA3でも帳票ページはA4になる。 <sub>`pdf_book_merges_every_page_into_one_document`</sub>
 - シートが1枚も無いプロジェクトでも、表紙だけの正しい1ページPDFになる。 <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
 - 盤レイアウトシートも一括出力に含まれ、回路図シートに続けてPDFへ入る。 <sub>`the_pdf_book_includes_the_panel_sheet`</sub>
+- 盤内部品配置表も他の帳票と同じようにPDF一括出力へ綴じられる。 <sub>`the_pdf_book_can_include_the_panel_placement_table`</sub>
 
 ### PLC I/O
 
@@ -329,10 +355,15 @@
 - クロスリファレンス表のCSVの見出しは、図面シート版の列見出しと同じ。 <sub>`the_cross_reference_csv_has_the_same_columns_as_its_sheet`</sub>
 - PLC I/Oレポートは割付済みの点ごとに1行で、CSVでも図枠付きの図面シートでも出せる。 <sub>`the_plc_io_report_has_one_row_per_assigned_point`</sub>
 - 帳票の種類はCLI・Link APIと同じケバブケース表記でJSONへ入る。 <sub>`report_kind_json_names_match_cli_spelling`</sub>
+- 盤内部品配置表はCSVで出せる。フットプリント1つにつき1行で、アイテム番号・位置・レールが並ぶ。 <sub>`the_panel_placement_table_is_available_as_csv`</sub>
+- 盤内部品配置表は図枠付きのA4図面ページとしても出せるので、図面と一緒に綴じられる。 <sub>`the_panel_placement_table_is_available_as_a_drawing_sheet`</sub>
+- 盤シートが1枚も無いプロジェクトでも配置表は出る(列見出しだけで本文が空になる)。 <sub>`the_panel_placement_table_of_a_project_without_panels_is_empty`</sub>
 
 ### 帳票 (部品表 / 電線リスト)
 
 - 部品表はシンボルを型番でまとめ、数量を集計する。 <sub>`bom_groups_by_value_and_counts`</sub>
+- 部品表の先頭列は盤のアイテム番号なので、盤図面のバルーンと部品表が突き合わせられる。 <sub>`bom_starts_with_the_panel_item_number`</sub>
+- まだ盤に置いていない部品はアイテム番号の欄が空欄になり、部品表の他の欄はそのまま出る。 <sub>`bom_leaves_the_item_number_empty_for_unplaced_parts`</sub>
 - カンマを含む項目は引用符で囲まれ、CSVが壊れない。 <sub>`bom_escapes_fields_with_commas`</sub>
 - 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先から始まる。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。 <sub>`wire_list_is_a_from_to_list`</sub>
 - シンボルのピンに届いているワイヤの端は「参照記号:ピン番号」(例 K1:A1) と書かれる。 <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
@@ -421,6 +452,9 @@
 - DINレールは取付線を中心にした横帯として描かれる。 <sub>`svg_of_a_panel_sheet_draws_the_din_rail`</sub>
 - フットプリントは外形の矩形として描かれ、その中に参照記号と型番が入る。 <sub>`svg_of_a_panel_sheet_draws_the_footprint_with_its_reference`</sub>
 - 90度回したフットプリントは横倒しに描かれる(幅と高さが入れ替わる)。 <sub>`svg_draws_a_rotated_footprint_lying_down`</sub>
+- 採番したフットプリントにはバルーンが付く(アイテム番号を入れた白丸と、部品へ伸びる短い引出線)。 <sub>`svg_draws_a_balloon_on_a_numbered_footprint`</sub>
+- まだ採番していないフットプリントには図面にバルーンが出ない。 <sub>`svg_draws_no_balloon_before_numbering`</sub>
+- 凡例表は置いた場所に描かれ、そのシートの部品のアイテム番号・参照記号・型番が並ぶ。 <sub>`svg_draws_the_legend_table`</sub>
 - 全ての配線は線径・線色・電線長を配線の下に印字する(現場が電線を作るのに必要な情報)。 <sub>`svg_annotates_each_wire_with_gauge_colour_and_length`</sub>
 - 配線注記は図面そのものの一部なので、何も設定しなくてもSVG・PDFに出る。 <sub>`wire_notes_are_exported_by_default`</sub>
 - 画面で表示クラスを消しても出力ファイルは変わらない(出力は常に図面の全部を描く)。 <sub>`export_ignores_screen_only_view_classes`</sub>
@@ -1359,6 +1393,13 @@
 - ダクトは45度の斜線で埋まり、斜線はダクトの内側に収まる。 <sub>`panel layout geometry`</sub>
 - 幅や高さの無いダクトには描く斜線が無い。 <sub>`panel layout geometry`</sub>
 - レールの近くへ置いた部品は、レールの取付線に吸い付く。 <sub>`panel layout geometry`</sub>
+- アイテム番号は読み順(上の段から先に、段の中は左から右へ)に並ぶ。 <sub>`panel item numbers and legend`</sub>
+- 同じレールに乗った部品は、外形の高さが違っても同じ段として左から右へ数える。 <sub>`panel item numbers and legend`</sub>
+- アイテム番号がまだ無いフットプリントにはバルーンが出ない。 <sub>`panel item numbers and legend`</sub>
+- バルーンは左上角のすぐ外の丸で、短い引出線で角と結ばれる。 <sub>`panel item numbers and legend`</sub>
+- 凡例表は採番済みの部品を番号順に並べ、未採番の部品は番号欄を空けて末尾に置く。 <sub>`panel item numbers and legend`</sub>
+- 凡例表は行が増えるぶんだけ下へ伸び、幅は列幅の合計になる。 <sub>`panel item numbers and legend`</sub>
+- レールは盤の上から順に番号を振るので、配置表とプロパティが同じレールを指す。 <sub>`panel item numbers and legend`</sub>
 - 未配置部品の一覧はRust側 (回路図と盤シートの突き合わせ) から読み込む。 <sub>`unplaced parts store`</sub>
 - 図面が変わっていなければ一覧を読み直さない (置くたびの往復を減らす)。 <sub>`unplaced parts store`</sub>
 - 部品を盤へ置いて図面が変わると、次の読み込みで一覧から消える。 <sub>`unplaced parts store`</sub>
@@ -1392,6 +1433,9 @@
 - 盤レイアウトシートでは回路図のツール(配線・部品挿入など)を使えない。 <sub>`tools allowed per sheet kind`</sub>
 - 回路図シートでは盤のツール(盤枠・レール・ダクト)を使えない。 <sub>`tools allowed per sheet kind`</sub>
 - シートが1枚も開いていなければどちらのツールも使えない。 <sub>`tools allowed per sheet kind`</sub>
+- バルーン採番は renumber_panel_items コマンド1回 (undo一発で採番前へ戻せる)。 <sub>`balloon numbering and the legend table`</sub>
+- 置く部品が1つも無い盤では採番のコマンドを送らない。 <sub>`balloon numbering and the legend table`</sub>
+- 凡例表の挿入は add_entity コマンド1つで、決めるのは置き場所だけ。 <sub>`balloon numbering and the legend table`</sub>
 
 ### relayXref
 
@@ -1882,7 +1926,7 @@
 
 ### 帳票 (部品表 / 電線リスト)
 
-- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・XRef表・PLC I/Oレポート の6つ <sub>`report generation dialog store`</sub>
+- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・XRef表・PLC I/Oレポート・盤内部品配置表 の7つ <sub>`report generation dialog store`</sub>
 - 部品表はプロジェクト全体が対象で、既定はCSV出力 <sub>`report generation dialog store`</sub>
 - 出力形式を図面シートPDFにすると、同じ帳票がPDF要求になる <sub>`report generation dialog store`</sub>
 - 端子台チャートは「プロジェクト全体」に加えて端子台1つを対象に選べる <sub>`report generation dialog store`</sub>

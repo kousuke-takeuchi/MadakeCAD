@@ -84,6 +84,18 @@ pub enum Command {
         sheet_id: SheetId,
         numbers: Vec<WireNumber>,
     },
+    /// 盤レイアウトシートのアイテム番号 (バルーン) の自動採番 (M4仕様 §8)。
+    /// そのシートのフットプリントへ読み順 ([`crate::panel::item_order`]) で 1..N を振る。
+    /// 逆コマンドは採番前の番号 (`SetPanelItemNumbers`)。
+    RenumberPanelItems {
+        sheet_id: SheetId,
+    },
+    /// アイテム番号の直接指定 (自動採番の逆コマンド・個別編集)。
+    /// item_noがnullなら番号を消す (バルーンも消える)。
+    SetPanelItemNumbers {
+        sheet_id: SheetId,
+        numbers: Vec<PanelItemNumber>,
+    },
 }
 
 /// エンジンからフロントエンドへ通知する差分。
@@ -649,7 +661,69 @@ impl Engine {
             Command::SetWireNumbers { sheet_id, numbers } => {
                 self.apply_wire_numbers(*sheet_id, numbers)
             }
+            Command::RenumberPanelItems { sheet_id } => {
+                let sheet = self
+                    .project
+                    .sheet(*sheet_id)
+                    .ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let numbers: Vec<PanelItemNumber> = crate::panel::renumber_plan(sheet)
+                    .into_iter()
+                    .map(|(footprint_id, item_no)| PanelItemNumber {
+                        footprint_id,
+                        item_no,
+                    })
+                    .collect();
+                self.apply_panel_item_numbers(*sheet_id, &numbers)
+            }
+            Command::SetPanelItemNumbers { sheet_id, numbers } => {
+                self.apply_panel_item_numbers(*sheet_id, numbers)
+            }
         }
+    }
+
+    /// 指定フットプリントのアイテム番号を書き換える。値が変わるものだけをpatch・
+    /// 逆コマンドに含める (同じ番号を振り直しても無駄なundoの段を作らない)。
+    fn apply_panel_item_numbers(
+        &mut self,
+        sheet_id: SheetId,
+        numbers: &[PanelItemNumber],
+    ) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let sheet = self
+            .project
+            .sheet_mut(sheet_id)
+            .ok_or(CoreError::SheetNotFound(sheet_id))?;
+        let mut ops = Vec::new();
+        let mut old = Vec::new();
+        for PanelItemNumber {
+            footprint_id,
+            item_no,
+        } in numbers
+        {
+            let Some(Entity::Footprint(fp)) = sheet.entities.get_mut(footprint_id) else {
+                continue;
+            };
+            if fp.item_no == *item_no {
+                continue;
+            }
+            old.push(PanelItemNumber {
+                footprint_id: *footprint_id,
+                item_no: fp.item_no,
+            });
+            fp.item_no = *item_no;
+            ops.push(PatchOp::EntityUpserted {
+                sheet_id,
+                entity: Entity::Footprint(fp.clone()),
+            });
+        }
+        let inverse = if old.is_empty() {
+            Vec::new()
+        } else {
+            vec![Command::SetPanelItemNumbers {
+                sheet_id,
+                numbers: old,
+            }]
+        };
+        Ok((ops, inverse))
     }
 
     /// 指定Wireの線番を書き換える。値が変わるものだけをpatch・逆コマンドに含める。
@@ -1084,6 +1158,7 @@ mod tests {
                 rotation: 0,
                 reference: "K1".into(),
                 part_no: "MDK-RLY-24V".into(),
+                item_no: None,
             }),
         ]
     }
@@ -1143,6 +1218,7 @@ mod tests {
             rotation: 0,
             reference: "K1".into(),
             part_no: "MDK-RLY-24V".into(),
+            item_no: None,
         });
         let id = entity.id();
         engine
@@ -1753,5 +1829,122 @@ mod tests {
             .is_none());
         assert_eq!(engine.project().sheets[0].entities.len(), 1);
         assert_eq!(engine.revision(), revision, "revisionも進まない");
+    }
+
+    // --- 盤レイアウトのアイテム番号 (バルーン) ---------------------------------
+
+    /// 盤シート1枚を足し、そこへフットプリントを置いたエンジンを作る。
+    fn panel_engine(places: &[(&str, f64, f64)]) -> (Engine, SheetId, Vec<EntityId>) {
+        let mut engine = Engine::new(Project::new("panel"));
+        engine
+            .execute(Command::AddSheet {
+                name: "盤".into(),
+                size: PaperSize::A3,
+                orientation: Orientation::Landscape,
+                kind: SheetKind::Panel,
+            })
+            .unwrap();
+        let sheet_id = engine.project().sheets.last().unwrap().id;
+        let mut ids = Vec::new();
+        for (reference, x, y) in places {
+            let id = Uuid::new_v4();
+            ids.push(id);
+            engine
+                .execute(Command::AddEntity {
+                    sheet_id,
+                    entity: Entity::Footprint(Footprint {
+                        id,
+                        at: Point::new(*x, *y),
+                        w: 20.0,
+                        h: 40.0,
+                        rotation: 0,
+                        reference: (*reference).into(),
+                        part_no: String::new(),
+                        item_no: None,
+                    }),
+                })
+                .unwrap();
+        }
+        (engine, sheet_id, ids)
+    }
+
+    fn item_no_of(engine: &Engine, sheet_id: SheetId, id: EntityId) -> Option<u32> {
+        match engine.project().sheet(sheet_id).unwrap().entities.get(&id) {
+            Some(Entity::Footprint(fp)) => fp.item_no,
+            other => panic!("フットプリントではない: {other:?}"),
+        }
+    }
+
+    /// Numbering the panel gives every footprint on that sheet an item number in reading order.
+    /// 盤の採番は、そのシートのフットプリント全てに読み順のアイテム番号を振る。
+    #[test]
+    fn renumbering_a_panel_numbers_every_footprint() {
+        let (mut engine, sheet_id, ids) =
+            panel_engine(&[("K2", 200.0, 80.0), ("K1", 100.0, 80.0)]);
+        engine
+            .execute(Command::RenumberPanelItems { sheet_id })
+            .unwrap();
+        assert_eq!(item_no_of(&engine, sheet_id, ids[1]), Some(1), "左のK1が1番");
+        assert_eq!(item_no_of(&engine, sheet_id, ids[0]), Some(2));
+    }
+
+    /// Undoing the numbering puts the previous item numbers back, including parts that had no number at all.
+    /// 採番のundoは元のアイテム番号を戻す(番号が無かった部品は番号の無い状態へ戻る)。
+    #[test]
+    fn undoing_the_numbering_restores_the_previous_numbers() {
+        let (mut engine, sheet_id, ids) =
+            panel_engine(&[("K2", 200.0, 80.0), ("K1", 100.0, 80.0)]);
+        engine
+            .execute(Command::SetPanelItemNumbers {
+                sheet_id,
+                numbers: vec![PanelItemNumber {
+                    footprint_id: ids[0],
+                    item_no: Some(9),
+                }],
+            })
+            .unwrap();
+        engine
+            .execute(Command::RenumberPanelItems { sheet_id })
+            .unwrap();
+        assert_eq!(item_no_of(&engine, sheet_id, ids[0]), Some(2));
+        engine.undo().unwrap();
+        assert_eq!(item_no_of(&engine, sheet_id, ids[0]), Some(9), "元の番号へ戻る");
+        assert_eq!(item_no_of(&engine, sheet_id, ids[1]), None, "無かった番号は無いまま");
+    }
+
+    /// Numbering the same panel a second time changes nothing on the drawing: the numbers are already the ones the reading order asks for.
+    /// 同じ盤をもう一度採番しても図面は何も変わらない(すでに読み順どおりの番号が入っているため)。
+    #[test]
+    fn numbering_an_already_numbered_panel_changes_nothing() {
+        let (mut engine, sheet_id, ids) = panel_engine(&[("K1", 100.0, 80.0)]);
+        engine
+            .execute(Command::RenumberPanelItems { sheet_id })
+            .unwrap();
+        let patch = engine
+            .execute(Command::RenumberPanelItems { sheet_id })
+            .unwrap();
+        assert!(patch.ops.is_empty(), "図面は1つも変わらない: {:?}", patch.ops);
+        assert_eq!(item_no_of(&engine, sheet_id, ids[0]), Some(1));
+    }
+
+    /// The numbering command is plain JSON, so agents and the CLI can send it.
+    /// 採番コマンドは素のJSONで表現できるので、AIやCLIから送れる。
+    #[test]
+    fn the_panel_numbering_command_is_plain_json() {
+        let (mut engine, sheet_id, _) = panel_engine(&[("K1", 100.0, 80.0)]);
+        let json = format!(r#"{{"type":"renumber_panel_items","sheet_id":"{sheet_id}"}}"#);
+        let command: Command = serde_json::from_str(&json).unwrap();
+        engine.execute(command).unwrap();
+    }
+
+    /// Numbering a sheet that does not exist is refused instead of silently doing nothing.
+    /// 存在しないシートの採番は、黙って何もせずに断られる。
+    #[test]
+    fn numbering_an_unknown_sheet_is_refused() {
+        let (mut engine, _, _) = panel_engine(&[("K1", 100.0, 80.0)]);
+        let missing = Uuid::new_v4();
+        assert!(engine
+            .execute(Command::RenumberPanelItems { sheet_id: missing })
+            .is_err());
     }
 }

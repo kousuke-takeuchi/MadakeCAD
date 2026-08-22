@@ -107,6 +107,7 @@ export function placeMacroEntities(entities: Entity[], at: Point, rotation: numb
       case "din_rail":
       case "duct":
       case "footprint":
+      case "panel_legend":
         return e;
     }
   });
