@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // 左ドック (デザイン: 「左パネル(タブ式)」)。幅340px・全高。
-// タブ行 + 「プロジェクト」= ProjectPanel / 「エージェント」= ChatDock。
-// 中身はどちらも v-show で常時マウントし、タブ切替で会話やストリーミングを壊さない。
+// タブ行 + 「プロジェクト」= ProjectPanel / 「デバイス」= DevicePanel / 「エージェント」= ChatDock。
+// プロジェクトとエージェントは v-show で常時マウントし、タブ切替で会話やストリーミングを
+// 壊さない (デバイスタブは状態を持たないので v-if でよい)。
 //
 // chat.panelOpen="expanded" の意味は「左ドックのエージェントタブ表示」。
 // 浮き入力カード (CanvasView の ChatPanel) の送信/展開もこの状態を立てるので、
@@ -15,6 +16,7 @@ import { useSettingsStore } from "../stores/settings";
 import { useUiStore, type LeftPanelTab } from "../stores/ui";
 import ChatDock from "./chat/ChatDock.vue";
 import ChatHistoryPopup from "./chat/ChatHistoryPopup.vue";
+import DevicePanel from "./DevicePanel.vue";
 import ProjectPanel from "./ProjectPanel.vue";
 
 const { t } = useI18n();
@@ -24,10 +26,12 @@ const settings = useSettingsStore();
 
 const { open: historyOpen, toggle: toggleHistory, close: closeHistory } = usePopover();
 
-const tabs: { id: LeftPanelTab; label: string }[] = [
+const tabs = computed<{ id: LeftPanelTab; label: string }[]>(() => [
   { id: "project", label: "プロジェクト" },
+  // デバイスナビゲータ (spec §10): 参照記号ツリーで機能単位まで展開する
+  { id: "devices", label: t("devices.tab") },
   { id: "chat", label: "エージェント" },
-];
+]);
 
 // 接続バッジ: Claude Code CLIならCLIの検出、Anthropic APIならキーの保存状況を見る
 const connected = computed(() => settings.agentReady(chat.detect !== null));
@@ -36,9 +40,13 @@ const chatTab = computed(() => ui.leftPanelTab === "chat");
 const running = computed(() => chat.runningCount);
 
 function selectTab(tab: LeftPanelTab) {
-  // プロジェクトタブへ戻ったら浮き入力カードを出す (入力欄の二重表示を避ける)
-  if (tab === "chat") ui.openAgentTab();
-  else ui.closeAgentTab();
+  // エージェント以外のタブへ移ったら浮き入力カードを出す (入力欄の二重表示を避ける)
+  if (tab === "chat") {
+    ui.openAgentTab();
+    return;
+  }
+  ui.closeAgentTab();
+  ui.setLeftPanelTab(tab);
 }
 
 function minimize() {
@@ -104,7 +112,8 @@ watch(
       </template>
     </div>
 
-    <ProjectPanel v-show="!chatTab" />
+    <ProjectPanel v-show="ui.leftPanelTab === 'project'" />
+    <DevicePanel v-if="ui.leftPanelTab === 'devices'" />
     <ChatDock v-show="chatTab" />
   </aside>
 </template>
