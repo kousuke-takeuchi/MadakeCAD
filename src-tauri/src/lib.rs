@@ -134,11 +134,13 @@ fn save_macro(
 
 /// 回路マクロをシートへ挿入する。UI操作なので由来は`user`、
 /// **1回の編集**として履歴に乗るのでundo一発で全体が戻る。
+/// 値セット(`value_set`)を指定すると、プレースホルダの行き先へ定格・型番が一括で入る。
 #[tauri::command]
 fn apply_macro(
     state: State<AppState>,
     macro_id: String,
     variant: Option<String>,
+    value_set: Option<String>,
     sheet_id: madake_core::SheetId,
     at: madake_core::Point,
     rotation: Option<u16>,
@@ -148,6 +150,7 @@ fn apply_macro(
         .apply_macro(
             &macro_id,
             variant.as_deref(),
+            value_set.as_deref(),
             sheet_id,
             at,
             rotation.unwrap_or(0),
@@ -163,6 +166,7 @@ fn apply_macro_inline(
     state: State<AppState>,
     r#macro: madake_core::macros::Macro,
     variant: Option<String>,
+    value_set: Option<String>,
     sheet_id: madake_core::SheetId,
     at: madake_core::Point,
     rotation: Option<u16>,
@@ -172,6 +176,7 @@ fn apply_macro_inline(
         .insert_macro(
             &r#macro,
             variant.as_deref(),
+            value_set.as_deref(),
             sheet_id,
             at,
             rotation.unwrap_or(0),

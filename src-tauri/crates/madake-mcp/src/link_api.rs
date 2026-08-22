@@ -157,6 +157,9 @@ struct ApplyMacroBody {
     /// バリアントキー ("A"=既定)。省略時は既定。
     #[serde(default)]
     variant: Option<String>,
+    /// 値セットid。指定すると定格・型番が一括設定される。省略時は保存時の値のまま。
+    #[serde(default)]
+    value_set: Option<String>,
     #[serde(default)]
     sheet_id: Option<Uuid>,
     /// 基準点が来る位置 (カーソル位置)。
@@ -175,6 +178,7 @@ async fn post_apply_macro(
     doc.apply_macro(
         &body.id,
         body.variant.as_deref(),
+        body.value_set.as_deref(),
         sheet_id,
         body.at,
         body.rotation,
@@ -191,6 +195,9 @@ struct ApplyMacroInlineBody {
     macro_def: madake_core::macros::Macro,
     #[serde(default)]
     variant: Option<String>,
+    /// 値セットid (`POST /macros/apply`と同じ)。
+    #[serde(default)]
+    value_set: Option<String>,
     #[serde(default)]
     sheet_id: Option<Uuid>,
     at: madake_core::Point,
@@ -208,6 +215,7 @@ async fn post_apply_macro_inline(
     doc.insert_macro(
         &body.macro_def,
         body.variant.as_deref(),
+        body.value_set.as_deref(),
         sheet_id,
         body.at,
         body.rotation,

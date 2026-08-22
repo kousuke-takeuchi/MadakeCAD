@@ -23,6 +23,8 @@ export type ToolId = "select" | "wire" | "place" | "harness" | "macro";
 export interface MacroPlacement {
   macro: Macro;
   fromLibrary: boolean;
+  /** 挿入ダイアログで選んだ値セットid (null=保存時の値のまま置く)。 */
+  valueSet: string | null;
 }
 
 /** マクロ確定時にRustへ渡す引数 (ライブラリはid、無名マクロはマクロそのもの)。 */
@@ -31,11 +33,20 @@ export type MacroApplyArgs =
       kind: "library";
       macroId: string;
       variant: string;
+      valueSet: string | null;
       sheetId: string;
       at: Point;
       rotation: number;
     }
-  | { kind: "inline"; macro: Macro; variant: string; sheetId: string; at: Point; rotation: number };
+  | {
+      kind: "inline";
+      macro: Macro;
+      variant: string;
+      valueSet: string | null;
+      sheetId: string;
+      at: Point;
+      rotation: number;
+    };
 
 type DocumentStore = ReturnType<typeof useDocumentStore>;
 
@@ -108,11 +119,16 @@ export class EditorController {
 
   /**
    * 回路マクロの配置モードに入る (ゴースト表示 → クリックで確定)。
-   * バリアントは既定の"A"、回転は0から始める。
+   * バリアントは既定の"A"、回転は0から始める。値セットは挿入ダイアログで選んだものを
+   * そのまま持ち回る (⌘Vの無名マクロには値セットが無いのでnull)。
    */
-  startMacroPlacement(macro: Macro, opts: { fromLibrary?: boolean } = {}) {
+  startMacroPlacement(macro: Macro, opts: { fromLibrary?: boolean; valueSet?: string | null } = {}) {
     this.tool = "macro";
-    this.placeMacro = { macro, fromLibrary: opts.fromLibrary ?? true };
+    this.placeMacro = {
+      macro,
+      fromLibrary: opts.fromLibrary ?? true,
+      valueSet: opts.valueSet ?? null,
+    };
     this.macroVariantIndex = 0;
     this.placeRotation = 0;
     this.placeSymbolId = null;
@@ -146,6 +162,7 @@ export class EditorController {
     if (!sheet || !this.placeMacro) return null;
     const common = {
       variant: this.macroVariantKey,
+      valueSet: this.placeMacro.valueSet,
       sheetId: sheet.id,
       at: { x: at.x, y: at.y },
       rotation: this.placeRotation,
@@ -166,10 +183,18 @@ export class EditorController {
     try {
       const patch =
         args.kind === "library"
-          ? await ipc.applyMacro(args.macroId, args.variant, args.sheetId, args.at, args.rotation)
+          ? await ipc.applyMacro(
+              args.macroId,
+              args.variant,
+              args.valueSet,
+              args.sheetId,
+              args.at,
+              args.rotation,
+            )
           : await ipc.applyMacroInline(
               args.macro,
               args.variant,
+              args.valueSet,
               args.sheetId,
               args.at,
               args.rotation,

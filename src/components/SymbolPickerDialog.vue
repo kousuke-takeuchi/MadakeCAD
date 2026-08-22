@@ -7,7 +7,12 @@ import { Minus, Plus, Search, X } from "lucide-vue-next";
 import { computed, inject, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { DYNAMIC_PIN_MAX, dynamicSymbol } from "../canvas/dynamicSymbol";
-import { macroDescription, macroName, macroVariantLabel } from "../canvas/macroPreview";
+import {
+  macroDescription,
+  macroName,
+  macroValueSetLabel,
+  macroVariantLabel,
+} from "../canvas/macroPreview";
 import { groupSymbolsByCategory } from "../canvas/symbolLibrary";
 import { CONTACT_CONFIG_ATTR } from "../canvas/relayXref";
 import type { Part } from "../ipc";
@@ -128,11 +133,16 @@ function pickPart(part: Part) {
   ui.log(t("symbolPicker.placePartLog", { part: part.part_no }));
 }
 
+/** 値セットのドロップダウン (「保存時のまま」=未選択)。 */
+function chooseValueSet(event: Event) {
+  macros.setValueSet((event.target as HTMLSelectElement).value || null);
+}
+
 /** 選んだマクロの配置モードへ入る (ゴースト表示 → クリックで確定)。 */
 function placeMacro() {
   const macro = macros.selected;
   if (!macro) return;
-  controller.startMacroPlacement(macro, { fromLibrary: true });
+  controller.startMacroPlacement(macro, { fromLibrary: true, valueSet: macros.valueSetId });
   controller.macroVariantIndex = Math.max(0, macros.variantKeys.indexOf(macros.variantKey));
   ui.symbolPickerOpen = false;
   ui.log(t("macros.placeLog", { name: macroName(macro, locale.value) }));
@@ -267,13 +277,23 @@ function placeMacro() {
           <p v-if="macros.selected" class="side-desc">
             {{ macroDescription(macros.selected, locale) }}
           </p>
-          <div class="row">
-            <span class="label">{{ t("macros.valueSetRow") }}</span>
-            <select class="select" disabled :title="t('macros.valueSetHint')">
-              <option>{{ t("macros.valueSetPlaceholder") }}</option>
-            </select>
-          </div>
-          <p class="caption">{{ t("macros.valueSetHint") }}</p>
+          <template v-if="macros.selected && macros.valueSets.length">
+            <div class="row">
+              <span class="label">{{ t("macros.valueSetRow") }}</span>
+              <select
+                class="select"
+                :value="macros.valueSetId ?? ''"
+                :title="t('macros.valueSetHint')"
+                @change="chooseValueSet"
+              >
+                <option value="">{{ t("macros.valueSetNone") }}</option>
+                <option v-for="v in macros.valueSets" :key="v.id" :value="v.id">
+                  {{ macroValueSetLabel(v, locale) }}
+                </option>
+              </select>
+            </div>
+            <p class="caption">{{ t("macros.valueSetHint") }}</p>
+          </template>
           <p v-for="issue in macros.issues" :key="issue.path" class="issue">
             {{ t("macros.issue", { path: issue.path, message: issue.message }) }}
           </p>

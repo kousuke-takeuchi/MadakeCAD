@@ -9,20 +9,24 @@ import { ALL_CATEGORIES, UNCATEGORIZED, useMacrosStore } from "./macros";
 
 const NIL = "00000000-0000-0000-0000-000000000000";
 
-function addSymbol(id: string, reference: string): Command {
+function addSymbol(
+  id: string,
+  reference: string,
+  opts: { symbolId?: string; value?: string; attrs?: Record<string, string> } = {},
+): Command {
   return {
     type: "add_entity",
     sheet_id: NIL,
     entity: {
       kind: "symbol",
       id,
-      symbol_id: "relay_coil",
+      symbol_id: opts.symbolId ?? "relay_coil",
       at: { x: 0, y: 0 },
       rotation: 0,
       mirror: false,
       reference,
-      value: "",
-      attrs: {},
+      value: opts.value ?? "",
+      attrs: opts.attrs ?? {},
     },
   };
 }
@@ -43,6 +47,19 @@ function macro(id: string, category: string, variants = 0): Macro {
       name_ja: `v${i}`,
       commands: [addSymbol(`${id}-v${i}`, "K1")],
     })),
+    placeholders: [],
+    value_sets: [],
+  };
+}
+
+/** モータ回路の選択範囲 (型番欄に値が入ったモータ+定格属性を持つブレーカ)。 */
+function motorSelection(): Macro {
+  return {
+    ...macro("selection", ""),
+    commands: [
+      addSymbol("m1", "M1", { symbolId: "motor", value: "0.4kW" }),
+      addSymbol("cb1", "CB1", { symbolId: "breaker_3p", attrs: { rating: "1-1.6A" } }),
+    ],
   };
 }
 
@@ -219,6 +236,200 @@ describe("macro save dialog", () => {
     const macros = useMacrosStore();
     await macros.openSave("sheet-1", ["e1"]);
     expect(macros.savePreview?.base_point).toEqual({ x: 92.5, y: 130 });
+  });
+});
+
+describe("placeholders and value sets in the save dialog", () => {
+  // ja: プレースホルダの候補は、選択したシンボルの型番欄と属性の一覧から作られる
+  it("lists the value field and every attribute of the selected symbols as a placeholder candidate", async () => {
+    vi.spyOn(ipc, "buildMacro").mockResolvedValue(motorSelection());
+    const macros = useMacrosStore();
+    await macros.openSave("sheet-1", ["m1", "cb1"]);
+    expect(macros.placeholderCandidates).toEqual([
+      { id: "m1|value", entity: "m1", field: "value", reference: "M1", symbolId: "motor", current: "0.4kW" },
+      { id: "cb1|value", entity: "cb1", field: "value", reference: "CB1", symbolId: "breaker_3p", current: "" },
+      {
+        id: "cb1|attrs.rating",
+        entity: "cb1",
+        field: "attrs.rating",
+        reference: "CB1",
+        symbolId: "breaker_3p",
+        current: "1-1.6A",
+      },
+    ]);
+  });
+
+  // ja: 同じキー名を付けた複数の欄は、行き先を複数持つ1つのプレースホルダにまとまる
+  it("groups every field that was given the same key name into one placeholder with several targets", async () => {
+    vi.spyOn(ipc, "buildMacro").mockResolvedValue(motorSelection());
+    const macros = useMacrosStore();
+    await macros.openSave("sheet-1", ["m1", "cb1"]);
+    macros.setPlaceholderKey("m1|value", "rating");
+    macros.setPlaceholderKey("cb1|attrs.rating", " rating ");
+
+    expect(macros.savePlaceholders).toEqual([
+      {
+        key: "rating",
+        label: "rating",
+        label_ja: "rating",
+        targets: [
+          { entity: "m1", field: "value" },
+          { entity: "cb1", field: "attrs.rating" },
+        ],
+      },
+    ]);
+    expect(macros.placeholderKeyList).toEqual(["rating"]);
+  });
+
+  // ja: 値セットは行を足して名前とキーごとの値を入れると組み立てられ、idは名前から作られる
+  it("builds one value set per row from its name and the value of each key", async () => {
+    vi.spyOn(ipc, "buildMacro").mockResolvedValue(motorSelection());
+    const macros = useMacrosStore();
+    await macros.openSave("sheet-1", ["m1", "cb1"]);
+    macros.setPlaceholderKey("m1|value", "rating");
+
+    macros.addValueSet();
+    macros.setValueSetLabel(0, "0.75 kW");
+    macros.setValueSetValue(0, "rating", "0.75kW");
+    macros.addValueSet();
+    macros.setValueSetLabel(1, "1.5 kW");
+    macros.setValueSetValue(1, "rating", "1.5kW");
+
+    expect(macros.saveValueSets).toEqual([
+      { id: "0_75_kw", label: "0.75 kW", label_ja: "0.75 kW", values: { rating: "0.75kW" } },
+      { id: "1_5_kw", label: "1.5 kW", label_ja: "1.5 kW", values: { rating: "1.5kW" } },
+    ]);
+
+    macros.removeValueSet(0);
+    expect(macros.saveValueSets.map((v) => v.id)).toEqual(["1_5_kw"]);
+  });
+
+  // ja: 名前を入れていない値セットの行は保存されない(空の値セットは作らない)
+  it("drops a value set row that has no name yet", async () => {
+    vi.spyOn(ipc, "buildMacro").mockResolvedValue(motorSelection());
+    const macros = useMacrosStore();
+    await macros.openSave("sheet-1", ["m1"]);
+    macros.setPlaceholderKey("m1|value", "rating");
+    macros.addValueSet();
+    macros.setValueSetValue(0, "rating", "1.5kW");
+    expect(macros.saveValueSets).toEqual([]);
+  });
+
+  // ja: プレースホルダと値セットは保存時にマクロの情報として一緒に渡される
+  it("sends the placeholders and the value sets along with the save", async () => {
+    vi.spyOn(ipc, "buildMacro").mockResolvedValue(motorSelection());
+    const saved = macro("motor_circuit", "motor");
+    const save = vi
+      .spyOn(ipc, "saveMacro")
+      .mockResolvedValue({ macro: saved, path: "/home/u/MadakeCAD/macros/motor_circuit.json" });
+    mockList([...library, saved]);
+    const macros = useMacrosStore();
+    await macros.openSave("sheet-1", ["m1", "cb1"]);
+    macros.saveName = "モータ回路";
+    macros.setPlaceholderKey("m1|value", "rating");
+    macros.setPlaceholderKey("cb1|attrs.rating", "rating");
+    macros.addValueSet();
+    macros.setValueSetLabel(0, "1.5 kW");
+    macros.setValueSetValue(0, "rating", "1.5kW");
+
+    await macros.save();
+    const meta: MacroMeta = {
+      name: "モータ回路",
+      name_ja: "モータ回路",
+      category: "",
+      placeholders: [
+        {
+          key: "rating",
+          label: "rating",
+          label_ja: "rating",
+          targets: [
+            { entity: "m1", field: "value" },
+            { entity: "cb1", field: "attrs.rating" },
+          ],
+        },
+      ],
+      value_sets: [{ id: "1_5_kw", label: "1.5 kW", label_ja: "1.5 kW", values: { rating: "1.5kW" } }],
+    };
+    expect(save).toHaveBeenCalledWith("sheet-1", ["m1", "cb1"], meta);
+  });
+
+  // ja: 何も指定しなければ保存の中身は今までどおり(プレースホルダも値セットも付かない)
+  it("saves exactly as before when no placeholder and no value set was entered", async () => {
+    vi.spyOn(ipc, "buildMacro").mockResolvedValue(motorSelection());
+    const saved = macro("plain", "");
+    const save = vi.spyOn(ipc, "saveMacro").mockResolvedValue({ macro: saved, path: "/p.json" });
+    mockList([saved]);
+    const macros = useMacrosStore();
+    await macros.openSave("sheet-1", ["m1"]);
+    macros.saveName = "そのまま";
+    await macros.save();
+    expect(save).toHaveBeenCalledWith("sheet-1", ["m1"], {
+      name: "そのまま",
+      name_ja: "そのまま",
+      category: "",
+    });
+  });
+
+  // ja: 保存ダイアログを開き直すと、前回のプレースホルダと値セットは残らない
+  it("starts every save dialog with no placeholder keys and no value set rows", async () => {
+    vi.spyOn(ipc, "buildMacro").mockResolvedValue(motorSelection());
+    const macros = useMacrosStore();
+    await macros.openSave("sheet-1", ["m1", "cb1"]);
+    macros.setPlaceholderKey("m1|value", "rating");
+    macros.addValueSet();
+    macros.setValueSetLabel(0, "1.5 kW");
+
+    await macros.openSave("sheet-1", ["m1"]);
+    expect(macros.savePlaceholders).toEqual([]);
+    expect(macros.saveValueSets).toEqual([]);
+  });
+});
+
+describe("choosing a value set when inserting", () => {
+  // ja: 値セットを持たないマクロでは選ぶものが無い(挿入ダイアログのドロップダウンを出さない)
+  it("offers no value set for a macro that defines none", async () => {
+    mockList();
+    const macros = useMacrosStore();
+    await macros.load();
+    macros.select("motor_dol");
+    expect(macros.valueSets).toEqual([]);
+    expect(macros.valueSetId).toBeNull();
+  });
+
+  // ja: 値セットを持つマクロでは一覧が並び、選んだ値セットを覚える
+  it("lists the value sets of the selected macro and remembers the chosen one", async () => {
+    const rated: Macro = {
+      ...macro("motor_rated", "motor"),
+      placeholders: [
+        { key: "rating", label: "Rating", label_ja: "定格", targets: [{ entity: "m1", field: "value" }] },
+      ],
+      value_sets: [
+        { id: "0_75_kw", label: "0.75 kW", label_ja: "0.75kW", values: { rating: "0.75kW" } },
+        { id: "1_5_kw", label: "1.5 kW", label_ja: "1.5kW", values: { rating: "1.5kW" } },
+      ],
+    };
+    mockList([...library, rated]);
+    const macros = useMacrosStore();
+    await macros.load();
+    macros.select("motor_rated");
+    expect(macros.valueSets.map((v) => v.id)).toEqual(["0_75_kw", "1_5_kw"]);
+    macros.setValueSet("1_5_kw");
+    expect(macros.valueSetId).toBe("1_5_kw");
+  });
+
+  // ja: 別のマクロを選び直すと、値セットの選択は外れる(そのマクロには無い値セットのため)
+  it("clears the chosen value set when another macro is selected", async () => {
+    const rated: Macro = {
+      ...macro("motor_rated", "motor"),
+      value_sets: [{ id: "1_5_kw", label: "1.5 kW", label_ja: "1.5kW", values: {} }],
+    };
+    mockList([...library, rated]);
+    const macros = useMacrosStore();
+    await macros.load();
+    macros.select("motor_rated");
+    macros.setValueSet("1_5_kw");
+    macros.select("power_24v");
+    expect(macros.valueSetId).toBeNull();
   });
 });
 

@@ -6,7 +6,7 @@
 // 座標は基準点 (`base_point`) からの相対で入っているため、ゴーストも確定も
 // 「回転 → 挿入位置へ平行移動」の同じ変換を通る (Rust macros::place_entity と同一規則)。
 
-import type { Command, Entity, Macro, Point, Sheet, SymbolDef } from "../ipc";
+import type { Command, Entity, Macro, MacroValueSet, Point, Sheet, SymbolDef } from "../ipc";
 import { drawHarness, drawSymbol } from "./renderer";
 import { theme, wireColorScreen } from "./theme";
 import type { Viewport } from "./viewport";
@@ -28,6 +28,12 @@ export function macroVariantLabel(m: Macro, key: string, locale: string): string
   const v = m.variants.find((x) => x.key.toUpperCase() === key.toUpperCase());
   const name = v ? (locale === "ja" && v.name_ja ? v.name_ja : v.name) : "";
   return name ? `${key} ${name}` : key;
+}
+
+/** UI言語に合わせた値セットの表示名 (日本語名が無ければ英語名、どちらも無ければid)。 */
+export function macroValueSetLabel(v: MacroValueSet, locale: string): string {
+  const label = locale === "ja" && v.label_ja ? v.label_ja : v.label;
+  return label || v.id;
 }
 
 /** 指定バリアントのCommand列。"A"・未指定・知らないキーは既定の`commands`。 */

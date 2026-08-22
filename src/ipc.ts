@@ -428,6 +428,40 @@ export interface Macro {
   /** 既定バリアント("A")のCommand列。 */
   commands: Command[];
   variants: MacroVariant[];
+  /** 可変値のスロット (定格・型番など。値セットが値を入れる先)。 */
+  placeholders: MacroPlaceholder[];
+  /** 値セット (挿入時に選ぶと関連する欄が一括設定される)。 */
+  value_sets: MacroValueSet[];
+}
+
+/**
+ * マクロのプレースホルダ1件 = 「この回路のこの値は現場で決める」というスロット。
+ * `key`が値セットとの合言葉で、`targets`がその値の行き先。
+ */
+export interface MacroPlaceholder {
+  /** 値セットから参照される名前 (例: "rating")。 */
+  key: string;
+  label: string;
+  label_ja: string;
+  targets: PlaceholderTarget[];
+}
+
+/** プレースホルダの値の行き先1つ (どのシンボルのどの欄へ書くか)。 */
+export interface PlaceholderTarget {
+  /** マクロ内のエンティティid (挿入時に新しいidへ振り直される)。 */
+  entity: string;
+  /** `"value"` (型番・値) または `"attrs.<名前>"`。 */
+  field: string;
+}
+
+/** 値セット1件 = プレースホルダの値の組 (例: 「1.5kW」を選ぶと決まる値ぜんぶ)。 */
+export interface MacroValueSet {
+  /** 挿入時に指定するid (例: "1_5_kw")。 */
+  id: string;
+  label: string;
+  label_ja: string;
+  /** プレースホルダの`key` → 値。 */
+  values: Record<string, string>;
 }
 
 /** マクロの代替バリアント1件 (EPLANのマクロバリアントA〜Hに相当)。 */
@@ -447,6 +481,10 @@ export interface MacroMeta {
   description?: string;
   description_ja?: string;
   category?: string;
+  /** 可変値のスロット (指定しなければプレースホルダ無しのマクロになる)。 */
+  placeholders?: MacroPlaceholder[];
+  /** 値セット (指定しなければ値セット無しのマクロになる)。 */
+  value_sets?: MacroValueSet[];
 }
 
 /** 読み込めなかったマクロファイル1件 (形はテンプレートと同じ)。 */
@@ -491,10 +529,14 @@ interface Ipc {
     entityIds: string[],
     meta: MacroMeta,
   ): Promise<{ macro: Macro; path: string }>;
-  /** ライブラリのマクロをidで挿入する。1回の編集なのでundo一発で戻る。 */
+  /**
+   * ライブラリのマクロをidで挿入する。1回の編集なのでundo一発で戻る。
+   * `valueSet`を渡すと、その値セットの値がプレースホルダの行き先へ一括で入る。
+   */
   applyMacro(
     macroId: string,
     variant: string | null,
+    valueSet: string | null,
     sheetId: string,
     at: Point,
     rotation: number,
@@ -503,6 +545,7 @@ interface Ipc {
   applyMacroInline(
     macro: Macro,
     variant: string | null,
+    valueSet: string | null,
     sheetId: string,
     at: Point,
     rotation: number,
@@ -567,10 +610,10 @@ const tauriIpc: Ipc = {
     invoke<Macro>("build_macro", { sheetId, entityIds, meta }),
   saveMacro: (sheetId, entityIds, meta) =>
     invoke<{ macro: Macro; path: string }>("save_macro", { sheetId, entityIds, meta }),
-  applyMacro: (macroId, variant, sheetId, at, rotation) =>
-    invoke<Patch>("apply_macro", { macroId, variant, sheetId, at, rotation }),
-  applyMacroInline: (macro, variant, sheetId, at, rotation) =>
-    invoke<Patch>("apply_macro_inline", { macro, variant, sheetId, at, rotation }),
+  applyMacro: (macroId, variant, valueSet, sheetId, at, rotation) =>
+    invoke<Patch>("apply_macro", { macroId, variant, valueSet, sheetId, at, rotation }),
+  applyMacroInline: (macro, variant, valueSet, sheetId, at, rotation) =>
+    invoke<Patch>("apply_macro_inline", { macro, variant, valueSet, sheetId, at, rotation }),
   openMacrosFolder: () => invoke<string>("open_macros_folder"),
   getNetlist: (sheetId: string) => invoke<Net[]>("get_netlist", { sheetId }),
   verify: (sheetId: string | null) => invoke<Diagnostic[]>("run_verification", { sheetId }),
@@ -649,15 +692,22 @@ const httpIpc: Ipc = {
       method: "POST",
       body: JSON.stringify({ sheet_id: sheetId, entity_ids: entityIds, ...meta }),
     }),
-  applyMacro: (macroId, variant, sheetId, at, rotation) =>
+  applyMacro: (macroId, variant, valueSet, sheetId, at, rotation) =>
     http<Patch>("/macros/apply", {
       method: "POST",
-      body: JSON.stringify({ id: macroId, variant, sheet_id: sheetId, at, rotation }),
+      body: JSON.stringify({
+        id: macroId,
+        variant,
+        value_set: valueSet,
+        sheet_id: sheetId,
+        at,
+        rotation,
+      }),
     }),
-  applyMacroInline: (macro, variant, sheetId, at, rotation) =>
+  applyMacroInline: (macro, variant, valueSet, sheetId, at, rotation) =>
     http<Patch>("/macros/apply-inline", {
       method: "POST",
-      body: JSON.stringify({ macro, variant, sheet_id: sheetId, at, rotation }),
+      body: JSON.stringify({ macro, variant, value_set: valueSet, sheet_id: sheetId, at, rotation }),
     }),
   openMacrosFolder: () => Promise.reject(new Error("browser mode: not supported")),
   getNetlist: (sheetId) => http<Net[]>(`/netlist?sheet_id=${sheetId}`),
