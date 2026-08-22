@@ -51,8 +51,16 @@
 
 ### Task 2: マクロ値セット
 
-- [ ] Step 1 (red): Rustテスト: placeholders/value_setsの形式・検証/挿入時の一括適用(value・attrs)/値セット無し・不正参照の扱い/undo一発維持。TS: 挿入プレビューの値セット選択→apply引数/保存ダイアログのプレースホルダ指定
-- [ ] Step 2 (green): 実装(macros.rs拡張+UI)。実機確認(値セット付きマクロ→挿入で定格一括設定)→コミット
+- [x] Step 1 (red): Rustテスト: placeholders/value_setsの形式・検証/挿入時の一括適用(value・attrs)/値セット無し・不正参照の扱い/undo一発維持。TS: 挿入プレビューの値セット選択→apply引数/保存ダイアログのプレースホルダ指定
+- [x] Step 2 (green): 実装(macros.rs拡張+UI)。実機確認(値セット付きマクロ→挿入で定格一括設定)→コミット
+
+> **完了(2026-08-22)。** 形式: `placeholders: [{key, label, label_ja, targets: [{entity, field}]}]` +
+> `value_sets: [{id, label, label_ja, values: {key: 値}}]`(どちらも`#[serde(default)]`で省略可 =
+> 旧マクロJSONはそのまま読める)。`field`は`"value"`か`"attrs.<名前>"`。挿入は
+> `insert_macro(…, value_set)`で、行き先の解決を**全部済ませてから**書き込み、
+> `execute_batch`は1回のまま(undo一発)。不正な値セット・行き先は図面を変えずにエラー。
+> UI=保存ダイアログのプレースホルダ表/値セット表、挿入ダイアログの値セットドロップダウン
+> (値セットを持つマクロにだけ出る)。⌘C/Vの無名マクロは値セット無し。
 
 ### Task 3: PLC I/O(コア)
 

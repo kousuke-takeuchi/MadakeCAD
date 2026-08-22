@@ -9,7 +9,14 @@
 
 import { defineStore } from "pinia";
 import { macroVariantKeys, DEFAULT_VARIANT } from "../canvas/macroPreview";
-import { ipc, type Macro, type MacroIssue, type MacroMeta } from "../ipc";
+import {
+  ipc,
+  type Macro,
+  type MacroIssue,
+  type MacroMeta,
+  type MacroPlaceholder,
+  type MacroValueSet,
+} from "../ipc";
 
 /** カテゴリツリーの「すべて」。実在の分類名と衝突しないよう記号を使う。 */
 export const ALL_CATEGORIES = "*";
@@ -21,6 +28,42 @@ export interface MacroTile {
   macro: Macro;
   /** 既定の"A"を含めたバリアント数 (タイル右上のバッジ)。 */
   variantCount: number;
+}
+
+/**
+ * 保存ダイアログの「プレースホルダ」表の1行 = 選択範囲の中の書き換えられる欄1つ。
+ * ここへキー名を付けた行がプレースホルダになる。
+ */
+export interface PlaceholderCandidate {
+  /** 行のid (`<エンティティid>|<欄>`)。 */
+  id: string;
+  entity: string;
+  /** `"value"` または `"attrs.<名前>"`。 */
+  field: string;
+  reference: string;
+  symbolId: string;
+  /** 保存時点で入っている値 (表に薄く出す)。 */
+  current: string;
+}
+
+/** 保存ダイアログの「値セット」表の1行 (入力中の値セット)。 */
+export interface ValueSetDraft {
+  label: string;
+  /** プレースホルダのキー → 値。 */
+  values: Record<string, string>;
+}
+
+/**
+ * 表示名から安定したidを作る (英数字以外は`_`)。Rustの`derive_id`と同じ規則なので、
+ * 「1.5 kW」→`1_5_kw`のように保存前後で同じidになる。
+ */
+export function deriveValueSetId(label: string): string {
+  let id = "";
+  for (const ch of label) {
+    if (/[0-9A-Za-z]/.test(ch)) id += ch.toLowerCase();
+    else if (!id.endsWith("_")) id += "_";
+  }
+  return id.replace(/^_+|_+$/g, "");
 }
 
 interface MacroState {
@@ -39,6 +82,8 @@ interface MacroState {
   selectedId: string | null;
   /** 選択中タイルのバリアントキー (配置中はTabでも変わる)。 */
   variantKey: string;
+  /** 選択中タイルの値セットid (未選択=保存時の値のまま挿入する)。 */
+  valueSetId: string | null;
 
   /** 保存ダイアログ。 */
   saveOpen: boolean;
@@ -49,6 +94,10 @@ interface MacroState {
   saveSheetId: string | null;
   saveEntityIds: string[];
   saving: boolean;
+  /** プレースホルダ表で入力したキー名 (行id → キー。空の行はプレースホルダにしない)。 */
+  placeholderKeys: Record<string, string>;
+  /** 値セット表で入力中の行。 */
+  valueSetDrafts: ValueSetDraft[];
 
   /** ⌘Cで覚えた無名マクロ (ファイルには書かない)。 */
   clipboard: Macro | null;
@@ -66,6 +115,7 @@ export const useMacrosStore = defineStore("macros", {
     query: "",
     selectedId: null,
     variantKey: DEFAULT_VARIANT,
+    valueSetId: null,
     saveOpen: false,
     saveName: "",
     saveCategory: "",
@@ -73,6 +123,8 @@ export const useMacrosStore = defineStore("macros", {
     saveSheetId: null,
     saveEntityIds: [],
     saving: false,
+    placeholderKeys: {},
+    valueSetDrafts: [],
     clipboard: null,
     error: null,
   }),
@@ -125,9 +177,78 @@ export const useMacrosStore = defineStore("macros", {
       return this.selected ? macroVariantKeys(this.selected) : [];
     },
 
+    /**
+     * 選択中マクロの値セット (挿入ダイアログのドロップダウン)。
+     * 値セットを持たないマクロでは空 = 選ぶものが無いのでドロップダウンを出さない。
+     */
+    valueSets(): MacroValueSet[] {
+      return this.selected?.value_sets ?? [];
+    },
+
     /** 保存ダイアログの対象エンティティ数 (プレビュー欄の「n エンティティ」)。 */
     saveEntityCount(state): number {
       return state.saveEntityIds.length;
+    },
+
+    /**
+     * プレースホルダ表の候補行: 選択範囲のシンボルごとに、型番・値の欄と
+     * 今ある属性を1行ずつ並べる (型番欄は空でも並べる。空の定格にキーを付けられるように)。
+     */
+    placeholderCandidates(state): PlaceholderCandidate[] {
+      const rows: PlaceholderCandidate[] = [];
+      for (const c of state.savePreview?.commands ?? []) {
+        if (c.type !== "add_entity" || c.entity.kind !== "symbol") continue;
+        const e = c.entity;
+        const base = { entity: e.id, reference: e.reference, symbolId: e.symbol_id };
+        rows.push({ id: `${e.id}|value`, field: "value", current: e.value, ...base });
+        for (const name of Object.keys(e.attrs).sort()) {
+          rows.push({
+            id: `${e.id}|attrs.${name}`,
+            field: `attrs.${name}`,
+            current: e.attrs[name],
+            ...base,
+          });
+        }
+      }
+      return rows;
+    },
+
+    /**
+     * 入力したキー名からプレースホルダを組み立てる。
+     * 同じキー名を付けた欄は**1つのプレースホルダの複数の行き先**にまとまるので、
+     * 「モータ容量」を1回選ぶだけで関係する欄がまとめて決まる。
+     */
+    savePlaceholders(): MacroPlaceholder[] {
+      const byKey = new Map<string, MacroPlaceholder>();
+      for (const row of this.placeholderCandidates) {
+        const key = (this.placeholderKeys[row.id] ?? "").trim();
+        if (!key) continue;
+        const slot = byKey.get(key) ?? { key, label: key, label_ja: key, targets: [] };
+        slot.targets.push({ entity: row.entity, field: row.field });
+        byKey.set(key, slot);
+      }
+      return [...byKey.values()];
+    },
+
+    /** 宣言済みのキー名 (値セット表の列)。 */
+    placeholderKeyList(): string[] {
+      return this.savePlaceholders.map((p) => p.key);
+    },
+
+    /** 入力中の行から値セットを組み立てる (名前が空の行は値セットにしない)。 */
+    saveValueSets(state): MacroValueSet[] {
+      const keys = this.placeholderKeyList;
+      return state.valueSetDrafts
+        .filter((d) => d.label.trim().length > 0)
+        .map((d) => {
+          const label = d.label.trim();
+          const values: Record<string, string> = {};
+          for (const key of keys) {
+            const v = d.values[key];
+            if (v !== undefined && v !== "") values[key] = v;
+          }
+          return { id: deriveValueSetId(label), label, label_ja: label, values };
+        });
     },
 
     /** 保存できるか (名前が空のあいだは保存させない。名前がマクロのidになるため)。 */
@@ -149,6 +270,7 @@ export const useMacrosStore = defineStore("macros", {
         if (!this.macros.some((m) => m.id === this.selectedId)) {
           this.selectedId = this.macros[0]?.id ?? null;
           this.variantKey = DEFAULT_VARIANT;
+          this.valueSetId = null;
         }
       } catch (e) {
         this.macros = [];
@@ -165,14 +287,47 @@ export const useMacrosStore = defineStore("macros", {
       this.category = key;
     },
 
-    /** タイルを選ぶ (右のプレビューが切り替わり、バリアントは既定へ戻る)。 */
+    /**
+     * タイルを選ぶ (右のプレビューが切り替わり、バリアントは既定へ戻る)。
+     * 値セットの選択も外す (値セットはマクロごとのものなので持ち越さない)。
+     */
     select(id: string) {
       this.selectedId = id;
       this.variantKey = DEFAULT_VARIANT;
+      this.valueSetId = null;
     },
 
     setVariant(key: string) {
       this.variantKey = key;
+    },
+
+    /** 挿入に使う値セットを選ぶ (nullで「保存時の値のまま」)。 */
+    setValueSet(id: string | null) {
+      this.valueSetId = id;
+    },
+
+    /** プレースホルダ表の1行にキー名を付ける (空にするとその行はプレースホルダでなくなる)。 */
+    setPlaceholderKey(rowId: string, key: string) {
+      this.placeholderKeys[rowId] = key;
+    },
+
+    /** 値セットの行を1つ足す。 */
+    addValueSet() {
+      this.valueSetDrafts.push({ label: "", values: {} });
+    },
+
+    removeValueSet(index: number) {
+      this.valueSetDrafts.splice(index, 1);
+    },
+
+    setValueSetLabel(index: number, label: string) {
+      const draft = this.valueSetDrafts[index];
+      if (draft) draft.label = label;
+    },
+
+    setValueSetValue(index: number, key: string, value: string) {
+      const draft = this.valueSetDrafts[index];
+      if (draft) draft.values[key] = value;
     },
 
     /**
@@ -187,6 +342,8 @@ export const useMacrosStore = defineStore("macros", {
       this.saveName = "";
       this.saveCategory = "";
       this.savePreview = null;
+      this.placeholderKeys = {};
+      this.valueSetDrafts = [];
       this.error = null;
       try {
         this.savePreview = await ipc.buildMacro(sheetId, this.saveEntityIds, { name: "" });
@@ -213,6 +370,11 @@ export const useMacrosStore = defineStore("macros", {
         name_ja: name,
         category: this.saveCategory.trim(),
       };
+      // 何も指定していないマクロは今までどおりの中身のまま保存する (後方互換)。
+      const placeholders = this.savePlaceholders;
+      const valueSets = this.saveValueSets;
+      if (placeholders.length) meta.placeholders = placeholders;
+      if (valueSets.length) meta.value_sets = valueSets;
       this.saving = true;
       this.error = null;
       try {
@@ -221,6 +383,7 @@ export const useMacrosStore = defineStore("macros", {
         await this.load();
         this.selectedId = result.macro.id;
         this.variantKey = DEFAULT_VARIANT;
+        this.valueSetId = null;
         this.saveOpen = false;
         return result;
       } catch (e) {

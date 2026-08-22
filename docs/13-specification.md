@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1080 specification clauses** across 5 areas.
+**1106 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -94,6 +94,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Saving a circuit as a macro and inserting it back at its base point reproduces the drawing exactly: same pins, wires, junctions and labels at the same coordinates. <sub>`a_saved_macro_reproduces_the_drawing_when_inserted_back`</sub>
 - A motor circuit saved as a macro can be inserted twice into another sheet: the two copies never share a reference designator and the drawing still passes verification with no errors or ERC warnings. <sub>`a_macro_inserted_twice_keeps_references_unique_and_passes_verification`</sub>
 - Macros are written to and listed from the user's macros folder, and a file that is not a valid macro is reported with its path and reason while the others stay usable. <sub>`macros_round_trip_through_the_user_folder_and_broken_files_are_reported`</sub>
+- A macro file written before value sets existed still loads and inserts: it simply has no placeholders and no value sets. <sub>`a_macro_file_without_placeholders_still_loads_and_inserts`</sub>
+- Choosing a value set on insert writes its values into the value field of the symbols the placeholder points at. <sub>`a_chosen_value_set_fills_in_the_value_field_of_its_targets`</sub>
+- A placeholder can point at a named attribute (attrs.<name>) instead of the value field, so ratings and part numbers land in their own slots. <sub>`a_placeholder_can_write_into_a_named_attribute`</sub>
+- One value of a value set reaches every target of its placeholder at once, across several symbols and fields, and a value set can carry several keys. <sub>`one_value_set_updates_every_target_of_every_key_at_once`</sub>
+- Inserting without choosing a value set leaves every field exactly as it was saved. <sub>`inserting_without_a_value_set_keeps_the_saved_values`</sub>
+- An unknown value set id is refused with the id in the message, and nothing is placed. <sub>`an_unknown_value_set_id_is_refused_and_places_nothing`</sub>
+- A value set that points at an entity the macro does not contain is refused, and none of its other values are applied either (no half-filled circuit). <sub>`a_target_that_is_not_in_the_macro_is_refused_without_applying_anything`</sub>
+- A value set naming a placeholder key the macro does not declare is refused with the key in the message. <sub>`a_value_set_key_without_a_placeholder_is_refused`</sub>
+- Saving refuses a placeholder that points outside the selection or writes into a field that does not exist, so a macro can never be saved with a target it cannot reach. <sub>`saving_refuses_a_placeholder_target_outside_the_selection_or_an_unknown_field`</sub>
+- Inserting with a value set is still one edit: a single undo takes the whole circuit, values and all, back out. <sub>`inserting_with_a_value_set_is_still_undone_in_one_step`</sub>
+- Placeholders and value sets survive the round trip through the macros folder, so a macro saved with them can be inserted later with any of its value sets. <sub>`placeholders_and_value_sets_round_trip_through_the_user_folder`</sub>
 - Inserting into a sheet that is not in the project is refused, and an unknown macro id is refused by name. <sub>`inserting_into_an_unknown_sheet_or_by_an_unknown_id_is_refused`</sub>
 
 ### Document model
@@ -475,6 +486,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - POST /macros/save turns the selected entities into a macro file in the user's macros folder, and GET /macros lists it with its base point. <sub>`saving_a_selection_over_the_link_api_stores_a_macro_in_the_user_folder`</sub>
 - POST /macros/apply drops the macro at the requested point as a single edit that one undo takes back, renumbering its reference designators so they do not clash. <sub>`applying_a_macro_over_the_link_api_is_one_undo_step`</sub>
+- A macro saved with placeholders and value sets can be inserted over the Link API with one of them chosen, and the values land on the drawing in the same single edit. <sub>`applying_a_macro_with_a_value_set_over_the_link_api_fills_in_the_values`</sub>
 - POST /macros/build turns the selection into a macro without writing any file, which is what the save dialog previews and what Cmd+C keeps in memory. <sub>`building_a_macro_does_not_write_a_file`</sub>
 - POST /macros/apply-inline drops a macro handed over by value (the Cmd+C clipboard) as a single edit, renumbering its reference designators just like a stored macro. <sub>`applying_an_inline_macro_behaves_like_a_stored_one`</sub>
 - An unknown macro id, an unknown variant key and an empty selection are all refused with 400 and leave the drawing untouched. <sub>`the_link_api_refuses_unknown_macros_variants_and_empty_selections`</sub>
@@ -930,6 +942,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - gives a macro without variants the single key A <sub>`macroVariantKeys`</sub>
 - labels a variant with its key and name, in Japanese when the UI is Japanese <sub>`macroVariantLabel`</sub>
 - shows just the key for a variant that has no name, such as the default A <sub>`macroVariantLabel`</sub>
+- labels a value set in the UI language, falling back to the English name <sub>`macroValueSetLabel`</sub>
+- falls back to the id for a value set with no name at all <sub>`macroValueSetLabel`</sub>
 - reads the default commands for A (or no key) and the variant's own commands otherwise <sub>`macroCommands / macroEntities`</sub>
 - falls back to the default commands when the variant key is unknown <sub>`macroCommands / macroEntities`</sub>
 - extracts only the entities the macro adds <sub>`macroCommands / macroEntities`</sub>
@@ -1217,6 +1231,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - saves the selection with the entered name and category, then reloads the library <sub>`macro save dialog`</sub>
 - leaves the dialog open with the reason when saving fails <sub>`macro save dialog`</sub>
 - shows the base point derived from the selection, which the user does not edit <sub>`macro save dialog`</sub>
+- lists the value field and every attribute of the selected symbols as a placeholder candidate <sub>`placeholders and value sets in the save dialog`</sub>
+- groups every field that was given the same key name into one placeholder with several targets <sub>`placeholders and value sets in the save dialog`</sub>
+- builds one value set per row from its name and the value of each key <sub>`placeholders and value sets in the save dialog`</sub>
+- drops a value set row that has no name yet <sub>`placeholders and value sets in the save dialog`</sub>
+- sends the placeholders and the value sets along with the save <sub>`placeholders and value sets in the save dialog`</sub>
+- saves exactly as before when no placeholder and no value set was entered <sub>`placeholders and value sets in the save dialog`</sub>
+- starts every save dialog with no placeholder keys and no value set rows <sub>`placeholders and value sets in the save dialog`</sub>
+- offers no value set for a macro that defines none <sub>`choosing a value set when inserting`</sub>
+- lists the value sets of the selected macro and remembers the chosen one <sub>`choosing a value set when inserting`</sub>
+- clears the chosen value set when another macro is selected <sub>`choosing a value set when inserting`</sub>
 - copies the selection into an in-memory macro without writing any file <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - does nothing on copy when nothing is selected, keeping the previous clipboard <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - hands the copied macro back on every paste, so it can be pasted repeatedly <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
@@ -1376,6 +1400,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - applies a library macro by id at the clicked point with the current variant and rotation <sub>`confirming a macro placement`</sub>
 - applies a pasted macro by value instead of by id, since it has no file <sub>`confirming a macro placement`</sub>
 - stays in macro placement after a click, so the same macro can be placed again <sub>`confirming a macro placement`</sub>
+- passes the value set chosen in the dialog to the insert <sub>`placing a macro with a value set`</sub>
+- inserts a macro with no value set chosen just as it was saved <sub>`placing a macro with a value set`</sub>
 - copies the selection on Cmd+C and starts placing it on Cmd+V <sub>`Cmd+C / Cmd+V`</sub>
 - does not swallow Cmd+C with an empty selection nor Cmd+V with an empty clipboard <sub>`Cmd+C / Cmd+V`</sub>
 

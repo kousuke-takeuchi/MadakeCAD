@@ -45,6 +45,22 @@ function macro(id = "motor_dol", variantKeys: string[] = ["B", "C"]): Macro {
       name_ja: key,
       commands: [addSymbol(`s-${key}`)],
     })),
+    placeholders: [],
+    value_sets: [],
+  };
+}
+
+/** 値セットを2つ持つマクロ (挿入時に定格を一括設定するモータ回路)。 */
+function ratedMacro(): Macro {
+  return {
+    ...macro("motor_rated", []),
+    placeholders: [
+      { key: "rating", label: "Rating", label_ja: "定格", targets: [{ entity: "s1", field: "value" }] },
+    ],
+    value_sets: [
+      { id: "0_75_kw", label: "0.75 kW", label_ja: "0.75kW", values: { rating: "0.75kW" } },
+      { id: "1_5_kw", label: "1.5 kW", label_ja: "1.5kW", values: { rating: "1.5kW" } },
+    ],
   };
 }
 
@@ -153,12 +169,13 @@ describe("confirming a macro placement", () => {
       kind: "library",
       macroId: "motor_dol",
       variant: "B",
+      valueSet: null,
       sheetId: "sheet-1",
       at: { x: 150, y: 120 },
       rotation: 90,
     });
     await controller.commitMacro({ x: 150, y: 120 });
-    expect(apply).toHaveBeenCalledWith("motor_dol", "B", "sheet-1", { x: 150, y: 120 }, 90);
+    expect(apply).toHaveBeenCalledWith("motor_dol", "B", null, "sheet-1", { x: 150, y: 120 }, 90);
   });
 
   // ja: 貼り付けた無名マクロはidではなくマクロそのものを渡して挿入される(ファイルが無いため)
@@ -170,7 +187,7 @@ describe("confirming a macro placement", () => {
 
     expect(controller.macroApplyArgs({ x: 10, y: 20 })).toMatchObject({ kind: "inline" });
     await controller.commitMacro({ x: 10, y: 20 });
-    expect(inline).toHaveBeenCalledWith(m, "A", "sheet-1", { x: 10, y: 20 }, 0);
+    expect(inline).toHaveBeenCalledWith(m, "A", null, "sheet-1", { x: 10, y: 20 }, 0);
   });
 
   // ja: 確定してもマクロツールのままなので、同じマクロを続けて何個でも置ける
@@ -181,6 +198,43 @@ describe("confirming a macro placement", () => {
     await controller.commitMacro({ x: 10, y: 20 });
     expect(controller.tool).toBe("macro");
     expect(controller.placeMacro?.macro.id).toBe("motor_dol");
+  });
+});
+
+describe("placing a macro with a value set", () => {
+  // ja: 挿入ダイアログで選んだ値セットは、挿入の引数にそのまま乗る(定格が一括で入る)
+  it("passes the value set chosen in the dialog to the insert", async () => {
+    const apply = vi.spyOn(ipc, "applyMacro").mockResolvedValue(emptyPatch);
+    const controller = new EditorController(seedDocument());
+    controller.startMacroPlacement(ratedMacro(), { fromLibrary: true, valueSet: "1_5_kw" });
+
+    expect(controller.macroApplyArgs({ x: 40, y: 60 })).toEqual({
+      kind: "library",
+      macroId: "motor_rated",
+      variant: "A",
+      valueSet: "1_5_kw",
+      sheetId: "sheet-1",
+      at: { x: 40, y: 60 },
+      rotation: 0,
+    });
+    await controller.commitMacro({ x: 40, y: 60 });
+    expect(apply).toHaveBeenCalledWith(
+      "motor_rated",
+      "A",
+      "1_5_kw",
+      "sheet-1",
+      { x: 40, y: 60 },
+      0,
+    );
+  });
+
+  // ja: 値セットを選ばずに置いたマクロは、保存時の値のまま入る
+  it("inserts a macro with no value set chosen just as it was saved", async () => {
+    const apply = vi.spyOn(ipc, "applyMacro").mockResolvedValue(emptyPatch);
+    const controller = new EditorController(seedDocument());
+    controller.startMacroPlacement(ratedMacro());
+    await controller.commitMacro({ x: 40, y: 60 });
+    expect(apply).toHaveBeenCalledWith("motor_rated", "A", null, "sheet-1", { x: 40, y: 60 }, 0);
   });
 });
 
@@ -196,7 +250,7 @@ describe("Cmd+C / Cmd+V", () => {
 
     expect(await controller.onKeyDown(key("v", true))).toBe(true);
     expect(controller.tool).toBe("macro");
-    expect(controller.placeMacro).toEqual({ macro: copied, fromLibrary: false });
+    expect(controller.placeMacro).toEqual({ macro: copied, fromLibrary: false, valueSet: null });
   });
 
   // ja: 何も選択していない⌘C・何もコピーしていない⌘Vはキー入力を横取りしない

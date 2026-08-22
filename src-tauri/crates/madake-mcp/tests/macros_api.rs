@@ -172,6 +172,118 @@ async fn applying_a_macro_over_the_link_api_is_one_undo_step() {
     );
 }
 
+/// A macro saved with placeholders and value sets can be inserted over the Link API with one of them chosen, and the values land on the drawing in the same single edit.
+/// プレースホルダと値セットを付けて保存したマクロは、Link APIから値セットを選んで挿入でき、値も同じ1回の編集で図面へ入る。
+#[tokio::test]
+async fn applying_a_macro_with_a_value_set_over_the_link_api_fills_in_the_values() {
+    let (doc, router) = setup();
+    let sheet_id = doc.engine.lock().unwrap().project().sheets[0].id;
+    let ids = place_two_symbols(&router, sheet_id).await;
+
+    let (status, body) = post(
+        &router,
+        "/api/v1/macros/save",
+        json!({
+            "sheet_id": sheet_id,
+            "entity_ids": ids,
+            "id": "api_value_sets",
+            "name": "API value sets",
+            "placeholders": [
+                { "key": "rating", "label": "Rating", "label_ja": "定格",
+                  "targets": [
+                    { "entity": ids[0], "field": "value" },
+                    { "entity": ids[1], "field": "attrs.rating" }
+                  ] }
+            ],
+            "value_sets": [
+                { "id": "0.75kw", "label": "0.75 kW", "label_ja": "0.75kW",
+                  "values": { "rating": "0.75kW" } },
+                { "id": "1.5kw", "label": "1.5 kW", "label_ja": "1.5kW",
+                  "values": { "rating": "1.5kW" } }
+            ]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, list) = get(&router, "/api/v1/macros").await;
+    assert_eq!(status, StatusCode::OK);
+    let mine = list["macros"]
+        .as_array()
+        .expect("macros配列")
+        .iter()
+        .find(|m| m["id"] == "api_value_sets")
+        .expect("保存したマクロ");
+    assert_eq!(
+        mine["value_sets"].as_array().expect("value_sets").len(),
+        2,
+        "挿入UIのドロップダウン用に値セットも返す"
+    );
+
+    let (status, patch) = post(
+        &router,
+        "/api/v1/macros/apply",
+        json!({
+            "id": "api_value_sets",
+            "value_set": "1.5kw",
+            "sheet_id": sheet_id,
+            "at": { "x": 250.0, "y": 130.0 }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{patch}");
+
+    let filled: Vec<(String, String, Option<String>)> = {
+        let engine = doc.engine.lock().unwrap();
+        engine.project().sheets[0]
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                madake_core::Entity::Symbol(s) if s.at.x > 200.0 => Some((
+                    s.symbol_id.clone(),
+                    s.value.clone(),
+                    s.attrs.get("rating").cloned(),
+                )),
+                _ => None,
+            })
+            .collect()
+    };
+    assert!(
+        filled.contains(&("relay_coil".into(), "1.5kW".into(), None)),
+        "{filled:?}"
+    );
+    assert!(
+        filled.contains(&("lamp".into(), String::new(), Some("1.5kW".into()))),
+        "{filled:?}"
+    );
+
+    let (status, _) = post(&router, "/api/v1/undo", json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0].entities.len(),
+        2,
+        "値セット込みでもundo一発"
+    );
+
+    let (status, body) = post(
+        &router,
+        "/api/v1/macros/apply",
+        json!({
+            "id": "api_value_sets",
+            "value_set": "2.2kw",
+            "sheet_id": sheet_id,
+            "at": { "x": 250.0, "y": 130.0 }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0].entities.len(),
+        2,
+        "知らない値セットでは何も置かれない"
+    );
+}
+
 /// POST /macros/build turns the selection into a macro without writing any file, which is what the save dialog previews and what Cmd+C keeps in memory.
 /// POST /macros/build は選択範囲をファイルに書かずにマクロへ組み立てる(保存ダイアログのプレビューと⌘Cの無名マクロが使う)。
 #[tokio::test]

@@ -26,6 +26,16 @@ const basePoint = computed(() => {
     : t("macros.basePointPending");
 });
 
+/** 欄の表示名 (`value`=型番・値、`attrs.<名前>`は属性名そのまま)。 */
+function fieldLabel(field: string): string {
+  return field === "value" ? t("macros.placeholderFieldValue") : field.replace(/^attrs\./, "");
+}
+
+/** 入力欄の現在値 (テンプレートから型付きで読むための小さなヘルパ)。 */
+function inputValue(event: Event): string {
+  return (event.target as HTMLInputElement).value;
+}
+
 async function save() {
   const result = await macros.save();
   if (!result) {
@@ -81,6 +91,80 @@ async function save() {
             </button>
           </span>
         </div>
+
+        <!-- プレースホルダ: 現場ごとに決める欄にキー名を付ける (v1=表形式) -->
+        <p class="section">{{ t("macros.placeholderSection") }}</p>
+        <p class="hint">{{ t("macros.placeholderHint") }}</p>
+        <table v-if="macros.placeholderCandidates.length" class="grid">
+          <thead>
+            <tr>
+              <th>{{ t("macros.placeholderColTarget") }}</th>
+              <th>{{ t("macros.placeholderColField") }}</th>
+              <th>{{ t("macros.placeholderColCurrent") }}</th>
+              <th>{{ t("macros.placeholderColKey") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in macros.placeholderCandidates" :key="row.id">
+              <td class="mono">{{ row.reference || row.symbolId }}</td>
+              <td>{{ fieldLabel(row.field) }}</td>
+              <td class="muted">{{ row.current }}</td>
+              <td>
+                <input
+                  class="input cell"
+                  :value="macros.placeholderKeys[row.id] ?? ''"
+                  :placeholder="t('macros.placeholderKeyPlaceholder')"
+                  @input="macros.setPlaceholderKey(row.id, inputValue($event))"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="hint">{{ t("macros.placeholderEmpty") }}</p>
+
+        <!-- 値セット: キーごとの値の組 (挿入時に選ぶと一括設定される) -->
+        <p class="section">{{ t("macros.valueSetSection") }}</p>
+        <table v-if="macros.placeholderKeyList.length" class="grid">
+          <thead>
+            <tr>
+              <th>{{ t("macros.valueSetColName") }}</th>
+              <th v-for="key in macros.placeholderKeyList" :key="key" class="mono">{{ key }}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(draft, i) in macros.valueSetDrafts" :key="i">
+              <td>
+                <input
+                  class="input cell"
+                  :value="draft.label"
+                  :placeholder="t('macros.valueSetNamePlaceholder')"
+                  @input="macros.setValueSetLabel(i, inputValue($event))"
+                />
+              </td>
+              <td v-for="key in macros.placeholderKeyList" :key="key">
+                <input
+                  class="input cell"
+                  :value="draft.values[key] ?? ''"
+                  @input="macros.setValueSetValue(i, key, inputValue($event))"
+                />
+              </td>
+              <td>
+                <button class="link" :title="t('macros.valueSetRemove')" @click="macros.removeValueSet(i)">
+                  <X :size="12" />
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="hint">{{ t("macros.valueSetNeedsKeys") }}</p>
+        <button
+          v-if="macros.placeholderKeyList.length"
+          class="chip add-set"
+          @click="macros.addValueSet()"
+        >
+          {{ t("macros.valueSetAdd") }}
+        </button>
 
         <div class="preview-frame">
           <MacroPreview
@@ -197,6 +281,50 @@ async function save() {
   cursor: default;
   opacity: 0.6;
 }
+.section {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  color: var(--ui-text);
+}
+.grid th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ui-muted);
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--ribbon-line);
+  white-space: nowrap;
+}
+.grid td {
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--ribbon-line);
+  vertical-align: middle;
+}
+.grid .mono { font-family: monospace; }
+.grid .muted { color: var(--ui-muted); }
+.input.cell { padding: 3px 6px; font-size: 10px; width: 100%; }
+.link {
+  border: none;
+  background: transparent;
+  color: var(--ui-muted);
+  display: flex;
+  padding: 0;
+  cursor: pointer;
+}
+.chip.add-set {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px dashed var(--ribbon-line);
+  color: var(--ui-text);
+  cursor: pointer;
+}
+.chip.add-set:hover { background: var(--hover-bg); }
 .preview-frame {
   height: 180px;
   display: flex;

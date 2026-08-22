@@ -77,6 +77,128 @@ pub struct Macro {
     /// 代替バリアント(`"B"`以降)。
     #[serde(default)]
     pub variants: Vec<MacroVariant>,
+    /// 可変値のスロット (定格・型番・信号名など)。省略可。
+    #[serde(default)]
+    pub placeholders: Vec<MacroPlaceholder>,
+    /// 値セット (プレースホルダの値の組。挿入時に選ぶと一括設定される)。省略可。
+    #[serde(default)]
+    pub value_sets: Vec<MacroValueSet>,
+}
+
+/// マクロの**プレースホルダ**1件 = 「この回路のこの値は現場で決める」というスロット。
+///
+/// `key`が値セット側との合言葉で、`targets`がその値の行き先 (どのシンボルのどの欄か)。
+/// 1つのkeyが複数の行き先を持てるので、「モータ容量」を選ぶだけでモータの型番・
+/// ブレーカの定格・電線sqがまとめて決まる、という書き方ができる。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+pub struct MacroPlaceholder {
+    /// 値セットから参照される名前 (例: "motor_rating")。マクロ内で一意。
+    pub key: String,
+    /// 英語の表示名。
+    #[serde(default)]
+    pub label: String,
+    /// 日本語の表示名。
+    #[serde(default)]
+    pub label_ja: String,
+    /// 値の行き先。
+    #[serde(default)]
+    pub targets: Vec<PlaceholderTarget>,
+}
+
+/// プレースホルダの値の行き先1つ (どのシンボルのどの欄へ書くか)。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+pub struct PlaceholderTarget {
+    /// 保存時のエンティティid。マクロファイルの中では安定していて、挿入のたびに
+    /// 新しいidへ振り直される ([`crate::templates::substitute`])。
+    pub entity: EntityId,
+    /// 書き込む欄: `"value"` (型番・値) または `"attrs.<名前>"` (名前付きの属性)。
+    pub field: String,
+}
+
+/// **値セット**1件 = プレースホルダの値の組 (例: 「1.5kW」を選ぶと決まる値ぜんぶ)。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+pub struct MacroValueSet {
+    /// 挿入時に指定するid (例: "1.5kw")。マクロ内で一意。
+    pub id: String,
+    /// 英語の表示名 (例: "1.5 kW (MMP 2.5-4A / 0.75sq)")。
+    #[serde(default)]
+    pub label: String,
+    /// 日本語の表示名。
+    #[serde(default)]
+    pub label_ja: String,
+    /// プレースホルダの`key` → 値。
+    #[serde(default)]
+    pub values: BTreeMap<String, String>,
+}
+
+/// プレースホルダの書き込み先の欄。
+enum TargetField {
+    /// シンボルの型番・値。
+    Value,
+    /// シンボルの名前付き属性。
+    Attr(String),
+}
+
+/// `"value"` / `"attrs.<名前>"` を解釈する。それ以外は理由を添えて拒否する。
+fn parse_field(field: &str) -> Result<TargetField> {
+    if field == "value" {
+        return Ok(TargetField::Value);
+    }
+    if let Some(name) = field.strip_prefix("attrs.") {
+        if !name.is_empty() {
+            return Ok(TargetField::Attr(name.to_string()));
+        }
+    }
+    Err(CoreError::InvalidCommand(format!(
+        "unknown macro placeholder field: {field} (expected \"value\" or \"attrs.<name>\")"
+    )))
+}
+
+/// プレースホルダと値セットの**形**を確かめる (キーの空・重複、欄の書き方、
+/// 値セットが宣言されていないキーを使っていないか)。行き先のエンティティが実在するかは
+/// 保存時 ([`save_macro`]) と挿入時 ([`insert_macro`]) が見る。
+pub fn validate_placeholders(
+    placeholders: &[MacroPlaceholder],
+    value_sets: &[MacroValueSet],
+) -> Result<()> {
+    let mut keys: BTreeSet<&str> = BTreeSet::new();
+    for p in placeholders {
+        if p.key.trim().is_empty() {
+            return Err(CoreError::InvalidCommand(
+                "macro placeholder key is empty".into(),
+            ));
+        }
+        if !keys.insert(p.key.as_str()) {
+            return Err(CoreError::InvalidCommand(format!(
+                "duplicate macro placeholder key: {}",
+                p.key
+            )));
+        }
+        for t in &p.targets {
+            parse_field(&t.field)?;
+        }
+    }
+    let mut ids: BTreeSet<&str> = BTreeSet::new();
+    for vs in value_sets {
+        if vs.id.trim().is_empty() {
+            return Err(CoreError::InvalidCommand("macro value set id is empty".into()));
+        }
+        if !ids.insert(vs.id.as_str()) {
+            return Err(CoreError::InvalidCommand(format!(
+                "duplicate macro value set id: {}",
+                vs.id
+            )));
+        }
+        for key in vs.values.keys() {
+            if !keys.contains(key.as_str()) {
+                return Err(CoreError::InvalidCommand(format!(
+                    "macro value set {} uses an undeclared placeholder key: {key}",
+                    vs.id
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// マクロの代替バリアント1件 (EPLANのマクロバリアントA〜Hに相当)。
@@ -107,6 +229,12 @@ pub struct MacroMeta {
     pub description_ja: String,
     #[serde(default)]
     pub category: String,
+    /// 可変値のスロット (保存ダイアログの「プレースホルダ」節)。省略可。
+    #[serde(default)]
+    pub placeholders: Vec<MacroPlaceholder>,
+    /// 値セット (保存ダイアログの「値セット」節)。省略可。
+    #[serde(default)]
+    pub value_sets: Vec<MacroValueSet>,
 }
 
 /// マクロの一覧と、読み込めなかったファイルの理由。
@@ -149,6 +277,18 @@ impl Macro {
         )))
     }
 
+    /// 値セットのidを並び順で返す (挿入UIのドロップダウンの並び)。
+    pub fn value_set_ids(&self) -> Vec<String> {
+        self.value_sets.iter().map(|v| v.id.clone()).collect()
+    }
+
+    /// 値セットをidで引く (大文字小文字は区別しない)。
+    pub fn value_set(&self, id: &str) -> Option<&MacroValueSet> {
+        self.value_sets
+            .iter()
+            .find(|v| v.id.eq_ignore_ascii_case(id))
+    }
+
     /// 挿入先シート向けにUUIDを差し替えたCommand列を組み立てる。
     ///
     /// 座標はまだ`base_point`基準の相対のまま。配置(平行移動・回転)と参照記号の
@@ -158,10 +298,20 @@ impl Macro {
         sheet_id: SheetId,
         variant_key: Option<&str>,
     ) -> Result<Vec<Command>> {
+        Ok(self.commands_and_remap(sheet_id, variant_key)?.0)
+    }
+
+    /// [`Self::commands_for`] に、保存時のid → 挿入後のidの対応表を添えたもの。
+    /// プレースホルダの行き先 ([`PlaceholderTarget::entity`]) を引くのに使う。
+    fn commands_and_remap(
+        &self,
+        sheet_id: SheetId,
+        variant_key: Option<&str>,
+    ) -> Result<(Vec<Command>, BTreeMap<Uuid, Uuid>)> {
         let mut value = serde_json::Value::Array(self.variant_commands(variant_key)?.to_vec());
         let mut remap: BTreeMap<Uuid, Uuid> = BTreeMap::new();
         crate::templates::substitute(&mut value, sheet_id, &mut remap);
-        Ok(serde_json::from_value(value)?)
+        Ok((serde_json::from_value(value)?, remap))
     }
 }
 
@@ -211,15 +361,16 @@ pub fn find(id: &str) -> Option<Macro> {
     list().macros.into_iter().find(|m| m.id == id)
 }
 
-/// JSONを読み、コマンド列 (既定・全バリアント) が本当にCommandとして読めるかまで確かめる。
-fn parse(text: &str) -> serde_json::Result<Macro> {
+/// JSONを読み、コマンド列 (既定・全バリアント) が本当にCommandとして読めるか、
+/// プレースホルダ・値セットの形が通っているかまで確かめる。
+fn parse(text: &str) -> Result<Macro> {
     let m: Macro = serde_json::from_str(text)?;
-    let _: Vec<Command> =
-        serde_json::from_value(serde_json::Value::Array(m.commands.clone()))?;
+    let _: Vec<Command> = serde_json::from_value(serde_json::Value::Array(m.commands.clone()))?;
     for v in &m.variants {
         let _: Vec<Command> =
             serde_json::from_value(serde_json::Value::Array(v.commands.clone()))?;
     }
+    validate_placeholders(&m.placeholders, &m.value_sets)?;
     Ok(m)
 }
 
@@ -257,6 +408,21 @@ pub fn save_macro(
         }
     }
 
+    validate_placeholders(&meta.placeholders, &meta.value_sets)?;
+    for p in &meta.placeholders {
+        for t in &p.targets {
+            let ok = picked
+                .iter()
+                .any(|e| matches!(e, Entity::Symbol(s) if s.id == t.entity));
+            if !ok {
+                return Err(CoreError::InvalidCommand(format!(
+                    "macro placeholder {} points at an entity outside the selection: {}",
+                    p.key, t.entity
+                )));
+            }
+        }
+    }
+
     let base = base_point(&picked);
     let mut commands = Vec::with_capacity(picked.len());
     for entity in picked {
@@ -286,6 +452,8 @@ pub fn save_macro(
         base_point: base,
         commands,
         variants: Vec::new(),
+        placeholders: meta.placeholders.clone(),
+        value_sets: meta.value_sets.clone(),
     })
 }
 
@@ -375,14 +543,20 @@ pub fn write_macro_to(dir: &Path, m: &Macro) -> Result<PathBuf> {
 ///
 /// - `at`: 基準点が来る位置 (カーソル位置)
 /// - `rotation`: 0/90/180/270。回路全体を`at`まわりに回し、各シンボルの向きも回す
+/// - `value_set`: 選んだ値セットのid。指定するとプレースホルダの行き先へ値が一括で入る
+///   (省略すると保存時の値のまま)。値は挿入と同じ1回の編集に含まれるので**undo一発**
 /// - 参照記号は図面で使用済みの最大番号の次から**自動再採番**される
 ///   ([`plan_references`]。マクロ内の相対関係は保たれる)
 /// - ワイヤの線番は挿入時にクリアされる (図面ごとに振り直すもののため)
+///
+/// 知らない値セットid・届かない行き先は**図面を変えずに**エラーになる (値が半分だけ
+/// 入った回路は残さない)。
 #[allow(clippy::too_many_arguments)]
 pub fn insert_macro(
     engine: &mut Engine,
     m: &Macro,
     variant_key: Option<&str>,
+    value_set: Option<&str>,
     sheet_id: SheetId,
     at: Point,
     rotation: u16,
@@ -391,7 +565,10 @@ pub fn insert_macro(
     if engine.project().sheet(sheet_id).is_none() {
         return Err(CoreError::SheetNotFound(sheet_id));
     }
-    let mut commands = m.commands_for(sheet_id, variant_key)?;
+    let (mut commands, remap) = m.commands_and_remap(sheet_id, variant_key)?;
+    if let Some(value_set) = value_set {
+        apply_value_set(m, value_set, &remap, &mut commands)?;
+    }
     let renames = plan_references(engine.project(), &commands);
     for cmd in &mut commands {
         let Command::AddEntity { entity, .. } = cmd else {
@@ -417,13 +594,95 @@ pub fn apply(
     engine: &mut Engine,
     id: &str,
     variant_key: Option<&str>,
+    value_set: Option<&str>,
     sheet_id: SheetId,
     at: Point,
     rotation: u16,
     origin: EditOrigin,
 ) -> Result<Patch> {
     let m = find(id).ok_or_else(|| CoreError::InvalidCommand(format!("unknown macro: {id}")))?;
-    insert_macro(engine, &m, variant_key, sheet_id, at, rotation, origin)
+    insert_macro(
+        engine,
+        &m,
+        variant_key,
+        value_set,
+        sheet_id,
+        at,
+        rotation,
+        origin,
+    )
+}
+
+/// 選んだ値セットの値を、プレースホルダの行き先へ書き込む。
+///
+/// **全部書けると分かってから書く**: 知らない値セットid・宣言されていないキー・
+/// このバリアントに無いエンティティ・シンボル以外への書き込みは、1つでもあれば
+/// エラーになり、コマンド列には一切手を入れない (値が半分だけ入った回路を作らない)。
+fn apply_value_set(
+    m: &Macro,
+    value_set: &str,
+    remap: &BTreeMap<Uuid, Uuid>,
+    commands: &mut [Command],
+) -> Result<()> {
+    let set = m.value_set(value_set).ok_or_else(|| {
+        CoreError::InvalidCommand(format!(
+            "unknown macro value set: {value_set} (macro {})",
+            m.id
+        ))
+    })?;
+    // (行き先のエンティティid, 欄, 値) をすべて解決してから書き込む。
+    let mut writes: Vec<(EntityId, TargetField, &str)> = Vec::new();
+    for (key, value) in &set.values {
+        let placeholder = m
+            .placeholders
+            .iter()
+            .find(|p| &p.key == key)
+            .ok_or_else(|| {
+                CoreError::InvalidCommand(format!(
+                    "macro value set {} uses an undeclared placeholder key: {key} (macro {})",
+                    set.id, m.id
+                ))
+            })?;
+        for target in &placeholder.targets {
+            let entity_id = remap.get(&target.entity).copied().ok_or_else(|| {
+                CoreError::InvalidCommand(format!(
+                    "macro placeholder {key} points at an entity that is not in this macro: {} (macro {})",
+                    target.entity, m.id
+                ))
+            })?;
+            writes.push((entity_id, parse_field(&target.field)?, value.as_str()));
+        }
+    }
+    for (entity_id, field, value) in writes {
+        let mut done = false;
+        for cmd in commands.iter_mut() {
+            let Command::AddEntity {
+                entity: Entity::Symbol(s),
+                ..
+            } = cmd
+            else {
+                continue;
+            };
+            if s.id != entity_id {
+                continue;
+            }
+            match &field {
+                TargetField::Value => s.value = value.to_string(),
+                TargetField::Attr(name) => {
+                    s.attrs.insert(name.clone(), value.to_string());
+                }
+            }
+            done = true;
+            break;
+        }
+        if !done {
+            return Err(CoreError::InvalidCommand(format!(
+                "macro placeholder target is not a symbol of this macro: {entity_id} (macro {})",
+                m.id
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// 相対座標のエンティティを挿入位置へ置く (回転 → 平行移動)。
@@ -584,6 +843,70 @@ mod tests {
             name_ja: "テストマクロ".into(),
             ..Default::default()
         }
+    }
+
+    /// シンボルの型番・値の欄を書き換える (保存時点の値を作るため)。
+    fn set_value(engine: &mut Engine, sheet_id: SheetId, id: EntityId, value: &str) {
+        let mut entity = engine
+            .project()
+            .sheet(sheet_id)
+            .unwrap()
+            .entities
+            .get(&id)
+            .unwrap()
+            .clone();
+        if let Entity::Symbol(s) = &mut entity {
+            s.value = value.into();
+        }
+        engine
+            .execute(Command::UpdateEntity { sheet_id, entity })
+            .expect("値の更新");
+    }
+
+    /// プレースホルダ1件 (keyと対象フィールドの並び)。
+    fn placeholder(key: &str, targets: &[(EntityId, &str)]) -> MacroPlaceholder {
+        MacroPlaceholder {
+            key: key.into(),
+            label: key.to_uppercase(),
+            label_ja: format!("{key}(日本語)"),
+            targets: targets
+                .iter()
+                .map(|(entity, field)| PlaceholderTarget {
+                    entity: *entity,
+                    field: (*field).into(),
+                })
+                .collect(),
+        }
+    }
+
+    /// 値セット1件 (idとkey→値)。
+    fn value_set(id: &str, values: &[(&str, &str)]) -> MacroValueSet {
+        MacroValueSet {
+            id: id.into(),
+            label: id.to_uppercase(),
+            label_ja: format!("{id}(日本語)"),
+            values: values
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+                .collect(),
+        }
+    }
+
+    /// シート上のシンボルを symbol_id → (value, attrs) で拾う (値セットの適用確認用)。
+    fn values(engine: &Engine, sheet_id: SheetId) -> BTreeMap<String, (String, BTreeMap<String, String>)> {
+        engine
+            .project()
+            .sheet(sheet_id)
+            .unwrap()
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                Entity::Symbol(s) => {
+                    Some((s.symbol_id.clone(), (s.value.clone(), s.attrs.clone())))
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     fn sheet_ids(engine: &Engine, sheet_id: SheetId) -> Vec<EntityId> {
@@ -827,6 +1150,7 @@ mod tests {
             &mut target,
             &m,
             None,
+            None,
             target_sheet,
             Point::new(200.0, 200.0),
             0,
@@ -857,6 +1181,7 @@ mod tests {
         insert_macro(
             &mut target,
             &m,
+            None,
             None,
             target_sheet,
             Point::new(200.0, 200.0),
@@ -898,6 +1223,7 @@ mod tests {
         insert_macro(
             &mut engine,
             &m,
+            None,
             None,
             sheet_id,
             Point::new(250.0, 100.0),
@@ -959,6 +1285,7 @@ mod tests {
             &mut engine,
             &m,
             None,
+            None,
             sheet_id,
             Point::new(50.0, 50.0),
             0,
@@ -1011,6 +1338,7 @@ mod tests {
                 &mut engine,
                 &m,
                 key,
+                None,
                 sheet_id,
                 Point::new(100.0, 100.0),
                 0,
@@ -1034,6 +1362,7 @@ mod tests {
             &mut engine,
             &m,
             Some("Z"),
+            None,
             sheet_id,
             Point::new(100.0, 100.0),
             0,
@@ -1059,6 +1388,7 @@ mod tests {
         insert_macro(
             &mut target,
             &m,
+            None,
             None,
             target_sheet,
             Point::new(100.0, 100.0),
@@ -1098,6 +1428,7 @@ mod tests {
         insert_macro(
             &mut target,
             &m,
+            None,
             None,
             target_sheet,
             m.base_point,
@@ -1160,6 +1491,7 @@ mod tests {
             &mut engine,
             &m,
             None,
+            None,
             second,
             Point::new(60.0, 40.0),
             0,
@@ -1170,6 +1502,7 @@ mod tests {
         insert_macro(
             &mut engine,
             &m,
+            None,
             None,
             second,
             Point::new(60.0, 160.0),
@@ -1244,6 +1577,7 @@ mod tests {
             &mut target,
             &list.macros[0],
             None,
+            None,
             target_sheet,
             Point::new(10.0, 10.0),
             0,
@@ -1251,6 +1585,480 @@ mod tests {
         )
         .expect("挿入");
         assert_eq!(symbols(&target, target_sheet).len(), 1);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ------------------------------------------------------------------
+    // プレースホルダと値セット (M4仕様 §2)
+    // ------------------------------------------------------------------
+
+    /// A macro file written before value sets existed still loads and inserts: it simply has no placeholders and no value sets.
+    /// 値セットが無かった頃のマクロファイルもそのまま読めて挿入できる(プレースホルダも値セットも無いマクロとして扱われる)。
+    #[test]
+    fn a_macro_file_without_placeholders_still_loads_and_inserts() {
+        let m: Macro = serde_json::from_str(
+            r#"{
+                "id": "old_format",
+                "name": "old format",
+                "base_point": { "x": 0.0, "y": 0.0 },
+                "commands": [
+                    { "type": "add_entity", "sheet_id": "00000000-0000-0000-0000-000000000000",
+                      "entity": { "kind": "symbol", "id": "00000000-0000-0000-0000-000000000001",
+                                  "symbol_id": "lamp", "at": { "x": 0.0, "y": 0.0 }, "reference": "L1" } }
+                ]
+            }"#,
+        )
+        .expect("旧形式のマクロJSON");
+        assert!(m.placeholders.is_empty(), "プレースホルダは無い");
+        assert!(m.value_sets.is_empty(), "値セットも無い");
+
+        let (mut engine, sheet_id) = new_engine();
+        insert_macro(
+            &mut engine,
+            &m,
+            None,
+            None,
+            sheet_id,
+            Point::new(50.0, 50.0),
+            0,
+            EditOrigin::User,
+        )
+        .expect("挿入");
+        assert_eq!(symbols(&engine, sheet_id).len(), 1);
+    }
+
+    /// Choosing a value set on insert writes its values into the value field of the symbols the placeholder points at.
+    /// 挿入時に値セットを選ぶと、プレースホルダが指すシンボルの型番・値の欄へその値が書き込まれる。
+    #[test]
+    fn a_chosen_value_set_fills_in_the_value_field_of_its_targets() {
+        let (mut engine, sheet_id) = new_engine();
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 100.0, 100.0);
+        let m = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor],
+            &MacroMeta {
+                placeholders: vec![placeholder("motor_rating", &[(motor, "value")])],
+                value_sets: vec![
+                    value_set("0.75kw", &[("motor_rating", "0.75kW")]),
+                    value_set("1.5kw", &[("motor_rating", "1.5kW")]),
+                ],
+                ..meta("motor_rated")
+            },
+        )
+        .expect("保存");
+
+        let (mut target, target_sheet) = new_engine();
+        insert_macro(
+            &mut target,
+            &m,
+            None,
+            Some("1.5kw"),
+            target_sheet,
+            Point::new(200.0, 200.0),
+            0,
+            EditOrigin::User,
+        )
+        .expect("挿入");
+
+        assert_eq!(values(&target, target_sheet)["motor"].0, "1.5kW");
+    }
+
+    /// A placeholder can point at a named attribute (attrs.<name>) instead of the value field, so ratings and part numbers land in their own slots.
+    /// プレースホルダは型番欄の代わりに属性 (attrs.<名前>) も指せるので、定格や部品番号をそれぞれの欄へ入れられる。
+    #[test]
+    fn a_placeholder_can_write_into_a_named_attribute() {
+        let (mut engine, sheet_id) = new_engine();
+        let breaker = symbol(&mut engine, sheet_id, "breaker_3p", "CB1", 100.0, 100.0);
+        let m = save_macro(
+            engine.project(),
+            sheet_id,
+            &[breaker],
+            &MacroMeta {
+                placeholders: vec![placeholder("trip", &[(breaker, "attrs.rating")])],
+                value_sets: vec![value_set("1.5kw", &[("trip", "2.5-4A")])],
+                ..meta("breaker_rated")
+            },
+        )
+        .expect("保存");
+
+        let (mut target, target_sheet) = new_engine();
+        insert_macro(
+            &mut target,
+            &m,
+            None,
+            Some("1.5kw"),
+            target_sheet,
+            Point::new(50.0, 50.0),
+            0,
+            EditOrigin::User,
+        )
+        .expect("挿入");
+
+        let (value, attrs) = values(&target, target_sheet)["breaker_3p"].clone();
+        assert_eq!(attrs.get("rating").map(String::as_str), Some("2.5-4A"));
+        assert_eq!(value, "", "型番欄は触らない");
+    }
+
+    /// One value of a value set reaches every target of its placeholder at once, across several symbols and fields, and a value set can carry several keys.
+    /// 値セットの1つの値はプレースホルダの全対象へ一度に届き(複数のシンボル・複数の欄)、値セットは複数のキーを持てる。
+    #[test]
+    fn one_value_set_updates_every_target_of_every_key_at_once() {
+        let (mut engine, sheet_id) = new_engine();
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 100.0, 100.0);
+        let breaker = symbol(&mut engine, sheet_id, "breaker_3p", "CB1", 100.0, 140.0);
+        let lamp = symbol(&mut engine, sheet_id, "lamp", "L1", 140.0, 100.0);
+        let m = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor, breaker, lamp],
+            &MacroMeta {
+                placeholders: vec![
+                    placeholder(
+                        "rating",
+                        &[
+                            (motor, "value"),
+                            (breaker, "attrs.rating"),
+                            (lamp, "attrs.rating"),
+                        ],
+                    ),
+                    placeholder("wire_sq", &[(motor, "attrs.wire_sq")]),
+                ],
+                value_sets: vec![value_set(
+                    "1.5kw",
+                    &[("rating", "1.5kW"), ("wire_sq", "0.75sq")],
+                )],
+                ..meta("motor_full")
+            },
+        )
+        .expect("保存");
+
+        let (mut target, target_sheet) = new_engine();
+        insert_macro(
+            &mut target,
+            &m,
+            None,
+            Some("1.5kw"),
+            target_sheet,
+            Point::new(60.0, 60.0),
+            0,
+            EditOrigin::User,
+        )
+        .expect("挿入");
+
+        let placed = values(&target, target_sheet);
+        assert_eq!(placed["motor"].0, "1.5kW");
+        assert_eq!(placed["motor"].1["wire_sq"], "0.75sq");
+        assert_eq!(placed["breaker_3p"].1["rating"], "1.5kW");
+        assert_eq!(placed["lamp"].1["rating"], "1.5kW");
+    }
+
+    /// Inserting without choosing a value set leaves every field exactly as it was saved.
+    /// 値セットを選ばずに挿入すると、各欄は保存したときのままになる。
+    #[test]
+    fn inserting_without_a_value_set_keeps_the_saved_values() {
+        let (mut engine, sheet_id) = new_engine();
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 100.0, 100.0);
+        set_value(&mut engine, sheet_id, motor, "0.4kW");
+        let m = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor],
+            &MacroMeta {
+                placeholders: vec![placeholder("motor_rating", &[(motor, "value")])],
+                value_sets: vec![value_set("1.5kw", &[("motor_rating", "1.5kW")])],
+                ..meta("motor_default")
+            },
+        )
+        .expect("保存");
+
+        let (mut target, target_sheet) = new_engine();
+        insert_macro(
+            &mut target,
+            &m,
+            None,
+            None,
+            target_sheet,
+            Point::new(50.0, 50.0),
+            0,
+            EditOrigin::User,
+        )
+        .expect("挿入");
+
+        assert_eq!(values(&target, target_sheet)["motor"].0, "0.4kW");
+    }
+
+    /// An unknown value set id is refused with the id in the message, and nothing is placed.
+    /// 知らない値セットidはidを添えたエラーで拒否され、図面には何も置かれない。
+    #[test]
+    fn an_unknown_value_set_id_is_refused_and_places_nothing() {
+        let (mut engine, sheet_id) = new_engine();
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 100.0, 100.0);
+        let m = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor],
+            &MacroMeta {
+                placeholders: vec![placeholder("motor_rating", &[(motor, "value")])],
+                value_sets: vec![value_set("1.5kw", &[("motor_rating", "1.5kW")])],
+                ..meta("motor_unknown_set")
+            },
+        )
+        .expect("保存");
+
+        let (mut target, target_sheet) = new_engine();
+        let err = insert_macro(
+            &mut target,
+            &m,
+            None,
+            Some("2.2kw"),
+            target_sheet,
+            Point::new(50.0, 50.0),
+            0,
+            EditOrigin::User,
+        )
+        .expect_err("知らない値セット");
+        assert!(err.to_string().contains("2.2kw"), "{err}");
+        assert!(target
+            .project()
+            .sheet(target_sheet)
+            .unwrap()
+            .entities
+            .is_empty());
+        assert_eq!(target.undo_depth(), 0, "履歴も積まれない");
+    }
+
+    /// A value set that points at an entity the macro does not contain is refused, and none of its other values are applied either (no half-filled circuit).
+    /// マクロに無いエンティティを指す値セットは拒否され、他の値も一切適用されない(中途半端に埋まった回路は作らない)。
+    #[test]
+    fn a_target_that_is_not_in_the_macro_is_refused_without_applying_anything() {
+        let (mut engine, sheet_id) = new_engine();
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 100.0, 100.0);
+        let ghost = Uuid::new_v4();
+        let mut m = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor],
+            &MacroMeta {
+                placeholders: vec![placeholder("motor_rating", &[(motor, "value")])],
+                value_sets: vec![value_set("1.5kw", &[("motor_rating", "1.5kW")])],
+                ..meta("motor_ghost")
+            },
+        )
+        .expect("保存");
+        // 手で書き足された(あるいは編集で消えた)対象を模す
+        m.placeholders
+            .push(placeholder("gone", &[(ghost, "value")]));
+        m.value_sets[0]
+            .values
+            .insert("gone".into(), "x".into());
+
+        let (mut target, target_sheet) = new_engine();
+        let err = insert_macro(
+            &mut target,
+            &m,
+            None,
+            Some("1.5kw"),
+            target_sheet,
+            Point::new(50.0, 50.0),
+            0,
+            EditOrigin::User,
+        )
+        .expect_err("知らない対象");
+        assert!(err.to_string().contains(&ghost.to_string()), "{err}");
+        assert!(
+            target
+                .project()
+                .sheet(target_sheet)
+                .unwrap()
+                .entities
+                .is_empty(),
+            "1つ目のkeyだけ適用された回路は残さない"
+        );
+    }
+
+    /// A value set naming a placeholder key the macro does not declare is refused with the key in the message.
+    /// マクロが宣言していないキーを持つ値セットは、そのキーを添えたエラーで拒否される。
+    #[test]
+    fn a_value_set_key_without_a_placeholder_is_refused() {
+        let (mut engine, sheet_id) = new_engine();
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 100.0, 100.0);
+        let m = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor],
+            &MacroMeta {
+                placeholders: vec![placeholder("motor_rating", &[(motor, "value")])],
+                value_sets: vec![value_set("1.5kw", &[("motor_rating", "1.5kW")])],
+                ..meta("motor_bad_key")
+            },
+        )
+        .expect("保存");
+        let mut broken = m.clone();
+        broken.value_sets[0]
+            .values
+            .insert("no_such_key".into(), "x".into());
+
+        let (mut target, target_sheet) = new_engine();
+        let err = insert_macro(
+            &mut target,
+            &broken,
+            None,
+            Some("1.5kw"),
+            target_sheet,
+            Point::new(50.0, 50.0),
+            0,
+            EditOrigin::User,
+        )
+        .expect_err("知らないキー");
+        assert!(err.to_string().contains("no_such_key"), "{err}");
+    }
+
+    /// Saving refuses a placeholder that points outside the selection or writes into a field that does not exist, so a macro can never be saved with a target it cannot reach.
+    /// 選択範囲の外を指すプレースホルダや、存在しない欄へ書こうとするプレースホルダは保存時に拒否される(届かない対象を持つマクロは作れない)。
+    #[test]
+    fn saving_refuses_a_placeholder_target_outside_the_selection_or_an_unknown_field() {
+        let (mut engine, sheet_id) = new_engine();
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 100.0, 100.0);
+        let outside = symbol(&mut engine, sheet_id, "lamp", "L1", 200.0, 100.0);
+
+        let err = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor],
+            &MacroMeta {
+                placeholders: vec![placeholder("rating", &[(outside, "value")])],
+                ..meta("outside")
+            },
+        )
+        .expect_err("選択範囲の外");
+        assert!(err.to_string().contains(&outside.to_string()), "{err}");
+
+        let err = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor],
+            &MacroMeta {
+                placeholders: vec![placeholder("rating", &[(motor, "colour")])],
+                ..meta("bad_field")
+            },
+        )
+        .expect_err("知らない欄");
+        assert!(err.to_string().contains("colour"), "{err}");
+
+        let err = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor],
+            &MacroMeta {
+                placeholders: vec![
+                    placeholder("rating", &[(motor, "value")]),
+                    placeholder("rating", &[(motor, "attrs.x")]),
+                ],
+                ..meta("dup_key")
+            },
+        )
+        .expect_err("キーの重複");
+        assert!(err.to_string().contains("rating"), "{err}");
+    }
+
+    /// Inserting with a value set is still one edit: a single undo takes the whole circuit, values and all, back out.
+    /// 値セットを選んで挿入しても編集は1回のままなので、undo一発で値ごと回路全体が戻る。
+    #[test]
+    fn inserting_with_a_value_set_is_still_undone_in_one_step() {
+        let (mut engine, sheet_id) = new_engine();
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 100.0, 100.0);
+        let breaker = symbol(&mut engine, sheet_id, "breaker_3p", "CB1", 100.0, 140.0);
+        let m = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor, breaker],
+            &MacroMeta {
+                placeholders: vec![placeholder(
+                    "rating",
+                    &[(motor, "value"), (breaker, "attrs.rating")],
+                )],
+                value_sets: vec![value_set("1.5kw", &[("rating", "1.5kW")])],
+                ..meta("motor_undo")
+            },
+        )
+        .expect("保存");
+
+        let (mut target, target_sheet) = new_engine();
+        insert_macro(
+            &mut target,
+            &m,
+            None,
+            Some("1.5kw"),
+            target_sheet,
+            Point::new(50.0, 50.0),
+            0,
+            EditOrigin::User,
+        )
+        .expect("挿入");
+        assert_eq!(target.undo_depth(), 1, "履歴は1件");
+
+        target.undo().expect("undo").expect("戻せる");
+        assert!(target
+            .project()
+            .sheet(target_sheet)
+            .unwrap()
+            .entities
+            .is_empty());
+        target.redo().expect("redo").expect("やり直せる");
+        assert_eq!(values(&target, target_sheet)["motor"].0, "1.5kW");
+    }
+
+    /// Placeholders and value sets survive the round trip through the macros folder, so a macro saved with them can be inserted later with any of its value sets.
+    /// プレースホルダと値セットはマクロフォルダへの往復でも残るので、保存したマクロは後からどの値セットでも挿入できる。
+    #[test]
+    fn placeholders_and_value_sets_round_trip_through_the_user_folder() {
+        let dir = temp_dir("valuesets");
+        let (mut engine, sheet_id) = new_engine();
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 100.0, 100.0);
+        let m = save_macro(
+            engine.project(),
+            sheet_id,
+            &[motor],
+            &MacroMeta {
+                placeholders: vec![placeholder("motor_rating", &[(motor, "value")])],
+                value_sets: vec![
+                    value_set("0.75kw", &[("motor_rating", "0.75kW")]),
+                    value_set("1.5kw", &[("motor_rating", "1.5kW")]),
+                ],
+                ..meta("motor_roundtrip")
+            },
+        )
+        .expect("保存");
+        write_macro_to(&dir, &m).expect("書き出し");
+
+        let list = list_from(Some(&dir));
+        let loaded = &list.macros[0];
+        assert_eq!(loaded.placeholders.len(), 1);
+        assert_eq!(loaded.placeholders[0].key, "motor_rating");
+        assert_eq!(loaded.placeholders[0].label_ja, "motor_rating(日本語)");
+        assert_eq!(
+            loaded.value_set_ids(),
+            vec!["0.75kw".to_string(), "1.5kw".to_string()],
+            "値セットは並び順のまま(挿入UIのドロップダウン)"
+        );
+
+        for (id, expected) in [("0.75kw", "0.75kW"), ("1.5kw", "1.5kW")] {
+            let (mut target, target_sheet) = new_engine();
+            insert_macro(
+                &mut target,
+                loaded,
+                None,
+                Some(id),
+                target_sheet,
+                Point::new(50.0, 50.0),
+                0,
+                EditOrigin::User,
+            )
+            .expect("挿入");
+            assert_eq!(values(&target, target_sheet)["motor"].0, expected);
+        }
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -1267,6 +2075,7 @@ mod tests {
             &mut engine,
             &m,
             None,
+            None,
             Uuid::new_v4(),
             Point::new(0.0, 0.0),
             0,
@@ -1278,6 +2087,7 @@ mod tests {
         let err = apply(
             &mut engine,
             "no_such_macro",
+            None,
             None,
             sheet_id,
             Point::new(0.0, 0.0),

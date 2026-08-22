@@ -10,6 +10,7 @@ import {
   macroName,
   macroSheet,
   macroVariantKeys,
+  macroValueSetLabel,
   macroVariantLabel,
   placeMacroEntities,
   placePoint,
@@ -73,6 +74,13 @@ function macro(): Macro {
       { key: "B", name: "Reversing", name_ja: "正逆転", commands: [addSymbol("s2", "K1", 0, -20)] },
       { key: "C", name: "Jog", name_ja: "寸動", commands: [addSymbol("s3", "K1", 0, -30)] },
     ],
+    placeholders: [
+      { key: "rating", label: "Rating", label_ja: "定格", targets: [{ entity: "s1", field: "value" }] },
+    ],
+    value_sets: [
+      { id: "0_75_kw", label: "0.75 kW", label_ja: "0.75kW", values: { rating: "0.75kW" } },
+      { id: "1_5_kw", label: "1.5 kW", label_ja: "", values: { rating: "1.5kW" } },
+    ],
   };
 }
 
@@ -98,6 +106,23 @@ describe("macroVariantLabel", () => {
   // ja: 名前の無いバリアント(既定のA)はキーだけを表示する
   it("shows just the key for a variant that has no name, such as the default A", () => {
     expect(macroVariantLabel(macro(), "A", "ja")).toBe("A");
+  });
+});
+
+describe("macroValueSetLabel", () => {
+  // ja: 値セットの表示名はUI言語に合わせ、日本語名が無ければ英語名を使う
+  it("labels a value set in the UI language, falling back to the English name", () => {
+    const [first, second] = macro().value_sets;
+    expect(macroValueSetLabel(first, "ja")).toBe("0.75kW");
+    expect(macroValueSetLabel(first, "en")).toBe("0.75 kW");
+    expect(macroValueSetLabel(second, "ja")).toBe("1.5 kW");
+  });
+
+  // ja: 名前の無い値セットはidをそのまま表示する
+  it("falls back to the id for a value set with no name at all", () => {
+    expect(macroValueSetLabel({ id: "1_5_kw", label: "", label_ja: "", values: {} }, "ja")).toBe(
+      "1_5_kw",
+    );
   });
 });
 

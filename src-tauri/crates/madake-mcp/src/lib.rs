@@ -160,6 +160,7 @@ impl SharedDoc {
         &self,
         macro_id: &str,
         variant: Option<&str>,
+        value_set: Option<&str>,
         sheet_id: Uuid,
         at: Point,
         rotation: u16,
@@ -169,6 +170,7 @@ impl SharedDoc {
             &mut self.engine.lock().unwrap(),
             macro_id,
             variant,
+            value_set,
             sheet_id,
             at,
             rotation,
@@ -187,6 +189,7 @@ impl SharedDoc {
         &self,
         m: &madake_core::macros::Macro,
         variant: Option<&str>,
+        value_set: Option<&str>,
         sheet_id: Uuid,
         at: Point,
         rotation: u16,
@@ -196,6 +199,7 @@ impl SharedDoc {
             &mut self.engine.lock().unwrap(),
             m,
             variant,
+            value_set,
             sheet_id,
             at,
             rotation,
@@ -316,6 +320,12 @@ pub struct SaveMacroParams {
     pub description_ja: Option<String>,
     /// 挿入ダイアログでの分類 (例: "motor")。
     pub category: Option<String>,
+    /// 可変値のスロット。keyと行き先 (どのエンティティのvalue/attrs.<名前>か) を並べる。省略可。
+    #[serde(default)]
+    pub placeholders: Vec<madake_core::macros::MacroPlaceholder>,
+    /// 値セット (例: 0.75kW / 1.5kW)。プレースホルダのkey→値。省略可。
+    #[serde(default)]
+    pub value_sets: Vec<madake_core::macros::MacroValueSet>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -324,6 +334,8 @@ pub struct ApplyMacroParams {
     pub macro_id: String,
     /// バリアントキー ("A"=既定)。省略時は既定。
     pub variant: Option<String>,
+    /// 値セットid (`list_macros`のvalue_setsで得る)。指定すると定格・型番が一括設定される。省略時はマクロ保存時の値のまま。
+    pub value_set: Option<String>,
     /// 挿入先シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
     /// 基準点が来る位置 (mm)。
@@ -534,7 +546,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "使える回路マクロ(現場で作った回路をそのまま再利用する部品)の一覧を返す。各マクロはid・名称(英/日)・分類・基準点・バリアントキー(A〜。Aが既定)を持つ。置き場は~/MadakeCAD/macros/。挿入はapply_macro、新しく作るのはsave_macro"
+        description = "使える回路マクロ(現場で作った回路をそのまま再利用する部品)の一覧を返す。各マクロはid・名称(英/日)・分類・基準点・バリアントキー(A〜。Aが既定)・値セット(定格や型番を一括設定する値の組)を持つ。置き場は~/MadakeCAD/macros/。挿入はapply_macro、新しく作るのはsave_macro"
     )]
     fn list_macros(&self) -> Result<String, ErrorData> {
         let list = madake_core::macros::list();
@@ -551,6 +563,8 @@ impl MadakeMcp {
                     "category": m.category,
                     "base_point": m.base_point,
                     "variants": m.variant_keys(),
+                    "placeholders": m.placeholders,
+                    "value_sets": m.value_sets,
                     "command_count": m.commands.len(),
                 })
             })
@@ -574,6 +588,8 @@ impl MadakeMcp {
             description: p.description.unwrap_or_default(),
             description_ja: p.description_ja.unwrap_or_default(),
             category: p.category.unwrap_or_default(),
+            placeholders: p.placeholders,
+            value_sets: p.value_sets,
         };
         let (m, path) = self
             .doc
@@ -588,7 +604,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "回路マクロをシートへ挿入する。基準点が指定位置(at)へ来るように置かれ、参照記号は図面で使用済みの次の番号へ自動で振り直される(2回挿入しても重複しない)。バリアントを指定すると代替回路が入る。挿入は1回の編集として履歴に乗るためundo一発で全体が戻る。挿入後は必ずrun_verificationで確認する"
+        description = "回路マクロをシートへ挿入する。基準点が指定位置(at)へ来るように置かれ、参照記号は図面で使用済みの次の番号へ自動で振り直される(2回挿入しても重複しない)。バリアントを指定すると代替回路が入り、値セット(value_set)を指定すると定格・型番などが一括設定される。挿入は1回の編集として履歴に乗るためundo一発で全体が戻る。挿入後は必ずrun_verificationで確認する"
     )]
     fn apply_macro(&self, Parameters(p): Parameters<ApplyMacroParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
@@ -597,6 +613,7 @@ impl MadakeMcp {
             .apply_macro(
                 &p.macro_id,
                 p.variant.as_deref(),
+                p.value_set.as_deref(),
                 sheet_id,
                 p.at,
                 p.rotation.unwrap_or(0),
@@ -605,6 +622,7 @@ impl MadakeMcp {
             .map_err(internal)?;
         json_ok(&serde_json::json!({
             "macro_id": p.macro_id,
+            "value_set": p.value_set,
             "sheet_id": sheet_id,
             "revision": patch.revision,
             "entities_added": patch.ops.len(),

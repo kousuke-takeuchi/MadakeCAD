@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1080仕様項目**。
+全5領域・**1106仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -94,6 +94,17 @@
 - 回路をマクロとして保存し基準点の位置へ挿入し直すと、図面がそのまま再現される(ピン・配線・接続点・ラベルが同じ座標に来る)。 <sub>`a_saved_macro_reproduces_the_drawing_when_inserted_back`</sub>
 - モータ回路のマクロは別シートへ2回挿入でき、2つのコピーが参照記号を取り合うことはなく、図面は検証でエラー0・ERC警告0のまま通る。 <sub>`a_macro_inserted_twice_keeps_references_unique_and_passes_verification`</sub>
 - マクロはユーザーのマクロフォルダへ書き出され、そこから一覧される。マクロとして読めないファイルはパスと理由を添えて報告され、他のマクロはそのまま使える。 <sub>`macros_round_trip_through_the_user_folder_and_broken_files_are_reported`</sub>
+- 値セットが無かった頃のマクロファイルもそのまま読めて挿入できる(プレースホルダも値セットも無いマクロとして扱われる)。 <sub>`a_macro_file_without_placeholders_still_loads_and_inserts`</sub>
+- 挿入時に値セットを選ぶと、プレースホルダが指すシンボルの型番・値の欄へその値が書き込まれる。 <sub>`a_chosen_value_set_fills_in_the_value_field_of_its_targets`</sub>
+- プレースホルダは型番欄の代わりに属性 (attrs.<名前>) も指せるので、定格や部品番号をそれぞれの欄へ入れられる。 <sub>`a_placeholder_can_write_into_a_named_attribute`</sub>
+- 値セットの1つの値はプレースホルダの全対象へ一度に届き(複数のシンボル・複数の欄)、値セットは複数のキーを持てる。 <sub>`one_value_set_updates_every_target_of_every_key_at_once`</sub>
+- 値セットを選ばずに挿入すると、各欄は保存したときのままになる。 <sub>`inserting_without_a_value_set_keeps_the_saved_values`</sub>
+- 知らない値セットidはidを添えたエラーで拒否され、図面には何も置かれない。 <sub>`an_unknown_value_set_id_is_refused_and_places_nothing`</sub>
+- マクロに無いエンティティを指す値セットは拒否され、他の値も一切適用されない(中途半端に埋まった回路は作らない)。 <sub>`a_target_that_is_not_in_the_macro_is_refused_without_applying_anything`</sub>
+- マクロが宣言していないキーを持つ値セットは、そのキーを添えたエラーで拒否される。 <sub>`a_value_set_key_without_a_placeholder_is_refused`</sub>
+- 選択範囲の外を指すプレースホルダや、存在しない欄へ書こうとするプレースホルダは保存時に拒否される(届かない対象を持つマクロは作れない)。 <sub>`saving_refuses_a_placeholder_target_outside_the_selection_or_an_unknown_field`</sub>
+- 値セットを選んで挿入しても編集は1回のままなので、undo一発で値ごと回路全体が戻る。 <sub>`inserting_with_a_value_set_is_still_undone_in_one_step`</sub>
+- プレースホルダと値セットはマクロフォルダへの往復でも残るので、保存したマクロは後からどの値セットでも挿入できる。 <sub>`placeholders_and_value_sets_round_trip_through_the_user_folder`</sub>
 - プロジェクトに無いシートへの挿入は拒否され、知らないマクロidは名前を添えて拒否される。 <sub>`inserting_into_an_unknown_sheet_or_by_an_unknown_id_is_refused`</sub>
 
 ### ドキュメントモデル
@@ -475,6 +486,7 @@
 
 - POST /macros/save は選択したエンティティをユーザーのマクロフォルダのファイルにし、GET /macros がそれを基準点つきで一覧に返す。 <sub>`saving_a_selection_over_the_link_api_stores_a_macro_in_the_user_folder`</sub>
 - POST /macros/apply はマクロを指定位置へ1回の編集として入れ(undo一発で戻る)、参照記号は衝突しないよう振り直される。 <sub>`applying_a_macro_over_the_link_api_is_one_undo_step`</sub>
+- プレースホルダと値セットを付けて保存したマクロは、Link APIから値セットを選んで挿入でき、値も同じ1回の編集で図面へ入る。 <sub>`applying_a_macro_with_a_value_set_over_the_link_api_fills_in_the_values`</sub>
 - POST /macros/build は選択範囲をファイルに書かずにマクロへ組み立てる(保存ダイアログのプレビューと⌘Cの無名マクロが使う)。 <sub>`building_a_macro_does_not_write_a_file`</sub>
 - POST /macros/apply-inline は値で渡したマクロ(⌘Cのクリップボード)を1回の編集として入れ、参照記号も保存済みマクロと同じように振り直す。 <sub>`applying_an_inline_macro_behaves_like_a_stored_one`</sub>
 - 知らないマクロid・知らないバリアントキー・空の選択はいずれも400で拒否され、図面は変わらない。 <sub>`the_link_api_refuses_unknown_macros_variants_and_empty_selections`</sub>
@@ -930,6 +942,8 @@
 - バリアントを持たないマクロのキーは「A」の1つだけ <sub>`macroVariantKeys`</sub>
 - バリアントの表示名は「キー+名前」で、UI言語が日本語なら日本語名を使う <sub>`macroVariantLabel`</sub>
 - 名前の無いバリアント(既定のA)はキーだけを表示する <sub>`macroVariantLabel`</sub>
+- 値セットの表示名はUI言語に合わせ、日本語名が無ければ英語名を使う <sub>`macroValueSetLabel`</sub>
+- 名前の無い値セットはidをそのまま表示する <sub>`macroValueSetLabel`</sub>
 - 「A」と未指定は既定のコマンド列、それ以外のキーはそのバリアントのコマンド列を読む <sub>`macroCommands / macroEntities`</sub>
 - 知らないバリアントキーを指定したときは既定のコマンド列に戻る(空表示にしない) <sub>`macroCommands / macroEntities`</sub>
 - マクロが置くエンティティだけを取り出す(add_entity以外のコマンドは描かない) <sub>`macroCommands / macroEntities`</sub>
@@ -1217,6 +1231,16 @@
 - 保存は選択範囲・名前・カテゴリをそのまま渡し、保存後は一覧を読み直して閉じる <sub>`macro save dialog`</sub>
 - 保存に失敗したらダイアログは開いたまま理由を出す(入力をやり直せる) <sub>`macro save dialog`</sub>
 - 基準点は選択範囲から自動で決まり(左下ピン)、保存ダイアログには表示だけする <sub>`macro save dialog`</sub>
+- プレースホルダの候補は、選択したシンボルの型番欄と属性の一覧から作られる <sub>`placeholders and value sets in the save dialog`</sub>
+- 同じキー名を付けた複数の欄は、行き先を複数持つ1つのプレースホルダにまとまる <sub>`placeholders and value sets in the save dialog`</sub>
+- 値セットは行を足して名前とキーごとの値を入れると組み立てられ、idは名前から作られる <sub>`placeholders and value sets in the save dialog`</sub>
+- 名前を入れていない値セットの行は保存されない(空の値セットは作らない) <sub>`placeholders and value sets in the save dialog`</sub>
+- プレースホルダと値セットは保存時にマクロの情報として一緒に渡される <sub>`placeholders and value sets in the save dialog`</sub>
+- 何も指定しなければ保存の中身は今までどおり(プレースホルダも値セットも付かない) <sub>`placeholders and value sets in the save dialog`</sub>
+- 保存ダイアログを開き直すと、前回のプレースホルダと値セットは残らない <sub>`placeholders and value sets in the save dialog`</sub>
+- 値セットを持たないマクロでは選ぶものが無い(挿入ダイアログのドロップダウンを出さない) <sub>`choosing a value set when inserting`</sub>
+- 値セットを持つマクロでは一覧が並び、選んだ値セットを覚える <sub>`choosing a value set when inserting`</sub>
+- 別のマクロを選び直すと、値セットの選択は外れる(そのマクロには無い値セットのため) <sub>`choosing a value set when inserting`</sub>
 - ⌘Cは選択範囲を無名マクロとしてメモリに持ち、ファイルには書き出さない <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - 何も選択していない状態の⌘Cは何もしない(前のコピー内容も消さない) <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - コピーした無名マクロは何度でも貼り付けられる(貼り付けても消えない) <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
@@ -1376,6 +1400,8 @@
 - ライブラリのマクロはid・バリアント・クリック位置・回転を渡して挿入される <sub>`confirming a macro placement`</sub>
 - 貼り付けた無名マクロはidではなくマクロそのものを渡して挿入される(ファイルが無いため) <sub>`confirming a macro placement`</sub>
 - 確定してもマクロツールのままなので、同じマクロを続けて何個でも置ける <sub>`confirming a macro placement`</sub>
+- 挿入ダイアログで選んだ値セットは、挿入の引数にそのまま乗る(定格が一括で入る) <sub>`placing a macro with a value set`</sub>
+- 値セットを選ばずに置いたマクロは、保存時の値のまま入る <sub>`placing a macro with a value set`</sub>
 - 選択範囲を⌘Cすると無名マクロとして覚え、⌘Vでそのまま配置モードに入る <sub>`Cmd+C / Cmd+V`</sub>
 - 何も選択していない⌘C・何もコピーしていない⌘Vはキー入力を横取りしない <sub>`Cmd+C / Cmd+V`</sub>
 

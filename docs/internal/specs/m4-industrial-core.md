@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | 線番自動採番(連番/参照ベース) | ✅ | ✅ | ⬜ | M2で連番、参照ベースは§6 |
 | 端子台管理・端子台チャート | ✅ | ✅(端子台ごとの結線図) | 🔶 **フェーズ1実装済** (エディタ+チャート+接続図。並べ替え/多段/アクセサリが残り) | §1 |
-| 回路の再利用(回路コピー/マクロ) | ✅ | ✅(マクロが中核) | 🔶 **フェーズ2実装済** (保存/挿入/Tabバリアント/⌘C・V。値セット=プレースホルダが残り) | §2 |
+| 回路の再利用(回路コピー/マクロ) | ✅ | ✅(マクロが中核) | 🔶 **フェーズ3実装済** (保存/挿入/Tabバリアント/⌘C・V/プレースホルダ+値セット。保存UIからのバリアント追加が残り) | §2 |
 | PLC I/O図面・レポート | ✅(表から自動生成) | ✅(PLCカード図) | ⬜ | §3 |
 | クロスリファレンス(コイル⇔接点) | ✅ | ✅(自動) | ✅ **フェーズ2実装済** (接点マップ+コイル所在+ERC+Surfer) | §4 |
 | 帳票群(BOM/From-To/ケーブル/端子) | ✅ | ✅(自動生成) | 🔶 **フェーズ1実装済** (From-To/端子台/接続図/BOM/XRef+図面シート化+PDF一括。ケーブル一覧とBOM拡張が残り) | §5 |
@@ -46,6 +46,8 @@
 ## 2. 回路マクロ(回路の保存・再利用)
 
 > **ステータス: 🔶 フェーズ2完了(2026-08-22)。** 実装済み = 保存(選択範囲→Command列+相対座標化。基準点=選択範囲の左下ピンを自動決定)、`~/MadakeCAD/macros/*.json`への書き出しと一覧(壊れたJSONはissueとして報告)、挿入(UUID振り直し+参照記号の再採番(既存最大+1、マクロ内の関係は保持)+線番クリア。`execute_batch`で1編集=undo一発)、バリアントの列挙と選択(配置中`Tab`)、部品挿入ダイアログの「マクロ」タブ(カテゴリツリー+バリアント数バッジ+プレビュー)、保存ダイアログ、ゴースト配置(`R`回転・Esc・連続配置)、⌘C/Vの無名マクロ。露出=Tauri IPC(`list_macros`/`save_macro`/`apply_macro`/`open_macros_folder`)・Link API(`GET /macros`・`POST /macros/build|save|apply|apply-inline`)・MCP(`list_macros`/`save_macro`/`apply_macro`)。**フェーズ3に残した項目**: プレースホルダと値セット、保存ダイアログからのバリアント追加(UIはdisabledプレースホルダで示す)。計画=`docs/superpowers/plans/2026-08-22-m4-phase2-macros-xref-nav.md`
+>
+> **値セット: 🔶 フェーズ3完了(2026-08-22)。** マクロ形式へ`placeholders`(key+label(英/日)+行き先`{entity, field: "value"|"attrs.<名前>"}`)と`value_sets`(id+label(英/日)+`{key: 値}`)を追加(どちらも省略可・旧マクロJSONはそのまま読める)。挿入時に値セットidを渡すと、行き先の欄へ値が入った状態で`execute_batch`されるので**undo一発**のまま。知らない値セットid・宣言されていないキー・マクロに無い行き先は図面を変えずにエラー(部分適用しない)。UI=保存ダイアログの「プレースホルダ」表(選択範囲の型番欄・属性にキー名を付ける。同じキー名の欄は1つのプレースホルダにまとまる)+「値セット」表(名前+キーごとの値。idは名前から自動生成)、挿入ダイアログの値セットドロップダウン(値セットを持つマクロにだけ出る)。⌘C/Vの無名マクロには値セットが無い。露出=Tauri IPC(`apply_macro`/`apply_macro_inline`の`value_set`)・Link API(`POST /macros/apply|apply-inline`の`value_set`、`POST /macros/save`の`placeholders`/`value_sets`)・MCP(`apply_macro`の`value_set`、`save_macro`の`placeholders`/`value_sets`、`list_macros`の返却)。計画=`docs/superpowers/plans/2026-08-22-m4-phase3-library-valuesets-plc.md` Task 2
 
 **ベンチマーク: EPLANのウィンドウマクロ(バリアント+プレースホルダ+値セット)。** ACADEの回路コピーも同機構で包含する。
 
