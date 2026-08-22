@@ -20,7 +20,38 @@ const SETTINGS_DIR: &str = ".madakecad";
 /// 設定ファイル名。
 const SETTINGS_FILE: &str = "settings.json";
 
+/// エージェントの実行方式(どこへ問い合わせるか)。
+///
+/// **APIキーはここには入らない**。キーはOSキーチェーンだけに置く([`crate::secrets`])。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentProvider {
+    /// ローカルのClaude Code CLI(サブスクリプションのサインインを利用。既定)
+    #[default]
+    ClaudeCli,
+    /// Anthropic Messages APIへ直接(APIキー)
+    AnthropicApi,
+}
+
+impl<'de> Deserialize<'de> for AgentProvider {
+    /// 知らない値は既定([`AgentProvider::ClaudeCli`])として読む。
+    ///
+    /// 新しいプロバイダを足した設定ファイルを古いビルドで開いても、設定全体が
+    /// 読めなくなって既定へ戻ることのないようにするため。
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        let raw = String::deserialize(d)?;
+        Ok(match raw.trim() {
+            "anthropic_api" => Self::AnthropicApi,
+            _ => Self::ClaudeCli,
+        })
+    }
+}
+
 /// アプリ全体の設定(A1範囲)。
+///
+/// **秘密は書かない**: APIキーのような資格情報はこの構造体に持たせず、
+/// OSキーチェーンへ入れる([`crate::secrets`])。設定ファイルは平文JSONなので、
+/// ここに項目を足すと平文でディスクへ残る。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
@@ -39,6 +70,10 @@ pub struct AppSettings {
     /// 社内・顧客の流儀で同梱の決まりを上書きできる。読めないパスは黙って無視する
     /// (設定ミスでエージェントが起動しなくなるのを避けるため)。
     pub knowledge_path: Option<PathBuf>,
+    /// エージェントの実行方式。既定はClaude Code CLI。
+    pub provider: AgentProvider,
+    /// [`AgentProvider::AnthropicApi`]で使うモデルID。空なら既定へ戻す。
+    pub api_model: String,
 }
 
 impl Default for AppSettings {
@@ -49,6 +84,8 @@ impl Default for AppSettings {
             auto_read_drawing: true,
             language: "en".into(),
             knowledge_path: None,
+            provider: AgentProvider::ClaudeCli,
+            api_model: crate::anthropic::DEFAULT_API_MODEL.into(),
         }
     }
 }
@@ -65,6 +102,12 @@ impl AppSettings {
             "en".into()
         } else {
             language
+        };
+        let api_model = self.api_model.trim();
+        self.api_model = if api_model.is_empty() {
+            crate::anthropic::DEFAULT_API_MODEL.into()
+        } else {
+            api_model.into()
         };
         self
     }

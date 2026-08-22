@@ -11,6 +11,7 @@ import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { usePopover } from "../composables/popover";
 import { useChatStore } from "../stores/chat";
+import { useSettingsStore } from "../stores/settings";
 import { useUiStore, type LeftPanelTab } from "../stores/ui";
 import ChatDock from "./chat/ChatDock.vue";
 import ChatHistoryPopup from "./chat/ChatHistoryPopup.vue";
@@ -19,6 +20,7 @@ import ProjectPanel from "./ProjectPanel.vue";
 const { t } = useI18n();
 const chat = useChatStore();
 const ui = useUiStore();
+const settings = useSettingsStore();
 
 const { open: historyOpen, toggle: toggleHistory, close: closeHistory } = usePopover();
 
@@ -27,7 +29,8 @@ const tabs: { id: LeftPanelTab; label: string }[] = [
   { id: "chat", label: "エージェント" },
 ];
 
-const connected = computed(() => chat.detect !== null);
+// 接続バッジ: Claude Code CLIならCLIの検出、Anthropic APIならキーの保存状況を見る
+const connected = computed(() => settings.agentReady(chat.detect !== null));
 const chatTab = computed(() => ui.leftPanelTab === "chat");
 // 並列エージェント: 開いていない会話も動くので、実行中の本数をタブ行に出す
 const running = computed(() => chat.runningCount);

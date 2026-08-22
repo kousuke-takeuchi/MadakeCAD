@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**810仕様項目**。
+全5領域・**872仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -432,6 +432,15 @@
 - ターン実行中の印は入れ子でも数えられ、必ず解除されるため、ターン後の編集はまたユーザー編集になる。 <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
 - エージェントマネージャが使う窓口はエージェント編集だけを巻き戻し、戻した件数を報告する。 <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
 
+### provider_api
+
+- 設定画面は「どのプロバイダか」「キーが保存済みか」を知るが、キーそのものは受け取らない。 <sub>`the_settings_screen_never_receives_the_api_key`</sub>
+- 保存済みのキーを削除すると「保存済み」表示が戻る(設定画面から消えたことが分かる)。 <sub>`removing_the_saved_key_flips_the_saved_flag_back`</sub>
+- キー欄が空のまま保存しようとするとエラーになる(役に立たない空の登録を作らない)。 <sub>`an_empty_key_box_is_refused`</sub>
+- 接続テストはリクエスト自体を失敗させず、読める理由を答えとして返す。 <sub>`the_connection_test_answers_with_a_readable_reason`</sub>
+- 設定エンドポイントでAnthropic APIを選ぶと、プロバイダの状態にも反映される。 <sub>`choosing_the_anthropic_api_is_reflected_in_the_provider_status`</sub>
+- OSキーチェーンが返事をしないときも設定画面は開き、理由を表示する(固まらない)。 <sub>`a_keychain_that_never_answers_does_not_freeze_the_settings_screen`</sub>
+
 ### 開始テンプレート (REST)
 
 - GET /templates は同梱の開始テンプレートを英日の名前つきで返す。 <sub>`the_link_api_lists_the_bundled_templates`</sub>
@@ -443,6 +452,15 @@
 - 整えメトリクスのツール説明には「整えループの目標値として使う」ことと、数える3つの対象が書かれている。 <sub>`the_tidy_metrics_tool_is_advertised_as_the_tidy_loop_target`</sub>
 - GET /api/v1/tidy-metrics はシートの交差数・ラベル重なり数・シンボル重なり数・グリッド外数をJSONで返す。 <sub>`tidy_metrics_endpoint_returns_the_four_counts`</sub>
 
+### tool_bridge
+
+- API経由で見えるツールはCLI経由とまったく同じ顔ぶれで、片方だけ機能が欠けることがない。 <sub>`the_api_route_sees_the_same_tools_as_the_cli_route`</sub>
+- 窓口から見えるツールには全て説明が付き、入力スキーマはオブジェクト型になっている。 <sub>`every_bridged_tool_has_a_description_and_an_object_schema`</sub>
+- 窓口経由の編集は図面に入り、他の編集と同じように元に戻せる(Commandエンジンを通っている)。 <sub>`an_edit_through_the_bridge_lands_in_the_document_and_can_be_undone`</sub>
+- 読み取り系のツールも窓口経由で動く(エージェントは編集の前に図面を見られる)。 <sub>`reading_tools_work_through_the_bridge`</sub>
+- 存在しないツール名は、ターンを落とさずにエラーの結果として返る(モデルが言い直せる)。 <sub>`an_unknown_tool_name_comes_back_as_an_error_result`</sub>
+- 引数が間違っているときも理由つきのエラーの結果として返り、モデルが自分で直せる。 <sub>`bad_arguments_come_back_with_a_reason`</sub>
+
 ### tools
 
 - 部品検索ツールの説明には選定・比較・代替品の用途が書かれており、「これの代替は?」と聞かれたエージェントがこれを使う。 <sub>`the_parts_search_tool_advertises_selection_and_comparison`</sub>
@@ -452,6 +470,20 @@
 
 ## AIアシスタント (madake-agent)
 
+
+### anthropic_api
+
+- APIから届いた本文はそのまま文字の差分として流れ、ターンの終わりに組み立てた返答とトークン使用量が付く。 <sub>`streamed_text_becomes_deltas_and_a_completed_turn`</sub>
+- APIへ送るリクエストには設定したモデル・ストリーミング指定・システムプロンプト・ユーザーの発言が載る。 <sub>`the_request_carries_the_model_system_prompt_and_user_message`</sub>
+- ブリッジしたMCPツールは毎回のリクエストでAPIへ渡る(エージェントが図面を編集できる)。 <sub>`the_bridged_mcp_tools_are_offered_to_the_api`</sub>
+- モデルが要求したツールはその場で実行され、結果を返して会話を続ける(1ターンで完結する)。 <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- 失敗したツールはターンを中断せず、エラーとしてモデルへ返す(モデルが直せる)。 <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
+- ツール実行の往復には上限があり、堂々巡りになったモデルが延々と動き続けない。 <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
+- APIキーが弾かれたときは、生のHTTPコードではなく「キーの問題」と分かる文言を表示する。 <sub>`a_rejected_api_key_is_explained_as_a_key_problem`</sub>
+- APIが混み合っているときは「混雑しているので時間をおいて」と読める文言を表示する。 <sub>`an_overloaded_api_is_explained_as_a_busy_service`</sub>
+- ストリームの途中で届いたエラーもユーザーへ伝える(黙って途切れさせない)。 <sub>`an_error_event_inside_the_stream_is_surfaced`</sub>
+- 会話の前のやりとりも一緒に送るので、モデルは前に話した内容を覚えている。 <sub>`earlier_turns_of_the_conversation_are_replayed`</sub>
+- 接続テストは、使えるキーなら成功を、駄目なキーなら読める理由を返す。 <sub>`the_connection_test_reports_success_or_a_readable_reason`</sub>
 
 ### Claude CLIバックエンド
 
@@ -548,6 +580,14 @@
 - ターン通し番号は会話ごとに独立しているので、片方を中断してももう片方のイベントは捨てられない。 <sub>`each_conversation_keeps_its_own_turn_seq`</sub>
 - 並行していたターンの編集ごと巻き戻したときは、そのターンも巻き戻し済みになる(適用済みのまま残らない)。 <sub>`undo_turn_marks_the_parallel_turn_whose_edits_it_swept`</sub>
 
+### manager_api_provider
+
+- Anthropic APIを選んでおけば、Claude Code CLIが入っていない環境でもチャットのやりとりができる。 <sub>`a_turn_runs_on_the_api_without_any_claude_cli`</sub>
+- APIを選んだのにキーを保存していないと、設定画面へ促す文言で送信を断る。 <sub>`sending_without_a_saved_key_points_at_the_settings_screen`</sub>
+- キーを保存すればプロバイダは「使える」状態になり、消せば「使えない」状態に戻る(バッジ表示用)。 <sub>`the_provider_is_ready_only_while_a_key_is_saved`</sub>
+- 接続テストはキーを保存する前は実行せず、「キーが無い」ことを理由として返す。 <sub>`the_connection_test_refuses_before_a_key_is_saved`</sub>
+- APIキーはUIへ流れるイベントに一切載らない。 <sub>`the_api_key_never_appears_in_the_event_stream`</sub>
+
 ### stream-jsonパーサ
 
 - CLIのsystem/init行はセッションIDを載せたセッション開始イベントになる。 <sub>`init_line_yields_session_started`</sub>
@@ -560,6 +600,19 @@
 - 実際に採取したストリームが期待どおりの完全なイベント列に解釈される。 <sub>`full_event_sequence_of_tooluse_fixture`</sub>
 - パーサはツール実行の完了時にツール名を補完する。 <sub>`stream_parser_fills_tool_name_on_finish`</sub>
 - 同じIDの重複したツール開始イベントは破棄される。 <sub>`stream_parser_drops_duplicate_tool_use_started`</sub>
+
+### secrets
+
+- 保存したAPIキーは読み戻せて、削除すると消える。 <sub>`a_saved_api_key_can_be_read_back_and_deleted`</sub>
+- 保存していないキーを削除してもエラーにしない(UIの「削除」がいつでも押せる)。 <sub>`deleting_a_key_that_was_never_stored_is_not_an_error`</sub>
+- 空の入力は保存せずに断る(空のキーを持って後から分かりにくい失敗をしないため)。 <sub>`a_blank_api_key_is_refused`</sub>
+- 前後の空白は取り除いて保存する(改行ごと貼り付けたキーでも使える)。 <sub>`a_pasted_key_is_trimmed_before_it_is_stored`</sub>
+- 保存したキーは設定ファイルに一切現れない(設定ファイルに秘密は書かない)。 <sub>`the_settings_file_never_contains_the_api_key`</sub>
+- 何らかの理由でAPIキーが書かれた設定ファイルを読んでも、次の保存でその項目は消える。 <sub>`an_api_key_smuggled_into_the_settings_file_is_dropped_on_save`</sub>
+- キーチェーンの保管先はアプリ名と決まった名前で、次に起動しても同じキーが見つかる。 <sub>`the_keychain_entry_is_addressed_by_the_app_name`</sub>
+- 実際のOSキーチェーンでも、キーは保存して読み戻して削除できる(環境変数で明示的に有効化したときだけ実行)。 <sub>`the_real_os_keychain_round_trips_a_key`</sub>
+- キーチェーンを読むのはアプリ起動につき1回だけで、OSの許可確認が何度も出ることがない。 <sub>`the_keychain_is_read_only_once_per_app_run`</sub>
+- OSキーチェーンが読めないときは、黙って「キー未設定」にせず理由を伝える。 <sub>`a_keychain_that_cannot_be_read_reports_the_reason`</sub>
 
 ### AI設定
 
@@ -577,6 +630,21 @@
 - 既定では追加の知識ファイルは未設定(同梱の規格ノートだけを使う)。 <sub>`default_knowledge_path_is_unset`</sub>
 - 知識ファイルの項目が無い旧い設定ファイルは、未設定として読み込まれる。 <sub>`old_settings_file_without_knowledge_path_loads_unset`</sub>
 - 空白だけの知識ファイルパスは正規化で未設定になり、前後の空白は取り除かれる。 <sub>`normalized_drops_a_blank_knowledge_path`</sub>
+- 既定のエージェントはClaude Code CLI経由で、API経由に切り替えたときのモデルはClaude Sonnet 5。 <sub>`the_default_provider_is_the_claude_code_cli`</sub>
+- Anthropic APIを選んだ設定は、モデル名と一緒に保存して読み直しても保持される。 <sub>`the_anthropic_api_choice_round_trips_through_save_and_load`</sub>
+- プロバイダは読める名前で保存される(設定ファイルを手で書き換えられる)。 <sub>`the_provider_is_stored_under_a_readable_name`</sub>
+- プロバイダの項目が無い旧い設定ファイルもそのまま動き、Claude Code CLIのままになる。 <sub>`an_old_settings_file_without_a_provider_stays_on_the_cli`</sub>
+- このビルドが知らないプロバイダ名は、設定ファイル全体を読めなくせずにCLIへ戻す。 <sub>`an_unknown_provider_name_falls_back_to_the_cli`</sub>
+- モデル名を空にすると既定のモデルへ戻り、前後の空白は取り除かれる。 <sub>`a_blank_api_model_falls_back_to_the_default`</sub>
+
+### tool_bridge
+
+- MCPツール1つがAPIのツール1つになり、名前・説明・入力スキーマがそのまま引き継がれる。 <sub>`every_mcp_tool_becomes_one_api_tool`</sub>
+- JSON Schemaの`$schema`宣言は落とす(APIが必要とするのは形そのものだけ)。 <sub>`the_schema_marker_is_dropped_from_the_input_schema`</sub>
+- スキーマの無いツールにも空のオブジェクトスキーマを与える(APIが受け付ける形にする)。 <sub>`a_tool_without_a_schema_gets_an_empty_object_schema`</sub>
+- `"type": "object"`が抜けたスキーマは、そのまま送らずに補って直す。 <sub>`a_schema_missing_its_object_type_is_repaired`</sub>
+- ブリッジしたツール名は全てAPIが許す文字種・長さに収まる(ツールが弾かれない)。 <sub>`bridged_tool_names_fit_the_api_name_rules`</sub>
+- 説明が空のツールには説明の代わりを入れる(説明無しのツールをAPIへ渡さない)。 <sub>`a_tool_without_a_description_still_carries_some_text`</sub>
 
 
 ## madake CLI
@@ -855,6 +923,7 @@
 - 未知のconversation_idでは幽霊会話を作らず一覧を取り直す <sub>`chat store: applyAgentEvent`</sub>
 - 自分のターンが進行中の間は、未知会話のイベントで一覧を取り直さない <sub>`chat store: applyAgentEvent`</sub>
 - 進行中ターンの無い会話へのturn_completed/errorは捨てられる <sub>`chat store: applyAgentEvent`</sub>
+- 送信に失敗したら、その理由が最初の1通目からチャットに表示される <sub>`chat store: アクション`</sub>
 - sendは会話を新規作成し、サーバー採番のidを引き取る <sub>`chat store: アクション`</sub>
 - send解決前に届いたイベントも同じ会話へ入る <sub>`chat store: アクション`</sub>
 - 空プロンプトとストリーミング中の送信は無視される <sub>`chat store: アクション`</sub>
@@ -930,6 +999,20 @@
 
 - searchは部品APIの結果を保持する <sub>`parts store`</sub>
 - 検索失敗時は結果を空にしloadingを戻す <sub>`parts store`</sub>
+
+### provider
+
+- 既定のプロバイダはClaude Code CLIで、API経由に切り替えたときのモデルはClaude Sonnet 5 <sub>`AI provider settings`</sub>
+- プロバイダを選び直すと設定として保存される <sub>`AI provider settings`</sub>
+- プロバイダの状態を読み込むと「キーが保存済みか」が分かる <sub>`AI provider settings`</sub>
+- 保存したAPIキーの文字列はフロントの状態に一切残らない <sub>`AI provider settings`</sub>
+- キー欄が空のままなら送信せず、入力を促すエラーになる <sub>`AI provider settings`</sub>
+- キーを削除すると「保存済み」表示が消える <sub>`AI provider settings`</sub>
+- 接続テストは成功すると確かめたモデル名を表示する <sub>`AI provider settings`</sub>
+- 接続テストが失敗すると理由をそのまま表示する <sub>`AI provider settings`</sub>
+- 接続テストの実行中はtestingが立ち、前回の結果は消える <sub>`AI provider settings`</sub>
+- 接続バッジはClaude Code CLIならCLIの検出、Anthropic APIならキーの保存状況を見る <sub>`AI provider settings`</sub>
+- 保存済みのキーは伏せ字で表す(値そのものは画面に出さない) <sub>`AI provider settings`</sub>
 
 ### 帳票 (部品表 / 電線リスト)
 

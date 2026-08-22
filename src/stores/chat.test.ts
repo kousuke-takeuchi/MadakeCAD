@@ -1,4 +1,5 @@
 import { setActivePinia, createPinia } from "pinia";
+import { nextTick, watch } from "vue";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
@@ -339,6 +340,31 @@ describe("chat store: アクション", () => {
     // agentApiはモジュールレベルの共有オブジェクト。テスト間でスパイを戻す
     vi.restoreAllMocks();
     setActivePinia(createPinia());
+  });
+
+  // ja: 送信に失敗したら、その理由が最初の1通目からチャットに表示される
+  it("a failed first send shows the reason in the chat right away", async () => {
+    vi.spyOn(agentApi, "send").mockRejectedValue(
+      new Error("Anthropic APIキーが設定されていません(設定 > エージェント で入力してください)"),
+    );
+    const store = useChatStore();
+
+    // 画面が更新されるか (= 変更がリアクティブに届くか) を監視する
+    let shown: string | null | undefined;
+    watch(
+      () => store.conversations[0]?.messages[1]?.error,
+      (error) => {
+        shown = error;
+      },
+    );
+
+    const id = await store.send("こんにちは");
+    await nextTick();
+
+    expect(id).toBeNull();
+    expect(shown).toContain("APIキー");
+    expect(store.messages[1].streaming).toBe(false);
+    expect(store.streaming).toBe(false);
   });
 
   // ja: sendは会話を新規作成し、サーバー採番のidを引き取る

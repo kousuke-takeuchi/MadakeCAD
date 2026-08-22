@@ -1,15 +1,75 @@
-//! Claude Code CLIをヘッドレス起動してAgentEventを流すバックエンド。
+//! エージェントのターン実行バックエンド。
 //!
-//! APIキーは扱わない。認証はCLI側のOAuthセッション(`claude login`)に委譲する。
-//! 図面編集ツールは内蔵MCPサーバー(`http://127.0.0.1:<port>/mcp`)だけを許可し、
-//! `--strict-mcp-config`でユーザー環境のMCP設定を読ませない。
+//! [`AgentBackend`]が「1ターン = プロンプト+システムプロンプト → イベント列」の
+//! 共通の形で、実装は2つ:
+//!
+//! - [`ClaudeCodeCliBackend`]: ローカルのClaude Code CLIをヘッドレス起動する。
+//!   APIキーは扱わず、認証はCLI側のOAuthセッション(`claude login`)に委譲する。
+//!   図面編集ツールは内蔵MCPサーバー(`http://127.0.0.1:<port>/mcp`)だけを許可し、
+//!   `--strict-mcp-config`でユーザー環境のMCP設定を読ませない
+//! - [`crate::AnthropicApiBackend`]: Anthropic Messages APIへ直接つなぐ
+//!   (APIキーはOSキーチェーンから。ツールは[`crate::tools::ToolBridge`]経由)
+//!
+//! どちらも流すのは同じ[`AgentEvent`]なので、UIはバックエンドの違いを知らない。
 
+use crate::conversation::Role;
 use crate::{AgentError, AgentEvent, Result, StreamParser};
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
+
+/// 会話の過去のやりとり1件(API直結バックエンドが文脈として送り直す)。
+///
+/// CLIバックエンドはCLI側のセッション(`--resume`)が文脈を持つため使わない。
+#[derive(Debug, Clone, PartialEq)]
+pub struct HistoryMessage {
+    pub role: Role,
+    pub text: String,
+}
+
+/// 1ターンの入力。
+#[derive(Debug, Clone, Copy)]
+pub struct TurnRequest<'a> {
+    /// ユーザーの発言
+    pub prompt: &'a str,
+    /// CLIセッションID(CLIバックエンドの`--resume`用。API直結では使わない)
+    pub session: Option<&'a str>,
+    /// 図面コンテキスト+作図ルール+規格知識([`crate::knowledge::system_prompt`])
+    pub system_prompt: Option<&'a str>,
+    /// この会話の過去のやりとり(古い順)
+    pub history: &'a [HistoryMessage],
+}
+
+impl<'a> TurnRequest<'a> {
+    pub fn new(prompt: &'a str) -> Self {
+        Self {
+            prompt,
+            session: None,
+            system_prompt: None,
+            history: &[],
+        }
+    }
+}
+
+/// [`AgentBackend::run_turn`]の戻り値(トレイトオブジェクトのままawaitできる形)。
+pub type TurnFuture<'a> = Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
+
+/// 1ターンを実行してイベントを流すもの。
+///
+/// エラーの扱いは実装をまたいで一本化してある: 失敗は種類を問わず必ず
+/// [`AgentEvent::Error`]として`tx`へ流れる。呼び出し側はイベントだけを見て
+/// UI表示すればよい。戻り値の`Err`は「そのうえで異常終了した」ことを示す。
+pub trait AgentBackend: Send + Sync {
+    fn run_turn<'a>(
+        &'a self,
+        request: TurnRequest<'a>,
+        tx: mpsc::Sender<AgentEvent>,
+    ) -> TurnFuture<'a>;
+}
 
 /// エージェントに開放するMCPツールのパターン(内蔵サーバーのみ)。
 /// 自動承認するツール。図面の編集は内蔵MCP経由(Commandエンジン)に限り、
@@ -311,6 +371,20 @@ impl ClaudeCodeCliBackend {
         Ok(DetectResult {
             path,
             version: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        })
+    }
+}
+
+impl AgentBackend for ClaudeCodeCliBackend {
+    fn run_turn<'a>(
+        &'a self,
+        request: TurnRequest<'a>,
+        tx: mpsc::Sender<AgentEvent>,
+    ) -> TurnFuture<'a> {
+        // CLIは会話の文脈をセッション(`--resume`)で持つので`history`は使わない
+        Box::pin(async move {
+            self.send_with_context(request.prompt, request.session, request.system_prompt, tx)
+                .await
         })
     }
 }

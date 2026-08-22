@@ -7,6 +7,7 @@ import { nextTick, computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useChatComposer } from "../../composables/chatComposer";
 import { appliedCommandCount, useChatStore } from "../../stores/chat";
 import { useDocumentStore } from "../../stores/document";
+import { useSettingsStore } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
 import ChatComposerFooter from "./ChatComposerFooter.vue";
 import ChatMessage from "./ChatMessage.vue";
@@ -14,10 +15,12 @@ import ChatMessage from "./ChatMessage.vue";
 const store = useChatStore();
 const doc = useDocumentStore();
 const ui = useUiStore();
+const settings = useSettingsStore();
 const { draft, onKeydown } = useChatComposer();
 
 const listRef = ref<HTMLDivElement | null>(null);
-const connected = computed(() => store.detect !== null);
+// 接続バッジ: Claude Code CLIならCLIの検出、Anthropic APIならキーの保存状況を見る
+const connected = computed(() => settings.agentReady(store.detect !== null));
 
 /**
  * 「元に戻す」を出すのは最新の適用済みターンだけ (サーバーは古いターンの巻き戻しも

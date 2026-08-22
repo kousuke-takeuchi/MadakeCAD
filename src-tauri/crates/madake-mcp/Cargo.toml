@@ -10,7 +10,7 @@ axum = { version = "0.8", default-features = false, features = ["http1", "json",
 futures = "0.3.34"
 madake-agent = { path = "../madake-agent" }
 madake-core = { path = "../madake-core" }
-rmcp = { version = "3.1.4", features = ["server", "transport-streamable-http-server"] }
+rmcp = { version = "3.1.4", features = ["server", "client", "transport-streamable-http-server"] }
 schemars = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }

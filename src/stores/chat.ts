@@ -941,7 +941,10 @@ export const useChatStore = defineStore("chat", {
         // `local-N`のまま確定し、以降の送信が延々とUuidデシリアライズで落ちる
         this.pendingLocalId = isLocalId(conv.id) ? conv.id : null;
         this.setRunning(conv.id, false);
-        const turn = lastAssistant(conv);
+        // 新規会話の`conv`はストアへ入れる前の生オブジェクト。そのまま書き換えても
+        // 画面は更新されない(リアクティブな実体はストア側にある)ので、必ず
+        // ストアから引き直してから理由を書き込む
+        const turn = lastAssistant(this.conversations.find((c) => c.id === conv.id) ?? conv);
         if (turn) {
           turn.error = e instanceof Error ? e.message : String(e);
           turn.streaming = false;
