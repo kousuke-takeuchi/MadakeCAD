@@ -42,12 +42,12 @@ and verification grounded in a real circuit solver (ngspice).
 - ✅ **Solver-grounded verification** — ERC plus electrical checks (reachability, ampacity, voltage drop, fuse rating) judged from an actual ngspice DC solution
 - ⚡ **DC simulation** — net voltages, component currents/power, open-switch what-if analysis
 - 🗄️ **Parts database** — local SQLite master with ratings, procurement links, and a wire part master; place parts with ratings applied automatically
-- 🤖 **AI assistant built in** — chat drafts and edits your drawing via MCP, knows the JIS/IEC drafting conventions, and verifies its own work (ERC → fix → re-verify) before reporting back; every AI turn is undoable and never swallows your manual edits. One-click tidy-up passes, several conversations working in parallel, and a choice of Claude Code CLI or Anthropic API key
+- 🤖 **AI assistant built in** — chat drafts and edits your drawing via MCP, knows the JIS/IEC drafting conventions, and verifies its own work (ERC → fix → re-verify) before reporting back; every AI turn is undoable and never swallows your manual edits. One-click tidy-up passes, several conversations working in parallel, and six providers to choose from — Claude Code CLI, Anthropic API, GitHub Copilot CLI, any OpenAI-compatible endpoint, a local Ollama (no key, nothing leaves the machine), or Google Gemini
 - 🔌 **Automate everything** — MCP server, REST API + SSE, and a `madake` CLI, all driving the same command engine
 
 ## Quick Start
 
-Prerequisites: [Rust](https://rustup.rs), Node.js 20+. Optional: [ngspice](https://ngspice.sourceforge.io/) (circuit-solved verification), [Claude Code](https://claude.com/claude-code) (AI chat — or use an Anthropic API key instead, stored in your OS keychain).
+Prerequisites: [Rust](https://rustup.rs), Node.js 20+. Optional: [ngspice](https://ngspice.sourceforge.io/) (circuit-solved verification), and — for the AI chat — **any one** of six providers: [Claude Code](https://claude.com/claude-code) (the default), an Anthropic API key, GitHub Copilot CLI, an OpenAI-compatible endpoint, a local [Ollama](https://ollama.com), or a Gemini key. API keys are kept in your OS keychain; see [AI Assistant → Providers](docs/09-ai-assistant.md#providers).
 
 ```bash
 git clone <this repository>

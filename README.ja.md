@@ -42,12 +42,12 @@ AIアシスタントは人間と同じundo可能なコマンドエンジンで�
 - ✅ **ソルバ裏付けの検証** — ERC+電気チェック(到達性・許容電流・電圧降下・ヒューズ定格)をngspiceのDC解で判定
 - ⚡ **DCシミュレーション** — ネット電圧・部品電流/電力、スイッチ開閉のwhat-if
 - 🗄️ **部品データベース** — 定格・購入先リンク付きローカルSQLiteマスタ+電線品番マスタ。配置で定格が自動設定
-- 🤖 **AIアシスタント内蔵** — チャットがMCP経由で作図・編集。JIS/IECの作図慣習を内蔵し、ERC検証 → 修正 → 再検証を自走してから報告する。AIのターンは全てundo可能で、手編集を巻き込まない。ワンクリックの整えループ、複数会話の並列作業、Claude Code CLIとAnthropic APIキーの選択にも対応
+- 🤖 **AIアシスタント内蔵** — チャットがMCP経由で作図・編集。JIS/IECの作図慣習を内蔵し、ERC検証 → 修正 → 再検証を自走してから報告する。AIのターンは全てundo可能で、手編集を巻き込まない。ワンクリックの整えループ、複数会話の並列作業、プロバイダ6経路の選択(Claude Code CLI / Anthropic API / GitHub Copilot CLI / OpenAI互換API / ローカルOllama(キー不要・PCの外へ出ない)/ Google Gemini)にも対応
 - 🔌 **全部自動化できる** — MCPサーバー・REST API+SSE・`madake` CLIが同じコマンドエンジンを駆動
 
 ## クイックスタート
 
-前提: [Rust](https://rustup.rs)、Node.js 20+。任意: [ngspice](https://ngspice.sourceforge.io/)(回路解析検証)、[Claude Code](https://claude.com/claude-code)(AIチャット。代わりにAnthropic APIキーでも動く。キーはOSキーチェーンに保存)。
+前提: [Rust](https://rustup.rs)、Node.js 20+。任意: [ngspice](https://ngspice.sourceforge.io/)(回路解析検証)、AIチャット用に6経路の**どれか1つ**([Claude Code](https://claude.com/claude-code)=既定 / Anthropic APIキー / GitHub Copilot CLI / OpenAI互換エンドポイント / ローカルの[Ollama](https://ollama.com) / Geminiキー)。APIキーはOSキーチェーンに保存する。詳細は[AIアシスタント > プロバイダ](docs/09-ai-assistant.ja.md#プロバイダ)。
 
 ```bash
 git clone <このリポジトリ>
