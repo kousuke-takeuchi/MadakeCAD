@@ -348,3 +348,130 @@ async fn export_pdf_book_writes_cover_sheets_and_reports() {
     assert!(pdf.starts_with(b"%PDF-"));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// The terminal endpoints list the terminal blocks of the drawing and return one block's chart and check result.
+/// 端子台エンドポイントは図面の端子台を一覧し、1台のチャートとチェック結果を返す。
+#[tokio::test]
+async fn terminal_endpoints_list_chart_and_check() {
+    let mut project = Project::new("端子台API");
+    let tb_id = uuid::Uuid::new_v4();
+    let mut attrs = std::collections::BTreeMap::new();
+    attrs.insert("jumpers".to_string(), "1-2".to_string());
+    project.sheets[0].entities.insert(
+        tb_id,
+        madake_core::Entity::Symbol(madake_core::SymbolInstance {
+            id: tb_id,
+            symbol_id: "terminal_block_4p".into(),
+            at: madake_core::Point::new(100.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs,
+        }),
+    );
+    let doc = SharedDoc::new(Engine::new(project));
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude()));
+    let parts = madake_mcp::open_parts(
+        &std::env::temp_dir().join(format!("madake-parts-tb-{}.sqlite", std::process::id())),
+    )
+    .expect("parts db");
+    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
+
+    let get = |uri: String| {
+        let router = router.clone();
+        async move {
+            let req = Request::builder().method("GET").uri(uri).body(Body::empty()).unwrap();
+            let res = router.oneshot(req).await.unwrap();
+            let status = res.status();
+            let bytes = res.into_body().collect().await.unwrap().to_bytes();
+            (status, serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null))
+        }
+    };
+
+    // 一覧: 参照記号・極数・ジャンパ指定が出る
+    let (status, body) = get("/api/v1/terminals".into()).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body.as_array().unwrap().len(), 1);
+    assert_eq!(body[0]["reference"], "TB1");
+    assert_eq!(body[0]["terminal_count"], 4);
+    assert_eq!(body[0]["jumpers"], "1-2");
+    assert_eq!(body[0]["entity_id"], json!(tb_id.to_string()));
+
+    // チャート: 端子4行
+    let (status, chart) = get(format!("/api/v1/terminals/chart?entity_id={tb_id}")).await;
+    assert_eq!(status, StatusCode::OK, "{chart:?}");
+    assert_eq!(chart["rows"].as_array().unwrap().len(), 4);
+
+    // チェック: 未結線なので予備端子の情報が出る
+    let (status, diags) = get(format!("/api/v1/terminals/check?entity_id={tb_id}")).await;
+    assert_eq!(status, StatusCode::OK, "{diags:?}");
+    assert!(!diags.as_array().unwrap().is_empty(), "{diags:?}");
+
+    // 端子台でないidは400
+    let (status, _) = get(format!("/api/v1/terminals/chart?entity_id={}", uuid::Uuid::new_v4())).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+/// POST /api/v1/export/report writes one report as CSV or as framed PDF pages, and refuses CSV for the graphical terminal diagram.
+/// POST /api/v1/export/report は帳票1種をCSVまたは図枠付きPDFで書き出し、図面である端子接続図のCSVは拒否する。
+#[tokio::test]
+async fn export_report_writes_csv_and_pdf_per_report() {
+    let doc = SharedDoc::new(Engine::new(Project::new("帳票API")));
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude()));
+    let parts = madake_mcp::open_parts(
+        &std::env::temp_dir().join(format!("madake-parts-report-{}.sqlite", std::process::id())),
+    )
+    .expect("parts db");
+    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
+
+    let dir = std::env::temp_dir().join(format!("madake-report-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let post = |body: Value| {
+        let router = router.clone();
+        async move {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/v1/export/report")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            let res = router.oneshot(req).await.unwrap();
+            let status = res.status();
+            let bytes = res.into_body().collect().await.unwrap().to_bytes();
+            (status, serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null))
+        }
+    };
+
+    // From-To電線リストのCSV
+    let csv_path = dir.join("wire-list.csv");
+    let (status, body) = post(json!({
+        "path": csv_path.to_string_lossy(), "kind": "wire-list", "format": "csv"
+    }))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let csv = std::fs::read_to_string(&csv_path).unwrap();
+    assert!(csv.starts_with("シート,From,To,"), "{csv}");
+
+    // クロスリファレンス表の図面シートPDF
+    let pdf_path = dir.join("xref.pdf");
+    let (status, body) = post(json!({
+        "path": pdf_path.to_string_lossy(), "kind": "xref", "format": "pdf"
+    }))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["count"], json!(1));
+    assert!(std::fs::read(&pdf_path).unwrap().starts_with(b"%PDF-"));
+
+    // 端子接続図はグラフィカルなのでCSV不可
+    let (status, _) = post(json!({
+        "path": dir.join("tb.csv").to_string_lossy(), "kind": "terminal-diagram", "format": "csv"
+    }))
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    std::fs::remove_dir_all(&dir).ok();
+}

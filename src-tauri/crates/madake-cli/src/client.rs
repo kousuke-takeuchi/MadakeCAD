@@ -17,26 +17,55 @@ pub enum ExportKind {
     Svg,
     /// シート1枚をPDFで出力 (印刷品質)。
     Pdf,
-    /// 部品表 (CSV)。
+    /// 部品表 (帳票)。
     Bom,
-    /// 電線リスト (CSV)。
-    #[value(name = "wire-list")]
+    /// From-To電線リスト (帳票)。
+    #[value(name = "wire-list", alias = "from-to")]
     WireList,
+    /// 端子台チャート (帳票。`--terminal`で1台に絞れる)。
+    #[value(name = "terminal-chart")]
+    TerminalChart,
+    /// 端子接続図 (帳票。グラフィカルなのでPDFのみ。`--terminal`で1台に絞れる)。
+    #[value(name = "terminal-diagram")]
+    TerminalDiagram,
+    /// クロスリファレンス表 (帳票)。
+    #[value(name = "xref-table", alias = "xref")]
+    XrefTable,
     /// 図面一式を1つのPDFへ (表紙+回路図全シート+選択帳票)。
     #[value(name = "pdf-book")]
     PdfBook,
 }
 
 impl ExportKind {
-    /// `/api/v1` からの相対パス。
+    /// `/api/v1` からの相対パス。帳票 ([`ExportKind::report_kind`] がSomeのもの) は
+    /// 種類と形式をボディに載せる `/export/report` を使うため、ここには現れない。
     pub fn path(self) -> &'static str {
         match self {
             ExportKind::Svg => "/export/svg",
             ExportKind::Pdf => "/export/pdf",
-            ExportKind::Bom => "/export/bom",
-            ExportKind::WireList => "/export/wire-list",
             ExportKind::PdfBook => "/export/pdf-book",
+            _ => "/export/report",
         }
+    }
+
+    /// 帳票ならその種類。回路図の出力 (svg/pdf/pdf-book) ならNone。
+    pub fn report_kind(self) -> Option<ReportKind> {
+        match self {
+            ExportKind::Bom => Some(ReportKind::Bom),
+            ExportKind::WireList => Some(ReportKind::WireList),
+            ExportKind::TerminalChart => Some(ReportKind::TerminalChart),
+            ExportKind::TerminalDiagram => Some(ReportKind::TerminalDiagram),
+            ExportKind::XrefTable => Some(ReportKind::Xref),
+            ExportKind::Svg | ExportKind::Pdf | ExportKind::PdfBook => None,
+        }
+    }
+
+    /// `--terminal` で対象を1つの端子台に絞れる帳票か。
+    pub fn takes_terminal(self) -> bool {
+        matches!(
+            self,
+            ExportKind::TerminalChart | ExportKind::TerminalDiagram
+        )
     }
 
     /// 人間向けの表示名。
@@ -45,8 +74,47 @@ impl ExportKind {
             ExportKind::Svg => "SVG",
             ExportKind::Pdf => "PDF",
             ExportKind::Bom => "部品表(BOM)",
-            ExportKind::WireList => "電線リスト",
+            ExportKind::WireList => "From-To電線リスト",
+            ExportKind::TerminalChart => "端子台チャート",
+            ExportKind::TerminalDiagram => "端子接続図",
+            ExportKind::XrefTable => "クロスリファレンス表",
             ExportKind::PdfBook => "図面一式PDF",
+        }
+    }
+}
+
+/// 帳票の出力形式 (`madake export ... --format`)。JSON表記はLink API・MCPと同じ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ReportFormat {
+    /// 表計算ソフトで開けるCSV (UTF-8)。
+    Csv,
+    /// 図枠+表題欄付きのA4横ページを綴じたPDF。
+    Pdf,
+}
+
+impl ReportFormat {
+    /// Link APIへ載せるJSON表記。
+    pub fn as_json(self) -> &'static str {
+        match self {
+            ReportFormat::Csv => "csv",
+            ReportFormat::Pdf => "pdf",
+        }
+    }
+
+    /// `--format` 省略時の既定。出力先の拡張子が `.pdf` ならPDF、それ以外はCSV。
+    pub fn for_path(path: &str) -> Self {
+        if path.to_ascii_lowercase().ends_with(".pdf") {
+            ReportFormat::Pdf
+        } else {
+            ReportFormat::Csv
+        }
+    }
+
+    /// 件数の単位 (CSV=行、PDF=ページ)。
+    pub fn count_unit(self) -> &'static str {
+        match self {
+            ReportFormat::Csv => "行",
+            ReportFormat::Pdf => "ページ",
         }
     }
 }
@@ -114,6 +182,8 @@ pub enum CliError {
     Io(String),
     /// 入力JSONの不正。
     Json(String),
+    /// オプションの組み合わせが正しくない (clapでは表せない条件)。
+    Usage(String),
 }
 
 impl fmt::Display for CliError {
@@ -130,6 +200,7 @@ impl fmt::Display for CliError {
             }
             CliError::Io(msg) => write!(f, "ファイル入出力エラー: {msg}"),
             CliError::Json(msg) => write!(f, "JSONが不正です: {msg}"),
+            CliError::Usage(msg) => write!(f, "オプションの指定が正しくありません: {msg}"),
         }
     }
 }
@@ -175,6 +246,25 @@ pub fn verify_url(port: u16, sheet_id: Option<&str>) -> String {
     }
 }
 
+/// `/terminals` のURL。シート指定時は `?sheet_id=<uuid>` を付ける。
+pub fn terminals_url(port: u16, sheet_id: Option<&str>) -> String {
+    match sheet_id {
+        Some(id) => format!("{}?sheet_id={}", endpoint(port, "/terminals"), id),
+        None => endpoint(port, "/terminals"),
+    }
+}
+
+/// 8-4-4-4-12桁の16進 = UUID表記か。`--terminal` が参照記号かentity idかの判別に使う。
+pub fn looks_like_uuid(s: &str) -> bool {
+    let groups = [8usize, 4, 4, 4, 12];
+    let parts: Vec<&str> = s.split('-').collect();
+    parts.len() == groups.len()
+        && parts
+            .iter()
+            .zip(groups)
+            .all(|(p, n)| p.len() == n && p.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
 /// Link APIの呼び出し口。テストではフェイク実装に差し替える。
 pub trait LinkApi {
     /// `GET /api/v1`
@@ -201,12 +291,22 @@ pub trait LinkApi {
     fn open(&self, path: &str) -> Result<Value, CliError>;
     /// `POST /api/v1/import/kicad` (`{"path": ...}`)
     fn import_kicad(&self, path: &str) -> Result<Value, CliError>;
-    /// `POST /api/v1/export/{svg,pdf,bom,wire-list}`
+    /// `GET /api/v1/terminals[?sheet_id=..]` (端子台の一覧)
+    fn terminals(&self, sheet_id: Option<&str>) -> Result<Value, CliError>;
+    /// `POST /api/v1/export/{svg,pdf}`
     fn export(
         &self,
         kind: ExportKind,
         path: &str,
         sheet_id: Option<&str>,
+    ) -> Result<Value, CliError>;
+    /// `POST /api/v1/export/report` (`{"path":..., "kind":..., "format":..., "entity_id":...}`)
+    fn export_report(
+        &self,
+        kind: ReportKind,
+        format: ReportFormat,
+        path: &str,
+        entity_id: Option<&str>,
     ) -> Result<Value, CliError>;
     /// `POST /api/v1/export/pdf-book` (`{"path":..., "include_reports":[...], "cover":bool}`)
     fn export_pdf_book(
@@ -328,6 +428,10 @@ impl LinkApi for HttpClient {
         self.post("/import/kicad", json!({ "path": path }))
     }
 
+    fn terminals(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
+        self.get(terminals_url(self.port, sheet_id))
+    }
+
     fn export(
         &self,
         kind: ExportKind,
@@ -340,6 +444,24 @@ impl LinkApi for HttpClient {
             _ => json!({ "path": path }),
         };
         self.post(kind.path(), body)
+    }
+
+    fn export_report(
+        &self,
+        kind: ReportKind,
+        format: ReportFormat,
+        path: &str,
+        entity_id: Option<&str>,
+    ) -> Result<Value, CliError> {
+        self.post(
+            "/export/report",
+            json!({
+                "path": path,
+                "kind": kind.as_json(),
+                "format": format.as_json(),
+                "entity_id": entity_id,
+            }),
+        )
     }
 
     fn export_pdf_book(
@@ -402,15 +524,86 @@ mod tests {
         );
     }
 
-    /// Each export kind (svg/pdf/bom/wire-list) maps to its REST route.
-    /// 各エクスポート種別(svg/pdf/bom/wire-list)は対応するRESTルートへ対応付く。
+    /// Schematic exports (svg/pdf/pdf-book) each have their own REST route, while every report goes to the shared /export/report route.
+    /// 回路図の出力(svg/pdf/pdf-book)は専用ルートを持ち、帳票は共通の/export/reportへまとまる。
     #[test]
     fn export_kind_paths_match_link_api_routes() {
         assert_eq!(ExportKind::Svg.path(), "/export/svg");
         assert_eq!(ExportKind::Pdf.path(), "/export/pdf");
-        assert_eq!(ExportKind::Bom.path(), "/export/bom");
-        assert_eq!(ExportKind::WireList.path(), "/export/wire-list");
         assert_eq!(ExportKind::PdfBook.path(), "/export/pdf-book");
+        assert_eq!(ExportKind::Bom.path(), "/export/report");
+        assert_eq!(ExportKind::TerminalChart.path(), "/export/report");
+    }
+
+    /// The five report kinds map to the report names the Link API knows; schematic exports are not reports.
+    /// 帳票5種はLink APIの帳票名へ対応付き、回路図の出力は帳票ではない。
+    #[test]
+    fn export_kinds_map_to_the_five_reports() {
+        assert_eq!(ExportKind::WireList.report_kind(), Some(ReportKind::WireList));
+        assert_eq!(
+            ExportKind::TerminalChart.report_kind(),
+            Some(ReportKind::TerminalChart)
+        );
+        assert_eq!(
+            ExportKind::TerminalDiagram.report_kind(),
+            Some(ReportKind::TerminalDiagram)
+        );
+        assert_eq!(ExportKind::Bom.report_kind(), Some(ReportKind::Bom));
+        assert_eq!(ExportKind::XrefTable.report_kind(), Some(ReportKind::Xref));
+        assert_eq!(ExportKind::Svg.report_kind(), None);
+        assert_eq!(ExportKind::PdfBook.report_kind(), None);
+    }
+
+    /// Only the two terminal reports can be narrowed to a single terminal block.
+    /// 対象を1つの端子台に絞れるのは端子台チャートと端子接続図だけ。
+    #[test]
+    fn only_terminal_reports_take_a_terminal_option() {
+        assert!(ExportKind::TerminalChart.takes_terminal());
+        assert!(ExportKind::TerminalDiagram.takes_terminal());
+        assert!(!ExportKind::WireList.takes_terminal());
+        assert!(!ExportKind::XrefTable.takes_terminal());
+    }
+
+    /// Without --format the output format follows the file extension: .pdf writes a PDF, anything else writes CSV.
+    /// --format省略時は出力先の拡張子に従い、.pdfならPDF、それ以外はCSVになる。
+    #[test]
+    fn report_format_defaults_to_the_file_extension() {
+        assert_eq!(ReportFormat::for_path("/tmp/chart.pdf"), ReportFormat::Pdf);
+        assert_eq!(ReportFormat::for_path("/tmp/CHART.PDF"), ReportFormat::Pdf);
+        assert_eq!(ReportFormat::for_path("/tmp/chart.csv"), ReportFormat::Csv);
+        assert_eq!(ReportFormat::for_path("/tmp/chart"), ReportFormat::Csv);
+    }
+
+    /// The report format names sent to the Link API are "csv" and "pdf".
+    /// Link APIへ送る出力形式の綴りは "csv" と "pdf"。
+    #[test]
+    fn report_format_json_names() {
+        assert_eq!(ReportFormat::Csv.as_json(), "csv");
+        assert_eq!(ReportFormat::Pdf.as_json(), "pdf");
+    }
+
+    /// The terminals URL uses the same sheet_id query name as the other endpoints.
+    /// 端子台一覧のURLも他のエンドポイントと同じsheet_idクエリ名を使う。
+    #[test]
+    fn terminals_url_uses_sheet_id_query_name() {
+        assert_eq!(
+            terminals_url(9310, None),
+            "http://127.0.0.1:9310/api/v1/terminals"
+        );
+        assert_eq!(
+            terminals_url(9310, Some("s1")),
+            "http://127.0.0.1:9310/api/v1/terminals?sheet_id=s1"
+        );
+    }
+
+    /// A --terminal value is treated as an entity id only when it is spelled like a UUID; anything else is a reference designator.
+    /// --terminalの値はUUID表記のときだけentity idとして扱い、それ以外は参照記号とみなす。
+    #[test]
+    fn uuid_shaped_values_are_recognized() {
+        assert!(looks_like_uuid("2f4e0b9a-0000-4000-8000-000000000001"));
+        assert!(!looks_like_uuid("TB1"));
+        assert!(!looks_like_uuid("2f4e0b9a-0000-4000-8000"));
+        assert!(!looks_like_uuid("2f4e0b9z-0000-4000-8000-000000000001"));
     }
 
     /// The report names sent for a PDF book are spelled the same as in the Link API and MCP JSON.
