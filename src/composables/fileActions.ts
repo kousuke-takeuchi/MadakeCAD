@@ -10,9 +10,18 @@ interface Filter {
   extensions: string[];
 }
 
-async function pickSave(defaultPath: string, filters: Filter[]): Promise<string | null> {
+/**
+ * 保存先をOSの保存ダイアログで選ぶ (Tauri外ではプロンプト入力)。
+ * 帳票ダイアログの「参照...」もこれを使う (モーダルの上のモーダルにはならない)。
+ */
+export async function pickSave(defaultPath: string, filters: Filter[]): Promise<string | null> {
   if (inTauri) return dialogSave({ defaultPath, filters });
   return window.prompt("保存先の絶対パス:", `/tmp/${defaultPath}`);
+}
+
+/** 拡張子から保存ダイアログのフィルタを作る (csv / pdf / svg …)。 */
+export function filterFor(extension: string): Filter[] {
+  return [{ name: extension.toUpperCase(), extensions: [extension] }];
 }
 
 async function pickOpen(filters: Filter[]): Promise<string | null> {

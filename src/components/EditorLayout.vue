@@ -14,16 +14,24 @@ import RibbonBar from "./RibbonBar.vue";
 import StatusBar from "./StatusBar.vue";
 import RevisionsDialog from "./RevisionsDialog.vue";
 import WireNumberDialog from "./WireNumberDialog.vue";
+import TerminalEditorDialog from "./TerminalEditorDialog.vue";
+import ReportDialog from "./ReportDialog.vue";
+import PdfBookDialog from "./PdfBookDialog.vue";
 import SymbolPickerDialog from "./SymbolPickerDialog.vue";
 import TitleBar from "./TitleBar.vue";
 import SettingsDialog from "./settings/SettingsDialog.vue";
 import { useRevisionsStore } from "../stores/revisions";
 import { useWireNumbersStore } from "../stores/wireNumbers";
+import { useTerminalsStore } from "../stores/terminals";
+import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
 
 const store = useDocumentStore();
 const ui = useUiStore();
 const revisions = useRevisionsStore();
 const wireNumbers = useWireNumbersStore();
+const terminals = useTerminalsStore();
+const reportDialog = useReportDialogStore();
+const pdfBook = usePdfBookStore();
 const controller = reactive(new EditorController(store)) as EditorController;
 provide("controller", controller);
 const files = useFileActions();
@@ -54,9 +62,24 @@ async function onKeyDown(ev: KeyboardEvent) {
     ev.preventDefault();
     return;
   }
+  if (ev.key === "Escape" && terminals.open) {
+    terminals.close();
+    ev.preventDefault();
+    return;
+  }
+  if (ev.key === "Escape" && reportDialog.open) {
+    reportDialog.cancel();
+    ev.preventDefault();
+    return;
+  }
+  if (ev.key === "Escape" && pdfBook.open) {
+    pdfBook.cancel();
+    ev.preventDefault();
+    return;
+  }
   if (isEditableTarget(ev)) return;
   // モーダル表示中はキャンバスのショートカットを走らせない
-  if (revisions.open || wireNumbers.open) return;
+  if (revisions.open || wireNumbers.open || terminals.open || reportDialog.open || pdfBook.open) return;
   if (await controller.onKeyDown(ev)) ev.preventDefault();
 }
 function onKeyUp(ev: KeyboardEvent) {
@@ -94,6 +117,9 @@ onBeforeUnmount(() => {
     <SettingsDialog />
     <RevisionsDialog />
     <WireNumberDialog />
+    <TerminalEditorDialog />
+    <ReportDialog />
+    <PdfBookDialog />
   </div>
 </template>
 

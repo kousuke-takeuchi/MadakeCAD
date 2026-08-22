@@ -206,6 +206,53 @@ fn export_pdf_book(
     Ok(pages)
 }
 
+/// 端子台エディタ・帳票の対象選択に出す端子台の一覧 (sheet_id省略でプロジェクト全体)。
+#[tauri::command]
+fn list_terminal_blocks(
+    state: State<AppState>,
+    sheet_id: Option<madake_core::SheetId>,
+) -> Vec<madake_core::terminal_chart::TerminalBlockInfo> {
+    let engine = state.doc.engine.lock().unwrap();
+    madake_core::terminal_chart::terminal_block_infos(engine.project(), sheet_id)
+}
+
+/// 端子台1つのチャート (端子ごとの行・ジャンパ)。端子台でなければNone。
+#[tauri::command]
+fn get_terminal_chart(
+    state: State<AppState>,
+    entity_id: madake_core::EntityId,
+) -> Option<madake_core::terminal_chart::TerminalChart> {
+    let engine = state.doc.engine.lock().unwrap();
+    madake_core::terminal_chart::terminal_chart_in_project(engine.project(), entity_id)
+}
+
+/// 端子台チェック (未結線の端子・不正なジャンパ)。
+#[tauri::command]
+fn check_terminal_block(
+    state: State<AppState>,
+    entity_id: madake_core::EntityId,
+) -> Vec<madake_core::verify::Diagnostic> {
+    let engine = state.doc.engine.lock().unwrap();
+    madake_core::terminal_chart::check_terminal_block_in_project(engine.project(), entity_id)
+}
+
+/// 帳票1種を1ファイルへ書き出す。戻り値はCSVなら行数、PDFならページ数。
+#[tauri::command]
+fn export_report(
+    state: State<AppState>,
+    kind: madake_core::report_sheet::ReportKind,
+    format: madake_core::report_sheet::ReportFormat,
+    entity_id: Option<madake_core::EntityId>,
+    path: String,
+) -> Result<usize, String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let (bytes, count) =
+        madake_core::report_sheet::report_bytes(engine.project(), kind, format, entity_id)
+            .map_err(|e| e.to_string())?;
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
 #[tauri::command]
 fn export_bom(state: State<AppState>, path: String) -> Result<(), String> {
     let engine = state.doc.engine.lock().unwrap();
@@ -367,6 +414,10 @@ pub fn run() {
             export_svg,
             export_pdf,
             export_pdf_book,
+            export_report,
+            list_terminal_blocks,
+            get_terminal_chart,
+            check_terminal_block,
             export_bom,
             export_wire_list,
             agent_send,

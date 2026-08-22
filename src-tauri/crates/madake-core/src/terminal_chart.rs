@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::geometry::Point;
-use crate::model::{Entity, EntityId, Project, Sheet, SymbolInstance, Wire};
+use crate::model::{Entity, EntityId, Project, Sheet, SheetId, SymbolInstance, Wire};
 use crate::netlist::{transform_local, CONNECT_EPS};
 use crate::reports::{csv_row, endpoint_label, fmt_num};
 use crate::symbol::{resolve_symbol, sheet_symbol_defs, SymbolDef};
@@ -18,6 +18,12 @@ use crate::verify::{Diagnostic, Severity};
 /// 端子台チャートの列見出し (デザイン「紙 端子台チャート」準拠)。
 pub const TERMINAL_CHART_COLUMNS: [&str; 6] =
     ["端子", "内部側", "線番", "電線", "外部側", "ジャンパ"];
+
+/// プロジェクト全体の端子台チャート (全端子台を1つのCSVにまとめる) の列見出し。
+/// [`TERMINAL_CHART_COLUMNS`] の先頭に端子台の参照記号列を足したもの。
+pub const TERMINAL_CHART_PROJECT_COLUMNS: [&str; 7] = [
+    "端子台", "端子", "内部側", "線番", "電線", "外部側", "ジャンパ",
+];
 
 /// ジャンパの記述が読み取れない・隣り合わない端子に掛かっている。
 pub const JUMPER_INVALID: &str = "terminal.jumper_invalid";
@@ -54,6 +60,75 @@ pub fn terminal_block_ids(project: &Project) -> Vec<EntityId> {
         .flat_map(terminal_blocks)
         .map(|tb| tb.id)
         .collect()
+}
+
+/// 端子台1つの概要 (端子台エディタの切替ドロップダウン・帳票の対象選択に使う)。
+///
+/// チャート本体 ([`TerminalChart`]) より軽く、図面を開かずに一覧を出すためのもの。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TerminalBlockInfo {
+    pub entity_id: EntityId,
+    /// この端子台が載っているシート。
+    pub sheet_id: SheetId,
+    pub sheet_name: String,
+    /// 参照記号 (例 "TB1")。
+    pub reference: String,
+    /// 型番・値。
+    pub value: String,
+    /// 端子数 (極数)。
+    pub terminal_count: usize,
+    /// ジャンパ指定の生の値 (`attrs["jumpers"]`。未設定なら空)。
+    pub jumpers: String,
+}
+
+/// 端子台シンボルの端子数 (ピン番号の種類数)。端子台以外・未知のシンボルは0。
+fn terminal_count_of(inst: &SymbolInstance) -> usize {
+    resolve_symbol(&inst.symbol_id)
+        .map(|def| {
+            def.pins
+                .iter()
+                .map(|p| p.number.clone())
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+        })
+        .unwrap_or(0)
+}
+
+/// プロジェクト内の端子台の概要一覧。`sheet_id`を渡すとそのシートだけに絞る。
+///
+/// 並びは [`terminal_block_ids`] と同じ (シート順→シート内は参照記号順)。
+pub fn terminal_block_infos(project: &Project, sheet_id: Option<SheetId>) -> Vec<TerminalBlockInfo> {
+    project
+        .sheets
+        .iter()
+        .filter(|s| sheet_id.is_none_or(|id| s.id == id))
+        .flat_map(|sheet| {
+            terminal_blocks(sheet).into_iter().map(move |tb| TerminalBlockInfo {
+                entity_id: tb.id,
+                sheet_id: sheet.id,
+                sheet_name: sheet.name.clone(),
+                reference: tb.reference.clone(),
+                value: tb.value.clone(),
+                terminal_count: terminal_count_of(tb),
+                jumpers: tb.attrs.get("jumpers").cloned().unwrap_or_default(),
+            })
+        })
+        .collect()
+}
+
+/// 端子台チャートをプロジェクト全体から探す (シートを跨いでentity idで引く)。
+pub fn terminal_chart_in_project(project: &Project, tb_id: EntityId) -> Option<TerminalChart> {
+    project.sheets.iter().find_map(|s| terminal_chart(s, tb_id))
+}
+
+/// 端子台チェックをプロジェクト全体から探した端子台に対して行う。見つからなければ空。
+pub fn check_terminal_block_in_project(project: &Project, tb_id: EntityId) -> Vec<Diagnostic> {
+    project
+        .sheets
+        .iter()
+        .find(|s| s.entities.contains_key(&tb_id))
+        .map(|s| check_terminal_block(s, tb_id))
+        .unwrap_or_default()
 }
 
 /// 端子台チャートの1行 = 端子1個。
@@ -371,6 +446,27 @@ pub fn terminal_chart_csv(sheet: &Sheet, tb_id: EntityId) -> String {
     for row in chart.cells() {
         out.push_str(&csv_row(&row));
         out.push('\n');
+    }
+    out
+}
+
+/// プロジェクト全体の端子台チャートCSV。見出しは [`TERMINAL_CHART_PROJECT_COLUMNS`]。
+///
+/// 端子台1つ分のCSV ([`terminal_chart_csv`]) の先頭に「端子台」列 (参照記号) を足したもので、
+/// 全端子台の行が シート順→参照記号順→端子番号順 に並ぶ。
+pub fn terminal_charts_csv(project: &Project) -> String {
+    let mut out = TERMINAL_CHART_PROJECT_COLUMNS.join(",");
+    out.push('\n');
+    for id in terminal_block_ids(project) {
+        let Some(chart) = terminal_chart_in_project(project, id) else {
+            continue;
+        };
+        for cells in chart.cells() {
+            let mut row = vec![chart.reference.clone()];
+            row.extend(cells);
+            out.push_str(&csv_row(&row));
+            out.push('\n');
+        }
     }
     out
 }
@@ -780,6 +876,87 @@ mod tests {
         let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
         s.attrs.insert("jumpers".into(), "1-2".into());
         assert!(check_terminal_block(&sheet, id).is_empty());
+    }
+
+    /// The editor lists every terminal block of the project with its sheet, its pole count and its jumpers, sheet by sheet and in reference-designator order.
+    /// 端子台エディタの一覧には、プロジェクトの全端子台がシート順・参照記号順に、所在シート・極数・ジャンパ付きで並ぶ。
+    #[test]
+    fn the_editor_lists_every_terminal_block_with_its_sheet_poles_and_jumpers() {
+        let mut project = Project::new("t");
+        let (mut sheet1, tb1) = sheet_with_tb(4, 0);
+        let Some(Entity::Symbol(tb)) = sheet1.entities.get_mut(&tb1) else { panic!() };
+        tb.attrs.insert("jumpers".into(), "1-2".into());
+        let (mut sheet2, tb2) = sheet_with_tb(8, 0);
+        sheet2.name = "Sheet2".into();
+        let Some(Entity::Symbol(tb)) = sheet2.entities.get_mut(&tb2) else { panic!() };
+        tb.reference = "TB2".into();
+        tb.symbol_id = "terminal_block_8p".into();
+        project.sheets = vec![sheet1, sheet2];
+
+        let infos = terminal_block_infos(&project, None);
+        assert_eq!(infos.len(), 2);
+        assert_eq!(infos[0].reference, "TB1");
+        assert_eq!(infos[0].sheet_name, "Sheet1");
+        assert_eq!(infos[0].terminal_count, 4);
+        assert_eq!(infos[0].jumpers, "1-2");
+        assert_eq!(infos[1].reference, "TB2");
+        assert_eq!(infos[1].terminal_count, 8);
+        assert_eq!(infos[1].jumpers, "", "ジャンパ未設定なら空");
+    }
+
+    /// Naming a sheet narrows the list to the terminal blocks drawn on that sheet.
+    /// シートを指定すると、そのシートに描かれている端子台だけの一覧になる。
+    #[test]
+    fn naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet() {
+        let mut project = Project::new("t");
+        let (sheet1, _) = sheet_with_tb(4, 0);
+        let (mut sheet2, tb2) = sheet_with_tb(4, 0);
+        sheet2.name = "Sheet2".into();
+        let Some(Entity::Symbol(tb)) = sheet2.entities.get_mut(&tb2) else { panic!() };
+        tb.reference = "TB2".into();
+        let sheet2_id = sheet2.id;
+        project.sheets = vec![sheet1, sheet2];
+
+        let infos = terminal_block_infos(&project, Some(sheet2_id));
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].reference, "TB2");
+        assert_eq!(infos[0].sheet_id, sheet2_id);
+    }
+
+    /// Symbols that are not terminal blocks never show up in the list.
+    /// 端子台ではないシンボルは一覧に出ない。
+    #[test]
+    fn other_symbols_never_show_up_in_the_terminal_block_list() {
+        let mut project = Project::new("t");
+        let (mut sheet, _) = sheet_with_tb(4, 0);
+        add_resistor(&mut sheet, "R1", 85.0, 42.5);
+        project.sheets = vec![sheet];
+        let refs: Vec<String> = terminal_block_infos(&project, None)
+            .into_iter()
+            .map(|i| i.reference)
+            .collect();
+        assert_eq!(refs, ["TB1"]);
+    }
+
+    /// The chart and the check of a terminal block can be looked up by entity id alone, without knowing which sheet it sits on.
+    /// 端子台のチャートとチェックは、どのシートにあるかを知らなくてもentity idだけで引ける。
+    #[test]
+    fn a_terminal_block_can_be_looked_up_by_id_across_sheets() {
+        let mut project = Project::new("t");
+        let (sheet1, _) = sheet_with_tb(4, 0);
+        let (mut sheet2, tb2) = sheet_with_tb(4, 0);
+        sheet2.name = "Sheet2".into();
+        let Some(Entity::Symbol(tb)) = sheet2.entities.get_mut(&tb2) else { panic!() };
+        tb.reference = "TB2".into();
+        project.sheets = vec![sheet1, sheet2];
+
+        let chart = terminal_chart_in_project(&project, tb2).expect("チャート");
+        assert_eq!(chart.reference, "TB2");
+        assert_eq!(chart.sheet_name, "Sheet2");
+        let diags = check_terminal_block_in_project(&project, tb2);
+        assert_eq!(diags.len(), 4, "未結線の4端子が予備として報告される");
+        assert!(terminal_chart_in_project(&project, Uuid::new_v4()).is_none());
+        assert!(check_terminal_block_in_project(&project, Uuid::new_v4()).is_empty());
     }
 
     /// Jumpers are set with the ordinary update_entity command, so the chart follows the change and undo takes it back.

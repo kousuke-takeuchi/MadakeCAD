@@ -252,6 +252,64 @@ export interface Net {
   wire_no?: string | null;
 }
 
+/** 端子台チャートの1行 = 端子1個 (madake-coreの`TerminalRow`)。 */
+export interface TerminalRow {
+  /** 端子番号 (例 "1")。 */
+  terminal: string;
+  /** 内部側 (盤内) の接続先 "参照記号:ピン番号"。 */
+  internal: string;
+  /** 外部側 (盤外) の接続先。 */
+  external: string;
+  wire_no: string;
+  /** 電線の仕様 (線色・sq・品番)。 */
+  wire: string;
+  internal_wire: string;
+  external_wire: string;
+  internal_harness: string;
+  external_harness: string;
+  /** この端子に掛かっているジャンパ (例 "1-2")。 */
+  jumper: string;
+  /** 予備端子 (内部側・外部側とも未結線)。 */
+  spare: boolean;
+}
+
+/** 読み取れなかったジャンパ指定1件。 */
+export interface JumperIssue {
+  text: string;
+  code: string;
+  message: string;
+}
+
+/** 端子台1つのチャート (madake-coreの`TerminalChart`)。 */
+export interface TerminalChart {
+  entity_id: string;
+  reference: string;
+  value: string;
+  sheet_name: string;
+  terminal_count: number;
+  rows: TerminalRow[];
+  /** 正規化済みのジャンパ (小さい端子番号が先)。 */
+  jumpers: [number, number][];
+  jumper_issues: JumperIssue[];
+}
+
+/** 端子台1つの概要 (エディタの切替ドロップダウン・帳票の対象選択)。 */
+export interface TerminalBlockInfo {
+  entity_id: string;
+  sheet_id: string;
+  sheet_name: string;
+  reference: string;
+  value: string;
+  terminal_count: number;
+  /** ジャンパ指定の生の値 (`attrs["jumpers"]`)。 */
+  jumpers: string;
+}
+
+/** 帳票の種類 (Rustの`ReportKind`と同じケバブケース表記)。 */
+export type ReportKind = "wire-list" | "terminal-chart" | "terminal-diagram" | "bom" | "xref";
+/** 帳票の出力形式 (CSV or 図枠付き図面シートのPDF)。 */
+export type ReportFormat = "csv" | "pdf";
+
 interface Ipc {
   getProject(): Promise<ProjectSnapshot>;
   listSymbols(): Promise<SymbolDef[]>;
@@ -273,6 +331,24 @@ interface Ipc {
   exportPdf(sheetId: string, path: string): Promise<void>;
   exportBom(path: string): Promise<void>;
   exportWireList(path: string): Promise<void>;
+  /** シート内 (nullでプロジェクト全体) の端子台一覧。 */
+  listTerminalBlocks(sheetId: string | null): Promise<TerminalBlockInfo[]>;
+  /** 端子台1つのチャート。端子台でなければnull。 */
+  getTerminalChart(entityId: string): Promise<TerminalChart | null>;
+  /** 端子台チェック (未結線・不正なジャンパ)。 */
+  checkTerminalBlock(entityId: string): Promise<Diagnostic[]>;
+  /**
+   * 帳票1種を1ファイルへ書き出す。entityIdは端子台チャート・端子接続図の対象を
+   * 1つの端子台に絞るときだけ渡す。戻り値=CSVなら行数、PDFならページ数。
+   */
+  exportReport(
+    kind: ReportKind,
+    format: ReportFormat,
+    entityId: string | null,
+    path: string,
+  ): Promise<number>;
+  /** 表紙+回路図全シート+選択帳票を1つのPDFへ。戻り値=ページ数。 */
+  exportPdfBook(path: string, reports: ReportKind[], cover: boolean): Promise<number>;
   onPatch(handler: (patch: Patch) => void): Promise<UnlistenFn>;
 }
 
@@ -296,6 +372,16 @@ const tauriIpc: Ipc = {
   exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
   exportBom: (path: string) => invoke<void>("export_bom", { path }),
   exportWireList: (path: string) => invoke<void>("export_wire_list", { path }),
+  listTerminalBlocks: (sheetId: string | null) =>
+    invoke<TerminalBlockInfo[]>("list_terminal_blocks", { sheetId }),
+  getTerminalChart: (entityId: string) =>
+    invoke<TerminalChart | null>("get_terminal_chart", { entityId }),
+  checkTerminalBlock: (entityId: string) =>
+    invoke<Diagnostic[]>("check_terminal_block", { entityId }),
+  exportReport: (kind, format, entityId, path) =>
+    invoke<number>("export_report", { kind, format, entityId, path }),
+  exportPdfBook: (path, reports, cover) =>
+    invoke<number>("export_pdf_book", { path, includeReports: reports, cover }),
   onPatch: (handler: (patch: Patch) => void): Promise<UnlistenFn> =>
     listen<Patch>("doc:patch", (e) => handler(e.payload)),
 };
@@ -356,6 +442,31 @@ const httpIpc: Ipc = {
   },
   exportWireList: async (path) => {
     await http("/export/wire-list", { method: "POST", body: JSON.stringify({ path }) });
+  },
+  listTerminalBlocks: (sheetId) =>
+    http<TerminalBlockInfo[]>(`/terminals${sheetId ? `?sheet_id=${sheetId}` : ""}`),
+  getTerminalChart: async (entityId) => {
+    try {
+      return await http<TerminalChart>(`/terminals/chart?entity_id=${entityId}`);
+    } catch {
+      // 端子台ではない (400) 場合はチャート無し
+      return null;
+    }
+  },
+  checkTerminalBlock: (entityId) => http<Diagnostic[]>(`/terminals/check?entity_id=${entityId}`),
+  exportReport: async (kind, format, entityId, path) => {
+    const res = await http<{ count: number }>("/export/report", {
+      method: "POST",
+      body: JSON.stringify({ kind, format, entity_id: entityId, path }),
+    });
+    return res.count;
+  },
+  exportPdfBook: async (path, reports, cover) => {
+    const res = await http<{ pages: number }>("/export/pdf-book", {
+      method: "POST",
+      body: JSON.stringify({ path, include_reports: reports, cover }),
+    });
+    return res.pages;
   },
   onPatch: (handler) => {
     const es = new EventSource(`${API_BASE}/events`);

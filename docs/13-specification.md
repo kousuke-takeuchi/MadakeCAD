@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**499 specification clauses** across 5 areas.
+**547 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -128,6 +128,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The cross-reference sheet lists each net with the pins it connects and the sheet it appears on. <sub>`xref_table_sheet_lists_nets_and_pins`</sub>
 - The cover page shows the project name, every sheet with its drawing number, and the newest revision of the whole project. <sub>`cover_page_shows_project_sheets_and_latest_revision`</sub>
 - A project without any revision says so on the cover instead of leaving the line blank. <sub>`cover_page_states_when_there_is_no_revision`</sub>
+- Exporting a report as CSV returns the same table the drawing sheet shows, and reports how many body rows it wrote. <sub>`a_csv_export_returns_the_table_and_its_row_count`</sub>
+- Asking for the terminal chart of the whole project puts the reference designator of each terminal block in the first column. <sub>`a_project_wide_terminal_chart_names_the_terminal_block_in_each_row`</sub>
+- Exporting a report as PDF binds the framed drawing pages into one PDF file and reports the page count. <sub>`a_pdf_export_binds_the_framed_pages_into_one_file`</sub>
+- The terminal connection diagram is a drawing, so it cannot be exported as CSV and says so. <sub>`the_terminal_connection_diagram_has_no_csv_form`</sub>
+- Pointing a terminal report at something that is not a terminal block fails instead of writing an empty file. <sub>`a_terminal_report_of_an_unknown_block_fails`</sub>
+- Every other report ignores the terminal selection and always covers the whole project. <sub>`other_reports_always_cover_the_whole_project`</sub>
+- The cross-reference CSV carries the same column headings as its drawing sheet. <sub>`the_cross_reference_csv_has_the_same_columns_as_its_sheet`</sub>
 - Report kinds are serialized with the same kebab-case names the CLI and Link API use. <sub>`report_kind_json_names_match_cli_spelling`</sub>
 
 ### Reports (BOM / wire list)
@@ -213,6 +220,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The terminal block check reports a jumper between non-adjacent terminals as an error. <sub>`the_check_reports_an_invalid_jumper_as_an_error`</sub>
 - The terminal block check reports a jumper to a terminal that does not exist as an error. <sub>`the_check_reports_a_jumper_to_a_missing_terminal_as_an_error`</sub>
 - A terminal block with every terminal wired and correct jumpers passes the check with nothing to report. <sub>`a_fully_wired_terminal_block_passes_the_check`</sub>
+- The editor lists every terminal block of the project with its sheet, its pole count and its jumpers, sheet by sheet and in reference-designator order. <sub>`the_editor_lists_every_terminal_block_with_its_sheet_poles_and_jumpers`</sub>
+- Naming a sheet narrows the list to the terminal blocks drawn on that sheet. <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
+- Symbols that are not terminal blocks never show up in the list. <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
+- The chart and the check of a terminal block can be looked up by entity id alone, without knowing which sheet it sits on. <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
 - Jumpers are set with the ordinary update_entity command, so the chart follows the change and undo takes it back. <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
 
 ### Terminal connection diagrams
@@ -637,6 +648,26 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - search stores the results from the parts API <sub>`parts store`</sub>
 - a failed search clears the results and resets loading <sub>`parts store`</sub>
 
+### Reports (BOM / wire list)
+
+- offers the five report kinds of the reports tab <sub>`report generation dialog store`</sub>
+- opens a project-wide report as a CSV export <sub>`report generation dialog store`</sub>
+- switches the same report to a framed drawing-sheet PDF <sub>`report generation dialog store`</sub>
+- lets the terminal chart target one terminal block as well as the whole project <sub>`report generation dialog store`</sub>
+- offers PDF only for the graphical terminal connection diagram <sub>`report generation dialog store`</sub>
+- opens with the drawing-sheet PDF already chosen when asked for it <sub>`report generation dialog store`</sub>
+- falls back to a format the report actually has <sub>`report generation dialog store`</sub>
+- swaps the targets and the formats when another report is picked in the dialog <sub>`report generation dialog store`</sub>
+- suggests a file name from the report, the target and the format <sub>`report generation dialog store`</sub>
+- cannot generate anything while the output path is empty <sub>`report generation dialog store`</sub>
+- writes the report once, reports how much it wrote and closes <sub>`report generation dialog store`</sub>
+- keeps the dialog open and shows the error when the export fails <sub>`report generation dialog store`</sub>
+- includes the cover and every report by default <sub>`PDF book dialog store`</sub>
+- keeps the chosen reports in the fixed report order <sub>`PDF book dialog store`</sub>
+- can drop the cover and every report to export the schematics alone <sub>`PDF book dialog store`</sub>
+- cannot export while the output path is empty <sub>`PDF book dialog store`</sub>
+- writes one file, reports the page count and closes <sub>`PDF book dialog store`</sub>
+
 ### revisions
 
 - adds the first row with mark A and today's date <sub>`revisions dialog store`</sub>
@@ -665,6 +696,29 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - run fetches the DC result and opens the panel <sub>`simulation store`</sub>
 - toggled switches are passed as open_switches on the next run <sub>`simulation store`</sub>
 - failures (e.g. ngspice missing) keep the error message and still open the panel <sub>`simulation store`</sub>
+
+### terminals
+
+- normalizes a jumper list to ascending, low-first, duplicate-free pairs <sub>`jumper specification`</sub>
+- drops malformed entries and jumpers between terminals that are not neighbours <sub>`jumper specification`</sub>
+- adds a jumper for adjacent terminals while keeping the existing ones <sub>`jumper specification`</sub>
+- chains jumpers along a run of three or more adjacent terminals <sub>`jumper specification`</sub>
+- refuses to jumper terminals that are not adjacent <sub>`jumper specification`</sub>
+- removes only the jumpers that touch the selected terminals <sub>`jumper specification`</sub>
+- loads the terminal blocks of the sheet and shows the first one <sub>`terminal strip editor store`</sub>
+- shows one grid row per terminal with the wiring taken from the drawing <sub>`terminal strip editor store`</sub>
+- marks terminals with no wire at all as spare <sub>`terminal strip editor store`</sub>
+- writes a jumper into the symbol attributes with one update_entity command <sub>`terminal strip editor store`</sub>
+- cannot generate a jumper while no terminal is selected <sub>`terminal strip editor store`</sub>
+- cannot generate a jumper between terminals that are not adjacent <sub>`terminal strip editor store`</sub>
+- clears only the jumpers on the selected terminals <sub>`terminal strip editor store`</sub>
+- drops the jumper attribute entirely once no jumper is left <sub>`terminal strip editor store`</sub>
+- reloads the chart after editing a jumper so the grid keeps matching the model <sub>`terminal strip editor store`</sub>
+- summarizes the terminal block check as counts per severity <sub>`terminal strip editor store`</sub>
+- reports a clean terminal block when the check finds nothing <sub>`terminal strip editor store`</sub>
+- clears the selection and the previous check result when another block is picked <sub>`terminal strip editor store`</sub>
+- shows an empty grid on a sheet without any terminal block <sub>`terminal strip editor store`</sub>
+- throws away the chart, the selection and the check result when closed <sub>`terminal strip editor store`</sub>
 
 ### ui
 

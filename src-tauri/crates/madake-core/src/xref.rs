@@ -339,6 +339,17 @@ pub fn xref_table_rows(project: &Project) -> Vec<Vec<String>> {
     rows
 }
 
+/// クロスリファレンス表のCSV。見出しは [`XREF_TABLE_COLUMNS`]、行は [`xref_table_rows`]。
+pub fn xref_table_csv(project: &Project) -> String {
+    let mut out = XREF_TABLE_COLUMNS.join(",");
+    out.push('\n');
+    for row in xref_table_rows(project) {
+        out.push_str(&crate::reports::csv_row(&row));
+        out.push('\n');
+    }
+    out
+}
+
 /// シート内でそのネットの配線に載っているネットラベル (entity id, 名前)。
 fn labels_on_net(sheet: &Sheet, net: &Net) -> (Vec<EntityId>, BTreeSet<String>) {
     let wires: Vec<&crate::model::Wire> = net
