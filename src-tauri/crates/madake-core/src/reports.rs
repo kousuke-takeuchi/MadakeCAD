@@ -8,7 +8,7 @@ use crate::netlist::{pin_positions, CONNECT_EPS};
 use crate::symbol::{sheet_symbol_defs, SymbolDef};
 
 /// CSVフィールドのエスケープ(カンマ・引用符・改行を含む場合はクォート)。
-fn csv_escape(s: &str) -> String {
+pub(crate) fn csv_escape(s: &str) -> String {
     if s.contains(',') || s.contains('"') || s.contains('\n') {
         format!("\"{}\"", s.replace('"', "\"\""))
     } else {
@@ -16,7 +16,7 @@ fn csv_escape(s: &str) -> String {
     }
 }
 
-fn csv_row(fields: &[String]) -> String {
+pub(crate) fn csv_row(fields: &[String]) -> String {
     fields
         .iter()
         .map(|f| csv_escape(f))
@@ -25,7 +25,7 @@ fn csv_row(fields: &[String]) -> String {
 }
 
 /// 数値をCSV向けに整形(整数なら小数点なし)。
-fn fmt_num(v: f64) -> String {
+pub(crate) fn fmt_num(v: f64) -> String {
     if v == 0.0 {
         String::new()
     } else if (v - v.round()).abs() < 1e-9 {

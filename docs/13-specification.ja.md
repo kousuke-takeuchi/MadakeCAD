@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**437仕様項目**。
+全5領域・**457仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -164,6 +164,29 @@
 - resolve_symbolは同梱idを見つけ、不正・範囲外の動的ID(0極・51極・数値なし)は拒否する。 <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defsは同梱ライブラリに加え、シートで実際に使われている動的シンボルの定義を返す。 <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
 - シンボル定義はJSONに往復変換しても失われない。 <sub>`symbol_json_roundtrip`</sub>
+
+### 端子台チャート
+
+- 端子台のチャートは端子1個につき1行で、端子番号の順に並ぶ。 <sub>`the_chart_has_one_row_per_terminal_in_number_order`</sub>
+- 端子の左側に繋がっているものが内部側 (盤内)、右側に繋がっているものが外部側 (盤外) になる。 <sub>`the_left_side_is_the_inside_and_the_right_side_is_the_outside`</sub>
+- 端子台を180度回転させると内外も入れ替わる。内部側はあくまで用紙上で左に描かれている側である。 <sub>`a_terminal_block_rotated_180_degrees_still_takes_the_paper_left_as_the_inside`</sub>
+- 端子台を90度回して横向きに置くと接続点は上下に並び、上側が内部側として扱われる。 <sub>`a_sideways_terminal_block_takes_the_upper_connection_as_the_inside`</sub>
+- どちら側にも電線が繋がっていない端子は、内部側・外部側とも空欄の予備端子として行が残る。 <sub>`an_unwired_terminal_stays_as_a_spare_row`</sub>
+- 各行にはその電線に振られた線番と、電線の仕様 (線色・線径sq・品番) が載る。 <sub>`a_row_shows_the_wire_number_and_the_wire_specification`</sub>
+- 内部側と外部側で電線が違うときは、行に両方の電線が並ぶ。 <sub>`both_wires_are_listed_when_the_inside_and_outside_differ`</sub>
+- ジャンパの記述は正規化される。各組は小さい番号が先になり、重複は除かれ、昇順に並ぶ。 <sub>`jumpers_are_normalized`</sub>
+- 隣り合っていない端子どうしのジャンパは受け付けられず、同じ記述内の正しいジャンパは残る。 <sub>`a_jumper_between_non_adjacent_terminals_is_rejected`</sub>
+- 端子番号2つの組になっていないジャンパの記述は、異常終了せずエラーとして報告される。 <sub>`unreadable_jumper_text_is_reported`</sub>
+- 端子台に無い端子番号を指すジャンパは、存在しない端子として報告される。 <sub>`a_jumper_to_a_terminal_that_does_not_exist_is_reported`</sub>
+- ジャンパの記述が空なら、ジャンパは無いという意味になる。 <sub>`no_jumper_text_means_no_jumpers`</sub>
+- ジャンパは、それが繋ぐ両方の端子のジャンパ欄に表示される。 <sub>`a_jumper_is_shown_on_both_of_its_terminals`</sub>
+- 端子台チャートのCSVは 端子・内部側・線番・電線・外部側・ジャンパ の列を持ち、端子1個につき1行になる。 <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
+- 端子台ではないものにチャートを求めても何も返らない。 <sub>`only_terminal_blocks_have_a_chart`</sub>
+- 端子台チェックは未結線の端子をすべて情報として報告するので、予備端子は間違い扱いされずに見える。 <sub>`the_check_reports_unwired_terminals_as_information`</sub>
+- 端子台チェックは、隣り合わない端子に掛けられたジャンパをエラーとして報告する。 <sub>`the_check_reports_an_invalid_jumper_as_an_error`</sub>
+- 端子台チェックは、存在しない端子へのジャンパをエラーとして報告する。 <sub>`the_check_reports_a_jumper_to_a_missing_terminal_as_an_error`</sub>
+- 全端子が結線されジャンパも正しい端子台は、チェックで何も指摘されない。 <sub>`a_fully_wired_terminal_block_passes_the_check`</sub>
+- ジャンパは通常のupdate_entityコマンドで設定するので、チャートに反映され、undoで元に戻る。 <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
 
 ### 検証 (ERC・電気検証)
 

@@ -55,6 +55,7 @@ MODULES = {
     "svg": ("SVG output (JIS frame)", "SVG出力 (JIS図枠)"),
     "pdf": ("PDF output", "PDF出力"),
     "reports": ("Reports (BOM / wire list)", "帳票 (部品表 / 電線リスト)"),
+    "terminal_chart": ("Terminal block charts", "端子台チャート"),
     "verify": ("Verification (ERC & electrical)", "検証 (ERC・電気検証)"),
     "spice": ("SPICE netlist generation", "SPICEネットリスト生成"),
     "ngspice": ("ngspice runner", "ngspiceランナー"),
