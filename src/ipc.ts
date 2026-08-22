@@ -164,10 +164,21 @@ export interface ProjectSnapshot {
   can_redo: boolean;
 }
 
+/** ピンの接続方向 (シンボルの外側へ電線が出る向き。回転0度基準)。 */
+export type PinDir = "up" | "down" | "left" | "right";
+
 export interface PinDef {
   number: string;
   name: string;
   at: Point;
+  dir?: PinDir;
+}
+
+/** 属性テキストの流し込み位置 (参照記号・型番・説明・定格)。 */
+export interface TextSlot {
+  key: string;
+  at: Point;
+  height: number;
 }
 
 export type Primitive =
@@ -183,8 +194,11 @@ export interface SymbolDef {
   name_ja: string;
   category: string;
   ref_prefix: string;
+  /** 検索語 (英語+日本語+略称)。名称に無い呼び方でも部品挿入ダイアログで探せる。 */
+  keywords?: string[];
   primitives: Primitive[];
   pins: PinDef[];
+  text_slots?: TextSlot[];
 }
 
 /** 部品DB (グローバル共有マスタ) の1部品。 */

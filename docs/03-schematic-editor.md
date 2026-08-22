@@ -7,7 +7,7 @@ A purpose-built editor for industrial electrical schematics, modeled on the conv
 ## Available
 
 - **Canvas**: pan (middle button / Space), wheel zoom, grid display, paper outline, crosshair cursor. Coordinates in mm, top-left origin
-- **Symbols**: JIS C 0617 symbol library (resistor, fuse, relay coil/contact, switches, lamp, motor, battery, ground, terminal, …) plus **parametric symbols** — `connector_{n}p` and `terminal_block_{n}p` with 1–50 poles at 5 mm pitch. Terminal blocks model feed-through terminals (left/right points of a terminal are internally connected)
+- **Symbols**: 47 bundled JIS C 0617 / IEC 60617 symbols — supplies and conversion (AC source, transformer, bridge rectifier, protective/frame earth), protection (fuse, 1/2/3-pole circuit breakers, disconnectors), operating switches (pushbuttons NO/NC, emergency stop, changeover and three-position switches, limit switches), relays and contactors (coil, NO/NC/changeover contacts, 3-pole contactor), semiconductors, passive parts, loads (motors 3-phase/single-phase/DC, lamp, bell), instruments (voltmeter, ammeter, current transformer) and connectors — plus **parametric symbols** `connector_{n}p` and `terminal_block_{n}p` with 1–50 poles at 5 mm pitch. Every symbol carries pin connection directions, attribute slots (reference, part number, description, rating) and bilingual search keywords; multi-pole devices are numbered pole by pole (1/2, 3/4, 5/6) and conduct pole by pole. Terminal blocks model feed-through terminals (left/right points of a terminal are internally connected)
 - **Placement**: insert dialog with search, per-category grid, pole-count stepper for parametric parts, and a parts-database section that applies part number and rated current on placement. Ghost preview, `R` to rotate, automatic reference designators (F1, K2, TB1, …)
 - **Wiring**: orthogonal polyline tool with grid snap and pin snap (diamond marker); junctions; net labels; free text annotations
 - **Editing**: click/shift/marquee selection, drag-move (grid-snapped), delete, full undo/redo (⌘Z / ⇧⌘Z) — every edit from every entry point (UI, AI, CLI, API) shares one history
@@ -27,5 +27,5 @@ A purpose-built editor for industrial electrical schematics, modeled on the conv
 - Macro value sets: placeholders that apply ratings and part numbers across a whole macro in one go, and adding variants beyond `A` from the save dialog (M4 phase 3)
 - Dragging an unplaced device function (a reserved contact) from the device navigator onto the drawing (M4 phase 3)
 - PLC I/O drawings and reports (M4)
-- Symbol editor for user-defined symbols and an expanded bundled library (M4)
+- Symbol editor for user-defined symbols (M4)
 - 2D panel layout sheets; customizable frame / title-block templates (M4)

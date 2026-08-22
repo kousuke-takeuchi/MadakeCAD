@@ -8,6 +8,7 @@ import { computed, inject, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { DYNAMIC_PIN_MAX, dynamicSymbol } from "../canvas/dynamicSymbol";
 import { macroDescription, macroName, macroVariantLabel } from "../canvas/macroPreview";
+import { groupSymbolsByCategory } from "../canvas/symbolLibrary";
 import { CONTACT_CONFIG_ATTR } from "../canvas/relayXref";
 import type { Part } from "../ipc";
 import type { EditorController } from "../tools/controller";
@@ -47,20 +48,14 @@ const dynamicCells = computed(() => {
     .filter((d) => !q || d.label.toLowerCase().includes(q) || d.base.includes(q));
 });
 
+// カテゴリの並び・所属はバックエンドのライブラリ順 (symbol.rs CATEGORY_ORDER) に従う
 const categories = computed(() => {
-  const q = query.value.trim().toLowerCase();
-  const map = new Map<string, typeof store.symbols>();
-  for (const s of store.symbols) {
-    if (q && !s.name_ja.toLowerCase().includes(q) && !s.name.toLowerCase().includes(q) && !s.id.includes(q)) {
-      continue;
-    }
-    const arr = map.get(s.category) ?? [];
-    arr.push(s);
-    map.set(s.category, arr);
-  }
+  const groups = groupSymbolsByCategory(store.symbols, query.value);
   // 動的セル(端子台/コネクタ)が検索に一致する場合はコネクタカテゴリを必ず出す
-  if (dynamicCells.value.length > 0 && !map.has("connector")) map.set("connector", []);
-  return [...map.entries()];
+  if (dynamicCells.value.length > 0 && !groups.some(([cat]) => cat === "connector")) {
+    groups.push(["connector", []]);
+  }
+  return groups;
 });
 
 /** カテゴリの表示名 (未知の分類はキーをそのまま出す)。 */

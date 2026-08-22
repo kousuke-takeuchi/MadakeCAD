@@ -10,7 +10,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | Commandエンジン | ✅ | 全編集がCommand経由。逆コマンドによるundo/redo、Patch(revision付き)のbroadcast |
 | ドキュメントモデル | ✅ | Project / Sheet(JIS図枠・表題欄・改訂欄・ゾーン) / Entity(Symbol・Wire・Junction・NetLabel・Text・Harness) |
 | 保存形式 `.mdkproj` | ✅ | 整形JSON(git差分可読)。チャット履歴は`<名前>.chat.json`を併存 |
-| シンボルライブラリ | ✅ | JIS C 0617系の静的15種(リレーはコイル・a接点・b接点)+動的シンボル`connector_{n}p`/`terminal_block_{n}p`(n=1..50、5mmピッチ中央揃え)。端子台は左右貫通端子 |
+| シンボルライブラリ | ✅ | JIS C 0617 / IEC 60617系の静的47種(電源・変換・接地7/保護6/操作スイッチ8/リレー・電磁接触器5/半導体3/受動6/負荷・報知6/計測3/接続3)+動的シンボル`connector_{n}p`/`terminal_block_{n}p`(n=1..50、5mmピッチ中央揃え)。全記号がピンの接続方向(up/down/left/right)・属性スロット(TAG/PART/DESC/RATING)・検索キーワード(en+ja)を持つ。多極機器(遮断器・断路器・電磁接触器)は端子1/2・3/4・5/6で極ごとに導通。端子台は左右貫通端子 |
 | 座標系 | ✅ | mm・左上原点・Y下向き。2.5mmグリッド、回転0/90/180/270 |
 | ヘッドレス実行 | ✅ | コアはUI非依存(全ロジックがmadake-coreに集中) |
 

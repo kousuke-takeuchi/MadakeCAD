@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**999仕様項目**。
+全5領域・**1040仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -114,6 +114,7 @@
 - ネットラベルは常に線番より優先され、線番は自動名 (N001) より優先される。 <sub>`net_name_prefers_label_then_wire_number_then_auto_name`</sub>
 - ピン座標はシンボルの回転(Y下向き座標系で時計回り)と配置位置を反映する。 <sub>`pin_positions_apply_rotation_and_translation`</sub>
 - ミラーは回転より先に、縦軸に対してピンを反転する。 <sub>`pin_positions_apply_mirror_before_rotation`</sub>
+- シンボル内の弧はシンボルと一緒に回るので、電磁接触器の半円はどの回転角でも可動接点の側を向き続け、ミラーでは描画方向を保ったまま左右が入れ替わる。 <sub>`arc_angles_follow_symbol_rotation_and_mirror`</sub>
 
 ### ngspiceランナー
 
@@ -273,6 +274,38 @@
 - リレーコイルのシンボルは、JISのコイル端子記号A1・A2と参照記号の接頭辞Kを持つ。 <sub>`relay_coil_has_a1_a2_terminals`</sub>
 - リレー接点はa接点・b接点の2種類があり、コイルと同じ参照記号の接頭辞を持ち、2つの接続点が2.5mmグリッド上にある。 <sub>`relay_contacts_come_in_make_and_break_types`</sub>
 - シンボル定義はJSONに往復変換しても失われない。 <sub>`symbol_json_roundtrip`</sub>
+- 同梱ライブラリはJIS C 0617の主要記号を50種規模で網羅し、idはすべて一意である。 <sub>`library_covers_the_main_jis_symbols`</sub>
+- すべてのピンは2.5mmグリッド上にあり、接続点ごとに番号が決まっていて、シンボル本体の外側を向いている。 <sub>`every_pin_is_on_the_grid_and_points_outwards`</sub>
+- すべてのシンボルは4つの属性スロット(参照記号・型番・説明・定格)を持ち、外形に重ならない位置に置かれる。 <sub>`every_symbol_exposes_the_standard_attribute_slots`</sub>
+- シンボルは部品挿入ダイアログの表示順にカテゴリごとまとまって並び、英語・日本語のキーワードで検索できる。 <sub>`symbols_are_grouped_by_category_in_display_order`</sub>
+- 初版から同梱している記号はid・カテゴリ・参照記号の接頭辞・ピン番号・ピン位置が変わらないため、ライブラリ拡充前に描いた図面もそのまま同じに描画される。 <sub>`legacy_symbols_keep_their_definition`</sub>
+- 電磁接触器(3極)は極ごとにコンタクタの半円付きa接点を描き、端子は1/2・3/4・5/6、極をつなぐ連動線は破線で表す。 <sub>`contactor_3p_has_three_ganged_main_contacts`</sub>
+- 単極の配線用遮断器(MCB)は固定接点に遮断器の×印を付けたa接点で、端子は1と2である。 <sub>`circuit_breaker_1p_marks_the_fixed_contact_with_a_cross`</sub>
+- 2極・3極の配線用遮断器は極を5mmピッチで並べ、端子を1/2・3/4(・5/6)と振る。 <sub>`circuit_breaker_multipole_numbers_terminals_by_pole`</sub>
+- 断路器は固定接点を、遮断器の×印ではなく可動接点に直交する短い棒で表す。 <sub>`disconnector_marks_the_fixed_contact_with_a_bar`</sub>
+- 3極の断路器は3つの可動接点を連動させ、端子は1/2・3/4・5/6になる。 <sub>`disconnector_3p_gangs_three_blades`</sub>
+- b接点の押しボタンは、a接点と同じ2つの接続点を持ち、押しボタンの操作子が付く。 <sub>`pushbutton_nc_is_a_break_contact_with_a_button_actuator`</sub>
+- 非常停止は、きのこ形の頭部を持つb接点で、叩くと回路が開く。 <sub>`emergency_stop_is_a_break_contact_with_a_mushroom_head`</sub>
+- 切替スイッチは共通端子1つと固定接点2つを持ち、操作していない状態では可動接点がb接点側に載っている。 <sub>`switch_spdt_has_a_common_and_two_fixed_contacts`</sub>
+- 3位置切替スイッチは可動接点が中立位置にあり、どちらの固定接点にも接触していない状態で描く。 <sub>`switch_3pos_shows_the_blade_in_neutral`</sub>
+- リミットスイッチはa接点・b接点の2種類があり、どちらも位置スイッチの操作子(ロッド先端の塗りつぶし四角)で動く。 <sub>`limit_switch_comes_in_make_and_break_types`</sub>
+- リレーの切替接点(c接点)は、IECの端子番号11(共通)・12(b接点)・14(a接点)を使う。 <sub>`relay_contact_co_uses_iec_terminal_numbers`</sub>
+- 変圧器(2巻線)は鉄心を挟んで両側に巻線を半円で描き、一次側が端子1/2、二次側が端子3/4になる。 <sub>`transformer_has_two_windings_around_a_core`</sub>
+- 交流電源は円の中に正弦波を描いた記号で、接続点は2つである。 <sub>`ac_source_is_a_circle_with_a_sine_wave`</sub>
+- 整流器(ブリッジ)は菱形の中にダイオードを描いた記号で、交流側が左右、直流側が上(+)と下(-)の端子になる。 <sub>`rectifier_bridge_has_ac_and_dc_terminals`</sub>
+- 保護接地は接地記号を円で囲み、機能接地(フレーム接地)はシャーシ記号で表す。どちらも接続点は1つ。 <sub>`earth_symbols_distinguish_protective_and_frame_earth`</sub>
+- ツェナーダイオードはダイオードの形を保ちつつ、陰極バーの両端を折り曲げた形で描く。 <sub>`zener_diode_bends_the_cathode_bar`</sub>
+- 有極性コンデンサは片方の極板を塗りつぶし、プラス側の端子を「+」で示す。 <sub>`capacitor_polarized_marks_the_positive_plate`</sub>
+- インダクタ(コイル)は導線の上に並んだ半円で描く。 <sub>`inductor_is_a_row_of_half_circles`</sub>
+- 可変抵抗器は抵抗器の外形を斜めに貫く矢印を加えた形で描く。 <sub>`resistor_variable_adds_an_arrow_across_the_body`</sub>
+- バリスタは抵抗器を斜線が貫き「U」を添えた形で、電圧に依存する抵抗であることを示す。 <sub>`varistor_is_a_voltage_dependent_resistor`</sub>
+- 三相電動機は円の上側にU・V・Wの3つの相端子を持つ。 <sub>`motor_3ph_has_u_v_w_terminals`</sub>
+- 単相電動機と直流電動機は電動機の円を共有し、中に書く「1~」と直流記号で区別する。 <sub>`motor_1ph_and_dc_are_told_apart_by_the_mark_inside`</sub>
+- ベルは底辺の上に半円を載せたドーム形で、接続点は2つである。 <sub>`bell_is_a_dome_with_two_terminals`</sub>
+- 電圧計・電流計は「V」「A」を書いた円で、2端子の計器として回路に入れる。 <sub>`voltmeter_and_ammeter_are_circles_marked_v_and_a`</sub>
+- 変流器は一次導体が鉄心を貫き、二次側にS1・S2の2端子を持つ。 <sub>`current_transformer_has_primary_through_and_secondary_terminals`</sub>
+- 差込接続器のプラグとソケットは向かい合う形で、プラグはくさび形、ソケットはそれを受ける半円形になる。 <sub>`connector_plug_and_socket_face_each_other`</sub>
+- 多極機器は極ごと(端子1-2・3-4・5-6)に導通するため、相どうしがつながっている扱いにはならない。 <sub>`multipole_devices_conduct_pole_by_pole`</sub>
 
 ### 開始テンプレート
 
@@ -373,6 +406,7 @@
 - シート1枚の中のラベル競合は、プロジェクト全体を検証しても1件だけ報告される。 <sub>`project_verification_reports_a_single_sheet_label_conflict_once`</sub>
 - 同名ラベルでシートを跨いで繋がったネットは1ネットとして検査されるので、2枚に跨る競合も全ラベルを挙げた1件として報告される。 <sub>`project_verification_merges_label_conflicts_across_sheets`</sub>
 - 同じラベル名でシートを跨いで続くネットは、競合ではない。 <sub>`project_verification_accepts_a_net_continued_onto_another_sheet`</sub>
+- 多極の遮断器は極ごとに導通するため、結線されていない極につながる負荷は電源から到達できないと報告される。 <sub>`multipole_breaker_does_not_connect_its_poles_to_each_other`</sub>
 
 ### 線番採番
 
@@ -896,6 +930,8 @@
 - 列は記号・日付・内容・承認の4つで、合計幅は表題欄の幅と一致する <sub>`revisionLayout`</sub>
 - 表示対象の改訂は新しい方から6件までで、古い順のまま返る <sub>`visibleRevisions / effectiveRev`</sub>
 - 表題欄のRev欄は最新改訂の記号を出し、改訂が無ければ表題欄の値、それも空ならハイフンを出す <sub>`visibleRevisions / effectiveRev`</sub>
+- シンボル内の弧はシンボルと一緒に回るので、電磁接触器の半円はどの回転角でも可動接点の側を向く <sub>`rotateArcAngles`</sub>
+- ミラーは弧を左右反転させるが、描画方向(開始→終了を時計回り)は保つ <sub>`rotateArcAngles`</sub>
 
 ### search
 
@@ -942,6 +978,14 @@
 - ↑↓で所在を巡回し、端まで行くと回り込む <sub>`Surferポップアップ`</sub>
 - 行をクリックするとその所在が選ばれ、範囲外の行は無視される <sub>`Surferポップアップ`</sub>
 - Escで閉じると巡回位置も先頭へ戻る <sub>`Surferポップアップ`</sub>
+
+### symbolLibrary
+
+- 検索語は英語名・日本語名・シンボルidのどれに当たっても一致する <sub>`symbolMatchesQuery`</sub>
+- 名称に無い現場の呼び方 (NFB・マグネットスイッチ等) も検索キーワードで見つかる <sub>`symbolMatchesQuery`</sub>
+- 空の検索語はすべてのシンボルに一致する <sub>`symbolMatchesQuery`</sub>
+- シンボルはライブラリの並び順のままカテゴリごとにまとまる <sub>`groupSymbolsByCategory`</sub>
+- 検索語を渡すと一致するシンボルだけが残り、空になったカテゴリは消える <sub>`groupSymbolsByCategory`</sub>
 
 ### viewClasses
 

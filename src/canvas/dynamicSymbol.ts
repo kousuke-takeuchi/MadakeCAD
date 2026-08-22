@@ -29,7 +29,7 @@ export function dynamicSymbol(id: string): SymbolDef | null {
       const y = offset(i, n);
       primitives.push({ type: "text", at: p(-2, y), text: String(i + 1), height: 2 });
       primitives.push({ type: "line", pts: [p(4, y), p(7.5, y)] });
-      pins.push({ number: String(i + 1), name: "", at: p(7.5, y) });
+      pins.push({ number: String(i + 1), name: "", at: p(7.5, y), dir: "right" });
     }
     return {
       id,
@@ -56,8 +56,8 @@ export function dynamicSymbol(id: string): SymbolDef | null {
       primitives.push({ type: "line", pts: [p(-2.5, y), p(-1.8, y)] });
       primitives.push({ type: "line", pts: [p(1.8, y), p(2.5, y)] });
       // 貫通端子: 左右2接続点に同一ピン番号(ネットリストで内部短絡)
-      pins.push({ number: no, name: "", at: p(-2.5, y) });
-      pins.push({ number: no, name: "", at: p(2.5, y) });
+      pins.push({ number: no, name: "", at: p(-2.5, y), dir: "left" });
+      pins.push({ number: no, name: "", at: p(2.5, y), dir: "right" });
     }
     return {
       id,
