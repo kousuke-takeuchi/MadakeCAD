@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 /// v2: partsに`spice_model`列を追加 (過渡解析・非線形モデル用のSPICE素子行)。
 /// v3: partsに`contact_config`列を追加 (リレーの接点構成。コイル⇔接点XRefの接点数検証用)。
 /// v4: partsに`plc_module`列を追加 (PLC I/Oモジュールの定義JSON。点数・入出力・アドレス体系)。
-pub const SCHEMA_VERSION: u32 = 4;
+/// v5: 列は変えず、同梱のPLCモジュールのサンプルを追補する (v4で列だけ足してサンプルを
+///     入れ損ねたDBがあり、PLC I/O図面を作るときにモジュールを1つも選べなかったため)。
+pub const SCHEMA_VERSION: u32 = 5;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PartsError {
@@ -98,6 +100,55 @@ fn plc_module_part(
         rated_voltage: "DC24V".into(),
         plc_module: spec.to_json(),
         ..Default::default()
+    }
+}
+
+/// 同梱するPLC I/Oモジュールのサンプル (三菱・Siemens・Allen-Bradleyのアドレス体系)。
+/// 新規作成時のサンプル投入と、v3以前のDBをv4へ移行するときの追補の両方で使う。
+fn plc_sample_parts() -> Vec<Part> {
+    vec![
+        plc_module_part(
+            "MDK-PLC-DI16-MITSUBISHI",
+            "PLC入力ユニット 16点 (三菱 FX5-16EX相当)",
+            16,
+            crate::plc::PlcIoKind::Di,
+            "X",
+            crate::plc::PlcAddressStyle::Mitsubishi,
+        ),
+        plc_module_part(
+            "MDK-PLC-DO16-MITSUBISHI",
+            "PLC出力ユニット 16点 トランジスタ (三菱 FX5-16EYT相当)",
+            16,
+            crate::plc::PlcIoKind::Do,
+            "Y",
+            crate::plc::PlcAddressStyle::Mitsubishi,
+        ),
+        plc_module_part(
+            "MDK-PLC-DI8-SIEMENS",
+            "PLC入力ユニット 8点 (Siemens SM1221相当)",
+            8,
+            crate::plc::PlcIoKind::Di,
+            "%I",
+            crate::plc::PlcAddressStyle::Siemens,
+        ),
+        plc_module_part(
+            "MDK-PLC-DI16-AB",
+            "PLC入力ユニット 16点 (Allen-Bradley 1756-IB16相当)",
+            16,
+            crate::plc::PlcIoKind::Di,
+            "I:",
+            crate::plc::PlcAddressStyle::Ab,
+        ),
+    ]
+}
+
+/// サンプル部品の共通欄 (メーカ名・注記・通貨) を埋める。
+fn as_sample(part: &Part) -> Part {
+    Part {
+        maker: "サンプル".into(),
+        note: "同梱サンプル (ダミー型番)".into(),
+        currency: default_currency(),
+        ..part.clone()
     }
 }
 
@@ -242,6 +293,17 @@ impl PartsDb {
                 [],
             )?;
         }
+        if from < 5 {
+            // v4→v5: PLCモジュールのサンプルを追補する。
+            // 既に作られていたDBには列が増えただけでサンプルが1件も入らず、そのままでは
+            // PLC I/O図面の生成でモジュールを1つも選べなかった。
+            // 同じ型番の部品が既にあれば触らない (利用者が直したサンプルを上書きしない)。
+            for part in plc_sample_parts() {
+                if self.get_part(&part.part_no)?.is_none() {
+                    self.upsert_part(&as_sample(&part))?;
+                }
+            }
+        }
         self.conn.execute(
             "UPDATE meta SET value=?1 WHERE key='schema_version'",
             [SCHEMA_VERSION.to_string()],
@@ -305,31 +367,6 @@ impl PartsDb {
                 price: Some(600.0),
                 ..Default::default()
             },
-            // PLC I/Oモジュール (M4仕様 §3)。メーカ別のアドレス体系をひと通り揃える
-            plc_module_part(
-                "MDK-PLC-DI16-MITSUBISHI",
-                "PLC入力ユニット 16点 (三菱 FX5-16EX相当)",
-                16,
-                crate::plc::PlcIoKind::Di,
-                "X",
-                crate::plc::PlcAddressStyle::Mitsubishi,
-            ),
-            plc_module_part(
-                "MDK-PLC-DO16-MITSUBISHI",
-                "PLC出力ユニット 16点 トランジスタ (三菱 FX5-16EYT相当)",
-                16,
-                crate::plc::PlcIoKind::Do,
-                "Y",
-                crate::plc::PlcAddressStyle::Mitsubishi,
-            ),
-            plc_module_part(
-                "MDK-PLC-DI8-SIEMENS",
-                "PLC入力ユニット 8点 (Siemens SM1221相当)",
-                8,
-                crate::plc::PlcIoKind::Di,
-                "%I",
-                crate::plc::PlcAddressStyle::Siemens,
-            ),
             Part {
                 part_no: "MDK-CONN-3P".into(),
                 name: "コネクタ 3極".into(),
@@ -340,12 +377,9 @@ impl PartsDb {
                 ..Default::default()
             },
         ];
-        for p in &samples {
-            let mut sample = p.clone();
-            sample.maker = "サンプル".into();
-            sample.note = "同梱サンプル (ダミー型番)".into();
-            sample.currency = default_currency();
-            self.upsert_part(&sample)?;
+        // PLC I/Oモジュール (M4仕様 §3)。メーカ別のアドレス体系をひと通り揃える
+        for p in samples.iter().chain(plc_sample_parts().iter()) {
+            self.upsert_part(&as_sample(p))?;
         }
         for (part_no, color, sq) in [
             ("MDK-W-03SB", "light_blue", 0.3),
@@ -735,8 +769,61 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 
-    /// The bundled samples include three PLC modules that cover the Mitsubishi, Siemens and Allen-Bradley address styles.
-    /// 同梱サンプルには三菱・Siemens・Allen-Bradleyのアドレス体系をひと通り含む3種のPLCモジュールが入っている。
+    /// Opening an older parts database adds the bundled PLC module samples, so PLC I/O drawings can be generated without registering a module by hand.
+    /// 前のバージョンで作られた部品DBを開くと同梱のPLCモジュールのサンプルが追補されるので、モジュールを手で登録しなくてもPLC I/O図面を作れる。
+    #[test]
+    fn an_older_database_gains_the_bundled_plc_module_samples() {
+        for from in [3, 4] {
+            let path = tmp_db(&format!("migrate-v5-plc-samples-{from}"));
+            {
+                let conn = rusqlite::Connection::open(&path).unwrap();
+                conn.execute_batch(&format!(
+                    "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                     INSERT INTO meta VALUES ('schema_version', '{from}');
+                     CREATE TABLE parts (
+                       part_no TEXT PRIMARY KEY,
+                       maker TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '',
+                       category TEXT NOT NULL DEFAULT '', symbol_id TEXT NOT NULL DEFAULT '',
+                       rated_voltage TEXT NOT NULL DEFAULT '', rated_current_a REAL,
+                       purchase_url TEXT NOT NULL DEFAULT '', datasheet_url TEXT NOT NULL DEFAULT '',
+                       price REAL, currency TEXT NOT NULL DEFAULT 'JPY',
+                       note TEXT NOT NULL DEFAULT '', model_3d TEXT NOT NULL DEFAULT '',
+                       mounting TEXT NOT NULL DEFAULT '', spice_model TEXT NOT NULL DEFAULT '',
+                       contact_config TEXT NOT NULL DEFAULT ''{plc_column}
+                     );
+                     -- サンプルと同じ型番を自分で登録済みのケース (上書きされてはいけない)
+                     INSERT INTO parts (part_no, name) VALUES ('MDK-PLC-DI8-SIEMENS', '自分で登録した部品');
+                     CREATE TABLE wire_parts (
+                       part_no TEXT PRIMARY KEY, color TEXT NOT NULL, sq REAL NOT NULL,
+                       purchase_url TEXT NOT NULL DEFAULT '', price_per_m REAL,
+                       note TEXT NOT NULL DEFAULT ''
+                     );",
+                    plc_column = if from >= 4 {
+                        ", plc_module TEXT NOT NULL DEFAULT ''"
+                    } else {
+                        ""
+                    }
+                ))
+                .unwrap();
+            }
+            let db = PartsDb::open(&path).unwrap();
+            let modules = db.list_plc_modules().unwrap();
+            assert!(
+                modules.len() >= 3,
+                "v{from}から移行したDBでもPLCモジュールを選べる: {modules:?}"
+            );
+            // 同じ型番の既存部品はそのまま (PLCモジュール定義も付かない)
+            let mine = db.get_part("MDK-PLC-DI8-SIEMENS").unwrap().unwrap();
+            assert_eq!(mine.name, "自分で登録した部品");
+            assert_eq!(mine.plc_module, "");
+            // PLC以外のサンプルは再投入されない (旧版で既にseed済みの想定)
+            assert!(db.get_part("MDK-FUSE-5A").unwrap().is_none());
+            std::fs::remove_file(&path).ok();
+        }
+    }
+
+    /// The bundled samples include PLC modules covering the Mitsubishi, Siemens and Allen-Bradley address styles.
+    /// 同梱サンプルには三菱・Siemens・Allen-Bradleyのアドレス体系をひと通り含むPLCモジュールが入っている。
     #[test]
     fn sample_plc_modules_cover_the_three_address_styles() {
         let path = tmp_db("plc-samples");
@@ -752,6 +839,16 @@ mod tests {
         assert!(specs
             .iter()
             .any(|s| s.address_style == crate::plc::PlcAddressStyle::Siemens && s.points == 8));
+        for style in [
+            crate::plc::PlcAddressStyle::Mitsubishi,
+            crate::plc::PlcAddressStyle::Siemens,
+            crate::plc::PlcAddressStyle::Ab,
+        ] {
+            assert!(
+                specs.iter().any(|s| s.address_style == style),
+                "{style:?}のサンプルがある: {specs:?}"
+            );
+        }
         // モジュールは点数に合った動的シンボルを既定に持つ
         for (part, spec) in modules.iter().zip(&specs) {
             assert_eq!(part.symbol_id, spec.symbol_id(), "{}", part.part_no);

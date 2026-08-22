@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1216仕様項目**。
+全5領域・**1217仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -144,7 +144,8 @@
 - 旧スキーマv2のDBは開いた時点でv3へ移行され、既存データを保持したままcontact_config列が使えるようになる。 <sub>`v2_database_migrates_to_v3_preserving_data`</sub>
 - 同梱のサンプルリレーは接点構成を持っているので、配置直後から接点数超過の検証ができる。 <sub>`sample_relay_part_has_a_contact_configuration`</sub>
 - 旧スキーマv3のDBは開いた時点でv4へ移行され、既存データを保持したままplc_module列が使えるようになる。 <sub>`v3_database_migrates_to_v4_preserving_data`</sub>
-- 同梱サンプルには三菱・Siemens・Allen-Bradleyのアドレス体系をひと通り含む3種のPLCモジュールが入っている。 <sub>`sample_plc_modules_cover_the_three_address_styles`</sub>
+- 前のバージョンで作られた部品DBを開くと同梱のPLCモジュールのサンプルが追補されるので、モジュールを手で登録しなくてもPLC I/O図面を作れる。 <sub>`an_older_database_gains_the_bundled_plc_module_samples`</sub>
+- 同梱サンプルには三菱・Siemens・Allen-Bradleyのアドレス体系をひと通り含むPLCモジュールが入っている。 <sub>`sample_plc_modules_cover_the_three_address_styles`</sub>
 - PLCモジュールの一覧はモジュール定義を持つ部品だけを返すので、普通の部品がモジュールライブラリに紛れ込まない。 <sub>`the_plc_module_list_contains_only_parts_with_a_module_definition`</sub>
 - DBパスの既定はOSのアプリデータフォルダで、MADAKE_PARTS_DBで上書きできる。 <sub>`default_path_respects_env_override`</sub>
 

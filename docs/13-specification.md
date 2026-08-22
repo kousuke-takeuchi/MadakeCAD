@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1216 specification clauses** across 5 areas.
+**1217 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -144,7 +144,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An old schema-v2 database migrates to v3 on open, preserving existing rows and gaining the contact_config column. <sub>`v2_database_migrates_to_v3_preserving_data`</sub>
 - The bundled sample relay carries its contact configuration, so a freshly placed relay can be checked for contact overflow. <sub>`sample_relay_part_has_a_contact_configuration`</sub>
 - An old schema-v3 database migrates to v4 on open, preserving existing rows and gaining the plc_module column. <sub>`v3_database_migrates_to_v4_preserving_data`</sub>
-- The bundled samples include three PLC modules that cover the Mitsubishi, Siemens and Allen-Bradley address styles. <sub>`sample_plc_modules_cover_the_three_address_styles`</sub>
+- Opening an older parts database adds the bundled PLC module samples, so PLC I/O drawings can be generated without registering a module by hand. <sub>`an_older_database_gains_the_bundled_plc_module_samples`</sub>
+- The bundled samples include PLC modules covering the Mitsubishi, Siemens and Allen-Bradley address styles. <sub>`sample_plc_modules_cover_the_three_address_styles`</sub>
 - The PLC module list contains only parts that carry a module definition, so ordinary parts never show up in the module library. <sub>`the_plc_module_list_contains_only_parts_with_a_module_definition`</sub>
 - The database path defaults to the OS app-data folder and can be overridden with MADAKE_PARTS_DB. <sub>`default_path_respects_env_override`</sub>
 

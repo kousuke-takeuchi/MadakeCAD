@@ -1072,7 +1072,7 @@ mod tests {
         project
             .sheets
             .push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
-        let mut put = |sheet: &mut Sheet, symbol_id: &str, x: f64, y: f64| {
+        let put = |sheet: &mut Sheet, symbol_id: &str, x: f64, y: f64| {
             let e = Entity::Symbol(SymbolInstance {
                 id: Uuid::new_v4(),
                 symbol_id: symbol_id.into(),
