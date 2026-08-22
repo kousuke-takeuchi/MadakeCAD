@@ -239,17 +239,22 @@ pub fn assigned_module_refs(project: &Project) -> Vec<String> {
 ///
 /// **行は割付表の順**で、n行目がモジュールの点n番に対応する。図面にそのモジュールが
 /// 置かれていなければ接続先・線番は空欄のままになる。
+///
+/// 同じモジュールが複数のシートに描かれていることがある (I/O図面を生成すると元のシートと
+/// 生成したページの両方に置かれる) ので、**すべての置き場所の結線をまとめて**読む。
 pub fn plc_points(project: &Project, module_ref: &str) -> Vec<PlcPoint> {
-    let placed = project.sheets.iter().find_map(|sheet| {
-        sheet.entities.values().find_map(|e| match e {
-            Entity::Symbol(s)
-                if is_plc_module(&s.symbol_id) && s.reference == module_ref =>
-            {
-                Some((sheet, s))
-            }
-            _ => None,
+    let placed: Vec<(&Sheet, &SymbolInstance)> = project
+        .sheets
+        .iter()
+        .flat_map(|sheet| {
+            sheet.entities.values().filter_map(move |e| match e {
+                Entity::Symbol(s) if is_plc_module(&s.symbol_id) && s.reference == module_ref => {
+                    Some((sheet, s))
+                }
+                _ => None,
+            })
         })
-    });
+        .collect();
     project
         .plc_assignments
         .iter()
@@ -257,38 +262,47 @@ pub fn plc_points(project: &Project, module_ref: &str) -> Vec<PlcPoint> {
         .enumerate()
         .map(|(i, a)| {
             let point = i + 1;
-            let (target, wire_no) = placed
-                .map(|(sheet, inst)| point_connection(sheet, inst, &point.to_string()))
-                .unwrap_or_default();
+            let mut targets: Vec<String> = Vec::new();
+            let mut numbers: Vec<String> = Vec::new();
+            for (sheet, inst) in &placed {
+                point_connection(sheet, inst, &point.to_string(), &mut targets, &mut numbers);
+            }
+            targets.sort();
+            numbers.sort();
             PlcPoint {
                 point,
                 address: a.address.clone(),
                 signal_name: a.signal_name.clone(),
                 comment: a.comment.clone(),
-                target,
-                wire_no,
+                target: targets.join(", "),
+                wire_no: numbers.join("/"),
             }
         })
         .collect()
 }
 
-/// モジュールの1点に繋がっている電線から (接続先, 線番) を読む。
+/// モジュールの1点に繋がっている電線から接続先と線番を読み、`targets`/`numbers`へ足す
+/// (同じものは重複させない)。
 ///
-/// 接続先は電線の**反対側**の端の表記 ([`endpoint_label`]) で、複数あれば ", " で並べる。
-fn point_connection(sheet: &Sheet, inst: &SymbolInstance, pin_no: &str) -> (String, String) {
+/// 接続先は電線の**反対側**の端の表記 ([`endpoint_label`])。
+fn point_connection(
+    sheet: &Sheet,
+    inst: &SymbolInstance,
+    pin_no: &str,
+    targets: &mut Vec<String>,
+    numbers: &mut Vec<String>,
+) {
     let Some(def) = resolve_symbol(&inst.symbol_id) else {
-        return (String::new(), String::new());
+        return;
     };
     let Some(at) = pin_positions(inst, &def)
         .into_iter()
         .find(|(no, _)| no == pin_no)
         .map(|(_, p)| p)
     else {
-        return (String::new(), String::new());
+        return;
     };
     let defs = sheet_symbol_defs(sheet);
-    let mut targets: Vec<String> = Vec::new();
-    let mut numbers: Vec<String> = Vec::new();
     for entity in sheet.entities.values() {
         let Entity::Wire(w) = entity else { continue };
         if !on_wire(w, &at) {
@@ -309,9 +323,6 @@ fn point_connection(sheet: &Sheet, inst: &SymbolInstance, pin_no: &str) -> (Stri
             }
         }
     }
-    targets.sort();
-    numbers.sort();
-    (targets.join(", "), numbers.join("/"))
 }
 
 /// I/Oレポートの行 ([`PLC_IO_PROJECT_COLUMNS`]と同じ並び)。図面シート化・CSVから使う。
@@ -993,6 +1004,74 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    /// Wiring a field device onto a generated rung makes that device the target of the matching point in the assignment table.
+    /// 生成したラングへ現場機器を結線すると、その機器が割付表の対応する点の接続先になる。
+    #[test]
+    fn a_device_wired_onto_a_generated_rung_becomes_that_points_target() {
+        let (mut project, _) = project_with_module(4);
+        project.plc_assignments = vec![
+            assignment("PLC1", "X0", "非常停止", ""),
+            assignment("PLC1", "X1", "運転指令", ""),
+            assignment("PLC1", "X2", "停止指令", ""),
+            assignment("PLC1", "X3", "予備", ""),
+        ];
+        let mut engine = Engine::new(project);
+        generate_plc_sheet(
+            &mut engine,
+            "PLC1",
+            &spec(4, PlcIoKind::Di, "X", PlcAddressStyle::Mitsubishi),
+            &PlcSheetOptions::default(),
+            EditOrigin::User,
+        )
+        .unwrap();
+        // 生成された1点目のラングの、母線側の端へ非常停止押釦を置く
+        let sheet = engine.project().sheets.last().unwrap();
+        let Entity::Symbol(module) = sheet
+            .entities
+            .values()
+            .find(|e| matches!(e, Entity::Symbol(s) if s.reference == "PLC1"))
+            .unwrap()
+            .clone()
+        else {
+            panic!()
+        };
+        let def = resolve_symbol(&module.symbol_id).unwrap();
+        let pin1 = pin_positions(&module, &def)
+            .into_iter()
+            .find(|(no, _)| no == "1")
+            .unwrap()
+            .1;
+        let bus_end = sheet
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Wire(w) if w.points.last() == Some(&pin1) => w.points.first().copied(),
+                _ => None,
+            })
+            .expect("1点目のラングがある");
+        let sid = sheet.id;
+        let pb = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            // ピン1が母線側の端に重なる位置 (ピンは中心から±7.5mm)
+            symbol_id: "emergency_stop".into(),
+            at: Point::new(bus_end.x + 7.5, bus_end.y),
+            rotation: 0,
+            mirror: false,
+            reference: "PB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        });
+        engine
+            .execute(crate::command::Command::AddEntity {
+                sheet_id: sid,
+                entity: pb,
+            })
+            .unwrap();
+        let points = plc_points(engine.project(), "PLC1");
+        assert_eq!(points[0].target, "PB1:1", "結線した押釦が1点目の接続先になる");
+        assert_eq!(points[1].target, "", "他の点は空欄のまま");
     }
 
     /// Rungs sit at the requested vertical spacing, and the requested number of leading rung positions is left empty.

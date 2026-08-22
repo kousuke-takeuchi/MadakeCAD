@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1217 specification clauses** across 5 areas.
+**1218 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -175,6 +175,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Each point of the assignment table picks up the connected device and the wire number from the drawing. <sub>`each_point_picks_up_its_target_and_wire_number_from_the_drawing`</sub>
 - The modules placed on the drawing are listed with their point count and I/O kind, so the editor can offer them for selection. <sub>`placed_modules_are_listed_with_their_point_count_and_kind`</sub>
 - Generating an I/O drawing adds one new sheet whose ladder has one rung per point of the module. <sub>`generating_an_io_drawing_makes_one_rung_per_point`</sub>
+- Wiring a field device onto a generated rung makes that device the target of the matching point in the assignment table. <sub>`a_device_wired_onto_a_generated_rung_becomes_that_points_target`</sub>
 - Rungs sit at the requested vertical spacing, and the requested number of leading rung positions is left empty. <sub>`rungs_follow_the_requested_spacing_and_leading_skip`</sub>
 - The whole generated page is a single edit, so one undo removes the sheet and everything on it. <sub>`a_generated_io_page_is_undone_in_one_step`</sub>
 - Generating twice adds a second sheet instead of overwriting the first one. <sub>`generating_twice_adds_a_second_sheet`</sub>

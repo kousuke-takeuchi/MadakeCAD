@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1217仕様項目**。
+全5領域・**1218仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -175,6 +175,7 @@
 - 割付表の各点は、図面の結線から接続先の機器と線番を拾ってくる。 <sub>`each_point_picks_up_its_target_and_wire_number_from_the_drawing`</sub>
 - 図面に置かれたPLCモジュールは点数と入出力の種別つきで一覧でき、エディタの選択肢にできる。 <sub>`placed_modules_are_listed_with_their_point_count_and_kind`</sub>
 - I/O図面の生成はシートを1枚増やし、そのラダーにはモジュールの点数ぶんのラングが並ぶ。 <sub>`generating_an_io_drawing_makes_one_rung_per_point`</sub>
+- 生成したラングへ現場機器を結線すると、その機器が割付表の対応する点の接続先になる。 <sub>`a_device_wired_onto_a_generated_rung_becomes_that_points_target`</sub>
 - ラングは指定したラング間隔で並び、先頭の指定本数ぶんの位置は空けられる。 <sub>`rungs_follow_the_requested_spacing_and_leading_skip`</sub>
 - 生成したページ全体が1回の編集なので、undo一発でシートごと消える。 <sub>`a_generated_io_page_is_undone_in_one_step`</sub>
 - 2回生成すると1枚目を上書きせず、2枚目のシートが増える。 <sub>`generating_twice_adds_a_second_sheet`</sub>
