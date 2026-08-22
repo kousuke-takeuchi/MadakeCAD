@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**654仕様項目**。
+全5領域・**676仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -264,6 +264,29 @@
 - 端子接続図はterminal-diagramという名前の帳票として選べ、CLI・Link API・MCPで同じ綴りになる。 <sub>`the_terminal_diagram_is_a_report_named_terminal_diagram`</sub>
 - 端子台が1つも無いプロジェクトでも1ページは出るので、帳票が空になることはない。 <sub>`a_project_without_terminal_blocks_still_yields_one_page`</sub>
 
+### 整えメトリクス (交差・重なり・グリッド)
+
+- 2本の配線がX字に横切っていると、配線交差数は1になる。 <sub>`two_wires_laid_across_each_other_count_as_one_crossing`</sub>
+- 触れ合わない配線どうしには交差が無い。 <sub>`wires_that_never_meet_have_no_crossings`</sub>
+- 端点を共有してつながっている2本の配線は接続であって交差ではない。 <sub>`wires_joined_at_a_shared_endpoint_are_not_a_crossing`</sub>
+- 片方の端点が相手の途中に乗るT分岐は接続点であり、交差には数えない。 <sub>`a_t_branch_landing_on_another_wire_is_not_a_crossing`</sub>
+- 1本の折れ線配線の曲がり角は交差ではない: 同じ配線の連続する線分どうしは数えない。 <sub>`the_corner_of_a_polyline_wire_is_not_a_crossing`</sub>
+- 自分自身の上を横切るように引き回した配線は、離れた線分どうしが交差するので交差に数える。 <sub>`a_wire_crossing_its_own_route_counts_as_a_crossing`</sub>
+- 一部が重なって二重に引かれた配線は交差1件として数える (直すべき箇所が1つだから)。 <sub>`wires_drawn_on_top_of_each_other_count_as_one_crossing`</sub>
+- 同一直線上で端どうしが突き合わさっているだけの配線は接続であり、重なりではない。 <sub>`wires_meeting_end_to_end_on_one_line_are_not_a_crossing`</sub>
+- 重なって印字される2つの注記は、重なり1件として数える。 <sub>`two_notes_printed_over_each_other_overlap`</sub>
+- 外枠が辺で接しているだけの2つの注記は、重なりに数えない。 <sub>`notes_that_only_touch_along_an_edge_do_not_overlap`</sub>
+- 十分に離して置かれた注記は重ならない。 <sub>`notes_placed_well_apart_do_not_overlap`</sub>
+- シンボルの外形の上に印字された注記は、重なりとして数える。 <sub>`a_note_printed_over_a_symbol_outline_overlaps`</sub>
+- シンボルの外形の上端でぴたりと止まる注記は、接しているだけで重なっていない。 <sub>`a_note_stopping_at_the_symbol_edge_does_not_overlap`</sub>
+- 重ねて置かれたシンボルどうしの重なりは、ラベルの重なりとは別に数える。 <sub>`symbols_placed_on_top_of_each_other_are_counted_separately`</sub>
+- シンボル自身の参照記号は、その持ち主のシンボルとの重なりには数えない。 <sub>`a_reference_designator_never_overlaps_its_own_symbol`</sub>
+- シンボル原点も配線頂点も2.5mmグリッドに乗っていれば、グリッド外は0件になる。 <sub>`entities_on_the_grid_report_no_off_grid_points`</sub>
+- グリッドから0.1mmずれた点は数えられ、ずれた頂点1つにつき1件になる。 <sub>`a_point_shifted_a_tenth_of_a_millimetre_is_off_grid`</sub>
+- 何も置かれていないシートは完全に整っており、全てのメトリクスが0になる。 <sub>`an_empty_sheet_scores_zero_on_every_metric`</sub>
+- tidy_metricsは1枚のシートの4つの数値をまとめて1つの値で返す。 <sub>`tidy_metrics_gathers_the_four_counts`</sub>
+- 同じシートを2回測ると全く同じ数値になるので、エージェントは編集の前後を比べられる。 <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
+
 ### 検証 (ERC・電気検証)
 
 - 完全に結線された回路ではERCの指摘は出ない。 <sub>`fully_wired_pair_has_no_erc_findings`</sub>
@@ -357,6 +380,11 @@
 - GET /templates は同梱の開始テンプレートを英日の名前つきで返す。 <sub>`the_link_api_lists_the_bundled_templates`</sub>
 - POST /templates/apply はテンプレートを1回の編集としてシートへ入れ、undo一発で戻せる。 <sub>`applying_a_template_over_the_link_api_is_one_undo_step`</sub>
 - シートidを省くと先頭シートが対象になり、知らないテンプレートidは400で拒否される。 <sub>`the_link_api_defaults_to_the_first_sheet_and_refuses_unknown_templates`</sub>
+
+### 整えメトリクス (MCPツール / REST)
+
+- 整えメトリクスのツール説明には「整えループの目標値として使う」ことと、数える3つの対象が書かれている。 <sub>`the_tidy_metrics_tool_is_advertised_as_the_tidy_loop_target`</sub>
+- GET /api/v1/tidy-metrics はシートの交差数・ラベル重なり数・シンボル重なり数・グリッド外数をJSONで返す。 <sub>`tidy_metrics_endpoint_returns_the_four_counts`</sub>
 
 ### tools
 

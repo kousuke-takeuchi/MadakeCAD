@@ -36,9 +36,17 @@ const REV_HEADER_FONT: f64 = 2.2;
 /// セル内テキストの左余白 (mm)。
 pub(crate) const CELL_PAD: f64 = 2.0;
 /// 線番テキストの文字高さ (mm)。
-const WIRE_NO_FONT: f64 = 2.5;
+pub(crate) const WIRE_NO_FONT: f64 = 2.5;
 /// 線番テキストと配線の間隔 (mm)。グリッドピッチと同じ。
-const WIRE_NO_GAP: f64 = 2.5;
+pub(crate) const WIRE_NO_GAP: f64 = 2.5;
+/// 参照記号・型番・ネットラベルの文字高さ (mm)。
+pub(crate) const LABEL_FONT: f64 = 2.5;
+/// 参照記号のベースラインを、シンボル外形の上端からどれだけ上に置くか (mm)。
+pub(crate) const REF_LABEL_DY: f64 = 4.5;
+/// 型番・値のベースラインを、シンボル外形の上端からどれだけ上に置くか (mm)。
+pub(crate) const VALUE_LABEL_DY: f64 = 1.0;
+/// ネットラベルのベースラインを、基準点からどれだけ上に置くか (mm)。
+pub(crate) const NET_LABEL_DY: f64 = 1.0;
 /// ハーネス境界の破線 (IEC 61082-1 のグループ囲み)。線の長さと間隔 mm。
 const HARNESS_DASH: (f64, f64) = (3.0, 2.0);
 /// ハーネス境界の線幅 (mm)。図面の主線より細い補助線。
@@ -274,7 +282,7 @@ fn revision_block(out: &mut String, sheet: &Sheet, tx: f64, ty: f64) {
 }
 
 /// 配置後のシンボル外形の上端Y(用紙座標)。参照記号・型番の重なり回避用。
-fn symbol_top_y(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> f64 {
+pub(crate) fn symbol_top_y(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> f64 {
     let mut top = inst.at.y;
     let mut visit = |p: Point| {
         let t = transform_local(p, inst);
@@ -365,15 +373,18 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
     // 参照記号と型番/値をシンボル外形の上に併記(縦長シンボルでも重ならない)
     let top = symbol_top_y(inst, def);
     if !inst.reference.is_empty() {
-        text_el(out, inst.at.x, top - 4.5, 2.5, "#000", "middle", &inst.reference);
+        text_el(out, inst.at.x, top - REF_LABEL_DY, LABEL_FONT, "#000", "middle", &inst.reference);
     }
     if !inst.value.is_empty() {
-        text_el(out, inst.at.x, top - 1.0, 2.5, "#000", "middle", &inst.value);
+        text_el(out, inst.at.x, top - VALUE_LABEL_DY, LABEL_FONT, "#000", "middle", &inst.value);
     }
 }
 
 /// ネットの代表線分 (最も長い線分)。同長なら上・左の線分を選ぶ。
-fn longest_segment(sheet: &Sheet, wire_ids: &[crate::model::EntityId]) -> Option<(Point, Point)> {
+pub(crate) fn longest_segment(
+    sheet: &Sheet,
+    wire_ids: &[crate::model::EntityId],
+) -> Option<(Point, Point)> {
     let mut best: Option<(f64, Point, Point)> = None;
     for id in wire_ids {
         let Some(Entity::Wire(w)) = sheet.entities.get(id) else {
@@ -399,7 +410,7 @@ fn longest_segment(sheet: &Sheet, wire_ids: &[crate::model::EntityId]) -> Option
     best.map(|(_, a, b)| (a, b))
 }
 
-fn midpoint(a: &Point, b: &Point) -> Point {
+pub(crate) fn midpoint(a: &Point, b: &Point) -> Point {
     Point::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
 }
 
@@ -526,7 +537,7 @@ fn sheet_to_svg_with_xrefs(
                 );
             }
             Entity::NetLabel(l) => {
-                text_el(&mut out, l.at.x, l.at.y - 1.0, 2.5, "#000", "start", &l.name);
+                text_el(&mut out, l.at.x, l.at.y - NET_LABEL_DY, LABEL_FONT, "#000", "start", &l.name);
                 // シート間クロスリファレンス (IEC 61082-1)。相手がいるラベルだけ脇に添える
                 if let Some(text) = xrefs.get(&l.id) {
                     let at = crate::xref::xref_text_at(l);
