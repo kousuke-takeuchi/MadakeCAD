@@ -385,6 +385,70 @@
     "chartLog": "Terminal editor: wrote the chart of {reference} ({count} row(s)) to {path}",
     "diagramLog": "Terminal editor: wrote the connection diagram of {reference} ({count} page(s)) to {path}"
   },
+  "search": {
+    "placeholder": "Search (designator, part no., net)",
+    "count": "{count} found",
+    "hint": "Enter = next result, Shift+Enter = previous, Esc = close",
+    "close": "Close",
+    "panelTitle": "Search results for “{query}”",
+    "empty": "No match for “{query}”",
+    "filter": {
+      "all": "All",
+      "reference": "Designator",
+      "value": "Part no.",
+      "net": "Net",
+      "text": "Text"
+    },
+    "kind": {
+      "reference": "Reference designator",
+      "value": "Part number",
+      "net": "Net name",
+      "wireNo": "Wire number",
+      "text": "Text note"
+    },
+    "function": {
+      "coil": "Relay coil",
+      "contactNo": "Relay contact {terminals}",
+      "contactNc": "Relay contact {terminals}",
+      "terminal": "Terminal block, terminals {terminals}",
+      "body": "Part"
+    },
+    "revealLog": "Search: showing {text} ({address}) — {index} of {count}"
+  },
+  "devices": {
+    "tab": "Devices",
+    "empty": "No devices yet. Place parts with a reference designator and they show up here",
+    "hint": "Click a row to jump to it in the drawing. Right-click to jump or delete",
+    "count": "{count}",
+    "head": {
+      "relay": "Relay",
+      "relayWithValue": "Relay {value}",
+      "terminalBlock": "Terminal block, {poles} poles",
+      "other": "{name}",
+      "otherWithValue": "{name} {value}"
+    },
+    "function": {
+      "coil": "Coil {terminals}",
+      "contactNo": "Contact {terminals}",
+      "contactNc": "Contact {terminals}",
+      "terminal": "Terminals {terminals}",
+      "body": "Body"
+    },
+    "menu": {
+      "reveal": "Go to drawing",
+      "delete": "Delete"
+    },
+    "phase3Hint": "Dragging unplaced functions onto the drawing comes in phase 3",
+    "revealLog": "Devices: showing {function} of {reference} ({address})",
+    "deletedLog": "Devices: deleted {reference} from the drawing ({count} items — Cmd+Z undoes it)"
+  },
+  "surfer": {
+    "titleDevice": "Where {title} appears (reference surfer)",
+    "titleNet": "Where net {title} appears (reference surfer)",
+    "titleWireNo": "Where wire number {title} appears (reference surfer)",
+    "hint": "Alt-click to open. Cycle with the arrow keys and Enter, Esc closes",
+    "jumpLog": "Reference surfer: jumped to {address} of {title}"
+  },
   "chat": {
     "tidy": {
       "button": "Tidy up",
