@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1271仕様項目**。
+全5領域・**1314仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -548,6 +548,9 @@
 - 一覧には図枠の定義一式(用紙・マージン・ゾーン・表題欄のセル・改訂欄の列幅)が入っているので、クライアントはファイルを読まずにプレビューできる。 <sub>`a_listed_frame_template_carries_its_whole_definition`</sub>
 - POST /commands の set_frame_template でプロジェクト全体の図枠が切り替わり、undo一発で元の図枠へ戻る。 <sub>`setting_the_frame_template_over_the_link_api_is_one_undo_step`</sub>
 - 書き出したSVGはプロジェクトの図枠テンプレートに従う: A4縦へ切り替えると表題欄が120mmではなく110mm幅で描かれる。 <sub>`the_exported_svg_follows_the_projects_frame_template`</sub>
+- 新規プロジェクトは、アプリ設定で「グローバル既定」に選んだ図枠テンプレートで始まる。 <sub>`a_new_project_starts_with_the_default_frame_template_from_the_settings`</sub>
+- 設定にグローバル既定が無ければ、新規プロジェクトの図枠は未指定のまま(同梱のJIS A3図枠で描かれる)。 <sub>`a_new_project_without_a_default_setting_keeps_the_frame_unset`</sub>
+- 設定の既定図枠が空欄のときは、未知のidではなく「既定なし」として扱う。 <sub>`a_blank_default_frame_template_setting_is_ignored`</sub>
 
 ### REST Link API
 
@@ -920,6 +923,10 @@
 - Geminiの項目が無い旧い設定ファイルもそのまま動き、その項目は既定値になる。 <sub>`an_old_settings_file_without_gemini_fields_keeps_working`</sub>
 - Geminiのモデル欄を空にすると既定モデルへ戻り、前後の余分な空白は取り除かれる。 <sub>`a_blank_gemini_model_box_returns_to_the_default`</sub>
 - GeminiのAPIキーは設定ファイルへ一切書かれない(そこに置くのはモデル名だけ)。 <sub>`no_gemini_key_is_written_to_the_settings_file`</sub>
+- 既定では「グローバル既定の図枠テンプレート」は未設定で、新しい図面は同梱のJIS A3図枠で始まる。 <sub>`default_frame_template_is_unset`</sub>
+- 既定図枠の項目が無かった頃の設定ファイルもそのまま読め、「既定なし」として扱われる。 <sub>`old_settings_file_without_default_frame_template_loads_as_unset`</sub>
+- 既定図枠のidは前後の空白が取り除かれ、空欄は空のidではなく「既定なし」になる。 <sub>`default_frame_template_is_trimmed_and_blank_means_unset`</sub>
+- 選んだ既定の図枠テンプレートは、設定を保存して読み直しても残っている。 <sub>`default_frame_template_round_trips_through_save_and_load`</sub>
 
 ### tool_bridge
 
@@ -1071,6 +1078,15 @@
 - ロゴ枠を持つ図枠テンプレートでは、ロゴの位置がそのまま配置に出る(画像が無くても場所が決まる) <sub>`frameLayout`</sub>
 - 改訂欄は表題欄の真上に同じ右端・同じ幅で置かれ、行高は表題欄と同じ8mmになる <sub>`revisionLayout (図枠テンプレート版)`</sub>
 - 改訂欄の最大行数はテンプレートが決め、上限を超えた分は古い行から省かれる <sub>`revisionLayout (図枠テンプレート版)`</sub>
+- 表題欄の中身が空のプロジェクトでは、どのバインドがそこへ入るかを`{...}`のまま重ねて見せる <sub>`bindOverlays (図枠プレビューの青いプレースホルダ)`</sub>
+- 実際の値が入っている欄にはプレースホルダを重ねない(図面の値が読めなくならない) <sub>`bindOverlays (図枠プレビューの青いプレースホルダ)`</sub>
+- 固定文字のセル(「品名」などの見出し)はバインドではないのでプレースホルダを出さない <sub>`bindOverlays (図枠プレビューの青いプレースホルダ)`</sub>
+- 空欄なら描画されない会社名のセルも、プレビューではどのバインドが入るかを見せる <sub>`bindOverlays (図枠プレビューの青いプレースホルダ)`</sub>
+- 図枠テンプレートの名前は日本語UIでは日本語名、それ以外では英語名で出す <sub>`frameTemplateName (UI言語ごとの図枠名)`</sub>
+- 日本語名を持たないユーザー図枠は、日本語UIでも英語名をそのまま出す <sub>`frameTemplateName (UI言語ごとの図枠名)`</sub>
+- 情報行は用紙・ゾーン分割・表題欄の大きさ・改訂欄の有無をまとめて示す <sub>`frameTemplateSummary (一覧・情報行の要約)`</sub>
+- 表題欄が使っているバインドを、出てくる順に重複なく並べる(1つのセルに複数書いてもよい) <sub>`bindNames (フィールドバインド表)`</sub>
+- バインドを1つも使わない図枠では表は空になる(見出しだけの図枠も作れる) <sub>`bindNames (フィールドバインド表)`</sub>
 
 ### ハーネス境界
 
@@ -1364,6 +1380,34 @@
 - シート追加・削除のパッチは並び順を保つ <sub>`document store`</sub>
 - シートメタ更新のパッチはエンティティに触れない <sub>`document store`</sub>
 - 古いrevisionのパッチは破棄される(二重配信しても安全) <sub>`document store`</sub>
+- 図枠テンプレートを差し替えるパッチはミラーへ反映され、undoでも即座に元へ戻る <sub>`document store`</sub>
+- 起動時に図枠テンプレートの一覧を読み込み、以降の描画はその定義で行う <sub>`document store: 図枠テンプレートの解決`</sub>
+- 図枠テンプレートの一覧が読めなくても図面は開ける(同梱のjis-a3で描く) <sub>`document store: 図枠テンプレートの解決`</sub>
+- プロジェクトが選んでいる図枠テンプレートの定義が、図面の描画に使われる <sub>`document store: 図枠テンプレートの解決`</sub>
+- 図枠テンプレートが未指定なら同梱のjis-a3で描く(従来どおりの見た目) <sub>`document store: 図枠テンプレートの解決`</sub>
+- 他所で作った図面が知らない図枠idを持っていても、jis-a3で開けて図面は失われない <sub>`document store: 図枠テンプレートの解決`</sub>
+- 図枠を差し替えるとキャンバスへ渡す図枠定義もその場で入れ替わる(全シートに効く) <sub>`document store: 図枠テンプレートの解決`</sub>
+- 表題欄のバインドはプロジェクト文脈で解決される(「3枚中2枚目」がシートごとに入る) <sub>`document store: 図枠テンプレートの解決`</sub>
+- シートが1枚も無ければ図枠の描画情報は無い(空の図面でも落ちない) <sub>`document store: 図枠テンプレートの解決`</sub>
+
+### frameTemplates
+
+- ダイアログを開くと同梱とユーザーの図枠が一覧され、いま図面が使っている図枠が選ばれた状態で出る <sub>`frame template dialog store`</sub>
+- 図枠が未指定の図面では、実際に描かれている同梱のjis-a3が選ばれた状態で開く <sub>`frame template dialog store`</sub>
+- 一覧の各行は同梱かユーザーかの区別を持つ(どこから来た図枠かが分かる) <sub>`frame template dialog store`</sub>
+- 行を選ぶとプレビューと情報行がその図枠の内容に切り替わる <sub>`frame template dialog store`</sub>
+- 適用範囲の既定は「このプロジェクト」で、適用すると set_frame_template を1回だけ実行する <sub>`frame template dialog store`</sub>
+- いま使っている図枠をそのまま適用してもコマンドは送らない(空のundo段を積まない) <sub>`frame template dialog store`</sub>
+- 適用しても一覧の「使用中」は選んだ図枠へ移り、続けて適用を押しても二重にコマンドは飛ばない <sub>`frame template dialog store`</sub>
+- 適用範囲を「グローバル既定」にすると図面は編集せず、新規プロジェクトの既定として設定に保存する <sub>`frame template dialog store`</sub>
+- 図面の図枠を替えたあとに適用範囲を切り替えても、それぞれの適用は1回ずつしか起きない <sub>`frame template dialog store`</sub>
+- OKは適用してからダイアログを閉じる <sub>`frame template dialog store`</sub>
+- 適用は閉じずに反映する(続けて別の図枠を試せる) <sub>`frame template dialog store`</sub>
+- キャンセルは何も適用せずに閉じる <sub>`frame template dialog store`</sub>
+- 適用が失敗したらダイアログは開いたままで理由を表示する <sub>`frame template dialog store`</sub>
+- 読み込めなかった図枠JSONは一覧の代わりに理由として並べる(壊れたファイルで一覧が空にならない) <sub>`frame template dialog store`</sub>
+- 「+ JSONを読み込み…」はユーザー図枠の置き場を開き、戻ってきたときに一覧を読み直す <sub>`frame template dialog store`</sub>
+- フォルダを開けない環境(ブラウザ検証)では置き場のパスだけを案内する <sub>`frame template dialog store`</sub>
 
 ### 回路マクロ
 
@@ -1510,6 +1554,8 @@
 ### AI設定
 
 - 既定値は自動適用・図面自動読み取りがON <sub>`settings store`</sub>
+- 図枠テンプレートのグローバル既定は初期状態では未設定(新しい図面は同梱のJIS A3図枠で始まる) <sub>`settings store`</sub>
+- 図枠選択ダイアログの「グローバル既定」は設定として保存され、以降の表示にも残る <sub>`settings store`</sub>
 - loadでバックエンドの設定を取り込む <sub>`settings store`</sub>
 - saveは変更分をマージして送り、正規化後の戻り値を採用する <sub>`settings store`</sub>
 - 知識ファイルのパスを保存でき、空文字はバックエンドが未設定へ正規化する <sub>`settings store`</sub>

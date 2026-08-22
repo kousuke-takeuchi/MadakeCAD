@@ -21,8 +21,25 @@ describe("settings store", () => {
       openai_base_url: "https://api.openai.com/v1",
       openai_model: "",
       gemini_model: "gemini-2.5-flash",
+      default_frame_template: null,
     });
     expect(useSettingsStore().settings).toEqual(defaultSettings());
+  });
+
+  // ja: 図枠テンプレートのグローバル既定は初期状態では未設定(新しい図面は同梱のJIS A3図枠で始まる)
+  it("starts with no global default frame template", () => {
+    expect(defaultSettings().default_frame_template).toBeNull();
+  });
+
+  // ja: 図枠選択ダイアログの「グローバル既定」は設定として保存され、以降の表示にも残る
+  it("saves the global default frame template chosen in the frame picker", async () => {
+    const store = useSettingsStore();
+    vi.spyOn(settingsApi, "set").mockImplementation(async (settings) => settings);
+    expect(await store.save({ default_frame_template: "jis-a4-portrait" })).toBe(true);
+    expect(settingsApi.set).toHaveBeenCalledWith(
+      expect.objectContaining({ default_frame_template: "jis-a4-portrait" }),
+    );
+    expect(store.settings.default_frame_template).toBe("jis-a4-portrait");
   });
 
   // ja: loadでバックエンドの設定を取り込む
@@ -40,6 +57,7 @@ describe("settings store", () => {
       openai_base_url: "https://api.openai.com/v1",
       openai_model: "",
       gemini_model: "gemini-2.5-flash",
+      default_frame_template: "jis-a4-portrait",
     };
     vi.spyOn(settingsApi, "get").mockResolvedValue(stored);
 

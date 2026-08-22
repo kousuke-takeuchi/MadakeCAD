@@ -21,6 +21,7 @@ import PlcGenerateDialog from "./PlcGenerateDialog.vue";
 import ReportDialog from "./ReportDialog.vue";
 import PdfBookDialog from "./PdfBookDialog.vue";
 import TemplateDialog from "./TemplateDialog.vue";
+import FrameTemplateDialog from "./FrameTemplateDialog.vue";
 import MacroSaveDialog from "./MacroSaveDialog.vue";
 import SymbolPickerDialog from "./SymbolPickerDialog.vue";
 import TitleBar from "./TitleBar.vue";
@@ -167,6 +168,7 @@ onBeforeUnmount(() => {
     <ReportDialog />
     <PdfBookDialog />
     <TemplateDialog />
+    <FrameTemplateDialog />
     <MacroSaveDialog />
   </div>
 </template>

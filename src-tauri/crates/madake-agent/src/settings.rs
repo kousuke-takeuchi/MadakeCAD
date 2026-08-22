@@ -110,6 +110,12 @@ pub struct AppSettings {
     /// 接続先が1つ(Google)に決まっているためURL欄は無く、モデル名だけを持つ。
     /// **APIキーはここには入らない**(キーチェーンだけに置く)。
     pub gemini_model: String,
+    /// 新しく作る図面の図枠テンプレートid(M4仕様 §9)。`None`なら同梱の`jis-a3`。
+    ///
+    /// 図枠の選択ダイアログの適用範囲「グローバル既定」がここへ入る。**既存の図面は
+    /// 変えない**(図面ごとの図枠は[`madake_core`]の`Project::frame_template`が持ち、
+    /// 差し替えはCommandを通る)。idは秘密ではないので平文で保存してよい。
+    pub default_frame_template: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -127,6 +133,7 @@ impl Default for AppSettings {
             openai_base_url: crate::openai_compat::DEFAULT_OPENAI_BASE_URL.into(),
             openai_model: String::new(),
             gemini_model: crate::gemini::DEFAULT_GEMINI_MODEL.into(),
+            default_frame_template: None,
         }
     }
 }
@@ -172,6 +179,11 @@ impl AppSettings {
         } else {
             gemini_model.into()
         };
+        // 図枠テンプレートのidは空欄=「既定なし」(空のidを保存して未知id扱いにしない)
+        self.default_frame_template = self
+            .default_frame_template
+            .map(|id| id.trim().to_string())
+            .filter(|id| !id.is_empty());
         self
     }
 }

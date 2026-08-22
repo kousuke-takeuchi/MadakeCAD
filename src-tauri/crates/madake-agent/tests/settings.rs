@@ -54,6 +54,7 @@ fn saved_settings_round_trip() {
         openai_base_url: "https://api.openai.com/v1".into(),
         openai_model: String::new(),
         gemini_model: "gemini-2.5-flash".into(),
+        default_frame_template: Some("jis-a4-portrait".into()),
     };
 
     save_settings(&path, &settings).unwrap();
@@ -657,5 +658,62 @@ fn no_gemini_key_is_written_to_the_settings_file() {
             "設定ファイルに資格情報の項目がある ({secret}): {written}"
         );
     }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Out of the box no default frame template is chosen, so a new drawing starts with the bundled JIS A3 frame.
+/// 既定では「グローバル既定の図枠テンプレート」は未設定で、新しい図面は同梱のJIS A3図枠で始まる。
+#[test]
+fn default_frame_template_is_unset() {
+    assert_eq!(AppSettings::default().default_frame_template, None);
+}
+
+/// A settings file written before the default frame template existed still loads, with no default frame chosen.
+/// 既定図枠の項目が無かった頃の設定ファイルもそのまま読め、「既定なし」として扱われる。
+#[test]
+fn old_settings_file_without_default_frame_template_loads_as_unset() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    std::fs::write(&path, r#"{ "language": "ja" }"#).unwrap();
+    let settings = load_settings(&path).unwrap();
+    assert_eq!(settings.default_frame_template, None);
+    assert_eq!(settings.language, "ja");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// The default frame template id is trimmed, and an empty entry means "no default" rather than an empty id.
+/// 既定図枠のidは前後の空白が取り除かれ、空欄は空のidではなく「既定なし」になる。
+#[test]
+fn default_frame_template_is_trimmed_and_blank_means_unset() {
+    let padded = AppSettings {
+        default_frame_template: Some("  jis-a4-portrait  ".into()),
+        ..AppSettings::default()
+    };
+    assert_eq!(
+        padded.normalized().default_frame_template.as_deref(),
+        Some("jis-a4-portrait")
+    );
+    let blank = AppSettings {
+        default_frame_template: Some("   ".into()),
+        ..AppSettings::default()
+    };
+    assert_eq!(blank.normalized().default_frame_template, None);
+}
+
+/// The chosen default frame template is still there after saving and reloading the settings.
+/// 選んだ既定の図枠テンプレートは、設定を保存して読み直しても残っている。
+#[test]
+fn default_frame_template_round_trips_through_save_and_load() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    let settings = AppSettings {
+        default_frame_template: Some("jis-a4-portrait".into()),
+        ..AppSettings::default()
+    };
+    save_settings(&path, &settings).unwrap();
+    assert_eq!(
+        load_settings(&path).unwrap().default_frame_template.as_deref(),
+        Some("jis-a4-portrait")
+    );
     std::fs::remove_dir_all(&dir).ok();
 }

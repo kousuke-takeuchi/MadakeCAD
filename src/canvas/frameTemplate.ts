@@ -120,6 +120,99 @@ export const DEFAULT_FRAME_TEMPLATE: FrameTemplate = {
   logo: null,
 };
 
+/** UI言語に合わせた図枠テンプレート名 (日本語名を持たないユーザー図枠は英語名)。 */
+export function frameTemplateName(t: FrameTemplate, locale: string): string {
+  return locale === "ja" && t.name_ja ? t.name_ja : t.name;
+}
+
+/** UI言語に合わせた図枠テンプレートの説明。 */
+export function frameTemplateDescription(t: FrameTemplate, locale: string): string {
+  return (locale === "ja" ? t.description_ja || t.description : t.description) ?? "";
+}
+
+/** 図枠テンプレートの要約 (選択ダイアログの情報行)。 */
+export interface FrameTemplateSummary {
+  /** 想定用紙 (mm)。実際の描画はシートの用紙を使う。 */
+  paper: string;
+  /** そのテンプレートが想定するゾーン分割 (実際の分割はシートが持つ)。 */
+  zones: string;
+  /** 表題欄の大きさ (mm)。 */
+  titleBlock: string;
+  /** 改訂欄に積める最大行数。 */
+  revisionRows: number;
+}
+
+/** 情報行に出す要約を組み立てる (数値の整形だけ。文字はi18nカタログが持つ)。 */
+export function frameTemplateSummary(t: FrameTemplate): FrameTemplateSummary {
+  return {
+    paper: `${t.paper.w}×${t.paper.h}`,
+    zones: `${t.zones.cols}×${t.zones.rows}`,
+    titleBlock: `${t.title_block.w}×${t.title_block.h}`,
+    revisionRows: t.revision_block.rows_max,
+  };
+}
+
+/**
+ * テンプレートの表題欄が使っているバインド名を、出てくる順に重複なく返す
+ * (選択ダイアログの「フィールドバインド」表)。
+ */
+export function bindNames(t: FrameTemplate): string[] {
+  const out: string[] = [];
+  for (const cell of t.title_block.cells) {
+    let rest = cell.bind ?? "";
+    for (;;) {
+      const open = rest.indexOf("{");
+      if (open < 0) break;
+      const after = rest.slice(open + 1);
+      const close = after.indexOf("}");
+      if (close < 0) break;
+      const name = after.slice(0, close);
+      if (name && !out.includes(name)) out.push(name);
+      rest = after.slice(close + 1);
+    }
+  }
+  return out;
+}
+
+/** プレビューで空欄へ重ねる「そこへ何が入るか」の表示 (デザインの青い`{...}`)。 */
+export interface BindOverlay {
+  x: number;
+  y: number;
+  size: number;
+  align: CellAlign;
+  /** バインドの記述そのまま (例 "{title_block.title}")。 */
+  text: string;
+}
+
+/**
+ * 図枠プレビュー用に、値が空になる表題欄セルのバインド記述を返す。
+ *
+ * 実際の値が入っている欄には重ねない(図面の値が読めなくならない)。値が空の欄だけ
+ * `{title_block.title}`のように青字で見せて、その欄に何が入るかを分かるようにする。
+ * 空欄なら描画されないセル (会社名) もプレビューでは見せる。
+ */
+export function bindOverlays(
+  sheet: Sheet,
+  t: FrameTemplate = DEFAULT_FRAME_TEMPLATE,
+  ctx: BindContext = bindContextForSheet(sheet),
+): BindOverlay[] {
+  const { w: pw, h: ph } = paperSizeMm(sheet);
+  const { x: tx, y: ty } = titleBlockOrigin(t, pw, ph);
+  const out: BindOverlay[] = [];
+  for (const cell of t.title_block.cells) {
+    if (cell.bind == null) continue;
+    if (resolveBinds(cell.bind, ctx).trim() !== "") continue;
+    out.push({
+      x: tx + cell.x,
+      y: ty + cell.y,
+      size: cell.size,
+      align: cell.align ?? "start",
+      text: cell.bind,
+    });
+  }
+  return out;
+}
+
 /** 改訂欄の列見出し (ISO 7200 / JIS Z 8311)。列幅はテンプレートの revision_block.col_w。 */
 export const REV_HEADERS = ["記号", "日付", "内容", "承認"];
 

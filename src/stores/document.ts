@@ -4,7 +4,23 @@
 
 import { defineStore } from "pinia";
 import { resolveSymbolDef } from "../canvas/dynamicSymbol";
-import { ipc, type Command, type Patch, type Project, type SymbolDef } from "../ipc";
+import {
+  DEFAULT_FRAME_TEMPLATE,
+  DEFAULT_FRAME_TEMPLATE_ID,
+  bindContextForProject,
+  bindContextForSheet,
+  type BindContext,
+  type FrameTemplate,
+} from "../canvas/frameTemplate";
+import {
+  ipc,
+  type Command,
+  type FrameTemplateList,
+  type Patch,
+  type Project,
+  type Sheet,
+  type SymbolDef,
+} from "../ipc";
 
 interface DocumentState {
   project: Project | null;
@@ -12,6 +28,8 @@ interface DocumentState {
   canUndo: boolean;
   canRedo: boolean;
   symbols: SymbolDef[];
+  /** 使える図枠テンプレート (同梱+ユーザー)。描画はこの中からプロジェクトのidを引く。 */
+  frameTemplates: FrameTemplate[];
   /** 現在表示中のシートid。 */
   activeSheetId: string | null;
   /** 選択中エンティティid集合。 */
@@ -25,6 +43,7 @@ export const useDocumentStore = defineStore("document", {
     canUndo: false,
     canRedo: false,
     symbols: [],
+    frameTemplates: [],
     activeSheetId: null,
     selection: new Set(),
   }),
@@ -45,6 +64,34 @@ export const useDocumentStore = defineStore("document", {
         null
       );
     },
+
+    /**
+     * いま図面を描いている図枠テンプレート (M4 §9)。
+     * 未指定・知らないidは同梱の`jis-a3`へ落とす(他所で作った図面も必ず開ける)。
+     */
+    frameTemplate(state): FrameTemplate {
+      const byId = (id: string) => state.frameTemplates.find((t) => t.id === id);
+      return (
+        byId(state.project?.frame_template ?? "") ??
+        byId(DEFAULT_FRAME_TEMPLATE_ID) ??
+        DEFAULT_FRAME_TEMPLATE
+      );
+    },
+
+    /** シートの表題欄バインドをプロジェクト文脈で解決する (シート番号・総数が入る)。 */
+    bindContextFor(state) {
+      return (sheet: Sheet): BindContext =>
+        state.project ? bindContextForProject(state.project, sheet) : bindContextForSheet(sheet);
+    },
+
+    /**
+     * 表示中のシートをキャンバスへ描くときの図枠指定 (`renderSheet`の`frame`/`bind`)。
+     * シートが無ければnull。
+     */
+    frameOptions(): { frame: FrameTemplate; bind: BindContext } | null {
+      const sheet = this.activeSheet;
+      return sheet ? { frame: this.frameTemplate, bind: this.bindContextFor(sheet) } : null;
+    },
   },
 
   actions: {
@@ -57,7 +104,23 @@ export const useDocumentStore = defineStore("document", {
       this.canRedo = snapshot.can_redo;
       this.symbols = symbols;
       this.activeSheetId = snapshot.project.sheets[0]?.id ?? null;
+      await this.loadFrameTemplates();
       await ipc.onPatch((patch) => this.applyPatch(patch));
+    },
+
+    /**
+     * 図枠テンプレートの一覧を読み込む (起動時と、ユーザーが図枠JSONを足したあと)。
+     * 読めなくても図面は開ける: 一覧が空なら同梱のjis-a3で描く。
+     */
+    async loadFrameTemplates(): Promise<FrameTemplateList> {
+      try {
+        const list = await ipc.listFrameTemplates();
+        this.frameTemplates = list.templates;
+        return list;
+      } catch {
+        this.frameTemplates = [];
+        return { templates: [], issues: [] };
+      }
     },
 
     /** Rustからのpatchをミラーに適用する。 */

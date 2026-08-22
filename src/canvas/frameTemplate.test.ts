@@ -8,10 +8,14 @@ import type { Project, Revision, Sheet } from "../ipc";
 import {
   DEFAULT_FRAME_TEMPLATE,
   bindContextForProject,
+  bindNames,
+  bindOverlays,
   bindContextForSheet,
   bindValue,
   cellText,
   frameLayout,
+  frameTemplateName,
+  frameTemplateSummary,
   resolveBinds,
   revisionLayout,
   titleBlockOrigin,
@@ -229,5 +233,89 @@ describe("revisionLayout (図枠テンプレート版)", () => {
     const l = revisionLayout(sheet(["A", "B", "C", "D", "E"]), t)!;
     expect(l.rows.map((r) => r.rev.mark)).toEqual(["C", "D", "E"]);
     expect(l.h).toBe(32);
+  });
+});
+
+describe("bindOverlays (図枠プレビューの青いプレースホルダ)", () => {
+  // ja: 表題欄の中身が空のプロジェクトでは、どのバインドがそこへ入るかを`{...}`のまま重ねて見せる
+  it("shows the bind placeholders themselves for the title block cells that would come out blank", () => {
+    const blank = sheet([], { title_block: {} } as Partial<Sheet>);
+    const overlays = bindOverlays(blank, DEFAULT_FRAME_TEMPLATE, bindContextForSheet(blank));
+    expect(overlays.map((o) => o.text)).toContain("{title_block.title}");
+    // 位置・大きさ・寄せは、そのセルの描画位置とそろえる (右下の表題欄の中)
+    const title = overlays.find((o) => o.text === "{title_block.title}")!;
+    expect(title).toMatchObject({ x: 316, y: 268.5, size: 3, align: "start" });
+  });
+
+  // ja: 実際の値が入っている欄にはプレースホルダを重ねない(図面の値が読めなくならない)
+  it("never covers a cell that already resolves to a real value", () => {
+    const overlays = bindOverlays(sheet(), DEFAULT_FRAME_TEMPLATE);
+    expect(overlays.map((o) => o.text)).not.toContain("{title_block.title}");
+  });
+
+  // ja: 固定文字のセル(「品名」などの見出し)はバインドではないのでプレースホルダを出さない
+  it("leaves the fixed heading cells alone because they hold no binds", () => {
+    const blank = sheet([], { title_block: {} } as Partial<Sheet>);
+    const overlays = bindOverlays(blank, DEFAULT_FRAME_TEMPLATE, bindContextForSheet(blank));
+    expect(overlays.map((o) => o.text)).not.toContain("品名");
+  });
+
+  // ja: 空欄なら描画されない会社名のセルも、プレビューではどのバインドが入るかを見せる
+  it("still shows the placeholder for a cell that the drawing omits when empty (the company name)", () => {
+    const blank = sheet([], { title_block: {} } as Partial<Sheet>);
+    const overlays = bindOverlays(blank, DEFAULT_FRAME_TEMPLATE, bindContextForSheet(blank));
+    const company = overlays.find((o) => o.text === "{title_block.company}")!;
+    expect(company).toMatchObject({ align: "end", size: 3 });
+  });
+});
+
+describe("frameTemplateName (UI言語ごとの図枠名)", () => {
+  // ja: 図枠テンプレートの名前は日本語UIでは日本語名、それ以外では英語名で出す
+  it("shows the Japanese name in the Japanese UI and the English one everywhere else", () => {
+    expect(frameTemplateName(DEFAULT_FRAME_TEMPLATE, "ja")).toBe("JIS A3 横");
+    expect(frameTemplateName(DEFAULT_FRAME_TEMPLATE, "en")).toBe("JIS A3 landscape");
+  });
+
+  // ja: 日本語名を持たないユーザー図枠は、日本語UIでも英語名をそのまま出す
+  it("falls back to the English name for a user frame that has no Japanese name", () => {
+    const t = { ...DEFAULT_FRAME_TEMPLATE, name: "Shop frame", name_ja: "" };
+    expect(frameTemplateName(t, "ja")).toBe("Shop frame");
+  });
+});
+
+describe("frameTemplateSummary (一覧・情報行の要約)", () => {
+  // ja: 情報行は用紙・ゾーン分割・表題欄の大きさ・改訂欄の有無をまとめて示す
+  it("summarises the paper, the zone grid, the title block size and the revision table", () => {
+    expect(frameTemplateSummary(DEFAULT_FRAME_TEMPLATE)).toEqual({
+      paper: "420×297",
+      zones: "4×6",
+      titleBlock: "120×32",
+      revisionRows: 6,
+    });
+  });
+});
+
+describe("bindNames (フィールドバインド表)", () => {
+  // ja: 表題欄が使っているバインドを、出てくる順に重複なく並べる(1つのセルに複数書いてもよい)
+  it("lists the binds the title block uses once each, in the order they appear", () => {
+    expect(bindNames(DEFAULT_FRAME_TEMPLATE)).toEqual([
+      "title_block.drawing_no",
+      "rev.latest",
+      "title_block.title",
+      "scale",
+      "date",
+      "title_block.designed",
+      "title_block.drawn",
+      "title_block.checked",
+      "approver",
+      "title_block.company",
+    ]);
+  });
+
+  // ja: バインドを1つも使わない図枠では表は空になる(見出しだけの図枠も作れる)
+  it("comes back empty for a frame whose title block holds only fixed text", () => {
+    const t = structuredClone(DEFAULT_FRAME_TEMPLATE);
+    t.title_block.cells = [{ x: 2, y: 5.5, text: "図番", size: 3 }];
+    expect(bindNames(t)).toEqual([]);
   });
 });

@@ -258,6 +258,9 @@
     },
     "projectGroup": {
       "start": "Start"
+    },
+    "adminGroup": {
+      "templates": "Templates"
     }
   },
   "templates": {
@@ -280,6 +283,83 @@
     "noSheetLog": "Templates: no sheet is open",
     "folderOpenedLog": "Templates: opened {path} (drop .json files there to see them listed)",
     "folderHintLog": "Templates: drop .json files into {path} to see them listed"
+  },
+  "frameTemplates": {
+    "title": "Frame template",
+    "close": "Close",
+    "ribbonButton": "Frame template",
+    "ribbonTitleBlock": "Edit title block",
+    "loading": "Loading frames...",
+    "empty": "No frame template available",
+    "addUser": "+ Load a JSON file...",
+    "inUse": "in use",
+    "noSheet": "No sheet is open, so there is nothing to preview",
+    "noBinds": "This title block holds fixed text only",
+    "source": {
+      "builtin": "Bundled",
+      "user": "User"
+    },
+    "info": "Paper {paper} mm · Zones {zones} · Title block {titleBlock} mm · Revision table up to {revisionRows} rows",
+    "scopeLabel": "Apply to:",
+    "scopeProject": "This project",
+    "scopeGlobal": "Global default",
+    "scopeProjectHint": "Every sheet of the open drawing switches to this frame in one edit, so Cmd+Z takes it back.",
+    "scopeGlobalHint": "The open drawing is left alone: new drawings will start with this frame.",
+    "groupBinds": "Field binds",
+    "bindsHint": "Binds are filled in while drawing. A bind nobody knows stays empty instead of breaking the sheet.",
+    "bind": {
+      "project": {
+        "name": "Project name",
+        "no": "Project no."
+      },
+      "sheet": {
+        "no": "Sheet no.",
+        "total": "Sheet count",
+        "name": "Sheet name"
+      },
+      "rev": {
+        "latest": "Latest revision"
+      },
+      "title_block": {
+        "company": "Company",
+        "title": "Drawing title",
+        "drawing_no": "Drawing no.",
+        "scale": "Scale",
+        "date": "Date",
+        "designed": "Designed by",
+        "drawn": "Drawn by",
+        "checked": "Checked by",
+        "approved": "Approved by",
+        "rev": "Revision"
+      },
+      "date": "Date",
+      "scale": "Scale",
+      "designer": "Designed by",
+      "approver": "Approved by"
+    },
+    "groupZones": "Zones",
+    "zoneCols": "Columns",
+    "zoneRows": "Rows",
+    "zoneLabels": "Zone labels: columns {cols} / rows {rows} (IEC 61082-1)",
+    "zoneReadOnly": "These are the divisions the frame suggests for new sheets. Each sheet keeps its own division so the zone addresses in the drawing never move.",
+    "labelStyle": {
+      "numeric": "1, 2, 3...",
+      "alpha": "A, B, C..."
+    },
+    "groupBulk": "Applies everywhere",
+    "bulkHint": "Switching the frame redraws the frame, the title block and the revision table of every sheet, in the canvas and in the SVG/PDF output alike.",
+    "undoHint": "Applying is a single edit, so one Cmd+Z takes it back.",
+    "issue": "Frame template could not be read: {path} ({message})",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "apply": "Apply",
+    "applying": "Applying...",
+    "openLog": "Frame template: the picker is open",
+    "appliedLog": "Frame template: every sheet now uses \"{frame}\" (undo with Cmd+Z)",
+    "defaultSavedLog": "Frame template: new drawings will start with \"{frame}\"",
+    "unchangedLog": "Frame template: \"{frame}\" was already in use, nothing changed",
+    "folderOpenedLog": "Frame template: opened {path} (drop .json files there to see them listed)",
+    "folderHintLog": "Frame template: drop .json files into {path} to see them listed"
   },
   "macros": {
     "saveTitle": "Save as circuit macro",

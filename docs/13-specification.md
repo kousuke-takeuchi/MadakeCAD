@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1271 specification clauses** across 5 areas.
+**1314 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -548,6 +548,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The listed frame template carries the whole frame definition (paper, margin, zones, title-block cells and revision columns), so a client can preview it without reading any file. <sub>`a_listed_frame_template_carries_its_whole_definition`</sub>
 - POST /commands with set_frame_template switches the whole project's frame, and one undo puts the previous frame back. <sub>`setting_the_frame_template_over_the_link_api_is_one_undo_step`</sub>
 - The exported SVG follows the project's frame template: after switching to A4 portrait the title block is drawn 110 mm wide instead of 120 mm. <sub>`the_exported_svg_follows_the_projects_frame_template`</sub>
+- A new project starts with the frame template picked as the global default in the app settings. <sub>`a_new_project_starts_with_the_default_frame_template_from_the_settings`</sub>
+- Without a global default in the settings a new project leaves the frame unset, so it is drawn with the bundled JIS A3 frame. <sub>`a_new_project_without_a_default_setting_keeps_the_frame_unset`</sub>
+- A blank default frame template in the settings is treated as "no default" instead of an unknown id. <sub>`a_blank_default_frame_template_setting_is_ignored`</sub>
 
 ### REST Link API
 
@@ -920,6 +923,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A settings file written before the Gemini route existed keeps working, with its fields at their defaults. <sub>`an_old_settings_file_without_gemini_fields_keeps_working`</sub>
 - A blank Gemini model box returns to the default model, and stray spaces are trimmed away. <sub>`a_blank_gemini_model_box_returns_to_the_default`</sub>
 - No Gemini key is ever written to the settings file: only the model name lives there. <sub>`no_gemini_key_is_written_to_the_settings_file`</sub>
+- Out of the box no default frame template is chosen, so a new drawing starts with the bundled JIS A3 frame. <sub>`default_frame_template_is_unset`</sub>
+- A settings file written before the default frame template existed still loads, with no default frame chosen. <sub>`old_settings_file_without_default_frame_template_loads_as_unset`</sub>
+- The default frame template id is trimmed, and an empty entry means "no default" rather than an empty id. <sub>`default_frame_template_is_trimmed_and_blank_means_unset`</sub>
+- The chosen default frame template is still there after saving and reloading the settings. <sub>`default_frame_template_round_trips_through_save_and_load`</sub>
 
 ### tool_bridge
 
@@ -1071,6 +1078,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reports the logo frame rectangle so the space is reserved even without an image <sub>`frameLayout`</sub>
 - places the revision table directly above the title block with the same width and row height <sub>`revisionLayout (図枠テンプレート版)`</sub>
 - keeps only as many revision rows as the template allows, dropping the oldest <sub>`revisionLayout (図枠テンプレート版)`</sub>
+- shows the bind placeholders themselves for the title block cells that would come out blank <sub>`bindOverlays (図枠プレビューの青いプレースホルダ)`</sub>
+- never covers a cell that already resolves to a real value <sub>`bindOverlays (図枠プレビューの青いプレースホルダ)`</sub>
+- leaves the fixed heading cells alone because they hold no binds <sub>`bindOverlays (図枠プレビューの青いプレースホルダ)`</sub>
+- still shows the placeholder for a cell that the drawing omits when empty (the company name) <sub>`bindOverlays (図枠プレビューの青いプレースホルダ)`</sub>
+- shows the Japanese name in the Japanese UI and the English one everywhere else <sub>`frameTemplateName (UI言語ごとの図枠名)`</sub>
+- falls back to the English name for a user frame that has no Japanese name <sub>`frameTemplateName (UI言語ごとの図枠名)`</sub>
+- summarises the paper, the zone grid, the title block size and the revision table <sub>`frameTemplateSummary (一覧・情報行の要約)`</sub>
+- lists the binds the title block uses once each, in the order they appear <sub>`bindNames (フィールドバインド表)`</sub>
+- comes back empty for a frame whose title block holds only fixed text <sub>`bindNames (フィールドバインド表)`</sub>
 
 ### Harness boundaries
 
@@ -1364,6 +1380,34 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sheet add/remove patches keep sheet order <sub>`document store`</sub>
 - sheet-meta patches never touch the entities <sub>`document store`</sub>
 - patches with an older revision are discarded (duplicate delivery is safe) <sub>`document store`</sub>
+- frame_template_changed patches update the mirror both ways (switch and undo) <sub>`document store`</sub>
+- loads the frame template catalogue on bootstrap <sub>`document store: 図枠テンプレートの解決`</sub>
+- still opens the drawing when the frame template catalogue cannot be read <sub>`document store: 図枠テンプレートの解決`</sub>
+- resolves the frame template the project has chosen <sub>`document store: 図枠テンプレートの解決`</sub>
+- falls back to the bundled JIS A3 frame when the project names none <sub>`document store: 図枠テンプレートの解決`</sub>
+- falls back to JIS A3 for a frame id this installation does not know <sub>`document store: 図枠テンプレートの解決`</sub>
+- swaps the frame handed to the canvas as soon as the project's frame changes <sub>`document store: 図枠テンプレートの解決`</sub>
+- binds the title block against the project, so each sheet knows its own number out of the total <sub>`document store: 図枠テンプレートの解決`</sub>
+- has no frame options at all when the project holds no sheet <sub>`document store: 図枠テンプレートの解決`</sub>
+
+### frameTemplates
+
+- opens with the bundled and user frames listed and the project's current frame selected <sub>`frame template dialog store`</sub>
+- selects the bundled JIS A3 frame for a project that has never chosen one <sub>`frame template dialog store`</sub>
+- marks each row as a bundled or a user frame <sub>`frame template dialog store`</sub>
+- switches the preview and the summary line to the frame that was clicked <sub>`frame template dialog store`</sub>
+- applies to this project with a single set_frame_template command <sub>`frame template dialog store`</sub>
+- sends nothing when the frame that is already in use is applied again <sub>`frame template dialog store`</sub>
+- moves the in-use marker to the applied frame so a second click sends nothing <sub>`frame template dialog store`</sub>
+- saves the frame as the default for new projects instead of editing the drawing <sub>`frame template dialog store`</sub>
+- keeps the project edit and the global default apart when both are used in one visit <sub>`frame template dialog store`</sub>
+- OK applies and then closes the dialog <sub>`frame template dialog store`</sub>
+- Apply keeps the dialog open so another frame can be tried <sub>`frame template dialog store`</sub>
+- Cancel closes without applying anything <sub>`frame template dialog store`</sub>
+- stays open and shows the reason when applying fails <sub>`frame template dialog store`</sub>
+- reports unreadable frame JSON files instead of dropping the list <sub>`frame template dialog store`</sub>
+- opens the user frame folder and reloads the list afterwards <sub>`frame template dialog store`</sub>
+- just names the folder when it cannot be opened (browser verification mode) <sub>`frame template dialog store`</sub>
 
 ### Circuit macros
 
@@ -1510,6 +1554,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### AI settings
 
 - defaults enable auto-apply and auto-read-drawing <sub>`settings store`</sub>
+- starts with no global default frame template <sub>`settings store`</sub>
+- saves the global default frame template chosen in the frame picker <sub>`settings store`</sub>
 - load pulls the settings from the backend <sub>`settings store`</sub>
 - save merges the changes, sends them, and adopts the normalized response <sub>`settings store`</sub>
 - saves the knowledge-file path and adopts the backend's normalized value <sub>`settings store`</sub>

@@ -17,6 +17,7 @@ import { useRevisionsStore } from "../stores/revisions";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
 import { useMacrosStore } from "../stores/macros";
 import { useTemplatesStore } from "../stores/templates";
+import { useFrameTemplatesStore } from "../stores/frameTemplates";
 import { usePlcIoStore } from "../stores/plcIo";
 import { useTerminalsStore } from "../stores/terminals";
 import { useWireNumbersStore } from "../stores/wireNumbers";
@@ -39,6 +40,7 @@ const pdfBook = usePdfBookStore();
 const terminals = useTerminalsStore();
 const plcIo = usePlcIoStore();
 const templates = useTemplatesStore();
+const frameTemplates = useFrameTemplatesStore();
 const macros = useMacrosStore();
 
 /** タブのid (表示名はi18nカタログ)。 */
@@ -122,6 +124,15 @@ async function openReport(kind: ReportKind, format?: ReportFormat) {
 async function openTemplates() {
   await templates.openDialog();
   ui.log(t("templates.openLog"));
+}
+
+/**
+ * 図枠テンプレートの選択ダイアログを開く (リボン「管理」タブ>テンプレート、
+ * および「プロジェクト」タブ>作図の開始の小ボタン。IAどおりの2導線)。
+ */
+async function openFrameTemplates() {
+  await frameTemplates.openDialog();
+  ui.log(t("frameTemplates.openLog"));
 }
 
 /**
@@ -293,7 +304,35 @@ const projectGroups = computed<RibbonGroup[]>(() => [
     small: [
       [
         { label: t("templates.ribbonPick"), icon: LayoutGrid, action: () => openTemplates() },
+        { label: t("frameTemplates.ribbonButton"), icon: Frame, action: () => openFrameTemplates() },
         { label: t("templates.ribbonUserFolder"), icon: FolderPlus, action: () => openUserFolder() },
+      ],
+    ],
+  },
+]);
+
+/**
+ * 「管理」タブのテンプレートグループ (.pen「M4デザイン - リボン パネル/レポート/管理タブ」)。
+ * デザインの管理タブは3グループ (ライブラリ/テンプレート/設定) だが、シンボルエディタは
+ * 未実装のため、実装済みのテンプレートグループだけを出す。
+ */
+const adminGroups = computed<RibbonGroup[]>(() => [
+  {
+    name: t("ribbon.adminGroup.templates"),
+    big: {
+      label: t("frameTemplates.ribbonButton"),
+      icon: Frame,
+      color: "var(--icon-edit)",
+      action: () => openFrameTemplates(),
+    },
+    small: [
+      [
+        {
+          label: t("frameTemplates.ribbonTitleBlock"),
+          icon: Table2,
+          action: () => todo(t("frameTemplates.ribbonTitleBlock")),
+        },
+        { label: t("templates.ribbonButton"), icon: LayoutTemplate, action: () => openTemplates() },
       ],
     ],
   },
@@ -396,6 +435,7 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
   if (activeTab.value === "schematic") return groups.value;
   if (activeTab.value === "project") return projectGroups.value;
   if (activeTab.value === "report") return reportGroups.value;
+  if (activeTab.value === "admin") return adminGroups.value;
   return null;
 });
 </script>

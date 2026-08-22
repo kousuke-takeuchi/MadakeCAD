@@ -230,12 +230,9 @@ fn load_project(state: State<AppState>, path: String) -> Result<Patch, String> {
 
 #[tauri::command]
 fn new_project(state: State<AppState>, name: String) -> Result<Patch, String> {
-    let patch = state
-        .doc
-        .engine
-        .lock()
-        .unwrap()
-        .replace_project(Project::new(&name));
+    // 図枠は設定の「グローバル既定」で始める(未設定なら同梱のjis-a3)
+    let project = madake_mcp::agent::new_project(&name, &state.agent.settings());
+    let patch = state.doc.engine.lock().unwrap().replace_project(project);
     let _ = state.doc.patches.send(patch.clone());
     // 無題(未保存)プロジェクトの会話は保存先が無いため、履歴も新規から始める
     state.agent.set_conversations(Vec::new());

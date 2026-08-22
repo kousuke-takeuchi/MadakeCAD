@@ -154,3 +154,42 @@ async fn the_exported_svg_follows_the_projects_frame_template() {
     assert!(after.contains("width=\"110\" height=\"32\""), "{after}");
     std::fs::remove_file(&path).ok();
 }
+
+/// A new project starts with the frame template picked as the global default in the app settings.
+/// 新規プロジェクトは、アプリ設定で「グローバル既定」に選んだ図枠テンプレートで始まる。
+#[test]
+fn a_new_project_starts_with_the_default_frame_template_from_the_settings() {
+    let settings = madake_agent::AppSettings {
+        default_frame_template: Some("jis-a4-portrait".into()),
+        ..madake_agent::AppSettings::default()
+    };
+    let project = madake_mcp::agent::new_project("新規図面", &settings);
+    assert_eq!(project.frame_template.as_deref(), Some("jis-a4-portrait"));
+    assert_eq!(project.name, "新規図面");
+}
+
+/// Without a global default in the settings a new project leaves the frame unset, so it is drawn with the bundled JIS A3 frame.
+/// 設定にグローバル既定が無ければ、新規プロジェクトの図枠は未指定のまま(同梱のJIS A3図枠で描かれる)。
+#[test]
+fn a_new_project_without_a_default_setting_keeps_the_frame_unset() {
+    let project = madake_mcp::agent::new_project("新規図面", &madake_agent::AppSettings::default());
+    assert_eq!(project.frame_template, None);
+    assert_eq!(
+        madake_core::frame_template::for_project(&project).id,
+        madake_core::frame_template::DEFAULT_FRAME_TEMPLATE_ID
+    );
+}
+
+/// A blank default frame template in the settings is treated as "no default" instead of an unknown id.
+/// 設定の既定図枠が空欄のときは、未知のidではなく「既定なし」として扱う。
+#[test]
+fn a_blank_default_frame_template_setting_is_ignored() {
+    let settings = madake_agent::AppSettings {
+        default_frame_template: Some("   ".into()),
+        ..madake_agent::AppSettings::default()
+    };
+    assert_eq!(
+        madake_mcp::agent::new_project("新規図面", &settings).frame_template,
+        None
+    );
+}

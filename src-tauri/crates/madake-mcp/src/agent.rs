@@ -106,6 +106,25 @@ pub fn load_and_apply_settings(agent: &AgentManager) -> AppSettings {
     settings
 }
 
+/// 新規プロジェクトを1つ作る(「新規」IPCの中身)。
+///
+/// アプリ設定の「グローバル既定の図枠テンプレート」
+/// ([`AppSettings::default_frame_template`])を初期値として入れる。空欄・未設定なら
+/// 未指定のままにして、同梱の`jis-a3`図枠で描く(従来どおりの見た目)。
+///
+/// **既存の図面の図枠は変えない**(差し替えは`set_frame_template`コマンド)。ここは
+/// まだドキュメントになっていない新しいProjectを組み立てるだけなので、編集ではない。
+pub fn new_project(name: &str, settings: &AppSettings) -> madake_core::Project {
+    let mut project = madake_core::Project::new(name);
+    project.frame_template = settings
+        .default_frame_template
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_string);
+    project
+}
+
 /// プロバイダの状態(設定画面のバッジ・「保存済み」表示用)。
 ///
 /// **APIキーそのものは絶対に含めない**。返すのは「保存されているか」だけ。

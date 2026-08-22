@@ -89,6 +89,11 @@ export interface AppSettings {
   openai_model: string;
   /** `gemini` で使うモデル名 (空にすると既定モデルへ戻る) */
   gemini_model: string;
+  /**
+   * 新しく作る図面の図枠テンプレートid (M4 §9)。nullなら同梱の`jis-a3`。
+   * **図枠の選択ダイアログの「グローバル既定」**がここへ入る (既存の図面は変えない)。
+   */
+  default_frame_template: string | null;
 }
 
 export function defaultSettings(): AppSettings {
@@ -105,6 +110,7 @@ export function defaultSettings(): AppSettings {
     openai_base_url: DEFAULT_OPENAI_BASE_URL,
     openai_model: "",
     gemini_model: DEFAULT_GEMINI_MODEL,
+    default_frame_template: null,
   };
 }
 

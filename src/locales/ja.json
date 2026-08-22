@@ -258,6 +258,9 @@
     },
     "projectGroup": {
       "start": "作図の開始"
+    },
+    "adminGroup": {
+      "templates": "テンプレート"
     }
   },
   "templates": {
@@ -280,6 +283,83 @@
     "noSheetLog": "テンプレート: シートが開かれていません",
     "folderOpenedLog": "テンプレート: {path} を開きました (ここに .json を置くと一覧に並びます)",
     "folderHintLog": "テンプレート: {path} に .json を置くと一覧に並びます"
+  },
+  "frameTemplates": {
+    "title": "図枠テンプレート",
+    "close": "閉じる",
+    "ribbonButton": "図枠テンプレート",
+    "ribbonTitleBlock": "表題欄の編集",
+    "loading": "図枠を読み込んでいます...",
+    "empty": "使える図枠テンプレートがありません",
+    "addUser": "+ JSONを読み込み…",
+    "inUse": "使用中",
+    "noSheet": "シートが開いていないためプレビューできません",
+    "noBinds": "この表題欄は固定文字だけでできています",
+    "source": {
+      "builtin": "同梱",
+      "user": "ユーザー"
+    },
+    "info": "用紙 {paper} mm · ゾーン {zones} · 表題欄 {titleBlock} mm · 改訂欄 最大{revisionRows}行",
+    "scopeLabel": "適用範囲:",
+    "scopeProject": "このプロジェクト",
+    "scopeGlobal": "グローバル既定",
+    "scopeProjectHint": "開いている図面の全シートが1回の編集でこの図枠に変わります (Cmd+Zで戻せます)。",
+    "scopeGlobalHint": "開いている図面は変えません。これから作る図面がこの図枠で始まります。",
+    "groupBinds": "フィールドバインド",
+    "bindsHint": "バインドは描画時に実際の値へ置き換わります。知らないバインドは空欄になるだけで、図面は出せます。",
+    "bind": {
+      "project": {
+        "name": "プロジェクト名",
+        "no": "プロジェクト番号"
+      },
+      "sheet": {
+        "no": "シート番号",
+        "total": "総シート数",
+        "name": "シート名"
+      },
+      "rev": {
+        "latest": "最新改訂"
+      },
+      "title_block": {
+        "company": "会社名",
+        "title": "品名",
+        "drawing_no": "図番",
+        "scale": "尺度",
+        "date": "日付",
+        "designed": "設計",
+        "drawn": "製図",
+        "checked": "検図",
+        "approved": "承認",
+        "rev": "改訂"
+      },
+      "date": "日付",
+      "scale": "尺度",
+      "designer": "設計",
+      "approver": "承認"
+    },
+    "groupZones": "ゾーン設定",
+    "zoneCols": "列",
+    "zoneRows": "行",
+    "zoneLabels": "ゾーン文字: 列={cols} / 行={rows} (IEC 61082-1)",
+    "zoneReadOnly": "ここに出るのは、この図枠が新しいシートへ勧める分割数です。分割数はシートごとに持つので、図枠を替えても図面のゾーン住所は動きません。",
+    "labelStyle": {
+      "numeric": "1, 2, 3…",
+      "alpha": "A, B, C…"
+    },
+    "groupBulk": "一括適用",
+    "bulkHint": "図枠を替えると全シートの図枠・表題欄・改訂欄が一括で変わります (キャンバスもSVG/PDF出力も同じ図枠になります)。",
+    "undoHint": "適用は1回の編集なので、Cmd+Z一発で元の図枠へ戻せます。",
+    "issue": "図枠テンプレートを読めませんでした: {path} ({message})",
+    "ok": "OK",
+    "cancel": "キャンセル",
+    "apply": "適用",
+    "applying": "適用中...",
+    "openLog": "図枠テンプレート: 選択ダイアログを開きました",
+    "appliedLog": "図枠テンプレート: 全シートを「{frame}」にしました (Cmd+Zで戻せます)",
+    "defaultSavedLog": "図枠テンプレート: これから作る図面は「{frame}」で始まります",
+    "unchangedLog": "図枠テンプレート: 「{frame}」はすでに使用中のため変更はありません",
+    "folderOpenedLog": "図枠テンプレート: {path} を開きました (ここへ.jsonを置くと一覧に並びます)",
+    "folderHintLog": "図枠テンプレート: {path} へ.jsonを置くと一覧に並びます"
   },
   "macros": {
     "saveTitle": "回路マクロとして保存",
