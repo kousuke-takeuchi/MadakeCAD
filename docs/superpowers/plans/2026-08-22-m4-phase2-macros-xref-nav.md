@@ -27,8 +27,10 @@
 
 ### Task 2: 回路マクロ(UI)
 
-- [ ] Step 1 (red): vitest: 保存ダイアログ(名前/カテゴリ/基準点/バリアント)のコマンド組み立て/挿入カテゴリの選択→配置プレビューstate/Tabバリアント切替/⌘C/V
-- [ ] Step 2 (green): デザインどおり実装(保存ダイアログ+部品挿入「マクロ」カテゴリ+ゴーストプレビュー)。i18n。実機確認(保存→2回挿入→参照記号重複なし・ERC通過→undoで後始末)+コミット
+- [x] Step 1 (red): vitest: 保存ダイアログ(名前/カテゴリ/基準点/バリアント)のコマンド組み立て/挿入カテゴリの選択→配置プレビューstate/Tabバリアント切替/⌘C/V
+- [x] Step 2 (green): デザインどおり実装(保存ダイアログ+部品挿入「マクロ」カテゴリ+ゴーストプレビュー)。i18n。実機確認(保存→2回挿入→参照記号重複なし・ERC通過→undoで後始末)+コミット
+
+> **完了 (2026-08-22)**: vitest 43件追加(`src/canvas/macroPreview.test.ts` 15 / `src/stores/macros.test.ts` 17 / `src/tools/macroPlacement.test.ts` 11)。UI= `MacroSaveDialog.vue`(名前/カテゴリ/基準点表示/バリアントAチップ+無効の「+追加」/選択範囲プレビュー)、`SymbolPickerDialog.vue`に「部品」/「マクロ」タブ行+マクロギャラリー(カテゴリツリー+バリアント数バッジ付きタイル+プレビュー/バリアント行/無効の値セット/配置)、`MacroPreview.vue`、`canvas/macroPreview.ts`(バリアント選択・配置変換・ゴースト描画)、`stores/macros.ts`、`tools/controller.ts`に`macro`ツール(ゴースト+R回転+Tabバリアント+Esc+連続配置、⌘C/V)。⌘C/Vの無名マクロ用にRust側へ`build_macro`(書き出さずに組み立て)と`apply_macro_inline`(マクロそのものを挿入)をIPC+Link API(`POST /macros/build`・`POST /macros/apply-inline`、2テスト)で追加。値セット(プレースホルダ)とバリアント追加はフェーズ3のまま(disabledプレースホルダ+title)。
 
 ### Task 3: コイル⇔接点XRef
 

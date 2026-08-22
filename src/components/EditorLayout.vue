@@ -18,6 +18,7 @@ import TerminalEditorDialog from "./TerminalEditorDialog.vue";
 import ReportDialog from "./ReportDialog.vue";
 import PdfBookDialog from "./PdfBookDialog.vue";
 import TemplateDialog from "./TemplateDialog.vue";
+import MacroSaveDialog from "./MacroSaveDialog.vue";
 import SymbolPickerDialog from "./SymbolPickerDialog.vue";
 import TitleBar from "./TitleBar.vue";
 import SettingsDialog from "./settings/SettingsDialog.vue";
@@ -25,6 +26,7 @@ import { useRevisionsStore } from "../stores/revisions";
 import { useWireNumbersStore } from "../stores/wireNumbers";
 import { useTerminalsStore } from "../stores/terminals";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
+import { useMacrosStore } from "../stores/macros";
 
 const store = useDocumentStore();
 const ui = useUiStore();
@@ -33,6 +35,7 @@ const wireNumbers = useWireNumbersStore();
 const terminals = useTerminalsStore();
 const reportDialog = useReportDialogStore();
 const pdfBook = usePdfBookStore();
+const macros = useMacrosStore();
 const controller = reactive(new EditorController(store)) as EditorController;
 provide("controller", controller);
 const files = useFileActions();
@@ -78,9 +81,23 @@ async function onKeyDown(ev: KeyboardEvent) {
     ev.preventDefault();
     return;
   }
+  if (ev.key === "Escape" && macros.saveOpen) {
+    macros.cancelSave();
+    ev.preventDefault();
+    return;
+  }
   if (isEditableTarget(ev)) return;
   // モーダル表示中はキャンバスのショートカットを走らせない
-  if (revisions.open || wireNumbers.open || terminals.open || reportDialog.open || pdfBook.open) return;
+  if (
+    revisions.open ||
+    wireNumbers.open ||
+    terminals.open ||
+    reportDialog.open ||
+    pdfBook.open ||
+    macros.saveOpen
+  ) {
+    return;
+  }
   if (await controller.onKeyDown(ev)) ev.preventDefault();
 }
 function onKeyUp(ev: KeyboardEvent) {
@@ -122,6 +139,7 @@ onBeforeUnmount(() => {
     <ReportDialog />
     <PdfBookDialog />
     <TemplateDialog />
+    <MacroSaveDialog />
   </div>
 </template>
 

@@ -1,15 +1,41 @@
 // 対話ツールの状態機械。ドラッグ中はローカルプレビュー、確定時にCommandを発行する。
 
 import { harnessAddCommand, harnessRectPoints, harnessWireCount } from "../canvas/harness";
+import {
+  DEFAULT_VARIANT,
+  drawMacroGhost,
+  macroEntities,
+  macroVariantKeys,
+  placeMacroEntities,
+} from "../canvas/macroPreview";
 import { drawHarness, drawSymbol, transformLocal } from "../canvas/renderer";
 import { theme, wireColorScreen } from "../canvas/theme";
 import { Viewport, type Pt } from "../canvas/viewport";
 import { i18n } from "../i18n";
-import type { Entity, Point, SymbolInstance } from "../ipc";
+import { ipc, type Entity, type Macro, type Point, type SymbolInstance } from "../ipc";
 import { useDocumentStore } from "../stores/document";
+import { useMacrosStore } from "../stores/macros";
 import { useUiStore } from "../stores/ui";
 
-export type ToolId = "select" | "wire" | "place" | "harness";
+export type ToolId = "select" | "wire" | "place" | "harness" | "macro";
+
+/** 配置中のマクロ。`fromLibrary=false`は⌘Vの無名マクロ (ファイルに無いのでidを引けない)。 */
+export interface MacroPlacement {
+  macro: Macro;
+  fromLibrary: boolean;
+}
+
+/** マクロ確定時にRustへ渡す引数 (ライブラリはid、無名マクロはマクロそのもの)。 */
+export type MacroApplyArgs =
+  | {
+      kind: "library";
+      macroId: string;
+      variant: string;
+      sheetId: string;
+      at: Point;
+      rotation: number;
+    }
+  | { kind: "inline"; macro: Macro; variant: string; sheetId: string; at: Point; rotation: number };
 
 type DocumentStore = ReturnType<typeof useDocumentStore>;
 
@@ -35,6 +61,10 @@ export class EditorController {
   placeRotation = 0;
   /** 部品DBから選択した部品情報 (配置時にvalue/attrsへ反映)。 */
   placePart: { value: string; attrs: Record<string, string> } | null = null;
+  /** macroツールで配置中の回路マクロ。 */
+  placeMacro: MacroPlacement | null = null;
+  /** 配置中のバリアント (Tabで巡回する`macroVariantKeys`の添字)。 */
+  macroVariantIndex = 0;
   /** 配線ツールの既定属性。 */
   wireColor = "red";
   wireSq = 0.75;
@@ -67,8 +97,87 @@ export class EditorController {
     this.tool = tool;
     this.placeSymbolId = tool === "place" ? (symbolId ?? this.placeSymbolId) : null;
     this.placePart = tool === "place" ? (part ?? null) : null;
+    if (tool !== "macro") {
+      this.placeMacro = null;
+      this.macroVariantIndex = 0;
+    }
     this.wirePoints = [];
     this.dragMode = "none";
+    this.requestRedraw();
+  }
+
+  /**
+   * 回路マクロの配置モードに入る (ゴースト表示 → クリックで確定)。
+   * バリアントは既定の"A"、回転は0から始める。
+   */
+  startMacroPlacement(macro: Macro, opts: { fromLibrary?: boolean } = {}) {
+    this.tool = "macro";
+    this.placeMacro = { macro, fromLibrary: opts.fromLibrary ?? true };
+    this.macroVariantIndex = 0;
+    this.placeRotation = 0;
+    this.placeSymbolId = null;
+    this.placePart = null;
+    this.wirePoints = [];
+    this.dragMode = "none";
+    this.requestRedraw();
+  }
+
+  /** 配置中のマクロのバリアントキー ("A"が既定)。 */
+  get macroVariantKey(): string {
+    if (!this.placeMacro) return DEFAULT_VARIANT;
+    const keys = macroVariantKeys(this.placeMacro.macro);
+    return keys[this.macroVariantIndex % keys.length] ?? DEFAULT_VARIANT;
+  }
+
+  /** Tab: バリアントを次へ巡回する (1つしか無ければ変わらない)。 */
+  cycleMacroVariant() {
+    if (!this.placeMacro) return;
+    const keys = macroVariantKeys(this.placeMacro.macro);
+    this.macroVariantIndex = (this.macroVariantIndex + 1) % keys.length;
+    this.requestRedraw();
+  }
+
+  /**
+   * 確定時にRustへ渡す引数。ライブラリのマクロはidで、⌘Vの無名マクロは
+   * マクロそのものを渡す (ファイルが無いのでidを引けない)。
+   */
+  macroApplyArgs(at: Pt): MacroApplyArgs | null {
+    const sheet = this.store.activeSheet;
+    if (!sheet || !this.placeMacro) return null;
+    const common = {
+      variant: this.macroVariantKey,
+      sheetId: sheet.id,
+      at: { x: at.x, y: at.y },
+      rotation: this.placeRotation,
+    };
+    return this.placeMacro.fromLibrary
+      ? { kind: "library", macroId: this.placeMacro.macro.id, ...common }
+      : { kind: "inline", macro: this.placeMacro.macro, ...common };
+  }
+
+  /**
+   * マクロを1回の編集として挿入する (undo一発で全体が戻る)。
+   * 確定後もマクロツールのままなので、同じマクロを続けて何個でも置ける。
+   */
+  async commitMacro(at: Pt) {
+    const args = this.macroApplyArgs(at);
+    if (!args) return;
+    const ui = useUiStore();
+    try {
+      const patch =
+        args.kind === "library"
+          ? await ipc.applyMacro(args.macroId, args.variant, args.sheetId, args.at, args.rotation)
+          : await ipc.applyMacroInline(
+              args.macro,
+              args.variant,
+              args.sheetId,
+              args.at,
+              args.rotation,
+            );
+      this.store.applyEdit(patch);
+    } catch (e) {
+      ui.log(String(e));
+    }
     this.requestRedraw();
   }
 
@@ -154,6 +263,9 @@ export class EditorController {
       }
       case "place":
         void this.commitPlace(this.snap(world));
+        break;
+      case "macro":
+        void this.commitMacro(this.snap(world));
         break;
       case "harness": {
         // ハーネス境界は矩形ドラッグ。押した点をグリッドに乗せて始点にする
@@ -294,6 +406,9 @@ export class EditorController {
       this.requestRedraw();
       return true;
     }
+    // ⌘C/V: 選択範囲を無名マクロとして覚え、貼り付けは同じ配置モードで置く
+    if (mod && ev.key.toLowerCase() === "c") return await this.copySelection();
+    if (mod && ev.key.toLowerCase() === "v") return this.pasteMacro();
     switch (ev.key) {
       case "Escape":
         if (this.tool === "wire" && this.wirePoints.length) void this.commitWire();
@@ -309,9 +424,15 @@ export class EditorController {
         return true;
       case "r":
       case "R":
-        if (this.tool === "place") {
+        if (this.tool === "place" || this.tool === "macro") {
           this.placeRotation = (this.placeRotation + 90) % 360;
           this.requestRedraw();
+          return true;
+        }
+        return false;
+      case "Tab":
+        if (this.tool === "macro" && this.placeMacro) {
+          this.cycleMacroVariant();
           return true;
         }
         return false;
@@ -327,6 +448,29 @@ export class EditorController {
 
   onKeyUp(ev: KeyboardEvent) {
     if (ev.code === "Space") this.spaceHeld = false;
+  }
+
+  /**
+   * ⌘C: 選択範囲を無名マクロとしてメモリに覚える (ファイルには書かない)。
+   * 選択が空のときはキー入力を横取りしない (通常のコピーを邪魔しない)。
+   */
+  async copySelection(): Promise<boolean> {
+    const sheet = this.store.activeSheet;
+    if (!sheet || this.store.selection.size === 0) return false;
+    const ids = [...this.store.selection];
+    const copied = await useMacrosStore().copy(sheet.id, ids);
+    if (!copied) return false;
+    useUiStore().log(i18n.global.t("macros.copiedLog", { count: ids.length }));
+    return true;
+  }
+
+  /** ⌘V: 覚えている無名マクロの配置モードへ入る (何もコピーしていなければ何もしない)。 */
+  pasteMacro(): boolean {
+    const pasted = useMacrosStore().paste();
+    if (!pasted) return false;
+    this.startMacroPlacement(pasted, { fromLibrary: false });
+    useUiStore().log(i18n.global.t("macros.pasteLog"));
+    return true;
   }
 
   async deleteSelection() {
@@ -435,6 +579,15 @@ export class EditorController {
         ctx.globalAlpha = 1;
       }
     }
+    // 回路マクロの配置ゴースト: 確定後と同じ回路をカーソル位置へ半透明で描く
+    if (this.tool === "macro" && this.placeMacro) {
+      const entities = placeMacroEntities(
+        macroEntities(this.placeMacro.macro, this.macroVariantKey),
+        this.cursorWorld,
+        this.placeRotation,
+      );
+      drawMacroGhost(ctx, vp, entities, (id) => this.store.resolveSymbol(id));
+    }
     // 移動プレビュー: 選択物のピン/頂点を差分表示
     if (this.dragMode === "move" && (this.moveDelta.x || this.moveDelta.y)) {
       const sheet = this.store.activeSheet;
@@ -487,7 +640,7 @@ export class EditorController {
     }
     // ピンスナップマーカー: カーソル近傍のピンに菱形
     const sheet = this.store.activeSheet;
-    if (sheet && (this.tool === "wire" || this.tool === "place")) {
+    if (sheet && (this.tool === "wire" || this.tool === "place" || this.tool === "macro")) {
       for (const e of Object.values(sheet.entities)) {
         if (e.kind !== "symbol") continue;
         const def = this.store.resolveSymbol(e.symbol_id);
