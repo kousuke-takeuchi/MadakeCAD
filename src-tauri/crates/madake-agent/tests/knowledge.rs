@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use madake_agent::knowledge::{system_prompt, standards_text};
+use madake_agent::knowledge::{docs_guide, system_prompt, standards_text};
 use madake_agent::AppSettings;
 use uuid::Uuid;
 
@@ -90,6 +90,113 @@ fn without_a_knowledge_file_only_the_bundled_note_is_used() {
     let prompt = system_prompt(&AppSettings::default(), None);
     assert!(prompt.contains("JIS C 0617"), "{prompt}");
     assert!(!prompt.contains("追加の知識"), "{prompt}");
+}
+
+/// The prompt lists the bundled manual (01-13) so how-to questions are answered from the documentation with a source.
+/// プロンプトには同梱マニュアル(01〜13)の目次が載り、操作方法の質問へ出典つきで答えられる。
+#[test]
+fn system_prompt_lists_the_bundled_documentation() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    for needle in [
+        "01-overview.md",
+        "02-getting-started.md",
+        "03-schematic-editor.md",
+        "04-standards-output.md",
+        "05-wire-management.md",
+        "06-verification-simulation.md",
+        "07-parts-database.md",
+        "08-import-export.md",
+        "09-ai-assistant.md",
+        "10-automation-api.md",
+        "11-mechanical-integration.md",
+        "12-roadmap.md",
+        "13-specification.md",
+        // 推測ではなく読んでから答え、出典(ファイル名)を添える
+        "出典",
+    ] {
+        assert!(prompt.contains(needle), "ドキュメント案内に「{needle}」が無い");
+    }
+}
+
+/// Questions about missing features are answered from the roadmap and the feature inventory.
+/// 未対応機能の質問には、ロードマップと機能インベントリを見てマイルストーンを答える。
+#[test]
+fn system_prompt_points_unsupported_features_at_the_roadmap() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    assert!(prompt.contains("feature-inventory.md"), "{prompt}");
+    assert!(prompt.contains("12-roadmap.md"), "{prompt}");
+    assert!(prompt.contains("未対応"), "{prompt}");
+}
+
+/// Without bundled documentation the guide is dropped instead of pointing at files that are not there.
+/// ドキュメントが同梱されていない環境では、存在しないファイルを案内せずガイドごと省く。
+#[test]
+fn the_documentation_guide_is_dropped_when_the_docs_are_missing() {
+    // そもそも場所が分からない
+    assert!(docs_guide(None).is_none());
+    // 場所はあるが中身が違う(01-overview.mdが無い)ディレクトリも案内しない
+    let dir = temp_dir();
+    assert!(docs_guide(Some(&dir)).is_none());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A review request runs the deterministic verification first, then the five habit-based checkpoints.
+/// レビュー依頼ではまず`run_verification`を実行し、その後で慣行の5観点を点検する。
+#[test]
+fn system_prompt_carries_the_review_checklist() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    let review = prompt.find("設計レビュー").expect("レビュー節が無い");
+    let section = &prompt[review..];
+    for needle in [
+        "run_verification",
+        "参照記号",
+        "線色",
+        "線番",
+        "レイアウト",
+        "表題欄",
+        "改訂欄",
+    ] {
+        assert!(section.contains(needle), "レビュー観点に「{needle}」が無い");
+    }
+}
+
+/// Review findings are listed as severity / target / finding / suggestion, and fixes wait for the user's approval.
+/// レビューの指摘は「重要度|対象|指摘|提案」で並べ、修正はユーザー承認を待つ。
+#[test]
+fn review_findings_use_the_severity_table_and_wait_for_approval() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    assert!(
+        prompt.contains("| 重要度 | 対象 | 指摘 | 提案 |"),
+        "{prompt}"
+    );
+    assert!(prompt.contains("高"), "{prompt}");
+    assert!(prompt.contains("承認"), "{prompt}");
+}
+
+/// A test-plan request produces a step / action / expected-result table and does not write notes into the drawing on its own.
+/// 動作確認手順の依頼には「手順|操作|期待結果」の表で答え、図面へ勝手に注記を書き込まない。
+#[test]
+fn system_prompt_carries_the_test_plan_table() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    assert!(prompt.contains("| 手順 | 操作 | 期待結果 |"), "{prompt}");
+    let plan = prompt.find("動作確認手順").expect("検証計画の節が無い");
+    assert!(prompt[plan..].contains("指示"), "{prompt}");
+}
+
+/// Parts selection searches the parts database and answers with a comparison table.
+/// 部品選定では部品DBを検索し、比較表で答える。
+#[test]
+fn system_prompt_carries_the_parts_comparison_table() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    assert!(prompt.contains("search_parts"), "{prompt}");
+    assert!(
+        prompt.contains("| 型番 | メーカ | 定格 | 価格 | 購入先 | 差分 |"),
+        "{prompt}"
+    );
+    // 置換は提案どまり。実行はユーザーの承認後
+    let parts = prompt.find("部品選定").expect("部品選定の節が無い");
+    assert!(prompt[parts..].contains("承認"), "{prompt}");
+    assert!(prompt[parts..].contains("execute_commands"), "{prompt}");
 }
 
 /// An unreadable knowledge file is skipped without losing the bundled note.

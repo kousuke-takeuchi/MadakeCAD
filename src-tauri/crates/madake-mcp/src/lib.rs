@@ -295,6 +295,23 @@ impl MadakeMcp {
     }
 }
 
+/// 公開しているMCPツールの一覧(ツール名 → 説明文)。
+///
+/// 説明文はエージェントがツールを選ぶ唯一の手がかりなので、用途を書き漏らしていないか
+/// テストから確かめられるようにここで公開する。
+pub fn tool_descriptions() -> Vec<(String, String)> {
+    MadakeMcp::tool_router()
+        .list_all()
+        .into_iter()
+        .map(|tool| {
+            (
+                tool.name.to_string(),
+                tool.description.map(|d| d.to_string()).unwrap_or_default(),
+            )
+        })
+        .collect()
+}
+
 #[tool_router]
 impl MadakeMcp {
     #[tool(
@@ -573,7 +590,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "部品DB(グローバル共有マスタ)を検索する。queryは型番・名称・メーカの部分一致、categoryは完全一致。部品のsymbol_id/rated_current_aはplace_symbolやexecute_commandsでの配置に使える"
+        description = "部品DB(グローバル共有マスタ)を検索する。部品の選定・比較・代替品の提案はこのツールで実在する部品を調べてから行う(型番を記憶で書かない)。queryは型番・名称・メーカの部分一致、categoryは完全一致。各部品は型番・メーカ・カテゴリ・定格電圧/定格電流・参考価格・購入先URL・データシートURL・既定シンボルidを持ち、比較表(定格・価格・購入先の差分)にそのまま使える。symbol_id/rated_current_aはplace_symbolやexecute_commandsでの配置に使える"
     )]
     fn search_parts(
         &self,

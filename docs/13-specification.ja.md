@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**609仕様項目**。
+全5領域・**620仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -335,6 +335,11 @@
 - ターン実行中の印は入れ子でも数えられ、必ず解除されるため、ターン後の編集はまたユーザー編集になる。 <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
 - エージェントマネージャが使う窓口はエージェント編集だけを巻き戻し、戻した件数を報告する。 <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
 
+### tools
+
+- 部品検索ツールの説明には選定・比較・代替品の用途が書かれており、「これの代替は?」と聞かれたエージェントがこれを使う。 <sub>`the_parts_search_tool_advertises_selection_and_comparison`</sub>
+- 公開ツールには全て説明文が付いており、説明の無いツールをエージェントへ見せない。 <sub>`every_published_tool_has_a_description`</sub>
+
 
 ## AIアシスタント (madake-agent)
 
@@ -342,6 +347,7 @@
 ### Claude CLIバックエンド
 
 - Claude CLIは必須フラグ(-p・stream-json出力・部分メッセージ・strict MCP設定)付きでヘッドレス起動される。 <sub>`args_contain_required_flags`</sub>
+- 同梱ドキュメントのフォルダは読み取り可能なディレクトリとしてエージェントへ開かれ、マニュアルを引用できる。 <sub>`args_open_the_bundled_documentation_for_reading`</sub>
 - セッション再開ID・モデル指定・追加システムプロンプトは、指定時にCLIへ引き渡される。 <sub>`args_include_resume_model_and_system_prompt_when_given`</sub>
 - エージェントのMCP設定はMadakeCAD自身のローカルMCPサーバーを指し、他クライアントと同じツールを使う。 <sub>`mcp_config_points_at_local_mcp_server`</sub>
 - ターンはCLIのstream-json出力から解釈したイベント(テキスト差分・ツール実行・完了)を流す。 <sub>`send_streams_events_from_fake_cli`</sub>
@@ -385,7 +391,18 @@
 - システムプロンプトは図面コンテキストが先頭で、規格知識はその後ろに続く。 <sub>`system_prompt_puts_the_drawing_context_first`</sub>
 - 設定の知識ファイルは同梱ノートの後ろへ追記される。 <sub>`user_knowledge_file_is_appended_to_the_prompt`</sub>
 - 知識ファイル未設定なら、プロンプトには同梱ノートだけが載る。 <sub>`without_a_knowledge_file_only_the_bundled_note_is_used`</sub>
+- プロンプトには同梱マニュアル(01〜13)の目次が載り、操作方法の質問へ出典つきで答えられる。 <sub>`system_prompt_lists_the_bundled_documentation`</sub>
+- 未対応機能の質問には、ロードマップと機能インベントリを見てマイルストーンを答える。 <sub>`system_prompt_points_unsupported_features_at_the_roadmap`</sub>
+- ドキュメントが同梱されていない環境では、存在しないファイルを案内せずガイドごと省く。 <sub>`the_documentation_guide_is_dropped_when_the_docs_are_missing`</sub>
+- レビュー依頼ではまず`run_verification`を実行し、その後で慣行の5観点を点検する。 <sub>`system_prompt_carries_the_review_checklist`</sub>
+- レビューの指摘は「重要度|対象|指摘|提案」で並べ、修正はユーザー承認を待つ。 <sub>`review_findings_use_the_severity_table_and_wait_for_approval`</sub>
+- 動作確認手順の依頼には「手順|操作|期待結果」の表で答え、図面へ勝手に注記を書き込まない。 <sub>`system_prompt_carries_the_test_plan_table`</sub>
+- 部品選定では部品DBを検索し、比較表で答える。 <sub>`system_prompt_carries_the_parts_comparison_table`</sub>
 - 読めない知識ファイルは読み飛ばされ、同梱ノートは失われない。 <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
+
+### knowledge_docs
+
+- エージェントにはアプリが解決したドキュメントの場所が伝わり、どこにインストールされていてもマニュアルを読める。 <sub>`the_documentation_folder_of_the_installed_app_is_handed_to_the_agent`</sub>
 
 ### 規格知識 (リソースファイル)
 
