@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1144 specification clauses** across 5 areas.
+**1183 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -26,6 +26,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - UpdateEntity replaces an entity wholesale; undo brings back the previous version. <sub>`update_entity_undo_restores_previous_version`</sub>
 - SetTitleBlock updates the sheet's title block; undo restores the previous fields. <sub>`set_title_block_is_undoable`</sub>
 - SetRevisions replaces the revision-table rows; undo restores the previous list. <sub>`set_revisions_is_undoable`</sub>
+- SetPlcAssignments replaces the whole PLC I/O assignment table of the project; undo restores the previous table. <sub>`set_plc_assignments_is_undoable`</sub>
 - A harness boundary is added, renamed and deleted with the ordinary entity commands, and every step can be undone. <sub>`harness_add_rename_delete_are_undoable`</sub>
 - Moving a harness boundary shifts all of its corners, and undo puts them back exactly. <sub>`harness_move_and_undo_restores_every_corner`</sub>
 - A harness boundary survives a JSON round trip with the kind tag "harness", so any client can send it. <sub>`harness_command_json_roundtrip_uses_the_harness_kind`</sub>
@@ -66,6 +67,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project saved to .mdkproj and loaded back is identical, including all entities. <sub>`project_file_roundtrip`</sub>
 - The saved .mdkproj file is pretty-printed JSON with a format_version field, so it diffs well in git. <sub>`saved_file_is_pretty_json_with_format_version`</sub>
 - Loading a missing file returns an error instead of panicking. <sub>`loading_missing_file_is_an_error`</sub>
+- A project file saved before the PLC assignment table existed still opens: it gets an empty table and is brought up to the current format version. <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
 
 ### KiCad import
 
@@ -110,7 +112,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### Document model
 
 - Paper sizes follow ISO A-series dimensions, and portrait orientation swaps width and height. <sub>`paper_sizes_match_iso_and_orientation_swaps`</sub>
-- A new project starts with one sheet named "Sheet1" and format_version 1. <sub>`new_project_has_one_default_sheet`</sub>
+- A new project starts with one sheet named "Sheet1", the current file format version and an empty PLC assignment table. <sub>`new_project_has_one_default_sheet`</sub>
 - Entity::translate moves every coordinate of the entity: all wire points, or the anchor of symbols/labels/text. <sub>`translate_moves_all_coordinates`</sub>
 - Entity::id() returns the inner entity's UUID regardless of the entity kind. <sub>`entity_id_is_uniform_across_kinds`</sub>
 
@@ -141,6 +143,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An old schema-v1 database migrates to v2 on open, preserving existing rows and gaining the spice_model column. <sub>`v1_database_migrates_to_v2_preserving_data`</sub>
 - An old schema-v2 database migrates to v3 on open, preserving existing rows and gaining the contact_config column. <sub>`v2_database_migrates_to_v3_preserving_data`</sub>
 - The bundled sample relay carries its contact configuration, so a freshly placed relay can be checked for contact overflow. <sub>`sample_relay_part_has_a_contact_configuration`</sub>
+- An old schema-v3 database migrates to v4 on open, preserving existing rows and gaining the plc_module column. <sub>`v3_database_migrates_to_v4_preserving_data`</sub>
+- The bundled samples include three PLC modules that cover the Mitsubishi, Siemens and Allen-Bradley address styles. <sub>`sample_plc_modules_cover_the_three_address_styles`</sub>
+- The PLC module list contains only parts that carry a module definition, so ordinary parts never show up in the module library. <sub>`the_plc_module_list_contains_only_parts_with_a_module_definition`</sub>
 - The database path defaults to the OS app-data folder and can be overridden with MADAKE_PARTS_DB. <sub>`default_path_respects_env_override`</sub>
 
 ### PDF output
@@ -153,6 +158,32 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The cover page can be turned off, leaving the circuit sheets first. <sub>`pdf_book_can_omit_the_cover`</sub>
 - Exporting the book writes one PDF document holding every page, with report pages on A4 even when the circuit is A3. <sub>`pdf_book_merges_every_page_into_one_document`</sub>
 - A book of a project with no sheet at all still produces a valid one-page PDF (the cover). <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
+
+### PLC I/O
+
+- Mitsubishi-style addresses count up in octal, so the eighth point of an X module is X10 rather than X8. <sub>`mitsubishi_addresses_count_up_in_octal`</sub>
+- Siemens-style addresses are written as byte.bit with eight bits per byte, so the ninth point is %I1.0. <sub>`siemens_addresses_are_written_as_byte_and_bit`</sub>
+- Allen-Bradley-style addresses are written as word/bit with sixteen bits per word, so the seventeenth point is I:1/0. <sub>`allen_bradley_addresses_are_written_as_word_and_bit`</sub>
+- Auto-numbering can start from a point offset, so a second module continues where the first one ended. <sub>`auto_addresses_can_start_from_a_point_offset`</sub>
+- A module definition knows which dynamic symbol to place: input modules use plc_di_{n}p and output modules plc_do_{n}p. <sub>`a_module_definition_names_its_drawing_symbol`</sub>
+- A module definition survives the round trip through the parts-database JSON column. <sub>`a_module_definition_round_trips_through_json`</sub>
+- The assignment table is written to CSV as address, signal name and comment, and reading it back gives the same rows. <sub>`the_assignment_table_round_trips_through_csv`</sub>
+- A CSV without a header row is read as data, so a spreadsheet exported without titles still loads. <sub>`a_csv_without_a_header_row_is_still_read`</sub>
+- Importing a CSV replaces only the target module's rows and leaves other modules untouched; one undo puts the old table back. <sub>`importing_a_csv_replaces_only_the_target_module`</sub>
+- A CSV row without the three columns is refused, and the drawing keeps its old assignment table. <sub>`a_malformed_csv_row_is_refused_without_changing_the_table`</sub>
+- Each point of the assignment table picks up the connected device and the wire number from the drawing. <sub>`each_point_picks_up_its_target_and_wire_number_from_the_drawing`</sub>
+- The modules placed on the drawing are listed with their point count and I/O kind, so the editor can offer them for selection. <sub>`placed_modules_are_listed_with_their_point_count_and_kind`</sub>
+- Generating an I/O drawing adds one new sheet whose ladder has one rung per point of the module. <sub>`generating_an_io_drawing_makes_one_rung_per_point`</sub>
+- Rungs sit at the requested vertical spacing, and the requested number of leading rung positions is left empty. <sub>`rungs_follow_the_requested_spacing_and_leading_skip`</sub>
+- The whole generated page is a single edit, so one undo removes the sheet and everything on it. <sub>`a_generated_io_page_is_undone_in_one_step`</sub>
+- Generating twice adds a second sheet instead of overwriting the first one. <sub>`generating_twice_adds_a_second_sheet`</sub>
+- A generated I/O page has no ERC complaints: every point is wired and every wire end lands on something. <sub>`a_generated_io_page_passes_the_electrical_rule_check`</sub>
+- Generating for a module with no assignments fills the table with auto-numbered addresses in the same single edit. <sub>`generating_fills_an_empty_assignment_table_with_auto_addresses`</sub>
+- Existing signal names are kept when the page is generated: the assignment table stays the master of names and comments. <sub>`generating_keeps_the_signal_names_already_in_the_table`</sub>
+- The two module-placement policies that are not implemented yet are refused with a clear error, and the drawing is left untouched. <sub>`the_unimplemented_placement_policies_are_refused`</sub>
+- The horizontal-bus ladder style is not implemented yet and is refused the same way. <sub>`the_horizontal_bus_ladder_style_is_refused`</sub>
+- A rung spacing that is not a positive multiple of the 2.5 mm grid is refused, so generated pages stay on grid. <sub>`an_off_grid_rung_spacing_is_refused`</sub>
+- The I/O report lists every point as address, signal name, target, wire number and comment, with the module reference in front for the whole project. <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
 
 ### relay_xref
 
@@ -200,6 +231,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Pointing a terminal report at something that is not a terminal block fails instead of writing an empty file. <sub>`a_terminal_report_of_an_unknown_block_fails`</sub>
 - Every other report ignores the terminal selection and always covers the whole project. <sub>`other_reports_always_cover_the_whole_project`</sub>
 - The cross-reference CSV carries the same column headings as its drawing sheet. <sub>`the_cross_reference_csv_has_the_same_columns_as_its_sheet`</sub>
+- The PLC I/O report is available as CSV and as a framed drawing sheet, with one row per assigned I/O point. <sub>`the_plc_io_report_has_one_row_per_assigned_point`</sub>
 - Report kinds are serialized with the same kebab-case names the CLI and Link API use. <sub>`report_kind_json_names_match_cli_spelling`</sub>
 
 ### Reports (BOM / wire list)
@@ -282,6 +314,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - connector_2p generated dynamically has exactly the same pin coordinates as the old static definition, so existing drawings are unaffected. <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
 - resolve_symbol finds built-in ids, and rejects malformed or out-of-range dynamic ids (0 poles, 51 poles, missing count). <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defs returns the built-in library plus definitions for every dynamic symbol actually used on the sheet. <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
+- A PLC input module symbol (e.g. 16 points) is a tall box with one connection point per I/O point on its left side, all on the 2.5 mm grid. <sub>`a_plc_input_module_has_one_connection_point_per_io_point`</sub>
+- PLC modules come in an input and an output flavour, and both carry the PLC reference prefix. <sub>`plc_modules_come_in_input_and_output_flavours`</sub>
+- PLC module symbols exist from 1 to 64 points; anything outside that range is not a symbol. <sub>`plc_module_point_counts_are_limited_to_one_through_sixty_four`</sub>
 - The relay coil symbol carries the JIS coil terminal names A1 and A2 and the reference prefix K. <sub>`relay_coil_has_a1_a2_terminals`</sub>
 - Both relay contact types (make and break) exist, share the coil's reference prefix, and have their two connection points on the 2.5 mm grid. <sub>`relay_contacts_come_in_make_and_break_types`</sub>
 - Symbol definitions serialize to JSON and back without loss. <sub>`symbol_json_roundtrip`</sub>
@@ -496,6 +531,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Each entry point records who made the edit: the UI is a user edit, the agent's turn is an agent edit, and outside clients are mcp edits. <sub>`every_edit_path_records_who_made_the_change`</sub>
 - The agent-turn marker nests and always clears, so edits after the turn are user edits again. <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
 - The bridge the agent manager uses reverts only agent edits and reports how many were rolled back. <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
+
+### PLC I/O (MCP tool / REST)
+
+- PUT /plc/assignments replaces the whole I/O assignment table, and GET reads it back per module. <sub>`the_assignment_table_can_be_written_and_read_over_the_link_api`</sub>
+- POST /plc/assignments/import loads a CSV of address, signal name and comment for one module, and one undo takes the whole import back. <sub>`a_csv_of_signal_names_can_be_imported_and_undone`</sub>
+- A CSV whose rows do not have the three columns is refused with 400 and leaves the assignment table untouched. <sub>`a_malformed_csv_import_is_refused_with_a_bad_request`</sub>
+- POST /plc/generate builds the I/O ladder page as a single edit: the new sheet carries the module symbol and one rung per point, and GET /plc/modules then lists the placed module. <sub>`generating_an_io_page_over_the_link_api_is_one_undo_step`</sub>
+- Generation settings that are not implemented yet (sharing a ladder between modules) are refused with 400 and change nothing. <sub>`an_unimplemented_generation_setting_is_refused_with_a_bad_request`</sub>
+- The PLC I/O report is exported through the ordinary report endpoint as "plc-io", listing one row per assigned point. <sub>`the_plc_io_report_is_exported_like_any_other_report`</sub>
+- The PLC tools tell the agent what the assignment table is for and that generating a page is one undo step. <sub>`the_plc_tools_explain_the_assignment_table_and_the_generated_page`</sub>
 
 ### provider_api
 
@@ -1328,7 +1373,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Reports (BOM / wire list)
 
-- offers the five report kinds of the reports tab <sub>`report generation dialog store`</sub>
+- offers the six report kinds of the reports tab <sub>`report generation dialog store`</sub>
 - opens a project-wide report as a CSV export <sub>`report generation dialog store`</sub>
 - switches the same report to a framed drawing-sheet PDF <sub>`report generation dialog store`</sub>
 - lets the terminal chart target one terminal block as well as the whole project <sub>`report generation dialog store`</sub>

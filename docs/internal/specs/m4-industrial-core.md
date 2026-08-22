@@ -61,6 +61,18 @@
 
 ## 3. PLC I/O
 
+> **ステータス: 🔶 フェーズ3のコア完了(2026-08-22)。** 実装済み = 部品DB v4の`plc_module`列
+> (点数・DI/DO・アドレス接頭辞・アドレス体系のJSON)+サンプル3種、動的シンボル
+> `plc_di_{n}p`/`plc_do_{n}p`(1〜64点)、割付表(`Project.plc_assignments`。**format_version 2**、
+> 編集は`set_plc_assignments`でundo可)、アドレス自動採番(三菱=8進/Siemens=バイト.ビット/
+> AB=ワード/ビット)、CSV入出力(アドレス・信号名・コメント。取り込みはCommand経由でモジュール
+> 単位に置換)、接続先・線番の図面からの導出(読み取り専用)、I/O図面生成(縦バス+横ラング・
+> 1点=1ラング・undo一発・ERC指摘ゼロ)、I/Oレポート(`plc-io`。CSV/図面シート/PDF一括)。
+> 露出=Tauri IPC・Link API(`/plc/*`)・MCPツール3種・CLIの`plc-io`帳票。
+> **残り**: 割付表エディタUIと生成設定ダイアログ(Task 4)、ラダー形式=横バス、
+> 配置方針の②同居・③同居+分割(ページ分割)、生成設定のプロジェクト保存。
+> 計画=`docs/superpowers/plans/2026-08-22-m4-phase3-library-valuesets-plc.md` Task 3
+
 **ベンチマーク: ACADEの「Spreadsheet to PLC I/O Utility」+モジュールライブラリ。**
 
 - **PLCモジュール定義**: 部品DB拡張(モジュール型番・点数・**メーカ別アドレス体系**: 三菱`X0/Y0`・Siemens`%I0.0/%Q0.0`・Allen-Bradley`I:0/0`)。動的シンボル`plc_di_{n}p`等

@@ -64,8 +64,31 @@
 
 ### Task 3: PLC I/O(コア)
 
-- [ ] Step 1 (red): Rustテスト: 部品DB v4移行/動的シンボルplc_di_{n}p/割付表モデル(format_version)+CSV入出力/接続先・線番の導出/生成設定→ラダーページ生成(配置方針3種・ページ分割)/undo一発/I/Oレポート
-- [ ] Step 2 (green): 実装。gen_spec→コミット
+- [x] Step 1 (red): Rustテスト: 部品DB v4移行/動的シンボルplc_di_{n}p/割付表モデル(format_version)+CSV入出力/接続先・線番の導出/生成設定→ラダーページ生成(配置方針3種・ページ分割)/undo一発/I/Oレポート
+- [x] Step 2 (green): 実装。gen_spec→コミット
+
+> **完了(2026-08-22)。** 実装 = `madake-core/src/plc.rs`(モジュール定義・アドレス採番・
+> CSV入出力・接続先/線番の導出・ラダーページ生成)+`model.rs`(`Project.plc_assignments`、
+> **format_version 2**。旧ファイルは空の割付表で開き`io::migrate`で現行版へ)+
+> `command.rs`(`set_plc_assignments`。逆コマンド=旧リスト)+`symbol.rs`(動的
+> `plc_di_{n}p`/`plc_do_{n}p`、1〜64点・点ピッチ5mm・カテゴリ`plc`)+`parts.rs`
+> (**スキーマv4**の`plc_module`列+サンプル3種)+`report_sheet.rs`(帳票`plc-io`)。
+>
+> 設計判断:
+> - **アドレス体系**: 三菱=8進(X0..X7,X10)/Siemens=バイト.ビット(%I0.0)/AB=ワード/ビット(I:0/0)。
+>   開始点をずらせるので2枚目のモジュールは続き番号から振れる
+> - **CSVは2種類**: 割付表の往復用(アドレス・信号名・コメントの3列。取り込みは
+>   Command経由でモジュール単位に置換)と、読み取り専用のI/Oレポート(接続先・線番を含む6列)
+> - **ラダー生成**: 新シートは`Command::RestoreSheet`(組み立て済みシートの挿入)1本+
+>   必要なら`set_plc_assignments`を`execute_batch`で1履歴 = **undo一発**。左の縦バス
+>   (上端にネットラベル`P24`)から1点=1ラング、点ピッチとラング間隔が違っても線が
+>   重ならないよう点ごとに違う列で縦に振り分ける。生成したページはERC指摘ゼロ
+> - **v1の範囲**: ラダー形式=縦バス+横ラング、配置方針=モジュールごとに新ラダーのみ。
+>   横バス形式・同居2方針・ページ分割は設定enumだけ用意して「未実装」エラー
+> - 露出 = Tauri IPC 6本 / Link API(`GET /plc/modules`・`GET|PUT /plc/assignments`・
+>   `POST /plc/assignments/import`・`POST /plc/generate`)/ MCPツール3種 / CLIの`plc-io`帳票
+>
+> 残り(Task 4以降): 生成設定のプロジェクト保存(再生成での再利用)、割付表エディタUI。
 
 ### Task 4: PLC I/O(UI)
 
