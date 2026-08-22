@@ -50,8 +50,13 @@
 
 ### Task 5: 端子台エディタUI+リボン「レポート」タブ
 
-- [ ] Step 1 (red): vitest: エディタstore(行導出の表示整形/ジャンパ生成・削除→update_entityコマンド/チェック結果表示)/レポートタブの生成ダイアログ(出力先・対象の組み立て)
-- [ ] Step 2 (green): 端子台エディタダイアログ(デザイン準拠: グリッド+ツールバー(ジャンパ生成/削除・チェック)+フッタ(接続図生成/チャート生成))。リボン「レポート」タブ実装(帳票/端子台/出力グループ)。i18n。実機確認(端子台+配線を作って一連操作→undoで復帰)+コミット
+- [x] Step 1 (red): vitest: エディタstore(行導出の表示整形/ジャンパ生成・削除→update_entityコマンド/チェック結果表示)/レポートタブの生成ダイアログ(出力先・対象の組み立て)
+- [x] Step 2 (green): 端子台エディタダイアログ(デザイン準拠: グリッド+ツールバー(ジャンパ生成/削除・チェック)+フッタ(接続図生成/チャート生成))。リボン「レポート」タブ実装(帳票/端子台/出力グループ)。i18n。実機確認(端子台+配線を作って一連操作→undoで復帰)+コミット
+  - コア追加: `terminal_block_infos`(端子台一覧)/`terminal_chart_in_project`・`check_terminal_block_in_project`(entity idで引く)/`terminal_charts_csv`(先頭に端子台列)/`xref_table_csv`/`report_bytes(kind, format, entity_id)`(CSV=行数・PDF=ページ数を返す。端子接続図のCSVは`ReportError::UnsupportedFormat`)
+  - 露出: Tauri IPC `list_terminal_blocks` `get_terminal_chart` `check_terminal_block` `export_report`、Link API `GET /terminals` `GET /terminals/chart` `GET /terminals/check` `POST /export/report`。`export_pdf_book`をipc.tsへ追加
+  - UI: `TerminalEditorDialog.vue`(グリッド9列。Lv・型番・配置はモデル拡張待ちで非表示、フェーズ2の操作はdisabledプレースホルダ)/`ReportDialog.vue`/`PdfBookDialog.vue`/リボン「レポート」タブ。ストアは`stores/terminals.ts`・`stores/reports.ts`
+  - ジャンパは隣接端子のみ・`update_entity`1回・全部外れたら属性ごと削除。リボンのタブ名もi18n化(タブidで管理)
+  - 実機確認(http://localhost:1420): TB1(4極)+抵抗2個+配線2本+線番採番 → エディタの行が図面と一致 → ジャンパ1-2生成(グリッド反映)→ チェック(情報3=予備端子3)→ チャートCSV・接続図PDF(1ページ)・チャート図面シートPDF・PDF一括(7ページ=表紙+回路1+帳票5)→ undo連打で空図面へ復帰(can_undo=false・要素0)。英語ロケール表示も確認
 
 ### Task 6: 露出と仕上げ
 
