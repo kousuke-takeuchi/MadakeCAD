@@ -60,9 +60,18 @@
 
 ### Task 6: 露出と仕上げ
 
-- [ ] Step 1: CLI `madake export terminal-chart|from-to <path> [--sheet]`等の追加(薄いクライアント)。MCP説明文更新
-- [ ] Step 2: docs/04・05(EN+JA)へ端子台チャート・From-To・PDF一括を追記、feature-inventory・ロードマップM4を🔶へ。デモ図面に端子台チャートページを追加
-- [ ] Step 3: 全テストgreen+受け入れ基準の実機検証(下記)→undoで図面復帰
+- [x] Step 1: CLI `madake export terminal-chart|from-to <path> [--sheet]`等の追加(薄いクライアント)。MCP説明文更新
+  - CLI: `madake export bom|wire-list|terminal-chart|terminal-diagram|xref-table <path> [--format csv|pdf] [--terminal <参照記号|ID>]`(帳票5種は全て`POST /export/report`へ)+`madake terminals [--sheet <ID>]`(端子台一覧)
+  - `--format`省略時は出力先の拡張子から判定(`.pdf`→図面シートPDF、他はCSV)。`--terminal`は参照記号を`GET /terminals`で引いてentity idへ解決(UUID表記はそのまま送る。未発見・複数該当は候補付きで中断)
+  - 帳票はプロジェクト全体が対象(`report_bytes`にシート絞り込みが無い)ため、`--sheet`単独指定は`--terminal`を案内して拒否し、`--sheet`は`--terminal`の探索範囲としてのみ効く
+  - MCP: ツール`list_terminal_blocks`/`get_terminal_chart`/`check_terminal_block`/`export_report`を追加、`execute_commands`の説明にジャンパ(`update_entity`で`attrs["jumpers"]`)を明記、サーバーinstructionsに帳票5種を追記
+  - Link API `GET /terminals*`・`POST /export/report`のエンドポイントテストを追加(tests/link_export.rs)
+- [x] Step 2: docs/04・05(EN+JA)へ端子台チャート・From-To・PDF一括を追記、feature-inventory・ロードマップM4を🔶へ。デモ図面に端子台チャートページを追加
+  - 更新: docs/04・05・10(EN+JA)、docs/12-roadmap(M4を🔶「フェーズ1完了」へ)、README/README.ja(特徴・現況・仕様項目バッジ)、CLAUDE.mdのCLI節、docs/internal/feature-inventory(帳票・端子台エディタ・MCP/API/CLI行)、m4仕様§0表・§1・§5のステータス
+  - デモ(`examples/pdf_demo -- --book`)はTask 4で既に全帳票入り(表紙+回路2+帳票6=9ページ)。図面自体は不変のためsample-drawing.svgは据え置き
+- [x] Step 3: 全テストgreen+受け入れ基準の実機検証(下記)→undoで図面復帰
+
+**M4フェーズ1 完了(2026-08-22)。** 端子台チャート(§1)と帳票拡充(§5)が、コア→Link API/MCP/CLI→UIまで一通り繋がった。次はM4の優先順に従い回路マクロ(§2)。
 
 ## 受け入れ基準
 

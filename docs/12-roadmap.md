@@ -22,10 +22,12 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - Circuit templates; tidy-up automation (placement/wiring/labels)
 - Parallel agents; multi-provider LLM support with OS-keychain credentials
 
-## M4 — Industrial CAD core (ACADE/EPLAN benchmark)
+## M4 — Industrial CAD core (ACADE/EPLAN benchmark) 🔶 (phase 1 done)
 
-- Terminal charts; circuit macros; PLC I/O drawings & reports
-- Coil ⇔ contact cross-references; extended report set (from–to, cables, enriched BOM)
+- ✅ **Terminal charts** (phase 1): terminal strip editor with saddle jumpers and terminal checks, terminal chart (CSV / drawing sheet), graphical terminal connection diagram. Sorting, multi-level terminals and accessories need a model extension and come later
+- ✅ **Extended report set** (phase 1): from–to wire list, cross-reference table, every report as a framed drawing sheet, and a combined PDF (cover → schematic sheets → reports)
+- Circuit macros; PLC I/O drawings & reports
+- Coil ⇔ contact cross-references; cable summary; BOM enriched from the parts database
 - 2D panel layout sheets; customizable frame/title-block templates
 - Symbol editor + expanded symbol library; project-wide search
 

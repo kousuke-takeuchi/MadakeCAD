@@ -1,6 +1,6 @@
 # MadakeCAD 機能インベントリ
 
-作成: 2026-08-21(フェーズ0〜3完了時点)。更新: 2026-08-22(M2 参考図面の完全再現 完了)。全機能の棚卸しと、未実装バックログの一覧。
+作成: 2026-08-21(フェーズ0〜3完了時点)。更新: 2026-08-22(M4フェーズ1 端子台チャート+帳票拡充 完了)。全機能の棚卸しと、未実装バックログの一覧。
 specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は`docs/superpowers/plans/`の各プラン。
 
 ## 1. コア・アーキテクチャ(madake-core)
@@ -20,7 +20,8 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 |---|---|---|
 | リボン(回路図タブ) | ✅ | 配線 / 部品を挿入 / 回路図を編集 / 検証・レポート(部品表・電線リスト・シミュレーション・SVG/PDF出力) |
 | リボン(表示タブ) | ✅ | 表示クラス9種(配線/シンボル/参照記号/ネットラベル/線番/ハーネス/注記/図枠/グリッド)のトグル(レイヤ。画面のみ、出力へ非反映) |
-| リボン(他タブ) | ⬜ | ホーム/プロジェクト/パネル/レポート/読み込み・書き出し/管理はプレースホルダ |
+| リボン(レポートタブ) | ✅ | 帳票(From-To/端子台チャート/端子接続図/BOM/XRef表)+端子台(端子台エディタ)+出力(PDF一括出力)。生成ダイアログで出力形式(CSV/図面シートPDF)と対象を選ぶ |
+| リボン(他タブ) | ⬜ | ホーム/プロジェクト/パネル/読み込み・書き出し/管理はプレースホルダ |
 | キャンバス操作 | ✅ | パン(中ボタン/Space)・ホイールズーム・グリッド・スナップ・直交拘束・ピンスナップ(菱形マーカー) |
 | 選択・編集 | ✅ | クリック選択・Shift追加・矩形選択・ドラッグ移動(Command化)・削除・⌘Z/⇧⌘Z |
 | 配線ツール | ✅ | 直交ポリライン、ダブルクリック/Escで確定。線色・sq既定値 |
@@ -45,8 +46,13 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 改訂欄 | ✅ | ISO 7200様式(表題欄直上・古い行が下・最大6行・列=記号/日付/内容/承認)。キャンバス/SVG/PDFで同一、表題欄Revは最新行に連動。編集ダイアログ(`set_revisions`コマンド1回=undo1回) |
 | SVG出力 | ✅ | 印刷品質、mm 1:1、XMLエスケープ |
 | PDF出力 | ✅ | svg2pdfでベクタ変換、日本語フォント埋め込み(macOS=Hiragino。Win/Linuxのフォント割当は未調整) |
-| BOM(部品表)CSV | ✅ | 参照記号+型番の集計 |
-| 電線リストCSV | ✅ | シート・線番・ハーネス・品番・色・sq・長さ |
+| BOM(部品表) | ✅ | 参照記号+型番の集計。CSV / 図枠付き図面シート |
+| From-Toワイヤリスト | ✅ | シート・From・To・線番・線色・sq・長さ・電線品番・ハーネス。From/Toはピン(`参照記号:ピン`)/ネットラベル/空。CSV / 図面シート |
+| 端子台チャート | ✅ | 端子台1台=1表。端子番号順に内部側/外部側・線番・電線・ハーネス・ジャンパ・予備端子。CSV / 図面シート(`--terminal`で1台に絞れる) |
+| 端子接続図 | ✅ | EPLAN端子図様式(外部=左/内部=右・ハーネスブラケット・予備・ジャンパ)。1端子台=1ページ(端子15個で分割)。PDFのみ |
+| クロスリファレンス表 | ✅ | プロジェクト全体ネットの所在一覧。CSV / 図面シート。コイル⇔接点対応はM4フェーズ2 |
+| 帳票の図面シート化 | ✅ | `report_sheet.rs`の汎用テーブルレンダラ(A4横・25行/ページ・列幅は相対比・長文セルは省略・自動ページ分割)。回路図と同じ図枠・表題欄 |
+| PDF一括出力(図面一式) | ✅ | 表紙(プロジェクト名・シート一覧・最新改訂)→回路図全シート→選択帳票を1PDFへ(`pdf::export_project_pdf`) |
 | 印刷(OSダイアログ) | ⬜ | PDF経由で代替 |
 
 ## 4. ネットリスト・検証・シミュレーション
@@ -86,9 +92,9 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加もここから) / get_netlist / run_verification / simulate_op / search_parts / upsert_part / delete_part / import_kicad / export_svg・pdf・bom・wire_list / undo / redo |
-| Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols / netlist / verify / simulate/op / commands / undo / redo / save / load / import/kicad / export/* / parts / wire-parts / agent/* / events |
-| madake CLI | ✅ | status / project / netlist / verify / sim / parts / export / save / open(.kicad_sch対応) / renumber / exec / undo / redo |
+| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo |
+| Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols / netlist / verify / simulate/op / commands / undo / redo / save / load / import/kicad / terminals(+/chart・/check) / export/*(svg・pdf・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/* / events |
+| madake CLI | ✅ | status / project / netlist / verify / sim / parts / terminals / export(svg・pdf・pdf-book+帳票5種を`--format csv\|pdf`・`--terminal`付きで) / save / open(.kicad_sch対応) / renumber / exec / undo / redo |
 | AIチャット(A1) | ✅ | 左ドック+浮きカード、Claude Code CLIバックエンド(Pro/Max OAuth再利用)、ツールチップ表示、ターン単位undo、編集オーバーレイ(シアンパルス)、会話履歴のプロジェクト保存 |
 | A1の持ち越し負債 | ⚠ | ターン安定ID(添字指定の脆さ)・編集origin(user/agent区別)・キャンセルseq(プランに詳細) |
 | 並列エージェント・自動反復(A2) | ⬜ | UIポップアップのみデザイン済み |
@@ -100,6 +106,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 機能 | 状態 | 備考 |
 |---|---|---|
 | 端子台・コネクタ(ピン番号単位の結線) | ✅ | 動的シンボル+貫通端子+ネットリスト |
+| 端子台エディタ(グリッド) | 🔶 | 行の導出表示・サドルジャンパ生成/削除(`attrs["jumpers"]`をupdate_entity。undo可)・端子台チェック・チャート/接続図の生成起点。並べ替え・多段端子・アクセサリ・部品割当はM4フェーズ2 |
 | 電線管理(色・sq・長さ・品番) | ✅ | Wire属性+電線品番マスタ |
 | 線番(ワイヤ番号)の挿入・自動採番 | ✅ | ネット単位。`renumber_wires`(追い番/振り直し・開始番号・シート指定/全体)+`set_wire_numbers`(個別編集)。キャンバス/SVG/PDF描画、電線リスト連動、CLI `madake renumber` |
 | ハーネス境界(破線囲み) | ✅ | Entity `Harness`(矩形・名前・備考)。所属は全点内包(入れ子は最小優先)、破線描画+名前、電線リストのハーネス列、リボンのハーネスツール |
@@ -113,12 +120,12 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| テスト | ✅ | cargo 248件+vitest 180件+vue-tsc。全テストに対訳仕様文が付き、`docs/13-specification.md`(428項目)を自動生成。TDD運用 |
+| テスト | ✅ | cargo 351件+vitest 217件+vue-tsc。全テストに対訳仕様文が付き、`docs/13-specification.md`(568項目)を自動生成。TDD運用 |
 | macOSビルド | ✅ | 開発は`npm run tauri dev` |
 | Windows/Linuxビルド | ⬜ | 非目標(現時点)。コードはOS非依存を維持(ngspice探索・PDFフォントに一部OS別処理あり) |
 | 配布パッケージ/自動更新 | ⬜ | 未着手 |
 | 自動保存・クラッシュ復旧 | ⬜ | 未着手 |
-| i18n | ⬜ | 日本語のみ |
+| i18n | 🔶 | en/jaのメッセージカタログ+言語設定。新規UI文字列はi18n必須。他言語カタログはM6 |
 
 ## 10. 次期計画
 
