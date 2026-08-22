@@ -14,16 +14,16 @@ const WIRE_STROKE: f64 = 0.35;
 /// シンボルの線幅 (mm)。
 const SYMBOL_STROKE: f64 = 0.3;
 /// 表題欄の外形 (幅, 高さ) mm。右下に置く。
-const TITLE_W: f64 = 120.0;
+pub(crate) const TITLE_W: f64 = 120.0;
 const TITLE_H: f64 = 32.0;
 /// 表題欄・改訂欄の共通行高 (mm)。
-const ROW_H: f64 = 8.0;
+pub(crate) const ROW_H: f64 = 8.0;
 /// 枠線の線幅 (mm)。
-const FRAME_STROKE: f64 = 0.5;
+pub(crate) const FRAME_STROKE: f64 = 0.5;
 /// 罫線の線幅 (mm)。
-const RULE_STROKE: f64 = 0.25;
+pub(crate) const RULE_STROKE: f64 = 0.25;
 /// 表題欄の文字高さ (mm)。
-const TITLE_FONT: f64 = 3.0;
+pub(crate) const TITLE_FONT: f64 = 3.0;
 /// 改訂欄の列幅 (記号 / 日付 / 内容 / 承認) mm。合計は表題欄の幅と一致させる。
 const REV_COL_W: [f64; 4] = [14.0, 28.0, 56.0, 22.0];
 /// 改訂欄の列見出し (ISO 7200 / JIS Z 8311)。
@@ -34,7 +34,7 @@ const REV_MAX_ROWS: usize = 6;
 const REV_FONT: f64 = 2.5;
 const REV_HEADER_FONT: f64 = 2.2;
 /// セル内テキストの左余白 (mm)。
-const CELL_PAD: f64 = 2.0;
+pub(crate) const CELL_PAD: f64 = 2.0;
 /// 線番テキストの文字高さ (mm)。
 const WIRE_NO_FONT: f64 = 2.5;
 /// 線番テキストと配線の間隔 (mm)。グリッドピッチと同じ。
@@ -68,7 +68,7 @@ pub fn effective_rev(sheet: &Sheet) -> String {
     }
 }
 
-fn xml_escape(s: &str) -> String {
+pub(crate) fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -76,7 +76,7 @@ fn xml_escape(s: &str) -> String {
 }
 
 /// 数値整形: 無駄な小数を出さない。
-fn n(v: f64) -> String {
+pub(crate) fn n(v: f64) -> String {
     if (v - v.round()).abs() < 1e-9 {
         format!("{}", v.round() as i64)
     } else {
@@ -121,11 +121,37 @@ fn text_family_el(
     );
 }
 
-fn text_el(out: &mut String, x: f64, y: f64, size: f64, fill: &str, anchor: &str, s: &str) {
+pub(crate) fn text_el(
+    out: &mut String,
+    x: f64,
+    y: f64,
+    size: f64,
+    fill: &str,
+    anchor: &str,
+    s: &str,
+) {
     text_family_el(out, x, y, size, fill, anchor, "sans-serif", s);
 }
 
-fn line_el(out: &mut String, x1: f64, y1: f64, x2: f64, y2: f64, w: f64, stroke: &str) {
+/// 矩形。属性の並び (x, y, width, height) は図枠のテストが依存しているので変えない。
+pub(crate) fn rect_el(
+    out: &mut String,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    fill: &str,
+    stroke: &str,
+    stroke_width: f64,
+) {
+    let _ = write!(
+        out,
+        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\" stroke=\"{}\" stroke-width=\"{}\"/>\n",
+        n(x), n(y), n(w), n(h), fill, stroke, n(stroke_width)
+    );
+}
+
+pub(crate) fn line_el(out: &mut String, x1: f64, y1: f64, x2: f64, y2: f64, w: f64, stroke: &str) {
     let _ = write!(
         out,
         "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"{}\" stroke-width=\"{}\"/>\n",
@@ -144,11 +170,7 @@ fn frame_and_title_block(out: &mut String, sheet: &Sheet) {
     let (pw, ph) = sheet.paper_mm();
     let (x0, y0) = (FRAME_MARGIN, FRAME_MARGIN);
     let (x1, y1) = (pw - FRAME_MARGIN, ph - FRAME_MARGIN);
-    let _ = write!(
-        out,
-        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"0.5\"/>\n",
-        n(x0), n(y0), n(x1 - x0), n(y1 - y0)
-    );
+    rect_el(out, x0, y0, x1 - x0, y1 - y0, "none", "#000", FRAME_STROKE);
     // ゾーン番号: 横=数字、縦=英字
     let cols = sheet.zone_cols.max(1) as f64;
     let rows = sheet.zone_rows.max(1) as f64;
@@ -175,11 +197,7 @@ fn frame_and_title_block(out: &mut String, sheet: &Sheet) {
     let (tx, ty) = (x1 - tw, y1 - th);
     let tb = &sheet.title_block;
     revision_block(out, sheet, tx, ty);
-    let _ = write!(
-        out,
-        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"#fff\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
-        n(tx), n(ty), n(tw), n(th), n(FRAME_STROKE)
-    );
+    rect_el(out, tx, ty, tw, th, "#fff", "#000", FRAME_STROKE);
     for r in 1..4 {
         let ry = ty + ROW_H * r as f64;
         line_el(out, tx, ry, tx + tw, ry, RULE_STROKE, "#000");
@@ -217,11 +235,7 @@ fn revision_block(out: &mut String, sheet: &Sheet, tx: f64, ty: f64) {
     // 高さ = (改訂行 + 列見出し1行) × 行高。下端は表題欄の上端。
     let h = (rows.len() as f64 + 1.0) * ROW_H;
     let top = ty - h;
-    let _ = write!(
-        out,
-        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"#fff\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
-        n(tx), n(top), n(TITLE_W), n(h), n(FRAME_STROKE)
-    );
+    rect_el(out, tx, top, TITLE_W, h, "#fff", "#000", FRAME_STROKE);
     for r in 1..=rows.len() {
         let ry = top + ROW_H * r as f64;
         line_el(out, tx, ry, tx + TITLE_W, ry, RULE_STROKE, "#000");

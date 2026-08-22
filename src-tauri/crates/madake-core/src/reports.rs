@@ -35,8 +35,12 @@ pub(crate) fn fmt_num(v: f64) -> String {
     }
 }
 
-/// 部品表CSV。全シート横断で (型番/値, シンボル) ごとに集計し参照記号を列挙する。
-pub fn bom_csv(project: &Project) -> String {
+/// 部品表の列見出し。
+pub const BOM_COLUMNS: [&str; 4] = ["参照記号", "型番/値", "シンボル", "数量"];
+
+/// 部品表の行 ([`BOM_COLUMNS`] と同じ並び)。図面シート化からも使う。
+/// 全シート横断で (型番/値, シンボル) ごとに集計し、参照記号を昇順で列挙する。
+pub fn bom_rows(project: &Project) -> Vec<Vec<String>> {
     let mut groups: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
     for sheet in &project.sheets {
         for entity in sheet.entities.values() {
@@ -48,15 +52,26 @@ pub fn bom_csv(project: &Project) -> String {
             }
         }
     }
-    let mut out = String::from("参照記号,型番/値,シンボル,数量\n");
-    for ((value, symbol_id), mut refs) in groups {
-        refs.sort();
-        out.push_str(&csv_row(&[
-            refs.join(", "),
-            value,
-            symbol_id,
-            refs.len().to_string(),
-        ]));
+    groups
+        .into_iter()
+        .map(|((value, symbol_id), mut refs)| {
+            refs.sort();
+            vec![
+                refs.join(", "),
+                value,
+                symbol_id,
+                refs.len().to_string(),
+            ]
+        })
+        .collect()
+}
+
+/// 部品表CSV。見出しは [`BOM_COLUMNS`]。
+pub fn bom_csv(project: &Project) -> String {
+    let mut out = BOM_COLUMNS.join(",");
+    out.push('\n');
+    for row in bom_rows(project) {
+        out.push_str(&csv_row(&row));
         out.push('\n');
     }
     out
