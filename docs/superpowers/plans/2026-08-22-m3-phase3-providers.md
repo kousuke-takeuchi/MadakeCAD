@@ -102,7 +102,26 @@
 
 ### Task 4: 仕上げ
 
-- [ ] docs/09(EN+JA)へプロバイダ表(CLI/API/Copilot/OpenAI互換/Ollama/Gemini)、feature-inventory・roadmap更新、m3仕様§5を完了へ。全テストgreen
+- [x] docs/09(EN+JA)へプロバイダ表(CLI/API/Copilot/OpenAI互換/Ollama/Gemini)、feature-inventory・roadmap更新、m3仕様§5を完了へ。全テストgreen
+
+  **実施内容(2026-08-22)**:
+  - `docs/09-ai-assistant(.ja).md`: プロバイダ個別の箇条書きを**6経路の表**(認証方式 / 必要なもの / 確認済みの範囲)へ整理し、`## Providers`(`## プロバイダ`)節を新設。経路ごとの差(Copilot=システムプロンプト前置・Gemini=OpenAPI部分集合へのスキーマ削り・OpenAI互換=`ERROR: `前置)、設定手順、キーチェーンの説明(service/account・平文非保存・macOSの1回キャッシュ)、`MADAKE_*_BASE_URL`の上書きを追記。✅/🔶の意味を明文化し「計画中」はフェーズ4以降(整えバリアント・比較案UX)だけに
+  - `docs/12-roadmap(.ja).md`: M3を「フェーズ1〜3完了」へ。フェーズ3の成果を1行追加し、残件はフェーズ4の2件+「値セット等はM4側」の1行に集約
+  - `docs/internal/feature-inventory.md`: 「その他プロバイダ ⬜」を削除し、**実装 / 実機確認状況 / キーチェーン / 接続テスト**の4行へ分割。設定画面の行を「6経路すべて実動」へ。Link APIの`agent/*`一覧に`provider`・`api-key`・`test-connection`を追加。冒頭の更新日付にM3フェーズ3を記載
+  - `docs/internal/specs/m3-ai-first.md`: §5を「フェーズ2・3で完了」+6経路の表(実装 / 認証 / 状態)へ。認証アーキタイプが3種に収束した経緯(デバイスコードOAuthはCopilot CLI側が処理するため不要)を記録。**ユーザー確認事項を1つの表へ集約**(Copilot=`/login`+JSONL実イベント形、Gemini=実キー+スキーマ400の有無、Anthropic=実キー通し)。受け入れ基準の達成をOllama経路で記録。冒頭にフェーズ3完了注記
+  - `README(.ja).md`: AI特徴行を「6プロバイダから選べる」へ、前提を「claude CLI必須」から「**どれか1つ**あればよい」へ
+  - `docs/02-getting-started(.ja).md`: 前提表にCopilot CLI・Ollamaを追加し、「AIチャットはどれか1つのプロバイダで動く」旨とプロバイダ設定手順(Ollamaはキー不要)を追記
+  - `docs/internal/design-system.md`: 設定ダイアログのプロバイダ欄の記述を実装(5項目のドロップダウン+経路別の詳細グループ、OllamaはOpenAI互換内のプリセット)へ更新。**`MadakeCAD.pen`のデザインシステムボードへの反映は未**(Pen.app起動が要るため次のデザイン作業時に取り込む)
+  - 総合検証: `cargo test --workspace` 748件green / `npx vitest run` 435件green(36ファイル) / `npx vue-tsc --noEmit` エラー0 / `python3 scripts/gen_spec.py --check` 最新
+
+## M3フェーズ3 完了 (2026-08-22)
+
+プロバイダは**6経路**そろった: Claude Code CLI(既定) / Anthropic API / GitHub Copilot CLI / OpenAI互換API / Ollama(ローカルプリセット) / Google Gemini。
+全経路が同じ`ToolBridge`(内蔵MCPサーバー)とCommandエンジンを通り、キーはOSキーチェーンのみ(CLI経路は資格情報を持たない)。
+
+**実機で通し確認済み**: Claude Code CLI、**Ollama**(キー不要のローカル経路。作図1ターン=ツール往復3回→revision 0→1→`undo-turn`で後始末)。
+**ユーザー確認事項として残る**: GitHub Copilot(`copilot`→`/login`後の通しとJSONL実イベント形)、Google Gemini(実キーでの通しとfunction callingのスキーマ)、Anthropic API(実キーでの通し)。
+**フェーズ4の残件**: 整えのバリアント(2〜4案の並列比較)、並列エージェントの比較案UX。
 
 ## 受け入れ基準
 
