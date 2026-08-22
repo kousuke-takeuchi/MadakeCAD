@@ -209,6 +209,40 @@ async fn post_export_pdf(
     Ok(Json(serde_json::json!({ "written": body.path })))
 }
 
+#[derive(Deserialize)]
+struct ExportPdfBookBody {
+    path: String,
+    /// 回路図の後ろに付ける帳票 (`wire-list` / `terminal-chart` / `bom` / `xref`)。
+    #[serde(default)]
+    include_reports: Vec<madake_core::report_sheet::ReportKind>,
+    /// 表紙を付けるか (既定: 付ける)。
+    #[serde(default = "default_true")]
+    cover: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// 表紙+回路図全シート+選択帳票を1つのPDFにまとめて書き出す。
+async fn post_export_pdf_book(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<ExportPdfBookBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let engine = doc.engine.lock().unwrap();
+    let options = madake_core::pdf::PdfBookOptions {
+        include_reports: body.include_reports,
+        cover: body.cover,
+    };
+    let pages = madake_core::pdf::project_pdf_pages(engine.project(), &options).len();
+    let pdf = madake_core::pdf::export_project_pdf(engine.project(), &options)
+        .map_err(bad_request)?;
+    std::fs::write(&body.path, pdf).map_err(bad_request)?;
+    Ok(Json(
+        serde_json::json!({ "written": body.path, "pages": pages }),
+    ))
+}
+
 async fn post_export_bom(
     State(doc): State<SharedDoc>,
     Json(body): Json<PathBody>,
@@ -519,6 +553,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/redo", post(post_redo))
         .route("/api/v1/export/svg", post(post_export_svg))
         .route("/api/v1/export/pdf", post(post_export_pdf))
+        .route("/api/v1/export/pdf-book", post(post_export_pdf_book))
         .route("/api/v1/export/bom", post(post_export_bom))
         .route("/api/v1/export/wire-list", post(post_export_wire_list))
         .route("/api/v1/events", get(get_events))

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**480 specification clauses** across 5 areas.
+**484 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -287,6 +287,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - POST /api/v1/import/kicad replaces the open project with the converted schematic and returns a patch plus an import report. <sub>`import_kicad_replaces_project_and_reports`</sub>
 - POST /api/v1/simulate/op solves the DC operating point and returns net voltages and component currents (requires ngspice; skipped otherwise). <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf writes a valid PDF file to the requested path. <sub>`export_pdf_writes_pdf_file`</sub>
+- POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports. <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 
 
 ## AI assistant (madake-agent)
@@ -380,6 +381,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The default port is 9310 and --json is off unless requested. <sub>`default_port_is_9310_and_json_is_off`</sub>
 - --port and --json are global options and may appear after the subcommand. <sub>`port_and_json_are_global_options_after_subcommand`</sub>
 - The export kind accepts the 'wire-list' spelling used in documentation. <sub>`export_kind_accepts_wire_list_spelling`</sub>
+- madake export pdf-book sends the reports listed with --reports, in that order, and asks for a cover by default. <sub>`export_pdf_book_sends_the_requested_reports_in_order`</sub>
+- --no-cover drops the cover page from the PDF book. <sub>`export_pdf_book_can_drop_the_cover`</sub>
 - madake status calls the health endpoint and the project snapshot. <sub>`status_queries_health_and_project`</sub>
 - --json prints raw pretty-printed JSON for piping into jq and similar tools. <sub>`json_flag_emits_raw_json`</sub>
 - madake netlist forwards the --sheet option to the API. <sub>`netlist_forwards_sheet_option`</sub>
@@ -401,6 +404,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The netlist URL has no query string when no sheet is specified. <sub>`netlist_url_omits_query_without_sheet`</sub>
 - Sheet selection uses the sheet_id query parameter, matching the server. <sub>`netlist_url_uses_sheet_id_query_name`</sub>
 - Each export kind (svg/pdf/bom/wire-list) maps to its REST route. <sub>`export_kind_paths_match_link_api_routes`</sub>
+- The report names sent for a PDF book are spelled the same as in the Link API and MCP JSON. <sub>`report_kind_json_names_match_the_link_api`</sub>
 - When the app is not running, the CLI explains it explicitly (with the port) instead of a cryptic error. <sub>`not_running_error_is_explicit`</sub>
 
 ### Human-readable output

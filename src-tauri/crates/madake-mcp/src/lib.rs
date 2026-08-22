@@ -152,6 +152,18 @@ pub struct ExportPathParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ExportPdfBookParams {
+    /// 出力先ファイルパス(絶対パス)。
+    pub path: String,
+    /// 回路図の後ろに付ける帳票。`wire-list` / `terminal-chart` / `bom` / `xref`。省略時は帳票なし。
+    #[serde(default)]
+    pub include_reports: Vec<madake_core::report_sheet::ReportKind>,
+    /// 表紙を付けるか。省略時は付ける。
+    #[serde(default)]
+    pub cover: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ExportSvgParams {
     /// 対象シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
@@ -369,6 +381,25 @@ impl MadakeMcp {
                 .map_err(internal)?;
         std::fs::write(&p.path, pdf).map_err(internal)?;
         json_ok(&serde_json::json!({ "written": p.path }))
+    }
+
+    #[tool(
+        description = "図面一式を1つのPDFにまとめて指定パスに書き出す。ページ順は 表紙(プロジェクト名・図面一覧・最新改訂) → 回路図の全シート → 選択した帳票。include_reportsに wire-list(From-To電線リスト) / terminal-chart(端子台チャート) / bom(部品表) / xref(クロスリファレンス表) を並べた順に帳票ページが付く。帳票はA4横の図枠付きページで、行が多ければ自動でページ分割される"
+    )]
+    fn export_pdf_book(
+        &self,
+        Parameters(p): Parameters<ExportPdfBookParams>,
+    ) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let options = madake_core::pdf::PdfBookOptions {
+            include_reports: p.include_reports,
+            cover: p.cover.unwrap_or(true),
+        };
+        let pages = madake_core::pdf::project_pdf_pages(engine.project(), &options).len();
+        let pdf =
+            madake_core::pdf::export_project_pdf(engine.project(), &options).map_err(internal)?;
+        std::fs::write(&p.path, pdf).map_err(internal)?;
+        json_ok(&serde_json::json!({ "written": p.path, "pages": pages }))
     }
 
     #[tool(

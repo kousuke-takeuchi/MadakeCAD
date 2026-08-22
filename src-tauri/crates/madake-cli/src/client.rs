@@ -22,6 +22,9 @@ pub enum ExportKind {
     /// 電線リスト (CSV)。
     #[value(name = "wire-list")]
     WireList,
+    /// 図面一式を1つのPDFへ (表紙+回路図全シート+選択帳票)。
+    #[value(name = "pdf-book")]
+    PdfBook,
 }
 
 impl ExportKind {
@@ -32,6 +35,7 @@ impl ExportKind {
             ExportKind::Pdf => "/export/pdf",
             ExportKind::Bom => "/export/bom",
             ExportKind::WireList => "/export/wire-list",
+            ExportKind::PdfBook => "/export/pdf-book",
         }
     }
 
@@ -42,6 +46,35 @@ impl ExportKind {
             ExportKind::Pdf => "PDF",
             ExportKind::Bom => "部品表(BOM)",
             ExportKind::WireList => "電線リスト",
+            ExportKind::PdfBook => "図面一式PDF",
+        }
+    }
+}
+
+/// `madake export pdf-book --reports` で選べる帳票。
+/// 値の綴りはLink API・MCPのJSON表記と同じ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ReportKind {
+    /// From-To電線リスト。
+    #[value(name = "wire-list")]
+    WireList,
+    /// 端子台チャート。
+    #[value(name = "terminal-chart")]
+    TerminalChart,
+    /// 部品表。
+    Bom,
+    /// クロスリファレンス表。
+    Xref,
+}
+
+impl ReportKind {
+    /// Link APIへ載せるJSON表記。
+    pub fn as_json(self) -> &'static str {
+        match self {
+            ReportKind::WireList => "wire-list",
+            ReportKind::TerminalChart => "terminal-chart",
+            ReportKind::Bom => "bom",
+            ReportKind::Xref => "xref",
         }
     }
 }
@@ -171,6 +204,13 @@ pub trait LinkApi {
         path: &str,
         sheet_id: Option<&str>,
     ) -> Result<Value, CliError>;
+    /// `POST /api/v1/export/pdf-book` (`{"path":..., "include_reports":[...], "cover":bool}`)
+    fn export_pdf_book(
+        &self,
+        path: &str,
+        reports: &[ReportKind],
+        cover: bool,
+    ) -> Result<Value, CliError>;
 }
 
 /// reqwest blocking による実装。
@@ -297,6 +337,19 @@ impl LinkApi for HttpClient {
         };
         self.post(kind.path(), body)
     }
+
+    fn export_pdf_book(
+        &self,
+        path: &str,
+        reports: &[ReportKind],
+        cover: bool,
+    ) -> Result<Value, CliError> {
+        let include: Vec<&str> = reports.iter().map(|r| r.as_json()).collect();
+        self.post(
+            ExportKind::PdfBook.path(),
+            json!({ "path": path, "include_reports": include, "cover": cover }),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -353,6 +406,17 @@ mod tests {
         assert_eq!(ExportKind::Pdf.path(), "/export/pdf");
         assert_eq!(ExportKind::Bom.path(), "/export/bom");
         assert_eq!(ExportKind::WireList.path(), "/export/wire-list");
+        assert_eq!(ExportKind::PdfBook.path(), "/export/pdf-book");
+    }
+
+    /// The report names sent for a PDF book are spelled the same as in the Link API and MCP JSON.
+    /// PDF一括出力で送る帳票名の綴りは、Link API・MCPのJSON表記と同じになる。
+    #[test]
+    fn report_kind_json_names_match_the_link_api() {
+        assert_eq!(ReportKind::WireList.as_json(), "wire-list");
+        assert_eq!(ReportKind::TerminalChart.as_json(), "terminal-chart");
+        assert_eq!(ReportKind::Bom.as_json(), "bom");
+        assert_eq!(ReportKind::Xref.as_json(), "xref");
     }
 
     /// When the app is not running, the CLI explains it explicitly (with the port) instead of a cryptic error.

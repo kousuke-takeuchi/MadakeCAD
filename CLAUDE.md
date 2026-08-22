@@ -68,6 +68,7 @@ cargo run -p madake-cli -- parts [<検索語>] [--category <c>]  # 部品DB検�
 cargo run -p madake-cli -- sim [--open SW1,K1]       # DC動作点シミュレーション
 cargo run -p madake-cli -- renumber [--sheet <ID>] [--mode append|renumber] [--start N]  # 線番の自動採番
 cargo run -p madake-cli -- export svg|pdf|bom|wire-list <path> [--sheet <ID>]
+cargo run -p madake-cli -- export pdf-book <path> [--reports wire-list,terminal-chart,bom,xref] [--no-cover]  # 表紙+全シート+帳票を1PDFへ
 cargo run -p madake-cli -- save|open <path.mdkproj>
 cargo run -p madake-cli -- exec <commands.json>      # Command配列JSON → POST /api/v1/commands
 cargo run -p madake-cli -- undo|redo
