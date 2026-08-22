@@ -250,15 +250,22 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> 
             }
         }
     }
-    // 導通部品の (ネット, ネット) 橋
+    // 導通部品の (ネット, ネット) 橋。多極機器は極ごと(1-2 / 3-4 / …)に張る
     let mut bridges: Vec<Vec<usize>> = Vec::new();
     for e in sheet.entities.values() {
         let Entity::Symbol(s) = e else { continue };
         let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
         if is_conductor(def) {
-            let ns = nets_of(s, def);
-            if ns.len() >= 2 {
-                bridges.push(ns);
+            for group in crate::symbol::conducting_pin_groups(def) {
+                let mut ns = BTreeSet::new();
+                for no in group {
+                    if let Some(ni) = pin_net.get(&(s.id, no)) {
+                        ns.insert(*ni);
+                    }
+                }
+                if ns.len() >= 2 {
+                    bridges.push(ns.into_iter().collect());
+                }
             }
         }
     }
@@ -1100,5 +1107,29 @@ mod tests {
         );
         // 帳票・検証では1ネットとして数える
         assert_eq!(crate::xref::extract_netlist_project(&project).nets.len(), 1);
+    }
+
+    /// A multi-pole breaker conducts pole by pole, so a load fed from an unwired pole is still reported as unreachable from the source.
+    /// 多極の遮断器は極ごとに導通するため、結線されていない極につながる負荷は電源から到達できないと報告される。
+    #[test]
+    fn multipole_breaker_does_not_connect_its_poles_to_each_other() {
+        // 極1 (端子1-2) だけを電源とL1の回路に入れる。L2は極2 (端子3-4) の下側にぶら下げる
+        let sheet = sheet_with(vec![
+            symbol("battery", "BT1", 60.0, 42.5),
+            symbol("breaker_3p", "CB1", 100.0, 50.0),
+            symbol("lamp", "L1", 120.0, 57.5),
+            symbol("lamp", "L2", 120.0, 80.0),
+            wire(&[(67.5, 42.5), (95.0, 42.5)]),
+            wire(&[(95.0, 57.5), (112.5, 57.5)]),
+            wire(&[(127.5, 57.5), (140.0, 57.5), (140.0, 30.0), (52.5, 30.0), (52.5, 42.5)]),
+            wire(&[(100.0, 57.5), (100.0, 80.0), (112.5, 80.0)]),
+            wire(&[(127.5, 80.0), (145.0, 80.0)]),
+        ]);
+        let unreachable: Vec<_> = run(&sheet)
+            .into_iter()
+            .filter(|d| d.code == "elec.unreachable_load")
+            .collect();
+        assert_eq!(unreachable.len(), 1, "{unreachable:?}");
+        assert!(unreachable[0].message.contains("L2"), "{}", unreachable[0].message);
     }
 }
