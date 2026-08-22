@@ -41,6 +41,12 @@ const copilotPathInput = ref("");
 const openaiBaseUrlInput = ref("");
 /** OpenAI互換APIで使うモデル名の入力欄 (接続先ごとに違うので既定値は無い)。 */
 const openaiModelInput = ref("");
+/** Geminiで使うモデル名の入力欄 (空にすると既定モデルへ戻る)。 */
+const geminiModelInput = ref("");
+/**
+ * Gemini APIのキーの入力欄。**保存したらすぐ空にする**(ほかのキー欄と同じ約束)。
+ */
+const geminiKeyInput = ref("");
 /**
  * OpenAI互換APIのキーの入力欄。**保存したらすぐ空にする**(Anthropicのキー欄と同じ約束)。
  * ローカルのOllamaならキーは不要なので、空のままでも接続できる。
@@ -58,6 +64,7 @@ const provider = computed(() => settings.settings.provider);
 const usingApi = computed(() => provider.value === "anthropic_api");
 const usingCopilot = computed(() => provider.value === "copilot_cli");
 const usingOpenAi = computed(() => provider.value === "openai_compat");
+const usingGemini = computed(() => provider.value === "gemini");
 /** claude CLIの検出結果を出すのはCLIプロバイダのときだけ。 */
 const usingClaudeCli = computed(() => provider.value === "claude_cli");
 /** いま選んでいるプロバイダで送信できる状態か(バッジ表示)。 */
@@ -79,6 +86,9 @@ const openaiBaseUrlDirty = computed(
 const openaiModelDirty = computed(
   () => openaiModelInput.value.trim() !== settings.settings.openai_model,
 );
+const geminiModelDirty = computed(
+  () => geminiModelInput.value.trim() !== settings.settings.gemini_model,
+);
 const dirty = computed(
   () =>
     pathDirty.value ||
@@ -87,7 +97,8 @@ const dirty = computed(
     copilotModelDirty.value ||
     copilotPathDirty.value ||
     openaiBaseUrlDirty.value ||
-    openaiModelDirty.value,
+    openaiModelDirty.value ||
+    geminiModelDirty.value,
 );
 const activeLocale = computed(() => resolveLocale(settings.settings.language));
 
@@ -120,8 +131,10 @@ watch(
     copilotPathInput.value = settings.settings.copilot_path ?? "";
     openaiBaseUrlInput.value = settings.settings.openai_base_url;
     openaiModelInput.value = settings.settings.openai_model;
+    geminiModelInput.value = settings.settings.gemini_model;
     apiKeyInput.value = "";
     openaiKeyInput.value = "";
+    geminiKeyInput.value = "";
     settings.testResult = null;
     await settings.loadProviderStatus();
     if (!chat.detect) await redetect();
@@ -153,6 +166,7 @@ async function apply(): Promise<boolean> {
   const copilotPathChanged = copilotPathDirty.value;
   const copilotPath = copilotPathInput.value.trim();
   const openaiChanged = openaiBaseUrlDirty.value || openaiModelDirty.value;
+  const geminiModelChanged = geminiModelDirty.value;
   if (
     !(await settings.save({
       claude_path: path || null,
@@ -162,6 +176,7 @@ async function apply(): Promise<boolean> {
       copilot_path: copilotPath || null,
       openai_base_url: openaiBaseUrlInput.value.trim(),
       openai_model: openaiModelInput.value.trim(),
+      gemini_model: geminiModelInput.value.trim(),
     }))
   )
     return false;
@@ -172,6 +187,11 @@ async function apply(): Promise<boolean> {
   copilotPathInput.value = settings.settings.copilot_path ?? "";
   openaiBaseUrlInput.value = settings.settings.openai_base_url;
   openaiModelInput.value = settings.settings.openai_model;
+  geminiModelInput.value = settings.settings.gemini_model;
+  if (geminiModelChanged) {
+    ui.log(t("settings.agent.geminiModelSetLog", { model: settings.settings.gemini_model }));
+    settings.testResult = null;
+  }
   if (openaiChanged) {
     ui.log(
       t("settings.agent.openaiSetLog", {
@@ -251,6 +271,7 @@ function providerLabelKey(p: AgentProvider): string {
   if (p === "anthropic_api") return "settings.agent.providerApi";
   if (p === "copilot_cli") return "settings.agent.providerCopilot";
   if (p === "openai_compat") return "settings.agent.providerOpenAi";
+  if (p === "gemini") return "settings.agent.providerGemini";
   return "settings.agent.providerCli";
 }
 
@@ -259,6 +280,7 @@ const providerHintKey = computed(() => {
   if (usingApi.value) return "settings.agent.providerHintApi";
   if (usingCopilot.value) return "settings.agent.providerHintCopilot";
   if (usingOpenAi.value) return "settings.agent.providerHintOpenAi";
+  if (usingGemini.value) return "settings.agent.providerHintGemini";
   return "settings.agent.providerHint";
 });
 
@@ -273,6 +295,11 @@ const providerBadgeKey = computed(() => {
     return providerReady.value
       ? "settings.agent.openaiReadyBadge"
       : "settings.agent.openaiNotReadyBadge";
+  }
+  if (usingGemini.value) {
+    return providerReady.value
+      ? "settings.agent.geminiReadyBadge"
+      : "settings.agent.geminiNotReadyBadge";
   }
   return providerReady.value ? "settings.agent.detectedBadge" : "settings.agent.notDetectedBadge";
 });
@@ -303,6 +330,20 @@ async function removeOpenAiKey() {
   if (!(await settings.clearApiKey("openai_compat"))) return;
   openaiKeyInput.value = "";
   ui.log(t("settings.agent.openaiKeyRemovedLog"));
+}
+
+/** 入力したGemini APIキーをOSキーチェーンへ保存する(保存後は入力欄を空にする)。 */
+async function saveGeminiKey() {
+  if (!(await settings.saveApiKey(geminiKeyInput.value, "gemini"))) return;
+  geminiKeyInput.value = "";
+  ui.log(t("settings.agent.geminiKeySavedLog"));
+}
+
+/** 保存済みのGemini APIキーを消す。 */
+async function removeGeminiKey() {
+  if (!(await settings.clearApiKey("gemini"))) return;
+  geminiKeyInput.value = "";
+  ui.log(t("settings.agent.geminiKeyRemovedLog"));
 }
 
 /**
@@ -626,6 +667,80 @@ async function changeLanguage(ev: Event) {
               <p v-else-if="settings.testResult" class="caption indent-label warn">{{ testErrorText }}</p>
               <p v-else-if="!providerReady" class="caption indent-label">
                 {{ t("settings.agent.openaiTestHint") }}
+              </p>
+            </div>
+
+            <div v-if="usingGemini" class="group">
+              <div class="group-head"><span>{{ t("settings.agent.geminiGroup") }}</span><i /></div>
+              <div class="form-row">
+                <label class="form-label" for="gemini-model">{{ t("settings.agent.geminiModelLabel") }}</label>
+                <input
+                  id="gemini-model"
+                  v-model="geminiModelInput"
+                  class="field input mono"
+                  spellcheck="false"
+                  :placeholder="t('settings.agent.geminiModelPlaceholder')"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
+                />
+              </div>
+              <p class="caption indent-label">{{ t("settings.agent.geminiModelHint") }}</p>
+
+              <div class="form-row">
+                <label class="form-label" for="gemini-key">{{ t("settings.agent.geminiKeyLabel") }}</label>
+                <div v-if="settings.geminiKeySaved" class="field mono-field">
+                  <span><KeyRound :size="11" /> {{ maskedApiKey() }}</span>
+                </div>
+                <input
+                  v-else
+                  id="gemini-key"
+                  v-model="geminiKeyInput"
+                  class="field input mono"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  :placeholder="t('settings.agent.geminiKeyPlaceholder')"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && saveGeminiKey()"
+                />
+                <button
+                  v-if="settings.geminiKeySaved"
+                  class="btn secondary"
+                  :disabled="settings.keySaving"
+                  @click="removeGeminiKey"
+                >
+                  {{ t("settings.agent.apiKeyRemove") }}
+                </button>
+                <button
+                  v-else
+                  class="btn secondary"
+                  :disabled="settings.keySaving || !geminiKeyInput.trim()"
+                  @click="saveGeminiKey"
+                >
+                  {{ t("settings.agent.apiKeySave") }}
+                </button>
+              </div>
+              <p class="caption indent-label">{{ t("settings.agent.geminiKeyHint") }}</p>
+              <p v-if="settings.keychainError" class="caption indent-label warn">
+                {{ t("settings.agent.keychainError", { reason: settings.keychainError }) }}
+              </p>
+
+              <div class="form-row">
+                <span class="form-label" />
+                <button
+                  class="btn secondary test-btn"
+                  :disabled="settings.testing || !settings.geminiKeySaved"
+                  @click="settings.testConnection()"
+                >
+                  <RefreshCw :size="12" :class="{ spin: settings.testing }" />
+                  {{ settings.testing ? t("settings.agent.testing") : t("settings.agent.testConnection") }}
+                </button>
+              </div>
+              <p v-if="settings.testResult?.ok" class="caption indent-label ok">
+                <Check :size="11" />
+                {{ t("settings.agent.testOk", { model: settings.testResult.model ?? settings.settings.gemini_model }) }}
+              </p>
+              <p v-else-if="settings.testResult" class="caption indent-label warn">{{ testErrorText }}</p>
+              <p v-else-if="!settings.geminiKeySaved" class="caption indent-label">
+                {{ t("settings.agent.geminiTestHint") }}
               </p>
             </div>
 

@@ -53,6 +53,7 @@ fn saved_settings_round_trip() {
         copilot_model: "auto".into(),
         openai_base_url: "https://api.openai.com/v1".into(),
         openai_model: String::new(),
+        gemini_model: "gemini-2.5-flash".into(),
     };
 
     save_settings(&path, &settings).unwrap();
@@ -312,7 +313,7 @@ fn an_unknown_provider_name_falls_back_to_the_cli() {
     let path = dir.join("settings.json");
     std::fs::write(
         &path,
-        r#"{ "provider": "gemini", "language": "ja", "knowledge_path": "/tmp/notes.md" }"#,
+        r#"{ "provider": "some_future_provider", "language": "ja", "knowledge_path": "/tmp/notes.md" }"#,
     )
     .unwrap();
     let settings = load_settings(&path).unwrap();
@@ -550,6 +551,107 @@ fn no_openai_key_is_written_to_the_settings_file() {
     let written = std::fs::read_to_string(&path).unwrap();
     assert!(written.contains("openai_base_url"), "URLが保存されていない");
     for secret in ["api_key", "openai_key", "authorization", "password"] {
+        assert!(
+            !written.contains(secret),
+            "設定ファイルに資格情報の項目がある ({secret}): {written}"
+        );
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+// ------------------------------------------------------ プロバイダ (Google Gemini)
+
+/// Out of the box the Gemini route is preloaded with the recommended fast model.
+/// Geminiの経路は、はじめから推奨の高速モデルが入った状態になっている。
+#[test]
+fn the_gemini_default_model_is_the_recommended_fast_one() {
+    assert_eq!(AppSettings::default().gemini_model, "gemini-2.5-flash");
+}
+
+/// Choosing Gemini survives a save/load round trip together with the model name.
+/// Geminiを選んだ設定は、モデル名と一緒に保存して読み直しても保持される。
+#[test]
+fn the_gemini_choice_round_trips_through_save_and_load() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    let settings = AppSettings {
+        provider: AgentProvider::Gemini,
+        gemini_model: "gemini-2.5-pro".into(),
+        ..AppSettings::default()
+    };
+    save_settings(&path, &settings).unwrap();
+
+    let loaded = load_settings(&path).unwrap();
+    assert_eq!(loaded.provider, AgentProvider::Gemini);
+    assert_eq!(loaded.gemini_model, "gemini-2.5-pro");
+    // 設定ファイルは手で読める名前で書かれる
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        written.contains("\"provider\": \"gemini\""),
+        "読める名前で保存されていない: {written}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A settings file written before the Gemini route existed keeps working, with its fields at their defaults.
+/// Geminiの項目が無い旧い設定ファイルもそのまま動き、その項目は既定値になる。
+#[test]
+fn an_old_settings_file_without_gemini_fields_keeps_working() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    std::fs::write(
+        &path,
+        r#"{ "provider": "openai_compat", "language": "ja" }"#,
+    )
+    .unwrap();
+
+    let settings = load_settings(&path).unwrap();
+    assert_eq!(settings.provider, AgentProvider::OpenAiCompat);
+    assert_eq!(settings.gemini_model, "gemini-2.5-flash");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A blank Gemini model box returns to the default model, and stray spaces are trimmed away.
+/// Geminiのモデル欄を空にすると既定モデルへ戻り、前後の余分な空白は取り除かれる。
+#[test]
+fn a_blank_gemini_model_box_returns_to_the_default() {
+    let blank = AppSettings {
+        gemini_model: "  ".into(),
+        ..AppSettings::default()
+    }
+    .normalized();
+    assert_eq!(blank.gemini_model, "gemini-2.5-flash");
+
+    let padded = AppSettings {
+        gemini_model: " gemini-2.5-pro ".into(),
+        ..AppSettings::default()
+    }
+    .normalized();
+    assert_eq!(padded.gemini_model, "gemini-2.5-pro");
+}
+
+/// No Gemini key is ever written to the settings file: only the model name lives there.
+/// GeminiのAPIキーは設定ファイルへ一切書かれない(そこに置くのはモデル名だけ)。
+#[test]
+fn no_gemini_key_is_written_to_the_settings_file() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    save_settings(
+        &path,
+        &AppSettings {
+            provider: AgentProvider::Gemini,
+            gemini_model: "gemini-2.5-flash".into(),
+            ..AppSettings::default()
+        },
+    )
+    .unwrap();
+
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        written.contains("gemini_model"),
+        "モデル名が保存されていない"
+    );
+    for secret in ["api_key", "gemini_key", "x-goog", "AIza", "password"] {
         assert!(
             !written.contains(secret),
             "設定ファイルに資格情報の項目がある ({secret}): {written}"

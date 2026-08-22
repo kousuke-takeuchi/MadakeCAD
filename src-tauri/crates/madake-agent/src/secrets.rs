@@ -3,7 +3,8 @@
 //! - macOS: キーチェーン / Windows: 資格情報マネージャ / Linux: Secret Service
 //!   (いずれも`keyring`クレート経由)
 //! - 保管先は`service = "MadakeCAD"`。`account`はプロバイダごとに分ける
-//!   (Anthropic=`anthropic_api_key` / OpenAI互換=`openai_compat_api_key`)
+//!   (Anthropic=`anthropic_api_key` / OpenAI互換=`openai_compat_api_key` /
+//!   Gemini=`gemini_api_key`)
 //!
 //! テスト・CIでは実キーチェーンが使えない(ヘッドレスLinuxにはSecret Serviceが無い)ため、
 //! [`install_store`]で[`MemoryStore`]へ差し替えられるようにしてある。差し替えは
@@ -28,6 +29,13 @@ pub const ANTHROPIC_KEY_ENV: &str = "ANTHROPIC_API_KEY";
 pub const OPENAI_COMPAT_ACCOUNT: &str = "openai_compat_api_key";
 /// キーチェーンに無いときに見る環境変数(CI・開発用の逃げ道)。
 pub const OPENAI_KEY_ENV: &str = "OPENAI_API_KEY";
+/// Google Gemini APIのキーの保管名。
+///
+/// Anthropic・OpenAI互換のキーとは**別の入れ物**なので、全部を保存しておいて
+/// 設定画面でプロバイダを切り替えるだけで行き来できる。
+pub const GEMINI_ACCOUNT: &str = "gemini_api_key";
+/// キーチェーンに無いときに見る環境変数(CI・開発用の逃げ道)。
+pub const GEMINI_KEY_ENV: &str = "GEMINI_API_KEY";
 
 /// 秘密の保管先。実体はOSキーチェーン([`KeyringStore`])、テストは[`MemoryStore`]。
 pub trait SecretStore: Send + Sync + 'static {
@@ -284,4 +292,29 @@ pub fn clear_openai_compat_api_key() -> Result<()> {
 /// OpenAI互換APIのキーが保管済みか。**値そのものは返さない。**
 pub fn has_openai_compat_api_key() -> bool {
     openai_compat_api_key().is_some()
+}
+
+/// Gemini APIのキーを取り出す。
+pub fn gemini_api_key() -> Option<String> {
+    gemini_api_key_checked().0
+}
+
+/// [`gemini_api_key`]の理由つき版。`(キー, キーチェーンが使えなかった理由)`。
+pub fn gemini_api_key_checked() -> (Option<String>, Option<String>) {
+    api_key_checked(GEMINI_ACCOUNT, Some(GEMINI_KEY_ENV))
+}
+
+/// Gemini APIのキーを保管する。前後の空白は取り除く。空文字は拒否する。
+pub fn set_gemini_api_key(key: &str) -> Result<()> {
+    set_api_key(GEMINI_ACCOUNT, key)
+}
+
+/// Gemini APIのキーを消す(元から無くても成功)。
+pub fn clear_gemini_api_key() -> Result<()> {
+    clear_api_key(GEMINI_ACCOUNT)
+}
+
+/// Gemini APIのキーが保管済みか。**値そのものは返さない。**
+pub fn has_gemini_api_key() -> bool {
+    gemini_api_key().is_some()
 }

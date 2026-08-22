@@ -39,6 +39,8 @@ pub enum AgentProvider {
     /// 書く名前を明示する(手で読める`openai_compat`にそろえる)。
     #[serde(rename = "openai_compat")]
     OpenAiCompat,
+    /// Google Gemini API(モデル+APIキー)
+    Gemini,
 }
 
 impl<'de> Deserialize<'de> for AgentProvider {
@@ -52,6 +54,7 @@ impl<'de> Deserialize<'de> for AgentProvider {
             "anthropic_api" => Self::AnthropicApi,
             "copilot_cli" => Self::CopilotCli,
             "openai_compat" => Self::OpenAiCompat,
+            "gemini" => Self::Gemini,
             _ => Self::ClaudeCli,
         })
     }
@@ -101,6 +104,12 @@ pub struct AppSettings {
     /// 接続先ごとに正解が違う(`gpt-4o` / `qwen3:4b` / `x-ai/grok-4`…)ため、
     /// **既定値は置かず空のまま**にして、利用者に必ず選ばせる。
     pub openai_model: String,
+    /// [`AgentProvider::Gemini`]で使うモデル名。空なら既定
+    /// ([`crate::gemini::DEFAULT_GEMINI_MODEL`])へ戻す。
+    ///
+    /// 接続先が1つ(Google)に決まっているためURL欄は無く、モデル名だけを持つ。
+    /// **APIキーはここには入らない**(キーチェーンだけに置く)。
+    pub gemini_model: String,
 }
 
 impl Default for AppSettings {
@@ -117,6 +126,7 @@ impl Default for AppSettings {
             copilot_model: crate::copilot_cli::DEFAULT_COPILOT_MODEL.into(),
             openai_base_url: crate::openai_compat::DEFAULT_OPENAI_BASE_URL.into(),
             openai_model: String::new(),
+            gemini_model: crate::gemini::DEFAULT_GEMINI_MODEL.into(),
         }
     }
 }
@@ -155,6 +165,13 @@ impl AppSettings {
         };
         // モデル名には既定値を置かない(空=未選択のまま。UIがプレースホルダで例示する)
         self.openai_model = self.openai_model.trim().to_string();
+        // Geminiは接続先が1つなので、空欄なら推奨の既定モデルへ戻す
+        let gemini_model = self.gemini_model.trim();
+        self.gemini_model = if gemini_model.is_empty() {
+            crate::gemini::DEFAULT_GEMINI_MODEL.into()
+        } else {
+            gemini_model.into()
+        };
         self
     }
 }

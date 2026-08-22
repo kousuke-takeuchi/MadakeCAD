@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1106仕様項目**。
+全5領域・**1144仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -634,6 +634,29 @@
 - 解釈できない行はターンを壊さず黙って無視される。 <sub>`unknown_and_broken_lines_are_ignored`</sub>
 - 同じツール呼び出しが二度流れても、チャットには一度だけ表示される。 <sub>`a_repeated_tool_call_is_shown_only_once`</sub>
 
+### gemini
+
+- Geminiから届いた本文はそのまま文字の差分として流れ、ターンの終わりに組み立てた返答とトークン使用量が付く。 <sub>`streamed_text_becomes_deltas_and_a_completed_turn`</sub>
+- Geminiが毎チャンクに載せてくる累計の使用量を二重に足し込まない。 <sub>`repeated_running_token_totals_are_not_counted_twice`</sub>
+- リクエストは設定したモデルのストリーミング用エンドポイントへ行き、システム指示とユーザーの発言を載せる。 <sub>`the_request_goes_to_the_streaming_endpoint_with_the_system_instruction_and_message`</sub>
+- ブリッジしたMCPツールはGeminiのfunctionDeclarations形式で渡る(エージェントが図面を編集できる)。 <sub>`the_bridged_mcp_tools_are_offered_as_function_declarations`</sub>
+- Geminiが受け付けないスキーマの項目はツール定義から落とし、型が無くなったプロパティにも型を補う。 <sub>`schema_keywords_gemini_rejects_are_dropped_from_tool_definitions`</sub>
+- モデルが要求したツールはその場で実行され、結果をfunctionResponseとして返して会話を続ける(1ターンで完結する)。 <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- 呼び出しIDを付けてこないモデルにも、関数名で対応づけて結果を返す。 <sub>`a_call_without_an_id_is_answered_by_function_name`</sub>
+- 失敗したツールはターンを中断せず、エラーの欄に理由を入れてモデルへ返す(モデルが直せる)。 <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
+- 関数呼び出しの往復には上限があり、堂々巡りになったモデルが延々と動き続けない。 <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
+- APIキーはx-goog-api-keyヘッダだけで送られ、URLにも本文にもユーザーに見える文言にも現れない。 <sub>`the_api_key_travels_only_in_the_header`</sub>
+- APIキーが弾かれたときは、生のHTTPコードではなく「キーの問題」と分かる文言を表示する。 <sub>`a_rejected_api_key_is_explained_as_a_key_problem`</sub>
+- Geminiの利用上限に当たったときは「利用上限に達したので時間をおいて」と読める文言を表示する。 <sub>`a_rate_limited_service_is_explained_as_a_usage_limit`</sub>
+- モデル名が見つからないときは「モデル名の問題」と分かる文言で、試したモデル名を添えて表示する。 <sub>`an_unknown_model_name_is_explained_as_a_model_problem`</sub>
+- サーバーへ接続できないときは、黙って失敗せずに試したURLを示す。 <sub>`an_unreachable_server_names_the_url_that_was_tried`</sub>
+- 会話の前のやりとりも一緒に送るので、モデルは前に話した内容を覚えている。 <sub>`earlier_turns_of_the_conversation_are_replayed`</sub>
+- 接続テストは、使える設定なら成功を、駄目な設定なら区分つきの読める理由を返す。 <sub>`the_connection_test_reports_success_or_a_readable_reason`</sub>
+- 接続テストは設定したモデルの通常(非ストリーミング)エンドポイントを叩く。 <sub>`the_connection_test_uses_the_non_streaming_endpoint`</sub>
+- 接続先と既定のモデル名はGoogleが公開しているGemini APIのものになっている。 <sub>`the_defaults_match_the_published_gemini_api`</sub>
+- 「models/」付きで貼り付けたモデル名でも、正しいエンドポイントへ1回だけつながる。 <sub>`a_model_name_with_the_models_prefix_still_works`</sub>
+- モデル名が無いときは通信する前にターンを止め、どこを埋めればよいかを伝える。 <sub>`an_empty_model_name_stops_before_any_request`</sub>
+
 ### 規格知識の注入
 
 - 同梱の規格知識には図記号・参照記号・線色/sq・線番・配置の決まりが書かれている。 <sub>`bundled_standards_cover_the_drawing_conventions`</sub>
@@ -704,6 +727,15 @@
 - プロバイダのバッジは、Copilot CLIが実際に見つかるときだけ「使える」状態になる。 <sub>`the_provider_is_ready_only_while_copilot_is_found`</sub>
 - 設定したCopilotの実行ファイルが無い場合、黙って失敗せず理由がチャットに表示される。 <sub>`a_missing_copilot_executable_is_explained_in_the_chat`</sub>
 - Copilotを選んでいる間、接続テストはAnthropic APIではなくCopilotへ行く。 <sub>`the_connection_test_follows_the_chosen_provider`</sub>
+
+### manager_gemini_provider
+
+- Google Geminiを選んでおけば、Claude Code CLIが入っていない環境でもチャットのやりとりができる。 <sub>`a_turn_runs_on_google_gemini`</sub>
+- Geminiを選んだのにキーを保存していないと、設定画面へ促す文言で送信を断る。 <sub>`sending_without_a_key_points_at_the_settings_screen`</sub>
+- GeminiのキーはAnthropic・OpenAI互換とは別の入れ物に入るため、他社のキーがあってもGeminiは「使える」にならない。 <sub>`the_gemini_key_is_stored_separately_from_the_other_providers`</sub>
+- モデル欄を空にすると推奨の既定モデルへ戻るため、そのまま使える状態が保たれる。 <sub>`a_blank_model_box_falls_back_to_the_default_model`</sub>
+- Geminiを選んでいる間、接続テストはAnthropic APIではなくGeminiへ行く。 <sub>`the_connection_test_follows_the_chosen_provider`</sub>
+- GeminiのAPIキーはUIへ流れるイベントにも会話履歴にも一切載らない。 <sub>`the_api_key_never_appears_in_the_event_stream`</sub>
 
 ### プロバイダ: OpenAI互換 / Ollama
 
@@ -795,6 +827,11 @@
 - OpenAI互換APIの項目が無い旧い設定ファイルもそのまま動き、その項目は既定値になる。 <sub>`an_old_settings_file_without_openai_fields_keeps_working`</sub>
 - URL欄を空にするとOpenAI本体へ戻り、末尾の「/」は取り除かれ、モデル名は入力どおり(前後の空白だけ除去)保たれる。 <sub>`blank_openai_boxes_return_to_the_defaults`</sub>
 - OpenAI互換APIのキーは設定ファイルへ一切書かれない(そこに置くのはURLとモデル名だけ)。 <sub>`no_openai_key_is_written_to_the_settings_file`</sub>
+- Geminiの経路は、はじめから推奨の高速モデルが入った状態になっている。 <sub>`the_gemini_default_model_is_the_recommended_fast_one`</sub>
+- Geminiを選んだ設定は、モデル名と一緒に保存して読み直しても保持される。 <sub>`the_gemini_choice_round_trips_through_save_and_load`</sub>
+- Geminiの項目が無い旧い設定ファイルもそのまま動き、その項目は既定値になる。 <sub>`an_old_settings_file_without_gemini_fields_keeps_working`</sub>
+- Geminiのモデル欄を空にすると既定モデルへ戻り、前後の余分な空白は取り除かれる。 <sub>`a_blank_gemini_model_box_returns_to_the_default`</sub>
+- GeminiのAPIキーは設定ファイルへ一切書かれない(そこに置くのはモデル名だけ)。 <sub>`no_gemini_key_is_written_to_the_settings_file`</sub>
 
 ### tool_bridge
 
@@ -1281,6 +1318,13 @@
 - 接続バッジは、キー保存済み(またはローカルURL)でモデル名が入っているときだけ「接続済み」 <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
 - プロバイダの状態からOpenAI互換APIのURL・モデル・キーの保存状況が分かる <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
 - キーが弾かれたときは、接続テストがOpenAI互換API用の区分つきで失敗を返す <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- プロバイダの選択肢にGoogle Geminiがあり、既定のモデル名が入っている <sub>`Google Gemini provider`</sub>
+- Geminiのモデル名は設定として保存できる <sub>`Google Gemini provider`</sub>
+- GeminiのキーはAnthropic・OpenAI互換とは別枠で保存され、値は状態に残らない <sub>`Google Gemini provider`</sub>
+- Geminiのキーを削除すると、そのプロバイダ指定で削除が呼ばれる <sub>`Google Gemini provider`</sub>
+- 接続バッジは、キーが保存済みでモデル名が入っているときだけ「使えます」 <sub>`Google Gemini provider`</sub>
+- プロバイダの状態からGeminiのモデルとキーの保存状況が分かる <sub>`Google Gemini provider`</sub>
+- キーが弾かれたときは、接続テストがGemini用の区分つきで失敗を返す <sub>`Google Gemini provider`</sub>
 
 ### 帳票 (部品表 / 電線リスト)
 

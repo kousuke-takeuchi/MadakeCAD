@@ -15,14 +15,21 @@ import { inTauri } from "../ipc";
  *   認証はCopilot自身のGitHubサインイン)
  * - `openai_compat`: OpenAI互換のChat Completions API (OpenAI/xAI/OpenRouter/**Ollama**。
  *   接続先URL+モデル名で切り替える。キーはOSキーチェーン。ローカルURLならキー不要)
+ * - `gemini`: Google Gemini API (モデル名+APIキー。**キーはOSキーチェーン**)
  */
-export type AgentProvider = "claude_cli" | "anthropic_api" | "copilot_cli" | "openai_compat";
+export type AgentProvider =
+  | "claude_cli"
+  | "anthropic_api"
+  | "copilot_cli"
+  | "openai_compat"
+  | "gemini";
 
 export const AGENT_PROVIDERS: AgentProvider[] = [
   "claude_cli",
   "anthropic_api",
   "copilot_cli",
   "openai_compat",
+  "gemini",
 ];
 
 /** OpenAI互換APIの既定の接続先 (OpenAI本体)。 */
@@ -30,6 +37,9 @@ export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 
 /** 「Ollama (ローカル)」プリセットの接続先。**APIキー不要**。 */
 export const OLLAMA_BASE_URL = "http://localhost:11434/v1";
+
+/** Geminiの既定モデル (速度と価格のつり合いが良い現行の安定版)。 */
+export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
 /** 接続先URLがこのPCの中を指しているか (=APIキー無しで使える前提か)。 */
 export function isLocalUrl(url: string): boolean {
@@ -77,6 +87,8 @@ export interface AppSettings {
   openai_base_url: string;
   /** `openai_compat` で使うモデル名 (接続先ごとに違うため既定値は無く、空=未選択) */
   openai_model: string;
+  /** `gemini` で使うモデル名 (空にすると既定モデルへ戻る) */
+  gemini_model: string;
 }
 
 export function defaultSettings(): AppSettings {
@@ -92,6 +104,7 @@ export function defaultSettings(): AppSettings {
     copilot_model: "auto",
     openai_base_url: DEFAULT_OPENAI_BASE_URL,
     openai_model: "",
+    gemini_model: DEFAULT_GEMINI_MODEL,
   };
 }
 
@@ -117,6 +130,10 @@ export interface ProviderStatus {
   openai_model?: string;
   /** OpenAI互換APIのキーが保存済みか (**値は返らない**) */
   openai_key_saved?: boolean;
+  /** `gemini` で使うモデル名 */
+  gemini_model?: string;
+  /** Gemini APIのキーが保存済みか (**値は返らない**) */
+  gemini_key_saved?: boolean;
 }
 
 /** 接続テストの結果。 */
@@ -225,6 +242,11 @@ interface SettingsState {
    * **キーそのものはフロントに持たない**(保存後は伏せ字だけを表示する)。
    */
   openaiKeySaved: boolean;
+  /**
+   * Gemini APIのキーがOSキーチェーンに保存されているか。
+   * **キーそのものはフロントに持たない**(保存後は伏せ字だけを表示する)。
+   */
+  geminiKeySaved: boolean;
 }
 
 export const useSettingsStore = defineStore("settings", {
@@ -241,6 +263,7 @@ export const useSettingsStore = defineStore("settings", {
     copilotDetected: false,
     copilotVersion: null,
     openaiKeySaved: false,
+    geminiKeySaved: false,
   }),
 
   getters: {
@@ -250,6 +273,8 @@ export const useSettingsStore = defineStore("settings", {
     usingCopilotProvider: (state): boolean => state.settings.provider === "copilot_cli",
     /** OpenAI互換APIを選んでいるか。 */
     usingOpenAiProvider: (state): boolean => state.settings.provider === "openai_compat",
+    /** Google Geminiを選んでいるか。 */
+    usingGeminiProvider: (state): boolean => state.settings.provider === "gemini",
     /** OpenAI互換APIの接続先がローカル (Ollama等。キー不要) か。 */
     openaiIsLocal: (state): boolean => isLocalUrl(state.settings.openai_base_url),
     /**
@@ -264,6 +289,10 @@ export const useSettingsStore = defineStore("settings", {
           // ローカル (Ollama) はキー不要。どちらの場合もモデル名は必須
           if (!this.settings.openai_model.trim()) return false;
           return this.openaiIsLocal || this.openaiKeySaved;
+        }
+        // Geminiはキーが必須。モデル名も入っていること
+        if (this.usingGeminiProvider) {
+          return this.geminiKeySaved && !!this.settings.gemini_model.trim();
         }
         return cliDetected;
       };
@@ -312,6 +341,7 @@ export const useSettingsStore = defineStore("settings", {
         this.copilotDetected = status.copilot_detected ?? false;
         this.copilotVersion = status.copilot_version ?? null;
         this.openaiKeySaved = status.openai_key_saved ?? false;
+        this.geminiKeySaved = status.gemini_key_saved ?? false;
       } catch (e) {
         this.error = messageOf(e);
       }
@@ -331,6 +361,7 @@ export const useSettingsStore = defineStore("settings", {
         const status = await providerApi.setKey(key, provider);
         this.apiKeySaved = status.api_key_saved;
         this.openaiKeySaved = status.openai_key_saved ?? this.openaiKeySaved;
+        this.geminiKeySaved = status.gemini_key_saved ?? this.geminiKeySaved;
         this.keychainError = status.keychain_error ?? null;
         this.error = null;
         this.testResult = null;
@@ -350,6 +381,7 @@ export const useSettingsStore = defineStore("settings", {
         const status = await providerApi.clearKey(provider);
         this.apiKeySaved = status.api_key_saved;
         this.openaiKeySaved = status.openai_key_saved ?? false;
+        this.geminiKeySaved = status.gemini_key_saved ?? false;
         this.keychainError = status.keychain_error ?? null;
         this.error = null;
         this.testResult = null;

@@ -20,6 +20,7 @@ describe("settings store", () => {
       copilot_model: "auto",
       openai_base_url: "https://api.openai.com/v1",
       openai_model: "",
+      gemini_model: "gemini-2.5-flash",
     });
     expect(useSettingsStore().settings).toEqual(defaultSettings());
   });
@@ -38,6 +39,7 @@ describe("settings store", () => {
       copilot_model: "auto",
       openai_base_url: "https://api.openai.com/v1",
       openai_model: "",
+      gemini_model: "gemini-2.5-flash",
     };
     vi.spyOn(settingsApi, "get").mockResolvedValue(stored);
 

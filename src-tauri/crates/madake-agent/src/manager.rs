@@ -22,6 +22,7 @@ use crate::backend::{
 use crate::conversation::{AppliedRevisions, AppliedUndoDepth, Conversation, DocState};
 use crate::copilot_cli::CopilotCliBackend;
 use crate::events::AgentEvent;
+use crate::gemini::{self, GeminiBackend};
 use crate::openai_compat::{self, OpenAiCompatBackend};
 use crate::settings::{AgentProvider, AppSettings};
 use crate::tools::ToolBridge;
@@ -204,6 +205,7 @@ impl AgentManager {
     /// - [`AgentProvider::AnthropicApi`]: APIキーが保管されているか(値は返さない)
     /// - [`AgentProvider::OpenAiCompat`]: モデル名が入っていて、かつキーが保管済みか
     ///   接続先URLがローカル(Ollama等。キー不要)か
+    /// - [`AgentProvider::Gemini`]: モデル名が入っていて、かつAPIキーが保管済みか
     pub async fn provider_ready(&self) -> bool {
         let settings = self.settings().normalized();
         match settings.provider {
@@ -214,6 +216,9 @@ impl AgentManager {
                 !settings.openai_model.is_empty()
                     && (openai_compat::is_local_url(&settings.openai_base_url)
                         || crate::secrets::has_openai_compat_api_key())
+            }
+            AgentProvider::Gemini => {
+                !settings.gemini_model.is_empty() && crate::secrets::has_gemini_api_key()
             }
         }
     }
@@ -239,6 +244,7 @@ impl AgentManager {
         match self.settings().provider {
             AgentProvider::CopilotCli => self.test_copilot_connection().await,
             AgentProvider::OpenAiCompat => self.test_openai_connection().await,
+            AgentProvider::Gemini => self.test_gemini_connection().await,
             AgentProvider::ClaudeCli | AgentProvider::AnthropicApi => {
                 self.test_anthropic_connection().await
             }
@@ -286,6 +292,47 @@ impl AgentManager {
             settings.openai_model.clone(),
             settings.openai_base_url.clone(),
         );
+        if let Some(tools) = self.tool_bridge() {
+            backend = backend.with_tools(tools);
+        }
+        Ok(backend)
+    }
+
+    /// Gemini APIへの疎通を試す(設定画面の「接続テスト」)。
+    ///
+    /// 成功したら確かめたモデル名を返す。失敗は種類つきの[`ConnectionError`]
+    /// (`gemini_no_key` / `gemini_no_model` は通信する前に分かる設定漏れ)。
+    /// **APIキーは戻り値にも含めない。**
+    pub async fn test_gemini_connection(
+        &self,
+    ) -> std::result::Result<String, crate::anthropic::ConnectionError> {
+        let settings = self.settings().normalized();
+        let backend = self.gemini_backend(&settings).map_err(|e| match e {
+            AgentError::NoGeminiModel => crate::anthropic::ConnectionError {
+                kind: gemini::KIND_GEMINI_NO_MODEL.to_string(),
+                message: e.to_string(),
+            },
+            e => crate::anthropic::ConnectionError {
+                kind: gemini::KIND_GEMINI_NO_KEY.to_string(),
+                message: e.to_string(),
+            },
+        })?;
+        backend
+            .check_connection()
+            .await
+            .map(|()| settings.gemini_model)
+    }
+
+    /// 設定からGeminiバックエンドを組み立てる(送信・接続テスト共通)。
+    ///
+    /// APIキーとモデル名の両方が要る(接続先URLは固定なので設定項目にしていない)。
+    fn gemini_backend(&self, settings: &AppSettings) -> Result<GeminiBackend> {
+        if settings.gemini_model.trim().is_empty() {
+            return Err(AgentError::NoGeminiModel);
+        }
+        let key = crate::secrets::gemini_api_key().ok_or(AgentError::NoGeminiKey)?;
+        // ベースURLは既定(環境変数MADAKE_GEMINI_BASE_URLがあればそれ)を使う
+        let mut backend = GeminiBackend::new(key, settings.gemini_model.clone(), "");
         if let Some(tools) = self.tool_bridge() {
             backend = backend.with_tools(tools);
         }
@@ -445,6 +492,11 @@ impl AgentManager {
                 self.openai_backend(&settings.clone().normalized())?;
                 None
             }
+            AgentProvider::Gemini => {
+                // モデル・キーの設定漏れは送る前に断る(理由が読める形で)
+                self.gemini_backend(&settings.clone().normalized())?;
+                None
+            }
         };
 
         let (id, seq, session, turn_model, context, history) = {
@@ -503,6 +555,10 @@ impl AgentManager {
             (AgentProvider::OpenAiCompat, _) => {
                 // 直前に組み立てて確かめてあるが、その後にキーが消された場合に備える
                 Box::new(self.openai_backend(&settings.clone().normalized())?)
+            }
+            (AgentProvider::Gemini, _) => {
+                // 直前に組み立てて確かめてあるが、その後にキーが消された場合に備える
+                Box::new(self.gemini_backend(&settings.clone().normalized())?)
             }
             (AgentProvider::CopilotCli, Some(executable)) => {
                 let mut backend = CopilotCliBackend::new(executable, self.mcp_port);
