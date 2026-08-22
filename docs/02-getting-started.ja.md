@@ -12,10 +12,12 @@ macOSでの手順(コアはOS非依存だが、現状の動作確認はmacOSの�
 | Node.js 20+ | ✅ | https://nodejs.org / nvm | `node --version` |
 | ngspice | 任意 | `brew install ngspice` | `ngspice --version` |
 | Claude Code CLI | 任意 | https://claude.com/claude-code | `claude --version` |
+| GitHub Copilot CLI | 任意 | `npm i -g @github/copilot` | `copilot --version` |
+| Ollama | 任意 | https://ollama.com | `ollama list` |
 | Pen.app (Pencil) | 開発時 | https://pen.dev | - |
 
 - **ngspice**: 電気検証の実回路解析とDCシミュレーションに使用。未導入でも検証は近似モードで動作(シミュレーションは導入案内エラー)。Linux: `apt install ngspice` / Windows: 公式インストーラ(Spice64)。既定パス以外は環境変数`MADAKE_NGSPICE`で実行ファイルを指定
-- **Claude Code CLI**: アプリ内AIチャット用(Pro/MaxのOAuthセッションを再利用。APIキー不要)
+- **AIチャットは「どれか1つ」のプロバイダがあれば動く**(特定のものは必須ではない)。既定はClaude Code CLI(Pro/MaxのOAuthセッションを再利用。APIキー不要)だが、Anthropic APIキー・GitHub Copilot CLI・OpenAI互換エンドポイント・ローカルのOllama・Geminiキーでも同じように動く。設定 > エージェント で選ぶ。手で作図するだけならどれも不要。詳細は[AIアシスタント > プロバイダ](09-ai-assistant.ja.md#プロバイダ)
 - rustupの`cargo`は`~/.cargo/bin`に入る。PATHに無ければ `export PATH="$HOME/.cargo/bin:$PATH"`
 
 ## 2. セットアップ
@@ -52,7 +54,7 @@ madake status                                            # 起動中アプリへ
 ## 4. AI連携(任意)
 
 - **Claude Codeから図面編集**: リポジトリの`.mcp.json`で自動接続される(アプリ起動中に`claude`を開くだけ)
-- **アプリ内チャット**: `claude`にサインイン済みであればそのまま使える(設定→AI設定で実行ファイルパス変更可)
+- **アプリ内チャット**: `claude`にサインイン済みであればそのまま使える(設定 > エージェント で実行ファイルパス変更可)。別の経路を使うときは**設定 > エージェント > プロバイダ**で選び、パス / URL / モデルを埋め、キーが要る経路ならキーを保存(OSキーチェーンへ入る)して**接続テスト**を押す。キー不要なのは**Ollama(ローカル)**: `ollama serve`を起動し、Capabilitiesに`tools`があるモデルをpullしてから「Ollama (ローカル)」プリセットボタンを押す
 
 ## 5. UI開発の検証経路
 
