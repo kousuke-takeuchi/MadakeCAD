@@ -402,19 +402,21 @@ impl AgentBackend for ClaudeCodeCliBackend {
     }
 }
 
-/// `--mcp-config`用の一時ファイル(dropで削除)。
-struct TempMcpConfig {
+/// MCP設定を渡すための一時ファイル(dropで削除)。
+///
+/// claude CLIの`--mcp-config`とCopilot CLIの`--additional-mcp-config`で共用する。
+pub(crate) struct TempMcpConfig {
     path: PathBuf,
 }
 
 impl TempMcpConfig {
-    fn create(contents: &str) -> Result<Self> {
+    pub(crate) fn create(contents: &str) -> Result<Self> {
         let path = std::env::temp_dir().join(format!("madake-mcp-{}.json", uuid::Uuid::new_v4()));
         std::fs::write(&path, contents)?;
         Ok(Self { path })
     }
 
-    fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Path {
         &self.path
     }
 }

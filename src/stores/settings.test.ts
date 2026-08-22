@@ -16,6 +16,8 @@ describe("settings store", () => {
       knowledge_path: null,
       provider: "claude_cli",
       api_model: "claude-sonnet-5",
+      copilot_path: null,
+      copilot_model: "auto",
     });
     expect(useSettingsStore().settings).toEqual(defaultSettings());
   });
@@ -30,6 +32,8 @@ describe("settings store", () => {
       knowledge_path: "/home/me/house-rules.md",
       provider: "anthropic_api",
       api_model: "claude-opus-4-6",
+      copilot_path: null,
+      copilot_model: "auto",
     };
     vi.spyOn(settingsApi, "get").mockResolvedValue(stored);
 

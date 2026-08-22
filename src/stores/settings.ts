@@ -11,10 +11,12 @@ import { inTauri } from "../ipc";
  * エージェントの実行方式。
  * - `claude_cli`: ローカルのClaude Code CLI (サブスクリプションのサインインを利用)
  * - `anthropic_api`: Anthropic Messages APIへ直接 (APIキー。**キーはOSキーチェーン**)
+ * - `copilot_cli`: ローカルのGitHub Copilot CLI (**MadakeCADは資格情報を持たない**。
+ *   認証はCopilot自身のGitHubサインイン)
  */
-export type AgentProvider = "claude_cli" | "anthropic_api";
+export type AgentProvider = "claude_cli" | "anthropic_api" | "copilot_cli";
 
-export const AGENT_PROVIDERS: AgentProvider[] = ["claude_cli", "anthropic_api"];
+export const AGENT_PROVIDERS: AgentProvider[] = ["claude_cli", "anthropic_api", "copilot_cli"];
 
 /** Rust側 `AppSettings` のJSON表現。**APIキーはここには入らない**(キーチェーンに置く)。 */
 export interface AppSettings {
@@ -35,6 +37,10 @@ export interface AppSettings {
   provider: AgentProvider;
   /** `anthropic_api` のときに使うモデルID */
   api_model: string;
+  /** copilot実行ファイルの明示パス。nullなら自動検出 */
+  copilot_path: string | null;
+  /** `copilot_cli` のときに使うモデル ("auto" ならCopilotが選ぶ) */
+  copilot_model: string;
 }
 
 export function defaultSettings(): AppSettings {
@@ -46,16 +52,27 @@ export function defaultSettings(): AppSettings {
     knowledge_path: null,
     provider: "claude_cli",
     api_model: "claude-sonnet-5",
+    copilot_path: null,
+    copilot_model: "auto",
   };
 }
 
-/** プロバイダの状態。**APIキーそのものは含まない**(保存済みかどうかだけ)。 */
+/**
+ * プロバイダの状態。**資格情報そのものは含まない**
+ * (Anthropicはキーが保存済みかどうかだけ、Copilotは自身のサインインを使う)。
+ */
 export interface ProviderStatus {
   provider: AgentProvider;
   api_model: string;
   api_key_saved: boolean;
   /** OSキーチェーンが読めなかった理由(読めたときはnull) */
   keychain_error?: string | null;
+  /** `copilot_cli` で使うモデル */
+  copilot_model?: string;
+  /** copilot CLIが見つかったか (null = まだ調べていない) */
+  copilot_detected?: boolean | null;
+  /** 見つかったcopilot CLIのバージョン表示 */
+  copilot_version?: string | null;
 }
 
 /** 接続テストの結果。 */
@@ -148,6 +165,10 @@ interface SettingsState {
    * 「保存したのにキー未設定と出る」ときに何が起きているかを画面へ出す。
    */
   keychainError: string | null;
+  /** GitHub Copilot CLIが見つかっているか(接続バッジ用) */
+  copilotDetected: boolean;
+  /** 見つかったGitHub Copilot CLIのバージョン表示(未検出ならnull) */
+  copilotVersion: string | null;
 }
 
 export const useSettingsStore = defineStore("settings", {
@@ -161,18 +182,25 @@ export const useSettingsStore = defineStore("settings", {
     testing: false,
     testResult: null,
     keychainError: null,
+    copilotDetected: false,
+    copilotVersion: null,
   }),
 
   getters: {
     /** Anthropic API直結を選んでいるか。 */
     usingApiProvider: (state): boolean => state.settings.provider === "anthropic_api",
+    /** GitHub Copilot CLIを選んでいるか。 */
+    usingCopilotProvider: (state): boolean => state.settings.provider === "copilot_cli",
     /**
      * いま選んでいるプロバイダで送信できるか(接続バッジ用)。
-     * CLIの検出結果はチャットストアが持つので引数で受ける。
+     * claude CLIの検出結果はチャットストアが持つので引数で受ける。
      */
     agentReady() {
-      return (cliDetected: boolean): boolean =>
-        this.usingApiProvider ? this.apiKeySaved : cliDetected;
+      return (cliDetected: boolean): boolean => {
+        if (this.usingApiProvider) return this.apiKeySaved;
+        if (this.usingCopilotProvider) return this.copilotDetected;
+        return cliDetected;
+      };
     },
   },
 
@@ -214,6 +242,9 @@ export const useSettingsStore = defineStore("settings", {
         const status = await providerApi.status();
         this.apiKeySaved = status.api_key_saved;
         this.keychainError = status.keychain_error ?? null;
+        // null (まだ調べていない) は「未検出」として扱う
+        this.copilotDetected = status.copilot_detected ?? false;
+        this.copilotVersion = status.copilot_version ?? null;
       } catch (e) {
         this.error = messageOf(e);
       }

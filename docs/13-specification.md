@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**952 specification clauses** across 5 areas.
+**999 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -553,6 +553,41 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Saving chat history stamps the current format version so migrated files are not re-migrated. <sub>`save_chat_stamps_the_current_format_version`</sub>
 - The chat file lives next to the project file as <name>.chat.json. <sub>`chat_path_sits_next_to_project_file`</sub>
 
+### copilot_cli
+
+- The Copilot CLI is launched non-interactively with the flags needed to work unattended (JSON lines, auto-approved tools, no questions). <sub>`args_contain_required_flags`</sub>
+- The first turn of a conversation pins a new session id, so later turns can continue the same session. <sub>`the_first_turn_pins_a_new_session_id`</sub>
+- A follow-up turn resumes the same Copilot session instead of starting a new one, so the agent remembers the conversation. <sub>`a_follow_up_turn_resumes_the_same_session`</sub>
+- The configured Copilot model is passed to the CLI ("auto" lets Copilot pick). <sub>`the_configured_model_is_passed_to_the_cli`</sub>
+- Copilot is pointed at MadakeCAD's own MCP server, so it edits drawings through the same commands as every other client. <sub>`the_mcp_config_points_at_the_local_madakecad_server`</sub>
+- Because the Copilot CLI has no system-prompt flag, MadakeCAD's drawing rules are prepended to the prompt under a clear heading. <sub>`the_system_prompt_is_prepended_to_the_user_prompt`</sub>
+- A turn streams the events parsed from Copilot's JSON lines (session, text, tool use, completion). <sub>`a_turn_streams_events_from_the_fake_cli`</sub>
+- The composed prompt actually reaches the CLI as the -p argument. <sub>`the_composed_prompt_reaches_the_cli`</sub>
+- The MCP settings file handed to Copilot really exists while the turn runs, and it names MadakeCAD's server. <sub>`the_mcp_config_file_exists_while_the_turn_runs`</sub>
+- When Copilot is not signed in to GitHub, the chat says so and explains how to sign in. <sub>`a_signed_out_cli_is_reported_with_login_guidance`</sub>
+- The unauthenticated wording of the real CLI is recognised wherever it is printed. <sub>`the_real_unauthenticated_message_is_recognised`</sub>
+- When Copilot dies with the reason printed as plain text (e.g. credits exhausted), that reason reaches the chat error. <sub>`a_plain_stdout_reason_reaches_the_error_message`</sub>
+- If the event receiver goes away (the user cancelled), the turn stops promptly instead of blocking forever. <sub>`a_cancelled_turn_stops_promptly`</sub>
+- Copilot CLI detection reads the version from the configured executable. <sub>`detect_reads_the_version_from_the_configured_executable`</sub>
+- Detection fails cleanly when the Copilot executable is not installed. <sub>`detect_fails_when_copilot_is_not_installed`</sub>
+- Detection looks for copilot on PATH and in the usual npm install locations. <sub>`default_candidates_include_the_known_install_paths`</sub>
+- The connection test reports success when the CLI answers, and the sign-in guidance when it is signed out. <sub>`the_connection_test_distinguishes_success_from_being_signed_out`</sub>
+
+### copilot_events
+
+- A Copilot session id line becomes the session event used to continue the same conversation. <sub>`session_line_becomes_a_session_event`</sub>
+- Assistant text is delivered to the chat whichever field name the CLI uses for it. <sub>`assistant_text_is_delivered_under_any_of_the_known_field_names`</sub>
+- A tool call line becomes a tool-start event with its name and arguments. <sub>`a_tool_call_line_becomes_a_tool_start_event`</sub>
+- Tool calls are recognised under the alternative field names too (tool/input, function/parameters). <sub>`tool_calls_are_recognised_under_alternative_field_names`</sub>
+- A tool result line closes the matching tool call and carries whether it failed. <sub>`a_tool_result_line_closes_the_call_and_reports_failure`</sub>
+- The tool name from the call is filled into the matching result, so the chat shows what finished. <sub>`the_tool_name_is_carried_from_the_call_to_its_result`</sub>
+- The final line completes the turn with the answer and the token usage. <sub>`the_final_line_completes_the_turn_with_usage`</sub>
+- Token usage is also read from OpenAI-style field names (prompt/completion tokens). <sub>`token_usage_is_also_read_from_openai_style_names`</sub>
+- An error line from the CLI is shown in the chat as an error. <sub>`an_error_line_becomes_an_error_event`</sub>
+- A result line flagged as an error becomes an error instead of a normal completion. <sub>`a_failed_result_line_becomes_an_error`</sub>
+- Lines the parser does not understand are ignored instead of breaking the turn. <sub>`unknown_and_broken_lines_are_ignored`</sub>
+- The same tool call reported twice is only shown once in the chat. <sub>`a_repeated_tool_call_is_shown_only_once`</sub>
+
 ### Standards knowledge injection
 
 - The bundled standards note covers symbols, reference designators, wire colors, numbering and layout. <sub>`bundled_standards_cover_the_drawing_conventions`</sub>
@@ -616,6 +651,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The connection test refuses before a key is saved, naming the missing key as the reason. <sub>`the_connection_test_refuses_before_a_key_is_saved`</sub>
 - Nothing about the key is ever broadcast to the UI event stream. <sub>`the_api_key_never_appears_in_the_event_stream`</sub>
 
+### manager_copilot_provider
+
+- With GitHub Copilot selected, a chat turn runs through the Copilot CLI without any Anthropic key. <sub>`a_turn_runs_through_the_copilot_cli`</sub>
+- The session id chosen for the first turn is remembered, so the next turn continues the same Copilot session. <sub>`the_session_is_remembered_for_the_next_turn`</sub>
+- The provider badge reports "ready" only while the Copilot CLI can actually be found. <sub>`the_provider_is_ready_only_while_copilot_is_found`</sub>
+- If the configured Copilot executable does not exist, the chat shows why instead of failing silently. <sub>`a_missing_copilot_executable_is_explained_in_the_chat`</sub>
+- The connection test goes to Copilot (not to the Anthropic API) while Copilot is the chosen provider. <sub>`the_connection_test_follows_the_chosen_provider`</sub>
+
 ### stream-json parser
 
 - The CLI's system/init line yields a session-started event carrying the session id. <sub>`init_line_yields_session_started`</sub>
@@ -664,6 +707,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A settings file written before providers existed keeps working and stays on the CLI. <sub>`an_old_settings_file_without_a_provider_stays_on_the_cli`</sub>
 - A provider name this build does not know falls back to the CLI instead of breaking the whole file. <sub>`an_unknown_provider_name_falls_back_to_the_cli`</sub>
 - A blank model box falls back to the default model, and padding is trimmed. <sub>`a_blank_api_model_falls_back_to_the_default`</sub>
+- Out of the box GitHub Copilot is set to let Copilot pick the model, with the executable found on PATH. <sub>`the_copilot_defaults_let_copilot_pick_the_model`</sub>
+- Choosing GitHub Copilot survives a save/load round trip together with its path and model. <sub>`the_copilot_choice_round_trips_through_save_and_load`</sub>
+- A settings file written before GitHub Copilot existed keeps working, with the Copilot fields at their defaults. <sub>`an_old_settings_file_without_copilot_fields_keeps_working`</sub>
+- A blank Copilot model box returns to "auto", and a blank path returns to auto-detection. <sub>`blank_copilot_boxes_return_to_the_defaults`</sub>
+- No GitHub credential is ever written to the settings file: Copilot uses its own sign-in. <sub>`no_github_credential_is_written_to_the_settings_file`</sub>
 
 ### tool_bridge
 
@@ -1111,6 +1159,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - the previous test result is cleared while a new test runs <sub>`AI provider settings`</sub>
 - the connection badge follows the CLI for the CLI route and the saved key for the API route <sub>`AI provider settings`</sub>
 - a saved key is shown as dots, never as its value <sub>`AI provider settings`</sub>
+- offers GitHub Copilot CLI as a provider <sub>`GitHub Copilot CLI provider`</sub>
+- defaults Copilot to the auto model and PATH lookup <sub>`GitHub Copilot CLI provider`</sub>
+- choosing GitHub Copilot saves it <sub>`GitHub Copilot CLI provider`</sub>
+- saves the Copilot model and executable path <sub>`GitHub Copilot CLI provider`</sub>
+- the provider status reports whether the Copilot CLI was found <sub>`GitHub Copilot CLI provider`</sub>
+- the connection badge follows the Copilot CLI detection for the Copilot route <sub>`GitHub Copilot CLI provider`</sub>
+- a signed-out Copilot fails the connection test with sign-in guidance <sub>`GitHub Copilot CLI provider`</sub>
+- never keeps a GitHub credential in the frontend state <sub>`GitHub Copilot CLI provider`</sub>
 
 ### Reports (BOM / wire list)
 

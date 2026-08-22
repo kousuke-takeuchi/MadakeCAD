@@ -112,14 +112,20 @@ pub fn load_and_apply_settings(agent: &AgentManager) -> AppSettings {
 /// UI・Link API・Tauri IPCが同じ形を見るように、組み立てはここに1本化する。
 pub fn provider_status(agent: &AgentManager) -> serde_json::Value {
     let (key, keychain_error) = madake_agent::secrets::anthropic_api_key_checked();
-    provider_status_with(agent, key.is_some(), keychain_error)
+    // 同期版はCLIを起動しない(Copilotの検出は非同期版だけが行う)
+    provider_status_with(agent, key.is_some(), keychain_error, None)
 }
 
 /// キーチェーンを読まずに状態を組み立てる(読み出し結果は呼び出し側が渡す)。
+///
+/// `copilot`はcopilot CLIの検出結果で3状態:
+/// `None`=まだ調べていない(`copilot_detected`はnull。「無い」と言い切らない)、
+/// `Some(None)`=調べたが見つからない、`Some(Some(_))`=見つかった。
 fn provider_status_with(
     agent: &AgentManager,
     api_key_saved: bool,
     keychain_error: Option<String>,
+    copilot: Option<Option<madake_agent::DetectResult>>,
 ) -> serde_json::Value {
     let settings = agent.settings().normalized();
     serde_json::json!({
@@ -129,6 +135,11 @@ fn provider_status_with(
         // キーチェーンが読めなかった理由(読めたときはnull)。保存したのに「未設定」と
         // 出る状況を黙って放置しないため、設定画面へそのまま出す
         "keychain_error": keychain_error,
+        // GitHub Copilot CLI。**資格情報は含めない**(Copilot自身のサインインを使う)
+        "copilot_model": settings.copilot_model,
+        "copilot_path": settings.copilot_path,
+        "copilot_detected": copilot.as_ref().map(Option::is_some),
+        "copilot_version": copilot.flatten().map(|found| found.version),
     })
 }
 
@@ -143,9 +154,11 @@ pub const KEYCHAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 /// 一度許可すれば以降は待ち時間なしで返る。
 pub async fn provider_status_async(agent: &Arc<AgentManager>) -> serde_json::Value {
     let job = tokio::task::spawn_blocking(madake_agent::secrets::anthropic_api_key_checked);
+    // キーチェーンの読み出し(別スレッドで進行中)と並行にCopilot CLIを検出する
+    let copilot = Some(agent.detect_copilot().await.ok());
     match tokio::time::timeout(KEYCHAIN_TIMEOUT, job).await {
-        Ok(Ok((key, error))) => provider_status_with(agent, key.is_some(), error),
-        Ok(Err(e)) => provider_status_with(agent, false, Some(e.to_string())),
+        Ok(Ok((key, error))) => provider_status_with(agent, key.is_some(), error, copilot),
+        Ok(Err(e)) => provider_status_with(agent, false, Some(e.to_string()), copilot),
         Err(_) => provider_status_with(
             agent,
             false,
@@ -154,6 +167,7 @@ pub async fn provider_status_async(agent: &Arc<AgentManager>) -> serde_json::Val
                  ダイアログが出ていないか確認してください)",
                 KEYCHAIN_TIMEOUT.as_secs()
             )),
+            copilot,
         ),
     }
 }

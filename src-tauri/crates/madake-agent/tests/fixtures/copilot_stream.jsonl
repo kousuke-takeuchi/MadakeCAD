@@ -1,0 +1,6 @@
+{"type":"assistant","text":"端子台を配置します。"}
+{"type":"tool_call","id":"call_1","name":"madakecad-add_symbol","arguments":{"symbol":"TB","x":100}}
+{"type":"progress","note":"未知のイベント型(無視される)"}
+this line is not json at all
+{"type":"tool_result","tool_call_id":"call_1","status":"success"}
+{"type":"result","result":"端子台X1を配置しました。","usage":{"input_tokens":1200,"output_tokens":80},"total_cost_usd":0.0123}

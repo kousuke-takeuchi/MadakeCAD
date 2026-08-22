@@ -701,11 +701,11 @@ async fn delete_agent_api_key(
     Ok(Json(provider_status_blocking(&state.agent).await))
 }
 
-/// Anthropic APIへ小さなリクエストを投げて設定が使えるか確かめる。
+/// いま選んでいるプロバイダへ小さなリクエストを投げて設定が使えるか確かめる。
 ///
 /// 失敗しても200で`{"ok": false, "error": "..."}`を返す(UIがそのまま表示する)。
 async fn post_agent_test_connection(State(state): State<AgentApi>) -> Json<serde_json::Value> {
-    Json(match state.agent.test_anthropic_connection().await {
+    Json(match state.agent.test_connection().await {
         Ok(model) => serde_json::json!({ "ok": true, "model": model }),
         // kind=UIが翻訳するための区分、error=翻訳が無いときにそのまま出せる説明
         Err(e) => serde_json::json!({ "ok": false, "error_kind": e.kind, "error": e.message }),
