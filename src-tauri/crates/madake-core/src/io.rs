@@ -190,6 +190,46 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version.
+    /// テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。
+    #[test]
+    fn an_old_project_file_opens_with_unstyled_notes() {
+        let dir = std::env::temp_dir().join(format!("madake-io-text-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.mdkproj");
+        // format_version 4の頃のファイル (注記に anchor / color / bold が無い)
+        std::fs::write(
+            &path,
+            r#"{"format_version":4,"name":"旧図面","wire_parts":[],"plc_assignments":[],
+                "sheets":[{"id":"44444444-4444-4444-8444-444444444444","name":"S1","size":"A3",
+                "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},
+                "entities":{"55555555-5555-4555-8555-555555555555":{"kind":"text",
+                "id":"55555555-5555-4555-8555-555555555555","at":{"x":10.0,"y":20.0},
+                "text":"注意","height":2.5,"rotation":0}}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        let Some(Entity::Text(t)) = loaded.sheets[0].entities.values().next() else {
+            panic!("注記が残っていること")
+        };
+        assert_eq!(t.anchor, TextAnchor::Start);
+        assert_eq!(t.color, None);
+        assert!(!t.bold);
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The current file format version is 5, the version that added text styling.
+    /// 現行のファイル形式バージョンは5 (テキスト装飾を追加した版) である。
+    #[test]
+    fn the_current_format_version_is_five() {
+        assert_eq!(FORMAT_VERSION, 5);
+        let mut old = Project::new("x");
+        old.format_version = 4;
+        migrate(&mut old);
+        assert_eq!(old.format_version, 5);
+    }
+
     /// The frame template chosen for a project is saved to the file and comes back on reload.
     /// プロジェクトに選んだ図枠テンプレートはファイルへ保存され、読み直しても残っている。
     #[test]

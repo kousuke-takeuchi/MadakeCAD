@@ -941,6 +941,32 @@
     "tagHint": "Draws the net label as a directional flag, so the reader sees at a glance which way the signal goes.",
     "tagChangedLog": "Net label {name}: tag shape set to {tag}"
   },
+  "note": {
+    "section": "Note",
+    "textRow": "Text",
+    "anchorRow": "Anchor",
+    "anchorHint": "Which part of the text sits on the note's coordinate. Use \"Right\" for notes against devices on the right-hand side so their right edges line up whatever the text length.",
+    "anchor": {
+      "start": "Left",
+      "middle": "Centre",
+      "end": "Right"
+    },
+    "colorRow": "Colour",
+    "colorHint": "Pick the note colour from a fixed set of names. Screen and paper each get a colour that reads well there, so raw colour codes are not accepted.",
+    "color": {
+      "default": "Default (black)",
+      "accent": "Accent (blue)",
+      "warning": "Warning (red)",
+      "success": "Good (green)",
+      "muted": "Muted (grey)"
+    },
+    "boldRow": "Weight",
+    "boldLabel": "Bold",
+    "boldHint": "Makes a heading note bold.",
+    "functionRow": "Function label",
+    "functionPlaceholder": "Emergency stop button",
+    "functionHint": "What this device does, printed under the symbol (the third text field after the designator and the type number)."
+  },
   "panel": {
     "tab": "Unplaced parts",
     "head": "Unplaced parts (from the schematic)",

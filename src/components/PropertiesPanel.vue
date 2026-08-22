@@ -7,7 +7,8 @@ import { BLOCK_SYMBOL_ID } from "../canvas/dynamicSymbol";
 import { harnessWireCount } from "../canvas/harness";
 import { panelUpdateCommand, railOfFootprint, type PanelPatch } from "../canvas/panelTools";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
-import type { Entity } from "../ipc";
+import type { Entity, TextAnchor, TextColorToken } from "../ipc";
+import { FUNCTION_LABEL_ATTR, TEXT_ANCHORS, TEXT_COLOR_TOKENS } from "../canvas/textStyle";
 import { useBlockEditorStore } from "../stores/blockEditor";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
@@ -54,6 +55,14 @@ const buf = reactive({
   note: "",
   /** ネットラベルのタグ向き ("" / "left" / "right")。 */
   tag: "",
+  /** 注記の基準位置 (G4)。 */
+  anchor: "start" as TextAnchor,
+  /** 注記の色トークン (G4)。生の色コードは入れられない。 */
+  textColor: "default" as TextColorToken,
+  /** 注記を太字にするか (G4)。 */
+  bold: false,
+  /** シンボルの機能ラベル (G4の第3テキスト欄)。 */
+  functionLabel: "",
   /** 盤の要素 (M4 §8): 外形・ダクト・フットプリントの寸法、レールの取付線と両端。 */
   w: "",
   h: "",
@@ -102,6 +111,11 @@ watch(
     } else if (e.kind === "symbol") {
       buf.reference = e.reference;
       buf.value = e.value;
+      buf.functionLabel = e.attrs?.[FUNCTION_LABEL_ATTR] ?? "";
+    } else if (e.kind === "text") {
+      buf.anchor = e.anchor ?? "start";
+      buf.textColor = e.color ?? "default";
+      buf.bold = e.bold ?? false;
     } else if (e.kind === "net_label") {
       buf.name = e.name;
       buf.tag = e.attrs?.tag === "left" || e.attrs?.tag === "right" ? e.attrs.tag : "";
@@ -192,7 +206,20 @@ async function apply() {
     }
     return;
   } else if (e.kind === "symbol") {
-    entity = { ...e, reference: buf.reference, value: buf.value };
+    // 機能ラベル (G4の第3テキスト欄) はattrsに入れる。空ならキーごと消して従来の形に戻す
+    const attrs = { ...(e.attrs ?? {}) };
+    const label = buf.functionLabel.trim();
+    if (label) attrs[FUNCTION_LABEL_ATTR] = label;
+    else delete attrs[FUNCTION_LABEL_ATTR];
+    entity = { ...e, reference: buf.reference, value: buf.value, attrs };
+  } else if (e.kind === "text") {
+    // 注記の装飾 (G4)。既定色は色指定なし (null) に戻して、旧い図面と同じ形で保存する
+    entity = {
+      ...e,
+      anchor: buf.anchor,
+      color: buf.textColor === "default" ? null : buf.textColor,
+      bold: buf.bold,
+    };
   } else if (e.kind === "net_label") {
     // タグ向きはattrsに入れる。「なし」はキーごと消して従来の図面と同じ形に戻す
     const attrs = { ...(e.attrs ?? {}) };
@@ -331,6 +358,17 @@ const kindLabel = computed<Record<string, string>>(() => ({
       <div class="prow">
         <span class="plabel">型番/値</span>
         <span class="pvalue"><input v-model="buf.value" class="bare" placeholder="[redacted]" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("note.functionRow") }}</span>
+        <span class="pvalue" :title="t('note.functionHint')">
+          <input
+            v-model="buf.functionLabel"
+            class="bare"
+            :placeholder="t('note.functionPlaceholder')"
+            @keyup.enter="apply"
+          />
+        </span>
       </div>
       <div class="prow">
         <span class="plabel">シンボル</span>
@@ -482,6 +520,41 @@ const kindLabel = computed<Record<string, string>>(() => ({
       </div>
     </template>
 
+    <!-- 注記テキストの装飾 (G4): 基準位置・色トークン・太字 -->
+    <template v-else-if="selected?.kind === 'text'">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("note.section") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("note.textRow") }}</span>
+        <span class="pvalue">{{ selected.text }}</span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("note.anchorRow") }}</span>
+        <span class="pvalue" :title="t('note.anchorHint')">
+          <select v-model="buf.anchor" class="bare" @change="apply">
+            <option v-for="a in TEXT_ANCHORS" :key="a" :value="a">{{ t(`note.anchor.${a}`) }}</option>
+          </select>
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("note.colorRow") }}</span>
+        <span class="pvalue" :title="t('note.colorHint')">
+          <span class="swatch" :data-note-color="buf.textColor" />
+          <select v-model="buf.textColor" class="bare" @change="apply">
+            <option v-for="c in TEXT_COLOR_TOKENS" :key="c" :value="c">{{ t(`note.color.${c}`) }}</option>
+          </select>
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("note.boldRow") }}</span>
+        <span class="pvalue" :title="t('note.boldHint')">
+          <label class="check">
+            <input v-model="buf.bold" type="checkbox" @change="apply" />
+            {{ t("note.boldLabel") }}
+          </label>
+        </span>
+      </div>
+    </template>
+
     <template v-else-if="selected?.kind === 'net_label'">
       <div class="sec"><ChevronDown :size="10" /> ネット</div>
       <div class="prow">
@@ -629,6 +702,19 @@ const kindLabel = computed<Record<string, string>>(() => ({
 .swatch[data-color="gray"] { background: #808080; }
 .swatch[data-color="pink"] { background: #d06090; }
 .swatch[data-color="light_blue"] { background: #2090c0; }
+/* 注記色トークンの見本 (印刷色。画面のキャンバスは canvas/theme.ts の textColors) */
+.swatch[data-note-color="default"] { background: var(--note-default); }
+.swatch[data-note-color="accent"] { background: var(--note-accent); }
+.swatch[data-note-color="warning"] { background: var(--note-warning); }
+.swatch[data-note-color="success"] { background: var(--note-success); }
+.swatch[data-note-color="muted"] { background: var(--note-muted); }
+.check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  cursor: pointer;
+}
 .apply-row {
   display: flex;
   justify-content: flex-end;

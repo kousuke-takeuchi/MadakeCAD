@@ -30,6 +30,13 @@ pub const SLOT_PART: &str = "PART";
 pub const SLOT_DESC: &str = "DESC";
 /// 属性スロットのキー: 定格。
 pub const SLOT_RATING: &str = "RATING";
+/// 属性スロットのキー: 機能ラベル (G4の第3テキスト欄。例「非常停止ボタン」)。
+///
+/// 値はシンボルインスタンスの`attrs["function_label"]`
+/// ([`crate::text_style::FUNCTION_LABEL_ATTR`]) が持つ。このスロットを**定義しなくてよい**:
+/// 同梱シンボルのように位置が無いときは外形の下へ自動で置かれる
+/// ([`crate::text_style::function_label_placement`])。
+pub const SLOT_FUNCTION: &str = "FUNCTION";
 
 /// 部品挿入ダイアログでのカテゴリ表示順。同カテゴリの記号は連続して並べる。
 /// 最後の`user` ([`crate::symbol_library::USER_CATEGORY`]) はユーザーが自分で作った

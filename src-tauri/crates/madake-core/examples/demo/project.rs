@@ -87,6 +87,9 @@ fn note(text: &str, x: f64, y: f64) -> Entity {
         text: text.into(),
         height: 2.5,
         rotation: 0,
+        anchor: madake_core::TextAnchor::Start,
+        color: None,
+        bold: false,
     })
 }
 

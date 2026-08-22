@@ -18,7 +18,10 @@ pub type SheetId = Uuid;
 /// - v4: シート種別 ([`Sheet::kind`]) と盤レイアウトのエンティティ4種
 ///   ([`Entity::PanelOutline`] / [`Entity::DinRail`] / [`Entity::Duct`] / [`Entity::Footprint`])
 ///   を追加。種別の無い旧ファイルのシートは回路図シート ([`SheetKind::Schematic`]) として開く
-pub const FORMAT_VERSION: u32 = 4;
+/// - v5: 注記テキストの装飾 ([`TextEntity::anchor`] / [`TextEntity::color`] / [`TextEntity::bold`])
+///   を追加。装飾を持たない旧ファイルの注記は左揃え・既定色 (黒)・太字なしで開き、
+///   出力される図面はこれまでと1文字も変わらない
+pub const FORMAT_VERSION: u32 = 5;
 
 /// プロジェクト全体。保存形式(.mdkproj)のルート。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -452,6 +455,24 @@ pub struct Harness {
     pub note: String,
 }
 
+/// 注記テキストの基準位置 = `at`に文字のどこを合わせるか (G4)。
+///
+/// 図面の右側に並ぶ機器へ注記を寄せて書くときは[`TextAnchor::End`] (右揃え) にすると、
+/// 文字の長さが変わっても右端がそろう。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TextAnchor {
+    /// 左端を合わせる (既定。装飾が無かった頃の注記と同じ)。
+    #[default]
+    Start,
+    /// 中央を合わせる。
+    Middle,
+    /// 右端を合わせる。
+    End,
+}
+
 /// 自由テキスト注記。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TextEntity {
@@ -462,6 +483,20 @@ pub struct TextEntity {
     pub height: f64,
     #[serde(default)]
     pub rotation: u16,
+    /// 文字の基準位置 (既定=左揃え)。
+    #[serde(default)]
+    pub anchor: TextAnchor,
+    /// 注記色の**トークン名** (`default` / `accent` / `warning` …
+    /// [`crate::text_style::TEXT_COLORS`])。`None`は既定色 (黒)。
+    ///
+    /// 生の色コード (`#ff0000`) は受け付けない: 画面 (暗い作図領域) と紙 (白地) で
+    /// 見やすい色が違うので、図面には**意味**だけを持たせて実際の色は描くときに選ぶ。
+    /// 知らない名前を入れたコマンドは[`crate::command::Engine::execute`]が拒否する。
+    #[serde(default)]
+    pub color: Option<String>,
+    /// 太字にするか (既定=false)。
+    #[serde(default)]
+    pub bold: bool,
 }
 
 #[cfg(test)]
@@ -660,6 +695,53 @@ mod tests {
             let back: Entity = serde_json::from_str(&json).unwrap();
             assert_eq!(back.id(), id);
         }
+    }
+
+    /// A note written before text styling existed opens with the look it always had: left-aligned, plain black, not bold.
+    /// テキスト装飾が無かった頃に書かれた注記は、従来どおりの見た目 (左揃え・黒・太字でない) で開く。
+    #[test]
+    fn an_old_note_opens_with_the_previous_look() {
+        let json = r#"{"kind":"text","id":"33333333-3333-4333-8333-333333333333",
+            "at":{"x":10.0,"y":20.0},"text":"注意","height":2.5,"rotation":0}"#;
+        let entity: Entity = serde_json::from_str(json).expect("旧い注記が読める");
+        let Entity::Text(t) = entity else { panic!("注記であること") };
+        assert_eq!(t.anchor, TextAnchor::Start, "従来どおり左揃え");
+        assert_eq!(t.color, None, "色指定なし = 既定色 (黒)");
+        assert!(!t.bold, "従来どおり太字でない");
+    }
+
+    /// The text anchor travels as JSON in snake_case ("start" / "middle" / "end").
+    /// テキストの基準位置は snake_case ("start" / "middle" / "end") のJSONで往復する。
+    #[test]
+    fn the_text_anchor_is_serialized_in_snake_case() {
+        assert_eq!(serde_json::to_string(&TextAnchor::Middle).unwrap(), "\"middle\"");
+        assert_eq!(serde_json::to_string(&TextAnchor::End).unwrap(), "\"end\"");
+        let back: TextAnchor = serde_json::from_str("\"start\"").unwrap();
+        assert_eq!(back, TextAnchor::Start);
+        assert_eq!(TextAnchor::default(), TextAnchor::Start);
+    }
+
+    /// A styled note keeps its anchor, colour token and bold flag through a JSON round trip.
+    /// 装飾を付けた注記は、基準位置・色トークン・太字の指定をJSONの往復でも保つ。
+    #[test]
+    fn a_styled_note_survives_a_json_round_trip() {
+        let entity = Entity::Text(TextEntity {
+            id: uuid::Uuid::new_v4(),
+            at: Point::new(1.0, 2.0),
+            text: "非常停止".into(),
+            height: 3.0,
+            rotation: 0,
+            anchor: TextAnchor::End,
+            color: Some("warning".into()),
+            bold: true,
+        });
+        let json = serde_json::to_string(&entity).unwrap();
+        let Entity::Text(back) = serde_json::from_str::<Entity>(&json).unwrap() else {
+            panic!("注記であること")
+        };
+        assert_eq!(back.anchor, TextAnchor::End);
+        assert_eq!(back.color.as_deref(), Some("warning"));
+        assert!(back.bold);
     }
 
     /// Entity::id() returns the inner entity's UUID regardless of the entity kind.

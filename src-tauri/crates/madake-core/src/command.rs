@@ -697,12 +697,26 @@ impl Engine {
 ///
 /// 描けないもの・意味が壊れているものは**黙って受け取らず**、
 /// [`CoreError::InvalidCommand`]で断る(サイレント失敗の禁止)。今のところ対象は
-/// ブロックシンボル ([`crate::block`]) のピン表・外形寸法。
+/// ブロックシンボル ([`crate::block`]) のピン表・外形寸法と、注記の色トークン。
 fn validate_entity(entity: &Entity) -> Result<()> {
-    if let Entity::Symbol(s) = entity {
-        if s.symbol_id == crate::block::BLOCK_SYMBOL_ID {
+    match entity {
+        Entity::Symbol(s) if s.symbol_id == crate::block::BLOCK_SYMBOL_ID => {
             crate::block::parse_block_spec(&s.attrs).map_err(CoreError::InvalidCommand)?;
         }
+        Entity::Text(t) => {
+            // 注記色は決められたトークン名だけ。生の色コードを黙って受け取ると、
+            // 紙では読めない色の注記が図面に残ってしまう
+            if let Some(color) = &t.color {
+                if !crate::text_style::is_text_color_token(color) {
+                    let known: Vec<&str> = crate::text_style::text_color_tokens().collect();
+                    return Err(CoreError::InvalidCommand(format!(
+                        "unknown text color token: {color:?} (expected one of {})",
+                        known.join(", ")
+                    )));
+                }
+            }
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -735,6 +749,20 @@ mod tests {
             length_m: Some(0.4),
             part_no: None,
             net: None,
+        })
+    }
+
+    /// 色トークンだけを変えた注記 (他の欄は同じ)。
+    fn styled_note(color: Option<&str>) -> Entity {
+        Entity::Text(TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(20.0, 20.0),
+            text: "注意".into(),
+            height: 2.5,
+            rotation: 0,
+            anchor: TextAnchor::Start,
+            color: color.map(|c| c.to_string()),
+            bold: false,
         })
     }
 
@@ -808,6 +836,69 @@ mod tests {
             Some(r#"{"left":[{"no":"IN1"}]}"#),
             "拒否されたのに書き換わっている"
         );
+    }
+
+    /// A note whose colour is a name the drawing does not know (a typo, or a raw colour code) is refused instead of being stored and silently drawn in black.
+    /// 図面が知らない色名 (打ち間違いや生の色コード) を付けた注記は、黙って黒で描かれるのではなく拒否される。
+    #[test]
+    fn a_note_with_an_unknown_colour_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        for bad in ["#ff0000", "red", "赤", "", "Accent"] {
+            let err = engine
+                .execute(Command::AddEntity {
+                    sheet_id,
+                    entity: styled_note(Some(bad)),
+                })
+                .expect_err("知らない色は拒否される");
+            assert!(matches!(err, CoreError::InvalidCommand(_)), "{bad}: {err:?}");
+        }
+        assert!(
+            engine.project().sheet(sheet_id).unwrap().entities.is_empty(),
+            "拒否された注記はシートに残らない"
+        );
+    }
+
+    /// A note that uses one of the drawing's colour tokens (or no colour at all) is accepted.
+    /// 図面の色トークンを使った注記 (色を指定しない注記も) は受け付けられる。
+    #[test]
+    fn a_note_with_a_known_colour_token_is_accepted() {
+        let (mut engine, sheet_id) = test_engine();
+        for good in [None, Some("default"), Some("accent"), Some("warning")] {
+            engine
+                .execute(Command::AddEntity {
+                    sheet_id,
+                    entity: styled_note(good),
+                })
+                .unwrap_or_else(|e| panic!("{good:?} は受け付ける: {e:?}"));
+        }
+        assert_eq!(engine.project().sheet(sheet_id).unwrap().entities.len(), 4);
+    }
+
+    /// Changing an existing note to an unknown colour is refused too, and the note keeps the colour it had.
+    /// 既にある注記を知らない色へ変える更新も拒否され、注記は元の色のままになる。
+    #[test]
+    fn recolouring_a_note_to_an_unknown_colour_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let good = styled_note(Some("accent"));
+        let id = good.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: good }).unwrap();
+        let Entity::Text(mut broken) =
+            engine.project().sheet(sheet_id).unwrap().entities[&id].clone()
+        else {
+            unreachable!()
+        };
+        broken.color = Some("#ff0000".into());
+        let err = engine
+            .execute(Command::UpdateEntity {
+                sheet_id,
+                entity: Entity::Text(broken),
+            })
+            .expect_err("生の色コードへの更新は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        let Entity::Text(kept) = &engine.project().sheet(sheet_id).unwrap().entities[&id] else {
+            unreachable!()
+        };
+        assert_eq!(kept.color.as_deref(), Some("accent"), "拒否されたのに書き換わっている");
     }
 
     /// Adding an entity can be undone (the entity disappears) and redone (it comes back).

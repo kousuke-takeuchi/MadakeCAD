@@ -209,6 +209,9 @@ fn add_text(doc: &SharedDoc, id: Uuid, label: &str) -> madake_core::Command {
             text: label.into(),
             height: 3.5,
             rotation: 0,
+            anchor: madake_core::TextAnchor::Start,
+            color: None,
+            bold: false,
         }),
     }
 }
@@ -304,6 +307,9 @@ async fn undo_turn_refuses_a_conflicting_rollback() {
             text: "AIが直した文字".into(),
             height: 3.5,
             rotation: 0,
+            anchor: madake_core::TextAnchor::Start,
+            color: None,
+            bold: false,
         }),
     })
     .unwrap();

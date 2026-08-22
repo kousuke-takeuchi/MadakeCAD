@@ -428,6 +428,11 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
     if !inst.value.is_empty() {
         text_el(out, inst.at.x, top - VALUE_LABEL_DY, LABEL_FONT, "#000", "middle", &inst.value);
     }
+    // 機能ラベル (G4の第3テキスト欄)。参照記号・型番の反対側=外形の下に置く
+    if let Some(label) = crate::text_style::function_label_placement(inst, def) {
+        let text = crate::text_style::function_label(inst).unwrap_or_default();
+        text_el(out, label.at.x, label.at.y, label.height, "#000", "middle", text);
+    }
 }
 
 /// コイルの下に接点マップ (端子対 | 所在) の表を描く (M4 §4)。
@@ -817,7 +822,17 @@ fn sheet_to_svg_with_xrefs(
                 }
             }
             Entity::Text(t) => {
-                text_el(&mut out, t.at.x, t.at.y, t.height, "#000", "start", &t.text);
+                // 注記の装飾 (G4): 基準位置・色トークン・太字。既定の注記は従来と同じ出力
+                text_weight_el(
+                    &mut out,
+                    t.at.x,
+                    t.at.y,
+                    t.height,
+                    crate::text_style::text_fill(t),
+                    crate::text_style::svg_anchor(t.anchor),
+                    if t.bold { Weight::Bold } else { Weight::Normal },
+                    &t.text,
+                );
             }
             // ハーネス境界は背面のrender_harnesses、盤レイアウトはrender_panelで描き済み
             Entity::Harness(_)
@@ -1227,6 +1242,130 @@ mod tests {
             sheet.entities.insert(e.id(), e);
         }
         sheet
+    }
+
+    /// 注記1つだけのシートと、その注記のSVG行を返す。
+    fn note_line(text: &TextEntity) -> String {
+        let sheet = sheet_with(vec![Entity::Text(text.clone())]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        svg.lines()
+            .find(|l| l.contains(&format!(">{}<", text.text)))
+            .unwrap_or_else(|| panic!("注記が描かれていない: {svg}"))
+            .to_string()
+    }
+
+    fn plain_note(text: &str) -> TextEntity {
+        TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(40.0, 60.0),
+            text: text.into(),
+            height: 2.5,
+            rotation: 0,
+            anchor: TextAnchor::Start,
+            color: None,
+            bold: false,
+        }
+    }
+
+    /// A note with no styling is exported exactly as notes have always been exported: left-aligned, black, normal weight.
+    /// 装飾を付けていない注記は、これまでと寸分違わない形で出力される (左揃え・黒・普通の太さ)。
+    #[test]
+    fn an_unstyled_note_is_exported_exactly_as_before() {
+        let line = note_line(&plain_note("注意"));
+        assert_eq!(
+            line,
+            "<text x=\"40\" y=\"60\" font-size=\"2.500\" fill=\"#000\" text-anchor=\"start\" font-family=\"sans-serif\">注意</text>",
+            "従来の出力と1文字も変えないこと"
+        );
+    }
+
+    /// Choosing the default colour token explicitly changes nothing in the exported drawing.
+    /// 既定の色トークンを明示的に選んでも、出力される図面は何も変わらない。
+    #[test]
+    fn the_default_colour_token_changes_nothing_in_the_export() {
+        let mut explicit = plain_note("注意");
+        explicit.color = Some("default".into());
+        assert_eq!(note_line(&explicit), note_line(&plain_note("注意")));
+    }
+
+    /// A note's anchor, colour token and bold flag all reach the exported drawing.
+    /// 注記の基準位置・色トークン・太字は、そのまま出力図面に反映される。
+    #[test]
+    fn a_styled_note_is_exported_with_its_anchor_colour_and_weight() {
+        let mut note = plain_note("非常停止");
+        note.anchor = TextAnchor::Middle;
+        note.color = Some("warning".into());
+        note.bold = true;
+        let line = note_line(&note);
+        assert!(line.contains("text-anchor=\"middle\""), "{line}");
+        assert!(line.contains("fill=\"#c00000\""), "赤系の印刷色: {line}");
+        assert!(line.contains("font-weight=\"bold\""), "{line}");
+
+        let mut right = plain_note("右寄せ");
+        right.anchor = TextAnchor::End;
+        right.color = Some("accent".into());
+        let line = note_line(&right);
+        assert!(line.contains("text-anchor=\"end\""), "{line}");
+        assert!(line.contains("fill=\"#0000c0\""), "青系の印刷色: {line}");
+        assert!(!line.contains("font-weight"), "太字でない注記に太さ指定は付かない: {line}");
+    }
+
+    /// A symbol's function label (its third text field) is printed under the symbol outline, centred, alongside the designator and the type number above it.
+    /// シンボルの機能ラベル (第3のテキスト欄) は、上に並ぶ参照記号・型番とは反対に、シンボル外形の下へ中央揃えで描かれる。
+    #[test]
+    fn the_function_label_is_printed_under_the_symbol() {
+        let mut inst = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "switch_spst".into(),
+            at: Point::new(100.0, 80.0),
+            rotation: 0,
+            mirror: false,
+            reference: "SW1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        inst.attrs
+            .insert(crate::text_style::FUNCTION_LABEL_ATTR.into(), "非常停止ボタン".into());
+        let sheet = sheet_with(vec![Entity::Symbol(inst.clone())]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let line = svg
+            .lines()
+            .find(|l| l.contains(">非常停止ボタン<"))
+            .unwrap_or_else(|| panic!("機能ラベルが描かれていない: {svg}"));
+        assert_eq!(attr(line, "x"), Some(100.0), "配置基準点を中心に: {line}");
+        assert!(line.contains("text-anchor=\"middle\""), "{line}");
+        let def = builtin_symbols().into_iter().find(|d| d.id == "switch_spst").unwrap();
+        let (_, max) = symbol_bounds(&inst, &def);
+        assert!(attr(line, "y").unwrap() > max.y, "外形より下: {line}");
+        let reference_y = texts(&svg)
+            .into_iter()
+            .find(|(_, _, s)| s == "SW1")
+            .map(|(_, y, _)| y)
+            .expect("参照記号");
+        assert!(attr(line, "y").unwrap() > reference_y, "参照記号より下: {line}");
+    }
+
+    /// A symbol with no function label is drawn exactly as before, with only its designator and type number.
+    /// 機能ラベルの無いシンボルは従来どおり、参照記号と型番だけを添えて描かれる。
+    #[test]
+    fn a_symbol_without_a_function_label_is_drawn_as_before() {
+        let inst = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "switch_spst".into(),
+            at: Point::new(100.0, 80.0),
+            rotation: 0,
+            mirror: false,
+            reference: "SW1".into(),
+            value: "ABC-1".into(),
+            attrs: Default::default(),
+        };
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Symbol(inst)]), &builtin_symbols());
+        let labels: Vec<String> = texts(&svg)
+            .into_iter()
+            .filter(|(x, _, _)| (*x - 100.0).abs() < 1e-9)
+            .map(|(_, _, s)| s)
+            .collect();
+        assert_eq!(labels, vec!["SW1".to_string(), "ABC-1".to_string()]);
     }
 
     /// The wire number of a horizontal wire is printed in a monospaced font 2.5 mm above the middle of the wire.

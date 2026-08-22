@@ -67,12 +67,24 @@ export interface NetLabel {
   attrs?: Record<string, string>;
 }
 
+/** 注記テキストの基準位置 = `at`に文字のどこを合わせるか (G4)。既定は左揃え。 */
+export type TextAnchor = "start" | "middle" | "end";
+
+/** 注記色のトークン名 (canvas/textStyle.ts の TEXT_COLOR_TOKENS)。生の色コードは不可。 */
+export type TextColorToken = "default" | "accent" | "warning" | "success" | "muted";
+
 export interface TextEntity {
   id: string;
   at: Point;
   text: string;
   height: number;
   rotation: number;
+  /** 文字の基準位置 (既定 "start" = 左揃え)。 */
+  anchor?: TextAnchor;
+  /** 注記色のトークン名。null/未指定は既定色。 */
+  color?: TextColorToken | null;
+  /** 太字にするか (既定 false)。 */
+  bold?: boolean;
 }
 
 /** ハーネス境界 (IEC 61082-1 のグループ囲み)。所属配線は幾何学的な内包で決まる。 */

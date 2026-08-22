@@ -31,6 +31,7 @@ pub mod symbol_library;
 pub mod templates;
 pub mod terminal_chart;
 pub mod terminal_diagram;
+pub mod text_style;
 pub mod tidy;
 pub mod verify;
 pub mod wire_no;

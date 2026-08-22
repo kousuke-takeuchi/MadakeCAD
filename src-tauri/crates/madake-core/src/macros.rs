@@ -1064,6 +1064,9 @@ mod tests {
                 text: "note".into(),
                 height: 3.5,
                 rotation: 0,
+                anchor: crate::model::TextAnchor::Start,
+                color: None,
+                bold: false,
             }),
         );
 

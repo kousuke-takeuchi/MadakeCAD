@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1624 specification clauses** across 5 areas.
+**1657 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -34,6 +34,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - A block whose pin table is broken (duplicate numbers) is refused when added, and the sheet is left untouched. <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - Editing a good block into a broken one is refused too, so a block on the sheet always has a drawable pin table. <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
+- A note whose colour is a name the drawing does not know (a typo, or a raw colour code) is refused instead of being stored and silently drawn in black. <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
+- A note that uses one of the drawing's colour tokens (or no colour at all) is accepted. <sub>`a_note_with_a_known_colour_token_is_accepted`</sub>
+- Changing an existing note to an unknown colour is refused too, and the note keeps the colour it had. <sub>`recolouring_a_note_to_an_unknown_colour_is_refused`</sub>
 - Adding an entity can be undone (the entity disappears) and redone (it comes back). <sub>`add_undo_redo_entity`</sub>
 - Moving entities shifts their coordinates; undo restores the original position exactly. <sub>`move_and_undo_restores_position`</sub>
 - Deleting several entities at once is a single undo step that restores all of them. <sub>`delete_multiple_and_undo`</sub>
@@ -116,6 +119,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project file saved before frame templates existed opens with no frame template set, which means it is drawn with the default JIS A3 frame exactly as before. <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
 - A project file saved before panel layouts existed opens with every sheet as a schematic sheet and is brought up to the current format version. <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
+- A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
+- The current file format version is 5, the version that added text styling. <sub>`the_current_format_version_is_five`</sub>
 - The frame template chosen for a project is saved to the file and comes back on reload. <sub>`the_frame_template_survives_a_save_and_reload`</sub>
 
 ### KiCad import
@@ -168,6 +173,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The sheet kind travels as JSON in snake_case ("schematic" / "panel"). <sub>`the_sheet_kind_is_serialized_in_snake_case`</sub>
 - Moving a panel sheet moves its panel entities too: outline, duct and footprint move by their top-left corner, and a DIN rail moves along both axes. <sub>`translate_moves_panel_entities`</sub>
 - Panel entities travel as JSON under their own kind tags, so any client can send them. <sub>`panel_entities_have_their_own_json_kind_tags`</sub>
+- A note written before text styling existed opens with the look it always had: left-aligned, plain black, not bold. <sub>`an_old_note_opens_with_the_previous_look`</sub>
+- The text anchor travels as JSON in snake_case ("start" / "middle" / "end"). <sub>`the_text_anchor_is_serialized_in_snake_case`</sub>
+- A styled note keeps its anchor, colour token and bold flag through a JSON round trip. <sub>`a_styled_note_survives_a_json_round_trip`</sub>
 - Entity::id() returns the inner entity's UUID regardless of the entity kind. <sub>`entity_id_is_uniform_across_kinds`</sub>
 
 ### net_tag
@@ -389,6 +397,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A sheet with no revisions draws no revision table at all, not even an empty frame. <sub>`svg_omits_revision_table_when_no_revisions`</sub>
 - The Rev field of the title block shows the mark of the newest revision, and falls back to the stored value when there are no revisions. <sub>`svg_title_block_rev_follows_latest_revision`</sub>
 - With seven revisions only the newest six rows are drawn; the oldest row is dropped from the drawing while the data keeps it. <sub>`svg_revision_table_shows_only_newest_six_rows`</sub>
+- A note with no styling is exported exactly as notes have always been exported: left-aligned, black, normal weight. <sub>`an_unstyled_note_is_exported_exactly_as_before`</sub>
+- Choosing the default colour token explicitly changes nothing in the exported drawing. <sub>`the_default_colour_token_changes_nothing_in_the_export`</sub>
+- A note's anchor, colour token and bold flag all reach the exported drawing. <sub>`a_styled_note_is_exported_with_its_anchor_colour_and_weight`</sub>
+- A symbol's function label (its third text field) is printed under the symbol outline, centred, alongside the designator and the type number above it. <sub>`the_function_label_is_printed_under_the_symbol`</sub>
+- A symbol with no function label is drawn exactly as before, with only its designator and type number. <sub>`a_symbol_without_a_function_label_is_drawn_as_before`</sub>
 - The wire number of a horizontal wire is printed in a monospaced font 2.5 mm above the middle of the wire. <sub>`svg_draws_wire_number_above_a_horizontal_wire`</sub>
 - The wire number of a vertical wire is printed 2.5 mm to the left of the middle of the wire. <sub>`svg_draws_wire_number_left_of_a_vertical_wire`</sub>
 - One net is labelled once, at the middle of its longest segment, however many wires it is drawn with. <sub>`svg_draws_the_wire_number_once_on_the_longest_segment`</sub>
@@ -548,6 +561,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A terminal diagram page is an A4 landscape sheet with the JIS frame and a title block naming the terminal block. <sub>`the_page_has_the_frame_and_a_title_block`</sub>
 - The terminal diagram is offered as a report named terminal-diagram, spelled the same way in the CLI, Link API and MCP. <sub>`the_terminal_diagram_is_a_report_named_terminal_diagram`</sub>
 - A project without any terminal block still yields one page, so the report is never empty. <sub>`a_project_without_terminal_blocks_still_yields_one_page`</sub>
+
+### text_style
+
+- Every note colour is a named token with a print colour, and the default token prints black. <sub>`every_colour_token_has_a_print_colour`</sub>
+- A raw colour code is not a colour token, so it can never sneak into a drawing. <sub>`a_raw_colour_code_is_not_a_colour_token`</sub>
+- A note with no colour is drawn in the default colour, and a note with a token is drawn in that token's print colour. <sub>`a_note_without_a_colour_uses_the_default_colour`</sub>
+- The three anchors map to the three SVG text-anchor values, and the default anchor is the one drawings have always used. <sub>`anchors_map_to_svg_text_anchor`</sub>
+- A symbol with no function label attribute has nothing extra to draw. <sub>`a_symbol_without_a_function_label_draws_nothing_extra`</sub>
+- A blank function label counts as no label, so a stray space does not print an empty line. <sub>`a_blank_function_label_counts_as_no_label`</sub>
+- With a bundled symbol (which defines no function slot) the function label lands just below the symbol outline, centred on the placement point. <sub>`the_function_label_sits_below_a_symbol_that_defines_no_slot`</sub>
+- When the symbol definition does place a FUNCTION slot, the label follows the slot (rotation and all) instead of the automatic position. <sub>`the_function_label_follows_a_slot_defined_by_the_symbol`</sub>
 
 ### Tidy metrics (crossings / overlaps / grid)
 
@@ -1508,6 +1532,21 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - shows the Japanese name in Japanese and the English name in English <sub>`symbolName`</sub>
 - falls back to whichever name the symbol actually has <sub>`symbolName`</sub>
 - shows the symbol id when both names are empty <sub>`symbolName`</sub>
+
+### textStyle
+
+- offers a small fixed set of colour tokens including the default <sub>`note styling`</sub>
+- does not accept a raw colour code as a colour token <sub>`note styling`</sub>
+- draws a note without a colour in the default screen colour <sub>`note styling`</sub>
+- shows the selection highlight instead of the note colour while it is selected <sub>`note styling`</sub>
+- maps the three anchors to the three canvas text alignments <sub>`note styling`</sub>
+- puts the hit box to the right of the anchor point for a left-aligned note <sub>`note hit box`</sub>
+- extends the hit box to the left for centred and right-aligned notes <sub>`note hit box`</sub>
+- widens the hit box with the length of the text <sub>`note hit box`</sub>
+- draws nothing extra for a symbol with no function label <sub>`function label`</sub>
+- treats a blank function label as no label and trims the surrounding spaces <sub>`function label`</sub>
+- places the label just below the outline when the definition has no slot <sub>`function label`</sub>
+- follows the FUNCTION slot when the symbol definition defines one <sub>`function label`</sub>
 
 ### viewClasses
 

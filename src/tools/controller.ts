@@ -27,6 +27,7 @@ import {
   type PanelToolId,
 } from "../canvas/panelTools";
 import { drawHarness, drawSymbol, symbolBounds, transformLocal } from "../canvas/renderer";
+import { noteBounds } from "../canvas/textStyle";
 import { panelTheme, theme, wireColorScreen } from "../canvas/theme";
 import { Viewport, type Pt } from "../canvas/viewport";
 import { i18n } from "../i18n";
@@ -334,6 +335,17 @@ export class EditorController {
         }
       } else if (e.kind === "junction" || e.kind === "net_label") {
         if (Math.hypot(world.x - e.at.x, world.y - e.at.y) <= HIT_TOLERANCE * 1.5) return e.id;
+      } else if (e.kind === "text") {
+        // 注記は書かれている文字の範囲で掴む (基準位置で左右どちらへ伸びるかが変わる)
+        const { min, max } = noteBounds(e);
+        if (
+          world.x >= min.x - SYMBOL_HIT_PAD &&
+          world.x <= max.x + SYMBOL_HIT_PAD &&
+          world.y >= min.y - SYMBOL_HIT_PAD &&
+          world.y <= max.y + SYMBOL_HIT_PAD
+        ) {
+          return e.id;
+        }
       }
     }
     for (const e of entities) {

@@ -715,6 +715,9 @@ fn build_ladder_sheet(
                 text: label,
                 height: 2.5,
                 rotation: 0,
+                anchor: crate::model::TextAnchor::Start,
+                color: None,
+                bold: false,
             }));
         }
     }

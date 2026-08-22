@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1624仕様項目**。
+全5領域・**1657仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -34,6 +34,9 @@
 
 - ピン表が壊れている(番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。 <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - 正しいブロックを壊れた内容へ編集するのも拒否されるので、図面上のブロックは常に描けるピン表を持つ。 <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
+- 図面が知らない色名 (打ち間違いや生の色コード) を付けた注記は、黙って黒で描かれるのではなく拒否される。 <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
+- 図面の色トークンを使った注記 (色を指定しない注記も) は受け付けられる。 <sub>`a_note_with_a_known_colour_token_is_accepted`</sub>
+- 既にある注記を知らない色へ変える更新も拒否され、注記は元の色のままになる。 <sub>`recolouring_a_note_to_an_unknown_colour_is_refused`</sub>
 - エンティティの追加はundoで消え、redoで復活する。 <sub>`add_undo_redo_entity`</sub>
 - 移動でエンティティの座標が動き、undoで元の位置に正確に戻る。 <sub>`move_and_undo_restores_position`</sub>
 - 複数エンティティの一括削除は1回のundoで全て復元される。 <sub>`delete_multiple_and_undo`</sub>
@@ -116,6 +119,8 @@
 - 図枠テンプレートが無かった頃のプロジェクトファイルは図枠未指定で開き、従来どおり既定のJIS A3図枠で描かれる。 <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
 - 盤レイアウトが無かった頃のプロジェクトファイルは全シートが回路図シートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
+- テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
+- 現行のファイル形式バージョンは5 (テキスト装飾を追加した版) である。 <sub>`the_current_format_version_is_five`</sub>
 - プロジェクトに選んだ図枠テンプレートはファイルへ保存され、読み直しても残っている。 <sub>`the_frame_template_survives_a_save_and_reload`</sub>
 
 ### KiCadインポート
@@ -168,6 +173,9 @@
 - シート種別は snake_case ("schematic" / "panel") のJSONで往復する。 <sub>`the_sheet_kind_is_serialized_in_snake_case`</sub>
 - 盤シートを動かすと盤エンティティも動く: 盤外形・ダクト・フットプリントは左上の角が動き、DINレールは左右にも上下にも動く。 <sub>`translate_moves_panel_entities`</sub>
 - 盤エンティティはそれぞれの種別タグでJSONを往復でき、どのクライアントからも送れる。 <sub>`panel_entities_have_their_own_json_kind_tags`</sub>
+- テキスト装飾が無かった頃に書かれた注記は、従来どおりの見た目 (左揃え・黒・太字でない) で開く。 <sub>`an_old_note_opens_with_the_previous_look`</sub>
+- テキストの基準位置は snake_case ("start" / "middle" / "end") のJSONで往復する。 <sub>`the_text_anchor_is_serialized_in_snake_case`</sub>
+- 装飾を付けた注記は、基準位置・色トークン・太字の指定をJSONの往復でも保つ。 <sub>`a_styled_note_survives_a_json_round_trip`</sub>
 - Entity::id()は種別によらず内側エンティティのUUIDを返す。 <sub>`entity_id_is_uniform_across_kinds`</sub>
 
 ### net_tag
@@ -389,6 +397,11 @@
 - 改訂が0件のシートには改訂欄をまったく描かない(空の枠だけも描かない)。 <sub>`svg_omits_revision_table_when_no_revisions`</sub>
 - 表題欄のRev欄には最新改訂の記号が出る。改訂が無いときは表題欄に保存された値がそのまま出る。 <sub>`svg_title_block_rev_follows_latest_revision`</sub>
 - 改訂が7件あると新しい6行だけが描かれ、最も古い行は図面から省かれる(データとしては残る)。 <sub>`svg_revision_table_shows_only_newest_six_rows`</sub>
+- 装飾を付けていない注記は、これまでと寸分違わない形で出力される (左揃え・黒・普通の太さ)。 <sub>`an_unstyled_note_is_exported_exactly_as_before`</sub>
+- 既定の色トークンを明示的に選んでも、出力される図面は何も変わらない。 <sub>`the_default_colour_token_changes_nothing_in_the_export`</sub>
+- 注記の基準位置・色トークン・太字は、そのまま出力図面に反映される。 <sub>`a_styled_note_is_exported_with_its_anchor_colour_and_weight`</sub>
+- シンボルの機能ラベル (第3のテキスト欄) は、上に並ぶ参照記号・型番とは反対に、シンボル外形の下へ中央揃えで描かれる。 <sub>`the_function_label_is_printed_under_the_symbol`</sub>
+- 機能ラベルの無いシンボルは従来どおり、参照記号と型番だけを添えて描かれる。 <sub>`a_symbol_without_a_function_label_is_drawn_as_before`</sub>
 - 横向きの配線の線番は、配線の中点の2.5mm上に等幅フォントで描かれる。 <sub>`svg_draws_wire_number_above_a_horizontal_wire`</sub>
 - 縦向きの配線の線番は、配線の中点の2.5mm左に描かれる。 <sub>`svg_draws_wire_number_left_of_a_vertical_wire`</sub>
 - 1つのネットの線番は、何本のワイヤで描かれていても、最も長い線分の中点に1回だけ描かれる。 <sub>`svg_draws_the_wire_number_once_on_the_longest_segment`</sub>
@@ -548,6 +561,17 @@
 - 端子接続図のページはA4横で、JIS図枠と、端子台の参照記号が入った表題欄を持つ。 <sub>`the_page_has_the_frame_and_a_title_block`</sub>
 - 端子接続図はterminal-diagramという名前の帳票として選べ、CLI・Link API・MCPで同じ綴りになる。 <sub>`the_terminal_diagram_is_a_report_named_terminal_diagram`</sub>
 - 端子台が1つも無いプロジェクトでも1ページは出るので、帳票が空になることはない。 <sub>`a_project_without_terminal_blocks_still_yields_one_page`</sub>
+
+### text_style
+
+- 注記の色はどれも印刷色を持つ名前付きトークンで、既定のトークンは黒で刷られる。 <sub>`every_colour_token_has_a_print_colour`</sub>
+- 生の色コードは色トークンではないので、図面に紛れ込むことはない。 <sub>`a_raw_colour_code_is_not_a_colour_token`</sub>
+- 色を指定していない注記は既定色で描かれ、トークンを指定した注記はそのトークンの印刷色で描かれる。 <sub>`a_note_without_a_colour_uses_the_default_colour`</sub>
+- 3つの基準位置はSVGの text-anchor の3つの値に対応し、既定は従来の図面が使ってきた左揃えである。 <sub>`anchors_map_to_svg_text_anchor`</sub>
+- 機能ラベルの属性が無いシンボルには、余分に描くものが無い。 <sub>`a_symbol_without_a_function_label_draws_nothing_extra`</sub>
+- 空白だけの機能ラベルは「無し」と同じ扱いになるので、うっかりの空白で空行が刷られることはない。 <sub>`a_blank_function_label_counts_as_no_label`</sub>
+- 同梱シンボル (機能スロットを持たない) では、機能ラベルはシンボル外形のすぐ下に、配置基準点を中心にして置かれる。 <sub>`the_function_label_sits_below_a_symbol_that_defines_no_slot`</sub>
+- シンボル定義がFUNCTIONスロットを持つ場合、機能ラベルは自動位置ではなくそのスロット (回転も込み) に従う。 <sub>`the_function_label_follows_a_slot_defined_by_the_symbol`</sub>
 
 ### 整えメトリクス (交差・重なり・グリッド)
 
@@ -1508,6 +1532,21 @@
 - 日本語で使っているときは日本語名、英語のときは英語名が一覧に出る <sub>`symbolName`</sub>
 - 片方の名前しか無いシンボルは、あるほうの名前が出る <sub>`symbolName`</sub>
 - 名前がどちらも空ならシンボルidが出る(一覧から行が消えない) <sub>`symbolName`</sub>
+
+### textStyle
+
+- 注記の色はどれも名前付きトークンで、既定のトークンも必ずその中にある <sub>`note styling`</sub>
+- 生の色コードは色トークンではないので、図面に紛れ込むことはない <sub>`note styling`</sub>
+- 色を指定していない注記は画面でも既定色で描かれ、トークンを指定すればその色になる <sub>`note styling`</sub>
+- 選択中の注記は色トークンより選択ハイライトが優先されるので、選んだものが分かる <sub>`note styling`</sub>
+- 3つの基準位置はCanvas2Dの3つの寄せ方に対応し、既定は従来どおりの左揃えになる <sub>`note styling`</sub>
+- 左揃えの注記は基準点から右へ広がる箱で掴め、箱の高さは文字高さぶんある <sub>`note hit box`</sub>
+- 中央揃え・右揃えの注記は、基準点の左側にも箱が広がるので同じように掴める <sub>`note hit box`</sub>
+- 長い文字の注記ほど掴める箱も広くなるので、書いた文字のどこを押しても選べる <sub>`note hit box`</sub>
+- 機能ラベルの属性が無いシンボルには、余分に描くものが無い <sub>`function label`</sub>
+- 空白だけの機能ラベルは「無し」と同じ扱いになり、前後の空白は取り除かれる <sub>`function label`</sub>
+- スロットを持たない同梱シンボルでは、機能ラベルは外形のすぐ下・基準点を中心に置かれる <sub>`function label`</sub>
+- シンボル定義がFUNCTIONスロットを持つ場合は、そのスロットの位置と文字高さに従う <sub>`function label`</sub>
 
 ### viewClasses
 

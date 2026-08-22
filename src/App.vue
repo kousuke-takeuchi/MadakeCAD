@@ -56,6 +56,13 @@ onMounted(async () => {
   --off-bg: #f3f4f6;
   --info-fg: #1d4ed8;
   --info-bg: #eff6ff;
+  /* 注記色トークン (G4) の見本 = 紙に刷られる色。図面の描画色は
+     canvas/theme.ts の textColors (画面) と text_style.rs の TEXT_COLORS (紙) */
+  --note-default: #202020;
+  --note-accent: #0000c0;
+  --note-warning: #c00000;
+  --note-success: #008040;
+  --note-muted: #808080;
   --ribbon-icon: #4a6fa5;
   --icon-wire: #c0392b;
   --icon-edit: #b7791f;

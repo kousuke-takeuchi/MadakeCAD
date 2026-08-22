@@ -34,6 +34,26 @@ export const theme = {
 } as const;
 
 /**
+ * 注記の色トークン (G4) → **画面色**。暗い作図領域で読める明るい色を割り当てる。
+ *
+ * 紙・PDFの色は Rust側 `madake-core/src/text_style.rs` の `TEXT_COLORS` が持つ
+ * (default=黒 / accent=青 / warning=赤 / success=緑 / muted=灰)。
+ * 図面データが持つのはトークン名だけなので、配色を変えても図面は書き換えなくてよい。
+ */
+export const textColors = {
+  /** 通常の注記 (図枠・シンボルと同じ基本線色)。 */
+  default: "#e8eaec",
+  /** 強調・参照 (青系)。 */
+  accent: "#7fb2e5",
+  /** 注意喚起 (赤系)。 */
+  warning: "#ff8a7a",
+  /** 確認済み・良好 (緑系)。 */
+  success: "#7fd9a2",
+  /** 補足・控えめ (灰)。 */
+  muted: "#9aa2ab",
+} as const;
+
+/**
  * シンボルエディタのキャンバス配色 (.pen「M4デザイン - シンボルエディタ」)。
  *
  * 作図領域 (暗い`theme`) とは逆に**白紙**の上で記号を描くので、別テーブルにしてある。

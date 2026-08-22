@@ -500,6 +500,9 @@ mod tests {
             text: body.into(),
             height: 2.5,
             rotation: 0,
+            anchor: crate::model::TextAnchor::Start,
+            color: None,
+            bold: false,
         })
     }
 

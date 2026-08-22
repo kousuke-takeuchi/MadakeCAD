@@ -353,6 +353,9 @@ pub fn import_kicad_sch(
                 text: text.to_string(),
                 height,
                 rotation: (angle.rem_euclid(360.0) as u16) % 360,
+                anchor: crate::model::TextAnchor::Start,
+                color: None,
+                bold: false,
             }),
         );
         report.texts += 1;

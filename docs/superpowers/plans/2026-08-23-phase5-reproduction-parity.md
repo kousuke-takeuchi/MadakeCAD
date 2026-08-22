@@ -56,8 +56,21 @@
 
 ### Task 4: G4 テキスト装飾+第3スロット
 
-- [ ] Step 1 (red): TextEntity拡張(format_version・旧ファイル互換・既定不変)/anchor・color・boldの描画(SVG+キャンバス)/シンボル機能ラベルスロット
-- [ ] Step 2 (green): 実装+プロパティパネル(色はトークン選択)。gen_spec→コミット
+- [x] Step 1 (red): TextEntity拡張(format_version・旧ファイル互換・既定不変)/anchor・color・boldの描画(SVG+キャンバス)/シンボル機能ラベルスロット
+- [x] Step 2 (green): 実装+プロパティパネル(色はトークン選択)。gen_spec→コミット
+
+  実装メモ: `madake-core/src/text_style.rs`(色トークン`TEXT_COLORS`=default/accent/warning/success/muted
+  → 印刷色。`svg_anchor`。機能ラベルの属性`function_label`と位置決め`function_label_placement`)。
+  `TextEntity`に`anchor`/`color`/`bold`を追加し**format_version 5**へ。旧ファイルは左揃え・既定色・
+  太字なしで開き、**装飾なしの注記のSVG出力は1バイトも変わらない**(ゴールデンテストで固定)。
+  色は**トークン名のみ**で、生の色コードは`Engine::execute`が`InvalidCommand`で拒否(Link APIは400)。
+  シンボルの第3テキスト欄=機能ラベルは`symbol::SLOT_FUNCTION`スロットに従い、**スロットが無ければ
+  外形の下3.5mmへ自動**(同梱シンボル定義は変更不要)。キャンバス側は`canvas/textStyle.ts`
+  (画面色は`theme.textColors`)、プロパティは注記の基準位置/色/太字とシンボルの機能ラベル行。
+  ついでに: **注記がクリックで選べなかった**(`hitTest`にtextの枝が無かった)ので、書かれた文字の
+  範囲(`noteBounds`。基準位置で左右どちらへ伸びるかが変わる)で掴めるようにした。
+  既知の制限: `TextEntity.rotation`は引き続き未描画(G4の回転は次フェーズ)。リレーコイルの
+  接点マップと機能ラベルは同じ「外形の下」に出るため、両方付けると重なる。
 
 ### Task 5: G17 サイレント失敗+G11 電線品番
 

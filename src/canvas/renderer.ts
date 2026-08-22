@@ -35,6 +35,14 @@ import {
   type Rect,
 } from "./panel";
 import { agentRgba, panelTheme, theme, wireColorScreen } from "./theme";
+import {
+  FUNCTION_LABEL_FONT,
+  canvasTextAlign,
+  functionLabelFallbackAt,
+  functionLabelSlot,
+  functionLabelText,
+  noteColor,
+} from "./textStyle";
 import { WIRE_NO_FONT, wireNumberLabels } from "./wireNumbers";
 import { WIRE_NOTE_FONT, wireNoteLabels } from "./wireNotes";
 import { TAG_FONT, netTag } from "./netTag";
@@ -416,6 +424,18 @@ export function drawSymbol(
   if (inst.value) {
     const p = vp.toScreen({ x: inst.at.x, y: top - 1 });
     ctx.fillText(inst.value, p.x, p.y);
+  }
+  // 機能ラベル (G4の第3テキスト欄): 参照記号・型番の反対側=外形の下 (svg.rsと同ルール)
+  const functionLabel = functionLabelText(inst);
+  if (functionLabel) {
+    const slot = functionLabelSlot(def);
+    const at = slot
+      ? transformLocal(slot.at, inst)
+      : functionLabelFallbackAt(inst, symbolBounds(inst, def));
+    const height = slot?.height ?? FUNCTION_LABEL_FONT;
+    ctx.font = `${Math.max(9, height * vp.scale)}px monospace`;
+    const p = vp.toScreen(at);
+    ctx.fillText(functionLabel, p.x, p.y);
   }
 }
 
@@ -909,11 +929,14 @@ export function renderSheet(
         ctx.fillText(xref, at.x, at.y);
       }
     } else if (e.kind === "text") {
+      // 注記の装飾 (G4): 色トークン・基準位置・太字 (紙の色は text_style.rs が持つ)
       const s = vp.toScreen(e.at);
-      ctx.fillStyle = theme.line;
-      ctx.font = `${Math.max(9, e.height * vp.scale)}px sans-serif`;
-      ctx.textAlign = "left";
+      ctx.fillStyle = noteColor(e.color, opts.selection.has(e.id));
+      const weight = e.bold ? "600 " : "";
+      ctx.font = `${weight}${Math.max(9, e.height * vp.scale)}px sans-serif`;
+      ctx.textAlign = canvasTextAlign(e.anchor);
       ctx.fillText(e.text, s.x, s.y);
+      ctx.textAlign = "left";
     }
   }
 

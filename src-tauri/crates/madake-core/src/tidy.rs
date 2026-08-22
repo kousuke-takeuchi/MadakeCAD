@@ -497,6 +497,9 @@ mod tests {
             text: text.into(),
             height,
             rotation: 0,
+            anchor: crate::model::TextAnchor::Start,
+            color: None,
+            bold: false,
         })
     }
 
