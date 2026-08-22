@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**584 specification clauses** across 5 areas.
+**591 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -306,7 +306,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - POST /agent/send runs an assistant turn and the conversation list reflects the new messages. <sub>`send_runs_a_turn_and_conversations_reflects_it`</sub>
 - Sending to a non-existent conversation id returns 400 instead of creating garbage. <sub>`send_to_unknown_conversation_is_400`</sub>
 - Cancel and undo-turn endpoints take a stable turn id and reject turns with nothing to roll back. <sub>`cancel_and_undo_turn_respond`</sub>
-- Undoing a turn rolls back exactly the document edits that the turn produced, via the same undo history as manual edits. <sub>`undo_turn_rolls_back_agent_edits_through_the_command_engine`</sub>
+- Undoing a turn rolls back exactly the agent's edits through the command engine, keeping a manual edit the user made during the turn. <sub>`undo_turn_rolls_back_agent_edits_and_keeps_the_manual_edit`</sub>
+- If a manual edit removed what the turn touched, the rollback is refused with a conflict error and the drawing is left untouched. <sub>`undo_turn_refuses_a_conflicting_rollback`</sub>
 - GET /agent/events streams conversation events over SSE, in the same shape as the Tauri agent:event. <sub>`events_endpoint_streams_agent_events`</sub>
 - Saving and loading a project carries the chat history alongside (.chat.json). <sub>`save_and_load_carry_the_chat_history`</sub>
 - Loading a project cancels any running turn first, so the agent never edits the wrong document. <sub>`load_cancels_a_running_turn`</sub>
@@ -325,6 +326,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports. <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - The terminal endpoints list the terminal blocks of the drawing and return one block's chart and check result. <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report writes one report as CSV or as framed PDF pages, and refuses CSV for the graphical terminal diagram. <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
+
+### Edit origin (user / agent / mcp)
+
+- Each entry point records who made the edit: the UI is a user edit, the agent's turn is an agent edit, and outside clients are mcp edits. <sub>`every_edit_path_records_who_made_the_change`</sub>
+- The agent-turn marker nests and always clears, so edits after the turn are user edits again. <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
+- The bridge the agent manager uses reverts only agent edits and reports how many were rolled back. <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
 
 
 ## AI assistant (madake-agent)
@@ -352,7 +359,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Each turn records the engine revision range it spanned, for display and debugging. <sub>`turn_records_engine_revision_range`</sub>
 - The turn's undo count is the undo-stack depth delta, not the revision delta (undo/redo also advance revisions). <sub>`undo_count_uses_undo_stack_depth_not_revision_delta`</sub>
 - A turn whose edits were all undone during the turn counts as having no edits. <sub>`turn_whose_edits_were_all_undone_has_no_edits`</sub>
-- When an undo rollback stops midway, only the completed undo count is recorded. <sub>`record_undone_applies_only_the_completed_count`</sub>
+- Recording a rollback clears the turn's applied range, so it is no longer offered for undo. <sub>`record_reverted_clears_the_applied_range`</sub>
 - A text-only turn (no document edits) has an undo count of zero. <sub>`turn_without_edits_has_zero_undo_count`</sub>
 - A turn collects the streamed text, the tool calls, and the CLI session id. <sub>`turn_collects_text_tool_calls_and_session`</sub>
 - A second turn appends to the conversation and resumes the same CLI session. <sub>`second_turn_appends_messages_and_reuses_session`</sub>
@@ -373,13 +380,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - Sending without a conversation id creates a conversation and broadcasts its events. <sub>`send_creates_conversation_and_broadcasts_events`</sub>
 - A turn that edits the document records the applied revisions and emits a turn-applied event with the undo depth. <sub>`turn_records_applied_revisions_and_emits_turn_applied`</sub>
-- Turn undo counts are based on undo-stack growth, so user undos during the turn don't corrupt the count. <sub>`undo_turn_counts_stack_growth_not_revision_delta`</sub>
-- Only the latest applied turn may be reverted; older targets are rejected (safety guard). <sub>`undo_turn_rejects_targets_that_are_not_the_latest_applied_turn`</sub>
+- Edits made while a turn is running count as agent edits, and edits outside a turn stay user edits. <sub>`edits_during_a_turn_are_recorded_as_agent_edits`</sub>
+- Rolling back a turn reverts only the agent's edits and keeps the user's manual edits, even those made during the turn. <sub>`undo_turn_reverts_only_the_agent_edits_of_the_turn`</sub>
+- An older turn can still be rolled back later; edits made after it are kept. <sub>`undo_turn_can_revert_an_older_turn_and_keeps_later_edits`</sub>
+- A rollback that conflicts with a manual edit is refused, the turn stays applied, and it can be retried later. <sub>`undo_turn_reports_a_conflict_and_keeps_the_turn_rollbackable`</sub>
 - A turn id keeps pointing at the same turn even after later turns are appended. <sub>`a_turn_id_keeps_addressing_the_same_turn_after_more_turns`</sub>
 - A turn that was already rolled back cannot be rolled back twice. <sub>`undo_turn_rejects_an_already_undone_turn`</sub>
 - A running turn cannot be reverted. <sub>`undo_turn_rejects_a_running_turn`</sub>
-- If undo fails midway, the partial progress is recorded so the state stays truthful. <sub>`undo_turn_records_partial_progress_when_undo_fails_midway`</sub>
 - Document errors and unknown turn targets are reported as distinct errors. <sub>`undo_turn_reports_doc_errors_and_unknown_targets`</sub>
+- Every broadcast event carries the sequence number of the turn that produced it, increasing with each send. <sub>`turn_events_carry_a_monotonic_turn_seq`</sub>
+- Cancelling reports the cancelled turn's sequence number, and the next turn gets a higher one, so late events can be told apart. <sub>`cancel_reports_the_cancelled_turn_seq`</sub>
 - Sending to a conversation that is already running a turn is rejected. <sub>`second_send_while_running_is_rejected`</sub>
 - Cancel kills the CLI process and marks the message as cancelled. <sub>`cancel_stops_the_turn_and_marks_the_message`</sub>
 - Sending to an unknown conversation id fails cleanly. <sub>`send_to_unknown_conversation_fails`</sub>

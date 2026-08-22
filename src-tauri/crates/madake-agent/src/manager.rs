@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::backend::{ClaudeCodeCliBackend, DetectResult};
-use crate::conversation::{AppliedRevisions, AppliedUndoDepth, Conversation, DocState, Role};
+use crate::conversation::{AppliedRevisions, AppliedUndoDepth, Conversation, DocState};
 use crate::events::AgentEvent;
 use crate::settings::AppSettings;
 use crate::{AgentError, Result};
@@ -28,18 +28,53 @@ pub const CANCELLED_MESSAGE: &str = "キャンセルされました";
 /// 配信チャネルのバッファ長(遅い購読者はLaggedで取りこぼす)。
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
 
+/// ターン巻き戻しの結果(ドキュメント側からの報告)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RevertReport {
+    /// 逆適用した編集コマンド数(0なら戻す編集が無かった)
+    pub reverted: u64,
+    /// 巻き戻し後のrevision
+    pub revision: u64,
+}
+
+/// 巻き戻しが実行できなかった理由。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RevertError {
+    /// 逆適用が現在の図面と衝突した(対象が手編集で消えている等)。**図面は無変更**
+    Conflict(String),
+    /// その他の失敗(ドキュメント側のエラー)
+    Failed(String),
+}
+
 /// ドキュメント(Commandエンジン)側への最小の窓口。
 ///
 /// madake-agentがmadake-coreへ依存しないためのトレイト。実装はmadake-mcp側にあり、
-/// `SharedDoc`のエンジンを触る。**新しい編集経路は作らない**: undoは既存の
-/// `SharedDoc::undo`(patch配信込み)をそのまま呼ぶだけ。
+/// `SharedDoc`のエンジンを触る。**新しい編集経路は作らない**: 巻き戻しも
+/// Commandエンジンの逆Command適用(patch配信込み)を呼ぶだけ。
 pub trait DocBridge: Send + Sync + 'static {
     /// 現在のドキュメントrevision。
     fn revision(&self) -> u64;
     /// 現在のundoスタック深さ(積まれている編集コマンド数)。
     fn undo_depth(&self) -> u64;
-    /// undoを1回実行する。戻せる編集が無ければ`false`。
-    fn undo(&self) -> std::result::Result<bool, String>;
+
+    /// undo深さの区間`[start_depth, end_depth)`にある**エージェント由来の編集だけ**を
+    /// 逆Commandとして適用し、巻き戻す。
+    ///
+    /// 区間に挟まったユーザーの手編集は保持する。逆適用が現在の図面と衝突する場合は
+    /// [`RevertError::Conflict`]を返し、図面は一切変更しない(部分適用しない)。
+    fn revert_agent_edits(
+        &self,
+        start_depth: u64,
+        end_depth: u64,
+    ) -> std::result::Result<RevertReport, RevertError>;
+
+    /// エージェントのターン実行が始まったことを知らせる。
+    ///
+    /// この区間にCommandエンジンへ届いた編集はエージェント由来として記録される
+    /// (MCPサーバーの入口はUI・外部クライアントと共通なので、時間で見分ける)。
+    fn begin_agent_turn(&self) {}
+    /// ターン実行が終わったことを知らせる(中断時も必ず呼ばれる)。
+    fn end_agent_turn(&self) {}
 
     /// revisionと深さの組。両方を1回のロックで取れるなら上書きすること。
     fn state(&self) -> DocState {
@@ -47,10 +82,37 @@ pub trait DocBridge: Send + Sync + 'static {
     }
 }
 
-/// 購読者へ配信する1件。JSONは`{"conversation_id": "...", "event": {"type": ...}}`。
+/// ターン実行中だけ「エージェント編集中」を立てるRAIIガード。
+///
+/// タスクがabort(キャンセル)された場合もdropは走るため、フラグが立ちっぱなしに
+/// ならない。
+struct AgentTurnGuard(Arc<dyn DocBridge>);
+
+impl AgentTurnGuard {
+    fn begin(doc: Arc<dyn DocBridge>) -> Self {
+        doc.begin_agent_turn();
+        Self(doc)
+    }
+}
+
+impl Drop for AgentTurnGuard {
+    fn drop(&mut self) {
+        self.0.end_agent_turn();
+    }
+}
+
+/// 購読者へ配信する1件。
+/// JSONは`{"conversation_id": "...", "turn_seq": N, "event": {"type": ...}}`。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConversationEvent {
     pub conversation_id: Uuid,
+    /// このイベントを生んだターンの通し番号(送信のたびに単調増加。1始まり)。
+    ///
+    /// キャンセル後に遅れて届くイベントを受信側が捨てるための鍵。中断したターンの
+    /// seqを覚えておき、それ以下のseqのイベントを無視すれば、次のターンの表示へ
+    /// 前のターンの残りが混ざらない。`0`は「不明」(旧サーバー由来)。
+    #[serde(default)]
+    pub turn_seq: u64,
     pub event: AgentEvent,
 }
 
@@ -254,14 +316,14 @@ impl AgentManager {
     /// タスクをabortするとバックエンド側の受信端(mpsc::Receiver)が落ち、
     /// `ClaudeCodeCliBackend`が子プロセスをkillして片付ける。
     pub fn cancel(&self, conversation_id: Uuid) -> bool {
-        let applied = {
+        let (seq, applied) = {
             let mut state = self.state.lock().unwrap();
-            let Some((_, handle)) = state.running.remove(&conversation_id) else {
+            let Some((seq, handle)) = state.running.remove(&conversation_id) else {
                 return false;
             };
             handle.abort();
             let doc_state = self.doc.state();
-            state.conversation_mut(conversation_id).and_then(|c| {
+            let applied = state.conversation_mut(conversation_id).and_then(|c| {
                 c.touch();
                 let message = c.current_turn_mut()?;
                 message.error = Some(CANCELLED_MESSAGE.to_string());
@@ -271,17 +333,20 @@ impl AgentManager {
                     message.applied_revisions,
                     message.applied_undo_depth,
                 ))
-            })
+            });
+            (seq, applied)
         };
-        // abortされたタスクは後片付けを実行できないので、終了イベントはここで流す
+        // abortされたタスクは後片付けを実行できないので、終了イベントはここで流す。
+        // seqは中断したターンのもの: 受信側はこれ以下のseqの遅延イベントを捨てられる
         self.broadcast(
             conversation_id,
+            seq,
             AgentEvent::Error {
                 message: CANCELLED_MESSAGE.to_string(),
             },
         );
         if let Some((turn_id, revisions, depth)) = applied {
-            self.broadcast_applied(conversation_id, turn_id, revisions, depth);
+            self.broadcast_applied(conversation_id, seq, turn_id, revisions, depth);
         }
         true
     }
@@ -291,12 +356,17 @@ impl AgentManager {
     /// 対象はターンの安定ID([`crate::ChatMessage::turn_id`])で指定する。メッセージ添字と
     /// 違い、後続ターンの追記や履歴移行でズレないため、別ターンを取り違えて戻すことがない。
     ///
-    /// エンジンのundoはLIFOなので、**巻き戻せるのは最新の適用済みターンだけ**。
-    /// 後続ターンやユーザー操作の編集が上に積まれている状態では拒否する。
-    /// 既に巻き戻したターン(戻せる編集が残っていないターン)も明示エラーにする
-    /// (黙って成功を返すと、UI側が「戻した」と表示したまま何も起きない)。
+    /// 巻き戻すのは**そのターンのエージェント編集だけ**。ターン中・ターン後にユーザーが
+    /// 手で入れた編集は保持されるので、手編集を挟んでも「元に戻す」が巻き込むことはない
+    /// (ドキュメント側は逆Commandの適用として実行する。詳細は[`DocBridge::revert_agent_edits`])。
+    ///
+    /// エラー:
+    /// - 実行中のターン: [`AgentError::Busy`](編集がまだ増えるため確定後に戻す)
+    /// - 既に巻き戻したターン: [`AgentError::TurnNotApplied`](黙って成功を返すと、
+    ///   UIが「戻した」と表示したまま何も起きない)
+    /// - 逆適用が現在の図面と衝突: [`AgentError::TurnConflict`](図面は無変更)
     pub fn undo_turn(&self, conversation_id: Uuid, turn_id: Uuid) -> Result<u64> {
-        let count = {
+        let range = {
             let state = self.state.lock().unwrap();
             if state.running.contains_key(&conversation_id) {
                 // 実行中ターンはまだ編集が増える。確定してから戻す
@@ -314,47 +384,29 @@ impl AgentManager {
             if !message.has_edits() {
                 return Err(AgentError::TurnNotApplied(turn_id));
             }
-            // 同じ会話の後続ターンに編集が残っていないこと
-            if conversation.messages[index + 1..]
-                .iter()
-                .any(|m| m.role == Role::Assistant && m.has_edits())
-            {
-                return Err(AgentError::NotLatestTurn(turn_id));
-            }
-            // 他の会話やユーザーのUI操作による編集が上に積まれていないこと
-            if self.doc.undo_depth() != message.applied_undo_depth.end {
-                return Err(AgentError::NotLatestTurn(turn_id));
-            }
-            message.applied_command_count()
+            message.applied_undo_depth
         };
 
-        let mut undone = 0u64;
-        let mut failure = None;
-        for _ in 0..count {
-            match self.doc.undo() {
-                Ok(true) => undone += 1,
-                Ok(false) => break,
-                Err(e) => {
-                    failure = Some(AgentError::Doc(e));
-                    break;
-                }
+        let report = match self.doc.revert_agent_edits(range.start, range.end) {
+            Ok(report) => report,
+            Err(RevertError::Conflict(detail)) => {
+                return Err(AgentError::TurnConflict { turn_id, detail })
             }
+            Err(RevertError::Failed(detail)) => return Err(AgentError::Doc(detail)),
+        };
+        // 区間にエージェント編集が1件も無かった(履歴が入れ替わった等)。図面は無変更
+        if report.reverted == 0 {
+            return Err(AgentError::TurnNotApplied(turn_id));
         }
 
-        // 失敗しても「実行できた回数」だけは必ず記録する(リトライで戻しすぎないため)
-        {
-            let mut state = self.state.lock().unwrap();
-            if let Some(conversation) = state.conversation_mut(conversation_id) {
-                conversation.touch();
-                if let Some(index) = conversation.turn_index(turn_id) {
-                    conversation.messages[index].record_undone(undone);
-                }
+        let mut state = self.state.lock().unwrap();
+        if let Some(conversation) = state.conversation_mut(conversation_id) {
+            conversation.touch();
+            if let Some(index) = conversation.turn_index(turn_id) {
+                conversation.messages[index].record_reverted();
             }
         }
-        match failure {
-            Some(e) => Err(e),
-            None => Ok(self.doc.revision()),
-        }
+        Ok(report.revision)
     }
 
     /// 設定済みパス、無ければ検出結果(キャッシュ)を返す。
@@ -365,9 +417,10 @@ impl AgentManager {
         Ok(self.detect().await?.path)
     }
 
-    fn broadcast(&self, conversation_id: Uuid, event: AgentEvent) {
+    fn broadcast(&self, conversation_id: Uuid, turn_seq: u64, event: AgentEvent) {
         let _ = self.events.send(ConversationEvent {
             conversation_id,
+            turn_seq,
             event,
         });
     }
@@ -375,12 +428,14 @@ impl AgentManager {
     fn broadcast_applied(
         &self,
         conversation_id: Uuid,
+        turn_seq: u64,
         turn_id: Uuid,
         revisions: AppliedRevisions,
         depth: AppliedUndoDepth,
     ) {
         self.broadcast(
             conversation_id,
+            turn_seq,
             AgentEvent::TurnApplied {
                 turn_id,
                 start_revision: revisions.start,
@@ -406,6 +461,9 @@ struct Turn {
 
 impl Turn {
     async fn run(self, backend: ClaudeCodeCliBackend) {
+        // この間にCommandエンジンへ届いた編集はエージェント由来として記録される。
+        // 中断(abort)されてもdropは走るので、フラグは必ず下りる
+        let _agent_turn = AgentTurnGuard::begin(Arc::clone(&self.doc));
         let (tx, mut rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
         let prompt = self.prompt.clone();
         let session = self.session.clone();
@@ -435,6 +493,7 @@ impl Turn {
             }
             let _ = self.events.send(ConversationEvent {
                 conversation_id: self.conversation_id,
+                turn_seq: self.seq,
                 event,
             });
         }
@@ -475,6 +534,7 @@ impl Turn {
         if let Some((turn_id, revisions, depth)) = applied {
             let _ = self.events.send(ConversationEvent {
                 conversation_id: self.conversation_id,
+                turn_seq: self.seq,
                 event: AgentEvent::TurnApplied {
                     turn_id,
                     start_revision: revisions.start,

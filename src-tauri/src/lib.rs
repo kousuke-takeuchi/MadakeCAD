@@ -40,9 +40,10 @@ fn list_symbols() -> Vec<SymbolDef> {
     builtin_symbols()
 }
 
+/// UI操作の編集。由来は`user`として履歴に残り、AIのターン巻き戻しに巻き込まれない。
 #[tauri::command]
 fn execute_command(state: State<AppState>, command: Command) -> Result<Patch, String> {
-    state.doc.execute(command).map_err(|e| e.to_string())
+    state.doc.execute_user(command).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

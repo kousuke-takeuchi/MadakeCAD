@@ -66,6 +66,7 @@ MODULES = {
     "kicad": ("KiCad import", "KiCadインポート"),
     "link_export": ("REST Link API", "REST Link API"),
     "agent_api": ("Agent REST endpoints", "エージェントRESTエンドポイント"),
+    "origin": ("Edit origin (user / agent / mcp)", "編集origin (ユーザー/エージェント/MCP)"),
     "backend": ("Claude CLI backend", "Claude CLIバックエンド"),
     "parser": ("stream-json parser", "stream-jsonパーサ"),
     "conversation": ("Conversations & history", "会話・履歴"),
