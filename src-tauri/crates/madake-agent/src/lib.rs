@@ -8,6 +8,7 @@
 pub mod backend;
 pub mod conversation;
 pub mod events;
+pub mod knowledge;
 pub mod manager;
 pub mod settings;
 
@@ -17,6 +18,7 @@ pub use conversation::{
     Conversation, DocState, Role, ToolCall,
 };
 pub use events::{parse_stream_events, parse_stream_line, AgentEvent, StreamParser, Usage};
+pub use knowledge::{standards_text, system_prompt};
 pub use manager::{AgentManager, ConversationEvent, DocBridge, RevertError, RevertReport};
 pub use settings::{load_settings, save_settings, settings_path, AppSettings};
 

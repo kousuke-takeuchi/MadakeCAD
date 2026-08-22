@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**594仕様項目**。
+全5領域・**609仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -314,6 +314,8 @@
 - 外部Webオリジンからのリクエストは拒否され、ローカルオリジンとブラウザ以外(Originヘッダなし)は通る。 <sub>`external_origins_are_rejected_but_local_and_originless_pass`</sub>
 - オリジンガードはループバックホスト(localhost/127.0.0.1)のみをローカル扱いする。 <sub>`local_origin_predicate_matches_only_loopback_hosts`</sub>
 - エージェントへ渡す図面コンテキストはアクティブシートの要約(名前・ネット数・要素数)を含む。 <sub>`drawing_context_summarizes_the_active_sheet`</sub>
+- 指摘の無い図面では、図面コンテキストの検証サマリがエラー0・警告0になる。 <sub>`drawing_context_reports_a_clean_drawing_as_no_diagnostics`</sub>
+- 図面コンテキストは検証サマリ(重要度ごとの件数と先頭数件のcode・メッセージ)を含む。 <sub>`drawing_context_summarizes_the_verification_result`</sub>
 - AI設定のエンドポイントは変更を永続化し、エージェントマネージャへ適用する。 <sub>`settings_endpoints_persist_and_apply`</sub>
 
 ### REST Link API
@@ -376,6 +378,19 @@
 - チャット履歴の保存は現在のフォーマット版を記録する(移行済みファイルを再移行しない)。 <sub>`save_chat_stamps_the_current_format_version`</sub>
 - チャットファイルはプロジェクトの隣に<名前>.chat.jsonとして置かれる。 <sub>`chat_path_sits_next_to_project_file`</sub>
 
+### 規格知識の注入
+
+- 同梱の規格知識には図記号・参照記号・線色/sq・線番・配置の決まりが書かれている。 <sub>`bundled_standards_cover_the_drawing_conventions`</sub>
+- システムプロンプトには同梱の規格知識と検証ループの指示が載る。 <sub>`system_prompt_carries_the_standards_and_the_verification_loop`</sub>
+- システムプロンプトは図面コンテキストが先頭で、規格知識はその後ろに続く。 <sub>`system_prompt_puts_the_drawing_context_first`</sub>
+- 設定の知識ファイルは同梱ノートの後ろへ追記される。 <sub>`user_knowledge_file_is_appended_to_the_prompt`</sub>
+- 知識ファイル未設定なら、プロンプトには同梱ノートだけが載る。 <sub>`without_a_knowledge_file_only_the_bundled_note_is_used`</sub>
+- 読めない知識ファイルは読み飛ばされ、同梱ノートは失われない。 <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
+
+### 規格知識 (リソースファイル)
+
+- 同梱の規格知識は、実ファイル(Tauriのリソース・開発時のパス)があればそちらから読む。 <sub>`the_standards_note_is_read_from_the_resource_file_when_present`</sub>
+
 ### エージェントマネージャ (ターン)
 
 - 会話IDなしの送信は会話を新規作成し、そのイベントを配信する。 <sub>`send_creates_conversation_and_broadcasts_events`</sub>
@@ -394,7 +409,9 @@
 - キャンセルはCLIプロセスを停止し、メッセージをキャンセル済みにする。 <sub>`cancel_stops_the_turn_and_marks_the_message`</sub>
 - 不明な会話IDへの送信は明確に失敗する。 <sub>`send_to_unknown_conversation_fails`</sub>
 - 図面コンテキストと選択モデルはCLI起動へ引き渡される。 <sub>`context_and_model_are_forwarded_to_the_cli`</sub>
-- 図面自動読み取りをオフにすると図面コンテキストは付かない。 <sub>`auto_read_drawing_off_suppresses_the_drawing_context`</sub>
+- 送信のたびに、同梱の規格知識と検証ループの指示がシステムプロンプトへ載る。 <sub>`every_turn_injects_the_standards_knowledge`</sub>
+- 設定の知識ファイルの内容もCLIへ渡る。 <sub>`the_knowledge_file_setting_reaches_the_cli`</sub>
+- 図面自動読み取りをオフにすると図面コンテキストは付かないが、規格知識は残る。 <sub>`auto_read_drawing_off_suppresses_the_drawing_context`</sub>
 - claude実行ファイルパス設定がバックエンドの実行ファイルを上書きする。 <sub>`claude_path_setting_becomes_the_backend_executable`</sub>
 - 会話履歴の置き換え(プロジェクト読込)は実行中ターンを先にキャンセルする。 <sub>`set_conversations_replaces_history_and_cancels_running_turn`</sub>
 
@@ -424,6 +441,9 @@
 - 言語フィールド追加前に保存された設定ファイルは英語 (en) として読み込まれる。 <sub>`old_settings_file_without_language_loads_as_english`</sub>
 - 言語タグは正規化で小文字になり、空白だけの入力は英語 (en) に戻る。 <sub>`language_is_normalized_to_lowercase_and_blank_becomes_english`</sub>
 - 言語の選択は保存して読み直しても保持される。 <sub>`language_round_trips_through_save_and_load`</sub>
+- 既定では追加の知識ファイルは未設定(同梱の規格ノートだけを使う)。 <sub>`default_knowledge_path_is_unset`</sub>
+- 知識ファイルの項目が無い旧い設定ファイルは、未設定として読み込まれる。 <sub>`old_settings_file_without_knowledge_path_loads_unset`</sub>
+- 空白だけの知識ファイルパスは正規化で未設定になり、前後の空白は取り除かれる。 <sub>`normalized_drops_a_blank_knowledge_path`</sub>
 
 
 ## madake CLI
@@ -737,6 +757,7 @@
 - 既定値は自動適用・図面自動読み取りがON <sub>`settings store`</sub>
 - loadでバックエンドの設定を取り込む <sub>`settings store`</sub>
 - saveは変更分をマージして送り、正規化後の戻り値を採用する <sub>`settings store`</sub>
+- 知識ファイルのパスを保存でき、空文字はバックエンドが未設定へ正規化する <sub>`settings store`</sub>
 - save失敗時はエラーを保持し、表示中の設定を変えない <sub>`settings store`</sub>
 
 ### simulation

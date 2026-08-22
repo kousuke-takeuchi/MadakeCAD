@@ -229,6 +229,8 @@ pub fn drawing_context(doc: &SharedDoc) -> String {
         ));
     }
 
+    out.push_str(&verification_summary(project));
+
     out.push_str(
         "\n## 座標系\n\
          - 用紙座標系はmm単位・左上原点・Y下向き\n\
@@ -244,5 +246,61 @@ pub fn drawing_context(doc: &SharedDoc) -> String {
          - ツール経由の編集はundo履歴に乗り、UIへ即座に反映される\n\
          - 位置やシートが不明なときは、まずget_project / get_netlist / list_symbolsで現状を確認すること\n",
     );
+    out
+}
+
+/// 図面コンテキストに載せる検証サマリの先頭何件を列挙するか。
+const CONTEXT_DIAGNOSTICS: usize = 3;
+
+/// ターン開始時点の検証結果の要約(重要度ごとの件数+先頭数件)。
+///
+/// エージェントが「今どこが壊れているか」を最初から知っている状態にするための行。
+/// 全件は`run_verification`で取り直させる(ここに全部並べるとプロンプトが膨らむ)。
+fn verification_summary(project: &madake_core::model::Project) -> String {
+    use madake_core::verify::Severity;
+
+    let diags = madake_core::verify::verify_project(project);
+    let count = |severity: Severity| diags.iter().filter(|d| d.severity == severity).count();
+    let (errors, warnings, infos) = (
+        count(Severity::Error),
+        count(Severity::Warning),
+        count(Severity::Info),
+    );
+
+    let mut out = format!(
+        "\n## 現在の検証結果(ターン開始時点)\n\
+         - エラー {errors}件 / 警告 {warnings}件 / 情報 {infos}件\n"
+    );
+    if diags.is_empty() {
+        out.push_str("- 指摘なし\n");
+        return out;
+    }
+    // 重要度の高い順(エラー→警告→情報)に先頭数件だけ
+    let mut ordered: Vec<_> = diags.iter().collect();
+    ordered.sort_by_key(|d| match d.severity {
+        Severity::Error => 0,
+        Severity::Warning => 1,
+        Severity::Info => 2,
+    });
+    for diag in ordered.iter().take(CONTEXT_DIAGNOSTICS) {
+        out.push_str(&format!(
+            "  - [{}] {}: {}\n",
+            match diag.severity {
+                Severity::Error => "error",
+                Severity::Warning => "warning",
+                Severity::Info => "info",
+            },
+            diag.code,
+            diag.message
+        ));
+    }
+    if diags.len() > CONTEXT_DIAGNOSTICS {
+        out.push_str(&format!(
+            "  - (ほか{}件。全件はrun_verificationで取得すること)\n",
+            diags.len() - CONTEXT_DIAGNOSTICS
+        ));
+    } else {
+        out.push_str("- 詳細(該当エンティティid)はrun_verificationで取得すること\n");
+    }
     out
 }

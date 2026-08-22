@@ -244,7 +244,7 @@ async fn collect_turn_seqs(rx: &mut Receiver<ConversationEvent>) -> Vec<u64> {
 }
 
 /// ターンを1本受け切り、`TurnCompleted`の本文を返す
-/// (`fake_claude_echo_args.sh`はCLIへ渡った引数をここへ載せる)。
+/// (`fake_claude_probe_prompt.sh`はCLIへ渡った引数の検査結果をここへ載せる)。
 async fn turn_result(rx: &mut Receiver<ConversationEvent>) -> String {
     collect_turn(rx)
         .await
@@ -794,7 +794,7 @@ async fn send_to_unknown_conversation_fails() {
 #[tokio::test]
 async fn context_and_model_are_forwarded_to_the_cli() {
     let doc = FakeDoc::new(0);
-    let manager = manager(doc, "fake_claude_echo_args.sh");
+    let manager = manager(doc, "fake_claude_probe_prompt.sh");
     let mut rx = manager.subscribe();
 
     manager
@@ -807,56 +807,95 @@ async fn context_and_model_are_forwarded_to_the_cli() {
         .await
         .unwrap();
     let text = turn_result(&mut rx).await;
-    assert!(text.contains("--model=claude-opus-4-6"), "{text}");
-    assert!(
-        text.contains("--append-system-prompt=アクティブシート: S1"),
-        "{text}"
-    );
+    assert!(text.contains("model=claude-opus-4-6"), "{text}");
+    assert!(text.contains("drawing"), "{text}");
     assert_eq!(
         manager.conversations()[0].model.as_deref(),
         Some("claude-opus-4-6")
     );
 }
 
-/// Turning off auto-read-drawing suppresses the drawing context.
-/// 図面自動読み取りをオフにすると図面コンテキストは付かない。
+/// Every turn injects the bundled standards knowledge and the verification-loop rule.
+/// 送信のたびに、同梱の規格知識と検証ループの指示がシステムプロンプトへ載る。
+#[tokio::test]
+async fn every_turn_injects_the_standards_knowledge() {
+    let doc = FakeDoc::new(0);
+    let manager = manager(doc, "fake_claude_probe_prompt.sh");
+    let mut rx = manager.subscribe();
+
+    // 図面コンテキストが無いターン(質問だけ)でも規格知識は載る
+    manager.send(None, "線番の付け方は?", None, None).await.unwrap();
+    let text = turn_result(&mut rx).await;
+    assert!(text.contains("standards"), "{text}");
+    assert!(text.contains("verify-loop"), "{text}");
+}
+
+/// The knowledge file from the settings reaches the CLI too.
+/// 設定の知識ファイルの内容もCLIへ渡る。
+#[tokio::test]
+async fn the_knowledge_file_setting_reaches_the_cli() {
+    let dir = std::env::temp_dir().join(format!("madake_knowledge_manager_{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let knowledge = dir.join("house-rules.md");
+    std::fs::write(&knowledge, "## 社内ルール\n- 制御電源は24VDCのみ\n").unwrap();
+
+    let doc = FakeDoc::new(0);
+    let manager = manager(doc, "fake_claude_probe_prompt.sh");
+    let mut rx = manager.subscribe();
+    manager.apply_settings(AppSettings {
+        claude_path: Some(fixtures_dir().join("fake_claude_probe_prompt.sh")),
+        knowledge_path: Some(knowledge),
+        ..AppSettings::default()
+    });
+
+    manager.send(None, "hi", None, None).await.unwrap();
+    let text = turn_result(&mut rx).await;
+    assert!(text.contains("user-knowledge"), "{text}");
+    assert!(text.contains("standards"), "同梱ノートも残る: {text}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Turning off auto-read-drawing suppresses the drawing context but keeps the standards knowledge.
+/// 図面自動読み取りをオフにすると図面コンテキストは付かないが、規格知識は残る。
 #[tokio::test]
 async fn auto_read_drawing_off_suppresses_the_drawing_context() {
     let doc = FakeDoc::new(0);
-    let manager = manager(doc, "fake_claude_echo_args.sh");
+    let manager = manager(doc, "fake_claude_probe_prompt.sh");
     let mut rx = manager.subscribe();
 
     manager.apply_settings(AppSettings {
-        claude_path: Some(fixtures_dir().join("fake_claude_echo_args.sh")),
+        claude_path: Some(fixtures_dir().join("fake_claude_probe_prompt.sh")),
         auto_apply: true,
         auto_read_drawing: false,
-        language: "en".into(),
+        ..AppSettings::default()
     });
     manager
         .send(None, "hi", None, Some("アクティブシート: S1".to_string()))
         .await
         .unwrap();
+    let text = turn_result(&mut rx).await;
     assert!(
-        !turn_result(&mut rx)
-            .await
-            .contains("--append-system-prompt"),
-        "自動読み取りOFFでは図面コンテキストを渡さない"
+        !text.contains("drawing"),
+        "自動読み取りOFFでは図面コンテキストを渡さない: {text}"
+    );
+    assert!(
+        text.contains("standards"),
+        "図面を渡さなくても規格知識は渡す: {text}"
     );
 
     // 設定を戻せば、そのまま次の送信から復活する
     manager.apply_settings(AppSettings {
-        claude_path: Some(fixtures_dir().join("fake_claude_echo_args.sh")),
+        claude_path: Some(fixtures_dir().join("fake_claude_probe_prompt.sh")),
         auto_apply: true,
         auto_read_drawing: true,
-        language: "en".into(),
+        ..AppSettings::default()
     });
     manager
         .send(None, "hi", None, Some("アクティブシート: S1".to_string()))
         .await
         .unwrap();
-    assert!(turn_result(&mut rx)
-        .await
-        .contains("--append-system-prompt=アクティブシート: S1"));
+    assert!(turn_result(&mut rx).await.contains("drawing"));
 }
 
 /// The claude-path setting overrides which executable the backend runs.
@@ -868,21 +907,19 @@ async fn claude_path_setting_becomes_the_backend_executable() {
     let manager = Arc::new(AgentManager::new(doc, 9310));
     let mut rx = manager.subscribe();
     manager.apply_settings(AppSettings {
-        claude_path: Some(fixtures_dir().join("fake_claude_echo_args.sh")),
+        claude_path: Some(fixtures_dir().join("fake_claude_probe_prompt.sh")),
         ..AppSettings::default()
     });
     assert_eq!(
         manager.executable(),
-        Some(fixtures_dir().join("fake_claude_echo_args.sh"))
+        Some(fixtures_dir().join("fake_claude_probe_prompt.sh"))
     );
 
     manager
         .send(None, "hi", Some("claude-opus-4-6".to_string()), None)
         .await
         .unwrap();
-    assert!(turn_result(&mut rx)
-        .await
-        .contains("--model=claude-opus-4-6"));
+    assert!(turn_result(&mut rx).await.contains("model=claude-opus-4-6"));
 
     // パスを消すと自動検出へ戻る
     manager.apply_settings(AppSettings::default());

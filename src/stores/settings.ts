@@ -17,10 +17,21 @@ export interface AppSettings {
   auto_read_drawing: boolean;
   /** UI表示言語 (BCP 47小文字。既定は "en"。未知の値はenへフォールバック) */
   language: string;
+  /**
+   * エージェントへ追加で読ませる知識ファイル (Markdown) のパス。nullなら同梱の規格ノートのみ。
+   * 内容は同梱ノートの後ろへ追記される (社内・顧客の流儀で上書きできる)。
+   */
+  knowledge_path: string | null;
 }
 
 export function defaultSettings(): AppSettings {
-  return { claude_path: null, auto_apply: true, auto_read_drawing: true, language: "en" };
+  return {
+    claude_path: null,
+    auto_apply: true,
+    auto_read_drawing: true,
+    language: "en",
+    knowledge_path: null,
+  };
 }
 
 interface SettingsApi {

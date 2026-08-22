@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**594 specification clauses** across 5 areas.
+**609 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -314,6 +314,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Requests from external web origins are rejected; local origins and non-browser clients (no Origin header) pass. <sub>`external_origins_are_rejected_but_local_and_originless_pass`</sub>
 - The origin guard treats only loopback hosts (localhost/127.0.0.1) as local. <sub>`local_origin_predicate_matches_only_loopback_hosts`</sub>
 - The drawing context given to the agent summarizes the active sheet (name, nets, entity count). <sub>`drawing_context_summarizes_the_active_sheet`</sub>
+- A clean drawing reports zero errors and zero warnings in the drawing context. <sub>`drawing_context_reports_a_clean_drawing_as_no_diagnostics`</sub>
+- The drawing context summarizes verification: severity counts plus the first few findings. <sub>`drawing_context_summarizes_the_verification_result`</sub>
 - AI settings endpoints persist changes and apply them to the agent manager. <sub>`settings_endpoints_persist_and_apply`</sub>
 
 ### REST Link API
@@ -376,6 +378,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Saving chat history stamps the current format version so migrated files are not re-migrated. <sub>`save_chat_stamps_the_current_format_version`</sub>
 - The chat file lives next to the project file as <name>.chat.json. <sub>`chat_path_sits_next_to_project_file`</sub>
 
+### Standards knowledge injection
+
+- The bundled standards note covers symbols, reference designators, wire colors, numbering and layout. <sub>`bundled_standards_cover_the_drawing_conventions`</sub>
+- The system prompt carries the bundled standards and the verification-loop rule. <sub>`system_prompt_carries_the_standards_and_the_verification_loop`</sub>
+- The drawing context comes first in the system prompt, with the knowledge behind it. <sub>`system_prompt_puts_the_drawing_context_first`</sub>
+- A knowledge file set in the settings is appended after the bundled note. <sub>`user_knowledge_file_is_appended_to_the_prompt`</sub>
+- Without a knowledge file the prompt holds the bundled note only. <sub>`without_a_knowledge_file_only_the_bundled_note_is_used`</sub>
+- An unreadable knowledge file is skipped without losing the bundled note. <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
+
+### Standards knowledge (resource file)
+
+- The bundled standards note is read from the resource file when one is available. <sub>`the_standards_note_is_read_from_the_resource_file_when_present`</sub>
+
 ### Agent manager (turns)
 
 - Sending without a conversation id creates a conversation and broadcasts its events. <sub>`send_creates_conversation_and_broadcasts_events`</sub>
@@ -394,7 +409,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Cancel kills the CLI process and marks the message as cancelled. <sub>`cancel_stops_the_turn_and_marks_the_message`</sub>
 - Sending to an unknown conversation id fails cleanly. <sub>`send_to_unknown_conversation_fails`</sub>
 - The drawing context and selected model are forwarded to the CLI invocation. <sub>`context_and_model_are_forwarded_to_the_cli`</sub>
-- Turning off auto-read-drawing suppresses the drawing context. <sub>`auto_read_drawing_off_suppresses_the_drawing_context`</sub>
+- Every turn injects the bundled standards knowledge and the verification-loop rule. <sub>`every_turn_injects_the_standards_knowledge`</sub>
+- The knowledge file from the settings reaches the CLI too. <sub>`the_knowledge_file_setting_reaches_the_cli`</sub>
+- Turning off auto-read-drawing suppresses the drawing context but keeps the standards knowledge. <sub>`auto_read_drawing_off_suppresses_the_drawing_context`</sub>
 - The claude-path setting overrides which executable the backend runs. <sub>`claude_path_setting_becomes_the_backend_executable`</sub>
 - Replacing the conversation history (project load) cancels any running turn first. <sub>`set_conversations_replaces_history_and_cancels_running_turn`</sub>
 
@@ -424,6 +441,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A settings file saved before the language field existed loads with English. <sub>`old_settings_file_without_language_loads_as_english`</sub>
 - Normalization lowercases the language tag and turns blank input into English. <sub>`language_is_normalized_to_lowercase_and_blank_becomes_english`</sub>
 - The language choice survives a save/load round trip. <sub>`language_round_trips_through_save_and_load`</sub>
+- By default no extra knowledge file is configured (only the bundled standards note is used). <sub>`default_knowledge_path_is_unset`</sub>
+- A settings file saved before the knowledge-file field existed loads with it unset. <sub>`old_settings_file_without_knowledge_path_loads_unset`</sub>
+- A blank knowledge-file path is normalized away, and padding is trimmed. <sub>`normalized_drops_a_blank_knowledge_path`</sub>
 
 
 ## madake CLI
@@ -737,6 +757,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - defaults enable auto-apply and auto-read-drawing <sub>`settings store`</sub>
 - load pulls the settings from the backend <sub>`settings store`</sub>
 - save merges the changes, sends them, and adopts the normalized response <sub>`settings store`</sub>
+- saves the knowledge-file path and adopts the backend's normalized value <sub>`settings store`</sub>
 - a failed save keeps the error and leaves the shown settings untouched <sub>`settings store`</sub>
 
 ### simulation
