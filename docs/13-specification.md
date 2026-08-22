@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**609 specification clauses** across 5 areas.
+**620 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -335,6 +335,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The agent-turn marker nests and always clears, so edits after the turn are user edits again. <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
 - The bridge the agent manager uses reverts only agent edits and reports how many were rolled back. <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
 
+### tools
+
+- The parts search tool advertises selection, comparison and alternative-part use, so the agent reaches for it when asked "what can replace this?". <sub>`the_parts_search_tool_advertises_selection_and_comparison`</sub>
+- Every published tool carries a description, so no tool is offered to the agent unexplained. <sub>`every_published_tool_has_a_description`</sub>
+
 
 ## AI assistant (madake-agent)
 
@@ -342,6 +347,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### Claude CLI backend
 
 - The Claude CLI is launched headless with the required flags (-p, stream-json output, partial messages, strict MCP config). <sub>`args_contain_required_flags`</sub>
+- The bundled documentation folder is opened to the agent as a readable directory, so it can quote the manual. <sub>`args_open_the_bundled_documentation_for_reading`</sub>
 - Resume session id, model choice and an appended system prompt are passed through when provided. <sub>`args_include_resume_model_and_system_prompt_when_given`</sub>
 - The agent's MCP config points at MadakeCAD's own local MCP server, so it uses the same tools as any client. <sub>`mcp_config_points_at_local_mcp_server`</sub>
 - A turn streams events (text deltas, tool use, completion) parsed from the CLI's stream-json output. <sub>`send_streams_events_from_fake_cli`</sub>
@@ -385,7 +391,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The drawing context comes first in the system prompt, with the knowledge behind it. <sub>`system_prompt_puts_the_drawing_context_first`</sub>
 - A knowledge file set in the settings is appended after the bundled note. <sub>`user_knowledge_file_is_appended_to_the_prompt`</sub>
 - Without a knowledge file the prompt holds the bundled note only. <sub>`without_a_knowledge_file_only_the_bundled_note_is_used`</sub>
+- The prompt lists the bundled manual (01-13) so how-to questions are answered from the documentation with a source. <sub>`system_prompt_lists_the_bundled_documentation`</sub>
+- Questions about missing features are answered from the roadmap and the feature inventory. <sub>`system_prompt_points_unsupported_features_at_the_roadmap`</sub>
+- Without bundled documentation the guide is dropped instead of pointing at files that are not there. <sub>`the_documentation_guide_is_dropped_when_the_docs_are_missing`</sub>
+- A review request runs the deterministic verification first, then the five habit-based checkpoints. <sub>`system_prompt_carries_the_review_checklist`</sub>
+- Review findings are listed as severity / target / finding / suggestion, and fixes wait for the user's approval. <sub>`review_findings_use_the_severity_table_and_wait_for_approval`</sub>
+- A test-plan request produces a step / action / expected-result table and does not write notes into the drawing on its own. <sub>`system_prompt_carries_the_test_plan_table`</sub>
+- Parts selection searches the parts database and answers with a comparison table. <sub>`system_prompt_carries_the_parts_comparison_table`</sub>
 - An unreadable knowledge file is skipped without losing the bundled note. <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
+
+### knowledge_docs
+
+- The agent is pointed at the documentation folder the app resolved, so it can read the manual wherever it is installed. <sub>`the_documentation_folder_of_the_installed_app_is_handed_to_the_agent`</sub>
 
 ### Standards knowledge (resource file)
 

@@ -12,7 +12,9 @@ use tokio::process::Command;
 use tokio::sync::mpsc;
 
 /// エージェントに開放するMCPツールのパターン(内蔵サーバーのみ)。
-const ALLOWED_TOOLS: &str = "mcp__madakecad__*";
+/// 自動承認するツール。図面の編集は内蔵MCP経由(Commandエンジン)に限り、
+/// ファイル系は**読み取り専用**だけ許す(同梱ドキュメントを出典つきで引用するため)。
+const ALLOWED_TOOLS: &str = "mcp__madakecad__*,Read,Glob,Grep";
 
 /// `claude --version`による検出結果。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -88,6 +90,11 @@ impl ClaudeCodeCliBackend {
         args.push("--strict-mcp-config".to_string());
         args.push("--allowedTools".to_string());
         args.push(ALLOWED_TOOLS.to_string());
+        // 同梱ドキュメントはCLIの作業ディレクトリの外にあるため、読める場所として明示する
+        if let Some(docs) = crate::knowledge::docs_dir() {
+            args.push("--add-dir".to_string());
+            args.push(docs.display().to_string());
+        }
         if let Some(ctx) = append_system_prompt {
             args.push("--append-system-prompt".to_string());
             args.push(ctx.to_string());

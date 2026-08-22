@@ -40,7 +40,7 @@ fn args_contain_required_flags() {
     for pair in [
         ("--output-format", Some("stream-json")),
         ("--mcp-config", Some("/tmp/mcp.json")),
-        ("--allowedTools", Some("mcp__madakecad__*")),
+        ("--allowedTools", Some("mcp__madakecad__*,Read,Glob,Grep")),
         ("--verbose", None),
         ("--include-partial-messages", None),
         ("--strict-mcp-config", None),
@@ -59,6 +59,28 @@ fn args_contain_required_flags() {
         !args.iter().any(|a| a == "--append-system-prompt"),
         "{args:?}"
     );
+}
+
+/// The bundled documentation folder is opened to the agent as a readable directory, so it can quote the manual.
+/// 同梱ドキュメントのフォルダは読み取り可能なディレクトリとしてエージェントへ開かれ、マニュアルを引用できる。
+#[test]
+fn args_open_the_bundled_documentation_for_reading() {
+    let backend = backend("fake_claude.sh");
+    let args = backend.build_args(None, Path::new("/tmp/mcp.json"), None);
+
+    let docs = madake_agent::knowledge::docs_dir().expect("リポジトリのdocs/が見つからない");
+    let idx = args
+        .iter()
+        .position(|a| a == "--add-dir")
+        .unwrap_or_else(|| panic!("--add-dir が無い: {args:?}"));
+    assert_eq!(args[idx + 1], docs.display().to_string());
+    // 読み取り専用のツールだけを許可する(編集はMCPのCommand経由のまま)
+    let allowed = &args[args.iter().position(|a| a == "--allowedTools").unwrap() + 1];
+    for tool in ["Read", "Glob", "Grep"] {
+        assert!(allowed.contains(tool), "{allowed}");
+    }
+    assert!(!allowed.contains("Write"), "{allowed}");
+    assert!(!allowed.contains("Bash"), "{allowed}");
 }
 
 /// Resume session id, model choice and an appended system prompt are passed through when provided.

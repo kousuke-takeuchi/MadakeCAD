@@ -356,6 +356,30 @@ fn resolve_standards_resource(app: &tauri::AppHandle) {
     eprintln!("規格ノート({RELATIVE})が見つかりません。埋め込みの内容で続行します");
 }
 
+/// 同梱ドキュメント(`docs/`の公開マニュアル01〜13)の場所をエージェントへ渡す
+/// (`MADAKE_DOCS_PATH`)。
+///
+/// 配布時はアプリバンドル内のリソース(`../docs/*.md`は`_up_/docs`へ入る)、
+/// 開発時(`tauri dev`)はリポジトリの`docs/`。見つからなければ何もしない
+/// (madake-agentがドキュメント案内をプロンプトから省き、読めないファイルを出典にさせない)。
+fn resolve_docs_resource(app: &tauri::AppHandle) {
+    use tauri::path::BaseDirectory;
+    use tauri::Manager;
+
+    let candidates = [
+        app.path().resolve("_up_/docs", BaseDirectory::Resource).ok(),
+        app.path().resolve("docs", BaseDirectory::Resource).ok(),
+        Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../docs")),
+    ];
+    for path in candidates.into_iter().flatten() {
+        if path.join("01-overview.md").is_file() {
+            std::env::set_var(madake_agent::knowledge::DOCS_PATH_ENV, &path);
+            return;
+        }
+    }
+    eprintln!("ドキュメント(docs/)が見つかりません。ドキュメント案内なしで続行します");
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let doc = SharedDoc::new(Engine::new(Project::new("無題プロジェクト")));
@@ -386,6 +410,8 @@ pub fn run() {
             // 同梱の規格ノート(編集可能なMarkdown)の実体をエージェントへ教える。
             // 見つからなくてもビルドへ埋め込んだ同内容で動くので、失敗は警告だけ
             resolve_standards_resource(app.handle());
+            // 同梱ドキュメント(操作方法・規格の出典)の場所も教える
+            resolve_docs_resource(app.handle());
 
             // MCPサーバー起動 (127.0.0.1:port/mcp)。Link API(/api/v1)も同じポート
             let mcp_doc = doc.clone();
