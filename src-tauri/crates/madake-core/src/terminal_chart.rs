@@ -82,8 +82,8 @@ pub struct TerminalBlockInfo {
 }
 
 /// 端子台シンボルの端子数 (ピン番号の種類数)。端子台以外・未知のシンボルは0。
-fn terminal_count_of(inst: &SymbolInstance) -> usize {
-    resolve_symbol(&inst.symbol_id)
+pub fn terminal_count_of(symbol_id: &str) -> usize {
+    resolve_symbol(symbol_id)
         .map(|def| {
             def.pins
                 .iter()
@@ -109,7 +109,7 @@ pub fn terminal_block_infos(project: &Project, sheet_id: Option<SheetId>) -> Vec
                 sheet_name: sheet.name.clone(),
                 reference: tb.reference.clone(),
                 value: tb.value.clone(),
-                terminal_count: terminal_count_of(tb),
+                terminal_count: terminal_count_of(&tb.symbol_id),
                 jumpers: tb.attrs.get("jumpers").cloned().unwrap_or_default(),
             })
         })
