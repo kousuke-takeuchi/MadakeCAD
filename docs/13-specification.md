@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1441 specification clauses** across 5 areas.
+**1442 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -1439,6 +1439,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - ships English and Japanese catalogs <sub>`i18n`</sub>
 - keeps the English and Japanese catalogs key-identical <sub>`i18n`</sub>
 - rejects empty strings in either catalog <sub>`i18n`</sub>
+- compiles every message in both catalogs <sub>`i18n`</sub>
 - resolves language tags leniently and falls back to English for unknown values <sub>`i18n`</sub>
 
 ### chat

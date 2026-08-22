@@ -414,7 +414,7 @@
       "circle": "C",
       "arc": "A",
       "text": "T",
-      "slot": "@",
+      "slot": "{'@'}",
       "pin": "P"
     },
     "toolName": {

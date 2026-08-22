@@ -42,6 +42,21 @@ describe("i18n", () => {
     }
   });
 
+  // ja: カタログの文字列はすべて表示できる(`@`などの記号は書き方を誤ると画面が真っ白になる)
+  it("compiles every message in both catalogs", () => {
+    const original = i18n.global.locale.value;
+    try {
+      for (const locale of SUPPORTED_LOCALES) {
+        i18n.global.locale.value = locale;
+        for (const key of keysOf(locale === "ja" ? ja : en)) {
+          expect(() => i18n.global.t(key), `${locale}: ${key}`).not.toThrow();
+        }
+      }
+    } finally {
+      i18n.global.locale.value = original;
+    }
+  });
+
   // ja: 言語タグは大文字・余白があっても解決でき、未知・空の値は英語になる
   it("resolves language tags leniently and falls back to English for unknown values", () => {
     expect(resolveLocale("ja")).toBe("ja");
