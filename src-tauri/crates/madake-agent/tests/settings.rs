@@ -51,6 +51,8 @@ fn saved_settings_round_trip() {
         api_model: "claude-sonnet-5".into(),
         copilot_path: None,
         copilot_model: "auto".into(),
+        openai_base_url: "https://api.openai.com/v1".into(),
+        openai_model: String::new(),
     };
 
     save_settings(&path, &settings).unwrap();
@@ -445,6 +447,109 @@ fn no_github_credential_is_written_to_the_settings_file() {
 
     let written = std::fs::read_to_string(&path).unwrap();
     for secret in ["token", "GITHUB_TOKEN", "api_key", "password"] {
+        assert!(
+            !written.contains(secret),
+            "設定ファイルに資格情報の項目がある ({secret}): {written}"
+        );
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+// ------------------------------------------------ プロバイダ (OpenAI互換API / Ollama)
+
+/// Out of the box the OpenAI-compatible route points at OpenAI itself and leaves the model name empty on purpose.
+/// OpenAI互換APIの既定の接続先はOpenAI本体で、モデル名はあえて空(利用者が必ず選ぶ項目)。
+#[test]
+fn the_openai_defaults_point_at_openai_and_ask_for_a_model() {
+    let settings = AppSettings::default();
+    assert_eq!(settings.openai_base_url, "https://api.openai.com/v1");
+    assert_eq!(settings.openai_model, "");
+}
+
+/// Choosing the OpenAI-compatible route survives a save/load round trip together with the URL and the model.
+/// OpenAI互換APIを選んだ設定は、URLとモデル名と一緒に保存して読み直しても保持される。
+#[test]
+fn the_openai_choice_round_trips_through_save_and_load() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    let settings = AppSettings {
+        provider: AgentProvider::OpenAiCompat,
+        openai_base_url: "http://localhost:11434/v1".into(),
+        openai_model: "qwen3:4b".into(),
+        ..AppSettings::default()
+    };
+    save_settings(&path, &settings).unwrap();
+
+    let loaded = load_settings(&path).unwrap();
+    assert_eq!(loaded.provider, AgentProvider::OpenAiCompat);
+    assert_eq!(loaded.openai_base_url, "http://localhost:11434/v1");
+    assert_eq!(loaded.openai_model, "qwen3:4b");
+    // 設定ファイルは手で読める名前で書かれる
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        written.contains("\"provider\": \"openai_compat\""),
+        "読める名前で保存されていない: {written}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A settings file written before the OpenAI-compatible route existed keeps working, with its fields at their defaults.
+/// OpenAI互換APIの項目が無い旧い設定ファイルもそのまま動き、その項目は既定値になる。
+#[test]
+fn an_old_settings_file_without_openai_fields_keeps_working() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    std::fs::write(&path, r#"{ "provider": "copilot_cli", "language": "ja" }"#).unwrap();
+
+    let settings = load_settings(&path).unwrap();
+    assert_eq!(settings.provider, AgentProvider::CopilotCli);
+    assert_eq!(settings.openai_base_url, "https://api.openai.com/v1");
+    assert_eq!(settings.openai_model, "");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A blank URL box returns to OpenAI, a trailing slash is trimmed, and the model name keeps whatever was typed (minus spaces).
+/// URL欄を空にするとOpenAI本体へ戻り、末尾の「/」は取り除かれ、モデル名は入力どおり(前後の空白だけ除去)保たれる。
+#[test]
+fn blank_openai_boxes_return_to_the_defaults() {
+    let blank = AppSettings {
+        openai_base_url: "   ".into(),
+        openai_model: "  ".into(),
+        ..AppSettings::default()
+    };
+    let blank = blank.normalized();
+    assert_eq!(blank.openai_base_url, "https://api.openai.com/v1");
+    assert_eq!(blank.openai_model, "");
+
+    let padded = AppSettings {
+        openai_base_url: " http://localhost:11434/v1/ ".into(),
+        openai_model: " qwen3:4b ".into(),
+        ..AppSettings::default()
+    };
+    let padded = padded.normalized();
+    assert_eq!(padded.openai_base_url, "http://localhost:11434/v1");
+    assert_eq!(padded.openai_model, "qwen3:4b");
+}
+
+/// No OpenAI key is ever written to the settings file: only the URL and the model name live there.
+/// OpenAI互換APIのキーは設定ファイルへ一切書かれない(そこに置くのはURLとモデル名だけ)。
+#[test]
+fn no_openai_key_is_written_to_the_settings_file() {
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    save_settings(
+        &path,
+        &AppSettings {
+            provider: AgentProvider::OpenAiCompat,
+            openai_model: "gpt-4o".into(),
+            ..AppSettings::default()
+        },
+    )
+    .unwrap();
+
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(written.contains("openai_base_url"), "URLが保存されていない");
+    for secret in ["api_key", "openai_key", "authorization", "password"] {
         assert!(
             !written.contains(secret),
             "設定ファイルに資格情報の項目がある ({secret}): {written}"

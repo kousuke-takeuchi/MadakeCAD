@@ -479,20 +479,29 @@ async fn agent_provider_status(state: State<'_, AppState>) -> Result<serde_json:
     Ok(madake_mcp::agent::provider_status_async(&state.agent).await)
 }
 
-/// Anthropic APIキーをOSキーチェーンへ保存する。**設定ファイルには書かない。**
+/// APIキーをOSキーチェーンへ保存する。**設定ファイルには書かない。**
+///
+/// `provider`はどのプロバイダのキーかの指定(`anthropic_api` / `openai_compat`)。
+/// 省略時はAnthropic(以前からの動作)。
 #[tauri::command]
 async fn agent_set_api_key(
     state: State<'_, AppState>,
     key: String,
+    provider: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    madake_agent::secrets::set_anthropic_api_key(&key).map_err(|e| e.to_string())?;
+    let account = madake_mcp::agent::key_account_for(provider.as_deref());
+    madake_agent::secrets::set_api_key(account, &key).map_err(|e| e.to_string())?;
     Ok(madake_mcp::agent::provider_status_async(&state.agent).await)
 }
 
-/// 保存済みのAnthropic APIキーを消す。
+/// 保存済みのAPIキーを消す(`provider`省略時はAnthropic)。
 #[tauri::command]
-async fn agent_clear_api_key(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    madake_agent::secrets::clear_anthropic_api_key().map_err(|e| e.to_string())?;
+async fn agent_clear_api_key(
+    state: State<'_, AppState>,
+    provider: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let account = madake_mcp::agent::key_account_for(provider.as_deref());
+    madake_agent::secrets::clear_api_key(account).map_err(|e| e.to_string())?;
     Ok(madake_mcp::agent::provider_status_async(&state.agent).await)
 }
 

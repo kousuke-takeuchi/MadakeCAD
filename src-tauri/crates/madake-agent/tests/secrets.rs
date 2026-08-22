@@ -7,7 +7,9 @@
 
 use std::sync::Arc;
 
-use madake_agent::secrets::{self, MemoryStore, ANTHROPIC_ACCOUNT, KEYCHAIN_SERVICE};
+use madake_agent::secrets::{
+    self, MemoryStore, ANTHROPIC_ACCOUNT, KEYCHAIN_SERVICE, OPENAI_COMPAT_ACCOUNT,
+};
 use madake_agent::settings::{save_settings, AppSettings};
 use madake_agent::AgentProvider;
 use uuid::Uuid;
@@ -144,7 +146,10 @@ fn the_real_os_keychain_round_trips_a_key() {
     let store = secrets::keyring_store();
     let account = format!("madake_test_{}", Uuid::new_v4());
     store.set(&account, "sk-ant-roundtrip").unwrap();
-    assert_eq!(store.get(&account).unwrap().as_deref(), Some("sk-ant-roundtrip"));
+    assert_eq!(
+        store.get(&account).unwrap().as_deref(),
+        Some("sk-ant-roundtrip")
+    );
     store.delete(&account).unwrap();
     assert_eq!(store.get(&account).unwrap(), None);
 }
@@ -158,8 +163,7 @@ struct CountingStore {
 
 impl secrets::SecretStore for CountingStore {
     fn get(&self, account: &str) -> madake_agent::Result<Option<String>> {
-        self.reads
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.inner.get(account)
     }
     fn set(&self, account: &str, secret: &str) -> madake_agent::Result<()> {
@@ -197,7 +201,9 @@ fn a_keychain_that_cannot_be_read_reports_the_reason() {
     struct BrokenStore;
     impl secrets::SecretStore for BrokenStore {
         fn get(&self, _: &str) -> madake_agent::Result<Option<String>> {
-            Err(madake_agent::AgentError::Keychain("鍵束が閉じています".into()))
+            Err(madake_agent::AgentError::Keychain(
+                "鍵束が閉じています".into(),
+            ))
         }
         fn set(&self, _: &str, _: &str) -> madake_agent::Result<()> {
             Ok(())
@@ -214,4 +220,77 @@ fn a_keychain_that_cannot_be_read_reports_the_reason() {
         reason.unwrap_or_default().contains("鍵束"),
         "読めなかった理由が伝わっていない"
     );
+}
+
+// ------------------------------------------------ OpenAI互換APIのキー
+
+/// The OpenAI-compatible key lives under its own keychain entry, so saving one provider's key never disturbs the other's.
+/// OpenAI互換APIのキーはキーチェーンの別の名前で保管され、片方を保存してももう片方のキーは影響を受けない。
+#[test]
+fn the_openai_key_is_stored_beside_the_anthropic_one_without_disturbing_it() {
+    with_memory_store(|| {
+        assert_eq!(OPENAI_COMPAT_ACCOUNT, "openai_compat_api_key");
+        assert_ne!(OPENAI_COMPAT_ACCOUNT, ANTHROPIC_ACCOUNT);
+
+        secrets::set_anthropic_api_key("sk-ant-0001").unwrap();
+        secrets::set_openai_compat_api_key("sk-openai-0001").unwrap();
+        assert_eq!(
+            secrets::openai_compat_api_key().as_deref(),
+            Some("sk-openai-0001")
+        );
+        assert_eq!(secrets::anthropic_api_key().as_deref(), Some("sk-ant-0001"));
+
+        // 片方を消してももう片方は残る
+        secrets::clear_openai_compat_api_key().unwrap();
+        assert_eq!(secrets::openai_compat_api_key(), None);
+        assert!(!secrets::has_openai_compat_api_key());
+        assert_eq!(secrets::anthropic_api_key().as_deref(), Some("sk-ant-0001"));
+    });
+}
+
+/// A pasted OpenAI key is trimmed, and a blank one is refused instead of being stored.
+/// 貼り付けたOpenAIのキーは前後の空白を落として保存し、空の入力は保存せずに断る。
+#[test]
+fn a_pasted_openai_key_is_trimmed_and_a_blank_one_is_refused() {
+    with_memory_store(|| {
+        secrets::set_openai_compat_api_key(" sk-openai-0002\n").unwrap();
+        assert_eq!(
+            secrets::openai_compat_api_key().as_deref(),
+            Some("sk-openai-0002")
+        );
+        assert!(secrets::set_openai_compat_api_key("   ").is_err());
+        // 断られた保存で既存のキーが壊れることはない
+        assert_eq!(
+            secrets::openai_compat_api_key().as_deref(),
+            Some("sk-openai-0002")
+        );
+    });
+}
+
+/// The OpenAI key never appears in the settings file, which keeps only the URL and the model name.
+/// OpenAI互換APIのキーは設定ファイルに一切現れない(設定ファイルに残るのはURLとモデル名だけ)。
+#[test]
+fn the_settings_file_never_contains_the_openai_key() {
+    with_memory_store(|| {
+        const KEY: &str = "sk-openai-secret-must-not-be-written";
+        secrets::set_openai_compat_api_key(KEY).unwrap();
+
+        let dir = std::env::temp_dir().join(format!("madake_secret_test_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        let settings = AppSettings {
+            provider: AgentProvider::OpenAiCompat,
+            openai_base_url: "http://localhost:11434/v1".into(),
+            openai_model: "qwen3:4b".into(),
+            ..AppSettings::default()
+        };
+        save_settings(&path, &settings).unwrap();
+
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            !written.contains(KEY),
+            "設定ファイルにAPIキーが書かれている: {written}"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    });
 }

@@ -10,6 +10,7 @@ import { SUPPORTED_LOCALES, resolveLocale, setLocale } from "../../i18n";
 import { useChatStore } from "../../stores/chat";
 import {
   AGENT_PROVIDERS,
+  OLLAMA_BASE_URL,
   maskedApiKey,
   useSettingsStore,
   type AgentProvider,
@@ -36,6 +37,15 @@ const apiModelInput = ref("");
 const copilotModelInput = ref("");
 /** copilot実行ファイルのパス入力欄 (空なら自動検出)。 */
 const copilotPathInput = ref("");
+/** OpenAI互換APIの接続先URLの入力欄 (`/chat/completions` の1つ上)。 */
+const openaiBaseUrlInput = ref("");
+/** OpenAI互換APIで使うモデル名の入力欄 (接続先ごとに違うので既定値は無い)。 */
+const openaiModelInput = ref("");
+/**
+ * OpenAI互換APIのキーの入力欄。**保存したらすぐ空にする**(Anthropicのキー欄と同じ約束)。
+ * ローカルのOllamaならキーは不要なので、空のままでも接続できる。
+ */
+const openaiKeyInput = ref("");
 /**
  * APIキーの入力欄。**保存したらすぐ空にする**(キーを画面にもメモリにも残さない)。
  * 保存済みのキーは伏せ字だけを表示し、値を読み戻すことはできない。
@@ -47,6 +57,7 @@ const detected = computed(() => chat.detect);
 const provider = computed(() => settings.settings.provider);
 const usingApi = computed(() => provider.value === "anthropic_api");
 const usingCopilot = computed(() => provider.value === "copilot_cli");
+const usingOpenAi = computed(() => provider.value === "openai_compat");
 /** claude CLIの検出結果を出すのはCLIプロバイダのときだけ。 */
 const usingClaudeCli = computed(() => provider.value === "claude_cli");
 /** いま選んでいるプロバイダで送信できる状態か(バッジ表示)。 */
@@ -62,13 +73,21 @@ const copilotModelDirty = computed(
 const copilotPathDirty = computed(
   () => copilotPathInput.value.trim() !== (settings.settings.copilot_path ?? ""),
 );
+const openaiBaseUrlDirty = computed(
+  () => openaiBaseUrlInput.value.trim() !== settings.settings.openai_base_url,
+);
+const openaiModelDirty = computed(
+  () => openaiModelInput.value.trim() !== settings.settings.openai_model,
+);
 const dirty = computed(
   () =>
     pathDirty.value ||
     knowledgeDirty.value ||
     apiModelDirty.value ||
     copilotModelDirty.value ||
-    copilotPathDirty.value,
+    copilotPathDirty.value ||
+    openaiBaseUrlDirty.value ||
+    openaiModelDirty.value,
 );
 const activeLocale = computed(() => resolveLocale(settings.settings.language));
 
@@ -99,7 +118,10 @@ watch(
     apiModelInput.value = settings.settings.api_model;
     copilotModelInput.value = settings.settings.copilot_model;
     copilotPathInput.value = settings.settings.copilot_path ?? "";
+    openaiBaseUrlInput.value = settings.settings.openai_base_url;
+    openaiModelInput.value = settings.settings.openai_model;
     apiKeyInput.value = "";
+    openaiKeyInput.value = "";
     settings.testResult = null;
     await settings.loadProviderStatus();
     if (!chat.detect) await redetect();
@@ -130,6 +152,7 @@ async function apply(): Promise<boolean> {
   const copilotModelChanged = copilotModelDirty.value;
   const copilotPathChanged = copilotPathDirty.value;
   const copilotPath = copilotPathInput.value.trim();
+  const openaiChanged = openaiBaseUrlDirty.value || openaiModelDirty.value;
   if (
     !(await settings.save({
       claude_path: path || null,
@@ -137,6 +160,8 @@ async function apply(): Promise<boolean> {
       api_model: apiModelInput.value.trim(),
       copilot_model: copilotModelInput.value.trim(),
       copilot_path: copilotPath || null,
+      openai_base_url: openaiBaseUrlInput.value.trim(),
+      openai_model: openaiModelInput.value.trim(),
     }))
   )
     return false;
@@ -145,6 +170,17 @@ async function apply(): Promise<boolean> {
   apiModelInput.value = settings.settings.api_model;
   copilotModelInput.value = settings.settings.copilot_model;
   copilotPathInput.value = settings.settings.copilot_path ?? "";
+  openaiBaseUrlInput.value = settings.settings.openai_base_url;
+  openaiModelInput.value = settings.settings.openai_model;
+  if (openaiChanged) {
+    ui.log(
+      t("settings.agent.openaiSetLog", {
+        url: settings.settings.openai_base_url,
+        model: settings.settings.openai_model || t("settings.agent.openaiModelUnset"),
+      }),
+    );
+    settings.testResult = null;
+  }
   if (modelChanged) {
     ui.log(t("settings.agent.apiModelSetLog", { model: settings.settings.api_model }));
   }
@@ -214,6 +250,7 @@ const settingsError = computed(() =>
 function providerLabelKey(p: AgentProvider): string {
   if (p === "anthropic_api") return "settings.agent.providerApi";
   if (p === "copilot_cli") return "settings.agent.providerCopilot";
+  if (p === "openai_compat") return "settings.agent.providerOpenAi";
   return "settings.agent.providerCli";
 }
 
@@ -221,6 +258,7 @@ function providerLabelKey(p: AgentProvider): string {
 const providerHintKey = computed(() => {
   if (usingApi.value) return "settings.agent.providerHintApi";
   if (usingCopilot.value) return "settings.agent.providerHintCopilot";
+  if (usingOpenAi.value) return "settings.agent.providerHintOpenAi";
   return "settings.agent.providerHint";
 });
 
@@ -230,6 +268,11 @@ const providerBadgeKey = computed(() => {
     return providerReady.value
       ? "settings.agent.keySavedBadge"
       : "settings.agent.keyMissingBadge";
+  }
+  if (usingOpenAi.value) {
+    return providerReady.value
+      ? "settings.agent.openaiReadyBadge"
+      : "settings.agent.openaiNotReadyBadge";
   }
   return providerReady.value ? "settings.agent.detectedBadge" : "settings.agent.notDetectedBadge";
 });
@@ -246,6 +289,30 @@ async function removeApiKey() {
   if (!(await settings.clearApiKey())) return;
   apiKeyInput.value = "";
   ui.log(t("settings.agent.apiKeyRemovedLog"));
+}
+
+/** 入力したOpenAI互換APIのキーをOSキーチェーンへ保存する(保存後は入力欄を空にする)。 */
+async function saveOpenAiKey() {
+  if (!(await settings.saveApiKey(openaiKeyInput.value, "openai_compat"))) return;
+  openaiKeyInput.value = "";
+  ui.log(t("settings.agent.openaiKeySavedLog"));
+}
+
+/** 保存済みのOpenAI互換APIのキーを消す。 */
+async function removeOpenAiKey() {
+  if (!(await settings.clearApiKey("openai_compat"))) return;
+  openaiKeyInput.value = "";
+  ui.log(t("settings.agent.openaiKeyRemovedLog"));
+}
+
+/**
+ * 「Ollama (ローカル)」プリセット。接続先をローカルのOllamaへ向けて即座に保存する。
+ * OllamaはAPIキーを要求しないので、キー欄は空のままでよい。
+ */
+async function useOllamaPreset() {
+  openaiBaseUrlInput.value = OLLAMA_BASE_URL;
+  if (!(await apply())) return;
+  await settings.loadProviderStatus();
 }
 
 /** 表示言語を保存して即時切替する。 */
@@ -462,6 +529,103 @@ async function changeLanguage(ev: Event) {
               <p v-else-if="settings.testResult" class="caption indent-label warn">{{ testErrorText }}</p>
               <p v-else-if="!settings.apiKeySaved" class="caption indent-label">
                 {{ t("settings.agent.testNeedsKey") }}
+              </p>
+            </div>
+
+            <div v-if="usingOpenAi" class="group">
+              <div class="group-head"><span>{{ t("settings.agent.openaiGroup") }}</span><i /></div>
+              <div class="form-row">
+                <label class="form-label" for="openai-url">{{ t("settings.agent.openaiUrlLabel") }}</label>
+                <input
+                  id="openai-url"
+                  v-model="openaiBaseUrlInput"
+                  class="field input mono"
+                  spellcheck="false"
+                  autocomplete="off"
+                  placeholder="https://api.openai.com/v1"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
+                />
+                <button
+                  class="btn secondary"
+                  :disabled="settings.saving"
+                  @click="useOllamaPreset"
+                >
+                  {{ t("settings.agent.ollamaPreset") }}
+                </button>
+              </div>
+              <p class="caption indent-label">{{ t("settings.agent.openaiUrlHint") }}</p>
+
+              <div class="form-row">
+                <label class="form-label" for="openai-model">{{ t("settings.agent.openaiModelLabel") }}</label>
+                <input
+                  id="openai-model"
+                  v-model="openaiModelInput"
+                  class="field input mono"
+                  spellcheck="false"
+                  :placeholder="t('settings.agent.openaiModelPlaceholder')"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && apply()"
+                />
+              </div>
+              <p class="caption indent-label">{{ t("settings.agent.openaiModelHint") }}</p>
+
+              <div class="form-row">
+                <label class="form-label" for="openai-key">{{ t("settings.agent.openaiKeyLabel") }}</label>
+                <div v-if="settings.openaiKeySaved" class="field mono-field">
+                  <span><KeyRound :size="11" /> {{ maskedApiKey() }}</span>
+                </div>
+                <input
+                  v-else
+                  id="openai-key"
+                  v-model="openaiKeyInput"
+                  class="field input mono"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  :placeholder="t('settings.agent.openaiKeyPlaceholder')"
+                  @keydown.enter="(e) => !(e as KeyboardEvent).isComposing && saveOpenAiKey()"
+                />
+                <button
+                  v-if="settings.openaiKeySaved"
+                  class="btn secondary"
+                  :disabled="settings.keySaving"
+                  @click="removeOpenAiKey"
+                >
+                  {{ t("settings.agent.apiKeyRemove") }}
+                </button>
+                <button
+                  v-else
+                  class="btn secondary"
+                  :disabled="settings.keySaving || !openaiKeyInput.trim()"
+                  @click="saveOpenAiKey"
+                >
+                  {{ t("settings.agent.apiKeySave") }}
+                </button>
+              </div>
+              <p class="caption indent-label">
+                {{ settings.openaiIsLocal ? t("settings.agent.openaiKeyLocalHint") : t("settings.agent.openaiKeyHint") }}
+              </p>
+              <p v-if="settings.keychainError" class="caption indent-label warn">
+                {{ t("settings.agent.keychainError", { reason: settings.keychainError }) }}
+              </p>
+
+              <div class="form-row">
+                <span class="form-label" />
+                <button
+                  class="btn secondary test-btn"
+                  :disabled="settings.testing || !providerReady"
+                  @click="settings.testConnection()"
+                >
+                  <RefreshCw :size="12" :class="{ spin: settings.testing }" />
+                  {{ settings.testing ? t("settings.agent.testing") : t("settings.agent.testConnection") }}
+                </button>
+              </div>
+              <p v-if="settings.testResult?.ok" class="caption indent-label ok">
+                <Check :size="11" />
+                {{ t("settings.agent.testOk", { model: settings.testResult.model ?? settings.settings.openai_model }) }}
+              </p>
+              <p v-else-if="settings.testResult" class="caption indent-label warn">{{ testErrorText }}</p>
+              <p v-else-if="!providerReady" class="caption indent-label">
+                {{ t("settings.agent.openaiTestHint") }}
               </p>
             </div>
 

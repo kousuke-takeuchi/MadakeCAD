@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1040 specification clauses** across 5 areas.
+**1080 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -693,6 +693,35 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - If the configured Copilot executable does not exist, the chat shows why instead of failing silently. <sub>`a_missing_copilot_executable_is_explained_in_the_chat`</sub>
 - The connection test goes to Copilot (not to the Anthropic API) while Copilot is the chosen provider. <sub>`the_connection_test_follows_the_chosen_provider`</sub>
 
+### Provider: OpenAI-compatible / Ollama
+
+- With an OpenAI-compatible endpoint selected, a chat turn runs even though no Claude CLI is installed. <sub>`a_turn_runs_on_an_openai_compatible_endpoint`</sub>
+- A local Ollama URL needs no API key at all, so a turn runs with nothing saved in the keychain. <sub>`a_local_ollama_url_needs_no_api_key`</sub>
+- Choosing a remote OpenAI-compatible endpoint without saving a key refuses the send with a message pointing at the settings screen. <sub>`sending_to_a_remote_endpoint_without_a_key_points_at_the_settings_screen`</sub>
+- Leaving the model box empty refuses the send and says which box to fill in. <sub>`sending_without_a_model_name_says_which_box_to_fill_in`</sub>
+- The provider badge reports "ready" once a key is saved (or the URL is local) and a model name is filled in. <sub>`the_provider_is_ready_with_a_key_or_a_local_url_and_a_model`</sub>
+- While an OpenAI-compatible endpoint is chosen, the connection test goes there instead of to the Anthropic API. <sub>`the_connection_test_follows_the_chosen_provider`</sub>
+- Nothing about the OpenAI key is ever broadcast to the UI event stream or written into the chat history. <sub>`the_api_key_never_appears_in_the_event_stream`</sub>
+
+### OpenAI-compatible backend
+
+- Streamed assistant text arrives as text deltas and the turn ends with the assembled reply and its token usage. <sub>`streamed_text_becomes_deltas_and_a_completed_turn`</sub>
+- The request goes to /chat/completions under the configured base URL and carries the model, the streaming flag, the system prompt and the user's message. <sub>`the_request_goes_to_chat_completions_with_the_model_system_prompt_and_message`</sub>
+- The bridged MCP tools are offered in the OpenAI function format so the agent can edit the drawing. <sub>`the_bridged_mcp_tools_are_offered_as_openai_functions`</sub>
+- A tool the model asks for is executed locally and its result is sent back as a tool message so the model can continue. <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- A tool that fails is reported back to the model as a clearly marked error instead of aborting the turn. <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
+- The tool loop stops after a bounded number of rounds so a looping model cannot run forever. <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
+- A saved key is sent as a bearer token, and never appears in any message shown to the user. <sub>`a_saved_key_is_sent_as_a_bearer_token`</sub>
+- A local server such as Ollama is called without any Authorization header when no key is saved. <sub>`a_local_server_is_called_without_an_authorization_header`</sub>
+- A rejected API key produces a message that says the key is the problem, not a raw HTTP code. <sub>`a_rejected_api_key_is_explained_as_a_key_problem`</sub>
+- Hitting the provider's rate limit is explained as a usage limit with a "try again later" hint. <sub>`a_rate_limited_service_is_explained_as_a_usage_limit`</sub>
+- An unknown model name is explained as a model-name problem, naming the model that was tried. <sub>`an_unknown_model_name_is_explained_as_a_model_problem`</sub>
+- A server that cannot be reached names the URL that was tried and points at starting Ollama for a local URL. <sub>`an_unreachable_server_names_the_url_and_suggests_starting_ollama`</sub>
+- Earlier turns of the conversation are replayed so the model remembers what was said before. <sub>`earlier_turns_of_the_conversation_are_replayed`</sub>
+- The connection test reports success for a working setup and a readable, machine-tagged reason for a broken one. <sub>`the_connection_test_reports_success_or_a_readable_reason`</sub>
+- The Ollama preset points at the local Ollama server's OpenAI-compatible endpoint, while the default is OpenAI itself. <sub>`the_ollama_preset_points_at_the_local_ollama_server`</sub>
+- A base URL pasted with a trailing slash still reaches /chat/completions exactly once. <sub>`a_base_url_with_a_trailing_slash_still_works`</sub>
+
 ### stream-json parser
 
 - The CLI's system/init line yields a session-started event carrying the session id. <sub>`init_line_yields_session_started`</sub>
@@ -718,6 +747,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Against the real OS keychain, a key round-trips and is removed again (opt-in; skipped by default). <sub>`the_real_os_keychain_round_trips_a_key`</sub>
 - The keychain is read once per app run, so the OS does not ask for permission again and again. <sub>`the_keychain_is_read_only_once_per_app_run`</sub>
 - When the OS keychain cannot be read, the reason is reported instead of a silent "no key". <sub>`a_keychain_that_cannot_be_read_reports_the_reason`</sub>
+- The OpenAI-compatible key lives under its own keychain entry, so saving one provider's key never disturbs the other's. <sub>`the_openai_key_is_stored_beside_the_anthropic_one_without_disturbing_it`</sub>
+- A pasted OpenAI key is trimmed, and a blank one is refused instead of being stored. <sub>`a_pasted_openai_key_is_trimmed_and_a_blank_one_is_refused`</sub>
+- The OpenAI key never appears in the settings file, which keeps only the URL and the model name. <sub>`the_settings_file_never_contains_the_openai_key`</sub>
 
 ### AI settings
 
@@ -746,6 +778,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A settings file written before GitHub Copilot existed keeps working, with the Copilot fields at their defaults. <sub>`an_old_settings_file_without_copilot_fields_keeps_working`</sub>
 - A blank Copilot model box returns to "auto", and a blank path returns to auto-detection. <sub>`blank_copilot_boxes_return_to_the_defaults`</sub>
 - No GitHub credential is ever written to the settings file: Copilot uses its own sign-in. <sub>`no_github_credential_is_written_to_the_settings_file`</sub>
+- Out of the box the OpenAI-compatible route points at OpenAI itself and leaves the model name empty on purpose. <sub>`the_openai_defaults_point_at_openai_and_ask_for_a_model`</sub>
+- Choosing the OpenAI-compatible route survives a save/load round trip together with the URL and the model. <sub>`the_openai_choice_round_trips_through_save_and_load`</sub>
+- A settings file written before the OpenAI-compatible route existed keeps working, with its fields at their defaults. <sub>`an_old_settings_file_without_openai_fields_keeps_working`</sub>
+- A blank URL box returns to OpenAI, a trailing slash is trimmed, and the model name keeps whatever was typed (minus spaces). <sub>`blank_openai_boxes_return_to_the_defaults`</sub>
+- No OpenAI key is ever written to the settings file: only the URL and the model name live there. <sub>`no_openai_key_is_written_to_the_settings_file`</sub>
 
 ### tool_bridge
 
@@ -1211,6 +1248,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - the connection badge follows the Copilot CLI detection for the Copilot route <sub>`GitHub Copilot CLI provider`</sub>
 - a signed-out Copilot fails the connection test with sign-in guidance <sub>`GitHub Copilot CLI provider`</sub>
 - never keeps a GitHub credential in the frontend state <sub>`GitHub Copilot CLI provider`</sub>
+- offers an OpenAI-compatible endpoint as a provider <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- defaults to OpenAI itself with an empty model box <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- the Ollama preset points at the local Ollama server <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- saves the endpoint URL and the model name <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- saves its key separately from the Anthropic one and never keeps the value <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- removing its key asks the backend for that provider's entry <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- the connection badge needs a model plus either a saved key or a local URL <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- the provider status reports the endpoint, the model and whether a key is saved <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- a rejected key fails the connection test with its own error kind <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
 
 ### Reports (BOM / wire list)
 

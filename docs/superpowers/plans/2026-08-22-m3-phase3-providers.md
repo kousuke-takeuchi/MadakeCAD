@@ -36,8 +36,32 @@
 
 ### Task 2: OpenAI互換Backend(Ollamaプリセット含む)
 
-- [ ] Step 1 (red): モックHTTPでtool callingループ/キーチェーン/Ollamaはキー無しで可/401・レート制限の表示
-- [ ] Step 2 (green): 実装+UI。ローカルOllamaがあれば実機確認(なければモックのみと記録)。コミット
+- [x] Step 1 (red): モックHTTPでtool callingループ/キーチェーン/Ollamaはキー無しで可/401・レート制限の表示
+- [x] Step 2 (green): 実装+UI。ローカルOllamaがあれば実機確認(なければモックのみと記録)。コミット
+
+  **実装の要点**: `openai_compat.rs`(`POST {base_url}/chat/completions`・`stream:true`+
+  `stream_options.include_usage`)。systemは`messages[0]`、ツールはOpenAIのfunction形式
+  (`tools[].function.parameters`)、`tool_calls`は`index`ごとに引数JSONを連結して実行し
+  `role:"tool"`+`tool_call_id`で返す(上限16往復)。ツール失敗は`ERROR: `を前置して返す
+  (OpenAIのツールメッセージには成否欄が無いため)。キーは`account="openai_compat_api_key"`、
+  **接続先がローカル(localhost/127.0.0.1/*.local等)ならAuthorizationヘッダごと省略**。
+  設定は`openai_base_url`(既定`https://api.openai.com/v1`)+`openai_model`(既定は空=必須入力)。
+  エラー区分は`openai_auth`/`openai_rate_limit`/`openai_model_not_found`/`openai_network`ほか。
+
+  **実機確認(2026-08-22、ローカルOllama 0.32.14)**: 実施済み。
+  - `stream_options.include_usage`・`tools`・`tool_calls`の実チャンク形がパーサの想定と一致
+    (`{"choices":[{"delta":{"tool_calls":[{"id":..,"index":0,"type":"function","function":{"name":..,"arguments":"{...}"}}]}}]}`
+    → `finish_reason:"tool_calls"` → usageチャンク → `data: [DONE]`)。**キー無しで通る**
+  - 接続テスト(`POST /api/v1/agent/test-connection`)はキー未保存のまま成功
+  - **アプリで1ターン通し(`gemma4:26b`)が成功**: 「Sheet1の(50,50)にリレーK1を置いて」
+    → ツール往復3回(最初の2回はモデルが`mcp__madakecad__place_symbol`という別名で呼んで
+    失敗 → こちらが`ERROR: `付きで返す → モデルが`place_symbol`へ直して成功)→
+    revision 0→1・エンティティ1件・`turn_applied`イベント・日本語の報告文まで到達。
+    後始末に`POST /api/v1/agent/undo-turn`でエンティティ0件へ巻き戻し済み(設定も復元)
+  - **モデル依存の注意**: `Agents-A1-4B`(HF GGUF)は2往復目でチャットテンプレートが
+    `No user query found in messages.`(HTTP 500)を返す=モデル側テンプレートの制約であって
+    リクエスト形の誤りではない(その旨をエラー本文にそのまま出す)。`ollama show`の
+    Capabilitiesに`tools`があるモデルを選ぶこと
 
 ### Task 3: GeminiBackend
 

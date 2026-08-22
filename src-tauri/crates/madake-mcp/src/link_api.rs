@@ -675,26 +675,39 @@ async fn provider_status_blocking(agent: &Arc<AgentManager>) -> serde_json::Valu
 #[derive(serde::Deserialize)]
 struct ApiKeyBody {
     key: String,
+    /// どのプロバイダのキーか(`anthropic_api` / `openai_compat`)。省略時はAnthropic。
+    #[serde(default)]
+    provider: Option<String>,
 }
 
-/// Anthropic APIキーをOSキーチェーンへ保存する。**設定ファイルには書かない。**
+/// 削除するキーのプロバイダ指定(`?provider=openai_compat`)。省略時はAnthropic。
+#[derive(serde::Deserialize)]
+struct ApiKeyQuery {
+    #[serde(default)]
+    provider: Option<String>,
+}
+
+/// APIキーをOSキーチェーンへ保存する。**設定ファイルには書かない。**
 async fn put_agent_api_key(
     State(state): State<AgentApi>,
     Json(body): Json<ApiKeyBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let key = body.key;
-    tokio::task::spawn_blocking(move || madake_agent::secrets::set_anthropic_api_key(&key))
+    let account = crate::agent::key_account_for(body.provider.as_deref());
+    tokio::task::spawn_blocking(move || madake_agent::secrets::set_api_key(account, &key))
         .await
         .map_err(|e| bad_request(e.to_string()))?
         .map_err(|e| bad_request(e.to_string()))?;
     Ok(Json(provider_status_blocking(&state.agent).await))
 }
 
-/// 保存済みのAnthropic APIキーを消す。
+/// 保存済みのAPIキーを消す。
 async fn delete_agent_api_key(
     State(state): State<AgentApi>,
+    Query(query): Query<ApiKeyQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    tokio::task::spawn_blocking(madake_agent::secrets::clear_anthropic_api_key)
+    let account = crate::agent::key_account_for(query.provider.as_deref());
+    tokio::task::spawn_blocking(move || madake_agent::secrets::clear_api_key(account))
         .await
         .map_err(|e| bad_request(e.to_string()))?
         .map_err(|e| bad_request(e.to_string()))?;

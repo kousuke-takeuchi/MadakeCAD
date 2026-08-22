@@ -78,6 +78,11 @@ MODULES = {
     "conversation": ("Conversations & history", "会話・履歴"),
     "manager": ("Agent manager (turns)", "エージェントマネージャ (ターン)"),
     "settings": ("AI settings", "AI設定"),
+    "openai_compat": ("OpenAI-compatible backend", "OpenAI互換バックエンド"),
+    "manager_openai_provider": (
+        "Provider: OpenAI-compatible / Ollama",
+        "プロバイダ: OpenAI互換 / Ollama",
+    ),
     "knowledge": ("Standards knowledge injection", "規格知識の注入"),
     "knowledge_env": ("Standards knowledge (resource file)", "規格知識 (リソースファイル)"),
     "cli": ("Argument parsing & dispatch", "引数解釈・ディスパッチ"),

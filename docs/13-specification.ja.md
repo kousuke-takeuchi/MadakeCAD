@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1040仕様項目**。
+全5領域・**1080仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -693,6 +693,35 @@
 - 設定したCopilotの実行ファイルが無い場合、黙って失敗せず理由がチャットに表示される。 <sub>`a_missing_copilot_executable_is_explained_in_the_chat`</sub>
 - Copilotを選んでいる間、接続テストはAnthropic APIではなくCopilotへ行く。 <sub>`the_connection_test_follows_the_chosen_provider`</sub>
 
+### プロバイダ: OpenAI互換 / Ollama
+
+- OpenAI互換APIを選んでおけば、Claude Code CLIが入っていない環境でもチャットのやりとりができる。 <sub>`a_turn_runs_on_an_openai_compatible_endpoint`</sub>
+- ローカルのOllamaのURLならAPIキーは要らず、キーチェーンに何も保存していなくてもやりとりできる。 <sub>`a_local_ollama_url_needs_no_api_key`</sub>
+- 社外のOpenAI互換APIを選んだのにキーを保存していないと、設定画面へ促す文言で送信を断る。 <sub>`sending_to_a_remote_endpoint_without_a_key_points_at_the_settings_screen`</sub>
+- モデル名を空のままにしていると送信を断り、どこを埋めればよいかを伝える。 <sub>`sending_without_a_model_name_says_which_box_to_fill_in`</sub>
+- プロバイダのバッジは、キーを保存済み(またはURLがローカル)でモデル名が入っているときだけ「使える」状態になる。 <sub>`the_provider_is_ready_with_a_key_or_a_local_url_and_a_model`</sub>
+- OpenAI互換APIを選んでいる間、接続テストはAnthropic APIではなくそのURLへ行く。 <sub>`the_connection_test_follows_the_chosen_provider`</sub>
+- OpenAI互換APIのキーはUIへ流れるイベントにも会話履歴にも一切載らない。 <sub>`the_api_key_never_appears_in_the_event_stream`</sub>
+
+### OpenAI互換バックエンド
+
+- OpenAI互換サーバーから届いた本文はそのまま文字の差分として流れ、ターンの終わりに組み立てた返答とトークン使用量が付く。 <sub>`streamed_text_becomes_deltas_and_a_completed_turn`</sub>
+- リクエストは設定したベースURL配下の /chat/completions へ行き、モデル・ストリーミング指定・システムプロンプト・ユーザーの発言を載せる。 <sub>`the_request_goes_to_chat_completions_with_the_model_system_prompt_and_message`</sub>
+- ブリッジしたMCPツールはOpenAIのfunction形式で渡る(エージェントが図面を編集できる)。 <sub>`the_bridged_mcp_tools_are_offered_as_openai_functions`</sub>
+- モデルが要求したツールはその場で実行され、結果をツールメッセージとして返して会話を続ける(1ターンで完結する)。 <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- 失敗したツールはターンを中断せず、エラーと分かる印をつけてモデルへ返す(モデルが直せる)。 <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
+- ツール実行の往復には上限があり、堂々巡りになったモデルが延々と動き続けない。 <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
+- 保存したキーはBearerトークンとして送られ、ユーザーに見える文言には一切現れない。 <sub>`a_saved_key_is_sent_as_a_bearer_token`</sub>
+- Ollamaのようなローカルサーバーは、キーを保存していなくてもAuthorizationヘッダ無しでそのまま呼べる。 <sub>`a_local_server_is_called_without_an_authorization_header`</sub>
+- APIキーが弾かれたときは、生のHTTPコードではなく「キーの問題」と分かる文言を表示する。 <sub>`a_rejected_api_key_is_explained_as_a_key_problem`</sub>
+- レート制限に当たったときは「利用上限に達したので時間をおいて」と読める文言を表示する。 <sub>`a_rate_limited_service_is_explained_as_a_usage_limit`</sub>
+- モデル名が見つからないときは「モデル名の問題」と分かる文言で、試したモデル名を添えて表示する。 <sub>`an_unknown_model_name_is_explained_as_a_model_problem`</sub>
+- サーバーへ接続できないときは試したURLを示し、ローカルURLならOllamaの起動を促す。 <sub>`an_unreachable_server_names_the_url_and_suggests_starting_ollama`</sub>
+- 会話の前のやりとりも一緒に送るので、モデルは前に話した内容を覚えている。 <sub>`earlier_turns_of_the_conversation_are_replayed`</sub>
+- 接続テストは、使える設定なら成功を、駄目な設定なら区分つきの読める理由を返す。 <sub>`the_connection_test_reports_success_or_a_readable_reason`</sub>
+- Ollamaプリセットはローカルのollamaが持つOpenAI互換エンドポイントを指し、既定の接続先はOpenAI本体である。 <sub>`the_ollama_preset_points_at_the_local_ollama_server`</sub>
+- 末尾に「/」を付けて貼り付けたベースURLでも、/chat/completions へ正しく1回だけつながる。 <sub>`a_base_url_with_a_trailing_slash_still_works`</sub>
+
 ### stream-jsonパーサ
 
 - CLIのsystem/init行はセッションIDを載せたセッション開始イベントになる。 <sub>`init_line_yields_session_started`</sub>
@@ -718,6 +747,9 @@
 - 実際のOSキーチェーンでも、キーは保存して読み戻して削除できる(環境変数で明示的に有効化したときだけ実行)。 <sub>`the_real_os_keychain_round_trips_a_key`</sub>
 - キーチェーンを読むのはアプリ起動につき1回だけで、OSの許可確認が何度も出ることがない。 <sub>`the_keychain_is_read_only_once_per_app_run`</sub>
 - OSキーチェーンが読めないときは、黙って「キー未設定」にせず理由を伝える。 <sub>`a_keychain_that_cannot_be_read_reports_the_reason`</sub>
+- OpenAI互換APIのキーはキーチェーンの別の名前で保管され、片方を保存してももう片方のキーは影響を受けない。 <sub>`the_openai_key_is_stored_beside_the_anthropic_one_without_disturbing_it`</sub>
+- 貼り付けたOpenAIのキーは前後の空白を落として保存し、空の入力は保存せずに断る。 <sub>`a_pasted_openai_key_is_trimmed_and_a_blank_one_is_refused`</sub>
+- OpenAI互換APIのキーは設定ファイルに一切現れない(設定ファイルに残るのはURLとモデル名だけ)。 <sub>`the_settings_file_never_contains_the_openai_key`</sub>
 
 ### AI設定
 
@@ -746,6 +778,11 @@
 - GitHub Copilotの項目が無い旧い設定ファイルもそのまま動き、Copilotの項目は既定値になる。 <sub>`an_old_settings_file_without_copilot_fields_keeps_working`</sub>
 - Copilotのモデル欄を空にすると`auto`へ戻り、パス欄を空にすると自動検出へ戻る。 <sub>`blank_copilot_boxes_return_to_the_defaults`</sub>
 - GitHubの資格情報は設定ファイルへ一切書かれない(Copilotは自身のサインインを使う)。 <sub>`no_github_credential_is_written_to_the_settings_file`</sub>
+- OpenAI互換APIの既定の接続先はOpenAI本体で、モデル名はあえて空(利用者が必ず選ぶ項目)。 <sub>`the_openai_defaults_point_at_openai_and_ask_for_a_model`</sub>
+- OpenAI互換APIを選んだ設定は、URLとモデル名と一緒に保存して読み直しても保持される。 <sub>`the_openai_choice_round_trips_through_save_and_load`</sub>
+- OpenAI互換APIの項目が無い旧い設定ファイルもそのまま動き、その項目は既定値になる。 <sub>`an_old_settings_file_without_openai_fields_keeps_working`</sub>
+- URL欄を空にするとOpenAI本体へ戻り、末尾の「/」は取り除かれ、モデル名は入力どおり(前後の空白だけ除去)保たれる。 <sub>`blank_openai_boxes_return_to_the_defaults`</sub>
+- OpenAI互換APIのキーは設定ファイルへ一切書かれない(そこに置くのはURLとモデル名だけ)。 <sub>`no_openai_key_is_written_to_the_settings_file`</sub>
 
 ### tool_bridge
 
@@ -1211,6 +1248,15 @@
 - Copilotを選んでいるときの接続バッジは、Copilot CLIが見つかったかどうかを見る <sub>`GitHub Copilot CLI provider`</sub>
 - Copilotが未認証のときは、接続テストがサインイン手順つきで失敗を返す <sub>`GitHub Copilot CLI provider`</sub>
 - Copilotの認証情報(GitHubトークン)はフロントの状態に一切持たない <sub>`GitHub Copilot CLI provider`</sub>
+- プロバイダの選択肢にOpenAI互換APIがある <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- 既定の接続先はOpenAI本体で、モデル名は空(接続先ごとに違うので必ず選ばせる) <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- 「Ollama (ローカル)」プリセットはローカルの11434番へ向ける <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- OpenAI互換APIのURLとモデル名は設定として保存できる <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- OpenAI互換APIのキーはAnthropicのキーとは別枠で保存され、値は状態に残らない <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- OpenAI互換APIのキーを削除すると、そのプロバイダ指定で削除が呼ばれる <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- 接続バッジは、キー保存済み(またはローカルURL)でモデル名が入っているときだけ「接続済み」 <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- プロバイダの状態からOpenAI互換APIのURL・モデル・キーの保存状況が分かる <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
+- キーが弾かれたときは、接続テストがOpenAI互換API用の区分つきで失敗を返す <sub>`OpenAI-compatible provider (incl. Ollama)`</sub>
 
 ### 帳票 (部品表 / 電線リスト)
 

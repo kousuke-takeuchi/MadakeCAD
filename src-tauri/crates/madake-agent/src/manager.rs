@@ -22,6 +22,7 @@ use crate::backend::{
 use crate::conversation::{AppliedRevisions, AppliedUndoDepth, Conversation, DocState};
 use crate::copilot_cli::CopilotCliBackend;
 use crate::events::AgentEvent;
+use crate::openai_compat::{self, OpenAiCompatBackend};
 use crate::settings::{AgentProvider, AppSettings};
 use crate::tools::ToolBridge;
 use crate::{AgentError, AnthropicApiBackend, Result};
@@ -201,11 +202,19 @@ impl AgentManager {
     ///
     /// - [`AgentProvider::ClaudeCli`]: CLIを検出できるか
     /// - [`AgentProvider::AnthropicApi`]: APIキーが保管されているか(値は返さない)
+    /// - [`AgentProvider::OpenAiCompat`]: モデル名が入っていて、かつキーが保管済みか
+    ///   接続先URLがローカル(Ollama等。キー不要)か
     pub async fn provider_ready(&self) -> bool {
-        match self.settings().provider {
+        let settings = self.settings().normalized();
+        match settings.provider {
             AgentProvider::ClaudeCli => self.detect().await.is_ok(),
             AgentProvider::AnthropicApi => crate::secrets::has_anthropic_api_key(),
             AgentProvider::CopilotCli => self.detect_copilot().await.is_ok(),
+            AgentProvider::OpenAiCompat => {
+                !settings.openai_model.is_empty()
+                    && (openai_compat::is_local_url(&settings.openai_base_url)
+                        || crate::secrets::has_openai_compat_api_key())
+            }
         }
     }
 
@@ -229,10 +238,58 @@ impl AgentManager {
     ) -> std::result::Result<String, crate::anthropic::ConnectionError> {
         match self.settings().provider {
             AgentProvider::CopilotCli => self.test_copilot_connection().await,
+            AgentProvider::OpenAiCompat => self.test_openai_connection().await,
             AgentProvider::ClaudeCli | AgentProvider::AnthropicApi => {
                 self.test_anthropic_connection().await
             }
         }
+    }
+
+    /// OpenAI互換APIへの疎通を試す(設定画面の「接続テスト」)。
+    ///
+    /// 成功したら確かめたモデル名を返す。失敗は種類つきの[`ConnectionError`]
+    /// (`openai_no_key` / `openai_no_model` は通信する前に分かる設定漏れ)。
+    /// **APIキーは戻り値にも含めない。**
+    pub async fn test_openai_connection(
+        &self,
+    ) -> std::result::Result<String, crate::anthropic::ConnectionError> {
+        let settings = self.settings().normalized();
+        let backend = self.openai_backend(&settings).map_err(|e| match e {
+            AgentError::NoOpenAiModel => crate::anthropic::ConnectionError {
+                kind: openai_compat::KIND_OPENAI_NO_MODEL.to_string(),
+                message: e.to_string(),
+            },
+            e => crate::anthropic::ConnectionError {
+                kind: openai_compat::KIND_OPENAI_NO_KEY.to_string(),
+                message: e.to_string(),
+            },
+        })?;
+        backend
+            .check_connection()
+            .await
+            .map(|()| settings.openai_model)
+    }
+
+    /// 設定からOpenAI互換バックエンドを組み立てる(送信・接続テスト共通)。
+    ///
+    /// キーはローカルURL(Ollama等)のときだけ省略できる。モデル名は必須。
+    fn openai_backend(&self, settings: &AppSettings) -> Result<OpenAiCompatBackend> {
+        if settings.openai_model.trim().is_empty() {
+            return Err(AgentError::NoOpenAiModel);
+        }
+        let key = crate::secrets::openai_compat_api_key();
+        if key.is_none() && !openai_compat::is_local_url(&settings.openai_base_url) {
+            return Err(AgentError::NoOpenAiKey);
+        }
+        let mut backend = OpenAiCompatBackend::new(
+            key,
+            settings.openai_model.clone(),
+            settings.openai_base_url.clone(),
+        );
+        if let Some(tools) = self.tool_bridge() {
+            backend = backend.with_tools(tools);
+        }
+        Ok(backend)
     }
 
     /// GitHub Copilot CLIへの疎通を試す(設定画面の「接続テスト」)。
@@ -383,6 +440,11 @@ impl AgentManager {
                 }
                 None
             }
+            AgentProvider::OpenAiCompat => {
+                // URL・モデル・キーの設定漏れは送る前に断る(理由が読める形で)
+                self.openai_backend(&settings.clone().normalized())?;
+                None
+            }
         };
 
         let (id, seq, session, turn_model, context, history) = {
@@ -437,6 +499,10 @@ impl AgentManager {
                 let mut backend = ClaudeCodeCliBackend::new(executable, self.mcp_port);
                 backend.model = turn_model;
                 Box::new(backend)
+            }
+            (AgentProvider::OpenAiCompat, _) => {
+                // 直前に組み立てて確かめてあるが、その後にキーが消された場合に備える
+                Box::new(self.openai_backend(&settings.clone().normalized())?)
             }
             (AgentProvider::CopilotCli, Some(executable)) => {
                 let mut backend = CopilotCliBackend::new(executable, self.mcp_port);

@@ -7,6 +7,9 @@
 //!   (9310)のツールを呼ぶことで行われる
 //! - [`AnthropicApiBackend`]: Anthropic Messages APIへ直接つなぐ(APIキーはOSキー
 //!   チェーン)。ツールは [`tools::ToolBridge`] 経由で内蔵MCPサーバーを呼ぶ
+//! - [`CopilotCliBackend`]: ローカルのGitHub Copilot CLIを起動する(認証はCopilot自身)
+//! - [`OpenAiCompatBackend`]: OpenAI互換のChat Completions API(OpenAI/xAI/OpenRouter/
+//!   **ローカルのOllama**)。URL+モデル名で切り替える
 //!
 //! どちらの経路でも図面の編集はmadake-coreのCommandエンジンを通り、出力は同じ
 //! [`events::AgentEvent`] のストリームになる(UIは違いを知らない)。
@@ -19,6 +22,7 @@ pub mod copilot_events;
 pub mod events;
 pub mod knowledge;
 pub mod manager;
+pub mod openai_compat;
 pub mod secrets;
 pub mod settings;
 pub mod tools;
@@ -34,6 +38,7 @@ pub use copilot_events::{parse_copilot_events, CopilotParser};
 pub use events::{parse_stream_events, parse_stream_line, AgentEvent, StreamParser, Usage};
 pub use knowledge::{docs_dir, docs_guide, standards_text, system_prompt};
 pub use manager::{AgentManager, ConversationEvent, DocBridge, RevertError, RevertReport};
+pub use openai_compat::{OpenAiCompatBackend, DEFAULT_OPENAI_BASE_URL, OLLAMA_BASE_URL};
 pub use settings::{load_settings, save_settings, settings_path, AgentProvider, AppSettings};
 pub use tools::{ToolBridge, ToolDef, ToolOutcome};
 
@@ -75,6 +80,16 @@ pub enum AgentError {
     NoApiKey,
     #[error("APIキーが空です")]
     EmptyApiKey,
+    #[error(
+        "OpenAI互換APIのAPIキーが設定されていません(設定 > エージェント でAPIキーを入力するか、\
+         URLをローカルのOllamaへ変えてください)"
+    )]
+    NoOpenAiKey,
+    #[error(
+        "OpenAI互換APIのモデル名が設定されていません(設定 > エージェント の「モデル」に、\
+         接続先で使えるモデル名を入力してください)"
+    )]
+    NoOpenAiModel,
     #[error("OSのキーチェーンを利用できません: {0}")]
     Keychain(String),
 }

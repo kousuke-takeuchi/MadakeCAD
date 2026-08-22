@@ -6,6 +6,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 import {
   AGENT_PROVIDERS,
+  DEFAULT_OPENAI_BASE_URL,
+  OLLAMA_BASE_URL,
+  isLocalUrl,
   useSettingsStore,
   settingsApi,
   providerApi,
@@ -281,5 +284,141 @@ describe("GitHub Copilot CLI provider", () => {
     for (const secret of ["token", "gh_token", "password"]) {
       expect(state).not.toContain(secret);
     }
+  });
+});
+
+describe("OpenAI-compatible provider (incl. Ollama)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setActivePinia(createPinia());
+  });
+
+  // ja: プロバイダの選択肢にOpenAI互換APIがある
+  it("offers an OpenAI-compatible endpoint as a provider", () => {
+    expect(AGENT_PROVIDERS).toContain("openai_compat");
+  });
+
+  // ja: 既定の接続先はOpenAI本体で、モデル名は空(接続先ごとに違うので必ず選ばせる)
+  it("defaults to OpenAI itself with an empty model box", () => {
+    expect(defaultSettings().openai_base_url).toBe(DEFAULT_OPENAI_BASE_URL);
+    expect(defaultSettings().openai_model).toBe("");
+  });
+
+  // ja: 「Ollama (ローカル)」プリセットはローカルの11434番へ向ける
+  it("the Ollama preset points at the local Ollama server", () => {
+    expect(OLLAMA_BASE_URL).toBe("http://localhost:11434/v1");
+    expect(isLocalUrl(OLLAMA_BASE_URL)).toBe(true);
+    expect(isLocalUrl("https://api.openai.com/v1")).toBe(false);
+  });
+
+  // ja: OpenAI互換APIのURLとモデル名は設定として保存できる
+  it("saves the endpoint URL and the model name", async () => {
+    const saved = {
+      ...defaultSettings(),
+      provider: "openai_compat" as const,
+      openai_base_url: OLLAMA_BASE_URL,
+      openai_model: "qwen3:4b",
+    };
+    vi.spyOn(settingsApi, "set").mockResolvedValue(saved);
+
+    const store = useSettingsStore();
+    await store.save({ openai_base_url: OLLAMA_BASE_URL, openai_model: "qwen3:4b" });
+
+    expect(store.settings.openai_base_url).toBe(OLLAMA_BASE_URL);
+    expect(store.settings.openai_model).toBe("qwen3:4b");
+  });
+
+  // ja: OpenAI互換APIのキーはAnthropicのキーとは別枠で保存され、値は状態に残らない
+  it("saves its key separately from the Anthropic one and never keeps the value", async () => {
+    const KEY = "sk-openai-must-not-be-kept";
+    const setKey = vi.spyOn(providerApi, "setKey").mockResolvedValue({
+      provider: "openai_compat",
+      api_model: "claude-sonnet-5",
+      api_key_saved: false,
+      openai_key_saved: true,
+    });
+
+    const store = useSettingsStore();
+    const ok = await store.saveApiKey(KEY, "openai_compat");
+
+    expect(ok).toBe(true);
+    expect(setKey).toHaveBeenCalledWith(KEY, "openai_compat");
+    expect(store.openaiKeySaved).toBe(true);
+    // Anthropic側の「保存済み」表示は動かない
+    expect(store.apiKeySaved).toBe(false);
+    expect(JSON.stringify(store.$state)).not.toContain(KEY);
+  });
+
+  // ja: OpenAI互換APIのキーを削除すると、そのプロバイダ指定で削除が呼ばれる
+  it("removing its key asks the backend for that provider's entry", async () => {
+    const clearKey = vi.spyOn(providerApi, "clearKey").mockResolvedValue({
+      provider: "openai_compat",
+      api_model: "claude-sonnet-5",
+      api_key_saved: false,
+      openai_key_saved: false,
+    });
+
+    const store = useSettingsStore();
+    store.openaiKeySaved = true;
+    const ok = await store.clearApiKey("openai_compat");
+
+    expect(ok).toBe(true);
+    expect(clearKey).toHaveBeenCalledWith("openai_compat");
+    expect(store.openaiKeySaved).toBe(false);
+  });
+
+  // ja: 接続バッジは、キー保存済み(またはローカルURL)でモデル名が入っているときだけ「接続済み」
+  it("the connection badge needs a model plus either a saved key or a local URL", () => {
+    const store = useSettingsStore();
+    store.settings.provider = "openai_compat";
+    store.settings.openai_base_url = DEFAULT_OPENAI_BASE_URL;
+    store.settings.openai_model = "gpt-4o";
+
+    // 社外のURL: キーが要る
+    expect(store.agentReady(true)).toBe(false);
+    store.openaiKeySaved = true;
+    expect(store.agentReady(false)).toBe(true);
+
+    // ローカルのOllama: キー無しでも接続済み
+    store.openaiKeySaved = false;
+    store.settings.openai_base_url = OLLAMA_BASE_URL;
+    store.settings.openai_model = "qwen3:4b";
+    expect(store.agentReady(false)).toBe(true);
+
+    // モデル名が空なら、ローカルでも「未接続」
+    store.settings.openai_model = "  ";
+    expect(store.agentReady(false)).toBe(false);
+  });
+
+  // ja: プロバイダの状態からOpenAI互換APIのURL・モデル・キーの保存状況が分かる
+  it("the provider status reports the endpoint, the model and whether a key is saved", async () => {
+    vi.spyOn(providerApi, "status").mockResolvedValue({
+      provider: "openai_compat",
+      api_model: "claude-sonnet-5",
+      api_key_saved: false,
+      openai_base_url: OLLAMA_BASE_URL,
+      openai_model: "qwen3:4b",
+      openai_key_saved: false,
+    });
+
+    const store = useSettingsStore();
+    await store.loadProviderStatus();
+
+    expect(store.openaiKeySaved).toBe(false);
+  });
+
+  // ja: キーが弾かれたときは、接続テストがOpenAI互換API用の区分つきで失敗を返す
+  it("a rejected key fails the connection test with its own error kind", async () => {
+    vi.spyOn(providerApi, "test").mockResolvedValue({
+      ok: false,
+      error_kind: "openai_auth",
+      error: "APIキーが受け付けられませんでした。",
+    });
+
+    const store = useSettingsStore();
+    await store.testConnection();
+
+    expect(store.testResult?.ok).toBe(false);
+    expect(store.testResult?.error_kind).toBe("openai_auth");
   });
 });

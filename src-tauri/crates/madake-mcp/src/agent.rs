@@ -111,9 +111,30 @@ pub fn load_and_apply_settings(agent: &AgentManager) -> AppSettings {
 /// **APIキーそのものは絶対に含めない**。返すのは「保存されているか」だけ。
 /// UI・Link API・Tauri IPCが同じ形を見るように、組み立てはここに1本化する。
 pub fn provider_status(agent: &AgentManager) -> serde_json::Value {
-    let (key, keychain_error) = madake_agent::secrets::anthropic_api_key_checked();
     // 同期版はCLIを起動しない(Copilotの検出は非同期版だけが行う)
-    provider_status_with(agent, key.is_some(), keychain_error, None)
+    provider_status_with(agent, read_saved_keys(), None)
+}
+
+/// キーチェーンから「保存済みか」だけを読む。**値は持ち出さない。**
+///
+/// 戻り値は`(Anthropicが保存済みか, OpenAI互換が保存済みか, 読めなかった理由)`。
+pub fn read_saved_keys() -> SavedKeys {
+    let (anthropic, anthropic_error) = madake_agent::secrets::anthropic_api_key_checked();
+    let (openai, openai_error) = madake_agent::secrets::openai_compat_api_key_checked();
+    SavedKeys {
+        api_key_saved: anthropic.is_some(),
+        openai_key_saved: openai.is_some(),
+        keychain_error: anthropic_error.or(openai_error),
+    }
+}
+
+/// プロバイダごとの「キーが保存済みか」。**キーの値は含まない。**
+#[derive(Debug, Clone, Default)]
+pub struct SavedKeys {
+    pub api_key_saved: bool,
+    pub openai_key_saved: bool,
+    /// OSキーチェーンが読めなかった理由(読めたときはNone)
+    pub keychain_error: Option<String>,
 }
 
 /// キーチェーンを読まずに状態を組み立てる(読み出し結果は呼び出し側が渡す)。
@@ -123,23 +144,26 @@ pub fn provider_status(agent: &AgentManager) -> serde_json::Value {
 /// `Some(None)`=調べたが見つからない、`Some(Some(_))`=見つかった。
 fn provider_status_with(
     agent: &AgentManager,
-    api_key_saved: bool,
-    keychain_error: Option<String>,
+    keys: SavedKeys,
     copilot: Option<Option<madake_agent::DetectResult>>,
 ) -> serde_json::Value {
     let settings = agent.settings().normalized();
     serde_json::json!({
         "provider": settings.provider,
         "api_model": settings.api_model,
-        "api_key_saved": api_key_saved,
+        "api_key_saved": keys.api_key_saved,
         // キーチェーンが読めなかった理由(読めたときはnull)。保存したのに「未設定」と
         // 出る状況を黙って放置しないため、設定画面へそのまま出す
-        "keychain_error": keychain_error,
+        "keychain_error": keys.keychain_error,
         // GitHub Copilot CLI。**資格情報は含めない**(Copilot自身のサインインを使う)
         "copilot_model": settings.copilot_model,
         "copilot_path": settings.copilot_path,
         "copilot_detected": copilot.as_ref().map(Option::is_some),
         "copilot_version": copilot.flatten().map(|found| found.version),
+        // OpenAI互換API。**キーの値は返さない**(保存済みかどうかだけ)
+        "openai_base_url": settings.openai_base_url,
+        "openai_model": settings.openai_model,
+        "openai_key_saved": keys.openai_key_saved,
     })
 }
 
@@ -153,22 +177,34 @@ pub const KEYCHAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 /// (待ち続けると設定画面が開いたまま固まる)。読み出しはプロセスに1回だけなので、
 /// 一度許可すれば以降は待ち時間なしで返る。
 pub async fn provider_status_async(agent: &Arc<AgentManager>) -> serde_json::Value {
-    let job = tokio::task::spawn_blocking(madake_agent::secrets::anthropic_api_key_checked);
+    let job = tokio::task::spawn_blocking(read_saved_keys);
     // キーチェーンの読み出し(別スレッドで進行中)と並行にCopilot CLIを検出する
     let copilot = Some(agent.detect_copilot().await.ok());
-    match tokio::time::timeout(KEYCHAIN_TIMEOUT, job).await {
-        Ok(Ok((key, error))) => provider_status_with(agent, key.is_some(), error, copilot),
-        Ok(Err(e)) => provider_status_with(agent, false, Some(e.to_string()), copilot),
-        Err(_) => provider_status_with(
-            agent,
-            false,
-            Some(format!(
+    let keys = match tokio::time::timeout(KEYCHAIN_TIMEOUT, job).await {
+        Ok(Ok(keys)) => keys,
+        Ok(Err(e)) => SavedKeys {
+            keychain_error: Some(e.to_string()),
+            ..SavedKeys::default()
+        },
+        Err(_) => SavedKeys {
+            keychain_error: Some(format!(
                 "OSキーチェーンの読み出しが{}秒たっても終わりませんでした(OSの許可を求める\
                  ダイアログが出ていないか確認してください)",
                 KEYCHAIN_TIMEOUT.as_secs()
             )),
-            copilot,
-        ),
+            ..SavedKeys::default()
+        },
+    };
+    provider_status_with(agent, keys, copilot)
+}
+
+/// 設定画面の「APIキー」欄がどのプロバイダのものかを表す名前 → キーチェーンの保管名。
+///
+/// 未知の名前(古いUI・省略時)はAnthropicとして扱う(これまでの動作のまま)。
+pub fn key_account_for(provider: Option<&str>) -> &'static str {
+    match provider.map(str::trim) {
+        Some("openai_compat") => madake_agent::secrets::OPENAI_COMPAT_ACCOUNT,
+        _ => madake_agent::secrets::ANTHROPIC_ACCOUNT,
     }
 }
 
