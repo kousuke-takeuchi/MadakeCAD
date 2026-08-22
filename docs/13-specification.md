@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1442 specification clauses** across 5 areas.
+**1485 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -1114,6 +1114,45 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - regions of two conversations running at once keep their own colors side by side <sub>`並列エージェント: 会話ごとの色`</sub>
 - conversation colors follow the start order and wrap around after the fourth <sub>`並列エージェント: 会話ごとの色`</sub>
 
+### blockEditor
+
+- starts with one pin on each side, numbered 1 and 2, and an automatic outline <sub>`block pin table draft`</sub>
+- numbers a new pin after the highest number already in the table <sub>`block pin table draft`</sub>
+- falls back to the pin count plus one when no pin number is a plain number <sub>`block pin table draft`</sub>
+- removes just the deleted row from the table <sub>`block pin table draft`</sub>
+- swaps a pin with its neighbour and keeps the ends in place <sub>`block pin table draft`</sub>
+- writes only the sides that have pins, and omits empty pin names <sub>`block attributes built from the draft`</sub>
+- drops rows whose number and name are both blank <sub>`block attributes built from the draft`</sub>
+- writes the outline size only when the size is set by hand <sub>`block attributes built from the draft`</sub>
+- reads a placed block's attributes back into the same table <sub>`block attributes built from the draft`</sub>
+- opens a block with unreadable attributes as an empty table <sub>`block attributes built from the draft`</sub>
+- derives the automatic outline size from the pins, rounded to 5 mm steps <sub>`block attributes built from the draft`</sub>
+- previews the very symbol that will be drawn, with one connection point per pin <sub>`block attributes built from the draft`</sub>
+- reports nothing for a table that is filled in correctly <sub>`checks on the pin table`</sub>
+- reports a pin number that is used twice <sub>`checks on the pin table`</sub>
+- reports a row that has a name but no pin number <sub>`checks on the pin table`</sub>
+- reports a hand-set outline that is too small for its pins <sub>`checks on the pin table`</sub>
+- reports a block with more than 200 pins <sub>`checks on the pin table`</sub>
+- lists the pins a wire actually reaches <sub>`pins that are already wired`</sub>
+- follows the rotation of the placed block when looking for wires <sub>`pins that are already wired`</sub>
+- finds no wired pins on a block that nothing is connected to <sub>`pins that are already wired`</sub>
+- flags a wired pin that the edit deletes or renumbers <sub>`pins that are already wired`</sub>
+- stays quiet when the wired pins survive the edit <sub>`pins that are already wired`</sub>
+- opens a pin table with one pin per side when the generic block is picked <sub>`starting a new block from the insert dialog`</sub>
+- hands the edited table to the placement as block attributes <sub>`starting a new block from the insert dialog`</sub>
+- seeds the hand-set size with the automatic one when switching to manual <sub>`starting a new block from the insert dialog`</sub>
+- refuses to place while two pins share a number <sub>`starting a new block from the insert dialog`</sub>
+- loads the pin table of the selected block <sub>`editing a block that is already on the drawing`</sub>
+- applies the table as a single update_entity, keeping the tag, part number and position <sub>`editing a block that is already on the drawing`</sub>
+- keeps attributes that are not part of the pin table <sub>`editing a block that is already on the drawing`</sub>
+- drops the hand-set size attribute when the outline goes back to automatic <sub>`editing a block that is already on the drawing`</sub>
+- sends no command when the table was not changed <sub>`editing a block that is already on the drawing`</sub>
+- throws the draft away when the editor is closed <sub>`editing a block that is already on the drawing`</sub>
+- warns that a wired pin loses its connection when its number changes <sub>`warning about wired pins`</sub>
+- warns the same way when a wired pin is deleted <sub>`warning about wired pins`</sub>
+- stays quiet when the deleted pin had no wire on it <sub>`warning about wired pins`</sub>
+- still allows applying the edit, warning and all <sub>`warning about wired pins`</sub>
+
 ### deviceTree
 
 - an expanded device is followed by one row per function <sub>`デバイスツリーの整形`</sub>
@@ -1766,6 +1805,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - run fetches diagnostics, opens the panel, and counts by severity <sub>`verification store`</sub>
 - close hides the panel but keeps the diagnostics <sub>`verification store`</sub>
 - a failed run resets the running flag and leaves diagnostics empty <sub>`verification store`</sub>
+
+### blockPlacement
+
+- shows a ghost shaped by the pin table that is about to be placed <sub>`placing a block with a pin table`</sub>
+- adds the block with its pin table in a single add_entity <sub>`placing a block with a pin table`</sub>
+- selects a tall block anywhere inside its outline, far from its origin <sub>`picking a symbol on the canvas`</sub>
+- does not select the block when the click is outside its outline <sub>`picking a symbol on the canvas`</sub>
+- selects a small symbol inside its own outline <sub>`picking a symbol on the canvas`</sub>
+- leaves a small symbol alone when the click is well outside it <sub>`picking a symbol on the canvas`</sub>
+- still lets a block with broken attributes be picked near where it was placed <sub>`picking a symbol on the canvas`</sub>
 
 ### macroPlacement
 

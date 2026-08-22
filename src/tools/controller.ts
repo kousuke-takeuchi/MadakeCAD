@@ -8,7 +8,7 @@ import {
   macroVariantKeys,
   placeMacroEntities,
 } from "../canvas/macroPreview";
-import { drawHarness, drawSymbol, transformLocal } from "../canvas/renderer";
+import { drawHarness, drawSymbol, symbolBounds, transformLocal } from "../canvas/renderer";
 import { theme, wireColorScreen } from "../canvas/theme";
 import { Viewport, type Pt } from "../canvas/viewport";
 import { i18n } from "../i18n";
@@ -52,7 +52,9 @@ type DocumentStore = ReturnType<typeof useDocumentStore>;
 
 /** 選択ヒット判定の許容距離 (mm)。 */
 const HIT_TOLERANCE = 2.0;
-/** シンボルのクリック判定半径 (mm)。 */
+/** シンボル外形の外側でも掴める幅 (mm)。 */
+const SYMBOL_HIT_PAD = 1.0;
+/** 定義を引けないシンボル(属性が壊れたブロック等)のクリック判定半径 (mm)。 */
 const SYMBOL_HIT_RADIUS = 9.0;
 
 function segmentDistance(p: Pt, a: Point, b: Point): number {
@@ -218,14 +220,33 @@ export class EditorController {
       : { x: from.x, y: to.y };
   }
 
-  /** カーソル位置のエンティティid (上にあるものを優先)。 */
+  /**
+   * カーソル位置のエンティティid (上にあるものを優先)。
+   *
+   * シンボルは**外形の囲み矩形**で判定する (ブロックのように大きさがピン表で決まる
+   * シンボルでも、外形の中ならどこでも掴めるようにするため)。定義を引けないシンボル
+   * (属性が壊れたブロック) だけは、置いた位置まわりの固定半径で拾って直せるようにする。
+   */
   hitTest(world: Pt): string | null {
     const sheet = this.store.activeSheet;
     if (!sheet) return null;
     const entities = Object.values(sheet.entities);
     for (const e of entities) {
       if (e.kind === "symbol") {
-        if (Math.hypot(world.x - e.at.x, world.y - e.at.y) <= SYMBOL_HIT_RADIUS) return e.id;
+        const def = this.store.resolveInstance(e);
+        if (!def) {
+          if (Math.hypot(world.x - e.at.x, world.y - e.at.y) <= SYMBOL_HIT_RADIUS) return e.id;
+          continue;
+        }
+        const { min, max } = symbolBounds(e, def);
+        if (
+          world.x >= min.x - SYMBOL_HIT_PAD &&
+          world.x <= max.x + SYMBOL_HIT_PAD &&
+          world.y >= min.y - SYMBOL_HIT_PAD &&
+          world.y <= max.y + SYMBOL_HIT_PAD
+        ) {
+          return e.id;
+        }
       } else if (e.kind === "junction" || e.kind === "net_label") {
         if (Math.hypot(world.x - e.at.x, world.y - e.at.y) <= HIT_TOLERANCE * 1.5) return e.id;
       }
@@ -525,14 +546,33 @@ export class EditorController {
     return `${prefix}${max + 1}`;
   }
 
+  /**
+   * 配置ゴーストのシンボル (カーソル位置・現在の回転・配置に使う属性つき)。
+   * ブロックは形が属性 (ピン表) で決まるので、ゴーストもこの属性から描く。
+   */
+  ghostInstance(): SymbolInstance | null {
+    if (this.tool !== "place" || !this.placeSymbolId) return null;
+    return {
+      id: "ghost",
+      symbol_id: this.placeSymbolId,
+      at: this.cursorWorld,
+      rotation: this.placeRotation,
+      mirror: false,
+      reference: "",
+      value: "",
+      attrs: this.placePart?.attrs ?? {},
+    };
+  }
+
   private async commitPlace(at: Pt) {
     const sheet = this.store.activeSheet;
-    const def = this.placeSymbolId ? this.store.resolveSymbol(this.placeSymbolId) : undefined;
-    if (!sheet || !def) return;
+    const ghost = this.ghostInstance();
+    const def = ghost ? this.store.resolveInstance(ghost) : undefined;
+    if (!sheet || !ghost || !def) return;
     const entity: Entity = {
       kind: "symbol",
       id: crypto.randomUUID(),
-      symbol_id: def.id,
+      symbol_id: ghost.symbol_id,
       at,
       rotation: this.placeRotation,
       mirror: false,
@@ -585,20 +625,11 @@ export class EditorController {
       ctx.stroke();
       ctx.setLineDash([]);
     }
-    // 配置ゴースト
-    if (this.tool === "place" && this.placeSymbolId) {
-      const def = this.store.resolveSymbol(this.placeSymbolId);
+    // 配置ゴースト (ブロックはピン表の属性どおりの形で出す)
+    const ghost = this.ghostInstance();
+    if (ghost) {
+      const def = this.store.resolveInstance(ghost);
       if (def) {
-        const ghost: SymbolInstance = {
-          id: "ghost",
-          symbol_id: def.id,
-          at: this.cursorWorld,
-          rotation: this.placeRotation,
-          mirror: false,
-          reference: "",
-          value: "",
-          attrs: {},
-        };
         ctx.globalAlpha = 0.6;
         drawSymbol(ctx, vp, ghost, def, false, theme.selection);
         ctx.globalAlpha = 1;

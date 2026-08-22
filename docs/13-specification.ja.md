@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1442仕様項目**。
+全5領域・**1485仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1114,6 +1114,45 @@
 - 同時に走る2会話の編集領域は、それぞれの色を保ったまま並ぶ <sub>`並列エージェント: 会話ごとの色`</sub>
 - 会話の色は開始順(0始まり)で決まり、5本目からは先頭の色へ戻る <sub>`並列エージェント: 会話ごとの色`</sub>
 
+### blockEditor
+
+- 新しいブロックの下書きは左右に1本ずつピンがあり、番号は1と2で外形は自動 <sub>`block pin table draft`</sub>
+- ピンを追加すると、いま使っている一番大きい番号の次の番号が振られる <sub>`block pin table draft`</sub>
+- 番号が数字でないピンばかりのときは、ピンの本数+1を新しい番号にする <sub>`block pin table draft`</sub>
+- ピンを削除すると、その行だけが表から消える <sub>`block pin table draft`</sub>
+- ピンを上下に動かすと隣の行と入れ替わり、端の行はそれ以上動かない <sub>`block pin table draft`</sub>
+- 配置に使う属性はピンのある辺だけを書き、ピン名が空の行は番号だけを書く <sub>`block attributes built from the draft`</sub>
+- 番号もピン名も空の行は書き出さない(表の空行はピンにならない) <sub>`block attributes built from the draft`</sub>
+- 外形を手動にしたときだけ、寸法が属性に書かれる <sub>`block attributes built from the draft`</sub>
+- 配置済みブロックの属性を読み戻すと、同じピン表と外形の下書きに戻る <sub>`block attributes built from the draft`</sub>
+- 読めない属性のブロックは空のピン表として開く(その場で作り直せる) <sub>`block attributes built from the draft`</sub>
+- 外形が自動のときの寸法はピンの数で決まり、5mm刻みに丸められる <sub>`block attributes built from the draft`</sub>
+- プレビューは実際に描かれるシンボル定義そのもの(ピンの数だけ接続点がある) <sub>`block attributes built from the draft`</sub>
+- 正しく埋めたピン表には指摘が出ない <sub>`checks on the pin table`</sub>
+- 同じピン番号が2つあると指摘される(番号は図面内で一意) <sub>`checks on the pin table`</sub>
+- ピン名だけ書いて番号が空の行は指摘される <sub>`checks on the pin table`</sub>
+- 手動の外形がピンの並びより小さいと指摘される(必要な寸法つき) <sub>`checks on the pin table`</sub>
+- ピンが多すぎる(200本超)ブロックは指摘される <sub>`checks on the pin table`</sub>
+- 配線が接続点に届いているピンは「配線済み」として拾われる <sub>`pins that are already wired`</sub>
+- 回転して置いたブロックでも、回転後の接続点で配線済みかを見る <sub>`pins that are already wired`</sub>
+- 配線が1本も届いていないブロックには配線済みピンが無い <sub>`pins that are already wired`</sub>
+- 配線済みのピンを消す・番号を変えると、そのピンが「接続が外れる」として挙がる <sub>`pins that are already wired`</sub>
+- 配線済みのピンをそのまま残す編集では警告は出ない <sub>`pins that are already wired`</sub>
+- 部品挿入で「ブロック(汎用)」を選ぶと、左右1本ずつのピン表が開く <sub>`starting a new block from the insert dialog`</sub>
+- 編集したピン表はそのまま配置に使う属性になる(配置後もこの形で描かれる) <sub>`starting a new block from the insert dialog`</sub>
+- 「手動」に切り替えると、そのときの自動寸法が編集できる初期値として入る <sub>`starting a new block from the insert dialog`</sub>
+- ピン番号が重なっているあいだは配置できない(指摘が出る) <sub>`starting a new block from the insert dialog`</sub>
+- プロパティの「ピン表を編集…」は、そのブロックのピン表を読み込んで開く <sub>`editing a block that is already on the drawing`</sub>
+- 適用するとupdate_entityコマンドが1回だけ実行され、参照記号・型番・位置は変わらない <sub>`editing a block that is already on the drawing`</sub>
+- ブロック以外の属性(定格など)は編集しても残る <sub>`editing a block that is already on the drawing`</sub>
+- 外形を自動へ戻して適用すると、手動寸法の属性が消える <sub>`editing a block that is already on the drawing`</sub>
+- 何も変えずに適用したときはコマンドを送らない(履歴を汚さない) <sub>`editing a block that is already on the drawing`</sub>
+- 閉じると下書きを捨てる(図面は変わらない) <sub>`editing a block that is already on the drawing`</sub>
+- 配線済みのピンの番号を変えると「接続が外れる」警告が出る <sub>`warning about wired pins`</sub>
+- 配線済みのピンを消しても同じ警告が出る <sub>`warning about wired pins`</sub>
+- 配線されていないピンを消しても警告は出ない <sub>`warning about wired pins`</sub>
+- 警告が出ていても適用はできる(承知のうえで直せる) <sub>`warning about wired pins`</sub>
+
 ### deviceTree
 
 - 展開中のデバイスは、見出しの下に機能の行が続く <sub>`デバイスツリーの整形`</sub>
@@ -1766,6 +1805,16 @@
 - runで診断を取得してパネルを開き、severity別に件数を数える <sub>`verification store`</sub>
 - closeはパネルを閉じるが診断は保持する <sub>`verification store`</sub>
 - 取得失敗時はrunningが戻り、診断は空のまま <sub>`verification store`</sub>
+
+### blockPlacement
+
+- ブロックの配置ゴーストは、ピン表どおりの形(接続点の数)で出る <sub>`placing a block with a pin table`</sub>
+- 配置を確定すると、ピン表の属性を持ったブロックが1回のadd_entityで追加される <sub>`placing a block with a pin table`</sub>
+- 縦長のブロックは外形の中ならどこをクリックしても選べる(固定半径では届かない下端も) <sub>`picking a symbol on the canvas`</sub>
+- 外形の外をクリックしてもブロックは選ばれない <sub>`picking a symbol on the canvas`</sub>
+- 小さなシンボルもその外形の中で選べる <sub>`picking a symbol on the canvas`</sub>
+- 小さなシンボルから離れたところをクリックしても選ばれない(外形で判定するため) <sub>`picking a symbol on the canvas`</sub>
+- 属性が壊れていて描けないブロックも、置いた位置の近くをクリックすれば選べる(直せる) <sub>`picking a symbol on the canvas`</sub>
 
 ### macroPlacement
 

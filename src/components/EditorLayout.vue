@@ -25,6 +25,7 @@ import FrameTemplateDialog from "./FrameTemplateDialog.vue";
 import MacroSaveDialog from "./MacroSaveDialog.vue";
 import SymbolPickerDialog from "./SymbolPickerDialog.vue";
 import SymbolEditorDialog from "./SymbolEditorDialog.vue";
+import BlockEditorDialog from "./BlockEditorDialog.vue";
 import TitleBar from "./TitleBar.vue";
 import SettingsDialog from "./settings/SettingsDialog.vue";
 import { useRevisionsStore } from "../stores/revisions";
@@ -34,6 +35,7 @@ import { usePlcIoStore } from "../stores/plcIo";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
 import { useMacrosStore } from "../stores/macros";
 import { useSymbolEditorStore } from "../stores/symbolEditor";
+import { useBlockEditorStore } from "../stores/blockEditor";
 import { useSearchStore } from "../stores/search";
 
 const store = useDocumentStore();
@@ -47,6 +49,7 @@ const reportDialog = useReportDialogStore();
 const pdfBook = usePdfBookStore();
 const macros = useMacrosStore();
 const symbolEditor = useSymbolEditorStore();
+const blockEditor = useBlockEditorStore();
 const controller = reactive(new EditorController(store)) as EditorController;
 provide("controller", controller);
 const files = useFileActions();
@@ -65,6 +68,12 @@ async function onKeyDown(ev: KeyboardEvent) {
   }
   if (ev.key === "Escape" && ui.settingsOpen) {
     ui.settingsOpen = false;
+    ev.preventDefault();
+    return;
+  }
+  // ピン表エディタは部品挿入ダイアログの中にも出るので、先にこちらを閉じる
+  if (ev.key === "Escape" && blockEditor.active) {
+    blockEditor.close();
     ev.preventDefault();
     return;
   }
@@ -138,7 +147,8 @@ async function onKeyDown(ev: KeyboardEvent) {
     reportDialog.open ||
     pdfBook.open ||
     macros.saveOpen ||
-    symbolEditor.open
+    symbolEditor.open ||
+    blockEditor.active
   ) {
     return;
   }
@@ -189,6 +199,7 @@ onBeforeUnmount(() => {
     <FrameTemplateDialog />
     <MacroSaveDialog />
     <SymbolEditorDialog />
+    <BlockEditorDialog />
   </div>
 </template>
 

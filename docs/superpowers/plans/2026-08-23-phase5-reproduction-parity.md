@@ -27,8 +27,17 @@
 
 ### Task 2: G1 ブロックシンボル(UI)
 
-- [ ] Step 1 (red): TS: 部品挿入「ブロック」カテゴリ+ピン表エディタ(行追加/削除/並べ替え)→attrs組み立て/配置ゴースト
-- [ ] Step 2 (green): 実装(i18n)。実機確認(コントローラ相当を作成→配線→BOM)+コミット
+- [x] Step 1 (red): TS: 部品挿入「ブロック」カテゴリ+ピン表エディタ(行追加/削除/並べ替え)→attrs組み立て/配置ゴースト
+- [x] Step 2 (green): 実装(i18n)。実機確認(コントローラ相当を作成→配線→BOM)+コミット
+
+  実装メモ: `canvas/blockEditor.ts`(行の表⇔attrs変換・指摘・配線済みピン判定)、`stores/blockEditor.ts`
+  (挿入/編集で共有する下書き。編集の確定は`update_entity`1回)、`components/BlockPinsEditor.vue`+
+  `BlockPinColumn.vue`(部品挿入ダイアログのパネルと`BlockEditorDialog.vue`が同じ1枚を使う)。
+  プロパティにピン構成の行+「ピン表を編集…」。配置ゴーストは`EditorController.ghostInstance()`が
+  属性つきインスタンスを返し`resolveInstance`で描く。**選択判定はシンボル外形の囲み矩形ベースへ変更**
+  (`symbolBounds`+1mm。定義を引けない壊れたブロックだけ従来の固定半径9mmで拾う)。
+  デザインはMadakeCAD.penへ3フレーム追加(「フェーズ5 - 部品挿入 ブロック(ピン表エディタ)」ほか)。
+  既知の挙動: ピンを足すと辺のピンが再センタリングされるため既設配線が外れることがある(要再配線)。
 
 ### Task 3: G2 配線注記+G3 タグ形状
 

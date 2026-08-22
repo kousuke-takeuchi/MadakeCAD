@@ -3,9 +3,11 @@
 import { ChevronDown, Pin } from "lucide-vue-next";
 import { computed, inject, reactive, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { BLOCK_SYMBOL_ID } from "../canvas/dynamicSymbol";
 import { harnessWireCount } from "../canvas/harness";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import type { Entity } from "../ipc";
+import { useBlockEditorStore } from "../stores/blockEditor";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import type { EditorController } from "../tools/controller";
@@ -13,6 +15,7 @@ import { harnessUpdateCommand, wireNumberCommand } from "./propertyCommands";
 
 const store = useDocumentStore();
 const ui = useUiStore();
+const blockEditor = useBlockEditorStore();
 const { t } = useI18n();
 const controller = inject<EditorController>("controller")!;
 
@@ -142,6 +145,27 @@ async function apply() {
   await store.execute({ type: "update_entity", sheet_id: sheet.id, entity });
 }
 
+/** 選択中がブロック (ピン表で形が決まるシンボル) か。 */
+const isBlock = computed(
+  () => selected.value?.kind === "symbol" && selected.value.symbol_id === BLOCK_SYMBOL_ID,
+);
+
+/** 選択中のブロックのピン構成 (「左5 / 右3」)。 */
+const blockPinCounts = computed(() => {
+  const e = selected.value;
+  if (e?.kind !== "symbol") return "";
+  const def = store.resolveInstance(e);
+  if (!def) return t("blockEditor.broken");
+  const count = (dir: string) => def.pins.filter((p) => p.dir === dir).length;
+  return t("blockEditor.pinCounts", { left: count("left"), right: count("right") });
+});
+
+/** ピン表エディタを開く (確定でupdate_entityコマンド)。 */
+function editBlockPins() {
+  const e = selected.value;
+  if (e?.kind === "symbol") blockEditor.startEdit(e);
+}
+
 const kindLabel = computed<Record<string, string>>(() => ({
   wire: "配線",
   symbol: "シンボル",
@@ -226,6 +250,17 @@ const kindLabel = computed<Record<string, string>>(() => ({
         <span class="plabel">シンボル</span>
         <span class="pvalue">{{ selected.symbol_id }}</span>
       </div>
+      <template v-if="isBlock">
+        <div class="prow">
+          <span class="plabel">{{ t("blockEditor.pinsRow") }}</span>
+          <span class="pvalue mono">{{ blockPinCounts }}</span>
+        </div>
+        <div class="apply-row">
+          <button class="secondary" :title="t('blockEditor.editHint')" @click="editBlockPins">
+            {{ t("blockEditor.editPins") }}
+          </button>
+        </div>
+      </template>
     </template>
 
     <template v-else-if="selected?.kind === 'harness'">
@@ -417,6 +452,17 @@ const kindLabel = computed<Record<string, string>>(() => ({
   justify-content: flex-end;
   padding: 10px;
 }
+/* セカンダリ操作 (ピン表を編集…): 白+枠 */
+.secondary {
+  background: var(--card-bg);
+  color: var(--ui-text);
+  border: 1px solid var(--ribbon-line);
+  border-radius: 4px;
+  padding: 5px 12px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.secondary:hover { background: var(--hover-bg); }
 .apply {
   background: var(--acad-blue);
   color: #fff;

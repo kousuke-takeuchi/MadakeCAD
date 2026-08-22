@@ -563,6 +563,52 @@
     "folderOpenedLog": "マクロ: {path} を開きました",
     "folderHintLog": "マクロ: 置き場は {path} です"
   },
+  "blockEditor": {
+    "title": "{reference} のピン表を編集",
+    "close": "閉じる",
+    "pinTable": "ピン表",
+    "pinTableHint": "ピン番号はブロック内で一意・ピンは5mmピッチ",
+    "colNo": "番号",
+    "colName": "ピン名",
+    "namePlaceholder": "例: 運転指令",
+    "addPin": "ピンを追加",
+    "moveUp": "上へ",
+    "moveDown": "下へ",
+    "removePin": "このピンを削除",
+    "side": {
+      "left": "左辺",
+      "right": "右辺",
+      "top": "上辺",
+      "bottom": "下辺"
+    },
+    "extraSides": "上辺・下辺 ({count})",
+    "extraSidesHint": "クリックで展開",
+    "size": "外形",
+    "sizeAuto": "自動 ({w}×{h}mm)",
+    "sizeManual": "手動",
+    "width": "幅 (mm・5mm刻み)",
+    "height": "高さ (mm・5mm刻み)",
+    "previewUnavailable": "プレビューはピン表の指摘を直すと出ます",
+    "issue": {
+      "duplicate": "ピン番号 {no} が重複しています",
+      "emptyNo": "{side}の{row}行目にピン番号がありません",
+      "tooMany": "ピンが多すぎます: {count}本 (最大{max}本)",
+      "sizeTooSmall": "外形がピンに対して小さすぎます (最低 {w}×{h}mm)"
+    },
+    "wiredWarning": "ピン {pins} は配線済みです。番号を変える・削除すると接続が外れます",
+    "placeHint": "「配置」でカーソルにゴーストが付きます (Rで回転・Escで解除)",
+    "placeLog": "INSERT  ブロック({pins}ピン)を配置: 位置をクリック (Rで回転, Escで解除)",
+    "applyHint": "適用すると1回の編集として履歴に載ります (⌘Zで戻せます)",
+    "apply": "適用",
+    "cancel": "キャンセル",
+    "editPins": "ピン表を編集…",
+    "editHint": "このブロックのピン(番号・名前・並び・外形)を編集します",
+    "pinsRow": "ピン",
+    "pinCounts": "左{left} / 右{right}",
+    "broken": "読み取れません",
+    "updatedLog": "{reference}: ピン表を更新しました (ピン{pins}本)",
+    "droppedLog": "ピン {pins} が無くなりました: その配線の接続は外れています"
+  },
   "symbolPicker": {
     "title": "挿入する部品を選択",
     "close": "閉じる",
@@ -586,9 +632,12 @@
       "passive": "受動部品",
       "output": "出力",
       "instrument": "計測器",
+      "plc": "PLC",
+      "block": "ブロック",
       "connector": "コネクタ",
       "user": "ユーザー"
-    }
+    },
+    "block": "ブロック(汎用機器)"
   },
   "reports": {
     "title": "帳票の生成",

@@ -6,7 +6,7 @@
 import { Minus, Plus, Search, X } from "lucide-vue-next";
 import { computed, inject, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { DYNAMIC_PIN_MAX, dynamicSymbol } from "../canvas/dynamicSymbol";
+import { BLOCK_SYMBOL_ID, DYNAMIC_PIN_MAX, dynamicSymbol } from "../canvas/dynamicSymbol";
 import {
   macroDescription,
   macroName,
@@ -17,14 +17,17 @@ import { groupSymbolsByCategory } from "../canvas/symbolLibrary";
 import { CONTACT_CONFIG_ATTR } from "../canvas/relayXref";
 import type { Part } from "../ipc";
 import type { EditorController } from "../tools/controller";
+import { useBlockEditorStore } from "../stores/blockEditor";
 import { useDocumentStore } from "../stores/document";
 import { ALL_CATEGORIES, UNCATEGORIZED, useMacrosStore } from "../stores/macros";
 import { usePartsStore } from "../stores/parts";
 import { useUiStore } from "../stores/ui";
+import BlockPinsEditor from "./BlockPinsEditor.vue";
 import MacroPreview from "./MacroPreview.vue";
 import SymbolPreview from "./SymbolPreview.vue";
 
 const store = useDocumentStore();
+const blockEditor = useBlockEditorStore();
 const ui = useUiStore();
 const parts = usePartsStore();
 const macros = useMacrosStore();
@@ -53,12 +56,25 @@ const dynamicCells = computed(() => {
     .filter((d) => !q || d.label.toLowerCase().includes(q) || d.base.includes(q));
 });
 
+/** 「ブロック(汎用)」セルが検索に一致するか (ピン表は選んでから作る)。 */
+const blockCell = computed(() => {
+  const q = query.value.trim().toLowerCase();
+  const label = t("symbolPicker.block");
+  return !q || label.toLowerCase().includes(q) || BLOCK_SYMBOL_ID.includes(q);
+});
+
 // カテゴリの並び・所属はバックエンドのライブラリ順 (symbol.rs CATEGORY_ORDER) に従う
 const categories = computed(() => {
   const groups = groupSymbolsByCategory(store.symbols, query.value);
   // 動的セル(端子台/コネクタ)が検索に一致する場合はコネクタカテゴリを必ず出す
   if (dynamicCells.value.length > 0 && !groups.some(([cat]) => cat === "connector")) {
     groups.push(["connector", []]);
+  }
+  // ブロックはライブラリに載らない (形がインスタンスごとに決まる) ので、ここで足す
+  // (並びはCATEGORY_ORDERどおり、コネクタの手前)
+  if (blockCell.value && !groups.some(([cat]) => cat === BLOCK_SYMBOL_ID)) {
+    const before = groups.findIndex(([cat]) => cat === "connector" || cat === "user");
+    groups.splice(before < 0 ? groups.length : before, 0, [BLOCK_SYMBOL_ID, []]);
   }
   return groups;
 });
@@ -81,11 +97,31 @@ function macroCategoryLabel(key: string): string {
 const dynPreview = (base: DynBase) =>
   dynamicSymbol(`${base}_${base === selectedDyn.value ? pinCount.value : 3}p`)!;
 
+/** ブロックセルのプレビュー (左右1本ずつの最小のブロック)。 */
+const blockPreview = computed(() => blockEditor.previewDef ?? dynamicSymbol(BLOCK_SYMBOL_ID)!);
+
+/** 「ブロック(汎用)」を選ぶ: ピン表エディタのパネルを開く。 */
+function selectBlock() {
+  selectedDyn.value = null;
+  blockEditor.startInsert();
+}
+
+/** ピン表どおりのブロックの配置モードへ入る。 */
+function placeBlock() {
+  if (!blockEditor.canApply) return;
+  const pins = blockEditor.previewDef?.pins.length ?? 0;
+  controller.setTool("place", BLOCK_SYMBOL_ID, { value: "", attrs: blockEditor.attrs });
+  blockEditor.close();
+  ui.symbolPickerOpen = false;
+  ui.log(t("blockEditor.placeLog", { pins }));
+}
+
 watch(
   () => ui.symbolPickerOpen,
   (open) => {
     if (open) {
       selectedDyn.value = null;
+      blockEditor.close();
       macros.query = query.value;
       void parts.search(query.value);
       void macros.load();
@@ -151,7 +187,10 @@ function placeMacro() {
 
 <template>
   <div v-if="ui.symbolPickerOpen" class="overlay" @click.self="ui.symbolPickerOpen = false">
-    <div class="dialog" :class="{ wide: tab === 'macros' }">
+    <div
+      class="dialog"
+      :class="{ wide: tab === 'macros', 'with-pins': tab === 'parts' && blockEditor.active }"
+    >
       <div class="dialog-head">
         <span>{{ t("symbolPicker.title") }}</span>
         <button class="close" :title="t('symbolPicker.close')" @click="ui.symbolPickerOpen = false">
@@ -190,12 +229,21 @@ function placeMacro() {
                 :key="d.base"
                 class="cell"
                 :class="{ selected: selectedDyn === d.base }"
-                @click="selectedDyn = d.base"
+                @click="((selectedDyn = d.base), blockEditor.close())"
               >
                 <SymbolPreview :def="dynPreview(d.base)" :width="72" :height="40" />
                 <span>{{ d.label }}</span>
               </button>
             </template>
+            <button
+              v-if="cat === 'block'"
+              class="cell"
+              :class="{ selected: blockEditor.active }"
+              @click="selectBlock"
+            >
+              <SymbolPreview :def="blockPreview" :width="72" :height="40" />
+              <span>{{ t("symbolPicker.block") }}</span>
+            </button>
           </div>
         </template>
         <template v-if="parts.results.length > 0">
@@ -305,6 +353,18 @@ function placeMacro() {
         </div>
       </div>
 
+      <!-- ブロック(汎用): ピン表エディタ + 配置 -->
+      <template v-if="tab === 'parts' && blockEditor.active && blockEditor.mode === 'insert'">
+        <BlockPinsEditor />
+        <div class="pins-bar">
+          <span class="pins-hint">{{ t("blockEditor.placeHint") }}</span>
+          <span class="spacer" />
+          <button class="place-btn" :disabled="!blockEditor.canApply" @click="placeBlock">
+            {{ t("symbolPicker.place") }}
+          </button>
+        </div>
+      </template>
+
       <div v-if="tab === 'parts' && selectedDyn" class="pins-bar">
         <span class="pins-label">{{ t("symbolPicker.pinsLabel") }}</span>
         <div class="stepper">
@@ -348,6 +408,12 @@ function placeMacro() {
 .dialog.wide {
   width: min(940px, 94vw);
   max-height: 82vh;
+}
+/* ピン表エディタを開いているあいだは、左右のピン行+プレビューが入る幅にする */
+.dialog.with-pins {
+  width: min(820px, 96vw);
+  max-height: 88vh;
+  overflow-y: auto;
 }
 .dialog-head {
   display: flex;

@@ -563,6 +563,52 @@
     "folderOpenedLog": "Macros: opened {path}",
     "folderHintLog": "Macros: your macros live in {path}"
   },
+  "blockEditor": {
+    "title": "Edit the pin table of {reference}",
+    "close": "Close",
+    "pinTable": "Pin table",
+    "pinTableHint": "Pin numbers are unique within the block; pins sit on a 5 mm pitch",
+    "colNo": "Number",
+    "colName": "Pin name",
+    "namePlaceholder": "e.g. Run command",
+    "addPin": "Add a pin",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "removePin": "Delete this pin",
+    "side": {
+      "left": "Left side",
+      "right": "Right side",
+      "top": "Top side",
+      "bottom": "Bottom side"
+    },
+    "extraSides": "Top and bottom sides ({count})",
+    "extraSidesHint": "Click to open",
+    "size": "Outline",
+    "sizeAuto": "Automatic ({w}x{h} mm)",
+    "sizeManual": "By hand",
+    "width": "Width (mm, 5 mm steps)",
+    "height": "Height (mm, 5 mm steps)",
+    "previewUnavailable": "The preview needs a pin table without problems",
+    "issue": {
+      "duplicate": "Pin number {no} is used twice",
+      "emptyNo": "Row {row} of the {side} has a name but no pin number",
+      "tooMany": "Too many pins: {count} (at most {max})",
+      "sizeTooSmall": "The outline is too small for these pins (at least {w}x{h} mm)"
+    },
+    "wiredWarning": "Pins {pins} are wired: renumbering or deleting them disconnects those wires",
+    "placeHint": "Place puts a ghost on the cursor (R rotates, Esc cancels)",
+    "placeLog": "INSERT  placing a block with {pins} pins: click a position (R to rotate, Esc to cancel)",
+    "applyHint": "Applying counts as one edit, so Cmd+Z takes it back",
+    "apply": "Apply",
+    "cancel": "Cancel",
+    "editPins": "Edit the pin table...",
+    "editHint": "Edit the pins of this block (numbers, names, order and outline)",
+    "pinsRow": "Pins",
+    "pinCounts": "{left} left / {right} right",
+    "broken": "Cannot be read",
+    "updatedLog": "{reference}: pin table updated ({pins} pins)",
+    "droppedLog": "Pins {pins} are gone: their wires are no longer connected"
+  },
   "symbolPicker": {
     "title": "Insert a part",
     "close": "Close",
@@ -586,9 +632,12 @@
       "passive": "Passive",
       "output": "Outputs",
       "instrument": "Instruments",
+      "plc": "PLC",
+      "block": "Blocks",
       "connector": "Connectors",
       "user": "User"
-    }
+    },
+    "block": "Block (generic device)"
   },
   "reports": {
     "title": "Generate report",
