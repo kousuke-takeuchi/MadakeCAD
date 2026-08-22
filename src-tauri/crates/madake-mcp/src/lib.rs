@@ -119,6 +119,51 @@ impl SharedDoc {
         Ok(patch)
     }
 
+    /// 選択したエンティティを回路マクロとして保存する(ユーザー領域へJSONを書き出す)。
+    ///
+    /// 図面は変更しない(読み取りのみ)ので履歴には乗らない。保存したマクロと
+    /// 書き出し先パスを返す。
+    pub fn save_macro(
+        &self,
+        sheet_id: Uuid,
+        entity_ids: &[Uuid],
+        meta: &madake_core::macros::MacroMeta,
+    ) -> madake_core::Result<(madake_core::macros::Macro, String)> {
+        let m = {
+            let engine = self.engine.lock().unwrap();
+            madake_core::macros::save_macro(engine.project(), sheet_id, entity_ids, meta)?
+        };
+        let path = madake_core::macros::write_macro(&m)?;
+        Ok((m, path.display().to_string()))
+    }
+
+    /// 回路マクロをシートへ挿入する(**1回の編集** = undo一発で戻る)。
+    ///
+    /// 由来は呼び出し経路で決まる: UI=[`EditOrigin::User`]、エージェント/外部=
+    /// [`Self::mcp_origin`]。
+    #[allow(clippy::too_many_arguments)]
+    pub fn apply_macro(
+        &self,
+        macro_id: &str,
+        variant: Option<&str>,
+        sheet_id: Uuid,
+        at: Point,
+        rotation: u16,
+        origin: EditOrigin,
+    ) -> madake_core::Result<Patch> {
+        let patch = madake_core::macros::apply(
+            &mut self.engine.lock().unwrap(),
+            macro_id,
+            variant,
+            sheet_id,
+            at,
+            rotation,
+            origin,
+        )?;
+        let _ = self.patches.send(patch.clone());
+        Ok(patch)
+    }
+
     /// undo深さの区間`[start, end)`にあるエージェント編集だけを巻き戻す。
     ///
     /// 逆Commandの適用として実行されるためpatchも配信され、UIへそのまま反映される。
@@ -214,6 +259,36 @@ pub struct ApplyTemplateParams {
     pub template_id: String,
     /// 適用先シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SaveMacroParams {
+    /// マクロにするエンティティid(選択範囲)。
+    pub entity_ids: Vec<Uuid>,
+    /// 英語名(必須)。
+    pub name: String,
+    /// 安定id。省略時は名前から作る。
+    pub sheet_id: Option<Uuid>,
+    pub id: Option<String>,
+    pub name_ja: Option<String>,
+    pub description: Option<String>,
+    pub description_ja: Option<String>,
+    /// 挿入ダイアログでの分類 (例: "motor")。
+    pub category: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ApplyMacroParams {
+    /// 挿入するマクロのid (`list_macros`で得る)。
+    pub macro_id: String,
+    /// バリアントキー ("A"=既定)。省略時は既定。
+    pub variant: Option<String>,
+    /// 挿入先シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 基準点が来る位置 (mm)。
+    pub at: Point,
+    /// 回転角。0/90/180/270。省略時は0。
+    pub rotation: Option<u16>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -411,6 +486,84 @@ impl MadakeMcp {
             .map_err(internal)?;
         json_ok(&serde_json::json!({
             "template_id": p.template_id,
+            "sheet_id": sheet_id,
+            "revision": patch.revision,
+            "entities_added": patch.ops.len(),
+        }))
+    }
+
+    #[tool(
+        description = "使える回路マクロ(現場で作った回路をそのまま再利用する部品)の一覧を返す。各マクロはid・名称(英/日)・分類・基準点・バリアントキー(A〜。Aが既定)を持つ。置き場は~/MadakeCAD/macros/。挿入はapply_macro、新しく作るのはsave_macro"
+    )]
+    fn list_macros(&self) -> Result<String, ErrorData> {
+        let list = madake_core::macros::list();
+        let macros: Vec<serde_json::Value> = list
+            .macros
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "id": m.id,
+                    "name": m.name,
+                    "name_ja": m.name_ja,
+                    "description": m.description,
+                    "description_ja": m.description_ja,
+                    "category": m.category,
+                    "base_point": m.base_point,
+                    "variants": m.variant_keys(),
+                    "command_count": m.commands.len(),
+                })
+            })
+            .collect();
+        json_ok(&serde_json::json!({
+            "macros": macros,
+            "issues": list.issues,
+            "user_dir": list.user_dir,
+        }))
+    }
+
+    #[tool(
+        description = "図面の一部(選択したエンティティ)を回路マクロとして保存する。座標は基準点(選択範囲の左下のピン)からの相対で保存され、線番は捨てられる(挿入先で振り直すため)。図面は変更しない"
+    )]
+    fn save_macro(&self, Parameters(p): Parameters<SaveMacroParams>) -> Result<String, ErrorData> {
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let meta = madake_core::macros::MacroMeta {
+            id: p.id.unwrap_or_default(),
+            name: p.name,
+            name_ja: p.name_ja.unwrap_or_default(),
+            description: p.description.unwrap_or_default(),
+            description_ja: p.description_ja.unwrap_or_default(),
+            category: p.category.unwrap_or_default(),
+        };
+        let (m, path) = self
+            .doc
+            .save_macro(sheet_id, &p.entity_ids, &meta)
+            .map_err(internal)?;
+        json_ok(&serde_json::json!({
+            "id": m.id,
+            "base_point": m.base_point,
+            "command_count": m.commands.len(),
+            "path": path,
+        }))
+    }
+
+    #[tool(
+        description = "回路マクロをシートへ挿入する。基準点が指定位置(at)へ来るように置かれ、参照記号は図面で使用済みの次の番号へ自動で振り直される(2回挿入しても重複しない)。バリアントを指定すると代替回路が入る。挿入は1回の編集として履歴に乗るためundo一発で全体が戻る。挿入後は必ずrun_verificationで確認する"
+    )]
+    fn apply_macro(&self, Parameters(p): Parameters<ApplyMacroParams>) -> Result<String, ErrorData> {
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let patch = self
+            .doc
+            .apply_macro(
+                &p.macro_id,
+                p.variant.as_deref(),
+                sheet_id,
+                p.at,
+                p.rotation.unwrap_or(0),
+                self.doc.mcp_origin(),
+            )
+            .map_err(internal)?;
+        json_ok(&serde_json::json!({
+            "macro_id": p.macro_id,
             "sheet_id": sheet_id,
             "revision": patch.revision,
             "entities_added": patch.ops.len(),

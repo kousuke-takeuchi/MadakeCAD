@@ -81,6 +81,66 @@ fn apply_template(
         .map_err(|e| e.to_string())
 }
 
+/// 使える回路マクロの一覧(ユーザーの`~/MadakeCAD/macros`)。
+#[tauri::command]
+fn list_macros() -> madake_core::macros::MacroList {
+    madake_core::macros::list()
+}
+
+/// ユーザーマクロの置き場(`~/MadakeCAD/macros`)をOSのファイラで開く。
+#[tauri::command]
+fn open_macros_folder(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let dir = madake_core::macros::user_dir().ok_or("home directory not found")?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.display().to_string();
+    app.opener()
+        .open_path(path.clone(), None::<&str>)
+        .map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
+/// 選択したエンティティを回路マクロとして保存する(図面は変更しない)。
+/// 保存したマクロと書き出し先パスを返す。
+#[tauri::command]
+fn save_macro(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+    entity_ids: Vec<madake_core::EntityId>,
+    meta: madake_core::macros::MacroMeta,
+) -> Result<serde_json::Value, String> {
+    let (m, path) = state
+        .doc
+        .save_macro(sheet_id, &entity_ids, &meta)
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "macro": m, "path": path }))
+}
+
+/// 回路マクロをシートへ挿入する。UI操作なので由来は`user`、
+/// **1回の編集**として履歴に乗るのでundo一発で全体が戻る。
+#[tauri::command]
+fn apply_macro(
+    state: State<AppState>,
+    macro_id: String,
+    variant: Option<String>,
+    sheet_id: madake_core::SheetId,
+    at: madake_core::Point,
+    rotation: Option<u16>,
+) -> Result<Patch, String> {
+    state
+        .doc
+        .apply_macro(
+            &macro_id,
+            variant.as_deref(),
+            sheet_id,
+            at,
+            rotation.unwrap_or(0),
+            madake_core::EditOrigin::User,
+        )
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn undo(state: State<AppState>) -> Result<Option<Patch>, String> {
     state.doc.undo().map_err(|e| e.to_string())
@@ -522,6 +582,10 @@ pub fn run() {
             list_templates,
             apply_template,
             open_templates_folder,
+            list_macros,
+            save_macro,
+            apply_macro,
+            open_macros_folder,
             undo,
             redo,
             save_project,

@@ -20,8 +20,10 @@
 
 ### Task 1: 回路マクロ(コア)
 
-- [ ] Step 1 (red): Rustテスト: 選択範囲→マクロ保存(相対座標化・基準点)/挿入で再採番・線番クリア/バリアント列挙とTab切替相当の選択適用/undo一発/往復(保存→挿入)で図面等価/壊れたマクロJSONのエラー
-- [ ] Step 2 (green): `macros.rs`実装(テンプレ機構再利用)+IPC/Link API(保存・列挙・挿入)。gen_spec→コミット
+- [x] Step 1 (red): Rustテスト: 選択範囲→マクロ保存(相対座標化・基準点)/挿入で再採番・線番クリア/バリアント列挙とTab切替相当の選択適用/undo一発/往復(保存→挿入)で図面等価/壊れたマクロJSONのエラー
+- [x] Step 2 (green): `macros.rs`実装(テンプレ機構再利用)+IPC/Link API(保存・列挙・挿入)。gen_spec→コミット
+
+> **完了 (2026-08-22)**: `madake-core/src/macros.rs`(コア16テスト)+Link API 3エンドポイント(`GET /macros`・`POST /macros/save`・`POST /macros/apply`、3テスト)+MCPツール(`list_macros`/`save_macro`/`apply_macro`)+Tauri IPC(`list_macros`/`save_macro`/`apply_macro`/`open_macros_folder`)。テンプレート機構との共通化=UUIDプレースホルダ置換(`templates::substitute`)・`*.json`走査(`templates::json_files`)・issue型(`TemplateIssue`)・回転規則(`netlist::rotate_local`)。値セット(プレースホルダ)はフェーズ3のまま。
 
 ### Task 2: 回路マクロ(UI)
 
