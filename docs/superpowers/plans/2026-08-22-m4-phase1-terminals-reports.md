@@ -30,8 +30,12 @@
 
 ### Task 3: 帳票の図面シート化+PDF一括
 
-- [ ] Step 1 (red): Rustテスト: 汎用テーブルページ(図枠+表題+列見出し+行/ページ分割/長文セルの省略)/端子台チャートのシート化/From-Toのシート化/PDF一括(表紙+回路+帳票のページ数・順序)
-- [ ] Step 2 (green): report_sheet_svg+PDF結合実装。gen_spec→コミット
+- [x] Step 1 (red): Rustテスト: 汎用テーブルページ(図枠+表題+列見出し+行/ページ分割/長文セルの省略)/端子台チャートのシート化/From-Toのシート化/PDF一括(表紙+回路+帳票のページ数・順序)
+- [x] Step 2 (green): report_sheet_svg+PDF結合実装。gen_spec→コミット
+  - `report_sheet.rs`(A4横・25行/ページ・列幅は相対比・セルは省略記号で切る)、行データは `reports::bom_rows` / `xref::xref_table_rows` を追加してモジュール側に置いた
+  - PDF結合は pdf-writer で実装 (`pdf::svgs_to_pdf` / `project_pdf_pages` / `export_project_pdf`)。ページ寸法のスケール不具合 (96dpi→72pt換算漏れでA3が133%) もあわせて修正
+  - 露出: Link API `POST /export/pdf-book`・MCP `export_pdf_book`・CLI `madake export pdf-book --reports ... [--no-cover]`・Tauri IPC `export_pdf_book`
+  - 目視確認: `cargo run -p madake-core --example pdf_demo -- --book <path>` (表紙+回路2+帳票5=8ページ)
 
 ### Task 4: 端子接続図(グラフィカル)
 
