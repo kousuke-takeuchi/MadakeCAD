@@ -37,6 +37,7 @@ function twoSheetProject(): Project {
     format_version: 1,
     name: "t",
     wire_parts: [],
+    plc_assignments: [],
     sheets: [
       sheet("s1", "Sheet1", [netLabel("l1", "24V_1", 20, 20)]),
       sheet("s2", "Sheet2", [netLabel("l2", "24V_1", 250, 70)]),

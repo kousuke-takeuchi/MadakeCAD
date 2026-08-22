@@ -116,6 +116,19 @@ export interface Project {
   name: string;
   sheets: Sheet[];
   wire_parts: WirePart[];
+  /** PLC I/O割付表 (信号名・コメントの正。接続先・線番は図面から導出)。 */
+  plc_assignments: PlcAssignment[];
+}
+
+/** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */
+export interface PlcAssignment {
+  id: string;
+  /** PLCモジュールの参照記号 (例 "PLC1")。 */
+  module_ref: string;
+  /** I/Oアドレス (例 "X0" / "%I0.0" / "I:0/0")。 */
+  address: string;
+  signal_name: string;
+  comment: string;
 }
 
 export type Command =
@@ -129,6 +142,8 @@ export type Command =
   | { type: "delete_entities"; sheet_id: string; ids: string[] }
   | { type: "move_entities"; sheet_id: string; ids: string[]; dx: number; dy: number }
   | { type: "set_wire_parts"; wire_parts: WirePart[] }
+  /** PLC I/O割付表の置換 (プロジェクト単位)。 */
+  | { type: "set_plc_assignments"; assignments: PlcAssignment[] }
   /** 線番のネット単位自動採番。sheet_id省略(null)で全シート。 */
   | {
       type: "renumber_wires";
@@ -150,7 +165,8 @@ export type PatchOp =
   | { op: "sheet_meta_updated"; sheet: Sheet }
   | { op: "entity_upserted"; sheet_id: string; entity: Entity }
   | { op: "entity_removed"; sheet_id: string; id: string }
-  | { op: "wire_parts_replaced"; wire_parts: WirePart[] };
+  | { op: "wire_parts_replaced"; wire_parts: WirePart[] }
+  | { op: "plc_assignments_replaced"; assignments: PlcAssignment[] };
 
 export interface Patch {
   revision: number;
@@ -219,6 +235,8 @@ export interface Part {
   mounting: string;
   /** 接点構成 (リレー・コンタクタの実装数。例 "2NO+2NC")。配置時にattrsへ写る。 */
   contact_config?: string;
+  /** PLC I/Oモジュールの定義JSON (空欄ならPLCモジュールではない)。 */
+  plc_module?: string;
 }
 
 /** KiCadインポートの結果要約。 */
@@ -498,8 +516,62 @@ export interface MacroList {
   user_dir?: string | null;
 }
 
+/** PLCモジュールの入出力の種別。 */
+export type PlcIoKind = "DI" | "DO";
+/** PLCのアドレス体系 (三菱=8進 / Siemens=バイト.ビット / AB=ワード/ビット)。 */
+export type PlcAddressStyle = "mitsubishi" | "siemens" | "ab";
+
+/** PLCモジュール1機種の定義 (部品DBの`plc_module`列と同じ形)。 */
+export interface PlcModuleSpec {
+  points: number;
+  kind: PlcIoKind;
+  address_prefix: string;
+  address_style: PlcAddressStyle;
+}
+
+/** 図面に置かれているPLCモジュール1つの概要。 */
+export interface PlcModuleInfo {
+  entity_id: string;
+  sheet_id: string;
+  sheet_name: string;
+  reference: string;
+  value: string;
+  points: number;
+  kind: PlcIoKind;
+}
+
+/** 割付表エディタのグリッド1行 (接続先・線番は図面から読んだ読み取り専用の値)。 */
+export interface PlcPoint {
+  /** 1起点の点番号 (モジュールシンボルのピン番号)。 */
+  point: number;
+  address: string;
+  signal_name: string;
+  comment: string;
+  target: string;
+  wire_no: string;
+}
+
+/** ラダーの形式 (v1は縦バス+横ラングのみ実装)。 */
+export type LadderStyle = "vertical-bus" | "horizontal-bus";
+/** モジュールの配置方針 (v1はモジュールごとに新ラダーのみ実装)。 */
+export type ModulePlacement = "new-ladder" | "share-if-fits" | "share-or-split";
+
+/** I/O図面の生成設定。 */
+export interface PlcSheetOptions {
+  rung_spacing_mm: number;
+  start_skip: number;
+  ladder_style: LadderStyle;
+  placement: ModulePlacement;
+}
+
 /** 帳票の種類 (Rustの`ReportKind`と同じケバブケース表記)。 */
-export type ReportKind = "wire-list" | "terminal-chart" | "terminal-diagram" | "bom" | "xref";
+export type ReportKind =
+  | "wire-list"
+  | "terminal-chart"
+  | "terminal-diagram"
+  | "bom"
+  | "xref"
+  | "plc-io";
 /** 帳票の出力形式 (CSV or 図枠付き図面シートのPDF)。 */
 export type ReportFormat = "csv" | "pdf";
 
@@ -576,6 +648,22 @@ interface Ipc {
   getTerminalChart(entityId: string): Promise<TerminalChart | null>;
   /** 端子台チェック (未結線・不正なジャンパ)。 */
   checkTerminalBlock(entityId: string): Promise<Diagnostic[]>;
+  /** 図面に置かれているPLC I/Oモジュールの一覧。 */
+  listPlcModules(): Promise<PlcModuleInfo[]>;
+  /** 部品DBのPLCモジュールライブラリ (機種一覧)。 */
+  listPlcModuleParts(): Promise<Part[]>;
+  /** 1つのモジュールのI/O割付表 (接続先・線番は図面から導出)。 */
+  getPlcAssignments(moduleRef: string): Promise<PlcPoint[]>;
+  /** I/O割付表を丸ごと置き換える (undo一発で戻る)。 */
+  setPlcAssignments(assignments: PlcAssignment[]): Promise<Patch>;
+  /** 割付表のCSVを取り込む (対象モジュールの行だけ置き換え)。 */
+  importPlcAssignmentsCsv(moduleRef: string, csv: string): Promise<Patch>;
+  /** PLC I/O図面 (ラダーページ) を生成する (1回の編集 = undo一発)。 */
+  generatePlcSheet(
+    moduleRef: string,
+    module: PlcModuleSpec,
+    options?: PlcSheetOptions,
+  ): Promise<Patch>;
   /**
    * 帳票1種を1ファイルへ書き出す。entityIdは端子台チャート・端子接続図の対象を
    * 1つの端子台に絞るときだけ渡す。戻り値=CSVなら行数、PDFならページ数。
@@ -634,6 +722,16 @@ const tauriIpc: Ipc = {
     invoke<TerminalChart | null>("get_terminal_chart", { entityId }),
   checkTerminalBlock: (entityId: string) =>
     invoke<Diagnostic[]>("check_terminal_block", { entityId }),
+  listPlcModules: () => invoke<PlcModuleInfo[]>("list_plc_modules"),
+  listPlcModuleParts: () => invoke<Part[]>("list_plc_module_parts"),
+  getPlcAssignments: (moduleRef: string) =>
+    invoke<PlcPoint[]>("get_plc_assignments", { moduleRef }),
+  setPlcAssignments: (assignments: PlcAssignment[]) =>
+    invoke<Patch>("set_plc_assignments", { assignments }),
+  importPlcAssignmentsCsv: (moduleRef: string, csv: string) =>
+    invoke<Patch>("import_plc_assignments_csv", { moduleRef, csv }),
+  generatePlcSheet: (moduleRef, module, options) =>
+    invoke<Patch>("generate_plc_sheet", { moduleRef, module, options }),
   exportReport: (kind, format, entityId, path) =>
     invoke<number>("export_report", { kind, format, entityId, path }),
   exportPdfBook: (path, reports, cover) =>
@@ -754,6 +852,27 @@ const httpIpc: Ipc = {
     }
   },
   checkTerminalBlock: (entityId) => http<Diagnostic[]>(`/terminals/check?entity_id=${entityId}`),
+  listPlcModules: async () =>
+    (await http<{ modules: PlcModuleInfo[] }>("/plc/modules")).modules,
+  listPlcModuleParts: () => http<Part[]>("/parts?category=plc"),
+  getPlcAssignments: async (moduleRef) => {
+    const res = await http<{ modules: { module_ref: string; points: PlcPoint[] }[] }>(
+      `/plc/assignments?module_ref=${encodeURIComponent(moduleRef)}`,
+    );
+    return res.modules[0]?.points ?? [];
+  },
+  setPlcAssignments: (assignments) =>
+    http<Patch>("/plc/assignments", { method: "PUT", body: JSON.stringify({ assignments }) }),
+  importPlcAssignmentsCsv: (moduleRef, csv) =>
+    http<Patch>("/plc/assignments/import", {
+      method: "POST",
+      body: JSON.stringify({ module_ref: moduleRef, csv }),
+    }),
+  generatePlcSheet: (moduleRef, module, options) =>
+    http<Patch>("/plc/generate", {
+      method: "POST",
+      body: JSON.stringify({ module_ref: moduleRef, module, options }),
+    }),
   exportReport: async (kind, format, entityId, path) => {
     const res = await http<{ count: number }>("/export/report", {
       method: "POST",

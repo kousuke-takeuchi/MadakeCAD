@@ -17,7 +17,7 @@ function testProject(): Project {
     revisions: [],
     entities: {},
   };
-  return { format_version: 1, name: "t", wire_parts: [], sheets: [sheet] };
+  return { format_version: 2, name: "t", wire_parts: [], plc_assignments: [], sheets: [sheet] };
 }
 
 describe("document store", () => {
@@ -54,7 +54,7 @@ describe("document store", () => {
       ops: [
         {
           op: "project_replaced",
-          project: { format_version: 1, name: "new", wire_parts: [], sheets: [] },
+          project: { format_version: 2, name: "new", wire_parts: [], plc_assignments: [], sheets: [] },
         },
       ],
     });

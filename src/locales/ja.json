@@ -376,7 +376,8 @@
       "terminal-chart": "端子台チャート",
       "terminal-diagram": "端子接続図",
       "bom": "部品表 (BOM)",
-      "xref": "クロスリファレンス表"
+      "xref": "クロスリファレンス表",
+      "plc-io": "PLC I/Oレポート"
     },
     "targetLabel": "対象:",
     "targetProject": "プロジェクト全体",

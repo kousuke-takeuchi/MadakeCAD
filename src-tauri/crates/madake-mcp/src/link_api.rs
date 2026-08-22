@@ -225,6 +225,107 @@ async fn post_apply_macro_inline(
     .map_err(bad_request)
 }
 
+#[derive(Deserialize)]
+struct PlcModuleQuery {
+    /// PLCモジュールの参照記号 (例 "PLC1")。省略で全モジュール。
+    #[serde(default)]
+    module_ref: Option<String>,
+}
+
+/// 図面に置かれているPLC I/Oモジュールの一覧 (参照記号・点数・入出力の種別)。
+async fn get_plc_modules(State(doc): State<SharedDoc>) -> Json<serde_json::Value> {
+    let engine = doc.engine.lock().unwrap();
+    Json(serde_json::json!({
+        "modules": madake_core::plc::plc_modules(engine.project())
+    }))
+}
+
+/// PLC I/O割付表 (接続先・線番は図面から読んだ値)。`module_ref`で1モジュールに絞れる。
+async fn get_plc_assignments(
+    State(doc): State<SharedDoc>,
+    Query(q): Query<PlcModuleQuery>,
+) -> Json<serde_json::Value> {
+    let engine = doc.engine.lock().unwrap();
+    let project = engine.project();
+    let refs = match q.module_ref {
+        Some(r) => vec![r],
+        None => madake_core::plc::assigned_module_refs(project),
+    };
+    let modules: Vec<serde_json::Value> = refs
+        .iter()
+        .map(|module_ref| {
+            serde_json::json!({
+                "module_ref": module_ref,
+                "points": madake_core::plc::plc_points(project, module_ref),
+            })
+        })
+        .collect();
+    Json(serde_json::json!({
+        "assignments": project.plc_assignments,
+        "modules": modules,
+    }))
+}
+
+#[derive(Deserialize)]
+struct PlcAssignmentsBody {
+    /// 置き換え後の割付表 (プロジェクト全体)。
+    assignments: Vec<madake_core::PlcAssignment>,
+}
+
+/// PLC I/O割付表を丸ごと置き換える。**1回の編集**として履歴に乗る(undo一発)。
+async fn put_plc_assignments(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<PlcAssignmentsBody>,
+) -> Result<Json<Patch>, ApiError> {
+    doc.set_plc_assignments(body.assignments, doc.mcp_origin())
+        .map(Json)
+        .map_err(bad_request)
+}
+
+#[derive(Deserialize)]
+struct PlcImportBody {
+    /// 取り込み先モジュールの参照記号。
+    module_ref: String,
+    /// CSV本文 (アドレス,信号名,コメント。見出し行はあってもなくてもよい)。
+    csv: String,
+}
+
+/// 割付表のCSVを取り込む (対象モジュールの行だけ置き換え)。undo一発で元に戻る。
+async fn post_plc_import(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<PlcImportBody>,
+) -> Result<Json<Patch>, ApiError> {
+    doc.import_plc_assignments_csv(&body.module_ref, &body.csv, doc.mcp_origin())
+        .map(Json)
+        .map_err(bad_request)
+}
+
+#[derive(Deserialize)]
+struct PlcGenerateBody {
+    /// モジュールの参照記号 (例 "PLC1")。
+    module_ref: String,
+    /// モジュール定義 (点数・入出力・アドレス体系)。部品DBの`plc_module`列と同じ形。
+    module: madake_core::plc::PlcModuleSpec,
+    /// 生成設定 (ラダー形式・ラング間隔・先頭スキップ・配置方針)。省略時は既定。
+    #[serde(default)]
+    options: madake_core::plc::PlcSheetOptions,
+}
+
+/// PLC I/O図面 (ラダーページ) を生成する。**1回の編集**として履歴に乗る(undo一発)。
+async fn post_plc_generate(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<PlcGenerateBody>,
+) -> Result<Json<Patch>, ApiError> {
+    doc.generate_plc_sheet(
+        &body.module_ref,
+        &body.module,
+        &body.options,
+        doc.mcp_origin(),
+    )
+    .map(Json)
+    .map_err(bad_request)
+}
+
 /// シートidの解決 (省略時は先頭シート)。
 fn resolve_sheet(doc: &SharedDoc, sheet_id: Option<Uuid>) -> Result<Uuid, ApiError> {
     match sheet_id {
@@ -940,6 +1041,13 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/terminals", get(get_terminals))
         .route("/api/v1/terminals/chart", get(get_terminal_chart))
         .route("/api/v1/terminals/check", get(get_terminal_check))
+        .route("/api/v1/plc/modules", get(get_plc_modules))
+        .route(
+            "/api/v1/plc/assignments",
+            get(get_plc_assignments).put(put_plc_assignments),
+        )
+        .route("/api/v1/plc/assignments/import", post(post_plc_import))
+        .route("/api/v1/plc/generate", post(post_plc_generate))
         .route("/api/v1/simulate/op", post(post_simulate_op))
         .route("/api/v1/templates", get(get_templates))
         .route("/api/v1/templates/apply", post(post_apply_template))

@@ -123,6 +123,7 @@ describe("template picker store", () => {
       format_version: 1,
       name: "P",
       wire_parts: [],
+      plc_assignments: [],
       sheets: [
         {
           id: "s1",

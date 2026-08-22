@@ -376,7 +376,8 @@
       "terminal-chart": "Terminal chart",
       "terminal-diagram": "Terminal connection diagram",
       "bom": "Bill of materials (BOM)",
-      "xref": "Cross-reference table"
+      "xref": "Cross-reference table",
+      "plc-io": "PLC I/O report"
     },
     "targetLabel": "Target:",
     "targetProject": "Whole project",

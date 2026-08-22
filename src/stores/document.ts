@@ -106,6 +106,9 @@ export const useDocumentStore = defineStore("document", {
           case "wire_parts_replaced":
             if (this.project) this.project.wire_parts = op.wire_parts;
             break;
+          case "plc_assignments_replaced":
+            if (this.project) this.project.plc_assignments = op.assignments;
+            break;
         }
       }
       this.revision = patch.revision;

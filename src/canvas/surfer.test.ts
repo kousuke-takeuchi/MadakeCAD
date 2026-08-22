@@ -18,7 +18,7 @@ function sheet(id: string, name: string): Sheet {
 }
 
 function project(sheets: Sheet[]): Project {
-  return { format_version: 1, name: "t", sheets, wire_parts: [] };
+  return { format_version: 2, name: "t", sheets, wire_parts: [], plc_assignments: [] };
 }
 
 function put(s: Sheet, e: Entity): Entity {

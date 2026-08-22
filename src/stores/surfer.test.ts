@@ -74,6 +74,7 @@ function project(): Project {
       sheet("s2", "シート2", [symbol("contact", "K1")]),
     ],
     wire_parts: [],
+    plc_assignments: [],
   };
 }
 
