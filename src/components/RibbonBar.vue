@@ -1,17 +1,20 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileText, Frame, Grid3x3, Hash,
-  Image, LayoutGrid, ListOrdered, Move, MoveRight, Pencil, Route, Scissors, ShieldCheck,
-  SquareDashed, Tag, Trash2, Type,
+  Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileSpreadsheet, FileText, Frame,
+  Grid3x3, Hash, Image, LayoutGrid, ListOrdered, ListChecks, Move, MoveRight, Network, Pencil,
+  Route, Scissors, ShieldCheck, SquareDashed, Table2, Tag, Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
 import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
+import type { ReportFormat, ReportKind } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useFileActions } from "../composables/fileActions";
 import { useRevisionsStore } from "../stores/revisions";
+import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
+import { useTerminalsStore } from "../stores/terminals";
 import { useWireNumbersStore } from "../stores/wireNumbers";
 import { useSimulationStore } from "../stores/simulation";
 import { useVerificationStore } from "../stores/verification";
@@ -27,7 +30,14 @@ const revisions = useRevisionsStore();
 const wireNumbers = useWireNumbersStore();
 const { t } = useI18n();
 
-const activeTab = ref("回路図");
+const reportDialog = useReportDialogStore();
+const pdfBook = usePdfBookStore();
+const terminals = useTerminalsStore();
+
+/** タブのid (表示名はi18nカタログ)。 */
+type TabId = "home" | "project" | "schematic" | "panel" | "report" | "io" | "view" | "admin";
+const tabs: TabId[] = ["home", "project", "schematic", "panel", "report", "io", "view", "admin"];
+const activeTab = ref<TabId>("schematic");
 
 // 表示タブ: 表示クラストグル (レイヤ、spec §4)。3個ずつの縦列に分ける
 const viewIcons: Record<ViewClass, LucideIcon> = {
@@ -38,7 +48,6 @@ const viewClassColumns = Array.from(
   { length: Math.ceil(VIEW_CLASSES.length / 3) },
   (_, i) => VIEW_CLASSES.slice(i * 3, i * 3 + 3),
 );
-const tabs = ["ホーム", "プロジェクト", "回路図", "パネル", "レポート", "読み込み/書き出し", "表示", "管理"];
 
 async function runSimulation() {
   const doc = useDocumentStore();
@@ -91,6 +100,118 @@ function startHarness() {
 function todo(name: string) {
   ui.log(`${name}: 未実装 (今後のフェーズで対応予定)`);
 }
+
+/** 帳票生成ダイアログを開く (リボン「レポート」タブ>帳票グループ)。 */
+async function openReport(kind: ReportKind, format?: ReportFormat) {
+  await reportDialog.openFor(kind, format);
+  ui.log(t("reports.openLog", { report: t(`reports.kind.${kind}`) }));
+}
+
+/** PDF一括出力ダイアログを開く (レポートタブ>出力グループ)。 */
+function openPdfBook() {
+  pdfBook.openDialog();
+  ui.log(t("pdfBook.openLog"));
+}
+
+/** 端子台エディタを開く。`check`ならそのまま端子台チェックまで実行する。 */
+async function openTerminalEditor(check = false) {
+  const sheet = useDocumentStore().activeSheet;
+  if (!sheet) {
+    ui.log(t("terminals.noSheetLog"));
+    return;
+  }
+  await terminals.openFor(sheet.id);
+  ui.log(t("terminals.openLog", { sheet: sheet.name }));
+  if (!terminals.entityId) {
+    ui.log(t("terminals.noBlockLog"));
+    return;
+  }
+  if (!check) return;
+  await terminals.runCheck();
+  const result = terminals.checkOk
+    ? t("terminals.checkOk")
+    : t("terminals.checkCounts", terminals.checkCounts);
+  ui.log(t("terminals.checkLog", { reference: terminals.reference, result }));
+}
+
+/**
+ * 「レポート」タブ (.pen「M4デザイン - リボン パネル/レポート/管理タブ」準拠)。
+ * ケーブル一覧・PLC I/Oレポートは帳票そのものが未実装なのでログのみ。
+ * 電線リストはTask 1でFrom-Toリストへ統合したため1ボタンにまとめている。
+ */
+const reportGroups = computed<RibbonGroup[]>(() => [
+  {
+    name: t("ribbon.reportGroup.reports"),
+    big: {
+      label: t("reports.kind.terminal-chart"),
+      icon: Table2,
+      color: "var(--ok-fg)",
+      action: () => openReport("terminal-chart"),
+    },
+    small: [
+      [
+        { label: t("reports.kind.bom"), icon: FileText, action: () => openReport("bom") },
+        { label: t("reports.kind.wire-list"), icon: Cable, action: () => openReport("wire-list") },
+        {
+          label: t("reports.ribbonCableList"),
+          icon: Cable,
+          action: () => ui.log(t("reports.todoLog", { report: t("reports.ribbonCableList") })),
+        },
+      ],
+      [
+        { label: t("reports.kind.xref"), icon: Network, action: () => openReport("xref") },
+        {
+          label: t("reports.ribbonPlcIo"),
+          icon: Cpu,
+          action: () => ui.log(t("reports.todoLog", { report: t("reports.ribbonPlcIo") })),
+        },
+      ],
+    ],
+  },
+  {
+    name: t("ribbon.reportGroup.terminals"),
+    big: {
+      label: t("terminals.ribbonButton"),
+      icon: LayoutGrid,
+      color: "var(--acad-blue)",
+      action: () => openTerminalEditor(),
+    },
+    small: [
+      [
+        {
+          label: t("reports.kind.terminal-diagram"),
+          icon: Route,
+          action: () => openReport("terminal-diagram"),
+        },
+        { label: t("terminals.check"), icon: ListChecks, action: () => openTerminalEditor(true) },
+      ],
+    ],
+  },
+  {
+    name: t("ribbon.reportGroup.output"),
+    big: {
+      label: t("pdfBook.ribbonButton"),
+      icon: FileDown,
+      color: "var(--icon-edit)",
+      action: () => openPdfBook(),
+    },
+    small: [
+      [
+        {
+          label: t("reports.ribbonSheetify"),
+          icon: Frame,
+          action: () => openReport("wire-list", "pdf"),
+        },
+        {
+          label: t("reports.ribbonCsv"),
+          icon: FileSpreadsheet,
+          action: () => openReport("wire-list", "csv"),
+        },
+        { label: t("reports.ribbonPickTargets"), icon: ListChecks, action: () => openPdfBook() },
+      ],
+    ],
+  },
+]);
 
 interface RibbonItem {
   label: string;
@@ -182,24 +303,31 @@ const groups = computed<RibbonGroup[]>(() => [
     ],
   },
 ]);
+
+/** 表示中のタブのグループ。まだ実装していないタブはnull (プレースホルダを出す)。 */
+const activeGroups = computed<RibbonGroup[] | null>(() => {
+  if (activeTab.value === "schematic") return groups.value;
+  if (activeTab.value === "report") return reportGroups.value;
+  return null;
+});
 </script>
 
 <template>
   <div class="ribbon">
     <div class="ribbon-tabs">
       <button
-        v-for="t in tabs"
-        :key="t"
+        v-for="tab in tabs"
+        :key="tab"
         class="ribbon-tab"
-        :class="{ active: t === activeTab }"
-        @click="activeTab = t"
+        :class="{ active: tab === activeTab }"
+        @click="activeTab = tab"
       >
-        {{ t }}
+        {{ t(`ribbon.tab.${tab}`) }}
       </button>
     </div>
     <div class="ribbon-body">
-      <template v-if="activeTab === '回路図'">
-        <template v-for="(g, i) in groups" :key="g.name">
+      <template v-if="activeGroups">
+        <template v-for="(g, i) in activeGroups" :key="g.name">
           <div v-if="i > 0" class="ribbon-sep" />
           <div class="ribbon-group">
             <div class="ribbon-group-body">
@@ -228,7 +356,7 @@ const groups = computed<RibbonGroup[]>(() => [
           </div>
         </template>
       </template>
-      <template v-else-if="activeTab === '表示'">
+      <template v-else-if="activeTab === 'view'">
         <div class="ribbon-group">
           <div class="ribbon-group-body">
             <div v-for="(col, ci) in viewClassColumns" :key="ci" class="ribbon-smalls">
@@ -247,7 +375,9 @@ const groups = computed<RibbonGroup[]>(() => [
           <div class="ribbon-group-label">表示クラス ▾</div>
         </div>
       </template>
-      <div v-else class="ribbon-placeholder">「{{ activeTab }}」タブは今後のフェーズで実装予定です</div>
+      <div v-else class="ribbon-placeholder">
+        「{{ t(`ribbon.tab.${activeTab}`) }}」タブは今後のフェーズで実装予定です
+      </div>
     </div>
   </div>
 </template>

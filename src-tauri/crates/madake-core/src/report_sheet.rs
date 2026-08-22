@@ -123,6 +123,121 @@ impl ReportKind {
     }
 }
 
+/// 帳票1種の出力形式。JSON表記はケバブケース (`"csv"` / `"pdf"`)。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReportFormat {
+    /// 表計算ソフトで開けるCSV (UTF-8)。
+    Csv,
+    /// 図枠+表題欄付きのA4横ページを綴じたPDF。
+    Pdf,
+}
+
+/// 帳票の書き出しに失敗した理由。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReportError {
+    /// この帳票にはその出力形式が無い (端子接続図のCSVなど)。
+    UnsupportedFormat(ReportKind, ReportFormat),
+    /// 対象に指定されたIDの端子台が見つからない。
+    TerminalBlockNotFound,
+    /// PDFの組み立てに失敗した。
+    Pdf(String),
+}
+
+impl std::fmt::Display for ReportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReportError::UnsupportedFormat(kind, _) => {
+                write!(f, "「{}」はCSVでは出力できません (図面のためPDFを選んでください)", kind.title())
+            }
+            ReportError::TerminalBlockNotFound => write!(f, "指定された端子台が見つかりません"),
+            ReportError::Pdf(e) => write!(f, "PDFの生成に失敗しました: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for ReportError {}
+
+/// 帳票1種を1ファイル分のバイト列にする。
+///
+/// - `entity_id` は端子台チャート・端子接続図の対象を1つの端子台に絞るときだけ渡す
+///   (Noneならプロジェクト内の全端子台)。他の帳票では無視される
+/// - 戻り値は (中身, 件数)。件数はCSVなら本文の行数、PDFならページ数
+/// - 端子接続図はグラフィカルな図面なのでCSVでは出せない ([`ReportError::UnsupportedFormat`])
+pub fn report_bytes(
+    project: &Project,
+    kind: ReportKind,
+    format: ReportFormat,
+    entity_id: Option<EntityId>,
+) -> Result<(Vec<u8>, usize), ReportError> {
+    match format {
+        ReportFormat::Csv => {
+            let csv = report_csv(project, kind, entity_id)?;
+            // 見出し行を除いた本文の行数
+            let rows = csv.lines().count().saturating_sub(1);
+            Ok((csv.into_bytes(), rows))
+        }
+        ReportFormat::Pdf => {
+            let pages = report_pages(project, kind, entity_id)?;
+            let count = pages.len();
+            let pdf = crate::pdf::svgs_to_pdf(&pages)
+                .map_err(|e| ReportError::Pdf(e.to_string()))?;
+            Ok((pdf, count))
+        }
+    }
+}
+
+/// 帳票1種のCSV本文 (見出し行つき)。対象の絞り込みは [`report_bytes`] と同じ。
+pub fn report_csv(
+    project: &Project,
+    kind: ReportKind,
+    entity_id: Option<EntityId>,
+) -> Result<String, ReportError> {
+    match (kind, entity_id) {
+        (ReportKind::WireList, _) => Ok(crate::reports::wire_list_csv(project)),
+        (ReportKind::Bom, _) => Ok(crate::reports::bom_csv(project)),
+        (ReportKind::Xref, _) => Ok(crate::xref::xref_table_csv(project)),
+        (ReportKind::TerminalChart, None) => {
+            Ok(crate::terminal_chart::terminal_charts_csv(project))
+        }
+        (ReportKind::TerminalChart, Some(id)) => project
+            .sheets
+            .iter()
+            .find(|s| s.entities.contains_key(&id))
+            .map(|s| crate::terminal_chart::terminal_chart_csv(s, id))
+            .filter(|csv| !csv.is_empty())
+            .ok_or(ReportError::TerminalBlockNotFound),
+        (ReportKind::TerminalDiagram, _) => Err(ReportError::UnsupportedFormat(
+            kind,
+            ReportFormat::Csv,
+        )),
+    }
+}
+
+/// 帳票1種の図面ページ (1要素=1ページのSVG)。対象の絞り込みは [`report_bytes`] と同じ。
+pub fn report_pages(
+    project: &Project,
+    kind: ReportKind,
+    entity_id: Option<EntityId>,
+) -> Result<Vec<String>, ReportError> {
+    match (kind, entity_id) {
+        (ReportKind::TerminalChart, Some(id)) => {
+            terminal_chart_sheet_svg(project, id).ok_or(ReportError::TerminalBlockNotFound)
+        }
+        (ReportKind::TerminalDiagram, Some(id)) => {
+            let pages = crate::terminal_diagram::terminal_diagram_svg(project, id);
+            if pages.is_empty() {
+                Err(ReportError::TerminalBlockNotFound)
+            } else {
+                Ok(pages)
+            }
+        }
+        _ => Ok(kind.pages(project)),
+    }
+}
+
 /// 表の1ページに入る本文行数。用紙・行高から決まる固定値。
 pub fn rows_per_page() -> usize {
     let body = body_bottom() - table_top() - TABLE_HEADER_H;
@@ -822,6 +937,102 @@ mod tests {
         let project = Project::new("無改訂");
         let t = texts(&cover_sheet_svg(&project));
         assert!(t.contains(&"最新改訂: なし".to_string()), "{t:?}");
+    }
+
+    /// Exporting a report as CSV returns the same table the drawing sheet shows, and reports how many body rows it wrote.
+    /// 帳票をCSVで書き出すと図面シートと同じ表が返り、書き出した本文の行数も分かる。
+    #[test]
+    fn a_csv_export_returns_the_table_and_its_row_count() {
+        let (project, tb) = tb_project();
+        let (bytes, rows) =
+            report_bytes(&project, ReportKind::TerminalChart, ReportFormat::Csv, Some(tb))
+                .expect("CSV");
+        let csv = String::from_utf8(bytes).expect("UTF-8");
+        assert!(csv.starts_with("端子,内部側,線番,電線,外部側,ジャンパ\n"), "{csv}");
+        assert_eq!(rows, 4, "4極なので本文は4行");
+    }
+
+    /// Asking for the terminal chart of the whole project puts the reference designator of each terminal block in the first column.
+    /// 対象を絞らずに端子台チャートを出すと、どの端子台の行かが分かるよう先頭列に参照記号が入る。
+    #[test]
+    fn a_project_wide_terminal_chart_names_the_terminal_block_in_each_row() {
+        let (project, _) = tb_project();
+        let (bytes, rows) =
+            report_bytes(&project, ReportKind::TerminalChart, ReportFormat::Csv, None)
+                .expect("CSV");
+        let csv = String::from_utf8(bytes).expect("UTF-8");
+        assert!(csv.starts_with("端子台,端子,内部側,"), "{csv}");
+        assert!(csv.lines().nth(1).expect("1行目").starts_with("TB1,1,"), "{csv}");
+        assert_eq!(rows, 4);
+    }
+
+    /// Exporting a report as PDF binds the framed drawing pages into one PDF file and reports the page count.
+    /// 帳票をPDFで書き出すと図枠付きの図面ページが1つのPDFにまとまり、ページ数が分かる。
+    #[test]
+    fn a_pdf_export_binds_the_framed_pages_into_one_file() {
+        let (project, tb) = tb_project();
+        let (bytes, pages) =
+            report_bytes(&project, ReportKind::TerminalDiagram, ReportFormat::Pdf, Some(tb))
+                .expect("PDF");
+        assert!(bytes.starts_with(b"%PDF-"), "PDFのシグネチャ");
+        assert_eq!(pages, 1, "4極の端子接続図は1ページ");
+    }
+
+    /// The terminal connection diagram is a drawing, so it cannot be exported as CSV and says so.
+    /// 端子接続図は図面なのでCSVでは出せず、その旨を返す。
+    #[test]
+    fn the_terminal_connection_diagram_has_no_csv_form() {
+        let (project, tb) = tb_project();
+        let err = report_bytes(&project, ReportKind::TerminalDiagram, ReportFormat::Csv, Some(tb))
+            .expect_err("CSVは無い");
+        assert_eq!(
+            err,
+            ReportError::UnsupportedFormat(ReportKind::TerminalDiagram, ReportFormat::Csv)
+        );
+    }
+
+    /// Pointing a terminal report at something that is not a terminal block fails instead of writing an empty file.
+    /// 端子台ではないものを対象にすると、空のファイルを書かずにエラーになる。
+    #[test]
+    fn a_terminal_report_of_an_unknown_block_fails() {
+        let (project, _) = tb_project();
+        for format in [ReportFormat::Csv, ReportFormat::Pdf] {
+            let err = report_bytes(
+                &project,
+                ReportKind::TerminalChart,
+                format,
+                Some(Uuid::new_v4()),
+            )
+            .expect_err("端子台が無い");
+            assert_eq!(err, ReportError::TerminalBlockNotFound);
+        }
+    }
+
+    /// Every other report ignores the terminal selection and always covers the whole project.
+    /// 端子台以外の帳票は端子台の指定を無視し、常にプロジェクト全体を対象にする。
+    #[test]
+    fn other_reports_always_cover_the_whole_project() {
+        let (project, tb) = tb_project();
+        for kind in [ReportKind::WireList, ReportKind::Bom, ReportKind::Xref] {
+            let (with_tb, _) =
+                report_bytes(&project, kind, ReportFormat::Csv, Some(tb)).expect("CSV");
+            let (whole, _) = report_bytes(&project, kind, ReportFormat::Csv, None).expect("CSV");
+            assert_eq!(with_tb, whole, "{kind:?}");
+        }
+    }
+
+    /// The cross-reference CSV carries the same column headings as its drawing sheet.
+    /// クロスリファレンス表のCSVの見出しは、図面シート版の列見出しと同じ。
+    #[test]
+    fn the_cross_reference_csv_has_the_same_columns_as_its_sheet() {
+        let (project, _) = tb_project();
+        let (bytes, _) = report_bytes(&project, ReportKind::Xref, ReportFormat::Csv, None)
+            .expect("CSV");
+        let csv = String::from_utf8(bytes).expect("UTF-8");
+        assert_eq!(
+            csv.lines().next().expect("見出し"),
+            crate::xref::XREF_TABLE_COLUMNS.join(",")
+        );
     }
 
     /// Report kinds are serialized with the same kebab-case names the CLI and Link API use.

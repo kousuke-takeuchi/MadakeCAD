@@ -243,6 +243,79 @@ async fn post_export_pdf_book(
     ))
 }
 
+/// 端子台エディタ・帳票の対象選択に出す端子台の一覧。`sheet_id`でシートを絞れる。
+async fn get_terminals(
+    State(doc): State<SharedDoc>,
+    Query(q): Query<NetlistQuery>,
+) -> Json<serde_json::Value> {
+    let engine = doc.engine.lock().unwrap();
+    Json(serde_json::json!(
+        madake_core::terminal_chart::terminal_block_infos(engine.project(), q.sheet_id)
+    ))
+}
+
+#[derive(Deserialize)]
+struct EntityQuery {
+    entity_id: Uuid,
+}
+
+/// 端子台1つのチャート (端子ごとの行・ジャンパ)。端子台でなければ400。
+async fn get_terminal_chart(
+    State(doc): State<SharedDoc>,
+    Query(q): Query<EntityQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let engine = doc.engine.lock().unwrap();
+    let chart =
+        madake_core::terminal_chart::terminal_chart_in_project(engine.project(), q.entity_id)
+            .ok_or_else(|| bad_request("terminal block not found"))?;
+    Ok(Json(serde_json::json!(chart)))
+}
+
+/// 端子台チェック (未結線の端子・不正なジャンパ)。
+async fn get_terminal_check(
+    State(doc): State<SharedDoc>,
+    Query(q): Query<EntityQuery>,
+) -> Json<serde_json::Value> {
+    let engine = doc.engine.lock().unwrap();
+    Json(serde_json::json!(
+        madake_core::terminal_chart::check_terminal_block_in_project(
+            engine.project(),
+            q.entity_id
+        )
+    ))
+}
+
+#[derive(Deserialize)]
+struct ExportReportBody {
+    path: String,
+    /// 帳票の種類 (`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref`)。
+    kind: madake_core::report_sheet::ReportKind,
+    /// 出力形式 (`csv` / `pdf`)。
+    format: madake_core::report_sheet::ReportFormat,
+    /// 端子台チャート・端子接続図の対象を1つの端子台に絞る場合のentity id。
+    #[serde(default)]
+    entity_id: Option<Uuid>,
+}
+
+/// 帳票1種を1ファイルへ書き出す。`count`はCSVなら行数、PDFならページ数。
+async fn post_export_report(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<ExportReportBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let engine = doc.engine.lock().unwrap();
+    let (bytes, count) = madake_core::report_sheet::report_bytes(
+        engine.project(),
+        body.kind,
+        body.format,
+        body.entity_id,
+    )
+    .map_err(bad_request)?;
+    std::fs::write(&body.path, bytes).map_err(bad_request)?;
+    Ok(Json(
+        serde_json::json!({ "written": body.path, "count": count }),
+    ))
+}
+
 async fn post_export_bom(
     State(doc): State<SharedDoc>,
     Json(body): Json<PathBody>,
@@ -547,6 +620,9 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/symbols", get(get_symbols))
         .route("/api/v1/netlist", get(get_netlist))
         .route("/api/v1/verify", get(get_verify))
+        .route("/api/v1/terminals", get(get_terminals))
+        .route("/api/v1/terminals/chart", get(get_terminal_chart))
+        .route("/api/v1/terminals/check", get(get_terminal_check))
         .route("/api/v1/simulate/op", post(post_simulate_op))
         .route("/api/v1/commands", post(post_commands))
         .route("/api/v1/undo", post(post_undo))
@@ -554,6 +630,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/export/svg", post(post_export_svg))
         .route("/api/v1/export/pdf", post(post_export_pdf))
         .route("/api/v1/export/pdf-book", post(post_export_pdf_book))
+        .route("/api/v1/export/report", post(post_export_report))
         .route("/api/v1/export/bom", post(post_export_bom))
         .route("/api/v1/export/wire-list", post(post_export_wire_list))
         .route("/api/v1/events", get(get_events))

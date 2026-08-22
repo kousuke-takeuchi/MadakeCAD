@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**499仕様項目**。
+全5領域・**547仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -128,6 +128,13 @@
 - クロスリファレンス表のシートはネットごとに接続先ピンと現れるシートを並べる。 <sub>`xref_table_sheet_lists_nets_and_pins`</sub>
 - 表紙にはプロジェクト名・全シートと図番・プロジェクト全体で最新の改訂が出る。 <sub>`cover_page_shows_project_sheets_and_latest_revision`</sub>
 - 改訂が1件も無いプロジェクトの表紙は空欄ではなく「なし」と記す。 <sub>`cover_page_states_when_there_is_no_revision`</sub>
+- 帳票をCSVで書き出すと図面シートと同じ表が返り、書き出した本文の行数も分かる。 <sub>`a_csv_export_returns_the_table_and_its_row_count`</sub>
+- 対象を絞らずに端子台チャートを出すと、どの端子台の行かが分かるよう先頭列に参照記号が入る。 <sub>`a_project_wide_terminal_chart_names_the_terminal_block_in_each_row`</sub>
+- 帳票をPDFで書き出すと図枠付きの図面ページが1つのPDFにまとまり、ページ数が分かる。 <sub>`a_pdf_export_binds_the_framed_pages_into_one_file`</sub>
+- 端子接続図は図面なのでCSVでは出せず、その旨を返す。 <sub>`the_terminal_connection_diagram_has_no_csv_form`</sub>
+- 端子台ではないものを対象にすると、空のファイルを書かずにエラーになる。 <sub>`a_terminal_report_of_an_unknown_block_fails`</sub>
+- 端子台以外の帳票は端子台の指定を無視し、常にプロジェクト全体を対象にする。 <sub>`other_reports_always_cover_the_whole_project`</sub>
+- クロスリファレンス表のCSVの見出しは、図面シート版の列見出しと同じ。 <sub>`the_cross_reference_csv_has_the_same_columns_as_its_sheet`</sub>
 - 帳票の種類はCLI・Link APIと同じケバブケース表記でJSONへ入る。 <sub>`report_kind_json_names_match_cli_spelling`</sub>
 
 ### 帳票 (部品表 / 電線リスト)
@@ -213,6 +220,10 @@
 - 端子台チェックは、隣り合わない端子に掛けられたジャンパをエラーとして報告する。 <sub>`the_check_reports_an_invalid_jumper_as_an_error`</sub>
 - 端子台チェックは、存在しない端子へのジャンパをエラーとして報告する。 <sub>`the_check_reports_a_jumper_to_a_missing_terminal_as_an_error`</sub>
 - 全端子が結線されジャンパも正しい端子台は、チェックで何も指摘されない。 <sub>`a_fully_wired_terminal_block_passes_the_check`</sub>
+- 端子台エディタの一覧には、プロジェクトの全端子台がシート順・参照記号順に、所在シート・極数・ジャンパ付きで並ぶ。 <sub>`the_editor_lists_every_terminal_block_with_its_sheet_poles_and_jumpers`</sub>
+- シートを指定すると、そのシートに描かれている端子台だけの一覧になる。 <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
+- 端子台ではないシンボルは一覧に出ない。 <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
+- 端子台のチャートとチェックは、どのシートにあるかを知らなくてもentity idだけで引ける。 <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
 - ジャンパは通常のupdate_entityコマンドで設定するので、チャートに反映され、undoで元に戻る。 <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
 
 ### 端子接続図
@@ -637,6 +648,26 @@
 - searchは部品APIの結果を保持する <sub>`parts store`</sub>
 - 検索失敗時は結果を空にしloadingを戻す <sub>`parts store`</sub>
 
+### 帳票 (部品表 / 電線リスト)
+
+- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・XRef表 の5つ <sub>`report generation dialog store`</sub>
+- 部品表はプロジェクト全体が対象で、既定はCSV出力 <sub>`report generation dialog store`</sub>
+- 出力形式を図面シートPDFにすると、同じ帳票がPDF要求になる <sub>`report generation dialog store`</sub>
+- 端子台チャートは「プロジェクト全体」に加えて端子台1つを対象に選べる <sub>`report generation dialog store`</sub>
+- 端子接続図はグラフィカルな図面なのでPDFだけを選べる <sub>`report generation dialog store`</sub>
+- 「帳票のシート化」から開くと図面シートPDFを選んだ状態で開く <sub>`report generation dialog store`</sub>
+- 帳票にその出力形式が無ければ、選べる形式に読み替えて開く <sub>`report generation dialog store`</sub>
+- ダイアログを開いたまま帳票を変えると、対象と出力形式もその帳票のものに入れ替わる <sub>`report generation dialog store`</sub>
+- 既定のファイル名は帳票名と対象と出力形式から決まる <sub>`report generation dialog store`</sub>
+- 出力先パスが空のままでは生成できない <sub>`report generation dialog store`</sub>
+- 生成すると帳票を1回だけ書き出し、書き出した件数を返して閉じる <sub>`report generation dialog store`</sub>
+- 書き出しに失敗したらダイアログは開いたままエラーを表示する <sub>`report generation dialog store`</sub>
+- 既定では表紙付きで、全ての帳票が回路図の後ろに付く <sub>`PDF book dialog store`</sub>
+- 選んだ帳票は種類の並び順どおりに並ぶ(選んだ順ではない) <sub>`PDF book dialog store`</sub>
+- 表紙は外せる。帳票を1つも選ばなければ回路図だけのPDFになる <sub>`PDF book dialog store`</sub>
+- 出力先パスが空のままでは出力できない <sub>`PDF book dialog store`</sub>
+- 出力すると1ファイルに書き出し、ページ数を返して閉じる <sub>`PDF book dialog store`</sub>
+
 ### revisions
 
 - 改訂が1件も無いシートで行を追加すると、記号Aと今日の日付が入る <sub>`revisions dialog store`</sub>
@@ -665,6 +696,29 @@
 - runでDC解析結果を取得してパネルを開く <sub>`simulation store`</sub>
 - 開閉トグルは再実行時にopen_switchesとして渡される <sub>`simulation store`</sub>
 - 失敗時(ngspice未導入等)はエラーメッセージを保持したままパネルを開く <sub>`simulation store`</sub>
+
+### terminals
+
+- ジャンパ指定は「小さい端子番号が先・昇順・重複なし」に正規化される <sub>`jumper specification`</sub>
+- 壊れた記述と隣り合わない端子のジャンパは読み飛ばす <sub>`jumper specification`</sub>
+- 隣り合う端子を選んでジャンパを掛けると既存のジャンパは残る <sub>`jumper specification`</sub>
+- 3つ以上の端子を選ぶと隣どうしを順につないだジャンパになる <sub>`jumper specification`</sub>
+- 隣り合わない端子どうしにはジャンパを掛けられない <sub>`jumper specification`</sub>
+- ジャンパ削除は選んだ端子に掛かっているものだけを外す <sub>`jumper specification`</sub>
+- 開くとそのシートの端子台一覧を読み込み、先頭の端子台のチャートを表示する <sub>`terminal strip editor store`</sub>
+- グリッドは端子番号ごとに1行で、外部側・内部側・線番・電線が図面どおりに並ぶ <sub>`terminal strip editor store`</sub>
+- 電線が1本も繋がっていない端子は予備端子として印が付く <sub>`terminal strip editor store`</sub>
+- 隣り合う2端子を選んでジャンパを生成すると、update_entityコマンド1回で属性に書き込まれる <sub>`terminal strip editor store`</sub>
+- 端子を選んでいないとジャンパは生成できない <sub>`terminal strip editor store`</sub>
+- 隣り合わない端子を選んでもジャンパは生成できない <sub>`terminal strip editor store`</sub>
+- ジャンパ削除は選んだ端子に掛かるジャンパだけを外したコマンドになる <sub>`terminal strip editor store`</sub>
+- ジャンパが1本も残らないときは属性ごと消す <sub>`terminal strip editor store`</sub>
+- ジャンパを編集したらチャートを読み直し、グリッドが図面と一致し続ける <sub>`terminal strip editor store`</sub>
+- 端子台チェックの結果は重大度ごとの件数に整形される <sub>`terminal strip editor store`</sub>
+- 問題が1件も無ければチェックは「問題なし」になる <sub>`terminal strip editor store`</sub>
+- 端子台を切り替えると選択と直前のチェック結果は消える <sub>`terminal strip editor store`</sub>
+- 端子台が1つも無いシートでは行が空になり、生成もチェックもできない <sub>`terminal strip editor store`</sub>
+- 閉じると選択・チャート・チェック結果を捨てる <sub>`terminal strip editor store`</sub>
 
 ### ui
 
