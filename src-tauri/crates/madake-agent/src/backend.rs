@@ -252,6 +252,9 @@ impl ClaudeCodeCliBackend {
         let mut parser = StreamParser::new();
         let mut lines = BufReader::new(stdout).lines();
         let mut read_error = None;
+        // stream-jsonとして解釈できなかった最後のstdout行。実物のCLIは利用上限などの
+        // 理由を素のテキストで出して非0終了することがあり、異常終了時の説明に使う
+        let mut last_plain_line: Option<String> = None;
         'read: loop {
             // 受信側のcloseは`send`の失敗だけでは検知できない。イベントにならない行
             // (thinking_delta・未知の行)が続く間はsendが呼ばれず、キャンセル後も
@@ -267,7 +270,11 @@ impl ClaudeCodeCliBackend {
             };
             match line {
                 Ok(Some(line)) => {
-                    for event in parser.push(&line) {
+                    let events = parser.push(&line);
+                    if events.is_empty() && !line.trim().is_empty() {
+                        last_plain_line = Some(line.trim().to_string());
+                    }
+                    for event in events {
                         if tx.send(event).await.is_err() {
                             // 受信側が閉じた(キャンセル等)。読み手が居なくなるので
                             // killしないとパイプが詰まってwait()が返らなくなる
@@ -303,7 +310,13 @@ impl ClaudeCodeCliBackend {
                 .code()
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| "signal".to_string());
-            let detail = stderr_text.trim();
+            // 理由はstderr優先。空ならstream-jsonでなかった最後のstdout行(利用上限等)
+            let stderr_detail = stderr_text.trim();
+            let detail = if stderr_detail.is_empty() {
+                last_plain_line.as_deref().unwrap_or("")
+            } else {
+                stderr_detail
+            };
             let message = if detail.is_empty() {
                 format!("claude CLIが異常終了しました (exit {code})")
             } else {

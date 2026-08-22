@@ -168,6 +168,29 @@ async fn send_reports_nonzero_exit_as_error_event() {
     }
 }
 
+/// When the CLI dies with the reason printed as plain text on stdout (e.g. a usage limit), that reason reaches the chat error.
+/// CLIが理由(利用上限など)をstdoutの素のテキストで出して異常終了したとき、その理由がチャットのエラーに載る。
+#[tokio::test]
+async fn a_plain_stdout_reason_reaches_the_error_message() {
+    let backend = backend("fake_claude_fail_stdout.sh");
+    let (tx, mut rx) = mpsc::channel(1024);
+    backend.send("hi", None, tx).await.expect("send自体は成功");
+
+    let mut events = Vec::new();
+    while let Some(ev) = rx.recv().await {
+        events.push(ev);
+    }
+    match events.last() {
+        Some(AgentEvent::Error { message }) => {
+            assert!(
+                message.contains("weekly limit"),
+                "stdoutの理由が含まれる: {message}"
+            );
+        }
+        other => panic!("最後はErrorのはず: {other:?}"),
+    }
+}
+
 /// The prompt is passed via stdin, never via argv (avoids OS argument-length and quoting issues).
 /// プロンプトはargvではなくstdin経由で渡される(OSの引数長・クォート問題を避ける)。
 #[tokio::test]

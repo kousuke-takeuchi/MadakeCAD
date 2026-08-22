@@ -27,10 +27,10 @@ const settings = useSettingsStore();
 const { open: historyOpen, toggle: toggleHistory, close: closeHistory } = usePopover();
 
 const tabs = computed<{ id: LeftPanelTab; label: string }[]>(() => [
-  { id: "project", label: "プロジェクト" },
+  { id: "project", label: t("leftPanel.project") },
   // デバイスナビゲータ (spec §10): 参照記号ツリーで機能単位まで展開する
   { id: "devices", label: t("devices.tab") },
-  { id: "chat", label: "エージェント" },
+  { id: "chat", label: t("leftPanel.agent") },
 ]);
 
 // 接続バッジ: Claude Code CLIならCLIの検出、Anthropic APIならキーの保存状況を見る

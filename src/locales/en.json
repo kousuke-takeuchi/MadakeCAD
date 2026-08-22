@@ -478,5 +478,9 @@
       "runningBadge": "{count} running",
       "runningBadgeTitle": "{count} conversation(s) are answering right now. Their edits are highlighted in the drawing, one color per conversation."
     }
+  },
+  "leftPanel": {
+    "project": "Project",
+    "agent": "Agent"
   }
 }
