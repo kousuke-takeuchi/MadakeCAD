@@ -1,12 +1,13 @@
 // 改訂欄 (ISO 7200 / JIS Z 8311) のレイアウト計算。Rust側 svg.rs と同一ルールであること。
 import { describe, expect, it } from "vitest";
 
-import type { Revision, Sheet } from "../ipc";
+import type { Revision, Sheet, SymbolInstance } from "../ipc";
 import {
   REV_COL_W,
   REV_HEADERS,
   effectiveRev,
   revisionLayout,
+  rotateArcAngles,
   visibleRevisions,
 } from "./renderer";
 
@@ -88,5 +89,32 @@ describe("visibleRevisions / effectiveRev", () => {
     expect(effectiveRev(sheet(["A", "B"], "A"))).toBe("B");
     expect(effectiveRev(sheet([], "A"))).toBe("A");
     expect(effectiveRev(sheet([]))).toBe("-");
+  });
+});
+
+describe("rotateArcAngles", () => {
+  const inst = (rotation: number, mirror = false): SymbolInstance => ({
+    id: "s",
+    symbol_id: "contactor_3p",
+    at: { x: 0, y: 0 },
+    rotation,
+    mirror,
+    reference: "K1",
+    value: "",
+    attrs: {},
+  });
+
+  // ja: シンボル内の弧はシンボルと一緒に回るので、電磁接触器の半円はどの回転角でも可動接点の側を向く
+  it("turns arcs with the symbol so the contactor half circle keeps facing its moving contact", () => {
+    expect(rotateArcAngles(0, 180, inst(0))).toEqual([0, 180]);
+    expect(rotateArcAngles(0, 180, inst(90))).toEqual([90, 270]);
+    expect(rotateArcAngles(0, 180, inst(180))).toEqual([180, 360]);
+    expect(rotateArcAngles(0, 180, inst(270))).toEqual([270, 450]);
+  });
+
+  // ja: ミラーは弧を左右反転させるが、描画方向(開始→終了を時計回り)は保つ
+  it("mirrors arcs left to right while keeping the clockwise drawing direction", () => {
+    expect(rotateArcAngles(0, 180, inst(0, true))).toEqual([0, 180]);
+    expect(rotateArcAngles(270, 450, inst(0, true))).toEqual([90, 270]);
   });
 });

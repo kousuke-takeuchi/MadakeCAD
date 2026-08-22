@@ -168,6 +168,21 @@ export function transformLocal(p: Point, inst: SymbolInstance): Point {
   return { x: inst.at.x + rx, y: inst.at.y + ry };
 }
 
+/**
+ * 弧の開始・終了角をシンボルの回転・ミラーに追従させる
+ * (netlist.rs rotate_arc_anglesと同一。描画は常に開始→終了を時計回り)。
+ */
+export function rotateArcAngles(
+  startDeg: number,
+  endDeg: number,
+  inst: SymbolInstance,
+): [number, number] {
+  const [s, e] = inst.mirror ? [180 - endDeg, 180 - startDeg] : [startDeg, endDeg];
+  const span = e - s;
+  const start = (((s + (inst.rotation % 360)) % 360) + 360) % 360;
+  return [start, start + span];
+}
+
 function drawGrid(ctx: CanvasRenderingContext2D, vp: Viewport, w: number, h: number, pw: number, ph: number) {
   // ズームが小さいときは間引く
   let pitch = GRID_PITCH;
@@ -376,14 +391,9 @@ export function drawSymbol(
       }
       case "arc": {
         const c = vp.toScreen(transformLocal(prim.center, inst));
+        const [a0, a1] = rotateArcAngles(prim.start_deg, prim.end_deg, inst);
         ctx.beginPath();
-        ctx.arc(
-          c.x,
-          c.y,
-          prim.r * vp.scale,
-          (prim.start_deg * Math.PI) / 180,
-          (prim.end_deg * Math.PI) / 180,
-        );
+        ctx.arc(c.x, c.y, prim.r * vp.scale, (a0 * Math.PI) / 180, (a1 * Math.PI) / 180);
         ctx.stroke();
         break;
       }
