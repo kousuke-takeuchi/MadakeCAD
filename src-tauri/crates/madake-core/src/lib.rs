@@ -25,7 +25,7 @@ pub mod verify;
 pub mod wire_no;
 pub mod xref;
 
-pub use command::{Command, Engine, Patch, PatchOp};
+pub use command::{Command, EditOrigin, Engine, Patch, PatchOp, Reverted};
 pub use geometry::Point;
 pub use model::*;
 pub use wire_no::RenumberMode;
@@ -44,6 +44,10 @@ pub enum CoreError {
     SymbolNotFound(String),
     #[error("invalid command: {0}")]
     InvalidCommand(String),
+    /// 巻き戻し([`command::Engine::revert_range`])の逆適用が現在の図面と衝突した。
+    /// 図面は変更されていない(部分適用しない)。
+    #[error("revert conflict: {0}")]
+    RevertConflict(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("serialization error: {0}")]

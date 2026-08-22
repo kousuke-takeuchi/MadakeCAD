@@ -92,9 +92,38 @@ pub enum PatchOp {
     WirePartsReplaced { wire_parts: Vec<WirePart> },
 }
 
+/// 編集の由来(誰の操作か)。undo履歴の各エントリに記録する。
+///
+/// ターン巻き戻し([`Engine::revert_range`])が「エージェントの編集だけ」を戻し、
+/// 間に挟まったユーザーの手編集を保持するために使う。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum EditOrigin {
+    /// UI操作(Tauri IPC)。既定
+    #[default]
+    User,
+    /// 内蔵AIエージェントがターン実行中に行った編集
+    Agent,
+    /// 外部MCPクライアント・Link API・madake CLIからの編集
+    Mcp,
+}
+
+/// [`Engine::revert_range`]の結果。
+#[derive(Debug, Clone)]
+pub struct Reverted {
+    /// 逆適用した履歴エントリ数(= 巻き戻した編集コマンド数)
+    pub commands: usize,
+    /// 巻き戻しで生じた差分
+    pub patch: Patch,
+}
+
 struct HistoryEntry {
-    forward: Command,
+    /// 適用したコマンド列(通常は1件。巻き戻しのように1操作=複数コマンドの場合もある)
+    forward: Vec<Command>,
     inverse: Vec<Command>,
+    origin: EditOrigin,
 }
 
 /// ドキュメントの単一の真実。全編集はexecute()を通る。
@@ -137,12 +166,22 @@ impl Engine {
         }
     }
 
-    /// コマンドを実行し、undo履歴に積む。
+    /// コマンドを実行し、undo履歴に積む(ユーザー操作として記録する)。
     pub fn execute(&mut self, cmd: Command) -> Result<Patch> {
+        self.execute_as(cmd, EditOrigin::User)
+    }
+
+    /// 由来を明示してコマンドを実行する。
+    ///
+    /// 由来は履歴エントリに残り、[`Self::revert_range`]が対象を絞るのに使う。
+    /// 呼び出し経路ごとに: UI(Tauri IPC)=[`EditOrigin::User`]、エージェントの
+    /// ターン実行中=[`EditOrigin::Agent`]、外部MCP/Link API/CLI=[`EditOrigin::Mcp`]。
+    pub fn execute_as(&mut self, cmd: Command, origin: EditOrigin) -> Result<Patch> {
         let (ops, inverse) = self.apply(&cmd)?;
         self.undo_stack.push(HistoryEntry {
-            forward: cmd,
+            forward: vec![cmd],
             inverse,
+            origin,
         });
         self.redo_stack.clear();
         self.revision += 1;
@@ -150,6 +189,64 @@ impl Engine {
             revision: self.revision,
             ops,
         })
+    }
+
+    /// undo履歴に積まれている編集の由来を古い順に返す(検査・テスト用)。
+    pub fn history_origins(&self) -> Vec<EditOrigin> {
+        self.undo_stack.iter().map(|e| e.origin).collect()
+    }
+
+    /// undo深さの区間`[start_depth, end_depth)`にある`origin`由来の編集だけを
+    /// 逆Commandとして適用し、巻き戻す。
+    ///
+    /// 履歴末尾からn回undoする方式と違い、**区間に挟まった他の由来の編集(ユーザーの
+    /// 手編集)は保持する**。AIエージェントのターン単位の巻き戻しが使う。
+    ///
+    /// 規則:
+    /// - 逆適用は新しい編集として通常の履歴に積まれる(由来は[`EditOrigin::User`]。
+    ///   「元に戻す」はユーザー操作のため)。したがって**巻き戻し自体をundoで取り消せる**
+    ///   一方、redo履歴は通常の編集と同じく破棄される
+    /// - 逆適用が現在の図面と衝突した場合(対象が手で削除されている等)は
+    ///   [`CoreError::RevertConflict`]を返し、**何も変更しない**(部分適用しない)
+    /// - 区間に対象の編集が1件も無ければ`Ok(None)`(図面もrevisionも変わらない)
+    pub fn revert_range(
+        &mut self,
+        start_depth: usize,
+        end_depth: usize,
+        origin: EditOrigin,
+    ) -> Result<Option<Reverted>> {
+        let end = end_depth.min(self.undo_stack.len());
+        let start = start_depth.min(end);
+        // 新しい編集から順に戻す(逆コマンドはLIFOで適用しないと前提が崩れる)
+        let mut commands = 0usize;
+        let mut inverses: Vec<Command> = Vec::new();
+        for entry in self.undo_stack[start..end].iter().rev() {
+            if entry.origin != origin {
+                continue;
+            }
+            commands += 1;
+            inverses.extend(entry.inverse.iter().cloned());
+        }
+        if inverses.is_empty() {
+            return Ok(None);
+        }
+        let (ops, inverse) = self
+            .apply_all(&inverses)
+            .map_err(|e| CoreError::RevertConflict(e.to_string()))?;
+        self.undo_stack.push(HistoryEntry {
+            forward: inverses,
+            inverse,
+            origin: EditOrigin::User,
+        });
+        self.redo_stack.clear();
+        self.revision += 1;
+        Ok(Some(Reverted {
+            commands,
+            patch: Patch {
+                revision: self.revision,
+                ops,
+            },
+        }))
     }
 
     pub fn can_undo(&self) -> bool {
@@ -190,16 +287,42 @@ impl Engine {
         let Some(entry) = self.redo_stack.pop() else {
             return Ok(None);
         };
-        let (ops, inverse) = self.apply(&entry.forward)?;
+        let (ops, inverse) = self.apply_all(&entry.forward)?;
         self.undo_stack.push(HistoryEntry {
             forward: entry.forward,
             inverse,
+            origin: entry.origin,
         });
         self.revision += 1;
         Ok(Some(Patch {
             revision: self.revision,
             ops,
         }))
+    }
+
+    /// コマンド列を順に適用する。**途中で失敗したら適用前の状態へ戻して`Err`**
+    /// (中途半端に適用された図面を残さない)。
+    ///
+    /// 戻り値は (生成patch, 逆コマンド列)。逆コマンドは適用と逆順に並べてあるので、
+    /// そのまま順に適用すれば元へ戻る。
+    fn apply_all(&mut self, cmds: &[Command]) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let snapshot = self.project.clone();
+        let mut ops = Vec::new();
+        let mut groups: Vec<Vec<Command>> = Vec::new();
+        for cmd in cmds {
+            match self.apply(cmd) {
+                Ok((mut o, inv)) => {
+                    ops.append(&mut o);
+                    groups.push(inv);
+                }
+                Err(e) => {
+                    self.project = snapshot;
+                    return Err(e);
+                }
+            }
+        }
+        groups.reverse();
+        Ok((ops, groups.into_iter().flatten().collect()))
     }
 
     /// コマンドを適用し、(生成patch, 逆コマンド列) を返す。履歴には触れない。
@@ -325,10 +448,15 @@ impl Engine {
                     .sheet_mut(*sheet_id)
                     .ok_or(CoreError::SheetNotFound(*sheet_id))?;
                 let id = entity.id();
+                // 先に存在確認する: insertしてからエラーにすると、失敗したはずの
+                // 更新でエンティティがシートへ紛れ込む
+                if !sheet.entities.contains_key(&id) {
+                    return Err(CoreError::EntityNotFound(id));
+                }
                 let old = sheet
                     .entities
                     .insert(id, entity.clone())
-                    .ok_or(CoreError::EntityNotFound(id))?;
+                    .expect("直前に存在確認済み");
                 Ok((
                     vec![PatchOp::EntityUpserted {
                         sheet_id: *sheet_id,
@@ -845,5 +973,236 @@ mod tests {
         engine.undo().unwrap().unwrap();
         engine.execute(Command::AddEntity { sheet_id, entity: sample_wire() }).unwrap();
         assert!(engine.redo().unwrap().is_none());
+    }
+
+    /// Updating an entity that does not exist fails and does not sneak the new entity into the sheet.
+    /// 存在しないエンティティの更新は失敗し、その要素がシートへ紛れ込むこともない。
+    #[test]
+    fn updating_a_missing_entity_fails_without_inserting_it() {
+        let (mut engine, sheet_id) = test_engine();
+        let wire = sample_wire();
+        let id = wire.id();
+        assert!(engine
+            .execute(Command::UpdateEntity {
+                sheet_id,
+                entity: wire
+            })
+            .is_err());
+        assert!(!engine.project().sheets[0].entities.contains_key(&id));
+    }
+
+    /// Every history entry records who made the edit; plain execute() counts as a user edit.
+    /// 履歴の各エントリは編集の由来(誰の編集か)を記録し、通常のexecute()はユーザー編集として扱う。
+    #[test]
+    fn execute_as_records_the_edit_origin() {
+        let (mut engine, sheet_id) = test_engine();
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: sample_wire(),
+            })
+            .unwrap();
+        engine
+            .execute_as(
+                Command::AddEntity {
+                    sheet_id,
+                    entity: sample_wire(),
+                },
+                EditOrigin::Agent,
+            )
+            .unwrap();
+        engine
+            .execute_as(
+                Command::AddEntity {
+                    sheet_id,
+                    entity: sample_wire(),
+                },
+                EditOrigin::Mcp,
+            )
+            .unwrap();
+        assert_eq!(
+            engine.history_origins(),
+            vec![EditOrigin::User, EditOrigin::Agent, EditOrigin::Mcp]
+        );
+        // redoで積み直しても由来は変わらない
+        engine.undo().unwrap().unwrap();
+        engine.redo().unwrap().unwrap();
+        assert_eq!(
+            engine.history_origins(),
+            vec![EditOrigin::User, EditOrigin::Agent, EditOrigin::Mcp]
+        );
+    }
+
+    /// Reverting a range rolls back only the agent's edits in it and keeps the user's own edits, even when they were interleaved.
+    /// 区間の巻き戻しはその中のエージェント編集だけを戻し、間に挟まったユーザー編集はそのまま残す。
+    #[test]
+    fn revert_range_rolls_back_agent_edits_and_keeps_user_edits() {
+        let (mut engine, sheet_id) = test_engine();
+        let agent_a = sample_wire();
+        let user = sample_wire();
+        let agent_b = sample_wire();
+        let (agent_a_id, user_id, agent_b_id) = (agent_a.id(), user.id(), agent_b.id());
+
+        let start = engine.undo_depth();
+        engine
+            .execute_as(
+                Command::AddEntity {
+                    sheet_id,
+                    entity: agent_a,
+                },
+                EditOrigin::Agent,
+            )
+            .unwrap();
+        // ターンの途中でユーザーが手で1本引いた
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: user,
+            })
+            .unwrap();
+        engine
+            .execute_as(
+                Command::AddEntity {
+                    sheet_id,
+                    entity: agent_b,
+                },
+                EditOrigin::Agent,
+            )
+            .unwrap();
+        let end = engine.undo_depth();
+
+        let reverted = engine
+            .revert_range(start, end, EditOrigin::Agent)
+            .unwrap()
+            .expect("エージェント編集が2件戻る");
+        assert_eq!(reverted.commands, 2);
+        let entities = &engine.project().sheets[0].entities;
+        assert!(!entities.contains_key(&agent_a_id), "エージェントの編集は戻る");
+        assert!(!entities.contains_key(&agent_b_id));
+        assert!(entities.contains_key(&user_id), "ユーザーの手編集は残る");
+    }
+
+    /// A revert is a normal edit in the history, so undoing it brings the agent's work back.
+    /// 巻き戻しも通常の編集として履歴に乗るため、undoすればエージェントの編集が戻ってくる。
+    #[test]
+    fn revert_range_is_itself_undoable() {
+        let (mut engine, sheet_id) = test_engine();
+        let wire = sample_wire();
+        let id = wire.id();
+        let start = engine.undo_depth();
+        engine
+            .execute_as(
+                Command::AddEntity {
+                    sheet_id,
+                    entity: wire,
+                },
+                EditOrigin::Agent,
+            )
+            .unwrap();
+        let end = engine.undo_depth();
+
+        engine.revert_range(start, end, EditOrigin::Agent).unwrap();
+        assert!(!engine.project().sheets[0].entities.contains_key(&id));
+        assert_eq!(engine.undo_depth(), end + 1, "巻き戻しも1件の履歴になる");
+        assert_eq!(
+            engine.history_origins().last(),
+            Some(&EditOrigin::User),
+            "巻き戻しはユーザー操作として積まれる"
+        );
+
+        engine.undo().unwrap().unwrap();
+        assert!(
+            engine.project().sheets[0].entities.contains_key(&id),
+            "巻き戻しの取り消しでエージェントの編集が戻る"
+        );
+        engine.redo().unwrap().unwrap();
+        assert!(!engine.project().sheets[0].entities.contains_key(&id));
+    }
+
+    /// If the agent's edit cannot be undone against the current drawing (the user deleted the target), the whole revert is refused and nothing changes.
+    /// エージェントの編集を現在の図面へ逆適用できない場合(対象をユーザーが消した等)、巻き戻し全体を拒否し何も変更しない。
+    #[test]
+    fn revert_range_refuses_conflicting_reverts_without_partial_changes() {
+        let (mut engine, sheet_id) = test_engine();
+        let wire = sample_wire();
+        let id = wire.id();
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: wire.clone(),
+            })
+            .unwrap();
+
+        let start = engine.undo_depth();
+        // エージェントが色を変え、さらに別の配線を追加した
+        let mut updated = wire.clone();
+        if let Entity::Wire(w) = &mut updated {
+            w.color = "blue".into();
+        }
+        engine
+            .execute_as(
+                Command::UpdateEntity {
+                    sheet_id,
+                    entity: updated,
+                },
+                EditOrigin::Agent,
+            )
+            .unwrap();
+        let other = sample_wire();
+        let other_id = other.id();
+        engine
+            .execute_as(
+                Command::AddEntity {
+                    sheet_id,
+                    entity: other,
+                },
+                EditOrigin::Agent,
+            )
+            .unwrap();
+        let end = engine.undo_depth();
+
+        // ユーザーが更新対象を手で削除 → 色の巻き戻し先が存在しない
+        engine
+            .execute(Command::DeleteEntities {
+                sheet_id,
+                ids: vec![id],
+            })
+            .unwrap();
+        let depth_before = engine.undo_depth();
+
+        let err = engine
+            .revert_range(start, end, EditOrigin::Agent)
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::RevertConflict(_)),
+            "衝突は専用エラー: {err}"
+        );
+        assert!(
+            engine.project().sheets[0].entities.contains_key(&other_id),
+            "部分適用しない(戻せた分も戻さない)"
+        );
+        assert_eq!(engine.undo_depth(), depth_before, "履歴も増えない");
+    }
+
+    /// Reverting a range with no edits of that origin reports "nothing to do" instead of touching the drawing.
+    /// その由来の編集が1件も無い区間の巻き戻しは、図面に触れず「戻すものが無い」と報告する。
+    #[test]
+    fn revert_range_without_matching_edits_changes_nothing() {
+        let (mut engine, sheet_id) = test_engine();
+        let start = engine.undo_depth();
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: sample_wire(),
+            })
+            .unwrap();
+        let end = engine.undo_depth();
+        let revision = engine.revision();
+        assert!(engine
+            .revert_range(start, end, EditOrigin::Agent)
+            .unwrap()
+            .is_none());
+        assert_eq!(engine.project().sheets[0].entities.len(), 1);
+        assert_eq!(engine.revision(), revision, "revisionも進まない");
     }
 }

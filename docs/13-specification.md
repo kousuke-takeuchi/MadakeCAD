@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**578 specification clauses** across 5 areas.
+**584 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -33,6 +33,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Commands targeting a non-existent sheet fail with an error and change nothing. <sub>`unknown_sheet_is_rejected`</sub>
 - Undo with an empty history returns None instead of an error. <sub>`undo_on_empty_history_returns_none`</sub>
 - A new edit after undo clears the redo history (standard editor behavior). <sub>`new_edit_after_undo_clears_redo`</sub>
+- Updating an entity that does not exist fails and does not sneak the new entity into the sheet. <sub>`updating_a_missing_entity_fails_without_inserting_it`</sub>
+- Every history entry records who made the edit; plain execute() counts as a user edit. <sub>`execute_as_records_the_edit_origin`</sub>
+- Reverting a range rolls back only the agent's edits in it and keeps the user's own edits, even when they were interleaved. <sub>`revert_range_rolls_back_agent_edits_and_keeps_user_edits`</sub>
+- A revert is a normal edit in the history, so undoing it brings the agent's work back. <sub>`revert_range_is_itself_undoable`</sub>
+- If the agent's edit cannot be undone against the current drawing (the user deleted the target), the whole revert is refused and nothing changes. <sub>`revert_range_refuses_conflicting_reverts_without_partial_changes`</sub>
+- Reverting a range with no edits of that origin reports "nothing to do" instead of touching the drawing. <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
 
 ### Geometry & coordinates
 
