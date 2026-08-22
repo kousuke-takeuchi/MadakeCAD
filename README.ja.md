@@ -12,7 +12,7 @@ AIアシスタントは人間と同じundo可能なコマンドエンジンで�
 検証は実回路ソルバ(ngspice)の解に基づく。
 
 [![CI](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml)
-[![仕様項目](https://img.shields.io/badge/spec_clauses-428_tested-blue)](docs/13-specification.ja.md)
+[![仕様項目](https://img.shields.io/badge/spec_clauses-568_tested-blue)](docs/13-specification.ja.md)
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
 ![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)
@@ -38,7 +38,7 @@ AIアシスタントは人間と同じundo可能なコマンドエンジンで�
 ## 特徴
 
 - ✏️ **専用回路図エディタ** — JIS C 0617シンボル、ピン数可変端子台/コネクタ(1〜50極)、直交配線+グリッド/ピンスナップ、参照記号自動採番、複数シート、レイヤ
-- 📐 **規格に忠実な出力** — 現状はJIS図枠(ゾーン・表題欄)、IEC 60617 / IEC 81346 / ISO 7200系はロードマップ。日本語フォント埋め込みの印刷品質SVG/PDF、部品表・電線リストCSV
+- 📐 **規格に忠実な出力** — 現状はJIS図枠(ゾーン・表題欄)、IEC 60617 / IEC 81346 / ISO 7200系はロードマップ。日本語フォント埋め込みの印刷品質SVG/PDF、帳票5種(From-Toワイヤリスト・端子台チャート・端子接続図・部品表・クロスリファレンス表)をCSV/図枠付き図面シート/回路図と綴じた1つのPDFで出力
 - ✅ **ソルバ裏付けの検証** — ERC+電気チェック(到達性・許容電流・電圧降下・ヒューズ定格)をngspiceのDC解で判定
 - ⚡ **DCシミュレーション** — ネット電圧・部品電流/電力、スイッチ開閉のwhat-if
 - 🗄️ **部品データベース** — 定格・購入先リンク付きローカルSQLiteマスタ+電線品番マスタ。配置で定格が自動設定
@@ -67,8 +67,8 @@ npm run tauri dev
 | 01 | [概要](docs/01-overview.ja.md) | MadakeCADとは・存在理由・設計目標 |
 | 02 | [はじめに](docs/02-getting-started.ja.md) | インストール・ビルド・起動・トラブル対処 |
 | 03 | [回路図エディタ](docs/03-schematic-editor.ja.md) | キャンバス・ツール・シンボル・シート・レイヤ |
-| 04 | [規格・出力](docs/04-standards-output.ja.md) | JIS図枠・PDF/SVG・部品表・電線リスト |
-| 05 | [電線管理](docs/05-wire-management.ja.md) | 線色・線径・品番・ハーネス |
+| 04 | [規格・出力](docs/04-standards-output.ja.md) | JIS図枠・PDF/SVG・帳票・PDF一括出力 |
+| 05 | [電線管理](docs/05-wire-management.ja.md) | 線色・線径・品番・ハーネス・端子台チャート |
 | 06 | [検証・シミュレーション](docs/06-verification-simulation.ja.md) | ERC・電気チェック・DC解析 |
 | 07 | [部品データベース](docs/07-parts-database.ja.md) | 部品マスタ・定格・購入先 |
 | 08 | [インポート/エクスポート](docs/08-import-export.ja.md) | KiCadインポート・ファイル形式 |
@@ -90,7 +90,7 @@ UI · AIチャット · CLI · REST  →  Command(JSON)  →  エンジン(Rust)
 
 ## ステータスとロードマップ
 
-**アルファ版。** マイルストーンM1(基盤)とM2(参考図面の完全再現: 改訂欄・線番・ハーネス境界・シート間クロスリファレンス)は概ね完了。M3(AI-first作図)〜M6(OSS公開)は[ロードマップ](docs/12-roadmap.ja.md)参照。Tauri 2 + Vue 3 + Rust製。
+**アルファ版。** マイルストーンM1(基盤)とM2(参考図面の完全再現: 改訂欄・線番・ハーネス境界・シート間クロスリファレンス)は概ね完了、M4フェーズ1(端子台チャート+帳票拡充)も実装済み。M3(AI-first作図)〜M6(OSS公開)は[ロードマップ](docs/12-roadmap.ja.md)参照。Tauri 2 + Vue 3 + Rust製。
 
 ## コントリビュート
 

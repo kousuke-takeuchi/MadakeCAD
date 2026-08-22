@@ -12,7 +12,7 @@ with an AI assistant that edits through the same undoable command engine as you,
 and verification grounded in a real circuit solver (ngspice).
 
 [![CI](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml)
-[![Spec clauses](https://img.shields.io/badge/spec_clauses-428_tested-blue)](docs/13-specification.md)
+[![Spec clauses](https://img.shields.io/badge/spec_clauses-568_tested-blue)](docs/13-specification.md)
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
 ![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)
@@ -38,7 +38,7 @@ and verification grounded in a real circuit solver (ngspice).
 ## Highlights
 
 - ✏️ **Purpose-built schematic editor** — JIS C 0617 symbols, parametric terminal blocks & connectors (1–50 poles), orthogonal wiring with grid/pin snap, auto reference designators, multi-sheet, layers
-- 📐 **Standards-true output** — JIS drawing frame today (zones, title block), IEC 60617 / IEC 81346 / ISO 7200-series variants on the roadmap; print-quality SVG/PDF with embedded CJK fonts, BOM & wire-list CSV
+- 📐 **Standards-true output** — JIS drawing frame today (zones, title block), IEC 60617 / IEC 81346 / ISO 7200-series variants on the roadmap; print-quality SVG/PDF with embedded CJK fonts, and five reports (from–to wire list, terminal chart, terminal connection diagram, BOM, cross-reference) as CSV, as framed drawing sheets, or bound into one PDF with the schematics
 - ✅ **Solver-grounded verification** — ERC plus electrical checks (reachability, ampacity, voltage drop, fuse rating) judged from an actual ngspice DC solution
 - ⚡ **DC simulation** — net voltages, component currents/power, open-switch what-if analysis
 - 🗄️ **Parts database** — local SQLite master with ratings, procurement links, and a wire part master; place parts with ratings applied automatically
@@ -67,8 +67,8 @@ Read in order — files are numbered:
 | 01 | [Overview](docs/01-overview.md) | What MadakeCAD is, why it exists, design goals |
 | 02 | [Getting Started](docs/02-getting-started.md) | Install, build, run, troubleshoot |
 | 03 | [Schematic Editor](docs/03-schematic-editor.md) | Canvas, tools, symbols, sheets, layers |
-| 04 | [Standards & Output](docs/04-standards-output.md) | JIS frame, PDF/SVG, BOM, wire list |
-| 05 | [Wire Management](docs/05-wire-management.md) | Colors, gauges, part numbers, harnesses |
+| 04 | [Standards & Output](docs/04-standards-output.md) | JIS frame, PDF/SVG, reports, combined PDF |
+| 05 | [Wire Management](docs/05-wire-management.md) | Colors, gauges, part numbers, harnesses, terminal charts |
 | 06 | [Verification & Simulation](docs/06-verification-simulation.md) | ERC, electrical checks, DC analysis |
 | 07 | [Parts Database](docs/07-parts-database.md) | Part master, ratings, procurement |
 | 08 | [Import & Export](docs/08-import-export.md) | KiCad import, file formats |
@@ -90,7 +90,7 @@ Every edit from every entry point is an undoable command against a single engine
 
 ## Status & Roadmap
 
-**Alpha.** Milestones M1 (foundation) and M2 (reference-drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references) are essentially complete; see the [roadmap](docs/12-roadmap.md) for M3 (AI-first drafting) through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
+**Alpha.** Milestones M1 (foundation) and M2 (reference-drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references) are essentially complete, and M4 phase 1 (terminal charts + the extended report set) has landed; see the [roadmap](docs/12-roadmap.md) for M3 (AI-first drafting) through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
 
 ## Contributing
 
