@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**893 specification clauses** across 5 areas.
+**951 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -771,6 +771,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - regions of two conversations running at once keep their own colors side by side <sub>`並列エージェント: 会話ごとの色`</sub>
 - conversation colors follow the start order and wrap around after the fourth <sub>`並列エージェント: 会話ごとの色`</sub>
 
+### deviceTree
+
+- an expanded device is followed by one row per function <sub>`デバイスツリーの整形`</sub>
+- a collapsed device shows only its heading and leaves other devices alone <sub>`デバイスツリーの整形`</sub>
+- the order of devices and of their functions is kept as the core returned it <sub>`デバイスツリーの整形`</sub>
+- an empty project produces no rows <sub>`デバイスツリーの整形`</sub>
+- a relay is named by its kind and part number <sub>`見出しの文言`</sub>
+- a terminal block is named with its pole count <sub>`見出しの文言`</sub>
+- other parts are named after their symbol, in the UI language <sub>`見出しの文言`</sub>
+- a function row reads like 'contact 13-14' with a '/2.B3' badge <sub>`見出しの文言`</sub>
+- clicking a function row switches to its sheet and selects its entity <sub>`ツリーからの操作`</sub>
+- deleting a device removes every entity of that reference designator, without duplicates <sub>`ツリーからの操作`</sub>
+
 ### dynamicSymbol
 
 - connector_2p has the same pin coordinates as the legacy static definition <sub>`dynamicSymbol`</sub>
@@ -834,6 +847,52 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - splits the title block width into the mark, date, description and approver columns <sub>`revisionLayout`</sub>
 - returns at most the newest six revisions, still in oldest-first order <sub>`visibleRevisions / effectiveRev`</sub>
 - shows the newest revision mark in the title block Rev cell, falling back to the stored value or a dash <sub>`visibleRevisions / effectiveRev`</sub>
+
+### search
+
+- the All chip does not narrow the targets <sub>`検索バーのフィルタ`</sub>
+- the Net chip searches both net names and wire numbers <sub>`検索バーのフィルタ`</sub>
+- the reference, part-number and text chips each narrow to one target <sub>`検索バーのフィルタ`</sub>
+- the chips are ordered All, reference, part number, net, text <sub>`検索バーのフィルタ`</sub>
+- Enter steps to the next result and wraps around at the end <sub>`Enter巡回`</sub>
+- Shift+Enter steps back and wraps around at the start <sub>`Enter巡回`</sub>
+- with nothing selected yet, Enter picks the first hit and Shift+Enter the last <sub>`Enter巡回`</sub>
+- with no results there is nothing to select <sub>`Enter巡回`</sub>
+- clicking a row jumps to that hit's sheet and selects its entity <sub>`結果行`</sub>
+- the location column joins the sheet name and the zone <sub>`結果行`</sub>
+- a symbol hit is described by the function it plays in its device <sub>`結果行`</sub>
+- hits without a device function are described by the search target itself <sub>`結果行`</sub>
+- in the tree and the surfer, functions drop the device kind from their label <sub>`結果行`</sub>
+- Cmd+F opens the floating search bar <sub>`検索バー`</sub>
+- Escape closes the bar and the results panel but keeps the query for next time <sub>`検索バー`</sub>
+- running a search fills in the count and opens the results panel <sub>`検索バー`</sub>
+- an empty query searches nothing and closes the panel <sub>`検索バー`</sub>
+- the All chip searches without narrowing the targets <sub>`フィルタチップ`</sub>
+- switching chips searches again with that target <sub>`フィルタチップ`</sub>
+- surrounding whitespace is trimmed from the query <sub>`フィルタチップ`</sub>
+- Enter walks to the next hit and wraps around at the end <sub>`Enter巡回と行クリック`</sub>
+- Shift+Enter walks back to the previous hit <sub>`Enter巡回と行クリック`</sub>
+- with no hits there is nothing to walk to <sub>`Enter巡回と行クリック`</sub>
+- clicking a result row makes that row the current one <sub>`Enter巡回と行クリック`</sub>
+- searching again resets the walk position <sub>`Enter巡回と行クリック`</sub>
+- the panel's close button closes only the results panel <sub>`Enter巡回と行クリック`</sub>
+
+### surfer
+
+- Alt-clicking a symbol lists every function of that device with its location <sub>`参照サーフィン (Surfer)`</sub>
+- Alt-clicking a net label lists every place that name appears, including its own sheet <sub>`参照サーフィン (Surfer)`</sub>
+- Alt-clicking a numbered wire lists every wire carrying that number <sub>`参照サーフィン (Surfer)`</sub>
+- locations come back in sheet, zone and id order, the same way every time <sub>`参照サーフィン (Surfer)`</sub>
+- an element with no designator, name or number has nothing to surf <sub>`参照サーフィン (Surfer)`</sub>
+- a reference designator with no device behind it has nothing to surf <sub>`参照サーフィン (Surfer)`</sub>
+- choosing a row switches to that sheet and reveals the entity <sub>`参照サーフィン (Surfer)`</sub>
+- the up/down cycle follows the same wrap-around rule as the search bar <sub>`参照サーフィン (Surfer)`</sub>
+- Alt-clicking a symbol with a designator opens the list of where that device appears <sub>`Surferポップアップ`</sub>
+- the walk starts at the element that was clicked <sub>`Surferポップアップ`</sub>
+- an element with nothing to surf does not open the popup <sub>`Surferポップアップ`</sub>
+- the arrow keys walk through the locations and wrap around <sub>`Surferポップアップ`</sub>
+- clicking a row picks that location and out-of-range rows are ignored <sub>`Surferポップアップ`</sub>
+- closing with Escape also resets the walk position <sub>`Surferポップアップ`</sub>
 
 ### viewClasses
 
@@ -993,6 +1052,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - does not send again while the open conversation is still answering <sub>`chat store: 並列エージェント`</sub>
 - keeps conversations that are still answering marked as running across a history reload <sub>`chat store: 並列エージェント`</sub>
 - drops a conversation from the running list once its turn ends <sub>`chat store: 並列エージェント`</sub>
+
+### devices
+
+- opening the tab loads the tree and knows how many devices there are <sub>`デバイスツリーの読み込み`</sub>
+- the tree is not reloaded while the drawing has not changed <sub>`デバイスツリーの読み込み`</sub>
+- the tree is reloaded once the drawing has changed <sub>`デバイスツリーの読み込み`</sub>
+- collapsing a device hides its functions and expanding brings them back <sub>`折りたたみと選択`</sub>
+- a picked row stays selected <sub>`折りたたみと選択`</sub>
+- deleting a device goes through the command engine, one command per sheet <sub>`デバイスの削除`</sub>
+- a terminal block whose one symbol carries several functions is deleted only once <sub>`デバイスの削除`</sub>
+- deleting the selected device clears the selection and reloads the tree <sub>`デバイスの削除`</sub>
 
 ### document
 
