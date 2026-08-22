@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**578仕様項目**。
+全5領域・**584仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -33,6 +33,12 @@
 - 存在しないシートへのCommandはエラーになり、何も変更されない。 <sub>`unknown_sheet_is_rejected`</sub>
 - 履歴が空のときのundoはエラーではなくNoneを返す。 <sub>`undo_on_empty_history_returns_none`</sub>
 - undo後に新しい編集をするとredo履歴は消える(一般的なエディタと同じ挙動)。 <sub>`new_edit_after_undo_clears_redo`</sub>
+- 存在しないエンティティの更新は失敗し、その要素がシートへ紛れ込むこともない。 <sub>`updating_a_missing_entity_fails_without_inserting_it`</sub>
+- 履歴の各エントリは編集の由来(誰の編集か)を記録し、通常のexecute()はユーザー編集として扱う。 <sub>`execute_as_records_the_edit_origin`</sub>
+- 区間の巻き戻しはその中のエージェント編集だけを戻し、間に挟まったユーザー編集はそのまま残す。 <sub>`revert_range_rolls_back_agent_edits_and_keeps_user_edits`</sub>
+- 巻き戻しも通常の編集として履歴に乗るため、undoすればエージェントの編集が戻ってくる。 <sub>`revert_range_is_itself_undoable`</sub>
+- エージェントの編集を現在の図面へ逆適用できない場合(対象をユーザーが消した等)、巻き戻し全体を拒否し何も変更しない。 <sub>`revert_range_refuses_conflicting_reverts_without_partial_changes`</sub>
+- その由来の編集が1件も無い区間の巻き戻しは、図面に触れず「戻すものが無い」と報告する。 <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
 
 ### 座標・ジオメトリ
 
