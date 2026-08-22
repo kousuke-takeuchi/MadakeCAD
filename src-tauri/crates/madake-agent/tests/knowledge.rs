@@ -56,6 +56,15 @@ fn system_prompt_points_at_the_start_templates() {
     assert!(prompt.contains("apply_template"), "{prompt}");
 }
 
+/// The system prompt says the shell is unavailable and that entity ids are written by hand.
+/// システムプロンプトは、シェルが使えないこととエンティティidを自分で書くことを伝える。
+#[test]
+fn system_prompt_tells_the_agent_no_shell_is_available() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    assert!(prompt.contains("Bash"), "{prompt}");
+    assert!(prompt.contains("シェルで生成せず自分で書く"), "{prompt}");
+}
+
 /// The drawing context comes first in the system prompt, with the knowledge behind it.
 /// システムプロンプトは図面コンテキストが先頭で、規格知識はその後ろに続く。
 #[test]

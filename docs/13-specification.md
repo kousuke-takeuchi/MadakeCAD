@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**653 specification clauses** across 5 areas.
+**654 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -413,6 +413,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The bundled standards note covers symbols, reference designators, wire colors, numbering and layout. <sub>`bundled_standards_cover_the_drawing_conventions`</sub>
 - The system prompt carries the bundled standards and the verification-loop rule. <sub>`system_prompt_carries_the_standards_and_the_verification_loop`</sub>
 - The system prompt tells the agent to start a blank drawing from a template instead of drawing everything by hand. <sub>`system_prompt_points_at_the_start_templates`</sub>
+- The system prompt says the shell is unavailable and that entity ids are written by hand. <sub>`system_prompt_tells_the_agent_no_shell_is_available`</sub>
 - The drawing context comes first in the system prompt, with the knowledge behind it. <sub>`system_prompt_puts_the_drawing_context_first`</sub>
 - A knowledge file set in the settings is appended after the bundled note. <sub>`user_knowledge_file_is_appended_to_the_prompt`</sub>
 - Without a knowledge file the prompt holds the bundled note only. <sub>`without_a_knowledge_file_only_the_bundled_note_is_used`</sub>
