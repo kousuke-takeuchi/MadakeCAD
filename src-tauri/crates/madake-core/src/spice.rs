@@ -95,7 +95,13 @@ pub fn build_deck_with(
                 attachments.push(l.at);
                 labels.entry(l.name.as_str()).or_default().push((l.id, l.at));
             }
-            Entity::Wire(_) | Entity::Text(_) | Entity::Harness(_) => {}
+            Entity::Wire(_)
+            | Entity::Text(_)
+            | Entity::Harness(_)
+            | Entity::PanelOutline(_)
+            | Entity::DinRail(_)
+            | Entity::Duct(_)
+            | Entity::Footprint(_) => {}
         }
     }
     if batteries.is_empty() {

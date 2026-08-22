@@ -155,8 +155,13 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
                     }
                 }
             }
-            // 注記とハーネス境界は電気的な接続を持たない
-            Entity::Text(_) | Entity::Harness(_) => {}
+            // 注記・ハーネス境界・盤レイアウトの要素は電気的な接続を持たない
+            Entity::Text(_)
+            | Entity::Harness(_)
+            | Entity::PanelOutline(_)
+            | Entity::DinRail(_)
+            | Entity::Duct(_)
+            | Entity::Footprint(_) => {}
         }
     }
 

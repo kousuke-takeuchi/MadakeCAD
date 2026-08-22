@@ -2,7 +2,8 @@
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
   Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileSpreadsheet, FileText,
-  FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid, LayoutTemplate, ListOrdered, ListChecks,
+  FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid, LayoutPanelTop, LayoutTemplate, ListOrdered,
+  ListChecks,
   Move, MoveRight, Network, Package, Pencil, Route, Scissors, Shapes, ShieldCheck, SquareDashed,
   Table2, Tag, Trash2, Type,
   type LucideIcon,
@@ -53,7 +54,7 @@ const activeTab = ref<TabId>("schematic");
 // 表示タブ: 表示クラストグル (レイヤ、spec §4)。3個ずつの縦列に分ける
 const viewIcons: Record<ViewClass, LucideIcon> = {
   wires: Route, symbols: Cpu, refs: Tag, net_labels: Hash, wire_numbers: ListOrdered,
-  harness: SquareDashed, texts: Type, frame: Frame, grid: Grid3x3,
+  harness: SquareDashed, panel: LayoutPanelTop, texts: Type, frame: Frame, grid: Grid3x3,
 };
 const viewClassColumns = Array.from(
   { length: Math.ceil(VIEW_CLASSES.length / 3) },

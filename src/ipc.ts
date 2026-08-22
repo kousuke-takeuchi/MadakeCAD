@@ -84,17 +84,68 @@ export interface Harness {
   note: string;
 }
 
+/** 盤の外形 (筐体) と取付板。盤レイアウトシート専用 (M4 §8)。 */
+export interface PanelOutline {
+  id: string;
+  /** 外形の左上角 (用紙座標mm)。 */
+  at: Point;
+  w: number;
+  h: number;
+  /** 盤の名前 (例 "制御盤")。空なら描かない。 */
+  name: string;
+}
+
+/** DINレール。v1は水平のみ。`y`は取付線 (帯の中心)。 */
+export interface DinRail {
+  id: string;
+  y: number;
+  x1: number;
+  x2: number;
+}
+
+/** 配線ダクト (斜線ハッチで描く)。 */
+export interface Duct {
+  id: string;
+  at: Point;
+  w: number;
+  h: number;
+}
+
+/** 部品が盤面に占める外形。`reference`で回路図のシンボルと結び付く。 */
+export interface Footprint {
+  id: string;
+  /** 描かれる矩形の左上角 (用紙座標mm)。 */
+  at: Point;
+  /** 部品そのものの幅・高さ mm (回転前の値)。 */
+  w: number;
+  h: number;
+  /** 回転角(度)。v1は0か90のみ。 */
+  rotation: number;
+  /** 回路図の参照記号 (例 "K1")。空なら盤だけの部品。 */
+  reference: string;
+  part_no: string;
+}
+
 export type Entity =
   | ({ kind: "symbol" } & SymbolInstance)
   | ({ kind: "wire" } & Wire)
   | ({ kind: "junction" } & Junction)
   | ({ kind: "net_label" } & NetLabel)
   | ({ kind: "text" } & TextEntity)
-  | ({ kind: "harness" } & Harness);
+  | ({ kind: "harness" } & Harness)
+  | ({ kind: "panel_outline" } & PanelOutline)
+  | ({ kind: "din_rail" } & DinRail)
+  | ({ kind: "duct" } & Duct)
+  | ({ kind: "footprint" } & Footprint);
+
+/** シート種別。回路図 (既定) と2D盤レイアウト (M4 §8)。 */
+export type SheetKind = "schematic" | "panel";
 
 export interface Sheet {
   id: string;
   name: string;
+  /** シート種別。旧ファイルは種別を持たないので省略可 (=回路図)。 */
+  kind?: SheetKind;
   size: PaperSize;
   orientation: Orientation;
   zone_cols: number;
@@ -137,7 +188,14 @@ export interface PlcAssignment {
 }
 
 export type Command =
-  | { type: "add_sheet"; name: string; size: PaperSize; orientation: Orientation }
+  | {
+      type: "add_sheet";
+      name: string;
+      size: PaperSize;
+      orientation: Orientation;
+      /** シート種別 (省略時は回路図)。 */
+      kind?: SheetKind;
+    }
   | { type: "remove_sheet"; sheet_id: string }
   | { type: "rename_sheet"; sheet_id: string; name: string }
   | { type: "set_title_block"; sheet_id: string; title_block: TitleBlock }

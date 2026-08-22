@@ -14,6 +14,7 @@ pub mod macros;
 pub mod model;
 pub mod netlist;
 pub mod ngspice;
+pub mod panel;
 pub mod parts;
 pub mod pdf;
 pub mod plc;

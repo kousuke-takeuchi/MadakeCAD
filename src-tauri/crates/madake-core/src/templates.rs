@@ -439,6 +439,7 @@ mod tests {
                 name: "Sheet2".into(),
                 size: PaperSize::A3,
                 orientation: Orientation::Landscape,
+                kind: crate::model::SheetKind::Schematic,
             })
             .unwrap();
         let second = engine.project().sheets[1].id;

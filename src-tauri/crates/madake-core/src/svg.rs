@@ -60,6 +60,13 @@ const HARNESS_FONT: f64 = 2.5;
 /// ハーネス名の位置: 囲みの左上角から右へ / 上へ (mm)。
 const HARNESS_LABEL_DX: f64 = 1.0;
 const HARNESS_LABEL_DY: f64 = 1.0;
+/// 盤の名前を外形の上端からどれだけ上に置くか (mm)。
+const PANEL_LABEL_DY: f64 = 1.5;
+/// ダクトの斜線・DINレールの取付線の線幅 (mm)。外形の罫線より細い補助線。
+const DUCT_HATCH_STROKE: f64 = 0.15;
+/// フットプリントの型番の文字高さ (mm) と、参照記号からの送り (mm)。
+const FOOTPRINT_PART_NO_FONT: f64 = 2.0;
+const FOOTPRINT_PART_NO_DY: f64 = 3.0;
 
 /// 図面に描く改訂行(古い順)。既定の上限を超えた分は古い行から省く。
 pub fn visible_revisions(revisions: &[Revision]) -> &[Revision] {
@@ -566,6 +573,60 @@ fn render_harnesses(out: &mut String, sheet: &Sheet) {
     }
 }
 
+/// 盤レイアウト (M4仕様 §8) を描く。奥から順に **盤外形+取付板 → ダクト → DINレール →
+/// フットプリント**。寸法の数式は [`crate::panel`] が正で、画面 (`src/canvas/panel.ts`) と
+/// 同じ結果になる。紙面なので白地・黒線で、面は塗らない (ダクトは斜線で表す)。
+fn render_panel(out: &mut String, sheet: &Sheet) {
+    for entity in sheet.entities.values() {
+        let Entity::PanelOutline(o) = entity else {
+            continue;
+        };
+        let (min, max) = crate::panel::outline_rect(o);
+        rect_el(out, min.x, min.y, max.x - min.x, max.y - min.y, "none", "#000", FRAME_STROKE);
+        if let Some((pmin, pmax)) = crate::panel::plate_rect(o) {
+            rect_el(
+                out,
+                pmin.x,
+                pmin.y,
+                pmax.x - pmin.x,
+                pmax.y - pmin.y,
+                "none",
+                "#000",
+                RULE_STROKE,
+            );
+        }
+        let name = o.name.trim();
+        if !name.is_empty() {
+            text_el(out, min.x + CELL_PAD, min.y - PANEL_LABEL_DY, TITLE_FONT, "#000", "start", name);
+        }
+    }
+    for duct in crate::panel::ducts(sheet) {
+        rect_el(out, duct.at.x, duct.at.y, duct.w, duct.h, "none", "#000", RULE_STROKE);
+        for (a, b) in crate::panel::duct_hatch(duct.at, duct.w, duct.h) {
+            line_el(out, a.x, a.y, b.x, b.y, DUCT_HATCH_STROKE, "#000");
+        }
+    }
+    for rail in crate::panel::rails(sheet) {
+        let (min, max) = crate::panel::rail_rect(rail);
+        rect_el(out, min.x, min.y, max.x - min.x, max.y - min.y, "none", "#000", RULE_STROKE);
+        // 取付線 (部品が乗る中心線)
+        line_el(out, min.x, rail.y, max.x, rail.y, DUCT_HATCH_STROKE, "#000");
+    }
+    for fp in crate::panel::footprints(sheet) {
+        let (min, max) = crate::panel::footprint_rect(fp);
+        rect_el(out, min.x, min.y, max.x - min.x, max.y - min.y, "none", "#000", SYMBOL_STROKE);
+        let (cx, cy) = ((min.x + max.x) / 2.0, (min.y + max.y) / 2.0);
+        let reference = fp.reference.trim();
+        if !reference.is_empty() {
+            text_family_el(out, cx, cy, LABEL_FONT, "#000", "middle", "monospace", reference);
+        }
+        let part_no = fp.part_no.trim();
+        if !part_no.is_empty() {
+            text_el(out, cx, cy + FOOTPRINT_PART_NO_DY, FOOTPRINT_PART_NO_FONT, "#000", "middle", part_no);
+        }
+    }
+}
+
 /// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。図枠は既定の`jis-a3`。
 /// シート単体の出力なのでシート間クロスリファレンスは描かない
 /// (描くには [`project_sheet_to_svg`] を使う)。
@@ -652,6 +713,8 @@ fn sheet_to_svg_with_xrefs(
         n(pw), n(ph)
     );
     frame_and_title_block(&mut out, sheet, frame, ctx);
+    // 盤レイアウト (盤外形・ダクト・レール・フットプリント) は最背面
+    render_panel(&mut out, sheet);
     // ハーネス境界は配線・シンボルの背面に置く
     render_harnesses(&mut out, sheet);
     let defs = crate::symbol::DefIndex::new(symbols);
@@ -715,8 +778,12 @@ fn sheet_to_svg_with_xrefs(
             Entity::Text(t) => {
                 text_el(&mut out, t.at.x, t.at.y, t.height, "#000", "start", &t.text);
             }
-            // ハーネス境界は背面のrender_harnessesで描き済み
-            Entity::Harness(_) => {}
+            // ハーネス境界は背面のrender_harnesses、盤レイアウトはrender_panelで描き済み
+            Entity::Harness(_)
+            | Entity::PanelOutline(_)
+            | Entity::DinRail(_)
+            | Entity::Duct(_)
+            | Entity::Footprint(_) => {}
         }
     }
     render_wire_numbers(&mut out, sheet, symbols);
@@ -1385,5 +1452,123 @@ mod tests {
         let project = relay_project();
         let svg = sheet_to_svg(&project.sheets[0], &builtin_symbols());
         assert!(!svg.contains(">13-14<"), "{svg}");
+    }
+    /// 盤レイアウトシート (盤外形200x150・ダクト・DINレール・K1のフットプリント)。
+    fn panel_sheet() -> Sheet {
+        let mut sheet =
+            Sheet::new_kind("盤", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);
+        let entities = vec![
+            Entity::PanelOutline(PanelOutline {
+                id: Uuid::new_v4(),
+                at: Point::new(40.0, 40.0),
+                w: 200.0,
+                h: 150.0,
+                name: "制御盤".into(),
+            }),
+            Entity::Duct(Duct {
+                id: Uuid::new_v4(),
+                at: Point::new(100.0, 100.0),
+                w: 20.0,
+                h: 20.0,
+            }),
+            Entity::DinRail(DinRail {
+                id: Uuid::new_v4(),
+                y: 150.0,
+                x1: 60.0,
+                x2: 220.0,
+            }),
+            Entity::Footprint(Footprint {
+                id: Uuid::new_v4(),
+                at: Point::new(60.0, 132.5),
+                w: 25.0,
+                h: 65.0,
+                rotation: 0,
+                reference: "K1".into(),
+                part_no: "MDK-RLY-24V".into(),
+            }),
+        ];
+        for e in entities {
+            sheet.entities.insert(e.id(), e);
+        }
+        sheet
+    }
+
+    /// A panel-layout sheet is exported with the same drawing frame as a schematic, plus the enclosure and its mounting plate.
+    /// 盤レイアウトシートは回路図と同じ図枠つきで書き出され、そこに盤外形と取付板が描かれる。
+    #[test]
+    fn svg_of_a_panel_sheet_draws_the_enclosure_and_its_mounting_plate() {
+        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols());
+        assert!(svg.contains("viewBox=\"0 0 420 297\""));
+        assert!(
+            svg.contains("<rect x=\"40\" y=\"40\" width=\"200\" height=\"150\""),
+            "盤外形: {svg}"
+        );
+        assert!(
+            svg.contains("<rect x=\"50\" y=\"50\" width=\"180\" height=\"130\""),
+            "取付板 (10mm内側): {svg}"
+        );
+        assert!(svg.contains(">制御盤<"), "盤の名前: {svg}");
+    }
+
+    /// A duct is drawn as a rectangle filled with 45-degree hatch lines.
+    /// ダクトは45度のハッチ(斜線)で埋めた矩形として描かれる。
+    #[test]
+    fn svg_of_a_panel_sheet_hatches_the_duct() {
+        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols());
+        assert!(
+            svg.contains("<rect x=\"100\" y=\"100\" width=\"20\" height=\"20\""),
+            "ダクトの外形: {svg}"
+        );
+        assert!(
+            svg.contains("<line x1=\"100\" y1=\"100\" x2=\"120\" y2=\"120\""),
+            "ダクトの斜線: {svg}"
+        );
+    }
+
+    /// A DIN rail is drawn as a horizontal band centred on its mounting line.
+    /// DINレールは取付線を中心にした横帯として描かれる。
+    #[test]
+    fn svg_of_a_panel_sheet_draws_the_din_rail() {
+        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols());
+        assert!(
+            svg.contains("<rect x=\"60\" y=\"132.500\" width=\"160\" height=\"35\""),
+            "DINレール: {svg}"
+        );
+    }
+
+    /// A footprint is drawn as its outline rectangle with the reference designator and the type number inside.
+    /// フットプリントは外形の矩形として描かれ、その中に参照記号と型番が入る。
+    #[test]
+    fn svg_of_a_panel_sheet_draws_the_footprint_with_its_reference() {
+        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols());
+        assert!(
+            svg.contains("<rect x=\"60\" y=\"132.500\" width=\"25\" height=\"65\""),
+            "フットプリントの外形: {svg}"
+        );
+        assert!(svg.contains(">K1<"), "参照記号: {svg}");
+        assert!(svg.contains(">MDK-RLY-24V<"), "型番: {svg}");
+    }
+
+    /// A footprint turned 90 degrees is drawn lying down (its width and height swap).
+    /// 90度回したフットプリントは横倒しに描かれる(幅と高さが入れ替わる)。
+    #[test]
+    fn svg_draws_a_rotated_footprint_lying_down() {
+        let mut sheet =
+            Sheet::new_kind("盤", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);
+        let fp = Entity::Footprint(Footprint {
+            id: Uuid::new_v4(),
+            at: Point::new(60.0, 100.0),
+            w: 25.0,
+            h: 65.0,
+            rotation: 90,
+            reference: "K2".into(),
+            part_no: String::new(),
+        });
+        sheet.entities.insert(fp.id(), fp);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(
+            svg.contains("<rect x=\"60\" y=\"100\" width=\"65\" height=\"25\""),
+            "{svg}"
+        );
     }
 }

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1485 specification clauses** across 5 areas.
+**1532 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -38,6 +38,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Moving entities shifts their coordinates; undo restores the original position exactly. <sub>`move_and_undo_restores_position`</sub>
 - Deleting several entities at once is a single undo step that restores all of them. <sub>`delete_multiple_and_undo`</sub>
 - Sheets can be added and removed; undoing a removal restores the sheet with its original id and position. <sub>`sheet_add_remove_undo`</sub>
+- Adding a sheet without naming a kind gives an ordinary schematic sheet, and a panel-layout sheet is added by asking for the panel kind (undo removes it either way). <sub>`add_sheet_defaults_to_schematic_and_can_add_a_panel_sheet`</sub>
+- A sheet-add command written before panel sheets existed (no kind field) still works and adds a schematic sheet. <sub>`a_sheet_add_command_without_a_kind_still_adds_a_schematic_sheet`</sub>
+- The four panel entities (panel outline, DIN rail, duct, footprint) are added, moved and deleted with the ordinary entity commands, and every step can be undone. <sub>`panel_entities_are_added_moved_and_deleted_with_undo`</sub>
+- Editing a footprint (its reference, part number or rotation) replaces it wholesale, and undo brings back the previous version. <sub>`a_footprint_can_be_edited_and_undone`</sub>
 - Commands serialize to JSON and back without loss, so any client can send them over the wire. <sub>`command_json_roundtrip`</sub>
 - UpdateEntity replaces an entity wholesale; undo brings back the previous version. <sub>`update_entity_undo_restores_previous_version`</sub>
 - SetTitleBlock updates the sheet's title block; undo restores the previous fields. <sub>`set_title_block_is_undoable`</sub>
@@ -110,6 +114,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Loading a missing file returns an error instead of panicking. <sub>`loading_missing_file_is_an_error`</sub>
 - A project file saved before the PLC assignment table existed still opens: it gets an empty table and is brought up to the current format version. <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
 - A project file saved before frame templates existed opens with no frame template set, which means it is drawn with the default JIS A3 frame exactly as before. <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
+- A project file saved before panel layouts existed opens with every sheet as a schematic sheet and is brought up to the current format version. <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
+- A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - The frame template chosen for a project is saved to the file and comes back on reload. <sub>`the_frame_template_survives_a_save_and_reload`</sub>
 
 ### KiCad import
@@ -157,6 +163,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Paper sizes follow ISO A-series dimensions, and portrait orientation swaps width and height. <sub>`paper_sizes_match_iso_and_orientation_swaps`</sub>
 - A new project starts with one sheet named "Sheet1", the current file format version, an empty PLC assignment table and no explicit frame template (so it uses the default JIS A3 frame). <sub>`new_project_has_one_default_sheet`</sub>
 - Entity::translate moves every coordinate of the entity: all wire points, or the anchor of symbols/labels/text. <sub>`translate_moves_all_coordinates`</sub>
+- A new sheet is a schematic sheet, and a panel-layout sheet is a separate sheet kind recorded in the file. <sub>`a_new_sheet_is_schematic_and_a_panel_sheet_is_a_separate_kind`</sub>
+- A sheet saved before panel layouts existed carries no sheet kind, and it opens as an ordinary schematic sheet. <sub>`a_sheet_without_a_kind_opens_as_a_schematic_sheet`</sub>
+- The sheet kind travels as JSON in snake_case ("schematic" / "panel"). <sub>`the_sheet_kind_is_serialized_in_snake_case`</sub>
+- Moving a panel sheet moves its panel entities too: outline, duct and footprint move by their top-left corner, and a DIN rail moves along both axes. <sub>`translate_moves_panel_entities`</sub>
+- Panel entities travel as JSON under their own kind tags, so any client can send them. <sub>`panel_entities_have_their_own_json_kind_tags`</sub>
 - Entity::id() returns the inner entity's UUID regardless of the entity kind. <sub>`entity_id_is_uniform_across_kinds`</sub>
 
 ### Netlist extraction
@@ -179,6 +190,23 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The ngspice executable is located by priority: MADAKE_NGSPICE env var, then PATH, then OS default install paths; a missing env path falls through. <sub>`find_in_prefers_env_then_path_then_candidates`</sub>
 - Running a DC operating point on a 24 V / 6+6 ohm divider yields 12 V at the midpoint and 2 A of source current (requires ngspice; skipped otherwise). <sub>`run_op_solves_a_divider_when_ngspice_is_installed`</sub>
 
+### panel
+
+- A footprint occupies the rectangle of its own size, and turning it 90 degrees swaps width and height. <sub>`a_rotated_footprint_swaps_width_and_height`</sub>
+- The panel outline draws the enclosure and, inset inside it, the mounting plate that parts are screwed onto. <sub>`the_panel_outline_carries_a_mounting_plate_inside_it`</sub>
+- A panel outline smaller than the inset on both sides has no mounting plate (there is nothing left to draw). <sub>`a_tiny_panel_outline_has_no_mounting_plate`</sub>
+- A DIN rail is drawn as a horizontal band centred on its mounting line, so parts snapped to the line sit on the rail. <sub>`a_din_rail_is_a_band_centred_on_its_mounting_line`</sub>
+- A rail drawn from right to left covers the same span as one drawn from left to right. <sub>`a_rail_drawn_backwards_covers_the_same_span`</sub>
+- A duct is filled with 45-degree hatch lines that stay inside it, spaced on a fixed pitch so neighbouring ducts line up. <sub>`a_duct_is_filled_with_45_degree_hatch_lines`</sub>
+- A duct with no width or height has nothing to hatch. <sub>`a_flat_duct_has_no_hatch_lines`</sub>
+- Every part on the schematic that has no footprint on a panel sheet yet is listed as unplaced, with its part number and outline size. <sub>`parts_without_a_footprint_are_listed_as_unplaced`</sub>
+- A part whose type number has no size in the parts database is still placeable: it comes with the default rectangle, which can be adjusted afterwards. <sub>`an_unknown_type_number_falls_back_to_the_default_footprint_size`</sub>
+- With no panel sheet in the project, every part of the schematic is unplaced. <sub>`without_a_panel_sheet_every_part_is_unplaced`</sub>
+- One device is listed once even when it appears on the schematic several times (a relay coil and its contacts share one reference). <sub>`a_device_drawn_several_times_is_listed_once`</sub>
+- Symbols with no reference designator yet (nothing to place on the panel) are left out of the unplaced list. <sub>`symbols_without_a_reference_are_not_listed`</sub>
+- A footprint whose reference does not exist on the schematic is reported as an orphan, so a renamed or deleted part is not forgotten on the panel. <sub>`a_footprint_with_no_matching_part_is_reported`</sub>
+- A footprint that is not linked to a reference designator (a panel-only part) is not reported as an orphan. <sub>`a_footprint_without_a_reference_is_not_reported`</sub>
+
 ### Parts database
 
 - Opening a new database creates the schema and seeds sample parts exactly once; reopening never re-seeds. <sub>`open_creates_schema_and_seeds_samples_once`</sub>
@@ -191,6 +219,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Opening an older parts database adds the bundled PLC module samples, so PLC I/O drawings can be generated without registering a module by hand. <sub>`an_older_database_gains_the_bundled_plc_module_samples`</sub>
 - The bundled samples include PLC modules covering the Mitsubishi, Siemens and Allen-Bradley address styles. <sub>`sample_plc_modules_cover_the_three_address_styles`</sub>
 - The PLC module list contains only parts that carry a module definition, so ordinary parts never show up in the module library. <sub>`the_plc_module_list_contains_only_parts_with_a_module_definition`</sub>
+- An old schema-v5 database migrates to v6 on open, preserving existing rows and gaining the footprint size columns used by panel layouts. <sub>`v5_database_migrates_to_v6_preserving_data`</sub>
+- The bundled sample parts carry footprint sizes, so a part placed on a panel sheet gets its own outline instead of the fallback rectangle. <sub>`sample_parts_have_footprint_sizes`</sub>
+- Opening an older parts database fills in the footprint sizes of the bundled samples that have none yet, without touching sizes someone entered by hand. <sub>`an_older_database_gains_the_bundled_footprint_sizes`</sub>
+- A part with only one of the two footprint dimensions filled in has no usable footprint size, because both width and height are needed to draw the outline. <sub>`a_half_filled_footprint_size_is_not_used`</sub>
 - The database path defaults to the OS app-data folder and can be overridden with MADAKE_PARTS_DB. <sub>`default_path_respects_env_override`</sub>
 
 ### PDF output
@@ -203,6 +235,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The cover page can be turned off, leaving the circuit sheets first. <sub>`pdf_book_can_omit_the_cover`</sub>
 - Exporting the book writes one PDF document holding every page, with report pages on A4 even when the circuit is A3. <sub>`pdf_book_merges_every_page_into_one_document`</sub>
 - A book of a project with no sheet at all still produces a valid one-page PDF (the cover). <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
+- A panel-layout sheet is part of the book: exporting the project puts it in the PDF right after the schematic sheets. <sub>`the_pdf_book_includes_the_panel_sheet`</sub>
 
 ### PLC I/O
 
@@ -361,6 +394,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The sheet holding the coil shows a contact map under it: one row per contact with its terminal pair and its address. <sub>`svg_draws_the_contact_map_under_the_coil`</sub>
 - The sheet holding the contact shows the coil's address in parentheses beside it. <sub>`svg_draws_the_coil_location_beside_the_contact`</sub>
 - Exporting a single sheet on its own draws no contact map, because the counterpart sheets are unknown. <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
+- A panel-layout sheet is exported with the same drawing frame as a schematic, plus the enclosure and its mounting plate. <sub>`svg_of_a_panel_sheet_draws_the_enclosure_and_its_mounting_plate`</sub>
+- A duct is drawn as a rectangle filled with 45-degree hatch lines. <sub>`svg_of_a_panel_sheet_hatches_the_duct`</sub>
+- A DIN rail is drawn as a horizontal band centred on its mounting line. <sub>`svg_of_a_panel_sheet_draws_the_din_rail`</sub>
+- A footprint is drawn as its outline rectangle with the reference designator and the type number inside. <sub>`svg_of_a_panel_sheet_draws_the_footprint_with_its_reference`</sub>
+- A footprint turned 90 degrees is drawn lying down (its width and height swap). <sub>`svg_draws_a_rotated_footprint_lying_down`</sub>
 
 ### Symbol library
 
@@ -538,6 +576,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Nets joined across sheets by a shared label name are checked as one net, so a conflict spanning two sheets is reported once with all offending labels. <sub>`project_verification_merges_label_conflicts_across_sheets`</sub>
 - A net continued onto another sheet with the same label name is not a conflict. <sub>`project_verification_accepts_a_net_continued_onto_another_sheet`</sub>
 - A multi-pole breaker conducts pole by pole, so a load fed from an unwired pole is still reported as unreachable from the source. <sub>`multipole_breaker_does_not_connect_its_poles_to_each_other`</sub>
+- A panel-layout sheet is not checked against the schematic rules: it carries no wiring, so nothing there counts as an unconnected pin or a dangling wire. <sub>`a_panel_sheet_is_not_checked_against_the_schematic_rules`</sub>
+- A part placed on the panel whose reference designator is nowhere on the schematic is reported as a warning, and the whole-project check reports it together with the schematic findings. <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
 
 ### Wire numbering
 
@@ -1246,6 +1286,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - builds a throwaway sheet holding only the chosen variant's entities <sub>`macroSheet`</sub>
 - shows the Japanese name when the UI is Japanese and the English name otherwise <sub>`macroName`</sub>
 - falls back to the English name when a macro has no Japanese name <sub>`macroName`</sub>
+
+### panel
+
+- gives a footprint the rectangle of its own size <sub>`panel layout geometry`</sub>
+- swaps width and height for a footprint turned 90 degrees <sub>`panel layout geometry`</sub>
+- falls back to the default rectangle for a part with no size <sub>`panel layout geometry`</sub>
+- draws the mounting plate inset inside the panel outline <sub>`panel layout geometry`</sub>
+- has no mounting plate when the outline is smaller than the inset <sub>`panel layout geometry`</sub>
+- draws a DIN rail as a band centred on its mounting line <sub>`panel layout geometry`</sub>
+- covers the same span for a rail drawn backwards <sub>`panel layout geometry`</sub>
+- fills a duct with 45 degree hatch lines that stay inside it <sub>`panel layout geometry`</sub>
+- has no hatch lines for a flat duct <sub>`panel layout geometry`</sub>
+- snaps a part dropped near a rail onto its mounting line <sub>`panel layout geometry`</sub>
 
 ### relayXref
 

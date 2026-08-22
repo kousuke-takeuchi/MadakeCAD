@@ -1065,6 +1065,28 @@ async fn post_wire_part(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// 盤レイアウトAPIの状態 (ドキュメント + 部品DB)。未配置部品の外形寸法を部品DBから引く。
+#[derive(Clone)]
+struct PanelApi {
+    doc: SharedDoc,
+    parts: SharedParts,
+}
+
+/// 未配置部品 = 回路図にあって、どの盤レイアウトシートにもフットプリントが無い部品
+/// (M4仕様 §8)。外形寸法は部品DBの`footprint_w`/`footprint_h`、登録の無い型番は既定の矩形。
+async fn get_unplaced_components(
+    State(api): State<PanelApi>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let sizes = {
+        let db = api.parts.lock().unwrap();
+        db.footprint_sizes().map_err(bad_request)?
+    };
+    let engine = api.doc.engine.lock().unwrap();
+    Ok(Json(serde_json::json!({
+        "unplaced": madake_core::panel::unplaced_components(engine.project(), &sizes)
+    })))
+}
+
 async fn health() -> impl IntoResponse {
     Json(serde_json::json!({ "name": "MadakeCAD Link API", "version": 1 }))
 }
@@ -1079,6 +1101,12 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         doc: doc.clone(),
         agent,
     });
+    let panel_routes = Router::new()
+        .route("/api/v1/panel/unplaced", get(get_unplaced_components))
+        .with_state(PanelApi {
+            doc: doc.clone(),
+            parts: parts.clone(),
+        });
     let parts_routes = Router::new()
         .route("/api/v1/parts", get(get_parts).post(post_part))
         .route(
@@ -1140,6 +1168,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/events", get(get_events))
         .with_state(doc)
         .merge(parts_routes)
+        .merge(panel_routes)
         .merge(agent_routes)
         .layer(cors)
         // CORSより外側。プリフライトもここを通す(外部オリジンはここで403)

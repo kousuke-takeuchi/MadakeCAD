@@ -481,6 +481,11 @@ pub fn base_point(entities: &[&Entity]) -> Point {
             Entity::Junction(j) => pts.push(j.at),
             Entity::NetLabel(l) => pts.push(l.at),
             Entity::Text(t) => pts.push(t.at),
+            // 盤レイアウトの要素はマクロ(回路の部分図)には入らない
+            Entity::PanelOutline(_)
+            | Entity::DinRail(_)
+            | Entity::Duct(_)
+            | Entity::Footprint(_) => {}
         }
     }
     if pts.is_empty() {
@@ -716,6 +721,11 @@ fn place_entity(entity: &mut Entity, rotation: u16, at: Point) {
             t.at = map(t.at);
             t.rotation = (t.rotation + rotation) % 360;
         }
+        // 盤レイアウトの要素はマクロ(回路の部分図)には入らない
+        Entity::PanelOutline(_)
+        | Entity::DinRail(_)
+        | Entity::Duct(_)
+        | Entity::Footprint(_) => {}
     }
 }
 
@@ -1468,6 +1478,7 @@ mod tests {
                 name: "Sheet2".into(),
                 size: PaperSize::A3,
                 orientation: Orientation::Landscape,
+                kind: crate::model::SheetKind::Schematic,
             })
             .unwrap();
         let second = engine.project().sheets[1].id;

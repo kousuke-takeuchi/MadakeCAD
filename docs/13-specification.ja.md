@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1485仕様項目**。
+全5領域・**1532仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -38,6 +38,10 @@
 - 移動でエンティティの座標が動き、undoで元の位置に正確に戻る。 <sub>`move_and_undo_restores_position`</sub>
 - 複数エンティティの一括削除は1回のundoで全て復元される。 <sub>`delete_multiple_and_undo`</sub>
 - シートは追加・削除でき、削除のundoは元のid・位置のままシートを復元する。 <sub>`sheet_add_remove_undo`</sub>
+- 種別を指定しないシート追加は通常の回路図シートになり、盤レイアウトシートは種別を指定して追加する(どちらもundoで消える)。 <sub>`add_sheet_defaults_to_schematic_and_can_add_a_panel_sheet`</sub>
+- 盤シートが無かった頃に書かれたシート追加コマンド(種別の欄が無い)もそのまま動き、回路図シートを追加する。 <sub>`a_sheet_add_command_without_a_kind_still_adds_a_schematic_sheet`</sub>
+- 盤エンティティ4種(盤外形・DINレール・ダクト・フットプリント)は通常のエンティティ用コマンドで追加・移動・削除でき、どの操作もundoで戻せる。 <sub>`panel_entities_are_added_moved_and_deleted_with_undo`</sub>
+- フットプリントの編集(参照記号・型番・回転)は丸ごと置換で、undoで編集前に戻る。 <sub>`a_footprint_can_be_edited_and_undone`</sub>
 - CommandはJSONに往復変換でき、どのクライアントからも送信できる。 <sub>`command_json_roundtrip`</sub>
 - UpdateEntityはエンティティを丸ごと置換し、undoで置換前の状態に戻る。 <sub>`update_entity_undo_restores_previous_version`</sub>
 - SetTitleBlockはシートの表題欄を更新し、undoで以前の内容に戻る。 <sub>`set_title_block_is_undoable`</sub>
@@ -110,6 +114,8 @@
 - 存在しないファイルの読み込みはパニックせずエラーを返す。 <sub>`loading_missing_file_is_an_error`</sub>
 - PLC割付表が無かった頃の古いプロジェクトファイルもそのまま開ける (割付表は空になり、現行のファイル形式へ更新される)。 <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
 - 図枠テンプレートが無かった頃のプロジェクトファイルは図枠未指定で開き、従来どおり既定のJIS A3図枠で描かれる。 <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
+- 盤レイアウトが無かった頃のプロジェクトファイルは全シートが回路図シートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
+- 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - プロジェクトに選んだ図枠テンプレートはファイルへ保存され、読み直しても残っている。 <sub>`the_frame_template_survives_a_save_and_reload`</sub>
 
 ### KiCadインポート
@@ -157,6 +163,11 @@
 - 用紙サイズはISO A列の寸法に従い、縦置きでは幅と高さが入れ替わる。 <sub>`paper_sizes_match_iso_and_orientation_swaps`</sub>
 - 新規プロジェクトは「Sheet1」という1枚のシート・現行のファイル形式バージョン・空のPLC割付表で始まり、図枠テンプレートは未指定(=既定のJIS A3図枠)である。 <sub>`new_project_has_one_default_sheet`</sub>
 - Entity::translateはエンティティの全座標を動かす: ワイヤは全頂点、シンボル/ラベル/テキストは基準点。 <sub>`translate_moves_all_coordinates`</sub>
+- 新しいシートは回路図シートで、盤レイアウトシートはファイルに記録される別のシート種別である。 <sub>`a_new_sheet_is_schematic_and_a_panel_sheet_is_a_separate_kind`</sub>
+- 盤レイアウトが無かった頃に保存されたシートは種別を持たないが、通常の回路図シートとして開く。 <sub>`a_sheet_without_a_kind_opens_as_a_schematic_sheet`</sub>
+- シート種別は snake_case ("schematic" / "panel") のJSONで往復する。 <sub>`the_sheet_kind_is_serialized_in_snake_case`</sub>
+- 盤シートを動かすと盤エンティティも動く: 盤外形・ダクト・フットプリントは左上の角が動き、DINレールは左右にも上下にも動く。 <sub>`translate_moves_panel_entities`</sub>
+- 盤エンティティはそれぞれの種別タグでJSONを往復でき、どのクライアントからも送れる。 <sub>`panel_entities_have_their_own_json_kind_tags`</sub>
 - Entity::id()は種別によらず内側エンティティのUUIDを返す。 <sub>`entity_id_is_uniform_across_kinds`</sub>
 
 ### ネットリスト抽出
@@ -179,6 +190,23 @@
 - ngspiceの実行ファイルは MADAKE_NGSPICE環境変数→PATH→OS既定パス の優先順で探索され、存在しないenv指定は次へフォールバックする。 <sub>`find_in_prefers_env_then_path_then_candidates`</sub>
 - 24V・6+6Ωの分圧回路のDC動作点は中点12V・電源電流2Aになる(ngspice必須。未導入時はスキップ)。 <sub>`run_op_solves_a_divider_when_ngspice_is_installed`</sub>
 
+### panel
+
+- フットプリントは自分の寸法どおりの矩形を占め、90度回すと幅と高さが入れ替わる。 <sub>`a_rotated_footprint_swaps_width_and_height`</sub>
+- 盤外形は筐体と、その内側に一回り小さい取付板(部品を留める板)を描く。 <sub>`the_panel_outline_carries_a_mounting_plate_inside_it`</sub>
+- インセットより小さい盤外形には取付板が無い(描く余地が残らない)。 <sub>`a_tiny_panel_outline_has_no_mounting_plate`</sub>
+- DINレールは取付線を中心とした横帯として描かれるので、取付線に合わせた部品はレールに乗る。 <sub>`a_din_rail_is_a_band_centred_on_its_mounting_line`</sub>
+- 右から左へ引いたレールも、左から右へ引いたものと同じ範囲を覆う。 <sub>`a_rail_drawn_backwards_covers_the_same_span`</sub>
+- ダクトは45度のハッチ(斜線)で埋まる。斜線はダクトの内側に収まり、一定間隔なので隣り合うダクトでも線がそろう。 <sub>`a_duct_is_filled_with_45_degree_hatch_lines`</sub>
+- 幅や高さの無いダクトには描く斜線が無い。 <sub>`a_flat_duct_has_no_hatch_lines`</sub>
+- 回路図にあって盤シートにまだフットプリントが無い部品は、型番と外形寸法つきで「未配置」として並ぶ。 <sub>`parts_without_a_footprint_are_listed_as_unplaced`</sub>
+- 型番の寸法が部品DBに無い部品も配置できる。既定の矩形の大きさで並び、置いたあとで直せる。 <sub>`an_unknown_type_number_falls_back_to_the_default_footprint_size`</sub>
+- 盤シートがまだ1枚も無いプロジェクトでは、回路図の部品は全て未配置になる。 <sub>`without_a_panel_sheet_every_part_is_unplaced`</sub>
+- 同じ部品が回路図に何度も出てきても未配置の一覧には1件だけ載る(リレーのコイルと接点は同じ参照記号の1台)。 <sub>`a_device_drawn_several_times_is_listed_once`</sub>
+- まだ参照記号が付いていないシンボル(盤へ置くものが決まっていない)は未配置の一覧に出ない。 <sub>`symbols_without_a_reference_are_not_listed`</sub>
+- 回路図に無い参照記号のフットプリントは「みなしご」として報告される(参照記号を変えた・部品を消したときに盤へ置き去りにしないため)。 <sub>`a_footprint_with_no_matching_part_is_reported`</sub>
+- 参照記号を結び付けていないフットプリント(盤だけの部品)はみなしごとして報告しない。 <sub>`a_footprint_without_a_reference_is_not_reported`</sub>
+
 ### 部品データベース
 
 - 新規DBを開くとスキーマ作成とサンプル投入が一度だけ行われ、開き直しても再投入されない。 <sub>`open_creates_schema_and_seeds_samples_once`</sub>
@@ -191,6 +219,10 @@
 - 前のバージョンで作られた部品DBを開くと同梱のPLCモジュールのサンプルが追補されるので、モジュールを手で登録しなくてもPLC I/O図面を作れる。 <sub>`an_older_database_gains_the_bundled_plc_module_samples`</sub>
 - 同梱サンプルには三菱・Siemens・Allen-Bradleyのアドレス体系をひと通り含むPLCモジュールが入っている。 <sub>`sample_plc_modules_cover_the_three_address_styles`</sub>
 - PLCモジュールの一覧はモジュール定義を持つ部品だけを返すので、普通の部品がモジュールライブラリに紛れ込まない。 <sub>`the_plc_module_list_contains_only_parts_with_a_module_definition`</sub>
+- 旧スキーマv5のDBは開いた時点でv6へ移行され、既存データを保持したまま盤レイアウト用のフットプリント寸法の列が使えるようになる。 <sub>`v5_database_migrates_to_v6_preserving_data`</sub>
+- 同梱のサンプル部品はフットプリント寸法を持っているので、盤シートへ置くと既定の矩形ではなくその部品の外形で入る。 <sub>`sample_parts_have_footprint_sizes`</sub>
+- 前のバージョンで作られた部品DBを開くと、寸法の無い同梱サンプルにフットプリント寸法が追補される(自分で入れた寸法は書き換えない)。 <sub>`an_older_database_gains_the_bundled_footprint_sizes`</sub>
+- 幅か高さの片方しか入っていない部品はフットプリント寸法を持たない扱いになる(外形を描くには両方必要なため)。 <sub>`a_half_filled_footprint_size_is_not_used`</sub>
 - DBパスの既定はOSのアプリデータフォルダで、MADAKE_PARTS_DBで上書きできる。 <sub>`default_path_respects_env_override`</sub>
 
 ### PDF出力
@@ -203,6 +235,7 @@
 - 表紙は外すことができ、その場合は回路図シートが先頭になる。 <sub>`pdf_book_can_omit_the_cover`</sub>
 - 一括出力は全ページを1つのPDF文書にまとめ、回路図がA3でも帳票ページはA4になる。 <sub>`pdf_book_merges_every_page_into_one_document`</sub>
 - シートが1枚も無いプロジェクトでも、表紙だけの正しい1ページPDFになる。 <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
+- 盤レイアウトシートも一括出力に含まれ、回路図シートに続けてPDFへ入る。 <sub>`the_pdf_book_includes_the_panel_sheet`</sub>
 
 ### PLC I/O
 
@@ -361,6 +394,11 @@
 - コイルのあるシートには、コイルの下に接点マップ(端子対と所在の行)が描かれる。 <sub>`svg_draws_the_contact_map_under_the_coil`</sub>
 - 接点のあるシートには、その脇にコイルの住所が丸括弧付きで描かれる。 <sub>`svg_draws_the_coil_location_beside_the_contact`</sub>
 - シート単体の書き出しでは相手のシートが分からないので、接点マップは描かれない。 <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
+- 盤レイアウトシートは回路図と同じ図枠つきで書き出され、そこに盤外形と取付板が描かれる。 <sub>`svg_of_a_panel_sheet_draws_the_enclosure_and_its_mounting_plate`</sub>
+- ダクトは45度のハッチ(斜線)で埋めた矩形として描かれる。 <sub>`svg_of_a_panel_sheet_hatches_the_duct`</sub>
+- DINレールは取付線を中心にした横帯として描かれる。 <sub>`svg_of_a_panel_sheet_draws_the_din_rail`</sub>
+- フットプリントは外形の矩形として描かれ、その中に参照記号と型番が入る。 <sub>`svg_of_a_panel_sheet_draws_the_footprint_with_its_reference`</sub>
+- 90度回したフットプリントは横倒しに描かれる(幅と高さが入れ替わる)。 <sub>`svg_draws_a_rotated_footprint_lying_down`</sub>
 
 ### シンボルライブラリ
 
@@ -538,6 +576,8 @@
 - 同名ラベルでシートを跨いで繋がったネットは1ネットとして検査されるので、2枚に跨る競合も全ラベルを挙げた1件として報告される。 <sub>`project_verification_merges_label_conflicts_across_sheets`</sub>
 - 同じラベル名でシートを跨いで続くネットは、競合ではない。 <sub>`project_verification_accepts_a_net_continued_onto_another_sheet`</sub>
 - 多極の遮断器は極ごとに導通するため、結線されていない極につながる負荷は電源から到達できないと報告される。 <sub>`multipole_breaker_does_not_connect_its_poles_to_each_other`</sub>
+- 盤レイアウトシートは回路図の規則で検査しない。配線を持たないシートなので、未接続ピンや宙ぶらりんの配線として指摘されるものは無い。 <sub>`a_panel_sheet_is_not_checked_against_the_schematic_rules`</sub>
+- 回路図のどこにも無い参照記号のフットプリントが盤に置かれていると注意として報告され、プロジェクト全体の検証では回路図の指摘と一緒に出る。 <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
 
 ### 線番採番
 
@@ -1247,6 +1287,19 @@
 - マクロ名はUI言語が日本語なら日本語名、それ以外は英語名を出す <sub>`macroName`</sub>
 - 日本語名が空のマクロはどちらの言語でも英語名を出す(空欄にしない) <sub>`macroName`</sub>
 
+### panel
+
+- フットプリントは自分の寸法どおりの矩形を占める。 <sub>`panel layout geometry`</sub>
+- 90度回したフットプリントは幅と高さが入れ替わる。 <sub>`panel layout geometry`</sub>
+- 部品DBに寸法が無い型番でも既定の矩形で置ける。 <sub>`panel layout geometry`</sub>
+- 盤外形の内側には一回り小さい取付板がある。 <sub>`panel layout geometry`</sub>
+- インセットより小さい盤外形には取付板が無い。 <sub>`panel layout geometry`</sub>
+- DINレールは取付線を中心とした横帯として描かれる。 <sub>`panel layout geometry`</sub>
+- 右から左へ引いたレールも同じ範囲を覆う。 <sub>`panel layout geometry`</sub>
+- ダクトは45度の斜線で埋まり、斜線はダクトの内側に収まる。 <sub>`panel layout geometry`</sub>
+- 幅や高さの無いダクトには描く斜線が無い。 <sub>`panel layout geometry`</sub>
+- レールの近くへ置いた部品は、レールの取付線に吸い付く。 <sub>`panel layout geometry`</sub>
+
 ### relayXref
 
 - 同じ参照記号を持つコイルと接点は、1つのリレーデバイスとしてまとめられる。 <sub>`relayXref`</sub>
@@ -1380,7 +1433,7 @@
 ### viewClasses
 
 - エンティティ種別を表示クラスへ対応付ける(ジャンクションは配線扱い) <sub>`entityViewClass`</sub>
-- VIEW_CLASSESは全クラスを一意に列挙する(線番・ハーネスを加えて9クラス) <sub>`entityViewClass`</sub>
+- VIEW_CLASSESは全クラスを一意に列挙する(線番・ハーネス・盤レイアウトを加えて10クラス) <sub>`entityViewClass`</sub>
 - 表示クラスは初期状態で全て表示ONになっている(線番・ハーネスも最初から見える) <sub>`view class visibility`</sub>
 
 ### viewport

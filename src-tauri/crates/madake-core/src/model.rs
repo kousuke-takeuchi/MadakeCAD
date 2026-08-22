@@ -15,7 +15,10 @@ pub type SheetId = Uuid;
 ///   読み込み時に現行版へ更新される ([`crate::io::load_project`])
 /// - v3: 図枠テンプレート ([`Project::frame_template`]) を追加。旧ファイルは未指定で開き、
 ///   既定の`jis-a3`図枠で描かれる(見た目は従来と同じ)
-pub const FORMAT_VERSION: u32 = 3;
+/// - v4: シート種別 ([`Sheet::kind`]) と盤レイアウトのエンティティ4種
+///   ([`Entity::PanelOutline`] / [`Entity::DinRail`] / [`Entity::Duct`] / [`Entity::Footprint`])
+///   を追加。種別の無い旧ファイルのシートは回路図シート ([`SheetKind::Schematic`]) として開く
+pub const FORMAT_VERSION: u32 = 4;
 
 /// プロジェクト全体。保存形式(.mdkproj)のルート。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -119,11 +122,32 @@ pub enum Orientation {
     Portrait,
 }
 
+/// シートの種別 (M4仕様 §8)。
+///
+/// 同じ図枠の中に何を描くシートかで、使える道具と検証が変わる。
+/// - [`SheetKind::Schematic`]: 回路図。配線・シンボルを置き、ERC・電気検証の対象
+/// - [`SheetKind::Panel`]: 2D盤レイアウト。盤外形・DINレール・ダクト・フットプリントを置く。
+///   配線が無いので回路図のERCは行わない ([`crate::verify::verify_sheet`])
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SheetKind {
+    /// 回路図 (既定)。種別を持たない旧ファイルもこれで開く。
+    #[default]
+    Schematic,
+    /// 2D盤レイアウト。
+    Panel,
+}
+
 /// 図面シート1枚。JIS図枠・表題欄・改訂欄を持つ。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Sheet {
     pub id: SheetId,
     pub name: String,
+    /// シート種別 (回路図 / 盤レイアウト)。旧ファイルは回路図。
+    #[serde(default)]
+    pub kind: SheetKind,
     pub size: PaperSize,
     pub orientation: Orientation,
     /// ゾーン分割数(横方向)。縦方向は用紙比率から自動。
@@ -136,10 +160,22 @@ pub struct Sheet {
 }
 
 impl Sheet {
+    /// 回路図シートを1枚作る。
     pub fn new(name: &str, size: PaperSize, orientation: Orientation) -> Self {
+        Self::new_kind(name, size, orientation, SheetKind::Schematic)
+    }
+
+    /// 種別を指定してシートを1枚作る (盤レイアウトシートはこちら)。
+    pub fn new_kind(
+        name: &str,
+        size: PaperSize,
+        orientation: Orientation,
+        kind: SheetKind,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             name: name.to_string(),
+            kind,
             size,
             orientation,
             zone_cols: 4,
@@ -148,6 +184,11 @@ impl Sheet {
             revisions: Vec::new(),
             entities: BTreeMap::new(),
         }
+    }
+
+    /// 盤レイアウトシートか。
+    pub fn is_panel(&self) -> bool {
+        self.kind == SheetKind::Panel
     }
 
     /// 用紙サイズ (幅, 高さ) mm。向きを反映。
@@ -204,6 +245,14 @@ pub enum Entity {
     NetLabel(NetLabel),
     Text(TextEntity),
     Harness(Harness),
+    /// 盤の外形 (筐体) と取付板。盤レイアウトシート専用 (M4仕様 §8)。
+    PanelOutline(PanelOutline),
+    /// DINレール。盤レイアウトシート専用。
+    DinRail(DinRail),
+    /// 配線ダクト。盤レイアウトシート専用。
+    Duct(Duct),
+    /// 部品のフットプリント (盤面に占める外形)。盤レイアウトシート専用。
+    Footprint(Footprint),
 }
 
 impl Entity {
@@ -215,6 +264,10 @@ impl Entity {
             Entity::NetLabel(e) => e.id,
             Entity::Text(e) => e.id,
             Entity::Harness(e) => e.id,
+            Entity::PanelOutline(e) => e.id,
+            Entity::DinRail(e) => e.id,
+            Entity::Duct(e) => e.id,
+            Entity::Footprint(e) => e.id,
         }
     }
 
@@ -234,8 +287,80 @@ impl Entity {
                     *p = p.translated(dx, dy);
                 }
             }
+            Entity::PanelOutline(e) => e.at = e.at.translated(dx, dy),
+            Entity::DinRail(e) => {
+                e.x1 += dx;
+                e.x2 += dx;
+                e.y += dy;
+            }
+            Entity::Duct(e) => e.at = e.at.translated(dx, dy),
+            Entity::Footprint(e) => e.at = e.at.translated(dx, dy),
         }
     }
+}
+
+/// 盤の外形 (筐体) と取付板 (M4仕様 §8)。
+///
+/// 1エンティティで盤の外周と、その内側の取付板 (部品を留める板) の2重の矩形を表す。
+/// 取付板の位置は [`crate::panel::plate_rect`] が決める (外周から一定量内側)。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PanelOutline {
+    pub id: EntityId,
+    /// 外形の左上角 (用紙座標mm)。
+    pub at: Point,
+    /// 外形の幅 mm。
+    pub w: f64,
+    /// 外形の高さ mm。
+    pub h: f64,
+    /// 盤の名前 (例 "制御盤")。空なら描かない。
+    #[serde(default)]
+    pub name: String,
+}
+
+/// DINレール (M4仕様 §8)。v1は水平のみ。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DinRail {
+    pub id: EntityId,
+    /// レールの取付線 (帯の中心) のy座標 mm。部品はこの線に合わせて乗る。
+    pub y: f64,
+    /// 左右の端 mm (どちらが大きくてもよい)。
+    pub x1: f64,
+    pub x2: f64,
+}
+
+/// 配線ダクト (M4仕様 §8)。斜線 (ハッチ) で塗った矩形として描く。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Duct {
+    pub id: EntityId,
+    /// 左上角 (用紙座標mm)。
+    pub at: Point,
+    pub w: f64,
+    pub h: f64,
+}
+
+/// 部品のフットプリント = 盤面に占める外形 (M4仕様 §8)。
+///
+/// `reference`で回路図のシンボル (同じ参照記号) と結び付く。回路図にあってフットプリントが
+/// 無い部品は「未配置」 ([`crate::panel::unplaced_components`])、逆に回路図に無い参照記号の
+/// フットプリントは検証で報告される ([`crate::panel::panel_diagnostics`])。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Footprint {
+    pub id: EntityId,
+    /// 描かれる矩形の左上角 (用紙座標mm)。
+    pub at: Point,
+    /// 部品そのものの幅 mm (部品DBの`footprint_w`。回転前の値)。
+    pub w: f64,
+    /// 部品そのものの高さ mm (部品DBの`footprint_h`。回転前の値)。
+    pub h: f64,
+    /// 回転角(度)。v1は0か90のみ (90で幅と高さが入れ替わる)。
+    #[serde(default)]
+    pub rotation: u16,
+    /// 回路図のシンボルと結び付く参照記号 (例 "K1")。空なら盤だけの部品。
+    #[serde(default)]
+    pub reference: String,
+    /// 型番。
+    #[serde(default)]
+    pub part_no: String,
 }
 
 /// ライブラリシンボルの配置インスタンス。
@@ -392,6 +517,144 @@ mod tests {
         label.translate(-1.0, -1.0);
         let Entity::NetLabel(l) = &label else { panic!() };
         assert_eq!(l.at, Point::new(0.0, 0.0));
+    }
+
+    /// A new sheet is a schematic sheet, and a panel-layout sheet is a separate sheet kind recorded in the file.
+    /// 新しいシートは回路図シートで、盤レイアウトシートはファイルに記録される別のシート種別である。
+    #[test]
+    fn a_new_sheet_is_schematic_and_a_panel_sheet_is_a_separate_kind() {
+        let schematic = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        assert_eq!(schematic.kind, SheetKind::Schematic);
+        assert!(!schematic.is_panel());
+        let panel = Sheet::new_kind("盤", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);
+        assert_eq!(panel.kind, SheetKind::Panel);
+        assert!(panel.is_panel());
+    }
+
+    /// A sheet saved before panel layouts existed carries no sheet kind, and it opens as an ordinary schematic sheet.
+    /// 盤レイアウトが無かった頃に保存されたシートは種別を持たないが、通常の回路図シートとして開く。
+    #[test]
+    fn a_sheet_without_a_kind_opens_as_a_schematic_sheet() {
+        let json = r#"{"id":"11111111-1111-4111-8111-111111111111","name":"S1","size":"A3",
+            "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},"entities":{}}"#;
+        let sheet: Sheet = serde_json::from_str(json).expect("旧シートが読める");
+        assert_eq!(sheet.kind, SheetKind::Schematic);
+    }
+
+    /// The sheet kind travels as JSON in snake_case ("schematic" / "panel").
+    /// シート種別は snake_case ("schematic" / "panel") のJSONで往復する。
+    #[test]
+    fn the_sheet_kind_is_serialized_in_snake_case() {
+        let json = serde_json::to_string(&SheetKind::Panel).unwrap();
+        assert_eq!(json, "\"panel\"");
+        let back: SheetKind = serde_json::from_str("\"schematic\"").unwrap();
+        assert_eq!(back, SheetKind::Schematic);
+    }
+
+    /// Moving a panel sheet moves its panel entities too: outline, duct and footprint move by their top-left corner, and a DIN rail moves along both axes.
+    /// 盤シートを動かすと盤エンティティも動く: 盤外形・ダクト・フットプリントは左上の角が動き、DINレールは左右にも上下にも動く。
+    #[test]
+    fn translate_moves_panel_entities() {
+        let id = uuid::Uuid::new_v4();
+        let mut outline = Entity::PanelOutline(PanelOutline {
+            id,
+            at: Point::new(10.0, 20.0),
+            w: 100.0,
+            h: 50.0,
+            name: "盤A".into(),
+        });
+        outline.translate(5.0, -2.5);
+        let Entity::PanelOutline(o) = &outline else { panic!() };
+        assert_eq!(o.at, Point::new(15.0, 17.5));
+        assert_eq!((o.w, o.h), (100.0, 50.0), "寸法は変わらない");
+
+        let mut rail = Entity::DinRail(DinRail {
+            id,
+            y: 60.0,
+            x1: 20.0,
+            x2: 120.0,
+        });
+        rail.translate(10.0, 5.0);
+        let Entity::DinRail(r) = &rail else { panic!() };
+        assert_eq!((r.x1, r.x2, r.y), (30.0, 130.0, 65.0));
+
+        let mut duct = Entity::Duct(Duct {
+            id,
+            at: Point::new(0.0, 0.0),
+            w: 40.0,
+            h: 10.0,
+        });
+        duct.translate(2.5, 2.5);
+        let Entity::Duct(d) = &duct else { panic!() };
+        assert_eq!(d.at, Point::new(2.5, 2.5));
+
+        let mut fp = Entity::Footprint(Footprint {
+            id,
+            at: Point::new(50.0, 50.0),
+            w: 20.0,
+            h: 40.0,
+            rotation: 0,
+            reference: "K1".into(),
+            part_no: "MDK-RLY-24V".into(),
+        });
+        fp.translate(-10.0, 0.0);
+        let Entity::Footprint(f) = &fp else { panic!() };
+        assert_eq!(f.at, Point::new(40.0, 50.0));
+        assert_eq!(f.reference, "K1");
+    }
+
+    /// Panel entities travel as JSON under their own kind tags, so any client can send them.
+    /// 盤エンティティはそれぞれの種別タグでJSONを往復でき、どのクライアントからも送れる。
+    #[test]
+    fn panel_entities_have_their_own_json_kind_tags() {
+        let id = uuid::Uuid::new_v4();
+        for (entity, tag) in [
+            (
+                Entity::PanelOutline(PanelOutline {
+                    id,
+                    at: Point::new(0.0, 0.0),
+                    w: 10.0,
+                    h: 10.0,
+                    name: String::new(),
+                }),
+                "panel_outline",
+            ),
+            (
+                Entity::DinRail(DinRail {
+                    id,
+                    y: 0.0,
+                    x1: 0.0,
+                    x2: 10.0,
+                }),
+                "din_rail",
+            ),
+            (
+                Entity::Duct(Duct {
+                    id,
+                    at: Point::new(0.0, 0.0),
+                    w: 10.0,
+                    h: 10.0,
+                }),
+                "duct",
+            ),
+            (
+                Entity::Footprint(Footprint {
+                    id,
+                    at: Point::new(0.0, 0.0),
+                    w: 10.0,
+                    h: 10.0,
+                    rotation: 90,
+                    reference: "K1".into(),
+                    part_no: String::new(),
+                }),
+                "footprint",
+            ),
+        ] {
+            let json = serde_json::to_string(&entity).unwrap();
+            assert!(json.contains(&format!("\"kind\":\"{tag}\"")), "{json}");
+            let back: Entity = serde_json::from_str(&json).unwrap();
+            assert_eq!(back.id(), id);
+        }
     }
 
     /// Entity::id() returns the inner entity's UUID regardless of the entity kind.

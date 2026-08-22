@@ -100,6 +100,23 @@ fn execute_command(state: State<AppState>, command: Command) -> Result<Patch, St
     state.doc.execute_user(command).map_err(|e| e.to_string())
 }
 
+/// 未配置部品(回路図にあって、どの盤レイアウトシートにもフットプリントが無い部品)。
+/// 外形寸法は部品DBから引き、登録の無い型番は既定の矩形になる (M4仕様 §8)。
+#[tauri::command]
+fn unplaced_components(
+    state: State<AppState>,
+) -> Result<Vec<madake_core::panel::UnplacedComponent>, String> {
+    let sizes = {
+        let db = state.parts.lock().unwrap();
+        db.footprint_sizes().map_err(|e| e.to_string())?
+    };
+    let engine = state.doc.engine.lock().unwrap();
+    Ok(madake_core::panel::unplaced_components(
+        engine.project(),
+        &sizes,
+    ))
+}
+
 /// 使える開始テンプレートの一覧(同梱+ユーザーの`~/MadakeCAD/templates`)。
 #[tauri::command]
 fn list_templates() -> madake_core::templates::TemplateList {
@@ -862,6 +879,7 @@ pub fn run() {
             apply_template,
             open_templates_folder,
             list_frame_templates,
+            unplaced_components,
             open_frame_templates_folder,
             list_macros,
             build_macro,

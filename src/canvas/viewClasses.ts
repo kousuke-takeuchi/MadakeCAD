@@ -9,6 +9,7 @@ export type ViewClass =
   | "net_labels"
   | "wire_numbers"
   | "harness"
+  | "panel"
   | "texts"
   | "frame"
   | "grid";
@@ -21,6 +22,7 @@ export const VIEW_CLASSES: ReadonlyArray<{ id: ViewClass; label: string; icon: s
   { id: "net_labels", label: "ネットラベル", icon: "hash" },
   { id: "wire_numbers", label: "線番", icon: "list-ordered" },
   { id: "harness", label: "ハーネス", icon: "square-dashed" },
+  { id: "panel", label: "盤レイアウト", icon: "layout-panel-top" },
   { id: "texts", label: "注記", icon: "type" },
   { id: "frame", label: "図枠", icon: "frame" },
   { id: "grid", label: "グリッド", icon: "grid-3x3" },
@@ -44,5 +46,10 @@ export function entityViewClass(e: Entity): ViewClass {
       return "texts";
     case "harness":
       return "harness";
+    case "panel_outline":
+    case "din_rail":
+    case "duct":
+    case "footprint":
+      return "panel";
   }
 }

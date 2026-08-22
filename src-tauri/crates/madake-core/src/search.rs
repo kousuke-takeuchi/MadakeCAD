@@ -181,7 +181,12 @@ pub fn search_project(project: &Project, query: &str, kinds: &[SearchKind]) -> V
                         push(SearchKind::Text, &t.text, "", t.id, t.at);
                     }
                 }
-                Entity::Junction(_) | Entity::Harness(_) => {}
+                Entity::Junction(_)
+                | Entity::Harness(_)
+                | Entity::PanelOutline(_)
+                | Entity::DinRail(_)
+                | Entity::Duct(_)
+                | Entity::Footprint(_) => {}
             }
         }
     }

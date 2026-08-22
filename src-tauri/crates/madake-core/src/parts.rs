@@ -13,7 +13,9 @@ use serde::{Deserialize, Serialize};
 /// v4: partsに`plc_module`列を追加 (PLC I/Oモジュールの定義JSON。点数・入出力・アドレス体系)。
 /// v5: 列は変えず、同梱のPLCモジュールのサンプルを追補する (v4で列だけ足してサンプルを
 ///     入れ損ねたDBがあり、PLC I/O図面を作るときにモジュールを1つも選べなかったため)。
-pub const SCHEMA_VERSION: u32 = 5;
+/// v6: partsに`footprint_w`/`footprint_h`列を追加 (2D盤レイアウトのフットプリント寸法。
+///     mm。両方入っているときだけ使う)。同梱サンプルにも寸法を追補する。
+pub const SCHEMA_VERSION: u32 = 6;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PartsError {
@@ -71,6 +73,24 @@ pub struct Part {
     /// 空欄ならPLCモジュールではない。読み方は [`crate::plc::PlcModuleSpec::parse`]。
     #[serde(default)]
     pub plc_module: String,
+    /// フットプリントの幅 mm (2D盤レイアウトの外形、v6)。
+    #[serde(default)]
+    pub footprint_w: Option<f64>,
+    /// フットプリントの高さ mm (同上)。
+    #[serde(default)]
+    pub footprint_h: Option<f64>,
+}
+
+impl Part {
+    /// 盤レイアウトで使えるフットプリント寸法 (幅, 高さ) mm。
+    /// **幅と高さの両方が正の値のときだけ**返す (片方だけでは外形を描けないため)。
+    /// 寸法の無い型番は [`crate::panel::DEFAULT_FOOTPRINT_SIZE`] で置く。
+    pub fn footprint_size(&self) -> Option<(f64, f64)> {
+        match (self.footprint_w, self.footprint_h) {
+            (Some(w), Some(h)) if w > 0.0 && h > 0.0 => Some((w, h)),
+            _ => None,
+        }
+    }
 }
 
 fn default_currency() -> String {
@@ -142,12 +162,32 @@ fn plc_sample_parts() -> Vec<Part> {
     ]
 }
 
-/// サンプル部品の共通欄 (メーカ名・注記・通貨) を埋める。
+/// 同梱サンプルのフットプリント寸法 (型番, 幅mm, 高さmm)。**ダミー寸法**で、実物の
+/// カタログ値ではない。盤レイアウトを試すのに十分な大きさを2.5mmグリッドで置いてある。
+const SAMPLE_FOOTPRINT_SIZES: &[(&str, f64, f64)] = &[
+    ("MDK-FUSE-5A", 20.0, 45.0),
+    ("MDK-RLY-24V", 25.0, 65.0),
+    ("MDK-RLY-MY2N-DC24", 22.5, 55.0),
+    ("MDK-TB-8P", 40.0, 45.0),
+    ("MDK-LAMP-24V", 25.0, 25.0),
+    ("MDK-CONN-3P", 20.0, 30.0),
+    ("MDK-PLC-DI16-MITSUBISHI", 40.0, 90.0),
+    ("MDK-PLC-DO16-MITSUBISHI", 40.0, 90.0),
+    ("MDK-PLC-DI8-SIEMENS", 30.0, 90.0),
+    ("MDK-PLC-DI16-AB", 40.0, 90.0),
+];
+
+/// サンプル部品の共通欄 (メーカ名・注記・通貨) と、盤レイアウト用のフットプリント寸法を埋める。
 fn as_sample(part: &Part) -> Part {
+    let size = SAMPLE_FOOTPRINT_SIZES
+        .iter()
+        .find(|(no, _, _)| *no == part.part_no);
     Part {
         maker: "サンプル".into(),
         note: "同梱サンプル (ダミー型番)".into(),
         currency: default_currency(),
+        footprint_w: part.footprint_w.or(size.map(|s| s.1)),
+        footprint_h: part.footprint_h.or(size.map(|s| s.2)),
         ..part.clone()
     }
 }
@@ -184,7 +224,7 @@ pub fn default_db_path() -> PathBuf {
 
 const PART_COLUMNS: &str = "part_no, maker, name, category, symbol_id, rated_voltage, \
      rated_current_a, purchase_url, datasheet_url, price, currency, note, model_3d, mounting, \
-     spice_model, contact_config, plc_module";
+     spice_model, contact_config, plc_module, footprint_w, footprint_h";
 
 fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
     Ok(Part {
@@ -205,6 +245,8 @@ fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
         spice_model: row.get(14)?,
         contact_config: row.get(15)?,
         plc_module: row.get(16)?,
+        footprint_w: row.get(17)?,
+        footprint_h: row.get(18)?,
     })
 }
 
@@ -234,7 +276,9 @@ impl PartsDb {
                mounting TEXT NOT NULL DEFAULT '',
                spice_model TEXT NOT NULL DEFAULT '',
                contact_config TEXT NOT NULL DEFAULT '',
-               plc_module TEXT NOT NULL DEFAULT ''
+               plc_module TEXT NOT NULL DEFAULT '',
+               footprint_w REAL,
+               footprint_h REAL
              );
              CREATE TABLE IF NOT EXISTS wire_parts (
                part_no TEXT PRIMARY KEY,
@@ -270,28 +314,42 @@ impl PartsDb {
         Ok(db)
     }
 
+    /// 列を1本足す。**既にある列は黙って飛ばす** (列だけ先に足された状態のDBでも移行を
+    /// 最後まで通すため。v4→v5でサンプルだけ入っていないDBが実際にあった)。
+    fn add_column(&self, ddl: &str) -> Result<(), PartsError> {
+        match self.conn.execute(ddl, []) {
+            Err(rusqlite::Error::SqliteFailure(_, Some(msg)))
+                if msg.contains("duplicate column name") =>
+            {
+                Ok(())
+            }
+            Err(e) => Err(e.into()),
+            Ok(_) => Ok(()),
+        }
+    }
+
     /// 旧スキーマからのマイグレーション。
+    ///
+    /// **列の追加を先に全部済ませてから、データの追補を行う**。部品の読み書き
+    /// ([`Self::get_part`] / [`Self::upsert_part`]) は現行の全列を並べるので、
+    /// 途中の版のデータ追補でも最新の列が揃っている必要がある。
     fn migrate(&self, from: u32) -> Result<(), PartsError> {
         if from < 2 {
             // v1→v2: spice_model列を追加
-            self.conn.execute(
-                "ALTER TABLE parts ADD COLUMN spice_model TEXT NOT NULL DEFAULT ''",
-                [],
-            )?;
+            self.add_column("ALTER TABLE parts ADD COLUMN spice_model TEXT NOT NULL DEFAULT ''")?;
         }
         if from < 3 {
             // v2→v3: contact_config列を追加
-            self.conn.execute(
-                "ALTER TABLE parts ADD COLUMN contact_config TEXT NOT NULL DEFAULT ''",
-                [],
-            )?;
+            self.add_column("ALTER TABLE parts ADD COLUMN contact_config TEXT NOT NULL DEFAULT ''")?;
         }
         if from < 4 {
             // v3→v4: plc_module列を追加
-            self.conn.execute(
-                "ALTER TABLE parts ADD COLUMN plc_module TEXT NOT NULL DEFAULT ''",
-                [],
-            )?;
+            self.add_column("ALTER TABLE parts ADD COLUMN plc_module TEXT NOT NULL DEFAULT ''")?;
+        }
+        if from < 6 {
+            // v5→v6: フットプリント寸法 (2D盤レイアウト) の列を追加
+            self.add_column("ALTER TABLE parts ADD COLUMN footprint_w REAL")?;
+            self.add_column("ALTER TABLE parts ADD COLUMN footprint_h REAL")?;
         }
         if from < 5 {
             // v4→v5: PLCモジュールのサンプルを追補する。
@@ -301,6 +359,22 @@ impl PartsDb {
             for part in plc_sample_parts() {
                 if self.get_part(&part.part_no)?.is_none() {
                     self.upsert_part(&as_sample(&part))?;
+                }
+            }
+        }
+        if from < 6 {
+            // v5→v6: 寸法の無い同梱サンプルへフットプリント寸法を追補する
+            // (自分で入れた寸法は書き換えない)
+            for (part_no, w, h) in SAMPLE_FOOTPRINT_SIZES {
+                let Some(part) = self.get_part(part_no)? else {
+                    continue;
+                };
+                if part.footprint_size().is_none() {
+                    self.upsert_part(&Part {
+                        footprint_w: Some(*w),
+                        footprint_h: Some(*h),
+                        ..part
+                    })?;
                 }
             }
         }
@@ -403,12 +477,12 @@ impl PartsDb {
         self.conn.execute(
             &format!(
                 "INSERT INTO parts ({PART_COLUMNS}) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19) \
                  ON CONFLICT(part_no) DO UPDATE SET \
                  maker=?2, name=?3, category=?4, symbol_id=?5, rated_voltage=?6, \
                  rated_current_a=?7, purchase_url=?8, datasheet_url=?9, price=?10, \
                  currency=?11, note=?12, model_3d=?13, mounting=?14, spice_model=?15, \
-                 contact_config=?16, plc_module=?17"
+                 contact_config=?16, plc_module=?17, footprint_w=?18, footprint_h=?19"
             ),
             rusqlite::params![
                 part.part_no,
@@ -428,6 +502,8 @@ impl PartsDb {
                 part.spice_model,
                 part.contact_config,
                 part.plc_module,
+                part.footprint_w,
+                part.footprint_h,
             ],
         )?;
         Ok(())
@@ -462,6 +538,22 @@ impl PartsDb {
         ))?;
         let rows = stmt.query_map([], row_to_part)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// 型番 → フットプリント寸法 (幅, 高さ) mm の対応表。盤レイアウトの未配置部品一覧
+    /// ([`crate::panel::unplaced_components`]) が引く。幅と高さが揃っている部品だけが載る。
+    pub fn footprint_sizes(&self) -> Result<crate::panel::FootprintSizes, PartsError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT part_no, footprint_w, footprint_h FROM parts \
+             WHERE footprint_w > 0 AND footprint_h > 0 ORDER BY part_no",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                (row.get::<_, f64>(1)?, row.get::<_, f64>(2)?),
+            ))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn delete_part(&self, part_no: &str) -> Result<bool, PartsError> {
@@ -869,6 +961,126 @@ mod tests {
             "PLCでない部品は出ない"
         );
         std::fs::remove_file(&path).ok();
+    }
+
+    /// An old schema-v5 database migrates to v6 on open, preserving existing rows and gaining the footprint size columns used by panel layouts.
+    /// 旧スキーマv5のDBは開いた時点でv6へ移行され、既存データを保持したまま盤レイアウト用のフットプリント寸法の列が使えるようになる。
+    #[test]
+    fn v5_database_migrates_to_v6_preserving_data() {
+        let path = tmp_db("migrate-v6");
+        // v5相当のDBを手で作る (footprint_w/footprint_h列なし、version=5)
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO meta VALUES ('schema_version', '5');
+                 CREATE TABLE parts (
+                   part_no TEXT PRIMARY KEY,
+                   maker TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '',
+                   category TEXT NOT NULL DEFAULT '', symbol_id TEXT NOT NULL DEFAULT '',
+                   rated_voltage TEXT NOT NULL DEFAULT '', rated_current_a REAL,
+                   purchase_url TEXT NOT NULL DEFAULT '', datasheet_url TEXT NOT NULL DEFAULT '',
+                   price REAL, currency TEXT NOT NULL DEFAULT 'JPY',
+                   note TEXT NOT NULL DEFAULT '', model_3d TEXT NOT NULL DEFAULT '',
+                   mounting TEXT NOT NULL DEFAULT '', spice_model TEXT NOT NULL DEFAULT '',
+                   contact_config TEXT NOT NULL DEFAULT '', plc_module TEXT NOT NULL DEFAULT ''
+                 );
+                 INSERT INTO parts (part_no, name, contact_config) VALUES ('OLD-5', '旧部品', '2NO');
+                 CREATE TABLE wire_parts (
+                   part_no TEXT PRIMARY KEY, color TEXT NOT NULL, sq REAL NOT NULL,
+                   purchase_url TEXT NOT NULL DEFAULT '', price_per_m REAL,
+                   note TEXT NOT NULL DEFAULT ''
+                 );",
+            )
+            .unwrap();
+        }
+        let db = PartsDb::open(&path).unwrap();
+        let old = db.get_part("OLD-5").unwrap().unwrap();
+        assert_eq!(old.name, "旧部品");
+        assert_eq!(old.contact_config, "2NO");
+        assert_eq!(old.footprint_size(), None, "寸法未登録の部品は既定寸法で置く");
+        // 寸法の書き込みも可能
+        let mut updated = old.clone();
+        updated.footprint_w = Some(45.0);
+        updated.footprint_h = Some(80.0);
+        db.upsert_part(&updated).unwrap();
+        assert_eq!(
+            db.get_part("OLD-5").unwrap().unwrap().footprint_size(),
+            Some((45.0, 80.0))
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The bundled sample parts carry footprint sizes, so a part placed on a panel sheet gets its own outline instead of the fallback rectangle.
+    /// 同梱のサンプル部品はフットプリント寸法を持っているので、盤シートへ置くと既定の矩形ではなくその部品の外形で入る。
+    #[test]
+    fn sample_parts_have_footprint_sizes() {
+        let path = tmp_db("footprint-samples");
+        let db = PartsDb::open(&path).unwrap();
+        let relay = db.get_part("MDK-RLY-24V").unwrap().unwrap();
+        assert!(relay.footprint_size().is_some(), "{relay:?}");
+        let sizes = db.footprint_sizes().unwrap();
+        assert!(sizes.contains_key("MDK-RLY-24V"));
+        assert!(
+            sizes.values().all(|(w, h)| *w > 0.0 && *h > 0.0),
+            "寸法は正の値: {sizes:?}"
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// Opening an older parts database fills in the footprint sizes of the bundled samples that have none yet, without touching sizes someone entered by hand.
+    /// 前のバージョンで作られた部品DBを開くと、寸法の無い同梱サンプルにフットプリント寸法が追補される(自分で入れた寸法は書き換えない)。
+    #[test]
+    fn an_older_database_gains_the_bundled_footprint_sizes() {
+        let path = tmp_db("footprint-migrate");
+        {
+            let db = PartsDb::open(&path).unwrap();
+            // 自分で寸法を直したサンプル部品 (移行で上書きされてはいけない)
+            let mut mine = db.get_part("MDK-FUSE-5A").unwrap().unwrap();
+            mine.footprint_w = Some(99.0);
+            mine.footprint_h = Some(99.0);
+            db.upsert_part(&mine).unwrap();
+            // 寸法の無いv5相当の状態へ戻す
+            db.conn
+                .execute(
+                    "UPDATE parts SET footprint_w=NULL, footprint_h=NULL WHERE part_no<>'MDK-FUSE-5A'",
+                    [],
+                )
+                .unwrap();
+            db.conn
+                .execute("UPDATE meta SET value='5' WHERE key='schema_version'", [])
+                .unwrap();
+        }
+        let db = PartsDb::open(&path).unwrap();
+        assert_eq!(
+            db.get_part("MDK-FUSE-5A").unwrap().unwrap().footprint_size(),
+            Some((99.0, 99.0)),
+            "自分で入れた寸法はそのまま"
+        );
+        assert!(
+            db.get_part("MDK-RLY-24V").unwrap().unwrap().footprint_size().is_some(),
+            "寸法の無いサンプルには追補される"
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// A part with only one of the two footprint dimensions filled in has no usable footprint size, because both width and height are needed to draw the outline.
+    /// 幅か高さの片方しか入っていない部品はフットプリント寸法を持たない扱いになる(外形を描くには両方必要なため)。
+    #[test]
+    fn a_half_filled_footprint_size_is_not_used() {
+        let half = Part {
+            part_no: "HALF".into(),
+            footprint_w: Some(30.0),
+            ..Default::default()
+        };
+        assert_eq!(half.footprint_size(), None);
+        let zero = Part {
+            part_no: "ZERO".into(),
+            footprint_w: Some(0.0),
+            footprint_h: Some(30.0),
+            ..Default::default()
+        };
+        assert_eq!(zero.footprint_size(), None, "0mmの外形は描けない");
     }
 
     /// The database path defaults to the OS app-data folder and can be overridden with MADAKE_PARTS_DB.

@@ -403,4 +403,26 @@ mod tests {
         assert!(pdf.starts_with(b"%PDF-"));
         assert_eq!(page_count(&pdf), 1);
     }
+    /// A panel-layout sheet is part of the book: exporting the project puts it in the PDF right after the schematic sheets.
+    /// 盤レイアウトシートも一括出力に含まれ、回路図シートに続けてPDFへ入る。
+    #[test]
+    fn the_pdf_book_includes_the_panel_sheet() {
+        let mut project = Project::new("盤入りブック");
+        let mut panel =
+            Sheet::new_kind("盤", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);
+        let outline = Entity::PanelOutline(PanelOutline {
+            id: Uuid::new_v4(),
+            at: Point::new(40.0, 40.0),
+            w: 200.0,
+            h: 150.0,
+            name: "制御盤".into(),
+        });
+        panel.entities.insert(outline.id(), outline);
+        project.sheets.push(panel);
+        let pages = project_pdf_pages(&project, &PdfBookOptions::default());
+        assert_eq!(pages.len(), 3, "表紙 + 回路図1枚 + 盤1枚");
+        assert!(pages[2].contains("制御盤"), "盤シートのページ: {}", pages[2]);
+        let pdf = export_project_pdf(&project, &PdfBookOptions::default()).expect("PDF");
+        assert_eq!(page_count(&pdf), 3);
+    }
 }

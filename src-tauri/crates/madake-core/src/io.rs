@@ -137,6 +137,59 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// A project file saved before panel layouts existed opens with every sheet as a schematic sheet and is brought up to the current format version.
+    /// 盤レイアウトが無かった頃のプロジェクトファイルは全シートが回路図シートとして開き、現行のファイル形式へ更新される。
+    #[test]
+    fn an_old_project_file_opens_with_schematic_sheets() {
+        let dir = std::env::temp_dir().join(format!("madake-io-panel-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.mdkproj");
+        // format_version 3の頃のファイル (シートに種別が無い)
+        std::fs::write(
+            &path,
+            r#"{"format_version":3,"name":"旧図面","wire_parts":[],"plc_assignments":[],
+                "sheets":[{"id":"22222222-2222-4222-8222-222222222222","name":"S1","size":"A3",
+                "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},
+                "entities":{}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.sheets[0].kind, SheetKind::Schematic);
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A panel sheet and the panel entities on it survive a save and reload unchanged.
+    /// 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。
+    #[test]
+    fn a_panel_sheet_survives_a_save_and_reload() {
+        let mut project = Project::new("panel");
+        let mut panel = Sheet::new_kind("盤", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);
+        let footprint = Entity::Footprint(Footprint {
+            id: Uuid::new_v4(),
+            at: Point::new(80.0, 80.0),
+            w: 25.0,
+            h: 65.0,
+            rotation: 90,
+            reference: "K1".into(),
+            part_no: "MDK-RLY-24V".into(),
+        });
+        panel.entities.insert(footprint.id(), footprint);
+        project.sheets.push(panel);
+
+        let dir = std::env::temp_dir().join(format!("madake-io-panel2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.mdkproj");
+        save_project(&path, &project).unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.sheets[1].kind, SheetKind::Panel);
+        let Some(Entity::Footprint(f)) = loaded.sheets[1].entities.values().next() else {
+            panic!("フットプリントが残っていること")
+        };
+        assert_eq!((f.reference.as_str(), f.rotation), ("K1", 90));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// The frame template chosen for a project is saved to the file and comes back on reload.
     /// プロジェクトに選んだ図枠テンプレートはファイルへ保存され、読み直しても残っている。
     #[test]

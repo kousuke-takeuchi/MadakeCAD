@@ -32,7 +32,14 @@ pub struct Diagnostic {
 
 /// シート1枚のERC+電気検証。電流・電圧はngspiceのDC動作点解析を優先し、
 /// ngspice未導入(またはSPICE化不能)ならグラフ近似へフォールバックする。
+///
+/// **盤レイアウトシート ([`crate::model::SheetKind::Panel`]) は対象外**。配線を持たない
+/// シートなので、未接続ピンや宙ぶらりんの配線として指摘されるものが無い。盤の検査は
+/// プロジェクト全体で行う ([`verify_project`] → [`crate::panel::panel_diagnostics`])。
 pub fn verify_sheet(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
+    if sheet.is_panel() {
+        return Vec::new();
+    }
     let sim = simulate(sheet, symbols);
     verify_sheet_with(sheet, symbols, sim.as_ref())
 }
@@ -55,6 +62,8 @@ pub fn verify_project(project: &crate::model::Project) -> Vec<Diagnostic> {
     diags.extend(project_label_conflicts(project));
     // コイル⇔接点も1デバイスがシートを跨ぐので、プロジェクト全体で評価する
     diags.extend(crate::relay_xref::relay_diagnostics(project));
+    // 盤レイアウト (回路図と盤の突き合わせ) もプロジェクト全体で評価する
+    diags.extend(crate::panel::panel_diagnostics(project));
     diags
 }
 
@@ -573,8 +582,13 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
             Entity::Junction(j) => junctions.push(j.at),
             Entity::NetLabel(l) => labels.push(l.at),
             Entity::Wire(w) => wires.push(w),
-            // 注記とハーネス境界は電気的な接続を持たない
-            Entity::Text(_) | Entity::Harness(_) => {}
+            // 注記・ハーネス境界・盤レイアウトの要素は電気的な接続を持たない
+            Entity::Text(_)
+            | Entity::Harness(_)
+            | Entity::PanelOutline(_)
+            | Entity::DinRail(_)
+            | Entity::Duct(_)
+            | Entity::Footprint(_) => {}
         }
     }
     for w in &wires {
@@ -1156,5 +1170,75 @@ mod tests {
             .collect();
         assert_eq!(unreachable.len(), 1, "{unreachable:?}");
         assert!(unreachable[0].message.contains("L2"), "{}", unreachable[0].message);
+    }
+    /// 盤レイアウトシート (盤外形・ダクト・DINレール・フットプリント)。
+    fn panel_sheet(entities: Vec<Entity>) -> Sheet {
+        let mut sheet =
+            Sheet::new_kind("盤", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);
+        for e in entities {
+            sheet.entities.insert(e.id(), e);
+        }
+        sheet
+    }
+
+    fn footprint(reference: &str, x: f64, y: f64) -> Entity {
+        Entity::Footprint(Footprint {
+            id: Uuid::new_v4(),
+            at: Point::new(x, y),
+            w: 25.0,
+            h: 65.0,
+            rotation: 0,
+            reference: reference.into(),
+            part_no: "MDK-RLY-24V".into(),
+        })
+    }
+
+    /// A panel-layout sheet is not checked against the schematic rules: it carries no wiring, so nothing there counts as an unconnected pin or a dangling wire.
+    /// 盤レイアウトシートは回路図の規則で検査しない。配線を持たないシートなので、未接続ピンや宙ぶらりんの配線として指摘されるものは無い。
+    #[test]
+    fn a_panel_sheet_is_not_checked_against_the_schematic_rules() {
+        let panel = panel_sheet(vec![
+            Entity::PanelOutline(PanelOutline {
+                id: Uuid::new_v4(),
+                at: Point::new(40.0, 40.0),
+                w: 200.0,
+                h: 150.0,
+                name: "制御盤".into(),
+            }),
+            Entity::Duct(Duct {
+                id: Uuid::new_v4(),
+                at: Point::new(60.0, 60.0),
+                w: 160.0,
+                h: 20.0,
+            }),
+            Entity::DinRail(DinRail {
+                id: Uuid::new_v4(),
+                y: 120.0,
+                x1: 60.0,
+                x2: 220.0,
+            }),
+            footprint("K1", 80.0, 100.0),
+        ]);
+        assert!(run(&panel).is_empty(), "{:?}", run(&panel));
+    }
+
+    /// A part placed on the panel whose reference designator is nowhere on the schematic is reported as a warning, and the whole-project check reports it together with the schematic findings.
+    /// 回路図のどこにも無い参照記号のフットプリントが盤に置かれていると注意として報告され、プロジェクト全体の検証では回路図の指摘と一緒に出る。
+    #[test]
+    fn an_orphan_footprint_is_reported_by_the_project_check() {
+        let mut project = Project::new("panel");
+        let coil = symbol("relay_coil", "K1", 100.0, 50.0);
+        project.sheets[0].entities.insert(coil.id(), coil);
+        project
+            .sheets
+            .push(panel_sheet(vec![footprint("K1", 80.0, 100.0), footprint("K9", 120.0, 100.0)]));
+        let diags = verify_project(&project);
+        let orphans: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code == "panel.orphan_footprint")
+            .collect();
+        assert_eq!(orphans.len(), 1, "{orphans:?}");
+        assert_eq!(orphans[0].severity, Severity::Warning);
+        assert!(orphans[0].message.contains("K9"));
     }
 }

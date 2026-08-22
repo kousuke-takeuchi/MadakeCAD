@@ -22,7 +22,19 @@ import {
 import { resolveInstanceDef } from "./dynamicSymbol";
 import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
 import { entityViewClass, type ViewClass } from "./viewClasses";
-import { agentRgba, theme, wireColorScreen } from "./theme";
+import {
+  ductHatch,
+  ducts,
+  footprintRect,
+  footprints,
+  panelOutlineRect,
+  panelOutlines,
+  panelPlateRect,
+  railRect,
+  rails,
+  type Rect,
+} from "./panel";
+import { agentRgba, panelTheme, theme, wireColorScreen } from "./theme";
 import { WIRE_NO_FONT, wireNumberLabels } from "./wireNumbers";
 import { XREF_FONT, xrefTextAt } from "./xref";
 import {
@@ -36,6 +48,13 @@ import { GRID_PITCH, type Viewport } from "./viewport";
 
 /** セル内テキストの左余白 (mm)。 */
 const CELL_PAD = 2;
+/** 参照記号・盤面の注記の文字高さ (mm)。svg.rsのLABEL_FONTと一致させること。 */
+const LABEL_FONT = 2.5;
+/** 盤の名前を外形の上端からどれだけ上に置くか (mm)。svg.rsのPANEL_LABEL_DYと一致。 */
+const PANEL_LABEL_DY = 1.5;
+/** フットプリントの型番の文字高さ (mm) と、参照記号からの送り (mm)。svg.rsと一致。 */
+const FOOTPRINT_PART_NO_FONT = 2;
+const FOOTPRINT_PART_NO_DY = 3;
 /** 改訂欄の列幅 (記号 / 日付 / 内容 / 承認) mm。既定の図枠テンプレートのもの。 */
 export const REV_COL_W = DEFAULT_FRAME_TEMPLATE.revision_block.col_w;
 /** 改訂欄に描く最大行数。溢れた分は古い行から省略する (データは保持)。 */
@@ -653,6 +672,123 @@ export function drawHarness(
   ctx.fillText(name, s.x, s.y);
 }
 
+/** 用紙座標の矩形をスクリーンへ変換して塗る/描く (盤レイアウト用の共通処理)。 */
+function paintRect(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  rect: Rect,
+  fill: string | null,
+  stroke: string,
+  lineWidth: number,
+): void {
+  const a = vp.toScreen({ x: rect.x, y: rect.y });
+  const b = vp.toScreen({ x: rect.x + rect.w, y: rect.y + rect.h });
+  if (fill) {
+    ctx.fillStyle = fill;
+    ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+  }
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+}
+
+/**
+ * 盤レイアウト (M4 §8) を描く。奥から順に **盤外形+取付板 → ダクト → DINレール →
+ * フットプリント**。寸法の数式は `panel.ts` (Rustの`panel.rs`と同一) が持ち、
+ * 配色は `panelTheme` (.pen「M4デザイン - 盤レイアウト」)。選択中は sel-blue の枠で囲む。
+ */
+export function drawPanel(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  sheet: Sheet,
+  selection: Set<string>,
+): void {
+  const edge = (id: string, normal: string) => (selection.has(id) ? theme.selection : normal);
+  const width = (id: string, normal = 1) => (selection.has(id) ? 2 : normal);
+
+  for (const o of panelOutlines(sheet)) {
+    paintRect(
+      ctx,
+      vp,
+      panelOutlineRect(o),
+      panelTheme.enclosure,
+      edge(o.id, panelTheme.enclosureEdge),
+      width(o.id, 1.5),
+    );
+    const plate = panelPlateRect(o);
+    if (plate) paintRect(ctx, vp, plate, panelTheme.plate, panelTheme.plateEdge, 1);
+    const name = o.name?.trim();
+    if (name) {
+      const s = vp.toScreen({ x: o.at.x + 2, y: o.at.y - PANEL_LABEL_DY });
+      ctx.fillStyle = edge(o.id, panelTheme.label);
+      ctx.font = `${Math.max(9, 3 * vp.scale)}px sans-serif`;
+      ctx.textAlign = "left";
+      ctx.fillText(name, s.x, s.y);
+    }
+  }
+
+  for (const duct of ducts(sheet)) {
+    paintRect(
+      ctx,
+      vp,
+      { x: duct.at.x, y: duct.at.y, w: duct.w, h: duct.h },
+      panelTheme.duct,
+      edge(duct.id, panelTheme.ductEdge),
+      width(duct.id),
+    );
+    ctx.strokeStyle = panelTheme.ductHatch;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const line of ductHatch(duct)) {
+      const a = vp.toScreen({ x: line.x1, y: line.y1 });
+      const b = vp.toScreen({ x: line.x2, y: line.y2 });
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
+  }
+
+  for (const rail of rails(sheet)) {
+    paintRect(ctx, vp, railRect(rail), panelTheme.rail, edge(rail.id, panelTheme.railEdge), width(rail.id));
+    // 取付線 (部品が乗る中心線)
+    const a = vp.toScreen({ x: Math.min(rail.x1, rail.x2), y: rail.y });
+    const b = vp.toScreen({ x: Math.max(rail.x1, rail.x2), y: rail.y });
+    ctx.strokeStyle = panelTheme.railEdge;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+
+  for (const fp of footprints(sheet)) {
+    const rect = footprintRect(fp);
+    paintRect(
+      ctx,
+      vp,
+      rect,
+      panelTheme.footprint,
+      edge(fp.id, panelTheme.footprintEdge),
+      width(fp.id),
+    );
+    const center = vp.toScreen({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 });
+    ctx.textAlign = "center";
+    const reference = fp.reference?.trim();
+    if (reference) {
+      ctx.fillStyle = panelTheme.reference;
+      ctx.font = `${Math.max(9, LABEL_FONT * vp.scale)}px monospace`;
+      ctx.fillText(reference, center.x, center.y);
+    }
+    const partNo = fp.part_no?.trim();
+    if (partNo) {
+      ctx.fillStyle = panelTheme.partNo;
+      ctx.font = `${Math.max(8, FOOTPRINT_PART_NO_FONT * vp.scale)}px sans-serif`;
+      ctx.fillText(partNo, center.x, center.y + Math.max(9, FOOTPRINT_PART_NO_DY * vp.scale));
+    }
+    ctx.textAlign = "left";
+  }
+}
+
 export function renderSheet(
   ctx: CanvasRenderingContext2D,
   sheet: Sheet,
@@ -672,6 +808,9 @@ export function renderSheet(
 
   const defs = new Map(symbols.map((d) => [d.id, d]));
   const entities = Object.values(sheet.entities).filter((e) => !hidden.has(entityViewClass(e)));
+
+  // 盤レイアウト (盤外形・ダクト・レール・フットプリント) は最背面
+  if (!hidden.has("panel")) drawPanel(ctx, vp, sheet, opts.selection);
 
   // ハーネス境界は配線・シンボルの背面
   for (const e of entities) {

@@ -60,6 +60,39 @@ export const symbolEditorTheme = {
 } as const;
 
 /**
+ * 盤レイアウトシートの配色 (.pen「M4デザイン - 盤レイアウト」)。
+ *
+ * 暗い作図領域 (`theme`) の上に**白い盤面**が乗るので、盤の中に描くものは
+ * シンボルエディタ (`symbolEditorTheme`) と同じ明るい地の配色にする。
+ */
+export const panelTheme = {
+  /** 盤の外形 (筐体) の面。 */
+  enclosure: "#ffffff",
+  /** 盤の外形の輪郭。 */
+  enclosureEdge: "#9aa2ab",
+  /** 取付板の面 (外形よりわずかに沈ませる)。 */
+  plate: "#fafbfc",
+  /** 取付板の輪郭。 */
+  plateEdge: "#c8ccd2",
+  /** DINレールの面。 */
+  rail: "#e8e8e8",
+  /** DINレールの輪郭・取付線。 */
+  railEdge: "#c8ccd2",
+  /** ダクトの面と斜線ハッチ。 */
+  duct: "#ffffff",
+  ductHatch: "#c8ccd2",
+  ductEdge: "#9aa2ab",
+  /** フットプリントの面・輪郭。 */
+  footprint: "#ffffff",
+  footprintEdge: "#2b2f33",
+  /** フットプリントの参照記号 (等幅) と型番。 */
+  reference: "#2b2f33",
+  partNo: "#6b7178",
+  /** 盤の名前。 */
+  label: "#6b7178",
+} as const;
+
+/**
  * 並列エージェント: 会話ごとの編集オーバーレイ色 (仕様: m3-ai-first.md §4)。
  *
  * 複数の会話が同時に図面を編集するので、どの会話の編集かを色で見分ける。

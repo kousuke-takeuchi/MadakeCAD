@@ -268,7 +268,8 @@ pub fn demo_project() -> Project {
             name: "2 現場配線".into(),
             size: PaperSize::A3,
             orientation: Orientation::Landscape,
-        })
+            kind: madake_core::model::SheetKind::Schematic,
+            })
         .expect("シート2追加");
     let sheet2 = engine.project().sheets[1].id;
     build_sheet2(&mut engine, sheet2);

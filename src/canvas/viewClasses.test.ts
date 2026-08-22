@@ -19,9 +19,12 @@ describe("entityViewClass", () => {
     expect(entityViewClass(e("net_label"))).toBe("net_labels");
     expect(entityViewClass(e("text"))).toBe("texts");
     expect(entityViewClass(e("harness"))).toBe("harness");
+    for (const kind of ["panel_outline", "din_rail", "duct", "footprint"]) {
+      expect(entityViewClass(e(kind))).toBe("panel");
+    }
   });
 
-  // ja: VIEW_CLASSESは全クラスを一意に列挙する(線番・ハーネスを加えて9クラス)
+  // ja: VIEW_CLASSESは全クラスを一意に列挙する(線番・ハーネス・盤レイアウトを加えて10クラス)
   it("VIEW_CLASSES enumerates every class exactly once", () => {
     expect(VIEW_CLASSES.map((c) => c.id)).toEqual([
       "wires",
@@ -30,11 +33,12 @@ describe("entityViewClass", () => {
       "net_labels",
       "wire_numbers",
       "harness",
+      "panel",
       "texts",
       "frame",
       "grid",
     ]);
-    expect(VIEW_CLASSES).toHaveLength(9);
+    expect(VIEW_CLASSES).toHaveLength(10);
     for (const c of VIEW_CLASSES) {
       expect(c.label.length).toBeGreaterThan(0);
     }

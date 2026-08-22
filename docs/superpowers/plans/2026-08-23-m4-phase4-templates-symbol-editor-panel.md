@@ -108,8 +108,23 @@
 
 ### Task 5: 盤レイアウト(モデル+描画)
 
-- [ ] Step 1 (red): Sheet.kind(format_version互換)/盤エンティティ4種のCommand経由add/update/remove+undo/部品DB v6(footprint_size)/未配置部品の導出/SVG・キャンバス描画(レール・ダクトハッチ・フットプリント+参照記号)
-- [ ] Step 2 (green): 実装。gen_spec→コミット
+- [x] Step 1 (red): Sheet.kind(format_version互換)/盤エンティティ4種のCommand経由add/update/remove+undo/部品DB v6(footprint_size)/未配置部品の導出/SVG・キャンバス描画(レール・ダクトハッチ・フットプリント+参照記号)
+- [x] Step 2 (green): 実装。gen_spec→コミット
+
+#### Task 5で決めたこと(2026-08-23)
+
+- **シート種別**: `Sheet.kind: SheetKind {Schematic(既定), Panel}`(`.mdkproj` format_version **4**)。種別の無い旧ファイルは回路図シートとして開く。`add_sheet`コマンドに`kind`を足したが**serdeの既定値付き**なので、種別を書いていない既存のコマンドJSONもそのまま動く
+- **盤エンティティ4種**は既存のentity機構へ相乗り(専用コマンドを作らない)。`add_entity`/`update_entity`/`move_entities`/`delete_entities`とundoがそのまま効く:
+  - `panel_outline {at, w, h, name}` — **外形と取付板を1エンティティ**にした(取付板は外周から`PLATE_INSET`=10mm内側。板が残らない小さな盤では外周だけ描く)。盤を動かすと板も必ず一緒に動くため
+  - `din_rail {y, x1, x2}` — v1は水平のみ。**`y`は取付線(帯の中心)**で、描画は高さ35mm(TS35相当)の帯。部品のスナップ先が取付線になるので中心を持つのが自然
+  - `duct {at, w, h}` — 45°の斜線ハッチ。線は`y = x + b`(bは5mmの倍数)で**用紙座標に固定**したので、ダクトを動かしても斜線の向き・間隔が変わらず、隣り合うダクトでも線がそろう
+  - `footprint {at, w, h, rotation, reference, part_no}` — `w`/`h`は部品そのものの寸法(回転前)で、`rotation=90`のとき描画で幅と高さを入れ替える。`at`は**描かれる矩形の左上**
+- **部品DB v6**: `footprint_w`/`footprint_h`(REAL、mm)の**2列**にした(JSON1列より型が付き、寸法での絞り込みもSQLで書けるため)。**両方が正の値のときだけ**寸法として使う。同梱サンプル10件へダミー寸法を追補し、旧DBは開いた時点で追補される(自分で入れた寸法は上書きしない)。マイグレーションは**列の追加を全部先に済ませてからデータ追補**へ進む(部品の読み書きが現行の全列を並べるため)
+- **未配置部品**(`panel::unplaced_components(project, sizes)`): 回路図シートのシンボルのうち参照記号があるものを**参照記号ごとに1台**へまとめ(リレーのコイルと接点は1台)、型番は最初に見つかった空でない値を採る。どの盤シートにも同じ参照記号のフットプリントが無いものが未配置。盤シートが無ければ全部が未配置。寸法は部品DBから引き、無ければ`DEFAULT_FOOTPRINT_SIZE`(20×40mm)で置ける
+- **検証**: 盤シートは`verify_sheet`が**即座に空を返す**(配線が無いのでERC・電気検証の対象外)。代わりに`verify_project`が`panel.orphan_footprint`(回路図に無い参照記号のフットプリント、Warning)を出す。**参照記号を結び付けていないフットプリント(盤だけの部品)は報告しない**
+- **描画**: 盤シートも図枠は通常どおりで、盤エンティティは**最背面**(外形+取付板→ダクト→レール→フットプリントの順)。数式は`madake-core/src/panel.rs`が正で、`src/canvas/panel.ts`が同じ式を持つ(SVG/PDFと画面が一致)。紙面は面を塗らず黒線のみ、画面は`panelTheme`(白い盤面)。表示クラスに「盤レイアウト」を追加した
+- **露出**: IPC`unplaced_components`、Link API`GET /api/v1/panel/unplaced`、MCPは`execute_commands`の説明へ`add_sheet`の`kind`と盤エンティティ4種の書き方を追記(専用ツールは作らない)
+- 未対応(Task 6以降): 盤ツール(リボン「パネル」タブ)・未配置部品パネルからのドラッグ配置・レールスナップのUI(純関数`rail_snap_y`/`railSnapY`は用意済み)・実外形風のフットプリント(フェーズ6)
 
 ### Task 6: 盤レイアウト(UI)
 

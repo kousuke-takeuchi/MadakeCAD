@@ -659,7 +659,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "任意の編集コマンド列を実行する。シート追加/削除/改名、エンティティ追加(add_entity)/更新/削除/移動、表題欄設定(set_title_block)のほか、改訂欄の書き換え(set_revisions: 記号/日付/内容/承認の行リスト。表題欄のRevは最新行に連動)、線番のネット単位自動採番(renumber_wires: mode=append で未採番のネットだけ追い番、mode=renumber で全振り直し、sheet_id省略で図面全体、start=開始番号)、線番の個別指定(set_wire_numbers)、PLC I/O割付表の置換(set_plc_assignments)が使える。ハーネス境界は専用コマンドではなくadd_entityでkind=\"harness\"のエンティティ(points=矩形4点・name・note)を追加する(内包した配線が電線リストのハーネス列に載る)。端子台のサドルジャンパも専用コマンドではなくupdate_entityで端子台シンボルのattrs[\"jumpers\"]を書き換える(値は隣接端子の対をカンマ区切りにした\"1-2,3-4\"。小-大順に正規化し、全て外すときは属性ごと削除)。ジャンパは端子台エディタ・端子台チャート・端子接続図の3か所に反映され、undoで戻る。各コマンドの完全なスキーマは入力スキーマを参照。実行結果のpatchを返す"
+        description = "任意の編集コマンド列を実行する。シート追加(add_sheet: name/size/orientation。kind=\"panel\"で2D盤レイアウトシート、省略時は回路図)/削除/改名、エンティティ追加(add_entity)/更新/削除/移動、表題欄設定(set_title_block)のほか、改訂欄の書き換え(set_revisions: 記号/日付/内容/承認の行リスト。表題欄のRevは最新行に連動)、線番のネット単位自動採番(renumber_wires: mode=append で未採番のネットだけ追い番、mode=renumber で全振り直し、sheet_id省略で図面全体、start=開始番号)、線番の個別指定(set_wire_numbers)、PLC I/O割付表の置換(set_plc_assignments)が使える。ハーネス境界は専用コマンドではなくadd_entityでkind=\"harness\"のエンティティ(points=矩形4点・name・note)を追加する(内包した配線が電線リストのハーネス列に載る)。端子台のサドルジャンパも専用コマンドではなくupdate_entityで端子台シンボルのattrs[\"jumpers\"]を書き換える(値は隣接端子の対をカンマ区切りにした\"1-2,3-4\"。小-大順に正規化し、全て外すときは属性ごと削除)。ジャンパは端子台エディタ・端子台チャート・端子接続図の3か所に反映され、undoで戻る。盤レイアウトシートの盤外形・DINレール・ダクト・フットプリントも専用コマンドではなくadd_entityでkind=\"panel_outline\"(at/w/h/name)・\"din_rail\"(y=取付線・x1・x2)・\"duct\"(at/w/h)・\"footprint\"(at/w/h/rotation=0か90/reference=回路図の参照記号/part_no)を追加する。各コマンドの完全なスキーマは入力スキーマを参照。実行結果のpatchを返す"
     )]
     fn execute_commands(
         &self,

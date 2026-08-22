@@ -12,6 +12,9 @@ pub enum Command {
         name: String,
         size: PaperSize,
         orientation: Orientation,
+        /// シート種別 (省略時は回路図)。盤レイアウトシートは`"panel"`。
+        #[serde(default)]
+        kind: SheetKind,
     },
     RemoveSheet {
         sheet_id: SheetId,
@@ -378,8 +381,9 @@ impl Engine {
                 name,
                 size,
                 orientation,
+                kind,
             } => {
-                let sheet = Sheet::new(name, *size, *orientation);
+                let sheet = Sheet::new_kind(name, *size, *orientation, *kind);
                 let inverse = vec![Command::RemoveSheet { sheet_id: sheet.id }];
                 let index = self.project.sheets.len();
                 self.project.sheets.push(sheet.clone());
@@ -905,6 +909,7 @@ mod tests {
                 name: "TB2".into(),
                 size: PaperSize::A4,
                 orientation: Orientation::Portrait,
+                kind: SheetKind::Schematic,
             })
             .unwrap();
         assert_eq!(engine.project().sheets.len(), 2);
@@ -916,6 +921,165 @@ mod tests {
         engine.undo().unwrap().unwrap();
         assert_eq!(engine.project().sheets.len(), 2);
         assert_eq!(engine.project().sheets[1].id, new_id);
+    }
+
+    /// Adding a sheet without naming a kind gives an ordinary schematic sheet, and a panel-layout sheet is added by asking for the panel kind (undo removes it either way).
+    /// 種別を指定しないシート追加は通常の回路図シートになり、盤レイアウトシートは種別を指定して追加する(どちらもundoで消える)。
+    #[test]
+    fn add_sheet_defaults_to_schematic_and_can_add_a_panel_sheet() {
+        let (mut engine, _) = test_engine();
+        engine
+            .execute(Command::AddSheet {
+                name: "回路".into(),
+                size: PaperSize::A3,
+                orientation: Orientation::Landscape,
+                kind: SheetKind::default(),
+            })
+            .unwrap();
+        assert_eq!(engine.project().sheets[1].kind, SheetKind::Schematic);
+        engine
+            .execute(Command::AddSheet {
+                name: "盤レイアウト".into(),
+                size: PaperSize::A3,
+                orientation: Orientation::Landscape,
+                kind: SheetKind::Panel,
+            })
+            .unwrap();
+        assert_eq!(engine.project().sheets[2].kind, SheetKind::Panel);
+        engine.undo().unwrap().unwrap();
+        assert_eq!(engine.project().sheets.len(), 2);
+    }
+
+    /// A sheet-add command written before panel sheets existed (no kind field) still works and adds a schematic sheet.
+    /// 盤シートが無かった頃に書かれたシート追加コマンド(種別の欄が無い)もそのまま動き、回路図シートを追加する。
+    #[test]
+    fn a_sheet_add_command_without_a_kind_still_adds_a_schematic_sheet() {
+        let cmd: Command = serde_json::from_str(
+            r#"{"type":"add_sheet","name":"S2","size":"A3","orientation":"Landscape"}"#,
+        )
+        .expect("旧いコマンドJSONが読める");
+        let Command::AddSheet { kind, .. } = cmd else {
+            panic!("シート追加コマンドであること")
+        };
+        assert_eq!(kind, SheetKind::Schematic);
+    }
+
+    fn sample_panel_entities() -> Vec<Entity> {
+        vec![
+            Entity::PanelOutline(PanelOutline {
+                id: Uuid::new_v4(),
+                at: Point::new(40.0, 40.0),
+                w: 200.0,
+                h: 150.0,
+                name: "制御盤".into(),
+            }),
+            Entity::DinRail(DinRail {
+                id: Uuid::new_v4(),
+                y: 100.0,
+                x1: 60.0,
+                x2: 220.0,
+            }),
+            Entity::Duct(Duct {
+                id: Uuid::new_v4(),
+                at: Point::new(60.0, 60.0),
+                w: 160.0,
+                h: 20.0,
+            }),
+            Entity::Footprint(Footprint {
+                id: Uuid::new_v4(),
+                at: Point::new(80.0, 82.5),
+                w: 25.0,
+                h: 65.0,
+                rotation: 0,
+                reference: "K1".into(),
+                part_no: "MDK-RLY-24V".into(),
+            }),
+        ]
+    }
+
+    /// The four panel entities (panel outline, DIN rail, duct, footprint) are added, moved and deleted with the ordinary entity commands, and every step can be undone.
+    /// 盤エンティティ4種(盤外形・DINレール・ダクト・フットプリント)は通常のエンティティ用コマンドで追加・移動・削除でき、どの操作もundoで戻せる。
+    #[test]
+    fn panel_entities_are_added_moved_and_deleted_with_undo() {
+        let (mut engine, sheet_id) = test_engine();
+        let entities = sample_panel_entities();
+        let ids: Vec<EntityId> = entities.iter().map(|e| e.id()).collect();
+        for entity in entities {
+            engine
+                .execute(Command::AddEntity { sheet_id, entity })
+                .unwrap();
+        }
+        assert_eq!(engine.project().sheets[0].entities.len(), 4);
+
+        engine
+            .execute(Command::MoveEntities {
+                sheet_id,
+                ids: ids.clone(),
+                dx: 10.0,
+                dy: 5.0,
+            })
+            .unwrap();
+        let Entity::DinRail(rail) = &engine.project().sheets[0].entities[&ids[1]] else {
+            panic!("DINレールであること")
+        };
+        assert_eq!((rail.x1, rail.y), (70.0, 105.0));
+
+        engine
+            .execute(Command::DeleteEntities {
+                sheet_id,
+                ids: ids.clone(),
+            })
+            .unwrap();
+        assert!(engine.project().sheets[0].entities.is_empty());
+        engine.undo().unwrap().unwrap(); // 削除を戻す
+        engine.undo().unwrap().unwrap(); // 移動を戻す
+        let Entity::DinRail(rail) = &engine.project().sheets[0].entities[&ids[1]] else {
+            panic!("DINレールであること")
+        };
+        assert_eq!((rail.x1, rail.y), (60.0, 100.0));
+    }
+
+    /// Editing a footprint (its reference, part number or rotation) replaces it wholesale, and undo brings back the previous version.
+    /// フットプリントの編集(参照記号・型番・回転)は丸ごと置換で、undoで編集前に戻る。
+    #[test]
+    fn a_footprint_can_be_edited_and_undone() {
+        let (mut engine, sheet_id) = test_engine();
+        let entity = Entity::Footprint(Footprint {
+            id: Uuid::new_v4(),
+            at: Point::new(80.0, 80.0),
+            w: 25.0,
+            h: 65.0,
+            rotation: 0,
+            reference: "K1".into(),
+            part_no: "MDK-RLY-24V".into(),
+        });
+        let id = entity.id();
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: entity.clone(),
+            })
+            .unwrap();
+        let mut edited = entity.clone();
+        if let Entity::Footprint(f) = &mut edited {
+            f.reference = "K2".into();
+            f.rotation = 90;
+        }
+        engine
+            .execute(Command::UpdateEntity {
+                sheet_id,
+                entity: edited,
+            })
+            .unwrap();
+        let Entity::Footprint(f) = &engine.project().sheets[0].entities[&id] else {
+            panic!()
+        };
+        assert_eq!((f.reference.as_str(), f.rotation), ("K2", 90));
+        engine.undo().unwrap().unwrap();
+        let Entity::Footprint(f) = &engine.project().sheets[0].entities[&id] else {
+            panic!()
+        };
+        assert_eq!((f.reference.as_str(), f.rotation), ("K1", 0));
     }
 
     /// Commands serialize to JSON and back without loss, so any client can send them over the wire.
