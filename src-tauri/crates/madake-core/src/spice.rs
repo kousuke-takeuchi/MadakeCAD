@@ -216,8 +216,13 @@ pub fn build_deck_with(
         if is_conductor(def) {
             // what-if: 指定された参照記号の導通部品は開路扱い(橋を張らない)
             if !opts.open_switches.iter().any(|r| r == &s.reference) {
-                for p in reps.iter().skip(1) {
-                    push(reps[0], *p, BRIDGE_OHMS);
+                // 多極機器は極ごと(1-2 / 3-4 / …)に橋を張り、相どうしは短絡させない
+                for group in crate::symbol::conducting_pin_groups(def) {
+                    let pts: Vec<crate::geometry::Point> =
+                        group.iter().filter_map(|no| by_no.get(*no).map(|v| v[0])).collect();
+                    for p in pts.iter().skip(1) {
+                        push(pts[0], *p, BRIDGE_OHMS);
+                    }
                 }
             }
         } else if is_load(def) && reps.len() >= 2 {
