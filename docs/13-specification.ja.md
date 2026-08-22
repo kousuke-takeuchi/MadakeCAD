@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1568仕様項目**。
+全5領域・**1624仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1335,6 +1335,39 @@
 - ダクトは45度の斜線で埋まり、斜線はダクトの内側に収まる。 <sub>`panel layout geometry`</sub>
 - 幅や高さの無いダクトには描く斜線が無い。 <sub>`panel layout geometry`</sub>
 - レールの近くへ置いた部品は、レールの取付線に吸い付く。 <sub>`panel layout geometry`</sub>
+- 未配置部品の一覧はRust側 (回路図と盤シートの突き合わせ) から読み込む。 <sub>`unplaced parts store`</sub>
+- 図面が変わっていなければ一覧を読み直さない (置くたびの往復を減らす)。 <sub>`unplaced parts store`</sub>
+- 部品を盤へ置いて図面が変わると、次の読み込みで一覧から消える。 <sub>`unplaced parts store`</sub>
+- 一覧が読めなくても画面は開いたまま (理由を控えて空一覧にする)。 <sub>`unplaced parts store`</sub>
+- 配置する部品を選ぶと、その行だけが選択表示になる。 <sub>`unplaced parts store`</sub>
+
+### panelTools
+
+- 盤枠ツールの矩形ドラッグで、盤の外形を1つ足すコマンドを送る (undo一発で消える)。 <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- 逆向き(右下から左上へ)にドラッグしても同じ盤ができる。 <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- 盤の名前は自動で採番する (CP-1, CP-2 …)。 <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- クリックしただけ(つぶれた矩形)ではコマンドを送らない。 <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- DINレールは水平ドラッグで作る。取付線の高さは押し始めた点で決まる。 <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- ダクトツールの矩形ドラッグで配線ダクトを1つ足す。 <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- 未配置部品の行には参照記号・型番・外形寸法が並ぶ。 <sub>`unplaced parts panel`</sub>
+- 部品DBに寸法が無い型番は既定の矩形で置ける (行には「寸法から自動」と出る)。 <sub>`unplaced parts panel`</sub>
+- 型番が入っていない部品は「未登録」として注意付きで並ぶ。 <sub>`unplaced parts panel`</sub>
+- フットプリントはカーソルを中心に置かれる (外形の左上ではなく真ん中を持つ)。 <sub>`footprint placement and rail snapping`</sub>
+- 90度回すと幅と高さが入れ替わり、置かれる位置も回した外形の中心になる。 <sub>`footprint placement and rail snapping`</sub>
+- DINレールの近くへ落とすと、部品の中心がレールの取付線へ吸い付く。 <sub>`footprint placement and rail snapping`</sub>
+- レールから離れた場所ではカーソルの位置のまま置かれる (勝手に吸い付かない)。 <sub>`footprint placement and rail snapping`</sub>
+- 未配置部品を置くと、参照記号と型番を持つフットプリントが1つ足される。 <sub>`footprint placement and rail snapping`</sub>
+- 置いたフットプリントをレールの近くへ動かすと、移動量がレールへ吸い付くように直る。 <sub>`footprint placement and rail snapping`</sub>
+- フットプリントが乗っているレールが分かる (プロパティの「所属レール」)。 <sub>`footprint placement and rail snapping`</sub>
+- プロパティの編集は update_entity コマンドになる (モデルを直接書き換えない)。 <sub>`panel entity properties`</sub>
+- 何も変わっていなければコマンドを送らない (無駄なundo段を作らない)。 <sub>`panel entity properties`</sub>
+- 幅・高さに0や文字を入れても図面は壊れない (その欄は変えない)。 <sub>`panel entity properties`</sub>
+- 回転は0度と90度だけ (v1の描画がこの2つしか持たない)。 <sub>`panel entity properties`</sub>
+- 盤枠は名前と寸法を、レールは取付線と長さを編集できる。 <sub>`panel entity properties`</sub>
+- 回路図の要素(配線など)はこの編集の対象外。 <sub>`panel entity properties`</sub>
+- 盤レイアウトシートでは回路図のツール(配線・部品挿入など)を使えない。 <sub>`tools allowed per sheet kind`</sub>
+- 回路図シートでは盤のツール(盤枠・レール・ダクト)を使えない。 <sub>`tools allowed per sheet kind`</sub>
+- シートが1枚も開いていなければどちらのツールも使えない。 <sub>`tools allowed per sheet kind`</sub>
 
 ### relayXref
 
@@ -1392,6 +1425,16 @@
 - 結果パネルの行をクリックすると、その行が巡回位置になる <sub>`Enter巡回と行クリック`</sub>
 - 検索し直すと巡回位置は先頭より前(未選択)に戻る <sub>`Enter巡回と行クリック`</sub>
 - パネルの✕は結果パネルだけ閉じ、検索バーは開いたままにする <sub>`Enter巡回と行クリック`</sub>
+
+### sheets
+
+- シートを追加するときに種別を選べる。盤レイアウトを選ぶと盤シートが1枚増える。 <sub>`sheet kind (schematic / panel)`</sub>
+- 種別に回路図を選ぶと、これまでどおりの回路図シートが増える。 <sub>`sheet kind (schematic / panel)`</sub>
+- 名前は種別ごとに数える (回路図が3枚あっても最初の盤は「Panel1」になる)。 <sub>`sheet kind (schematic / panel)`</sub>
+- すでに同じ名前のシートがあるときは、空いている番号まで数を進める。 <sub>`sheet kind (schematic / panel)`</sub>
+- 用紙は表示中のシートに合わせる (盤シートだけA4になってしまわない)。 <sub>`sheet kind (schematic / panel)`</sub>
+- 種別を書いていない古いシートは回路図シートとして扱う。 <sub>`sheet kind (schematic / panel)`</sub>
+- 図面タブの「シート種別」の表示は種別ごとの文言になる。 <sub>`sheet kind (schematic / panel)`</sub>
 
 ### surfer
 
@@ -1900,6 +1943,11 @@
 - チャット下書きはドックと浮きカードで共有される <sub>`ui store: 左ドックのタブとチャット下書き`</sub>
 - 既定では全表示クラスが表示される <sub>`表示クラス (レイヤ)`</sub>
 - toggleViewClassで表示クラスの非表示・再表示を切り替える <sub>`表示クラス (レイヤ)`</sub>
+- 起動直後のリボンは回路図タブ <sub>`シート種別に合わせた画面の切り替え`</sub>
+- 盤レイアウトシートを開くとリボンのパネルタブと左ドックの未配置部品が自動で開く <sub>`シート種別に合わせた画面の切り替え`</sub>
+- 回路図シートへ戻すと回路図タブとプロジェクトツリーへ戻る <sub>`シート種別に合わせた画面の切り替え`</sub>
+- 自分で開いた表示タブは盤シートを開いても勝手に切り替わらない <sub>`シート種別に合わせた画面の切り替え`</sub>
+- エージェントと会話中は左ドックのタブを取り上げない <sub>`シート種別に合わせた画面の切り替え`</sub>
 
 ### verification
 
@@ -1932,4 +1980,21 @@
 - 値セットを選ばずに置いたマクロは、保存時の値のまま入る <sub>`placing a macro with a value set`</sub>
 - 選択範囲を⌘Cすると無名マクロとして覚え、⌘Vでそのまま配置モードに入る <sub>`Cmd+C / Cmd+V`</sub>
 - 何も選択していない⌘C・何もコピーしていない⌘Vはキー入力を横取りしない <sub>`Cmd+C / Cmd+V`</sub>
+
+### panelPlacement
+
+- 盤枠ツールは矩形ドラッグで盤の外形を1つ作る (undo一発で消える)。 <sub>`panel drawing tools on a panel sheet`</sub>
+- DINレールツールは水平ドラッグでレールを1本作る。 <sub>`panel drawing tools on a panel sheet`</sub>
+- ダクトツールは矩形ドラッグでダクトを1つ作る。 <sub>`panel drawing tools on a panel sheet`</sub>
+- 作図をやめる (Esc) と選択ツールへ戻り、コマンドは送られない。 <sub>`panel drawing tools on a panel sheet`</sub>
+- 未配置部品を選ぶとフットプリントの配置モードに入る (ゴーストがカーソルに付く)。 <sub>`placing an unplaced part`</sub>
+- クリックでフットプリントが確定し、レールの近くなら取付線へ吸い付く。 <sub>`placing an unplaced part`</sub>
+- 配置中のRは向きを0度と90度で入れ替える (盤の描画はこの2つだけを持つ)。 <sub>`placing an unplaced part`</sub>
+- 置いたあとは選択ツールへ戻る (同じ部品を2台置いてしまわない)。 <sub>`placing an unplaced part`</sub>
+- 盤の要素 (フットプリント・レール・ダクト・盤枠) はクリックで選べる。 <sub>`placing an unplaced part`</sub>
+- 置いたフットプリントをレールの近くへ動かすと、移動もレールへ吸い付く。 <sub>`placing an unplaced part`</sub>
+- 盤レイアウトシートでは回路図のツール(配線・部品挿入)へ切り替わらず、理由をログに出す。 <sub>`tools that do not belong to the sheet`</sub>
+- 回路図シートでは盤のツール(盤枠・レール・ダクト)へ切り替わらない。 <sub>`tools that do not belong to the sheet`</sub>
+- 回路図シートでは未配置部品の配置も始まらない (置き場所が無い)。 <sub>`tools that do not belong to the sheet`</sub>
+- 盤シートでも選択・移動・削除はこれまでどおり使える。 <sub>`tools that do not belong to the sheet`</sub>
 

@@ -5,6 +5,7 @@ import { computed, inject, reactive, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { BLOCK_SYMBOL_ID } from "../canvas/dynamicSymbol";
 import { harnessWireCount } from "../canvas/harness";
+import { panelUpdateCommand, railOfFootprint, type PanelPatch } from "../canvas/panelTools";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import type { Entity } from "../ipc";
 import { useBlockEditorStore } from "../stores/blockEditor";
@@ -53,6 +54,13 @@ const buf = reactive({
   note: "",
   /** ネットラベルのタグ向き ("" / "left" / "right")。 */
   tag: "",
+  /** 盤の要素 (M4 §8): 外形・ダクト・フットプリントの寸法、レールの取付線と両端。 */
+  w: "",
+  h: "",
+  rotation: 0,
+  railY: "",
+  railX1: "",
+  railX2: "",
 });
 
 /**
@@ -100,10 +108,57 @@ watch(
     } else if (e.kind === "harness") {
       buf.name = e.name ?? "";
       buf.note = e.note ?? "";
+    } else if (e.kind === "footprint") {
+      buf.reference = e.reference;
+      buf.part_no = e.part_no;
+      buf.w = String(e.w);
+      buf.h = String(e.h);
+      buf.rotation = e.rotation;
+    } else if (e.kind === "panel_outline") {
+      buf.name = e.name ?? "";
+      buf.w = String(e.w);
+      buf.h = String(e.h);
+    } else if (e.kind === "duct") {
+      buf.w = String(e.w);
+      buf.h = String(e.h);
+    } else if (e.kind === "din_rail") {
+      buf.railY = String(e.y);
+      buf.railX1 = String(e.x1);
+      buf.railX2 = String(e.x2);
     }
   },
   { immediate: true },
 );
+
+/** 入力欄の文字を数値へ (空欄・文字はundefined = その欄は変えない)。 */
+function num(text: string): number | undefined {
+  const value = Number(text);
+  return text.trim() === "" || Number.isNaN(value) ? undefined : value;
+}
+
+/** 盤の要素の編集内容 (種別ごとに使う欄だけが効く)。 */
+function panelPatch(e: Entity): PanelPatch {
+  switch (e.kind) {
+    case "footprint":
+      return { part_no: buf.part_no, w: num(buf.w), h: num(buf.h), rotation: buf.rotation };
+    case "panel_outline":
+      return { name: buf.name, w: num(buf.w), h: num(buf.h) };
+    case "duct":
+      return { w: num(buf.w), h: num(buf.h) };
+    case "din_rail":
+      return { y: num(buf.railY), x1: num(buf.railX1), x2: num(buf.railX2) };
+    default:
+      return {};
+  }
+}
+
+/** 選択中のフットプリントが乗っているレール (無ければnull)。 */
+const footprintRail = computed(() => {
+  const sheet = store.activeSheet;
+  const e = selected.value;
+  if (!sheet || e?.kind !== "footprint") return null;
+  return railOfFootprint(sheet, e);
+});
 
 async function apply() {
   const sheet = store.activeSheet;
@@ -156,6 +211,16 @@ async function apply() {
       ui.log(t("harness.renamedLog", { name: buf.name.trim() }));
     }
     return;
+  } else if (
+    e.kind === "footprint" ||
+    e.kind === "panel_outline" ||
+    e.kind === "duct" ||
+    e.kind === "din_rail"
+  ) {
+    // 盤の要素 (M4 §8): 寸法・向き・型番の編集。変わっていなければ何も送らない
+    const command = panelUpdateCommand(sheet.id, e, panelPatch(e));
+    if (command) await store.execute(command);
+    return;
   } else {
     return;
   }
@@ -190,6 +255,10 @@ const kindLabel = computed<Record<string, string>>(() => ({
   net_label: "ネットラベル",
   text: "テキスト",
   harness: t("harness.kindLabel"),
+  panel_outline: t("panel.prop.kind.panel_outline"),
+  din_rail: t("panel.prop.kind.din_rail"),
+  duct: t("panel.prop.kind.duct"),
+  footprint: t("panel.prop.kind.footprint"),
 }));
 </script>
 
@@ -322,6 +391,94 @@ const kindLabel = computed<Record<string, string>>(() => ({
             @keyup.enter="apply"
           />
         </span>
+      </div>
+    </template>
+
+    <!-- 盤レイアウト (M4 §8): フットプリント -->
+    <template v-else-if="selected?.kind === 'footprint'">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("panel.prop.kind.footprint") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.reference") }}</span>
+        <span class="pvalue mono" :title="t('panel.prop.referenceHint')">
+          {{ selected.reference || "—" }}
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.partNo") }}</span>
+        <span class="pvalue">
+          <input v-model="buf.part_no" class="bare mono" spellcheck="false" @keyup.enter="apply" />
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.width") }}</span>
+        <span class="pvalue"><input v-model="buf.w" class="bare mono" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.height") }}</span>
+        <span class="pvalue"><input v-model="buf.h" class="bare mono" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.rotation") }}</span>
+        <span class="pvalue">
+          <select v-model.number="buf.rotation" class="bare" @change="apply">
+            <option :value="0">0°</option>
+            <option :value="90">90°</option>
+          </select>
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.rail") }}</span>
+        <span class="pvalue">
+          <span v-if="footprintRail">{{ t("panel.prop.railName", { index: footprintRail.index }) }}</span>
+          <span v-else class="muted">{{ t("panel.prop.railNone") }}</span>
+        </span>
+      </div>
+    </template>
+
+    <!-- 盤レイアウト: 盤の外形 (取付板つき) -->
+    <template v-else-if="selected?.kind === 'panel_outline'">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("panel.prop.kind.panel_outline") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.name") }}</span>
+        <span class="pvalue"><input v-model="buf.name" class="bare" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.width") }}</span>
+        <span class="pvalue"><input v-model="buf.w" class="bare mono" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.height") }}</span>
+        <span class="pvalue"><input v-model="buf.h" class="bare mono" @keyup.enter="apply" /></span>
+      </div>
+    </template>
+
+    <!-- 盤レイアウト: 配線ダクト -->
+    <template v-else-if="selected?.kind === 'duct'">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("panel.prop.kind.duct") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.width") }}</span>
+        <span class="pvalue"><input v-model="buf.w" class="bare mono" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.height") }}</span>
+        <span class="pvalue"><input v-model="buf.h" class="bare mono" @keyup.enter="apply" /></span>
+      </div>
+    </template>
+
+    <!-- 盤レイアウト: DINレール (yは取付線) -->
+    <template v-else-if="selected?.kind === 'din_rail'">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("panel.prop.kind.din_rail") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.railY") }}</span>
+        <span class="pvalue"><input v-model="buf.railY" class="bare mono" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.railX1") }}</span>
+        <span class="pvalue"><input v-model="buf.railX1" class="bare mono" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("panel.prop.railX2") }}</span>
+        <span class="pvalue"><input v-model="buf.railX2" class="bare mono" @keyup.enter="apply" /></span>
       </div>
     </template>
 

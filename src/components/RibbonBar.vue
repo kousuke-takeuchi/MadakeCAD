@@ -1,15 +1,21 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileSpreadsheet, FileText,
+  Activity, AlignJustify, Cable, Columns3, Copy, Cpu, FileClock, FileDown, FileSpreadsheet, FileText,
   FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid, LayoutPanelTop, LayoutTemplate, ListOrdered,
   ListChecks,
-  Move, MoveRight, Network, Package, Pencil, Route, Ruler, Scissors, Shapes, ShieldCheck, SquareDashed,
+  Move, MoveRight, Network, Package, Pencil, Route, Rows3, Ruler, Scissors, Shapes, ShieldCheck,
+  SquareDashed,
   Table2, Tag, Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
-import { computed, inject, ref } from "vue";
+import { computed, inject } from "vue";
 import { useI18n } from "vue-i18n";
+import {
+  panelToolsAllowed,
+  schematicToolsAllowed,
+  type PanelToolId,
+} from "../canvas/panelTools";
 import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
 import type { ReportFormat, ReportKind } from "../ipc";
 import { useDocumentStore } from "../stores/document";
@@ -26,7 +32,7 @@ import { useWireNumbersStore } from "../stores/wireNumbers";
 import { useSimulationStore } from "../stores/simulation";
 import { useVerificationStore } from "../stores/verification";
 import type { EditorController } from "../tools/controller";
-import { useUiStore } from "../stores/ui";
+import { useUiStore, type RibbonTab } from "../stores/ui";
 
 const controller = inject<EditorController>("controller")!;
 const ui = useUiStore();
@@ -46,10 +52,18 @@ const frameTemplates = useFrameTemplatesStore();
 const macros = useMacrosStore();
 const symbolEditor = useSymbolEditorStore();
 
-/** タブのid (表示名はi18nカタログ)。 */
-type TabId = "home" | "project" | "schematic" | "panel" | "report" | "io" | "view" | "admin";
+/** タブのid (表示名はi18nカタログ)。表示中のタブは ui ストアが持つ。 */
+type TabId = RibbonTab;
 const tabs: TabId[] = ["home", "project", "schematic", "panel", "report", "io", "view", "admin"];
-const activeTab = ref<TabId>("schematic");
+const activeTab = computed({
+  get: () => ui.ribbonTab,
+  set: (tab: TabId) => ui.setRibbonTab(tab),
+});
+
+/** 表示中のシートが盤レイアウトシートか (盤ツールが使えるか)。 */
+const onPanelSheet = computed(() => panelToolsAllowed(useDocumentStore().activeSheet));
+/** 表示中のシートが回路図シートか (配線・部品挿入などが使えるか)。 */
+const onSchematicSheet = computed(() => schematicToolsAllowed(useDocumentStore().activeSheet));
 
 // 表示タブ: 表示クラストグル (レイヤ、spec §4)。3個ずつの縦列に分ける
 const viewIcons: Record<ViewClass, LucideIcon> = {
@@ -100,6 +114,18 @@ function openWireNumbers() {
   ui.log(t("wireNumbers.openLog", { sheet: sheet.name }));
 }
 
+/**
+ * 部品挿入ダイアログを開く (リボン「回路図」タブ)。
+ * 盤レイアウトシートでは回路図の部品を置けないので、理由をログに出して開かない。
+ */
+function openSymbolPicker() {
+  if (!onSchematicSheet.value) {
+    ui.log(t("panel.schematicToolLog"));
+    return;
+  }
+  ui.symbolPickerOpen = true;
+}
+
 /** ハーネス境界の作図ツールに切り替える (リボン「配線」グループ)。矩形ドラッグで囲みを作る。 */
 function startHarness() {
   if (!useDocumentStore().activeSheet) {
@@ -112,6 +138,40 @@ function startHarness() {
 
 function todo(name: string) {
   ui.log(`${name}: 未実装 (今後のフェーズで対応予定)`);
+}
+
+/** 未実装の小ボタン (淡く出したまま、押すとログに理由を出す)。 */
+function todoItem(label: string, icon: LucideIcon): RibbonItem {
+  return {
+    label,
+    icon,
+    action: () => todo(label),
+    isDisabled: () => true,
+    title: t("panel.todoPhase"),
+  };
+}
+
+/**
+ * 盤の作図ツールへ切り替える (リボン「パネル」タブ>盤グループ)。
+ * 盤レイアウトシート以外では切り替わらず、理由をログに出す (ツール側のガード)。
+ */
+function startPanelTool(tool: PanelToolId) {
+  const sheet = useDocumentStore().activeSheet;
+  if (!sheet) {
+    ui.log(t("panel.noSheetLog"));
+    return;
+  }
+  controller.setTool(tool);
+  if (controller.tool === tool) ui.log(t(`panel.toolLog.${tool}`));
+}
+
+/** 左ドックの「未配置部品」ビューを開く (リボン「パネル」タブ>フットプリントの大ボタン)。 */
+function openUnplaced() {
+  if (!onPanelSheet.value) {
+    ui.log(t("panel.panelToolLog"));
+    return;
+  }
+  ui.setLeftPanelTab("panel");
 }
 
 /** 帳票生成ダイアログを開く (リボン「レポート」タブ>帳票グループ)。 */
@@ -380,6 +440,15 @@ interface RibbonItem {
   icon: LucideIcon;
   action: () => void;
   isActive?: () => boolean;
+  /**
+   * 使えない操作 (まだ実装していない・いまのシートでは使えない)。
+   * デザイン原則5「未実装機能もUIに見せ、操作時に未実装をログする」に従い、
+   * **見た目だけを淡くし、押すと理由をログに出す**。`disabled`属性・`aria-disabled`は
+   * 付けない: 押しても何も起きないボタンにすると「なぜ使えないか」を伝えられないため。
+   */
+  isDisabled?: () => boolean;
+  /** ツールチップ (未実装のフェーズ・使えない理由)。 */
+  title?: string;
 }
 interface RibbonGroup {
   name: string;
@@ -387,6 +456,110 @@ interface RibbonGroup {
   /** 小ボタンの列(リボンの縦列)。 */
   small: RibbonItem[][];
 }
+
+/**
+ * 「パネル」タブ (.pen「M4デザイン - リボン パネル/レポート/管理タブ」)。
+ * 盤レイアウトシートを開くと自動でこのタブになる (`ui.syncSheetKind`)。
+ * Task 7で実装する操作 (バルーン採番・間隔チェック・盤の帳票) と、フェーズ6の
+ * フットプリント作り込みは**淡いdisabled表示のまま並べ、押すと未実装をログする**。
+ */
+const panelGroups = computed<RibbonGroup[]>(() => [
+  {
+    name: t("ribbon.panelGroup.enclosure"),
+    big: {
+      label: t("panel.ribbonCreate"),
+      icon: LayoutPanelTop,
+      color: "var(--icon-edit)",
+      action: () => startPanelTool("panel_outline"),
+      isActive: () => controller.tool === "panel_outline",
+      isDisabled: () => !onPanelSheet.value,
+    },
+    small: [
+      [
+        {
+          label: t("panel.tool.panel_outline"),
+          icon: LayoutPanelTop,
+          action: () => startPanelTool("panel_outline"),
+          isActive: () => controller.tool === "panel_outline",
+          isDisabled: () => !onPanelSheet.value,
+        },
+        {
+          label: t("panel.tool.din_rail"),
+          icon: Rows3,
+          action: () => startPanelTool("din_rail"),
+          isActive: () => controller.tool === "din_rail",
+          isDisabled: () => !onPanelSheet.value,
+        },
+        {
+          label: t("panel.tool.duct"),
+          icon: Columns3,
+          action: () => startPanelTool("duct"),
+          isActive: () => controller.tool === "duct",
+          isDisabled: () => !onPanelSheet.value,
+        },
+      ],
+    ],
+  },
+  {
+    name: t("ribbon.panelGroup.footprint"),
+    big: {
+      label: t("panel.ribbonUnplaced"),
+      icon: Package,
+      color: "var(--acad-blue)",
+      action: () => openUnplaced(),
+      isDisabled: () => !onPanelSheet.value,
+    },
+    small: [
+      [
+        todoItem(t("ribbon.panelSmall.insertByPart"), Cpu),
+        todoItem(t("ribbon.panelSmall.lookupEdit"), Table2),
+        todoItem(t("ribbon.panelSmall.nameplate"), Tag),
+      ],
+    ],
+  },
+  {
+    name: t("ribbon.panelGroup.placement"),
+    big: {
+      label: t("ribbon.panelSmall.align"),
+      icon: AlignJustify,
+      color: "var(--ribbon-icon)",
+      action: () => todo(t("ribbon.panelSmall.align")),
+      isDisabled: () => true,
+      title: t("panel.todoPhase"),
+    },
+    small: [
+      [
+        todoItem(t("ribbon.panelSmall.distribute"), Move),
+        todoItem(t("ribbon.panelSmall.alignRail"), Rows3),
+        todoItem(t("ribbon.panelSmall.balloon"), Hash),
+      ],
+      [
+        todoItem(t("ribbon.panelSmall.dimension"), Ruler),
+        todoItem(t("ribbon.panelSmall.clearance"), ListChecks),
+      ],
+    ],
+  },
+  {
+    name: t("ribbon.panelGroup.reports"),
+    big: {
+      label: t("panel.ribbonLayoutTable"),
+      icon: Table2,
+      color: "var(--ok-fg)",
+      action: () => todo(t("panel.ribbonLayoutTable")),
+      isDisabled: () => true,
+      title: t("panel.todoPhase"),
+    },
+    small: [
+      [
+        todoItem(t("ribbon.panelSmall.panelWiring"), Route),
+        todoItem(t("ribbon.panelSmall.legend"), FileText),
+      ],
+    ],
+  },
+]);
+
+// 回路図のツールは盤レイアウトシートでは使えない (M4 §8)。押すと理由をログに出す
+const schematicOnly = () => !onSchematicSheet.value;
 
 const groups = computed<RibbonGroup[]>(() => [
   {
@@ -397,16 +570,23 @@ const groups = computed<RibbonGroup[]>(() => [
       color: "var(--icon-wire)",
       action: () => controller.setTool("wire"),
       isActive: () => controller.tool === "wire",
+      isDisabled: schematicOnly,
     },
     small: [[
-      { label: "複数母線", icon: AlignJustify, action: () => todo("複数母線") },
-      { label: t("wireNumbers.ribbonButton"), icon: ListOrdered, action: () => openWireNumbers() },
-      { label: "信号矢印", icon: MoveRight, action: () => todo("信号矢印") },
+      { label: "複数母線", icon: AlignJustify, action: () => todo("複数母線"), isDisabled: schematicOnly },
+      {
+        label: t("wireNumbers.ribbonButton"),
+        icon: ListOrdered,
+        action: () => openWireNumbers(),
+        isDisabled: schematicOnly,
+      },
+      { label: "信号矢印", icon: MoveRight, action: () => todo("信号矢印"), isDisabled: schematicOnly },
       {
         label: t("harness.ribbonButton"),
         icon: SquareDashed,
         action: () => startHarness(),
         isActive: () => controller.tool === "harness",
+        isDisabled: schematicOnly,
       },
     ]],
   },
@@ -416,13 +596,24 @@ const groups = computed<RibbonGroup[]>(() => [
       label: "部品挿入",
       icon: Cpu,
       color: "var(--acad-blue)",
-      action: () => (ui.symbolPickerOpen = true),
+      action: () => openSymbolPicker(),
       isActive: () => controller.tool === "place",
+      isDisabled: schematicOnly,
     },
     small: [[
-      { label: "端子台", icon: LayoutGrid, action: () => (ui.symbolPickerOpen = true) },
-      { label: t("templates.ribbonButton"), icon: LayoutTemplate, action: () => openTemplates() },
-      { label: t("macros.ribbonSave"), icon: Copy, action: () => saveMacro() },
+      { label: "端子台", icon: LayoutGrid, action: () => openSymbolPicker(), isDisabled: schematicOnly },
+      {
+        label: t("templates.ribbonButton"),
+        icon: LayoutTemplate,
+        action: () => openTemplates(),
+        isDisabled: schematicOnly,
+      },
+      {
+        label: t("macros.ribbonSave"),
+        icon: Copy,
+        action: () => saveMacro(),
+        isDisabled: schematicOnly,
+      },
     ]],
   },
   {
@@ -470,6 +661,7 @@ const groups = computed<RibbonGroup[]>(() => [
 /** 表示中のタブのグループ。まだ実装していないタブはnull (プレースホルダを出す)。 */
 const activeGroups = computed<RibbonGroup[] | null>(() => {
   if (activeTab.value === "schematic") return groups.value;
+  if (activeTab.value === "panel") return panelGroups.value;
   if (activeTab.value === "project") return projectGroups.value;
   if (activeTab.value === "report") return reportGroups.value;
   if (activeTab.value === "admin") return adminGroups.value;
@@ -498,7 +690,8 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
             <div class="ribbon-group-body">
               <button
                 class="ribbon-big"
-                :class="{ active: g.big.isActive?.() }"
+                :class="{ active: g.big.isActive?.(), disabled: g.big.isDisabled?.() }"
+                :title="g.big.title"
                 @click="g.big.action()"
               >
                 <component :is="g.big.icon" :size="26" :color="g.big.color" />
@@ -509,7 +702,8 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
                   v-for="s in col"
                   :key="s.label"
                   class="ribbon-small"
-                  :class="{ active: s.isActive?.() }"
+                  :class="{ active: s.isActive?.(), disabled: s.isDisabled?.() }"
+                  :title="s.title"
                   @click="s.action()"
                 >
                   <component :is="s.icon" :size="13" class="small-icon" />
@@ -646,6 +840,11 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
 }
 .ribbon-small:hover { background: var(--hover-bg); }
 .ribbon-small.active { background: var(--sel-blue); }
+/* 使えない操作 (未実装・このシートでは使えない): 淡く出したまま押せる (押すと理由をログ) */
+.ribbon-big.disabled,
+.ribbon-small.disabled { color: var(--off-fg); }
+.ribbon-big.disabled :deep(svg),
+.ribbon-small.disabled :deep(svg) { color: var(--off-fg); opacity: 0.5; }
 .small-icon { color: var(--ribbon-icon); flex: none; }
 .view-toggle { color: var(--ui-muted); }
 .view-toggle .small-icon { color: var(--ui-muted); }

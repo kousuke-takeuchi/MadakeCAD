@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1568 specification clauses** across 5 areas.
+**1624 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -1335,6 +1335,39 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - fills a duct with 45 degree hatch lines that stay inside it <sub>`panel layout geometry`</sub>
 - has no hatch lines for a flat duct <sub>`panel layout geometry`</sub>
 - snaps a part dropped near a rail onto its mounting line <sub>`panel layout geometry`</sub>
+- loads the unplaced parts from the engine <sub>`unplaced parts store`</sub>
+- does not reload while the drawing has not changed <sub>`unplaced parts store`</sub>
+- drops a part from the list once it has been placed <sub>`unplaced parts store`</sub>
+- keeps the panel open when the list cannot be read <sub>`unplaced parts store`</sub>
+- highlights the row of the part being placed <sub>`unplaced parts store`</sub>
+
+### panelTools
+
+- turns a rectangle drag into one add_entity command for the enclosure <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- accepts a drag in any direction for the enclosure <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- numbers each new enclosure (CP-1, CP-2 …) <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- sends no command when the enclosure drag is a mere click <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- draws a DIN rail horizontally from the point where the drag started <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- turns a rectangle drag into one duct <sub>`panel drawing tools (enclosure / DIN rail / duct)`</sub>
+- shows the reference, part number and outline size of an unplaced part <sub>`unplaced parts panel`</sub>
+- marks a part that falls back to the default rectangle <sub>`unplaced parts panel`</sub>
+- flags a part with no part number as unregistered <sub>`unplaced parts panel`</sub>
+- centres the footprint on the cursor <sub>`footprint placement and rail snapping`</sub>
+- centres a footprint turned 90 degrees on its swapped outline <sub>`footprint placement and rail snapping`</sub>
+- snaps the footprint centre onto a nearby DIN rail <sub>`footprint placement and rail snapping`</sub>
+- leaves the footprint where the cursor is when no rail is near <sub>`footprint placement and rail snapping`</sub>
+- adds one footprint carrying the reference and part number <sub>`footprint placement and rail snapping`</sub>
+- corrects a drag so the moved footprint lands on the rail <sub>`footprint placement and rail snapping`</sub>
+- tells which rail a footprint sits on <sub>`footprint placement and rail snapping`</sub>
+- turns a property edit into one update_entity command <sub>`panel entity properties`</sub>
+- sends no command when nothing changed <sub>`panel entity properties`</sub>
+- ignores a width or height that is not a positive number <sub>`panel entity properties`</sub>
+- keeps the rotation at 0 or 90 degrees <sub>`panel entity properties`</sub>
+- edits the enclosure name and size, and the rail line and length <sub>`panel entity properties`</sub>
+- refuses to edit a schematic entity through the panel properties <sub>`panel entity properties`</sub>
+- disables the schematic tools on a panel sheet <sub>`tools allowed per sheet kind`</sub>
+- disables the panel tools on a schematic sheet <sub>`tools allowed per sheet kind`</sub>
+- disables both tool sets when no sheet is open <sub>`tools allowed per sheet kind`</sub>
 
 ### relayXref
 
@@ -1392,6 +1425,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - clicking a result row makes that row the current one <sub>`Enter巡回と行クリック`</sub>
 - searching again resets the walk position <sub>`Enter巡回と行クリック`</sub>
 - the panel's close button closes only the results panel <sub>`Enter巡回と行クリック`</sub>
+
+### sheets
+
+- adds a panel sheet when the panel kind is chosen <sub>`sheet kind (schematic / panel)`</sub>
+- adds a schematic sheet when the schematic kind is chosen <sub>`sheet kind (schematic / panel)`</sub>
+- numbers the new sheet within its own kind <sub>`sheet kind (schematic / panel)`</sub>
+- skips a number that another sheet already uses <sub>`sheet kind (schematic / panel)`</sub>
+- keeps the paper size and orientation of the sheet in front <sub>`sheet kind (schematic / panel)`</sub>
+- treats a sheet with no kind as a schematic sheet <sub>`sheet kind (schematic / panel)`</sub>
+- labels the sheet kind shown next to the drawing tabs <sub>`sheet kind (schematic / panel)`</sub>
 
 ### surfer
 
@@ -1900,6 +1943,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - the chat draft is shared between the dock and the floating card <sub>`ui store: 左ドックのタブとチャット下書き`</sub>
 - all view classes are visible by default <sub>`表示クラス (レイヤ)`</sub>
 - toggleViewClass hides and re-shows a class <sub>`表示クラス (レイヤ)`</sub>
+- starts on the schematic ribbon tab <sub>`シート種別に合わせた画面の切り替え`</sub>
+- opens the panel ribbon tab and the unplaced parts dock for a panel sheet <sub>`シート種別に合わせた画面の切り替え`</sub>
+- returns to the schematic tab and the project tree on a schematic sheet <sub>`シート種別に合わせた画面の切り替え`</sub>
+- leaves a ribbon tab the user chose after the panel tab is once shown <sub>`シート種別に合わせた画面の切り替え`</sub>
+- does not steal the left dock from an open agent conversation <sub>`シート種別に合わせた画面の切り替え`</sub>
 
 ### verification
 
@@ -1932,4 +1980,21 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - inserts a macro with no value set chosen just as it was saved <sub>`placing a macro with a value set`</sub>
 - copies the selection on Cmd+C and starts placing it on Cmd+V <sub>`Cmd+C / Cmd+V`</sub>
 - does not swallow Cmd+C with an empty selection nor Cmd+V with an empty clipboard <sub>`Cmd+C / Cmd+V`</sub>
+
+### panelPlacement
+
+- draws the enclosure with one rectangle drag <sub>`panel drawing tools on a panel sheet`</sub>
+- draws a DIN rail with one horizontal drag <sub>`panel drawing tools on a panel sheet`</sub>
+- draws a duct with one rectangle drag <sub>`panel drawing tools on a panel sheet`</sub>
+- sends nothing when the drawing is abandoned with Escape <sub>`panel drawing tools on a panel sheet`</sub>
+- enters footprint placement for the chosen part <sub>`placing an unplaced part`</sub>
+- commits the footprint on click and snaps it onto the rail <sub>`placing an unplaced part`</sub>
+- toggles the footprint between 0 and 90 degrees on R <sub>`placing an unplaced part`</sub>
+- returns to the select tool once the part is placed <sub>`placing an unplaced part`</sub>
+- selects panel entities by clicking them <sub>`placing an unplaced part`</sub>
+- snaps a footprint drag onto the rail <sub>`placing an unplaced part`</sub>
+- refuses the schematic tools on a panel sheet <sub>`tools that do not belong to the sheet`</sub>
+- refuses the panel tools on a schematic sheet <sub>`tools that do not belong to the sheet`</sub>
+- does not start footprint placement on a schematic sheet <sub>`tools that do not belong to the sheet`</sub>
+- keeps select, move and delete available on a panel sheet <sub>`tools that do not belong to the sheet`</sub>
 

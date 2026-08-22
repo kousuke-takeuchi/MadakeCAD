@@ -14,22 +14,30 @@ import { usePopover } from "../composables/popover";
 import { useChatStore } from "../stores/chat";
 import { useSettingsStore } from "../stores/settings";
 import { useUiStore, type LeftPanelTab } from "../stores/ui";
+import { isPanelSheet } from "../canvas/sheets";
+import { useDocumentStore } from "../stores/document";
 import ChatDock from "./chat/ChatDock.vue";
 import ChatHistoryPopup from "./chat/ChatHistoryPopup.vue";
 import DevicePanel from "./DevicePanel.vue";
+import PanelPartsPanel from "./PanelPartsPanel.vue";
 import ProjectPanel from "./ProjectPanel.vue";
 
 const { t } = useI18n();
 const chat = useChatStore();
 const ui = useUiStore();
 const settings = useSettingsStore();
+const store = useDocumentStore();
 
 const { open: historyOpen, toggle: toggleHistory, close: closeHistory } = usePopover();
+
+/** 盤レイアウトシートを開いているあいだだけ「未配置部品」タブを出す (M4 §8)。 */
+const panelSheet = computed(() => isPanelSheet(store.activeSheet));
 
 const tabs = computed<{ id: LeftPanelTab; label: string }[]>(() => [
   { id: "project", label: t("leftPanel.project") },
   // デバイスナビゲータ (spec §10): 参照記号ツリーで機能単位まで展開する
   { id: "devices", label: t("devices.tab") },
+  ...(panelSheet.value ? [{ id: "panel" as const, label: t("panel.tab") }] : []),
   { id: "chat", label: t("leftPanel.agent") },
 ]);
 
@@ -114,6 +122,7 @@ watch(
 
     <ProjectPanel v-show="ui.leftPanelTab === 'project'" />
     <DevicePanel v-if="ui.leftPanelTab === 'devices'" />
+    <PanelPartsPanel v-if="ui.leftPanelTab === 'panel' && panelSheet" />
     <ChatDock v-show="chatTab" />
   </aside>
 </template>

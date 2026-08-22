@@ -8,16 +8,51 @@ import {
   macroVariantKeys,
   placeMacroEntities,
 } from "../canvas/macroPreview";
+import {
+  DIN_RAIL_H,
+  footprintRect,
+  footprintSize,
+  panelOutlineRect,
+  railRect,
+} from "../canvas/panel";
+import {
+  dinRailAddCommand,
+  ductAddCommand,
+  footprintAddCommand,
+  footprintPlaceAt,
+  panelOutlineAddCommand,
+  panelToolsAllowed,
+  railSnapDelta,
+  schematicToolsAllowed,
+  type PanelToolId,
+} from "../canvas/panelTools";
 import { drawHarness, drawSymbol, symbolBounds, transformLocal } from "../canvas/renderer";
-import { theme, wireColorScreen } from "../canvas/theme";
+import { panelTheme, theme, wireColorScreen } from "../canvas/theme";
 import { Viewport, type Pt } from "../canvas/viewport";
 import { i18n } from "../i18n";
-import { ipc, type Entity, type Macro, type Point, type SymbolInstance } from "../ipc";
+import {
+  ipc,
+  type Entity,
+  type Macro,
+  type Point,
+  type SymbolInstance,
+  type UnplacedComponent,
+} from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useMacrosStore } from "../stores/macros";
 import { useUiStore } from "../stores/ui";
 
-export type ToolId = "select" | "wire" | "place" | "harness" | "macro";
+/**
+ * 対話ツール。回路図のツール (配線・部品挿入・ハーネス・マクロ) と
+ * 盤のツール (盤枠・DINレール・ダクト・フットプリント、M4 §8) は
+ * **シートの種別で使える側が決まる** (`setTool`が弾く)。
+ */
+export type ToolId = "select" | "wire" | "place" | "harness" | "macro" | PanelToolId;
+
+/** 回路図シートでしか使えないツール。 */
+const SCHEMATIC_TOOLS: ToolId[] = ["wire", "place", "harness", "macro"];
+/** 盤レイアウトシートでしか使えないツール。 */
+const PANEL_TOOLS: ToolId[] = ["panel_outline", "din_rail", "duct", "footprint"];
 
 /** 配置中のマクロ。`fromLibrary=false`は⌘Vの無名マクロ (ファイルに無いのでidを引けない)。 */
 export interface MacroPlacement {
@@ -57,6 +92,11 @@ const SYMBOL_HIT_PAD = 1.0;
 /** 定義を引けないシンボル(属性が壊れたブロック等)のクリック判定半径 (mm)。 */
 const SYMBOL_HIT_RADIUS = 9.0;
 
+/** 点が矩形の中 (辺の上を含む) にあるか。盤の要素の当たり判定。 */
+function inRect(p: Pt, r: { x: number; y: number; w: number; h: number }): boolean {
+  return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+}
+
 function segmentDistance(p: Pt, a: Point, b: Point): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -76,6 +116,8 @@ export class EditorController {
   placePart: { value: string; attrs: Record<string, string> } | null = null;
   /** macroツールで配置中の回路マクロ。 */
   placeMacro: MacroPlacement | null = null;
+  /** footprintツールで配置中の未配置部品 (未配置部品パネルの行から入る)。 */
+  placeFootprint: UnplacedComponent | null = null;
   /** 配置中のバリアント (Tabで巡回する`macroVariantKeys`の添字)。 */
   macroVariantIndex = 0;
   /** 配線ツールの既定属性。 */
@@ -93,7 +135,14 @@ export class EditorController {
   viewSize = { w: 0, h: 0 };
 
   private wirePoints: Pt[] = [];
-  private dragMode: "none" | "pan" | "move" | "rubber" | "harness" = "none";
+  private dragMode:
+    | "none"
+    | "pan"
+    | "move"
+    | "rubber"
+    | "harness"
+    | "panel_rect"
+    | "panel_rail" = "none";
   private dragStartWorld: Pt = { x: 0, y: 0 };
   private dragStartScreen: Pt = { x: 0, y: 0 };
   private moveDelta: Pt = { x: 0, y: 0 };
@@ -102,11 +151,31 @@ export class EditorController {
 
   constructor(private store: DocumentStore) {}
 
+  /**
+   * ツールが表示中のシートで使えるか (M4 §8)。回路図のツールは盤レイアウトシートでは
+   * 使えず、盤のツールは回路図シートでは使えない。**Commandエンジン側にシート種別の
+   * ガードは無い**ので、置けてしまわないようにするのはこのUIの役目。
+   */
+  toolAllowed(tool: ToolId): boolean {
+    const sheet = this.store.activeSheet;
+    if (SCHEMATIC_TOOLS.includes(tool)) return schematicToolsAllowed(sheet);
+    if (PANEL_TOOLS.includes(tool)) return panelToolsAllowed(sheet);
+    return true;
+  }
+
   setTool(
     tool: ToolId,
     symbolId?: string,
     part?: { value: string; attrs: Record<string, string> },
   ) {
+    if (!this.toolAllowed(tool)) {
+      useUiStore().log(
+        i18n.global.t(
+          SCHEMATIC_TOOLS.includes(tool) ? "panel.schematicToolLog" : "panel.panelToolLog",
+        ),
+      );
+      return;
+    }
     this.tool = tool;
     this.placeSymbolId = tool === "place" ? (symbolId ?? this.placeSymbolId) : null;
     this.placePart = tool === "place" ? (part ?? null) : null;
@@ -114,8 +183,24 @@ export class EditorController {
       this.placeMacro = null;
       this.macroVariantIndex = 0;
     }
+    if (tool !== "footprint") this.placeFootprint = null;
     this.wirePoints = [];
     this.dragMode = "none";
+    this.requestRedraw();
+  }
+
+  /**
+   * 未配置部品をフットプリントとして置くモードに入る (未配置部品パネルの行から)。
+   * ゴーストがカーソルに付き、Rで0/90度を切り替え、クリックで確定する。
+   */
+  startFootprintPlacement(component: UnplacedComponent) {
+    if (!this.toolAllowed("footprint")) {
+      useUiStore().log(i18n.global.t("panel.panelToolLog"));
+      return;
+    }
+    this.setTool("footprint");
+    this.placeFootprint = component;
+    this.placeRotation = 0;
     this.requestRedraw();
   }
 
@@ -266,6 +351,20 @@ export class EditorController {
         if (segmentDistance(world, a, b) <= HIT_TOLERANCE) return e.id;
       }
     }
+    // 盤の要素は描いた順の逆 (フットプリント→レール→ダクト→盤外形) に拾う。
+    // 盤外形は中身を選びたいことのほうが多いので最後に見る
+    for (const e of entities) {
+      if (e.kind === "footprint" && inRect(world, footprintRect(e))) return e.id;
+    }
+    for (const e of entities) {
+      if (e.kind === "din_rail" && inRect(world, railRect(e))) return e.id;
+    }
+    for (const e of entities) {
+      if (e.kind === "duct" && inRect(world, { x: e.at.x, y: e.at.y, w: e.w, h: e.h })) return e.id;
+    }
+    for (const e of entities) {
+      if (e.kind === "panel_outline" && inRect(world, panelOutlineRect(e))) return e.id;
+    }
     return null;
   }
 
@@ -320,6 +419,18 @@ export class EditorController {
         this.dragMode = "harness";
         break;
       }
+      // 盤枠・ダクトは矩形ドラッグ、DINレールは水平ドラッグ (取付線は押した点の高さ)
+      case "panel_outline":
+      case "duct":
+      case "din_rail": {
+        this.dragStartWorld = this.snap(world);
+        this.rubberEnd = this.dragStartWorld;
+        this.dragMode = this.tool === "din_rail" ? "panel_rail" : "panel_rect";
+        break;
+      }
+      case "footprint":
+        void this.commitFootprint(this.snap(world));
+        break;
     }
     this.requestRedraw();
   }
@@ -338,13 +449,15 @@ export class EditorController {
           x: world.x - this.dragStartWorld.x,
           y: world.y - this.dragStartWorld.y,
         });
-        this.moveDelta = snapped;
+        this.moveDelta = this.railSnappedDelta(snapped);
         break;
       }
       case "rubber":
         this.rubberEnd = world;
         break;
       case "harness":
+      case "panel_rect":
+      case "panel_rail":
         this.rubberEnd = this.snap(world);
         break;
     }
@@ -383,6 +496,23 @@ export class EditorController {
               }
             }
             this.store.selection = sel;
+          }
+        }
+        break;
+      }
+      case "panel_rect":
+      case "panel_rail": {
+        // 盤の要素も1回のadd_entityコマンドで作る (undo一発で消える)
+        if (sheet) {
+          const command =
+            this.tool === "panel_outline"
+              ? panelOutlineAddCommand(sheet, this.dragStartWorld, this.rubberEnd)
+              : this.tool === "duct"
+                ? ductAddCommand(sheet, this.dragStartWorld, this.rubberEnd)
+                : dinRailAddCommand(sheet, this.dragStartWorld, this.rubberEnd);
+          if (command) {
+            await this.store.execute(command);
+            useUiStore().log(i18n.global.t(`panel.added.${this.tool}`));
           }
         }
         break;
@@ -470,6 +600,12 @@ export class EditorController {
         return true;
       case "r":
       case "R":
+        // 盤のフットプリントは0度と90度だけ (v1の描画がこの2つしか持たない)
+        if (this.tool === "footprint") {
+          this.placeRotation = this.placeRotation === 0 ? 90 : 0;
+          this.requestRedraw();
+          return true;
+        }
         if (this.tool === "place" || this.tool === "macro") {
           this.placeRotation = (this.placeRotation + 90) % 360;
           this.requestRedraw();
@@ -562,6 +698,38 @@ export class EditorController {
       value: "",
       attrs: this.placePart?.attrs ?? {},
     };
+  }
+
+  /**
+   * 移動量をDINレールへ吸い付かせる (フットプリントを1つだけ動かしているとき)。
+   * 盤以外の要素・複数選択のときは何もしない。
+   */
+  private railSnappedDelta(delta: Pt): Pt {
+    const sheet = this.store.activeSheet;
+    if (!sheet || this.store.selection.size !== 1) return delta;
+    const [id] = [...this.store.selection];
+    const e = sheet.entities[id];
+    if (!e || e.kind !== "footprint") return delta;
+    return railSnapDelta(sheet, e, delta);
+  }
+
+  /**
+   * 未配置部品をフットプリントとして確定する。置いたら選択ツールへ戻る
+   * (同じ部品は1台しか無いので、続けて置けると二重配置になる)。
+   */
+  private async commitFootprint(at: Pt) {
+    const sheet = this.store.activeSheet;
+    const component = this.placeFootprint;
+    if (!sheet || !component) return;
+    await this.store.execute(footprintAddCommand(sheet, component, at, this.placeRotation));
+    useUiStore().log(
+      i18n.global.t("panel.placedLog", {
+        reference: component.reference,
+        part: component.part_no,
+      }),
+    );
+    this.setTool("select");
+    this.requestRedraw();
   }
 
   private async commitPlace(at: Pt) {
@@ -683,6 +851,43 @@ export class EditorController {
     if (this.dragMode === "harness") {
       const preview = harnessRectPoints(this.dragStartWorld, this.rubberEnd);
       drawHarness(ctx, vp, preview, "", false);
+    }
+    // 盤の作図プレビュー: 盤枠・ダクトは矩形、DINレールは帯 (確定後と同じ高さ)
+    if (this.dragMode === "panel_rect" || this.dragMode === "panel_rail") {
+      const a = vp.toScreen(this.dragStartWorld);
+      const b = vp.toScreen(this.rubberEnd);
+      ctx.strokeStyle = theme.selection;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 3]);
+      if (this.dragMode === "panel_rail") {
+        const half = (DIN_RAIL_H / 2) * vp.scale;
+        ctx.strokeRect(Math.min(a.x, b.x), a.y - half, Math.abs(b.x - a.x), half * 2);
+      } else {
+        ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+      }
+      ctx.setLineDash([]);
+    }
+    // フットプリントの配置ゴースト: 確定後と同じ矩形+参照記号をカーソル位置へ出す
+    const sheetForGhost = this.store.activeSheet;
+    if (this.tool === "footprint" && this.placeFootprint && sheetForGhost) {
+      const component = this.placeFootprint;
+      const at = footprintPlaceAt(sheetForGhost, component, this.cursorWorld, this.placeRotation);
+      const size = footprintSize({ w: component.w, h: component.h, rotation: this.placeRotation });
+      const s = vp.toScreen(at);
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = panelTheme.footprint;
+      ctx.strokeStyle = theme.selection;
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(s.x, s.y, size.w * vp.scale, size.h * vp.scale);
+      ctx.strokeRect(s.x, s.y, size.w * vp.scale, size.h * vp.scale);
+      ctx.fillStyle = panelTheme.reference;
+      ctx.font = `600 ${Math.max(9, 3 * vp.scale)}px var(--mono-font, monospace)`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(component.reference, s.x + (size.w * vp.scale) / 2, s.y + (size.h * vp.scale) / 2);
+      ctx.textAlign = "start";
+      ctx.textBaseline = "alphabetic";
+      ctx.globalAlpha = 1;
     }
     // 矩形選択
     if (this.dragMode === "rubber") {

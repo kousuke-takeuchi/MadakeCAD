@@ -267,6 +267,25 @@
       "partsDb": "Parts database",
       "macros": "Macros",
       "userLibrary": "User library"
+    },
+    "panelGroup": {
+      "enclosure": "Panel",
+      "footprint": "Footprints",
+      "placement": "Layout",
+      "reports": "Reports"
+    },
+    "panelSmall": {
+      "insertByPart": "Insert by part no.",
+      "lookupEdit": "Edit lookup",
+      "nameplate": "Nameplate",
+      "align": "Align",
+      "distribute": "Distribute",
+      "alignRail": "Align to rail",
+      "balloon": "Balloon numbers",
+      "dimension": "Dimensions",
+      "clearance": "Clearance check",
+      "panelWiring": "Panel wiring diagram",
+      "legend": "Legend table"
     }
   },
   "templates": {
@@ -921,5 +940,80 @@
     "tagRight": "Flag pointing right",
     "tagHint": "Draws the net label as a directional flag, so the reader sees at a glance which way the signal goes.",
     "tagChangedLog": "Net label {name}: tag shape set to {tag}"
+  },
+  "panel": {
+    "tab": "Unplaced parts",
+    "head": "Unplaced parts (from the schematic)",
+    "count": "{count} part(s)",
+    "empty": "Every part on the schematic is already on a panel.",
+    "hint": "Click a part, then click on the panel sheet to place it. It snaps onto a DIN rail; R turns it.",
+    "errorHint": "The list of unplaced parts could not be read: {error}",
+    "status": {
+      "sized": "from parts DB",
+      "default": "auto size",
+      "unregistered": "unregistered"
+    },
+    "statusHint": {
+      "sized": "The outline comes from the parts database.",
+      "default": "The part number has no outline in the parts database, so the default rectangle is used.",
+      "unregistered": "This part has no part number yet, so the default rectangle is used."
+    },
+    "placeLog": "Panel: placing {reference} — click on the panel (R turns it, Esc cancels)",
+    "placedLog": "Panel: placed {reference} {part} (undo with Cmd+Z)",
+    "schematicToolLog": "The schematic tools (wiring, part insertion …) cannot be used on a panel layout sheet.",
+    "panelToolLog": "The panel tools (enclosure, DIN rail, duct) can only be used on a panel layout sheet.",
+    "noSheetLog": "Panel: no sheet is open",
+    "tool": {
+      "panel_outline": "Enclosure",
+      "din_rail": "DIN rail",
+      "duct": "Duct"
+    },
+    "toolLog": {
+      "panel_outline": "Enclosure: drag a rectangle for the panel (Esc to cancel)",
+      "din_rail": "DIN rail: drag horizontally at the mounting line (Esc to cancel)",
+      "duct": "Duct: drag a rectangle for the wiring duct (Esc to cancel)"
+    },
+    "added": {
+      "panel_outline": "Panel: added an enclosure (undo with Cmd+Z)",
+      "din_rail": "Panel: added a DIN rail (undo with Cmd+Z)",
+      "duct": "Panel: added a wiring duct (undo with Cmd+Z)"
+    },
+    "ribbonCreate": "Create panel",
+    "ribbonUnplaced": "Unplaced parts",
+    "ribbonLayoutTable": "Layout table",
+    "prop": {
+      "kind": {
+        "panel_outline": "Enclosure",
+        "din_rail": "DIN rail",
+        "duct": "Wiring duct",
+        "footprint": "Footprint"
+      },
+      "reference": "Reference",
+      "referenceHint": "The reference designator links the footprint to the schematic part. Change it on the schematic symbol.",
+      "partNo": "Part number",
+      "name": "Name",
+      "width": "Width mm",
+      "height": "Height mm",
+      "rotation": "Rotation",
+      "rail": "On rail",
+      "railName": "Rail {index}",
+      "railNone": "not on a rail",
+      "railY": "Mounting line y",
+      "railX1": "Left x",
+      "railX2": "Right x"
+    },
+    "todoPhase": "Planned for a later phase of the panel layout work"
+  },
+  "sheets": {
+    "addTitle": "Add sheet",
+    "addSchematic": "Schematic",
+    "addPanel": "Panel layout",
+    "addHint": "Pick what the new sheet is for.",
+    "kindRow": "Sheet kind",
+    "kind": {
+      "schematic": "Schematic",
+      "panel": "Panel layout"
+    },
+    "addedLog": "Added the sheet {name} ({kind}) (undo with Cmd+Z)"
   }
 }

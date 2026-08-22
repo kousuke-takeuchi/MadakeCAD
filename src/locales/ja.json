@@ -267,6 +267,25 @@
       "partsDb": "部品DB管理",
       "macros": "マクロ管理",
       "userLibrary": "ユーザーライブラリ"
+    },
+    "panelGroup": {
+      "enclosure": "盤",
+      "footprint": "フットプリント",
+      "placement": "配置",
+      "reports": "帳票"
+    },
+    "panelSmall": {
+      "insertByPart": "型番から挿入",
+      "lookupEdit": "ルックアップ編集",
+      "nameplate": "銘板",
+      "align": "整列",
+      "distribute": "等間隔",
+      "alignRail": "レール整列",
+      "balloon": "バルーン採番",
+      "dimension": "寸法",
+      "clearance": "間隔チェック",
+      "panelWiring": "盤内配線図",
+      "legend": "凡例表"
     }
   },
   "templates": {
@@ -921,5 +940,80 @@
     "tagRight": "右向きの旗",
     "tagHint": "ネットラベルを方向付きの旗で描きます。信号がどちら向きかが一目で分かります。",
     "tagChangedLog": "ネットラベル {name}: タグ形状を {tag} にしました"
+  },
+  "panel": {
+    "tab": "未配置部品",
+    "head": "未配置部品 (回路図より)",
+    "count": "{count}件",
+    "empty": "回路図の部品はすべて盤へ配置済みです。",
+    "hint": "行をクリックしてから盤面をクリックすると置けます。DINレールに吸い付き、Rで向きが変わります。",
+    "errorHint": "未配置部品の一覧を読めませんでした: {error}",
+    "status": {
+      "sized": "部品DBの外形",
+      "default": "寸法から自動",
+      "unregistered": "未登録"
+    },
+    "statusHint": {
+      "sized": "外形寸法は部品DBに登録されているものです。",
+      "default": "この型番の外形が部品DBに無いため、既定の矩形で置きます。",
+      "unregistered": "型番がまだ入っていないため、既定の矩形で置きます。"
+    },
+    "placeLog": "盤: {reference} を配置します。盤面をクリック (Rで向き、Escで中止)",
+    "placedLog": "盤: {reference} {part} を配置しました (Cmd+Zで戻せます)",
+    "schematicToolLog": "盤レイアウトシートでは回路図のツール (配線・部品挿入など) は使えません。",
+    "panelToolLog": "盤のツール (盤枠・DINレール・ダクト) は盤レイアウトシートでだけ使えます。",
+    "noSheetLog": "盤: シートが開いていません",
+    "tool": {
+      "panel_outline": "盤筐体",
+      "din_rail": "DINレール",
+      "duct": "ダクト"
+    },
+    "toolLog": {
+      "panel_outline": "盤筐体: 矩形にドラッグして盤の外形を描きます (Escで中止)",
+      "din_rail": "DINレール: 取付線の高さで水平にドラッグします (Escで中止)",
+      "duct": "ダクト: 矩形にドラッグして配線ダクトを描きます (Escで中止)"
+    },
+    "added": {
+      "panel_outline": "盤: 盤の外形を追加しました (Cmd+Zで戻せます)",
+      "din_rail": "盤: DINレールを追加しました (Cmd+Zで戻せます)",
+      "duct": "盤: 配線ダクトを追加しました (Cmd+Zで戻せます)"
+    },
+    "ribbonCreate": "盤作成",
+    "ribbonUnplaced": "未配置部品",
+    "ribbonLayoutTable": "配置表",
+    "prop": {
+      "kind": {
+        "panel_outline": "盤の外形",
+        "din_rail": "DINレール",
+        "duct": "配線ダクト",
+        "footprint": "フットプリント"
+      },
+      "reference": "参照記号",
+      "referenceHint": "参照記号は回路図の部品との結び付きです。変えるときは回路図のシンボル側で変えます。",
+      "partNo": "型番",
+      "name": "名前",
+      "width": "幅 mm",
+      "height": "高さ mm",
+      "rotation": "回転",
+      "rail": "所属レール",
+      "railName": "レール{index}",
+      "railNone": "レールに乗っていません",
+      "railY": "取付線 y",
+      "railX1": "左端 x",
+      "railX2": "右端 x"
+    },
+    "todoPhase": "盤レイアウトの後半フェーズで実装予定"
+  },
+  "sheets": {
+    "addTitle": "シートを追加",
+    "addSchematic": "回路図",
+    "addPanel": "盤レイアウト",
+    "addHint": "追加するシートの種別を選びます。",
+    "kindRow": "シート種別",
+    "kind": {
+      "schematic": "回路図",
+      "panel": "盤レイアウト"
+    },
+    "addedLog": "シート「{name}」({kind}) を追加しました (Cmd+Zで戻せます)"
   }
 }

@@ -128,6 +128,25 @@ export interface Footprint {
   part_no: string;
 }
 
+/**
+ * 回路図にあって、どの盤レイアウトシートにもフットプリントが無い部品
+ * (未配置部品パネルの1行。Rustの`madake_core::panel::UnplacedComponent`)。
+ */
+export interface UnplacedComponent {
+  /** 参照記号 (例 "K1")。盤のフットプリントとの結び付き。 */
+  reference: string;
+  /** 型番 (回路図のシンボルの値)。空なら未指定。 */
+  part_no: string;
+  /** 代表シンボルのid。 */
+  symbol_id: string;
+  /** その部品が最初に出てくる回路図シート。 */
+  sheet_id: string;
+  /** 置くときの外形の幅 mm (部品DBの寸法。無ければ既定の矩形)。 */
+  w: number;
+  /** 置くときの外形の高さ mm。 */
+  h: number;
+}
+
 export type Entity =
   | ({ kind: "symbol" } & SymbolInstance)
   | ({ kind: "wire" } & Wire)
@@ -769,6 +788,11 @@ interface Ipc {
   searchProject(query: string, kinds: SearchKind[]): Promise<SearchHit[]>;
   /** デバイスナビゲータのツリー (参照記号 → 機能)。 */
   getDeviceTree(): Promise<DeviceNode[]>;
+  /**
+   * 未配置部品 (回路図にあって、どの盤レイアウトシートにもフットプリントが無い部品)。
+   * 外形寸法は部品DBから引き、登録の無い型番は既定の矩形になる (M4仕様 §8)。
+   */
+  unplacedComponents(): Promise<UnplacedComponent[]>;
   /** シート内 (nullでプロジェクト全体) の端子台一覧。 */
   listTerminalBlocks(sheetId: string | null): Promise<TerminalBlockInfo[]>;
   /** 端子台1つのチャート。端子台でなければnull。 */
@@ -852,6 +876,7 @@ const tauriIpc: Ipc = {
   searchProject: (query: string, kinds: SearchKind[]) =>
     invoke<SearchHit[]>("search_project", { query, kinds }),
   getDeviceTree: () => invoke<DeviceNode[]>("get_device_tree"),
+  unplacedComponents: () => invoke<UnplacedComponent[]>("unplaced_components"),
   listTerminalBlocks: (sheetId: string | null) =>
     invoke<TerminalBlockInfo[]>("list_terminal_blocks", { sheetId }),
   getTerminalChart: (entityId: string) =>
@@ -1005,6 +1030,8 @@ const httpIpc: Ipc = {
     return res.hits;
   },
   getDeviceTree: async () => (await http<{ devices: DeviceNode[] }>("/devices")).devices,
+  unplacedComponents: async () =>
+    (await http<{ unplaced: UnplacedComponent[] }>("/panel/unplaced")).unplaced,
   listTerminalBlocks: (sheetId) =>
     http<TerminalBlockInfo[]>(`/terminals${sheetId ? `?sheet_id=${sheetId}` : ""}`),
   getTerminalChart: async (entityId) => {

@@ -2,13 +2,26 @@
 
 import { defineStore } from "pinia";
 import type { ViewClass } from "../canvas/viewClasses";
+import type { SheetKind } from "../ipc";
 import { useChatStore } from "./chat";
 
 /**
  * 左ドックのタブ。"chat" は chat store の panelOpen="expanded" と対で同期する。
  * "devices" = デバイスナビゲータ (spec §10)。
+ * "panel" = 未配置部品 (盤レイアウトシートを開いているあいだだけ出る、M4 §8)。
  */
-export type LeftPanelTab = "project" | "devices" | "chat";
+export type LeftPanelTab = "project" | "devices" | "panel" | "chat";
+
+/** リボンのタブ (表示名はi18nカタログの`ribbon.tab.*`)。 */
+export type RibbonTab =
+  | "home"
+  | "project"
+  | "schematic"
+  | "panel"
+  | "report"
+  | "io"
+  | "view"
+  | "admin";
 
 export const useUiStore = defineStore("ui", {
   state: () => ({
@@ -16,6 +29,8 @@ export const useUiStore = defineStore("ui", {
     symbolPickerOpen: false,
     settingsOpen: false,
     leftPanelTab: "project" as LeftPanelTab,
+    /** 表示中のリボンタブ。盤レイアウトシートを開くと「パネル」へ自動で移る。 */
+    ribbonTab: "schematic" as RibbonTab,
     /**
      * チャットの入力途中テキスト。左ドックの入力欄とキャンバスの浮き入力カードは
      * 別コンポーネントなので、下書きはここに置いて双方から共有する。
@@ -36,6 +51,29 @@ export const useUiStore = defineStore("ui", {
   actions: {
     setLeftPanelTab(tab: LeftPanelTab) {
       this.leftPanelTab = tab;
+    },
+    setRibbonTab(tab: RibbonTab) {
+      this.ribbonTab = tab;
+    },
+    /**
+     * 表示中のシートの種別に合わせてリボンと左ドックを切り替える
+     * (.pen「M4デザイン - リボン パネル/レポート/管理タブ」:
+     * 「パネルタブは盤レイアウトシート選択時に自動アクティブ化」)。
+     *
+     * 戻すときは**パネル系を開いていたときだけ**回路図・プロジェクトへ戻すので、
+     * 自分で開いた「表示」タブなどは取り上げない。エージェントと会話中の左ドックも
+     * そのままにする (会話を見失わないため)。
+     */
+    syncSheetKind(kind: SheetKind) {
+      if (kind === "panel") {
+        this.ribbonTab = "panel";
+        if (this.leftPanelTab === "project" || this.leftPanelTab === "devices") {
+          this.leftPanelTab = "panel";
+        }
+        return;
+      }
+      if (this.ribbonTab === "panel") this.ribbonTab = "schematic";
+      if (this.leftPanelTab === "panel") this.leftPanelTab = "project";
     },
     setChatDraft(text: string) {
       this.chatDraft = text;

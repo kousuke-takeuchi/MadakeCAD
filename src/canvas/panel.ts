@@ -38,7 +38,10 @@ export interface HatchLine {
 }
 
 /** フットプリントが盤面で占める寸法。90/270度回転で幅と高さが入れ替わる。 */
-export function footprintSize(fp: Footprint): { w: number; h: number } {
+export function footprintSize(fp: Pick<Footprint, "w" | "h" | "rotation">): {
+  w: number;
+  h: number;
+} {
   return fp.rotation % 180 === 90 ? { w: fp.h, h: fp.w } : { w: fp.w, h: fp.h };
 }
 
