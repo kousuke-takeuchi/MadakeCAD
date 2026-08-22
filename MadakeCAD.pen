@@ -372,7 +372,8 @@
                   "fill": "$ui-text",
                   "content": "ホーム",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -400,7 +401,8 @@
                   "fill": "$ui-text",
                   "content": "プロジェクト",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -457,7 +459,8 @@
                   "fill": "$ui-text",
                   "content": "パネル",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -485,7 +488,8 @@
                   "fill": "$ui-text",
                   "content": "レポート",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -513,7 +517,8 @@
                   "fill": "$ui-text",
                   "content": "読み込み/書き出し",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -541,7 +546,8 @@
                   "fill": "$ui-text",
                   "content": "表示",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -569,7 +575,8 @@
                   "fill": "$ui-text",
                   "content": "管理",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -17264,7 +17271,8 @@
                   "fill": "$ui-text",
                   "content": "ホーム",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -17292,7 +17300,8 @@
                   "fill": "$ui-text",
                   "content": "プロジェクト",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -17349,7 +17358,8 @@
                   "fill": "$ui-text",
                   "content": "パネル",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -17377,7 +17387,8 @@
                   "fill": "$ui-text",
                   "content": "レポート",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -17405,7 +17416,8 @@
                   "fill": "$ui-text",
                   "content": "読み込み/書き出し",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -17433,7 +17445,8 @@
                   "fill": "$ui-text",
                   "content": "表示",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -17461,7 +17474,8 @@
                   "fill": "$ui-text",
                   "content": "管理",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -26806,7 +26820,8 @@
                   "fill": "#2B2F33",
                   "content": "配線を選択してsqと線色を設定します",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -26899,7 +26914,8 @@
                   "fill": "#2B2F33",
                   "content": "IEC 62491準拠の線番を自動採番",
                   "fontFamily": "Noto Sans JP",
-                  "fontSize": 10
+                  "fontSize": 10,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -27614,7 +27630,8 @@
                           "fill": "#2B2F33",
                           "content": "名前を付けて保存",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -27657,7 +27674,8 @@
                           "fill": "#2B2F33",
                           "content": "名前を付けて保存",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -27744,7 +27762,8 @@
                           "fill": "#9CA3AF",
                           "content": "名前を付けて保存",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -28374,7 +28393,8 @@
                           "fill": "#6B7178",
                           "content": "一般",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -28419,7 +28439,8 @@
                           "fill": "#6B7178",
                           "content": "チャット",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -28441,7 +28462,8 @@
                           "fill": "#6B7178",
                           "content": "MCP",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -28463,7 +28485,8 @@
                           "fill": "#6B7178",
                           "content": "アカウント",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -29224,7 +29247,8 @@
                           "fill": "#6B7178",
                           "content": "エージェント",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -29246,7 +29270,8 @@
                           "fill": "#6B7178",
                           "content": "チャット",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -29268,7 +29293,8 @@
                           "fill": "#6B7178",
                           "content": "MCP",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -29290,7 +29316,8 @@
                           "fill": "#6B7178",
                           "content": "アカウント",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -37320,7 +37347,8 @@
                               "fill": "#2B2F33",
                               "content": "B",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 10
+                              "fontSize": 10,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -37344,7 +37372,8 @@
                               "fill": "#2B2F33",
                               "content": "C",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 10
+                              "fontSize": 10,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -37540,7 +37569,8 @@
                               "fill": "#6B7178",
                               "content": "すべて",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 11
+                              "fontSize": 11,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -37585,7 +37615,8 @@
                               "fill": "#6B7178",
                               "content": "電源",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 11
+                              "fontSize": 11,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -37607,7 +37638,8 @@
                               "fill": "#6B7178",
                               "content": "安全回路",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 11
+                              "fontSize": 11,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -37629,7 +37661,8 @@
                               "fill": "#6B7178",
                               "content": "センサ入力",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 11
+                              "fontSize": 11,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -37651,7 +37684,8 @@
                               "fill": "#6B7178",
                               "content": "ユーザー",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 11
+                              "fontSize": 11,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -37844,7 +37878,8 @@
                                   "fill": "#2B2F33",
                                   "content": "正逆転回路",
                                   "fontFamily": "Noto Sans JP",
-                                  "fontSize": 10
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -37900,7 +37935,8 @@
                                   "fill": "#2B2F33",
                                   "content": "スターデルタ起動",
                                   "fontFamily": "Noto Sans JP",
-                                  "fontSize": 10
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
                                 }
                               ]
                             },
@@ -37947,7 +37983,8 @@
                                   "fill": "#2B2F33",
                                   "content": "インバータ駆動",
                                   "fontFamily": "Noto Sans JP",
-                                  "fontSize": 10
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -38026,7 +38063,8 @@
                                   "fill": "#6B7178",
                                   "content": "B 保持回路",
                                   "fontFamily": "Noto Sans JP",
-                                  "fontSize": 10
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
                                 }
                               ]
                             },
@@ -38050,7 +38088,8 @@
                                   "fill": "#6B7178",
                                   "content": "C 寸動",
                                   "fontFamily": "Noto Sans JP",
-                                  "fontSize": 10
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
                                 }
                               ]
                             },
@@ -38352,7 +38391,8 @@
                           "fill": "#6B7178",
                           "content": "参照記号",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 10
+                          "fontSize": 10,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -38376,7 +38416,8 @@
                           "fill": "#6B7178",
                           "content": "型番",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 10
+                          "fontSize": 10,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -38400,7 +38441,8 @@
                           "fill": "#6B7178",
                           "content": "ネット",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 10
+                          "fontSize": 10,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -38424,7 +38466,8 @@
                           "fill": "#6B7178",
                           "content": "テキスト",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 10
+                          "fontSize": 10,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -39034,7 +39077,8 @@
                           "fill": "#2B2F33",
                           "content": "コイル A1-A2",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 10
+                          "fontSize": 10,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -39070,7 +39114,8 @@
                           "fill": "#2B2F33",
                           "content": "接点 13-14",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 10
+                          "fontSize": 10,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -39106,7 +39151,8 @@
                           "fill": "#2B2F33",
                           "content": "接点 21-22",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 10
+                          "fontSize": 10,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -39142,7 +39188,8 @@
                           "fill": "#2B2F33",
                           "content": "接点 31-32 (ドラッグで配置)",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 10
+                          "fontSize": 10,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -39203,7 +39250,8 @@
                           "fill": "#2B2F33",
                           "content": "端子 1-8",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 10
+                          "fontSize": 10,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -42024,7 +42072,8 @@
                           "fill": "#6B7178",
                           "content": "JIS A4 縦",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -42058,7 +42107,8 @@
                           "fill": "#6B7178",
                           "content": "参考図面様式",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -42092,7 +42142,8 @@
                           "fill": "#6B7178",
                           "content": "自社様式 2026",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -44818,7 +44869,8 @@
                           "fill": "#6B7178",
                           "content": "線",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 11
+                          "fontSize": 11,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -44840,7 +44892,8 @@
                           "fill": "#6B7178",
                           "content": "矩",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 11
+                          "fontSize": 11,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -44862,7 +44915,8 @@
                           "fill": "#6B7178",
                           "content": "円",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 11
+                          "fontSize": 11,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -44884,7 +44938,8 @@
                           "fill": "#6B7178",
                           "content": "弧",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 11
+                          "fontSize": 11,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -44906,7 +44961,8 @@
                           "fill": "#6B7178",
                           "content": "文",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 11
+                          "fontSize": 11,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -44928,7 +44984,8 @@
                           "fill": "#6B7178",
                           "content": "属",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 11
+                          "fontSize": 11,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -44950,7 +45007,8 @@
                           "fill": "#6B7178",
                           "content": "ピ",
                           "fontFamily": "Noto Sans JP",
-                          "fontSize": 11
+                          "fontSize": 11,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -47014,7 +47072,8 @@
                       "fill": "#6B7178",
                       "content": "回路 /1",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 10
+                      "fontSize": 10,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -47036,7 +47095,8 @@
                       "fill": "#6B7178",
                       "content": "回路 /2",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 10
+                      "fontSize": 10,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -49604,7 +49664,8 @@
                               "fill": "#2B2F33",
                               "content": "PS1",
                               "fontFamily": "JetBrains Mono",
-                              "fontSize": 10
+                              "fontSize": 10,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -49660,7 +49721,8 @@
                               "fill": "#2B2F33",
                               "content": "S8VK-G06024",
                               "fontFamily": "JetBrains Mono",
-                              "fontSize": 10
+                              "fontSize": 10,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -49716,7 +49778,8 @@
                               "fill": "#2B2F33",
                               "content": "fp_s8vk (60×90)",
                               "fontFamily": "JetBrains Mono",
-                              "fontSize": 10
+                              "fontSize": 10,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -49772,7 +49835,8 @@
                               "fill": "#2B2F33",
                               "content": "③ (バルーン)",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 10
+                              "fontSize": 10,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -49828,7 +49892,8 @@
                               "fill": "#2B2F33",
                               "content": "レール1",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 10
+                              "fontSize": 10,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -49884,7 +49949,8 @@
                               "fill": "#2B2F33",
                               "content": "128.0 mm",
                               "fontFamily": "JetBrains Mono",
-                              "fontSize": 10
+                              "fontSize": 10,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -49940,7 +50006,8 @@
                               "fill": "#2B2F33",
                               "content": "「主電源」",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 10
+                              "fontSize": 10,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -50053,7 +50120,8 @@
                               "fill": "#2B2F33",
                               "content": "✓ OK (左10 / 右12mm)",
                               "fontFamily": "Noto Sans JP",
-                              "fontSize": 10
+                              "fontSize": 10,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -50186,7 +50254,8 @@
                       "fill": "#6B7178",
                       "content": "ホーム",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -50213,7 +50282,8 @@
                       "fill": "#6B7178",
                       "content": "プロジェクト",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -50240,7 +50310,8 @@
                       "fill": "#6B7178",
                       "content": "回路図",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -50295,7 +50366,8 @@
                       "fill": "#6B7178",
                       "content": "レポート",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -50322,7 +50394,8 @@
                       "fill": "#6B7178",
                       "content": "読み込み/書き出し",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -50349,7 +50422,8 @@
                       "fill": "#6B7178",
                       "content": "表示",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -50376,7 +50450,8 @@
                       "fill": "#6B7178",
                       "content": "管理",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -51239,7 +51314,8 @@
                       "fill": "#6B7178",
                       "content": "ホーム",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -51266,7 +51342,8 @@
                       "fill": "#6B7178",
                       "content": "プロジェクト",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -51293,7 +51370,8 @@
                       "fill": "#6B7178",
                       "content": "回路図",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -51320,7 +51398,8 @@
                       "fill": "#6B7178",
                       "content": "パネル",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -51375,7 +51454,8 @@
                       "fill": "#6B7178",
                       "content": "読み込み/書き出し",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -51402,7 +51482,8 @@
                       "fill": "#6B7178",
                       "content": "表示",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -51429,7 +51510,8 @@
                       "fill": "#6B7178",
                       "content": "管理",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -52138,7 +52220,8 @@
                       "fill": "#6B7178",
                       "content": "ホーム",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -52165,7 +52248,8 @@
                       "fill": "#6B7178",
                       "content": "プロジェクト",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -52192,7 +52276,8 @@
                       "fill": "#6B7178",
                       "content": "回路図",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -52219,7 +52304,8 @@
                       "fill": "#6B7178",
                       "content": "パネル",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -52246,7 +52332,8 @@
                       "fill": "#6B7178",
                       "content": "レポート",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -52273,7 +52360,8 @@
                       "fill": "#6B7178",
                       "content": "読み込み/書き出し",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -52300,7 +52388,8 @@
                       "fill": "#6B7178",
                       "content": "表示",
                       "fontFamily": "Noto Sans JP",
-                      "fontSize": 11
+                      "fontSize": 11,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -53033,6 +53122,692 @@
           "fontFamily": "Noto Sans JP",
           "fontSize": 10,
           "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "O956Db",
+      "x": 0,
+      "y": 12143,
+      "name": "M3デザイン - テンプレート選択/検証ループ",
+      "width": 1240,
+      "fill": "$ribbon-bg",
+      "cornerRadius": 12,
+      "layout": "vertical",
+      "gap": 16,
+      "padding": 28,
+      "children": [
+        {
+          "type": "text",
+          "id": "q3pCVm",
+          "name": "Tタイトル",
+          "fill": "$ui-text",
+          "content": "M3 テンプレート選択と検証ループ表示",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 17,
+          "fontWeight": "700"
+        },
+        {
+          "type": "text",
+          "id": "yMbc0",
+          "name": "T説明",
+          "fill": "$ui-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "テンプレート=Command列JSON(同梱3種+ユーザー追加)。適用は1ターン(undo一発)。起動: 新規作成時+リボン「プロジェクト」。検証ループ=エージェントが編集後にrun_verificationを自走し、Errorが残れば修正して再検証(最大3回)。進行はチャットのツールチップ行で見せる。",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "cVXFm",
+          "name": "T行",
+          "width": "fill_container",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "TjONf",
+              "name": "テンプレート選択ダイアログ",
+              "clip": true,
+              "width": 720,
+              "fill": "#F2F4F5",
+              "cornerRadius": 8,
+              "stroke": "#C6CBD1",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "BSSuL",
+                  "name": "ヘッダ",
+                  "width": "fill_container",
+                  "fill": "#D9DDE1",
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "oPWX4",
+                      "name": "題",
+                      "fill": "#2B2F33",
+                      "content": "テンプレートから開始",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "oja5O",
+                      "name": "X",
+                      "fill": "#6B7178",
+                      "content": "✕",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "jRca6",
+                  "name": "本体",
+                  "width": "fill_container",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "xjHTq",
+                      "name": "ギャラリー",
+                      "width": 380,
+                      "stroke": "#C6CBD1",
+                      "strokeWidth": {
+                        "right": 1
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "b4C5h",
+                          "name": "t 空白の図面",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": 1,
+                          "gap": 10,
+                          "padding": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "cornerRadius": 2,
+                              "id": "jScC3",
+                              "name": "thumb",
+                              "fill": "#FAFAFA",
+                              "width": 96,
+                              "height": 54,
+                              "stroke": "#C6CBD1",
+                              "strokeWidth": 1
+                            },
+                            {
+                              "type": "frame",
+                              "id": "rWRjy",
+                              "name": "tx",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "omdrJ",
+                                  "name": "n",
+                                  "fill": "#2B2F33",
+                                  "content": "空白の図面",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 12
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "RjZ16",
+                                  "name": "s",
+                                  "fill": "#6B7178",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "JIS A3横図枠のみ",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "B9Crj",
+                          "name": "t 24V制御 基本回路",
+                          "width": "fill_container",
+                          "fill": "#CCE4F7",
+                          "cornerRadius": 4,
+                          "stroke": "#1F6FBF",
+                          "strokeWidth": 1.5,
+                          "gap": 10,
+                          "padding": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "cornerRadius": 2,
+                              "id": "glG6c",
+                              "name": "thumb",
+                              "fill": "#FAFAFA",
+                              "width": 96,
+                              "height": 54,
+                              "stroke": "#C6CBD1",
+                              "strokeWidth": 1
+                            },
+                            {
+                              "type": "frame",
+                              "id": "MHE4x",
+                              "name": "tx",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "a3gzKs",
+                                  "name": "n",
+                                  "fill": "#2B2F33",
+                                  "content": "24V制御 基本回路",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "fZQsz",
+                                  "name": "s",
+                                  "fill": "#6B7178",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "電源+ヒューズ+端子台。制御回路の土台",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "SLBSQ",
+                          "name": "t モータ起動回路",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": 1,
+                          "gap": 10,
+                          "padding": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "cornerRadius": 2,
+                              "id": "h11YQm",
+                              "name": "thumb",
+                              "fill": "#FAFAFA",
+                              "width": 96,
+                              "height": 54,
+                              "stroke": "#C6CBD1",
+                              "strokeWidth": 1
+                            },
+                            {
+                              "type": "frame",
+                              "id": "u6wcR8",
+                              "name": "tx",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "AxjLT",
+                                  "name": "n",
+                                  "fill": "#2B2F33",
+                                  "content": "モータ起動回路",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 12
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "x3I56L",
+                                  "name": "s",
+                                  "fill": "#6B7178",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "MCB+コンタクタ+サーマル+モータ",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "etouj",
+                          "name": "t 非常停止回路",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": 1,
+                          "gap": 10,
+                          "padding": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "cornerRadius": 2,
+                              "id": "icMDh",
+                              "name": "thumb",
+                              "fill": "#FAFAFA",
+                              "width": 96,
+                              "height": 54,
+                              "stroke": "#C6CBD1",
+                              "strokeWidth": 1
+                            },
+                            {
+                              "type": "frame",
+                              "id": "hC4yF",
+                              "name": "tx",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "v6h31",
+                                  "name": "n",
+                                  "fill": "#2B2F33",
+                                  "content": "非常停止回路",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 12
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "sCyjG",
+                                  "name": "s",
+                                  "fill": "#6B7178",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "非常停止PB+安全リレーの雛形",
+                                  "fontFamily": "Noto Sans JP",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pz0LY",
+                          "name": "user",
+                          "width": "fill_container",
+                          "padding": [
+                            6,
+                            4
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "pf9YH",
+                              "name": "t",
+                              "fill": "#1F6FBF",
+                              "content": "+ ユーザーテンプレートを追加… (~/MadakeCAD/templates/)",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uhyew",
+                      "name": "プレビュー側",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "h2GWV",
+                          "name": "pn",
+                          "fill": "#2B2F33",
+                          "content": "24V制御 基本回路",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "rectangle",
+                          "cornerRadius": 4,
+                          "id": "u88v7",
+                          "name": "大プレビュー",
+                          "fill": "#FFFFFF",
+                          "width": "fill_container",
+                          "height": 170,
+                          "stroke": "#C6CBD1",
+                          "strokeWidth": 1
+                        },
+                        {
+                          "type": "text",
+                          "id": "q6ZIs",
+                          "name": "desc",
+                          "fill": "#6B7178",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "含まれるもの: DC24V電源(PS1)・ヒューズ(F1)・端子台TB1(4極)・0V/24V母線とネットラベル。適用後すぐ配線を足せる状態。適用は1回のCommand実行(⌘Zで一括で戻せます)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Lu6wN",
+                          "name": "footer",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "justifyContent": "end",
+                          "children": [
+                            {
+                              "id": "BcyKW",
+                              "type": "ref",
+                              "ref": "x4Qvxy",
+                              "name": "キャンセル",
+                              "descendants": {
+                                "jkIc9": {
+                                  "content": "キャンセル"
+                                }
+                              }
+                            },
+                            {
+                              "id": "z5mDRA",
+                              "type": "ref",
+                              "ref": "Axj7d",
+                              "name": "開始",
+                              "descendants": {
+                                "gsbC2": {
+                                  "content": "このテンプレートで開始"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "duIUL",
+              "name": "検証ループ表示",
+              "width": 440,
+              "fill": "#FFFFFF",
+              "cornerRadius": 8,
+              "stroke": "#C6CBD1",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 8,
+              "padding": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "QOSvx",
+                  "name": "t",
+                  "fill": "#2B2F33",
+                  "content": "チャット: 検証ループ中の表示 (ツールチップ行の拡張)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "t1nk5",
+                  "name": "chip execute_commands",
+                  "width": "fill_container",
+                  "fill": "#FAFAFA",
+                  "cornerRadius": 8,
+                  "stroke": "#C6CBD1",
+                  "strokeWidth": 1,
+                  "gap": 7,
+                  "padding": [
+                    5,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "E8yw0",
+                      "name": "i",
+                      "fill": "#1F8A4C",
+                      "content": "✓",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "boDxh",
+                      "name": "n",
+                      "fill": "#2B2F33",
+                      "content": "execute_commands",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "zybnb",
+                      "name": "s",
+                      "fill": "#6B7178",
+                      "content": "部品6点を配置し配線 (rev 12)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "h3vQEV",
+                  "name": "chip run_verification",
+                  "width": "fill_container",
+                  "fill": "#FAFAFA",
+                  "cornerRadius": 8,
+                  "stroke": "#C6CBD1",
+                  "strokeWidth": 1,
+                  "gap": 7,
+                  "padding": [
+                    5,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "RnQwi",
+                      "name": "i",
+                      "fill": "#1F8A4C",
+                      "content": "✓",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "CWQBw",
+                      "name": "n",
+                      "fill": "#2B2F33",
+                      "content": "run_verification",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "DzehO",
+                      "name": "s",
+                      "fill": "#6B7178",
+                      "content": "検証 1回目: エラー1件 (elec.overcurrent)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ioyu1",
+                  "name": "chip execute_commands",
+                  "width": "fill_container",
+                  "fill": "#FAFAFA",
+                  "cornerRadius": 8,
+                  "stroke": "#C6CBD1",
+                  "strokeWidth": 1,
+                  "gap": 7,
+                  "padding": [
+                    5,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "UXsgI",
+                      "name": "i",
+                      "fill": "#1F8A4C",
+                      "content": "✓",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "C6tG1s",
+                      "name": "n",
+                      "fill": "#2B2F33",
+                      "content": "execute_commands",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "ORwYC",
+                      "name": "s",
+                      "fill": "#6B7178",
+                      "content": "F1の定格を10Aへ修正 (rev 13)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "YmbSQ",
+                  "name": "chip run_verification",
+                  "width": "fill_container",
+                  "fill": "#FAFAFA",
+                  "cornerRadius": 8,
+                  "stroke": "#C6CBD1",
+                  "strokeWidth": 1,
+                  "gap": 7,
+                  "padding": [
+                    5,
+                    9
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "N5GqI",
+                      "name": "i",
+                      "fill": "#8A9099",
+                      "content": "◐",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "cyPxr",
+                      "name": "n",
+                      "fill": "#2B2F33",
+                      "content": "run_verification",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "grqiw",
+                      "name": "s",
+                      "fill": "#6B7178",
+                      "content": "検証ループ 2/3: 再検証中…",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "qVz9O",
+                  "name": "loopnote",
+                  "width": "fill_container",
+                  "padding": [
+                    4,
+                    2
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "g87yZw",
+                      "name": "t",
+                      "fill": "#6B7178",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "ループ上限3回。終了時に「検証: エラー0・警告1で完了」を応答に含める。ループ中もターンは1つ(undo一発)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
       ]
     }
