@@ -7,7 +7,9 @@
 
 > **フェーズ2完了 (2026-08-22)** — §3(整えループ)・§4(並列エージェント)・§5の第1弾(AnthropicApiBackend+OSキーチェーン)を実装済み。
 > 計画と検証結果: [`docs/superpowers/plans/2026-08-22-m3-phase2-tidy-parallel-api.md`](../../superpowers/plans/2026-08-22-m3-phase2-tidy-parallel-api.md)。
-> 残り(**フェーズ3**)は §5のOpenAI互換/Geminiバックエンド、§3のバリアント数(2〜4案の比較)、§4の比較案UX。
+> **フェーズ3完了 (2026-08-22)** — §5のプロバイダを**6経路そろえた**(Copilot CLI / OpenAI互換(Ollama含む) / Gemini を追加)。
+> 計画と検証結果: [`docs/superpowers/plans/2026-08-22-m3-phase3-providers.md`](../../superpowers/plans/2026-08-22-m3-phase3-providers.md)。
+> 残り(**フェーズ4**)は §3のバリアント数(2〜4案の比較)、§4の比較案UX。
 
 ## 0. ベンチマーク(2026-08-22調査)
 
@@ -90,27 +92,44 @@ A1プラン「既知の制限」(`docs/superpowers/plans/2026-08-20-phaseA1-ai-c
 - 同じ理由で、図面patch由来の編集ハイライトは会話を特定できない。**2つ以上の会話が同時に走っている間**のpatch由来の領域だけは既定色で描く(ツール呼び出し由来の領域は会話色で描ける)
 
 未決事項:
-- [x] 比較案のUX(シート複製で並べる? 提案パッチのプレビュー?)→ **フェーズ2は「並行実行+会話別色」まで**と決定。シート複製比較・パッチプレビューは需要を見てフェーズ3で設計する
+- [x] 比較案のUX(シート複製で並べる? 提案パッチのプレビュー?)→ **フェーズ2は「並行実行+会話別色」まで**と決定。シート複製比較・パッチプレビューは需要を見て**フェーズ4**で設計する(フェーズ3はプロバイダ拡充に充てた)
 
-## 5. マルチプロバイダ(A3) — フェーズ2
+## 5. マルチプロバイダ(A3) — フェーズ2・3で完了
 
-`AgentBackend`トレイトの実装追加とAI設定画面(デザイン済み6フレーム)のフル実装。
+`AgentBackend`トレイトの実装追加とAI設定画面(デザイン済み6フレーム)のフル実装。**6経路すべて実装済み**。
 
-- **AnthropicApiBackend**: Messages API直(APIキー。ツールはMCPブリッジ経由)
-- **OpenAI互換Backend**: OpenAI / xAI / OpenRouter / Ollama(ローカルURL)を同一実装で
-- **GeminiBackend**
-- 認証アーキタイプ4種(CLI再利用 / APIキー / デバイスコードOAuth / ローカルURL)。**キーはOSキーチェーン保存**(設定ファイル禁止)
-- 設定画面: プロバイダ一覧の接続状態バッジ、詳細ページ、モデルピッカーへの反映
+| 経路 | 実装 | 認証 | 状態 |
+|---|---|---|---|
+| Claude Code CLI(既定) | `ClaudeCliBackend` | CLI自身のサインイン。保存物なし | ✅ A1から通し確認済み |
+| Anthropic API | `AnthropicApiBackend`(Messages API・SSE) | キーチェーン`anthropic_api_key` | 🔶 実キー通しはユーザー確認事項 |
+| GitHub Copilot CLI | `CopilotCliBackend`(`copilot -p … --output-format json`) | CLI自身のGitHubサインイン。**トークンは保存しない** | 🔶 `/login`後の通しはユーザー確認事項 |
+| OpenAI互換 | `OpenAiCompatBackend`(`/chat/completions`・SSE) | キーチェーン`openai_compat_api_key` | 🔶 モック+Ollamaで実証 |
+| Ollama(ローカル) | 同上(ローカルURLプリセット) | 不要(ローカルURLはAuthorizationごと省略) | ✅ 実機で作図1ターン通し確認済み |
+| Google Gemini | `GeminiBackend`(`streamGenerateContent?alt=sse`) | キーチェーン`gemini_api_key` | 🔶 実キー通しはユーザー確認事項 |
+
+- 認証アーキタイプは3種に収束(**CLI再利用 / APIキー / ローカルURL**)。デバイスコードOAuthはCopilotがCLI側で処理するため**MadakeCAD側には不要**だった
+- **キーはOSキーチェーン保存**(設定ファイルには項目自体を作らない)。ツールは全経路で共通の`ToolBridge`(内蔵MCPサーバーをプロセス内で呼ぶ)、ツール往復は上限16
+- 設定画面: プロバイダ選択+経路ごとの詳細欄(パス / URL / モデル / 伏せ字キーの保存・削除)、接続テスト、検出バッジ
 
 受け入れ基準: claude CLI無しの環境でも、APIキー設定のみでチャット作図が動く。キーがファイルに平文で残らない。
+→ **達成**。Ollama(キー不要のローカルURL)経路で、`claude` CLIを使わずに作図1ターンを通した。平文非保存はテストで固定。
 
 ### 未決事項(決定済み)
-- [x] プロバイダ実装の優先順 → **Anthropic API(フェーズ2)→ OpenAI互換(Ollama含む)→ Gemini(フェーズ3)**
-- [x] キーチェーン実装 → **`keyring 4.1.6`を直接使う**(`service="MadakeCAD"` / `account="anthropic_api_key"`)。`SecretStore`トレイトでテストはメモリ保管に差し替え、実キーチェーンのテストは`MADAKE_KEYCHAIN_TESTS=1`のときだけ。macOSは署名変更で許可ダイアログが出るため**読み出しはプロセスに1回だけキャッシュ**する
+- [x] プロバイダ実装の優先順 → **Anthropic API(フェーズ2)→ Copilot CLI → OpenAI互換(Ollama含む)→ Gemini(フェーズ3)**
+- [x] キーチェーン実装 → **`keyring 4.1.6`を直接使う**(`service="MadakeCAD"` / `account`はプロバイダごと: `anthropic_api_key` / `openai_compat_api_key` / `gemini_api_key`)。`SecretStore`トレイトでテストはメモリ保管に差し替え、実キーチェーンのテストは`MADAKE_KEYCHAIN_TESTS=1`のときだけ。macOSは署名変更で許可ダイアログが出るため**読み出しはプロセスに1回だけキャッシュ**する
 
-### 実キーでの通し確認(ユーザー確認事項)
+### 実資格情報での通し確認(ユーザー確認事項・フェーズ3終了時点)
 
-フェーズ2では実APIキーを用意できなかったため、**実キーでの通し(作図・ツール往復・トークン消費)は未確認**。
-確認済みなのは実キー無しで観測できる範囲: プロバイダ切替のUI・ダミーキーの保存(伏せ字+「キー保存済み」バッジ)・
-本物のエンドポイントからの401を種類つきエラーとして表示・キー削除・キー未設定のまま送信したときの案内・
-設定ファイルにキーが残らないこと。実キーが用意できた時点で通しを1回行うこと。
+有料/個人の資格情報が要る3経路は、**実資格情報での通し(作図・ツール往復・トークン消費)が未確認**のまま残っている。
+それぞれ (a) 接続テストの成功表示、(b) アプリで1ターン通し(作図+検証+`undo-turn`で後始末)を1回ずつ行うこと。
+
+| 経路 | ユーザー側で必要な操作 | 追加で見るところ |
+|---|---|---|
+| **GitHub Copilot CLI** | `copilot`を起動して`/login`でサインイン | `--output-format json`のJSONL実イベント形をパーサの別名表へ寄せる(現状はフィクスチャ+寛容パーサ) |
+| **Google Gemini** | Google AI Studio発行の実キーを 設定 > エージェント へ保存 | 実際のfunction callingでMCPツールのスキーマが400にならないこと(`gemini_schema()`の削り込みが十分か) |
+| **Anthropic API** | Anthropic Console発行の実キーを保存 | ツール往復を伴う作図が最後まで通ること |
+
+実資格情報無しで観測できる範囲は**全経路で確認済み**: プロバイダ切替のUI・ダミーキーの保存(伏せ字+「キー保存済み」バッジ)・
+本物のエンドポイントがキー不正/キー無しを弾くところ(Anthropic=401、Gemini=`API_KEY_INVALID`、Copilot=`No authentication information found.`)を
+種類つきエラー+日本語の案内として表示・キー削除・キー未設定のまま送信したときの案内・設定ファイルにキーが残らないこと。
+**Ollama経路は資格情報が要らないため、フェーズ3で実機の通しまで完了している**(唯一の通し済みAPI経路)。
