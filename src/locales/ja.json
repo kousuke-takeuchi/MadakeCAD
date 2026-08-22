@@ -260,7 +260,13 @@
       "start": "作図の開始"
     },
     "adminGroup": {
-      "templates": "テンプレート"
+      "templates": "テンプレート",
+      "library": "ライブラリ"
+    },
+    "adminSmall": {
+      "partsDb": "部品DB管理",
+      "macros": "マクロ管理",
+      "userLibrary": "ユーザーライブラリ"
     }
   },
   "templates": {
@@ -360,6 +366,143 @@
     "unchangedLog": "図枠テンプレート: 「{frame}」はすでに使用中のため変更はありません",
     "folderOpenedLog": "図枠テンプレート: {path} を開きました (ここへ.jsonを置くと一覧に並びます)",
     "folderHintLog": "図枠テンプレート: {path} へ.jsonを置くと一覧に並びます"
+  },
+  "symbolEditor": {
+    "title": "シンボルエディター",
+    "titleWith": "シンボルエディター — {name}",
+    "library": "ライブラリ: ユーザー",
+    "kind": "種別: ユーザーシンボル",
+    "close": "閉じる",
+    "ribbonButton": "シンボルエディタ",
+    "ribbonNew": "空から新規",
+    "ribbonFolder": "シンボルの置き場を開く",
+    "group": {
+      "required": "必須属性",
+      "optional": "任意属性",
+      "rating": "定格",
+      "pins": "接続点 (Wire Connection)",
+      "info": "シンボル情報",
+      "variants": "回転バリアント (自動生成)",
+      "checks": "保存前チェック"
+    },
+    "slot": {
+      "TAG": "TAG (参照記号)",
+      "PART": "PART (型番)",
+      "DESC": "DESC (説明)",
+      "RATING": "RATING (定格)"
+    },
+    "slotToggle": "クリックで配置/解除",
+    "placed": "配置済",
+    "unplaced": "未配置",
+    "pinCount": "{count}点",
+    "noPins": "接続点がまだありません (下のボタンか「ピ」ツールで足します)",
+    "col": {
+      "number": "番号",
+      "dir": "方向",
+      "name": "名前"
+    },
+    "dir": {
+      "up": "上",
+      "down": "下",
+      "left": "左",
+      "right": "右"
+    },
+    "tool": {
+      "select": "選",
+      "line": "線",
+      "rect": "矩",
+      "circle": "円",
+      "arc": "弧",
+      "text": "文",
+      "slot": "属",
+      "pin": "ピ"
+    },
+    "toolName": {
+      "select": "選択 (クリックで掴む・ドラッグで移動・Deleteで削除)",
+      "line": "線 (ドラッグで1本)",
+      "rect": "矩形 (ドラッグで対角)",
+      "circle": "円 (中心からドラッグで半径)",
+      "arc": "弧 (中心からドラッグ。そこから時計回りに90度)",
+      "text": "文字 (座標バーの文字をクリック位置へ)",
+      "slot": "属性テキスト (未配置のものを順に置く)",
+      "pin": "接続点 (クリック位置へ。向きは自動)"
+    },
+    "field": {
+      "id": "ID",
+      "name": "名前 (EN)",
+      "nameJa": "名前",
+      "prefix": "接頭辞",
+      "category": "カテゴリ",
+      "keywords": "検索キー"
+    },
+    "variantsHint": "接続点番号・属性位置は回転に自動追従します (バリアントは保存されません)。",
+    "check": {
+      "pins_grid": {
+        "ok": "接続点{count}点すべて2.5mmグリッド上",
+        "warn": "接続点の位置を確認してください",
+        "error": "グリッドから外れた接続点があります (または接続点が0点)"
+      },
+      "pin_numbers": {
+        "ok": "接続点番号の重複なし",
+        "warn": "接続点番号を確認してください",
+        "error": "同じ位置に接続点が重なっています (または番号が空)"
+      },
+      "slot_required": {
+        "ok": "必須属性スロットあり",
+        "warn": "必須属性スロットを確認してください",
+        "error": "参照記号 (TAG) のスロットがありません"
+      },
+      "slot_optional": {
+        "ok": "任意属性をすべて配置済み",
+        "warn": "任意属性 {keys} が未配置",
+        "error": "任意属性 {keys} が未配置"
+      }
+    },
+    "issue": {
+      "symbol": {
+        "id_empty": "IDを入れてください",
+        "id_invalid": "IDに使えるのは英数字・アンダースコア・ハイフンだけです: {id}",
+        "id_reserved": "同梱シンボルと同じIDは使えません (既存図面の記号が変わってしまいます): {id}",
+        "name_empty": "名前 (日本語・英語のどちらか) を入れてください",
+        "ref_prefix_empty": "参照記号の接頭辞 (K・PB など) を入れてください",
+        "no_primitives": "図形が1つもありません (線・矩形・円などを描いてください)",
+        "primitive_invalid": "図形{index}が正しくありません",
+        "no_pins": "接続点 (ピン) が1つもありません",
+        "pin_number_empty": "番号の無い接続点があります ({x}, {y})",
+        "pin_off_grid": "接続点{number}が2.5mmグリッドから外れています ({x}, {y})",
+        "pin_duplicate": "接続点{number}が同じ位置に2つあります ({x}, {y})",
+        "pin_overlap": "接続点{other}と{number}が同じ位置に重なっています ({x}, {y})",
+        "slot_missing": "参照記号のスロット ({key}) は必須です",
+        "slot_unknown": "知らない属性スロット「{key}」です (使えるのは {keys})",
+        "slot_duplicate": "属性スロット「{key}」が重複しています",
+        "slot_height": "属性スロット「{key}」の文字高が0以下です",
+        "save_failed": "保存できませんでした"
+      }
+    },
+    "cursor": "x: {x}  y: {y} mm",
+    "gridHint": "グリッド 2.5mm スナップ ON",
+    "pinHint": "接続点は必ずグリッド交点に置く",
+    "textValue": "文字",
+    "originMark": "原点 (0,0) = 配置基準点",
+    "duplicateFrom": "既存シンボルを複製して新規…",
+    "pickerSearch": "検索 (名称・記号)",
+    "pickerEmpty": "一致するシンボルがありません",
+    "openFolder": "シンボルの置き場を開く",
+    "noPath": "IDを入れると保存先が決まります",
+    "unsaved": "未保存の変更があります",
+    "keepEditing": "編集へ戻る",
+    "discard": "破棄して閉じる",
+    "cancel": "キャンセル",
+    "save": "ユーザーライブラリへ保存",
+    "saving": "保存中...",
+    "openLog": "シンボルエディタ: 開きました (既存シンボルの複製から始められます)",
+    "closedLog": "シンボルエディタ: 閉じました",
+    "discardedLog": "シンボルエディタ: 変更を破棄して閉じました",
+    "savedLog": "シンボルエディタ: 「{id}」を {path} へ保存しました (部品挿入の「ユーザー」に並びます)",
+    "saveFailedLog": "シンボルエディタ: 保存できませんでした ({reasons})",
+    "duplicatedLog": "シンボルエディタ: 「{source}」を複製して「{id}」の編集を始めました",
+    "folderOpenedLog": "シンボルエディタ: {path} を開きました (ここへ.jsonを置くと一覧に並びます)",
+    "folderHintLog": "シンボルエディタ: {path} へ.jsonを置くと一覧に並びます"
   },
   "macros": {
     "saveTitle": "回路マクロとして保存",

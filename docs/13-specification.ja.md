@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1396仕様項目**。
+全5領域・**1441仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1282,6 +1282,51 @@
 - 行をクリックするとその所在が選ばれ、範囲外の行は無視される <sub>`Surferポップアップ`</sub>
 - Escで閉じると巡回位置も先頭へ戻る <sub>`Surferポップアップ`</sub>
 
+### symbolEditor
+
+- キャンバスのクリック位置は必ず2.5mmグリッドの交点へ吸い付く <sub>`symbol editor canvas geometry`</sub>
+- 原点より左上(マイナス側)をクリックしてもグリッドに吸い付く <sub>`symbol editor canvas geometry`</sub>
+- 図形の上に乗っている接続点をクリックすると、図形ではなく接続点が選ばれる <sub>`symbol editor canvas geometry`</sub>
+- 図形が重なっている場所では、あとから描いた図形が選ばれる <sub>`symbol editor canvas geometry`</sub>
+- 何も無いところをクリックすると選択は外れる <sub>`symbol editor canvas geometry`</sub>
+- 属性テキストは配置位置をクリックして選べる <sub>`symbol editor canvas geometry`</sub>
+- 図形をドラッグすると、その図形の全ての点が同じ量だけ動く <sub>`symbol editor canvas geometry`</sub>
+- 新しい接続点の番号は、いま一番大きい番号の次になる(最初は1番) <sub>`symbol editor canvas geometry`</sub>
+- 方向ボタンで足した接続点は、図形の外側1グリッドの位置にグリッドに乗って置かれる <sub>`symbol editor canvas geometry`</sub>
+- 同じ方向にもう1本足しても、接続点が同じ点に重なることはない <sub>`symbol editor canvas geometry`</sub>
+- 過不足のないシンボルは指摘ゼロで保存できる <sub>`symbol editor validation`</sub>
+- 2.5mmグリッドから外れた接続点は保存前に指摘される <sub>`symbol editor validation`</sub>
+- 同じ位置に同じ番号の接続点が2つあると保存前に指摘される <sub>`symbol editor validation`</sub>
+- 同じ位置に別番号の接続点が重なっていると保存前に指摘される <sub>`symbol editor validation`</sub>
+- 離れた2点に同じ番号を置くのは正しい(端子台の貫通端子)ので指摘しない <sub>`symbol editor validation`</sub>
+- 参照記号(TAG)の属性スロットが無いと保存できない <sub>`symbol editor validation`</sub>
+- 同梱シンボルと同じidは、既存図面の記号が変わってしまうので使えない <sub>`symbol editor validation`</sub>
+- idが空・英数字以外・名前や接頭辞が空・図形0個・接続点0個はいずれも保存できない <sub>`symbol editor validation`</sub>
+- 指摘は見つかった分を全部返すので、直しては保存し直す回数が減る <sub>`symbol editor validation`</sub>
+- 保存前チェックは「グリッド」「番号の重複」「必須属性」「任意属性」の4行を必ず出す <sub>`symbol editor pre-save checklist`</sub>
+- 過不足のないシンボルでは、任意属性が未配置なら注意、それ以外は合格になる <sub>`symbol editor pre-save checklist`</sub>
+- 任意属性をすべて配置すると4行すべてが合格になる <sub>`symbol editor pre-save checklist`</sub>
+- 問題のある行はエラーになり、残りの理由は5行目以降に並ぶ <sub>`symbol editor pre-save checklist`</sub>
+- エラーが1つでもあるあいだは保存ボタンを押せない <sub>`symbol editor pre-save checklist`</sub>
+- 空から始めると、参照記号(TAG)の置き場だけが入った白紙の下書きになる <sub>`symbol editor store`</sub>
+- 既存シンボルを複製して開くと、その図形と接続点がそのまま下書きに入る <sub>`symbol editor store`</sub>
+- 図形を描き足すと、その図形が選択された状態になる <sub>`symbol editor store`</sub>
+- 選択した図形はドラッグで動かせる <sub>`symbol editor store`</sub>
+- 選択した図形・接続点は削除できる <sub>`symbol editor store`</sub>
+- 方向ボタンで足した接続点には次の番号が付き、2.5mmグリッドに乗る <sub>`symbol editor store`</sub>
+- キャンバスで置いた接続点も、クリック位置に関わらずグリッドの交点に乗る <sub>`symbol editor store`</sub>
+- 接続点の番号・名前・方向は表から書き換えられる <sub>`symbol editor store`</sub>
+- 属性テキストは置いたり外したりでき、外した属性はチェックで注意になる <sub>`symbol editor store`</sub>
+- シンボル情報 (id・名前・接頭辞・検索キー) は右のフォームから書き換えられる <sub>`symbol editor store`</sub>
+- 保存先のパスはidに追従する (フッタに出るパス) <sub>`symbol editor store`</sub>
+- 同梱シンボルと同じidにすると、保存前チェックがエラーになり保存できない <sub>`symbol editor store`</sub>
+- グリッド外の接続点・番号の重複・必須属性の欠落は保存前チェックに出る <sub>`symbol editor store`</sub>
+- 保存すると下書きがそのままユーザーライブラリへ書かれ、保存先のパスが返る <sub>`symbol editor store`</sub>
+- 保存に成功すると未保存の変更が消え、部品挿入の一覧も読み直される <sub>`symbol editor store`</sub>
+- 保存が拒否されたら何も書かれず、理由が全部そのまま出る <sub>`symbol editor store`</sub>
+- 未保存の変更があるまま閉じようとすると、いったん確認を出して閉じない <sub>`symbol editor store`</sub>
+- 「複製から新規」のピッカーは、同梱もユーザーも合わせた全シンボルから選べる <sub>`symbol editor store`</sub>
+
 ### symbolLibrary
 
 - 検索語は英語名・日本語名・シンボルidのどれに当たっても一致する <sub>`symbolMatchesQuery`</sub>
@@ -1289,6 +1334,9 @@
 - 空の検索語はすべてのシンボルに一致する <sub>`symbolMatchesQuery`</sub>
 - シンボルはライブラリの並び順のままカテゴリごとにまとまる <sub>`groupSymbolsByCategory`</sub>
 - 検索語を渡すと一致するシンボルだけが残り、空になったカテゴリは消える <sub>`groupSymbolsByCategory`</sub>
+- 日本語で使っているときは日本語名、英語のときは英語名が一覧に出る <sub>`symbolName`</sub>
+- 片方の名前しか無いシンボルは、あるほうの名前が出る <sub>`symbolName`</sub>
+- 名前がどちらも空ならシンボルidが出る(一覧から行が消えない) <sub>`symbolName`</sub>
 
 ### viewClasses
 

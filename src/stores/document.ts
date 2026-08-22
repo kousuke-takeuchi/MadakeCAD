@@ -117,6 +117,20 @@ export const useDocumentStore = defineStore("document", {
     },
 
     /**
+     * 部品挿入に並ぶシンボルの一覧を読み直す (同梱+ユーザーの`~/MadakeCAD/symbols`)。
+     * シンボルエディタでユーザーシンボルを保存したあとに呼ぶと、保存した記号が
+     * 「ユーザー」カテゴリへ現れ、すでに配置済みの部品も新しい定義で描き直される。
+     */
+    async reloadSymbols(): Promise<SymbolDef[]> {
+      try {
+        this.symbols = await ipc.listSymbols();
+      } catch {
+        // 一覧が読めなくても図面は開いたままにする (次の保存でまた試す)
+      }
+      return this.symbols;
+    },
+
+    /**
      * 図枠テンプレートの一覧を読み込む (起動時と、ユーザーが図枠JSONを足したあと)。
      * 読めなくても図面は開ける: 一覧が空なら同梱のjis-a3で描く。
      */

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SymbolDef } from "../ipc";
-import { groupSymbolsByCategory, symbolMatchesQuery } from "./symbolLibrary";
+import { groupSymbolsByCategory, symbolMatchesQuery, symbolName } from "./symbolLibrary";
 
 function def(id: string, category: string, name: string, nameJa: string, keywords: string[] = []): SymbolDef {
   return {
@@ -73,5 +73,24 @@ describe("groupSymbolsByCategory", () => {
       "protection",
       "relay",
     ]);
+  });
+});
+
+describe("symbolName", () => {
+  // ja: 日本語で使っているときは日本語名、英語のときは英語名が一覧に出る
+  it("shows the Japanese name in Japanese and the English name in English", () => {
+    expect(symbolName(library[0], "ja")).toBe("配線用遮断器(3極)");
+    expect(symbolName(library[0], "en")).toBe("Circuit breaker 3P (MCB/MCCB)");
+  });
+
+  // ja: 片方の名前しか無いシンボルは、あるほうの名前が出る
+  it("falls back to whichever name the symbol actually has", () => {
+    expect(symbolName(def("x1", "user", "", "自社記号"), "en")).toBe("自社記号");
+    expect(symbolName(def("x2", "user", "Shop symbol", ""), "ja")).toBe("Shop symbol");
+  });
+
+  // ja: 名前がどちらも空ならシンボルidが出る(一覧から行が消えない)
+  it("shows the symbol id when both names are empty", () => {
+    expect(symbolName(def("x3", "user", "", ""), "ja")).toBe("x3");
   });
 });

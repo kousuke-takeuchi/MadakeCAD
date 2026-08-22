@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1396 specification clauses** across 5 areas.
+**1441 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -1282,6 +1282,51 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - clicking a row picks that location and out-of-range rows are ignored <sub>`Surferポップアップ`</sub>
 - closing with Escape also resets the walk position <sub>`Surferポップアップ`</sub>
 
+### symbolEditor
+
+- snaps a click position to the nearest 2.5 mm grid intersection <sub>`symbol editor canvas geometry`</sub>
+- snaps negative coordinates (left of and above the origin) to the grid too <sub>`symbol editor canvas geometry`</sub>
+- picks the connection point on top of a shape rather than the shape itself <sub>`symbol editor canvas geometry`</sub>
+- picks the most recently drawn shape where two shapes overlap <sub>`symbol editor canvas geometry`</sub>
+- selects nothing when the click is away from every shape and point <sub>`symbol editor canvas geometry`</sub>
+- finds an attribute slot by clicking its anchor point <sub>`symbol editor canvas geometry`</sub>
+- moves every point of a shape by the same amount when it is dragged <sub>`symbol editor canvas geometry`</sub>
+- numbers a new connection point one past the largest number in use <sub>`symbol editor canvas geometry`</sub>
+- places a new connection point one grid step outside the shape on the chosen side <sub>`symbol editor canvas geometry`</sub>
+- never stacks a second connection point on the same point as an existing one <sub>`symbol editor canvas geometry`</sub>
+- reports no problem for a well-formed symbol <sub>`symbol editor validation`</sub>
+- reports a connection point that is off the 2.5 mm grid <sub>`symbol editor validation`</sub>
+- reports two connection points with the same number at the same position <sub>`symbol editor validation`</sub>
+- reports two different connection point numbers stacked on one position <sub>`symbol editor validation`</sub>
+- accepts the same connection point number at two separate positions <sub>`symbol editor validation`</sub>
+- reports a missing reference designator (TAG) attribute slot <sub>`symbol editor validation`</sub>
+- rejects an id that is already used by a bundled symbol <sub>`symbol editor validation`</sub>
+- rejects an empty id, an id with unusable characters, and an empty symbol <sub>`symbol editor validation`</sub>
+- returns every problem at once instead of stopping at the first <sub>`symbol editor validation`</sub>
+- always shows the four pre-save rows (grid, numbers, required and optional attributes) <sub>`symbol editor pre-save checklist`</sub>
+- marks the optional-attribute row as a caution while some optional slots are unplaced <sub>`symbol editor pre-save checklist`</sub>
+- marks all four rows as passed once every optional attribute is placed <sub>`symbol editor pre-save checklist`</sub>
+- turns the affected row into an error and lists the remaining reasons after it <sub>`symbol editor pre-save checklist`</sub>
+- keeps the save button disabled while any row is an error <sub>`symbol editor pre-save checklist`</sub>
+- starts a blank draft that already carries the required TAG attribute slot <sub>`symbol editor store`</sub>
+- opens a duplicate of an existing symbol with its shapes and points copied <sub>`symbol editor store`</sub>
+- selects a shape right after it is drawn <sub>`symbol editor store`</sub>
+- moves the selected shape by the dragged amount <sub>`symbol editor store`</sub>
+- deletes the selected shape or connection point <sub>`symbol editor store`</sub>
+- gives a connection point added from a side button the next number, on the grid <sub>`symbol editor store`</sub>
+- snaps a connection point dropped on the canvas onto a grid intersection <sub>`symbol editor store`</sub>
+- edits the number, name and direction of a connection point from the table <sub>`symbol editor store`</sub>
+- places and removes an attribute slot, and cautions about the removed ones <sub>`symbol editor store`</sub>
+- edits the symbol information (id, names, prefix and search keys) from the right panel <sub>`symbol editor store`</sub>
+- keeps the save path in step with the symbol id <sub>`symbol editor store`</sub>
+- refuses to save under an id that a bundled symbol already uses <sub>`symbol editor store`</sub>
+- shows off-grid points, duplicate numbers and a missing TAG slot in the checklist <sub>`symbol editor store`</sub>
+- writes the draft to the user library and reports where it was saved <sub>`symbol editor store`</sub>
+- clears the unsaved-changes mark and reloads the insert list after a successful save <sub>`symbol editor store`</sub>
+- keeps the editor open and shows every reason when the save is refused <sub>`symbol editor store`</sub>
+- asks for confirmation instead of closing while there are unsaved changes <sub>`symbol editor store`</sub>
+- offers every symbol (bundled and user) in the duplicate-from picker <sub>`symbol editor store`</sub>
+
 ### symbolLibrary
 
 - matches the English name, the Japanese name or the symbol id <sub>`symbolMatchesQuery`</sub>
@@ -1289,6 +1334,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - treats an empty query as matching everything <sub>`symbolMatchesQuery`</sub>
 - groups symbols by category keeping the library order <sub>`groupSymbolsByCategory`</sub>
 - keeps only matching symbols and drops the categories left empty <sub>`groupSymbolsByCategory`</sub>
+- shows the Japanese name in Japanese and the English name in English <sub>`symbolName`</sub>
+- falls back to whichever name the symbol actually has <sub>`symbolName`</sub>
+- shows the symbol id when both names are empty <sub>`symbolName`</sub>
 
 ### viewClasses
 

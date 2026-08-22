@@ -260,7 +260,13 @@
       "start": "Start"
     },
     "adminGroup": {
-      "templates": "Templates"
+      "templates": "Templates",
+      "library": "Library"
+    },
+    "adminSmall": {
+      "partsDb": "Parts database",
+      "macros": "Macros",
+      "userLibrary": "User library"
     }
   },
   "templates": {
@@ -360,6 +366,143 @@
     "unchangedLog": "Frame template: \"{frame}\" was already in use, nothing changed",
     "folderOpenedLog": "Frame template: opened {path} (drop .json files there to see them listed)",
     "folderHintLog": "Frame template: drop .json files into {path} to see them listed"
+  },
+  "symbolEditor": {
+    "title": "Symbol editor",
+    "titleWith": "Symbol editor — {name}",
+    "library": "Library: User",
+    "kind": "Kind: user symbol",
+    "close": "Close",
+    "ribbonButton": "Symbol editor",
+    "ribbonNew": "New from blank",
+    "ribbonFolder": "Open symbols folder",
+    "group": {
+      "required": "Required attributes",
+      "optional": "Optional attributes",
+      "rating": "Rating",
+      "pins": "Wire connection points",
+      "info": "Symbol information",
+      "variants": "Rotation variants (derived)",
+      "checks": "Pre-save checks"
+    },
+    "slot": {
+      "TAG": "TAG (reference)",
+      "PART": "PART (part no.)",
+      "DESC": "DESC (description)",
+      "RATING": "RATING"
+    },
+    "slotToggle": "Click to place or remove",
+    "placed": "Placed",
+    "unplaced": "Unplaced",
+    "pinCount": "{count} pts",
+    "noPins": "No connection points yet (add them with the buttons below or the pin tool)",
+    "col": {
+      "number": "No.",
+      "dir": "Dir",
+      "name": "Name"
+    },
+    "dir": {
+      "up": "Up",
+      "down": "Down",
+      "left": "Left",
+      "right": "Right"
+    },
+    "tool": {
+      "select": "S",
+      "line": "L",
+      "rect": "R",
+      "circle": "C",
+      "arc": "A",
+      "text": "T",
+      "slot": "@",
+      "pin": "P"
+    },
+    "toolName": {
+      "select": "Select (click to grab, drag to move, Delete to remove)",
+      "line": "Line (drag once)",
+      "rect": "Rectangle (drag corner to corner)",
+      "circle": "Circle (drag from the centre for the radius)",
+      "arc": "Arc (drag from the centre; spans 90 degrees clockwise)",
+      "text": "Text (places the text from the coordinate bar)",
+      "slot": "Attribute text (places the unplaced keys in order)",
+      "pin": "Connection point (direction is chosen automatically)"
+    },
+    "field": {
+      "id": "ID",
+      "name": "Name (EN)",
+      "nameJa": "Name (JA)",
+      "prefix": "Prefix",
+      "category": "Category",
+      "keywords": "Search keys"
+    },
+    "variantsHint": "Point numbers and attribute positions follow the rotation automatically (variants are not stored).",
+    "check": {
+      "pins_grid": {
+        "ok": "All {count} connection points on the 2.5 mm grid",
+        "warn": "Check the connection point positions",
+        "error": "A connection point is off the grid (or there is none)"
+      },
+      "pin_numbers": {
+        "ok": "No duplicate connection point numbers",
+        "warn": "Check the connection point numbers",
+        "error": "Two connection points sit on the same position (or a number is empty)"
+      },
+      "slot_required": {
+        "ok": "Required attribute slot present",
+        "warn": "Check the required attribute slot",
+        "error": "The reference designator (TAG) slot is missing"
+      },
+      "slot_optional": {
+        "ok": "Every optional attribute is placed",
+        "warn": "Optional attributes {keys} are unplaced",
+        "error": "Optional attributes {keys} are unplaced"
+      }
+    },
+    "issue": {
+      "symbol": {
+        "id_empty": "Enter an ID",
+        "id_invalid": "An ID may only use letters, digits, underscore and hyphen: {id}",
+        "id_reserved": "This ID belongs to a bundled symbol (existing drawings would change): {id}",
+        "name_empty": "Enter a name (Japanese or English)",
+        "ref_prefix_empty": "Enter the reference designator prefix (K, PB, ...)",
+        "no_primitives": "There is no shape yet (draw a line, rectangle or circle)",
+        "primitive_invalid": "Shape {index} is not valid",
+        "no_pins": "There is no connection point (pin)",
+        "pin_number_empty": "A connection point has no number ({x}, {y})",
+        "pin_off_grid": "Connection point {number} is off the 2.5 mm grid ({x}, {y})",
+        "pin_duplicate": "Connection point {number} appears twice at the same position ({x}, {y})",
+        "pin_overlap": "Connection points {other} and {number} sit on the same position ({x}, {y})",
+        "slot_missing": "The reference designator slot ({key}) is required",
+        "slot_unknown": "Unknown attribute slot {key} (allowed: {keys})",
+        "slot_duplicate": "Attribute slot {key} is duplicated",
+        "slot_height": "Attribute slot {key} has a text height of zero or less",
+        "save_failed": "Could not save"
+      }
+    },
+    "cursor": "x: {x}  y: {y} mm",
+    "gridHint": "Grid 2.5 mm, snap on",
+    "pinHint": "Connection points must sit on a grid intersection",
+    "textValue": "Text",
+    "originMark": "Origin (0,0) = insertion point",
+    "duplicateFrom": "New from a copy of...",
+    "pickerSearch": "Search (name or symbol)",
+    "pickerEmpty": "No symbol matches",
+    "openFolder": "Open symbols folder",
+    "noPath": "Enter an ID to choose the save path",
+    "unsaved": "There are unsaved changes",
+    "keepEditing": "Keep editing",
+    "discard": "Discard and close",
+    "cancel": "Cancel",
+    "save": "Save to user library",
+    "saving": "Saving...",
+    "openLog": "Symbol editor: opened (you can start from a copy of an existing symbol)",
+    "closedLog": "Symbol editor: closed",
+    "discardedLog": "Symbol editor: closed and discarded the changes",
+    "savedLog": "Symbol editor: saved {id} to {path} (it now appears under User in Insert part)",
+    "saveFailedLog": "Symbol editor: could not save ({reasons})",
+    "duplicatedLog": "Symbol editor: started editing {id} as a copy of {source}",
+    "folderOpenedLog": "Symbol editor: opened {path} (drop .json files here to see them listed)",
+    "folderHintLog": "Symbol editor: drop .json files into {path} to see them listed"
   },
   "macros": {
     "saveTitle": "Save as circuit macro",

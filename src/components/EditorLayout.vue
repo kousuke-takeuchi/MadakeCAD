@@ -24,6 +24,7 @@ import TemplateDialog from "./TemplateDialog.vue";
 import FrameTemplateDialog from "./FrameTemplateDialog.vue";
 import MacroSaveDialog from "./MacroSaveDialog.vue";
 import SymbolPickerDialog from "./SymbolPickerDialog.vue";
+import SymbolEditorDialog from "./SymbolEditorDialog.vue";
 import TitleBar from "./TitleBar.vue";
 import SettingsDialog from "./settings/SettingsDialog.vue";
 import { useRevisionsStore } from "../stores/revisions";
@@ -32,6 +33,7 @@ import { useTerminalsStore } from "../stores/terminals";
 import { usePlcIoStore } from "../stores/plcIo";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
 import { useMacrosStore } from "../stores/macros";
+import { useSymbolEditorStore } from "../stores/symbolEditor";
 import { useSearchStore } from "../stores/search";
 
 const store = useDocumentStore();
@@ -44,6 +46,7 @@ const plcIo = usePlcIoStore();
 const reportDialog = useReportDialogStore();
 const pdfBook = usePdfBookStore();
 const macros = useMacrosStore();
+const symbolEditor = useSymbolEditorStore();
 const controller = reactive(new EditorController(store)) as EditorController;
 provide("controller", controller);
 const files = useFileActions();
@@ -111,6 +114,20 @@ async function onKeyDown(ev: KeyboardEvent) {
     ev.preventDefault();
     return;
   }
+  // シンボルエディタ: ポップオーバー→ダイアログの順に閉じ、Deleteで選択中の図形を消す
+  if (symbolEditor.open) {
+    if (ev.key === "Escape") {
+      if (symbolEditor.pickerOpen) symbolEditor.closePicker();
+      else symbolEditor.requestClose();
+      ev.preventDefault();
+      return;
+    }
+    if ((ev.key === "Delete" || ev.key === "Backspace") && !isEditableTarget(ev)) {
+      symbolEditor.deleteSelection();
+      ev.preventDefault();
+      return;
+    }
+  }
   if (isEditableTarget(ev)) return;
   // モーダル表示中はキャンバスのショートカットを走らせない
   if (
@@ -120,7 +137,8 @@ async function onKeyDown(ev: KeyboardEvent) {
     plcIo.open ||
     reportDialog.open ||
     pdfBook.open ||
-    macros.saveOpen
+    macros.saveOpen ||
+    symbolEditor.open
   ) {
     return;
   }
@@ -170,6 +188,7 @@ onBeforeUnmount(() => {
     <TemplateDialog />
     <FrameTemplateDialog />
     <MacroSaveDialog />
+    <SymbolEditorDialog />
   </div>
 </template>
 

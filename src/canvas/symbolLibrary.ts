@@ -16,6 +16,16 @@ export function symbolMatchesQuery(def: SymbolDef, query: string): boolean {
 }
 
 /**
+ * 一覧に出す表示名。日本語ロケールでは日本語名を優先し、片方しか無ければもう片方、
+ * どちらも空ならシンボルidを出す (名前の無い記号でも行が消えないようにする)。
+ */
+export function symbolName(def: SymbolDef, locale: string): string {
+  const ja = def.name_ja?.trim() ?? "";
+  const en = def.name?.trim() ?? "";
+  return (locale === "ja" ? ja || en : en || ja) || def.id;
+}
+
+/**
  * カテゴリごとにまとめる。カテゴリの出現順・カテゴリ内の並びはライブラリの並び順のまま
  * (Rust側でカテゴリごとに連続して並んでいる)。
  */

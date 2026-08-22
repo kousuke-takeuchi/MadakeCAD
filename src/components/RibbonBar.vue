@@ -3,8 +3,8 @@
 import {
   Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileSpreadsheet, FileText,
   FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid, LayoutTemplate, ListOrdered, ListChecks,
-  Move, MoveRight, Network, Pencil, Route, Scissors, ShieldCheck, SquareDashed, Table2, Tag,
-  Trash2, Type,
+  Move, MoveRight, Network, Package, Pencil, Route, Scissors, Shapes, ShieldCheck, SquareDashed,
+  Table2, Tag, Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
 import { computed, inject, ref } from "vue";
@@ -18,6 +18,7 @@ import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
 import { useMacrosStore } from "../stores/macros";
 import { useTemplatesStore } from "../stores/templates";
 import { useFrameTemplatesStore } from "../stores/frameTemplates";
+import { useSymbolEditorStore } from "../stores/symbolEditor";
 import { usePlcIoStore } from "../stores/plcIo";
 import { useTerminalsStore } from "../stores/terminals";
 import { useWireNumbersStore } from "../stores/wireNumbers";
@@ -42,6 +43,7 @@ const plcIo = usePlcIoStore();
 const templates = useTemplatesStore();
 const frameTemplates = useFrameTemplatesStore();
 const macros = useMacrosStore();
+const symbolEditor = useSymbolEditorStore();
 
 /** タブのid (表示名はi18nカタログ)。 */
 type TabId = "home" | "project" | "schematic" | "panel" | "report" | "io" | "view" | "admin";
@@ -133,6 +135,23 @@ async function openTemplates() {
 async function openFrameTemplates() {
   await frameTemplates.openDialog();
   ui.log(t("frameTemplates.openLog"));
+}
+
+/**
+ * シンボルエディタを開く (リボン「管理」タブ>ライブラリの大ボタン)。
+ * 既定の動線が「既存シンボルを複製して開始」なので、白紙の下書きで開いたうえで
+ * 複製元のポップオーバーを出しておく (空から描き始めたければ閉じるだけでよい)。
+ */
+async function openSymbolEditor() {
+  await symbolEditor.openBlank();
+  symbolEditor.openPicker();
+  ui.log(t("symbolEditor.openLog"));
+}
+
+/** ユーザーシンボルの置き場をファイラで開く (リボン「管理」タブ>ライブラリの小ボタン)。 */
+async function openSymbolsFolder() {
+  const { path, opened } = await symbolEditor.openUserFolder();
+  ui.log(t(opened ? "symbolEditor.folderOpenedLog" : "symbolEditor.folderHintLog", { path }));
 }
 
 /**
@@ -312,11 +331,27 @@ const projectGroups = computed<RibbonGroup[]>(() => [
 ]);
 
 /**
- * 「管理」タブのテンプレートグループ (.pen「M4デザイン - リボン パネル/レポート/管理タブ」)。
- * デザインの管理タブは3グループ (ライブラリ/テンプレート/設定) だが、シンボルエディタは
- * 未実装のため、実装済みのテンプレートグループだけを出す。
+ * 「管理」タブ (.pen「M4デザイン - リボン パネル/レポート/管理タブ」)。
+ * デザインどおりライブラリ→テンプレートの順に並べる (プロジェクト・設定グループは
+ * 中身が他タブ・設定ダイアログにあるため、実装済みの2グループだけを出す)。
  */
 const adminGroups = computed<RibbonGroup[]>(() => [
+  {
+    name: t("ribbon.adminGroup.library"),
+    big: {
+      label: t("symbolEditor.ribbonButton"),
+      icon: Shapes,
+      color: "var(--acad-blue)",
+      action: () => openSymbolEditor(),
+    },
+    small: [
+      [
+        { label: t("ribbon.adminSmall.partsDb"), icon: Package, action: () => todo(t("ribbon.adminSmall.partsDb")) },
+        { label: t("ribbon.adminSmall.macros"), icon: Copy, action: () => todo(t("ribbon.adminSmall.macros")) },
+        { label: t("ribbon.adminSmall.userLibrary"), icon: FolderPlus, action: () => openSymbolsFolder() },
+      ],
+    ],
+  },
   {
     name: t("ribbon.adminGroup.templates"),
     big: {

@@ -1,21 +1,30 @@
 <script setup lang="ts">
 // シンボル定義をミニキャンバスに描くプレビュー (部品挿入ダイアログ・パレット用)。
-import { onMounted, ref } from "vue";
-import { drawSymbol } from "../canvas/renderer";
+import { onMounted, ref, watch } from "vue";
+import { drawSymbol, transformLocal } from "../canvas/renderer";
 import { Viewport } from "../canvas/viewport";
 import type { SymbolDef } from "../ipc";
 
 const props = withDefaults(
-  defineProps<{ def: SymbolDef; width?: number; height?: number; color?: string }>(),
-  { width: 64, height: 36, color: "#2b2f33" },
+  defineProps<{
+    def: SymbolDef;
+    width?: number;
+    height?: number;
+    color?: string;
+    /** 回転バリアントのプレビュー (0/90/180/270)。既定は0度。 */
+    rotation?: number;
+  }>(),
+  { width: 64, height: 36, color: "#2b2f33", rotation: 0 },
 );
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
-onMounted(() => {
+/** 定義・回転が変わったら描き直す (バリアント帯は同じ定義を4つの角度で描く)。 */
+function draw() {
   const canvas = canvasRef.value;
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   // シンボルのバウンディングボックスを求めてフィット
   let minX = -8, maxX = 8, minY = -8, maxY = 8;
   const consider = (x: number, y: number) => {
@@ -33,20 +42,37 @@ onMounted(() => {
       consider(prim.p2.x, prim.p2.y);
     }
   }
+  const inst = {
+    id: "p",
+    symbol_id: props.def.id,
+    at: { x: 0, y: 0 },
+    rotation: props.rotation,
+    mirror: false,
+    reference: "",
+    value: "",
+    attrs: {},
+  };
+  // 回転後の外形でフィットさせる (90/270度では縦横が入れ替わる)
+  const corners = [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ].map((p) => transformLocal(p, inst));
+  const rMinX = Math.min(...corners.map((p) => p.x));
+  const rMaxX = Math.max(...corners.map((p) => p.x));
+  const rMinY = Math.min(...corners.map((p) => p.y));
+  const rMaxY = Math.max(...corners.map((p) => p.y));
   const vp = new Viewport();
-  const w = maxX - minX, h = maxY - minY;
+  const w = rMaxX - rMinX, h = rMaxY - rMinY;
   vp.scale = Math.min((props.width - 8) / w, (props.height - 8) / h);
-  vp.originX = props.width / 2 - ((minX + maxX) / 2) * vp.scale;
-  vp.originY = props.height / 2 - ((minY + maxY) / 2) * vp.scale;
-  drawSymbol(
-    ctx,
-    vp,
-    { id: "p", symbol_id: props.def.id, at: { x: 0, y: 0 }, rotation: 0, mirror: false, reference: "", value: "", attrs: {} },
-    props.def,
-    false,
-    props.color,
-  );
-});
+  vp.originX = props.width / 2 - ((rMinX + rMaxX) / 2) * vp.scale;
+  vp.originY = props.height / 2 - ((rMinY + rMaxY) / 2) * vp.scale;
+  drawSymbol(ctx, vp, inst, props.def, false, props.color);
+}
+
+onMounted(draw);
+watch(() => [props.def, props.rotation, props.color], draw, { deep: true });
 </script>
 
 <template>
