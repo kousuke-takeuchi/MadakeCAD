@@ -120,7 +120,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| テスト | ✅ | cargo 351件+vitest 217件+vue-tsc。全テストに対訳仕様文が付き、`docs/13-specification.md`(568項目)を自動生成。TDD運用 |
+| テスト | ✅ | cargo 351件+vitest 219件+vue-tsc。全テストに対訳仕様文が付き、`docs/13-specification.md`(570項目)を自動生成。TDD運用 |
 | macOSビルド | ✅ | 開発は`npm run tauri dev` |
 | Windows/Linuxビルド | ⬜ | 非目標(現時点)。コードはOS非依存を維持(ngspice探索・PDFフォントに一部OS別処理あり) |
 | 配布パッケージ/自動更新 | ⬜ | 未着手 |

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**568 specification clauses** across 5 areas.
+**570 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -735,6 +735,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - clears only the jumpers on the selected terminals <sub>`terminal strip editor store`</sub>
 - drops the jumper attribute entirely once no jumper is left <sub>`terminal strip editor store`</sub>
 - reloads the chart after editing a jumper so the grid keeps matching the model <sub>`terminal strip editor store`</sub>
+- reloads the grid when the drawing changes from outside the editor, e.g. an undo <sub>`terminal strip editor store`</sub>
+- does not fetch anything while the editor is closed <sub>`terminal strip editor store`</sub>
 - summarizes the terminal block check as counts per severity <sub>`terminal strip editor store`</sub>
 - reports a clean terminal block when the check finds nothing <sub>`terminal strip editor store`</sub>
 - clears the selection and the previous check result when another block is picked <sub>`terminal strip editor store`</sub>

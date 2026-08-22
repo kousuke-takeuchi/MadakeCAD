@@ -292,6 +292,17 @@ export const useTerminalsStore = defineStore("terminals", {
       }
     },
 
+    /**
+     * 図面が変わったときにグリッドを追従させる (undo/redo・AIチャット・CLIなど、
+     * このダイアログの外からの編集を含む)。直前のチェック結果は図面と食い違うので捨てる。
+     */
+    async refresh() {
+      if (!this.open) return;
+      this.selected = [];
+      this.diagnostics = null;
+      await this.reloadBlocks();
+    },
+
     close() {
       this.open = false;
       this.chart = null;

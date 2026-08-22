@@ -315,6 +315,30 @@ describe("terminal strip editor store", () => {
     expect(store.selected).toEqual([]);
   });
 
+  // ja: 図面が外から変わったら (undoやAIの編集) グリッドを取り直し、古いチェック結果は捨てる
+  it("reloads the grid when the drawing changes from outside the editor, e.g. an undo", async () => {
+    mockBackend({ chart: wiredChart([[1, 2]]) });
+    const store = await opened("1-2");
+    await store.runCheck();
+    store.toggleRow("1");
+    expect(store.rows[0].jumper).toBe("1-2");
+
+    // undoでジャンパが消えた図面に差し替わる
+    vi.spyOn(ipc, "getTerminalChart").mockResolvedValue(wiredChart());
+    await store.refresh();
+    expect(store.rows[0].jumper).toBe("");
+    expect(store.selected).toEqual([]);
+    expect(store.diagnostics).toBeNull();
+  });
+
+  // ja: 端子台エディタを閉じている間は図面が変わっても読み込みに行かない
+  it("does not fetch anything while the editor is closed", async () => {
+    mockBackend();
+    const store = useTerminalsStore();
+    await store.refresh();
+    expect(ipc.listTerminalBlocks).not.toHaveBeenCalled();
+  });
+
   // ja: 端子台チェックの結果は重大度ごとの件数に整形される
   it("summarizes the terminal block check as counts per severity", async () => {
     mockBackend({
