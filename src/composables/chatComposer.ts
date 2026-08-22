@@ -4,12 +4,33 @@
 // 図面の編集は一切行わない (エージェントがMCP→Commandエンジン経由で編集する)。
 
 import { computed } from "vue";
-import { useChatStore } from "../stores/chat";
+import { useI18n } from "vue-i18n";
+import { useChatStore, type ChatMessage } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
+
+/**
+ * 会話の使用量を足し合わせる。
+ *
+ * プロバイダによって埋まる欄が違う: Claude系はトークン数、GitHub Copilotは
+ * 「プレミアムリクエスト」(小数)。数え方が違うので足さずに別々に持つ。
+ */
+export function sumUsage(messages: ChatMessage[]) {
+  let input = 0;
+  let output = 0;
+  let premium = 0;
+  for (const m of messages) {
+    if (!m.usage) continue;
+    input += m.usage.input_tokens;
+    output += m.usage.output_tokens;
+    premium += m.usage.premium_requests ?? 0;
+  }
+  return { input, output, tokens: input + output, premium };
+}
 
 export function useChatComposer() {
   const store = useChatStore();
   const ui = useUiStore();
+  const { t } = useI18n();
 
   /** 入力途中テキスト。ドックと浮きカードで共有する (uiストアが保持)。 */
   const draft = computed({
@@ -19,14 +40,36 @@ export function useChatComposer() {
 
   const canSend = computed(() => draft.value.trim().length > 0 && !store.streaming);
 
+  /** 会話全体の使用量の合計 (プロバイダによって埋まる欄が違う)。 */
+  const usageTotals = computed(() => sumUsage(store.messages));
+
   /** ⚡バッジ: 会話のトークン累計 (未使用なら並列エージェント数=1x)。 */
   const tokenBadge = computed(() => {
-    let total = 0;
-    for (const m of store.messages) {
-      if (m.usage) total += m.usage.input_tokens + m.usage.output_tokens;
-    }
+    const total = usageTotals.value.tokens;
     if (total === 0) return "1x";
     return total >= 1000 ? `${(total / 1000).toFixed(1)}k` : String(total);
+  });
+
+  /**
+   * ⚡バッジの内訳 (ホバーで出る説明)。
+   *
+   * GitHub Copilotはトークンではなく「プレミアムリクエスト」で残量を数えるため、
+   * 消費があるときだけその行を足す (他のプロバイダでは常に0なので出ない)。
+   */
+  const usageTooltip = computed(() => {
+    const { input, output, tokens, premium } = usageTotals.value;
+    if (tokens === 0 && premium === 0) return "";
+    const lines = [
+      t("chat.usageTooltip", {
+        tokens: tokens.toLocaleString(),
+        input: input.toLocaleString(),
+        output: output.toLocaleString(),
+      }),
+    ];
+    if (premium > 0) {
+      lines.push(t("chat.usagePremium", { premium: Math.round(premium * 100) / 100 }));
+    }
+    return lines.join("\n");
   });
 
   /**
@@ -59,5 +102,5 @@ export function useChatComposer() {
     }
   }
 
-  return { store, ui, draft, canSend, tokenBadge, submit, onKeydown, onCancel };
+  return { store, ui, draft, canSend, tokenBadge, usageTooltip, submit, onKeydown, onCancel };
 }

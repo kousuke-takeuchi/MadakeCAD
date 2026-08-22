@@ -698,7 +698,9 @@
     "parallel": {
       "runningBadge": "{count} running",
       "runningBadgeTitle": "{count} conversation(s) are answering right now. Their edits are highlighted in the drawing, one color per conversation."
-    }
+    },
+    "usageTooltip": "{tokens} tokens ({input} in / {output} out)",
+    "usagePremium": "{premium} premium requests"
   },
   "leftPanel": {
     "project": "Project",

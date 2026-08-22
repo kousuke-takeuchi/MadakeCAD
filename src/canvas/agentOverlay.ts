@@ -153,10 +153,19 @@ function rec(input: unknown): Record<string, unknown> {
     : {};
 }
 
-/** `mcp__madakecad__place_symbol` → `place_symbol`。 */
+/** Copilot CLIが付けるMCPサーバー名の接頭辞(`<サーバー名>-<ツール名>`)。 */
+const MCP_SERVER_PREFIX = "madakecad-";
+
+/**
+ * MCPツール名からサーバー名の接頭辞を落とす。
+ *
+ * `mcp__madakecad__place_symbol`(Claude Code CLI)も
+ * `madakecad-place_symbol`(GitHub Copilot CLI)も`place_symbol`になる。
+ */
 function shortName(tool: string): string {
   const m = /^mcp__[^_]+(?:_[^_]+)*__(.+)$/.exec(tool);
   if (m) return m[1];
+  if (tool.startsWith(MCP_SERVER_PREFIX)) return tool.slice(MCP_SERVER_PREFIX.length);
   return tool.startsWith("mcp__") ? tool.slice(5) : tool;
 }
 

@@ -53,6 +53,13 @@ describe("toolBox", () => {
     });
   });
 
+  // ja: GitHub Copilotが付ける「サーバー名-」の接頭辞でも同じ領域が光る
+  it("the drawing lights up the same region whichever provider called the tool", () => {
+    expect(toolBox("madakecad-place_symbol", { symbol_id: "fuse", x: 100, y: 50 })).toEqual(
+      toolBox(PLACE, { symbol_id: "fuse", x: 100, y: 50 }),
+    );
+  });
+
   // ja: draw_wireのpoints列のバウンディングボックスを作る
   it("draw_wire's point list produces its bounding box", () => {
     const b = toolBox(WIRE, {

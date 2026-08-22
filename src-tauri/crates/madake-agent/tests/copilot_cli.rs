@@ -171,7 +171,17 @@ async fn a_turn_streams_events_from_the_fake_cli() {
     let events = collect(rx).await;
     assert_eq!(
         kinds(&events),
-        vec!["session", "text", "tool_start", "tool_end", "completed"]
+        vec![
+            "session",
+            "text",
+            "text",
+            "tool_start",
+            "tool_end",
+            "text",
+            "text",
+            "completed"
+        ],
+        "{events:?}"
     );
     match &events[0] {
         AgentEvent::SessionStarted { session_id } => {
@@ -179,15 +189,43 @@ async fn a_turn_streams_events_from_the_fake_cli() {
         }
         other => panic!("最初はsessionのはず: {other:?}"),
     }
-    match &events[3] {
+    match &events[4] {
         AgentEvent::ToolUseFinished { tool, is_error, .. } => {
             assert_eq!(tool, "madakecad-add_symbol", "ツール名が補完されること");
             assert!(!is_error);
         }
         other => panic!("tool_endのはず: {other:?}"),
     }
-    // JSONでない行・未知の型の行はフィクスチャに混ぜてある(捨てられること)
-    assert_eq!(events.len(), 5, "{events:?}");
+    match &events[7] {
+        AgentEvent::TurnCompleted { result, usage } => {
+            // 回答は最後のassistant.messageから。最終行のresultには載らない
+            assert_eq!(result, "端子台X1を配置しました。");
+            let usage = usage.as_ref().expect("usageが読めること");
+            assert_eq!(usage.premium_requests, Some(0.33));
+            assert_eq!(usage.output_tokens, 166 + 57, "メッセージごとの積み上げ");
+        }
+        other => panic!("最後はcompletedのはず: {other:?}"),
+    }
+    // JSONでない行・未知の型の行・思考の差分はフィクスチャに混ぜてある(捨てられること)
+    assert_eq!(events.len(), 8, "{events:?}");
+}
+
+/// The session id MadakeCAD pinned is the one the CLI reports back, so it is announced only once.
+/// MadakeCADが決めたセッションIDはCLIがそのまま返してくるので、通知は一度だけになる。
+#[tokio::test]
+async fn the_pinned_session_id_is_announced_once() {
+    let (tx, rx) = mpsc::channel(1024);
+    backend("fake_copilot.sh")
+        .send("hi", None, tx)
+        .await
+        .expect("send成功");
+
+    let sessions = collect(rx)
+        .await
+        .into_iter()
+        .filter(|e| matches!(e, AgentEvent::SessionStarted { .. }))
+        .count();
+    assert_eq!(sessions, 1, "最終行のsessionIdは確認なので二重通知しない");
 }
 
 /// The composed prompt actually reaches the CLI as the -p argument.

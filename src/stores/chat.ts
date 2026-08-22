@@ -13,13 +13,19 @@ import { inTauri } from "../ipc";
 // ワイヤ型 (madake-agent の serde 表現: 内部タグ`type`, snake_case)
 // ---------------------------------------------------------------------------
 
-/** 1ターン分のトークン使用量(CLIの`result`イベントより)。 */
+/** 1ターン分の使用量(CLIの`result`イベントより)。 */
 export interface Usage {
   input_tokens: number;
   output_tokens: number;
   cache_creation_input_tokens: number;
   cache_read_input_tokens: number;
   total_cost_usd: number | null;
+  /**
+   * GitHub Copilotの「プレミアムリクエスト」消費量(小数。Copilot経路のみ)。
+   *
+   * Copilotはトークンではなくこの単位で残量を数えるため、トークン数とは別枠。
+   */
+  premium_requests?: number | null;
 }
 
 /** Rust側 `AgentEvent` のJSON表現。 */
@@ -317,10 +323,20 @@ function baseName(path: unknown): string {
   return seg || p;
 }
 
-/** `mcp__madakecad__place_symbol` → `place_symbol`。 */
+/** Copilot CLIが付けるMCPサーバー名の接頭辞(`<サーバー名>-<ツール名>`)。 */
+const MCP_SERVER_PREFIX = "madakecad-";
+
+/**
+ * MCPツール名からサーバー名の接頭辞を落とす。
+ *
+ * 接頭辞の付け方はクライアントごとに違う:
+ * `mcp__madakecad__place_symbol`(Claude Code CLI)も
+ * `madakecad-place_symbol`(GitHub Copilot CLI)も`place_symbol`になる。
+ */
 export function shortToolName(tool: string): string {
   const m = /^mcp__[^_]+(?:_[^_]+)*__(.+)$/.exec(tool);
   if (m) return m[1];
+  if (tool.startsWith(MCP_SERVER_PREFIX)) return tool.slice(MCP_SERVER_PREFIX.length);
   return tool.startsWith("mcp__") ? tool.slice(5) : tool;
 }
 

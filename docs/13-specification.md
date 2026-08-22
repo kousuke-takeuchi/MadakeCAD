@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1314 specification clauses** across 5 areas.
+**1331 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -699,6 +699,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Copilot is pointed at MadakeCAD's own MCP server, so it edits drawings through the same commands as every other client. <sub>`the_mcp_config_points_at_the_local_madakecad_server`</sub>
 - Because the Copilot CLI has no system-prompt flag, MadakeCAD's drawing rules are prepended to the prompt under a clear heading. <sub>`the_system_prompt_is_prepended_to_the_user_prompt`</sub>
 - A turn streams the events parsed from Copilot's JSON lines (session, text, tool use, completion). <sub>`a_turn_streams_events_from_the_fake_cli`</sub>
+- The session id MadakeCAD pinned is the one the CLI reports back, so it is announced only once. <sub>`the_pinned_session_id_is_announced_once`</sub>
 - The composed prompt actually reaches the CLI as the -p argument. <sub>`the_composed_prompt_reaches_the_cli`</sub>
 - The MCP settings file handed to Copilot really exists while the turn runs, and it names MadakeCAD's server. <sub>`the_mcp_config_file_exists_while_the_turn_runs`</sub>
 - When Copilot is not signed in to GitHub, the chat says so and explains how to sign in. <sub>`a_signed_out_cli_is_reported_with_login_guidance`</sub>
@@ -712,18 +713,29 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### copilot_events
 
-- A Copilot session id line becomes the session event used to continue the same conversation. <sub>`session_line_becomes_a_session_event`</sub>
-- Assistant text is delivered to the chat whichever field name the CLI uses for it. <sub>`assistant_text_is_delivered_under_any_of_the_known_field_names`</sub>
-- A tool call line becomes a tool-start event with its name and arguments. <sub>`a_tool_call_line_becomes_a_tool_start_event`</sub>
-- Tool calls are recognised under the alternative field names too (tool/input, function/parameters). <sub>`tool_calls_are_recognised_under_alternative_field_names`</sub>
-- A tool result line closes the matching tool call and carries whether it failed. <sub>`a_tool_result_line_closes_the_call_and_reports_failure`</sub>
+- The assistant's answer arrives as message deltas and is shown in the chat as it is typed. <sub>`assistant_message_deltas_are_shown_as_they_arrive`</sub>
+- The model's private reasoning is not shown in the chat, even though it streams like the answer. <sub>`reasoning_deltas_are_not_shown_in_the_chat`</sub>
+- A completed assistant message carries the tool calls the model asked for, with their arguments. <sub>`a_completed_message_carries_the_requested_tool_calls`</sub>
+- Starting a tool reports its name and arguments, so the chat can show what the agent is doing. <sub>`a_tool_execution_start_reports_the_tool_and_its_arguments`</sub>
+- Finishing a tool closes the matching call and reports whether it succeeded. <sub>`a_tool_execution_complete_closes_the_call_with_its_outcome`</sub>
+- The final line ends the turn and reports how many Copilot premium requests it used. <sub>`the_final_line_completes_the_turn_with_the_premium_requests_used`</sub>
+- A non-zero exit code in the final line is reported to the chat as an error, not as a normal answer. <sub>`a_failed_final_line_becomes_an_error`</sub>
+- The session id the CLI actually used is reported, so the next turn resumes the same conversation. <sub>`the_session_line_reports_the_id_to_resume`</sub>
+- Setup and bookkeeping lines (MCP status, skills, tokens spent so far, turn boundaries) do not appear in the chat. <sub>`setup_and_bookkeeping_lines_are_ignored`</sub>
+- Lines the parser does not understand are ignored instead of breaking the turn. <sub>`unknown_and_broken_lines_are_ignored`</sub>
 - The tool name from the call is filled into the matching result, so the chat shows what finished. <sub>`the_tool_name_is_carried_from_the_call_to_its_result`</sub>
-- The final line completes the turn with the answer and the token usage. <sub>`the_final_line_completes_the_turn_with_usage`</sub>
+- The same tool call is announced by both the message and the execution line, but the chat shows it once. <sub>`a_tool_call_announced_twice_is_shown_only_once`</sub>
+- The turn's answer is the assistant's last message, because the final line does not repeat it. <sub>`the_turn_result_comes_from_the_last_assistant_message`</sub>
+- Text that only arrived in the completed message (never as a delta) is still shown in the chat. <sub>`text_missing_from_the_deltas_is_still_delivered`</sub>
+- The whole answer is delivered once when the CLI sends no deltas at all. <sub>`the_whole_answer_is_delivered_when_no_deltas_arrive`</sub>
+- The session id MadakeCAD pinned is not announced twice when the CLI confirms it in the final line. <sub>`a_confirmed_session_id_is_not_announced_twice`</sub>
+- If the CLI answers under a different session id, that id is announced so the next turn resumes the right conversation. <sub>`a_different_session_id_from_the_cli_wins`</sub>
+- Assistant text is delivered whichever field name the CLI uses for it. <sub>`assistant_text_is_delivered_under_any_of_the_known_field_names`</sub>
+- Tool calls are recognised under the alternative field names too (tool/input, function/parameters). <sub>`tool_calls_are_recognised_under_alternative_field_names`</sub>
+- A tool result is recognised as failed under any of the known ways of saying so. <sub>`a_failed_tool_result_is_recognised_under_any_wording`</sub>
 - Token usage is also read from OpenAI-style field names (prompt/completion tokens). <sub>`token_usage_is_also_read_from_openai_style_names`</sub>
 - An error line from the CLI is shown in the chat as an error. <sub>`an_error_line_becomes_an_error_event`</sub>
 - A result line flagged as an error becomes an error instead of a normal completion. <sub>`a_failed_result_line_becomes_an_error`</sub>
-- Lines the parser does not understand are ignored instead of breaking the turn. <sub>`unknown_and_broken_lines_are_ignored`</sub>
-- The same tool call reported twice is only shown once in the chat. <sub>`a_repeated_tool_call_is_shown_only_once`</sub>
 
 ### gemini
 
@@ -1013,6 +1025,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### agentOverlay
 
 - place_symbol's x/y produces a region around the approximate symbol size <sub>`toolBox`</sub>
+- the drawing lights up the same region whichever provider called the tool <sub>`toolBox`</sub>
 - draw_wire's point list produces its bounding box <sub>`toolBox`</sub>
 - execute_commands regions merge the add_entity commands inside <sub>`toolBox`</sub>
 - tools without coordinates and malformed input produce no region <sub>`toolBox`</sub>
@@ -1263,6 +1276,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sends nothing when neither the name nor the note changed <sub>`harnessUpdateCommand`</sub>
 - builds nothing for entities other than harnesses <sub>`harnessUpdateCommand`</sub>
 
+### chatComposer
+
+- tokens are added up across the turns of a conversation <sub>`sumUsage`</sub>
+- Copilot's premium requests are counted separately from tokens, as a fraction <sub>`sumUsage`</sub>
+- a conversation with no usage yet counts as zero <sub>`sumUsage`</sub>
+
 ### drawingContext
 
 - with no selection the context covers the whole sheet <sub>`drawingContextTag`</sub>
@@ -1345,6 +1364,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - newConversation does not disturb a pending local id <sub>`chat store: アクション`</sub>
 - setModel / setPanel / newConversation update their state <sub>`chat store: アクション`</sub>
 - the MCP tool-name prefix is stripped for display <sub>`summarizeToolUse`</sub>
+- the same tool shows the same name whichever provider called it <sub>`summarizeToolUse`</sub>
 - place_symbol calls summarize as symbol, reference and position <sub>`summarizeToolUse`</sub>
 - draw_wire calls summarize as color, gauge and point count <sub>`summarizeToolUse`</sub>
 - update_entity and execute_commands summarize by command content <sub>`summarizeToolUse`</sub>

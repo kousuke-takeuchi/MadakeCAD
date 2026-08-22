@@ -871,6 +871,14 @@ describe("summarizeToolUse", () => {
     expect(shortToolName("place_symbol")).toBe("place_symbol");
   });
 
+  // ja: GitHub Copilotが付ける「サーバー名-」の接頭辞も外して同じ名前で表示する
+  it("the same tool shows the same name whichever provider called it", () => {
+    expect(shortToolName("madakecad-place_symbol")).toBe("place_symbol");
+    expect(summarizeToolUse("madakecad-place_symbol", { symbol_id: "fuse", x: 10, y: 20 })).toBe(
+      summarizeToolUse("mcp__madakecad__place_symbol", { symbol_id: "fuse", x: 10, y: 20 }),
+    );
+  });
+
   // ja: place_symbolはシンボル・参照記号・位置で要約される
   it("place_symbol calls summarize as symbol, reference and position", () => {
     expect(

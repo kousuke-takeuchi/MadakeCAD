@@ -10,7 +10,7 @@ import ChatTidyMenu from "./ChatTidyMenu.vue";
 import ModelPicker from "./ModelPicker.vue";
 
 const { t } = useI18n();
-const { store, canSend, tokenBadge, submit, onCancel } = useChatComposer();
+const { store, canSend, tokenBadge, usageTooltip, submit, onCancel } = useChatComposer();
 const { open: contextOpen, toggle: toggleContext, close: closeContext } = usePopover();
 const { open: tidyOpen, toggle: toggleTidy, close: closeTidy } = usePopover();
 </script>
@@ -36,7 +36,7 @@ const { open: tidyOpen, toggle: toggleTidy, close: closeTidy } = usePopover();
       </template>
     </div>
     <span class="spacer" />
-    <span class="token"><Zap :size="11" class="zap" />{{ tokenBadge }}</span>
+    <span class="token" :title="usageTooltip"><Zap :size="11" class="zap" />{{ tokenBadge }}</span>
     <ModelPicker :model-value="store.model" @update:model-value="store.setModel($event)" />
     <button v-if="store.streaming" class="send stop" title="停止" @click="onCancel">
       <Square :size="11" />

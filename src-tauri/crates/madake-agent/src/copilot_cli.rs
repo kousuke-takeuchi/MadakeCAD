@@ -231,7 +231,7 @@ impl CopilotCliBackend {
         if session.is_none()
             && tx
                 .send(AgentEvent::SessionStarted {
-                    session_id: new_session_id,
+                    session_id: new_session_id.clone(),
                 })
                 .await
                 .is_err()
@@ -257,7 +257,9 @@ impl CopilotCliBackend {
             buf
         });
 
-        let mut parser = CopilotParser::new();
+        // 最終行`result`はこちらが渡したセッションIDをそのまま返してくる。既知として
+        // 渡しておき、同じIDの二重通知を避ける(違うIDならCLI側が正として通知される)
+        let mut parser = CopilotParser::for_session(session.unwrap_or(&new_session_id));
         let mut lines = BufReader::new(stdout).lines();
         let mut read_error = None;
         // JSONLとして解釈できなかった最後のstdout行。CLIはクレジット切れなどの理由を

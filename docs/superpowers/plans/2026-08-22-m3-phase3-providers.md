@@ -32,7 +32,35 @@
 - [x] Step 2 (green): 実装+プロバイダUI追加(i18n)→全テストgreen→gen_spec→コミット
 - [x] Step 3: 実機probe(2026-08-22実施)。`copilot -p "reply pong" --output-format json --allow-all-tools`は**未認証で失敗**(exit 1、stdout空、stderrに`Error: No authentication information found.`+`/login`等の手順)。実出力をフィクスチャ`fake_copilot_unauth.sh`と検知ロジックへ反映済み。起動フラグ一式(`--no-ask-user`/`--no-custom-instructions`/`--disable-builtin-mcps`/`--additional-mcp-config @file`/`--session-id`/`--model`/`--log-level error`)が実機CLIに受け付けられること、MCP設定JSONの形が`copilot mcp add --transport http`の書き出しと一致することも実機で確認済み
 
-  **ユーザー確認事項(未完)**: `copilot`を起動して`/login`でサインインしたうえで、(a) `--output-format json`のJSONL実形をパーサの別名表へ寄せる、(b) アプリで1ターン通し(作図+検証+undo後始末)。docs/09(EN/JA)に「確認できている範囲」として記載済み
+- [x] Step 4: **JSONL実形へ寄せ+アプリ通し確認済み(2026-08-23、`/login`済みの実機)**。✅通し済み
+
+  **実イベント形(copilot 1.0.80、`-p --output-format json`)**: 1行1JSONで、最終行以外は
+  `{"type":…,"data":{…},"id","timestamp","parentId","ephemeral"}`の封筒。使うのは
+  `assistant.message_delta`(`data.deltaContent`=本文の差分。**ephemeralだが本文そのもの**)/
+  `assistant.message`(`data.content`・`data.toolRequests[]`{`toolCallId`,`name`,`arguments`}・
+  `data.outputTokens`)/ `tool.execution_start`(`data.toolCallId`/`toolName`/`arguments`、
+  MCPツールは`madakecad-<ツール名>`)/ `tool.execution_complete`(`data.toolCallId`/`data.success`)/
+  最終行`result`(**ここだけ封筒が無い**。`sessionId`・`exitCode`・
+  `usage.premiumRequests`)。`assistant.reasoning_delta`も`data.deltaContent`を持つが本文では
+  ないので捨てる。`session.mcp_servers_loaded`/`session.skills_loaded`/`session.tools_updated`/
+  `session.usage_checkpoint`/`model.call_start`/`assistant.turn_start`/`turn_end`/`idle`等は無視。
+  `session.shutdown`(入出力トークンの内訳を持つ)は**stdoutには出ない**(セッション状態ファイルのみ)
+
+  **パーサの変更点**: `data`を先に見るフィールド解決/最終行`result`の`sessionId`採用
+  (こちらの`--session-id`と一致することを実機で確認。同じなら二重通知しない)/`exitCode≠0`と
+  `success:false`をエラー判定へ/回答本文は最後の`assistant.message`から補う(`result`に載らない)/
+  差分で取りこぼした本文の追いかけ配信/`outputTokens`の積み上げ。`Usage`に
+  `premium_requests`(小数)を追加し、⚡バッジのホバー内訳に出す。フロントの`shortToolName`は
+  `madakecad-`接頭辞も外す(Claude系の`mcp__madakecad__`と同じ表示になる)
+
+  **アプリ通し(2026-08-23)**: provider=`copilot_cli`で
+  ①「Sheet1の(60,60)に24V直流電源DC1を、(90,60)にヒューズF1を」→ `list_templates`・
+  `place_symbol`×2・`run_verification`のツールチップ→エンティティ2件・revision 0→2・
+  `turn_applied`(undo_depth 0→2)②継続ターン「さっき置いた2つの部品を参照記号だけ列挙して」→
+  ツールを使わず「DC1, F1」と回答(`--resume`で文脈保持を確認)→`undo_turn`で0件へ戻し、
+  providerを`claude_cli`へ復元。`auto`が選んだモデルはgpt-5.3-codex/gpt-5.4-miniで
+  **プレミアムリクエスト消費は0**。ブラウザ(localhost:1420)からのUI確認はこの環境の
+  ブラウザpaneがLink APIへ到達できないため未実施(Gemini確認時と同じ制約)
 
 ### Task 2: OpenAI互換Backend(Ollamaプリセット含む)
 

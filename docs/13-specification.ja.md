@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1314仕様項目**。
+全5領域・**1331仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -699,6 +699,7 @@
 - CopilotにはMadakeCAD自身のMCPサーバーを渡すので、他のクライアントと同じコマンド経由で図面を編集する。 <sub>`the_mcp_config_points_at_the_local_madakecad_server`</sub>
 - Copilot CLIにはシステムプロンプト用のフラグが無いため、MadakeCADの作図ルールは見出し付きでプロンプトの先頭へ前置される。 <sub>`the_system_prompt_is_prepended_to_the_user_prompt`</sub>
 - ターンはCopilotのJSONLから解釈したイベント(セッション・本文・ツール実行・完了)を流す。 <sub>`a_turn_streams_events_from_the_fake_cli`</sub>
+- MadakeCADが決めたセッションIDはCLIがそのまま返してくるので、通知は一度だけになる。 <sub>`the_pinned_session_id_is_announced_once`</sub>
 - 合成したプロンプトは実際に-p引数としてCLIへ届く。 <sub>`the_composed_prompt_reaches_the_cli`</sub>
 - Copilotへ渡すMCP設定ファイルはターン実行中に実在し、MadakeCADのサーバーを指している。 <sub>`the_mcp_config_file_exists_while_the_turn_runs`</sub>
 - GitHubへサインインしていない場合、チャットにその旨とサインイン手順が表示される。 <sub>`a_signed_out_cli_is_reported_with_login_guidance`</sub>
@@ -712,18 +713,29 @@
 
 ### copilot_events
 
-- Copilotのセッション行は、同じ会話を続けるためのセッションイベントになる。 <sub>`session_line_becomes_a_session_event`</sub>
-- アシスタントの本文は、CLIがどのフィールド名で出してもチャットへ届く。 <sub>`assistant_text_is_delivered_under_any_of_the_known_field_names`</sub>
-- ツール呼び出しの行は、ツール名と引数を持つ「ツール開始」イベントになる。 <sub>`a_tool_call_line_becomes_a_tool_start_event`</sub>
-- ツール呼び出しは別のフィールド名(tool/input、function/parameters)でも認識される。 <sub>`tool_calls_are_recognised_under_alternative_field_names`</sub>
-- ツール結果の行は対応するツール呼び出しを閉じ、失敗したかどうかを伝える。 <sub>`a_tool_result_line_closes_the_call_and_reports_failure`</sub>
+- アシスタントの回答は差分(message_delta)で届き、書かれるそばからチャットに表示される。 <sub>`assistant_message_deltas_are_shown_as_they_arrive`</sub>
+- モデルの思考(reasoning)は回答と同じ形で流れてくるが、チャットには表示しない。 <sub>`reasoning_deltas_are_not_shown_in_the_chat`</sub>
+- 完成したアシスタントメッセージには、モデルが頼んだツール呼び出しと引数が入っている。 <sub>`a_completed_message_carries_the_requested_tool_calls`</sub>
+- ツールの実行開始はツール名と引数を伝えるので、チャットには今なにをしているかが出る。 <sub>`a_tool_execution_start_reports_the_tool_and_its_arguments`</sub>
+- ツールの実行完了は対応する呼び出しを閉じ、成功したかどうかを伝える。 <sub>`a_tool_execution_complete_closes_the_call_with_its_outcome`</sub>
+- 最終行はターンを終わらせ、そのターンが使ったCopilotのプレミアムリクエスト数を伝える。 <sub>`the_final_line_completes_the_turn_with_the_premium_requests_used`</sub>
+- 最終行の終了コードが0でなければ、通常の回答ではなくエラーとしてチャットに出る。 <sub>`a_failed_final_line_becomes_an_error`</sub>
+- CLIが実際に使ったセッションIDが伝わるので、次のターンは同じ会話を再開できる。 <sub>`the_session_line_reports_the_id_to_resume`</sub>
+- 準備や記録のための行(MCPの状態・スキル一覧・ここまでの消費・ターンの区切り)はチャットに出ない。 <sub>`setup_and_bookkeeping_lines_are_ignored`</sub>
+- 解釈できない行はターンを壊さず黙って無視される。 <sub>`unknown_and_broken_lines_are_ignored`</sub>
 - ツール名は呼び出しから結果へ補完され、チャットには何が終わったのかが表示される。 <sub>`the_tool_name_is_carried_from_the_call_to_its_result`</sub>
-- 最後の行は、回答とトークン使用量を伴ってターンを完了させる。 <sub>`the_final_line_completes_the_turn_with_usage`</sub>
+- 同じツール呼び出しはメッセージと実行開始の両方に現れるが、チャットには一度だけ表示される。 <sub>`a_tool_call_announced_twice_is_shown_only_once`</sub>
+- ターンの回答はアシスタントの最後のメッセージになる(最終行には回答が載らないため)。 <sub>`the_turn_result_comes_from_the_last_assistant_message`</sub>
+- 差分では届かず完成メッセージにだけ載った本文も、取りこぼさずチャットに表示される。 <sub>`text_missing_from_the_deltas_is_still_delivered`</sub>
+- 差分が一切来ない場合は、完成した回答がまるごと一度だけ届く。 <sub>`the_whole_answer_is_delivered_when_no_deltas_arrive`</sub>
+- MadakeCADが決めたセッションIDが最終行で返ってきただけのときは、二重に通知しない。 <sub>`a_confirmed_session_id_is_not_announced_twice`</sub>
+- CLIが別のセッションIDで答えた場合はそのIDが通知され、次のターンは正しい会話を再開する。 <sub>`a_different_session_id_from_the_cli_wins`</sub>
+- アシスタントの本文は、CLIがどのフィールド名で出してもチャットへ届く。 <sub>`assistant_text_is_delivered_under_any_of_the_known_field_names`</sub>
+- ツール呼び出しは別のフィールド名(tool/input、function/parameters)でも認識される。 <sub>`tool_calls_are_recognised_under_alternative_field_names`</sub>
+- ツールの失敗は、知られているどの言い方でも失敗として認識される。 <sub>`a_failed_tool_result_is_recognised_under_any_wording`</sub>
 - トークン使用量はOpenAI流のフィールド名(prompt/completion tokens)でも読み取れる。 <sub>`token_usage_is_also_read_from_openai_style_names`</sub>
 - CLIのエラー行は、チャットにエラーとして表示される。 <sub>`an_error_line_becomes_an_error_event`</sub>
 - エラー扱いのresult行は、通常の完了ではなくエラーになる。 <sub>`a_failed_result_line_becomes_an_error`</sub>
-- 解釈できない行はターンを壊さず黙って無視される。 <sub>`unknown_and_broken_lines_are_ignored`</sub>
-- 同じツール呼び出しが二度流れても、チャットには一度だけ表示される。 <sub>`a_repeated_tool_call_is_shown_only_once`</sub>
 
 ### gemini
 
@@ -1013,6 +1025,7 @@
 ### agentOverlay
 
 - place_symbolのx/yからシンボル概寸の領域を作る <sub>`toolBox`</sub>
+- GitHub Copilotが付ける「サーバー名-」の接頭辞でも同じ領域が光る <sub>`toolBox`</sub>
 - draw_wireのpoints列のバウンディングボックスを作る <sub>`toolBox`</sub>
 - execute_commands内のadd_entityを合成した領域になる <sub>`toolBox`</sub>
 - 座標を持たないツールや不正なinputは領域を作らない <sub>`toolBox`</sub>
@@ -1263,6 +1276,12 @@
 - 名前も備考も変わっていなければコマンドを送らない(無駄なundo履歴を作らない) <sub>`harnessUpdateCommand`</sub>
 - ハーネス以外を選んでいるときはハーネスコマンドを作らない <sub>`harnessUpdateCommand`</sub>
 
+### chatComposer
+
+- 会話のトークンはターンをまたいで足し合わされる <sub>`sumUsage`</sub>
+- GitHub Copilotのプレミアムリクエストは小数のままトークンと別枠で数える <sub>`sumUsage`</sub>
+- 使用量がまだ無い会話は全て0(バッジは「1x」表示になる) <sub>`sumUsage`</sub>
+
 ### drawingContext
 
 - 選択が無ければコンテキストはシート全体になる <sub>`drawingContextTag`</sub>
@@ -1345,6 +1364,7 @@
 - newConversationは採番待ち(pendingLocalId)を巻き込まない <sub>`chat store: アクション`</sub>
 - setModel / setPanel / newConversationがそれぞれの状態を更新する <sub>`chat store: アクション`</sub>
 - 表示時にMCPツール名のプレフィックスを外す <sub>`summarizeToolUse`</sub>
+- GitHub Copilotが付ける「サーバー名-」の接頭辞も外して同じ名前で表示する <sub>`summarizeToolUse`</sub>
 - place_symbolはシンボル・参照記号・位置で要約される <sub>`summarizeToolUse`</sub>
 - draw_wireは線色・線径・頂点数で要約される <sub>`summarizeToolUse`</sub>
 - update_entity / execute_commandsはコマンド内容で要約される <sub>`summarizeToolUse`</sub>

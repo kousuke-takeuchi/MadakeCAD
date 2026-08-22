@@ -102,7 +102,7 @@ A1プラン「既知の制限」(`docs/superpowers/plans/2026-08-20-phaseA1-ai-c
 |---|---|---|---|
 | Claude Code CLI(既定) | `ClaudeCliBackend` | CLI自身のサインイン。保存物なし | ✅ A1から通し確認済み |
 | Anthropic API | `AnthropicApiBackend`(Messages API・SSE) | キーチェーン`anthropic_api_key` | 🔶 実キー通しはユーザー確認事項 |
-| GitHub Copilot CLI | `CopilotCliBackend`(`copilot -p … --output-format json`) | CLI自身のGitHubサインイン。**トークンは保存しない** | 🔶 `/login`後の通しはユーザー確認事項 |
+| GitHub Copilot CLI | `CopilotCliBackend`(`copilot -p … --output-format json`) | CLI自身のGitHubサインイン。**トークンは保存しない** | ✅ `/login`後に実機で通し確認済み(2026-08-23) |
 | OpenAI互換 | `OpenAiCompatBackend`(`/chat/completions`・SSE) | キーチェーン`openai_compat_api_key` | 🔶 モック+Ollamaで実証 |
 | Ollama(ローカル) | 同上(ローカルURLプリセット) | 不要(ローカルURLはAuthorizationごと省略) | ✅ 実機で作図1ターン通し確認済み |
 | Google Gemini | `GeminiBackend`(`streamGenerateContent?alt=sse`) | キーチェーン`gemini_api_key` | 🔶 実キー通しはユーザー確認事項 |
@@ -120,12 +120,13 @@ A1プラン「既知の制限」(`docs/superpowers/plans/2026-08-20-phaseA1-ai-c
 
 ### 実資格情報での通し確認(ユーザー確認事項・フェーズ3終了時点)
 
-有料/個人の資格情報が要る3経路は、**実資格情報での通し(作図・ツール往復・トークン消費)が未確認**のまま残っている。
+有料/個人の資格情報が要る経路のうち、**Copilot CLIは2026-08-23に通し確認済み**
+(`/login`後にJSONL実イベント形をパーサへ反映し、作図1ターン→継続ターンの文脈保持→`undo-turn`で後始末)。
+残る2経路は**実キーでの通し(作図・ツール往復・トークン消費)が未確認**のまま。
 それぞれ (a) 接続テストの成功表示、(b) アプリで1ターン通し(作図+検証+`undo-turn`で後始末)を1回ずつ行うこと。
 
 | 経路 | ユーザー側で必要な操作 | 追加で見るところ |
 |---|---|---|
-| **GitHub Copilot CLI** | `copilot`を起動して`/login`でサインイン | `--output-format json`のJSONL実イベント形をパーサの別名表へ寄せる(現状はフィクスチャ+寛容パーサ) |
 | **Google Gemini** | Google AI Studio発行の実キーを 設定 > エージェント へ保存 | 実際のfunction callingでMCPツールのスキーマが400にならないこと(`gemini_schema()`の削り込みが十分か) |
 | **Anthropic API** | Anthropic Console発行の実キーを保存 | ツール往復を伴う作図が最後まで通ること |
 
@@ -133,3 +134,4 @@ A1プラン「既知の制限」(`docs/superpowers/plans/2026-08-20-phaseA1-ai-c
 本物のエンドポイントがキー不正/キー無しを弾くところ(Anthropic=401、Gemini=`API_KEY_INVALID`、Copilot=`No authentication information found.`)を
 種類つきエラー+日本語の案内として表示・キー削除・キー未設定のまま送信したときの案内・設定ファイルにキーが残らないこと。
 **Ollama経路は資格情報が要らないため、フェーズ3で実機の通しまで完了している**(唯一の通し済みAPI経路)。
+CLI経路は2つとも通し済み(Claude Code CLI・GitHub Copilot CLI)。

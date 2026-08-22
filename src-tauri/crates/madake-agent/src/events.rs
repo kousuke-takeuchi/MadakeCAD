@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// 1ターン分のトークン使用量(CLIの`result`イベントより)。
+/// 1ターン分の使用量(CLIの`result`イベントより)。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Usage {
     pub input_tokens: u64,
@@ -25,6 +25,12 @@ pub struct Usage {
     pub cache_creation_input_tokens: u64,
     pub cache_read_input_tokens: u64,
     pub total_cost_usd: Option<f64>,
+    /// GitHub Copilotの「プレミアムリクエスト」消費量(小数。Copilot経路のみ)。
+    ///
+    /// Copilotはトークンではなくこの単位で残量を数えるため、トークン数と別枠で持つ。
+    /// 他のプロバイダは`None`。
+    #[serde(default)]
+    pub premium_requests: Option<f64>,
 }
 
 /// UI/CLIへ配信するエージェントイベント。
@@ -191,6 +197,8 @@ fn parse_usage(v: &Value) -> Option<Usage> {
         cache_creation_input_tokens: u64_field(usage, "cache_creation_input_tokens"),
         cache_read_input_tokens: u64_field(usage, "cache_read_input_tokens"),
         total_cost_usd: v.get("total_cost_usd").and_then(Value::as_f64),
+        // プレミアムリクエストはGitHub Copilot固有の単位(Claude Code CLIには無い)
+        premium_requests: None,
     })
 }
 
