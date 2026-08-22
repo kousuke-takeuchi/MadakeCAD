@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**770仕様項目**。
+全5領域・**797仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -127,6 +127,8 @@
 - 部品は登録・型番キーでの更新・取得ができ、名称の部分一致やカテゴリ完全一致で検索できる。 <sub>`upsert_get_and_search`</sub>
 - 電線品番は登録でき、線色+線径の完全一致で引き当てられる。 <sub>`wire_parts_crud_and_lookup`</sub>
 - 旧スキーマv1のDBは開いた時点でv2へ移行され、既存データを保持したままspice_model列が使えるようになる。 <sub>`v1_database_migrates_to_v2_preserving_data`</sub>
+- 旧スキーマv2のDBは開いた時点でv3へ移行され、既存データを保持したままcontact_config列が使えるようになる。 <sub>`v2_database_migrates_to_v3_preserving_data`</sub>
+- 同梱のサンプルリレーは接点構成を持っているので、配置直後から接点数超過の検証ができる。 <sub>`sample_relay_part_has_a_contact_configuration`</sub>
 - DBパスの既定はOSのアプリデータフォルダで、MADAKE_PARTS_DBで上書きできる。 <sub>`default_path_respects_env_override`</sub>
 
 ### PDF出力
@@ -139,6 +141,29 @@
 - 表紙は外すことができ、その場合は回路図シートが先頭になる。 <sub>`pdf_book_can_omit_the_cover`</sub>
 - 一括出力は全ページを1つのPDF文書にまとめ、回路図がA3でも帳票ページはA4になる。 <sub>`pdf_book_merges_every_page_into_one_document`</sub>
 - シートが1枚も無いプロジェクトでも、表紙だけの正しい1ページPDFになる。 <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
+
+### relay_xref
+
+- 同じ参照記号を持つコイルと接点は、1つのリレーデバイスとしてまとめられる。 <sub>`same_reference_groups_coil_and_contacts_into_one_device`</sub>
+- リレーのコイル・接点以外のシンボルは、リレーデバイスには含まれない。 <sub>`non_relay_symbols_are_not_relay_devices`</sub>
+- デバイスの接点はシート順→ゾーン順に並ぶので、端子対の連番は図面の読み順どおりになる。 <sub>`contacts_are_ordered_by_sheet_then_zone`</sub>
+- 端子対はIEC 60947-1に従い、先頭の数字が接点の連番、末尾がa接点なら3/4・b接点なら1/2になる。 <sub>`terminal_pairs_follow_iec_position_and_function_digits`</sub>
+- コイル下の接点マップには、配置済みの接点が端子対と図面上の住所とともに並ぶ。 <sub>`contact_map_lists_used_contacts_with_their_addresses`</sub>
+- 部品の接点構成が分かっているときは、まだ使っていない接点も行として並び、所在の代わりに「—」が入る。 <sub>`contact_map_shows_dash_for_unused_contacts`</sub>
+- 接点構成が分からないときは実際に描かれた接点だけが並び、空の行は作られない。 <sub>`contact_map_omits_unused_rows_without_contact_config`</sub>
+- それぞれの接点の脇には、その接点を動かすコイルの住所が丸括弧付きで出る。 <sub>`contact_shows_the_location_of_its_coil`</sub>
+- コイルが見つからない接点には、コイル所在が一切表示されない。 <sub>`contact_without_a_coil_shows_no_location`</sub>
+- シートごとの接点マップはコイルのentity idで引くので、そのシートに居るコイルだけが表を持つ。 <sub>`sheet_contact_maps_are_keyed_by_the_coil_on_that_sheet`</sub>
+- 「2NO+2NC」のような接点構成は、その部品が実際に持つa接点・b接点の数として読み取られる。 <sub>`contact_config_parses_make_and_break_counts`</sub>
+- 読み取れない接点構成は、接点数を推測せずに無視される。 <sub>`unreadable_contact_config_is_ignored`</sub>
+- 割り当てた部品が持つ数より多くの接点を使うとエラーになり、足りない接点の種別が示される。 <sub>`using_more_contacts_than_the_part_has_is_an_error`</sub>
+- プロジェクトのどこにも同じ参照記号のコイルが無い接点はエラーになる。 <sub>`a_contact_without_a_coil_is_an_error`</sub>
+- 接点を1つも動かしていないコイルは、これから足す可能性があるので警告にとどまる。 <sub>`a_coil_without_contacts_is_a_warning`</sub>
+- 読み取れない接点構成は、接点数の検証が黙って効かなくなるため警告として報告される。 <sub>`an_unreadable_contact_config_is_a_warning`</sub>
+- 正しく組まれたリレー(コイル+接点構成の範囲内の接点)には、クロスリファレンスの指摘が一切出ない。 <sub>`a_correct_relay_produces_no_diagnostics`</sub>
+- プロジェクト全体の検証には、コイル⇔接点クロスリファレンスの検査が含まれる。 <sub>`project_verification_includes_relay_checks`</sub>
+- 接点マップの表はコイルの真下に中央揃えで置かれ、接点1個につき1行ずつ下へ伸びる。 <sub>`contact_map_table_is_centred_under_the_coil`</sub>
+- 接点マップはコイルの外形の下にぶら下がり、コイル所在の文字は接点シンボルの右脇に置かれる。 <sub>`annotations_are_anchored_to_the_symbol_outline`</sub>
 
 ### 帳票の図面シート化
 
@@ -215,6 +240,9 @@
 - プロジェクトの一部として書き出したシートには、各ネットラベルの脇に他シートの同名ラベルの住所「/シート.ゾーン」が出る。 <sub>`svg_draws_cross_reference_address_next_to_net_label`</sub>
 - 他のシートに相手がいないネットラベルには、クロスリファレンスの文字が出ない。 <sub>`svg_omits_cross_reference_when_there_is_no_counterpart`</sub>
 - プロジェクトの文脈なしにシート単体を書き出したときは、クロスリファレンスを描かない。 <sub>`svg_of_a_lone_sheet_has_no_cross_reference`</sub>
+- コイルのあるシートには、コイルの下に接点マップ(端子対と所在の行)が描かれる。 <sub>`svg_draws_the_contact_map_under_the_coil`</sub>
+- 接点のあるシートには、その脇にコイルの住所が丸括弧付きで描かれる。 <sub>`svg_draws_the_coil_location_beside_the_contact`</sub>
+- シート単体の書き出しでは相手のシートが分からないので、接点マップは描かれない。 <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
 
 ### シンボルライブラリ
 
@@ -223,6 +251,8 @@
 - 動的生成のconnector_2pは旧静的定義と完全に同じピン座標を持ち、既存図面に影響しない。 <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
 - resolve_symbolは同梱idを見つけ、不正・範囲外の動的ID(0極・51極・数値なし)は拒否する。 <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defsは同梱ライブラリに加え、シートで実際に使われている動的シンボルの定義を返す。 <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
+- リレーコイルのシンボルは、JISのコイル端子記号A1・A2と参照記号の接頭辞Kを持つ。 <sub>`relay_coil_has_a1_a2_terminals`</sub>
+- リレー接点はa接点・b接点の2種類があり、コイルと同じ参照記号の接頭辞を持ち、2つの接続点が2.5mmグリッド上にある。 <sub>`relay_contacts_come_in_make_and_break_types`</sub>
 - シンボル定義はJSONに往復変換しても失われない。 <sub>`symbol_json_roundtrip`</sub>
 
 ### 開始テンプレート

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**770 specification clauses** across 5 areas.
+**797 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -127,6 +127,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Parts can be inserted, updated by part number, fetched, and searched by partial name match or exact category. <sub>`upsert_get_and_search`</sub>
 - Wire parts are registered and looked up by exact color + gauge combination. <sub>`wire_parts_crud_and_lookup`</sub>
 - An old schema-v1 database migrates to v2 on open, preserving existing rows and gaining the spice_model column. <sub>`v1_database_migrates_to_v2_preserving_data`</sub>
+- An old schema-v2 database migrates to v3 on open, preserving existing rows and gaining the contact_config column. <sub>`v2_database_migrates_to_v3_preserving_data`</sub>
+- The bundled sample relay carries its contact configuration, so a freshly placed relay can be checked for contact overflow. <sub>`sample_relay_part_has_a_contact_configuration`</sub>
 - The database path defaults to the OS app-data folder and can be overridden with MADAKE_PARTS_DB. <sub>`default_path_respects_env_override`</sub>
 
 ### PDF output
@@ -139,6 +141,29 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The cover page can be turned off, leaving the circuit sheets first. <sub>`pdf_book_can_omit_the_cover`</sub>
 - Exporting the book writes one PDF document holding every page, with report pages on A4 even when the circuit is A3. <sub>`pdf_book_merges_every_page_into_one_document`</sub>
 - A book of a project with no sheet at all still produces a valid one-page PDF (the cover). <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
+
+### relay_xref
+
+- A coil and the contacts that carry the same reference designator form one relay device. <sub>`same_reference_groups_coil_and_contacts_into_one_device`</sub>
+- Symbols that are not relay coils or contacts never become part of a relay device. <sub>`non_relay_symbols_are_not_relay_devices`</sub>
+- The contacts of a device are ordered by sheet, then by zone, so the numbering follows the reading order of the drawing. <sub>`contacts_are_ordered_by_sheet_then_zone`</sub>
+- Terminal pairs follow IEC 60947-1: the leading digit is the contact position, the last digits are 3/4 for make contacts and 1/2 for break contacts. <sub>`terminal_pairs_follow_iec_position_and_function_digits`</sub>
+- The contact map under a coil lists every placed contact with its terminal pair and its drawing address. <sub>`contact_map_lists_used_contacts_with_their_addresses`</sub>
+- When the part's contact configuration is known, the unused contacts are listed too, with a dash instead of an address. <sub>`contact_map_shows_dash_for_unused_contacts`</sub>
+- Without a contact configuration only the contacts actually drawn are listed; no empty rows are invented. <sub>`contact_map_omits_unused_rows_without_contact_config`</sub>
+- Each contact shows the address of the coil that drives it, in parentheses. <sub>`contact_shows_the_location_of_its_coil`</sub>
+- A contact whose coil is missing shows no coil location at all. <sub>`contact_without_a_coil_shows_no_location`</sub>
+- The per-sheet contact maps are keyed by the coil entity, so only coils on that sheet carry a table. <sub>`sheet_contact_maps_are_keyed_by_the_coil_on_that_sheet`</sub>
+- A contact configuration like "2NO+2NC" is read as the number of make and break contacts the part actually has. <sub>`contact_config_parses_make_and_break_counts`</sub>
+- An unreadable contact configuration is ignored instead of guessing a number of contacts. <sub>`unreadable_contact_config_is_ignored`</sub>
+- Using more contacts than the assigned part provides is an error, naming the type that ran out. <sub>`using_more_contacts_than_the_part_has_is_an_error`</sub>
+- A contact with no coil of the same reference anywhere in the project is an error. <sub>`a_contact_without_a_coil_is_an_error`</sub>
+- A coil that drives no contact at all is only a warning, because the contact may still be planned. <sub>`a_coil_without_contacts_is_a_warning`</sub>
+- A contact configuration that cannot be read is reported as a warning, because it silently disables the contact count check. <sub>`an_unreadable_contact_config_is_a_warning`</sub>
+- A correctly wired relay (coil plus contacts within the part's configuration) produces no cross-reference diagnostics. <sub>`a_correct_relay_produces_no_diagnostics`</sub>
+- The whole-project verification includes the relay cross-reference checks. <sub>`project_verification_includes_relay_checks`</sub>
+- The contact map table is centred under the coil and grows downwards, one row per contact. <sub>`contact_map_table_is_centred_under_the_coil`</sub>
+- The contact map hangs below the coil symbol's outline, and the coil location text sits to the right of the contact symbol. <sub>`annotations_are_anchored_to_the_symbol_outline`</sub>
 
 ### Reports as drawing sheets
 
@@ -215,6 +240,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A sheet exported as part of its project shows, next to each net label, the "/sheet.zone" address of the same-named label on the other sheet. <sub>`svg_draws_cross_reference_address_next_to_net_label`</sub>
 - A net label with no counterpart on another sheet gets no cross-reference text. <sub>`svg_omits_cross_reference_when_there_is_no_counterpart`</sub>
 - Exporting a single sheet on its own (no project context) never draws cross-references. <sub>`svg_of_a_lone_sheet_has_no_cross_reference`</sub>
+- The sheet holding the coil shows a contact map under it: one row per contact with its terminal pair and its address. <sub>`svg_draws_the_contact_map_under_the_coil`</sub>
+- The sheet holding the contact shows the coil's address in parentheses beside it. <sub>`svg_draws_the_coil_location_beside_the_contact`</sub>
+- Exporting a single sheet on its own draws no contact map, because the counterpart sheets are unknown. <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
 
 ### Symbol library
 
@@ -223,6 +251,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - connector_2p generated dynamically has exactly the same pin coordinates as the old static definition, so existing drawings are unaffected. <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
 - resolve_symbol finds built-in ids, and rejects malformed or out-of-range dynamic ids (0 poles, 51 poles, missing count). <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defs returns the built-in library plus definitions for every dynamic symbol actually used on the sheet. <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
+- The relay coil symbol carries the JIS coil terminal names A1 and A2 and the reference prefix K. <sub>`relay_coil_has_a1_a2_terminals`</sub>
+- Both relay contact types (make and break) exist, share the coil's reference prefix, and have their two connection points on the 2.5 mm grid. <sub>`relay_contacts_come_in_make_and_break_types`</sub>
 - Symbol definitions serialize to JSON and back without loss. <sub>`symbol_json_roundtrip`</sub>
 
 ### Start templates

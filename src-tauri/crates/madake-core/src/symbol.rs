@@ -220,6 +220,21 @@ pub fn builtin_symbols() -> Vec<SymbolDef> {
             pins: vec![pin("1", "", -7.5, 0.0), pin("2", "", 7.5, 0.0)],
         },
         SymbolDef {
+            id: "relay_contact_nc".into(),
+            name: "Relay contact (NC)".into(),
+            name_ja: "リレー接点(b接点)".into(),
+            category: "relay".into(),
+            ref_prefix: "K".into(),
+            primitives: vec![
+                line(&[(-7.5, 0.0), (-2.5, 0.0)]),
+                line(&[(2.5, 0.0), (7.5, 0.0)]),
+                line(&[(-2.5, 0.0), (2.5, -3.5)]),
+                // 可動接点が固定接点に載っていることを示す横切り線 (IEC 60617 ブレーク接点)
+                line(&[(2.5, 0.0), (2.5, -4.5)]),
+            ],
+            pins: vec![pin("1", "", -7.5, 0.0), pin("2", "", 7.5, 0.0)],
+        },
+        SymbolDef {
             id: "lamp".into(),
             name: "Lamp".into(),
             name_ja: "ランプ".into(),
@@ -507,6 +522,36 @@ mod tests {
         let defs = sheet_symbol_defs(&sheet);
         assert!(defs.iter().any(|d| d.id == "resistor"), "builtin含む");
         assert!(defs.iter().any(|d| d.id == "terminal_block_3p"), "使用中の動的ID含む");
+    }
+
+    /// The relay coil symbol carries the JIS coil terminal names A1 and A2 and the reference prefix K.
+    /// リレーコイルのシンボルは、JISのコイル端子記号A1・A2と参照記号の接頭辞Kを持つ。
+    #[test]
+    fn relay_coil_has_a1_a2_terminals() {
+        let def = resolve_symbol("relay_coil").expect("relay coil");
+        assert_eq!(def.ref_prefix, "K");
+        assert_eq!(def.category, "relay");
+        let numbers: Vec<&str> = def.pins.iter().map(|p| p.number.as_str()).collect();
+        assert_eq!(numbers, vec!["A1", "A2"]);
+    }
+
+    /// Both relay contact types (make and break) exist, share the coil's reference prefix, and have their two connection points on the 2.5 mm grid.
+    /// リレー接点はa接点・b接点の2種類があり、コイルと同じ参照記号の接頭辞を持ち、2つの接続点が2.5mmグリッド上にある。
+    #[test]
+    fn relay_contacts_come_in_make_and_break_types() {
+        let no = resolve_symbol("relay_contact_no").expect("a接点");
+        let nc = resolve_symbol("relay_contact_nc").expect("b接点");
+        for def in [&no, &nc] {
+            assert_eq!(def.ref_prefix, "K");
+            assert_eq!(def.category, "relay");
+            assert_eq!(def.pins.len(), 2, "{}", def.id);
+            for pin in &def.pins {
+                assert!((pin.at.x.abs() - 7.5).abs() < 1e-9, "{} {:?}", def.id, pin.at);
+                assert!((pin.at.y / 2.5 - (pin.at.y / 2.5).round()).abs() < 1e-9);
+            }
+        }
+        // b接点は接点を横切る線が1本多く、a接点と図形が違う
+        assert!(nc.primitives.len() > no.primitives.len(), "b接点はa接点と区別できる図形");
     }
 
     /// Symbol definitions serialize to JSON and back without loss.
