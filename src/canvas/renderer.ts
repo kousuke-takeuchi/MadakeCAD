@@ -9,6 +9,13 @@ import { entityViewClass, type ViewClass } from "./viewClasses";
 import { agentRgba, theme, wireColorScreen } from "./theme";
 import { WIRE_NO_FONT, wireNumberLabels } from "./wireNumbers";
 import { XREF_FONT, xrefTextAt } from "./xref";
+import {
+  CONTACT_MAP_FONT,
+  coilLocationAt,
+  contactMapLayout,
+  contactMapOrigin,
+  type ContactMapRow,
+} from "./relayXref";
 import { GRID_PITCH, type Viewport } from "./viewport";
 
 /** 図枠の用紙端からのマージン (mm)。svg.rsのFRAME_MARGINと一致させること。 */
@@ -106,6 +113,16 @@ export interface RenderOptions {
    * `sheetXrefs()` の戻り。省略時は描かない。表示クラスは「ネットラベル」に含まれる。
    */
   xrefs?: ReadonlyMap<string, string>;
+  /**
+   * コイル⇔接点クロスリファレンス (M4 §4)。`sheetContactMaps()` / `sheetCoilLocations()`
+   * の戻り。省略時は描かない。表示クラスは「参照記号」に含める。
+   */
+  relay?: {
+    /** コイルのid → その下に描く接点マップの行。 */
+    contactMaps?: ReadonlyMap<string, ContactMapRow[]>;
+    /** 接点のid → 脇に描くコイル所在 (例 "(/1.C2)")。 */
+    coilLocations?: ReadonlyMap<string, string>;
+  };
 }
 
 /** エージェント編集オーバーレイの描画入力。 */
@@ -413,12 +430,75 @@ export function drawSymbol(
   }
 }
 
-/** 配置後のシンボル外形の上端Y(用紙座標)。円・弧は回転対称なので中心±rで安全側に評価。 */
+/**
+ * コイルの下に接点マップ (端子対 | 所在) の表を描く (M4 §4)。
+ * 位置・列幅は relayXref.contactMapLayout が決め、SVG出力 (svg.rs) と同じ数式。
+ */
+export function drawContactMap(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  inst: SymbolInstance,
+  def: SymbolDef,
+  rows: ContactMapRow[],
+) {
+  if (!rows.length) return;
+  const origin = contactMapOrigin(symbolBounds(inst, def), inst.at.x);
+  const layout = contactMapLayout(rows, origin.x, origin.y);
+  const topLeft = vp.toScreen({ x: layout.x, y: layout.y });
+  const bottomRight = vp.toScreen({
+    x: layout.x + layout.width,
+    y: layout.y + layout.height,
+  });
+  ctx.strokeStyle = theme.xref;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(
+    topLeft.x,
+    topLeft.y,
+    bottomRight.x - topLeft.x,
+    bottomRight.y - topLeft.y,
+  );
+  ctx.beginPath();
+  const divider = vp.toScreen({ x: layout.colX(1), y: layout.y });
+  ctx.moveTo(divider.x, topLeft.y);
+  ctx.lineTo(divider.x, bottomRight.y);
+  for (let i = 1; i < rows.length; i += 1) {
+    const y = vp.toScreen({ x: layout.x, y: layout.rowTop(i) }).y;
+    ctx.moveTo(topLeft.x, y);
+    ctx.lineTo(bottomRight.x, y);
+  }
+  ctx.stroke();
+  ctx.fillStyle = theme.xref;
+  ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
+  ctx.textAlign = "left";
+  rows.forEach((row, i) => {
+    const y = vp.toScreen({ x: layout.x, y: layout.baseline(i) }).y;
+    ctx.fillText(row.terminals, vp.toScreen({ x: layout.textX(0), y: 0 }).x, y);
+    ctx.fillText(row.address, vp.toScreen({ x: layout.textX(1), y: 0 }).x, y);
+  });
+}
+
+/** 配置後のシンボル外形の上端Y(用紙座標)。 */
 export function symbolTopY(inst: SymbolInstance, def: SymbolDef): number {
-  let top = inst.at.y;
+  return symbolBounds(inst, def).min.y;
+}
+
+/**
+ * 配置後のシンボル外形の囲み矩形(用紙座標)。円・弧は回転対称なので中心±rで安全側に
+ * 評価し、配置基準点も必ず含める。Rust側 svg.rs の symbol_bounds と同一。
+ * 参照記号・接点マップなど、外形の外側に置く注記の位置決めに使う。
+ */
+export function symbolBounds(
+  inst: SymbolInstance,
+  def: SymbolDef,
+): { min: Point; max: Point } {
+  const min = { ...inst.at };
+  const max = { ...inst.at };
   const visit = (p: Point) => {
     const t = transformLocal(p, inst);
-    if (t.y < top) top = t.y;
+    min.x = Math.min(min.x, t.x);
+    min.y = Math.min(min.y, t.y);
+    max.x = Math.max(max.x, t.x);
+    max.y = Math.max(max.y, t.y);
   };
   for (const prim of def.primitives) {
     switch (prim.type) {
@@ -442,7 +522,7 @@ export function symbolTopY(inst: SymbolInstance, def: SymbolDef): number {
     }
   }
   for (const pin of def.pins) visit(pin.at);
-  return top;
+  return { min, max };
 }
 
 // --- エージェント編集オーバーレイ -------------------------------------------
@@ -647,7 +727,20 @@ export function renderSheet(
   for (const e of entities) {
     if (e.kind !== "symbol") continue;
     const def = resolve(e.symbol_id);
-    if (def) drawSymbol(ctx, vp, e, def, opts.selection.has(e.id), undefined, !hidden.has("refs"));
+    if (!def) continue;
+    drawSymbol(ctx, vp, e, def, opts.selection.has(e.id), undefined, !hidden.has("refs"));
+    // コイル⇔接点クロスリファレンス (表示クラスは「参照記号」に含める)
+    if (hidden.has("refs")) continue;
+    const rows = opts.relay?.contactMaps?.get(e.id);
+    if (rows?.length) drawContactMap(ctx, vp, e, def, rows);
+    const location = opts.relay?.coilLocations?.get(e.id);
+    if (location) {
+      const at = vp.toScreen(coilLocationAt(symbolBounds(e, def), e.at.y));
+      ctx.fillStyle = theme.xref;
+      ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
+      ctx.textAlign = "left";
+      ctx.fillText(location, at.x, at.y);
+    }
   }
   for (const e of entities) {
     if (e.kind === "junction") {

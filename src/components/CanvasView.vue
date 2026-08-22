@@ -2,6 +2,7 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
 import { sheetXrefs } from "../canvas/xref";
+import { sheetCoilLocations, sheetContactMaps } from "../canvas/relayXref";
 import { AgentOverlay } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
 import type { Patch } from "../ipc";
@@ -44,6 +45,11 @@ function draw() {
     agent: regions.length > 0 ? { regions, active: chat.anyStreaming } : undefined,
     // シート間クロスリファレンス「/2.B3」(表示クラスは「ネットラベル」に含める)
     xrefs: sheetXrefs(store.project, sheet.id),
+    // コイル⇔接点クロスリファレンス(接点マップ・コイル所在。表示クラスは「参照記号」)
+    relay: {
+      contactMaps: sheetContactMaps(store.project, sheet.id),
+      coilLocations: sheetCoilLocations(store.project, sheet.id),
+    },
   });
   controller.renderPreview(ctx);
 }

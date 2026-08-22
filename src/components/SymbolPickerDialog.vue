@@ -8,6 +8,7 @@ import { computed, inject, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { DYNAMIC_PIN_MAX, dynamicSymbol } from "../canvas/dynamicSymbol";
 import { macroDescription, macroName, macroVariantLabel } from "../canvas/macroPreview";
+import { CONTACT_CONFIG_ATTR } from "../canvas/relayXref";
 import type { Part } from "../ipc";
 import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
@@ -125,6 +126,8 @@ function pickPart(part: Part) {
   }
   const attrs: Record<string, string> = {};
   if (part.rated_current_a != null) attrs.current_a = String(part.rated_current_a);
+  // 接点構成はコイル⇔接点XRefの接点数検証に使う (図面はDBのスナップショット)
+  if (part.contact_config) attrs[CONTACT_CONFIG_ATTR] = part.contact_config;
   controller.setTool("place", part.symbol_id, { value: part.part_no, attrs });
   ui.symbolPickerOpen = false;
   ui.log(t("symbolPicker.placePartLog", { part: part.part_no }));
