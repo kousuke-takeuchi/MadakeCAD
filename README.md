@@ -37,7 +37,7 @@ and verification grounded in a real circuit solver (ngspice).
 
 ## Highlights
 
-- ✏️ **Purpose-built schematic editor** — JIS C 0617 symbols, parametric terminal blocks & connectors (1–50 poles), orthogonal wiring with grid/pin snap, auto reference designators, multi-sheet, layers
+- ✏️ **Purpose-built schematic editor** — JIS C 0617 symbols, parametric terminal blocks & connectors (1–50 poles), orthogonal wiring with grid/pin snap, auto reference designators, multi-sheet, layers, reusable circuit macros, coil ⇔ contact cross-references, and project-wide search with a device navigator
 - 📐 **Standards-true output** — JIS drawing frame today (zones, title block), IEC 60617 / IEC 81346 / ISO 7200-series variants on the roadmap; print-quality SVG/PDF with embedded CJK fonts, and five reports (from–to wire list, terminal chart, terminal connection diagram, BOM, cross-reference) as CSV, as framed drawing sheets, or bound into one PDF with the schematics
 - ✅ **Solver-grounded verification** — ERC plus electrical checks (reachability, ampacity, voltage drop, fuse rating) judged from an actual ngspice DC solution
 - ⚡ **DC simulation** — net voltages, component currents/power, open-switch what-if analysis
@@ -90,7 +90,7 @@ Every edit from every entry point is an undoable command against a single engine
 
 ## Status & Roadmap
 
-**Alpha.** Milestones M1 (foundation) and M2 (reference-drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references) are essentially complete, and M3 phase 1 (standards knowledge, self-verification loop, safe turn revert, start templates) and M4 phase 1 (terminal charts + the extended report set) have landed; see the [roadmap](docs/12-roadmap.md) for the rest of M3 through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
+**Alpha.** Milestones M1 (foundation) and M2 (reference-drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references) are essentially complete, and M3 phase 1 (standards knowledge, self-verification loop, safe turn revert, start templates) and M4 phases 1 and 2 (terminal charts + the extended report set; circuit macros, coil ⇔ contact cross-references, search and navigation) have landed; see the [roadmap](docs/12-roadmap.md) for the rest of M3 through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
 
 ## Contributing
 

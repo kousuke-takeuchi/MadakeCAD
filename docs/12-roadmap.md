@@ -26,14 +26,14 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - ✅ **Anthropic API provider + OS keychain** (phase 2): a backend trait with a Claude Code CLI and a Messages API implementation sharing one tool bridge, the API key kept only in the OS keychain, and a provider settings page with a masked key field and a connection test
 - Remaining for phase 3: OpenAI-compatible endpoints (incl. Ollama) and Gemini; tidy variants (2-4 alternatives side by side) and the alternative-proposal UX for parallel agents
 
-## M4 — Industrial CAD core (ACADE/EPLAN benchmark) 🔶 (phase 1 done)
+## M4 — Industrial CAD core (ACADE/EPLAN benchmark) 🔶 (phases 1 and 2 done)
 
 - ✅ **Terminal charts** (phase 1): terminal strip editor with saddle jumpers and terminal checks, terminal chart (CSV / drawing sheet), graphical terminal connection diagram. Sorting, multi-level terminals and accessories need a model extension and come later
 - ✅ **Extended report set** (phase 1): from–to wire list, cross-reference table, every report as a framed drawing sheet, and a combined PDF (cover → schematic sheets → reports)
-- Circuit macros; PLC I/O drawings & reports
-- Coil ⇔ contact cross-references; cable summary; BOM enriched from the parts database
-- 2D panel layout sheets; customizable frame/title-block templates
-- Symbol editor + expanded symbol library; project-wide search
+- ✅ **Circuit macros** (phase 2): save a selection as a macro (base point = its bottom-left pin) in `~/MadakeCAD/macros` and insert it from the Macros tab with a ghost preview, `R` to rotate and `Tab` to switch variants. Designators are renumbered above the ones already in use and wire numbers cleared, so repeated inserts never collide; `⌘C` / `⌘V` share the mechanism, and one insert is one undo step
+- ✅ **Coil ⇔ contact cross-references** (phase 2): symbols sharing a designator form one device, with an IEC 60947-1 contact map under the coil, the coil's address beside each contact, and ERC rules for overusing a contact configuration, orphan contacts and coils with no contact. The parts database carries the contact configuration (schema v3)
+- ✅ **Search and navigation** (phase 2): project-wide ⌘F search (designator, part no., net name, wire number, text) with a docked result panel, a device navigator tree in the left panel, and Alt-click reference surfing — all four paths reveal by switching sheet, selecting and zooming
+- Remaining for later phases: PLC I/O drawings & reports; macro value sets and reserved contacts placed from the navigator; cable summary; BOM enriched from the parts database; 2D panel layout sheets; customizable frame/title-block templates; symbol editor + expanded symbol library
 
 ## M5 — Mechanical CAD integration (FreeCAD)
 
