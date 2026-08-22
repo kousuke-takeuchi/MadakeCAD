@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**872 specification clauses** across 5 areas.
+**893 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -206,6 +206,25 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The wire list contains each wire's color, gauge, length and part number. <sub>`wire_list_contains_attributes`</sub>
 - A wire with no measured length leaves the length column empty (lengths come back from the 3D routing later). <sub>`wire_list_length_is_empty_until_it_is_known`</sub>
 - Rows are sorted by From then To within each sheet, so exporting the same drawing twice gives byte-identical files. <sub>`rows_are_sorted_by_from_then_to`</sub>
+
+### search
+
+- One search covers all five targets at once: reference designators, part numbers, net names, wire numbers and free text. <sub>`search_covers_all_five_targets`</sub>
+- The query matches any part of a word and ignores upper/lower case, so "my2" finds the part number "MY2N". <sub>`search_is_case_insensitive_and_partial`</sub>
+- Ticking only some filter chips narrows the results to those targets, so searching "K1" with the reference filter drops the text note. <sub>`kinds_filter_narrows_the_targets`</sub>
+- An empty query finds nothing at all (it never dumps the whole drawing), and blank fields are never matched. <sub>`empty_query_finds_nothing`</sub>
+- Results come back in reading order — sheet number, then zone, then entity — so the same drawing always lists them the same way. <sub>`results_are_in_reading_order`</sub>
+- Each hit knows where it lives — sheet, zone and the entity to select — and prints its address as "/sheet.zone". <sub>`hit_carries_its_location`</sub>
+- A part-number hit shows which device it belongs to, and a reference hit shows that device's part number. <sub>`hits_carry_the_partner_field_as_detail`</sub>
+- A hit on a symbol also says what that symbol does in its device, so the result list can read "relay contact 13-14". <sub>`symbol_hits_say_what_the_symbol_does`</sub>
+- Attribute values such as the contact configuration are searched together with the part number. <sub>`attribute_values_are_searched_as_part_numbers`</sub>
+- A relay device lists its coil first and then its contacts, using the same terminal numbers as the contact map. <sub>`relay_device_lists_coil_then_contacts`</sub>
+- A terminal block appears as one "terminals" row covering every pole, with the pole count on the device. <sub>`terminal_block_device_shows_its_terminal_range`</sub>
+- An ordinary part that has no separable functions shows up as a single "body" row, named after its symbol. <sub>`plain_part_is_a_single_body_row`</sub>
+- Devices are keyed by reference designator, so the same designator on several sheets is one device, and symbols without a designator are not devices at all. <sub>`devices_group_by_reference_across_sheets`</sub>
+- An empty project has no devices, and the tree is ordered by reference designator. <sub>`device_tree_is_ordered_and_can_be_empty`</sub>
+- Every function row knows the sheet and zone to jump to, which is what the navigator and the reference surfer use to reveal it. <sub>`every_function_knows_where_to_jump`</sub>
+- Filter names travel over the API as snake_case strings, and unknown names are rejected rather than guessed. <sub>`filter_names_parse_from_the_api`</sub>
 
 ### DC simulation
 
@@ -440,6 +459,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The connection test answers with a readable reason instead of failing the request itself. <sub>`the_connection_test_answers_with_a_readable_reason`</sub>
 - Choosing the Anthropic API through the settings endpoint is reflected in the provider status. <sub>`choosing_the_anthropic_api_is_reflected_in_the_provider_status`</sub>
 - If the OS keychain does not answer, the settings screen still opens and says why. <sub>`a_keychain_that_never_answers_does_not_freeze_the_settings_screen`</sub>
+
+### search_api
+
+- GET /search finds every kind of target across the project and returns each hit with the sheet and zone to jump to. <sub>`searching_over_the_link_api_returns_located_hits`</sub>
+- The kinds parameter narrows the search to the chosen filter chips, and an unknown filter name is rejected instead of guessed. <sub>`the_kinds_parameter_narrows_the_search`</sub>
+- An empty query returns no hits at all, so the search bar never dumps the whole drawing. <sub>`an_empty_query_returns_nothing`</sub>
+- GET /devices returns the reference-designator tree the device navigator draws, with each function's terminals and location. <sub>`the_device_tree_comes_back_over_the_link_api`</sub>
+- A drawing with nothing on it has an empty device tree rather than an error. <sub>`an_empty_drawing_has_an_empty_device_tree`</sub>
 
 ### Start templates (REST)
 

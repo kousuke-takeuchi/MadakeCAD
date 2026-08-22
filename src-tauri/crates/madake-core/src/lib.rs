@@ -17,6 +17,7 @@ pub mod pdf;
 pub mod relay_xref;
 pub mod report_sheet;
 pub mod reports;
+pub mod search;
 pub mod sim;
 pub mod spice;
 pub mod svg;

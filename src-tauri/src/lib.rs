@@ -343,6 +343,25 @@ fn export_pdf_book(
     Ok(pages)
 }
 
+/// プロジェクト内検索 (⌘F)。参照記号・型番・ネット名・線番・テキストを横断する。
+/// `kinds`が空なら全種別。結果は図面の読み順で、各ヒットはジャンプ先の所在を持つ。
+#[tauri::command]
+fn search_project(
+    state: State<AppState>,
+    query: String,
+    kinds: Option<Vec<madake_core::search::SearchKind>>,
+) -> Vec<madake_core::search::SearchHit> {
+    let engine = state.doc.engine.lock().unwrap();
+    madake_core::search::search_project(engine.project(), &query, &kinds.unwrap_or_default())
+}
+
+/// デバイスナビゲータのツリー (参照記号 → 機能: コイル/接点/端子/本体)。
+#[tauri::command]
+fn get_device_tree(state: State<AppState>) -> Vec<madake_core::search::DeviceNode> {
+    let engine = state.doc.engine.lock().unwrap();
+    madake_core::search::device_tree(engine.project())
+}
+
 /// 端子台エディタ・帳票の対象選択に出す端子台の一覧 (sheet_id省略でプロジェクト全体)。
 #[tauri::command]
 fn list_terminal_blocks(
@@ -678,6 +697,8 @@ pub fn run() {
             export_pdf,
             export_pdf_book,
             export_report,
+            search_project,
+            get_device_tree,
             list_terminal_blocks,
             get_terminal_chart,
             check_terminal_block,

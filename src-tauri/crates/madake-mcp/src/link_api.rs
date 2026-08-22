@@ -440,6 +440,49 @@ struct EntityQuery {
     entity_id: Uuid,
 }
 
+#[derive(Deserialize)]
+struct SearchQuery {
+    /// 検索語 (部分一致・大文字小文字を区別しない)。空なら結果は0件。
+    #[serde(default)]
+    q: String,
+    /// 対象種別をカンマ区切りで絞る (`reference,value,net,wire_no,text`)。省略で全種別。
+    #[serde(default)]
+    kinds: Option<String>,
+}
+
+/// プロジェクト内検索 (⌘F)。参照記号・型番・ネット名・線番・テキストを横断する。
+/// 結果は図面の読み順 (シート→ゾーン→id) で、各ヒットはジャンプ先の所在を持つ。
+async fn get_search(
+    State(doc): State<SharedDoc>,
+    Query(q): Query<SearchQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let kinds = match q.kinds.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        None => Vec::new(),
+        Some(raw) => raw
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|name| {
+                madake_core::search::SearchKind::parse(name)
+                    .ok_or_else(|| bad_request(format!("unknown search kind: {name}")))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+    let engine = doc.engine.lock().unwrap();
+    let hits = madake_core::search::search_project(engine.project(), &q.q, &kinds);
+    Ok(Json(
+        serde_json::json!({ "count": hits.len(), "hits": hits }),
+    ))
+}
+
+/// デバイスナビゲータのツリー (参照記号 → 機能: コイル/接点/端子/本体)。
+async fn get_devices(State(doc): State<SharedDoc>) -> Json<serde_json::Value> {
+    let engine = doc.engine.lock().unwrap();
+    Json(serde_json::json!({
+        "devices": madake_core::search::device_tree(engine.project())
+    }))
+}
+
 /// 端子台1つのチャート (端子ごとの行・ジャンパ)。端子台でなければ400。
 async fn get_terminal_chart(
     State(doc): State<SharedDoc>,
@@ -871,6 +914,8 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/netlist", get(get_netlist))
         .route("/api/v1/verify", get(get_verify))
         .route("/api/v1/tidy-metrics", get(get_tidy_metrics))
+        .route("/api/v1/search", get(get_search))
+        .route("/api/v1/devices", get(get_devices))
         .route("/api/v1/terminals", get(get_terminals))
         .route("/api/v1/terminals/chart", get(get_terminal_chart))
         .route("/api/v1/terminals/check", get(get_terminal_check))

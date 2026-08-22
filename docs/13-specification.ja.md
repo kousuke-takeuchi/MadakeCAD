@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**872仕様項目**。
+全5領域・**893仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -206,6 +206,25 @@
 - 電線リストには各ワイヤの線色・線径・長さ・品番が載る。 <sub>`wire_list_contains_attributes`</sub>
 - 長さが決まっていないワイヤの長さ列は空欄になる (長さは後で3D配線から書き戻される)。 <sub>`wire_list_length_is_empty_until_it_is_known`</sub>
 - 行はシートごとにFrom→Toの順に並ぶので、同じ図面を2回出力すると全く同じファイルになる。 <sub>`rows_are_sorted_by_from_then_to`</sub>
+
+### search
+
+- 1回の検索で5種すべて(参照記号・型番・ネット名・線番・テキスト)を対象にする。 <sub>`search_covers_all_five_targets`</sub>
+- クエリは語の一部にも当たり、大文字小文字も区別しない。「my2」で型番「MY2N」が見つかる。 <sub>`search_is_case_insensitive_and_partial`</sub>
+- フィルタチップで対象を絞ると、その種別だけが残る。「K1」を参照記号だけで探すと注記のヒットは消える。 <sub>`kinds_filter_narrows_the_targets`</sub>
+- 空のクエリは何も返さない(図面全体を並べたりしない)。空欄のフィールドもヒットしない。 <sub>`empty_query_finds_nothing`</sub>
+- 結果は図面の読み順(シート番号→ゾーン→エンティティ)で返るので、同じ図面なら並びは常に同じになる。 <sub>`results_are_in_reading_order`</sub>
+- ヒットは所在(シート・ゾーン・選択するエンティティ)を持ち、住所を「/シート.ゾーン」の形で表す。 <sub>`hit_carries_its_location`</sub>
+- 型番のヒットはどの部品のものかを、参照記号のヒットはその部品の型番を、それぞれ添えて返す。 <sub>`hits_carry_the_partner_field_as_detail`</sub>
+- シンボルのヒットは、そのシンボルがデバイスの中で果たす機能も返すので、結果一覧に「リレー 接点 13-14」と出せる。 <sub>`symbol_hits_say_what_the_symbol_does`</sub>
+- 接点構成のような属性の値も、型番と一緒に検索できる。 <sub>`attribute_values_are_searched_as_part_numbers`</sub>
+- リレーのデバイスはコイルを先に、続けて接点を並べ、端子の呼び名は接点マップと同じになる。 <sub>`relay_device_lists_coil_then_contacts`</sub>
+- 端子台は全極をまとめた「端子」1行として並び、極数はデバイス側に持つ。 <sub>`terminal_block_device_shows_its_terminal_range`</sub>
+- 機能に分かれない普通の部品は、「本体」1行だけのデバイスとして、シンボルの名前つきで出る。 <sub>`plain_part_is_a_single_body_row`</sub>
+- デバイスは参照記号でまとまるので、複数シートに散っていても1デバイスになる。参照記号の無いシンボルはデバイスにならない。 <sub>`devices_group_by_reference_across_sheets`</sub>
+- 空のプロジェクトにデバイスは無く、ツリーは参照記号の順に並ぶ。 <sub>`device_tree_is_ordered_and_can_be_empty`</sub>
+- 機能の行はジャンプ先のシートとゾーンを持つ。ナビゲータと参照サーフィンはこれを使って図面を表示する。 <sub>`every_function_knows_where_to_jump`</sub>
+- フィルタ名はAPI上ではsnake_caseの文字列で、未知の名前は推測せずに拒否する。 <sub>`filter_names_parse_from_the_api`</sub>
 
 ### DCシミュレーション
 
@@ -440,6 +459,14 @@
 - 接続テストはリクエスト自体を失敗させず、読める理由を答えとして返す。 <sub>`the_connection_test_answers_with_a_readable_reason`</sub>
 - 設定エンドポイントでAnthropic APIを選ぶと、プロバイダの状態にも反映される。 <sub>`choosing_the_anthropic_api_is_reflected_in_the_provider_status`</sub>
 - OSキーチェーンが返事をしないときも設定画面は開き、理由を表示する(固まらない)。 <sub>`a_keychain_that_never_answers_does_not_freeze_the_settings_screen`</sub>
+
+### search_api
+
+- GET /search はプロジェクト全体から全種別を探し、ジャンプ先のシートとゾーンつきで各ヒットを返す。 <sub>`searching_over_the_link_api_returns_located_hits`</sub>
+- kindsパラメータは選んだフィルタチップだけに絞る。未知のフィルタ名は推測せずエラーにする。 <sub>`the_kinds_parameter_narrows_the_search`</sub>
+- 空のクエリは1件も返さないので、検索バーが図面全体を並べてしまうことはない。 <sub>`an_empty_query_returns_nothing`</sub>
+- GET /devices はデバイスナビゲータが描く参照記号ツリーを、機能ごとの端子と所在つきで返す。 <sub>`the_device_tree_comes_back_over_the_link_api`</sub>
+- 何も置いていない図面のデバイスツリーは、エラーではなく空になる。 <sub>`an_empty_drawing_has_an_empty_device_tree`</sub>
 
 ### 開始テンプレート (REST)
 
