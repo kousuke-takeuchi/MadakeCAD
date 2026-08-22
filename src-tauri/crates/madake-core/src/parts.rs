@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 
 /// スキーマバージョン (metaテーブルに保存。変更時はマイグレーションを書く)。
 /// v2: partsに`spice_model`列を追加 (過渡解析・非線形モデル用のSPICE素子行)。
-pub const SCHEMA_VERSION: u32 = 2;
+/// v3: partsに`contact_config`列を追加 (リレーの接点構成。コイル⇔接点XRefの接点数検証用)。
+pub const SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PartsError {
@@ -59,6 +60,10 @@ pub struct Part {
     /// SPICEモデル (素子行テンプレート。過渡解析・非線形モデル用、v2)。
     #[serde(default)]
     pub spice_model: String,
+    /// 接点構成 (リレー・コンタクタの実装数。例 "2NO+2NC"、v3)。
+    /// 図面に置くとシンボルの`attrs["contact_config"]`へ写り、接点数超過の検証に使われる。
+    #[serde(default)]
+    pub contact_config: String,
 }
 
 fn default_currency() -> String {
@@ -97,7 +102,7 @@ pub fn default_db_path() -> PathBuf {
 
 const PART_COLUMNS: &str = "part_no, maker, name, category, symbol_id, rated_voltage, \
      rated_current_a, purchase_url, datasheet_url, price, currency, note, model_3d, mounting, \
-     spice_model";
+     spice_model, contact_config";
 
 fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
     Ok(Part {
@@ -116,6 +121,7 @@ fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
         model_3d: row.get(12)?,
         mounting: row.get(13)?,
         spice_model: row.get(14)?,
+        contact_config: row.get(15)?,
     })
 }
 
@@ -143,7 +149,8 @@ impl PartsDb {
                note TEXT NOT NULL DEFAULT '',
                model_3d TEXT NOT NULL DEFAULT '',
                mounting TEXT NOT NULL DEFAULT '',
-               spice_model TEXT NOT NULL DEFAULT ''
+               spice_model TEXT NOT NULL DEFAULT '',
+               contact_config TEXT NOT NULL DEFAULT ''
              );
              CREATE TABLE IF NOT EXISTS wire_parts (
                part_no TEXT PRIMARY KEY,
@@ -188,6 +195,13 @@ impl PartsDb {
                 [],
             )?;
         }
+        if from < 3 {
+            // v2→v3: contact_config列を追加
+            self.conn.execute(
+                "ALTER TABLE parts ADD COLUMN contact_config TEXT NOT NULL DEFAULT ''",
+                [],
+            )?;
+        }
         self.conn.execute(
             "UPDATE meta SET value=?1 WHERE key='schema_version'",
             [SCHEMA_VERSION.to_string()],
@@ -216,6 +230,19 @@ impl PartsDb {
                 rated_voltage: "DC24V".into(),
                 rated_current_a: Some(0.05),
                 price: Some(900.0),
+                // 2c接点 (2回路の切替接点) = a接点2 + b接点2
+                contact_config: "2NO+2NC".into(),
+                ..Default::default()
+            },
+            Part {
+                part_no: "MDK-RLY-MY2N-DC24".into(),
+                name: "小型パワーリレー MY2N相当 2c DC24V".into(),
+                category: "relay".into(),
+                symbol_id: "relay_coil".into(),
+                rated_voltage: "DC24V".into(),
+                rated_current_a: Some(0.04),
+                price: Some(880.0),
+                contact_config: "2NO+2NC".into(),
                 ..Default::default()
             },
             Part {
@@ -277,11 +304,12 @@ impl PartsDb {
         self.conn.execute(
             &format!(
                 "INSERT INTO parts ({PART_COLUMNS}) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16) \
                  ON CONFLICT(part_no) DO UPDATE SET \
                  maker=?2, name=?3, category=?4, symbol_id=?5, rated_voltage=?6, \
                  rated_current_a=?7, purchase_url=?8, datasheet_url=?9, price=?10, \
-                 currency=?11, note=?12, model_3d=?13, mounting=?14, spice_model=?15"
+                 currency=?11, note=?12, model_3d=?13, mounting=?14, spice_model=?15, \
+                 contact_config=?16"
             ),
             rusqlite::params![
                 part.part_no,
@@ -299,6 +327,7 @@ impl PartsDb {
                 part.model_3d,
                 part.mounting,
                 part.spice_model,
+                part.contact_config,
             ],
         )?;
         Ok(())
@@ -511,6 +540,70 @@ mod tests {
         );
         // サンプルは再投入されない (v1で既にseed済みの想定)
         assert!(db.get_part("MDK-FUSE-5A").unwrap().is_none());
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// An old schema-v2 database migrates to v3 on open, preserving existing rows and gaining the contact_config column.
+    /// 旧スキーマv2のDBは開いた時点でv3へ移行され、既存データを保持したままcontact_config列が使えるようになる。
+    #[test]
+    fn v2_database_migrates_to_v3_preserving_data() {
+        let path = tmp_db("migrate-v3");
+        // v2相当のDBを手で作る (contact_config列なし、version=2)
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO meta VALUES ('schema_version', '2');
+                 CREATE TABLE parts (
+                   part_no TEXT PRIMARY KEY,
+                   maker TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '',
+                   category TEXT NOT NULL DEFAULT '', symbol_id TEXT NOT NULL DEFAULT '',
+                   rated_voltage TEXT NOT NULL DEFAULT '', rated_current_a REAL,
+                   purchase_url TEXT NOT NULL DEFAULT '', datasheet_url TEXT NOT NULL DEFAULT '',
+                   price REAL, currency TEXT NOT NULL DEFAULT 'JPY',
+                   note TEXT NOT NULL DEFAULT '', model_3d TEXT NOT NULL DEFAULT '',
+                   mounting TEXT NOT NULL DEFAULT '', spice_model TEXT NOT NULL DEFAULT ''
+                 );
+                 INSERT INTO parts (part_no, name, spice_model) VALUES ('OLD-2', '旧部品', 'R1 a b 1k');
+                 CREATE TABLE wire_parts (
+                   part_no TEXT PRIMARY KEY, color TEXT NOT NULL, sq REAL NOT NULL,
+                   purchase_url TEXT NOT NULL DEFAULT '', price_per_m REAL,
+                   note TEXT NOT NULL DEFAULT ''
+                 );",
+            )
+            .unwrap();
+        }
+        let db = PartsDb::open(&path).unwrap();
+        // 既存データが残り、contact_configは空文字で読める
+        let old = db.get_part("OLD-2").unwrap().unwrap();
+        assert_eq!(old.name, "旧部品");
+        assert_eq!(old.spice_model, "R1 a b 1k");
+        assert_eq!(old.contact_config, "");
+        // contact_configの書き込みも可能
+        let mut updated = old.clone();
+        updated.contact_config = "2NO+2NC".into();
+        db.upsert_part(&updated).unwrap();
+        assert_eq!(
+            db.get_part("OLD-2").unwrap().unwrap().contact_config,
+            "2NO+2NC"
+        );
+        // サンプルは再投入されない (v2で既にseed済みの想定)
+        assert!(db.get_part("MDK-FUSE-5A").unwrap().is_none());
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The bundled sample relay carries its contact configuration, so a freshly placed relay can be checked for contact overflow.
+    /// 同梱のサンプルリレーは接点構成を持っているので、配置直後から接点数超過の検証ができる。
+    #[test]
+    fn sample_relay_part_has_a_contact_configuration() {
+        let path = tmp_db("relay-config");
+        let db = PartsDb::open(&path).unwrap();
+        let relays = db.search_parts("", Some("relay")).unwrap();
+        assert!(!relays.is_empty(), "リレーのサンプルがある");
+        assert!(
+            relays.iter().all(|p| !p.contact_config.is_empty()),
+            "接点構成が入っている: {relays:?}"
+        );
         std::fs::remove_file(&path).ok();
     }
 

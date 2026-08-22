@@ -40,7 +40,8 @@ pub fn verify_sheet(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
 /// プロジェクト全体のERC+電気検証。シートごとの検証に加え、ネットラベル関連のチェック
 /// (`erc.label_conflict`) は**シートを跨いだ統合ネット** ([`crate::xref`]) で評価する。
 /// これにより、同名ラベルで繋がった複数シートのネットは1ネットとして扱われ、
-/// 1件の指摘にまとまる。
+/// 1件の指摘にまとまる。コイル⇔接点のクロスリファレンス
+/// ([`crate::relay_xref::relay_diagnostics`]) も同じ理由でここで評価する。
 pub fn verify_project(project: &crate::model::Project) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     for sheet in &project.sheets {
@@ -52,6 +53,8 @@ pub fn verify_project(project: &crate::model::Project) -> Vec<Diagnostic> {
         );
     }
     diags.extend(project_label_conflicts(project));
+    // コイル⇔接点も1デバイスがシートを跨ぐので、プロジェクト全体で評価する
+    diags.extend(crate::relay_xref::relay_diagnostics(project));
     diags
 }
 

@@ -14,6 +14,7 @@ pub mod netlist;
 pub mod ngspice;
 pub mod parts;
 pub mod pdf;
+pub mod relay_xref;
 pub mod report_sheet;
 pub mod reports;
 pub mod sim;

@@ -283,17 +283,24 @@ fn revision_block(out: &mut String, sheet: &Sheet, tx: f64, ty: f64) {
 
 /// 配置後のシンボル外形の上端Y(用紙座標)。参照記号・型番の重なり回避用。
 pub(crate) fn symbol_top_y(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> f64 {
-    let mut top = inst.at.y;
+    symbol_bounds(inst, def).0.y
+}
+
+/// 配置後のシンボル外形の囲み矩形 (最小点, 最大点) を用紙座標で返す。
+/// 円・弧は回転対称なので中心±rで安全側に評価する。配置基準点も必ず含める。
+/// 参照記号・接点マップなど、外形の外側に置く注記の位置決めに使う。
+pub fn symbol_bounds(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> (Point, Point) {
+    let (mut min, mut max) = (inst.at, inst.at);
     let mut visit = |p: Point| {
         let t = transform_local(p, inst);
-        if t.y < top {
-            top = t.y;
-        }
+        min.x = min.x.min(t.x);
+        min.y = min.y.min(t.y);
+        max.x = max.x.max(t.x);
+        max.y = max.y.max(t.y);
     };
     for prim in &def.primitives {
         match prim {
             Primitive::Line { pts } => pts.iter().copied().for_each(&mut visit),
-            // 円・弧は回転対称なので中心±rで安全側に評価
             Primitive::Circle { center, r, .. } | Primitive::Arc { center, r, .. } => {
                 visit(Point::new(center.x - r, center.y - r));
                 visit(Point::new(center.x + r, center.y + r));
@@ -310,7 +317,7 @@ pub(crate) fn symbol_top_y(inst: &crate::model::SymbolInstance, def: &SymbolDef)
     for pin in &def.pins {
         visit(pin.at);
     }
-    top
+    (min, max)
 }
 
 fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &SymbolDef) {
@@ -377,6 +384,59 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
     }
     if !inst.value.is_empty() {
         text_el(out, inst.at.x, top - VALUE_LABEL_DY, LABEL_FONT, "#000", "middle", &inst.value);
+    }
+}
+
+/// コイルの下に接点マップ (端子対 | 所在) の表を描く (M4 §4)。
+/// 位置・列幅は [`crate::relay_xref::contact_map_layout`] が決め、キャンバス描画と共通。
+fn render_contact_map(
+    out: &mut String,
+    inst: &crate::model::SymbolInstance,
+    def: &SymbolDef,
+    rows: &[crate::relay_xref::ContactMapRow],
+) {
+    use crate::relay_xref::{contact_map_layout, contact_map_origin, CONTACT_MAP_FONT};
+    if rows.is_empty() {
+        return;
+    }
+    let origin = contact_map_origin(inst, def);
+    let layout = contact_map_layout(rows, origin.x, origin.y);
+    let _ = write!(
+        out,
+        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+        n(layout.x), n(layout.y), n(layout.width()), n(layout.height()), n(RULE_STROKE)
+    );
+    // 列の仕切り
+    let _ = write!(
+        out,
+        "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+        n(layout.col_x(1)), n(layout.y),
+        n(layout.col_x(1)), n(layout.y + layout.height()),
+        n(RULE_STROKE)
+    );
+    for (i, row) in rows.iter().enumerate() {
+        if i > 0 {
+            let _ = write!(
+                out,
+                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+                n(layout.x), n(layout.row_top(i)),
+                n(layout.x + layout.width()), n(layout.row_top(i)),
+                n(RULE_STROKE)
+            );
+        }
+        let baseline = layout.baseline(i);
+        for (col, text) in [(0, &row.terminals), (1, &row.address)] {
+            text_family_el(
+                out,
+                layout.text_x(col),
+                baseline,
+                CONTACT_MAP_FONT,
+                "#000",
+                "start",
+                "monospace",
+                text,
+            );
+        }
     }
 }
 
@@ -474,7 +534,25 @@ fn render_harnesses(out: &mut String, sheet: &Sheet) {
 /// シート単体の出力なのでシート間クロスリファレンスは描かない
 /// (描くには [`project_sheet_to_svg`] を使う)。
 pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
-    sheet_to_svg_with_xrefs(sheet, symbols, &std::collections::BTreeMap::new())
+    sheet_to_svg_with_xrefs(
+        sheet,
+        symbols,
+        &std::collections::BTreeMap::new(),
+        &RelayAnnotations::default(),
+    )
+}
+
+/// リレーのコイル⇔接点クロスリファレンス注記 ([`crate::relay_xref`])。
+/// プロジェクト全体を見ないと決まらないので、シート単体の出力では空になる。
+#[derive(Debug, Clone, Default)]
+pub struct RelayAnnotations {
+    /// コイルのentity id → その下に描く接点マップの行。
+    pub contact_maps: std::collections::BTreeMap<
+        crate::model::EntityId,
+        Vec<crate::relay_xref::ContactMapRow>,
+    >,
+    /// 接点のentity id → 脇に描くコイル所在 (例 "(/1.C2)")。
+    pub coil_locations: std::collections::BTreeMap<crate::model::EntityId, String>,
 }
 
 /// プロジェクト内の1シートをSVGとして書き出す。ネットラベルの脇には、他シートにある
@@ -487,14 +565,20 @@ pub fn project_sheet_to_svg(
 ) -> Option<String> {
     let sheet = project.sheet(sheet_id)?;
     let xrefs = crate::xref::sheet_xrefs(project, sheet_id);
-    Some(sheet_to_svg_with_xrefs(sheet, symbols, &xrefs))
+    let relay = RelayAnnotations {
+        contact_maps: crate::relay_xref::sheet_contact_maps(project, sheet_id),
+        coil_locations: crate::relay_xref::sheet_coil_locations(project, sheet_id),
+    };
+    Some(sheet_to_svg_with_xrefs(sheet, symbols, &xrefs, &relay))
 }
 
-/// [`sheet_to_svg`] の本体。`xrefs`はネットラベルのentity id → 脇に描くXRefテキスト。
+/// [`sheet_to_svg`] の本体。`xrefs`はネットラベルのentity id → 脇に描くXRefテキスト、
+/// `relay`はコイル⇔接点のクロスリファレンス注記。
 fn sheet_to_svg_with_xrefs(
     sheet: &Sheet,
     symbols: &[SymbolDef],
     xrefs: &std::collections::BTreeMap<crate::model::EntityId, String>,
+    relay: &RelayAnnotations,
 ) -> String {
     let (pw, ph) = sheet.paper_mm();
     let mut out = String::new();
@@ -527,6 +611,23 @@ fn sheet_to_svg_with_xrefs(
             Entity::Symbol(s) => {
                 if let Some(def) = defs.get(s.symbol_id.as_str()) {
                     render_symbol(&mut out, s, def);
+                    // コイル⇔接点クロスリファレンス (M4 §4)
+                    if let Some(rows) = relay.contact_maps.get(&s.id) {
+                        render_contact_map(&mut out, s, def, rows);
+                    }
+                    if let Some(location) = relay.coil_locations.get(&s.id) {
+                        let at = crate::relay_xref::coil_location_at(s, def);
+                        text_family_el(
+                            &mut out,
+                            at.x,
+                            at.y,
+                            crate::relay_xref::CONTACT_MAP_FONT,
+                            "#000",
+                            "start",
+                            "monospace",
+                            location,
+                        );
+                    }
                 }
             }
             Entity::Junction(j) => {
@@ -957,5 +1058,68 @@ mod tests {
         let svg = sheet_to_svg(&project.sheets[0], &builtin_symbols());
         assert!(svg.contains(">24V_1<"));
         assert!(!svg.contains("/2.B3"), "{svg}");
+    }
+
+    /// コイル(シート1)+a接点(シート2)のリレーK1を置いた2枚組プロジェクト。
+    fn relay_project() -> Project {
+        let mut project = Project::new("t");
+        project
+            .sheets
+            .push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let mut put = |sheet: &mut Sheet, symbol_id: &str, x: f64, y: f64| {
+            let e = Entity::Symbol(SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: symbol_id.into(),
+                at: Point::new(x, y),
+                rotation: 0,
+                mirror: false,
+                reference: "K1".into(),
+                value: String::new(),
+                attrs: Default::default(),
+            });
+            sheet.entities.insert(e.id(), e);
+        };
+        let (s1, s2) = project.sheets.split_at_mut(1);
+        put(&mut s1[0], "relay_coil", 150.0, 120.0);
+        put(&mut s2[0], "relay_contact_no", 250.0, 70.0);
+        project
+    }
+
+    /// The sheet holding the coil shows a contact map under it: one row per contact with its terminal pair and its address.
+    /// コイルのあるシートには、コイルの下に接点マップ(端子対と所在の行)が描かれる。
+    #[test]
+    fn svg_draws_the_contact_map_under_the_coil() {
+        let project = relay_project();
+        let svg = project_sheet_to_svg(&project, project.sheets[0].id, &builtin_symbols()).unwrap();
+        assert!(svg.contains(">13-14<"), "端子対の行: {svg}");
+        assert!(svg.contains(">/2.B3<"), "接点の所在");
+        let (_, y, _) = texts(&svg)
+            .into_iter()
+            .find(|(_, _, t)| t == "13-14")
+            .expect("端子対テキスト");
+        assert!(y > 120.0, "コイル(y=120)より下に置く: {y}");
+    }
+
+    /// The sheet holding the contact shows the coil's address in parentheses beside it.
+    /// 接点のあるシートには、その脇にコイルの住所が丸括弧付きで描かれる。
+    #[test]
+    fn svg_draws_the_coil_location_beside_the_contact() {
+        let project = relay_project();
+        let svg = project_sheet_to_svg(&project, project.sheets[1].id, &builtin_symbols()).unwrap();
+        assert!(svg.contains(">(/1.C2)<"), "コイル所在: {svg}");
+        let (x, _, _) = texts(&svg)
+            .into_iter()
+            .find(|(_, _, t)| t == "(/1.C2)")
+            .expect("コイル所在テキスト");
+        assert!(x > 250.0, "接点(x=250)の右脇: {x}");
+    }
+
+    /// Exporting a single sheet on its own draws no contact map, because the counterpart sheets are unknown.
+    /// シート単体の書き出しでは相手のシートが分からないので、接点マップは描かれない。
+    #[test]
+    fn svg_of_a_lone_sheet_has_no_contact_map() {
+        let project = relay_project();
+        let svg = sheet_to_svg(&project.sheets[0], &builtin_symbols());
+        assert!(!svg.contains(">13-14<"), "{svg}");
     }
 }
