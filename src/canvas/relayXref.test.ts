@@ -59,6 +59,7 @@ function project(sheets: Entity[][]): Project {
     format_version: 1,
     name: "t",
     wire_parts: [],
+    plc_assignments: [],
     sheets: sheets.map((entities, i) => {
       const s = sheet(String(i + 1));
       for (const e of entities) s.entities[e.id] = e;

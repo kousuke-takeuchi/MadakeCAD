@@ -209,6 +209,51 @@ impl SharedDoc {
         Ok(patch)
     }
 
+    /// PLC I/O割付表を丸ごと置き換える(1回の編集 = undo一発で元の表に戻る)。
+    pub fn set_plc_assignments(
+        &self,
+        assignments: Vec<madake_core::PlcAssignment>,
+        origin: EditOrigin,
+    ) -> madake_core::Result<Patch> {
+        self.execute_as(Command::SetPlcAssignments { assignments }, origin)
+    }
+
+    /// CSVからPLC I/O割付表を取り込む(対象モジュールの行だけ置き換え、undo一発で戻る)。
+    pub fn import_plc_assignments_csv(
+        &self,
+        module_ref: &str,
+        csv: &str,
+        origin: EditOrigin,
+    ) -> madake_core::Result<Patch> {
+        let patch = madake_core::plc::import_assignments_csv(
+            &mut self.engine.lock().unwrap(),
+            module_ref,
+            csv,
+            origin,
+        )?;
+        let _ = self.patches.send(patch.clone());
+        Ok(patch)
+    }
+
+    /// PLC I/O図面 (ラダーページ) を生成する(**1回の編集** = undo一発でページごと消える)。
+    pub fn generate_plc_sheet(
+        &self,
+        module_ref: &str,
+        spec: &madake_core::plc::PlcModuleSpec,
+        options: &madake_core::plc::PlcSheetOptions,
+        origin: EditOrigin,
+    ) -> madake_core::Result<Patch> {
+        let patch = madake_core::plc::generate_plc_sheet(
+            &mut self.engine.lock().unwrap(),
+            module_ref,
+            spec,
+            options,
+            origin,
+        )?;
+        let _ = self.patches.send(patch.clone());
+        Ok(patch)
+    }
+
     /// undo深さの区間`[start, end)`にあるエージェント編集だけを巻き戻す。
     ///
     /// 逆Commandの適用として実行されるためpatchも配信され、UIへそのまま反映される。
@@ -345,6 +390,36 @@ pub struct ApplyMacroParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PlcModuleParams {
+    /// PLCモジュールの参照記号 (例 "PLC1")。省略時は割付のある全モジュール。
+    pub module_ref: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SetPlcAssignmentsParams {
+    /// 置き換え後の割付表 (プロジェクト全体)。
+    pub assignments: Vec<madake_core::PlcAssignment>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct GeneratePlcSheetParams {
+    /// モジュールの参照記号 (例 "PLC1")。割付表の`module_ref`と揃える。
+    pub module_ref: String,
+    /// I/O点数 (1〜64)。
+    pub points: usize,
+    /// 入出力の種別 ("DI"=入力 / "DO"=出力)。
+    pub kind: madake_core::plc::PlcIoKind,
+    /// アドレスの接頭辞 ("X" / "Y" / "%I" / "%Q" / "I:" / "O:")。
+    pub address_prefix: Option<String>,
+    /// アドレス体系 ("mitsubishi" / "siemens" / "ab")。
+    pub address_style: madake_core::plc::PlcAddressStyle,
+    /// ラング間隔 (mm。2.5mmグリッドの正の倍数)。省略時は10mm。
+    pub rung_spacing_mm: Option<f64>,
+    /// 先頭で空けるラング位置の数。省略時は0。
+    pub start_skip: Option<usize>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct SimulateOpParams {
     /// 対象シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
@@ -376,7 +451,7 @@ pub struct ExportPathParams {
 pub struct ExportPdfBookParams {
     /// 出力先ファイルパス(絶対パス)。
     pub path: String,
-    /// 回路図の後ろに付ける帳票。`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref`。省略時は帳票なし。
+    /// 回路図の後ろに付ける帳票。`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref` / `plc-io`。省略時は帳票なし。
     #[serde(default)]
     pub include_reports: Vec<madake_core::report_sheet::ReportKind>,
     /// 表紙を付けるか。省略時は付ける。
@@ -400,7 +475,7 @@ pub struct TerminalRefParams {
 pub struct ExportReportParams {
     /// 出力先ファイルパス(絶対パス)。
     pub path: String,
-    /// 帳票の種類。`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref`。
+    /// 帳票の種類。`wire-list` / `terminal-chart` / `terminal-diagram` / `bom` / `xref` / `plc-io`。
     pub kind: madake_core::report_sheet::ReportKind,
     /// 出力形式。`csv`(表計算用) / `pdf`(図枠+表題欄付きのA4横ページ)。
     pub format: madake_core::report_sheet::ReportFormat,
@@ -488,7 +563,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "任意の編集コマンド列を実行する。シート追加/削除/改名、エンティティ追加(add_entity)/更新/削除/移動、表題欄設定(set_title_block)のほか、改訂欄の書き換え(set_revisions: 記号/日付/内容/承認の行リスト。表題欄のRevは最新行に連動)、線番のネット単位自動採番(renumber_wires: mode=append で未採番のネットだけ追い番、mode=renumber で全振り直し、sheet_id省略で図面全体、start=開始番号)、線番の個別指定(set_wire_numbers)が使える。ハーネス境界は専用コマンドではなくadd_entityでkind=\"harness\"のエンティティ(points=矩形4点・name・note)を追加する(内包した配線が電線リストのハーネス列に載る)。端子台のサドルジャンパも専用コマンドではなくupdate_entityで端子台シンボルのattrs[\"jumpers\"]を書き換える(値は隣接端子の対をカンマ区切りにした\"1-2,3-4\"。小-大順に正規化し、全て外すときは属性ごと削除)。ジャンパは端子台エディタ・端子台チャート・端子接続図の3か所に反映され、undoで戻る。各コマンドの完全なスキーマは入力スキーマを参照。実行結果のpatchを返す"
+        description = "任意の編集コマンド列を実行する。シート追加/削除/改名、エンティティ追加(add_entity)/更新/削除/移動、表題欄設定(set_title_block)のほか、改訂欄の書き換え(set_revisions: 記号/日付/内容/承認の行リスト。表題欄のRevは最新行に連動)、線番のネット単位自動採番(renumber_wires: mode=append で未採番のネットだけ追い番、mode=renumber で全振り直し、sheet_id省略で図面全体、start=開始番号)、線番の個別指定(set_wire_numbers)、PLC I/O割付表の置換(set_plc_assignments)が使える。ハーネス境界は専用コマンドではなくadd_entityでkind=\"harness\"のエンティティ(points=矩形4点・name・note)を追加する(内包した配線が電線リストのハーネス列に載る)。端子台のサドルジャンパも専用コマンドではなくupdate_entityで端子台シンボルのattrs[\"jumpers\"]を書き換える(値は隣接端子の対をカンマ区切りにした\"1-2,3-4\"。小-大順に正規化し、全て外すときは属性ごと削除)。ジャンパは端子台エディタ・端子台チャート・端子接続図の3か所に反映され、undoで戻る。各コマンドの完全なスキーマは入力スキーマを参照。実行結果のpatchを返す"
     )]
     fn execute_commands(
         &self,
@@ -626,6 +701,81 @@ impl MadakeMcp {
             "sheet_id": sheet_id,
             "revision": patch.revision,
             "entities_added": patch.ops.len(),
+        }))
+    }
+
+    #[tool(
+        description = "PLC I/O割付表を読む。図面に置かれているPLCモジュール(参照記号・点数・DI/DO)と、各点のアドレス・信号名・コメント・接続先・線番を返す。信号名とコメントは割付表が正で、接続先と線番は図面の結線から読み取った値(図面を直せば変わる)。編集はset_plc_assignments、I/O図面の生成はgenerate_plc_sheet"
+    )]
+    fn get_plc_assignments(
+        &self,
+        Parameters(p): Parameters<PlcModuleParams>,
+    ) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let project = engine.project();
+        let refs = match p.module_ref {
+            Some(r) => vec![r],
+            None => madake_core::plc::assigned_module_refs(project),
+        };
+        let modules: Vec<serde_json::Value> = refs
+            .iter()
+            .map(|module_ref| {
+                serde_json::json!({
+                    "module_ref": module_ref,
+                    "points": madake_core::plc::plc_points(project, module_ref),
+                })
+            })
+            .collect();
+        json_ok(&serde_json::json!({
+            "placed_modules": madake_core::plc::plc_modules(project),
+            "modules": modules,
+        }))
+    }
+
+    #[tool(
+        description = "PLC I/O割付表を丸ごと置き換える(プロジェクト全体のリストを渡す)。各行は module_ref(モジュールの参照記号 例 PLC1)・address(例 X0 / %I0.0 / I:0/0)・signal_name・comment と id(UUID)。行の並びがそのままモジュールの点番号(1行目=点1)になる。接続先と線番は図面から導くのでここには書かない。1回の編集として履歴に乗るためundo一発で元の表に戻る"
+    )]
+    fn set_plc_assignments(
+        &self,
+        Parameters(p): Parameters<SetPlcAssignmentsParams>,
+    ) -> Result<String, ErrorData> {
+        let count = p.assignments.len();
+        let patch = self
+            .doc
+            .set_plc_assignments(p.assignments, self.doc.mcp_origin())
+            .map_err(internal)?;
+        json_ok(&serde_json::json!({ "rows": count, "revision": patch.revision }))
+    }
+
+    #[tool(
+        description = "PLC I/O図面(ラダーページ)を新しいシートとして生成する。縦バスから各点へ1点=1ラングで横ラングを引き、モジュールのシンボルと信号名のテキストを置く。割付表に行が足りなければアドレスを自動採番して表にも入れる(三菱=8進のX0,X1..X7,X10、Siemens=%I0.0のバイト.ビット、Allen-Bradley=I:0/0のワード/ビット)。生成は1回の編集として履歴に乗るためundo一発でページごと消える。v1が対応するのはラダー形式=縦バス+横ラング・配置方針=モジュールごとに新ラダーのみ"
+    )]
+    fn generate_plc_sheet(
+        &self,
+        Parameters(p): Parameters<GeneratePlcSheetParams>,
+    ) -> Result<String, ErrorData> {
+        let spec = madake_core::plc::PlcModuleSpec {
+            points: p.points,
+            kind: p.kind,
+            address_prefix: p.address_prefix.unwrap_or_default(),
+            address_style: p.address_style,
+        };
+        let options = madake_core::plc::PlcSheetOptions {
+            rung_spacing_mm: p
+                .rung_spacing_mm
+                .unwrap_or(madake_core::plc::DEFAULT_RUNG_SPACING_MM),
+            start_skip: p.start_skip.unwrap_or(0),
+            ..Default::default()
+        };
+        let patch = self
+            .doc
+            .generate_plc_sheet(&p.module_ref, &spec, &options, self.doc.mcp_origin())
+            .map_err(internal)?;
+        json_ok(&serde_json::json!({
+            "module_ref": p.module_ref,
+            "points": p.points,
+            "symbol_id": spec.symbol_id(),
+            "revision": patch.revision,
         }))
     }
 

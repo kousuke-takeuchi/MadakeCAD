@@ -397,6 +397,74 @@ fn check_terminal_block(
     madake_core::terminal_chart::check_terminal_block_in_project(engine.project(), entity_id)
 }
 
+/// 図面に置かれているPLC I/Oモジュールの一覧 (割付表エディタの選択肢)。
+#[tauri::command]
+fn list_plc_modules(state: State<AppState>) -> Vec<madake_core::plc::PlcModuleInfo> {
+    let engine = state.doc.engine.lock().unwrap();
+    madake_core::plc::plc_modules(engine.project())
+}
+
+/// 部品DBのPLCモジュールライブラリ (メーカ別のアドレス体系つき機種一覧)。
+#[tauri::command]
+fn list_plc_module_parts(state: State<AppState>) -> Result<Vec<madake_core::parts::Part>, String> {
+    let db = state.parts.lock().unwrap();
+    db.list_plc_modules().map_err(|e| e.to_string())
+}
+
+/// 1つのモジュールのI/O割付表 (接続先・線番は図面から読んだ値)。
+#[tauri::command]
+fn get_plc_assignments(
+    state: State<AppState>,
+    module_ref: String,
+) -> Vec<madake_core::plc::PlcPoint> {
+    let engine = state.doc.engine.lock().unwrap();
+    madake_core::plc::plc_points(engine.project(), &module_ref)
+}
+
+/// I/O割付表を丸ごと置き換える。UI操作なので由来は`user`、undo一発で元の表に戻る。
+#[tauri::command]
+fn set_plc_assignments(
+    state: State<AppState>,
+    assignments: Vec<madake_core::PlcAssignment>,
+) -> Result<Patch, String> {
+    state
+        .doc
+        .set_plc_assignments(assignments, madake_core::EditOrigin::User)
+        .map_err(|e| e.to_string())
+}
+
+/// 割付表のCSVを取り込む (対象モジュールの行だけ置き換え)。undo一発で戻る。
+#[tauri::command]
+fn import_plc_assignments_csv(
+    state: State<AppState>,
+    module_ref: String,
+    csv: String,
+) -> Result<Patch, String> {
+    state
+        .doc
+        .import_plc_assignments_csv(&module_ref, &csv, madake_core::EditOrigin::User)
+        .map_err(|e| e.to_string())
+}
+
+/// PLC I/O図面 (ラダーページ) を生成する。**1回の編集**なのでundo一発でページごと消える。
+#[tauri::command]
+fn generate_plc_sheet(
+    state: State<AppState>,
+    module_ref: String,
+    module: madake_core::plc::PlcModuleSpec,
+    options: Option<madake_core::plc::PlcSheetOptions>,
+) -> Result<Patch, String> {
+    state
+        .doc
+        .generate_plc_sheet(
+            &module_ref,
+            &module,
+            &options.unwrap_or_default(),
+            madake_core::EditOrigin::User,
+        )
+        .map_err(|e| e.to_string())
+}
+
 /// 帳票1種を1ファイルへ書き出す。戻り値はCSVなら行数、PDFならページ数。
 #[tauri::command]
 fn export_report(
@@ -718,6 +786,12 @@ pub fn run() {
             list_terminal_blocks,
             get_terminal_chart,
             check_terminal_block,
+            list_plc_modules,
+            list_plc_module_parts,
+            get_plc_assignments,
+            set_plc_assignments,
+            import_plc_assignments_csv,
+            generate_plc_sheet,
             export_bom,
             export_wire_list,
             agent_send,

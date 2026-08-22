@@ -31,6 +31,9 @@ pub enum ExportKind {
     /// クロスリファレンス表 (帳票)。
     #[value(name = "xref-table", alias = "xref")]
     XrefTable,
+    /// PLC I/Oレポート (帳票)。
+    #[value(name = "plc-io", alias = "plc")]
+    PlcIo,
     /// 図面一式を1つのPDFへ (表紙+回路図全シート+選択帳票)。
     #[value(name = "pdf-book")]
     PdfBook,
@@ -56,6 +59,7 @@ impl ExportKind {
             ExportKind::TerminalChart => Some(ReportKind::TerminalChart),
             ExportKind::TerminalDiagram => Some(ReportKind::TerminalDiagram),
             ExportKind::XrefTable => Some(ReportKind::Xref),
+            ExportKind::PlcIo => Some(ReportKind::PlcIo),
             ExportKind::Svg | ExportKind::Pdf | ExportKind::PdfBook => None,
         }
     }
@@ -78,6 +82,7 @@ impl ExportKind {
             ExportKind::TerminalChart => "端子台チャート",
             ExportKind::TerminalDiagram => "端子接続図",
             ExportKind::XrefTable => "クロスリファレンス表",
+            ExportKind::PlcIo => "PLC I/Oレポート",
             ExportKind::PdfBook => "図面一式PDF",
         }
     }
@@ -136,6 +141,9 @@ pub enum ReportKind {
     Bom,
     /// クロスリファレンス表。
     Xref,
+    /// PLC I/Oレポート。
+    #[value(name = "plc-io")]
+    PlcIo,
 }
 
 impl ReportKind {
@@ -147,6 +155,7 @@ impl ReportKind {
             ReportKind::TerminalDiagram => "terminal-diagram",
             ReportKind::Bom => "bom",
             ReportKind::Xref => "xref",
+            ReportKind::PlcIo => "plc-io",
         }
     }
 }
