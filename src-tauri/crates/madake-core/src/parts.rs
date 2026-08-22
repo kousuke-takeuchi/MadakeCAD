@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 /// スキーマバージョン (metaテーブルに保存。変更時はマイグレーションを書く)。
 /// v2: partsに`spice_model`列を追加 (過渡解析・非線形モデル用のSPICE素子行)。
 /// v3: partsに`contact_config`列を追加 (リレーの接点構成。コイル⇔接点XRefの接点数検証用)。
-pub const SCHEMA_VERSION: u32 = 3;
+/// v4: partsに`plc_module`列を追加 (PLC I/Oモジュールの定義JSON。点数・入出力・アドレス体系)。
+pub const SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PartsError {
@@ -64,10 +65,40 @@ pub struct Part {
     /// 図面に置くとシンボルの`attrs["contact_config"]`へ写り、接点数超過の検証に使われる。
     #[serde(default)]
     pub contact_config: String,
+    /// PLC I/Oモジュールの定義 (JSON。点数・入出力の種別・アドレス体系、v4)。
+    /// 空欄ならPLCモジュールではない。読み方は [`crate::plc::PlcModuleSpec::parse`]。
+    #[serde(default)]
+    pub plc_module: String,
 }
 
 fn default_currency() -> String {
     "JPY".into()
+}
+
+/// サンプルのPLC I/Oモジュール1件を組み立てる (定義JSONと既定シンボルを揃える)。
+fn plc_module_part(
+    part_no: &str,
+    name: &str,
+    points: usize,
+    kind: crate::plc::PlcIoKind,
+    address_prefix: &str,
+    address_style: crate::plc::PlcAddressStyle,
+) -> Part {
+    let spec = crate::plc::PlcModuleSpec {
+        points,
+        kind,
+        address_prefix: address_prefix.into(),
+        address_style,
+    };
+    Part {
+        part_no: part_no.into(),
+        name: name.into(),
+        category: "plc".into(),
+        symbol_id: spec.symbol_id(),
+        rated_voltage: "DC24V".into(),
+        plc_module: spec.to_json(),
+        ..Default::default()
+    }
 }
 
 /// 電線品番マスタの1行 (線色+sq→品番)。
@@ -102,7 +133,7 @@ pub fn default_db_path() -> PathBuf {
 
 const PART_COLUMNS: &str = "part_no, maker, name, category, symbol_id, rated_voltage, \
      rated_current_a, purchase_url, datasheet_url, price, currency, note, model_3d, mounting, \
-     spice_model, contact_config";
+     spice_model, contact_config, plc_module";
 
 fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
     Ok(Part {
@@ -122,6 +153,7 @@ fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
         mounting: row.get(13)?,
         spice_model: row.get(14)?,
         contact_config: row.get(15)?,
+        plc_module: row.get(16)?,
     })
 }
 
@@ -150,7 +182,8 @@ impl PartsDb {
                model_3d TEXT NOT NULL DEFAULT '',
                mounting TEXT NOT NULL DEFAULT '',
                spice_model TEXT NOT NULL DEFAULT '',
-               contact_config TEXT NOT NULL DEFAULT ''
+               contact_config TEXT NOT NULL DEFAULT '',
+               plc_module TEXT NOT NULL DEFAULT ''
              );
              CREATE TABLE IF NOT EXISTS wire_parts (
                part_no TEXT PRIMARY KEY,
@@ -199,6 +232,13 @@ impl PartsDb {
             // v2→v3: contact_config列を追加
             self.conn.execute(
                 "ALTER TABLE parts ADD COLUMN contact_config TEXT NOT NULL DEFAULT ''",
+                [],
+            )?;
+        }
+        if from < 4 {
+            // v3→v4: plc_module列を追加
+            self.conn.execute(
+                "ALTER TABLE parts ADD COLUMN plc_module TEXT NOT NULL DEFAULT ''",
                 [],
             )?;
         }
@@ -265,6 +305,31 @@ impl PartsDb {
                 price: Some(600.0),
                 ..Default::default()
             },
+            // PLC I/Oモジュール (M4仕様 §3)。メーカ別のアドレス体系をひと通り揃える
+            plc_module_part(
+                "MDK-PLC-DI16-MITSUBISHI",
+                "PLC入力ユニット 16点 (三菱 FX5-16EX相当)",
+                16,
+                crate::plc::PlcIoKind::Di,
+                "X",
+                crate::plc::PlcAddressStyle::Mitsubishi,
+            ),
+            plc_module_part(
+                "MDK-PLC-DO16-MITSUBISHI",
+                "PLC出力ユニット 16点 トランジスタ (三菱 FX5-16EYT相当)",
+                16,
+                crate::plc::PlcIoKind::Do,
+                "Y",
+                crate::plc::PlcAddressStyle::Mitsubishi,
+            ),
+            plc_module_part(
+                "MDK-PLC-DI8-SIEMENS",
+                "PLC入力ユニット 8点 (Siemens SM1221相当)",
+                8,
+                crate::plc::PlcIoKind::Di,
+                "%I",
+                crate::plc::PlcAddressStyle::Siemens,
+            ),
             Part {
                 part_no: "MDK-CONN-3P".into(),
                 name: "コネクタ 3極".into(),
@@ -304,12 +369,12 @@ impl PartsDb {
         self.conn.execute(
             &format!(
                 "INSERT INTO parts ({PART_COLUMNS}) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17) \
                  ON CONFLICT(part_no) DO UPDATE SET \
                  maker=?2, name=?3, category=?4, symbol_id=?5, rated_voltage=?6, \
                  rated_current_a=?7, purchase_url=?8, datasheet_url=?9, price=?10, \
                  currency=?11, note=?12, model_3d=?13, mounting=?14, spice_model=?15, \
-                 contact_config=?16"
+                 contact_config=?16, plc_module=?17"
             ),
             rusqlite::params![
                 part.part_no,
@@ -328,6 +393,7 @@ impl PartsDb {
                 part.mounting,
                 part.spice_model,
                 part.contact_config,
+                part.plc_module,
             ],
         )?;
         Ok(())
@@ -351,6 +417,16 @@ impl PartsDb {
              ORDER BY part_no"
         ))?;
         let rows = stmt.query_map(rusqlite::params![like, category], row_to_part)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// PLC I/Oモジュールの一覧 (`plc_module`列にモジュール定義が入っている部品だけ)。
+    /// PLC I/O図面の生成で「どの機種を置くか」を選ぶモジュールライブラリになる。
+    pub fn list_plc_modules(&self) -> Result<Vec<Part>, PartsError> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {PART_COLUMNS} FROM parts WHERE plc_module <> '' ORDER BY part_no"
+        ))?;
+        let rows = stmt.query_map([], row_to_part)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
@@ -603,6 +679,97 @@ mod tests {
         assert!(
             relays.iter().all(|p| !p.contact_config.is_empty()),
             "接点構成が入っている: {relays:?}"
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// An old schema-v3 database migrates to v4 on open, preserving existing rows and gaining the plc_module column.
+    /// 旧スキーマv3のDBは開いた時点でv4へ移行され、既存データを保持したままplc_module列が使えるようになる。
+    #[test]
+    fn v3_database_migrates_to_v4_preserving_data() {
+        let path = tmp_db("migrate-v4");
+        // v3相当のDBを手で作る (plc_module列なし、version=3)
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO meta VALUES ('schema_version', '3');
+                 CREATE TABLE parts (
+                   part_no TEXT PRIMARY KEY,
+                   maker TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '',
+                   category TEXT NOT NULL DEFAULT '', symbol_id TEXT NOT NULL DEFAULT '',
+                   rated_voltage TEXT NOT NULL DEFAULT '', rated_current_a REAL,
+                   purchase_url TEXT NOT NULL DEFAULT '', datasheet_url TEXT NOT NULL DEFAULT '',
+                   price REAL, currency TEXT NOT NULL DEFAULT 'JPY',
+                   note TEXT NOT NULL DEFAULT '', model_3d TEXT NOT NULL DEFAULT '',
+                   mounting TEXT NOT NULL DEFAULT '', spice_model TEXT NOT NULL DEFAULT '',
+                   contact_config TEXT NOT NULL DEFAULT ''
+                 );
+                 INSERT INTO parts (part_no, name, contact_config) VALUES ('OLD-3', '旧部品', '2NO');
+                 CREATE TABLE wire_parts (
+                   part_no TEXT PRIMARY KEY, color TEXT NOT NULL, sq REAL NOT NULL,
+                   purchase_url TEXT NOT NULL DEFAULT '', price_per_m REAL,
+                   note TEXT NOT NULL DEFAULT ''
+                 );",
+            )
+            .unwrap();
+        }
+        let db = PartsDb::open(&path).unwrap();
+        let old = db.get_part("OLD-3").unwrap().unwrap();
+        assert_eq!(old.name, "旧部品");
+        assert_eq!(old.contact_config, "2NO");
+        assert_eq!(old.plc_module, "", "PLCモジュールでない部品は空欄");
+        // plc_moduleの書き込みも可能
+        let mut updated = old.clone();
+        updated.plc_module =
+            r#"{"points":8,"kind":"DI","address_prefix":"X","address_style":"mitsubishi"}"#.into();
+        db.upsert_part(&updated).unwrap();
+        assert!(db
+            .get_part("OLD-3")
+            .unwrap()
+            .unwrap()
+            .plc_module
+            .contains("\"points\":8"));
+        // サンプルは再投入されない (v3で既にseed済みの想定)
+        assert!(db.get_part("MDK-FUSE-5A").unwrap().is_none());
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The bundled samples include three PLC modules that cover the Mitsubishi, Siemens and Allen-Bradley address styles.
+    /// 同梱サンプルには三菱・Siemens・Allen-Bradleyのアドレス体系をひと通り含む3種のPLCモジュールが入っている。
+    #[test]
+    fn sample_plc_modules_cover_the_three_address_styles() {
+        let path = tmp_db("plc-samples");
+        let db = PartsDb::open(&path).unwrap();
+        let modules = db.list_plc_modules().unwrap();
+        assert!(modules.len() >= 3, "PLCモジュールのサンプル: {modules:?}");
+        let specs: Vec<crate::plc::PlcModuleSpec> = modules
+            .iter()
+            .map(|p| crate::plc::PlcModuleSpec::parse(&p.plc_module).expect("読める定義"))
+            .collect();
+        assert!(specs.iter().any(|s| s.kind == crate::plc::PlcIoKind::Di && s.points == 16));
+        assert!(specs.iter().any(|s| s.kind == crate::plc::PlcIoKind::Do && s.points == 16));
+        assert!(specs
+            .iter()
+            .any(|s| s.address_style == crate::plc::PlcAddressStyle::Siemens && s.points == 8));
+        // モジュールは点数に合った動的シンボルを既定に持つ
+        for (part, spec) in modules.iter().zip(&specs) {
+            assert_eq!(part.symbol_id, spec.symbol_id(), "{}", part.part_no);
+        }
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The PLC module list contains only parts that carry a module definition, so ordinary parts never show up in the module library.
+    /// PLCモジュールの一覧はモジュール定義を持つ部品だけを返すので、普通の部品がモジュールライブラリに紛れ込まない。
+    #[test]
+    fn the_plc_module_list_contains_only_parts_with_a_module_definition() {
+        let path = tmp_db("plc-only");
+        let db = PartsDb::open(&path).unwrap();
+        let modules = db.list_plc_modules().unwrap();
+        assert!(modules.iter().all(|p| !p.plc_module.is_empty()));
+        assert!(
+            !modules.iter().any(|p| p.part_no == "MDK-FUSE-5A"),
+            "PLCでない部品は出ない"
         );
         std::fs::remove_file(&path).ok();
     }

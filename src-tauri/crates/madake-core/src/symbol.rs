@@ -41,6 +41,7 @@ pub const CATEGORY_ORDER: &[&str] = &[
     "passive",
     "output",
     "instrument",
+    "plc",
     "connector",
 ];
 
@@ -1017,7 +1018,59 @@ pub fn builtin_symbols() -> Vec<SymbolDef> {
 /// 動的シンボルの最大極数。
 pub const DYNAMIC_PIN_MAX: usize = 50;
 
-/// `connector_{n}p` / `terminal_block_{n}p` 形式のIDからピン数可変シンボルを生成する。
+/// PLCモジュール(`plc_di_{n}p` / `plc_do_{n}p`)の最大点数。
+pub const PLC_POINT_MAX: usize = 64;
+/// PLCモジュールのI/O点の縦ピッチ (mm)。2.5mmグリッドの倍数。
+pub const PLC_POINT_PITCH_MM: f64 = 5.0;
+
+/// `plc_di_{n}p` / `plc_do_{n}p` 形式のIDからPLC I/Oモジュールのシンボルを生成する。
+///
+/// 縦長の箱の**左側にI/O点ぶんの接続点**を [`PLC_POINT_PITCH_MM`] ピッチで並べる
+/// (入力は外部の機器から信号が入ってくる側、出力も同じ側にまとめて配線しやすくする)。
+/// 箱の中には点番号 (1〜n) と種別 (DI/DO) を書く。参照記号の接頭辞は `PLC`。
+fn plc_module_symbol(id: &str) -> Option<SymbolDef> {
+    let (rest, input) = match (id.strip_prefix("plc_di_"), id.strip_prefix("plc_do_")) {
+        (Some(rest), _) => (rest, true),
+        (_, Some(rest)) => (rest, false),
+        _ => return None,
+    };
+    let n: usize = rest.strip_suffix('p')?.parse().ok()?;
+    if !(1..=PLC_POINT_MAX).contains(&n) {
+        return None;
+    }
+    let pitch = PLC_POINT_PITCH_MM;
+    let offset = |i: usize| (i as f64 - (n - 1) as f64 / 2.0) * pitch;
+    let (top, bottom) = (offset(0) - pitch, offset(n - 1) + pitch);
+    let mut primitives = vec![
+        Primitive::Rect {
+            p1: p(-5.0, top),
+            p2: p(5.0, bottom),
+            filled: false,
+        },
+        text(0.0, top + 3.5, if input { "DI" } else { "DO" }, 3.0),
+    ];
+    let mut pins = Vec::with_capacity(n);
+    for i in 0..n {
+        let y = offset(i);
+        primitives.push(text(-2.5, y + 1.0, &(i + 1).to_string(), 2.0));
+        primitives.push(line(&[(-7.5, y), (-5.0, y)]));
+        pins.push(pin(&(i + 1).to_string(), "", -7.5, y, PinDir::Left));
+    }
+    let (name, name_ja) = if input {
+        (format!("PLC input module {n} points"), format!("PLC入力モジュール({n}点)"))
+    } else {
+        (format!("PLC output module {n} points"), format!("PLC出力モジュール({n}点)"))
+    };
+    let keywords: Vec<&str> = if input {
+        vec!["plc", "input", "di", "module", "PLC", "入力", "モジュール", "シーケンサ"]
+    } else {
+        vec!["plc", "output", "do", "module", "PLC", "出力", "モジュール", "シーケンサ"]
+    };
+    Some(sym(id, &name, &name_ja, "plc", "PLC", &keywords, primitives, pins))
+}
+
+/// `connector_{n}p` / `terminal_block_{n}p` / `plc_di_{n}p` / `plc_do_{n}p` 形式のIDから
+/// ピン数可変シンボルを生成する。
 /// 端子は縦並び・ピッチ5mm・中央揃え(オフセットは常に2.5mmグリッド倍数)。
 pub fn dynamic_symbol(id: &str) -> Option<SymbolDef> {
     let parse = |rest: &str| -> Option<usize> {
@@ -1091,7 +1144,7 @@ pub fn dynamic_symbol(id: &str) -> Option<SymbolDef> {
             pins,
         ));
     }
-    None
+    plc_module_symbol(id)
 }
 
 /// symbol_idから定義を解決する。静的ライブラリ優先、なければ動的生成。
@@ -1211,6 +1264,56 @@ mod tests {
         let defs = sheet_symbol_defs(&sheet);
         assert!(defs.iter().any(|d| d.id == "resistor"), "builtin含む");
         assert!(defs.iter().any(|d| d.id == "terminal_block_3p"), "使用中の動的ID含む");
+    }
+
+    /// A PLC input module symbol (e.g. 16 points) is a tall box with one connection point per I/O point on its left side, all on the 2.5 mm grid.
+    /// PLC入力モジュールのシンボル (例: 16点) は縦長の箱で、左側に点数ぶんの接続点が2.5mmグリッド上に並ぶ。
+    #[test]
+    fn a_plc_input_module_has_one_connection_point_per_io_point() {
+        let def = resolve_symbol("plc_di_16p").expect("PLC入力モジュール");
+        assert_eq!(def.ref_prefix, "PLC");
+        assert_eq!(def.category, "plc");
+        assert_eq!(def.pins.len(), 16);
+        // ピン番号は点番号 (1〜16)、全て左向き・左端に揃う
+        let numbers: Vec<String> = def.pins.iter().map(|p| p.number.clone()).collect();
+        assert_eq!(numbers[0], "1");
+        assert_eq!(numbers[15], "16");
+        assert!(def.pins.iter().all(|p| p.dir == PinDir::Left));
+        assert!(def.pins.windows(2).all(|w| w[0].at.x == w[1].at.x), "左端に一列");
+        // 点ピッチは一定で、全ピンが2.5mmグリッド上・上下中央揃え
+        let pitch = def.pins[1].at.y - def.pins[0].at.y;
+        assert!((pitch - PLC_POINT_PITCH_MM).abs() < 1e-9, "点ピッチ: {pitch}");
+        let mut ysum = 0.0;
+        for p in &def.pins {
+            assert!((p.at.x / 2.5 - (p.at.x / 2.5).round()).abs() < 1e-9, "{:?}", p.at);
+            assert!((p.at.y / 2.5 - (p.at.y / 2.5).round()).abs() < 1e-9, "{:?}", p.at);
+            ysum += p.at.y;
+        }
+        assert!(ysum.abs() < 1e-9, "上下中央揃え");
+    }
+
+    /// PLC modules come in an input and an output flavour, and both carry the PLC reference prefix.
+    /// PLCモジュールには入力用と出力用があり、どちらも参照記号の接頭辞はPLCになる。
+    #[test]
+    fn plc_modules_come_in_input_and_output_flavours() {
+        let di = resolve_symbol("plc_di_8p").expect("入力8点");
+        let d_o = resolve_symbol("plc_do_8p").expect("出力8点");
+        assert_eq!(di.pins.len(), 8);
+        assert_eq!(d_o.pins.len(), 8);
+        assert_eq!(d_o.ref_prefix, "PLC");
+        assert_ne!(di.name, d_o.name, "名称で入出力が区別できる");
+        assert!(d_o.name.contains("output") || d_o.name_ja.contains("出力"));
+    }
+
+    /// PLC module symbols exist from 1 to 64 points; anything outside that range is not a symbol.
+    /// PLCモジュールのシンボルは1〜64点まで作れ、その外の点数はシンボルとして存在しない。
+    #[test]
+    fn plc_module_point_counts_are_limited_to_one_through_sixty_four() {
+        assert!(resolve_symbol("plc_di_1p").is_some());
+        assert!(resolve_symbol("plc_di_64p").is_some());
+        assert!(resolve_symbol("plc_di_0p").is_none());
+        assert!(resolve_symbol("plc_di_65p").is_none());
+        assert!(resolve_symbol("plc_do_xp").is_none());
     }
 
     /// The relay coil symbol carries the JIS coil terminal names A1 and A2 and the reference prefix K.
