@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**999 specification clauses** across 5 areas.
+**1040 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -114,6 +114,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A net label always wins over the wire number, which in turn wins over the automatic N001 name. <sub>`net_name_prefers_label_then_wire_number_then_auto_name`</sub>
 - Pin positions honor the symbol's rotation (clockwise in the Y-down paper coordinate system) and placement. <sub>`pin_positions_apply_rotation_and_translation`</sub>
 - Mirroring flips pins across the vertical axis before rotation is applied. <sub>`pin_positions_apply_mirror_before_rotation`</sub>
+- An arc inside a symbol turns with the symbol, so the contactor's half circle keeps facing its moving contact at every rotation, and mirroring flips it without reversing the drawing direction. <sub>`arc_angles_follow_symbol_rotation_and_mirror`</sub>
 
 ### ngspice runner
 
@@ -273,6 +274,38 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The relay coil symbol carries the JIS coil terminal names A1 and A2 and the reference prefix K. <sub>`relay_coil_has_a1_a2_terminals`</sub>
 - Both relay contact types (make and break) exist, share the coil's reference prefix, and have their two connection points on the 2.5 mm grid. <sub>`relay_contacts_come_in_make_and_break_types`</sub>
 - Symbol definitions serialize to JSON and back without loss. <sub>`symbol_json_roundtrip`</sub>
+- The bundled library covers the JIS C 0617 main symbols at a 50-symbol scale, with unique ids. <sub>`library_covers_the_main_jis_symbols`</sub>
+- Every pin sits on the 2.5 mm grid, has a unique number per connection point, and points away from the body of the symbol. <sub>`every_pin_is_on_the_grid_and_points_outwards`</sub>
+- Every symbol carries the four attribute slots (reference, part number, description, rating) placed clear of its outline. <sub>`every_symbol_exposes_the_standard_attribute_slots`</sub>
+- Symbols are listed grouped by category in the display order used by the insert dialog, and every symbol is searchable by English and Japanese keywords. <sub>`symbols_are_grouped_by_category_in_display_order`</sub>
+- The symbols shipped in the first version keep their id, category, reference prefix, pin numbers and pin positions, so drawings made before the library grew still render identically. <sub>`legacy_symbols_keep_their_definition`</sub>
+- The three-pole contactor draws one make contact per pole with the contactor半円, terminals 1/2, 3/4, 5/6 and a dashed mechanical link. <sub>`contactor_3p_has_three_ganged_main_contacts`</sub>
+- The single-pole circuit breaker (MCB) is a make contact whose fixed contact carries the breaker cross, with terminals 1 and 2. <sub>`circuit_breaker_1p_marks_the_fixed_contact_with_a_cross`</sub>
+- The two- and three-pole circuit breakers repeat the pole at a 5 mm pitch and number the terminals 1/2, 3/4 (and 5/6). <sub>`circuit_breaker_multipole_numbers_terminals_by_pole`</sub>
+- The disconnector marks its fixed contact with a short bar at right angles to the blade instead of the breaker cross. <sub>`disconnector_marks_the_fixed_contact_with_a_bar`</sub>
+- The three-pole disconnector gangs three blades with terminals 1/2, 3/4, 5/6. <sub>`disconnector_3p_gangs_three_blades`</sub>
+- The break-contact pushbutton keeps the two connection points of the make type and adds the button actuator. <sub>`pushbutton_nc_is_a_break_contact_with_a_button_actuator`</sub>
+- The emergency stop is a break contact with the mushroom head actuator, so it opens the circuit when hit. <sub>`emergency_stop_is_a_break_contact_with_a_mushroom_head`</sub>
+- The changeover switch has one common terminal and two fixed contacts, with the blade resting on the break side while it is not operated. <sub>`switch_spdt_has_a_common_and_two_fixed_contacts`</sub>
+- The three-position switch shows the blade in the neutral centre position, touching neither fixed contact. <sub>`switch_3pos_shows_the_blade_in_neutral`</sub>
+- The limit switch comes as a make and a break type, both driven by the position-switch actuator (a filled square on the rod). <sub>`limit_switch_comes_in_make_and_break_types`</sub>
+- The relay changeover contact uses the IEC terminal numbers 11 (common), 12 (break) and 14 (make). <sub>`relay_contact_co_uses_iec_terminal_numbers`</sub>
+- The two-winding transformer draws both windings as arcs on either side of the core, with primary terminals 1/2 and secondary 3/4. <sub>`transformer_has_two_windings_around_a_core`</sub>
+- The AC source is a circle with a sine wave inside and two connection points. <sub>`ac_source_is_a_circle_with_a_sine_wave`</sub>
+- The bridge rectifier is a diamond with a diode inside, the AC terminals on the left and right and the DC terminals on top (+) and bottom (-). <sub>`rectifier_bridge_has_ac_and_dc_terminals`</sub>
+- Protective earth encloses the earth symbol in a circle, while functional (frame) earth uses the chassis symbol; both have a single connection point. <sub>`earth_symbols_distinguish_protective_and_frame_earth`</sub>
+- The zener diode keeps the diode outline and bends both ends of the cathode bar. <sub>`zener_diode_bends_the_cathode_bar`</sub>
+- The polarized capacitor draws one plate solid and marks the positive terminal. <sub>`capacitor_polarized_marks_the_positive_plate`</sub>
+- The inductor is drawn as a row of half circles on the conductor. <sub>`inductor_is_a_row_of_half_circles`</sub>
+- The variable resistor adds an arrow across the resistor body. <sub>`resistor_variable_adds_an_arrow_across_the_body`</sub>
+- The varistor is a resistor crossed by an oblique line and labelled U, marking it as voltage dependent. <sub>`varistor_is_a_voltage_dependent_resistor`</sub>
+- The three-phase motor has the three phase terminals U, V and W leaving the top of the circle. <sub>`motor_3ph_has_u_v_w_terminals`</sub>
+- The single-phase and DC motors share the motor circle and are told apart by the 1~ and DC marks inside. <sub>`motor_1ph_and_dc_are_told_apart_by_the_mark_inside`</sub>
+- The bell is a dome (half circle on its base line) with two connection points. <sub>`bell_is_a_dome_with_two_terminals`</sub>
+- The voltmeter and ammeter are circles marked V and A, wired in the circuit like any two-terminal instrument. <sub>`voltmeter_and_ammeter_are_circles_marked_v_and_a`</sub>
+- The current transformer has the primary conductor passing through the core and two secondary terminals S1/S2. <sub>`current_transformer_has_primary_through_and_secondary_terminals`</sub>
+- The plug and the socket of a connector pair face each other: the plug is a wedge, the socket the cup that receives it. <sub>`connector_plug_and_socket_face_each_other`</sub>
+- A multi-pole device conducts pole by pole (terminals 1-2, 3-4, 5-6), so the phases are never treated as connected to each other. <sub>`multipole_devices_conduct_pole_by_pole`</sub>
 
 ### Start templates
 
@@ -373,6 +406,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A single-sheet label conflict is reported exactly once when the whole project is verified. <sub>`project_verification_reports_a_single_sheet_label_conflict_once`</sub>
 - Nets joined across sheets by a shared label name are checked as one net, so a conflict spanning two sheets is reported once with all offending labels. <sub>`project_verification_merges_label_conflicts_across_sheets`</sub>
 - A net continued onto another sheet with the same label name is not a conflict. <sub>`project_verification_accepts_a_net_continued_onto_another_sheet`</sub>
+- A multi-pole breaker conducts pole by pole, so a load fed from an unwired pole is still reported as unreachable from the source. <sub>`multipole_breaker_does_not_connect_its_poles_to_each_other`</sub>
 
 ### Wire numbering
 
@@ -896,6 +930,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - splits the title block width into the mark, date, description and approver columns <sub>`revisionLayout`</sub>
 - returns at most the newest six revisions, still in oldest-first order <sub>`visibleRevisions / effectiveRev`</sub>
 - shows the newest revision mark in the title block Rev cell, falling back to the stored value or a dash <sub>`visibleRevisions / effectiveRev`</sub>
+- turns arcs with the symbol so the contactor half circle keeps facing its moving contact <sub>`rotateArcAngles`</sub>
+- mirrors arcs left to right while keeping the clockwise drawing direction <sub>`rotateArcAngles`</sub>
 
 ### search
 
@@ -942,6 +978,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - the arrow keys walk through the locations and wrap around <sub>`Surferポップアップ`</sub>
 - clicking a row picks that location and out-of-range rows are ignored <sub>`Surferポップアップ`</sub>
 - closing with Escape also resets the walk position <sub>`Surferポップアップ`</sub>
+
+### symbolLibrary
+
+- matches the English name, the Japanese name or the symbol id <sub>`symbolMatchesQuery`</sub>
+- finds symbols by the shop-floor words kept in the search keywords <sub>`symbolMatchesQuery`</sub>
+- treats an empty query as matching everything <sub>`symbolMatchesQuery`</sub>
+- groups symbols by category keeping the library order <sub>`groupSymbolsByCategory`</sub>
+- keeps only matching symbols and drops the categories left empty <sub>`groupSymbolsByCategory`</sub>
 
 ### viewClasses
 

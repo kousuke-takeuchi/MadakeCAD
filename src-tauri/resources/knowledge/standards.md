@@ -12,10 +12,27 @@ MadakeCADに同梱される作図知識。エージェントのシステムプ�
 
 - 電気用図記号の日本産業規格はJIS C 0617シリーズで、国際規格IEC 60617に整合している。
   MadakeCADのシンボルライブラリはこの系統の形状に従う。
-- 使えるシンボルIDは`list_symbols`で確認する。第一版の主なもの:
-  `resistor` / `capacitor` / `diode` / `led` / `fuse` / `switch_spst` / `pushbutton_no` /
-  `relay_coil` / `relay_contact_no` / `lamp` / `motor` / `battery` / `ground` / `terminal`。
+- 使えるシンボルIDは`list_symbols`で確認する(同梱47種)。カテゴリ別の一覧:
+
+  | カテゴリ | シンボルID |
+  |---|---|
+  | 電源・変換・接地 | `battery` / `ac_source` / `transformer` / `rectifier_bridge` / `ground` / `earth_protective` / `frame_ground` |
+  | 保護 | `fuse` / `breaker_1p` / `breaker_2p` / `breaker_3p` / `disconnector_1p` / `disconnector_3p` |
+  | 操作スイッチ | `switch_spst` / `switch_spdt` / `switch_3pos` / `pushbutton_no` / `pushbutton_nc` / `emergency_stop` / `limit_switch_no` / `limit_switch_nc` |
+  | リレー・電磁接触器 | `relay_coil` / `relay_contact_no` / `relay_contact_nc` / `relay_contact_co` / `contactor_3p` |
+  | 半導体 | `diode` / `zener_diode` / `led` |
+  | 受動部品 | `resistor` / `resistor_variable` / `varistor` / `capacitor` / `capacitor_polarized` / `inductor` |
+  | 負荷・報知 | `lamp` / `motor` / `motor_3ph` / `motor_1ph` / `motor_dc` / `bell` |
+  | 計測器 | `voltmeter` / `ammeter` / `current_transformer` |
+  | 端子・接続器 | `terminal` / `connector_plug` / `connector_socket` |
+
   極数可変の動的IDとして`connector_{n}p` / `terminal_block_{n}p`(n=1..50)が使える。
+- **多極機器の端子番号は極ごと**に1/2・3/4・5/6(`breaker_3p`・`disconnector_3p`・
+  `contactor_3p`)。切替接点(`relay_contact_co`)は11(共通)・12(b)・14(a)、
+  三相電動機(`motor_3ph`)はU・V・W、変流器(`current_transformer`)はP1/P2・S1/S2。
+- 一覧に無い機器(サーマルリレー・近接センサ・タイマの限時接点など)は、
+  **勝手に似た記号で代用しない**。ユーザーに確認するか、既存記号の組み合わせで
+  表せる範囲にとどめること。
 - **接点は非励磁・非操作の状態で描く**(リレーが動いていない、ボタンを押していない状態)。
   a接点(メーク接点)は開いた形、b接点(ブレーク接点)は閉じた形で描くのが図記号の約束。
 - **リレーはコイルと接点を離して描いてよい**。コイル(`relay_coil`)と接点
@@ -31,18 +48,30 @@ MadakeCADに同梱される作図知識。エージェントのシステムプ�
   | 接頭辞 | 対象 |
   |---|---|
   | R | 抵抗 |
+  | VR | 可変抵抗器 |
+  | RV | バリスタ |
   | C | コンデンサ |
-  | D | ダイオード・LED |
+  | L | インダクタ・リアクトル |
+  | D | ダイオード・LED・整流器 |
   | F | ヒューズ・保護機器 |
+  | CB | 配線用遮断器(MCB/MCCB) |
+  | DS | 断路器 |
   | SW | スイッチ(切替・選択) |
-  | PB | 押しボタン |
+  | PB | 押しボタン・非常停止 |
+  | LS | リミットスイッチ |
   | K | リレー・電磁接触器(コイルと接点で共有) |
   | M | モータ |
+  | BL | ベル |
   | PL | 表示灯(パイロットランプ) |
+  | T | 変圧器 |
+  | CT | 変流器 |
+  | VM / AM | 電圧計 / 電流計 |
+  | PE / FG | 保護接地 / フレーム接地 |
   | TB | 端子台 |
-  | J | コネクタ |
+  | J | コネクタ・差込接続器 |
   | W | ハーネス(電線束の囲み) |
   | BT | 電池・直流電源 |
+  | G | 交流電源 |
 
 - 番号は図面の読み順(左上→右下)で振ると追いやすい。
 - 参照記号を空のままにしない(検証が`erc.empty_reference`で指摘する)。

@@ -286,12 +286,13 @@
     "connector": "Connector (N poles)",
     "category": {
       "power": "Power",
-      "passive": "Passive",
       "protection": "Protection",
       "switch": "Switches",
       "relay": "Relays",
-      "output": "Outputs",
       "semiconductor": "Semiconductors",
+      "passive": "Passive",
+      "output": "Outputs",
+      "instrument": "Instruments",
       "connector": "Connectors"
     }
   },

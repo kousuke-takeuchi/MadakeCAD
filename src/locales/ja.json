@@ -286,12 +286,13 @@
     "connector": "コネクタ(N極)",
     "category": {
       "power": "電源",
-      "passive": "受動部品",
       "protection": "保護",
       "switch": "スイッチ",
       "relay": "リレー",
-      "output": "出力",
       "semiconductor": "半導体",
+      "passive": "受動部品",
+      "output": "出力",
+      "instrument": "計測器",
       "connector": "コネクタ"
     }
   },
