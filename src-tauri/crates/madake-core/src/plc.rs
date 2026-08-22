@@ -372,7 +372,7 @@ pub fn assignments_csv(project: &Project, module_ref: &str) -> String {
 }
 
 /// CSV1行をセルへ分ける (引用符で囲んだセル・セル内のカンマ・`""`によるエスケープに対応)。
-fn split_csv_line(line: &str) -> Vec<String> {
+pub(crate) fn split_csv_line(line: &str) -> Vec<String> {
     let mut cells = Vec::new();
     let mut cur = String::new();
     let mut quoted = false;

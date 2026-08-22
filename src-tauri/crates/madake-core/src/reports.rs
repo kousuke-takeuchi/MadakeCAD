@@ -184,7 +184,7 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
                     w.color.clone(),
                     fmt_num(w.sq),
                     w.length_m.map(fmt_num).unwrap_or_default(),
-                    w.part_no.clone().unwrap_or_default(),
+                    crate::wire_parts::wire_part_number(project, w).unwrap_or_default(),
                     crate::harness::harness_name_of_wire(sheet, w),
                 ]
             })
@@ -197,6 +197,8 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
 
 /// From-To電線リストCSV。Wireごとに1行で、両端の接続先 (From/To) と線番・電線属性・ハーネスを並べる。
 /// 長さ列は測長済みのワイヤだけ埋まる (3D配線からの書き戻しはM5)。
+/// 電線品番の列は、ワイヤに書かれた品番か、無ければ線色+線径で電線品番表
+/// ([`crate::wire_parts`]) を引いた品番で埋まる。
 pub fn wire_list_csv(project: &Project) -> String {
     let mut out = WIRE_LIST_COLUMNS.join(",");
     out.push('\n');
@@ -582,6 +584,58 @@ mod tests {
         });
         let row = data_rows(&wire_list_csv(&project))[0].clone();
         assert_eq!(&row[4..9], ["red", "0.75", "0.4", "SAMPLE0001", ""]);
+    }
+
+    /// The part-number column of the wire list is filled from the project's wire-part table (colour + gauge), so wires never have to be given a part number one by one.
+    /// 電線リストの品番列はプロジェクトの電線品番表 (線色+線径) から埋まるので、ワイヤ1本ずつ品番を書く必要はない。
+    #[test]
+    fn wire_list_part_number_comes_from_the_wire_part_table() {
+        let mut project = one_wire_project(|w| {
+            w.color = "水色".into();
+            w.sq = 0.3;
+        });
+        project.wire_parts = vec![WirePart {
+            part_no: "SAMPLE0001".into(),
+            color: "水色".into(),
+            sq: 0.3,
+            note: String::new(),
+        }];
+        assert_eq!(data_rows(&wire_list_csv(&project))[0][7], "SAMPLE0001");
+    }
+
+    /// A combination that is not in the wire-part table leaves the part-number column empty.
+    /// 電線品番表に無い線色+線径の組み合わせは、品番の列が空欄のままになる。
+    #[test]
+    fn wire_list_part_number_is_empty_when_the_table_has_no_match() {
+        let mut project = one_wire_project(|w| {
+            w.color = "橙".into();
+            w.sq = 2.0;
+        });
+        project.wire_parts = vec![WirePart {
+            part_no: "SAMPLE0001".into(),
+            color: "水色".into(),
+            sq: 0.3,
+            note: String::new(),
+        }];
+        assert_eq!(data_rows(&wire_list_csv(&project))[0][7], "");
+    }
+
+    /// A part number written on the wire itself is kept in the list even when the table says otherwise.
+    /// ワイヤ自身に書かれた品番は、表に別の品番があってもそのまま電線リストに載る。
+    #[test]
+    fn wire_list_keeps_a_part_number_written_on_the_wire() {
+        let mut project = one_wire_project(|w| {
+            w.color = "水色".into();
+            w.sq = 0.3;
+            w.part_no = Some("MY-WIRE-9".into());
+        });
+        project.wire_parts = vec![WirePart {
+            part_no: "SAMPLE0001".into(),
+            color: "水色".into(),
+            sq: 0.3,
+            note: String::new(),
+        }];
+        assert_eq!(data_rows(&wire_list_csv(&project))[0][7], "MY-WIRE-9");
     }
 
     /// A wire with no measured length leaves the length column empty (lengths come back from the 3D routing later).

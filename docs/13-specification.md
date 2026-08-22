@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1701 specification clauses** across 5 areas.
+**1735 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -32,6 +32,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Command engine (undo/redo)
 
+- A symbol whose id is not in the library is refused instead of being stored as an invisible entity, and the sheet is left untouched. <sub>`an_unknown_symbol_id_is_refused_and_changes_nothing`</sub>
+- A parametric symbol asked for outside its pole range (0 poles, or more than the limit) is refused with a message that says the range. <sub>`a_pole_count_outside_the_range_is_refused`</sub>
+- Every ordinary placement still goes through: bundled symbols, parametric symbols inside their range, and a block defined by its attributes. <sub>`valid_symbol_ids_are_still_accepted`</sub>
+- Changing an existing symbol to an unknown id is refused too, so a symbol on the sheet can always be drawn. <sub>`changing_a_symbol_to_an_unknown_id_is_refused`</sub>
 - A block whose pin table is broken (duplicate numbers) is refused when added, and the sheet is left untouched. <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - Editing a good block into a broken one is refused too, so a block on the sheet always has a drawable pin table. <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
 - A note whose colour is a name the drawing does not know (a typo, or a raw colour code) is refused instead of being stored and silently drawn in black. <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
@@ -199,6 +203,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A wire that meets a block pin joins that pin to the net under the pin's own name, not a number. <sub>`block_pins_join_nets_under_their_own_names`</sub>
 - Wires that merely cross do NOT connect; a net label attached to a wire names its net. <sub>`crossing_without_junction_stays_separate_and_label_names_net`</sub>
 - A junction dot connects crossing wires, and same-named labels merge distant nets into one. <sub>`junction_connects_crossing_wires_and_same_labels_merge`</sub>
+- A net label placed exactly on a symbol pin connects that pin to the net of the same name elsewhere, without a wire stub. <sub>`a_label_on_a_pin_joins_that_pin_to_the_net_of_the_same_name`</sub>
+- The attachment test used by the netlist accepts a label on a wire vertex, in the middle of a wire segment, or on a symbol pin, and rejects one that floats even slightly off. <sub>`the_label_attachment_test_accepts_vertices_segments_and_pins`</sub>
 - Unnamed nets receive deterministic sequential names (N001, N002, ...). <sub>`unnamed_nets_get_deterministic_sequential_names`</sub>
 - Two connection points of the same symbol sharing a pin number (a feed-through terminal) are internally shorted, and appear once in the net's pin list. <sub>`same_pin_number_points_short_internally`</sub>
 - A wire number written on the wires becomes the net's displayed name when the net has no net label. <sub>`wire_number_names_a_net_without_a_label`</sub>
@@ -376,6 +382,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The wire list keeps the wire-number column introduced with wire numbering: it holds the number written on the wire, or is empty when the wire is not numbered yet. <sub>`wire_list_has_a_wire_number_column`</sub>
 - The wire list keeps the harness column: it carries the name of the harness boundary that fully encloses the wire, and stays empty for wires outside every harness. <sub>`wire_list_has_a_harness_column`</sub>
 - The wire list contains each wire's color, gauge, length and part number. <sub>`wire_list_contains_attributes`</sub>
+- The part-number column of the wire list is filled from the project's wire-part table (colour + gauge), so wires never have to be given a part number one by one. <sub>`wire_list_part_number_comes_from_the_wire_part_table`</sub>
+- A combination that is not in the wire-part table leaves the part-number column empty. <sub>`wire_list_part_number_is_empty_when_the_table_has_no_match`</sub>
+- A part number written on the wire itself is kept in the list even when the table says otherwise. <sub>`wire_list_keeps_a_part_number_written_on_the_wire`</sub>
 - A wire with no measured length leaves the length column empty (lengths come back from the 3D routing later). <sub>`wire_list_length_is_empty_until_it_is_known`</sub>
 - Rows are sorted by From then To within each sheet, so exporting the same drawing twice gives byte-identical files. <sub>`rows_are_sorted_by_from_then_to`</sub>
 
@@ -646,6 +655,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - With ngspice installed, electrical findings carry solver-measured values and no approximate-mode note appears. <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
 - Without a solver result, checks fall back to a graph approximation and say so with an Info note. <sub>`fallback_mode_emits_approximate_info`</sub>
 - Two different net labels on one net (a short between potentials) is an error. <sub>`conflicting_net_labels_on_one_net_are_an_error`</sub>
+- A net label that sits on a wire vertex, in the middle of a wire, or on a symbol pin is properly attached and is not reported. <sub>`a_net_label_on_a_wire_or_a_pin_is_not_reported`</sub>
+- A net label placed even half a millimetre off a wire is reported as a warning naming the label, because it silently fails to join the net. <sub>`a_net_label_that_floats_off_the_wire_is_reported`</sub>
+- A net label within the 0.01 mm connection tolerance still counts as attached, so ordinary rounding never triggers the warning. <sub>`a_net_label_within_the_connection_tolerance_is_still_attached`</sub>
 - A single-sheet label conflict is reported exactly once when the whole project is verified. <sub>`project_verification_reports_a_single_sheet_label_conflict_once`</sub>
 - Nets joined across sheets by a shared label name are checked as one net, so a conflict spanning two sheets is reported once with all offending labels. <sub>`project_verification_merges_label_conflicts_across_sheets`</sub>
 - A net continued onto another sheet with the same label name is not a conflict. <sub>`project_verification_accepts_a_net_continued_onto_another_sheet`</sub>
@@ -678,6 +690,20 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The note of a vertical wire sits to the right of the wire, on the opposite side from its wire number. <sub>`vertical_wire_note_sits_right_of_the_wire`</sub>
 - Every wire gets its own note, unlike the wire number which is drawn once per net. <sub>`each_wire_gets_its_own_note`</sub>
 - On a bent wire the note is placed on the longest straight run, where there is room to read it. <sub>`note_is_placed_on_the_longest_straight_run`</sub>
+
+### Wire part numbers (colour + gauge table)
+
+- A wire's part number is looked up in the project's wire-part table by its colour and gauge. <sub>`a_wire_takes_its_part_number_from_the_colour_and_gauge_table`</sub>
+- A colour and gauge combination that is not in the table leaves the part number empty; no number is invented. <sub>`an_unregistered_combination_stays_empty`</sub>
+- A part number written on the wire itself wins over the table, so a hand-picked part is never overwritten. <sub>`a_part_number_written_on_the_wire_wins_over_the_table`</sub>
+- The lookup ignores surrounding spaces and upper/lower case in the colour name. <sub>`the_lookup_ignores_spaces_and_letter_case_in_the_colour`</sub>
+- A wire with no colour or no gauge is not looked up at all. <sub>`a_wire_without_a_colour_or_a_gauge_is_not_looked_up`</sub>
+- When the table has two rows for the same colour and gauge, the row written first wins. <sub>`the_first_row_wins_when_the_table_has_duplicates`</sub>
+- The wire-part table round trips through CSV: colour, gauge, part number and note come back unchanged. <sub>`the_wire_part_table_round_trips_through_csv`</sub>
+- A CSV without a header row is read as data, and the note column may be left out. <sub>`a_csv_without_a_header_row_and_without_the_note_column_is_read`</sub>
+- A malformed CSV (wrong number of columns, a non-numeric gauge, or an empty part number) is refused and no row is taken. <sub>`a_malformed_csv_is_refused`</sub>
+- Importing a CSV replaces the whole table through the command engine, and one undo brings the previous table back. <sub>`importing_a_csv_replaces_the_table_and_undo_restores_it`</sub>
+- A CSV that cannot be read leaves the table exactly as it was. <sub>`a_csv_that_cannot_be_read_leaves_the_table_unchanged`</sub>
 
 ### xref
 
@@ -821,6 +847,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The parts search tool advertises selection, comparison and alternative-part use, so the agent reaches for it when asked "what can replace this?". <sub>`the_parts_search_tool_advertises_selection_and_comparison`</sub>
 - The template tools explain that a template is a starting skeleton, that it lands ERC-clean, and that applying it is a single undo step. <sub>`the_template_tools_explain_what_a_template_is`</sub>
 - Every published tool carries a description, so no tool is offered to the agent unexplained. <sub>`every_published_tool_has_a_description`</sub>
+
+### Wire part numbers / command errors (REST)
+
+- A command the engine refuses comes back as HTTP 400 saying what went wrong and which command in the list failed, instead of a silent 200. <sub>`a_refused_command_returns_400_with_the_reason_and_the_command_index`</sub>
+- A parametric symbol asked for beyond its pole limit is refused the same way, with a message that names the usable range. <sub>`a_pole_count_beyond_the_limit_is_refused_over_the_api`</sub>
+- A valid command list still returns 200 with one patch per command. <sub>`a_valid_command_list_still_succeeds`</sub>
+- Posting a wire-part CSV fills the project's colour+gauge table, and the wire list then prints the part number of a wire that has none of its own. <sub>`importing_a_wire_part_csv_fills_the_part_number_column_of_the_wire_list`</sub>
+- A CSV that cannot be read is refused with 400 and the table is left exactly as it was. <sub>`a_malformed_wire_part_csv_is_refused_and_changes_nothing`</sub>
 
 
 ## AI assistant (madake-agent)
@@ -1636,6 +1670,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - refuses to run while the start number is invalid <sub>`wire numbering dialog store`</sub>
 - sends nothing when the dialog is cancelled <sub>`wire numbering dialog store`</sub>
 - keeps the dialog open and reports the error when numbering fails <sub>`wire numbering dialog store`</sub>
+
+### wireParts
+
+- looks a wire's part number up by colour and gauge <sub>`wirePartNo`</sub>
+- leaves an unregistered combination empty <sub>`wirePartNo`</sub>
+- prefers a part number written on the wire <sub>`wirePartNo`</sub>
+- ignores spaces and letter case in the colour <sub>`wirePartNo`</sub>
+- does not look up a wire without a colour or a gauge <sub>`wirePartNo`</sub>
+- takes the first of two rows for the same colour and gauge <sub>`wirePartNo`</sub>
 
 ### xref
 

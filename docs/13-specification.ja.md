@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1701仕様項目**。
+全5領域・**1735仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -32,6 +32,10 @@
 
 ### Commandエンジン (undo/redo)
 
+- ライブラリに無いシンボルidは、描かれない幽霊エンティティとして保存されるのではなく拒否され、図面は何も変わらない。 <sub>`an_unknown_symbol_id_is_refused_and_changes_nothing`</sub>
+- 極数可変シンボルを範囲外の極数 (0極や上限超え) で頼むと、使える範囲を書いたメッセージで拒否される。 <sub>`a_pole_count_outside_the_range_is_refused`</sub>
+- ふつうの配置はこれまでどおり通る: 同梱シンボル・範囲内の極数可変シンボル・属性で形が決まるブロック。 <sub>`valid_symbol_ids_are_still_accepted`</sub>
+- 既にある部品を知らないシンボルidへ変更するのも拒否されるので、図面の部品は常に描ける。 <sub>`changing_a_symbol_to_an_unknown_id_is_refused`</sub>
 - ピン表が壊れている(番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。 <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - 正しいブロックを壊れた内容へ編集するのも拒否されるので、図面上のブロックは常に描けるピン表を持つ。 <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
 - 図面が知らない色名 (打ち間違いや生の色コード) を付けた注記は、黙って黒で描かれるのではなく拒否される。 <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
@@ -199,6 +203,8 @@
 - ブロックのピンに届いた配線は、そのピンを番号ではなくピン名(例 "OUT1")でネットに参加させる。 <sub>`block_pins_join_nets_under_their_own_names`</sub>
 - 単に交差しただけのワイヤは接続されない。ワイヤに付いたネットラベルはそのネットの名前になる。 <sub>`crossing_without_junction_stays_separate_and_label_names_net`</sub>
 - ジャンクションは交差ワイヤを接続し、同名ラベルは離れたネットを1つに統合する。 <sub>`junction_connects_crossing_wires_and_same_labels_merge`</sub>
+- シンボルのピンにぴったり置いたネットラベルは、配線を引かなくても同じ名前のネットへそのピンを繋ぐ。 <sub>`a_label_on_a_pin_joins_that_pin_to_the_net_of_the_same_name`</sub>
+- ネットリストが使う載り判定は、配線の頂点上・線分の途中・シンボルのピン上のラベルを載っていると認め、わずかでも浮いたラベルは認めない。 <sub>`the_label_attachment_test_accepts_vertices_segments_and_pins`</sub>
 - 無名ネットには決定的な連番名(N001, N002, …)が付く。 <sub>`unnamed_nets_get_deterministic_sequential_names`</sub>
 - 同一シンボルで同じピン番号を持つ2つの接続点(貫通端子)は内部短絡され、ネットのピン一覧には1回だけ載る。 <sub>`same_pin_number_points_short_internally`</sub>
 - ワイヤに書かれた線番は、ネットラベルが無いネットの表示名になる。 <sub>`wire_number_names_a_net_without_a_label`</sub>
@@ -376,6 +382,9 @@
 - 電線リストには線番採番で入った線番の列があり、そのワイヤに書かれた線番が入る (未採番なら空欄)。 <sub>`wire_list_has_a_wire_number_column`</sub>
 - 電線リストにはハーネス列があり、そのワイヤを完全に囲んでいるハーネス境界の名前が入る (どの囲みにも入らない線は空欄)。 <sub>`wire_list_has_a_harness_column`</sub>
 - 電線リストには各ワイヤの線色・線径・長さ・品番が載る。 <sub>`wire_list_contains_attributes`</sub>
+- 電線リストの品番列はプロジェクトの電線品番表 (線色+線径) から埋まるので、ワイヤ1本ずつ品番を書く必要はない。 <sub>`wire_list_part_number_comes_from_the_wire_part_table`</sub>
+- 電線品番表に無い線色+線径の組み合わせは、品番の列が空欄のままになる。 <sub>`wire_list_part_number_is_empty_when_the_table_has_no_match`</sub>
+- ワイヤ自身に書かれた品番は、表に別の品番があってもそのまま電線リストに載る。 <sub>`wire_list_keeps_a_part_number_written_on_the_wire`</sub>
 - 長さが決まっていないワイヤの長さ列は空欄になる (長さは後で3D配線から書き戻される)。 <sub>`wire_list_length_is_empty_until_it_is_known`</sub>
 - 行はシートごとにFrom→Toの順に並ぶので、同じ図面を2回出力すると全く同じファイルになる。 <sub>`rows_are_sorted_by_from_then_to`</sub>
 
@@ -646,6 +655,9 @@
 - ngspiceがあれば電気検証はソルバの実測値で報告され、近似モードの通知は出ない。 <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
 - ソルバ結果が無い場合はグラフ近似にフォールバックし、その旨をInfoで明示する。 <sub>`fallback_mode_emits_approximate_info`</sub>
 - 1つのネットに異なるネットラベルが混在する状態(異電位の短絡)はエラーになる。 <sub>`conflicting_net_labels_on_one_net_are_an_error`</sub>
+- 配線の頂点上・配線の途中・シンボルのピン上にあるネットラベルはきちんと載っているので、指摘されない。 <sub>`a_net_label_on_a_wire_or_a_pin_is_not_reported`</sub>
+- 配線から0.5mmでもずれたネットラベルは、黙ってネットから外れてしまうので、ラベル名を挙げた警告として報告される。 <sub>`a_net_label_that_floats_off_the_wire_is_reported`</sub>
+- 接続の許容誤差 (0.01mm) の内側にあるネットラベルは載っている扱いなので、ふつうの丸め誤差で警告が出ることはない。 <sub>`a_net_label_within_the_connection_tolerance_is_still_attached`</sub>
 - シート1枚の中のラベル競合は、プロジェクト全体を検証しても1件だけ報告される。 <sub>`project_verification_reports_a_single_sheet_label_conflict_once`</sub>
 - 同名ラベルでシートを跨いで繋がったネットは1ネットとして検査されるので、2枚に跨る競合も全ラベルを挙げた1件として報告される。 <sub>`project_verification_merges_label_conflicts_across_sheets`</sub>
 - 同じラベル名でシートを跨いで続くネットは、競合ではない。 <sub>`project_verification_accepts_a_net_continued_onto_another_sheet`</sub>
@@ -678,6 +690,20 @@
 - 縦向きのワイヤの注記は配線の右に置かれ、左に出る線番とは反対側になる。 <sub>`vertical_wire_note_sits_right_of_the_wire`</sub>
 - 注記はワイヤ1本ごとに付く(ネットごとに1回だけ描かれる線番とは違う)。 <sub>`each_wire_gets_its_own_note`</sub>
 - 折れ曲がったワイヤの注記は、いちばん長い直線部分に置かれて読みやすくなる。 <sub>`note_is_placed_on_the_longest_straight_run`</sub>
+
+### 電線品番 (線色+線径の表)
+
+- ワイヤの電線品番は、線色と線径からプロジェクトの電線品番表を引いて決まる。 <sub>`a_wire_takes_its_part_number_from_the_colour_and_gauge_table`</sub>
+- 表に無い線色+線径の組み合わせは品番が空のままで、勝手に品番が作られることはない。 <sub>`an_unregistered_combination_stays_empty`</sub>
+- ワイヤ自身に書かれた品番は表より優先されるので、手で決めた品番が表で上書きされることはない。 <sub>`a_part_number_written_on_the_wire_wins_over_the_table`</sub>
+- 引き当ては線色の前後の空白と英字の大小を無視する。 <sub>`the_lookup_ignores_spaces_and_letter_case_in_the_colour`</sub>
+- 線色が空・線径が0のワイヤは引き当てない。 <sub>`a_wire_without_a_colour_or_a_gauge_is_not_looked_up`</sub>
+- 同じ線色+線径の行が表に2つあるときは、先に書いた行が勝つ。 <sub>`the_first_row_wins_when_the_table_has_duplicates`</sub>
+- 電線品番表はCSVで往復でき、線色・線径・品番・備考がそのまま戻る。 <sub>`the_wire_part_table_round_trips_through_csv`</sub>
+- 見出し行の無いCSVもそのままデータとして読め、備考の列は省略できる。 <sub>`a_csv_without_a_header_row_and_without_the_note_column_is_read`</sub>
+- 壊れたCSV (列数違い・線径が数値でない・品番が空) は拒否され、1行も取り込まれない。 <sub>`a_malformed_csv_is_refused`</sub>
+- CSVの取り込みはCommandエンジンを通して表全体を置き換え、undo一発で元の表に戻る。 <sub>`importing_a_csv_replaces_the_table_and_undo_restores_it`</sub>
+- 読めないCSVを取り込もうとしても、表は元のままである。 <sub>`a_csv_that_cannot_be_read_leaves_the_table_unchanged`</sub>
 
 ### xref
 
@@ -821,6 +847,14 @@
 - 部品検索ツールの説明には選定・比較・代替品の用途が書かれており、「これの代替は?」と聞かれたエージェントがこれを使う。 <sub>`the_parts_search_tool_advertises_selection_and_comparison`</sub>
 - テンプレートのツール説明には「作図の雛形であること」「ERC指摘ゼロで入ること」「undo一発で戻せること」が書かれている。 <sub>`the_template_tools_explain_what_a_template_is`</sub>
 - 公開ツールには全て説明文が付いており、説明の無いツールをエージェントへ見せない。 <sub>`every_published_tool_has_a_description`</sub>
+
+### 電線品番・コマンドエラー (REST)
+
+- エンジンが拒否したコマンドは、黙って200で返るのではなく、理由と何番目のコマンドが落ちたかを添えたHTTP 400で返る。 <sub>`a_refused_command_returns_400_with_the_reason_and_the_command_index`</sub>
+- 極数の上限を超えた極数可変シンボルも同じように拒否され、使える範囲がメッセージに書かれる。 <sub>`a_pole_count_beyond_the_limit_is_refused_over_the_api`</sub>
+- 正しいコマンド列はこれまでどおり200で、コマンドごとのpatchが返る。 <sub>`a_valid_command_list_still_succeeds`</sub>
+- 電線品番表のCSVを投げるとプロジェクトの線色+線径の表が埋まり、品番を持たないワイヤでも電線リストに品番が出る。 <sub>`importing_a_wire_part_csv_fills_the_part_number_column_of_the_wire_list`</sub>
+- 読めないCSVは400で拒否され、表は元のままになる。 <sub>`a_malformed_wire_part_csv_is_refused_and_changes_nothing`</sub>
 
 
 ## AIアシスタント (madake-agent)
@@ -1636,6 +1670,15 @@
 - 開始番号が不正なままでは採番せず、ダイアログは開いたまま残る <sub>`wire numbering dialog store`</sub>
 - キャンセルするとコマンドは送られずに閉じる <sub>`wire numbering dialog store`</sub>
 - 採番に失敗したらダイアログは開いたままエラーを表示する <sub>`wire numbering dialog store`</sub>
+
+### wireParts
+
+- ワイヤの品番は線色と線径から電線品番表を引いて決まる <sub>`wirePartNo`</sub>
+- 表に無い線色+線径の組み合わせは空のまま <sub>`wirePartNo`</sub>
+- ワイヤ自身に書かれた品番は表より優先される <sub>`wirePartNo`</sub>
+- 引き当ては線色の前後の空白と英字の大小を無視する <sub>`wirePartNo`</sub>
+- 線色が空・線径が0のワイヤは引き当てない <sub>`wirePartNo`</sub>
+- 同じ線色+線径の行が2つあるときは先に書いた行が勝つ <sub>`wirePartNo`</sub>
 
 ### xref
 

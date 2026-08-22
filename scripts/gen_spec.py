@@ -54,6 +54,8 @@ MODULES = {
     "macros": ("Circuit macros", "回路マクロ"),
     "netlist": ("Netlist extraction", "ネットリスト抽出"),
     "wire_no": ("Wire numbering", "線番採番"),
+    "wire_parts": ("Wire part numbers (colour + gauge table)", "電線品番 (線色+線径の表)"),
+    "wire_parts_api": ("Wire part numbers / command errors (REST)", "電線品番・コマンドエラー (REST)"),
     "harness": ("Harness boundaries", "ハーネス境界"),
     "frame_template": ("Frame templates (plot frames)", "図枠テンプレート (プロットフレーム)"),
     "svg": ("SVG output (JIS frame)", "SVG出力 (JIS図枠)"),

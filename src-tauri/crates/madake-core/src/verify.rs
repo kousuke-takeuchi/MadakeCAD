@@ -99,6 +99,9 @@ fn project_label_conflicts(project: &crate::model::Project) -> Vec<Diagnostic> {
 /// ネットラベル競合の診断コード。シート単位・プロジェクト全体で共通。
 const LABEL_CONFLICT: &str = "erc.label_conflict";
 
+/// 浮きネットラベル (配線にもピンにも載っていない) の診断コード。
+pub const DANGLING_LABEL: &str = "erc.dangling_label";
+
 pub(crate) fn verify_sheet_with(
     sheet: &Sheet,
     symbols: &[SymbolDef],
@@ -623,6 +626,24 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
         }
     }
 
+    // 浮きネットラベル: 配線にもピンにも載っていないラベルは、名前が付いているように
+    // 見えて実際にはどのネットにも参加していない (静かにネットが割れる G17)
+    for e in sheet.entities.values() {
+        let Entity::NetLabel(l) = e else { continue };
+        if crate::netlist::label_is_attached(sheet, symbols, &l.at) {
+            continue;
+        }
+        diags.push(diag(
+            Severity::Warning,
+            DANGLING_LABEL,
+            format!(
+                "ネットラベル {} が配線にもピンにも載っていません (このラベルはどのネットにも繋がりません)",
+                l.name
+            ),
+            vec![l.id],
+        ));
+    }
+
     // 1ネット上の異名ネットラベル(異電位ネットの直結の代表例)
     for net in &nets {
         let net_wires: Vec<&crate::model::Wire> = net
@@ -1070,6 +1091,58 @@ mod tests {
             rotation: 0,
             attrs: Default::default(),
         })
+    }
+
+    /// 浮きネットラベルの指摘だけを取り出す。
+    fn dangling_labels(sheet: &Sheet) -> Vec<Diagnostic> {
+        run(sheet)
+            .into_iter()
+            .filter(|d| d.code == DANGLING_LABEL)
+            .collect()
+    }
+
+    /// A net label that sits on a wire vertex, in the middle of a wire, or on a symbol pin is properly attached and is not reported.
+    /// 配線の頂点上・配線の途中・シンボルのピン上にあるネットラベルはきちんと載っているので、指摘されない。
+    #[test]
+    fn a_net_label_on_a_wire_or_a_pin_is_not_reported() {
+        for (x, y, where_) in [
+            (0.0, 10.0, "頂点上"),
+            (10.0, 10.0, "線分の途中"),
+            (107.5, 50.0, "ピン上"),
+        ] {
+            let sheet = sheet_with(vec![
+                symbol("resistor", "R1", 100.0, 50.0),
+                wire(&[(0.0, 10.0), (20.0, 10.0)]),
+                net_label("24V", x, y),
+            ]);
+            assert!(dangling_labels(&sheet).is_empty(), "{where_}のラベルは指摘しない");
+        }
+    }
+
+    /// A net label placed even half a millimetre off a wire is reported as a warning naming the label, because it silently fails to join the net.
+    /// 配線から0.5mmでもずれたネットラベルは、黙ってネットから外れてしまうので、ラベル名を挙げた警告として報告される。
+    #[test]
+    fn a_net_label_that_floats_off_the_wire_is_reported() {
+        let sheet = sheet_with(vec![
+            wire(&[(0.0, 10.0), (20.0, 10.0)]),
+            net_label("[redacted]", 10.0, 10.5),
+        ]);
+        let diags = dangling_labels(&sheet);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].severity, Severity::Warning);
+        assert!(diags[0].message.contains("[redacted]"), "{}", diags[0].message);
+        assert_eq!(diags[0].entity_ids.len(), 1, "指摘はそのラベルを選択できる");
+    }
+
+    /// A net label within the 0.01 mm connection tolerance still counts as attached, so ordinary rounding never triggers the warning.
+    /// 接続の許容誤差 (0.01mm) の内側にあるネットラベルは載っている扱いなので、ふつうの丸め誤差で警告が出ることはない。
+    #[test]
+    fn a_net_label_within_the_connection_tolerance_is_still_attached() {
+        let sheet = sheet_with(vec![
+            wire(&[(0.0, 10.0), (20.0, 10.0)]),
+            net_label("[redacted]", 10.0, 10.005),
+        ]);
+        assert!(dangling_labels(&sheet).is_empty());
     }
 
     /// A single-sheet label conflict is reported exactly once when the whole project is verified.

@@ -127,15 +127,60 @@ async fn get_netlist(
 
 /// 外部クライアント(madake CLI・FreeCADアドオン・ブラウザ検証)からの編集。
 /// 由来は`mcp`として履歴に残る(UI操作=`user`・エージェント=`agent`と区別する)。
+///
+/// **失敗したコマンドは黙って捨てない** (G17): 拒否されたら 400 と
+/// `{ "error": 理由, "failed_command_index": 何番目か, "applied": 適用済みの件数 }`
+/// を返す。それより前のコマンドは適用済みで、まとめて取り消したいなら`undo`を
+/// `applied`回呼ぶ (1コマンド=1履歴のため)。
 async fn post_commands(
     State(doc): State<SharedDoc>,
     Json(commands): Json<Vec<Command>>,
-) -> Result<Json<Vec<Patch>>, ApiError> {
+) -> Result<Json<Vec<Patch>>, CommandError> {
     let mut patches = Vec::new();
-    for cmd in commands {
-        patches.push(doc.execute_external(cmd).map_err(bad_request)?);
+    for (i, cmd) in commands.into_iter().enumerate() {
+        match doc.execute_external(cmd) {
+            Ok(patch) => patches.push(patch),
+            Err(e) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": e.to_string(),
+                        "failed_command_index": i,
+                        "applied": patches.len(),
+                    })),
+                ))
+            }
+        }
     }
     Ok(Json(patches))
+}
+
+/// コマンド実行の失敗 (400 + 理由・何番目で落ちたか)。
+type CommandError = (StatusCode, Json<serde_json::Value>);
+
+#[derive(Deserialize)]
+struct WirePartsCsvBody {
+    csv: String,
+}
+
+/// プロジェクトの電線品番表 (線色+線径→品番)。CSVでも返すのでそのまま編集して投げ戻せる。
+async fn get_project_wire_parts(State(doc): State<SharedDoc>) -> Json<serde_json::Value> {
+    let engine = doc.engine.lock().unwrap();
+    Json(serde_json::json!({
+        "wire_parts": engine.project().wire_parts,
+        "csv": madake_core::wire_parts::wire_parts_csv(engine.project()),
+    }))
+}
+
+/// 電線品番表のCSV取り込み (表全体を置き換え)。**Commandを通す**のでundo一発で戻る。
+/// 列は 線色・線径sq・電線品番 (+備考)。読めないCSVは400で、表は変わらない。
+async fn post_project_wire_parts_csv(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<WirePartsCsvBody>,
+) -> Result<Json<Patch>, ApiError> {
+    doc.import_wire_parts_csv(&body.csv, madake_core::EditOrigin::Mcp)
+        .map(Json)
+        .map_err(bad_request)
 }
 
 /// 使える開始テンプレートの一覧(同梱+ユーザーの`~/MadakeCAD/templates`)。
@@ -1157,6 +1202,11 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/macros/apply", post(post_apply_macro))
         .route("/api/v1/macros/apply-inline", post(post_apply_macro_inline))
         .route("/api/v1/commands", post(post_commands))
+        .route("/api/v1/project/wire-parts", get(get_project_wire_parts))
+        .route(
+            "/api/v1/project/wire-parts/csv",
+            post(post_project_wire_parts_csv),
+        )
         .route("/api/v1/undo", post(post_undo))
         .route("/api/v1/redo", post(post_redo))
         .route("/api/v1/export/svg", post(post_export_svg))

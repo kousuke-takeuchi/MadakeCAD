@@ -536,6 +536,16 @@ fn import_plc_assignments_csv(
         .map_err(|e| e.to_string())
 }
 
+/// 電線品番表 (線色+線径→品番) のCSVを取り込む。表全体を置き換え、undo一発で戻る。
+/// 列は 線色・線径sq・電線品番 (+備考)。読めないCSVは理由を返し、表は変わらない。
+#[tauri::command]
+fn import_wire_parts_csv(state: State<AppState>, csv: String) -> Result<Patch, String> {
+    state
+        .doc
+        .import_wire_parts_csv(&csv, madake_core::EditOrigin::User)
+        .map_err(|e| e.to_string())
+}
+
 /// PLC I/O図面 (ラダーページ) を生成する。**1回の編集**なのでundo一発でページごと消える。
 #[tauri::command]
 fn generate_plc_sheet(
@@ -911,6 +921,7 @@ pub fn run() {
             get_plc_assignments,
             set_plc_assignments,
             import_plc_assignments_csv,
+            import_wire_parts_csv,
             generate_plc_sheet,
             export_bom,
             export_wire_list,

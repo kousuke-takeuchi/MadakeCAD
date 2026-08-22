@@ -36,6 +36,7 @@ pub mod tidy;
 pub mod verify;
 pub mod wire_no;
 pub mod wire_note;
+pub mod wire_parts;
 pub mod xref;
 
 pub use command::{Command, EditOrigin, Engine, Patch, PatchOp, Reverted};
@@ -44,6 +45,7 @@ pub use model::*;
 pub use wire_no::RenumberMode;
 pub use net_tag::{net_tag, NetTag, TagDir};
 pub use wire_note::{wire_note_text, wire_notes, WireNote};
+pub use wire_parts::{wire_part_number, WIRE_PARTS_COLUMNS};
 pub use block::{block_symbol, BLOCK_SYMBOL_ID};
 pub use symbol::{
     builtin_symbols, dynamic_symbol, instance_symbol_def, resolve_symbol, sheet_symbol_defs, DefIndex,

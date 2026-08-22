@@ -846,6 +846,11 @@ interface Ipc {
   setPlcAssignments(assignments: PlcAssignment[]): Promise<Patch>;
   /** 割付表のCSVを取り込む (対象モジュールの行だけ置き換え)。 */
   importPlcAssignmentsCsv(moduleRef: string, csv: string): Promise<Patch>;
+  /**
+   * 電線品番表 (線色+線径→品番) のCSVを取り込む。表全体を置き換え、undo一発で戻る。
+   * 列は 線色・線径sq・電線品番 (+備考)。読めないCSVは理由つきで失敗し、表は変わらない。
+   */
+  importWirePartsCsv(csv: string): Promise<Patch>;
   /** PLC I/O図面 (ラダーページ) を生成する (1回の編集 = undo一発)。 */
   generatePlcSheet(
     moduleRef: string,
@@ -928,6 +933,7 @@ const tauriIpc: Ipc = {
     invoke<Patch>("set_plc_assignments", { assignments }),
   importPlcAssignmentsCsv: (moduleRef: string, csv: string) =>
     invoke<Patch>("import_plc_assignments_csv", { moduleRef, csv }),
+  importWirePartsCsv: (csv: string) => invoke<Patch>("import_wire_parts_csv", { csv }),
   generatePlcSheet: (moduleRef, module, options) =>
     invoke<Patch>("generate_plc_sheet", { moduleRef, module, options }),
   exportReport: (kind, format, entityId, path) =>
@@ -1102,6 +1108,8 @@ const httpIpc: Ipc = {
   },
   setPlcAssignments: (assignments) =>
     http<Patch>("/plc/assignments", { method: "PUT", body: JSON.stringify({ assignments }) }),
+  importWirePartsCsv: (csv) =>
+    http<Patch>("/project/wire-parts/csv", { method: "POST", body: JSON.stringify({ csv }) }),
   importPlcAssignmentsCsv: (moduleRef, csv) =>
     http<Patch>("/plc/assignments/import", {
       method: "POST",

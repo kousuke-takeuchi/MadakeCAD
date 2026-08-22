@@ -122,10 +122,27 @@ pub(crate) fn segment_distance(p: &Point, a: &Point, b: &Point) -> f64 {
 }
 
 /// 点がWireのいずれかの線分上(許容誤差内)にあるか。
-pub(crate) fn on_wire(w: &crate::model::Wire, p: &Point) -> bool {
+pub fn on_wire(w: &crate::model::Wire, p: &Point) -> bool {
     w.points
         .windows(2)
         .any(|seg| segment_distance(p, &seg[0], &seg[1]) < CONNECT_EPS)
+}
+
+/// ネットラベルが図面に**載っている**か = ラベルの位置が配線の線分上 (頂点を含む) か、
+/// シンボルのピンにあるか。
+///
+/// ネットリスト ([`extract_netlist`]) がラベルをネットへ繋ぐ判定と、ERCの浮きラベル判定
+/// ([`crate::verify`] の `erc.dangling_label`) は**この関数を共有する**。
+/// 判定が2か所に分かれていると「ERCは黙っているのに繋がっていない」ラベルが生まれるため。
+pub fn label_is_attached(sheet: &Sheet, symbols: &[SymbolDef], at: &Point) -> bool {
+    let defs = crate::symbol::DefIndex::new(symbols);
+    sheet.entities.values().any(|entity| match entity {
+        Entity::Wire(w) => on_wire(w, at),
+        Entity::Symbol(s) => defs
+            .get(s)
+            .is_some_and(|def| pin_positions(s, &def).iter().any(|(_, pos)| near(pos, at))),
+        _ => false,
+    })
 }
 
 /// シートからネットリストを導出する。
@@ -215,11 +232,17 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
             }
         }
     }
-    // ラベル ⇔ Wire上の任意点、同名ラベル同士
+    // ラベル ⇔ Wire上の任意点 / シンボルピン、同名ラベル同士
+    // (載り判定は[`label_is_attached`]と同じ2つの述語。ERCの浮きラベル判定と揃える)
     for (l, lab) in labels.iter().enumerate() {
         for (a, w) in wires.iter().enumerate() {
             if on_wire(w, &lab.at) {
                 ds.union(li + l, wi + a);
+            }
+        }
+        for (p, (_, _, _, pos)) in pins.iter().enumerate() {
+            if near(pos, &lab.at) {
+                ds.union(li + l, pi + p);
             }
         }
         for (l2, lab2) in labels.iter().enumerate().skip(l + 1) {
@@ -460,6 +483,64 @@ mod tests {
         assert_eq!(nets.len(), 1, "ジャンクション+同名ラベルで全て1ネット");
         assert_eq!(nets[0].name, "48-P1");
         assert_eq!(nets[0].wire_ids.len(), 3);
+    }
+
+    /// A net label placed exactly on a symbol pin connects that pin to the net of the same name elsewhere, without a wire stub.
+    /// シンボルのピンにぴったり置いたネットラベルは、配線を引かなくても同じ名前のネットへそのピンを繋ぐ。
+    #[test]
+    fn a_label_on_a_pin_joins_that_pin_to_the_net_of_the_same_name() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        // R1のピン2 (x=107.5) の上にラベル。離れた場所の同名ラベルは配線に載っている
+        let label_on_pin = Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(107.5, 50.0),
+            name: "24V".into(),
+            rotation: 0,
+            attrs: Default::default(),
+        });
+        let label_on_wire = Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(0.0, 0.0),
+            name: "24V".into(),
+            rotation: 0,
+            attrs: Default::default(),
+        });
+        for e in [
+            symbol("resistor", "R1", 100.0, 50.0),
+            wire(&[(0.0, 0.0), (20.0, 0.0)]),
+            label_on_pin,
+            label_on_wire,
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &builtin_symbols());
+        let net = nets.iter().find(|n| n.name == "24V").expect("24Vのネット");
+        assert!(
+            net.pins.iter().any(|p| p.reference == "R1" && p.pin == "2"),
+            "ピンに置いたラベルでR1:2が繋がる: {net:?}"
+        );
+    }
+
+    /// The attachment test used by the netlist accepts a label on a wire vertex, in the middle of a wire segment, or on a symbol pin, and rejects one that floats even slightly off.
+    /// ネットリストが使う載り判定は、配線の頂点上・線分の途中・シンボルのピン上のラベルを載っていると認め、わずかでも浮いたラベルは認めない。
+    #[test]
+    fn the_label_attachment_test_accepts_vertices_segments_and_pins() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        for e in [
+            symbol("resistor", "R1", 100.0, 50.0),
+            wire(&[(0.0, 0.0), (20.0, 0.0)]),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let defs = builtin_symbols();
+        assert!(label_is_attached(&sheet, &defs, &Point::new(0.0, 0.0)), "頂点上");
+        assert!(label_is_attached(&sheet, &defs, &Point::new(10.0, 0.0)), "線分の途中");
+        assert!(label_is_attached(&sheet, &defs, &Point::new(107.5, 50.0)), "ピン上");
+        assert!(
+            label_is_attached(&sheet, &defs, &Point::new(10.0, 0.005)),
+            "許容誤差 (0.01mm) の内側は載っている扱い"
+        );
+        assert!(!label_is_attached(&sheet, &defs, &Point::new(10.0, 0.5)), "0.5mm浮き");
     }
 
     /// Unnamed nets receive deterministic sequential names (N001, N002, ...).

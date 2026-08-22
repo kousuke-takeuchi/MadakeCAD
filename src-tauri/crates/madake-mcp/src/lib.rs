@@ -258,6 +258,21 @@ impl SharedDoc {
         Ok(patch)
     }
 
+    /// 電線品番表 (線色+線径→品番) のCSVを取り込む。**Commandを通す**のでundoで戻る。
+    pub fn import_wire_parts_csv(
+        &self,
+        csv: &str,
+        origin: EditOrigin,
+    ) -> madake_core::Result<Patch> {
+        let patch = madake_core::wire_parts::import_wire_parts_csv(
+            &mut self.engine.lock().unwrap(),
+            csv,
+            origin,
+        )?;
+        let _ = self.patches.send(patch.clone());
+        Ok(patch)
+    }
+
     /// PLC I/O図面 (ラダーページ) を生成する(**1回の編集** = undo一発でページごと消える)。
     pub fn generate_plc_sheet(
         &self,
@@ -666,8 +681,18 @@ impl MadakeMcp {
         Parameters(p): Parameters<ExecuteCommandsParams>,
     ) -> Result<String, ErrorData> {
         let mut patches = Vec::new();
-        for cmd in p.commands {
-            let patch = self.doc.execute(cmd).map_err(internal)?;
+        for (i, cmd) in p.commands.into_iter().enumerate() {
+            // 失敗したコマンドは黙って捨てない (G17): 何番目がなぜ落ちたかまで返す
+            let patch = self.doc.execute(cmd).map_err(|e| {
+                ErrorData::invalid_params(
+                    format!(
+                        "commands[{i}] が拒否されました: {e} (ここまでの{}件は適用済み。取り消すにはundoを{}回)",
+                        patches.len(),
+                        patches.len()
+                    ),
+                    None,
+                )
+            })?;
             patches.push(patch);
         }
         json_ok(&patches)

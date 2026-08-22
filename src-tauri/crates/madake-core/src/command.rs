@@ -772,11 +772,32 @@ impl Engine {
 /// 描けないもの・意味が壊れているものは**黙って受け取らず**、
 /// [`CoreError::InvalidCommand`]で断る(サイレント失敗の禁止)。今のところ対象は
 /// ブロックシンボル ([`crate::block`]) のピン表・外形寸法と、注記の色トークン。
+/// 図面へ入れられない`symbol_id`を拒む (G17)。
+///
+/// **描けないシンボルを黙って受け取らない**: 知らないidや極数が範囲外のidを200 OKで
+/// 受け取ると、エンティティは保存されるのに図面には何も描かれず、原因も分からない。
+/// 解決先は配置と同じ [`crate::symbol::resolve_symbol`] (同梱→極数可変→ユーザーライブラリ)。
+fn validate_symbol_id(id: &str) -> Result<()> {
+    if crate::symbol::resolve_symbol(id).is_some() {
+        return Ok(());
+    }
+    let reason = match crate::symbol::dynamic_family(id) {
+        Some((prefix, max)) => format!(
+            "極数が範囲外です (`{prefix}{{1〜{max}}}p` の形で指定してください)"
+        ),
+        None => "そのようなシンボルはライブラリにありません".to_string(),
+    };
+    Err(CoreError::InvalidCommand(format!(
+        "unknown symbol_id: {id:?} ({reason})"
+    )))
+}
+
 fn validate_entity(entity: &Entity) -> Result<()> {
     match entity {
         Entity::Symbol(s) if s.symbol_id == crate::block::BLOCK_SYMBOL_ID => {
             crate::block::parse_block_spec(&s.attrs).map_err(CoreError::InvalidCommand)?;
         }
+        Entity::Symbol(s) => validate_symbol_id(&s.symbol_id)?,
         Entity::Text(t) => {
             // 注記色は決められたトークン名だけ。生の色コードを黙って受け取ると、
             // 紙では読めない色の注記が図面に残ってしまう
@@ -838,6 +859,131 @@ mod tests {
             color: color.map(|c| c.to_string()),
             bold: false,
         })
+    }
+
+    /// シンボルを1個置くコマンド (idと属性だけを変える)。
+    fn place(symbol_id: &str) -> Entity {
+        Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: symbol_id.into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "X1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        })
+    }
+
+    /// A symbol whose id is not in the library is refused instead of being stored as an invisible entity, and the sheet is left untouched.
+    /// ライブラリに無いシンボルidは、描かれない幽霊エンティティとして保存されるのではなく拒否され、図面は何も変わらない。
+    #[test]
+    fn an_unknown_symbol_id_is_refused_and_changes_nothing() {
+        let (mut engine, sheet_id) = test_engine();
+        let err = engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: place("no_such_symbol"),
+            })
+            .expect_err("知らないシンボルidは拒否される");
+        assert!(
+            matches!(&err, CoreError::InvalidCommand(m)
+                if m.contains("no_such_symbol") && m.contains("ライブラリ")),
+            "{err:?}"
+        );
+        assert!(engine.project().sheet(sheet_id).unwrap().entities.is_empty());
+        assert_eq!(engine.undo_depth(), 0, "履歴も積まれない");
+    }
+
+    /// A parametric symbol asked for outside its pole range (0 poles, or more than the limit) is refused with a message that says the range.
+    /// 極数可変シンボルを範囲外の極数 (0極や上限超え) で頼むと、使える範囲を書いたメッセージで拒否される。
+    #[test]
+    fn a_pole_count_outside_the_range_is_refused() {
+        for id in [
+            "connector_0p",
+            "connector_51p",
+            "terminal_block_0p",
+            "plc_di_65p",
+            "plc_do_0p",
+        ] {
+            let (mut engine, sheet_id) = test_engine();
+            let err = engine
+                .execute(Command::AddEntity {
+                    sheet_id,
+                    entity: place(id),
+                })
+                .expect_err("範囲外の極数は拒否される");
+            assert!(
+                matches!(&err, CoreError::InvalidCommand(m) if m.contains("極数が範囲外")),
+                "{id}: {err:?}"
+            );
+            assert!(engine.project().sheet(sheet_id).unwrap().entities.is_empty());
+        }
+    }
+
+    /// Every ordinary placement still goes through: bundled symbols, parametric symbols inside their range, and a block defined by its attributes.
+    /// ふつうの配置はこれまでどおり通る: 同梱シンボル・範囲内の極数可変シンボル・属性で形が決まるブロック。
+    #[test]
+    fn valid_symbol_ids_are_still_accepted() {
+        let (mut engine, sheet_id) = test_engine();
+        for id in [
+            "resistor",
+            "relay_coil",
+            "connector_3p",
+            "terminal_block_8p",
+            "plc_di_16p",
+            "plc_do_64p",
+        ] {
+            engine
+                .execute(Command::AddEntity {
+                    sheet_id,
+                    entity: place(id),
+                })
+                .unwrap_or_else(|e| panic!("{id} が置けない: {e:?}"));
+        }
+        let block = crate::block::test_block(
+            "CTRL1",
+            "MainController",
+            100.0,
+            50.0,
+            r#"{"left":[{"no":"IN1","name":"入力1"}]}"#,
+        );
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: block,
+            })
+            .expect("ブロックも置ける");
+        assert_eq!(engine.project().sheet(sheet_id).unwrap().entities.len(), 7);
+    }
+
+    /// Changing an existing symbol to an unknown id is refused too, so a symbol on the sheet can always be drawn.
+    /// 既にある部品を知らないシンボルidへ変更するのも拒否されるので、図面の部品は常に描ける。
+    #[test]
+    fn changing_a_symbol_to_an_unknown_id_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let entity = place("resistor");
+        let id = entity.id();
+        engine
+            .execute(Command::AddEntity { sheet_id, entity })
+            .expect("抵抗は置ける");
+        let Entity::Symbol(mut s) =
+            engine.project().sheet(sheet_id).unwrap().entities[&id].clone()
+        else {
+            unreachable!()
+        };
+        s.symbol_id = "resistor_typo".into();
+        let err = engine
+            .execute(Command::UpdateEntity {
+                sheet_id,
+                entity: Entity::Symbol(s),
+            })
+            .expect_err("知らないidへの変更は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        let Entity::Symbol(kept) = &engine.project().sheet(sheet_id).unwrap().entities[&id] else {
+            unreachable!()
+        };
+        assert_eq!(kept.symbol_id, "resistor", "元の部品のまま");
     }
 
     /// A block whose pin table is broken (duplicate numbers) is refused when added, and the sheet is left untouched.

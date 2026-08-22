@@ -1053,5 +1053,12 @@
       "panel": "Panel layout"
     },
     "addedLog": "Added the sheet {name} ({kind}) (undo with Cmd+Z)"
+  },
+  "wireParts": {
+    "section": "Wire part number",
+    "autoRow": "Part no. (auto)",
+    "autoHint": "The part number looked up from the wire-part table by colour and gauge. A wire with an empty part number is listed with this one.",
+    "autoNone": "Not in the table",
+    "manualHint": "A part number written here wins over the wire-part table. Leave it empty to take the number from the table."
   }
 }

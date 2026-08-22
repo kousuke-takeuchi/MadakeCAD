@@ -7,6 +7,7 @@ import { BLOCK_SYMBOL_ID } from "../canvas/dynamicSymbol";
 import { harnessWireCount } from "../canvas/harness";
 import { panelUpdateCommand, railOfFootprint, type PanelPatch } from "../canvas/panelTools";
 import { legendRows } from "../canvas/panel";
+import { autoWirePartNo } from "../canvas/wireParts";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import type { Entity, TextAnchor, TextColorToken } from "../ipc";
 import { FUNCTION_LABEL_ATTR, TEXT_ANCHORS, TEXT_COLOR_TOKENS } from "../canvas/textStyle";
@@ -93,6 +94,14 @@ function jumpToXref(site: NetSite) {
 }
 
 /** 選択中のハーネスが囲んでいる電線の本数 (幾何学的な内包で決まる)。 */
+/**
+ * 線色+線径から電線品番表 (G11) を引いた品番。品番欄が空のワイヤは、この品番で
+ * 電線リストに載る。編集中の色・太さで引くので、選び直すとその場で変わる。
+ */
+const autoPartNo = computed(() =>
+  selected.value?.kind === "wire" ? autoWirePartNo(store.project, buf.color, buf.sq) : "",
+);
+
 const harnessWires = computed(() => {
   const sheet = store.activeSheet;
   const e = selected.value;
@@ -335,7 +344,20 @@ const kindLabel = computed<Record<string, string>>(() => ({
       </div>
       <div class="prow">
         <span class="plabel">電線品番</span>
-        <span class="pvalue"><input v-model="buf.part_no" class="bare" placeholder="SAMPLE0001" /></span>
+        <span class="pvalue">
+          <input
+            v-model="buf.part_no"
+            class="bare"
+            :placeholder="autoPartNo || 'SAMPLE0001'"
+            :title="t('wireParts.manualHint')"
+          />
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("wireParts.autoRow") }}</span>
+        <span class="pvalue" :title="t('wireParts.autoHint')">
+          {{ autoPartNo || t("wireParts.autoNone") }}
+        </span>
       </div>
       <div class="prow">
         <span class="plabel">長さ m</span>

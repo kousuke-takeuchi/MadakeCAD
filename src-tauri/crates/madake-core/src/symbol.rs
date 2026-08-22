@@ -1031,6 +1031,25 @@ pub const DYNAMIC_PIN_MAX: usize = 50;
 
 /// PLCモジュール(`plc_di_{n}p` / `plc_do_{n}p`)の最大点数。
 pub const PLC_POINT_MAX: usize = 64;
+
+/// 極数可変シンボル (`connector_{n}p` など) の一族: (idの接頭辞, 極数の上限)。
+pub const DYNAMIC_FAMILIES: &[(&str, usize)] = &[
+    ("connector_", DYNAMIC_PIN_MAX),
+    ("terminal_block_", DYNAMIC_PIN_MAX),
+    ("plc_di_", PLC_POINT_MAX),
+    ("plc_do_", PLC_POINT_MAX),
+];
+
+/// `symbol_id`が極数可変シンボルの一族のものなら (接頭辞, 極数の上限) を返す。
+///
+/// 「`connector_99p`は極数が範囲外」と「`connectr_3p`はそんなシンボルが無い」を
+/// 言い分けるために使う ([`crate::command::Engine::execute`]のエラー文)。
+pub fn dynamic_family(id: &str) -> Option<(&'static str, usize)> {
+    DYNAMIC_FAMILIES
+        .iter()
+        .find(|(prefix, _)| id.starts_with(prefix))
+        .copied()
+}
 /// PLCモジュールのI/O点の縦ピッチ (mm)。2.5mmグリッドの倍数。
 pub const PLC_POINT_PITCH_MM: f64 = 5.0;
 

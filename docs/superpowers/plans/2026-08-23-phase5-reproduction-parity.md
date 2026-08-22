@@ -74,8 +74,28 @@
 
 ### Task 5: G17 サイレント失敗+G11 電線品番
 
-- [ ] Step 1 (red): dangling_label検出(頂点上/ピン上/浮き)/不正add_entityのCommandエラー化(既存の寛容挙動に依存するテストの洗い出しと更新)/Link APIの400化/wire_parts引き当て(電線リスト・From-To品番列)/wire_parts設定Command+CSV
-- [ ] Step 2 (green): 実装。gen_spec→コミット
+- [x] Step 1 (red): dangling_label検出(頂点上/ピン上/浮き)/不正add_entityのCommandエラー化(既存の寛容挙動に依存するテストの洗い出しと更新)/Link APIの400化/wire_parts引き当て(電線リスト・From-To品番列)/wire_parts設定Command+CSV
+- [x] Step 2 (green): 実装。gen_spec→コミット
+
+  実装メモ: **G17-a** `netlist::label_is_attached`(配線の線分上 or シンボルピン)を新設し、
+  ネットリストの結線判定とERCの`erc.dangling_label`(Warning)が**同じ関数**を使う。
+  ついでにネットリストが**ラベル⇔ピンも結ぶ**ようになった(ピンに直接置いたラベルが
+  同名ネットへ繋がる。従来は配線の上にしか載らなかった)。
+  **G17-b** `Engine::execute`の`validate_entity`が`symbol_id`を`resolve_symbol`で解決できないと
+  `InvalidCommand`。極数可変シンボルの範囲外は`symbol::dynamic_family`で「極数が範囲外
+  (`connector_{1〜50}p`)」と理由を出し分ける。**寛容挙動に依存していた既存経路は無し**
+  (テンプレート・回路マクロ・PLC生成・端子接続図はすべて正当なidを使っており、
+  cargo test --workspace は追加テストだけが増えた)。
+  **G17-c** Link API `POST /commands`は失敗時400 + `{error, failed_command_index, applied}`。
+  MCP `execute_commands`のエラーも「commands[i] が拒否されました: 理由 (ここまでのn件は適用済み)」。
+  **G11** `madake-core/src/wire_parts.rs`: `wire_part_number(project, wire)`=**ワイヤに書かれた
+  品番が最優先**、空なら線色(前後空白無視・英字大小同一視)+線径(誤差1e-9)で`Project.wire_parts`を
+  引く(先に書いた行が勝つ・無ければ空欄)。電線リストの品番列が追従。設定は既存の
+  `set_wire_parts`コマンドで、CSV(線色,線径sq,電線品番[,備考]・見出し任意)は
+  `import_wire_parts_csv`→同コマンド1回=undo一発。露出は Link API
+  `GET /project/wire-parts`・`POST /project/wire-parts/csv` と Tauri IPC `import_wire_parts_csv`。
+  フロントは`canvas/wireParts.ts`(同じ規則)でプロパティに「品番 (自動)」行と入力欄の
+  プレースホルダを出す。端子接続図の電線仕様欄はシート単位の帳票なので手書き品番のみ(据え置き)。
 
 ### Task 6: パリティ再検証と仕上げ
 
