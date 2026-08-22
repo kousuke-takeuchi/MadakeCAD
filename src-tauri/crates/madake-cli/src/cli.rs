@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 
-use crate::client::{base_url, CliError, ExportKind, LinkApi, RenumberMode, DEFAULT_PORT};
+use crate::client::{
+    base_url, CliError, ExportKind, LinkApi, RenumberMode, ReportKind, DEFAULT_PORT,
+};
 use crate::format;
 
 #[derive(Debug, Parser)]
@@ -63,7 +65,7 @@ pub enum Commands {
         #[arg(long, value_name = "ID")]
         sheet: Option<String>,
     },
-    /// SVG / 部品表 / 電線リストの書き出し
+    /// SVG / PDF / 図面一式PDF / 部品表 / 電線リストの書き出し
     Export {
         /// 種別
         #[arg(value_enum)]
@@ -73,6 +75,12 @@ pub enum Commands {
         /// シートID (svg/pdfのみ有効。省略時は先頭シート)
         #[arg(long, value_name = "ID")]
         sheet: Option<String>,
+        /// 一括PDFに付ける帳票 (pdf-bookのみ有効。カンマ区切りで並べた順に付く)
+        #[arg(long, value_enum, value_delimiter = ',', value_name = "KIND")]
+        reports: Vec<ReportKind>,
+        /// 一括PDFの表紙を付けない (pdf-bookのみ有効)
+        #[arg(long)]
+        no_cover: bool,
     },
     /// プロジェクトを保存
     Save {
@@ -162,8 +170,17 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
             }
             Ok(format::diagnostics(&diags))
         }
-        Commands::Export { kind, path, sheet } => {
-            let result = api.export(*kind, path, sheet.as_deref())?;
+        Commands::Export {
+            kind,
+            path,
+            sheet,
+            reports,
+            no_cover,
+        } => {
+            let result = match kind {
+                ExportKind::PdfBook => api.export_pdf_book(path, reports, !no_cover)?,
+                _ => api.export(*kind, path, sheet.as_deref())?,
+            };
             if cli.json {
                 return Ok(pretty(&result));
             }
@@ -339,6 +356,16 @@ mod tests {
             self.record(format!("export({kind:?}, {path}, {sheet_id:?})"));
             Ok(json!({ "written": path }))
         }
+        fn export_pdf_book(
+            &self,
+            path: &str,
+            reports: &[ReportKind],
+            cover: bool,
+        ) -> Result<Value, CliError> {
+            let names: Vec<&str> = reports.iter().map(|r| r.as_json()).collect();
+            self.record(format!("export_pdf_book({path}, {names:?}, cover={cover})"));
+            Ok(json!({ "written": path, "pages": 4 }))
+        }
     }
 
     fn parse(args: &[&str]) -> Cli {
@@ -386,13 +413,57 @@ mod tests {
     fn export_kind_accepts_wire_list_spelling() {
         let cli = parse(&["madake", "export", "wire-list", "/tmp/w.csv"]);
         match cli.command {
-            Commands::Export { kind, path, sheet } => {
+            Commands::Export { kind, path, sheet, .. } => {
                 assert_eq!(kind, ExportKind::WireList);
                 assert_eq!(path, "/tmp/w.csv");
                 assert!(sheet.is_none());
             }
             _ => panic!("exportではない"),
         }
+    }
+
+    /// madake export pdf-book sends the reports listed with --reports, in that order, and asks for a cover by default.
+    /// madake export pdf-book は --reports に並べた帳票をその順で送り、既定では表紙付きで依頼する。
+    #[test]
+    fn export_pdf_book_sends_the_requested_reports_in_order() {
+        let api = FakeApi::default();
+        let out = run(
+            &parse(&[
+                "madake",
+                "export",
+                "pdf-book",
+                "/tmp/book.pdf",
+                "--reports",
+                "wire-list,terminal-chart",
+            ]),
+            &api,
+        )
+        .unwrap();
+        assert_eq!(
+            api.calls(),
+            vec![
+                "export_pdf_book(/tmp/book.pdf, [\"wire-list\", \"terminal-chart\"], cover=true)"
+                    .to_string()
+            ]
+        );
+        assert!(out.contains("図面一式PDF"), "{out}");
+        assert!(out.contains("4 ページ"), "{out}");
+    }
+
+    /// --no-cover drops the cover page from the PDF book.
+    /// --no-cover を付けると一括PDFから表紙が外れる。
+    #[test]
+    fn export_pdf_book_can_drop_the_cover() {
+        let api = FakeApi::default();
+        run(
+            &parse(&["madake", "export", "pdf-book", "/tmp/book.pdf", "--no-cover"]),
+            &api,
+        )
+        .unwrap();
+        assert_eq!(
+            api.calls(),
+            vec!["export_pdf_book(/tmp/book.pdf, [], cover=false)".to_string()]
+        );
     }
 
     /// madake status calls the health endpoint and the project snapshot.

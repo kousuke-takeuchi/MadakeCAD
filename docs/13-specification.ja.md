@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**480仕様項目**。
+全5領域・**484仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -287,6 +287,7 @@
 - POST /api/v1/import/kicad は開いているプロジェクトを変換結果で置き換え、patchとインポートレポートを返す。 <sub>`import_kicad_replaces_project_and_reports`</sub>
 - POST /api/v1/simulate/op はDC動作点を解き、ネット電圧と部品電流を返す(ngspice必須。未導入時はスキップ)。 <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf は指定パスへ正しいPDFファイルを書き出す。 <sub>`export_pdf_writes_pdf_file`</sub>
+- POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。 <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 
 
 ## AIアシスタント (madake-agent)
@@ -380,6 +381,8 @@
 - 既定ポートは9310で、--jsonは指定しない限り無効。 <sub>`default_port_is_9310_and_json_is_off`</sub>
 - --portと--jsonはグローバルオプションで、サブコマンドの後にも書ける。 <sub>`port_and_json_are_global_options_after_subcommand`</sub>
 - エクスポート種別はドキュメント表記どおりの'wire-list'を受け付ける。 <sub>`export_kind_accepts_wire_list_spelling`</sub>
+- madake export pdf-book は --reports に並べた帳票をその順で送り、既定では表紙付きで依頼する。 <sub>`export_pdf_book_sends_the_requested_reports_in_order`</sub>
+- --no-cover を付けると一括PDFから表紙が外れる。 <sub>`export_pdf_book_can_drop_the_cover`</sub>
 - madake statusはヘルスチェックとプロジェクト概要を取得する。 <sub>`status_queries_health_and_project`</sub>
 - --jsonはjq等へ渡せる整形JSONをそのまま出力する。 <sub>`json_flag_emits_raw_json`</sub>
 - madake netlistは--sheetオプションをAPIへ引き渡す。 <sub>`netlist_forwards_sheet_option`</sub>
@@ -401,6 +404,7 @@
 - シート未指定のときnetlist URLにクエリは付かない。 <sub>`netlist_url_omits_query_without_sheet`</sub>
 - シート指定はサーバー側と同じsheet_idクエリ名を使う。 <sub>`netlist_url_uses_sheet_id_query_name`</sub>
 - 各エクスポート種別(svg/pdf/bom/wire-list)は対応するRESTルートへ対応付く。 <sub>`export_kind_paths_match_link_api_routes`</sub>
+- PDF一括出力で送る帳票名の綴りは、Link API・MCPのJSON表記と同じになる。 <sub>`report_kind_json_names_match_the_link_api`</sub>
 - アプリ未起動時は不可解なエラーではなく、ポート付きの明快なメッセージを出す。 <sub>`not_running_error_is_explicit`</sub>
 
 ### 人間向け整形出力

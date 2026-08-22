@@ -445,12 +445,17 @@ pub fn opened(patch: &Value, path: &str) -> String {
     )
 }
 
-/// `madake export ...`
+/// `madake export ...`。ページ数を返すエクスポート (一括PDF) では枚数も添える。
 pub fn exported(kind: ExportKind, result: &Value) -> String {
+    let pages = match result["pages"].as_u64() {
+        Some(n) => format!(" ({n} ページ)"),
+        None => String::new(),
+    };
     format!(
-        "{} を書き出しました: {}",
+        "{} を書き出しました: {}{}",
         kind.label(),
-        written_path(result)
+        written_path(result),
+        pages
     )
 }
 

@@ -186,6 +186,26 @@ fn export_pdf(
     std::fs::write(&path, pdf).map_err(|e| e.to_string())
 }
 
+/// 図面一式を1つのPDFへ (表紙+回路図全シート+選択帳票)。書き出したページ数を返す。
+#[tauri::command]
+fn export_pdf_book(
+    state: State<AppState>,
+    path: String,
+    include_reports: Vec<madake_core::report_sheet::ReportKind>,
+    cover: Option<bool>,
+) -> Result<usize, String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let options = madake_core::pdf::PdfBookOptions {
+        include_reports,
+        cover: cover.unwrap_or(true),
+    };
+    let pages = madake_core::pdf::project_pdf_pages(engine.project(), &options).len();
+    let pdf = madake_core::pdf::export_project_pdf(engine.project(), &options)
+        .map_err(|e| e.to_string())?;
+    std::fs::write(&path, pdf).map_err(|e| e.to_string())?;
+    Ok(pages)
+}
+
 #[tauri::command]
 fn export_bom(state: State<AppState>, path: String) -> Result<(), String> {
     let engine = state.doc.engine.lock().unwrap();
@@ -346,6 +366,7 @@ pub fn run() {
             import_kicad,
             export_svg,
             export_pdf,
+            export_pdf_book,
             export_bom,
             export_wire_list,
             agent_send,

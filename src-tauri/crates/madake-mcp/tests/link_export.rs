@@ -305,3 +305,46 @@ async fn export_pdf_writes_pdf_file() {
     assert!(pdf.starts_with(b"%PDF-"));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports.
+/// POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。
+#[tokio::test]
+async fn export_pdf_book_writes_cover_sheets_and_reports() {
+    let doc = SharedDoc::new(Engine::new(Project::new("PDF一括テスト")));
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude()));
+    let parts = madake_mcp::open_parts(
+        &std::env::temp_dir().join(format!("madake-parts-book-{}.sqlite", std::process::id())),
+    )
+    .expect("parts db");
+    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
+
+    let dir = std::env::temp_dir().join(format!("madake-pdf-book-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let out = dir.join("book.pdf");
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/export/pdf-book")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "path": out.to_string_lossy(),
+                "include_reports": ["wire-list", "bom"],
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let response = router.oneshot(request).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["written"], json!(out.to_string_lossy()));
+    // 新規プロジェクト = 表紙 + シート1枚 + 帳票2ページ
+    assert_eq!(body["pages"], json!(4));
+
+    let pdf = std::fs::read(&out).unwrap();
+    assert!(pdf.starts_with(b"%PDF-"));
+    std::fs::remove_dir_all(&dir).ok();
+}
