@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1183 specification clauses** across 5 areas.
+**1216 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -1002,7 +1002,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - connector_2p has the same pin coordinates as the legacy static definition <sub>`dynamicSymbol`</sub>
 - terminal_block_3p has 3 terminals with left/right points, centered on the 2.5 mm grid <sub>`dynamicSymbol`</sub>
+- a PLC input module has one connection point per I/O point on its left side <sub>`dynamicSymbol`</sub>
+- PLC modules come in an input and an output flavour <sub>`dynamicSymbol`</sub>
 - malformed dynamic ids return null <sub>`dynamicSymbol`</sub>
+- PLC module symbols exist from 1 to 64 points only <sub>`dynamicSymbol`</sub>
 - static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
 
 ### Harness boundaries
@@ -1332,6 +1335,39 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - search stores the results from the parts API <sub>`parts store`</sub>
 - a failed search clears the results and resets loading <sub>`parts store`</sub>
+
+### plcIo
+
+- counts Mitsubishi addresses in octal so X7 is followed by X10 <sub>`PLC address numbering`</sub>
+- writes Siemens addresses as a byte and a bit <sub>`PLC address numbering`</sub>
+- writes Allen-Bradley addresses as a word and a bit <sub>`PLC address numbering`</sub>
+- starts the automatic numbering from the point the start address names <sub>`PLC address numbering`</sub>
+- refuses a start address that does not match the address style of the module <sub>`PLC address numbering`</sub>
+- loads the PLC modules placed in the drawing and shows the first one <sub>`PLC I/O assignment editor`</sub>
+- shows one grid row per I/O point with the address it would get from the numbering <sub>`PLC I/O assignment editor`</sub>
+- shows the address, the signal name and the comment of the rows already saved <sub>`PLC I/O assignment editor`</sub>
+- takes the target and the wire number of each point from the drawing <sub>`PLC I/O assignment editor`</sub>
+- fills every address from the start address without touching signal names <sub>`PLC I/O assignment editor`</sub>
+- renumbers from the start address the user typed <sub>`PLC I/O assignment editor`</sub>
+- saves the whole table with a single set_plc_assignments command <sub>`PLC I/O assignment editor`</sub>
+- keeps the rows of the other modules untouched when saving <sub>`PLC I/O assignment editor`</sub>
+- keeps the id of the rows that already exist in the table <sub>`PLC I/O assignment editor`</sub>
+- sends no command when nothing was edited <sub>`PLC I/O assignment editor`</sub>
+- drops the empty rows at the end while keeping a blank row in the middle <sub>`PLC I/O assignment editor`</sub>
+- imports a CSV file into the table of the selected module <sub>`PLC I/O assignment editor`</sub>
+- reports the error of a malformed CSV and leaves the table alone <sub>`PLC I/O assignment editor`</sub>
+- refreshes the wiring columns when the drawing changes from outside the editor <sub>`PLC I/O assignment editor`</sub>
+- keeps the unsaved signal names while refreshing after an outside change <sub>`PLC I/O assignment editor`</sub>
+- reloads the table itself after an outside change when nothing is being edited <sub>`PLC I/O assignment editor`</sub>
+- does not fetch anything while the editor is closed <sub>`PLC I/O assignment editor`</sub>
+- shows an empty table when no PLC module is placed <sub>`PLC I/O assignment editor`</sub>
+- throws away the draft when the editor is closed <sub>`PLC I/O assignment editor`</sub>
+- defaults to a vertical bus ladder with a 10mm rung spacing <sub>`PLC I/O sheet generation settings`</sub>
+- generates the I/O sheet from the settings and the module spec of the parts library <sub>`PLC I/O sheet generation settings`</sub>
+- refuses to generate with a ladder style that is not implemented yet <sub>`PLC I/O sheet generation settings`</sub>
+- refuses to generate with a module placement that is not implemented yet <sub>`PLC I/O sheet generation settings`</sub>
+- saves the pending edits before generating the sheet <sub>`PLC I/O sheet generation settings`</sub>
+- falls back to the default address style when the module is not in the parts library <sub>`PLC I/O sheet generation settings`</sub>
 
 ### provider
 

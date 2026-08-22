@@ -253,7 +253,8 @@
     "reportGroup": {
       "reports": "帳票",
       "terminals": "端子台",
-      "output": "出力"
+      "output": "出力",
+      "plc": "PLC I/O"
     },
     "projectGroup": {
       "start": "作図の開始"
@@ -470,6 +471,60 @@
     "checkLog": "端子台: {reference} をチェックしました — {result}",
     "chartLog": "端子台: {reference} のチャート{count}行を {path} に書き出しました",
     "diagramLog": "端子台: {reference} の端子接続図{count}ページを {path} に書き出しました"
+  },
+  "plcIo": {
+    "ribbonButton": "PLC I/O割付表",
+    "ribbonGenerate": "I/O図面を生成",
+    "title": "PLC I/O割付表",
+    "titleWith": "PLC I/O割付表 — {reference}",
+    "close": "閉じる",
+    "moduleLabel": "モジュール:",
+    "moduleOption": "{reference} — {value} ({kind} {points}点)",
+    "startAddress": "開始アドレス:",
+    "autoNumber": "自動採番で埋める",
+    "col": {
+      "address": "アドレス",
+      "signal": "信号名",
+      "target": "接続先",
+      "wireNo": "線番",
+      "comment": "コメント"
+    },
+    "unassigned": "(未割付)",
+    "note": "接続先・線番は図面から自動反映(読み取り専用)。信号名・コメントはここが正で、生成したI/O図面のラベルへ反映されます",
+    "noModules": "PLCモジュールがまだ置かれていません。「部品挿入」から配置してください(部品DBのカテゴリ「plc」)",
+    "importCsv": "CSV読み込み…",
+    "save": "保存",
+    "generateSheet": "I/O図面ページを生成",
+    "generateTitle": "I/O図面の生成設定",
+    "ladderGroup": "ラダー",
+    "ladderStyle": {
+      "vertical-bus": "縦バス + 横ラング",
+      "horizontal-bus": "横バス + 縦ラング"
+    },
+    "jisHint": "(JIS慣行)",
+    "rungSpacing": "ラング間隔(mm)",
+    "startSkip": "先頭スキップ",
+    "placementGroup": "モジュール配置",
+    "placement": {
+      "new-ladder": "モジュールごとに新しいラダー",
+      "share-if-fits": "収まる場合のみ前モジュールと同居",
+      "share-or-split": "同居し、必要ならモジュールを分割"
+    },
+    "notImplemented": "未実装",
+    "generateNote": "1点=1ラングで、アドレス順に信号名を添えて作図します。生成は1回の編集なのでCmd+Zでページごと取り消せます。設定はこのセッションの間だけ保持します",
+    "generate": "生成",
+    "cancel": "キャンセル",
+    "openLog": "PLC I/O: 図面に置かれているPLCモジュールの割付表を編集します",
+    "noSheetLog": "PLC I/O: シートが開かれていません",
+    "noModuleLog": "PLC I/O: このプロジェクトにはPLCモジュールがありません",
+    "autoNumberLog": "PLC I/O: {reference} のアドレスを {start} から自動採番しました",
+    "savedLog": "PLC I/O: {reference} の割付表{count}行を保存しました (Cmd+Zで元に戻せます)",
+    "noChangeLog": "PLC I/O: 変更はありません",
+    "csvLog": "PLC I/O: {file} を {reference} の割付表({count}行)へ取り込みました (Cmd+Zで元に戻せます)",
+    "csvFailedLog": "PLC I/O: {file} を読み込めませんでした",
+    "generateOpenLog": "PLC I/O: {reference} のI/O図面の生成設定",
+    "generatedLog": "PLC I/O: {reference} のI/O図面を生成しました (ラング間隔{spacing}mm・Cmd+Zで元に戻せます)",
+    "generateFailedLog": "PLC I/O: {reference} のI/O図面を生成できませんでした"
   },
   "search": {
     "placeholder": "検索 (参照記号・型番・ネット)",

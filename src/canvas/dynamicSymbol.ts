@@ -1,4 +1,4 @@
-// ピン数可変シンボル(connector_{n}p / terminal_block_{n}p)のTS側生成。
+// ピン数可変シンボル(connector_{n}p / terminal_block_{n}p / plc_di_{n}p / plc_do_{n}p)のTS側生成。
 // Rust側 madake-core/src/symbol.rs の dynamic_symbol と同一座標を返すこと
 // (両者は dynamicSymbol.test.ts と Rust側テストで代表値を突き合わせている)。
 
@@ -6,18 +6,64 @@ import type { Point, Primitive, PinDef, SymbolDef } from "../ipc";
 
 /** 動的シンボルの最大極数(Rust側 DYNAMIC_PIN_MAX と一致)。 */
 export const DYNAMIC_PIN_MAX = 50;
+/** PLCモジュールの最大点数(Rust側 PLC_POINT_MAX と一致)。 */
+export const PLC_POINT_MAX = 64;
+/** PLCモジュールのI/O点の縦ピッチ mm(Rust側 PLC_POINT_PITCH_MM と一致)。 */
+export const PLC_POINT_PITCH_MM = 5.0;
 
-function parsePinCount(rest: string): number | null {
+function parseCount(rest: string, max: number): number | null {
   const m = /^([0-9]+)p$/.exec(rest);
   if (!m) return null;
   const n = Number(m[1]);
-  return n >= 1 && n <= DYNAMIC_PIN_MAX ? n : null;
+  return n >= 1 && n <= max ? n : null;
+}
+
+function parsePinCount(rest: string): number | null {
+  return parseCount(rest, DYNAMIC_PIN_MAX);
+}
+
+/**
+ * `plc_di_{n}p` / `plc_do_{n}p` からPLC I/Oモジュールのシンボルを作る
+ * (Rust側 `plc_module_symbol` と同一の座標)。縦長の箱の左側に点数ぶんの
+ * 接続点を5mmピッチで並べ、箱の中に点番号と種別 (DI/DO) を書く。
+ */
+function plcModuleSymbol(id: string): SymbolDef | null {
+  const input = id.startsWith("plc_di_");
+  const output = id.startsWith("plc_do_");
+  if (!input && !output) return null;
+  const n = parseCount(id.slice("plc_di_".length), PLC_POINT_MAX);
+  if (n === null) return null;
+  const pitch = PLC_POINT_PITCH_MM;
+  const at = (i: number) => (i - (n - 1) / 2) * pitch;
+  const top = at(0) - pitch;
+  const bottom = at(n - 1) + pitch;
+  const primitives: Primitive[] = [
+    { type: "rect", p1: p(-5, top), p2: p(5, bottom), filled: false },
+    { type: "text", at: p(0, top + 3.5), text: input ? "DI" : "DO", height: 3 },
+  ];
+  const pins: PinDef[] = [];
+  for (let i = 0; i < n; i++) {
+    const y = at(i);
+    primitives.push({ type: "text", at: p(-2.5, y + 1), text: String(i + 1), height: 2 });
+    primitives.push({ type: "line", pts: [p(-7.5, y), p(-5, y)] });
+    pins.push({ number: String(i + 1), name: "", at: p(-7.5, y), dir: "left" });
+  }
+  return {
+    id,
+    name: input ? `PLC input module ${n} points` : `PLC output module ${n} points`,
+    name_ja: input ? `PLC入力モジュール(${n}点)` : `PLC出力モジュール(${n}点)`,
+    category: "plc",
+    ref_prefix: "PLC",
+    primitives,
+    pins,
+  };
 }
 
 const p = (x: number, y: number): Point => ({ x, y });
 const offset = (i: number, n: number) => (i - (n - 1) / 2) * 5.0;
 
 export function dynamicSymbol(id: string): SymbolDef | null {
+  if (id.startsWith("plc_di_") || id.startsWith("plc_do_")) return plcModuleSymbol(id);
   if (id.startsWith("connector_")) {
     const n = parsePinCount(id.slice("connector_".length));
     if (n === null) return null;

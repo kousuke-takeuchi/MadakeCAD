@@ -253,7 +253,8 @@
     "reportGroup": {
       "reports": "Reports",
       "terminals": "Terminal blocks",
-      "output": "Output"
+      "output": "Output",
+      "plc": "PLC I/O"
     },
     "projectGroup": {
       "start": "Start"
@@ -470,6 +471,60 @@
     "checkLog": "Terminal editor: {reference} checked - {result}",
     "chartLog": "Terminal editor: wrote the chart of {reference} ({count} row(s)) to {path}",
     "diagramLog": "Terminal editor: wrote the connection diagram of {reference} ({count} page(s)) to {path}"
+  },
+  "plcIo": {
+    "ribbonButton": "PLC I/O table",
+    "ribbonGenerate": "Generate I/O sheet",
+    "title": "PLC I/O assignment table",
+    "titleWith": "PLC I/O assignment table - {reference}",
+    "close": "Close",
+    "moduleLabel": "Module:",
+    "moduleOption": "{reference} - {value} ({kind} {points} pts)",
+    "startAddress": "Start address:",
+    "autoNumber": "Fill addresses",
+    "col": {
+      "address": "Address",
+      "signal": "Signal name",
+      "target": "Target",
+      "wireNo": "Wire no.",
+      "comment": "Comment"
+    },
+    "unassigned": "(not assigned)",
+    "note": "The target and the wire number come from the drawing (read only). The signal name and the comment are owned by this table and are printed on the generated I/O sheet.",
+    "noModules": "No PLC module is placed yet. Place one from Insert part (parts library category \"plc\").",
+    "importCsv": "Import CSV...",
+    "save": "Save",
+    "generateSheet": "Generate I/O sheet page",
+    "generateTitle": "I/O sheet generation settings",
+    "ladderGroup": "Ladder",
+    "ladderStyle": {
+      "vertical-bus": "Vertical bus + horizontal rungs",
+      "horizontal-bus": "Horizontal bus + vertical rungs"
+    },
+    "jisHint": "(JIS practice)",
+    "rungSpacing": "Rung spacing (mm)",
+    "startSkip": "Skip at top",
+    "placementGroup": "Module placement",
+    "placement": {
+      "new-ladder": "A new ladder per module",
+      "share-if-fits": "Share with the previous module when it fits",
+      "share-or-split": "Share and split the module when needed"
+    },
+    "notImplemented": "not implemented yet",
+    "generateNote": "One point becomes one rung, numbered in address order with the signal name written next to it. The page is created with a single edit, so Cmd+Z removes it again. The settings are kept for this session only.",
+    "generate": "Generate",
+    "cancel": "Cancel",
+    "openLog": "PLC I/O: editing the assignment table of the placed modules",
+    "noSheetLog": "PLC I/O: no sheet is open",
+    "noModuleLog": "PLC I/O: no PLC module is placed in this project",
+    "autoNumberLog": "PLC I/O: addresses of {reference} filled from {start}",
+    "savedLog": "PLC I/O: saved {count} row(s) of {reference} (undo with Cmd+Z)",
+    "noChangeLog": "PLC I/O: nothing to save",
+    "csvLog": "PLC I/O: read {file} into the table of {reference} ({count} rows, undo with Cmd+Z)",
+    "csvFailedLog": "PLC I/O: could not read {file}",
+    "generateOpenLog": "PLC I/O: generation settings for {reference}",
+    "generatedLog": "PLC I/O: generated the I/O sheet of {reference} (rung spacing {spacing}mm, undo with Cmd+Z)",
+    "generateFailedLog": "PLC I/O: could not generate the I/O sheet of {reference}"
   },
   "search": {
     "placeholder": "Search (designator, part no., net)",

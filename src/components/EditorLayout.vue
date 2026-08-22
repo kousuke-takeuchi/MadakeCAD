@@ -16,6 +16,8 @@ import StatusBar from "./StatusBar.vue";
 import RevisionsDialog from "./RevisionsDialog.vue";
 import WireNumberDialog from "./WireNumberDialog.vue";
 import TerminalEditorDialog from "./TerminalEditorDialog.vue";
+import PlcIoDialog from "./PlcIoDialog.vue";
+import PlcGenerateDialog from "./PlcGenerateDialog.vue";
 import ReportDialog from "./ReportDialog.vue";
 import PdfBookDialog from "./PdfBookDialog.vue";
 import TemplateDialog from "./TemplateDialog.vue";
@@ -26,6 +28,7 @@ import SettingsDialog from "./settings/SettingsDialog.vue";
 import { useRevisionsStore } from "../stores/revisions";
 import { useWireNumbersStore } from "../stores/wireNumbers";
 import { useTerminalsStore } from "../stores/terminals";
+import { usePlcIoStore } from "../stores/plcIo";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
 import { useMacrosStore } from "../stores/macros";
 import { useSearchStore } from "../stores/search";
@@ -36,6 +39,7 @@ const search = useSearchStore();
 const revisions = useRevisionsStore();
 const wireNumbers = useWireNumbersStore();
 const terminals = useTerminalsStore();
+const plcIo = usePlcIoStore();
 const reportDialog = useReportDialogStore();
 const pdfBook = usePdfBookStore();
 const macros = useMacrosStore();
@@ -80,6 +84,17 @@ async function onKeyDown(ev: KeyboardEvent) {
     ev.preventDefault();
     return;
   }
+  // 生成設定は割付表エディタの上に重なるので、先に生成設定だけ閉じる
+  if (ev.key === "Escape" && plcIo.generateOpen) {
+    plcIo.cancelGenerate();
+    ev.preventDefault();
+    return;
+  }
+  if (ev.key === "Escape" && plcIo.open) {
+    plcIo.close();
+    ev.preventDefault();
+    return;
+  }
   if (ev.key === "Escape" && reportDialog.open) {
     reportDialog.cancel();
     ev.preventDefault();
@@ -101,6 +116,7 @@ async function onKeyDown(ev: KeyboardEvent) {
     revisions.open ||
     wireNumbers.open ||
     terminals.open ||
+    plcIo.open ||
     reportDialog.open ||
     pdfBook.open ||
     macros.saveOpen
@@ -146,6 +162,8 @@ onBeforeUnmount(() => {
     <RevisionsDialog />
     <WireNumberDialog />
     <TerminalEditorDialog />
+    <PlcIoDialog />
+    <PlcGenerateDialog />
     <ReportDialog />
     <PdfBookDialog />
     <TemplateDialog />
