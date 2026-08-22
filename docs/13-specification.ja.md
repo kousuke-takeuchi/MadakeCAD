@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**695仕様項目**。
+全5領域・**712仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -478,6 +478,7 @@
 - 動作確認手順の依頼には「手順|操作|期待結果」の表で答え、図面へ勝手に注記を書き込まない。 <sub>`system_prompt_carries_the_test_plan_table`</sub>
 - 部品選定では部品DBを検索し、比較表で答える。 <sub>`system_prompt_carries_the_parts_comparison_table`</sub>
 - 読めない知識ファイルは読み飛ばされ、同梱ノートは失われない。 <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
+- システムプロンプトは、整えるときは`get_tidy_metrics`で数値を測り、改善が止まったらやめるよう指示する。 <sub>`system_prompt_carries_the_tidy_loop`</sub>
 
 ### knowledge_docs
 
@@ -734,6 +735,25 @@
 - アクティブシートに無い選択idは無視される(全て外れれば全体扱い) <sub>`drawingContextTag`</sub>
 - 空の下書きにはそのまま挿入される <sub>`appendContextTag`</sub>
 - 既存の下書きとは改行で区切る(改行済みなら重ねない) <sub>`appendContextTag`</sub>
+
+### 整えメトリクス (交差・重なり・グリッド)
+
+- 整えモードは配置整理・配線整理・ラベル整頓の3種類 <sub>`tidyPrompt`</sub>
+- 配置整理は2.5mmグリッドへ載せる・シンボルの重なりを解消する・列を揃えることを指示する <sub>`tidyPrompt`</sub>
+- 配線整理は交差を減らし直交を保ち、余分な曲がりを減らすことを指示する <sub>`tidyPrompt`</sub>
+- ラベル整頓は位置を動かすだけで、ラベルや線番を消したり書き換えたりしないよう指示する <sub>`tidyPrompt`</sub>
+- どの整えも接続関係(どのピンとどのピンが繋がるか)は変えない <sub>`tidyPrompt`</sub>
+- どの整えも「計測 → 編集 → 再計測」をget_tidy_metricsで行うよう指示する <sub>`tidyPrompt`</sub>
+- どの整えも改善が止まったら終わり、繰り返しは最大3回まで <sub>`tidyPrompt`</sub>
+- どの整えも最終応答にビフォー/アフターの数値を書かせる <sub>`tidyPrompt`</sub>
+- 選択が無ければ整える対象はシート全体になる <sub>`tidyPrompt`</sub>
+- 選択があれば選択したエンティティのidを並べ、それ以外は動かさないよう指示する <sub>`tidyPrompt`</sub>
+- 別シートの選択が残っていても、このシートに無いidは対象にしない(シート全体扱いに戻る) <sub>`tidyPrompt`</sub>
+- シートが無くてもプロンプトは壊れない <sub>`tidyPrompt`</sub>
+- 整えの実行は普通のチャット送信1回(=undo一発で戻せる1ターン)になる <sub>`runTidy`</sub>
+- 整えを実行するとエージェントタブが開いて経過が見える <sub>`runTidy`</sub>
+- 選択中のエンティティがあれば、送るプロンプトにそのidが入る <sub>`runTidy`</sub>
+- 応答の途中(ストリーミング中)は整えを二重に投げない <sub>`runTidy`</sub>
 
 ### i18n
 

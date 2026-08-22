@@ -229,3 +229,17 @@ fn an_unreadable_knowledge_file_is_skipped() {
     assert!(prompt.contains("JIS C 0617"), "{prompt}");
     assert!(!prompt.contains("追加の知識"), "{prompt}");
 }
+
+/// The system prompt tells the agent to measure tidiness with get_tidy_metrics and to stop once it stops improving.
+/// システムプロンプトは、整えるときは`get_tidy_metrics`で数値を測り、改善が止まったらやめるよう指示する。
+#[test]
+fn system_prompt_carries_the_tidy_loop() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    // 直す前に測り、編集したらもう一度測る
+    assert!(prompt.contains("get_tidy_metrics"), "{prompt}");
+    // 改善が止まるか3回で終わる(いつまでもいじらない)
+    assert!(prompt.contains("改善が止まったら"), "{prompt}");
+    assert!(prompt.contains("3回"), "{prompt}");
+    // 最終応答にビフォー/アフターの数値を書く
+    assert!(prompt.contains("ビフォー"), "{prompt}");
+}

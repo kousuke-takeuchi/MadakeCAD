@@ -1,14 +1,18 @@
 <script setup lang="ts">
 // 入力欄の下のフッタ行 (添付 / トークン / モデル / 送信・停止)。
 // 左ドックのエージェントタブと浮き入力カードで共通。
-import { ArrowUp, Plus, Square, Zap } from "lucide-vue-next";
+import { ArrowUp, Plus, Square, WandSparkles, Zap } from "lucide-vue-next";
+import { useI18n } from "vue-i18n";
 import { useChatComposer } from "../../composables/chatComposer";
 import { usePopover } from "../../composables/popover";
 import ChatContextMenu from "./ChatContextMenu.vue";
+import ChatTidyMenu from "./ChatTidyMenu.vue";
 import ModelPicker from "./ModelPicker.vue";
 
+const { t } = useI18n();
 const { store, canSend, tokenBadge, submit, onCancel } = useChatComposer();
 const { open: contextOpen, toggle: toggleContext, close: closeContext } = usePopover();
+const { open: tidyOpen, toggle: toggleTidy, close: closeTidy } = usePopover();
 </script>
 
 <template>
@@ -20,6 +24,15 @@ const { open: contextOpen, toggle: toggleContext, close: closeContext } = usePop
       <template v-if="contextOpen">
         <div class="backdrop" @click="closeContext()" />
         <ChatContextMenu class="context-popup" @close="closeContext()" />
+      </template>
+    </div>
+    <div class="attach-wrap">
+      <button class="attach" :title="t('chat.tidy.button')" @click="toggleTidy()">
+        <WandSparkles :size="13" />
+      </button>
+      <template v-if="tidyOpen">
+        <div class="backdrop" @click="closeTidy()" />
+        <ChatTidyMenu class="context-popup" @close="closeTidy()" />
       </template>
     </div>
     <span class="spacer" />

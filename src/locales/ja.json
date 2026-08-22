@@ -283,5 +283,24 @@
     "checkLog": "端子台: {reference} をチェックしました — {result}",
     "chartLog": "端子台: {reference} のチャート{count}行を {path} に書き出しました",
     "diagramLog": "端子台: {reference} の端子接続図{count}ページを {path} に書き出しました"
+  },
+  "chat": {
+    "tidy": {
+      "button": "整える",
+      "title": "自動で整える",
+      "description": "図面を自動で反復改善します",
+      "modeHead": "反復モード",
+      "mode": {
+        "layout": "配置整理",
+        "wiring": "配線整理",
+        "labels": "ラベル整頓"
+      },
+      "variantHead": "バリアント数",
+      "variantNone": "反復しない",
+      "variantPlannedLog": "AGENT   複数案を比べるバリアント数はフェーズ3で対応予定です",
+      "startedLog": "AGENT   {mode}で整えます (1ターン。Cmd+Zで戻せます)",
+      "busyLog": "AGENT   応答の途中です。ターンが終わってからもう一度実行してください",
+      "sendFailed": "AGENT   整えの送信に失敗しました (詳細はチャットのエラー表示を参照)"
+    }
   }
 }

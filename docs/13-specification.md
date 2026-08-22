@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**695 specification clauses** across 5 areas.
+**712 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -478,6 +478,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A test-plan request produces a step / action / expected-result table and does not write notes into the drawing on its own. <sub>`system_prompt_carries_the_test_plan_table`</sub>
 - Parts selection searches the parts database and answers with a comparison table. <sub>`system_prompt_carries_the_parts_comparison_table`</sub>
 - An unreadable knowledge file is skipped without losing the bundled note. <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
+- The system prompt tells the agent to measure tidiness with get_tidy_metrics and to stop once it stops improving. <sub>`system_prompt_carries_the_tidy_loop`</sub>
 
 ### knowledge_docs
 
@@ -734,6 +735,25 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - selection ids absent from the active sheet are ignored <sub>`drawingContextTag`</sub>
 - an empty draft receives the context as-is <sub>`appendContextTag`</sub>
 - an existing draft is separated by a newline (without doubling) <sub>`appendContextTag`</sub>
+
+### Tidy metrics (crossings / overlaps / grid)
+
+- offers three tidy modes: layout, wiring and labels <sub>`tidyPrompt`</sub>
+- the layout prompt asks for the 2.5mm grid, no overlapping symbols and aligned rows <sub>`tidyPrompt`</sub>
+- the wiring prompt asks to cut crossings, keep right angles and drop needless bends <sub>`tidyPrompt`</sub>
+- the label prompt only moves labels and forbids deleting or rewriting them <sub>`tidyPrompt`</sub>
+- no tidy mode is allowed to change the connections of the circuit <sub>`tidyPrompt`</sub>
+- every tidy prompt asks to measure with get_tidy_metrics before and after editing <sub>`tidyPrompt`</sub>
+- every tidy prompt stops when the numbers stop improving, and after three rounds at most <sub>`tidyPrompt`</sub>
+- every tidy prompt requires before/after numbers in the final answer <sub>`tidyPrompt`</sub>
+- with no selection the tidy covers the whole sheet <sub>`tidyPrompt`</sub>
+- with a selection the tidy lists the selected entity ids and forbids touching anything else <sub>`tidyPrompt`</sub>
+- ids that are not on the active sheet fall back to tidying the whole sheet <sub>`tidyPrompt`</sub>
+- stays well-formed when there is no sheet at all <sub>`tidyPrompt`</sub>
+- runs one tidy as exactly one chat turn <sub>`runTidy`</sub>
+- opens the agent tab so the user can watch the tidy run <sub>`runTidy`</sub>
+- sends the selected entity ids when a selection is active <sub>`runTidy`</sub>
+- does not start a tidy while another turn is still streaming <sub>`runTidy`</sub>
 
 ### i18n
 

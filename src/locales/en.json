@@ -283,5 +283,24 @@
     "checkLog": "Terminal editor: {reference} checked - {result}",
     "chartLog": "Terminal editor: wrote the chart of {reference} ({count} row(s)) to {path}",
     "diagramLog": "Terminal editor: wrote the connection diagram of {reference} ({count} page(s)) to {path}"
+  },
+  "chat": {
+    "tidy": {
+      "button": "Tidy up",
+      "title": "Tidy up automatically",
+      "description": "Improves the drawing by repeated passes",
+      "modeHead": "TIDY MODE",
+      "mode": {
+        "layout": "Layout",
+        "wiring": "Wiring",
+        "labels": "Labels"
+      },
+      "variantHead": "VARIANTS",
+      "variantNone": "No variants",
+      "variantPlannedLog": "AGENT   Comparing several tidy variants is planned for phase 3",
+      "startedLog": "AGENT   Tidying up ({mode}) - one turn, undo with Cmd+Z",
+      "busyLog": "AGENT   The agent is still answering; wait until the turn is done",
+      "sendFailed": "AGENT   Could not send the tidy request (see the error in the chat)"
+    }
   }
 }
