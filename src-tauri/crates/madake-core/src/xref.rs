@@ -293,6 +293,52 @@ pub fn extract_netlist_project(project: &Project) -> ProjectNetlist {
     ProjectNetlist { nets }
 }
 
+/// クロスリファレンス表 (ネット所在一覧) の列見出し。
+pub const XREF_TABLE_COLUMNS: [&str; 5] = ["ネット", "線番", "接続先", "シート", "所在"];
+
+/// クロスリファレンス表の行 ([`XREF_TABLE_COLUMNS`] と同じ並び)。
+///
+/// プロジェクト全体の統合ネット ([`extract_netlist_project`]) 1本が1行。
+/// 「接続先」はネットに繋がる全ピンの `参照記号:ピン番号`、「シート」はネットが現れるシート番号、
+/// 「所在」はネットラベルの図面上の住所 (`/シート.ゾーン`)。行はネット名の昇順で決定的に並ぶ。
+pub fn xref_table_rows(project: &Project) -> Vec<Vec<String>> {
+    let mut rows: Vec<Vec<String>> = extract_netlist_project(project)
+        .nets
+        .into_iter()
+        .map(|net| {
+            let mut wire_nos: BTreeSet<String> = BTreeSet::new();
+            let mut pins: BTreeSet<String> = BTreeSet::new();
+            let mut sheet_nos: BTreeSet<usize> = BTreeSet::new();
+            for m in &net.members {
+                if let Some(no) = &m.net.wire_no {
+                    wire_nos.insert(no.clone());
+                }
+                for p in &m.net.pins {
+                    pins.insert(format!("{}:{}", p.reference, p.pin));
+                }
+                sheet_nos.insert(m.sheet_no);
+            }
+            vec![
+                net.name,
+                wire_nos.into_iter().collect::<Vec<_>>().join(", "),
+                pins.into_iter().collect::<Vec<_>>().join(", "),
+                sheet_nos
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                net.sites
+                    .iter()
+                    .map(NetSite::address)
+                    .collect::<Vec<_>>()
+                    .join(XREF_SEPARATOR),
+            ]
+        })
+        .collect();
+    rows.sort_by(|a, b| (&a[0], &a[2]).cmp(&(&b[0], &b[2])));
+    rows
+}
+
 /// シート内でそのネットの配線に載っているネットラベル (entity id, 名前)。
 fn labels_on_net(sheet: &Sheet, net: &Net) -> (Vec<EntityId>, BTreeSet<String>) {
     let wires: Vec<&crate::model::Wire> = net
@@ -510,5 +556,28 @@ mod tests {
         assert!((at.y - (50.0 - NET_LABEL_RISE)).abs() < 1e-9, "ベースラインは同じ");
         // 5文字分の幅 + 間隔
         assert!((at.x - (100.0 + 2.5 * 0.6 * 5.0 + 1.0)).abs() < 1e-9);
+    }
+
+    /// The cross-reference table has one row per project-wide net, listing the sheets it spans and the drawing addresses of its labels.
+    /// クロスリファレンス表はプロジェクト全体のネット1本につき1行で、跨るシートとラベルの図面上の住所を並べる。
+    #[test]
+    fn cross_reference_table_lists_one_row_per_net_with_its_sites() {
+        let project = two_sheet_project();
+        let rows = xref_table_rows(&project);
+        assert_eq!(rows.len(), 1, "同名ラベルで1本に統合される: {rows:?}");
+        assert_eq!(rows[0][0], "24V_1");
+        assert_eq!(rows[0][3], "1, 2", "現れるシート番号");
+        assert_eq!(rows[0][4], "/1.A1 /2.B3", "ラベルの住所");
+    }
+
+    /// The columns of the cross-reference table are net / wire number / connected pins / sheets / sites.
+    /// クロスリファレンス表の列は ネット・線番・接続先・シート・所在 の5列。
+    #[test]
+    fn cross_reference_table_columns_are_net_wire_pins_sheets_sites() {
+        assert_eq!(
+            XREF_TABLE_COLUMNS,
+            ["ネット", "線番", "接続先", "シート", "所在"]
+        );
+        assert_eq!(xref_table_rows(&two_sheet_project())[0].len(), XREF_TABLE_COLUMNS.len());
     }
 }
