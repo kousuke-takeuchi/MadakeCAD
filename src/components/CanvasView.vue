@@ -11,10 +11,13 @@ import { useChatStore, type ChatToolCall } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
 import ChatPanel from "./chat/ChatPanel.vue";
 import SearchBar from "./SearchBar.vue";
+import SurferPopup from "./SurferPopup.vue";
+import { useSurferStore } from "../stores/surfer";
 
 const store = useDocumentStore();
 const chat = useChatStore();
 const ui = useUiStore();
+const surfer = useSurferStore();
 
 // 左ドックのエージェントタブが開いている間は入力欄が二重になるので浮きカードを出さない。
 const dockChatOpen = computed(() => chat.panelOpen === "expanded" || ui.leftPanelTab === "chat");
@@ -173,6 +176,28 @@ function toLocal(ev: PointerEvent | WheelEvent | MouseEvent) {
   return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
 }
 
+/**
+ * キャンバスの押下。**Alt(Option)+クリックは参照サーフィン** (spec §4): 押した要素の
+ * 「同じものが図面のどこに出てくるか」をポップアップで出す。素のクリックは今までどおり
+ * 選択・作画なので、既存の操作は変わらない。
+ */
+async function onPointerDown(ev: PointerEvent) {
+  const local = toLocal(ev);
+  if (ev.altKey && ev.button === 0 && store.activeSheet) {
+    const hit = controller.hitTest(controller.vp.toWorld(local));
+    if (hit && (await surfer.openAt(store.project, store.activeSheet.id, hit, {
+      x: ev.clientX,
+      y: ev.clientY,
+    }))) {
+      return;
+    }
+  }
+  surfer.close();
+  canvasRef.value?.focus();
+  canvasRef.value?.setPointerCapture(ev.pointerId);
+  controller.onPointerDown(local, ev);
+}
+
 onMounted(() => {
   controller.requestRedraw = scheduleDraw;
   observer = new ResizeObserver(resize);
@@ -204,7 +229,7 @@ watch(() => store.activeSheetId, () => {
     <canvas
       ref="canvasRef"
       tabindex="0"
-      @pointerdown="(e) => { canvasRef?.focus(); canvasRef?.setPointerCapture(e.pointerId); controller.onPointerDown(toLocal(e), e); }"
+      @pointerdown="onPointerDown"
       @pointermove="(e) => controller.onPointerMove(toLocal(e))"
       @pointerup="() => controller.onPointerUp()"
       @pointerleave="() => { controller.cursorScreen = null; controller.requestRedraw(); }"
@@ -213,6 +238,7 @@ watch(() => store.activeSheetId, () => {
       @contextmenu.prevent
     />
     <SearchBar />
+    <SurferPopup />
     <ChatPanel v-if="!dockChatOpen" />
   </div>
 </template>
