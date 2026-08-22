@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**653仕様項目**。
+全5領域・**654仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -413,6 +413,7 @@
 - 同梱の規格知識には図記号・参照記号・線色/sq・線番・配置の決まりが書かれている。 <sub>`bundled_standards_cover_the_drawing_conventions`</sub>
 - システムプロンプトには同梱の規格知識と検証ループの指示が載る。 <sub>`system_prompt_carries_the_standards_and_the_verification_loop`</sub>
 - システムプロンプトは、白紙から作り始めるときはまず開始テンプレートを使うよう指示する。 <sub>`system_prompt_points_at_the_start_templates`</sub>
+- システムプロンプトは、シェルが使えないこととエンティティidを自分で書くことを伝える。 <sub>`system_prompt_tells_the_agent_no_shell_is_available`</sub>
 - システムプロンプトは図面コンテキストが先頭で、規格知識はその後ろに続く。 <sub>`system_prompt_puts_the_drawing_context_first`</sub>
 - 設定の知識ファイルは同梱ノートの後ろへ追記される。 <sub>`user_knowledge_file_is_appended_to_the_prompt`</sub>
 - 知識ファイル未設定なら、プロンプトには同梱ノートだけが載る。 <sub>`without_a_knowledge_file_only_the_bundled_note_is_used`</sub>
