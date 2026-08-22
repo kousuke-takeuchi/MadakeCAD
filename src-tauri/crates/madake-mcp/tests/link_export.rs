@@ -17,6 +17,17 @@ fn fake_claude() -> PathBuf {
         .join("fake_claude.sh")
 }
 
+/// テストごとに一意の部品DBパスを返す。並列テストがファイルを共有すると
+/// スキーマ初期化(版チェック→INSERT)が非アトミックなためUNIQUE制約で落ちる。
+fn unique_parts_db(tag: &str) -> std::path::PathBuf {
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    std::env::temp_dir().join(format!(
+        "madake-parts-{tag}-{}-{seq}.sqlite",
+        std::process::id()
+    ))
+}
+
 /// The REST parts endpoints support searching (sample data included), upserting, category filtering, deleting, and listing wire parts.
 /// RESTの部品エンドポイントは検索(サンプル含む)・登録更新・カテゴリ絞り込み・削除・電線品番一覧に対応する。
 #[tokio::test]
@@ -24,7 +35,7 @@ async fn parts_endpoints_search_upsert_delete() {
     let doc = SharedDoc::new(Engine::new(Project::new("部品テスト")));
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude()));
-    let db_path = std::env::temp_dir().join(format!("madake-parts-api-{}.sqlite", std::process::id()));
+    let db_path = unique_parts_db("api");
     std::fs::remove_file(&db_path).ok();
     let parts = madake_mcp::open_parts(&db_path).expect("parts db");
     let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
@@ -110,7 +121,7 @@ async fn verify_returns_diagnostics() {
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude()));
     let parts = madake_mcp::open_parts(
-        &std::env::temp_dir().join(format!("madake-parts-export-{}.sqlite", std::process::id())),
+        &unique_parts_db("export"),
     )
     .expect("parts db");
     let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
@@ -139,7 +150,7 @@ async fn import_kicad_replaces_project_and_reports() {
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude()));
     let parts = madake_mcp::open_parts(
-        &std::env::temp_dir().join(format!("madake-parts-kicad-{}.sqlite", std::process::id())),
+        &unique_parts_db("kicad"),
     )
     .expect("parts db");
     let router = madake_mcp::link_api::router(doc.clone(), Arc::clone(&agent), parts);
@@ -242,7 +253,7 @@ async fn simulate_op_returns_result() {
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude()));
     let parts = madake_mcp::open_parts(
-        &std::env::temp_dir().join(format!("madake-parts-sim-{}.sqlite", std::process::id())),
+        &unique_parts_db("sim"),
     )
     .expect("parts db");
     let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
@@ -277,7 +288,7 @@ async fn export_pdf_writes_pdf_file() {
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude()));
     let parts = madake_mcp::open_parts(
-        &std::env::temp_dir().join(format!("madake-parts-export-{}.sqlite", std::process::id())),
+        &unique_parts_db("export"),
     )
     .expect("parts db");
     let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
@@ -314,7 +325,7 @@ async fn export_pdf_book_writes_cover_sheets_and_reports() {
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude()));
     let parts = madake_mcp::open_parts(
-        &std::env::temp_dir().join(format!("madake-parts-book-{}.sqlite", std::process::id())),
+        &unique_parts_db("book"),
     )
     .expect("parts db");
     let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
@@ -374,7 +385,7 @@ async fn terminal_endpoints_list_chart_and_check() {
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude()));
     let parts = madake_mcp::open_parts(
-        &std::env::temp_dir().join(format!("madake-parts-tb-{}.sqlite", std::process::id())),
+        &unique_parts_db("tb"),
     )
     .expect("parts db");
     let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
@@ -422,7 +433,7 @@ async fn export_report_writes_csv_and_pdf_per_report() {
     let agent = madake_mcp::agent::manager(&doc, 9310);
     agent.set_executable(Some(fake_claude()));
     let parts = madake_mcp::open_parts(
-        &std::env::temp_dir().join(format!("madake-parts-report-{}.sqlite", std::process::id())),
+        &unique_parts_db("report"),
     )
     .expect("parts db");
     let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
