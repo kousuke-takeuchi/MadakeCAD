@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1183仕様項目**。
+全5領域・**1216仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1002,7 +1002,10 @@
 
 - connector_2pは旧静的定義と同一のピン座標を持つ <sub>`dynamicSymbol`</sub>
 - terminal_block_3pは3端子×左右2接続点で、中央揃え・2.5mmグリッド上にある <sub>`dynamicSymbol`</sub>
+- PLC入力モジュールは点数ぶんの接続点が左側に5mmピッチで並ぶ縦長の箱になる <sub>`dynamicSymbol`</sub>
+- PLCモジュールには入力用と出力用があり、名前で見分けられる <sub>`dynamicSymbol`</sub>
 - 不正な動的IDはnullになる <sub>`dynamicSymbol`</sub>
+- PLCモジュールのシンボルは1〜64点までで、その外の点数は存在しない <sub>`dynamicSymbol`</sub>
 - 静的定義を優先し、無ければ動的生成にフォールバックする <sub>`resolveSymbolDef`</sub>
 
 ### ハーネス境界
@@ -1332,6 +1335,39 @@
 
 - searchは部品APIの結果を保持する <sub>`parts store`</sub>
 - 検索失敗時は結果を空にしloadingを戻す <sub>`parts store`</sub>
+
+### plcIo
+
+- 三菱のアドレスは8進で数えるので X7 の次は X10 になる <sub>`PLC address numbering`</sub>
+- Siemensのアドレスは「バイト.ビット」(1バイト8点) で数える <sub>`PLC address numbering`</sub>
+- Allen-Bradleyのアドレスは「ワード/ビット」(1ワード16点) で数える <sub>`PLC address numbering`</sub>
+- 自動採番の開始アドレスは何点目から始めるかを表す (2枚目のユニットは続き番号から振れる) <sub>`PLC address numbering`</sub>
+- アドレス体系に合わない開始アドレスは受け付けない (採番できないため) <sub>`PLC address numbering`</sub>
+- 開くと図面に置かれているPLCモジュールを読み込み、先頭のモジュールを表示する <sub>`PLC I/O assignment editor`</sub>
+- グリッドはモジュールの点数ぶんの行になり、未割付の行にも自動採番の候補アドレスが出る <sub>`PLC I/O assignment editor`</sub>
+- 割付表に保存済みの行はアドレス・信号名・コメントがそのまま表示される <sub>`PLC I/O assignment editor`</sub>
+- 接続先と線番は図面から読んだ値で、編集はできない (読み取り専用の列) <sub>`PLC I/O assignment editor`</sub>
+- 「自動採番で埋める」は開始アドレスから全行のアドレスを埋め、信号名とコメントは触らない <sub>`PLC I/O assignment editor`</sub>
+- 開始アドレスを変えて自動採番すると、その番号から続けて振られる <sub>`PLC I/O assignment editor`</sub>
+- 保存はset_plc_assignmentsコマンド1回で、編集した表がまとめてプロジェクトへ入る <sub>`PLC I/O assignment editor`</sub>
+- 保存しても他のモジュールの行は順番も中身もそのまま残る <sub>`PLC I/O assignment editor`</sub>
+- すでにある行はidを引き継ぐので、保存し直しても表の同一性が保たれる <sub>`PLC I/O assignment editor`</sub>
+- 何も編集していなければ保存してもコマンドは送らない <sub>`PLC I/O assignment editor`</sub>
+- 末尾の空行は保存しない (途中の空行は点番号がずれないよう残す) <sub>`PLC I/O assignment editor`</sub>
+- CSVを読み込むと、そのモジュールの行だけがCSVの中身で置き換わる (undo一発で戻る) <sub>`PLC I/O assignment editor`</sub>
+- 列数の合わないCSVはエラーになり、表は一切変わらない <sub>`PLC I/O assignment editor`</sub>
+- 図面が外から変わったら (結線の追加やundo) 接続先・線番の列を取り直す <sub>`PLC I/O assignment editor`</sub>
+- 編集の途中で図面が変わっても、まだ保存していない信号名は消えない <sub>`PLC I/O assignment editor`</sub>
+- 編集していないときの外からの変更は、表そのものを読み直す <sub>`PLC I/O assignment editor`</sub>
+- エディタを閉じている間は図面が変わっても読み込みに行かない <sub>`PLC I/O assignment editor`</sub>
+- PLCモジュールが1つも置かれていなければ表は空になり、保存も生成もできない <sub>`PLC I/O assignment editor`</sub>
+- 閉じると下書きと選択を捨てる <sub>`PLC I/O assignment editor`</sub>
+- 生成設定の既定はJIS慣行の縦バス+横ラング・ラング間隔10mm・先頭スキップ0 <sub>`PLC I/O sheet generation settings`</sub>
+- 生成は選んだ設定と、部品DBから引いたモジュール定義でI/O図面を1ページ作る (undo一発) <sub>`PLC I/O sheet generation settings`</sub>
+- 未実装のラダー形式 (横バス) では生成できない <sub>`PLC I/O sheet generation settings`</sub>
+- 未実装の配置方針 (前モジュールと同居) では生成できない <sub>`PLC I/O sheet generation settings`</sub>
+- 未保存の編集があれば、生成の前に割付表を保存する (図面のラベルが下書きと一致する) <sub>`PLC I/O sheet generation settings`</sub>
+- 部品DBに無い型番のモジュールは、種別どおりの既定のアドレス体系 (三菱) で扱う <sub>`PLC I/O sheet generation settings`</sub>
 
 ### provider
 

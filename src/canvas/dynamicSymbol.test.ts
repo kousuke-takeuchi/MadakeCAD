@@ -34,6 +34,31 @@ describe("dynamicSymbol", () => {
     }
   });
 
+  // ja: PLC入力モジュールは点数ぶんの接続点が左側に5mmピッチで並ぶ縦長の箱になる
+  it("a PLC input module has one connection point per I/O point on its left side", () => {
+    const def = dynamicSymbol("plc_di_16p");
+    expect(def).not.toBeNull();
+    expect(def!.ref_prefix).toBe("PLC");
+    expect(def!.category).toBe("plc");
+    expect(def!.pins).toHaveLength(16);
+    expect(def!.pins.every((p) => p.dir === "left" && p.at.x === -7.5)).toBe(true);
+    expect(def!.pins[1].at.y - def!.pins[0].at.y).toBeCloseTo(5, 9);
+    // 上下中央揃えで、全ピンが2.5mmグリッド上
+    expect(def!.pins.reduce((s, p) => s + p.at.y, 0)).toBeCloseTo(0, 9);
+    for (const p of def!.pins) expect(Math.abs((p.at.y / 2.5) % 1)).toBeCloseTo(0, 9);
+  });
+
+  // ja: PLCモジュールには入力用と出力用があり、名前で見分けられる
+  it("PLC modules come in an input and an output flavour", () => {
+    const di = dynamicSymbol("plc_di_8p");
+    const dout = dynamicSymbol("plc_do_8p");
+    expect(di!.pins).toHaveLength(8);
+    expect(dout!.pins).toHaveLength(8);
+    expect(dout!.ref_prefix).toBe("PLC");
+    expect(di!.name).not.toBe(dout!.name);
+    expect(dout!.name_ja).toContain("出力");
+  });
+
   // ja: 不正な動的IDはnullになる
   it("malformed dynamic ids return null", () => {
     expect(dynamicSymbol("connector_0p")).toBeNull();
@@ -41,6 +66,15 @@ describe("dynamicSymbol", () => {
     expect(dynamicSymbol("connector_p")).toBeNull();
     expect(dynamicSymbol("terminal_block_xp")).toBeNull();
     expect(dynamicSymbol("resistor")).toBeNull();
+  });
+
+  // ja: PLCモジュールのシンボルは1〜64点までで、その外の点数は存在しない
+  it("PLC module symbols exist from 1 to 64 points only", () => {
+    expect(dynamicSymbol("plc_di_1p")).not.toBeNull();
+    expect(dynamicSymbol("plc_di_64p")).not.toBeNull();
+    expect(dynamicSymbol("plc_di_0p")).toBeNull();
+    expect(dynamicSymbol("plc_di_65p")).toBeNull();
+    expect(dynamicSymbol("plc_do_xp")).toBeNull();
   });
 });
 

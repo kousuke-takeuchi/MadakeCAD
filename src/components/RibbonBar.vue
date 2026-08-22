@@ -17,6 +17,7 @@ import { useRevisionsStore } from "../stores/revisions";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
 import { useMacrosStore } from "../stores/macros";
 import { useTemplatesStore } from "../stores/templates";
+import { usePlcIoStore } from "../stores/plcIo";
 import { useTerminalsStore } from "../stores/terminals";
 import { useWireNumbersStore } from "../stores/wireNumbers";
 import { useSimulationStore } from "../stores/simulation";
@@ -36,6 +37,7 @@ const { t } = useI18n();
 const reportDialog = useReportDialogStore();
 const pdfBook = usePdfBookStore();
 const terminals = useTerminalsStore();
+const plcIo = usePlcIoStore();
 const templates = useTemplatesStore();
 const macros = useMacrosStore();
 
@@ -168,8 +170,29 @@ async function openTerminalEditor(check = false) {
 }
 
 /**
+ * PLC I/O割付表エディタを開く。`generate`ならそのままI/O図面の生成設定まで開く。
+ * IAでは「読み込み/書き出し」タブだが、同タブは未実装のため実装済みの
+ * 「レポート」タブのPLC I/Oグループから起動する (端子台エディタと同じ扱い)。
+ */
+async function openPlcEditor(generate = false) {
+  await plcIo.openEditor();
+  ui.log(t("plcIo.openLog"));
+  if (!plcIo.moduleRef) {
+    ui.log(t("plcIo.noModuleLog"));
+    return;
+  }
+  if (generate) openPlcGenerate();
+}
+
+/** I/O図面の生成設定ダイアログを開く (割付表エディタの上に重なる)。 */
+function openPlcGenerate() {
+  plcIo.openGenerate();
+  ui.log(t("plcIo.generateOpenLog", { reference: plcIo.moduleRef ?? "" }));
+}
+
+/**
  * 「レポート」タブ (.pen「M4デザイン - リボン パネル/レポート/管理タブ」準拠)。
- * ケーブル一覧・PLC I/Oレポートは帳票そのものが未実装なのでログのみ。
+ * ケーブル一覧は帳票そのものが未実装なのでログのみ。
  * 電線リストはTask 1でFrom-Toリストへ統合したため1ボタンにまとめている。
  */
 const reportGroups = computed<RibbonGroup[]>(() => [
@@ -193,11 +216,7 @@ const reportGroups = computed<RibbonGroup[]>(() => [
       ],
       [
         { label: t("reports.kind.xref"), icon: Network, action: () => openReport("xref") },
-        {
-          label: t("reports.ribbonPlcIo"),
-          icon: Cpu,
-          action: () => ui.log(t("reports.todoLog", { report: t("reports.ribbonPlcIo") })),
-        },
+        { label: t("reports.ribbonPlcIo"), icon: Cpu, action: () => openReport("plc-io") },
       ],
     ],
   },
@@ -217,6 +236,21 @@ const reportGroups = computed<RibbonGroup[]>(() => [
           action: () => openReport("terminal-diagram"),
         },
         { label: t("terminals.check"), icon: ListChecks, action: () => openTerminalEditor(true) },
+      ],
+    ],
+  },
+  {
+    name: t("ribbon.reportGroup.plc"),
+    big: {
+      label: t("plcIo.ribbonButton"),
+      icon: Cpu,
+      color: "var(--icon-wire)",
+      action: () => openPlcEditor(),
+    },
+    small: [
+      [
+        { label: t("plcIo.ribbonGenerate"), icon: Grid3x3, action: () => openPlcEditor(true) },
+        { label: t("reports.ribbonPlcIo"), icon: FileSpreadsheet, action: () => openReport("plc-io") },
       ],
     ],
   },
