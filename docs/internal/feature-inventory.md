@@ -92,12 +92,15 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo |
-| Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols / netlist / verify / simulate/op / commands / undo / redo / save / load / import/kicad / terminals(+/chart・/check) / export/*(svg・pdf・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/* / events |
+| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / list_templates / apply_template / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo |
+| Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols / netlist / verify / simulate/op / commands / undo / redo / save / load / import/kicad / terminals(+/chart・/check) / templates(+/apply) / export/*(svg・pdf・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/*(send・cancel・conversations・undo-turn・detect・events) / settings / events |
 | madake CLI | ✅ | status / project / netlist / verify / sim / parts / terminals / export(svg・pdf・pdf-book+帳票5種を`--format csv\|pdf`・`--terminal`付きで) / save / open(.kicad_sch対応) / renumber / exec / undo / redo |
 | AIチャット(A1) | ✅ | 左ドック+浮きカード、Claude Code CLIバックエンド(Pro/Max OAuth再利用)、ツールチップ表示、ターン単位undo、編集オーバーレイ(シアンパルス)、会話履歴のプロジェクト保存 |
-| A1の持ち越し負債 | ⚠ | ターン安定ID(添字指定の脆さ)・編集origin(user/agent区別)・キャンセルseq(プランに詳細) |
-| 並列エージェント・自動反復(A2) | ⬜ | UIポップアップのみデザイン済み |
+| A1の持ち越し負債(M3フェーズ1で解消) | ✅ | ターン安定ID(`turn_id`。chat.json format_version 2へ移行)・編集origin(`Engine::execute_as` / `revert_range`でagent編集だけを逆適用。衝突は`RevertConflict`)・キャンセルseq(`turn_seq`で遅延イベントを破棄) |
+| 規格知識+検証ループ(M3フェーズ1) | ✅ | 同梱`resources/knowledge/standards.md`を毎ターン注入(設定`knowledge_path`で追記可、後勝ち)。図面コンテキストに検証サマリ。プロンプトで「編集後は`run_verification`→修正→再検証(最大3回)→件数報告」を必須化 |
+| ナレッジ回答・AIレビュー・部品選定(M3フェーズ1) | ✅ | `docs/`目次+`--add-dir`+読み取り専用ツール(Read/Glob/Grep)で出典付き回答(未対応機能はroadmapで回答)。レビューは決定的検証+5観点チェックリストを重要度表に。検証計画は手順表。部品選定は`search_parts`の比較表(最大10件) |
+| 開始テンプレート(M3フェーズ1) | ✅ | 同梱3種(24V制御基本・モータ起動回路・非常停止回路。適用後ERCエラー/警告0)。`Engine::execute_batch`で履歴1エントリ=undo一発。IPC/Link API/MCPツール+リボン導線。`~/MadakeCAD/templates/*.json`でユーザーテンプレート |
+| 並列エージェント・自動反復(A2 = M3フェーズ2) | ⬜ | UIポップアップのみデザイン済み |
 | APIキー系プロバイダ(A3) | ⬜ | Anthropic API直/OpenAI互換/Gemini/Ollama等。設定UIは骨格あり |
 | FreeCAD連携(フェーズM) | 🔶 | Link API(M1の土台)は実装済み。アドオンWB・3D対応付け・電線長書き戻し・盤レイアウトが未 |
 

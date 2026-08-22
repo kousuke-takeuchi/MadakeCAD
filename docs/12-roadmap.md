@@ -15,11 +15,13 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - Harness boundaries: dashed enclosures with a name; enclosed wires get a harness column in the wire list
 - Cross-sheet references: project-wide nets from same-named labels, destination `/sheet.zone` addresses on the drawing, click-through in the properties panel, one net in reports and ERC
 
-## M3 — AI-first drafting
+## M3 — AI-first drafting 🔶 (phase 1 done)
 
-- Robust turn management (stable IDs, user/agent edit origins)
-- Standards knowledge injection + self-verification loop
-- Circuit templates; tidy-up automation (placement/wiring/labels)
+- ✅ **Robust turn management** (phase 1): stable turn IDs, user/agent/mcp edit origins, turn-revert that undoes agent edits only (manual edits survive; conflicts are reported instead of half-reverted), turn sequence numbers that discard events from a cancelled turn
+- ✅ **Standards knowledge + verification loop** (phase 1): a bundled editable standards note injected every turn, a drawing context carrying the verification summary, and a mandatory verify → fix → re-verify loop (up to three rounds) reported as error/warning counts
+- ✅ **Knowledge answers, design review, part selection** (phase 1): documentation answers with sources (roadmap answers for unsupported features), a severity-ranked review combining ERC with a human-convention checklist, test-procedure tables, and part comparison tables from the parts database
+- ✅ **Start templates** (phase 1): three bundled circuits (24 V control basics, motor starter, emergency stop) applied as a single undo step, plus user templates from `~/MadakeCAD/templates`
+- Tidy-up automation (placement/wiring/labels) with convergence criteria
 - Parallel agents; multi-provider LLM support with OS-keychain credentials
 
 ## M4 — Industrial CAD core (ACADE/EPLAN benchmark) 🔶 (phase 1 done)
