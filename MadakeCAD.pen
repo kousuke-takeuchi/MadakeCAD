@@ -13695,6 +13695,45 @@
                   ]
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "cJ7oq",
+              "name": "DS秘密入力欄",
+              "reusable": true,
+              "width": 190,
+              "fill": "#FAFAFA",
+              "cornerRadius": 8,
+              "stroke": "$pw-border",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                7,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "canbF",
+                  "name": "DS秘密入力アイコン",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "key-round",
+                  "library": "lucide",
+                  "fill": "$pw-faint"
+                },
+                {
+                  "type": "text",
+                  "id": "RXdlD",
+                  "name": "DS秘密入力値",
+                  "fill": "$pw-text",
+                  "content": "••••••••••••••••",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
             }
           ]
         },
