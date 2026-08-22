@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**568仕様項目**。
+全5領域・**570仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -735,6 +735,8 @@
 - ジャンパ削除は選んだ端子に掛かるジャンパだけを外したコマンドになる <sub>`terminal strip editor store`</sub>
 - ジャンパが1本も残らないときは属性ごと消す <sub>`terminal strip editor store`</sub>
 - ジャンパを編集したらチャートを読み直し、グリッドが図面と一致し続ける <sub>`terminal strip editor store`</sub>
+- 図面が外から変わったら (undoやAIの編集) グリッドを取り直し、古いチェック結果は捨てる <sub>`terminal strip editor store`</sub>
+- 端子台エディタを閉じている間は図面が変わっても読み込みに行かない <sub>`terminal strip editor store`</sub>
 - 端子台チェックの結果は重大度ごとの件数に整形される <sub>`terminal strip editor store`</sub>
 - 問題が1件も無ければチェックは「問題なし」になる <sub>`terminal strip editor store`</sub>
 - 端子台を切り替えると選択と直前のチェック結果は消える <sub>`terminal strip editor store`</sub>

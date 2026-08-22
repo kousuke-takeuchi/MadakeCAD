@@ -8,17 +8,25 @@
 // v1で実装しない操作 (並べ替え・自動採番・多段端子・アクセサリ・内外スワップ・図面へ) は
 // 無効化したプレースホルダとして並べ、Lv・型番・配置の列は出さない (フェーズ2)。
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ArrowLeftRight, Layers, ListOrdered, Plus, Rows3, ShieldCheck, SquareStack, Unplug, X } from "lucide-vue-next";
 import { filterFor, pickSave } from "../composables/fileActions";
 import { ipc } from "../ipc";
+import { useDocumentStore } from "../stores/document";
 import { useTerminalsStore } from "../stores/terminals";
 import { useUiStore } from "../stores/ui";
 
 const terminals = useTerminalsStore();
+const doc = useDocumentStore();
 const ui = useUiStore();
 const { t } = useI18n();
+
+// 図面が変われば (undo/redo・AIチャット・CLIからの編集も含む) グリッドを取り直す
+watch(
+  () => doc.revision,
+  () => void terminals.refresh(),
+);
 
 /** フェーズ2で実装する操作 (デザインどおり並べるが押せない)。 */
 const phase2 = [
