@@ -26,3 +26,5 @@ dist-ssr
 # 社外秘の参考資料 (コミット禁止。READMEも企業名を含むためローカル専用)
 docs/references/*.pdf
 docs/references/README.md
+# 参考図面の再現データ・突き合わせメモ (社外秘情報を含むためローカル専用)
+docs/references/repro/
