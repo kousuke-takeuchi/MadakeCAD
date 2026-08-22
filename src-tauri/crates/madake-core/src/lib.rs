@@ -18,6 +18,7 @@ pub mod sim;
 pub mod spice;
 pub mod svg;
 pub mod symbol;
+pub mod terminal_chart;
 pub mod verify;
 pub mod wire_no;
 pub mod xref;
