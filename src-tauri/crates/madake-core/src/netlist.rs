@@ -12,16 +12,24 @@ use crate::symbol::SymbolDef;
 /// 接続判定の座標一致許容誤差 (mm)。
 pub const CONNECT_EPS: f64 = 0.01;
 
+/// ローカル座標をミラー→回転(0/90/180/270、時計回り、Y下向き座標系)する。
+///
+/// 平行移動は含まない。シンボルのピン解決 ([`transform_local`]) と回路マクロの
+/// 回転挿入 ([`crate::macros`]) が同じ回転規則を共有するための共通部品。
+pub fn rotate_local(p: Point, rotation: u16, mirror: bool) -> Point {
+    let (x, y) = if mirror { (-p.x, p.y) } else { (p.x, p.y) };
+    match rotation % 360 {
+        90 => Point::new(-y, x),
+        180 => Point::new(-x, -y),
+        270 => Point::new(y, -x),
+        _ => Point::new(x, y),
+    }
+}
+
 /// ローカル座標をミラー→回転(0/90/180/270、時計回り、Y下向き座標系)→平行移動する。
 pub fn transform_local(p: Point, inst: &SymbolInstance) -> Point {
-    let (x, y) = if inst.mirror { (-p.x, p.y) } else { (p.x, p.y) };
-    let (rx, ry) = match inst.rotation % 360 {
-        90 => (-y, x),
-        180 => (-x, -y),
-        270 => (y, -x),
-        _ => (x, y),
-    };
-    Point::new(inst.at.x + rx, inst.at.y + ry)
+    let r = rotate_local(p, inst.rotation, inst.mirror);
+    Point::new(inst.at.x + r.x, inst.at.y + r.y)
 }
 
 /// シンボルインスタンスの各ピンの (ピン番号, 用紙上絶対座標) を返す。

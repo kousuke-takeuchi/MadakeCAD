@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**676 specification clauses** across 5 areas.
+**695 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -76,6 +76,25 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Escaped quotes/newlines and multibyte (Japanese) text inside strings parse correctly. <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name) iterates every child list with the given head symbol. <sub>`children_iterates_all_matches`</sub>
 - Unbalanced parentheses and unterminated strings are reported as syntax errors with a position. <sub>`syntax_errors_are_reported`</sub>
+
+### Circuit macros
+
+- Saving a macro stores every coordinate relative to the base point, which is the pin closest to the bottom-left of the selection. <sub>`saving_a_macro_uses_the_bottom_left_pin_as_the_base_point`</sub>
+- When the selection has no symbol pins at all, the base point falls back to the bottom-left corner of the bounding box. <sub>`the_base_point_falls_back_to_the_bounding_box_corner_without_pins`</sub>
+- Wire numbers are dropped when a macro is saved (they are renumbered per drawing), while net labels are kept as part of the circuit. <sub>`saving_a_macro_drops_wire_numbers_but_keeps_net_labels`</sub>
+- Saving refuses an empty selection, and an entity id that is not on the sheet is reported instead of silently skipped. <sub>`saving_a_macro_refuses_an_empty_or_unknown_selection`</sub>
+- A macro saved without an id gets a stable one derived from its name, so the save dialog only has to ask for a name. <sub>`a_macro_without_an_id_derives_one_from_its_name`</sub>
+- Inserting a macro puts its base point exactly under the cursor position. <sub>`inserting_a_macro_lands_the_base_point_on_the_cursor`</sub>
+- Inserting a macro rotated turns the whole circuit around the insertion point and turns each symbol with it. <sub>`inserting_a_macro_rotated_turns_the_whole_circuit`</sub>
+- Inserting a macro renumbers its reference designators from the highest one already used in the project, keeping the macro's own relations (K1/K2 stay two different relays, and a coil and its contact keep sharing one designator). <sub>`inserting_a_macro_renumbers_references_after_the_existing_ones`</sub>
+- Any wire number left in a hand-written macro file is cleared on insert, so numbering always belongs to the drawing it lands in. <sub>`wire_numbers_in_a_macro_file_are_cleared_on_insert`</sub>
+- A macro can hold alternative variants: the default commands are variant "A" and any other key picks its own circuit. <sub>`a_variant_can_be_chosen_when_inserting`</sub>
+- An unknown variant key is refused with an error naming the key, and the drawing is left untouched. <sub>`an_unknown_variant_key_is_refused`</sub>
+- Inserting a macro is one edit: a single undo takes the whole circuit back out, and a single redo brings it back. <sub>`inserting_a_macro_is_undone_in_one_step`</sub>
+- Saving a circuit as a macro and inserting it back at its base point reproduces the drawing exactly: same pins, wires, junctions and labels at the same coordinates. <sub>`a_saved_macro_reproduces_the_drawing_when_inserted_back`</sub>
+- A motor circuit saved as a macro can be inserted twice into another sheet: the two copies never share a reference designator and the drawing still passes verification with no errors or ERC warnings. <sub>`a_macro_inserted_twice_keeps_references_unique_and_passes_verification`</sub>
+- Macros are written to and listed from the user's macros folder, and a file that is not a valid macro is reported with its path and reason while the others stay usable. <sub>`macros_round_trip_through_the_user_folder_and_broken_files_are_reported`</sub>
+- Inserting into a sheet that is not in the project is refused, and an unknown macro id is refused by name. <sub>`inserting_into_an_unknown_sheet_or_by_an_unknown_id_is_refused`</sub>
 
 ### Document model
 
@@ -206,7 +225,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sheet_symbol_defs returns the built-in library plus definitions for every dynamic symbol actually used on the sheet. <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
 - Symbol definitions serialize to JSON and back without loss. <sub>`symbol_json_roundtrip`</sub>
 
-### templates
+### Start templates
 
 - The three bundled templates (24 V control basics, motor starter, emergency stop) are listed in that order, each with an English and a Japanese name and description. <sub>`the_three_bundled_templates_are_listed_in_both_languages`</sub>
 - Even without the resource directory, the templates bundled into the build are still available. <sub>`templates_are_available_without_the_resource_directory`</sub>
@@ -369,13 +388,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The terminal endpoints list the terminal blocks of the drawing and return one block's chart and check result. <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report writes one report as CSV or as framed PDF pages, and refuses CSV for the graphical terminal diagram. <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
 
+### Circuit macros (REST)
+
+- POST /macros/save turns the selected entities into a macro file in the user's macros folder, and GET /macros lists it with its base point. <sub>`saving_a_selection_over_the_link_api_stores_a_macro_in_the_user_folder`</sub>
+- POST /macros/apply drops the macro at the requested point as a single edit that one undo takes back, renumbering its reference designators so they do not clash. <sub>`applying_a_macro_over_the_link_api_is_one_undo_step`</sub>
+- An unknown macro id, an unknown variant key and an empty selection are all refused with 400 and leave the drawing untouched. <sub>`the_link_api_refuses_unknown_macros_variants_and_empty_selections`</sub>
+
 ### Edit origin (user / agent / mcp)
 
 - Each entry point records who made the edit: the UI is a user edit, the agent's turn is an agent edit, and outside clients are mcp edits. <sub>`every_edit_path_records_who_made_the_change`</sub>
 - The agent-turn marker nests and always clears, so edits after the turn are user edits again. <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
 - The bridge the agent manager uses reverts only agent edits and reports how many were rolled back. <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
 
-### templates_api
+### Start templates (REST)
 
 - GET /templates lists the bundled start templates with their names in both languages. <sub>`the_link_api_lists_the_bundled_templates`</sub>
 - POST /templates/apply drops the template on the sheet as a single edit that one undo takes back. <sub>`applying_a_template_over_the_link_api_is_one_undo_step`</sub>
@@ -837,7 +862,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - toggled switches are passed as open_switches on the next run <sub>`simulation store`</sub>
 - failures (e.g. ngspice missing) keep the error message and still open the panel <sub>`simulation store`</sub>
 
-### templates
+### Start templates
 
 - opens with the first template selected <sub>`template picker store`</sub>
 - switches the selected template when another tile is picked <sub>`template picker store`</sub>

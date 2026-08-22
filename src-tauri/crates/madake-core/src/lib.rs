@@ -8,6 +8,7 @@ pub mod geometry;
 pub mod harness;
 pub mod io;
 pub mod kicad;
+pub mod macros;
 pub mod model;
 pub mod netlist;
 pub mod ngspice;

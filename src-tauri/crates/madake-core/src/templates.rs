@@ -109,7 +109,14 @@ impl Template {
 }
 
 /// JSON中のUUID文字列を差し替える (nil=適用先シート、それ以外=新しいidへ振り直し)。
-fn substitute(value: &mut serde_json::Value, sheet_id: SheetId, remap: &mut BTreeMap<Uuid, Uuid>) {
+///
+/// テンプレートと回路マクロ ([`crate::macros`]) が共有する、同じ雛形を何度でも適用
+/// できるようにするための仕組み。
+pub(crate) fn substitute(
+    value: &mut serde_json::Value,
+    sheet_id: SheetId,
+    remap: &mut BTreeMap<Uuid, Uuid>,
+) {
     match value {
         serde_json::Value::String(s) => {
             if let Ok(id) = Uuid::parse_str(s) {
@@ -225,16 +232,7 @@ pub fn apply_template(
 /// ディレクトリ内の`*.json`をファイル名順に読む。無いディレクトリは静かに無視する
 /// (ユーザーテンプレートを1つも置いていないのは正常な状態)。
 fn read_dir_templates(dir: &Path, builtin: bool, out: &mut TemplateList) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    let mut paths: Vec<PathBuf> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
-        .collect();
-    paths.sort();
-    for path in paths {
+    for path in json_files(dir) {
         let loaded = std::fs::read_to_string(&path)
             .map_err(|e| e.to_string())
             .and_then(|text| parse(&text).map_err(|e| e.to_string()));
@@ -249,6 +247,21 @@ fn read_dir_templates(dir: &Path, builtin: bool, out: &mut TemplateList) {
             }),
         }
     }
+}
+
+/// ディレクトリ内の`*.json`をファイル名順に返す。無いディレクトリは空
+/// (ユーザーが1つも置いていないのは正常な状態)。テンプレートと回路マクロで共有する。
+pub(crate) fn json_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut paths: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
+        .collect();
+    paths.sort();
+    paths
 }
 
 /// JSONを読み、コマンド列が本当にCommandとして読めるかまで確かめる。

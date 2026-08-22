@@ -111,6 +111,83 @@ async fn post_apply_template(
         .map_err(bad_request)
 }
 
+/// 使える回路マクロの一覧(ユーザーの`~/MadakeCAD/macros`)。
+async fn get_macros() -> Json<madake_core::macros::MacroList> {
+    Json(madake_core::macros::list())
+}
+
+#[derive(Deserialize)]
+struct SaveMacroBody {
+    #[serde(default)]
+    sheet_id: Option<Uuid>,
+    /// マクロにするエンティティ(選択範囲)。
+    entity_ids: Vec<Uuid>,
+    #[serde(flatten)]
+    meta: madake_core::macros::MacroMeta,
+}
+
+/// 選択したエンティティを回路マクロとして保存する(座標は基準点からの相対、線番は除去)。
+async fn post_save_macro(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<SaveMacroBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let sheet_id = resolve_sheet(&doc, body.sheet_id)?;
+    let (m, path) = doc
+        .save_macro(sheet_id, &body.entity_ids, &body.meta)
+        .map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "macro": m, "path": path })))
+}
+
+#[derive(Deserialize)]
+struct ApplyMacroBody {
+    /// マクロのid (`GET /macros`で得る)。
+    id: String,
+    /// バリアントキー ("A"=既定)。省略時は既定。
+    #[serde(default)]
+    variant: Option<String>,
+    #[serde(default)]
+    sheet_id: Option<Uuid>,
+    /// 基準点が来る位置 (カーソル位置)。
+    at: madake_core::Point,
+    /// 0/90/180/270。省略時は0。
+    #[serde(default)]
+    rotation: u16,
+}
+
+/// 回路マクロをシートへ挿入する。**1回の編集**として履歴に乗る(undo一発)。
+async fn post_apply_macro(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<ApplyMacroBody>,
+) -> Result<Json<Patch>, ApiError> {
+    let sheet_id = resolve_sheet(&doc, body.sheet_id)?;
+    doc.apply_macro(
+        &body.id,
+        body.variant.as_deref(),
+        sheet_id,
+        body.at,
+        body.rotation,
+        doc.mcp_origin(),
+    )
+    .map(Json)
+    .map_err(bad_request)
+}
+
+/// シートidの解決 (省略時は先頭シート)。
+fn resolve_sheet(doc: &SharedDoc, sheet_id: Option<Uuid>) -> Result<Uuid, ApiError> {
+    match sheet_id {
+        Some(id) => Ok(id),
+        None => doc
+            .engine
+            .lock()
+            .unwrap()
+            .project()
+            .sheets
+            .first()
+            .map(|s| s.id)
+            .ok_or_else(|| bad_request("project has no sheets")),
+    }
+}
+
 async fn post_undo(State(doc): State<SharedDoc>) -> Result<Json<Option<Patch>>, ApiError> {
     doc.undo().map(Json).map_err(bad_request)
 }
@@ -693,6 +770,9 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/simulate/op", post(post_simulate_op))
         .route("/api/v1/templates", get(get_templates))
         .route("/api/v1/templates/apply", post(post_apply_template))
+        .route("/api/v1/macros", get(get_macros))
+        .route("/api/v1/macros/save", post(post_save_macro))
+        .route("/api/v1/macros/apply", post(post_apply_macro))
         .route("/api/v1/commands", post(post_commands))
         .route("/api/v1/undo", post(post_undo))
         .route("/api/v1/redo", post(post_redo))

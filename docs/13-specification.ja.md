@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**676仕様項目**。
+全5領域・**695仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -76,6 +76,25 @@
 - 文字列内のエスケープ(引用符・改行)と日本語などのマルチバイト文字を正しく解釈する。 <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name)は指定した先頭シンボルを持つ子リストをすべて列挙する。 <sub>`children_iterates_all_matches`</sub>
 - 括弧の不整合や閉じていない文字列は、位置付きの構文エラーとして報告される。 <sub>`syntax_errors_are_reported`</sub>
+
+### 回路マクロ
+
+- マクロの保存では全座標が基準点からの相対座標になり、基準点は選択範囲の左下に最も近いピンになる。 <sub>`saving_a_macro_uses_the_bottom_left_pin_as_the_base_point`</sub>
+- 選択範囲にシンボルのピンが1つも無いときは、基準点はバウンディングボックスの左下角になる。 <sub>`the_base_point_falls_back_to_the_bounding_box_corner_without_pins`</sub>
+- マクロの保存では線番は捨てられ(図面ごとに振り直すため)、ネットラベルは回路の一部としてそのまま残る。 <sub>`saving_a_macro_drops_wire_numbers_but_keeps_net_labels`</sub>
+- 選択が空のマクロ保存は拒否され、そのシートに無いエンティティidは黙って飛ばさずエラーになる。 <sub>`saving_a_macro_refuses_an_empty_or_unknown_selection`</sub>
+- idを指定せずに保存したマクロは名前から安定したidが作られる(保存ダイアログは名前だけ聞けばよい)。 <sub>`a_macro_without_an_id_derives_one_from_its_name`</sub>
+- マクロを挿入すると、基準点がちょうど指定した位置(カーソル位置)へ来る。 <sub>`inserting_a_macro_lands_the_base_point_on_the_cursor`</sub>
+- 回転を指定して挿入すると、回路全体が挿入点を中心に回り、各シンボルの向きも一緒に回る。 <sub>`inserting_a_macro_rotated_turns_the_whole_circuit`</sub>
+- マクロの挿入では参照記号が図面で使用済みの最大値の次から振り直され、マクロ内の関係は保たれる(K1/K2は別のリレーのまま、コイルとその接点は同じ記号を共有し続ける)。 <sub>`inserting_a_macro_renumbers_references_after_the_existing_ones`</sub>
+- 手書きのマクロファイルに線番が残っていても挿入時に消される(線番は挿入先の図面のものだから)。 <sub>`wire_numbers_in_a_macro_file_are_cleared_on_insert`</sub>
+- マクロは代替バリアントを持てる。既定のcommandsがバリアント「A」で、他のキーを指定するとそのバリアントの回路が入る。 <sub>`a_variant_can_be_chosen_when_inserting`</sub>
+- 知らないバリアントキーはキーを添えたエラーで拒否され、図面は変わらない。 <sub>`an_unknown_variant_key_is_refused`</sub>
+- マクロの挿入は1回の編集なので、undo一発で回路全体が消え、redo一発で戻ってくる。 <sub>`inserting_a_macro_is_undone_in_one_step`</sub>
+- 回路をマクロとして保存し基準点の位置へ挿入し直すと、図面がそのまま再現される(ピン・配線・接続点・ラベルが同じ座標に来る)。 <sub>`a_saved_macro_reproduces_the_drawing_when_inserted_back`</sub>
+- モータ回路のマクロは別シートへ2回挿入でき、2つのコピーが参照記号を取り合うことはなく、図面は検証でエラー0・ERC警告0のまま通る。 <sub>`a_macro_inserted_twice_keeps_references_unique_and_passes_verification`</sub>
+- マクロはユーザーのマクロフォルダへ書き出され、そこから一覧される。マクロとして読めないファイルはパスと理由を添えて報告され、他のマクロはそのまま使える。 <sub>`macros_round_trip_through_the_user_folder_and_broken_files_are_reported`</sub>
+- プロジェクトに無いシートへの挿入は拒否され、知らないマクロidは名前を添えて拒否される。 <sub>`inserting_into_an_unknown_sheet_or_by_an_unknown_id_is_refused`</sub>
 
 ### ドキュメントモデル
 
@@ -206,7 +225,7 @@
 - sheet_symbol_defsは同梱ライブラリに加え、シートで実際に使われている動的シンボルの定義を返す。 <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
 - シンボル定義はJSONに往復変換しても失われない。 <sub>`symbol_json_roundtrip`</sub>
 
-### templates
+### 開始テンプレート
 
 - 同梱テンプレートは「24V制御基本・モータ起動回路・非常停止回路」の3種がこの順で並び、それぞれ英語と日本語の名前・説明を持つ。 <sub>`the_three_bundled_templates_are_listed_in_both_languages`</sub>
 - リソースのディレクトリが無い環境でも、ビルドへ埋め込んだ同梱テンプレートが使える。 <sub>`templates_are_available_without_the_resource_directory`</sub>
@@ -369,13 +388,19 @@
 - 端子台エンドポイントは図面の端子台を一覧し、1台のチャートとチェック結果を返す。 <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report は帳票1種をCSVまたは図枠付きPDFで書き出し、図面である端子接続図のCSVは拒否する。 <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
 
+### 回路マクロ (REST)
+
+- POST /macros/save は選択したエンティティをユーザーのマクロフォルダのファイルにし、GET /macros がそれを基準点つきで一覧に返す。 <sub>`saving_a_selection_over_the_link_api_stores_a_macro_in_the_user_folder`</sub>
+- POST /macros/apply はマクロを指定位置へ1回の編集として入れ(undo一発で戻る)、参照記号は衝突しないよう振り直される。 <sub>`applying_a_macro_over_the_link_api_is_one_undo_step`</sub>
+- 知らないマクロid・知らないバリアントキー・空の選択はいずれも400で拒否され、図面は変わらない。 <sub>`the_link_api_refuses_unknown_macros_variants_and_empty_selections`</sub>
+
 ### 編集origin (ユーザー/エージェント/MCP)
 
 - 編集は入口ごとに由来が残る: UIはユーザー編集、エージェントのターン中はエージェント編集、外部クライアントはmcp編集。 <sub>`every_edit_path_records_who_made_the_change`</sub>
 - ターン実行中の印は入れ子でも数えられ、必ず解除されるため、ターン後の編集はまたユーザー編集になる。 <sub>`the_agent_turn_marker_nests_and_always_clears`</sub>
 - エージェントマネージャが使う窓口はエージェント編集だけを巻き戻し、戻した件数を報告する。 <sub>`the_agent_bridge_reverts_only_agent_edits`</sub>
 
-### templates_api
+### 開始テンプレート (REST)
 
 - GET /templates は同梱の開始テンプレートを英日の名前つきで返す。 <sub>`the_link_api_lists_the_bundled_templates`</sub>
 - POST /templates/apply はテンプレートを1回の編集としてシートへ入れ、undo一発で戻せる。 <sub>`applying_a_template_over_the_link_api_is_one_undo_step`</sub>
@@ -837,7 +862,7 @@
 - 開閉トグルは再実行時にopen_switchesとして渡される <sub>`simulation store`</sub>
 - 失敗時(ngspice未導入等)はエラーメッセージを保持したままパネルを開く <sub>`simulation store`</sub>
 
-### templates
+### 開始テンプレート
 
 - ダイアログを開くとテンプレート一覧を読み込み、先頭を選んだ状態で表示する <sub>`template picker store`</sub>
 - タイルを選ぶと選択中のテンプレートが切り替わる (右のプレビューが変わる) <sub>`template picker store`</sub>
