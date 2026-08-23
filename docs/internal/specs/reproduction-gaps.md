@@ -1,6 +1,6 @@
 # Reproduction gap ledger — reference wiring diagram, sheet 1
 
-Created: 2026-08-23. Second pass: 2026-08-23 (after phase 5).
+Created: 2026-08-23. Second pass: 2026-08-23 (after phase 5). Third pass: 2026-08-23 (after phase 6).
 Japanese version: [reproduction-gaps.ja.md](reproduction-gaps.ja.md).
 
 ## What this is
@@ -102,6 +102,32 @@ reason, `failed_command_index` and `applied: 0` — nothing is written:
 | parametric symbol beyond its pin limit | 400 `unknown symbol_id: … (pin count out of range)` |
 | raw colour code on a note | 400 `unknown text color token: … (expected one of default, accent, warning, success, muted)` |
 | block with a duplicate pin number | 400 `duplicate block pin number: 1` |
+
+---
+
+## Third pass — after phase 6 (2026-08-23)
+
+Phase 6 closed the three readability findings of the second pass (G19 tag anchor, G20
+annotation text height, G21 changeover contacts). The reproduction script was re-run
+through the same Link API path, with the sheet's annotation text height set to **1.4 mm**
+— the size the reference drawing uses — and with three label anchors moved, because a tag
+body now grows to the *left* of its anchor where it used to grow to the right.
+
+**260 commands** produce the same sheet. Measured on it:
+
+| Measure | 2nd pass | 3rd pass |
+|---|---|---|
+| Overlapping labels on sheet 1 (`tidy-metrics`) | — | **0** (12 for the same drawing at the default 2.0 mm) |
+| ERC + electrical verification | 3 | **2** (the false `erc.coil_without_contact` on the relay is gone) |
+| Wire-list rows with a part number | 111 / 111 | 111 / 111 |
+| Book pages | 17 | 17 |
+
+The two remaining diagnostics are both about the same relay and both genuine
+(`elec.no_current_attr` info, `elec.unreachable_load` warning). The `right` tags of the
+terminal blocks, the controller and the right-hand connector column now stand clear of
+their own conductors, and at 1.4 mm a wire note clears the tag of the row below by
+0.1 mm on the 5 mm pin pitch — crowded on purpose, exactly as on the reference sheet.
+One new overlap was found in the process and is recorded as G22.
 
 ---
 
@@ -584,6 +610,17 @@ report directly usable for wiring.
 
 ### G19 — A directional net tag always grows to the right of its anchor · quality
 
+> **✅ Resolved 2026-08-23 (phase 6).** The anchor is now the **root of the point**, and
+> the flag body grows away from the point: a `right` tag puts its body to the left of the
+> label position with the point sticking out to the right, and a `left` tag is its exact
+> mirror image. Both directions keep the same outline size, and the cross-sheet reference
+> is pushed out on the **body** side (a `right` tag prints it to the left, right-aligned).
+> Since a net label must sit on a wire vertex, no flag can land on its own conductor or on
+> the wire note any more. SVG, canvas and the tidy metrics share one formula.
+> **Compatibility:** this moves every existing tagged label by up to the width of its flag.
+> That break is accepted because the tag glyph shipped in phase 5 and no production drawing
+> uses it yet; the reproduction script needed two label anchors moved for the new direction.
+
 **Found on the second pass (2026-08-23).**
 
 **Current behaviour (verified).** Both tag directions lay the flag body on the **+x**
@@ -607,6 +644,18 @@ this is one change in `net_tag.rs` plus the canvas twin.
 
 ### G20 — Annotation size and placement are not settable · quality
 
+> **✅ Resolved for the text height 2026-08-23 (phase 6).** `Sheet.annotation_text_mm`
+> (`format_version` 7, 1.0–3.5 mm, unset = the previous 2.0 mm) sets the size of the
+> **wire notes, the wire numbers and the net tags** on that sheet, because the size of the
+> annotation layer is a property of the drawing standard rather than of any one wire. The
+> distance from the conductor and the tag's padding and point scale with the same factor,
+> so the whole annotation layer shrinks together. It is set with the `set_sheet_annotation_text`
+> command (out-of-range values are refused with a reason) and edited in the properties
+> palette when nothing is selected. Measured on the reproduction: at 1.4 mm the sheet has
+> **0 label overlaps**, against 12 for the same drawing at the default 2.0 mm.
+> **Still open:** leader lines are still not a thing, and the reference / type / function
+> labels still print at a fixed 2.5 mm — the setting deliberately does not cover them.
+
 **Found on the second pass (2026-08-23).**
 
 **Current behaviour (verified).** The automatic wire note is a fixed 2.0 mm high, on a
@@ -627,6 +676,15 @@ size is what pushed the reproduction's left-hand column past the title-block ban
 
 ### G21 — The changeover contact is invisible to the relay cross-reference · quality
 
+> **✅ Resolved 2026-08-23 (phase 6).** `relay_contact_co` now has a relay role, so a relay
+> built from changeover contacts is a proper device: the false `erc.coil_without_contact`
+> is gone, the contact map is drawn under the coil, and the contact count is checked. A
+> changeover pole carries **three** terminals — common = 1, break = 2, make = 4 (IEC 60947-5-1)
+> — so its row reads `11-12-14` rather than a pair. A contact configuration may now say
+> `2CO`, and **one changeover pole can serve as a make or as a break contact**: the check
+> lends a spare changeover pole to a plain contact that has run out of dedicated poles, but
+> never the other way round (a drawn changeover symbol needs a changeover pole).
+
 **Found on the second pass (2026-08-23).**
 
 **Current behaviour (verified).** `relay_xref::relay_role()` recognises `relay_coil`,
@@ -641,13 +699,34 @@ against a contact configuration (one changeover pole is both an NO and an NC pol
 
 ---
 
+### G22 — The coil location on a contact collides with the wire note above it · minor
+
+**Found on the third pass (2026-08-23).**
+
+**Current behaviour (verified).** The coil location (`(/1.A3)`) is printed to the right of
+a contact symbol at the symbol's mid height. The wire note of the pin **above** that
+midpoint is printed just under its conductor, at the same height. On a changeover contact,
+whose two right-hand pins straddle the mid height by one grid pitch, the two annotations
+land on each other whenever both pins run horizontally.
+
+**Consequence, measured.** One spot on the reproduction sheet (the relay's changeover
+contact). It was worse before phase 6 — the 2.0 mm note covered the location text
+completely — and the smaller note only moves it off by a fraction.
+
+**Proposed.** Give the coil location the same "opposite side" rule the wire note already
+follows (print it above the outline, or offset it by half a row), or let it move to the
+first free side. This is one placement rule in `relay_xref::coil_location_at` plus the
+canvas twin.
+
+---
+
 ## Summary by impact
 
 | Impact | Gaps |
 |---|---|
 | **essential** | *(all closed in phase 5)* ✅ G1 named pins on multi-pin blocks · ✅ G2 wire annotation on the sheet · ✅ G3 directional net-label flags · ✅ G4 text styling, anchoring and a third symbol text field |
-| **quality** | G5 jumper bars on the schematic · G6 multi-level terminal blocks · G7 physical relay blocks · G8 pin-group brackets · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · G10 graphics-only entity · G11 enclosure boundary · 🔶 G12 pictorial symbols *(user library shipped; none bundled)* · G13 device-level cross-sheet reference · G19 net tag anchor side · G20 annotation size setting · G21 changeover contact cross-reference |
-| **minor** | G14 mating connector pairs · G15 sheet size command · G16 project meta command · ✅ G17 silent failures · G18 From-To list through net labels |
+| **quality** | G5 jumper bars on the schematic · G6 multi-level terminal blocks · G7 physical relay blocks · G8 pin-group brackets · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · G10 graphics-only entity · G11 enclosure boundary · 🔶 G12 pictorial symbols *(user library shipped; none bundled)* · G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height *(leader placement and the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
+| **minor** | G14 mating connector pairs · G15 sheet size command · G16 project meta command · ✅ G17 silent failures · G18 From-To list through net labels · G22 coil location vs wire note |
 
 ## Reading of the result
 
@@ -668,7 +747,11 @@ replaces — **parity reached**. The reproduction script shrank from 313 command
 while gaining ~110 automatic annotations, because roughly 210 hand-placed text entities
 were replaced by data on the wires and the symbols.
 
-What is left is legibility rather than content: the annotation is all present but
-crowded wherever pins sit on the 5 mm pitch (G20), and `right`-facing tags land on
-their own conductor (G19). Both are small, well-understood fixes. Beyond that the
-remaining ledger is polish toward the target-quality standard.
+**Third pass (after phase 6): legibility closed too.** The three findings of the second
+pass were small and well understood, and they behaved that way: with the tag anchored at
+the root of its point and the annotation text height set to the reference drawing's
+1.4 mm, the same sheet measures **zero overlapping labels** where the default size gives
+twelve, and the relay's false ERC warning is gone. The sheet now carries the same
+information as the drawing it replaces **and reads like it**. What is left in the ledger
+is no longer parity or legibility but the target-quality standard: physical device
+blocks, pin groups, filled shapes, pictorial symbols and a wire-part legend.

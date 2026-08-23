@@ -1,6 +1,7 @@
 # MadakeCAD 機能インベントリ
 
-作成: 2026-08-21(フェーズ0〜3完了時点)。更新: 2026-08-23(**フェーズ5 完了**: 参考図面の再現パリティ — ブロックシンボル+配線注記+ネットラベルのタグ形状+注記の装飾+電線品番の引き当て)。その前の更新は M4フェーズ4 完了(= M4完了: 図枠テンプレート+シンボルエディタ+2D盤レイアウト)。全機能の棚卸しと、未実装バックログの一覧。
+作成: 2026-08-21(フェーズ0〜3完了時点)。更新: 2026-08-23(**フェーズ6 完了**: 可読性 —
+ネットタグの基準点・シートの注記文字高・c接点のリレー認識)。その前の更新は **フェーズ5 完了**(参考図面の再現パリティ — ブロックシンボル+配線注記+ネットラベルのタグ形状+注記の装飾+電線品番の引き当て)。その前の更新は M4フェーズ4 完了(= M4完了: 図枠テンプレート+シンボルエディタ+2D盤レイアウト)。全機能の棚卸しと、未実装バックログの一覧。
 specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は`docs/superpowers/plans/`の各プラン。
 
 ## 1. コア・アーキテクチャ(madake-core)
@@ -37,7 +38,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 検索バー+結果パネル | ✅ | ⌘Fの浮きバー(フィルタチップ=参照記号/型番/ネット/テキスト・件数)+下部ドックの結果パネル(参照/種別/所在/補足)。Enter=次へ/Shift+Enter=前へ(端で回り込み)/Escで閉じる |
 | デバイスナビゲータ(左3タブ目) | ✅ | 参照記号→機能(コイル/接点(端子対)/端子/本体)のツリー+所在。行クリックでreveal、右クリックでジャンプ/削除(`delete_entities`経由なので⌘Zで戻る)。未配置機能のドラッグ配置はフェーズ3 |
 | 参照サーフィン(Surfer) | ✅ | キャンバスでAlt(Option)+クリック→所在一覧ポップアップ(シンボル=同一デバイスの全機能/ネットラベル=同名ラベル/ワイヤ=同一線番)。↑↓で巡回・Enterで確定・Escで閉じる |
-| プロパティパネル | ✅ | シンボルの参照記号・型番・機能ラベル・ピン表(ブロック)、ワイヤの線番(ネット単位)・線色/線径/長さ/品番(自動引き当てはプレースホルダ表示)、注記の基準位置/色トークン/太字、ハーネスの名前・備考(含む電線数)、ネットラベルのタグ形状と相手先リンク(クリックでシート切替+ズーム) |
+| プロパティパネル | ✅ | 何も選択していないときはシートの設定(注記文字高 1.0〜3.5mm=配線注記・線番・ネットタグの大きさ)、シンボルの参照記号・型番・機能ラベル・ピン表(ブロック)、ワイヤの線番(ネット単位)・線色/線径/長さ/品番(自動引き当てはプレースホルダ表示)、注記の基準位置/色トークン/太字、ハーネスの名前・備考(含む電線数)、ネットラベルのタグ形状と相手先リンク(クリックでシート切替+ズーム) |
 | reveal(ジャンプ)の一本化 | ✅ | 検証パネル・検索・デバイスナビゲータ・Surferの4経路が`composables/reveal.ts`(シート切替+選択+ズーム) |
 | プロジェクトマネージャ(左) | ✅ | ツリー+詳細。エージェントタブと切替 |
 | 図面タブ | ✅ | シート切替・追加(add_sheet) |
@@ -74,7 +75,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 機能 | 状態 | 備考 |
 |---|---|---|
 | ネットリスト抽出 | ✅ | 座標一致+Junction+同名NetLabel統合。端子台の同番号ピン内部短絡。決定的なネット名(ラベル名 or N001〜) |
-| ERC | ✅ | 未接続ピン / 空参照 / 参照記号重複(リレー除外) / 宙ぶらりんワイヤ(ジャンクション忘れ検出) / ネットラベル競合 / 接点構成の超過`contact_overflow`(Error) / 親コイル無しの接点`orphan_contact`(Error) / 接点無しコイル`coil_without_contact`(Warning) / 読めない接点構成`invalid_contact_config`(Warning) |
+| ERC | ✅ | 未接続ピン / 空参照 / 参照記号重複(リレー除外) / 宙ぶらりんワイヤ(ジャンクション忘れ検出) / ネットラベル競合 / 接点構成の超過`contact_overflow`(Error) / 親コイル無しの接点`orphan_contact`(Error) / 接点無しコイル`coil_without_contact`(Warning) / 読めない接点構成`invalid_contact_config`(Warning)。接点はa/b/c接点の3種を数え、**c接点1極はa接点にもb接点にも充当できる**(`2CO`の部品にa接点1+b接点1を描いても超過にならない) |
 | 電気検証 | ✅ | 電源到達性 / 線径許容電流(sq表) / 電圧降下(電源電圧の3%) / ヒューズ定格。**ngspiceのDC動作点解析がバックエンド**、未導入時はグラフ近似+Info明示 |
 | SPICEネットリスト生成 | ✅ | 接続点ノード・ワイヤ抵抗(ρL/A、途中接続で分割按分)・導通橋・負荷等価抵抗・ラベル橋 |
 | ngspiceランナー | ✅ | OS非依存(env→PATH→OS既定パス探索、サブプロセス実行) |
@@ -107,7 +108,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール35種: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / get_tidy_metrics / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / list_templates / apply_template / list_macros / save_macro / apply_macro / duplicate_symbol / save_user_symbol / delete_user_symbol / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo。**検索・デバイスツリーはMCP未露出**(IPC+Link APIのみ。AIはget_projectで足りるため意図的) |
+| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール35種: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・set_sheet_annotation_text・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / get_tidy_metrics / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / list_templates / apply_template / list_macros / save_macro / apply_macro / duplicate_symbol / save_user_symbol / delete_user_symbol / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo。**検索・デバイスツリーはMCP未露出**(IPC+Link APIのみ。AIはget_projectで足りるため意図的) |
 | Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols(+/user・/user/save・/user/delete・/duplicate) / frame-templates / panel/unplaced / netlist / verify / tidy-metrics / search / devices / simulate/op / commands / undo / redo / save / load / import/kicad / terminals(+/chart・/check) / templates(+/apply) / macros(+/build・/save・/apply・/apply-inline) / export/*(svg・pdf・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/*(send・cancel・conversations・undo-turn・detect・provider・api-key(PUT/DELETE)・test-connection・events) / settings / events |
 | madake CLI | ✅ | status / project / netlist / verify / sim / parts / terminals / export(svg・pdf・pdf-book+帳票6種を`--format csv\|pdf`・`--terminal`付きで) / save / open(.kicad_sch対応) / renumber / exec / undo / redo。マクロ・検索のサブコマンドは未(Link APIを`exec`/curlで直接叩ける) |
 | AIチャット(A1) | ✅ | 左ドック+浮きカード、Claude Code CLIバックエンド(Pro/Max OAuth再利用)、ツールチップ表示、ターン単位undo、編集オーバーレイ(シアンパルス)、会話履歴のプロジェクト保存 |
@@ -139,7 +140,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 回路トリム | ⬜ | リボンにボタンのみ(todo) |
 | コイル⇔接点クロスリファレンス | ✅ | `relay_xref.rs`。同一参照記号のコイル+接点群=1デバイス。接点はシート番号→ゾーン→idの読み順に並び、その連番が端子対(IEC 60947-1。コイル=A1-A2)。コイル外形下端+2.5mmに接点マップ(端子対\|所在。`contact_config`が読めるとき未使用は「—」)、接点の外形右端+1mmにコイル所在。SVGとキャンバスは`contact_map_layout`/`contactMapLayout`の同一数式 |
 | プロジェクト内検索 | ✅ | `search.rs`。対象5種=参照記号・型番(value+attrs)・ネット名・線番・テキスト。部分一致・大文字小文字無視・空クエリは0件。並びはシート番号→ゾーン→entity id→種別で決定的。シンボルのヒットにはデバイス内の機能(コイル/接点13-14…)が付く |
-| デバイスツリー(ナビゲータのデータ) | ✅ | `search.rs`。参照記号ごとに機能を列挙(リレー=コイル+接点(端子対は接点マップと同じ連番)、端子台=端子群1行、その他=本体) |
+| デバイスツリー(ナビゲータのデータ) | ✅ | `search.rs`。参照記号ごとに機能を列挙(リレー=コイル+接点(端子対は接点マップと同じ連番。c接点は共通・b側・a側の3端子「11-12-14」)、端子台=端子群1行、その他=本体) |
 | シート間クロスリファレンス | ✅ | `extract_netlist_project`が同名ラベルでシート横断統合。ラベル脇に「/シート.ゾーン」(キャンバス/SVG/PDF)、プロパティパネルの相手先リンク、ERC(`verify_project`)・帳票も統合ネットで評価 |
 | PLC I/O(割付表・図面生成・レポート) | ✅ | `plc.rs`。モジュール定義=部品DBの`plc_module`(点数・DI/DO・アドレス接頭辞・体系)。アドレス採番は三菱=8進/Siemens=バイト.ビット/AB=ワード/ビット(開始点をずらせる)。割付表=`Project.plc_assignments`(**format_version 2**。旧ファイルは空の表で開く)、編集は`set_plc_assignments`1回。CSVは往復用3列と読み取り専用レポート6列の2種。図面生成=`RestoreSheet`+必要なら`set_plc_assignments`を`execute_batch`で**undo一発**(縦母線`P24`+1点=1ラング、生成ページはERC指摘ゼロ)。接続先・線番は図面から読むだけ(全シート合算)。露出=IPC 6本 / Link API 4本 / MCPツール3種 / CLIの`plc-io`帳票 / 割付表エディタ+生成設定ダイアログ |
 | PLC I/O(横母線・モジュール同居・ページ分割) | ⬜ | 生成設定のenumだけ用意し「未実装」エラーを返す。生成設定のプロジェクト保存も未(セッション限り) |
@@ -165,8 +166,10 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 (再現検証で必須と判定されたG1〜G4+基盤のG9/G17を解消。判定は`specs/reproduction-gaps.md`)。 M4から先送りした項目(フェーズ未設定): ナビゲータからの
 予約接点配置 / `A`以外のマクロバリアント追加UI / PLCの横母線ラダー・モジュール同居・ページ分割 /
 ケーブル一覧(Cableエンティティ待ち) / 部品DB連動BOM / 盤内配線図・銘板・寸法線・整列/等間隔 /
-グラフィカルな図枠エディタ。フェーズ5から残ったのは`specs/reproduction-gaps.md`の品質向上・軽微の各項目
-(特にG19 タグの基準点・G20 注記の文字高さ設定・G21 c接点のクロスリファレンスは小さく効く)。
+グラフィカルな図枠エディタ。**フェーズ6(可読性ギャップ)も2026-08-23に完了**: G19 タグの基準点・G20 注記文字高の
+シート設定・G21 c接点のクロスリファレンスを解消し、再現図面のシート1は文字の重なり0件・
+ERC 2件(どちらも実在の指摘)になった。残るのは`specs/reproduction-gaps.md`の品質向上・
+軽微の各項目(実機としての機器ブロック・ピングループ・塗り分け・絵記号・電線品番の凡例など)。
 
 本節の旧A〜D方向案は、ビジョン明確化(2026-08-21)によりマイルストーンM2〜M6へ再編された。
 計画の正は[要件定義書](requirements.md) §2 と [機能仕様集](specs/README.md)(競合比較は[ギャップ分析](specs/gap-analysis.ja.md))。
