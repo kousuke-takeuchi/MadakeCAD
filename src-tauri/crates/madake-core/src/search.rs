@@ -182,6 +182,7 @@ pub fn search_project(project: &Project, query: &str, kinds: &[SearchKind]) -> V
                     }
                 }
                 Entity::Junction(_)
+                | Entity::Shape(_)
                 | Entity::Harness(_)
                 | Entity::PanelOutline(_)
                 | Entity::DinRail(_)

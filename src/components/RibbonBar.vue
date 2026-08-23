@@ -1,11 +1,12 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  Activity, AlignJustify, Cable, Columns3, Copy, Cpu, FileClock, FileDown, FileSpreadsheet, FileText,
+  Activity, AlignJustify, Cable, Circle, Columns3, Copy, Cpu, FileClock, FileDown, FileSpreadsheet,
+  FileText,
   FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid, LayoutPanelTop, LayoutTemplate, ListOrdered,
-  ListChecks,
+  ListChecks, Minus,
   Move, MoveRight, Network, Package, Pencil, Route, Rows3, Ruler, Scissors, Shapes, ShieldCheck,
-  SquareDashed,
+  Spline, Square, SquareDashed,
   Table2, Tag, Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
@@ -18,6 +19,7 @@ import {
   type PanelToolId,
 } from "../canvas/panelTools";
 import { footprints } from "../canvas/panel";
+import { SHAPE_TOOLS, type ShapeToolId } from "../canvas/shapes";
 import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
 import type { ReportFormat, ReportKind } from "../ipc";
 import { useDocumentStore } from "../stores/document";
@@ -70,7 +72,7 @@ const onSchematicSheet = computed(() => schematicToolsAllowed(useDocumentStore()
 // 表示タブ: 表示クラストグル (レイヤ、spec §4)。3個ずつの縦列に分ける
 const viewIcons: Record<ViewClass, LucideIcon> = {
   wires: Route, symbols: Cpu, refs: Tag, net_labels: Hash, wire_numbers: ListOrdered,
-  wire_notes: Ruler, harness: SquareDashed, panel: LayoutPanelTop, texts: Type,
+  wire_notes: Ruler, harness: SquareDashed, shapes: Shapes, panel: LayoutPanelTop, texts: Type,
   frame: Frame, grid: Grid3x3,
 };
 const viewClassColumns = Array.from(
@@ -126,6 +128,19 @@ function openSymbolPicker() {
     return;
   }
   ui.symbolPickerOpen = true;
+}
+
+/**
+ * 図形の作図ツールに切り替える (リボン「図形」グループ、G10)。
+ * 筐体の囲み・強調枠はこれで描く (ハーネス境界は電線をまとめる用途に限る = G11)。
+ */
+function startShape(tool: ShapeToolId) {
+  if (!onSchematicSheet.value) {
+    ui.log(t("panel.schematicToolLog"));
+    return;
+  }
+  controller.setTool(tool);
+  ui.log(t(`shapes.startLog.${SHAPE_TOOLS[tool]}`));
 }
 
 /** ハーネス境界の作図ツールに切り替える (リボン「配線」グループ)。矩形ドラッグで囲みを作る。 */
@@ -641,6 +656,7 @@ const groups = computed<RibbonGroup[]>(() => [
         action: () => startHarness(),
         isActive: () => controller.tool === "harness",
         isDisabled: schematicOnly,
+        title: t("harness.ribbonHint"),
       },
     ]],
   },
@@ -689,6 +705,42 @@ const groups = computed<RibbonGroup[]>(() => [
         { label: t("revisions.ribbonButton"), icon: FileClock, action: () => openRevisions() },
       ],
     ],
+  },
+  {
+    name: t("shapes.ribbonGroup"),
+    big: {
+      label: t("shapes.tool.rect"),
+      icon: Square,
+      color: "var(--icon-edit)",
+      action: () => startShape("shape_rect"),
+      isActive: () => controller.tool === "shape_rect",
+      isDisabled: schematicOnly,
+      title: t("shapes.ribbonHint"),
+    },
+    small: [[
+      {
+        label: t("shapes.tool.line"),
+        icon: Minus,
+        action: () => startShape("shape_line"),
+        isActive: () => controller.tool === "shape_line",
+        isDisabled: schematicOnly,
+      },
+      {
+        label: t("shapes.tool.circle"),
+        icon: Circle,
+        action: () => startShape("shape_circle"),
+        isActive: () => controller.tool === "shape_circle",
+        isDisabled: schematicOnly,
+      },
+      {
+        label: t("shapes.tool.polyline"),
+        icon: Spline,
+        action: () => startShape("shape_polyline"),
+        isActive: () => controller.tool === "shape_polyline",
+        isDisabled: schematicOnly,
+        title: t("shapes.polylineHint"),
+      },
+    ]],
   },
   {
     name: "検証/レポート",

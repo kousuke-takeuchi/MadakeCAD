@@ -23,8 +23,8 @@
 
 ### Task 1: G10 図形エンティティ+G11 筐体囲みの指針変更
 
-- [ ] Step 1 (red): Shape 4種のCRUD+undo/translate/描画(SVG+キャンバス、色トークン・破線・塗り)/netlist・ERC・BOM対象外/表示クラス/format_version互換
-- [ ] Step 2 (green): 実装+リボン作図ツール(矩形/線/円/折れ線)+プロパティ(色・線幅・破線・塗り)。ハーネス流用の指針をdocs/台帳へ。実機確認+コミット
+- [x] Step 1 (red): Shape 4種のCRUD+undo/translate/描画(SVG+キャンバス、色トークン・破線・塗り)/netlist・ERC・BOM対象外/表示クラス/format_version互換
+- [x] Step 2 (green): 実装+リボン作図ツール(矩形/線/円/折れ線)+プロパティ(色・線幅・破線・塗り)。ハーネス流用の指針をdocs/台帳へ。実機確認+コミット
 
 ### Task 2: G5 ジャンパバー+G6 多段端子台
 

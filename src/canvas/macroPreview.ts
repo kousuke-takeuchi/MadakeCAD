@@ -96,6 +96,7 @@ export function placeMacroEntities(entities: Entity[], at: Point, rotation: numb
         return { ...e, at: map(e.at), rotation: (e.rotation + rotation) % 360 };
       case "wire":
       case "harness":
+      case "shape":
         return { ...e, points: e.points.map(map) };
       case "net_label":
       case "text":

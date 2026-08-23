@@ -23,6 +23,7 @@ pub mod relay_xref;
 pub mod report_sheet;
 pub mod reports;
 pub mod search;
+pub mod shape;
 pub mod sim;
 pub mod spice;
 pub mod svg;

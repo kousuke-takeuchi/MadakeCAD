@@ -217,11 +217,13 @@
   },
   "harness": {
     "ribbonButton": "Harness",
+    "ribbonHint": "Encloses a group of wires that are made and bought as one bundle; the harness name fills the harness column of the wire list. To outline an enclosure or a case, use a graphics rectangle instead - it leaves the reports alone.",
     "kindLabel": "Harness boundary",
     "startLog": "Harness: drag a rectangle around the wires to enclose (Esc to cancel)",
     "noSheetLog": "Harness: no sheet is open",
     "createdLog": "Harness: created {name} enclosing {count} wire(s) (undo with Cmd+Z)",
     "kindRow": "Type",
+    "kindHint": "A harness boundary groups wires. An enclosure or a highlight box is drawn with a graphics rectangle, which never reaches the reports.",
     "nameRow": "Name",
     "nameHint": "Harness name (W1, W2 ...). It appears in the harness column of the wire list.",
     "wireCountRow": "Wires",
@@ -930,11 +932,13 @@
     "wireNumbers": "Wire numbers",
     "wireNotes": "Wire notes",
     "harness": "Harness",
+    "shapes": "Graphics",
     "panel": "Panel layout",
     "texts": "Notes",
     "frame": "Drawing frame",
     "grid": "Grid",
-    "wireNotesHint": "Gauge, colour and cut length printed along every wire. Always exported to SVG/PDF; this toggle only hides it on screen."
+    "wireNotesHint": "Gauge, colour and cut length printed along every wire. Always exported to SVG/PDF; this toggle only hides it on screen.",
+    "shapesHint": "Rectangles, lines, circles and polylines drawn as pure graphics. They carry no electrical meaning."
   },
   "annotationText": {
     "section": "Sheet annotation",
@@ -1069,5 +1073,47 @@
     "autoHint": "The part number looked up from the wire-part table by colour and gauge. A wire with an empty part number is listed with this one.",
     "autoNone": "Not in the table",
     "manualHint": "A part number written here wins over the wire-part table. Leave it empty to take the number from the table."
+  },
+  "shapes": {
+    "ribbonGroup": "Graphics",
+    "ribbonHint": "Draw an enclosure, a highlight box or a note frame. Graphics carry no electrical meaning, so they never reach the netlist, the checks or any report.",
+    "kindLabel": "Shape",
+    "kindRow": "Type",
+    "kind": {
+      "rect": "Rectangle",
+      "line": "Line",
+      "circle": "Circle",
+      "polyline": "Polyline"
+    },
+    "tool": {
+      "rect": "Rectangle",
+      "line": "Line",
+      "circle": "Circle",
+      "polyline": "Polyline"
+    },
+    "startLog": {
+      "rect": "Rectangle: drag to draw (Esc to cancel)",
+      "line": "Line: drag from one end to the other (Esc to cancel)",
+      "circle": "Circle: drag from the centre outwards (Esc to cancel)",
+      "polyline": "Polyline: click each corner, double-click or Enter to finish (Esc to cancel)"
+    },
+    "added": {
+      "rect": "Graphics: added a rectangle (undo with Cmd+Z)",
+      "line": "Graphics: added a line (undo with Cmd+Z)",
+      "circle": "Graphics: added a circle (undo with Cmd+Z)",
+      "polyline": "Graphics: added a polyline (undo with Cmd+Z)"
+    },
+    "polylineHint": "Click each corner in turn, then double-click or press Enter to finish.",
+    "strokeRow": "Line colour",
+    "strokeHint": "Pick the colour from a fixed set of names, the same ones the notes use. Screen and paper each get a colour that reads well there, so raw colour codes are not accepted.",
+    "widthRow": "Line width",
+    "fillRow": "Fill",
+    "fillNone": "None",
+    "fillHint": "Shades the inside of the shape. The fill is kept light so the wires and symbols underneath stay readable.",
+    "dashedRow": "Dashed",
+    "styledLog": "Graphics: restyled the {kind} (undo with Cmd+Z)",
+    "prop": {
+      "hint": "A shape is drawing only: it never appears in the netlist, the checks, the parts list or the wire list. Draw enclosures with a shape and keep harness boundaries for grouping wires."
+    }
   }
 }

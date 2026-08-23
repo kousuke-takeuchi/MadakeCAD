@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 
 use crate::frame_template::{BindContext, FrameTemplate, Weight};
 use crate::geometry::Point;
-use crate::model::{Entity, Revision, Sheet};
+use crate::model::{Entity, Revision, ShapeKind, Sheet};
 use crate::netlist::transform_local;
 use crate::symbol::{Primitive, SymbolDef};
 
@@ -566,6 +566,80 @@ fn render_wire_notes(out: &mut String, sheet: &Sheet) {
     }
 }
 
+/// 図形 (G10) を描く。矩形・線・円・折れ線を、指定された色トークンの印刷色・線幅・
+/// 破線・塗りで。配線・シンボルより先に描いて**背面**へ置くので、塗りつぶした強調枠が
+/// その上の回路を隠すことはない (塗りは下が透ける濃さ = [`crate::shape::SHAPE_FILL_OPACITY`])。
+///
+/// 電気的な意味は一切持たない要素なので、ここは純粋に「言われたとおりに描く」だけ。
+fn render_shapes(out: &mut String, sheet: &Sheet) {
+    for shape in crate::shape::shapes(sheet) {
+        if crate::shape::validate(shape).is_err() {
+            // 壊れた図形 (頂点不足など) は描かない。図面の他の部分は今までどおり出す
+            continue;
+        }
+        let stroke = crate::shape::stroke_print_color(shape);
+        let width = n(shape.stroke_width_mm);
+        let fill = shape_fill_attrs(shape);
+        let dash = if shape.dashed {
+            format!(
+                " stroke-dasharray=\"{} {}\"",
+                n(crate::shape::SHAPE_DASH.0),
+                n(crate::shape::SHAPE_DASH.1)
+            )
+        } else {
+            String::new()
+        };
+        match shape.shape {
+            ShapeKind::Rect => {
+                let Some((min, max)) = crate::shape::rect_corners(shape) else {
+                    continue;
+                };
+                let _ = write!(
+                    out,
+                    "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" {fill} stroke=\"{stroke}\" stroke-width=\"{width}\"{dash}/>\n",
+                    n(min.x), n(min.y), n(max.x - min.x), n(max.y - min.y)
+                );
+            }
+            ShapeKind::Line => {
+                let (a, b) = (shape.points[0], shape.points[1]);
+                let _ = write!(
+                    out,
+                    "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"{stroke}\" stroke-width=\"{width}\"{dash}/>\n",
+                    n(a.x), n(a.y), n(b.x), n(b.y)
+                );
+            }
+            ShapeKind::Circle => {
+                let Some((center, r)) = crate::shape::circle(shape) else {
+                    continue;
+                };
+                let _ = write!(
+                    out,
+                    "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" {fill} stroke=\"{stroke}\" stroke-width=\"{width}\"{dash}/>\n",
+                    n(center.x), n(center.y), n(r)
+                );
+            }
+            ShapeKind::Polyline => {
+                let _ = write!(
+                    out,
+                    "<polyline points=\"{}\" {fill} stroke=\"{stroke}\" stroke-width=\"{width}\"{dash}/>\n",
+                    polyline_points(&shape.points)
+                );
+            }
+        }
+    }
+}
+
+/// 図形の塗りのSVG属性。塗り無しは`fill="none"` (面を持たない線・折れ線もこれ)。
+fn shape_fill_attrs(shape: &crate::model::Shape) -> String {
+    match crate::shape::fill_print_color(shape) {
+        Some(hex) => format!(
+            "fill=\"{hex}\" fill-opacity=\"{}\"",
+            n(crate::shape::SHAPE_FILL_OPACITY)
+        ),
+        None => "fill=\"none\"".to_string(),
+    }
+}
+
 /// ハーネス境界 (IEC 61082-1 のグループ囲み)。破線の閉じた多角形と、その左上角の外側に
 /// 置いたハーネス名を描く。配線より先に描いて背面に置く。名前が空なら囲みだけを描く。
 fn render_harnesses(out: &mut String, sheet: &Sheet) {
@@ -826,6 +900,8 @@ fn sheet_to_svg_with_xrefs(
     frame_and_title_block(&mut out, sheet, frame, ctx);
     // 盤レイアウト (盤外形・ダクト・レール・フットプリント) は最背面
     render_panel(&mut out, sheet);
+    // 図形 (G10) は配線・シンボルの背面に置く (塗りつぶしの強調枠が回路を隠さない)
+    render_shapes(&mut out, sheet);
     // ハーネス境界は配線・シンボルの背面に置く
     render_harnesses(&mut out, sheet);
     // 注記の層 (ネットラベル・タグ・線番・配線注記) にかける倍率 (G20)
@@ -923,8 +999,10 @@ fn sheet_to_svg_with_xrefs(
                     &t.text,
                 );
             }
-            // ハーネス境界は背面のrender_harnesses、盤レイアウトはrender_panelで描き済み
-            Entity::Harness(_)
+            // 図形は背面のrender_shapes、ハーネス境界は背面のrender_harnesses、
+            // 盤レイアウトはrender_panelで描き済み
+            Entity::Shape(_)
+            | Entity::Harness(_)
             | Entity::PanelOutline(_)
             | Entity::DinRail(_)
             | Entity::Duct(_)
@@ -1571,6 +1649,131 @@ mod tests {
             !texts(&svg).iter().any(|&(x, y, _)| x == 51.0 && y == 49.0),
             "囲みの左上角にラベルは描かない: {svg}"
         );
+    }
+
+    /// テスト用の図形 (G10)。見た目は既定 (既定色・細線・塗りなし・実線)。
+    fn shape_entity(kind: crate::model::ShapeKind, points: &[(f64, f64)]) -> Entity {
+        Entity::Shape(crate::shape::new_shape(
+            kind,
+            points.iter().map(|&(x, y)| Point::new(x, y)).collect(),
+        ))
+    }
+
+    /// A rectangle shape is drawn as a plain rectangle at the two corners it was given.
+    /// 矩形の図形は、与えた2つの角の位置にそのまま矩形として描かれる。
+    #[test]
+    fn svg_draws_a_rectangle_shape() {
+        let sheet = sheet_with(vec![shape_entity(
+            crate::model::ShapeKind::Rect,
+            &[(150.0, 100.0), (50.0, 50.0)],
+        )]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let line = svg
+            .lines()
+            .find(|l| l.starts_with("<rect") && l.contains("x=\"50\"") && l.contains("y=\"50\""))
+            .unwrap_or_else(|| panic!("図形の矩形が無い: {svg}"));
+        assert!(line.contains("width=\"100\""), "{line}");
+        assert!(line.contains("height=\"50\""), "{line}");
+        assert!(line.contains("fill=\"none\""), "塗り無しは塗らない: {line}");
+        assert!(line.contains("stroke=\"#000\""), "既定色は黒: {line}");
+        assert!(line.contains("stroke-width=\"0.250\""), "{line}");
+        assert!(!line.contains("stroke-dasharray"), "既定は実線: {line}");
+    }
+
+    /// A line shape is drawn as a straight line between its two points, and a polyline shape follows every point in order.
+    /// 線の図形は2点を結ぶ直線として、折れ線の図形は与えた点を順にたどる線として描かれる。
+    #[test]
+    fn svg_draws_line_and_polyline_shapes() {
+        let sheet = sheet_with(vec![shape_entity(
+            crate::model::ShapeKind::Line,
+            &[(50.0, 60.0), (150.0, 60.0)],
+        )]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(
+            svg.lines().any(|l| l.starts_with("<line")
+                && l.contains("x1=\"50\"")
+                && l.contains("y1=\"60\"")
+                && l.contains("x2=\"150\"")
+                && l.contains("y2=\"60\"")),
+            "図形の線が無い: {svg}"
+        );
+
+        let sheet = sheet_with(vec![shape_entity(
+            crate::model::ShapeKind::Polyline,
+            &[(50.0, 50.0), (100.0, 50.0), (100.0, 90.0)],
+        )]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(
+            svg.contains("points=\"50,50 100,50 100,90\""),
+            "折れ線が順にたどられていない: {svg}"
+        );
+    }
+
+    /// A circle shape is drawn at its centre with the radius reaching the point on its edge.
+    /// 円の図形は中心の位置に、円周上の点までの距離を半径にして描かれる。
+    #[test]
+    fn svg_draws_a_circle_shape() {
+        let sheet = sheet_with(vec![shape_entity(
+            crate::model::ShapeKind::Circle,
+            &[(100.0, 50.0), (100.0, 60.0)],
+        )]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let line = svg
+            .lines()
+            .find(|l| l.starts_with("<circle") && l.contains("r=\"10\""))
+            .unwrap_or_else(|| panic!("図形の円が無い: {svg}"));
+        assert!(line.contains("cx=\"100\"") && line.contains("cy=\"50\""), "{line}");
+        assert!(line.contains("fill=\"none\""), "{line}");
+    }
+
+    /// A shape prints in the colour its token stands for, at the stroke width it was given, dashed when it is set to dashed and shaded when it has a fill.
+    /// 図形はトークンが表す色・指定した線幅で刷られ、破線に設定すれば破線に、塗りを指定すれば薄く塗られる。
+    #[test]
+    fn svg_honours_the_colour_width_dash_and_fill_of_a_shape() {
+        let mut entity = shape_entity(crate::model::ShapeKind::Rect, &[(50.0, 50.0), (150.0, 100.0)]);
+        if let Entity::Shape(s) = &mut entity {
+            s.stroke = "accent".into();
+            s.stroke_width_mm = 0.5;
+            s.dashed = true;
+            s.fill = Some("warning".into());
+        }
+        let sheet = sheet_with(vec![entity]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let line = svg
+            .lines()
+            .find(|l| l.starts_with("<rect") && l.contains("x=\"50\""))
+            .unwrap_or_else(|| panic!("図形の矩形が無い: {svg}"));
+        assert!(line.contains("stroke=\"#0000c0\""), "強調色の印刷色: {line}");
+        assert!(line.contains("stroke-width=\"0.500\""), "{line}");
+        assert!(line.contains("stroke-dasharray=\"3 2\""), "{line}");
+        assert!(line.contains("fill=\"#c00000\""), "塗りの印刷色: {line}");
+        assert!(
+            line.contains(&format!("fill-opacity=\"{}\"", n(crate::shape::SHAPE_FILL_OPACITY))),
+            "塗りは下の回路が透けて読める濃さ: {line}"
+        );
+    }
+
+    /// Shapes are drawn behind the wires, so a filled highlight box never hides the circuit on top of it.
+    /// 図形は配線より背面に描かれるので、塗りつぶした強調枠がその上の回路を隠すことはない。
+    #[test]
+    fn svg_draws_shapes_behind_the_wires() {
+        let wire = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(60.0, 60.0), Point::new(140.0, 60.0)],
+            color: "red".into(),
+            sq: 0.75,
+            length_m: None,
+            part_no: None,
+            net: None,
+        });
+        let sheet = sheet_with(vec![
+            wire,
+            shape_entity(crate::model::ShapeKind::Rect, &[(50.0, 50.0), (150.0, 100.0)]),
+        ]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let shape_at = svg.find("<rect x=\"50\"").expect("図形の矩形");
+        let wire_at = svg.find("<polyline points=\"60,60").expect("配線");
+        assert!(shape_at < wire_at, "図形が配線より後に描かれている: {svg}");
     }
 
     /// Rotated symbols are drawn with their shapes actually rotated (90 deg makes a resistor body vertical).

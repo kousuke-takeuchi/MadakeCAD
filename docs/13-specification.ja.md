@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1783仕様項目**。
+全5領域・**1841仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -63,6 +63,12 @@
 - ハーネス境界は通常のエンティティ用コマンドで追加・改名・削除でき、どの操作もundoで戻せる。 <sub>`harness_add_rename_delete_are_undoable`</sub>
 - ハーネス境界を移動すると4隅すべてが動き、undoで元の位置に正確に戻る。 <sub>`harness_move_and_undo_restores_every_corner`</sub>
 - ハーネス境界は kind="harness" としてJSONに往復変換でき、どのクライアントからも送れる。 <sub>`harness_command_json_roundtrip_uses_the_harness_kind`</sub>
+- 4種類すべての図形が通常のエンティティ用コマンドで追加・編集・削除でき、どの操作もundoで戻せる。 <sub>`shape_add_edit_delete_are_undoable_for_every_kind`</sub>
+- 図形を移動すると全ての頂点が動き、undoで元の位置に正確に戻る。 <sub>`shape_move_and_undo_restores_every_point`</sub>
+- 色トークンではなく生の色コードを入れた図形は拒否され、図面は何も変わらない。 <sub>`a_shape_with_a_raw_colour_code_is_refused`</sub>
+- 印刷できないほど細い線幅・グリッドを潰すほど太い線幅の図形は拒否される。 <sub>`a_shape_with_an_unprintable_stroke_width_is_refused`</sub>
+- 頂点の数が合っていない矩形は拒否されるので、描きかけの図形が図面へ入ることはない。 <sub>`a_shape_with_the_wrong_number_of_points_is_refused`</sub>
+- 図形は kind="shape" としてJSONに往復変換でき、どのクライアントからも送れる。 <sub>`shape_command_json_roundtrip_uses_the_shape_kind`</sub>
 - execute/undo/redoのたびにドキュメントrevisionが増加し、クライアントは古いpatchを破棄できる。 <sub>`revision_increases_monotonically`</sub>
 - 存在しないシートへのCommandはエラーになり、何も変更されない。 <sub>`unknown_sheet_is_rejected`</sub>
 - 履歴が空のときのundoはエラーではなくNoneを返す。 <sub>`undo_on_empty_history_returns_none`</sub>
@@ -131,9 +137,11 @@
 - PLC割付表が無かった頃の古いプロジェクトファイルもそのまま開ける (割付表は空になり、現行のファイル形式へ更新される)。 <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
 - 図枠テンプレートが無かった頃のプロジェクトファイルは図枠未指定で開き、従来どおり既定のJIS A3図枠で描かれる。 <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
 - 盤レイアウトが無かった頃のプロジェクトファイルは全シートが回路図シートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
+- 図形が無かった頃のプロジェクトファイルはそのままの姿で開き (シートに図形は無い)、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_without_any_shapes`</sub>
+- シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは7 (シートごとの注記文字高を追加した版) である。 <sub>`the_current_format_version_is_seven`</sub>
+- 現行のファイル形式バージョンは8 (図形エンティティを追加した版) である。 <sub>`the_current_format_version_is_eight`</sub>
 - 注記文字高が無かった頃の図面は既定の2.0mmで開くので、注記の見た目はこれまでと変わらない。 <sub>`an_old_project_file_opens_with_the_default_annotation_text_height`</sub>
 - シートに設定した注記文字高はファイルへ保存され、読み直しても残っている。 <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
 - アイテム番号が無かった頃の盤図面はバルーンの無い状態で開く。フットプリントの位置はそのままで、番号はいつでも振り直せる。 <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
@@ -192,6 +200,10 @@
 - テキスト装飾が無かった頃に書かれた注記は、従来どおりの見た目 (左揃え・黒・太字でない) で開く。 <sub>`an_old_note_opens_with_the_previous_look`</sub>
 - テキストの基準位置は snake_case ("start" / "middle" / "end") のJSONで往復する。 <sub>`the_text_anchor_is_serialized_in_snake_case`</sub>
 - 装飾を付けた注記は、基準位置・色トークン・太字の指定をJSONの往復でも保つ。 <sub>`a_styled_note_survives_a_json_round_trip`</sub>
+- 図形を動かすと全ての頂点が動くので、矩形は大きさを保ち、折れ線は折れ方を保つ。 <sub>`translate_moves_every_point_of_a_shape`</sub>
+- 図形は kind="shape" のJSONで往復し、図形の種類は snake_case で入るので、どのクライアントからも送れる。 <sub>`a_shape_is_serialized_under_the_shape_kind_tag`</sub>
+- 4種類の図形はいずれも snake_case でJSONを往復する。 <sub>`the_shape_kinds_are_serialized_in_snake_case`</sub>
+- 見た目の欄を省いて送られた図形は、既定色・細線・塗りなし・実線という素の形で開く。 <sub>`a_shape_without_look_fields_opens_plain`</sub>
 - Entity::id()は種別によらず内側エンティティのUUIDを返す。 <sub>`entity_id_is_uniform_across_kinds`</sub>
 
 ### net_tag
@@ -426,6 +438,22 @@
 - 機能の行はジャンプ先のシートとゾーンを持つ。ナビゲータと参照サーフィンはこれを使って図面を表示する。 <sub>`every_function_knows_where_to_jump`</sub>
 - フィルタ名はAPI上ではsnake_caseの文字列で、未知の名前は推測せずに拒否する。 <sub>`filter_names_parse_from_the_api`</sub>
 
+### shape
+
+- 新しい図形は既定色・細線・塗りなし・実線で始まるので、プロパティを何も触らずに引いた矩形は図枠の線と同じ見た目になる。 <sub>`a_new_shape_starts_plain`</sub>
+- 矩形は対角の2点で表し、どの向きにドラッグしても同じ矩形へ正規化される。 <sub>`a_rectangle_is_two_diagonal_corners`</sub>
+- 円は中心の点と円周上の点で表すので、半径はその2点の距離になる。 <sub>`a_circle_is_a_centre_and_a_point_on_its_edge`</sub>
+- 折れ線は描いた順に全ての点をそのまま持つ。 <sub>`a_polyline_keeps_every_point`</sub>
+- 矩形・線・円は2点ちょうどでなければ拒否され、折れ線は2点以上が必要である。 <sub>`the_number_of_points_must_match_the_shape_kind`</sub>
+- 図形の色は名前付きトークンだけで生の色コードは使えないので、紙に出せない色の図形が生まれることはない。 <sub>`a_shape_colour_must_be_a_token`</sub>
+- 線幅は、A3に印刷できる最も細い線と、2.5mmグリッドを潰さない最も太い線の間でなければならない。 <sub>`the_stroke_width_has_a_printable_range`</sub>
+- 実数でない座標は拒否されるので、壊れた図形が図面を描けなくすることはない。 <sub>`a_non_finite_coordinate_is_rejected`</sub>
+- 図形はトークンが表す色で刷られ、塗りを指定していない図形は塗られない。 <sub>`shapes_print_in_their_token_colour`</sub>
+- 図形は電気的な意味を持たない: 配線の真上に重ねて描いても、ネットリストも検証結果も変わらない。 <sub>`shapes_are_invisible_to_the_netlist_and_the_checks`</sub>
+- 図形は部品表にも電線リストにも出ず、図形の中に入った配線のハーネス列は空のままである (筐体の囲みをハーネスではなく図形で描く理由)。 <sub>`shapes_never_reach_the_parts_list_or_the_wire_list`</sub>
+- 図形は整頓メトリクスの対象外なので、注記の枠をグリッドから外して描いても図面の点数は下がらない。 <sub>`shapes_are_left_out_of_the_tidy_metrics`</sub>
+- シートの図形を数えると図形だけが返り、配線・注記・ハーネス境界は混ざらない。 <sub>`only_shapes_are_listed`</sub>
+
 ### DCシミュレーション
 
 - 不正なngspice実行ファイルでのシミュレーションは明示的なエラーになる(暗黙のフォールバックはしない)。 <sub>`missing_ngspice_is_an_explicit_error`</sub>
@@ -468,6 +496,11 @@
 - ハーネス境界は、囲んだ配線のまわりに破線の矩形 (IEC 61082-1のグループ囲み) として描かれる。 <sub>`svg_draws_a_harness_as_a_dashed_rectangle`</sub>
 - ハーネス名は囲みの左上角のすぐ外側に描かれる。 <sub>`svg_labels_the_harness_at_its_top_left_corner`</sub>
 - 名前の無いハーネスは破線の囲みだけを描き、ラベルは出さない。 <sub>`svg_omits_the_label_of_an_unnamed_harness`</sub>
+- 矩形の図形は、与えた2つの角の位置にそのまま矩形として描かれる。 <sub>`svg_draws_a_rectangle_shape`</sub>
+- 線の図形は2点を結ぶ直線として、折れ線の図形は与えた点を順にたどる線として描かれる。 <sub>`svg_draws_line_and_polyline_shapes`</sub>
+- 円の図形は中心の位置に、円周上の点までの距離を半径にして描かれる。 <sub>`svg_draws_a_circle_shape`</sub>
+- 図形はトークンが表す色・指定した線幅で刷られ、破線に設定すれば破線に、塗りを指定すれば薄く塗られる。 <sub>`svg_honours_the_colour_width_dash_and_fill_of_a_shape`</sub>
+- 図形は配線より背面に描かれるので、塗りつぶした強調枠がその上の回路を隠すことはない。 <sub>`svg_draws_shapes_behind_the_wires`</sub>
 - 回転したシンボルは形状ごと回転して描かれる(90度で抵抗の本体が縦長になる)。 <sub>`svg_renders_rotated_symbol_primitives`</sub>
 - プロジェクトの一部として書き出したシートには、各ネットラベルの脇に他シートの同名ラベルの住所「/シート.ゾーン」が出る。 <sub>`svg_draws_cross_reference_address_next_to_net_label`</sub>
 - 他のシートに相手がいないネットラベルには、クロスリファレンスの文字が出ない。 <sub>`svg_omits_cross_reference_when_there_is_no_counterpart`</sub>
@@ -1570,6 +1603,29 @@
 - 検索し直すと巡回位置は先頭より前(未選択)に戻る <sub>`Enter巡回と行クリック`</sub>
 - パネルの✕は結果パネルだけ閉じ、検索バーは開いたままにする <sub>`Enter巡回と行クリック`</sub>
 
+### shapes
+
+- 新しい図形は既定色・細線・塗りなし・実線で始まる(何も設定せずに引いた線が図枠と同じ見た目になる) <sub>`shape geometry`</sub>
+- 矩形は対角の2点で、どの向きにドラッグしても同じ矩形になる <sub>`shape geometry`</sub>
+- 円は中心と円周上の点で表すので、半径はその2点の距離になる <sub>`shape geometry`</sub>
+- 折れ線は描いた点をそのまま順に持ち、外接矩形は全ての点を含む <sub>`shape geometry`</sub>
+- 矩形・線・円は2点ちょうど、折れ線は何点でもよい(Rust側と同じ規則) <sub>`shape geometry`</sub>
+- 線幅は0.1〜2.0mmの範囲だけを受け付ける(Commandエンジンと同じ範囲) <sub>`shape geometry`</sub>
+- 図形は色トークンの画面色で描かれ、選択中は選択色が優先する <sub>`shape colours on screen`</sub>
+- 塗りは下の配線・記号が透けて読める薄さで塗り、塗り無しは塗らない <sub>`shape colours on screen`</sub>
+- 破線の刻みはハーネス境界と同じ3mm/2mm <sub>`shape colours on screen`</sub>
+- 矩形は輪郭の線で掴む(塗りの下にある配線を選べるように、面の中では掴まない) <sub>`shape hit testing`</sub>
+- 円は円周の上で掴む(中心も外側も掴まない) <sub>`shape hit testing`</sub>
+- 線と折れ線はどの区間の上でも掴める <sub>`shape hit testing`</sub>
+- 作図の確定は add_entity コマンド1本になる(undo一発で消える) <sub>`shape commands`</sub>
+- クリックしただけのつぶれた図形はコマンドを送らない(誤操作で点だけの図形が生まれない) <sub>`shape commands`</sub>
+- 見た目の編集は update_entity コマンドになり、何も変わっていなければ送らない <sub>`shape commands`</sub>
+- 範囲外の線幅は送らない(エンジンも同じ範囲で拒否する) <sub>`shape commands`</sub>
+- 図形以外のエンティティにはコマンドを作らない <sub>`shape commands`</sub>
+- シートの図形を数えると図形だけが返る(ハーネス境界は混ざらない) <sub>`shape commands`</sub>
+- 作図ツールのidは4種の図形にひとつずつ対応する <sub>`shape commands`</sub>
+- 図形は電線リストのハーネス列を汚さない(筐体をハーネスで囲まなくてよくなる理由) <sub>`shapes and the reports`</sub>
+
 ### sheets
 
 - シートを追加するときに種別を選べる。盤レイアウトを選ぶと盤シートが1枚増える。 <sub>`sheet kind (schematic / panel)`</sub>
@@ -1671,7 +1727,7 @@
 ### viewClasses
 
 - エンティティ種別を表示クラスへ対応付ける(ジャンクションは配線扱い) <sub>`entityViewClass`</sub>
-- VIEW_CLASSESは全クラスを一意に列挙する(線番・配線注記・ハーネス・盤レイアウトを加えて11クラス) <sub>`entityViewClass`</sub>
+- VIEW_CLASSESは全クラスを一意に列挙する(線番・配線注記・ハーネス・図形・盤レイアウトを加えて12クラス) <sub>`entityViewClass`</sub>
 - 表示クラスは初期状態で全て表示ONになっている(線番・配線注記・ハーネスも最初から見える) <sub>`view class visibility`</sub>
 
 ### viewport
@@ -2174,4 +2230,15 @@
 - 回路図シートでは盤のツール(盤枠・レール・ダクト)へ切り替わらない。 <sub>`tools that do not belong to the sheet`</sub>
 - 回路図シートでは未配置部品の配置も始まらない (置き場所が無い)。 <sub>`tools that do not belong to the sheet`</sub>
 - 盤シートでも選択・移動・削除はこれまでどおり使える。 <sub>`tools that do not belong to the sheet`</sub>
+
+### shapePlacement
+
+- 矩形ツールは1回のドラッグで矩形を1つ作る(undo一発で消える) <sub>`drawing shapes`</sub>
+- 線ツールと円ツールも1回のドラッグで1つ作る(円は押した点が中心) <sub>`drawing shapes`</sub>
+- クリックしただけ(ドラッグしていない)ときは何も作らない <sub>`drawing shapes`</sub>
+- 折れ線はクリックを重ねて打ち、ダブルクリックで確定する <sub>`drawing shapes`</sub>
+- 折れ線はEnterでも確定でき、点が1つだけなら何も作らずに捨てる <sub>`drawing shapes`</sub>
+- 図形ツールは盤レイアウトシートでは使えない(回路図の作図要素なので) <sub>`drawing shapes`</sub>
+- 図形は輪郭で掴む(塗りの下の配線を選びたいので、面の中では掴まない) <sub>`selecting shapes`</sub>
+- 図形を移動すると全ての頂点が動く(move_entitiesコマンド1本) <sub>`selecting shapes`</sub>
 

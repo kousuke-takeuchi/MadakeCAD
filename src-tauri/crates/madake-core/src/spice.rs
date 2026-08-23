@@ -97,6 +97,7 @@ pub fn build_deck_with(
             }
             Entity::Wire(_)
             | Entity::Text(_)
+            | Entity::Shape(_)
             | Entity::Harness(_)
             | Entity::PanelOutline(_)
             | Entity::DinRail(_)

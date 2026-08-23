@@ -87,7 +87,10 @@ export interface TextEntity {
   bold?: boolean;
 }
 
-/** ハーネス境界 (IEC 61082-1 のグループ囲み)。所属配線は幾何学的な内包で決まる。 */
+/**
+ * ハーネス境界 (IEC 61082-1 のグループ囲み)。所属配線は幾何学的な内包で決まる。
+ * **電線をまとめる境界専用**で、筐体・強調枠の囲みは`Shape`で描く (G11)。
+ */
 export interface Harness {
   id: string;
   /** 囲みの頂点 (現状は矩形の4点)。 */
@@ -96,6 +99,33 @@ export interface Harness {
   name: string;
   /** 備考 (製作指示など)。 */
   note: string;
+}
+
+/**
+ * 図形の種類 (G10)。`points`の読み方がこれで決まる:
+ * `rect`=対角の2点 / `line`=両端の2点 / `circle`=中心と円周上の1点 / `polyline`=通る点を順に。
+ */
+export type ShapeKind = "rect" | "line" | "circle" | "polyline";
+
+/**
+ * 図形 (G10) = 電気的な意味を持たない純粋な作図要素。筐体の囲み・強調枠・注記の枠に使う。
+ * ネットリスト・ERC・部品表・電線リストのどれにも出てこないので、図面に何本描いても
+ * 帳票は1行も変わらない (筐体をハーネス境界で囲まなくてよくなる = G11)。
+ */
+export interface Shape {
+  id: string;
+  /** 図形の種類。`points`の読み方がこれで決まる。 */
+  shape: ShapeKind;
+  /** 頂点 (用紙座標mm)。 */
+  points: Point[];
+  /** 線色のトークン名 (注記と同じトークン。生の色コードはコマンドが拒否する)。 */
+  stroke: TextColorToken;
+  /** 線幅 mm (0.1〜2.0)。 */
+  stroke_width_mm: number;
+  /** 塗りの色トークン。null/未指定なら塗らない。 */
+  fill?: TextColorToken | null;
+  /** 破線で描くか (既定 false = 実線)。 */
+  dashed: boolean;
 }
 
 /** 盤の外形 (筐体) と取付板。盤レイアウトシート専用 (M4 §8)。 */
@@ -181,6 +211,7 @@ export type Entity =
   | ({ kind: "net_label" } & NetLabel)
   | ({ kind: "text" } & TextEntity)
   | ({ kind: "harness" } & Harness)
+  | ({ kind: "shape" } & Shape)
   | ({ kind: "panel_outline" } & PanelOutline)
   | ({ kind: "din_rail" } & DinRail)
   | ({ kind: "duct" } & Duct)

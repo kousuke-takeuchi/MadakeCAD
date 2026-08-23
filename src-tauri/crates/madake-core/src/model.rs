@@ -26,7 +26,9 @@ pub type SheetId = Uuid;
 ///   採番 (`renumber_panel_items`) すればいつでも振り直せる
 /// - v7: シートごとの注記文字高 ([`Sheet::annotation_text_mm`]) を追加。設定の無い旧ファイルは
 ///   既定 ([`DEFAULT_ANNOTATION_TEXT_MM`] = 2.0mm) で開き、出力される図面は変わらない
-pub const FORMAT_VERSION: u32 = 7;
+/// - v8: 図形エンティティ ([`Entity::Shape`]) を追加。矩形・線・円・折れ線の純粋な作図要素で、
+///   図形を1つも持たない旧ファイルは今までどおり開き、出力される図面も変わらない
+pub const FORMAT_VERSION: u32 = 8;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -283,6 +285,8 @@ pub enum Entity {
     NetLabel(NetLabel),
     Text(TextEntity),
     Harness(Harness),
+    /// 図形 (G10)。電気的な意味を持たない作図要素 ([`crate::shape`])。
+    Shape(Shape),
     /// 盤の外形 (筐体) と取付板。盤レイアウトシート専用 (M4仕様 §8)。
     PanelOutline(PanelOutline),
     /// DINレール。盤レイアウトシート専用。
@@ -304,6 +308,7 @@ impl Entity {
             Entity::NetLabel(e) => e.id,
             Entity::Text(e) => e.id,
             Entity::Harness(e) => e.id,
+            Entity::Shape(e) => e.id,
             Entity::PanelOutline(e) => e.id,
             Entity::DinRail(e) => e.id,
             Entity::Duct(e) => e.id,
@@ -324,6 +329,11 @@ impl Entity {
             Entity::NetLabel(e) => e.at = e.at.translated(dx, dy),
             Entity::Text(e) => e.at = e.at.translated(dx, dy),
             Entity::Harness(e) => {
+                for p in &mut e.points {
+                    *p = p.translated(dx, dy);
+                }
+            }
+            Entity::Shape(e) => {
                 for p in &mut e.points {
                     *p = p.translated(dx, dy);
                 }
@@ -508,6 +518,9 @@ pub struct NetLabel {
 
 /// ハーネス境界 (IEC 61082-1 のグループ囲み)。まとめて製作・購入する電線束の範囲を
 /// 破線で囲んで名前を付ける。所属するワイヤは幾何学的な内包で決まる ([`crate::harness`])。
+///
+/// **電線をまとめる境界専用**。筐体・盤・強調枠の囲みは [`Entity::Shape`] で描く (G11):
+/// ハーネスで囲むと、中にあるだけの導線まで電線リストのハーネス列に載ってしまう。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Harness {
     pub id: EntityId,
@@ -519,6 +532,65 @@ pub struct Harness {
     /// 備考 (製作指示など)。
     #[serde(default)]
     pub note: String,
+}
+
+/// 図形の種類 (G10)。`points`の読み方がこれで決まる ([`crate::shape`])。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ShapeKind {
+    /// 矩形。`points`は**対角の2点**(どちら回りでもよい)。
+    #[default]
+    Rect,
+    /// 直線。`points`は**両端の2点**。
+    Line,
+    /// 円。`points`は**中心と円周上の1点**で、その距離が半径。
+    Circle,
+    /// 折れ線。`points`は**通る点を順に**(2点以上)。
+    Polyline,
+}
+
+/// 図形 (G10) = 電気的な意味を持たない、純粋な作図要素。
+///
+/// 筐体の囲み・強調枠・注記の枠・塗りつぶしの機器ブロックはこれで描く。
+/// **ネットリスト・ERC・部品表・From-To表・整頓メトリクスのどれにも出てこない**ので、
+/// 図面に何本描いても電線リストや検証結果は1行も変わらない (これがハーネス境界
+/// [`Harness`] を筐体の囲みに流用しないで済む理由 = G11)。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Shape {
+    pub id: EntityId,
+    /// 図形の種類。`points`の読み方がこれで決まる。
+    #[serde(default, rename = "shape")]
+    pub shape: ShapeKind,
+    /// 頂点 (用紙座標mm)。必要な数は種別ごとに決まる
+    /// ([`crate::shape::required_points`])。
+    pub points: Vec<Point>,
+    /// 線色の**トークン名** (`default` / `accent` / `warning` …
+    /// [`crate::text_style::TEXT_COLORS`])。注記と同じトークンを共有する。
+    ///
+    /// 生の色コード (`#ff0000`) は受け付けない: 画面 (暗い作図領域) と紙 (白地) で
+    /// 見やすい色が違うので、図面には**意味**だけを持たせて実際の色は描くときに選ぶ。
+    #[serde(default = "default_shape_stroke")]
+    pub stroke: String,
+    /// 線幅 mm ([`crate::shape::MIN_SHAPE_STROKE_MM`]〜[`crate::shape::MAX_SHAPE_STROKE_MM`])。
+    #[serde(default = "default_shape_stroke_width")]
+    pub stroke_width_mm: f64,
+    /// 塗りの色トークン。`None`なら塗らない。塗っても下の回路が透けて読める濃さで塗る
+    /// ([`crate::shape::SHAPE_FILL_OPACITY`])。
+    #[serde(default)]
+    pub fill: Option<String>,
+    /// 破線で描くか (既定=false = 実線)。
+    #[serde(default)]
+    pub dashed: bool,
+}
+
+fn default_shape_stroke() -> String {
+    crate::shape::DEFAULT_SHAPE_COLOR.to_string()
+}
+
+fn default_shape_stroke_width() -> f64 {
+    crate::shape::DEFAULT_SHAPE_STROKE_MM
 }
 
 /// 注記テキストの基準位置 = `at`に文字のどこを合わせるか (G4)。
@@ -810,6 +882,96 @@ mod tests {
         assert_eq!(back.anchor, TextAnchor::End);
         assert_eq!(back.color.as_deref(), Some("warning"));
         assert!(back.bold);
+    }
+
+    /// Moving a shape shifts every one of its points, so a rectangle keeps its size and a polyline keeps its bends.
+    /// 図形を動かすと全ての頂点が動くので、矩形は大きさを保ち、折れ線は折れ方を保つ。
+    #[test]
+    fn translate_moves_every_point_of_a_shape() {
+        let mut rect = Entity::Shape(Shape {
+            id: uuid::Uuid::new_v4(),
+            shape: ShapeKind::Rect,
+            points: vec![Point::new(10.0, 20.0), Point::new(50.0, 40.0)],
+            stroke: "accent".into(),
+            stroke_width_mm: 0.25,
+            fill: None,
+            dashed: true,
+        });
+        rect.translate(5.0, -2.5);
+        let Entity::Shape(s) = &rect else { panic!() };
+        assert_eq!(s.points[0], Point::new(15.0, 17.5));
+        assert_eq!(s.points[1], Point::new(55.0, 37.5));
+        assert_eq!(s.stroke, "accent", "見た目の設定は動かしても変わらない");
+
+        let mut poly = Entity::Shape(Shape {
+            id: uuid::Uuid::new_v4(),
+            shape: ShapeKind::Polyline,
+            points: vec![Point::new(0.0, 0.0), Point::new(10.0, 0.0), Point::new(10.0, 10.0)],
+            stroke: "default".into(),
+            stroke_width_mm: 0.25,
+            fill: None,
+            dashed: false,
+        });
+        poly.translate(1.0, 1.0);
+        let Entity::Shape(s) = &poly else { panic!() };
+        assert_eq!(s.points[2], Point::new(11.0, 11.0));
+    }
+
+    /// A shape travels as JSON under the kind tag "shape", with its own kind of shape in snake_case, so any client can send one.
+    /// 図形は kind="shape" のJSONで往復し、図形の種類は snake_case で入るので、どのクライアントからも送れる。
+    #[test]
+    fn a_shape_is_serialized_under_the_shape_kind_tag() {
+        let id = uuid::Uuid::new_v4();
+        let entity = Entity::Shape(Shape {
+            id,
+            shape: ShapeKind::Circle,
+            points: vec![Point::new(0.0, 0.0), Point::new(5.0, 0.0)],
+            stroke: "warning".into(),
+            stroke_width_mm: 0.5,
+            fill: Some("muted".into()),
+            dashed: true,
+        });
+        let json = serde_json::to_string(&entity).unwrap();
+        assert!(json.contains("\"kind\":\"shape\""), "{json}");
+        assert!(json.contains("\"shape\":\"circle\""), "{json}");
+        let Entity::Shape(back) = serde_json::from_str::<Entity>(&json).unwrap() else {
+            panic!("図形であること")
+        };
+        assert_eq!(back.id, id);
+        assert_eq!(back.shape, ShapeKind::Circle);
+        assert_eq!(back.fill.as_deref(), Some("muted"));
+        assert!(back.dashed);
+        assert_eq!(back.stroke_width_mm, 0.5);
+    }
+
+    /// The four kinds of shape all travel in snake_case.
+    /// 4種類の図形はいずれも snake_case でJSONを往復する。
+    #[test]
+    fn the_shape_kinds_are_serialized_in_snake_case() {
+        for (kind, tag) in [
+            (ShapeKind::Rect, "\"rect\""),
+            (ShapeKind::Line, "\"line\""),
+            (ShapeKind::Circle, "\"circle\""),
+            (ShapeKind::Polyline, "\"polyline\""),
+        ] {
+            assert_eq!(serde_json::to_string(&kind).unwrap(), tag);
+            assert_eq!(serde_json::from_str::<ShapeKind>(tag).unwrap(), kind);
+        }
+    }
+
+    /// A shape sent without the optional look fields opens plain: default colour, hairline stroke, no fill, solid line.
+    /// 見た目の欄を省いて送られた図形は、既定色・細線・塗りなし・実線という素の形で開く。
+    #[test]
+    fn a_shape_without_look_fields_opens_plain() {
+        let json = r#"{"kind":"shape","id":"44444444-4444-4444-8444-444444444444",
+            "shape":"rect","points":[{"x":0.0,"y":0.0},{"x":10.0,"y":10.0}]}"#;
+        let Entity::Shape(s) = serde_json::from_str::<Entity>(json).expect("図形が読める") else {
+            panic!("図形であること")
+        };
+        assert_eq!(s.stroke, crate::shape::DEFAULT_SHAPE_COLOR);
+        assert_eq!(s.stroke_width_mm, crate::shape::DEFAULT_SHAPE_STROKE_MM);
+        assert_eq!(s.fill, None);
+        assert!(!s.dashed);
     }
 
     /// Entity::id() returns the inner entity's UUID regardless of the entity kind.

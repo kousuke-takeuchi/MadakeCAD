@@ -70,7 +70,7 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Jumper bars on the schematic | 🔶 | 🔶 | G5 — still reports only |
 | Multi-pin controller block with arbitrary pin names | ❌ | **✅** | G1 — 14 + 14 named pins, names inside the outline, numbers outside |
 | Pin-group brackets with rotated group labels | ❌ | ❌ | G8 |
-| Filled / shaded device blocks | ❌ | ❌ | G10 |
+| Filled / shaded device blocks | ❌ | **✅** | G10 — `shape` with a fill token |
 | Relay: coil + two changeover contacts | 🔶 | 🔶 | G7; and see G21 — changeover contacts are invisible to the relay cross-reference |
 | Net labels merging nets by name | ✅ | ✅ | |
 | Cross-sheet reference on net labels | ✅ | ✅ | renders the `/sheet.zone` address of the twin label |
@@ -81,8 +81,8 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Wire colour | ✅ | ✅ | English and Japanese colour names both resolve |
 | Wire part number from colour + gauge | ❌ | **✅** | G9 — 111/111 wire-list rows filled from an imported CSV |
 | Harness boundary (dashed enclosure) | ✅ | ✅ | |
-| Enclosure / case boundary distinct from a harness | 🔶 | 🔶 | G11 — all 111 wire-list rows still inherit the enclosure name |
-| Highlight box (coloured rectangle annotation) | ❌ | ❌ | G10 |
+| Enclosure / case boundary distinct from a harness | 🔶 | **✅** | G11 — draw it as a dashed `shape`; the harness column stays empty |
+| Highlight box (coloured rectangle annotation) | ❌ | **✅** | G10 — `shape` rectangle with a colour token |
 | Pictorial device symbols (fan, speaker, display module) | ❌ | 🔶 | G12 — M4 shipped the user symbol library and editor, so these can be authored; none are bundled |
 | Free notes | 🔶 | 🔶 | G4 gave colour, weight and anchor; rotation and multi-line are still missing |
 | Junctions | ✅ | ✅ | |
@@ -437,6 +437,17 @@ on a sheet.
 
 ### G10 — No graphics-only entity (rectangle, line, fill) · quality
 
+> **✅ Resolved 2026-08-23 (phase 6, task 1).** A `shape` entity ships: rectangle
+> (two diagonal corners), line (two ends), circle (centre plus a point on the edge)
+> and polyline (any number of points), each with a stroke colour **token**, a stroke
+> width of 0.1–2.0 mm, an optional fill and a dashed flag. It is drawn behind the
+> wires in both the canvas and the SVG/PDF export, has its own view class
+> ("Graphics", the 12th), and is **excluded by construction** from the netlist, the
+> ERC, the BOM, the From-To wire list and the tidy metrics (tests pin all five).
+> Colours reuse the note colour tokens, so raw colour codes are refused by the
+> command engine. File format 8; drawings without shapes open unchanged.
+> **Still open:** no title-block logo image (that belongs to the frame template).
+
 > **Status 2026-08-23 (phase 5): unchanged.** The entity kinds gained only the
 > panel-layout ones (outline, DIN rail, duct, footprint, legend), which are restricted
 > to panel sheets. A schematic still has no free rectangle, line or fill.
@@ -460,6 +471,17 @@ a small addition that unblocks G10, G11 and part of G4.
 
 ### G11 — Enclosure boundaries have to borrow the harness entity · quality
 
+> **✅ Resolved 2026-08-23 (phase 6, task 1) — by a change of practice, not a new
+> entity.** With the G10 `shape` entity in place, **an enclosure is drawn as a dashed
+> rectangle shape with a free text caption**, and the harness boundary goes back to
+> being what it was designed for: the group of wires that are made and bought as one
+> bundle. A shape has no bearing on wire grouping, so the harness column of the wire
+> list and the terminal chart stays empty for conductors that merely sit inside an
+> enclosure. This is written into the drawing-notation section of
+> `docs/internal/design-system.md` and into the harness tool's own help text; no code
+> change was needed on the harness side. The re-measurement of the reproduction
+> belongs to phase 6 task 6.
+
 > **Status 2026-08-23 (phase 5): unchanged.** Measured again: all 111 wire-list rows
 > report the enclosure name in the harness column.
 
@@ -471,7 +493,7 @@ Using it for an enclosure works visually, but every wire inside it is then repor
 belonging to that "harness": the terminal chart and wire list both attributed the
 enclosure name to unrelated conductors.
 
-**Proposed.** Either the generic `shape` entity from G10, or a first-class
+**Proposed (adopted: the first option).** Either the generic `shape` entity from G10, or a first-class
 `enclosure` / `location` boundary with its own semantics (which would also feed the
 "installation location" concept that panel layout and FreeCAD linking will need).
 
@@ -725,7 +747,7 @@ canvas twin.
 | Impact | Gaps |
 |---|---|
 | **essential** | *(all closed in phase 5)* ✅ G1 named pins on multi-pin blocks · ✅ G2 wire annotation on the sheet · ✅ G3 directional net-label flags · ✅ G4 text styling, anchoring and a third symbol text field |
-| **quality** | G5 jumper bars on the schematic · G6 multi-level terminal blocks · G7 physical relay blocks · G8 pin-group brackets · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · G10 graphics-only entity · G11 enclosure boundary · 🔶 G12 pictorial symbols *(user library shipped; none bundled)* · G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height *(leader placement and the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
+| **quality** | G5 jumper bars on the schematic · G6 multi-level terminal blocks · G7 physical relay blocks · G8 pin-group brackets · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; reproduction re-measured in task 6)* · 🔶 G12 pictorial symbols *(user library shipped; none bundled)* · G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height *(leader placement and the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
 | **minor** | G14 mating connector pairs · G15 sheet size command · G16 project meta command · ✅ G17 silent failures · G18 From-To list through net labels · G22 coil location vs wire note |
 
 ## Reading of the result

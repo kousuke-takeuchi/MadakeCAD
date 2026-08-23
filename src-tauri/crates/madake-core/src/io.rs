@@ -159,6 +159,64 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// A project file saved before shapes existed opens exactly as it was, with no shapes on its sheets, and is brought up to the current format version.
+    /// 図形が無かった頃のプロジェクトファイルはそのままの姿で開き (シートに図形は無い)、現行のファイル形式へ更新される。
+    #[test]
+    fn an_old_project_file_opens_without_any_shapes() {
+        let dir = std::env::temp_dir().join(format!("madake-io-shape-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.mdkproj");
+        // format_version 7の頃のファイル (図形エンティティがまだ無い)
+        std::fs::write(
+            &path,
+            r#"{"format_version":7,"name":"旧図面","wire_parts":[],"plc_assignments":[],
+                "sheets":[{"id":"55555555-5555-4555-8555-555555555555","name":"S1","size":"A3",
+                "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},
+                "entities":{}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.sheets.len(), 1);
+        assert_eq!(crate::shape::shapes(&loaded.sheets[0]).count(), 0);
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        assert_eq!(FORMAT_VERSION, 8, "図形の追加でファイル形式が1つ上がる");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged.
+    /// シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。
+    #[test]
+    fn a_shape_survives_a_save_and_reload() {
+        let mut project = Project::new("shape");
+        let mut shape = crate::shape::new_shape(
+            ShapeKind::Rect,
+            vec![Point::new(50.0, 50.0), Point::new(150.0, 100.0)],
+        );
+        shape.stroke = "accent".into();
+        shape.stroke_width_mm = 0.5;
+        shape.dashed = true;
+        shape.fill = Some("muted".into());
+        let id = shape.id;
+        let entity = Entity::Shape(shape);
+        project.sheets[0].entities.insert(entity.id(), entity);
+
+        let dir = std::env::temp_dir().join(format!("madake-io-shape-rt-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("shape.mdkproj");
+        save_project(&path, &project).unwrap();
+        let loaded = load_project(&path).unwrap();
+        let Entity::Shape(back) = &loaded.sheets[0].entities[&id] else {
+            panic!("図形であること")
+        };
+        assert_eq!(back.shape, ShapeKind::Rect);
+        assert_eq!(back.points.len(), 2);
+        assert_eq!(back.stroke, "accent");
+        assert_eq!(back.stroke_width_mm, 0.5);
+        assert!(back.dashed);
+        assert_eq!(back.fill.as_deref(), Some("muted"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// A panel sheet and the panel entities on it survive a save and reload unchanged.
     /// 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。
     #[test]
@@ -220,15 +278,15 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 7, the version that added the per-sheet annotation text height.
-    /// 現行のファイル形式バージョンは7 (シートごとの注記文字高を追加した版) である。
+    /// The current file format version is 8, the version that added the graphics-only shape entity.
+    /// 現行のファイル形式バージョンは8 (図形エンティティを追加した版) である。
     #[test]
-    fn the_current_format_version_is_seven() {
-        assert_eq!(FORMAT_VERSION, 7);
+    fn the_current_format_version_is_eight() {
+        assert_eq!(FORMAT_VERSION, 8);
         let mut old = Project::new("x");
-        old.format_version = 6;
+        old.format_version = 7;
         migrate(&mut old);
-        assert_eq!(old.format_version, 7);
+        assert_eq!(old.format_version, 8);
     }
 
     /// A drawing saved before the annotation text height existed opens at the default 2.0mm, so its notes look exactly as before.

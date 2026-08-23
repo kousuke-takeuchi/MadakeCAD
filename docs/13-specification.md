@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1783 specification clauses** across 5 areas.
+**1841 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -63,6 +63,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A harness boundary is added, renamed and deleted with the ordinary entity commands, and every step can be undone. <sub>`harness_add_rename_delete_are_undoable`</sub>
 - Moving a harness boundary shifts all of its corners, and undo puts them back exactly. <sub>`harness_move_and_undo_restores_every_corner`</sub>
 - A harness boundary survives a JSON round trip with the kind tag "harness", so any client can send it. <sub>`harness_command_json_roundtrip_uses_the_harness_kind`</sub>
+- All four kinds of shape are added, edited and deleted with the ordinary entity commands, and every step can be undone. <sub>`shape_add_edit_delete_are_undoable_for_every_kind`</sub>
+- Moving a shape shifts every one of its points, and undo puts them back exactly. <sub>`shape_move_and_undo_restores_every_point`</sub>
+- A shape with a raw colour code instead of a colour token is refused, and the drawing is left untouched. <sub>`a_shape_with_a_raw_colour_code_is_refused`</sub>
+- A shape whose stroke is too thin to print or thick enough to swamp the grid is refused. <sub>`a_shape_with_an_unprintable_stroke_width_is_refused`</sub>
+- A rectangle sent with the wrong number of points is refused, so a half-drawn shape never reaches the drawing. <sub>`a_shape_with_the_wrong_number_of_points_is_refused`</sub>
+- A shape survives a JSON round trip with the kind tag "shape", so any client can send it. <sub>`shape_command_json_roundtrip_uses_the_shape_kind`</sub>
 - Every execute/undo/redo increases the document revision, so clients can discard stale patches. <sub>`revision_increases_monotonically`</sub>
 - Commands targeting a non-existent sheet fail with an error and change nothing. <sub>`unknown_sheet_is_rejected`</sub>
 - Undo with an empty history returns None instead of an error. <sub>`undo_on_empty_history_returns_none`</sub>
@@ -131,9 +137,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project file saved before the PLC assignment table existed still opens: it gets an empty table and is brought up to the current format version. <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
 - A project file saved before frame templates existed opens with no frame template set, which means it is drawn with the default JIS A3 frame exactly as before. <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
 - A project file saved before panel layouts existed opens with every sheet as a schematic sheet and is brought up to the current format version. <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
+- A project file saved before shapes existed opens exactly as it was, with no shapes on its sheets, and is brought up to the current format version. <sub>`an_old_project_file_opens_without_any_shapes`</sub>
+- A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 7, the version that added the per-sheet annotation text height. <sub>`the_current_format_version_is_seven`</sub>
+- The current file format version is 8, the version that added the graphics-only shape entity. <sub>`the_current_format_version_is_eight`</sub>
 - A drawing saved before the annotation text height existed opens at the default 2.0mm, so its notes look exactly as before. <sub>`an_old_project_file_opens_with_the_default_annotation_text_height`</sub>
 - The annotation text height set on a sheet is saved to the file and comes back on reload. <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
 - A panel drawn before item numbers existed opens with no balloons at all: the footprints keep their place and can be numbered whenever the drawing is next tidied up. <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
@@ -192,6 +200,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A note written before text styling existed opens with the look it always had: left-aligned, plain black, not bold. <sub>`an_old_note_opens_with_the_previous_look`</sub>
 - The text anchor travels as JSON in snake_case ("start" / "middle" / "end"). <sub>`the_text_anchor_is_serialized_in_snake_case`</sub>
 - A styled note keeps its anchor, colour token and bold flag through a JSON round trip. <sub>`a_styled_note_survives_a_json_round_trip`</sub>
+- Moving a shape shifts every one of its points, so a rectangle keeps its size and a polyline keeps its bends. <sub>`translate_moves_every_point_of_a_shape`</sub>
+- A shape travels as JSON under the kind tag "shape", with its own kind of shape in snake_case, so any client can send one. <sub>`a_shape_is_serialized_under_the_shape_kind_tag`</sub>
+- The four kinds of shape all travel in snake_case. <sub>`the_shape_kinds_are_serialized_in_snake_case`</sub>
+- A shape sent without the optional look fields opens plain: default colour, hairline stroke, no fill, solid line. <sub>`a_shape_without_look_fields_opens_plain`</sub>
 - Entity::id() returns the inner entity's UUID regardless of the entity kind. <sub>`entity_id_is_uniform_across_kinds`</sub>
 
 ### net_tag
@@ -426,6 +438,22 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Every function row knows the sheet and zone to jump to, which is what the navigator and the reference surfer use to reveal it. <sub>`every_function_knows_where_to_jump`</sub>
 - Filter names travel over the API as snake_case strings, and unknown names are rejected rather than guessed. <sub>`filter_names_parse_from_the_api`</sub>
 
+### shape
+
+- A new shape starts in the default colour, with a hairline stroke, no fill and a solid line, so a rectangle drawn without touching any property looks exactly like the frame lines. <sub>`a_new_shape_starts_plain`</sub>
+- A rectangle is two diagonal corners, and it normalises to the same rectangle whichever way it was dragged. <sub>`a_rectangle_is_two_diagonal_corners`</sub>
+- A circle is a centre point plus a point on its edge, so its radius is the distance between the two. <sub>`a_circle_is_a_centre_and_a_point_on_its_edge`</sub>
+- A polyline keeps every point it was drawn with, in order. <sub>`a_polyline_keeps_every_point`</sub>
+- A rectangle, line or circle with anything other than two points is rejected, and a polyline needs at least two. <sub>`the_number_of_points_must_match_the_shape_kind`</sub>
+- A shape colour is a named token, never a raw colour code, so a shape can never print in a colour the paper cannot show. <sub>`a_shape_colour_must_be_a_token`</sub>
+- The stroke width has to stay between the thinnest line A3 can print and the thickest line that does not swamp a 2.5 mm grid. <sub>`the_stroke_width_has_a_printable_range`</sub>
+- A coordinate that is not a real number is rejected, so a broken shape can never make the drawing unpaintable. <sub>`a_non_finite_coordinate_is_rejected`</sub>
+- Shapes print in the colour their token stands for, and a shape with no fill is not painted at all. <sub>`shapes_print_in_their_token_colour`</sub>
+- Shapes carry no electrical meaning: adding them changes neither the netlist nor the ERC result, even when a shape lies exactly on top of a wire. <sub>`shapes_are_invisible_to_the_netlist_and_the_checks`</sub>
+- Shapes never appear in the parts list or the wire list, and a wire inside a shape keeps an empty harness column — which is why an enclosure is drawn with a shape and not with a harness boundary (G11). <sub>`shapes_never_reach_the_parts_list_or_the_wire_list`</sub>
+- Shapes are left out of the tidy metrics, so drawing an annotation off the grid never counts against the drawing. <sub>`shapes_are_left_out_of_the_tidy_metrics`</sub>
+- Listing the shapes of a sheet returns only shapes, never wires, notes or harness boundaries. <sub>`only_shapes_are_listed`</sub>
+
 ### DC simulation
 
 - Simulation with an invalid ngspice binary fails with an explicit error (no silent fallback). <sub>`missing_ngspice_is_an_explicit_error`</sub>
@@ -468,6 +496,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A harness boundary is drawn as a dashed rectangle (IEC 61082-1 group enclosure) around the wires it holds. <sub>`svg_draws_a_harness_as_a_dashed_rectangle`</sub>
 - The harness name is printed just outside the top-left corner of the boundary. <sub>`svg_labels_the_harness_at_its_top_left_corner`</sub>
 - A harness with no name draws only its dashed boundary, without a label. <sub>`svg_omits_the_label_of_an_unnamed_harness`</sub>
+- A rectangle shape is drawn as a plain rectangle at the two corners it was given. <sub>`svg_draws_a_rectangle_shape`</sub>
+- A line shape is drawn as a straight line between its two points, and a polyline shape follows every point in order. <sub>`svg_draws_line_and_polyline_shapes`</sub>
+- A circle shape is drawn at its centre with the radius reaching the point on its edge. <sub>`svg_draws_a_circle_shape`</sub>
+- A shape prints in the colour its token stands for, at the stroke width it was given, dashed when it is set to dashed and shaded when it has a fill. <sub>`svg_honours_the_colour_width_dash_and_fill_of_a_shape`</sub>
+- Shapes are drawn behind the wires, so a filled highlight box never hides the circuit on top of it. <sub>`svg_draws_shapes_behind_the_wires`</sub>
 - Rotated symbols are drawn with their shapes actually rotated (90 deg makes a resistor body vertical). <sub>`svg_renders_rotated_symbol_primitives`</sub>
 - A sheet exported as part of its project shows, next to each net label, the "/sheet.zone" address of the same-named label on the other sheet. <sub>`svg_draws_cross_reference_address_next_to_net_label`</sub>
 - A net label with no counterpart on another sheet gets no cross-reference text. <sub>`svg_omits_cross_reference_when_there_is_no_counterpart`</sub>
@@ -1570,6 +1603,29 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - searching again resets the walk position <sub>`Enter巡回と行クリック`</sub>
 - the panel's close button closes only the results panel <sub>`Enter巡回と行クリック`</sub>
 
+### shapes
+
+- starts a new shape plain: default colour, hairline stroke, no fill, solid line <sub>`shape geometry`</sub>
+- normalises a rectangle to the same corners whichever way it was dragged <sub>`shape geometry`</sub>
+- reads a circle as a centre plus a point on its edge <sub>`shape geometry`</sub>
+- keeps every point of a polyline and bounds them all <sub>`shape geometry`</sub>
+- requires exactly two points for a rectangle, line and circle, and any number for a polyline <sub>`shape geometry`</sub>
+- accepts only printable stroke widths <sub>`shape geometry`</sub>
+- draws a shape in its token's screen colour, and in the selection colour while selected <sub>`shape colours on screen`</sub>
+- shades a filled shape lightly so the circuit underneath stays readable <sub>`shape colours on screen`</sub>
+- uses the same dash rhythm as a harness boundary <sub>`shape colours on screen`</sub>
+- grabs a rectangle by its outline, not by the area inside it <sub>`shape hit testing`</sub>
+- grabs a circle on its edge <sub>`shape hit testing`</sub>
+- grabs a line or a polyline anywhere along it <sub>`shape hit testing`</sub>
+- turns a finished drawing into one add_entity command <sub>`shape commands`</sub>
+- sends nothing for a collapsed shape from a stray click <sub>`shape commands`</sub>
+- updates the look with one update_entity command, and sends nothing when nothing changed <sub>`shape commands`</sub>
+- refuses to send a stroke width the engine would reject <sub>`shape commands`</sub>
+- makes no command for anything that is not a shape <sub>`shape commands`</sub>
+- lists only the shapes of a sheet <sub>`shape commands`</sub>
+- maps each drawing tool to one kind of shape <sub>`shape commands`</sub>
+- keeps a shape out of the harness column of the wire list <sub>`shapes and the reports`</sub>
+
 ### sheets
 
 - adds a panel sheet when the panel kind is chosen <sub>`sheet kind (schematic / panel)`</sub>
@@ -2174,4 +2230,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - refuses the panel tools on a schematic sheet <sub>`tools that do not belong to the sheet`</sub>
 - does not start footprint placement on a schematic sheet <sub>`tools that do not belong to the sheet`</sub>
 - keeps select, move and delete available on a panel sheet <sub>`tools that do not belong to the sheet`</sub>
+
+### shapePlacement
+
+- draws a rectangle with one drag <sub>`drawing shapes`</sub>
+- draws a line and a circle with one drag each <sub>`drawing shapes`</sub>
+- creates nothing from a stray click <sub>`drawing shapes`</sub>
+- draws a polyline by clicking each corner and finishing with a double click <sub>`drawing shapes`</sub>
+- finishes a polyline with Enter and throws away a single stray point <sub>`drawing shapes`</sub>
+- refuses the shape tools on a panel layout sheet <sub>`drawing shapes`</sub>
+- picks a shape by its outline, not by the area inside it <sub>`selecting shapes`</sub>
+- moves every point of a shape with one move_entities command <sub>`selecting shapes`</sub>
 

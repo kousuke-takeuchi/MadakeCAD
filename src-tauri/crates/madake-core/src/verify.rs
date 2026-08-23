@@ -585,8 +585,9 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
             Entity::Junction(j) => junctions.push(j.at),
             Entity::NetLabel(l) => labels.push(l.at),
             Entity::Wire(w) => wires.push(w),
-            // 注記・ハーネス境界・盤レイアウトの要素は電気的な接続を持たない
+            // 注記・図形・ハーネス境界・盤レイアウトの要素は電気的な接続を持たない
             Entity::Text(_)
+            | Entity::Shape(_)
             | Entity::Harness(_)
             | Entity::PanelOutline(_)
             | Entity::DinRail(_)

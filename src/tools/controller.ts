@@ -28,7 +28,15 @@ import {
   schematicToolsAllowed,
   type PanelToolId,
 } from "../canvas/panelTools";
-import { drawHarness, drawSymbol, symbolBounds, transformLocal } from "../canvas/renderer";
+import { drawHarness, drawShape, drawSymbol, symbolBounds, transformLocal } from "../canvas/renderer";
+import {
+  SHAPE_TOOLS,
+  isShapeTool,
+  newShape,
+  shapeAddCommand,
+  shapeHitTest,
+  type ShapeToolId,
+} from "../canvas/shapes";
 import { noteBounds } from "../canvas/textStyle";
 import { panelTheme, theme, wireColorScreen } from "../canvas/theme";
 import { Viewport, type Pt } from "../canvas/viewport";
@@ -50,10 +58,26 @@ import { useUiStore } from "../stores/ui";
  * 盤のツール (盤枠・DINレール・ダクト・フットプリント、M4 §8) は
  * **シートの種別で使える側が決まる** (`setTool`が弾く)。
  */
-export type ToolId = "select" | "wire" | "place" | "harness" | "macro" | PanelToolId;
+export type ToolId =
+  | "select"
+  | "wire"
+  | "place"
+  | "harness"
+  | "macro"
+  | ShapeToolId
+  | PanelToolId;
 
 /** 回路図シートでしか使えないツール。 */
-const SCHEMATIC_TOOLS: ToolId[] = ["wire", "place", "harness", "macro"];
+const SCHEMATIC_TOOLS: ToolId[] = [
+  "wire",
+  "place",
+  "harness",
+  "macro",
+  "shape_rect",
+  "shape_line",
+  "shape_circle",
+  "shape_polyline",
+];
 /** 盤レイアウトシートでしか使えないツール。 */
 const PANEL_TOOLS: ToolId[] = [
   "panel_outline",
@@ -144,12 +168,15 @@ export class EditorController {
   viewSize = { w: 0, h: 0 };
 
   private wirePoints: Pt[] = [];
+  /** 折れ線ツールで打ち終えた点 (ダブルクリック・Enter・Escで確定する)。 */
+  private shapePoints: Pt[] = [];
   private dragMode:
     | "none"
     | "pan"
     | "move"
     | "rubber"
     | "harness"
+    | "shape"
     | "panel_rect"
     | "panel_rail" = "none";
   private dragStartWorld: Pt = { x: 0, y: 0 };
@@ -194,6 +221,7 @@ export class EditorController {
     }
     if (tool !== "footprint") this.placeFootprint = null;
     this.wirePoints = [];
+    this.shapePoints = [];
     this.dragMode = "none";
     this.requestRedraw();
   }
@@ -362,6 +390,10 @@ export class EditorController {
         if (segmentDistance(world, e.points[i], e.points[i + 1]) <= HIT_TOLERANCE) return e.id;
       }
     }
+    // 図形は輪郭で掴む (塗りの下にある配線・記号を選びたいことのほうが多い)
+    for (const e of entities) {
+      if (e.kind === "shape" && shapeHitTest(e, world, HIT_TOLERANCE)) return e.id;
+    }
     // ハーネス境界は最後 (囲みの中身を選びたいことのほうが多い)。破線そのものを掴む
     for (const e of entities) {
       if (e.kind !== "harness" || e.points.length < 2) continue;
@@ -442,6 +474,18 @@ export class EditorController {
         this.dragMode = "harness";
         break;
       }
+      // 図形 (G10): 矩形・線・円はドラッグ、折れ線はクリックを重ねてダブルクリックで確定
+      case "shape_rect":
+      case "shape_line":
+      case "shape_circle": {
+        this.dragStartWorld = this.snap(world);
+        this.rubberEnd = this.dragStartWorld;
+        this.dragMode = "shape";
+        break;
+      }
+      case "shape_polyline":
+        this.shapePoints.push(this.snap(world));
+        break;
       // 盤枠・ダクトは矩形ドラッグ、DINレールは水平ドラッグ (取付線は押した点の高さ)
       case "panel_outline":
       case "duct":
@@ -482,6 +526,7 @@ export class EditorController {
         this.rubberEnd = world;
         break;
       case "harness":
+      case "shape":
       case "panel_rect":
       case "panel_rail":
         this.rubberEnd = this.snap(world);
@@ -516,7 +561,11 @@ export class EditorController {
             const sel = new Set(this.store.selection);
             for (const e of Object.values(sheet.entities)) {
               const pts: Point[] =
-                e.kind === "wire" || e.kind === "harness" ? e.points : "at" in e ? [e.at] : [];
+                e.kind === "wire" || e.kind === "harness" || e.kind === "shape"
+                  ? e.points
+                  : "at" in e
+                    ? [e.at]
+                    : [];
               if (pts.length && pts.every((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1)) {
                 sel.add(e.id);
               }
@@ -539,6 +588,21 @@ export class EditorController {
           if (command) {
             await this.store.execute(command);
             useUiStore().log(i18n.global.t(`panel.added.${this.tool}`));
+          }
+        }
+        break;
+      }
+      case "shape": {
+        // 図形を1回のadd_entityコマンドで作る (undo一発で消える)
+        if (sheet && isShapeTool(this.tool)) {
+          const kind = SHAPE_TOOLS[this.tool];
+          const command = shapeAddCommand(sheet, kind, [
+            { x: this.dragStartWorld.x, y: this.dragStartWorld.y },
+            { x: this.rubberEnd.x, y: this.rubberEnd.y },
+          ]);
+          if (command) {
+            await this.store.execute(command);
+            useUiStore().log(i18n.global.t(`shapes.added.${kind}`));
           }
         }
         break;
@@ -575,7 +639,7 @@ export class EditorController {
     const first = entityIds.map((id) => sheet.entities[id]).find(Boolean);
     if (!first) return;
     const target: Pt | null =
-      first.kind === "wire" || first.kind === "harness"
+      first.kind === "wire" || first.kind === "harness" || first.kind === "shape"
         ? first.points.length
           ? {
               x: (first.points[0].x + first.points[first.points.length - 1].x) / 2,
@@ -594,6 +658,8 @@ export class EditorController {
 
   onDoubleClick() {
     if (this.tool === "wire") void this.commitWire();
+    // 折れ線はダブルクリックで確定する (最後のクリックは点として数えない)
+    if (this.tool === "shape_polyline") void this.commitPolyline();
   }
 
   async onKeyDown(ev: KeyboardEvent): Promise<boolean> {
@@ -614,6 +680,7 @@ export class EditorController {
     switch (ev.key) {
       case "Escape":
         if (this.tool === "wire" && this.wirePoints.length) void this.commitWire();
+        else if (this.tool === "shape_polyline" && this.shapePoints.length) void this.commitPolyline();
         else this.setTool("select");
         return true;
       case "Delete":
@@ -647,6 +714,10 @@ export class EditorController {
       case "Enter":
         if (this.tool === "wire") {
           void this.commitWire();
+          return true;
+        }
+        if (this.tool === "shape_polyline") {
+          void this.commitPolyline();
           return true;
         }
         return false;
@@ -813,6 +884,28 @@ export class EditorController {
     this.requestRedraw();
   }
 
+  /**
+   * 折れ線を確定する (ダブルクリック・Enter・Esc)。点が1つ以下なら何も作らずに捨てる。
+   * 確定後も折れ線ツールのままなので、続けて何本でも描ける。
+   */
+  private async commitPolyline() {
+    const sheet = this.store.activeSheet;
+    const pts = this.shapePoints;
+    this.shapePoints = [];
+    if (sheet && pts.length >= 2) {
+      const command = shapeAddCommand(
+        sheet,
+        "polyline",
+        pts.map((p) => ({ x: p.x, y: p.y })),
+      );
+      if (command) {
+        await this.store.execute(command);
+        useUiStore().log(i18n.global.t("shapes.added.polyline"));
+      }
+    }
+    this.requestRedraw();
+  }
+
   /** ツールのプレビューを描く (renderSheetの後に呼ぶ)。 */
   renderPreview(ctx: CanvasRenderingContext2D) {
     const vp = this.vp;
@@ -861,7 +954,7 @@ export class EditorController {
         for (const id of this.store.selection) {
           const e = sheet.entities[id];
           if (!e) continue;
-          if (e.kind === "wire" || e.kind === "harness") {
+          if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape") {
             ctx.beginPath();
             e.points.forEach((p, i) => {
               const s = vp.toScreen({ x: p.x + this.moveDelta.x, y: p.y + this.moveDelta.y });
@@ -890,6 +983,22 @@ export class EditorController {
     if (this.dragMode === "harness") {
       const preview = harnessRectPoints(this.dragStartWorld, this.rubberEnd);
       drawHarness(ctx, vp, preview, "", false);
+    }
+    // 図形のドラッグプレビュー (確定後と同じ形を選択色で見せる)
+    if (this.dragMode === "shape" && isShapeTool(this.tool)) {
+      const preview = newShape(SHAPE_TOOLS[this.tool], [
+        { x: this.dragStartWorld.x, y: this.dragStartWorld.y },
+        { x: this.rubberEnd.x, y: this.rubberEnd.y },
+      ]);
+      drawShape(ctx, vp, preview, true);
+    }
+    // 折れ線の作図中プレビュー: 打った点 + カーソルまでの1本
+    if (this.tool === "shape_polyline" && this.shapePoints.length) {
+      const preview = newShape("polyline", [
+        ...this.shapePoints.map((p) => ({ x: p.x, y: p.y })),
+        { x: this.cursorWorld.x, y: this.cursorWorld.y },
+      ]);
+      drawShape(ctx, vp, preview, true);
     }
     // 盤の作図プレビュー: 盤枠・ダクトは矩形、DINレールは帯 (確定後と同じ高さ)
     if (this.dragMode === "panel_rect" || this.dragMode === "panel_rail") {

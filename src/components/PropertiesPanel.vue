@@ -5,6 +5,11 @@ import { computed, inject, reactive, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { BLOCK_SYMBOL_ID } from "../canvas/dynamicSymbol";
 import { harnessWireCount } from "../canvas/harness";
+import {
+  SHAPE_STROKE_CHOICES,
+  shapeUpdateCommand,
+  type ShapePatch,
+} from "../canvas/shapes";
 import { panelUpdateCommand, railOfFootprint, type PanelPatch } from "../canvas/panelTools";
 import { legendRows } from "../canvas/panel";
 import { autoWirePartNo } from "../canvas/wireParts";
@@ -60,6 +65,11 @@ const buf = reactive({
   name: "",
   /** ハーネスの備考。 */
   note: "",
+  /** 図形 (G10) の線色トークン・線幅mm・塗りトークン ("" = 塗らない)・破線。 */
+  shapeStroke: "default" as TextColorToken,
+  shapeWidth: 0.25,
+  shapeFill: "" as TextColorToken | "",
+  shapeDashed: false,
   /** ネットラベルのタグ向き ("" / "left" / "right")。 */
   tag: "",
   /** 注記の基準位置 (G4)。 */
@@ -139,6 +149,11 @@ watch(
     } else if (e.kind === "harness") {
       buf.name = e.name ?? "";
       buf.note = e.note ?? "";
+    } else if (e.kind === "shape") {
+      buf.shapeStroke = e.stroke;
+      buf.shapeWidth = e.stroke_width_mm;
+      buf.shapeFill = e.fill ?? "";
+      buf.shapeDashed = e.dashed;
     } else if (e.kind === "footprint") {
       buf.reference = e.reference;
       buf.part_no = e.part_no;
@@ -290,6 +305,20 @@ async function apply() {
       ui.log(t("harness.renamedLog", { name: buf.name.trim() }));
     }
     return;
+  } else if (e.kind === "shape") {
+    // 図形 (G10) は見た目だけを書き換える (形はキャンバス側の操作で変える)
+    const patch: ShapePatch = {
+      stroke: buf.shapeStroke,
+      stroke_width_mm: buf.shapeWidth,
+      fill: buf.shapeFill === "" ? null : buf.shapeFill,
+      dashed: buf.shapeDashed,
+    };
+    const command = shapeUpdateCommand(sheet.id, e, patch);
+    if (command) {
+      await store.execute(command);
+      ui.log(t("shapes.styledLog", { kind: t(`shapes.kind.${e.shape}`) }));
+    }
+    return;
   } else if (
     e.kind === "footprint" ||
     e.kind === "panel_outline" ||
@@ -334,6 +363,7 @@ const kindLabel = computed<Record<string, string>>(() => ({
   net_label: "ネットラベル",
   text: "テキスト",
   harness: t("harness.kindLabel"),
+  shape: t("shapes.kindLabel"),
   panel_outline: t("panel.prop.kind.panel_outline"),
   din_rail: t("panel.prop.kind.din_rail"),
   duct: t("panel.prop.kind.duct"),
@@ -456,7 +486,7 @@ const kindLabel = computed<Record<string, string>>(() => ({
       <div class="sec"><ChevronDown :size="10" /> {{ t("harness.kindLabel") }}</div>
       <div class="prow">
         <span class="plabel">{{ t("harness.kindRow") }}</span>
-        <span class="pvalue">{{ t("harness.kindLabel") }}</span>
+        <span class="pvalue" :title="t('harness.kindHint')">{{ t("harness.kindLabel") }}</span>
       </div>
       <div class="prow">
         <span class="plabel">{{ t("harness.nameRow") }}</span>
@@ -495,6 +525,51 @@ const kindLabel = computed<Record<string, string>>(() => ({
           />
         </span>
       </div>
+    </template>
+
+    <!-- 図形 (G10): 電気的な意味を持たない作図要素。見た目だけを編集する -->
+    <template v-else-if="selected?.kind === 'shape'">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("shapes.kindLabel") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("shapes.kindRow") }}</span>
+        <span class="pvalue">{{ t(`shapes.kind.${selected.shape}`) }}</span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("shapes.strokeRow") }}</span>
+        <span class="pvalue" :title="t('shapes.strokeHint')">
+          <select v-model="buf.shapeStroke" class="bare" @change="apply">
+            <option v-for="c in TEXT_COLOR_TOKENS" :key="c" :value="c">
+              {{ t(`note.color.${c}`) }}
+            </option>
+          </select>
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("shapes.widthRow") }}</span>
+        <span class="pvalue">
+          <select v-model.number="buf.shapeWidth" class="bare mono" @change="apply">
+            <option v-for="w in SHAPE_STROKE_CHOICES" :key="w" :value="w">{{ w }} mm</option>
+          </select>
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("shapes.fillRow") }}</span>
+        <span class="pvalue" :title="t('shapes.fillHint')">
+          <select v-model="buf.shapeFill" class="bare" @change="apply">
+            <option value="">{{ t("shapes.fillNone") }}</option>
+            <option v-for="c in TEXT_COLOR_TOKENS" :key="c" :value="c">
+              {{ t(`note.color.${c}`) }}
+            </option>
+          </select>
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("shapes.dashedRow") }}</span>
+        <span class="pvalue">
+          <input v-model="buf.shapeDashed" type="checkbox" @change="apply" />
+        </span>
+      </div>
+      <div class="hint hint-block">{{ t("shapes.prop.hint") }}</div>
     </template>
 
     <!-- 盤レイアウト (M4 §8): フットプリント -->

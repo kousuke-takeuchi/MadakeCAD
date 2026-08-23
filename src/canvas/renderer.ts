@@ -1,7 +1,7 @@
 // Canvas2Dレンダラ本体。純関数でDOM非依存(ctxとviewportを受け取るだけ)。
 // 描画順: 背景 → グリッド → JIS図枠 → 配線 → シンボル → ジャンクション → ラベル → 選択
 
-import type { Point, Sheet, SymbolDef, SymbolInstance } from "../ipc";
+import type { Point, Shape, Sheet, SymbolDef, SymbolInstance } from "../ipc";
 import type { Region } from "./agentOverlay";
 import {
   DEFAULT_FRAME_TEMPLATE,
@@ -21,6 +21,13 @@ import {
 } from "./frameTemplate";
 import { resolveInstanceDef } from "./dynamicSymbol";
 import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
+import {
+  SHAPE_DASH,
+  shapeCircle,
+  shapeFillColor,
+  shapeRectCorners,
+  shapeStrokeColor,
+} from "./shapes";
 import { entityViewClass, type ViewClass } from "./viewClasses";
 import {
   BALLOON_FONT,
@@ -722,6 +729,58 @@ export function drawHarness(
   ctx.fillText(name, s.x, s.y);
 }
 
+/**
+ * 図形 (G10) を1つ描く。矩形・線・円・折れ線を、色トークン・線幅・破線・塗りのとおりに。
+ * Rust側 svg.rs の render_shapes と同一ルール (破線3mm/間隔2mm、塗りは下が透ける濃さ)。
+ * 配線・シンボルより先に描いて背面に置く。
+ */
+export function drawShape(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  shape: Shape,
+  selected: boolean,
+): void {
+  if (shape.points.length < 2) return;
+  const fill = shapeFillColor(shape);
+  ctx.strokeStyle = shapeStrokeColor(shape, selected);
+  // 紙の線幅をそのまま拡大すると細すぎて見えないので、画面では最低1pxを保つ
+  ctx.lineWidth = Math.max(1, shape.stroke_width_mm * vp.scale) + (selected ? 1 : 0);
+  ctx.setLineDash(shape.dashed ? SHAPE_DASH.map((d) => Math.max(2, d * vp.scale)) : []);
+  ctx.beginPath();
+  switch (shape.shape) {
+    case "rect": {
+      const r = shapeRectCorners(shape.points);
+      if (!r) break;
+      const a = vp.toScreen(r.min);
+      const b = vp.toScreen(r.max);
+      ctx.rect(a.x, a.y, b.x - a.x, b.y - a.y);
+      break;
+    }
+    case "circle": {
+      const c = shapeCircle(shape.points);
+      if (!c) break;
+      const s = vp.toScreen(c.center);
+      ctx.arc(s.x, s.y, c.r * vp.scale, 0, Math.PI * 2);
+      break;
+    }
+    case "line":
+    case "polyline": {
+      shape.points.forEach((p, i) => {
+        const s = vp.toScreen(p);
+        if (i === 0) ctx.moveTo(s.x, s.y);
+        else ctx.lineTo(s.x, s.y);
+      });
+      break;
+    }
+  }
+  if (fill && shape.shape !== "line") {
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
 /** 用紙座標の矩形をスクリーンへ変換して塗る/描く (盤レイアウト用の共通処理)。 */
 function paintRect(
   ctx: CanvasRenderingContext2D,
@@ -952,6 +1011,11 @@ export function renderSheet(
   // 盤レイアウト (盤外形・ダクト・レール・フットプリント) は最背面
   if (!hidden.has("panel")) drawPanel(ctx, vp, sheet, opts.selection);
 
+  // 図形 (G10) は配線・シンボルの背面 (塗りつぶした強調枠が回路を隠さない)
+  for (const e of entities) {
+    if (e.kind !== "shape") continue;
+    drawShape(ctx, vp, e, opts.selection.has(e.id));
+  }
   // ハーネス境界は配線・シンボルの背面
   for (const e of entities) {
     if (e.kind !== "harness") continue;

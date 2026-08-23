@@ -10,6 +10,7 @@ export type ViewClass =
   | "wire_numbers"
   | "wire_notes"
   | "harness"
+  | "shapes"
   | "panel"
   | "texts"
   | "frame"
@@ -33,6 +34,7 @@ export const VIEW_CLASSES: ReadonlyArray<{
   { id: "wire_numbers", labelKey: "view.wireNumbers", icon: "list-ordered" },
   { id: "wire_notes", labelKey: "view.wireNotes", icon: "ruler", hintKey: "view.wireNotesHint" },
   { id: "harness", labelKey: "view.harness", icon: "square-dashed" },
+  { id: "shapes", labelKey: "view.shapes", icon: "shapes", hintKey: "view.shapesHint" },
   { id: "panel", labelKey: "view.panel", icon: "layout-panel-top" },
   { id: "texts", labelKey: "view.texts", icon: "type" },
   { id: "frame", labelKey: "view.frame", icon: "frame" },
@@ -57,6 +59,8 @@ export function entityViewClass(e: Entity): ViewClass {
       return "texts";
     case "harness":
       return "harness";
+    case "shape":
+      return "shapes";
     case "panel_outline":
     case "din_rail":
     case "duct":

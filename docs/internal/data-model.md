@@ -1,6 +1,6 @@
 # データ設計書
 
-作成: 2026-08-21。更新: 2026-08-23(フェーズ6: `.mdkproj` format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
+作成: 2026-08-21。更新: 2026-08-23(フェーズ6: `.mdkproj` format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
 
 MadakeCADの永続データは3系統ある:
 
@@ -12,7 +12,7 @@ MadakeCADの永続データは3系統ある:
 
 ## 1. 図面ドキュメント(.mdkproj)
 
-`format_version: 7`。構造(mermaid classDiagram):
+`format_version: 8`。構造(mermaid classDiagram):
 
 ```mermaid
 classDiagram
@@ -77,7 +77,16 @@ classDiagram
     class Junction { id; at: Point }
     class NetLabel { id; at: Point; name; rotation; attrs %% tag=left|right }
     class TextEntity { id; at: Point; text; height; rotation; anchor; color?; bold }
-    class Harness { id; points: Point[]; name; note }
+    class Harness { id; points: Point[]; name; note  %% 電線をまとめる境界専用 }
+    class Shape {
+      id
+      shape: rect|line|circle|polyline
+      points: Point[]  %% rect=対角2点 / line=両端2点 / circle=中心+円周上の1点 / polyline=N点
+      stroke: String   %% 色トークン(注記と共有)
+      stroke_width_mm: f64  %% 0.1〜2.0
+      fill: String?    %% 色トークン。Noneなら塗らない(塗りは不透明度0.15)
+      dashed: bool
+    }
     class PanelOutline { id; at: Point; w; h; name %% 取付板は外周から10mm内側 }
     class DinRail { id; y %% 取付線(帯の中心); x1; x2 }
     class Duct { id; at: Point; w; h }
@@ -96,6 +105,7 @@ classDiagram
 - 座標は**mm・左上原点・Y下向き**。ピン/端点は2.5mmグリッド上(接続判定の許容誤差0.01mm)
 - Entityは`kind`タグ付きJSON(serde tagged enum)
 - **編集は必ずCommand経由**(add_entity / update_entity / remove_entity / move_entities / add_sheet / set_title_block / set_frame_template / renumber_panel_items 等)。Commandスキーマの正は`madake-core/src/command.rs`(MCPの`execute_commands`入力スキーマとして自動公開)
+- 図形`shape`は**電気的な意味を持たない**。ネットリスト・ERC・部品表・From-To電線リスト・整頓メトリクスのどれからも構造的に除外される(筐体の囲みはこれで描き、ハーネス境界は電線のグルーピング専用に保つ = G11)。線色・塗り色は注記と同じ色トークンだけで、生の色コードはCommandエンジンが拒否する
 - 盤レイアウトの5エンティティ(`panel_outline`/`din_rail`/`duct`/`footprint`/`panel_legend`)は**専用コマンドを持たない**。既存のadd/update/move/deleteに相乗りするのでundoもそのまま効く。唯一の例外がバルーン採番`renumber_panel_items`(逆コマンド=`set_panel_item_numbers`)
 - **シート種別のガードはUIだけが持つ**。Commandエンジンは盤シートへ配線を置くことを拒まない
 - 図面はシンボル定義の**スナップショットを持たない**(`SymbolInstance`は`symbol_id`だけ)。ユーザーシンボルを保存し直すと配置済みの部品も新しい定義で描き直される
@@ -112,6 +122,7 @@ classDiagram
 | 5 | `TextEntity.anchor`/`color`/`bold`(注記の装飾) | 左揃え・黒・細字で開く |
 | 6 | `Footprint.item_no`+凡例表エンティティ`panel_legend` | バルーン未採番として開く。**逆に新しいファイルは旧アプリでは読めない**(`panel_legend`が未知) |
 | 7 | `Sheet.annotation_text_mm`(注記文字高。配線注記・線番・ネットタグの大きさ) | 既定の2.0mm=従来の見た目で開く |
+| 8 | 図形エンティティ`shape`(矩形・線・円・折れ線。電気的意味なし) | 図形が無いだけでそのまま開く。**逆に図形を含む新しいファイルは旧アプリでは読めない**(`shape`が未知) |
 
 `NetLabel.attrs`(方向付きタグ形状)のように**追加するだけで旧アプリも読める**変更は版を上げていない。
 版を上げるのは、旧アプリが読めなくなる要素が入ったとき(6)と、意味のある新フィールドを足したときだけ。

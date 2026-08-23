@@ -845,6 +845,9 @@ fn validate_entity(entity: &Entity) -> Result<()> {
                 }
             }
         }
+        // 図形 (G10): 頂点の数・色トークン・線幅を確かめる。生の色コードや
+        // 印刷できない線幅を黙って受け取ると、紙に出せない図形が図面に残ってしまう
+        Entity::Shape(s) => crate::shape::validate(s).map_err(CoreError::InvalidCommand)?,
         _ => {}
     }
     Ok(())
@@ -1731,6 +1734,169 @@ mod tests {
         };
         assert_eq!(h.name, "W1");
         assert_eq!(h.points.len(), 4);
+    }
+
+    /// 図形1つ (G10)。既定の見た目 (既定色・細線・塗りなし・実線) で作る。
+    fn sample_shape(kind: ShapeKind, points: &[(f64, f64)]) -> Entity {
+        Entity::Shape(crate::shape::new_shape(
+            kind,
+            points.iter().map(|&(x, y)| Point::new(x, y)).collect(),
+        ))
+    }
+
+    /// All four kinds of shape are added, edited and deleted with the ordinary entity commands, and every step can be undone.
+    /// 4種類すべての図形が通常のエンティティ用コマンドで追加・編集・削除でき、どの操作もundoで戻せる。
+    #[test]
+    fn shape_add_edit_delete_are_undoable_for_every_kind() {
+        for (kind, points) in [
+            (ShapeKind::Rect, &[(50.0, 50.0), (150.0, 100.0)][..]),
+            (ShapeKind::Line, &[(50.0, 50.0), (150.0, 50.0)][..]),
+            (ShapeKind::Circle, &[(100.0, 50.0), (110.0, 50.0)][..]),
+            (
+                ShapeKind::Polyline,
+                &[(50.0, 50.0), (100.0, 50.0), (100.0, 90.0)][..],
+            ),
+        ] {
+            let (mut engine, sheet_id) = test_engine();
+            let entity = sample_shape(kind, points);
+            let id = entity.id();
+            engine
+                .execute(Command::AddEntity {
+                    sheet_id,
+                    entity: entity.clone(),
+                })
+                .unwrap_or_else(|e| panic!("{kind:?}: {e}"));
+            assert!(engine.project().sheets[0].entities.contains_key(&id), "{kind:?}");
+
+            let mut styled = entity.clone();
+            if let Entity::Shape(s) = &mut styled {
+                s.stroke = "accent".into();
+                s.stroke_width_mm = 0.5;
+                s.dashed = true;
+                s.fill = Some("muted".into());
+            }
+            engine
+                .execute(Command::UpdateEntity {
+                    sheet_id,
+                    entity: styled,
+                })
+                .unwrap();
+            let Entity::Shape(s) = &engine.project().sheets[0].entities[&id] else {
+                panic!("図形であること")
+            };
+            assert_eq!(s.stroke, "accent");
+            assert!(s.dashed);
+
+            engine
+                .execute(Command::DeleteEntities {
+                    sheet_id,
+                    ids: vec![id],
+                })
+                .unwrap();
+            assert!(!engine.project().sheets[0].entities.contains_key(&id));
+
+            engine.undo().unwrap().unwrap(); // 削除を戻す
+            engine.undo().unwrap().unwrap(); // 見た目の変更を戻す
+            let Entity::Shape(s) = &engine.project().sheets[0].entities[&id] else {
+                panic!("図形であること")
+            };
+            assert_eq!(s.stroke, crate::shape::DEFAULT_SHAPE_COLOR, "{kind:?}");
+            assert!(!s.dashed);
+            engine.undo().unwrap().unwrap(); // 追加を戻す
+            assert!(engine.project().sheets[0].entities.is_empty(), "{kind:?}");
+        }
+    }
+
+    /// Moving a shape shifts every one of its points, and undo puts them back exactly.
+    /// 図形を移動すると全ての頂点が動き、undoで元の位置に正確に戻る。
+    #[test]
+    fn shape_move_and_undo_restores_every_point() {
+        let (mut engine, sheet_id) = test_engine();
+        let entity = sample_shape(ShapeKind::Polyline, &[(50.0, 50.0), (100.0, 50.0), (100.0, 90.0)]);
+        let id = entity.id();
+        engine.execute(Command::AddEntity { sheet_id, entity }).unwrap();
+        engine
+            .execute(Command::MoveEntities {
+                sheet_id,
+                ids: vec![id],
+                dx: 10.0,
+                dy: -5.0,
+            })
+            .unwrap();
+        let Entity::Shape(s) = &engine.project().sheets[0].entities[&id] else { panic!() };
+        assert_eq!(s.points[0], Point::new(60.0, 45.0));
+        assert_eq!(s.points[2], Point::new(110.0, 85.0));
+        engine.undo().unwrap().unwrap();
+        let Entity::Shape(s) = &engine.project().sheets[0].entities[&id] else { panic!() };
+        assert_eq!(s.points[0], Point::new(50.0, 50.0));
+        assert_eq!(s.points[2], Point::new(100.0, 90.0));
+    }
+
+    /// A shape with a raw colour code instead of a colour token is refused, and the drawing is left untouched.
+    /// 色トークンではなく生の色コードを入れた図形は拒否され、図面は何も変わらない。
+    #[test]
+    fn a_shape_with_a_raw_colour_code_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let mut entity = sample_shape(ShapeKind::Rect, &[(0.0, 0.0), (10.0, 10.0)]);
+        if let Entity::Shape(s) = &mut entity {
+            s.stroke = "#ff0000".into();
+        }
+        let err = engine
+            .execute(Command::AddEntity { sheet_id, entity })
+            .expect_err("生の色コードは拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err}");
+        assert!(engine.project().sheets[0].entities.is_empty(), "図面は変わらない");
+    }
+
+    /// A shape whose stroke is too thin to print or thick enough to swamp the grid is refused.
+    /// 印刷できないほど細い線幅・グリッドを潰すほど太い線幅の図形は拒否される。
+    #[test]
+    fn a_shape_with_an_unprintable_stroke_width_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        for width in [0.0, 0.05, 2.5] {
+            let mut entity = sample_shape(ShapeKind::Line, &[(0.0, 0.0), (10.0, 0.0)]);
+            if let Entity::Shape(s) = &mut entity {
+                s.stroke_width_mm = width;
+            }
+            let err = engine
+                .execute(Command::AddEntity { sheet_id, entity })
+                .expect_err("範囲外の線幅は拒否される");
+            assert!(matches!(err, CoreError::InvalidCommand(_)), "{width}: {err}");
+        }
+        assert!(engine.project().sheets[0].entities.is_empty());
+    }
+
+    /// A rectangle sent with the wrong number of points is refused, so a half-drawn shape never reaches the drawing.
+    /// 頂点の数が合っていない矩形は拒否されるので、描きかけの図形が図面へ入ることはない。
+    #[test]
+    fn a_shape_with_the_wrong_number_of_points_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let entity = sample_shape(ShapeKind::Rect, &[(0.0, 0.0)]);
+        assert!(engine.execute(Command::AddEntity { sheet_id, entity }).is_err());
+        assert!(engine.project().sheets[0].entities.is_empty());
+    }
+
+    /// A shape survives a JSON round trip with the kind tag "shape", so any client can send it.
+    /// 図形は kind="shape" としてJSONに往復変換でき、どのクライアントからも送れる。
+    #[test]
+    fn shape_command_json_roundtrip_uses_the_shape_kind() {
+        let (_, sheet_id) = test_engine();
+        let cmd = Command::AddEntity {
+            sheet_id,
+            entity: sample_shape(ShapeKind::Rect, &[(0.0, 0.0), (10.0, 10.0)]),
+        };
+        let json = serde_json::to_string(&cmd).unwrap();
+        assert!(json.contains("\"kind\":\"shape\""), "{json}");
+        let back: Command = serde_json::from_str(&json).unwrap();
+        let Command::AddEntity {
+            entity: Entity::Shape(s),
+            ..
+        } = back
+        else {
+            panic!("図形の追加コマンドに戻ること")
+        };
+        assert_eq!(s.shape, ShapeKind::Rect);
+        assert_eq!(s.points.len(), 2);
     }
 
     /// Every execute/undo/redo increases the document revision, so clients can discard stale patches.

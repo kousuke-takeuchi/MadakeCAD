@@ -478,6 +478,7 @@ pub fn base_point(entities: &[&Entity]) -> Point {
             }
             Entity::Wire(w) => pts.extend(w.points.iter().copied()),
             Entity::Harness(h) => pts.extend(h.points.iter().copied()),
+            Entity::Shape(s) => pts.extend(s.points.iter().copied()),
             Entity::Junction(j) => pts.push(j.at),
             Entity::NetLabel(l) => pts.push(l.at),
             Entity::Text(t) => pts.push(t.at),
@@ -710,6 +711,11 @@ fn place_entity(entity: &mut Entity, rotation: u16, at: Point) {
         }
         Entity::Harness(h) => {
             for p in &mut h.points {
+                *p = map(*p);
+            }
+        }
+        Entity::Shape(s) => {
+            for p in &mut s.points {
                 *p = map(*p);
             }
         }
