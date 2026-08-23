@@ -4,7 +4,8 @@
 //     接点構成 (attrs.contact_config、例 "2NO+2NC") が分かるときは未使用の接点も
 //     行として並べ、所在の代わりに「—」を書く
 //   - コイル所在 = 接点の脇に置く「(/1.C2)」
-//   - 端子対は IEC 60947-1: 先頭が接点の連番、末尾が a接点=3/4・b接点=1/2
+//   - 端子対は IEC 60947-1: 先頭が接点の連番、末尾が a接点=3/4・b接点=1/2。
+//     c接点 (切換接点) は共通=1・b側=2・a側=4 の3端子で「11-12-14」と書く
 
 import type { Point, Project, SymbolInstance } from "../ipc";
 import { zoneAt } from "./xref";
@@ -19,6 +20,8 @@ export const COIL_SYMBOL_ID = "relay_coil";
 export const CONTACT_NO_SYMBOL_ID = "relay_contact_no";
 /** b接点 (ブレーク接点) のシンボルid。 */
 export const CONTACT_NC_SYMBOL_ID = "relay_contact_nc";
+/** c接点 (切換接点) のシンボルid。1極でa接点とb接点を兼ねる。 */
+export const CONTACT_CO_SYMBOL_ID = "relay_contact_co";
 
 /** 接点マップの文字高さ (mm)。relay_xref.rsのCONTACT_MAP_FONTと一致させること。 */
 export const CONTACT_MAP_FONT = 2.0;
@@ -36,7 +39,7 @@ export const COIL_LOCATION_GAP = 1.0;
 const CHAR_WIDTH_RATIO = 0.6;
 
 /** リレーデバイスの機能種別。 */
-export type RelayRole = "coil" | "contact_no" | "contact_nc";
+export type RelayRole = "coil" | "contact_no" | "contact_nc" | "contact_co";
 
 /** シンボルidからリレーの機能種別を判定する。リレー以外はnull。 */
 export function relayRole(symbolId: string): RelayRole | null {
@@ -47,6 +50,8 @@ export function relayRole(symbolId: string): RelayRole | null {
       return "contact_no";
     case CONTACT_NC_SYMBOL_ID:
       return "contact_nc";
+    case CONTACT_CO_SYMBOL_ID:
+      return "contact_co";
     default:
       return null;
   }
@@ -78,10 +83,47 @@ export interface ContactMapRow {
   entityId: string | null;
 }
 
-/** 接点構成 (部品DBの実装数)。 */
+/** 接点構成 (部品DBの実装数)。使用中の接点の数を数えるときにも使う。 */
 export interface ContactConfig {
   no: number;
   nc: number;
+  /** c接点 (切換接点) の実装数。 */
+  co: number;
+}
+
+/**
+ * 使用中の接点を接点構成へ割り当てた結果 (Rust側 allocate_contacts と同じ規則)。
+ * c接点1極はa接点にもb接点にもなるので、専用極が足りない分はc接点の空き極から充当する。
+ * 逆にc接点の図記号を描いたときは、c接点の極でしか賄えない。
+ */
+export interface ContactAllocation {
+  /** まだ使っていない極数 (未使用接点の行になる)。 */
+  spare: ContactConfig;
+  /** 実装数では賄えなかった数 (0でなければ接点数超過)。 */
+  shortage: ContactConfig;
+}
+
+/** 使用中の接点数を接点構成の極へ割り当てる。 */
+export function allocateContacts(config: ContactConfig, used: ContactConfig): ContactAllocation {
+  let coLeft = Math.max(0, config.co - used.co);
+  const shortage: ContactConfig = { no: 0, nc: 0, co: Math.max(0, used.co - config.co) };
+  const borrow = (usedCount: number, available: number) => {
+    let deficit = Math.max(0, usedCount - available);
+    const taken = Math.min(deficit, coLeft);
+    coLeft -= taken;
+    deficit -= taken;
+    return deficit;
+  };
+  shortage.no = borrow(used.no, config.no);
+  shortage.nc = borrow(used.nc, config.nc);
+  return {
+    spare: {
+      no: Math.max(0, config.no - used.no),
+      nc: Math.max(0, config.nc - used.nc),
+      co: coLeft,
+    },
+    shortage,
+  };
 }
 
 /** 参照記号1つ分のリレーデバイス (コイル+接点群)。 */
@@ -106,7 +148,7 @@ export interface RelayDevice {
 export function parseContactConfig(raw: string): ContactConfig | null {
   const text = raw.trim();
   if (!text || /^[+,]/.test(text) || /[+,]$/.test(text)) return null;
-  const config: ContactConfig = { no: 0, nc: 0 };
+  const config: ContactConfig = { no: 0, nc: 0, co: 0 };
   let terms = 0;
   for (const term of text.split(/[+,\s]+/).filter(Boolean)) {
     const m = /^(\d+)\s*([A-Za-z]+)$/.exec(term);
@@ -115,6 +157,7 @@ export function parseContactConfig(raw: string): ContactConfig | null {
     const kind = m[2].toUpperCase();
     if (kind === "NO") config.no += count;
     else if (kind === "NC") config.nc += count;
+    else if (kind === "CO") config.co += count;
     else return null;
     terms += 1;
   }
@@ -122,12 +165,15 @@ export function parseContactConfig(raw: string): ContactConfig | null {
 }
 
 /**
- * 接点の端子対 (IEC 60947-1)。先頭の数字が接点の連番、末尾の2桁が機能を表し、
- * a接点は3/4、b接点は1/2になる。コイルは端子対ではなく固定の端子記号 A1-A2。
+ * 接点の端子対 (IEC 60947-1 / IEC 60947-5-1)。先頭の数字が接点の連番、末尾の1桁が機能を
+ * 表し、a接点は3/4、b接点は1/2になる。c接点は共通=1・b側=2・a側=4 の3端子を1極で持つので
+ * 「11-12-14」と3つ並べて書く。コイルは端子対ではなく固定の端子記号 A1-A2。
  */
 export function terminalPair(position: number, role: RelayRole): string {
   if (role === "coil") return "A1-A2";
-  return role === "contact_no" ? `${position}3-${position}4` : `${position}1-${position}2`;
+  if (role === "contact_no") return `${position}3-${position}4`;
+  if (role === "contact_co") return `${position}1-${position}2-${position}4`;
+  return `${position}1-${position}2`;
 }
 
 /** デバイスの接点マップを組み立てる (使用中の接点 → 接点構成の残り)。 */
@@ -139,10 +185,16 @@ function buildContactMap(contacts: RelayFunction[], config: ContactConfig | null
     entityId: c.entityId,
   }));
   if (!config) return rows;
-  const used = (role: RelayRole) => contacts.filter((c) => c.role === role).length;
+  const count = (role: RelayRole) => contacts.filter((c) => c.role === role).length;
+  const { spare: left } = allocateContacts(config, {
+    no: count("contact_no"),
+    nc: count("contact_nc"),
+    co: count("contact_co"),
+  });
   const spare: [RelayRole, number][] = [
-    ["contact_no", Math.max(0, config.no - used("contact_no"))],
-    ["contact_nc", Math.max(0, config.nc - used("contact_nc"))],
+    ["contact_no", left.no],
+    ["contact_nc", left.nc],
+    ["contact_co", left.co],
   ];
   for (const [role, count] of spare) {
     for (let i = 0; i < count; i += 1) {

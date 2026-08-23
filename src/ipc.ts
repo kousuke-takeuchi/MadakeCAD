@@ -201,6 +201,11 @@ export interface Sheet {
   zone_rows: number;
   title_block: TitleBlock;
   revisions: Revision[];
+  /**
+   * 注記文字高 (mm)。配線注記・線番・ネットタグの大きさをシート単位で決める図面規格
+   * (canvas/annotationText.ts)。未設定 (旧ファイル) は既定の2.0mm。
+   */
+  annotation_text_mm?: number | null;
   entities: Record<string, Entity>;
 }
 
@@ -249,6 +254,8 @@ export type Command =
   | { type: "rename_sheet"; sheet_id: string; name: string }
   | { type: "set_title_block"; sheet_id: string; title_block: TitleBlock }
   | { type: "set_revisions"; sheet_id: string; revisions: Revision[] }
+  /** シートの注記文字高 (mm) の設定。nullで既定 (2.0mm) へ戻す。範囲は1.0〜3.5mm。 */
+  | { type: "set_sheet_annotation_text"; sheet_id: string; height_mm: number | null }
   | { type: "add_entity"; sheet_id: string; entity: Entity }
   | { type: "update_entity"; sheet_id: string; entity: Entity }
   | { type: "delete_entities"; sheet_id: string; ids: string[] }
@@ -497,7 +504,13 @@ export type SearchKind = "reference" | "value" | "net" | "wire_no" | "text";
 export type DeviceKind = "relay" | "terminal_block" | "other";
 
 /** デバイスを構成する機能1つの種別。 */
-export type DeviceFunctionKind = "coil" | "contact_no" | "contact_nc" | "terminal" | "body";
+export type DeviceFunctionKind =
+  | "coil"
+  | "contact_no"
+  | "contact_nc"
+  | "contact_co"
+  | "terminal"
+  | "body";
 
 /** 検索で見つかった1件 (madake-coreの`SearchHit`)。 */
 export interface SearchHit {

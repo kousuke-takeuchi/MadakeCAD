@@ -239,6 +239,8 @@ pub enum DeviceFunctionKind {
     ContactNo,
     /// b接点 (ブレーク接点)。
     ContactNc,
+    /// c接点 (切換接点)。
+    ContactCo,
     /// 端子台の端子群。
     Terminal,
     /// 機能に分かれない部品の本体。
@@ -423,6 +425,7 @@ fn relay_functions(
             let Some(p) = find(contact.entity_id) else { continue };
             let kind = match contact.role {
                 RelayRole::ContactNc => DeviceFunctionKind::ContactNc,
+                RelayRole::ContactCo => DeviceFunctionKind::ContactCo,
                 _ => DeviceFunctionKind::ContactNo,
             };
             out.push(function(p, kind, terminal_pair(i + 1, contact.role)));

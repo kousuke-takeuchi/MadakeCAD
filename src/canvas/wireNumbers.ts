@@ -7,11 +7,17 @@
 // (採番は図面全体で一意なので、別ネットが同じ線番を持つことはない)。
 
 import type { Point, Sheet } from "../ipc";
+import { annotationScale } from "./annotationText";
 
-/** 線番テキストの文字高さ (mm)。svg.rsのWIRE_NO_FONTと一致させること。 */
+/** 線番テキストの文字高さ (mm)。svg.rsのWIRE_NO_FONTと一致させること (既定値)。 */
 export const WIRE_NO_FONT = 2.5;
-/** 線番テキストと配線の間隔 (mm)。svg.rsのWIRE_NO_GAPと一致させること。 */
+/** 線番テキストと配線の間隔 (mm)。svg.rsのWIRE_NO_GAPと一致させること (既定値)。 */
 export const WIRE_NO_GAP = 2.5;
+
+/** このシートで線番を描く文字高さ (mm)。シートの注記文字高 (G20) に合わせて伸縮する。 */
+export function wireNumberFont(sheet: Sheet | null | undefined): number {
+  return WIRE_NO_FONT * annotationScale(sheet);
+}
 
 /** 描画する線番1件。alignはテキストの揃え (横線=中央、縦線=右)。 */
 export interface WireNumberLabel {
@@ -47,13 +53,15 @@ export function wireNumberLabels(sheet: Sheet): WireNumberLabel[] {
       if (!best || len > best.len) longest.set(number, { a, b, len });
     }
   }
+  // 注記文字高を下げたシートでは、配線からの逃がしも同じ比率で詰める
+  const gap = WIRE_NO_GAP * annotationScale(sheet);
   return [...longest.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([number, { a, b }]) => {
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       // 横に長い線分は上へ、縦に長い線分は左へ逃がす (配線と重ねない)
       return Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)
-        ? { number, at: { x: mid.x, y: mid.y - WIRE_NO_GAP }, align: "center" as const }
-        : { number, at: { x: mid.x - WIRE_NO_GAP, y: mid.y }, align: "right" as const };
+        ? { number, at: { x: mid.x, y: mid.y - gap }, align: "center" as const }
+        : { number, at: { x: mid.x - gap, y: mid.y }, align: "right" as const };
     });
 }

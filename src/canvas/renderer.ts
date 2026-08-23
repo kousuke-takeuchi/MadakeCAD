@@ -53,10 +53,11 @@ import {
   functionLabelText,
   noteColor,
 } from "./textStyle";
-import { WIRE_NO_FONT, wireNumberLabels } from "./wireNumbers";
-import { WIRE_NOTE_FONT, wireNoteLabels } from "./wireNotes";
+import { wireNumberFont, wireNumberLabels } from "./wireNumbers";
+import { wireNoteFont, wireNoteLabels } from "./wireNotes";
 import { TAG_FONT, netTag } from "./netTag";
-import { XREF_FONT, XREF_GAP, xrefTextAt } from "./xref";
+import { XREF_FONT, xrefTextAt } from "./xref";
+import { annotationScale } from "./annotationText";
 import {
   CONTACT_MAP_FONT,
   coilLocationAt,
@@ -661,7 +662,7 @@ function drawWireNumbers(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: She
   const labels = wireNumberLabels(sheet);
   if (labels.length === 0) return;
   ctx.fillStyle = theme.wireNumber;
-  ctx.font = `${Math.max(9, WIRE_NO_FONT * vp.scale)}px monospace`;
+  ctx.font = `${Math.max(9, wireNumberFont(sheet) * vp.scale)}px monospace`;
   for (const label of labels) {
     const s = vp.toScreen(label.at);
     ctx.textAlign = label.align === "center" ? "center" : "right";
@@ -678,7 +679,7 @@ function drawWireNotes(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet
   const labels = wireNoteLabels(sheet);
   if (labels.length === 0) return;
   ctx.fillStyle = theme.wireNote;
-  ctx.font = `${Math.max(8, WIRE_NOTE_FONT * vp.scale)}px monospace`;
+  ctx.font = `${Math.max(8, wireNoteFont(sheet) * vp.scale)}px monospace`;
   for (const label of labels) {
     const s = vp.toScreen(label.at);
     ctx.textAlign = label.align === "center" ? "center" : "left";
@@ -995,10 +996,11 @@ export function renderSheet(
       ctx.arc(s.x, s.y, Math.max(2, 0.6 * vp.scale), 0, Math.PI * 2);
       ctx.fill();
     } else if (e.kind === "net_label") {
-      // 方向付きタグ (G3)。attrs.tagがある時だけ旗の枠で囲む (Rust側 net_tag.rs と同形)
-      const tag = netTag(e);
+      // 方向付きタグ (G3/G19)。attrs.tagがある時だけ旗の枠で囲む (Rust側 net_tag.rs と同形)
+      const labelFont = TAG_FONT * annotationScale(sheet);
+      const tag = netTag(e, labelFont);
       ctx.fillStyle = theme.annotation;
-      ctx.font = `${Math.max(9, TAG_FONT * vp.scale)}px monospace`;
+      ctx.font = `${Math.max(9, labelFont * vp.scale)}px monospace`;
       ctx.textAlign = "left";
       if (tag) {
         ctx.strokeStyle = theme.annotation;
@@ -1020,13 +1022,13 @@ export function renderSheet(
       // シート間クロスリファレンス (IEC 61082-1)。相手のいるラベルだけ右脇に添える
       const xref = opts.xrefs?.get(e.id);
       if (xref) {
-        // タグ付きは旗の右端の外へ逃がす (枠と重ねない)
-        const at = vp.toScreen(
-          tag ? { x: tag.right + XREF_GAP, y: tag.textAt.y } : xrefTextAt(e),
-        );
+        // タグ付きは旗の本体側の外へ逃がす (枠にも自分の配線にも重ねない)
+        const at = vp.toScreen(tag ? tag.xrefAt : xrefTextAt(e, labelFont));
         ctx.fillStyle = theme.xref;
-        ctx.font = `${Math.max(8, XREF_FONT * vp.scale)}px monospace`;
+        ctx.font = `${Math.max(8, XREF_FONT * annotationScale(sheet) * vp.scale)}px monospace`;
+        ctx.textAlign = tag ? canvasTextAlign(tag.xrefAnchor) : "left";
         ctx.fillText(xref, at.x, at.y);
+        ctx.textAlign = "left";
       }
     } else if (e.kind === "text") {
       // 注記の装飾 (G4): 色トークン・基準位置・太字 (紙の色は text_style.rs が持つ)

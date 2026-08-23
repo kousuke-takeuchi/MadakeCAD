@@ -844,6 +844,7 @@
       "coil": "Relay coil",
       "contactNo": "Relay contact {terminals}",
       "contactNc": "Relay contact {terminals}",
+      "contactCo": "Relay changeover contact {terminals}",
       "terminal": "Terminal block, terminals {terminals}",
       "body": "Part"
     },
@@ -865,6 +866,7 @@
       "coil": "Coil {terminals}",
       "contactNo": "Contact {terminals}",
       "contactNc": "Contact {terminals}",
+      "contactCo": "Changeover contact {terminals}",
       "terminal": "Terminals {terminals}",
       "body": "Body"
     },
@@ -933,6 +935,13 @@
     "frame": "Drawing frame",
     "grid": "Grid",
     "wireNotesHint": "Gauge, colour and cut length printed along every wire. Always exported to SVG/PDF; this toggle only hides it on screen."
+  },
+  "annotationText": {
+    "section": "Sheet annotation",
+    "row": "Text height mm",
+    "hint": "The size of the wire notes, wire numbers and net tags. It is a drawing standard, so it is set per sheet. Leave it empty for the default (2.0mm).",
+    "range": "{min}-{max}mm. On a drawing where devices sit on a 5mm pitch, about 1.4mm keeps a note off the row below.",
+    "changedLog": "Annotation text height set to {height}mm"
   },
   "netLabel": {
     "tagRow": "Tag shape",

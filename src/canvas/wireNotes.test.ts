@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Entity, Sheet, Wire } from "../ipc";
-import { WIRE_NOTE_GAP, colorJa, wireNoteLabels, wireNoteText } from "./wireNotes";
+import { WIRE_NOTE_GAP, colorJa, wireNoteFont, wireNoteLabels, wireNoteText } from "./wireNotes";
 
 function wire(
   id: string,
@@ -98,5 +98,21 @@ describe("wireNoteLabels", () => {
   // ja: 属性の無いワイヤは注記の一覧に現れない
   it("skips wires that carry no attributes", () => {
     expect(wireNoteLabels(sheetOf([wire("w1", [[0, 0], [10, 0]], "", 0, null)]))).toEqual([]);
+  });
+});
+
+describe("annotation text height", () => {
+  // ja: 注記文字高を設定していないシートは、これまでどおり2.0mmの注記で描かれる
+  it("keeps the default 2.0mm note height on a sheet with no setting", () => {
+    const s = sheetOf([wire("w", [[0, 20], [40, 20]], "red", 0.5, null)]);
+    expect(wireNoteFont(s)).toBeCloseTo(2.0, 9);
+    expect(wireNoteLabels(s)[0].at.y).toBeCloseTo(20 + WIRE_NOTE_GAP, 9);
+  });
+
+  // ja: シートの注記文字高を1.4mmにすると、配線注記はちょうどその高さで描かれ配線にも寄る
+  it("draws the wire notes at the sheet's annotation text height and moves them closer", () => {
+    const s = { ...sheetOf([wire("w", [[0, 20], [40, 20]], "red", 0.5, null)]), annotation_text_mm: 1.4 };
+    expect(wireNoteFont(s)).toBeCloseTo(1.4, 9);
+    expect(wireNoteLabels(s)[0].at.y).toBeCloseTo(20 + WIRE_NOTE_GAP * 0.7, 9);
   });
 });

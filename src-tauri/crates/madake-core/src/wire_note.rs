@@ -8,10 +8,16 @@
 use crate::geometry::Point;
 use crate::model::{Entity, EntityId, Sheet, Wire};
 
-/// 配線注記の文字高さ (mm)。線番より一回り小さい補助注記。
+/// 配線注記の文字高さ (mm)。線番より一回り小さい補助注記 (注記文字高が既定のときの値)。
 pub const WIRE_NOTE_FONT: f64 = 2.0;
-/// 配線注記と配線の間隔 (mm)。線番と同じグリッドピッチ。
+/// 配線注記と配線の間隔 (mm)。線番と同じグリッドピッチ (注記文字高が既定のときの値)。
 pub const WIRE_NOTE_GAP: f64 = 2.5;
+
+/// このシートで配線注記を描く文字高さ (mm)。シートの注記文字高
+/// ([`Sheet::annotation_text_mm`]) そのもので、未設定なら [`WIRE_NOTE_FONT`]。
+pub fn wire_note_font(sheet: &Sheet) -> f64 {
+    WIRE_NOTE_FONT * sheet.annotation_scale()
+}
 
 /// 注記テキストの寄せ方。横線の下は中央揃え、縦線の右は左揃え。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,6 +90,8 @@ pub fn wire_note_text(wire: &Wire) -> Option<String> {
 /// シートの配線注記を、ワイヤid順 (決定的) に返す。属性の無いワイヤは含まない。
 pub fn wire_notes(sheet: &Sheet) -> Vec<WireNote> {
     let mut out = Vec::new();
+    // 注記文字高を下げたシートでは、配線からの逃がしも同じ比率で詰める (注記の層ごと小さくする)
+    let gap = WIRE_NOTE_GAP * sheet.annotation_scale();
     for (id, entity) in &sheet.entities {
         let Entity::Wire(w) = entity else { continue };
         let Some(text) = wire_note_text(w) else {
@@ -95,9 +103,9 @@ pub fn wire_notes(sheet: &Sheet) -> Vec<WireNote> {
         let mid = crate::svg::midpoint(&a, &b);
         // 線番は横線の上・縦線の左。注記はその反対側 (下・右) に置いて重ねない
         let (at, align) = if (b.x - a.x).abs() >= (b.y - a.y).abs() {
-            (Point::new(mid.x, mid.y + WIRE_NOTE_GAP), NoteAlign::Center)
+            (Point::new(mid.x, mid.y + gap), NoteAlign::Center)
         } else {
-            (Point::new(mid.x + WIRE_NOTE_GAP, mid.y), NoteAlign::Left)
+            (Point::new(mid.x + gap, mid.y), NoteAlign::Left)
         };
         out.push(WireNote {
             wire_id: *id,
@@ -209,6 +217,36 @@ mod tests {
         let texts: Vec<&str> = notes.iter().map(|n| n.text.as_str()).collect();
         assert!(texts.contains(&"0.5sq 赤 0.3m"), "{texts:?}");
         assert!(texts.contains(&"0.5sq 赤 0.9m"), "{texts:?}");
+    }
+
+    /// A sheet that has no annotation text height set keeps the 2.0mm notes it has always had.
+    /// 注記文字高を設定していないシートは、これまでどおり2.0mmの注記で描かれる。
+    #[test]
+    fn a_sheet_without_a_setting_keeps_the_default_note_height() {
+        let sheet = sheet_with(vec![wire(&[(0.0, 20.0), (40.0, 20.0)], "red", 0.5, None)]);
+        assert!((wire_note_font(&sheet) - 2.0).abs() < 1e-9);
+        assert!((wire_notes(&sheet)[0].at.y - (20.0 + WIRE_NOTE_GAP)).abs() < 1e-9);
+    }
+
+    /// Setting the sheet's annotation text height to 1.4mm draws the wire notes at exactly that height.
+    /// シートの注記文字高を1.4mmにすると、配線注記はちょうどその高さで描かれる。
+    #[test]
+    fn the_sheet_setting_is_the_wire_note_height() {
+        let mut sheet = sheet_with(vec![wire(&[(0.0, 20.0), (40.0, 20.0)], "red", 0.5, None)]);
+        sheet.annotation_text_mm = Some(1.4);
+        assert!((wire_note_font(&sheet) - 1.4).abs() < 1e-9);
+    }
+
+    /// Smaller annotation text also moves the note closer to its wire, so a row of wires 5mm apart stays readable.
+    /// 注記文字を小さくすると注記が配線に寄るので、5mm間隔で並ぶ配線でも読める余白が残る。
+    #[test]
+    fn smaller_annotation_text_moves_the_note_closer_to_the_wire() {
+        let mut sheet = sheet_with(vec![wire(&[(0.0, 20.0), (40.0, 20.0)], "red", 0.5, None)]);
+        sheet.annotation_text_mm = Some(1.4);
+        let note = &wire_notes(&sheet)[0];
+        assert!((note.at.y - (20.0 + WIRE_NOTE_GAP * 0.7)).abs() < 1e-9, "{note:?}");
+        // 5mmピッチの隣の行 (y=25) の配線には届かない
+        assert!(note.at.y + 1.4 < 25.0 - 1.4, "隣の行の注記と重ならない: {note:?}");
     }
 
     /// On a bent wire the note is placed on the longest straight run, where there is room to read it.

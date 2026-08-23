@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Entity, Sheet } from "../ipc";
-import { WIRE_NO_FONT, WIRE_NO_GAP, wireNumberLabels } from "./wireNumbers";
+import { WIRE_NO_FONT, WIRE_NO_GAP, wireNumberFont, wireNumberLabels } from "./wireNumbers";
 
 let seq = 0;
 function wire(points: [number, number][], net: string | null): Entity {
@@ -86,5 +86,21 @@ describe("wireNumberLabels", () => {
   it("ignores entities that are not wires", () => {
     const label = { kind: "net_label", id: "l1", at: { x: 0, y: 0 }, name: "24V", rotation: 0 } as Entity;
     expect(wireNumberLabels(sheet([label]))).toEqual([]);
+  });
+});
+
+describe("annotation text height", () => {
+  // ja: 注記文字高を設定していないシートの線番は、これまでどおり2.5mm・配線から2.5mmで描かれる
+  it("keeps the default wire number size and offset on a sheet with no setting", () => {
+    const s = sheet([wire([[10, 40], [30, 40]], "12")]);
+    expect(wireNumberFont(s)).toBeCloseTo(WIRE_NO_FONT, 9);
+    expect(wireNumberLabels(s)[0].at.y).toBeCloseTo(40 - WIRE_NO_GAP, 9);
+  });
+
+  // ja: シートの注記文字高を1.4mmにすると、線番も同じ比率(0.7倍)で小さくなり配線に寄る
+  it("shrinks the wire number in proportion to the sheet's annotation text height", () => {
+    const s = { ...sheet([wire([[10, 40], [30, 40]], "12")]), annotation_text_mm: 1.4 };
+    expect(wireNumberFont(s)).toBeCloseTo(WIRE_NO_FONT * 0.7, 9);
+    expect(wireNumberLabels(s)[0].at.y).toBeCloseTo(40 - WIRE_NO_GAP * 0.7, 9);
   });
 });

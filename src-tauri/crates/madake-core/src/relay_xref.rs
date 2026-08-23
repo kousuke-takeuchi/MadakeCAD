@@ -31,6 +31,8 @@ pub const COIL_SYMBOL_ID: &str = "relay_coil";
 pub const CONTACT_NO_SYMBOL_ID: &str = "relay_contact_no";
 /// b接点 (ブレーク接点) のシンボルid。
 pub const CONTACT_NC_SYMBOL_ID: &str = "relay_contact_nc";
+/// c接点 (切換接点) のシンボルid。1極でa接点とb接点を兼ねる。
+pub const CONTACT_CO_SYMBOL_ID: &str = "relay_contact_co";
 
 /// 接点マップの文字高さ (mm)。
 pub const CONTACT_MAP_FONT: f64 = 2.0;
@@ -57,6 +59,8 @@ pub enum RelayRole {
     ContactNo,
     /// b接点 (ブレーク接点)。
     ContactNc,
+    /// c接点 (切換接点)。1極で共通・b側・a側の3端子を持ち、a接点にもb接点にも使える。
+    ContactCo,
 }
 
 /// シンボルidからリレーの機能種別を判定する。リレー以外はNone。
@@ -65,6 +69,7 @@ pub fn relay_role(symbol_id: &str) -> Option<RelayRole> {
         COIL_SYMBOL_ID => Some(RelayRole::Coil),
         CONTACT_NO_SYMBOL_ID => Some(RelayRole::ContactNo),
         CONTACT_NC_SYMBOL_ID => Some(RelayRole::ContactNc),
+        CONTACT_CO_SYMBOL_ID => Some(RelayRole::ContactCo),
         _ => None,
     }
 }
@@ -102,13 +107,56 @@ pub struct RelayDevice {
     pub contact_config_raw: String,
 }
 
-/// 接点構成 (部品DBの実装数)。
+/// 接点構成 (部品DBの実装数)。使用中の接点の数を数えるときにも使う。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct ContactConfig {
     /// a接点の実装数。
     pub no: usize,
     /// b接点の実装数。
     pub nc: usize,
+    /// c接点 (切換接点) の実装数。
+    #[serde(default)]
+    pub co: usize,
+}
+
+/// 使用中の接点を接点構成へ割り当てた結果。
+///
+/// c接点1極は共通端子の倒れる向きでa接点にもb接点にもなるので、**a接点・b接点の
+/// 専用極が足りないときはc接点の空き極から充当する**。逆にc接点の図記号を描いた
+/// ときは切換動作そのものを使うので、c接点の極でしか賄えない。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ContactAllocation {
+    /// まだ使っていない極数 (未使用接点の行になる)。
+    pub spare: ContactConfig,
+    /// 実装数では賄えなかった数 (0でなければ接点数超過)。
+    pub shortage: ContactConfig,
+}
+
+/// 使用中の接点数 (`used`) を接点構成 (`config`) の極へ割り当てる。
+pub fn allocate_contacts(config: ContactConfig, used: ContactConfig) -> ContactAllocation {
+    let mut co_left = config.co;
+    let mut shortage = ContactConfig::default();
+    // c接点はc接点の極でしか作れない
+    shortage.co = used.co.saturating_sub(co_left);
+    co_left = co_left.saturating_sub(used.co);
+    // a接点・b接点は専用極を先に使い、足りない分をc接点の空き極から借りる
+    let borrow = |used: usize, available: usize, co_left: &mut usize| {
+        let mut deficit = used.saturating_sub(available);
+        let taken = deficit.min(*co_left);
+        *co_left -= taken;
+        deficit -= taken;
+        deficit
+    };
+    shortage.no = borrow(used.no, config.no, &mut co_left);
+    shortage.nc = borrow(used.nc, config.nc, &mut co_left);
+    ContactAllocation {
+        spare: ContactConfig {
+            no: config.no.saturating_sub(used.no),
+            nc: config.nc.saturating_sub(used.nc),
+            co: co_left,
+        },
+        shortage,
+    }
 }
 
 /// 接点マップの1行。
@@ -123,7 +171,7 @@ pub struct ContactMapRow {
     pub entity_id: Option<EntityId>,
 }
 
-/// 接点構成の文字列を読む。例 `"2NO+2NC"` → a接点2・b接点2。
+/// 接点構成の文字列を読む。例 `"2NO+2NC"` → a接点2・b接点2、`"2CO"` → c接点2。
 ///
 /// 区切りは `+` / `,` / 空白。大文字小文字は問わない。個数の無い `"NO"` や
 /// 種別の無い `"2"`、未知の種別 (`"2c"` 等) は読めないものとして `None` を返す
@@ -146,6 +194,7 @@ pub fn parse_contact_config(raw: &str) -> Option<ContactConfig> {
         match term[digits.len()..].trim().to_ascii_uppercase().as_str() {
             "NO" => config.no += count,
             "NC" => config.nc += count,
+            "CO" => config.co += count,
             _ => return None,
         }
         terms += 1;
@@ -153,13 +202,18 @@ pub fn parse_contact_config(raw: &str) -> Option<ContactConfig> {
     (terms > 0).then_some(config)
 }
 
-/// 接点の端子対 (IEC 60947-1)。先頭の数字が接点の連番 (`position`)、末尾の2桁が機能を表し、
-/// a接点は3/4、b接点は1/2になる。コイルは端子対ではなく固定の端子記号 `A1-A2`。
+/// 接点の端子対 (IEC 60947-1 / IEC 60947-5-1)。先頭の数字が接点の連番 (`position`)、
+/// 末尾の1桁が機能を表し、a接点は3/4、b接点は1/2になる。
+///
+/// c接点 (切換接点) は共通=1・b側=2・a側=4 の**3端子**を1極で持つので、対ではなく
+/// `11-12-14` と3つ並べて書く (リレーソケットの表記と同じ)。
+/// コイルは端子対ではなく固定の端子記号 `A1-A2`。
 pub fn terminal_pair(position: usize, role: RelayRole) -> String {
     match role {
         RelayRole::Coil => "A1-A2".to_string(),
         RelayRole::ContactNo => format!("{position}3-{position}4"),
         RelayRole::ContactNc => format!("{position}1-{position}2"),
+        RelayRole::ContactCo => format!("{position}1-{position}2-{position}4"),
     }
 }
 
@@ -167,6 +221,16 @@ impl RelayDevice {
     /// 接点構成 (読めなければNone)。
     pub fn contact_config(&self) -> Option<ContactConfig> {
         parse_contact_config(&self.contact_config_raw)
+    }
+
+    /// 図面に描かれている接点の数を種別ごとに数えたもの。
+    pub fn used_contacts(&self) -> ContactConfig {
+        let count = |role: RelayRole| self.contacts.iter().filter(|c| c.role == role).count();
+        ContactConfig {
+            no: count(RelayRole::ContactNo),
+            nc: count(RelayRole::ContactNc),
+            co: count(RelayRole::ContactCo),
+        }
     }
 
     /// コイルの下に描く接点マップ。配置済みの接点を図面の読み順に並べ、接点構成が
@@ -186,10 +250,11 @@ impl RelayDevice {
         let Some(config) = self.contact_config() else {
             return rows;
         };
-        let used = |role: RelayRole| self.contacts.iter().filter(|c| c.role == role).count();
+        let spare = allocate_contacts(config, self.used_contacts()).spare;
         let spare = [
-            (RelayRole::ContactNo, config.no.saturating_sub(used(RelayRole::ContactNo))),
-            (RelayRole::ContactNc, config.nc.saturating_sub(used(RelayRole::ContactNc))),
+            (RelayRole::ContactNo, spare.no),
+            (RelayRole::ContactNc, spare.nc),
+            (RelayRole::ContactCo, spare.co),
         ];
         for (role, count) in spare {
             for _ in 0..count {
@@ -419,16 +484,20 @@ pub fn relay_diagnostics(project: &Project) -> Vec<Diagnostic> {
         };
         let mut over: Vec<String> = Vec::new();
         let mut ids: Vec<EntityId> = device.coils.iter().map(|c| c.entity_id).collect();
-        for (role, label, available) in [
-            (RelayRole::ContactNo, "a接点", config.no),
-            (RelayRole::ContactNc, "b接点", config.nc),
+        // c接点1極はa接点にもb接点にもなるので、専用極が足りない分はc接点の空き極から充当する
+        let shortage = allocate_contacts(config, device.used_contacts()).shortage;
+        for (role, label, available, short) in [
+            (RelayRole::ContactNo, "a接点", config.no, shortage.no),
+            (RelayRole::ContactNc, "b接点", config.nc, shortage.nc),
+            (RelayRole::ContactCo, "c接点", config.co, shortage.co),
         ] {
+            if short == 0 {
+                continue;
+            }
             let used: Vec<&RelayFunction> =
                 device.contacts.iter().filter(|c| c.role == role).collect();
-            if used.len() > available {
-                over.push(format!("{label} {}個 (実装 {available}個)", used.len()));
-                ids.extend(used.iter().map(|c| c.entity_id));
-            }
+            over.push(format!("{label} {}個 (実装 {available}個)", used.len()));
+            ids.extend(used.iter().map(|c| c.entity_id));
         }
         if !over.is_empty() {
             diags.push(Diagnostic {
@@ -677,9 +746,9 @@ mod tests {
     /// 「2NO+2NC」のような接点構成は、その部品が実際に持つa接点・b接点の数として読み取られる。
     #[test]
     fn contact_config_parses_make_and_break_counts() {
-        assert_eq!(parse_contact_config("2NO+2NC"), Some(ContactConfig { no: 2, nc: 2 }));
-        assert_eq!(parse_contact_config("4NO"), Some(ContactConfig { no: 4, nc: 0 }));
-        assert_eq!(parse_contact_config(" 1no , 3nc "), Some(ContactConfig { no: 1, nc: 3 }));
+        assert_eq!(parse_contact_config("2NO+2NC"), Some(ContactConfig { no: 2, nc: 2, co: 0 }));
+        assert_eq!(parse_contact_config("4NO"), Some(ContactConfig { no: 4, nc: 0, co: 0 }));
+        assert_eq!(parse_contact_config(" 1no , 3nc "), Some(ContactConfig { no: 1, nc: 3, co: 0 }));
     }
 
     /// An unreadable contact configuration is ignored instead of guessing a number of contacts.
@@ -805,6 +874,167 @@ mod tests {
         let project = project_with(1, vec![(0, symbol(CONTACT_NO_SYMBOL_ID, "K9", 20.0, 20.0))]);
         let diags = crate::verify::verify_project(&project);
         assert!(diags.iter().any(|d| d.code == "erc.orphan_contact"), "{diags:?}");
+    }
+
+    /// A changeover contact counts as a contact of its relay, exactly like a make or a break contact.
+    /// c接点(切換接点)も、a接点・b接点と同じようにそのリレーの接点として数えられる。
+    #[test]
+    fn a_changeover_contact_belongs_to_its_relay() {
+        assert_eq!(relay_role(CONTACT_CO_SYMBOL_ID), Some(RelayRole::ContactCo));
+        let project = project_with(
+            1,
+            vec![
+                (0, symbol(COIL_SYMBOL_ID, "K1", 20.0, 20.0)),
+                (0, symbol(CONTACT_CO_SYMBOL_ID, "K1", 60.0, 20.0)),
+            ],
+        );
+        let device = &relay_devices(&project)[0];
+        assert_eq!(device.contacts.len(), 1);
+        assert_eq!(device.contacts[0].role, RelayRole::ContactCo);
+    }
+
+    /// A relay drawn with changeover contacts is no longer reported as a coil that drives nothing.
+    /// c接点で組んだリレーは、「接点を動かしていないコイル」として誤って指摘されなくなる。
+    #[test]
+    fn a_relay_with_changeover_contacts_is_not_reported_as_contactless() {
+        let project = project_with(
+            1,
+            vec![
+                (0, symbol(COIL_SYMBOL_ID, "K1", 20.0, 20.0)),
+                (0, symbol(CONTACT_CO_SYMBOL_ID, "K1", 60.0, 20.0)),
+                (0, symbol(CONTACT_CO_SYMBOL_ID, "K1", 100.0, 20.0)),
+            ],
+        );
+        let diags = relay_diagnostics(&project);
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    /// The terminals of a changeover contact are written as three numbers - common, break, make - like "11-12-14".
+    /// c接点の端子は「11-12-14」のように、共通・b側・a側の3つを並べて書かれる。
+    #[test]
+    fn changeover_terminals_are_written_common_break_make() {
+        assert_eq!(terminal_pair(1, RelayRole::ContactCo), "11-12-14");
+        assert_eq!(terminal_pair(2, RelayRole::ContactCo), "21-22-24");
+        assert_eq!(terminal_pair(3, RelayRole::ContactCo), "31-32-34");
+    }
+
+    /// The contact map under the coil lists changeover contacts with their three terminals and their address.
+    /// コイル下の接点マップには、c接点も3つの端子と所在つきで並ぶ。
+    #[test]
+    fn contact_map_lists_changeover_contacts() {
+        let project = project_with(
+            1,
+            vec![
+                (0, symbol(COIL_SYMBOL_ID, "K1", 20.0, 20.0)),
+                (0, symbol(CONTACT_CO_SYMBOL_ID, "K1", 250.0, 70.0)),
+            ],
+        );
+        let rows = relay_devices(&project)[0].contact_map();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].terminals, "11-12-14");
+        assert_eq!(rows[0].address, "/1.B3");
+        assert_eq!(rows[0].role, RelayRole::ContactCo);
+    }
+
+    /// A contact configuration like "2CO" is read as two changeover poles.
+    /// 「2CO」のような接点構成は、c接点2極として読み取られる。
+    #[test]
+    fn contact_config_parses_changeover_poles() {
+        assert_eq!(
+            parse_contact_config("2CO"),
+            Some(ContactConfig { no: 0, nc: 0, co: 2 })
+        );
+        assert_eq!(
+            parse_contact_config("1co+2NO"),
+            Some(ContactConfig { no: 2, nc: 0, co: 1 })
+        );
+    }
+
+    /// The unused poles of a "2CO" relay with one contact drawn are listed as the remaining changeover contact.
+    /// 「2CO」のリレーに接点を1つだけ描いたときは、残り1極がc接点の未使用行として並ぶ。
+    #[test]
+    fn contact_map_shows_the_remaining_changeover_poles() {
+        let project = project_with(
+            1,
+            vec![
+                (
+                    0,
+                    with_attr(symbol(COIL_SYMBOL_ID, "K1", 20.0, 20.0), CONTACT_CONFIG_ATTR, "2CO"),
+                ),
+                (0, symbol(CONTACT_CO_SYMBOL_ID, "K1", 250.0, 70.0)),
+            ],
+        );
+        let rows = relay_devices(&project)[0].contact_map();
+        assert_eq!(
+            rows.iter()
+                .map(|r| (r.terminals.as_str(), r.address.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("11-12-14", "/1.B3"), ("21-22-24", CONTACT_UNUSED)]
+        );
+    }
+
+    /// A changeover pole may be drawn as a plain make or break contact, so a "2CO" relay accepts two make contacts.
+    /// c接点の極はa接点・b接点としても描けるので、「2CO」のリレーはa接点2個の使い方も受け付ける。
+    #[test]
+    fn a_changeover_pole_can_be_used_as_a_make_or_break_contact() {
+        let project = project_with(
+            1,
+            vec![
+                (
+                    0,
+                    with_attr(symbol(COIL_SYMBOL_ID, "K1", 20.0, 20.0), CONTACT_CONFIG_ATTR, "2CO"),
+                ),
+                (0, symbol(CONTACT_NO_SYMBOL_ID, "K1", 60.0, 20.0)),
+                (0, symbol(CONTACT_NC_SYMBOL_ID, "K1", 100.0, 20.0)),
+            ],
+        );
+        let diags = relay_diagnostics(&project);
+        assert!(diags.is_empty(), "2極を使い切っているので指摘なし: {diags:?}");
+    }
+
+    /// Using more poles than the part has is still an error, and the message names the changeover contact.
+    /// 部品の極数を超えて使えばやはりエラーになり、メッセージにc接点と示される。
+    #[test]
+    fn using_more_changeover_contacts_than_the_part_has_is_an_error() {
+        let project = project_with(
+            1,
+            vec![
+                (
+                    0,
+                    with_attr(symbol(COIL_SYMBOL_ID, "K1", 20.0, 20.0), CONTACT_CONFIG_ATTR, "1CO"),
+                ),
+                (0, symbol(CONTACT_CO_SYMBOL_ID, "K1", 60.0, 20.0)),
+                (0, symbol(CONTACT_CO_SYMBOL_ID, "K1", 100.0, 20.0)),
+            ],
+        );
+        let d = relay_diagnostics(&project)
+            .into_iter()
+            .find(|d| d.code == "erc.contact_overflow")
+            .expect("接点数超過");
+        assert_eq!(d.severity, Severity::Error);
+        assert!(d.message.contains("c接点 2個 (実装 1個)"), "{}", d.message);
+    }
+
+    /// A make contact cannot borrow a changeover pole that a changeover contact already uses.
+    /// c接点の図記号が使っている極は、a接点が借りることはできない。
+    #[test]
+    fn a_make_contact_cannot_borrow_a_pole_already_in_use() {
+        let project = project_with(
+            1,
+            vec![
+                (
+                    0,
+                    with_attr(symbol(COIL_SYMBOL_ID, "K1", 20.0, 20.0), CONTACT_CONFIG_ATTR, "1CO"),
+                ),
+                (0, symbol(CONTACT_CO_SYMBOL_ID, "K1", 60.0, 20.0)),
+                (0, symbol(CONTACT_NO_SYMBOL_ID, "K1", 100.0, 20.0)),
+            ],
+        );
+        let d = relay_diagnostics(&project)
+            .into_iter()
+            .find(|d| d.code == "erc.contact_overflow")
+            .expect("接点数超過");
+        assert!(d.message.contains("a接点 1個 (実装 0個)"), "{}", d.message);
     }
 
     /// The contact map table is centred under the coil and grows downwards, one row per contact.

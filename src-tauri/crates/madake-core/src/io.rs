@@ -220,15 +220,58 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 6, the version that added panel item numbers and the legend table.
-    /// 現行のファイル形式バージョンは6 (盤のアイテム番号と凡例表を追加した版) である。
+    /// The current file format version is 7, the version that added the per-sheet annotation text height.
+    /// 現行のファイル形式バージョンは7 (シートごとの注記文字高を追加した版) である。
     #[test]
-    fn the_current_format_version_is_six() {
-        assert_eq!(FORMAT_VERSION, 6);
+    fn the_current_format_version_is_seven() {
+        assert_eq!(FORMAT_VERSION, 7);
         let mut old = Project::new("x");
-        old.format_version = 5;
+        old.format_version = 6;
         migrate(&mut old);
-        assert_eq!(old.format_version, 6);
+        assert_eq!(old.format_version, 7);
+    }
+
+    /// A drawing saved before the annotation text height existed opens at the default 2.0mm, so its notes look exactly as before.
+    /// 注記文字高が無かった頃の図面は既定の2.0mmで開くので、注記の見た目はこれまでと変わらない。
+    #[test]
+    fn an_old_project_file_opens_with_the_default_annotation_text_height() {
+        let dir = std::env::temp_dir().join(format!("madake-io-annot-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.mdkproj");
+        // format_version 6の頃のファイル (シートに annotation_text_mm が無い)
+        std::fs::write(
+            &path,
+            r#"{"format_version":6,"name":"旧図面","wire_parts":[],"plc_assignments":[],
+                "sheets":[{"id":"88888888-8888-4888-8888-888888888888","name":"S1","size":"A3",
+                "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},
+                "entities":{}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.sheets[0].annotation_text_mm, None, "設定なしとして開く");
+        assert!((loaded.sheets[0].annotation_text_mm() - 2.0).abs() < 1e-9);
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The annotation text height set on a sheet is saved to the file and comes back on reload.
+    /// シートに設定した注記文字高はファイルへ保存され、読み直しても残っている。
+    #[test]
+    fn the_annotation_text_height_survives_a_save_and_reload() {
+        let mut engine = Engine::new(Project::new("annot"));
+        let sheet_id = engine.project().sheets[0].id;
+        engine
+            .execute(crate::command::Command::SetSheetAnnotationText {
+                sheet_id,
+                height_mm: Some(1.4),
+            })
+            .unwrap();
+        let dir = std::env::temp_dir().join(format!("madake-io-annot2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.mdkproj");
+        save_project(&path, engine.project()).unwrap();
+        assert_eq!(load_project(&path).unwrap().sheets[0].annotation_text_mm, Some(1.4));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// A panel drawn before item numbers existed opens with no balloons at all: the footprints keep their place and can be numbered whenever the drawing is next tidied up.

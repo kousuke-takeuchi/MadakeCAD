@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1737仕様項目**。
+全5領域・**1783仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -53,6 +53,10 @@
 - UpdateEntityはエンティティを丸ごと置換し、undoで置換前の状態に戻る。 <sub>`update_entity_undo_restores_previous_version`</sub>
 - SetTitleBlockはシートの表題欄を更新し、undoで以前の内容に戻る。 <sub>`set_title_block_is_undoable`</sub>
 - SetRevisionsは改訂欄の行を置き換え、undoで以前のリストに戻る。 <sub>`set_revisions_is_undoable`</sub>
+- シートの注記文字高はコマンドで設定し、undoで以前の高さに戻る。 <sub>`set_sheet_annotation_text_is_undoable`</sub>
+- 注記文字高をnullで消すと、シートは既定の2.0mmに戻る。 <sub>`clearing_the_annotation_text_height_restores_the_default`</sub>
+- 1.0〜3.5mmの範囲を外れた注記文字高は理由付きで拒否され、シートは書き換わらない。 <sub>`an_out_of_range_annotation_text_height_is_rejected`</sub>
+- 注記文字高のコマンドは素のJSONで表現でき、AIやCLIから送れる。 <sub>`set_sheet_annotation_text_is_plain_json`</sub>
 - SetPlcAssignmentsはプロジェクトのPLC I/O割付表を丸ごと置き換え、undoで以前の表に戻る。 <sub>`set_plc_assignments_is_undoable`</sub>
 - SetFrameTemplateはプロジェクト全体の図枠テンプレートを1回の編集で差し替え、undoで元の図枠へ戻る(最初の差し替えをundoすると未指定=既定の図枠へ戻る)。 <sub>`set_frame_template_is_undoable`</sub>
 - SetFrameTemplateは知らないidも受け付ける(図面は既定の図枠で描かれ続けるので、他所で作ったプロジェクトも開ける)。 <sub>`set_frame_template_accepts_an_unknown_id`</sub>
@@ -129,7 +133,9 @@
 - 盤レイアウトが無かった頃のプロジェクトファイルは全シートが回路図シートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは6 (盤のアイテム番号と凡例表を追加した版) である。 <sub>`the_current_format_version_is_six`</sub>
+- 現行のファイル形式バージョンは7 (シートごとの注記文字高を追加した版) である。 <sub>`the_current_format_version_is_seven`</sub>
+- 注記文字高が無かった頃の図面は既定の2.0mmで開くので、注記の見た目はこれまでと変わらない。 <sub>`an_old_project_file_opens_with_the_default_annotation_text_height`</sub>
+- シートに設定した注記文字高はファイルへ保存され、読み直しても残っている。 <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
 - アイテム番号が無かった頃の盤図面はバルーンの無い状態で開く。フットプリントの位置はそのままで、番号はいつでも振り直せる。 <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
 - プロジェクトに選んだ図枠テンプレートはファイルへ保存され、読み直しても残っている。 <sub>`the_frame_template_survives_a_save_and_reload`</sub>
 
@@ -190,10 +196,14 @@
 
 ### net_tag
 
-- タグ「右」のネットラベルは、右へ先端が飛び出した五角形の旗として描かれる。 <sub>`tag_right_points_to_the_right`</sub>
-- タグ「左」のネットラベルは、先端が左にある左右反転した旗として描かれる。 <sub>`tag_left_points_to_the_left`</sub>
+- タグ「右」のネットラベルは、置いた点から右へ先端が飛び出した五角形の旗として描かれる。 <sub>`tag_right_points_to_the_right`</sub>
+- タグ「左」のネットラベルは、先端が左へ飛び出した左右反転した旗として描かれる。 <sub>`tag_left_points_to_the_left`</sub>
+- 旗の本体はラベルを置いた点を覆わず、先端と反対側へ伸びる。ラベルが載っている配線が隠れない。 <sub>`the_flag_body_grows_away_from_the_point`</sub>
+- ラベルを置いた点は先端の付け根にあたるので、左向きの旗と右向きの旗はちょうど鏡像になる。 <sub>`the_label_position_is_the_root_of_the_point`</sub>
 - タグの文字は必ず旗の内側に収まり、旗の幅はネット名の長さに合わせて伸びる。 <sub>`tag_box_follows_the_text_width`</sub>
 - 左向きと右向きのタグは同じ大きさになるので、左右のラベルが並んでも高さと幅がそろう。 <sub>`both_directions_have_the_same_size`</sub>
+- シート間クロスリファレンスは旗の本体側の外へ逃がされるので、先端や配線の上には出ない。 <sub>`the_cross_reference_escapes_on_the_body_side`</sub>
+- 注記文字高を小さくすると、文字・余白・先端がまとめて縮み、旗の形はそのままで小さくなる。 <sub>`a_smaller_annotation_height_shrinks_the_whole_flag`</sub>
 - タグ属性の無いネットラベルは、これまでどおり文字だけの見た目のままになる。 <sub>`label_without_tag_attribute_stays_plain_text`</sub>
 - 知らないタグの値(打ち間違いや "up")は無視され、失敗せずに文字だけの表示に戻る。 <sub>`unknown_tag_value_is_ignored`</sub>
 
@@ -333,6 +343,15 @@
 - 読み取れない接点構成は、接点数の検証が黙って効かなくなるため警告として報告される。 <sub>`an_unreadable_contact_config_is_a_warning`</sub>
 - 正しく組まれたリレー(コイル+接点構成の範囲内の接点)には、クロスリファレンスの指摘が一切出ない。 <sub>`a_correct_relay_produces_no_diagnostics`</sub>
 - プロジェクト全体の検証には、コイル⇔接点クロスリファレンスの検査が含まれる。 <sub>`project_verification_includes_relay_checks`</sub>
+- c接点(切換接点)も、a接点・b接点と同じようにそのリレーの接点として数えられる。 <sub>`a_changeover_contact_belongs_to_its_relay`</sub>
+- c接点で組んだリレーは、「接点を動かしていないコイル」として誤って指摘されなくなる。 <sub>`a_relay_with_changeover_contacts_is_not_reported_as_contactless`</sub>
+- c接点の端子は「11-12-14」のように、共通・b側・a側の3つを並べて書かれる。 <sub>`changeover_terminals_are_written_common_break_make`</sub>
+- コイル下の接点マップには、c接点も3つの端子と所在つきで並ぶ。 <sub>`contact_map_lists_changeover_contacts`</sub>
+- 「2CO」のような接点構成は、c接点2極として読み取られる。 <sub>`contact_config_parses_changeover_poles`</sub>
+- 「2CO」のリレーに接点を1つだけ描いたときは、残り1極がc接点の未使用行として並ぶ。 <sub>`contact_map_shows_the_remaining_changeover_poles`</sub>
+- c接点の極はa接点・b接点としても描けるので、「2CO」のリレーはa接点2個の使い方も受け付ける。 <sub>`a_changeover_pole_can_be_used_as_a_make_or_break_contact`</sub>
+- 部品の極数を超えて使えばやはりエラーになり、メッセージにc接点と示される。 <sub>`using_more_changeover_contacts_than_the_part_has_is_an_error`</sub>
+- c接点の図記号が使っている極は、a接点が借りることはできない。 <sub>`a_make_contact_cannot_borrow_a_pole_already_in_use`</sub>
 - 接点マップの表はコイルの真下に中央揃えで置かれ、接点1個につき1行ずつ下へ伸びる。 <sub>`contact_map_table_is_centred_under_the_coil`</sub>
 - 接点マップはコイルの外形の下にぶら下がり、コイル所在の文字は接点シンボルの右脇に置かれる。 <sub>`annotations_are_anchored_to_the_symbol_outline`</sub>
 
@@ -468,7 +487,8 @@
 - 配線注記は図面そのものの一部なので、何も設定しなくてもSVG・PDFに出る。 <sub>`wire_notes_are_exported_by_default`</sub>
 - 画面で表示クラスを消しても出力ファイルは変わらない(出力は常に図面の全部を描く)。 <sub>`export_ignores_screen_only_view_classes`</sub>
 - 線径も色も長さも無い配線には、注記が何も付かない。 <sub>`svg_omits_the_note_of_a_bare_wire`</sub>
-- タグ「右」のネットラベルは、右を向いた旗の枠として描かれ、ネット名はその中に入る。 <sub>`svg_draws_a_directional_flag_around_a_tagged_net_label`</sub>
+- タグ「右」のネットラベルは右を向いた旗の枠として描かれ、ネット名は置いた点の左へ伸びる本体の中に入る。 <sub>`svg_draws_a_directional_flag_around_a_tagged_net_label`</sub>
+- 注記文字高を小さくしたシートは、線番・配線注記・ネットタグだけが小さくなって出力される。 <sub>`svg_follows_the_sheet_annotation_text_height`</sub>
 - タグの無いネットラベルは従来どおり文字だけで、周りに枠は描かれない。 <sub>`svg_draws_no_outline_for_an_untagged_net_label`</sub>
 - 知らないタグの値は無視され、出力が壊れるのではなく文字だけの表示に戻る。 <sub>`svg_ignores_an_unknown_tag_value`</sub>
 
@@ -633,6 +653,8 @@
 - シンボルの外形の上端でぴたりと止まる注記は、接しているだけで重なっていない。 <sub>`a_note_stopping_at_the_symbol_edge_does_not_overlap`</sub>
 - 重ねて置かれたシンボルどうしの重なりは、ラベルの重なりとは別に数える。 <sub>`symbols_placed_on_top_of_each_other_are_counted_separately`</sub>
 - シンボル自身の参照記号は、その持ち主のシンボルとの重なりには数えない。 <sub>`a_reference_designator_never_overlaps_its_own_symbol`</sub>
+- タグ付きネットラベルの文字は旗の中として測られるので、重なりの数は実際に印字される見た目と一致する。 <sub>`a_tagged_net_label_is_measured_inside_its_flag`</sub>
+- 注記文字高を小さくすると、測られるネットラベル・線番の大きさも一緒に小さくなる。 <sub>`measured_annotation_text_follows_the_sheet_setting`</sub>
 - シンボル原点も配線頂点も2.5mmグリッドに乗っていれば、グリッド外は0件になる。 <sub>`entities_on_the_grid_report_no_off_grid_points`</sub>
 - グリッドから0.1mmずれた点は数えられ、ずれた頂点1つにつき1件になる。 <sub>`a_point_shifted_a_tenth_of_a_millimetre_is_off_grid`</sub>
 - 何も置かれていないシートは完全に整っており、全てのメトリクスが0になる。 <sub>`an_empty_sheet_scores_zero_on_every_metric`</sub>
@@ -689,6 +711,9 @@
 - 横向きのワイヤの注記は配線の下に置かれ、上に出る線番とは反対側になる。 <sub>`horizontal_wire_note_sits_below_the_wire`</sub>
 - 縦向きのワイヤの注記は配線の右に置かれ、左に出る線番とは反対側になる。 <sub>`vertical_wire_note_sits_right_of_the_wire`</sub>
 - 注記はワイヤ1本ごとに付く(ネットごとに1回だけ描かれる線番とは違う)。 <sub>`each_wire_gets_its_own_note`</sub>
+- 注記文字高を設定していないシートは、これまでどおり2.0mmの注記で描かれる。 <sub>`a_sheet_without_a_setting_keeps_the_default_note_height`</sub>
+- シートの注記文字高を1.4mmにすると、配線注記はちょうどその高さで描かれる。 <sub>`the_sheet_setting_is_the_wire_note_height`</sub>
+- 注記文字を小さくすると注記が配線に寄るので、5mm間隔で並ぶ配線でも読める余白が残る。 <sub>`smaller_annotation_text_moves_the_note_closer_to_the_wire`</sub>
 - 折れ曲がったワイヤの注記は、いちばん長い直線部分に置かれて読みやすくなる。 <sub>`note_is_placed_on_the_longest_straight_run`</sub>
 
 ### 電線品番 (線色+線径の表)
@@ -719,6 +744,7 @@
 - 他のシートに相手がいないラベルには、クロスリファレンスが一切表示されない。 <sub>`label_without_counterpart_shows_nothing`</sub>
 - シートごとのクロスリファレンス表は、各ラベルのentity idを脇に描くテキストへ対応付ける。 <sub>`sheet_cross_reference_table_maps_labels_to_text`</sub>
 - クロスリファレンスのテキストは、ラベル本文の右側に同じベースラインで並ぶ。 <sub>`cross_reference_text_sits_right_of_the_label`</sub>
+- 注記文字高を小さくすると、クロスリファレンスも同じ比率でラベルに寄る。 <sub>`cross_reference_follows_the_annotation_text_height`</sub>
 - クロスリファレンス表はプロジェクト全体のネット1本につき1行で、跨るシートとラベルの図面上の住所を並べる。 <sub>`cross_reference_table_lists_one_row_per_net_with_its_sites`</sub>
 - クロスリファレンス表の列は ネット・線番・接続先・シート・所在 の5列。 <sub>`cross_reference_table_columns_are_net_wire_pins_sheets_sites`</sub>
 
@@ -1274,6 +1300,13 @@
 - 同時に走る2会話の編集領域は、それぞれの色を保ったまま並ぶ <sub>`並列エージェント: 会話ごとの色`</sub>
 - 会話の色は開始順(0始まり)で決まり、5本目からは先頭の色へ戻る <sub>`並列エージェント: 会話ごとの色`</sub>
 
+### annotationText
+
+- 注記文字高を設定していないシートは既定の2.0mmで、注記の大きさはこれまでと変わらない <sub>`annotationText`</sub>
+- 注記文字高1.4mmのシートでは、注記の層がまとめて0.7倍の大きさになる <sub>`annotationText`</sub>
+- 壊れた値 (0・負・数値でない) が入っていても既定に落ちるので、図面が消えることはない <sub>`annotationText`</sub>
+- 設定できる注記文字高は1.0〜3.5mmで、その外はエンジンが受け付けない <sub>`annotationText`</sub>
+
 ### blockEditor
 
 - 新しいブロックの下書きは左右に1本ずつピンがあり、番号は1と2で外形は自動 <sub>`block pin table draft`</sub>
@@ -1409,10 +1442,14 @@
 
 ### netTag
 
-- タグ「右」のネットラベルは、右へ先端が飛び出した五角形の旗として描かれる <sub>`netTag`</sub>
-- タグ「左」のネットラベルは、先端が左にある左右反転した旗として描かれる <sub>`netTag`</sub>
+- タグ「右」のネットラベルは、置いた点から右へ先端が飛び出した五角形の旗として描かれる <sub>`netTag`</sub>
+- タグ「左」のネットラベルは、先端が左へ飛び出した左右反転した旗として描かれる <sub>`netTag`</sub>
+- 旗の本体はラベルを置いた点を覆わず先端と反対側へ伸びるので、載っている配線が隠れない <sub>`netTag`</sub>
+- ラベルを置いた点は先端の付け根にあたるので、左向きの旗と右向きの旗はちょうど鏡像になる <sub>`netTag`</sub>
 - タグの文字は必ず旗の内側に収まり、旗の幅はネット名の長さに合わせて伸びる <sub>`netTag`</sub>
 - 左向きと右向きのタグは同じ大きさになるので、左右のラベルが並んでも高さと幅がそろう <sub>`netTag`</sub>
+- シート間クロスリファレンスは旗の本体側の外へ逃がされるので、先端や配線の上には出ない <sub>`netTag`</sub>
+- 注記文字高を小さくすると、文字・余白・先端がまとめて縮み、旗の形はそのままで小さくなる <sub>`netTag`</sub>
 - タグ属性の無いネットラベルは、これまでどおり文字だけの見た目のままになる <sub>`netTag`</sub>
 - 知らないタグの値(打ち間違いや "up")は無視され、文字だけの表示に戻る <sub>`netTag`</sub>
 
@@ -1485,6 +1522,10 @@
 - それぞれの接点の脇には、その接点を動かすコイルの住所が丸括弧付きで出る。 <sub>`relayXref`</sub>
 - コイルが見つからない接点には、コイル所在が一切表示されない。 <sub>`relayXref`</sub>
 - 「2NO+2NC」のような接点構成は、a接点・b接点の数として読み取られ、読めない値は無視される。 <sub>`relayXref`</sub>
+- c接点(切換接点)も、a接点・b接点と同じようにそのリレーの接点として数えられる <sub>`relayXref`</sub>
+- c接点の端子は「11-12-14」のように、共通・b側・a側の3つを並べて書かれる <sub>`relayXref`</sub>
+- 「2CO」のリレーに接点を1つだけ描いたときは、残り1極がc接点の未使用行として並ぶ <sub>`relayXref`</sub>
+- c接点の極はa接点・b接点としても描けるので、「2CO」のリレーはa接点2個の使い方も受け付ける <sub>`relayXref`</sub>
 - 接点マップの表はコイルの真下に中央揃えで置かれ、接点1個につき1行ずつ下へ伸びる。 <sub>`relayXref`</sub>
 - 接点マップはコイルの外形の下にぶら下がり、コイル所在の文字は接点シンボルの右脇に置かれる。 <sub>`relayXref`</sub>
 
@@ -1651,6 +1692,8 @@
 - 注記はワイヤ1本ごとに付く(ネットごとに1回だけ描かれる線番とは違う) <sub>`wireNoteLabels`</sub>
 - 折れ曲がったワイヤの注記は、いちばん長い直線部分に置かれて読みやすくなる <sub>`wireNoteLabels`</sub>
 - 属性の無いワイヤは注記の一覧に現れない <sub>`wireNoteLabels`</sub>
+- 注記文字高を設定していないシートは、これまでどおり2.0mmの注記で描かれる <sub>`annotation text height`</sub>
+- シートの注記文字高を1.4mmにすると、配線注記はちょうどその高さで描かれ配線にも寄る <sub>`annotation text height`</sub>
 
 ### wireNumbers
 
@@ -1661,6 +1704,8 @@
 - 複数の線番があると線番順に並んで返り、同じ図面なら常に同じ並びになる <sub>`wireNumberLabels`</sub>
 - 斜めの配線は、横に長ければ上、縦に長ければ左に線番を置く <sub>`wireNumberLabels`</sub>
 - 配線以外のエンティティは線番の計算に影響しない <sub>`wireNumberLabels`</sub>
+- 注記文字高を設定していないシートの線番は、これまでどおり2.5mm・配線から2.5mmで描かれる <sub>`annotation text height`</sub>
+- シートの注記文字高を1.4mmにすると、線番も同じ比率(0.7倍)で小さくなり配線に寄る <sub>`annotation text height`</sub>
 - 既定は「連番・開始1・現在のシート・既存の線番は保持」で開く <sub>`wire numbering dialog store`</sub>
 - 「現在のシート」+「保持する」は、そのシートだけを追い番で採番するコマンドになる <sub>`wire numbering dialog store`</sub>
 - 「現在のシート」+「すべて振り直す」は、そのシートを振り直すコマンドになる <sub>`wire numbering dialog store`</sub>
@@ -1708,6 +1753,10 @@
 - 名前の前後の空白は落とされる <sub>`harnessUpdateCommand`</sub>
 - 名前も備考も変わっていなければコマンドを送らない(無駄なundo履歴を作らない) <sub>`harnessUpdateCommand`</sub>
 - ハーネス以外を選んでいるときはハーネスコマンドを作らない <sub>`harnessUpdateCommand`</sub>
+- 注記文字高を入力するとシート設定のコマンドになり、注記・線番・タグがまとめて縮む <sub>`annotationTextCommand`</sub>
+- 空欄にすると既定 (2.0mm) へ戻すコマンドになる <sub>`annotationTextCommand`</sub>
+- 範囲 (1.0〜3.5mm) を外れた値・数値でない入力は送らない (エンジンも同じ範囲で拒否する) <sub>`annotationTextCommand`</sub>
+- 今と同じ高さならコマンドを送らない (無駄なundo履歴を作らない) <sub>`annotationTextCommand`</sub>
 
 ### chatComposer
 

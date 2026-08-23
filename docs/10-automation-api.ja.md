@@ -9,7 +9,7 @@ UIでできることはすべてスクリプト化できる。3つの入口が�
 ### MCPサーバー(AIクライアント向け)
 `127.0.0.1:9310/mcp`(Streamable HTTP、`MADAKE_MCP_PORT`で変更可)。ツール:
 `get_project`・`list_symbols`(同梱**と**ユーザーシンボル)・`place_symbol`・`draw_wire`・`execute_commands`(Command全スキーマ公開)・`get_netlist`・`run_verification`・`get_tidy_metrics`・`simulate_op`・`search_parts`・`upsert_part`・`delete_part`・`import_kicad`・`list_terminal_blocks`・`get_terminal_chart`・`check_terminal_block`・`list_templates`・`apply_template`・`list_macros`・`save_macro`・`apply_macro`・`duplicate_symbol`・`save_user_symbol`・`delete_user_symbol`・PLC I/O系・`export_svg`・`export_pdf`・`export_report`(帳票7種のいずれかをCSVまたは図枠付きPDFへ)・`export_pdf_book`(表紙+全シート+選択帳票を1つのPDFへ)・`export_bom`・`export_wire_list`・`undo`・`redo`。
-専用ツールが無い編集は`execute_commands`から実行する: `set_revisions`(改訂欄)、`renumber_wires`(`mode: append | renumber`・`sheet_id`任意・`start`)と`set_wire_numbers`(線番)、ハーネス境界は`add_entity`で`harness`エンティティを追加、端子台のサドルジャンパは`update_entity`で端子台シンボルの`attrs["jumpers"] = "1-2,3-4"`を書き換える。図枠テンプレートは`set_frame_template`、盤レイアウトは`add_sheet`の`kind: "panel"`+`panel_outline`/`din_rail`/`duct`/`footprint`/`panel_legend`エンティティ、バルーン採番は`renumber_panel_items`。
+専用ツールが無い編集は`execute_commands`から実行する: `set_revisions`(改訂欄)、`set_sheet_annotation_text`(シートの注記文字高。`height_mm`は1.0〜3.5mm、nullで既定2.0mm。配線注記・線番・ネットタグの大きさが一緒に変わる)、`renumber_wires`(`mode: append | renumber`・`sheet_id`任意・`start`)と`set_wire_numbers`(線番)、ハーネス境界は`add_entity`で`harness`エンティティを追加、端子台のサドルジャンパは`update_entity`で端子台シンボルの`attrs["jumpers"] = "1-2,3-4"`を書き換える。図枠テンプレートは`set_frame_template`、盤レイアウトは`add_sheet`の`kind: "panel"`+`panel_outline`/`din_rail`/`duct`/`footprint`/`panel_legend`エンティティ、バルーン採番は`renumber_panel_items`。
 Claude Codeはリポジトリの`.mcp.json`で自動接続。
 
 ### Link API(REST+SSE、外部ツール向け)

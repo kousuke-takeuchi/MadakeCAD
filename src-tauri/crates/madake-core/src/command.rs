@@ -38,6 +38,14 @@ pub enum Command {
         sheet_id: SheetId,
         revisions: Vec<Revision>,
     },
+    /// シートの注記文字高 (mm) の設定 (G20)。配線注記・線番・ネットタグの大きさが変わる。
+    /// `height_mm`がnullなら既定 ([`crate::model::DEFAULT_ANNOTATION_TEXT_MM`]) に戻す。
+    /// 範囲は [`crate::model::MIN_ANNOTATION_TEXT_MM`]〜[`crate::model::MAX_ANNOTATION_TEXT_MM`]。
+    SetSheetAnnotationText {
+        sheet_id: SheetId,
+        #[serde(default)]
+        height_mm: Option<f64>,
+    },
     AddEntity {
         sheet_id: SheetId,
         entity: Entity,
@@ -478,6 +486,32 @@ impl Engine {
                     vec![Command::SetRevisions {
                         sheet_id: *sheet_id,
                         revisions: old,
+                    }],
+                ))
+            }
+            Command::SetSheetAnnotationText { sheet_id, height_mm } => {
+                if let Some(h) = height_mm {
+                    if !h.is_finite()
+                        || *h < MIN_ANNOTATION_TEXT_MM
+                        || *h > MAX_ANNOTATION_TEXT_MM
+                    {
+                        return Err(CoreError::InvalidCommand(format!(
+                            "annotation text height out of range: {h} (expected {MIN_ANNOTATION_TEXT_MM}..{MAX_ANNOTATION_TEXT_MM} mm)"
+                        )));
+                    }
+                }
+                let sheet = self
+                    .project
+                    .sheet_mut(*sheet_id)
+                    .ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let old = sheet.annotation_text_mm;
+                sheet.annotation_text_mm = *height_mm;
+                let meta = sheet_meta(sheet);
+                Ok((
+                    vec![PatchOp::SheetMetaUpdated { sheet: meta }],
+                    vec![Command::SetSheetAnnotationText {
+                        sheet_id: *sheet_id,
+                        height_mm: old,
                     }],
                 ))
             }
@@ -1450,6 +1484,70 @@ mod tests {
         assert_eq!(engine.project().sheets[0].revisions.len(), 1);
         engine.undo().unwrap().unwrap();
         assert!(engine.project().sheets[0].revisions.is_empty());
+    }
+
+    /// The annotation text height of a sheet is set through a command, and undo puts the previous height back.
+    /// シートの注記文字高はコマンドで設定し、undoで以前の高さに戻る。
+    #[test]
+    fn set_sheet_annotation_text_is_undoable() {
+        let (mut engine, sheet_id) = test_engine();
+        engine
+            .execute(Command::SetSheetAnnotationText {
+                sheet_id,
+                height_mm: Some(1.4),
+            })
+            .unwrap();
+        assert_eq!(engine.project().sheets[0].annotation_text_mm, Some(1.4));
+        assert!((engine.project().sheets[0].annotation_text_mm() - 1.4).abs() < 1e-9);
+        engine.undo().unwrap().unwrap();
+        assert_eq!(engine.project().sheets[0].annotation_text_mm, None, "設定前へ戻る");
+    }
+
+    /// Clearing the annotation text height with null puts the sheet back to the default 2.0mm.
+    /// 注記文字高をnullで消すと、シートは既定の2.0mmに戻る。
+    #[test]
+    fn clearing_the_annotation_text_height_restores_the_default() {
+        let (mut engine, sheet_id) = test_engine();
+        for height in [Some(3.0), None] {
+            engine
+                .execute(Command::SetSheetAnnotationText {
+                    sheet_id,
+                    height_mm: height,
+                })
+                .unwrap();
+        }
+        assert_eq!(engine.project().sheets[0].annotation_text_mm, None);
+        assert!((engine.project().sheets[0].annotation_text_mm() - 2.0).abs() < 1e-9);
+    }
+
+    /// An annotation text height outside 1.0-3.5mm is rejected with a reason, and the sheet is left untouched.
+    /// 1.0〜3.5mmの範囲を外れた注記文字高は理由付きで拒否され、シートは書き換わらない。
+    #[test]
+    fn an_out_of_range_annotation_text_height_is_rejected() {
+        let (mut engine, sheet_id) = test_engine();
+        for bad in [0.5, 5.0, f64::NAN] {
+            let err = engine
+                .execute(Command::SetSheetAnnotationText {
+                    sheet_id,
+                    height_mm: Some(bad),
+                })
+                .unwrap_err();
+            assert!(err.to_string().contains("annotation text height"), "{err}");
+        }
+        assert_eq!(engine.project().sheets[0].annotation_text_mm, None, "書き換わらない");
+    }
+
+    /// The annotation text height command is plain JSON, so AI agents and the CLI can send it.
+    /// 注記文字高のコマンドは素のJSONで表現でき、AIやCLIから送れる。
+    #[test]
+    fn set_sheet_annotation_text_is_plain_json() {
+        let (mut engine, sheet_id) = test_engine();
+        let json = format!(
+            r#"{{"type":"set_sheet_annotation_text","sheet_id":"{sheet_id}","height_mm":1.4}}"#
+        );
+        let cmd: Command = serde_json::from_str(&json).unwrap();
+        engine.execute(cmd).unwrap();
+        assert_eq!(engine.project().sheets[0].annotation_text_mm, Some(1.4));
     }
 
     /// SetPlcAssignments replaces the whole PLC I/O assignment table of the project; undo restores the previous table.

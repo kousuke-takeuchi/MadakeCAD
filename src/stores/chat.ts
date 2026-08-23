@@ -292,6 +292,7 @@ const COMMAND_JA: Record<string, string> = {
   rename_sheet: "シート改名",
   set_title_block: "表題欄設定",
   set_revisions: "改訂欄設定",
+  set_sheet_annotation_text: "注記文字高設定",
   add_entity: "要素追加",
   update_entity: "要素更新",
   delete_entities: "要素削除",

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1737 specification clauses** across 5 areas.
+**1783 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -53,6 +53,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - UpdateEntity replaces an entity wholesale; undo brings back the previous version. <sub>`update_entity_undo_restores_previous_version`</sub>
 - SetTitleBlock updates the sheet's title block; undo restores the previous fields. <sub>`set_title_block_is_undoable`</sub>
 - SetRevisions replaces the revision-table rows; undo restores the previous list. <sub>`set_revisions_is_undoable`</sub>
+- The annotation text height of a sheet is set through a command, and undo puts the previous height back. <sub>`set_sheet_annotation_text_is_undoable`</sub>
+- Clearing the annotation text height with null puts the sheet back to the default 2.0mm. <sub>`clearing_the_annotation_text_height_restores_the_default`</sub>
+- An annotation text height outside 1.0-3.5mm is rejected with a reason, and the sheet is left untouched. <sub>`an_out_of_range_annotation_text_height_is_rejected`</sub>
+- The annotation text height command is plain JSON, so AI agents and the CLI can send it. <sub>`set_sheet_annotation_text_is_plain_json`</sub>
 - SetPlcAssignments replaces the whole PLC I/O assignment table of the project; undo restores the previous table. <sub>`set_plc_assignments_is_undoable`</sub>
 - SetFrameTemplate switches the frame template of the whole project in one edit, and undo puts the previous one back (undoing the very first switch returns to the default frame). <sub>`set_frame_template_is_undoable`</sub>
 - SetFrameTemplate accepts an id nobody knows: the drawing keeps printing with the default frame, so a project made elsewhere still opens. <sub>`set_frame_template_accepts_an_unknown_id`</sub>
@@ -129,7 +133,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project file saved before panel layouts existed opens with every sheet as a schematic sheet and is brought up to the current format version. <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 6, the version that added panel item numbers and the legend table. <sub>`the_current_format_version_is_six`</sub>
+- The current file format version is 7, the version that added the per-sheet annotation text height. <sub>`the_current_format_version_is_seven`</sub>
+- A drawing saved before the annotation text height existed opens at the default 2.0mm, so its notes look exactly as before. <sub>`an_old_project_file_opens_with_the_default_annotation_text_height`</sub>
+- The annotation text height set on a sheet is saved to the file and comes back on reload. <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
 - A panel drawn before item numbers existed opens with no balloons at all: the footprints keep their place and can be numbered whenever the drawing is next tidied up. <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
 - The frame template chosen for a project is saved to the file and comes back on reload. <sub>`the_frame_template_survives_a_save_and_reload`</sub>
 
@@ -190,10 +196,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### net_tag
 
-- A net label with tag "right" is drawn as a five-cornered flag whose point sticks out to the right. <sub>`tag_right_points_to_the_right`</sub>
-- A net label with tag "left" is drawn as the mirrored flag, with the point on the left. <sub>`tag_left_points_to_the_left`</sub>
+- A net label with tag "right" is drawn as a five-cornered flag whose point sticks out to the right of the label position. <sub>`tag_right_points_to_the_right`</sub>
+- A net label with tag "left" is drawn as the mirrored flag, with the point sticking out to the left. <sub>`tag_left_points_to_the_left`</sub>
+- The body of the flag never covers the label's own position: it grows away from the point, so the wire the label sits on stays readable. <sub>`the_flag_body_grows_away_from_the_point`</sub>
+- The label position is the root of the point, so a left flag and a right flag are exact mirror images of each other. <sub>`the_label_position_is_the_root_of_the_point`</sub>
 - The tag text always sits inside the flag, and the flag grows with the length of the net name. <sub>`tag_box_follows_the_text_width`</sub>
 - Both tag directions produce a flag of the very same size, so left and right labels line up. <sub>`both_directions_have_the_same_size`</sub>
+- The cross-sheet reference is pushed out on the body side of the flag, so it never lands on the point or on the wire. <sub>`the_cross_reference_escapes_on_the_body_side`</sub>
+- A smaller annotation text height shrinks the whole flag - text, padding and point - keeping its shape. <sub>`a_smaller_annotation_height_shrinks_the_whole_flag`</sub>
 - A net label without the tag attribute keeps the plain text look it has always had. <sub>`label_without_tag_attribute_stays_plain_text`</sub>
 - An unknown tag value (a typo, or "up") is ignored and the label falls back to plain text instead of failing. <sub>`unknown_tag_value_is_ignored`</sub>
 
@@ -333,6 +343,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A contact configuration that cannot be read is reported as a warning, because it silently disables the contact count check. <sub>`an_unreadable_contact_config_is_a_warning`</sub>
 - A correctly wired relay (coil plus contacts within the part's configuration) produces no cross-reference diagnostics. <sub>`a_correct_relay_produces_no_diagnostics`</sub>
 - The whole-project verification includes the relay cross-reference checks. <sub>`project_verification_includes_relay_checks`</sub>
+- A changeover contact counts as a contact of its relay, exactly like a make or a break contact. <sub>`a_changeover_contact_belongs_to_its_relay`</sub>
+- A relay drawn with changeover contacts is no longer reported as a coil that drives nothing. <sub>`a_relay_with_changeover_contacts_is_not_reported_as_contactless`</sub>
+- The terminals of a changeover contact are written as three numbers - common, break, make - like "11-12-14". <sub>`changeover_terminals_are_written_common_break_make`</sub>
+- The contact map under the coil lists changeover contacts with their three terminals and their address. <sub>`contact_map_lists_changeover_contacts`</sub>
+- A contact configuration like "2CO" is read as two changeover poles. <sub>`contact_config_parses_changeover_poles`</sub>
+- The unused poles of a "2CO" relay with one contact drawn are listed as the remaining changeover contact. <sub>`contact_map_shows_the_remaining_changeover_poles`</sub>
+- A changeover pole may be drawn as a plain make or break contact, so a "2CO" relay accepts two make contacts. <sub>`a_changeover_pole_can_be_used_as_a_make_or_break_contact`</sub>
+- Using more poles than the part has is still an error, and the message names the changeover contact. <sub>`using_more_changeover_contacts_than_the_part_has_is_an_error`</sub>
+- A make contact cannot borrow a changeover pole that a changeover contact already uses. <sub>`a_make_contact_cannot_borrow_a_pole_already_in_use`</sub>
 - The contact map table is centred under the coil and grows downwards, one row per contact. <sub>`contact_map_table_is_centred_under_the_coil`</sub>
 - The contact map hangs below the coil symbol's outline, and the coil location text sits to the right of the contact symbol. <sub>`annotations_are_anchored_to_the_symbol_outline`</sub>
 
@@ -468,7 +487,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The wire note is part of the exported drawing itself, so it comes out in SVG and PDF without turning anything on. <sub>`wire_notes_are_exported_by_default`</sub>
 - Hiding a class on screen never changes the exported file: the export always draws the whole drawing. <sub>`export_ignores_screen_only_view_classes`</sub>
 - A wire with no gauge, colour or length is drawn without any note next to it. <sub>`svg_omits_the_note_of_a_bare_wire`</sub>
-- A net label tagged "right" is drawn as a flag outline pointing right, with the net name inside it. <sub>`svg_draws_a_directional_flag_around_a_tagged_net_label`</sub>
+- A net label tagged "right" is drawn as a flag outline pointing right, with the net name inside the body that runs to the left of the label position. <sub>`svg_draws_a_directional_flag_around_a_tagged_net_label`</sub>
+- A sheet with a smaller annotation text height exports smaller wire numbers, wire notes and net tags, and nothing else changes size. <sub>`svg_follows_the_sheet_annotation_text_height`</sub>
 - A net label with no tag keeps the plain text look, with no outline drawn around it. <sub>`svg_draws_no_outline_for_an_untagged_net_label`</sub>
 - An unknown tag value is ignored and the label falls back to plain text rather than breaking the export. <sub>`svg_ignores_an_unknown_tag_value`</sub>
 
@@ -633,6 +653,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A note that stops exactly at the top edge of a symbol is touching, not overlapping. <sub>`a_note_stopping_at_the_symbol_edge_does_not_overlap`</sub>
 - Symbols placed on top of each other are counted separately from label overlaps. <sub>`symbols_placed_on_top_of_each_other_are_counted_separately`</sub>
 - A symbol's own reference designator never counts as overlapping the symbol it belongs to. <sub>`a_reference_designator_never_overlaps_its_own_symbol`</sub>
+- The measured text of a tagged net label sits inside its flag, so the overlap count follows what is actually printed. <sub>`a_tagged_net_label_is_measured_inside_its_flag`</sub>
+- A smaller annotation text height makes the measured net label and wire number smaller too. <sub>`measured_annotation_text_follows_the_sheet_setting`</sub>
 - Symbol origins and wire vertices sitting on the 2.5 mm grid report no off-grid points. <sub>`entities_on_the_grid_report_no_off_grid_points`</sub>
 - A point shifted by 0.1 mm off the grid is counted, and each stray vertex counts once. <sub>`a_point_shifted_a_tenth_of_a_millimetre_is_off_grid`</sub>
 - An empty sheet is perfectly tidy: every metric is zero. <sub>`an_empty_sheet_scores_zero_on_every_metric`</sub>
@@ -689,6 +711,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The note of a horizontal wire sits below the wire, on the opposite side from its wire number. <sub>`horizontal_wire_note_sits_below_the_wire`</sub>
 - The note of a vertical wire sits to the right of the wire, on the opposite side from its wire number. <sub>`vertical_wire_note_sits_right_of_the_wire`</sub>
 - Every wire gets its own note, unlike the wire number which is drawn once per net. <sub>`each_wire_gets_its_own_note`</sub>
+- A sheet that has no annotation text height set keeps the 2.0mm notes it has always had. <sub>`a_sheet_without_a_setting_keeps_the_default_note_height`</sub>
+- Setting the sheet's annotation text height to 1.4mm draws the wire notes at exactly that height. <sub>`the_sheet_setting_is_the_wire_note_height`</sub>
+- Smaller annotation text also moves the note closer to its wire, so a row of wires 5mm apart stays readable. <sub>`smaller_annotation_text_moves_the_note_closer_to_the_wire`</sub>
 - On a bent wire the note is placed on the longest straight run, where there is room to read it. <sub>`note_is_placed_on_the_longest_straight_run`</sub>
 
 ### Wire part numbers (colour + gauge table)
@@ -719,6 +744,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A label with no counterpart on another sheet shows no cross-reference at all. <sub>`label_without_counterpart_shows_nothing`</sub>
 - The per-sheet cross-reference table maps each label entity to the text drawn beside it. <sub>`sheet_cross_reference_table_maps_labels_to_text`</sub>
 - The cross-reference text sits to the right of the label text, on the same baseline. <sub>`cross_reference_text_sits_right_of_the_label`</sub>
+- A smaller annotation text height moves the cross-reference closer to the label, keeping the gap in proportion. <sub>`cross_reference_follows_the_annotation_text_height`</sub>
 - The cross-reference table has one row per project-wide net, listing the sheets it spans and the drawing addresses of its labels. <sub>`cross_reference_table_lists_one_row_per_net_with_its_sites`</sub>
 - The columns of the cross-reference table are net / wire number / connected pins / sheets / sites. <sub>`cross_reference_table_columns_are_net_wire_pins_sheets_sites`</sub>
 
@@ -1274,6 +1300,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - regions of two conversations running at once keep their own colors side by side <sub>`並列エージェント: 会話ごとの色`</sub>
 - conversation colors follow the start order and wrap around after the fourth <sub>`並列エージェント: 会話ごとの色`</sub>
 
+### annotationText
+
+- uses the default 2.0mm on a sheet with no setting <sub>`annotationText`</sub>
+- scales the whole annotation layer to 0.7 at a 1.4mm text height <sub>`annotationText`</sub>
+- falls back to the default for a broken value instead of losing the annotation <sub>`annotationText`</sub>
+- accepts only heights between 1.0 and 3.5mm <sub>`annotationText`</sub>
+
 ### blockEditor
 
 - starts with one pin on each side, numbered 1 and 2, and an automatic outline <sub>`block pin table draft`</sub>
@@ -1411,8 +1444,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - draws a tag pointing right as a five-cornered flag with its point on the right <sub>`netTag`</sub>
 - draws a tag pointing left as the mirrored flag, with its point on the left <sub>`netTag`</sub>
+- grows the flag body away from its point so the wire under the label stays visible <sub>`netTag`</sub>
+- puts the label position at the root of the point, mirroring left and right flags <sub>`netTag`</sub>
 - keeps the text inside the flag and widens the flag for a longer net name <sub>`netTag`</sub>
 - gives both directions the same flag size <sub>`netTag`</sub>
+- escapes the cross-reference on the body side of the flag <sub>`netTag`</sub>
+- shrinks the whole flag when the annotation text height is smaller <sub>`netTag`</sub>
 - leaves a label without the tag attribute as plain text <sub>`netTag`</sub>
 - ignores an unknown tag value instead of breaking <sub>`netTag`</sub>
 
@@ -1485,6 +1522,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - shows the address of the driving coil beside each contact <sub>`relayXref`</sub>
 - shows no coil location for a contact whose coil is missing <sub>`relayXref`</sub>
 - parses make and break counts and ignores unreadable configurations <sub>`relayXref`</sub>
+- counts a changeover contact as a contact of its relay <sub>`relayXref`</sub>
+- writes the terminals of a changeover contact as common, break and make <sub>`relayXref`</sub>
+- lists the remaining changeover poles of a 2CO relay as unused rows <sub>`relayXref`</sub>
+- lets a changeover pole be drawn as a plain make or break contact <sub>`relayXref`</sub>
 - centres the contact map table under the coil <sub>`relayXref`</sub>
 - anchors both annotations to the symbol outline <sub>`relayXref`</sub>
 
@@ -1651,6 +1692,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - annotates every wire, unlike the wire number which is drawn once per net <sub>`wireNoteLabels`</sub>
 - puts the note on the longest straight run of a bent wire <sub>`wireNoteLabels`</sub>
 - skips wires that carry no attributes <sub>`wireNoteLabels`</sub>
+- keeps the default 2.0mm note height on a sheet with no setting <sub>`annotation text height`</sub>
+- draws the wire notes at the sheet's annotation text height and moves them closer <sub>`annotation text height`</sub>
 
 ### wireNumbers
 
@@ -1661,6 +1704,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - returns every number in a stable order <sub>`wireNumberLabels`</sub>
 - places a diagonal wire's number above when it runs wide and to the left when it runs tall <sub>`wireNumberLabels`</sub>
 - ignores entities that are not wires <sub>`wireNumberLabels`</sub>
+- keeps the default wire number size and offset on a sheet with no setting <sub>`annotation text height`</sub>
+- shrinks the wire number in proportion to the sheet's annotation text height <sub>`annotation text height`</sub>
 - opens with sequential numbering from 1 over the current sheet, keeping existing numbers <sub>`wire numbering dialog store`</sub>
 - numbers only the current sheet in append mode when keeping existing numbers <sub>`wire numbering dialog store`</sub>
 - renumbers only the current sheet when all numbers are reassigned <sub>`wire numbering dialog store`</sub>
@@ -1708,6 +1753,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - trims the entered harness name <sub>`harnessUpdateCommand`</sub>
 - sends nothing when neither the name nor the note changed <sub>`harnessUpdateCommand`</sub>
 - builds nothing for entities other than harnesses <sub>`harnessUpdateCommand`</sub>
+- builds a sheet command for the entered annotation text height <sub>`annotationTextCommand`</sub>
+- clears the height back to the default when the field is emptied <sub>`annotationTextCommand`</sub>
+- sends nothing for a height outside the allowed range or a non-number <sub>`annotationTextCommand`</sub>
+- sends nothing when the height did not change <sub>`annotationTextCommand`</sub>
 
 ### chatComposer
 

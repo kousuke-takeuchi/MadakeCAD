@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Entity, Project, Sheet, SymbolInstance } from "../ipc";
 import {
   CONTACT_MAP_GAP,
+  allocateContacts,
   CONTACT_MAP_MIN_COL_W,
   CONTACT_MAP_ROW_H,
   CONTACT_UNUSED,
@@ -172,12 +173,55 @@ describe("relayXref", () => {
 
   // ja: 「2NO+2NC」のような接点構成は、a接点・b接点の数として読み取られ、読めない値は無視される。
   it("parses make and break counts and ignores unreadable configurations", () => {
-    expect(parseContactConfig("2NO+2NC")).toEqual({ no: 2, nc: 2 });
-    expect(parseContactConfig("4NO")).toEqual({ no: 4, nc: 0 });
-    expect(parseContactConfig(" 1no , 3nc ")).toEqual({ no: 1, nc: 3 });
+    expect(parseContactConfig("2NO+2NC")).toEqual({ no: 2, nc: 2, co: 0 });
+    expect(parseContactConfig("4NO")).toEqual({ no: 4, nc: 0, co: 0 });
+    expect(parseContactConfig(" 1no , 3nc ")).toEqual({ no: 1, nc: 3, co: 0 });
     expect(parseContactConfig("2c")).toBeNull();
     expect(parseContactConfig("2NO+")).toBeNull();
     expect(parseContactConfig("")).toBeNull();
+  });
+
+  // ja: c接点(切換接点)も、a接点・b接点と同じようにそのリレーの接点として数えられる
+  it("counts a changeover contact as a contact of its relay", () => {
+    expect(relayRole("relay_contact_co")).toBe("contact_co");
+    const p = project([
+      [symbol("relay_coil", "K1", 20, 20), symbol("relay_contact_co", "K1", 60, 20)],
+    ]);
+    const device = relayDevices(p)[0];
+    expect(device.contacts).toHaveLength(1);
+    expect(device.contacts[0].role).toBe("contact_co");
+  });
+
+  // ja: c接点の端子は「11-12-14」のように、共通・b側・a側の3つを並べて書かれる
+  it("writes the terminals of a changeover contact as common, break and make", () => {
+    expect(terminalPair(1, "contact_co")).toBe("11-12-14");
+    expect(terminalPair(2, "contact_co")).toBe("21-22-24");
+  });
+
+  // ja: 「2CO」のリレーに接点を1つだけ描いたときは、残り1極がc接点の未使用行として並ぶ
+  it("lists the remaining changeover poles of a 2CO relay as unused rows", () => {
+    expect(parseContactConfig("2CO")).toEqual({ no: 0, nc: 0, co: 2 });
+    const p = project([
+      [
+        symbol("relay_coil", "K1", 20, 20, { contact_config: "2CO" }),
+        symbol("relay_contact_co", "K1", 250, 70),
+      ],
+    ]);
+    expect(relayDevices(p)[0].contactMap.map((r) => [r.terminals, r.address])).toEqual([
+      ["11-12-14", "/1.B3"],
+      ["21-22-24", CONTACT_UNUSED],
+    ]);
+  });
+
+  // ja: c接点の極はa接点・b接点としても描けるので、「2CO」のリレーはa接点2個の使い方も受け付ける
+  it("lets a changeover pole be drawn as a plain make or break contact", () => {
+    const config = { no: 0, nc: 0, co: 2 };
+    const both = allocateContacts(config, { no: 1, nc: 1, co: 0 });
+    expect(both.shortage).toEqual({ no: 0, nc: 0, co: 0 });
+    expect(both.spare.co).toBe(0);
+    // c接点の図記号が使っている極は借りられない
+    const taken = allocateContacts({ no: 0, nc: 0, co: 1 }, { no: 1, nc: 0, co: 1 });
+    expect(taken.shortage.no).toBe(1);
   });
 
   // ja: 接点マップの表はコイルの真下に中央揃えで置かれ、接点1個につき1行ずつ下へ伸びる。

@@ -1,8 +1,12 @@
 // プロパティパネルの編集がCommandへどう変換されるか (docs/internal/specs/m2-drawing-parity.md §2・§3)。
 import { describe, expect, it } from "vitest";
 
-import type { Entity } from "../ipc";
-import { harnessUpdateCommand, wireNumberCommand } from "./propertyCommands";
+import type { Entity, Sheet } from "../ipc";
+import {
+  annotationTextCommand,
+  harnessUpdateCommand,
+  wireNumberCommand,
+} from "./propertyCommands";
 
 function wire(net: string | null): Entity {
   return {
@@ -112,5 +116,40 @@ describe("harnessUpdateCommand", () => {
   // ja: ハーネス以外を選んでいるときはハーネスコマンドを作らない
   it("builds nothing for entities other than harnesses", () => {
     expect(harnessUpdateCommand("s1", wire("3"), "W1", "")).toBeNull();
+  });
+});
+
+const sheetWith = (height?: number | null): Sheet =>
+  ({ id: "s1", annotation_text_mm: height, entities: {} }) as unknown as Sheet;
+
+describe("annotationTextCommand", () => {
+  // ja: 注記文字高を入力するとシート設定のコマンドになり、注記・線番・タグがまとめて縮む
+  it("builds a sheet command for the entered annotation text height", () => {
+    const expected = { type: "set_sheet_annotation_text", sheet_id: "s1", height_mm: 1.4 };
+    expect(annotationTextCommand(sheetWith(), "1.4")).toEqual(expected);
+    // 数値入力欄のv-modelは数値を返すので、そのままでも同じコマンドになる
+    expect(annotationTextCommand(sheetWith(), 1.4)).toEqual(expected);
+  });
+
+  // ja: 空欄にすると既定 (2.0mm) へ戻すコマンドになる
+  it("clears the height back to the default when the field is emptied", () => {
+    expect(annotationTextCommand(sheetWith(1.4), "")).toEqual({
+      type: "set_sheet_annotation_text",
+      sheet_id: "s1",
+      height_mm: null,
+    });
+  });
+
+  // ja: 範囲 (1.0〜3.5mm) を外れた値・数値でない入力は送らない (エンジンも同じ範囲で拒否する)
+  it("sends nothing for a height outside the allowed range or a non-number", () => {
+    for (const bad of ["0.5", "9", "おおきく"]) {
+      expect(annotationTextCommand(sheetWith(), bad), bad).toBeNull();
+    }
+  });
+
+  // ja: 今と同じ高さならコマンドを送らない (無駄なundo履歴を作らない)
+  it("sends nothing when the height did not change", () => {
+    expect(annotationTextCommand(sheetWith(1.4), "1.4")).toBeNull();
+    expect(annotationTextCommand(sheetWith(), "2")).toBeNull();
   });
 });

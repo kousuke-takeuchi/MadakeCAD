@@ -238,6 +238,8 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
         LABEL_FONT, NET_LABEL_DY, REF_LABEL_DY, VALUE_LABEL_DY, WIRE_NO_FONT, WIRE_NO_GAP,
     };
     let defs = crate::symbol::DefIndex::new(symbols);
+    // 注記の層 (ネットラベル・タグ・線番) はシートの注記文字高で伸縮する (G20)
+    let annotation_scale = sheet.annotation_scale();
     let mut boxes = Vec::new();
     for entity in sheet.entities.values() {
         match entity {
@@ -273,17 +275,19 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                     });
                 }
             }
-            Entity::NetLabel(l) if !l.name.is_empty() => boxes.push(TextBox {
-                rect: text_box(
-                    l.at.x,
-                    l.at.y - NET_LABEL_DY,
-                    LABEL_FONT,
-                    Anchor::Start,
-                    &l.name,
-                ),
-                kind: TextKind::NetLabel,
-                owner: Some(l.id),
-            }),
+            // タグ付きラベルの文字は旗の本体の中 (基準点の左右どちらに来るかは向き次第)
+            Entity::NetLabel(l) if !l.name.is_empty() => {
+                let font = LABEL_FONT * annotation_scale;
+                let (x, baseline) = match crate::net_tag::net_tag(l, font) {
+                    Some(tag) => (tag.text_at.x, tag.text_at.y),
+                    None => (l.at.x, l.at.y - NET_LABEL_DY * annotation_scale),
+                };
+                boxes.push(TextBox {
+                    rect: text_box(x, baseline, font, Anchor::Start, &l.name),
+                    kind: TextKind::NetLabel,
+                    owner: Some(l.id),
+                });
+            }
             Entity::Text(t) if !t.text.is_empty() => boxes.push(TextBox {
                 rect: text_box(t.at.x, t.at.y, t.height, Anchor::Start, &t.text),
                 kind: TextKind::Note,
@@ -301,10 +305,11 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
             continue;
         };
         let mid = crate::svg::midpoint(&a, &b);
+        let (font, gap) = (WIRE_NO_FONT * annotation_scale, WIRE_NO_GAP * annotation_scale);
         let rect = if (b.x - a.x).abs() >= (b.y - a.y).abs() {
-            text_box(mid.x, mid.y - WIRE_NO_GAP, WIRE_NO_FONT, Anchor::Middle, no)
+            text_box(mid.x, mid.y - gap, font, Anchor::Middle, no)
         } else {
-            text_box(mid.x - WIRE_NO_GAP, mid.y, WIRE_NO_FONT, Anchor::End, no)
+            text_box(mid.x - gap, mid.y, font, Anchor::End, no)
         };
         boxes.push(TextBox {
             rect,
@@ -687,6 +692,45 @@ mod tests {
     fn a_reference_designator_never_overlaps_its_own_symbol() {
         let sheet = sheet_with(vec![symbol("resistor", (100.0, 100.0), "R1")]);
         assert_eq!(label_overlaps(&sheet, &builtin_symbols()), 0);
+    }
+
+    /// The measured text of a tagged net label sits inside its flag, so the overlap count follows what is actually printed.
+    /// タグ付きネットラベルの文字は旗の中として測られるので、重なりの数は実際に印字される見た目と一致する。
+    #[test]
+    fn a_tagged_net_label_is_measured_inside_its_flag() {
+        let mut label = NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 50.0),
+            name: "24V_1".into(),
+            rotation: 0,
+            attrs: Default::default(),
+        };
+        label.attrs.insert("tag".into(), "right".into());
+        let sheet = sheet_with(vec![Entity::NetLabel(label)]);
+        let boxes = text_boxes(&sheet, &builtin_symbols());
+        assert_eq!(boxes.len(), 1);
+        assert!(boxes[0].rect.max.x <= 100.0, "本体は基準点の左: {:?}", boxes[0].rect);
+    }
+
+    /// A smaller annotation text height makes the measured net label and wire number smaller too.
+    /// 注記文字高を小さくすると、測られるネットラベル・線番の大きさも一緒に小さくなる。
+    #[test]
+    fn measured_annotation_text_follows_the_sheet_setting() {
+        let label = Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 50.0),
+            name: "24V_1".into(),
+            rotation: 0,
+            attrs: Default::default(),
+        });
+        let mut sheet = sheet_with(vec![label]);
+        let width = |s: &Sheet| {
+            let r = text_boxes(s, &builtin_symbols())[0].rect;
+            r.max.x - r.min.x
+        };
+        let before = width(&sheet);
+        sheet.annotation_text_mm = Some(1.4);
+        assert!((width(&sheet) / before - 0.7).abs() < 1e-9);
     }
 
     /// Symbol origins and wire vertices sitting on the 2.5 mm grid report no off-grid points.

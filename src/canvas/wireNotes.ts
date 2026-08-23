@@ -4,11 +4,17 @@
 // 違うのでワイヤ単位で描く。
 
 import type { Point, Sheet, Wire } from "../ipc";
+import { annotationScale } from "./annotationText";
 
-/** 配線注記の文字高さ (mm)。wire_note.rsのWIRE_NOTE_FONTと一致させること。 */
+/** 配線注記の文字高さ (mm)。wire_note.rsのWIRE_NOTE_FONTと一致させること (既定値)。 */
 export const WIRE_NOTE_FONT = 2.0;
-/** 配線注記と配線の間隔 (mm)。wire_note.rsのWIRE_NOTE_GAPと一致させること。 */
+/** 配線注記と配線の間隔 (mm)。wire_note.rsのWIRE_NOTE_GAPと一致させること (既定値)。 */
 export const WIRE_NOTE_GAP = 2.5;
+
+/** このシートで配線注記を描く文字高さ (mm) = シートの注記文字高そのもの (G20)。 */
+export function wireNoteFont(sheet: Sheet | null | undefined): number {
+  return WIRE_NOTE_FONT * annotationScale(sheet);
+}
 
 /** 線色名 → 図面に書く日本語の色名 (wire_note.rsのcolor_jaと同じ表)。 */
 const COLOR_JA: Record<string, string> = {
@@ -84,6 +90,8 @@ function longestSegment(points: Point[]): [Point, Point] | null {
 /** シートの配線注記を、ワイヤid順 (決定的) に返す。属性の無いワイヤは含まない。 */
 export function wireNoteLabels(sheet: Sheet): WireNoteLabel[] {
   const out: WireNoteLabel[] = [];
+  // 注記文字高を下げたシートでは、配線からの逃がしも同じ比率で詰める
+  const gap = WIRE_NOTE_GAP * annotationScale(sheet);
   for (const entity of Object.values(sheet.entities)) {
     if (entity.kind !== "wire") continue;
     const text = wireNoteText(entity);
@@ -95,8 +103,8 @@ export function wireNoteLabels(sheet: Sheet): WireNoteLabel[] {
     // 線番は横線の上・縦線の左。注記はその反対側 (下・右) へ置いて重ねない
     out.push(
       Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)
-        ? { wireId: entity.id, text, at: { x: mid.x, y: mid.y + WIRE_NOTE_GAP }, align: "center" }
-        : { wireId: entity.id, text, at: { x: mid.x + WIRE_NOTE_GAP, y: mid.y }, align: "left" },
+        ? { wireId: entity.id, text, at: { x: mid.x, y: mid.y + gap }, align: "center" }
+        : { wireId: entity.id, text, at: { x: mid.x + gap, y: mid.y }, align: "left" },
     );
   }
   return out.sort((p, q) => (p.wireId < q.wireId ? -1 : p.wireId > q.wireId ? 1 : 0));

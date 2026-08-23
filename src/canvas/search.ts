@@ -93,7 +93,10 @@ export function hitLabel(hit: SearchHit): LabelSpec {
 }
 
 function camelFunction(kind: DeviceFunctionKind): string {
-  return kind === "contact_no" ? "contactNo" : kind === "contact_nc" ? "contactNc" : kind;
+  if (kind === "contact_no") return "contactNo";
+  if (kind === "contact_nc") return "contactNc";
+  if (kind === "contact_co") return "contactCo";
+  return kind;
 }
 
 function camelKind(kind: SearchKind): string {

@@ -525,6 +525,9 @@ pub(crate) fn midpoint(a: &Point, b: &Point) -> Point {
 /// 線番 (IEC 62491)。ネットごとに代表線分の中点へ1回だけ描く。
 /// 横向きの線分なら上へ、縦向きなら左へ [`WIRE_NO_GAP`] だけ離す。線番の無いネットは描かない。
 fn render_wire_numbers(out: &mut String, sheet: &Sheet, symbols: &[SymbolDef]) {
+    // 文字も配線からの逃がしも、シートの注記文字高 (G20) に合わせて一緒に伸縮する
+    let scale = sheet.annotation_scale();
+    let (font, gap) = (WIRE_NO_FONT * scale, WIRE_NO_GAP * scale);
     for net in crate::netlist::extract_netlist(sheet, symbols) {
         let Some(no) = net.wire_no.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
             continue;
@@ -534,9 +537,9 @@ fn render_wire_numbers(out: &mut String, sheet: &Sheet, symbols: &[SymbolDef]) {
         };
         let mid = midpoint(&a, &b);
         if (b.x - a.x).abs() >= (b.y - a.y).abs() {
-            text_family_el(out, mid.x, mid.y - WIRE_NO_GAP, WIRE_NO_FONT, "#000", "middle", "monospace", no);
+            text_family_el(out, mid.x, mid.y - gap, font, "#000", "middle", "monospace", no);
         } else {
-            text_family_el(out, mid.x - WIRE_NO_GAP, mid.y, WIRE_NO_FONT, "#000", "end", "monospace", no);
+            text_family_el(out, mid.x - gap, mid.y, font, "#000", "end", "monospace", no);
         }
     }
 }
@@ -554,7 +557,7 @@ fn render_wire_notes(out: &mut String, sheet: &Sheet) {
             out,
             note.at.x,
             note.at.y,
-            crate::wire_note::WIRE_NOTE_FONT,
+            crate::wire_note::wire_note_font(sheet),
             "#000",
             anchor,
             "monospace",
@@ -825,6 +828,8 @@ fn sheet_to_svg_with_xrefs(
     render_panel(&mut out, sheet);
     // ハーネス境界は配線・シンボルの背面に置く
     render_harnesses(&mut out, sheet);
+    // 注記の層 (ネットラベル・タグ・線番・配線注記) にかける倍率 (G20)
+    let annotation_scale = sheet.annotation_scale();
     let defs = crate::symbol::DefIndex::new(symbols);
     for entity in sheet.entities.values() {
         match entity {
@@ -867,8 +872,10 @@ fn sheet_to_svg_with_xrefs(
                 );
             }
             Entity::NetLabel(l) => {
+                // ネットラベルの文字はシートの注記文字高 (G20) に従って伸縮する
+                let label_font = LABEL_FONT * annotation_scale;
                 // 方向付きタグ (G3)。attrs["tag"]がある時だけ旗の枠で囲む
-                let tag = crate::net_tag::net_tag(l);
+                let tag = crate::net_tag::net_tag(l, label_font);
                 match &tag {
                     Some(t) => {
                         let _ = write!(
@@ -877,26 +884,27 @@ fn sheet_to_svg_with_xrefs(
                             polyline_points(&t.points),
                             n(crate::net_tag::TAG_STROKE)
                         );
-                        text_el(&mut out, t.text_at.x, t.text_at.y, LABEL_FONT, "#000", "start", &l.name);
+                        text_el(&mut out, t.text_at.x, t.text_at.y, label_font, "#000", "start", &l.name);
                     }
                     None => {
-                        text_el(&mut out, l.at.x, l.at.y - NET_LABEL_DY, LABEL_FONT, "#000", "start", &l.name);
+                        let dy = NET_LABEL_DY * annotation_scale;
+                        text_el(&mut out, l.at.x, l.at.y - dy, label_font, "#000", "start", &l.name);
                     }
                 }
                 // シート間クロスリファレンス (IEC 61082-1)。相手がいるラベルだけ脇に添える
                 if let Some(text) = xrefs.get(&l.id) {
-                    let at = match &tag {
-                        // タグ付きは旗の右端の外へ逃がす (枠と重ねない)
-                        Some(t) => Point::new(t.right + crate::xref::XREF_GAP, t.text_at.y),
-                        None => crate::xref::xref_text_at(l),
+                    // タグ付きは旗の本体側の外へ逃がす (枠にも自分の配線にも重ねない)
+                    let (at, anchor) = match &tag {
+                        Some(t) => (t.xref_at, crate::text_style::svg_anchor(t.xref_anchor)),
+                        None => (crate::xref::xref_text_at(l, label_font), "start"),
                     };
                     text_family_el(
                         &mut out,
                         at.x,
                         at.y,
-                        crate::xref::XREF_FONT,
+                        crate::xref::XREF_FONT * annotation_scale,
                         "#000",
-                        "start",
+                        anchor,
                         "monospace",
                         text,
                     );
@@ -1990,8 +1998,8 @@ mod tests {
         sheet
     }
 
-    /// A net label tagged "right" is drawn as a flag outline pointing right, with the net name inside it.
-    /// タグ「右」のネットラベルは、右を向いた旗の枠として描かれ、ネット名はその中に入る。
+    /// A net label tagged "right" is drawn as a flag outline pointing right, with the net name inside the body that runs to the left of the label position.
+    /// タグ「右」のネットラベルは右を向いた旗の枠として描かれ、ネット名は置いた点の左へ伸びる本体の中に入る。
     #[test]
     fn svg_draws_a_directional_flag_around_a_tagged_net_label() {
         let svg = sheet_to_svg(&sheet_with_net_label(Some("right")), &builtin_symbols());
@@ -2004,8 +2012,48 @@ mod tests {
             .into_iter()
             .find(|(_, _, t)| t == "24V_1")
             .expect("ネット名");
-        assert!(x > 100.0, "文字は枠の内側: {x}");
+        assert!(x < 100.0, "文字は基準点の左の本体の中: {x}");
         assert!(svg.contains("fill=\"none\""), "枠は塗らない: {svg}");
+    }
+
+    /// A sheet with a smaller annotation text height exports smaller wire numbers, wire notes and net tags, and nothing else changes size.
+    /// 注記文字高を小さくしたシートは、線番・配線注記・ネットタグだけが小さくなって出力される。
+    #[test]
+    fn svg_follows_the_sheet_annotation_text_height() {
+        let mut sheet = sheet_with_net_label(Some("right"));
+        let w = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(20.0, 100.0), Point::new(80.0, 100.0)],
+            color: "red".into(),
+            sq: 0.75,
+            length_m: Some(0.4),
+            part_no: None,
+            net: Some("12".into()),
+        });
+        sheet.entities.insert(w.id(), w);
+        let default_svg = sheet_to_svg(&sheet, &builtin_symbols());
+        sheet.annotation_text_mm = Some(1.4);
+        let small_svg = sheet_to_svg(&sheet, &builtin_symbols());
+
+        let size_of = |svg: &str, text: &str| {
+            svg.lines()
+                .find(|l| l.contains(&format!(">{text}<")))
+                .and_then(|l| {
+                    let i = l.find("font-size=\"")? + 11;
+                    l[i..].split('"').next()?.parse::<f64>().ok()
+                })
+                .unwrap_or_else(|| panic!("{text} が見つからない: {svg}"))
+        };
+        assert!((size_of(&default_svg, "12") - 2.5).abs() < 1e-9, "既定の線番は2.5mm");
+        assert!((size_of(&small_svg, "12") - 1.75).abs() < 1e-9, "線番も同じ比率で縮む");
+        assert!((size_of(&default_svg, "0.75sq 赤 0.4m") - 2.0).abs() < 1e-9);
+        assert!((size_of(&small_svg, "0.75sq 赤 0.4m") - 1.4).abs() < 1e-9, "配線注記=設定値");
+        assert!((size_of(&small_svg, "24V_1") - 1.75).abs() < 1e-9, "タグ文字も縮む");
+        // 表題欄は図面規格の一部なので注記文字高では変わらない
+        assert_eq!(
+            default_svg.matches(&format!("font-size=\"{}\"", n(TITLE_FONT))).count(),
+            small_svg.matches(&format!("font-size=\"{}\"", n(TITLE_FONT))).count(),
+        );
     }
 
     /// A net label with no tag keeps the plain text look, with no outline drawn around it.

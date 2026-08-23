@@ -844,6 +844,7 @@
       "coil": "リレー コイル",
       "contactNo": "リレー 接点 {terminals}",
       "contactNc": "リレー 接点 {terminals}",
+      "contactCo": "リレー c接点 {terminals}",
       "terminal": "端子台 端子 {terminals}",
       "body": "部品"
     },
@@ -865,6 +866,7 @@
       "coil": "コイル {terminals}",
       "contactNo": "接点 {terminals}",
       "contactNc": "接点 {terminals}",
+      "contactCo": "c接点 {terminals}",
       "terminal": "端子 {terminals}",
       "body": "本体"
     },
@@ -933,6 +935,13 @@
     "frame": "図枠",
     "grid": "グリッド",
     "wireNotesHint": "配線ごとの線径・線色・電線長の注記。SVG/PDFには常に出力され、このトグルは画面表示だけを消します。"
+  },
+  "annotationText": {
+    "section": "シートの注記",
+    "row": "注記文字高 mm",
+    "hint": "配線注記・線番・ネットタグの文字の大きさです。図面規格としてシート単位で決めます。空欄で既定 (2.0mm) に戻ります。",
+    "range": "{min}〜{max}mm。機器が5mmピッチで並ぶ図面は1.4mm前後にすると注記が隣の行にかかりません。",
+    "changedLog": "注記文字高を {height}mm にしました"
   },
   "netLabel": {
     "tagRow": "タグ形状",

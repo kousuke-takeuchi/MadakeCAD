@@ -15,7 +15,12 @@ import { useBlockEditorStore } from "../stores/blockEditor";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import type { EditorController } from "../tools/controller";
-import { harnessUpdateCommand, wireNumberCommand } from "./propertyCommands";
+import { annotationTextCommand, harnessUpdateCommand, wireNumberCommand } from "./propertyCommands";
+import {
+  MAX_ANNOTATION_TEXT_MM,
+  MIN_ANNOTATION_TEXT_MM,
+  annotationTextMm,
+} from "../canvas/annotationText";
 
 const store = useDocumentStore();
 const ui = useUiStore();
@@ -72,6 +77,8 @@ const buf = reactive({
   railY: "",
   railX1: "",
   railX2: "",
+  /** シートの注記文字高 (mm。G20)。空欄 = 既定 (2.0mm)。数値入力欄なので数値も入る。 */
+  annotationText: "" as string | number,
 });
 
 /**
@@ -153,6 +160,35 @@ watch(
   },
   { immediate: true },
 );
+
+// 選択が無いときはシートのプロパティを出す。シートを切り替えたときも、undoや他の
+// クライアントの編集でシートの設定が変わったときも、下書きを実際の値へ取り直す
+watch(
+  () => [store.activeSheetId, store.activeSheet?.annotation_text_mm] as const,
+  ([, height]) => {
+    buf.annotationText = height != null ? String(height) : "";
+  },
+  { immediate: true },
+);
+
+/** シートの注記文字高 (mm)。設定が無ければ既定値を表示に使う。 */
+const sheetAnnotationText = computed(() => annotationTextMm(store.activeSheet));
+
+/**
+ * 注記文字高を確定する (G20)。範囲外・数値でない入力は送らずに下書きを戻す。
+ * 配線注記・線番・ネットタグがまとめて新しい高さで描き直される。
+ */
+async function applyAnnotationText() {
+  const sheet = store.activeSheet;
+  if (!sheet) return;
+  const command = annotationTextCommand(sheet, buf.annotationText);
+  if (!command) {
+    buf.annotationText = sheet.annotation_text_mm != null ? String(sheet.annotation_text_mm) : "";
+    return;
+  }
+  await store.execute(command);
+  ui.log(t("annotationText.changedLog", { height: annotationTextMm(store.activeSheet) }));
+}
 
 /** 入力欄の文字を数値へ (空欄・文字はundefined = その欄は変えない)。 */
 function num(text: string): number | undefined {
@@ -516,7 +552,7 @@ const kindLabel = computed<Record<string, string>>(() => ({
         <span class="plabel">{{ t("panel.prop.legendRows") }}</span>
         <span class="pvalue mono">{{ legendRowCount }}</span>
       </div>
-      <div class="hint">{{ t("panel.prop.legendHint") }}</div>
+      <div class="hint hint-block">{{ t("panel.prop.legendHint") }}</div>
     </template>
 
     <!-- 盤レイアウト: 盤の外形 (取付板つき) -->
@@ -637,6 +673,30 @@ const kindLabel = computed<Record<string, string>>(() => ({
       </div>
     </template>
 
+    <!-- 選択が無いときはシート全体の設定 (図面規格) を出す -->
+    <template v-if="!selected && store.selection.size === 0">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("annotationText.section") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("annotationText.row") }}</span>
+        <span class="pvalue" :title="t('annotationText.hint')">
+          <input
+            v-model="buf.annotationText"
+            class="bare mono"
+            type="number"
+            :min="MIN_ANNOTATION_TEXT_MM"
+            :max="MAX_ANNOTATION_TEXT_MM"
+            step="0.1"
+            :placeholder="String(sheetAnnotationText)"
+            @change="applyAnnotationText"
+            @keyup.enter="applyAnnotationText"
+          />
+        </span>
+      </div>
+      <div class="hint hint-block">
+        {{ t("annotationText.range", { min: MIN_ANNOTATION_TEXT_MM, max: MAX_ANNOTATION_TEXT_MM }) }}
+      </div>
+    </template>
+
     <div v-if="selected" class="apply-row">
       <button class="apply" @click="apply">適用</button>
     </div>
@@ -715,6 +775,12 @@ const kindLabel = computed<Record<string, string>>(() => ({
 }
 .mono { font-family: var(--mono-font); }
 .hint { color: var(--ui-muted); }
+/* 行の下に単独で置く補足 (プロパティ行と同じ字送り・余白のcaption) */
+.hint-block {
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 5px 9px;
+}
 .pvalue.stacked {
   flex-direction: column;
   align-items: flex-start;

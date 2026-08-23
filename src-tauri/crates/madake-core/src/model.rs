@@ -24,7 +24,17 @@ pub type SheetId = Uuid;
 /// - v6: 盤レイアウトのアイテム番号 ([`Footprint::item_no`]) と凡例表 ([`Entity::PanelLegend`])
 ///   を追加。アイテム番号を持たない旧ファイルのフットプリントはバルーンを描かず、
 ///   採番 (`renumber_panel_items`) すればいつでも振り直せる
-pub const FORMAT_VERSION: u32 = 6;
+/// - v7: シートごとの注記文字高 ([`Sheet::annotation_text_mm`]) を追加。設定の無い旧ファイルは
+///   既定 ([`DEFAULT_ANNOTATION_TEXT_MM`] = 2.0mm) で開き、出力される図面は変わらない
+pub const FORMAT_VERSION: u32 = 7;
+
+/// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
+/// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
+pub const DEFAULT_ANNOTATION_TEXT_MM: f64 = 2.0;
+/// 注記文字高の下限 (mm)。これより小さいとA3に印刷したとき人の目で読めない。
+pub const MIN_ANNOTATION_TEXT_MM: f64 = 1.0;
+/// 注記文字高の上限 (mm)。これより大きいと2.5mmピッチの図面で注記同士が必ず重なる。
+pub const MAX_ANNOTATION_TEXT_MM: f64 = 3.5;
 
 /// プロジェクト全体。保存形式(.mdkproj)のルート。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -162,6 +172,14 @@ pub struct Sheet {
     pub title_block: TitleBlock,
     #[serde(default)]
     pub revisions: Vec<Revision>,
+    /// 注記文字高 (mm)。図面規格として**シート単位**で決める、配線注記・線番・ネットタグの
+    /// 文字の大きさ。`None`は既定 ([`DEFAULT_ANNOTATION_TEXT_MM`])。
+    ///
+    /// 参考図面のように5mmピッチで機器が並ぶ図面では、既定の2.0mmだと注記が隣の行に
+    /// かかるため1.4mm前後まで下げる。文字だけでなく配線からの逃がし量も同じ比率で縮み、
+    /// 注記の層全体が小さくなる ([`Sheet::annotation_scale`])。
+    #[serde(default)]
+    pub annotation_text_mm: Option<f64>,
     pub entities: BTreeMap<EntityId, Entity>,
 }
 
@@ -188,6 +206,7 @@ impl Sheet {
             zone_rows: 6,
             title_block: TitleBlock::default(),
             revisions: Vec::new(),
+            annotation_text_mm: None,
             entities: BTreeMap::new(),
         }
     }
@@ -195,6 +214,19 @@ impl Sheet {
     /// 盤レイアウトシートか。
     pub fn is_panel(&self) -> bool {
         self.kind == SheetKind::Panel
+    }
+
+    /// このシートの注記文字高 (mm)。未設定なら既定 ([`DEFAULT_ANNOTATION_TEXT_MM`])。
+    pub fn annotation_text_mm(&self) -> f64 {
+        self.annotation_text_mm
+            .filter(|v| v.is_finite() && *v > 0.0)
+            .unwrap_or(DEFAULT_ANNOTATION_TEXT_MM)
+    }
+
+    /// 注記の層 (配線注記・線番・ネットタグ) にかける倍率。1.0 = 既定の大きさ。
+    /// 文字高さも配線からの逃がし量も、この倍率で一緒に縮む・伸びる。
+    pub fn annotation_scale(&self) -> f64 {
+        self.annotation_text_mm() / DEFAULT_ANNOTATION_TEXT_MM
     }
 
     /// 用紙サイズ (幅, 高さ) mm。向きを反映。

@@ -193,11 +193,15 @@ pub fn sheet_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<EntityId, S
 
 /// ネットラベル本文の右脇に置くXRefテキストの基準点 (テキストは左揃え)。
 /// ラベル本文の幅を文字数から見積り、その右に [`XREF_GAP`] だけ空ける。
-pub fn xref_text_at(label: &NetLabel) -> Point {
-    let width = NET_LABEL_FONT * CHAR_WIDTH_RATIO * label.name.chars().count() as f64;
+///
+/// `font`はネットラベル本文の文字高さ (mm)。シートの注記文字高 (G20) で変わるので、
+/// 逃がし量とベースラインの持ち上げも同じ比率で伸縮する。
+pub fn xref_text_at(label: &NetLabel, font: f64) -> Point {
+    let scale = font / NET_LABEL_FONT;
+    let width = font * CHAR_WIDTH_RATIO * label.name.chars().count() as f64;
     Point::new(
-        label.at.x + width + XREF_GAP,
-        label.at.y - NET_LABEL_RISE,
+        label.at.x + width + XREF_GAP * scale,
+        label.at.y - NET_LABEL_RISE * scale,
     )
 }
 
@@ -564,11 +568,27 @@ mod tests {
             rotation: 0,
             attrs: Default::default(),
         };
-        let at = xref_text_at(&l);
+        let at = xref_text_at(&l, NET_LABEL_FONT);
         assert!(at.x > 100.0, "ラベルの右に置く: {at:?}");
         assert!((at.y - (50.0 - NET_LABEL_RISE)).abs() < 1e-9, "ベースラインは同じ");
         // 5文字分の幅 + 間隔
         assert!((at.x - (100.0 + 2.5 * 0.6 * 5.0 + 1.0)).abs() < 1e-9);
+    }
+
+    /// A smaller annotation text height moves the cross-reference closer to the label, keeping the gap in proportion.
+    /// 注記文字高を小さくすると、クロスリファレンスも同じ比率でラベルに寄る。
+    #[test]
+    fn cross_reference_follows_the_annotation_text_height() {
+        let l = NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 50.0),
+            name: "24V_1".into(),
+            rotation: 0,
+            attrs: Default::default(),
+        };
+        let small = xref_text_at(&l, NET_LABEL_FONT * 0.6);
+        assert!((small.x - (100.0 + (2.5 * 0.6 * 5.0 + 1.0) * 0.6)).abs() < 1e-9, "{small:?}");
+        assert!((small.y - (50.0 - NET_LABEL_RISE * 0.6)).abs() < 1e-9);
     }
 
     /// The cross-reference table has one row per project-wide net, listing the sheets it spans and the drawing addresses of its labels.

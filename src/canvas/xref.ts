@@ -162,8 +162,15 @@ export function xrefJumpTarget(site: NetSite): { sheetId: string; entityIds: str
 /**
  * ネットラベル本文の右脇に置くXRefテキストの基準点 (テキストは左揃え)。
  * ラベル本文の幅を文字数から見積り、その右に XREF_GAP だけ空ける。
+ *
+ * `font` はネットラベル本文の文字高さ (mm)。シートの注記文字高 (G20) で変わるので、
+ * 逃がし量とベースラインの持ち上げも同じ比率で伸縮する。
  */
-export function xrefTextAt(label: Pick<NetLabel, "at" | "name">): Point {
-  const width = NET_LABEL_FONT * CHAR_WIDTH_RATIO * [...label.name].length;
-  return { x: label.at.x + width + XREF_GAP, y: label.at.y - NET_LABEL_RISE };
+export function xrefTextAt(
+  label: Pick<NetLabel, "at" | "name">,
+  font: number = NET_LABEL_FONT,
+): Point {
+  const scale = font / NET_LABEL_FONT;
+  const width = font * CHAR_WIDTH_RATIO * [...label.name].length;
+  return { x: label.at.x + width + XREF_GAP * scale, y: label.at.y - NET_LABEL_RISE * scale };
 }

@@ -1,6 +1,6 @@
 # データ設計書
 
-作成: 2026-08-21。更新: 2026-08-23(M4フェーズ4: `.mdkproj` format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
+作成: 2026-08-21。更新: 2026-08-23(フェーズ6: `.mdkproj` format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
 
 MadakeCADの永続データは3系統ある:
 
@@ -12,7 +12,7 @@ MadakeCADの永続データは3系統ある:
 
 ## 1. 図面ドキュメント(.mdkproj)
 
-`format_version: 6`。構造(mermaid classDiagram):
+`format_version: 7`。構造(mermaid classDiagram):
 
 ```mermaid
 classDiagram
@@ -46,6 +46,7 @@ classDiagram
       size: A4|A3|A2|A1|A0
       orientation: Landscape|Portrait
       zone_cols / zone_rows: u32
+      annotation_text_mm: f64?  %% 注記文字高。未設定=2.0mm
     }
     class TitleBlock {
       company / title / drawing_no / scale / date
@@ -110,6 +111,7 @@ classDiagram
 | 4 | `Sheet.kind`(回路図/盤レイアウト)+盤エンティティ4種 | 回路図シートとして開く |
 | 5 | `TextEntity.anchor`/`color`/`bold`(注記の装飾) | 左揃え・黒・細字で開く |
 | 6 | `Footprint.item_no`+凡例表エンティティ`panel_legend` | バルーン未採番として開く。**逆に新しいファイルは旧アプリでは読めない**(`panel_legend`が未知) |
+| 7 | `Sheet.annotation_text_mm`(注記文字高。配線注記・線番・ネットタグの大きさ) | 既定の2.0mm=従来の見た目で開く |
 
 `NetLabel.attrs`(方向付きタグ形状)のように**追加するだけで旧アプリも読める**変更は版を上げていない。
 版を上げるのは、旧アプリが読めなくなる要素が入ったとき(6)と、意味のある新フィールドを足したときだけ。
