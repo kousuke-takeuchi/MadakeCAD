@@ -41,6 +41,15 @@ describe("wirePartNo", () => {
     expect(autoWirePartNo(p, " LIGHT_BLUE", 0.5)).toBe("SAMPLE0003");
   });
 
+  // ja: ワイヤの英語の色名と表の日本語の色名は同じ電線を指す
+  it("treats the English and the Japanese name of a colour as the same wire", () => {
+    const p = project([part("SAMPLE0001", "水色", 0.3)]);
+    expect(autoWirePartNo(p, "light_blue", 0.3)).toBe("SAMPLE0001");
+    expect(autoWirePartNo(project([part("SAMPLE0006", "light_blue", 0.5)]), "水色", 0.5)).toBe(
+      "SAMPLE0006",
+    );
+  });
+
   // ja: 線色が空・線径が0のワイヤは引き当てない
   it("does not look up a wire without a colour or a gauge", () => {
     const p = project([part("SAMPLE0001", "水色", 0.3), part("SAMPLE0004", "", 0.3)]);

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1735仕様項目**。
+全5領域・**1737仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -697,6 +697,7 @@
 - 表に無い線色+線径の組み合わせは品番が空のままで、勝手に品番が作られることはない。 <sub>`an_unregistered_combination_stays_empty`</sub>
 - ワイヤ自身に書かれた品番は表より優先されるので、手で決めた品番が表で上書きされることはない。 <sub>`a_part_number_written_on_the_wire_wins_over_the_table`</sub>
 - 引き当ては線色の前後の空白と英字の大小を無視する。 <sub>`the_lookup_ignores_spaces_and_letter_case_in_the_colour`</sub>
+- ワイヤの英語の色名と表の日本語の色名は同じ電線を指すので、日本語で書いた表がそのまま英語の色名の図面に効く。 <sub>`the_english_and_japanese_names_of_a_colour_mean_the_same_wire`</sub>
 - 線色が空・線径が0のワイヤは引き当てない。 <sub>`a_wire_without_a_colour_or_a_gauge_is_not_looked_up`</sub>
 - 同じ線色+線径の行が表に2つあるときは、先に書いた行が勝つ。 <sub>`the_first_row_wins_when_the_table_has_duplicates`</sub>
 - 電線品番表はCSVで往復でき、線色・線径・品番・備考がそのまま戻る。 <sub>`the_wire_part_table_round_trips_through_csv`</sub>
@@ -1677,6 +1678,7 @@
 - 表に無い線色+線径の組み合わせは空のまま <sub>`wirePartNo`</sub>
 - ワイヤ自身に書かれた品番は表より優先される <sub>`wirePartNo`</sub>
 - 引き当ては線色の前後の空白と英字の大小を無視する <sub>`wirePartNo`</sub>
+- ワイヤの英語の色名と表の日本語の色名は同じ電線を指す <sub>`wirePartNo`</sub>
 - 線色が空・線径が0のワイヤは引き当てない <sub>`wirePartNo`</sub>
 - 同じ線色+線径の行が2つあるときは先に書いた行が勝つ <sub>`wirePartNo`</sub>
 

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1735 specification clauses** across 5 areas.
+**1737 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -697,6 +697,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A colour and gauge combination that is not in the table leaves the part number empty; no number is invented. <sub>`an_unregistered_combination_stays_empty`</sub>
 - A part number written on the wire itself wins over the table, so a hand-picked part is never overwritten. <sub>`a_part_number_written_on_the_wire_wins_over_the_table`</sub>
 - The lookup ignores surrounding spaces and upper/lower case in the colour name. <sub>`the_lookup_ignores_spaces_and_letter_case_in_the_colour`</sub>
+- The English colour name on a wire and the Japanese colour name in the table mean the same wire, so a table written in Japanese serves a drawing drawn with English colour tokens. <sub>`the_english_and_japanese_names_of_a_colour_mean_the_same_wire`</sub>
 - A wire with no colour or no gauge is not looked up at all. <sub>`a_wire_without_a_colour_or_a_gauge_is_not_looked_up`</sub>
 - When the table has two rows for the same colour and gauge, the row written first wins. <sub>`the_first_row_wins_when_the_table_has_duplicates`</sub>
 - The wire-part table round trips through CSV: colour, gauge, part number and note come back unchanged. <sub>`the_wire_part_table_round_trips_through_csv`</sub>
@@ -1677,6 +1678,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - leaves an unregistered combination empty <sub>`wirePartNo`</sub>
 - prefers a part number written on the wire <sub>`wirePartNo`</sub>
 - ignores spaces and letter case in the colour <sub>`wirePartNo`</sub>
+- treats the English and the Japanese name of a colour as the same wire <sub>`wirePartNo`</sub>
 - does not look up a wire without a colour or a gauge <sub>`wirePartNo`</sub>
 - takes the first of two rows for the same colour and gauge <sub>`wirePartNo`</sub>
 

@@ -89,8 +89,9 @@
   **G17-c** Link API `POST /commands`は失敗時400 + `{error, failed_command_index, applied}`。
   MCP `execute_commands`のエラーも「commands[i] が拒否されました: 理由 (ここまでのn件は適用済み)」。
   **G11** `madake-core/src/wire_parts.rs`: `wire_part_number(project, wire)`=**ワイヤに書かれた
-  品番が最優先**、空なら線色(前後空白無視・英字大小同一視)+線径(誤差1e-9)で`Project.wire_parts`を
-  引く(先に書いた行が勝つ・無ければ空欄)。電線リストの品番列が追従。設定は既存の
+  品番が最優先**、空なら線色+線径(誤差1e-9)で`Project.wire_parts`を引く(先に書いた行が勝つ・
+  無ければ空欄)。線色は前後空白無視・英字大小同一視に加え、**英日の色名を同一視**
+  (`wire_note::color_ja`で正規化。`light_blue`の図面に「水色」の表がそのまま効く)。電線リストの品番列が追従。設定は既存の
   `set_wire_parts`コマンドで、CSV(線色,線径sq,電線品番[,備考]・見出し任意)は
   `import_wire_parts_csv`→同コマンド1回=undo一発。露出は Link API
   `GET /project/wire-parts`・`POST /project/wire-parts/csv` と Tauri IPC `import_wire_parts_csv`。

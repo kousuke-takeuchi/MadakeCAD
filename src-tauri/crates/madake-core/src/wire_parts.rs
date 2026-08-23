@@ -12,8 +12,9 @@
 //!
 //! - **ワイヤに直接書かれた品番 ([`Wire::part_no`]) が最優先**。表から引いた品番は、
 //!   品番欄が空のワイヤにだけ入る (手で決めた品番を表が上書きしない)
-//! - 引き当ては**線色は前後の空白を無視・英字の大小同一視**、線径は完全一致 (浮動小数の
-//!   誤差 [`SQ_EPS`] まで)。同じ組み合わせが表に2行あれば**先に書いた行**が勝つ
+//! - 引き当ては**線色は前後の空白を無視・英字の大小同一視・英日の色名を同一視**
+//!   (`light_blue` = `水色`)、線径は完全一致 (浮動小数の誤差 [`SQ_EPS`] まで)。
+//!   同じ組み合わせが表に2行あれば**先に書いた行**が勝つ
 //! - 線色が空・線径が0のワイヤは引き当てない (何色の何sqか決まっていないため)
 //! - 表に無い組み合わせは**空欄のまま**。勝手に品番を作らない
 //!
@@ -30,9 +31,11 @@ pub const SQ_EPS: f64 = 1e-9;
 /// 電線品番表のCSV列。4列目 (備考) は省略できる。
 pub const WIRE_PARTS_COLUMNS: [&str; 4] = ["線色", "線径sq", "電線品番", "備考"];
 
-/// 線色の比較キー (前後の空白を落として小文字化)。
+/// 線色の比較キー。前後の空白を落として小文字化し、**日本語の色名へそろえる**
+/// ([`crate::wire_note::color_ja`])。図面のワイヤが`light_blue`でも、表に「水色」と
+/// 書いてあれば同じ電線として引ける (表を作る人と図面を描く道具で表記が違うため)。
 fn color_key(color: &str) -> String {
-    color.trim().to_lowercase()
+    crate::wire_note::color_ja(&color.trim().to_lowercase()).to_string()
 }
 
 /// 線色+線径で電線品番表を引く。表の**先頭に近い行**が勝つ。
@@ -218,6 +221,28 @@ mod tests {
         assert_eq!(
             wire_part_number(&project, &wire(" LIGHT_BLUE", 0.5, None)).as_deref(),
             Some("SAMPLE0003")
+        );
+    }
+
+    /// The English colour name on a wire and the Japanese colour name in the table mean the same wire, so a table written in Japanese serves a drawing drawn with English colour tokens.
+    /// ワイヤの英語の色名と表の日本語の色名は同じ電線を指すので、日本語で書いた表がそのまま英語の色名の図面に効く。
+    #[test]
+    fn the_english_and_japanese_names_of_a_colour_mean_the_same_wire() {
+        let project = project_with(vec![part("SAMPLE0001", "水色", 0.3), part("SAMPLE0005", "灰", 1.25)]);
+        assert_eq!(
+            wire_part_number(&project, &wire("light_blue", 0.3, None)).as_deref(),
+            Some("SAMPLE0001")
+        );
+        assert_eq!(
+            wire_part_number(&project, &wire("grey", 1.25, None)).as_deref(),
+            Some("SAMPLE0005"),
+            "grey も gray も灰"
+        );
+        // 逆向き (表が英語・図面が日本語) も同じ
+        let english_table = project_with(vec![part("SAMPLE0006", "light_blue", 0.5)]);
+        assert_eq!(
+            wire_part_number(&english_table, &wire("水色", 0.5, None)).as_deref(),
+            Some("SAMPLE0006")
         );
     }
 

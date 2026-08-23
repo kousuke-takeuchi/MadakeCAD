@@ -2,15 +2,18 @@
 // プロパティ表示のためにフロントでも引けるようにしたもの。
 //
 // - ワイヤ自身に書かれた品番が最優先。表から引くのは品番が空のワイヤだけ
-// - 線色は前後の空白を無視・英字の大小を同一視、線径は完全一致 (浮動小数の誤差まで)
+// - 線色は前後の空白を無視・英字の大小と英日の色名を同一視 (light_blue = 水色)、
+//   線径は完全一致 (浮動小数の誤差まで)
 // - 同じ組み合わせが2行あれば先に書いた行が勝つ。無ければ空 (勝手に品番を作らない)
 import type { Project, WirePart } from "../ipc";
+import { colorJa } from "./wireNotes";
 
 /** 線径 (sq) の一致とみなす誤差。 */
 export const SQ_EPS = 1e-9;
 
+/** 線色の比較キー。空白を落として小文字化し、日本語の色名へそろえる。 */
 function colorKey(color: string): string {
-  return color.trim().toLowerCase();
+  return colorJa(color.trim().toLowerCase());
 }
 
 /** 線色+線径で電線品番表を引く (先に書いた行が勝つ)。 */
