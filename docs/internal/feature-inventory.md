@@ -1,6 +1,6 @@
 # MadakeCAD 機能インベントリ
 
-作成: 2026-08-21(フェーズ0〜3完了時点)。更新: 2026-08-22(M3フェーズ3 プロバイダ6経路 完了。M4フェーズ2 回路マクロ+コイル⇔接点XRef+検索/ナビゲータ 完了。M4フェーズ3 シンボルライブラリ拡充+マクロ値セット+PLC I/O 完了)。全機能の棚卸しと、未実装バックログの一覧。
+作成: 2026-08-21(フェーズ0〜3完了時点)。更新: 2026-08-23(**M4フェーズ4 完了 = M4完了**: 図枠テンプレート+シンボルエディタ+2D盤レイアウト)。全機能の棚卸しと、未実装バックログの一覧。
 specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は`docs/superpowers/plans/`の各プラン。
 
 ## 1. コア・アーキテクチャ(madake-core)
@@ -8,9 +8,9 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 機能 | 状態 | 備考 |
 |---|---|---|
 | Commandエンジン | ✅ | 全編集がCommand経由。逆コマンドによるundo/redo、Patch(revision付き)のbroadcast |
-| ドキュメントモデル | ✅ | Project / Sheet(JIS図枠・表題欄・改訂欄・ゾーン) / Entity(Symbol・Wire・Junction・NetLabel・Text・Harness) |
-| 保存形式 `.mdkproj` | ✅ | 整形JSON(git差分可読)。チャット履歴は`<名前>.chat.json`を併存 |
-| シンボルライブラリ | ✅ | JIS C 0617 / IEC 60617系の静的47種(電源・変換・接地7/保護6/操作スイッチ8/リレー・電磁接触器5/半導体3/受動6/負荷・報知6/計測3/接続3)+動的シンボル`connector_{n}p`/`terminal_block_{n}p`(n=1..50、5mmピッチ中央揃え)・`plc_di_{n}p`/`plc_do_{n}p`(n=1..64、点ピッチ5mm、カテゴリ`plc`)。全記号がピンの接続方向(up/down/left/right)・属性スロット(TAG/PART/DESC/RATING)・検索キーワード(en+ja)を持つ。多極機器(遮断器・断路器・電磁接触器)は端子1/2・3/4・5/6で極ごとに導通。端子台は左右貫通端子 |
+| ドキュメントモデル | ✅ | Project(図枠テンプレートid・PLC割付表) / Sheet(種別=回路図\|盤レイアウト・JIS図枠・表題欄・改訂欄・ゾーン) / Entity 11種(Symbol・Wire・Junction・NetLabel・Text・Harness+盤の PanelOutline・DinRail・Duct・Footprint・PanelLegend) |
+| 保存形式 `.mdkproj` | ✅ | 整形JSON(git差分可読)、`format_version` **6**(履歴と旧ファイルの扱いは`data-model.md`)。チャット履歴は`<名前>.chat.json`を併存 |
+| シンボルライブラリ | ✅ | JIS C 0617 / IEC 60617系の静的47種(電源・変換・接地7/保護6/操作スイッチ8/リレー・電磁接触器5/半導体3/受動6/負荷・報知6/計測3/接続3)+動的シンボル`connector_{n}p`/`terminal_block_{n}p`(n=1..50、5mmピッチ中央揃え)・`plc_di_{n}p`/`plc_do_{n}p`(n=1..64、点ピッチ5mm、カテゴリ`plc`)。全記号がピンの接続方向(up/down/left/right)・属性スロット(TAG/PART/DESC/RATING)・検索キーワード(en+ja)を持つ。多極機器(遮断器・断路器・電磁接触器)は端子1/2・3/4・5/6で極ごとに導通。端子台は左右貫通端子。**ユーザーシンボル**(`~/MadakeCAD/symbols/*.json`、分類`user`固定・同梱とのid衝突は拒否・保存時検証)が同じ解決経路に合流する(同梱→動的→ユーザー) |
 | 座標系 | ✅ | mm・左上原点・Y下向き。2.5mmグリッド、回転0/90/180/270 |
 | ヘッドレス実行 | ✅ | コアはUI非依存(全ロジックがmadake-coreに集中) |
 
@@ -20,8 +20,14 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 |---|---|---|
 | リボン(回路図タブ) | ✅ | 配線 / 部品を挿入 / 回路図を編集 / 検証・レポート(部品表・電線リスト・シミュレーション・SVG/PDF出力) |
 | リボン(表示タブ) | ✅ | 表示クラス9種(配線/シンボル/参照記号/ネットラベル/線番/ハーネス/注記/図枠/グリッド)のトグル(レイヤ。画面のみ、出力へ非反映) |
-| リボン(レポートタブ) | ✅ | 帳票(From-To/端子台チャート/端子接続図/BOM/XRef表)+端子台(端子台エディタ)+出力(PDF一括出力)。生成ダイアログで出力形式(CSV/図面シートPDF)と対象を選ぶ |
-| リボン(他タブ) | ⬜ | ホーム/プロジェクト/パネル/読み込み・書き出し/管理はプレースホルダ |
+| リボン(レポートタブ) | ✅ | 帳票7種(From-To/端子台チャート/端子接続図/BOM/XRef表/PLC I/O/盤内部品配置表)+端子台(端子台エディタ)+PLC I/O+出力(PDF一括出力)。生成ダイアログで出力形式(CSV/図面シートPDF)と対象を選ぶ |
+| リボン(パネルタブ) | ✅ | 盤(盤枠・DINレール・ダクトの作図)/フットプリント(未配置部品・型番から挿入*・ルックアップ編集*・銘板*)/配置(バルーン採番・整列*・等間隔*・レール整列*・寸法*・間隔チェック)/レポート(配置表・盤内配線図*・凡例表)。盤シートを開くと自動で切り替わる。*=未実装(淡く出して押すと理由をログ) |
+| リボン(管理タブ) | ✅ | テンプレート(図枠テンプレート・表題欄の編集*・回路テンプレート)/ライブラリ(シンボルエディタ・部品DB*・マクロ*・ユーザーライブラリ) |
+| リボン(プロジェクトタブ) | 🔶 | 作図の開始グループに図枠テンプレートを配置。他はプレースホルダ |
+| リボン(他タブ) | ⬜ | ホーム/読み込み・書き出しはプレースホルダ |
+| シンボルエディタ | ✅ | 属性パレット(TAG必須/PART・DESC・RATING任意)+2.5mmグリッドのキャンバス(線・矩形・円・弧・文字・属性・接続点。選択/移動/削除)+接続点表(番号・方向・名前)+回転バリアント0/90/180/270の実プレビュー+保存前チェック(コアと同じ判断)。「複製して新規」はポップオーバー、未保存の確認はフッタで行う(モーダルを重ねない) |
+| 盤レイアウトUI | ✅ | シート種別の選択(図面タブ行の+がポップオーバー)、盤ツール(矩形/水平ドラッグ→`add_entity`1回)、未配置部品パネル(参照記号・型番・寸法+出どころバッジ)、クリック配置(ゴーストは部品の中心・`R`で0/90・レール取付線へスナップ)、フットプリントのプロパティ(参照記号・型番・幅高さ・回転・アイテム番号・所属レール) |
+| 図枠テンプレート選択ダイアログ | ✅ | 一覧(同梱/ユーザー・使用中バッジ)+表示中シートでのライブプレビュー(値が空になる欄にだけ`{バインド}`を青で重ねる)+バインド一覧+ゾーン設定(読み取り専用)+適用範囲(このプロジェクト=`set_frame_template`1回 / グローバル既定=`AppSettings.default_frame_template`) |
 | キャンバス操作 | ✅ | パン(中ボタン/Space)・ホイールズーム・グリッド・スナップ・直交拘束・ピンスナップ(菱形マーカー) |
 | 選択・編集 | ✅ | クリック選択・Shift追加・矩形選択・ドラッグ移動(Command化)・削除・⌘Z/⇧⌘Z |
 | 配線ツール | ✅ | 直交ポリライン、ダブルクリック/Escで確定。線色・sq既定値 |
@@ -48,14 +54,16 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 機能 | 状態 | 備考 |
 |---|---|---|
 | JIS図枠描画 | ✅ | 枠線・ゾーン番号(横=数字/縦=英字)・表題欄(図番/品名/尺度/日付/設計〜承認/社名)。画面とSVG/PDFで同一 |
+| 図枠テンプレート(プロットフレーム) | ✅ | `frame_template.rs`。JSON定義(余白・ゾーン文字・表題欄の罫線とセル・改訂欄)+バインド解決(`{sheet.no}`/`{rev.latest}`/`{title_block.*}`ほか。知らないバインドは空文字)。同梱`jis-a3`(データ駆動化前の出力とゴールデン一致)・`jis-a4-portrait`、ユーザーは`~/MadakeCAD/templates/frames/`。差し替えは`set_frame_template`1回で全シート(キャンバス=`canvas/frameTemplate.ts`とSVG/PDFが同一計算)。**用紙・ゾーン分割はシートが正**。ロゴ画像の実描画は未 |
 | 改訂欄 | ✅ | ISO 7200様式(表題欄直上・古い行が下・最大6行・列=記号/日付/内容/承認)。キャンバス/SVG/PDFで同一、表題欄Revは最新行に連動。編集ダイアログ(`set_revisions`コマンド1回=undo1回) |
 | SVG出力 | ✅ | 印刷品質、mm 1:1、XMLエスケープ |
 | PDF出力 | ✅ | svg2pdfでベクタ変換、日本語フォント埋め込み(macOS=Hiragino。Win/Linuxのフォント割当は未調整) |
-| BOM(部品表) | ✅ | 参照記号+型番の集計。CSV / 図枠付き図面シート |
+| BOM(部品表) | ✅ | **アイテム番号**+参照記号+型番+シンボル+数量。アイテム番号は盤のバルーンと連動(未配置は空欄、複数まとまる行は「1, 3」)。**旧4列CSVとは非互換**。CSV / 図枠付き図面シート |
 | From-Toワイヤリスト | ✅ | シート・From・To・線番・線色・sq・長さ・電線品番・ハーネス。From/Toはピン(`参照記号:ピン`)/ネットラベル/空。CSV / 図面シート |
 | 端子台チャート | ✅ | 端子台1台=1表。端子番号順に内部側/外部側・線番・電線・ハーネス・ジャンパ・予備端子。CSV / 図面シート(`--terminal`で1台に絞れる) |
 | 端子接続図 | ✅ | EPLAN端子図様式(外部=左/内部=右・ハーネスブラケット・予備・ジャンパ)。1端子台=1ページ(端子15個で分割)。PDFのみ |
 | クロスリファレンス表 | ✅ | プロジェクト全体ネットの所在一覧。CSV / 図面シート。コイル⇔接点対応は図面上の接点マップ(§8)で実装済み |
+| 盤内部品配置表 | ✅ | アイテム番号/参照記号/型番/X/Y/レールの6列。X/Yは描かれる外形の左上角、レール番号は盤の上から順。CSV / 図面シート / PDF一括 |
 | PLC I/Oレポート | ✅ | 割り付けた1点=1行(モジュール・アドレス・信号名・接続先・線番・コメントの6列)。接続先・線番は出力のたびに図面から読み直す(モジュールが描かれている全シートを合わせて見る)。CSV / 図面シート |
 | 帳票の図面シート化 | ✅ | `report_sheet.rs`の汎用テーブルレンダラ(A4横・25行/ページ・列幅は相対比・長文セルは省略・自動ページ分割)。回路図と同じ図枠・表題欄 |
 | PDF一括出力(図面一式) | ✅ | 表紙(プロジェクト名・シート一覧・最新改訂)→回路図全シート→選択帳票を1PDFへ(`pdf::export_project_pdf`) |
@@ -78,12 +86,13 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| 部品マスタ | ✅ | 型番・メーカ・名称・カテゴリ・既定シンボル・定格電圧/電流・接点構成(`contact_config`、例"2NO+2NC")・PLCモジュール定義(`plc_module`、JSON)・購入先URL・データシートURL・価格・備考。スキーマv5(バージョン管理+マイグレーション。v3→v4でPLCモジュール列を追加、v4→v5は列を変えずPLCサンプルの追補) |
+| 部品マスタ | ✅ | 型番・メーカ・名称・カテゴリ・既定シンボル・定格電圧/電流・接点構成(`contact_config`、例"2NO+2NC")・PLCモジュール定義(`plc_module`、JSON)・購入先URL・データシートURL・価格・備考。外形寸法(`footprint_w`/`footprint_h`、mm)・スキーマ**v6**(バージョン管理+マイグレーション。v3→v4でPLCモジュール列、v4→v5は列を変えずPLCサンプルの追補、v5→v6で寸法2列+同梱サンプルへの寸法追補) |
 | 電線品番マスタ | ✅ | 線色+sq→品番(DBがマスタ。図面側`Project::wire_parts`はスナップショット) |
 | 予約列 | ✅ | `model_3d`(フェーズM)・`mounting`・`spice_model`(過渡解析用) |
 | サンプルデータ | ✅ | 初回作成時にダミー型番5件+PLCモジュール4件(三菱DI/DO16点・Siemens DI8点・Allen-Bradley DI16点)+電線4件。v5より前のDBを開くとPLCサンプルのうち**不足しているものだけ**追補する(同じ型番の既存部品は上書きしない) |
 | 検索→配置連携 | ✅ | 部品挿入ダイアログから配置すると型番(value)と定格(attrs.current_a)・接点構成(attrs.contact_config)が図面に設定され、検証・シミュレーション・接点マップと連動(図面はDBのスナップショット) |
 | 管理UI(一覧・編集画面) | ⬜ | 登録・編集はCLI/MCP/API経由(意図した割り切り) |
+| 盤レイアウトとの連動 | ✅ | 未配置部品の外形寸法を型番で引く(両方が正のときだけ採用、無ければ20×40mm)。一覧に出どころのバッジ(部品DBの外形/寸法から自動/未登録) |
 | BOMとの連動 | ⬜ | BOMに型番は出るが、DBのメーカ・価格・購入先の引き当ては未 |
 
 ## 6. インポート/エクスポート
@@ -98,8 +107,8 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール29種: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / get_tidy_metrics / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / list_templates / apply_template / list_macros / save_macro / apply_macro / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo。**検索・デバイスツリーはMCP未露出**(IPC+Link APIのみ。AIはget_projectで足りるため意図的) |
-| Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols / netlist / verify / tidy-metrics / search / devices / simulate/op / commands / undo / redo / save / load / import/kicad / terminals(+/chart・/check) / templates(+/apply) / macros(+/build・/save・/apply・/apply-inline) / export/*(svg・pdf・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/*(send・cancel・conversations・undo-turn・detect・provider・api-key(PUT/DELETE)・test-connection・events) / settings / events |
+| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール35種: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / get_tidy_metrics / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / list_templates / apply_template / list_macros / save_macro / apply_macro / duplicate_symbol / save_user_symbol / delete_user_symbol / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo。**検索・デバイスツリーはMCP未露出**(IPC+Link APIのみ。AIはget_projectで足りるため意図的) |
+| Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols(+/user・/user/save・/user/delete・/duplicate) / frame-templates / panel/unplaced / netlist / verify / tidy-metrics / search / devices / simulate/op / commands / undo / redo / save / load / import/kicad / terminals(+/chart・/check) / templates(+/apply) / macros(+/build・/save・/apply・/apply-inline) / export/*(svg・pdf・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/*(send・cancel・conversations・undo-turn・detect・provider・api-key(PUT/DELETE)・test-connection・events) / settings / events |
 | madake CLI | ✅ | status / project / netlist / verify / sim / parts / terminals / export(svg・pdf・pdf-book+帳票6種を`--format csv\|pdf`・`--terminal`付きで) / save / open(.kicad_sch対応) / renumber / exec / undo / redo。マクロ・検索のサブコマンドは未(Link APIを`exec`/curlで直接叩ける) |
 | AIチャット(A1) | ✅ | 左ドック+浮きカード、Claude Code CLIバックエンド(Pro/Max OAuth再利用)、ツールチップ表示、ターン単位undo、編集オーバーレイ(シアンパルス)、会話履歴のプロジェクト保存 |
 | A1の持ち越し負債(M3フェーズ1で解消) | ✅ | ターン安定ID(`turn_id`。chat.json format_version 2へ移行)・編集origin(`Engine::execute_as` / `revert_range`でagent編集だけを逆適用。衝突は`RevertConflict`)・キャンセルseq(`turn_seq`で遅延イベントを破棄) |
@@ -113,7 +122,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | プロバイダの実機確認状況 | 🔶 | **Ollama(0.32.14)は通し確認済み**(実チャンク形一致・キー無しで接続テスト成功・`gemma4:26b`で作図1ターン=ツール往復3回→revision 0→1→`undo-turn`で後始末)。**Copilot CLI 1.0.80も通し確認済み**(2026-08-23、`/login`済み。JSONL実イベント形=`{type,data}`封筒+封筒無しの最終行`result`をパーサへ反映し、作図1ターン→継続ターンで文脈保持→`undo-turn`で後始末)。Geminiは無効キーで実APIの`API_KEY_INVALID`→`gemini_auth`変換まで。Anthropic APIは401・キー未設定案内まで。**Gemini・Anthropicの実キー通しはユーザー確認事項** |
 | キーチェーン(全プロバイダ共通) | ✅ | `keyring 4.1.6`直用。`service="MadakeCAD"`、`account`=`anthropic_api_key`/`openai_compat_api_key`/`gemini_api_key`。設定ファイル(`~/.madakecad/settings.json`)には項目自体を作らない(平文非保存はテストで固定)。`SecretStore`トレイトでテストはメモリ保管、実キーチェーンのテストは`MADAKE_KEYCHAIN_TESTS=1`のときだけ。macOSは許可ダイアログ抑制のためプロセスに1回だけ読み出しをキャッシュ。CLI経路(Claude Code / Copilot)は資格情報を一切持たない |
 | プロバイダ接続テスト | ✅ | Link API `POST /api/v1/agent/test-connection` + `GET /api/v1/agent/provider`(モデル名・キー保存済みフラグ)。CLI経路は検出+バージョン、API経路は実エンドポイントへの疎通。失敗は種類つき(`*_auth`/`*_rate_limit`/`*_model_not_found`/`*_server`/`*_request`/`*_network`/`*_no_key`/`*_no_model`)で日本語の案内文を返す |
-| FreeCAD連携(フェーズM) | 🔶 | Link API(M1の土台)は実装済み。アドオンWB・3D対応付け・電線長書き戻し・盤レイアウトが未 |
+| FreeCAD連携(フェーズM) | 🔶 | Link API(M1の土台)は実装済み。**2D盤レイアウトはM4フェーズ4で実装済み**。アドオンWB・3D対応付け・電線長書き戻し・3D筐体との同期が未 |
 
 ## 8. ドメイン機能(参考図面の再現に必要な残り)
 
@@ -134,14 +143,16 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | シート間クロスリファレンス | ✅ | `extract_netlist_project`が同名ラベルでシート横断統合。ラベル脇に「/シート.ゾーン」(キャンバス/SVG/PDF)、プロパティパネルの相手先リンク、ERC(`verify_project`)・帳票も統合ネットで評価 |
 | PLC I/O(割付表・図面生成・レポート) | ✅ | `plc.rs`。モジュール定義=部品DBの`plc_module`(点数・DI/DO・アドレス接頭辞・体系)。アドレス採番は三菱=8進/Siemens=バイト.ビット/AB=ワード/ビット(開始点をずらせる)。割付表=`Project.plc_assignments`(**format_version 2**。旧ファイルは空の表で開く)、編集は`set_plc_assignments`1回。CSVは往復用3列と読み取り専用レポート6列の2種。図面生成=`RestoreSheet`+必要なら`set_plc_assignments`を`execute_batch`で**undo一発**(縦母線`P24`+1点=1ラング、生成ページはERC指摘ゼロ)。接続先・線番は図面から読むだけ(全シート合算)。露出=IPC 6本 / Link API 4本 / MCPツール3種 / CLIの`plc-io`帳票 / 割付表エディタ+生成設定ダイアログ |
 | PLC I/O(横母線・モジュール同居・ページ分割) | ⬜ | 生成設定のenumだけ用意し「未実装」エラーを返す。生成設定のプロジェクト保存も未(セッション限り) |
-| シンボルエディタ(ユーザー定義シンボル) | ⬜ | SymbolDefはJSONなので手書きは可能。UIなし |
+| シンボルエディタ(ユーザー定義シンボル) | ✅ | `symbol_library.rs`(ユーザーライブラリの読み書き・列挙・保存時検証・複製開始)+`canvas/symbolEditor.ts`(画面側。**検証はコアと同じ判断・同じコード**)。保存先`~/MadakeCAD/symbols/{id}.json`、分類は`user`へ正規化、同梱・動的シンボルとのid衝突は拒否。検証=id/名称/接頭辞/図形0個・潰れた図形/接続点0個・番号空・2.5mmグリッド外・同じ点の重複/属性スロット(TAG必須)。落ちたら**何も書かない**。図面はスナップショットを持たないので保存し直すと配置済みの部品も追従(使用中の削除は`force`なしでは拒否)。露出=IPC 6本 / Link API 5本 / MCPツール3種。**残り**: 回転バリアントの手動上書き |
+| 2D盤レイアウト | ✅ | `panel.rs`(数式の正)+`canvas/panel.ts`(同じ式)。シート種別`panel`、盤枠(外形+取付板10mm内側)・DINレール(取付線=帯の中心、35mm帯)・ダクト(用紙座標に固定した45°ハッチ)・フットプリント・凡例表。未配置部品=回路図の参照記号ごとに1台(どの盤シートにもフットプリントが無いもの)。バルーン採番`renumber_panel_items`(読み順=部品の中心の高さで段分け→左から右。逆コマンド=`set_panel_item_numbers`)。検査=`panel.overlap`(面で重なる対。辺が触れるだけは報告しない)/`panel.off_rail`(レール0本の盤では報告しない)/`panel.rail_fill`(80%超は注意)/`panel.orphan_footprint`。盤シートは`verify_sheet`が即空を返す(配線が無いため)。露出=IPC`unplaced_components` / Link API`GET /panel/unplaced` / MCPは`execute_commands`の説明に書き方を追記 |
+| 盤内配線図(wire annotation)・銘板・寸法線 | ⬜ | リボンに項目だけ(淡く表示。押すと理由をログ) |
 | 計測ツール | ⬜ | 未実装 |
 
 ## 9. 基盤・配布
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| テスト | ✅ | cargo 750件+vitest 468件+vue-tsc。全テストに対訳仕様文が付き、`docs/13-specification.md`(1218項目)を自動生成。TDD運用 |
+| テスト | ✅ | cargo 1003件+vitest 734件+vue-tsc。全テストに対訳仕様文が付き、`docs/13-specification.md`(1737項目)を自動生成。TDD運用 |
 | macOSビルド | ✅ | 開発は`npm run tauri dev` |
 | Windows/Linuxビルド | ⬜ | 非目標(現時点)。コードはOS非依存を維持(ngspice探索・PDFフォントに一部OS別処理あり) |
 | 配布パッケージ/自動更新 | ⬜ | 未着手 |
@@ -149,6 +160,11 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | i18n | 🔶 | en/jaのメッセージカタログ+言語設定。新規UI文字列はi18n必須。他言語カタログはM6 |
 
 ## 10. 次期計画
+
+**M4は2026-08-23のフェーズ4完了をもって完了。** M4から先送りした項目(フェーズ未設定): ナビゲータからの
+予約接点配置 / `A`以外のマクロバリアント追加UI / PLCの横母線ラダー・モジュール同居・ページ分割 /
+ケーブル一覧(Cableエンティティ待ち) / 部品DB連動BOM / 盤内配線図・銘板・寸法線・整列/等間隔 /
+グラフィカルな図枠エディタ。並行して進行中なのは参考図面の再現パリティ(フェーズ5、`specs/reproduction-gaps.md`)。
 
 本節の旧A〜D方向案は、ビジョン明確化(2026-08-21)によりマイルストーンM2〜M6へ再編された。
 計画の正は[要件定義書](requirements.md) §2 と [機能仕様集](specs/README.md)(競合比較は[ギャップ分析](specs/gap-analysis.ja.md))。
