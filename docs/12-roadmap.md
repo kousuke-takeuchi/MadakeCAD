@@ -8,7 +8,7 @@ Milestones toward the vision (standards-compliant, AI-first, veteran-grade, mech
 
 Command engine with full undo/redo · Canvas editor · JIS frame · parametric terminal blocks/connectors · netlist · ERC + ngspice-backed electrical verification · DC operating-point simulation · SVG/PDF/BOM/wire-list output · parts database · KiCad import · AI chat (Claude Code) · MCP/REST/CLI automation
 
-## M2 — Reference-drawing parity ✅ (mostly complete)
+## M2 — Industrial drawing parity ✅ (mostly complete)
 
 - Revision table rendering (canvas, SVG, PDF) and the editing dialog, with the title-block revision mark following the newest row
 - Wire numbers: net-scoped numbering (top-up / renumber), on-drawing labels with their own view class, per-net editing, wire-list column, `madake renumber` on the CLI

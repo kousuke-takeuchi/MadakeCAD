@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1841 specification clauses** across 5 areas.
+**1842 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -1619,6 +1619,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - grabs a line or a polyline anywhere along it <sub>`shape hit testing`</sub>
 - turns a finished drawing into one add_entity command <sub>`shape commands`</sub>
 - sends nothing for a collapsed shape from a stray click <sub>`shape commands`</sub>
+- merges the duplicate point a double-click leaves at the end of a polyline <sub>`shape commands`</sub>
 - updates the look with one update_entity command, and sends nothing when nothing changed <sub>`shape commands`</sub>
 - refuses to send a stroke width the engine would reject <sub>`shape commands`</sub>
 - makes no command for anything that is not a shape <sub>`shape commands`</sub>

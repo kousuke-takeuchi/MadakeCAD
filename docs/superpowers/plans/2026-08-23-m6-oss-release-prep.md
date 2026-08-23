@@ -17,11 +17,15 @@
 - **コミュニティ**: CONTRIBUTING(.ja)・CODE_OF_CONDUCT(Contributor Covenant 2.1)・SECURITY.md・Issue/PRテンプレート・`.github/`一式
 - **第三者権利レビュー**: ACADE/EPLANの素材(アイコン・文言・スクショ)を含まないことの機械検査+デザインのデッドコピーが無いことのレビュー記録
 
-### Task 1: 機密・権利の監査
+### Task 1: 機密・権利の監査 ✅(2026-08-23完了)
 
-- [ ] Step 1: 履歴全体+作業ツリーの機密スキャン(顧客名・企業名・実品番パターン・参考図面ファイル名)。結果を`docs/internal/release-audit.md`(一般化した集計のみ。検出文字列そのものは書かない)へ
-- [ ] Step 2: 第三者権利レビュー(同梱アセット・アイコン・文言の出所確認、依存ライセンス一覧の生成 `cargo license`相当+npm)。`docs/internal/third-party-licenses.md`(EN+JA不要・機械生成)
-- [ ] Step 3: 参考図面依存の記述を一般化(残っていれば)。コミット
+> 結果: [`docs/internal/release-audit.md`](../../internal/release-audit.md) / 依存ライセンス: [`docs/internal/third-party-licenses.md`](../../internal/third-party-licenses.md)。
+> 顧客企業名・コネクタ実型番は作業ツリー・履歴とも0件、参考図面PDFはコミット歴なし。強コピーレフト依存も0件。
+> **未解決の要対応**: `MadakeCAD.pen` に顧客由来の識別子がプレースホルダとして残る(作業ツリー+push済みの14コミット)。公開方法は**新規リポジトリへのスカッシュエクスポートを推奨**(監査記録 §1.5)。
+
+- [x] Step 1: 履歴全体+作業ツリーの機密スキャン(顧客名・企業名・実品番パターン・参考図面ファイル名)。結果を`docs/internal/release-audit.md`(一般化した集計のみ。検出文字列そのものは書かない)へ
+- [x] Step 2: 第三者権利レビュー(同梱アセット・アイコン・文言の出所確認、依存ライセンス一覧の生成 `cargo license`相当+npm)。`docs/internal/third-party-licenses.md`(EN+JA不要・機械生成)
+- [x] Step 3: 参考図面依存の記述を一般化(残っていれば)。コミット
 
 ### Task 2: クロスプラットフォーム
 

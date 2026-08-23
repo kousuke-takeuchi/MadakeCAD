@@ -92,7 +92,7 @@ Every edit from every entry point is an undoable command against a single engine
 
 ## Status & Roadmap
 
-**Alpha.** Milestones M1 (foundation), M2 (reference-drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references) and **M4 (industrial CAD core)** are complete — M4 through four phases: terminal charts and the extended report set; circuit macros, coil ⇔ contact cross-references, search and navigation; the expanded symbol library, macro value sets and PLC I/O; and finally frame templates, the symbol editor and 2D panel layout. M3 phases 1-3 (standards knowledge, self-verification loop, safe turn revert, start templates, tidy-up passes, parallel conversations, six AI providers) have landed as well; see the [roadmap](docs/12-roadmap.md) for the rest of M3 through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
+**Alpha.** Milestones M1 (foundation), M2 (industrial drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references) and **M4 (industrial CAD core)** are complete — M4 through four phases: terminal charts and the extended report set; circuit macros, coil ⇔ contact cross-references, search and navigation; the expanded symbol library, macro value sets and PLC I/O; and finally frame templates, the symbol editor and 2D panel layout. M3 phases 1-3 (standards knowledge, self-verification loop, safe turn revert, start templates, tidy-up passes, parallel conversations, six AI providers) have landed as well; see the [roadmap](docs/12-roadmap.md) for the rest of M3 through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
 
 ## Contributing
 
@@ -108,3 +108,9 @@ Licensed under either of
 at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+Dependency licenses are inventoried in [third-party-licenses.md](docs/internal/third-party-licenses.md) (regenerate with `python3 scripts/gen_licenses.py`).
+
+### Trademarks
+
+AutoCAD, AutoCAD Electrical and Autodesk are trademarks of Autodesk, Inc.; EPLAN is a trademark of EPLAN GmbH & Co. KG; SOLIDWORKS is a trademark of Dassault Systèmes; KiCad is a trademark of the KiCad project. MadakeCAD is not affiliated with, endorsed by, or derived from any of them. These names appear only to describe the industry conventions MadakeCAD follows and the tools it interoperates with. No artwork, icons, screenshots, or text from those products are included in this repository.

@@ -546,7 +546,7 @@ fn render_wire_numbers(out: &mut String, sheet: &Sheet, symbols: &[SymbolDef]) {
 
 /// 配線注記 (G2)。ワイヤ1本ごとに線径・線色・電線長を、線番の反対側 (横線=下、縦線=右) へ描く。
 /// 位置と文字列は [`crate::wire_note`] が決める (キャンバスと同じ数式)。
-/// **画面の表示クラスとは無関係に常に出力する**: 参考図面ではこれが主情報だから。
+/// **画面の表示クラスとは無関係に常に出力する**: 製造用のハーネス図面ではこれが主情報だから。
 fn render_wire_notes(out: &mut String, sheet: &Sheet) {
     for note in crate::wire_note::wire_notes(sheet) {
         let anchor = match note.align {

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1841仕様項目**。
+全5領域・**1842仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1619,6 +1619,7 @@
 - 線と折れ線はどの区間の上でも掴める <sub>`shape hit testing`</sub>
 - 作図の確定は add_entity コマンド1本になる(undo一発で消える) <sub>`shape commands`</sub>
 - クリックしただけのつぶれた図形はコマンドを送らない(誤操作で点だけの図形が生まれない) <sub>`shape commands`</sub>
+- 折れ線をダブルクリックで確定したときに重なる最後の点は1つにまとめられる <sub>`shape commands`</sub>
 - 見た目の編集は update_entity コマンドになり、何も変わっていなければ送らない <sub>`shape commands`</sub>
 - 範囲外の線幅は送らない(エンジンも同じ範囲で拒否する) <sub>`shape commands`</sub>
 - 図形以外のエンティティにはコマンドを作らない <sub>`shape commands`</sub>
