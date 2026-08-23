@@ -8,14 +8,14 @@ Everything the UI can do is scriptable. Three surfaces expose the same Command e
 
 ### MCP server (for AI clients)
 Streamable HTTP at `127.0.0.1:9310/mcp` (`MADAKE_MCP_PORT` to change). Tools:
-`get_project`, `list_symbols`, `place_symbol`, `draw_wire`, `execute_commands` (full Command schema exposed), `get_netlist`, `run_verification`, `simulate_op`, `search_parts`, `upsert_part`, `delete_part`, `import_kicad`, `list_terminal_blocks`, `get_terminal_chart`, `check_terminal_block`, `export_svg`, `export_pdf`, `export_report` (one of the five reports as CSV or framed PDF), `export_pdf_book` (cover + all sheets + selected reports in one PDF), `export_bom`, `export_wire_list`, `undo`, `redo`.
-Drawing edits that have no dedicated tool go through `execute_commands`: `set_revisions` (revision table), `renumber_wires` (`mode: append | renumber`, optional `sheet_id`, `start`) and `set_wire_numbers` for wire numbers, `add_entity` with a `harness` entity for harness boundaries, and `update_entity` writing `attrs["jumpers"] = "1-2,3-4"` on a terminal block symbol for saddle jumpers.
+`get_project`, `list_symbols` (bundled **and** user symbols), `place_symbol`, `draw_wire`, `execute_commands` (full Command schema exposed), `get_netlist`, `run_verification`, `get_tidy_metrics`, `simulate_op`, `search_parts`, `upsert_part`, `delete_part`, `import_kicad`, `list_terminal_blocks`, `get_terminal_chart`, `check_terminal_block`, `list_templates`, `apply_template`, `list_macros`, `save_macro`, `apply_macro`, `duplicate_symbol`, `save_user_symbol`, `delete_user_symbol`, the PLC I/O tools, `export_svg`, `export_pdf`, `export_report` (one of the seven reports as CSV or framed PDF), `export_pdf_book` (cover + all sheets + selected reports in one PDF), `export_bom`, `export_wire_list`, `undo`, `redo`.
+Drawing edits that have no dedicated tool go through `execute_commands`: `set_revisions` (revision table), `renumber_wires` (`mode: append | renumber`, optional `sheet_id`, `start`) and `set_wire_numbers` for wire numbers, `add_entity` with a `harness` entity for harness boundaries, `update_entity` writing `attrs["jumpers"] = "1-2,3-4"` on a terminal block symbol for saddle jumpers, `set_frame_template` for the frame template, `add_sheet` with `kind: "panel"` plus the `panel_outline` / `din_rail` / `duct` / `footprint` / `panel_legend` entities for panel layout, and `renumber_panel_items` for balloon numbers.
 Claude Code connects automatically via this repository's `.mcp.json`.
 
 ### Link API (REST + SSE, for external tools)
 `127.0.0.1:9310/api/v1` — plain JSON REST used by the CLI, browser-based UI verification, and (future) the FreeCAD add-on:
-- Read: `/project`, `/symbols`, `/netlist`, `/verify`, `/parts`, `/wire-parts`, `/terminals`, `/terminals/chart`, `/terminals/check`
-- Write: `/commands` (Command array), `/undo`, `/redo`, `/save`, `/load`, `/import/kicad`, `/simulate/op`, `/export/{svg,pdf,pdf-book,report,bom,wire-list}`, parts CRUD
+- Read: `/project`, `/symbols` (+`/symbols/user`), `/frame-templates`, `/panel/unplaced`, `/netlist`, `/verify`, `/search`, `/devices`, `/parts`, `/wire-parts`, `/terminals`, `/terminals/chart`, `/terminals/check`, `/plc/modules`
+- Write: `/commands` (Command array), `/undo`, `/redo`, `/save`, `/load`, `/import/kicad`, `/simulate/op`, `/symbols/user/{save,delete}`, `/symbols/duplicate`, `/macros/{build,save,apply,apply-inline}`, `/templates/apply`, `/export/{svg,pdf,pdf-book,report,bom,wire-list}`, parts CRUD
 - Live updates: `GET /events` (SSE patch stream)
 - Local-origin guard: requests from non-local web origins are rejected
 
@@ -27,8 +27,8 @@ Thin terminal client over the Link API: `status`, `project`, `netlist`, `verify`
 | Kind | Options |
 |---|---|
 | `svg`, `pdf` | `--sheet <ID>` (default: first sheet) |
-| `pdf-book` | `--reports wire-list,terminal-chart,terminal-diagram,bom,xref` (in that order), `--no-cover` |
-| `bom`, `wire-list`, `terminal-chart`, `terminal-diagram`, `xref-table` | `--format csv\|pdf` (default: from the file extension — `.pdf` writes framed drawing sheets), `--terminal <ref\|id>` for the two terminal reports |
+| `pdf-book` | `--reports wire-list,terminal-chart,terminal-diagram,bom,xref,panel-placement` (in that order), `--no-cover` |
+| `bom`, `wire-list`, `terminal-chart`, `terminal-diagram`, `xref-table`, `plc-io`, `panel-placement` | `--format csv\|pdf` (default: from the file extension — `.pdf` writes framed drawing sheets), `--terminal <ref\|id>` for the two terminal reports |
 
 Reports always cover the whole project; the only narrowing is `--terminal TB1` (add `--sheet <ID>` when the same designator exists on several sheets). `madake terminals` lists the candidates.
 

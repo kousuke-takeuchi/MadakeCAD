@@ -24,10 +24,36 @@ A purpose-built editor for industrial electrical schematics, modeled on the conv
 - **PLC I/O**: place a PLC module from the parts database (its `plc_module` definition gives the point count, the I/O direction and the maker's address scheme) and it appears as the parametric symbol `plc_di_{n}p` / `plc_do_{n}p`. The **I/O assignment table** (Reports tab → PLC I/O group) is one row per point: address, signal name and comment are yours to edit, while target and wire number are read out of the drawing. *Fill addresses* numbers a whole module from a start address in its own scheme — Mitsubishi octal (`X0…X7, X10`), Siemens byte.bit (`%I0.0`), Allen-Bradley word/bit (`I:0/0`). The table round-trips through CSV, so signal names can be typed in a spreadsheet. *Generate I/O sheet* builds a ladder page (a vertical `P24` bus with one rung per point, each labelled with its address and signal name) as **one undo step**; the generated page passes ERC with no findings. Editing the drawing afterwards — wiring a device onto a rung, numbering the wires — flows straight back into the target and wire-number columns and into the PLC I/O report
 - **Properties panel**: edit reference designator and part number/value of the selection
 
+## Symbol editor
+
+Draw your own symbols instead of hand-writing JSON. Ribbon: Admin tab → Library group → *Symbol editor*.
+
+- **Start from a copy**: the editor opens blank with a "New from a copy of…" popover listing every bundled and user symbol. Picking one gives you a draft with its shapes, connection points and attribute slots, an id of `{source}_copy` and the name suffixed `(copy)`. Nothing is written to disk until you save
+- **Canvas**: a 2.5 mm grid with snap on. Line, rectangle, circle and arc are each drawn with one drag; text places the string from the coordinate bar; the attribute tool places the next unplaced slot; the connection-point tool drops a pin where you click and infers its direction from the symbol's outline. Click to select, drag to move, `Delete` to remove. Vertex editing, rotation and multi-select are not in this version
+- **Attributes**: the four slots the model has — `TAG` (reference, required), `PART`, `DESC`, `RATING`. The value you type is only the sample drawn on the editor canvas; it is not stored in the symbol file
+- **Connection points**: a table of number / direction / name, plus *+ Up / + Down / + Left / + Right* buttons. Points must sit on a grid intersection. The same number on two separate points is legitimate (a feed-through terminal), a duplicate at the same point is not
+- **Rotation variants**: 0° / 90° / 180° / 270° previews drawn with the same renderer as the drawing. Variants are derived, never stored — point numbers and attribute positions follow the rotation automatically
+- **Pre-save checks**: four fixed rows (grid, duplicate numbers, required slot, optional slots) with anything else listed after them. Unplaced optional attributes are a warning you can save through; the final verdict is Rust's, so what the panel accepts the save accepts
+- **Saving**: `~/MadakeCAD/symbols/{id}.json` — the `SymbolDef` JSON as-is, always filed under the **User** category. An id that collides with a bundled or parametric symbol is refused, so a file dropped in later can never silently change how an existing drawing looks. If the save is refused nothing is written and every reason is reported. Saved symbols appear in the **User** category of the insert dialog immediately
+- **Library follow-through**: drawings store only the symbol id, so re-saving a user symbol redraws the parts already placed with it. Deleting a symbol that is in use is refused unless you force it, and the refusal tells you how many instances there are
+- Also reachable outside the UI: IPC, `GET /api/v1/symbols/user`, `POST /api/v1/symbols/user/save|delete`, `POST /api/v1/symbols/duplicate`, and the MCP tools `duplicate_symbol` / `save_user_symbol` / `delete_user_symbol` — so the AI assistant can build symbols too
+
+## 2D panel layout
+
+A second kind of sheet for the inside of the enclosure. The sheet tab row's **+** asks which kind you want; a panel sheet switches the ribbon to the Panel tab and the left panel to *Unplaced parts* on its own.
+
+- **Panel entities**: enclosure (outline plus the mounting plate, inset 10 mm, moved as one), DIN rail (horizontal; the mounting line you press on, drawn as a 35 mm TS35 band), wiring duct (45° hatch anchored to the paper, so neighbouring ducts line up), footprint (the rectangle a part occupies) and the legend table. They are ordinary entities, so `⌘Z`, move and delete work exactly as on a schematic
+- **Unplaced parts**: every designator on the schematic that has no footprint on any panel sheet — a relay's coil and contacts count as one device. Each row shows the designator, the part number, the outline size and where the size came from (*from parts DB* / *default* / *unregistered*). Click a row, then click the panel: the ghost is held by the part's centre, `R` turns it 90°, and the centre snaps onto a DIN rail's mounting line when you are within the band. Moving a placed part snaps the same way, and one `⌘Z` puts it back
+- **Balloons (item numbers)**: *Balloon numbers* assigns 1…N to the footprints of the sheet in reading order — rows are split by the part's **centre** height, then left to right — and draws a balloon at each. The BOM's first column is that item number, so the layout table and the BOM always agree. The inverse command restores the numbers you had, so renumbering is one undo step
+- **Legend table**: an entity that stores only its position; the rows are derived from the sheet's footprints every time it is drawn, so it can never fall out of date
+- **Panel checks** (run from *Clearance check*, reported in the verification panel): `panel.overlap` — two footprints overlapping in area, edges merely touching is the normal look of a filled rail, so it is not reported; `panel.off_rail` — a part on no rail at all, not reported on a panel with no rails (parts screwed to the plate); `panel.rail_fill` — the fill ratio of every rail (sum of part widths ÷ rail length), a warning above 80 %; `panel.orphan_footprint` — a footprint whose designator is not on the schematic
+- **Layout table report**: item no. / designator / part no. / X / Y / rail, as CSV, as a framed drawing sheet or inside the combined PDF. X and Y are the top-left corner of the drawn outline, and rails are numbered from the top of the panel
+- Panel sheets are outside ERC and the electrical checks (they carry no wiring)
+
 ## Planned
 
-- Adding macro variants beyond `A` from the save dialog (M4 phase 4)
-- Dragging an unplaced device function (a reserved contact) from the device navigator onto the drawing (M4 phase 4)
-- PLC I/O: the horizontal-bus ladder style, sharing one ladder between modules, and splitting a module across pages — the settings exist but are refused as not implemented (M4 phase 4)
-- Symbol editor for user-defined symbols (M4 phase 4)
-- 2D panel layout sheets; customizable frame / title-block templates (M4 phase 4)
+- Adding macro variants beyond `A` from the save dialog (M4 remainder)
+- Dragging an unplaced device function (a reserved contact) from the device navigator onto the drawing (M4 remainder)
+- PLC I/O: the horizontal-bus ladder style, sharing one ladder between modules, and splitting a module across pages — the settings exist but are refused as not implemented (M4 remainder)
+- Symbol editor: manual overrides for a rotation variant that comes out wrong
+- Panel layout: wire annotation (the in-panel wiring diagram), nameplates, dimensions, align/distribute, insert by part number, and footprints that look like the real part instead of a plain rectangle
