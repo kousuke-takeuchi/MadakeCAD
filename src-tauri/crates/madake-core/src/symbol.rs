@@ -1032,6 +1032,13 @@ pub const DYNAMIC_PIN_MAX: usize = 50;
 /// 多段端子台 (`terminal_block_{n}p_{levels}l`、G6) の最大段数。
 pub const TERMINAL_LEVEL_MAX: usize = 3;
 
+/// 端子の印 (貫通端子を表す丸) の半径 (mm)。
+pub(crate) const TERMINAL_MARK_R: f64 = 1.8;
+
+/// 端子番号の文字高さ (mm)。文字は端子の中心の真上に、中心揃え・
+/// ベースラインが中心に来るように置かれる。
+pub(crate) const TERMINAL_NUMBER_HEIGHT: f64 = 2.0;
+
 /// 多段端子台の段(=列)の中心間隔 (mm)。列そのものの幅は単段の端子台と同じ5mmなので、
 /// 10mm間隔にすると隣り合う列の内側の接続点 (`1a`の右と`1b`の左) が5mm離れた**別の**
 /// 2.5mmグリッド点になり、その間を配線が通れる。
@@ -1175,16 +1182,16 @@ fn terminal_block_symbol(id: &str, n: usize, levels: usize) -> SymbolDef {
             };
             primitives.push(Primitive::Circle {
                 center: p(cx, y),
-                r: 1.8,
+                r: TERMINAL_MARK_R,
                 filled: false,
             });
             primitives.push(Primitive::Text {
-                at: p(cx, y - 1.0),
+                at: p(cx, y - TERMINAL_NUMBER_HEIGHT / 2.0),
                 text: no.clone(),
-                height: 2.0,
+                height: TERMINAL_NUMBER_HEIGHT,
             });
-            primitives.push(line(&[(cx - 2.5, y), (cx - 1.8, y)]));
-            primitives.push(line(&[(cx + 1.8, y), (cx + 2.5, y)]));
+            primitives.push(line(&[(cx - 2.5, y), (cx - TERMINAL_MARK_R, y)]));
+            primitives.push(line(&[(cx + TERMINAL_MARK_R, y), (cx + 2.5, y)]));
             // 貫通端子: 左右2接続点に同一ピン番号(段が違えば番号も違うのでネットも独立)
             pins.push(pin(&no, "", cx - 2.5, y, PinDir::Left));
             pins.push(pin(&no, "", cx + 2.5, y, PinDir::Right));

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1886 specification clauses** across 5 areas.
+**1891 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -525,10 +525,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A sheet with a smaller annotation text height exports smaller wire numbers, wire notes and net tags, and nothing else changes size. <sub>`svg_follows_the_sheet_annotation_text_height`</sub>
 - A net label with no tag keeps the plain text look, with no outline drawn around it. <sub>`svg_draws_no_outline_for_an_untagged_net_label`</sub>
 - An unknown tag value is ignored and the label falls back to plain text rather than breaking the export. <sub>`svg_ignores_an_unknown_tag_value`</sub>
+- A jumper bar and its end marks are always drawn clear of every terminal number, whatever jumpers the block carries and however it is turned or mirrored, so the numbers stay readable. <sub>`a_jumper_bar_never_covers_a_terminal_number`</sub>
 - A jumper between two adjacent terminals is drawn on the schematic as a thick bar linking their centres, five millimetres apart, with a small filled circle at each end. <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
 - On a multi-level terminal block, a jumper written with level letters ("1a-1b") is drawn as a horizontal bar across the two level columns of the same pole. <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
 - A jumper bar turns with its terminal block, so on a block rotated a quarter turn the bar lies across the rotated terminals instead of staying upright. <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
 - The round mark at each end of a jumper bar is clearly wider than the bar itself, so the bar reads as a shorting bar with two ends rather than a plain thick line. <sub>`the_jumper_bar_end_dot_is_wider_than_the_bar`</sub>
+- The whole jumper bar, end marks included, stays outside the terminals' own round marks, so a terminal still reads as a ring with its number inside instead of a filled blob. <sub>`the_jumper_bar_stays_outside_the_terminal_marks`</sub>
 - A jumper written between two terminals that are not adjacent is invalid (the same rule the terminal chart enforces), so no bar is drawn for it at all. <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - A terminal block with several jumpers gets one bar per jumper. <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
 - A terminal block with no jumpers draws no bar, and a symbol that is not a terminal block never gets one even if it happened to carry a "jumpers" attribute. <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
@@ -663,7 +665,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Naming a sheet narrows the list to the terminal blocks drawn on that sheet. <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
 - Symbols that are not terminal blocks never show up in the list. <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
 - The chart and the check of a terminal block can be looked up by entity id alone, without knowing which sheet it sits on. <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
-- The jumper bar between two adjacent terminals spans the centers of their markers (circles), five millimetres apart on the standard terminal pitch. <sub>`jumper_bar_segment_spans_the_two_terminal_centers`</sub>
+- The jumper bar between two terminals of one column runs alongside them, parallel to the line of their centres and the same five millimetres long, pushed out to the right so it clears the terminal numbers. <sub>`a_jumper_bar_runs_alongside_the_column_clear_of_the_numbers`</sub>
+- The jumper bar between the two levels of one pole runs below their row, parallel to the line of their centres, so it clears both that row's numbers and the next row's. <sub>`a_cross_level_jumper_bar_runs_below_the_row`</sub>
 - Several jumpers on the same terminal block each produce their own bar segment. <sub>`multiple_jumpers_each_produce_their_own_bar_segment`</sub>
 - A jumper referencing a terminal number the block does not have produces no segment instead of panicking. <sub>`a_jumper_to_a_missing_terminal_produces_no_bar_segment`</sub>
 - Jumpers are set with the ordinary update_entity command, so the chart follows the change and undo takes it back. <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
@@ -1752,8 +1755,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - accepts level-aware jumpers on a multi-level block <sub>`parseJumperSpec`</sub>
 - drops a jumper written without its level letter on a multi-level block <sub>`parseJumperSpec`</sub>
 - drops a jumper to a level the block does not have and a diagonal one <sub>`parseJumperSpec`</sub>
-- spans the two terminal centres, 5 mm apart on the standard pitch <sub>`jumperBarSegments`</sub>
-- spans the two level columns of one pole for a cross-level jumper <sub>`jumperBarSegments`</sub>
+- keeps the same millimetre values as the Rust side <sub>`jumper bar dimensions`</sub>
+- runs alongside the column, clear of the numbers, 5 mm long on the standard pitch <sub>`jumperBarSegments`</sub>
+- runs below the row, across the two level columns of one pole <sub>`jumperBarSegments`</sub>
+- never covers a terminal number <sub>`jumperBarSegments`</sub>
 - produces one segment per jumper when there are several <sub>`jumperBarSegments`</sub>
 - produces no segment for a jumper to a terminal the block does not have <sub>`jumperBarSegments`</sub>
 

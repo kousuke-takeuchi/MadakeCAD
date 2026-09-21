@@ -2,9 +2,13 @@
 // 同一ルールを検証する。
 import { describe, expect, it } from "vitest";
 
+import type { Primitive, SymbolDef } from "../ipc";
 import { dynamicSymbol } from "./dynamicSymbol";
 import {
   formatJumperSpec,
+  JUMPER_BAR_DOT_R_MM,
+  JUMPER_BAR_OFFSET_MM,
+  JUMPER_BAR_STROKE_MM,
   jumperBarSegments,
   parseJumperSpec,
   terminalNumbers,
@@ -53,26 +57,81 @@ describe("parseJumperSpec", () => {
   });
 });
 
+describe("jumper bar dimensions", () => {
+  // ja: ジャンパバーの寸法(線幅・両端の丸の半径・中心線からのずらし量)はRust側と同じ数値になる
+  it("keeps the same millimetre values as the Rust side", () => {
+    // madake-core/src/terminal_chart.rs の JUMPER_BAR_STROKE / _DOT_R / _OFFSET
+    expect([JUMPER_BAR_STROKE_MM, JUMPER_BAR_DOT_R_MM, JUMPER_BAR_OFFSET_MM]).toEqual([
+      0.8, 0.7, 2.7,
+    ]);
+  });
+});
+
 describe("jumperBarSegments", () => {
-  // ja: 隣り合う2端子間のジャンパバーは、それぞれの印の中心を結ぶ5mm間隔の線分になる
-  it("spans the two terminal centres, 5 mm apart on the standard pitch", () => {
+  // ja: 同じ列の2端子を繋ぐジャンパバーは、端子番号を避けて列の右へずらした5mmの線分になる
+  it("runs alongside the column, clear of the numbers, 5 mm long on the standard pitch", () => {
     const def = dynamicSymbol("terminal_block_4p")!;
     const segs = jumperBarSegments(def, [["1", "2"]]);
     expect(segs).toHaveLength(1);
     const [a, b] = segs[0];
-    expect(a.x).toBe(0);
-    expect(b.x).toBe(0);
+    expect(a.x).toBe(JUMPER_BAR_OFFSET_MM);
+    expect(b.x).toBe(JUMPER_BAR_OFFSET_MM);
     expect(b.y - a.y).toBeCloseTo(5, 9);
   });
 
-  // ja: 段をまたぐジャンパのバーは、同じ行にある2つの段の列を横に結ぶ線分になる
-  it("spans the two level columns of one pole for a cross-level jumper", () => {
+  // ja: 段をまたぐジャンパのバーは、2つの段の列の真下を横に結ぶ線分になる(行の下へずれる)
+  it("runs below the row, across the two level columns of one pole", () => {
     const def = dynamicSymbol("terminal_block_4p_2l")!;
     const segs = jumperBarSegments(def, [["1a", "1b"]]);
     expect(segs).toHaveLength(1);
     const [a, b] = segs[0];
     expect(a.y).toBeCloseTo(b.y, 9);
     expect(b.x - a.x).toBeCloseTo(10, 9);
+    expect(a.y).toBeCloseTo(-7.5 + JUMPER_BAR_OFFSET_MM, 9);
+  });
+
+  // ja: ジャンパバーと両端の丸は、どの端子番号の文字にも重ならない
+  it("never covers a terminal number", () => {
+    // 文字は中心揃え・ベースラインが端子の中心。幅は文字数x文字高x0.6、高さは文字高x0.7で見る
+    const numberBoxes = (def: SymbolDef) =>
+      def.primitives
+        .filter((p): p is Extract<Primitive, { type: "text" }> => p.type === "text")
+        .map((p) => {
+          const baseline = p.at.y + p.height / 2;
+          const half = (p.text.length * p.height * 0.6) / 2;
+          return [p.at.x - half, baseline - p.height * 0.7, p.at.x + half, baseline] as const;
+        });
+    const overlaps = (a: readonly number[], b: readonly number[]) =>
+      a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+    for (const [id, spec] of [
+      ["terminal_block_4p", "1-2,3-4"],
+      ["terminal_block_4p_2l", "1a-1b,2a-3a"],
+      ["terminal_block_4p_3l", "1a-1b,1b-1c"],
+      ["terminal_block_12p_2l", "10a-10b,11a-12a"],
+    ] as const) {
+      const def = dynamicSymbol(id)!;
+      const pairs = parseJumperSpec(spec, terminalNumbers(def));
+      const graphics: (readonly number[])[] = [];
+      for (const [a, b] of jumperBarSegments(def, pairs)) {
+        const h = JUMPER_BAR_STROKE_MM / 2;
+        graphics.push([
+          Math.min(a.x, b.x) - h,
+          Math.min(a.y, b.y) - h,
+          Math.max(a.x, b.x) + h,
+          Math.max(a.y, b.y) + h,
+        ]);
+        for (const p of [a, b]) {
+          const r = JUMPER_BAR_DOT_R_MM;
+          graphics.push([p.x - r, p.y - r, p.x + r, p.y + r]);
+        }
+      }
+      expect(graphics.length).toBeGreaterThan(0);
+      for (const g of graphics) {
+        for (const box of numberBoxes(def)) {
+          expect(overlaps(g, box), `${id} ${spec}: ${g} vs ${box}`).toBe(false);
+        }
+      }
+    }
   });
 
   // ja: 複数のジャンパはそれぞれ独立した線分になる

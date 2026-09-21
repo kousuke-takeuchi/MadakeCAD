@@ -6,10 +6,15 @@
 import { parseTerminalNo } from "./dynamicSymbol";
 import type { Point, SymbolDef } from "../ipc";
 
-/** ジャンパバーの線幅 (mm)。svg.rsのJUMPER_BAR_STROKEと一致させること。 */
+/** ジャンパバーの線幅 (mm)。Rust側 terminal_chart.rs の JUMPER_BAR_STROKE と一致させること。 */
 export const JUMPER_BAR_STROKE_MM = 0.8;
-/** ジャンパバーの両端に付ける丸の半径 (mm)。svg.rsのJUMPER_BAR_DOT_Rと一致させること。 */
-export const JUMPER_BAR_DOT_R_MM = 1.5;
+/** ジャンパバーの両端に付ける丸の半径 (mm)。Rust側 JUMPER_BAR_DOT_R と一致させること。 */
+export const JUMPER_BAR_DOT_R_MM = 0.7;
+/**
+ * ジャンパバーを端子の中心線からどれだけ横へずらすか (mm)。Rust側 JUMPER_BAR_OFFSET と一致。
+ * 端子番号は端子の中心の真上に書かれるので、中心を通すとバーと両端の丸が番号を隠してしまう。
+ */
+export const JUMPER_BAR_OFFSET_MM = 2.7;
 
 /** 端子番号の並べ替えキー (極番号→段記号→表記)。Rust側 terminal_sort_key と同一。 */
 function sortKey(no: string): [number, string, string] {
@@ -92,6 +97,10 @@ export function terminalCenter(def: SymbolDef, number: string): Point | null {
  * ジャンパ (正規化済みの端子番号の組) を、シンボル定義のローカル座標系でのバーの
  * 端点に変換する。見つからない端子番号の組は結果から省く(Rust側 jumper_bar_segments
  * と同一)。
+ *
+ * バーは端子の中心を結ぶ線そのものではなく、それと平行に JUMPER_BAR_OFFSET_MM だけ
+ * 横へずらした線にする(端子番号の文字を隠さないため)。ずらす向きは中心線に直交する
+ * 向きのうち+x/+y側で、縦に並ぶ端子は列の右、横に並ぶ端子は行の下に出る。
  */
 export function jumperBarSegments(
   def: SymbolDef,
@@ -101,7 +110,19 @@ export function jumperBarSegments(
   for (const [a, b] of pairs) {
     const pa = terminalCenter(def, a);
     const pb = terminalCenter(def, b);
-    if (pa && pb) out.push([pa, pb]);
+    if (!pa || !pb) continue;
+    const [dx, dy] = [pb.x - pa.x, pb.y - pa.y];
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-9) {
+      out.push([pa, pb]);
+      continue;
+    }
+    const nx = (Math.abs(dy) / len) * JUMPER_BAR_OFFSET_MM;
+    const ny = (Math.abs(dx) / len) * JUMPER_BAR_OFFSET_MM;
+    out.push([
+      { x: pa.x + nx, y: pa.y + ny },
+      { x: pb.x + nx, y: pb.y + ny },
+    ]);
   }
   return out;
 }

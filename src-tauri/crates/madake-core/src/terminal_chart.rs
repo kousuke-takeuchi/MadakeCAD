@@ -26,6 +26,21 @@ pub const TERMINAL_CHART_PROJECT_COLUMNS: [&str; 8] = [
     "端子台", "端子", "Lv", "内部側", "線番", "電線", "外部側", "ジャンパ",
 ];
 
+/// ジャンパバー (G5) の線幅 (mm)。ショートバーだと分かるよう、シンボルの線 (0.3mm) より太くする。
+pub const JUMPER_BAR_STROKE: f64 = 0.8;
+
+/// ジャンパバーの両端に付ける丸の半径 (mm)。バーの太さよりはっきり大きくして、
+/// 「両端のあるバー」に見せる。
+pub const JUMPER_BAR_DOT_R: f64 = 0.7;
+
+/// ジャンパバーを端子の中心線からどれだけ横へずらすか (mm)。
+///
+/// 端子番号の文字は端子の中心の真上 (高さ[`crate::symbol::TERMINAL_NUMBER_HEIGHT`]=2.0mm)
+/// にあり、一番長い番号 (`50c` のような3文字) は中心から左右へおよそ1.8mmまで広がる。
+/// バーと両端の丸がその外側に出るように、また上下に隣り合う行の番号 (中心から3.6mm上)
+/// にも届かないように、`1.8 + DOT_R` と `3.6 - DOT_R` の間の値にしてある。
+pub const JUMPER_BAR_OFFSET: f64 = 2.7;
+
 /// ジャンパの記述が読み取れない・隣り合わない端子に掛かっている。
 pub const JUMPER_INVALID: &str = "terminal.jumper_invalid";
 /// ジャンパが端子台に存在しない端子番号を指している。
@@ -363,10 +378,29 @@ fn terminal_center(def: &SymbolDef, number: &str) -> Option<Point> {
 /// ジャンパ (正規化済みの端子番号の組) を、シンボル定義のローカル座標系での
 /// バーの端点に変換する (G5)。見つからない端子番号の組は結果から省く
 /// (パニックしない。端子台以外・壊れた定義に対しても安全)。
+///
+/// バーは端子の中心を結ぶ線そのものではなく、**その線と平行に[`JUMPER_BAR_OFFSET`]だけ
+/// 横へずらした線**にする。端子番号の文字は端子の中心の真上に書かれるので、中心を通すと
+/// バーと両端の印が番号を隠してしまう (通過する端子の番号も同じ)。ずらす向きは
+/// 中心線に直交する向きのうち+x/+y側: 縦に並ぶ端子 (同じ段) のバーは列の右、
+/// 横に並ぶ端子 (段をまたぐ) のバーは行の下に出る。行の下を選ぶのは、番号が
+/// 中心の**上**にあるためで、これで上下どちらの行の番号とも重ならない。
 pub fn jumper_bar_segments(def: &SymbolDef, pairs: &[(String, String)]) -> Vec<(Point, Point)> {
     pairs
         .iter()
-        .filter_map(|(a, b)| Some((terminal_center(def, a)?, terminal_center(def, b)?)))
+        .filter_map(|(a, b)| {
+            let (pa, pb) = (terminal_center(def, a)?, terminal_center(def, b)?);
+            let (dx, dy) = (pb.x - pa.x, pb.y - pa.y);
+            let len = (dx * dx + dy * dy).sqrt();
+            if len < CONNECT_EPS {
+                return Some((pa, pb));
+            }
+            let (nx, ny) = (dy.abs() / len * JUMPER_BAR_OFFSET, dx.abs() / len * JUMPER_BAR_OFFSET);
+            Some((
+                Point::new(pa.x + nx, pa.y + ny),
+                Point::new(pb.x + nx, pb.y + ny),
+            ))
+        })
         .collect()
 }
 
@@ -1182,17 +1216,29 @@ mod tests {
         assert!(check_terminal_block_in_project(&project, Uuid::new_v4()).is_empty());
     }
 
-    /// The jumper bar between two adjacent terminals spans the centers of their markers (circles), five millimetres apart on the standard terminal pitch.
-    /// 隣り合う2端子間のジャンパバーは、それぞれの印(丸)の中心を結ぶ線分になり、標準の端子ピッチどおり5mm離れる。
+    /// The jumper bar between two terminals of one column runs alongside them, parallel to the line of their centres and the same five millimetres long, pushed out to the right so it clears the terminal numbers.
+    /// 同じ列の2端子を繋ぐジャンパバーは、端子の中心を結ぶ線と平行な同じ長さ5mmの線分として、端子番号に重ならないよう右へずらした位置に引かれる。
     #[test]
-    fn jumper_bar_segment_spans_the_two_terminal_centers() {
+    fn a_jumper_bar_runs_alongside_the_column_clear_of_the_numbers() {
         let def = resolve_symbol("terminal_block_4p").expect("端子台");
         let segs = jumper_bar_segments(&def, &pairs(&[("1", "2")]));
         assert_eq!(segs.len(), 1);
         let (a, b) = segs[0];
-        assert_eq!(a.x, 0.0, "{a:?}");
-        assert_eq!(b.x, 0.0, "{b:?}");
+        assert_eq!((a.x, b.x), (JUMPER_BAR_OFFSET, JUMPER_BAR_OFFSET), "{a:?} {b:?}");
         assert!((b.y - a.y - 5.0).abs() < 1e-9, "{a:?} {b:?}");
+        assert_eq!((a.y, b.y), (-7.5, -2.5), "端子1・2の行の高さのまま");
+    }
+
+    /// The jumper bar between the two levels of one pole runs below their row, parallel to the line of their centres, so it clears both that row's numbers and the next row's.
+    /// 同じ極の2つの段を繋ぐジャンパバーは、端子の中心を結ぶ線と平行に行の下へずらして引かれるので、その行の番号にも次の行の番号にも重ならない。
+    #[test]
+    fn a_cross_level_jumper_bar_runs_below_the_row() {
+        let def = resolve_symbol("terminal_block_4p_2l").expect("多段端子台");
+        let segs = jumper_bar_segments(&def, &pairs(&[("1a", "1b")]));
+        assert_eq!(segs.len(), 1);
+        let (a, b) = segs[0];
+        assert_eq!((a.y, b.y), (-7.5 + JUMPER_BAR_OFFSET, -7.5 + JUMPER_BAR_OFFSET));
+        assert_eq!((a.x, b.x), (-5.0, 5.0), "段aの列と段bの列の真下");
     }
 
     /// Several jumpers on the same terminal block each produce their own bar segment.
