@@ -695,6 +695,33 @@ mod tests {
         assert!(internal.iter().all(|t| t.0 > box_right()), "{internal:?}");
     }
 
+    /// A multi-level terminal block's diagram labels each box with its full level-letter terminal number (1a, 1b, 2a, 2b, ...), so the two levels are never drawn as if they were the same terminal.
+    /// 多段端子台の接続図は、各箱に段記号付きの完全な端子番号(1a,1b,2a,2b,…)を書くので、2つの段が同じ端子として描かれることはない。
+    #[test]
+    fn a_multilevel_terminal_block_labels_boxes_with_the_level_letter() {
+        let mut project = Project::new("多段端子台デモ");
+        let tb = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "terminal_block_2p_2l".into(),
+            at: Point::new(150.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        });
+        let tb_id = tb.id();
+        project.sheets[0].entities.insert(tb_id, tb);
+        let pages = terminal_diagram_svg(&project, tb_id);
+        assert_eq!(pages.len(), 1);
+        let numbers: Vec<String> = texts(&pages[0])
+            .into_iter()
+            .filter(|t| (t.0 - center_x()).abs() < 1e-9)
+            .map(|t| t.2)
+            .collect();
+        assert_eq!(numbers, ["1a", "1b", "2a", "2b"]);
+    }
+
     /// Terminals that do not fit on one page continue on the next, and each page title states the range of terminals it holds.
     /// 1ページに収まらない端子は次のページへ続き、各ページの表題にそのページの端子の範囲が入る。
     #[test]

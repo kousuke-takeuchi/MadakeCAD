@@ -1029,6 +1029,9 @@ pub fn builtin_symbols() -> Vec<SymbolDef> {
 /// 動的シンボルの最大極数。
 pub const DYNAMIC_PIN_MAX: usize = 50;
 
+/// 多段端子台 (`terminal_block_{n}p_{levels}l`、G6) の最大段数。
+pub const TERMINAL_LEVEL_MAX: usize = 3;
+
 /// PLCモジュール(`plc_di_{n}p` / `plc_do_{n}p`)の最大点数。
 pub const PLC_POINT_MAX: usize = 64;
 
@@ -1099,6 +1102,73 @@ fn plc_module_symbol(id: &str) -> Option<SymbolDef> {
     Some(sym(id, &name, &name_ja, "plc", "PLC", &keywords, primitives, pins))
 }
 
+/// 段番号 (0始まり) を段記号 ('a', 'b', 'c', …) にする。
+pub fn level_letter(level_index: usize) -> char {
+    (b'a' + level_index as u8) as char
+}
+
+/// `terminal_block_`の後ろ (`rest`) を多段端子台の (極数, 段数) にパースする。
+/// `{n}p_{levels}l` の形だけを受け付け (例 "8p_2l")、単段の `{n}p` はNoneを返す
+/// (単段は呼び出し側で[`dynamic_symbol`]の既存経路がそのまま扱う=互換性を保つ)。
+fn parse_multilevel_terminal_block(rest: &str) -> Option<(usize, usize)> {
+    let (poles_part, levels_part) = rest.split_once('_')?;
+    let n: usize = poles_part.strip_suffix('p')?.parse().ok()?;
+    let levels: usize = levels_part.strip_suffix('l')?.parse().ok()?;
+    if !(1..=DYNAMIC_PIN_MAX).contains(&n) || !(1..=TERMINAL_LEVEL_MAX).contains(&levels) {
+        return None;
+    }
+    Some((n, levels))
+}
+
+/// `terminal_block_{n}p_{levels}l` から多段端子台のシンボルを生成する (G6)。
+///
+/// 見た目は単段の端子台とまったく同じ規則の縦一列 (5mmピッチ・2.5mmグリッド) で、
+/// 1極ぶんに段数だけ端子が連続する (2段なら 1a,1b,2a,2b,… という並び)。
+/// ピン番号の末尾アルファベットが段を表す: 同じ極でも段が違えば別のピン番号になるので、
+/// 貫通端子の内部短絡 (同一ピン番号どうし) は段をまたがず、**段ごとに独立したネット**になる。
+/// 総端子数は極数×段数だが、あくまで**1個のシンボルインスタンス**なので、
+/// チャート・BOMには常に1デバイスとして載る。
+fn multilevel_terminal_block_symbol(id: &str, n: usize, levels: usize) -> SymbolDef {
+    let total = n * levels;
+    let offset = |i: usize, count: usize| (i as f64 - (count - 1) as f64 / 2.0) * 5.0;
+    let mut primitives = vec![Primitive::Rect {
+        p1: p(-2.5, offset(0, total) - 2.5),
+        p2: p(2.5, offset(total - 1, total) + 2.5),
+        filled: false,
+    }];
+    let mut pins = Vec::with_capacity(total * 2);
+    for k in 0..total {
+        let y = offset(k, total);
+        let pole = k / levels + 1;
+        let no = format!("{pole}{}", level_letter(k % levels));
+        primitives.push(Primitive::Circle {
+            center: p(0.0, y),
+            r: 1.8,
+            filled: false,
+        });
+        primitives.push(Primitive::Text {
+            at: p(0.0, y - 1.0),
+            text: no.clone(),
+            height: 2.0,
+        });
+        primitives.push(line(&[(-2.5, y), (-1.8, y)]));
+        primitives.push(line(&[(1.8, y), (2.5, y)]));
+        // 貫通端子: 左右2接続点に同一ピン番号(段が違えば番号も違うのでネットも独立)
+        pins.push(pin(&no, "", -2.5, y, PinDir::Left));
+        pins.push(pin(&no, "", 2.5, y, PinDir::Right));
+    }
+    sym(
+        id,
+        &format!("Terminal block {n}P {levels}-level"),
+        &format!("端子台({n}極 {levels}段)"),
+        "connector",
+        "TB",
+        &["terminal block", "tb", "端子台", "端子", "多段", "multilevel", "段"],
+        primitives,
+        pins,
+    )
+}
+
 /// `connector_{n}p` / `terminal_block_{n}p` / `plc_di_{n}p` / `plc_do_{n}p` / `block` から
 /// ピン数可変シンボルを生成する。
 /// 端子は縦並び・ピッチ5mm・中央揃え(オフセットは常に2.5mmグリッド倍数)。
@@ -1143,6 +1213,11 @@ pub fn dynamic_symbol(id: &str) -> Option<SymbolDef> {
             primitives,
             pins,
         ));
+    }
+    if let Some(rest) = id.strip_prefix("terminal_block_") {
+        if let Some((n, levels)) = parse_multilevel_terminal_block(rest) {
+            return Some(multilevel_terminal_block_symbol(id, n, levels));
+        }
     }
     if let Some(n) = id.strip_prefix("terminal_block_").and_then(parse) {
         let mut primitives = vec![Primitive::Rect {
@@ -1333,6 +1408,61 @@ mod tests {
             ysum += p.at.y;
         }
         assert!(ysum.abs() < 1e-9);
+    }
+
+    /// A multi-level terminal block (8 poles, 2 levels) numbers its pins with a level letter (1a, 1b, 2a, ... 8b), stays on the 2.5 mm grid, and keeps the same 5 mm pitch between neighbouring terminals as a single-level block.
+    /// 多段端子台(8極2段)は段記号付きのピン番号(1a,1b,2a,…8b)を持ち、2.5mmグリッド上に、単段と同じ5mmピッチで並ぶ。
+    #[test]
+    fn dynamic_multilevel_terminal_block_numbers_pins_with_level_letters() {
+        let def = resolve_symbol("terminal_block_8p_2l").expect("多段端子台");
+        assert_eq!(def.ref_prefix, "TB");
+        assert_eq!(def.pins.len(), 8 * 2 * 2, "8極x2段 x 左右2接続点");
+        let numbers: std::collections::BTreeSet<String> =
+            def.pins.iter().map(|p| p.number.clone()).collect();
+        let expected: std::collections::BTreeSet<String> = (1..=8)
+            .flat_map(|n| [format!("{n}a"), format!("{n}b")])
+            .collect();
+        assert_eq!(numbers, expected);
+        // 貫通端子: 同じ番号の左右ピンは中心対称(単段と同じ規則)
+        for no in &numbers {
+            let same: Vec<_> = def.pins.iter().filter(|p| &p.number == no).collect();
+            assert_eq!(same.len(), 2, "{no}");
+            assert!((same[0].at.x + same[1].at.x).abs() < 1e-9);
+            assert!((same[0].at.y - same[1].at.y).abs() < 1e-9);
+        }
+        // 全ピン2.5mmグリッド上
+        for p in &def.pins {
+            assert!((p.at.x / 2.5 - (p.at.x / 2.5).round()).abs() < 1e-9, "{:?}", p.at);
+            assert!((p.at.y / 2.5 - (p.at.y / 2.5).round()).abs() < 1e-9, "{:?}", p.at);
+        }
+        // 段のピッチ: 隣り合う端子の中心Yは常に5mm離れる(単段と同じピッチ)
+        let mut ys: Vec<f64> = def.pins.iter().map(|p| p.at.y).collect();
+        ys.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        ys.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+        assert_eq!(ys.len(), 16, "8極x2段=16行ぶんの異なるY");
+        for w in ys.windows(2) {
+            assert!((w[1] - w[0] - 5.0).abs() < 1e-9, "{ys:?}");
+        }
+    }
+
+    /// A terminal block asking for 0 or 4 levels (outside the 1-3 range) is rejected as an unknown symbol, the same way an out-of-range pole count is.
+    /// 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様に未知のシンボルとして拒否される。
+    #[test]
+    fn multilevel_terminal_block_rejects_level_count_outside_one_to_three() {
+        assert!(resolve_symbol("terminal_block_8p_0l").is_none());
+        assert!(resolve_symbol("terminal_block_8p_4l").is_none());
+    }
+
+    /// The single-level terminal block id keeps its plain numeric pin numbers (1, 2, ...) exactly as before, unaffected by the new multi-level id shape, so existing projects stay valid.
+    /// 単段の端子台id(`terminal_block_{n}p`)は多段対応の追加後もそのままの数字だけのピン番号(1,2,…)を持ち、既存プロジェクトは有効なまま使える。
+    #[test]
+    fn single_level_terminal_block_id_is_unaffected_by_multilevel_support() {
+        let def = resolve_symbol("terminal_block_8p").expect("単段端子台");
+        assert!(def.pins.iter().all(|p| p.number.chars().all(|c| c.is_ascii_digit())));
+        assert_eq!(
+            def.pins.iter().map(|p| p.number.clone()).collect::<std::collections::BTreeSet<_>>().len(),
+            8
+        );
     }
 
     /// connector_2p generated dynamically has exactly the same pin coordinates as the old static definition, so existing drawings are unaffected.

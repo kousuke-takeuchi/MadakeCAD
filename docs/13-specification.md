@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1842 specification clauses** across 5 areas.
+**1864 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -229,6 +229,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The attachment test used by the netlist accepts a label on a wire vertex, in the middle of a wire segment, or on a symbol pin, and rejects one that floats even slightly off. <sub>`the_label_attachment_test_accepts_vertices_segments_and_pins`</sub>
 - Unnamed nets receive deterministic sequential names (N001, N002, ...). <sub>`unnamed_nets_get_deterministic_sequential_names`</sub>
 - Two connection points of the same symbol sharing a pin number (a feed-through terminal) are internally shorted, and appear once in the net's pin list. <sub>`same_pin_number_points_short_internally`</sub>
+- A multi-level terminal block never shorts its levels together: level a and level b of the same pole end up on two separate nets, even though each level's own left and right connection points are still shorted internally (through-terminal). <sub>`each_level_of_a_multilevel_terminal_block_is_an_independent_net`</sub>
 - A wire number written on the wires becomes the net's displayed name when the net has no net label. <sub>`wire_number_names_a_net_without_a_label`</sub>
 - A net label always wins over the wire number, which in turn wins over the automatic N001 name. <sub>`net_name_prefers_label_then_wire_number_then_auto_name`</sub>
 - Pin positions honor the symbol's rotation (clockwise in the Y-down paper coordinate system) and placement. <sub>`pin_positions_apply_rotation_and_translation`</sub>
@@ -524,11 +525,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A sheet with a smaller annotation text height exports smaller wire numbers, wire notes and net tags, and nothing else changes size. <sub>`svg_follows_the_sheet_annotation_text_height`</sub>
 - A net label with no tag keeps the plain text look, with no outline drawn around it. <sub>`svg_draws_no_outline_for_an_untagged_net_label`</sub>
 - An unknown tag value is ignored and the label falls back to plain text rather than breaking the export. <sub>`svg_ignores_an_unknown_tag_value`</sub>
+- A jumper between two adjacent terminals is drawn on the schematic as a thick bar linking their centres, five millimetres apart, with a small filled circle at each end. <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
+- A jumper written between two terminals that are not adjacent is invalid (the same rule the terminal chart enforces), so no bar is drawn for it at all. <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
+- A terminal block with several jumpers gets one bar per jumper. <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
+- A terminal block with no jumpers draws no bar, and a symbol that is not a terminal block never gets one even if it happened to carry a "jumpers" attribute. <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
 
 ### Symbol library
 
 - Every bundled symbol has a unique id and at least one pin. <sub>`builtin_symbols_have_unique_ids_and_pins`</sub>
 - A parametric terminal block (e.g. 8 poles) has one left and one right connection point per terminal, all on the 2.5 mm grid and vertically centered. <sub>`dynamic_terminal_block_has_through_pins_on_grid`</sub>
+- A multi-level terminal block (8 poles, 2 levels) numbers its pins with a level letter (1a, 1b, 2a, ... 8b), stays on the 2.5 mm grid, and keeps the same 5 mm pitch between neighbouring terminals as a single-level block. <sub>`dynamic_multilevel_terminal_block_numbers_pins_with_level_letters`</sub>
+- A terminal block asking for 0 or 4 levels (outside the 1-3 range) is rejected as an unknown symbol, the same way an out-of-range pole count is. <sub>`multilevel_terminal_block_rejects_level_count_outside_one_to_three`</sub>
+- The single-level terminal block id keeps its plain numeric pin numbers (1, 2, ...) exactly as before, unaffected by the new multi-level id shape, so existing projects stay valid. <sub>`single_level_terminal_block_id_is_unaffected_by_multilevel_support`</sub>
 - connector_2p generated dynamically has exactly the same pin coordinates as the old static definition, so existing drawings are unaffected. <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
 - resolve_symbol finds built-in ids, and rejects malformed or out-of-range dynamic ids (0 poles, 51 poles, missing count). <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defs returns the built-in library plus definitions for every dynamic symbol actually used on the sheet. <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
@@ -631,7 +639,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A jumper pointing at a terminal the block does not have is reported as such. <sub>`a_jumper_to_a_terminal_that_does_not_exist_is_reported`</sub>
 - An empty jumper attribute simply means no jumpers. <sub>`no_jumper_text_means_no_jumpers`</sub>
 - A jumper appears in the jumper column of both terminals it connects. <sub>`a_jumper_is_shown_on_both_of_its_terminals`</sub>
-- The terminal chart CSV has the columns terminal, inside, wire number, wire, outside, jumper, and one line per terminal. <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
+- The terminal chart CSV has the columns terminal, level, inside, wire number, wire, outside, jumper, and one line per terminal. <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
+- A multi-level terminal block shows its level letter in the chart's Lv column, and its terminal column carries the full pin number ("1a"), so the two levels never look like the same terminal. <sub>`a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column`</sub>
 - Asking for the chart of something that is not a terminal block gives nothing. <sub>`only_terminal_blocks_have_a_chart`</sub>
 - The terminal block check reports every unwired terminal as information, so spares are visible without being treated as mistakes. <sub>`the_check_reports_unwired_terminals_as_information`</sub>
 - The terminal block check reports a jumper between non-adjacent terminals as an error. <sub>`the_check_reports_an_invalid_jumper_as_an_error`</sub>
@@ -641,6 +650,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Naming a sheet narrows the list to the terminal blocks drawn on that sheet. <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
 - Symbols that are not terminal blocks never show up in the list. <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
 - The chart and the check of a terminal block can be looked up by entity id alone, without knowing which sheet it sits on. <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
+- The jumper bar between two adjacent terminals spans the centers of their markers (circles), five millimetres apart on the standard terminal pitch. <sub>`jumper_bar_segment_spans_the_two_terminal_centers`</sub>
+- Several jumpers on the same terminal block each produce their own bar segment. <sub>`multiple_jumpers_each_produce_their_own_bar_segment`</sub>
+- A jumper referencing a terminal number the block does not have produces no segment instead of panicking. <sub>`a_jumper_to_a_missing_terminal_produces_no_bar_segment`</sub>
 - Jumpers are set with the ordinary update_entity command, so the chart follows the change and undo takes it back. <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
 
 ### Terminal connection diagrams
@@ -652,6 +664,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A wire that belongs to no harness gets no bracket at all. <sub>`a_wire_without_a_harness_gets_no_bracket`</sub>
 - A saddle jumper between neighbouring terminals is drawn as a vertical link on the inside edge of the terminal boxes. <sub>`a_jumper_is_drawn_on_the_inside_edge_of_the_boxes`</sub>
 - Each lead line carries the wire it stands for: colour, gauge in sq and part number, written small under the line. <sub>`each_lead_line_carries_the_wire_specification`</sub>
+- A multi-level terminal block's diagram labels each box with its full level-letter terminal number (1a, 1b, 2a, 2b, ...), so the two levels are never drawn as if they were the same terminal. <sub>`a_multilevel_terminal_block_labels_boxes_with_the_level_letter`</sub>
 - Terminals that do not fit on one page continue on the next, and each page title states the range of terminals it holds. <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
 - Every terminal block gets exactly one page; anything that is not a terminal block gets none. <sub>`one_page_per_terminal_block_and_none_for_anything_else`</sub>
 - A terminal diagram page is an A4 landscape sheet with the JIS frame and a title block naming the terminal block. <sub>`the_page_has_the_frame_and_a_title_block`</sub>
@@ -1400,6 +1413,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - PLC modules come in an input and an output flavour <sub>`dynamicSymbol`</sub>
 - malformed dynamic ids return null <sub>`dynamicSymbol`</sub>
 - PLC module symbols exist from 1 to 64 points only <sub>`dynamicSymbol`</sub>
+- a multi-level terminal block (4 poles, 2 levels) numbers its pins with a level letter and keeps the 5 mm pitch <sub>`dynamicSymbol`</sub>
+- a terminal block with a level count outside 1-3 returns null <sub>`dynamicSymbol`</sub>
+- the plain single-level terminal block id keeps its numeric-only pin numbers <sub>`dynamicSymbol`</sub>
 - static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
 - puts named pins on both sides of the box, 5 mm apart on the 2.5 mm grid <sub>`blockSymbol`</sub>
 - draws pin numbers outside the outline and pin names inside it <sub>`blockSymbol`</sub>
@@ -1709,6 +1725,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - shows the Japanese name in Japanese and the English name in English <sub>`symbolName`</sub>
 - falls back to whichever name the symbol actually has <sub>`symbolName`</sub>
 - shows the symbol id when both names are empty <sub>`symbolName`</sub>
+
+### terminalJumpers
+
+- keeps jumpers between adjacent terminals and drops non-adjacent ones <sub>`parseJumperPairs`</sub>
+- keeps every jumper when there are several <sub>`parseJumperPairs`</sub>
+- treats empty or unreadable text as no jumpers <sub>`parseJumperPairs`</sub>
+- spans the two terminal centres, 5 mm apart on the standard pitch <sub>`jumperBarSegments`</sub>
+- produces one segment per jumper when there are several <sub>`jumperBarSegments`</sub>
+- produces no segment for a jumper to a terminal the block does not have <sub>`jumperBarSegments`</sub>
 
 ### textStyle
 

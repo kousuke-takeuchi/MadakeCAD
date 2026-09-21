@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1842仕様項目**。
+全5領域・**1864仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -229,6 +229,7 @@
 - ネットリストが使う載り判定は、配線の頂点上・線分の途中・シンボルのピン上のラベルを載っていると認め、わずかでも浮いたラベルは認めない。 <sub>`the_label_attachment_test_accepts_vertices_segments_and_pins`</sub>
 - 無名ネットには決定的な連番名(N001, N002, …)が付く。 <sub>`unnamed_nets_get_deterministic_sequential_names`</sub>
 - 同一シンボルで同じピン番号を持つ2つの接続点(貫通端子)は内部短絡され、ネットのピン一覧には1回だけ載る。 <sub>`same_pin_number_points_short_internally`</sub>
+- 多段端子台は段どうしを決して短絡しない: 同じ極でも段aと段bは別々のネットになる(各段自身の左右接続点は貫通端子として今までどおり内部短絡される)。 <sub>`each_level_of_a_multilevel_terminal_block_is_an_independent_net`</sub>
 - ワイヤに書かれた線番は、ネットラベルが無いネットの表示名になる。 <sub>`wire_number_names_a_net_without_a_label`</sub>
 - ネットラベルは常に線番より優先され、線番は自動名 (N001) より優先される。 <sub>`net_name_prefers_label_then_wire_number_then_auto_name`</sub>
 - ピン座標はシンボルの回転(Y下向き座標系で時計回り)と配置位置を反映する。 <sub>`pin_positions_apply_rotation_and_translation`</sub>
@@ -524,11 +525,18 @@
 - 注記文字高を小さくしたシートは、線番・配線注記・ネットタグだけが小さくなって出力される。 <sub>`svg_follows_the_sheet_annotation_text_height`</sub>
 - タグの無いネットラベルは従来どおり文字だけで、周りに枠は描かれない。 <sub>`svg_draws_no_outline_for_an_untagged_net_label`</sub>
 - 知らないタグの値は無視され、出力が壊れるのではなく文字だけの表示に戻る。 <sub>`svg_ignores_an_unknown_tag_value`</sub>
+- 隣り合う2端子間のジャンパは、図面上でその中心どうしを結ぶ5mm間隔の太いバーとして描かれ、両端に小さな塗り丸が付く。 <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
+- 隣り合わない2端子間のジャンパは(端子台チャートと同じ規則で)不正なので、バーはまったく描かれない。 <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
+- 複数のジャンパを持つ端子台には、ジャンパの数だけバーが描かれる。 <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
+- ジャンパの無い端子台にはバーが描かれず、端子台以外のシンボルは"jumpers"属性を持っていてもバーが描かれない。 <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
 
 ### シンボルライブラリ
 
 - 同梱シンボルはすべて一意のidを持ち、最低1つのピンを持つ。 <sub>`builtin_symbols_have_unique_ids_and_pins`</sub>
 - ピン数可変の端子台(例: 8極)は端子ごとに左右1点ずつの接続点を持ち、すべて2.5mmグリッド上・上下中央揃えになる。 <sub>`dynamic_terminal_block_has_through_pins_on_grid`</sub>
+- 多段端子台(8極2段)は段記号付きのピン番号(1a,1b,2a,…8b)を持ち、2.5mmグリッド上に、単段と同じ5mmピッチで並ぶ。 <sub>`dynamic_multilevel_terminal_block_numbers_pins_with_level_letters`</sub>
+- 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様に未知のシンボルとして拒否される。 <sub>`multilevel_terminal_block_rejects_level_count_outside_one_to_three`</sub>
+- 単段の端子台id(`terminal_block_{n}p`)は多段対応の追加後もそのままの数字だけのピン番号(1,2,…)を持ち、既存プロジェクトは有効なまま使える。 <sub>`single_level_terminal_block_id_is_unaffected_by_multilevel_support`</sub>
 - 動的生成のconnector_2pは旧静的定義と完全に同じピン座標を持ち、既存図面に影響しない。 <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
 - resolve_symbolは同梱idを見つけ、不正・範囲外の動的ID(0極・51極・数値なし)は拒否する。 <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defsは同梱ライブラリに加え、シートで実際に使われている動的シンボルの定義を返す。 <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
@@ -631,7 +639,8 @@
 - 端子台に無い端子番号を指すジャンパは、存在しない端子として報告される。 <sub>`a_jumper_to_a_terminal_that_does_not_exist_is_reported`</sub>
 - ジャンパの記述が空なら、ジャンパは無いという意味になる。 <sub>`no_jumper_text_means_no_jumpers`</sub>
 - ジャンパは、それが繋ぐ両方の端子のジャンパ欄に表示される。 <sub>`a_jumper_is_shown_on_both_of_its_terminals`</sub>
-- 端子台チャートのCSVは 端子・内部側・線番・電線・外部側・ジャンパ の列を持ち、端子1個につき1行になる。 <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
+- 端子台チャートのCSVは 端子・Lv・内部側・線番・電線・外部側・ジャンパ の列を持ち、端子1個につき1行になる。 <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
+- 多段端子台はチャートのLv列に段記号が入り、端子列は完全なピン番号 ("1a") になるので、2つの段が同じ端子に見えることはない。 <sub>`a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column`</sub>
 - 端子台ではないものにチャートを求めても何も返らない。 <sub>`only_terminal_blocks_have_a_chart`</sub>
 - 端子台チェックは未結線の端子をすべて情報として報告するので、予備端子は間違い扱いされずに見える。 <sub>`the_check_reports_unwired_terminals_as_information`</sub>
 - 端子台チェックは、隣り合わない端子に掛けられたジャンパをエラーとして報告する。 <sub>`the_check_reports_an_invalid_jumper_as_an_error`</sub>
@@ -641,6 +650,9 @@
 - シートを指定すると、そのシートに描かれている端子台だけの一覧になる。 <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
 - 端子台ではないシンボルは一覧に出ない。 <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
 - 端子台のチャートとチェックは、どのシートにあるかを知らなくてもentity idだけで引ける。 <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
+- 隣り合う2端子間のジャンパバーは、それぞれの印(丸)の中心を結ぶ線分になり、標準の端子ピッチどおり5mm離れる。 <sub>`jumper_bar_segment_spans_the_two_terminal_centers`</sub>
+- 1つの端子台に複数のジャンパがあれば、それぞれ独立したバーの線分になる。 <sub>`multiple_jumpers_each_produce_their_own_bar_segment`</sub>
+- 端子台に無い端子番号を指すジャンパは、パニックせず線分を作らない。 <sub>`a_jumper_to_a_missing_terminal_produces_no_bar_segment`</sub>
 - ジャンパは通常のupdate_entityコマンドで設定するので、チャートに反映され、undoで元に戻る。 <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
 
 ### 端子接続図
@@ -652,6 +664,7 @@
 - どのハーネスにも属さない電線にはブラケットが付かない。 <sub>`a_wire_without_a_harness_gets_no_bracket`</sub>
 - 隣り合う端子のサドルジャンパは、端子箱の内部側の縁に縦の連結線として描かれる。 <sub>`a_jumper_is_drawn_on_the_inside_edge_of_the_boxes`</sub>
 - 各引出線には、その電線の線色・線径sq・品番が線の下に小さく書かれる。 <sub>`each_lead_line_carries_the_wire_specification`</sub>
+- 多段端子台の接続図は、各箱に段記号付きの完全な端子番号(1a,1b,2a,2b,…)を書くので、2つの段が同じ端子として描かれることはない。 <sub>`a_multilevel_terminal_block_labels_boxes_with_the_level_letter`</sub>
 - 1ページに収まらない端子は次のページへ続き、各ページの表題にそのページの端子の範囲が入る。 <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
 - 端子台1つにつき1ページが出て、端子台でないものには1ページも出ない。 <sub>`one_page_per_terminal_block_and_none_for_anything_else`</sub>
 - 端子接続図のページはA4横で、JIS図枠と、端子台の参照記号が入った表題欄を持つ。 <sub>`the_page_has_the_frame_and_a_title_block`</sub>
@@ -1400,6 +1413,9 @@
 - PLCモジュールには入力用と出力用があり、名前で見分けられる <sub>`dynamicSymbol`</sub>
 - 不正な動的IDはnullになる <sub>`dynamicSymbol`</sub>
 - PLCモジュールのシンボルは1〜64点までで、その外の点数は存在しない <sub>`dynamicSymbol`</sub>
+- 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、2.5mmグリッド上・単段と同じ5mmピッチになる <sub>`dynamicSymbol`</sub>
+- 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様にnullになる <sub>`dynamicSymbol`</sub>
+- 単段の端子台id(terminal_block_{n}p)は多段対応の追加後も数字だけのピン番号のままで、既存プロジェクトとの互換を保つ <sub>`dynamicSymbol`</sub>
 - 静的定義を優先し、無ければ動的生成にフォールバックする <sub>`resolveSymbolDef`</sub>
 - ブロックのピンは箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並ぶ(Rust側と同じ座標) <sub>`blockSymbol`</sub>
 - ピン番号は外形の外側に、ピン名は内側に描かれる <sub>`blockSymbol`</sub>
@@ -1709,6 +1725,15 @@
 - 日本語で使っているときは日本語名、英語のときは英語名が一覧に出る <sub>`symbolName`</sub>
 - 片方の名前しか無いシンボルは、あるほうの名前が出る <sub>`symbolName`</sub>
 - 名前がどちらも空ならシンボルidが出る(一覧から行が消えない) <sub>`symbolName`</sub>
+
+### terminalJumpers
+
+- 隣り合う端子どうしのジャンパは正規化され、隣り合わない組は捨てられる <sub>`parseJumperPairs`</sub>
+- 複数のジャンパはそれぞれ組として残る <sub>`parseJumperPairs`</sub>
+- 空文字や読めない記述はジャンパ無しとして扱う <sub>`parseJumperPairs`</sub>
+- 隣り合う2端子間のジャンパバーは、それぞれの印の中心を結ぶ5mm間隔の線分になる <sub>`jumperBarSegments`</sub>
+- 複数のジャンパはそれぞれ独立した線分になる <sub>`jumperBarSegments`</sub>
+- 端子台に無い端子番号を指すジャンパは線分を作らない <sub>`jumperBarSegments`</sub>
 
 ### textStyle
 

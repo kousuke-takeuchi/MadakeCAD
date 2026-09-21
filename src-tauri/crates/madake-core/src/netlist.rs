@@ -605,6 +605,36 @@ mod tests {
         assert_eq!(nets[0].pins[0].pin, "1");
     }
 
+    /// A multi-level terminal block never shorts its levels together: level a and level b of the same pole end up on two separate nets, even though each level's own left and right connection points are still shorted internally (through-terminal).
+    /// 多段端子台は段どうしを決して短絡しない: 同じ極でも段aと段bは別々のネットになる(各段自身の左右接続点は貫通端子として今までどおり内部短絡される)。
+    #[test]
+    fn each_level_of_a_multilevel_terminal_block_is_an_independent_net() {
+        let def = crate::symbol::resolve_symbol("terminal_block_1p_2l").expect("多段端子台");
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        // TB1 (100,50): 段aは y=47.5、段bは y=52.5 (2段1極、5mmピッチ)
+        for e in [
+            symbol("terminal_block_1p_2l", "TB1", 100.0, 50.0),
+            wire(&[(80.0, 47.5), (97.5, 47.5)]),   // 1a 左 (外部側)
+            wire(&[(102.5, 47.5), (120.0, 47.5)]), // 1a 右 (内部側)
+            wire(&[(80.0, 52.5), (97.5, 52.5)]),   // 1b 左
+            wire(&[(102.5, 52.5), (120.0, 52.5)]), // 1b 右
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &[def]);
+        assert_eq!(nets.len(), 2, "段a・段bは別ネットになる: {nets:?}");
+        let mut pin_names: Vec<String> = nets
+            .iter()
+            .flat_map(|n| n.pins.iter().map(|p| p.pin.clone()))
+            .collect();
+        pin_names.sort();
+        assert_eq!(pin_names, vec!["1a", "1b"]);
+        for net in &nets {
+            assert_eq!(net.wire_ids.len(), 2, "各段は左右2本の配線を持つ: {net:?}");
+            assert_eq!(net.pins.len(), 1, "各段のピンは貫通端子として1つにまとまる: {net:?}");
+        }
+    }
+
     /// A wire number written on the wires becomes the net's displayed name when the net has no net label.
     /// ワイヤに書かれた線番は、ネットラベルが無いネットの表示名になる。
     #[test]

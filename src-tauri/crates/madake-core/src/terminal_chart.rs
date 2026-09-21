@@ -16,13 +16,14 @@ use crate::symbol::{resolve_symbol, sheet_symbol_defs, SymbolDef};
 use crate::verify::{Diagnostic, Severity};
 
 /// 端子台チャートの列見出し (デザイン「紙 端子台チャート」準拠)。
-pub const TERMINAL_CHART_COLUMNS: [&str; 6] =
-    ["端子", "内部側", "線番", "電線", "外部側", "ジャンパ"];
+/// `Lv`は多段端子台 (G6) の段記号列。単段の端子台では常に空欄になる。
+pub const TERMINAL_CHART_COLUMNS: [&str; 7] =
+    ["端子", "Lv", "内部側", "線番", "電線", "外部側", "ジャンパ"];
 
 /// プロジェクト全体の端子台チャート (全端子台を1つのCSVにまとめる) の列見出し。
 /// [`TERMINAL_CHART_COLUMNS`] の先頭に端子台の参照記号列を足したもの。
-pub const TERMINAL_CHART_PROJECT_COLUMNS: [&str; 7] = [
-    "端子台", "端子", "内部側", "線番", "電線", "外部側", "ジャンパ",
+pub const TERMINAL_CHART_PROJECT_COLUMNS: [&str; 8] = [
+    "端子台", "端子", "Lv", "内部側", "線番", "電線", "外部側", "ジャンパ",
 ];
 
 /// ジャンパの記述が読み取れない・隣り合わない端子に掛かっている。
@@ -134,8 +135,10 @@ pub fn check_terminal_block_in_project(project: &Project, tb_id: EntityId) -> Ve
 /// 端子台チャートの1行 = 端子1個。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TerminalRow {
-    /// 端子番号 (例 "1")。
+    /// 端子番号 (例 "1"。多段端子台では段記号付きで "1a" のようになる)。
     pub terminal: String,
+    /// 段記号 (例 "a")。多段端子台 (G6) の端子だけが持ち、単段の端子台では空文字。
+    pub level: String,
     /// 内部側 (盤内) の接続先。`"参照記号:ピン番号"` またはネットラベル名。複数あれば ", " 区切り。
     pub internal: String,
     /// 外部側 (盤外) の接続先。
@@ -184,6 +187,7 @@ impl TerminalChart {
             .map(|r| {
                 vec![
                     r.terminal.clone(),
+                    r.level.clone(),
                     r.internal.clone(),
                     r.wire_no.clone(),
                     r.wire.clone(),
@@ -288,6 +292,53 @@ pub fn jumpers_to_string(pairs: &[(u32, u32)]) -> String {
         .join(",")
 }
 
+/// 端子番号の表記から (行番号, 段記号) を取り出す。
+///
+/// 単段の端子台の番号は数字だけ (例 "8" → (8, None))。多段端子台 (G6) の番号は
+/// 末尾に段記号のアルファベット1文字が付く (例 "8a" → (8, Some('a')))。
+/// 読み取れない番号は行番号を[`u32::MAX`]として末尾に回す (パニックしない)。
+fn parse_terminal_no(no: &str) -> (u32, Option<char>) {
+    if let Some(last) = no.chars().last() {
+        if last.is_ascii_alphabetic() {
+            let digits = &no[..no.len() - last.len_utf8()];
+            if let Ok(n) = digits.parse::<u32>() {
+                return (n, Some(last));
+            }
+        }
+    }
+    (no.parse::<u32>().unwrap_or(u32::MAX), None)
+}
+
+/// シンボル定義の中で、端子番号(文字列)の中心点を求める(同じ番号のピンの中点)。
+/// 貫通端子は左右2つの接続点が同じ番号を持つので、その中点が端子の印(丸)の位置になる。
+fn terminal_center(def: &SymbolDef, number: &str) -> Option<Point> {
+    let pts: Vec<Point> = def
+        .pins
+        .iter()
+        .filter(|p| p.number == number)
+        .map(|p| p.at)
+        .collect();
+    if pts.is_empty() {
+        return None;
+    }
+    let (sx, sy) = pts.iter().fold((0.0, 0.0), |(sx, sy), p| (sx + p.x, sy + p.y));
+    Some(Point::new(sx / pts.len() as f64, sy / pts.len() as f64))
+}
+
+/// ジャンパ (正規化済みの端子番号の組) を、シンボル定義のローカル座標系での
+/// バーの端点に変換する (G5)。見つからない端子番号の組は結果から省く
+/// (パニックしない。端子台以外・壊れた定義に対しても安全)。
+pub fn jumper_bar_segments(def: &SymbolDef, pairs: &[(u32, u32)]) -> Vec<(Point, Point)> {
+    pairs
+        .iter()
+        .filter_map(|(a, b)| {
+            let pa = terminal_center(def, &a.to_string())?;
+            let pb = terminal_center(def, &b.to_string())?;
+            Some((pa, pb))
+        })
+        .collect()
+}
+
 /// 端子の片側 (接続点1つ) に繋がっているもの。
 struct Side<'a> {
     /// 相手側の表記 (`"K1:A1"` / ネットラベル名)。辞書順。
@@ -362,10 +413,11 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
     let def = resolve_symbol(&inst.symbol_id)?;
     let defs = sheet_symbol_defs(sheet);
 
-    // 端子番号ごとの接続点 (番号は数値順)
-    let mut by_no: BTreeMap<(u32, String), Vec<Point>> = BTreeMap::new();
+    // 端子番号ごとの接続点 (行番号→段記号→表記の順で並ぶ。単段は段記号なし)
+    let mut by_no: BTreeMap<(u32, Option<char>, String), Vec<Point>> = BTreeMap::new();
     for pin in &def.pins {
-        let key = (pin.number.parse::<u32>().unwrap_or(u32::MAX), pin.number.clone());
+        let (num, level) = parse_terminal_no(&pin.number);
+        let key = (num, level, pin.number.clone());
         by_no.entry(key).or_default().push(transform_local(pin.at, inst));
     }
     let terminal_count = by_no.len();
@@ -375,7 +427,7 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
     );
 
     let mut rows = Vec::with_capacity(terminal_count);
-    for ((num, terminal), mut points) in by_no {
+    for ((num, level, terminal), mut points) in by_no {
         // 用紙上の左 (同じなら上) が内部側
         points.sort_by(|a, b| {
             if (a.x - b.x).abs() < CONNECT_EPS {
@@ -411,6 +463,7 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
         };
         rows.push(TerminalRow {
             terminal,
+            level: level.map(String::from).unwrap_or_default(),
             internal: inside.labels.join(", "),
             external: outside.labels.join(", "),
             wire_no: join_unique(numbers, "/"),
@@ -781,16 +834,41 @@ mod tests {
         assert_eq!(row(&chart, "3").jumper, "");
     }
 
-    /// The terminal chart CSV has the columns terminal, inside, wire number, wire, outside, jumper, and one line per terminal.
-    /// 端子台チャートのCSVは 端子・内部側・線番・電線・外部側・ジャンパ の列を持ち、端子1個につき1行になる。
+    /// The terminal chart CSV has the columns terminal, level, inside, wire number, wire, outside, jumper, and one line per terminal.
+    /// 端子台チャートのCSVは 端子・Lv・内部側・線番・電線・外部側・ジャンパ の列を持ち、端子1個につき1行になる。
     #[test]
     fn the_terminal_chart_csv_has_the_designed_columns() {
         let (sheet, id) = wired_tb();
         let csv = terminal_chart_csv(&sheet, id);
         let lines: Vec<&str> = csv.lines().collect();
-        assert_eq!(lines[0], "端子,内部側,線番,電線,外部側,ジャンパ");
+        assert_eq!(lines[0], "端子,Lv,内部側,線番,電線,外部側,ジャンパ");
         assert_eq!(lines.len(), 5, "見出し+4端子: {csv}");
-        assert_eq!(lines[1], "1,R1:2,,,R2:1,");
+        assert_eq!(lines[1], "1,,R1:2,,,R2:1,", "単段の端子台はLv列が空欄");
+    }
+
+    /// A multi-level terminal block shows its level letter in the chart's Lv column, and its terminal column carries the full pin number ("1a"), so the two levels never look like the same terminal.
+    /// 多段端子台はチャートのLv列に段記号が入り、端子列は完全なピン番号 ("1a") になるので、2つの段が同じ端子に見えることはない。
+    #[test]
+    fn a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column() {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+        let tb = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "terminal_block_2p_2l".into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        let id = tb.id;
+        sheet.entities.insert(id, Entity::Symbol(tb));
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.terminal_count, 4, "2極x2段=4端子");
+        let terminals: Vec<&str> = chart.rows.iter().map(|r| r.terminal.as_str()).collect();
+        assert_eq!(terminals, ["1a", "1b", "2a", "2b"]);
+        let levels: Vec<&str> = chart.rows.iter().map(|r| r.level.as_str()).collect();
+        assert_eq!(levels, ["a", "b", "a", "b"]);
     }
 
     /// Asking for the chart of something that is not a terminal block gives nothing.
@@ -957,6 +1035,37 @@ mod tests {
         assert_eq!(diags.len(), 4, "未結線の4端子が予備として報告される");
         assert!(terminal_chart_in_project(&project, Uuid::new_v4()).is_none());
         assert!(check_terminal_block_in_project(&project, Uuid::new_v4()).is_empty());
+    }
+
+    /// The jumper bar between two adjacent terminals spans the centers of their markers (circles), five millimetres apart on the standard terminal pitch.
+    /// 隣り合う2端子間のジャンパバーは、それぞれの印(丸)の中心を結ぶ線分になり、標準の端子ピッチどおり5mm離れる。
+    #[test]
+    fn jumper_bar_segment_spans_the_two_terminal_centers() {
+        let def = resolve_symbol("terminal_block_4p").expect("端子台");
+        let segs = jumper_bar_segments(&def, &[(1, 2)]);
+        assert_eq!(segs.len(), 1);
+        let (a, b) = segs[0];
+        assert_eq!(a.x, 0.0, "{a:?}");
+        assert_eq!(b.x, 0.0, "{b:?}");
+        assert!((b.y - a.y - 5.0).abs() < 1e-9, "{a:?} {b:?}");
+    }
+
+    /// Several jumpers on the same terminal block each produce their own bar segment.
+    /// 1つの端子台に複数のジャンパがあれば、それぞれ独立したバーの線分になる。
+    #[test]
+    fn multiple_jumpers_each_produce_their_own_bar_segment() {
+        let def = resolve_symbol("terminal_block_4p").expect("端子台");
+        let segs = jumper_bar_segments(&def, &[(1, 2), (3, 4)]);
+        assert_eq!(segs.len(), 2);
+    }
+
+    /// A jumper referencing a terminal number the block does not have produces no segment instead of panicking.
+    /// 端子台に無い端子番号を指すジャンパは、パニックせず線分を作らない。
+    #[test]
+    fn a_jumper_to_a_missing_terminal_produces_no_bar_segment() {
+        let def = resolve_symbol("terminal_block_4p").expect("端子台");
+        let segs = jumper_bar_segments(&def, &[(4, 5)]);
+        assert!(segs.is_empty());
     }
 
     /// Jumpers are set with the ordinary update_entity command, so the chart follows the change and undo takes it back.

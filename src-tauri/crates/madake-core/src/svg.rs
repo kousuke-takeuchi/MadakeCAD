@@ -19,6 +19,10 @@ pub const FRAME_MARGIN: f64 = 10.0;
 const WIRE_STROKE: f64 = 0.35;
 /// シンボルの線幅 (mm)。
 const SYMBOL_STROKE: f64 = 0.3;
+/// ジャンパバー (G5) の線幅 (mm)。ショートバーだと分かるよう、シンボルの線より太くする。
+const JUMPER_BAR_STROKE: f64 = 1.0;
+/// ジャンパバーの両端に付ける丸の半径 (mm)。
+const JUMPER_BAR_DOT_R: f64 = 1.0;
 /// 表題欄の外形 (幅, 高さ) mm。右下に置く。図面シートの表題欄は図枠テンプレートが決めるので、
 /// この定数は帳票シート ([`crate::report_sheet`]) 用の既定値。
 pub(crate) const TITLE_W: f64 = 120.0;
@@ -432,6 +436,32 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
     if let Some(label) = crate::text_style::function_label_placement(inst, def) {
         let text = crate::text_style::function_label(inst).unwrap_or_default();
         text_el(out, label.at.x, label.at.y, label.height, "#000", "middle", text);
+    }
+}
+
+/// 端子台のジャンパバー (G5): `attrs["jumpers"]` を太い線+両端の丸(ショートバー)として
+/// シンボルの上に描く。パース・妥当性検証は端子台チャートと同じ
+/// [`crate::terminal_chart::parse_jumpers`] を再利用するので、隣り合わない端子どうしの
+/// 指定は(チャート同様)描かれない。
+fn render_jumper_bars(out: &mut String, inst: &crate::model::SymbolInstance, def: &SymbolDef) {
+    if !crate::terminal_chart::is_terminal_block(&inst.symbol_id) {
+        return;
+    }
+    let terminal_count = crate::terminal_chart::terminal_count_of(&inst.symbol_id);
+    let jumpers = crate::terminal_chart::parse_jumpers(
+        inst.attrs.get("jumpers").map(String::as_str).unwrap_or(""),
+        terminal_count,
+    );
+    for (a, b) in crate::terminal_chart::jumper_bar_segments(def, &jumpers.pairs) {
+        let (pa, pb) = (transform_local(a, inst), transform_local(b, inst));
+        line_el(out, pa.x, pa.y, pb.x, pb.y, JUMPER_BAR_STROKE, "#000");
+        for pt in [pa, pb] {
+            let _ = write!(
+                out,
+                "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"#000\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+                n(pt.x), n(pt.y), n(JUMPER_BAR_DOT_R), n(SYMBOL_STROKE)
+            );
+        }
     }
 }
 
@@ -921,6 +951,7 @@ fn sheet_to_svg_with_xrefs(
             Entity::Symbol(s) => {
                 if let Some(def) = defs.get(s) {
                     render_symbol(&mut out, s, &def);
+                    render_jumper_bars(&mut out, s, &def);
                     // コイル⇔接点クロスリファレンス (M4 §4)
                     if let Some(rows) = relay.contact_maps.get(&s.id) {
                         render_contact_map(&mut out, s, &def, rows);
@@ -2275,5 +2306,116 @@ mod tests {
         let svg = sheet_to_svg(&sheet_with_net_label(Some("diagonal")), &builtin_symbols());
         assert!(svg.contains(">24V_1<"));
         assert!(!svg.contains("<polygon"), "{svg}");
+    }
+
+    // ---- ジャンパバー (G5) ----
+
+    /// SVG中の`<line>`を (x1, y1, x2, y2, 線幅) で列挙する。
+    fn svg_lines(svg: &str) -> Vec<(f64, f64, f64, f64, f64)> {
+        svg.lines()
+            .filter(|l| l.trim_start().starts_with("<line "))
+            .filter_map(|l| {
+                Some((attr(l, "x1")?, attr(l, "y1")?, attr(l, "x2")?, attr(l, "y2")?, attr(l, "stroke-width")?))
+            })
+            .collect()
+    }
+
+    /// SVG中の`<circle>`を (cx, cy, r) で列挙する。
+    fn svg_circles(svg: &str) -> Vec<(f64, f64, f64)> {
+        svg.lines()
+            .filter(|l| l.trim_start().starts_with("<circle "))
+            .filter_map(|l| Some((attr(l, "cx")?, attr(l, "cy")?, attr(l, "r")?)))
+            .collect()
+    }
+
+    fn terminal_block(reference: &str, symbol_id: &str, x: f64, y: f64, jumpers: &str) -> Entity {
+        let mut attrs = std::collections::BTreeMap::new();
+        if !jumpers.is_empty() {
+            attrs.insert("jumpers".to_string(), jumpers.to_string());
+        }
+        Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: symbol_id.into(),
+            at: Point::new(x, y),
+            rotation: 0,
+            mirror: false,
+            reference: reference.into(),
+            value: String::new(),
+            attrs,
+        })
+    }
+
+    /// A jumper between two adjacent terminals is drawn on the schematic as a thick bar linking their centres, five millimetres apart, with a small filled circle at each end.
+    /// 隣り合う2端子間のジャンパは、図面上でその中心どうしを結ぶ5mm間隔の太いバーとして描かれ、両端に小さな塗り丸が付く。
+    #[test]
+    fn svg_draws_a_jumper_bar_between_adjacent_terminals() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "1-2");
+        sheet.entities.insert(tb.id(), tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        // 端子1中心 (100, 42.5)・端子2中心 (100, 47.5)
+        let bars: Vec<_> = svg_lines(&svg)
+            .into_iter()
+            .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
+            .collect();
+        assert_eq!(bars.len(), 1, "太いバーは1本: {bars:?}");
+        assert_eq!((bars[0].0, bars[0].1, bars[0].2, bars[0].3), (100.0, 42.5, 100.0, 47.5));
+        let dots: Vec<_> = svg_circles(&svg)
+            .into_iter()
+            .filter(|c| (c.2 - JUMPER_BAR_DOT_R).abs() < 1e-9)
+            .collect();
+        assert_eq!(dots.len(), 2, "バーの両端に丸: {dots:?}");
+        assert!(dots.iter().any(|c| (c.0, c.1) == (100.0, 42.5)));
+        assert!(dots.iter().any(|c| (c.0, c.1) == (100.0, 47.5)));
+    }
+
+    /// A jumper written between two terminals that are not adjacent is invalid (the same rule the terminal chart enforces), so no bar is drawn for it at all.
+    /// 隣り合わない2端子間のジャンパは(端子台チャートと同じ規則で)不正なので、バーはまったく描かれない。
+    #[test]
+    fn svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "1-3");
+        sheet.entities.insert(tb.id(), tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let bars: Vec<_> = svg_lines(&svg)
+            .into_iter()
+            .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
+            .collect();
+        assert!(bars.is_empty(), "離れた端子には描かない: {bars:?}");
+    }
+
+    /// A terminal block with several jumpers gets one bar per jumper.
+    /// 複数のジャンパを持つ端子台には、ジャンパの数だけバーが描かれる。
+    #[test]
+    fn svg_draws_one_bar_per_jumper_when_there_are_several() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "1-2,3-4");
+        sheet.entities.insert(tb.id(), tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let bars: Vec<_> = svg_lines(&svg)
+            .into_iter()
+            .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
+            .collect();
+        assert_eq!(bars.len(), 2, "{bars:?}");
+    }
+
+    /// A terminal block with no jumpers draws no bar, and a symbol that is not a terminal block never gets one even if it happened to carry a "jumpers" attribute.
+    /// ジャンパの無い端子台にはバーが描かれず、端子台以外のシンボルは"jumpers"属性を持っていてもバーが描かれない。
+    #[test]
+    fn svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let plain_tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "");
+        let mut not_tb = terminal_block("R1", "resistor", 150.0, 50.0, "");
+        if let Entity::Symbol(s) = &mut not_tb {
+            s.attrs.insert("jumpers".into(), "1-2".into());
+        }
+        sheet.entities.insert(plain_tb.id(), plain_tb);
+        sheet.entities.insert(not_tb.id(), not_tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let bars: Vec<_> = svg_lines(&svg)
+            .into_iter()
+            .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
+            .collect();
+        assert!(bars.is_empty(), "{bars:?}");
     }
 }

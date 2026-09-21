@@ -498,7 +498,7 @@ pub fn terminal_chart_sheet_svg(project: &Project, tb_id: EntityId) -> Option<Ve
         .iter()
         .find_map(|s| crate::terminal_chart::terminal_chart(s, tb_id))?;
     let meta = ReportMeta::from_project(project)
-        .with_col_ratios(&[6.0, 20.0, 10.0, 24.0, 20.0, 8.0]);
+        .with_col_ratios(&[6.0, 5.0, 20.0, 10.0, 24.0, 20.0, 8.0]);
     let title = format!("{} {}", ReportKind::TerminalChart.title(), chart.reference);
     Some(report_sheet_svg(
         &title,
@@ -994,7 +994,7 @@ mod tests {
             report_bytes(&project, ReportKind::TerminalChart, ReportFormat::Csv, Some(tb))
                 .expect("CSV");
         let csv = String::from_utf8(bytes).expect("UTF-8");
-        assert!(csv.starts_with("端子,内部側,線番,電線,外部側,ジャンパ\n"), "{csv}");
+        assert!(csv.starts_with("端子,Lv,内部側,線番,電線,外部側,ジャンパ\n"), "{csv}");
         assert_eq!(rows, 4, "4極なので本文は4行");
     }
 
@@ -1007,8 +1007,8 @@ mod tests {
             report_bytes(&project, ReportKind::TerminalChart, ReportFormat::Csv, None)
                 .expect("CSV");
         let csv = String::from_utf8(bytes).expect("UTF-8");
-        assert!(csv.starts_with("端子台,端子,内部側,"), "{csv}");
-        assert!(csv.lines().nth(1).expect("1行目").starts_with("TB1,1,"), "{csv}");
+        assert!(csv.starts_with("端子台,端子,Lv,内部側,"), "{csv}");
+        assert!(csv.lines().nth(1).expect("1行目").starts_with("TB1,1,,"), "{csv}");
         assert_eq!(rows, 4);
     }
 
