@@ -82,16 +82,29 @@ pub struct TerminalBlockInfo {
     pub jumpers: String,
 }
 
+/// 端子番号の並べ替えキー (極番号→段記号→表記)。単段は段記号なし、多段 (G6) は `1a` の `a`。
+fn terminal_sort_key(no: &str) -> (u32, Option<char>, String) {
+    let (pole, level) = parse_terminal_no(no);
+    (pole, level, no.to_string())
+}
+
+/// シンボル定義が持つ端子番号を、チャートに並ぶ順 (極番号→段記号) に列挙する。
+///
+/// 貫通端子は同じ番号のピンが左右2つあるので、重複を除いた「端子の一覧」になる。
+/// ジャンパ指定 ([`parse_jumpers`]) が存在する端子を判定するときの正でもある。
+pub fn terminal_numbers_of(def: &SymbolDef) -> Vec<String> {
+    let mut keys: Vec<(u32, Option<char>, String)> =
+        def.pins.iter().map(|p| terminal_sort_key(&p.number)).collect();
+    keys.sort();
+    keys.dedup();
+    keys.into_iter().map(|(_, _, no)| no).collect()
+}
+
 /// 端子台シンボルの端子数 (ピン番号の種類数)。端子台以外・未知のシンボルは0。
+/// 多段端子台 (G6) では極数×段数になる。
 pub fn terminal_count_of(symbol_id: &str) -> usize {
     resolve_symbol(symbol_id)
-        .map(|def| {
-            def.pins
-                .iter()
-                .map(|p| p.number.clone())
-                .collect::<std::collections::BTreeSet<_>>()
-                .len()
-        })
+        .map(|def| terminal_numbers_of(&def).len())
         .unwrap_or(0)
 }
 
@@ -173,8 +186,9 @@ pub struct TerminalChart {
     /// 端子数 (極数)。
     pub terminal_count: usize,
     pub rows: Vec<TerminalRow>,
-    /// 正規化済みのジャンパ (小さい端子番号が先、昇順、重複なし)。
-    pub jumpers: Vec<(u32, u32)>,
+    /// 正規化済みのジャンパ (並び順で先に来る端子番号が先、昇順、重複なし)。
+    /// 多段端子台 (G6) では段記号付きの端子番号 (`("1a","1b")`)。
+    pub jumpers: Vec<(String, String)>,
     /// 読み取れなかった・不正なジャンパ指定。
     pub jumper_issues: Vec<JumperIssue>,
 }
@@ -213,25 +227,51 @@ pub struct JumperIssue {
 /// `attrs["jumpers"]` の解析結果。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Jumpers {
-    /// 正規化済みのジャンパ。
-    pub pairs: Vec<(u32, u32)>,
+    /// 正規化済みのジャンパ (端子番号の組)。多段端子台 (G6) では段記号付き (`("1a","1b")`)。
+    pub pairs: Vec<(String, String)>,
     /// 不正な記述 (該当分だけ捨てられ、残りは有効)。
     pub issues: Vec<JumperIssue>,
 }
 
-/// ジャンパ指定 (`"1-2,3-4"`) を解析して正規化する。
+/// 2つの端子が隣り合っているか (ジャンパを掛けられる並び)。
 ///
-/// - 各項は「端子番号-端子番号」。小さい番号が先になるよう入れ替え、重複を除き、昇順に並べる
-/// - 掛けられるのは**隣り合う端子どうし**だけ (`"1-3"` は不正)
-/// - `terminal_count` を超える番号・0番は「存在しない端子」として報告する
+/// 端子台は極が縦、段 (G6) が横に並ぶので、隣り合うのは
+/// **同じ段で極番号が1違い** (縦の隣) か、**同じ極で段記号が1違い** (横の隣) の組だけ。
+/// 極も段も違う斜めの組 (`1a-2b`) は隣り合っていない。
+fn terminals_are_adjacent(a: &str, b: &str) -> bool {
+    let (pole_a, level_a) = parse_terminal_no(a);
+    let (pole_b, level_b) = parse_terminal_no(b);
+    if level_a == level_b {
+        return pole_a.abs_diff(pole_b) == 1;
+    }
+    match (pole_a == pole_b, level_a, level_b) {
+        (true, Some(x), Some(y)) => (x as i32 - y as i32).abs() == 1,
+        _ => false,
+    }
+}
+
+/// ジャンパ指定 (`"1-2,3-4"`、多段端子台なら `"1a-1b,1a-2a"`) を解析して正規化する。
+///
+/// - 各項は「端子番号-端子番号」。並び順 (極番号→段記号) で先に来る端子が前になるよう
+///   入れ替え、重複を除き、昇順に並べる
+/// - 掛けられるのは**隣り合う端子どうし**だけ ([`terminals_are_adjacent`]。`"1-3"` は不正)
+/// - `terminals` (その端子台が実際に持つ端子番号) に無い番号は「存在しない端子」として報告する
+/// - 多段端子台に段記号なしの数字だけの指定 (`"1-2"`) を書いた場合は、どの段に掛けるのか
+///   決まらないので不正として報告する (図面のバーと帳票が食い違わないようにするため)
 /// - 空白と空の項は無視する。不正な項があってもパニックせず、問題は [`Jumpers::issues`] に並ぶ
-pub fn parse_jumpers(spec: &str, terminal_count: usize) -> Jumpers {
-    let mut pairs: Vec<(u32, u32)> = Vec::new();
+pub fn parse_jumpers(spec: &str, terminals: &[String]) -> Jumpers {
+    let mut pairs: Vec<(String, String)> = Vec::new();
     let mut issues: Vec<JumperIssue> = Vec::new();
     let issue = |text: &str, code: &str, message: String| JumperIssue {
         text: text.to_string(),
         code: code.to_string(),
         message,
+    };
+    // 段記号付きの端子を持つ=多段端子台 (G6)
+    let multilevel = terminals.iter().any(|t| parse_terminal_no(t).1.is_some());
+    let range = || match (terminals.first(), terminals.last()) {
+        (Some(first), Some(last)) => format!("{first}〜{last}"),
+        _ => "なし".to_string(),
     };
     for raw in spec.split(',') {
         let text = raw.trim();
@@ -239,36 +279,40 @@ pub fn parse_jumpers(spec: &str, terminal_count: usize) -> Jumpers {
             continue;
         }
         let parts: Vec<&str> = text.split('-').map(|p| p.trim()).collect();
-        let nums: Option<Vec<u32>> = (parts.len() == 2)
-            .then(|| parts.iter().map(|p| p.parse::<u32>().ok()).collect())
-            .flatten();
-        let Some(nums) = nums else {
+        if parts.len() != 2 || parts.iter().any(|p| p.is_empty()) {
             issues.push(issue(
                 text,
                 JUMPER_INVALID,
                 "「端子番号-端子番号」の形式で書いてください".into(),
             ));
             continue;
-        };
-        let (a, b) = (nums[0].min(nums[1]), nums[0].max(nums[1]));
-        let outside: Vec<u32> = [a, b]
-            .into_iter()
-            .filter(|n| *n < 1 || *n as usize > terminal_count)
-            .collect();
-        if !outside.is_empty() {
-            let list = outside
-                .iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
+        }
+        if multilevel && parts.iter().all(|p| p.chars().all(|c| c.is_ascii_digit())) {
             issues.push(issue(
                 text,
-                JUMPER_UNKNOWN_TERMINAL,
-                format!("存在しない端子 {list} を指しています (端子は1〜{terminal_count})"),
+                JUMPER_INVALID,
+                format!("多段端子台のジャンパは段記号まで書いてください (端子は{})", range()),
             ));
             continue;
         }
-        if b - a != 1 {
+        let unknown: Vec<&str> = parts
+            .iter()
+            .copied()
+            .filter(|p| !terminals.iter().any(|t| t == p))
+            .collect();
+        if !unknown.is_empty() {
+            issues.push(issue(
+                text,
+                JUMPER_UNKNOWN_TERMINAL,
+                format!(
+                    "存在しない端子 {} を指しています (端子は{})",
+                    unknown.join(", "),
+                    range()
+                ),
+            ));
+            continue;
+        }
+        if !terminals_are_adjacent(parts[0], parts[1]) {
             issues.push(issue(
                 text,
                 JUMPER_INVALID,
@@ -276,15 +320,23 @@ pub fn parse_jumpers(spec: &str, terminal_count: usize) -> Jumpers {
             ));
             continue;
         }
-        pairs.push((a, b));
+        let (a, b) = if terminal_sort_key(parts[0]) <= terminal_sort_key(parts[1]) {
+            (parts[0], parts[1])
+        } else {
+            (parts[1], parts[0])
+        };
+        pairs.push((a.to_string(), b.to_string()));
     }
-    pairs.sort_unstable();
+    pairs.sort_by(|x, y| {
+        (terminal_sort_key(&x.0), terminal_sort_key(&x.1))
+            .cmp(&(terminal_sort_key(&y.0), terminal_sort_key(&y.1)))
+    });
     pairs.dedup();
     Jumpers { pairs, issues }
 }
 
 /// 正規化済みジャンパを `attrs["jumpers"]` に保存する文字列へ戻す (`"1-2,3-4"`)。
-pub fn jumpers_to_string(pairs: &[(u32, u32)]) -> String {
+pub fn jumpers_to_string(pairs: &[(String, String)]) -> String {
     pairs
         .iter()
         .map(|(a, b)| format!("{a}-{b}"))
@@ -311,14 +363,10 @@ fn terminal_center(def: &SymbolDef, number: &str) -> Option<Point> {
 /// ジャンパ (正規化済みの端子番号の組) を、シンボル定義のローカル座標系での
 /// バーの端点に変換する (G5)。見つからない端子番号の組は結果から省く
 /// (パニックしない。端子台以外・壊れた定義に対しても安全)。
-pub fn jumper_bar_segments(def: &SymbolDef, pairs: &[(u32, u32)]) -> Vec<(Point, Point)> {
+pub fn jumper_bar_segments(def: &SymbolDef, pairs: &[(String, String)]) -> Vec<(Point, Point)> {
     pairs
         .iter()
-        .filter_map(|(a, b)| {
-            let pa = terminal_center(def, &a.to_string())?;
-            let pb = terminal_center(def, &b.to_string())?;
-            Some((pa, pb))
-        })
+        .filter_map(|(a, b)| Some((terminal_center(def, a)?, terminal_center(def, b)?)))
         .collect()
 }
 
@@ -403,14 +451,15 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
         let key = (num, level, pin.number.clone());
         by_no.entry(key).or_default().push(transform_local(pin.at, inst));
     }
-    let terminal_count = by_no.len();
+    let terminals: Vec<String> = by_no.keys().map(|(_, _, no)| no.clone()).collect();
+    let terminal_count = terminals.len();
     let jumpers = parse_jumpers(
         inst.attrs.get("jumpers").map(String::as_str).unwrap_or(""),
-        terminal_count,
+        &terminals,
     );
 
     let mut rows = Vec::with_capacity(terminal_count);
-    for ((num, level, terminal), mut points) in by_no {
+    for ((_num, level, terminal), mut points) in by_no {
         // 用紙上の左 (同じなら上) が内部側
         points.sort_by(|a, b| {
             if (a.x - b.x).abs() < CONNECT_EPS {
@@ -424,10 +473,11 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
             0 | 1 => Side { labels: Vec::new(), wires: Vec::new() },
             n => side_at(sheet, &defs, &points[n - 1]),
         };
+        // ジャンパは、それが実際に繋ぐ端子の行にだけ載る (同じ極の別の段には載らない)
         let jumper = jumpers
             .pairs
             .iter()
-            .filter(|(a, b)| *a == num || *b == num)
+            .filter(|(a, b)| *a == terminal || *b == terminal)
             .map(|(a, b)| format!("{a}-{b}"))
             .collect::<Vec<_>>()
             .join(",");
@@ -561,6 +611,38 @@ mod tests {
         let id = tb.id;
         sheet.entities.insert(id, Entity::Symbol(tb));
         (sheet, id)
+    }
+
+    /// 多段端子台TB1を(100,50)に置いたシート (ジャンパ指定付き)。
+    fn sheet_with_multilevel_tb(poles: usize, levels: usize, jumpers: &str) -> (Sheet, EntityId) {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+        let mut attrs = std::collections::BTreeMap::new();
+        if !jumpers.is_empty() {
+            attrs.insert("jumpers".to_string(), jumpers.to_string());
+        }
+        let tb = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: format!("terminal_block_{poles}p_{levels}l"),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs,
+        };
+        let id = tb.id;
+        sheet.entities.insert(id, Entity::Symbol(tb));
+        (sheet, id)
+    }
+
+    /// 1〜nの端子番号 (単段の端子台の端子一覧)。
+    fn numbered(n: usize) -> Vec<String> {
+        (1..=n).map(|i| i.to_string()).collect()
+    }
+
+    /// 端子番号の組 (ジャンパ) を作る。
+    fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
+        list.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()
     }
 
     /// ピン1が(x-7.5,y)、ピン2が(x+7.5,y)にある抵抗を置く。
@@ -757,9 +839,9 @@ mod tests {
     /// ジャンパの記述は正規化される。各組は小さい番号が先になり、重複は除かれ、昇順に並ぶ。
     #[test]
     fn jumpers_are_normalized() {
-        let j = parse_jumpers("3-4, 2-1 ,2-1", 4);
+        let j = parse_jumpers("3-4, 2-1 ,2-1", &numbered(4));
         assert!(j.issues.is_empty(), "{:?}", j.issues);
-        assert_eq!(j.pairs, vec![(1, 2), (3, 4)]);
+        assert_eq!(j.pairs, pairs(&[("1", "2"), ("3", "4")]));
         assert_eq!(jumpers_to_string(&j.pairs), "1-2,3-4");
     }
 
@@ -767,8 +849,8 @@ mod tests {
     /// 隣り合っていない端子どうしのジャンパは受け付けられず、同じ記述内の正しいジャンパは残る。
     #[test]
     fn a_jumper_between_non_adjacent_terminals_is_rejected() {
-        let j = parse_jumpers("1-3,3-4", 4);
-        assert_eq!(j.pairs, vec![(3, 4)]);
+        let j = parse_jumpers("1-3,3-4", &numbered(4));
+        assert_eq!(j.pairs, pairs(&[("3", "4")]));
         assert_eq!(j.issues.len(), 1);
         assert_eq!(j.issues[0].text, "1-3");
         assert_eq!(j.issues[0].code, JUMPER_INVALID);
@@ -778,8 +860,8 @@ mod tests {
     /// 端子番号2つの組になっていないジャンパの記述は、異常終了せずエラーとして報告される。
     #[test]
     fn unreadable_jumper_text_is_reported() {
-        let j = parse_jumpers("abc,1-,1-2-3,-,1 - 2", 4);
-        assert_eq!(j.pairs, vec![(1, 2)], "空白入りの 1 - 2 は読める");
+        let j = parse_jumpers("abc,1-,1-2-3,-,1 - 2", &numbered(4));
+        assert_eq!(j.pairs, pairs(&[("1", "2")]), "空白入りの 1 - 2 は読める");
         assert_eq!(j.issues.len(), 4);
         assert!(j.issues.iter().all(|i| i.code == JUMPER_INVALID));
     }
@@ -788,7 +870,7 @@ mod tests {
     /// 端子台に無い端子番号を指すジャンパは、存在しない端子として報告される。
     #[test]
     fn a_jumper_to_a_terminal_that_does_not_exist_is_reported() {
-        let j = parse_jumpers("4-5,0-1", 4);
+        let j = parse_jumpers("4-5,0-1", &numbered(4));
         assert!(j.pairs.is_empty());
         assert_eq!(j.issues.len(), 2);
         assert!(j.issues.iter().all(|i| i.code == JUMPER_UNKNOWN_TERMINAL));
@@ -799,7 +881,7 @@ mod tests {
     /// ジャンパの記述が空なら、ジャンパは無いという意味になる。
     #[test]
     fn no_jumper_text_means_no_jumpers() {
-        let j = parse_jumpers("", 4);
+        let j = parse_jumpers("", &numbered(4));
         assert!(j.pairs.is_empty() && j.issues.is_empty());
     }
 
@@ -811,7 +893,7 @@ mod tests {
         let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
         s.attrs.insert("jumpers".into(), "2-1".into());
         let chart = terminal_chart(&sheet, id).expect("chart");
-        assert_eq!(chart.jumpers, vec![(1, 2)]);
+        assert_eq!(chart.jumpers, pairs(&[("1", "2")]));
         assert_eq!(row(&chart, "1").jumper, "1-2");
         assert_eq!(row(&chart, "2").jumper, "1-2");
         assert_eq!(row(&chart, "3").jumper, "");
@@ -852,6 +934,86 @@ mod tests {
         assert_eq!(terminals, ["1a", "1b", "2a", "2b"]);
         let levels: Vec<&str> = chart.rows.iter().map(|r| r.level.as_str()).collect();
         assert_eq!(levels, ["a", "b", "a", "b"]);
+    }
+
+    /// On a multi-level terminal block a jumper is written with the level letter, so "1a-1b" links the two levels of the same pole and is accepted.
+    /// 多段端子台のジャンパは段記号まで書く。"1a-1b" は同じ極の2つの段を繋ぐ指定として受け付けられる。
+    #[test]
+    fn a_jumper_can_link_the_two_levels_of_one_pole() {
+        let (sheet, id) = sheet_with_multilevel_tb(4, 2, "1b-1a");
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert!(chart.jumper_issues.is_empty(), "{:?}", chart.jumper_issues);
+        assert_eq!(row(&chart, "1a").jumper, "1a-1b", "段の小さい方が先に正規化される");
+        assert_eq!(row(&chart, "1b").jumper, "1a-1b");
+    }
+
+    /// On a multi-level terminal block a jumper between neighbouring poles of the same level ("1a-2a") is accepted just like on a single-level block.
+    /// 多段端子台でも、同じ段の隣り合う極どうしのジャンパ ("1a-2a") は単段の端子台と同じように受け付けられる。
+    #[test]
+    fn a_jumper_can_link_neighbouring_poles_of_one_level() {
+        let (sheet, id) = sheet_with_multilevel_tb(4, 2, "1a-2a");
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert!(chart.jumper_issues.is_empty(), "{:?}", chart.jumper_issues);
+        assert_eq!(row(&chart, "1a").jumper, "1a-2a");
+        assert_eq!(row(&chart, "2a").jumper, "1a-2a");
+    }
+
+    /// A jumper written without the level letter ("1-2") on a multi-level terminal block is refused, because it does not say which level it is on.
+    /// 多段端子台に段記号なしのジャンパ ("1-2") を書くと、どの段に掛けるのか分からないので受け付けられない。
+    #[test]
+    fn a_jumper_without_a_level_letter_is_refused_on_a_multilevel_block() {
+        let (sheet, id) = sheet_with_multilevel_tb(4, 2, "1-2");
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert!(chart.jumpers.is_empty(), "バーもチャートも出さない");
+        assert_eq!(chart.jumper_issues.len(), 1);
+        assert_eq!(chart.jumper_issues[0].code, JUMPER_INVALID);
+        assert!(chart.rows.iter().all(|r| r.jumper.is_empty()), "どの行にも載らない");
+    }
+
+    /// A jumper pointing at a level the multi-level terminal block does not have ("1a-1c" on a 2-level block) is refused as a terminal that does not exist.
+    /// 多段端子台に無い段を指すジャンパ (2段の端子台への "1a-1c") は、存在しない端子として受け付けられない。
+    #[test]
+    fn a_jumper_to_a_level_the_block_does_not_have_is_refused() {
+        let (sheet, id) = sheet_with_multilevel_tb(4, 2, "1a-1c");
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert!(chart.jumpers.is_empty());
+        assert_eq!(chart.jumper_issues.len(), 1);
+        assert_eq!(chart.jumper_issues[0].code, JUMPER_UNKNOWN_TERMINAL);
+    }
+
+    /// A diagonal jumper ("1a-2b" — a different pole and a different level at once) is refused, because those two terminals are not next to each other.
+    /// 斜めのジャンパ ("1a-2b"、極も段も違う組) は、その2端子が隣り合っていないので受け付けられない。
+    #[test]
+    fn a_diagonal_jumper_across_a_pole_and_a_level_is_refused() {
+        let (sheet, id) = sheet_with_multilevel_tb(4, 2, "1a-2b");
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert!(chart.jumpers.is_empty());
+        assert_eq!(chart.jumper_issues.len(), 1);
+        assert_eq!(chart.jumper_issues[0].code, JUMPER_INVALID);
+    }
+
+    /// The jumper column of a multi-level chart shows a jumper only on the two rows it actually links, never on the other levels of the same poles.
+    /// 多段端子台のチャートのジャンパ欄には、そのジャンパが実際に繋ぐ2行にだけ表示され、同じ極の別の段には出ない。
+    #[test]
+    fn a_multilevel_jumper_is_shown_only_on_the_rows_it_links() {
+        let (sheet, id) = sheet_with_multilevel_tb(2, 2, "1a-1b");
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(row(&chart, "1a").jumper, "1a-1b");
+        assert_eq!(row(&chart, "1b").jumper, "1a-1b");
+        assert_eq!(row(&chart, "2a").jumper, "");
+        assert_eq!(row(&chart, "2b").jumper, "");
+    }
+
+    /// The terminal block check reports a jumper written without its level letter on a multi-level block as an error, so the drawing and the report can never disagree about it.
+    /// 端子台チェックは、多段端子台に段記号なしで書かれたジャンパをエラーとして報告するので、図面と帳票が食い違うことはない。
+    #[test]
+    fn the_check_reports_a_jumper_without_a_level_letter_as_an_error() {
+        let (sheet, id) = sheet_with_multilevel_tb(4, 2, "1-2");
+        let diags = check_terminal_block(&sheet, id);
+        let bad: Vec<&Diagnostic> = diags.iter().filter(|d| d.code == JUMPER_INVALID).collect();
+        assert_eq!(bad.len(), 1);
+        assert_eq!(bad[0].severity, Severity::Error);
+        assert!(bad[0].message.contains("1-2"), "{}", bad[0].message);
     }
 
     /// Asking for the chart of something that is not a terminal block gives nothing.
@@ -1025,7 +1187,7 @@ mod tests {
     #[test]
     fn jumper_bar_segment_spans_the_two_terminal_centers() {
         let def = resolve_symbol("terminal_block_4p").expect("端子台");
-        let segs = jumper_bar_segments(&def, &[(1, 2)]);
+        let segs = jumper_bar_segments(&def, &pairs(&[("1", "2")]));
         assert_eq!(segs.len(), 1);
         let (a, b) = segs[0];
         assert_eq!(a.x, 0.0, "{a:?}");
@@ -1038,7 +1200,7 @@ mod tests {
     #[test]
     fn multiple_jumpers_each_produce_their_own_bar_segment() {
         let def = resolve_symbol("terminal_block_4p").expect("端子台");
-        let segs = jumper_bar_segments(&def, &[(1, 2), (3, 4)]);
+        let segs = jumper_bar_segments(&def, &pairs(&[("1", "2"), ("3", "4")]));
         assert_eq!(segs.len(), 2);
     }
 
@@ -1047,7 +1209,7 @@ mod tests {
     #[test]
     fn a_jumper_to_a_missing_terminal_produces_no_bar_segment() {
         let def = resolve_symbol("terminal_block_4p").expect("端子台");
-        let segs = jumper_bar_segments(&def, &[(4, 5)]);
+        let segs = jumper_bar_segments(&def, &pairs(&[("4", "5")]));
         assert!(segs.is_empty());
     }
 
@@ -1076,7 +1238,7 @@ mod tests {
             })
             .unwrap();
         let chart = terminal_chart(&engine.project().sheets[0], tb_id).expect("chart");
-        assert_eq!(chart.jumpers, vec![(1, 2)]);
+        assert_eq!(chart.jumpers, pairs(&[("1", "2")]));
         assert_eq!(row(&chart, "1").jumper, "1-2");
 
         engine.undo().unwrap().unwrap();

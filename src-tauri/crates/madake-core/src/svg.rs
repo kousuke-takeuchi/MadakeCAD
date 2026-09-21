@@ -20,9 +20,10 @@ const WIRE_STROKE: f64 = 0.35;
 /// シンボルの線幅 (mm)。
 const SYMBOL_STROKE: f64 = 0.3;
 /// ジャンパバー (G5) の線幅 (mm)。ショートバーだと分かるよう、シンボルの線より太くする。
-const JUMPER_BAR_STROKE: f64 = 1.0;
-/// ジャンパバーの両端に付ける丸の半径 (mm)。
-const JUMPER_BAR_DOT_R: f64 = 1.0;
+const JUMPER_BAR_STROKE: f64 = 0.8;
+/// ジャンパバーの両端に付ける丸の半径 (mm)。バーの太さよりはっきり大きく、かつ
+/// 端子の印 (半径1.8mmの丸) の内側に収まる大きさにして、「両端のあるバー」に見せる。
+const JUMPER_BAR_DOT_R: f64 = 1.5;
 /// 表題欄の外形 (幅, 高さ) mm。右下に置く。図面シートの表題欄は図枠テンプレートが決めるので、
 /// この定数は帳票シート ([`crate::report_sheet`]) 用の既定値。
 pub(crate) const TITLE_W: f64 = 120.0;
@@ -447,10 +448,10 @@ fn render_jumper_bars(out: &mut String, inst: &crate::model::SymbolInstance, def
     if !crate::terminal_chart::is_terminal_block(&inst.symbol_id) {
         return;
     }
-    let terminal_count = crate::terminal_chart::terminal_count_of(&inst.symbol_id);
+    let terminals = crate::terminal_chart::terminal_numbers_of(def);
     let jumpers = crate::terminal_chart::parse_jumpers(
         inst.attrs.get("jumpers").map(String::as_str).unwrap_or(""),
-        terminal_count,
+        &terminals,
     );
     for (a, b) in crate::terminal_chart::jumper_bar_segments(def, &jumpers.pairs) {
         let (pa, pb) = (transform_local(a, inst), transform_local(b, inst));
@@ -2367,6 +2368,63 @@ mod tests {
         assert_eq!(dots.len(), 2, "バーの両端に丸: {dots:?}");
         assert!(dots.iter().any(|c| (c.0, c.1) == (100.0, 42.5)));
         assert!(dots.iter().any(|c| (c.0, c.1) == (100.0, 47.5)));
+    }
+
+    /// On a multi-level terminal block, a jumper written with level letters ("1a-1b") is drawn as a horizontal bar across the two level columns of the same pole.
+    /// 多段端子台で段記号付きに書かれたジャンパ ("1a-1b") は、同じ極の2つの段の列をまたぐ横向きのバーとして描かれる。
+    #[test]
+    fn svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let tb = terminal_block("TB1", "terminal_block_4p_2l", 100.0, 50.0, "1a-1b");
+        sheet.entities.insert(tb.id(), tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        // 極1の行は y=42.5、段aの列は x=95、段bの列は x=105
+        let bars: Vec<_> = svg_lines(&svg)
+            .into_iter()
+            .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
+            .collect();
+        assert_eq!(bars.len(), 1, "太いバーは1本: {bars:?}");
+        assert_eq!((bars[0].0, bars[0].1, bars[0].2, bars[0].3), (95.0, 42.5, 105.0, 42.5));
+    }
+
+    /// A jumper bar turns with its terminal block, so on a block rotated a quarter turn the bar lies across the rotated terminals instead of staying upright.
+    /// ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の並びに沿って描かれる。
+    #[test]
+    fn svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let mut tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "1-2");
+        if let Entity::Symbol(s) = &mut tb {
+            s.rotation = 90;
+        }
+        sheet.entities.insert(tb.id(), tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        // 90度回すと端子1は(107.5,50)、端子2は(102.5,50)へ移り、バーは横向きになる
+        let bars: Vec<_> = svg_lines(&svg)
+            .into_iter()
+            .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
+            .collect();
+        assert_eq!(bars.len(), 1, "{bars:?}");
+        assert_eq!((bars[0].0, bars[0].1, bars[0].2, bars[0].3), (107.5, 50.0, 102.5, 50.0));
+        let dots: Vec<_> = svg_circles(&svg)
+            .into_iter()
+            .filter(|c| (c.2 - JUMPER_BAR_DOT_R).abs() < 1e-9)
+            .collect();
+        assert_eq!(dots.len(), 2, "{dots:?}");
+        assert!(dots.iter().any(|c| (c.0, c.1) == (107.5, 50.0)));
+        assert!(dots.iter().any(|c| (c.0, c.1) == (102.5, 50.0)));
+    }
+
+    /// The round mark at each end of a jumper bar is clearly wider than the bar itself, so the bar reads as a shorting bar with two ends rather than a plain thick line.
+    /// ジャンパバーの両端の丸はバーの太さよりはっきり大きいので、ただの太い線ではなく「両端のあるショートバー」に見える。
+    #[test]
+    fn the_jumper_bar_end_dot_is_wider_than_the_bar() {
+        assert!(
+            JUMPER_BAR_DOT_R * 2.0 > JUMPER_BAR_STROKE * 2.0,
+            "丸の直径{}はバーの太さ{}より大きい",
+            JUMPER_BAR_DOT_R * 2.0,
+            JUMPER_BAR_STROKE
+        );
+        assert!(JUMPER_BAR_DOT_R < 1.8, "端子の印(丸、半径1.8mm)の内側に収まる");
     }
 
     /// A jumper written between two terminals that are not adjacent is invalid (the same rule the terminal chart enforces), so no bar is drawn for it at all.

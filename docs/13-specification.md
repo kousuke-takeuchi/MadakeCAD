@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1867 specification clauses** across 5 areas.
+**1883 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -526,6 +526,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A net label with no tag keeps the plain text look, with no outline drawn around it. <sub>`svg_draws_no_outline_for_an_untagged_net_label`</sub>
 - An unknown tag value is ignored and the label falls back to plain text rather than breaking the export. <sub>`svg_ignores_an_unknown_tag_value`</sub>
 - A jumper between two adjacent terminals is drawn on the schematic as a thick bar linking their centres, five millimetres apart, with a small filled circle at each end. <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
+- On a multi-level terminal block, a jumper written with level letters ("1a-1b") is drawn as a horizontal bar across the two level columns of the same pole. <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
+- A jumper bar turns with its terminal block, so on a block rotated a quarter turn the bar lies across the rotated terminals instead of staying upright. <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
+- The round mark at each end of a jumper bar is clearly wider than the bar itself, so the bar reads as a shorting bar with two ends rather than a plain thick line. <sub>`the_jumper_bar_end_dot_is_wider_than_the_bar`</sub>
 - A jumper written between two terminals that are not adjacent is invalid (the same rule the terminal chart enforces), so no bar is drawn for it at all. <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - A terminal block with several jumpers gets one bar per jumper. <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
 - A terminal block with no jumpers draws no bar, and a symbol that is not a terminal block never gets one even if it happened to carry a "jumpers" attribute. <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
@@ -644,6 +647,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A jumper appears in the jumper column of both terminals it connects. <sub>`a_jumper_is_shown_on_both_of_its_terminals`</sub>
 - The terminal chart CSV has the columns terminal, level, inside, wire number, wire, outside, jumper, and one line per terminal. <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
 - A multi-level terminal block shows its level letter in the chart's Lv column, and its terminal column carries the full pin number ("1a"), so the two levels never look like the same terminal. <sub>`a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column`</sub>
+- On a multi-level terminal block a jumper is written with the level letter, so "1a-1b" links the two levels of the same pole and is accepted. <sub>`a_jumper_can_link_the_two_levels_of_one_pole`</sub>
+- On a multi-level terminal block a jumper between neighbouring poles of the same level ("1a-2a") is accepted just like on a single-level block. <sub>`a_jumper_can_link_neighbouring_poles_of_one_level`</sub>
+- A jumper written without the level letter ("1-2") on a multi-level terminal block is refused, because it does not say which level it is on. <sub>`a_jumper_without_a_level_letter_is_refused_on_a_multilevel_block`</sub>
+- A jumper pointing at a level the multi-level terminal block does not have ("1a-1c" on a 2-level block) is refused as a terminal that does not exist. <sub>`a_jumper_to_a_level_the_block_does_not_have_is_refused`</sub>
+- A diagonal jumper ("1a-2b" — a different pole and a different level at once) is refused, because those two terminals are not next to each other. <sub>`a_diagonal_jumper_across_a_pole_and_a_level_is_refused`</sub>
+- The jumper column of a multi-level chart shows a jumper only on the two rows it actually links, never on the other levels of the same poles. <sub>`a_multilevel_jumper_is_shown_only_on_the_rows_it_links`</sub>
+- The terminal block check reports a jumper written without its level letter on a multi-level block as an error, so the drawing and the report can never disagree about it. <sub>`the_check_reports_a_jumper_without_a_level_letter_as_an_error`</sub>
 - Asking for the chart of something that is not a terminal block gives nothing. <sub>`only_terminal_blocks_have_a_chart`</sub>
 - The terminal block check reports every unwired terminal as information, so spares are visible without being treated as mistakes. <sub>`the_check_reports_unwired_terminals_as_information`</sub>
 - The terminal block check reports a jumper between non-adjacent terminals as an error. <sub>`the_check_reports_an_invalid_jumper_as_an_error`</sub>
@@ -1416,7 +1426,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - PLC modules come in an input and an output flavour <sub>`dynamicSymbol`</sub>
 - malformed dynamic ids return null <sub>`dynamicSymbol`</sub>
 - PLC module symbols exist from 1 to 64 points only <sub>`dynamicSymbol`</sub>
-- a multi-level terminal block (4 poles, 2 levels) numbers its pins with a level letter and keeps the 5 mm pitch <sub>`dynamicSymbol`</sub>
+- a multi-level terminal block (4 poles, 2 levels) numbers its pins with a level letter <sub>`dynamicSymbol`</sub>
+- draws one terminal column per level, with the same pole of every level on one row <sub>`dynamicSymbol`</sub>
+- keeps every connection point on the 2.5 mm grid and never lets two terminals share one <sub>`dynamicSymbol`</sub>
 - a terminal block with a level count outside 1-3 returns null <sub>`dynamicSymbol`</sub>
 - the plain single-level terminal block id keeps its numeric-only pin numbers <sub>`dynamicSymbol`</sub>
 - static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
@@ -1731,10 +1743,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### terminalJumpers
 
-- keeps jumpers between adjacent terminals and drops non-adjacent ones <sub>`parseJumperPairs`</sub>
-- keeps every jumper when there are several <sub>`parseJumperPairs`</sub>
-- treats empty or unreadable text as no jumpers <sub>`parseJumperPairs`</sub>
+- keeps jumpers between adjacent terminals and drops non-adjacent ones <sub>`parseJumperSpec`</sub>
+- keeps every jumper when there are several, in terminal order <sub>`parseJumperSpec`</sub>
+- treats empty or unreadable text as no jumpers <sub>`parseJumperSpec`</sub>
+- accepts level-aware jumpers on a multi-level block <sub>`parseJumperSpec`</sub>
+- drops a jumper written without its level letter on a multi-level block <sub>`parseJumperSpec`</sub>
+- drops a jumper to a level the block does not have and a diagonal one <sub>`parseJumperSpec`</sub>
 - spans the two terminal centres, 5 mm apart on the standard pitch <sub>`jumperBarSegments`</sub>
+- spans the two level columns of one pole for a cross-level jumper <sub>`jumperBarSegments`</sub>
 - produces one segment per jumper when there are several <sub>`jumperBarSegments`</sub>
 - produces no segment for a jumper to a terminal the block does not have <sub>`jumperBarSegments`</sub>
 

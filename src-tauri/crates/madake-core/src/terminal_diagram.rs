@@ -366,15 +366,12 @@ fn draw_brackets(out: &mut String, rows: &[TerminalRow], side: Side) {
 
 /// サドルジャンパ。端子箱の**内部側の縁**に縦線で描く (両端に短い横線)。
 /// このページに両方の端子が載っているジャンパだけを描き、注記はページに1回だけ添える。
-fn draw_jumpers(out: &mut String, rows: &[TerminalRow], jumpers: &[(u32, u32)]) {
-    let index = |no: u32| {
-        rows.iter()
-            .position(|r| r.terminal.parse::<u32>().ok() == Some(no))
-    };
+fn draw_jumpers(out: &mut String, rows: &[TerminalRow], jumpers: &[(String, String)]) {
+    let index = |no: &str| rows.iter().position(|r| r.terminal == no);
     let x = box_right() + JUMPER_OFFSET;
     let mut noted = false;
     for (a, b) in jumpers {
-        let (Some(ka), Some(kb)) = (index(*a), index(*b)) else {
+        let (Some(ka), Some(kb)) = (index(a), index(b)) else {
             continue;
         };
         let (ya, yb) = (row_y(ka), row_y(kb));

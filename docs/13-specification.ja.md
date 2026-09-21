@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1867仕様項目**。
+全5領域・**1883仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -526,6 +526,9 @@
 - タグの無いネットラベルは従来どおり文字だけで、周りに枠は描かれない。 <sub>`svg_draws_no_outline_for_an_untagged_net_label`</sub>
 - 知らないタグの値は無視され、出力が壊れるのではなく文字だけの表示に戻る。 <sub>`svg_ignores_an_unknown_tag_value`</sub>
 - 隣り合う2端子間のジャンパは、図面上でその中心どうしを結ぶ5mm間隔の太いバーとして描かれ、両端に小さな塗り丸が付く。 <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
+- 多段端子台で段記号付きに書かれたジャンパ ("1a-1b") は、同じ極の2つの段の列をまたぐ横向きのバーとして描かれる。 <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
+- ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の並びに沿って描かれる。 <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
+- ジャンパバーの両端の丸はバーの太さよりはっきり大きいので、ただの太い線ではなく「両端のあるショートバー」に見える。 <sub>`the_jumper_bar_end_dot_is_wider_than_the_bar`</sub>
 - 隣り合わない2端子間のジャンパは(端子台チャートと同じ規則で)不正なので、バーはまったく描かれない。 <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - 複数のジャンパを持つ端子台には、ジャンパの数だけバーが描かれる。 <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
 - ジャンパの無い端子台にはバーが描かれず、端子台以外のシンボルは"jumpers"属性を持っていてもバーが描かれない。 <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
@@ -644,6 +647,13 @@
 - ジャンパは、それが繋ぐ両方の端子のジャンパ欄に表示される。 <sub>`a_jumper_is_shown_on_both_of_its_terminals`</sub>
 - 端子台チャートのCSVは 端子・Lv・内部側・線番・電線・外部側・ジャンパ の列を持ち、端子1個につき1行になる。 <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
 - 多段端子台はチャートのLv列に段記号が入り、端子列は完全なピン番号 ("1a") になるので、2つの段が同じ端子に見えることはない。 <sub>`a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column`</sub>
+- 多段端子台のジャンパは段記号まで書く。"1a-1b" は同じ極の2つの段を繋ぐ指定として受け付けられる。 <sub>`a_jumper_can_link_the_two_levels_of_one_pole`</sub>
+- 多段端子台でも、同じ段の隣り合う極どうしのジャンパ ("1a-2a") は単段の端子台と同じように受け付けられる。 <sub>`a_jumper_can_link_neighbouring_poles_of_one_level`</sub>
+- 多段端子台に段記号なしのジャンパ ("1-2") を書くと、どの段に掛けるのか分からないので受け付けられない。 <sub>`a_jumper_without_a_level_letter_is_refused_on_a_multilevel_block`</sub>
+- 多段端子台に無い段を指すジャンパ (2段の端子台への "1a-1c") は、存在しない端子として受け付けられない。 <sub>`a_jumper_to_a_level_the_block_does_not_have_is_refused`</sub>
+- 斜めのジャンパ ("1a-2b"、極も段も違う組) は、その2端子が隣り合っていないので受け付けられない。 <sub>`a_diagonal_jumper_across_a_pole_and_a_level_is_refused`</sub>
+- 多段端子台のチャートのジャンパ欄には、そのジャンパが実際に繋ぐ2行にだけ表示され、同じ極の別の段には出ない。 <sub>`a_multilevel_jumper_is_shown_only_on_the_rows_it_links`</sub>
+- 端子台チェックは、多段端子台に段記号なしで書かれたジャンパをエラーとして報告するので、図面と帳票が食い違うことはない。 <sub>`the_check_reports_a_jumper_without_a_level_letter_as_an_error`</sub>
 - 端子台ではないものにチャートを求めても何も返らない。 <sub>`only_terminal_blocks_have_a_chart`</sub>
 - 端子台チェックは未結線の端子をすべて情報として報告するので、予備端子は間違い扱いされずに見える。 <sub>`the_check_reports_unwired_terminals_as_information`</sub>
 - 端子台チェックは、隣り合わない端子に掛けられたジャンパをエラーとして報告する。 <sub>`the_check_reports_an_invalid_jumper_as_an_error`</sub>
@@ -1416,7 +1426,9 @@
 - PLCモジュールには入力用と出力用があり、名前で見分けられる <sub>`dynamicSymbol`</sub>
 - 不正な動的IDはnullになる <sub>`dynamicSymbol`</sub>
 - PLCモジュールのシンボルは1〜64点までで、その外の点数は存在しない <sub>`dynamicSymbol`</sub>
-- 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、2.5mmグリッド上・単段と同じ5mmピッチになる <sub>`dynamicSymbol`</sub>
+- 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、1端子=左右2接続点になる <sub>`dynamicSymbol`</sub>
+- 多段端子台は段ごとに1列の端子が横に並び、同じ極の端子(1aと1b)は同じ行に載る(Rust側と同じ座標) <sub>`dynamicSymbol`</sub>
+- 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有しない <sub>`dynamicSymbol`</sub>
 - 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様にnullになる <sub>`dynamicSymbol`</sub>
 - 単段の端子台id(terminal_block_{n}p)は多段対応の追加後も数字だけのピン番号のままで、既存プロジェクトとの互換を保つ <sub>`dynamicSymbol`</sub>
 - 静的定義を優先し、無ければ動的生成にフォールバックする <sub>`resolveSymbolDef`</sub>
@@ -1731,10 +1743,14 @@
 
 ### terminalJumpers
 
-- 隣り合う端子どうしのジャンパは正規化され、隣り合わない組は捨てられる <sub>`parseJumperPairs`</sub>
-- 複数のジャンパはそれぞれ組として残る <sub>`parseJumperPairs`</sub>
-- 空文字や読めない記述はジャンパ無しとして扱う <sub>`parseJumperPairs`</sub>
+- 隣り合う端子どうしのジャンパは正規化され、隣り合わない組は捨てられる <sub>`parseJumperSpec`</sub>
+- 複数のジャンパはそれぞれ組として残り、端子番号順に並ぶ <sub>`parseJumperSpec`</sub>
+- 空文字や読めない記述はジャンパ無しとして扱う <sub>`parseJumperSpec`</sub>
+- 多段端子台では段記号付きのジャンパ(同じ極の段をまたぐ組・同じ段の隣の極)だけが通る <sub>`parseJumperSpec`</sub>
+- 多段端子台に段記号なしの指定("1-2")を書いても、どの段か決まらないので捨てられる <sub>`parseJumperSpec`</sub>
+- 端子台に無い段を指すジャンパ("1a-1c")と斜めの組("1a-2b")は捨てられる <sub>`parseJumperSpec`</sub>
 - 隣り合う2端子間のジャンパバーは、それぞれの印の中心を結ぶ5mm間隔の線分になる <sub>`jumperBarSegments`</sub>
+- 段をまたぐジャンパのバーは、同じ行にある2つの段の列を横に結ぶ線分になる <sub>`jumperBarSegments`</sub>
 - 複数のジャンパはそれぞれ独立した線分になる <sub>`jumperBarSegments`</sub>
 - 端子台に無い端子番号を指すジャンパは線分を作らない <sub>`jumperBarSegments`</sub>
 
