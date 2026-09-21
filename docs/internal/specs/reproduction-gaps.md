@@ -66,8 +66,8 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Named connector pins (e.g. `P`/`N`) | ❌ | **✅** | G1 — `block` + `block_pins` |
 | Function label above a device (a third text field) | 🔶 | **✅** | G4 — `attrs.function_label`; it prints *below* the outline, the reference prints it above |
 | Terminal blocks, through terminals | ✅ | ✅ | `terminal_block_{n}p` |
-| Terminal block with two terminal columns as one device | 🔶 | 🔶 | G6 — still approximated with two blocks side by side |
-| Jumper bars on the schematic | 🔶 | 🔶 | G5 — still reports only |
+| Terminal block with two terminal columns as one device | 🔶 | **✅** | G6 — `terminal_block_{n}p_{levels}l`, one column per level, one device |
+| Jumper bars on the schematic | 🔶 | **✅** | G5 — drawn on the symbol as a shorting bar, level-aware on a multi-level block |
 | Multi-pin controller block with arbitrary pin names | ❌ | **✅** | G1 — 14 + 14 named pins, names inside the outline, numbers outside |
 | Pin-group brackets with rotated group labels | ❌ | ❌ | G8 |
 | Filled / shaded device blocks | ❌ | **✅** | G10 — `shape` with a fill token |
@@ -314,6 +314,14 @@ Text styling is new.
 > (non-adjacent or unknown terminal numbers draw nothing). Still also reported in
 > the terminal chart and terminal diagram, unchanged.
 >
+> On a **multi-level** block (G6) the jumper spec is level-aware: `1a-1b` links the
+> two levels of one pole, `1a-2a` two neighbouring poles of one level, and a
+> diagonal pair (`1a-2b`) is not adjacent. A plain numeric spec (`1-2`) on a
+> multi-level block is refused with the `terminal.jumper_invalid` diagnostic, and a
+> reference to a terminal the block does not have with
+> `terminal.jumper_unknown_terminal`, so the chart rows, the schematic bar and the
+> ERC can never disagree. Single-level blocks keep plain numeric specs.
+>
 > **Status 2026-08-23 (phase 5): unchanged.** Still reports only; nothing is drawn
 > on the schematic sheet.
 
@@ -338,17 +346,22 @@ existing jumper drawing.
 
 > **Status 2026-08-23 (phase 6, task 2): resolved (dynamic symbol id).** A new
 > parametric symbol family, `terminal_block_{n}p_{levels}l` (1–3 levels, e.g.
-> `terminal_block_8p_2l`), numbers each level's terminals with a level letter
-> (`1a`/`1b`/…). Levels never short together (independent nets), the terminal
-> chart carries a level (`Lv`) column, the terminal diagram labels each box with
-> the full level-letter terminal number, and the whole thing is still **one**
+> `terminal_block_8p_2l`), draws **one terminal column per level, side by side**
+> (2 levels = 2 columns), with the poles as rows, so the same pole of every level
+> sits on one row. Column centres are 10 mm apart, which keeps every connection
+> point on the 2.5 mm grid, leaves adjacent columns' inner points 5 mm apart (no
+> two terminals share a point) and leaves room for a wire between the columns.
+> Each level's terminals are numbered with a level letter (`1a`/`1b`/…), so levels
+> never short together (independent nets). The terminal chart carries a level
+> (`Lv`) column, the terminal diagram splits the terminal strip into one column
+> per level (headed by the level letter), and the whole thing is still **one**
 > symbol instance, so it is one device in the terminal chart, the terminal
 > diagram and the BOM. No `.mdkproj` format change: it is a dynamic symbol id
 > plus the existing `attrs`, and the plain `terminal_block_{n}p` id (1 level,
-> chosen by default in the part-insert dialog) is untouched, so existing
-> projects stay valid. The terminal editor grid does not yet show the `Lv`
-> column or let a level be added after the fact — the level count is chosen
-> once, at insertion.
+> chosen by default in the part-insert dialog) produces exactly the same geometry
+> and pin numbering as before, so existing projects stay valid. The terminal
+> editor grid does not yet show the `Lv` column or let a level be added after the
+> fact — the level count is chosen once, at insertion.
 >
 > **Status 2026-08-23 (phase 5): unchanged.** The two-column block was again
 > approximated with two `terminal_block_{n}p` symbols and two designators.
@@ -768,7 +781,7 @@ canvas twin.
 | Impact | Gaps |
 |---|---|
 | **essential** | *(all closed in phase 5)* ✅ G1 named pins on multi-pin blocks · ✅ G2 wire annotation on the sheet · ✅ G3 directional net-label flags · ✅ G4 text styling, anchoring and a third symbol text field |
-| **quality** | G5 jumper bars on the schematic · G6 multi-level terminal blocks · G7 physical relay blocks · G8 pin-group brackets · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; reproduction re-measured in task 6)* · 🔶 G12 pictorial symbols *(user library shipped; none bundled)* · G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height *(leader placement and the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
+| **quality** | ✅ G5 jumper bars on the schematic · ✅ G6 multi-level terminal blocks · G7 physical relay blocks · G8 pin-group brackets · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; reproduction re-measured in task 6)* · 🔶 G12 pictorial symbols *(user library shipped; none bundled)* · G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height *(leader placement and the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
 | **minor** | G14 mating connector pairs · G15 sheet size command · G16 project meta command · ✅ G17 silent failures · G18 From-To list through net labels · G22 coil location vs wire note |
 
 ## Reading of the result
