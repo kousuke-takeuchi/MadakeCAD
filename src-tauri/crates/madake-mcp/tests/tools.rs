@@ -53,3 +53,16 @@ fn every_published_tool_has_a_description() {
         assert!(!description.trim().is_empty(), "{name}の説明が空");
     }
 }
+
+/// The edit tool tells an agent how to write a jumper on a multi-level terminal block (with the level letter), so it does not send a plain numeric pair that would be refused.
+/// 編集ツールの説明には多段端子台のジャンパの書き方 (段記号つき) が書かれているので、エージェントが拒否される数字だけの指定を送らずに済む。
+#[test]
+fn the_edit_tool_explains_the_multilevel_jumper_form() {
+    let description = description_of("execute_commands");
+    for needle in ["1a-1b", "段記号"] {
+        assert!(
+            description.contains(needle),
+            "execute_commandsの説明に「{needle}」が無い: {description}"
+        );
+    }
+}

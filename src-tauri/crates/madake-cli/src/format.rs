@@ -483,9 +483,12 @@ pub fn terminals(list: &Value) -> String {
     let rows: Vec<Vec<String>> = blocks
         .iter()
         .map(|b| {
+            // 極数と端子数は多段端子台 (G6) で食い違うので、極数と段数を別々に出す
+            let levels = b.get("levels").and_then(|v| v.as_u64()).unwrap_or(1);
             vec![
                 text(b, "reference"),
-                format!("{}極", text(b, "terminal_count")),
+                format!("{}極", text(b, "poles")),
+                if levels > 1 { format!("{levels}段") } else { String::new() },
                 text(b, "value"),
                 text(b, "jumpers"),
                 text(b, "sheet_name"),
@@ -497,7 +500,7 @@ pub fn terminals(list: &Value) -> String {
         "端子台: {} 台\n\n{}",
         blocks.len(),
         table(
-            &["参照記号", "極数", "型番", "ジャンパ", "シート", "entity id"],
+            &["参照記号", "極数", "段数", "型番", "ジャンパ", "シート", "entity id"],
             &rows
         )
     )
@@ -735,6 +738,8 @@ mod tests {
                 "reference": "TB1",
                 "value": "TB-4P",
                 "terminal_count": 4,
+                "poles": 4,
+                "levels": 1,
                 "jumpers": "1-2"
             }
         ]);
@@ -746,6 +751,30 @@ mod tests {
         assert!(row.contains("1-2"), "{row}");
         assert!(row.contains("Sheet1"), "{row}");
         assert!(row.contains("2f4e0b9a-0000-4000-8000-000000000009"), "{row}");
+    }
+
+    /// madake terminals counts a multi-level terminal block by its poles and names its level count, so a 4-pole 2-level block is not mistaken for an 8-pole one.
+    /// madake terminalsは多段端子台を極数で数えて段数を併記するので、4極2段の端子台が8極の端子台に見えることはない。
+    #[test]
+    fn terminals_shows_a_multilevel_block_as_poles_and_levels() {
+        let list = json!([
+            {
+                "entity_id": "2f4e0b9a-0000-4000-8000-000000000009",
+                "sheet_id": "2f4e0b9a-0000-4000-8000-000000000001",
+                "sheet_name": "Sheet1",
+                "reference": "TB1",
+                "value": "TB-4P2L",
+                "terminal_count": 8,
+                "poles": 4,
+                "levels": 2,
+                "jumpers": "1a-1b"
+            }
+        ]);
+        let out = terminals(&list);
+        let row = out.lines().find(|l| l.contains("TB1")).expect("TB1の行");
+        assert!(row.contains("4極"), "{row}");
+        assert!(row.contains("2段"), "{row}");
+        assert!(!row.contains("8極"), "端子数を極数として出さない: {row}");
     }
 
     /// An empty terminal list prints a friendly message instead of an empty table.

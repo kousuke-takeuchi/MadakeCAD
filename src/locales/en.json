@@ -863,6 +863,7 @@
       "relay": "Relay",
       "relayWithValue": "Relay {value}",
       "terminalBlock": "Terminal block, {poles} poles",
+      "terminalBlockMultiLevel": "Terminal block, {poles} poles x {levels} levels",
       "other": "{name}",
       "otherWithValue": "{name} {value}"
     },

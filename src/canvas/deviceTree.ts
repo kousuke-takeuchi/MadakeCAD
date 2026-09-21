@@ -54,9 +54,13 @@ export function deviceHeadline(device: DeviceNode, japanese: boolean): LabelSpec
     case "relay":
       return { key: value ? "devices.head.relayWithValue" : "devices.head.relay", params: { value } };
     case "terminal_block":
+      // 多段端子台 (G6) は端子数ではなく「何極何段」で呼ぶ
       return {
-        key: "devices.head.terminalBlock",
-        params: { poles: String(device.poles) },
+        key:
+          device.levels > 1
+            ? "devices.head.terminalBlockMultiLevel"
+            : "devices.head.terminalBlock",
+        params: { poles: String(device.poles), levels: String(device.levels) },
       };
     case "other": {
       const name = (japanese ? device.symbol_name_ja : device.symbol_name) || device.symbol_id;

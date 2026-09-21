@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1891仕様項目**。
+全5領域・**1897仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -433,6 +433,7 @@
 - 接点構成のような属性の値も、型番と一緒に検索できる。 <sub>`attribute_values_are_searched_as_part_numbers`</sub>
 - リレーのデバイスはコイルを先に、続けて接点を並べ、端子の呼び名は接点マップと同じになる。 <sub>`relay_device_lists_coil_then_contacts`</sub>
 - 端子台は全極をまとめた「端子」1行として並び、極数はデバイス側に持つ。 <sub>`terminal_block_device_shows_its_terminal_range`</sub>
+- 多段端子台は端子の数ではなく極数で数える: 4極2段の端子台は「4極2段」で、端子の行は最初から最後の端子番号まで (1a-4b) になる。 <sub>`multilevel_terminal_block_device_counts_poles_not_terminals`</sub>
 - 機能に分かれない普通の部品は、「本体」1行だけのデバイスとして、シンボルの名前つきで出る。 <sub>`plain_part_is_a_single_body_row`</sub>
 - デバイスは参照記号でまとまるので、複数シートに散っていても1デバイスになる。参照記号の無いシンボルはデバイスにならない。 <sub>`devices_group_by_reference_across_sheets`</sub>
 - 空のプロジェクトにデバイスは無く、ツリーは参照記号の順に並ぶ。 <sub>`device_tree_is_ordered_and_can_be_empty`</sub>
@@ -662,6 +663,8 @@
 - 端子台チェックは、存在しない端子へのジャンパをエラーとして報告する。 <sub>`the_check_reports_a_jumper_to_a_missing_terminal_as_an_error`</sub>
 - 全端子が結線されジャンパも正しい端子台は、チェックで何も指摘されない。 <sub>`a_fully_wired_terminal_block_passes_the_check`</sub>
 - 端子台エディタの一覧には、プロジェクトの全端子台がシート順・参照記号順に、所在シート・極数・ジャンパ付きで並ぶ。 <sub>`the_editor_lists_every_terminal_block_with_its_sheet_poles_and_jumpers`</sub>
+- 多段端子台の概要は極数・段数を端子数と区別して持つ: 4極2段の端子台は極数4・段数2・端子数8になる。 <sub>`a_multilevel_terminal_block_summary_separates_poles_levels_and_terminals`</sub>
+- 単段の端子台は段数1として報告されるので、極数と端子数は同じ数になる。 <sub>`a_single_level_terminal_block_summary_has_one_level`</sub>
 - シートを指定すると、そのシートに描かれている端子台だけの一覧になる。 <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
 - 端子台ではないシンボルは一覧に出ない。 <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
 - 端子台のチャートとチェックは、どのシートにあるかを知らなくてもentity idだけで引ける。 <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
@@ -939,6 +942,7 @@
 - 部品検索ツールの説明には選定・比較・代替品の用途が書かれており、「これの代替は?」と聞かれたエージェントがこれを使う。 <sub>`the_parts_search_tool_advertises_selection_and_comparison`</sub>
 - テンプレートのツール説明には「作図の雛形であること」「ERC指摘ゼロで入ること」「undo一発で戻せること」が書かれている。 <sub>`the_template_tools_explain_what_a_template_is`</sub>
 - 公開ツールには全て説明文が付いており、説明の無いツールをエージェントへ見せない。 <sub>`every_published_tool_has_a_description`</sub>
+- 編集ツールの説明には多段端子台のジャンパの書き方 (段記号つき) が書かれているので、エージェントが拒否される数字だけの指定を送らずに済む。 <sub>`the_edit_tool_explains_the_multilevel_jumper_form`</sub>
 
 ### 電線品番・コマンドエラー (REST)
 
@@ -1332,6 +1336,7 @@
 - 保存・エクスポートのメッセージには書き出したパスが含まれる。 <sub>`saved_and_exported_report_written_path`</sub>
 - 帳票の書き出しメッセージは帳票名・形式・分量(CSVは行数、PDFはページ数)を伝える。 <sub>`exported_report_reports_format_and_count`</sub>
 - madake terminalsは端子台を極数・ジャンパ・シート・entity id付きで一覧する。 <sub>`terminals_lists_blocks_with_poles_and_jumpers`</sub>
+- madake terminalsは多段端子台を極数で数えて段数を併記するので、4極2段の端子台が8極の端子台に見えることはない。 <sub>`terminals_shows_a_multilevel_block_as_poles_and_levels`</sub>
 - 端子台が無い場合は空の表ではなく分かりやすいメッセージを出す。 <sub>`terminals_handles_empty`</sub>
 - openのメッセージには読み込んだパスと結果のrevisionが含まれる。 <sub>`opened_reports_path_and_revision`</sub>
 
@@ -1417,6 +1422,7 @@
 - 折りたたんだデバイスは見出しだけになり、他のデバイスの展開には影響しない <sub>`デバイスツリーの整形`</sub>
 - デバイスの並びも機能の並びもRust側が決めた順のまま変えない <sub>`デバイスツリーの整形`</sub>
 - 空のプロジェクトのツリーは1行も出ない <sub>`デバイスツリーの整形`</sub>
+- 多段端子台は端子の数ではなく「何極何段」で呼ぶ <sub>`見出しの文言`</sub>
 - リレーは種別と型番で呼ぶ(型番が無ければ種別だけ) <sub>`見出しの文言`</sub>
 - 端子台は極数つきで呼ぶ <sub>`見出しの文言`</sub>
 - その他の部品はシンボルの名前で呼び、UI言語に合わせて英語名と日本語名を使い分ける <sub>`見出しの文言`</sub>

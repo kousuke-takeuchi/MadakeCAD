@@ -18,7 +18,7 @@ use crate::geometry::Point;
 use crate::model::{Entity, EntityId, Project, SheetId, Wire};
 use crate::relay_xref::{relay_devices, relay_role, terminal_pair, RelayDevice, RelayRole};
 use crate::symbol::resolve_symbol;
-use crate::terminal_chart::{is_terminal_block, terminal_count_of};
+use crate::terminal_chart::{is_terminal_block, poles_and_levels_of, terminal_range_of};
 use crate::xref::zone_at;
 
 /// 検索の対象種別。
@@ -283,8 +283,10 @@ pub struct DeviceNode {
     pub symbol_name: String,
     /// 代表シンボルの名前 (日本語)。
     pub symbol_name_ja: String,
-    /// 端子台の極数 (端子台以外は0)。
+    /// 端子台の極数 (端子台以外は0)。多段端子台 (G6) でも段数は掛けない。
     pub poles: usize,
+    /// 端子台の段数 (単段は1、多段端子台=G6 は2以上。端子台以外は0)。
+    pub levels: usize,
     /// この参照記号が図面で果たしている機能の一覧。
     pub functions: Vec<DeviceFunction>,
 }
@@ -373,17 +375,20 @@ pub fn device_tree(project: &Project) -> Vec<DeviceNode> {
                 .or_else(|| places.first());
             let symbol_id = head.map(|p| p.symbol_id.clone()).unwrap_or_default();
             let def = resolve_symbol(&symbol_id);
+            // 端子台の「何極何段」。端子数 (極数x段数) と取り違えないよう別々に持つ
+            let terminal_layout = if kind == DeviceKind::TerminalBlock {
+                poles_and_levels_of(&symbol_id)
+            } else {
+                (0, 0)
+            };
             DeviceNode {
                 reference,
                 kind,
                 value,
                 symbol_name: def.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
                 symbol_name_ja: def.as_ref().map(|d| d.name_ja.clone()).unwrap_or_default(),
-                poles: if kind == DeviceKind::TerminalBlock {
-                    terminal_count_of(&symbol_id)
-                } else {
-                    0
-                },
+                poles: terminal_layout.0,
+                levels: terminal_layout.1,
                 symbol_id,
                 functions,
             }
@@ -438,7 +443,9 @@ fn relay_functions(
     out
 }
 
-/// 端子台の機能 = 端子群1つ (例 8極なら "1-8")。極数が1なら "1"、読めなければ空。
+/// 端子台の機能 = 端子群1つ。表記は最初の端子番号から最後の端子番号まで
+/// (8極なら "1-8"、多段端子台=G6 の4極2段なら "1a-4b")。端子が1つならその番号、
+/// 読めなければ空。
 fn terminal_functions(places: &[Placement]) -> Vec<DeviceFunction> {
     places
         .iter()
@@ -446,12 +453,7 @@ fn terminal_functions(places: &[Placement]) -> Vec<DeviceFunction> {
             if !is_terminal_block(&p.symbol_id) {
                 return function(p, DeviceFunctionKind::Body, String::new());
             }
-            let terminals = match terminal_count_of(&p.symbol_id) {
-                0 => String::new(),
-                1 => "1".to_string(),
-                n => format!("1-{n}"),
-            };
-            function(p, DeviceFunctionKind::Terminal, terminals)
+            function(p, DeviceFunctionKind::Terminal, terminal_range_of(&p.symbol_id))
         })
         .collect()
 }
@@ -755,6 +757,20 @@ mod tests {
         assert_eq!(tree[0].functions.len(), 1);
         assert_eq!(tree[0].functions[0].kind, DeviceFunctionKind::Terminal);
         assert_eq!(tree[0].functions[0].terminals, "1-8");
+    }
+
+    /// A multi-level terminal block counts its poles, not its terminals: a 4-pole 2-level block is 4 poles over 2 levels, and its terminal row spans the first to the last terminal number (1a-4b).
+    /// 多段端子台は端子の数ではなく極数で数える: 4極2段の端子台は「4極2段」で、端子の行は最初から最後の端子番号まで (1a-4b) になる。
+    #[test]
+    fn multilevel_terminal_block_device_counts_poles_not_terminals() {
+        let project = project_with(
+            1,
+            vec![(0, symbol("terminal_block_4p_2l", "TB1", "", 30.0, 30.0))],
+        );
+        let tree = device_tree(&project);
+        assert_eq!(tree[0].poles, 4, "端子は8個でも極数は4");
+        assert_eq!(tree[0].levels, 2);
+        assert_eq!(tree[0].functions[0].terminals, "1a-4b");
     }
 
     /// An ordinary part that has no separable functions shows up as a single "body" row, named after its symbol.

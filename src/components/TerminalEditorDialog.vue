@@ -41,7 +41,7 @@ const phase2 = [
 
 const title = computed(() =>
   terminals.reference
-    ? t("terminals.titleWith", { reference: terminals.reference, poles: terminals.terminalCount })
+    ? t("terminals.titleWith", { reference: terminals.reference, poles: terminals.poleCount })
     : t("terminals.title"),
 );
 

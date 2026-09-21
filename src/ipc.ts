@@ -526,6 +526,10 @@ export interface TerminalBlockInfo {
   reference: string;
   value: string;
   terminal_count: number;
+  /** 極数 (多段端子台でも段数は掛けない)。 */
+  poles: number;
+  /** 段数 (単段は1、多段端子台は2以上)。 */
+  levels: number;
   /** ジャンパ指定の生の値 (`attrs["jumpers"]`)。 */
   jumpers: string;
 }
@@ -587,8 +591,10 @@ export interface DeviceNode {
   symbol_id: string;
   symbol_name: string;
   symbol_name_ja: string;
-  /** 端子台の極数 (端子台以外は0)。 */
+  /** 端子台の極数 (端子台以外は0)。多段端子台でも段数は掛けない。 */
   poles: number;
+  /** 端子台の段数 (単段は1、多段端子台は2以上。端子台以外は0)。 */
+  levels: number;
   functions: DeviceFunction[];
 }
 

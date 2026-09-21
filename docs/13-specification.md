@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1891 specification clauses** across 5 areas.
+**1897 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -433,6 +433,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Attribute values such as the contact configuration are searched together with the part number. <sub>`attribute_values_are_searched_as_part_numbers`</sub>
 - A relay device lists its coil first and then its contacts, using the same terminal numbers as the contact map. <sub>`relay_device_lists_coil_then_contacts`</sub>
 - A terminal block appears as one "terminals" row covering every pole, with the pole count on the device. <sub>`terminal_block_device_shows_its_terminal_range`</sub>
+- A multi-level terminal block counts its poles, not its terminals: a 4-pole 2-level block is 4 poles over 2 levels, and its terminal row spans the first to the last terminal number (1a-4b). <sub>`multilevel_terminal_block_device_counts_poles_not_terminals`</sub>
 - An ordinary part that has no separable functions shows up as a single "body" row, named after its symbol. <sub>`plain_part_is_a_single_body_row`</sub>
 - Devices are keyed by reference designator, so the same designator on several sheets is one device, and symbols without a designator are not devices at all. <sub>`devices_group_by_reference_across_sheets`</sub>
 - An empty project has no devices, and the tree is ordered by reference designator. <sub>`device_tree_is_ordered_and_can_be_empty`</sub>
@@ -662,6 +663,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The terminal block check reports a jumper to a terminal that does not exist as an error. <sub>`the_check_reports_a_jumper_to_a_missing_terminal_as_an_error`</sub>
 - A terminal block with every terminal wired and correct jumpers passes the check with nothing to report. <sub>`a_fully_wired_terminal_block_passes_the_check`</sub>
 - The editor lists every terminal block of the project with its sheet, its pole count and its jumpers, sheet by sheet and in reference-designator order. <sub>`the_editor_lists_every_terminal_block_with_its_sheet_poles_and_jumpers`</sub>
+- The summary of a multi-level terminal block tells its pole count and its level count apart from its terminal count: a 4-pole 2-level block has 4 poles, 2 levels and 8 terminals. <sub>`a_multilevel_terminal_block_summary_separates_poles_levels_and_terminals`</sub>
+- A single-level terminal block reports one level, so its pole count and its terminal count are the same number. <sub>`a_single_level_terminal_block_summary_has_one_level`</sub>
 - Naming a sheet narrows the list to the terminal blocks drawn on that sheet. <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
 - Symbols that are not terminal blocks never show up in the list. <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
 - The chart and the check of a terminal block can be looked up by entity id alone, without knowing which sheet it sits on. <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
@@ -939,6 +942,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The parts search tool advertises selection, comparison and alternative-part use, so the agent reaches for it when asked "what can replace this?". <sub>`the_parts_search_tool_advertises_selection_and_comparison`</sub>
 - The template tools explain that a template is a starting skeleton, that it lands ERC-clean, and that applying it is a single undo step. <sub>`the_template_tools_explain_what_a_template_is`</sub>
 - Every published tool carries a description, so no tool is offered to the agent unexplained. <sub>`every_published_tool_has_a_description`</sub>
+- The edit tool tells an agent how to write a jumper on a multi-level terminal block (with the level letter), so it does not send a plain numeric pair that would be refused. <sub>`the_edit_tool_explains_the_multilevel_jumper_form`</sub>
 
 ### Wire part numbers / command errors (REST)
 
@@ -1332,6 +1336,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Save/export messages include the written file path. <sub>`saved_and_exported_report_written_path`</sub>
 - A report export message names the report, the format and how much was written (CSV rows / PDF pages). <sub>`exported_report_reports_format_and_count`</sub>
 - madake terminals lists every terminal block with its pole count, jumpers, sheet and entity id. <sub>`terminals_lists_blocks_with_poles_and_jumpers`</sub>
+- madake terminals counts a multi-level terminal block by its poles and names its level count, so a 4-pole 2-level block is not mistaken for an 8-pole one. <sub>`terminals_shows_a_multilevel_block_as_poles_and_levels`</sub>
 - An empty terminal list prints a friendly message instead of an empty table. <sub>`terminals_handles_empty`</sub>
 - Open messages include the loaded path and resulting revision. <sub>`opened_reports_path_and_revision`</sub>
 
@@ -1417,6 +1422,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - a collapsed device shows only its heading and leaves other devices alone <sub>`デバイスツリーの整形`</sub>
 - the order of devices and of their functions is kept as the core returned it <sub>`デバイスツリーの整形`</sub>
 - an empty project produces no rows <sub>`デバイスツリーの整形`</sub>
+- a multi-level terminal block is named by its poles and its levels, not by its terminal count <sub>`見出しの文言`</sub>
 - a relay is named by its kind and part number <sub>`見出しの文言`</sub>
 - a terminal block is named with its pole count <sub>`見出しの文言`</sub>
 - other parts are named after their symbol, in the UI language <sub>`見出しの文言`</sub>

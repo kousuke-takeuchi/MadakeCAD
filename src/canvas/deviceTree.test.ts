@@ -31,6 +31,7 @@ function relay(): DeviceNode {
     symbol_name: "Relay coil",
     symbol_name_ja: "リレーコイル",
     poles: 0,
+    levels: 0,
     functions: [
       fn(),
       fn({ kind: "contact_no", terminals: "13-14", entity_id: "e2", sheet_no: 2, zone: "B3" }),
@@ -47,6 +48,7 @@ function terminalBlock(): DeviceNode {
     symbol_name: "Terminal block",
     symbol_name_ja: "端子台",
     poles: 8,
+    levels: 1,
     functions: [fn({ kind: "terminal", terminals: "1-8", entity_id: "e3", zone: "B2" })],
   };
 }
@@ -60,6 +62,7 @@ function fuse(): DeviceNode {
     symbol_name: "Fuse",
     symbol_name_ja: "ヒューズ",
     poles: 0,
+    levels: 0,
     functions: [fn({ kind: "body", terminals: "", entity_id: "e4" })],
   };
 }
@@ -104,6 +107,15 @@ describe("デバイスツリーの整形", () => {
 });
 
 describe("見出しの文言", () => {
+  // ja: 多段端子台は端子の数ではなく「何極何段」で呼ぶ
+  it("a multi-level terminal block is named by its poles and its levels, not by its terminal count", () => {
+    const block: DeviceNode = { ...terminalBlock(), poles: 4, levels: 2 };
+    expect(deviceHeadline(block, true)).toEqual({
+      key: "devices.head.terminalBlockMultiLevel",
+      params: { poles: "4", levels: "2" },
+    });
+  });
+
   // ja: リレーは種別と型番で呼ぶ(型番が無ければ種別だけ)
   it("a relay is named by its kind and part number", () => {
     expect(deviceHeadline(relay(), true)).toEqual({
@@ -120,7 +132,7 @@ describe("見出しの文言", () => {
   it("a terminal block is named with its pole count", () => {
     expect(deviceHeadline(terminalBlock(), true)).toEqual({
       key: "devices.head.terminalBlock",
-      params: { poles: "8" },
+      params: { poles: "8", levels: "1" },
     });
   });
 

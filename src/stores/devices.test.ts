@@ -30,6 +30,7 @@ function relay(): DeviceNode {
     symbol_name: "Relay coil",
     symbol_name_ja: "リレーコイル",
     poles: 0,
+    levels: 0,
     functions: [
       fn(),
       fn({
@@ -138,6 +139,7 @@ describe("デバイスの削除", () => {
       symbol_name: "Terminal block",
       symbol_name_ja: "端子台",
       poles: 8,
+      levels: 1,
       functions: [
         fn({ kind: "terminal", terminals: "1", entity_id: "tb" }),
         fn({ kind: "terminal", terminals: "2", entity_id: "tb" }),

@@ -597,6 +597,8 @@ mod tests {
                 "reference": "TB1",
                 "value": "",
                 "terminal_count": 4,
+                "poles": 4,
+                "levels": 1,
                 "jumpers": ""
             },
             {
@@ -606,6 +608,8 @@ mod tests {
                 "reference": "TB2",
                 "value": "",
                 "terminal_count": 8,
+                "poles": 8,
+                "levels": 1,
                 "jumpers": "1-2"
             }
         ])

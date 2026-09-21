@@ -863,6 +863,7 @@
       "relay": "リレー",
       "relayWithValue": "リレー {value}",
       "terminalBlock": "端子台 {poles}極",
+      "terminalBlockMultiLevel": "端子台 {poles}極{levels}段",
       "other": "{name}",
       "otherWithValue": "{name} {value}"
     },

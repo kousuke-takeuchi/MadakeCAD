@@ -122,6 +122,8 @@ const block: TerminalBlockInfo = {
   reference: "TB1",
   value: "UK 2.5N",
   terminal_count: 4,
+  poles: 4,
+  levels: 1,
   jumpers: "",
 };
 

@@ -91,8 +91,12 @@ pub struct TerminalBlockInfo {
     pub reference: String,
     /// 型番・値。
     pub value: String,
-    /// 端子数 (極数)。
+    /// 端子数。多段端子台 (G6) では極数×段数になる。
     pub terminal_count: usize,
+    /// 極数 (端子台の「何極」。多段でも段数は掛けない)。
+    pub poles: usize,
+    /// 段数。単段の端子台は1、多段端子台 (G6) は2以上。
+    pub levels: usize,
     /// ジャンパ指定の生の値 (`attrs["jumpers"]`。未設定なら空)。
     pub jumpers: String,
 }
@@ -116,11 +120,45 @@ pub fn terminal_numbers_of(def: &SymbolDef) -> Vec<String> {
 }
 
 /// 端子台シンボルの端子数 (ピン番号の種類数)。端子台以外・未知のシンボルは0。
-/// 多段端子台 (G6) では極数×段数になる。
+/// 多段端子台 (G6) では極数×段数になる。**極数が欲しいときは
+/// [`poles_and_levels_of`] を使うこと** (多段端子台では両者が食い違う)。
 pub fn terminal_count_of(symbol_id: &str) -> usize {
     resolve_symbol(symbol_id)
         .map(|def| terminal_numbers_of(&def).len())
         .unwrap_or(0)
+}
+
+/// 端子台シンボルの (極数, 段数)。多段端子台 (G6) は段数が2以上になり、端子数は極数×段数。
+/// 単段の端子台は段数1で、極数=端子数。未知のシンボルは (0, 0)。
+///
+/// 端子番号 (`1` / `1a`) から数えるので、ユーザーシンボルの端子台にも効く。
+pub fn poles_and_levels_of(symbol_id: &str) -> (usize, usize) {
+    let Some(def) = resolve_symbol(symbol_id) else {
+        return (0, 0);
+    };
+    let mut poles = std::collections::BTreeSet::new();
+    let mut levels = std::collections::BTreeSet::new();
+    for no in terminal_numbers_of(&def) {
+        let (pole, level) = parse_terminal_no(&no);
+        poles.insert(pole);
+        if let Some(letter) = level {
+            levels.insert(letter);
+        }
+    }
+    (poles.len(), levels.len().max(1))
+}
+
+/// 端子台シンボルの端子番号の範囲表記 (例 `"1-8"` / 多段なら `"1a-4b"`)。
+/// 端子が1つなら番号そのもの、端子が無ければ空文字。
+pub fn terminal_range_of(symbol_id: &str) -> String {
+    let Some(def) = resolve_symbol(symbol_id) else {
+        return String::new();
+    };
+    match terminal_numbers_of(&def).as_slice() {
+        [] => String::new(),
+        [only] => only.clone(),
+        [first, .., last] => format!("{first}-{last}"),
+    }
 }
 
 /// プロジェクト内の端子台の概要一覧。`sheet_id`を渡すとそのシートだけに絞る。
@@ -132,14 +170,19 @@ pub fn terminal_block_infos(project: &Project, sheet_id: Option<SheetId>) -> Vec
         .iter()
         .filter(|s| sheet_id.is_none_or(|id| s.id == id))
         .flat_map(|sheet| {
-            terminal_blocks(sheet).into_iter().map(move |tb| TerminalBlockInfo {
-                entity_id: tb.id,
-                sheet_id: sheet.id,
-                sheet_name: sheet.name.clone(),
-                reference: tb.reference.clone(),
-                value: tb.value.clone(),
-                terminal_count: terminal_count_of(&tb.symbol_id),
-                jumpers: tb.attrs.get("jumpers").cloned().unwrap_or_default(),
+            terminal_blocks(sheet).into_iter().map(move |tb| {
+                let (poles, levels) = poles_and_levels_of(&tb.symbol_id);
+                TerminalBlockInfo {
+                    entity_id: tb.id,
+                    sheet_id: sheet.id,
+                    sheet_name: sheet.name.clone(),
+                    reference: tb.reference.clone(),
+                    value: tb.value.clone(),
+                    terminal_count: terminal_count_of(&tb.symbol_id),
+                    poles,
+                    levels,
+                    jumpers: tb.attrs.get("jumpers").cloned().unwrap_or_default(),
+                }
             })
         })
         .collect()
@@ -1159,6 +1202,28 @@ mod tests {
         assert_eq!(infos[1].reference, "TB2");
         assert_eq!(infos[1].terminal_count, 8);
         assert_eq!(infos[1].jumpers, "", "ジャンパ未設定なら空");
+    }
+
+    /// The summary of a multi-level terminal block tells its pole count and its level count apart from its terminal count: a 4-pole 2-level block has 4 poles, 2 levels and 8 terminals.
+    /// 多段端子台の概要は極数・段数を端子数と区別して持つ: 4極2段の端子台は極数4・段数2・端子数8になる。
+    #[test]
+    fn a_multilevel_terminal_block_summary_separates_poles_levels_and_terminals() {
+        let mut project = Project::new("t");
+        let (sheet, _) = sheet_with_multilevel_tb(4, 2, "");
+        project.sheets = vec![sheet];
+        let infos = terminal_block_infos(&project, None);
+        assert_eq!((infos[0].poles, infos[0].levels, infos[0].terminal_count), (4, 2, 8));
+    }
+
+    /// A single-level terminal block reports one level, so its pole count and its terminal count are the same number.
+    /// 単段の端子台は段数1として報告されるので、極数と端子数は同じ数になる。
+    #[test]
+    fn a_single_level_terminal_block_summary_has_one_level() {
+        let mut project = Project::new("t");
+        let (sheet, _) = sheet_with_tb(4, 0);
+        project.sheets = vec![sheet];
+        let infos = terminal_block_infos(&project, None);
+        assert_eq!((infos[0].poles, infos[0].levels, infos[0].terminal_count), (4, 1, 4));
     }
 
     /// Naming a sheet narrows the list to the terminal blocks drawn on that sheet.

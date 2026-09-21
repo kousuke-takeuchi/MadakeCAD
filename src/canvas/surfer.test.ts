@@ -68,6 +68,7 @@ const K1: DeviceNode = {
   symbol_name: "Relay coil",
   symbol_name_ja: "リレーコイル",
   poles: 0,
+  levels: 0,
   functions: [
     {
       kind: "coil",

@@ -107,9 +107,13 @@ export const useTerminalsStore = defineStore("terminals", {
     reference(state): string {
       return state.chart?.reference ?? this.block?.reference ?? "";
     },
-    /** 極数。 */
+    /** 端子数 (多段端子台では極数×段数)。 */
     terminalCount(state): number {
       return state.chart?.terminal_count ?? this.block?.terminal_count ?? 0;
+    },
+    /** 極数 (多段端子台でも段数は掛けない)。端子台の見出しはこちらで呼ぶ。 */
+    poleCount(): number {
+      return this.block?.poles ?? this.terminalCount;
     },
     /** グリッドの行 (端子番号順)。 */
     rows(state): TerminalEditorRow[] {
