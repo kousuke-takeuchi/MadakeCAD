@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1883仕様項目**。
+全5領域・**1886仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -678,6 +678,9 @@
 - 隣り合う端子のサドルジャンパは、端子箱の内部側の縁に縦の連結線として描かれる。 <sub>`a_jumper_is_drawn_on_the_inside_edge_of_the_boxes`</sub>
 - 各引出線には、その電線の線色・線径sq・品番が線の下に小さく書かれる。 <sub>`each_lead_line_carries_the_wire_specification`</sub>
 - 多段端子台の接続図は、各箱に段記号付きの完全な端子番号(1a,1b,2a,2b,…)を書くので、2つの段が同じ端子として描かれることはない。 <sub>`a_multilevel_terminal_block_labels_boxes_with_the_level_letter`</sub>
+- 多段端子台の接続図は段を列で表す。端子ストリップが段の数だけの列に分かれ(段aが左)、各端子の箱は自分の段の列に置かれる。 <sub>`a_multilevel_terminal_diagram_draws_each_level_as_a_column`</sub>
+- 多段端子台の接続図は、段の列それぞれの上に段記号を書くので、箱の番号を読まなくてもどの列がどの段か分かる。 <sub>`a_multilevel_terminal_diagram_heads_each_level_column_with_its_letter`</sub>
+- 単段の端子台の接続図には段の見出しが付かない (端子の列が1本しかないため)。 <sub>`a_single_level_terminal_diagram_has_no_level_heading`</sub>
 - 1ページに収まらない端子は次のページへ続き、各ページの表題にそのページの端子の範囲が入る。 <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
 - 端子台1つにつき1ページが出て、端子台でないものには1ページも出ない。 <sub>`one_page_per_terminal_block_and_none_for_anything_else`</sub>
 - 端子接続図のページはA4横で、JIS図枠と、端子台の参照記号が入った表題欄を持つ。 <sub>`the_page_has_the_frame_and_a_title_block`</sub>

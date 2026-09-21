@@ -76,6 +76,28 @@ fn row_y(k: usize) -> f64 {
     table_top() + CAPTION_GAP + k as f64 * TERM_PITCH
 }
 
+/// この端子台の段 (レベル) の一覧 (段記号の昇順)。単段の端子台では空になる。
+/// 段を**列**で表す (G6) ときの列の並び順の正。
+fn levels_of(rows: &[TerminalRow]) -> Vec<String> {
+    let mut levels: Vec<String> = rows
+        .iter()
+        .filter(|r| !r.level.is_empty())
+        .map(|r| r.level.clone())
+        .collect();
+    levels.sort();
+    levels.dedup();
+    levels
+}
+
+/// ある端子の箱の (左端X, 幅) mm。端子ストリップを段の数だけの列に割り、
+/// その端子の段の列に置く。単段の端子台ではストリップ全体が1列になる (従来と同じ)。
+fn box_cell(levels: &[String], row: &TerminalRow) -> (f64, f64) {
+    let cols = levels.len().max(1);
+    let w = BOX_W / cols as f64;
+    let col = levels.iter().position(|l| *l == row.level).unwrap_or(0);
+    (box_left() + col as f64 * w, w)
+}
+
 /// 1ページに描ける端子の数。用紙の高さと端子ピッチから決まる固定値。
 pub fn terminals_per_page() -> usize {
     let usable = body_bottom() - (row_y(0) - BOX_H / 2.0);
@@ -100,11 +122,19 @@ impl Side {
         }
     }
 
-    /// 端子箱のこちら側の縁のX。
+    /// 端子ストリップ全体のこちら側の縁のX (引出線の外端・ジャンパ線の基準)。
     fn box_edge(self) -> f64 {
         match self {
             Side::Outside => box_left(),
             Side::Inside => box_right(),
+        }
+    }
+
+    /// ある端子の箱そのもののこちら側の縁のX (段の列に置かれた箱の縁)。
+    fn cell_edge(self, cell: (f64, f64)) -> f64 {
+        match self {
+            Side::Outside => cell.0,
+            Side::Inside => cell.0 + cell.1,
         }
     }
 
@@ -201,14 +231,16 @@ pub fn terminal_diagram_svg(project: &Project, tb_id: EntityId) -> Vec<String> {
                     format!("{base} (端子 {}〜{})", first.terminal, last.terminal)
                 }
             };
+            // 段の列はページをまたいで同じ並びになるよう、チャート全体から決める
+            let levels = levels_of(&chart.rows);
             let mut out = page_open(&title);
-            draw_captions(&mut out);
-            draw_strip(&mut out, rows);
+            draw_captions(&mut out, &levels);
+            draw_strip(&mut out, rows, &levels);
             for side in [Side::Outside, Side::Inside] {
-                draw_side(&mut out, rows, side);
+                draw_side(&mut out, rows, side, &levels);
                 draw_brackets(&mut out, rows, side);
             }
-            draw_jumpers(&mut out, rows, &chart.jumpers);
+            draw_jumpers(&mut out, rows, &chart.jumpers, &levels);
             report_title_block(&mut out, &title, &meta, i + 1, total);
             out.push_str("</svg>\n");
             out
@@ -222,7 +254,7 @@ pub fn terminal_diagrams_svg(project: &Project) -> Vec<String> {
     let ids = terminal_block_ids(project);
     if ids.is_empty() {
         let mut out = page_open(ReportKind::TerminalDiagram.title());
-        draw_captions(&mut out);
+        draw_captions(&mut out, &[]);
         report_title_block(
             &mut out,
             ReportKind::TerminalDiagram.title(),
@@ -238,8 +270,8 @@ pub fn terminal_diagrams_svg(project: &Project) -> Vec<String> {
         .collect()
 }
 
-/// 左右の見出し (外部側 / 内部側)。
-fn draw_captions(out: &mut String) {
+/// 左右の見出し (外部側 / 内部側) と、多段端子台なら段の列の見出し (段記号)。
+fn draw_captions(out: &mut String, levels: &[String]) {
     for side in [Side::Outside, Side::Inside] {
         text_el(
             out,
@@ -251,17 +283,32 @@ fn draw_captions(out: &mut String) {
             side.caption(),
         );
     }
+    // 段を列で表すので、どの列がどの段かを列の真上に書く (単段の端子台には付けない)
+    let w = BOX_W / levels.len().max(1) as f64;
+    for (col, level) in levels.iter().enumerate() {
+        text_el(
+            out,
+            box_left() + (col as f64 + 0.5) * w,
+            table_top() + CAPTION_FONT,
+            CAPTION_FONT,
+            "#000",
+            "middle",
+            level,
+        );
+    }
 }
 
-/// 端子ストリップ (端子番号入りの箱を縦に積む)。予備端子は薄塗り+注記。
-fn draw_strip(out: &mut String, rows: &[TerminalRow]) {
+/// 端子ストリップ (端子番号入りの箱を縦に積む)。多段端子台では段ごとの列に置く。
+/// 予備端子は薄塗り+注記。
+fn draw_strip(out: &mut String, rows: &[TerminalRow], levels: &[String]) {
     for (k, row) in rows.iter().enumerate() {
         let y = row_y(k);
+        let (left, w) = box_cell(levels, row);
         rect_el(
             out,
-            box_left(),
+            left,
             y - BOX_H / 2.0,
-            BOX_W,
+            w,
             BOX_H,
             if row.spare { SPARE_FILL } else { BOX_FILL },
             "#000",
@@ -269,7 +316,7 @@ fn draw_strip(out: &mut String, rows: &[TerminalRow]) {
         );
         text_el(
             out,
-            center_x(),
+            left + w / 2.0,
             y + NUMBER_FONT * 0.35,
             NUMBER_FONT,
             "#000",
@@ -290,14 +337,16 @@ fn draw_strip(out: &mut String, rows: &[TerminalRow]) {
     }
 }
 
-/// 片側の引出線・接続先表記・電線仕様。
-fn draw_side(out: &mut String, rows: &[TerminalRow], side: Side) {
+/// 片側の引出線・接続先表記・電線仕様。引出線は**その端子の箱の縁**から伸びるので、
+/// 多段端子台では内側の列の端子ほど引出線が長くなる (間の列は別の行なので重ならない)。
+fn draw_side(out: &mut String, rows: &[TerminalRow], side: Side, levels: &[String]) {
     for (k, row) in rows.iter().enumerate() {
         if !side.wired(row) {
             continue;
         }
         let y = row_y(k);
-        line_el(out, side.box_edge(), y, side.lead_end(), y, FRAME_STROKE, "#000");
+        let edge = side.cell_edge(box_cell(levels, row));
+        line_el(out, edge, y, side.lead_end(), y, FRAME_STROKE, "#000");
         let target = side.target(row);
         if !target.is_empty() {
             text_el(
@@ -366,7 +415,12 @@ fn draw_brackets(out: &mut String, rows: &[TerminalRow], side: Side) {
 
 /// サドルジャンパ。端子箱の**内部側の縁**に縦線で描く (両端に短い横線)。
 /// このページに両方の端子が載っているジャンパだけを描き、注記はページに1回だけ添える。
-fn draw_jumpers(out: &mut String, rows: &[TerminalRow], jumpers: &[(String, String)]) {
+fn draw_jumpers(
+    out: &mut String,
+    rows: &[TerminalRow],
+    jumpers: &[(String, String)],
+    levels: &[String],
+) {
     let index = |no: &str| rows.iter().position(|r| r.terminal == no);
     let x = box_right() + JUMPER_OFFSET;
     let mut noted = false;
@@ -376,8 +430,10 @@ fn draw_jumpers(out: &mut String, rows: &[TerminalRow], jumpers: &[(String, Stri
         };
         let (ya, yb) = (row_y(ka), row_y(kb));
         line_el(out, x, ya, x, yb, FRAME_STROKE, "#000");
-        for y in [ya, yb] {
-            line_el(out, box_right(), y, x, y, FRAME_STROKE, "#000");
+        for k in [ka, kb] {
+            let y = row_y(k);
+            let edge = Side::Inside.cell_edge(box_cell(levels, &rows[k]));
+            line_el(out, edge, y, x, y, FRAME_STROKE, "#000");
         }
         if !noted {
             text_el(
@@ -454,11 +510,11 @@ mod tests {
             .collect()
     }
 
-    /// 端子箱 (幅がBOX_Wの矩形) だけを上から順に。
+    /// 端子箱 (高さがBOX_Hの矩形) だけを上から順に。多段端子台では幅が段数ぶん狭くなる。
     fn boxes(svg: &str) -> Vec<(f64, f64, f64, f64, String)> {
         let mut v: Vec<_> = rects(svg)
             .into_iter()
-            .filter(|r| (r.2 - BOX_W).abs() < 1e-9)
+            .filter(|r| (r.3 - BOX_H).abs() < 1e-9)
             .collect();
         v.sort_by(|a, b| a.1.partial_cmp(&b.1).expect("y"));
         v
@@ -692,14 +748,84 @@ mod tests {
         assert!(internal.iter().all(|t| t.0 > box_right()), "{internal:?}");
     }
 
+    /// 多段端子台TB1 (`{poles}極{levels}段`) だけを置いたプロジェクトの端子接続図。
+    fn multilevel_diagram(poles: usize, levels: usize) -> Vec<String> {
+        let mut project = Project::new("多段端子台デモ");
+        let tb = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: format!("terminal_block_{poles}p_{levels}l"),
+            at: Point::new(150.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        });
+        let tb_id = tb.id();
+        project.sheets[0].entities.insert(tb_id, tb);
+        terminal_diagram_svg(&project, tb_id)
+    }
+
     /// A multi-level terminal block's diagram labels each box with its full level-letter terminal number (1a, 1b, 2a, 2b, ...), so the two levels are never drawn as if they were the same terminal.
     /// 多段端子台の接続図は、各箱に段記号付きの完全な端子番号(1a,1b,2a,2b,…)を書くので、2つの段が同じ端子として描かれることはない。
     #[test]
     fn a_multilevel_terminal_block_labels_boxes_with_the_level_letter() {
-        let mut project = Project::new("多段端子台デモ");
+        let pages = multilevel_diagram(2, 2);
+        assert_eq!(pages.len(), 1);
+        let numbers: Vec<String> = texts(&pages[0])
+            .into_iter()
+            .filter(|t| t.0 > box_left() && t.0 < box_right() && t.1 > row_y(0) - BOX_H / 2.0)
+            .map(|t| t.2)
+            .collect();
+        assert_eq!(numbers, ["1a", "1b", "2a", "2b"]);
+    }
+
+    /// A multi-level terminal block's diagram shows the levels as columns: the terminal strip is split into one column per level, level a on the left, and each terminal's box sits in its own level's column.
+    /// 多段端子台の接続図は段を列で表す。端子ストリップが段の数だけの列に分かれ(段aが左)、各端子の箱は自分の段の列に置かれる。
+    #[test]
+    fn a_multilevel_terminal_diagram_draws_each_level_as_a_column() {
+        let pages = multilevel_diagram(2, 2);
+        let bs = boxes(&pages[0]);
+        assert_eq!(bs.len(), 4, "2極x2段=4端子: {bs:?}");
+        let w = BOX_W / 2.0;
+        assert!(bs.iter().all(|b| (b.2 - w).abs() < 1e-9), "箱の幅は列の幅: {bs:?}");
+        // 上から 1a, 1b, 2a, 2b。段aは左の列、段bは右の列
+        let lefts: Vec<f64> = bs.iter().map(|b| b.0).collect();
+        assert_eq!(lefts, vec![box_left(), box_left() + w, box_left(), box_left() + w]);
+        assert!(
+            bs.iter().all(|b| b.0 >= box_left() && b.0 + b.2 <= box_right()),
+            "列は端子ストリップの幅に収まる: {bs:?}"
+        );
+    }
+
+    /// Each level column of a multi-level terminal diagram is headed by its level letter, so a reader can tell which column is which level without reading the box numbers.
+    /// 多段端子台の接続図は、段の列それぞれの上に段記号を書くので、箱の番号を読まなくてもどの列がどの段か分かる。
+    #[test]
+    fn a_multilevel_terminal_diagram_heads_each_level_column_with_its_letter() {
+        let pages = multilevel_diagram(2, 2);
+        let heads: Vec<(f64, String)> = texts(&pages[0])
+            .into_iter()
+            .filter(|t| t.0 > box_left() && t.0 < box_right() && t.1 < row_y(0) - BOX_H / 2.0)
+            .map(|t| (t.0, t.2))
+            .collect();
+        let w = BOX_W / 2.0;
+        assert_eq!(
+            heads,
+            vec![
+                (box_left() + w / 2.0, "a".to_string()),
+                (box_left() + w + w / 2.0, "b".to_string()),
+            ]
+        );
+    }
+
+    /// A single-level terminal diagram gets no level heading, because it has only one column of terminals.
+    /// 単段の端子台の接続図には段の見出しが付かない (端子の列が1本しかないため)。
+    #[test]
+    fn a_single_level_terminal_diagram_has_no_level_heading() {
+        let mut project = Project::new("単段端子台");
         let tb = Entity::Symbol(SymbolInstance {
             id: Uuid::new_v4(),
-            symbol_id: "terminal_block_2p_2l".into(),
+            symbol_id: "terminal_block_2p".into(),
             at: Point::new(150.0, 100.0),
             rotation: 0,
             mirror: false,
@@ -710,13 +836,12 @@ mod tests {
         let tb_id = tb.id();
         project.sheets[0].entities.insert(tb_id, tb);
         let pages = terminal_diagram_svg(&project, tb_id);
-        assert_eq!(pages.len(), 1);
-        let numbers: Vec<String> = texts(&pages[0])
+        let heads: Vec<String> = texts(&pages[0])
             .into_iter()
-            .filter(|t| (t.0 - center_x()).abs() < 1e-9)
+            .filter(|t| t.0 > box_left() && t.0 < box_right() && t.1 < row_y(0) - BOX_H / 2.0)
             .map(|t| t.2)
             .collect();
-        assert_eq!(numbers, ["1a", "1b", "2a", "2b"]);
+        assert!(heads.is_empty(), "{heads:?}");
     }
 
     /// Terminals that do not fit on one page continue on the next, and each page title states the range of terminals it holds.
