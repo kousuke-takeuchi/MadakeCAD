@@ -7,8 +7,17 @@
 // 並べ替え・多段端子・アクセサリはモデル拡張が要るためフェーズ2。
 
 import { defineStore } from "pinia";
+import { parseTerminalNo } from "../canvas/dynamicSymbol";
+// ジャンパ指定の正規化はキャンバス描画と共通の純関数を使う (Pinia非依存モジュールが正)
+import {
+  formatJumperSpec,
+  parseJumperSpec,
+  terminalsAreAdjacent,
+} from "../canvas/terminalJumpers";
 import { ipc, type Command, type Diagnostic, type TerminalBlockInfo, type TerminalChart } from "../ipc";
 import { useDocumentStore } from "./document";
+
+export { formatJumperSpec, parseJumperSpec } from "../canvas/terminalJumpers";
 
 /** グリッドの1行 (デザイン「端子台エディタ」の列順)。 */
 export interface TerminalEditorRow {
@@ -32,47 +41,23 @@ export interface TerminalEditorRow {
   selected: boolean;
 }
 
-/** ジャンパ指定 (`"1-2,3-4"`) を解析する。小さい番号が先・昇順・重複なしに正規化する。 */
-export function parseJumperSpec(spec: string): [number, number][] {
-  const pairs: [number, number][] = [];
-  for (const item of spec.split(",")) {
-    const parts = item.split("-").map((p) => p.trim());
-    if (parts.length !== 2) continue;
-    if (!/^\d+$/.test(parts[0]) || !/^\d+$/.test(parts[1])) continue;
-    const a = Math.min(Number(parts[0]), Number(parts[1]));
-    const b = Math.max(Number(parts[0]), Number(parts[1]));
-    // 掛けられるのは隣り合う端子どうしだけ (Rust側の parse_jumpers と同じ規則)
-    if (b - a !== 1) continue;
-    if (!pairs.some(([x, y]) => x === a && y === b)) pairs.push([a, b]);
-  }
-  pairs.sort((p, q) => p[0] - q[0]);
-  return pairs;
-}
-
-/** ジャンパ指定の文字列表現 (`attrs["jumpers"]` に入れる形)。 */
-export function formatJumperSpec(pairs: readonly [number, number][]): string {
-  return pairs.map(([a, b]) => `${a}-${b}`).join(",");
-}
-
 /**
  * 選んだ端子どうしにジャンパを掛けた指定を返す。既存のジャンパは残る。
  * 端子が2つ未満、または隣り合っていない端子が混ざっていればnull (掛けられない)。
  */
-export function withJumpers(spec: string, terminals: readonly number[]): string | null {
-  const sorted = [...terminals].sort((a, b) => a - b);
-  if (sorted.length < 2) return null;
+export function withJumpers(spec: string, terminals: readonly string[]): string | null {
+  if (terminals.length < 2) return null;
   const pairs = parseJumperSpec(spec);
-  for (let i = 1; i < sorted.length; i++) {
-    const [a, b] = [sorted[i - 1], sorted[i]];
-    if (b - a !== 1) return null;
-    if (!pairs.some(([x, y]) => x === a && y === b)) pairs.push([a, b]);
+  for (let i = 1; i < terminals.length; i++) {
+    const [a, b] = [terminals[i - 1], terminals[i]];
+    if (!terminalsAreAdjacent(a, b)) return null;
+    if (!pairs.some(([x, y]) => (x === a && y === b) || (x === b && y === a))) pairs.push([a, b]);
   }
-  pairs.sort((p, q) => p[0] - q[0]);
-  return formatJumperSpec(pairs);
+  return formatJumperSpec(parseJumperSpec(formatJumperSpec(pairs)));
 }
 
 /** 選んだ端子に掛かっているジャンパだけを外した指定を返す。 */
-export function withoutJumpers(spec: string, terminals: readonly number[]): string {
+export function withoutJumpers(spec: string, terminals: readonly string[]): string {
   const keep = parseJumperSpec(spec).filter(
     ([a, b]) => !terminals.includes(a) && !terminals.includes(b),
   );
@@ -145,12 +130,13 @@ export const useTerminalsStore = defineStore("terminals", {
     spareCount(): number {
       return this.rows.filter((r) => r.spare).length;
     },
-    /** 選択中の端子番号 (数値・昇順)。数値でない端子番号は無視する。 */
-    selectedTerminals(state): number[] {
-      return state.selected
-        .filter((t) => /^\d+$/.test(t))
-        .map(Number)
-        .sort((a, b) => a - b);
+    /** 選択中の端子番号 (極番号→段記号の順)。多段端子台では "1a" のような段記号付き。 */
+    selectedTerminals(state): string[] {
+      return [...state.selected].sort((a, b) => {
+        const [poleA, levelA] = parseTerminalNo(a);
+        const [poleB, levelB] = parseTerminalNo(b);
+        return poleA - poleB || (levelA ?? "").localeCompare(levelB ?? "") || a.localeCompare(b);
+      });
     },
     /** 現在のジャンパ指定 (図面の値)。 */
     jumperSpec(state): string {

@@ -513,8 +513,8 @@ export interface TerminalChart {
   sheet_name: string;
   terminal_count: number;
   rows: TerminalRow[];
-  /** 正規化済みのジャンパ (小さい端子番号が先)。 */
-  jumpers: [number, number][];
+  /** 正規化済みのジャンパ (並び順で先に来る端子番号が先)。多段端子台では段記号付き ("1a")。 */
+  jumpers: [string, string][];
   jumper_issues: JumperIssue[];
 }
 

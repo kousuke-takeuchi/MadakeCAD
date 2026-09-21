@@ -1,33 +1,78 @@
-// 端子台のジャンパバー (G5)。attrs["jumpers"]からシンボル上に描くバーの端点を求める。
-// Rust側 madake-core/src/terminal_chart.rs の parse_jumpers / jumper_bar_segments と
-// 同一ルール(隣り合う端子どうしだけを認め、それ以外は捨てる)。SVG出力(svg.rs)と
-// このキャンバス描画は、ここの正規化ルールと terminalCenter の座標計算を共有する。
+// 端子台のジャンパ (G5)。attrs["jumpers"] の解析と、シンボル上に描くバーの端点を求める。
+// Rust側 madake-core/src/terminal_chart.rs の parse_jumpers / jumper_bar_segments と同一ルール。
+// Pinia非依存の純関数だけを置き、端子台エディタのストア (stores/terminals.ts) も
+// キャンバス描画 (renderer.ts) も**ここ1か所**の正規化ルールを使う。
 
+import { parseTerminalNo } from "./dynamicSymbol";
 import type { Point, SymbolDef } from "../ipc";
 
 /** ジャンパバーの線幅 (mm)。svg.rsのJUMPER_BAR_STROKEと一致させること。 */
-export const JUMPER_BAR_STROKE_MM = 1.0;
+export const JUMPER_BAR_STROKE_MM = 0.8;
 /** ジャンパバーの両端に付ける丸の半径 (mm)。svg.rsのJUMPER_BAR_DOT_Rと一致させること。 */
-export const JUMPER_BAR_DOT_R_MM = 1.0;
+export const JUMPER_BAR_DOT_R_MM = 1.5;
+
+/** 端子番号の並べ替えキー (極番号→段記号→表記)。Rust側 terminal_sort_key と同一。 */
+function sortKey(no: string): [number, string, string] {
+  const [pole, level] = parseTerminalNo(no);
+  return [pole, level ?? "", no];
+}
+
+function compareKeys(a: [number, string, string], b: [number, string, string]): number {
+  return a[0] - b[0] || a[1].localeCompare(b[1]) || a[2].localeCompare(b[2]);
+}
 
 /**
- * ジャンパ指定 (`"1-2,3-4"`) を解析する。小さい番号が先・昇順・重複なしに正規化し、
- * 隣り合わない端子どうし(例 "1-3")は捨てる(Rust側 parse_jumpers と同じ規則)。
- * 端子台エディタの stores/terminals.ts の parseJumperSpec とも同一の正規化。
+ * 2つの端子が隣り合っているか (ジャンパを掛けられる並び)。
+ * 同じ段で極番号が1違い(縦の隣)か、同じ極で段記号が1違い(横の隣=段をまたぐ)の組だけ。
+ * 極も段も違う斜めの組("1a-2b")は隣り合っていない(Rust側 terminals_are_adjacent と同一)。
  */
-export function parseJumperPairs(spec: string): [number, number][] {
-  const pairs: [number, number][] = [];
+export function terminalsAreAdjacent(a: string, b: string): boolean {
+  const [poleA, levelA] = parseTerminalNo(a);
+  const [poleB, levelB] = parseTerminalNo(b);
+  if (levelA === levelB) return Math.abs(poleA - poleB) === 1;
+  if (poleA === poleB && levelA !== null && levelB !== null) {
+    return Math.abs(levelA.charCodeAt(0) - levelB.charCodeAt(0)) === 1;
+  }
+  return false;
+}
+
+/** 端子台シンボルが持つ端子番号を、チャートに並ぶ順に列挙する(Rust側 terminal_numbers_of と同一)。 */
+export function terminalNumbers(def: SymbolDef): string[] {
+  const keys = def.pins.map((p) => sortKey(p.number));
+  keys.sort(compareKeys);
+  const out: string[] = [];
+  for (const k of keys) if (out[out.length - 1] !== k[2]) out.push(k[2]);
+  return out;
+}
+
+/**
+ * ジャンパ指定 (`"1-2,3-4"`、多段端子台なら `"1a-1b"`) を解析して正規化する。
+ * 並び順で先に来る端子を前にし、重複を除き、昇順に並べる。隣り合わない端子どうしの
+ * 組は捨てる。`terminals` (その端子台が実際に持つ端子番号) を渡すと、そこに無い端子を
+ * 指す組と、多段端子台に段記号なしで書かれた組も捨てる(Rust側 parse_jumpers と同一)。
+ */
+export function parseJumperSpec(spec: string, terminals?: readonly string[]): [string, string][] {
+  const multilevel = (terminals ?? []).some((t) => parseTerminalNo(t)[1] !== null);
+  const pairs: [string, string][] = [];
   for (const item of spec.split(",")) {
     const parts = item.split("-").map((p) => p.trim());
-    if (parts.length !== 2) continue;
-    if (!/^\d+$/.test(parts[0]) || !/^\d+$/.test(parts[1])) continue;
-    const a = Math.min(Number(parts[0]), Number(parts[1]));
-    const b = Math.max(Number(parts[0]), Number(parts[1]));
-    if (b - a !== 1) continue;
+    if (parts.length !== 2 || parts.some((p) => p === "")) continue;
+    if (multilevel && parts.every((p) => /^\d+$/.test(p))) continue;
+    if (terminals && parts.some((p) => !terminals.includes(p))) continue;
+    if (!terminalsAreAdjacent(parts[0], parts[1])) continue;
+    const [a, b] =
+      compareKeys(sortKey(parts[0]), sortKey(parts[1])) <= 0
+        ? [parts[0], parts[1]]
+        : [parts[1], parts[0]];
     if (!pairs.some(([x, y]) => x === a && y === b)) pairs.push([a, b]);
   }
-  pairs.sort((p, q) => p[0] - q[0]);
+  pairs.sort((p, q) => compareKeys(sortKey(p[0]), sortKey(q[0])) || compareKeys(sortKey(p[1]), sortKey(q[1])));
   return pairs;
+}
+
+/** ジャンパ指定の文字列表現 (`attrs["jumpers"]` に入れる形)。 */
+export function formatJumperSpec(pairs: readonly (readonly [string, string])[]): string {
+  return pairs.map(([a, b]) => `${a}-${b}`).join(",");
 }
 
 /**
@@ -50,12 +95,12 @@ export function terminalCenter(def: SymbolDef, number: string): Point | null {
  */
 export function jumperBarSegments(
   def: SymbolDef,
-  pairs: readonly [number, number][],
+  pairs: readonly (readonly [string, string])[],
 ): [Point, Point][] {
   const out: [Point, Point][] = [];
   for (const [a, b] of pairs) {
-    const pa = terminalCenter(def, String(a));
-    const pb = terminalCenter(def, String(b));
+    const pa = terminalCenter(def, a);
+    const pb = terminalCenter(def, b);
     if (pa && pb) out.push([pa, pb]);
   }
   return out;

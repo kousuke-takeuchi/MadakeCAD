@@ -77,8 +77,8 @@ describe("dynamicSymbol", () => {
     expect(dynamicSymbol("plc_do_xp")).toBeNull();
   });
 
-  // ja: 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、2.5mmグリッド上・単段と同じ5mmピッチになる
-  it("a multi-level terminal block (4 poles, 2 levels) numbers its pins with a level letter and keeps the 5 mm pitch", () => {
+  // ja: 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、1端子=左右2接続点になる
+  it("a multi-level terminal block (4 poles, 2 levels) numbers its pins with a level letter", () => {
     const def = dynamicSymbol("terminal_block_4p_2l");
     expect(def).not.toBeNull();
     expect(def!.ref_prefix).toBe("TB");
@@ -88,16 +88,36 @@ describe("dynamicSymbol", () => {
     for (const no of numbers) {
       const same = def!.pins.filter((p) => p.number === no);
       expect(same).toHaveLength(2);
-      expect(same[0].at.x + same[1].at.x).toBeCloseTo(0, 9);
+      expect(same[1].at.x - same[0].at.x).toBeCloseTo(5, 9);
       expect(same[0].at.y).toBeCloseTo(same[1].at.y, 9);
     }
-    for (const p of def!.pins) {
-      expect(Math.abs((p.at.x / 2.5) % 1)).toBeCloseTo(0, 9);
-      expect(Math.abs((p.at.y / 2.5) % 1)).toBeCloseTo(0, 9);
+  });
+
+  // ja: 多段端子台は段ごとに1列の端子が横に並び、同じ極の端子(1aと1b)は同じ行に載る(Rust側と同じ座標)
+  it("draws one terminal column per level, with the same pole of every level on one row", () => {
+    const def = dynamicSymbol("terminal_block_4p_2l")!;
+    expect(def.primitives.filter((p) => p.type === "rect")).toHaveLength(2);
+    const at = (no: string) => def.pins.filter((p) => p.number === no).map((p) => p.at);
+    // 段aの列は中心x=-5 (接続点 -7.5/-2.5)、段bの列は中心x=+5 (接続点 +2.5/+7.5)
+    expect(at("1a").map((p) => p.x)).toEqual([-7.5, -2.5]);
+    expect(at("1b").map((p) => p.x)).toEqual([2.5, 7.5]);
+    expect(at("1a")[0].y).toBeCloseTo(at("1b")[0].y, 9);
+    expect(at("2a")[0].y - at("1a")[0].y).toBeCloseTo(5, 9);
+  });
+
+  // ja: 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有しない
+  it("keeps every connection point on the 2.5 mm grid and never lets two terminals share one", () => {
+    for (const levels of [1, 2, 3]) {
+      const def = dynamicSymbol(`terminal_block_4p_${levels}l`)!;
+      const seen = new Map<string, string>();
+      for (const pin of def.pins) {
+        expect(Math.abs((pin.at.x / 2.5) % 1)).toBeCloseTo(0, 9);
+        expect(Math.abs((pin.at.y / 2.5) % 1)).toBeCloseTo(0, 9);
+        const key = `${pin.at.x},${pin.at.y}`;
+        expect(seen.get(key) ?? pin.number).toBe(pin.number);
+        seen.set(key, pin.number);
+      }
     }
-    const ys = [...new Set(def!.pins.map((p) => p.at.y))].sort((a, b) => a - b);
-    expect(ys).toHaveLength(8);
-    for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeCloseTo(5, 9);
   });
 
   // ja: 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様にnullになる

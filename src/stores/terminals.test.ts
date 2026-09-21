@@ -73,7 +73,7 @@ function row(terminal: string, extra: Partial<TerminalRow> = {}): TerminalRow {
   };
 }
 
-function chart(rows: TerminalRow[], jumpers: [number, number][] = []): TerminalChart {
+function chart(rows: TerminalRow[], jumpers: [string, string][] = []): TerminalChart {
   return {
     entity_id: "tb1",
     reference: "TB1",
@@ -87,7 +87,7 @@ function chart(rows: TerminalRow[], jumpers: [number, number][] = []): TerminalC
 }
 
 /** 図面どおりの4極チャート (端子1・2は結線済み、3・4は予備)。 */
-function wiredChart(jumpers: [number, number][] = []): TerminalChart {
+function wiredChart(jumpers: [string, string][] = []): TerminalChart {
   return chart(
     [
       row("1", {
@@ -154,8 +154,8 @@ describe("jumper specification", () => {
   // ja: ジャンパ指定は「小さい端子番号が先・昇順・重複なし」に正規化される
   it("normalizes a jumper list to ascending, low-first, duplicate-free pairs", () => {
     expect(parseJumperSpec("3-2,1-2,2-1")).toEqual([
-      [1, 2],
-      [2, 3],
+      ["1", "2"],
+      ["2", "3"],
     ]);
     expect(formatJumperSpec(parseJumperSpec("3-2,1-2,2-1"))).toBe("1-2,2-3");
   });
@@ -163,31 +163,31 @@ describe("jumper specification", () => {
   // ja: 壊れた記述と隣り合わない端子のジャンパは読み飛ばす
   it("drops malformed entries and jumpers between terminals that are not neighbours", () => {
     expect(parseJumperSpec("1-3")).toEqual([]);
-    expect(parseJumperSpec("abc, ,1-,1-2")).toEqual([[1, 2]]);
+    expect(parseJumperSpec("abc, ,1-,1-2")).toEqual([["1", "2"]]);
   });
 
   // ja: 隣り合う端子を選んでジャンパを掛けると既存のジャンパは残る
   it("adds a jumper for adjacent terminals while keeping the existing ones", () => {
-    expect(withJumpers("3-4", [1, 2])).toBe("1-2,3-4");
+    expect(withJumpers("3-4", ["1", "2"])).toBe("1-2,3-4");
   });
 
   // ja: 3つ以上の端子を選ぶと隣どうしを順につないだジャンパになる
   it("chains jumpers along a run of three or more adjacent terminals", () => {
-    expect(withJumpers("", [1, 2, 3])).toBe("1-2,2-3");
+    expect(withJumpers("", ["1", "2", "3"])).toBe("1-2,2-3");
   });
 
   // ja: 隣り合わない端子どうしにはジャンパを掛けられない
   it("refuses to jumper terminals that are not adjacent", () => {
-    expect(withJumpers("", [1, 3])).toBeNull();
-    expect(withJumpers("", [2])).toBeNull();
+    expect(withJumpers("", ["1", "3"])).toBeNull();
+    expect(withJumpers("", ["2"])).toBeNull();
     expect(withJumpers("", [])).toBeNull();
   });
 
   // ja: ジャンパ削除は選んだ端子に掛かっているものだけを外す
   it("removes only the jumpers that touch the selected terminals", () => {
-    expect(withoutJumpers("1-2,3-4", [3])).toBe("1-2");
-    expect(withoutJumpers("1-2,2-3,3-4", [2])).toBe("3-4");
-    expect(withoutJumpers("1-2", [4])).toBe("1-2");
+    expect(withoutJumpers("1-2,3-4", ["3"])).toBe("1-2");
+    expect(withoutJumpers("1-2,2-3,3-4", ["2"])).toBe("3-4");
+    expect(withoutJumpers("1-2", ["4"])).toBe("1-2");
   });
 });
 
@@ -277,8 +277,8 @@ describe("terminal strip editor store", () => {
   it("clears only the jumpers on the selected terminals", async () => {
     mockBackend({
       chart: wiredChart([
-        [1, 2],
-        [3, 4],
+        ["1", "2"],
+        ["3", "4"],
       ]),
     });
     const sent = spyCommands();
@@ -294,7 +294,7 @@ describe("terminal strip editor store", () => {
 
   // ja: ジャンパが1本も残らないときは属性ごと消す
   it("drops the jumper attribute entirely once no jumper is left", async () => {
-    mockBackend({ chart: wiredChart([[1, 2]]) });
+    mockBackend({ chart: wiredChart([["1", "2"]]) });
     const sent = spyCommands();
     const store = await opened("1-2");
     store.toggleRow("2");
@@ -308,7 +308,7 @@ describe("terminal strip editor store", () => {
     mockBackend();
     spyCommands();
     const store = await opened();
-    vi.spyOn(ipc, "getTerminalChart").mockResolvedValue(wiredChart([[1, 2]]));
+    vi.spyOn(ipc, "getTerminalChart").mockResolvedValue(wiredChart([["1", "2"]]));
     store.toggleRow("1");
     store.toggleRow("2");
     await store.addJumper();
@@ -318,7 +318,7 @@ describe("terminal strip editor store", () => {
 
   // ja: 図面が外から変わったら (undoやAIの編集) グリッドを取り直し、古いチェック結果は捨てる
   it("reloads the grid when the drawing changes from outside the editor, e.g. an undo", async () => {
-    mockBackend({ chart: wiredChart([[1, 2]]) });
+    mockBackend({ chart: wiredChart([["1", "2"]]) });
     const store = await opened("1-2");
     await store.runCheck();
     store.toggleRow("1");

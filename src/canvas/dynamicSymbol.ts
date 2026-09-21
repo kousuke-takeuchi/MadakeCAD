@@ -8,6 +8,8 @@ import type { Point, Primitive, PinDef, SymbolDef, SymbolInstance, TextSlot } fr
 export const DYNAMIC_PIN_MAX = 50;
 /** 多段端子台 (`terminal_block_{n}p_{levels}l`、G6) の最大段数(Rust側 TERMINAL_LEVEL_MAX と一致)。 */
 export const TERMINAL_LEVEL_MAX = 3;
+/** 多段端子台の段(=列)の中心間隔 mm(Rust側 TERMINAL_LEVEL_PITCH と一致)。 */
+export const TERMINAL_LEVEL_PITCH = 10.0;
 /** PLCモジュールの最大点数(Rust側 PLC_POINT_MAX と一致)。 */
 export const PLC_POINT_MAX = 64;
 /** PLCモジュールのI/O点の縦ピッチ mm(Rust側 PLC_POINT_PITCH_MM と一致)。 */
@@ -65,8 +67,19 @@ const p = (x: number, y: number): Point => ({ x, y });
 const offset = (i: number, n: number) => (i - (n - 1) / 2) * 5.0;
 
 /** 段番号(0始まり)を段記号('a','b','c',…)にする(Rust側 level_letter と一致)。 */
-function levelLetter(levelIndex: number): string {
+export function levelLetter(levelIndex: number): string {
   return String.fromCharCode(97 + levelIndex);
+}
+
+/**
+ * 端子番号の表記から(極番号, 段記号)を取り出す(Rust側 parse_terminal_no と一致)。
+ * 単段は数字だけ("8" → [8, null])、多段端子台 (G6) は末尾に段記号が付く("8a" → [8,"a"])。
+ * 読み取れない番号は極番号を Number.MAX_SAFE_INTEGER として末尾に回す。
+ */
+export function parseTerminalNo(no: string): [number, string | null] {
+  const m = /^([0-9]+)([a-zA-Z])$/.exec(no);
+  if (m) return [Number(m[1]), m[2]];
+  return [/^[0-9]+$/.test(no) ? Number(no) : Number.MAX_SAFE_INTEGER, null];
 }
 
 /**
@@ -86,32 +99,39 @@ function parseMultiLevelTerminalBlock(rest: string): { n: number; levels: number
 }
 
 /**
- * `terminal_block_{n}p_{levels}l`から多段端子台のシンボルを作る
- * (Rust側 multilevel_terminal_block_symbol と同一座標。G6)。単段と同じ規則の縦一列
- * (5mmピッチ・2.5mmグリッド)で、1極ぶんに段数だけ端子が連続する(2段なら1a,1b,2a,2b,…)。
+ * 端子台のシンボルを作る(Rust側 terminal_block_symbol と同一座標)。
+ * 端子は縦にn行(5mmピッチ・2.5mmグリッド)、段(レベル)は**横に並ぶ列**で表す(G6)。
+ * 列の中心間隔は TERMINAL_LEVEL_PITCH で、同じ極の端子は段が違っても同じ行に載る。
+ * `levels === 1`では列が1本・ピン番号は数字だけになり、従来の単段端子台と同一。
  */
-function multiLevelTerminalBlockSymbol(id: string, n: number, levels: number): SymbolDef {
-  const total = n * levels;
-  const primitives: Primitive[] = [
-    { type: "rect", p1: p(-2.5, offset(0, total) - 2.5), p2: p(2.5, offset(total - 1, total) + 2.5), filled: false },
-  ];
+function terminalBlockSymbol(id: string, n: number, levels: number): SymbolDef {
+  const columnX = (j: number) => (j - (levels - 1) / 2) * TERMINAL_LEVEL_PITCH;
+  const primitives: Primitive[] = [];
   const pins: PinDef[] = [];
-  for (let k = 0; k < total; k++) {
-    const y = offset(k, total);
-    const pole = Math.floor(k / levels) + 1;
-    const no = `${pole}${levelLetter(k % levels)}`;
-    primitives.push({ type: "circle", center: p(0, y), r: 1.8, filled: false });
-    primitives.push({ type: "text", at: p(0, y - 1), text: no, height: 2 });
-    primitives.push({ type: "line", pts: [p(-2.5, y), p(-1.8, y)] });
-    primitives.push({ type: "line", pts: [p(1.8, y), p(2.5, y)] });
-    // 貫通端子: 左右2接続点に同一ピン番号(段が違えば番号も違うのでネットも独立)
-    pins.push({ number: no, name: "", at: p(-2.5, y), dir: "left" });
-    pins.push({ number: no, name: "", at: p(2.5, y), dir: "right" });
+  for (let j = 0; j < levels; j++) {
+    const cx = columnX(j);
+    primitives.push({
+      type: "rect",
+      p1: p(cx - 2.5, offset(0, n) - 2.5),
+      p2: p(cx + 2.5, offset(n - 1, n) + 2.5),
+      filled: false,
+    });
+    for (let i = 0; i < n; i++) {
+      const y = offset(i, n);
+      const no = levels === 1 ? String(i + 1) : `${i + 1}${levelLetter(j)}`;
+      primitives.push({ type: "circle", center: p(cx, y), r: 1.8, filled: false });
+      primitives.push({ type: "text", at: p(cx, y - 1), text: no, height: 2 });
+      primitives.push({ type: "line", pts: [p(cx - 2.5, y), p(cx - 1.8, y)] });
+      primitives.push({ type: "line", pts: [p(cx + 1.8, y), p(cx + 2.5, y)] });
+      // 貫通端子: 左右2接続点に同一ピン番号(段が違えば番号も違うのでネットも独立)
+      pins.push({ number: no, name: "", at: p(cx - 2.5, y), dir: "left" });
+      pins.push({ number: no, name: "", at: p(cx + 2.5, y), dir: "right" });
+    }
   }
   return {
     id,
-    name: `Terminal block ${n}P ${levels}-level`,
-    name_ja: `端子台(${n}極 ${levels}段)`,
+    name: levels === 1 ? `Terminal block ${n}P` : `Terminal block ${n}P ${levels}-level`,
+    name_ja: levels === 1 ? `端子台(${n}極)` : `端子台(${n}極 ${levels}段)`,
     category: "connector",
     ref_prefix: "TB",
     primitives,
@@ -148,33 +168,10 @@ export function dynamicSymbol(id: string): SymbolDef | null {
   if (id.startsWith("terminal_block_")) {
     const rest = id.slice("terminal_block_".length);
     const multi = parseMultiLevelTerminalBlock(rest);
-    if (multi) return multiLevelTerminalBlockSymbol(id, multi.n, multi.levels);
+    if (multi) return terminalBlockSymbol(id, multi.n, multi.levels);
     const n = parsePinCount(rest);
     if (n === null) return null;
-    const primitives: Primitive[] = [
-      { type: "rect", p1: p(-2.5, offset(0, n) - 2.5), p2: p(2.5, offset(n - 1, n) + 2.5), filled: false },
-    ];
-    const pins: PinDef[] = [];
-    for (let i = 0; i < n; i++) {
-      const y = offset(i, n);
-      const no = String(i + 1);
-      primitives.push({ type: "circle", center: p(0, y), r: 1.8, filled: false });
-      primitives.push({ type: "text", at: p(0, y - 1), text: no, height: 2 });
-      primitives.push({ type: "line", pts: [p(-2.5, y), p(-1.8, y)] });
-      primitives.push({ type: "line", pts: [p(1.8, y), p(2.5, y)] });
-      // 貫通端子: 左右2接続点に同一ピン番号(ネットリストで内部短絡)
-      pins.push({ number: no, name: "", at: p(-2.5, y), dir: "left" });
-      pins.push({ number: no, name: "", at: p(2.5, y), dir: "right" });
-    }
-    return {
-      id,
-      name: `Terminal block ${n}P`,
-      name_ja: `端子台(${n}極)`,
-      category: "connector",
-      ref_prefix: "TB",
-      primitives,
-      pins,
-    };
+    return terminalBlockSymbol(id, n, 1);
   }
   return null;
 }
