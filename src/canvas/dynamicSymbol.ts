@@ -6,6 +6,8 @@ import type { Point, Primitive, PinDef, SymbolDef, SymbolInstance, TextSlot } fr
 
 /** 動的シンボルの最大極数(Rust側 DYNAMIC_PIN_MAX と一致)。 */
 export const DYNAMIC_PIN_MAX = 50;
+/** 多段端子台 (`terminal_block_{n}p_{levels}l`、G6) の最大段数(Rust側 TERMINAL_LEVEL_MAX と一致)。 */
+export const TERMINAL_LEVEL_MAX = 3;
 /** PLCモジュールの最大点数(Rust側 PLC_POINT_MAX と一致)。 */
 export const PLC_POINT_MAX = 64;
 /** PLCモジュールのI/O点の縦ピッチ mm(Rust側 PLC_POINT_PITCH_MM と一致)。 */
@@ -62,6 +64,61 @@ function plcModuleSymbol(id: string): SymbolDef | null {
 const p = (x: number, y: number): Point => ({ x, y });
 const offset = (i: number, n: number) => (i - (n - 1) / 2) * 5.0;
 
+/** 段番号(0始まり)を段記号('a','b','c',…)にする(Rust側 level_letter と一致)。 */
+function levelLetter(levelIndex: number): string {
+  return String.fromCharCode(97 + levelIndex);
+}
+
+/**
+ * `terminal_block_`の後ろを多段端子台の(極数, 段数)にパースする
+ * (Rust側 parse_multilevel_terminal_block と同一規則)。`{n}p_{levels}l`の形だけを
+ * 受け付け(例 "8p_2l")、単段の`{n}p`はnullを返す(呼び出し側の既存経路がそのまま扱う)。
+ */
+function parseMultiLevelTerminalBlock(rest: string): { n: number; levels: number } | null {
+  const parts = rest.split("_");
+  if (parts.length !== 2) return null;
+  const n = parseCount(parts[0], DYNAMIC_PIN_MAX);
+  const m = /^([0-9]+)l$/.exec(parts[1]);
+  if (n === null || !m) return null;
+  const levels = Number(m[1]);
+  if (levels < 1 || levels > TERMINAL_LEVEL_MAX) return null;
+  return { n, levels };
+}
+
+/**
+ * `terminal_block_{n}p_{levels}l`から多段端子台のシンボルを作る
+ * (Rust側 multilevel_terminal_block_symbol と同一座標。G6)。単段と同じ規則の縦一列
+ * (5mmピッチ・2.5mmグリッド)で、1極ぶんに段数だけ端子が連続する(2段なら1a,1b,2a,2b,…)。
+ */
+function multiLevelTerminalBlockSymbol(id: string, n: number, levels: number): SymbolDef {
+  const total = n * levels;
+  const primitives: Primitive[] = [
+    { type: "rect", p1: p(-2.5, offset(0, total) - 2.5), p2: p(2.5, offset(total - 1, total) + 2.5), filled: false },
+  ];
+  const pins: PinDef[] = [];
+  for (let k = 0; k < total; k++) {
+    const y = offset(k, total);
+    const pole = Math.floor(k / levels) + 1;
+    const no = `${pole}${levelLetter(k % levels)}`;
+    primitives.push({ type: "circle", center: p(0, y), r: 1.8, filled: false });
+    primitives.push({ type: "text", at: p(0, y - 1), text: no, height: 2 });
+    primitives.push({ type: "line", pts: [p(-2.5, y), p(-1.8, y)] });
+    primitives.push({ type: "line", pts: [p(1.8, y), p(2.5, y)] });
+    // 貫通端子: 左右2接続点に同一ピン番号(段が違えば番号も違うのでネットも独立)
+    pins.push({ number: no, name: "", at: p(-2.5, y), dir: "left" });
+    pins.push({ number: no, name: "", at: p(2.5, y), dir: "right" });
+  }
+  return {
+    id,
+    name: `Terminal block ${n}P ${levels}-level`,
+    name_ja: `端子台(${n}極 ${levels}段)`,
+    category: "connector",
+    ref_prefix: "TB",
+    primitives,
+    pins,
+  };
+}
+
 export function dynamicSymbol(id: string): SymbolDef | null {
   if (id === BLOCK_SYMBOL_ID) return blockSymbol({});
   if (id.startsWith("plc_di_") || id.startsWith("plc_do_")) return plcModuleSymbol(id);
@@ -89,7 +146,10 @@ export function dynamicSymbol(id: string): SymbolDef | null {
     };
   }
   if (id.startsWith("terminal_block_")) {
-    const n = parsePinCount(id.slice("terminal_block_".length));
+    const rest = id.slice("terminal_block_".length);
+    const multi = parseMultiLevelTerminalBlock(rest);
+    if (multi) return multiLevelTerminalBlockSymbol(id, multi.n, multi.levels);
+    const n = parsePinCount(rest);
     if (n === null) return null;
     const primitives: Primitive[] = [
       { type: "rect", p1: p(-2.5, offset(0, n) - 2.5), p2: p(2.5, offset(n - 1, n) + 2.5), filled: false },

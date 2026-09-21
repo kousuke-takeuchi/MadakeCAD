@@ -58,6 +58,7 @@ function project(spec = ""): Project {
 function row(terminal: string, extra: Partial<TerminalRow> = {}): TerminalRow {
   return {
     terminal,
+    level: "",
     internal: "",
     external: "",
     wire_no: "",

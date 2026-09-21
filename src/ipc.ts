@@ -477,8 +477,10 @@ export interface Net {
 
 /** 端子台チャートの1行 = 端子1個 (madake-coreの`TerminalRow`)。 */
 export interface TerminalRow {
-  /** 端子番号 (例 "1")。 */
+  /** 端子番号 (例 "1"。多段端子台では段記号付きで "1a" のようになる)。 */
   terminal: string;
+  /** 段記号 (例 "a")。多段端子台 (G6) の端子だけが持ち、単段の端子台では空文字。 */
+  level: string;
   /** 内部側 (盤内) の接続先 "参照記号:ピン番号"。 */
   internal: string;
   /** 外部側 (盤外) の接続先。 */

@@ -76,6 +76,43 @@ describe("dynamicSymbol", () => {
     expect(dynamicSymbol("plc_di_65p")).toBeNull();
     expect(dynamicSymbol("plc_do_xp")).toBeNull();
   });
+
+  // ja: 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、2.5mmグリッド上・単段と同じ5mmピッチになる
+  it("a multi-level terminal block (4 poles, 2 levels) numbers its pins with a level letter and keeps the 5 mm pitch", () => {
+    const def = dynamicSymbol("terminal_block_4p_2l");
+    expect(def).not.toBeNull();
+    expect(def!.ref_prefix).toBe("TB");
+    expect(def!.pins).toHaveLength(4 * 2 * 2);
+    const numbers = new Set(def!.pins.map((p) => p.number));
+    expect([...numbers].sort()).toEqual(["1a", "1b", "2a", "2b", "3a", "3b", "4a", "4b"]);
+    for (const no of numbers) {
+      const same = def!.pins.filter((p) => p.number === no);
+      expect(same).toHaveLength(2);
+      expect(same[0].at.x + same[1].at.x).toBeCloseTo(0, 9);
+      expect(same[0].at.y).toBeCloseTo(same[1].at.y, 9);
+    }
+    for (const p of def!.pins) {
+      expect(Math.abs((p.at.x / 2.5) % 1)).toBeCloseTo(0, 9);
+      expect(Math.abs((p.at.y / 2.5) % 1)).toBeCloseTo(0, 9);
+    }
+    const ys = [...new Set(def!.pins.map((p) => p.at.y))].sort((a, b) => a - b);
+    expect(ys).toHaveLength(8);
+    for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeCloseTo(5, 9);
+  });
+
+  // ja: 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様にnullになる
+  it("a terminal block with a level count outside 1-3 returns null", () => {
+    expect(dynamicSymbol("terminal_block_8p_0l")).toBeNull();
+    expect(dynamicSymbol("terminal_block_8p_4l")).toBeNull();
+  });
+
+  // ja: 単段の端子台id(terminal_block_{n}p)は多段対応の追加後も数字だけのピン番号のままで、既存プロジェクトとの互換を保つ
+  it("the plain single-level terminal block id keeps its numeric-only pin numbers", () => {
+    const def = dynamicSymbol("terminal_block_8p");
+    expect(def).not.toBeNull();
+    expect(def!.pins.every((p) => /^[0-9]+$/.test(p.number))).toBe(true);
+    expect(new Set(def!.pins.map((p) => p.number)).size).toBe(8);
+  });
 });
 
 describe("resolveSymbolDef", () => {

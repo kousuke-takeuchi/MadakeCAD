@@ -28,6 +28,12 @@ import {
   shapeRectCorners,
   shapeStrokeColor,
 } from "./shapes";
+import {
+  JUMPER_BAR_DOT_R_MM,
+  JUMPER_BAR_STROKE_MM,
+  jumperBarSegments,
+  parseJumperPairs,
+} from "./terminalJumpers";
 import { entityViewClass, type ViewClass } from "./viewClasses";
 import {
   BALLOON_FONT,
@@ -426,6 +432,25 @@ export function drawSymbol(
         ctx.textAlign = "center";
         ctx.fillText(prim.text, p.x, p.y + (prim.height * vp.scale) / 2.8);
         break;
+      }
+    }
+  }
+  // ジャンパバー (G5): 端子台のattrs.jumpersを太い線+両端の丸(ショートバー)として描く
+  // (SVG出力のrender_jumper_barsと同じジオメトリ。表示クラスは"symbols"に含まれる)
+  if (inst.symbol_id.startsWith("terminal_block_")) {
+    const pairs = parseJumperPairs(inst.attrs.jumpers ?? "");
+    for (const [a, b] of jumperBarSegments(def, pairs)) {
+      const sa = vp.toScreen(transformLocal(a, inst));
+      const sb = vp.toScreen(transformLocal(b, inst));
+      ctx.lineWidth = Math.max(1, JUMPER_BAR_STROKE_MM * vp.scale);
+      ctx.beginPath();
+      ctx.moveTo(sa.x, sa.y);
+      ctx.lineTo(sb.x, sb.y);
+      ctx.stroke();
+      for (const s of [sa, sb]) {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, JUMPER_BAR_DOT_R_MM * vp.scale, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
   }

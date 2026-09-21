@@ -636,6 +636,8 @@
     "search": "検索 (名称・記号)",
     "pinsLabel": "極数",
     "pinsHint": "1〜{max} (5mmピッチ・中央揃え)",
+    "levelsLabel": "段数",
+    "levelsHint": "1〜{max} (ピン番号に段記号が付く: 1a, 1b, …)",
     "place": "配置",
     "partsDb": "部品DB (グローバルマスタ)",
     "partsHint": "選択して配置すると型番・定格が図面に設定されます (登録は madake parts / AIチャットから)",

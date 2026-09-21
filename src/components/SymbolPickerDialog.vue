@@ -6,7 +6,7 @@
 import { Minus, Plus, Search, X } from "lucide-vue-next";
 import { computed, inject, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { BLOCK_SYMBOL_ID, DYNAMIC_PIN_MAX, dynamicSymbol } from "../canvas/dynamicSymbol";
+import { BLOCK_SYMBOL_ID, DYNAMIC_PIN_MAX, TERMINAL_LEVEL_MAX, dynamicSymbol } from "../canvas/dynamicSymbol";
 import {
   macroDescription,
   macroName,
@@ -48,6 +48,10 @@ type DynBase = (typeof dynamicBases)[number]["base"];
 
 const selectedDyn = ref<DynBase | null>(null);
 const pinCount = ref(8);
+/** 段数 (G6、多段端子台)。1 (既定) は単段の `terminal_block_{n}p` のままになる。 */
+const levelCount = ref(1);
+/** 段数指定は端子台だけで出す (コネクタ・ブロックには無い概念)。 */
+const showLevels = computed(() => selectedDyn.value === "terminal_block");
 
 const dynamicCells = computed(() => {
   const q = query.value.trim().toLowerCase();
@@ -93,9 +97,14 @@ function macroCategoryLabel(key: string): string {
   return key;
 }
 
-/** 選択中の可変部品の現在極数でのプレビュー定義。 */
-const dynPreview = (base: DynBase) =>
-  dynamicSymbol(`${base}_${base === selectedDyn.value ? pinCount.value : 3}p`)!;
+/** 選択中の可変部品の現在極数(+端子台は段数)でのプレビュー定義。 */
+const dynPreview = (base: DynBase) => {
+  const n = base === selectedDyn.value ? pinCount.value : 3;
+  if (base === "terminal_block" && base === selectedDyn.value && levelCount.value > 1) {
+    return dynamicSymbol(`terminal_block_${n}p_${levelCount.value}l`)!;
+  }
+  return dynamicSymbol(`${base}_${n}p`)!;
+};
 
 /** ブロックセルのプレビュー (左右1本ずつの最小のブロック)。 */
 const blockPreview = computed(() => blockEditor.previewDef ?? dynamicSymbol(BLOCK_SYMBOL_ID)!);
@@ -121,6 +130,7 @@ watch(
   (open) => {
     if (open) {
       selectedDyn.value = null;
+      levelCount.value = 1;
       blockEditor.close();
       macros.query = query.value;
       void parts.search(query.value);
@@ -141,6 +151,10 @@ function clampPins(n: number) {
   pinCount.value = Math.min(DYNAMIC_PIN_MAX, Math.max(1, Math.round(n) || 1));
 }
 
+function clampLevels(n: number) {
+  levelCount.value = Math.min(TERMINAL_LEVEL_MAX, Math.max(1, Math.round(n) || 1));
+}
+
 function pick(symbolId: string) {
   controller.setTool("place", symbolId);
   ui.symbolPickerOpen = false;
@@ -149,6 +163,11 @@ function pick(symbolId: string) {
 
 function placeDynamic() {
   if (!selectedDyn.value) return;
+  // 段数1は既存の単段id(terminal_block_{n}p)のまま=既存プロジェクトとの互換を保つ
+  if (selectedDyn.value === "terminal_block" && levelCount.value > 1) {
+    pick(`terminal_block_${pinCount.value}p_${levelCount.value}l`);
+    return;
+  }
   pick(`${selectedDyn.value}_${pinCount.value}p`);
 }
 
@@ -229,7 +248,7 @@ function placeMacro() {
                 :key="d.base"
                 class="cell"
                 :class="{ selected: selectedDyn === d.base }"
-                @click="((selectedDyn = d.base), blockEditor.close())"
+                @click="((selectedDyn = d.base), (levelCount = 1), blockEditor.close())"
               >
                 <SymbolPreview :def="dynPreview(d.base)" :width="72" :height="40" />
                 <span>{{ d.label }}</span>
@@ -377,6 +396,19 @@ function placeMacro() {
           <button class="step" @click="clampPins(pinCount + 1)"><Plus :size="12" /></button>
         </div>
         <span class="pins-hint">{{ t("symbolPicker.pinsHint", { max: DYNAMIC_PIN_MAX }) }}</span>
+        <template v-if="showLevels">
+          <span class="pins-label">{{ t("symbolPicker.levelsLabel") }}</span>
+          <div class="stepper">
+            <button class="step" @click="clampLevels(levelCount - 1)"><Minus :size="12" /></button>
+            <input
+              class="step-value"
+              :value="levelCount"
+              @change="clampLevels(Number(($event.target as HTMLInputElement).value))"
+            />
+            <button class="step" @click="clampLevels(levelCount + 1)"><Plus :size="12" /></button>
+          </div>
+          <span class="pins-hint">{{ t("symbolPicker.levelsHint", { max: TERMINAL_LEVEL_MAX }) }}</span>
+        </template>
         <span class="spacer" />
         <button class="place-btn" @click="placeDynamic">{{ t("symbolPicker.place") }}</button>
       </div>

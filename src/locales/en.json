@@ -636,6 +636,8 @@
     "search": "Search (name or symbol)",
     "pinsLabel": "Poles",
     "pinsHint": "1-{max} (5 mm pitch, centred)",
+    "levelsLabel": "Levels",
+    "levelsHint": "1-{max} (level letter added to pin numbers: 1a, 1b, ...)",
     "place": "Place",
     "partsDb": "Parts database (shared master)",
     "partsHint": "Placing a part fills in its part number and rating (register parts with madake parts or the AI chat)",
