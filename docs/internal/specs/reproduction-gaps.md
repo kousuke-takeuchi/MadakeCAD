@@ -307,6 +307,13 @@ Text styling is new.
 
 ### G5 — Jumper bars are invisible on the schematic · quality
 
+> **Status 2026-08-23 (phase 6, task 2): resolved.** `attrs["jumpers"]` is now
+> drawn on the schematic symbol itself (SVG export and the canvas renderer), as a
+> bar spanning the jumpered terminals with a small circle at each end, reusing the
+> same `parse_jumpers` validation the terminal chart and terminal diagram use
+> (non-adjacent or unknown terminal numbers draw nothing). Still also reported in
+> the terminal chart and terminal diagram, unchanged.
+>
 > **Status 2026-08-23 (phase 5): unchanged.** Still reports only; nothing is drawn
 > on the schematic sheet.
 
@@ -329,6 +336,20 @@ existing jumper drawing.
 
 ### G6 — A terminal block is one column of terminals · quality
 
+> **Status 2026-08-23 (phase 6, task 2): resolved (dynamic symbol id).** A new
+> parametric symbol family, `terminal_block_{n}p_{levels}l` (1–3 levels, e.g.
+> `terminal_block_8p_2l`), numbers each level's terminals with a level letter
+> (`1a`/`1b`/…). Levels never short together (independent nets), the terminal
+> chart carries a level (`Lv`) column, the terminal diagram labels each box with
+> the full level-letter terminal number, and the whole thing is still **one**
+> symbol instance, so it is one device in the terminal chart, the terminal
+> diagram and the BOM. No `.mdkproj` format change: it is a dynamic symbol id
+> plus the existing `attrs`, and the plain `terminal_block_{n}p` id (1 level,
+> chosen by default in the part-insert dialog) is untouched, so existing
+> projects stay valid. The terminal editor grid does not yet show the `Lv`
+> column or let a level be added after the fact — the level count is chosen
+> once, at insertion.
+>
 > **Status 2026-08-23 (phase 5): unchanged.** The two-column block was again
 > approximated with two `terminal_block_{n}p` symbols and two designators.
 
