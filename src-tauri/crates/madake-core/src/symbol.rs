@@ -1032,6 +1032,11 @@ pub const DYNAMIC_PIN_MAX: usize = 50;
 /// 多段端子台 (`terminal_block_{n}p_{levels}l`、G6) の最大段数。
 pub const TERMINAL_LEVEL_MAX: usize = 3;
 
+/// 多段端子台の段(=列)の中心間隔 (mm)。列そのものの幅は単段の端子台と同じ5mmなので、
+/// 10mm間隔にすると隣り合う列の内側の接続点 (`1a`の右と`1b`の左) が5mm離れた**別の**
+/// 2.5mmグリッド点になり、その間を配線が通れる。
+pub const TERMINAL_LEVEL_PITCH: f64 = 10.0;
+
 /// PLCモジュール(`plc_di_{n}p` / `plc_do_{n}p`)の最大点数。
 pub const PLC_POINT_MAX: usize = 64;
 
@@ -1103,8 +1108,26 @@ fn plc_module_symbol(id: &str) -> Option<SymbolDef> {
 }
 
 /// 段番号 (0始まり) を段記号 ('a', 'b', 'c', …) にする。
-pub fn level_letter(level_index: usize) -> char {
+pub(crate) fn level_letter(level_index: usize) -> char {
     (b'a' + level_index as u8) as char
+}
+
+/// 端子番号の表記から (極番号, 段記号) を取り出す。[`level_letter`] の逆変換で、
+/// 端子番号の読み方をこの1か所に集めるためのもの (チャートの並べ替え・ジャンパの解析が使う)。
+///
+/// 単段の端子台の番号は数字だけ (例 "8" → (8, None))。多段端子台 (G6) の番号は
+/// 末尾に段記号のアルファベット1文字が付く (例 "8a" → (8, Some('a')))。
+/// 読み取れない番号は極番号を[`u32::MAX`]として末尾に回す (パニックしない)。
+pub(crate) fn parse_terminal_no(no: &str) -> (u32, Option<char>) {
+    if let Some(last) = no.chars().last() {
+        if last.is_ascii_alphabetic() {
+            let digits = &no[..no.len() - last.len_utf8()];
+            if let Ok(n) = digits.parse::<u32>() {
+                return (n, Some(last));
+            }
+        }
+    }
+    (no.parse::<u32>().unwrap_or(u32::MAX), None)
 }
 
 /// `terminal_block_`の後ろ (`rest`) を多段端子台の (極数, 段数) にパースする。
@@ -1120,53 +1143,64 @@ fn parse_multilevel_terminal_block(rest: &str) -> Option<(usize, usize)> {
     Some((n, levels))
 }
 
-/// `terminal_block_{n}p_{levels}l` から多段端子台のシンボルを生成する (G6)。
+/// 端子台シンボルを生成する (`terminal_block_{n}p` と多段の `terminal_block_{n}p_{levels}l`)。
 ///
-/// 見た目は単段の端子台とまったく同じ規則の縦一列 (5mmピッチ・2.5mmグリッド) で、
-/// 1極ぶんに段数だけ端子が連続する (2段なら 1a,1b,2a,2b,… という並び)。
+/// 端子は縦にn行 (5mmピッチ・2.5mmグリッド)、**段 (レベル) は横に並ぶ列**で表す (G6):
+/// 2段なら2列、3段なら3列で、列の中心間隔は[`TERMINAL_LEVEL_PITCH`]。
+/// 同じ極の端子は段が違っても同じ行に載るので、`1a`と`1b`は横に並ぶ。
 /// ピン番号の末尾アルファベットが段を表す: 同じ極でも段が違えば別のピン番号になるので、
 /// 貫通端子の内部短絡 (同一ピン番号どうし) は段をまたがず、**段ごとに独立したネット**になる。
 /// 総端子数は極数×段数だが、あくまで**1個のシンボルインスタンス**なので、
 /// チャート・BOMには常に1デバイスとして載る。
-fn multilevel_terminal_block_symbol(id: &str, n: usize, levels: usize) -> SymbolDef {
-    let total = n * levels;
-    let offset = |i: usize, count: usize| (i as f64 - (count - 1) as f64 / 2.0) * 5.0;
-    let mut primitives = vec![Primitive::Rect {
-        p1: p(-2.5, offset(0, total) - 2.5),
-        p2: p(2.5, offset(total - 1, total) + 2.5),
-        filled: false,
-    }];
-    let mut pins = Vec::with_capacity(total * 2);
-    for k in 0..total {
-        let y = offset(k, total);
-        let pole = k / levels + 1;
-        let no = format!("{pole}{}", level_letter(k % levels));
-        primitives.push(Primitive::Circle {
-            center: p(0.0, y),
-            r: 1.8,
+///
+/// `levels == 1` では列が1本・ピン番号は数字だけになり、従来の単段端子台と同一の図形になる。
+fn terminal_block_symbol(id: &str, n: usize, levels: usize) -> SymbolDef {
+    let offset = |i: usize| (i as f64 - (n - 1) as f64 / 2.0) * 5.0;
+    let column_x = |j: usize| (j as f64 - (levels - 1) as f64 / 2.0) * TERMINAL_LEVEL_PITCH;
+    let mut primitives: Vec<Primitive> = Vec::new();
+    let mut pins = Vec::with_capacity(n * levels * 2);
+    for j in 0..levels {
+        let cx = column_x(j);
+        primitives.push(Primitive::Rect {
+            p1: p(cx - 2.5, offset(0) - 2.5),
+            p2: p(cx + 2.5, offset(n - 1) + 2.5),
             filled: false,
         });
-        primitives.push(Primitive::Text {
-            at: p(0.0, y - 1.0),
-            text: no.clone(),
-            height: 2.0,
-        });
-        primitives.push(line(&[(-2.5, y), (-1.8, y)]));
-        primitives.push(line(&[(1.8, y), (2.5, y)]));
-        // 貫通端子: 左右2接続点に同一ピン番号(段が違えば番号も違うのでネットも独立)
-        pins.push(pin(&no, "", -2.5, y, PinDir::Left));
-        pins.push(pin(&no, "", 2.5, y, PinDir::Right));
+        for i in 0..n {
+            let y = offset(i);
+            let no = if levels == 1 {
+                (i + 1).to_string()
+            } else {
+                format!("{}{}", i + 1, level_letter(j))
+            };
+            primitives.push(Primitive::Circle {
+                center: p(cx, y),
+                r: 1.8,
+                filled: false,
+            });
+            primitives.push(Primitive::Text {
+                at: p(cx, y - 1.0),
+                text: no.clone(),
+                height: 2.0,
+            });
+            primitives.push(line(&[(cx - 2.5, y), (cx - 1.8, y)]));
+            primitives.push(line(&[(cx + 1.8, y), (cx + 2.5, y)]));
+            // 貫通端子: 左右2接続点に同一ピン番号(段が違えば番号も違うのでネットも独立)
+            pins.push(pin(&no, "", cx - 2.5, y, PinDir::Left));
+            pins.push(pin(&no, "", cx + 2.5, y, PinDir::Right));
+        }
     }
-    sym(
-        id,
-        &format!("Terminal block {n}P {levels}-level"),
-        &format!("端子台({n}極 {levels}段)"),
-        "connector",
-        "TB",
-        &["terminal block", "tb", "端子台", "端子", "多段", "multilevel", "段"],
-        primitives,
-        pins,
-    )
+    let mut keywords = vec!["terminal block", "tb", "端子台", "端子"];
+    let (name, name_ja) = if levels == 1 {
+        (format!("Terminal block {n}P"), format!("端子台({n}極)"))
+    } else {
+        keywords.extend(["多段", "multilevel", "段"]);
+        (
+            format!("Terminal block {n}P {levels}-level"),
+            format!("端子台({n}極 {levels}段)"),
+        )
+    };
+    sym(id, &name, &name_ja, "connector", "TB", &keywords, primitives, pins)
 }
 
 /// `connector_{n}p` / `terminal_block_{n}p` / `plc_di_{n}p` / `plc_do_{n}p` / `block` から
@@ -1216,45 +1250,11 @@ pub fn dynamic_symbol(id: &str) -> Option<SymbolDef> {
     }
     if let Some(rest) = id.strip_prefix("terminal_block_") {
         if let Some((n, levels)) = parse_multilevel_terminal_block(rest) {
-            return Some(multilevel_terminal_block_symbol(id, n, levels));
+            return Some(terminal_block_symbol(id, n, levels));
         }
-    }
-    if let Some(n) = id.strip_prefix("terminal_block_").and_then(parse) {
-        let mut primitives = vec![Primitive::Rect {
-            p1: p(-2.5, offset(0, n) - 2.5),
-            p2: p(2.5, offset(n - 1, n) + 2.5),
-            filled: false,
-        }];
-        let mut pins = Vec::with_capacity(n * 2);
-        for i in 0..n {
-            let y = offset(i, n);
-            let no = (i + 1).to_string();
-            primitives.push(Primitive::Circle {
-                center: p(0.0, y),
-                r: 1.8,
-                filled: false,
-            });
-            primitives.push(Primitive::Text {
-                at: p(0.0, y - 1.0),
-                text: no.clone(),
-                height: 2.0,
-            });
-            primitives.push(line(&[(-2.5, y), (-1.8, y)]));
-            primitives.push(line(&[(1.8, y), (2.5, y)]));
-            // 貫通端子: 左右2接続点に同一ピン番号(ネットリストで内部短絡)
-            pins.push(pin(&no, "", -2.5, y, PinDir::Left));
-            pins.push(pin(&no, "", 2.5, y, PinDir::Right));
+        if let Some(n) = parse(rest) {
+            return Some(terminal_block_symbol(id, n, 1));
         }
-        return Some(sym(
-            id,
-            &format!("Terminal block {n}P"),
-            &format!("端子台({n}極)"),
-            "connector",
-            "TB",
-            &["terminal block", "tb", "端子台", "端子"],
-            primitives,
-            pins,
-        ));
     }
     plc_module_symbol(id)
 }
@@ -1410,8 +1410,8 @@ mod tests {
         assert!(ysum.abs() < 1e-9);
     }
 
-    /// A multi-level terminal block (8 poles, 2 levels) numbers its pins with a level letter (1a, 1b, 2a, ... 8b), stays on the 2.5 mm grid, and keeps the same 5 mm pitch between neighbouring terminals as a single-level block.
-    /// 多段端子台(8極2段)は段記号付きのピン番号(1a,1b,2a,…8b)を持ち、2.5mmグリッド上に、単段と同じ5mmピッチで並ぶ。
+    /// A multi-level terminal block (8 poles, 2 levels) numbers its pins with a level letter (1a, 1b, 2a, ... 8b), one pin number per terminal and two connection points each, like a single-level block.
+    /// 多段端子台(8極2段)は段記号付きのピン番号(1a,1b,2a,…8b)を持ち、単段と同じく1端子=1ピン番号・左右2接続点になる。
     #[test]
     fn dynamic_multilevel_terminal_block_numbers_pins_with_level_letters() {
         let def = resolve_symbol("terminal_block_8p_2l").expect("多段端子台");
@@ -1423,25 +1423,94 @@ mod tests {
             .flat_map(|n| [format!("{n}a"), format!("{n}b")])
             .collect();
         assert_eq!(numbers, expected);
-        // 貫通端子: 同じ番号の左右ピンは中心対称(単段と同じ規則)
+        // 貫通端子: 同じ番号の左右ピンは端子の中心をはさんで向かい合う
         for no in &numbers {
             let same: Vec<_> = def.pins.iter().filter(|p| &p.number == no).collect();
             assert_eq!(same.len(), 2, "{no}");
-            assert!((same[0].at.x + same[1].at.x).abs() < 1e-9);
-            assert!((same[0].at.y - same[1].at.y).abs() < 1e-9);
+            assert!((same[1].at.x - same[0].at.x - 5.0).abs() < 1e-9, "{no}");
+            assert!((same[0].at.y - same[1].at.y).abs() < 1e-9, "{no}");
         }
-        // 全ピン2.5mmグリッド上
-        for p in &def.pins {
-            assert!((p.at.x / 2.5 - (p.at.x / 2.5).round()).abs() < 1e-9, "{:?}", p.at);
-            assert!((p.at.y / 2.5 - (p.at.y / 2.5).round()).abs() < 1e-9, "{:?}", p.at);
+    }
+
+    /// A multi-level terminal block is drawn as side-by-side terminal columns, one column per level, so a 3-level block has three columns of terminals evenly spaced left to right.
+    /// 多段端子台は段ごとに1列の端子が横に並ぶ形で描かれ、3段なら3列が左から等間隔に並ぶ。
+    #[test]
+    fn a_multilevel_terminal_block_draws_one_terminal_column_per_level() {
+        for (levels, letters) in [(2usize, vec!['a', 'b']), (3, vec!['a', 'b', 'c'])] {
+            let def = resolve_symbol(&format!("terminal_block_4p_{levels}l")).expect("多段端子台");
+            // 段ごとに外形が1本 (=列が1本) ある
+            let rects = def
+                .primitives
+                .iter()
+                .filter(|p| matches!(p, Primitive::Rect { .. }))
+                .count();
+            assert_eq!(rects, levels, "{levels}段=外形{levels}本");
+            // 各段の列の中心Xは TERMINAL_LEVEL_PITCH 間隔で左から順に並ぶ
+            let centers: Vec<f64> = letters
+                .iter()
+                .map(|letter| {
+                    let xs: Vec<f64> = def
+                        .pins
+                        .iter()
+                        .filter(|p| p.number.ends_with(*letter))
+                        .map(|p| p.at.x)
+                        .collect();
+                    let lo = xs.iter().cloned().fold(f64::INFINITY, f64::min);
+                    let hi = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                    assert!((hi - lo - 5.0).abs() < 1e-9, "1列の幅は5mm: {xs:?}");
+                    (lo + hi) / 2.0
+                })
+                .collect();
+            for w in centers.windows(2) {
+                assert!(
+                    (w[1] - w[0] - TERMINAL_LEVEL_PITCH).abs() < 1e-9,
+                    "列の間隔: {centers:?}"
+                );
+            }
+            let sum: f64 = centers.iter().sum();
+            assert!(sum.abs() < 1e-9, "列全体は左右中央揃え: {centers:?}");
         }
-        // 段のピッチ: 隣り合う端子の中心Yは常に5mm離れる(単段と同じピッチ)
-        let mut ys: Vec<f64> = def.pins.iter().map(|p| p.at.y).collect();
-        ys.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        ys.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
-        assert_eq!(ys.len(), 16, "8極x2段=16行ぶんの異なるY");
-        for w in ys.windows(2) {
-            assert!((w[1] - w[0] - 5.0).abs() < 1e-9, "{ys:?}");
+    }
+
+    /// Every terminal of the same pole sits on one row across all levels, so 1a and 1b share a row and the rows keep the 5 mm pitch of a single-level block.
+    /// 同じ極の端子は段が違っても同じ行に並ぶので、1aと1bは同じ高さになり、行のピッチは単段と同じ5mmのままになる。
+    #[test]
+    fn every_level_of_the_same_pole_sits_on_one_row() {
+        let def = resolve_symbol("terminal_block_4p_2l").expect("多段端子台");
+        let row_y = |no: &str| {
+            def.pins
+                .iter()
+                .find(|p| p.number == no)
+                .unwrap_or_else(|| panic!("端子 {no}"))
+                .at
+                .y
+        };
+        for pole in 1..=4 {
+            assert!(
+                (row_y(&format!("{pole}a")) - row_y(&format!("{pole}b"))).abs() < 1e-9,
+                "{pole}aと{pole}bは同じ行"
+            );
+        }
+        for pole in 1..4 {
+            assert!((row_y(&format!("{}a", pole + 1)) - row_y(&format!("{pole}a")) - 5.0).abs() < 1e-9);
+        }
+    }
+
+    /// Every connection point of a multi-level terminal block sits on the 2.5 mm grid, and no two terminals share a connection point, so a wire can always reach each terminal on its own.
+    /// 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有することはないので、どの端子にも別々に配線できる。
+    #[test]
+    fn multilevel_terminal_block_pins_are_on_the_grid_and_never_coincide() {
+        for levels in 1..=TERMINAL_LEVEL_MAX {
+            let def = resolve_symbol(&format!("terminal_block_4p_{levels}l")).expect("端子台");
+            let mut seen: std::collections::HashMap<(i64, i64), String> = Default::default();
+            for p in &def.pins {
+                assert!((p.at.x / 2.5 - (p.at.x / 2.5).round()).abs() < 1e-9, "{:?}", p.at);
+                assert!((p.at.y / 2.5 - (p.at.y / 2.5).round()).abs() < 1e-9, "{:?}", p.at);
+                let key = ((p.at.x * 1000.0).round() as i64, (p.at.y * 1000.0).round() as i64);
+                if let Some(other) = seen.insert(key, p.number.clone()) {
+                    assert_eq!(other, p.number, "別の端子が同じ接続点を共有している: {:?}", p.at);
+                }
+            }
         }
     }
 

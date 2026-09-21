@@ -611,13 +611,13 @@ mod tests {
     fn each_level_of_a_multilevel_terminal_block_is_an_independent_net() {
         let def = crate::symbol::resolve_symbol("terminal_block_1p_2l").expect("多段端子台");
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
-        // TB1 (100,50): 段aは y=47.5、段bは y=52.5 (2段1極、5mmピッチ)
+        // TB1 (100,50): 1極2段なので段aの列は x=92.5/97.5、段bの列は x=102.5/107.5 (同じ行 y=50)
         for e in [
             symbol("terminal_block_1p_2l", "TB1", 100.0, 50.0),
-            wire(&[(80.0, 47.5), (97.5, 47.5)]),   // 1a 左 (外部側)
-            wire(&[(102.5, 47.5), (120.0, 47.5)]), // 1a 右 (内部側)
-            wire(&[(80.0, 52.5), (97.5, 52.5)]),   // 1b 左
-            wire(&[(102.5, 52.5), (120.0, 52.5)]), // 1b 右
+            wire(&[(80.0, 50.0), (92.5, 50.0)]),   // 1a 左 (外部側)
+            wire(&[(97.5, 50.0), (97.5, 30.0)]),   // 1a 右 (内部側、列の間を上へ抜ける)
+            wire(&[(102.5, 50.0), (102.5, 30.0)]), // 1b 左 (列の間を上へ抜ける)
+            wire(&[(107.5, 50.0), (120.0, 50.0)]), // 1b 右
         ] {
             sheet.entities.insert(e.id(), e);
         }

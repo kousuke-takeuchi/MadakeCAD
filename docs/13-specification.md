@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1864 specification clauses** across 5 areas.
+**1867 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -534,7 +534,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - Every bundled symbol has a unique id and at least one pin. <sub>`builtin_symbols_have_unique_ids_and_pins`</sub>
 - A parametric terminal block (e.g. 8 poles) has one left and one right connection point per terminal, all on the 2.5 mm grid and vertically centered. <sub>`dynamic_terminal_block_has_through_pins_on_grid`</sub>
-- A multi-level terminal block (8 poles, 2 levels) numbers its pins with a level letter (1a, 1b, 2a, ... 8b), stays on the 2.5 mm grid, and keeps the same 5 mm pitch between neighbouring terminals as a single-level block. <sub>`dynamic_multilevel_terminal_block_numbers_pins_with_level_letters`</sub>
+- A multi-level terminal block (8 poles, 2 levels) numbers its pins with a level letter (1a, 1b, 2a, ... 8b), one pin number per terminal and two connection points each, like a single-level block. <sub>`dynamic_multilevel_terminal_block_numbers_pins_with_level_letters`</sub>
+- A multi-level terminal block is drawn as side-by-side terminal columns, one column per level, so a 3-level block has three columns of terminals evenly spaced left to right. <sub>`a_multilevel_terminal_block_draws_one_terminal_column_per_level`</sub>
+- Every terminal of the same pole sits on one row across all levels, so 1a and 1b share a row and the rows keep the 5 mm pitch of a single-level block. <sub>`every_level_of_the_same_pole_sits_on_one_row`</sub>
+- Every connection point of a multi-level terminal block sits on the 2.5 mm grid, and no two terminals share a connection point, so a wire can always reach each terminal on its own. <sub>`multilevel_terminal_block_pins_are_on_the_grid_and_never_coincide`</sub>
 - A terminal block asking for 0 or 4 levels (outside the 1-3 range) is rejected as an unknown symbol, the same way an out-of-range pole count is. <sub>`multilevel_terminal_block_rejects_level_count_outside_one_to_three`</sub>
 - The single-level terminal block id keeps its plain numeric pin numbers (1, 2, ...) exactly as before, unaffected by the new multi-level id shape, so existing projects stay valid. <sub>`single_level_terminal_block_id_is_unaffected_by_multilevel_support`</sub>
 - connector_2p generated dynamically has exactly the same pin coordinates as the old static definition, so existing drawings are unaffected. <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>

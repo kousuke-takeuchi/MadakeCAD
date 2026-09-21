@@ -12,7 +12,7 @@ use crate::geometry::Point;
 use crate::model::{Entity, EntityId, Project, Sheet, SheetId, SymbolInstance, Wire};
 use crate::netlist::{transform_local, CONNECT_EPS};
 use crate::reports::{csv_row, endpoint_label, fmt_num};
-use crate::symbol::{resolve_symbol, sheet_symbol_defs, SymbolDef};
+use crate::symbol::{parse_terminal_no, resolve_symbol, sheet_symbol_defs, SymbolDef};
 use crate::verify::{Diagnostic, Severity};
 
 /// 端子台チャートの列見出し (デザイン「紙 端子台チャート」準拠)。
@@ -290,23 +290,6 @@ pub fn jumpers_to_string(pairs: &[(u32, u32)]) -> String {
         .map(|(a, b)| format!("{a}-{b}"))
         .collect::<Vec<_>>()
         .join(",")
-}
-
-/// 端子番号の表記から (行番号, 段記号) を取り出す。
-///
-/// 単段の端子台の番号は数字だけ (例 "8" → (8, None))。多段端子台 (G6) の番号は
-/// 末尾に段記号のアルファベット1文字が付く (例 "8a" → (8, Some('a')))。
-/// 読み取れない番号は行番号を[`u32::MAX`]として末尾に回す (パニックしない)。
-fn parse_terminal_no(no: &str) -> (u32, Option<char>) {
-    if let Some(last) = no.chars().last() {
-        if last.is_ascii_alphabetic() {
-            let digits = &no[..no.len() - last.len_utf8()];
-            if let Ok(n) = digits.parse::<u32>() {
-                return (n, Some(last));
-            }
-        }
-    }
-    (no.parse::<u32>().unwrap_or(u32::MAX), None)
 }
 
 /// シンボル定義の中で、端子番号(文字列)の中心点を求める(同じ番号のピンの中点)。

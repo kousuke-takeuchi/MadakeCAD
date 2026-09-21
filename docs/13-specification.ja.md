@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1864仕様項目**。
+全5領域・**1867仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -534,7 +534,10 @@
 
 - 同梱シンボルはすべて一意のidを持ち、最低1つのピンを持つ。 <sub>`builtin_symbols_have_unique_ids_and_pins`</sub>
 - ピン数可変の端子台(例: 8極)は端子ごとに左右1点ずつの接続点を持ち、すべて2.5mmグリッド上・上下中央揃えになる。 <sub>`dynamic_terminal_block_has_through_pins_on_grid`</sub>
-- 多段端子台(8極2段)は段記号付きのピン番号(1a,1b,2a,…8b)を持ち、2.5mmグリッド上に、単段と同じ5mmピッチで並ぶ。 <sub>`dynamic_multilevel_terminal_block_numbers_pins_with_level_letters`</sub>
+- 多段端子台(8極2段)は段記号付きのピン番号(1a,1b,2a,…8b)を持ち、単段と同じく1端子=1ピン番号・左右2接続点になる。 <sub>`dynamic_multilevel_terminal_block_numbers_pins_with_level_letters`</sub>
+- 多段端子台は段ごとに1列の端子が横に並ぶ形で描かれ、3段なら3列が左から等間隔に並ぶ。 <sub>`a_multilevel_terminal_block_draws_one_terminal_column_per_level`</sub>
+- 同じ極の端子は段が違っても同じ行に並ぶので、1aと1bは同じ高さになり、行のピッチは単段と同じ5mmのままになる。 <sub>`every_level_of_the_same_pole_sits_on_one_row`</sub>
+- 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有することはないので、どの端子にも別々に配線できる。 <sub>`multilevel_terminal_block_pins_are_on_the_grid_and_never_coincide`</sub>
 - 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様に未知のシンボルとして拒否される。 <sub>`multilevel_terminal_block_rejects_level_count_outside_one_to_three`</sub>
 - 単段の端子台id(`terminal_block_{n}p`)は多段対応の追加後もそのままの数字だけのピン番号(1,2,…)を持ち、既存プロジェクトは有効なまま使える。 <sub>`single_level_terminal_block_id_is_unaffected_by_multilevel_support`</sub>
 - 動的生成のconnector_2pは旧静的定義と完全に同じピン座標を持ち、既存図面に影響しない。 <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
