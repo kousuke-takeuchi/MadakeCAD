@@ -54253,6 +54253,4723 @@
           ]
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "JUcBh",
+      "x": 6140,
+      "y": -1080,
+      "name": "フェーズ5 - 部品挿入 ブロック(ピン表エディタ)",
+      "width": 720,
+      "fill": "$ribbon-bg",
+      "cornerRadius": 6,
+      "stroke": "$ribbon-line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "HoZLS",
+          "name": "BIヘッダ",
+          "width": "fill_container",
+          "fill": "$palette-head",
+          "padding": [
+            8,
+            12
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "Xgsgp",
+              "name": "BIタイトル",
+              "fill": "$ui-text",
+              "content": "挿入する部品を選択",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "icon",
+              "id": "tzCDv",
+              "name": "BI閉じる",
+              "width": 14,
+              "height": 14,
+              "icon": "x",
+              "library": "lucide",
+              "fill": "$ui-muted"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "niSdd",
+          "name": "BI検索行外",
+          "width": "fill_container",
+          "padding": [
+            8,
+            12,
+            0,
+            12
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "biwNe",
+              "name": "BI検索行",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 4,
+              "stroke": "$ribbon-line",
+              "strokeWidth": 1,
+              "gap": 6,
+              "padding": [
+                5,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "u3JIjj",
+                  "name": "BI検索アイコン",
+                  "width": 13,
+                  "height": 13,
+                  "icon": "search",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                },
+                {
+                  "type": "text",
+                  "id": "A6ZsB",
+                  "name": "BI検索プレースホルダ",
+                  "fill": "$ui-muted",
+                  "content": "検索 (名称・記号)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "TFN7i",
+          "name": "BI本体",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 4,
+          "padding": [
+            8,
+            12,
+            12,
+            12
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "MvJnD",
+              "name": "BIカテゴリ",
+              "fill": "$ui-muted",
+              "content": "ブロック",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "slM9M",
+              "name": "BIグリッド",
+              "width": "fill_container",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "CE6Tz",
+                  "name": "BIセル ブロック",
+                  "width": 97,
+                  "fill": "#cce4f7",
+                  "cornerRadius": 4,
+                  "stroke": "$acad-blue",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 3,
+                  "padding": [
+                    6,
+                    2,
+                    4,
+                    2
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "SDHUm",
+                      "name": "BIセル ブロック図",
+                      "width": 72,
+                      "height": 40,
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "id": "ooprl",
+                          "x": 22,
+                          "y": 6,
+                          "name": "BIセル ブロック外形",
+                          "fill": "#00000000",
+                          "width": 28,
+                          "height": 28,
+                          "stroke": "$ui-text",
+                          "strokeWidth": 1.5
+                        },
+                        {
+                          "type": "rectangle",
+                          "id": "iteyu",
+                          "x": 12,
+                          "y": 14,
+                          "name": "BIセル ブロック左リード1",
+                          "fill": "$ui-text",
+                          "width": 10,
+                          "height": 1.4
+                        },
+                        {
+                          "type": "rectangle",
+                          "id": "JFJVy",
+                          "x": 12,
+                          "y": 24,
+                          "name": "BIセル ブロック左リード2",
+                          "fill": "$ui-text",
+                          "width": 10,
+                          "height": 1.4
+                        },
+                        {
+                          "type": "rectangle",
+                          "id": "kR7jh",
+                          "x": 50,
+                          "y": 19,
+                          "name": "BIセル ブロック右リード1",
+                          "fill": "$ui-text",
+                          "width": 10,
+                          "height": 1.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "UQKSv",
+                      "name": "BIセル ブロック名",
+                      "fill": "$ui-text",
+                      "content": "ブロック(汎用)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "WOWo0",
+          "name": "BPパネル挿入",
+          "width": "fill_container",
+          "fill": "$palette-bg",
+          "layout": "vertical",
+          "gap": 8,
+          "padding": [
+            10,
+            12
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "afZRp",
+              "name": "BPパネル見出し挿入",
+              "width": "fill_container",
+              "gap": 8,
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "yTUCh",
+                  "name": "BPパネル見出し左挿入",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "eXbhQ",
+                      "name": "BPパネル題挿入",
+                      "fill": "$ui-text",
+                      "content": "ピン表",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "GFQZv",
+                      "name": "BPパネル注挿入",
+                      "fill": "$ui-muted",
+                      "content": "番号は図面内で一意・5mmピッチ",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "A6wr4",
+                  "name": "BPサイズ行挿入",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "HnNvO",
+                      "name": "BPサイズ題挿入",
+                      "fill": "$ui-muted",
+                      "content": "サイズ",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ep3Fs",
+                      "name": "BPサイズ自動挿入",
+                      "gap": 5,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "rvMhL",
+                          "name": "BPサイズ自動挿入丸",
+                          "width": 12,
+                          "height": 12,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 999,
+                          "stroke": "$acad-blue",
+                          "strokeWidth": 2,
+                          "layout": "none",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "Ysoqi",
+                              "x": 3,
+                              "y": 3,
+                              "name": "BPサイズ自動挿入点",
+                              "fill": "$acad-blue",
+                              "width": 6,
+                              "height": 6
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "XkRIn",
+                          "name": "BPサイズ自動挿入文字",
+                          "fill": "$ui-text",
+                          "content": "自動 (45×40mm)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "XkVGl",
+                      "name": "BPサイズ手動挿入",
+                      "gap": 5,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "S3Rip",
+                          "name": "BPサイズ手動挿入丸",
+                          "width": 12,
+                          "height": 12,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 999,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "layout": "none"
+                        },
+                        {
+                          "type": "text",
+                          "id": "cun2h",
+                          "name": "BPサイズ手動挿入文字",
+                          "fill": "$ui-text",
+                          "content": "手動",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "KSmKU",
+                      "name": "BP幅挿入",
+                      "fill": "#fafafa",
+                      "cornerRadius": 8,
+                      "stroke": "$ribbon-line",
+                      "strokeWidth": 1,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "L8wwre",
+                          "name": "BP幅挿入減",
+                          "width": 22,
+                          "height": 24,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "E71Zvi",
+                              "name": "BP幅挿入減アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "minus",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "K4TI0",
+                          "name": "BP幅挿入値枠",
+                          "width": 38,
+                          "height": 24,
+                          "fill": "#FFFFFF",
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "E5Wa1",
+                              "name": "BP幅挿入値",
+                              "fill": "$ui-text",
+                              "content": "45",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "CCayH",
+                          "name": "BP幅挿入増",
+                          "width": 22,
+                          "height": 24,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "Nt6Kk",
+                              "name": "BP幅挿入増アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "cCjR5",
+                      "name": "BP高挿入",
+                      "fill": "#fafafa",
+                      "cornerRadius": 8,
+                      "stroke": "$ribbon-line",
+                      "strokeWidth": 1,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "uSwJZ",
+                          "name": "BP高挿入減",
+                          "width": 22,
+                          "height": 24,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "GmeIF",
+                              "name": "BP高挿入減アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "minus",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "I8z3Y",
+                          "name": "BP高挿入値枠",
+                          "width": 38,
+                          "height": 24,
+                          "fill": "#FFFFFF",
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "cFDto",
+                              "name": "BP高挿入値",
+                              "fill": "$ui-text",
+                              "content": "40",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "qWc94",
+                          "name": "BP高挿入増",
+                          "width": 22,
+                          "height": 24,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "QIQik",
+                              "name": "BP高挿入増アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Iy2ER",
+              "name": "BPパネル本体挿入",
+              "width": "fill_container",
+              "gap": 10,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "RZqbg",
+                  "name": "BP列 左挿入",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "qXKLJ",
+                      "name": "BP列見出し 左挿入",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "gjMeW",
+                          "name": "BP列名 左挿入",
+                          "fill": "$ui-text",
+                          "content": "左辺",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "H5E64",
+                          "name": "BP列数 左挿入",
+                          "fill": "$ui-muted",
+                          "content": "(5)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "hM4Fr",
+                      "name": "BP列ヘッダ 左挿入",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "vuHWr",
+                          "name": "BPヘッダ番号枠 左挿入",
+                          "width": 72,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "NSHq1",
+                              "name": "BPヘッダ番号 左挿入",
+                              "fill": "#8a9099",
+                              "content": "番号",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "WhJQd",
+                          "name": "BPヘッダ名前 左挿入",
+                          "fill": "#8a9099",
+                          "content": "ピン名",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "g09dXe",
+                      "name": "BP行 左挿入1",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "LW82C",
+                          "name": "BP行番号 左挿入1",
+                          "fill": "$ui-muted",
+                          "content": "1",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "m4qCyK",
+                          "name": "BP番号 左挿入1",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "F2K3B",
+                              "name": "BP番号 左挿入1値",
+                              "fill": "$ui-text",
+                              "content": "IN1",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ZCNfQ",
+                          "name": "BP名前 左挿入1",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Fyzwt",
+                              "name": "BP名前 左挿入1値",
+                              "fill": "$ui-text",
+                              "content": "入力1",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "n1Udli",
+                          "name": "BP上へ 左挿入1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "RvwFs",
+                              "name": "BP上へ 左挿入1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "wqncm",
+                          "name": "BP下へ 左挿入1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "fT11s",
+                              "name": "BP下へ 左挿入1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "c9r6K",
+                          "name": "BP削除 左挿入1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "lnEeI",
+                              "name": "BP削除 左挿入1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wOkaa",
+                      "name": "BP行 左挿入2",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "sz05E",
+                          "name": "BP行番号 左挿入2",
+                          "fill": "$ui-muted",
+                          "content": "2",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mOdRX",
+                          "name": "BP番号 左挿入2",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "qRV2i",
+                              "name": "BP番号 左挿入2値",
+                              "fill": "$ui-text",
+                              "content": "IN2",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "V1U11s",
+                          "name": "BP名前 左挿入2",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "F5bVsY",
+                              "name": "BP名前 左挿入2値",
+                              "fill": "$ui-text",
+                              "content": "入力2",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "W6lx3",
+                          "name": "BP上へ 左挿入2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "uLTvc",
+                              "name": "BP上へ 左挿入2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "OVjjT",
+                          "name": "BP下へ 左挿入2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "M6Z1my",
+                              "name": "BP下へ 左挿入2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "QsKBe",
+                          "name": "BP削除 左挿入2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "uWfz7",
+                              "name": "BP削除 左挿入2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "rVq9k",
+                      "name": "BP行 左挿入3",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "z0yv6",
+                          "name": "BP行番号 左挿入3",
+                          "fill": "$ui-muted",
+                          "content": "3",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "xapHb",
+                          "name": "BP番号 左挿入3",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "NYWSQ",
+                              "name": "BP番号 左挿入3値",
+                              "fill": "$ui-text",
+                              "content": "IN3",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "eXUdN",
+                          "name": "BP名前 左挿入3",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "DRj7z",
+                              "name": "BP名前 左挿入3値",
+                              "fill": "$ui-text",
+                              "content": "入力3",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "LfBZN",
+                          "name": "BP上へ 左挿入3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "Iy2GC",
+                              "name": "BP上へ 左挿入3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "SieFR",
+                          "name": "BP下へ 左挿入3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "BzVGW",
+                              "name": "BP下へ 左挿入3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "F7Scs",
+                          "name": "BP削除 左挿入3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "WBdGP",
+                              "name": "BP削除 左挿入3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ISwEd",
+                      "name": "BP行 左挿入4",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "b1VTy5",
+                          "name": "BP行番号 左挿入4",
+                          "fill": "$ui-muted",
+                          "content": "4",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "RoGpO",
+                          "name": "BP番号 左挿入4",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "fc06C",
+                              "name": "BP番号 左挿入4値",
+                              "fill": "$ui-text",
+                              "content": "IN4",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "YAo1N",
+                          "name": "BP名前 左挿入4",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "I6xoug",
+                              "name": "BP名前 左挿入4値",
+                              "fill": "$ui-text",
+                              "content": "入力4",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "D8oi3S",
+                          "name": "BP上へ 左挿入4",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "lCgCS",
+                              "name": "BP上へ 左挿入4アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Bysw8",
+                          "name": "BP下へ 左挿入4",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "Wjx5w",
+                              "name": "BP下へ 左挿入4アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ltVKm",
+                          "name": "BP削除 左挿入4",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "O5eVV",
+                              "name": "BP削除 左挿入4アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dxuYn",
+                      "name": "BP行 左挿入5",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "YSrUN",
+                          "name": "BP行番号 左挿入5",
+                          "fill": "$ui-muted",
+                          "content": "5",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "RRxUx",
+                          "name": "BP番号 左挿入5",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "A5mUAE",
+                              "name": "BP番号 左挿入5値",
+                              "fill": "$ui-text",
+                              "content": "IN5",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "U0tWF",
+                          "name": "BP名前 左挿入5",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "GeRjq",
+                              "name": "BP名前 左挿入5値",
+                              "fill": "$ui-text",
+                              "content": "入力5",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "NEukl",
+                          "name": "BP上へ 左挿入5",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "e7FTgG",
+                              "name": "BP上へ 左挿入5アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "M0qOZQ",
+                          "name": "BP下へ 左挿入5",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "kqcCI",
+                              "name": "BP下へ 左挿入5アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "UvnAW",
+                          "name": "BP削除 左挿入5",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "NaWlw",
+                              "name": "BP削除 左挿入5アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "V2FQQt",
+                      "name": "BP行追加 左挿入",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "$ribbon-line",
+                      "strokeWidth": 1,
+                      "gap": 4,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "FCLcj",
+                          "name": "BP行追加アイコン 左挿入",
+                          "width": 11,
+                          "height": 11,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$acad-blue"
+                        },
+                        {
+                          "type": "text",
+                          "id": "k2Wh7b",
+                          "name": "BP行追加文字 左挿入",
+                          "fill": "$ui-text",
+                          "content": "ピンを追加",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "dNJHS",
+                  "name": "BP列 右挿入",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Rfj9q",
+                      "name": "BP列見出し 右挿入",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "G19tt",
+                          "name": "BP列名 右挿入",
+                          "fill": "$ui-text",
+                          "content": "右辺",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "yyFMx",
+                          "name": "BP列数 右挿入",
+                          "fill": "$ui-muted",
+                          "content": "(3)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "vE8iP",
+                      "name": "BP列ヘッダ 右挿入",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Z1ncf",
+                          "name": "BPヘッダ番号枠 右挿入",
+                          "width": 72,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Qibuh",
+                              "name": "BPヘッダ番号 右挿入",
+                              "fill": "#8a9099",
+                              "content": "番号",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "XJWjE",
+                          "name": "BPヘッダ名前 右挿入",
+                          "fill": "#8a9099",
+                          "content": "ピン名",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lzhtP",
+                      "name": "BP行 右挿入1",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "rM8Db",
+                          "name": "BP行番号 右挿入1",
+                          "fill": "$ui-muted",
+                          "content": "1",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "E2FvVW",
+                          "name": "BP番号 右挿入1",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "xVDe7",
+                              "name": "BP番号 右挿入1値",
+                              "fill": "$ui-text",
+                              "content": "OUT1",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "MZ9cE",
+                          "name": "BP名前 右挿入1",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "u9455",
+                              "name": "BP名前 右挿入1値",
+                              "fill": "$ui-text",
+                              "content": "出力1",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "RCMYo",
+                          "name": "BP上へ 右挿入1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "YE9MO",
+                              "name": "BP上へ 右挿入1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "F1rTT",
+                          "name": "BP下へ 右挿入1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "PUnkJ",
+                              "name": "BP下へ 右挿入1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "bCvQg",
+                          "name": "BP削除 右挿入1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "xylH3",
+                              "name": "BP削除 右挿入1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "N2h2kU",
+                      "name": "BP行 右挿入2",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "EuHkh",
+                          "name": "BP行番号 右挿入2",
+                          "fill": "$ui-muted",
+                          "content": "2",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "tKSof",
+                          "name": "BP番号 右挿入2",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "BiEun",
+                              "name": "BP番号 右挿入2値",
+                              "fill": "$ui-text",
+                              "content": "OUT2",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "P50i05",
+                          "name": "BP名前 右挿入2",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Ktv9g",
+                              "name": "BP名前 右挿入2値",
+                              "fill": "$ui-text",
+                              "content": "出力2",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "U4XfWS",
+                          "name": "BP上へ 右挿入2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "y7d5Q",
+                              "name": "BP上へ 右挿入2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "epdZV",
+                          "name": "BP下へ 右挿入2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "pFZI6",
+                              "name": "BP下へ 右挿入2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "S3jqK5",
+                          "name": "BP削除 右挿入2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "C7avE",
+                              "name": "BP削除 右挿入2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "UvcBe",
+                      "name": "BP行 右挿入3",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "l0fe0d",
+                          "name": "BP行番号 右挿入3",
+                          "fill": "$ui-muted",
+                          "content": "3",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "f7o65",
+                          "name": "BP番号 右挿入3",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "UOGqJ",
+                              "name": "BP番号 右挿入3値",
+                              "fill": "$ui-text",
+                              "content": "OUT3",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "px56R",
+                          "name": "BP名前 右挿入3",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "VmAUk",
+                              "name": "BP名前 右挿入3値",
+                              "fill": "$ui-text",
+                              "content": "出力3",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "gQeqL",
+                          "name": "BP上へ 右挿入3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "BHh7c",
+                              "name": "BP上へ 右挿入3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "UoDsI",
+                          "name": "BP下へ 右挿入3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "qU0Jk",
+                              "name": "BP下へ 右挿入3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "NkRDu",
+                          "name": "BP削除 右挿入3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "G5y7uZ",
+                              "name": "BP削除 右挿入3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "LYF2r",
+                      "name": "BP行追加 右挿入",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "$ribbon-line",
+                      "strokeWidth": 1,
+                      "gap": 4,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "vSKby",
+                          "name": "BP行追加アイコン 右挿入",
+                          "width": 11,
+                          "height": 11,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$acad-blue"
+                        },
+                        {
+                          "type": "text",
+                          "id": "x2Jmn",
+                          "name": "BP行追加文字 右挿入",
+                          "fill": "$ui-text",
+                          "content": "ピンを追加",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "owwrm",
+                  "name": "BPプレビュー挿入",
+                  "width": 188,
+                  "height": 168,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 4,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "xa4yS",
+                      "x": 54,
+                      "y": 24,
+                      "name": "BPプレビュー参照記号挿入",
+                      "fill": "$ui-text",
+                      "content": "CTRL1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 9,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "L1jg4",
+                      "x": 54,
+                      "y": 40,
+                      "name": "BPプレビュー外形挿入",
+                      "fill": "#00000000",
+                      "width": 84,
+                      "height": 88,
+                      "stroke": "$ui-text",
+                      "strokeWidth": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "H1i4x",
+                      "x": 38,
+                      "y": 54,
+                      "name": "BPプレビュー左リード挿入0",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "K1a1Jq",
+                      "x": 38,
+                      "y": 70,
+                      "name": "BPプレビュー左リード挿入1",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "CdmpH",
+                      "x": 38,
+                      "y": 86,
+                      "name": "BPプレビュー左リード挿入2",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "ksVdq",
+                      "x": 38,
+                      "y": 102,
+                      "name": "BPプレビュー左リード挿入3",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "XhYn9",
+                      "x": 38,
+                      "y": 118,
+                      "name": "BPプレビュー左リード挿入4",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "text",
+                      "id": "fbVt7",
+                      "x": 58,
+                      "y": 50,
+                      "name": "BPプレビュー左名 挿入0",
+                      "fill": "$ui-text",
+                      "content": "IN1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "sGe0W",
+                      "x": 58,
+                      "y": 66,
+                      "name": "BPプレビュー左名 挿入1",
+                      "fill": "$ui-text",
+                      "content": "IN2",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "TdNl6",
+                      "x": 58,
+                      "y": 82,
+                      "name": "BPプレビュー左名 挿入2",
+                      "fill": "$ui-text",
+                      "content": "IN3",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "CG1W2",
+                      "x": 58,
+                      "y": 98,
+                      "name": "BPプレビュー左名 挿入3",
+                      "fill": "$ui-text",
+                      "content": "IN4",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "INeMH",
+                      "x": 58,
+                      "y": 114,
+                      "name": "BPプレビュー左名 挿入4",
+                      "fill": "$ui-text",
+                      "content": "IN5",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "fh4pe",
+                      "x": 138,
+                      "y": 70,
+                      "name": "BPプレビュー右リード挿入0",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "ggS0E",
+                      "x": 138,
+                      "y": 86,
+                      "name": "BPプレビュー右リード挿入1",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "j8GVX",
+                      "x": 138,
+                      "y": 102,
+                      "name": "BPプレビュー右リード挿入2",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "text",
+                      "id": "g5KNKF",
+                      "x": 106,
+                      "y": 66,
+                      "name": "BPプレビュー右名 挿入0",
+                      "fill": "$ui-text",
+                      "content": "OUT1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "D7m3yL",
+                      "x": 106,
+                      "y": 82,
+                      "name": "BPプレビュー右名 挿入1",
+                      "fill": "$ui-text",
+                      "content": "OUT2",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "K9j3c",
+                      "x": 106,
+                      "y": 98,
+                      "name": "BPプレビュー右名 挿入2",
+                      "fill": "$ui-text",
+                      "content": "OUT3",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "bWMNn",
+              "name": "BP折りたたみ挿入",
+              "width": "fill_container",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "rlEPt",
+                  "name": "BP折りたたみ矢印挿入",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "chevron-right",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                },
+                {
+                  "type": "text",
+                  "id": "GgJSi",
+                  "name": "BP折りたたみ文字挿入",
+                  "fill": "$ui-text",
+                  "content": "上辺・下辺 (0)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "TsL9k",
+                  "name": "BP折りたたみ注挿入",
+                  "fill": "$ui-muted",
+                  "content": "クリックで展開",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "I6CvzQ",
+          "name": "BIフッタ",
+          "width": "fill_container",
+          "fill": "$palette-bg",
+          "gap": 8,
+          "padding": [
+            8,
+            12
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "E7DHO",
+              "name": "BIフッタ注",
+              "fill": "$ui-muted",
+              "content": "「配置」でカーソルにゴーストが付きます (Rで回転・Escで解除)",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "wETsz",
+              "name": "BIフッタ余白",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "YBELa",
+              "name": "BI配置",
+              "fill": "$acad-blue",
+              "cornerRadius": 4,
+              "stroke": "$acad-blue",
+              "strokeWidth": 1,
+              "padding": [
+                5,
+                14
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "oXQtc",
+                  "name": "BI配置文字",
+                  "fill": "#FFFFFF",
+                  "content": "配置",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "IeNDj",
+      "x": 6900,
+      "y": -1080,
+      "name": "フェーズ5 - ブロックのピン表を編集(プロパティから)",
+      "width": 720,
+      "fill": "$ribbon-bg",
+      "cornerRadius": 8,
+      "stroke": "$ribbon-line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "LU4bX",
+          "name": "BEヘッダ",
+          "width": "fill_container",
+          "fill": "$palette-head",
+          "padding": [
+            8,
+            12
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "D3eoKE",
+              "name": "BEタイトル",
+              "fill": "$ui-text",
+              "content": "ブロックのピン表を編集 — CTRL1",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "icon",
+              "id": "lXuPT",
+              "name": "BE閉じる",
+              "width": 14,
+              "height": 14,
+              "icon": "x",
+              "library": "lucide",
+              "fill": "$ui-muted"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "F7M9n4",
+          "name": "BPパネル編集",
+          "width": "fill_container",
+          "fill": "$palette-bg",
+          "layout": "vertical",
+          "gap": 8,
+          "padding": [
+            10,
+            12
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "FTGMd",
+              "name": "BPパネル見出し編集",
+              "width": "fill_container",
+              "gap": 8,
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "FQfTW",
+                  "name": "BPパネル見出し左編集",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ueM4k",
+                      "name": "BPパネル題編集",
+                      "fill": "$ui-text",
+                      "content": "ピン表",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "e94M2c",
+                      "name": "BPパネル注編集",
+                      "fill": "$ui-muted",
+                      "content": "番号は図面内で一意・5mmピッチ",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "h4dJHw",
+                  "name": "BPサイズ行編集",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "qpqIx",
+                      "name": "BPサイズ題編集",
+                      "fill": "$ui-muted",
+                      "content": "サイズ",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "QPQUZ",
+                      "name": "BPサイズ自動編集",
+                      "gap": 5,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Cdf6Y",
+                          "name": "BPサイズ自動編集丸",
+                          "width": 12,
+                          "height": 12,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 999,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "layout": "none"
+                        },
+                        {
+                          "type": "text",
+                          "id": "ZHnWA",
+                          "name": "BPサイズ自動編集文字",
+                          "fill": "$ui-text",
+                          "content": "自動 (45×40mm)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "F4in5b",
+                      "name": "BPサイズ手動編集",
+                      "gap": 5,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "kkOcv",
+                          "name": "BPサイズ手動編集丸",
+                          "width": 12,
+                          "height": 12,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 999,
+                          "stroke": "$acad-blue",
+                          "strokeWidth": 2,
+                          "layout": "none",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "ZibS6",
+                              "x": 3,
+                              "y": 3,
+                              "name": "BPサイズ手動編集点",
+                              "fill": "$acad-blue",
+                              "width": 6,
+                              "height": 6
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "O9fp6",
+                          "name": "BPサイズ手動編集文字",
+                          "fill": "$ui-text",
+                          "content": "手動",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "x9MQns",
+                      "name": "BP幅編集",
+                      "fill": "#fafafa",
+                      "cornerRadius": 8,
+                      "stroke": "$ribbon-line",
+                      "strokeWidth": 1,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "rE4z3",
+                          "name": "BP幅編集減",
+                          "width": 22,
+                          "height": 24,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "wtDzA",
+                              "name": "BP幅編集減アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "minus",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "vwO1l",
+                          "name": "BP幅編集値枠",
+                          "width": 38,
+                          "height": 24,
+                          "fill": "#FFFFFF",
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "p65bQ",
+                              "name": "BP幅編集値",
+                              "fill": "$ui-text",
+                              "content": "45",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "m5C57e",
+                          "name": "BP幅編集増",
+                          "width": 22,
+                          "height": 24,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "x5paU",
+                              "name": "BP幅編集増アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "AwkeD",
+                      "name": "BP高編集",
+                      "fill": "#fafafa",
+                      "cornerRadius": 8,
+                      "stroke": "$ribbon-line",
+                      "strokeWidth": 1,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "N0vzyT",
+                          "name": "BP高編集減",
+                          "width": 22,
+                          "height": 24,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "AvUl5",
+                              "name": "BP高編集減アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "minus",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "QYbyK",
+                          "name": "BP高編集値枠",
+                          "width": 38,
+                          "height": 24,
+                          "fill": "#FFFFFF",
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "g0gEc",
+                              "name": "BP高編集値",
+                              "fill": "$ui-text",
+                              "content": "40",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "cJP6c",
+                          "name": "BP高編集増",
+                          "width": 22,
+                          "height": 24,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "SFE47",
+                              "name": "BP高編集増アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Etcg5",
+              "name": "BPパネル本体編集",
+              "width": "fill_container",
+              "gap": 10,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "p9HD2",
+                  "name": "BP列 左編集",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "B7SUnN",
+                      "name": "BP列見出し 左編集",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "DP8XF",
+                          "name": "BP列名 左編集",
+                          "fill": "$ui-text",
+                          "content": "左辺",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Ml5p4",
+                          "name": "BP列数 左編集",
+                          "fill": "$ui-muted",
+                          "content": "(5)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "cySA5",
+                      "name": "BP列ヘッダ 左編集",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "iOgyx",
+                          "name": "BPヘッダ番号枠 左編集",
+                          "width": 72,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "U3Ewi",
+                              "name": "BPヘッダ番号 左編集",
+                              "fill": "#8a9099",
+                              "content": "番号",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "JH1rV",
+                          "name": "BPヘッダ名前 左編集",
+                          "fill": "#8a9099",
+                          "content": "ピン名",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lqJ6T",
+                      "name": "BP行 左編集1",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "LOgzU",
+                          "name": "BP行番号 左編集1",
+                          "fill": "$ui-muted",
+                          "content": "1",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "zJNzE",
+                          "name": "BP番号 左編集1",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "uMY1n",
+                              "name": "BP番号 左編集1値",
+                              "fill": "$ui-text",
+                              "content": "IN1",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "L078CN",
+                          "name": "BP名前 左編集1",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Onhr1",
+                              "name": "BP名前 左編集1値",
+                              "fill": "$ui-text",
+                              "content": "入力1",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "zCzXV",
+                          "name": "BP上へ 左編集1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "QB89I",
+                              "name": "BP上へ 左編集1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "lSHzq",
+                          "name": "BP下へ 左編集1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "HWjiL",
+                              "name": "BP下へ 左編集1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "f1QkLL",
+                          "name": "BP削除 左編集1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "rHg7A",
+                              "name": "BP削除 左編集1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wMidB",
+                      "name": "BP行 左編集2",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "c4QSNH",
+                          "name": "BP行番号 左編集2",
+                          "fill": "$ui-muted",
+                          "content": "2",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "X4rD2",
+                          "name": "BP番号 左編集2",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "UybMC",
+                              "name": "BP番号 左編集2値",
+                              "fill": "$ui-text",
+                              "content": "IN2",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "xhQ4k",
+                          "name": "BP名前 左編集2",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Y2gOsS",
+                              "name": "BP名前 左編集2値",
+                              "fill": "$ui-text",
+                              "content": "入力2",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "IwpuC",
+                          "name": "BP上へ 左編集2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "OQTT1",
+                              "name": "BP上へ 左編集2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "OFiW1",
+                          "name": "BP下へ 左編集2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "X1ikLU",
+                              "name": "BP下へ 左編集2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "q0Yqp",
+                          "name": "BP削除 左編集2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "dPitu",
+                              "name": "BP削除 左編集2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "btplS",
+                      "name": "BP行 左編集3",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lUsmO",
+                          "name": "BP行番号 左編集3",
+                          "fill": "$ui-muted",
+                          "content": "3",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "akVNd",
+                          "name": "BP番号 左編集3",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "qsD1h",
+                              "name": "BP番号 左編集3値",
+                              "fill": "$ui-text",
+                              "content": "IN3",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "FHM7U",
+                          "name": "BP名前 左編集3",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "uXP57",
+                              "name": "BP名前 左編集3値",
+                              "fill": "$ui-text",
+                              "content": "入力3",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "nykpD",
+                          "name": "BP上へ 左編集3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "P5uIP",
+                              "name": "BP上へ 左編集3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "BWNN0",
+                          "name": "BP下へ 左編集3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "bP2d5",
+                              "name": "BP下へ 左編集3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "MHWgJ",
+                          "name": "BP削除 左編集3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "FEUnF",
+                              "name": "BP削除 左編集3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "YXdU1",
+                      "name": "BP行 左編集4",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "b7koSd",
+                          "name": "BP行番号 左編集4",
+                          "fill": "$ui-muted",
+                          "content": "4",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "FFOLh",
+                          "name": "BP番号 左編集4",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "l1vey",
+                              "name": "BP番号 左編集4値",
+                              "fill": "$ui-text",
+                              "content": "IN4",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "gyyLD",
+                          "name": "BP名前 左編集4",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "HmYut",
+                              "name": "BP名前 左編集4値",
+                              "fill": "$ui-text",
+                              "content": "入力4",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ePnoV",
+                          "name": "BP上へ 左編集4",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "cXcRb",
+                              "name": "BP上へ 左編集4アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "km0MI",
+                          "name": "BP下へ 左編集4",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "scavH",
+                              "name": "BP下へ 左編集4アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Ie3Ar",
+                          "name": "BP削除 左編集4",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "bPCqT",
+                              "name": "BP削除 左編集4アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "O4vqq",
+                      "name": "BP行 左編集5",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "X9AQF",
+                          "name": "BP行番号 左編集5",
+                          "fill": "$ui-muted",
+                          "content": "5",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "UCdJT",
+                          "name": "BP番号 左編集5",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "nvZRf",
+                              "name": "BP番号 左編集5値",
+                              "fill": "$ui-text",
+                              "content": "IN5",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "WDPeP",
+                          "name": "BP名前 左編集5",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "j8k8f",
+                              "name": "BP名前 左編集5値",
+                              "fill": "$ui-text",
+                              "content": "入力5",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "o1FHQQ",
+                          "name": "BP上へ 左編集5",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "pTi6P",
+                              "name": "BP上へ 左編集5アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "teA17",
+                          "name": "BP下へ 左編集5",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "SQBNx",
+                              "name": "BP下へ 左編集5アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "JSeM0",
+                          "name": "BP削除 左編集5",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "mB5EJ",
+                              "name": "BP削除 左編集5アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lklFw",
+                      "name": "BP行追加 左編集",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "$ribbon-line",
+                      "strokeWidth": 1,
+                      "gap": 4,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "kYBge",
+                          "name": "BP行追加アイコン 左編集",
+                          "width": 11,
+                          "height": 11,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$acad-blue"
+                        },
+                        {
+                          "type": "text",
+                          "id": "LYI7y",
+                          "name": "BP行追加文字 左編集",
+                          "fill": "$ui-text",
+                          "content": "ピンを追加",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "IDtEA",
+                  "name": "BP列 右編集",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "qc1ac",
+                      "name": "BP列見出し 右編集",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Q21Ez3",
+                          "name": "BP列名 右編集",
+                          "fill": "$ui-text",
+                          "content": "右辺",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "m9nFo",
+                          "name": "BP列数 右編集",
+                          "fill": "$ui-muted",
+                          "content": "(3)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Km6MX",
+                      "name": "BP列ヘッダ 右編集",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Czkyk",
+                          "name": "BPヘッダ番号枠 右編集",
+                          "width": 72,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "SXGvJ",
+                              "name": "BPヘッダ番号 右編集",
+                              "fill": "#8a9099",
+                              "content": "番号",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 10,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "GwmHl",
+                          "name": "BPヘッダ名前 右編集",
+                          "fill": "#8a9099",
+                          "content": "ピン名",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "nHvuk",
+                      "name": "BP行 右編集1",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "wsZ3D",
+                          "name": "BP行番号 右編集1",
+                          "fill": "$ui-muted",
+                          "content": "1",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "f7i9Z",
+                          "name": "BP番号 右編集1",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "J1ZqGv",
+                              "name": "BP番号 右編集1値",
+                              "fill": "$ui-text",
+                              "content": "OUT1",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "U0H3S",
+                          "name": "BP名前 右編集1",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "dUiHz",
+                              "name": "BP名前 右編集1値",
+                              "fill": "$ui-text",
+                              "content": "出力1",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "yn6t2",
+                          "name": "BP上へ 右編集1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "o62vUM",
+                              "name": "BP上へ 右編集1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "TqlPx",
+                          "name": "BP下へ 右編集1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "jw5mH",
+                              "name": "BP下へ 右編集1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pMAOL",
+                          "name": "BP削除 右編集1",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "dnDsR",
+                              "name": "BP削除 右編集1アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "i650O",
+                      "name": "BP行 右編集2",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "gxuCp",
+                          "name": "BP行番号 右編集2",
+                          "fill": "$ui-muted",
+                          "content": "2",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "zLyx6",
+                          "name": "BP番号 右編集2",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "MyGL0",
+                              "name": "BP番号 右編集2値",
+                              "fill": "$ui-text",
+                              "content": "OUT2",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ORK2g",
+                          "name": "BP名前 右編集2",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Gab75",
+                              "name": "BP名前 右編集2値",
+                              "fill": "$ui-text",
+                              "content": "出力2",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "U8IDDP",
+                          "name": "BP上へ 右編集2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "xEwbm",
+                              "name": "BP上へ 右編集2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pFv3q",
+                          "name": "BP下へ 右編集2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "Da5JB",
+                              "name": "BP下へ 右編集2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "HLAHP",
+                          "name": "BP削除 右編集2",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "A6yCYb",
+                              "name": "BP削除 右編集2アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "FwoU0",
+                      "name": "BP行 右編集3",
+                      "width": "fill_container",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "WR8te",
+                          "name": "BP行番号 右編集3",
+                          "fill": "$ui-muted",
+                          "content": "3",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "d7M2P",
+                          "name": "BP番号 右編集3",
+                          "width": 58,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Z62SAG",
+                              "name": "BP番号 右編集3値",
+                              "fill": "$ui-text",
+                              "content": "OUT3",
+                              "fontFamily": "JetBrains Mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "UO9VD",
+                          "name": "BP名前 右編集3",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "QZQZ5",
+                              "name": "BP名前 右編集3値",
+                              "fill": "$ui-text",
+                              "content": "出力3",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "zb9Qz",
+                          "name": "BP上へ 右編集3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "j97LfF",
+                              "name": "BP上へ 右編集3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-up",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "PCRBg",
+                          "name": "BP下へ 右編集3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "wIyrC",
+                              "name": "BP下へ 右編集3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "IEj9R",
+                          "name": "BP削除 右編集3",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 4,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "aEOv4",
+                              "name": "BP削除 右編集3アイコン",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$ui-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "XobXZ",
+                      "name": "BP行追加 右編集",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 4,
+                      "stroke": "$ribbon-line",
+                      "strokeWidth": 1,
+                      "gap": 4,
+                      "padding": [
+                        4,
+                        9
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "W1Ze6c",
+                          "name": "BP行追加アイコン 右編集",
+                          "width": 11,
+                          "height": 11,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$acad-blue"
+                        },
+                        {
+                          "type": "text",
+                          "id": "EwhJP",
+                          "name": "BP行追加文字 右編集",
+                          "fill": "$ui-text",
+                          "content": "ピンを追加",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "rYiEN",
+                  "name": "BPプレビュー編集",
+                  "width": 188,
+                  "height": 168,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 4,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Ws1jw",
+                      "x": 54,
+                      "y": 24,
+                      "name": "BPプレビュー参照記号編集",
+                      "fill": "$ui-text",
+                      "content": "CTRL1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 9,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "d7mZM",
+                      "x": 54,
+                      "y": 40,
+                      "name": "BPプレビュー外形編集",
+                      "fill": "#00000000",
+                      "width": 84,
+                      "height": 88,
+                      "stroke": "$ui-text",
+                      "strokeWidth": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "aHtMP",
+                      "x": 38,
+                      "y": 54,
+                      "name": "BPプレビュー左リード編集0",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "LFfQP",
+                      "x": 38,
+                      "y": 70,
+                      "name": "BPプレビュー左リード編集1",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "DywkH",
+                      "x": 38,
+                      "y": 86,
+                      "name": "BPプレビュー左リード編集2",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "aq8h5",
+                      "x": 38,
+                      "y": 102,
+                      "name": "BPプレビュー左リード編集3",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "dAiyb",
+                      "x": 38,
+                      "y": 118,
+                      "name": "BPプレビュー左リード編集4",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "text",
+                      "id": "cuP2P",
+                      "x": 58,
+                      "y": 50,
+                      "name": "BPプレビュー左名 編集0",
+                      "fill": "$ui-text",
+                      "content": "IN1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "uzTVW",
+                      "x": 58,
+                      "y": 66,
+                      "name": "BPプレビュー左名 編集1",
+                      "fill": "$ui-text",
+                      "content": "IN2",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "WpmyD",
+                      "x": 58,
+                      "y": 82,
+                      "name": "BPプレビュー左名 編集2",
+                      "fill": "$ui-text",
+                      "content": "IN3",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "pUlWw",
+                      "x": 58,
+                      "y": 98,
+                      "name": "BPプレビュー左名 編集3",
+                      "fill": "$ui-text",
+                      "content": "IN4",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Z1qh8g",
+                      "x": 58,
+                      "y": 114,
+                      "name": "BPプレビュー左名 編集4",
+                      "fill": "$ui-text",
+                      "content": "IN5",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "GhTha",
+                      "x": 138,
+                      "y": 70,
+                      "name": "BPプレビュー右リード編集0",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "qFxFN",
+                      "x": 138,
+                      "y": 86,
+                      "name": "BPプレビュー右リード編集1",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "FyILH",
+                      "x": 138,
+                      "y": 102,
+                      "name": "BPプレビュー右リード編集2",
+                      "fill": "$ui-text",
+                      "width": 16,
+                      "height": 1.2
+                    },
+                    {
+                      "type": "text",
+                      "id": "GyKxC",
+                      "x": 106,
+                      "y": 66,
+                      "name": "BPプレビュー右名 編集0",
+                      "fill": "$ui-text",
+                      "content": "OUT1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "x9DMQ",
+                      "x": 106,
+                      "y": 82,
+                      "name": "BPプレビュー右名 編集1",
+                      "fill": "$ui-text",
+                      "content": "OUT2",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "smYsw",
+                      "x": 106,
+                      "y": 98,
+                      "name": "BPプレビュー右名 編集2",
+                      "fill": "$ui-text",
+                      "content": "OUT3",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 7,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "p1lpj",
+              "name": "BP折りたたみ編集",
+              "width": "fill_container",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "tRy7Q",
+                  "name": "BP折りたたみ矢印編集",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "chevron-right",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                },
+                {
+                  "type": "text",
+                  "id": "skPxg",
+                  "name": "BP折りたたみ文字編集",
+                  "fill": "$ui-text",
+                  "content": "上辺・下辺 (0)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "livmO",
+                  "name": "BP折りたたみ注編集",
+                  "fill": "$ui-muted",
+                  "content": "クリックで展開",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "tfZgI",
+          "name": "BE警告",
+          "width": "fill_container",
+          "fill": "#fff7ed",
+          "gap": 6,
+          "padding": [
+            8,
+            12
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "rVsTg",
+              "name": "BE警告アイコン",
+              "width": 12,
+              "height": 12,
+              "icon": "triangle-alert",
+              "library": "lucide",
+              "fill": "#d97706"
+            },
+            {
+              "type": "text",
+              "id": "x8mFt6",
+              "name": "BE警告文",
+              "fill": "#d97706",
+              "content": "ピン IN3 は配線済みです。番号を変える・削除すると接続が外れます",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "vql3x",
+          "name": "BEフッタ",
+          "width": "fill_container",
+          "gap": 8,
+          "padding": 12,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "MO8AG",
+              "name": "BEフッタ注",
+              "fill": "$ui-muted",
+              "content": "適用すると1回の編集として履歴に載ります (⌘Zで戻せます)",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "VrLhB",
+              "name": "BEフッタ余白",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "aJsub",
+              "name": "BEキャンセル",
+              "fill": "#FFFFFF",
+              "cornerRadius": 4,
+              "stroke": "$ribbon-line",
+              "strokeWidth": 1,
+              "padding": [
+                5,
+                14
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "arDgw",
+                  "name": "BEキャンセル文字",
+                  "fill": "$ui-text",
+                  "content": "キャンセル",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "l8YzHY",
+              "name": "BE適用",
+              "fill": "$acad-blue",
+              "cornerRadius": 4,
+              "stroke": "$acad-blue",
+              "strokeWidth": 1,
+              "padding": [
+                5,
+                14
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ndOM5",
+                  "name": "BE適用文字",
+                  "fill": "#FFFFFF",
+                  "content": "適用",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "FbuAh",
+      "x": 7680,
+      "y": -1080,
+      "name": "フェーズ5 - プロパティ(ブロック選択時)",
+      "width": 240,
+      "fill": "$palette-bg",
+      "stroke": "$ribbon-line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "nPE9R",
+          "name": "BPPヘッダ",
+          "width": "fill_container",
+          "fill": "$palette-head",
+          "padding": [
+            5,
+            9
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "G0Qf2S",
+              "name": "BPP題",
+              "fill": "$ui-text",
+              "content": "プロパティ",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 11,
+              "fontWeight": "600"
+            },
+            {
+              "type": "icon",
+              "id": "U8WGX2",
+              "name": "BPPピン",
+              "width": 11,
+              "height": 11,
+              "icon": "pin",
+              "library": "lucide",
+              "fill": "$ui-muted"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "o7hVxU",
+          "name": "BPP種別",
+          "width": "fill_container",
+          "padding": [
+            5,
+            9
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "cwlna",
+              "name": "BPP種別文字",
+              "fill": "$ui-text",
+              "content": "シンボル (1)",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "SI3SA",
+          "name": "BPP節",
+          "width": "fill_container",
+          "fill": "#e4e8ec",
+          "padding": [
+            4,
+            9
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "vn8zF",
+              "name": "BPP節文字",
+              "fill": "$ui-text",
+              "content": "識別",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "mh0B3",
+          "name": "BPP行1",
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Z1vUe",
+              "name": "BPP行1ラベル",
+              "width": 88,
+              "padding": [
+                5,
+                9
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "IDUKQ",
+                  "name": "BPP行1ラベル文字",
+                  "fill": "$ui-muted",
+                  "content": "参照記号",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "veHti",
+              "name": "BPP行1値",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "padding": [
+                5,
+                8
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "SiPjW",
+                  "name": "BPP行1値文字",
+                  "fill": "$ui-text",
+                  "content": "CTRL1",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "aRY9D",
+          "name": "BPP行2",
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "MUEgZ",
+              "name": "BPP行2ラベル",
+              "width": 88,
+              "padding": [
+                5,
+                9
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "c67aOl",
+                  "name": "BPP行2ラベル文字",
+                  "fill": "$ui-muted",
+                  "content": "シンボル",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "dlte1",
+              "name": "BPP行2値",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "padding": [
+                5,
+                8
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "gBt5Q",
+                  "name": "BPP行2値文字",
+                  "fill": "$ui-text",
+                  "content": "block",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "CFqTy",
+          "name": "BPP行3",
+          "width": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "t6Swae",
+              "name": "BPP行3ラベル",
+              "width": 88,
+              "padding": [
+                5,
+                9
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "XCIaW",
+                  "name": "BPP行3ラベル文字",
+                  "fill": "$ui-muted",
+                  "content": "ピン",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "SFrWd",
+              "name": "BPP行3値",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "padding": [
+                5,
+                8
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "HRf1v",
+                  "name": "BPP行3値文字",
+                  "fill": "$ui-text",
+                  "content": "左5 / 右3",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "YbTH9",
+          "name": "BPPボタン行",
+          "width": "fill_container",
+          "padding": [
+            10,
+            9
+          ],
+          "justifyContent": "end",
+          "children": [
+            {
+              "type": "frame",
+              "id": "dTVpu",
+              "name": "BPPピン表編集",
+              "fill": "#FFFFFF",
+              "cornerRadius": 4,
+              "stroke": "$ribbon-line",
+              "strokeWidth": 1,
+              "padding": [
+                5,
+                14
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "RzsKT",
+                  "name": "BPPピン表編集文字",
+                  "fill": "$ui-text",
+                  "content": "ピン表を編集…",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "variables": {
