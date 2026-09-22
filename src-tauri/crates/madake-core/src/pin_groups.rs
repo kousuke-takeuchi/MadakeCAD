@@ -15,17 +15,20 @@
 use std::collections::BTreeSet;
 
 use crate::geometry::Point;
+use crate::model::SymbolInstance;
 use crate::symbol::{PinDef, PinDir, SymbolDef};
 
 /// `attrs`のキー。
 pub const PIN_GROUPS_ATTR: &str = "pin_groups";
 
 /// 「範囲:名前」の書式が読めない (コロンが無い・範囲の両端が空など)。
-pub const PIN_GROUP_INVALID: &str = "pin_group.invalid";
+pub const PIN_GROUP_INVALID: &str = "erc.pin_group_invalid";
 /// 範囲の両端がそのシンボルインスタンスのピン番号に無い。
-pub const PIN_GROUP_UNKNOWN_PIN: &str = "pin_group.unknown_pin";
+pub const PIN_GROUP_UNKNOWN_PIN: &str = "erc.pin_group_unknown_pin";
 /// 範囲が他のグループと重なっている。
-pub const PIN_GROUP_OVERLAP: &str = "pin_group.overlap";
+pub const PIN_GROUP_OVERLAP: &str = "erc.pin_group_overlap";
+/// ピングループ括弧を描けない表示形式のシンボルに指定されている (実機ブロック表示のコイルなど)。
+pub const PIN_GROUP_UNSUPPORTED: &str = "erc.pin_group_unsupported";
 
 /// キャプションの折り返し文字数 (縦書きの近似)。
 pub const PIN_GROUP_CAPTION_WRAP: usize = 4;
@@ -33,7 +36,9 @@ pub const PIN_GROUP_CAPTION_WRAP: usize = 4;
 pub const PIN_GROUP_BRACKET_GAP_MM: f64 = 1.5;
 /// 括弧の両端のヒゲ (ピン側へ折り返す部分) の長さ (mm)。
 pub const PIN_GROUP_BRACKET_TICK_MM: f64 = 1.2;
-/// 括弧の棒とキャプションの間隔 (mm)。
+/// 括弧の棒とキャプションの**文字の縁**との間隔 (mm)。キャプションは中央揃えで描くので、
+/// 基準点は文字の幅・高さの半分だけさらに外へ置く (そうしないと長い名前の手前側が
+/// ピン番号の上まで戻ってくる)。
 pub const PIN_GROUP_CAPTION_GAP_MM: f64 = 1.5;
 /// キャプション文字高さ (mm)。
 pub const PIN_GROUP_CAPTION_TEXT_MM: f64 = 2.0;
@@ -83,6 +88,45 @@ pub fn chart_order_pin_numbers(def: &SymbolDef) -> Vec<String> {
     chart_order_pin_defs(def).into_iter().map(|p| p.number.clone()).collect()
 }
 
+/// 全ピンが広がる範囲の中心 (シンボルのローカル座標)。ピンが無ければNone。
+fn pin_center(def: &SymbolDef) -> Option<Point> {
+    let mut it = def.pins.iter();
+    let first = it.next()?.at;
+    let (mut min, mut max) = (first, first);
+    for pin in it {
+        min.x = min.x.min(pin.at.x);
+        min.y = min.y.min(pin.at.y);
+        max.x = max.x.max(pin.at.x);
+        max.y = max.y.max(pin.at.y);
+    }
+    Some(Point::new((min.x + max.x) / 2.0, (min.y + max.y) / 2.0))
+}
+
+/// ある番号のピン定義のうち、ピンの広がりの中心からいちばん遠いものを選ぶ。
+///
+/// 端子台の貫通端子は同じ番号が左右2つある。多段端子台で右の列 (`1b`…) の括弧を
+/// **列の外側**へ出すための規則で、内側 (柱と柱の間) に括弧が入らない。距離が同じなら
+/// 定義順で先に出てくるほう (1段の端子台は従来どおり左側)。
+pub fn outer_pin_def<'a>(def: &'a SymbolDef, number: &str) -> Option<&'a PinDef> {
+    let center = pin_center(def)?;
+    let mut best: Option<(&PinDef, f64)> = None;
+    for pin in def.pins.iter().filter(|p| p.number == number) {
+        let d = pin.at.distance_to(&center);
+        if best.is_none_or(|(_, bd)| d > bd) {
+            best = Some((pin, d));
+        }
+    }
+    best.map(|(p, _)| p)
+}
+
+/// 折り返した各行のうち、いちばん長い行の幅 (mm)。
+fn max_line_width(lines: &[String]) -> f64 {
+    lines
+        .iter()
+        .map(|l| crate::tidy::text_width(l, PIN_GROUP_CAPTION_TEXT_MM))
+        .fold(0.0, f64::max)
+}
+
 /// キャプションを[`PIN_GROUP_CAPTION_WRAP`]文字ごとに折り返す (縦書きの近似)。
 /// 空文字は1行 (空行) を返す。
 pub fn wrap_caption(caption: &str) -> Vec<String> {
@@ -123,6 +167,17 @@ pub fn parse_pin_groups(spec: &str, order: &[String]) -> ParsedPinGroups {
         };
         let range = range.trim();
         let caption = caption.trim().to_string();
+        // ピン番号そのものに「-」が入っている端子 (ブロックのピン番号は自由文字列) は、
+        // 範囲の区切り記号と見分けが付かない。「存在しないピン」と誤報せず、使えないことを
+        // そのまま伝える (docs/03-schematic-editorに制限として明記)
+        if range.contains('-') && order.iter().any(|p| p == range) {
+            issues.push(PinGroupIssue {
+                text: text.to_string(),
+                code: PIN_GROUP_INVALID.into(),
+                message: "ピン番号に「-」を含む端子は範囲指定に使えません".into(),
+            });
+            continue;
+        }
         let (first, last) = match range.split_once('-') {
             Some((a, b)) => (a.trim().to_string(), b.trim().to_string()),
             None => (range.to_string(), range.to_string()),
@@ -229,7 +284,7 @@ pub fn pin_group_bracket(pins: &[&PinDef], caption: &str) -> Option<PinGroupBrac
                 Point::new(bar_x, bottom),
                 Point::new(tick_x, bottom),
             ];
-            let caption_x = bar_x + sign * PIN_GROUP_CAPTION_GAP_MM;
+            let caption_x = bar_x + sign * (PIN_GROUP_CAPTION_GAP_MM + max_line_width(&lines) / 2.0);
             let mid_y = (top + bottom) / 2.0;
             let total = (lines.len().saturating_sub(1)) as f64 * PIN_GROUP_CAPTION_LINE_PITCH_MM;
             let start_y = mid_y - total / 2.0;
@@ -253,7 +308,8 @@ pub fn pin_group_bracket(pins: &[&PinDef], caption: &str) -> Option<PinGroupBrac
                 Point::new(right, bar_y),
                 Point::new(right, tick_y),
             ];
-            let caption_y0 = bar_y + sign * PIN_GROUP_CAPTION_GAP_MM;
+            let caption_y0 =
+                bar_y + sign * (PIN_GROUP_CAPTION_GAP_MM + PIN_GROUP_CAPTION_TEXT_MM / 2.0);
             let mid_x = (left + right) / 2.0;
             let caption_lines = lines
                 .into_iter()
@@ -271,12 +327,14 @@ pub fn pin_group_bracket(pins: &[&PinDef], caption: &str) -> Option<PinGroupBrac
 /// あるシンボル定義+`attrs["pin_groups"]`から、描ける括弧を全部求める。
 /// 読めない・重なる項目は黙って飛ばす (診断は[`crate::verify`]側が
 /// [`parse_pin_groups`]を直接使って報告する)。
+///
+/// 範囲の順番はチャート順 ([`chart_order_pin_numbers`]) で決めるが、括弧を掛ける位置は
+/// 番号ごとに[`outer_pin_def`]で選び直す (多段端子台で括弧が列の内側に入らないように)。
 pub fn pin_group_brackets(def: &SymbolDef, spec: &str) -> Vec<PinGroupBracket> {
     if spec.trim().is_empty() {
         return Vec::new();
     }
     let order = chart_order_pin_numbers(def);
-    let defs = chart_order_pin_defs(def);
     let parsed = parse_pin_groups(spec, &order);
     parsed
         .groups
@@ -284,10 +342,68 @@ pub fn pin_group_brackets(def: &SymbolDef, spec: &str) -> Vec<PinGroupBracket> {
         .filter_map(|g| {
             let i0 = order.iter().position(|p| p == &g.first)?;
             let i1 = order.iter().position(|p| p == &g.last)?;
-            let pins: Vec<&PinDef> = defs[i0..=i1].to_vec();
+            let pins: Vec<&PinDef> = order[i0..=i1]
+                .iter()
+                .filter_map(|no| outer_pin_def(def, no))
+                .collect();
             pin_group_bracket(&pins, &g.caption)
         })
         .collect()
+}
+
+/// 括弧とキャプションが**用紙の上で**占める矩形の一覧 (括弧の外接矩形1つ+キャプション1行1つ)。
+///
+/// 文字は回転しても横書きのままなので、キャプションの箱は用紙座標で文字幅・文字高から取る。
+/// 参照記号・型番・機能ラベルの位置決め ([`crate::svg::symbol_bounds`]) が、括弧とキャプションを
+/// 避けるためにこれを使う。
+pub fn pin_group_paper_boxes(inst: &SymbolInstance, def: &SymbolDef) -> Vec<(Point, Point)> {
+    let Some(spec) = inst.attrs.get(PIN_GROUPS_ATTR) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for bracket in pin_group_brackets(def, spec) {
+        let pts: Vec<Point> = bracket
+            .bracket
+            .iter()
+            .map(|p| crate::netlist::transform_local(*p, inst))
+            .collect();
+        if let Some(first) = pts.first() {
+            let (mut min, mut max) = (*first, *first);
+            for p in &pts {
+                min.x = min.x.min(p.x);
+                min.y = min.y.min(p.y);
+                max.x = max.x.max(p.x);
+                max.y = max.y.max(p.y);
+            }
+            out.push((min, max));
+        }
+        for (text, at) in &bracket.caption_lines {
+            if text.is_empty() {
+                continue;
+            }
+            let c = crate::netlist::transform_local(*at, inst);
+            let hw = crate::tidy::text_width(text, PIN_GROUP_CAPTION_TEXT_MM) / 2.0;
+            let hh = PIN_GROUP_CAPTION_TEXT_MM / 2.0;
+            out.push((
+                Point::new(c.x - hw, c.y - hh),
+                Point::new(c.x + hw, c.y + hh),
+            ));
+        }
+    }
+    out
+}
+
+/// [`pin_group_paper_boxes`]をひとまとめにした外接矩形。ピングループが無ければNone。
+pub fn pin_group_paper_bounds(inst: &SymbolInstance, def: &SymbolDef) -> Option<(Point, Point)> {
+    let boxes = pin_group_paper_boxes(inst, def);
+    let (mut min, mut max) = *boxes.first()?;
+    for (a, b) in &boxes {
+        min.x = min.x.min(a.x);
+        min.y = min.y.min(a.y);
+        max.x = max.x.max(b.x);
+        max.y = max.y.max(b.y);
+    }
+    Some((min, max))
 }
 
 #[cfg(test)]
@@ -397,6 +513,37 @@ mod tests {
         assert!(
             bracket.caption_lines.iter().all(|(_, p)| p.x < bracket.bracket[0].x),
             "キャプションは括弧よりさらに外側"
+        );
+    }
+
+    /// A pin whose own number contains a hyphen cannot be named in a pin group, and says so instead of being reported as a pin that does not exist.
+    /// ピン番号そのものに「-」が入っている端子はピングループに指定できず、「存在しないピン」ではなく使えない理由がそのまま報告される。
+    #[test]
+    fn a_pin_number_containing_a_hyphen_is_refused_with_its_own_reason() {
+        let order = vec!["A-1".to_string(), "B".to_string()];
+        let parsed = parse_pin_groups("A-1:電源", &order);
+        assert!(parsed.groups.is_empty());
+        assert_eq!(parsed.issues[0].code, PIN_GROUP_INVALID);
+        assert!(parsed.issues[0].message.contains("-"), "{:?}", parsed.issues[0]);
+    }
+
+    /// On a multi-level terminal block, a group over the second level's terminals brackets the outside of that level's own column, never the gap between the columns.
+    /// 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない)。
+    #[test]
+    fn a_multilevel_group_brackets_the_outside_of_its_own_column() {
+        let def = resolve_symbol("terminal_block_8p_2l").unwrap();
+        // 2段の列は中心x=-5と+5、箱はそれぞれ±2.5なので右の列の外縁はx=7.5
+        let brackets = pin_group_brackets(&def, "1b-4b:B系統");
+        assert_eq!(brackets.len(), 1);
+        assert!(
+            brackets[0].bracket.iter().all(|p| p.x > 7.5),
+            "括弧が列の外側に出ていない: {:?}",
+            brackets[0].bracket
+        );
+        assert!(
+            brackets[0].caption_lines.iter().all(|(_, p)| p.x > 7.5),
+            "キャプションが列の外側に出ていない: {:?}",
+            brackets[0].caption_lines
         );
     }
 

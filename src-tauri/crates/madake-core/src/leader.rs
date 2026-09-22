@@ -7,14 +7,15 @@
 //!
 //! ここは純関数だけを置く (モデルは変更しない)。SVG/PDF出力 (`svg.rs`) とcanvas描画
 //! (`src/canvas/leader.ts`) の双方がこの1か所のジオメトリを使う。
+//!
+//! **対象の外接矩形は[`crate::svg::symbol_bounds`]1つだけを使う** (canvas側の双子
+//! `dynamicSymbol.ts`の`symbolBounds`と同じ定義: 配置基準点を含め、文字プリミティブは
+//! 基準点だけを見る)。図面に描かれる外形と、引き出し線が指す先を必ず一致させるため。
 
 use crate::model::{Entity, Sheet, TextAnchor, TextEntity};
 use crate::symbol::DefIndex;
 use crate::tidy::{text_width, Rect};
 use crate::Point;
-
-/// 引き出し線の対象端に描く丸印の半径 (mm)。配線の分岐点 (ジャンクション) の印と同じ。
-pub const LEADER_DOT_R: f64 = 0.6;
 
 /// 注記の外接矩形 (用紙座標)。基準位置 (`anchor`) に応じて左揃え・中央揃え・右揃えで求める。
 pub fn text_bounds(text: &TextEntity) -> Rect {
@@ -33,7 +34,9 @@ pub fn entity_bounds(entity: &Entity, defs: &DefIndex) -> Option<Rect> {
     match entity {
         Entity::Symbol(s) => {
             let def = defs.get(s)?;
-            crate::tidy::symbol_bounds(s, &def)
+            // 描画側と同じ外形 (canvas双子 dynamicSymbol.ts の symbolBounds と同一定義)
+            let (min, max) = crate::svg::symbol_bounds(s, &def);
+            Some(Rect::from_corners(min, max))
         }
         Entity::Text(t) => Some(text_bounds(t)),
         Entity::Wire(w) => bounds_of_points(&w.points),
@@ -116,6 +119,7 @@ pub fn leader_for(sheet: &Sheet, text: &TextEntity, defs: &DefIndex) -> Option<(
 mod tests {
     use super::*;
     use crate::model::{Entity, Junction, Project, SymbolInstance, TextEntity};
+    use crate::symbol::SymbolDef;
     use uuid::Uuid;
 
     fn note(x: f64, y: f64, text: &str, leader_to: Option<crate::model::EntityId>) -> TextEntity {
@@ -187,6 +191,49 @@ mod tests {
         let text = note(0.0, 0.0, "普通の注記", None);
         let defs = DefIndex::new(&[]);
         assert!(leader_for(sheet, &text, &defs).is_none());
+    }
+
+    /// A leader aimed at a symbol ends on exactly the outline the drawing shows: the placement point is always inside it, and a text mark inside the symbol counts as its own reference point, not as a box of letters.
+    /// シンボルを指す引き出し線は、図面に描かれている外形ちょうどで止まる: 配置基準点は必ず外形の内側に入り、シンボルの中の文字は文字の箱ではなく基準点1点として数える。
+    #[test]
+    fn a_leader_targets_exactly_the_outline_the_drawing_shows() {
+        // 外形が配置基準点を囲まず、文字が外形の外にはみ出す定義 (2つの数え方で差が出る形)
+        let def = SymbolDef {
+            id: "leader_probe".into(),
+            name: "Probe".into(),
+            name_ja: "試験".into(),
+            category: "misc".into(),
+            ref_prefix: "X".into(),
+            keywords: vec![],
+            primitives: vec![
+                crate::symbol::Primitive::Rect {
+                    p1: Point::new(10.0, 10.0),
+                    p2: Point::new(20.0, 20.0),
+                    filled: false,
+                },
+                crate::symbol::Primitive::Text {
+                    at: Point::new(30.0, 0.0),
+                    text: "XYZ".into(),
+                    height: 2.5,
+                },
+            ],
+            pins: vec![],
+            text_slots: vec![],
+        };
+        let inst = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "leader_probe".into(),
+            at: Point::new(100.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "X1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        });
+        let defs = DefIndex::new(std::slice::from_ref(&def));
+        let rect = entity_bounds(&inst, &defs).expect("外形が求まる");
+        assert_eq!(rect.min, Point::new(100.0, 100.0), "配置基準点が外形に入る");
+        assert_eq!(rect.max, Point::new(130.0, 120.0), "文字は基準点1点ぶんだけ広がる");
     }
 
     /// entity_bounds resolves a symbol instance's bounding box from its definition, so a leader can target a symbol.

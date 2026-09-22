@@ -59,6 +59,9 @@ const HARNESS_DASH: (f64, f64) = (3.0, 2.0);
 const HARNESS_STROKE: f64 = 0.25;
 /// 引き出し線 (G20) の線幅 (mm)。ハーネス境界の細線と同じ太さ。
 const LEADER_STROKE: f64 = 0.25;
+/// 丸印の半径 (mm)。配線の分岐点 (ジャンクション) と、引き出し線 (G20) の対象端に
+/// 同じ大きさで描く。図面上で「ここに繋がっている」を表す印は1種類だけにする。
+pub const JUNCTION_DOT_R: f64 = 0.6;
 /// ピングループ括弧 (G8) の線幅 (mm)。シンボル本体の線と同じ太さ。
 const PIN_GROUP_BRACKET_STROKE: f64 = SYMBOL_STROKE;
 /// ハーネス名の文字高さ (mm)。
@@ -332,6 +335,9 @@ pub(crate) fn symbol_top_y(inst: &crate::model::SymbolInstance, def: &SymbolDef)
 /// 配置後のシンボル外形の囲み矩形 (最小点, 最大点) を用紙座標で返す。
 /// 円・弧は回転対称なので中心±rで安全側に評価する。配置基準点も必ず含める。
 /// 参照記号・接点マップなど、外形の外側に置く注記の位置決めに使う。
+///
+/// ピングループ括弧 (G8) もシンボルと一緒に描かれる外形の一部なので、括弧とキャプションの
+/// 箱を含める。こうしないと、回転したシンボルで参照記号・型番が括弧の文字に重なる。
 pub fn symbol_bounds(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> (Point, Point) {
     let (mut min, mut max) = (inst.at, inst.at);
     let mut visit = |p: Point| {
@@ -359,6 +365,12 @@ pub fn symbol_bounds(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> (P
     }
     for pin in &def.pins {
         visit(pin.at);
+    }
+    for (a, b) in crate::pin_groups::pin_group_paper_boxes(inst, def) {
+        min.x = min.x.min(a.x);
+        min.y = min.y.min(a.y);
+        max.x = max.x.max(b.x);
+        max.y = max.y.max(b.y);
     }
     (min, max)
 }
@@ -1120,8 +1132,8 @@ fn sheet_to_svg_with_xrefs(
             Entity::Junction(j) => {
                 let _ = write!(
                     out,
-                    "<circle cx=\"{}\" cy=\"{}\" r=\"0.6\" fill=\"#000\"/>\n",
-                    n(j.at.x), n(j.at.y)
+                    "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"#000\"/>\n",
+                    n(j.at.x), n(j.at.y), n(JUNCTION_DOT_R)
                 );
             }
             Entity::NetLabel(l) => {
@@ -1182,7 +1194,7 @@ fn sheet_to_svg_with_xrefs(
                     let _ = write!(
                         out,
                         "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"#000\"/>\n",
-                        n(end.x), n(end.y), n(crate::leader::LEADER_DOT_R)
+                        n(end.x), n(end.y), n(JUNCTION_DOT_R)
                     );
                 }
             }
@@ -3192,24 +3204,166 @@ mod tests {
         assert_eq!(bracket_polylines(&svg), 1, "重ならないCの分だけ: {svg}");
     }
 
-    /// A pin group bracket follows the symbol's rotation and mirror, exactly as the pin positions themselves do.
-    /// ピングループ括弧はシンボルの回転・ミラーに、ピンそのものの位置と同じように追従する。
+    /// 4ピンのブロック (左辺に1〜4)。ピン番号はブロック自身が足の脇に書く。
+    fn four_pin_block(reference: &str, x: f64, y: f64) -> Entity {
+        let mut attrs = std::collections::BTreeMap::new();
+        attrs.insert(
+            crate::block::BLOCK_PINS_ATTR.to_string(),
+            r#"{"left":[{"no":"1","name":"IN1"},{"no":"2","name":"IN2"},
+                {"no":"3","name":"IN3"},{"no":"4","name":"IN4"}]}"#
+                .to_string(),
+        );
+        Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: crate::block::BLOCK_SYMBOL_ID.into(),
+            at: Point::new(x, y),
+            rotation: 0,
+            mirror: false,
+            reference: reference.into(),
+            value: String::new(),
+            attrs,
+        })
+    }
+
+    /// SVGの全ての`<text>`の (本文, 占める矩形)。文字は常に水平なので、幅は`text_width`、
+    /// 高さはベースラインから文字高ぶん上に取る (描画側と同じ約束)。
+    fn all_text_boxes(svg: &str) -> Vec<(String, (f64, f64, f64, f64))> {
+        svg.lines()
+            .filter(|l| l.trim_start().starts_with("<text "))
+            .filter_map(|l| {
+                let size = attr(l, "font-size")?;
+                let (x, y) = (attr(l, "x")?, attr(l, "y")?);
+                let body = l.split_once('>')?.1.rsplit_once("</text>")?.0.to_string();
+                let w = crate::tidy::text_width(&body, size);
+                let x0 = match l.split("text-anchor=\"").nth(1).and_then(|s| s.split('"').next()) {
+                    Some("middle") => x - w / 2.0,
+                    Some("end") => x - w,
+                    _ => x,
+                };
+                Some((body, (x0, y - size, x0 + w, y)))
+            })
+            .collect()
+    }
+
+    /// Pin group brackets and their captions never land on a pin number, a pin name or the symbol's designator, type or function label, for a block, a terminal block and a connector, at every rotation and mirrored.
+    /// ピングループの括弧とキャプションは、ブロック・端子台・コネクタのいずれでも、全ての回転とミラーで、ピン番号・ピン名・参照記号・型番・機能ラベルのどれにも重ならない。
     #[test]
-    fn svg_pin_group_bracket_follows_rotation_and_mirror() {
-        for (rotation, mirror) in [(0u16, false), (90, false), (180, true), (270, true)] {
-            let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
-            let mut tb = with_pin_groups(
-                terminal_block("TB1", "terminal_block_4p", 150.0, 100.0, ""),
-                "1-2:A",
-            );
-            if let Entity::Symbol(s) = &mut tb {
-                s.rotation = rotation;
-                s.mirror = mirror;
+    fn svg_pin_group_boxes_never_land_on_any_label_at_any_rotation() {
+        // 4文字を超えるキャプション → 2行に割れるので、行の積み上がりも当たり判定に入る
+        let caption_lines = ["電源系統", "一式"];
+        for (id, spec) in [
+            ("block", "1-2:電源系統一式"),
+            ("terminal_block_8p", "1-4:電源系統一式"),
+            ("connector_8p", "1-4:電源系統一式"),
+        ] {
+            for rotation in [0u16, 90, 180, 270] {
+                for mirror in [false, true] {
+                    let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+                    let base = if id == "block" {
+                        four_pin_block("B1", 150.0, 100.0)
+                    } else {
+                        terminal_block("TB1", id, 150.0, 100.0, "")
+                    };
+                    let mut inst = with_pin_groups(base, spec);
+                    if let Entity::Symbol(s) = &mut inst {
+                        s.rotation = rotation;
+                        s.mirror = mirror;
+                        s.value = "AB-1234".into();
+                        s.attrs.insert(
+                            crate::text_style::FUNCTION_LABEL_ATTR.into(),
+                            "非常停止".into(),
+                        );
+                    }
+                    let (entity_id, symbol) = match &inst {
+                        Entity::Symbol(s) => (s.id, s.clone()),
+                        _ => unreachable!(),
+                    };
+                    sheet.entities.insert(entity_id, inst);
+                    let defs = crate::symbol::sheet_symbol_defs(&sheet);
+                    let def = crate::symbol::DefIndex::new(&defs).get(&symbol).unwrap();
+                    let svg = sheet_to_svg(&sheet, &defs);
+                    let where_ = format!("{id} rot={rotation} mirror={mirror}");
+
+                    let group_boxes = crate::pin_groups::pin_group_paper_boxes(&symbol, &def);
+                    assert!(!group_boxes.is_empty(), "括弧が描かれていない ({where_})");
+                    for (min, max) in &group_boxes {
+                        let g = (min.x, min.y, max.x, max.y);
+                        for (body, t) in all_text_boxes(&svg) {
+                            if caption_lines.contains(&body.as_str()) {
+                                continue;
+                            }
+                            assert!(!overlaps(g, t), "「{body}」に重なった {g:?} vs {t:?} ({where_})");
+                        }
+                    }
+                }
             }
-            sheet.entities.insert(tb.id(), tb);
-            let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
-            assert_eq!(bracket_polylines(&svg), 1, "rot={rotation} mirror={mirror}: {svg}");
-            assert!(svg.contains(">A<"), "rot={rotation} mirror={mirror}: {svg}");
         }
+    }
+
+    /// A pin group's caption sits beyond its bracket, further from the symbol than the bracket bar is, at every rotation and mirrored.
+    /// ピングループのキャプションは括弧の外側 (シンボルから見て括弧の棒よりさらに遠く) に置かれる。回転・ミラーでも変わらない。
+    #[test]
+    fn svg_pin_group_caption_sits_beyond_its_bracket() {
+        for rotation in [0u16, 90, 180, 270] {
+            for mirror in [false, true] {
+                let mut inst = with_pin_groups(
+                    terminal_block("TB1", "terminal_block_8p", 150.0, 100.0, ""),
+                    "1-4:電源系統一式",
+                );
+                if let Entity::Symbol(s) = &mut inst {
+                    s.rotation = rotation;
+                    s.mirror = mirror;
+                }
+                let Entity::Symbol(symbol) = inst else { unreachable!() };
+                let def = crate::symbol::resolve_symbol("terminal_block_8p").unwrap();
+                let boxes = crate::pin_groups::pin_group_paper_boxes(&symbol, &def);
+                // 先頭が括弧、残りがキャプションの行 (pin_group_paper_boxes の並び)
+                let center = |b: &(Point, Point)| {
+                    Point::new((b.0.x + b.1.x) / 2.0, (b.0.y + b.1.y) / 2.0)
+                };
+                let bracket = center(&boxes[0]).distance_to(&symbol.at);
+                for caption in &boxes[1..] {
+                    assert!(
+                        center(caption).distance_to(&symbol.at) > bracket,
+                        "キャプションが括弧より内側 rot={rotation} mirror={mirror}: {caption:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The dot at the target end of a note's leader line is drawn exactly the size of a wire junction dot, so the two read as the same mark.
+    /// 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える)。
+    #[test]
+    fn svg_leader_dot_is_the_size_of_a_wire_junction_dot() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let target = Entity::Junction(crate::model::Junction {
+            id: Uuid::new_v4(),
+            at: Point::new(150.0, 100.0),
+        });
+        let target_id = target.id();
+        let mut note = TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(120.0, 80.0),
+            text: "注意".into(),
+            height: 2.5,
+            rotation: 0,
+            anchor: TextAnchor::Start,
+            color: None,
+            bold: false,
+            leader_to: None,
+        };
+        note.leader_to = Some(target_id);
+        sheet.entities.insert(target_id, target);
+        sheet.entities.insert(note.id, Entity::Text(note));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let radii: Vec<f64> = svg
+            .lines()
+            .filter(|l| l.trim_start().starts_with("<circle "))
+            .filter_map(|l| attr(l, "r"))
+            .collect();
+        assert_eq!(radii.len(), 2, "分岐点と引き出し線の丸印が1つずつ: {svg}");
+        assert_eq!(radii[0], radii[1], "同じ大きさ: {svg}");
+        assert_eq!(radii[0], JUNCTION_DOT_R);
     }
 }
