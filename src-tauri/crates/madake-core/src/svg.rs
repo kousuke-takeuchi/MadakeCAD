@@ -57,6 +57,11 @@ pub(crate) const NET_LABEL_DY: f64 = 1.0;
 const HARNESS_DASH: (f64, f64) = (3.0, 2.0);
 /// ハーネス境界の線幅 (mm)。図面の主線より細い補助線。
 const HARNESS_STROKE: f64 = 0.25;
+/// 嵌合コネクタ対 (G14) の破線。ハーネス境界より短い刻みにして、
+/// 「短い連絡線」であることを見た目でも区別する。
+const MATE_LINE_DASH: (f64, f64) = (1.5, 1.0);
+/// 嵌合コネクタ対の破線の線幅 (mm)。ハーネス境界と同じ細さ。
+const MATE_LINE_STROKE: f64 = 0.25;
 /// 引き出し線 (G20) の線幅 (mm)。ハーネス境界の細線と同じ太さ。
 const LEADER_STROKE: f64 = 0.25;
 /// 丸印の半径 (mm)。配線の分岐点 (ジャンクション) と、引き出し線 (G20) の対象端に
@@ -829,6 +834,61 @@ fn render_harnesses(out: &mut String, sheet: &Sheet) {
     }
 }
 
+/// 矩形の周上で、外部の点`target`にいちばん近い点 (G14の「外形どうしの最短点」)。
+/// `target`が矩形の外にあれば単純にクランプ、矩形の内側 (通常は起きないが保険) なら
+/// いちばん近い辺へ押し出す。
+fn rect_boundary_point_toward(min: Point, max: Point, target: Point) -> Point {
+    let cx = target.x.clamp(min.x, max.x);
+    let cy = target.y.clamp(min.y, max.y);
+    let inside = cx > min.x && cx < max.x && cy > min.y && cy < max.y;
+    if !inside {
+        return Point::new(cx, cy);
+    }
+    let (dl, dr, dt, db) = (cx - min.x, max.x - cx, cy - min.y, max.y - cy);
+    let m = dl.min(dr).min(dt).min(db);
+    if m == dl {
+        Point::new(min.x, cy)
+    } else if m == dr {
+        Point::new(max.x, cy)
+    } else if m == dt {
+        Point::new(cx, min.y)
+    } else {
+        Point::new(cx, max.y)
+    }
+}
+
+/// 嵌合コネクタ対 (G14)。両方が同一シート上で50mm以内にある対だけが
+/// [`crate::mate::mate_links`] に入っているので、ここでは渡された分をそのまま描く:
+/// 双方の外形 ([`symbol_bounds`]) のうち、相手の配置基準点にいちばん近い点どうしを
+/// 短い破線で結ぶ。配線・シンボルより先に描いて背面に置く (ハーネス境界と同じ扱い)。
+fn render_mate_links(
+    out: &mut String,
+    sheet: &Sheet,
+    links: &[crate::mate::MateLink],
+    defs: &crate::symbol::DefIndex,
+) {
+    for link in links {
+        let (Some(Entity::Symbol(a)), Some(Entity::Symbol(b))) =
+            (sheet.entities.get(&link.a), sheet.entities.get(&link.b))
+        else {
+            continue;
+        };
+        let (Some(def_a), Some(def_b)) = (defs.get(a), defs.get(b)) else {
+            continue;
+        };
+        let (a_min, a_max) = symbol_bounds(a, &def_a);
+        let (b_min, b_max) = symbol_bounds(b, &def_b);
+        let pa = rect_boundary_point_toward(a_min, a_max, b.at);
+        let pb = rect_boundary_point_toward(b_min, b_max, a.at);
+        let _ = write!(
+            out,
+            "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#000\" stroke-width=\"{}\" stroke-dasharray=\"{} {}\"/>\n",
+            n(pa.x), n(pa.y), n(pb.x), n(pb.y),
+            n(MATE_LINE_STROKE), n(MATE_LINE_DASH.0), n(MATE_LINE_DASH.1)
+        );
+    }
+}
+
 /// 盤レイアウト (M4仕様 §8) を描く。奥から順に **盤外形+取付板 → ダクト → DINレール →
 /// フットプリント**。寸法の数式は [`crate::panel`] が正で、画面 (`src/canvas/panel.ts`) と
 /// 同じ結果になる。紙面なので白地・黒線で、面は塗らない (ダクトは斜線で表す)。
@@ -983,6 +1043,7 @@ pub fn sheet_to_svg_with_frame(
         &std::collections::BTreeMap::new(),
         &std::collections::BTreeMap::new(),
         &RelayAnnotations::default(),
+        &[],
         frame,
         &BindContext::for_sheet(sheet),
     )
@@ -1023,12 +1084,17 @@ pub fn project_sheet_to_svg(
         device_blocks: crate::relay_xref::sheet_device_blocks(project, sheet_id),
     };
     let frame = crate::frame_template::for_project(project);
+    let mate_links: Vec<crate::mate::MateLink> = crate::mate::mate_links(project)
+        .into_iter()
+        .filter(|l| l.sheet_id == sheet_id)
+        .collect();
     Some(sheet_to_svg_with_xrefs(
         sheet,
         symbols,
         &xrefs,
         &device_xrefs,
         &relay,
+        &mate_links,
         &frame,
         &BindContext::for_project(project, sheet),
     ))
@@ -1044,6 +1110,7 @@ fn sheet_to_svg_with_xrefs(
     xrefs: &std::collections::BTreeMap<crate::model::EntityId, String>,
     device_xrefs: &std::collections::BTreeMap<crate::model::EntityId, String>,
     relay: &RelayAnnotations,
+    mate_links: &[crate::mate::MateLink],
     frame: &FrameTemplate,
     ctx: &BindContext,
 ) -> String {
@@ -1069,6 +1136,8 @@ fn sheet_to_svg_with_xrefs(
     // 注記の層 (ネットラベル・タグ・線番・配線注記) にかける倍率 (G20)
     let annotation_scale = sheet.annotation_scale();
     let defs = crate::symbol::DefIndex::new(symbols);
+    // 嵌合コネクタ対 (G14) の破線もハーネス境界と同じく背面に置く
+    render_mate_links(&mut out, sheet, mate_links, &defs);
     // コイル所在 (G22) の逃がし判定に使う、このシートの配線注記と、その文字高 (G20で伸縮)
     let wire_notes = crate::wire_note::wire_notes(sheet);
     let wire_note_font = crate::wire_note::wire_note_font(sheet);
@@ -1445,6 +1514,7 @@ mod tests {
             &Default::default(),
             &Default::default(),
             &RelayAnnotations::default(),
+            &[],
             &frame,
             &BindContext::for_project(&project, &project.sheets[0]),
         );
@@ -1894,6 +1964,64 @@ mod tests {
             .find(|(_, _, s)| s == "W1")
             .unwrap_or_else(|| panic!("ハーネス名が無い: {svg}"));
         assert_eq!((label.0, label.1), (51.0, 49.0), "左上角の外側: {label:?}");
+    }
+
+    fn connector_entity(reference: &str, mate: Option<&str>, x: f64, y: f64) -> Entity {
+        let mut attrs = std::collections::BTreeMap::new();
+        if let Some(m) = mate {
+            attrs.insert(crate::mate::MATES_WITH_ATTR.to_string(), m.to_string());
+        }
+        Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "connector_plug".into(),
+            at: Point::new(x, y),
+            rotation: 0,
+            mirror: false,
+            reference: reference.into(),
+            value: String::new(),
+            attrs,
+        })
+    }
+
+    /// Two mated connectors on the same sheet within 50mm are joined by a short dashed line between their outlines (G14).
+    /// 同一シート上で50mm以内にある嵌合対は、外形どうしを結ぶ短い破線で結ばれる (G14)。
+    #[test]
+    fn svg_draws_a_dashed_line_between_a_mated_pair_on_one_sheet() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [
+            connector_entity("J1", Some("J12"), 100.0, 100.0),
+            connector_entity("J12", Some("J1"), 130.0, 100.0),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let svg = project_sheet_to_svg(&project, sid, &builtin_symbols()).unwrap();
+        let line = svg
+            .lines()
+            .find(|l| l.starts_with("<line") && l.contains("stroke-dasharray"))
+            .unwrap_or_else(|| panic!("嵌合対の破線が無い: {svg}"));
+        assert!(line.contains("stroke-dasharray=\"1.500 1\""), "{line}");
+    }
+
+    /// A mated pair more than 50mm apart on the same sheet draws no line at all (the reports carry the pair instead).
+    /// 50mmを超えて離れた嵌合対は線を一切描かない (対は帳票が伝える)。
+    #[test]
+    fn svg_draws_no_line_for_a_mated_pair_more_than_50mm_apart() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [
+            connector_entity("J1", Some("J12"), 0.0, 0.0),
+            connector_entity("J12", Some("J1"), 300.0, 0.0),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let svg = project_sheet_to_svg(&project, sid, &builtin_symbols()).unwrap();
+        assert!(
+            !svg.lines().any(|l| l.starts_with("<line") && l.contains("stroke-dasharray=\"1.500 1\"")),
+            "{svg}"
+        );
     }
 
     /// A harness with no name draws only its dashed boundary, without a label.

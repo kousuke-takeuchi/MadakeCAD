@@ -12,6 +12,7 @@ pub mod io;
 pub mod kicad;
 pub mod leader;
 pub mod macros;
+pub mod mate;
 pub mod model;
 pub mod net_tag;
 pub mod netlist;

@@ -64,6 +64,8 @@ pub fn verify_project(project: &crate::model::Project) -> Vec<Diagnostic> {
     diags.extend(crate::relay_xref::relay_diagnostics(project));
     // 盤レイアウト (回路図と盤の突き合わせ) もプロジェクト全体で評価する
     diags.extend(crate::panel::panel_diagnostics(project));
+    // 嵌合コネクタ対 (G14) もmates_withが他シートの参照記号を指しうるので、プロジェクト全体で評価する
+    diags.extend(crate::mate::mate_diagnostics(project));
     diags
 }
 
@@ -714,8 +716,36 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
         }
     }
 
+    // 用紙の外に出たエンティティ (G15): set_sheet_paperは既存エンティティの座標を
+    // 動かさないので、用紙を小さくすると新しい用紙の外に出るエンティティが生まれ得る。
+    // 動かさない・消さない代わりにここで警告する
+    let (paper_w, paper_h) = sheet.paper_mm();
+    for e in sheet.entities.values() {
+        let Some(rect) = crate::leader::entity_bounds(e, &defs) else {
+            continue;
+        };
+        if rect.min.x < -OUTSIDE_PAPER_EPS
+            || rect.min.y < -OUTSIDE_PAPER_EPS
+            || rect.max.x > paper_w + OUTSIDE_PAPER_EPS
+            || rect.max.y > paper_h + OUTSIDE_PAPER_EPS
+        {
+            diags.push(diag(
+                Severity::Warning,
+                OUTSIDE_PAPER,
+                format!("用紙 ({paper_w}×{paper_h}mm) の外に出ています"),
+                vec![e.id()],
+            ));
+        }
+    }
+
     diags
 }
+
+/// 用紙外エンティティ (G15) の判定に使う許容誤差 (mm)。丸め誤差で縁ぴったりの
+/// エンティティを誤検出しないための小さな遊び。
+const OUTSIDE_PAPER_EPS: f64 = 1e-6;
+/// 用紙外エンティティの診断コード (G15)。
+pub const OUTSIDE_PAPER: &str = "erc.outside_paper";
 
 #[cfg(test)]
 mod tests {
@@ -777,6 +807,39 @@ mod tests {
         let diags = run(&sheet);
         let erc: Vec<_> = diags.iter().filter(|d| d.code.starts_with("erc.")).collect();
         assert!(erc.is_empty(), "{erc:?}");
+    }
+
+    /// An entity that sits well inside the sheet's paper produces no `erc.outside_paper` warning.
+    /// 用紙の内側に収まっているエンティティは`erc.outside_paper`警告を出さない。
+    #[test]
+    fn an_entity_inside_the_paper_has_no_outside_paper_warning() {
+        let sheet = sheet_with(vec![symbol("resistor", "R1", 100.0, 50.0)]);
+        let diags = run(&sheet);
+        assert!(!diags.iter().any(|d| d.code == OUTSIDE_PAPER));
+    }
+
+    /// An entity whose bounds sit exactly on the paper edge is not flagged (only crossing the edge counts).
+    /// 用紙の縁ちょうどに収まるエンティティは指摘されない (縁を越えたときだけ指摘する)。
+    #[test]
+    fn an_entity_exactly_on_the_paper_edge_has_no_warning() {
+        // A3横 (420x297mm) の右下角ちょうどに置いたジャンクション
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let j = Entity::Junction(Junction { id: Uuid::new_v4(), at: Point::new(420.0, 297.0) });
+        sheet.entities.insert(j.id(), j);
+        let diags = run(&sheet);
+        assert!(!diags.iter().any(|d| d.code == OUTSIDE_PAPER));
+    }
+
+    /// An entity that falls outside the sheet's current paper bounds is reported as `erc.outside_paper`, without being moved or removed from the drawing.
+    /// シートの用紙の外に出ているエンティティは、動かしたり消したりせずに`erc.outside_paper`として報告される。
+    #[test]
+    fn an_entity_outside_the_paper_is_reported() {
+        // A3横 (420x297mm) の外、x=500 にワイヤを置く (set_sheet_paperで用紙を縮めた後を想定)
+        let sheet = sheet_with(vec![wire(&[(500.0, 50.0), (520.0, 50.0)])]);
+        let diags = run(&sheet);
+        let hit: Vec<_> = diags.iter().filter(|d| d.code == OUTSIDE_PAPER).collect();
+        assert_eq!(hit.len(), 1, "{diags:?}");
+        assert_eq!(hit[0].severity, Severity::Warning);
     }
 
     /// Unconnected pins are reported as one warning per symbol, listing the affected pin numbers.
