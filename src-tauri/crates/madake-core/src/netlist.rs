@@ -47,17 +47,6 @@ pub fn transform_local(p: Point, inst: &SymbolInstance) -> Point {
     Point::new(inst.at.x + r.x, inst.at.y + r.y)
 }
 
-/// ローカル座標の軸平行な矩形 (対角の2点) を配置変換した、用紙座標の軸平行な矩形
-/// (最小点, 最大点)。回転は90度単位なので変換しても軸平行のままで、どの角が最小点になるかが
-/// 変わるだけ。シンボルと一緒に回る外形 (実機ブロック等) の当たり判定・描画に使う。
-pub fn transform_rect(a: Point, b: Point, inst: &SymbolInstance) -> (Point, Point) {
-    let (ta, tb) = (transform_local(a, inst), transform_local(b, inst));
-    (
-        Point::new(ta.x.min(tb.x), ta.y.min(tb.y)),
-        Point::new(ta.x.max(tb.x), ta.y.max(tb.y)),
-    )
-}
-
 /// シンボルインスタンスの各ピンの (ピン番号, 用紙上絶対座標) を返す。
 pub fn pin_positions(inst: &SymbolInstance, def: &SymbolDef) -> Vec<(String, Point)> {
     def.pins

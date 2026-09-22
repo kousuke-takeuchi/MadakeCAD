@@ -312,7 +312,9 @@ pub fn sheet_device_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<Enti
 }
 
 /// 参照記号の脇に置くデバイスXRefテキストの基準点 (テキストは左揃え、G13)。
-/// シンボル外形の右端から [`XREF_GAP`] だけ空け、高さは参照記号のラベルと同じ行に揃える
+/// シンボル外形と**参照記号ラベル**の右端 (長いほう) から [`XREF_GAP`] だけ空け、
+/// 高さは参照記号のラベルと同じ行に揃える (ネットラベル側の [`xref_text_at`] が
+/// ラベル本文の幅を測って逃がすのと同じ考え方)
 /// (コイル所在が接点の中央高さに出るのと違い、参照記号は常に外形の上に出るため)。
 pub fn device_xref_at(
     inst: &crate::model::SymbolInstance,
@@ -320,7 +322,13 @@ pub fn device_xref_at(
 ) -> Point {
     let (_, max) = crate::svg::symbol_bounds(inst, def);
     let top = crate::svg::symbol_top_y(inst, def);
-    Point::new(max.x + XREF_GAP, top - crate::svg::REF_LABEL_DY)
+    // 参照記号は配置基準点を中心に描かれるので、右端は中心+幅の半分
+    let label_right = inst.at.x
+        + crate::svg::LABEL_FONT * CHAR_WIDTH_RATIO * inst.reference.chars().count() as f64 / 2.0;
+    Point::new(
+        max.x.max(label_right) + XREF_GAP,
+        top - crate::svg::REF_LABEL_DY,
+    )
 }
 
 /// ネットラベル本文の右脇に置くXRefテキストの基準点 (テキストは左揃え)。
@@ -903,5 +911,29 @@ mod tests {
             (at.y - (crate::svg::symbol_top_y(&inst, &def) - crate::svg::REF_LABEL_DY)).abs() < 1e-9,
             "参照記号ラベルと同じ高さ: {at:?}"
         );
+    }
+
+    /// A designator label wider than its symbol pushes the device cross-reference further right, so the two never overlap.
+    /// 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない。
+    #[test]
+    fn device_cross_reference_clears_a_designator_label_wider_than_the_symbol() {
+        let inst = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "motor".into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "M1-CONVEYOR-DRIVE".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        let def = crate::symbol::resolve_symbol("motor").unwrap();
+        let (_, max) = crate::svg::symbol_bounds(&inst, &def);
+        // 参照記号は配置基準点を中心に描かれるので、右端は中心+幅の半分
+        let label_right = inst.at.x
+            + crate::svg::LABEL_FONT * CHAR_WIDTH_RATIO * inst.reference.chars().count() as f64 / 2.0;
+        assert!(label_right > max.x, "ラベルが外形より長い前提: {label_right} vs {}", max.x);
+        let at = device_xref_at(&inst, &def);
+        assert!(at.x >= label_right + XREF_GAP - 1e-9, "ラベルの右に逃げる: {at:?}");
     }
 }

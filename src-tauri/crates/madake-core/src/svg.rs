@@ -515,10 +515,10 @@ fn render_contact_map(
 /// (端子対+所在) を1つの外形にまとめる。コイル自身の小さな図形 (rect+リード) の代わりに
 /// これを描く。
 ///
-/// 外形・仕切り線・引き出し線は、シンボルの図形と同じようにインスタンスの回転・ミラーを
-/// 掛けて描く ([`crate::netlist::transform_local`])。引き出し線はシンボル定義の実際のピン
-/// (A1/A2) から外形の縁まで引くので、コイルをどの向きに置いても配線は繋がったまま。
-/// 文字だけはシンボル内の文字と同じく常に水平に書き、回した後のセルの中へ置く。
+/// 表 (外形・仕切り線・文字) は**常に正立**で、インスタンスの回転・ミラーでは向きが変わらない
+/// (回すと複数行の文字が互いに重なって読めなくなるため)。回るのはピンの位置だけで、
+/// 引き出し線はシンボル定義の実際のピン (A1/A2) を回した先から外形のいちばん近い点まで引く
+/// ([`crate::relay_xref::device_block_lead_end`])。どの向きでも配線は繋がったまま。
 fn render_device_block(
     out: &mut String,
     inst: &crate::model::SymbolInstance,
@@ -526,79 +526,59 @@ fn render_device_block(
     block: &crate::relay_xref::DeviceBlock,
 ) {
     use crate::relay_xref::{
-        device_block_bounds, device_block_layout, CONTACT_MAP_BASELINE_SHIFT, CONTACT_MAP_FONT,
-        CONTACT_MAP_PAD,
+        device_block_bounds, device_block_layout, device_block_lead_end, device_block_texts,
+        CONTACT_MAP_FONT,
     };
+    use crate::wire_note::NoteAlign;
     let layout = device_block_layout(block);
-    // ローカル座標の点・矩形を用紙座標へ (回転は90度単位なので矩形は軸平行のまま)
-    let at = |x: f64, y: f64| transform_local(Point::new(x, y), inst);
-    let cell = |c: (Point, Point)| crate::netlist::transform_rect(c.0, c.1, inst);
-    let rule = |out: &mut String, x0: f64, y0: f64, x1: f64, y1: f64| {
-        let (a, b) = (at(x0, y0), at(x1, y1));
-        line_el(out, a.x, a.y, b.x, b.y, RULE_STROKE, "#000");
-    };
     let (min, max) = device_block_bounds(inst, block);
     let _ = write!(
         out,
         "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
         n(min.x), n(min.y), n(max.x - min.x), n(max.y - min.y), n(SYMBOL_STROKE)
     );
-    // ピン (A1/A2) から外形の縁までの引き出し線 (外形が最小幅ちょうどなら長さ0で描かない)
+    // ピン (A1/A2) から外形の縁までの引き出し線 (ピンが縁の上・外形の中なら描かない)
     for pin in &def.pins {
-        let edge_x = (layout.width / 2.0).copysign(pin.at.x);
-        if (edge_x - pin.at.x).abs() < 1e-9 {
-            continue;
+        let at = transform_local(pin.at, inst);
+        if let Some(end) = device_block_lead_end(at, (min, max)) {
+            line_el(out, at.x, at.y, end.x, end.y, SYMBOL_STROKE, "#000");
         }
-        let (a, b) = (at(pin.at.x, pin.at.y), at(edge_x, pin.at.y));
-        line_el(out, a.x, a.y, b.x, b.y, SYMBOL_STROKE, "#000");
     }
     // ヘッダ行 (参照記号、型番があればもう1行) と接点の行を仕切る線
-    let (left, right) = (layout.x, layout.x + layout.width);
-    let header_bottom = layout.y + layout.row_h * layout.header_rows as f64;
+    let rule = |out: &mut String, x0: f64, y0: f64, x1: f64, y1: f64| {
+        line_el(out, x0, y0, x1, y1, RULE_STROKE, "#000");
+    };
+    let header_bottom = min.y + layout.row_h * layout.header_rows as f64;
     for i in 1..layout.header_rows {
-        let y = layout.y + layout.row_h * i as f64;
-        rule(out, left, y, right, y);
+        let y = min.y + layout.row_h * i as f64;
+        rule(out, min.x, y, max.x, y);
     }
     if layout.contact_rows > 0 {
-        rule(out, left, header_bottom, right, header_bottom);
+        rule(out, min.x, header_bottom, max.x, header_bottom);
         // 接点の列の仕切り
-        let col1_x = layout.col_x(1);
-        rule(out, col1_x, header_bottom, col1_x, layout.y + layout.height());
+        let col1_x = inst.at.x + layout.col_x(1);
+        rule(out, col1_x, header_bottom, col1_x, max.y);
         for i in 1..layout.contact_rows {
-            let y = layout.contact_row_top(i);
-            rule(out, left, y, right, y);
+            let y = inst.at.y + layout.contact_row_top(i);
+            rule(out, min.x, y, max.x, y);
         }
     }
-    // ヘッダ: 回した後のセルの中央に置く
-    for (i, text) in [(0, &block.reference), (1, &block.part_no)] {
-        if i >= layout.header_rows {
-            continue;
-        }
-        let (cmin, cmax) = cell(layout.header_cell(i));
-        text_el(
-            out,
-            (cmin.x + cmax.x) / 2.0,
-            (cmin.y + cmax.y) / 2.0 + CONTACT_MAP_BASELINE_SHIFT,
-            CONTACT_MAP_FONT,
-            "#000",
-            "middle",
-            text,
-        );
-    }
-    // 接点の行: 回した後のセルの左端から左揃えで書く
-    for (i, row) in block.contacts.iter().enumerate() {
-        for (col, text) in [(0, &row.terminals), (1, &row.address)] {
-            let (cmin, cmax) = cell(layout.contact_cell(i, col));
-            text_family_el(
+    // 文字 (ヘッダは中央揃え、接点の行は左揃えの等幅)
+    for t in device_block_texts(inst, block) {
+        match t.align {
+            NoteAlign::Center => {
+                text_el(out, t.at.x, t.at.y, CONTACT_MAP_FONT, "#000", "middle", &t.text)
+            }
+            NoteAlign::Left => text_family_el(
                 out,
-                cmin.x + CONTACT_MAP_PAD,
-                (cmin.y + cmax.y) / 2.0 + CONTACT_MAP_BASELINE_SHIFT,
+                t.at.x,
+                t.at.y,
                 CONTACT_MAP_FONT,
                 "#000",
                 "start",
                 "monospace",
-                text,
-            );
+                &t.text,
+            ),
         }
     }
     // 機能ラベル (G4): 分散配置と同じく外形の下に置く (ここではブロックの外形の下)
@@ -1039,8 +1019,9 @@ fn sheet_to_svg_with_xrefs(
     // 注記の層 (ネットラベル・タグ・線番・配線注記) にかける倍率 (G20)
     let annotation_scale = sheet.annotation_scale();
     let defs = crate::symbol::DefIndex::new(symbols);
-    // コイル所在 (G22) の逃がし判定に使う、このシートの配線注記
+    // コイル所在 (G22) の逃がし判定に使う、このシートの配線注記と、その文字高 (G20で伸縮)
     let wire_notes = crate::wire_note::wire_notes(sheet);
+    let wire_note_font = crate::wire_note::wire_note_font(sheet);
     for entity in sheet.entities.values() {
         match entity {
             Entity::Wire(w) => {
@@ -1066,7 +1047,7 @@ fn sheet_to_svg_with_xrefs(
                         }
                     }
                     if let Some(location) = relay.coil_locations.get(&s.id) {
-                        let at = crate::relay_xref::coil_location_at(s, &def, location, &wire_notes);
+                        let at = crate::relay_xref::coil_location_at(s, &def, location, &wire_notes, wire_note_font);
                         text_family_el(
                             &mut out,
                             at.x,
@@ -2121,9 +2102,12 @@ mod tests {
         assert!(svg.contains(">/2.B3<"), "接点イメージの所在: {svg}");
     }
 
-    /// 実機ブロック表示のコイルを回転・反転させたシートのSVGと、そのコイルのインスタンス。
-    /// 型番を入れてブロックをピン間隔より広げ、引き出し線が必ず描かれる形にする。
-    fn turned_device_block_svg(rotation: u16, mirror: bool) -> (String, SymbolInstance) {
+    /// 実機ブロック表示のコイルを回転・反転させたシートのSVGと、そのコイルのインスタンス・
+    /// ブロックの中身。型番を入れてブロックをピン間隔より広げ、引き出し線が必ず描かれる形にする。
+    fn turned_device_block_svg(
+        rotation: u16,
+        mirror: bool,
+    ) -> (String, SymbolInstance, crate::relay_xref::DeviceBlock) {
         let mut project = relay_project();
         let Entity::Symbol(coil) = project.sheets[0].entities.values_mut().next().unwrap() else {
             unreachable!()
@@ -2133,8 +2117,30 @@ mod tests {
         coil.rotation = rotation;
         coil.mirror = mirror;
         let coil = coil.clone();
+        let block = crate::relay_xref::sheet_device_blocks(&project, project.sheets[0].id)
+            .remove(&coil.id)
+            .expect("実機ブロック");
         let svg = project_sheet_to_svg(&project, project.sheets[0].id, &builtin_symbols()).unwrap();
-        (svg, coil)
+        (svg, coil, block)
+    }
+
+    /// [`turned_device_block_svg`] のブロックが描く文字を (x, ベースラインy, 寄せ, 文字列) で拾う。
+    fn block_texts(svg: &str) -> Vec<(f64, f64, String, String)> {
+        let wanted = ["K1", "SAMPLE0001", "13-14", "/2.B3"];
+        svg.lines()
+            .filter(|l| l.trim_start().starts_with("<text "))
+            .filter_map(|l| {
+                let body = l.split_once('>')?.1.rsplit_once("</text>")?.0.to_string();
+                if !wanted.contains(&body.as_str()) {
+                    return None;
+                }
+                let anchor = l
+                    .split_once("text-anchor=\"")
+                    .map(|(_, rest)| rest.split('"').next().unwrap_or("start").to_string())
+                    .unwrap_or_else(|| "start".into());
+                Some((attr(l, "x")?, attr(l, "y")?, anchor, body))
+            })
+            .collect()
     }
 
     /// However a device-block coil is turned or mirrored, each lead line still starts exactly on one of the coil's A1/A2 pin points, so the wires attached there stay connected.
@@ -2142,7 +2148,7 @@ mod tests {
     #[test]
     fn a_turned_device_block_keeps_its_leads_on_the_coil_pins() {
         for (rotation, mirror) in [(0, false), (90, false), (180, false), (270, false), (0, true)] {
-            let (svg, coil) = turned_device_block_svg(rotation, mirror);
+            let (svg, coil, _) = turned_device_block_svg(rotation, mirror);
             let def = crate::symbol::resolve_symbol(&coil.symbol_id).unwrap();
             let segments = line_segments(&svg);
             for (number, at) in crate::netlist::pin_positions(&coil, &def) {
@@ -2155,20 +2161,36 @@ mod tests {
         }
     }
 
-    /// A device-block coil turned upside down stacks its contact image away from the pins the same way the symbol itself turns, instead of always hanging downwards.
-    /// 上下逆さまに置いた実機ブロックのコイルは、接点イメージを常に下ではなくシンボルと同じ向きに積む (180度回転なら上へ)。
+    /// However a device-block coil is turned or mirrored, its table is drawn upright: every line of text stays inside the outline and no two lines are drawn on top of each other.
+    /// 実機ブロックのコイルをどの向きに回しても反転しても、表は正立したまま描かれる: どの行の文字も外形の中に収まり、行どうしが重なることはない (G7)。
     #[test]
-    fn a_device_block_turned_upside_down_stacks_its_contact_image_upwards() {
-        let (svg, coil) = turned_device_block_svg(180, false);
-        let (_, y, _) = texts(&svg)
-            .into_iter()
-            .find(|(_, _, t)| t == "13-14")
-            .expect("接点イメージの端子対");
-        assert!(
-            y < coil.at.y,
-            "180度回転では接点の行はピンの高さ({})より上に積む: {y}",
-            coil.at.y
-        );
+    fn a_turned_device_block_keeps_its_lettering_upright_and_inside_the_outline() {
+        for (rotation, mirror) in [(0, false), (90, false), (180, false), (270, false), (0, true)] {
+            let (svg, coil, block) = turned_device_block_svg(rotation, mirror);
+            let (min, max) = crate::relay_xref::device_block_bounds(&coil, &block);
+            let boxes: Vec<(String, (f64, f64, f64, f64))> = block_texts(&svg)
+                .into_iter()
+                .map(|(x, y, anchor, text)| {
+                    let w = 2.0 * 0.6 * text.chars().count() as f64;
+                    let x0 = if anchor == "middle" { x - w / 2.0 } else { x };
+                    (text, (x0, y - 2.0, x0 + w, y))
+                })
+                .collect();
+            for (text, b) in &boxes {
+                assert!(
+                    b.0 >= min.x - 1e-6 && b.2 <= max.x + 1e-6 && b.1 >= min.y - 1e-6 && b.3 <= max.y + 1e-6,
+                    "rotation={rotation} mirror={mirror}: 「{text}」が外形({min:?}..{max:?})から出ている: {b:?}"
+                );
+            }
+            for (i, (ta, a)) in boxes.iter().enumerate() {
+                for (tb, b) in boxes.iter().skip(i + 1) {
+                    assert!(
+                        a.0 >= b.2 - 1e-6 || b.0 >= a.2 - 1e-6 || a.1 >= b.3 - 1e-6 || b.1 >= a.3 - 1e-6,
+                        "rotation={rotation} mirror={mirror}: 「{ta}」と「{tb}」が重なっている: {a:?} {b:?}"
+                    );
+                }
+            }
+        }
     }
 
     /// A device-block coil still prints its function label under the outline, the same as a coil in the ordinary distributed placement.
