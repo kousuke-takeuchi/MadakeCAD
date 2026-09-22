@@ -545,6 +545,16 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
         }
         // ピングループ括弧 (G8): 読めない・重なる項目はその項目だけを報告する
         if let Some(spec) = s.attrs.get(crate::pin_groups::PIN_GROUPS_ATTR) {
+            if crate::relay_xref::is_device_block(s) {
+                // 実機ブロック表示 (G7) はシンボル本体の代わりに表を描くので、ピンに沿った
+                // 括弧を描く場所が無い。黙って消えるのではなく理由を報告する
+                diags.push(diag(
+                    Severity::Error,
+                    crate::pin_groups::PIN_GROUP_UNSUPPORTED,
+                    format!("{label}: 実機ブロック表示のシンボルにはピングループ括弧を描けません"),
+                    vec![s.id],
+                ));
+            }
             let order = crate::pin_groups::chart_order_pin_numbers(&def);
             for issue in crate::pin_groups::parse_pin_groups(spec, &order).issues {
                 diags.push(diag(
@@ -554,6 +564,21 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                     vec![s.id],
                 ));
             }
+        }
+    }
+
+    // 引き出し線 (G20) の対象が後から消えている注記。コマンド時は実在を確かめるので、
+    // これは「対象を先に消した」ときにだけ起きる。線は描かれないので図面には現れない
+    for e in sheet.entities.values() {
+        let Entity::Text(t) = e else { continue };
+        let Some(target) = t.leader_to else { continue };
+        if !sheet.entities.contains_key(&target) {
+            diags.push(diag(
+                Severity::Warning,
+                "erc.leader_target_missing",
+                format!("注記「{}」の引き出し先が見つかりません (対象が削除されています)", t.text),
+                vec![t.id],
+            ));
         }
     }
 
@@ -874,12 +899,58 @@ mod tests {
         );
         let sheet = sheet_with(vec![Entity::Symbol(tb)]);
         let diags = run(&sheet);
-        let pg: Vec<_> = diags.iter().filter(|d| d.code.starts_with("pin_group.")).collect();
+        let pg: Vec<_> = diags.iter().filter(|d| d.code.starts_with("erc.pin_group_")).collect();
         assert_eq!(pg.len(), 3, "{pg:?}"); // 1-4と3-6の重なり2件+存在しないピン1件
         assert!(pg.iter().all(|d| d.severity == Severity::Error));
         assert!(pg.iter().all(|d| d.message.contains("TB1")));
         assert!(pg.iter().any(|d| d.code == crate::pin_groups::PIN_GROUP_OVERLAP));
         assert!(pg.iter().any(|d| d.code == crate::pin_groups::PIN_GROUP_UNKNOWN_PIN));
+    }
+
+    /// A coil drawn as a device block cannot carry pin group brackets, and says so as an ERC error instead of dropping them without a word.
+    /// 実機ブロック表示のコイルにはピングループ括弧を描けないので、黙って消えるのではなくERCエラーとして理由が報告される。
+    #[test]
+    fn pin_groups_on_a_device_block_coil_are_reported_instead_of_silently_dropped() {
+        let Entity::Symbol(mut coil) = symbol("relay_coil", "K1", 100.0, 50.0) else {
+            panic!("シンボルであること")
+        };
+        coil.attrs.insert(crate::relay_xref::DEVICE_BLOCK_ATTR.into(), "true".into());
+        coil.attrs.insert(crate::pin_groups::PIN_GROUPS_ATTR.into(), "A1-A2:コイル".into());
+        let sheet = sheet_with(vec![Entity::Symbol(coil)]);
+        let diags = run(&sheet);
+        let unsupported: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code == crate::pin_groups::PIN_GROUP_UNSUPPORTED)
+            .collect();
+        assert_eq!(unsupported.len(), 1, "{diags:?}");
+        assert_eq!(unsupported[0].severity, Severity::Error);
+        assert!(unsupported[0].message.contains("K1"));
+    }
+
+    /// A note whose leader target was deleted afterwards is reported, so the drawing never keeps a leader pointing at nothing without saying so.
+    /// 引き出し先を後から削除された注記は指摘される。行き先の無い引き出し先を黙って抱えたままにしない。
+    #[test]
+    fn a_note_whose_leader_target_was_deleted_is_reported() {
+        let mut note = TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 50.0),
+            text: "配線注意".into(),
+            height: 2.5,
+            rotation: 0,
+            anchor: crate::model::TextAnchor::Start,
+            color: None,
+            bold: false,
+            leader_to: None,
+        };
+        note.leader_to = Some(Uuid::new_v4()); // 既に消えたエンティティのid
+        let sheet = sheet_with(vec![Entity::Text(note)]);
+        let diags = run(&sheet);
+        let dangling: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code == "erc.leader_target_missing")
+            .collect();
+        assert_eq!(dangling.len(), 1, "{diags:?}");
+        assert!(dangling[0].message.contains("配線注意"));
     }
 
     /// Wire ends attached to nothing are flagged, including an endpoint resting mid-wire without a junction dot.
