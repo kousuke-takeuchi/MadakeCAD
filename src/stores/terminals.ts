@@ -111,9 +111,17 @@ export const useTerminalsStore = defineStore("terminals", {
     terminalCount(state): number {
       return state.chart?.terminal_count ?? this.block?.terminal_count ?? 0;
     },
-    /** 極数 (多段端子台でも段数は掛けない)。端子台の見出しはこちらで呼ぶ。 */
-    poleCount(): number {
-      return this.block?.poles ?? 0;
+    /**
+     * 極数 (多段端子台でも段数は掛けない)。端子台の見出しはこちらで呼ぶ。
+     * 一覧より先にチャートだけが読めている場合に備えて、`terminalCount`と同じく
+     * チャート (行の端子番号から数えた別々の極の数) へフォールバックする。
+     */
+    poleCount(state): number {
+      if (this.block) return this.block.poles;
+      const poles = new Set(
+        (state.chart?.rows ?? []).map((r) => parseTerminalNo(r.terminal)[0]),
+      );
+      return poles.size;
     },
     /** グリッドの行 (端子番号順)。 */
     rows(state): TerminalEditorRow[] {

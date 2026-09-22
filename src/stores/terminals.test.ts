@@ -265,6 +265,20 @@ describe("terminal strip editor store", () => {
     expect(store.terminalCount).toBe(8);
   });
 
+  // ja: 端子台の一覧より先にチャートだけが読めているときは、極数をチャートの行から数える(4極2段のチャートなら「4極」)
+  it("counts the pole count from the chart rows while the block list is not loaded yet", () => {
+    const store = useTerminalsStore();
+    store.chart = chart(["1a", "1b", "2a", "2b", "3a", "3b", "4a", "4b"].map((no) => row(no)));
+    expect(store.block).toBe(null);
+    expect(store.poleCount).toBe(4);
+    expect(store.terminalCount).toBe(8);
+  });
+
+  // ja: チャートも端子台の一覧も読めていなければ極数は0極になる
+  it("reports no poles while neither the block list nor the chart is loaded", () => {
+    expect(useTerminalsStore().poleCount).toBe(0);
+  });
+
   // ja: 端子を選んでいないとジャンパは生成できない
   it("cannot generate a jumper while no terminal is selected", async () => {
     mockBackend();

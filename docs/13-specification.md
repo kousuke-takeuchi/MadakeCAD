@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1917 specification clauses** across 5 areas.
+**1919 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -2237,6 +2237,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - marks terminals with no wire at all as spare <sub>`terminal strip editor store`</sub>
 - writes a jumper into the symbol attributes with one update_entity command <sub>`terminal strip editor store`</sub>
 - names a terminal block by its pole count, not by its terminal count <sub>`terminal strip editor store`</sub>
+- counts the pole count from the chart rows while the block list is not loaded yet <sub>`terminal strip editor store`</sub>
+- reports no poles while neither the block list nor the chart is loaded <sub>`terminal strip editor store`</sub>
 - cannot generate a jumper while no terminal is selected <sub>`terminal strip editor store`</sub>
 - cannot generate a jumper between terminals that are not adjacent <sub>`terminal strip editor store`</sub>
 - clears only the jumpers on the selected terminals <sub>`terminal strip editor store`</sub>

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1917仕様項目**。
+全5領域・**1919仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2237,6 +2237,8 @@
 - 電線が1本も繋がっていない端子は予備端子として印が付く <sub>`terminal strip editor store`</sub>
 - 隣り合う2端子を選んでジャンパを生成すると、update_entityコマンド1回で属性に書き込まれる <sub>`terminal strip editor store`</sub>
 - 多段端子台の見出しには端子数ではなく極数を使う(4極2段は「8極」ではなく「4極」) <sub>`terminal strip editor store`</sub>
+- 端子台の一覧より先にチャートだけが読めているときは、極数をチャートの行から数える(4極2段のチャートなら「4極」) <sub>`terminal strip editor store`</sub>
+- チャートも端子台の一覧も読めていなければ極数は0極になる <sub>`terminal strip editor store`</sub>
 - 端子を選んでいないとジャンパは生成できない <sub>`terminal strip editor store`</sub>
 - 隣り合わない端子を選んでもジャンパは生成できない <sub>`terminal strip editor store`</sub>
 - ジャンパ削除は選んだ端子に掛かるジャンパだけを外したコマンドになる <sub>`terminal strip editor store`</sub>
