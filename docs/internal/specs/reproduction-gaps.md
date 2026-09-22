@@ -71,7 +71,7 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Multi-pin controller block with arbitrary pin names | ❌ | **✅** | G1 — 14 + 14 named pins, names inside the outline, numbers outside |
 | Pin-group brackets with rotated group labels | ❌ | ❌ | G8 |
 | Filled / shaded device blocks | ❌ | **✅** | G10 — `shape` with a fill token |
-| Relay: coil + two changeover contacts | 🔶 | 🔶 | G7; and see G21 — changeover contacts are invisible to the relay cross-reference |
+| Relay: coil + two changeover contacts | 🔶 | 🔶 | G7; and see G21 — changeover contacts are invisible to the relay cross-reference. **✅ phase 6 task 3**: `attrs.device_block` draws the coil as one outline with the contact image; manufacturer pin numbers and the mechanical linkage are still not drawn |
 | Net labels merging nets by name | ✅ | ✅ | |
 | Cross-sheet reference on net labels | ✅ | ✅ | renders the `/sheet.zone` address of the twin label |
 | Net label drawn as a directional flag tag | ❌ | **✅** | G3 — pentagon flag; see G19 for the anchor caveat |
@@ -86,7 +86,7 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Pictorial device symbols (fan, speaker, display module) | ❌ | 🔶 | G12 — M4 shipped the user symbol library and editor, so these can be authored; none are bundled |
 | Free notes | 🔶 | 🔶 | G4 gave colour, weight and anchor; rotation and multi-line are still missing |
 | Junctions | ✅ | ✅ | |
-| Device-level cross-sheet block reference | ❌ | ❌ | G13 |
+| Device-level cross-sheet block reference | ❌ | ❌ | G13. **✅ phase 6 task 3**: any designator spanning sheets gets the `/sheet.zone` note automatically, relay coils/contacts excluded |
 | Mating connector pairs | ❌ | ❌ | G14 |
 | Reports (wire list, terminal chart/diagram, BOM, xref) | ✅ | ✅ | 17-page book |
 | ERC / electrical verification | ✅ | ✅ | 3 diagnostics |
@@ -407,6 +407,26 @@ the terminal diagram and the BOM as **one** device.
 > rebuilt on it. See **G21**: the bundled changeover contact is not recognised by the
 > relay cross-reference at all.
 
+> **✅ Resolved 2026-09-22 (phase 6, task 3).** Not a new symbol family: a **display
+> mode** on the existing coil. `relay_coil` gained an instance attribute
+> `attrs["device_block"]`; when it is `"true"` the coil is drawn as one outline
+> carrying the designator, the part number (the instance's `value`, the same field the
+> BOM already reads) and a **contact image** — one line per contact sharing the
+> designator, with that contact's IEC 60947-1 terminal pair and its `/sheet.zone`
+> address (the same content the coil ⇔ contact contact map already carries, now
+> merged into the block instead of hung below it as a separate table). The default
+> (`device_block` unset) keeps the distributed placement unchanged. The contacts stay
+> individually placed and wired either way, and the coil's own A1/A2 pins do not move:
+> the outline is never narrower than the pin span, and content that needs more room
+> only stretches a horizontal lead from pin to outline edge, so toggling the checkbox
+> never breaks a wire. Geometry is one shared helper
+> (`relay_xref::device_block_layout` / `relayXref.ts` `deviceBlockLayout`) drawn by
+> both `svg.rs::render_device_block` and `renderer.ts::drawDeviceBlock`, with a parity
+> test on both sides. The properties panel gained a checkbox ("実機ブロックで表示" /
+> "Show as physical block") on relay coils, writing the attribute through the existing
+> `update_entity` command. No manufacturer per-pole numbering scheme and no mechanical
+> linkage drawing were added — those remain open (see **Proposed**, second half).
+
 **Needed.** The reference draws the relay as one physical block: coil plus both
 changeover contacts inside a single outline, with the manufacturer's pin numbers and
 the mechanical linkage dashed between the poles.
@@ -423,7 +443,13 @@ schematically; loses the physical pin numbering the panel builder needs.
 linkage drawn, per-pole pin numbers), or resolve this via G1's per-instance pin naming
 plus a device-block symbol. G1 is the cheaper route.
 
-**Existing spec.** M4 §4 covers the xref. The physical-device rendering is new.
+**Still open (2026-09-22).** The manufacturer's own per-pole pin numbering scheme (the
+block still shows the IEC generic pairs `13-14`/`21-22`/…, not a vendor's silkscreen
+numbers) and the dashed mechanical linkage between poles were out of scope for this
+task and are not implemented.
+
+**Existing spec.** M4 §4 covers the xref. The physical-device rendering is
+`relay_xref::device_block_layout` (task 3, phase 6).
 
 ---
 
@@ -582,6 +608,24 @@ silently.
 > **Status 2026-08-23 (phase 5): unchanged.** The only device-level cross-reference
 > is the relay coil↔contact link from M4 §4.
 
+> **✅ Resolved 2026-09-22 (phase 6, task 3).** The net-label cross-reference engine
+> (`xref.rs`) gained a device-keyed twin: `device_sites`/`sheet_device_xrefs` group
+> every symbol instance by **reference designator** the same way `label_sites` groups
+> net labels by name, and produce the identical `/sheet.zone` text
+> (`device_xref_at`/`deviceXrefAt` place it beside the designator, one space between
+> several addresses, exactly as `xref_text_at` already does for net labels). Any
+> designator drawn on two or more sheets now gets the note on every instance it has,
+> automatically, with no new command needed. Relay coils and contacts are excluded
+> (`relay_xref::relay_role(...).is_some()`) so the two mechanisms never draw on top of
+> each other — a relay keeps only its coil ⇔ contact reference. No new view class was
+> added: the annotation reuses the existing "reference designators" (`refs`) class in
+> the canvas renderer and the SVG/PDF export (unconditional, per the existing
+> screen-vs-output split). Benchmark: EPLAN's cross-reference types distinguish a
+> "device reference" from a "coil/contact reference"
+> (<https://www.eplan.help/en-us/Infoportal/Content/Plattform/2022/Content/htm/xessettingsgui_k_querverweisarten.htm>);
+> this closes the gap between the two the same way, without adding EPLAN's full
+> configurable type system.
+
 **Needed.** A device that continues on another sheet should say so on both sheets.
 
 **Current behaviour (verified).** Cross-sheet reference is **net-label based** only:
@@ -592,7 +636,8 @@ device" annotation.
 **Proposed.** Extend the cross-reference engine from nets to devices, keyed on the
 designator, reusing the existing `/sheet.zone` address formatting.
 
-**Existing spec.** M2 §4 and M4 §4. Extend both.
+**Existing spec.** M2 §4 and M4 §4, extended by `xref::sheet_device_xrefs` (task 3,
+phase 6).
 
 ---
 
@@ -774,6 +819,20 @@ against a contact configuration (one changeover pole is both an NO and an NC pol
 
 **Found on the third pass (2026-08-23).**
 
+> **✅ Resolved 2026-09-22 (phase 6, task 3).** `relay_xref::coil_location_at` (and
+> its canvas twin `coilLocationAt`) now try, in order, the right side (the previous
+> fixed position), then above the outline, then below it, and use the first one that
+> does not overlap a wire note on that sheet (`wire_note::wire_notes`; the overlap
+> check approximates both texts as boxes at the fixed `CONTACT_MAP_FONT` height, the
+> same simplification the rest of the relay cross-reference already makes — annotation
+> text height (G20) is not applied to these two mm-scale labels). This is the same
+> "print on whichever side is free" idea the wire note itself uses relative to the
+> wire number, generalised from a fixed two-way choice to try three sides in turn. A
+> test reproduces the exact changeover-contact geometry from this gap (a horizontal
+> wire off the upper pin, whose note lands exactly on the old fixed position) and
+> confirms the text moves off it, plus a second test confirming the fallback to
+> "below" when both right and above are occupied.
+
 **Current behaviour (verified).** The coil location (`(/1.A3)`) is printed to the right of
 a contact symbol at the symbol's mid height. The wire note of the pin **above** that
 midpoint is printed just under its conductor, at the same height. On a changeover contact,
@@ -796,8 +855,8 @@ canvas twin.
 | Impact | Gaps |
 |---|---|
 | **essential** | *(all closed in phase 5)* ✅ G1 named pins on multi-pin blocks · ✅ G2 wire annotation on the sheet · ✅ G3 directional net-label flags · ✅ G4 text styling, anchoring and a third symbol text field |
-| **quality** | ✅ G5 jumper bars on the schematic · ✅ G6 multi-level terminal blocks · G7 physical relay blocks · G8 pin-group brackets · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; reproduction re-measured in task 6)* · 🔶 G12 pictorial symbols *(user library shipped; none bundled)* · G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height *(leader placement and the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
-| **minor** | G14 mating connector pairs · G15 sheet size command · G16 project meta command · ✅ G17 silent failures · G18 From-To list through net labels · G22 coil location vs wire note |
+| **quality** | ✅ G5 jumper bars on the schematic · ✅ G6 multi-level terminal blocks · ✅ G7 physical relay blocks *(display mode + contact image; manufacturer pin numbering and mechanical linkage still open)* · G8 pin-group brackets · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; reproduction re-measured in task 6)* · 🔶 G12 pictorial symbols *(user library shipped; none bundled)* · ✅ G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height *(leader placement and the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
+| **minor** | G14 mating connector pairs · G15 sheet size command · G16 project meta command · ✅ G17 silent failures · G18 From-To list through net labels · ✅ G22 coil location vs wire note |
 
 ## Reading of the result
 
