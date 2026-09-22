@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2045 specification clauses** across 5 areas.
+**2049 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -168,6 +168,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - leader_for follows a note that is moved: recomputing after the note's position changes yields a different geometry without touching the model. <sub>`leader_for_recomputes_after_the_note_moves`</sub>
 - leader_for returns None when leader_to is unset, so an ordinary note draws no leader line. <sub>`leader_for_is_none_without_a_leader_target`</sub>
 - A leader aimed at a symbol ends on exactly the outline the drawing shows: the placement point is always inside it, and a text mark inside the symbol counts as its own reference point, not as a box of letters. <sub>`a_leader_targets_exactly_the_outline_the_drawing_shows`</sub>
+- A leader aimed at a symbol carrying pin-group brackets stops outside the caption beside them, not on the symbol body, because the brackets and captions are drawn with the symbol and a line ending on top of them would be harder to read. <sub>`a_leader_stops_outside_a_symbols_pin_group_caption`</sub>
 - entity_bounds resolves a symbol instance's bounding box from its definition, so a leader can target a symbol. <sub>`entity_bounds_resolves_a_symbol_instance`</sub>
 
 ### Circuit macros
@@ -598,6 +599,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - No two pieces of a pin group - the bracket and each caption line - ever overlap each other, so a caption split over several lines stays readable at every rotation and mirrored. <sub>`svg_pin_group_pieces_never_overlap_each_other_at_any_rotation`</sub>
 - A caption split over several lines is always stacked downwards on the paper - the lines share one centre line and step down one after another - because lettering stays horizontal however the symbol is turned. <sub>`svg_pin_group_caption_lines_stack_downwards_on_paper`</sub>
 - A pin group's caption block sits wholly beyond its bracket: no caption line touches the bracket, and every line is further from the symbol than the bracket bar, at every rotation and mirrored. <sub>`svg_pin_group_caption_block_sits_wholly_beyond_its_bracket`</sub>
+- A coil shown as a device block reserves no room for pin-group brackets even if it carries the attribute, because none are drawn there: its outline, and so its designator and contact map, sit exactly where they would without the attribute. <sub>`a_device_block_coil_reserves_no_room_for_brackets_it_never_draws`</sub>
 - The dot at the target end of a note's leader line is drawn exactly the size of a wire junction dot, so the two read as the same mark. <sub>`svg_leader_dot_is_the_size_of_a_wire_junction_dot`</sub>
 
 ### Symbol library
@@ -1534,6 +1536,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - builds a block's definition from the instance attributes, not from its id <sub>`resolveInstanceDef`</sub>
 - returns nothing for a block whose attributes are broken <sub>`resolveInstanceDef`</sub>
 - grows to take in a pin group's bracket and caption, so labels are placed clear of them <sub>`symbolBounds`</sub>
+- reserves no room on a device-block coil for brackets it never draws <sub>`symbolBounds`</sub>
 - grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption <sub>`symbolBounds`</sub>
 - never lets a bracket and its caption lines overlap each other, at any rotation <sub>`captionLineAnchors`</sub>
 - stacks caption lines downwards on the paper, sharing one centre line, at any rotation <sub>`captionLineAnchors`</sub>
@@ -1590,6 +1593,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - returns null when the target id does not exist on the sheet <sub>`leaderFor`</sub>
 - resolves a symbol instance's bounding box from its definition <sub>`entityBounds`</sub>
 - ends on exactly the outline the drawing shows, counting a text mark as its own point <sub>`entityBounds`</sub>
+- stops outside a symbol's pin-group caption, not on the symbol body <sub>`entityBounds`</sub>
 - resolves shapes, harnesses, wires and junctions, and refuses panel-only entities <sub>`entityBounds`</sub>
 
 ### macroPreview

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2045仕様項目**。
+全5領域・**2049仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -168,6 +168,7 @@
 - leader_forは注記の移動に追従する: 位置を変えて求め直すとモデルを書き換えずに違うジオメトリが返る。 <sub>`leader_for_recomputes_after_the_note_moves`</sub>
 - leader_forはleader_to未設定ならNoneを返す。普通の注記は引き出し線を描かない。 <sub>`leader_for_is_none_without_a_leader_target`</sub>
 - シンボルを指す引き出し線は、図面に描かれている外形ちょうどで止まる: 配置基準点は必ず外形の内側に入り、シンボルの中の文字は文字の箱ではなく基準点1点として数える。 <sub>`a_leader_targets_exactly_the_outline_the_drawing_shows`</sub>
+- ピングループ括弧の付いたシンボルを指す引き出し線は、シンボル本体ではなく括弧の脇のキャプションの外側で止まる。括弧もキャプションもそのシンボルと一緒に描かれるので、その上に重ねて終わると読みにくいため。 <sub>`a_leader_stops_outside_a_symbols_pin_group_caption`</sub>
 - entity_boundsはシンボルの外形をその定義から求めるので、引き出し線はシンボルも対象にできる。 <sub>`entity_bounds_resolves_a_symbol_instance`</sub>
 
 ### 回路マクロ
@@ -598,6 +599,7 @@
 - ピングループの部品どうし (括弧と、折り返したキャプションの各行) は決して重ならないので、複数行に割れたキャプションは全ての回転・ミラーで読める。 <sub>`svg_pin_group_pieces_never_overlap_each_other_at_any_rotation`</sub>
 - 複数行に割れたキャプションは、シンボルをどう回しても文字は横書きのままなので、用紙の上では必ず縦に積まれる (各行は同じ中心線に並び、順に下へ下がる)。 <sub>`svg_pin_group_caption_lines_stack_downwards_on_paper`</sub>
 - ピングループのキャプションは塊ごと括弧の外側に出る: どの行も括弧に触れず、シンボルから見て括弧の棒より遠くにある。回転・ミラーでも変わらない。 <sub>`svg_pin_group_caption_block_sits_wholly_beyond_its_bracket`</sub>
+- 実機ブロック表示のコイルは、ピングループの属性を持っていても括弧のための余白を取らない (そこには括弧を描かないため)。外形も、それに従う参照記号・接点マップの位置も、属性が無いときと寸分違わない。 <sub>`a_device_block_coil_reserves_no_room_for_brackets_it_never_draws`</sub>
 - 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える)。 <sub>`svg_leader_dot_is_the_size_of_a_wire_junction_dot`</sub>
 
 ### シンボルライブラリ
@@ -1534,6 +1536,7 @@
 - 配置済みブロックの定義はインスタンスの属性から作られる(同じidでも中身が違う) <sub>`resolveInstanceDef`</sub>
 - 属性が壊れているブロックは描かれない(undefinedになる) <sub>`resolveInstanceDef`</sub>
 - ピングループ括弧はシンボルと一緒に描かれるので、参照記号・型番の位置決めに使う外形にはその箱も入る (Rust側 svg::symbol_bounds とparity) <sub>`symbolBounds`</sub>
+- 実機ブロック表示のコイルは、ピングループの属性を持っていても括弧のための余白を取らない (そこには括弧を描かないため。Rust側 a_device_block_coil_reserves_no_room_for_brackets_it_never_draws とparity) <sub>`symbolBounds`</sub>
 - 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない) <sub>`symbolBounds`</sub>
 - ピングループの部品どうし (括弧と、折り返したキャプションの各行) は全ての回転・ミラーで決して重ならない (Rust側 svg_pin_group_pieces_never_overlap_each_other_at_any_rotation とparity) <sub>`captionLineAnchors`</sub>
 - 文字はシンボルを回しても横書きのままなので、キャプションの行は用紙の上で必ず縦に積まれる (同じ中心線に並び、順に下へ下がる。Rust側 svg_pin_group_caption_lines_stack_downwards_on_paper とparity) <sub>`captionLineAnchors`</sub>
@@ -1590,6 +1593,7 @@
 - 対象のエンティティidが存在しない・削除されていればnull (パニックせず何も描かない) <sub>`leaderFor`</sub>
 - シンボルの外形はその定義から求まるので、引き出し線はシンボルも対象にできる <sub>`entityBounds`</sub>
 - シンボルを指す引き出し線は図面に描かれている外形ちょうどで止まる: 配置基準点は必ず外形の内側に入り、シンボルの中の文字は文字の箱ではなく基準点1点として数える (Rust側 a_leader_targets_exactly_the_outline_the_drawing_shows とparity) <sub>`entityBounds`</sub>
+- ピングループ括弧の付いたシンボルを指す引き出し線は、シンボル本体ではなく括弧の脇のキャプションの外側で止まる (括弧もキャプションもそのシンボルと一緒に描かれるため。Rust側 a_leader_stops_outside_a_symbols_pin_group_caption とparity) <sub>`entityBounds`</sub>
 - 図形・ハーネス・配線・ジャンクションも対象にでき、盤レイアウト専用のエンティティはnull <sub>`entityBounds`</sub>
 
 ### macroPreview
