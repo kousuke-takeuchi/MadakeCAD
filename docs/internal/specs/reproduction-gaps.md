@@ -505,9 +505,14 @@ task and are not implemented.
 > drop" rule as the terminal jumper checks (G5's `terminal.jumper_invalid`).
 > Pin groups on a coil drawn as a device block (G7) have nowhere to hang, so they are
 > reported as `erc.pin_group_unsupported` rather than disappearing without a word.
-> **Limitation:** a pin whose own number contains a hyphen (block pin numbers are free
-> text) cannot be named in a group, because `-` is the range separator; such an item is
-> refused with `erc.pin_group_invalid` stating exactly that. No command-time
+> **Limitations**, both refused with `erc.pin_group_invalid` rather than quietly drawing
+> nothing: a pin whose own number contains a hyphen (block pin numbers are free text)
+> cannot be named in a group, because `-` is the range separator; and a range spanning two
+> levels of a multi-level terminal block (`4a-1b`) cannot be bracketed, because each level
+> is bracketed from its own outer side.
+> The caption's lines are stacked **on the paper**, not in the symbol's own coordinates:
+> lettering stays horizontal however the symbol is turned, so the lines always step
+> downward on the sheet and the whole caption block clears the bracket. No command-time
 > validation (same as `attrs["jumpers"]`): a bad item never blocks placing or editing
 > the instance, it is caught by verification.
 
