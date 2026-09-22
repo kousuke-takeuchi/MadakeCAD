@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1975 specification clauses** across 5 areas.
+**1979 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -380,7 +380,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The device block's minimum width is exactly the relay coil symbol's own pin span, so the narrowest block reaches both of the coil's pins. <sub>`device_block_min_width_is_the_coil_symbols_pin_span`</sub>
 - A part number adds a second header row, and pins still reach the outline through a lead when the content widens the box past the pin span. <sub>`device_block_layout_grows_for_the_part_number_and_keeps_the_pins_reachable`</sub>
 - The row dividers never sit at the height the coil's leads attach, so the two leads are never joined into one line across the block. <sub>`device_block_rows_keep_clear_of_the_lead_height`</sub>
-- The device block stays upright whatever the rotation: the outline keeps its size and position, and only the pins turn, so the leads reach the turned pins from the nearest edge. <sub>`device_block_bounds_stay_upright_when_the_instance_turns`</sub>
+- However wide the outline grows, an unturned coil's leads stay horizontal and end on the left and right edge at the pin's own height, where its wires come in. <sub>`device_block_leads_run_along_the_pin_axis_however_wide_the_block`</sub>
+- A coil turned 90 or 270 degrees sends its leads straight up and down to the top and bottom edge, and they never run through a line of the contact image, however many contacts the block lists. <sub>`a_turned_device_blocks_leads_run_vertically_without_crossing_the_rows`</sub>
+- The device block stays upright whatever the rotation: the outline keeps its size and position, and only the pins turn, so the leads reach the turned pins along their own axis. <sub>`device_block_bounds_stay_upright_when_the_instance_turns`</sub>
 - The device block's contact rows sit directly under the header rows, and the outline's total height covers every row with no gap. <sub>`device_block_layout_stacks_contact_rows_under_the_header`</sub>
 
 ### Reports as drawing sheets
@@ -1667,6 +1669,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - draws a jumper as a bar only, with no round mark at either end <sub>`drawSymbol text placement`</sub>
 - keeps the lead lines on the coil's own pins, whatever the rotation <sub>`drawDeviceBlock`</sub>
 - draws the same upright outline whatever the rotation <sub>`drawDeviceBlock`</sub>
+- keeps the leads on the pin axis however wide the block grows <sub>`drawDeviceBlock`</sub>
+- runs a turned coil's leads vertically without crossing the contact rows <sub>`drawDeviceBlock`</sub>
 - keeps every line of text inside its own cell and clear of the others, whatever the rotation <sub>`drawDeviceBlock`</sub>
 - strokes the outline in the selection colour while the coil is selected <sub>`drawDeviceBlock`</sub>
 - prints the function label under the block outline <sub>`drawDeviceBlock`</sub>

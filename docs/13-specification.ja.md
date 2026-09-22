@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1975仕様項目**。
+全5領域・**1979仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -380,7 +380,9 @@
 - 実機ブロックの最小幅はリレーコイルのシンボル定義のピン間隔そのものなので、いちばん細いブロックでもコイルの両ピンに届く。 <sub>`device_block_min_width_is_the_coil_symbols_pin_span`</sub>
 - 型番があるとヘッダは2行になり、内容で外形がピン間隔より広がっても引き出し線でピンは外形まで届く。 <sub>`device_block_layout_grows_for_the_part_number_and_keeps_the_pins_reachable`</sub>
 - 行の仕切り線はコイルの引き出し線が付く高さには来ないので、2本の引き出し線がブロックを横切る1本の線で繋がって見えることはない。 <sub>`device_block_rows_keep_clear_of_the_lead_height`</sub>
-- 実機ブロックはどの回転でも正立のまま: 外形の大きさも位置も変わらず、回るのはピンだけなので、引き出し線はいちばん近い辺から回った先のピンへ届く。 <sub>`device_block_bounds_stay_upright_when_the_instance_turns`</sub>
+- 外形がどれだけ横に広がっても、回していないコイルの引き出し線は水平のまま、配線が来るピンの高さで外形の左右の辺に届く (G7)。 <sub>`device_block_leads_run_along_the_pin_axis_however_wide_the_block`</sub>
+- 90度・270度に回したコイルの引き出し線は真上・真下へ伸びて外形の上端・下端で止まり、接点が何行あっても接点イメージの文字を横切らない (G7)。 <sub>`a_turned_device_blocks_leads_run_vertically_without_crossing_the_rows`</sub>
+- 実機ブロックはどの回転でも正立のまま: 外形の大きさも位置も変わらず、回るのはピンだけなので、引き出し線はピン自身の軸に沿って外形へ届く。 <sub>`device_block_bounds_stay_upright_when_the_instance_turns`</sub>
 - 実機ブロックの接点の行はヘッダ行のすぐ下に続き、外形全体の高さは隙間なく全ての行をちょうど覆う。 <sub>`device_block_layout_stacks_contact_rows_under_the_header`</sub>
 
 ### 帳票の図面シート化
@@ -1667,6 +1669,8 @@
 - ジャンパバーは太い線だけで描かれ、両端に丸(円)は描かれない <sub>`drawSymbol text placement`</sub>
 - 実機ブロックをどの向きに回しても反転しても、引き出し線は必ず実際のA1/A2ピンの点から出るので、そこに繋いだ配線は繋がったまま (G7) <sub>`drawDeviceBlock`</sub>
 - 実機ブロックの表はどの回転でも正立のままで、外形の位置も大きさも変わらない (回るのはピンだけ) <sub>`drawDeviceBlock`</sub>
+- 外形がどれだけ横に広がっても、回していないコイルの引き出し線は水平のまま、配線が来るピンの高さで外形の左右の辺に届く <sub>`drawDeviceBlock`</sub>
+- 90度・270度に回したコイルの引き出し線は真上・真下へ伸びて外形の上端・下端で止まり、接点が何行あっても接点イメージの文字を横切らない <sub>`drawDeviceBlock`</sub>
 - 実機ブロックの文字はどの回転でも自分のセルの中に収まり、ほかの行と重ならない <sub>`drawDeviceBlock`</sub>
 - 選択中の実機ブロックは、ほかのシンボルと同じように選択色の外形で描かれる <sub>`drawDeviceBlock`</sub>
 - 実機ブロックのコイルにも機能ラベルは外形の下に描かれる (G4) <sub>`drawDeviceBlock`</sub>

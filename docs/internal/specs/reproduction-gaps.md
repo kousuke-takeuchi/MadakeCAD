@@ -439,9 +439,13 @@ the terminal diagram and the BOM as **one** device.
 > the cells turns multi-line text through each other — so **the block is always drawn as an
 > upright, unrotated, unmirrored table centred on the instance position**. Rotation and
 > mirror move only the two pin points; each lead then runs from its real (transformed) pin
-> to the nearest point on the outline edge (`relay_xref::device_block_lead_end` /
-> `relayXref.ts` `deviceBlockLeadEnd`), attaching to the top or bottom edge for a coil
-> turned 90°/270°. Column order is therefore fixed, and text is always horizontal in
+> **along that pin's own axis** — the direction its wire comes in on — until it meets the
+> outline (`relay_xref::device_block_lead_end` / `relayXref.ts` `deviceBlockLeadEnd`, with
+> the axis from `device_block_lead_axis`): horizontal to the left/right edge when unturned,
+> vertical to the top/bottom edge at 90°/270°. When the outline has grown past the pin (a
+> changeover row is already 19.6 mm wide, a real part number ~25 mm), the lead is a stub
+> along the same axis, away from the block's centre, so it never cuts across a row of the
+> contact image. Column order is therefore fixed, and text is always horizontal in
 > upright cells (`device_block_texts`/`deviceBlockTexts` lay out every line with its cell,
 > and tests assert, for 0/90/180/270 and mirror, that each line stays inside its cell, that
 > no two lines overlap, that the leads start exactly on the transformed pins and end on the
