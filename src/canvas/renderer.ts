@@ -22,7 +22,7 @@ import {
 import { resolveInstanceDef, symbolBounds, transformLocal } from "./dynamicSymbol";
 // 循環import防止のため定義はdynamicSymbol.tsへ移した。他モジュールとの互換のため再エクスポートする
 export { symbolBounds, transformLocal } from "./dynamicSymbol";
-import { LEADER_DOT_R_MM, LEADER_STROKE_MM, leaderFor } from "./leader";
+import { LEADER_STROKE_MM, leaderFor } from "./leader";
 import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
 import {
   SHAPE_DASH,
@@ -96,6 +96,13 @@ import { GRID_PITCH, type Viewport } from "./viewport";
 
 /** セル内テキストの左余白 (mm)。 */
 const CELL_PAD = 2;
+/** シンボル本体・ピングループ括弧の線幅 (mm)。svg.rsのSYMBOL_STROKEと一致。 */
+export const SYMBOL_STROKE_MM = 0.3;
+/**
+ * 丸印の半径 (mm)。svg.rsのJUNCTION_DOT_Rと一致。配線の分岐点 (ジャンクション) と、
+ * 引き出し線 (G20) の対象端に同じ大きさで描く。
+ */
+export const JUNCTION_DOT_R_MM = 0.6;
 /** 盤の名前を外形の上端からどれだけ上に置くか (mm)。svg.rsのPANEL_LABEL_DYと一致。 */
 const PANEL_LABEL_DY = 1.5;
 /** フットプリントの型番の文字高さ (mm) と、参照記号からの送り (mm)。svg.rsと一致。 */
@@ -375,7 +382,7 @@ export function drawSymbol(
 ) {
   ctx.strokeStyle = colorOverride ?? (selected ? theme.selection : theme.line);
   ctx.fillStyle = ctx.strokeStyle;
-  ctx.lineWidth = Math.max(1, 0.3 * vp.scale);
+  ctx.lineWidth = Math.max(1, SYMBOL_STROKE_MM * vp.scale);
   for (const prim of def.primitives) {
     switch (prim.type) {
       case "line": {
@@ -459,7 +466,7 @@ export function drawSymbol(
   if (pinGroupsSpec) {
     for (const bracket of pinGroupBrackets(def, pinGroupsSpec)) {
       const lineWidth = ctx.lineWidth;
-      ctx.lineWidth = Math.max(1, 0.3 * vp.scale);
+      ctx.lineWidth = Math.max(1, SYMBOL_STROKE_MM * vp.scale);
       ctx.beginPath();
       bracket.bracket.forEach((p, i) => {
         const s = vp.toScreen(transformLocal(p, inst));
@@ -587,7 +594,7 @@ export function drawDeviceBlock(
     ctx.lineTo(b.x, b.y);
   };
   ctx.strokeStyle = selected ? theme.selection : theme.line;
-  ctx.lineWidth = Math.max(1, 0.3 * vp.scale);
+  ctx.lineWidth = Math.max(1, SYMBOL_STROKE_MM * vp.scale);
   ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
   // ピン (A1/A2) から外形の縁までの引き出し線。ピン自身の軸 (配線と同じ向き) に沿って引く
   ctx.beginPath();
@@ -1170,7 +1177,7 @@ export function renderSheet(
       const s = vp.toScreen(e.at);
       ctx.fillStyle = theme.line;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, Math.max(2, 0.6 * vp.scale), 0, Math.PI * 2);
+      ctx.arc(s.x, s.y, Math.max(2, JUNCTION_DOT_R_MM * vp.scale), 0, Math.PI * 2);
       ctx.fill();
     } else if (e.kind === "net_label") {
       // 方向付きタグ (G3/G19)。attrs.tagがある時だけ旗の枠で囲む (Rust側 net_tag.rs と同形)
@@ -1231,7 +1238,7 @@ export function renderSheet(
         ctx.stroke();
         ctx.fillStyle = theme.line;
         ctx.beginPath();
-        ctx.arc(sb.x, sb.y, Math.max(2, LEADER_DOT_R_MM * vp.scale), 0, Math.PI * 2);
+        ctx.arc(sb.x, sb.y, Math.max(2, JUNCTION_DOT_R_MM * vp.scale), 0, Math.PI * 2);
         ctx.fill();
       }
     }

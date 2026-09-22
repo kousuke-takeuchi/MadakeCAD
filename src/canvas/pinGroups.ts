@@ -6,16 +6,19 @@
 // ミラーにも自動で追従する。読めない・重なる項目はその項目だけを飛ばす (パニックしない)。
 
 import type { Point, PinDef, PinDir, SymbolDef } from "../ipc";
+import { textWidthMm } from "./textWidth";
 
 /** `attrs`のキー。Rust側 PIN_GROUPS_ATTR と同じ。 */
 export const PIN_GROUPS_ATTR = "pin_groups";
 
 /** 「範囲:名前」の書式が読めない。 */
-export const PIN_GROUP_INVALID = "pin_group.invalid";
+export const PIN_GROUP_INVALID = "erc.pin_group_invalid";
 /** 範囲の両端がそのインスタンスのピン番号に無い。 */
-export const PIN_GROUP_UNKNOWN_PIN = "pin_group.unknown_pin";
+export const PIN_GROUP_UNKNOWN_PIN = "erc.pin_group_unknown_pin";
 /** 範囲が他のグループと重なっている。 */
-export const PIN_GROUP_OVERLAP = "pin_group.overlap";
+export const PIN_GROUP_OVERLAP = "erc.pin_group_overlap";
+/** ピングループ括弧を描けない表示形式のシンボルに指定されている (実機ブロック表示のコイルなど)。 */
+export const PIN_GROUP_UNSUPPORTED = "erc.pin_group_unsupported";
 
 /** キャプションの折り返し文字数 (縦書きの近似)。 */
 export const PIN_GROUP_CAPTION_WRAP = 4;
@@ -23,7 +26,10 @@ export const PIN_GROUP_CAPTION_WRAP = 4;
 export const PIN_GROUP_BRACKET_GAP_MM = 1.5;
 /** 括弧の両端のヒゲの長さ (mm)。 */
 export const PIN_GROUP_BRACKET_TICK_MM = 1.2;
-/** 括弧の棒とキャプションの間隔 (mm)。 */
+/**
+ * 括弧の棒とキャプションの**文字の縁**との間隔 (mm)。キャプションは中央揃えで描くので、
+ * 基準点は文字の幅・高さの半分だけさらに外へ置く (Rust側と同一)。
+ */
 export const PIN_GROUP_CAPTION_GAP_MM = 1.5;
 /** キャプション文字高さ (mm)。 */
 export const PIN_GROUP_CAPTION_TEXT_MM = 2.0;
@@ -69,6 +75,44 @@ export function chartOrderPinNumbers(def: SymbolDef): string[] {
   return chartOrderPinDefs(def).map((p) => p.number);
 }
 
+/** 全ピンが広がる範囲の中心 (シンボルのローカル座標)。ピンが無ければnull。 */
+function pinCenter(def: SymbolDef): Point | null {
+  if (def.pins.length === 0) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const pin of def.pins) {
+    minX = Math.min(minX, pin.at.x);
+    minY = Math.min(minY, pin.at.y);
+    maxX = Math.max(maxX, pin.at.x);
+    maxY = Math.max(maxY, pin.at.y);
+  }
+  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+}
+
+/**
+ * ある番号のピン定義のうち、ピンの広がりの中心からいちばん遠いものを選ぶ
+ * (Rust側 outer_pin_def と同一)。多段端子台で右の列の括弧を列の外側へ出すための規則。
+ */
+export function outerPinDef(def: SymbolDef, number: string): PinDef | null {
+  const center = pinCenter(def);
+  if (!center) return null;
+  let best: PinDef | null = null;
+  let bestD = -Infinity;
+  for (const pin of def.pins) {
+    if (pin.number !== number) continue;
+    const d = Math.hypot(pin.at.x - center.x, pin.at.y - center.y);
+    if (d > bestD) {
+      bestD = d;
+      best = pin;
+    }
+  }
+  return best;
+}
+
+/** 折り返した各行のうち、いちばん長い行の幅 (mm)。 */
+function maxLineWidth(lines: readonly string[]): number {
+  return lines.reduce((w, l) => Math.max(w, textWidthMm(l, PIN_GROUP_CAPTION_TEXT_MM)), 0);
+}
+
 /** キャプションをPIN_GROUP_CAPTION_WRAP文字ごとに折り返す (縦書きの近似)。 */
 export function wrapCaption(caption: string): string[] {
   if (caption.length === 0) return [""];
@@ -98,6 +142,16 @@ export function parsePinGroups(spec: string, order: readonly string[]): ParsedPi
     }
     const range = text.slice(0, colon).trim();
     const caption = text.slice(colon + 1).trim();
+    // ピン番号そのものに「-」が入っている端子は範囲の区切りと見分けが付かない
+    // (Rust側 parse_pin_groups と同一)
+    if (range.includes("-") && order.includes(range)) {
+      issues.push({
+        text,
+        code: PIN_GROUP_INVALID,
+        message: "ピン番号に「-」を含む端子は範囲指定に使えません",
+      });
+      continue;
+    }
     const dash = range.indexOf("-");
     const [first, last] = dash >= 0
       ? [range.slice(0, dash).trim(), range.slice(dash + 1).trim()]
@@ -177,7 +231,7 @@ export function pinGroupBracket(pins: readonly PinDef[], caption: string): PinGr
       { x: barX, y: bottom },
       { x: tickX, y: bottom },
     ];
-    const captionX = barX + sign * PIN_GROUP_CAPTION_GAP_MM;
+    const captionX = barX + sign * (PIN_GROUP_CAPTION_GAP_MM + maxLineWidth(lines) / 2);
     const midY = (top + bottom) / 2;
     const total = Math.max(0, lines.length - 1) * PIN_GROUP_CAPTION_LINE_PITCH_MM;
     const startY = midY - total / 2;
@@ -200,7 +254,7 @@ export function pinGroupBracket(pins: readonly PinDef[], caption: string): PinGr
     { x: right, y: barY },
     { x: right, y: tickY },
   ];
-  const captionY0 = barY + sign * PIN_GROUP_CAPTION_GAP_MM;
+  const captionY0 = barY + sign * (PIN_GROUP_CAPTION_GAP_MM + PIN_GROUP_CAPTION_TEXT_MM / 2);
   const midX = (left + right) / 2;
   const captionLines: [string, Point][] = lines.map((l, i) => [
     l,
@@ -209,18 +263,24 @@ export function pinGroupBracket(pins: readonly PinDef[], caption: string): PinGr
   return { bracket, captionLines };
 }
 
-/** あるシンボル定義+attrs["pin_groups"]から、描ける括弧を全部求める (Rust側 pin_group_brackets と同一)。 */
+/**
+ * あるシンボル定義+attrs["pin_groups"]から、描ける括弧を全部求める (Rust側 pin_group_brackets と同一)。
+ * 範囲の順番はチャート順で決めるが、括弧を掛ける位置は番号ごとにouterPinDefで選び直す。
+ */
 export function pinGroupBrackets(def: SymbolDef, spec: string): PinGroupBracket[] {
   if (spec.trim() === "") return [];
   const order = chartOrderPinNumbers(def);
-  const defs = chartOrderPinDefs(def);
   const parsed = parsePinGroups(spec, order);
   const out: PinGroupBracket[] = [];
   for (const g of parsed.groups) {
     const i0 = order.indexOf(g.first);
     const i1 = order.indexOf(g.last);
     if (i0 < 0 || i1 < 0) continue;
-    const bracket = pinGroupBracket(defs.slice(i0, i1 + 1), g.caption);
+    const pins = order
+      .slice(i0, i1 + 1)
+      .map((no) => outerPinDef(def, no))
+      .filter((p): p is PinDef => p !== null);
+    const bracket = pinGroupBracket(pins, g.caption);
     if (bracket) out.push(bracket);
   }
   return out;

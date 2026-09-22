@@ -2,7 +2,7 @@
 // 同一ルールを検証する (parityテスト)。
 import { describe, expect, it } from "vitest";
 
-import { dynamicSymbol } from "./dynamicSymbol";
+import { blockSymbol, dynamicSymbol } from "./dynamicSymbol";
 import {
   chartOrderPinDefs,
   chartOrderPinNumbers,
@@ -11,6 +11,7 @@ import {
   PIN_GROUP_UNKNOWN_PIN,
   parsePinGroups,
   pinGroupBracket,
+  pinGroupBrackets,
   wrapCaption,
 } from "./pinGroups";
 
@@ -68,6 +69,14 @@ describe("parsePinGroups", () => {
     expect(parsed.issues).toEqual([]);
     expect(parsed.groups).toHaveLength(1);
   });
+
+  // ja: ピン番号そのものに「-」が入っている端子はピングループに指定できず、使えない理由がそのまま報告される (Rust側とparity)
+  it("refuses a pin whose own number contains a hyphen, with its own reason", () => {
+    const parsed = parsePinGroups("A-1:電源", ["A-1", "B"]);
+    expect(parsed.groups).toEqual([]);
+    expect(parsed.issues[0].code).toBe(PIN_GROUP_INVALID);
+    expect(parsed.issues[0].message).toContain("-");
+  });
 });
 
 describe("wrapCaption", () => {
@@ -87,6 +96,40 @@ describe("pinGroupBracket", () => {
     const bracket = pinGroupBracket(pins, "電源")!;
     expect(bracket.bracket.every((p) => p.x < pins[0].at.x)).toBe(true);
     expect(bracket.captionLines.every(([, p]) => p.x < bracket.bracket[0].x)).toBe(true);
+  });
+
+  // ja: ブロックでも括弧は左のピンの足先より外に出て、キャプションはさらに外に置かれる (Rust側の3一族テストとparity)
+  it("puts a block's bracket beyond the pin stubs and its caption beyond the bracket", () => {
+    const def = blockSymbol({
+      block_pins: '{"left":[{"no":"1","name":"IN1"},{"no":"2","name":"IN2"}]}',
+    })!;
+    const stubEnd = def.pins[0].at.x; // 左の足の先端 (負)
+    const brackets = pinGroupBrackets(def, "1-2:電源系統一式");
+    expect(brackets).toHaveLength(1);
+    expect(brackets[0].bracket.every((p) => p.x < stubEnd)).toBe(true);
+    const barX = Math.min(...brackets[0].bracket.map((p) => p.x));
+    expect(brackets[0].captionLines.every(([, p]) => p.x < barX)).toBe(true);
+  });
+
+  // ja: コネクタは右側にピンが出るので、括弧とキャプションは足先より右に出る (Rust側の3一族テストとparity)
+  it("puts a connector's bracket to the right of its pin stubs", () => {
+    const def = dynamicSymbol("connector_8p")!;
+    const stubEnd = def.pins[0].at.x; // 右の足の先端 (正)
+    const brackets = pinGroupBrackets(def, "1-4:電源系統一式");
+    expect(brackets).toHaveLength(1);
+    expect(brackets[0].bracket.every((p) => p.x > stubEnd)).toBe(true);
+    const barX = Math.max(...brackets[0].bracket.map((p) => p.x));
+    expect(brackets[0].captionLines.every(([, p]) => p.x > barX)).toBe(true);
+  });
+
+  // ja: 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない、Rust側とparity)
+  it("brackets the outside of a multi-level terminal block's own column, not the gap between columns", () => {
+    const def = dynamicSymbol("terminal_block_8p_2l")!;
+    // 2段の列は中心x=-5と+5、箱はそれぞれ±2.5なので右の列の外縁はx=7.5
+    const brackets = pinGroupBrackets(def, "1b-4b:B系統");
+    expect(brackets).toHaveLength(1);
+    expect(brackets[0].bracket.every((p) => p.x > 7.5)).toBe(true);
+    expect(brackets[0].captionLines.every(([, p]) => p.x > 7.5)).toBe(true);
   });
 
   // ja: シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される

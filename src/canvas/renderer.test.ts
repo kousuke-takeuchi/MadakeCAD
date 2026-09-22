@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 import type { Point, Primitive, Revision, Sheet, SymbolDef, SymbolInstance } from "../ipc";
 import { dynamicSymbol, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./dynamicSymbol";
 import {
+  JUNCTION_DOT_R_MM,
   REV_COL_W,
   REV_HEADERS,
   drawDeviceBlock,
   drawSymbol,
   effectiveRev,
   revisionLayout,
+  renderSheet,
   rotateArcAngles,
   transformLocal,
   visibleRevisions,
@@ -563,5 +565,72 @@ describe("drawDeviceBlock", () => {
     expect(hidden).not.toContain("13-14");
     expect(hidden).not.toContain("/1.B3");
     expect(hidden).toContain("K1");
+  });
+});
+
+describe("renderSheet dots", () => {
+  /** renderSheetが触るCanvas2D APIだけを備えた、arcの記録用キャンバス。 */
+  function sheetRecorder() {
+    const arcs: { x: number; y: number; r: number }[] = [];
+    const ctx = {
+      canvas: { width: 800, height: 600 },
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 0,
+      font: "",
+      textAlign: "" as CanvasTextAlign,
+      beginPath() {},
+      moveTo() {},
+      lineTo() {},
+      arcTo() {},
+      rect() {},
+      closePath() {},
+      stroke() {},
+      fill() {},
+      fillRect() {},
+      strokeRect() {},
+      setLineDash() {},
+      measureText: (t: string) => ({ width: t.length * 6 }),
+      arc(x: number, y: number, r: number) {
+        arcs.push({ x, y, r });
+      },
+      fillText() {},
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, arcs };
+  }
+
+  // ja: 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える。Rust側 svg_leader_dot_is_the_size_of_a_wire_junction_dot とparity)
+  it("draws a note's leader dot exactly the size of a wire junction dot", () => {
+    const junction = { kind: "junction", id: "j1", at: { x: 150, y: 100 } };
+    const note = {
+      kind: "text",
+      id: "t1",
+      at: { x: 120, y: 80 },
+      text: "注意",
+      height: 2.5,
+      rotation: 0,
+      anchor: "start",
+      color: null,
+      bold: false,
+      leader_to: "j1",
+    };
+    const sheet = {
+      id: "s1",
+      name: "S1",
+      size: "A3",
+      orientation: "Landscape",
+      zone_cols: 4,
+      zone_rows: 6,
+      title_block: {},
+      revisions: [],
+      entities: { j1: junction, t1: note },
+    } as unknown as Sheet;
+    const rec = sheetRecorder();
+    const vp = new Viewport();
+    vp.scale = 4;
+    renderSheet(rec.ctx, sheet, [], vp, { selection: new Set(), cursor: null });
+    expect(rec.arcs).toHaveLength(2);
+    expect(rec.arcs[0].r).toBe(rec.arcs[1].r);
+    expect(rec.arcs[0].r).toBe(Math.max(2, JUNCTION_DOT_R_MM * vp.scale));
   });
 });

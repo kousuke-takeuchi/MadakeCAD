@@ -2,7 +2,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { SymbolDef, SymbolInstance } from "../ipc";
-import { blockSymbol, dynamicSymbol, resolveInstanceDef, resolveSymbolDef } from "./dynamicSymbol";
+import {
+  blockSymbol,
+  dynamicSymbol,
+  resolveInstanceDef,
+  resolveSymbolDef,
+  symbolBounds,
+} from "./dynamicSymbol";
 
 describe("dynamicSymbol", () => {
   // ja: connector_2pは旧静的定義と同一のピン座標を持つ
@@ -255,5 +261,39 @@ describe("resolveInstanceDef", () => {
   // ja: 属性が壊れているブロックは描かれない(undefinedになる)
   it("returns nothing for a block whose attributes are broken", () => {
     expect(resolveInstanceDef(inst({ block_pins: "not json" }), new Map())).toBeUndefined();
+  });
+});
+
+describe("symbolBounds", () => {
+  function tb(rotation: number, mirror: boolean, attrs: Record<string, string>): SymbolInstance {
+    return {
+      id: "tb1",
+      symbol_id: "terminal_block_8p",
+      at: { x: 150, y: 100 },
+      rotation,
+      mirror,
+      reference: "TB1",
+      value: "",
+      attrs,
+    } as SymbolInstance;
+  }
+
+  // ja: ピングループ括弧はシンボルと一緒に描かれるので、参照記号・型番の位置決めに使う外形にはその箱も入る (Rust側 svg::symbol_bounds とparity)
+  it("grows to take in a pin group's bracket and caption, so labels are placed clear of them", () => {
+    const def = dynamicSymbol("terminal_block_8p")!;
+    const plain = symbolBounds(tb(0, false, {}), def);
+    const grouped = symbolBounds(tb(0, false, { pin_groups: "1-4:電源系統一式" }), def);
+    // 左側のピンに掛かるので、外形は左へだけ広がる
+    expect(grouped.min.x).toBeLessThan(plain.min.x);
+    expect(grouped.max.x).toBe(plain.max.x);
+  });
+
+  // ja: 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない)
+  it("grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption", () => {
+    const def = dynamicSymbol("terminal_block_8p")!;
+    const plain = symbolBounds(tb(90, false, {}), def);
+    const grouped = symbolBounds(tb(90, false, { pin_groups: "1-4:電源系統一式" }), def);
+    expect(grouped.min.y).toBeLessThan(plain.min.y);
+    expect(grouped.min.x).toBe(plain.min.x);
   });
 });

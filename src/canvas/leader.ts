@@ -1,5 +1,9 @@
 // 注記の引き出し線 (G20)。Rust側 madake-core/src/leader.rs と同一ジオメトリの双子。
 //
+// 対象がシンボルのときの外接矩形は dynamicSymbol.ts の symbolBounds 1つだけを使う
+// (Rust側 leader.rs も svg::symbol_bounds 1つだけを使う)。図面に描かれる外形と、
+// 引き出し線が指す先を必ず一致させるため。
+//
 // TextEntity.leader_toに対象のエンティティIDが入っていれば、注記の外接矩形のうち
 // 対象にいちばん近い辺の中点から、対象の外接矩形上のいちばん近い点まで直線を引く
 // (対象端には配線の分岐点と同じ大きさの丸印)。位置は保存せず描画のたびに求め直すので、
@@ -16,8 +20,6 @@ export interface Rect {
   max: Point;
 }
 
-/** 引き出し線の対象端に描く丸印の半径 (mm)。配線の分岐点 (ジャンクション) の印と同じ。 */
-export const LEADER_DOT_R_MM = 0.6;
 /** 引き出し線の線幅 (mm)。Rust側 svg.rs の LEADER_STROKE と同じ。 */
 export const LEADER_STROKE_MM = 0.25;
 

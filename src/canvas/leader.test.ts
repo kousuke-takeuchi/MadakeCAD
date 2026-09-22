@@ -112,6 +112,40 @@ describe("entityBounds", () => {
     expect(rect).toEqual({ min: { x: 45, y: 45 }, max: { x: 55, y: 55 } });
   });
 
+  // ja: シンボルを指す引き出し線は図面に描かれている外形ちょうどで止まる: 配置基準点は必ず外形の内側に入り、シンボルの中の文字は文字の箱ではなく基準点1点として数える (Rust側 a_leader_targets_exactly_the_outline_the_drawing_shows とparity)
+  it("ends on exactly the outline the drawing shows, counting a text mark as its own point", () => {
+    const def: SymbolDef = {
+      id: "leader_probe",
+      name: "Probe",
+      name_ja: "試験",
+      category: "misc",
+      ref_prefix: "X",
+      keywords: [],
+      // 外形が配置基準点を囲まず、文字が外形の外にはみ出す定義 (2つの数え方で差が出る形)
+      primitives: [
+        { type: "rect", p1: { x: 10, y: 10 }, p2: { x: 20, y: 20 }, filled: false },
+        { type: "text", at: { x: 30, y: 0 }, text: "XYZ", height: 2.5 },
+      ],
+      pins: [],
+      text_slots: [],
+    };
+    const inst: Entity = {
+      kind: "symbol",
+      id: "s1",
+      symbol_id: "leader_probe",
+      at: { x: 100, y: 100 },
+      rotation: 0,
+      mirror: false,
+      reference: "X1",
+      value: "",
+      attrs: {},
+    };
+    expect(entityBounds(inst, new Map([["leader_probe", def]]))).toEqual({
+      min: { x: 100, y: 100 },
+      max: { x: 130, y: 120 },
+    });
+  });
+
   // ja: 図形・ハーネス・配線・ジャンクションも対象にでき、盤レイアウト専用のエンティティはnull
   it("resolves shapes, harnesses, wires and junctions, and refuses panel-only entities", () => {
     const shape: Entity = {

@@ -3,6 +3,14 @@
 // 同一座標を返すこと(両者は dynamicSymbol.test.ts と Rust側テストで代表値を突き合わせている)。
 
 import type { Point, Primitive, PinDef, SymbolDef, SymbolInstance, TextSlot } from "../ipc";
+import {
+  PIN_GROUPS_ATTR,
+  PIN_GROUP_CAPTION_TEXT_MM,
+  pinGroupBrackets,
+} from "./pinGroups";
+// 循環import防止のため定義はtextWidth.tsへ移した。既存のimport元のために再エクスポートする
+import { textWidthMm } from "./textWidth";
+export { textWidthMm } from "./textWidth";
 
 /** 動的シンボルの最大極数(Rust側 DYNAMIC_PIN_MAX と一致)。 */
 export const DYNAMIC_PIN_MAX = 50;
@@ -257,32 +265,6 @@ export interface BlockPins {
 
 const BLOCK_SIDES = ["left", "right", "top", "bottom"] as const;
 
-/** 全角幅で描かれる文字か (Rust側 tidy::is_wide と同じ範囲)。 */
-function isWideChar(c: string): boolean {
-  const u = c.codePointAt(0) ?? 0;
-  return (
-    (u >= 0x1100 && u <= 0x115f) ||
-    (u >= 0x2e80 && u <= 0x303e) ||
-    (u >= 0x3041 && u <= 0x33ff) ||
-    (u >= 0x3400 && u <= 0x4dbf) ||
-    (u >= 0x4e00 && u <= 0x9fff) ||
-    (u >= 0xa000 && u <= 0xa4cf) ||
-    (u >= 0xac00 && u <= 0xd7a3) ||
-    (u >= 0xf900 && u <= 0xfaff) ||
-    (u >= 0xfe30 && u <= 0xfe6f) ||
-    (u >= 0xff00 && u <= 0xff60) ||
-    (u >= 0xffe0 && u <= 0xffe6) ||
-    (u >= 0x20000 && u <= 0x3fffd)
-  );
-}
-
-/** 文字列を高さheightで描いたときの見積もり幅 mm (Rust側 tidy::text_width と同じ)。 */
-export function textWidthMm(text: string, height: number): number {
-  let advance = 0;
-  for (const c of text) advance += isWideChar(c) ? 1.0 : 0.6;
-  return height * advance;
-}
-
 /**
  * シンボルローカル座標→用紙座標。netlist.rs transform_localと同一の変換。
  * ここに置く (renderer.tsではない) のは、canvas/leader.tsのように図面描画とは
@@ -313,8 +295,10 @@ export function transformLocal(p: Point, inst: SymbolInstance): Point {
 
 /**
  * 配置後のシンボル外形の囲み矩形(用紙座標)。円・弧は回転対称なので中心±rで安全側に
- * 評価し、配置基準点も必ず含める。Rust側 tidy::symbol_bounds と同一。
- * 参照記号・接点マップなど、外形の外側に置く注記の位置決めに使う。
+ * 評価し、配置基準点も必ず含める。Rust側 **svg::symbol_bounds** と同一
+ * (文字プリミティブは基準点だけを見る。文字の幅・高さまで含める tidy::symbol_bounds とは別物)。
+ * 参照記号・接点マップ・引き出し線 (G20) の指す先など、外形を基準にする位置決めに使う。
+ * ピングループ括弧 (G8) はシンボルと一緒に描かれるので、その箱も含める。
  */
 export function symbolBounds(
   inst: SymbolInstance,
@@ -351,7 +335,55 @@ export function symbolBounds(
     }
   }
   for (const pin of def.pins) visit(pin.at);
+  for (const [a, b] of pinGroupPaperBoxes(inst, def)) {
+    min.x = Math.min(min.x, a.x);
+    min.y = Math.min(min.y, a.y);
+    max.x = Math.max(max.x, b.x);
+    max.y = Math.max(max.y, b.y);
+  }
   return { min, max };
+}
+
+/**
+ * ピングループ括弧 (G8) とキャプションが用紙の上で占める矩形の一覧
+ * (Rust側 pin_groups::pin_group_paper_boxes と同一)。文字は回転しても横書きのままなので、
+ * キャプションの箱は用紙座標で文字幅・文字高から取る。
+ *
+ * ここに置く (pinGroups.tsではない) のは、pinGroups.tsが座標変換も文字幅も持たない
+ * 葉モジュールのままでいられるようにするため (循環importを起こさない)。
+ */
+export function pinGroupPaperBoxes(
+  inst: SymbolInstance,
+  def: SymbolDef,
+): [Point, Point][] {
+  const spec = inst.attrs?.[PIN_GROUPS_ATTR];
+  if (!spec) return [];
+  const out: [Point, Point][] = [];
+  for (const bracket of pinGroupBrackets(def, spec)) {
+    const pts = bracket.bracket.map((p) => transformLocal(p, inst));
+    if (pts.length > 0) {
+      const min = { x: Infinity, y: Infinity };
+      const max = { x: -Infinity, y: -Infinity };
+      for (const p of pts) {
+        min.x = Math.min(min.x, p.x);
+        min.y = Math.min(min.y, p.y);
+        max.x = Math.max(max.x, p.x);
+        max.y = Math.max(max.y, p.y);
+      }
+      out.push([min, max]);
+    }
+    for (const [text, at] of bracket.captionLines) {
+      if (!text) continue;
+      const c = transformLocal(at, inst);
+      const hw = textWidthMm(text, PIN_GROUP_CAPTION_TEXT_MM) / 2;
+      const hh = PIN_GROUP_CAPTION_TEXT_MM / 2;
+      out.push([
+        { x: c.x - hw, y: c.y - hh },
+        { x: c.x + hw, y: c.y + hh },
+      ]);
+    }
+  }
+  return out;
 }
 
 function snapUp(v: number, step: number): number {
