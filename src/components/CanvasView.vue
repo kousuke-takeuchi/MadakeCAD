@@ -52,6 +52,7 @@ function draw() {
     xrefs: annotations?.xrefs,
     relay: annotations?.relay,
     deviceXrefs: annotations?.deviceXrefs,
+    mateLinks: annotations?.mateLinks,
     // 図枠テンプレート (M4 §9) と表題欄バインドの文脈。差し替えは全シートへ効く
     frame: store.frameTemplate,
     bind: store.bindContextFor(sheet),

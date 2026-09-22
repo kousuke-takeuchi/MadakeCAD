@@ -14,6 +14,8 @@ import PropertiesPanel from "./PropertiesPanel.vue";
 import RibbonBar from "./RibbonBar.vue";
 import StatusBar from "./StatusBar.vue";
 import RevisionsDialog from "./RevisionsDialog.vue";
+import ProjectInfoDialog from "./ProjectInfoDialog.vue";
+import SheetPaperDialog from "./SheetPaperDialog.vue";
 import WireNumberDialog from "./WireNumberDialog.vue";
 import TerminalEditorDialog from "./TerminalEditorDialog.vue";
 import PlcIoDialog from "./PlcIoDialog.vue";
@@ -29,6 +31,8 @@ import BlockEditorDialog from "./BlockEditorDialog.vue";
 import TitleBar from "./TitleBar.vue";
 import SettingsDialog from "./settings/SettingsDialog.vue";
 import { useRevisionsStore } from "../stores/revisions";
+import { useProjectInfoStore } from "../stores/projectInfo";
+import { useSheetPaperStore } from "../stores/sheetPaper";
 import { useWireNumbersStore } from "../stores/wireNumbers";
 import { useTerminalsStore } from "../stores/terminals";
 import { usePlcIoStore } from "../stores/plcIo";
@@ -42,6 +46,8 @@ const store = useDocumentStore();
 const ui = useUiStore();
 const search = useSearchStore();
 const revisions = useRevisionsStore();
+const projectInfo = useProjectInfoStore();
+const sheetPaper = useSheetPaperStore();
 const wireNumbers = useWireNumbersStore();
 const terminals = useTerminalsStore();
 const plcIo = usePlcIoStore();
@@ -84,6 +90,16 @@ async function onKeyDown(ev: KeyboardEvent) {
   }
   if (ev.key === "Escape" && revisions.open) {
     revisions.cancel();
+    ev.preventDefault();
+    return;
+  }
+  if (ev.key === "Escape" && projectInfo.open) {
+    projectInfo.cancel();
+    ev.preventDefault();
+    return;
+  }
+  if (ev.key === "Escape" && sheetPaper.open) {
+    sheetPaper.cancel();
     ev.preventDefault();
     return;
   }
@@ -141,6 +157,8 @@ async function onKeyDown(ev: KeyboardEvent) {
   // モーダル表示中はキャンバスのショートカットを走らせない
   if (
     revisions.open ||
+    projectInfo.open ||
+    sheetPaper.open ||
     wireNumbers.open ||
     terminals.open ||
     plcIo.open ||
@@ -189,6 +207,8 @@ onBeforeUnmount(() => {
     <SymbolPickerDialog />
     <SettingsDialog />
     <RevisionsDialog />
+    <ProjectInfoDialog />
+    <SheetPaperDialog />
     <WireNumberDialog />
     <TerminalEditorDialog />
     <PlcIoDialog />

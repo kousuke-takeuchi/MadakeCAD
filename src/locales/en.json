@@ -992,6 +992,47 @@
     "deviceBlockOff": "off",
     "deviceBlockChangedLog": "{reference}: physical device block {state}"
   },
+  "mate": {
+    "row": "Mate",
+    "placeholder": "e.g. J12",
+    "hint": "The reference designator of the mating connector (plug↔socket). Declaring it on both connectors links the pair; the wire list and from-to report carry a mate column, and a short dashed line is drawn automatically when both are on the same sheet within 50mm."
+  },
+  "projectInfo": {
+    "ribbonButton": "Project info",
+    "title": "Project information",
+    "close": "Close",
+    "note": "Name and number are set on the project. Company, drawing number and title are written to every sheet's title block at once.",
+    "name": "Project name",
+    "no": "Project number",
+    "company": "Company",
+    "drawingNo": "Drawing number",
+    "titleBlockTitle": "Title",
+    "hint": "Saving runs one command (undoable). Only the fields you changed are written; the title block fields overwrite every sheet.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving...",
+    "openLog": "Project information: editing",
+    "savedLog": "Project information: saved (undo with Cmd+Z)",
+    "unchangedLog": "Project information: closed without changes"
+  },
+  "sheetPaper": {
+    "ribbonButton": "Paper size",
+    "title": "Change paper — {sheet}",
+    "close": "Close",
+    "note": "Existing entities keep their coordinates; nothing is moved or deleted. Anything left outside the new paper is reported as an ERC warning instead.",
+    "size": "Size",
+    "orientation": "Orientation",
+    "landscape": "Landscape",
+    "portrait": "Portrait",
+    "hint": "Saving runs one command (undoable).",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving...",
+    "openLog": "Paper size: editing \"{sheet}\"",
+    "savedLog": "Paper size: saved for \"{sheet}\" (undo with Cmd+Z)",
+    "unchangedLog": "Paper size: closed without changes",
+    "noSheetLog": "Paper size: no sheet is open"
+  },
   "panel": {
     "tab": "Unplaced parts",
     "head": "Unplaced parts (from the schematic)",

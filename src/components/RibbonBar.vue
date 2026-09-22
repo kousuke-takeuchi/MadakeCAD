@@ -25,6 +25,8 @@ import type { ReportFormat, ReportKind } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useFileActions } from "../composables/fileActions";
 import { useRevisionsStore } from "../stores/revisions";
+import { useProjectInfoStore } from "../stores/projectInfo";
+import { useSheetPaperStore } from "../stores/sheetPaper";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
 import { useMacrosStore } from "../stores/macros";
 import { useTemplatesStore } from "../stores/templates";
@@ -44,6 +46,8 @@ const files = useFileActions();
 const verification = useVerificationStore();
 const simulation = useSimulationStore();
 const revisions = useRevisionsStore();
+const projectInfo = useProjectInfoStore();
+const sheetPaper = useSheetPaperStore();
 const wireNumbers = useWireNumbersStore();
 const { t } = useI18n();
 
@@ -105,6 +109,23 @@ function openRevisions() {
   }
   revisions.openFor(sheet);
   ui.log(t("revisions.openLog", { sheet: sheet.name }));
+}
+
+/** プロジェクト情報ダイアログを開く (G16)。プロジェクト名・番号・表題欄の一括設定。 */
+function openProjectInfo() {
+  projectInfo.openDialog();
+  ui.log(t("projectInfo.openLog"));
+}
+
+/** 用紙変更ダイアログを開く (G15)。 */
+function openSheetPaper() {
+  const sheet = useDocumentStore().activeSheet;
+  if (!sheet) {
+    ui.log(t("sheetPaper.noSheetLog"));
+    return;
+  }
+  sheetPaper.openFor(sheet);
+  ui.log(t("sheetPaper.openLog", { sheet: sheet.name }));
 }
 
 /** 線番の自動採番ダイアログを開く (リボン「配線」グループ)。 */
@@ -703,6 +724,8 @@ const groups = computed<RibbonGroup[]>(() => [
       ],
       [
         { label: t("revisions.ribbonButton"), icon: FileClock, action: () => openRevisions() },
+        { label: t("projectInfo.ribbonButton"), icon: FileText, action: () => openProjectInfo() },
+        { label: t("sheetPaper.ribbonButton"), icon: LayoutTemplate, action: () => openSheetPaper() },
       ],
     ],
   },

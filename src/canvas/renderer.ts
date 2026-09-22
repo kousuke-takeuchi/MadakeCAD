@@ -29,6 +29,7 @@ import {
 export { symbolBounds, transformLocal } from "./dynamicSymbol";
 import { LEADER_STROKE_MM, leaderFor } from "./leader";
 import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
+import { MATE_LINE_DASH, mateLinkSegment, type MateLink } from "./mate";
 import {
   SHAPE_DASH,
   shapeCircle,
@@ -164,6 +165,11 @@ export interface RenderOptions {
    * 省略時は描かない。表示クラスは「参照記号」に含める。
    */
   deviceXrefs?: ReadonlyMap<string, string>;
+  /**
+   * このシート上で図面に破線を描くべき嵌合コネクタ対 (G14)。`mateLinks()` の戻りを
+   * このシートで絞ったもの。省略時は描かない。
+   */
+  mateLinks?: readonly MateLink[];
   /** 図枠テンプレート (M4 §9)。省略時は同梱のjis-a3。 */
   frame?: FrameTemplate;
   /** 表題欄バインドの文脈。省略時はシート単体 (1枚中1枚目・プロジェクト名は空)。 */
@@ -834,6 +840,32 @@ export function drawHarness(
 }
 
 /**
+ * 嵌合コネクタ対 (G14) の破線。svg.rsのrender_mate_linksと同一ルール:
+ * 両方の外形のうち、相手の配置基準点にいちばん近い点どうしを短い破線で結ぶ。
+ * 配線・シンボルより先に描いて背面に置く (ハーネス境界と同じ扱い)。
+ */
+export function drawMateLink(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  sheet: Sheet,
+  link: MateLink,
+  defs: ReadonlyMap<string, SymbolDef>,
+): void {
+  const seg = mateLinkSegment(sheet, link, defs);
+  if (!seg) return;
+  ctx.strokeStyle = theme.harness;
+  ctx.lineWidth = 1;
+  ctx.setLineDash(MATE_LINE_DASH.map((d) => Math.max(2, d * vp.scale)));
+  ctx.beginPath();
+  const a = vp.toScreen(seg.a);
+  const b = vp.toScreen(seg.b);
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/**
  * 図形 (G10) を1つ描く。矩形・線・円・折れ線を、色トークン・線幅・破線・塗りのとおりに。
  * Rust側 svg.rs の render_shapes と同一ルール (破線3mm/間隔2mm、塗りは下が透ける濃さ)。
  * 配線・シンボルより先に描いて背面に置く。
@@ -1127,6 +1159,12 @@ export function renderSheet(
   for (const e of entities) {
     if (e.kind !== "harness") continue;
     drawHarness(ctx, vp, e.points, e.name, opts.selection.has(e.id));
+  }
+  // 嵌合コネクタ対 (G14) の破線も配線・シンボルの背面
+  if (!hidden.has("refs")) {
+    for (const link of opts.mateLinks ?? []) {
+      drawMateLink(ctx, vp, sheet, link, defs);
+    }
   }
   for (const e of entities) {
     if (e.kind !== "wire") continue;

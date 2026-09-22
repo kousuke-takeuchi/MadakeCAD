@@ -265,6 +265,8 @@ export interface Project {
    * この定義で描かれる。未指定・未知idは既定の`jis-a3`。
    */
   frame_template?: string | null;
+  /** プロジェクト番号 (G16)。表題欄バインド`{project.no}`の供給元。未設定はnull。 */
+  no?: string | null;
 }
 
 /** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */
@@ -293,6 +295,12 @@ export type Command =
   | { type: "set_revisions"; sheet_id: string; revisions: Revision[] }
   /** シートの注記文字高 (mm) の設定。nullで既定 (2.0mm) へ戻す。範囲は1.0〜3.5mm。 */
   | { type: "set_sheet_annotation_text"; sheet_id: string; height_mm: number | null }
+  /**
+   * シートの用紙サイズ・向きの変更 (G15)。既存エンティティの座標はそのまま
+   * (動かない・消えない)。新しい用紙の外に出たエンティティはERC警告
+   * (`erc.outside_paper`) で報告するだけで、動かしたり消したりしない。
+   */
+  | { type: "set_sheet_paper"; sheet_id: string; size: PaperSize; orientation: Orientation }
   | { type: "add_entity"; sheet_id: string; entity: Entity }
   | { type: "update_entity"; sheet_id: string; entity: Entity }
   | { type: "delete_entities"; sheet_id: string; ids: string[] }
@@ -321,6 +329,19 @@ export type Command =
       type: "set_panel_item_numbers";
       sheet_id: string;
       numbers: { footprint_id: string; item_no: number | null }[];
+    }
+  /**
+   * プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
+   * 各欄は省略(undefined/null)すれば変更しない。`name`/`no`はプロジェクト単位、
+   * `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く(undo一発)。
+   */
+  | {
+      type: "set_project_meta";
+      name?: string | null;
+      no?: string | null;
+      company?: string | null;
+      drawing_no?: string | null;
+      title?: string | null;
     };
 
 export type PatchOp =
@@ -332,7 +353,9 @@ export type PatchOp =
   | { op: "entity_removed"; sheet_id: string; id: string }
   | { op: "wire_parts_replaced"; wire_parts: WirePart[] }
   | { op: "plc_assignments_replaced"; assignments: PlcAssignment[] }
-  | { op: "frame_template_changed"; frame_template: string | null };
+  | { op: "frame_template_changed"; frame_template: string | null }
+  /** プロジェクト名・番号が変わった (G16)。表題欄側は各シートの`sheet_meta_updated`で届く。 */
+  | { op: "project_meta_changed"; name: string; no: string | null };
 
 export interface Patch {
   revision: number;

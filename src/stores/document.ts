@@ -12,6 +12,7 @@ import {
   type DeviceBlock,
 } from "../canvas/relayXref";
 import { sheetDeviceXrefs, sheetXrefs } from "../canvas/xref";
+import { mateLinks, type MateLink } from "../canvas/mate";
 import {
   DEFAULT_FRAME_TEMPLATE,
   DEFAULT_FRAME_TEMPLATE_ID,
@@ -43,6 +44,8 @@ export interface SheetAnnotations {
   };
   /** シンボルのid → デバイス単位シート間XRefテキスト (G13)。 */
   deviceXrefs: Map<string, string>;
+  /** このシート上で図面に破線を描くべき嵌合コネクタ対 (G14)。 */
+  mateLinks: MateLink[];
 }
 
 interface DocumentState {
@@ -135,6 +138,7 @@ export const useDocumentStore = defineStore("document", {
           deviceBlocks: sheetDeviceBlocks(project, sheet.id),
         },
         deviceXrefs: sheetDeviceXrefs(project, sheet.id),
+        mateLinks: project ? mateLinks(project, this.symbolDefs).filter((l) => l.sheetId === sheet.id) : [],
       };
     },
 
@@ -242,6 +246,12 @@ export const useDocumentStore = defineStore("document", {
             break;
           case "frame_template_changed":
             if (this.project) this.project.frame_template = op.frame_template;
+            break;
+          case "project_meta_changed":
+            if (this.project) {
+              this.project.name = op.name;
+              this.project.no = op.no;
+            }
             break;
         }
       }

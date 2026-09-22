@@ -17,6 +17,7 @@ import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import type { Entity, TextAnchor, TextColorToken } from "../ipc";
 import { FUNCTION_LABEL_ATTR, TEXT_ANCHORS, TEXT_COLOR_TOKENS } from "../canvas/textStyle";
 import { COIL_SYMBOL_ID, DEVICE_BLOCK_ATTR, isDeviceBlock } from "../canvas/relayXref";
+import { MATES_WITH_ATTR, isConnectorInstance } from "../canvas/mate";
 import { useBlockEditorStore } from "../stores/blockEditor";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
@@ -83,6 +84,8 @@ const buf = reactive({
   functionLabel: "",
   /** リレーコイルの実機ブロック表示 (G7)。 */
   deviceBlock: false,
+  /** 嵌合コネクタ対 (G14): 相手の参照記号。空 = 未宣言。 */
+  mate: "",
   /** 盤の要素 (M4 §8): 外形・ダクト・フットプリントの寸法、レールの取付線と両端。 */
   w: "",
   h: "",
@@ -143,6 +146,7 @@ watch(
       buf.value = e.value;
       buf.functionLabel = e.attrs?.[FUNCTION_LABEL_ATTR] ?? "";
       buf.deviceBlock = isDeviceBlock(e);
+      buf.mate = e.attrs?.[MATES_WITH_ATTR] ?? "";
     } else if (e.kind === "text") {
       buf.anchor = e.anchor ?? "start";
       buf.textColor = e.color ?? "default";
@@ -285,6 +289,10 @@ async function apply() {
     // 実機ブロック表示 (G7) もattrsに入れる。「オフ」はキーごと消して従来の形に戻す
     if (buf.deviceBlock) attrs[DEVICE_BLOCK_ATTR] = "true";
     else delete attrs[DEVICE_BLOCK_ATTR];
+    // 嵌合相手 (G14) はコネクタ一族だけの欄。空ならキーごと消す
+    const mate = buf.mate.trim();
+    if (isConnectorInstance(e.symbol_id) && mate) attrs[MATES_WITH_ATTR] = mate;
+    else delete attrs[MATES_WITH_ATTR];
     entity = { ...e, reference: buf.reference, value: buf.value, attrs };
     if (isDeviceBlock(e) !== buf.deviceBlock) {
       ui.log(
@@ -358,6 +366,11 @@ const isBlock = computed(
 /** 選択中がリレーコイルか (実機ブロック切替 (G7) を出す条件)。 */
 const isRelayCoil = computed(
   () => selected.value?.kind === "symbol" && selected.value.symbol_id === COIL_SYMBOL_ID,
+);
+
+/** 選択中が嵌合コネクタ一族か (嵌合相手欄 (G14) を出す条件)。 */
+const isConnector = computed(
+  () => selected.value?.kind === "symbol" && isConnectorInstance(selected.value.symbol_id),
 );
 
 /** 選択中のブロックのピン構成 (「左5 / 右3」)。 */
@@ -496,6 +509,18 @@ const kindLabel = computed<Record<string, string>>(() => ({
             <input v-model="buf.deviceBlock" type="checkbox" @change="apply" />
             {{ t("relay.deviceBlockLabel") }}
           </label>
+        </span>
+      </div>
+      <div v-if="isConnector" class="prow">
+        <span class="plabel">{{ t("mate.row") }}</span>
+        <span class="pvalue" :title="t('mate.hint')">
+          <input
+            v-model="buf.mate"
+            class="bare mono"
+            :placeholder="t('mate.placeholder')"
+            spellcheck="false"
+            @keyup.enter="apply"
+          />
         </span>
       </div>
       <template v-if="isBlock">

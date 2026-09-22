@@ -992,6 +992,47 @@
     "deviceBlockOff": "オフ",
     "deviceBlockChangedLog": "{reference}: 実機ブロック表示を{state}にしました"
   },
+  "mate": {
+    "row": "嵌合相手",
+    "placeholder": "例 J12",
+    "hint": "嵌合する相手コネクタ(プラグ⇔ソケット)の参照記号。両方のコネクタに書くと対として結び付き、電線リスト・From-To帳票に嵌合相手列が載り、同一シート上で50mm以内なら短い破線が自動で描かれます。"
+  },
+  "projectInfo": {
+    "ribbonButton": "プロジェクト情報",
+    "title": "プロジェクト情報",
+    "close": "閉じる",
+    "note": "名前・番号はプロジェクト単位です。会社名・図番・表題は全シートの表題欄へ一括で書き込まれます。",
+    "name": "プロジェクト名",
+    "no": "プロジェクト番号",
+    "company": "会社名",
+    "drawingNo": "図番",
+    "titleBlockTitle": "表題",
+    "hint": "保存はコマンド1回 (undo可)。変更した欄だけが送られます。表題欄の欄は全シートを上書きします。",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "saving": "保存中...",
+    "openLog": "プロジェクト情報: 編集中",
+    "savedLog": "プロジェクト情報: 保存しました (Cmd+Zで取り消せます)",
+    "unchangedLog": "プロジェクト情報: 変更なしで閉じました"
+  },
+  "sheetPaper": {
+    "ribbonButton": "用紙サイズ",
+    "title": "用紙変更 — {sheet}",
+    "close": "閉じる",
+    "note": "既存のエンティティは座標を保ったまま動かず、消えもしません。新しい用紙の外に出たものはERC警告として報告されます。",
+    "size": "サイズ",
+    "orientation": "向き",
+    "landscape": "横",
+    "portrait": "縦",
+    "hint": "保存はコマンド1回 (undo可)。",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "saving": "保存中...",
+    "openLog": "用紙変更: 「{sheet}」を編集中",
+    "savedLog": "用紙変更: 「{sheet}」に保存しました (Cmd+Zで取り消せます)",
+    "unchangedLog": "用紙変更: 変更なしで閉じました",
+    "noSheetLog": "用紙変更: シートが開かれていません"
+  },
   "panel": {
     "tab": "未配置部品",
     "head": "未配置部品 (回路図より)",
