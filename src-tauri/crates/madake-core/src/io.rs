@@ -182,6 +182,31 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// A project file from the version that introduced shapes still opens with its shapes intact, so a drawing made back then looks the same today.
+    /// 図形が導入された版のプロジェクトファイルは、図形を保ったまま今でも開く (当時描いた図面の見た目が変わらない)。
+    #[test]
+    fn a_project_file_from_the_version_that_introduced_shapes_keeps_them() {
+        let dir = std::env::temp_dir().join(format!("madake-io-shape-v8-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("v8.mdkproj");
+        // 図形エンティティが入った当時 (format_version 8) のファイル
+        std::fs::write(
+            &path,
+            r#"{"format_version":8,"name":"旧図面","wire_parts":[],"plc_assignments":[],
+                "sheets":[{"id":"66666666-6666-4666-8666-666666666666","name":"S1","size":"A3",
+                "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},
+                "entities":{"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb":{"kind":"shape",
+                "id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","shape":"rect",
+                "points":[{"x":0.0,"y":0.0},{"x":10.0,"y":10.0}],"stroke":"default",
+                "stroke_width_mm":0.3,"dashed":false}}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(crate::shape::shapes(&loaded.sheets[0]).count(), 1, "図形はv8から入っている");
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// A project file saved before the note leader line existed opens with every note's leader target unset, so no note draws a leader line, and is brought up to the current format version.
     /// 注記の引き出し線が無かった頃のプロジェクトファイルは、全ての注記の引き出し先が未設定として開く (どの注記も引き出し線を描かない)。現行のファイル形式へ更新される。
     #[test]
