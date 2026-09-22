@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2023 specification clauses** across 5 areas.
+**2039 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -140,6 +140,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project file saved before frame templates existed opens with no frame template set, which means it is drawn with the default JIS A3 frame exactly as before. <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
 - A project file saved before panel layouts existed opens with every sheet as a schematic sheet and is brought up to the current format version. <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
 - A project file saved before shapes existed opens exactly as it was, with no shapes on its sheets, and is brought up to the current format version. <sub>`an_old_project_file_opens_without_any_shapes`</sub>
+- A project file from the version that introduced shapes still opens with its shapes intact, so a drawing made back then looks the same today. <sub>`a_project_file_from_the_version_that_introduced_shapes_keeps_them`</sub>
 - A project file saved before the note leader line existed opens with every note's leader target unset, so no note draws a leader line, and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_leader_targets`</sub>
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
@@ -166,6 +167,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A leader line drawn from a note beside its target runs horizontally from the note's near vertical edge to the target's bounding box. <sub>`a_leader_beside_its_target_runs_horizontally`</sub>
 - leader_for follows a note that is moved: recomputing after the note's position changes yields a different geometry without touching the model. <sub>`leader_for_recomputes_after_the_note_moves`</sub>
 - leader_for returns None when leader_to is unset, so an ordinary note draws no leader line. <sub>`leader_for_is_none_without_a_leader_target`</sub>
+- A leader aimed at a symbol ends on exactly the outline the drawing shows: the placement point is always inside it, and a text mark inside the symbol counts as its own reference point, not as a box of letters. <sub>`a_leader_targets_exactly_the_outline_the_drawing_shows`</sub>
 - entity_bounds resolves a symbol instance's bounding box from its definition, so a leader can target a symbol. <sub>`entity_bounds_resolves_a_symbol_instance`</sub>
 
 ### Circuit macros
@@ -330,6 +332,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A multi-level terminal block's chart order runs level by level (1a,2a,…,1b,2b,…), so a range like "1a-4a" names a contiguous run within one level. <sub>`a_multilevel_range_within_one_level_parses`</sub>
 - Wrapping a caption splits it into chunks of at most 4 characters, in order, approximating vertical writing with stacked horizontal lines. <sub>`wrap_caption_splits_into_chunks_of_four`</sub>
 - A bracket over pins on the left side of a symbol is a vertical bar to the left of the pins, spanning from the topmost to the bottommost pin, with its caption further left still. <sub>`a_bracket_on_left_pins_is_a_vertical_bar_further_left`</sub>
+- A pin whose own number contains a hyphen cannot be named in a pin group, and says so instead of being reported as a pin that does not exist. <sub>`a_pin_number_containing_a_hyphen_is_refused_with_its_own_reason`</sub>
+- On a multi-level terminal block, a group over the second level's terminals brackets the outside of that level's own column, never the gap between the columns. <sub>`a_multilevel_group_brackets_the_outside_of_its_own_column`</sub>
 - A bracket spans pins from two different sides of a symbol (mixed pin direction) is refused: the shape would not be a straight bracket. <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
 
 ### PLC I/O
@@ -589,7 +593,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A pin_groups range draws one square-bracket polyline and its caption text on the sheet. <sub>`svg_draws_a_bracket_and_caption_for_a_pin_group`</sub>
 - A symbol with no pin_groups attribute, or an empty one, draws no bracket polyline. <sub>`svg_draws_no_bracket_without_pin_groups`</sub>
 - Overlapping pin_groups items are reported by verify (tested in verify.rs) and draw no bracket at all, while an unrelated valid item on the same instance still draws. <sub>`svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest`</sub>
-- A pin group bracket follows the symbol's rotation and mirror, exactly as the pin positions themselves do. <sub>`svg_pin_group_bracket_follows_rotation_and_mirror`</sub>
+- Pin group brackets and their captions never land on a pin number, a pin name or the symbol's designator, type or function label, for a block, a terminal block and a connector, at every rotation and mirrored. <sub>`svg_pin_group_boxes_never_land_on_any_label_at_any_rotation`</sub>
+- A pin group's caption sits beyond its bracket, further from the symbol than the bracket bar is, at every rotation and mirrored. <sub>`svg_pin_group_caption_sits_beyond_its_bracket`</sub>
+- The dot at the target end of a note's leader line is drawn exactly the size of a wire junction dot, so the two read as the same mark. <sub>`svg_leader_dot_is_the_size_of_a_wire_junction_dot`</sub>
 
 ### Symbol library
 
@@ -798,6 +804,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A terminal-block terminal counts as connected if either its left or right side is wired. <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - Missing and duplicate reference designators are flagged, but relay coil + contacts legitimately share one designator. <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
 - A pin_groups attribute that overlaps another group, or names a pin the terminal block does not have, is reported as an ERC error naming the terminal block and the bad item, instead of being silently ignored. <sub>`a_bad_pin_groups_item_is_reported_as_an_erc_error`</sub>
+- A coil drawn as a device block cannot carry pin group brackets, and says so as an ERC error instead of dropping them without a word. <sub>`pin_groups_on_a_device_block_coil_are_reported_instead_of_silently_dropped`</sub>
+- A note whose leader target was deleted afterwards is reported, so the drawing never keeps a leader pointing at nothing without saying so. <sub>`a_note_whose_leader_target_was_deleted_is_reported`</sub>
 - Wire ends attached to nothing are flagged, including an endpoint resting mid-wire without a junction dot. <sub>`dangling_wire_end_is_flagged_including_missing_junction`</sub>
 - A healthy series circuit (source, fuse, switch, lamp) raises no electrical findings. <sub>`healthy_series_circuit_has_no_elec_findings`</sub>
 - A load cut off from the power source (broken wire or open path) is reported as unreachable. <sub>`load_cut_off_from_source_is_unreachable`</sub>
@@ -1522,6 +1530,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - makes an empty minimum-sized box when there is no pin table <sub>`blockSymbol`</sub>
 - builds a block's definition from the instance attributes, not from its id <sub>`resolveInstanceDef`</sub>
 - returns nothing for a block whose attributes are broken <sub>`resolveInstanceDef`</sub>
+- grows to take in a pin group's bracket and caption, so labels are placed clear of them <sub>`symbolBounds`</sub>
+- grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption <sub>`symbolBounds`</sub>
 
 ### Frame template layout (canvas)
 
@@ -1574,6 +1584,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - recomputes after the note moves, following whichever position it is drawn at <sub>`leaderFor`</sub>
 - returns null when the target id does not exist on the sheet <sub>`leaderFor`</sub>
 - resolves a symbol instance's bounding box from its definition <sub>`entityBounds`</sub>
+- ends on exactly the outline the drawing shows, counting a text mark as its own point <sub>`entityBounds`</sub>
 - resolves shapes, harnesses, wires and junctions, and refuses panel-only entities <sub>`entityBounds`</sub>
 
 ### macroPreview
@@ -1673,8 +1684,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reports unparseable text without throwing, keeping the rest <sub>`parsePinGroups`</sub>
 - rejects both of two overlapping groups but keeps a third that does not overlap <sub>`parsePinGroups`</sub>
 - accepts a multi-level range that stays within one level <sub>`parsePinGroups`</sub>
+- refuses a pin whose own number contains a hyphen, with its own reason <sub>`parsePinGroups`</sub>
 - splits into chunks of at most 4 characters <sub>`wrapCaption`</sub>
 - draws a vertical bar further left than left-side pins, with the caption further out still <sub>`pinGroupBracket`</sub>
+- puts a block's bracket beyond the pin stubs and its caption beyond the bracket <sub>`pinGroupBracket`</sub>
+- puts a connector's bracket to the right of its pin stubs <sub>`pinGroupBracket`</sub>
+- brackets the outside of a multi-level terminal block's own column, not the gap between columns <sub>`pinGroupBracket`</sub>
 - refuses a bracket across mixed pin directions <sub>`pinGroupBracket`</sub>
 
 ### relayXref
@@ -1731,6 +1746,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - strokes the outline in the selection colour while the coil is selected <sub>`drawDeviceBlock`</sub>
 - prints the function label under the block outline <sub>`drawDeviceBlock`</sub>
 - hides the contact image rows with the reference-designator view class <sub>`drawDeviceBlock`</sub>
+- draws a note's leader dot exactly the size of a wire junction dot <sub>`renderSheet dots`</sub>
 
 ### search
 

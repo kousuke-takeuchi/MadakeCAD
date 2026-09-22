@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2023仕様項目**。
+全5領域・**2039仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -140,6 +140,7 @@
 - 図枠テンプレートが無かった頃のプロジェクトファイルは図枠未指定で開き、従来どおり既定のJIS A3図枠で描かれる。 <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
 - 盤レイアウトが無かった頃のプロジェクトファイルは全シートが回路図シートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
 - 図形が無かった頃のプロジェクトファイルはそのままの姿で開き (シートに図形は無い)、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_without_any_shapes`</sub>
+- 図形が導入された版のプロジェクトファイルは、図形を保ったまま今でも開く (当時描いた図面の見た目が変わらない)。 <sub>`a_project_file_from_the_version_that_introduced_shapes_keeps_them`</sub>
 - 注記の引き出し線が無かった頃のプロジェクトファイルは、全ての注記の引き出し先が未設定として開く (どの注記も引き出し線を描かない)。現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_leader_targets`</sub>
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
@@ -166,6 +167,7 @@
 - 対象の真横にある注記から引く引き出し線は、注記の近いほうの縦辺から対象の外接矩形まで水平に伸びる。 <sub>`a_leader_beside_its_target_runs_horizontally`</sub>
 - leader_forは注記の移動に追従する: 位置を変えて求め直すとモデルを書き換えずに違うジオメトリが返る。 <sub>`leader_for_recomputes_after_the_note_moves`</sub>
 - leader_forはleader_to未設定ならNoneを返す。普通の注記は引き出し線を描かない。 <sub>`leader_for_is_none_without_a_leader_target`</sub>
+- シンボルを指す引き出し線は、図面に描かれている外形ちょうどで止まる: 配置基準点は必ず外形の内側に入り、シンボルの中の文字は文字の箱ではなく基準点1点として数える。 <sub>`a_leader_targets_exactly_the_outline_the_drawing_shows`</sub>
 - entity_boundsはシンボルの外形をその定義から求めるので、引き出し線はシンボルも対象にできる。 <sub>`entity_bounds_resolves_a_symbol_instance`</sub>
 
 ### 回路マクロ
@@ -330,6 +332,8 @@
 - 多段端子台のチャート順は段ごとに並ぶ (1a,2a,…,1b,2b,…) ので、"1a-4a"のような範囲は1段の中で連続する。 <sub>`a_multilevel_range_within_one_level_parses`</sub>
 - キャプションの折り返しは4文字ごとに順番どおり分割し、横書きの行を積んで縦書きを近似する。 <sub>`wrap_caption_splits_into_chunks_of_four`</sub>
 - シンボル左側のピンにかける括弧は、いちばん上から下のピンまで縦棒でつながり、キャプションはさらに左に置かれる。 <sub>`a_bracket_on_left_pins_is_a_vertical_bar_further_left`</sub>
+- ピン番号そのものに「-」が入っている端子はピングループに指定できず、「存在しないピン」ではなく使えない理由がそのまま報告される。 <sub>`a_pin_number_containing_a_hyphen_is_refused_with_its_own_reason`</sub>
+- 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない)。 <sub>`a_multilevel_group_brackets_the_outside_of_its_own_column`</sub>
 - シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される: まっすぐな括弧にならないため。 <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
 
 ### PLC I/O
@@ -589,7 +593,9 @@
 - pin_groups の範囲は、角括弧のポリライン1本とそのキャプション文字をシートに描く。 <sub>`svg_draws_a_bracket_and_caption_for_a_pin_group`</sub>
 - pin_groups属性が無い・空のシンボルには括弧のポリラインが描かれない。 <sub>`svg_draws_no_bracket_without_pin_groups`</sub>
 - 重なるpin_groups項目は (verify.rsで検証済みのとおり) 括弧を一切描かず、同じインスタンスの関係ない有効な項目は変わらず描かれる。 <sub>`svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest`</sub>
-- ピングループ括弧はシンボルの回転・ミラーに、ピンそのものの位置と同じように追従する。 <sub>`svg_pin_group_bracket_follows_rotation_and_mirror`</sub>
+- ピングループの括弧とキャプションは、ブロック・端子台・コネクタのいずれでも、全ての回転とミラーで、ピン番号・ピン名・参照記号・型番・機能ラベルのどれにも重ならない。 <sub>`svg_pin_group_boxes_never_land_on_any_label_at_any_rotation`</sub>
+- ピングループのキャプションは括弧の外側 (シンボルから見て括弧の棒よりさらに遠く) に置かれる。回転・ミラーでも変わらない。 <sub>`svg_pin_group_caption_sits_beyond_its_bracket`</sub>
+- 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える)。 <sub>`svg_leader_dot_is_the_size_of_a_wire_junction_dot`</sub>
 
 ### シンボルライブラリ
 
@@ -798,6 +804,8 @@
 - 端子台の端子は左右どちらか一方が結線されていれば接続済みとみなす。 <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - 参照記号の未設定・重複は指摘されるが、リレーのコイル+接点が同じ記号を共有するのは正当として許容される。 <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
 - 他のグループと重なる・端子台に無いピンを指すpin_groups属性は、黙って無視されるのではなく端子台とその項目名を添えたERCエラーとして報告される。 <sub>`a_bad_pin_groups_item_is_reported_as_an_erc_error`</sub>
+- 実機ブロック表示のコイルにはピングループ括弧を描けないので、黙って消えるのではなくERCエラーとして理由が報告される。 <sub>`pin_groups_on_a_device_block_coil_are_reported_instead_of_silently_dropped`</sub>
+- 引き出し先を後から削除された注記は指摘される。行き先の無い引き出し先を黙って抱えたままにしない。 <sub>`a_note_whose_leader_target_was_deleted_is_reported`</sub>
 - どこにも接続されていないワイヤ端点は指摘される(ジャンクション無しで他ワイヤの途中に乗る端点も含む)。 <sub>`dangling_wire_end_is_flagged_including_missing_junction`</sub>
 - 健全な直列回路(電源・ヒューズ・スイッチ・ランプ)では電気検証の指摘は出ない。 <sub>`healthy_series_circuit_has_no_elec_findings`</sub>
 - 電源から切り離された負荷(断線・開路)は「到達不能」として報告される。 <sub>`load_cut_off_from_source_is_unreachable`</sub>
@@ -1522,6 +1530,8 @@
 - ピン表の無いブロックは最小サイズの空の箱になる <sub>`blockSymbol`</sub>
 - 配置済みブロックの定義はインスタンスの属性から作られる(同じidでも中身が違う) <sub>`resolveInstanceDef`</sub>
 - 属性が壊れているブロックは描かれない(undefinedになる) <sub>`resolveInstanceDef`</sub>
+- ピングループ括弧はシンボルと一緒に描かれるので、参照記号・型番の位置決めに使う外形にはその箱も入る (Rust側 svg::symbol_bounds とparity) <sub>`symbolBounds`</sub>
+- 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない) <sub>`symbolBounds`</sub>
 
 ### 図枠テンプレートの配置計算 (キャンバス)
 
@@ -1574,6 +1584,7 @@
 - 対象がシート上に実在すれば線が引け、注記を動かすと引き出し線も追従して変わる <sub>`leaderFor`</sub>
 - 対象のエンティティidが存在しない・削除されていればnull (パニックせず何も描かない) <sub>`leaderFor`</sub>
 - シンボルの外形はその定義から求まるので、引き出し線はシンボルも対象にできる <sub>`entityBounds`</sub>
+- シンボルを指す引き出し線は図面に描かれている外形ちょうどで止まる: 配置基準点は必ず外形の内側に入り、シンボルの中の文字は文字の箱ではなく基準点1点として数える (Rust側 a_leader_targets_exactly_the_outline_the_drawing_shows とparity) <sub>`entityBounds`</sub>
 - 図形・ハーネス・配線・ジャンクションも対象にでき、盤レイアウト専用のエンティティはnull <sub>`entityBounds`</sub>
 
 ### macroPreview
@@ -1673,8 +1684,12 @@
 - コロンが無い・範囲が空の読めない記述はパニックせず不正として報告され、残りの項目は解析される <sub>`parsePinGroups`</sub>
 - チャート順の範囲が重なる2つのグループはどちらも報告されグループにならないが、重ならない3つ目は残る <sub>`parsePinGroups`</sub>
 - 多段端子台のチャート順は段ごとに並ぶ (1a,2a,…,1b,2b,…) ので、"1a-4a"は1段の中で連続する <sub>`parsePinGroups`</sub>
+- ピン番号そのものに「-」が入っている端子はピングループに指定できず、使えない理由がそのまま報告される (Rust側とparity) <sub>`parsePinGroups`</sub>
 - キャプションの折り返しは4文字ごとに順番どおり分割する <sub>`wrapCaption`</sub>
 - シンボル左側のピンにかける括弧は、いちばん上から下のピンまで縦棒でつながり、キャプションはさらに左に置かれる <sub>`pinGroupBracket`</sub>
+- ブロックでも括弧は左のピンの足先より外に出て、キャプションはさらに外に置かれる (Rust側の3一族テストとparity) <sub>`pinGroupBracket`</sub>
+- コネクタは右側にピンが出るので、括弧とキャプションは足先より右に出る (Rust側の3一族テストとparity) <sub>`pinGroupBracket`</sub>
+- 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない、Rust側とparity) <sub>`pinGroupBracket`</sub>
 - シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される <sub>`pinGroupBracket`</sub>
 
 ### relayXref
@@ -1731,6 +1746,7 @@
 - 選択中の実機ブロックは、ほかのシンボルと同じように選択色の外形で描かれる <sub>`drawDeviceBlock`</sub>
 - 実機ブロックのコイルにも機能ラベルは外形の下に描かれる (G4) <sub>`drawDeviceBlock`</sub>
 - 表示クラス「参照記号」を隠すと、実機ブロックの接点イメージ(端子対と所在)も消える(外形とヘッダは残る) <sub>`drawDeviceBlock`</sub>
+- 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える。Rust側 svg_leader_dot_is_the_size_of_a_wire_junction_dot とparity) <sub>`renderSheet dots`</sub>
 
 ### search
 
