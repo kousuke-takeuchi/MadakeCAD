@@ -2381,10 +2381,11 @@ mod tests {
             .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
             .map(|l| {
                 let h = JUMPER_BAR_STROKE / 2.0;
+                // 端子は2.5mmグリッド上・回転は0/90/180/270だけなので、バーは必ず縦か横になる
                 let (hx, hy) = match ((l.0 - l.2).abs() < 1e-9, (l.1 - l.3).abs() < 1e-9) {
                     (true, false) => (h, 0.0), // 縦のバー
                     (false, true) => (0.0, h), // 横のバー
-                    _ => (h, h),
+                    _ => panic!("ジャンパバーが縦にも横にもなっていない: {l:?}"),
                 };
                 (
                     l.0.min(l.2) - hx,
@@ -2526,31 +2527,143 @@ mod tests {
         }
     }
 
-    /// A terminal block's number sits centred on its own round mark however the block is turned or mirrored, instead of sliding off to one side, so every terminal of a rotated block can still be read off its mark.
-    /// 端子台の端子番号は、端子台をどの向きに回しても反転しても、自分の印(丸)の中央に載ったままで横にずれないので、回した端子台でも端子ごとに番号が読める。
+    /// 端子番号1つぶんの矩形と、その番号が載っている印 (一番近い印) の中心を返す。
+    fn number_on_its_mark(
+        b: (f64, f64, f64, f64),
+        marks: &[(f64, f64, f64)],
+    ) -> ((f64, f64), (f64, f64)) {
+        let centre = ((b.0 + b.2) / 2.0, (b.1 + b.3) / 2.0);
+        let mark = marks
+            .iter()
+            .min_by(|p, q| {
+                let d = |m: &&(f64, f64, f64)| (centre.0 - m.0).hypot(centre.1 - m.1);
+                d(p).total_cmp(&d(q))
+            })
+            .expect("印が1つも無い");
+        (centre, (mark.0, mark.1))
+    }
+
+    /// A terminal number of one or two characters sits wholly inside its own round mark, centred on it, however the block is turned or mirrored, so a rotated terminal block still reads terminal by terminal.
+    /// 1〜2文字の端子番号は、端子台をどの向きに回しても反転しても、自分の印(丸)の中に丸ごと収まり、その中央に載る。だから回した端子台でも端子ごとに番号が読める。
     #[test]
-    fn a_turned_terminal_block_keeps_each_number_centred_on_its_own_mark() {
+    fn a_turned_terminal_block_keeps_a_short_number_inside_its_own_mark() {
         let mark_r = crate::symbol::TERMINAL_MARK_R;
-        for (rotation, mirror) in [(0u16, false), (90, false), (180, false), (270, false), (0, true)]
-        {
-            let svg = jumper_sheet("terminal_block_4p", "1-2", rotation, mirror);
+        // 1文字 (`1`〜`4`) と2文字 (`10`〜`12`) の端子番号を持つ端子台
+        for (symbol_id, count) in [("terminal_block_4p", 4), ("terminal_block_12p", 12)] {
+            for (rotation, mirror) in
+                [(0u16, false), (90, false), (180, false), (270, false), (0, true)]
+            {
+                let svg = jumper_sheet(symbol_id, "1-2", rotation, mirror);
+                let marks: Vec<_> = svg_circles(&svg)
+                    .into_iter()
+                    .filter(|c| (c.2 - mark_r).abs() < 1e-9)
+                    .collect();
+                let numbers = number_boxes(&svg);
+                assert_eq!(numbers.len(), count, "{symbol_id} rot={rotation}: {numbers:?}");
+                for b in numbers {
+                    let (centre, mark) = number_on_its_mark(b, &marks);
+                    let off = (centre.0 - mark.0).hypot(centre.1 - mark.1);
+                    assert!(
+                        off <= mark_r / 2.0,
+                        "{symbol_id} rot={rotation} mirror={mirror}: 番号{b:?}が印の中央から{off}mmずれている"
+                    );
+                    for (x, y) in [(b.0, b.1), (b.2, b.1), (b.0, b.3), (b.2, b.3)] {
+                        let d = (x - mark.0).hypot(y - mark.1);
+                        assert!(
+                            d <= mark_r,
+                            "{symbol_id} rot={rotation} mirror={mirror}: 番号{b:?}の角が印から{}mm出る",
+                            d - mark_r
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// On an unturned terminal block each terminal number is written with its baseline exactly half a character below the centre of its own mark, single-level and multi-level blocks alike.
+    /// 回していない端子台では、どの端子番号も自分の印の中心のちょうど文字高の半分だけ下にベースラインが来る。単段でも多段でも同じ。
+    #[test]
+    fn a_terminal_number_sits_half_a_character_below_its_mark_centre() {
+        let mark_r = crate::symbol::TERMINAL_MARK_R;
+        let height = crate::symbol::TERMINAL_NUMBER_HEIGHT;
+        for (symbol_id, count) in [("terminal_block_4p", 4), ("terminal_block_4p_2l", 8)] {
+            let svg = jumper_sheet(symbol_id, "", 0, false);
             let marks: Vec<_> = svg_circles(&svg)
                 .into_iter()
                 .filter(|c| (c.2 - mark_r).abs() < 1e-9)
                 .collect();
-            let numbers = number_boxes(&svg);
-            assert_eq!(numbers.len(), 4, "rot={rotation} mirror={mirror}: {numbers:?}");
-            for b in numbers {
-                // 文字の四隅が印の中に収まり、文字の中心が印の中心の近く (半径の半分以内) にある
-                let (bx, by) = ((b.0 + b.2) / 2.0, (b.1 + b.3) / 2.0);
-                let corners = [(b.0, b.1), (b.2, b.1), (b.0, b.3), (b.2, b.3)];
-                let on_mark = marks.iter().any(|m| {
-                    ((bx - m.0).powi(2) + (by - m.1).powi(2)).sqrt() <= mark_r / 2.0
-                        && corners
-                            .iter()
-                            .all(|(x, y)| ((x - m.0).powi(2) + (y - m.1).powi(2)).sqrt() <= m.2)
-                });
-                assert!(on_mark, "rot={rotation} mirror={mirror}: 番号{b:?}が印の中央に無い");
+            let numbers: Vec<_> = svg_texts(&svg)
+                .into_iter()
+                .filter(|t| (t.2 - height).abs() < 1e-9)
+                .collect();
+            assert_eq!(marks.len(), count, "{symbol_id}: {marks:?}");
+            assert_eq!(numbers.len(), count, "{symbol_id}: {numbers:?}");
+            for m in &marks {
+                let want = (m.0, m.1 + height / 2.0);
+                assert_eq!(
+                    numbers.iter().filter(|t| (t.0, t.1) == want).count(),
+                    1,
+                    "{symbol_id}: 印{m:?}の番号が{want:?}に無い ({numbers:?})"
+                );
+            }
+        }
+    }
+
+    /// A three-character terminal number (a multi-level block's "10a") is as wide as its own mark, so it is centred on the mark and hangs at most three tenths of a millimetre over it, while still never running into a jumper bar or into a neighbouring terminal's mark.
+    /// 3文字の端子番号 (多段端子台の`10a`など) は自分の印と同じ幅なので、印の中央に載せたうえで、印から出るのは最大0.3mmまでに収まる。そのうえでジャンパバーにも隣の端子の印にも掛からない。
+    #[test]
+    fn a_three_character_terminal_number_hangs_at_most_a_little_over_its_own_mark() {
+        let mark_r = crate::symbol::TERMINAL_MARK_R;
+        /// 印からはみ出してよい量 (mm)。
+        const OVERHANG_MAX: f64 = 0.3;
+        for (symbol_id, jumpers, count) in [
+            ("terminal_block_12p_2l", "10a-10b,11a-12a", 24),
+            ("terminal_block_12p_3l", "10a-10b,10b-10c", 36),
+        ] {
+            for rotation in [0u16, 90] {
+                let svg = jumper_sheet(symbol_id, jumpers, rotation, false);
+                let marks: Vec<_> = svg_circles(&svg)
+                    .into_iter()
+                    .filter(|c| (c.2 - mark_r).abs() < 1e-9)
+                    .collect();
+                let bars = jumper_boxes(&svg);
+                assert!(!bars.is_empty(), "{symbol_id} rot={rotation}: バーが無い");
+                let numbers = number_boxes(&svg);
+                assert_eq!(numbers.len(), count, "{symbol_id} rot={rotation}: {numbers:?}");
+                for b in numbers {
+                    let (centre, mark) = number_on_its_mark(b, &marks);
+                    let off = (centre.0 - mark.0).hypot(centre.1 - mark.1);
+                    assert!(
+                        off <= mark_r / 2.0,
+                        "{symbol_id} rot={rotation}: 番号{b:?}が印の中央から{off}mmずれている"
+                    );
+                    for (x, y) in [(b.0, b.1), (b.2, b.1), (b.0, b.3), (b.2, b.3)] {
+                        let over = (x - mark.0).hypot(y - mark.1) - mark_r;
+                        assert!(
+                            over <= OVERHANG_MAX,
+                            "{symbol_id} rot={rotation}: 番号{b:?}の角が印から{over}mm出る"
+                        );
+                    }
+                    for bar in &bars {
+                        assert!(
+                            !overlaps(*bar, b),
+                            "{symbol_id} rot={rotation}: 番号{b:?}がジャンパバー{bar:?}に掛かる"
+                        );
+                    }
+                    // 隣の端子の印には入らない (矩形の一番近い点が印の外)
+                    for m in &marks {
+                        if (m.0 - mark.0).abs() < 1e-9 && (m.1 - mark.1).abs() < 1e-9 {
+                            continue;
+                        }
+                        let nx = m.0.clamp(b.0, b.2);
+                        let ny = m.1.clamp(b.1, b.3);
+                        let d = (nx - m.0).hypot(ny - m.1);
+                        assert!(
+                            d > mark_r,
+                            "{symbol_id} rot={rotation}: 番号{b:?}が隣の印{m:?}に入る"
+                        );
+                    }
+                }
             }
         }
     }

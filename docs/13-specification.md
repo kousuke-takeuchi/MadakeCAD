@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1905 specification clauses** across 5 areas.
+**1909 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -531,7 +531,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - On a multi-level terminal block, a jumper written with level letters ("1a-1b") is drawn on that pole's row as a bar in the gap between the two level columns' marks. <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
 - A jumper bar turns with its terminal block, so on a block rotated a quarter turn the bar lies between the rotated terminals instead of staying upright. <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
 - The lettering inside a symbol (a motor's "M", for instance) is drawn at the place the symbol definition gives it and stays there whatever the symbol's rotation or mirroring, because the letters themselves are always written horizontally. <sub>`the_lettering_inside_a_symbol_stays_put_when_the_symbol_is_turned`</sub>
-- A terminal block's number sits centred on its own round mark however the block is turned or mirrored, instead of sliding off to one side, so every terminal of a rotated block can still be read off its mark. <sub>`a_turned_terminal_block_keeps_each_number_centred_on_its_own_mark`</sub>
+- A terminal number of one or two characters sits wholly inside its own round mark, centred on it, however the block is turned or mirrored, so a rotated terminal block still reads terminal by terminal. <sub>`a_turned_terminal_block_keeps_a_short_number_inside_its_own_mark`</sub>
+- On an unturned terminal block each terminal number is written with its baseline exactly half a character below the centre of its own mark, single-level and multi-level blocks alike. <sub>`a_terminal_number_sits_half_a_character_below_its_mark_centre`</sub>
+- A three-character terminal number (a multi-level block's "10a") is as wide as its own mark, so it is centred on the mark and hangs at most three tenths of a millimetre over it, while still never running into a jumper bar or into a neighbouring terminal's mark. <sub>`a_three_character_terminal_number_hangs_at_most_a_little_over_its_own_mark`</sub>
 - A jumper bar is drawn at least twice as thick as an ordinary symbol line, so that the short bar in the narrow gap between two terminal marks still reads as a shorting bar when the sheet is printed. <sub>`the_jumper_bar_is_at_least_twice_as_thick_as_a_symbol_line`</sub>
 - A jumper written between two terminals that are not adjacent is invalid (the same rule the terminal chart enforces), so no bar is drawn for it at all. <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - A terminal block with several jumpers gets one bar per jumper. <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
@@ -1620,7 +1622,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - turns arcs with the symbol so the contactor half circle keeps facing its moving contact <sub>`rotateArcAngles`</sub>
 - mirrors arcs left to right while keeping the clockwise drawing direction <sub>`rotateArcAngles`</sub>
 - keeps the lettering inside a symbol where the symbol definition puts it, whatever the rotation <sub>`drawSymbol text placement`</sub>
-- keeps a turned terminal block's number centred on its own mark <sub>`drawSymbol text placement`</sub>
+- keeps a one- or two-character terminal number inside its own mark, whatever the rotation <sub>`drawSymbol text placement`</sub>
+- puts an unturned terminal block's number half a character below its mark centre <sub>`drawSymbol text placement`</sub>
+- draws a jumper as a bar only, with no round mark at either end <sub>`drawSymbol text placement`</sub>
 
 ### search
 

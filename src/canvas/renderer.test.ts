@@ -13,6 +13,7 @@ import {
   transformLocal,
   visibleRevisions,
 } from "./renderer";
+import { JUMPER_BAR_STROKE_MM } from "./terminalJumpers";
 import { Viewport } from "./viewport";
 
 function rev(mark: string): Revision {
@@ -124,9 +125,11 @@ describe("rotateArcAngles", () => {
 });
 
 describe("drawSymbol text placement", () => {
-  /** fillTextの呼び出しだけを記録する最小のキャンバス。 */
+  /** fillText / arc / stroke の呼び出しだけを記録する最小のキャンバス。 */
   function recorder() {
     const texts: { text: string; x: number; y: number }[] = [];
+    const arcs: { x: number; y: number; r: number }[] = [];
+    const strokeWidths: number[] = [];
     const ctx = {
       strokeStyle: "",
       fillStyle: "",
@@ -137,14 +140,38 @@ describe("drawSymbol text placement", () => {
       moveTo() {},
       lineTo() {},
       closePath() {},
-      stroke() {},
+      stroke() {
+        strokeWidths.push(ctx.lineWidth);
+      },
       fill() {},
-      arc() {},
+      arc(x: number, y: number, r: number) {
+        arcs.push({ x, y, r });
+      },
       fillText(text: string, x: number, y: number) {
         texts.push({ text, x, y });
       },
     };
-    return { ctx: ctx as unknown as CanvasRenderingContext2D, texts };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, texts, arcs, strokeWidths };
+  }
+
+  /** 端子台1台を画面に描いて、記録したfillText/arcを返す。 */
+  function drawTerminalBlock(symbolId: string, jumpers: string, rotation: number, mirror = false) {
+    const def = dynamicSymbol(symbolId)!;
+    const rec = recorder();
+    const vp = new Viewport();
+    vp.scale = 4;
+    const inst: SymbolInstance = {
+      id: "s",
+      symbol_id: symbolId,
+      at: { x: 100, y: 50 },
+      rotation,
+      mirror,
+      reference: "",
+      value: "",
+      attrs: jumpers ? { jumpers } : {},
+    };
+    drawSymbol(rec.ctx, vp, inst, def, false, undefined, false);
+    return { ...rec, def, vp, inst };
   }
 
   /** モータのように、外形の中心に文字を1つ持つシンボル。 */
@@ -197,53 +224,78 @@ describe("drawSymbol text placement", () => {
     }
   });
 
-  // ja: 端子台の端子番号は、どの向きに回しても反転しても自分の印(丸)の中央に載ったままになる
-  it("keeps a turned terminal block's number centred on its own mark", () => {
-    const def = dynamicSymbol("terminal_block_4p")!;
-    for (const [rotation, mirror] of [
-      [0, false],
-      [90, false],
-      [180, false],
-      [270, false],
-      [0, true],
+  // ja: 1〜2文字の端子番号は、どの向きに回しても反転しても自分の印(丸)の中に丸ごと収まる
+  it("keeps a one- or two-character terminal number inside its own mark, whatever the rotation", () => {
+    for (const [symbolId, count] of [
+      ["terminal_block_4p", 4],
+      ["terminal_block_12p", 12],
     ] as const) {
-      const { ctx, texts } = recorder();
-      const vp = new Viewport();
-      vp.scale = 4;
-      const inst: SymbolInstance = {
-        id: "s",
-        symbol_id: "terminal_block_4p",
-        at: { x: 100, y: 50 },
-        rotation,
-        mirror,
-        reference: "",
-        value: "",
-        attrs: {},
-      };
-      drawSymbol(ctx, vp, inst, def, false, undefined, false);
-      expect(texts).toHaveLength(4);
+      for (const [rotation, mirror] of [
+        [0, false],
+        [90, false],
+        [180, false],
+        [270, false],
+        [0, true],
+      ] as const) {
+        const { texts, def, vp, inst } = drawTerminalBlock(symbolId, "", rotation, mirror);
+        expect(texts).toHaveLength(count);
+        const marks = def.primitives
+          .filter((q): q is Extract<Primitive, { type: "circle" }> => q.type === "circle")
+          .map((q) => vp.toScreen(transformLocal(q.center, inst)));
+        for (const t of texts) {
+          // 文字は中心揃え・ベースライン基準。幅=文字数x文字高x0.6、高さ=文字高x0.7
+          const half = (t.text.length * TERMINAL_NUMBER_HEIGHT * 0.6 * vp.scale) / 2;
+          const top = t.y - TERMINAL_NUMBER_HEIGHT * 0.7 * vp.scale;
+          const corners = [
+            [t.x - half, top],
+            [t.x + half, top],
+            [t.x - half, t.y],
+            [t.x + half, t.y],
+          ];
+          // 四隅が印の中に収まり、文字の中心が印の中心の近く (半径の半分以内) にある
+          const centre = [t.x, (top + t.y) / 2];
+          const onMark = marks.some(
+            (m) =>
+              Math.hypot(centre[0] - m.x, centre[1] - m.y) <= (TERMINAL_MARK_R / 2) * vp.scale &&
+              corners.every(([x, y]) => Math.hypot(x - m.x, y - m.y) <= TERMINAL_MARK_R * vp.scale),
+          );
+          expect(onMark, `${symbolId} rot=${rotation} mirror=${mirror}: ${t.text}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  // ja: 回していない端子台の番号は、印の中心から文字高の半分だけ下にベースラインが来る
+  it("puts an unturned terminal block's number half a character below its mark centre", () => {
+    for (const symbolId of ["terminal_block_4p", "terminal_block_4p_2l"]) {
+      const { texts, def, vp, inst } = drawTerminalBlock(symbolId, "", 0);
       const marks = def.primitives
         .filter((q): q is Extract<Primitive, { type: "circle" }> => q.type === "circle")
         .map((q) => vp.toScreen(transformLocal(q.center, inst)));
-      for (const t of texts) {
-        // 文字は中心揃え・ベースライン基準。幅=文字数x文字高x0.6、高さ=文字高x0.7
-        const half = (t.text.length * TERMINAL_NUMBER_HEIGHT * 0.6 * vp.scale) / 2;
-        const top = t.y - TERMINAL_NUMBER_HEIGHT * 0.7 * vp.scale;
-        const corners = [
-          [t.x - half, top],
-          [t.x + half, top],
-          [t.x - half, t.y],
-          [t.x + half, t.y],
-        ];
-        // 四隅が印の中に収まり、文字の中心が印の中心の近く (半径の半分以内) にある
-        const centre = [t.x, (top + t.y) / 2];
-        const onMark = marks.some(
-          (m) =>
-            Math.hypot(centre[0] - m.x, centre[1] - m.y) <= (TERMINAL_MARK_R / 2) * vp.scale &&
-            corners.every(([x, y]) => Math.hypot(x - m.x, y - m.y) <= TERMINAL_MARK_R * vp.scale),
+      expect(texts).toHaveLength(marks.length);
+      // 基準点は印の中心。キャンバスのベースラインは基準点から文字高x scale/2.8 下
+      // (SVG側は文字高/2 下。この差は既知で、回転0の描画を変えないために残している)
+      const baseline = (TERMINAL_NUMBER_HEIGHT * vp.scale) / 2.8;
+      for (const m of marks) {
+        const at = texts.filter(
+          (q) => Math.abs(q.x - m.x) < 1e-9 && Math.abs(q.y - (m.y + baseline)) < 1e-9,
         );
-        expect(onMark, `rot=${rotation} mirror=${mirror}: ${t.text}`).toBe(true);
+        expect(at, `${symbolId}: 印(${m.x},${m.y})の番号`).toHaveLength(1);
       }
+    }
+  });
+
+  // ja: ジャンパバーは太い線だけで描かれ、両端に丸(円)は描かれない
+  it("draws a jumper as a bar only, with no round mark at either end", () => {
+    const { arcs, strokeWidths, def, vp } = drawTerminalBlock("terminal_block_4p", "1-2,3-4", 0);
+    // ジャンパのバーが実際に2本描かれている (太さはジャンパバー専用の線幅)
+    const barWidth = JUMPER_BAR_STROKE_MM * vp.scale;
+    expect(strokeWidths.filter((w) => Math.abs(w - barWidth) < 1e-9)).toHaveLength(2);
+    // それでも描かれる円は端子の印だけ (ジャンパは円をまったく足さない)
+    const markCount = def.primitives.filter((q) => q.type === "circle").length;
+    expect(arcs).toHaveLength(markCount);
+    for (const a of arcs) {
+      expect(a.r, `円の半径 ${a.r}`).toBeCloseTo(TERMINAL_MARK_R * vp.scale, 9);
     }
   });
 });
