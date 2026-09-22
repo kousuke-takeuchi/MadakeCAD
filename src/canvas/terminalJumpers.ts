@@ -6,10 +6,12 @@
 import { parseTerminalNo, TERMINAL_MARK_R } from "./dynamicSymbol";
 import type { Point, SymbolDef } from "../ipc";
 
-/** ジャンパバーの線幅 (mm)。Rust側 terminal_chart.rs の JUMPER_BAR_STROKE と一致させること。 */
-export const JUMPER_BAR_STROKE_MM = 0.4;
-/** ジャンパバーの両端に付ける丸の半径 (mm)。Rust側 JUMPER_BAR_DOT_R と一致させること。 */
-export const JUMPER_BAR_DOT_R_MM = 0.3;
+/**
+ * ジャンパバーの線幅 (mm)。Rust側 terminal_chart.rs の JUMPER_BAR_STROKE と一致させること。
+ * シンボルの線 (0.3mm) の2倍以上にして、印刷してもショートバーだと分かる太さにする。
+ * 端子の印どうしの隙間は1.4mmしかないので、両端の丸は描かずバーだけを描く。
+ */
+export const JUMPER_BAR_STROKE_MM = 0.8;
 /** 配線が接続点に載っているとみなす距離 (mm)。Rust側 netlist::CONNECT_EPS と同じ。 */
 const CONNECT_EPS = 0.01;
 
@@ -90,27 +92,19 @@ export function terminalCenter(def: SymbolDef, number: string): Point | null {
   return { x: sx / pts.length, y: sy / pts.length };
 }
 
-/** 図面に描くジャンパ1本ぶんの図形(シンボルのローカル座標。Rust側 JumperBar と同一)。 */
-export interface JumperBar {
-  /** バーの両端。2つの端子の印の縁どうしを結ぶ。 */
-  bar: [Point, Point];
-  /** 両端の丸の中心。それぞれ自分の端子の印に外接する。 */
-  dots: [Point, Point];
-}
-
 /**
- * ジャンパ (正規化済みの端子番号の組) を、シンボル定義のローカル座標系の図形に変換する
+ * ジャンパ (正規化済みの端子番号の組) を、シンボル定義のローカル座標系の線分に変換する
  * (Rust側 jumper_bars と同一)。見つからない端子番号の組は結果から省く。
  *
  * 形はサドルジャンパの実物どおり、隣り合う2端子の中心を結ぶ軸の上、2つの印の隙間だけに
- * 描く。バーは印の縁から縁まで、丸は自分の端子の印に外接する位置
- * (中心から TERMINAL_MARK_R + JUMPER_BAR_DOT_R_MM) に置く。
+ * 描く。バーは印の縁から縁まで引き、端がどの端子のものかは印の縁が示すので、
+ * 両端に別の印は描かない。
  */
 export function jumperBars(
   def: SymbolDef,
   pairs: readonly (readonly [string, string])[],
-): JumperBar[] {
-  const out: JumperBar[] = [];
+): [Point, Point][] {
+  const out: [Point, Point][] = [];
   for (const [a, b] of pairs) {
     const pa = terminalCenter(def, a);
     const pb = terminalCenter(def, b);
@@ -123,11 +117,7 @@ export function jumperBars(
       x: from.x + ux * d * sign,
       y: from.y + uy * d * sign,
     });
-    const dotD = TERMINAL_MARK_R + JUMPER_BAR_DOT_R_MM;
-    out.push({
-      bar: [along(pa, TERMINAL_MARK_R, 1), along(pb, TERMINAL_MARK_R, -1)],
-      dots: [along(pa, dotD, 1), along(pb, dotD, -1)],
-    });
+    out.push([along(pa, TERMINAL_MARK_R, 1), along(pb, TERMINAL_MARK_R, -1)]);
   }
   return out;
 }

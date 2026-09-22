@@ -26,13 +26,13 @@ pub const TERMINAL_CHART_PROJECT_COLUMNS: [&str; 8] = [
     "端子台", "端子", "Lv", "内部側", "線番", "電線", "外部側", "ジャンパ",
 ];
 
-/// ジャンパバー (G5) の線幅 (mm)。ショートバーだと分かるよう、シンボルの線 (0.3mm) より太くする。
-pub(crate) const JUMPER_BAR_STROKE: f64 = 0.4;
-
-/// ジャンパバーの両端に付ける丸の半径 (mm)。バーの太さよりはっきり大きくして
-/// 「両端のあるバー」に見せつつ、隣り合う端子の印の間 (5mmピッチなら1.4mm) に
-/// 2つ並べても離れて見える大きさにする。
-pub(crate) const JUMPER_BAR_DOT_R: f64 = 0.3;
+/// ジャンパバー (G5) の線幅 (mm)。シンボルの線 (0.3mm) の2倍以上にして、
+/// 印刷してもショートバーだと分かる太さにする。
+///
+/// 隣り合う端子の印の隙間は5mmピッチ・半径1.8mmだと1.4mmしかなく、ここへ太いバーと
+/// 「両端の丸」を両方入れると端子番号に掛かってしまうので、**バーだけ**を描く
+/// (バーの端がどこで終わるかは端子の印の縁そのものが示す)。
+pub(crate) const JUMPER_BAR_STROKE: f64 = 0.8;
 
 /// ジャンパの記述が読み取れない・隣り合わない端子に掛かっている。
 pub const JUMPER_INVALID: &str = "terminal.jumper_invalid";
@@ -411,16 +411,7 @@ fn terminal_center(def: &SymbolDef, number: &str) -> Option<Point> {
     Some(Point::new(sx / pts.len() as f64, sy / pts.len() as f64))
 }
 
-/// 図面に描くジャンパ1本ぶんの図形 (シンボルのローカル座標)。
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct JumperBar {
-    /// バーの両端。2つの端子の印の縁どうしを結ぶ。
-    pub bar: (Point, Point),
-    /// 両端の丸の中心。それぞれ自分の端子の印に外接する。
-    pub dots: (Point, Point),
-}
-
-/// ジャンパ (正規化済みの端子番号の組) を、シンボル定義のローカル座標系での図形に変換する (G5)。
+/// ジャンパ (正規化済みの端子番号の組) を、シンボル定義のローカル座標系での線分に変換する (G5)。
 /// 見つからない端子番号の組は結果から省く (パニックしない。端子台以外・壊れた定義にも安全)。
 ///
 /// 形はサドルジャンパの実物どおり、**隣り合う2端子の中心を結ぶ軸の上、2つの印の
@@ -431,12 +422,11 @@ pub struct JumperBar {
 /// - バーは片方の印の縁 ([`crate::symbol::TERMINAL_MARK_R`]) からもう片方の印の縁まで。
 ///   縦並び (同じ段) なら列の中心線上の短いバー、横並び (段をまたぐ) なら極の行の上の
 ///   バーになる (後者は内側のピンの足を跨ぐが、電気的に同じ節点なので問題にならない)
-/// - 丸は**自分の端子の印の外側に接する位置**、つまり中心から
-///   `TERMINAL_MARK_R + JUMPER_BAR_DOT_R` の点に置く。こうすると丸は必ず自分の端子の
-///   印に一番近くなり、隣の端子の印には届かない
+/// - バーの端がどの端子のものかは印の縁が示すので、両端に別の印は描かない
+///   ([`JUMPER_BAR_STROKE`] 参照)
 /// - [`terminals_are_adjacent`] がジャンパを隣り合う端子どうしに限っているので、
 ///   途中の端子を跨ぐバーは存在しない
-pub fn jumper_bars(def: &SymbolDef, pairs: &[(String, String)]) -> Vec<JumperBar> {
+pub fn jumper_bars(def: &SymbolDef, pairs: &[(String, String)]) -> Vec<(Point, Point)> {
     let mark = crate::symbol::TERMINAL_MARK_R;
     pairs
         .iter()
@@ -451,13 +441,7 @@ pub fn jumper_bars(def: &SymbolDef, pairs: &[(String, String)]) -> Vec<JumperBar
             let along = |from: &Point, d: f64, sign: f64| {
                 Point::new(from.x + ux * d * sign, from.y + uy * d * sign)
             };
-            Some(JumperBar {
-                bar: (along(&pa, mark, 1.0), along(&pb, mark, -1.0)),
-                dots: (
-                    along(&pa, mark + JUMPER_BAR_DOT_R, 1.0),
-                    along(&pb, mark + JUMPER_BAR_DOT_R, -1.0),
-                ),
-            })
+            Some((along(&pa, mark, 1.0), along(&pb, mark, -1.0)))
         })
         .collect()
 }
@@ -1296,8 +1280,8 @@ mod tests {
         assert!(check_terminal_block_in_project(&project, Uuid::new_v4()).is_empty());
     }
 
-    /// The jumper bar between the two levels of one pole lies on that pole's row, in the gap between the two level columns' marks, and its end marks sit just outside each of those two marks.
-    /// 同じ極の2つの段を繋ぐジャンパバーは、その極の行の上、2つの段の列の印の隙間に引かれ、両端の丸はそれぞれの印のすぐ外側に付く。
+    /// The jumper bar between the two levels of one pole lies on that pole's row, in the gap between the two level columns' marks.
+    /// 同じ極の2つの段を繋ぐジャンパバーは、その極の行の上、2つの段の列の印の隙間に引かれる。
     #[test]
     fn a_cross_level_jumper_bar_lies_on_the_row_between_the_two_marks() {
         let def = resolve_symbol("terminal_block_4p_2l").expect("多段端子台");
@@ -1305,20 +1289,18 @@ mod tests {
         assert_eq!(bars.len(), 1);
         let mark = crate::symbol::TERMINAL_MARK_R;
         assert_eq!(
-            (bars[0].bar.0.x, bars[0].bar.1.x),
+            (bars[0].0.x, bars[0].1.x),
             (-5.0 + mark, 5.0 - mark),
             "段aの印の縁から段bの印の縁まで"
         );
-        assert_eq!((bars[0].bar.0.y, bars[0].bar.1.y), (-7.5, -7.5), "極1の行の上");
-        let want = mark + JUMPER_BAR_DOT_R;
-        assert!((bars[0].dots.0.x - (-5.0 + want)).abs() < 1e-9, "{:?}", bars[0].dots);
-        assert!((bars[0].dots.1.x - (5.0 - want)).abs() < 1e-9, "{:?}", bars[0].dots);
+        assert_eq!((bars[0].0.y, bars[0].1.y), (-7.5, -7.5), "極1の行の上");
     }
 
-    /// Each round mark at the end of a jumper bar belongs to the terminal it sits on: it is nearer to its own terminal's mark than to any other terminal's, and it never touches another terminal's mark, so a jumper always reads as joining the right pair.
-    /// ジャンパバーの両端の丸は、それが繋ぐ端子のものだと見て分かる: 自分の端子の印に一番近く、ほかの端子の印には決して触れないので、どの2端子を繋いでいるか読み違えようがない。
+    /// Each end of a jumper bar sits exactly on the edge of its own terminal's round mark, and every other terminal of the block is farther away, so a jumper always reads as joining the right pair.
+    /// ジャンパバーの両端はちょうど自分の端子の印の縁の上にあり、ほかのどの端子よりも自分の端子に近いので、どの2端子を繋いでいるか読み違えようがない。
     #[test]
-    fn each_jumper_end_mark_belongs_to_its_own_terminal() {
+    fn each_jumper_bar_end_sits_on_the_edge_of_its_own_terminal_mark() {
+        let mark = crate::symbol::TERMINAL_MARK_R;
         for (id, spec) in [
             ("terminal_block_4p", "1-2,2-3"),
             ("terminal_block_4p_2l", "1a-1b,2a-3a"),
@@ -1329,22 +1311,48 @@ mod tests {
             let terminals = terminal_numbers_of(&def);
             let jumpers = parse_jumpers(spec, &terminals).pairs;
             assert!(!jumpers.is_empty(), "{id} {spec}");
-            for (jumper, (a, b)) in jumper_bars(&def, &jumpers).iter().zip(&jumpers) {
-                for (dot, owner) in [(jumper.dots.0, a), (jumper.dots.1, b)] {
-                    let own = terminal_center(&def, owner).expect(owner).distance_to(&dot);
+            for ((ea, eb), (a, b)) in jumper_bars(&def, &jumpers).iter().zip(&jumpers) {
+                for (end, owner) in [(ea, a), (eb, b)] {
+                    let own = terminal_center(&def, owner).expect(owner).distance_to(end);
+                    assert!(
+                        (own - mark).abs() < 1e-9,
+                        "{id} {spec}: {owner}側の端が印の縁 ({mark}mm) に無い ({own}mm)"
+                    );
                     for no in &terminals {
                         if no == owner {
                             continue;
                         }
-                        let other = terminal_center(&def, no).expect(no).distance_to(&dot);
-                        assert!(own < other, "{id} {spec}: {owner}の印が{no}に近い ({own} >= {other})");
-                        assert!(
-                            (other - crate::symbol::TERMINAL_MARK_R).abs() > JUMPER_BAR_DOT_R,
-                            "{id} {spec}: {owner}の丸が{no}の印に触れている"
-                        );
+                        let other = terminal_center(&def, no).expect(no).distance_to(end);
+                        assert!(own < other, "{id} {spec}: {owner}側の端が{no}に近い ({own} >= {other})");
                     }
                 }
             }
+        }
+    }
+
+    /// A jumper bar is exactly as long as the gap between the two terminal marks it joins, that is the terminals' own spacing less one mark radius at each end.
+    /// ジャンパバーの長さは、繋ぐ2つの端子の印の隙間ちょうど、つまりその端子台の端子の間隔から両端の印の半径を引いた長さになる。
+    #[test]
+    fn a_jumper_bar_is_exactly_as_long_as_the_gap_between_the_two_marks() {
+        let mark = crate::symbol::TERMINAL_MARK_R;
+        for (id, a, b) in [
+            ("terminal_block_4p", "1", "2"),
+            ("terminal_block_4p_2l", "1a", "2a"),
+            ("terminal_block_4p_2l", "1a", "1b"),
+        ] {
+            let def = resolve_symbol(id).expect("端子台");
+            // 端子の間隔はシンボル定義のピンの位置から取る (図面上の実際の間隔)
+            let pitch = terminal_center(&def, a)
+                .expect(a)
+                .distance_to(&terminal_center(&def, b).expect(b));
+            let bars = jumper_bars(&def, &pairs(&[(a, b)]));
+            assert_eq!(bars.len(), 1);
+            let len = bars[0].0.distance_to(&bars[0].1);
+            assert!(
+                (len - (pitch - 2.0 * mark)).abs() < 1e-9,
+                "{id} {a}-{b}: 間隔{pitch}mmの隙間は{}mmなのにバーは{len}mm",
+                pitch - 2.0 * mark
+            );
         }
     }
 
@@ -1355,19 +1363,18 @@ mod tests {
         let def = resolve_symbol("terminal_block_4p").expect("端子台");
         let bars = jumper_bars(&def, &pairs(&[("1", "2")]));
         assert_eq!(bars.len(), 1);
-        let (a, b) = bars[0].bar;
+        let (a, b) = bars[0];
         assert_eq!((a.x, b.x), (0.0, 0.0), "列の中心線の上");
         assert_eq!(
             (a.y, b.y),
             (-7.5 + crate::symbol::TERMINAL_MARK_R, -2.5 - crate::symbol::TERMINAL_MARK_R),
             "端子1の印の縁から端子2の印の縁まで"
         );
-        // どの接続点も、バーと両端の丸からは離れている
-        let reach = (JUMPER_BAR_STROKE / 2.0).max(JUMPER_BAR_DOT_R);
+        // どの接続点も、バーの太さの外にある
         for pin in &def.pins {
             assert!(
-                (pin.at.x - a.x).abs() > reach,
-                "接続点{:?}がジャンパの図形に掛かっている",
+                (pin.at.x - a.x).abs() > JUMPER_BAR_STROKE / 2.0,
+                "接続点{:?}がジャンパバーに掛かっている",
                 pin.at
             );
         }

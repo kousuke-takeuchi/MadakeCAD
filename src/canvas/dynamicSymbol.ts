@@ -12,10 +12,12 @@ export const TERMINAL_LEVEL_MAX = 3;
 export const TERMINAL_LEVEL_PITCH = 10.0;
 /** 端子の印(貫通端子を表す丸)の半径 mm(Rust側 TERMINAL_MARK_R と一致)。 */
 export const TERMINAL_MARK_R = 1.8;
-/** 端子番号の文字高さ mm(Rust側 TERMINAL_NUMBER_HEIGHT と一致)。 */
+/**
+ * 端子番号の文字高さ mm(Rust側 TERMINAL_NUMBER_HEIGHT と一致)。
+ * 文字の基準点は端子の印の中心そのもの。描画側がベースラインを基準点から
+ * 文字高の半分だけ画面の下へ取るので、端子台を回しても番号は印の中に留まる。
+ */
 export const TERMINAL_NUMBER_HEIGHT = 2.0;
-/** 3文字以上の端子番号の文字高さ mm(Rust側 TERMINAL_NUMBER_HEIGHT_NARROW と一致)。 */
-export const TERMINAL_NUMBER_HEIGHT_NARROW = 1.5;
 /** PLCモジュールの最大点数(Rust側 PLC_POINT_MAX と一致)。 */
 export const PLC_POINT_MAX = 64;
 /** PLCモジュールのI/O点の縦ピッチ mm(Rust側 PLC_POINT_PITCH_MM と一致)。 */
@@ -112,9 +114,6 @@ function parseMultiLevelTerminalBlock(rest: string): { n: number; levels: number
  */
 function terminalBlockSymbol(id: string, n: number, levels: number): SymbolDef {
   const columnX = (j: number) => (j - (levels - 1) / 2) * TERMINAL_LEVEL_PITCH;
-  // この端子台で一番長い番号が3文字以上なら、番号を小さく書く(印からはみ出さないように)
-  const longest = String(n).length + (levels > 1 ? 1 : 0);
-  const numberHeight = longest >= 3 ? TERMINAL_NUMBER_HEIGHT_NARROW : TERMINAL_NUMBER_HEIGHT;
   const primitives: Primitive[] = [];
   const pins: PinDef[] = [];
   for (let j = 0; j < levels; j++) {
@@ -129,12 +128,8 @@ function terminalBlockSymbol(id: string, n: number, levels: number): SymbolDef {
       const y = offset(i, n);
       const no = levels === 1 ? String(i + 1) : `${i + 1}${levelLetter(j)}`;
       primitives.push({ type: "circle", center: p(cx, y), r: TERMINAL_MARK_R, filled: false });
-      primitives.push({
-        type: "text",
-        at: p(cx, y - numberHeight / 2),
-        text: no,
-        height: numberHeight,
-      });
+      // 基準点は印の中心。ベースラインは描画側が画面の下向きに文字高の半分ずらす
+      primitives.push({ type: "text", at: p(cx, y), text: no, height: TERMINAL_NUMBER_HEIGHT });
       primitives.push({ type: "line", pts: [p(cx - 2.5, y), p(cx - TERMINAL_MARK_R, y)] });
       primitives.push({ type: "line", pts: [p(cx + TERMINAL_MARK_R, y), p(cx + 2.5, y)] });
       // 貫通端子: 左右2接続点に同一ピン番号(段が違えば番号も違うのでネットも独立)

@@ -29,7 +29,6 @@ import {
   shapeStrokeColor,
 } from "./shapes";
 import {
-  JUMPER_BAR_DOT_R_MM,
   JUMPER_BAR_STROKE_MM,
   jumperBars,
   parseJumperSpec,
@@ -428,18 +427,17 @@ export function drawSymbol(
         break;
       }
       case "text": {
-        // ベースラインの位置もシンボルと一緒に回す(Rust側svg.rsと同じ規則。文字は常に水平)
-        const p = vp.toScreen(
-          transformLocal({ x: prim.at.x, y: prim.at.y + prim.height / 2 }, inst),
-        );
+        // 文字は常に水平に書くので、ベースラインへのずらしはシンボルと一緒に回さず
+        // 画面の下向きに取る(Rust側svg.rsと同じ規則)
+        const p = vp.toScreen(transformLocal(prim.at, inst));
         ctx.font = `${Math.max(8, prim.height * vp.scale)}px sans-serif`;
         ctx.textAlign = "center";
-        ctx.fillText(prim.text, p.x, p.y);
+        ctx.fillText(prim.text, p.x, p.y + (prim.height * vp.scale) / 2.8);
         break;
       }
     }
   }
-  // ジャンパバー (G5): 端子台のattrs.jumpersを太い線+両端の丸(ショートバー)として描く
+  // ジャンパバー (G5): 端子台のattrs.jumpersを、端子の印の隙間を埋める太い線として描く
   // (SVG出力のrender_jumper_barsと同じジオメトリ。表示クラスは"symbols"に含まれる)
   if (inst.symbol_id.startsWith("terminal_block_")) {
     const pairs = parseJumperSpec(inst.attrs.jumpers ?? "", terminalNumbers(def));
@@ -447,19 +445,13 @@ export function drawSymbol(
     if (bars.length > 0) {
       const lineWidth = ctx.lineWidth;
       ctx.lineWidth = Math.max(1, JUMPER_BAR_STROKE_MM * vp.scale);
-      for (const { bar, dots } of bars) {
-        const sa = vp.toScreen(transformLocal(bar[0], inst));
-        const sb = vp.toScreen(transformLocal(bar[1], inst));
+      for (const [a, b] of bars) {
+        const sa = vp.toScreen(transformLocal(a, inst));
+        const sb = vp.toScreen(transformLocal(b, inst));
         ctx.beginPath();
         ctx.moveTo(sa.x, sa.y);
         ctx.lineTo(sb.x, sb.y);
         ctx.stroke();
-        for (const dot of dots) {
-          const s = vp.toScreen(transformLocal(dot, inst));
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, JUMPER_BAR_DOT_R_MM * vp.scale, 0, Math.PI * 2);
-          ctx.fill();
-        }
       }
       ctx.lineWidth = lineWidth;
     }

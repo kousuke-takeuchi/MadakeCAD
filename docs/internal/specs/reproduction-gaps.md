@@ -309,7 +309,7 @@ Text styling is new.
 
 > **Status 2026-08-23 (phase 6, task 2): resolved.** `attrs["jumpers"]` is now
 > drawn on the schematic symbol itself (SVG export and the canvas renderer), as a
-> bar spanning the jumpered terminals with a small circle at each end, reusing the
+> thick bar filling the gap between the two jumpered terminals' marks, reusing the
 > same `parse_jumpers` validation the terminal chart and terminal diagram use
 > (non-adjacent or unknown terminal numbers draw nothing). Still also reported in
 > the terminal chart and terminal diagram, unchanged.
@@ -319,8 +319,12 @@ Text styling is new.
 > (a saddle jumper sits in a duct in the middle of the terminal, joins neighbouring
 > terminals, and uses saddle-jumper connection points separate from the wire connection
 > points): the bar lies **on the axis joining the two neighbouring terminal centres and
-> only in the gap between their round marks**, with one filled end mark per endpoint,
-> placed just outside the mark it belongs to. It therefore never crosses a terminal
+> only in the gap between their round marks**, drawn at 0.8 mm — more than twice an
+> ordinary symbol line — so that it reads as a shorting bar in print. It carries **no end
+> marks of its own**: at a 5 mm terminal pitch the gap between two marks is only 1.4 mm,
+> which cannot hold a thick bar and two distinguishable end dots without covering the
+> terminal numbers, and the edges of the two round marks already show where the bar starts
+> and ends. It therefore never crosses a terminal
 > number, never sits on a wire connection point of a column, and always reads as joining
 > the pair it actually joins. `terminals_are_adjacent` limits a jumper to two neighbours,
 > so a bar never passes over a third terminal.

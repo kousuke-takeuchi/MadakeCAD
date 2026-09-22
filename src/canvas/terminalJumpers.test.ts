@@ -1,15 +1,15 @@
-// Rust側 madake-core/src/terminal_chart.rs の parse_jumpers / jumper_bar_segments と
+// Rust側 madake-core/src/terminal_chart.rs の parse_jumpers / jumper_bars と
 // 同一ルールを検証する。
 import { describe, expect, it } from "vitest";
 
 import type { Primitive, SymbolDef } from "../ipc";
-import { dynamicSymbol, TERMINAL_MARK_R } from "./dynamicSymbol";
+import { dynamicSymbol, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./dynamicSymbol";
 import {
   formatJumperSpec,
-  JUMPER_BAR_DOT_R_MM,
   JUMPER_BAR_STROKE_MM,
   jumperBars,
   parseJumperSpec,
+  terminalCenter,
   terminalNumbers,
 } from "./terminalJumpers";
 
@@ -57,10 +57,13 @@ describe("parseJumperSpec", () => {
 });
 
 describe("jumper bar dimensions", () => {
-  // ja: ジャンパバーの寸法(線幅・両端の丸の半径・中心線からのずらし量)はRust側と同じ数値になる
+  // ja: ジャンパバーの寸法(線幅・端子の印の半径・端子番号の文字高さ)はRust側と同じ数値になる
   it("keeps the same millimetre values as the Rust side", () => {
-    // madake-core/src/terminal_chart.rs の JUMPER_BAR_STROKE / _DOT_R と symbol.rs の TERMINAL_MARK_R
-    expect([JUMPER_BAR_STROKE_MM, JUMPER_BAR_DOT_R_MM, TERMINAL_MARK_R]).toEqual([0.4, 0.3, 1.8]);
+    // madake-core/src/terminal_chart.rs の JUMPER_BAR_STROKE と
+    // symbol.rs の TERMINAL_MARK_R / TERMINAL_NUMBER_HEIGHT
+    expect([JUMPER_BAR_STROKE_MM, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT]).toEqual([
+      0.8, 1.8, 2.0,
+    ]);
   });
 });
 
@@ -70,31 +73,43 @@ describe("jumperBars", () => {
     const def = dynamicSymbol("terminal_block_4p")!;
     const bars = jumperBars(def, [["1", "2"]]);
     expect(bars).toHaveLength(1);
-    const [a, b] = bars[0].bar;
+    const [a, b] = bars[0];
     expect([a.x, b.x]).toEqual([0, 0]);
     expect(a.y).toBeCloseTo(-7.5 + TERMINAL_MARK_R, 9);
     expect(b.y).toBeCloseTo(-2.5 - TERMINAL_MARK_R, 9);
   });
 
-  // ja: 両端の丸はそれぞれ自分の端子の印に外接する位置に付く
-  it("puts each end mark just outside its own terminal's mark", () => {
-    const def = dynamicSymbol("terminal_block_4p")!;
-    const [{ dots }] = jumperBars(def, [["1", "2"]]);
-    expect(dots[0].y).toBeCloseTo(-7.5 + TERMINAL_MARK_R + JUMPER_BAR_DOT_R_MM, 9);
-    expect(dots[1].y).toBeCloseTo(-2.5 - TERMINAL_MARK_R - JUMPER_BAR_DOT_R_MM, 9);
+  // ja: ジャンパバーの長さは、その端子台の端子の間隔から両端の印の半径を引いた長さちょうどになる
+  it("is exactly as long as the gap between the two marks it joins", () => {
+    for (const [id, a, b] of [
+      ["terminal_block_4p", "1", "2"],
+      ["terminal_block_4p_2l", "1a", "2a"],
+      ["terminal_block_4p_2l", "1a", "1b"],
+    ] as const) {
+      const def = dynamicSymbol(id)!;
+      // 端子の間隔はシンボル定義のピンの位置から取る(図面上の実際の間隔)
+      const ca = terminalCenter(def, a)!;
+      const cb = terminalCenter(def, b)!;
+      const pitch = Math.hypot(cb.x - ca.x, cb.y - ca.y);
+      const [[p, q]] = jumperBars(def, [[a, b]]);
+      expect(Math.hypot(q.x - p.x, q.y - p.y), `${id} ${a}-${b}`).toBeCloseTo(
+        pitch - 2 * TERMINAL_MARK_R,
+        9,
+      );
+    }
   });
 
   // ja: 段をまたぐジャンパは、極の行の上、2つの段の列の印の隙間に描かれる
   it("lies on the pole's row, between the two level columns' marks", () => {
     const def = dynamicSymbol("terminal_block_4p_2l")!;
-    const [{ bar }] = jumperBars(def, [["1a", "1b"]]);
+    const [bar] = jumperBars(def, [["1a", "1b"]]);
     expect(bar[0].y).toBeCloseTo(bar[1].y, 9);
     expect(bar[0].x).toBeCloseTo(-5 + TERMINAL_MARK_R, 9);
     expect(bar[1].x).toBeCloseTo(5 - TERMINAL_MARK_R, 9);
   });
 
-  // ja: 両端の丸は自分の端子の印に一番近く、ほかの端子の印には触れない
-  it("gives each end mark to the terminal it belongs to", () => {
+  // ja: バーの両端はちょうど自分の端子の印の縁の上にあり、ほかのどの端子よりも自分の端子に近い
+  it("ends exactly on the edge of the mark of the terminal it belongs to", () => {
     for (const [id, spec] of [
       ["terminal_block_4p", "1-2,2-3"],
       ["terminal_block_4p_2l", "1a-1b,2a-3a"],
@@ -103,33 +118,26 @@ describe("jumperBars", () => {
       const def = dynamicSymbol(id)!;
       const numbers = terminalNumbers(def);
       const pairs = parseJumperSpec(spec, numbers);
-      const centre = (no: string) => {
-        const pts = def.pins.filter((q) => q.number === no).map((q) => q.at);
-        return {
-          x: pts.reduce((t, q) => t + q.x, 0) / pts.length,
-          y: pts.reduce((t, q) => t + q.y, 0) / pts.length,
-        };
-      };
       const bars = jumperBars(def, pairs);
       expect(bars).toHaveLength(pairs.length);
-      bars.forEach(({ dots }, i) => {
-        dots.forEach((dot, side) => {
+      bars.forEach((bar, i) => {
+        bar.forEach((end, side) => {
           const owner = pairs[i][side];
-          const c = centre(owner);
-          const own = Math.hypot(dot.x - c.x, dot.y - c.y);
+          const c = terminalCenter(def, owner)!;
+          const own = Math.hypot(end.x - c.x, end.y - c.y);
+          expect(own, `${id} ${spec}: ${owner}側の端`).toBeCloseTo(TERMINAL_MARK_R, 9);
           for (const no of numbers) {
             if (no === owner) continue;
-            const o = centre(no);
-            const other = Math.hypot(dot.x - o.x, dot.y - o.y);
+            const o = terminalCenter(def, no)!;
+            const other = Math.hypot(end.x - o.x, end.y - o.y);
             expect(own, `${id} ${spec}: ${owner} vs ${no}`).toBeLessThan(other);
-            expect(Math.abs(other - TERMINAL_MARK_R)).toBeGreaterThan(JUMPER_BAR_DOT_R_MM);
           }
         });
       });
     }
   });
 
-  // ja: ジャンパバーと両端の丸は、どの端子番号の文字にも重ならない
+  // ja: ジャンパバーは、どの端子番号の文字にも重ならない
   it("never covers a terminal number", () => {
     // 文字は中心揃え・ベースラインが端子の中心。幅は文字数x文字高x0.6、高さは文字高x0.7で見る
     const numberBoxes = (def: SymbolDef) =>
@@ -152,19 +160,17 @@ describe("jumperBars", () => {
       const def = dynamicSymbol(id)!;
       const pairs = parseJumperSpec(spec, terminalNumbers(def));
       const graphics: (readonly number[])[] = [];
-      for (const { bar, dots } of jumperBars(def, pairs)) {
+      for (const [a, b] of jumperBars(def, pairs)) {
+        // 線の端は伸びない(butt cap)ので、太さのぶんは線に直交する向きにだけ広げる
         const h = JUMPER_BAR_STROKE_MM / 2;
-        const [a, b] = bar;
+        const hx = a.x === b.x ? h : 0;
+        const hy = a.y === b.y ? h : 0;
         graphics.push([
-          Math.min(a.x, b.x) - h,
-          Math.min(a.y, b.y) - h,
-          Math.max(a.x, b.x) + h,
-          Math.max(a.y, b.y) + h,
+          Math.min(a.x, b.x) - hx,
+          Math.min(a.y, b.y) - hy,
+          Math.max(a.x, b.x) + hx,
+          Math.max(a.y, b.y) + hy,
         ]);
-        for (const q of dots) {
-          const r = JUMPER_BAR_DOT_R_MM;
-          graphics.push([q.x - r, q.y - r, q.x + r, q.y + r]);
-        }
       }
       expect(graphics.length).toBeGreaterThan(0);
       for (const g of graphics) {
