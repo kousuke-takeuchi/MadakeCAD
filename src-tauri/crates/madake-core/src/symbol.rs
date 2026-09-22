@@ -329,6 +329,111 @@ pub fn conducting_pin_groups(def: &SymbolDef) -> Vec<Vec<&str>> {
     vec![numbers]
 }
 
+/// 拡声器 (スピーカー)。
+///
+/// 出典: IEC 60617-S01059:1996-05 "Loudspeaker, general symbol"
+/// (<https://products.iec.ch/> — Symbolsタブで"Loudspeaker"を検索し、
+/// "IEC 60617 - For diagram"に絞ると出る。2026-09-22参照)。
+/// ボイスコイルの箱 (矩形) に、開いたコーン (台形) をつないだ形で描く。
+fn loudspeaker_symbol() -> SymbolDef {
+    let primitives = vec![
+        rect(-5.0, -2.5, -2.5, 2.5, false),
+        line(&[(-2.5, -2.5), (2.5, -5.0), (2.5, 5.0), (-2.5, 2.5), (-2.5, -2.5)]),
+        line(&[(-7.5, -2.5), (-5.0, -2.5)]),
+        line(&[(-7.5, 2.5), (-5.0, 2.5)]),
+    ];
+    sym(
+        "loudspeaker",
+        "Loudspeaker",
+        "拡声器(スピーカー)",
+        "output",
+        "LS",
+        &["loudspeaker", "speaker", "スピーカー", "拡声器"],
+        primitives,
+        vec![
+            pin("1", "", -7.5, -2.5, PinDir::Left),
+            pin("2", "", -7.5, 2.5, PinDir::Left),
+        ],
+    )
+}
+
+/// ブザー。
+///
+/// 出典: IEC 60617-S00973:1996-05 "Buzzer" (<https://products.iec.ch/> —
+/// Symbolsタブで"Buzzer"を検索、分類は半円形 (Geometric forms: Half-circles)。
+/// 2026-09-22参照)。半円 (フラット側が引き出し線側) で表す。
+/// ベルのドーム (底辺=横の平らな辺) とは向きが違うので混同しない。
+fn buzzer_symbol() -> SymbolDef {
+    let primitives = vec![
+        line(&[(0.0, -4.0), (0.0, 4.0)]),
+        arc(0.0, 0.0, 4.0, 270.0, 90.0),
+        line(&[(-7.5, 0.0), (0.0, 0.0)]),
+        line(&[(4.0, 0.0), (7.5, 0.0)]),
+    ];
+    sym(
+        "buzzer",
+        "Buzzer",
+        "ブザー",
+        "output",
+        "BZ",
+        &["buzzer", "sounder", "ブザー", "報知器"],
+        primitives,
+        pins_lr("1", "", "2", ""),
+    )
+}
+
+/// サイレン。
+///
+/// 出典: IEC 60617-S00972:1996-05 "Siren" (<https://products.iec.ch/> —
+/// Symbolsタブで"Siren"を検索、分類は直角三角形 (Right-angled triangles)。
+/// 2026-09-22参照)。直角三角形 (垂直辺が左、底辺が下) で表す。
+fn siren_symbol() -> SymbolDef {
+    let primitives = vec![
+        line(&[(-2.5, -5.0), (-2.5, 2.5), (5.0, 2.5), (-2.5, -5.0)]),
+        line(&[(-2.5, 2.5), (-2.5, 5.0)]),
+        line(&[(5.0, 2.5), (5.0, 5.0)]),
+    ];
+    sym(
+        "siren",
+        "Siren",
+        "サイレン",
+        "output",
+        "SIR",
+        &["siren", "horn", "alarm", "サイレン", "警報器"],
+        primitives,
+        vec![
+            pin("1", "", -2.5, 5.0, PinDir::Down),
+            pin("2", "", 5.0, 5.0, PinDir::Down),
+        ],
+    )
+}
+
+/// 送風機 (ファン)。
+///
+/// 出典: IEC 60617-S01421:2002-07 "Fan" (<https://products.iec.ch/> —
+/// Symbolsタブで"Fan"を検索、"installations in buildings"分類。2026-09-22参照)。
+/// 外囲 (正方形) の中に3枚羽根の風車を描く。
+fn fan_symbol() -> SymbolDef {
+    let mut primitives = vec![
+        rect(-5.0, -5.0, 5.0, 5.0, false),
+        circle(0.0, 0.0, 3.75, false),
+        line(&[(0.0, 0.0), (0.0, -3.75)]),
+        line(&[(0.0, 0.0), (3.25, 1.875)]),
+        line(&[(0.0, 0.0), (-3.25, 1.875)]),
+    ];
+    primitives.extend(leads_lr(5.0));
+    sym(
+        "fan",
+        "Fan",
+        "送風機(ファン)",
+        "output",
+        "FAN",
+        &["fan", "blower", "ventilator", "送風機", "ファン", "換気扇"],
+        primitives,
+        pins_lr("1", "", "2", ""),
+    )
+}
+
 /// 同梱のJIS C 0617 / IEC 60617系シンボルセット。
 ///
 /// [`CATEGORY_ORDER`]の順に、同じカテゴリの記号を連続して並べる(部品挿入ダイアログの表示順)。
@@ -942,6 +1047,12 @@ pub fn builtin_symbols() -> Vec<SymbolDef> {
         bell,
         pins_lr("1", "", "2", ""),
     ));
+
+    // ---- G12: 同梱絵記号 (確立した形のみ。IEC 60617データベースで裏取り) ----
+    out.push(loudspeaker_symbol());
+    out.push(buzzer_symbol());
+    out.push(siren_symbol());
+    out.push(fan_symbol());
 
     // ---- instrument: 計測器 ----
     for (id, name, name_ja, prefix, mark, keywords) in [
@@ -2181,6 +2292,57 @@ mod tests {
         assert_eq!((d.category.as_str(), d.ref_prefix.as_str()), ("output", "BL"));
         assert_eq!(pin_map(&d), vec![("1".into(), -7.5, 0.0), ("2".into(), 7.5, 0.0)]);
         assert!(d.primitives.iter().any(|p| matches!(p, Primitive::Arc { .. })));
+    }
+
+    /// The loudspeaker is a coil box joined to a widening cone, with two connection points on its flat (coil) side.
+    /// 拡声器はコイルの箱と開いたコーンをつないだ形で、接続点は平らな (コイル側の) 辺に2つある。
+    #[test]
+    fn loudspeaker_is_a_coil_box_joined_to_a_cone() {
+        let d = def("loudspeaker");
+        assert_eq!((d.category.as_str(), d.ref_prefix.as_str()), ("output", "LS"));
+        assert_eq!(pin_map(&d), vec![("1".into(), -7.5, -2.5), ("2".into(), -7.5, 2.5)]);
+        assert!(d.primitives.iter().any(|p| matches!(p, Primitive::Rect { .. })), "コイルの箱");
+    }
+
+    /// The buzzer is a half circle whose flat edge faces its two connection points, distinguishing it from the bell's dome (flat edge on the base, not the side).
+    /// ブザーは接続点の側に平らな辺を向けた半円で、ベルのドーム (底辺が平ら) とは向きが違う。
+    #[test]
+    fn buzzer_is_a_half_circle_facing_its_terminals() {
+        let d = def("buzzer");
+        assert_eq!((d.category.as_str(), d.ref_prefix.as_str()), ("output", "BZ"));
+        assert_eq!(pin_map(&d), vec![("1".into(), -7.5, 0.0), ("2".into(), 7.5, 0.0)]);
+        assert!(d.primitives.iter().any(|p| matches!(p, Primitive::Arc { .. })));
+        // ベルは底辺 (y=0, x=-5..5) の上にドームを載せる形。ブザーは縦の直線 (x=0, y=-4..4)
+        // が平らな辺になっており、ベルと同じ縦横比の底辺を持たない
+        assert!(
+            d.primitives.iter().any(
+                |p| matches!(p, Primitive::Line { pts } if pts.len() == 2 && (pts[0].x - pts[1].x).abs() < 1e-9)
+            ),
+            "縦の平らな辺を持つ (ベルは横の底辺)"
+        );
+    }
+
+    /// The siren is a right triangle, with its two connection points below the triangle's base corners.
+    /// サイレンは直角三角形で、接続点は三角形の底辺の両角の下にある。
+    #[test]
+    fn siren_is_a_right_triangle() {
+        let d = def("siren");
+        assert_eq!((d.category.as_str(), d.ref_prefix.as_str()), ("output", "SIR"));
+        assert_eq!(pin_map(&d), vec![("1".into(), -2.5, 5.0), ("2".into(), 5.0, 5.0)]);
+        assert_eq!(d.pins.iter().map(|p| p.dir).collect::<Vec<_>>(), vec![PinDir::Down, PinDir::Down]);
+    }
+
+    /// The fan is a square housing around a 3-blade pinwheel, with two connection points on either side.
+    /// 送風機は3枚羽根の風車を正方形の外囲で囲んだ形で、接続点は左右にある。
+    #[test]
+    fn fan_is_a_pinwheel_in_a_square_housing() {
+        let d = def("fan");
+        assert_eq!((d.category.as_str(), d.ref_prefix.as_str()), ("output", "FAN"));
+        assert_eq!(pin_map(&d), vec![("1".into(), -7.5, 0.0), ("2".into(), 7.5, 0.0)]);
+        assert!(d.primitives.iter().any(|p| matches!(p, Primitive::Rect { .. })), "外囲の正方形");
+        assert!(d.primitives.iter().any(|p| matches!(p, Primitive::Circle { .. })), "羽根の円");
+        let line_count = d.primitives.iter().filter(|p| matches!(p, Primitive::Line { .. })).count();
+        assert!(line_count >= 2 + 3, "リード線2本+羽根3本 ({line_count})");
     }
 
     /// The voltmeter and ammeter are circles marked V and A, wired in the circuit like any two-terminal instrument.
