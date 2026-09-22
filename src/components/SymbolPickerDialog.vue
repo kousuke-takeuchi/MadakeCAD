@@ -22,6 +22,13 @@ import { useDocumentStore } from "../stores/document";
 import { ALL_CATEGORIES, UNCATEGORIZED, useMacrosStore } from "../stores/macros";
 import { usePartsStore } from "../stores/parts";
 import { useUiStore } from "../stores/ui";
+import type { DynamicBase } from "./symbolPickerDynamic";
+import {
+  clampLevels as clampLevelCount,
+  clampPins as clampPinCount,
+  dynamicSymbolId,
+  supportsLevels,
+} from "./symbolPickerDynamic";
 import BlockPinsEditor from "./BlockPinsEditor.vue";
 import MacroPreview from "./MacroPreview.vue";
 import SymbolPreview from "./SymbolPreview.vue";
@@ -44,14 +51,14 @@ const dynamicBases = [
   { base: "terminal_block", key: "terminalBlock" },
   { base: "connector", key: "connector" },
 ] as const;
-type DynBase = (typeof dynamicBases)[number]["base"];
+type DynBase = (typeof dynamicBases)[number]["base"] & DynamicBase;
 
 const selectedDyn = ref<DynBase | null>(null);
 const pinCount = ref(8);
 /** 段数 (G6、多段端子台)。1 (既定) は単段の `terminal_block_{n}p` のままになる。 */
 const levelCount = ref(1);
 /** 段数指定は端子台だけで出す (コネクタ・ブロックには無い概念)。 */
-const showLevels = computed(() => selectedDyn.value === "terminal_block");
+const showLevels = computed(() => supportsLevels(selectedDyn.value));
 
 const dynamicCells = computed(() => {
   const q = query.value.trim().toLowerCase();
@@ -99,11 +106,9 @@ function macroCategoryLabel(key: string): string {
 
 /** 選択中の可変部品の現在極数(+端子台は段数)でのプレビュー定義。 */
 const dynPreview = (base: DynBase) => {
-  const n = base === selectedDyn.value ? pinCount.value : 3;
-  if (base === "terminal_block" && base === selectedDyn.value && levelCount.value > 1) {
-    return dynamicSymbol(`terminal_block_${n}p_${levelCount.value}l`)!;
-  }
-  return dynamicSymbol(`${base}_${n}p`)!;
+  const selected = base === selectedDyn.value;
+  const n = selected ? pinCount.value : 3;
+  return dynamicSymbol(dynamicSymbolId(base, n, selected ? levelCount.value : 1))!;
 };
 
 /** ブロックセルのプレビュー (左右1本ずつの最小のブロック)。 */
@@ -148,11 +153,11 @@ watch(query, (q) => {
 });
 
 function clampPins(n: number) {
-  pinCount.value = Math.min(DYNAMIC_PIN_MAX, Math.max(1, Math.round(n) || 1));
+  pinCount.value = clampPinCount(n);
 }
 
 function clampLevels(n: number) {
-  levelCount.value = Math.min(TERMINAL_LEVEL_MAX, Math.max(1, Math.round(n) || 1));
+  levelCount.value = clampLevelCount(n);
 }
 
 function pick(symbolId: string) {
@@ -164,11 +169,7 @@ function pick(symbolId: string) {
 function placeDynamic() {
   if (!selectedDyn.value) return;
   // 段数1は既存の単段id(terminal_block_{n}p)のまま=既存プロジェクトとの互換を保つ
-  if (selectedDyn.value === "terminal_block" && levelCount.value > 1) {
-    pick(`terminal_block_${pinCount.value}p_${levelCount.value}l`);
-    return;
-  }
-  pick(`${selectedDyn.value}_${pinCount.value}p`);
+  pick(dynamicSymbolId(selectedDyn.value, pinCount.value, levelCount.value));
 }
 
 /** 部品DBの部品を配置: 既定シンボルを型番(value)・定格(attrs.current_a)付きで置く。 */

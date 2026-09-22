@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1909 specification clauses** across 5 areas.
+**1917 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -1883,6 +1883,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - clears the height back to the default when the field is emptied <sub>`annotationTextCommand`</sub>
 - sends nothing for a height outside the allowed range or a non-number <sub>`annotationTextCommand`</sub>
 - sends nothing when the height did not change <sub>`annotationTextCommand`</sub>
+
+### symbolPickerDynamic
+
+- keeps the level count inside the supported range of 1 to 3 levels <sub>`clampLevels`</sub>
+- rounds a fractional level count and falls back to one level for a non-number <sub>`clampLevels`</sub>
+- keeps the pole count inside the supported range of 1 to 50 poles <sub>`clampPins`</sub>
+- offers the levels stepper for a terminal block only, not for a connector <sub>`supportsLevels`</sub>
+- places the plain single-level terminal block id when the level count is left at one <sub>`dynamicSymbolId`</sub>
+- places the multi-level terminal block id when the level count is raised <sub>`dynamicSymbolId`</sub>
+- never adds a level suffix to a connector, whatever the level count says <sub>`dynamicSymbolId`</sub>
+- has the levels stepper label and hint in both the English and the Japanese catalogue <sub>`段数ステッパーの表示文字列`</sub>
 
 ### chatComposer
 

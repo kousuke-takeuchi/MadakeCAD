@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1909仕様項目**。
+全5領域・**1917仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1883,6 +1883,17 @@
 - 空欄にすると既定 (2.0mm) へ戻すコマンドになる <sub>`annotationTextCommand`</sub>
 - 範囲 (1.0〜3.5mm) を外れた値・数値でない入力は送らない (エンジンも同じ範囲で拒否する) <sub>`annotationTextCommand`</sub>
 - 今と同じ高さならコマンドを送らない (無駄なundo履歴を作らない) <sub>`annotationTextCommand`</sub>
+
+### symbolPickerDynamic
+
+- 段数ステッパーは1〜3段に収める(1より小さい値は1段、3より大きい値は3段になる) <sub>`clampLevels`</sub>
+- 段数の入力欄に数字以外や小数を入れても、1〜3段の整数に直される <sub>`clampLevels`</sub>
+- 極数ステッパーは1極から50極までに収める <sub>`clampPins`</sub>
+- 段数ステッパーは端子台を選んだときだけ出る(コネクタには段という概念が無い) <sub>`supportsLevels`</sub>
+- 段数が既定の1段のままなら、これまでどおりの単段の端子台 (terminal_block_8p) が置かれる <sub>`dynamicSymbolId`</sub>
+- 段数を2段にすると2段の端子台 (terminal_block_8p_2l) が置かれる <sub>`dynamicSymbolId`</sub>
+- コネクタは段数を上げても段は付かない (コネクタに段は無い) <sub>`dynamicSymbolId`</sub>
+- 段数ステッパーのラベルと範囲ヒントは英語カタログにも日本語カタログにも入っている <sub>`段数ステッパーの表示文字列`</sub>
 
 ### chatComposer
 
