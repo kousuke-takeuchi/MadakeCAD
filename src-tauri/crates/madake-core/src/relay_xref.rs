@@ -641,27 +641,48 @@ pub fn device_block_bounds(inst: &SymbolInstance, block: &DeviceBlock) -> (Point
     )
 }
 
-/// ピン (用紙座標、回転・ミラー済み) から実機ブロックの外形へ引く引き出し線の終点 =
-/// **外形の縁のいちばん近い点**。90度回したコイルならピンは外形の上下に来るので、
-/// 引き出し線は上端・下端の辺につながる。外形が内容で広がってピンが中に入ったときは、
-/// いちばん近い辺へ短く引いて接続点を示す。ピンがちょうど縁の上にあれば`None` (長さ0)。
-pub fn device_block_lead_end(pin: Point, bounds: (Point, Point)) -> Option<Point> {
+/// ピンのローカル座標から引き出し線の軸 (**ローカル座標**の外向き単位ベクトル) を求める。
+/// シンボルのピンは配置基準点から外へ伸びているので、大きいほうの成分がピンの向き。
+/// 用紙座標の軸は、これを配置変換した向き (回転0/180なら水平、90/270なら垂直)。
+pub fn device_block_lead_axis(pin_at: Point) -> Point {
+    if pin_at.x.abs() >= pin_at.y.abs() {
+        Point::new(pin_at.x.signum(), 0.0)
+    } else {
+        Point::new(0.0, pin_at.y.signum())
+    }
+}
+
+/// ピン (用紙座標、回転・ミラー済み) から実機ブロックの外形へ引く引き出し線の終点。
+///
+/// 引き出し線は**ピン自身の軸**に沿って出る (`axis` = 配置変換後の外向き単位ベクトル、
+/// [`device_block_lead_axis`])。そこに繋がる配線と同じ向きなので、回転0/180なら水平に
+/// 左右の辺へ、90/270なら垂直に上下の辺へ届く。外形が内容で広がってピンが中に入ったときは、
+/// 同じ軸を中心と反対向きに伸ばして縁で止める (接点の行の文字を横切らない)。
+/// ピンがちょうど縁の上にある・軸の延長が外形に当たらないときは`None` (引き出し線を描かない)。
+pub fn device_block_lead_end(pin: Point, axis: Point, bounds: (Point, Point)) -> Option<Point> {
     let (min, max) = bounds;
     let inside = pin.x > min.x && pin.x < max.x && pin.y > min.y && pin.y < max.y;
-    let end = if inside {
-        // 中にあるときは4辺のうちいちばん近い辺へ落とす
-        let d = [
-            (pin.x - min.x, Point::new(min.x, pin.y)),
-            (max.x - pin.x, Point::new(max.x, pin.y)),
-            (pin.y - min.y, Point::new(pin.x, min.y)),
-            (max.y - pin.y, Point::new(pin.x, max.y)),
-        ];
-        d.into_iter()
-            .min_by(|a, b| a.0.total_cmp(&b.0))
-            .map(|(_, p)| p)
-            .unwrap_or(pin)
+    let end = if axis.x.abs() > axis.y.abs() {
+        // 水平の軸: ピンの高さが外形の高さの範囲に無ければ、軸を伸ばしても外形に当たらない
+        if pin.y < min.y - 1e-9 || pin.y > max.y + 1e-9 {
+            return None;
+        }
+        let x = if inside {
+            if axis.x > 0.0 { max.x } else { min.x }
+        } else {
+            pin.x.clamp(min.x, max.x)
+        };
+        Point::new(x, pin.y)
     } else {
-        Point::new(pin.x.clamp(min.x, max.x), pin.y.clamp(min.y, max.y))
+        if pin.x < min.x - 1e-9 || pin.x > max.x + 1e-9 {
+            return None;
+        }
+        let y = if inside {
+            if axis.y > 0.0 { max.y } else { min.y }
+        } else {
+            pin.y.clamp(min.y, max.y)
+        };
+        Point::new(pin.x, y)
     };
     ((end.x - pin.x).abs() > 1e-9 || (end.y - pin.y).abs() > 1e-9).then_some(end)
 }
@@ -1795,8 +1816,135 @@ mod tests {
         }
     }
 
-    /// The device block stays upright whatever the rotation: the outline keeps its size and position, and only the pins turn, so the leads reach the turned pins from the nearest edge.
-    /// 実機ブロックはどの回転でも正立のまま: 外形の大きさも位置も変わらず、回るのはピンだけなので、引き出し線はいちばん近い辺から回った先のピンへ届く。
+    /// リレーコイルの実機ブロック表示をテストするための、接点`contacts`本・型番`part_no`のブロック。
+    fn demo_block(part_no: &str, contacts: usize) -> DeviceBlock {
+        DeviceBlock {
+            reference: "K1".into(),
+            part_no: part_no.into(),
+            contacts: (0..contacts)
+                .map(|i| ContactMapRow {
+                    terminals: format!("{}3-{}4", i + 1, i + 1),
+                    address: format!("/1.B{}", i + 1),
+                    role: RelayRole::ContactNo,
+                    entity_id: None,
+                })
+                .collect(),
+        }
+    }
+
+    /// ローカル座標のピン位置と配置から、引き出し線の軸 (用紙座標の外向き単位ベクトル) を作る。
+    fn lead_axis(pin_at: Point, inst: &SymbolInstance) -> Point {
+        let local = device_block_lead_axis(pin_at);
+        let t = crate::netlist::transform_local(local, inst);
+        Point::new(t.x - inst.at.x, t.y - inst.at.y)
+    }
+
+    /// 実機ブロックのコイル1個 (用紙座標100,50)。
+    fn block_coil(rotation: u16, mirror: bool) -> SymbolInstance {
+        SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: COIL_SYMBOL_ID.into(),
+            at: Point::new(100.0, 50.0),
+            rotation,
+            mirror,
+            reference: "K1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        }
+    }
+
+    /// However wide the outline grows, an unturned coil's leads stay horizontal and end on the left and right edge at the pin's own height, where its wires come in.
+    /// 外形がどれだけ横に広がっても、回していないコイルの引き出し線は水平のまま、配線が来るピンの高さで外形の左右の辺に届く (G7)。
+    #[test]
+    fn device_block_leads_run_along_the_pin_axis_however_wide_the_block() {
+        let def = crate::symbol::resolve_symbol(COIL_SYMBOL_ID).unwrap();
+        // 最小幅 / 切換接点の行 (19.6mm) / 実際の型番 (24.8mm) の3通り
+        for block in [
+            demo_block("", 0),
+            DeviceBlock {
+                contacts: vec![ContactMapRow {
+                    terminals: "11-12-14".into(),
+                    address: "/1.B3".into(),
+                    role: RelayRole::ContactCo,
+                    entity_id: None,
+                }],
+                ..demo_block("", 0)
+            },
+            demo_block("[redacted](D)/24DC-2Z6", 0),
+        ] {
+            let width = device_block_layout(&block).width;
+            for mirror in [false, true] {
+                let coil = block_coil(0, mirror);
+                let bounds = device_block_bounds(&coil, &block);
+                for pin in &def.pins {
+                    let at = crate::netlist::transform_local(pin.at, &coil);
+                    let end = device_block_lead_end(at, lead_axis(pin.at, &coil), bounds);
+                    if width <= DEVICE_BLOCK_MIN_WIDTH + 1e-9 {
+                        assert!(end.is_none(), "最小幅ではピンが縁の上なので引き出し線は要らない");
+                        continue;
+                    }
+                    let end = end.unwrap_or_else(|| {
+                        panic!("幅{width}mm mirror={mirror}: ピン{}の引き出し線が無い", pin.number)
+                    });
+                    assert!(
+                        (end.y - at.y).abs() < 1e-9,
+                        "幅{width}mm mirror={mirror}: ピン{}の引き出し線が水平でない {at:?}->{end:?}",
+                        pin.number
+                    );
+                    let on_side = (end.x - bounds.0.x).abs() < 1e-9 || (end.x - bounds.1.x).abs() < 1e-9;
+                    assert!(on_side, "幅{width}mm: 左右どちらかの辺で止まる {end:?} / {bounds:?}");
+                }
+            }
+        }
+    }
+
+    /// A coil turned 90 or 270 degrees sends its leads straight up and down to the top and bottom edge, and they never run through a line of the contact image, however many contacts the block lists.
+    /// 90度・270度に回したコイルの引き出し線は真上・真下へ伸びて外形の上端・下端で止まり、接点が何行あっても接点イメージの文字を横切らない (G7)。
+    #[test]
+    fn a_turned_device_blocks_leads_run_vertically_without_crossing_the_rows() {
+        let def = crate::symbol::resolve_symbol(COIL_SYMBOL_ID).unwrap();
+        for contacts in [1, 3] {
+            let block = demo_block("P1", contacts);
+            for rotation in [90, 270] {
+                let coil = block_coil(rotation, false);
+                let bounds = device_block_bounds(&coil, &block);
+                let boxes: Vec<(String, crate::tidy::Rect)> = device_block_texts(&coil, &block)
+                    .into_iter()
+                    .map(|t| {
+                        (
+                            t.text.clone(),
+                            text_rect(t.at, text_width(&t.text), CONTACT_MAP_FONT, t.align),
+                        )
+                    })
+                    .collect();
+                for pin in &def.pins {
+                    let at = crate::netlist::transform_local(pin.at, &coil);
+                    let end = device_block_lead_end(at, lead_axis(pin.at, &coil), bounds)
+                        .unwrap_or_else(|| panic!("接点{contacts}行 rotation={rotation}: ピン{}の引き出し線が無い", pin.number));
+                    assert!(
+                        (end.x - at.x).abs() < 1e-9,
+                        "接点{contacts}行 rotation={rotation}: 引き出し線が垂直でない {at:?}->{end:?}"
+                    );
+                    let on_edge = (end.y - bounds.0.y).abs() < 1e-9 || (end.y - bounds.1.y).abs() < 1e-9;
+                    assert!(on_edge, "上端・下端のどちらかで止まる {end:?} / {bounds:?}");
+                    let (lo, hi) = (at.y.min(end.y), at.y.max(end.y));
+                    for (text, r) in &boxes {
+                        let crosses = r.min.x < at.x - 1e-9
+                            && at.x < r.max.x - 1e-9
+                            && r.min.y < hi - 1e-9
+                            && lo < r.max.y - 1e-9;
+                        assert!(
+                            !crosses,
+                            "接点{contacts}行 rotation={rotation}: 引き出し線が「{text}」を横切る"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// The device block stays upright whatever the rotation: the outline keeps its size and position, and only the pins turn, so the leads reach the turned pins along their own axis.
+    /// 実機ブロックはどの回転でも正立のまま: 外形の大きさも位置も変わらず、回るのはピンだけなので、引き出し線はピン自身の軸に沿って外形へ届く。
     #[test]
     fn device_block_bounds_stay_upright_when_the_instance_turns() {
         let block = DeviceBlock {
@@ -1829,8 +1977,9 @@ mod tests {
             let bounds = device_block_bounds(&turned, &block);
             assert_eq!(bounds, upright, "rotation={rotation}: 外形は正立のまま動かない");
             // 引き出し線は回った先のピンから外形の縁まで届く (ピンが縁の上なら描かない)
-            for (number, at) in crate::netlist::pin_positions(&turned, &def) {
-                if let Some(end) = device_block_lead_end(at, bounds) {
+            for pin in &def.pins {
+                let (number, at) = (&pin.number, crate::netlist::transform_local(pin.at, &turned));
+                if let Some(end) = device_block_lead_end(at, lead_axis(pin.at, &turned), bounds) {
                     let on_edge = (end.x - bounds.0.x).abs() < 1e-9
                         || (end.x - bounds.1.x).abs() < 1e-9
                         || (end.y - bounds.0.y).abs() < 1e-9

@@ -526,8 +526,8 @@ fn render_device_block(
     block: &crate::relay_xref::DeviceBlock,
 ) {
     use crate::relay_xref::{
-        device_block_bounds, device_block_layout, device_block_lead_end, device_block_texts,
-        CONTACT_MAP_FONT,
+        device_block_bounds, device_block_layout, device_block_lead_axis, device_block_lead_end,
+        device_block_texts, CONTACT_MAP_FONT,
     };
     use crate::wire_note::NoteAlign;
     let layout = device_block_layout(block);
@@ -537,10 +537,12 @@ fn render_device_block(
         "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
         n(min.x), n(min.y), n(max.x - min.x), n(max.y - min.y), n(SYMBOL_STROKE)
     );
-    // ピン (A1/A2) から外形の縁までの引き出し線 (ピンが縁の上・外形の中なら描かない)
+    // ピン (A1/A2) から外形の縁までの引き出し線。ピン自身の軸 (配線と同じ向き) に沿って引く
     for pin in &def.pins {
         let at = transform_local(pin.at, inst);
-        if let Some(end) = device_block_lead_end(at, (min, max)) {
+        let tip = transform_local(device_block_lead_axis(pin.at), inst);
+        let axis = Point::new(tip.x - inst.at.x, tip.y - inst.at.y);
+        if let Some(end) = device_block_lead_end(at, axis, (min, max)) {
             line_el(out, at.x, at.y, end.x, end.y, SYMBOL_STROKE, "#000");
         }
     }
