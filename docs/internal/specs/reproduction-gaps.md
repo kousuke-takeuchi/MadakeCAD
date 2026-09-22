@@ -69,7 +69,7 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Terminal block with two terminal columns as one device | 🔶 | **✅** | G6 — `terminal_block_{n}p_{levels}l`, one column per level, one device |
 | Jumper bars on the schematic | 🔶 | **✅** | G5 — drawn on the symbol as a shorting bar, level-aware on a multi-level block |
 | Multi-pin controller block with arbitrary pin names | ❌ | **✅** | G1 — 14 + 14 named pins, names inside the outline, numbers outside |
-| Pin-group brackets with rotated group labels | ❌ | ❌ | G8. **✅ phase 6 task 4**: `attrs["pin_groups"]` draws a bracket + line-split caption, tracking rotation/mirror via the pin's own direction |
+| Pin-group brackets with line-split group labels | ❌ | ❌ | G8. **✅ phase 6 task 4**: `attrs["pin_groups"]` draws a bracket + line-split caption, tracking rotation/mirror via the pin's own direction |
 | Filled / shaded device blocks | ❌ | **✅** | G10 — `shape` with a fill token |
 | Relay: coil + two changeover contacts | 🔶 | 🔶 | G7; and see G21 — changeover contacts are invisible to the relay cross-reference. **✅ phase 6 task 3**: `attrs.device_block` draws the coil as one outline with the contact image; manufacturer pin numbers and the mechanical linkage are still not drawn |
 | Net labels merging nets by name | ✅ | ✅ | |
@@ -479,7 +479,7 @@ task and are not implemented.
 
 ---
 
-### G8 — No pin-group brackets or rotated group labels · quality
+### G8 — No pin-group brackets or line-split group labels · quality
 
 > **✅ Resolved 2026-09-22 (phase 6, task 4).** `SymbolInstance.attrs["pin_groups"]`
 > (comma-separated `range:caption` items, e.g. `"1-4:power,5-8:signal"`) draws a
@@ -492,11 +492,22 @@ task and are not implemented.
 > orientation follows the group's own pin direction (`PinDir`), so it tracks rotation
 > and mirror automatically, and works on the `block`, `terminal_block_*` and
 > `connector_*` families alike (`pin_groups.rs` + canvas twin `pinGroups.ts`, parity
-> tests). An overlapping range, a pin the instance does not have, or an unparseable
-> item is reported as an ERC diagnostic (`pin_group.overlap` /
-> `pin_group.unknown_pin` / `pin_group.invalid`) naming the device and the offending
-> item, and only that item is left undrawn — same "diagnose, don't silently drop"
-> rule as the terminal jumper checks (G5's `terminal.jumper_invalid`). No command-time
+> tests over all three families at every rotation and mirrored). The bracket sits
+> **beyond the pin stubs** and the caption beyond the bracket, and both boxes are
+> counted into the symbol's outline (`svg::symbol_bounds` + canvas twin), so the
+> designator, type and function labels move out of their way instead of printing over
+> them. On a multi-level terminal block the bracket is placed against the **outer**
+> edge of that level's own column (`1b-4b` brackets column b from outside, never the
+> gap between the columns). An overlapping range, a pin the instance does not have,
+> or an unparseable item is reported as an ERC diagnostic (`erc.pin_group_overlap` /
+> `erc.pin_group_unknown_pin` / `erc.pin_group_invalid`) naming the device and the
+> offending item, and only that item is left undrawn — same "diagnose, don't silently
+> drop" rule as the terminal jumper checks (G5's `terminal.jumper_invalid`).
+> Pin groups on a coil drawn as a device block (G7) have nowhere to hang, so they are
+> reported as `erc.pin_group_unsupported` rather than disappearing without a word.
+> **Limitation:** a pin whose own number contains a hyphen (block pin numbers are free
+> text) cannot be named in a group, because `-` is the range separator; such an item is
+> refused with `erc.pin_group_invalid` stating exactly that. No command-time
 > validation (same as `attrs["jumpers"]`): a bad item never blocks placing or editing
 > the instance, it is caught by verification.
 
@@ -628,11 +639,19 @@ enclosure name to unrelated conductors.
 > bundled — **loudspeaker**, **buzzer**, **siren** and **fan** — each an
 > established IEC 60617 diagram symbol (not invented artwork), cited in a Rust doc
 > comment on its own definition function (`loudspeaker_symbol` / `buzzer_symbol` /
-> `siren_symbol` / `fan_symbol` in `symbol.rs`) and verified against the IEC's own
-> symbol database (<https://products.iec.ch/>, Symbols tab, 2026-09-22):
-> IEC 60617-S01059 "Loudspeaker, general symbol", IEC 60617-S00973 "Buzzer",
-> IEC 60617-S00972 "Siren", IEC 60617-S01421 "Fan" (installations-in-buildings
-> class). All four sit in the existing `output` category (alongside lamp/motor/bell,
+> `siren_symbol` / `fan_symbol` in `symbol.rs`). Two of the four are confirmed against
+> the IEC's own symbol database (<https://products.iec.ch/>, Symbols tab, 2026-09-22):
+> IEC 60617-S01059 "Loudspeaker, general symbol" and IEC 60617-S01421 "Fan"
+> (installations-in-buildings class).
+> **Buzzer and siren are cited from JIS instead.** Their IEC identity numbers
+> (`S00973` / `S00972`) could not be confirmed against a second source — the IEC
+> database is subscription-gated and the identity numbers in the JIS text sit in the
+> scanned table column, not in any machine-readable text — so both symbols cite
+> **JIS C 0617-8:2011 第10節「ランプ及び信号報知装置」** instead, whose ブザー entry
+> carries the geometric-form class 半円 (half-circle) and whose サイレン entry carries
+> 直角三角形 (right-angled triangle); those are the shapes drawn here, and that much
+> *is* confirmed. The IEC numbers are kept in the doc comments, marked as unconfirmed.
+> All four sit in the existing `output` category (alongside lamp/motor/bell,
 > so they need no new symbol-picker category), have their pins on the 2.5 mm grid,
 > and carry reference-designator prefixes following the codebase's convention
 > (`LS`/`BZ`/`SIR`/`FAN`, next to `L`/`M`/`BL`). A **pictorial indicator lamp** was
@@ -841,7 +860,13 @@ this is one change in `net_tag.rs` plus the canvas twin.
 > codebase. A `leader_to` naming an entity that does not exist on the sheet, or the
 > note itself, is refused by the same `UpdateEntity`/`AddEntity` command that already
 > refuses an unresolvable `symbol_id`; the inverse command restores the previous
-> value, so clearing or changing a leader is an ordinary undo step. **Still open**:
+> value, so clearing or changing a leader is an ordinary undo step. If the target is
+> deleted *afterwards* the note draws no leader (it never panics), and verification
+> reports the stale target as `erc.leader_target_missing` so the drawing never carries
+> a leader pointing at nothing without saying so. The target's bounding box is the same
+> outline the drawing shows (`svg::symbol_bounds` and its canvas twin — one definition
+> on each side, so the on-screen leader and the printed one end at the same point).
+> **Still open**:
 > the properties panel has no entity-pick control to build a UI on, so `leader_to` is
 > settable only through a command, the CLI's `exec`, or an MCP tool — this is called
 > out explicitly rather than left implicit.
