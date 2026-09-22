@@ -427,6 +427,20 @@ the terminal diagram and the BOM as **one** device.
 > `update_entity` command. No manufacturer per-pole numbering scheme and no mechanical
 > linkage drawing were added — those remain open (see **Proposed**, second half).
 
+> **Fix round 2026-09-22 (review findings F1/F2/M1/M2/M4).** The block is drawn through
+> the instance transform, exactly like the symbol's own primitives: outline, rules and
+> lead lines all go through `transform_local`/`transformLocal`, and the leads start on
+> the symbol definition's real A1/A2 pin points, so a coil placed at 90/180/270 or
+> mirrored keeps its wires (`relay_xref::device_block_bounds` /
+> `renderer.ts` `deviceBlockBounds` give the turned outline; the text stays horizontal
+> inside the turned cells, the same rule symbol lettering follows). That outline is
+> also what the canvas hit-tests, so the block can be picked anywhere it is drawn, and
+> it strokes in the selection colour while selected. The function label (G4) is printed
+> under the block outline, as it is under an ordinary symbol. The contact image rows
+> belong to the "reference designators" (`refs`) view class in both display modes —
+> hiding that class leaves the outline and the header. `DEVICE_BLOCK_MIN_WIDTH` is
+> pinned to `resolve_symbol(COIL_SYMBOL_ID)`'s own pin span by a test.
+
 **Needed.** The reference draws the relay as one physical block: coil plus both
 changeover contacts inside a single outline, with the manufacturer's pin numbers and
 the mechanical linkage dashed between the poles.
@@ -615,9 +629,12 @@ silently.
 > (`device_xref_at`/`deviceXrefAt` place it beside the designator, one space between
 > several addresses, exactly as `xref_text_at` already does for net labels). Any
 > designator drawn on two or more sheets now gets the note on every instance it has,
-> automatically, with no new command needed. Relay coils and contacts are excluded
-> (`relay_xref::relay_role(...).is_some()`) so the two mechanisms never draw on top of
-> each other — a relay keeps only its coil ⇔ contact reference. No new view class was
+> automatically, with no new command needed. The instances the coil ⇔ contact
+> cross-reference actually annotates are excluded (`relay_xref::annotated_instances`:
+> the coils that carry a contact map or a device block, and the contacts that carry a
+> coil location) so the two mechanisms never draw on top of each other — a relay keeps
+> only its coil ⇔ contact reference, while a coil with no contacts anywhere, which that
+> mechanism draws nothing for, gets the ordinary device reference. No new view class was
 > added: the annotation reuses the existing "reference designators" (`refs`) class in
 > the canvas renderer and the SVG/PDF export (unconditional, per the existing
 > screen-vs-output split). Benchmark: EPLAN's cross-reference types distinguish a
@@ -831,7 +848,12 @@ against a contact configuration (one changeover pole is both an NO and an NC pol
 > test reproduces the exact changeover-contact geometry from this gap (a horizontal
 > wire off the upper pin, whose note lands exactly on the old fixed position) and
 > confirms the text moves off it, plus a second test confirming the fallback to
-> "below" when both right and above are occupied.
+> "below" when both right and above are occupied. The probe also covers the instance's
+> own designator and part-number labels (they sit above the outline, exactly where the
+> "above" candidate goes), so a contact that carries a part number escapes past them to
+> "below" instead of printing on top of them. The device cross-reference (G13) needs no
+> probe of its own: an instance that carries a coil location is never given one, because
+> `annotated_instances` excludes it.
 
 **Current behaviour (verified).** The coil location (`(/1.A3)`) is printed to the right of
 a contact symbol at the symbol's mid height. The wire note of the pin **above** that

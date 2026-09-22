@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1952 specification clauses** across 5 areas.
+**1968 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -369,13 +369,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The contact map hangs below the coil symbol's outline, and the coil location text sits to the right of the contact symbol. <sub>`annotations_are_anchored_to_the_symbol_outline`</sub>
 - A changeover contact's coil location moves off the wire note above it, reproducing the collision described in G22. <sub>`coil_location_moves_off_a_colliding_wire_note`</sub>
 - When even the space above is occupied, the coil location falls back to below the outline. <sub>`coil_location_falls_back_below_when_above_is_also_occupied`</sub>
+- When the contact carries a part number of its own, the coil location does not escape onto that text: it goes on past it, to the other side of the outline. <sub>`coil_location_does_not_escape_onto_the_instances_own_value_label`</sub>
 - A coil is only shown as a physical device block when its "device_block" attribute is exactly "true"; any other value, including empty, keeps the distributed placement. <sub>`device_block_attribute_selects_the_display_mode`</sub>
 - The device block's contact image lists each contact with its terminal pair and drawing address, in the same order as the contact map. <sub>`device_block_lists_the_same_contacts_as_the_contact_map`</sub>
 - A blank part number produces a device block with no part number line, rather than an empty one. <sub>`device_block_has_no_part_number_line_when_blank`</sub>
 - Only the coils whose instance has "device_block" set are collected into the sheet's device blocks; a coil left in the default distributed placement is not. <sub>`sheet_device_blocks_only_includes_flagged_coils`</sub>
 - A coil shown as a device block no longer gets the separate hanging contact map, because its contacts are already listed inside the block. <sub>`device_block_coils_are_excluded_from_the_separate_contact_map`</sub>
 - The device block's outline is at least as wide as the coil's pin span, so its A1/A2 pins land exactly on the outline's left and right edge and no lead line is needed. <sub>`device_block_layout_is_no_narrower_than_the_pin_span`</sub>
+- The device block's minimum width is exactly the relay coil symbol's own pin span, so the narrowest block reaches both of the coil's pins. <sub>`device_block_min_width_is_the_coil_symbols_pin_span`</sub>
 - A part number adds a second header row, and pins still reach the outline through a lead when the content widens the box past the pin span. <sub>`device_block_layout_grows_for_the_part_number_and_keeps_the_pins_reachable`</sub>
+- The device block turns and mirrors with its coil, so a coil placed at 90 degrees gets an upright block that still spans exactly its two pins. <sub>`device_block_bounds_turn_with_the_instance`</sub>
 - The device block's contact rows sit directly under the header rows, and the outline's total height covers every row with no gap. <sub>`device_block_layout_stacks_contact_rows_under_the_header`</sub>
 
 ### Reports as drawing sheets
@@ -521,6 +524,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The sheet holding the contact shows the coil's address in parentheses beside it. <sub>`svg_draws_the_coil_location_beside_the_contact`</sub>
 - Exporting a single sheet on its own draws no contact map, because the counterpart sheets are unknown. <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
 - A coil whose "device_block" attribute is "true" is drawn as one outline with its designator, part number and contact image, instead of the small coil symbol and the separate hanging contact map. <sub>`svg_draws_a_device_block_for_a_flagged_coil`</sub>
+- However a device-block coil is turned or mirrored, each lead line still starts exactly on one of the coil's A1/A2 pin points, so the wires attached there stay connected. <sub>`a_turned_device_block_keeps_its_leads_on_the_coil_pins`</sub>
+- A device-block coil turned upside down stacks its contact image away from the pins the same way the symbol itself turns, instead of always hanging downwards. <sub>`a_device_block_turned_upside_down_stacks_its_contact_image_upwards`</sub>
+- A device-block coil still prints its function label under the outline, the same as a coil in the ordinary distributed placement. <sub>`a_device_block_keeps_the_function_label_under_its_outline`</sub>
 - Toggling "device_block" off keeps the previous distributed placement: the small coil symbol with its own separate contact map underneath. <sub>`svg_keeps_the_distributed_placement_without_the_attribute`</sub>
 - A non-relay designator drawn on two sheets gets an automatic "(/2.B3)"-style cross-reference beside it, on both sheets (G13). <sub>`svg_draws_a_device_cross_reference_for_a_designator_on_two_sheets`</sub>
 - A panel-layout sheet is exported with the same drawing frame as a schematic, plus the enclosure and its mounting plate. <sub>`svg_of_a_panel_sheet_draws_the_enclosure_and_its_mounting_plate`</sub>
@@ -835,7 +841,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The columns of the cross-reference table are net / wire number / connected pins / sheets / sites. <sub>`cross_reference_table_columns_are_net_wire_pins_sheets_sites`</sub>
 - A designator drawn on two different sheets gets a mutual cross-reference: each instance shows the other sheet's address. <sub>`a_designator_on_two_sheets_cross_references_each_other`</sub>
 - A designator drawn on a single sheet only has no cross-reference at all. <sub>`a_designator_on_a_single_sheet_has_no_cross_reference`</sub>
-- Relay coils and contacts are skipped by the device cross-reference, because relay_xref already annotates their coil location automatically. <sub>`relay_coil_and_contacts_are_skipped_by_the_device_cross_reference`</sub>
+- A relay coil and the contact it drives are skipped by the device cross-reference, because the coil⇔contact cross-reference already writes where each of them is. <sub>`a_relay_coil_and_its_contact_are_skipped_by_the_device_cross_reference`</sub>
+- A coil with no contacts anywhere gets nothing from the coil⇔contact cross-reference, so a designator carried only by such coils still gets the ordinary device cross-reference. <sub>`a_contactless_coil_on_two_sheets_still_gets_a_device_cross_reference`</sub>
 - The per-sheet device cross-reference table maps each symbol entity to the text drawn beside it. <sub>`sheet_device_cross_reference_table_maps_symbols_to_text`</sub>
 - A designator on three sheets lists every other sheet's address, in sheet order, on one line. <sub>`a_designator_on_three_sheets_lists_every_other_sheet`</sub>
 - The device cross-reference text sits to the right of the symbol outline, on the same row as the designator label. <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
@@ -1630,6 +1637,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - anchors both annotations to the symbol outline <sub>`relayXref`</sub>
 - moves the coil location off a colliding wire note <sub>`relayXref`</sub>
 - falls back below the outline when the space above is also occupied <sub>`relayXref`</sub>
+- does not escape the coil location onto the contact's own value label <sub>`relayXref`</sub>
 - selects the display mode from the device_block attribute <sub>`relayXref`</sub>
 - only collects coils flagged as a device block <sub>`relayXref`</sub>
 - excludes device-block coils from the separate contact map <sub>`relayXref`</sub>
@@ -1652,6 +1660,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps a one- or two-character terminal number inside its own mark, whatever the rotation <sub>`drawSymbol text placement`</sub>
 - puts an unturned terminal block's number just over a third of a character height below its mark centre on the canvas, a smaller offset than the exported drawing's half <sub>`drawSymbol text placement`</sub>
 - draws a jumper as a bar only, with no round mark at either end <sub>`drawSymbol text placement`</sub>
+- keeps the lead lines on the coil's own pins, whatever the rotation <sub>`drawDeviceBlock`</sub>
+- draws an upright outline for a coil turned 90 degrees <sub>`drawDeviceBlock`</sub>
+- strokes the outline in the selection colour while the coil is selected <sub>`drawDeviceBlock`</sub>
+- prints the function label under the block outline <sub>`drawDeviceBlock`</sub>
+- hides the contact image rows with the reference-designator view class <sub>`drawDeviceBlock`</sub>
 
 ### search
 
@@ -1895,7 +1908,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - places the text right of the label text on the same baseline <sub>`xrefTextAt`</sub>
 - cross-references a designator on two sheets both ways <sub>`G13 device cross-reference`</sub>
 - shows nothing for a designator on a single sheet <sub>`G13 device cross-reference`</sub>
-- skips relay coils and contacts <sub>`G13 device cross-reference`</sub>
+- skips a relay coil and the contact it drives <sub>`G13 device cross-reference`</sub>
+- still cross-references a contactless coil that appears on two sheets <sub>`G13 device cross-reference`</sub>
 - maps each symbol entity id to the text drawn beside it <sub>`G13 device cross-reference`</sub>
 - lists every other sheet for a designator on three sheets <sub>`G13 device cross-reference`</sub>
 - places the text right of the symbol outline, level with the designator label <sub>`G13 device cross-reference`</sub>
@@ -2048,6 +2062,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### document
 
+- recomputes the sheet annotations only when the document changes <sub>`document store`</sub>
 - entity_upserted / entity_removed patches update the mirrored sheet <sub>`document store`</sub>
 - project_replaced swaps the whole mirrored project <sub>`document store`</sub>
 - sheet add/remove patches keep sheet order <sub>`document store`</sub>
@@ -2313,6 +2328,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - does not select the block when the click is outside its outline <sub>`picking a symbol on the canvas`</sub>
 - selects a small symbol inside its own outline <sub>`picking a symbol on the canvas`</sub>
 - leaves a small symbol alone when the click is well outside it <sub>`picking a symbol on the canvas`</sub>
+- selects a device-block coil anywhere inside the block it draws, not just the small coil <sub>`picking a symbol on the canvas`</sub>
 - still lets a block with broken attributes be picked near where it was placed <sub>`picking a symbol on the canvas`</sub>
 
 ### macroPlacement
