@@ -6,7 +6,6 @@ import { dynamicSymbol, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./dynami
 import {
   REV_COL_W,
   REV_HEADERS,
-  deviceBlockBounds,
   drawDeviceBlock,
   drawSymbol,
   effectiveRev,
@@ -15,7 +14,12 @@ import {
   transformLocal,
   visibleRevisions,
 } from "./renderer";
-import type { DeviceBlock } from "./relayXref";
+import {
+  CONTACT_MAP_FONT,
+  deviceBlockBounds,
+  deviceBlockTexts,
+  type DeviceBlock,
+} from "./relayXref";
 import { theme } from "./theme";
 import { JUMPER_BAR_STROKE_MM } from "./terminalJumpers";
 import { Viewport } from "./viewport";
@@ -400,12 +404,60 @@ describe("drawDeviceBlock", () => {
     }
   });
 
-  // ja: 90度回した実機ブロックは縦横が入れ替わった外形で描かれる
-  it("draws an upright outline for a coil turned 90 degrees", () => {
+  // ja: 実機ブロックの表はどの回転でも正立のままで、外形の位置も大きさも変わらない (回るのはピンだけ)
+  it("draws the same upright outline whatever the rotation", () => {
     const flat = paint(coil(0)).rects[0];
-    const turned = paint(coil(90)).rects[0];
-    expect(turned.w).toBeCloseTo(flat.h, 6);
-    expect(turned.h).toBeCloseTo(flat.w, 6);
+    for (const [rotation, mirror] of [
+      [90, false],
+      [180, false],
+      [270, false],
+      [0, true],
+    ] as const) {
+      const r = paint(coil(rotation, mirror)).rects[0];
+      expect([r.x, r.y, r.w, r.h], `rot=${rotation} mirror=${mirror}`).toEqual([
+        flat.x,
+        flat.y,
+        flat.w,
+        flat.h,
+      ]);
+    }
+  });
+
+  // ja: 実機ブロックの文字はどの回転でも自分のセルの中に収まり、ほかの行と重ならない
+  it("keeps every line of text inside its own cell and clear of the others, whatever the rotation", () => {
+    for (const [rotation, mirror] of [
+      [0, false],
+      [90, false],
+      [180, false],
+      [270, false],
+      [0, true],
+    ] as const) {
+      const inst = coil(rotation, mirror);
+      const boxes = deviceBlockTexts(inst, block).map((t) => {
+        const w = CONTACT_MAP_FONT * 0.6 * [...t.text].length;
+        const x0 = t.align === "center" ? t.at.x - w / 2 : t.at.x;
+        return { text: t.text, cell: t.cell, box: { x0, y0: t.at.y - CONTACT_MAP_FONT, x1: x0 + w, y1: t.at.y } };
+      });
+      expect(boxes.length).toBeGreaterThan(1);
+      for (const { text, cell, box } of boxes) {
+        expect(
+          box.x0 >= cell.min.x - 1e-6 &&
+            box.x1 <= cell.max.x + 1e-6 &&
+            box.y0 >= cell.min.y - 1e-6 &&
+            box.y1 <= cell.max.y + 1e-6,
+          `rot=${rotation} mirror=${mirror}: 「${text}」がセルから出ている`,
+        ).toBe(true);
+      }
+      for (let i = 0; i < boxes.length; i += 1) {
+        for (let j = i + 1; j < boxes.length; j += 1) {
+          const [a, b] = [boxes[i].box, boxes[j].box];
+          expect(
+            a.x0 >= b.x1 - 1e-6 || b.x0 >= a.x1 - 1e-6 || a.y0 >= b.y1 - 1e-6 || b.y0 >= a.y1 - 1e-6,
+            `rot=${rotation} mirror=${mirror}: 「${boxes[i].text}」と「${boxes[j].text}」が重なる`,
+          ).toBe(true);
+        }
+      }
+    }
   });
 
   // ja: 選択中の実機ブロックは、ほかのシンボルと同じように選択色の外形で描かれる

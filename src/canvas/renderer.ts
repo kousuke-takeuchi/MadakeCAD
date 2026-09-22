@@ -76,13 +76,14 @@ import { TAG_FONT, netTag } from "./netTag";
 import { XREF_FONT, deviceXrefAt, xrefTextAt } from "./xref";
 import { annotationScale } from "./annotationText";
 import {
-  CONTACT_MAP_BASELINE_SHIFT,
   CONTACT_MAP_FONT,
-  CONTACT_MAP_PAD,
   coilLocationAt,
   contactMapLayout,
   contactMapOrigin,
+  deviceBlockBounds,
   deviceBlockLayout,
+  deviceBlockLeadEnd,
+  deviceBlockTexts,
   type ContactMapRow,
   type DeviceBlock,
 } from "./relayXref";
@@ -181,42 +182,6 @@ export function transformLocal(p: Point, inst: SymbolInstance): Point {
       break;
   }
   return { x: inst.at.x + rx, y: inst.at.y + ry };
-}
-
-/**
- * ローカル座標の軸平行な矩形 (対角の2点) を配置変換した、用紙座標の軸平行な矩形。
- * 回転は90度単位なので変換しても軸平行のままで、どの角が最小点になるかが変わるだけ。
- * netlist.rs transform_rectと同一。
- */
-export function transformRect(
-  a: Point,
-  b: Point,
-  inst: SymbolInstance,
-): { min: Point; max: Point } {
-  const ta = transformLocal(a, inst);
-  const tb = transformLocal(b, inst);
-  return {
-    min: { x: Math.min(ta.x, tb.x), y: Math.min(ta.y, tb.y) },
-    max: { x: Math.max(ta.x, tb.x), y: Math.max(ta.y, tb.y) },
-  };
-}
-
-/**
- * 実機ブロック (G7) の外形を用紙座標で見た囲み矩形。配置の回転・ミラーを掛けた後の形で、
- * 回転は90度単位なので矩形は軸平行のまま。クリックでコイルを掴む当たり判定 (controller.ts)
- * と、外形の下に置く機能ラベルの位置決めはこれを引く。
- * Rust側 relay_xref::device_block_bounds と同一 (TS側は import の循環を避けてここに置く)。
- */
-export function deviceBlockBounds(
-  inst: SymbolInstance,
-  block: DeviceBlock,
-): { min: Point; max: Point } {
-  const layout = deviceBlockLayout(block);
-  return transformRect(
-    { x: layout.x, y: layout.y },
-    { x: layout.x + layout.width, y: layout.y + layout.height },
-    inst,
-  );
 }
 
 /**
@@ -604,80 +569,61 @@ export function drawDeviceBlock(
   showContacts = true,
 ) {
   const layout = deviceBlockLayout(block);
-  const screen = (x: number, y: number) => vp.toScreen(transformLocal({ x, y }, inst));
-  const cell = (c: { min: Point; max: Point }) => {
-    const r = transformRect(c.min, c.max, inst);
-    return { min: vp.toScreen(r.min), max: vp.toScreen(r.max) };
-  };
-  const rule = (x0: number, y0: number, x1: number, y1: number) => {
-    const a = screen(x0, y0);
-    const b = screen(x1, y1);
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-  };
   const bounds = deviceBlockBounds(inst, block);
   const topLeft = vp.toScreen(bounds.min);
   const bottomRight = vp.toScreen(bounds.max);
+  const rule = (x0: number, y0: number, x1: number, y1: number) => {
+    const a = vp.toScreen({ x: x0, y: y0 });
+    const b = vp.toScreen({ x: x1, y: y1 });
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  };
   ctx.strokeStyle = selected ? theme.selection : theme.line;
   ctx.lineWidth = Math.max(1, 0.3 * vp.scale);
   ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
-  // ピン (A1/A2) から外形の縁までの引き出し線 (外形が最小幅ちょうどなら描かない)
+  // ピン (A1/A2) から外形の縁までの引き出し線 (ピンが縁の上・外形の中なら描かない)
   ctx.beginPath();
   for (const pin of def.pins) {
-    const edgeX = Math.sign(pin.at.x) * (layout.width / 2);
-    if (Math.abs(edgeX - pin.at.x) < 1e-9) continue;
-    const a = screen(pin.at.x, pin.at.y);
-    const b = screen(edgeX, pin.at.y);
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
+    const at = transformLocal(pin.at, inst);
+    const end = deviceBlockLeadEnd(at, bounds);
+    if (end) rule(at.x, at.y, end.x, end.y);
   }
   ctx.stroke();
-  // ヘッダ行・接点行の仕切り線
-  const [left, right] = [layout.x, layout.x + layout.width];
+  // ヘッダ行・接点行の仕切り線 (表は常に正立)
+  const [left, right] = [bounds.min.x, bounds.max.x];
   ctx.strokeStyle = selected ? theme.selection : theme.xref;
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let i = 1; i < layout.headerRows; i += 1) {
-    const y = layout.y + layout.rowH * i;
+    const y = bounds.min.y + layout.rowH * i;
     rule(left, y, right, y);
   }
   if (layout.contactRows > 0 && showContacts) {
-    const headerBottom = layout.y + layout.rowH * layout.headerRows;
+    const headerBottom = bounds.min.y + layout.rowH * layout.headerRows;
+    const col1 = inst.at.x + layout.colX(1);
     rule(left, headerBottom, right, headerBottom);
-    rule(layout.colX(1), headerBottom, layout.colX(1), layout.y + layout.height);
+    rule(col1, headerBottom, col1, bounds.max.y);
     for (let i = 1; i < layout.contactRows; i += 1) {
-      rule(left, layout.contactRowTop(i), right, layout.contactRowTop(i));
+      const y = inst.at.y + layout.contactRowTop(i);
+      rule(left, y, right, y);
     }
   }
   ctx.stroke();
-  // ヘッダ (参照記号+型番): 回した後のセルの中央に置く
+  // 文字 (ヘッダは中央揃え、接点の行は左揃え)。接点の行は表示クラス「参照記号」で消える
   ctx.fillStyle = selected ? theme.selection : theme.xref;
   ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
-  ctx.textAlign = "center";
-  const shift = CONTACT_MAP_BASELINE_SHIFT * vp.scale;
-  [block.reference, block.partNo].forEach((text, i) => {
-    if (i >= layout.headerRows) return;
-    const c = cell(layout.headerCell(i));
-    ctx.fillText(text, (c.min.x + c.max.x) / 2, (c.min.y + c.max.y) / 2 + shift);
-  });
-  // 接点の行 (端子対 | 所在): 回した後のセルの左端から左揃えで書く
-  if (showContacts) {
-    ctx.textAlign = "left";
-    block.contacts.forEach((row, i) => {
-      [row.terminals, row.address].forEach((text, col) => {
-        const c = cell(layout.contactCell(i, col));
-        ctx.fillText(text, c.min.x + CONTACT_MAP_PAD * vp.scale, (c.min.y + c.max.y) / 2 + shift);
-      });
-    });
+  for (const t of deviceBlockTexts(inst, block)) {
+    if (!showContacts && t.align === "left") continue;
+    ctx.textAlign = t.align === "center" ? "center" : "left";
+    const at = vp.toScreen(t.at);
+    ctx.fillText(t.text, at.x, at.y);
   }
   // 機能ラベル (G4): 分散配置と同じく外形の下に置く (ここではブロックの外形の下)
   const functionLabel = functionLabelText(inst);
   if (functionLabel) {
     ctx.font = `${Math.max(9, FUNCTION_LABEL_FONT * vp.scale)}px monospace`;
     ctx.textAlign = "center";
-    const at = vp.toScreen(
-      functionLabelBelow((bounds.min.x + bounds.max.x) / 2, bounds.max.y),
-    );
+    const at = vp.toScreen(functionLabelBelow((bounds.min.x + bounds.max.x) / 2, bounds.max.y));
     ctx.fillText(functionLabel, at.x, at.y);
   }
 }
@@ -1234,7 +1180,9 @@ export function renderSheet(
     }
     const location = opts.relay?.coilLocations?.get(e.id);
     if (location) {
-      const at = vp.toScreen(coilLocationAt(e, symbolBounds(e, def), location, wireNotes));
+      const at = vp.toScreen(
+        coilLocationAt(e, symbolBounds(e, def), location, wireNotes, wireNoteFont(sheet)),
+      );
       ctx.fillStyle = theme.xref;
       ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
       ctx.textAlign = "left";
@@ -1242,7 +1190,7 @@ export function renderSheet(
     }
     const deviceXref = opts.deviceXrefs?.get(e.id);
     if (deviceXref) {
-      const at = vp.toScreen(deviceXrefAt(symbolBounds(e, def), symbolTopY(e, def)));
+      const at = vp.toScreen(deviceXrefAt(e, symbolBounds(e, def), symbolTopY(e, def)));
       ctx.fillStyle = theme.xref;
       ctx.font = `${Math.max(8, XREF_FONT * vp.scale)}px monospace`;
       ctx.textAlign = "left";

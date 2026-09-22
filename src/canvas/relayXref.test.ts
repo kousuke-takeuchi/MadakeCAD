@@ -3,6 +3,7 @@ import type { Entity, Project, Sheet, SymbolInstance } from "../ipc";
 import {
   CONTACT_MAP_FONT,
   CONTACT_MAP_GAP,
+  COIL_LOCATION_GAP,
   COIL_LOCATION_VGAP,
   DEVICE_BLOCK_ATTR,
   DEVICE_BLOCK_MIN_WIDTH,
@@ -26,7 +27,7 @@ import {
   type DeviceBlock,
 } from "./relayXref";
 import { symbolBounds } from "./renderer";
-import type { WireNoteLabel } from "./wireNotes";
+import { WIRE_NOTE_FONT, type WireNoteLabel } from "./wireNotes";
 
 function sheet(name: string): Sheet {
   return {
@@ -267,8 +268,8 @@ describe("relayXref", () => {
     const inst = symbol("relay_coil", "K1", 100, 50);
     const bounds = symbolBounds(inst, def);
     expect(contactMapOrigin(bounds, inst.at.x)).toEqual({ x: 100, y: 53 + CONTACT_MAP_GAP });
-    expect(coilLocationAt(inst, bounds, "(/1.C2)", []).x).toBeGreaterThan(107.5);
-    expect(coilLocationAt(inst, bounds, "(/1.C2)", []).y).toBe(50);
+    expect(coilLocationAt(inst, bounds, "(/1.C2)", [], WIRE_NOTE_FONT).x).toBeGreaterThan(107.5);
+    expect(coilLocationAt(inst, bounds, "(/1.C2)", [], WIRE_NOTE_FONT).y).toBe(50);
   });
 
   // ja: 切換接点のコイル所在は、上の配線に付く注記と重ならないよう逃げる (G22の衝突の再現)。
@@ -298,8 +299,8 @@ describe("relayXref", () => {
     const notes: WireNoteLabel[] = [
       { wireId: "w1", text: "0.75sq 赤", at: { x: 118.75, y: 50 }, align: "center" },
     ];
-    expect(coilLocationAt(inst, bounds, "(/1.C2)", []).y).toBe(50);
-    const at = coilLocationAt(inst, bounds, "(/1.C2)", notes);
+    expect(coilLocationAt(inst, bounds, "(/1.C2)", [], WIRE_NOTE_FONT).y).toBe(50);
+    const at = coilLocationAt(inst, bounds, "(/1.C2)", notes, WIRE_NOTE_FONT);
     expect(at.y).not.toBe(50);
     expect(at.y).toBeLessThan(50);
   });
@@ -322,12 +323,12 @@ describe("relayXref", () => {
     const inst = symbol("relay_contact_co", "K1", 100, 50);
     const bounds = symbolBounds(inst, def);
     const text = "(/1.C2)";
-    const right = coilLocationAt(inst, bounds, text, []);
+    const right = coilLocationAt(inst, bounds, text, [], WIRE_NOTE_FONT);
     const notes: WireNoteLabel[] = [
       { wireId: "w1", text, at: right, align: "left" },
       { wireId: "w2", text, at: { x: bounds.min.x, y: bounds.min.y - COIL_LOCATION_VGAP }, align: "left" },
     ];
-    const at = coilLocationAt(inst, bounds, text, notes);
+    const at = coilLocationAt(inst, bounds, text, notes, WIRE_NOTE_FONT);
     expect(at.x).toBeCloseTo(bounds.min.x, 9);
     expect(at.y).toBeCloseTo(bounds.max.y + COIL_LOCATION_VGAP + CONTACT_MAP_FONT, 9);
   });
@@ -353,10 +354,41 @@ describe("relayXref", () => {
     const text = "(/1.C2)";
     // 右の既定位置だけをふさぐ配線注記 (上下はまだ空いている)
     const notes: WireNoteLabel[] = [
-      { wireId: "w1", text, at: coilLocationAt(blank, bounds, text, []), align: "left" },
+      { wireId: "w1", text, at: coilLocationAt(blank, bounds, text, [], WIRE_NOTE_FONT), align: "left" },
     ];
-    expect(coilLocationAt(blank, bounds, text, notes).y).toBeLessThan(blank.at.y);
-    expect(coilLocationAt(withValue, bounds, text, notes).y).toBeGreaterThan(bounds.max.y);
+    expect(coilLocationAt(blank, bounds, text, notes, WIRE_NOTE_FONT).y).toBeLessThan(blank.at.y);
+    expect(coilLocationAt(withValue, bounds, text, notes, WIRE_NOTE_FONT).y).toBeGreaterThan(bounds.max.y);
+  });
+
+  // ja: 逃がしの判定はそのシートが実際に描く文字高で配線注記を測るので、注記文字を大きくしたシートでもコイル所在はきちんと逃げる (G20とG22)
+  it("measures the wire note at the text height that sheet draws it with", () => {
+    const def = {
+      id: "relay_contact_co",
+      name: "",
+      name_ja: "",
+      category: "relay",
+      ref_prefix: "K",
+      primitives: [],
+      pins: [
+        { number: "11", name: "", at: { x: -7.5, y: 0 } },
+        { number: "12", name: "", at: { x: 7.5, y: 2.5 } },
+        { number: "14", name: "", at: { x: 7.5, y: -2.5 } },
+      ],
+    };
+    const inst = { ...symbol("relay_contact_co", "", 100, 50), reference: "" };
+    const bounds = symbolBounds(inst, def);
+    const text = "(/1.C2)";
+    // 既定(2.0mm)の高さで測ると右の既定位置には届かないが、3.5mmで描かれると重なる注記
+    const notes: WireNoteLabel[] = [
+      {
+        wireId: "w1",
+        text: "0.75sq 赤 0.4m",
+        at: { x: bounds.max.x + COIL_LOCATION_GAP, y: inst.at.y + 2.6 },
+        align: "left",
+      },
+    ];
+    expect(coilLocationAt(inst, bounds, text, notes, WIRE_NOTE_FONT).y).toBe(50);
+    expect(coilLocationAt(inst, bounds, text, notes, 3.5).y).not.toBe(50);
   });
 
   // ---- G7: 実機ブロック表示 ----
@@ -419,7 +451,24 @@ describe("relayXref", () => {
     expect(layout.width).toBeGreaterThan(DEVICE_BLOCK_MIN_WIDTH);
     expect(layout.leadHalfLen).toBeGreaterThan(0);
     expect(layout.x).toBeCloseTo(-DEVICE_BLOCK_MIN_WIDTH / 2 - layout.leadHalfLen, 9);
-    expect(layout.y + (layout.rowH * layout.headerRows) / 2).toBeCloseTo(0, 9);
+    // ヘッダ1行目の中央がピンの高さ(ローカルY=0)
+    expect(layout.y + layout.rowH / 2).toBeCloseTo(0, 9);
+  });
+
+  // ja: 行の仕切り線はコイルの引き出し線が付く高さには来ないので、2本の引き出し線が1本の線で繋がって見えることはない
+  it("keeps the row dividers clear of the height the leads attach at", () => {
+    const block: DeviceBlock = {
+      reference: "K1",
+      partNo: "P1",
+      contacts: [{ terminals: "13-14", address: "/1.B3", role: "contact_no", entityId: null }],
+    };
+    const layout = deviceBlockLayout(block);
+    const dividers = [
+      ...Array.from({ length: layout.headerRows - 1 }, (_, i) => layout.y + layout.rowH * (i + 1)),
+      ...Array.from({ length: layout.contactRows }, (_, i) => layout.contactRowTop(i)),
+    ];
+    expect(dividers.length).toBeGreaterThan(0);
+    for (const y of dividers) expect(Math.abs(y)).toBeGreaterThan(1e-9);
   });
 
   // ja: 実機ブロックの接点の行はヘッダ行のすぐ下に続き、外形全体の高さは隙間なく全ての行をちょうど覆う。

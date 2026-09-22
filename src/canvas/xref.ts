@@ -4,9 +4,9 @@
 //   - 住所は「/シート.ゾーン」(例 /2.B3)。シート番号は1始まりの表示順
 //   - ゾーンは zone_cols/zone_rows の分割をラベル座標に当てたもの (行=英字を上から、列=数字を左から)
 
-import type { NetLabel, Point, Project, Sheet } from "../ipc";
+import type { NetLabel, Point, Project, Sheet, SymbolInstance } from "../ipc";
 import { annotatedInstances } from "./relayXref";
-import { REF_LABEL_DY } from "./textStyle";
+import { LABEL_FONT, REF_LABEL_DY } from "./textStyle";
 
 /** XRefテキストの文字高さ (mm)。xref.rsのXREF_FONTと一致させること。 */
 export const XREF_FONT = 2.0;
@@ -253,11 +253,18 @@ export function sheetDeviceXrefs(project: Project | null, sheetId: string): Map<
 
 /**
  * 参照記号の脇に置くデバイスXRefテキストの基準点 (テキストは左揃え、G13)。
- * シンボル外形の右端からXREF_GAPだけ空け、高さは参照記号のラベルと同じ行に揃える。
+ * シンボル外形と**参照記号ラベル**の右端 (長いほう) からXREF_GAPだけ空け、高さは参照記号の
+ * ラベルと同じ行に揃える (ネットラベル側のxrefTextAtがラベル本文の幅を測って逃がすのと同じ)。
  * boundsはシンボル外形の囲み矩形 (renderer.tsのsymbolBounds)、topYはその上端Y。
  */
-export function deviceXrefAt(bounds: { min: Point; max: Point }, topY: number): Point {
-  return { x: bounds.max.x + XREF_GAP, y: topY - REF_LABEL_DY };
+export function deviceXrefAt(
+  inst: Pick<SymbolInstance, "at" | "reference">,
+  bounds: { min: Point; max: Point },
+  topY: number,
+): Point {
+  // 参照記号は配置基準点を中心に描かれるので、右端は中心+幅の半分
+  const labelRight = inst.at.x + (LABEL_FONT * CHAR_WIDTH_RATIO * [...inst.reference].length) / 2;
+  return { x: Math.max(bounds.max.x, labelRight) + XREF_GAP, y: topY - REF_LABEL_DY };
 }
 
 /**

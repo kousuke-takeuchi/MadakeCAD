@@ -28,14 +28,8 @@ import {
   schematicToolsAllowed,
   type PanelToolId,
 } from "../canvas/panelTools";
-import {
-  deviceBlockBounds,
-  drawHarness,
-  drawShape,
-  drawSymbol,
-  symbolBounds,
-  transformLocal,
-} from "../canvas/renderer";
+import { drawHarness, drawShape, drawSymbol, symbolBounds, transformLocal } from "../canvas/renderer";
+import { deviceBlockBounds } from "../canvas/relayXref";
 import {
   SHAPE_TOOLS,
   isShapeTool,

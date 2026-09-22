@@ -527,14 +527,19 @@ function instanceLabelRects(
  * 横引きの配線注記がちょうどこの右側の位置に来て重なることがある。
  *
  * textは実際に描くコイル所在の文字列 (重なり判定の幅の見積りに使う)。notesはそのシートの
- * 配線注記 (wireNoteLabels)。逃がし先はそのインスタンス自身の参照記号・型番のラベル
+ * 配線注記 (wireNoteLabels)、noteFontはそのシートで配線注記を描く文字高 (wireNoteFont、
+ * 注記文字高 (G20) で伸縮する)。逃がし先はそのインスタンス自身の参照記号・型番のラベル
  * (外形の上に併記される) も避ける。全ての候補が重なっていれば、最後の逃がし先 (下) を返す。
+ *
+ * コイル所在そのものの文字高はCONTACT_MAP_FONT固定 (リレーのクロスリファレンスは注記文字高
+ * で伸縮しない)。伸縮するのは相手の配線注記の側だけ。
  */
 export function coilLocationAt(
   inst: Pick<SymbolInstance, "at" | "reference" | "value">,
   bounds: SymbolBounds,
   text: string,
   notes: readonly WireNoteLabel[],
+  noteFont: number,
 ): Point {
   const font = CONTACT_MAP_FONT;
   const width = textWidth(text);
@@ -544,7 +549,9 @@ export function coilLocationAt(
     { x: bounds.min.x, y: bounds.max.y + COIL_LOCATION_VGAP + font },
   ];
   const occupied = [
-    ...notes.map((note) => textRect(note.at, textWidth(note.text), font, note.align)),
+    ...notes.map((note) =>
+      textRect(note.at, textWidthAt(note.text, noteFont), noteFont, note.align),
+    ),
     ...instanceLabelRects(inst, bounds),
   ];
   for (const at of candidates) {
@@ -560,9 +567,13 @@ export function isRelaySymbol(inst: SymbolInstance): boolean {
 }
 
 /**
- * 実機ブロック表示 (G7) の外形の配置 (**シンボルのローカル座標**mm、配置基準点=コイルの
- * A1/A2ピンの中点が原点)。用紙へ描くときは必ず配置 (回転・ミラー・平行移動) を掛ける
- * (renderer.ts の transformLocal / deviceBlockBounds)。Rust側 device_block_layout と同一ルール。
+ * 実機ブロック表示 (G7) の外形の配置 (**シンボルのローカル座標**mm、配置基準点が原点)。
+ *
+ * 表は**常に正立**で描く: インスタンスの回転・ミラーは外形にも行にも効かせない
+ * (deviceBlockBoundsは配置基準点へ平行移動するだけ)。回すのはピンの位置だけで、引き出し線が
+ * 回った先のピンから外形のいちばん近い点まで伸びる (deviceBlockLeadEnd)。表を回すと複数行の
+ * 文字が互いに重なって読めなくなるため。ピンの高さ (ローカルY=0) はヘッダ1行目の中央に来る
+ * (仕切り線が引き出し線の高さに重ならないように)。Rust側 device_block_layout と同一ルール。
  */
 export interface DeviceBlockLayout {
   x: number;
@@ -583,15 +594,15 @@ export interface DeviceBlockLayout {
   contactCell(i: number, col: number): SymbolBounds;
   /** col列目 (0または1) の左端X。 */
   colX(col: number): number;
-  /** A1/A2ピンから外形の左右端までの引き出し線の半分の長さ (最小幅ちょうどなら0)。 */
+  /** 回していないコイルのピンから外形の左右端までの引き出し線の半分の長さ (最小幅なら0)。 */
   leadHalfLen: number;
 }
 
 /**
- * 実機ブロック表示の外形の配置をシンボルのローカル座標で求める (原点=コイルのA1/A2ピンの
- * 中点)。ピンは外形の左右端の、ちょうどピンの高さ(ローカルY=0)を通る位置につながるので、
- * 外形をどれだけ広げてもコイルの配線は繋がったまま (幅がDEVICE_BLOCK_MIN_WIDTHを超えた
- * 分だけ引き出し線が伸びる)。
+ * 実機ブロック表示の外形の配置をシンボルのローカル座標で求める (原点=配置基準点)。
+ * 回していないコイルのピンは外形の左右端の、ちょうどピンの高さ(ローカルY=0)を通る位置に
+ * つながるので、外形をどれだけ広げてもコイルの配線は繋がったまま (幅が
+ * DEVICE_BLOCK_MIN_WIDTHを超えた分だけ引き出し線が伸びる)。
  */
 export function deviceBlockLayout(block: DeviceBlock): DeviceBlockLayout {
   const [centerX, atY] = [0, 0];
@@ -605,7 +616,8 @@ export function deviceBlockLayout(block: DeviceBlock): DeviceBlockLayout {
   const width = Math.max(contactsW, headerW, DEVICE_BLOCK_MIN_WIDTH);
   const rowH = CONTACT_MAP_ROW_H;
   const x = centerX - width / 2;
-  const y = atY - (rowH * headerRows) / 2;
+  // ピンの高さはヘッダ**1行目**の中央。ヘッダ行の仕切り線がピンの高さに重ならない
+  const y = atY - rowH / 2;
   const contactsX = x + (width - (contactLayout.colW[0] + contactLayout.colW[1])) / 2;
   return {
     x,
@@ -629,4 +641,95 @@ export function deviceBlockLayout(block: DeviceBlock): DeviceBlockLayout {
     colX: (col) => contactsX + (col === 0 ? 0 : contactLayout.colW[0]),
     leadHalfLen: Math.max(0, (width - DEVICE_BLOCK_MIN_WIDTH) / 2),
   };
+}
+
+/**
+ * 実機ブロックの外形を用紙座標で見た囲み矩形。表は常に正立なので、配置の回転・ミラーでは
+ * 向きも大きさも変わらない (配置基準点へ平行移動するだけ)。描画・クリックで掴む当たり判定・
+ * 外形の下に置く機能ラベル (G4) はこれを引く。Rust側 device_block_bounds と同一。
+ */
+export function deviceBlockBounds(
+  inst: Pick<SymbolInstance, "at">,
+  block: DeviceBlock,
+): SymbolBounds {
+  const layout = deviceBlockLayout(block);
+  return {
+    min: { x: inst.at.x + layout.x, y: inst.at.y + layout.y },
+    max: { x: inst.at.x + layout.x + layout.width, y: inst.at.y + layout.y + layout.height },
+  };
+}
+
+/**
+ * ピン (用紙座標、回転・ミラー済み) から実機ブロックの外形へ引く引き出し線の終点 =
+ * 外形の縁のいちばん近い点。90度回したコイルならピンは外形の上下に来るので、引き出し線は
+ * 上端・下端の辺につながる。外形が内容で広がってピンが中に入ったときは、いちばん近い辺へ
+ * 短く引いて接続点を示す。ピンがちょうど縁の上にあればnull (長さ0)。
+ * Rust側 device_block_lead_end と同一。
+ */
+export function deviceBlockLeadEnd(pin: Point, bounds: SymbolBounds): Point | null {
+  const { min, max } = bounds;
+  const inside = pin.x > min.x && pin.x < max.x && pin.y > min.y && pin.y < max.y;
+  const end = inside
+    ? ([
+        [pin.x - min.x, { x: min.x, y: pin.y }],
+        [max.x - pin.x, { x: max.x, y: pin.y }],
+        [pin.y - min.y, { x: pin.x, y: min.y }],
+        [max.y - pin.y, { x: pin.x, y: max.y }],
+      ] as const).reduce((best, d) => (d[0] < best[0] ? d : best))[1]
+    : {
+        x: Math.min(Math.max(pin.x, min.x), max.x),
+        y: Math.min(Math.max(pin.y, min.y), max.y),
+      };
+  return Math.abs(end.x - pin.x) > 1e-9 || Math.abs(end.y - pin.y) > 1e-9 ? end : null;
+}
+
+/** 実機ブロックに描く文字1つ分。表は常に正立で、文字はセルの中に水平に書く。文字高はCONTACT_MAP_FONT。 */
+export interface DeviceBlockText {
+  text: string;
+  /** ベースラインの基準点 (用紙座標)。 */
+  at: Point;
+  /** 寄せ方。ヘッダ (参照記号・型番) は中央、接点の行は左。 */
+  align: "center" | "left";
+  /** この文字を収めるセル。 */
+  cell: SymbolBounds;
+}
+
+/**
+ * 実機ブロックに描く文字の一覧 (用紙座標)。上からヘッダ行 → 接点の行の順。
+ * キャンバス描画・SVG出力はこれをそのまま描く。Rust側 device_block_texts と同一。
+ */
+export function deviceBlockTexts(
+  inst: Pick<SymbolInstance, "at">,
+  block: DeviceBlock,
+): DeviceBlockText[] {
+  const layout = deviceBlockLayout(block);
+  const cellAt = (c: SymbolBounds): SymbolBounds => ({
+    min: { x: inst.at.x + c.min.x, y: inst.at.y + c.min.y },
+    max: { x: inst.at.x + c.max.x, y: inst.at.y + c.max.y },
+  });
+  const baseline = (cell: SymbolBounds) =>
+    (cell.min.y + cell.max.y) / 2 + CONTACT_MAP_BASELINE_SHIFT;
+  const out: DeviceBlockText[] = [];
+  [block.reference, block.partNo].forEach((text, i) => {
+    if (i >= layout.headerRows) return;
+    const cell = cellAt(layout.headerCell(i));
+    out.push({
+      text,
+      at: { x: (cell.min.x + cell.max.x) / 2, y: baseline(cell) },
+      align: "center",
+      cell,
+    });
+  });
+  block.contacts.forEach((row, i) => {
+    [row.terminals, row.address].forEach((text, col) => {
+      const cell = cellAt(layout.contactCell(i, col));
+      out.push({
+        text,
+        at: { x: cell.min.x + CONTACT_MAP_PAD, y: baseline(cell) },
+        align: "left",
+        cell,
+      });
+    });
+  });
+  return out;
 }

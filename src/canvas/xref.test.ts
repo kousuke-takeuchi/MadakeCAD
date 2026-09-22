@@ -254,8 +254,18 @@ describe("G13 device cross-reference", () => {
   it("places the text right of the symbol outline, level with the designator label", () => {
     const bounds = { min: { x: 92.5, y: 47 }, max: { x: 107.5, y: 53 } };
     const topY = 47;
-    const at = deviceXrefAt(bounds, topY);
+    const at = deviceXrefAt(symbolEntity("e1", "motor", "M1", 100, 50), bounds, topY);
     expect(at.x).toBeGreaterThan(bounds.max.x);
     expect(at.y).toBeCloseTo(topY - 4.5, 9);
+  });
+
+  // ja: 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない
+  it("clears a designator label wider than the symbol itself", () => {
+    const bounds = { min: { x: 92.5, y: 47 }, max: { x: 107.5, y: 53 } };
+    const inst = symbolEntity("e1", "motor", "M1-CONVEYOR-DRIVE", 100, 50);
+    // 参照記号は配置基準点を中心に描かれるので、右端は中心+幅の半分 (文字高2.5mm)
+    const labelRight = inst.at.x + (2.5 * 0.6 * inst.reference.length) / 2;
+    expect(labelRight).toBeGreaterThan(bounds.max.x);
+    expect(deviceXrefAt(inst, bounds, 47).x).toBeGreaterThanOrEqual(labelRight + 1.0 - 1e-9);
   });
 });

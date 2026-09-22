@@ -14,7 +14,7 @@ import {
   type SymbolDef,
   type SymbolInstance,
 } from "../ipc";
-import { deviceBlockBounds } from "../canvas/renderer";
+import { deviceBlockBounds } from "../canvas/relayXref";
 import { useDocumentStore } from "../stores/document";
 import { EditorController } from "./controller";
 
