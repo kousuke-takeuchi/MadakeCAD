@@ -265,8 +265,8 @@ describe("drawSymbol text placement", () => {
     }
   });
 
-  // ja: 回していない端子台の番号は、印の中心から文字高の半分だけ下にベースラインが来る
-  it("puts an unturned terminal block's number half a character below its mark centre", () => {
+  // ja: 画面のキャンバスでは、回していない端子台の番号は印の中心から文字高の約1/3(1/2.8)だけ下にベースラインが来る(出力図面の1/2より小さい)
+  it("puts an unturned terminal block's number just over a third of a character height below its mark centre on the canvas, a smaller offset than the exported drawing's half", () => {
     for (const symbolId of ["terminal_block_4p", "terminal_block_4p_2l"]) {
       const { texts, def, vp, inst } = drawTerminalBlock(symbolId, "", 0);
       const marks = def.primitives

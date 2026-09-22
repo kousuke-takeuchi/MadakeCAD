@@ -532,7 +532,7 @@
 - ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の間に横向きに描かれる。 <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
 - シンボルの中の文字 (モータの「M」など) はシンボル定義が決めた場所に描かれ、シンボルを回しても反転してもその場所から動かない (文字そのものは常に水平に書くため)。 <sub>`the_lettering_inside_a_symbol_stays_put_when_the_symbol_is_turned`</sub>
 - 1〜2文字の端子番号は、端子台をどの向きに回しても反転しても、自分の印(丸)の中に丸ごと収まり、その中央に載る。だから回した端子台でも端子ごとに番号が読める。 <sub>`a_turned_terminal_block_keeps_a_short_number_inside_its_own_mark`</sub>
-- 回していない端子台では、どの端子番号も自分の印の中心のちょうど文字高の半分だけ下にベースラインが来る。単段でも多段でも同じ。 <sub>`a_terminal_number_sits_half_a_character_below_its_mark_centre`</sub>
+- 出力図面(SVG/PDF)では、回していない端子台のどの端子番号も、自分の印の中心のちょうど文字高の半分(端子番号の文字高2.0mmに対して1.0mm)だけ下にベースラインが来る。単段でも多段でも同じ(画面のキャンバスはこれより小さい独自の下げ幅を使う)。 <sub>`a_terminal_number_sits_half_a_character_below_its_mark_centre`</sub>
 - 3文字の端子番号 (多段端子台の`10a`など) は自分の印と同じ幅なので、印の中央に載せたうえで、印から出るのは最大0.3mmまでに収まる。そのうえでジャンパバーにも隣の端子の印にも掛からない。 <sub>`a_three_character_terminal_number_hangs_at_most_a_little_over_its_own_mark`</sub>
 - ジャンパバーはシンボルの普通の線の2倍以上の太さで描かれるので、端子の印どうしの狭い隙間に入る短いバーでも、印刷したときにショートバーだと分かる。 <sub>`the_jumper_bar_is_at_least_twice_as_thick_as_a_symbol_line`</sub>
 - 隣り合わない2端子間のジャンパは(端子台チャートと同じ規則で)不正なので、バーはまったく描かれない。 <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
@@ -1623,7 +1623,7 @@
 - ミラーは弧を左右反転させるが、描画方向(開始→終了を時計回り)は保つ <sub>`rotateArcAngles`</sub>
 - シンボルの中の文字は、シンボルを回しても反転しても定義どおりの場所に描かれる <sub>`drawSymbol text placement`</sub>
 - 1〜2文字の端子番号は、どの向きに回しても反転しても自分の印(丸)の中に丸ごと収まる <sub>`drawSymbol text placement`</sub>
-- 回していない端子台の番号は、印の中心から文字高の半分だけ下にベースラインが来る <sub>`drawSymbol text placement`</sub>
+- 画面のキャンバスでは、回していない端子台の番号は印の中心から文字高の約1/3(1/2.8)だけ下にベースラインが来る(出力図面の1/2より小さい) <sub>`drawSymbol text placement`</sub>
 - ジャンパバーは太い線だけで描かれ、両端に丸(円)は描かれない <sub>`drawSymbol text placement`</sub>
 
 ### search

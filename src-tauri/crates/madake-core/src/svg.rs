@@ -2580,8 +2580,8 @@ mod tests {
         }
     }
 
-    /// On an unturned terminal block each terminal number is written with its baseline exactly half a character below the centre of its own mark, single-level and multi-level blocks alike.
-    /// 回していない端子台では、どの端子番号も自分の印の中心のちょうど文字高の半分だけ下にベースラインが来る。単段でも多段でも同じ。
+    /// In the exported drawing (SVG/PDF) an unturned terminal block writes each terminal number with its baseline exactly half the character height (1.0 mm at the 2.0 mm terminal-number height) below the centre of its own mark, single-level and multi-level blocks alike; the on-screen canvas uses a smaller offset of its own.
+    /// 出力図面(SVG/PDF)では、回していない端子台のどの端子番号も、自分の印の中心のちょうど文字高の半分(端子番号の文字高2.0mmに対して1.0mm)だけ下にベースラインが来る。単段でも多段でも同じ(画面のキャンバスはこれより小さい独自の下げ幅を使う)。
     #[test]
     fn a_terminal_number_sits_half_a_character_below_its_mark_centre() {
         let mark_r = crate::symbol::TERMINAL_MARK_R;
