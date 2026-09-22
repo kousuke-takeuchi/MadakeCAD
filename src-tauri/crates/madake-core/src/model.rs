@@ -30,7 +30,10 @@ pub type SheetId = Uuid;
 ///   図形を1つも持たない旧ファイルは今までどおり開き、出力される図面も変わらない
 /// - v9: 注記の引き出し先 ([`TextEntity::leader_to`]) を追加。引き出し先を持たない旧ファイルの
 ///   注記は未設定 (`None`) で開き、引き出し線を描かないので出力される図面も変わらない
-pub const FORMAT_VERSION: u32 = 9;
+/// - v10: プロジェクト番号 ([`Project::no`]) を追加。表題欄バインド`{project.no}`の供給元
+///   (G16)。番号を持たない旧ファイルは未設定 (`None`) で開き、バインドは空欄のまま
+///   (これまでと同じ見た目)
+pub const FORMAT_VERSION: u32 = 10;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -58,6 +61,11 @@ pub struct Project {
     /// ([`crate::frame_template::DEFAULT_FRAME_TEMPLATE_ID`])。
     #[serde(default)]
     pub frame_template: Option<String>,
+    /// プロジェクト番号 (G16)。表題欄バインド`{project.no}`の供給元
+    /// ([`crate::frame_template::bind_value`])。`Project::name`と違って作成時には決まらないので
+    /// 既定は未設定。`set_project_meta`コマンドで設定する。
+    #[serde(default)]
+    pub no: Option<String>,
 }
 
 impl Project {
@@ -69,6 +77,7 @@ impl Project {
             wire_parts: Vec::new(),
             plc_assignments: Vec::new(),
             frame_template: None,
+            no: None,
         }
     }
 

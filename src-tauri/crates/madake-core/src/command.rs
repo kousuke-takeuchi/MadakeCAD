@@ -46,6 +46,15 @@ pub enum Command {
         #[serde(default)]
         height_mm: Option<f64>,
     },
+    /// シートの用紙サイズ・向きの変更 (G15)。既存エンティティの座標はそのまま
+    /// (動かない・消えない)。ゾーン分割は`add_sheet`と同じ既定値へ引き直す。
+    /// 新しい用紙の外に出たエンティティはERC警告 (`erc.outside_paper`) で報告する
+    /// (このコマンドでは検出しない。検証は読み取り専用で行う)。
+    SetSheetPaper {
+        sheet_id: SheetId,
+        size: PaperSize,
+        orientation: Orientation,
+    },
     AddEntity {
         sheet_id: SheetId,
         entity: Entity,
@@ -104,6 +113,23 @@ pub enum Command {
         sheet_id: SheetId,
         numbers: Vec<PanelItemNumber>,
     },
+    /// プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
+    /// 各欄は省略 (null) すれば変更しない。`name`/`no`はプロジェクト単位、
+    /// `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く
+    /// (1コマンドでundo一発)。表題欄はシートごとに異なる値を持てるので、逆コマンドは
+    /// シートごとの元の値を個別に復元する。
+    SetProjectMeta {
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        no: Option<String>,
+        #[serde(default)]
+        company: Option<String>,
+        #[serde(default)]
+        drawing_no: Option<String>,
+        #[serde(default)]
+        title: Option<String>,
+    },
 }
 
 /// エンジンからフロントエンドへ通知する差分。
@@ -130,6 +156,9 @@ pub enum PatchOp {
     PlcAssignmentsReplaced { assignments: Vec<PlcAssignment> },
     /// 図枠テンプレートが差し替わった (全シートの図枠を描き直す)。
     FrameTemplateChanged { frame_template: Option<String> },
+    /// プロジェクト名・番号が変わった (G16)。表題欄側の変更は各シートの
+    /// [`PatchOp::SheetMetaUpdated`]で別に届く。
+    ProjectMetaChanged { name: String, no: Option<String> },
 }
 
 /// 編集の由来(誰の操作か)。undo履歴の各エントリに記録する。
@@ -515,6 +544,32 @@ impl Engine {
                     }],
                 ))
             }
+            Command::SetSheetPaper {
+                sheet_id,
+                size,
+                orientation,
+            } => {
+                let sheet = self
+                    .project
+                    .sheet_mut(*sheet_id)
+                    .ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let old_size = sheet.size;
+                let old_orientation = sheet.orientation;
+                sheet.size = *size;
+                sheet.orientation = *orientation;
+                // ゾーン分割は add_sheet / new_kind と同じ既定値へ引き直す (エンティティ座標は不変)
+                sheet.zone_cols = 4;
+                sheet.zone_rows = 6;
+                let meta = sheet_meta(sheet);
+                Ok((
+                    vec![PatchOp::SheetMetaUpdated { sheet: meta }],
+                    vec![Command::SetSheetPaper {
+                        sheet_id: *sheet_id,
+                        size: old_size,
+                        orientation: old_orientation,
+                    }],
+                ))
+            }
             Command::AddEntity { sheet_id, entity } => {
                 validate_entity(
                     entity,
@@ -722,7 +777,82 @@ impl Engine {
             Command::SetPanelItemNumbers { sheet_id, numbers } => {
                 self.apply_panel_item_numbers(*sheet_id, numbers)
             }
+            Command::SetProjectMeta {
+                name,
+                no,
+                company,
+                drawing_no,
+                title,
+            } => self.apply_project_meta(name, no, company, drawing_no, title),
         }
+    }
+
+    /// [`Command::SetProjectMeta`]の適用: プロジェクト単位の欄(名前・番号)は1つの
+    /// [`PatchOp::ProjectMetaChanged`]で、表題欄の欄は**シートごとに**
+    /// [`PatchOp::SheetMetaUpdated`]で届く。逆コマンドも同じ形に分かれるので、
+    /// undoはプロジェクト単位の値とシートごとの表題欄をそれぞれ正しい元の値へ戻す。
+    fn apply_project_meta(
+        &mut self,
+        name: &Option<String>,
+        no: &Option<String>,
+        company: &Option<String>,
+        drawing_no: &Option<String>,
+        title: &Option<String>,
+    ) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let mut ops = Vec::new();
+        let mut inverse = Vec::new();
+
+        let mut inv_name = None;
+        let mut inv_no = None;
+        if let Some(n) = name {
+            inv_name = Some(self.project.name.clone());
+            self.project.name = n.clone();
+        }
+        if let Some(n) = no {
+            inv_no = Some(self.project.no.clone().unwrap_or_default());
+            self.project.no = Some(n.clone());
+        }
+        if inv_name.is_some() || inv_no.is_some() {
+            ops.push(PatchOp::ProjectMetaChanged {
+                name: self.project.name.clone(),
+                no: self.project.no.clone(),
+            });
+            inverse.push(Command::SetProjectMeta {
+                name: inv_name,
+                no: inv_no,
+                company: None,
+                drawing_no: None,
+                title: None,
+            });
+        }
+
+        if company.is_some() || drawing_no.is_some() || title.is_some() {
+            for sheet in &mut self.project.sheets {
+                let old_tb = sheet.title_block.clone();
+                let mut changed = false;
+                if let Some(c) = company {
+                    sheet.title_block.company = c.clone();
+                    changed = true;
+                }
+                if let Some(d) = drawing_no {
+                    sheet.title_block.drawing_no = d.clone();
+                    changed = true;
+                }
+                if let Some(t) = title {
+                    sheet.title_block.title = t.clone();
+                    changed = true;
+                }
+                if changed {
+                    ops.push(PatchOp::SheetMetaUpdated { sheet: sheet_meta(sheet) });
+                    inverse.push(Command::SetTitleBlock {
+                        sheet_id: sheet.id,
+                        title_block: old_tb,
+                    });
+                }
+            }
+        }
+
+        Ok((ops, inverse))
     }
 
     /// 指定フットプリントのアイテム番号を書き換える。値が変わるものだけをpatch・
@@ -2462,5 +2592,154 @@ mod tests {
         assert!(engine
             .execute(Command::RenumberPanelItems { sheet_id: missing })
             .is_err());
+    }
+
+    /// Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted.
+    /// シートの用紙サイズ・向きを変えても (G15)、既存のエンティティは元の座標のまま動かず、消えもしない。
+    #[test]
+    fn changing_sheet_paper_keeps_entity_coordinates() {
+        let (mut engine, sheet_id) = test_engine();
+        let entity = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "resistor".into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "R1".into(),
+            value: "10k".into(),
+            attrs: Default::default(),
+        });
+        let id = entity.id();
+        engine.execute(Command::AddEntity { sheet_id, entity }).unwrap();
+        engine
+            .execute(Command::SetSheetPaper {
+                sheet_id,
+                size: PaperSize::A4,
+                orientation: Orientation::Portrait,
+            })
+            .unwrap();
+        let sheet = &engine.project().sheets[0];
+        assert_eq!(sheet.size, PaperSize::A4);
+        assert_eq!(sheet.orientation, Orientation::Portrait);
+        let Entity::Symbol(s) = &sheet.entities[&id] else {
+            panic!("シンボルであること")
+        };
+        assert_eq!(s.at, Point::new(100.0, 50.0), "座標は変わらない");
+    }
+
+    /// Undoing a paper size change restores both the previous size and orientation.
+    /// 用紙サイズの変更をundoすると、サイズと向きの両方が元へ戻る。
+    #[test]
+    fn undoing_a_paper_change_restores_size_and_orientation() {
+        let (mut engine, sheet_id) = test_engine();
+        assert_eq!(engine.project().sheets[0].size, PaperSize::A3);
+        assert_eq!(engine.project().sheets[0].orientation, Orientation::Landscape);
+        engine
+            .execute(Command::SetSheetPaper {
+                sheet_id,
+                size: PaperSize::A4,
+                orientation: Orientation::Portrait,
+            })
+            .unwrap();
+        engine.undo().unwrap().unwrap();
+        assert_eq!(engine.project().sheets[0].size, PaperSize::A3);
+        assert_eq!(engine.project().sheets[0].orientation, Orientation::Landscape);
+    }
+
+    /// A paper size change on a sheet that does not exist is refused.
+    /// 存在しないシートの用紙変更は断られる。
+    #[test]
+    fn changing_paper_on_an_unknown_sheet_is_refused() {
+        let (mut engine, _sheet_id) = test_engine();
+        let missing = Uuid::new_v4();
+        assert!(engine
+            .execute(Command::SetSheetPaper {
+                sheet_id: missing,
+                size: PaperSize::A4,
+                orientation: Orientation::Portrait,
+            })
+            .is_err());
+    }
+
+    /// `set_project_meta` sets the project name and number in one command, leaving every sheet's title block untouched when those fields are omitted.
+    /// `set_project_meta`はプロジェクト名と番号を1コマンドで設定し、その欄を省略すれば全シートの表題欄には触れない。
+    #[test]
+    fn set_project_meta_sets_name_and_number() {
+        let (mut engine, sheet_id) = test_engine();
+        let before_company = engine.project().sheets[0].title_block.company.clone();
+        engine
+            .execute(Command::SetProjectMeta {
+                name: Some("まだけ制御盤".into()),
+                no: Some("MDK-2026-001".into()),
+                company: None,
+                drawing_no: None,
+                title: None,
+            })
+            .unwrap();
+        assert_eq!(engine.project().name, "まだけ制御盤");
+        assert_eq!(engine.project().no.as_deref(), Some("MDK-2026-001"));
+        assert_eq!(
+            engine.project().sheets[0].title_block.company,
+            before_company,
+            "表題欄は変わらない"
+        );
+        let _ = sheet_id;
+    }
+
+    /// `set_project_meta` writes the title-block fields (company, drawing number, title) to every sheet in the project with one undoable command.
+    /// `set_project_meta`は表題欄の欄(会社名・図番・表題)をプロジェクトの全シートへ1つのundo可能なコマンドで書き込む。
+    #[test]
+    fn set_project_meta_writes_title_block_to_every_sheet() {
+        let mut project = Project::new("t");
+        project.sheets.push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let mut engine = Engine::new(project);
+        engine
+            .execute(Command::SetProjectMeta {
+                name: None,
+                no: None,
+                company: Some("まだけ電機".into()),
+                drawing_no: Some("MDK-100".into()),
+                title: Some("主回路".into()),
+            })
+            .unwrap();
+        for sheet in &engine.project().sheets {
+            assert_eq!(sheet.title_block.company, "まだけ電機");
+            assert_eq!(sheet.title_block.drawing_no, "MDK-100");
+            assert_eq!(sheet.title_block.title, "主回路");
+        }
+    }
+
+    /// Undoing `set_project_meta` restores each sheet's own previous title block, even when the sheets had different values beforehand (not a single shared value).
+    /// `set_project_meta`のundoは、各シートがそれぞれ異なる元の値を持っていた場合でも、シートごとの元の表題欄を正しく復元する(共通の1値には戻さない)。
+    #[test]
+    fn undoing_set_project_meta_restores_each_sheets_own_title_block() {
+        let mut project = Project::new("t");
+        project.sheets[0].title_block.drawing_no = "OLD-1".into();
+        project.sheets.push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        project.sheets[1].title_block.drawing_no = "OLD-2".into();
+        let mut engine = Engine::new(project);
+        engine
+            .execute(Command::SetProjectMeta {
+                name: None,
+                no: None,
+                company: None,
+                drawing_no: Some("NEW".into()),
+                title: None,
+            })
+            .unwrap();
+        engine.undo().unwrap().unwrap();
+        assert_eq!(engine.project().sheets[0].title_block.drawing_no, "OLD-1");
+        assert_eq!(engine.project().sheets[1].title_block.drawing_no, "OLD-2");
+    }
+
+    /// The project number command is plain JSON, so agents, the CLI and the Link API can all send it.
+    /// プロジェクト番号のコマンドは素のJSONで表現できるので、AI・CLI・Link APIのどこからでも送れる。
+    #[test]
+    fn set_project_meta_command_is_plain_json() {
+        let (mut engine, _sheet_id) = test_engine();
+        let json = r#"{"type":"set_project_meta","no":"MDK-2026-001"}"#;
+        let command: Command = serde_json::from_str(json).unwrap();
+        engine.execute(command).unwrap();
+        assert_eq!(engine.project().no.as_deref(), Some("MDK-2026-001"));
     }
 }

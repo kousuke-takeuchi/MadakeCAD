@@ -1488,8 +1488,10 @@ mod tests {
 
         engine
             .execute(Command::AddSheet {
+                // A0: 2つ分のマクロを並べても用紙の外に出ない広さ (このテストの主題は参照記号の
+                // 重複回避であって用紙の収まりではない)
                 name: "Sheet2".into(),
-                size: PaperSize::A3,
+                size: PaperSize::A0,
                 orientation: Orientation::Landscape,
                 kind: crate::model::SheetKind::Schematic,
             })
@@ -1517,7 +1519,7 @@ mod tests {
             None,
             None,
             second,
-            Point::new(60.0, 40.0),
+            Point::new(300.0, 300.0),
             0,
             EditOrigin::User,
         )
@@ -1529,7 +1531,7 @@ mod tests {
             None,
             None,
             second,
-            Point::new(60.0, 160.0),
+            Point::new(300.0, 500.0),
             0,
             EditOrigin::User,
         )

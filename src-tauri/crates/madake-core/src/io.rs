@@ -231,7 +231,6 @@ mod tests {
         };
         assert_eq!(t.leader_to, None);
         assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
-        assert_eq!(FORMAT_VERSION, 9, "引き出し線の追加でファイル形式が1つ上がる");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -330,15 +329,37 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 9, the version that added the note leader line.
-    /// 現行のファイル形式バージョンは9 (注記の引き出し線を追加した版) である。
+    /// The current file format version is 10, the version that added the project number.
+    /// 現行のファイル形式バージョンは10 (プロジェクト番号を追加した版) である。
     #[test]
-    fn the_current_format_version_is_nine() {
-        assert_eq!(FORMAT_VERSION, 9);
+    fn the_current_format_version_is_ten() {
+        assert_eq!(FORMAT_VERSION, 10);
         let mut old = Project::new("x");
-        old.format_version = 8;
+        old.format_version = 9;
         migrate(&mut old);
-        assert_eq!(old.format_version, 9);
+        assert_eq!(old.format_version, 10);
+    }
+
+    /// A project file saved before the project number existed opens with no project number set, so the `{project.no}` title-block bind stays blank exactly as before, and is brought up to the current format version.
+    /// プロジェクト番号が無かった頃のプロジェクトファイルはプロジェクト番号が未設定として開き、表題欄バインド`{project.no}`はこれまでどおり空欄のままになる。現行のファイル形式へ更新される。
+    #[test]
+    fn an_old_project_file_opens_with_no_project_number() {
+        let dir = std::env::temp_dir().join(format!("madake-io-projectno-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("v9.mdkproj");
+        // format_version 9の頃のファイル (プロジェクトに`no`が無い)
+        std::fs::write(
+            &path,
+            r#"{"format_version":9,"name":"旧図面","wire_parts":[],"plc_assignments":[],
+                "sheets":[{"id":"77777777-7777-4777-8777-777777777777","name":"S1","size":"A3",
+                "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},
+                "entities":{}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.no, None);
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// A drawing saved before the annotation text height existed opens at the default 2.0mm, so its notes look exactly as before.

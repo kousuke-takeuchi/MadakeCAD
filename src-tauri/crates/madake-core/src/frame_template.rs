@@ -9,7 +9,7 @@
 //! | バインド | 入る値 |
 //! |---|---|
 //! | `{project.name}` | プロジェクト名 |
-//! | `{project.no}` | プロジェクト番号(モデルにまだ無いので現状は空) |
+//! | `{project.no}` | プロジェクト番号 ([`crate::model::Project::no`]、G16。`set_project_meta`コマンドで設定) |
 //! | `{sheet.no}` / `{sheet.total}` | シート番号 / 総シート数 |
 //! | `{sheet.name}` | シート名 |
 //! | `{rev.latest}` | 最新改訂の記号 ([`crate::svg::effective_rev`]) |
@@ -339,7 +339,7 @@ pub const REVISION_COLUMNS: usize = 4;
 #[derive(Debug, Clone)]
 pub struct BindContext<'a> {
     pub project_name: &'a str,
-    /// プロジェクト番号。モデルにまだ無いので現状は常に空。
+    /// プロジェクト番号 ([`crate::model::Project::no`]、G16)。未設定なら空。
     pub project_no: &'a str,
     /// 1始まりのシート番号。
     pub sheet_no: usize,
@@ -373,7 +373,7 @@ impl<'a> BindContext<'a> {
             .unwrap_or(0);
         Self {
             project_name: &project.name,
-            project_no: "",
+            project_no: project.no.as_deref().unwrap_or(""),
             sheet_no: index + 1,
             sheet_total: project.sheets.len(),
             sheet_name: &sheet.name,
@@ -744,13 +744,24 @@ mod tests {
         assert_eq!(resolve_binds("{project.name}", &ctx), "");
     }
 
-    /// The project number bind is known but always empty for now, because the project model has no number field yet.
-    /// プロジェクト番号のバインドは名前としては知られているが、プロジェクトにまだ番号欄が無いので現状は常に空になる。
+    /// Outside a project (a lone sheet) the project number bind is known but empty, since there is no project to read it from.
+    /// プロジェクトの外 (シート単体) ではプロジェクト番号のバインドは名前として知られているが、読み取り元のプロジェクトが無いので空になる。
     #[test]
-    fn the_project_number_bind_is_known_but_empty_for_now() {
+    fn the_project_number_bind_is_empty_outside_a_project() {
         let s = sheet();
         let ctx = BindContext::for_sheet(&s);
         assert_eq!(bind_value("project.no", &ctx), Some(String::new()));
+    }
+
+    /// Inside a project, the project number bind reads `Project::no` (G16), the same field `set_project_meta` writes.
+    /// プロジェクトの中ではプロジェクト番号のバインドが`Project::no` (G16) を読む。`set_project_meta`コマンドが書き込む欄と同じ。
+    #[test]
+    fn the_project_number_bind_reads_the_project_number() {
+        let mut project = Project::new("t");
+        project.no = Some("MDK-2026-001".into());
+        let s = project.sheets[0].clone();
+        let ctx = BindContext::for_project(&project, &s);
+        assert_eq!(bind_value("project.no", &ctx), Some("MDK-2026-001".to_string()));
     }
 
     /// A cell with fixed text prints it verbatim, braces included, while a cell with a bind resolves it.
