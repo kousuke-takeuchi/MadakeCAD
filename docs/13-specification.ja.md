@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1968仕様項目**。
+全5領域・**1975仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -370,6 +370,7 @@
 - 切換接点のコイル所在は、上の配線に付く注記と重ならないよう逃げる (G22の衝突の再現)。 <sub>`coil_location_moves_off_a_colliding_wire_note`</sub>
 - 上も塞がっているときは、コイル所在は外形の下へ逃げる。 <sub>`coil_location_falls_back_below_when_above_is_also_occupied`</sub>
 - 接点自身に型番が書かれているときは、コイル所在はその文字の上へは逃げず、さらに先の外形の反対側へ回る (G22)。 <sub>`coil_location_does_not_escape_onto_the_instances_own_value_label`</sub>
+- 逃がしの判定はそのシートが実際に描く文字高で配線注記を測るので、注記文字を大きくしたシートでもコイル所在はきちんと逃げる (G20とG22)。 <sub>`coil_location_measures_the_wire_note_at_the_sheets_own_text_height`</sub>
 - コイルは`attrs["device_block"]`がちょうど`"true"`のときだけ実機ブロック表示になり、それ以外(空文字含む)は従来どおりの分散配置になる。 <sub>`device_block_attribute_selects_the_display_mode`</sub>
 - 実機ブロックの接点イメージには、接点マップと同じ並びで端子対と所在が並ぶ。 <sub>`device_block_lists_the_same_contacts_as_the_contact_map`</sub>
 - 型番が空のときは、空の型番行ではなく型番行そのものが無い実機ブロックになる。 <sub>`device_block_has_no_part_number_line_when_blank`</sub>
@@ -378,7 +379,8 @@
 - 実機ブロックの外形はコイルのピン間隔を下回らないので、幅が最小のときはA1/A2ピンがそのまま外形の左右端になり、引き出し線は要らない。 <sub>`device_block_layout_is_no_narrower_than_the_pin_span`</sub>
 - 実機ブロックの最小幅はリレーコイルのシンボル定義のピン間隔そのものなので、いちばん細いブロックでもコイルの両ピンに届く。 <sub>`device_block_min_width_is_the_coil_symbols_pin_span`</sub>
 - 型番があるとヘッダは2行になり、内容で外形がピン間隔より広がっても引き出し線でピンは外形まで届く。 <sub>`device_block_layout_grows_for_the_part_number_and_keeps_the_pins_reachable`</sub>
-- 実機ブロックの外形はコイルと一緒に回転・反転するので、90度回して置いたコイルには縦長のブロックが付き、それでも2つのピンをちょうど跨ぐ。 <sub>`device_block_bounds_turn_with_the_instance`</sub>
+- 行の仕切り線はコイルの引き出し線が付く高さには来ないので、2本の引き出し線がブロックを横切る1本の線で繋がって見えることはない。 <sub>`device_block_rows_keep_clear_of_the_lead_height`</sub>
+- 実機ブロックはどの回転でも正立のまま: 外形の大きさも位置も変わらず、回るのはピンだけなので、引き出し線はいちばん近い辺から回った先のピンへ届く。 <sub>`device_block_bounds_stay_upright_when_the_instance_turns`</sub>
 - 実機ブロックの接点の行はヘッダ行のすぐ下に続き、外形全体の高さは隙間なく全ての行をちょうど覆う。 <sub>`device_block_layout_stacks_contact_rows_under_the_header`</sub>
 
 ### 帳票の図面シート化
@@ -525,7 +527,7 @@
 - シート単体の書き出しでは相手のシートが分からないので、接点マップは描かれない。 <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
 - `device_block`属性が`"true"`のコイルは、小さなコイル図形と別表の接点マップの代わりに、参照記号・型番・接点イメージをまとめた1つの外形として描かれる (G7)。 <sub>`svg_draws_a_device_block_for_a_flagged_coil`</sub>
 - 実機ブロックのコイルをどの向きに回しても反転しても、引き出し線は必ず実際のA1/A2ピンの点から出るので、そこに繋いだ配線は繋がったまま (G7)。 <sub>`a_turned_device_block_keeps_its_leads_on_the_coil_pins`</sub>
-- 上下逆さまに置いた実機ブロックのコイルは、接点イメージを常に下ではなくシンボルと同じ向きに積む (180度回転なら上へ)。 <sub>`a_device_block_turned_upside_down_stacks_its_contact_image_upwards`</sub>
+- 実機ブロックのコイルをどの向きに回しても反転しても、表は正立したまま描かれる: どの行の文字も外形の中に収まり、行どうしが重なることはない (G7)。 <sub>`a_turned_device_block_keeps_its_lettering_upright_and_inside_the_outline`</sub>
 - 実機ブロックで表示するコイルでも、機能ラベルは従来の分散配置と同じく外形の下に描かれる (G4)。 <sub>`a_device_block_keeps_the_function_label_under_its_outline`</sub>
 - `device_block`を付けなければ従来どおりの分散配置のまま: 小さなコイル図形の下に別表の接点マップが付く。 <sub>`svg_keeps_the_distributed_placement_without_the_attribute`</sub>
 - リレー以外の参照記号が2枚のシートに描かれていると、両方のシートに「/2.B3」形式のクロスリファレンスが自動で添えられる (G13)。 <sub>`svg_draws_a_device_cross_reference_for_a_designator_on_two_sheets`</sub>
@@ -846,6 +848,7 @@
 - シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける。 <sub>`sheet_device_cross_reference_table_maps_symbols_to_text`</sub>
 - 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる。 <sub>`a_designator_on_three_sheets_lists_every_other_sheet`</sub>
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる。 <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
+- 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない。 <sub>`device_cross_reference_clears_a_designator_label_wider_than_the_symbol`</sub>
 
 
 ## 自動化API (MCP / REST)
@@ -1638,11 +1641,13 @@
 - 切換接点のコイル所在は、上の配線に付く注記と重ならないよう逃げる (G22の衝突の再現)。 <sub>`relayXref`</sub>
 - 上も塞がっているときは、コイル所在は外形の下へ逃げる。 <sub>`relayXref`</sub>
 - 接点自身に型番が書かれているときは、コイル所在はその文字の上へは逃げず、さらに先の外形の反対側へ回る (G22)。 <sub>`relayXref`</sub>
+- 逃がしの判定はそのシートが実際に描く文字高で配線注記を測るので、注記文字を大きくしたシートでもコイル所在はきちんと逃げる (G20とG22) <sub>`relayXref`</sub>
 - コイルはattrs.device_blockがちょうど"true"のときだけ実機ブロック表示になり、それ以外(空文字含む)は従来どおりの分散配置になる。 <sub>`relayXref`</sub>
 - シートの実機ブロック一覧に入るのはdevice_blockが付いたコイルだけで、従来どおりの分散配置のコイルは入らない。 <sub>`relayXref`</sub>
 - 実機ブロックで表示するコイルには、コイルの下にぶら下げる別表としての接点マップはもう付かない。 <sub>`relayXref`</sub>
 - 実機ブロックの外形はコイルのピン間隔を下回らないので、幅が最小のときはA1/A2ピンがそのまま外形の左右端になり、引き出し線は要らない。 <sub>`relayXref`</sub>
 - 型番があるとヘッダは2行になり、内容で外形がピン間隔より広がっても引き出し線でピンは外形まで届く。 <sub>`relayXref`</sub>
+- 行の仕切り線はコイルの引き出し線が付く高さには来ないので、2本の引き出し線が1本の線で繋がって見えることはない <sub>`relayXref`</sub>
 - 実機ブロックの接点の行はヘッダ行のすぐ下に続き、外形全体の高さは隙間なく全ての行をちょうど覆う。 <sub>`relayXref`</sub>
 
 ### renderer
@@ -1661,7 +1666,8 @@
 - 画面のキャンバスでは、回していない端子台の番号は印の中心から文字高の約1/3(1/2.8)だけ下にベースラインが来る(出力図面の1/2より小さい) <sub>`drawSymbol text placement`</sub>
 - ジャンパバーは太い線だけで描かれ、両端に丸(円)は描かれない <sub>`drawSymbol text placement`</sub>
 - 実機ブロックをどの向きに回しても反転しても、引き出し線は必ず実際のA1/A2ピンの点から出るので、そこに繋いだ配線は繋がったまま (G7) <sub>`drawDeviceBlock`</sub>
-- 90度回した実機ブロックは縦横が入れ替わった外形で描かれる <sub>`drawDeviceBlock`</sub>
+- 実機ブロックの表はどの回転でも正立のままで、外形の位置も大きさも変わらない (回るのはピンだけ) <sub>`drawDeviceBlock`</sub>
+- 実機ブロックの文字はどの回転でも自分のセルの中に収まり、ほかの行と重ならない <sub>`drawDeviceBlock`</sub>
 - 選択中の実機ブロックは、ほかのシンボルと同じように選択色の外形で描かれる <sub>`drawDeviceBlock`</sub>
 - 実機ブロックのコイルにも機能ラベルは外形の下に描かれる (G4) <sub>`drawDeviceBlock`</sub>
 - 表示クラス「参照記号」を隠すと、実機ブロックの接点イメージ(端子対と所在)も消える(外形とヘッダは残る) <sub>`drawDeviceBlock`</sub>
@@ -1913,6 +1919,7 @@
 - シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける <sub>`G13 device cross-reference`</sub>
 - 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる <sub>`G13 device cross-reference`</sub>
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる <sub>`G13 device cross-reference`</sub>
+- 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない <sub>`G13 device cross-reference`</sub>
 
 ### propertyCommands
 

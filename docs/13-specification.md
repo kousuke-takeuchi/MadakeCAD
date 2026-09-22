@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1968 specification clauses** across 5 areas.
+**1975 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -370,6 +370,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A changeover contact's coil location moves off the wire note above it, reproducing the collision described in G22. <sub>`coil_location_moves_off_a_colliding_wire_note`</sub>
 - When even the space above is occupied, the coil location falls back to below the outline. <sub>`coil_location_falls_back_below_when_above_is_also_occupied`</sub>
 - When the contact carries a part number of its own, the coil location does not escape onto that text: it goes on past it, to the other side of the outline. <sub>`coil_location_does_not_escape_onto_the_instances_own_value_label`</sub>
+- The escape measures the wire note at the height that sheet actually draws it, so a sheet with taller annotation text still moves the coil location out of the way. <sub>`coil_location_measures_the_wire_note_at_the_sheets_own_text_height`</sub>
 - A coil is only shown as a physical device block when its "device_block" attribute is exactly "true"; any other value, including empty, keeps the distributed placement. <sub>`device_block_attribute_selects_the_display_mode`</sub>
 - The device block's contact image lists each contact with its terminal pair and drawing address, in the same order as the contact map. <sub>`device_block_lists_the_same_contacts_as_the_contact_map`</sub>
 - A blank part number produces a device block with no part number line, rather than an empty one. <sub>`device_block_has_no_part_number_line_when_blank`</sub>
@@ -378,7 +379,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The device block's outline is at least as wide as the coil's pin span, so its A1/A2 pins land exactly on the outline's left and right edge and no lead line is needed. <sub>`device_block_layout_is_no_narrower_than_the_pin_span`</sub>
 - The device block's minimum width is exactly the relay coil symbol's own pin span, so the narrowest block reaches both of the coil's pins. <sub>`device_block_min_width_is_the_coil_symbols_pin_span`</sub>
 - A part number adds a second header row, and pins still reach the outline through a lead when the content widens the box past the pin span. <sub>`device_block_layout_grows_for_the_part_number_and_keeps_the_pins_reachable`</sub>
-- The device block turns and mirrors with its coil, so a coil placed at 90 degrees gets an upright block that still spans exactly its two pins. <sub>`device_block_bounds_turn_with_the_instance`</sub>
+- The row dividers never sit at the height the coil's leads attach, so the two leads are never joined into one line across the block. <sub>`device_block_rows_keep_clear_of_the_lead_height`</sub>
+- The device block stays upright whatever the rotation: the outline keeps its size and position, and only the pins turn, so the leads reach the turned pins from the nearest edge. <sub>`device_block_bounds_stay_upright_when_the_instance_turns`</sub>
 - The device block's contact rows sit directly under the header rows, and the outline's total height covers every row with no gap. <sub>`device_block_layout_stacks_contact_rows_under_the_header`</sub>
 
 ### Reports as drawing sheets
@@ -525,7 +527,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Exporting a single sheet on its own draws no contact map, because the counterpart sheets are unknown. <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
 - A coil whose "device_block" attribute is "true" is drawn as one outline with its designator, part number and contact image, instead of the small coil symbol and the separate hanging contact map. <sub>`svg_draws_a_device_block_for_a_flagged_coil`</sub>
 - However a device-block coil is turned or mirrored, each lead line still starts exactly on one of the coil's A1/A2 pin points, so the wires attached there stay connected. <sub>`a_turned_device_block_keeps_its_leads_on_the_coil_pins`</sub>
-- A device-block coil turned upside down stacks its contact image away from the pins the same way the symbol itself turns, instead of always hanging downwards. <sub>`a_device_block_turned_upside_down_stacks_its_contact_image_upwards`</sub>
+- However a device-block coil is turned or mirrored, its table is drawn upright: every line of text stays inside the outline and no two lines are drawn on top of each other. <sub>`a_turned_device_block_keeps_its_lettering_upright_and_inside_the_outline`</sub>
 - A device-block coil still prints its function label under the outline, the same as a coil in the ordinary distributed placement. <sub>`a_device_block_keeps_the_function_label_under_its_outline`</sub>
 - Toggling "device_block" off keeps the previous distributed placement: the small coil symbol with its own separate contact map underneath. <sub>`svg_keeps_the_distributed_placement_without_the_attribute`</sub>
 - A non-relay designator drawn on two sheets gets an automatic "(/2.B3)"-style cross-reference beside it, on both sheets (G13). <sub>`svg_draws_a_device_cross_reference_for_a_designator_on_two_sheets`</sub>
@@ -846,6 +848,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The per-sheet device cross-reference table maps each symbol entity to the text drawn beside it. <sub>`sheet_device_cross_reference_table_maps_symbols_to_text`</sub>
 - A designator on three sheets lists every other sheet's address, in sheet order, on one line. <sub>`a_designator_on_three_sheets_lists_every_other_sheet`</sub>
 - The device cross-reference text sits to the right of the symbol outline, on the same row as the designator label. <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
+- A designator label wider than its symbol pushes the device cross-reference further right, so the two never overlap. <sub>`device_cross_reference_clears_a_designator_label_wider_than_the_symbol`</sub>
 
 
 ## Automation APIs (MCP / REST)
@@ -1638,11 +1641,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - moves the coil location off a colliding wire note <sub>`relayXref`</sub>
 - falls back below the outline when the space above is also occupied <sub>`relayXref`</sub>
 - does not escape the coil location onto the contact's own value label <sub>`relayXref`</sub>
+- measures the wire note at the text height that sheet draws it with <sub>`relayXref`</sub>
 - selects the display mode from the device_block attribute <sub>`relayXref`</sub>
 - only collects coils flagged as a device block <sub>`relayXref`</sub>
 - excludes device-block coils from the separate contact map <sub>`relayXref`</sub>
 - keeps the device block layout no narrower than the pin span <sub>`relayXref`</sub>
 - grows the device block for the part number and keeps the pins reachable <sub>`relayXref`</sub>
+- keeps the row dividers clear of the height the leads attach at <sub>`relayXref`</sub>
 - stacks the device block's contact rows under the header <sub>`relayXref`</sub>
 
 ### renderer
@@ -1661,7 +1666,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - puts an unturned terminal block's number just over a third of a character height below its mark centre on the canvas, a smaller offset than the exported drawing's half <sub>`drawSymbol text placement`</sub>
 - draws a jumper as a bar only, with no round mark at either end <sub>`drawSymbol text placement`</sub>
 - keeps the lead lines on the coil's own pins, whatever the rotation <sub>`drawDeviceBlock`</sub>
-- draws an upright outline for a coil turned 90 degrees <sub>`drawDeviceBlock`</sub>
+- draws the same upright outline whatever the rotation <sub>`drawDeviceBlock`</sub>
+- keeps every line of text inside its own cell and clear of the others, whatever the rotation <sub>`drawDeviceBlock`</sub>
 - strokes the outline in the selection colour while the coil is selected <sub>`drawDeviceBlock`</sub>
 - prints the function label under the block outline <sub>`drawDeviceBlock`</sub>
 - hides the contact image rows with the reference-designator view class <sub>`drawDeviceBlock`</sub>
@@ -1913,6 +1919,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - maps each symbol entity id to the text drawn beside it <sub>`G13 device cross-reference`</sub>
 - lists every other sheet for a designator on three sheets <sub>`G13 device cross-reference`</sub>
 - places the text right of the symbol outline, level with the designator label <sub>`G13 device cross-reference`</sub>
+- clears a designator label wider than the symbol itself <sub>`G13 device cross-reference`</sub>
 
 ### propertyCommands
 

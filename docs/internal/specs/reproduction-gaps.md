@@ -427,19 +427,27 @@ the terminal diagram and the BOM as **one** device.
 > `update_entity` command. No manufacturer per-pole numbering scheme and no mechanical
 > linkage drawing were added — those remain open (see **Proposed**, second half).
 
-> **Fix round 2026-09-22 (review findings F1/F2/M1/M2/M4).** The block is drawn through
-> the instance transform, exactly like the symbol's own primitives: outline, rules and
-> lead lines all go through `transform_local`/`transformLocal`, and the leads start on
-> the symbol definition's real A1/A2 pin points, so a coil placed at 90/180/270 or
-> mirrored keeps its wires (`relay_xref::device_block_bounds` /
-> `renderer.ts` `deviceBlockBounds` give the turned outline; the text stays horizontal
-> inside the turned cells, the same rule symbol lettering follows). That outline is
-> also what the canvas hit-tests, so the block can be picked anywhere it is drawn, and
-> it strokes in the selection colour while selected. The function label (G4) is printed
-> under the block outline, as it is under an ordinary symbol. The contact image rows
-> belong to the "reference designators" (`refs`) view class in both display modes —
-> hiding that class leaves the outline and the header. `DEVICE_BLOCK_MIN_WIDTH` is
-> pinned to `resolve_symbol(COIL_SYMBOL_ID)`'s own pin span by a test.
+> **Fix round 2026-09-22 (review findings F1/F2/M1/M2/M4).** The block outline is what
+> the canvas hit-tests, so the block can be picked anywhere it is drawn, and it strokes
+> in the selection colour while selected. The function label (G4) is printed under the
+> block outline, as it is under an ordinary symbol. The contact image rows belong to the
+> "reference designators" (`refs`) view class in both display modes — hiding that class
+> leaves the outline and the header. `DEVICE_BLOCK_MIN_WIDTH` is pinned to
+> `resolve_symbol(COIL_SYMBOL_ID)`'s own pin span by a test.
+
+> **Final fix wave 2026-09-22 (rotation ruling).** A rotated table is unreadable — turning
+> the cells turns multi-line text through each other — so **the block is always drawn as an
+> upright, unrotated, unmirrored table centred on the instance position**. Rotation and
+> mirror move only the two pin points; each lead then runs from its real (transformed) pin
+> to the nearest point on the outline edge (`relay_xref::device_block_lead_end` /
+> `relayXref.ts` `deviceBlockLeadEnd`), attaching to the top or bottom edge for a coil
+> turned 90°/270°. Column order is therefore fixed, and text is always horizontal in
+> upright cells (`device_block_texts`/`deviceBlockTexts` lay out every line with its cell,
+> and tests assert, for 0/90/180/270 and mirror, that each line stays inside its cell, that
+> no two lines overlap, that the leads start exactly on the transformed pins and end on the
+> outline, and that the bounds — hence the hit-test — stay upright). The pin height is the
+> middle of the **first** header row, so no row divider ever lands on the lead height (two
+> leads joined by a full-width rule read as a through-connection).
 
 **Needed.** The reference draws the relay as one physical block: coil plus both
 changeover contacts inside a single outline, with the manufacturer's pin numbers and
@@ -634,7 +642,10 @@ silently.
 > the coils that carry a contact map or a device block, and the contacts that carry a
 > coil location) so the two mechanisms never draw on top of each other — a relay keeps
 > only its coil ⇔ contact reference, while a coil with no contacts anywhere, which that
-> mechanism draws nothing for, gets the ordinary device reference. No new view class was
+> mechanism draws nothing for, gets the ordinary device reference. The note clears the
+> instance's **designator label** as well as its outline (`device_xref_at`, the same
+> measurement the net-label twin `xref_text_at` makes), so a designator longer than the
+> symbol does not run into its own cross-reference. No new view class was
 > added: the annotation reuses the existing "reference designators" (`refs`) class in
 > the canvas renderer and the SVG/PDF export (unconditional, per the existing
 > screen-vs-output split). Benchmark: EPLAN's cross-reference types distinguish a
@@ -853,7 +864,10 @@ against a contact configuration (one changeover pole is both an NO and an NC pol
 > "above" candidate goes), so a contact that carries a part number escapes past them to
 > "below" instead of printing on top of them. The device cross-reference (G13) needs no
 > probe of its own: an instance that carries a coil location is never given one, because
-> `annotated_instances` excludes it.
+> `annotated_instances` excludes it. The note boxes are measured at the height that sheet
+> actually draws them (`wire_note::wire_note_font`, i.e. scaled by the sheet's annotation
+> text height, G20) rather than at a fixed 2.0 mm; the coil location itself stays at
+> `CONTACT_MAP_FONT`, as the rest of the relay cross-reference does.
 
 **Current behaviour (verified).** The coil location (`(/1.A3)`) is printed to the right of
 a contact symbol at the symbol's mid height. The wire note of the pin **above** that
