@@ -119,14 +119,6 @@ pub fn outer_pin_def<'a>(def: &'a SymbolDef, number: &str) -> Option<&'a PinDef>
     best.map(|(p, _)| p)
 }
 
-/// 折り返した各行のうち、いちばん長い行の幅 (mm)。
-fn max_line_width(lines: &[String]) -> f64 {
-    lines
-        .iter()
-        .map(|l| crate::tidy::text_width(l, PIN_GROUP_CAPTION_TEXT_MM))
-        .fold(0.0, f64::max)
-}
-
 /// キャプションを[`PIN_GROUP_CAPTION_WRAP`]文字ごとに折り返す (縦書きの近似)。
 /// 空文字は1行 (空行) を返す。
 pub fn wrap_caption(caption: &str) -> Vec<String> {
@@ -250,27 +242,35 @@ pub fn parse_pin_groups(spec: &str, order: &[String]) -> ParsedPinGroups {
     ParsedPinGroups { groups, issues }
 }
 
-/// 描画用に解決したピングループ1件のジオメトリ (**シンボルのローカル座標系**)。
+/// 描画用に解決したピングループ1件のジオメトリ。
+///
+/// 括弧はシンボルのローカル座標 (回転・ミラーは描画側が掛ける)。キャプションは**位置を
+/// ここで決めない**: 文字は回転しても横書きのままなので、行の積み上げはインスタンスの
+/// 変換を通したあとの**用紙座標**で行う必要がある ([`caption_line_anchors`])。
 #[derive(Debug, Clone, PartialEq)]
 pub struct PinGroupBracket {
-    /// 角括弧のポリライン (4点)。
+    /// 角括弧のポリライン (4点、ローカル座標)。
     pub bracket: Vec<Point>,
-    /// キャプションの各行と、その中心位置 (文字の幅・高さの中心。描画側が
-    /// ベースラインへ`height/2`だけ用紙の下向きにずらす、端子番号と同じ約束)。
-    pub caption_lines: Vec<(String, Point)>,
+    /// 折り返し済みのキャプション各行。
+    pub caption: Vec<String>,
+    /// 括弧の棒の中点 (ローカル座標)。キャプションはここから外向きに置く。
+    pub caption_from: Point,
+    /// キャプションを置く外向き (ローカル座標の単位ベクトル。ピンの向きそのもの)。
+    pub caption_dir: Point,
 }
 
-/// 1つのピングループの括弧とキャプションのジオメトリを求める。
+/// 1つのピングループの括弧のジオメトリと、キャプションの置き方を求める。
 ///
 /// `pins`はグループに属するピンの定義 (チャート順、`chart_order_pin_defs`の一部)。
-/// 空・ピンの向きが揃っていない (辺をまたぐ範囲) ときはNone (呼び出し側は描かない)。
+/// 空・ピンの向きが揃っていない (辺をまたぐ範囲・多段端子台の段をまたぐ範囲) ときはNone
+/// (呼び出し側は描かず、[`undrawable_group_issues`]が理由を報告する)。
 pub fn pin_group_bracket(pins: &[&PinDef], caption: &str) -> Option<PinGroupBracket> {
     let first_dir = pins.first()?.dir;
     if pins.iter().any(|p| p.dir != first_dir) {
         return None;
     }
-    let lines = wrap_caption(caption);
-    let bracket_and_caption = match first_dir {
+    let caption_lines = wrap_caption(caption);
+    let (bracket, caption_from, caption_dir) = match first_dir {
         PinDir::Left | PinDir::Right => {
             let top = pins.iter().map(|p| p.at.y).fold(f64::INFINITY, f64::min);
             let bottom = pins.iter().map(|p| p.at.y).fold(f64::NEG_INFINITY, f64::max);
@@ -284,16 +284,11 @@ pub fn pin_group_bracket(pins: &[&PinDef], caption: &str) -> Option<PinGroupBrac
                 Point::new(bar_x, bottom),
                 Point::new(tick_x, bottom),
             ];
-            let caption_x = bar_x + sign * (PIN_GROUP_CAPTION_GAP_MM + max_line_width(&lines) / 2.0);
-            let mid_y = (top + bottom) / 2.0;
-            let total = (lines.len().saturating_sub(1)) as f64 * PIN_GROUP_CAPTION_LINE_PITCH_MM;
-            let start_y = mid_y - total / 2.0;
-            let caption_lines = lines
-                .into_iter()
-                .enumerate()
-                .map(|(i, l)| (l, Point::new(caption_x, start_y + i as f64 * PIN_GROUP_CAPTION_LINE_PITCH_MM)))
-                .collect();
-            (bracket, caption_lines)
+            (
+                bracket,
+                Point::new(bar_x, (top + bottom) / 2.0),
+                Point::new(sign, 0.0),
+            )
         }
         PinDir::Up | PinDir::Down => {
             let left = pins.iter().map(|p| p.at.x).fold(f64::INFINITY, f64::min);
@@ -308,25 +303,68 @@ pub fn pin_group_bracket(pins: &[&PinDef], caption: &str) -> Option<PinGroupBrac
                 Point::new(right, bar_y),
                 Point::new(right, tick_y),
             ];
-            let caption_y0 =
-                bar_y + sign * (PIN_GROUP_CAPTION_GAP_MM + PIN_GROUP_CAPTION_TEXT_MM / 2.0);
-            let mid_x = (left + right) / 2.0;
-            let caption_lines = lines
-                .into_iter()
-                .enumerate()
-                .map(|(i, l)| {
-                    (l, Point::new(mid_x, caption_y0 + sign * i as f64 * PIN_GROUP_CAPTION_LINE_PITCH_MM))
-                })
-                .collect();
-            (bracket, caption_lines)
+            (
+                bracket,
+                Point::new((left + right) / 2.0, bar_y),
+                Point::new(0.0, sign),
+            )
         }
     };
-    Some(PinGroupBracket { bracket: bracket_and_caption.0, caption_lines: bracket_and_caption.1 })
+    Some(PinGroupBracket { bracket, caption: caption_lines, caption_from, caption_dir })
+}
+
+/// キャプション各行の描画位置 (**用紙座標**の、文字の幅・高さの中心)。
+///
+/// 文字はシンボルを回してもいつも横書きなので、行は**必ず用紙の下方向へ**積む
+/// (ローカル座標で積むと、回転90/270度では行送りが横方向のずれになって行同士が重なる)。
+/// キャプションの塊**全体**が括弧の棒より外に出るように、外向きが用紙の横軸なら塊の幅の
+/// 半分、縦軸なら塊の高さの半分だけ[`PIN_GROUP_CAPTION_GAP_MM`]に足して塊の中心を置く。
+/// 空行は描かないので返さない。
+pub fn caption_line_anchors(
+    inst: &SymbolInstance,
+    bracket: &PinGroupBracket,
+) -> Vec<(String, Point)> {
+    let lines: Vec<&String> = bracket.caption.iter().filter(|l| !l.is_empty()).collect();
+    if lines.is_empty() {
+        return Vec::new();
+    }
+    let from = crate::netlist::transform_local(bracket.caption_from, inst);
+    let tip = crate::netlist::transform_local(bracket.caption_dir, inst);
+    let dir = Point::new(tip.x - inst.at.x, tip.y - inst.at.y);
+    let width = lines
+        .iter()
+        .map(|l| crate::tidy::text_width(l, PIN_GROUP_CAPTION_TEXT_MM))
+        .fold(0.0, f64::max);
+    let pitch = PIN_GROUP_CAPTION_LINE_PITCH_MM;
+    let height = (lines.len() - 1) as f64 * pitch + PIN_GROUP_CAPTION_TEXT_MM;
+    // 回転は0/90/180/270だけなので、外向きは必ず用紙の縦横どちらかに揃っている
+    let half = if dir.x.abs() > dir.y.abs() { width / 2.0 } else { height / 2.0 };
+    let center = Point::new(
+        from.x + dir.x * (PIN_GROUP_CAPTION_GAP_MM + half),
+        from.y + dir.y * (PIN_GROUP_CAPTION_GAP_MM + half),
+    );
+    let first_y = center.y - (lines.len() - 1) as f64 * pitch / 2.0;
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, l)| ((*l).clone(), Point::new(center.x, first_y + i as f64 * pitch)))
+        .collect()
+}
+
+/// 1つのグループが括弧を掛けるピン定義 (番号ごとに[`outer_pin_def`]で選び直したもの)。
+fn group_pin_defs<'a>(def: &'a SymbolDef, order: &[String], group: &PinGroup) -> Vec<&'a PinDef> {
+    let (Some(i0), Some(i1)) = (
+        order.iter().position(|p| p == &group.first),
+        order.iter().position(|p| p == &group.last),
+    ) else {
+        return Vec::new();
+    };
+    order[i0..=i1].iter().filter_map(|no| outer_pin_def(def, no)).collect()
 }
 
 /// あるシンボル定義+`attrs["pin_groups"]`から、描ける括弧を全部求める。
-/// 読めない・重なる項目は黙って飛ばす (診断は[`crate::verify`]側が
-/// [`parse_pin_groups`]を直接使って報告する)。
+/// 読めない・重なる・描けない項目は黙って飛ばす (診断は[`crate::verify`]側が
+/// [`pin_group_issues`]で報告する)。
 ///
 /// 範囲の順番はチャート順 ([`chart_order_pin_numbers`]) で決めるが、括弧を掛ける位置は
 /// 番号ごとに[`outer_pin_def`]で選び直す (多段端子台で括弧が列の内側に入らないように)。
@@ -335,20 +373,37 @@ pub fn pin_group_brackets(def: &SymbolDef, spec: &str) -> Vec<PinGroupBracket> {
         return Vec::new();
     }
     let order = chart_order_pin_numbers(def);
-    let parsed = parse_pin_groups(spec, &order);
-    parsed
+    parse_pin_groups(spec, &order)
         .groups
         .iter()
-        .filter_map(|g| {
-            let i0 = order.iter().position(|p| p == &g.first)?;
-            let i1 = order.iter().position(|p| p == &g.last)?;
-            let pins: Vec<&PinDef> = order[i0..=i1]
-                .iter()
-                .filter_map(|no| outer_pin_def(def, no))
-                .collect();
-            pin_group_bracket(&pins, &g.caption)
+        .filter_map(|g| pin_group_bracket(&group_pin_defs(def, &order, g), &g.caption))
+        .collect()
+}
+
+/// 書式としては読めたのに**括弧を描けない**グループの診断。
+///
+/// ピンの向きが揃わない範囲がこれになる: 多段端子台で段をまたぐ範囲 (`4a-1b`。段ごとに
+/// 外側の辺が違う) や、ブロックの2辺にまたがる範囲。黙って消えないようにここで報告する。
+pub fn undrawable_group_issues(def: &SymbolDef, groups: &[PinGroup]) -> Vec<PinGroupIssue> {
+    let order = chart_order_pin_numbers(def);
+    groups
+        .iter()
+        .filter(|g| pin_group_bracket(&group_pin_defs(def, &order, g), &g.caption).is_none())
+        .map(|g| PinGroupIssue {
+            text: format!("{}:{}", g.range_text, g.caption),
+            code: PIN_GROUP_INVALID.into(),
+            message: "範囲がピンの向きをまたいでいます (多段端子台の段をまたぐ範囲や、シンボルの2辺にまたがる範囲には括弧を描けません)".into(),
         })
         .collect()
+}
+
+/// `attrs["pin_groups"]`の診断を全部集める (読めない項目+描けない範囲)。
+pub fn pin_group_issues(def: &SymbolDef, spec: &str) -> Vec<PinGroupIssue> {
+    let order = chart_order_pin_numbers(def);
+    let parsed = parse_pin_groups(spec, &order);
+    let mut issues = parsed.issues;
+    issues.extend(undrawable_group_issues(def, &parsed.groups));
+    issues
 }
 
 /// 括弧とキャプションが**用紙の上で**占める矩形の一覧 (括弧の外接矩形1つ+キャプション1行1つ)。
@@ -377,12 +432,8 @@ pub fn pin_group_paper_boxes(inst: &SymbolInstance, def: &SymbolDef) -> Vec<(Poi
             }
             out.push((min, max));
         }
-        for (text, at) in &bracket.caption_lines {
-            if text.is_empty() {
-                continue;
-            }
-            let c = crate::netlist::transform_local(*at, inst);
-            let hw = crate::tidy::text_width(text, PIN_GROUP_CAPTION_TEXT_MM) / 2.0;
+        for (text, c) in caption_line_anchors(inst, &bracket) {
+            let hw = crate::tidy::text_width(&text, PIN_GROUP_CAPTION_TEXT_MM) / 2.0;
             let hh = PIN_GROUP_CAPTION_TEXT_MM / 2.0;
             out.push((
                 Point::new(c.x - hw, c.y - hh),
@@ -510,10 +561,25 @@ mod tests {
         assert!((ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
             - ys.iter().cloned().fold(f64::INFINITY, f64::min))
             >= (pins[1].at.y - pins[0].at.y).abs() - 1e-9);
+        let anchors = caption_line_anchors(&unrotated("terminal_block_4p"), &bracket);
         assert!(
-            bracket.caption_lines.iter().all(|(_, p)| p.x < bracket.bracket[0].x),
-            "キャプションは括弧よりさらに外側"
+            anchors.iter().all(|(_, p)| p.x < bracket.bracket[0].x),
+            "キャプションは括弧よりさらに外側: {anchors:?}"
         );
+    }
+
+    /// 回転もミラーもしていない、原点に置いたインスタンス (用紙座標=ローカル座標になる)。
+    fn unrotated(symbol_id: &str) -> crate::model::SymbolInstance {
+        crate::model::SymbolInstance {
+            id: uuid::Uuid::new_v4(),
+            symbol_id: symbol_id.into(),
+            at: Point::new(0.0, 0.0),
+            rotation: 0,
+            mirror: false,
+            reference: String::new(),
+            value: String::new(),
+            attrs: Default::default(),
+        }
     }
 
     /// A pin whose own number contains a hyphen cannot be named in a pin group, and says so instead of being reported as a pin that does not exist.
@@ -540,11 +606,23 @@ mod tests {
             "括弧が列の外側に出ていない: {:?}",
             brackets[0].bracket
         );
+        let anchors = caption_line_anchors(&unrotated("terminal_block_8p_2l"), &brackets[0]);
         assert!(
-            brackets[0].caption_lines.iter().all(|(_, p)| p.x > 7.5),
-            "キャプションが列の外側に出ていない: {:?}",
-            brackets[0].caption_lines
+            anchors.iter().all(|(_, p)| p.x > 7.5),
+            "キャプションが列の外側に出ていない: {anchors:?}"
         );
+    }
+
+    /// A range that spans two levels of a multi-level terminal block is reported instead of quietly drawing nothing, because the two levels face opposite sides and no single bracket can hold them.
+    /// 多段端子台の段をまたぐ範囲は、黙って何も描かれるのではなく報告される: 段ごとに外側の辺が逆なので、1本の括弧では囲めないため。
+    #[test]
+    fn a_range_across_two_levels_is_reported_instead_of_silently_skipped() {
+        let def = resolve_symbol("terminal_block_8p_2l").unwrap();
+        assert!(pin_group_brackets(&def, "4a-1b:またぎ").is_empty(), "描かれない");
+        let issues = pin_group_issues(&def, "4a-1b:またぎ");
+        assert_eq!(issues.len(), 1, "{issues:?}");
+        assert_eq!(issues[0].code, PIN_GROUP_INVALID);
+        assert!(issues[0].text.contains("4a-1b"), "{:?}", issues[0]);
     }
 
     /// A bracket spans pins from two different sides of a symbol (mixed pin direction) is refused: the shape would not be a straight bracket.

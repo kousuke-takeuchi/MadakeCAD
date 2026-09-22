@@ -489,11 +489,9 @@ fn render_pin_group_brackets(out: &mut String, inst: &crate::model::SymbolInstan
             polyline_points(&pts),
             n(PIN_GROUP_BRACKET_STROKE)
         );
-        for (text, at) in &bracket.caption_lines {
-            if text.is_empty() {
-                continue;
-            }
-            let p = transform_local(*at, inst);
+        // キャプションの行は用紙座標で積む (文字は回転しても横書きなので、ローカル座標で
+        // 積むと回転90/270度で行が横に並んで重なる)
+        for (text, p) in crate::pin_groups::caption_line_anchors(inst, &bracket) {
             text_el(
                 &mut *out,
                 p.x,
@@ -501,7 +499,7 @@ fn render_pin_group_brackets(out: &mut String, inst: &crate::model::SymbolInstan
                 crate::pin_groups::PIN_GROUP_CAPTION_TEXT_MM,
                 "#000",
                 "middle",
-                text,
+                &text,
             );
         }
     }
@@ -3245,54 +3243,65 @@ mod tests {
             .collect()
     }
 
+    /// 括弧+キャプションを持つシンボル1個だけのシートを描いて、そのSVGと、ピングループの
+    /// 箱 (括弧1つ+キャプション各行) を返す。キャプションは3行に割れる長さにする。
+    fn pin_group_case(
+        id: &str,
+        spec: &str,
+        rotation: u16,
+        mirror: bool,
+    ) -> (String, Vec<(f64, f64, f64, f64)>) {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let base = if id == "block" {
+            four_pin_block("B1", 150.0, 100.0)
+        } else {
+            terminal_block("TB1", id, 150.0, 100.0, "")
+        };
+        let mut inst = with_pin_groups(base, spec);
+        if let Entity::Symbol(s) = &mut inst {
+            s.rotation = rotation;
+            s.mirror = mirror;
+            s.value = "AB-1234".into();
+            s.attrs
+                .insert(crate::text_style::FUNCTION_LABEL_ATTR.into(), "非常停止".into());
+        }
+        let (entity_id, symbol) = match &inst {
+            Entity::Symbol(s) => (s.id, s.clone()),
+            _ => unreachable!(),
+        };
+        sheet.entities.insert(entity_id, inst);
+        let defs = crate::symbol::sheet_symbol_defs(&sheet);
+        let def = crate::symbol::DefIndex::new(&defs).get(&symbol).unwrap();
+        let boxes = crate::pin_groups::pin_group_paper_boxes(&symbol, &def)
+            .into_iter()
+            .map(|(min, max)| (min.x, min.y, max.x, max.y))
+            .collect();
+        (sheet_to_svg(&sheet, &defs), boxes)
+    }
+
+    /// 3行に割れるキャプション (4文字×2+2文字)。
+    const THREE_LINE_SPEC_CAPTION: &str = "電源系統一式予備回路";
+
     /// Pin group brackets and their captions never land on a pin number, a pin name or the symbol's designator, type or function label, for a block, a terminal block and a connector, at every rotation and mirrored.
     /// ピングループの括弧とキャプションは、ブロック・端子台・コネクタのいずれでも、全ての回転とミラーで、ピン番号・ピン名・参照記号・型番・機能ラベルのどれにも重ならない。
     #[test]
     fn svg_pin_group_boxes_never_land_on_any_label_at_any_rotation() {
-        // 4文字を超えるキャプション → 2行に割れるので、行の積み上がりも当たり判定に入る
-        let caption_lines = ["電源系統", "一式"];
-        for (id, spec) in [
-            ("block", "1-2:電源系統一式"),
-            ("terminal_block_8p", "1-4:電源系統一式"),
-            ("connector_8p", "1-4:電源系統一式"),
-        ] {
+        for (id, range) in [("block", "1-2"), ("terminal_block_8p", "1-4"), ("connector_8p", "1-4")]
+        {
+            let spec = format!("{range}:{THREE_LINE_SPEC_CAPTION}");
             for rotation in [0u16, 90, 180, 270] {
                 for mirror in [false, true] {
-                    let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
-                    let base = if id == "block" {
-                        four_pin_block("B1", 150.0, 100.0)
-                    } else {
-                        terminal_block("TB1", id, 150.0, 100.0, "")
-                    };
-                    let mut inst = with_pin_groups(base, spec);
-                    if let Entity::Symbol(s) = &mut inst {
-                        s.rotation = rotation;
-                        s.mirror = mirror;
-                        s.value = "AB-1234".into();
-                        s.attrs.insert(
-                            crate::text_style::FUNCTION_LABEL_ATTR.into(),
-                            "非常停止".into(),
-                        );
-                    }
-                    let (entity_id, symbol) = match &inst {
-                        Entity::Symbol(s) => (s.id, s.clone()),
-                        _ => unreachable!(),
-                    };
-                    sheet.entities.insert(entity_id, inst);
-                    let defs = crate::symbol::sheet_symbol_defs(&sheet);
-                    let def = crate::symbol::DefIndex::new(&defs).get(&symbol).unwrap();
-                    let svg = sheet_to_svg(&sheet, &defs);
+                    let (svg, group_boxes) = pin_group_case(id, &spec, rotation, mirror);
                     let where_ = format!("{id} rot={rotation} mirror={mirror}");
-
-                    let group_boxes = crate::pin_groups::pin_group_paper_boxes(&symbol, &def);
                     assert!(!group_boxes.is_empty(), "括弧が描かれていない ({where_})");
-                    for (min, max) in &group_boxes {
-                        let g = (min.x, min.y, max.x, max.y);
+                    for g in &group_boxes {
                         for (body, t) in all_text_boxes(&svg) {
-                            if caption_lines.contains(&body.as_str()) {
+                            // キャプションの行そのものは比べない。文字列ではなく箱の一致で
+                            // 除く (同じ文字の参照記号・機能ラベルを取りこぼさないため)
+                            if group_boxes.iter().any(|b| *b == t) {
                                 continue;
                             }
-                            assert!(!overlaps(g, t), "「{body}」に重なった {g:?} vs {t:?} ({where_})");
+                            assert!(!overlaps(*g, t), "「{body}」に重なった {g:?} vs {t:?} ({where_})");
                         }
                     }
                 }
@@ -3300,33 +3309,83 @@ mod tests {
         }
     }
 
-    /// A pin group's caption sits beyond its bracket, further from the symbol than the bracket bar is, at every rotation and mirrored.
-    /// ピングループのキャプションは括弧の外側 (シンボルから見て括弧の棒よりさらに遠く) に置かれる。回転・ミラーでも変わらない。
+    /// No two pieces of a pin group - the bracket and each caption line - ever overlap each other, so a caption split over several lines stays readable at every rotation and mirrored.
+    /// ピングループの部品どうし (括弧と、折り返したキャプションの各行) は決して重ならないので、複数行に割れたキャプションは全ての回転・ミラーで読める。
     #[test]
-    fn svg_pin_group_caption_sits_beyond_its_bracket() {
+    fn svg_pin_group_pieces_never_overlap_each_other_at_any_rotation() {
+        for (id, range) in [("block", "1-2"), ("terminal_block_8p", "1-4"), ("connector_8p", "1-4")]
+        {
+            let spec = format!("{range}:{THREE_LINE_SPEC_CAPTION}");
+            for rotation in [0u16, 90, 180, 270] {
+                for mirror in [false, true] {
+                    let (_, boxes) = pin_group_case(id, &spec, rotation, mirror);
+                    let where_ = format!("{id} rot={rotation} mirror={mirror}");
+                    assert_eq!(boxes.len(), 4, "括弧1つ+キャプション3行 ({where_})");
+                    for i in 0..boxes.len() {
+                        for j in (i + 1)..boxes.len() {
+                            assert!(
+                                !overlaps(boxes[i], boxes[j]),
+                                "{:?} と {:?} が重なった ({where_})",
+                                boxes[i],
+                                boxes[j]
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// A caption split over several lines is always stacked downwards on the paper - the lines share one centre line and step down one after another - because lettering stays horizontal however the symbol is turned.
+    /// 複数行に割れたキャプションは、シンボルをどう回しても文字は横書きのままなので、用紙の上では必ず縦に積まれる (各行は同じ中心線に並び、順に下へ下がる)。
+    #[test]
+    fn svg_pin_group_caption_lines_stack_downwards_on_paper() {
+        let spec = format!("1-4:{THREE_LINE_SPEC_CAPTION}");
         for rotation in [0u16, 90, 180, 270] {
             for mirror in [false, true] {
-                let mut inst = with_pin_groups(
-                    terminal_block("TB1", "terminal_block_8p", 150.0, 100.0, ""),
-                    "1-4:電源系統一式",
-                );
-                if let Entity::Symbol(s) = &mut inst {
-                    s.rotation = rotation;
-                    s.mirror = mirror;
-                }
-                let Entity::Symbol(symbol) = inst else { unreachable!() };
-                let def = crate::symbol::resolve_symbol("terminal_block_8p").unwrap();
-                let boxes = crate::pin_groups::pin_group_paper_boxes(&symbol, &def);
+                let (_, boxes) = pin_group_case("terminal_block_8p", &spec, rotation, mirror);
+                let where_ = format!("rot={rotation} mirror={mirror}");
                 // 先頭が括弧、残りがキャプションの行 (pin_group_paper_boxes の並び)
-                let center = |b: &(Point, Point)| {
-                    Point::new((b.0.x + b.1.x) / 2.0, (b.0.y + b.1.y) / 2.0)
-                };
-                let bracket = center(&boxes[0]).distance_to(&symbol.at);
-                for caption in &boxes[1..] {
-                    assert!(
-                        center(caption).distance_to(&symbol.at) > bracket,
-                        "キャプションが括弧より内側 rot={rotation} mirror={mirror}: {caption:?}"
-                    );
+                let captions = &boxes[1..];
+                let cx = |b: &(f64, f64, f64, f64)| (b.0 + b.2) / 2.0;
+                for c in captions {
+                    assert!((cx(c) - cx(&captions[0])).abs() < 1e-9, "行の中心がずれた ({where_})");
+                }
+                for pair in captions.windows(2) {
+                    assert!(pair[0].3 <= pair[1].1 + 1e-9, "行が下へ積まれていない ({where_})");
+                }
+            }
+        }
+    }
+
+    /// A pin group's caption block sits wholly beyond its bracket: no caption line touches the bracket, and every line is further from the symbol than the bracket bar, at every rotation and mirrored.
+    /// ピングループのキャプションは塊ごと括弧の外側に出る: どの行も括弧に触れず、シンボルから見て括弧の棒より遠くにある。回転・ミラーでも変わらない。
+    #[test]
+    fn svg_pin_group_caption_block_sits_wholly_beyond_its_bracket() {
+        let spec = format!("1-4:{THREE_LINE_SPEC_CAPTION}");
+        for rotation in [0u16, 90, 180, 270] {
+            for mirror in [false, true] {
+                let (_, boxes) = pin_group_case("terminal_block_8p", &spec, rotation, mirror);
+                let where_ = format!("rot={rotation} mirror={mirror}");
+                let bracket = boxes[0];
+                // 括弧の棒は用紙の縦か横に揃うので、外向きは「シンボルから遠ざかる軸」1本
+                let at = Point::new(150.0, 100.0);
+                let horizontal = (bracket.2 - bracket.0) < (bracket.3 - bracket.1);
+                for c in &boxes[1..] {
+                    assert!(!overlaps(bracket, *c), "キャプションが括弧に重なった ({where_})");
+                    let (cb, bb) = if horizontal {
+                        // 縦棒 → 外向きは左右
+                        (
+                            ((c.0 + c.2) / 2.0 - at.x).abs(),
+                            ((bracket.0 + bracket.2) / 2.0 - at.x).abs(),
+                        )
+                    } else {
+                        (
+                            ((c.1 + c.3) / 2.0 - at.y).abs(),
+                            ((bracket.1 + bracket.3) / 2.0 - at.y).abs(),
+                        )
+                    };
+                    assert!(cb > bb, "キャプションが括弧より内側 ({where_}): {c:?} vs {bracket:?}");
                 }
             }
         }
