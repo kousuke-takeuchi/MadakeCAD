@@ -1007,7 +1007,7 @@
     "company": "Company",
     "drawingNo": "Drawing number",
     "titleBlockTitle": "Title",
-    "hint": "Saving runs one command (undoable). Only the fields you changed are written; the title block fields overwrite every sheet.",
+    "hint": "Saving runs one command (undoable). Only the fields you changed are written; the title block fields overwrite every sheet. The company, drawing number and title shown here are read from the sheet you are on, and saving applies them to all of them.",
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving...",

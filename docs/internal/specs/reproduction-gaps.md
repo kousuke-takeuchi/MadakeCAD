@@ -59,7 +59,7 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Element | 1st | 2nd | Note |
 |---|---|---|---|
 | A4 portrait JIS frame, zone numbers | ✅ | ✅ | `jis-a4-portrait`, 4 cols x 6 rows |
-| Title block | 🔶 | 🔶 | G16 — still no project name/number, no logo |
+| Title block | 🔶 | 🔶 | G16 — no logo. **✅ phase 6 task 5**: `Project.no` + `set_project_meta` feed `{project.name}`/`{project.no}` and write every sheet's company/drawing-number/title in one undoable command |
 | Revision table | ✅ | ✅ | mark/date/description/by, latest revision binds into the title block |
 | 2-pole / 4-pole connectors with designator + type | ✅ | ✅ | |
 | Connector facing left (load side) | ✅ | ✅ | a block chooses the edge its pins sit on, so no mirror is needed |
@@ -87,7 +87,7 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Free notes | 🔶 | 🔶 | G4 gave colour, weight and anchor; rotation and multi-line are still missing |
 | Junctions | ✅ | ✅ | |
 | Device-level cross-sheet block reference | ❌ | ❌ | G13. **✅ phase 6 task 3**: any designator spanning sheets gets the `/sheet.zone` note automatically, relay coils/contacts excluded |
-| Mating connector pairs | ❌ | ❌ | G14 |
+| Mating connector pairs | ❌ | ❌ | G14. **✅ phase 6 task 5**: `attrs["mates_with"]` declares the pair — ERC (pole mismatch / one-sided / unknown designator), a mate column in the wire list, and a short dashed line when both sit on one sheet within 50 mm; no gender field on the connector family yet |
 | Reports (wire list, terminal chart/diagram, BOM, xref) | ✅ | ✅ | 17-page book |
 | ERC / electrical verification | ✅ | ✅ | 3 diagnostics |
 
