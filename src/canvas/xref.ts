@@ -5,6 +5,7 @@
 //   - ゾーンは zone_cols/zone_rows の分割をラベル座標に当てたもの (行=英字を上から、列=数字を左から)
 
 import type { NetLabel, Point, Project, Sheet } from "../ipc";
+import { relayRole } from "./relayXref";
 
 /** XRefテキストの文字高さ (mm)。xref.rsのXREF_FONTと一致させること。 */
 export const XREF_FONT = 2.0;
@@ -149,6 +150,111 @@ export function sheetXrefs(project: Project | null, sheetId: string): Map<string
     if (addresses.length) out.set(entity.id, addresses.join(XREF_SEPARATOR));
   }
   return out;
+}
+
+/** 参照記号ラベルのベースラインを外形の上端から持ち上げる量 (mm)。renderer.tsのdrawSymbolと一致させること。 */
+const REF_LABEL_DY = 4.5;
+
+/** デバイス (参照記号) が置かれている場所 (どのシートのどのゾーンか、G13)。 */
+export interface DeviceSite {
+  sheet_id: string;
+  sheet_no: number;
+  sheet_name: string;
+  zone: string;
+  entity_id: string;
+  reference: string;
+  address: string;
+}
+
+/**
+ * プロジェクト内の全シンボルインスタンスの所在を、参照記号ごとにまとめて返す (G13)。
+ * 参照記号が空のインスタンスは含まない。コイル・接点はコイル⇔接点クロスリファレンス
+ * (relayXref.ts) が既に自動で所在を注記するので、ここでは対象から外す (二重に描かないため)。
+ */
+export function deviceSites(project: Project): Map<string, DeviceSite[]> {
+  const out = new Map<string, DeviceSite[]>();
+  project.sheets.forEach((sheet, i) => {
+    for (const entity of Object.values(sheet.entities)) {
+      if (entity.kind !== "symbol") continue;
+      if (relayRole(entity.symbol_id) !== null) continue;
+      const reference = entity.reference.trim();
+      if (!reference) continue;
+      const zone = zoneAt(sheet, entity.at);
+      const site: DeviceSite = {
+        sheet_id: sheet.id,
+        sheet_no: i + 1,
+        sheet_name: sheet.name,
+        zone,
+        entity_id: entity.id,
+        reference,
+        address: `/${i + 1}.${zone}`,
+      };
+      const list = out.get(reference);
+      if (list) list.push(site);
+      else out.set(reference, [site]);
+    }
+  });
+  for (const sites of out.values()) {
+    sites.sort(
+      (a, b) =>
+        a.sheet_no - b.sheet_no ||
+        (a.zone < b.zone ? -1 : a.zone > b.zone ? 1 : 0) ||
+        (a.entity_id < b.entity_id ? -1 : a.entity_id > b.entity_id ? 1 : 0),
+    );
+  }
+  return out;
+}
+
+/** あるデバイスの相手先 (同じ参照記号を持つインスタンスが置かれている他シートの所在)。 */
+export function deviceXrefSites(project: Project, sheetId: string, reference: string): DeviceSite[] {
+  const name = reference.trim();
+  if (!name) return [];
+  return (deviceSites(project).get(name) ?? []).filter((s) => s.sheet_id !== sheetId);
+}
+
+/** 相手先の住所一覧 (例 ["/2.B3", "/3.A1"])。同じ住所は1つにまとめる。 */
+export function deviceXrefAddresses(project: Project, sheetId: string, reference: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const site of deviceXrefSites(project, sheetId, reference)) {
+    if (seen.has(site.address)) continue;
+    seen.add(site.address);
+    out.push(site.address);
+  }
+  return out;
+}
+
+/**
+ * シート1枚分のデバイス単位XRefテキスト表 (シンボルのentity id → 表示テキスト、G13)。
+ * 複数シートに跨る参照記号を持つインスタンスだけが入る。コイル・接点は含まない。
+ */
+export function sheetDeviceXrefs(project: Project | null, sheetId: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const sheet = project?.sheets.find((s) => s.id === sheetId);
+  if (!project || !sheet) return out;
+  const sites = deviceSites(project);
+  for (const entity of Object.values(sheet.entities)) {
+    if (entity.kind !== "symbol") continue;
+    if (relayRole(entity.symbol_id) !== null) continue;
+    const reference = entity.reference.trim();
+    if (!reference) continue;
+    const seen = new Set<string>();
+    const addresses = (sites.get(reference) ?? [])
+      .filter((s) => s.sheet_id !== sheetId)
+      .map((s) => s.address)
+      .filter((a) => (seen.has(a) ? false : (seen.add(a), true)));
+    if (addresses.length) out.set(entity.id, addresses.join(XREF_SEPARATOR));
+  }
+  return out;
+}
+
+/**
+ * 参照記号の脇に置くデバイスXRefテキストの基準点 (テキストは左揃え、G13)。
+ * シンボル外形の右端からXREF_GAPだけ空け、高さは参照記号のラベルと同じ行に揃える。
+ * boundsはシンボル外形の囲み矩形 (renderer.tsのsymbolBounds)、topYはその上端Y。
+ */
+export function deviceXrefAt(bounds: { min: Point; max: Point }, topY: number): Point {
+  return { x: bounds.max.x + XREF_GAP, y: topY - REF_LABEL_DY };
 }
 
 /**

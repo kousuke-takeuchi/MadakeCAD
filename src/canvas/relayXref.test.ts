@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Entity, Project, Sheet, SymbolInstance } from "../ipc";
 import {
+  CONTACT_MAP_FONT,
   CONTACT_MAP_GAP,
+  COIL_LOCATION_VGAP,
+  DEVICE_BLOCK_ATTR,
+  DEVICE_BLOCK_MIN_WIDTH,
   allocateContacts,
   CONTACT_MAP_MIN_COL_W,
   CONTACT_MAP_ROW_H,
@@ -9,15 +13,20 @@ import {
   coilLocationAt,
   contactMapLayout,
   contactMapOrigin,
+  deviceBlockLayout,
+  isDeviceBlock,
   parseContactConfig,
   relayDevices,
   relayRole,
   sheetCoilLocations,
   sheetContactMaps,
+  sheetDeviceBlocks,
   terminalPair,
   type ContactMapRow,
+  type DeviceBlock,
 } from "./relayXref";
 import { symbolBounds } from "./renderer";
+import type { WireNoteLabel } from "./wireNotes";
 
 function sheet(name: string): Sheet {
   return {
@@ -258,7 +267,149 @@ describe("relayXref", () => {
     const inst = symbol("relay_coil", "K1", 100, 50);
     const bounds = symbolBounds(inst, def);
     expect(contactMapOrigin(bounds, inst.at.x)).toEqual({ x: 100, y: 53 + CONTACT_MAP_GAP });
-    expect(coilLocationAt(bounds, inst.at.y).x).toBeGreaterThan(107.5);
-    expect(coilLocationAt(bounds, inst.at.y).y).toBe(50);
+    expect(coilLocationAt(bounds, inst.at.y, "(/1.C2)", []).x).toBeGreaterThan(107.5);
+    expect(coilLocationAt(bounds, inst.at.y, "(/1.C2)", []).y).toBe(50);
+  });
+
+  // ja: 切換接点のコイル所在は、上の配線に付く注記と重ならないよう逃げる (G22の衝突の再現)。
+  it("moves the coil location off a colliding wire note", () => {
+    // 切換接点(c接点)は右2本のピンがシンボル中央高さ(y=50)を1グリッドピッチで挟む:
+    // 「14」(a側)がy=47.5、「12」(b側)がy=52.5。y=47.5のピンから横に引いた配線の注記は
+    // 線番と反対側 (下) の y=47.5+2.5=50.0 に来るので、右側の既定位置とぴったり重なる。
+    const def = {
+      id: "relay_contact_co",
+      name: "",
+      name_ja: "",
+      category: "relay",
+      ref_prefix: "K",
+      primitives: [
+        { type: "line" as const, pts: [{ x: -7.5, y: 0 }, { x: -2.5, y: 0 }] },
+        { type: "line" as const, pts: [{ x: 2.5, y: 2.5 }, { x: 7.5, y: 2.5 }] },
+        { type: "line" as const, pts: [{ x: 2.5, y: -2.5 }, { x: 7.5, y: -2.5 }] },
+      ],
+      pins: [
+        { number: "11", name: "", at: { x: -7.5, y: 0 } },
+        { number: "12", name: "", at: { x: 7.5, y: 2.5 } },
+        { number: "14", name: "", at: { x: 7.5, y: -2.5 } },
+      ],
+    };
+    const inst = symbol("relay_contact_co", "K1", 100, 50);
+    const bounds = symbolBounds(inst, def);
+    const notes: WireNoteLabel[] = [
+      { wireId: "w1", text: "0.75sq 赤", at: { x: 118.75, y: 50 }, align: "center" },
+    ];
+    expect(coilLocationAt(bounds, inst.at.y, "(/1.C2)", []).y).toBe(50);
+    const at = coilLocationAt(bounds, inst.at.y, "(/1.C2)", notes);
+    expect(at.y).not.toBe(50);
+    expect(at.y).toBeLessThan(50);
+  });
+
+  // ja: 上も塞がっているときは、コイル所在は外形の下へ逃げる。
+  it("falls back below the outline when the space above is also occupied", () => {
+    const def = {
+      id: "relay_contact_co",
+      name: "",
+      name_ja: "",
+      category: "relay",
+      ref_prefix: "K",
+      primitives: [],
+      pins: [
+        { number: "11", name: "", at: { x: -7.5, y: 0 } },
+        { number: "12", name: "", at: { x: 7.5, y: 2.5 } },
+        { number: "14", name: "", at: { x: 7.5, y: -2.5 } },
+      ],
+    };
+    const inst = symbol("relay_contact_co", "K1", 100, 50);
+    const bounds = symbolBounds(inst, def);
+    const text = "(/1.C2)";
+    const right = coilLocationAt(bounds, inst.at.y, text, []);
+    const notes: WireNoteLabel[] = [
+      { wireId: "w1", text, at: right, align: "left" },
+      { wireId: "w2", text, at: { x: bounds.min.x, y: bounds.min.y - COIL_LOCATION_VGAP }, align: "left" },
+    ];
+    const at = coilLocationAt(bounds, inst.at.y, text, notes);
+    expect(at.x).toBeCloseTo(bounds.min.x, 9);
+    expect(at.y).toBeCloseTo(bounds.max.y + COIL_LOCATION_VGAP + CONTACT_MAP_FONT, 9);
+  });
+
+  // ---- G7: 実機ブロック表示 ----
+
+  // ja: コイルはattrs.device_blockがちょうど"true"のときだけ実機ブロック表示になり、それ以外(空文字含む)は従来どおりの分散配置になる。
+  it("selects the display mode from the device_block attribute", () => {
+    expect(isDeviceBlock(symbol("relay_coil", "K1", 20, 20))).toBe(false);
+    expect(isDeviceBlock(symbol("relay_coil", "K1", 20, 20, { [DEVICE_BLOCK_ATTR]: "true" }))).toBe(true);
+    expect(isDeviceBlock(symbol("relay_coil", "K1", 20, 20, { [DEVICE_BLOCK_ATTR]: "TRUE" }))).toBe(
+      false,
+    );
+  });
+
+  // ja: シートの実機ブロック一覧に入るのはdevice_blockが付いたコイルだけで、従来どおりの分散配置のコイルは入らない。
+  it("only collects coils flagged as a device block", () => {
+    const p = project([
+      [
+        symbol("relay_coil", "K1", 20, 20, { [DEVICE_BLOCK_ATTR]: "true" }),
+        symbol("relay_coil", "K2", 20, 60),
+        symbol("relay_contact_no", "K1", 60, 20),
+      ],
+    ]);
+    const blocks = sheetDeviceBlocks(p, p.sheets[0].id);
+    expect(blocks.size).toBe(1);
+    const k1Id = p.sheets[0].entities[Object.keys(p.sheets[0].entities)[0]].id;
+    expect(blocks.get(k1Id)?.contacts.length).toBe(1);
+  });
+
+  // ja: 実機ブロックで表示するコイルには、コイルの下にぶら下げる別表としての接点マップはもう付かない。
+  it("excludes device-block coils from the separate contact map", () => {
+    const p = project([
+      [
+        symbol("relay_coil", "K1", 20, 20, { [DEVICE_BLOCK_ATTR]: "true" }),
+        symbol("relay_contact_no", "K1", 60, 20),
+      ],
+    ]);
+    expect(sheetContactMaps(p, p.sheets[0].id).size).toBe(0);
+    expect(sheetDeviceBlocks(p, p.sheets[0].id).size).toBe(1);
+  });
+
+  // ja: 実機ブロックの外形はコイルのピン間隔を下回らないので、幅が最小のときはA1/A2ピンがそのまま外形の左右端になり、引き出し線は要らない。
+  it("keeps the device block layout no narrower than the pin span", () => {
+    const block: DeviceBlock = { reference: "K1", partNo: "", contacts: [] };
+    const layout = deviceBlockLayout(block, 100, 50);
+    expect(layout.width).toBeCloseTo(DEVICE_BLOCK_MIN_WIDTH, 9);
+    expect(layout.headerRows).toBe(1);
+    expect(layout.leadHalfLen).toBeCloseTo(0, 9);
+    expect(layout.x).toBeCloseTo(100 - DEVICE_BLOCK_MIN_WIDTH / 2, 9);
+  });
+
+  // ja: 型番があるとヘッダは2行になり、内容で外形がピン間隔より広がっても引き出し線でピンは外形まで届く。
+  it("grows the device block for the part number and keeps the pins reachable", () => {
+    const block: DeviceBlock = {
+      reference: "K1",
+      partNo: "SAMPLE0001-VERY-LONG-PART-NO",
+      contacts: [{ terminals: "13-14", address: "/1.B3", role: "contact_no", entityId: null }],
+    };
+    const layout = deviceBlockLayout(block, 100, 50);
+    expect(layout.headerRows).toBe(2);
+    expect(layout.width).toBeGreaterThan(DEVICE_BLOCK_MIN_WIDTH);
+    expect(layout.leadHalfLen).toBeGreaterThan(0);
+    expect(layout.x).toBeCloseTo(100 - 7.5 - layout.leadHalfLen, 9);
+    expect(layout.y + (layout.rowH * layout.headerRows) / 2).toBeCloseTo(50, 9);
+  });
+
+  // ja: 実機ブロックの接点の行はヘッダ行のすぐ下に続き、外形全体の高さは隙間なく全ての行をちょうど覆う。
+  it("stacks the device block's contact rows under the header", () => {
+    const block: DeviceBlock = {
+      reference: "K1",
+      partNo: "P1",
+      contacts: [
+        { terminals: "13-14", address: "/1.B3", role: "contact_no", entityId: null },
+        { terminals: "21-22", address: CONTACT_UNUSED, role: "contact_nc", entityId: null },
+      ],
+    };
+    const layout = deviceBlockLayout(block, 100, 50);
+    expect(layout.headerRows).toBe(2);
+    expect(layout.contactRows).toBe(2);
+    expect(layout.contactRowTop(0)).toBeCloseTo(layout.y + layout.rowH * 2, 9);
+    expect(layout.contactRowTop(1)).toBeCloseTo(layout.y + layout.rowH * 3, 9);
+    expect(layout.height).toBeCloseTo(layout.rowH * 4, 9);
   });
 });

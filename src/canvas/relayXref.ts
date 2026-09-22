@@ -9,6 +9,7 @@
 
 import type { Point, Project, SymbolInstance } from "../ipc";
 import { zoneAt } from "./xref";
+import type { WireNoteLabel } from "./wireNotes";
 
 /** 接点構成を持たせるシンボル属性のキー。部品DBのcontact_config列を配置時に写す。 */
 export const CONTACT_CONFIG_ATTR = "contact_config";
@@ -35,8 +36,17 @@ export const CONTACT_MAP_MIN_COL_W = 8.0;
 export const CONTACT_MAP_GAP = 2.5;
 /** シンボル外形の右端からコイル所在テキストまでの間隔 (mm)。 */
 export const COIL_LOCATION_GAP = 1.0;
+/** シンボル外形の上端・下端からコイル所在テキストまでの間隔 (mm、G22の上下への逃がし)。 */
+export const COIL_LOCATION_VGAP = 1.0;
 /** 文字幅の見積り係数 (文字高さに対する1文字の平均幅)。xref.tsと共通。 */
 const CHAR_WIDTH_RATIO = 0.6;
+/** 座標一致・食い込みの許容誤差 (mm)。Rust側 tidy::EPS = netlist::CONNECT_EPS と同じ。 */
+const RECT_EPS = 0.01;
+/** コイルを実機ブロックとして描かせるインスタンス属性のキー (G7)。値"true"で有効。 */
+export const DEVICE_BLOCK_ATTR = "device_block";
+/** コイルのピン間隔 (mm)。relay_coilシンボルのA1/A2ピンはこの半分(±7.5mm)にある。
+ * 実機ブロックの外形はこの幅を下回らない(ピンの位置を変えずに済むように)。 */
+export const DEVICE_BLOCK_MIN_WIDTH = 15.0;
 
 /** リレーデバイスの機能種別。 */
 export type RelayRole = "coil" | "contact_no" | "contact_nc" | "contact_co";
@@ -55,6 +65,14 @@ export function relayRole(symbolId: string): RelayRole | null {
     default:
       return null;
   }
+}
+
+/**
+ * コイルが実機ブロック表示 (G7) を使うか。attrs.device_blockがちょうど"true"のときだけ有効
+ * (分散配置が既定)。コイル以外のシンボルに付いていても効果は無い。
+ */
+export function isDeviceBlock(inst: Pick<SymbolInstance, "attrs">): boolean {
+  return (inst.attrs?.[DEVICE_BLOCK_ATTR] ?? "") === "true";
 }
 
 /** デバイスを構成する機能1つ (コイル1個・接点1個) の所在。 */
@@ -268,18 +286,62 @@ export function relayDevices(project: Project | null): RelayDevice[] {
 
 /**
  * シート1枚分の接点マップ表 (コイルのentity id → 表の行)。キャンバス描画はこれを引く。
- * 接点を1つも持たないコイルは含まれない (描く表が無い)。
+ * 接点を1つも持たないコイルは含まれない (描く表が無い)。実機ブロック表示 (G7、
+ * attrs.device_block) のコイルも含まれない: 接点の並びはブロックの中に描かれるので、
+ * 別表として二重に出さない。
  */
 export function sheetContactMaps(
   project: Project | null,
   sheetId: string,
 ): Map<string, ContactMapRow[]> {
   const out = new Map<string, ContactMapRow[]>();
+  const sheet = project?.sheets.find((s) => s.id === sheetId);
   for (const device of relayDevices(project)) {
     if (!device.contactMap.length) continue;
     for (const coil of device.coils) {
-      if (coil.sheetId === sheetId) out.set(coil.entityId, device.contactMap);
+      if (coil.sheetId !== sheetId) continue;
+      const inst = sheet?.entities[coil.entityId];
+      if (inst && inst.kind === "symbol" && isDeviceBlock(inst)) continue;
+      out.set(coil.entityId, device.contactMap);
     }
+  }
+  return out;
+}
+
+/** 実機ブロック表示 (G7) の中身: コイル+同じ参照記号を持つ接点を1つの外形にまとめて描く。 */
+export interface DeviceBlock {
+  reference: string;
+  /** 型番 (空なら型番の行を描かない)。 */
+  partNo: string;
+  /** 接点の「機器イメージ」: 端子対+所在を接点マップと同じ並びで持つ。 */
+  contacts: ContactMapRow[];
+}
+
+/** デバイスの実機ブロック表示の中身を組み立てる。partNoはコイルインスタンスのvalue。 */
+export function buildDeviceBlock(device: RelayDevice, partNo: string): DeviceBlock {
+  return { reference: device.reference, partNo: partNo.trim(), contacts: device.contactMap };
+}
+
+/**
+ * シート1枚分の実機ブロック表示 (コイルのentity id → ブロックの中身)。device_block属性の
+ * 付いたコイルだけが対象。キャンバス描画はこれを引く。
+ */
+export function sheetDeviceBlocks(
+  project: Project | null,
+  sheetId: string,
+): Map<string, DeviceBlock> {
+  const out = new Map<string, DeviceBlock>();
+  const sheet = project?.sheets.find((s) => s.id === sheetId);
+  if (!project || !sheet) return out;
+  const devices = relayDevices(project);
+  for (const entity of Object.values(sheet.entities)) {
+    if (entity.kind !== "symbol" || entity.symbol_id !== COIL_SYMBOL_ID) continue;
+    if (!isDeviceBlock(entity)) continue;
+    const reference = entity.reference.trim();
+    if (!reference) continue;
+    const device = devices.find((d) => d.reference === reference);
+    if (!device) continue;
+    out.set(entity.id, buildDeviceBlock(device, entity.value));
   }
   return out;
 }
@@ -372,15 +434,124 @@ export function contactMapOrigin(bounds: SymbolBounds, atX: number): Point {
   return { x: atX, y: bounds.max.y + CONTACT_MAP_GAP };
 }
 
+/** 軸に平行な外接矩形の重なり判定 (Rust側 tidy::Rect::overlaps と同じ許容誤差)。 */
+function rectsOverlap(
+  a: { x0: number; y0: number; x1: number; y1: number },
+  b: { x0: number; y0: number; x1: number; y1: number },
+): boolean {
+  return (
+    a.x0 < b.x1 - RECT_EPS && b.x0 < a.x1 - RECT_EPS && a.y0 < b.y1 - RECT_EPS && b.y0 < a.y1 - RECT_EPS
+  );
+}
+
+/** ベースライン位置・幅・寄せ方から、CONTACT_MAP_FONTの高さで見積もる文字の外接矩形。 */
+function textRect(at: Point, width: number, height: number, align: "left" | "center") {
+  const x0 = align === "left" ? at.x : at.x - width / 2;
+  return { x0, y0: at.y - height, x1: x0 + width, y1: at.y };
+}
+
+/** 文字列をCONTACT_MAP_FONTで描いたときの見積り幅 (mm)。 */
+function textWidth(text: string): number {
+  return CONTACT_MAP_FONT * CHAR_WIDTH_RATIO * [...text].length;
+}
+
 /**
- * 接点の脇に置くコイル所在テキストの基準点 (テキストは左揃え)。
- * シンボル外形の右端からCOIL_LOCATION_GAPだけ空ける。
+ * 接点の脇に置くコイル所在テキストの基準点 (テキストは左揃え、G22)。
+ *
+ * 配線注記 (wireNotes.ts) と同じ「反対側へ逃がす」考え方で、まず右 (外形右端+
+ * COIL_LOCATION_GAP、シンボル中央高さ) を試し、そこが配線注記と重なるなら上→下の順に
+ * 外形の外を試す。切換接点は右2本のピンがシンボル中央高さを1グリッドピッチで挟むので、
+ * 横引きの配線注記がちょうどこの右側の位置に来て重なることがある。
+ *
+ * textは実際に描くコイル所在の文字列 (重なり判定の幅の見積りに使う)。notesはそのシートの
+ * 配線注記 (wireNoteLabels)。全ての候補が重なっていれば、最後の逃がし先 (下) を返す。
  */
-export function coilLocationAt(bounds: SymbolBounds, atY: number): Point {
-  return { x: bounds.max.x + COIL_LOCATION_GAP, y: atY };
+export function coilLocationAt(
+  bounds: SymbolBounds,
+  atY: number,
+  text: string,
+  notes: readonly WireNoteLabel[],
+): Point {
+  const font = CONTACT_MAP_FONT;
+  const width = textWidth(text);
+  const candidates: Point[] = [
+    { x: bounds.max.x + COIL_LOCATION_GAP, y: atY },
+    { x: bounds.min.x, y: bounds.min.y - COIL_LOCATION_VGAP },
+    { x: bounds.min.x, y: bounds.max.y + COIL_LOCATION_VGAP + font },
+  ];
+  for (const at of candidates) {
+    const probe = textRect(at, width, font, "left");
+    const collides = notes.some((note) =>
+      rectsOverlap(probe, textRect(note.at, textWidth(note.text), font, note.align)),
+    );
+    if (!collides) return at;
+  }
+  return candidates[candidates.length - 1];
 }
 
 /** 配置インスタンスがリレー機能を持つか (キャンバス側の早期判定用)。 */
 export function isRelaySymbol(inst: SymbolInstance): boolean {
   return relayRole(inst.symbol_id) !== null;
+}
+
+/** 実機ブロック表示 (G7) の外形の配置 (用紙座標mm)。Rust側 device_block_layout と同一ルール。 */
+export interface DeviceBlockLayout {
+  x: number;
+  y: number;
+  width: number;
+  rowH: number;
+  /** ヘッダ行数 (参照記号のみなら1、型番もあれば2)。 */
+  headerRows: number;
+  contactRows: number;
+  /** 接点の列幅 (端子対の列, 所在の列)。contactMapLayoutと同じ求め方。 */
+  colW: [number, number];
+  height: number;
+  /** i行目 (0始まり) のヘッダ行の文字のベースラインY。 */
+  headerBaseline(i: number): number;
+  /** i行目の接点行の上端Y。 */
+  contactRowTop(i: number): number;
+  /** i行目の接点行の文字のベースラインY。 */
+  contactBaseline(i: number): number;
+  /** col列目 (0または1) の左端X。 */
+  colX(col: number): number;
+  /** col列目の文字の左端X。 */
+  textX(col: number): number;
+  /** A1/A2ピンから外形の左右端までの引き出し線の半分の長さ (最小幅ちょうどなら0)。 */
+  leadHalfLen: number;
+}
+
+/**
+ * 実機ブロック表示の外形の配置を求める。centerXはコイルのA1/A2ピンの中点、atYはピンの高さ。
+ * ピンは外形の左右端の、ちょうどピンの高さを通る位置につながるので、外形をどれだけ広げても
+ * コイルの配線は繋がったまま (幅がDEVICE_BLOCK_MIN_WIDTHを超えた分だけ引き出し線が伸びる)。
+ */
+export function deviceBlockLayout(block: DeviceBlock, centerX: number, atY: number): DeviceBlockLayout {
+  const headerRows = block.partNo ? 2 : 1;
+  const contactLayout = contactMapLayout(block.contacts, centerX, 0);
+  const headerW =
+    Math.max(textWidth(block.reference), headerRows === 2 ? textWidth(block.partNo) : 0) +
+    2 * CONTACT_MAP_PAD;
+  // 接点が無ければcontactMapLayoutの列幅(最小幅ぶん)は外形の広さに数えない
+  const contactsW = block.contacts.length ? contactLayout.width : 0;
+  const width = Math.max(contactsW, headerW, DEVICE_BLOCK_MIN_WIDTH);
+  const rowH = CONTACT_MAP_ROW_H;
+  const x = centerX - width / 2;
+  const y = atY - (rowH * headerRows) / 2;
+  const contactsX = x + (width - (contactLayout.colW[0] + contactLayout.colW[1])) / 2;
+  return {
+    x,
+    y,
+    width,
+    rowH,
+    headerRows,
+    contactRows: block.contacts.length,
+    colW: contactLayout.colW,
+    height: rowH * (headerRows + block.contacts.length),
+    headerBaseline: (i) => y + rowH * i + rowH / 2 + CONTACT_MAP_FONT * 0.35,
+    contactRowTop: (i) => y + rowH * headerRows + rowH * i,
+    contactBaseline: (i) => y + rowH * headerRows + rowH * i + rowH / 2 + CONTACT_MAP_FONT * 0.35,
+    colX: (col) => contactsX + (col === 0 ? 0 : contactLayout.colW[0]),
+    textX: (col) => contactsX + (col === 0 ? 0 : contactLayout.colW[0]) + CONTACT_MAP_PAD,
+    leadHalfLen: Math.max(0, (width - DEVICE_BLOCK_MIN_WIDTH) / 2),
+  };
 }

@@ -69,14 +69,17 @@ import {
 import { wireNumberFont, wireNumberLabels } from "./wireNumbers";
 import { wireNoteFont, wireNoteLabels } from "./wireNotes";
 import { TAG_FONT, netTag } from "./netTag";
-import { XREF_FONT, xrefTextAt } from "./xref";
+import { XREF_FONT, deviceXrefAt, xrefTextAt } from "./xref";
 import { annotationScale } from "./annotationText";
 import {
   CONTACT_MAP_FONT,
+  DEVICE_BLOCK_MIN_WIDTH,
   coilLocationAt,
   contactMapLayout,
   contactMapOrigin,
+  deviceBlockLayout,
   type ContactMapRow,
+  type DeviceBlock,
 } from "./relayXref";
 import { GRID_PITCH, type Viewport } from "./viewport";
 
@@ -128,11 +131,18 @@ export interface RenderOptions {
    * の戻り。省略時は描かない。表示クラスは「参照記号」に含める。
    */
   relay?: {
-    /** コイルのid → その下に描く接点マップの行。 */
+    /** コイルのid → その下に描く接点マップの行 (分散配置のコイルだけ)。 */
     contactMaps?: ReadonlyMap<string, ContactMapRow[]>;
     /** 接点のid → 脇に描くコイル所在 (例 "(/1.C2)")。 */
     coilLocations?: ReadonlyMap<string, string>;
+    /** コイルのid → 実機ブロック表示の中身 (G7、`sheetDeviceBlocks()`の戻り)。 */
+    deviceBlocks?: ReadonlyMap<string, DeviceBlock>;
   };
+  /**
+   * デバイス単位シート間クロスリファレンス (G13)。`sheetDeviceXrefs()` の戻り。
+   * 省略時は描かない。表示クラスは「参照記号」に含める。
+   */
+  deviceXrefs?: ReadonlyMap<string, string>;
   /** 図枠テンプレート (M4 §9)。省略時は同梱のjis-a3。 */
   frame?: FrameTemplate;
   /** 表題欄バインドの文脈。省略時はシート単体 (1枚中1枚目・プロジェクト名は空)。 */
@@ -526,6 +536,79 @@ export function drawContactMap(
   ctx.textAlign = "left";
   rows.forEach((row, i) => {
     const y = vp.toScreen({ x: layout.x, y: layout.baseline(i) }).y;
+    ctx.fillText(row.terminals, vp.toScreen({ x: layout.textX(0), y: 0 }).x, y);
+    ctx.fillText(row.address, vp.toScreen({ x: layout.textX(1), y: 0 }).x, y);
+  });
+}
+
+/**
+ * コイルを実機ブロック (G7) として描く: 参照記号+型番のヘッダと、接点の「機器イメージ」
+ * (端子対+所在) を1つの外形にまとめる。コイル自身の小さな図形 (rect+リード) の代わりに
+ * これを描く。A1/A2ピンはinst.atのまま(呼び出し側は変えていない)なので、外形の幅が
+ * ピン間隔より広いときは、ピンから外形の左右端まで引き出し線を足してつなぐ
+ * (relayXref.DeviceBlockLayout.leadHalfLen)。SVG出力 (svg.rs render_device_block) と同じ数式。
+ */
+export function drawDeviceBlock(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  inst: SymbolInstance,
+  block: DeviceBlock,
+) {
+  const layout = deviceBlockLayout(block, inst.at.x, inst.at.y);
+  const topLeft = vp.toScreen({ x: layout.x, y: layout.y });
+  const bottomRight = vp.toScreen({ x: layout.x + layout.width, y: layout.y + layout.height });
+  ctx.strokeStyle = theme.line;
+  ctx.lineWidth = Math.max(1, 0.3 * vp.scale);
+  ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  // A1/A2ピンから外形の左右端までの引き出し線 (外形がピン間隔ちょうどなら描かない)
+  if (layout.leadHalfLen > 1e-9) {
+    for (const sign of [-1, 1]) {
+      const pinX = inst.at.x + (sign * DEVICE_BLOCK_MIN_WIDTH) / 2;
+      const edgeX = inst.at.x + sign * (DEVICE_BLOCK_MIN_WIDTH / 2 + layout.leadHalfLen);
+      const a = vp.toScreen({ x: pinX, y: inst.at.y });
+      const b = vp.toScreen({ x: edgeX, y: inst.at.y });
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+  }
+  // ヘッダ行・接点行の仕切り線
+  ctx.strokeStyle = theme.xref;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 1; i < layout.headerRows; i += 1) {
+    const y = vp.toScreen({ x: layout.x, y: layout.y + layout.rowH * i }).y;
+    ctx.moveTo(topLeft.x, y);
+    ctx.lineTo(bottomRight.x, y);
+  }
+  if (layout.contactRows > 0) {
+    const headerBottomY = vp.toScreen({ x: layout.x, y: layout.y + layout.rowH * layout.headerRows }).y;
+    ctx.moveTo(topLeft.x, headerBottomY);
+    ctx.lineTo(bottomRight.x, headerBottomY);
+    const col1 = vp.toScreen({ x: layout.colX(1), y: layout.y + layout.rowH * layout.headerRows });
+    const col1Bottom = vp.toScreen({ x: layout.colX(1), y: layout.y + layout.height });
+    ctx.moveTo(col1.x, col1.y);
+    ctx.lineTo(col1Bottom.x, col1Bottom.y);
+    for (let i = 1; i < layout.contactRows; i += 1) {
+      const y = vp.toScreen({ x: layout.x, y: layout.contactRowTop(i) }).y;
+      ctx.moveTo(topLeft.x, y);
+      ctx.lineTo(bottomRight.x, y);
+    }
+  }
+  ctx.stroke();
+  // ヘッダ (参照記号+型番、外形の全幅で中央揃え) と接点の行 (端子対 | 所在)
+  ctx.fillStyle = theme.xref;
+  const centerX = vp.toScreen({ x: layout.x + layout.width / 2, y: 0 }).x;
+  ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
+  ctx.textAlign = "center";
+  ctx.fillText(block.reference, centerX, vp.toScreen({ x: 0, y: layout.headerBaseline(0) }).y);
+  if (layout.headerRows === 2) {
+    ctx.fillText(block.partNo, centerX, vp.toScreen({ x: 0, y: layout.headerBaseline(1) }).y);
+  }
+  ctx.textAlign = "left";
+  block.contacts.forEach((row, i) => {
+    const y = vp.toScreen({ x: 0, y: layout.contactBaseline(i) }).y;
     ctx.fillText(row.terminals, vp.toScreen({ x: layout.textX(0), y: 0 }).x, y);
     ctx.fillText(row.address, vp.toScreen({ x: layout.textX(1), y: 0 }).x, y);
   });
@@ -1034,6 +1117,8 @@ export function renderSheet(
 
   const defs = new Map(symbols.map((d) => [d.id, d]));
   const entities = Object.values(sheet.entities).filter((e) => !hidden.has(entityViewClass(e)));
+  // コイル所在 (G22) の逃がし判定に使う、このシートの配線注記
+  const wireNotes = wireNoteLabels(sheet);
 
   // 盤レイアウト (盤外形・ダクト・レール・フットプリント) は最背面
   if (!hidden.has("panel")) drawPanel(ctx, vp, sheet, opts.selection);
@@ -1065,18 +1150,34 @@ export function renderSheet(
     if (e.kind !== "symbol") continue;
     const def = resolveInstanceDef(e, defs);
     if (!def) continue;
-    drawSymbol(ctx, vp, e, def, opts.selection.has(e.id), undefined, !hidden.has("refs"));
-    // コイル⇔接点クロスリファレンス (表示クラスは「参照記号」に含める)
+    const block = opts.relay?.deviceBlocks?.get(e.id);
+    if (block) {
+      // 実機ブロック表示 (G7): コイル自身の小さな図形の代わりにこれを描く
+      if (!hidden.has("symbols")) drawDeviceBlock(ctx, vp, e, block);
+    } else {
+      drawSymbol(ctx, vp, e, def, opts.selection.has(e.id), undefined, !hidden.has("refs"));
+    }
+    // コイル⇔接点クロスリファレンス・デバイス単位XRef (表示クラスは「参照記号」に含める)
     if (hidden.has("refs")) continue;
-    const rows = opts.relay?.contactMaps?.get(e.id);
-    if (rows?.length) drawContactMap(ctx, vp, e, def, rows);
+    if (!block) {
+      const rows = opts.relay?.contactMaps?.get(e.id);
+      if (rows?.length) drawContactMap(ctx, vp, e, def, rows);
+    }
     const location = opts.relay?.coilLocations?.get(e.id);
     if (location) {
-      const at = vp.toScreen(coilLocationAt(symbolBounds(e, def), e.at.y));
+      const at = vp.toScreen(coilLocationAt(symbolBounds(e, def), e.at.y, location, wireNotes));
       ctx.fillStyle = theme.xref;
       ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
       ctx.textAlign = "left";
       ctx.fillText(location, at.x, at.y);
+    }
+    const deviceXref = opts.deviceXrefs?.get(e.id);
+    if (deviceXref) {
+      const at = vp.toScreen(deviceXrefAt(symbolBounds(e, def), symbolTopY(e, def)));
+      ctx.fillStyle = theme.xref;
+      ctx.font = `${Math.max(8, XREF_FONT * vp.scale)}px monospace`;
+      ctx.textAlign = "left";
+      ctx.fillText(deviceXref, at.x, at.y);
     }
   }
   for (const e of entities) {

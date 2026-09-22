@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1919仕様項目**。
+全5領域・**1952仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -367,6 +367,16 @@
 - c接点の図記号が使っている極は、a接点が借りることはできない。 <sub>`a_make_contact_cannot_borrow_a_pole_already_in_use`</sub>
 - 接点マップの表はコイルの真下に中央揃えで置かれ、接点1個につき1行ずつ下へ伸びる。 <sub>`contact_map_table_is_centred_under_the_coil`</sub>
 - 接点マップはコイルの外形の下にぶら下がり、コイル所在の文字は接点シンボルの右脇に置かれる。 <sub>`annotations_are_anchored_to_the_symbol_outline`</sub>
+- 切換接点のコイル所在は、上の配線に付く注記と重ならないよう逃げる (G22の衝突の再現)。 <sub>`coil_location_moves_off_a_colliding_wire_note`</sub>
+- 上も塞がっているときは、コイル所在は外形の下へ逃げる。 <sub>`coil_location_falls_back_below_when_above_is_also_occupied`</sub>
+- コイルは`attrs["device_block"]`がちょうど`"true"`のときだけ実機ブロック表示になり、それ以外(空文字含む)は従来どおりの分散配置になる。 <sub>`device_block_attribute_selects_the_display_mode`</sub>
+- 実機ブロックの接点イメージには、接点マップと同じ並びで端子対と所在が並ぶ。 <sub>`device_block_lists_the_same_contacts_as_the_contact_map`</sub>
+- 型番が空のときは、空の型番行ではなく型番行そのものが無い実機ブロックになる。 <sub>`device_block_has_no_part_number_line_when_blank`</sub>
+- シートの実機ブロック一覧に入るのは`device_block`が付いたコイルだけで、従来どおりの分散配置のコイルは入らない。 <sub>`sheet_device_blocks_only_includes_flagged_coils`</sub>
+- 実機ブロックで表示するコイルには、コイルの下にぶら下げる別表としての接点マップはもう付かない(接点はブロックの中に既に並んでいるので)。 <sub>`device_block_coils_are_excluded_from_the_separate_contact_map`</sub>
+- 実機ブロックの外形はコイルのピン間隔を下回らないので、幅が最小のときはA1/A2ピンがそのまま外形の左右端になり、引き出し線は要らない。 <sub>`device_block_layout_is_no_narrower_than_the_pin_span`</sub>
+- 型番があるとヘッダは2行になり、内容で外形がピン間隔より広がっても引き出し線でピンは外形まで届く。 <sub>`device_block_layout_grows_for_the_part_number_and_keeps_the_pins_reachable`</sub>
+- 実機ブロックの接点の行はヘッダ行のすぐ下に続き、外形全体の高さは隙間なく全ての行をちょうど覆う。 <sub>`device_block_layout_stacks_contact_rows_under_the_header`</sub>
 
 ### 帳票の図面シート化
 
@@ -510,6 +520,9 @@
 - コイルのあるシートには、コイルの下に接点マップ(端子対と所在の行)が描かれる。 <sub>`svg_draws_the_contact_map_under_the_coil`</sub>
 - 接点のあるシートには、その脇にコイルの住所が丸括弧付きで描かれる。 <sub>`svg_draws_the_coil_location_beside_the_contact`</sub>
 - シート単体の書き出しでは相手のシートが分からないので、接点マップは描かれない。 <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
+- `device_block`属性が`"true"`のコイルは、小さなコイル図形と別表の接点マップの代わりに、参照記号・型番・接点イメージをまとめた1つの外形として描かれる (G7)。 <sub>`svg_draws_a_device_block_for_a_flagged_coil`</sub>
+- `device_block`を付けなければ従来どおりの分散配置のまま: 小さなコイル図形の下に別表の接点マップが付く。 <sub>`svg_keeps_the_distributed_placement_without_the_attribute`</sub>
+- リレー以外の参照記号が2枚のシートに描かれていると、両方のシートに「/2.B3」形式のクロスリファレンスが自動で添えられる (G13)。 <sub>`svg_draws_a_device_cross_reference_for_a_designator_on_two_sheets`</sub>
 - 盤レイアウトシートは回路図と同じ図枠つきで書き出され、そこに盤外形と取付板が描かれる。 <sub>`svg_of_a_panel_sheet_draws_the_enclosure_and_its_mounting_plate`</sub>
 - ダクトは45度のハッチ(斜線)で埋めた矩形として描かれる。 <sub>`svg_of_a_panel_sheet_hatches_the_duct`</sub>
 - DINレールは取付線を中心にした横帯として描かれる。 <sub>`svg_of_a_panel_sheet_draws_the_din_rail`</sub>
@@ -820,6 +833,12 @@
 - 注記文字高を小さくすると、クロスリファレンスも同じ比率でラベルに寄る。 <sub>`cross_reference_follows_the_annotation_text_height`</sub>
 - クロスリファレンス表はプロジェクト全体のネット1本につき1行で、跨るシートとラベルの図面上の住所を並べる。 <sub>`cross_reference_table_lists_one_row_per_net_with_its_sites`</sub>
 - クロスリファレンス表の列は ネット・線番・接続先・シート・所在 の5列。 <sub>`cross_reference_table_columns_are_net_wire_pins_sheets_sites`</sub>
+- 2枚の違うシートに描かれた参照記号は相互に参照し合う: それぞれのインスタンスにもう一方のシートの住所が出る。 <sub>`a_designator_on_two_sheets_cross_references_each_other`</sub>
+- 1枚のシートにしか描かれていない参照記号には、クロスリファレンスが一切付かない。 <sub>`a_designator_on_a_single_sheet_has_no_cross_reference`</sub>
+- リレーのコイル・接点はデバイス単位のクロスリファレンスの対象から外れる(コイル⇔接点クロスリファレンスが既に自動で所在を注記するため)。 <sub>`relay_coil_and_contacts_are_skipped_by_the_device_cross_reference`</sub>
+- シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける。 <sub>`sheet_device_cross_reference_table_maps_symbols_to_text`</sub>
+- 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる。 <sub>`a_designator_on_three_sheets_lists_every_other_sheet`</sub>
+- デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる。 <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
 
 
 ## 自動化API (MCP / REST)
@@ -1609,6 +1628,14 @@
 - c接点の極はa接点・b接点としても描けるので、「2CO」のリレーはa接点2個の使い方も受け付ける <sub>`relayXref`</sub>
 - 接点マップの表はコイルの真下に中央揃えで置かれ、接点1個につき1行ずつ下へ伸びる。 <sub>`relayXref`</sub>
 - 接点マップはコイルの外形の下にぶら下がり、コイル所在の文字は接点シンボルの右脇に置かれる。 <sub>`relayXref`</sub>
+- 切換接点のコイル所在は、上の配線に付く注記と重ならないよう逃げる (G22の衝突の再現)。 <sub>`relayXref`</sub>
+- 上も塞がっているときは、コイル所在は外形の下へ逃げる。 <sub>`relayXref`</sub>
+- コイルはattrs.device_blockがちょうど"true"のときだけ実機ブロック表示になり、それ以外(空文字含む)は従来どおりの分散配置になる。 <sub>`relayXref`</sub>
+- シートの実機ブロック一覧に入るのはdevice_blockが付いたコイルだけで、従来どおりの分散配置のコイルは入らない。 <sub>`relayXref`</sub>
+- 実機ブロックで表示するコイルには、コイルの下にぶら下げる別表としての接点マップはもう付かない。 <sub>`relayXref`</sub>
+- 実機ブロックの外形はコイルのピン間隔を下回らないので、幅が最小のときはA1/A2ピンがそのまま外形の左右端になり、引き出し線は要らない。 <sub>`relayXref`</sub>
+- 型番があるとヘッダは2行になり、内容で外形がピン間隔より広がっても引き出し線でピンは外形まで届く。 <sub>`relayXref`</sub>
+- 実機ブロックの接点の行はヘッダ行のすぐ下に続き、外形全体の高さは隙間なく全ての行をちょうど覆う。 <sub>`relayXref`</sub>
 
 ### renderer
 
@@ -1866,6 +1893,12 @@
 - シートごとのクロスリファレンス表は、各ラベルのidを脇に描くテキストへ対応付ける <sub>`cross references`</sub>
 - 相手先をクリックすると、相手のシートへ切り替えて相手のラベルを選択・ズームする指示になる <sub>`xrefJumpTarget`</sub>
 - クロスリファレンスのテキストは、ラベル本文の右側に同じベースラインで並ぶ <sub>`xrefTextAt`</sub>
+- 2枚の違うシートに描かれた参照記号は相互に参照し合う: それぞれのインスタンスにもう一方のシートの住所が出る <sub>`G13 device cross-reference`</sub>
+- 1枚のシートにしか描かれていない参照記号には、クロスリファレンスが一切付かない <sub>`G13 device cross-reference`</sub>
+- リレーのコイル・接点はデバイス単位のクロスリファレンスの対象から外れる(コイル⇔接点クロスリファレンスが既に自動で所在を注記するため) <sub>`G13 device cross-reference`</sub>
+- シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける <sub>`G13 device cross-reference`</sub>
+- 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる <sub>`G13 device cross-reference`</sub>
+- デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる <sub>`G13 device cross-reference`</sub>
 
 ### propertyCommands
 

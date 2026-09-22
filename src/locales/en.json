@@ -984,6 +984,14 @@
     "functionPlaceholder": "Emergency stop button",
     "functionHint": "What this device does, printed under the symbol (the third text field after the designator and the type number)."
   },
+  "relay": {
+    "deviceBlockRow": "Physical device block",
+    "deviceBlockLabel": "Show as physical device block",
+    "deviceBlockHint": "Draws this coil as one outline with the designator, part number and a contact image (pin numbers and drawing address for every contact sharing this designator), instead of the small coil symbol and a separate contact map. The contacts stay individually placed and wired; only the coil's own drawing changes.",
+    "deviceBlockOn": "on",
+    "deviceBlockOff": "off",
+    "deviceBlockChangedLog": "{reference}: physical device block {state}"
+  },
   "panel": {
     "tab": "Unplaced parts",
     "head": "Unplaced parts (from the schematic)",

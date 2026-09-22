@@ -16,6 +16,7 @@ import { autoWirePartNo } from "../canvas/wireParts";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import type { Entity, TextAnchor, TextColorToken } from "../ipc";
 import { FUNCTION_LABEL_ATTR, TEXT_ANCHORS, TEXT_COLOR_TOKENS } from "../canvas/textStyle";
+import { COIL_SYMBOL_ID, DEVICE_BLOCK_ATTR, isDeviceBlock } from "../canvas/relayXref";
 import { useBlockEditorStore } from "../stores/blockEditor";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
@@ -80,6 +81,8 @@ const buf = reactive({
   bold: false,
   /** シンボルの機能ラベル (G4の第3テキスト欄)。 */
   functionLabel: "",
+  /** リレーコイルの実機ブロック表示 (G7)。 */
+  deviceBlock: false,
   /** 盤の要素 (M4 §8): 外形・ダクト・フットプリントの寸法、レールの取付線と両端。 */
   w: "",
   h: "",
@@ -139,6 +142,7 @@ watch(
       buf.reference = e.reference;
       buf.value = e.value;
       buf.functionLabel = e.attrs?.[FUNCTION_LABEL_ATTR] ?? "";
+      buf.deviceBlock = isDeviceBlock(e);
     } else if (e.kind === "text") {
       buf.anchor = e.anchor ?? "start";
       buf.textColor = e.color ?? "default";
@@ -278,7 +282,18 @@ async function apply() {
     const label = buf.functionLabel.trim();
     if (label) attrs[FUNCTION_LABEL_ATTR] = label;
     else delete attrs[FUNCTION_LABEL_ATTR];
+    // 実機ブロック表示 (G7) もattrsに入れる。「オフ」はキーごと消して従来の形に戻す
+    if (buf.deviceBlock) attrs[DEVICE_BLOCK_ATTR] = "true";
+    else delete attrs[DEVICE_BLOCK_ATTR];
     entity = { ...e, reference: buf.reference, value: buf.value, attrs };
+    if (isDeviceBlock(e) !== buf.deviceBlock) {
+      ui.log(
+        t("relay.deviceBlockChangedLog", {
+          reference: buf.reference.trim(),
+          state: t(buf.deviceBlock ? "relay.deviceBlockOn" : "relay.deviceBlockOff"),
+        }),
+      );
+    }
   } else if (e.kind === "text") {
     // 注記の装飾 (G4)。既定色は色指定なし (null) に戻して、旧い図面と同じ形で保存する
     entity = {
@@ -338,6 +353,11 @@ async function apply() {
 /** 選択中がブロック (ピン表で形が決まるシンボル) か。 */
 const isBlock = computed(
   () => selected.value?.kind === "symbol" && selected.value.symbol_id === BLOCK_SYMBOL_ID,
+);
+
+/** 選択中がリレーコイルか (実機ブロック切替 (G7) を出す条件)。 */
+const isRelayCoil = computed(
+  () => selected.value?.kind === "symbol" && selected.value.symbol_id === COIL_SYMBOL_ID,
 );
 
 /** 選択中のブロックのピン構成 (「左5 / 右3」)。 */
@@ -468,6 +488,15 @@ const kindLabel = computed<Record<string, string>>(() => ({
       <div class="prow">
         <span class="plabel">シンボル</span>
         <span class="pvalue">{{ selected.symbol_id }}</span>
+      </div>
+      <div v-if="isRelayCoil" class="prow">
+        <span class="plabel">{{ t("relay.deviceBlockRow") }}</span>
+        <span class="pvalue" :title="t('relay.deviceBlockHint')">
+          <label class="check">
+            <input v-model="buf.deviceBlock" type="checkbox" @change="apply" />
+            {{ t("relay.deviceBlockLabel") }}
+          </label>
+        </span>
       </div>
       <template v-if="isBlock">
         <div class="prow">

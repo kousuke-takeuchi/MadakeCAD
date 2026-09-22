@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1919 specification clauses** across 5 areas.
+**1952 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -367,6 +367,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A make contact cannot borrow a changeover pole that a changeover contact already uses. <sub>`a_make_contact_cannot_borrow_a_pole_already_in_use`</sub>
 - The contact map table is centred under the coil and grows downwards, one row per contact. <sub>`contact_map_table_is_centred_under_the_coil`</sub>
 - The contact map hangs below the coil symbol's outline, and the coil location text sits to the right of the contact symbol. <sub>`annotations_are_anchored_to_the_symbol_outline`</sub>
+- A changeover contact's coil location moves off the wire note above it, reproducing the collision described in G22. <sub>`coil_location_moves_off_a_colliding_wire_note`</sub>
+- When even the space above is occupied, the coil location falls back to below the outline. <sub>`coil_location_falls_back_below_when_above_is_also_occupied`</sub>
+- A coil is only shown as a physical device block when its "device_block" attribute is exactly "true"; any other value, including empty, keeps the distributed placement. <sub>`device_block_attribute_selects_the_display_mode`</sub>
+- The device block's contact image lists each contact with its terminal pair and drawing address, in the same order as the contact map. <sub>`device_block_lists_the_same_contacts_as_the_contact_map`</sub>
+- A blank part number produces a device block with no part number line, rather than an empty one. <sub>`device_block_has_no_part_number_line_when_blank`</sub>
+- Only the coils whose instance has "device_block" set are collected into the sheet's device blocks; a coil left in the default distributed placement is not. <sub>`sheet_device_blocks_only_includes_flagged_coils`</sub>
+- A coil shown as a device block no longer gets the separate hanging contact map, because its contacts are already listed inside the block. <sub>`device_block_coils_are_excluded_from_the_separate_contact_map`</sub>
+- The device block's outline is at least as wide as the coil's pin span, so its A1/A2 pins land exactly on the outline's left and right edge and no lead line is needed. <sub>`device_block_layout_is_no_narrower_than_the_pin_span`</sub>
+- A part number adds a second header row, and pins still reach the outline through a lead when the content widens the box past the pin span. <sub>`device_block_layout_grows_for_the_part_number_and_keeps_the_pins_reachable`</sub>
+- The device block's contact rows sit directly under the header rows, and the outline's total height covers every row with no gap. <sub>`device_block_layout_stacks_contact_rows_under_the_header`</sub>
 
 ### Reports as drawing sheets
 
@@ -510,6 +520,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The sheet holding the coil shows a contact map under it: one row per contact with its terminal pair and its address. <sub>`svg_draws_the_contact_map_under_the_coil`</sub>
 - The sheet holding the contact shows the coil's address in parentheses beside it. <sub>`svg_draws_the_coil_location_beside_the_contact`</sub>
 - Exporting a single sheet on its own draws no contact map, because the counterpart sheets are unknown. <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
+- A coil whose "device_block" attribute is "true" is drawn as one outline with its designator, part number and contact image, instead of the small coil symbol and the separate hanging contact map. <sub>`svg_draws_a_device_block_for_a_flagged_coil`</sub>
+- Toggling "device_block" off keeps the previous distributed placement: the small coil symbol with its own separate contact map underneath. <sub>`svg_keeps_the_distributed_placement_without_the_attribute`</sub>
+- A non-relay designator drawn on two sheets gets an automatic "(/2.B3)"-style cross-reference beside it, on both sheets (G13). <sub>`svg_draws_a_device_cross_reference_for_a_designator_on_two_sheets`</sub>
 - A panel-layout sheet is exported with the same drawing frame as a schematic, plus the enclosure and its mounting plate. <sub>`svg_of_a_panel_sheet_draws_the_enclosure_and_its_mounting_plate`</sub>
 - A duct is drawn as a rectangle filled with 45-degree hatch lines. <sub>`svg_of_a_panel_sheet_hatches_the_duct`</sub>
 - A DIN rail is drawn as a horizontal band centred on its mounting line. <sub>`svg_of_a_panel_sheet_draws_the_din_rail`</sub>
@@ -820,6 +833,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A smaller annotation text height moves the cross-reference closer to the label, keeping the gap in proportion. <sub>`cross_reference_follows_the_annotation_text_height`</sub>
 - The cross-reference table has one row per project-wide net, listing the sheets it spans and the drawing addresses of its labels. <sub>`cross_reference_table_lists_one_row_per_net_with_its_sites`</sub>
 - The columns of the cross-reference table are net / wire number / connected pins / sheets / sites. <sub>`cross_reference_table_columns_are_net_wire_pins_sheets_sites`</sub>
+- A designator drawn on two different sheets gets a mutual cross-reference: each instance shows the other sheet's address. <sub>`a_designator_on_two_sheets_cross_references_each_other`</sub>
+- A designator drawn on a single sheet only has no cross-reference at all. <sub>`a_designator_on_a_single_sheet_has_no_cross_reference`</sub>
+- Relay coils and contacts are skipped by the device cross-reference, because relay_xref already annotates their coil location automatically. <sub>`relay_coil_and_contacts_are_skipped_by_the_device_cross_reference`</sub>
+- The per-sheet device cross-reference table maps each symbol entity to the text drawn beside it. <sub>`sheet_device_cross_reference_table_maps_symbols_to_text`</sub>
+- A designator on three sheets lists every other sheet's address, in sheet order, on one line. <sub>`a_designator_on_three_sheets_lists_every_other_sheet`</sub>
+- The device cross-reference text sits to the right of the symbol outline, on the same row as the designator label. <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
 
 
 ## Automation APIs (MCP / REST)
@@ -1609,6 +1628,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - lets a changeover pole be drawn as a plain make or break contact <sub>`relayXref`</sub>
 - centres the contact map table under the coil <sub>`relayXref`</sub>
 - anchors both annotations to the symbol outline <sub>`relayXref`</sub>
+- moves the coil location off a colliding wire note <sub>`relayXref`</sub>
+- falls back below the outline when the space above is also occupied <sub>`relayXref`</sub>
+- selects the display mode from the device_block attribute <sub>`relayXref`</sub>
+- only collects coils flagged as a device block <sub>`relayXref`</sub>
+- excludes device-block coils from the separate contact map <sub>`relayXref`</sub>
+- keeps the device block layout no narrower than the pin span <sub>`relayXref`</sub>
+- grows the device block for the part number and keeps the pins reachable <sub>`relayXref`</sub>
+- stacks the device block's contact rows under the header <sub>`relayXref`</sub>
 
 ### renderer
 
@@ -1866,6 +1893,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - maps each label id to the text drawn beside it <sub>`cross references`</sub>
 - names the sheet to switch to and the label to select and zoom <sub>`xrefJumpTarget`</sub>
 - places the text right of the label text on the same baseline <sub>`xrefTextAt`</sub>
+- cross-references a designator on two sheets both ways <sub>`G13 device cross-reference`</sub>
+- shows nothing for a designator on a single sheet <sub>`G13 device cross-reference`</sub>
+- skips relay coils and contacts <sub>`G13 device cross-reference`</sub>
+- maps each symbol entity id to the text drawn beside it <sub>`G13 device cross-reference`</sub>
+- lists every other sheet for a designator on three sheets <sub>`G13 device cross-reference`</sub>
+- places the text right of the symbol outline, level with the designator label <sub>`G13 device cross-reference`</sub>
 
 ### propertyCommands
 

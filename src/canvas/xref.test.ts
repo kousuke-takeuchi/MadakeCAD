@@ -2,9 +2,12 @@
 // Rust側 madake-core/src/xref.rs と同一ルール。
 import { describe, expect, it } from "vitest";
 
-import type { Entity, Project, Sheet } from "../ipc";
+import type { Entity, Project, Sheet, SymbolInstance } from "../ipc";
 import {
   NET_LABEL_RISE,
+  deviceXrefAddresses,
+  deviceXrefAt,
+  sheetDeviceXrefs,
   sheetXrefs,
   xrefJumpTarget,
   xrefSites,
@@ -12,6 +15,7 @@ import {
   xrefTextAt,
   zoneAt,
 } from "./xref";
+import { COIL_SYMBOL_ID } from "./relayXref";
 
 function sheet(id: string, name: string, entities: Entity[]): Sheet {
   return {
@@ -29,6 +33,40 @@ function sheet(id: string, name: string, entities: Entity[]): Sheet {
 
 function netLabel(id: string, name: string, x: number, y: number): Entity {
   return { kind: "net_label", id, at: { x, y }, name, rotation: 0 };
+}
+
+function symbolEntity(
+  id: string,
+  symbolId: string,
+  reference: string,
+  x: number,
+  y: number,
+): SymbolInstance & { kind: "symbol" } {
+  return {
+    kind: "symbol",
+    id,
+    symbol_id: symbolId,
+    at: { x, y },
+    rotation: 0,
+    mirror: false,
+    reference,
+    value: "",
+    attrs: {},
+  };
+}
+
+/** 2枚のA3シートに同じ参照記号のシンボルを1個ずつ置いたプロジェクト (シート1=A1、シート2=B3)。 */
+function twoSheetDeviceProject(symbolId: string, reference: string): Project {
+  return {
+    format_version: 1,
+    name: "t",
+    wire_parts: [],
+    plc_assignments: [],
+    sheets: [
+      sheet("s1", "Sheet1", [symbolEntity("e1", symbolId, reference, 20, 20)]),
+      sheet("s2", "Sheet2", [symbolEntity("e2", symbolId, reference, 250, 70)]),
+    ],
+  };
 }
 
 /** 2枚のA3シートに同名ラベル (シート1=A1、シート2=B3) を置いたプロジェクト。 */
@@ -133,5 +171,65 @@ describe("xrefTextAt", () => {
     const at = xrefTextAt({ at: { x: 100, y: 50 }, name: "24V_1" });
     expect(at.x).toBeCloseTo(100 + 2.5 * 0.6 * 5 + 1, 9);
     expect(at.y).toBeCloseTo(50 - NET_LABEL_RISE, 9);
+  });
+});
+
+describe("G13 device cross-reference", () => {
+  // ja: 2枚の違うシートに描かれた参照記号は相互に参照し合う: それぞれのインスタンスにもう一方のシートの住所が出る
+  it("cross-references a designator on two sheets both ways", () => {
+    const project = twoSheetDeviceProject("motor", "M1");
+    expect(deviceXrefAddresses(project, "s1", "M1")).toEqual(["/2.B3"]);
+    expect(deviceXrefAddresses(project, "s2", "M1")).toEqual(["/1.A1"]);
+  });
+
+  // ja: 1枚のシートにしか描かれていない参照記号には、クロスリファレンスが一切付かない
+  it("shows nothing for a designator on a single sheet", () => {
+    const project: Project = {
+      format_version: 1,
+      name: "t",
+      wire_parts: [],
+      plc_assignments: [],
+      sheets: [sheet("s1", "Sheet1", [symbolEntity("e1", "motor", "M1", 20, 20)])],
+    };
+    expect(deviceXrefAddresses(project, "s1", "M1")).toEqual([]);
+    expect(sheetDeviceXrefs(project, "s1").size).toBe(0);
+  });
+
+  // ja: リレーのコイル・接点はデバイス単位のクロスリファレンスの対象から外れる(コイル⇔接点クロスリファレンスが既に自動で所在を注記するため)
+  it("skips relay coils and contacts", () => {
+    const project = twoSheetDeviceProject(COIL_SYMBOL_ID, "K1");
+    expect(deviceXrefAddresses(project, "s1", "K1")).toEqual([]);
+    expect(sheetDeviceXrefs(project, "s1").size).toBe(0);
+  });
+
+  // ja: シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける
+  it("maps each symbol entity id to the text drawn beside it", () => {
+    const table = sheetDeviceXrefs(twoSheetDeviceProject("motor", "M1"), "s1");
+    expect(table.get("e1")).toBe("/2.B3");
+  });
+
+  // ja: 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる
+  it("lists every other sheet for a designator on three sheets", () => {
+    const project: Project = {
+      format_version: 1,
+      name: "t",
+      wire_parts: [],
+      plc_assignments: [],
+      sheets: [
+        sheet("s1", "Sheet1", [symbolEntity("e1", "motor", "M1", 20, 20)]),
+        sheet("s2", "Sheet2", [symbolEntity("e2", "motor", "M1", 20, 20)]),
+        sheet("s3", "Sheet3", [symbolEntity("e3", "motor", "M1", 20, 20)]),
+      ],
+    };
+    expect(deviceXrefAddresses(project, "s1", "M1")).toEqual(["/2.A1", "/3.A1"]);
+  });
+
+  // ja: デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる
+  it("places the text right of the symbol outline, level with the designator label", () => {
+    const bounds = { min: { x: 92.5, y: 47 }, max: { x: 107.5, y: 53 } };
+    const topY = 47;
+    const at = deviceXrefAt(bounds, topY);
+    expect(at.x).toBeGreaterThan(bounds.max.x);
+    expect(at.y).toBeCloseTo(topY - 4.5, 9);
   });
 });

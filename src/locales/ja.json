@@ -984,6 +984,14 @@
     "functionPlaceholder": "非常停止ボタン",
     "functionHint": "この機器が何をするものかをシンボルの下に書きます (参照記号・型番に続く3つ目のテキスト欄)。"
   },
+  "relay": {
+    "deviceBlockRow": "実機ブロック表示",
+    "deviceBlockLabel": "実機ブロックで表示",
+    "deviceBlockHint": "このコイルを、小さなコイル図形+別表の接点マップの代わりに、参照記号・型番・接点イメージ(この参照記号を共有する接点ごとのピン番号と図面上の住所)をまとめた1つの外形として描きます。接点は従来どおり個別に配置・配線されたままで、変わるのはコイル自身の描き方だけです。",
+    "deviceBlockOn": "オン",
+    "deviceBlockOff": "オフ",
+    "deviceBlockChangedLog": "{reference}: 実機ブロック表示を{state}にしました"
+  },
   "panel": {
     "tab": "未配置部品",
     "head": "未配置部品 (回路図より)",
