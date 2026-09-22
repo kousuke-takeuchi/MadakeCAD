@@ -1,6 +1,6 @@
 # データ設計書
 
-作成: 2026-08-21。更新: 2026-08-23(フェーズ6: `.mdkproj` format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
+作成: 2026-08-21。更新: 2026-09-22(フェーズ6タスク4: `.mdkproj` format_version 9・`TextEntity.leader_to`(G20、注記の引き出し線)。フェーズ6: format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
 
 MadakeCADの永続データは3系統ある:
 
@@ -12,7 +12,7 @@ MadakeCADの永続データは3系統ある:
 
 ## 1. 図面ドキュメント(.mdkproj)
 
-`format_version: 8`。構造(mermaid classDiagram):
+`format_version: 9`。構造(mermaid classDiagram):
 
 ```mermaid
 classDiagram
@@ -76,7 +76,7 @@ classDiagram
     }
     class Junction { id; at: Point }
     class NetLabel { id; at: Point; name; rotation; attrs %% tag=left|right }
-    class TextEntity { id; at: Point; text; height; rotation; anchor; color?; bold }
+    class TextEntity { id; at: Point; text; height; rotation; anchor; color?; bold; leader_to: Uuid? %% G20、対象エンティティid }
     class Harness { id; points: Point[]; name; note  %% 電線をまとめる境界専用 }
     class Shape {
       id
@@ -123,6 +123,7 @@ classDiagram
 | 6 | `Footprint.item_no`+凡例表エンティティ`panel_legend` | バルーン未採番として開く。**逆に新しいファイルは旧アプリでは読めない**(`panel_legend`が未知) |
 | 7 | `Sheet.annotation_text_mm`(注記文字高。配線注記・線番・ネットタグの大きさ) | 既定の2.0mm=従来の見た目で開く |
 | 8 | 図形エンティティ`shape`(矩形・線・円・折れ線。電気的意味なし) | 図形が無いだけでそのまま開く。**逆に図形を含む新しいファイルは旧アプリでは読めない**(`shape`が未知) |
+| 9 | `TextEntity.leader_to`(G20、注記から対象エンティティへの引き出し線) | 引き出し先未設定(`None`)として開く=引き出し線を描かない |
 
 `NetLabel.attrs`(方向付きタグ形状)のように**追加するだけで旧アプリも読める**変更は版を上げていない。
 版を上げるのは、旧アプリが読めなくなる要素が入ったとき(6)と、意味のある新フィールドを足したときだけ。

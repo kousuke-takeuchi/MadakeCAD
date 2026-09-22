@@ -69,7 +69,7 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Terminal block with two terminal columns as one device | 🔶 | **✅** | G6 — `terminal_block_{n}p_{levels}l`, one column per level, one device |
 | Jumper bars on the schematic | 🔶 | **✅** | G5 — drawn on the symbol as a shorting bar, level-aware on a multi-level block |
 | Multi-pin controller block with arbitrary pin names | ❌ | **✅** | G1 — 14 + 14 named pins, names inside the outline, numbers outside |
-| Pin-group brackets with rotated group labels | ❌ | ❌ | G8 |
+| Pin-group brackets with rotated group labels | ❌ | ❌ | G8. **✅ phase 6 task 4**: `attrs["pin_groups"]` draws a bracket + line-split caption, tracking rotation/mirror via the pin's own direction |
 | Filled / shaded device blocks | ❌ | **✅** | G10 — `shape` with a fill token |
 | Relay: coil + two changeover contacts | 🔶 | 🔶 | G7; and see G21 — changeover contacts are invisible to the relay cross-reference. **✅ phase 6 task 3**: `attrs.device_block` draws the coil as one outline with the contact image; manufacturer pin numbers and the mechanical linkage are still not drawn |
 | Net labels merging nets by name | ✅ | ✅ | |
@@ -83,7 +83,7 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Harness boundary (dashed enclosure) | ✅ | ✅ | |
 | Enclosure / case boundary distinct from a harness | 🔶 | **✅** | G11 — draw it as a dashed `shape`; the harness column stays empty |
 | Highlight box (coloured rectangle annotation) | ❌ | **✅** | G10 — `shape` rectangle with a colour token |
-| Pictorial device symbols (fan, speaker, display module) | ❌ | 🔶 | G12 — M4 shipped the user symbol library and editor, so these can be authored; none are bundled |
+| Pictorial device symbols (fan, speaker, display module) | ❌ | 🔶 | G12 — M4 shipped the user symbol library and editor, so these can be authored; none are bundled. **🔶 phase 6 task 4**: loudspeaker/buzzer/siren/fan now bundled (established IEC 60617 symbols only); a display module has no single-standard graphic to cite, so it still needs the user library |
 | Free notes | 🔶 | 🔶 | G4 gave colour, weight and anchor; rotation and multi-line are still missing |
 | Junctions | ✅ | ✅ | |
 | Device-level cross-sheet block reference | ❌ | ❌ | G13. **✅ phase 6 task 3**: any designator spanning sheets gets the `/sheet.zone` note automatically, relay coils/contacts excluded |
@@ -481,6 +481,25 @@ task and are not implemented.
 
 ### G8 — No pin-group brackets or rotated group labels · quality
 
+> **✅ Resolved 2026-09-22 (phase 6, task 4).** `SymbolInstance.attrs["pin_groups"]`
+> (comma-separated `range:caption` items, e.g. `"1-4:power,5-8:signal"`) draws a
+> square-bracket beside the pin column from the first pin of the range to the last,
+> with the caption split into 4-character lines stacked beside it — a line-splitting
+> approximation of vertical writing, since the renderer has no vertical-font control
+> (see G4). The range names pins in **chart order** (the order the symbol definition
+> declares them — a multi-level terminal block's `1a-4a` stays within one level,
+> because levels are declared level-by-level, not pole-by-pole); the bracket's
+> orientation follows the group's own pin direction (`PinDir`), so it tracks rotation
+> and mirror automatically, and works on the `block`, `terminal_block_*` and
+> `connector_*` families alike (`pin_groups.rs` + canvas twin `pinGroups.ts`, parity
+> tests). An overlapping range, a pin the instance does not have, or an unparseable
+> item is reported as an ERC diagnostic (`pin_group.overlap` /
+> `pin_group.unknown_pin` / `pin_group.invalid`) naming the device and the offending
+> item, and only that item is left undrawn — same "diagnose, don't silently drop"
+> rule as the terminal jumper checks (G5's `terminal.jumper_invalid`). No command-time
+> validation (same as `attrs["jumpers"]`): a bad item never blocks placing or editing
+> the instance, it is caught by verification.
+
 > **Status 2026-08-23 (phase 5): unchanged.** The `block` family from G1 landed
 > without pin groups, so this is now a well-defined extension of `block_pins`
 > (a group = a pin range + a caption) rather than a new symbol family.
@@ -491,7 +510,7 @@ spanning the group with a rotated caption alongside).
 **Current behaviour (verified).** No bracket primitive on an instance, and rotated
 text is ignored (see G4).
 
-**Proposed.** Fold into the device-block symbol family (G1): a group is a pin range
+**Proposed (adopted).** Fold into the device-block symbol family (G1): a group is a pin range
 plus a caption, and the symbol draws the bracket.
 
 ---
@@ -604,6 +623,25 @@ enclosure name to unrelated conductors.
 ---
 
 ### G12 — Pictorial device symbols are missing, with no user library · quality
+
+> **🔶 Partly resolved 2026-09-22 (phase 6, task 4).** Four pictorial symbols are now
+> bundled — **loudspeaker**, **buzzer**, **siren** and **fan** — each an
+> established IEC 60617 diagram symbol (not invented artwork), cited in a Rust doc
+> comment on its own definition function (`loudspeaker_symbol` / `buzzer_symbol` /
+> `siren_symbol` / `fan_symbol` in `symbol.rs`) and verified against the IEC's own
+> symbol database (<https://products.iec.ch/>, Symbols tab, 2026-09-22):
+> IEC 60617-S01059 "Loudspeaker, general symbol", IEC 60617-S00973 "Buzzer",
+> IEC 60617-S00972 "Siren", IEC 60617-S01421 "Fan" (installations-in-buildings
+> class). All four sit in the existing `output` category (alongside lamp/motor/bell,
+> so they need no new symbol-picker category), have their pins on the 2.5 mm grid,
+> and carry reference-designator prefixes following the codebase's convention
+> (`LS`/`BZ`/`SIR`/`FAN`, next to `L`/`M`/`BL`). A **pictorial indicator lamp** was
+> considered and dropped: no source was found describing an IEC 60617 lamp symbol
+> that differs from the one already bundled (a circle with a cross), so bundling one
+> would have meant inventing a shape — against this gap's own rule. Still 🔶 rather
+> than ✅: the reference drawing's fuller pictorial vocabulary (field-device icons,
+> display modules, sensors) has no established single-standard graphic to cite, so it
+> stays with the user symbol library from the resolution below.
 
 > **Status 2026-08-23 (phase 5): partly resolved — downgraded to 🔶.** M4 §7 shipped
 > the user symbol library (`~/MadakeCAD/symbols/*.json`) and the symbol editor, so a
@@ -792,6 +830,22 @@ this is one change in `net_tag.rs` plus the canvas twin.
 
 ### G20 — Annotation size and placement are not settable · quality
 
+> **✅ Resolved for leader lines 2026-09-22 (phase 6, task 4).**
+> `TextEntity.leader_to: Option<EntityId>` (`.mdkproj` format_version 8 → 9) lets a
+> note point at any other entity on the same sheet. A straight line is drawn from the
+> midpoint of whichever edge of the note's own bounding box sits nearest the target,
+> to the nearest point on the target's bounding box, with a filled dot the same size
+> as a wire-junction dot (r 0.6 mm) at the target end (`leader.rs` + canvas twin
+> `leader.ts`, parity tests) — recomputed at render time, so the leader follows
+> either end if it moves, exactly like every other derived annotation in this
+> codebase. A `leader_to` naming an entity that does not exist on the sheet, or the
+> note itself, is refused by the same `UpdateEntity`/`AddEntity` command that already
+> refuses an unresolvable `symbol_id`; the inverse command restores the previous
+> value, so clearing or changing a leader is an ordinary undo step. **Still open**:
+> the properties panel has no entity-pick control to build a UI on, so `leader_to` is
+> settable only through a command, the CLI's `exec`, or an MCP tool — this is called
+> out explicitly rather than left implicit.
+
 > **✅ Resolved for the text height 2026-08-23 (phase 6).** `Sheet.annotation_text_mm`
 > (`format_version` 7, 1.0–3.5 mm, unset = the previous 2.0 mm) sets the size of the
 > **wire notes, the wire numbers and the net tags** on that sheet, because the size of the
@@ -895,7 +949,7 @@ canvas twin.
 | Impact | Gaps |
 |---|---|
 | **essential** | *(all closed in phase 5)* ✅ G1 named pins on multi-pin blocks · ✅ G2 wire annotation on the sheet · ✅ G3 directional net-label flags · ✅ G4 text styling, anchoring and a third symbol text field |
-| **quality** | ✅ G5 jumper bars on the schematic · ✅ G6 multi-level terminal blocks · ✅ G7 physical relay blocks *(display mode + contact image; manufacturer pin numbering and mechanical linkage still open)* · G8 pin-group brackets · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; reproduction re-measured in task 6)* · 🔶 G12 pictorial symbols *(user library shipped; none bundled)* · ✅ G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height *(leader placement and the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
+| **quality** | ✅ G5 jumper bars on the schematic · ✅ G6 multi-level terminal blocks · ✅ G7 physical relay blocks *(display mode + contact image; manufacturer pin numbering and mechanical linkage still open)* · ✅ G8 pin-group brackets *(phase 6 task 4)* · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; reproduction re-measured in task 6)* · 🔶 G12 pictorial symbols *(4 established IEC 60617 symbols now bundled — loudspeaker/buzzer/siren/fan, phase 6 task 4; the rest still needs the user library)* · ✅ G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height and leader lines *(phase 6 task 4; the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
 | **minor** | G14 mating connector pairs · G15 sheet size command · G16 project meta command · ✅ G17 silent failures · G18 From-To list through net labels · ✅ G22 coil location vs wire note |
 
 ## Reading of the result
@@ -925,3 +979,12 @@ twelve, and the relay's false ERC warning is gone. The sheet now carries the sam
 information as the drawing it replaces **and reads like it**. What is left in the ledger
 is no longer parity or legibility but the target-quality standard: physical device
 blocks, pin groups, filled shapes, pictorial symbols and a wire-part legend.
+
+**Phase 6 task 4 (2026-09-22): three more of those target-quality items landed.** Pin
+groups (G8) and four bundled pictorial symbols (G12) are drawn with the same
+grid/rotation/mirror discipline as every other symbol, and a note can now carry a leader
+line to whatever it annotates (the remainder of G20). None of the three needed a new
+sheet-level reproduction pass to verify — G8 and G20 are single-instance geometry with
+their own parity-tested Rust/TS twins and ERC/unit tests, and G12 is a standards-citation
+exercise — so this pass did not re-run the full reproduction script; what is reported
+above is the implementation and its tests, not a re-measured sheet.
