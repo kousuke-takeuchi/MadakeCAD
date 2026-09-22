@@ -555,8 +555,7 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                     vec![s.id],
                 ));
             }
-            let order = crate::pin_groups::chart_order_pin_numbers(&def);
-            for issue in crate::pin_groups::parse_pin_groups(spec, &order).issues {
+            for issue in crate::pin_groups::pin_group_issues(&def, spec) {
                 diags.push(diag(
                     Severity::Error,
                     &issue.code,
