@@ -1,7 +1,7 @@
 // 改訂欄 (ISO 7200 / JIS Z 8311) のレイアウト計算。Rust側 svg.rs と同一ルールであること。
 import { describe, expect, it } from "vitest";
 
-import type { Point, Primitive, Revision, Sheet, SymbolDef, SymbolInstance } from "../ipc";
+import type { Entity, Point, Primitive, Revision, Sheet, SymbolDef, SymbolInstance } from "../ipc";
 import { dynamicSymbol, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./dynamicSymbol";
 import {
   JUNCTION_DOT_R_MM,
@@ -28,6 +28,7 @@ import {
 } from "./relayXref";
 import { theme } from "./theme";
 import { JUMPER_BAR_STROKE_MM } from "./terminalJumpers";
+import type { ViewClass } from "./viewClasses";
 import { Viewport } from "./viewport";
 
 function rev(mark: string): Revision {
@@ -565,6 +566,100 @@ describe("drawDeviceBlock", () => {
     expect(hidden).not.toContain("13-14");
     expect(hidden).not.toContain("/1.B3");
     expect(hidden).toContain("K1");
+  });
+});
+
+describe("renderSheet mate links", () => {
+  /** setLineDashで破線にしたまま引かれた線分だけを記録するキャンバス。 */
+  function dashRecorder() {
+    const dashed: { from: Point; to: Point }[] = [];
+    let dash: number[] = [];
+    let last: Point = { x: 0, y: 0 };
+    let start: Point = { x: 0, y: 0 };
+    const ctx = {
+      canvas: { width: 800, height: 600 },
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 0,
+      font: "",
+      textAlign: "" as CanvasTextAlign,
+      beginPath() {},
+      moveTo(x: number, y: number) {
+        start = { x, y };
+        last = start;
+      },
+      lineTo(x: number, y: number) {
+        last = { x, y };
+      },
+      arcTo() {},
+      rect() {},
+      closePath() {},
+      stroke() {
+        if (dash.length) dashed.push({ from: start, to: last });
+      },
+      fill() {},
+      fillRect() {},
+      strokeRect() {},
+      setLineDash(d: number[]) {
+        dash = d;
+      },
+      measureText: (t: string) => ({ width: t.length * 6 }),
+      arc() {},
+      fillText() {},
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, dashed };
+  }
+
+  function connectorPair(): { sheet: Sheet; defs: SymbolDef[] } {
+    const def = dynamicSymbol("connector_3p")!;
+    const inst = (id: string, reference: string, x: number, mate: string): Entity =>
+      ({
+        kind: "symbol",
+        id,
+        symbol_id: "connector_3p",
+        at: { x, y: 100 },
+        rotation: 0,
+        mirror: false,
+        reference,
+        value: "",
+        attrs: { mates_with: mate },
+      }) as unknown as Entity;
+    const sheet = {
+      id: "s1",
+      name: "S1",
+      size: "A3",
+      orientation: "Landscape",
+      zone_cols: 4,
+      zone_rows: 6,
+      title_block: {},
+      revisions: [],
+      entities: { a: inst("a", "J1", 100, "J12"), b: inst("b", "J12", 130, "J1") },
+    } as unknown as Sheet;
+    return { sheet, defs: [def] };
+  }
+
+  function dashedMateLines(hidden: ViewClass[]): number {
+    const { sheet, defs } = connectorPair();
+    const rec = dashRecorder();
+    const vp = new Viewport();
+    renderSheet(rec.ctx, sheet, defs, vp, {
+      selection: new Set(),
+      cursor: null,
+      hidden: new Set(hidden),
+      mateLinks: [{ sheetId: "s1", a: "a", b: "b" }],
+    });
+    return rec.dashed.length;
+  }
+
+  // ja: 嵌合対の破線は表示クラス「シンボル」に属し、シンボルを隠すと一緒に消える (結ぶ相手が見えないため)
+  it("hides the mate link together with the symbols view class", () => {
+    expect(dashedMateLines([])).toBe(1);
+    expect(dashedMateLines(["symbols"])).toBe(0);
+  });
+
+  // ja: 参照記号を隠しても嵌合対の破線は残る (参照記号の表示クラスには属さない)
+  it("keeps the mate link when only the reference-designator class is hidden", () => {
+    expect(dashedMateLines(["refs"])).toBe(1);
   });
 });
 

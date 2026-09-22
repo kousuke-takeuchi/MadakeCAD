@@ -6,7 +6,36 @@ import {
   annotationTextMm,
   isValidAnnotationTextMm,
 } from "../canvas/annotationText";
-import type { Command, Entity, Sheet } from "../ipc";
+import { MATES_WITH_ATTR, isConnectorInstance } from "../canvas/mate";
+import { DEVICE_BLOCK_ATTR } from "../canvas/relayXref";
+import { FUNCTION_LABEL_ATTR } from "../canvas/textStyle";
+import type { Command, Entity, Sheet, SymbolInstance } from "../ipc";
+
+/**
+ * プロパティパネルが確定するシンボルの`attrs` (G4 機能ラベル・G7 実機ブロック・G14 嵌合相手)。
+ *
+ * パネルが**持っている欄だけ**を書き換え、それ以外の属性 (ジャンパ・ブロック定義など
+ * MCP・CLIが書いたものを含む) はそのまま残す。嵌合相手はコネクタ一族
+ * (`connector_*`) のシンボルにしか欄が出ないので、それ以外のシンボルでは
+ * この属性に一切触れない。空欄の欄はキーごと消して、旧い図面と同じ形で保存する。
+ */
+export function symbolAttrs(
+  instance: SymbolInstance,
+  edited: { functionLabel: string; deviceBlock: boolean; mate: string },
+): Record<string, string> {
+  const attrs = { ...(instance.attrs ?? {}) };
+  const label = edited.functionLabel.trim();
+  if (label) attrs[FUNCTION_LABEL_ATTR] = label;
+  else delete attrs[FUNCTION_LABEL_ATTR];
+  if (edited.deviceBlock) attrs[DEVICE_BLOCK_ATTR] = "true";
+  else delete attrs[DEVICE_BLOCK_ATTR];
+  if (isConnectorInstance(instance.symbol_id)) {
+    const mate = edited.mate.trim();
+    if (mate) attrs[MATES_WITH_ATTR] = mate;
+    else delete attrs[MATES_WITH_ATTR];
+  }
+  return attrs;
+}
 
 /**
  * 線番の個別編集コマンド (docs/internal/specs/m2-drawing-parity.md §2)。

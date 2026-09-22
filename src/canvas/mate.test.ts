@@ -13,12 +13,12 @@ import {
   rectBoundaryPointToward,
 } from "./mate";
 
-function connector(id: string, reference: string, x: number, mate: string | null): Entity {
+function connector(id: string, reference: string, x: number, mate: string | null, y = 0): Entity {
   return {
     kind: "symbol",
     id,
     symbol_id: "connector_3p",
-    at: { x, y: 0 },
+    at: { x, y },
     rotation: 0,
     mirror: false,
     reference,
@@ -99,6 +99,17 @@ describe("mate: mateLinks", () => {
     expect(mateLinks(project, symbolDefs)).toHaveLength(0);
   });
 
+  // ja: 距離の上限は50mmちょうどを含む (50.0mmは描き、50mmを超えると描かない。Rust側 the_mate_link_distance_limit_includes_exactly_fifty_millimetres とparity)
+  it("includes exactly 50mm in the distance limit", () => {
+    const linksAt = (distance: number) =>
+      mateLinks(
+        projectWith([connector("a", "J1", 0, "J12"), connector("b", "J12", distance, "J1")]),
+        symbolDefs,
+      );
+    expect(linksAt(50)).toHaveLength(1);
+    expect(linksAt(50.5)).toHaveLength(0);
+  });
+
   // ja: 宣言していないコネクタはペアに入らない
   it("a connector with no declaration produces no mate link", () => {
     const project = projectWith([connector("a", "J1", 0, null), connector("b", "J12", 30, null)]);
@@ -112,20 +123,26 @@ describe("mate: rectBoundaryPointToward", () => {
     const p = rectBoundaryPointToward({ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 50, y: 5 });
     expect(p).toEqual({ x: 10, y: 5 });
   });
+
+  // ja: 矩形の内側にある点は、いちばん近い辺の上へ押し出される (Rust側 a_point_inside_the_outline_is_pushed_out_to_the_nearest_edge とparity)
+  it("pushes a point inside the rectangle out onto its nearest edge", () => {
+    // (3,4) からは左辺が3mmでいちばん近い (右7mm・上4mm・下6mm)
+    const p = rectBoundaryPointToward({ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 3, y: 4 });
+    expect(p).toEqual({ x: 0, y: 4 });
+  });
 });
 
 describe("mate: mateLinkSegment (SVG/canvas parity)", () => {
-  // ja: 破線の両端は、双方の外形のうち相手にいちばん近い点になる
-  it("the segment endpoints sit on each connector's own outline, nearest the other", () => {
-    const project = projectWith([connector("a", "J1", 0, "J12"), connector("b", "J12", 30, "J1")]);
+  // ja: 30mm離れた3極コネクタ2つの嵌合線は、双方の外形の向かい合う辺の上、配置基準点の高さを結ぶ (Rust側 the_mate_link_runs_between_the_facing_outline_edges と同じ配置・同じ座標)
+  it("runs between the facing outline edges of the two connectors", () => {
+    const project = projectWith([
+      connector("a", "J1", 100, "J12", 100),
+      connector("b", "J12", 130, "J1", 100),
+    ]);
     const sheet = project.sheets[0];
     const link = mateLinks(project, symbolDefs)[0];
     const seg = mateLinkSegment(sheet, link, symbolDefs);
-    expect(seg).not.toBeNull();
-    // connector_3p の外形は基準点を中心に左右対称なので、線分は2点とも y=0 上
-    expect(seg!.a.y).toBe(0);
-    expect(seg!.b.y).toBe(0);
-    // aの点はbの点よりも常にaの基準点に近い側 (x座標が小さい側) にある
-    expect(seg!.a.x).toBeLessThan(seg!.b.x);
+    // connector_3pの外形は基準点の周り x[-4,+7.5] (ピンの先まで)・y[-7.5,+7.5]
+    expect(seg).toEqual({ a: { x: 107.5, y: 100 }, b: { x: 126, y: 100 } });
   });
 });

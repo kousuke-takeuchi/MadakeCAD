@@ -33,7 +33,6 @@ export interface MateLink {
 interface MateEntry {
   sheetId: string;
   entityId: string;
-  poleCount: number;
   declared: string | null;
 }
 
@@ -46,13 +45,13 @@ function collect(project: Project, defs: ReadonlyMap<string, SymbolDef>): Map<st
       if (!isConnectorInstance(s.symbol_id)) continue;
       const reference = s.reference.trim();
       if (!reference || out.has(reference)) continue;
-      const def = resolveInstanceDef(s, defs);
-      if (!def) continue;
+      // 定義が引けないシンボルは対象外 (Rust側mate.rsのresolve_symbolでの足切りと揃える。
+      // 極数はERCで使うがERCはRust側だけの仕事なので、ここでは持たない)
+      if (!resolveInstanceDef(s, defs)) continue;
       const raw = (s.attrs ?? {})[MATES_WITH_ATTR]?.trim() ?? "";
       out.set(reference, {
         sheetId: sheet.id,
         entityId: s.id,
-        poleCount: def.pins.length,
         declared: raw || null,
       });
     }

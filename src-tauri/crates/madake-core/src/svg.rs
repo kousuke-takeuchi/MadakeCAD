@@ -1966,6 +1966,15 @@ mod tests {
         assert_eq!((label.0, label.1), (51.0, 49.0), "左上角の外側: {label:?}");
     }
 
+    /// 動的な3極コネクタ (`src/canvas/mate.test.ts`のparityテストと同じ形)。
+    fn connector_3p(reference: &str, mate: Option<&str>, x: f64, y: f64) -> Entity {
+        let Entity::Symbol(mut s) = connector_entity(reference, mate, x, y) else {
+            unreachable!()
+        };
+        s.symbol_id = "connector_3p".into();
+        Entity::Symbol(s)
+    }
+
     fn connector_entity(reference: &str, mate: Option<&str>, x: f64, y: f64) -> Entity {
         let mut attrs = std::collections::BTreeMap::new();
         if let Some(m) = mate {
@@ -2002,6 +2011,66 @@ mod tests {
             .find(|l| l.starts_with("<line") && l.contains("stroke-dasharray"))
             .unwrap_or_else(|| panic!("嵌合対の破線が無い: {svg}"));
         assert!(line.contains("stroke-dasharray=\"1.500 1\""), "{line}");
+    }
+
+    /// The mate link of two 3-pole connectors 30mm apart runs between the facing edges of their outlines, at the height of their placement points (G14).
+    /// 30mm離れた3極コネクタ2つの嵌合線は、双方の外形の向かい合う辺の上、配置基準点の高さを結ぶ (G14)。
+    #[test]
+    fn the_mate_link_runs_between_the_facing_outline_edges() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [
+            connector_3p("J1", Some("J12"), 100.0, 100.0),
+            connector_3p("J12", Some("J1"), 130.0, 100.0),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let defs = crate::symbol::sheet_symbol_defs(&project.sheets[0]);
+        let svg = project_sheet_to_svg(&project, sid, &defs).unwrap();
+        let line = svg
+            .lines()
+            .find(|l| l.starts_with("<line") && l.contains("stroke-dasharray=\"1.500 1\""))
+            .unwrap_or_else(|| panic!("嵌合対の破線が無い: {svg}"));
+        // connector_3pの外形は基準点の周り x[-4,+7.5] (ピンの先まで)・y[-7.5,+7.5]
+        assert!(
+            line.contains("x1=\"107.500\" y1=\"100\" x2=\"126\" y2=\"100\""),
+            "{line}"
+        );
+    }
+
+    /// A mated pair exactly 50mm apart is still drawn: the distance limit includes 50mm itself.
+    /// ちょうど50mm離れた嵌合対は描かれる: 距離の上限は50mmちょうどを含む。
+    #[test]
+    fn the_mate_link_distance_limit_includes_exactly_fifty_millimetres() {
+        let pair_at = |distance: f64| {
+            let mut project = Project::new("t");
+            let sid = project.sheets[0].id;
+            let sheet = project.sheet_mut(sid).unwrap();
+            for e in [
+                connector_3p("J1", Some("J12"), 100.0, 100.0),
+                connector_3p("J12", Some("J1"), 100.0 + distance, 100.0),
+            ] {
+                sheet.entities.insert(e.id(), e);
+            }
+            let defs = crate::symbol::sheet_symbol_defs(&project.sheets[0]);
+            let svg = project_sheet_to_svg(&project, sid, &defs).unwrap();
+            svg.lines().any(|l| l.starts_with("<line") && l.contains("stroke-dasharray=\"1.500 1\""))
+        };
+        assert!(pair_at(50.0), "50mmちょうどは描く");
+        assert!(!pair_at(50.5), "50mmを超えたら描かない");
+    }
+
+    /// A point inside a symbol's outline is pushed out onto the nearest edge of that outline, so the mate link never starts inside the symbol.
+    /// 外形の内側にある点は、その外形のいちばん近い辺の上へ押し出される (嵌合線がシンボルの内側から始まらない)。
+    #[test]
+    fn a_point_inside_the_outline_is_pushed_out_to_the_nearest_edge() {
+        let (min, max) = (Point::new(0.0, 0.0), Point::new(10.0, 10.0));
+        // (3,4)からは左辺が3mmでいちばん近い (右7mm・上4mm・下6mm)
+        assert_eq!(
+            rect_boundary_point_toward(min, max, Point::new(3.0, 4.0)),
+            Point::new(0.0, 4.0)
+        );
     }
 
     /// A mated pair more than 50mm apart on the same sheet draws no line at all (the reports carry the pair instead).

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2103 specification clauses** across 5 areas.
+**2113 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -580,6 +580,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A harness boundary is drawn as a dashed rectangle (IEC 61082-1 group enclosure) around the wires it holds. <sub>`svg_draws_a_harness_as_a_dashed_rectangle`</sub>
 - The harness name is printed just outside the top-left corner of the boundary. <sub>`svg_labels_the_harness_at_its_top_left_corner`</sub>
 - Two mated connectors on the same sheet within 50mm are joined by a short dashed line between their outlines (G14). <sub>`svg_draws_a_dashed_line_between_a_mated_pair_on_one_sheet`</sub>
+- The mate link of two 3-pole connectors 30mm apart runs between the facing edges of their outlines, at the height of their placement points (G14). <sub>`the_mate_link_runs_between_the_facing_outline_edges`</sub>
+- A mated pair exactly 50mm apart is still drawn: the distance limit includes 50mm itself. <sub>`the_mate_link_distance_limit_includes_exactly_fifty_millimetres`</sub>
+- A point inside a symbol's outline is pushed out onto the nearest edge of that outline, so the mate link never starts inside the symbol. <sub>`a_point_inside_the_outline_is_pushed_out_to_the_nearest_edge`</sub>
 - A mated pair more than 50mm apart on the same sheet draws no line at all (the reports carry the pair instead). <sub>`svg_draws_no_line_for_a_mated_pair_more_than_50mm_apart`</sub>
 - A harness with no name draws only its dashed boundary, without a label. <sub>`svg_omits_the_label_of_an_unnamed_harness`</sub>
 - A rectangle shape is drawn as a plain rectangle at the two corners it was given. <sub>`svg_draws_a_rectangle_shape`</sub>
@@ -1662,9 +1665,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - returns empty string when there is no declaration <sub>`mate: declaredMate`</sub>
 - a close pair on one sheet produces exactly one mate link <sub>`mate: mateLinks`</sub>
 - a pair more than 50mm apart produces no mate link <sub>`mate: mateLinks`</sub>
+- includes exactly 50mm in the distance limit <sub>`mate: mateLinks`</sub>
 - a connector with no declaration produces no mate link <sub>`mate: mateLinks`</sub>
 - clamps toward an external point onto the rectangle's boundary <sub>`mate: rectBoundaryPointToward`</sub>
-- the segment endpoints sit on each connector's own outline, nearest the other <sub>`mate: mateLinkSegment (SVG/canvas parity)`</sub>
+- pushes a point inside the rectangle out onto its nearest edge <sub>`mate: rectBoundaryPointToward`</sub>
+- runs between the facing outline edges of the two connectors <sub>`mate: mateLinkSegment (SVG/canvas parity)`</sub>
 
 ### netTag
 
@@ -1806,6 +1811,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - strokes the outline in the selection colour while the coil is selected <sub>`drawDeviceBlock`</sub>
 - prints the function label under the block outline <sub>`drawDeviceBlock`</sub>
 - hides the contact image rows with the reference-designator view class <sub>`drawDeviceBlock`</sub>
+- hides the mate link together with the symbols view class <sub>`renderSheet mate links`</sub>
+- keeps the mate link when only the reference-designator class is hidden <sub>`renderSheet mate links`</sub>
 - draws a note's leader dot exactly the size of a wire junction dot <sub>`renderSheet dots`</sub>
 
 ### search
@@ -2073,6 +2080,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - clears the height back to the default when the field is emptied <sub>`annotationTextCommand`</sub>
 - sends nothing for a height outside the allowed range or a non-number <sub>`annotationTextCommand`</sub>
 - sends nothing when the height did not change <sub>`annotationTextCommand`</sub>
+- keeps the mate attribute of a non-connector symbol, which the panel has no field for <sub>`symbolAttrs`</sub>
+- removes the mate attribute of a connector when the field is emptied <sub>`symbolAttrs`</sub>
+- leaves attributes the panel does not own untouched <sub>`symbolAttrs`</sub>
 
 ### symbolPickerDynamic
 

@@ -167,7 +167,9 @@ export interface RenderOptions {
   deviceXrefs?: ReadonlyMap<string, string>;
   /**
    * このシート上で図面に破線を描くべき嵌合コネクタ対 (G14)。`mateLinks()` の戻りを
-   * このシートで絞ったもの。省略時は描かない。
+   * このシートで絞ったもの。省略時は描かない。表示クラスは「シンボル」に含める
+   * (シンボルどうしを結ぶ線なので)。表示クラスは画面だけのもので、SVG/PDF出力は
+   * 他のクラスと同じく常に全部を描く。
    */
   mateLinks?: readonly MateLink[];
   /** 図枠テンプレート (M4 §9)。省略時は同梱のjis-a3。 */
@@ -1160,8 +1162,9 @@ export function renderSheet(
     if (e.kind !== "harness") continue;
     drawHarness(ctx, vp, e.points, e.name, opts.selection.has(e.id));
   }
-  // 嵌合コネクタ対 (G14) の破線も配線・シンボルの背面
-  if (!hidden.has("refs")) {
+  // 嵌合コネクタ対 (G14) の破線も配線・シンボルの背面。シンボルどうしを結ぶ線なので
+  // 表示クラスは「シンボル」に属する (シンボルを隠せば線も消える)
+  if (!hidden.has("symbols")) {
     for (const link of opts.mateLinks ?? []) {
       drawMateLink(ctx, vp, sheet, link, defs);
     }

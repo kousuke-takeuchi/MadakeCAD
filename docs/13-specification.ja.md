@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2103仕様項目**。
+全5領域・**2113仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -580,6 +580,9 @@
 - ハーネス境界は、囲んだ配線のまわりに破線の矩形 (IEC 61082-1のグループ囲み) として描かれる。 <sub>`svg_draws_a_harness_as_a_dashed_rectangle`</sub>
 - ハーネス名は囲みの左上角のすぐ外側に描かれる。 <sub>`svg_labels_the_harness_at_its_top_left_corner`</sub>
 - 同一シート上で50mm以内にある嵌合対は、外形どうしを結ぶ短い破線で結ばれる (G14)。 <sub>`svg_draws_a_dashed_line_between_a_mated_pair_on_one_sheet`</sub>
+- 30mm離れた3極コネクタ2つの嵌合線は、双方の外形の向かい合う辺の上、配置基準点の高さを結ぶ (G14)。 <sub>`the_mate_link_runs_between_the_facing_outline_edges`</sub>
+- ちょうど50mm離れた嵌合対は描かれる: 距離の上限は50mmちょうどを含む。 <sub>`the_mate_link_distance_limit_includes_exactly_fifty_millimetres`</sub>
+- 外形の内側にある点は、その外形のいちばん近い辺の上へ押し出される (嵌合線がシンボルの内側から始まらない)。 <sub>`a_point_inside_the_outline_is_pushed_out_to_the_nearest_edge`</sub>
 - 50mmを超えて離れた嵌合対は線を一切描かない (対は帳票が伝える)。 <sub>`svg_draws_no_line_for_a_mated_pair_more_than_50mm_apart`</sub>
 - 名前の無いハーネスは破線の囲みだけを描き、ラベルは出さない。 <sub>`svg_omits_the_label_of_an_unnamed_harness`</sub>
 - 矩形の図形は、与えた2つの角の位置にそのまま矩形として描かれる。 <sub>`svg_draws_a_rectangle_shape`</sub>
@@ -1662,9 +1665,11 @@
 - 宣言が無い参照記号は空文字を返す <sub>`mate: declaredMate`</sub>
 - 同一シート上で50mm以内にある嵌合対は、描くべきペアがちょうど1組できる <sub>`mate: mateLinks`</sub>
 - 50mmを超えて離れた嵌合対は描くべきペアに入らない (帳票だけが伝える) <sub>`mate: mateLinks`</sub>
+- 距離の上限は50mmちょうどを含む (50.0mmは描き、50mmを超えると描かない。Rust側 the_mate_link_distance_limit_includes_exactly_fifty_millimetres とparity) <sub>`mate: mateLinks`</sub>
 - 宣言していないコネクタはペアに入らない <sub>`mate: mateLinks`</sub>
 - 矩形の外側にある点へは、その点へ向かってクランプした周上の点を返す <sub>`mate: rectBoundaryPointToward`</sub>
-- 破線の両端は、双方の外形のうち相手にいちばん近い点になる <sub>`mate: mateLinkSegment (SVG/canvas parity)`</sub>
+- 矩形の内側にある点は、いちばん近い辺の上へ押し出される (Rust側 a_point_inside_the_outline_is_pushed_out_to_the_nearest_edge とparity) <sub>`mate: rectBoundaryPointToward`</sub>
+- 30mm離れた3極コネクタ2つの嵌合線は、双方の外形の向かい合う辺の上、配置基準点の高さを結ぶ (Rust側 the_mate_link_runs_between_the_facing_outline_edges と同じ配置・同じ座標) <sub>`mate: mateLinkSegment (SVG/canvas parity)`</sub>
 
 ### netTag
 
@@ -1806,6 +1811,8 @@
 - 選択中の実機ブロックは、ほかのシンボルと同じように選択色の外形で描かれる <sub>`drawDeviceBlock`</sub>
 - 実機ブロックのコイルにも機能ラベルは外形の下に描かれる (G4) <sub>`drawDeviceBlock`</sub>
 - 表示クラス「参照記号」を隠すと、実機ブロックの接点イメージ(端子対と所在)も消える(外形とヘッダは残る) <sub>`drawDeviceBlock`</sub>
+- 嵌合対の破線は表示クラス「シンボル」に属し、シンボルを隠すと一緒に消える (結ぶ相手が見えないため) <sub>`renderSheet mate links`</sub>
+- 参照記号を隠しても嵌合対の破線は残る (参照記号の表示クラスには属さない) <sub>`renderSheet mate links`</sub>
 - 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える。Rust側 svg_leader_dot_is_the_size_of_a_wire_junction_dot とparity) <sub>`renderSheet dots`</sub>
 
 ### search
@@ -2073,6 +2080,9 @@
 - 空欄にすると既定 (2.0mm) へ戻すコマンドになる <sub>`annotationTextCommand`</sub>
 - 範囲 (1.0〜3.5mm) を外れた値・数値でない入力は送らない (エンジンも同じ範囲で拒否する) <sub>`annotationTextCommand`</sub>
 - 今と同じ高さならコマンドを送らない (無駄なundo履歴を作らない) <sub>`annotationTextCommand`</sub>
+- コネクタでないシンボルを保存しても、パネルに欄の無い嵌合相手の属性は残る (MCP・CLIが書いた値を落とさない) <sub>`symbolAttrs`</sub>
+- コネクタの嵌合相手欄を空にして保存すると、その属性はキーごと消える <sub>`symbolAttrs`</sub>
+- パネルが持たない属性 (端子台のジャンパなど) は、どのシンボルでもそのまま残る <sub>`symbolAttrs`</sub>
 
 ### symbolPickerDynamic
 

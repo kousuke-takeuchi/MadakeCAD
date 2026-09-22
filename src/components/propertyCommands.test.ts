@@ -1,10 +1,11 @@
 // プロパティパネルの編集がCommandへどう変換されるか (docs/internal/specs/m2-drawing-parity.md §2・§3)。
 import { describe, expect, it } from "vitest";
 
-import type { Entity, Sheet } from "../ipc";
+import type { Entity, Sheet, SymbolInstance } from "../ipc";
 import {
   annotationTextCommand,
   harnessUpdateCommand,
+  symbolAttrs,
   wireNumberCommand,
 } from "./propertyCommands";
 
@@ -151,5 +152,37 @@ describe("annotationTextCommand", () => {
   it("sends nothing when the height did not change", () => {
     expect(annotationTextCommand(sheetWith(1.4), "1.4")).toBeNull();
     expect(annotationTextCommand(sheetWith(), "2")).toBeNull();
+  });
+});
+
+describe("symbolAttrs", () => {
+  const symbol = (symbolId: string, attrs: Record<string, string>): SymbolInstance => ({
+    id: "s1",
+    symbol_id: symbolId,
+    at: { x: 0, y: 0 },
+    rotation: 0,
+    mirror: false,
+    reference: "J1",
+    value: "",
+    attrs,
+  });
+  const edited = { functionLabel: "", deviceBlock: false, mate: "" };
+
+  // ja: コネクタでないシンボルを保存しても、パネルに欄の無い嵌合相手の属性は残る (MCP・CLIが書いた値を落とさない)
+  it("keeps the mate attribute of a non-connector symbol, which the panel has no field for", () => {
+    const attrs = symbolAttrs(symbol("relay_coil", { mates_with: "J12" }), edited);
+    expect(attrs.mates_with).toBe("J12");
+  });
+
+  // ja: コネクタの嵌合相手欄を空にして保存すると、その属性はキーごと消える
+  it("removes the mate attribute of a connector when the field is emptied", () => {
+    const attrs = symbolAttrs(symbol("connector_3p", { mates_with: "J12" }), edited);
+    expect(attrs.mates_with).toBeUndefined();
+  });
+
+  // ja: パネルが持たない属性 (端子台のジャンパなど) は、どのシンボルでもそのまま残る
+  it("leaves attributes the panel does not own untouched", () => {
+    const attrs = symbolAttrs(symbol("terminal_block_4p", { jumpers: "1-2" }), edited);
+    expect(attrs.jumpers).toBe("1-2");
   });
 });

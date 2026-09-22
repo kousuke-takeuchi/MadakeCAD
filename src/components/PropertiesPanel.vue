@@ -16,13 +16,18 @@ import { autoWirePartNo } from "../canvas/wireParts";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import type { Entity, TextAnchor, TextColorToken } from "../ipc";
 import { FUNCTION_LABEL_ATTR, TEXT_ANCHORS, TEXT_COLOR_TOKENS } from "../canvas/textStyle";
-import { COIL_SYMBOL_ID, DEVICE_BLOCK_ATTR, isDeviceBlock } from "../canvas/relayXref";
+import { COIL_SYMBOL_ID, isDeviceBlock } from "../canvas/relayXref";
 import { MATES_WITH_ATTR, isConnectorInstance } from "../canvas/mate";
 import { useBlockEditorStore } from "../stores/blockEditor";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import type { EditorController } from "../tools/controller";
-import { annotationTextCommand, harnessUpdateCommand, wireNumberCommand } from "./propertyCommands";
+import {
+  annotationTextCommand,
+  harnessUpdateCommand,
+  symbolAttrs,
+  wireNumberCommand,
+} from "./propertyCommands";
 import {
   MAX_ANNOTATION_TEXT_MM,
   MIN_ANNOTATION_TEXT_MM,
@@ -281,18 +286,13 @@ async function apply() {
     }
     return;
   } else if (e.kind === "symbol") {
-    // 機能ラベル (G4の第3テキスト欄) はattrsに入れる。空ならキーごと消して従来の形に戻す
-    const attrs = { ...(e.attrs ?? {}) };
-    const label = buf.functionLabel.trim();
-    if (label) attrs[FUNCTION_LABEL_ATTR] = label;
-    else delete attrs[FUNCTION_LABEL_ATTR];
-    // 実機ブロック表示 (G7) もattrsに入れる。「オフ」はキーごと消して従来の形に戻す
-    if (buf.deviceBlock) attrs[DEVICE_BLOCK_ATTR] = "true";
-    else delete attrs[DEVICE_BLOCK_ATTR];
-    // 嵌合相手 (G14) はコネクタ一族だけの欄。空ならキーごと消す
-    const mate = buf.mate.trim();
-    if (isConnectorInstance(e.symbol_id) && mate) attrs[MATES_WITH_ATTR] = mate;
-    else delete attrs[MATES_WITH_ATTR];
+    // 機能ラベル (G4)・実機ブロック表示 (G7)・嵌合相手 (G14) はattrsに入れる。
+    // パネルが持たない欄の属性はそのまま残す (symbolAttrsが正)
+    const attrs = symbolAttrs(e, {
+      functionLabel: buf.functionLabel,
+      deviceBlock: buf.deviceBlock,
+      mate: buf.mate,
+    });
     entity = { ...e, reference: buf.reference, value: buf.value, attrs };
     if (isDeviceBlock(e) !== buf.deviceBlock) {
       ui.log(
