@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2100 specification clauses** across 5 areas.
+**2102 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -91,6 +91,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Numbering a sheet that does not exist is refused instead of silently doing nothing. <sub>`numbering_an_unknown_sheet_is_refused`</sub>
 - Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted. <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - Undoing a paper size change restores both the previous size and orientation. <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
+- Changing the paper leaves the sheet's own zone division alone: a sheet divided into its own number of zones keeps that division. <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
+- Undoing a paper change puts the sheet back exactly as it was, so a cross-reference zone address computed on it points at the same zone as before. <sub>`undoing_a_paper_change_restores_the_zone_addresses`</sub>
 - A paper size change on a sheet that does not exist is refused. <sub>`changing_paper_on_an_unknown_sheet_is_refused`</sub>
 - `set_project_meta` sets the project name and number in one command, leaving every sheet's title block untouched when those fields are omitted. <sub>`set_project_meta_sets_name_and_number`</sub>
 - `set_project_meta` writes the title-block fields (company, drawing number, title) to every sheet in the project with one undoable command. <sub>`set_project_meta_writes_title_block_to_every_sheet`</sub>

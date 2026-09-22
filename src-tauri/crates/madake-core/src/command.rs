@@ -47,7 +47,9 @@ pub enum Command {
         height_mm: Option<f64>,
     },
     /// シートの用紙サイズ・向きの変更 (G15)。既存エンティティの座標はそのまま
-    /// (動かない・消えない)。ゾーン分割は`add_sheet`と同じ既定値へ引き直す。
+    /// (動かない・消えない)。ゾーン分割 (`zone_cols`/`zone_rows`) も**変えない**
+    /// (シートが正。図枠テンプレートの差し替えと同じで、クロスリファレンスの
+    /// ゾーン住所を用紙変更で書き換えないため)。逆コマンドはサイズと向きだけを元へ戻す。
     /// 新しい用紙の外に出たエンティティはERC警告 (`erc.outside_paper`) で報告する
     /// (このコマンドでは検出しない。検証は読み取り専用で行う)。
     SetSheetPaper {
@@ -575,9 +577,8 @@ impl Engine {
                 let old_orientation = sheet.orientation;
                 sheet.size = *size;
                 sheet.orientation = *orientation;
-                // ゾーン分割は add_sheet / new_kind と同じ既定値へ引き直す (エンティティ座標は不変)
-                sheet.zone_cols = 4;
-                sheet.zone_rows = 6;
+                // ゾーン分割はシートが正のまま触らない (図枠テンプレートの差し替えと同じ扱い。
+                // クロスリファレンスの指すゾーン住所が用紙変更で書き換わらないように。docs/04)
                 let meta = sheet_meta(sheet);
                 Ok((
                     vec![PatchOp::SheetMetaUpdated { sheet: meta }],
@@ -2664,6 +2665,48 @@ mod tests {
         engine.undo().unwrap().unwrap();
         assert_eq!(engine.project().sheets[0].size, PaperSize::A3);
         assert_eq!(engine.project().sheets[0].orientation, Orientation::Landscape);
+    }
+
+    /// Changing the paper leaves the sheet's own zone division alone: a sheet divided into its own number of zones keeps that division.
+    /// 用紙を変えてもシート独自のゾーン分割はそのまま: 独自の分割数を持つシートはその分割を保つ。
+    #[test]
+    fn changing_paper_keeps_the_sheets_own_zone_division() {
+        let mut project = Project::new("t");
+        project.sheets[0].zone_cols = 8;
+        project.sheets[0].zone_rows = 5;
+        let sheet_id = project.sheets[0].id;
+        let mut engine = Engine::new(project);
+        engine
+            .execute(Command::SetSheetPaper {
+                sheet_id,
+                size: PaperSize::A4,
+                orientation: Orientation::Portrait,
+            })
+            .unwrap();
+        assert_eq!(engine.project().sheets[0].zone_cols, 8);
+        assert_eq!(engine.project().sheets[0].zone_rows, 5);
+    }
+
+    /// Undoing a paper change puts the sheet back exactly as it was, so a cross-reference zone address computed on it points at the same zone as before.
+    /// 用紙変更をundoするとシートは元どおりになるので、そこで求めたクロスリファレンスのゾーン住所も変更前と同じゾーンを指す。
+    #[test]
+    fn undoing_a_paper_change_restores_the_zone_addresses() {
+        let mut project = Project::new("t");
+        project.sheets[0].zone_cols = 8;
+        project.sheets[0].zone_rows = 5;
+        let sheet_id = project.sheets[0].id;
+        let mut engine = Engine::new(project);
+        let at = Point::new(200.0, 120.0);
+        let before = crate::xref::zone_at(&engine.project().sheets[0], at);
+        engine
+            .execute(Command::SetSheetPaper {
+                sheet_id,
+                size: PaperSize::A4,
+                orientation: Orientation::Portrait,
+            })
+            .unwrap();
+        engine.undo().unwrap().unwrap();
+        assert_eq!(crate::xref::zone_at(&engine.project().sheets[0], at), before);
     }
 
     /// A paper size change on a sheet that does not exist is refused.

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2100仕様項目**。
+全5領域・**2102仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -91,6 +91,8 @@
 - 存在しないシートの採番は、黙って何もせずに断られる。 <sub>`numbering_an_unknown_sheet_is_refused`</sub>
 - シートの用紙サイズ・向きを変えても (G15)、既存のエンティティは元の座標のまま動かず、消えもしない。 <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - 用紙サイズの変更をundoすると、サイズと向きの両方が元へ戻る。 <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
+- 用紙を変えてもシート独自のゾーン分割はそのまま: 独自の分割数を持つシートはその分割を保つ。 <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
+- 用紙変更をundoするとシートは元どおりになるので、そこで求めたクロスリファレンスのゾーン住所も変更前と同じゾーンを指す。 <sub>`undoing_a_paper_change_restores_the_zone_addresses`</sub>
 - 存在しないシートの用紙変更は断られる。 <sub>`changing_paper_on_an_unknown_sheet_is_refused`</sub>
 - `set_project_meta`はプロジェクト名と番号を1コマンドで設定し、その欄を省略すれば全シートの表題欄には触れない。 <sub>`set_project_meta_sets_name_and_number`</sub>
 - `set_project_meta`は表題欄の欄(会社名・図番・表題)をプロジェクトの全シートへ1つのundo可能なコマンドで書き込む。 <sub>`set_project_meta_writes_title_block_to_every_sheet`</sub>
