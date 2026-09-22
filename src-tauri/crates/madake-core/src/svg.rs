@@ -2032,9 +2032,11 @@ mod tests {
             .lines()
             .find(|l| l.starts_with("<line") && l.contains("stroke-dasharray=\"1.500 1\""))
             .unwrap_or_else(|| panic!("嵌合対の破線が無い: {svg}"));
-        // connector_3pの外形は基準点の周り x[-4,+7.5] (ピンの先まで)・y[-7.5,+7.5]
+        // connector_3pの外形は基準点の周り x[-4,+7.5] (ピンの先まで)・y[-7.5,+7.5]。
+        // どちらの端から描くかはentity idの順で決まる (図面ごとには一定) ので両向きを許す
         assert!(
-            line.contains("x1=\"107.500\" y1=\"100\" x2=\"126\" y2=\"100\""),
+            line.contains("x1=\"107.500\" y1=\"100\" x2=\"126\" y2=\"100\"")
+                || line.contains("x1=\"126\" y1=\"100\" x2=\"107.500\" y2=\"100\""),
             "{line}"
         );
     }
