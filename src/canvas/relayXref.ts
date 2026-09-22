@@ -570,9 +570,10 @@ export function isRelaySymbol(inst: SymbolInstance): boolean {
  * 実機ブロック表示 (G7) の外形の配置 (**シンボルのローカル座標**mm、配置基準点が原点)。
  *
  * 表は**常に正立**で描く: インスタンスの回転・ミラーは外形にも行にも効かせない
- * (deviceBlockBoundsは配置基準点へ平行移動するだけ)。回すのはピンの位置だけで、引き出し線が
- * 回った先のピンから外形のいちばん近い点まで伸びる (deviceBlockLeadEnd)。表を回すと複数行の
- * 文字が互いに重なって読めなくなるため。ピンの高さ (ローカルY=0) はヘッダ1行目の中央に来る
+ * (deviceBlockBoundsは配置基準点へ平行移動するだけ)。回すのはピンの位置だけで、引き出し線は
+ * 回った先のピンから**ピン自身の軸**(配線が来る向き)に沿って外形まで伸びる
+ * (deviceBlockLeadEnd)。表を回すと複数行の文字が互いに重なって読めなくなるため。
+ * ピンの高さ (ローカルY=0) はヘッダ1行目の中央に来る
  * (仕切り線が引き出し線の高さに重ならないように)。Rust側 device_block_layout と同一ルール。
  */
 export interface DeviceBlockLayout {

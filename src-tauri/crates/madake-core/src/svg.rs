@@ -517,8 +517,9 @@ fn render_contact_map(
 ///
 /// 表 (外形・仕切り線・文字) は**常に正立**で、インスタンスの回転・ミラーでは向きが変わらない
 /// (回すと複数行の文字が互いに重なって読めなくなるため)。回るのはピンの位置だけで、
-/// 引き出し線はシンボル定義の実際のピン (A1/A2) を回した先から外形のいちばん近い点まで引く
-/// ([`crate::relay_xref::device_block_lead_end`])。どの向きでも配線は繋がったまま。
+/// 引き出し線はシンボル定義の実際のピン (A1/A2) を回した先から、**ピン自身の軸**
+/// (配線が来る向き) に沿って外形まで引く ([`crate::relay_xref::device_block_lead_end`])。
+/// どの向きでも配線は繋がったまま。
 fn render_device_block(
     out: &mut String,
     inst: &crate::model::SymbolInstance,
