@@ -77,7 +77,8 @@ export const useProjectInfoStore = defineStore("projectInfo", {
     /**
      * set_project_metaコマンドを1回実行して閉じる。変わった欄だけを送るので、
      * 触っていない欄は他シートの値を上書きしない。変更が無ければ何も送らない。
-     * 失敗したら開いたままエラーを表示する。戻り値=送信したか。
+     * プロジェクト番号は空にして保存すると`null`を送って**未設定へ戻す**
+     * (空文字の番号を残さない)。失敗したら開いたままエラーを表示する。戻り値=送信したか。
      */
     async save(): Promise<boolean> {
       if (this.saving) return false;
@@ -94,7 +95,7 @@ export const useProjectInfoStore = defineStore("projectInfo", {
         await doc.execute({
           type: "set_project_meta",
           name: a.name !== b.name ? a.name : undefined,
-          no: a.no !== b.no ? a.no : undefined,
+          no: a.no !== b.no ? (a.no.trim() === "" ? null : a.no) : undefined,
           company: a.company !== b.company ? a.company : undefined,
           drawing_no: a.drawingNo !== b.drawingNo ? a.drawingNo : undefined,
           title: a.title !== b.title ? a.title : undefined,

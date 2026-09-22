@@ -332,12 +332,13 @@ export type Command =
     }
   /**
    * プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
-   * 各欄は省略(undefined/null)すれば変更しない。`name`/`no`はプロジェクト単位、
+   * 各欄は省略(undefined)すれば変更しない。`name`/`no`はプロジェクト単位、
    * `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く(undo一発)。
+   * `no`だけは3状態で、`null`を送ると番号を**未設定へ戻す**(空文字にはしない)。
    */
   | {
       type: "set_project_meta";
-      name?: string | null;
+      name?: string;
       no?: string | null;
       company?: string | null;
       drawing_no?: string | null;

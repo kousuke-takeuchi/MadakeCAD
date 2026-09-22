@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2095仕様項目**。
+全5領域・**2100仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -96,6 +96,10 @@
 - `set_project_meta`は表題欄の欄(会社名・図番・表題)をプロジェクトの全シートへ1つのundo可能なコマンドで書き込む。 <sub>`set_project_meta_writes_title_block_to_every_sheet`</sub>
 - `set_project_meta`のundoは、各シートがそれぞれ異なる元の値を持っていた場合でも、シートごとの元の表題欄を正しく復元する(共通の1値には戻さない)。 <sub>`undoing_set_project_meta_restores_each_sheets_own_title_block`</sub>
 - プロジェクト番号のコマンドは素のJSONで表現できるので、AI・CLI・Link APIのどこからでも送れる。 <sub>`set_project_meta_command_is_plain_json`</sub>
+- 番号が無かったプロジェクトに初めて番号を付けてundoすると、空の番号ではなく「番号なし」に戻る。 <sub>`undoing_the_first_project_number_restores_the_unset_state`</sub>
+- プロジェクト番号にnullを送ると未設定へ戻る(間違って付けた番号を消す手段)。 <sub>`a_null_project_number_clears_it`</sub>
+- 消したプロジェクト番号をundoすると、元の番号がそのまま戻る。 <sub>`undoing_a_cleared_project_number_brings_it_back`</sub>
+- コマンドからプロジェクト番号の欄を省くと、ほかの欄を変えても既にある番号はそのまま残る。 <sub>`omitting_the_project_number_leaves_it_untouched`</sub>
 
 ### 図枠テンプレート (プロットフレーム)
 
@@ -2307,6 +2311,7 @@
 - 何も変えずに保存してもコマンドは送られない <sub>`project info dialog store`</sub>
 - 変えた欄だけがset_project_metaコマンドに載り、他の欄はundefinedのまま(触っていないシートの値を壊さない) <sub>`project info dialog store`</sub>
 - 名前・会社名・図番・表題をすべて変えれば、すべての欄がコマンドに載る <sub>`project info dialog store`</sub>
+- プロジェクト番号を空にして保存すると、空文字ではなくnullを送って番号を未設定へ戻す <sub>`project info dialog store`</sub>
 - キャンセルすると下書きが捨てられ、コマンドは送られない <sub>`project info dialog store`</sub>
 
 ### provider

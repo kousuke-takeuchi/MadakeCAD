@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2095 specification clauses** across 5 areas.
+**2100 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -96,6 +96,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - `set_project_meta` writes the title-block fields (company, drawing number, title) to every sheet in the project with one undoable command. <sub>`set_project_meta_writes_title_block_to_every_sheet`</sub>
 - Undoing `set_project_meta` restores each sheet's own previous title block, even when the sheets had different values beforehand (not a single shared value). <sub>`undoing_set_project_meta_restores_each_sheets_own_title_block`</sub>
 - The project number command is plain JSON, so agents, the CLI and the Link API can all send it. <sub>`set_project_meta_command_is_plain_json`</sub>
+- Undoing the very first project number puts the project back to having no number at all, not to an empty one. <sub>`undoing_the_first_project_number_restores_the_unset_state`</sub>
+- Sending the project number as null clears it back to unset, which is how a number set by mistake is removed. <sub>`a_null_project_number_clears_it`</sub>
+- Undoing a cleared project number brings the previous number back exactly as it was. <sub>`undoing_a_cleared_project_number_brings_it_back`</sub>
+- Leaving the project number out of the command leaves an existing number untouched, even while other fields change. <sub>`omitting_the_project_number_leaves_it_untouched`</sub>
 
 ### Frame templates (plot frames)
 
@@ -2307,6 +2311,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sends no command when nothing changed <sub>`project info dialog store`</sub>
 - sends only the changed fields, leaving the rest undefined <sub>`project info dialog store`</sub>
 - sends every field when every field is changed <sub>`project info dialog store`</sub>
+- clears the project number with null when the field is emptied <sub>`project info dialog store`</sub>
 - discards the draft and sends nothing on cancel <sub>`project info dialog store`</sub>
 
 ### provider

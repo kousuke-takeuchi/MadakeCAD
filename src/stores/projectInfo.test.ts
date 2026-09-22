@@ -125,6 +125,21 @@ describe("project info dialog store", () => {
     ]);
   });
 
+  // ja: プロジェクト番号を空にして保存すると、空文字ではなくnullを送って番号を未設定へ戻す
+  it("clears the project number with null when the field is emptied", async () => {
+    const doc = useDocumentStore();
+    const p = project();
+    p.no = "MDK-2026-001";
+    doc.project = p;
+    doc.activeSheetId = "s1";
+    const sent = spyCommands();
+    const info = useProjectInfoStore();
+    info.openDialog();
+    info.draft.no = "";
+    await info.save();
+    expect(sent[0]).toMatchObject({ type: "set_project_meta", no: null });
+  });
+
   // ja: キャンセルすると下書きが捨てられ、コマンドは送られない
   it("discards the draft and sends nothing on cancel", () => {
     const doc = useDocumentStore();

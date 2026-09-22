@@ -114,15 +114,23 @@ pub enum Command {
         numbers: Vec<PanelItemNumber>,
     },
     /// プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
-    /// 各欄は省略 (null) すれば変更しない。`name`/`no`はプロジェクト単位、
+    /// 各欄は省略 (キーごと書かない) すれば変更しない。`name`/`no`はプロジェクト単位、
     /// `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く
     /// (1コマンドでundo一発)。表題欄はシートごとに異なる値を持てるので、逆コマンドは
     /// シートごとの元の値を個別に復元する。
     SetProjectMeta {
         #[serde(default)]
         name: Option<String>,
-        #[serde(default)]
-        no: Option<String>,
+        /// プロジェクト番号 ([`crate::model::Project::no`]) は**3状態**:
+        /// キーを書かなければ変更しない / `null`なら未設定へ戻す (番号を消す) /
+        /// 文字列ならその値にする。逆コマンドも同じ3状態で元の状態を正確に復元する。
+        #[serde(
+            default,
+            deserialize_with = "double_option",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[schemars(with = "Option<String>")]
+        no: Option<Option<String>>,
         #[serde(default)]
         company: Option<String>,
         #[serde(default)]
@@ -130,6 +138,16 @@ pub enum Command {
         #[serde(default)]
         title: Option<String>,
     },
+}
+
+/// 「キーが無い」と「`null`」を区別して読む (`Option<Option<T>>`)。serdeの既定では
+/// どちらも`None`になってしまうので、**変更しない**と**未設定へ戻す**を区別する欄に使う。
+fn double_option<'de, T, D>(de: D) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    Deserialize::deserialize(de).map(Some)
 }
 
 /// エンジンからフロントエンドへ通知する差分。
@@ -794,7 +812,7 @@ impl Engine {
     fn apply_project_meta(
         &mut self,
         name: &Option<String>,
-        no: &Option<String>,
+        no: &Option<Option<String>>,
         company: &Option<String>,
         drawing_no: &Option<String>,
         title: &Option<String>,
@@ -808,9 +826,11 @@ impl Engine {
             inv_name = Some(self.project.name.clone());
             self.project.name = n.clone();
         }
-        if let Some(n) = no {
-            inv_no = Some(self.project.no.clone().unwrap_or_default());
-            self.project.no = Some(n.clone());
+        if let Some(next) = no {
+            // 「未設定」も1つの状態なので、そのまま逆コマンドへ持たせる
+            // (undoで空文字にすり替わらない・nullで番号を消せる)
+            inv_no = Some(self.project.no.clone());
+            self.project.no = next.clone();
         }
         if inv_name.is_some() || inv_no.is_some() {
             ops.push(PatchOp::ProjectMetaChanged {
@@ -2670,7 +2690,7 @@ mod tests {
         engine
             .execute(Command::SetProjectMeta {
                 name: Some("まだけ制御盤".into()),
-                no: Some("MDK-2026-001".into()),
+                no: Some(Some("MDK-2026-001".into())),
                 company: None,
                 drawing_no: None,
                 title: None,
@@ -2740,6 +2760,81 @@ mod tests {
         let json = r#"{"type":"set_project_meta","no":"MDK-2026-001"}"#;
         let command: Command = serde_json::from_str(json).unwrap();
         engine.execute(command).unwrap();
+        assert_eq!(engine.project().no.as_deref(), Some("MDK-2026-001"));
+    }
+
+    /// Undoing the very first project number puts the project back to having no number at all, not to an empty one.
+    /// 番号が無かったプロジェクトに初めて番号を付けてundoすると、空の番号ではなく「番号なし」に戻る。
+    #[test]
+    fn undoing_the_first_project_number_restores_the_unset_state() {
+        let (mut engine, _sheet_id) = test_engine();
+        assert_eq!(engine.project().no, None, "はじめは番号なし");
+        engine
+            .execute(Command::SetProjectMeta {
+                name: None,
+                no: Some(Some("MDK-2026-001".into())),
+                company: None,
+                drawing_no: None,
+                title: None,
+            })
+            .unwrap();
+        engine.undo().unwrap().unwrap();
+        assert_eq!(engine.project().no, None, "空文字ではなく未設定へ戻る");
+    }
+
+    /// Sending the project number as null clears it back to unset, which is how a number set by mistake is removed.
+    /// プロジェクト番号にnullを送ると未設定へ戻る(間違って付けた番号を消す手段)。
+    #[test]
+    fn a_null_project_number_clears_it() {
+        let (mut engine, _sheet_id) = test_engine();
+        engine
+            .execute(serde_json::from_str(r#"{"type":"set_project_meta","no":"MDK-2026-001"}"#).unwrap())
+            .unwrap();
+        engine
+            .execute(serde_json::from_str(r#"{"type":"set_project_meta","no":null}"#).unwrap())
+            .unwrap();
+        assert_eq!(engine.project().no, None);
+    }
+
+    /// Undoing a cleared project number brings the previous number back exactly as it was.
+    /// 消したプロジェクト番号をundoすると、元の番号がそのまま戻る。
+    #[test]
+    fn undoing_a_cleared_project_number_brings_it_back() {
+        let (mut engine, _sheet_id) = test_engine();
+        engine
+            .execute(Command::SetProjectMeta {
+                name: None,
+                no: Some(Some("MDK-2026-001".into())),
+                company: None,
+                drawing_no: None,
+                title: None,
+            })
+            .unwrap();
+        engine
+            .execute(Command::SetProjectMeta {
+                name: None,
+                no: Some(None),
+                company: None,
+                drawing_no: None,
+                title: None,
+            })
+            .unwrap();
+        engine.undo().unwrap().unwrap();
+        assert_eq!(engine.project().no.as_deref(), Some("MDK-2026-001"));
+    }
+
+    /// Leaving the project number out of the command leaves an existing number untouched, even while other fields change.
+    /// コマンドからプロジェクト番号の欄を省くと、ほかの欄を変えても既にある番号はそのまま残る。
+    #[test]
+    fn omitting_the_project_number_leaves_it_untouched() {
+        let (mut engine, _sheet_id) = test_engine();
+        engine
+            .execute(serde_json::from_str(r#"{"type":"set_project_meta","no":"MDK-2026-001"}"#).unwrap())
+            .unwrap();
+        engine
+            .execute(serde_json::from_str(r#"{"type":"set_project_meta","name":"まだけ制御盤"}"#).unwrap())
+            .unwrap();
+        assert_eq!(engine.project().name, "まだけ制御盤");
         assert_eq!(engine.project().no.as_deref(), Some("MDK-2026-001"));
     }
 }
