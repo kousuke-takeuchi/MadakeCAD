@@ -511,6 +511,61 @@ fn render_contact_map(
     }
 }
 
+/// コイルを実機ブロック (G7) として描く: 参照記号+型番のヘッダと、接点の「機器イメージ」
+/// (端子対+所在) を1つの外形にまとめる。コイル自身の小さな図形 (rect+リード) の代わりに
+/// これを描く。A1/A2ピンは`inst.at`のまま(呼び出し側は変えていない)なので、外形の幅が
+/// ピン間隔より広いときは、ピンから外形の左右端まで引き出し線を足してつなぐ
+/// ([`crate::relay_xref::DeviceBlockLayout::lead_half_len`])。
+fn render_device_block(
+    out: &mut String,
+    inst: &crate::model::SymbolInstance,
+    block: &crate::relay_xref::DeviceBlock,
+) {
+    use crate::relay_xref::{device_block_layout, CONTACT_MAP_FONT};
+    let layout = device_block_layout(block, inst.at.x, inst.at.y);
+    let _ = write!(
+        out,
+        "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+        n(layout.x), n(layout.y), n(layout.width), n(layout.height()), n(SYMBOL_STROKE)
+    );
+    // A1/A2ピンから外形の左右端までの引き出し線 (外形がピン間隔ちょうどなら長さ0で描かない)
+    let half = layout.lead_half_len();
+    if half > 1e-9 {
+        for sign in [-1.0, 1.0] {
+            let pin_x = inst.at.x + sign * crate::relay_xref::DEVICE_BLOCK_MIN_WIDTH / 2.0;
+            let edge_x = inst.at.x + sign * (crate::relay_xref::DEVICE_BLOCK_MIN_WIDTH / 2.0 + half);
+            line_el(out, pin_x, inst.at.y, edge_x, inst.at.y, SYMBOL_STROKE, "#000");
+        }
+    }
+    // ヘッダ行 (参照記号、型番があればもう1行) と接点の行を仕切る横線
+    let header_bottom = layout.y + layout.row_h * layout.header_rows as f64;
+    for i in 1..layout.header_rows {
+        let y = layout.y + layout.row_h * i as f64;
+        line_el(out, layout.x, y, layout.x + layout.width, y, RULE_STROKE, "#000");
+    }
+    if layout.contact_rows > 0 {
+        line_el(out, layout.x, header_bottom, layout.x + layout.width, header_bottom, RULE_STROKE, "#000");
+        // 接点の列の仕切り
+        let col1_x = layout.col_x(1);
+        line_el(out, col1_x, header_bottom, col1_x, layout.y + layout.height(), RULE_STROKE, "#000");
+        for i in 1..layout.contact_rows {
+            let y = layout.contact_row_top(i);
+            line_el(out, layout.x, y, layout.x + layout.width, y, RULE_STROKE, "#000");
+        }
+    }
+    let center_x = layout.x + layout.width / 2.0;
+    text_el(out, center_x, layout.header_baseline(0), CONTACT_MAP_FONT, "#000", "middle", &block.reference);
+    if layout.header_rows == 2 {
+        text_el(out, center_x, layout.header_baseline(1), CONTACT_MAP_FONT, "#000", "middle", &block.part_no);
+    }
+    for (i, row) in block.contacts.iter().enumerate() {
+        let baseline = layout.contact_baseline(i);
+        for (col, text) in [(0, &row.terminals), (1, &row.address)] {
+            text_family_el(out, layout.text_x(col), baseline, CONTACT_MAP_FONT, "#000", "start", "monospace", text);
+        }
+    }
+}
+
 /// ネットの代表線分 (最も長い線分)。同長なら上・左の線分を選ぶ。
 pub(crate) fn longest_segment(
     sheet: &Sheet,
@@ -852,6 +907,7 @@ pub fn sheet_to_svg_with_frame(
         sheet,
         symbols,
         &std::collections::BTreeMap::new(),
+        &std::collections::BTreeMap::new(),
         &RelayAnnotations::default(),
         frame,
         &BindContext::for_sheet(sheet),
@@ -862,18 +918,22 @@ pub fn sheet_to_svg_with_frame(
 /// プロジェクト全体を見ないと決まらないので、シート単体の出力では空になる。
 #[derive(Debug, Clone, Default)]
 pub struct RelayAnnotations {
-    /// コイルのentity id → その下に描く接点マップの行。
+    /// コイルのentity id → その下に描く接点マップの行 (分散配置のコイルだけ)。
     pub contact_maps: std::collections::BTreeMap<
         crate::model::EntityId,
         Vec<crate::relay_xref::ContactMapRow>,
     >,
     /// 接点のentity id → 脇に描くコイル所在 (例 "(/1.C2)")。
     pub coil_locations: std::collections::BTreeMap<crate::model::EntityId, String>,
+    /// コイルのentity id → 実機ブロック表示の中身 (G7、`attrs["device_block"]`のコイルだけ)。
+    pub device_blocks:
+        std::collections::BTreeMap<crate::model::EntityId, crate::relay_xref::DeviceBlock>,
 }
 
 /// プロジェクト内の1シートをSVGとして書き出す。図枠はプロジェクトの図枠テンプレート
 /// ([`crate::model::Project::frame_template`])。ネットラベルの脇には、他シートにある
-/// 同名ラベルの住所「/シート.ゾーン」([`crate::xref`]) を自動で添える。
+/// 同名ラベルの住所「/シート.ゾーン」([`crate::xref`]) を自動で添える。デバイス単位の
+/// クロスリファレンス (G13、`crate::xref::sheet_device_xrefs`) も同様に添える。
 /// シートが見つからなければNone。
 pub fn project_sheet_to_svg(
     project: &crate::model::Project,
@@ -882,15 +942,18 @@ pub fn project_sheet_to_svg(
 ) -> Option<String> {
     let sheet = project.sheet(sheet_id)?;
     let xrefs = crate::xref::sheet_xrefs(project, sheet_id);
+    let device_xrefs = crate::xref::sheet_device_xrefs(project, sheet_id);
     let relay = RelayAnnotations {
         contact_maps: crate::relay_xref::sheet_contact_maps(project, sheet_id),
         coil_locations: crate::relay_xref::sheet_coil_locations(project, sheet_id),
+        device_blocks: crate::relay_xref::sheet_device_blocks(project, sheet_id),
     };
     let frame = crate::frame_template::for_project(project);
     Some(sheet_to_svg_with_xrefs(
         sheet,
         symbols,
         &xrefs,
+        &device_xrefs,
         &relay,
         &frame,
         &BindContext::for_project(project, sheet),
@@ -898,12 +961,14 @@ pub fn project_sheet_to_svg(
 }
 
 /// [`sheet_to_svg`] の本体。`xrefs`はネットラベルのentity id → 脇に描くXRefテキスト、
+/// `device_xrefs`はシンボルのentity id → 脇に描くデバイス単位XRefテキスト (G13)、
 /// `relay`はコイル⇔接点のクロスリファレンス注記、`frame`/`ctx`は図枠テンプレートと
 /// 表題欄バインドの文脈。
 fn sheet_to_svg_with_xrefs(
     sheet: &Sheet,
     symbols: &[SymbolDef],
     xrefs: &std::collections::BTreeMap<crate::model::EntityId, String>,
+    device_xrefs: &std::collections::BTreeMap<crate::model::EntityId, String>,
     relay: &RelayAnnotations,
     frame: &FrameTemplate,
     ctx: &BindContext,
@@ -930,6 +995,8 @@ fn sheet_to_svg_with_xrefs(
     // 注記の層 (ネットラベル・タグ・線番・配線注記) にかける倍率 (G20)
     let annotation_scale = sheet.annotation_scale();
     let defs = crate::symbol::DefIndex::new(symbols);
+    // コイル所在 (G22) の逃がし判定に使う、このシートの配線注記
+    let wire_notes = crate::wire_note::wire_notes(sheet);
     for entity in sheet.entities.values() {
         match entity {
             Entity::Wire(w) => {
@@ -943,14 +1010,19 @@ fn sheet_to_svg_with_xrefs(
             }
             Entity::Symbol(s) => {
                 if let Some(def) = defs.get(s) {
-                    render_symbol(&mut out, s, &def);
-                    render_jumper_bars(&mut out, s, &def);
-                    // コイル⇔接点クロスリファレンス (M4 §4)
-                    if let Some(rows) = relay.contact_maps.get(&s.id) {
-                        render_contact_map(&mut out, s, &def, rows);
+                    if let Some(block) = relay.device_blocks.get(&s.id) {
+                        // 実機ブロック表示 (G7): コイル自身の小さな図形の代わりにこれを描く
+                        render_device_block(&mut out, s, block);
+                    } else {
+                        render_symbol(&mut out, s, &def);
+                        render_jumper_bars(&mut out, s, &def);
+                        // コイル⇔接点クロスリファレンス (M4 §4、分散配置のコイルだけ)
+                        if let Some(rows) = relay.contact_maps.get(&s.id) {
+                            render_contact_map(&mut out, s, &def, rows);
+                        }
                     }
                     if let Some(location) = relay.coil_locations.get(&s.id) {
-                        let at = crate::relay_xref::coil_location_at(s, &def);
+                        let at = crate::relay_xref::coil_location_at(s, &def, location, &wire_notes);
                         text_family_el(
                             &mut out,
                             at.x,
@@ -960,6 +1032,21 @@ fn sheet_to_svg_with_xrefs(
                             "start",
                             "monospace",
                             location,
+                        );
+                    }
+                    // デバイス単位シート間クロスリファレンス (G13)。コイル・接点は
+                    // relay_xrefが既に自動注記するので、sheet_device_xrefsの対象から外れている
+                    if let Some(text) = device_xrefs.get(&s.id) {
+                        let at = crate::xref::device_xref_at(s, &def);
+                        text_family_el(
+                            &mut out,
+                            at.x,
+                            at.y,
+                            crate::xref::XREF_FONT,
+                            "#000",
+                            "start",
+                            "monospace",
+                            text,
                         );
                     }
                 }
@@ -1269,6 +1356,7 @@ mod tests {
         let svg = sheet_to_svg_with_xrefs(
             &project.sheets[0],
             &builtin_symbols(),
+            &Default::default(),
             &Default::default(),
             &RelayAnnotations::default(),
             &frame,
@@ -1957,6 +2045,63 @@ mod tests {
         let project = relay_project();
         let svg = sheet_to_svg(&project.sheets[0], &builtin_symbols());
         assert!(!svg.contains(">13-14<"), "{svg}");
+    }
+
+    /// A coil whose "device_block" attribute is "true" is drawn as one outline with its designator, part number and contact image, instead of the small coil symbol and the separate hanging contact map.
+    /// `device_block`属性が`"true"`のコイルは、小さなコイル図形と別表の接点マップの代わりに、参照記号・型番・接点イメージをまとめた1つの外形として描かれる (G7)。
+    #[test]
+    fn svg_draws_a_device_block_for_a_flagged_coil() {
+        let mut project = relay_project();
+        let Entity::Symbol(coil) = project.sheets[0].entities.values_mut().next().unwrap() else {
+            unreachable!()
+        };
+        coil.attrs.insert("device_block".into(), "true".into());
+        coil.value = "SAMPLE0001".into();
+        let svg = project_sheet_to_svg(&project, project.sheets[0].id, &builtin_symbols()).unwrap();
+        assert!(svg.contains(">K1<"), "参照記号: {svg}");
+        assert!(svg.contains(">SAMPLE0001<"), "型番: {svg}");
+        assert!(svg.contains(">13-14<"), "接点イメージの端子対: {svg}");
+        assert!(svg.contains(">/2.B3<"), "接点イメージの所在: {svg}");
+    }
+
+    /// Toggling "device_block" off keeps the previous distributed placement: the small coil symbol with its own separate contact map underneath.
+    /// `device_block`を付けなければ従来どおりの分散配置のまま: 小さなコイル図形の下に別表の接点マップが付く。
+    #[test]
+    fn svg_keeps_the_distributed_placement_without_the_attribute() {
+        let project = relay_project();
+        let svg = project_sheet_to_svg(&project, project.sheets[0].id, &builtin_symbols()).unwrap();
+        assert!(svg.contains(">13-14<"), "接点マップは従来どおり別表で出る: {svg}");
+        assert!(svg.contains(">K1<"));
+    }
+
+    /// A non-relay designator drawn on two sheets gets an automatic "(/2.B3)"-style cross-reference beside it, on both sheets (G13).
+    /// リレー以外の参照記号が2枚のシートに描かれていると、両方のシートに「/2.B3」形式のクロスリファレンスが自動で添えられる (G13)。
+    #[test]
+    fn svg_draws_a_device_cross_reference_for_a_designator_on_two_sheets() {
+        let mut project = Project::new("t");
+        project
+            .sheets
+            .push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let put = |sheet: &mut Sheet, x: f64, y: f64| {
+            let e = Entity::Symbol(SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: "motor".into(),
+                at: Point::new(x, y),
+                rotation: 0,
+                mirror: false,
+                reference: "M1".into(),
+                value: String::new(),
+                attrs: Default::default(),
+            });
+            sheet.entities.insert(e.id(), e);
+        };
+        let (s1, s2) = project.sheets.split_at_mut(1);
+        put(&mut s1[0], 150.0, 120.0);
+        put(&mut s2[0], 250.0, 70.0);
+        let svg1 = project_sheet_to_svg(&project, project.sheets[0].id, &builtin_symbols()).unwrap();
+        assert!(svg1.contains(">/2.B3<"), "シート1に相手先の住所: {svg1}");
+        let svg2 = project_sheet_to_svg(&project, project.sheets[1].id, &builtin_symbols()).unwrap();
+        assert!(svg2.contains(">/1.C2<"), "シート2に相手先の住所: {svg2}");
     }
     /// 盤レイアウトシート (盤外形200x150・ダクト・DINレール・K1のフットプリント)。
     fn panel_sheet() -> Sheet {

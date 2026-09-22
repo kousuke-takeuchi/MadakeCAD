@@ -191,6 +191,133 @@ pub fn sheet_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<EntityId, S
     out
 }
 
+/// デバイス (参照記号) が置かれている場所 (どのシートのどのゾーンか)。G13:
+/// ネットラベルのシート間クロスリファレンス ([`NetSite`]) を、参照記号を持つシンボル
+/// インスタンス一般へ広げたもの。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DeviceSite {
+    pub sheet_id: SheetId,
+    /// 1始まりのシート表示順。
+    pub sheet_no: usize,
+    pub sheet_name: String,
+    /// ゾーンアドレス (例 "B3")。
+    pub zone: String,
+    /// この所在を作っているシンボルインスタンスのentity id。
+    pub entity_id: EntityId,
+    pub reference: String,
+}
+
+impl DeviceSite {
+    /// 図面上の住所表記 (IEC 61082-1)。「/シート.ゾーン」= 例 `/2.B3`。
+    pub fn address(&self) -> String {
+        format!("/{}.{}", self.sheet_no, self.zone)
+    }
+}
+
+/// プロジェクト内の全シンボルインスタンスの所在を、参照記号ごとにまとめて返す。
+/// 参照記号が空のインスタンスは含まない。コイル・接点はコイル⇔接点クロスリファレンス
+/// ([`crate::relay_xref`]) が既に自動で所在を注記するので、ここでは対象から外す
+/// (二重に描かないため)。並びは[`label_sites`]と同じくシート順→ゾーン順→id順で決定的。
+pub fn device_sites(project: &Project) -> BTreeMap<String, Vec<DeviceSite>> {
+    let mut out: BTreeMap<String, Vec<DeviceSite>> = BTreeMap::new();
+    for (i, sheet) in project.sheets.iter().enumerate() {
+        for entity in sheet.entities.values() {
+            let Entity::Symbol(s) = entity else { continue };
+            if crate::relay_xref::relay_role(&s.symbol_id).is_some() {
+                continue;
+            }
+            let reference = s.reference.trim();
+            if reference.is_empty() {
+                continue;
+            }
+            out.entry(reference.to_string()).or_default().push(DeviceSite {
+                sheet_id: sheet.id,
+                sheet_no: i + 1,
+                sheet_name: sheet.name.clone(),
+                zone: zone_at(sheet, s.at),
+                entity_id: s.id,
+                reference: reference.to_string(),
+            });
+        }
+    }
+    for sites in out.values_mut() {
+        sites.sort_by(|a, b| (a.sheet_no, &a.zone, a.entity_id).cmp(&(b.sheet_no, &b.zone, b.entity_id)));
+    }
+    out
+}
+
+/// あるデバイス (参照記号) の相手先 (同じ参照記号を持つインスタンスが置かれている
+/// **他シート**での所在)。自分のシート内の所在は相手ではないので除外する。相手がいなければ空。
+pub fn device_xref_sites(project: &Project, sheet_id: SheetId, reference: &str) -> Vec<DeviceSite> {
+    let reference = reference.trim();
+    if reference.is_empty() {
+        return Vec::new();
+    }
+    device_sites(project)
+        .remove(reference)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|s| s.sheet_id != sheet_id)
+        .collect()
+}
+
+/// 相手先の住所一覧 (例 ["/2.B3", "/3.A1"])。同じ住所は1つにまとめる。
+pub fn device_xref_addresses(project: &Project, sheet_id: SheetId, reference: &str) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    device_xref_sites(project, sheet_id, reference)
+        .into_iter()
+        .map(|s| s.address())
+        .filter(|a| seen.insert(a.clone()))
+        .collect()
+}
+
+/// シート1枚分のデバイス単位XRefテキスト表 (シンボルのentity id → 表示テキスト、G13)。
+/// 複数シートに跨る参照記号を持つインスタンスだけが入る。コイル・接点は含まない
+/// (コイル⇔接点クロスリファレンスが別に注記する)。SVG・キャンバスの描画はこれを引く。
+pub fn sheet_device_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<EntityId, String> {
+    let Some(sheet) = project.sheet(sheet_id) else {
+        return BTreeMap::new();
+    };
+    let sites = device_sites(project);
+    let mut out = BTreeMap::new();
+    for entity in sheet.entities.values() {
+        let Entity::Symbol(s) = entity else { continue };
+        if crate::relay_xref::relay_role(&s.symbol_id).is_some() {
+            continue;
+        }
+        let reference = s.reference.trim();
+        if reference.is_empty() {
+            continue;
+        }
+        let mut seen = BTreeSet::new();
+        let addresses: Vec<String> = sites
+            .get(reference)
+            .map(|v| v.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .filter(|site| site.sheet_id != sheet_id)
+            .map(|site| site.address())
+            .filter(|a| seen.insert(a.clone()))
+            .collect();
+        if !addresses.is_empty() {
+            out.insert(s.id, addresses.join(XREF_SEPARATOR));
+        }
+    }
+    out
+}
+
+/// 参照記号の脇に置くデバイスXRefテキストの基準点 (テキストは左揃え、G13)。
+/// シンボル外形の右端から [`XREF_GAP`] だけ空け、高さは参照記号のラベルと同じ行に揃える
+/// (コイル所在が接点の中央高さに出るのと違い、参照記号は常に外形の上に出るため)。
+pub fn device_xref_at(
+    inst: &crate::model::SymbolInstance,
+    def: &crate::symbol::SymbolDef,
+) -> Point {
+    let (_, max) = crate::svg::symbol_bounds(inst, def);
+    let top = crate::svg::symbol_top_y(inst, def);
+    Point::new(max.x + XREF_GAP, top - crate::svg::REF_LABEL_DY)
+}
+
 /// ネットラベル本文の右脇に置くXRefテキストの基準点 (テキストは左揃え)。
 /// ラベル本文の幅を文字数から見積り、その右に [`XREF_GAP`] だけ空ける。
 ///
@@ -409,6 +536,19 @@ mod tests {
         })
     }
 
+    fn symbol(symbol_id: &str, reference: &str, x: f64, y: f64) -> Entity {
+        Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: symbol_id.into(),
+            at: Point::new(x, y),
+            rotation: 0,
+            mirror: false,
+            reference: reference.into(),
+            value: String::new(),
+            attrs: Default::default(),
+        })
+    }
+
     /// 2枚のA3シートを持ち、それぞれに同名ラベル付きの配線を1本置いたプロジェクト。
     /// シート1のラベルはゾーンA1、シート2のラベルはゾーンB3に来る。
     fn two_sheet_project() -> Project {
@@ -612,5 +752,117 @@ mod tests {
             ["ネット", "線番", "接続先", "シート", "所在"]
         );
         assert_eq!(xref_table_rows(&two_sheet_project())[0].len(), XREF_TABLE_COLUMNS.len());
+    }
+
+    // ---- G13: デバイス単位シート間参照 ----
+
+    /// 2枚のA3シートを持ち、それぞれに同じ参照記号のシンボルを1個ずつ置いたプロジェクト。
+    fn two_sheet_device_project(symbol_id: &str, reference: &str) -> Project {
+        let mut project = Project::new("t");
+        project
+            .sheets
+            .push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let s1 = project.sheets[0].id;
+        let s2 = project.sheets[1].id;
+        let e1 = symbol(symbol_id, reference, 20.0, 20.0);
+        project.sheet_mut(s1).unwrap().entities.insert(e1.id(), e1);
+        let e2 = symbol(symbol_id, reference, 250.0, 70.0);
+        project.sheet_mut(s2).unwrap().entities.insert(e2.id(), e2);
+        project
+    }
+
+    /// A designator drawn on two different sheets gets a mutual cross-reference: each instance shows the other sheet's address.
+    /// 2枚の違うシートに描かれた参照記号は相互に参照し合う: それぞれのインスタンスにもう一方のシートの住所が出る。
+    #[test]
+    fn a_designator_on_two_sheets_cross_references_each_other() {
+        let project = two_sheet_device_project("motor", "M1");
+        let s1 = project.sheets[0].id;
+        let s2 = project.sheets[1].id;
+        assert_eq!(device_xref_addresses(&project, s1, "M1"), vec!["/2.B3"]);
+        assert_eq!(device_xref_addresses(&project, s2, "M1"), vec!["/1.A1"]);
+    }
+
+    /// A designator drawn on a single sheet only has no cross-reference at all.
+    /// 1枚のシートにしか描かれていない参照記号には、クロスリファレンスが一切付かない。
+    #[test]
+    fn a_designator_on_a_single_sheet_has_no_cross_reference() {
+        let mut project = Project::new("t");
+        let s1 = project.sheets[0].id;
+        let e = symbol("motor", "M1", 20.0, 20.0);
+        project.sheet_mut(s1).unwrap().entities.insert(e.id(), e);
+        assert!(device_xref_addresses(&project, s1, "M1").is_empty());
+        assert!(sheet_device_xrefs(&project, s1).is_empty());
+    }
+
+    /// Relay coils and contacts are skipped by the device cross-reference, because relay_xref already annotates their coil location automatically.
+    /// リレーのコイル・接点はデバイス単位のクロスリファレンスの対象から外れる(コイル⇔接点クロスリファレンスが既に自動で所在を注記するため)。
+    #[test]
+    fn relay_coil_and_contacts_are_skipped_by_the_device_cross_reference() {
+        let project = two_sheet_device_project(crate::relay_xref::COIL_SYMBOL_ID, "K1");
+        let s1 = project.sheets[0].id;
+        assert!(device_xref_addresses(&project, s1, "K1").is_empty());
+        assert!(sheet_device_xrefs(&project, s1).is_empty());
+    }
+
+    /// The per-sheet device cross-reference table maps each symbol entity to the text drawn beside it.
+    /// シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける。
+    #[test]
+    fn sheet_device_cross_reference_table_maps_symbols_to_text() {
+        let project = two_sheet_device_project("motor", "M1");
+        let s1 = project.sheets[0].id;
+        let entity_id = project.sheets[0]
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Symbol(s) => Some(s.id),
+                _ => None,
+            })
+            .unwrap();
+        let table = sheet_device_xrefs(&project, s1);
+        assert_eq!(table.get(&entity_id).map(String::as_str), Some("/2.B3"));
+    }
+
+    /// A designator on three sheets lists every other sheet's address, in sheet order, on one line.
+    /// 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる。
+    #[test]
+    fn a_designator_on_three_sheets_lists_every_other_sheet() {
+        let mut project = Project::new("t");
+        project
+            .sheets
+            .push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        project
+            .sheets
+            .push(Sheet::new("Sheet3", PaperSize::A3, Orientation::Landscape));
+        for i in 0..3 {
+            let sid = project.sheets[i].id;
+            let e = symbol("motor", "M1", 20.0, 20.0);
+            project.sheet_mut(sid).unwrap().entities.insert(e.id(), e);
+        }
+        let s1 = project.sheets[0].id;
+        assert_eq!(device_xref_addresses(&project, s1, "M1"), vec!["/2.A1", "/3.A1"]);
+    }
+
+    /// The device cross-reference text sits to the right of the symbol outline, on the same row as the designator label.
+    /// デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる。
+    #[test]
+    fn device_cross_reference_text_sits_right_of_the_outline() {
+        let inst = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "motor".into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "M1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        let def = crate::symbol::resolve_symbol("motor").unwrap();
+        let (_, max) = crate::svg::symbol_bounds(&inst, &def);
+        let at = device_xref_at(&inst, &def);
+        assert!(at.x > max.x, "外形の右に置く: {at:?}");
+        assert!(
+            (at.y - (crate::svg::symbol_top_y(&inst, &def) - crate::svg::REF_LABEL_DY)).abs() < 1e-9,
+            "参照記号ラベルと同じ高さ: {at:?}"
+        );
     }
 }
