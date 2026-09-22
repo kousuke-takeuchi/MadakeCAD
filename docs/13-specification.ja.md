@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2039仕様項目**。
+全5領域・**2045仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -334,6 +334,7 @@
 - シンボル左側のピンにかける括弧は、いちばん上から下のピンまで縦棒でつながり、キャプションはさらに左に置かれる。 <sub>`a_bracket_on_left_pins_is_a_vertical_bar_further_left`</sub>
 - ピン番号そのものに「-」が入っている端子はピングループに指定できず、「存在しないピン」ではなく使えない理由がそのまま報告される。 <sub>`a_pin_number_containing_a_hyphen_is_refused_with_its_own_reason`</sub>
 - 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない)。 <sub>`a_multilevel_group_brackets_the_outside_of_its_own_column`</sub>
+- 多段端子台の段をまたぐ範囲は、黙って何も描かれるのではなく報告される: 段ごとに外側の辺が逆なので、1本の括弧では囲めないため。 <sub>`a_range_across_two_levels_is_reported_instead_of_silently_skipped`</sub>
 - シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される: まっすぐな括弧にならないため。 <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
 
 ### PLC I/O
@@ -594,7 +595,9 @@
 - pin_groups属性が無い・空のシンボルには括弧のポリラインが描かれない。 <sub>`svg_draws_no_bracket_without_pin_groups`</sub>
 - 重なるpin_groups項目は (verify.rsで検証済みのとおり) 括弧を一切描かず、同じインスタンスの関係ない有効な項目は変わらず描かれる。 <sub>`svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest`</sub>
 - ピングループの括弧とキャプションは、ブロック・端子台・コネクタのいずれでも、全ての回転とミラーで、ピン番号・ピン名・参照記号・型番・機能ラベルのどれにも重ならない。 <sub>`svg_pin_group_boxes_never_land_on_any_label_at_any_rotation`</sub>
-- ピングループのキャプションは括弧の外側 (シンボルから見て括弧の棒よりさらに遠く) に置かれる。回転・ミラーでも変わらない。 <sub>`svg_pin_group_caption_sits_beyond_its_bracket`</sub>
+- ピングループの部品どうし (括弧と、折り返したキャプションの各行) は決して重ならないので、複数行に割れたキャプションは全ての回転・ミラーで読める。 <sub>`svg_pin_group_pieces_never_overlap_each_other_at_any_rotation`</sub>
+- 複数行に割れたキャプションは、シンボルをどう回しても文字は横書きのままなので、用紙の上では必ず縦に積まれる (各行は同じ中心線に並び、順に下へ下がる)。 <sub>`svg_pin_group_caption_lines_stack_downwards_on_paper`</sub>
+- ピングループのキャプションは塊ごと括弧の外側に出る: どの行も括弧に触れず、シンボルから見て括弧の棒より遠くにある。回転・ミラーでも変わらない。 <sub>`svg_pin_group_caption_block_sits_wholly_beyond_its_bracket`</sub>
 - 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える)。 <sub>`svg_leader_dot_is_the_size_of_a_wire_junction_dot`</sub>
 
 ### シンボルライブラリ
@@ -1532,6 +1535,8 @@
 - 属性が壊れているブロックは描かれない(undefinedになる) <sub>`resolveInstanceDef`</sub>
 - ピングループ括弧はシンボルと一緒に描かれるので、参照記号・型番の位置決めに使う外形にはその箱も入る (Rust側 svg::symbol_bounds とparity) <sub>`symbolBounds`</sub>
 - 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない) <sub>`symbolBounds`</sub>
+- ピングループの部品どうし (括弧と、折り返したキャプションの各行) は全ての回転・ミラーで決して重ならない (Rust側 svg_pin_group_pieces_never_overlap_each_other_at_any_rotation とparity) <sub>`captionLineAnchors`</sub>
+- 文字はシンボルを回しても横書きのままなので、キャプションの行は用紙の上で必ず縦に積まれる (同じ中心線に並び、順に下へ下がる。Rust側 svg_pin_group_caption_lines_stack_downwards_on_paper とparity) <sub>`captionLineAnchors`</sub>
 
 ### 図枠テンプレートの配置計算 (キャンバス)
 
@@ -1690,6 +1695,7 @@
 - ブロックでも括弧は左のピンの足先より外に出て、キャプションはさらに外に置かれる (Rust側の3一族テストとparity) <sub>`pinGroupBracket`</sub>
 - コネクタは右側にピンが出るので、括弧とキャプションは足先より右に出る (Rust側の3一族テストとparity) <sub>`pinGroupBracket`</sub>
 - 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない、Rust側とparity) <sub>`pinGroupBracket`</sub>
+- 多段端子台の段をまたぐ範囲は、黙って何も描かれるのではなく報告される (段ごとに外側の辺が逆で1本の括弧では囲めないため、Rust側とparity) <sub>`pinGroupBracket`</sub>
 - シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される <sub>`pinGroupBracket`</sub>
 
 ### relayXref

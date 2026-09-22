@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2039 specification clauses** across 5 areas.
+**2045 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -334,6 +334,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A bracket over pins on the left side of a symbol is a vertical bar to the left of the pins, spanning from the topmost to the bottommost pin, with its caption further left still. <sub>`a_bracket_on_left_pins_is_a_vertical_bar_further_left`</sub>
 - A pin whose own number contains a hyphen cannot be named in a pin group, and says so instead of being reported as a pin that does not exist. <sub>`a_pin_number_containing_a_hyphen_is_refused_with_its_own_reason`</sub>
 - On a multi-level terminal block, a group over the second level's terminals brackets the outside of that level's own column, never the gap between the columns. <sub>`a_multilevel_group_brackets_the_outside_of_its_own_column`</sub>
+- A range that spans two levels of a multi-level terminal block is reported instead of quietly drawing nothing, because the two levels face opposite sides and no single bracket can hold them. <sub>`a_range_across_two_levels_is_reported_instead_of_silently_skipped`</sub>
 - A bracket spans pins from two different sides of a symbol (mixed pin direction) is refused: the shape would not be a straight bracket. <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
 
 ### PLC I/O
@@ -594,7 +595,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A symbol with no pin_groups attribute, or an empty one, draws no bracket polyline. <sub>`svg_draws_no_bracket_without_pin_groups`</sub>
 - Overlapping pin_groups items are reported by verify (tested in verify.rs) and draw no bracket at all, while an unrelated valid item on the same instance still draws. <sub>`svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest`</sub>
 - Pin group brackets and their captions never land on a pin number, a pin name or the symbol's designator, type or function label, for a block, a terminal block and a connector, at every rotation and mirrored. <sub>`svg_pin_group_boxes_never_land_on_any_label_at_any_rotation`</sub>
-- A pin group's caption sits beyond its bracket, further from the symbol than the bracket bar is, at every rotation and mirrored. <sub>`svg_pin_group_caption_sits_beyond_its_bracket`</sub>
+- No two pieces of a pin group - the bracket and each caption line - ever overlap each other, so a caption split over several lines stays readable at every rotation and mirrored. <sub>`svg_pin_group_pieces_never_overlap_each_other_at_any_rotation`</sub>
+- A caption split over several lines is always stacked downwards on the paper - the lines share one centre line and step down one after another - because lettering stays horizontal however the symbol is turned. <sub>`svg_pin_group_caption_lines_stack_downwards_on_paper`</sub>
+- A pin group's caption block sits wholly beyond its bracket: no caption line touches the bracket, and every line is further from the symbol than the bracket bar, at every rotation and mirrored. <sub>`svg_pin_group_caption_block_sits_wholly_beyond_its_bracket`</sub>
 - The dot at the target end of a note's leader line is drawn exactly the size of a wire junction dot, so the two read as the same mark. <sub>`svg_leader_dot_is_the_size_of_a_wire_junction_dot`</sub>
 
 ### Symbol library
@@ -1532,6 +1535,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - returns nothing for a block whose attributes are broken <sub>`resolveInstanceDef`</sub>
 - grows to take in a pin group's bracket and caption, so labels are placed clear of them <sub>`symbolBounds`</sub>
 - grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption <sub>`symbolBounds`</sub>
+- never lets a bracket and its caption lines overlap each other, at any rotation <sub>`captionLineAnchors`</sub>
+- stacks caption lines downwards on the paper, sharing one centre line, at any rotation <sub>`captionLineAnchors`</sub>
 
 ### Frame template layout (canvas)
 
@@ -1690,6 +1695,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - puts a block's bracket beyond the pin stubs and its caption beyond the bracket <sub>`pinGroupBracket`</sub>
 - puts a connector's bracket to the right of its pin stubs <sub>`pinGroupBracket`</sub>
 - brackets the outside of a multi-level terminal block's own column, not the gap between columns <sub>`pinGroupBracket`</sub>
+- reports a range that spans two levels instead of quietly drawing nothing <sub>`pinGroupBracket`</sub>
 - refuses a bracket across mixed pin directions <sub>`pinGroupBracket`</sub>
 
 ### relayXref
