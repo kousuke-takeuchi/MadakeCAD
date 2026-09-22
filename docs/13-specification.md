@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2049 specification clauses** across 5 areas.
+**2095 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -89,6 +89,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Numbering the same panel a second time changes nothing on the drawing: the numbers are already the ones the reading order asks for. <sub>`numbering_an_already_numbered_panel_changes_nothing`</sub>
 - The numbering command is plain JSON, so agents and the CLI can send it. <sub>`the_panel_numbering_command_is_plain_json`</sub>
 - Numbering a sheet that does not exist is refused instead of silently doing nothing. <sub>`numbering_an_unknown_sheet_is_refused`</sub>
+- Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted. <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
+- Undoing a paper size change restores both the previous size and orientation. <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
+- A paper size change on a sheet that does not exist is refused. <sub>`changing_paper_on_an_unknown_sheet_is_refused`</sub>
+- `set_project_meta` sets the project name and number in one command, leaving every sheet's title block untouched when those fields are omitted. <sub>`set_project_meta_sets_name_and_number`</sub>
+- `set_project_meta` writes the title-block fields (company, drawing number, title) to every sheet in the project with one undoable command. <sub>`set_project_meta_writes_title_block_to_every_sheet`</sub>
+- Undoing `set_project_meta` restores each sheet's own previous title block, even when the sheets had different values beforehand (not a single shared value). <sub>`undoing_set_project_meta_restores_each_sheets_own_title_block`</sub>
+- The project number command is plain JSON, so agents, the CLI and the Link API can all send it. <sub>`set_project_meta_command_is_plain_json`</sub>
 
 ### Frame templates (plot frames)
 
@@ -101,7 +108,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An unknown bind becomes an empty string instead of an error, so a drawing with a typo in its template still prints. <sub>`an_unknown_bind_becomes_an_empty_string`</sub>
 - Text with no binds is printed as is, and an unclosed brace is left alone instead of swallowing the rest of the line. <sub>`plain_text_and_unclosed_braces_are_left_alone`</sub>
 - On its own, a sheet is bound as sheet 1 of 1 with an empty project name; inside a project it gets its real position. <sub>`a_lone_sheet_is_bound_as_sheet_one_of_one`</sub>
-- The project number bind is known but always empty for now, because the project model has no number field yet. <sub>`the_project_number_bind_is_known_but_empty_for_now`</sub>
+- Outside a project (a lone sheet) the project number bind is known but empty, since there is no project to read it from. <sub>`the_project_number_bind_is_empty_outside_a_project`</sub>
+- Inside a project, the project number bind reads `Project::no` (G16), the same field `set_project_meta` writes. <sub>`the_project_number_bind_reads_the_project_number`</sub>
 - A cell with fixed text prints it verbatim, braces included, while a cell with a bind resolves it. <sub>`a_fixed_text_cell_is_printed_verbatim`</sub>
 - A template whose cell has both text and bind, or neither, is rejected with a message naming the cell. <sub>`a_cell_must_have_either_text_or_bind`</sub>
 - The revision columns must be the four JIS columns and add up to the title-block width, otherwise the revision table would not line up with the title block. <sub>`the_revision_columns_must_add_up_to_the_title_block_width`</sub>
@@ -145,7 +153,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 9, the version that added the note leader line. <sub>`the_current_format_version_is_nine`</sub>
+- The current file format version is 10, the version that added the project number. <sub>`the_current_format_version_is_ten`</sub>
+- A project file saved before the project number existed opens with no project number set, so the `{project.no}` title-block bind stays blank exactly as before, and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_project_number`</sub>
 - A drawing saved before the annotation text height existed opens at the default 2.0mm, so its notes look exactly as before. <sub>`an_old_project_file_opens_with_the_default_annotation_text_height`</sub>
 - The annotation text height set on a sheet is saved to the file and comes back on reload. <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
 - A panel drawn before item numbers existed opens with no balloons at all: the footprints keep their place and can be numbered whenever the drawing is next tidied up. <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
@@ -200,6 +209,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Inserting with a value set is still one edit: a single undo takes the whole circuit, values and all, back out. <sub>`inserting_with_a_value_set_is_still_undone_in_one_step`</sub>
 - Placeholders and value sets survive the round trip through the macros folder, so a macro saved with them can be inserted later with any of its value sets. <sub>`placeholders_and_value_sets_round_trip_through_the_user_folder`</sub>
 - Inserting into a sheet that is not in the project is refused, and an unknown macro id is refused by name. <sub>`inserting_into_an_unknown_sheet_or_by_an_unknown_id_is_refused`</sub>
+
+### mate
+
+- Two connectors that declare each other as their mate, with matching pole counts, produce no ERC finding at all. <sub>`a_reciprocated_matching_pair_has_no_erc_findings`</sub>
+- A connector that declares a mate with a different pole count gets a pole-mismatch warning. <sub>`a_pole_count_mismatch_is_a_warning`</sub>
+- A connector that declares a mate the other side does not declare back gets an informational one-sided-declaration finding. <sub>`a_one_sided_declaration_is_info`</sub>
+- Declaring an unknown reference designator as a mate is a warning, and so is declaring oneself. <sub>`an_unknown_or_self_reference_is_a_warning`</sub>
+- A connector with no `mates_with` attribute produces no mate-related finding at all. <sub>`a_connector_with_no_declaration_is_silent`</sub>
+- A terminal block, even though it shares the "connector" category, is not treated as a mating connector (no mate diagnostics, even with the attribute set). <sub>`a_terminal_block_is_not_a_mating_connector`</sub>
+- Two mated connectors on the same sheet within 50mm produce exactly one drawn mate link. <sub>`a_close_pair_on_one_sheet_produces_one_mate_link`</sub>
+- Two mated connectors more than 50mm apart on the same sheet produce no drawn mate link (the reports still carry the pair). <sub>`a_far_pair_produces_no_mate_link`</sub>
+- The mate declared on a connector instance is what the wire list / from-to report's mate column reads. <sub>`declared_mate_reads_the_attribute`</sub>
 
 ### Document model
 
@@ -449,10 +470,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The parts list carries the panel item number as its first column, so the balloons on the panel drawing and the parts list line up. <sub>`bom_starts_with_the_panel_item_number`</sub>
 - Parts that are not on a panel yet leave the item number column empty; the rest of the parts list is unaffected. <sub>`bom_leaves_the_item_number_empty_for_unplaced_parts`</sub>
 - BOM fields containing commas are quoted so the CSV stays valid. <sub>`bom_escapes_fields_with_commas`</sub>
-- The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, and the older column order (sheet, wire number, harness, ...) is no longer produced. <sub>`wire_list_is_a_from_to_list`</sub>
+- The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, followed by the mate and remark columns (G14/G18), and the older column order (sheet, wire number, harness, ...) is no longer produced. <sub>`wire_list_is_a_from_to_list`</sub>
 - An end of a wire that lands on a symbol pin is written as "reference:pin number" (for example K1:A1). <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
 - A wire end on a block pin is written with the pin's name (for example CTRL1:OUT1), and the block itself is counted in the parts list. <sub>`a_wire_end_on_a_block_pin_uses_the_pin_name_and_the_block_is_in_the_parts_list`</sub>
 - An end of a wire that carries a net label is written as the label name. <sub>`a_wire_end_with_a_net_label_is_written_as_the_label_name`</sub>
+- A wire end on a net label resolves through the net to the single device pin on the other side (G18), when exactly one other pin belongs to that net. <sub>`a_label_end_resolves_to_the_one_to_one_device`</sub>
+- The net still resolves correctly when it is stitched together purely by two same-named net label instances with no direct wire between them (a chain through two labels), and both wires in the chain independently resolve to the device across the chain. <sub>`the_net_chains_through_two_same_named_labels`</sub>
+- When a net label's net has more than one other pin, the label end keeps the net name instead of picking one device, and the remark column marks the row as multi-ended (G18). <sub>`a_label_end_with_multiple_other_pins_keeps_the_label_and_marks_the_remark`</sub>
+- A net that is entirely label-to-label with no device pin anywhere leaves the label name in place on both ends and marks the remark, rather than inventing a device. <sub>`a_label_to_label_net_with_no_device_keeps_the_label_name`</sub>
+- A wire ending on a connector that declares a mate carries the mate's reference designator in the wire list's mate column (G14). <sub>`wire_list_carries_the_declared_mate`</sub>
+- A wire between two devices that neither is a connector with a declared mate leaves the mate column empty. <sub>`wire_list_mate_column_is_empty_without_a_declaration`</sub>
 - An end of a wire that touches nothing is left empty in the list. <sub>`an_unconnected_wire_end_is_empty`</sub>
 - Of the two ends, the one whose text sorts first alphabetically becomes From, so the same wire always yields the same From and To no matter which end was drawn first. <sub>`from_is_the_alphabetically_smaller_of_the_two_ends`</sub>
 - When only one end is connected, that end is always From and the empty one is always To. <sub>`a_connected_end_becomes_from_and_the_unconnected_end_becomes_to`</sub>
@@ -545,6 +572,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A net without a wire number gets no number text at all. <sub>`svg_omits_wire_number_for_unnumbered_nets`</sub>
 - A harness boundary is drawn as a dashed rectangle (IEC 61082-1 group enclosure) around the wires it holds. <sub>`svg_draws_a_harness_as_a_dashed_rectangle`</sub>
 - The harness name is printed just outside the top-left corner of the boundary. <sub>`svg_labels_the_harness_at_its_top_left_corner`</sub>
+- Two mated connectors on the same sheet within 50mm are joined by a short dashed line between their outlines (G14). <sub>`svg_draws_a_dashed_line_between_a_mated_pair_on_one_sheet`</sub>
+- A mated pair more than 50mm apart on the same sheet draws no line at all (the reports carry the pair instead). <sub>`svg_draws_no_line_for_a_mated_pair_more_than_50mm_apart`</sub>
 - A harness with no name draws only its dashed boundary, without a label. <sub>`svg_omits_the_label_of_an_unnamed_harness`</sub>
 - A rectangle shape is drawn as a plain rectangle at the two corners it was given. <sub>`svg_draws_a_rectangle_shape`</sub>
 - A line shape is drawn as a straight line between its two points, and a polyline shape follows every point in order. <sub>`svg_draws_line_and_polyline_shapes`</sub>
@@ -804,6 +833,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### Verification (ERC & electrical)
 
 - A fully wired circuit produces no ERC findings. <sub>`fully_wired_pair_has_no_erc_findings`</sub>
+- An entity that sits well inside the sheet's paper produces no `erc.outside_paper` warning. <sub>`an_entity_inside_the_paper_has_no_outside_paper_warning`</sub>
+- An entity whose bounds sit exactly on the paper edge is not flagged (only crossing the edge counts). <sub>`an_entity_exactly_on_the_paper_edge_has_no_warning`</sub>
+- An entity that falls outside the sheet's current paper bounds is reported as `erc.outside_paper`, without being moved or removed from the drawing. <sub>`an_entity_outside_the_paper_is_reported`</sub>
 - Unconnected pins are reported as one warning per symbol, listing the affected pin numbers. <sub>`unconnected_pins_are_reported_per_symbol`</sub>
 - Unconnected pins of a block are listed by their pin names, so a controller's dangling input is named, not numbered. <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
 - A terminal-block terminal counts as connected if either its left or right side is wired. <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
@@ -1616,6 +1648,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - shows the Japanese name when the UI is Japanese and the English name otherwise <sub>`macroName`</sub>
 - falls back to the English name when a macro has no Japanese name <sub>`macroName`</sub>
 
+### mate
+
+- only symbol ids starting with connector_ are treated as mating connectors <sub>`mate: connector family gate`</sub>
+- reads the mate declared on a connector instance <sub>`mate: declaredMate`</sub>
+- returns empty string when there is no declaration <sub>`mate: declaredMate`</sub>
+- a close pair on one sheet produces exactly one mate link <sub>`mate: mateLinks`</sub>
+- a pair more than 50mm apart produces no mate link <sub>`mate: mateLinks`</sub>
+- a connector with no declaration produces no mate link <sub>`mate: mateLinks`</sub>
+- clamps toward an external point onto the rectangle's boundary <sub>`mate: rectBoundaryPointToward`</sub>
+- the segment endpoints sit on each connector's own outline, nearest the other <sub>`mate: mateLinkSegment (SVG/canvas parity)`</sub>
+
 ### netTag
 
 - draws a tag pointing right as a five-cornered flag with its point on the right <sub>`netTag`</sub>
@@ -2258,6 +2301,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - saves the pending edits before generating the sheet <sub>`PLC I/O sheet generation settings`</sub>
 - falls back to the default address style when the module is not in the parts library <sub>`PLC I/O sheet generation settings`</sub>
 
+### projectInfo
+
+- opens with the project's name/number and the active sheet's title block <sub>`project info dialog store`</sub>
+- sends no command when nothing changed <sub>`project info dialog store`</sub>
+- sends only the changed fields, leaving the rest undefined <sub>`project info dialog store`</sub>
+- sends every field when every field is changed <sub>`project info dialog store`</sub>
+- discards the draft and sends nothing on cancel <sub>`project info dialog store`</sub>
+
 ### provider
 
 - defaults to the Claude Code CLI with Claude Sonnet 5 ready for the API route <sub>`AI provider settings`</sub>
@@ -2341,6 +2392,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - save merges the changes, sends them, and adopts the normalized response <sub>`settings store`</sub>
 - saves the knowledge-file path and adopts the backend's normalized value <sub>`settings store`</sub>
 - a failed save keeps the error and leaves the shown settings untouched <sub>`settings store`</sub>
+
+### sheetPaper
+
+- opens with the sheet's current size and orientation <sub>`sheet paper dialog store`</sub>
+- sends no command when nothing changed <sub>`sheet paper dialog store`</sub>
+- sends one set_sheet_paper command with the new size and orientation <sub>`sheet paper dialog store`</sub>
+- discards the draft and sends nothing on cancel <sub>`sheet paper dialog store`</sub>
 
 ### simulation
 

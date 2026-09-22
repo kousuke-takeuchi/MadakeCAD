@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2049仕様項目**。
+全5領域・**2095仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -89,6 +89,13 @@
 - 同じ盤をもう一度採番しても図面は何も変わらない(すでに読み順どおりの番号が入っているため)。 <sub>`numbering_an_already_numbered_panel_changes_nothing`</sub>
 - 採番コマンドは素のJSONで表現できるので、AIやCLIから送れる。 <sub>`the_panel_numbering_command_is_plain_json`</sub>
 - 存在しないシートの採番は、黙って何もせずに断られる。 <sub>`numbering_an_unknown_sheet_is_refused`</sub>
+- シートの用紙サイズ・向きを変えても (G15)、既存のエンティティは元の座標のまま動かず、消えもしない。 <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
+- 用紙サイズの変更をundoすると、サイズと向きの両方が元へ戻る。 <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
+- 存在しないシートの用紙変更は断られる。 <sub>`changing_paper_on_an_unknown_sheet_is_refused`</sub>
+- `set_project_meta`はプロジェクト名と番号を1コマンドで設定し、その欄を省略すれば全シートの表題欄には触れない。 <sub>`set_project_meta_sets_name_and_number`</sub>
+- `set_project_meta`は表題欄の欄(会社名・図番・表題)をプロジェクトの全シートへ1つのundo可能なコマンドで書き込む。 <sub>`set_project_meta_writes_title_block_to_every_sheet`</sub>
+- `set_project_meta`のundoは、各シートがそれぞれ異なる元の値を持っていた場合でも、シートごとの元の表題欄を正しく復元する(共通の1値には戻さない)。 <sub>`undoing_set_project_meta_restores_each_sheets_own_title_block`</sub>
+- プロジェクト番号のコマンドは素のJSONで表現できるので、AI・CLI・Link APIのどこからでも送れる。 <sub>`set_project_meta_command_is_plain_json`</sub>
 
 ### 図枠テンプレート (プロットフレーム)
 
@@ -101,7 +108,8 @@
 - 知らないバインドはエラーではなく空文字になる(テンプレートに書き間違いがあっても図面は出せる)。 <sub>`an_unknown_bind_becomes_an_empty_string`</sub>
 - バインドの無い文字はそのまま出て、閉じ括弧の無い「{」は行の残りを飲み込まずそのまま残る。 <sub>`plain_text_and_unclosed_braces_are_left_alone`</sub>
 - シート単体では「1枚中1枚目・プロジェクト名は空」として解決され、プロジェクトの中では実際の位置が入る。 <sub>`a_lone_sheet_is_bound_as_sheet_one_of_one`</sub>
-- プロジェクト番号のバインドは名前としては知られているが、プロジェクトにまだ番号欄が無いので現状は常に空になる。 <sub>`the_project_number_bind_is_known_but_empty_for_now`</sub>
+- プロジェクトの外 (シート単体) ではプロジェクト番号のバインドは名前として知られているが、読み取り元のプロジェクトが無いので空になる。 <sub>`the_project_number_bind_is_empty_outside_a_project`</sub>
+- プロジェクトの中ではプロジェクト番号のバインドが`Project::no` (G16) を読む。`set_project_meta`コマンドが書き込む欄と同じ。 <sub>`the_project_number_bind_reads_the_project_number`</sub>
 - 固定文字のセルは中括弧も含めてそのまま出し、バインドのセルだけが値へ置き換わる。 <sub>`a_fixed_text_cell_is_printed_verbatim`</sub>
 - セルに text と bind を両方書いた(またはどちらも書かなかった)テンプレートは、セル番号を添えて拒否される。 <sub>`a_cell_must_have_either_text_or_bind`</sub>
 - 改訂欄の列はJISの4列で、幅の合計が表題欄の幅と一致していなければならない(ずれた表は表題欄と揃わない)。 <sub>`the_revision_columns_must_add_up_to_the_title_block_width`</sub>
@@ -145,7 +153,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは9 (注記の引き出し線を追加した版) である。 <sub>`the_current_format_version_is_nine`</sub>
+- 現行のファイル形式バージョンは10 (プロジェクト番号を追加した版) である。 <sub>`the_current_format_version_is_ten`</sub>
+- プロジェクト番号が無かった頃のプロジェクトファイルはプロジェクト番号が未設定として開き、表題欄バインド`{project.no}`はこれまでどおり空欄のままになる。現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_project_number`</sub>
 - 注記文字高が無かった頃の図面は既定の2.0mmで開くので、注記の見た目はこれまでと変わらない。 <sub>`an_old_project_file_opens_with_the_default_annotation_text_height`</sub>
 - シートに設定した注記文字高はファイルへ保存され、読み直しても残っている。 <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
 - アイテム番号が無かった頃の盤図面はバルーンの無い状態で開く。フットプリントの位置はそのままで、番号はいつでも振り直せる。 <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
@@ -200,6 +209,18 @@
 - 値セットを選んで挿入しても編集は1回のままなので、undo一発で値ごと回路全体が戻る。 <sub>`inserting_with_a_value_set_is_still_undone_in_one_step`</sub>
 - プレースホルダと値セットはマクロフォルダへの往復でも残るので、保存したマクロは後からどの値セットでも挿入できる。 <sub>`placeholders_and_value_sets_round_trip_through_the_user_folder`</sub>
 - プロジェクトに無いシートへの挿入は拒否され、知らないマクロidは名前を添えて拒否される。 <sub>`inserting_into_an_unknown_sheet_or_by_an_unknown_id_is_refused`</sub>
+
+### mate
+
+- 互いを嵌合相手に指定し、極数も一致している2つのコネクタは、ERCの指摘を1つも出さない。 <sub>`a_reciprocated_matching_pair_has_no_erc_findings`</sub>
+- 極数の違う相手を嵌合相手に指定したコネクタには、極数不一致の警告が出る。 <sub>`a_pole_count_mismatch_is_a_warning`</sub>
+- 相手側からは指定されていない嵌合相手を宣言したコネクタには、片側宣言の参考情報が出る。 <sub>`a_one_sided_declaration_is_info`</sub>
+- 存在しない参照記号を嵌合相手に指定すると警告になり、自分自身を指定した場合も同様。 <sub>`an_unknown_or_self_reference_is_a_warning`</sub>
+- `mates_with`属性を持たないコネクタは、嵌合関連の指摘を一切出さない。 <sub>`a_connector_with_no_declaration_is_silent`</sub>
+- 端子台は「connector」カテゴリを共有していても嵌合コネクタとしては扱わない (属性を付けても嵌合の指摘は出ない)。 <sub>`a_terminal_block_is_not_a_mating_connector`</sub>
+- 同一シート上で50mm以内にある嵌合対は、図面に描く相手先ペアがちょうど1組できる。 <sub>`a_close_pair_on_one_sheet_produces_one_mate_link`</sub>
+- 同一シート上でも50mmを超えて離れている嵌合対は、図面に線を描かない(対は帳票だけが伝える)。 <sub>`a_far_pair_produces_no_mate_link`</sub>
+- コネクタインスタンスに宣言された嵌合相手が、電線リスト・From-To帳票の「嵌合相手」列にそのまま読まれる。 <sub>`declared_mate_reads_the_attribute`</sub>
 
 ### ドキュメントモデル
 
@@ -449,10 +470,16 @@
 - 部品表の先頭列は盤のアイテム番号なので、盤図面のバルーンと部品表が突き合わせられる。 <sub>`bom_starts_with_the_panel_item_number`</sub>
 - まだ盤に置いていない部品はアイテム番号の欄が空欄になり、部品表の他の欄はそのまま出る。 <sub>`bom_leaves_the_item_number_empty_for_unplaced_parts`</sub>
 - カンマを含む項目は引用符で囲まれ、CSVが壊れない。 <sub>`bom_escapes_fields_with_commas`</sub>
-- 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先から始まる。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。 <sub>`wire_list_is_a_from_to_list`</sub>
+- 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先、続いて嵌合相手・備考列 (G14/G18) が並ぶ。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。 <sub>`wire_list_is_a_from_to_list`</sub>
 - シンボルのピンに届いているワイヤの端は「参照記号:ピン番号」(例 K1:A1) と書かれる。 <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
 - ブロックのピンに届いたワイヤの端はピン名つき(例 CTRL1:OUT1)で書かれ、ブロック自体も部品表に数えられる。 <sub>`a_wire_end_on_a_block_pin_uses_the_pin_name_and_the_block_is_in_the_parts_list`</sub>
 - ネットラベルが付いているワイヤの端は、そのラベル名で書かれる。 <sub>`a_wire_end_with_a_net_label_is_written_as_the_label_name`</sub>
+- ネットラベルに届いたワイヤの端は、そのネットに他のピンがちょうど1つだけあれば、そのデバイスのピンまで辿って解決される (G18)。 <sub>`a_label_end_resolves_to_the_one_to_one_device`</sub>
+- 直接の配線が無くても同名のネットラベル2つだけで繋がったネット (2つのラベルを介した鎖) でも正しく解決され、鎖の両側のワイヤがそれぞれ反対側のデバイスへ解決される。 <sub>`the_net_chains_through_two_same_named_labels`</sub>
+- ネットラベルのネットに他のピンが複数あるときは、ラベル端は1つのデバイスを選ばずネット名のまま残り、備考列がその行を多端点として印す (G18)。 <sub>`a_label_end_with_multiple_other_pins_keeps_the_label_and_marks_the_remark`</sub>
+- どこにもデバイスのピンが無い、ラベル同士だけのネットは両端ともラベル名のまま残り、デバイスをでっち上げずに備考を印す。 <sub>`a_label_to_label_net_with_no_device_keeps_the_label_name`</sub>
+- 嵌合相手を宣言したコネクタに届くワイヤは、電線リストの嵌合相手列にその参照記号を載せる (G14)。 <sub>`wire_list_carries_the_declared_mate`</sub>
+- どちらも嵌合相手を宣言したコネクタではない2つのデバイス間のワイヤは、嵌合相手列が空欄のままになる。 <sub>`wire_list_mate_column_is_empty_without_a_declaration`</sub>
 - 何にも接続していないワイヤの端は、リストでは空欄になる。 <sub>`an_unconnected_wire_end_is_empty`</sub>
 - 両端のうち表記の辞書順で小さい方がFromになるので、どちら向きに描いたワイヤでもFrom/Toは常に同じになる。 <sub>`from_is_the_alphabetically_smaller_of_the_two_ends`</sub>
 - 片側だけ接続しているワイヤでは、接続している方が必ずFrom、空欄の方が必ずToになる。 <sub>`a_connected_end_becomes_from_and_the_unconnected_end_becomes_to`</sub>
@@ -545,6 +572,8 @@
 - 線番の無いネットには線番テキストを一切描かない。 <sub>`svg_omits_wire_number_for_unnumbered_nets`</sub>
 - ハーネス境界は、囲んだ配線のまわりに破線の矩形 (IEC 61082-1のグループ囲み) として描かれる。 <sub>`svg_draws_a_harness_as_a_dashed_rectangle`</sub>
 - ハーネス名は囲みの左上角のすぐ外側に描かれる。 <sub>`svg_labels_the_harness_at_its_top_left_corner`</sub>
+- 同一シート上で50mm以内にある嵌合対は、外形どうしを結ぶ短い破線で結ばれる (G14)。 <sub>`svg_draws_a_dashed_line_between_a_mated_pair_on_one_sheet`</sub>
+- 50mmを超えて離れた嵌合対は線を一切描かない (対は帳票が伝える)。 <sub>`svg_draws_no_line_for_a_mated_pair_more_than_50mm_apart`</sub>
 - 名前の無いハーネスは破線の囲みだけを描き、ラベルは出さない。 <sub>`svg_omits_the_label_of_an_unnamed_harness`</sub>
 - 矩形の図形は、与えた2つの角の位置にそのまま矩形として描かれる。 <sub>`svg_draws_a_rectangle_shape`</sub>
 - 線の図形は2点を結ぶ直線として、折れ線の図形は与えた点を順にたどる線として描かれる。 <sub>`svg_draws_line_and_polyline_shapes`</sub>
@@ -804,6 +833,9 @@
 ### 検証 (ERC・電気検証)
 
 - 完全に結線された回路ではERCの指摘は出ない。 <sub>`fully_wired_pair_has_no_erc_findings`</sub>
+- 用紙の内側に収まっているエンティティは`erc.outside_paper`警告を出さない。 <sub>`an_entity_inside_the_paper_has_no_outside_paper_warning`</sub>
+- 用紙の縁ちょうどに収まるエンティティは指摘されない (縁を越えたときだけ指摘する)。 <sub>`an_entity_exactly_on_the_paper_edge_has_no_warning`</sub>
+- シートの用紙の外に出ているエンティティは、動かしたり消したりせずに`erc.outside_paper`として報告される。 <sub>`an_entity_outside_the_paper_is_reported`</sub>
 - 未接続ピンはシンボルごとに1件の警告として、該当ピン番号を列挙して報告される。 <sub>`unconnected_pins_are_reported_per_symbol`</sub>
 - ブロックの未接続ピンはピン名で列挙されるので、コントローラの未配線入力が番号ではなく名前で分かる。 <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
 - 端子台の端子は左右どちらか一方が結線されていれば接続済みとみなす。 <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
@@ -1616,6 +1648,17 @@
 - マクロ名はUI言語が日本語なら日本語名、それ以外は英語名を出す <sub>`macroName`</sub>
 - 日本語名が空のマクロはどちらの言語でも英語名を出す(空欄にしない) <sub>`macroName`</sub>
 
+### mate
+
+- connector_で始まるsymbol_idだけが嵌合対の対象で、端子台は除外される <sub>`mate: connector family gate`</sub>
+- 宣言した嵌合相手の参照記号がそのまま読める <sub>`mate: declaredMate`</sub>
+- 宣言が無い参照記号は空文字を返す <sub>`mate: declaredMate`</sub>
+- 同一シート上で50mm以内にある嵌合対は、描くべきペアがちょうど1組できる <sub>`mate: mateLinks`</sub>
+- 50mmを超えて離れた嵌合対は描くべきペアに入らない (帳票だけが伝える) <sub>`mate: mateLinks`</sub>
+- 宣言していないコネクタはペアに入らない <sub>`mate: mateLinks`</sub>
+- 矩形の外側にある点へは、その点へ向かってクランプした周上の点を返す <sub>`mate: rectBoundaryPointToward`</sub>
+- 破線の両端は、双方の外形のうち相手にいちばん近い点になる <sub>`mate: mateLinkSegment (SVG/canvas parity)`</sub>
+
 ### netTag
 
 - タグ「右」のネットラベルは、置いた点から右へ先端が飛び出した五角形の旗として描かれる <sub>`netTag`</sub>
@@ -2258,6 +2301,14 @@
 - 未保存の編集があれば、生成の前に割付表を保存する (図面のラベルが下書きと一致する) <sub>`PLC I/O sheet generation settings`</sub>
 - 部品DBに無い型番のモジュールは、種別どおりの既定のアドレス体系 (三菱) で扱う <sub>`PLC I/O sheet generation settings`</sub>
 
+### projectInfo
+
+- 開くと、プロジェクト名・番号と現在のシートの表題欄が下書きへ複製される <sub>`project info dialog store`</sub>
+- 何も変えずに保存してもコマンドは送られない <sub>`project info dialog store`</sub>
+- 変えた欄だけがset_project_metaコマンドに載り、他の欄はundefinedのまま(触っていないシートの値を壊さない) <sub>`project info dialog store`</sub>
+- 名前・会社名・図番・表題をすべて変えれば、すべての欄がコマンドに載る <sub>`project info dialog store`</sub>
+- キャンセルすると下書きが捨てられ、コマンドは送られない <sub>`project info dialog store`</sub>
+
 ### provider
 
 - 既定のプロバイダはClaude Code CLIで、API経由に切り替えたときのモデルはClaude Sonnet 5 <sub>`AI provider settings`</sub>
@@ -2341,6 +2392,13 @@
 - saveは変更分をマージして送り、正規化後の戻り値を採用する <sub>`settings store`</sub>
 - 知識ファイルのパスを保存でき、空文字はバックエンドが未設定へ正規化する <sub>`settings store`</sub>
 - save失敗時はエラーを保持し、表示中の設定を変えない <sub>`settings store`</sub>
+
+### sheetPaper
+
+- 開くと、シートの現在の用紙サイズ・向きが下書きへ複製される <sub>`sheet paper dialog store`</sub>
+- 何も変えずに保存してもコマンドは送られない <sub>`sheet paper dialog store`</sub>
+- サイズ・向きを変えて保存すると、set_sheet_paperコマンドが1回送られる <sub>`sheet paper dialog store`</sub>
+- キャンセルすると下書きが捨てられ、コマンドは送られない <sub>`sheet paper dialog store`</sub>
 
 ### simulation
 
