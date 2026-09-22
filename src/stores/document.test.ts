@@ -24,6 +24,39 @@ function testProject(): Project {
 describe("document store", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
+  // ja: 自動注記 (シート間XRef・リレー注記・デバイス単位XRef) はドキュメントが変わったときだけ計算し直す (描画のたびに全プロジェクトを走査しない)
+  it("recomputes the sheet annotations only when the document changes", () => {
+    const store = useDocumentStore();
+    store.project = testProject();
+    store.activeSheetId = "s1";
+    const first = store.sheetAnnotations;
+    expect(first).not.toBeNull();
+    // 同じドキュメントなら計算し直さない (getterのキャッシュがそのまま返る)
+    expect(store.sheetAnnotations).toBe(first);
+    store.applyPatch({
+      revision: 1,
+      ops: [
+        {
+          op: "entity_upserted",
+          sheet_id: "s1",
+          entity: {
+            kind: "symbol",
+            id: "k1",
+            symbol_id: "relay_coil",
+            at: { x: 20, y: 20 },
+            rotation: 0,
+            mirror: false,
+            reference: "K1",
+            value: "",
+            attrs: {},
+          },
+        },
+      ],
+    });
+    // 図面が変わったら計算し直す
+    expect(store.sheetAnnotations).not.toBe(first);
+  });
+
   // ja: entity_upserted / entity_removed パッチがミラーのシートを更新する
   it("entity_upserted / entity_removed patches update the mirrored sheet", () => {
     const store = useDocumentStore();

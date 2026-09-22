@@ -60,7 +60,11 @@ import {
 import { agentRgba, panelTheme, theme, wireColorScreen } from "./theme";
 import {
   FUNCTION_LABEL_FONT,
+  LABEL_FONT,
+  REF_LABEL_DY,
+  VALUE_LABEL_DY,
   canvasTextAlign,
+  functionLabelBelow,
   functionLabelFallbackAt,
   functionLabelSlot,
   functionLabelText,
@@ -72,8 +76,9 @@ import { TAG_FONT, netTag } from "./netTag";
 import { XREF_FONT, deviceXrefAt, xrefTextAt } from "./xref";
 import { annotationScale } from "./annotationText";
 import {
+  CONTACT_MAP_BASELINE_SHIFT,
   CONTACT_MAP_FONT,
-  DEVICE_BLOCK_MIN_WIDTH,
+  CONTACT_MAP_PAD,
   coilLocationAt,
   contactMapLayout,
   contactMapOrigin,
@@ -85,8 +90,6 @@ import { GRID_PITCH, type Viewport } from "./viewport";
 
 /** セル内テキストの左余白 (mm)。 */
 const CELL_PAD = 2;
-/** 参照記号・盤面の注記の文字高さ (mm)。svg.rsのLABEL_FONTと一致させること。 */
-const LABEL_FONT = 2.5;
 /** 盤の名前を外形の上端からどれだけ上に置くか (mm)。svg.rsのPANEL_LABEL_DYと一致。 */
 const PANEL_LABEL_DY = 1.5;
 /** フットプリントの型番の文字高さ (mm) と、参照記号からの送り (mm)。svg.rsと一致。 */
@@ -178,6 +181,42 @@ export function transformLocal(p: Point, inst: SymbolInstance): Point {
       break;
   }
   return { x: inst.at.x + rx, y: inst.at.y + ry };
+}
+
+/**
+ * ローカル座標の軸平行な矩形 (対角の2点) を配置変換した、用紙座標の軸平行な矩形。
+ * 回転は90度単位なので変換しても軸平行のままで、どの角が最小点になるかが変わるだけ。
+ * netlist.rs transform_rectと同一。
+ */
+export function transformRect(
+  a: Point,
+  b: Point,
+  inst: SymbolInstance,
+): { min: Point; max: Point } {
+  const ta = transformLocal(a, inst);
+  const tb = transformLocal(b, inst);
+  return {
+    min: { x: Math.min(ta.x, tb.x), y: Math.min(ta.y, tb.y) },
+    max: { x: Math.max(ta.x, tb.x), y: Math.max(ta.y, tb.y) },
+  };
+}
+
+/**
+ * 実機ブロック (G7) の外形を用紙座標で見た囲み矩形。配置の回転・ミラーを掛けた後の形で、
+ * 回転は90度単位なので矩形は軸平行のまま。クリックでコイルを掴む当たり判定 (controller.ts)
+ * と、外形の下に置く機能ラベルの位置決めはこれを引く。
+ * Rust側 relay_xref::device_block_bounds と同一 (TS側は import の循環を避けてここに置く)。
+ */
+export function deviceBlockBounds(
+  inst: SymbolInstance,
+  block: DeviceBlock,
+): { min: Point; max: Point } {
+  const layout = deviceBlockLayout(block);
+  return transformRect(
+    { x: layout.x, y: layout.y },
+    { x: layout.x + layout.width, y: layout.y + layout.height },
+    inst,
+  );
 }
 
 /**
@@ -470,14 +509,14 @@ export function drawSymbol(
   // 参照記号・型番: シンボル外形の上に併記(縦長シンボルでも重ならない。Rust側svg.rsと同ルール)
   const top = symbolTopY(inst, def);
   ctx.fillStyle = colorOverride ?? (selected ? theme.selection : theme.annotation);
-  ctx.font = `${Math.max(9, 2.5 * vp.scale)}px monospace`;
+  ctx.font = `${Math.max(9, LABEL_FONT * vp.scale)}px monospace`;
   ctx.textAlign = "center";
   if (inst.reference) {
-    const p = vp.toScreen({ x: inst.at.x, y: top - 4.5 });
+    const p = vp.toScreen({ x: inst.at.x, y: top - REF_LABEL_DY });
     ctx.fillText(inst.reference, p.x, p.y);
   }
   if (inst.value) {
-    const p = vp.toScreen({ x: inst.at.x, y: top - 1 });
+    const p = vp.toScreen({ x: inst.at.x, y: top - VALUE_LABEL_DY });
     ctx.fillText(inst.value, p.x, p.y);
   }
   // 機能ラベル (G4の第3テキスト欄): 参照記号・型番の反対側=外形の下 (svg.rsと同ルール)
@@ -544,74 +583,103 @@ export function drawContactMap(
 /**
  * コイルを実機ブロック (G7) として描く: 参照記号+型番のヘッダと、接点の「機器イメージ」
  * (端子対+所在) を1つの外形にまとめる。コイル自身の小さな図形 (rect+リード) の代わりに
- * これを描く。A1/A2ピンはinst.atのまま(呼び出し側は変えていない)なので、外形の幅が
- * ピン間隔より広いときは、ピンから外形の左右端まで引き出し線を足してつなぐ
- * (relayXref.DeviceBlockLayout.leadHalfLen)。SVG出力 (svg.rs render_device_block) と同じ数式。
+ * これを描く。
+ *
+ * 外形・仕切り線・引き出し線は、シンボルの図形と同じようにインスタンスの回転・ミラーを
+ * 掛けて描く (transformLocal)。引き出し線はシンボル定義の実際のピン (A1/A2) から外形の縁まで
+ * 引くので、コイルをどの向きに置いても配線は繋がったまま。文字はシンボル内の文字と同じく
+ * 常に水平に書き、回した後のセルの中へ置く。SVG出力 (svg.rs render_device_block) と同じ数式。
+ *
+ * 接点の行 (機器イメージ) は表示クラス「参照記号」に属するので、分散配置の接点マップと
+ * 同じく showContacts=false で消える。外形とヘッダはシンボルそのものなので常に描く。
  */
 export function drawDeviceBlock(
   ctx: CanvasRenderingContext2D,
   vp: Viewport,
   inst: SymbolInstance,
+  def: SymbolDef,
   block: DeviceBlock,
+  selected: boolean,
+  /** falseで接点の「機器イメージ」を描かない (表示クラス "refs")。 */
+  showContacts = true,
 ) {
-  const layout = deviceBlockLayout(block, inst.at.x, inst.at.y);
-  const topLeft = vp.toScreen({ x: layout.x, y: layout.y });
-  const bottomRight = vp.toScreen({ x: layout.x + layout.width, y: layout.y + layout.height });
-  ctx.strokeStyle = theme.line;
+  const layout = deviceBlockLayout(block);
+  const screen = (x: number, y: number) => vp.toScreen(transformLocal({ x, y }, inst));
+  const cell = (c: { min: Point; max: Point }) => {
+    const r = transformRect(c.min, c.max, inst);
+    return { min: vp.toScreen(r.min), max: vp.toScreen(r.max) };
+  };
+  const rule = (x0: number, y0: number, x1: number, y1: number) => {
+    const a = screen(x0, y0);
+    const b = screen(x1, y1);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  };
+  const bounds = deviceBlockBounds(inst, block);
+  const topLeft = vp.toScreen(bounds.min);
+  const bottomRight = vp.toScreen(bounds.max);
+  ctx.strokeStyle = selected ? theme.selection : theme.line;
   ctx.lineWidth = Math.max(1, 0.3 * vp.scale);
   ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
-  // A1/A2ピンから外形の左右端までの引き出し線 (外形がピン間隔ちょうどなら描かない)
-  if (layout.leadHalfLen > 1e-9) {
-    for (const sign of [-1, 1]) {
-      const pinX = inst.at.x + (sign * DEVICE_BLOCK_MIN_WIDTH) / 2;
-      const edgeX = inst.at.x + sign * (DEVICE_BLOCK_MIN_WIDTH / 2 + layout.leadHalfLen);
-      const a = vp.toScreen({ x: pinX, y: inst.at.y });
-      const b = vp.toScreen({ x: edgeX, y: inst.at.y });
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-    }
+  // ピン (A1/A2) から外形の縁までの引き出し線 (外形が最小幅ちょうどなら描かない)
+  ctx.beginPath();
+  for (const pin of def.pins) {
+    const edgeX = Math.sign(pin.at.x) * (layout.width / 2);
+    if (Math.abs(edgeX - pin.at.x) < 1e-9) continue;
+    const a = screen(pin.at.x, pin.at.y);
+    const b = screen(edgeX, pin.at.y);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
   }
+  ctx.stroke();
   // ヘッダ行・接点行の仕切り線
-  ctx.strokeStyle = theme.xref;
+  const [left, right] = [layout.x, layout.x + layout.width];
+  ctx.strokeStyle = selected ? theme.selection : theme.xref;
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let i = 1; i < layout.headerRows; i += 1) {
-    const y = vp.toScreen({ x: layout.x, y: layout.y + layout.rowH * i }).y;
-    ctx.moveTo(topLeft.x, y);
-    ctx.lineTo(bottomRight.x, y);
+    const y = layout.y + layout.rowH * i;
+    rule(left, y, right, y);
   }
-  if (layout.contactRows > 0) {
-    const headerBottomY = vp.toScreen({ x: layout.x, y: layout.y + layout.rowH * layout.headerRows }).y;
-    ctx.moveTo(topLeft.x, headerBottomY);
-    ctx.lineTo(bottomRight.x, headerBottomY);
-    const col1 = vp.toScreen({ x: layout.colX(1), y: layout.y + layout.rowH * layout.headerRows });
-    const col1Bottom = vp.toScreen({ x: layout.colX(1), y: layout.y + layout.height });
-    ctx.moveTo(col1.x, col1.y);
-    ctx.lineTo(col1Bottom.x, col1Bottom.y);
+  if (layout.contactRows > 0 && showContacts) {
+    const headerBottom = layout.y + layout.rowH * layout.headerRows;
+    rule(left, headerBottom, right, headerBottom);
+    rule(layout.colX(1), headerBottom, layout.colX(1), layout.y + layout.height);
     for (let i = 1; i < layout.contactRows; i += 1) {
-      const y = vp.toScreen({ x: layout.x, y: layout.contactRowTop(i) }).y;
-      ctx.moveTo(topLeft.x, y);
-      ctx.lineTo(bottomRight.x, y);
+      rule(left, layout.contactRowTop(i), right, layout.contactRowTop(i));
     }
   }
   ctx.stroke();
-  // ヘッダ (参照記号+型番、外形の全幅で中央揃え) と接点の行 (端子対 | 所在)
-  ctx.fillStyle = theme.xref;
-  const centerX = vp.toScreen({ x: layout.x + layout.width / 2, y: 0 }).x;
+  // ヘッダ (参照記号+型番): 回した後のセルの中央に置く
+  ctx.fillStyle = selected ? theme.selection : theme.xref;
   ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
   ctx.textAlign = "center";
-  ctx.fillText(block.reference, centerX, vp.toScreen({ x: 0, y: layout.headerBaseline(0) }).y);
-  if (layout.headerRows === 2) {
-    ctx.fillText(block.partNo, centerX, vp.toScreen({ x: 0, y: layout.headerBaseline(1) }).y);
-  }
-  ctx.textAlign = "left";
-  block.contacts.forEach((row, i) => {
-    const y = vp.toScreen({ x: 0, y: layout.contactBaseline(i) }).y;
-    ctx.fillText(row.terminals, vp.toScreen({ x: layout.textX(0), y: 0 }).x, y);
-    ctx.fillText(row.address, vp.toScreen({ x: layout.textX(1), y: 0 }).x, y);
+  const shift = CONTACT_MAP_BASELINE_SHIFT * vp.scale;
+  [block.reference, block.partNo].forEach((text, i) => {
+    if (i >= layout.headerRows) return;
+    const c = cell(layout.headerCell(i));
+    ctx.fillText(text, (c.min.x + c.max.x) / 2, (c.min.y + c.max.y) / 2 + shift);
   });
+  // 接点の行 (端子対 | 所在): 回した後のセルの左端から左揃えで書く
+  if (showContacts) {
+    ctx.textAlign = "left";
+    block.contacts.forEach((row, i) => {
+      [row.terminals, row.address].forEach((text, col) => {
+        const c = cell(layout.contactCell(i, col));
+        ctx.fillText(text, c.min.x + CONTACT_MAP_PAD * vp.scale, (c.min.y + c.max.y) / 2 + shift);
+      });
+    });
+  }
+  // 機能ラベル (G4): 分散配置と同じく外形の下に置く (ここではブロックの外形の下)
+  const functionLabel = functionLabelText(inst);
+  if (functionLabel) {
+    ctx.font = `${Math.max(9, FUNCTION_LABEL_FONT * vp.scale)}px monospace`;
+    ctx.textAlign = "center";
+    const at = vp.toScreen(
+      functionLabelBelow((bounds.min.x + bounds.max.x) / 2, bounds.max.y),
+    );
+    ctx.fillText(functionLabel, at.x, at.y);
+  }
 }
 
 /** 配置後のシンボル外形の上端Y(用紙座標)。 */
@@ -1152,8 +1220,9 @@ export function renderSheet(
     if (!def) continue;
     const block = opts.relay?.deviceBlocks?.get(e.id);
     if (block) {
-      // 実機ブロック表示 (G7): コイル自身の小さな図形の代わりにこれを描く
-      if (!hidden.has("symbols")) drawDeviceBlock(ctx, vp, e, block);
+      // 実機ブロック表示 (G7): コイル自身の小さな図形の代わりにこれを描く。接点の
+      // 「機器イメージ」は分散配置の接点マップと同じ表示クラス「参照記号」に属する
+      drawDeviceBlock(ctx, vp, e, def, block, opts.selection.has(e.id), !hidden.has("refs"));
     } else {
       drawSymbol(ctx, vp, e, def, opts.selection.has(e.id), undefined, !hidden.has("refs"));
     }
@@ -1165,7 +1234,7 @@ export function renderSheet(
     }
     const location = opts.relay?.coilLocations?.get(e.id);
     if (location) {
-      const at = vp.toScreen(coilLocationAt(symbolBounds(e, def), e.at.y, location, wireNotes));
+      const at = vp.toScreen(coilLocationAt(e, symbolBounds(e, def), location, wireNotes));
       ctx.fillStyle = theme.xref;
       ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
       ctx.textAlign = "left";

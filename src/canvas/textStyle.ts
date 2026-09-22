@@ -68,6 +68,17 @@ export function noteBounds(note: TextEntity): { min: Point; max: Point } {
   };
 }
 
+/** 参照記号・型番・ネットラベルの文字高さ (mm)。svg.rsのLABEL_FONTと一致させること。 */
+export const LABEL_FONT = 2.5;
+
+/** 参照記号のベースラインを、シンボル外形の上端からどれだけ上に置くか (mm)。
+ * svg.rsのREF_LABEL_DYと一致させること (キャンバス描画・XRefテキストの行揃えで共通)。 */
+export const REF_LABEL_DY = 4.5;
+
+/** 型番・値のベースラインを、シンボル外形の上端からどれだけ上に置くか (mm)。
+ * svg.rsのVALUE_LABEL_DYと一致させること。 */
+export const VALUE_LABEL_DY = 1.0;
+
 /** 機能ラベル (第3のテキスト欄) をシンボルインスタンスへ入れる属性キー。 */
 export const FUNCTION_LABEL_ATTR = "function_label";
 
@@ -99,5 +110,14 @@ export function functionLabelFallbackAt(
   inst: SymbolInstance,
   bounds: { min: Point; max: Point },
 ): Point {
-  return { x: inst.at.x, y: bounds.max.y + FUNCTION_LABEL_DY };
+  return functionLabelBelow(inst.at.x, bounds.max.y);
+}
+
+/**
+ * 外形の下端 (bottomY) と中心X (centerX) を指定した機能ラベルの位置。
+ * シンボル定義の外形とは別の外形の下へ置くとき (実機ブロック表示 (G7) のコイル) にも
+ * 同じ行送りで置けるようにしたもの。Rust側 text_style::function_label_below と同一。
+ */
+export function functionLabelBelow(centerX: number, bottomY: number): Point {
+  return { x: centerX, y: bottomY + FUNCTION_LABEL_DY };
 }

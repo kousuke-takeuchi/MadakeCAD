@@ -28,7 +28,14 @@ import {
   schematicToolsAllowed,
   type PanelToolId,
 } from "../canvas/panelTools";
-import { drawHarness, drawShape, drawSymbol, symbolBounds, transformLocal } from "../canvas/renderer";
+import {
+  deviceBlockBounds,
+  drawHarness,
+  drawShape,
+  drawSymbol,
+  symbolBounds,
+  transformLocal,
+} from "../canvas/renderer";
 import {
   SHAPE_TOOLS,
   isShapeTool,
@@ -346,12 +353,15 @@ export class EditorController {
    * カーソル位置のエンティティid (上にあるものを優先)。
    *
    * シンボルは**外形の囲み矩形**で判定する (ブロックのように大きさがピン表で決まる
-   * シンボルでも、外形の中ならどこでも掴めるようにするため)。定義を引けないシンボル
+   * シンボルでも、外形の中ならどこでも掴めるようにするため)。実機ブロック表示 (G7) の
+   * コイルは、描かれているブロックの外形そのもので判定する (小さなコイル図形の範囲だけ
+   * しか掴めない、ということが起きないように)。定義を引けないシンボル
    * (属性が壊れたブロック) だけは、置いた位置まわりの固定半径で拾って直せるようにする。
    */
   hitTest(world: Pt): string | null {
     const sheet = this.store.activeSheet;
     if (!sheet) return null;
+    const blocks = this.store.sheetAnnotations?.relay.deviceBlocks;
     const entities = Object.values(sheet.entities);
     for (const e of entities) {
       if (e.kind === "symbol") {
@@ -360,7 +370,8 @@ export class EditorController {
           if (Math.hypot(world.x - e.at.x, world.y - e.at.y) <= SYMBOL_HIT_RADIUS) return e.id;
           continue;
         }
-        const { min, max } = symbolBounds(e, def);
+        const block = blocks?.get(e.id);
+        const { min, max } = block ? deviceBlockBounds(e, block) : symbolBounds(e, def);
         if (
           world.x >= min.x - SYMBOL_HIT_PAD &&
           world.x <= max.x + SYMBOL_HIT_PAD &&

@@ -267,8 +267,8 @@ describe("relayXref", () => {
     const inst = symbol("relay_coil", "K1", 100, 50);
     const bounds = symbolBounds(inst, def);
     expect(contactMapOrigin(bounds, inst.at.x)).toEqual({ x: 100, y: 53 + CONTACT_MAP_GAP });
-    expect(coilLocationAt(bounds, inst.at.y, "(/1.C2)", []).x).toBeGreaterThan(107.5);
-    expect(coilLocationAt(bounds, inst.at.y, "(/1.C2)", []).y).toBe(50);
+    expect(coilLocationAt(inst, bounds, "(/1.C2)", []).x).toBeGreaterThan(107.5);
+    expect(coilLocationAt(inst, bounds, "(/1.C2)", []).y).toBe(50);
   });
 
   // ja: 切換接点のコイル所在は、上の配線に付く注記と重ならないよう逃げる (G22の衝突の再現)。
@@ -298,8 +298,8 @@ describe("relayXref", () => {
     const notes: WireNoteLabel[] = [
       { wireId: "w1", text: "0.75sq 赤", at: { x: 118.75, y: 50 }, align: "center" },
     ];
-    expect(coilLocationAt(bounds, inst.at.y, "(/1.C2)", []).y).toBe(50);
-    const at = coilLocationAt(bounds, inst.at.y, "(/1.C2)", notes);
+    expect(coilLocationAt(inst, bounds, "(/1.C2)", []).y).toBe(50);
+    const at = coilLocationAt(inst, bounds, "(/1.C2)", notes);
     expect(at.y).not.toBe(50);
     expect(at.y).toBeLessThan(50);
   });
@@ -322,14 +322,41 @@ describe("relayXref", () => {
     const inst = symbol("relay_contact_co", "K1", 100, 50);
     const bounds = symbolBounds(inst, def);
     const text = "(/1.C2)";
-    const right = coilLocationAt(bounds, inst.at.y, text, []);
+    const right = coilLocationAt(inst, bounds, text, []);
     const notes: WireNoteLabel[] = [
       { wireId: "w1", text, at: right, align: "left" },
       { wireId: "w2", text, at: { x: bounds.min.x, y: bounds.min.y - COIL_LOCATION_VGAP }, align: "left" },
     ];
-    const at = coilLocationAt(bounds, inst.at.y, text, notes);
+    const at = coilLocationAt(inst, bounds, text, notes);
     expect(at.x).toBeCloseTo(bounds.min.x, 9);
     expect(at.y).toBeCloseTo(bounds.max.y + COIL_LOCATION_VGAP + CONTACT_MAP_FONT, 9);
+  });
+
+  // ja: 接点自身に型番が書かれているときは、コイル所在はその文字の上へは逃げず、さらに先の外形の反対側へ回る (G22)。
+  it("does not escape the coil location onto the contact's own value label", () => {
+    const def = {
+      id: "relay_contact_co",
+      name: "",
+      name_ja: "",
+      category: "relay",
+      ref_prefix: "K",
+      primitives: [],
+      pins: [
+        { number: "11", name: "", at: { x: -7.5, y: 0 } },
+        { number: "12", name: "", at: { x: 7.5, y: 2.5 } },
+        { number: "14", name: "", at: { x: 7.5, y: -2.5 } },
+      ],
+    };
+    const blank = symbol("relay_contact_co", "K1", 100, 50);
+    const withValue = { ...blank, value: "SAMPLE0001" };
+    const bounds = symbolBounds(blank, def);
+    const text = "(/1.C2)";
+    // 右の既定位置だけをふさぐ配線注記 (上下はまだ空いている)
+    const notes: WireNoteLabel[] = [
+      { wireId: "w1", text, at: coilLocationAt(blank, bounds, text, []), align: "left" },
+    ];
+    expect(coilLocationAt(blank, bounds, text, notes).y).toBeLessThan(blank.at.y);
+    expect(coilLocationAt(withValue, bounds, text, notes).y).toBeGreaterThan(bounds.max.y);
   });
 
   // ---- G7: 実機ブロック表示 ----
@@ -373,11 +400,11 @@ describe("relayXref", () => {
   // ja: 実機ブロックの外形はコイルのピン間隔を下回らないので、幅が最小のときはA1/A2ピンがそのまま外形の左右端になり、引き出し線は要らない。
   it("keeps the device block layout no narrower than the pin span", () => {
     const block: DeviceBlock = { reference: "K1", partNo: "", contacts: [] };
-    const layout = deviceBlockLayout(block, 100, 50);
+    const layout = deviceBlockLayout(block);
     expect(layout.width).toBeCloseTo(DEVICE_BLOCK_MIN_WIDTH, 9);
     expect(layout.headerRows).toBe(1);
     expect(layout.leadHalfLen).toBeCloseTo(0, 9);
-    expect(layout.x).toBeCloseTo(100 - DEVICE_BLOCK_MIN_WIDTH / 2, 9);
+    expect(layout.x).toBeCloseTo(-DEVICE_BLOCK_MIN_WIDTH / 2, 9);
   });
 
   // ja: 型番があるとヘッダは2行になり、内容で外形がピン間隔より広がっても引き出し線でピンは外形まで届く。
@@ -387,12 +414,12 @@ describe("relayXref", () => {
       partNo: "SAMPLE0001-VERY-LONG-PART-NO",
       contacts: [{ terminals: "13-14", address: "/1.B3", role: "contact_no", entityId: null }],
     };
-    const layout = deviceBlockLayout(block, 100, 50);
+    const layout = deviceBlockLayout(block);
     expect(layout.headerRows).toBe(2);
     expect(layout.width).toBeGreaterThan(DEVICE_BLOCK_MIN_WIDTH);
     expect(layout.leadHalfLen).toBeGreaterThan(0);
-    expect(layout.x).toBeCloseTo(100 - 7.5 - layout.leadHalfLen, 9);
-    expect(layout.y + (layout.rowH * layout.headerRows) / 2).toBeCloseTo(50, 9);
+    expect(layout.x).toBeCloseTo(-DEVICE_BLOCK_MIN_WIDTH / 2 - layout.leadHalfLen, 9);
+    expect(layout.y + (layout.rowH * layout.headerRows) / 2).toBeCloseTo(0, 9);
   });
 
   // ja: 実機ブロックの接点の行はヘッダ行のすぐ下に続き、外形全体の高さは隙間なく全ての行をちょうど覆う。
@@ -405,7 +432,7 @@ describe("relayXref", () => {
         { terminals: "21-22", address: CONTACT_UNUSED, role: "contact_nc", entityId: null },
       ],
     };
-    const layout = deviceBlockLayout(block, 100, 50);
+    const layout = deviceBlockLayout(block);
     expect(layout.headerRows).toBe(2);
     expect(layout.contactRows).toBe(2);
     expect(layout.contactRowTop(0)).toBeCloseTo(layout.y + layout.rowH * 2, 9);

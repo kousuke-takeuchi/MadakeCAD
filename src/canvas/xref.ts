@@ -5,7 +5,8 @@
 //   - ゾーンは zone_cols/zone_rows の分割をラベル座標に当てたもの (行=英字を上から、列=数字を左から)
 
 import type { NetLabel, Point, Project, Sheet } from "../ipc";
-import { relayRole } from "./relayXref";
+import { annotatedInstances } from "./relayXref";
+import { REF_LABEL_DY } from "./textStyle";
 
 /** XRefテキストの文字高さ (mm)。xref.rsのXREF_FONTと一致させること。 */
 export const XREF_FONT = 2.0;
@@ -152,9 +153,6 @@ export function sheetXrefs(project: Project | null, sheetId: string): Map<string
   return out;
 }
 
-/** 参照記号ラベルのベースラインを外形の上端から持ち上げる量 (mm)。renderer.tsのdrawSymbolと一致させること。 */
-const REF_LABEL_DY = 4.5;
-
 /** デバイス (参照記号) が置かれている場所 (どのシートのどのゾーンか、G13)。 */
 export interface DeviceSite {
   sheet_id: string;
@@ -168,15 +166,18 @@ export interface DeviceSite {
 
 /**
  * プロジェクト内の全シンボルインスタンスの所在を、参照記号ごとにまとめて返す (G13)。
- * 参照記号が空のインスタンスは含まない。コイル・接点はコイル⇔接点クロスリファレンス
- * (relayXref.ts) が既に自動で所在を注記するので、ここでは対象から外す (二重に描かないため)。
+ * 参照記号が空のインスタンスは含まない。コイル⇔接点クロスリファレンス (relayXref.ts の
+ * annotatedInstances) が既に自動で所在を注記するインスタンス**だけ**を対象から外す
+ * (二重に描かないため)。接点を1つも持たないコイルのように、コイル⇔接点クロスリファレンスが
+ * 何も描かないリレーシンボルはここで拾う。
  */
 export function deviceSites(project: Project): Map<string, DeviceSite[]> {
   const out = new Map<string, DeviceSite[]>();
+  const annotated = annotatedInstances(project);
   project.sheets.forEach((sheet, i) => {
     for (const entity of Object.values(sheet.entities)) {
       if (entity.kind !== "symbol") continue;
-      if (relayRole(entity.symbol_id) !== null) continue;
+      if (annotated.has(entity.id)) continue;
       const reference = entity.reference.trim();
       if (!reference) continue;
       const zone = zoneAt(sheet, entity.at);
@@ -226,16 +227,18 @@ export function deviceXrefAddresses(project: Project, sheetId: string, reference
 
 /**
  * シート1枚分のデバイス単位XRefテキスト表 (シンボルのentity id → 表示テキスト、G13)。
- * 複数シートに跨る参照記号を持つインスタンスだけが入る。コイル・接点は含まない。
+ * 複数シートに跨る参照記号を持つインスタンスだけが入る。コイル⇔接点クロスリファレンスが
+ * 所在を注記するコイル・接点は含まない (annotatedInstances)。
  */
 export function sheetDeviceXrefs(project: Project | null, sheetId: string): Map<string, string> {
   const out = new Map<string, string>();
   const sheet = project?.sheets.find((s) => s.id === sheetId);
   if (!project || !sheet) return out;
   const sites = deviceSites(project);
+  const annotated = annotatedInstances(project);
   for (const entity of Object.values(sheet.entities)) {
     if (entity.kind !== "symbol") continue;
-    if (relayRole(entity.symbol_id) !== null) continue;
+    if (annotated.has(entity.id)) continue;
     const reference = entity.reference.trim();
     if (!reference) continue;
     const seen = new Set<string>();

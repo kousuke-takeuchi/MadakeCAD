@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
-import { sheetDeviceXrefs, sheetXrefs } from "../canvas/xref";
-import { sheetCoilLocations, sheetContactMaps, sheetDeviceBlocks } from "../canvas/relayXref";
 import { AgentOverlay } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
 import type { Patch } from "../ipc";
@@ -41,22 +39,19 @@ function draw() {
   controller.viewSize = { w: canvas.width, h: canvas.height };
   const now = Date.now();
   const regions = overlay.activeRegions(now);
+  const annotations = store.sheetAnnotations;
   renderSheet(ctx, sheet, store.symbols, controller.vp, {
     selection: store.selection,
     hidden: ui.hiddenViewClasses,
     cursor: controller.cursorScreen,
     // チップ・パルスは実際に編集領域があるときだけ出す(テキスト応答だけのターンでは出さない)
     agent: regions.length > 0 ? { regions, active: chat.anyStreaming } : undefined,
-    // シート間クロスリファレンス「/2.B3」(表示クラスは「ネットラベル」に含める)
-    xrefs: sheetXrefs(store.project, sheet.id),
-    // コイル⇔接点クロスリファレンス(接点マップ・コイル所在・実機ブロック。表示クラスは「参照記号」)
-    relay: {
-      contactMaps: sheetContactMaps(store.project, sheet.id),
-      coilLocations: sheetCoilLocations(store.project, sheet.id),
-      deviceBlocks: sheetDeviceBlocks(store.project, sheet.id),
-    },
-    // デバイス単位シート間クロスリファレンス (G13。表示クラスは「参照記号」)
-    deviceXrefs: sheetDeviceXrefs(store.project, sheet.id),
+    // 自動注記 (シート間XRef「/2.B3」・コイル⇔接点クロスリファレンス・実機ブロック・
+    // デバイス単位XRef)。ドキュメントが変わったときだけ計算し直すストアのgetterを引く
+    // (毎フレームでプロジェクト全体を走査しない)
+    xrefs: annotations?.xrefs,
+    relay: annotations?.relay,
+    deviceXrefs: annotations?.deviceXrefs,
     // 図枠テンプレート (M4 §9) と表題欄バインドの文脈。差し替えは全シートへ効く
     frame: store.frameTemplate,
     bind: store.bindContextFor(sheet),

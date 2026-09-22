@@ -15,7 +15,12 @@ import {
   xrefTextAt,
   zoneAt,
 } from "./xref";
-import { COIL_SYMBOL_ID } from "./relayXref";
+import {
+  COIL_SYMBOL_ID,
+  CONTACT_NO_SYMBOL_ID,
+  sheetCoilLocations,
+  sheetContactMaps,
+} from "./relayXref";
 
 function sheet(id: string, name: string, entities: Entity[]): Sheet {
   return {
@@ -195,11 +200,32 @@ describe("G13 device cross-reference", () => {
     expect(sheetDeviceXrefs(project, "s1").size).toBe(0);
   });
 
-  // ja: リレーのコイル・接点はデバイス単位のクロスリファレンスの対象から外れる(コイル⇔接点クロスリファレンスが既に自動で所在を注記するため)
-  it("skips relay coils and contacts", () => {
-    const project = twoSheetDeviceProject(COIL_SYMBOL_ID, "K1");
+  // ja: 接点を従えたリレーのコイルと、その接点は、デバイス単位のクロスリファレンスの対象から外れる(コイル⇔接点クロスリファレンスが既に互いの所在を書いているため)
+  it("skips a relay coil and the contact it drives", () => {
+    const project: Project = {
+      format_version: 1,
+      name: "t",
+      wire_parts: [],
+      plc_assignments: [],
+      sheets: [
+        sheet("s1", "Sheet1", [symbolEntity("e1", COIL_SYMBOL_ID, "K1", 20, 20)]),
+        sheet("s2", "Sheet2", [symbolEntity("e2", CONTACT_NO_SYMBOL_ID, "K1", 250, 70)]),
+      ],
+    };
+    expect(sheetContactMaps(project, "s1").size).toBe(1);
+    expect(sheetCoilLocations(project, "s2").size).toBe(1);
     expect(deviceXrefAddresses(project, "s1", "K1")).toEqual([]);
     expect(sheetDeviceXrefs(project, "s1").size).toBe(0);
+    expect(sheetDeviceXrefs(project, "s2").size).toBe(0);
+  });
+
+  // ja: 接点をどこにも持たないコイルにはコイル⇔接点クロスリファレンスが何も描かないので、そういうコイルだけの参照記号には普通のデバイス単位クロスリファレンスが付く (G13)
+  it("still cross-references a contactless coil that appears on two sheets", () => {
+    const project = twoSheetDeviceProject(COIL_SYMBOL_ID, "K1");
+    expect(sheetContactMaps(project, "s1").size).toBe(0);
+    expect(deviceXrefAddresses(project, "s1", "K1")).toEqual(["/2.B3"]);
+    expect(sheetDeviceXrefs(project, "s1").size).toBe(1);
+    expect(sheetDeviceXrefs(project, "s2").size).toBe(1);
   });
 
   // ja: シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける

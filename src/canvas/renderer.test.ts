@@ -6,6 +6,8 @@ import { dynamicSymbol, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./dynami
 import {
   REV_COL_W,
   REV_HEADERS,
+  deviceBlockBounds,
+  drawDeviceBlock,
   drawSymbol,
   effectiveRev,
   revisionLayout,
@@ -13,6 +15,8 @@ import {
   transformLocal,
   visibleRevisions,
 } from "./renderer";
+import type { DeviceBlock } from "./relayXref";
+import { theme } from "./theme";
 import { JUMPER_BAR_STROKE_MM } from "./terminalJumpers";
 import { Viewport } from "./viewport";
 
@@ -297,5 +301,134 @@ describe("drawSymbol text placement", () => {
     for (const a of arcs) {
       expect(a.r, `円の半径 ${a.r}`).toBeCloseTo(TERMINAL_MARK_R * vp.scale, 9);
     }
+  });
+});
+
+describe("drawDeviceBlock", () => {
+  /** 線分 (moveTo→lineTo) と文字と矩形と色を記録するキャンバス。 */
+  function recorder() {
+    const segments: { a: { x: number; y: number }; b: { x: number; y: number } }[] = [];
+    const texts: { text: string; x: number; y: number }[] = [];
+    const rects: { x: number; y: number; w: number; h: number; style: string }[] = [];
+    let cursor = { x: 0, y: 0 };
+    const ctx = {
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 0,
+      font: "",
+      textAlign: "" as CanvasTextAlign,
+      beginPath() {},
+      moveTo(x: number, y: number) {
+        cursor = { x, y };
+      },
+      lineTo(x: number, y: number) {
+        segments.push({ a: cursor, b: { x, y } });
+        cursor = { x, y };
+      },
+      closePath() {},
+      stroke() {},
+      fill() {},
+      arc() {},
+      strokeRect(x: number, y: number, w: number, h: number) {
+        rects.push({ x, y, w, h, style: ctx.strokeStyle });
+      },
+      fillText(text: string, x: number, y: number) {
+        texts.push({ text, x, y });
+      },
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, segments, texts, rects };
+  }
+
+  /** リレーコイル (A1/A2ピンは±7.5mm)。 */
+  const coilDef: SymbolDef = {
+    id: "relay_coil",
+    name: "Relay coil",
+    name_ja: "リレーコイル",
+    category: "relay",
+    ref_prefix: "K",
+    primitives: [{ type: "rect", p1: { x: -5, y: -3 }, p2: { x: 5, y: 3 }, filled: false }],
+    pins: [
+      { number: "A1", name: "", at: { x: -7.5, y: 0 } },
+      { number: "A2", name: "", at: { x: 7.5, y: 0 } },
+    ],
+  };
+
+  const block: DeviceBlock = {
+    reference: "K1",
+    partNo: "SAMPLE0001-VERY-LONG-PART-NO",
+    contacts: [{ terminals: "13-14", address: "/1.B3", role: "contact_no", entityId: null }],
+  };
+
+  const coil = (rotation: number, mirror = false, attrs: Record<string, string> = {}): SymbolInstance => ({
+    id: "k1",
+    symbol_id: "relay_coil",
+    at: { x: 100, y: 50 },
+    rotation,
+    mirror,
+    reference: "K1",
+    value: "SAMPLE0001-VERY-LONG-PART-NO",
+    attrs,
+  });
+
+  const paint = (inst: SymbolInstance, selected = false, showContacts = true) => {
+    const rec = recorder();
+    const vp = new Viewport();
+    vp.scale = 4;
+    drawDeviceBlock(rec.ctx, vp, inst, coilDef, block, selected, showContacts);
+    return { ...rec, vp, inst };
+  };
+
+  // ja: 実機ブロックをどの向きに回しても反転しても、引き出し線は必ず実際のA1/A2ピンの点から出るので、そこに繋いだ配線は繋がったまま (G7)
+  it("keeps the lead lines on the coil's own pins, whatever the rotation", () => {
+    for (const [rotation, mirror] of [
+      [0, false],
+      [90, false],
+      [180, false],
+      [270, false],
+      [0, true],
+    ] as const) {
+      const { segments, vp, inst } = paint(coil(rotation, mirror));
+      for (const pin of coilDef.pins) {
+        const at = vp.toScreen(transformLocal(pin.at, inst));
+        const onPin = (p: { x: number; y: number }) =>
+          Math.abs(p.x - at.x) < 1e-6 && Math.abs(p.y - at.y) < 1e-6;
+        expect(
+          segments.some((s) => onPin(s.a) || onPin(s.b)),
+          `rot=${rotation} mirror=${mirror}: ピン${pin.number}から出る引き出し線`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  // ja: 90度回した実機ブロックは縦横が入れ替わった外形で描かれる
+  it("draws an upright outline for a coil turned 90 degrees", () => {
+    const flat = paint(coil(0)).rects[0];
+    const turned = paint(coil(90)).rects[0];
+    expect(turned.w).toBeCloseTo(flat.h, 6);
+    expect(turned.h).toBeCloseTo(flat.w, 6);
+  });
+
+  // ja: 選択中の実機ブロックは、ほかのシンボルと同じように選択色の外形で描かれる
+  it("strokes the outline in the selection colour while the coil is selected", () => {
+    expect(paint(coil(0), false).rects[0].style).toBe(theme.line);
+    expect(paint(coil(0), true).rects[0].style).toBe(theme.selection);
+  });
+
+  // ja: 実機ブロックのコイルにも機能ラベルは外形の下に描かれる (G4)
+  it("prints the function label under the block outline", () => {
+    const { texts, vp, inst } = paint(coil(0, false, { function_label: "運転" }));
+    const label = texts.find((t) => t.text === "運転");
+    expect(label).toBeDefined();
+    const bottom = vp.toScreen(deviceBlockBounds(inst, block).max).y;
+    expect(label!.y).toBeGreaterThan(bottom);
+  });
+
+  // ja: 表示クラス「参照記号」を隠すと、実機ブロックの接点イメージ(端子対と所在)も消える(外形とヘッダは残る)
+  it("hides the contact image rows with the reference-designator view class", () => {
+    expect(paint(coil(0), false, true).texts.map((t) => t.text)).toContain("13-14");
+    const hidden = paint(coil(0), false, false).texts.map((t) => t.text);
+    expect(hidden).not.toContain("13-14");
+    expect(hidden).not.toContain("/1.B3");
+    expect(hidden).toContain("K1");
   });
 });

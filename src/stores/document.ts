@@ -5,6 +5,14 @@
 import { defineStore } from "pinia";
 import { resolveInstanceDef, resolveSymbolDef } from "../canvas/dynamicSymbol";
 import {
+  sheetCoilLocations,
+  sheetContactMaps,
+  sheetDeviceBlocks,
+  type ContactMapRow,
+  type DeviceBlock,
+} from "../canvas/relayXref";
+import { sheetDeviceXrefs, sheetXrefs } from "../canvas/xref";
+import {
   DEFAULT_FRAME_TEMPLATE,
   DEFAULT_FRAME_TEMPLATE_ID,
   bindContextForProject,
@@ -22,6 +30,20 @@ import {
   type SymbolDef,
   type SymbolInstance,
 } from "../ipc";
+
+/** 表示中のシートに自動で添える注記 (`renderSheet`へ渡すものと、クリック判定が引くもの)。 */
+export interface SheetAnnotations {
+  /** ネットラベルのid → シート間XRefテキスト。 */
+  xrefs: Map<string, string>;
+  /** コイル⇔接点クロスリファレンス (M4 §4) と実機ブロック (G7)。 */
+  relay: {
+    contactMaps: Map<string, ContactMapRow[]>;
+    coilLocations: Map<string, string>;
+    deviceBlocks: Map<string, DeviceBlock>;
+  };
+  /** シンボルのid → デバイス単位シート間XRefテキスト (G13)。 */
+  deviceXrefs: Map<string, string>;
+}
 
 interface DocumentState {
   project: Project | null;
@@ -90,6 +112,30 @@ export const useDocumentStore = defineStore("document", {
     bindContextFor(state) {
       return (sheet: Sheet): BindContext =>
         state.project ? bindContextForProject(state.project, sheet) : bindContextForSheet(sheet);
+    },
+
+    /**
+     * 表示中のシートに自動で添える注記 (シート間XRef・コイル⇔接点クロスリファレンス・
+     * 実機ブロック・デバイス単位XRef)。`renderSheet`の`xrefs`/`relay`/`deviceXrefs`と、
+     * クリック判定 (実機ブロックの外形) が引く。
+     *
+     * どれもプロジェクト全体を走査するので、**ドキュメントが変わったときだけ**計算し直す:
+     * pinia の getter はキャッシュされ、patch を当てて`project`が変わったときにだけ
+     * 無効化される (描画フレームごとに計算し直さない)。
+     */
+    sheetAnnotations(state): SheetAnnotations | null {
+      const sheet = this.activeSheet;
+      const project = state.project;
+      if (!sheet) return null;
+      return {
+        xrefs: sheetXrefs(project, sheet.id),
+        relay: {
+          contactMaps: sheetContactMaps(project, sheet.id),
+          coilLocations: sheetCoilLocations(project, sheet.id),
+          deviceBlocks: sheetDeviceBlocks(project, sheet.id),
+        },
+        deviceXrefs: sheetDeviceXrefs(project, sheet.id),
+      };
     },
 
     /**
