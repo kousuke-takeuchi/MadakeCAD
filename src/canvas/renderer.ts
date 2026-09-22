@@ -82,6 +82,7 @@ import {
   contactMapOrigin,
   deviceBlockBounds,
   deviceBlockLayout,
+  deviceBlockLeadAxis,
   deviceBlockLeadEnd,
   deviceBlockTexts,
   type ContactMapRow,
@@ -581,11 +582,13 @@ export function drawDeviceBlock(
   ctx.strokeStyle = selected ? theme.selection : theme.line;
   ctx.lineWidth = Math.max(1, 0.3 * vp.scale);
   ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
-  // ピン (A1/A2) から外形の縁までの引き出し線 (ピンが縁の上・外形の中なら描かない)
+  // ピン (A1/A2) から外形の縁までの引き出し線。ピン自身の軸 (配線と同じ向き) に沿って引く
   ctx.beginPath();
   for (const pin of def.pins) {
     const at = transformLocal(pin.at, inst);
-    const end = deviceBlockLeadEnd(at, bounds);
+    const tip = transformLocal(deviceBlockLeadAxis(pin.at), inst);
+    const axis = { x: tip.x - inst.at.x, y: tip.y - inst.at.y };
+    const end = deviceBlockLeadEnd(at, axis, bounds);
     if (end) rule(at.x, at.y, end.x, end.y);
   }
   ctx.stroke();
@@ -1131,8 +1134,9 @@ export function renderSheet(
 
   const defs = new Map(symbols.map((d) => [d.id, d]));
   const entities = Object.values(sheet.entities).filter((e) => !hidden.has(entityViewClass(e)));
-  // コイル所在 (G22) の逃がし判定に使う、このシートの配線注記
+  // コイル所在 (G22) の逃がし判定に使う、このシートの配線注記と、その文字高 (G20で伸縮)
   const wireNotes = wireNoteLabels(sheet);
+  const noteFont = wireNoteFont(sheet);
 
   // 盤レイアウト (盤外形・ダクト・レール・フットプリント) は最背面
   if (!hidden.has("panel")) drawPanel(ctx, vp, sheet, opts.selection);
@@ -1181,7 +1185,7 @@ export function renderSheet(
     const location = opts.relay?.coilLocations?.get(e.id);
     if (location) {
       const at = vp.toScreen(
-        coilLocationAt(e, symbolBounds(e, def), location, wireNotes, wireNoteFont(sheet)),
+        coilLocationAt(e, symbolBounds(e, def), location, wireNotes, noteFont),
       );
       ctx.fillStyle = theme.xref;
       ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;

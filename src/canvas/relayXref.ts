@@ -660,26 +660,41 @@ export function deviceBlockBounds(
 }
 
 /**
- * ピン (用紙座標、回転・ミラー済み) から実機ブロックの外形へ引く引き出し線の終点 =
- * 外形の縁のいちばん近い点。90度回したコイルならピンは外形の上下に来るので、引き出し線は
- * 上端・下端の辺につながる。外形が内容で広がってピンが中に入ったときは、いちばん近い辺へ
- * 短く引いて接続点を示す。ピンがちょうど縁の上にあればnull (長さ0)。
- * Rust側 device_block_lead_end と同一。
+ * ピンのローカル座標から引き出し線の軸 (**ローカル座標**の外向き単位ベクトル) を求める。
+ * シンボルのピンは配置基準点から外へ伸びているので、大きいほうの成分がピンの向き。
+ * 用紙座標の軸は、これを配置変換した向き (回転0/180なら水平、90/270なら垂直)。
+ * Rust側 device_block_lead_axis と同一。
  */
-export function deviceBlockLeadEnd(pin: Point, bounds: SymbolBounds): Point | null {
+export function deviceBlockLeadAxis(pinAt: Point): Point {
+  return Math.abs(pinAt.x) >= Math.abs(pinAt.y)
+    ? { x: Math.sign(pinAt.x), y: 0 }
+    : { x: 0, y: Math.sign(pinAt.y) };
+}
+
+/**
+ * ピン (用紙座標、回転・ミラー済み) から実機ブロックの外形へ引く引き出し線の終点。
+ *
+ * 引き出し線は**ピン自身の軸**に沿って出る (axis = 配置変換後の外向き単位ベクトル、
+ * deviceBlockLeadAxis)。そこに繋がる配線と同じ向きなので、回転0/180なら水平に左右の辺へ、
+ * 90/270なら垂直に上下の辺へ届く。外形が内容で広がってピンが中に入ったときは、同じ軸を
+ * 中心と反対向きに伸ばして縁で止める (接点の行の文字を横切らない)。ピンがちょうど縁の上に
+ * ある・軸の延長が外形に当たらないときはnull。Rust側 device_block_lead_end と同一。
+ */
+export function deviceBlockLeadEnd(pin: Point, axis: Point, bounds: SymbolBounds): Point | null {
   const { min, max } = bounds;
   const inside = pin.x > min.x && pin.x < max.x && pin.y > min.y && pin.y < max.y;
-  const end = inside
-    ? ([
-        [pin.x - min.x, { x: min.x, y: pin.y }],
-        [max.x - pin.x, { x: max.x, y: pin.y }],
-        [pin.y - min.y, { x: pin.x, y: min.y }],
-        [max.y - pin.y, { x: pin.x, y: max.y }],
-      ] as const).reduce((best, d) => (d[0] < best[0] ? d : best))[1]
-    : {
-        x: Math.min(Math.max(pin.x, min.x), max.x),
-        y: Math.min(Math.max(pin.y, min.y), max.y),
-      };
+  const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+  let end: Point;
+  if (Math.abs(axis.x) > Math.abs(axis.y)) {
+    // 水平の軸: ピンの高さが外形の高さの範囲に無ければ、軸を伸ばしても外形に当たらない
+    if (pin.y < min.y - 1e-9 || pin.y > max.y + 1e-9) return null;
+    const x = inside ? (axis.x > 0 ? max.x : min.x) : clamp(pin.x, min.x, max.x);
+    end = { x, y: pin.y };
+  } else {
+    if (pin.x < min.x - 1e-9 || pin.x > max.x + 1e-9) return null;
+    const y = inside ? (axis.y > 0 ? max.y : min.y) : clamp(pin.y, min.y, max.y);
+    end = { x: pin.x, y };
+  }
   return Math.abs(end.x - pin.x) > 1e-9 || Math.abs(end.y - pin.y) > 1e-9 ? end : null;
 }
 

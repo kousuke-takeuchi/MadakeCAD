@@ -1,7 +1,7 @@
 // 改訂欄 (ISO 7200 / JIS Z 8311) のレイアウト計算。Rust側 svg.rs と同一ルールであること。
 import { describe, expect, it } from "vitest";
 
-import type { Primitive, Revision, Sheet, SymbolDef, SymbolInstance } from "../ipc";
+import type { Point, Primitive, Revision, Sheet, SymbolDef, SymbolInstance } from "../ipc";
 import { dynamicSymbol, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./dynamicSymbol";
 import {
   REV_COL_W,
@@ -16,7 +16,11 @@ import {
 } from "./renderer";
 import {
   CONTACT_MAP_FONT,
+  DEVICE_BLOCK_MIN_WIDTH,
   deviceBlockBounds,
+  deviceBlockLayout,
+  deviceBlockLeadAxis,
+  deviceBlockLeadEnd,
   deviceBlockTexts,
   type DeviceBlock,
 } from "./relayXref";
@@ -420,6 +424,83 @@ describe("drawDeviceBlock", () => {
         flat.w,
         flat.h,
       ]);
+    }
+  });
+
+  /** ローカル座標のピン位置と配置から、引き出し線の軸 (用紙座標の外向き単位ベクトル) を作る。 */
+  const leadAxis = (pinAt: Point, inst: SymbolInstance) => {
+    const t = transformLocal(deviceBlockLeadAxis(pinAt), inst);
+    return { x: t.x - inst.at.x, y: t.y - inst.at.y };
+  };
+
+  /** 接点contacts本・型番partNoの実機ブロック。 */
+  const demoBlock = (partNo: string, contacts: number): DeviceBlock => ({
+    reference: "K1",
+    partNo,
+    contacts: Array.from({ length: contacts }, (_, i) => ({
+      terminals: `${i + 1}3-${i + 1}4`,
+      address: `/1.B${i + 1}`,
+      role: "contact_no" as const,
+      entityId: null,
+    })),
+  });
+
+  // ja: 外形がどれだけ横に広がっても、回していないコイルの引き出し線は水平のまま、配線が来るピンの高さで外形の左右の辺に届く
+  it("keeps the leads on the pin axis however wide the block grows", () => {
+    // 最小幅 / 切換接点の行 (19.6mm) / 実際の型番 (24.8mm) の3通り
+    const blocks: DeviceBlock[] = [
+      demoBlock("", 0),
+      {
+        ...demoBlock("", 0),
+        contacts: [{ terminals: "11-12-14", address: "/1.B3", role: "contact_co", entityId: null }],
+      },
+      demoBlock("[redacted](D)/24DC-2Z6", 0),
+    ];
+    for (const b of blocks) {
+      const width = deviceBlockLayout(b).width;
+      for (const mirror of [false, true]) {
+        const inst = coil(0, mirror);
+        const bounds = deviceBlockBounds(inst, b);
+        for (const pin of coilDef.pins) {
+          const at = transformLocal(pin.at, inst);
+          const end = deviceBlockLeadEnd(at, leadAxis(pin.at, inst), bounds);
+          if (width <= DEVICE_BLOCK_MIN_WIDTH + 1e-9) {
+            expect(end, `幅${width}mm: ピンが縁の上なら引き出し線は無い`).toBeNull();
+            continue;
+          }
+          expect(end, `幅${width}mm mirror=${mirror}: ピン${pin.number}`).not.toBeNull();
+          expect(end!.y).toBeCloseTo(at.y, 9);
+          expect(Math.min(Math.abs(end!.x - bounds.min.x), Math.abs(end!.x - bounds.max.x))).toBeCloseTo(0, 9);
+        }
+      }
+    }
+  });
+
+  // ja: 90度・270度に回したコイルの引き出し線は真上・真下へ伸びて外形の上端・下端で止まり、接点が何行あっても接点イメージの文字を横切らない
+  it("runs a turned coil's leads vertically without crossing the contact rows", () => {
+    for (const contacts of [1, 3]) {
+      const b = demoBlock("P1", contacts);
+      for (const rotation of [90, 270]) {
+        const inst = coil(rotation);
+        const bounds = deviceBlockBounds(inst, b);
+        const boxes = deviceBlockTexts(inst, b).map((t) => {
+          const w = CONTACT_MAP_FONT * 0.6 * [...t.text].length;
+          const x0 = t.align === "center" ? t.at.x - w / 2 : t.at.x;
+          return { text: t.text, x0, y0: t.at.y - CONTACT_MAP_FONT, x1: x0 + w, y1: t.at.y };
+        });
+        for (const pin of coilDef.pins) {
+          const at = transformLocal(pin.at, inst);
+          const end = deviceBlockLeadEnd(at, leadAxis(pin.at, inst), bounds);
+          expect(end, `接点${contacts}行 rot=${rotation}: ピン${pin.number}`).not.toBeNull();
+          expect(end!.x).toBeCloseTo(at.x, 9);
+          expect(Math.min(Math.abs(end!.y - bounds.min.y), Math.abs(end!.y - bounds.max.y))).toBeCloseTo(0, 9);
+          const [lo, hi] = [Math.min(at.y, end!.y), Math.max(at.y, end!.y)];
+          for (const t of boxes) {
+            const crosses = t.x0 < at.x - 1e-9 && at.x < t.x1 - 1e-9 && t.y0 < hi - 1e-9 && lo < t.y1 - 1e-9;
+            expect(crosses, `接点${contacts}行 rot=${rotation}: 「${t.text}」を横切る`).toBe(false);
+          }
+        }
+      }
     }
   });
 
