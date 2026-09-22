@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1979仕様項目**。
+全5領域・**2023仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -41,6 +41,8 @@
 - 図面が知らない色名 (打ち間違いや生の色コード) を付けた注記は、黙って黒で描かれるのではなく拒否される。 <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
 - 図面の色トークンを使った注記 (色を指定しない注記も) は受け付けられる。 <sub>`a_note_with_a_known_colour_token_is_accepted`</sub>
 - 既にある注記を知らない色へ変える更新も拒否され、注記は元の色のままになる。 <sub>`recolouring_a_note_to_an_unknown_colour_is_refused`</sub>
+- シート上に存在しないIDへ引き出し線を向けた注記は、いつまでも描かれない引き出し線を持ったまま保存されるのではなく拒否される。 <sub>`a_note_with_an_unknown_leader_target_is_refused`</sub>
+- 注記はシート上の他のエンティティへ引き出し先を設定でき、引き出し先を外す更新 (Noneへ戻す) も他の更新と同じくundoできる。 <sub>`a_note_can_target_an_existing_entity_and_the_leader_can_be_cleared`</sub>
 - エンティティの追加はundoで消え、redoで復活する。 <sub>`add_undo_redo_entity`</sub>
 - 移動でエンティティの座標が動き、undoで元の位置に正確に戻る。 <sub>`move_and_undo_restores_position`</sub>
 - 複数エンティティの一括削除は1回のundoで全て復元される。 <sub>`delete_multiple_and_undo`</sub>
@@ -138,10 +140,11 @@
 - 図枠テンプレートが無かった頃のプロジェクトファイルは図枠未指定で開き、従来どおり既定のJIS A3図枠で描かれる。 <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
 - 盤レイアウトが無かった頃のプロジェクトファイルは全シートが回路図シートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
 - 図形が無かった頃のプロジェクトファイルはそのままの姿で開き (シートに図形は無い)、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_without_any_shapes`</sub>
+- 注記の引き出し線が無かった頃のプロジェクトファイルは、全ての注記の引き出し先が未設定として開く (どの注記も引き出し線を描かない)。現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_leader_targets`</sub>
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは8 (図形エンティティを追加した版) である。 <sub>`the_current_format_version_is_eight`</sub>
+- 現行のファイル形式バージョンは9 (注記の引き出し線を追加した版) である。 <sub>`the_current_format_version_is_nine`</sub>
 - 注記文字高が無かった頃の図面は既定の2.0mmで開くので、注記の見た目はこれまでと変わらない。 <sub>`an_old_project_file_opens_with_the_default_annotation_text_height`</sub>
 - シートに設定した注記文字高はファイルへ保存され、読み直しても残っている。 <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
 - アイテム番号が無かった頃の盤図面はバルーンの無い状態で開く。フットプリントの位置はそのままで、番号はいつでも振り直せる。 <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
@@ -156,6 +159,14 @@
 - 文字列内のエスケープ(引用符・改行)と日本語などのマルチバイト文字を正しく解釈する。 <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name)は指定した先頭シンボルを持つ子リストをすべて列挙する。 <sub>`children_iterates_all_matches`</sub>
 - 括弧の不整合や閉じていない文字列は、位置付きの構文エラーとして報告される。 <sub>`syntax_errors_are_reported`</sub>
+
+### leader
+
+- 対象の真上にある注記から引く引き出し線は、注記の下辺の中点から始まり、対象の上辺のいちばん近い点で終わる。 <sub>`a_leader_above_its_target_runs_from_the_bottom_edge_to_the_top`</sub>
+- 対象の真横にある注記から引く引き出し線は、注記の近いほうの縦辺から対象の外接矩形まで水平に伸びる。 <sub>`a_leader_beside_its_target_runs_horizontally`</sub>
+- leader_forは注記の移動に追従する: 位置を変えて求め直すとモデルを書き換えずに違うジオメトリが返る。 <sub>`leader_for_recomputes_after_the_note_moves`</sub>
+- leader_forはleader_to未設定ならNoneを返す。普通の注記は引き出し線を描かない。 <sub>`leader_for_is_none_without_a_leader_target`</sub>
+- entity_boundsはシンボルの外形をその定義から求めるので、引き出し線はシンボルも対象にできる。 <sub>`entity_bounds_resolves_a_symbol_instance`</sub>
 
 ### 回路マクロ
 
@@ -308,6 +319,18 @@
 - シートが1枚も無いプロジェクトでも、表紙だけの正しい1ページPDFになる。 <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
 - 盤レイアウトシートも一括出力に含まれ、回路図シートに続けてPDFへ入る。 <sub>`the_pdf_book_includes_the_panel_sheet`</sub>
 - 盤内部品配置表も他の帳票と同じようにPDF一括出力へ綴じられる。 <sub>`the_pdf_book_can_include_the_panel_placement_table`</sub>
+
+### pin_groups
+
+- 「範囲:名前」1項目と、ダッシュの無い単ピン指定は、それぞれ1つのグループとして解析される。 <sub>`a_range_and_a_single_pin_each_parse_to_one_group`</sub>
+- チャート順で終点が始点より前に書かれた範囲は不正として報告され、グループにならない。 <sub>`a_backwards_range_is_reported_as_invalid`</sub>
+- そのインスタンスに無いピンを指す範囲は不明ピンの診断コードで報告され、グループにならない。 <sub>`a_range_with_an_unknown_pin_is_reported`</sub>
+- コロンが無い・範囲が空といった読めない記述はパニックせず不正として報告され、残りの項目は解析される。 <sub>`unparseable_text_is_reported_without_panicking`</sub>
+- チャート順の範囲が重なる2つのグループはどちらも報告されグループにならないが、重ならない3つ目は残る。 <sub>`overlapping_groups_are_both_rejected`</sub>
+- 多段端子台のチャート順は段ごとに並ぶ (1a,2a,…,1b,2b,…) ので、"1a-4a"のような範囲は1段の中で連続する。 <sub>`a_multilevel_range_within_one_level_parses`</sub>
+- キャプションの折り返しは4文字ごとに順番どおり分割し、横書きの行を積んで縦書きを近似する。 <sub>`wrap_caption_splits_into_chunks_of_four`</sub>
+- シンボル左側のピンにかける括弧は、いちばん上から下のピンまで縦棒でつながり、キャプションはさらに左に置かれる。 <sub>`a_bracket_on_left_pins_is_a_vertical_bar_further_left`</sub>
+- シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される: まっすぐな括弧にならないため。 <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
 
 ### PLC I/O
 
@@ -506,6 +529,8 @@
 - 装飾を付けていない注記は、これまでと寸分違わない形で出力される (左揃え・黒・普通の太さ)。 <sub>`an_unstyled_note_is_exported_exactly_as_before`</sub>
 - 既定の色トークンを明示的に選んでも、出力される図面は何も変わらない。 <sub>`the_default_colour_token_changes_nothing_in_the_export`</sub>
 - 注記の基準位置・色トークン・太字は、そのまま出力図面に反映される。 <sub>`a_styled_note_is_exported_with_its_anchor_colour_and_weight`</sub>
+- 引き出し先の無い注記は、図枠・表題欄だけが描く線の本数と変わらない (引き出し線が足されない)。この機能が無かった頃の図面と同じ。 <sub>`a_note_without_a_leader_target_draws_no_leader_line`</sub>
+- 対象の真上に置いた注記は、下辺の中点から対象の外接矩形の上辺まで直線を引き、対象側の端には配線の分岐点と同じ丸印を描く。 <sub>`a_note_with_a_leader_target_draws_a_leader_line_to_it`</sub>
 - シンボルの機能ラベル (第3のテキスト欄) は、上に並ぶ参照記号・型番とは反対に、シンボル外形の下へ中央揃えで描かれる。 <sub>`the_function_label_is_printed_under_the_symbol`</sub>
 - 機能ラベルの無いシンボルは従来どおり、参照記号と型番だけを添えて描かれる。 <sub>`a_symbol_without_a_function_label_is_drawn_as_before`</sub>
 - 横向きの配線の線番は、配線の中点の2.5mm上に等幅フォントで描かれる。 <sub>`svg_draws_wire_number_above_a_horizontal_wire`</sub>
@@ -561,6 +586,10 @@
 - 隣り合わない2端子間のジャンパは(端子台チャートと同じ規則で)不正なので、バーはまったく描かれない。 <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - 複数のジャンパを持つ端子台には、ジャンパの数だけバーが描かれる。 <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
 - ジャンパの無い端子台にはバーが描かれず、端子台以外のシンボルは"jumpers"属性を持っていてもバーが描かれない。 <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
+- pin_groups の範囲は、角括弧のポリライン1本とそのキャプション文字をシートに描く。 <sub>`svg_draws_a_bracket_and_caption_for_a_pin_group`</sub>
+- pin_groups属性が無い・空のシンボルには括弧のポリラインが描かれない。 <sub>`svg_draws_no_bracket_without_pin_groups`</sub>
+- 重なるpin_groups項目は (verify.rsで検証済みのとおり) 括弧を一切描かず、同じインスタンスの関係ない有効な項目は変わらず描かれる。 <sub>`svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest`</sub>
+- ピングループ括弧はシンボルの回転・ミラーに、ピンそのものの位置と同じように追従する。 <sub>`svg_pin_group_bracket_follows_rotation_and_mirror`</sub>
 
 ### シンボルライブラリ
 
@@ -609,6 +638,10 @@
 - 三相電動機は円の上側にU・V・Wの3つの相端子を持つ。 <sub>`motor_3ph_has_u_v_w_terminals`</sub>
 - 単相電動機と直流電動機は電動機の円を共有し、中に書く「1~」と直流記号で区別する。 <sub>`motor_1ph_and_dc_are_told_apart_by_the_mark_inside`</sub>
 - ベルは底辺の上に半円を載せたドーム形で、接続点は2つである。 <sub>`bell_is_a_dome_with_two_terminals`</sub>
+- 拡声器はコイルの箱と開いたコーンをつないだ形で、接続点は平らな (コイル側の) 辺に2つある。 <sub>`loudspeaker_is_a_coil_box_joined_to_a_cone`</sub>
+- ブザーは接続点の側に平らな辺を向けた半円で、ベルのドーム (底辺が平ら) とは向きが違う。 <sub>`buzzer_is_a_half_circle_facing_its_terminals`</sub>
+- サイレンは直角三角形で、接続点は三角形の底辺の両角の下にある。 <sub>`siren_is_a_right_triangle`</sub>
+- 送風機は3枚羽根の風車を正方形の外囲で囲んだ形で、接続点は左右にある。 <sub>`fan_is_a_pinwheel_in_a_square_housing`</sub>
 - 電圧計・電流計は「V」「A」を書いた円で、2端子の計器として回路に入れる。 <sub>`voltmeter_and_ammeter_are_circles_marked_v_and_a`</sub>
 - 変流器は一次導体が鉄心を貫き、二次側にS1・S2の2端子を持つ。 <sub>`current_transformer_has_primary_through_and_secondary_terminals`</sub>
 - 差込接続器のプラグとソケットは向かい合う形で、プラグはくさび形、ソケットはそれを受ける半円形になる。 <sub>`connector_plug_and_socket_face_each_other`</sub>
@@ -764,6 +797,7 @@
 - ブロックの未接続ピンはピン名で列挙されるので、コントローラの未配線入力が番号ではなく名前で分かる。 <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
 - 端子台の端子は左右どちらか一方が結線されていれば接続済みとみなす。 <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - 参照記号の未設定・重複は指摘されるが、リレーのコイル+接点が同じ記号を共有するのは正当として許容される。 <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
+- 他のグループと重なる・端子台に無いピンを指すpin_groups属性は、黙って無視されるのではなく端子台とその項目名を添えたERCエラーとして報告される。 <sub>`a_bad_pin_groups_item_is_reported_as_an_erc_error`</sub>
 - どこにも接続されていないワイヤ端点は指摘される(ジャンクション無しで他ワイヤの途中に乗る端点も含む)。 <sub>`dangling_wire_end_is_flagged_including_missing_junction`</sub>
 - 健全な直列回路(電源・ヒューズ・スイッチ・ランプ)では電気検証の指摘は出ない。 <sub>`healthy_series_circuit_has_no_elec_findings`</sub>
 - 電源から切り離された負荷(断線・開路)は「到達不能」として報告される。 <sub>`load_cut_off_from_source_is_unreachable`</sub>
@@ -1532,6 +1566,16 @@
 - 矩形ドラッグはadd_entityコマンド1回(kind=harness・自動採番した名前)になる <sub>`harnessAddCommand`</sub>
 - つぶれた矩形(クリックしただけ)ではハーネスを作らない <sub>`harnessAddCommand`</sub>
 
+### leader
+
+- 対象の真上にある注記から引く引き出し線は、注記の下辺の中点から始まり、対象の上辺のいちばん近い点で終わる (Rust側 a_leader_above_its_target_runs_from_the_bottom_edge_to_the_top とparity) <sub>`leaderLine`</sub>
+- 対象の真横にある注記から引く引き出し線は、注記の近いほうの縦辺から対象の外接矩形まで水平に伸びる (Rust側 a_leader_beside_its_target_runs_horizontally とparity) <sub>`leaderLine`</sub>
+- leader_toが未設定の普通の注記はnull (引き出し線を描かない) <sub>`leaderFor`</sub>
+- 対象がシート上に実在すれば線が引け、注記を動かすと引き出し線も追従して変わる <sub>`leaderFor`</sub>
+- 対象のエンティティidが存在しない・削除されていればnull (パニックせず何も描かない) <sub>`leaderFor`</sub>
+- シンボルの外形はその定義から求まるので、引き出し線はシンボルも対象にできる <sub>`entityBounds`</sub>
+- 図形・ハーネス・配線・ジャンクションも対象にでき、盤レイアウト専用のエンティティはnull <sub>`entityBounds`</sub>
+
 ### macroPreview
 
 - バリアントキーは既定の「A」が先頭で、そのあとにマクロが持つバリアントが並ぶ <sub>`macroVariantKeys`</sub>
@@ -1620,6 +1664,18 @@
 - バルーン採番は renumber_panel_items コマンド1回 (undo一発で採番前へ戻せる)。 <sub>`balloon numbering and the legend table`</sub>
 - 置く部品が1つも無い盤では採番のコマンドを送らない。 <sub>`balloon numbering and the legend table`</sub>
 - 凡例表の挿入は add_entity コマンド1つで、決めるのは置き場所だけ。 <sub>`balloon numbering and the legend table`</sub>
+
+### pinGroups
+
+- 「範囲:名前」1項目と、ダッシュの無い単ピン指定は、それぞれ1つのグループとして解析される (Rust側とparity) <sub>`parsePinGroups`</sub>
+- チャート順で終点が始点より前に書かれた範囲は不正として報告される <sub>`parsePinGroups`</sub>
+- そのインスタンスに無いピンを指す範囲は不明ピンの診断コードで報告される <sub>`parsePinGroups`</sub>
+- コロンが無い・範囲が空の読めない記述はパニックせず不正として報告され、残りの項目は解析される <sub>`parsePinGroups`</sub>
+- チャート順の範囲が重なる2つのグループはどちらも報告されグループにならないが、重ならない3つ目は残る <sub>`parsePinGroups`</sub>
+- 多段端子台のチャート順は段ごとに並ぶ (1a,2a,…,1b,2b,…) ので、"1a-4a"は1段の中で連続する <sub>`parsePinGroups`</sub>
+- キャプションの折り返しは4文字ごとに順番どおり分割する <sub>`wrapCaption`</sub>
+- シンボル左側のピンにかける括弧は、いちばん上から下のピンまで縦棒でつながり、キャプションはさらに左に置かれる <sub>`pinGroupBracket`</sub>
+- シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される <sub>`pinGroupBracket`</sub>
 
 ### relayXref
 

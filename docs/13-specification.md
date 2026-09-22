@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1979 specification clauses** across 5 areas.
+**2023 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -41,6 +41,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A note whose colour is a name the drawing does not know (a typo, or a raw colour code) is refused instead of being stored and silently drawn in black. <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
 - A note that uses one of the drawing's colour tokens (or no colour at all) is accepted. <sub>`a_note_with_a_known_colour_token_is_accepted`</sub>
 - Changing an existing note to an unknown colour is refused too, and the note keeps the colour it had. <sub>`recolouring_a_note_to_an_unknown_colour_is_refused`</sub>
+- A note whose leader points at an entity id that does not exist on the sheet is refused instead of being stored with a leader line that never draws. <sub>`a_note_with_an_unknown_leader_target_is_refused`</sub>
+- A note can set its leader to another entity already on the sheet, and clearing the leader (setting it back to None) is undoable like any other update. <sub>`a_note_can_target_an_existing_entity_and_the_leader_can_be_cleared`</sub>
 - Adding an entity can be undone (the entity disappears) and redone (it comes back). <sub>`add_undo_redo_entity`</sub>
 - Moving entities shifts their coordinates; undo restores the original position exactly. <sub>`move_and_undo_restores_position`</sub>
 - Deleting several entities at once is a single undo step that restores all of them. <sub>`delete_multiple_and_undo`</sub>
@@ -138,10 +140,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project file saved before frame templates existed opens with no frame template set, which means it is drawn with the default JIS A3 frame exactly as before. <sub>`an_old_project_file_opens_with_the_default_frame_template`</sub>
 - A project file saved before panel layouts existed opens with every sheet as a schematic sheet and is brought up to the current format version. <sub>`an_old_project_file_opens_with_schematic_sheets`</sub>
 - A project file saved before shapes existed opens exactly as it was, with no shapes on its sheets, and is brought up to the current format version. <sub>`an_old_project_file_opens_without_any_shapes`</sub>
+- A project file saved before the note leader line existed opens with every note's leader target unset, so no note draws a leader line, and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_leader_targets`</sub>
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 8, the version that added the graphics-only shape entity. <sub>`the_current_format_version_is_eight`</sub>
+- The current file format version is 9, the version that added the note leader line. <sub>`the_current_format_version_is_nine`</sub>
 - A drawing saved before the annotation text height existed opens at the default 2.0mm, so its notes look exactly as before. <sub>`an_old_project_file_opens_with_the_default_annotation_text_height`</sub>
 - The annotation text height set on a sheet is saved to the file and comes back on reload. <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
 - A panel drawn before item numbers existed opens with no balloons at all: the footprints keep their place and can be numbered whenever the drawing is next tidied up. <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
@@ -156,6 +159,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Escaped quotes/newlines and multibyte (Japanese) text inside strings parse correctly. <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name) iterates every child list with the given head symbol. <sub>`children_iterates_all_matches`</sub>
 - Unbalanced parentheses and unterminated strings are reported as syntax errors with a position. <sub>`syntax_errors_are_reported`</sub>
+
+### leader
+
+- A leader line drawn from a note above its target starts at the midpoint of the note's bottom edge and ends at the nearest point on the target's top edge. <sub>`a_leader_above_its_target_runs_from_the_bottom_edge_to_the_top`</sub>
+- A leader line drawn from a note beside its target runs horizontally from the note's near vertical edge to the target's bounding box. <sub>`a_leader_beside_its_target_runs_horizontally`</sub>
+- leader_for follows a note that is moved: recomputing after the note's position changes yields a different geometry without touching the model. <sub>`leader_for_recomputes_after_the_note_moves`</sub>
+- leader_for returns None when leader_to is unset, so an ordinary note draws no leader line. <sub>`leader_for_is_none_without_a_leader_target`</sub>
+- entity_bounds resolves a symbol instance's bounding box from its definition, so a leader can target a symbol. <sub>`entity_bounds_resolves_a_symbol_instance`</sub>
 
 ### Circuit macros
 
@@ -308,6 +319,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A book of a project with no sheet at all still produces a valid one-page PDF (the cover). <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
 - A panel-layout sheet is part of the book: exporting the project puts it in the PDF right after the schematic sheets. <sub>`the_pdf_book_includes_the_panel_sheet`</sub>
 - The panel placement table can be bound into the PDF book like any other report. <sub>`the_pdf_book_can_include_the_panel_placement_table`</sub>
+
+### pin_groups
+
+- A single "range:caption" item, and a single-pin item with no dash, both parse to one group each. <sub>`a_range_and_a_single_pin_each_parse_to_one_group`</sub>
+- A range written back to front (end before start in chart order) is reported as invalid and produces no group. <sub>`a_backwards_range_is_reported_as_invalid`</sub>
+- A range naming a pin the instance does not have is reported with the unknown-pin code and produces no group. <sub>`a_range_with_an_unknown_pin_is_reported`</sub>
+- Unparseable text (no colon, or an empty range) is reported as invalid instead of panicking, and the rest of the spec still parses. <sub>`unparseable_text_is_reported_without_panicking`</sub>
+- Two groups whose chart-order ranges overlap are both reported and neither produces a group, while a third, non-overlapping group is kept. <sub>`overlapping_groups_are_both_rejected`</sub>
+- A multi-level terminal block's chart order runs level by level (1a,2a,…,1b,2b,…), so a range like "1a-4a" names a contiguous run within one level. <sub>`a_multilevel_range_within_one_level_parses`</sub>
+- Wrapping a caption splits it into chunks of at most 4 characters, in order, approximating vertical writing with stacked horizontal lines. <sub>`wrap_caption_splits_into_chunks_of_four`</sub>
+- A bracket over pins on the left side of a symbol is a vertical bar to the left of the pins, spanning from the topmost to the bottommost pin, with its caption further left still. <sub>`a_bracket_on_left_pins_is_a_vertical_bar_further_left`</sub>
+- A bracket spans pins from two different sides of a symbol (mixed pin direction) is refused: the shape would not be a straight bracket. <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
 
 ### PLC I/O
 
@@ -506,6 +529,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A note with no styling is exported exactly as notes have always been exported: left-aligned, black, normal weight. <sub>`an_unstyled_note_is_exported_exactly_as_before`</sub>
 - Choosing the default colour token explicitly changes nothing in the exported drawing. <sub>`the_default_colour_token_changes_nothing_in_the_export`</sub>
 - A note's anchor, colour token and bold flag all reach the exported drawing. <sub>`a_styled_note_is_exported_with_its_anchor_colour_and_weight`</sub>
+- A note with no leader target draws exactly as many lines as the frame and title block alone (no leader line is added), exactly like drawings made before the feature existed. <sub>`a_note_without_a_leader_target_draws_no_leader_line`</sub>
+- A note placed directly above its target draws a straight line from the midpoint of its bottom edge down to the top edge of the target's bounding box, with a filled dot at the target end, the same dot the wire junction uses. <sub>`a_note_with_a_leader_target_draws_a_leader_line_to_it`</sub>
 - A symbol's function label (its third text field) is printed under the symbol outline, centred, alongside the designator and the type number above it. <sub>`the_function_label_is_printed_under_the_symbol`</sub>
 - A symbol with no function label is drawn exactly as before, with only its designator and type number. <sub>`a_symbol_without_a_function_label_is_drawn_as_before`</sub>
 - The wire number of a horizontal wire is printed in a monospaced font 2.5 mm above the middle of the wire. <sub>`svg_draws_wire_number_above_a_horizontal_wire`</sub>
@@ -561,6 +586,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A jumper written between two terminals that are not adjacent is invalid (the same rule the terminal chart enforces), so no bar is drawn for it at all. <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - A terminal block with several jumpers gets one bar per jumper. <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
 - A terminal block with no jumpers draws no bar, and a symbol that is not a terminal block never gets one even if it happened to carry a "jumpers" attribute. <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
+- A pin_groups range draws one square-bracket polyline and its caption text on the sheet. <sub>`svg_draws_a_bracket_and_caption_for_a_pin_group`</sub>
+- A symbol with no pin_groups attribute, or an empty one, draws no bracket polyline. <sub>`svg_draws_no_bracket_without_pin_groups`</sub>
+- Overlapping pin_groups items are reported by verify (tested in verify.rs) and draw no bracket at all, while an unrelated valid item on the same instance still draws. <sub>`svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest`</sub>
+- A pin group bracket follows the symbol's rotation and mirror, exactly as the pin positions themselves do. <sub>`svg_pin_group_bracket_follows_rotation_and_mirror`</sub>
 
 ### Symbol library
 
@@ -609,6 +638,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The three-phase motor has the three phase terminals U, V and W leaving the top of the circle. <sub>`motor_3ph_has_u_v_w_terminals`</sub>
 - The single-phase and DC motors share the motor circle and are told apart by the 1~ and DC marks inside. <sub>`motor_1ph_and_dc_are_told_apart_by_the_mark_inside`</sub>
 - The bell is a dome (half circle on its base line) with two connection points. <sub>`bell_is_a_dome_with_two_terminals`</sub>
+- The loudspeaker is a coil box joined to a widening cone, with two connection points on its flat (coil) side. <sub>`loudspeaker_is_a_coil_box_joined_to_a_cone`</sub>
+- The buzzer is a half circle whose flat edge faces its two connection points, distinguishing it from the bell's dome (flat edge on the base, not the side). <sub>`buzzer_is_a_half_circle_facing_its_terminals`</sub>
+- The siren is a right triangle, with its two connection points below the triangle's base corners. <sub>`siren_is_a_right_triangle`</sub>
+- The fan is a square housing around a 3-blade pinwheel, with two connection points on either side. <sub>`fan_is_a_pinwheel_in_a_square_housing`</sub>
 - The voltmeter and ammeter are circles marked V and A, wired in the circuit like any two-terminal instrument. <sub>`voltmeter_and_ammeter_are_circles_marked_v_and_a`</sub>
 - The current transformer has the primary conductor passing through the core and two secondary terminals S1/S2. <sub>`current_transformer_has_primary_through_and_secondary_terminals`</sub>
 - The plug and the socket of a connector pair face each other: the plug is a wedge, the socket the cup that receives it. <sub>`connector_plug_and_socket_face_each_other`</sub>
@@ -764,6 +797,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Unconnected pins of a block are listed by their pin names, so a controller's dangling input is named, not numbered. <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
 - A terminal-block terminal counts as connected if either its left or right side is wired. <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - Missing and duplicate reference designators are flagged, but relay coil + contacts legitimately share one designator. <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
+- A pin_groups attribute that overlaps another group, or names a pin the terminal block does not have, is reported as an ERC error naming the terminal block and the bad item, instead of being silently ignored. <sub>`a_bad_pin_groups_item_is_reported_as_an_erc_error`</sub>
 - Wire ends attached to nothing are flagged, including an endpoint resting mid-wire without a junction dot. <sub>`dangling_wire_end_is_flagged_including_missing_junction`</sub>
 - A healthy series circuit (source, fuse, switch, lamp) raises no electrical findings. <sub>`healthy_series_circuit_has_no_elec_findings`</sub>
 - A load cut off from the power source (broken wire or open path) is reported as unreachable. <sub>`load_cut_off_from_source_is_unreachable`</sub>
@@ -1532,6 +1566,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - builds one add_entity command with the auto-suggested name <sub>`harnessAddCommand`</sub>
 - creates nothing for a degenerate rectangle (a plain click) <sub>`harnessAddCommand`</sub>
 
+### leader
+
+- runs from a note's bottom edge to its target's top edge when the note sits above it <sub>`leaderLine`</sub>
+- runs horizontally from a note's near vertical edge when the note sits beside its target <sub>`leaderLine`</sub>
+- returns null when the note has no leader target <sub>`leaderFor`</sub>
+- recomputes after the note moves, following whichever position it is drawn at <sub>`leaderFor`</sub>
+- returns null when the target id does not exist on the sheet <sub>`leaderFor`</sub>
+- resolves a symbol instance's bounding box from its definition <sub>`entityBounds`</sub>
+- resolves shapes, harnesses, wires and junctions, and refuses panel-only entities <sub>`entityBounds`</sub>
+
 ### macroPreview
 
 - lists the default variant A first, followed by the macro's own variants <sub>`macroVariantKeys`</sub>
@@ -1620,6 +1664,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - turns balloon numbering into one renumber_panel_items command <sub>`balloon numbering and the legend table`</sub>
 - sends no command when there is nothing to number <sub>`balloon numbering and the legend table`</sub>
 - inserts the legend table with one add_entity command carrying only its position <sub>`balloon numbering and the legend table`</sub>
+
+### pinGroups
+
+- parses a range and a dash-less single pin to one group each <sub>`parsePinGroups`</sub>
+- reports a backwards range as invalid <sub>`parsePinGroups`</sub>
+- reports a range naming an unknown pin <sub>`parsePinGroups`</sub>
+- reports unparseable text without throwing, keeping the rest <sub>`parsePinGroups`</sub>
+- rejects both of two overlapping groups but keeps a third that does not overlap <sub>`parsePinGroups`</sub>
+- accepts a multi-level range that stays within one level <sub>`parsePinGroups`</sub>
+- splits into chunks of at most 4 characters <sub>`wrapCaption`</sub>
+- draws a vertical bar further left than left-side pins, with the caption further out still <sub>`pinGroupBracket`</sub>
+- refuses a bracket across mixed pin directions <sub>`pinGroupBracket`</sub>
 
 ### relayXref
 
