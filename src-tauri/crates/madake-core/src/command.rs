@@ -516,7 +516,12 @@ impl Engine {
                 ))
             }
             Command::AddEntity { sheet_id, entity } => {
-                validate_entity(entity)?;
+                validate_entity(
+                    entity,
+                    self.project
+                        .sheet(*sheet_id)
+                        .ok_or(CoreError::SheetNotFound(*sheet_id))?,
+                )?;
                 let sheet = self
                     .project
                     .sheet_mut(*sheet_id)
@@ -540,7 +545,12 @@ impl Engine {
                 ))
             }
             Command::UpdateEntity { sheet_id, entity } => {
-                validate_entity(entity)?;
+                validate_entity(
+                    entity,
+                    self.project
+                        .sheet(*sheet_id)
+                        .ok_or(CoreError::SheetNotFound(*sheet_id))?,
+                )?;
                 let sheet = self
                     .project
                     .sheet_mut(*sheet_id)
@@ -826,7 +836,7 @@ fn validate_symbol_id(id: &str) -> Result<()> {
     )))
 }
 
-fn validate_entity(entity: &Entity) -> Result<()> {
+fn validate_entity(entity: &Entity, sheet: &Sheet) -> Result<()> {
     match entity {
         Entity::Symbol(s) if s.symbol_id == crate::block::BLOCK_SYMBOL_ID => {
             crate::block::parse_block_spec(&s.attrs).map_err(CoreError::InvalidCommand)?;
@@ -841,6 +851,21 @@ fn validate_entity(entity: &Entity) -> Result<()> {
                     return Err(CoreError::InvalidCommand(format!(
                         "unknown text color token: {color:?} (expected one of {})",
                         known.join(", ")
+                    )));
+                }
+            }
+            // 引き出し線の対象 (G20): 同じシート上に実在するエンティティだけを指せる。
+            // 存在しないIDを黙って受け取ると、注記は保存されるのに引き出し線が
+            // 永遠に描かれず、原因も分からない (シンボルidの検証と同じ理由)
+            if let Some(target) = t.leader_to {
+                if target == t.id {
+                    return Err(CoreError::InvalidCommand(
+                        "leader_to cannot point to the note itself".to_string(),
+                    ));
+                }
+                if !sheet.entities.contains_key(&target) {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "unknown leader_to target: {target} (no such entity on this sheet)"
                     )));
                 }
             }
@@ -895,6 +920,7 @@ mod tests {
             anchor: TextAnchor::Start,
             color: color.map(|c| c.to_string()),
             bold: false,
+            leader_to: None,
         })
     }
 
@@ -1156,6 +1182,86 @@ mod tests {
             unreachable!()
         };
         assert_eq!(kept.color.as_deref(), Some("accent"), "拒否されたのに書き換わっている");
+    }
+
+    /// A note whose leader points at an entity id that does not exist on the sheet is refused instead of being stored with a leader line that never draws.
+    /// シート上に存在しないIDへ引き出し線を向けた注記は、いつまでも描かれない引き出し線を持ったまま保存されるのではなく拒否される。
+    #[test]
+    fn a_note_with_an_unknown_leader_target_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let mut note = TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(20.0, 20.0),
+            text: "対象なし".into(),
+            height: 2.5,
+            rotation: 0,
+            anchor: TextAnchor::Start,
+            color: None,
+            bold: false,
+            leader_to: Some(Uuid::new_v4()),
+        };
+        let err = engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: Entity::Text(note.clone()),
+            })
+            .expect_err("存在しない対象は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert!(engine.project().sheet(sheet_id).unwrap().entities.is_empty());
+
+        // 自分自身を指すのも拒否される (長さ0の引き出し線に意味は無い)
+        note.leader_to = Some(note.id);
+        let err = engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: Entity::Text(note),
+            })
+            .expect_err("自分自身を指す引き出し線は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+    }
+
+    /// A note can set its leader to another entity already on the sheet, and clearing the leader (setting it back to None) is undoable like any other update.
+    /// 注記はシート上の他のエンティティへ引き出し先を設定でき、引き出し先を外す更新 (Noneへ戻す) も他の更新と同じくundoできる。
+    #[test]
+    fn a_note_can_target_an_existing_entity_and_the_leader_can_be_cleared() {
+        let (mut engine, sheet_id) = test_engine();
+        let target = sample_wire();
+        let target_id = target.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: target }).unwrap();
+
+        let note = Entity::Text(TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(20.0, 20.0),
+            text: "対象あり".into(),
+            height: 2.5,
+            rotation: 0,
+            anchor: TextAnchor::Start,
+            color: None,
+            bold: false,
+            leader_to: Some(target_id),
+        });
+        let note_id = note.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: note }).unwrap();
+        let Entity::Text(t) = &engine.project().sheet(sheet_id).unwrap().entities[&note_id] else {
+            unreachable!()
+        };
+        assert_eq!(t.leader_to, Some(target_id));
+
+        let mut cleared = t.clone();
+        cleared.leader_to = None;
+        engine
+            .execute(Command::UpdateEntity { sheet_id, entity: Entity::Text(cleared) })
+            .unwrap();
+        assert_eq!(
+            engine.undo().unwrap().unwrap().ops.len(),
+            1,
+            "更新のundoも1回で戻る"
+        );
+        let Entity::Text(restored) = &engine.project().sheet(sheet_id).unwrap().entities[&note_id]
+        else {
+            unreachable!()
+        };
+        assert_eq!(restored.leader_to, Some(target_id), "undoで引き出し先が復元される");
     }
 
     /// Adding an entity can be undone (the entity disappears) and redone (it comes back).

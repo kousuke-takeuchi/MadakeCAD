@@ -44,6 +44,7 @@ fn main() {
             anchor: madake_core::TextAnchor::Start,
             color: None,
             bold: false,
+            leader_to: None,
         }));
     }
     // 回転の追従確認: 3極機器と縦長記号を90/180/270度でも並べる

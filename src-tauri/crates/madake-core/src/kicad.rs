@@ -356,6 +356,7 @@ pub fn import_kicad_sch(
                 anchor: crate::model::TextAnchor::Start,
                 color: None,
                 bold: false,
+            leader_to: None,
             }),
         );
         report.texts += 1;

@@ -45,6 +45,7 @@ fn add_text(doc: &SharedDoc, label: &str) -> Command {
             anchor: madake_core::TextAnchor::Start,
             color: None,
             bold: false,
+            leader_to: None,
         }),
     }
 }

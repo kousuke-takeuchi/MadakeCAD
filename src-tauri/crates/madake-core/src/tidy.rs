@@ -505,6 +505,7 @@ mod tests {
             anchor: crate::model::TextAnchor::Start,
             color: None,
             bold: false,
+            leader_to: None,
         })
     }
 

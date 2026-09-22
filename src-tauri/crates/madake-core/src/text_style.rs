@@ -145,6 +145,7 @@ mod tests {
             anchor: TextAnchor::Start,
             color: color.map(|c| c.to_string()),
             bold: false,
+            leader_to: None,
         }
     }
 

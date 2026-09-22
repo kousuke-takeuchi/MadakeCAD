@@ -57,6 +57,10 @@ pub(crate) const NET_LABEL_DY: f64 = 1.0;
 const HARNESS_DASH: (f64, f64) = (3.0, 2.0);
 /// ハーネス境界の線幅 (mm)。図面の主線より細い補助線。
 const HARNESS_STROKE: f64 = 0.25;
+/// 引き出し線 (G20) の線幅 (mm)。ハーネス境界の細線と同じ太さ。
+const LEADER_STROKE: f64 = 0.25;
+/// ピングループ括弧 (G8) の線幅 (mm)。シンボル本体の線と同じ太さ。
+const PIN_GROUP_BRACKET_STROKE: f64 = SYMBOL_STROKE;
 /// ハーネス名の文字高さ (mm)。
 const HARNESS_FONT: f64 = 2.5;
 /// ハーネス名の位置: 囲みの左上角から右へ / 上へ (mm)。
@@ -455,6 +459,39 @@ fn render_jumper_bars(out: &mut String, inst: &crate::model::SymbolInstance, def
     for (a, b) in crate::terminal_chart::jumper_bars(def, &jumpers.pairs) {
         let (pa, pb) = (transform_local(a, inst), transform_local(b, inst));
         line_el(out, pa.x, pa.y, pb.x, pb.y, JUMPER_BAR_STROKE, "#000");
+    }
+}
+
+/// ピングループ括弧 (G8): `attrs["pin_groups"]`が指す範囲ごとに角括弧とキャプションを描く。
+/// 読めない・重なる項目はジオメトリ側 ([`crate::pin_groups::pin_group_brackets`]) が既に
+/// 除いているので、ここでは求まったものをそのまま描くだけ (パニックしない)。
+fn render_pin_group_brackets(out: &mut String, inst: &crate::model::SymbolInstance, def: &SymbolDef) {
+    let Some(spec) = inst.attrs.get(crate::pin_groups::PIN_GROUPS_ATTR) else {
+        return;
+    };
+    for bracket in crate::pin_groups::pin_group_brackets(def, spec) {
+        let pts: Vec<Point> = bracket.bracket.iter().map(|p| transform_local(*p, inst)).collect();
+        let _ = write!(
+            out,
+            "<polyline points=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+            polyline_points(&pts),
+            n(PIN_GROUP_BRACKET_STROKE)
+        );
+        for (text, at) in &bracket.caption_lines {
+            if text.is_empty() {
+                continue;
+            }
+            let p = transform_local(*at, inst);
+            text_el(
+                &mut *out,
+                p.x,
+                p.y + crate::pin_groups::PIN_GROUP_CAPTION_TEXT_MM / 2.0,
+                crate::pin_groups::PIN_GROUP_CAPTION_TEXT_MM,
+                "#000",
+                "middle",
+                text,
+            );
+        }
     }
 }
 
@@ -1044,6 +1081,7 @@ fn sheet_to_svg_with_xrefs(
                     } else {
                         render_symbol(&mut out, s, &def);
                         render_jumper_bars(&mut out, s, &def);
+                        render_pin_group_brackets(&mut out, s, &def);
                         // コイル⇔接点クロスリファレンス (M4 §4、分散配置のコイルだけ)
                         if let Some(rows) = relay.contact_maps.get(&s.id) {
                             render_contact_map(&mut out, s, &def, rows);
@@ -1137,6 +1175,16 @@ fn sheet_to_svg_with_xrefs(
                     if t.bold { Weight::Bold } else { Weight::Normal },
                     &t.text,
                 );
+                // 引き出し線 (G20): 対象がシート上に実在すれば、注記の辺から対象の外形まで
+                // 毎回求め直して引く (位置は保存しないので、どちらを動かしても追従する)
+                if let Some((start, end)) = crate::leader::leader_for(sheet, t, &defs) {
+                    line_el(&mut out, start.x, start.y, end.x, end.y, LEADER_STROKE, "#000");
+                    let _ = write!(
+                        out,
+                        "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"#000\"/>\n",
+                        n(end.x), n(end.y), n(crate::leader::LEADER_DOT_R)
+                    );
+                }
             }
             // 図形は背面のrender_shapes、ハーネス境界は背面のrender_harnesses、
             // 盤レイアウトはrender_panelで描き済み
@@ -1585,6 +1633,7 @@ mod tests {
             anchor: TextAnchor::Start,
             color: None,
             bold: false,
+            leader_to: None,
         }
     }
 
@@ -1629,6 +1678,52 @@ mod tests {
         assert!(line.contains("text-anchor=\"end\""), "{line}");
         assert!(line.contains("fill=\"#0000c0\""), "青系の印刷色: {line}");
         assert!(!line.contains("font-weight"), "太字でない注記に太さ指定は付かない: {line}");
+    }
+
+    /// A note with no leader target draws exactly as many lines as the frame and title block alone (no leader line is added), exactly like drawings made before the feature existed.
+    /// 引き出し先の無い注記は、図枠・表題欄だけが描く線の本数と変わらない (引き出し線が足されない)。この機能が無かった頃の図面と同じ。
+    #[test]
+    fn a_note_without_a_leader_target_draws_no_leader_line() {
+        let count_lines = |sheet: &Sheet| {
+            sheet_to_svg(sheet, &builtin_symbols())
+                .lines()
+                .filter(|l| l.starts_with("<line"))
+                .count()
+        };
+        let with_note = sheet_with(vec![Entity::Text(plain_note("注意"))]);
+        let without_note = sheet_with(vec![]);
+        assert_eq!(count_lines(&with_note), count_lines(&without_note));
+    }
+
+    /// A note placed directly above its target draws a straight line from the midpoint of its bottom edge down to the top edge of the target's bounding box, with a filled dot at the target end, the same dot the wire junction uses.
+    /// 対象の真上に置いた注記は、下辺の中点から対象の外接矩形の上辺まで直線を引き、対象側の端には配線の分岐点と同じ丸印を描く。
+    #[test]
+    fn a_note_with_a_leader_target_draws_a_leader_line_to_it() {
+        let mut shape =
+            crate::shape::new_shape(ShapeKind::Rect, vec![Point::new(90.0, 120.0), Point::new(130.0, 140.0)]);
+        shape.id = Uuid::new_v4();
+        let target_id = shape.id;
+        let mut note = plain_note("ここに接続"); // Start anchor, at (100,50), height 2.5 → box x:[100,112.5] y:[47.5,50]
+        note.at = Point::new(100.0, 50.0);
+        note.leader_to = Some(target_id);
+        let sheet = sheet_with(vec![Entity::Shape(shape), Entity::Text(note)]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let line = svg
+            .lines()
+            .find(|l| {
+                l.starts_with("<line")
+                    && attr(l, "y1") == Some(50.0)
+                    && attr(l, "y2") == Some(120.0)
+            })
+            .unwrap_or_else(|| panic!("注記の下辺から対象の上辺への線が無い: {svg}"));
+        assert_eq!(attr(line, "x1"), Some(106.25), "始点は注記の下辺の中点: {line}");
+        assert_eq!(attr(line, "x2"), Some(106.25), "対象の上辺で真下に着地: {line}");
+        let dot = svg
+            .lines()
+            .find(|l| l.starts_with("<circle") && l.contains("r=\"0.600\""))
+            .unwrap_or_else(|| panic!("対象端の丸印 (半径0.6mm、ジャンクションと同じ) が無い: {svg}"));
+        assert_eq!(attr(dot, "cx"), Some(106.25));
+        assert_eq!(attr(dot, "cy"), Some(120.0));
     }
 
     /// A symbol's function label (its third text field) is printed under the symbol outline, centred, alongside the designator and the type number above it.
@@ -3028,5 +3123,93 @@ mod tests {
             .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
             .collect();
         assert!(bars.is_empty(), "{bars:?}");
+    }
+
+    fn with_pin_groups(entity: Entity, spec: &str) -> Entity {
+        let Entity::Symbol(mut s) = entity else { panic!("シンボルであること") };
+        s.attrs.insert(crate::pin_groups::PIN_GROUPS_ATTR.into(), spec.into());
+        Entity::Symbol(s)
+    }
+
+    /// ピングループ括弧の本数 (4頂点のポリラインだけを数える。端子台自身が描く2頂点の
+    /// 足の短い引き線と区別するため)。
+    fn bracket_polylines(svg: &str) -> usize {
+        svg.lines()
+            .filter(|l| {
+                l.starts_with("<polyline")
+                    && l.split("points=\"")
+                        .nth(1)
+                        .and_then(|s| s.split('"').next())
+                        .map(|pts| pts.split(' ').count() == 4)
+                        .unwrap_or(false)
+            })
+            .count()
+    }
+
+    /// A pin_groups range draws one square-bracket polyline and its caption text on the sheet.
+    /// pin_groups の範囲は、角括弧のポリライン1本とそのキャプション文字をシートに描く。
+    #[test]
+    fn svg_draws_a_bracket_and_caption_for_a_pin_group() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let tb = with_pin_groups(
+            terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, ""),
+            "1-4:電源",
+        );
+        sheet.entities.insert(tb.id(), tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        assert_eq!(bracket_polylines(&svg), 1, "括弧のポリラインが無い: {svg}");
+        assert!(svg.contains(">電源<"), "キャプションが無い: {svg}");
+    }
+
+    /// A symbol with no pin_groups attribute, or an empty one, draws no bracket polyline.
+    /// pin_groups属性が無い・空のシンボルには括弧のポリラインが描かれない。
+    #[test]
+    fn svg_draws_no_bracket_without_pin_groups() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let plain = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "");
+        let empty = with_pin_groups(terminal_block("TB2", "terminal_block_4p", 200.0, 50.0, ""), "");
+        sheet.entities.insert(plain.id(), plain);
+        sheet.entities.insert(empty.id(), empty);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        assert_eq!(bracket_polylines(&svg), 0, "{svg}");
+    }
+
+    /// Overlapping pin_groups items are reported by verify (tested in verify.rs) and draw no bracket at all, while an unrelated valid item on the same instance still draws.
+    /// 重なるpin_groups項目は (verify.rsで検証済みのとおり) 括弧を一切描かず、同じインスタンスの関係ない有効な項目は変わらず描かれる。
+    #[test]
+    fn svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let tb = with_pin_groups(
+            terminal_block("TB1", "terminal_block_8p", 100.0, 50.0, ""),
+            "1-4:A,3-6:B,7-8:C",
+        );
+        sheet.entities.insert(tb.id(), tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        // キャプション文字はfont-size="2" (図枠のゾーン記号A〜Fはfont-size="3"なので混同しない)
+        let captioned = |letter: &str| svg.contains(&format!("font-size=\"2\" fill=\"#000\" text-anchor=\"middle\" font-family=\"sans-serif\">{letter}<"));
+        assert!(!captioned("A") && !captioned("B"), "重なる2件は描かれない: {svg}");
+        assert!(captioned("C"), "重ならない項目は描かれる: {svg}");
+        assert_eq!(bracket_polylines(&svg), 1, "重ならないCの分だけ: {svg}");
+    }
+
+    /// A pin group bracket follows the symbol's rotation and mirror, exactly as the pin positions themselves do.
+    /// ピングループ括弧はシンボルの回転・ミラーに、ピンそのものの位置と同じように追従する。
+    #[test]
+    fn svg_pin_group_bracket_follows_rotation_and_mirror() {
+        for (rotation, mirror) in [(0u16, false), (90, false), (180, true), (270, true)] {
+            let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+            let mut tb = with_pin_groups(
+                terminal_block("TB1", "terminal_block_4p", 150.0, 100.0, ""),
+                "1-2:A",
+            );
+            if let Entity::Symbol(s) = &mut tb {
+                s.rotation = rotation;
+                s.mirror = mirror;
+            }
+            sheet.entities.insert(tb.id(), tb);
+            let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+            assert_eq!(bracket_polylines(&svg), 1, "rot={rotation} mirror={mirror}: {svg}");
+            assert!(svg.contains(">A<"), "rot={rotation} mirror={mirror}: {svg}");
+        }
     }
 }

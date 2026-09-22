@@ -212,6 +212,7 @@ fn add_text(doc: &SharedDoc, id: Uuid, label: &str) -> madake_core::Command {
             anchor: madake_core::TextAnchor::Start,
             color: None,
             bold: false,
+            leader_to: None,
         }),
     }
 }
@@ -310,6 +311,7 @@ async fn undo_turn_refuses_a_conflicting_rollback() {
             anchor: madake_core::TextAnchor::Start,
             color: None,
             bold: false,
+            leader_to: None,
         }),
     })
     .unwrap();

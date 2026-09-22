@@ -543,6 +543,18 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 vec![s.id],
             ));
         }
+        // ピングループ括弧 (G8): 読めない・重なる項目はその項目だけを報告する
+        if let Some(spec) = s.attrs.get(crate::pin_groups::PIN_GROUPS_ATTR) {
+            let order = crate::pin_groups::chart_order_pin_numbers(&def);
+            for issue in crate::pin_groups::parse_pin_groups(spec, &order).issues {
+                diags.push(diag(
+                    Severity::Error,
+                    &issue.code,
+                    format!("{label} のピングループ「{}」: {}", issue.text, issue.message),
+                    vec![s.id],
+                ));
+            }
+        }
     }
 
     // 参照記号の重複。リレー同士(コイル+接点、多接点)は正当なので除外
@@ -840,6 +852,34 @@ mod tests {
         assert!(dups[0].message.contains("R1"));
         assert_eq!(dups[0].entity_ids.len(), 2);
         assert!(!diags.iter().any(|d| d.code == "erc.duplicate_reference" && d.message.contains("K1")));
+    }
+
+    /// A pin_groups attribute that overlaps another group, or names a pin the terminal block does not have, is reported as an ERC error naming the terminal block and the bad item, instead of being silently ignored.
+    /// 他のグループと重なる・端子台に無いピンを指すpin_groups属性は、黙って無視されるのではなく端子台とその項目名を添えたERCエラーとして報告される。
+    #[test]
+    fn a_bad_pin_groups_item_is_reported_as_an_erc_error() {
+        let mut tb = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "terminal_block_8p".into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        tb.attrs.insert(
+            crate::pin_groups::PIN_GROUPS_ATTR.into(),
+            "1-4:電源,3-6:重複,9-10:存在しない".into(),
+        );
+        let sheet = sheet_with(vec![Entity::Symbol(tb)]);
+        let diags = run(&sheet);
+        let pg: Vec<_> = diags.iter().filter(|d| d.code.starts_with("pin_group.")).collect();
+        assert_eq!(pg.len(), 3, "{pg:?}"); // 1-4と3-6の重なり2件+存在しないピン1件
+        assert!(pg.iter().all(|d| d.severity == Severity::Error));
+        assert!(pg.iter().all(|d| d.message.contains("TB1")));
+        assert!(pg.iter().any(|d| d.code == crate::pin_groups::PIN_GROUP_OVERLAP));
+        assert!(pg.iter().any(|d| d.code == crate::pin_groups::PIN_GROUP_UNKNOWN_PIN));
     }
 
     /// Wire ends attached to nothing are flagged, including an endpoint resting mid-wire without a junction dot.

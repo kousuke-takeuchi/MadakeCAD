@@ -90,6 +90,7 @@ fn note(text: &str, x: f64, y: f64) -> Entity {
         anchor: madake_core::TextAnchor::Start,
         color: None,
         bold: false,
+            leader_to: None,
     })
 }
 

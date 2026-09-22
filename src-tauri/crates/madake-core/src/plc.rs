@@ -718,6 +718,7 @@ fn build_ladder_sheet(
                 anchor: crate::model::TextAnchor::Start,
                 color: None,
                 bold: false,
+            leader_to: None,
             }));
         }
     }

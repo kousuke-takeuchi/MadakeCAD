@@ -28,7 +28,7 @@ pub type SheetId = Uuid;
 ///   既定 ([`DEFAULT_ANNOTATION_TEXT_MM`] = 2.0mm) で開き、出力される図面は変わらない
 /// - v8: 図形エンティティ ([`Entity::Shape`]) を追加。矩形・線・円・折れ線の純粋な作図要素で、
 ///   図形を1つも持たない旧ファイルは今までどおり開き、出力される図面も変わらない
-pub const FORMAT_VERSION: u32 = 8;
+pub const FORMAT_VERSION: u32 = 9;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -635,6 +635,12 @@ pub struct TextEntity {
     /// 太字にするか (既定=false)。
     #[serde(default)]
     pub bold: bool,
+    /// 引き出し線の対象エンティティ (G20)。`Some`なら、注記の外接矩形のうち対象にいちばん
+    /// 近い辺の中点から、対象の外接矩形上のいちばん近い点まで線を引く
+    /// ([`crate::leader::leader_line`])。描画のたびに求め直すので、どちらを動かしても
+    /// 線は追従する。存在しないIDは[`crate::command::Engine::execute`]が拒否する。
+    #[serde(default)]
+    pub leader_to: Option<EntityId>,
 }
 
 #[cfg(test)]
@@ -874,6 +880,7 @@ mod tests {
             anchor: TextAnchor::End,
             color: Some("warning".into()),
             bold: true,
+            leader_to: None,
         });
         let json = serde_json::to_string(&entity).unwrap();
         let Entity::Text(back) = serde_json::from_str::<Entity>(&json).unwrap() else {

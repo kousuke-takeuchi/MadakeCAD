@@ -179,7 +179,34 @@ mod tests {
         assert_eq!(loaded.sheets.len(), 1);
         assert_eq!(crate::shape::shapes(&loaded.sheets[0]).count(), 0);
         assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
-        assert_eq!(FORMAT_VERSION, 8, "図形の追加でファイル形式が1つ上がる");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A project file saved before the note leader line existed opens with every note's leader target unset, so no note draws a leader line, and is brought up to the current format version.
+    /// 注記の引き出し線が無かった頃のプロジェクトファイルは、全ての注記の引き出し先が未設定として開く (どの注記も引き出し線を描かない)。現行のファイル形式へ更新される。
+    #[test]
+    fn an_old_project_file_opens_with_no_leader_targets() {
+        let dir = std::env::temp_dir().join(format!("madake-io-leader-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.mdkproj");
+        // format_version 8の頃のファイル (注記にleader_toが無い)
+        std::fs::write(
+            &path,
+            r#"{"format_version":8,"name":"旧図面","wire_parts":[],"plc_assignments":[],
+                "sheets":[{"id":"99999999-9999-4999-8999-999999999999","name":"S1","size":"A3",
+                "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},
+                "entities":{"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa":{"kind":"text",
+                "id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","at":{"x":10.0,"y":20.0},
+                "text":"注意","height":2.5,"rotation":0}}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        let Some(Entity::Text(t)) = loaded.sheets[0].entities.values().next() else {
+            panic!("注記が残っていること")
+        };
+        assert_eq!(t.leader_to, None);
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        assert_eq!(FORMAT_VERSION, 9, "引き出し線の追加でファイル形式が1つ上がる");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -278,15 +305,15 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 8, the version that added the graphics-only shape entity.
-    /// 現行のファイル形式バージョンは8 (図形エンティティを追加した版) である。
+    /// The current file format version is 9, the version that added the note leader line.
+    /// 現行のファイル形式バージョンは9 (注記の引き出し線を追加した版) である。
     #[test]
-    fn the_current_format_version_is_eight() {
-        assert_eq!(FORMAT_VERSION, 8);
+    fn the_current_format_version_is_nine() {
+        assert_eq!(FORMAT_VERSION, 9);
         let mut old = Project::new("x");
-        old.format_version = 7;
+        old.format_version = 8;
         migrate(&mut old);
-        assert_eq!(old.format_version, 8);
+        assert_eq!(old.format_version, 9);
     }
 
     /// A drawing saved before the annotation text height existed opens at the default 2.0mm, so its notes look exactly as before.
