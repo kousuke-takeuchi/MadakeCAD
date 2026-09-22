@@ -215,15 +215,18 @@ impl DeviceSite {
 }
 
 /// プロジェクト内の全シンボルインスタンスの所在を、参照記号ごとにまとめて返す。
-/// 参照記号が空のインスタンスは含まない。コイル・接点はコイル⇔接点クロスリファレンス
-/// ([`crate::relay_xref`]) が既に自動で所在を注記するので、ここでは対象から外す
-/// (二重に描かないため)。並びは[`label_sites`]と同じくシート順→ゾーン順→id順で決定的。
+/// 参照記号が空のインスタンスは含まない。コイル⇔接点クロスリファレンス
+/// ([`crate::relay_xref::annotated_instances`]) が既に自動で所在を注記するインスタンス
+/// **だけ**を対象から外す (二重に描かないため)。接点を1つも持たないコイルのように、
+/// コイル⇔接点クロスリファレンスが何も描かないリレーシンボルはここで拾う。
+/// 並びは[`label_sites`]と同じくシート順→ゾーン順→id順で決定的。
 pub fn device_sites(project: &Project) -> BTreeMap<String, Vec<DeviceSite>> {
     let mut out: BTreeMap<String, Vec<DeviceSite>> = BTreeMap::new();
+    let annotated = crate::relay_xref::annotated_instances(project);
     for (i, sheet) in project.sheets.iter().enumerate() {
         for entity in sheet.entities.values() {
             let Entity::Symbol(s) = entity else { continue };
-            if crate::relay_xref::relay_role(&s.symbol_id).is_some() {
+            if annotated.contains(&s.id) {
                 continue;
             }
             let reference = s.reference.trim();
@@ -272,17 +275,19 @@ pub fn device_xref_addresses(project: &Project, sheet_id: SheetId, reference: &s
 }
 
 /// シート1枚分のデバイス単位XRefテキスト表 (シンボルのentity id → 表示テキスト、G13)。
-/// 複数シートに跨る参照記号を持つインスタンスだけが入る。コイル・接点は含まない
-/// (コイル⇔接点クロスリファレンスが別に注記する)。SVG・キャンバスの描画はこれを引く。
+/// 複数シートに跨る参照記号を持つインスタンスだけが入る。コイル⇔接点クロスリファレンスが
+/// 所在を注記するコイル・接点は含まない ([`crate::relay_xref::annotated_instances`])。
+/// SVG・キャンバスの描画はこれを引く。
 pub fn sheet_device_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<EntityId, String> {
     let Some(sheet) = project.sheet(sheet_id) else {
         return BTreeMap::new();
     };
     let sites = device_sites(project);
+    let annotated = crate::relay_xref::annotated_instances(project);
     let mut out = BTreeMap::new();
     for entity in sheet.entities.values() {
         let Entity::Symbol(s) = entity else { continue };
-        if crate::relay_xref::relay_role(&s.symbol_id).is_some() {
+        if annotated.contains(&s.id) {
             continue;
         }
         let reference = s.reference.trim();
@@ -794,14 +799,48 @@ mod tests {
         assert!(sheet_device_xrefs(&project, s1).is_empty());
     }
 
-    /// Relay coils and contacts are skipped by the device cross-reference, because relay_xref already annotates their coil location automatically.
-    /// リレーのコイル・接点はデバイス単位のクロスリファレンスの対象から外れる(コイル⇔接点クロスリファレンスが既に自動で所在を注記するため)。
+    /// A relay coil and the contact it drives are skipped by the device cross-reference, because the coil⇔contact cross-reference already writes where each of them is.
+    /// 接点を従えたリレーのコイルと、その接点は、デバイス単位のクロスリファレンスの対象から外れる(コイル⇔接点クロスリファレンスが既に互いの所在を書いているため)。
     #[test]
-    fn relay_coil_and_contacts_are_skipped_by_the_device_cross_reference() {
-        let project = two_sheet_device_project(crate::relay_xref::COIL_SYMBOL_ID, "K1");
+    fn a_relay_coil_and_its_contact_are_skipped_by_the_device_cross_reference() {
+        let mut project = two_sheet_device_project(crate::relay_xref::COIL_SYMBOL_ID, "K1");
+        let s2 = project.sheets[1].id;
+        // シート2のインスタンスを接点に差し替える (コイル=シート1・接点=シート2の普通のリレー)
+        let ids: Vec<_> = project.sheet(s2).unwrap().entities.keys().copied().collect();
+        for id in ids {
+            if let Some(Entity::Symbol(s)) = project.sheet_mut(s2).unwrap().entities.get_mut(&id) {
+                s.symbol_id = crate::relay_xref::CONTACT_NO_SYMBOL_ID.into();
+            }
+        }
         let s1 = project.sheets[0].id;
+        assert_eq!(
+            crate::relay_xref::sheet_contact_maps(&project, s1).len(),
+            1,
+            "コイルには接点マップが付く前提"
+        );
+        assert_eq!(
+            crate::relay_xref::sheet_coil_locations(&project, s2).len(),
+            1,
+            "接点にはコイル所在が付く前提"
+        );
         assert!(device_xref_addresses(&project, s1, "K1").is_empty());
-        assert!(sheet_device_xrefs(&project, s1).is_empty());
+        assert!(sheet_device_xrefs(&project, s1).is_empty(), "コイル側に二重の注記を出さない");
+        assert!(sheet_device_xrefs(&project, s2).is_empty(), "接点側に二重の注記を出さない");
+    }
+
+    /// A coil with no contacts anywhere gets nothing from the coil⇔contact cross-reference, so a designator carried only by such coils still gets the ordinary device cross-reference.
+    /// 接点をどこにも持たないコイルにはコイル⇔接点クロスリファレンスが何も描かないので、そういうコイルだけの参照記号には普通のデバイス単位クロスリファレンスが付く (G13)。
+    #[test]
+    fn a_contactless_coil_on_two_sheets_still_gets_a_device_cross_reference() {
+        let project = two_sheet_device_project(crate::relay_xref::COIL_SYMBOL_ID, "K1");
+        let (s1, s2) = (project.sheets[0].id, project.sheets[1].id);
+        assert!(
+            crate::relay_xref::sheet_contact_maps(&project, s1).is_empty(),
+            "接点が無いので接点マップは描かれない前提"
+        );
+        assert_eq!(device_xref_addresses(&project, s1, "K1"), vec!["/2.B3"]);
+        assert_eq!(sheet_device_xrefs(&project, s1).len(), 1);
+        assert_eq!(sheet_device_xrefs(&project, s2).len(), 1);
     }
 
     /// The per-sheet device cross-reference table maps each symbol entity to the text drawn beside it.

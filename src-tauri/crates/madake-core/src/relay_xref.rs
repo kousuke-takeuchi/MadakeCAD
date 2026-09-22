@@ -37,6 +37,8 @@ pub const CONTACT_CO_SYMBOL_ID: &str = "relay_contact_co";
 
 /// 接点マップの文字高さ (mm)。
 pub const CONTACT_MAP_FONT: f64 = 2.0;
+/// 行の中央に文字を置くときの、行の中央高さからベースラインまでの下向きのずれ (mm)。
+pub const CONTACT_MAP_BASELINE_SHIFT: f64 = CONTACT_MAP_FONT * 0.35;
 /// 接点マップの行高さ (mm)。
 pub const CONTACT_MAP_ROW_H: f64 = 3.5;
 /// 接点マップのセル内余白 (mm)。
@@ -424,6 +426,29 @@ pub fn sheet_device_blocks(project: &Project, sheet_id: SheetId) -> BTreeMap<Ent
     out
 }
 
+/// コイル⇔接点クロスリファレンスが所在を自動で注記するインスタンス (プロジェクト全体)。
+/// [`sheet_contact_maps`]・[`sheet_device_blocks`]・[`sheet_coil_locations`] が拾うものと
+/// 同じ顔ぶれ。デバイス単位のシート間クロスリファレンス (G13、[`crate::xref`]) は、この
+/// 顔ぶれだけを避ける: 接点を1つも持たないコイルのように、コイル⇔接点クロスリファレンスが
+/// 何も描かないリレーシンボルは避けない (何の所在も出ないままになってしまうので)。
+pub fn annotated_instances(project: &Project) -> std::collections::BTreeSet<EntityId> {
+    let mut out = std::collections::BTreeSet::new();
+    for device in relay_devices(project) {
+        // 接点マップ (別表) か実機ブロックが描かれるコイル
+        let has_rows = !device.contact_map().is_empty();
+        for coil in &device.coils {
+            if has_rows || instance_is_device_block(project.sheet(coil.sheet_id), coil.entity_id) {
+                out.insert(coil.entity_id);
+            }
+        }
+        // コイル所在が描かれる接点
+        if device.coil_location().is_some() {
+            out.extend(device.contacts.iter().map(|c| c.entity_id));
+        }
+    }
+    out
+}
+
 /// シート1枚分のコイル所在表 (接点のentity id → `"(/1.C2)"`)。
 /// コイルの見つからない接点は含まれない (何も描かない)。
 pub fn sheet_coil_locations(project: &Project, sheet_id: SheetId) -> BTreeMap<EntityId, String> {
@@ -463,7 +488,7 @@ impl ContactMapLayout {
     }
     /// i行目の文字のベースラインY (行の中央に文字を置く)。
     pub fn baseline(&self, i: usize) -> f64 {
-        self.row_top(i) + self.row_h / 2.0 + CONTACT_MAP_FONT * 0.35
+        self.row_top(i) + self.row_h / 2.0 + CONTACT_MAP_BASELINE_SHIFT
     }
     /// col列目 (0または1) の左端X。
     pub fn col_x(&self, col: usize) -> f64 {
@@ -503,13 +528,16 @@ pub fn contact_map_origin(inst: &SymbolInstance, def: &SymbolDef) -> Point {
     Point::new(inst.at.x, max.y + CONTACT_MAP_GAP)
 }
 
-/// 実機ブロック表示 (G7) の外形の配置 (用紙座標mm)。上から
-/// ヘッダ行 (参照記号、型番があればもう1行) → 接点の行、の順に積む。
+/// 実機ブロック表示 (G7) の外形の配置 (**シンボルのローカル座標**mm、配置基準点=コイルの
+/// A1/A2ピンの中点が原点)。上からヘッダ行 (参照記号、型番があればもう1行) → 接点の行、の順に
+/// 積む。用紙へ描くときは必ず [`crate::netlist::transform_local`] で配置 (回転・ミラー・平行
+/// 移動) を掛ける ([`device_block_bounds`])。そうすることで、回したコイルでもブロックは
+/// シンボルと同じ向きに回り、引き出し線は実際のピンの位置から出る。
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeviceBlockLayout {
-    /// 外形の左上X。
+    /// 外形の左上X (ローカル座標)。
     pub x: f64,
-    /// 外形の左上Y。
+    /// 外形の左上Y (ローカル座標)。
     pub y: f64,
     pub width: f64,
     pub row_h: f64,
@@ -524,9 +552,22 @@ impl DeviceBlockLayout {
     pub fn height(&self) -> f64 {
         self.row_h * (self.header_rows + self.contact_rows) as f64
     }
-    /// i行目 (0始まり) のヘッダ行の文字のベースラインY (行の中央に文字を置く)。
-    pub fn header_baseline(&self, i: usize) -> f64 {
-        self.y + self.row_h * i as f64 + self.row_h / 2.0 + CONTACT_MAP_FONT * 0.35
+    /// i行目 (0始まり) のヘッダ行のセル (外形の全幅)。ローカル座標の (左上, 右下)。
+    /// 文字は、このセルを用紙座標へ直した矩形の中に水平に書く。
+    pub fn header_cell(&self, i: usize) -> (Point, Point) {
+        let top = self.y + self.row_h * i as f64;
+        (
+            Point::new(self.x, top),
+            Point::new(self.x + self.width, top + self.row_h),
+        )
+    }
+    /// i行目の接点行の、col列目 (0または1) のセル。ローカル座標の (左上, 右下)。
+    pub fn contact_cell(&self, i: usize, col: usize) -> (Point, Point) {
+        let top = self.contact_row_top(i);
+        (
+            Point::new(self.col_x(col), top),
+            Point::new(self.col_x(col) + self.col_w[col], top + self.row_h),
+        )
     }
     /// ヘッダ行の下、接点の行が始まるY。
     fn contacts_top(&self) -> f64 {
@@ -536,10 +577,6 @@ impl DeviceBlockLayout {
     pub fn contact_row_top(&self, i: usize) -> f64 {
         self.contacts_top() + self.row_h * i as f64
     }
-    /// i行目の接点行の文字のベースラインY。
-    pub fn contact_baseline(&self, i: usize) -> f64 {
-        self.contact_row_top(i) + self.row_h / 2.0 + CONTACT_MAP_FONT * 0.35
-    }
     /// 接点の表 (2列) の左端X。外形の幅が接点の表より広いときは中央に寄せる。
     fn contacts_x(&self) -> f64 {
         self.x + (self.width - (self.col_w[0] + self.col_w[1])) / 2.0
@@ -547,10 +584,6 @@ impl DeviceBlockLayout {
     /// col列目 (0または1) の左端X。
     pub fn col_x(&self, col: usize) -> f64 {
         self.contacts_x() + if col == 0 { 0.0 } else { self.col_w[0] }
-    }
-    /// col列目の文字の左端X (セル内余白を空ける)。
-    pub fn text_x(&self, col: usize) -> f64 {
-        self.col_x(col) + CONTACT_MAP_PAD
     }
     /// コイルのA1/A2ピン (外形の中央高さ、外形の左右端から[`DEVICE_BLOCK_MIN_WIDTH`]/2の
     /// 位置) から外形の左右端までの引き出し線の半分の長さ。外形が最小幅ちょうどなら0
@@ -560,11 +593,12 @@ impl DeviceBlockLayout {
     }
 }
 
-/// 実機ブロック表示の外形の配置を求める。`center_x`はコイルのA1/A2ピンの中点(=配置基準点の
-/// X)、`at_y`はピンの高さ(=配置基準点のY)。ピンは外形の左右端の、ちょうどピンの高さを通る
-/// 位置につながるので、外形をどれだけ広げてもコイルの配線は繋がったまま
-/// (幅が[`DEVICE_BLOCK_MIN_WIDTH`]を超えた分だけ引き出し線が伸びる)。
-pub fn device_block_layout(block: &DeviceBlock, center_x: f64, at_y: f64) -> DeviceBlockLayout {
+/// 実機ブロック表示の外形の配置をシンボルのローカル座標で求める (原点=コイルのA1/A2ピンの
+/// 中点)。ピンは外形の左右端の、ちょうどピンの高さ(ローカルY=0)を通る位置につながるので、
+/// 外形をどれだけ広げてもコイルの配線は繋がったまま (幅が[`DEVICE_BLOCK_MIN_WIDTH`]を
+/// 超えた分だけ引き出し線が伸びる)。
+pub fn device_block_layout(block: &DeviceBlock) -> DeviceBlockLayout {
+    let (center_x, at_y) = (0.0, 0.0);
     let header_rows = if block.part_no.is_empty() { 1 } else { 2 };
     let contact_layout = contact_map_layout(&block.contacts, center_x, 0.0);
     let header_w = text_width(&block.reference).max(if header_rows == 2 {
@@ -587,6 +621,18 @@ pub fn device_block_layout(block: &DeviceBlock, center_x: f64, at_y: f64) -> Dev
     }
 }
 
+/// 実機ブロックの外形を用紙座標で見た囲み矩形 (最小点, 最大点)。配置の回転・ミラーを
+/// 掛けた後の形で、回転は90度単位なので矩形は軸平行のまま。クリックでコイルを掴む
+/// 当たり判定と、外形の下に置く機能ラベル (G4) の位置決めはこれを引く。
+pub fn device_block_bounds(inst: &SymbolInstance, block: &DeviceBlock) -> (Point, Point) {
+    let layout = device_block_layout(block);
+    crate::netlist::transform_rect(
+        Point::new(layout.x, layout.y),
+        Point::new(layout.x + layout.width, layout.y + layout.height()),
+        inst,
+    )
+}
+
 /// 接点の脇に置くコイル所在テキストの基準点 (テキストは左揃え、G22)。
 ///
 /// 配線注記 ([`crate::wire_note`]) と同じ「反対側へ逃がす」考え方で、まず右
@@ -595,8 +641,9 @@ pub fn device_block_layout(block: &DeviceBlock, center_x: f64, at_y: f64) -> Dev
 /// 挟むので、横引きの配線注記がちょうどこの右側の位置に来て重なることがある。
 ///
 /// `text`は実際に描くコイル所在の文字列 (重なり判定の幅の見積りに使う)。`notes`はそのシートの
-/// 配線注記 ([`crate::wire_note::wire_notes`])。全ての候補が重なっていれば、最後の逃がし先
-/// (下) を返す。
+/// 配線注記 ([`crate::wire_note::wire_notes`])。逃がし先はそのインスタンス自身の参照記号・
+/// 型番のラベル ([`instance_label_rects`]、外形の上に併記される) も避ける。全ての候補が
+/// 重なっていれば、最後の逃がし先 (下) を返す。
 pub fn coil_location_at(inst: &SymbolInstance, def: &SymbolDef, text: &str, notes: &[WireNote]) -> Point {
     let (min, max) = crate::svg::symbol_bounds(inst, def);
     let font = CONTACT_MAP_FONT;
@@ -606,21 +653,50 @@ pub fn coil_location_at(inst: &SymbolInstance, def: &SymbolDef, text: &str, note
         Point::new(min.x, min.y - COIL_LOCATION_VGAP),
         Point::new(min.x, max.y + COIL_LOCATION_VGAP + font),
     ];
+    let mut occupied: Vec<crate::tidy::Rect> = notes
+        .iter()
+        .map(|note| text_rect(note.at, text_width(&note.text), font, note.align))
+        .collect();
+    occupied.extend(instance_label_rects(inst, def));
     for at in candidates {
         let probe = text_rect(at, width, font, NoteAlign::Left);
-        let collides = notes
-            .iter()
-            .any(|note| probe.overlaps(&text_rect(note.at, text_width(&note.text), font, note.align)));
-        if !collides {
+        if !occupied.iter().any(|r| probe.overlaps(r)) {
             return at;
         }
     }
     candidates[candidates.len() - 1]
 }
 
+/// インスタンス自身の参照記号・型番のラベルが紙面で占める矩形 (空の欄は含まない)。
+/// 位置・文字高はシンボルを描くときと同じ (外形の上に中央揃えで併記する)。
+fn instance_label_rects(inst: &SymbolInstance, def: &SymbolDef) -> Vec<crate::tidy::Rect> {
+    let top = crate::svg::symbol_top_y(inst, def);
+    let font = crate::svg::LABEL_FONT;
+    [
+        (inst.reference.as_str(), crate::svg::REF_LABEL_DY),
+        (inst.value.as_str(), crate::svg::VALUE_LABEL_DY),
+    ]
+    .into_iter()
+    .filter(|(text, _)| !text.is_empty())
+    .map(|(text, dy)| {
+        text_rect(
+            Point::new(inst.at.x, top - dy),
+            text_width_at(text, font),
+            font,
+            NoteAlign::Center,
+        )
+    })
+    .collect()
+}
+
 /// 文字列を[`CONTACT_MAP_FONT`]で描いたときの見積り幅 (mm)。
 fn text_width(text: &str) -> f64 {
-    CONTACT_MAP_FONT * CHAR_WIDTH_RATIO * text.chars().count() as f64
+    text_width_at(text, CONTACT_MAP_FONT)
+}
+
+/// 文字列を文字高`font`で描いたときの見積り幅 (mm)。
+fn text_width_at(text: &str, font: f64) -> f64 {
+    font * CHAR_WIDTH_RATIO * text.chars().count() as f64
 }
 
 /// ベースライン位置・幅・寄せ方から、[`CONTACT_MAP_FONT`]の高さで見積もる文字の外接矩形。
@@ -1374,6 +1450,39 @@ mod tests {
         assert!((at.x - below.x).abs() < 1e-9 && (at.y - below.y).abs() < 1e-9, "{at:?}");
     }
 
+    /// When the contact carries a part number of its own, the coil location does not escape onto that text: it goes on past it, to the other side of the outline.
+    /// 接点自身に型番が書かれているときは、コイル所在はその文字の上へは逃げず、さらに先の外形の反対側へ回る (G22)。
+    #[test]
+    fn coil_location_does_not_escape_onto_the_instances_own_value_label() {
+        let contact = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: CONTACT_CO_SYMBOL_ID.into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "K1".into(),
+            value: "SAMPLE0001".into(),
+            attrs: Default::default(),
+        };
+        let def = crate::symbol::resolve_symbol(CONTACT_CO_SYMBOL_ID).unwrap();
+        let (_, max) = crate::svg::symbol_bounds(&contact, &def);
+        let text = "(/1.C2)";
+        // 右の既定位置だけをふさぐ配線注記 (上下はまだ空いている)
+        let notes = vec![WireNote {
+            wire_id: Uuid::new_v4(),
+            text: text.into(),
+            at: Point::new(max.x + COIL_LOCATION_GAP, contact.at.y),
+            align: NoteAlign::Left,
+        }];
+        let blank = SymbolInstance { value: String::new(), ..contact.clone() };
+        assert!(
+            coil_location_at(&blank, &def, text, &notes).y < contact.at.y,
+            "型番が無ければ上へ逃げる"
+        );
+        let at = coil_location_at(&contact, &def, text, &notes);
+        assert!(at.y > max.y, "型番の文字が上にあるので、上ではなく下へ逃げる: {at:?}");
+    }
+
     // ---- G7: 実機ブロック表示 ----
 
     /// A coil is only shown as a physical device block when its "device_block" attribute is exactly "true"; any other value, including empty, keeps the distributed placement.
@@ -1474,11 +1583,33 @@ mod tests {
     #[test]
     fn device_block_layout_is_no_narrower_than_the_pin_span() {
         let block = DeviceBlock { reference: "K1".into(), part_no: "".into(), contacts: vec![] };
-        let layout = device_block_layout(&block, 100.0, 50.0);
+        let layout = device_block_layout(&block);
         assert!((layout.width - DEVICE_BLOCK_MIN_WIDTH).abs() < 1e-9, "{layout:?}");
         assert_eq!(layout.header_rows, 1, "型番が無いのでヘッダ1行");
         assert!((layout.lead_half_len()).abs() < 1e-9, "最小幅ちょうどなら引き出し線は無い");
-        assert!((layout.x - (100.0 - DEVICE_BLOCK_MIN_WIDTH / 2.0)).abs() < 1e-9, "中心はピンの中点");
+        assert!((layout.x + DEVICE_BLOCK_MIN_WIDTH / 2.0).abs() < 1e-9, "中心はピンの中点");
+    }
+
+    /// The device block's minimum width is exactly the relay coil symbol's own pin span, so the narrowest block reaches both of the coil's pins.
+    /// 実機ブロックの最小幅はリレーコイルのシンボル定義のピン間隔そのものなので、いちばん細いブロックでもコイルの両ピンに届く。
+    #[test]
+    fn device_block_min_width_is_the_coil_symbols_pin_span() {
+        let def = crate::symbol::resolve_symbol(COIL_SYMBOL_ID).unwrap();
+        let xs: Vec<f64> = def.pins.iter().map(|p| p.at.x).collect();
+        let (min, max) = (
+            xs.iter().cloned().fold(f64::INFINITY, f64::min),
+            xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+        );
+        assert!(
+            (max - min - DEVICE_BLOCK_MIN_WIDTH).abs() < 1e-9,
+            "ピン間隔 {} と最小幅 {DEVICE_BLOCK_MIN_WIDTH} が食い違っている",
+            max - min
+        );
+        assert!(
+            def.pins.iter().all(|p| p.at.y.abs() < 1e-9),
+            "A1/A2は配置基準点と同じ高さにある: {:?}",
+            def.pins
+        );
     }
 
     /// A part number adds a second header row, and pins still reach the outline through a lead when the content widens the box past the pin span.
@@ -1495,15 +1626,60 @@ mod tests {
                 entity_id: None,
             }],
         };
-        let layout = device_block_layout(&block, 100.0, 50.0);
+        let layout = device_block_layout(&block);
         assert_eq!(layout.header_rows, 2, "型番の行が増える");
         assert!(layout.width > DEVICE_BLOCK_MIN_WIDTH, "長い型番で外形が広がる: {layout:?}");
         assert!(layout.lead_half_len() > 0.0, "外形が広がった分だけ引き出し線が伸びる");
-        // ピンはA1(-7.5,50)/A2(7.5,50)のまま: 外形の左右端から引き出し線の分だけ内側にある
-        let pin_x = [100.0 - 7.5, 100.0 + 7.5];
-        assert!((layout.x - (pin_x[0] - layout.lead_half_len())).abs() < 1e-9);
-        // ヘッダの中央高さがピンの高さ(50.0)と一致する: 引き出し線は水平に引ける
-        assert!((layout.y + layout.row_h * layout.header_rows as f64 / 2.0 - 50.0).abs() < 1e-9);
+        // ピンはシンボル定義のA1/A2のまま: 外形の左右端から引き出し線の分だけ内側にある
+        let def = crate::symbol::resolve_symbol(COIL_SYMBOL_ID).unwrap();
+        let left_pin = def.pins.iter().map(|p| p.at.x).fold(f64::INFINITY, f64::min);
+        assert!((layout.x - (left_pin - layout.lead_half_len())).abs() < 1e-9);
+        // ヘッダの中央高さがピンの高さ(ローカルY=0)と一致する: 引き出し線は水平に引ける
+        assert!((layout.y + layout.row_h * layout.header_rows as f64 / 2.0).abs() < 1e-9);
+    }
+
+    /// The device block turns and mirrors with its coil, so a coil placed at 90 degrees gets an upright block that still spans exactly its two pins.
+    /// 実機ブロックの外形はコイルと一緒に回転・反転するので、90度回して置いたコイルには縦長のブロックが付き、それでも2つのピンをちょうど跨ぐ。
+    #[test]
+    fn device_block_bounds_turn_with_the_instance() {
+        let block = DeviceBlock {
+            reference: "K1".into(),
+            part_no: "P1".into(),
+            contacts: vec![ContactMapRow {
+                terminals: "13-14".into(),
+                address: "/1.B3".into(),
+                role: RelayRole::ContactNo,
+                entity_id: None,
+            }],
+        };
+        let layout = device_block_layout(&block);
+        let coil = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: COIL_SYMBOL_ID.into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "K1".into(),
+            value: "P1".into(),
+            attrs: Default::default(),
+        };
+        let (min, max) = device_block_bounds(&coil, &block);
+        assert!((max.x - min.x - layout.width).abs() < 1e-9, "回転0なら幅はそのまま");
+        assert!((max.y - min.y - layout.height()).abs() < 1e-9);
+
+        let turned = SymbolInstance { rotation: 90, ..coil.clone() };
+        let (tmin, tmax) = device_block_bounds(&turned, &block);
+        assert!((tmax.x - tmin.x - layout.height()).abs() < 1e-9, "90度回すと縦横が入れ替わる");
+        assert!((tmax.y - tmin.y - layout.width).abs() < 1e-9);
+        // 回した後もブロックは両ピンを跨ぐ (ピンの点がブロックの縁の上に乗る)
+        let def = crate::symbol::resolve_symbol(COIL_SYMBOL_ID).unwrap();
+        for (_, at) in crate::netlist::pin_positions(&turned, &def) {
+            assert!(
+                at.x >= tmin.x - 1e-9 && at.x <= tmax.x + 1e-9,
+                "ピン {at:?} がブロック ({tmin:?}..{tmax:?}) の外にある"
+            );
+            assert!(at.y >= tmin.y - 1e-9 && at.y <= tmax.y + 1e-9, "{at:?}");
+        }
     }
 
     /// The device block's contact rows sit directly under the header rows, and the outline's total height covers every row with no gap.
@@ -1528,7 +1704,7 @@ mod tests {
                 },
             ],
         };
-        let layout = device_block_layout(&block, 100.0, 50.0);
+        let layout = device_block_layout(&block);
         assert_eq!(layout.header_rows, 2);
         assert_eq!(layout.contact_rows, 2);
         assert!((layout.contact_row_top(0) - (layout.y + layout.row_h * 2.0)).abs() < 1e-9);

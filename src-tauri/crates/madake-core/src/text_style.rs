@@ -108,11 +108,23 @@ pub fn function_label_placement(inst: &SymbolInstance, def: &SymbolDef) -> Optio
         },
         None => {
             let (_, max) = crate::svg::symbol_bounds(inst, def);
-            FunctionLabel {
-                at: Point::new(inst.at.x, max.y + FUNCTION_LABEL_DY),
-                height: crate::svg::LABEL_FONT,
-            }
+            return function_label_below(inst, inst.at.x, max.y);
         }
+    })
+}
+
+/// 外形の下端 (`bottom_y`) と中心X (`center_x`) を指定して、その**下**へ置く機能ラベルの
+/// 描画指示を求める。シンボル定義の外形とは別の外形で描くとき (実機ブロック表示 (G7) の
+/// コイル) にも同じ行送りで置けるようにしたもの。機能ラベルが無ければ`None`。
+pub fn function_label_below(
+    inst: &SymbolInstance,
+    center_x: f64,
+    bottom_y: f64,
+) -> Option<FunctionLabel> {
+    function_label(inst)?;
+    Some(FunctionLabel {
+        at: Point::new(center_x, bottom_y + FUNCTION_LABEL_DY),
+        height: crate::svg::LABEL_FONT,
     })
 }
 
