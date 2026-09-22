@@ -480,8 +480,9 @@ pub fn report_sheet_svg(
 /// From-To電線リストの図面ページ。内容はCSV ([`crate::reports::wire_list_csv`]) と同一。
 pub fn wire_list_sheet_svg(project: &Project) -> Vec<String> {
     let meta = ReportMeta::from_project(project)
-        // シート・From・To・線番を広めに、線色/sq/長さを狭く
-        .with_col_ratios(&[10.0, 16.0, 16.0, 10.0, 8.0, 6.0, 6.0, 14.0, 10.0]);
+        // シート・From・To・電線品番を広めに、線色/sq/長さ/備考を狭く
+        // (シート,From,To,嵌合相手,備考,線番,線色,線径sq,長さm,電線品番,ハーネス)
+        .with_col_ratios(&[8.0, 14.0, 14.0, 10.0, 8.0, 7.0, 6.0, 5.0, 5.0, 12.0, 8.0]);
     report_sheet_svg(
         ReportKind::WireList.title(),
         &crate::reports::WIRE_LIST_COLUMNS,

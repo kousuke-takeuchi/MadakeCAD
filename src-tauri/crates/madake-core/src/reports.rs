@@ -4,8 +4,12 @@ use std::collections::BTreeMap;
 
 use crate::geometry::Point;
 use crate::model::{Entity, Project, Sheet, Wire};
-use crate::netlist::{pin_positions, CONNECT_EPS};
+use crate::netlist::{extract_netlist, pin_positions, Net, NetPin, CONNECT_EPS};
 use crate::symbol::{sheet_symbol_defs, SymbolDef};
+
+/// 電線リスト・From-To帳票の備考欄に立てる、ネットが1対1で辿れなかったときの印 (G18)。
+/// i18n中立な記号 (言語非依存): 表示側で好きな文言に訳し替えられるよう、固定の英字にする。
+pub const REMARK_MULTI_ENDED: &str = "multi";
 
 /// CSVフィールドのエスケープ(カンマ・引用符・改行を含む場合はクォート)。
 pub(crate) fn csv_escape(s: &str) -> String {
@@ -96,10 +100,16 @@ pub fn bom_csv(project: &Project) -> String {
 }
 
 /// From-To電線リストの列見出し。
-pub const WIRE_LIST_COLUMNS: [&str; 9] = [
+///
+/// **嵌合相手・備考は新設でTo列の直後に入るため、CSVは従来の9列とは非互換**
+/// (旧: シート,From,To,線番,線色,線径sq,長さm,電線品番,ハーネス。列位置で読んでいる
+/// スクリプトは直す必要がある。`docs/05-wire-management.md`参照)。
+pub const WIRE_LIST_COLUMNS: [&str; 11] = [
     "シート",
     "From",
     "To",
+    "嵌合相手",
+    "備考",
     "線番",
     "線色",
     "線径sq",
@@ -108,18 +118,17 @@ pub const WIRE_LIST_COLUMNS: [&str; 9] = [
     "ハーネス",
 ];
 
-/// ワイヤ端点1つの接続先表記。
-///
-/// - シンボルのピンに一致 → `"参照記号:ピン番号"` (例 `K1:A1`、`TB1:3`)
-/// - ネットラベルに一致 → ラベル名
-/// - どちらでもない (未接続) → 空文字
-///
-/// 同じ点に複数の候補があるときはピンを優先し、同種の候補同士では辞書順で最小のものを選ぶ
-/// (出力を決定的にするため)。貫通端子台の左右の接続点は同じピン番号を持つので、
-/// 内側・外側どちらのワイヤも同じ `TB1:1` 表記になる。
-pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
+/// ワイヤ端点1つの解決結果。ピンかネットラベルかを区別する (G18: ラベル端をネット越しに
+/// 辿るには、反対端がピンかどうかを先に知る必要があるため`endpoint_label`より詳しい)。
+enum EndKind {
+    Pin { entity_id: crate::EntityId, reference: String, pin: String },
+    Label(String),
+    None,
+}
+
+fn resolve_endpoint(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> EndKind {
     let by_id = crate::symbol::DefIndex::new(defs);
-    let mut pin_hit: Option<String> = None;
+    let mut pin_hit: Option<(String, crate::EntityId, String, String)> = None;
     let mut label_hit: Option<String> = None;
     for entity in sheet.entities.values() {
         match entity {
@@ -130,8 +139,8 @@ pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
                 for (no, pos) in pin_positions(s, &def) {
                     if pos.distance_to(at) < CONNECT_EPS {
                         let text = format!("{}:{}", s.reference, no);
-                        if pin_hit.as_ref().is_none_or(|cur| text < *cur) {
-                            pin_hit = Some(text);
+                        if pin_hit.as_ref().is_none_or(|(cur, ..)| text < *cur) {
+                            pin_hit = Some((text, s.id, s.reference.clone(), no));
                         }
                     }
                 }
@@ -145,20 +154,113 @@ pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
             _ => {}
         }
     }
-    pin_hit.or(label_hit).unwrap_or_default()
+    match (pin_hit, label_hit) {
+        (Some((_, entity_id, reference, pin)), _) => EndKind::Pin { entity_id, reference, pin },
+        (None, Some(l)) => EndKind::Label(l),
+        (None, None) => EndKind::None,
+    }
 }
 
-/// ワイヤの (From, To)。両端の接続先を [`endpoint_label`] で解決し、
-/// **表記の辞書順で小さい方をFrom**、大きい方をToとする。未接続 (空文字) の端は常にTo側へ回す。
-/// この規則によって、描いた向きに関係なく同じワイヤは常に同じFrom/Toになる。
-pub fn wire_from_to(sheet: &Sheet, defs: &[SymbolDef], wire: &Wire) -> (String, String) {
-    let (Some(a), Some(b)) = (wire.points.first(), wire.points.last()) else {
-        return (String::new(), String::new());
+/// ワイヤ端点1つの接続先表記。
+///
+/// - シンボルのピンに一致 → `"参照記号:ピン番号"` (例 `K1:A1`、`TB1:3`)
+/// - ネットラベルに一致 → ラベル名 (このネットを辿った解決はしない。辿るのは
+///   [`wire_from_to`]の役目 — G18)
+/// - どちらでもない (未接続) → 空文字
+///
+/// 同じ点に複数の候補があるときはピンを優先し、同種の候補同士では辞書順で最小のものを選ぶ
+/// (出力を決定的にするため)。貫通端子台の左右の接続点は同じピン番号を持つので、
+/// 内側・外側どちらのワイヤも同じ `TB1:1` 表記になる。
+pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
+    match resolve_endpoint(sheet, defs, at) {
+        EndKind::Pin { reference, pin, .. } => format!("{reference}:{pin}"),
+        EndKind::Label(name) => name,
+        EndKind::None => String::new(),
+    }
+}
+
+/// ラベル端点をネット越しに辿る (G18)。
+///
+/// `exclude`にはこのワイヤ自身の反対端がピンだったときのそのピン (entity id・ピン番号) を渡す
+/// (自分自身に辿り着かないようにするため)。ネットの中に`exclude`を除いてピンが**ちょうど1つ**
+/// あれば`"参照記号:ピン番号"`へ解決し、0個(デバイスが無い)や2個以上(多端点)なら
+/// ラベル名のまま残し、多端点フラグを立てる。
+fn resolve_label_end(
+    nets: &[Net],
+    label_name: &str,
+    exclude: Option<&(crate::EntityId, String)>,
+) -> (String, bool) {
+    let Some(net) = nets.iter().find(|n| n.label.as_deref() == Some(label_name)) else {
+        return (label_name.to_string(), false);
     };
-    let mut ends = [endpoint_label(sheet, defs, a), endpoint_label(sheet, defs, b)];
-    ends.sort_by(|x, y| (x.is_empty(), x.as_str()).cmp(&(y.is_empty(), y.as_str())));
-    let [from, to] = ends;
-    (from, to)
+    let others: Vec<&NetPin> = net
+        .pins
+        .iter()
+        .filter(|p| exclude.is_none_or(|(id, pin)| *id != p.entity_id || pin != &p.pin))
+        .collect();
+    match others.as_slice() {
+        [only] => (format!("{}:{}", only.reference, only.pin), false),
+        _ => (label_name.to_string(), true),
+    }
+}
+
+/// 表記から参照記号部分を取り出す (`"K1:A1"` → `"K1"`)。ラベル名のまま (コロンを含まない)
+/// なら解決先のデバイスが無いので嵌合相手も引けない。
+fn reference_of(display: &str) -> Option<&str> {
+    display.split_once(':').map(|(r, _)| r)
+}
+
+/// ワイヤの (From, To, 嵌合相手, 備考)。
+///
+/// - From/Toは両端の接続先を解決する。ピンに届いた端はそのまま`参照記号:ピン番号`。
+///   ネットラベルに届いた端は、そのネットの中でこのワイヤ自身の反対端を除いた
+///   ピンが**ちょうど1つ**ならそのデバイスへ辿る (G18)。それ以外はラベル名のまま残る
+/// - 表記の辞書順で小さい方をFrom、大きい方をTo。未接続(空文字)の端は常にTo側
+/// - 嵌合相手はFrom/Toが指すデバイスのうち、コネクタが`mates_with`を宣言していれば
+///   その値をカンマ区切りで列挙する (G14。重複は1つにまとめる)
+/// - 備考はFrom/Toのどちらかがネットを1対1で辿れなかったとき`crate::reports::REMARK_MULTI_ENDED`
+///   ("multi") が立つ (G18)
+pub fn wire_from_to(sheet: &Sheet, defs: &[SymbolDef], wire: &Wire) -> (String, String, String, String) {
+    let (Some(a), Some(b)) = (wire.points.first(), wire.points.last()) else {
+        return (String::new(), String::new(), String::new(), String::new());
+    };
+    let kinds = [resolve_endpoint(sheet, defs, a), resolve_endpoint(sheet, defs, b)];
+    let nets = extract_netlist(sheet, defs);
+    let mut multi = false;
+    let mut resolved: Vec<String> = Vec::with_capacity(2);
+    for (i, kind) in kinds.iter().enumerate() {
+        let text = match kind {
+            EndKind::Pin { reference, pin, .. } => format!("{reference}:{pin}"),
+            EndKind::None => String::new(),
+            EndKind::Label(name) => {
+                let exclude = match &kinds[1 - i] {
+                    EndKind::Pin { entity_id, pin, .. } => Some((*entity_id, pin.clone())),
+                    _ => None,
+                };
+                let (text, was_multi) = resolve_label_end(&nets, name, exclude.as_ref());
+                if was_multi {
+                    multi = true;
+                }
+                text
+            }
+        };
+        resolved.push(text);
+    }
+
+    let mut mates: Vec<String> = Vec::new();
+    for text in &resolved {
+        if let Some(reference) = reference_of(text) {
+            let m = crate::mate::declared_mate(sheet, reference);
+            if !m.is_empty() && !mates.contains(&m) {
+                mates.push(m);
+            }
+        }
+    }
+
+    resolved.sort_by(|x, y| (x.is_empty(), x.as_str()).cmp(&(y.is_empty(), y.as_str())));
+    let [from, to] = [resolved[0].clone(), resolved[1].clone()];
+    let remark = if multi { REMARK_MULTI_ENDED.to_string() } else { String::new() };
+    (from, to, mates.join(", "), remark)
 }
 
 /// From-To電線リストの行 ([`WIRE_LIST_COLUMNS`] と同じ並び)。図面シート化からも使う。
@@ -175,11 +277,13 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
                 _ => None,
             })
             .map(|w| {
-                let (from, to) = wire_from_to(sheet, &defs, w);
+                let (from, to, mate, remark) = wire_from_to(sheet, &defs, w);
                 vec![
                     sheet.name.clone(),
                     from,
                     to,
+                    mate,
+                    remark,
                     w.net.clone().unwrap_or_default(),
                     w.color.clone(),
                     fmt_num(w.sq),
@@ -189,13 +293,14 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
                 ]
             })
             .collect();
-        sheet_rows.sort_by(|a, b| (&a[1], &a[2], &a[3]).cmp(&(&b[1], &b[2], &b[3])));
+        sheet_rows.sort_by(|a, b| (&a[1], &a[2], &a[5]).cmp(&(&b[1], &b[2], &b[5])));
         rows.extend(sheet_rows);
     }
     rows
 }
 
-/// From-To電線リストCSV。Wireごとに1行で、両端の接続先 (From/To) と線番・電線属性・ハーネスを並べる。
+/// From-To電線リストCSV。Wireごとに1行で、両端の接続先 (From/To)・嵌合相手・備考・
+/// 線番・電線属性・ハーネスを並べる。
 /// 長さ列は測長済みのワイヤだけ埋まる (3D配線からの書き戻しはM5)。
 /// 電線品番の列は、ワイヤに書かれた品番か、無ければ線色+線径で電線品番表
 /// ([`crate::wire_parts`]) を引いた品番で埋まる。
@@ -352,17 +457,17 @@ mod tests {
         assert!(csv.contains("\"[redacted](D), 24VDC\""), "カンマ入りはクォート: {csv}");
     }
 
-    /// The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, and the older column order (sheet, wire number, harness, ...) is no longer produced.
-    /// 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先から始まる。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。
+    /// The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, followed by the mate and remark columns (G14/G18), and the older column order (sheet, wire number, harness, ...) is no longer produced.
+    /// 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先、続いて嵌合相手・備考列 (G14/G18) が並ぶ。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。
     #[test]
     fn wire_list_is_a_from_to_list() {
         let project = one_wire_project(|_| {});
         let csv = wire_list_csv(&project);
         assert_eq!(
             csv.lines().next().unwrap(),
-            "シート,From,To,線番,線色,線径sq,長さm,電線品番,ハーネス"
+            "シート,From,To,嵌合相手,備考,線番,線色,線径sq,長さm,電線品番,ハーネス"
         );
-        assert_eq!(WIRE_LIST_COLUMNS.len(), 9);
+        assert_eq!(WIRE_LIST_COLUMNS.len(), 11);
     }
 
     /// An end of a wire that lands on a symbol pin is written as "reference:pin number" (for example K1:A1).
@@ -438,6 +543,155 @@ mod tests {
         }
         let row = data_rows(&wire_list_csv(&project))[0].clone();
         assert_eq!(&row[1..3], ["24V", "R1:1"]);
+    }
+
+    fn net_label(name: &str, x: f64, y: f64) -> Entity {
+        Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(x, y),
+            name: name.into(),
+            rotation: 0,
+            attrs: Default::default(),
+        })
+    }
+
+    /// A wire end on a net label resolves through the net to the single device pin on the other side (G18), when exactly one other pin belongs to that net.
+    /// ネットラベルに届いたワイヤの端は、そのネットに他のピンがちょうど1つだけあれば、そのデバイスのピンまで辿って解決される (G18)。
+    #[test]
+    fn a_label_end_resolves_to_the_one_to_one_device() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [
+            resistor("R1", 20.0, 0.0),
+            wire_between((0.0, 0.0), (12.5, 0.0)),
+            net_label("N1", 0.0, 0.0),
+            resistor("R2", 100.0, 0.0),
+            wire_between((92.5, 0.0), (80.0, 0.0)),
+            net_label("N1", 80.0, 0.0),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let rows = data_rows(&wire_list_csv(&project));
+        let ends: Vec<(String, String)> = rows.iter().map(|r| (r[1].clone(), r[2].clone())).collect();
+        assert!(ends.contains(&("R1:1".to_string(), "R2:1".to_string())), "{ends:?}");
+        for row in &rows {
+            assert_eq!(row[4], "", "1対1で解決できたので備考は空欄: {row:?}");
+        }
+    }
+
+    /// The net still resolves correctly when it is stitched together purely by two same-named net label instances with no direct wire between them (a chain through two labels), and both wires in the chain independently resolve to the device across the chain.
+    /// 直接の配線が無くても同名のネットラベル2つだけで繋がったネット (2つのラベルを介した鎖) でも正しく解決され、鎖の両側のワイヤがそれぞれ反対側のデバイスへ解決される。
+    #[test]
+    fn the_net_chains_through_two_same_named_labels() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [
+            resistor("R1", 20.0, 0.0),
+            wire_between((0.0, 0.0), (12.5, 0.0)),
+            net_label("CHAIN", 0.0, 0.0),
+            resistor("R2", 500.0, 500.0),
+            wire_between((492.5, 500.0), (480.0, 500.0)),
+            net_label("CHAIN", 480.0, 500.0),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let rows = data_rows(&wire_list_csv(&project));
+        let ends: Vec<(String, String)> = rows.iter().map(|r| (r[1].clone(), r[2].clone())).collect();
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        assert!(ends.contains(&("R1:1".to_string(), "R2:1".to_string())), "R1側の鎖: {ends:?}");
+    }
+
+    /// When a net label's net has more than one other pin, the label end keeps the net name instead of picking one device, and the remark column marks the row as multi-ended (G18).
+    /// ネットラベルのネットに他のピンが複数あるときは、ラベル端は1つのデバイスを選ばずネット名のまま残り、備考列がその行を多端点として印す (G18)。
+    #[test]
+    fn a_label_end_with_multiple_other_pins_keeps_the_label_and_marks_the_remark() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [
+            resistor("R1", 20.0, 0.0),
+            wire_between((0.0, 0.0), (12.5, 0.0)),
+            net_label("N2", 0.0, 0.0),
+            resistor("R2", 100.0, 0.0),
+            wire_between((92.5, 0.0), (80.0, 0.0)),
+            net_label("N2", 80.0, 0.0),
+            resistor("R3", 200.0, 0.0),
+            wire_between((192.5, 0.0), (180.0, 0.0)),
+            net_label("N2", 180.0, 0.0),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let rows = data_rows(&wire_list_csv(&project));
+        let row = rows.iter().find(|r| r[1] == "N2" || r[2] == "N2").expect("N2を含む行");
+        assert!(row[1] == "N2" || row[2] == "N2", "{row:?}");
+        assert_eq!(row[4], REMARK_MULTI_ENDED, "多端点は備考にmulti: {row:?}");
+    }
+
+    /// A net that is entirely label-to-label with no device pin anywhere leaves the label name in place on both ends and marks the remark, rather than inventing a device.
+    /// どこにもデバイスのピンが無い、ラベル同士だけのネットは両端ともラベル名のまま残り、デバイスをでっち上げずに備考を印す。
+    #[test]
+    fn a_label_to_label_net_with_no_device_keeps_the_label_name() {
+        let project = one_wire_project(|_| {});
+        let sid = project.sheets[0].id;
+        let mut project = project;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [net_label("N3", 0.0, 0.0), net_label("N3", 10.0, 0.0)] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let row = data_rows(&wire_list_csv(&project))[0].clone();
+        assert_eq!(&row[1..3], ["N3", "N3"], "{row:?}");
+        assert_eq!(row[4], REMARK_MULTI_ENDED, "{row:?}");
+    }
+
+    fn connector(reference: &str, mate: Option<&str>, x: f64, y: f64) -> Entity {
+        let mut attrs = std::collections::BTreeMap::new();
+        if let Some(m) = mate {
+            attrs.insert(crate::mate::MATES_WITH_ATTR.to_string(), m.to_string());
+        }
+        Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "connector_plug".into(),
+            at: Point::new(x, y),
+            rotation: 0,
+            mirror: false,
+            reference: reference.into(),
+            value: String::new(),
+            attrs,
+        })
+    }
+
+    /// A wire ending on a connector that declares a mate carries the mate's reference designator in the wire list's mate column (G14).
+    /// 嵌合相手を宣言したコネクタに届くワイヤは、電線リストの嵌合相手列にその参照記号を載せる (G14)。
+    #[test]
+    fn wire_list_carries_the_declared_mate() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [
+            connector("J1", Some("J12"), 20.0, 0.0),
+            resistor("R1", 0.0, 0.0),
+            wire_between((7.5, 0.0), (12.5, 0.0)),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let row = data_rows(&wire_list_csv(&project))[0].clone();
+        assert_eq!(row[3], "J12");
+    }
+
+    /// A wire between two devices that neither is a connector with a declared mate leaves the mate column empty.
+    /// どちらも嵌合相手を宣言したコネクタではない2つのデバイス間のワイヤは、嵌合相手列が空欄のままになる。
+    #[test]
+    fn wire_list_mate_column_is_empty_without_a_declaration() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [resistor("R1", 0.0, 0.0), resistor("R2", 50.0, 0.0), wire_between((7.5, 0.0), (42.5, 0.0))] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let row = data_rows(&wire_list_csv(&project))[0].clone();
+        assert_eq!(row[3], "");
     }
 
     /// An end of a wire that touches nothing is left empty in the list.
@@ -534,7 +788,7 @@ mod tests {
         }
         let numbers: Vec<String> = data_rows(&wire_list_csv(&project))
             .iter()
-            .map(|r| r[3].clone())
+            .map(|r| r[5].clone())
             .collect();
         assert!(numbers.contains(&"12".to_string()), "線番12の行: {numbers:?}");
         assert!(numbers.contains(&String::new()), "未採番は空欄: {numbers:?}");
@@ -566,10 +820,10 @@ mod tests {
         }
         let rows = data_rows(&wire_list_csv(&project));
         let by_no = |no: &str| {
-            rows.iter().find(|r| r[3] == no).unwrap_or_else(|| panic!("線番{no}の行: {rows:?}")).clone()
+            rows.iter().find(|r| r[5] == no).unwrap_or_else(|| panic!("線番{no}の行: {rows:?}")).clone()
         };
-        assert_eq!(by_no("1")[8], "W1", "囲まれた線");
-        assert_eq!(by_no("2")[8], "", "囲みの外は空欄");
+        assert_eq!(by_no("1")[10], "W1", "囲まれた線");
+        assert_eq!(by_no("2")[10], "", "囲みの外は空欄");
     }
 
     /// The wire list contains each wire's color, gauge, length and part number.
@@ -583,7 +837,7 @@ mod tests {
             w.part_no = Some("SAMPLE0001".into());
         });
         let row = data_rows(&wire_list_csv(&project))[0].clone();
-        assert_eq!(&row[4..9], ["red", "0.75", "0.4", "SAMPLE0001", ""]);
+        assert_eq!(&row[6..11], ["red", "0.75", "0.4", "SAMPLE0001", ""]);
     }
 
     /// The part-number column of the wire list is filled from the project's wire-part table (colour + gauge), so wires never have to be given a part number one by one.
@@ -600,7 +854,7 @@ mod tests {
             sq: 0.3,
             note: String::new(),
         }];
-        assert_eq!(data_rows(&wire_list_csv(&project))[0][7], "SAMPLE0001");
+        assert_eq!(data_rows(&wire_list_csv(&project))[0][9], "SAMPLE0001");
     }
 
     /// A combination that is not in the wire-part table leaves the part-number column empty.
@@ -617,7 +871,7 @@ mod tests {
             sq: 0.3,
             note: String::new(),
         }];
-        assert_eq!(data_rows(&wire_list_csv(&project))[0][7], "");
+        assert_eq!(data_rows(&wire_list_csv(&project))[0][9], "");
     }
 
     /// A part number written on the wire itself is kept in the list even when the table says otherwise.
@@ -635,7 +889,7 @@ mod tests {
             sq: 0.3,
             note: String::new(),
         }];
-        assert_eq!(data_rows(&wire_list_csv(&project))[0][7], "MY-WIRE-9");
+        assert_eq!(data_rows(&wire_list_csv(&project))[0][9], "MY-WIRE-9");
     }
 
     /// A wire with no measured length leaves the length column empty (lengths come back from the 3D routing later).
@@ -643,7 +897,7 @@ mod tests {
     #[test]
     fn wire_list_length_is_empty_until_it_is_known() {
         let project = one_wire_project(|w| w.length_m = None);
-        assert_eq!(data_rows(&wire_list_csv(&project))[0][6], "");
+        assert_eq!(data_rows(&wire_list_csv(&project))[0][8], "");
     }
 
     /// Rows are sorted by From then To within each sheet, so exporting the same drawing twice gives byte-identical files.
