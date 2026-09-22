@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2102仕様項目**。
+全5領域・**2103仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -483,8 +483,9 @@
 - ネットラベルに届いたワイヤの端は、そのネットに他のピンがちょうど1つだけあれば、そのデバイスのピンまで辿って解決される (G18)。 <sub>`a_label_end_resolves_to_the_one_to_one_device`</sub>
 - 直接の配線が無くても同名のネットラベル2つだけで繋がったネット (2つのラベルを介した鎖) でも正しく解決され、鎖の両側のワイヤがそれぞれ反対側のデバイスへ解決される。 <sub>`the_net_chains_through_two_same_named_labels`</sub>
 - ネットラベルのネットに他のピンが複数あるときは、ラベル端は1つのデバイスを選ばずネット名のまま残り、備考列がその行を多端点として印す (G18)。 <sub>`a_label_end_with_multiple_other_pins_keeps_the_label_and_marks_the_remark`</sub>
-- どこにもデバイスのピンが無い、ラベル同士だけのネットは両端ともラベル名のまま残り、デバイスをでっち上げずに備考を印す。 <sub>`a_label_to_label_net_with_no_device_keeps_the_label_name`</sub>
+- どこにもデバイスのピンが無い、ラベル同士だけのネットは両端ともラベル名のまま残り、備考は多端点とは別の「none」(辿る先が無い) になる。 <sub>`a_label_to_label_net_with_no_device_keeps_the_label_name`</sub>
 - 嵌合相手を宣言したコネクタに届くワイヤは、電線リストの嵌合相手列にその参照記号を載せる (G14)。 <sub>`wire_list_carries_the_declared_mate`</sub>
+- 両端とも嵌合相手を宣言したコネクタに届くワイヤは、どちら向きに描いても嵌合相手列に同じ並びで両方が載る (G14)。 <sub>`the_mate_column_does_not_depend_on_the_direction_the_wire_was_drawn`</sub>
 - どちらも嵌合相手を宣言したコネクタではない2つのデバイス間のワイヤは、嵌合相手列が空欄のままになる。 <sub>`wire_list_mate_column_is_empty_without_a_declaration`</sub>
 - 何にも接続していないワイヤの端は、リストでは空欄になる。 <sub>`an_unconnected_wire_end_is_empty`</sub>
 - 両端のうち表記の辞書順で小さい方がFromになるので、どちら向きに描いたワイヤでもFrom/Toは常に同じになる。 <sub>`from_is_the_alphabetically_smaller_of_the_two_ends`</sub>

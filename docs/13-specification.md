@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2102 specification clauses** across 5 areas.
+**2103 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -483,8 +483,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A wire end on a net label resolves through the net to the single device pin on the other side (G18), when exactly one other pin belongs to that net. <sub>`a_label_end_resolves_to_the_one_to_one_device`</sub>
 - The net still resolves correctly when it is stitched together purely by two same-named net label instances with no direct wire between them (a chain through two labels), and both wires in the chain independently resolve to the device across the chain. <sub>`the_net_chains_through_two_same_named_labels`</sub>
 - When a net label's net has more than one other pin, the label end keeps the net name instead of picking one device, and the remark column marks the row as multi-ended (G18). <sub>`a_label_end_with_multiple_other_pins_keeps_the_label_and_marks_the_remark`</sub>
-- A net that is entirely label-to-label with no device pin anywhere leaves the label name in place on both ends and marks the remark, rather than inventing a device. <sub>`a_label_to_label_net_with_no_device_keeps_the_label_name`</sub>
+- A net that is entirely label-to-label with no device pin anywhere leaves the label name in place on both ends and remarks `none` (nothing to reach), which is a different reason from the multi-ended one. <sub>`a_label_to_label_net_with_no_device_keeps_the_label_name`</sub>
 - A wire ending on a connector that declares a mate carries the mate's reference designator in the wire list's mate column (G14). <sub>`wire_list_carries_the_declared_mate`</sub>
+- A wire whose two ends are both connectors with their own declared mates lists both mates in the same order however the wire was drawn (G14). <sub>`the_mate_column_does_not_depend_on_the_direction_the_wire_was_drawn`</sub>
 - A wire between two devices that neither is a connector with a declared mate leaves the mate column empty. <sub>`wire_list_mate_column_is_empty_without_a_declaration`</sub>
 - An end of a wire that touches nothing is left empty in the list. <sub>`an_unconnected_wire_end_is_empty`</sub>
 - Of the two ends, the one whose text sorts first alphabetically becomes From, so the same wire always yields the same From and To no matter which end was drawn first. <sub>`from_is_the_alphabetically_smaller_of_the_two_ends`</sub>

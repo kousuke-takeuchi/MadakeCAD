@@ -7,9 +7,14 @@ use crate::model::{Entity, Project, Sheet, Wire};
 use crate::netlist::{extract_netlist, pin_positions, Net, NetPin, CONNECT_EPS};
 use crate::symbol::{sheet_symbol_defs, SymbolDef};
 
-/// 電線リスト・From-To帳票の備考欄に立てる、ネットが1対1で辿れなかったときの印 (G18)。
-/// i18n中立な記号 (言語非依存): 表示側で好きな文言に訳し替えられるよう、固定の英字にする。
+/// 電線リスト・From-To帳票の備考欄に立てる、ネットの相手が**複数**あって1つに絞れなかった
+/// ときの印 (G18)。i18n中立な記号 (言語非依存): 表示側で好きな文言に訳し替えられるよう、
+/// 固定の英字にする。
 pub const REMARK_MULTI_ENDED: &str = "multi";
+
+/// 同じく備考欄の印で、ネットにデバイスのピンが**1つも**無く辿る先が無かったとき (G18)。
+/// 多端点 ([`REMARK_MULTI_ENDED`]) とは原因が違うので別の印にする。
+pub const REMARK_NO_DEVICE: &str = "none";
 
 /// CSVフィールドのエスケープ(カンマ・引用符・改行を含む場合はクォート)。
 pub(crate) fn csv_escape(s: &str) -> String {
@@ -183,15 +188,16 @@ pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
 ///
 /// `exclude`にはこのワイヤ自身の反対端がピンだったときのそのピン (entity id・ピン番号) を渡す
 /// (自分自身に辿り着かないようにするため)。ネットの中に`exclude`を除いてピンが**ちょうど1つ**
-/// あれば`"参照記号:ピン番号"`へ解決し、0個(デバイスが無い)や2個以上(多端点)なら
-/// ラベル名のまま残し、多端点フラグを立てる。
+/// あれば`"参照記号:ピン番号"`へ解決する。0個(辿る先のデバイスが無い)なら
+/// [`REMARK_NO_DEVICE`]、2個以上(多端点で1つに絞れない)なら[`REMARK_MULTI_ENDED`]の印を
+/// 添えて、表記はラベル名のまま残す。
 fn resolve_label_end(
     nets: &[Net],
     label_name: &str,
     exclude: Option<&(crate::EntityId, String)>,
-) -> (String, bool) {
+) -> (String, &'static str) {
     let Some(net) = nets.iter().find(|n| n.label.as_deref() == Some(label_name)) else {
-        return (label_name.to_string(), false);
+        return (label_name.to_string(), "");
     };
     let others: Vec<&NetPin> = net
         .pins
@@ -199,8 +205,9 @@ fn resolve_label_end(
         .filter(|p| exclude.is_none_or(|(id, pin)| *id != p.entity_id || pin != &p.pin))
         .collect();
     match others.as_slice() {
-        [only] => (format!("{}:{}", only.reference, only.pin), false),
-        _ => (label_name.to_string(), true),
+        [only] => (format!("{}:{}", only.reference, only.pin), ""),
+        [] => (label_name.to_string(), REMARK_NO_DEVICE),
+        _ => (label_name.to_string(), REMARK_MULTI_ENDED),
     }
 }
 
@@ -217,16 +224,25 @@ fn reference_of(display: &str) -> Option<&str> {
 ///   ピンが**ちょうど1つ**ならそのデバイスへ辿る (G18)。それ以外はラベル名のまま残る
 /// - 表記の辞書順で小さい方をFrom、大きい方をTo。未接続(空文字)の端は常にTo側
 /// - 嵌合相手はFrom/Toが指すデバイスのうち、コネクタが`mates_with`を宣言していれば
-///   その値をカンマ区切りで列挙する (G14。重複は1つにまとめる)
-/// - 備考はFrom/Toのどちらかがネットを1対1で辿れなかったとき`crate::reports::REMARK_MULTI_ENDED`
-///   ("multi") が立つ (G18)
-pub fn wire_from_to(sheet: &Sheet, defs: &[SymbolDef], wire: &Wire) -> (String, String, String, String) {
+///   その値をカンマ区切りで列挙する (G14。From側→To側の順。重複は1つにまとめる)
+/// - 備考はFrom/Toのどちらかがネットを1対1で辿れなかったときに立つ (G18):
+///   多端点で絞れなければ[`REMARK_MULTI_ENDED`] ("multi")、辿る先のデバイスが
+///   無ければ[`REMARK_NO_DEVICE`] ("none")。両方当てはまるときは"multi"を優先する
+///
+/// `nets`はこのシートのネットリスト ([`extract_netlist`]) を呼び出し側から渡す
+/// (電線リストは1シートに何十本もワイヤがあるので、シートに1回だけ作る)。
+pub fn wire_from_to(
+    sheet: &Sheet,
+    defs: &[SymbolDef],
+    nets: &[Net],
+    wire: &Wire,
+) -> (String, String, String, String) {
     let (Some(a), Some(b)) = (wire.points.first(), wire.points.last()) else {
         return (String::new(), String::new(), String::new(), String::new());
     };
     let kinds = [resolve_endpoint(sheet, defs, a), resolve_endpoint(sheet, defs, b)];
-    let nets = extract_netlist(sheet, defs);
     let mut multi = false;
+    let mut no_device = false;
     let mut resolved: Vec<String> = Vec::with_capacity(2);
     for (i, kind) in kinds.iter().enumerate() {
         let text = match kind {
@@ -237,16 +253,17 @@ pub fn wire_from_to(sheet: &Sheet, defs: &[SymbolDef], wire: &Wire) -> (String, 
                     EndKind::Pin { entity_id, pin, .. } => Some((*entity_id, pin.clone())),
                     _ => None,
                 };
-                let (text, was_multi) = resolve_label_end(&nets, name, exclude.as_ref());
-                if was_multi {
-                    multi = true;
-                }
+                let (text, mark) = resolve_label_end(nets, name, exclude.as_ref());
+                multi |= mark == REMARK_MULTI_ENDED;
+                no_device |= mark == REMARK_NO_DEVICE;
                 text
             }
         };
         resolved.push(text);
     }
 
+    // From/To を決めてから嵌合相手列を組み立てる (描いた向きで並びが変わらないように)
+    resolved.sort_by(|x, y| (x.is_empty(), x.as_str()).cmp(&(y.is_empty(), y.as_str())));
     let mut mates: Vec<String> = Vec::new();
     for text in &resolved {
         if let Some(reference) = reference_of(text) {
@@ -257,10 +274,15 @@ pub fn wire_from_to(sheet: &Sheet, defs: &[SymbolDef], wire: &Wire) -> (String, 
         }
     }
 
-    resolved.sort_by(|x, y| (x.is_empty(), x.as_str()).cmp(&(y.is_empty(), y.as_str())));
     let [from, to] = [resolved[0].clone(), resolved[1].clone()];
-    let remark = if multi { REMARK_MULTI_ENDED.to_string() } else { String::new() };
-    (from, to, mates.join(", "), remark)
+    let remark = if multi {
+        REMARK_MULTI_ENDED
+    } else if no_device {
+        REMARK_NO_DEVICE
+    } else {
+        ""
+    };
+    (from, to, mates.join(", "), remark.to_string())
 }
 
 /// From-To電線リストの行 ([`WIRE_LIST_COLUMNS`] と同じ並び)。図面シート化からも使う。
@@ -269,6 +291,8 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     for sheet in &project.sheets {
         let defs = sheet_symbol_defs(sheet);
+        // ネットリストはワイヤごとではなくシートごとに1回だけ作る (G18の解決に全ワイヤが使う)
+        let nets = extract_netlist(sheet, &defs);
         let mut sheet_rows: Vec<Vec<String>> = sheet
             .entities
             .values()
@@ -277,7 +301,7 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
                 _ => None,
             })
             .map(|w| {
-                let (from, to, mate, remark) = wire_from_to(sheet, &defs, w);
+                let (from, to, mate, remark) = wire_from_to(sheet, &defs, &nets, w);
                 vec![
                     sheet.name.clone(),
                     from,
@@ -629,8 +653,8 @@ mod tests {
         assert_eq!(row[4], REMARK_MULTI_ENDED, "多端点は備考にmulti: {row:?}");
     }
 
-    /// A net that is entirely label-to-label with no device pin anywhere leaves the label name in place on both ends and marks the remark, rather than inventing a device.
-    /// どこにもデバイスのピンが無い、ラベル同士だけのネットは両端ともラベル名のまま残り、デバイスをでっち上げずに備考を印す。
+    /// A net that is entirely label-to-label with no device pin anywhere leaves the label name in place on both ends and remarks `none` (nothing to reach), which is a different reason from the multi-ended one.
+    /// どこにもデバイスのピンが無い、ラベル同士だけのネットは両端ともラベル名のまま残り、備考は多端点とは別の「none」(辿る先が無い) になる。
     #[test]
     fn a_label_to_label_net_with_no_device_keeps_the_label_name() {
         let project = one_wire_project(|_| {});
@@ -642,7 +666,7 @@ mod tests {
         }
         let row = data_rows(&wire_list_csv(&project))[0].clone();
         assert_eq!(&row[1..3], ["N3", "N3"], "{row:?}");
-        assert_eq!(row[4], REMARK_MULTI_ENDED, "{row:?}");
+        assert_eq!(row[4], REMARK_NO_DEVICE, "{row:?}");
     }
 
     fn connector(reference: &str, mate: Option<&str>, x: f64, y: f64) -> Entity {
@@ -678,6 +702,30 @@ mod tests {
         }
         let row = data_rows(&wire_list_csv(&project))[0].clone();
         assert_eq!(row[3], "J12");
+    }
+
+    /// A wire whose two ends are both connectors with their own declared mates lists both mates in the same order however the wire was drawn (G14).
+    /// 両端とも嵌合相手を宣言したコネクタに届くワイヤは、どちら向きに描いても嵌合相手列に同じ並びで両方が載る (G14)。
+    #[test]
+    fn the_mate_column_does_not_depend_on_the_direction_the_wire_was_drawn() {
+        let mate_column = |a: (f64, f64), b: (f64, f64)| {
+            let mut project = Project::new("t");
+            let sid = project.sheets[0].id;
+            let sheet = project.sheet_mut(sid).unwrap();
+            for e in [
+                connector("J1", Some("J11"), 20.0, 0.0),
+                connector("J2", Some("J22"), 60.0, 0.0),
+                wire_between(a, b),
+            ] {
+                sheet.entities.insert(e.id(), e);
+            }
+            // 嵌合相手列はカンマ区切りの値を持つので、CSVの引用を挟まない行データで見る
+            wire_list_rows(&project)[0][3].clone()
+        };
+        let forward = mate_column((12.5, 0.0), (52.5, 0.0));
+        let backward = mate_column((52.5, 0.0), (12.5, 0.0));
+        assert_eq!(forward, backward, "描いた向きで並びが変わらない");
+        assert_eq!(forward, "J11, J22", "From側→To側の順");
     }
 
     /// A wire between two devices that neither is a connector with a declared mate leaves the mate column empty.
