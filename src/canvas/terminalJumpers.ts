@@ -1,20 +1,17 @@
-// 端子台のジャンパ (G5)。attrs["jumpers"] の解析と、シンボル上に描くバーの端点を求める。
-// Rust側 madake-core/src/terminal_chart.rs の parse_jumpers / jumper_bar_segments と同一ルール。
+// 端子台のジャンパ (G5)。attrs["jumpers"] の解析と、シンボル上に描くバーの図形を求める。
+// Rust側 madake-core/src/terminal_chart.rs の parse_jumpers / jumper_bars と同一ルール。
 // Pinia非依存の純関数だけを置き、端子台エディタのストア (stores/terminals.ts) も
 // キャンバス描画 (renderer.ts) も**ここ1か所**の正規化ルールを使う。
 
-import { parseTerminalNo } from "./dynamicSymbol";
+import { parseTerminalNo, TERMINAL_MARK_R } from "./dynamicSymbol";
 import type { Point, SymbolDef } from "../ipc";
 
 /** ジャンパバーの線幅 (mm)。Rust側 terminal_chart.rs の JUMPER_BAR_STROKE と一致させること。 */
-export const JUMPER_BAR_STROKE_MM = 0.8;
+export const JUMPER_BAR_STROKE_MM = 0.4;
 /** ジャンパバーの両端に付ける丸の半径 (mm)。Rust側 JUMPER_BAR_DOT_R と一致させること。 */
-export const JUMPER_BAR_DOT_R_MM = 0.7;
-/**
- * ジャンパバーを端子の中心線からどれだけ横へずらすか (mm)。Rust側 JUMPER_BAR_OFFSET と一致。
- * 端子番号は端子の中心の真上に書かれるので、中心を通すとバーと両端の丸が番号を隠してしまう。
- */
-export const JUMPER_BAR_OFFSET_MM = 2.7;
+export const JUMPER_BAR_DOT_R_MM = 0.3;
+/** 配線が接続点に載っているとみなす距離 (mm)。Rust側 netlist::CONNECT_EPS と同じ。 */
+const CONNECT_EPS = 0.01;
 
 /** 端子番号の並べ替えキー (極番号→段記号→表記)。Rust側 terminal_sort_key と同一。 */
 function sortKey(no: string): [number, string, string] {
@@ -93,36 +90,44 @@ export function terminalCenter(def: SymbolDef, number: string): Point | null {
   return { x: sx / pts.length, y: sy / pts.length };
 }
 
+/** 図面に描くジャンパ1本ぶんの図形(シンボルのローカル座標。Rust側 JumperBar と同一)。 */
+export interface JumperBar {
+  /** バーの両端。2つの端子の印の縁どうしを結ぶ。 */
+  bar: [Point, Point];
+  /** 両端の丸の中心。それぞれ自分の端子の印に外接する。 */
+  dots: [Point, Point];
+}
+
 /**
- * ジャンパ (正規化済みの端子番号の組) を、シンボル定義のローカル座標系でのバーの
- * 端点に変換する。見つからない端子番号の組は結果から省く(Rust側 jumper_bar_segments
- * と同一)。
+ * ジャンパ (正規化済みの端子番号の組) を、シンボル定義のローカル座標系の図形に変換する
+ * (Rust側 jumper_bars と同一)。見つからない端子番号の組は結果から省く。
  *
- * バーは端子の中心を結ぶ線そのものではなく、それと平行に JUMPER_BAR_OFFSET_MM だけ
- * 横へずらした線にする(端子番号の文字を隠さないため)。ずらす向きは中心線に直交する
- * 向きのうち+x/+y側で、縦に並ぶ端子は列の右、横に並ぶ端子は行の下に出る。
+ * 形はサドルジャンパの実物どおり、隣り合う2端子の中心を結ぶ軸の上、2つの印の隙間だけに
+ * 描く。バーは印の縁から縁まで、丸は自分の端子の印に外接する位置
+ * (中心から TERMINAL_MARK_R + JUMPER_BAR_DOT_R_MM) に置く。
  */
-export function jumperBarSegments(
+export function jumperBars(
   def: SymbolDef,
   pairs: readonly (readonly [string, string])[],
-): [Point, Point][] {
-  const out: [Point, Point][] = [];
+): JumperBar[] {
+  const out: JumperBar[] = [];
   for (const [a, b] of pairs) {
     const pa = terminalCenter(def, a);
     const pb = terminalCenter(def, b);
     if (!pa || !pb) continue;
     const [dx, dy] = [pb.x - pa.x, pb.y - pa.y];
     const len = Math.hypot(dx, dy);
-    if (len < 1e-9) {
-      out.push([pa, pb]);
-      continue;
-    }
-    const nx = (Math.abs(dy) / len) * JUMPER_BAR_OFFSET_MM;
-    const ny = (Math.abs(dx) / len) * JUMPER_BAR_OFFSET_MM;
-    out.push([
-      { x: pa.x + nx, y: pa.y + ny },
-      { x: pb.x + nx, y: pb.y + ny },
-    ]);
+    if (len < CONNECT_EPS) continue;
+    const [ux, uy] = [dx / len, dy / len];
+    const along = (from: Point, d: number, sign: number): Point => ({
+      x: from.x + ux * d * sign,
+      y: from.y + uy * d * sign,
+    });
+    const dotD = TERMINAL_MARK_R + JUMPER_BAR_DOT_R_MM;
+    out.push({
+      bar: [along(pa, TERMINAL_MARK_R, 1), along(pb, TERMINAL_MARK_R, -1)],
+      dots: [along(pa, dotD, 1), along(pb, dotD, -1)],
+    });
   }
   return out;
 }

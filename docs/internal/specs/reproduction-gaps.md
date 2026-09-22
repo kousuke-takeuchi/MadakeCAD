@@ -314,6 +314,17 @@ Text styling is new.
 > (non-adjacent or unknown terminal numbers draw nothing). Still also reported in
 > the terminal chart and terminal diagram, unchanged.
 >
+> The bar's shape follows the real saddle jumper, after
+> [EPLAN "Using Jumpers"](https://www.eplan.help/en-us/Infoportal/Content/Plattform/2025/Content/htm/terminalgui_k_verwendungbruecken.htm)
+> (a saddle jumper sits in a duct in the middle of the terminal, joins neighbouring
+> terminals, and uses saddle-jumper connection points separate from the wire connection
+> points): the bar lies **on the axis joining the two neighbouring terminal centres and
+> only in the gap between their round marks**, with one filled end mark per endpoint,
+> placed just outside the mark it belongs to. It therefore never crosses a terminal
+> number, never sits on a wire connection point of a column, and always reads as joining
+> the pair it actually joins. `terminals_are_adjacent` limits a jumper to two neighbours,
+> so a bar never passes over a third terminal.
+>
 > On a **multi-level** block (G6) the jumper spec is level-aware: `1a-1b` links the
 > two levels of one pole, `1a-2a` two neighbouring poles of one level, and a
 > diagonal pair (`1a-2b`) is not adjacent. A plain numeric spec (`1-2`) on a

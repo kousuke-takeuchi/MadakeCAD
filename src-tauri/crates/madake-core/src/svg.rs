@@ -417,8 +417,10 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
                 );
             }
             Primitive::Text { at, text, height } => {
-                let p = transform_local(*at, inst);
-                text_el(out, p.x, p.y + height / 2.0, *height, "#000", "middle", text);
+                // ベースラインの位置もシンボルと一緒に回す (回転・反転しても文字の基準点が
+                // 定義どおりの場所に来る。文字そのものは常に水平に書く)
+                let p = transform_local(Point::new(at.x, at.y + height / 2.0), inst);
+                text_el(out, p.x, p.y, *height, "#000", "middle", text);
             }
         }
     }
@@ -450,14 +452,18 @@ fn render_jumper_bars(out: &mut String, inst: &crate::model::SymbolInstance, def
         inst.attrs.get("jumpers").map(String::as_str).unwrap_or(""),
         &terminals,
     );
-    for (a, b) in crate::terminal_chart::jumper_bar_segments(def, &jumpers.pairs) {
-        let (pa, pb) = (transform_local(a, inst), transform_local(b, inst));
+    for jumper in crate::terminal_chart::jumper_bars(def, &jumpers.pairs) {
+        let (pa, pb) = (
+            transform_local(jumper.bar.0, inst),
+            transform_local(jumper.bar.1, inst),
+        );
         line_el(out, pa.x, pa.y, pb.x, pb.y, JUMPER_BAR_STROKE, "#000");
-        for pt in [pa, pb] {
+        for dot in [jumper.dots.0, jumper.dots.1] {
+            let pt = transform_local(dot, inst);
             let _ = write!(
                 out,
-                "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"#000\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
-                n(pt.x), n(pt.y), n(JUMPER_BAR_DOT_R), n(SYMBOL_STROKE)
+                "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"#000\" stroke=\"none\"/>\n",
+                n(pt.x), n(pt.y), n(JUMPER_BAR_DOT_R)
             );
         }
     }
@@ -2356,7 +2362,10 @@ mod tests {
             .filter(|l| l.trim_start().starts_with("<text "))
             .filter_map(|l| {
                 let size = attr(l, "font-size")?;
-                if (size - crate::symbol::TERMINAL_NUMBER_HEIGHT).abs() > 1e-9 {
+                // 端子番号は通常の高さか、3文字以上のときの小さい高さのどちらか
+                if (size - crate::symbol::TERMINAL_NUMBER_HEIGHT).abs() > 1e-9
+                    && (size - crate::symbol::TERMINAL_NUMBER_HEIGHT_NARROW).abs() > 1e-9
+                {
                     return None;
                 }
                 let (x, y) = (attr(l, "x")?, attr(l, "y")?);
@@ -2408,6 +2417,7 @@ mod tests {
             ("terminal_block_4p", "1-2", 0u16, false),
             ("terminal_block_4p", "1-3", 0, false),
             ("terminal_block_4p", "1-2,3-4", 0, false),
+            ("terminal_block_4p", "1-2,2-3", 0, false),
             ("terminal_block_4p_2l", "1a-1b,2a-3a", 0, false),
             ("terminal_block_4p_3l", "1a-1b,1b-1c", 0, false),
             ("terminal_block_4p", "1-2,2-3", 90, false),
@@ -2418,10 +2428,12 @@ mod tests {
             ("terminal_block_12p_2l", "10a-10b,11a-12a", 0, false),
         ] {
             let svg = jumper_sheet(symbol_id, jumpers, rotation, mirror);
+            let numbers = number_boxes(&svg);
+            assert!(!numbers.is_empty(), "{symbol_id}: 端子番号が1つも見つからない");
             for graphic in jumper_boxes(&svg) {
-                for number in number_boxes(&svg) {
+                for number in &numbers {
                     assert!(
-                        !overlaps(graphic, number),
+                        !overlaps(graphic, *number),
                         "{symbol_id} {jumpers} rot={rotation} mirror={mirror}: \
                          ジャンパの図形{graphic:?}が端子番号{number:?}に重なっている"
                     );
@@ -2430,49 +2442,49 @@ mod tests {
         }
     }
 
-    /// A jumper between two adjacent terminals is drawn on the schematic as a thick bar linking their centres, five millimetres apart, with a small filled circle at each end.
-    /// 隣り合う2端子間のジャンパは、図面上でその中心どうしを結ぶ5mm間隔の太いバーとして描かれ、両端に小さな塗り丸が付く。
+    /// A jumper between two adjacent terminals is drawn on the schematic as a short thick bar in the gap between their two round marks, with a small filled circle at each end just outside the mark it belongs to.
+    /// 隣り合う2端子間のジャンパは、図面上でその2つの印(丸)の隙間に短い太いバーとして描かれ、両端には自分の印のすぐ外側に小さな塗り丸が付く。
     #[test]
     fn svg_draws_a_jumper_bar_between_adjacent_terminals() {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         let tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "1-2");
         sheet.entities.insert(tb.id(), tb);
         let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
-        // 端子1中心 (100, 42.5)・端子2中心 (100, 47.5)。バーは番号を避けて右へ2.7mmずれる
+        // 端子1中心 (100, 42.5)・端子2中心 (100, 47.5)。バーは2つの印の縁の間 (44.3〜45.7)
         let bars: Vec<_> = svg_lines(&svg)
             .into_iter()
             .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
             .collect();
         assert_eq!(bars.len(), 1, "太いバーは1本: {bars:?}");
-        assert_eq!((bars[0].0, bars[0].1, bars[0].2, bars[0].3), (102.7, 42.5, 102.7, 47.5));
+        assert_eq!((bars[0].0, bars[0].1, bars[0].2, bars[0].3), (100.0, 44.3, 100.0, 45.7));
         let dots: Vec<_> = svg_circles(&svg)
             .into_iter()
             .filter(|c| (c.2 - JUMPER_BAR_DOT_R).abs() < 1e-9)
             .collect();
         assert_eq!(dots.len(), 2, "バーの両端に丸: {dots:?}");
-        assert!(dots.iter().any(|c| (c.0, c.1) == (102.7, 42.5)));
-        assert!(dots.iter().any(|c| (c.0, c.1) == (102.7, 47.5)));
+        assert!(dots.iter().any(|c| (c.0, c.1) == (100.0, 44.6)), "{dots:?}");
+        assert!(dots.iter().any(|c| (c.0, c.1) == (100.0, 45.4)), "{dots:?}");
     }
 
-    /// On a multi-level terminal block, a jumper written with level letters ("1a-1b") is drawn as a horizontal bar across the two level columns of the same pole.
-    /// 多段端子台で段記号付きに書かれたジャンパ ("1a-1b") は、同じ極の2つの段の列をまたぐ横向きのバーとして描かれる。
+    /// On a multi-level terminal block, a jumper written with level letters ("1a-1b") is drawn on that pole's row as a bar in the gap between the two level columns' marks.
+    /// 多段端子台で段記号付きに書かれたジャンパ ("1a-1b") は、その極の行の上、2つの段の列の印の隙間にバーとして描かれる。
     #[test]
     fn svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block() {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         let tb = terminal_block("TB1", "terminal_block_4p_2l", 100.0, 50.0, "1a-1b");
         sheet.entities.insert(tb.id(), tb);
         let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
-        // 極1の行は y=42.5、段aの列は x=95、段bの列は x=105。バーは番号を避けて行の下へ2.7mm
+        // 極1の行は y=42.5、段aの列は x=95、段bの列は x=105。バーは2つの印の縁の間 (96.8〜103.2)
         let bars: Vec<_> = svg_lines(&svg)
             .into_iter()
             .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
             .collect();
         assert_eq!(bars.len(), 1, "太いバーは1本: {bars:?}");
-        assert_eq!((bars[0].0, bars[0].1, bars[0].2, bars[0].3), (95.0, 45.2, 105.0, 45.2));
+        assert_eq!((bars[0].0, bars[0].1, bars[0].2, bars[0].3), (96.8, 42.5, 103.2, 42.5));
     }
 
-    /// A jumper bar turns with its terminal block, so on a block rotated a quarter turn the bar lies across the rotated terminals instead of staying upright.
-    /// ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の並びに沿って描かれる。
+    /// A jumper bar turns with its terminal block, so on a block rotated a quarter turn the bar lies between the rotated terminals instead of staying upright.
+    /// ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の間に横向きに描かれる。
     #[test]
     fn svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block() {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
@@ -2482,21 +2494,20 @@ mod tests {
         }
         sheet.entities.insert(tb.id(), tb);
         let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
-        // 90度回すと端子1は(107.5,50)、端子2は(102.5,50)へ移り、バーは横向きになる。
-        // 「列の右」へのずらしも一緒に回るので、バーは行の下 (y=52.7) に出る
+        // 90度回すと端子1は(107.5,50)、端子2は(102.5,50)へ移り、バーも2つの印の縁の間で横向きになる
         let bars: Vec<_> = svg_lines(&svg)
             .into_iter()
             .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
             .collect();
         assert_eq!(bars.len(), 1, "{bars:?}");
-        assert_eq!((bars[0].0, bars[0].1, bars[0].2, bars[0].3), (107.5, 52.7, 102.5, 52.7));
+        assert_eq!((bars[0].0, bars[0].1, bars[0].2, bars[0].3), (105.7, 50.0, 104.3, 50.0));
         let dots: Vec<_> = svg_circles(&svg)
             .into_iter()
             .filter(|c| (c.2 - JUMPER_BAR_DOT_R).abs() < 1e-9)
             .collect();
         assert_eq!(dots.len(), 2, "{dots:?}");
-        assert!(dots.iter().any(|c| (c.0, c.1) == (107.5, 52.7)));
-        assert!(dots.iter().any(|c| (c.0, c.1) == (102.5, 52.7)));
+        assert!(dots.iter().any(|c| (c.0, c.1) == (105.4, 50.0)), "{dots:?}");
+        assert!(dots.iter().any(|c| (c.0, c.1) == (104.6, 50.0)), "{dots:?}");
     }
 
     /// The round mark at each end of a jumper bar is clearly wider than the bar itself, so the bar reads as a shorting bar with two ends rather than a plain thick line.
@@ -2510,24 +2521,20 @@ mod tests {
             JUMPER_BAR_STROKE
         );
         assert!(
-            JUMPER_BAR_DOT_R - JUMPER_BAR_STROKE / 2.0 >= 0.25,
+            JUMPER_BAR_DOT_R - JUMPER_BAR_STROKE / 2.0 > 0.05,
             "丸はバーの縁から{}mm出る (印刷しても丸と分かる大きさ)",
             JUMPER_BAR_DOT_R - JUMPER_BAR_STROKE / 2.0
         );
     }
 
-    /// The whole jumper bar, end marks included, stays outside the terminals' own round marks, so a terminal still reads as a ring with its number inside instead of a filled blob.
-    /// ジャンパバーは両端の丸も含めて端子自身の印(丸)の外側に収まるので、端子は塗りつぶされた塊ではなく、番号の入った輪のまま見える。
+    /// Both end marks of a jumper fit in the gap between the two terminal marks it joins, far enough apart to read as two separate marks rather than one blob.
+    /// ジャンパの両端の丸は、繋ぐ2つの端子の印の隙間にちょうど収まり、1つの塊ではなく2つの丸として見えるだけ離れている。
     #[test]
-    fn the_jumper_bar_stays_outside_the_terminal_marks() {
-        use crate::terminal_chart::JUMPER_BAR_OFFSET;
-        assert!(
-            JUMPER_BAR_OFFSET - JUMPER_BAR_DOT_R > crate::symbol::TERMINAL_MARK_R,
-            "両端の丸の内側の縁{}は端子の印の半径{}より外",
-            JUMPER_BAR_OFFSET - JUMPER_BAR_DOT_R,
-            crate::symbol::TERMINAL_MARK_R
-        );
-        assert!(JUMPER_BAR_OFFSET - JUMPER_BAR_STROKE / 2.0 > crate::symbol::TERMINAL_MARK_R);
+    fn the_two_end_marks_of_a_jumper_fit_apart_in_the_gap() {
+        // 隣り合う端子の中心間隔は5mm、印の半径は1.8mm → 隙間は1.4mm
+        let gap = 5.0 - 2.0 * crate::symbol::TERMINAL_MARK_R;
+        let between = gap - 4.0 * JUMPER_BAR_DOT_R;
+        assert!(between > 0.0, "丸2つが重ならずに隙間{gap}mmへ入る (残り{between}mm)");
     }
 
     /// A jumper written between two terminals that are not adjacent is invalid (the same rule the terminal chart enforces), so no bar is drawn for it at all.

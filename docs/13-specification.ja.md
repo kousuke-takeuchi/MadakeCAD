@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1897仕様項目**。
+全5領域・**1901仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -527,11 +527,11 @@
 - タグの無いネットラベルは従来どおり文字だけで、周りに枠は描かれない。 <sub>`svg_draws_no_outline_for_an_untagged_net_label`</sub>
 - 知らないタグの値は無視され、出力が壊れるのではなく文字だけの表示に戻る。 <sub>`svg_ignores_an_unknown_tag_value`</sub>
 - ジャンパバーと両端の印は、ジャンパの掛け方や端子台の向き・反転にかかわらず、どの端子番号にも重ならない場所に描かれるので、番号はいつでも読める。 <sub>`a_jumper_bar_never_covers_a_terminal_number`</sub>
-- 隣り合う2端子間のジャンパは、図面上でその中心どうしを結ぶ5mm間隔の太いバーとして描かれ、両端に小さな塗り丸が付く。 <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
-- 多段端子台で段記号付きに書かれたジャンパ ("1a-1b") は、同じ極の2つの段の列をまたぐ横向きのバーとして描かれる。 <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
-- ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の並びに沿って描かれる。 <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
+- 隣り合う2端子間のジャンパは、図面上でその2つの印(丸)の隙間に短い太いバーとして描かれ、両端には自分の印のすぐ外側に小さな塗り丸が付く。 <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
+- 多段端子台で段記号付きに書かれたジャンパ ("1a-1b") は、その極の行の上、2つの段の列の印の隙間にバーとして描かれる。 <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
+- ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の間に横向きに描かれる。 <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
 - ジャンパバーの両端の丸はバーの太さよりはっきり大きいので、ただの太い線ではなく「両端のあるショートバー」に見える。 <sub>`the_jumper_bar_end_dot_is_wider_than_the_bar`</sub>
-- ジャンパバーは両端の丸も含めて端子自身の印(丸)の外側に収まるので、端子は塗りつぶされた塊ではなく、番号の入った輪のまま見える。 <sub>`the_jumper_bar_stays_outside_the_terminal_marks`</sub>
+- ジャンパの両端の丸は、繋ぐ2つの端子の印の隙間にちょうど収まり、1つの塊ではなく2つの丸として見えるだけ離れている。 <sub>`the_two_end_marks_of_a_jumper_fit_apart_in_the_gap`</sub>
 - 隣り合わない2端子間のジャンパは(端子台チャートと同じ規則で)不正なので、バーはまったく描かれない。 <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - 複数のジャンパを持つ端子台には、ジャンパの数だけバーが描かれる。 <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
 - ジャンパの無い端子台にはバーが描かれず、端子台以外のシンボルは"jumpers"属性を持っていてもバーが描かれない。 <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
@@ -668,8 +668,9 @@
 - シートを指定すると、そのシートに描かれている端子台だけの一覧になる。 <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
 - 端子台ではないシンボルは一覧に出ない。 <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
 - 端子台のチャートとチェックは、どのシートにあるかを知らなくてもentity idだけで引ける。 <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
-- 同じ列の2端子を繋ぐジャンパバーは、端子の中心を結ぶ線と平行な同じ長さ5mmの線分として、端子番号に重ならないよう右へずらした位置に引かれる。 <sub>`a_jumper_bar_runs_alongside_the_column_clear_of_the_numbers`</sub>
-- 同じ極の2つの段を繋ぐジャンパバーは、端子の中心を結ぶ線と平行に行の下へずらして引かれるので、その行の番号にも次の行の番号にも重ならない。 <sub>`a_cross_level_jumper_bar_runs_below_the_row`</sub>
+- 同じ極の2つの段を繋ぐジャンパバーは、その極の行の上、2つの段の列の印の隙間に引かれ、両端の丸はそれぞれの印のすぐ外側に付く。 <sub>`a_cross_level_jumper_bar_lies_on_the_row_between_the_two_marks`</sub>
+- ジャンパバーの両端の丸は、それが繋ぐ端子のものだと見て分かる: 自分の端子の印に一番近く、ほかの端子の印には決して触れないので、どの2端子を繋いでいるか読み違えようがない。 <sub>`each_jumper_end_mark_belongs_to_its_own_terminal`</sub>
+- 同じ列の2端子を繋ぐジャンパは、2つの印の間の隙間だけに描かれるので、端子台の配線接続点の上を通ることはない。 <sub>`a_column_jumper_stays_in_the_gap_between_the_two_marks`</sub>
 - 1つの端子台に複数のジャンパがあれば、それぞれ独立したバーの線分になる。 <sub>`multiple_jumpers_each_produce_their_own_bar_segment`</sub>
 - 端子台に無い端子番号を指すジャンパは、パニックせず線分を作らない。 <sub>`a_jumper_to_a_missing_terminal_produces_no_bar_segment`</sub>
 - ジャンパは通常のupdate_entityコマンドで設定するので、チャートに反映され、undoで元に戻る。 <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
@@ -1762,11 +1763,13 @@
 - 多段端子台に段記号なしの指定("1-2")を書いても、どの段か決まらないので捨てられる <sub>`parseJumperSpec`</sub>
 - 端子台に無い段を指すジャンパ("1a-1c")と斜めの組("1a-2b")は捨てられる <sub>`parseJumperSpec`</sub>
 - ジャンパバーの寸法(線幅・両端の丸の半径・中心線からのずらし量)はRust側と同じ数値になる <sub>`jumper bar dimensions`</sub>
-- 同じ列の2端子を繋ぐジャンパバーは、端子番号を避けて列の右へずらした5mmの線分になる <sub>`jumperBarSegments`</sub>
-- 段をまたぐジャンパのバーは、2つの段の列の真下を横に結ぶ線分になる(行の下へずれる) <sub>`jumperBarSegments`</sub>
-- ジャンパバーと両端の丸は、どの端子番号の文字にも重ならない <sub>`jumperBarSegments`</sub>
-- 複数のジャンパはそれぞれ独立した線分になる <sub>`jumperBarSegments`</sub>
-- 端子台に無い端子番号を指すジャンパは線分を作らない <sub>`jumperBarSegments`</sub>
+- 同じ列の2端子を繋ぐジャンパは、列の中心線上の2つの印の隙間だけに描かれる <sub>`jumperBars`</sub>
+- 両端の丸はそれぞれ自分の端子の印に外接する位置に付く <sub>`jumperBars`</sub>
+- 段をまたぐジャンパは、極の行の上、2つの段の列の印の隙間に描かれる <sub>`jumperBars`</sub>
+- 両端の丸は自分の端子の印に一番近く、ほかの端子の印には触れない <sub>`jumperBars`</sub>
+- ジャンパバーと両端の丸は、どの端子番号の文字にも重ならない <sub>`jumperBars`</sub>
+- 複数のジャンパはそれぞれ独立した線分になる <sub>`jumperBars`</sub>
+- 端子台に無い端子番号を指すジャンパは線分を作らない <sub>`jumperBars`</sub>
 
 ### textStyle
 
@@ -2214,6 +2217,7 @@
 - グリッドは端子番号ごとに1行で、外部側・内部側・線番・電線が図面どおりに並ぶ <sub>`terminal strip editor store`</sub>
 - 電線が1本も繋がっていない端子は予備端子として印が付く <sub>`terminal strip editor store`</sub>
 - 隣り合う2端子を選んでジャンパを生成すると、update_entityコマンド1回で属性に書き込まれる <sub>`terminal strip editor store`</sub>
+- 多段端子台の見出しには端子数ではなく極数を使う(4極2段は「8極」ではなく「4極」) <sub>`terminal strip editor store`</sub>
 - 端子を選んでいないとジャンパは生成できない <sub>`terminal strip editor store`</sub>
 - 隣り合わない端子を選んでもジャンパは生成できない <sub>`terminal strip editor store`</sub>
 - ジャンパ削除は選んだ端子に掛かるジャンパだけを外したコマンドになる <sub>`terminal strip editor store`</sub>

@@ -31,7 +31,7 @@ import {
 import {
   JUMPER_BAR_DOT_R_MM,
   JUMPER_BAR_STROKE_MM,
-  jumperBarSegments,
+  jumperBars,
   parseJumperSpec,
   terminalNumbers,
 } from "./terminalJumpers";
@@ -428,10 +428,13 @@ export function drawSymbol(
         break;
       }
       case "text": {
-        const p = vp.toScreen(transformLocal(prim.at, inst));
+        // ベースラインの位置もシンボルと一緒に回す(Rust側svg.rsと同じ規則。文字は常に水平)
+        const p = vp.toScreen(
+          transformLocal({ x: prim.at.x, y: prim.at.y + prim.height / 2 }, inst),
+        );
         ctx.font = `${Math.max(8, prim.height * vp.scale)}px sans-serif`;
         ctx.textAlign = "center";
-        ctx.fillText(prim.text, p.x, p.y + (prim.height * vp.scale) / 2.8);
+        ctx.fillText(prim.text, p.x, p.y);
         break;
       }
     }
@@ -440,18 +443,19 @@ export function drawSymbol(
   // (SVG出力のrender_jumper_barsと同じジオメトリ。表示クラスは"symbols"に含まれる)
   if (inst.symbol_id.startsWith("terminal_block_")) {
     const pairs = parseJumperSpec(inst.attrs.jumpers ?? "", terminalNumbers(def));
-    const segments = jumperBarSegments(def, pairs);
-    if (segments.length > 0) {
+    const bars = jumperBars(def, pairs);
+    if (bars.length > 0) {
       const lineWidth = ctx.lineWidth;
       ctx.lineWidth = Math.max(1, JUMPER_BAR_STROKE_MM * vp.scale);
-      for (const [a, b] of segments) {
-        const sa = vp.toScreen(transformLocal(a, inst));
-        const sb = vp.toScreen(transformLocal(b, inst));
+      for (const { bar, dots } of bars) {
+        const sa = vp.toScreen(transformLocal(bar[0], inst));
+        const sb = vp.toScreen(transformLocal(bar[1], inst));
         ctx.beginPath();
         ctx.moveTo(sa.x, sa.y);
         ctx.lineTo(sb.x, sb.y);
         ctx.stroke();
-        for (const s of [sa, sb]) {
+        for (const dot of dots) {
+          const s = vp.toScreen(transformLocal(dot, inst));
           ctx.beginPath();
           ctx.arc(s.x, s.y, JUMPER_BAR_DOT_R_MM * vp.scale, 0, Math.PI * 2);
           ctx.fill();

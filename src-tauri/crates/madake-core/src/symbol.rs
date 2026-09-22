@@ -1039,6 +1039,14 @@ pub(crate) const TERMINAL_MARK_R: f64 = 1.8;
 /// ベースラインが中心に来るように置かれる。
 pub(crate) const TERMINAL_NUMBER_HEIGHT: f64 = 2.0;
 
+/// 3文字以上の端子番号 (多段端子台の `10a` など) の文字高さ (mm)。
+///
+/// 通常の高さのままだと3文字の番号は端子の印 (直径3.6mm) と同じ幅になってしまい、
+/// 印からはみ出すうえ、印の縁に描くジャンパの図形と番号が重なってしまう。
+/// 1つの端子台の中では高さを揃えたいので、**その端子台で一番長い番号**が3文字以上なら
+/// 全部の番号をこの高さで書く (単段の端子台は最大2文字=`50`なので影響を受けない)。
+pub(crate) const TERMINAL_NUMBER_HEIGHT_NARROW: f64 = 1.5;
+
 /// 多段端子台の段(=列)の中心間隔 (mm)。列そのものの幅は単段の端子台と同じ5mmなので、
 /// 10mm間隔にすると隣り合う列の内側の接続点 (`1a`の右と`1b`の左) が5mm離れた**別の**
 /// 2.5mmグリッド点になり、その間を配線が通れる。
@@ -1164,6 +1172,13 @@ fn parse_multilevel_terminal_block(rest: &str) -> Option<(usize, usize)> {
 fn terminal_block_symbol(id: &str, n: usize, levels: usize) -> SymbolDef {
     let offset = |i: usize| (i as f64 - (n - 1) as f64 / 2.0) * 5.0;
     let column_x = |j: usize| (j as f64 - (levels - 1) as f64 / 2.0) * TERMINAL_LEVEL_PITCH;
+    // この端子台で一番長い番号 (最大の極番号+段記号) が3文字以上なら、番号を小さく書く
+    let longest = n.to_string().len() + usize::from(levels > 1);
+    let number_height = if longest >= 3 {
+        TERMINAL_NUMBER_HEIGHT_NARROW
+    } else {
+        TERMINAL_NUMBER_HEIGHT
+    };
     let mut primitives: Vec<Primitive> = Vec::new();
     let mut pins = Vec::with_capacity(n * levels * 2);
     for j in 0..levels {
@@ -1186,9 +1201,9 @@ fn terminal_block_symbol(id: &str, n: usize, levels: usize) -> SymbolDef {
                 filled: false,
             });
             primitives.push(Primitive::Text {
-                at: p(cx, y - TERMINAL_NUMBER_HEIGHT / 2.0),
+                at: p(cx, y - number_height / 2.0),
                 text: no.clone(),
-                height: TERMINAL_NUMBER_HEIGHT,
+                height: number_height,
             });
             primitives.push(line(&[(cx - 2.5, y), (cx - TERMINAL_MARK_R, y)]));
             primitives.push(line(&[(cx + TERMINAL_MARK_R, y), (cx + 2.5, y)]));

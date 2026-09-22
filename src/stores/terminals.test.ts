@@ -253,6 +253,18 @@ describe("terminal strip editor store", () => {
     });
   });
 
+  // ja: 多段端子台の見出しには端子数ではなく極数を使う(4極2段は「8極」ではなく「4極」)
+  it("names a terminal block by its pole count, not by its terminal count", async () => {
+    vi.spyOn(ipc, "listTerminalBlocks").mockResolvedValue([
+      { ...block, poles: 4, levels: 2, terminal_count: 8 },
+    ]);
+    vi.spyOn(ipc, "getTerminalChart").mockResolvedValue({ ...wiredChart(), terminal_count: 8 });
+    vi.spyOn(ipc, "checkTerminalBlock").mockResolvedValue([]);
+    const store = await opened();
+    expect(store.poleCount).toBe(4);
+    expect(store.terminalCount).toBe(8);
+  });
+
   // ja: 端子を選んでいないとジャンパは生成できない
   it("cannot generate a jumper while no terminal is selected", async () => {
     mockBackend();

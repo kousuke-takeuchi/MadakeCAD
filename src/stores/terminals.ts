@@ -113,7 +113,7 @@ export const useTerminalsStore = defineStore("terminals", {
     },
     /** 極数 (多段端子台でも段数は掛けない)。端子台の見出しはこちらで呼ぶ。 */
     poleCount(): number {
-      return this.block?.poles ?? this.terminalCount;
+      return this.block?.poles ?? 0;
     },
     /** グリッドの行 (端子番号順)。 */
     rows(state): TerminalEditorRow[] {

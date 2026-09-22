@@ -3,13 +3,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { Primitive, SymbolDef } from "../ipc";
-import { dynamicSymbol } from "./dynamicSymbol";
+import { dynamicSymbol, TERMINAL_MARK_R } from "./dynamicSymbol";
 import {
   formatJumperSpec,
   JUMPER_BAR_DOT_R_MM,
-  JUMPER_BAR_OFFSET_MM,
   JUMPER_BAR_STROKE_MM,
-  jumperBarSegments,
+  jumperBars,
   parseJumperSpec,
   terminalNumbers,
 } from "./terminalJumpers";
@@ -60,34 +59,74 @@ describe("parseJumperSpec", () => {
 describe("jumper bar dimensions", () => {
   // ja: ジャンパバーの寸法(線幅・両端の丸の半径・中心線からのずらし量)はRust側と同じ数値になる
   it("keeps the same millimetre values as the Rust side", () => {
-    // madake-core/src/terminal_chart.rs の JUMPER_BAR_STROKE / _DOT_R / _OFFSET
-    expect([JUMPER_BAR_STROKE_MM, JUMPER_BAR_DOT_R_MM, JUMPER_BAR_OFFSET_MM]).toEqual([
-      0.8, 0.7, 2.7,
-    ]);
+    // madake-core/src/terminal_chart.rs の JUMPER_BAR_STROKE / _DOT_R と symbol.rs の TERMINAL_MARK_R
+    expect([JUMPER_BAR_STROKE_MM, JUMPER_BAR_DOT_R_MM, TERMINAL_MARK_R]).toEqual([0.4, 0.3, 1.8]);
   });
 });
 
-describe("jumperBarSegments", () => {
-  // ja: 同じ列の2端子を繋ぐジャンパバーは、端子番号を避けて列の右へずらした5mmの線分になる
-  it("runs alongside the column, clear of the numbers, 5 mm long on the standard pitch", () => {
+describe("jumperBars", () => {
+  // ja: 同じ列の2端子を繋ぐジャンパは、列の中心線上の2つの印の隙間だけに描かれる
+  it("is drawn in the gap between the two marks, on the column's centre line", () => {
     const def = dynamicSymbol("terminal_block_4p")!;
-    const segs = jumperBarSegments(def, [["1", "2"]]);
-    expect(segs).toHaveLength(1);
-    const [a, b] = segs[0];
-    expect(a.x).toBe(JUMPER_BAR_OFFSET_MM);
-    expect(b.x).toBe(JUMPER_BAR_OFFSET_MM);
-    expect(b.y - a.y).toBeCloseTo(5, 9);
+    const bars = jumperBars(def, [["1", "2"]]);
+    expect(bars).toHaveLength(1);
+    const [a, b] = bars[0].bar;
+    expect([a.x, b.x]).toEqual([0, 0]);
+    expect(a.y).toBeCloseTo(-7.5 + TERMINAL_MARK_R, 9);
+    expect(b.y).toBeCloseTo(-2.5 - TERMINAL_MARK_R, 9);
   });
 
-  // ja: 段をまたぐジャンパのバーは、2つの段の列の真下を横に結ぶ線分になる(行の下へずれる)
-  it("runs below the row, across the two level columns of one pole", () => {
+  // ja: 両端の丸はそれぞれ自分の端子の印に外接する位置に付く
+  it("puts each end mark just outside its own terminal's mark", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const [{ dots }] = jumperBars(def, [["1", "2"]]);
+    expect(dots[0].y).toBeCloseTo(-7.5 + TERMINAL_MARK_R + JUMPER_BAR_DOT_R_MM, 9);
+    expect(dots[1].y).toBeCloseTo(-2.5 - TERMINAL_MARK_R - JUMPER_BAR_DOT_R_MM, 9);
+  });
+
+  // ja: 段をまたぐジャンパは、極の行の上、2つの段の列の印の隙間に描かれる
+  it("lies on the pole's row, between the two level columns' marks", () => {
     const def = dynamicSymbol("terminal_block_4p_2l")!;
-    const segs = jumperBarSegments(def, [["1a", "1b"]]);
-    expect(segs).toHaveLength(1);
-    const [a, b] = segs[0];
-    expect(a.y).toBeCloseTo(b.y, 9);
-    expect(b.x - a.x).toBeCloseTo(10, 9);
-    expect(a.y).toBeCloseTo(-7.5 + JUMPER_BAR_OFFSET_MM, 9);
+    const [{ bar }] = jumperBars(def, [["1a", "1b"]]);
+    expect(bar[0].y).toBeCloseTo(bar[1].y, 9);
+    expect(bar[0].x).toBeCloseTo(-5 + TERMINAL_MARK_R, 9);
+    expect(bar[1].x).toBeCloseTo(5 - TERMINAL_MARK_R, 9);
+  });
+
+  // ja: 両端の丸は自分の端子の印に一番近く、ほかの端子の印には触れない
+  it("gives each end mark to the terminal it belongs to", () => {
+    for (const [id, spec] of [
+      ["terminal_block_4p", "1-2,2-3"],
+      ["terminal_block_4p_2l", "1a-1b,2a-3a"],
+      ["terminal_block_12p_2l", "10a-10b,11a-12a"],
+    ] as const) {
+      const def = dynamicSymbol(id)!;
+      const numbers = terminalNumbers(def);
+      const pairs = parseJumperSpec(spec, numbers);
+      const centre = (no: string) => {
+        const pts = def.pins.filter((q) => q.number === no).map((q) => q.at);
+        return {
+          x: pts.reduce((t, q) => t + q.x, 0) / pts.length,
+          y: pts.reduce((t, q) => t + q.y, 0) / pts.length,
+        };
+      };
+      const bars = jumperBars(def, pairs);
+      expect(bars).toHaveLength(pairs.length);
+      bars.forEach(({ dots }, i) => {
+        dots.forEach((dot, side) => {
+          const owner = pairs[i][side];
+          const c = centre(owner);
+          const own = Math.hypot(dot.x - c.x, dot.y - c.y);
+          for (const no of numbers) {
+            if (no === owner) continue;
+            const o = centre(no);
+            const other = Math.hypot(dot.x - o.x, dot.y - o.y);
+            expect(own, `${id} ${spec}: ${owner} vs ${no}`).toBeLessThan(other);
+            expect(Math.abs(other - TERMINAL_MARK_R)).toBeGreaterThan(JUMPER_BAR_DOT_R_MM);
+          }
+        });
+      });
+    }
   });
 
   // ja: ジャンパバーと両端の丸は、どの端子番号の文字にも重ならない
@@ -95,16 +134,17 @@ describe("jumperBarSegments", () => {
     // 文字は中心揃え・ベースラインが端子の中心。幅は文字数x文字高x0.6、高さは文字高x0.7で見る
     const numberBoxes = (def: SymbolDef) =>
       def.primitives
-        .filter((p): p is Extract<Primitive, { type: "text" }> => p.type === "text")
-        .map((p) => {
-          const baseline = p.at.y + p.height / 2;
-          const half = (p.text.length * p.height * 0.6) / 2;
-          return [p.at.x - half, baseline - p.height * 0.7, p.at.x + half, baseline] as const;
+        .filter((q): q is Extract<Primitive, { type: "text" }> => q.type === "text")
+        .map((q) => {
+          const baseline = q.at.y + q.height / 2;
+          const half = (q.text.length * q.height * 0.6) / 2;
+          return [q.at.x - half, baseline - q.height * 0.7, q.at.x + half, baseline] as const;
         });
     const overlaps = (a: readonly number[], b: readonly number[]) =>
       a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
     for (const [id, spec] of [
       ["terminal_block_4p", "1-2,3-4"],
+      ["terminal_block_4p", "1-2,2-3"],
       ["terminal_block_4p_2l", "1a-1b,2a-3a"],
       ["terminal_block_4p_3l", "1a-1b,1b-1c"],
       ["terminal_block_12p_2l", "10a-10b,11a-12a"],
@@ -112,17 +152,18 @@ describe("jumperBarSegments", () => {
       const def = dynamicSymbol(id)!;
       const pairs = parseJumperSpec(spec, terminalNumbers(def));
       const graphics: (readonly number[])[] = [];
-      for (const [a, b] of jumperBarSegments(def, pairs)) {
+      for (const { bar, dots } of jumperBars(def, pairs)) {
         const h = JUMPER_BAR_STROKE_MM / 2;
+        const [a, b] = bar;
         graphics.push([
           Math.min(a.x, b.x) - h,
           Math.min(a.y, b.y) - h,
           Math.max(a.x, b.x) + h,
           Math.max(a.y, b.y) + h,
         ]);
-        for (const p of [a, b]) {
+        for (const q of dots) {
           const r = JUMPER_BAR_DOT_R_MM;
-          graphics.push([p.x - r, p.y - r, p.x + r, p.y + r]);
+          graphics.push([q.x - r, q.y - r, q.x + r, q.y + r]);
         }
       }
       expect(graphics.length).toBeGreaterThan(0);
@@ -138,7 +179,7 @@ describe("jumperBarSegments", () => {
   it("produces one segment per jumper when there are several", () => {
     const def = dynamicSymbol("terminal_block_4p")!;
     expect(
-      jumperBarSegments(def, [
+      jumperBars(def, [
         ["1", "2"],
         ["3", "4"],
       ]),
@@ -148,6 +189,6 @@ describe("jumperBarSegments", () => {
   // ja: 端子台に無い端子番号を指すジャンパは線分を作らない
   it("produces no segment for a jumper to a terminal the block does not have", () => {
     const def = dynamicSymbol("terminal_block_4p")!;
-    expect(jumperBarSegments(def, [["4", "5"]])).toEqual([]);
+    expect(jumperBars(def, [["4", "5"]])).toEqual([]);
   });
 });

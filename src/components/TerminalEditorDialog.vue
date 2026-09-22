@@ -119,7 +119,7 @@ async function generateDiagram() {
           @change="terminals.selectBlock(($event.target as HTMLSelectElement).value)"
         >
           <option v-for="b in terminals.blocks" :key="b.entity_id" :value="b.entity_id">
-            {{ t("terminals.blockOption", { reference: b.reference, poles: b.terminal_count, sheet: b.sheet_name }) }}
+            {{ t("terminals.blockOption", { reference: b.reference, poles: b.poles, sheet: b.sheet_name }) }}
           </option>
         </select>
         <span class="spacer" />
