@@ -19,7 +19,10 @@ import {
   type RevisionLayout,
   type RevisionRowLayout,
 } from "./frameTemplate";
-import { resolveInstanceDef } from "./dynamicSymbol";
+import { resolveInstanceDef, symbolBounds, transformLocal } from "./dynamicSymbol";
+// 循環import防止のため定義はdynamicSymbol.tsへ移した。他モジュールとの互換のため再エクスポートする
+export { symbolBounds, transformLocal } from "./dynamicSymbol";
+import { LEADER_DOT_R_MM, LEADER_STROKE_MM, leaderFor } from "./leader";
 import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
 import {
   SHAPE_DASH,
@@ -34,6 +37,7 @@ import {
   parseJumperSpec,
   terminalNumbers,
 } from "./terminalJumpers";
+import { PIN_GROUP_CAPTION_TEXT_MM, PIN_GROUPS_ATTR, pinGroupBrackets } from "./pinGroups";
 import { entityViewClass, type ViewClass } from "./viewClasses";
 import {
   BALLOON_FONT,
@@ -160,29 +164,6 @@ export interface AgentPaint {
   regions: Region[];
   /** ターン進行中か。領域が無くてもラベルチップだけ出す。 */
   active: boolean;
-}
-
-/** シンボルローカル座標→用紙座標。netlist.rs transform_localと同一の変換。 */
-export function transformLocal(p: Point, inst: SymbolInstance): Point {
-  const x0 = inst.mirror ? -p.x : p.x;
-  const y0 = p.y;
-  let rx = x0;
-  let ry = y0;
-  switch (inst.rotation % 360) {
-    case 90:
-      rx = -y0;
-      ry = x0;
-      break;
-    case 180:
-      rx = -x0;
-      ry = -y0;
-      break;
-    case 270:
-      rx = y0;
-      ry = -x0;
-      break;
-  }
-  return { x: inst.at.x + rx, y: inst.at.y + ry };
 }
 
 /**
@@ -471,6 +452,32 @@ export function drawSymbol(
       ctx.lineWidth = lineWidth;
     }
   }
+  // ピングループ括弧 (G8): attrs.pin_groupsが指す範囲ごとに角括弧とキャプションを描く
+  // (SVG出力のrender_pin_group_bracketsと同じジオメトリ)。読めない・重なる項目は
+  // pinGroupBrackets側で既に除いているので、ここでは求まったものをそのまま描くだけ
+  const pinGroupsSpec = inst.attrs[PIN_GROUPS_ATTR];
+  if (pinGroupsSpec) {
+    for (const bracket of pinGroupBrackets(def, pinGroupsSpec)) {
+      const lineWidth = ctx.lineWidth;
+      ctx.lineWidth = Math.max(1, 0.3 * vp.scale);
+      ctx.beginPath();
+      bracket.bracket.forEach((p, i) => {
+        const s = vp.toScreen(transformLocal(p, inst));
+        if (i === 0) ctx.moveTo(s.x, s.y);
+        else ctx.lineTo(s.x, s.y);
+      });
+      ctx.stroke();
+      ctx.lineWidth = lineWidth;
+      ctx.font = `${Math.max(8, PIN_GROUP_CAPTION_TEXT_MM * vp.scale)}px sans-serif`;
+      ctx.textAlign = "center";
+      for (const [text, at] of bracket.captionLines) {
+        if (!text) continue;
+        const p = vp.toScreen(transformLocal(at, inst));
+        ctx.fillText(text, p.x, p.y + (PIN_GROUP_CAPTION_TEXT_MM * vp.scale) / 2.8);
+      }
+      ctx.textAlign = "left";
+    }
+  }
   if (!showLabels) return;
   // 参照記号・型番: シンボル外形の上に併記(縦長シンボルでも重ならない。Rust側svg.rsと同ルール)
   const top = symbolTopY(inst, def);
@@ -634,49 +641,6 @@ export function drawDeviceBlock(
 /** 配置後のシンボル外形の上端Y(用紙座標)。 */
 export function symbolTopY(inst: SymbolInstance, def: SymbolDef): number {
   return symbolBounds(inst, def).min.y;
-}
-
-/**
- * 配置後のシンボル外形の囲み矩形(用紙座標)。円・弧は回転対称なので中心±rで安全側に
- * 評価し、配置基準点も必ず含める。Rust側 svg.rs の symbol_bounds と同一。
- * 参照記号・接点マップなど、外形の外側に置く注記の位置決めに使う。
- */
-export function symbolBounds(
-  inst: SymbolInstance,
-  def: SymbolDef,
-): { min: Point; max: Point } {
-  const min = { ...inst.at };
-  const max = { ...inst.at };
-  const visit = (p: Point) => {
-    const t = transformLocal(p, inst);
-    min.x = Math.min(min.x, t.x);
-    min.y = Math.min(min.y, t.y);
-    max.x = Math.max(max.x, t.x);
-    max.y = Math.max(max.y, t.y);
-  };
-  for (const prim of def.primitives) {
-    switch (prim.type) {
-      case "line":
-        prim.pts.forEach(visit);
-        break;
-      case "circle":
-      case "arc":
-        visit({ x: prim.center.x - prim.r, y: prim.center.y - prim.r });
-        visit({ x: prim.center.x + prim.r, y: prim.center.y + prim.r });
-        break;
-      case "rect":
-        visit(prim.p1);
-        visit({ x: prim.p2.x, y: prim.p1.y });
-        visit(prim.p2);
-        visit({ x: prim.p1.x, y: prim.p2.y });
-        break;
-      case "text":
-        visit(prim.at);
-        break;
-    }
-  }
-  for (const pin of def.pins) visit(pin.at);
-  return { min, max };
 }
 
 // --- エージェント編集オーバーレイ -------------------------------------------
@@ -1252,6 +1216,24 @@ export function renderSheet(
       ctx.textAlign = canvasTextAlign(e.anchor);
       ctx.fillText(e.text, s.x, s.y);
       ctx.textAlign = "left";
+      // 引き出し線 (G20): 対象がシート上に実在すれば、注記の辺から対象の外形まで
+      // 毎回求め直して引く (位置は保存しないので、どちらを動かしても追従する)
+      const leader = leaderFor(sheet, e, defs);
+      if (leader) {
+        const [start, end] = leader;
+        const sa = vp.toScreen(start);
+        const sb = vp.toScreen(end);
+        ctx.strokeStyle = theme.line;
+        ctx.lineWidth = Math.max(1, LEADER_STROKE_MM * vp.scale);
+        ctx.beginPath();
+        ctx.moveTo(sa.x, sa.y);
+        ctx.lineTo(sb.x, sb.y);
+        ctx.stroke();
+        ctx.fillStyle = theme.line;
+        ctx.beginPath();
+        ctx.arc(sb.x, sb.y, Math.max(2, LEADER_DOT_R_MM * vp.scale), 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 

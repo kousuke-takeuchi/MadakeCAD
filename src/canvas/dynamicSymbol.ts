@@ -283,6 +283,77 @@ export function textWidthMm(text: string, height: number): number {
   return height * advance;
 }
 
+/**
+ * シンボルローカル座標→用紙座標。netlist.rs transform_localと同一の変換。
+ * ここに置く (renderer.tsではない) のは、canvas/leader.tsのように図面描画とは
+ * 別方向から座標変換だけを必要とするモジュールが、renderer.tsを経由せず (循環importを
+ * 起こさず) 読めるようにするため。renderer.tsは互換のため再エクスポートする。
+ */
+export function transformLocal(p: Point, inst: SymbolInstance): Point {
+  const x0 = inst.mirror ? -p.x : p.x;
+  const y0 = p.y;
+  let rx = x0;
+  let ry = y0;
+  switch (inst.rotation % 360) {
+    case 90:
+      rx = -y0;
+      ry = x0;
+      break;
+    case 180:
+      rx = -x0;
+      ry = -y0;
+      break;
+    case 270:
+      rx = y0;
+      ry = -x0;
+      break;
+  }
+  return { x: inst.at.x + rx, y: inst.at.y + ry };
+}
+
+/**
+ * 配置後のシンボル外形の囲み矩形(用紙座標)。円・弧は回転対称なので中心±rで安全側に
+ * 評価し、配置基準点も必ず含める。Rust側 tidy::symbol_bounds と同一。
+ * 参照記号・接点マップなど、外形の外側に置く注記の位置決めに使う。
+ */
+export function symbolBounds(
+  inst: SymbolInstance,
+  def: SymbolDef,
+): { min: Point; max: Point } {
+  const min = { ...inst.at };
+  const max = { ...inst.at };
+  const visit = (p: Point) => {
+    const t = transformLocal(p, inst);
+    min.x = Math.min(min.x, t.x);
+    min.y = Math.min(min.y, t.y);
+    max.x = Math.max(max.x, t.x);
+    max.y = Math.max(max.y, t.y);
+  };
+  for (const prim of def.primitives) {
+    switch (prim.type) {
+      case "line":
+        prim.pts.forEach(visit);
+        break;
+      case "circle":
+      case "arc":
+        visit({ x: prim.center.x - prim.r, y: prim.center.y - prim.r });
+        visit({ x: prim.center.x + prim.r, y: prim.center.y + prim.r });
+        break;
+      case "rect":
+        visit(prim.p1);
+        visit({ x: prim.p2.x, y: prim.p1.y });
+        visit(prim.p2);
+        visit({ x: prim.p1.x, y: prim.p2.y });
+        break;
+      case "text":
+        visit(prim.at);
+        break;
+    }
+  }
+  for (const pin of def.pins) visit(pin.at);
+  return { min, max };
+}
+
 function snapUp(v: number, step: number): number {
   return Math.ceil(v / step - 1e-9) * step;
 }

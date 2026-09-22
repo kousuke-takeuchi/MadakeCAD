@@ -85,6 +85,12 @@ export interface TextEntity {
   color?: TextColorToken | null;
   /** 太字にするか (既定 false)。 */
   bold?: boolean;
+  /**
+   * 引き出し線の対象エンティティ (G20)。設定されていれば、注記の外接矩形のうち対象に
+   * いちばん近い辺の中点から、対象の外接矩形上のいちばん近い点まで線を引く
+   * (canvas/leader.ts leaderFor)。null/未指定なら引き出し線は描かない。
+   */
+  leader_to?: string | null;
 }
 
 /**

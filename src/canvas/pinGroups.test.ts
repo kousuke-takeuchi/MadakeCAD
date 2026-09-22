@@ -1,0 +1,98 @@
+// Rust側 madake-core/src/pin_groups.rs の parse_pin_groups / pin_group_bracket と
+// 同一ルールを検証する (parityテスト)。
+import { describe, expect, it } from "vitest";
+
+import { dynamicSymbol } from "./dynamicSymbol";
+import {
+  chartOrderPinDefs,
+  chartOrderPinNumbers,
+  PIN_GROUP_INVALID,
+  PIN_GROUP_OVERLAP,
+  PIN_GROUP_UNKNOWN_PIN,
+  parsePinGroups,
+  pinGroupBracket,
+  wrapCaption,
+} from "./pinGroups";
+
+function order(id: string): string[] {
+  return chartOrderPinNumbers(dynamicSymbol(id)!);
+}
+
+describe("parsePinGroups", () => {
+  // ja: 「範囲:名前」1項目と、ダッシュの無い単ピン指定は、それぞれ1つのグループとして解析される (Rust側とparity)
+  it("parses a range and a dash-less single pin to one group each", () => {
+    const parsed = parsePinGroups("1-4:電源,6:予備", order("terminal_block_8p"));
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.groups).toEqual([
+      { rangeText: "1-4", caption: "電源", first: "1", last: "4" },
+      { rangeText: "6", caption: "予備", first: "6", last: "6" },
+    ]);
+  });
+
+  // ja: チャート順で終点が始点より前に書かれた範囲は不正として報告される
+  it("reports a backwards range as invalid", () => {
+    const parsed = parsePinGroups("4-1:電源", order("terminal_block_8p"));
+    expect(parsed.groups).toEqual([]);
+    expect(parsed.issues[0].code).toBe(PIN_GROUP_INVALID);
+  });
+
+  // ja: そのインスタンスに無いピンを指す範囲は不明ピンの診断コードで報告される
+  it("reports a range naming an unknown pin", () => {
+    const parsed = parsePinGroups("1-99:電源", order("terminal_block_8p"));
+    expect(parsed.groups).toEqual([]);
+    expect(parsed.issues[0].code).toBe(PIN_GROUP_UNKNOWN_PIN);
+  });
+
+  // ja: コロンが無い・範囲が空の読めない記述はパニックせず不正として報告され、残りの項目は解析される
+  it("reports unparseable text without throwing, keeping the rest", () => {
+    const parsed = parsePinGroups("nonsense,-4:x,1-2:良い", order("terminal_block_8p"));
+    expect(parsed.groups).toHaveLength(1);
+    expect(parsed.groups[0].caption).toBe("良い");
+    expect(parsed.issues).toHaveLength(2);
+    expect(parsed.issues.every((i) => i.code === PIN_GROUP_INVALID)).toBe(true);
+  });
+
+  // ja: チャート順の範囲が重なる2つのグループはどちらも報告されグループにならないが、重ならない3つ目は残る
+  it("rejects both of two overlapping groups but keeps a third that does not overlap", () => {
+    const parsed = parsePinGroups("1-4:A,3-5:B,6-8:C", order("terminal_block_8p"));
+    expect(parsed.groups).toEqual([{ rangeText: "6-8", caption: "C", first: "6", last: "8" }]);
+    expect(parsed.issues).toHaveLength(2);
+    expect(parsed.issues.every((i) => i.code === PIN_GROUP_OVERLAP)).toBe(true);
+  });
+
+  // ja: 多段端子台のチャート順は段ごとに並ぶ (1a,2a,…,1b,2b,…) ので、"1a-4a"は1段の中で連続する
+  it("accepts a multi-level range that stays within one level", () => {
+    const ord = order("terminal_block_8p_2l");
+    expect(ord.slice(0, 4)).toEqual(["1a", "2a", "3a", "4a"]);
+    const parsed = parsePinGroups("1a-4a:A系統", ord);
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.groups).toHaveLength(1);
+  });
+});
+
+describe("wrapCaption", () => {
+  // ja: キャプションの折り返しは4文字ごとに順番どおり分割する
+  it("splits into chunks of at most 4 characters", () => {
+    expect(wrapCaption("電源系統一式")).toEqual(["電源系統", "一式"]);
+    expect(wrapCaption("信号")).toEqual(["信号"]);
+    expect(wrapCaption("")).toEqual([""]);
+  });
+});
+
+describe("pinGroupBracket", () => {
+  // ja: シンボル左側のピンにかける括弧は、いちばん上から下のピンまで縦棒でつながり、キャプションはさらに左に置かれる
+  it("draws a vertical bar further left than left-side pins, with the caption further out still", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const pins = chartOrderPinDefs(def).slice(0, 2); // "1","2" (左側の足)
+    const bracket = pinGroupBracket(pins, "電源")!;
+    expect(bracket.bracket.every((p) => p.x < pins[0].at.x)).toBe(true);
+    expect(bracket.captionLines.every(([, p]) => p.x < bracket.bracket[0].x)).toBe(true);
+  });
+
+  // ja: シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される
+  it("refuses a bracket across mixed pin directions", () => {
+    const left = { number: "1", name: "", at: { x: -10, y: 0 }, dir: "left" as const };
+    const top = { number: "2", name: "", at: { x: 0, y: -10 }, dir: "up" as const };
+    expect(pinGroupBracket([left, top], "x")).toBeNull();
+  });
+});
