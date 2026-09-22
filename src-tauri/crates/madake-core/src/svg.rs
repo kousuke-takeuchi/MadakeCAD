@@ -3391,6 +3391,33 @@ mod tests {
         }
     }
 
+    /// A coil shown as a device block reserves no room for pin-group brackets even if it carries the attribute, because none are drawn there: its outline, and so its designator and contact map, sit exactly where they would without the attribute.
+    /// 実機ブロック表示のコイルは、ピングループの属性を持っていても括弧のための余白を取らない (そこには括弧を描かないため)。外形も、それに従う参照記号・接点マップの位置も、属性が無いときと寸分違わない。
+    #[test]
+    fn a_device_block_coil_reserves_no_room_for_brackets_it_never_draws() {
+        let mut coil = crate::model::SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: crate::relay_xref::COIL_SYMBOL_ID.into(),
+            at: Point::new(150.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "K1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        coil.attrs
+            .insert(crate::relay_xref::DEVICE_BLOCK_ATTR.into(), "true".into());
+        let def = crate::symbol::resolve_symbol(crate::relay_xref::COIL_SYMBOL_ID).unwrap();
+        let without = symbol_bounds(&coil, &def);
+        // 単ピンの指定なら普通のシンボルでは括弧が描かれる (この対比が効くように選ぶ)
+        coil.attrs
+            .insert(crate::pin_groups::PIN_GROUPS_ATTR.into(), "A1:コイル電源".into());
+        let mut plain = coil.clone();
+        plain.attrs.remove(crate::relay_xref::DEVICE_BLOCK_ATTR);
+        assert_ne!(symbol_bounds(&plain, &def), without, "普通のコイルなら括弧のぶん広がる");
+        assert_eq!(symbol_bounds(&coil, &def), without, "実機ブロック表示は余白を取らない");
+    }
+
     /// The dot at the target end of a note's leader line is drawn exactly the size of a wire junction dot, so the two read as the same mark.
     /// 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える)。
     #[test]

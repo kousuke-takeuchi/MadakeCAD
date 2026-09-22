@@ -12,6 +12,7 @@ import {
   type PinGroupBracket,
 } from "./pinGroups";
 // 循環import防止のため定義はtextWidth.tsへ移した。既存のimport元のために再エクスポートする
+import { isDeviceBlock } from "./relayXref";
 import { textWidthMm } from "./textWidth";
 export { textWidthMm } from "./textWidth";
 
@@ -359,6 +360,9 @@ export function pinGroupPaperBoxes(
   inst: SymbolInstance,
   def: SymbolDef,
 ): [Point, Point][] {
+  // 実機ブロック表示 (G7) のコイルは括弧を描かない (ERCが理由を報告する) ので、
+  // 描かれない箱のために参照記号・接点マップを押しのけない (Rust側と同一)
+  if (isDeviceBlock(inst)) return [];
   const spec = inst.attrs?.[PIN_GROUPS_ATTR];
   if (!spec) return [];
   const out: [Point, Point][] = [];

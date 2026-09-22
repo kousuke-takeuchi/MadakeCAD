@@ -289,6 +289,27 @@ describe("symbolBounds", () => {
     expect(grouped.max.x).toBe(plain.max.x);
   });
 
+  // ja: 実機ブロック表示のコイルは、ピングループの属性を持っていても括弧のための余白を取らない (そこには括弧を描かないため。Rust側 a_device_block_coil_reserves_no_room_for_brackets_it_never_draws とparity)
+  it("reserves no room on a device-block coil for brackets it never draws", () => {
+    const def = dynamicSymbol("terminal_block_8p")!;
+    const coil = (attrs: Record<string, string>): SymbolInstance =>
+      ({
+        id: "k1",
+        symbol_id: "terminal_block_8p",
+        at: { x: 150, y: 100 },
+        rotation: 0,
+        mirror: false,
+        reference: "K1",
+        value: "",
+        attrs,
+      }) as SymbolInstance;
+    const without = symbolBounds(coil({ device_block: "true" }), def);
+    const plain = symbolBounds(coil({ pin_groups: "1-4:電源系統一式" }), def);
+    const asBlock = symbolBounds(coil({ device_block: "true", pin_groups: "1-4:電源系統一式" }), def);
+    expect(plain).not.toEqual(without); // 普通なら括弧のぶん広がる
+    expect(asBlock).toEqual(without);
+  });
+
   // ja: 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない)
   it("grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption", () => {
     const def = dynamicSymbol("terminal_block_8p")!;

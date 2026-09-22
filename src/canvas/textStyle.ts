@@ -13,7 +13,7 @@ import type {
   TextEntity,
   TextSlot,
 } from "../ipc";
-import { textWidthMm } from "./dynamicSymbol";
+import { textWidthMm } from "./textWidth";
 import { textColors, theme } from "./theme";
 
 /** 使える注記色のトークン名 (プロパティの選択肢の並び順)。 */

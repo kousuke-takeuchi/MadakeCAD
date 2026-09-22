@@ -411,7 +411,14 @@ pub fn pin_group_issues(def: &SymbolDef, spec: &str) -> Vec<PinGroupIssue> {
 /// 文字は回転しても横書きのままなので、キャプションの箱は用紙座標で文字幅・文字高から取る。
 /// 参照記号・型番・機能ラベルの位置決め ([`crate::svg::symbol_bounds`]) が、括弧とキャプションを
 /// 避けるためにこれを使う。
+///
+/// 実機ブロック表示 (G7) のコイルは括弧を**描かない** ([`crate::verify`]が
+/// [`PIN_GROUP_UNSUPPORTED`]として報告する) ので、ここも空を返す。描かれない箱のために
+/// 参照記号や接点マップを押しのけて、空白だけが空くのを避けるため。
 pub fn pin_group_paper_boxes(inst: &SymbolInstance, def: &SymbolDef) -> Vec<(Point, Point)> {
+    if crate::relay_xref::is_device_block(inst) {
+        return Vec::new();
+    }
     let Some(spec) = inst.attrs.get(PIN_GROUPS_ATTR) else {
         return Vec::new();
     };
