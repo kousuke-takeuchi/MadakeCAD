@@ -19,7 +19,12 @@ import {
   type RevisionLayout,
   type RevisionRowLayout,
 } from "./frameTemplate";
-import { resolveInstanceDef, symbolBounds, transformLocal } from "./dynamicSymbol";
+import {
+  captionLineAnchors,
+  resolveInstanceDef,
+  symbolBounds,
+  transformLocal,
+} from "./dynamicSymbol";
 // 循環import防止のため定義はdynamicSymbol.tsへ移した。他モジュールとの互換のため再エクスポートする
 export { symbolBounds, transformLocal } from "./dynamicSymbol";
 import { LEADER_STROKE_MM, leaderFor } from "./leader";
@@ -477,9 +482,10 @@ export function drawSymbol(
       ctx.lineWidth = lineWidth;
       ctx.font = `${Math.max(8, PIN_GROUP_CAPTION_TEXT_MM * vp.scale)}px sans-serif`;
       ctx.textAlign = "center";
-      for (const [text, at] of bracket.captionLines) {
-        if (!text) continue;
-        const p = vp.toScreen(transformLocal(at, inst));
+      // キャプションの行は用紙座標で積む (文字は回転しても横書きなので、ローカル座標で
+      // 積むと回転90/270度で行が横に並んで重なる。Rust側 caption_line_anchors と同じ)
+      for (const [text, at] of captionLineAnchors(inst, bracket)) {
+        const p = vp.toScreen(at);
         ctx.fillText(text, p.x, p.y + (PIN_GROUP_CAPTION_TEXT_MM * vp.scale) / 2.8);
       }
       ctx.textAlign = "left";

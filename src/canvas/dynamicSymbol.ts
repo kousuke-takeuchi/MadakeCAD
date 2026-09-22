@@ -5,8 +5,11 @@
 import type { Point, Primitive, PinDef, SymbolDef, SymbolInstance, TextSlot } from "../ipc";
 import {
   PIN_GROUPS_ATTR,
+  PIN_GROUP_CAPTION_GAP_MM,
+  PIN_GROUP_CAPTION_LINE_PITCH_MM,
   PIN_GROUP_CAPTION_TEXT_MM,
   pinGroupBrackets,
+  type PinGroupBracket,
 } from "./pinGroups";
 // 循環import防止のため定義はtextWidth.tsへ移した。既存のimport元のために再エクスポートする
 import { textWidthMm } from "./textWidth";
@@ -372,9 +375,7 @@ export function pinGroupPaperBoxes(
       }
       out.push([min, max]);
     }
-    for (const [text, at] of bracket.captionLines) {
-      if (!text) continue;
-      const c = transformLocal(at, inst);
+    for (const [text, c] of captionLineAnchors(inst, bracket)) {
       const hw = textWidthMm(text, PIN_GROUP_CAPTION_TEXT_MM) / 2;
       const hh = PIN_GROUP_CAPTION_TEXT_MM / 2;
       out.push([
@@ -384,6 +385,37 @@ export function pinGroupPaperBoxes(
     }
   }
   return out;
+}
+
+/**
+ * キャプション各行の描画位置 (用紙座標の、文字の幅・高さの中心)
+ * (Rust側 pin_groups::caption_line_anchors と同一)。
+ *
+ * 文字はシンボルを回してもいつも横書きなので、行は必ず用紙の下方向へ積む (ローカル座標で
+ * 積むと、回転90/270度では行送りが横方向のずれになって行同士が重なる)。キャプションの塊
+ * 全体が括弧の棒より外に出るように、外向きが用紙の横軸なら塊の幅の半分、縦軸なら塊の高さの
+ * 半分だけ間隔に足して塊の中心を置く。空行は描かないので返さない。
+ */
+export function captionLineAnchors(
+  inst: SymbolInstance,
+  bracket: PinGroupBracket,
+): [string, Point][] {
+  const lines = bracket.caption.filter((l) => l !== "");
+  if (lines.length === 0) return [];
+  const from = transformLocal(bracket.captionFrom, inst);
+  const tip = transformLocal(bracket.captionDir, inst);
+  const dir = { x: tip.x - inst.at.x, y: tip.y - inst.at.y };
+  const width = lines.reduce((w, l) => Math.max(w, textWidthMm(l, PIN_GROUP_CAPTION_TEXT_MM)), 0);
+  const pitch = PIN_GROUP_CAPTION_LINE_PITCH_MM;
+  const height = (lines.length - 1) * pitch + PIN_GROUP_CAPTION_TEXT_MM;
+  // 回転は0/90/180/270だけなので、外向きは必ず用紙の縦横どちらかに揃っている
+  const half = Math.abs(dir.x) > Math.abs(dir.y) ? width / 2 : height / 2;
+  const center = {
+    x: from.x + dir.x * (PIN_GROUP_CAPTION_GAP_MM + half),
+    y: from.y + dir.y * (PIN_GROUP_CAPTION_GAP_MM + half),
+  };
+  const firstY = center.y - ((lines.length - 1) * pitch) / 2;
+  return lines.map((l, i) => [l, { x: center.x, y: firstY + i * pitch }]);
 }
 
 function snapUp(v: number, step: number): number {

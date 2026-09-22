@@ -6,6 +6,7 @@ import {
   blockSymbol,
   dynamicSymbol,
   resolveInstanceDef,
+  pinGroupPaperBoxes,
   resolveSymbolDef,
   symbolBounds,
 } from "./dynamicSymbol";
@@ -295,5 +296,62 @@ describe("symbolBounds", () => {
     const grouped = symbolBounds(tb(90, false, { pin_groups: "1-4:電源系統一式" }), def);
     expect(grouped.min.y).toBeLessThan(plain.min.y);
     expect(grouped.min.x).toBe(plain.min.x);
+  });
+});
+
+describe("captionLineAnchors", () => {
+  const SPEC = "1-4:電源系統一式予備回路"; // 4+4+2文字 → 3行
+
+  function boxes(rotation: number, mirror: boolean): [number, number, number, number][] {
+    const inst = {
+      id: "tb1",
+      symbol_id: "terminal_block_8p",
+      at: { x: 150, y: 100 },
+      rotation,
+      mirror,
+      reference: "TB1",
+      value: "",
+      attrs: { pin_groups: SPEC },
+    } as SymbolInstance;
+    return pinGroupPaperBoxes(inst, dynamicSymbol("terminal_block_8p")!).map(([a, b]) => [
+      a.x,
+      a.y,
+      b.x,
+      b.y,
+    ]);
+  }
+
+  const overlaps = (
+    a: [number, number, number, number],
+    b: [number, number, number, number],
+  ) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+
+  // ja: ピングループの部品どうし (括弧と、折り返したキャプションの各行) は全ての回転・ミラーで決して重ならない (Rust側 svg_pin_group_pieces_never_overlap_each_other_at_any_rotation とparity)
+  it("never lets a bracket and its caption lines overlap each other, at any rotation", () => {
+    for (const rotation of [0, 90, 180, 270]) {
+      for (const mirror of [false, true]) {
+        const bs = boxes(rotation, mirror);
+        expect(bs).toHaveLength(4); // 括弧1つ+キャプション3行
+        for (let i = 0; i < bs.length; i++) {
+          for (let j = i + 1; j < bs.length; j++) {
+            expect(overlaps(bs[i], bs[j])).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  // ja: 文字はシンボルを回しても横書きのままなので、キャプションの行は用紙の上で必ず縦に積まれる (同じ中心線に並び、順に下へ下がる。Rust側 svg_pin_group_caption_lines_stack_downwards_on_paper とparity)
+  it("stacks caption lines downwards on the paper, sharing one centre line, at any rotation", () => {
+    for (const rotation of [0, 90, 180, 270]) {
+      for (const mirror of [false, true]) {
+        const captions = boxes(rotation, mirror).slice(1);
+        const cx = (b: [number, number, number, number]) => (b[0] + b[2]) / 2;
+        for (const c of captions) expect(cx(c)).toBeCloseTo(cx(captions[0]), 9);
+        for (let i = 0; i + 1 < captions.length; i++) {
+          expect(captions[i][3]).toBeLessThanOrEqual(captions[i + 1][1] + 1e-9);
+        }
+      }
+    }
   });
 });

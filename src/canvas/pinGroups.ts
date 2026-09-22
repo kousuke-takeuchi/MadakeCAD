@@ -6,7 +6,6 @@
 // ミラーにも自動で追従する。読めない・重なる項目はその項目だけを飛ばす (パニックしない)。
 
 import type { Point, PinDef, PinDir, SymbolDef } from "../ipc";
-import { textWidthMm } from "./textWidth";
 
 /** `attrs`のキー。Rust側 PIN_GROUPS_ATTR と同じ。 */
 export const PIN_GROUPS_ATTR = "pin_groups";
@@ -108,11 +107,6 @@ export function outerPinDef(def: SymbolDef, number: string): PinDef | null {
   return best;
 }
 
-/** 折り返した各行のうち、いちばん長い行の幅 (mm)。 */
-function maxLineWidth(lines: readonly string[]): number {
-  return lines.reduce((w, l) => Math.max(w, textWidthMm(l, PIN_GROUP_CAPTION_TEXT_MM)), 0);
-}
-
 /** キャプションをPIN_GROUP_CAPTION_WRAP文字ごとに折り返す (縦書きの近似)。 */
 export function wrapCaption(caption: string): string[] {
   if (caption.length === 0) return [""];
@@ -201,16 +195,26 @@ export function parsePinGroups(spec: string, order: readonly string[]): ParsedPi
   return { groups, issues };
 }
 
+/**
+ * 描画用に解決したピングループ1件のジオメトリ (Rust側 PinGroupBracket と同一)。
+ * キャプションの位置はここで決めない: 文字は回転しても横書きのままなので、行の積み上げは
+ * インスタンスの変換を通したあとの用紙座標で行う (dynamicSymbol.ts の captionLineAnchors)。
+ */
 export interface PinGroupBracket {
   /** 角括弧のポリライン (4点、ローカル座標)。 */
   bracket: Point[];
-  /** キャプションの各行と、その中心位置 (ローカル座標)。 */
-  captionLines: [string, Point][];
+  /** 折り返し済みのキャプション各行。 */
+  caption: string[];
+  /** 括弧の棒の中点 (ローカル座標)。キャプションはここから外向きに置く。 */
+  captionFrom: Point;
+  /** キャプションを置く外向き (ローカル座標の単位ベクトル)。 */
+  captionDir: Point;
 }
 
 /**
- * 1つのピングループの括弧とキャプションのジオメトリを求める (Rust側 pin_group_bracket と
- * 同一)。pinsはグループに属するピン定義 (チャート順)。向きが揃っていなければnull。
+ * 1つのピングループの括弧のジオメトリとキャプションの置き方を求める
+ * (Rust側 pin_group_bracket と同一)。pinsはグループに属するピン定義 (チャート順)。
+ * 向きが揃っていなければnull (段をまたぐ範囲・2辺にまたがる範囲)。
  */
 export function pinGroupBracket(pins: readonly PinDef[], caption: string): PinGroupBracket | null {
   if (pins.length === 0) return null;
@@ -231,15 +235,12 @@ export function pinGroupBracket(pins: readonly PinDef[], caption: string): PinGr
       { x: barX, y: bottom },
       { x: tickX, y: bottom },
     ];
-    const captionX = barX + sign * (PIN_GROUP_CAPTION_GAP_MM + maxLineWidth(lines) / 2);
-    const midY = (top + bottom) / 2;
-    const total = Math.max(0, lines.length - 1) * PIN_GROUP_CAPTION_LINE_PITCH_MM;
-    const startY = midY - total / 2;
-    const captionLines: [string, Point][] = lines.map((l, i) => [
-      l,
-      { x: captionX, y: startY + i * PIN_GROUP_CAPTION_LINE_PITCH_MM },
-    ]);
-    return { bracket, captionLines };
+    return {
+      bracket,
+      caption: lines,
+      captionFrom: { x: barX, y: (top + bottom) / 2 },
+      captionDir: { x: sign, y: 0 },
+    };
   }
 
   const left = Math.min(...pins.map((p) => p.at.x));
@@ -254,13 +255,12 @@ export function pinGroupBracket(pins: readonly PinDef[], caption: string): PinGr
     { x: right, y: barY },
     { x: right, y: tickY },
   ];
-  const captionY0 = barY + sign * (PIN_GROUP_CAPTION_GAP_MM + PIN_GROUP_CAPTION_TEXT_MM / 2);
-  const midX = (left + right) / 2;
-  const captionLines: [string, Point][] = lines.map((l, i) => [
-    l,
-    { x: midX, y: captionY0 + sign * i * PIN_GROUP_CAPTION_LINE_PITCH_MM },
-  ]);
-  return { bracket, captionLines };
+  return {
+    bracket,
+    caption: lines,
+    captionFrom: { x: (left + right) / 2, y: barY },
+    captionDir: { x: 0, y: sign },
+  };
 }
 
 /**
@@ -273,15 +273,41 @@ export function pinGroupBrackets(def: SymbolDef, spec: string): PinGroupBracket[
   const parsed = parsePinGroups(spec, order);
   const out: PinGroupBracket[] = [];
   for (const g of parsed.groups) {
-    const i0 = order.indexOf(g.first);
-    const i1 = order.indexOf(g.last);
-    if (i0 < 0 || i1 < 0) continue;
-    const pins = order
-      .slice(i0, i1 + 1)
-      .map((no) => outerPinDef(def, no))
-      .filter((p): p is PinDef => p !== null);
-    const bracket = pinGroupBracket(pins, g.caption);
+    const bracket = pinGroupBracket(groupPinDefs(def, order, g), g.caption);
     if (bracket) out.push(bracket);
   }
   return out;
+}
+
+/** 1つのグループが括弧を掛けるピン定義 (Rust側 group_pin_defs と同一)。 */
+function groupPinDefs(def: SymbolDef, order: readonly string[], group: PinGroup): PinDef[] {
+  const i0 = order.indexOf(group.first);
+  const i1 = order.indexOf(group.last);
+  if (i0 < 0 || i1 < 0) return [];
+  return order
+    .slice(i0, i1 + 1)
+    .map((no) => outerPinDef(def, no))
+    .filter((p): p is PinDef => p !== null);
+}
+
+/**
+ * 書式としては読めたのに括弧を描けないグループの診断 (Rust側 undrawable_group_issues と同一)。
+ * 多段端子台で段をまたぐ範囲 (`4a-1b`) や、シンボルの2辺にまたがる範囲がこれになる。
+ */
+export function undrawableGroupIssues(def: SymbolDef, groups: readonly PinGroup[]): PinGroupIssue[] {
+  const order = chartOrderPinNumbers(def);
+  return groups
+    .filter((g) => pinGroupBracket(groupPinDefs(def, order, g), g.caption) === null)
+    .map((g) => ({
+      text: `${g.rangeText}:${g.caption}`,
+      code: PIN_GROUP_INVALID,
+      message:
+        "範囲がピンの向きをまたいでいます (多段端子台の段をまたぐ範囲や、シンボルの2辺にまたがる範囲には括弧を描けません)",
+    }));
+}
+
+/** attrs["pin_groups"]の診断を全部集める (Rust側 pin_group_issues と同一)。 */
+export function pinGroupIssues(def: SymbolDef, spec: string): PinGroupIssue[] {
+  const parsed = parsePinGroups(spec, chartOrderPinNumbers(def));
+  return [...parsed.issues, ...undrawableGroupIssues(def, parsed.groups)];
 }

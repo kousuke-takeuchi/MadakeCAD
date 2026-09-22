@@ -2,7 +2,9 @@
 // 同一ルールを検証する (parityテスト)。
 import { describe, expect, it } from "vitest";
 
-import { blockSymbol, dynamicSymbol } from "./dynamicSymbol";
+import type { SymbolInstance } from "../ipc";
+
+import { blockSymbol, captionLineAnchors, dynamicSymbol } from "./dynamicSymbol";
 import {
   chartOrderPinDefs,
   chartOrderPinNumbers,
@@ -12,8 +14,23 @@ import {
   parsePinGroups,
   pinGroupBracket,
   pinGroupBrackets,
+  pinGroupIssues,
   wrapCaption,
 } from "./pinGroups";
+
+/** 回転もミラーもしていない、原点に置いたインスタンス (用紙座標=ローカル座標になる)。 */
+function unrotated(symbolId: string): SymbolInstance {
+  return {
+    id: "s1",
+    symbol_id: symbolId,
+    at: { x: 0, y: 0 },
+    rotation: 0,
+    mirror: false,
+    reference: "",
+    value: "",
+    attrs: {},
+  } as SymbolInstance;
+}
 
 function order(id: string): string[] {
   return chartOrderPinNumbers(dynamicSymbol(id)!);
@@ -95,7 +112,8 @@ describe("pinGroupBracket", () => {
     const pins = chartOrderPinDefs(def).slice(0, 2); // "1","2" (左側の足)
     const bracket = pinGroupBracket(pins, "電源")!;
     expect(bracket.bracket.every((p) => p.x < pins[0].at.x)).toBe(true);
-    expect(bracket.captionLines.every(([, p]) => p.x < bracket.bracket[0].x)).toBe(true);
+    const anchors = captionLineAnchors(unrotated("terminal_block_4p"), bracket);
+    expect(anchors.every(([, p]) => p.x < bracket.bracket[0].x)).toBe(true);
   });
 
   // ja: ブロックでも括弧は左のピンの足先より外に出て、キャプションはさらに外に置かれる (Rust側の3一族テストとparity)
@@ -108,7 +126,8 @@ describe("pinGroupBracket", () => {
     expect(brackets).toHaveLength(1);
     expect(brackets[0].bracket.every((p) => p.x < stubEnd)).toBe(true);
     const barX = Math.min(...brackets[0].bracket.map((p) => p.x));
-    expect(brackets[0].captionLines.every(([, p]) => p.x < barX)).toBe(true);
+    const anchors = captionLineAnchors(unrotated("block"), brackets[0]);
+    expect(anchors.every(([, p]) => p.x < barX)).toBe(true);
   });
 
   // ja: コネクタは右側にピンが出るので、括弧とキャプションは足先より右に出る (Rust側の3一族テストとparity)
@@ -119,7 +138,8 @@ describe("pinGroupBracket", () => {
     expect(brackets).toHaveLength(1);
     expect(brackets[0].bracket.every((p) => p.x > stubEnd)).toBe(true);
     const barX = Math.max(...brackets[0].bracket.map((p) => p.x));
-    expect(brackets[0].captionLines.every(([, p]) => p.x > barX)).toBe(true);
+    const anchors = captionLineAnchors(unrotated("connector_8p"), brackets[0]);
+    expect(anchors.every(([, p]) => p.x > barX)).toBe(true);
   });
 
   // ja: 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない、Rust側とparity)
@@ -129,7 +149,18 @@ describe("pinGroupBracket", () => {
     const brackets = pinGroupBrackets(def, "1b-4b:B系統");
     expect(brackets).toHaveLength(1);
     expect(brackets[0].bracket.every((p) => p.x > 7.5)).toBe(true);
-    expect(brackets[0].captionLines.every(([, p]) => p.x > 7.5)).toBe(true);
+    const anchors = captionLineAnchors(unrotated("terminal_block_8p_2l"), brackets[0]);
+    expect(anchors.every(([, p]) => p.x > 7.5)).toBe(true);
+  });
+
+  // ja: 多段端子台の段をまたぐ範囲は、黙って何も描かれるのではなく報告される (段ごとに外側の辺が逆で1本の括弧では囲めないため、Rust側とparity)
+  it("reports a range that spans two levels instead of quietly drawing nothing", () => {
+    const def = dynamicSymbol("terminal_block_8p_2l")!;
+    expect(pinGroupBrackets(def, "4a-1b:またぎ")).toEqual([]);
+    const issues = pinGroupIssues(def, "4a-1b:またぎ");
+    expect(issues).toHaveLength(1);
+    expect(issues[0].code).toBe(PIN_GROUP_INVALID);
+    expect(issues[0].text).toContain("4a-1b");
   });
 
   // ja: シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される
