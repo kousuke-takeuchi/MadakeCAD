@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Entity, Sheet, SymbolDef, TextEntity } from "../ipc";
+import { dynamicSymbol } from "./dynamicSymbol";
 import { entityBounds, leaderFor, leaderLine, textBounds } from "./leader";
 
 function note(x: number, y: number, text: string, leaderTo?: string | null): TextEntity {
@@ -144,6 +145,33 @@ describe("entityBounds", () => {
       min: { x: 100, y: 100 },
       max: { x: 130, y: 120 },
     });
+  });
+
+  // ja: ピングループ括弧の付いたシンボルを指す引き出し線は、シンボル本体ではなく括弧の脇のキャプションの外側で止まる (括弧もキャプションもそのシンボルと一緒に描かれるため。Rust側 a_leader_stops_outside_a_symbols_pin_group_caption とparity)
+  it("stops outside a symbol's pin-group caption, not on the symbol body", () => {
+    const def = dynamicSymbol("terminal_block_8p")!;
+    const defs = new Map([["terminal_block_8p", def]]);
+    const inst = (attrs: Record<string, string>): Entity =>
+      ({
+        kind: "symbol",
+        id: "tb1",
+        symbol_id: "terminal_block_8p",
+        at: { x: 100, y: 100 },
+        rotation: 0,
+        mirror: false,
+        reference: "TB1",
+        value: "",
+        attrs,
+      }) as Entity;
+    const plainLeft = entityBounds(inst({}), defs)!.min.x;
+    const target = inst({ pin_groups: "1-4:電源系統一式" });
+    const groupedLeft = entityBounds(target, defs)!.min.x;
+    expect(groupedLeft).toBeLessThan(plainLeft); // キャプションのぶん外形が左へ広がる
+
+    const sheet = sheetWith([target]);
+    const leader = leaderFor(sheet, note(40, 100, "左の注記", "tb1"), defs);
+    expect(leader).not.toBeNull();
+    expect(leader![1].x).toBeCloseTo(groupedLeft, 9);
   });
 
   // ja: 図形・ハーネス・配線・ジャンクションも対象にでき、盤レイアウト専用のエンティティはnull

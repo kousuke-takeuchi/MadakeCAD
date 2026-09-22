@@ -11,6 +11,12 @@
 //! **対象の外接矩形は[`crate::svg::symbol_bounds`]1つだけを使う** (canvas側の双子
 //! `dynamicSymbol.ts`の`symbolBounds`と同じ定義: 配置基準点を含め、文字プリミティブは
 //! 基準点だけを見る)。図面に描かれる外形と、引き出し線が指す先を必ず一致させるため。
+//!
+//! この外形には**ピングループ括弧 (G8) のキャプションまで含まれる**ので、括弧付きの
+//! シンボルを指す引き出し線はキャプションの外側の縁で止まる (シンボル本体ではなく)。
+//! これは意図した挙動: 括弧もキャプションもそのシンボルと一緒に描かれる図形なので、
+//! 引き出し線がその上に重なって終わるほうが読みにくい。
+//! [`crate::leader::tests::a_leader_stops_outside_a_symbols_pin_group_caption`]が固定している。
 
 use crate::model::{Entity, Sheet, TextAnchor, TextEntity};
 use crate::symbol::DefIndex;
@@ -234,6 +240,41 @@ mod tests {
         let rect = entity_bounds(&inst, &defs).expect("外形が求まる");
         assert_eq!(rect.min, Point::new(100.0, 100.0), "配置基準点が外形に入る");
         assert_eq!(rect.max, Point::new(130.0, 120.0), "文字は基準点1点ぶんだけ広がる");
+    }
+
+    /// A leader aimed at a symbol carrying pin-group brackets stops outside the caption beside them, not on the symbol body, because the brackets and captions are drawn with the symbol and a line ending on top of them would be harder to read.
+    /// ピングループ括弧の付いたシンボルを指す引き出し線は、シンボル本体ではなく括弧の脇のキャプションの外側で止まる。括弧もキャプションもそのシンボルと一緒に描かれるので、その上に重ねて終わると読みにくいため。
+    #[test]
+    fn a_leader_stops_outside_a_symbols_pin_group_caption() {
+        let mut project = crate::model::Project::new("leader");
+        let mut inst = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "terminal_block_8p".into(),
+            at: Point::new(100.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        let def = crate::symbol::resolve_symbol("terminal_block_8p").unwrap();
+        let defs = DefIndex::new(std::slice::from_ref(&def));
+        let plain_left = entity_bounds(&Entity::Symbol(inst.clone()), &defs).unwrap().min.x;
+
+        inst.attrs.insert(
+            crate::pin_groups::PIN_GROUPS_ATTR.into(),
+            "1-4:電源系統一式".into(),
+        );
+        let target = Entity::Symbol(inst);
+        let target_id = target.id();
+        let grouped_left = entity_bounds(&target, &defs).unwrap().min.x;
+        assert!(grouped_left < plain_left, "キャプションのぶん外形が左へ広がる");
+
+        project.sheets[0].entities.insert(target_id, target);
+        // シンボルの左から引く注記 → 終点はキャプションの外側の縁
+        let text = note(40.0, 100.0, "左の注記", Some(target_id));
+        let (_, end) = leader_for(&project.sheets[0], &text, &defs).expect("線が引ける");
+        assert_eq!(end.x, grouped_left, "キャプションの外側で止まる");
     }
 
     /// entity_bounds resolves a symbol instance's bounding box from its definition, so a leader can target a symbol.
