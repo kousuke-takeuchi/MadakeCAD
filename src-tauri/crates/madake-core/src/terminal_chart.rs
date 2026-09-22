@@ -234,7 +234,8 @@ pub struct TerminalChart {
     /// 端子台の型番・値。
     pub value: String,
     pub sheet_name: String,
-    /// 端子数 (極数)。
+    /// 端子数 (`rows`の行数)。多段端子台 (G6) では極数×段数になるので、
+    /// **極数が欲しいときは [`poles_and_levels_of`] を使うこと**。
     pub terminal_count: usize,
     pub rows: Vec<TerminalRow>,
     /// 正規化済みのジャンパ (並び順で先に来る端子番号が先、昇順、重複なし)。

@@ -511,6 +511,7 @@ export interface TerminalChart {
   reference: string;
   value: string;
   sheet_name: string;
+  /** 端子数 (`rows`の行数)。多段端子台では極数×段数。極数は`TerminalBlockInfo.poles`を見ること。 */
   terminal_count: number;
   rows: TerminalRow[];
   /** 正規化済みのジャンパ (並び順で先に来る端子番号が先)。多段端子台では段記号付き ("1a")。 */
