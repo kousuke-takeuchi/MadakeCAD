@@ -10,7 +10,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 |---|---|---|
 | Commandエンジン | ✅ | 全編集がCommand経由。逆コマンドによるundo/redo、Patch(revision付き)のbroadcast |
 | ドキュメントモデル | ✅ | Project(図枠テンプレートid・PLC割付表) / Sheet(種別=回路図\|盤レイアウト・JIS図枠・表題欄・改訂欄・ゾーン) / Entity 12種(Symbol・Wire・Junction・NetLabel・Text・Harness・Shape(図形。電気的意味なし)+盤の PanelOutline・DinRail・Duct・Footprint・PanelLegend) |
-| 保存形式 `.mdkproj` | ✅ | 整形JSON(git差分可読)、`format_version` **9**(履歴と旧ファイルの扱いは`data-model.md`)。チャット履歴は`<名前>.chat.json`を併存 |
+| 保存形式 `.mdkproj` | ✅ | 整形JSON(git差分可読)、`format_version` **10**(履歴と旧ファイルの扱いは`data-model.md`)。チャット履歴は`<名前>.chat.json`を併存 |
 | シンボルライブラリ | ✅ | JIS C 0617 / IEC 60617系の静的51種(電源・変換・接地7/保護6/操作スイッチ8/リレー・電磁接触器5/半導体3/受動6/負荷・報知6+絵記号4(拡声器・ブザー・サイレン・送風機、G12。確立した形のみ。拡声器・送風機はIEC 60617の項目番号、ブザー・サイレンはJIS C 0617-8:2011 第10節で裏取り)/計測3/接続3)+動的シンボル`connector_{n}p`/`terminal_block_{n}p`(n=1..50、5mmピッチ中央揃え)・`plc_di_{n}p`/`plc_do_{n}p`(n=1..64、点ピッチ5mm、カテゴリ`plc`)。全記号がピンの接続方向(up/down/left/right)・属性スロット(TAG/PART/DESC/RATING)・検索キーワード(en+ja)を持つ。多極機器(遮断器・断路器・電磁接触器)は端子1/2・3/4・5/6で極ごとに導通。端子台は左右貫通端子。**多段端子台**(G6)`terminal_block_{n}p_{levels}l`(段=1〜3、例`terminal_block_8p_2l`)は段ごとに1列の端子を横に並べ(列の中心間隔10mm・極が行)、段記号付きピン番号(`1a`/`1b`…)を持つ独立端子になる。1シンボル=1デバイスのままチャート・接続図・BOMに載る(既定の1段は従来どおり`terminal_block_{n}p`と同一図形)。端子台の`attrs["jumpers"]`は端子台チャート・端子接続図に加え、図面上のシンボルにもショートバー(隣り合う端子の印の隙間を埋める太線、G5)として描かれ、多段端子台では段記号付きの指定(`1a-1b`/`1a-2a`)だけを受け付ける。`attrs["pin_groups"]`(G8、`"1-4:電源,5-8:信号"`)は`block`/`terminal_block_*`/`connector_*`のチャート順ピン範囲へ角括弧+縦書き近似(4文字ごとの行分割)のキャプションを描き、ピンの向きに追従して回転・ミラーでも崩れない。括弧はピンの足先より外・キャプションはさらに外に置き、その箱をシンボル外形に数え入れるので参照記号・型番・機能ラベルのほうが避ける。多段端子台では括弧がその段の列の外側に出る(`1b-4b`は柱の間に入らない)。範囲の重なり・不明ピン・書式エラー・実機ブロック表示への指定はその項目だけを飛ばすERC診断(`erc.pin_group_overlap`/`erc.pin_group_unknown_pin`/`erc.pin_group_invalid`/`erc.pin_group_unsupported`)。ピン番号そのものに「-」を含む端子は範囲指定に使えない(区切り記号と区別できないため、その旨を診断で返す)。**ブロックシンボル**`block`はインスタンスの属性(`block_pins`=辺ごとの`{no,name}`・任意の`block_size`)から定義を毎回生成する(名前付きピンの汎用機器。ピン名は外形の内側・ピン番号は外側、5mmピッチ)。**ユーザーシンボル**(`~/MadakeCAD/symbols/*.json`、分類`user`固定・同梱とのid衝突は拒否・保存時検証)が同じ解決経路に合流する(同梱→動的→ユーザー) |
 | 座標系 | ✅ | mm・左上原点・Y下向き。2.5mmグリッド、回転0/90/180/270 |
 | ヘッドレス実行 | ✅ | コアはUI非依存(全ロジックがmadake-coreに集中) |
@@ -38,7 +38,9 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 検索バー+結果パネル | ✅ | ⌘Fの浮きバー(フィルタチップ=参照記号/型番/ネット/テキスト・件数)+下部ドックの結果パネル(参照/種別/所在/補足)。Enter=次へ/Shift+Enter=前へ(端で回り込み)/Escで閉じる |
 | デバイスナビゲータ(左3タブ目) | ✅ | 参照記号→機能(コイル/接点(端子対)/端子/本体)のツリー+所在。行クリックでreveal、右クリックでジャンプ/削除(`delete_entities`経由なので⌘Zで戻る)。未配置機能のドラッグ配置はフェーズ3 |
 | 参照サーフィン(Surfer) | ✅ | キャンバスでAlt(Option)+クリック→所在一覧ポップアップ(シンボル=同一デバイスの全機能/ネットラベル=同名ラベル/ワイヤ=同一線番)。↑↓で巡回・Enterで確定・Escで閉じる |
-| プロパティパネル | ✅ | 何も選択していないときはシートの設定(注記文字高 1.0〜3.5mm=配線注記・線番・ネットタグの大きさ)、シンボルの参照記号・型番・機能ラベル・ピン表(ブロック)、ワイヤの線番(ネット単位)・線色/線径/長さ/品番(自動引き当てはプレースホルダ表示)、注記の基準位置/色トークン/太字、ハーネスの名前・備考(含む電線数)、ネットラベルのタグ形状と相手先リンク(クリックでシート切替+ズーム)。**未対応**: 注記の引き出し先(`leader_to`、G20)。パネルにエンティティを選ぶ部品が無いので、コマンド/CLI/MCP経由のみ(対象を後から消すと`erc.leader_target_missing`として検証が報告する) |
+| プロパティパネル | ✅ | 何も選択していないときはシートの設定(注記文字高 1.0〜3.5mm=配線注記・線番・ネットタグの大きさ)、シンボルの参照記号・型番・機能ラベル・ピン表(ブロック)・嵌合相手(コネクタ、G14)、ワイヤの線番(ネット単位)・線色/線径/長さ/品番(自動引き当てはプレースホルダ表示)、注記の基準位置/色トークン/太字、ハーネスの名前・備考(含む電線数)、ネットラベルのタグ形状と相手先リンク(クリックでシート切替+ズーム)。**未対応**: 注記の引き出し先(`leader_to`、G20)。パネルにエンティティを選ぶ部品が無いので、コマンド/CLI/MCP経由のみ(対象を後から消すと`erc.leader_target_missing`として検証が報告する) |
+| プロジェクト情報ダイアログ | ✅ | プロジェクト名・番号(`Project.no`、G16)+全シート共通の表題欄(会社名・図番・表題)を`set_project_meta`1回で設定。変更した欄だけを送る。「回路図」タブ→「編集」グループ |
+| 用紙変更ダイアログ | ✅ | シートの用紙サイズ・向きを作成後に変更(`set_sheet_paper`、G15)。既存エンティティの座標は不変、ゾーン分割は`add_sheet`と同じ既定値へ引き直す。「回路図」タブ→「編集」グループ |
 | reveal(ジャンプ)の一本化 | ✅ | 検証パネル・検索・デバイスナビゲータ・Surferの4経路が`composables/reveal.ts`(シート切替+選択+ズーム) |
 | プロジェクトマネージャ(左) | ✅ | ツリー+詳細。エージェントタブと切替 |
 | 図面タブ | ✅ | シート切替・追加(add_sheet) |
@@ -60,7 +62,8 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | SVG出力 | ✅ | 印刷品質、mm 1:1、XMLエスケープ |
 | PDF出力 | ✅ | svg2pdfでベクタ変換、日本語フォント埋め込み(macOS=Hiragino。Win/Linuxのフォント割当は未調整) |
 | BOM(部品表) | ✅ | **アイテム番号**+参照記号+型番+シンボル+数量。アイテム番号は盤のバルーンと連動(未配置は空欄、複数まとまる行は「1, 3」)。**旧4列CSVとは非互換**。CSV / 図枠付き図面シート |
-| From-Toワイヤリスト | ✅ | シート・From・To・線番・線色・sq・長さ・電線品番・ハーネス。From/Toはピン(`参照記号:ピン`)/ネットラベル/空。CSV / 図面シート |
+| From-Toワイヤリスト | ✅ | シート・From・To・**嵌合相手**(G14)・**備考**(G18)・線番・線色・sq・長さ・電線品番・ハーネス(旧9列とは非互換)。From/Toはピン(`参照記号:ピン`)/ネットラベル/空。ネットラベルに届いた端はネットを1対1で辿れるときだけデバイスへ解決し(G18)、辿れなければラベル名のまま備考に`multi`。嵌合相手列は宣言済みコネクタの相手参照記号。CSV / 図面シート |
+| 嵌合コネクタ対 | ✅ | `attrs["mates_with"]`(コネクタ一族`connector_*`のみ、G14)。ERC: 極数不一致`erc.mate_pole_mismatch`(Warning)・片側宣言`erc.mate_one_sided`(Info)・自己参照/不明参照記号`erc.mate_unknown`(Warning、いずれもプロジェクト全体で評価)。帳票の嵌合相手列+同一シート50mm以内なら図面に破線を自動描画(SVG `render_mate_links`+キャンバス双子`mate.ts`)。動的コネクタ系統への性別欄は未実装 |
 | 端子台チャート | ✅ | 端子台1台=1表。端子番号順に端子・**Lv(段)**・内部側/外部側・線番・電線・ハーネス・ジャンパ・予備端子。Lv列は多段端子台(G6)の段記号、単段は空欄。CSV / 図面シート(`--terminal`で1台に絞れる) |
 | 端子接続図 | ✅ | EPLAN端子図様式(外部=左/内部=右・ハーネスブラケット・予備・ジャンパ)。多段端子台は端子ストリップを段の列に分け(列の上に段記号)、箱に段記号付きの端子番号(`1a`等)を表示。1端子台=1ページ(端子15個で分割)。PDFのみ |
 | クロスリファレンス表 | ✅ | プロジェクト全体ネットの所在一覧。CSV / 図面シート。コイル⇔接点対応は図面上の接点マップ(§8)で実装済み |
@@ -75,7 +78,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 機能 | 状態 | 備考 |
 |---|---|---|
 | ネットリスト抽出 | ✅ | 座標一致+Junction+同名NetLabel統合。端子台の同番号ピン内部短絡。決定的なネット名(ラベル名 or N001〜) |
-| ERC | ✅ | 未接続ピン / 空参照 / 参照記号重複(リレー除外) / 宙ぶらりんワイヤ(ジャンクション忘れ検出) / ネットラベル競合 / 接点構成の超過`contact_overflow`(Error) / 親コイル無しの接点`orphan_contact`(Error) / 接点無しコイル`coil_without_contact`(Warning) / 読めない接点構成`invalid_contact_config`(Warning)。接点はa/b/c接点の3種を数え、**c接点1極はa接点にもb接点にも充当できる**(`2CO`の部品にa接点1+b接点1を描いても超過にならない) |
+| ERC | ✅ | 未接続ピン / 空参照 / 参照記号重複(リレー除外) / 宙ぶらりんワイヤ(ジャンクション忘れ検出) / ネットラベル競合 / 接点構成の超過`contact_overflow`(Error) / 親コイル無しの接点`orphan_contact`(Error) / 接点無しコイル`coil_without_contact`(Warning) / 読めない接点構成`invalid_contact_config`(Warning) / 用紙外エンティティ`erc.outside_paper`(Warning、G15) / 嵌合対の極数不一致`erc.mate_pole_mismatch`・片側宣言`erc.mate_one_sided`・自己参照/不明参照記号`erc.mate_unknown`(G14)。接点はa/b/c接点の3種を数え、**c接点1極はa接点にもb接点にも充当できる**(`2CO`の部品にa接点1+b接点1を描いても超過にならない) |
 | 電気検証 | ✅ | 電源到達性 / 線径許容電流(sq表) / 電圧降下(電源電圧の3%) / ヒューズ定格。**ngspiceのDC動作点解析がバックエンド**、未導入時はグラフ近似+Info明示 |
 | SPICEネットリスト生成 | ✅ | 接続点ノード・ワイヤ抵抗(ρL/A、途中接続で分割按分)・導通橋・負荷等価抵抗・ラベル橋 |
 | ngspiceランナー | ✅ | OS非依存(env→PATH→OS既定パス探索、サブプロセス実行) |
@@ -108,7 +111,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール35種: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・set_sheet_annotation_text・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / get_tidy_metrics / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / list_templates / apply_template / list_macros / save_macro / apply_macro / duplicate_symbol / save_user_symbol / delete_user_symbol / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo。**検索・デバイスツリーはMCP未露出**(IPC+Link APIのみ。AIはget_projectで足りるため意図的) |
+| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール35種: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・set_sheet_annotation_text・set_sheet_paper・set_project_meta・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / get_tidy_metrics / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / list_templates / apply_template / list_macros / save_macro / apply_macro / duplicate_symbol / save_user_symbol / delete_user_symbol / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo。**検索・デバイスツリーはMCP未露出**(IPC+Link APIのみ。AIはget_projectで足りるため意図的) |
 | Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols(+/user・/user/save・/user/delete・/duplicate) / frame-templates / panel/unplaced / netlist / verify / tidy-metrics / search / devices / simulate/op / commands / undo / redo / save / load / import/kicad / terminals(+/chart・/check) / templates(+/apply) / macros(+/build・/save・/apply・/apply-inline) / export/*(svg・pdf・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/*(send・cancel・conversations・undo-turn・detect・provider・api-key(PUT/DELETE)・test-connection・events) / settings / events |
 | madake CLI | ✅ | status / project / netlist / verify / sim / parts / terminals / export(svg・pdf・pdf-book+帳票6種を`--format csv\|pdf`・`--terminal`付きで) / save / open(.kicad_sch対応) / renumber / exec / undo / redo。マクロ・検索のサブコマンドは未(Link APIを`exec`/curlで直接叩ける) |
 | AIチャット(A1) | ✅ | 左ドック+浮きカード、Claude Code CLIバックエンド(Pro/Max OAuth再利用)、ツールチップ表示、ターン単位undo、編集オーバーレイ(シアンパルス)、会話履歴のプロジェクト保存 |
@@ -171,7 +174,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 グラフィカルな図枠エディタ。**フェーズ6(可読性ギャップ)も2026-08-23に完了**: G19 タグの基準点・G20 注記文字高の
 シート設定・G21 c接点のクロスリファレンスを解消し、再現図面のシート1は文字の重なり0件・
 ERC 2件(どちらも実在の指摘)になった。**フェーズ6タスク4(2026-09-22)**: G8 ピングループ括弧・
-G12 同梱絵記号(拡声器・ブザー・サイレン・送風機。ブザーとサイレンはJIS C 0617-8:2011 第10節を出典とする——IECの識別番号が第2の出典で裏取りできなかったため)・G20残(注記の引き出し線)を追加。残るのは
+G12 同梱絵記号(拡声器・ブザー・サイレン・送風機。ブザーとサイレンはJIS C 0617-8:2011 第10節を出典とする——IECの識別番号が第2の出典で裏取りできなかったため)・G20残(注記の引き出し線)を追加。**フェーズ6タスク5(2026-09-22)**: 軽微バッチ — G14 嵌合コネクタ対(`mates_with`+ERC+帳票+作図。性別欄は今後)・G15 用紙変更コマンド・G16 プロジェクト情報コマンド(`Project.no`追加、format_version 10)・G18 From-To帳票のネットラベル辿りを追加。残るのは
 `specs/reproduction-gaps.md`の品質向上・軽微の各項目(塗り分け・電線品番の凡例など)。
 
 本節の旧A〜D方向案は、ビジョン明確化(2026-08-21)によりマイルストーンM2〜M6へ再編された。

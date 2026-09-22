@@ -737,7 +737,22 @@ phase 6).
 
 ### G14 — No mating-connector-pair concept · minor for this sheet, essential for harness work
 
-> **Status 2026-08-23 (phase 5): unchanged.**
+> **✅ Resolved 2026-08-23 (phase 6, task 5).** `attrs["mates_with"] = "<designator>"` on a
+> connector instance (`connector_*` family: the dynamic `connector_{n}p` and the static
+> `connector_plug`/`connector_socket`; terminal blocks share the "connector" category but
+> are **not** treated as mating connectors) declares one side of a pair (`madake-core/src/mate.rs`).
+> ERC evaluates the whole project (a mate can point at a designator on another sheet):
+> pole-count mismatch is a Warning (`erc.mate_pole_mismatch`), a one-sided declaration
+> (the other side does not declare back) is an Info (`erc.mate_one_sided`), and a
+> self-reference or an unknown designator is a Warning (`erc.mate_unknown`). The wire
+> list and From-To report gained a **嵌合相手 / Mate** column, filled from the declared
+> attribute of whichever end of the wire resolves to a device. On the drawing, a short
+> dashed line is drawn automatically between the two instances' nearest outline points
+> **only** when both are on the same sheet and within 50 mm of each other; otherwise
+> nothing is drawn and the reports alone carry the pair (SVG `svg.rs::render_mate_links`
+> and the canvas twin `src/canvas/mate.ts`, parity-tested). No gender field was added to
+> the parametric connector family in this task — the plan text scoped this task to the
+> pairing link and reports; gender is left for a future task (see the ledger note below).
 
 **Needed.** Field connectors come in mating pairs; a harness drawing wants to state
 which plug mates with which socket, and reports want to list a mated pair once.
@@ -756,8 +771,16 @@ BOM output.
 
 ### G15 — Sheet paper size cannot be changed after creation · minor
 
-> **Status 2026-08-23 (phase 5): unchanged.** The second pass again had to add a new
-> A4-portrait sheet and delete the default one.
+> **✅ Resolved 2026-08-23 (phase 6, task 5).** `set_sheet_paper { sheet_id, size,
+> orientation }` (reusing the existing `PaperSize`/`Orientation` types — the plan text's
+> `w`/`h` is expressed through `PaperSize`, not raw millimetres) changes a sheet's paper
+> after creation without touching a single entity coordinate and without losing anything
+> already on the sheet; the zone grid is recomputed the same way `add_sheet` sets it
+> (`zone_cols`/`zone_rows` = 4/6). Existing entities left outside the new paper are not
+> moved or deleted — they are reported as an ERC Warning `erc.outside_paper`
+> (`madake-core/src/verify.rs`). The inverse command restores the previous size and
+> orientation together, so undo is one step. A "Paper size" dialog (size + orientation
+> selects) reaches the same command from the UI.
 
 `add_sheet` takes `size` and `orientation`; no command changes them afterwards. To get
 an A4-portrait sheet the reproduction had to add a new sheet and delete the default
@@ -768,8 +791,17 @@ into a `set_sheet_properties` command).
 
 ### G16 — No command sets the project name or number · minor
 
-> **Status 2026-08-23 (phase 5): unchanged.** The reports still print the placeholder
-> project name.
+> **✅ Resolved 2026-08-23 (phase 6, task 5).** `Project.no: Option<String>` is a new
+> field (format version 9 → 10, with a migration test that a v9 file loads with
+> `no = None`, exactly as Task 4's leader-line field did for 8 → 9). `set_project_meta
+> { name?, no?, company?, drawing_no?, title? }` sets `Project.name`/`Project.no` when
+> given, and for the title-block fields writes **every sheet's** `title_block.*` in one
+> undoable command; the inverse restores each sheet's own previous value (not a single
+> shared value — sheets can have had different values beforehand). Fields left out of
+> the command are left untouched. The `{project.no}` title-block bind
+> (`frame_template.rs::bind_value`) now reads `Project.no`, and reports that print the
+> project name/no pick up the values. A "Project information" dialog (name, number,
+> company, drawing number, title) reaches the same command from the UI.
 
 `Project.name` is only set at creation; reports and the title block therefore printed
 the placeholder project name throughout. `{project.no}` is a title-block bind that is
@@ -807,8 +839,19 @@ wire"), and the first two an error at command time.
 
 ### G18 — The From-To wire list degrades when one end is a net label · minor
 
-> **Status 2026-08-23 (phase 5): unchanged.** Measured again: the From column of all
-> 111 wire-list rows is a net name.
+> **✅ Resolved 2026-08-23 (phase 6, task 5).** A wire end that lands on a net label is
+> now resolved through the net (`madake-core/src/reports.rs::wire_from_to`): excluding
+> this same wire's own other end (if it is a pin), when the net has **exactly one**
+> other pin the label is replaced with that device's `REF:PIN`; otherwise the net name
+> stays and the new **備考 / remark** column carries the i18n-neutral marker `multi`
+> (`REMARK_MULTI_ENDED`). Covered by tests: 1-to-1 (resolves), 1-to-many (keeps the name,
+> remark set), label-to-label with no device anywhere in the net (keeps the name, remark
+> set), and a chain stitched together purely by two same-named net-label instances with
+> no direct wire between them, where both wires in the chain independently resolve to
+> the device across the chain. The wire list and From-To report gained this 備考 column
+> alongside the G14 嵌合相手 column (see G14); both are new and sit right after To, so
+> the CSV is no longer compatible with the previous 9-column layout (`docs/05-wire-management.md`
+> documents the break, following the same pattern the terminal chart's Lv column used).
 
 Where a conductor ends at a net label rather than a device pin, the wire list prints
 the net name in the From column instead of a device:pin pair. On a sheet drawn
@@ -980,7 +1023,7 @@ canvas twin.
 |---|---|
 | **essential** | *(all closed in phase 5)* ✅ G1 named pins on multi-pin blocks · ✅ G2 wire annotation on the sheet · ✅ G3 directional net-label flags · ✅ G4 text styling, anchoring and a third symbol text field |
 | **quality** | ✅ G5 jumper bars on the schematic · ✅ G6 multi-level terminal blocks · ✅ G7 physical relay blocks *(display mode + contact image; manufacturer pin numbering and mechanical linkage still open)* · ✅ G8 pin-group brackets *(phase 6 task 4)* · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; reproduction re-measured in task 6)* · 🔶 G12 pictorial symbols *(4 established IEC 60617 symbols now bundled — loudspeaker/buzzer/siren/fan, phase 6 task 4; the rest still needs the user library)* · ✅ G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height and leader lines *(phase 6 task 4; the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
-| **minor** | G14 mating connector pairs · G15 sheet size command · G16 project meta command · ✅ G17 silent failures · G18 From-To list through net labels · ✅ G22 coil location vs wire note |
+| **minor** | ✅ G14 mating connector pairs *(pairing link + ERC + reports + drawing, phase 6 task 5; gender on the parametric family still open)* · ✅ G15 sheet paper change command *(phase 6 task 5)* · ✅ G16 project meta command *(phase 6 task 5)* · ✅ G17 silent failures · ✅ G18 From-To list through net labels *(phase 6 task 5)* · ✅ G22 coil location vs wire note |
 
 ## Reading of the result
 
