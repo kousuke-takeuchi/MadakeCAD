@@ -627,15 +627,18 @@ plus a caption, and the symbol draws the bracket.
 > the BOM roll-up below uses. Like `PanelLegend` it holds no content of its own — the rows
 > are derived from the sheet's wires every time it is drawn — and like `Shape` it is
 > excluded by construction from the netlist, ERC, BOM and wire list (tests pin all four:
-> placing a block leaves the netlist, the diagnostics, the BOM rows and the wire-list rows
-> byte-identical). It is placed/moved/deleted through the existing add-entity / translate /
+> placing a block on a sheet that already has one diagnostic changes neither the nets, nor
+> the diagnostics, nor the BOM rows, nor the wire-list rows). It is placed/moved/deleted
+> through the existing add-entity / translate /
 > delete commands (placing, selecting and dragging are covered by their own tests), has an
 > SVG twin and a canvas twin with mirrored tests, and belongs to the "annotations"
 > (`texts`) view class. Separately, the BOM (`reports::bom_rows`) now appends, after the
 > component rows, one row per wire part number with the project-wide total length in the
 > quantity column (metres, 2 decimals, e.g. `12.50 m`); wires whose part number cannot be
 > resolved roll up together under one `(未割当)` row instead of being invented or dropped,
-> and a project with no wires gets no roll-up rows at all.
+> and a project with no wires gets no roll-up rows at all. Verified at the implementation
+> level with unit tests on both sides (Rust core + the canvas twin) and a generic
+> (non-confidential) demo SVG + BOM CSV in the task's evidence folder.
 >
 > **Re-measured on the fourth pass (2026-09-27):** 111/111 wire-list part numbers again,
 > two wire roll-up rows in the BOM, and the legend block itself draws, resolves, sums and
