@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1280 specification clauses** across 5 areas.
+**1297 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -457,6 +457,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - tidy_metrics gathers the four counts of one sheet in a single value. <sub>`tidy_metrics_gathers_the_four_counts`</sub>
 - Measuring the same sheet twice gives exactly the same numbers, so the agent can compare before and after. <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
 
+### Tidy variants (sheet copies / adopt)
+
+- A variant copy keeps the paper, title block and every entity of the original, with a new sheet id, new entity ids, the label in its name, and a complete old-to-new id map. <sub>`duplicate_keeps_content_with_fresh_ids_and_a_full_map`</sub>
+- Starting a run with N variants yields N RestoreSheet commands appended after the existing sheets, each with its own label and id map; N outside 1..=4 is rejected. <sub>`start_builds_one_restore_sheet_per_variant`</sub>
+- Adopting a variant writes moved entities back under their original ids, deletes what the variant removed, adds what it created with fresh ids, leaves untouched entities alone, and finally removes every variant sheet. <sub>`adopt_maps_changes_back_to_original_ids`</sub>
+- Adopting an unchanged variant only removes the variant sheets. <sub>`adopting_an_unchanged_variant_only_removes_sheets`</sub>
+- Through the engine, start → edit a variant → adopt leaves the original sheet with the variant's placement and no variant sheets, and each of the three steps is one undo. <sub>`engine_round_trip_is_one_undo_per_step`</sub>
+
 ### Verification (ERC & electrical)
 
 - A fully wired circuit produces no ERC findings. <sub>`fully_wired_pair_has_no_erc_findings`</sub>
@@ -537,6 +545,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - POST /api/v1/simulate/op solves the DC operating point and returns net voltages and component currents (requires ngspice; skipped otherwise). <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf writes a valid PDF file to the requested path. <sub>`export_pdf_writes_pdf_file`</sub>
 - POST /api/v1/export/dxf and /export/kicad write the sheet as DXF and .kicad_sch, and POST /api/v1/import/dxf reads the DXF back into a project with an import report. <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
+- POST /api/v1/variants/start copies the sheet once per variant (one undo step) and returns each copy's id map; /variants/finish with a chosen sheet writes it back under the original ids and removes the copies, with null it only removes them; a count outside 1..=4 is rejected. <sub>`variants_start_and_finish_round_trip`</sub>
 - POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports. <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - The terminal endpoints list the terminal blocks of the drawing and return one block's chart and check result. <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report writes one report as CSV or as framed PDF pages, and refuses CSV for the graphical terminal diagram. <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
@@ -1580,6 +1589,20 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - the chat draft is shared between the dock and the floating card <sub>`ui store: 左ドックのタブとチャット下書き`</sub>
 - all view classes are visible by default <sub>`表示クラス (レイヤ)`</sub>
 - toggleViewClass hides and re-shows a class <sub>`表示クラス (レイヤ)`</sub>
+
+### Tidy variants (sheet copies / adopt)
+
+- start copies the active sheet once per variant, sends the same tidy prompt in a separate conversation per copy, and opens the panel <sub>`variants store: 整え案の開始`</sub>
+- a selection is mapped to the copy's entity ids in each prompt <sub>`variants store: 整え案の開始`</sub>
+- metrics of the original and every variant are fetched after start <sub>`variants store: 整え案の開始`</sub>
+- start refuses without a sheet, with a count outside 2..4, and while a comparison is in progress <sub>`variants store: 整え案の開始`</sub>
+- a failed copy is logged and nothing starts <sub>`variants store: 整え案の開始`</sub>
+- variants count as running while their conversation answers, and adopt waits for all of them <sub>`variants store: 比較・採用・破棄`</sub>
+- adopt finishes with the chosen sheet, returns to the original sheet and ends the comparison <sub>`variants store: 比較・採用・破棄`</sub>
+- discard cancels the conversations still running and removes every copy <sub>`variants store: 比較・採用・破棄`</sub>
+- a failed finish is logged and the comparison stays open <sub>`variants store: 比較・採用・破棄`</sub>
+- closing the panel keeps the comparison and it can be reopened; nothing opens without a run <sub>`variants store: 比較・採用・破棄`</sub>
+- refreshing metrics leaves a variant without metrics when its sheet cannot be measured <sub>`variants store: 比較・採用・破棄`</sub>
 
 ### verification
 

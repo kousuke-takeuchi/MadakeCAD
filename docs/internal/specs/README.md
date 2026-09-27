@@ -11,7 +11,7 @@
 | 仕様書 | マイルストーン | 内容 |
 |---|---|---|
 | [m2-drawing-parity.md](m2-drawing-parity.md) | M2 参考図面の完全再現 | 改訂欄・線番・ハーネス境界・シート間クロスリファレンス |
-| [m3-ai-first.md](m3-ai-first.md) | M3 AI-first作図 | A1負債解消・自動反復・規格知識/検証ループ・マルチプロバイダ |
+| [m3-ai-first.md](m3-ai-first.md) | M3 AI-first作図(完了) | A1負債解消・自動反復(整えバリアント含む)・規格知識/検証ループ・マルチプロバイダ・並列エージェントの比較案 |
 | [m4-industrial-core.md](m4-industrial-core.md) | M4 産業CAD中核機能 | ベンチマーク(ACADE/EPLAN)・端子台チャート・回路マクロ・PLC I/O・帳票群・シンボルエディタ |
 | [m5-freecad.md](m5-freecad.md) | M5 機械CAD連携 | FreeCADアドオンWB・部品対応付け・電線長書き戻し・盤レイアウト |
 | [m6-oss.md](m6-oss.md) | M6 OSS公開 | ライセンス・公開準備・クロスプラットフォーム・コミュニティ |

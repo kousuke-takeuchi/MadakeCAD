@@ -649,10 +649,14 @@
       },
       "variantHead": "バリアント数",
       "variantNone": "反復しない",
-      "variantPlannedLog": "AGENT   複数案を比べるバリアント数はフェーズ3で対応予定です",
       "startedLog": "AGENT   {mode}で整えます (1ターン。Cmd+Zで戻せます)",
       "busyLog": "AGENT   応答の途中です。ターンが終わってからもう一度実行してください",
-      "sendFailed": "AGENT   整えの送信に失敗しました (詳細はチャットのエラー表示を参照)"
+      "sendFailed": "AGENT   整えの送信に失敗しました (詳細はチャットのエラー表示を参照)",
+      "variantStartedLog": "AGENT   {mode}を{count}案で整えます (案ごとに別の会話で並列実行。比較パネルで採用する案を選びます)",
+      "variantNoSheetLog": "AGENT   整え案を作るシートが開かれていません",
+      "variantBusyLog": "AGENT   整え案の比較中です。採用または破棄してから次を始めてください",
+      "variantStartFailedLog": "AGENT   整え案の開始に失敗しました: {message}",
+      "compareOpen": "比較パネルを開く"
     },
     "history": {
       "head": "会話履歴",
@@ -683,5 +687,22 @@
     "exportPdf": "PDF...",
     "exportBom": "部品表 CSV...",
     "exportWireList": "電線リスト CSV..."
+  },
+  "variants": {
+    "title": "整え案の比較",
+    "original": "元の図面",
+    "running": "実行中",
+    "done": "完了",
+    "failed": "送信失敗",
+    "metrics": "交差 {crossings} · 重なり {overlaps} · グリッド外 {off_grid}",
+    "total": "合計 {total}",
+    "noMetrics": "指標なし",
+    "show": "表示",
+    "adopt": "この案を採用",
+    "discard": "すべて破棄",
+    "waiting": "実行中の案が終わると採用できます",
+    "adoptedLog": "AGENT   {label}を採用しました (元の図面へ写し戻し。Cmd+Zで戻せます)",
+    "discardedLog": "AGENT   整え案をすべて破棄しました (Cmd+Zで戻せます)",
+    "finishFailedLog": "AGENT   整え案の終了に失敗しました: {message}"
   }
 }

@@ -4,26 +4,32 @@
 //
 // 3つの反復モードは押した瞬間に定型プロンプトを組み立てて**普通のチャット送信1回**として
 // 実行する (1整え=1ターン=undo一発)。図面には一切触らない。
+import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { TIDY_MODES, runTidy, type TidyMode } from "../../composables/tidy";
 import { useChatStore } from "../../stores/chat";
 import { useUiStore } from "../../stores/ui";
+import { VARIANT_COUNTS, useVariantsStore } from "../../stores/variants";
 
 const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 const chat = useChatStore();
 const ui = useUiStore();
+const variants = useVariantsStore();
 
 /**
- * バリアント数 (複数案を並行で作って比べる) はフェーズ3の予定。
- * デザインどおり表示は残し、押されたら予定をログする
- * (docs/internal/design-system.md「未実装機能のUI」)。
+ * バリアント数。1=反復しない(従来どおり1ターン)、2〜4=その数の案を並列会話で作り、
+ * 比較パネルで1案だけ採用する (M3フェーズ4)。ポップアップを開くたびに1へ戻る。
  */
-const VARIANT_COUNTS = [2, 3, 4];
+const count = ref(1);
 
 async function onMode(mode: TidyMode) {
   emit("close");
+  if (count.value > 1) {
+    await variants.start(mode, count.value);
+    return;
+  }
   if (chat.streaming) {
     ui.log(t("chat.tidy.busyLog"));
     return;
@@ -32,8 +38,9 @@ async function onMode(mode: TidyMode) {
   await runTidy(mode);
 }
 
-function onVariantPlanned() {
-  ui.log(t("chat.tidy.variantPlannedLog"));
+function openCompare() {
+  emit("close");
+  variants.open();
 }
 </script>
 
@@ -58,16 +65,23 @@ function onVariantPlanned() {
 
       <div class="head">{{ t("chat.tidy.variantHead") }}</div>
       <div class="row">
-        <button class="count selected">{{ t("chat.tidy.variantNone") }}</button>
+        <button class="count" :class="{ selected: count === 1 }" @click="count = 1">
+          {{ t("chat.tidy.variantNone") }}
+        </button>
         <button
-          v-for="count in VARIANT_COUNTS"
-          :key="count"
-          class="count disabled"
-          @click="onVariantPlanned()"
+          v-for="n in VARIANT_COUNTS"
+          :key="n"
+          class="count"
+          :class="{ selected: count === n }"
+          :disabled="!!variants.run"
+          @click="count = n"
         >
-          {{ count }}
+          {{ n }}
         </button>
       </div>
+      <button v-if="variants.run" class="compare" @click="openCompare()">
+        {{ t("chat.tidy.compareOpen") }}
+      </button>
     </div>
   </div>
 </template>
@@ -144,11 +158,22 @@ function onVariantPlanned() {
   background: var(--hover-bg);
   font-weight: 600;
 }
-.count.disabled {
+.count:disabled {
   color: var(--off-fg);
   cursor: default;
 }
-.count.disabled:hover {
+.count:disabled:hover {
   background: var(--off-bg);
+}
+.compare {
+  border: none;
+  background: transparent;
+  color: var(--acad-blue);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
 }
 </style>

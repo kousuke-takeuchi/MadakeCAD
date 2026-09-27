@@ -49,7 +49,9 @@ Ollama is the OpenAI-compatible route with a local preset, not a separate backen
 
 > **What "verified" means above.** ✅ = a real drafting turn was run through the route (edit → verify → report, then undone). 🔶 = everything observable without a paid credential was checked — provider switching, masked key save and removal, the real endpoint's rejection of a bad or absent key, the guidance shown in chat, and the absence of key material in the settings file — while the paid round-trip is left to you. For Copilot the machine was signed out, so its JSON-lines event shapes are covered by a tolerant parser plus fixtures rather than by the real stream.
 
-## Planned (M3 phase 4 and later)
+## Tidy variants (phase 4)
 
-- **Tidy variants**: producing two to four alternative tidy results side by side to compare, instead of a single pass
-- **Alternative-proposal UX for parallel agents**: duplicated sheets or patch previews for comparing two agents' answers to the same instruction
+- **Variants** in the tidy popup: choose 2, 3 or 4 instead of *No variants* and pick a mode. The active sheet is copied once per variant (named `<sheet> · 案A/B/C/D`, one undo step) and each copy gets its own conversation running the same tidy prompt in parallel, so the edit overlays show every variant working at once. With a selection, only the corresponding entities of each copy are tidied
+- **Comparison panel** (bottom dock, *Tidy variants*): one row per variant with its status, its tidy metrics (crossings · overlaps · off-grid, with the total) next to the original's, *Show* to switch to that sheet, and *Adopt this variant*. Adopt becomes available once every variant has finished
+- **Adopt** writes the chosen copy back onto the original sheet **under the original entity ids** (moved entities are updated, entities the variant removed are deleted, entities it added are created) and removes all copies — one undo step. **Discard all** stops any variant still running and removes the copies, also one undo step. Closing the panel keeps the comparison; reopen it from the tidy popup
+- Automation: `POST /api/v1/variants/start` `{sheet_id, count}` returns the copies with their id maps, `POST /api/v1/variants/finish` (same body plus `chosen_sheet_id` or `null`) adopts or discards; `GET /api/v1/tidy-metrics?sheet_id=` measures any sheet

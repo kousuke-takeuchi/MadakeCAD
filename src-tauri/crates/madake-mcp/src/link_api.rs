@@ -424,6 +424,42 @@ async fn post_import_dxf(
 }
 
 #[derive(Deserialize)]
+struct VariantsStartBody {
+    sheet_id: Uuid,
+    count: usize,
+}
+
+/// 整えバリアントの開始: シートを`count`枚複製する (1回の編集)。案の情報を返す。
+async fn post_variants_start(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<VariantsStartBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let (patch, run) = doc
+        .start_variants(body.sheet_id, body.count, doc.mcp_origin())
+        .map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "patch": patch, "run": run })))
+}
+
+#[derive(Deserialize)]
+struct VariantsFinishBody {
+    #[serde(flatten)]
+    run: madake_core::variants::VariantRun,
+    /// 採用する案の複製シートid。省略(null)なら全案を破棄。
+    #[serde(default)]
+    chosen_sheet_id: Option<Uuid>,
+}
+
+/// 整えバリアントの終了: 採用 (chosen_sheet_id) または破棄 (null)。1回の編集。
+async fn post_variants_finish(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<VariantsFinishBody>,
+) -> Result<Json<Patch>, ApiError> {
+    doc.finish_variants(&body.run, body.chosen_sheet_id, doc.mcp_origin())
+        .map(Json)
+        .map_err(bad_request)
+}
+
+#[derive(Deserialize)]
 struct ExportSvgBody {
     sheet_id: Option<Uuid>,
     path: String,
@@ -1097,6 +1133,8 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/netlist", get(get_netlist))
         .route("/api/v1/verify", get(get_verify))
         .route("/api/v1/tidy-metrics", get(get_tidy_metrics))
+        .route("/api/v1/variants/start", post(post_variants_start))
+        .route("/api/v1/variants/finish", post(post_variants_finish))
         .route("/api/v1/search", get(get_search))
         .route("/api/v1/devices", get(get_devices))
         .route("/api/v1/terminals", get(get_terminals))

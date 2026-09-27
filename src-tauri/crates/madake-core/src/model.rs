@@ -210,6 +210,18 @@ impl Entity {
         }
     }
 
+    /// idを付け替える (複製で新しいidを振るとき用)。
+    pub fn set_id(&mut self, id: EntityId) {
+        match self {
+            Entity::Symbol(e) => e.id = id,
+            Entity::Wire(e) => e.id = id,
+            Entity::Junction(e) => e.id = id,
+            Entity::NetLabel(e) => e.id = id,
+            Entity::Text(e) => e.id = id,
+            Entity::Harness(e) => e.id = id,
+        }
+    }
+
     pub fn translate(&mut self, dx: f64, dy: f64) {
         match self {
             Entity::Symbol(e) => e.at = e.at.translated(dx, dy),

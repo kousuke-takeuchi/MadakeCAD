@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1280仕様項目**。
+全5領域・**1297仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -457,6 +457,14 @@
 - tidy_metricsは1枚のシートの4つの数値をまとめて1つの値で返す。 <sub>`tidy_metrics_gathers_the_four_counts`</sub>
 - 同じシートを2回測ると全く同じ数値になるので、エージェントは編集の前後を比べられる。 <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
 
+### 整えバリアント (シート複製 / 採用)
+
+- 案の複製は用紙・表題欄・全エンティティを元のまま持ち、シートidとエンティティidだけ新しく、名前にラベルが付き、元id→新idの対応表が全要素分できる。 <sub>`duplicate_keeps_content_with_fresh_ids_and_a_full_map`</sub>
+- N案で開始すると既存シートの後ろへ入るRestoreSheetがN個でき、案ごとにラベルと対応表が付く。1〜4以外の数は拒否される。 <sub>`start_builds_one_restore_sheet_per_variant`</sub>
+- 採用すると、動かした要素は元idのまま更新、案で消えた要素は削除、案で増えた要素は新idで追加、変わらない要素は触らず、最後に全ての案シートが消える。 <sub>`adopt_maps_changes_back_to_original_ids`</sub>
+- 何も変わっていない案を採用すると、案シートを消すだけになる。 <sub>`adopting_an_unchanged_variant_only_removes_sheets`</sub>
+- エンジンで開始→案を編集→採用すると、元シートが案の配置になり案シートは残らない。開始・編集・採用はそれぞれundo1回で戻る。 <sub>`engine_round_trip_is_one_undo_per_step`</sub>
+
 ### 検証 (ERC・電気検証)
 
 - 完全に結線された回路ではERCの指摘は出ない。 <sub>`fully_wired_pair_has_no_erc_findings`</sub>
@@ -537,6 +545,7 @@
 - POST /api/v1/simulate/op はDC動作点を解き、ネット電圧と部品電流を返す(ngspice必須。未導入時はスキップ)。 <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf は指定パスへ正しいPDFファイルを書き出す。 <sub>`export_pdf_writes_pdf_file`</sub>
 - POST /api/v1/export/dxf と /export/kicad はシートをDXFと.kicad_schへ書き出し、POST /api/v1/import/dxf はそのDXFをインポートレポート付きでプロジェクトへ読み戻す。 <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
+- POST /api/v1/variants/start はシートを案の数だけ複製し(undo1回)、案ごとのid対応表を返す。/variants/finish は選んだ案を元idのまま元シートへ写し戻して複製を消し、nullなら複製を消すだけ。1〜4以外の数は拒否される。 <sub>`variants_start_and_finish_round_trip`</sub>
 - POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。 <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - 端子台エンドポイントは図面の端子台を一覧し、1台のチャートとチェック結果を返す。 <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report は帳票1種をCSVまたは図枠付きPDFで書き出し、図面である端子接続図のCSVは拒否する。 <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
@@ -1580,6 +1589,20 @@
 - チャット下書きはドックと浮きカードで共有される <sub>`ui store: 左ドックのタブとチャット下書き`</sub>
 - 既定では全表示クラスが表示される <sub>`表示クラス (レイヤ)`</sub>
 - toggleViewClassで表示クラスの非表示・再表示を切り替える <sub>`表示クラス (レイヤ)`</sub>
+
+### 整えバリアント (シート複製 / 採用)
+
+- 開始すると表示中のシートが案の数だけ複製され、案ごとに別の会話で同じ整え指示が送られ、比較パネルが開く <sub>`variants store: 整え案の開始`</sub>
+- 選択があれば、その要素の対応する複製側の要素だけを整える範囲として指示する <sub>`variants store: 整え案の開始`</sub>
+- 開始直後に元の図面と各案の指標が取られる <sub>`variants store: 整え案の開始`</sub>
+- シートが無い・案の数が2〜4以外・比較中は開始しない <sub>`variants store: 整え案の開始`</sub>
+- 複製に失敗したら理由をログに出し、何も始まらない <sub>`variants store: 整え案の開始`</sub>
+- 案の会話が答えている間は「実行中」で、全部終わると採用できる <sub>`variants store: 比較・採用・破棄`</sub>
+- 採用すると選んだ案が終了IPCへ渡り、元の図面へ戻って比較は終わる (undo一発で戻せる旨をログ) <sub>`variants store: 比較・採用・破棄`</sub>
+- 破棄は実行中の案の会話を止めてから全複製を消す <sub>`variants store: 比較・採用・破棄`</sub>
+- 終了に失敗したら理由をログに出し、比較はそのまま続く <sub>`variants store: 比較・採用・破棄`</sub>
+- パネルは閉じても比較は続き、開き直せる。比較が無ければ開かない <sub>`variants store: 比較・採用・破棄`</sub>
+- 指標の取り直しで取れなかった案は「指標なし」になる <sub>`variants store: 比較・採用・破棄`</sub>
 
 ### verification
 

@@ -402,6 +402,92 @@ async fn export_dxf_kicad_and_import_dxf_round_trip() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// POST /api/v1/variants/start copies the sheet once per variant (one undo step) and returns each copy's id map; /variants/finish with a chosen sheet writes it back under the original ids and removes the copies, with null it only removes them; a count outside 1..=4 is rejected.
+/// POST /api/v1/variants/start はシートを案の数だけ複製し(undo1回)、案ごとのid対応表を返す。/variants/finish は選んだ案を元idのまま元シートへ写し戻して複製を消し、nullなら複製を消すだけ。1〜4以外の数は拒否される。
+#[tokio::test]
+async fn variants_start_and_finish_round_trip() {
+    let mut project = Project::new("案テスト");
+    let sheet_id = project.sheets[0].id;
+    let symbol_id = uuid::Uuid::new_v4();
+    project.sheets[0].entities.insert(
+        symbol_id,
+        madake_core::Entity::Symbol(madake_core::SymbolInstance {
+            id: symbol_id,
+            symbol_id: "resistor".into(),
+            at: madake_core::Point::new(100.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "R1".into(),
+            value: "1k".into(),
+            attrs: Default::default(),
+        }),
+    );
+    let doc = SharedDoc::new(Engine::new(project));
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude()));
+    let parts = madake_mcp::open_parts(&unique_parts_db("variants")).expect("parts db");
+    let router = madake_mcp::link_api::router(doc.clone(), Arc::clone(&agent), parts);
+    let call = |uri: &'static str, body: Value| {
+        let router = router.clone();
+        async move {
+            let req = Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            let res = router.oneshot(req).await.unwrap();
+            let status = res.status();
+            let bytes = res.into_body().collect().await.unwrap().to_bytes();
+            (status, serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null))
+        }
+    };
+
+    let (status, body) = call("/api/v1/variants/start", json!({ "sheet_id": sheet_id, "count": 5 })).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+
+    let (status, body) = call("/api/v1/variants/start", json!({ "sheet_id": sheet_id, "count": 2 })).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let run = body["run"].clone();
+    assert_eq!(run["variants"].as_array().unwrap().len(), 2);
+    assert_eq!(run["variants"][0]["label"], "案A");
+    let variant_sheet: uuid::Uuid = serde_json::from_value(run["variants"][0]["sheet_id"].clone()).unwrap();
+    let copy_symbol: uuid::Uuid =
+        serde_json::from_value(run["variants"][0]["id_map"][symbol_id.to_string()].clone()).unwrap();
+    assert_eq!(doc.engine.lock().unwrap().project().sheets.len(), 3);
+
+    // 案Aでシンボルを動かす
+    let mut moved = doc.engine.lock().unwrap().project().sheet(variant_sheet).unwrap().entities[&copy_symbol].clone();
+    if let madake_core::Entity::Symbol(s) = &mut moved {
+        s.at = madake_core::Point::new(150.0, 100.0);
+    }
+    let (status, _) = call(
+        "/api/v1/commands",
+        json!([{ "type": "update_entity", "sheet_id": variant_sheet, "entity": moved }]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let mut finish = run.clone();
+    finish["chosen_sheet_id"] = json!(variant_sheet);
+    let (status, body) = call("/api/v1/variants/finish", finish).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    {
+        let engine = doc.engine.lock().unwrap();
+        assert_eq!(engine.project().sheets.len(), 1);
+        let madake_core::Entity::Symbol(s) = &engine.project().sheets[0].entities[&symbol_id] else { panic!() };
+        assert_eq!(s.at.x, 150.0, "元idのまま案の位置になる");
+    }
+    doc.undo().unwrap();
+    assert_eq!(doc.engine.lock().unwrap().project().sheets.len(), 3, "採用はundo1回");
+
+    let mut discard = run.clone();
+    discard["chosen_sheet_id"] = Value::Null;
+    let (status, body) = call("/api/v1/variants/finish", discard).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(doc.engine.lock().unwrap().project().sheets.len(), 1);
+}
+
 /// POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports.
 /// POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。
 #[tokio::test]
