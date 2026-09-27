@@ -100,6 +100,7 @@ MODULES = {
     "link_client": ("Link API client (Python)", "Link APIクライアント (Python)"),
     "link_model": ("Project overview & netlist view", "プロジェクト概要・ネットリスト表示"),
     "link_events": ("Live follow & settings", "ライブ追従・設定"),
+    "link_linking": ("Part linking & wire-length write-back", "部品対応付け・電線長書き戻し"),
     "format": ("Human-readable output", "人間向け整形出力"),
 }
 

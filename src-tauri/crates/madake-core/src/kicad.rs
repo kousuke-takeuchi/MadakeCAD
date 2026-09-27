@@ -301,6 +301,7 @@ pub fn import_kicad_sch(
                 color: "black".into(),
                 sq: 0.0,
                 length_m: None,
+                length_source: Default::default(),
                 part_no: None,
                 net: None,
             }),
@@ -1009,6 +1010,7 @@ mod tests {
             color: "red".into(),
             sq: 0.75,
             length_m: None,
+            length_source: Default::default(),
             part_no: None,
             net: Some("101".into()),
         }));

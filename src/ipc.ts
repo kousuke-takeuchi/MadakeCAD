@@ -49,8 +49,21 @@ export interface Wire {
   color: string;
   sq: number;
   length_m: number | null;
+  /** 電線長の出所 (手入力 / FreeCAD計測)。省略時は手入力。 */
+  length_source?: LengthSource;
   part_no: string | null;
   net: string | null;
+}
+
+/** 電線長の出所 (Rustの`LengthSource`)。 */
+export type LengthSource = "manual" | "freecad";
+
+/** エンティティとFreeCADオブジェクトの対応 (Rustの`MechLink`)。 */
+export interface MechLink {
+  entity_id: string;
+  fcstd_path: string;
+  object_name: string;
+  synced_at: string;
 }
 
 export interface Junction {
@@ -118,6 +131,8 @@ export interface Project {
   wire_parts: WirePart[];
   /** PLC I/O割付表 (信号名・コメントの正。接続先・線番は図面から導出)。 */
   plc_assignments: PlcAssignment[];
+  /** FreeCAD対応付け (entity UUIDがキー)。省略時は空。 */
+  mech_links?: MechLink[];
 }
 
 /** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */
@@ -144,6 +159,13 @@ export type Command =
   | { type: "set_wire_parts"; wire_parts: WirePart[] }
   /** PLC I/O割付表の置換 (プロジェクト単位)。 */
   | { type: "set_plc_assignments"; assignments: PlcAssignment[] }
+  | { type: "set_mech_link"; link: MechLink }
+  | { type: "remove_mech_link"; entity_id: string }
+  | {
+      type: "set_wire_lengths";
+      sheet_id: string;
+      lengths: { wire_id: string; length_m: number | null; source: LengthSource }[];
+    }
   /** 線番のネット単位自動採番。sheet_id省略(null)で全シート。 */
   | {
       type: "renumber_wires";
@@ -166,7 +188,8 @@ export type PatchOp =
   | { op: "entity_upserted"; sheet_id: string; entity: Entity }
   | { op: "entity_removed"; sheet_id: string; id: string }
   | { op: "wire_parts_replaced"; wire_parts: WirePart[] }
-  | { op: "plc_assignments_replaced"; assignments: PlcAssignment[] };
+  | { op: "plc_assignments_replaced"; assignments: PlcAssignment[] }
+  | { op: "mech_links_replaced"; mech_links: MechLink[] };
 
 export interface Patch {
   revision: number;

@@ -898,6 +898,7 @@ impl MadakeMcp {
             color: p.color.unwrap_or_else(|| "black".into()),
             sq: p.sq.unwrap_or(0.3),
             length_m: p.length_m,
+            length_source: Default::default(),
             part_no: p.part_no,
             net: None,
         });

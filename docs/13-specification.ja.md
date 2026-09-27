@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**1312仕様項目**。
+全6領域・**1327仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -43,6 +43,8 @@
 - バッチ内の1つでも失敗したらバッチ全体を拒否し、図面は変わらず履歴にも残らない。 <sub>`execute_batch_refuses_everything_when_one_command_fails`</sub>
 - 空のバッチは何も変えない(履歴も増えず、ドキュメントrevisionも進まない)。 <sub>`empty_batch_changes_nothing`</sub>
 - その由来の編集が1件も無い区間の巻き戻しは、図面に触れず「戻すものが無い」と報告する。 <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
+- FreeCAD対応付けを登録するとentity idをキーに保存され、再登録で置き換わり、解除で消える。各操作はundoで直前の一覧に戻る。 <sub>`mech_links_are_upserted_removed_and_undone`</sub>
+- 計測した電線長の書き戻しは、各配線の長さを設定して出所を「FreeCAD計測」にする1回の編集になる。変わらない配線は飛ばし、存在しない配線はエラーになる。 <sub>`wire_lengths_write_back_with_their_source`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 
@@ -84,6 +86,7 @@
 - 保存された.mdkprojはformat_version付きの整形JSONで、gitの差分が読みやすい。 <sub>`saved_file_is_pretty_json_with_format_version`</sub>
 - 存在しないファイルの読み込みはパニックせずエラーを返す。 <sub>`loading_missing_file_is_an_error`</sub>
 - PLC割付表が無かった頃の古いプロジェクトファイルもそのまま開ける (割付表は空になり、現行のファイル形式へ更新される)。 <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
+- 形式2のファイル(FreeCAD対応付けが無く、配線に長さの出所が無い)は、対応付けが空で全ての配線の長さが手入力扱いとして開ける。 <sub>`a_format_2_file_opens_with_empty_mech_links_and_manual_lengths`</sub>
 
 ### KiCadインポート / エクスポート
 
@@ -1217,6 +1220,10 @@
 - 名前の前後の空白は落とされる <sub>`harnessUpdateCommand`</sub>
 - 名前も備考も変わっていなければコマンドを送らない(無駄なundo履歴を作らない) <sub>`harnessUpdateCommand`</sub>
 - ハーネス以外を選んでいるときはハーネスコマンドを作らない <sub>`harnessUpdateCommand`</sub>
+- 色・線径・品番・長さのどれも変わっていなければコマンドを送らない <sub>`wireUpdateCommand`</sub>
+- 長さを手で変えると更新コマンドになり、出所は「手入力」になる <sub>`wireUpdateCommand`</sub>
+- FreeCADで計測した長さを手で上書きすると、その旨のフラグが立つ (呼び出し側が警告する) <sub>`wireUpdateCommand`</sub>
+- 長さ以外だけを変えたときはFreeCAD計測の出所を保つ <sub>`wireUpdateCommand`</sub>
 
 ### drawingContext
 
@@ -1360,6 +1367,7 @@
 - シート追加・削除のパッチは並び順を保つ <sub>`document store`</sub>
 - シートメタ更新のパッチはエンティティに触れない <sub>`document store`</sub>
 - 古いrevisionのパッチは破棄される(二重配信しても安全) <sub>`document store`</sub>
+- mech_links_replaced パッチでFreeCAD対応付けの一覧が置き換わる <sub>`document store`</sub>
 
 ### 回路マクロ
 
@@ -1646,6 +1654,16 @@
 - 表示中シートの要素が変わったとき、またはシートの追加・削除・改名やプロジェクト置換のときにパネルは再読込し、別シートの編集では再読込しない。 <sub>`test_refresh_is_needed_for_the_shown_sheet_and_structural_changes`</sub>
 - シートをまだ選んでいない間は、どの要素の変更でも再読込して最初の表示が最新になるようにする。 <sub>`test_with_no_sheet_shown_yet_any_entity_change_reloads`</sub>
 - ポート設定は1〜65535の整数を保持し、それ以外(文字列・0・大きすぎる値)は既定の9310へ戻る。 <sub>`test_port_setting_accepts_valid_ports_and_falls_back_to_the_default`</sub>
+
+### 部品対応付け・電線長書き戻し
+
+- 部品リストはシンボルごとに1行(シート・参照記号順)で、型番の3Dモデルと対応付け済みのFreeCADオブジェクト名を持つ。 <sub>`test_part_rows_list_symbols_with_their_3d_model_and_linked_object`</sub>
+- 配線リストは配線ごとに1行で、ネット/線番・現在の長さ・長さの出所・対応付け済みの経路オブジェクトを持つ。 <sub>`test_wire_rows_show_net_length_source_and_linked_route`</sub>
+- STEP/IGES/BREPはシェイプとして挿入、.FCStdはドキュメントとして取り込み、それ以外は挿入できない。 <sub>`test_model_kind_recognises_shape_files_and_freecad_documents`</sub>
+- 対応付けはentity id・FreeCADドキュメントのパス・オブジェクト名・同期時刻を持つset_mech_linkコマンドを送り、解除はremove_mech_linkを送る。 <sub>`test_link_commands_carry_the_entity_id_document_path_object_name_and_time`</sub>
+- 経路オブジェクトはmadake_idで配線と突き合わせ、長さはmmからm(1mm単位)へ換算し、配線でないオブジェクトは無視する。 <sub>`test_measured_route_lengths_are_converted_to_metres_and_matched_to_wires`</sub>
+- 書き戻しはシートごとに1つのset_wire_lengthsコマンドで、各項目はm単位の長さと出所"freecad"を持つ(MadakeCADが手入力の上書きを警告できる)。 <sub>`test_write_back_is_one_command_per_sheet_with_the_freecad_source`</sub>
+- 計測時に経路オブジェクトを配線の対応付けとして登録するが、すでに同じオブジェクトに対応付いている配線は登録し直さない。 <sub>`test_routes_are_linked_only_when_not_already_linked_to_that_object`</sub>
 
 ### プロジェクト概要・ネットリスト表示
 

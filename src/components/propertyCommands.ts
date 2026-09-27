@@ -24,6 +24,47 @@ export function wireNumberCommand(
   };
 }
 
+/** 配線プロパティの編集結果。 */
+export interface WireEdit {
+  command: Command | null;
+  /** FreeCADで計測した長さを手入力で上書きしたか (呼び出し側が警告を出す)。 */
+  overwroteMeasured: boolean;
+}
+
+/**
+ * 配線の色・線径・電線品番・長さの編集コマンド (M5-2: 長さの出所つき)。
+ * 何も変わっていなければコマンド無し。長さを手で変えると出所は「手入力」に戻り、
+ * それがFreeCAD計測値の上書きなら `overwroteMeasured` を立てる (暗黙の上書きを警告するため)。
+ * 配線以外にはコマンド無し。
+ */
+export function wireUpdateCommand(
+  sheetId: string,
+  entity: Entity,
+  edit: { color: string; sq: number; part_no: string; length_m: string },
+): WireEdit {
+  if (entity.kind !== "wire") return { command: null, overwroteMeasured: false };
+  const length = edit.length_m.trim() === "" ? null : Number(edit.length_m);
+  const lengthChanged = length !== entity.length_m;
+  const next: Entity = {
+    ...entity,
+    color: edit.color,
+    sq: edit.sq,
+    part_no: edit.part_no || null,
+    length_m: length,
+    length_source: lengthChanged ? "manual" : entity.length_source ?? "manual",
+  };
+  const changed =
+    next.color !== entity.color ||
+    next.sq !== entity.sq ||
+    next.part_no !== entity.part_no ||
+    lengthChanged;
+  if (!changed) return { command: null, overwroteMeasured: false };
+  return {
+    command: { type: "update_entity", sheet_id: sheetId, entity: next },
+    overwroteMeasured: lengthChanged && entity.length_source === "freecad",
+  };
+}
+
 /**
  * ハーネス境界の名前・備考の編集コマンド (docs/internal/specs/m2-drawing-parity.md §3)。
  * 名前は前後の空白を落とす。名前も備考も変わっていなければnull (コマンドを送らない)。

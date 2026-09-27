@@ -37,10 +37,10 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - ✅ **Search and navigation** (phase 2): project-wide ⌘F search (designator, part no., net name, wire number, text) with a docked result panel, a device navigator tree in the left panel, and Alt-click reference surfing — all four paths reveal by switching sheet, selecting and zooming
 - Remaining for later phases: PLC I/O drawings & reports; macro value sets and reserved contacts placed from the navigator; cable summary; BOM enriched from the parts database; 2D panel layout sheets; customizable frame/title-block templates; symbol editor + expanded symbol library
 
-## M5 — Mechanical CAD integration (FreeCAD) 🔶 (M5-1 done)
+## M5 — Mechanical CAD integration (FreeCAD) 🔶 (M5-1 and M5-2 done)
 
 - ✅ **Workbench skeleton** (M5-1): the `freecad-addon/` workbench "MadakeCAD Link" — connection settings, project overview and a netlist view that follows drawing edits live over the Link API's event stream. See [Mechanical Integration](11-mechanical-integration.md)
-- Part linking (`madake_id`) and wire-length write-back
+- ✅ **Part linking & wire-length write-back** (M5-2): Parts/Wires tabs in the workbench insert 3D models and link objects by `madake_id` (`Project.mech_links`), and measured route lengths are written back to the wires with a `freecad` source so hand edits never overwrite them silently. File format 3
 - Route visualization and panel-layout correspondence
 
 ## M6 — Open-source release

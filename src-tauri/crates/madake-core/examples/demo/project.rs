@@ -38,6 +38,7 @@ fn wire(points: &[(f64, f64)], color: &str, sq: f64, length_m: f64) -> Entity {
         color: color.into(),
         sq,
         length_m: Some(length_m),
+        length_source: Default::default(),
         part_no: None,
         net: None,
     })

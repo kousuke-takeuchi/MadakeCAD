@@ -11,8 +11,22 @@ from PySide import QtCore, QtWidgets  # type: ignore
 
 from .client import LinkClient, LinkError
 from .events import PatchFollower, refresh_needed
+from .linking import (
+    link_commands_for_routes,
+    measurements_from_objects,
+    model_kind,
+    part_rows,
+    remove_mech_link_command,
+    set_mech_link_command,
+    wire_length_commands,
+    wire_rows,
+)
 from .model import NETLIST_COLUMNS, netlist_cells, netlist_rows, summarize_project, summary_text
 from .settings import load_settings
+
+PARTS_COLUMNS = ("Sheet", "Ref", "Part no.", "3D model", "FreeCAD object")
+WIRES_COLUMNS = ("Sheet", "Net", "Length m", "Source", "Route object")
+MADAKE_ID_PROPERTY = "madake_id"
 
 
 class EventThread(QtCore.QThread):
@@ -84,15 +98,76 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         sheet_row.addWidget(refresh)
         layout.addLayout(sheet_row)
 
-        self._table = QtWidgets.QTableWidget(0, len(NETLIST_COLUMNS))
-        self._table.setHorizontalHeaderLabels(list(NETLIST_COLUMNS))
-        self._table.horizontalHeader().setStretchLastSection(False)
-        self._table.horizontalHeader().setSectionResizeMode(3, QtWidgets.QHeaderView.Stretch)
-        self._table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self._table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        layout.addWidget(self._table, 1)
+        self._tabs = QtWidgets.QTabWidget()
+        layout.addWidget(self._tabs, 1)
 
+        # --- Netlist tab ---
+        self._table = self._make_table(NETLIST_COLUMNS, stretch=3)
+        self._tabs.addTab(self._table, "Netlist")
+
+        # --- Parts tab (M5-2: 3D model insertion + linking) ---
+        parts_page = QtWidgets.QWidget()
+        parts_layout = QtWidgets.QVBoxLayout(parts_page)
+        self._parts = self._make_table(PARTS_COLUMNS, stretch=3)
+        parts_layout.addWidget(self._parts, 1)
+        parts_buttons = QtWidgets.QHBoxLayout()
+        insert = QtWidgets.QPushButton("Insert 3D model")
+        insert.setToolTip("Insert the part's 3D model (STEP/IGES/BREP or FCStd) into the active document and link it")
+        insert.clicked.connect(self.insert_model)
+        parts_buttons.addWidget(insert)
+        link = QtWidgets.QPushButton("Link selected object")
+        link.setToolTip("Link the FreeCAD object selected in the 3D view to the selected part")
+        link.clicked.connect(lambda: self.link_selected(self._parts, self._part_rows))
+        parts_buttons.addWidget(link)
+        unlink = QtWidgets.QPushButton("Unlink")
+        unlink.clicked.connect(lambda: self.unlink_selected(self._parts, self._part_rows))
+        parts_buttons.addWidget(unlink)
+        parts_buttons.addStretch(1)
+        parts_layout.addLayout(parts_buttons)
+        self._tabs.addTab(parts_page, "Parts")
+
+        # --- Wires tab (M5-2: route linking + length write-back) ---
+        wires_page = QtWidgets.QWidget()
+        wires_layout = QtWidgets.QVBoxLayout(wires_page)
+        self._wires = self._make_table(WIRES_COLUMNS, stretch=4)
+        wires_layout.addWidget(self._wires, 1)
+        wires_buttons = QtWidgets.QHBoxLayout()
+        link_route = QtWidgets.QPushButton("Link selected route")
+        link_route.setToolTip("Link the route object (Draft Wire, sketch, ...) selected in the 3D view to the selected wire")
+        link_route.clicked.connect(lambda: self.link_selected(self._wires, self._wire_rows))
+        wires_buttons.addWidget(link_route)
+        unlink_route = QtWidgets.QPushButton("Unlink")
+        unlink_route.clicked.connect(lambda: self.unlink_selected(self._wires, self._wire_rows))
+        wires_buttons.addWidget(unlink_route)
+        measure = QtWidgets.QPushButton("Measure routes → write back lengths")
+        measure.setToolTip("Measure every linked route object and write the lengths to MadakeCAD (one undo step per sheet)")
+        measure.clicked.connect(self.write_back_lengths)
+        wires_buttons.addWidget(measure)
+        wires_buttons.addStretch(1)
+        wires_layout.addLayout(wires_buttons)
+        self._tabs.addTab(wires_page, "Wires")
+
+        self._part_rows = []
+        self._wire_rows = []
+        self._snapshot = None
         self.setWidget(body)
+
+    def _make_table(self, columns, stretch: int) -> QtWidgets.QTableWidget:
+        table = QtWidgets.QTableWidget(0, len(columns))
+        table.setHorizontalHeaderLabels(list(columns))
+        table.horizontalHeader().setStretchLastSection(False)
+        table.horizontalHeader().setSectionResizeMode(stretch, QtWidgets.QHeaderView.Stretch)
+        table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        return table
+
+    @staticmethod
+    def _fill(table: QtWidgets.QTableWidget, rows: list):
+        table.setRowCount(len(rows))
+        for r, cells in enumerate(rows):
+            for c, cell in enumerate(cells):
+                table.setItem(r, c, QtWidgets.QTableWidgetItem("" if cell is None else str(cell)))
 
     def attach_to_main_window(self):
         FreeCADGui.getMainWindow().addDockWidget(QtCore.Qt.RightDockWidgetArea, self)
@@ -120,8 +195,10 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         except LinkError as e:
             self._status.setText(str(e))
             return
+        self._snapshot = snapshot
         self._summary = summarize_project(snapshot)
         self._follower.accept({"revision": self._summary.revision})
+        self.load_links()
         self._status.setText(summary_text(self._summary))
         current = self.current_sheet_id()
         self._sheets.blockSignals(True)
@@ -152,6 +229,138 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         for r, row in enumerate(rows):
             for c, cell in enumerate(netlist_cells(row)):
                 self._table.setItem(r, c, QtWidgets.QTableWidgetItem(cell))
+
+    # ---- M5-2: parts / wires / write-back --------------------------------
+
+    def load_links(self):
+        """Fill the Parts and Wires tabs from the current snapshot and the parts database."""
+        if self._snapshot is None:
+            return
+        try:
+            parts = self._client.parts()
+        except LinkError:
+            parts = []
+        self._part_rows = part_rows(self._snapshot, parts)
+        self._fill(
+            self._parts,
+            [(r.sheet_name, r.reference, r.part_no, r.model_3d, r.linked_object) for r in self._part_rows],
+        )
+        self._wire_rows = wire_rows(self._snapshot)
+        self._fill(
+            self._wires,
+            [(r.sheet_name, r.net, r.length_m, r.length_source, r.linked_object) for r in self._wire_rows],
+        )
+
+    @staticmethod
+    def _selected_row(table: QtWidgets.QTableWidget, rows: list):
+        index = table.currentRow()
+        return rows[index] if 0 <= index < len(rows) else None
+
+    @staticmethod
+    def _active_document():
+        import FreeCAD  # type: ignore
+
+        doc = FreeCAD.ActiveDocument
+        if doc is None:
+            doc = FreeCAD.newDocument("MadakeCAD")
+        return doc
+
+    @staticmethod
+    def _tag(obj, entity_id: str):
+        """Store the MadakeCAD entity id on a FreeCAD object (custom property ``madake_id``)."""
+        if MADAKE_ID_PROPERTY not in obj.PropertiesList:
+            obj.addProperty("App::PropertyString", MADAKE_ID_PROPERTY, "MadakeCAD", "MadakeCAD entity id")
+        setattr(obj, MADAKE_ID_PROPERTY, entity_id)
+
+    def _send(self, commands: list) -> bool:
+        if not commands:
+            return True
+        try:
+            self._client.post_commands(commands)
+        except LinkError as e:
+            self._status.setText(str(e))
+            return False
+        return True
+
+    def insert_model(self):
+        """Insert the selected part's 3D model into the active document, tag it and register the link."""
+        row = self._selected_row(self._parts, self._part_rows)
+        if row is None:
+            self._status.setText("Select a part first")
+            return
+        kind = model_kind(row.model_3d)
+        if not kind:
+            self._status.setText(f"{row.reference}: no insertable 3D model ({row.model_3d or 'no model_3d in the parts database'})")
+            return
+        doc = self._active_document()
+        if kind == "shape":
+            import Part  # type: ignore
+
+            shape = Part.read(row.model_3d)
+            obj = doc.addObject("Part::Feature", row.reference or "Part")
+            obj.Shape = shape
+            obj.Label = f"{row.reference} {row.part_no}".strip()
+        else:
+            before = set(o.Name for o in doc.Objects)
+            doc.mergeProject(row.model_3d)
+            added = [o for o in doc.Objects if o.Name not in before]
+            if not added:
+                self._status.setText(f"{row.reference}: nothing was imported from {row.model_3d}")
+                return
+            obj = added[0]
+        self._tag(obj, row.entity_id)
+        doc.recompute()
+        if self._send([set_mech_link_command(row.entity_id, doc.FileName or "", obj.Name)]):
+            self._status.setText(f"Inserted {obj.Label} and linked it to {row.reference}")
+
+    def link_selected(self, table, rows):
+        """Link the FreeCAD object selected in the 3D view to the selected table row."""
+        row = self._selected_row(table, rows)
+        selection = FreeCADGui.Selection.getSelection()
+        if row is None or not selection:
+            self._status.setText("Select a row and one FreeCAD object")
+            return
+        obj = selection[0]
+        self._tag(obj, row.entity_id)
+        doc = obj.Document
+        if self._send([set_mech_link_command(row.entity_id, doc.FileName or "", obj.Name)]):
+            self._status.setText(f"Linked {obj.Label} to {getattr(row, 'reference', None) or row.entity_id}")
+
+    def unlink_selected(self, table, rows):
+        row = self._selected_row(table, rows)
+        if row is None or not row.linked_object:
+            self._status.setText("Select a linked row")
+            return
+        if self._send([remove_mech_link_command(row.entity_id)]):
+            self._status.setText(f"Unlinked {row.linked_object}")
+
+    def write_back_lengths(self):
+        """Measure every route object tagged with a wire's madake_id and write the lengths to MadakeCAD."""
+        if self._snapshot is None:
+            self._status.setText("Connect first")
+            return
+        doc = self._active_document()
+        objects = []
+        for obj in doc.Objects:
+            madake_id = getattr(obj, MADAKE_ID_PROPERTY, None)
+            shape = getattr(obj, "Shape", None)
+            if madake_id and shape is not None and not shape.isNull():
+                objects.append((obj.Name, madake_id, shape.Length))
+        measurements = measurements_from_objects(objects, self._snapshot)
+        if not measurements:
+            self._status.setText("No route objects linked to wires (tag Draft Wires with a wire's madake_id via 'Link selected route')")
+            return
+        answer = QtWidgets.QMessageBox.question(
+            self,
+            "Write back wire lengths",
+            f"Write {len(measurements)} measured length(s) to MadakeCAD? Hand-entered lengths on those wires will be replaced (undo is possible in MadakeCAD).",
+        )
+        if answer != QtWidgets.QMessageBox.Yes:
+            return
+        commands = link_commands_for_routes(measurements, doc.FileName or "", self._snapshot) + wire_length_commands(measurements)
+        if self._send(commands):
+            self._status.setText(f"Wrote {len(measurements)} wire length(s) back to MadakeCAD")
+            self.refresh()
 
     # ---- live follow -----------------------------------------------------
 

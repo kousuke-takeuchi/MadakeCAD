@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Entity } from "../ipc";
-import { harnessUpdateCommand, wireNumberCommand } from "./propertyCommands";
+import { harnessUpdateCommand, wireNumberCommand, wireUpdateCommand } from "./propertyCommands";
 
 function wire(net: string | null): Entity {
   return {
@@ -114,3 +114,42 @@ describe("harnessUpdateCommand", () => {
     expect(harnessUpdateCommand("s1", wire("3"), "W1", "")).toBeNull();
   });
 });
+
+describe("wireUpdateCommand", () => {
+  const edit = { color: "black", sq: 0.3, part_no: "", length_m: "" };
+
+  // ja: 色・線径・品番・長さのどれも変わっていなければコマンドを送らない
+  it("sends nothing when colour, gauge, part number and length are unchanged", () => {
+    expect(wireUpdateCommand("s1", wire(null), edit)).toEqual({ command: null, overwroteMeasured: false });
+  });
+
+  // ja: 長さを手で変えると更新コマンドになり、出所は「手入力」になる
+  it("a hand-edited length becomes an update whose length source is manual", () => {
+    const result = wireUpdateCommand("s1", wire(null), { ...edit, length_m: "1.5" });
+    expect(result.command?.type).toBe("update_entity");
+    const entity = (result.command as { entity: Entity }).entity as Extract<Entity, { kind: "wire" }>;
+    expect(entity.length_m).toBe(1.5);
+    expect(entity.length_source).toBe("manual");
+    expect(result.overwroteMeasured).toBe(false);
+  });
+
+  // ja: FreeCADで計測した長さを手で上書きすると、その旨のフラグが立つ (呼び出し側が警告する)
+  it("overwriting a FreeCAD-measured length by hand is flagged so the panel can warn", () => {
+    const measured = { ...wire(null), length_m: 0.42, length_source: "freecad" } as Entity;
+    const result = wireUpdateCommand("s1", measured, { ...edit, length_m: "0.5" });
+    expect(result.overwroteMeasured).toBe(true);
+    const entity = (result.command as { entity: Entity }).entity as Extract<Entity, { kind: "wire" }>;
+    expect(entity.length_source).toBe("manual");
+  });
+
+  // ja: 長さ以外だけを変えたときはFreeCAD計測の出所を保つ
+  it("changing only colour or gauge keeps the FreeCAD length source", () => {
+    const measured = { ...wire(null), length_m: 0.42, length_source: "freecad" } as Entity;
+    const result = wireUpdateCommand("s1", measured, { ...edit, color: "red", length_m: "0.42" });
+    const entity = (result.command as { entity: Entity }).entity as Extract<Entity, { kind: "wire" }>;
+    expect(entity.color).toBe("red");
+    expect(entity.length_source).toBe("freecad");
+    expect(result.overwroteMeasured).toBe(false);
+  });
+});
+

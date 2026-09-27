@@ -113,4 +113,24 @@ mod tests {
         assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    /// A format 2 file (no FreeCAD links, wires without a length source) opens with an empty link list and every wire length marked as manual.
+    /// 形式2のファイル(FreeCAD対応付けが無く、配線に長さの出所が無い)は、対応付けが空で全ての配線の長さが手入力扱いとして開ける。
+    #[test]
+    fn a_format_2_file_opens_with_empty_mech_links_and_manual_lengths() {
+        let dir = std::env::temp_dir().join(format!("madake-io-v2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("v2.mdkproj");
+        std::fs::write(
+            &path,
+            r#"{"format_version":2,"name":"v2","wire_parts":[],"plc_assignments":[],"sheets":[{"id":"00000000-0000-0000-0000-000000000001","name":"S","size":"A3","orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},"revisions":[],"entities":{"00000000-0000-0000-0000-000000000002":{"kind":"wire","id":"00000000-0000-0000-0000-000000000002","points":[{"x":0,"y":0},{"x":10,"y":0}],"color":"red","sq":0.75,"length_m":0.5}}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert!(loaded.mech_links.is_empty());
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
+        let Entity::Wire(w) = loaded.sheets[0].entities.values().next().unwrap() else { panic!() };
+        assert_eq!((w.length_m, w.length_source), (Some(0.5), LengthSource::Manual));
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

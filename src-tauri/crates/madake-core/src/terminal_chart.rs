@@ -550,6 +550,7 @@ mod tests {
             color: String::new(),
             sq: 0.0,
             length_m: None,
+            length_source: Default::default(),
             part_no: None,
             net: None,
         };

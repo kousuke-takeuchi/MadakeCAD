@@ -9,7 +9,7 @@ import type { Entity } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import type { EditorController } from "../tools/controller";
-import { harnessUpdateCommand, wireNumberCommand } from "./propertyCommands";
+import { harnessUpdateCommand, wireNumberCommand, wireUpdateCommand } from "./propertyCommands";
 
 const store = useDocumentStore();
 const ui = useUiStore();
@@ -63,6 +63,13 @@ function jumpToXref(site: NetSite) {
   ui.log(t("xref.jumpLog", { address: site.address, sheet: site.sheet_name }));
 }
 
+/** 選択中のエンティティに対応するFreeCADオブジェクト (M5-2の対応付け。無ければnull)。 */
+const mechLink = computed(() => {
+  const e = selected.value;
+  if (!e) return null;
+  return store.project?.mech_links?.find((l) => l.entity_id === e.id) ?? null;
+});
+
 /** 選択中のハーネスが囲んでいる電線の本数 (幾何学的な内包で決まる)。 */
 const harnessWires = computed(() => {
   const sheet = store.activeSheet;
@@ -99,21 +106,12 @@ async function apply() {
   if (!sheet || !e) return;
   let entity: Entity;
   if (e.kind === "wire") {
-    entity = {
-      ...e,
-      color: buf.color,
-      sq: buf.sq,
-      part_no: buf.part_no || null,
-      length_m: buf.length_m === "" ? null : Number(buf.length_m),
-    };
+    // 色・線径・品番・長さ (長さの出所つき。FreeCAD計測値の手上書きは警告する)
+    const wireEdit = wireUpdateCommand(sheet.id, e, buf);
     // 線番はネット単位の属性なので、専用のset_wire_numbersコマンドで書き換える
     const numberCommand = wireNumberCommand(sheet.id, e, buf.wire_no);
-    const otherChanged =
-      entity.color !== e.color ||
-      entity.sq !== e.sq ||
-      entity.part_no !== e.part_no ||
-      entity.length_m !== e.length_m;
-    if (otherChanged) await store.execute({ type: "update_entity", sheet_id: sheet.id, entity });
+    if (wireEdit.command) await store.execute(wireEdit.command);
+    if (wireEdit.overwroteMeasured) ui.log(t("mech.overwroteLog"));
     if (numberCommand) {
       await store.execute(numberCommand);
       const number = buf.wire_no.trim();
@@ -195,7 +193,14 @@ const kindLabel = computed<Record<string, string>>(() => ({
       </div>
       <div class="prow">
         <span class="plabel">長さ m</span>
-        <span class="pvalue"><input v-model="buf.length_m" class="bare" placeholder="0.4" /></span>
+        <span class="pvalue">
+          <input v-model="buf.length_m" class="bare" placeholder="0.4" />
+          <span v-if="selected.length_source === 'freecad'" class="badge" :title="t('mech.measuredHint')">{{ t("mech.measured") }}</span>
+        </span>
+      </div>
+      <div v-if="mechLink" class="prow">
+        <span class="plabel">{{ t("mech.linkLabel") }}</span>
+        <span class="pvalue mono" :title="mechLink.fcstd_path">{{ mechLink.object_name }}</span>
       </div>
       <div class="prow">
         <span class="plabel">{{ t("wireNumbers.propertyLabel") }}</span>
@@ -225,6 +230,10 @@ const kindLabel = computed<Record<string, string>>(() => ({
       <div class="prow">
         <span class="plabel">シンボル</span>
         <span class="pvalue">{{ selected.symbol_id }}</span>
+      </div>
+      <div v-if="mechLink" class="prow">
+        <span class="plabel">{{ t("mech.linkLabel") }}</span>
+        <span class="pvalue mono" :title="mechLink.fcstd_path">{{ mechLink.object_name }}</span>
       </div>
     </template>
 
@@ -378,6 +387,15 @@ const kindLabel = computed<Record<string, string>>(() => ({
   padding: 2px 0;
 }
 .mono { font-family: var(--mono-font); }
+.badge {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--info-fg);
+  background: var(--info-bg);
+}
 .hint { color: var(--ui-muted); }
 .pvalue.stacked {
   flex-direction: column;
