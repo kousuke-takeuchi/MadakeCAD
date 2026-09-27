@@ -1,6 +1,7 @@
 # Reproduction gap ledger — reference wiring diagram, sheet 1
 
 Created: 2026-08-23. Second pass: 2026-08-23 (after phase 5). Third pass: 2026-08-23 (after phase 6).
+Fourth pass (2026-09-27, phase 6 task 6): planned but not run this session — see below.
 Japanese version: [reproduction-gaps.ja.md](reproduction-gaps.ja.md).
 
 ## What this is
@@ -79,7 +80,7 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Per-wire gauge / colour / length annotation on the sheet | ❌ | **✅** | G2 — automatic on all 111 conductors |
 | Per-wire-end crimp contact / ferrule part annotation | ❌ | ❌ | rest of G2 — `Wire` still has no per-end terminal field |
 | Wire colour | ✅ | ✅ | English and Japanese colour names both resolve |
-| Wire part number from colour + gauge | ❌ | **✅** | G9 — 111/111 wire-list rows filled from an imported CSV |
+| Wire part number from colour + gauge | ❌ | **✅** | G9 — 111/111 wire-list rows filled from an imported CSV. **✅ phase 6 task 6**: wire-part legend block + BOM wire roll-up close the rest of G9 (verified at the implementation level; no fourth reproduction-sheet re-measurement, see the note after the third pass) |
 | Harness boundary (dashed enclosure) | ✅ | ✅ | |
 | Enclosure / case boundary distinct from a harness | 🔶 | **✅** | G11 — draw it as a dashed `shape`; the harness column stays empty |
 | Highlight box (coloured rectangle annotation) | ❌ | **✅** | G10 — `shape` rectangle with a colour token |
@@ -128,6 +129,45 @@ terminal blocks, the controller and the right-hand connector column now stand cl
 their own conductors, and at 1.4 mm a wire note clears the tag of the row below by
 0.1 mm on the 5 mm pin pitch — crowded on purpose, exactly as on the reference sheet.
 One new overlap was found in the process and is recorded as G22.
+
+---
+
+## Fourth pass — phase 6 task 6 (2026-09-27): not run this session
+
+Task 6 planned to rebuild the reproduction sheet a fourth time with every phase-6
+feature applied, and the reproduction script (`docs/references/repro/build_sheet1.py`)
+was extended for that: `set_project_meta` (G16), `device_block` on the relay coil
+(G7 — the reference draws the relay as one outline, per `NOTES.md`), `pin_groups` on
+the controller block (G8), a leader from the P/N jumper note to the terminal block it
+describes (G20), a wire-part legend block (G9 remainder), a small multi-level
+terminal-block instance with level-aware jumpers (G5/G6 — kept as a separate
+demonstration rather than merged into the existing P/18-pole and N/12-pole blocks,
+since a multi-level block needs the same pole count on every level and those two
+column counts differ), a mated `connector_2p` pair (G14 — the reproduction's own
+connectors are named-pin `block` instances, which `mates_with` does not recognise, so
+this is a small separate pair rather than a conversion of an existing one), and a
+device reused across both sheets (G13).
+
+**The script was not executed this session.** The app's Link API on `127.0.0.1:9310`
+was already up and answering when this task started, but it belonged to an
+already-running, long-lived instance with its own open project — not one started for
+this task — so driving it with `add_entity`/`set_project_meta`/etc. would have edited
+someone else's live document instead of a disposable reproduction. No second instance
+was started either, since the port is fixed and a second listener on it would only
+have failed or, worse, raced the first one. This is reported rather than worked around
+silently, per the task's own instructions for exactly this situation.
+
+What follows from that: the wire-part legend block, the BOM roll-up and the
+pin-group-caption addition to the tidy metric are verified at the **implementation**
+level only — Rust unit tests (`madake-core`), the canvas twin's Vitest suite, and a
+generic (non-confidential) demo SVG + BOM CSV built from a throwaway project, not the
+reference data — the same way phase 6 task 4 verified G8, G12 and the G20 remainder
+without a sheet re-measurement (see the note at the end of this document). The
+"counts: commands / overlapping labels / ERC findings" that a real fourth pass would
+have produced were not measured and are not reported here; inventing plausible-looking
+numbers would misrepresent what was actually checked. Re-running the extended script
+once the app is free is a follow-up, not a blocker for this task's own gap (G9 is
+closed at the implementation level either way).
 
 ---
 
@@ -541,9 +581,33 @@ plus a caption, and the symbol draws the bracket.
 > `青` resolves a wire drawn `blue`. The table can be imported from CSV
 > (`線色,線径sq,電線品番[,備考]`) as a single undoable command.
 > Reproduction: 111 of 111 wire-list rows filled from a three-row CSV.
-> **Still open:** no wire-part legend block that can be placed on a sheet, no
-> per-part-number length roll-up in the BOM, and no diagnostic for an unmatched
-> colour+gauge combination.
+>
+> **✅ Resolved for the legend block and the BOM roll-up 2026-09-27 (phase 6,
+> task 6).** A new entity, `Entity::WireLegend` (`.mdkproj` format_version 10 → 11,
+> with a migration test that a v10 file loads with no legend blocks, exactly as
+> Task 4's leader-line field did for 8 → 9), draws the wire-part legend the reference
+> prints in a corner: colour / gauge / part number / total length, one row per
+> distinct combination among the sheet's wires, sorted colour-then-gauge, part number
+> resolved the same way as the wire list above. Like `PanelLegend` it holds no content
+> of its own — the rows are derived from the sheet's wires every time it is drawn — and
+> like `Shape` it is excluded by construction from the netlist, ERC, BOM and wire list
+> (tests pin all four). It is placed/moved/deleted through the existing add-entity /
+> translate / delete commands, has an SVG twin and a canvas twin with a parity test,
+> and belongs to the "annotations" (`texts`) view class. Separately, the BOM
+> (`reports::bom_rows`) now appends, after the component rows, one row per wire part
+> number with the project-wide total length in the quantity column (metres, 2
+> decimals, e.g. `12.50 m`); wires whose part number cannot be resolved roll up
+> together under one `(未割当)` row instead of being invented or dropped, and a project
+> with no wires gets no roll-up rows at all. Verified at the implementation level with
+> unit tests on both sides (Rust core + the canvas twin) and a generic (non-confidential)
+> demo SVG + BOM CSV in the task's evidence folder; see the note below on why this did
+> not include a fourth reproduction-sheet re-measurement, the same as phase 6 task 4's
+> G8/G12/G20-remainder.
+> **Still explicitly deferred:** a diagnostic for an unmatched colour+gauge combination
+> was out of this task's scope (the plan bound G9's remainder to exactly the legend
+> block and the BOM roll-up); an unresolved combination continues to show as a blank
+> part number everywhere (legend, wire list, BOM) rather than an invented one, which is
+> at least never silently wrong.
 >
 > *(The phase-5 plan refers to this gap as "G11"; the ledger number is G9.)*
 
@@ -615,8 +679,9 @@ a small addition that unblocks G10, G11 and part of G4.
 > list and the terminal chart stays empty for conductors that merely sit inside an
 > enclosure. This is written into the drawing-notation section of
 > `docs/internal/design-system.md` and into the harness tool's own help text; no code
-> change was needed on the harness side. The re-measurement of the reproduction
-> belongs to phase 6 task 6.
+> change was needed on the harness side. A fourth reproduction-sheet re-measurement
+> was planned for phase 6 task 6 but did not happen this session — see the note
+> after the third pass for why — so this line is unchanged from the second pass.
 
 > **Status 2026-08-23 (phase 5): unchanged.** Measured again: all 111 wire-list rows
 > report the enclosure name in the harness column.
@@ -1022,7 +1087,7 @@ canvas twin.
 | Impact | Gaps |
 |---|---|
 | **essential** | *(all closed in phase 5)* ✅ G1 named pins on multi-pin blocks · ✅ G2 wire annotation on the sheet · ✅ G3 directional net-label flags · ✅ G4 text styling, anchoring and a third symbol text field |
-| **quality** | ✅ G5 jumper bars on the schematic · ✅ G6 multi-level terminal blocks · ✅ G7 physical relay blocks *(display mode + contact image; manufacturer pin numbering and mechanical linkage still open)* · ✅ G8 pin-group brackets *(phase 6 task 4)* · ✅ G9 wire part number resolution *(legend and BOM roll-up still open)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; reproduction re-measured in task 6)* · 🔶 G12 pictorial symbols *(4 established IEC 60617 symbols now bundled — loudspeaker/buzzer/siren/fan, phase 6 task 4; the rest still needs the user library)* · ✅ G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height and leader lines *(phase 6 task 4; the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
+| **quality** | ✅ G5 jumper bars on the schematic · ✅ G6 multi-level terminal blocks · ✅ G7 physical relay blocks *(display mode + contact image; manufacturer pin numbering and mechanical linkage still open)* · ✅ G8 pin-group brackets *(phase 6 task 4)* · ✅ G9 wire part number resolution, legend block and BOM roll-up *(phase 6 task 6 closes the remainder)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; a fourth reproduction-sheet re-measurement was planned for task 6 but did not happen this session)* · 🔶 G12 pictorial symbols *(4 established IEC 60617 symbols now bundled — loudspeaker/buzzer/siren/fan, phase 6 task 4; the rest still needs the user library)* · ✅ G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height and leader lines *(phase 6 task 4; the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
 | **minor** | ✅ G14 mating connector pairs *(pairing link + ERC + reports + drawing, phase 6 task 5; gender on the parametric family still open)* · ✅ G15 sheet paper change command *(phase 6 task 5)* · ✅ G16 project meta command *(phase 6 task 5)* · ✅ G17 silent failures · ✅ G18 From-To list through net labels *(phase 6 task 5)* · ✅ G22 coil location vs wire note |
 
 ## Reading of the result
@@ -1061,3 +1126,16 @@ sheet-level reproduction pass to verify — G8 and G20 are single-instance geome
 their own parity-tested Rust/TS twins and ERC/unit tests, and G12 is a standards-citation
 exercise — so this pass did not re-run the full reproduction script; what is reported
 above is the implementation and its tests, not a re-measured sheet.
+
+**Phase 6 task 6 (2026-09-27, phase 6 complete): the last quality-impact item, G9's
+remainder, landed the same way.** The wire part-number legend block (`Entity::WireLegend`,
+`.mdkproj` format_version 11) and the BOM's per-part-number wire roll-up are both
+implemented, tested (Rust + canvas parity, migration test for the format bump) and
+demonstrated with a generic SVG/CSV in the task's evidence folder. Unlike G8/G12/G20,
+this gap's own plan called for a fourth reproduction-sheet rebuild to close the loop
+end-to-end; that rebuild did not happen this session because the app's Link API was
+occupied by an unrelated already-running instance rather than one started for this task
+(see "Fourth pass" above) — a safety call, not a shortcut. Every essential and quality
+gap this ledger tracks is now ✅ or an explicitly named 🔶 with its reason (G12's
+remaining pictorial vocabulary, and G7's manufacturer pin numbering and mechanical
+linkage); none is silently left open.
