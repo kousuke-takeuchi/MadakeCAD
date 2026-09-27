@@ -41,9 +41,9 @@ Consequences:
 - Harness boundaries: dashed closed `polyline` plus a `text` with the name (KiCad has no equivalent object).
 - Importer change: `lib_id` values starting with `MadakeCAD:` resolve directly to the symbol id (static and parametric ids), so MadakeCAD's own exports round-trip without the lib_id mapping table.
 
-### 4.2 DXF export (`madake_core::dxf::sheet_to_dxf`)
+### 4.2 DXF export (`madake_core::dxf::sheet_to_dxf`, `project_sheet_to_dxf`)
 
-ASCII DXF, `$ACADVER` = AC1015, `$INSUNITS` = 4 (mm), non-ASCII text written as `\U+XXXX` escapes (portable across code pages). Y axis flipped (`y_dxf = paper height − y`), paper border on layer `FRAME` so extents match the paper.
+ASCII DXF, `$ACADVER` = AC1015, `$INSUNITS` = 4 (mm), non-ASCII text written as `\U+XXXX` escapes (portable across code pages). Y axis flipped (`y_dxf = paper height − y`), paper outline on layer `FRAME` so extents match the paper. Because the Y flip mirrors the plane, **every angle is written negated** (group 50 = `-θ`, arc sweeps swapped): otherwise a 90°/270° symbol lands 180° off and its pins leave the wires. Returns `(String, io::ExportReport)` — the count per entity kind plus what could not be written; `project_sheet_to_dxf` is the project-level entry point (frame template of the project, sheet number/total in the title block binds, `Project::wire_parts` for the wire legend).
 
 | MadakeCAD | DXF | Layer |
 |---|---|---|
@@ -55,18 +55,25 @@ ASCII DXF, `$ACADVER` = AC1015, `$INSUNITS` = 4 (mm), non-ASCII text written as 
 | Net label | `TEXT` | `LABELS` |
 | Text | one `TEXT` per line | `MISC` |
 | Harness | closed `LWPOLYLINE` with linetype `DASHED` + name `TEXT` | `HARNESS` |
+| Frame (border, zone ticks + labels, title block cells with binds resolved, logo box) | `LWPOLYLINE`/`LINE`/`TEXT` from the frame template the SVG exporter uses | `FRAME` |
+| Shape (G10) | `LINE`/`LWPOLYLINE`/`CIRCLE`, linetype `DASHED` when dashed (fills not written) | `SHAPES` |
+| Wire part legend | `LWPOLYLINE` frame + `LINE` grid + `TEXT` rows (rows from `wire_legend::legend_rows_with`) | `ANNOTATION` |
+| Panel layout (`PanelOutline` incl. mounting plate, `DinRail`, `Duct` + hatching, `Footprint` + reference / part no. / balloon, `PanelLegend` table) | `LWPOLYLINE`/`LINE`/`CIRCLE`/`TEXT` with the same geometry helpers as the SVG exporter (`crate::panel`) | `PANEL` |
+
+The revision table is the one frame part not written (the latest revision reaches the title block through the `rev.latest` bind). Everything else that is on the sheet is written: DXF is a general 2D drawing format, so a shape, a legend or a panel layout does have an equivalent there, and dropping it silently would break the very user story of §3.3. Anything that still cannot be written (a symbol whose definition is missing) is listed in the export report.
 
 Block naming does **not** try to imitate ACADE's family codes (`HCR1`, `VCR1`, …) or EPLAN's symbol numbers: those tables are product-specific and undocumented. The attribute tags (`TAG1`, `CAT`, `DESC1`, `RATING1`, `TERMnn`) follow ACADE's attribute conventions so ACADE tools that read attributes (tag/catalog reports) see the values.
 
 ### 4.3 DXF import (`madake_core::dxf::import_dxf`)
 
 - Accepts any ASCII DXF with an `ENTITIES` section (R12 and later). `$INSUNITS` = 1 (inches) is scaled ×25.4; everything else is read as mm.
-- Paper: the smallest ISO A size (A4…A0, portrait when taller than wide) that contains the extents of all entities; the drawing is placed with its top-left extent at the paper origin. Files exported by MadakeCAD round-trip exactly because the `FRAME` border defines the extents.
-- Wires: `LINE`/`LWPOLYLINE`/`POLYLINE` on **wire layers**. Wire layers are (a) those given in `wire_layers`, else (b) layers whose name contains `WIRE` but not `WIRENO`/`WIRE_NO`/`WIRENUM` (matches ACADE's `WIRES`, `_MULTI_WIRE_n`). If no line sits on such a layer, **all** lines become wires and a warning names the layers seen so the user can re-import with `wire_layers`.
-- Junctions: `INSERT` of `WDDOT`, or a `CIRCLE` of radius ≤ 1 mm on a wire layer.
+- Paper: the header drawing limits decide it — `$LIMMIN`/`$LIMMAX`, else `$EXTMIN`/`$EXTMAX`, else (only when both are absent) the extents of all entities. Size = the smallest ISO A size (A4…A0, portrait when taller than wide) that contains that rectangle; the drawing is placed with the rectangle's top-left at the paper origin. Without the header rule an ACADE A3 page whose content covers 200×100 mm would import as A4 with everything in a corner. Files exported by MadakeCAD round-trip exactly (their header and the `FRAME` outline both give the paper).
+- Wires: `LINE`/`LWPOLYLINE`/`POLYLINE` on **wire layers**. Wire layers are (a) those given in `wire_layers`, else (b) layers whose name contains `WIRE` but not `WIRENO`/`WIRE_NO`/`WIRENUM` (matches ACADE's `WIRES`, `_MULTI_WIRE_n`). If no line sits on such a layer the two cases differ: with **no** `wire_layers` given, all lines become wires and a warning names the layers seen; with `wire_layers` **given**, no wire is imported and the warning names both the layers asked for and the layers the file has. An explicit narrowing must never widen into "every line is a wire" (the widest possible reading), because those wires feed the netlist, ERC, wire list and BOM. Either way the layer names also come back machine-readable in `ImportReport::layers`, which the ribbon turns into one "re-import with this wire layer" button per layer.
+- Junctions: `INSERT` of `WDDOT`, or a `CIRCLE` of radius ≤ 1 mm **on a genuine wire layer** — never under the all-lines fallback, where the pin circles and terminal dots of a foreign drawing would become junctions and merge nets silently.
 - Symbols: `INSERT` of `MDK_<symbol_id>` (static or parametric id). Attributes `TAG1`/`TAG` → reference, `CAT` → value, `DESC1`/`RATING1` → the DESC/RATING attribute slots, other tags → attrs, `TERMnn` ignored. Rotation must be a multiple of 90° (otherwise 0 with a warning); negative X scale → mirror. Any other block name is skipped and listed as `NAME (TAG1) xN`.
+- Text position: group 10/20, except a `TEXT` with a non-zero justification (group 72 or 73), whose insertion point is group 11/21 (ACADE's centred wire numbers). The extents scan reads the same point.
 - Text: layer containing `WIRENO` → wire number of the nearest wire within 5 mm (else a note plus warning); layer `LABELS` → net label; layer `HARNESS` → name of the harness whose top-left corner is within 5 mm; anything else → note (height from group 40). `MTEXT` paragraph breaks (`\P`) and formatting codes are decoded, `\U+XXXX` is decoded.
-- `FRAME` layer and closed polylines on wire layers are ignored; unsupported entity kinds are counted in the skipped list.
+- The `FRAME` layer (lines and texts: the frame belongs to the sheet's frame template, not to the drawing) and closed polylines on wire layers are ignored; unsupported entity kinds are counted in the skipped list.
 - Result: a one-sheet project plus the same `ImportReport` structure as the KiCad importer (counts, skipped, warnings).
 
 ### 4.4 Exposure
@@ -74,23 +81,28 @@ Block naming does **not** try to imitate ACADE's family codes (`HCR1`, `VCR1`, �
 | Surface | Import DXF | Export DXF | Export KiCad |
 |---|---|---|---|
 | App | Open dialog (`.dxf` filter) and ribbon **Import/Export** tab (KiCad / DXF import, DXF / KiCad / SVG / PDF export, report CSVs). Imports confirm unsaved changes first and leave the project without a save path, like the KiCad import | same tab (active sheet) | same tab |
-| REST | `POST /api/v1/import/dxf` `{path, wire_layers?}` | `POST /api/v1/export/dxf` `{sheet_id?, path}` | `POST /api/v1/export/kicad` `{sheet_id?, path}` |
+| REST | `POST /api/v1/import/dxf` `{path, wire_layers?}` | `POST /api/v1/export/dxf` `{sheet_id?, path}` → `{written, report}` | `POST /api/v1/export/kicad` `{sheet_id?, path}` → `{written, report}` |
 | MCP | `import_dxf` | `export_dxf` | `export_kicad` |
 | CLI | `madake open x.dxf [--wire-layer WIRES,_MULTI_WIRE_1]` | `madake export dxf out.dxf [--sheet ID]` | `madake export kicad out.kicad_sch [--sheet ID]` |
+
+Both exports return the export report (§4.2) next to the written path; the app logs the counts and the not-written kinds in the command log, the CLI prints them under the "written" line. The app can also pass `wire_layers`: when an import could not identify a wire layer, the layers from `ImportReport::layers` become buttons in the ribbon group **Wire layer**, and one click re-imports the same file with that layer.
 
 All imports go through `Engine::replace_project` (undo history cleared, agent turns cancelled, chat history reset), the same path as KiCad import and file open.
 
 ## 5. Design targets
 
-- Ribbon tab "Import/Export": groups Import (Open / KiCad schematic / DXF), Export (DXF big button / KiCad / SVG / PDF), Reports (BOM CSV / wire list CSV). Reuses the existing ribbon components; no new component was added to the design system.
+- Ribbon tab "Import/Export": groups Import (Open / KiCad schematic / DXF), Export (DXF big button / KiCad / SVG / PDF), Reports (BOM CSV / wire list CSV), plus **Wire layer** — one small button per candidate layer, shown only after a DXF import that could not identify a wire layer. Reuses the existing ribbon components; no new component was added to the design system.
 - Import report presentation: currently the command-line log (counts, skipped list, warnings). A dialog listing skipped blocks with a "place by hand" checklist is a design-phase item.
 
 ## 6. Acceptance criteria (all covered by tests; see `docs/13-specification.md` sections "KiCad import / export", "DXF interop", "REST Link API", "Argument parsing & dispatch", "File menu")
 
 - Export → import round trip of a sheet keeps paper, symbols (id, position, rotation, mirror, reference, value, attributes), wires, junctions, wire numbers, labels, notes and harness names, for both `.kicad_sch` and DXF.
 - An ACADE-style DXF (wires on `WIRES`/`_MULTI_WIRE_*`, `WIRENO` texts, unknown `HCR1` blocks with `TAG1`) imports its wires and wire numbers and reports the unknown blocks.
-- Explicit `wire_layers` restricts which lines become wires; a file with no wire layer imports all lines with a warning.
-- Inch files are scaled; paper size is the smallest A size that fits.
+- Explicit `wire_layers` restricts which lines become wires; a file with no wire layer imports all lines with a warning; explicit layers that match no line import no wire and warn with the layers the file has.
+- A rotated or mirrored symbol's pins land on the paper positions `netlist::pin_positions` gives them, so they meet the exported wires (0/90/180/270 × mirror).
+- Shapes, the wire legend, the panel layout and the frame reach the DXF on their own layers, and both exports return a report with the count per kind and the kinds they could not write.
+- Header drawing limits decide the imported paper; justified `TEXT` is read at group 11/21; small circles become junctions only on a wire layer.
+- Inch files are scaled; without header limits the paper size is the smallest A size that fits.
 - Non-ASCII text survives export/import through `\U+XXXX`.
 - REST, MCP and CLI expose the three operations with the same JSON shapes as the existing KiCad import / SVG export.
 

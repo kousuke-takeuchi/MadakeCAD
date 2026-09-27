@@ -451,12 +451,27 @@ pub fn exported(kind: ExportKind, result: &Value) -> String {
         Some(n) => format!(" ({n} ページ)"),
         None => String::new(),
     };
-    format!(
+    let mut out = format!(
         "{} を書き出しました: {}{}",
         kind.label(),
         written_path(result),
         pages
-    )
+    );
+    // DXF / KiCadは種別ごとの件数と、出せなかった種別を返す (無い形式では何も足さない)
+    let report = &result["report"];
+    if let Some(counts) = report["counts"].as_object() {
+        let counts: Vec<String> = counts
+            .iter()
+            .map(|(kind, n)| format!("{kind} {}", n.as_u64().unwrap_or(0)))
+            .collect();
+        if !counts.is_empty() {
+            out.push_str(&format!("\n内容: {}", counts.join(" / ")));
+        }
+    }
+    for skipped in report["skipped"].as_array().cloned().unwrap_or_default() {
+        out.push_str(&format!("\n⚠ 出せなかったもの: {}", skipped.as_str().unwrap_or("")));
+    }
+    out
 }
 
 /// `madake export <帳票>`。件数の単位はCSVなら行、PDFならページ。

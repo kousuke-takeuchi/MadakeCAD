@@ -19,7 +19,9 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
+use crate::frame_template::{Align, BindContext, FrameTemplate};
 use crate::geometry::Point;
+use crate::io::ExportReport;
 use crate::kicad::ImportReport;
 use crate::model::*;
 use crate::symbol::{Primitive, SymbolDef};
@@ -42,6 +44,12 @@ pub const LAYER_LABELS: &str = "LABELS";
 pub const LAYER_MISC: &str = "MISC";
 pub const LAYER_HARNESS: &str = "HARNESS";
 pub const LAYER_FRAME: &str = "FRAME";
+/// 図形 ([`Entity::Shape`]) = 電気的な意味を持たない作図要素。
+pub const LAYER_SHAPES: &str = "SHAPES";
+/// 表 ([`Entity::WireLegend`]) など、図面の注釈。
+pub const LAYER_ANNOTATION: &str = "ANNOTATION";
+/// 盤レイアウト (盤外形・DINレール・ダクト・フットプリント・凡例表)。
+pub const LAYER_PANEL: &str = "PANEL";
 /// シンボルブロック名の接頭辞 (`MDK_relay_coil`)。
 pub const BLOCK_PREFIX: &str = "MDK_";
 /// ジャンクションのブロック名 (ACADEの結線ドットと同名)。
@@ -214,8 +222,26 @@ impl Writer {
         self.pair(8, layer);
         h
     }
+    /// エンティティ共通ヘッダ + 線種 (破線なら`DASHED`の群6を足す)。
+    fn entity_styled(&mut self, kind: &str, owner: &str, layer: &str, dashed: bool) -> String {
+        let h = self.entity(kind, owner, layer);
+        if dashed {
+            self.pair(6, "DASHED");
+        }
+        h
+    }
     fn line(&mut self, owner: &str, layer: &str, a: (f64, f64), b: (f64, f64)) {
-        self.entity("LINE", owner, layer);
+        self.line_styled(owner, layer, a, b, false);
+    }
+    fn line_styled(
+        &mut self,
+        owner: &str,
+        layer: &str,
+        a: (f64, f64),
+        b: (f64, f64),
+        dashed: bool,
+    ) {
+        self.entity_styled("LINE", owner, layer, dashed);
         self.pair(100, "AcDbLine");
         self.pair(10, num(a.0));
         self.pair(20, num(a.1));
@@ -232,10 +258,7 @@ impl Writer {
         closed: bool,
         dashed: bool,
     ) {
-        self.entity("LWPOLYLINE", owner, layer);
-        if dashed {
-            self.pair(6, "DASHED");
-        }
+        self.entity_styled("LWPOLYLINE", owner, layer, dashed);
         self.pair(100, "AcDbPolyline");
         self.pair(90, pts.len());
         self.pair(70, if closed { 1 } else { 0 });
@@ -246,7 +269,10 @@ impl Writer {
         }
     }
     fn circle(&mut self, owner: &str, layer: &str, c: (f64, f64), r: f64) {
-        self.entity("CIRCLE", owner, layer);
+        self.circle_styled(owner, layer, c, r, false);
+    }
+    fn circle_styled(&mut self, owner: &str, layer: &str, c: (f64, f64), r: f64, dashed: bool) {
+        self.entity_styled("CIRCLE", owner, layer, dashed);
         self.pair(100, "AcDbCircle");
         self.pair(10, num(c.0));
         self.pair(20, num(c.1));
@@ -373,6 +399,9 @@ const LAYERS: &[(&str, u8, &str)] = &[
     (LAYER_LABELS, 6, "CONTINUOUS"),
     (LAYER_MISC, 7, "CONTINUOUS"),
     (LAYER_HARNESS, 3, "DASHED"),
+    (LAYER_SHAPES, 7, "CONTINUOUS"),
+    (LAYER_ANNOTATION, 7, "CONTINUOUS"),
+    (LAYER_PANEL, 8, "CONTINUOUS"),
 ];
 
 /// シンボルブロックの図形 (ローカル座標、Y反転済み) を書く。
@@ -519,8 +548,409 @@ fn instance_attributes(inst: &SymbolInstance, def: &SymbolDef) -> Vec<(String, S
     out
 }
 
-/// シートをDXF (AutoCAD 2000形式のASCII) の文字列にする。
-pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
+/// 矩形を閉じた`LWPOLYLINE`で書く (左上・右下の用紙座標を渡す。Y反転はここでする)。
+fn write_rect(w: &mut Writer, ms: &str, layer: &str, min: Point, max: Point, ph: f64, dashed: bool) {
+    let fy = |y: f64| ph - y;
+    w.polyline(
+        ms,
+        layer,
+        &[
+            (min.x, fy(min.y)),
+            (max.x, fy(min.y)),
+            (max.x, fy(max.y)),
+            (min.x, fy(max.y)),
+        ],
+        true,
+        dashed,
+    );
+}
+
+/// 図枠 (外枠・ゾーン目盛・表題欄・ロゴ枠) を`FRAME`レイヤへ書く。
+///
+/// SVG/PDFと同じ図枠テンプレート ([`crate::frame_template`]) の寸法とバインド解決を使うので、
+/// DXFを受け取った相手にも図面番号・改訂・会社名とゾーンの住所が伝わる。改訂欄は出さない
+/// (表題欄のバインド`rev.latest`に最新改訂が入る)。
+fn write_frame(w: &mut Writer, ms: &str, sheet: &Sheet, t: &FrameTemplate, ctx: &BindContext) {
+    let (pw, ph) = sheet.paper_mm();
+    let fy = |y: f64| ph - y;
+    let m = t.frame_margin;
+    let (x0, y0, x1, y1) = (m, m, pw - m, ph - m);
+    write_rect(
+        w,
+        ms,
+        LAYER_FRAME,
+        Point::new(x0, y0),
+        Point::new(x1, y1),
+        ph,
+        false,
+    );
+    // ゾーン目盛 (図面の住所)。分割数はシート、文字種はテンプレートが決める
+    let (cols, rows) = (sheet.zone_cols.max(1), sheet.zone_rows.max(1));
+    let zw = (x1 - x0) / f64::from(cols);
+    let zh = (y1 - y0) / f64::from(rows);
+    for i in 0..cols {
+        let cx = x0 + zw * (f64::from(i) + 0.5);
+        let label = t.zones.col_labels.label(i);
+        w.text(ms, LAYER_FRAME, (cx, fy(y0 - 3.0)), 3.0, 0.0, 1, 0, &label);
+        w.text(ms, LAYER_FRAME, (cx, fy(y1 + 6.0)), 3.0, 0.0, 1, 0, &label);
+        if i > 0 {
+            let tx = x0 + zw * f64::from(i);
+            w.line(ms, LAYER_FRAME, (tx, fy(y0 - 2.0)), (tx, fy(y0)));
+            w.line(ms, LAYER_FRAME, (tx, fy(y1)), (tx, fy(y1 + 2.0)));
+        }
+    }
+    for i in 0..rows {
+        let cy = y0 + zh * (f64::from(i) + 0.5) + 1.0;
+        let label = t.zones.row_labels.label(i);
+        w.text(ms, LAYER_FRAME, (x0 - 3.0, fy(cy)), 3.0, 0.0, 1, 0, &label);
+        w.text(ms, LAYER_FRAME, (x1 + 3.0, fy(cy)), 3.0, 0.0, 1, 0, &label);
+    }
+    // 表題欄 (枠・罫線・セル)。セルはバインドを解決してから書く
+    let def = &t.title_block;
+    let (tx, ty) = t.title_block_origin(pw, ph);
+    write_rect(
+        w,
+        ms,
+        LAYER_FRAME,
+        Point::new(tx, ty),
+        Point::new(tx + def.w, ty + def.h),
+        ph,
+        false,
+    );
+    for g in &def.grid_lines {
+        w.line(
+            ms,
+            LAYER_FRAME,
+            (tx + g.x1, fy(ty + g.y1)),
+            (tx + g.x2, fy(ty + g.y2)),
+        );
+    }
+    for cell in &def.cells {
+        let value = cell.resolve(ctx);
+        if value.is_empty() {
+            continue;
+        }
+        let halign = match cell.align {
+            Align::Start => 0,
+            Align::Middle => 1,
+            Align::End => 2,
+        };
+        w.text(
+            ms,
+            LAYER_FRAME,
+            (tx + cell.x, fy(ty + cell.y)),
+            cell.size,
+            0.0,
+            halign,
+            0,
+            &value,
+        );
+    }
+    if let Some(logo) = &t.logo {
+        write_rect(
+            w,
+            ms,
+            LAYER_FRAME,
+            Point::new(logo.x, logo.y),
+            Point::new(logo.x + logo.w, logo.y + logo.h),
+            ph,
+            false,
+        );
+    }
+}
+
+/// 図形 (G10) を`SHAPES`レイヤへ書く。破線は`DASHED`線種で表す。
+/// 塗り ([`Shape::fill`]) は出さない (DXFのHATCHは読み手の対応差が大きい)。
+fn write_shapes(w: &mut Writer, ms: &str, sheet: &Sheet, ph: f64, report: &mut ExportReport) {
+    let fy = |y: f64| ph - y;
+    let mut broken = 0;
+    for shape in crate::shape::shapes(sheet) {
+        if crate::shape::validate(shape).is_err() {
+            broken += 1;
+            continue;
+        }
+        match shape.shape {
+            ShapeKind::Rect => {
+                let Some((min, max)) = crate::shape::rect_corners(shape) else {
+                    continue;
+                };
+                write_rect(w, ms, LAYER_SHAPES, min, max, ph, shape.dashed);
+            }
+            ShapeKind::Line => {
+                let (a, b) = (shape.points[0], shape.points[1]);
+                w.line_styled(
+                    ms,
+                    LAYER_SHAPES,
+                    (a.x, fy(a.y)),
+                    (b.x, fy(b.y)),
+                    shape.dashed,
+                );
+            }
+            ShapeKind::Circle => {
+                let Some((center, r)) = crate::shape::circle(shape) else {
+                    continue;
+                };
+                w.circle_styled(ms, LAYER_SHAPES, (center.x, fy(center.y)), r, shape.dashed);
+            }
+            ShapeKind::Polyline => {
+                let pts: Vec<(f64, f64)> = shape.points.iter().map(|p| (p.x, fy(p.y))).collect();
+                w.polyline(ms, LAYER_SHAPES, &pts, false, shape.dashed);
+            }
+        }
+        report.count("shape");
+    }
+    report.skip("shape", broken, "頂点が足りず図面にも描けない図形");
+}
+
+/// 表 (凡例) の枠・罫線・文字を書く。行の中身は呼び出し元が導出したもの
+/// (SVGと同じ`legend_rows*`) を渡す。見出しの下だけ枠と同じ太さの罫線で区切る。
+#[allow(clippy::too_many_arguments)]
+fn write_table(
+    w: &mut Writer,
+    ms: &str,
+    layer: &str,
+    min: Point,
+    max: Point,
+    headers: &[&str],
+    col_w: &[f64],
+    rows: &[Vec<String>],
+    row_h: f64,
+    font: f64,
+    ph: f64,
+) {
+    let fy = |y: f64| ph - y;
+    write_rect(w, ms, layer, min, max, ph, false);
+    let mut x = min.x;
+    for cw in col_w.iter().take(col_w.len().saturating_sub(1)) {
+        x += cw;
+        w.line(ms, layer, (x, fy(min.y)), (x, fy(max.y)));
+    }
+    let cells = std::iter::once(headers.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+        .chain(rows.iter().cloned());
+    for (r, row) in cells.enumerate() {
+        let top = min.y + row_h * r as f64;
+        if r > 0 {
+            w.line(ms, layer, (min.x, fy(top)), (max.x, fy(top)));
+        }
+        let base = top + row_h / 2.0 + font / 2.0;
+        let mut cx = min.x;
+        for (i, cell) in row.iter().enumerate() {
+            if !cell.is_empty() {
+                w.text(
+                    ms,
+                    layer,
+                    (cx + crate::svg::CELL_PAD, fy(base)),
+                    font,
+                    0.0,
+                    0,
+                    0,
+                    cell,
+                );
+            }
+            cx += col_w.get(i).copied().unwrap_or(0.0);
+        }
+    }
+}
+
+/// 電線品番凡例ブロック (G9) を`ANNOTATION`レイヤへ書く。行はSVGと同じく
+/// そのシートの配線から導出する ([`crate::wire_legend::legend_rows_with`])。
+fn write_wire_legends(
+    w: &mut Writer,
+    ms: &str,
+    sheet: &Sheet,
+    wire_parts: &[WirePart],
+    ph: f64,
+    report: &mut ExportReport,
+) {
+    let rows = crate::wire_legend::legend_rows_with(sheet, wire_parts);
+    for legend in crate::wire_legend::legends(sheet) {
+        let (min, max) = crate::wire_legend::legend_rect_with(sheet, wire_parts, legend);
+        write_table(
+            w,
+            ms,
+            LAYER_ANNOTATION,
+            min,
+            max,
+            &crate::wire_legend::LEGEND_COLUMNS,
+            &crate::wire_legend::LEGEND_COL_W,
+            &rows,
+            crate::wire_legend::LEGEND_ROW_H,
+            crate::wire_legend::LEGEND_FONT,
+            ph,
+        );
+        report.count("wire_legend");
+    }
+}
+
+/// 盤レイアウト (盤外形・ダクト・DINレール・フットプリント・凡例表) を`PANEL`レイヤへ書く。
+/// DXFは製造図面を渡す形式なので、盤レイアウトシートもそのまま出す (SVGと同じ寸法)。
+fn write_panel(w: &mut Writer, ms: &str, sheet: &Sheet, ph: f64, report: &mut ExportReport) {
+    let fy = |y: f64| ph - y;
+    for e in sheet.entities.values() {
+        let Entity::PanelOutline(o) = e else { continue };
+        let (min, max) = crate::panel::outline_rect(o);
+        write_rect(w, ms, LAYER_PANEL, min, max, ph, false);
+        if let Some((pmin, pmax)) = crate::panel::plate_rect(o) {
+            write_rect(w, ms, LAYER_PANEL, pmin, pmax, ph, false);
+        }
+        let name = o.name.trim();
+        if !name.is_empty() {
+            w.text(
+                ms,
+                LAYER_PANEL,
+                (min.x + crate::svg::CELL_PAD, fy(min.y - 1.5)),
+                crate::svg::TITLE_FONT,
+                0.0,
+                0,
+                0,
+                name,
+            );
+        }
+        report.count("panel_outline");
+    }
+    for duct in crate::panel::ducts(sheet) {
+        let min = duct.at;
+        let max = Point::new(duct.at.x + duct.w, duct.at.y + duct.h);
+        write_rect(w, ms, LAYER_PANEL, min, max, ph, false);
+        for (a, b) in crate::panel::duct_hatch(duct.at, duct.w, duct.h) {
+            w.line(ms, LAYER_PANEL, (a.x, fy(a.y)), (b.x, fy(b.y)));
+        }
+        report.count("duct");
+    }
+    for rail in crate::panel::rails(sheet) {
+        let (min, max) = crate::panel::rail_rect(rail);
+        write_rect(w, ms, LAYER_PANEL, min, max, ph, false);
+        // 取付線 (部品が乗る中心線)
+        w.line(
+            ms,
+            LAYER_PANEL,
+            (min.x, fy(rail.y)),
+            (max.x, fy(rail.y)),
+        );
+        report.count("din_rail");
+    }
+    for fp in crate::panel::footprints(sheet) {
+        let (min, max) = crate::panel::footprint_rect(fp);
+        write_rect(w, ms, LAYER_PANEL, min, max, ph, false);
+        let (cx, cy) = ((min.x + max.x) / 2.0, (min.y + max.y) / 2.0);
+        let reference = fp.reference.trim();
+        if !reference.is_empty() {
+            w.text(
+                ms,
+                LAYER_PANEL,
+                (cx, fy(cy)),
+                crate::svg::LABEL_FONT,
+                0.0,
+                1,
+                0,
+                reference,
+            );
+        }
+        let part_no = fp.part_no.trim();
+        if !part_no.is_empty() {
+            w.text(
+                ms,
+                LAYER_PANEL,
+                (cx, fy(cy + 3.0)),
+                2.0,
+                0.0,
+                1,
+                0,
+                part_no,
+            );
+        }
+        // バルーン (アイテム番号)。採番済みのフットプリントだけに付く
+        if let Some(b) = crate::panel::balloon(fp) {
+            w.line(
+                ms,
+                LAYER_PANEL,
+                (b.leader_from.x, fy(b.leader_from.y)),
+                (b.leader_to.x, fy(b.leader_to.y)),
+            );
+            w.circle(
+                ms,
+                LAYER_PANEL,
+                (b.center.x, fy(b.center.y)),
+                crate::panel::BALLOON_R,
+            );
+            w.text(
+                ms,
+                LAYER_PANEL,
+                (b.center.x, fy(b.center.y + crate::panel::BALLOON_FONT / 2.0)),
+                crate::panel::BALLOON_FONT,
+                0.0,
+                1,
+                0,
+                &b.item_no.to_string(),
+            );
+        }
+        report.count("footprint");
+    }
+    let legend_rows = crate::panel::legend_rows(sheet);
+    for legend in crate::panel::legends(sheet) {
+        let (min, max) = crate::panel::legend_rect(sheet, legend);
+        write_table(
+            w,
+            ms,
+            LAYER_PANEL,
+            min,
+            max,
+            &crate::panel::LEGEND_COLUMNS,
+            &crate::panel::LEGEND_COL_W,
+            &legend_rows,
+            crate::panel::LEGEND_ROW_H,
+            crate::panel::LEGEND_FONT,
+            ph,
+        );
+        report.count("panel_legend");
+    }
+}
+
+/// シートをDXF (AutoCAD 2000形式のASCII) の文字列と書き出し内訳にする。図枠は既定の`jis-a3`。
+///
+/// `wire_parts`はプロジェクトの電線品番表 ([`Project::wire_parts`])。電線品番凡例ブロックの
+/// 品番欄はここから引くので、**プロジェクトを持っている呼び出し元は
+/// [`project_sheet_to_dxf`]を使うこと** (図枠もシート番号もそちらが正しく入る)。
+pub fn sheet_to_dxf(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    wire_parts: &[WirePart],
+) -> (String, ExportReport) {
+    sheet_to_dxf_with_frame(
+        sheet,
+        symbols,
+        crate::frame_template::default_template(),
+        &BindContext::for_sheet(sheet),
+        wire_parts,
+    )
+}
+
+/// プロジェクトの中の1シートをDXFへ書き出す。図枠はプロジェクトの図枠テンプレート、
+/// 表題欄のバインドはシート番号・総数入りで解決する。シートが無ければNone。
+pub fn project_sheet_to_dxf(
+    project: &Project,
+    sheet_id: SheetId,
+    symbols: &[SymbolDef],
+) -> Option<(String, ExportReport)> {
+    let sheet = project.sheet(sheet_id)?;
+    let frame = crate::frame_template::for_project(project);
+    Some(sheet_to_dxf_with_frame(
+        sheet,
+        symbols,
+        &frame,
+        &BindContext::for_project(project, sheet),
+        &project.wire_parts,
+    ))
+}
+
+/// [`sheet_to_dxf`]の本体。`frame`/`ctx`は図枠テンプレートと表題欄バインドの文脈。
+pub fn sheet_to_dxf_with_frame(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    frame: &FrameTemplate,
+    ctx: &BindContext,
+    wire_parts: &[WirePart],
+) -> (String, ExportReport) {
     let (paper_w, paper_h) = sheet.paper_mm();
     let fy = |y: f64| paper_h - y;
     let pt = |p: Point| (p.x, fy(p.y));
@@ -748,7 +1178,8 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
     w.pair(0, "SECTION");
     w.pair(2, "ENTITIES");
     let ms = model_space.as_str();
-    // 用紙枠
+    let mut report = ExportReport::default();
+    // 用紙の外周 (読み込み時に外形=用紙になるので座標と用紙サイズが往復で保たれる)
     w.polyline(
         ms,
         LAYER_FRAME,
@@ -761,11 +1192,14 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
         true,
         false,
     );
-    // 以降は種別ごとに1周ずつ回して描く。**回路図の電気要素だけ**をDXFへ出す:
-    // 図形 ([`Entity::Shape`])・電線品番凡例 ([`Entity::WireLegend`])・盤レイアウトの
-    // 4種 ([`Entity::PanelOutline`] / [`Entity::DinRail`] / [`Entity::Duct`] /
-    // [`Entity::Footprint`]) と凡例表 ([`Entity::PanelLegend`]) は、相手先
-    // (AutoCAD Electrical / EPLAN) の回路図に対応するものが無いので**意図して出さない**。
+    // 図枠 (外枠・ゾーン目盛・表題欄) → 盤レイアウト → 図形 の順に、SVGと同じ背面から描く。
+    // DXFは汎用の2D図面形式なので、電気要素以外 (図形・凡例表・盤レイアウト) も出す。
+    // 出した件数と出せなかったものは`report`で呼び出し元へ返す (黙って落とさない)。
+    write_frame(&mut w, ms, sheet, frame, ctx);
+    write_panel(&mut w, ms, sheet, paper_h, &mut report);
+    write_shapes(&mut w, ms, sheet, paper_h, &mut report);
+    write_wire_legends(&mut w, ms, sheet, wire_parts, paper_h, &mut report);
+    // 以降は種別ごとに1周ずつ回して描く。
     // ハーネス (背面)
     for e in sheet.entities.values() {
         if let Entity::Harness(h) = e {
@@ -789,6 +1223,7 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
                     &h.name,
                 );
             }
+            report.count("harness");
         }
     }
     // 配線 (LINEに分割)
@@ -797,11 +1232,13 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
             for seg in wire.points.windows(2) {
                 w.line(ms, LAYER_WIRES, pt(seg[0]), pt(seg[1]));
             }
+            report.count("wire");
         }
     }
     // ジャンクション
     for e in sheet.entities.values() {
         if let Entity::Junction(j) = e {
+            report.count("junction");
             w.entity("INSERT", ms, LAYER_WIRES);
             w.pair(100, "AcDbBlockReference");
             w.pair(2, BLOCK_DOT);
@@ -862,6 +1299,7 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
                 0,
                 &l.name,
             );
+            report.count("net_label");
         }
     }
     // 注記 (行ごとにTEXT)
@@ -880,17 +1318,21 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
                     line,
                 );
             }
+            report.count("text");
         }
     }
     // シンボル
+    let mut unresolved: BTreeMap<&str, usize> = BTreeMap::new();
     for e in sheet.entities.values() {
         let Entity::Symbol(inst) = e else { continue };
         let Some(def) = defs.get(inst.symbol_id.as_str()) else {
+            // 解決できないシンボル定義は描けない。SVGでは出るので黙って落とさず報告する
+            *unresolved.entry(inst.symbol_id.as_str()).or_insert(0) += 1;
             continue;
         };
         let insert = w.entity("INSERT", ms, LAYER_SYMS);
-        w.pair(66, 1);
         w.pair(100, "AcDbBlockReference");
+        w.pair(66, 1);
         w.pair(2, format!("{BLOCK_PREFIX}{}", inst.symbol_id));
         let (x, y) = pt(inst.at);
         w.pair(10, num(x));
@@ -926,6 +1368,14 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
             );
         }
         w.entity("SEQEND", &insert, LAYER_SYMS);
+        report.count("symbol");
+    }
+    for (id, count) in unresolved {
+        report.skip(
+            "symbol",
+            count,
+            &format!("シンボル定義 {id} が見つからないので図形を書けない"),
+        );
     }
     w.pair(0, "ENDSEC");
     // ---- OBJECTS ----
@@ -945,7 +1395,7 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
     w.pair(281, 1);
     w.pair(0, "ENDSEC");
     w.pair(0, "EOF");
-    w.out
+    (w.out, report)
 }
 
 // ---------------------------------------------------------------------------
@@ -1115,7 +1565,7 @@ pub fn import_dxf(
     let mut entities: Vec<Record> = Vec::new();
     let mut current_block: Option<String> = None;
     let mut seen_entities = false;
-    for (i, r) in recs.iter().enumerate() {
+    for r in recs.iter() {
         match r.kind.as_str() {
             "SECTION" => {
                 section = r.get(2).unwrap_or("").trim().to_uppercase();
@@ -1151,7 +1601,6 @@ pub fn import_dxf(
             "ENTITIES" => entities.push(r.clone()),
             _ => {}
         }
-        let _ = i;
     }
     if !seen_entities {
         return Err(DxfError::NotDxf);
@@ -1404,6 +1853,9 @@ pub fn import_dxf(
                 };
                 if text.trim().is_empty() {
                     // 空文字は無視
+                } else if up == LAYER_FRAME {
+                    // 図枠の文字 (ゾーン目盛・表題欄) は図面要素ではない。図枠は
+                    // シートの図枠テンプレートと表題欄が持つので、注記として拾わない
                 } else if up.contains("WIRENO") || up.contains("WIRE_NO") || up.contains("WIRENUM")
                 {
                     wire_no_texts.push((at, text.trim().to_string()));
@@ -1754,7 +2206,7 @@ mod tests {
     #[test]
     fn export_writes_a_well_formed_ac1015_file() {
         let sheet = fixture();
-        let dxf = sheet_to_dxf(&sheet, &defs(&sheet));
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
         let pairs = parse_pairs(&dxf).unwrap();
         assert!(pairs
             .windows(2)
@@ -1787,7 +2239,7 @@ mod tests {
     #[test]
     fn wires_become_lines_on_the_wires_layer_with_y_flipped() {
         let sheet = fixture();
-        let dxf = sheet_to_dxf(&sheet, &defs(&sheet));
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
         let lines: Vec<Record> = entity_records(&dxf)
             .into_iter()
             .filter(|r| r.kind == "LINE" && r.layer() == LAYER_WIRES)
@@ -1803,7 +2255,7 @@ mod tests {
     #[test]
     fn symbols_become_block_inserts_with_attributes() {
         let sheet = fixture();
-        let dxf = sheet_to_dxf(&sheet, &defs(&sheet));
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
         let recs = records(&parse_pairs(&dxf).unwrap());
         let block_names: Vec<&str> = recs
             .iter()
@@ -1859,7 +2311,7 @@ mod tests {
     #[test]
     fn texts_and_harness_go_to_their_layers() {
         let sheet = fixture();
-        let dxf = sheet_to_dxf(&sheet, &defs(&sheet));
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
         let ents = entity_records(&dxf);
         let text_on = |layer: &str| -> Vec<String> {
             ents.iter()
@@ -1892,7 +2344,7 @@ mod tests {
         );
         assert_eq!(decode_text("\\U+D83D\\U+DE00"), "😀");
         let sheet = fixture();
-        let dxf = sheet_to_dxf(&sheet, &defs(&sheet));
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
         assert!(!dxf.contains("注記A"), "生のマルチバイトを書かない");
     }
 
@@ -1901,7 +2353,7 @@ mod tests {
     #[test]
     fn export_then_import_round_trips_the_sheet() {
         let sheet = fixture();
-        let dxf = sheet_to_dxf(&sheet, &defs(&sheet));
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
         let (project, report) = import_dxf(&dxf, "往復", &DxfImportOptions::default()).unwrap();
         let back = &project.sheets[0];
         assert!(report.skipped.is_empty(), "{:?}", report.skipped);
@@ -2272,6 +2724,192 @@ mod tests {
         assert_eq!((arc.num(50), arc.num(51)), (Some(270.0), Some(90.0)));
     }
 
+    /// The frame goes to the FRAME layer: the border, the zone ticks with their letters and numbers, and the title block cells with their binds resolved (drawing number, title, revision).
+    /// 図枠はFRAMEレイヤに出る: 外枠・ゾーン目盛の英字と数字・バインドを解決した表題欄のセル(図番・品名・改訂)。
+    #[test]
+    fn the_frame_and_title_block_go_to_the_frame_layer() {
+        let mut sheet = fixture();
+        sheet.title_block.drawing_no = "E-1001".into();
+        sheet.title_block.title = "制御盤".into();
+        sheet.title_block.rev = "B".into();
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
+        let ents = entity_records(&dxf);
+        let texts: Vec<String> = ents
+            .iter()
+            .filter(|r| r.kind == "TEXT" && r.layer() == LAYER_FRAME)
+            .map(|r| r.text())
+            .collect();
+        assert!(texts.contains(&"E-1001  Rev B".to_string()), "{texts:?}");
+        assert!(texts.contains(&"制御盤".to_string()), "{texts:?}");
+        assert!(texts.contains(&"図番".to_string()), "{texts:?}");
+        // ゾーン目盛 (A3の既定は4列×6行、列=数字・行=英字)。上下・左右の2か所に出る
+        assert_eq!(texts.iter().filter(|t| *t == "1").count(), 2, "{texts:?}");
+        assert_eq!(texts.iter().filter(|t| *t == "F").count(), 2, "{texts:?}");
+        // 外枠 (マージン10mm) と表題欄 (120×32mm、右下) の枠
+        let frames: Vec<&Record> = ents
+            .iter()
+            .filter(|r| r.kind == "LWPOLYLINE" && r.layer() == LAYER_FRAME)
+            .collect();
+        assert!(
+            frames.iter().any(|r| r.num(10) == Some(10.0) && is_closed(r)),
+            "外枠が無い"
+        );
+        assert!(
+            frames.iter().any(|r| r.num(10) == Some(420.0 - 10.0 - 120.0)),
+            "表題欄の枠が無い"
+        );
+    }
+
+    /// Shapes, the wire part legend and the panel layout entities are exported too, each on its own layer (SHAPES / ANNOTATION / PANEL), and the export report counts what was written per kind.
+    /// 図形・電線品番凡例・盤レイアウトのエンティティもそれぞれのレイヤ(SHAPES / ANNOTATION / PANEL)へ書き出され、書き出し結果の内訳が種別ごとの件数を返す。
+    #[test]
+    fn shapes_legends_and_panel_layout_are_exported_on_their_own_layers() {
+        let mut sheet = Sheet::new("Panel", PaperSize::A3, Orientation::Landscape);
+        let mut push = |e: Entity| {
+            sheet.entities.insert(e.id(), e);
+        };
+        push(Entity::Shape(crate::model::Shape {
+            id: Uuid::new_v4(),
+            shape: ShapeKind::Rect,
+            points: vec![Point::new(10.0, 10.0), Point::new(30.0, 20.0)],
+            stroke: crate::shape::DEFAULT_SHAPE_COLOR.into(),
+            stroke_width_mm: 0.25,
+            fill: None,
+            dashed: true,
+        }));
+        push(Entity::Shape(crate::model::Shape {
+            id: Uuid::new_v4(),
+            shape: ShapeKind::Circle,
+            points: vec![Point::new(50.0, 50.0), Point::new(55.0, 50.0)],
+            stroke: crate::shape::DEFAULT_SHAPE_COLOR.into(),
+            stroke_width_mm: 0.25,
+            fill: None,
+            dashed: false,
+        }));
+        push(Entity::WireLegend(WireLegend {
+            id: Uuid::new_v4(),
+            at: Point::new(200.0, 200.0),
+        }));
+        push(Entity::PanelOutline(PanelOutline {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 100.0),
+            w: 200.0,
+            h: 150.0,
+            name: "制御盤".into(),
+        }));
+        push(Entity::DinRail(DinRail {
+            id: Uuid::new_v4(),
+            y: 150.0,
+            x1: 110.0,
+            x2: 290.0,
+        }));
+        push(Entity::Duct(Duct {
+            id: Uuid::new_v4(),
+            at: Point::new(110.0, 200.0),
+            w: 180.0,
+            h: 30.0,
+        }));
+        push(Entity::Footprint(Footprint {
+            id: Uuid::new_v4(),
+            at: Point::new(120.0, 135.0),
+            w: 30.0,
+            h: 30.0,
+            rotation: 0,
+            reference: "K1".into(),
+            part_no: "MY2N".into(),
+            item_no: Some(1),
+        }));
+        push(Entity::PanelLegend(PanelLegend {
+            id: Uuid::new_v4(),
+            at: Point::new(20.0, 240.0),
+        }));
+        let (dxf, report) = sheet_to_dxf(&sheet, &defs(&sheet), &[]);
+        let ents = entity_records(&dxf);
+        let on = |layer: &str| -> Vec<&Record> {
+            ents.iter().filter(|r| r.layer() == layer).collect()
+        };
+        // 図形: 破線の矩形 (LWPOLYLINE + DASHED線種) と円
+        let shapes = on(LAYER_SHAPES);
+        let rect = shapes
+            .iter()
+            .find(|r| r.kind == "LWPOLYLINE")
+            .unwrap_or_else(|| panic!("{shapes:?}"));
+        assert_eq!(rect.get(6), Some("DASHED"));
+        assert!(is_closed(rect));
+        assert_eq!(rect.num(20), Some(297.0 - 10.0), "Y反転して書く");
+        let circle = shapes.iter().find(|r| r.kind == "CIRCLE").unwrap();
+        assert_eq!((circle.num(10), circle.num(40)), (Some(50.0), Some(5.0)));
+        // 電線品番凡例: 表の枠 + 見出しのTEXT
+        let annotation = on(LAYER_ANNOTATION);
+        assert!(annotation.iter().any(|r| r.kind == "LWPOLYLINE"));
+        let headers: Vec<String> = annotation
+            .iter()
+            .filter(|r| r.kind == "TEXT")
+            .map(|r| r.text())
+            .collect();
+        assert!(headers.contains(&"線色".to_string()), "{headers:?}");
+        // 盤レイアウト: 外形・レール・ダクト・フットプリント・凡例表が1レイヤに乗る
+        let panel = on(LAYER_PANEL);
+        let panel_texts: Vec<String> = panel
+            .iter()
+            .filter(|r| r.kind == "TEXT")
+            .map(|r| r.text())
+            .collect();
+        for expected in ["制御盤", "K1", "MY2N", "1", "参照記号"] {
+            assert!(
+                panel_texts.contains(&expected.to_string()),
+                "{expected}: {panel_texts:?}"
+            );
+        }
+        assert!(
+            panel.iter().filter(|r| r.kind == "LWPOLYLINE").count() >= 6,
+            "盤外形・取付板・レール・ダクト・フットプリント・凡例表の枠"
+        );
+        assert_eq!(
+            report.counts,
+            [
+                ("din_rail".to_string(), 1),
+                ("duct".to_string(), 1),
+                ("footprint".to_string(), 1),
+                ("panel_legend".to_string(), 1),
+                ("panel_outline".to_string(), 1),
+                ("shape".to_string(), 2),
+                ("wire_legend".to_string(), 1),
+            ]
+            .into_iter()
+            .collect::<BTreeMap<String, usize>>()
+        );
+        assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+    }
+
+    /// A symbol whose definition cannot be resolved is reported in the export report instead of disappearing without a word.
+    /// シンボル定義が見つからないシンボルは、黙って消えるのではなく書き出し結果の内訳で報告される。
+    #[test]
+    fn an_unresolvable_symbol_is_reported_as_skipped() {
+        let mut sheet = Sheet::new("S", PaperSize::A3, Orientation::Landscape);
+        let id = Uuid::new_v4();
+        sheet.entities.insert(
+            id,
+            Entity::Symbol(SymbolInstance {
+                id,
+                symbol_id: "no_such_symbol".into(),
+                at: Point::new(50.0, 50.0),
+                rotation: 0,
+                mirror: false,
+                reference: "X1".into(),
+                value: String::new(),
+                attrs: Default::default(),
+            }),
+        );
+        let (dxf, report) = sheet_to_dxf(&sheet, &defs(&sheet), &[]);
+        assert!(!dxf.contains("no_such_symbol"));
+        assert_eq!(report.counts.get("symbol"), None);
+        assert_eq!(
+            report.skipped,
+            vec!["symbol x1: シンボル定義 no_such_symbol が見つからないので図形を書けない".to_string()]
+        );
+    }
+
     /// A rotated or mirrored symbol's pins land on exactly the paper positions the model gives them, so the exported pin still meets the wire drawn to it, and reading the file back gives the same rotation and mirror.
     /// 回転・ミラーしたシンボルのピンはモデルどおりの用紙座標に着地するので、書き出したDXFでもピンがそのピンへ引いた配線の端と一致し、読み戻すと同じ回転角・ミラーになる。
     #[test]
@@ -2304,7 +2942,7 @@ mod tests {
                 };
                 sheet.entities.insert(wire.id, Entity::Wire(wire));
                 sheet.entities.insert(inst.id, Entity::Symbol(inst));
-                let dxf = sheet_to_dxf(&sheet, &defs(&sheet));
+                let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
                 let (_, paper_h) = sheet.paper_mm();
                 let recs = records(&parse_pairs(&dxf).unwrap());
                 let ents = entity_records(&dxf);

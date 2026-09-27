@@ -1,7 +1,37 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::model::Project;
 use crate::Result;
+
+/// 他形式への書き出し結果の内訳 (DXF・KiCad共通)。
+///
+/// 「何を何件出して、何を出さなかったか」を呼び出し元 (CLI・MCP・UIのコマンドログ) へ
+/// 返すための報告。**対応の無い種別を黙って落とさない**ための仕組みで、
+/// [`crate::dxf::sheet_to_dxf`] と [`crate::kicad::export_kicad_sch`] が同じ型で返す。
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
+pub struct ExportReport {
+    /// 書き出した種別 ([`crate::model::Entity`]のJSON種別タグ) → 件数。0件の種別は入らない。
+    pub counts: BTreeMap<String, usize>,
+    /// 出さなかった種別と理由 (例 `"shape x3: KiCadの回路図に対応する図形が無い"`)。
+    pub skipped: Vec<String>,
+}
+
+impl ExportReport {
+    /// 書き出した1件を数える。
+    pub fn count(&mut self, kind: &str) {
+        *self.counts.entry(kind.to_string()).or_default() += 1;
+    }
+
+    /// ある種別を出さなかったことを件数と理由付きで記録する (0件なら何も記録しない)。
+    pub fn skip(&mut self, kind: &str, count: usize, reason: &str) {
+        if count > 0 {
+            self.skipped.push(format!("{kind} x{count}: {reason}"));
+        }
+    }
+}
 
 /// プロジェクトを整形JSONで保存する(git差分が読める形式)。
 pub fn save_project(path: &Path, project: &Project) -> Result<()> {

@@ -300,7 +300,7 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
             Ok(format::saved(&result))
         }
         Commands::Open { path, wire_layer } => {
-            if path.ends_with(".kicad_sch") {
+            if path.to_lowercase().ends_with(".kicad_sch") {
                 let result = api.import_kicad(path)?;
                 if cli.json {
                     return Ok(pretty(&result));
@@ -477,7 +477,17 @@ mod tests {
             sheet_id: Option<&str>,
         ) -> Result<Value, CliError> {
             self.record(format!("export({kind:?}, {path}, {sheet_id:?})"));
-            Ok(json!({ "written": path }))
+            // DXF / KiCadのエンドポイントは書き出し内訳も返す
+            match kind {
+                ExportKind::Dxf | ExportKind::Kicad => Ok(json!({
+                    "written": path,
+                    "report": {
+                        "counts": {"wire": 2, "shape": 1},
+                        "skipped": ["panel_outline x1: KiCadの回路図に対応するものが無い"],
+                    }
+                })),
+                _ => Ok(json!({ "written": path })),
+            }
         }
         fn terminals(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
             self.record(format!("terminals({sheet_id:?})"));
@@ -895,13 +905,15 @@ mod tests {
         assert!(out.contains("/tmp/a.svg"));
     }
 
-    /// madake export dxf / kicad write one sheet through the DXF and KiCad endpoints (sheet selectable).
-    /// madake export dxf / kicadはDXF・KiCadのエンドポイントでシート1枚を書き出す(シート指定可)。
+    /// madake export dxf / kicad write one sheet through the DXF and KiCad endpoints (sheet selectable) and print the export breakdown: how many of each kind was written and what could not be written.
+    /// madake export dxf / kicadはDXF・KiCadのエンドポイントでシート1枚を書き出し(シート指定可)、書き出した種別の件数と出せなかったものを表示する。
     #[test]
     fn export_dxf_and_kicad_forward_to_their_endpoints() {
         let api = FakeApi::default();
         let out = run(&parse(&["madake", "export", "dxf", "/tmp/a.dxf"]), &api).unwrap();
         assert!(out.contains("DXF") && out.contains("/tmp/a.dxf"), "{out}");
+        assert!(out.contains("wire 2") && out.contains("shape 1"), "{out}");
+        assert!(out.contains("出せなかったもの: panel_outline x1"), "{out}");
         run(
             &parse(&["madake", "export", "kicad", "/tmp/a.kicad_sch", "--sheet", "s1"]),
             &api,
@@ -918,11 +930,13 @@ mod tests {
         assert_eq!(ExportKind::Kicad.path(), "/export/kicad");
     }
 
-    /// madake open with a .dxf file imports it through /import/dxf, passing --wire-layer, and prints the import summary; --wire-layer is rejected for other files.
-    /// madake openに.dxfを渡すと/import/dxfで読み込み(--wire-layerを引き渡す)、変換結果の要約を表示する。他のファイルで--wire-layerを付けるとエラー。
+    /// madake open with a .dxf file imports it through /import/dxf, passing --wire-layer, and prints the import summary; the extension is matched case-insensitively for KiCad too; --wire-layer is rejected for other files.
+    /// madake openに.dxfを渡すと/import/dxfで読み込み(--wire-layerを引き渡す)、変換結果の要約を表示する。拡張子の大文字小文字はKiCadでも区別しない。他のファイルで--wire-layerを付けるとエラー。
     #[test]
     fn open_dxf_imports_with_wire_layers() {
         let api = FakeApi::default();
+        run(&parse(&["madake", "open", "/tmp/a.KICAD_SCH"]), &api).unwrap();
+        assert_eq!(api.calls(), vec!["import_kicad(/tmp/a.KICAD_SCH)"]);
         let out = run(
             &parse(&["madake", "open", "/tmp/panel.DXF", "--wire-layer", "WIRES,_MULTI_WIRE_1"]),
             &api,
@@ -930,7 +944,10 @@ mod tests {
         .unwrap();
         assert_eq!(
             api.calls(),
-            vec![r#"import_dxf(/tmp/panel.DXF, ["WIRES", "_MULTI_WIRE_1"])"#]
+            vec![
+                "import_kicad(/tmp/a.KICAD_SCH)".to_string(),
+                r#"import_dxf(/tmp/panel.DXF, ["WIRES", "_MULTI_WIRE_1"])"#.to_string()
+            ]
         );
         assert!(out.contains("DXF") && out.contains("HCR1 x1"), "{out}");
         let err = run(

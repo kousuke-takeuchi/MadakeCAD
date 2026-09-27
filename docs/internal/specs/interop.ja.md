@@ -41,9 +41,9 @@ KiCadから移行するユーザーや、AutoCAD Electrical(ACADE)・EPLANを使
 - ハーネス境界: 破線の閉じた`polyline`+名前の`text`(KiCadに相当物が無い)。
 - インポーター側の変更: `MadakeCAD:`で始まる`lib_id`は(静的・動的いずれも)symbol_idへ直接解決するので、自前の書き出しはlib_id対応表を介さずに往復する。
 
-### 4.2 DXFエクスポート(`madake_core::dxf::sheet_to_dxf`)
+### 4.2 DXFエクスポート(`madake_core::dxf::sheet_to_dxf`・`project_sheet_to_dxf`)
 
-ASCII DXF、`$ACADVER`=AC1015、`$INSUNITS`=4(mm)、非ASCII文字は`\U+XXXX`(コードページに依存しない表記)。Y軸は反転(`y_dxf = 用紙高さ − y`)、用紙枠を`FRAME`レイヤに書いて外形を用紙に一致させる。
+ASCII DXF、`$ACADVER`=AC1015、`$INSUNITS`=4(mm)、非ASCII文字は`\U+XXXX`(コードページに依存しない表記)。Y軸は反転(`y_dxf = 用紙高さ − y`)、用紙外周を`FRAME`レイヤに書いて外形を用紙に一致させる。Y反転は平面を鏡像にするので、**角度は必ず符号を反転して書く**(グループ50=`-θ`、弧は開始/終了を入れ替え)。そうしないと90°・270°のシンボルが180°ずれ、ピンが配線から離れる。戻り値は`(String, io::ExportReport)`で、種別ごとの件数と書けなかったものを返す。プロジェクト側の入口は`project_sheet_to_dxf`(プロジェクトの図枠テンプレート・表題欄のシート番号/総数・電線品番凡例の`Project::wire_parts`が入る)。
 
 | MadakeCAD | DXF | レイヤ |
 |---|---|---|
@@ -55,18 +55,25 @@ ASCII DXF、`$ACADVER`=AC1015、`$INSUNITS`=4(mm)、非ASCII文字は`\U+XXXX`(�
 | ネットラベル | `TEXT` | `LABELS` |
 | 注記 | 行ごとの`TEXT` | `MISC` |
 | ハーネス | 線種`DASHED`の閉じた`LWPOLYLINE`+名前の`TEXT` | `HARNESS` |
+| 図枠(外枠・ゾーン目盛と目盛文字・バインドを解決した表題欄のセル・ロゴ枠) | SVGと同じ図枠テンプレートから`LWPOLYLINE`/`LINE`/`TEXT` | `FRAME` |
+| 図形(G10) | `LINE`/`LWPOLYLINE`/`CIRCLE`(破線は線種`DASHED`。塗りは書かない) | `SHAPES` |
+| 電線品番凡例 | `LWPOLYLINE`の枠+`LINE`の罫線+`TEXT`の行(行は`wire_legend::legend_rows_with`) | `ANNOTATION` |
+| 盤レイアウト(`PanelOutline`と取付板・`DinRail`・`Duct`と斜線・`Footprint`と参照記号/型番/バルーン・`PanelLegend`の表) | SVGと同じジオメトリ関数(`crate::panel`)から`LWPOLYLINE`/`LINE`/`CIRCLE`/`TEXT` | `PANEL` |
+
+図枠のうち書かないのは改訂欄だけ(最新改訂は`rev.latest`バインドで表題欄に入る)。それ以外はシートにあるものを全て書く: DXFは汎用の2D図面形式なので図形・凡例・盤レイアウトにも対応するものがあり、黙って落とすと§3.3のユーザーストーリー自体が崩れる。それでも書けないもの(シンボル定義が見つからないシンボル)は書き出し内訳に挙げる。
 
 ブロック名はACADEのファミリコード(`HCR1`・`VCR1`…)やEPLANのシンボル番号を**模倣しない**。それらの対応表は製品固有で非公開のため。属性タグ(`TAG1`・`CAT`・`DESC1`・`RATING1`・`TERMnn`)はACADEの属性の慣習に合わせているので、属性を読むACADEのツール(タグ・カタログの帳票)からは値が見える。
 
 ### 4.3 DXFインポート(`madake_core::dxf::import_dxf`)
 
 - `ENTITIES`セクションを持つASCII DXF(R12以降)を受け付ける。`$INSUNITS`=1(インチ)は×25.4、それ以外はmmとして読む。
-- 用紙: 全エンティティの外形が収まる最小のA判(A4…A0。縦長なら縦置き)。図面は外形の左上を用紙原点に置く。MadakeCADが書き出したファイルは`FRAME`枠が外形を決めるので座標がそのまま往復する。
-- 配線: **配線レイヤ**上の`LINE`/`LWPOLYLINE`/`POLYLINE`。配線レイヤは (a) `wire_layers`で指定されたもの、無ければ (b) 名前に`WIRE`を含み`WIRENO`/`WIRE_NO`/`WIRENUM`を含まないレイヤ(ACADEの`WIRES`・`_MULTI_WIRE_n`に一致)。該当レイヤに線分が1本も無ければ**全ての線分**を配線として読み、見つかったレイヤ名を警告に出す(`wire_layers`を指定して読み直せる)。
-- ジャンクション: `WDDOT`の`INSERT`、または配線レイヤ上の半径1mm以下の`CIRCLE`。
+- 用紙: ヘッダの図面限界で決める(`$LIMMIN`/`$LIMMAX`→`$EXTMIN`/`$EXTMAX`→両方無いときだけ全エンティティの外形)。サイズはその矩形が収まる最小のA判(A4…A0。縦長なら縦置き)で、矩形の左上を用紙原点に置く。ヘッダを見ないと、内容が200×100mmしか無いACADEのA3ページがA4になって隅に寄る。MadakeCADが書き出したファイルはヘッダと`FRAME`外周のどちらでも用紙が決まるのでそのまま往復する。
+- 配線: **配線レイヤ**上の`LINE`/`LWPOLYLINE`/`POLYLINE`。配線レイヤは (a) `wire_layers`で指定されたもの、無ければ (b) 名前に`WIRE`を含み`WIRENO`/`WIRE_NO`/`WIRENUM`を含まないレイヤ(ACADEの`WIRES`・`_MULTI_WIRE_n`に一致)。該当レイヤに線分が1本も無いときは2つの場合に分かれる: `wire_layers`を**指定していない**ときは全ての線分を配線として読み、見つかったレイヤ名を警告に出す。`wire_layers`を**指定した**ときは配線を1本も読まず、指定したレイヤ名と実際にあるレイヤ名の両方を警告に出す。明示した絞り込みが「全ての線分を配線」(最も広い読み方)へ反転してはいけない(その配線はネットリスト・ERC・電線リスト・部品表に流れる)。どちらの場合もレイヤ名は`ImportReport::layers`で機械可読にも返し、リボンが「このレイヤで読み直す」ボタンをレイヤごとに出す。
+- ジャンクション: `WDDOT`の`INSERT`、または**本物の配線レイヤ上**の半径1mm以下の`CIRCLE`。全線分救済の下では円をジャンクションにしない(他社図面のピン円・端子ドットがジャンクションになってネットが黙って繋がる)。
 - シンボル: `MDK_<symbol_id>`(静的・動的)の`INSERT`。属性`TAG1`/`TAG`→参照記号、`CAT`→値、`DESC1`/`RATING1`→DESC/RATINGスロット、その他タグ→attrs、`TERMnn`は無視。回転は90°の倍数のみ(それ以外は0°+警告)、X倍率が負ならミラー。他のブロック名はスキップし`NAME (TAG1) xN`として一覧する。
+- 文字の位置: グループ10/20。ただし揃え指定(グループ72か73が0以外)のある`TEXT`は挿入点がグループ11/21(ACADEの中央揃えの線番)。外形の集計も同じ点を読む。
 - 文字: レイヤ名に`WIRENO`→5mm以内の最寄り配線の線番(無ければ注記+警告)、`LABELS`→ネットラベル、`HARNESS`→左上角が5mm以内の囲みの名前、それ以外→注記(高さはグループ40)。`MTEXT`の段落区切り(`\P`)と書式コード、`\U+XXXX`をデコードする。
-- `FRAME`レイヤと配線レイヤ上の閉じた多角形は無視。未対応の種類はスキップ一覧に数える。
+- `FRAME`レイヤ(線も文字も。図枠はシートの図枠テンプレートのもので図面要素ではない)と配線レイヤ上の閉じた多角形は無視。未対応の種類はスキップ一覧に数える。
 - 結果: 1シートのプロジェクトと、KiCadインポーターと同じ`ImportReport`(件数・スキップ・警告)。
 
 ### 4.4 露出
@@ -74,23 +81,28 @@ ASCII DXF、`$ACADVER`=AC1015、`$INSUNITS`=4(mm)、非ASCII文字は`\U+XXXX`(�
 | 経路 | DXF読み込み | DXF書き出し | KiCad書き出し |
 |---|---|---|---|
 | アプリ | 開くダイアログ(`.dxf`フィルタ)とリボン**読み込み/書き出し**タブ(KiCad / DXF読み込み、DXF / KiCad / SVG / PDF書き出し、帳票CSV)。読み込みは未保存の編集を先に確認し、KiCad読み込みと同じく保存先無しの状態になる | 同タブ(表示中のシート) | 同タブ |
-| REST | `POST /api/v1/import/dxf` `{path, wire_layers?}` | `POST /api/v1/export/dxf` `{sheet_id?, path}` | `POST /api/v1/export/kicad` `{sheet_id?, path}` |
+| REST | `POST /api/v1/import/dxf` `{path, wire_layers?}` | `POST /api/v1/export/dxf` `{sheet_id?, path}` → `{written, report}` | `POST /api/v1/export/kicad` `{sheet_id?, path}` → `{written, report}` |
 | MCP | `import_dxf` | `export_dxf` | `export_kicad` |
 | CLI | `madake open x.dxf [--wire-layer WIRES,_MULTI_WIRE_1]` | `madake export dxf out.dxf [--sheet ID]` | `madake export kicad out.kicad_sch [--sheet ID]` |
+
+書き出しはどちらも書き出し内訳(§4.2)を書き込み先と一緒に返す。アプリはコマンドログへ件数と書けなかった種別を出し、CLIは「書き出しました」の行の下に並べる。アプリから`wire_layers`も渡せる: 配線レイヤを決められなかった読み込みのあと、`ImportReport::layers`のレイヤがリボンの**配線レイヤ**グループのボタンになり、押すと同じファイルをそのレイヤで読み直す。
 
 読み込みはすべて`Engine::replace_project`を通る(undo履歴クリア、エージェントターン中断、チャット履歴リセット)。KiCad読み込み・ファイルを開くと同じ経路。
 
 ## 5. デザイン対象
 
-- リボン「読み込み/書き出し」タブ: 読み込み(開く / KiCad回路図 / DXF)、書き出し(DXF大ボタン / KiCad / SVG / PDF)、帳票(部品表CSV / 電線リストCSV)。既存のリボン部品を再利用し、デザインシステムへの新規部品追加は無し。
+- リボン「読み込み/書き出し」タブ: 読み込み(開く / KiCad回路図 / DXF)、書き出し(DXF大ボタン / KiCad / SVG / PDF)、帳票(部品表CSV / 電線リストCSV)、および**配線レイヤ** — 候補レイヤごとの小ボタンで、配線レイヤを決められなかったDXF読み込みのあとだけ現れる。既存のリボン部品を再利用し、デザインシステムへの新規部品追加は無し。
 - インポート結果の提示: 現状はコマンドラインのログ(件数・スキップ一覧・警告)。スキップしたブロックの一覧と「手で置く」チェックリストを出すダイアログはデザインフェーズの対象。
 
 ## 6. 受け入れ基準(すべてテストで固定。`docs/13-specification.ja.md`の「KiCadインポート/エクスポート」「DXF連携」「REST Link API」「引数定義とディスパッチ」「ファイルメニュー」参照)
 
 - シートの書き出し→読み戻しで、用紙・シンボル(種類・位置・回転・ミラー・参照記号・型番・属性)・配線・ジャンクション・線番・ラベル・注記・ハーネス名が保たれる(`.kicad_sch`・DXFの両方)。
 - ACADE流のDXF(`WIRES`/`_MULTI_WIRE_*`の配線、`WIRENO`の文字、`TAG1`付きの未知ブロック`HCR1`)から配線と線番が読め、未知ブロックが報告される。
-- `wire_layers`の明示で配線になる線分が絞られる。配線レイヤの無いファイルは全線分を配線として読み警告する。
-- インチのファイルは換算され、用紙は収まる最小のA判になる。
+- `wire_layers`の明示で配線になる線分が絞られる。配線レイヤの無いファイルは全線分を配線として読み警告する。指定したレイヤに線分が無いときは配線を読まず、実在するレイヤ名を警告に出す。
+- 回転・ミラーしたシンボルのピンが`netlist::pin_positions`どおりの用紙座標に着地し、書き出した配線の端と合う(0/90/180/270×ミラー)。
+- 図形・電線品番凡例・盤レイアウト・図枠がそれぞれのレイヤでDXFに入り、両方の書き出しが種別ごとの件数と書けなかった種別の内訳を返す。
+- 読み込む用紙はヘッダの図面限界で決まり、揃え指定のある`TEXT`はグループ11/21から読み、小さい円は配線レイヤ上だけでジャンクションになる。
+- インチのファイルは換算され、ヘッダの図面限界が無いときの用紙は収まる最小のA判になる。
 - 非ASCII文字は`\U+XXXX`で書き出し→読み戻しを生き残る。
 - REST・MCP・CLIが既存のKiCad読み込み / SVG書き出しと同じJSON形で3操作を公開する。
 

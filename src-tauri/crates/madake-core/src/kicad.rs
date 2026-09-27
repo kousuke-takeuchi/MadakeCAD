@@ -621,9 +621,17 @@ fn write_lib_symbol(out: &mut String, def: &SymbolDef) {
 /// - 線番はKiCadに無いので、そのネットの最長セグメント上の**ラベル**にする (ネット名として残る)
 /// - ハーネス境界は破線の多角形と名前の注記にする (KiCadでは図形扱い)
 /// - 回転・ミラーはインポートと同じ規則で書くので、往復で配置が変わらない
-pub fn export_kicad_sch(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
+///
+/// 戻り値は文字列と書き出し内訳 ([`crate::io::ExportReport`])。図形・電線品番凡例・盤
+/// レイアウトは出さないが、**何を出さなかったかを内訳で返す**のでUI/CLIが黙らない
+/// (DXFは同じ型でこれらを出す: [`crate::dxf::sheet_to_dxf`])。
+pub fn export_kicad_sch(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+) -> (String, crate::io::ExportReport) {
     use std::collections::BTreeMap;
 
+    let mut report = crate::io::ExportReport::default();
     let mut out = String::new();
     out.push_str(&format!(
         "(kicad_sch (version {KICAD_VERSION}) (generator \"madakecad\") (generator_version \"{}\")\n",
@@ -649,10 +657,35 @@ pub fn export_kicad_sch(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
     out.push_str(&format!("    (company {})\n", esc(&tb.company)));
     out.push_str("  )\n");
 
-    // 出すのは**回路図の電気要素だけ**。図形 ([`Entity::Shape`])・電線品番凡例
-    // ([`Entity::WireLegend`])・盤レイアウトの4種と凡例表 ([`Entity::PanelLegend`]) は
-    // KiCadの回路図(.kicad_sch)に対応するものが無いので**意図して出さない**
-    // (盤レイアウトはKiCadのPCBではなく製造図面なので、変換すると意味が壊れる)。
+    // 出すのは**回路図の電気要素だけ**。盤レイアウトの4種と凡例表は、KiCadの回路図
+    // (.kicad_sch) に対応するものが無いので**意図して出さない** (盤レイアウトはKiCadの
+    // PCBではなく製造図面なので、変換すると意味が壊れる)。図形 ([`Entity::Shape`]) と
+    // 電線品番凡例 ([`Entity::WireLegend`]) も回路図の図形では表しにくいので出さない。
+    // **どれも黙って落とさず、種別と件数を`report.skipped`で返す** (汎用の2D形式である
+    // DXFはこれらを出す: [`crate::dxf::sheet_to_dxf`])。
+    {
+        let mut not_exported: BTreeMap<&str, usize> = BTreeMap::new();
+        for e in sheet.entities.values() {
+            let kind = match e {
+                Entity::Shape(_) => "shape",
+                Entity::WireLegend(_) => "wire_legend",
+                Entity::PanelOutline(_) => "panel_outline",
+                Entity::DinRail(_) => "din_rail",
+                Entity::Duct(_) => "duct",
+                Entity::Footprint(_) => "footprint",
+                Entity::PanelLegend(_) => "panel_legend",
+                _ => continue,
+            };
+            *not_exported.entry(kind).or_insert(0) += 1;
+        }
+        for (kind, count) in not_exported {
+            report.skip(
+                kind,
+                count,
+                "KiCadの回路図に対応するものが無い (DXFなら書き出せる)",
+            );
+        }
+    }
     // 使われているシンボル定義だけを埋め込む (id順で決定的)
     let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
     let mut used: BTreeMap<&str, &SymbolDef> = BTreeMap::new();
@@ -678,6 +711,7 @@ pub fn export_kicad_sch(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
                 num(j.at.y),
                 esc(&j.id.to_string())
             ));
+            report.count("junction");
         }
     }
     // 配線 (2点ずつ)
@@ -692,6 +726,7 @@ pub fn export_kicad_sch(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
                     esc(&format!("{}-{i}", w.id))
                 ));
             }
+            report.count("wire");
         }
     }
     // ハーネス境界: 破線の閉多角形+名前
@@ -720,6 +755,7 @@ pub fn export_kicad_sch(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
                     esc(&format!("{}-name", h.id))
                 ));
             }
+            report.count("harness");
         }
     }
     // ネットラベル
@@ -733,6 +769,7 @@ pub fn export_kicad_sch(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
                 l.rotation,
                 esc(&l.id.to_string())
             ));
+            report.count("net_label");
         }
     }
     // 線番 → ラベル (ラベルの無いネットのみ。最長セグメントの中点)
@@ -765,13 +802,19 @@ pub fn export_kicad_sch(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
                 num(t.height),
                 esc(&t.id.to_string())
             ));
+            report.count("text");
         }
     }
     // シンボル
     let project_name = sheet.name.as_str();
+    let mut unresolved: BTreeMap<&str, usize> = BTreeMap::new();
     for e in sheet.entities.values() {
         let Entity::Symbol(inst) = e else { continue };
-        let Some(def) = defs.get(inst.symbol_id.as_str()) else { continue };
+        let Some(def) = defs.get(inst.symbol_id.as_str()) else {
+            // 図形を埋め込めないので書けない。黙って落とさず報告する
+            *unresolved.entry(inst.symbol_id.as_str()).or_insert(0) += 1;
+            continue;
+        };
         out.push_str(&format!(
             "  (symbol (lib_id {}) (at {} {} {})",
             esc(&format!("{EXPORT_LIB}{}", inst.symbol_id)),
@@ -822,9 +865,17 @@ pub fn export_kicad_sch(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
             esc(&inst.reference)
         ));
         out.push_str("  )\n");
+        report.count("symbol");
+    }
+    for (id, count) in unresolved {
+        report.skip(
+            "symbol",
+            count,
+            &format!("シンボル定義 {id} が見つからないので図形を埋め込めない"),
+        );
     }
     out.push_str(")\n");
-    out
+    (out, report)
 }
 
 #[cfg(test)]
@@ -1067,12 +1118,57 @@ mod tests {
         crate::symbol::sheet_symbol_defs(sheet)
     }
 
+    /// The KiCad export report counts the electrical kinds it wrote and names the kinds it does not write at all (shapes, the wire part legend and the panel layout entities), so nothing is dropped without a word.
+    /// KiCad書き出しの内訳は、書いた電気要素の件数と、まったく書かない種別(図形・電線品番凡例・盤レイアウト)を挙げるので、黙って落ちるものが無い。
+    #[test]
+    fn the_kicad_export_report_names_the_kinds_it_cannot_write() {
+        use crate::geometry::Point;
+        use uuid::Uuid;
+        let mut sheet = export_fixture();
+        let mut push = |e: Entity| {
+            sheet.entities.insert(e.id(), e);
+        };
+        push(Entity::Shape(crate::model::Shape {
+            id: Uuid::new_v4(),
+            shape: crate::model::ShapeKind::Rect,
+            points: vec![Point::new(10.0, 10.0), Point::new(30.0, 20.0)],
+            stroke: crate::shape::DEFAULT_SHAPE_COLOR.into(),
+            stroke_width_mm: 0.25,
+            fill: None,
+            dashed: false,
+        }));
+        push(Entity::WireLegend(WireLegend {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 100.0),
+        }));
+        push(Entity::PanelOutline(PanelOutline {
+            id: Uuid::new_v4(),
+            at: Point::new(10.0, 100.0),
+            w: 100.0,
+            h: 80.0,
+            name: String::new(),
+        }));
+        let (text, report) = export_kicad_sch(&sheet, &defs(&sheet));
+        assert!(!text.contains("panel"), "盤レイアウトは書かない");
+        assert_eq!(report.counts.get("symbol"), Some(&2));
+        assert_eq!(report.counts.get("wire"), Some(&1));
+        assert_eq!(report.counts.get("harness"), Some(&1));
+        assert_eq!(
+            report
+                .skipped
+                .iter()
+                .map(|s| s.split(':').next().unwrap().to_string())
+                .collect::<Vec<_>>(),
+            vec!["panel_outline x1", "shape x1", "wire_legend x1"]
+        );
+    }
+
     /// Exporting a sheet to .kicad_sch and importing it back keeps paper, title block, symbols (id, reference, value, rotation, mirror), wires, junctions, labels and text.
     /// シートを.kicad_schへ書き出して読み戻すと、用紙・表題欄・シンボル(種類・参照記号・型番・回転・ミラー)・配線・ジャンクション・ラベル・注記が保たれる。
     #[test]
     fn export_then_import_round_trips_the_sheet() {
         let sheet = export_fixture();
-        let text = export_kicad_sch(&sheet, &defs(&sheet));
+        let (text, _report) = export_kicad_sch(&sheet, &defs(&sheet));
         let (project, report) = import_kicad_sch(&text, "往復").unwrap();
         let back = &project.sheets[0];
         assert_eq!(back.size, PaperSize::A4);
@@ -1120,7 +1216,7 @@ mod tests {
     #[test]
     fn polyline_wires_are_split_into_segments() {
         let sheet = export_fixture();
-        let text = export_kicad_sch(&sheet, &defs(&sheet));
+        let (text, _report) = export_kicad_sch(&sheet, &defs(&sheet));
         let root = parse_sexpr(&text).unwrap();
         let wires: Vec<_> = root.children("wire").collect();
         assert_eq!(wires.len(), 2);
@@ -1134,7 +1230,7 @@ mod tests {
     #[test]
     fn used_symbols_are_embedded_in_lib_symbols() {
         let sheet = export_fixture();
-        let text = export_kicad_sch(&sheet, &defs(&sheet));
+        let (text, _report) = export_kicad_sch(&sheet, &defs(&sheet));
         let root = parse_sexpr(&text).unwrap();
         let libs = root.child("lib_symbols").unwrap();
         let names: Vec<&str> = libs.children("symbol").filter_map(|s| s.arg_str(0)).collect();
@@ -1155,7 +1251,7 @@ mod tests {
     #[test]
     fn wire_numbers_become_labels() {
         let sheet = export_fixture();
-        let text = export_kicad_sch(&sheet, &defs(&sheet));
+        let (text, _report) = export_kicad_sch(&sheet, &defs(&sheet));
         let root = parse_sexpr(&text).unwrap();
         let labels: Vec<&str> = root.children("label").filter_map(|l| l.arg_str(0)).collect();
         assert!(labels.contains(&"101"), "{labels:?}");
@@ -1170,7 +1266,7 @@ mod tests {
     #[test]
     fn harness_becomes_dashed_polyline_with_name() {
         let sheet = export_fixture();
-        let text = export_kicad_sch(&sheet, &defs(&sheet));
+        let (text, _report) = export_kicad_sch(&sheet, &defs(&sheet));
         let root = parse_sexpr(&text).unwrap();
         let poly = root.children("polyline").next().expect("polyline");
         assert_eq!(poly.child("pts").unwrap().children("xy").count(), 5, "閉じるため始点を再掲");

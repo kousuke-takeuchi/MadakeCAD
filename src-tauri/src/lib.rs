@@ -463,14 +463,17 @@ fn export_dxf(
     state: State<AppState>,
     sheet_id: madake_core::SheetId,
     path: String,
-) -> Result<(), String> {
+) -> Result<madake_core::ExportReport, String> {
     let engine = state.doc.engine.lock().unwrap();
-    let sheet = engine
-        .project()
+    let project = engine.project();
+    let sheet = project
         .sheet(sheet_id)
         .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
-    let dxf = madake_core::dxf::sheet_to_dxf(sheet, &sheet_symbol_defs(sheet));
-    std::fs::write(&path, dxf).map_err(|e| e.to_string())
+    let (dxf, report) =
+        madake_core::dxf::project_sheet_to_dxf(project, sheet_id, &sheet_symbol_defs(sheet))
+            .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+    std::fs::write(&path, dxf).map_err(|e| e.to_string())?;
+    Ok(report)
 }
 
 #[tauri::command]
@@ -478,14 +481,15 @@ fn export_kicad(
     state: State<AppState>,
     sheet_id: madake_core::SheetId,
     path: String,
-) -> Result<(), String> {
+) -> Result<madake_core::ExportReport, String> {
     let engine = state.doc.engine.lock().unwrap();
     let sheet = engine
         .project()
         .sheet(sheet_id)
         .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
-    let sch = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
-    std::fs::write(&path, sch).map_err(|e| e.to_string())
+    let (sch, report) = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
+    std::fs::write(&path, sch).map_err(|e| e.to_string())?;
+    Ok(report)
 }
 
 #[tauri::command]

@@ -48,6 +48,7 @@ pub mod xref;
 
 pub use command::{Command, EditOrigin, Engine, Patch, PatchOp, Reverted};
 pub use geometry::Point;
+pub use io::ExportReport;
 pub use model::*;
 pub use wire_no::RenumberMode;
 pub use net_tag::{net_tag, NetTag, TagDir};

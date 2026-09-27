@@ -620,8 +620,9 @@ pub struct ExportReportParams {
     pub entity_id: Option<Uuid>,
 }
 
+/// シート1枚を書き出す共通パラメータ (SVG / PDF / DXF / KiCad)。
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct ExportSvgParams {
+pub struct ExportSheetParams {
     /// 対象シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
     /// 出力先ファイルパス(絶対パス)。
@@ -1170,7 +1171,7 @@ impl MadakeMcp {
     }
 
     #[tool(description = "シートをJIS図枠つきSVGとして指定パスに書き出す(改訂欄・線番・ハーネス破線囲み・ネットラベルのシート間クロスリファレンス「/2.B3」を含む)")]
-    fn export_svg(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
+    fn export_svg(&self, Parameters(p): Parameters<ExportSheetParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
         let engine = self.doc.engine.lock().unwrap();
         let project = engine.project();
@@ -1185,7 +1186,7 @@ impl MadakeMcp {
     }
 
     #[tool(description = "シートをJIS図枠つきPDF(印刷品質、フォント埋め込み)として指定パスに書き出す。内容はSVG出力と同一(改訂欄・線番・ハーネス・シート間クロスリファレンス込み)")]
-    fn export_pdf(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
+    fn export_pdf(&self, Parameters(p): Parameters<ExportSheetParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
         let engine = self.doc.engine.lock().unwrap();
         let project = engine.project();
@@ -1303,7 +1304,7 @@ impl MadakeMcp {
     }
 
     #[tool(description = "シートをDXF(AutoCAD 2000形式。AutoCAD Electrical / EPLANで開ける。配線=WIRESレイヤのLINE、シンボル=MDK_<id>ブロック+TAG1/CAT属性、線番=WIRENOレイヤ)として指定パスに書き出す")]
-    fn export_dxf(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
+    fn export_dxf(&self, Parameters(p): Parameters<ExportSheetParams>) -> Result<String, ErrorData> {
         let engine = self.doc.engine.lock().unwrap();
         let project = engine.project();
         let sheet = match p.sheet_id {
@@ -1311,13 +1312,16 @@ impl MadakeMcp {
             None => project.sheets.first(),
         }
         .ok_or_else(|| internal("sheet not found"))?;
-        let dxf = madake_core::dxf::sheet_to_dxf(sheet, &sheet_symbol_defs(sheet));
+        let sheet_id = sheet.id;
+        let (dxf, report) =
+            madake_core::dxf::project_sheet_to_dxf(project, sheet_id, &sheet_symbol_defs(sheet))
+                .ok_or_else(|| internal("sheet not found"))?;
         std::fs::write(&p.path, dxf).map_err(internal)?;
-        json_ok(&serde_json::json!({ "written": p.path }))
+        json_ok(&serde_json::json!({ "written": p.path, "report": report }))
     }
 
     #[tool(description = "シートをKiCad回路図(.kicad_sch、KiCad 9形式。シンボル図形はファイルに埋め込むのでKiCad側にライブラリ不要)として指定パスに書き出す。線番はネットのラベルになる")]
-    fn export_kicad(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
+    fn export_kicad(&self, Parameters(p): Parameters<ExportSheetParams>) -> Result<String, ErrorData> {
         let engine = self.doc.engine.lock().unwrap();
         let project = engine.project();
         let sheet = match p.sheet_id {
@@ -1325,9 +1329,9 @@ impl MadakeMcp {
             None => project.sheets.first(),
         }
         .ok_or_else(|| internal("sheet not found"))?;
-        let sch = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
+        let (sch, report) = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
         std::fs::write(&p.path, sch).map_err(internal)?;
-        json_ok(&serde_json::json!({ "written": p.path }))
+        json_ok(&serde_json::json!({ "written": p.path, "report": report }))
     }
 
     #[tool(description = "直前の編集を取り消す")]

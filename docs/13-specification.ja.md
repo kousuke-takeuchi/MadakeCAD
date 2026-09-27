@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2300仕様項目**。
+全6領域・**2308仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -125,6 +125,9 @@
 - 90度の倍数でない角度で置かれたブロックは0度で配置され、警告が出る。 <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>
 - ENTITIESセクションの無いファイルはDXFではないとして拒否され、数値でないグループコードは行番号付きの構文エラーになる。 <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>
 - シンボルブロックの図形はY反転したローカル座標で書かれ、弧は用紙座標の時計回りがDXFでは反時計回りになる分だけ角度を入れ替えて向きを保つ。 <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
+- 図枠はFRAMEレイヤに出る: 外枠・ゾーン目盛の英字と数字・バインドを解決した表題欄のセル(図番・品名・改訂)。 <sub>`the_frame_and_title_block_go_to_the_frame_layer`</sub>
+- 図形・電線品番凡例・盤レイアウトのエンティティもそれぞれのレイヤ(SHAPES / ANNOTATION / PANEL)へ書き出され、書き出し結果の内訳が種別ごとの件数を返す。 <sub>`shapes_legends_and_panel_layout_are_exported_on_their_own_layers`</sub>
+- シンボル定義が見つからないシンボルは、黙って消えるのではなく書き出し結果の内訳で報告される。 <sub>`an_unresolvable_symbol_is_reported_as_skipped`</sub>
 - 回転・ミラーしたシンボルのピンはモデルどおりの用紙座標に着地するので、書き出したDXFでもピンがそのピンへ引いた配線の端と一致し、読み戻すと同じ回転角・ミラーになる。 <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
 
 ### 図枠テンプレート (プロットフレーム)
@@ -204,6 +207,7 @@
 - 文字列内のエスケープ(引用符・改行)と日本語などのマルチバイト文字を正しく解釈する。 <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name)は指定した先頭シンボルを持つ子リストをすべて列挙する。 <sub>`children_iterates_all_matches`</sub>
 - 括弧の不整合や閉じていない文字列は、位置付きの構文エラーとして報告される。 <sub>`syntax_errors_are_reported`</sub>
+- KiCad書き出しの内訳は、書いた電気要素の件数と、まったく書かない種別(図形・電線品番凡例・盤レイアウト)を挙げるので、黙って落ちるものが無い。 <sub>`the_kicad_export_report_names_the_kinds_it_cannot_write`</sub>
 - シートを.kicad_schへ書き出して読み戻すと、用紙・表題欄・シンボル(種類・参照記号・型番・回転・ミラー)・配線・ジャンクション・ラベル・注記が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
 - 折れ線で描いた配線は、セグメントごとに2点のKiCad wireとして書き出される。 <sub>`polyline_wires_are_split_into_segments`</sub>
 - シートで使うシンボルは図形とピンごとにlib_symbolsへ1回だけ埋め込まれ、KiCad側にライブラリが無くても開ける。 <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
@@ -1491,8 +1495,8 @@
 - --jsonはjq等へ渡せる整形JSONをそのまま出力する。 <sub>`json_flag_emits_raw_json`</sub>
 - madake netlistは--sheetオプションをAPIへ引き渡す。 <sub>`netlist_forwards_sheet_option`</sub>
 - madake exportは種別・出力パス・シート指定をAPIへ引き渡す。 <sub>`export_forwards_kind_path_and_sheet`</sub>
-- madake export dxf / kicadはDXF・KiCadのエンドポイントでシート1枚を書き出す(シート指定可)。 <sub>`export_dxf_and_kicad_forward_to_their_endpoints`</sub>
-- madake openに.dxfを渡すと/import/dxfで読み込み(--wire-layerを引き渡す)、変換結果の要約を表示する。他のファイルで--wire-layerを付けるとエラー。 <sub>`open_dxf_imports_with_wire_layers`</sub>
+- madake export dxf / kicadはDXF・KiCadのエンドポイントでシート1枚を書き出し(シート指定可)、書き出した種別の件数と出せなかったものを表示する。 <sub>`export_dxf_and_kicad_forward_to_their_endpoints`</sub>
+- madake openに.dxfを渡すと/import/dxfで読み込み(--wire-layerを引き渡す)、変換結果の要約を表示する。拡張子の大文字小文字はKiCadでも区別しない。他のファイルで--wire-layerを付けるとエラー。 <sub>`open_dxf_imports_with_wire_layers`</sub>
 - madake execはCommand配列のJSONファイルを読み、/commandsへ送信する。 <sub>`exec_posts_command_array_from_file`</sub>
 - madake execは配列でないJSONを明確なメッセージで拒否する。 <sub>`exec_rejects_non_array_json`</sub>
 - 入力ファイルが無い場合はパニックせずファイルエラーとして報告する。 <sub>`exec_reports_missing_file`</sub>
@@ -2246,6 +2250,10 @@
 - 保存ダイアログをキャンセルすると何も書き出さない <sub>`file menu: シートの書き出し`</sub>
 - シートが無ければダイアログを出さずにログで案内する <sub>`file menu: シートの書き出し`</sub>
 - 書き出しに失敗したら理由をログに出す <sub>`file menu: シートの書き出し`</sub>
+- DXF / KiCad書き出しは「何を何件書いたか」と「書けなかったもの」をコマンドログに出す <sub>`file menu: シートの書き出し`</sub>
+- 配線レイヤが決まらなかったDXF読み込みは、候補のレイヤ名をログで知らせて覚えておく <sub>`file menu: DXFの配線レイヤ`</sub>
+- 選んだレイヤで読み直すと、同じファイルをそのレイヤだけを配線として読み込む <sub>`file menu: DXFの配線レイヤ`</sub>
+- 直前のDXF読み込みが無ければ読み直しは何もしない <sub>`file menu: DXFの配線レイヤ`</sub>
 
 ### 整えメトリクス (交差・重なり・グリッド)
 

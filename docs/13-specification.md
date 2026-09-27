@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2300 specification clauses** across 6 areas.
+**2308 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -125,6 +125,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block insert rotated by an angle that is not a multiple of 90 degrees is placed at 0 degrees with a warning. <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>
 - A file without an ENTITIES section is rejected as not a DXF, and a group code that is not a number is a syntax error with its line number. <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>
 - Symbol block graphics are written in local coordinates with Y flipped; arcs keep their sweep because the clockwise paper-space direction becomes counter-clockwise in DXF. <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
+- The frame goes to the FRAME layer: the border, the zone ticks with their letters and numbers, and the title block cells with their binds resolved (drawing number, title, revision). <sub>`the_frame_and_title_block_go_to_the_frame_layer`</sub>
+- Shapes, the wire part legend and the panel layout entities are exported too, each on its own layer (SHAPES / ANNOTATION / PANEL), and the export report counts what was written per kind. <sub>`shapes_legends_and_panel_layout_are_exported_on_their_own_layers`</sub>
+- A symbol whose definition cannot be resolved is reported in the export report instead of disappearing without a word. <sub>`an_unresolvable_symbol_is_reported_as_skipped`</sub>
 - A rotated or mirrored symbol's pins land on exactly the paper positions the model gives them, so the exported pin still meets the wire drawn to it, and reading the file back gives the same rotation and mirror. <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
 
 ### Frame templates (plot frames)
@@ -204,6 +207,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Escaped quotes/newlines and multibyte (Japanese) text inside strings parse correctly. <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name) iterates every child list with the given head symbol. <sub>`children_iterates_all_matches`</sub>
 - Unbalanced parentheses and unterminated strings are reported as syntax errors with a position. <sub>`syntax_errors_are_reported`</sub>
+- The KiCad export report counts the electrical kinds it wrote and names the kinds it does not write at all (shapes, the wire part legend and the panel layout entities), so nothing is dropped without a word. <sub>`the_kicad_export_report_names_the_kinds_it_cannot_write`</sub>
 - Exporting a sheet to .kicad_sch and importing it back keeps paper, title block, symbols (id, reference, value, rotation, mirror), wires, junctions, labels and text. <sub>`export_then_import_round_trips_the_sheet`</sub>
 - A wire drawn as a polyline is exported as one two-point KiCad wire per segment. <sub>`polyline_wires_are_split_into_segments`</sub>
 - Every symbol used on the sheet is embedded once in lib_symbols with its graphics and pins, so KiCad opens the file without MadakeCAD libraries. <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
@@ -1491,8 +1495,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - --json prints raw pretty-printed JSON for piping into jq and similar tools. <sub>`json_flag_emits_raw_json`</sub>
 - madake netlist forwards the --sheet option to the API. <sub>`netlist_forwards_sheet_option`</sub>
 - madake export forwards kind, output path and optional sheet to the API. <sub>`export_forwards_kind_path_and_sheet`</sub>
-- madake export dxf / kicad write one sheet through the DXF and KiCad endpoints (sheet selectable). <sub>`export_dxf_and_kicad_forward_to_their_endpoints`</sub>
-- madake open with a .dxf file imports it through /import/dxf, passing --wire-layer, and prints the import summary; --wire-layer is rejected for other files. <sub>`open_dxf_imports_with_wire_layers`</sub>
+- madake export dxf / kicad write one sheet through the DXF and KiCad endpoints (sheet selectable) and print the export breakdown: how many of each kind was written and what could not be written. <sub>`export_dxf_and_kicad_forward_to_their_endpoints`</sub>
+- madake open with a .dxf file imports it through /import/dxf, passing --wire-layer, and prints the import summary; the extension is matched case-insensitively for KiCad too; --wire-layer is rejected for other files. <sub>`open_dxf_imports_with_wire_layers`</sub>
 - madake exec reads a JSON file containing a Command array and posts it to /commands. <sub>`exec_posts_command_array_from_file`</sub>
 - madake exec rejects JSON that is not an array, with a clear message. <sub>`exec_rejects_non_array_json`</sub>
 - A missing input file is reported as a file error, not a panic. <sub>`exec_reports_missing_file`</sub>
@@ -2246,6 +2250,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - cancelling the save dialog exports nothing <sub>`file menu: シートの書き出し`</sub>
 - without an open sheet the export logs a hint and shows no dialog <sub>`file menu: シートの書き出し`</sub>
 - a failed export is logged with its reason <sub>`file menu: シートの書き出し`</sub>
+- a DXF or KiCad export logs what it wrote per kind and what it could not write <sub>`file menu: シートの書き出し`</sub>
+- a DXF import with no wire layer logs the candidate layers and remembers them <sub>`file menu: DXFの配線レイヤ`</sub>
+- re-importing with a chosen wire layer reads the same file with only that layer as wires <sub>`file menu: DXFの配線レイヤ`</sub>
+- re-importing does nothing when no DXF import is remembered <sub>`file menu: DXFの配線レイヤ`</sub>
 
 ### Tidy metrics (crossings / overlaps / grid)
 

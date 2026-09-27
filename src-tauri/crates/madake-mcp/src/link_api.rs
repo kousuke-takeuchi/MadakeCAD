@@ -616,9 +616,12 @@ async fn post_export_dxf(
         None => project.sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    let dxf = madake_core::dxf::sheet_to_dxf(sheet, &sheet_symbol_defs(sheet));
+    let sheet_id = sheet.id;
+    let (dxf, report) =
+        madake_core::dxf::project_sheet_to_dxf(project, sheet_id, &sheet_symbol_defs(sheet))
+            .ok_or_else(|| bad_request("sheet not found"))?;
     std::fs::write(&body.path, dxf).map_err(bad_request)?;
-    Ok(Json(serde_json::json!({ "written": body.path })))
+    Ok(Json(serde_json::json!({ "written": body.path, "report": report })))
 }
 
 /// シートをKiCad回路図 (.kicad_sch) で書き出す。
@@ -633,9 +636,9 @@ async fn post_export_kicad(
         None => project.sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    let sch = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
+    let (sch, report) = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
     std::fs::write(&body.path, sch).map_err(bad_request)?;
-    Ok(Json(serde_json::json!({ "written": body.path })))
+    Ok(Json(serde_json::json!({ "written": body.path, "report": report })))
 }
 
 async fn post_export_svg(
