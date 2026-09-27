@@ -65,6 +65,20 @@ fn num(v: f64) -> String {
     }
 }
 
+/// MadakeCADの回転角 (用紙座標の時計回り) → DXFの群50 (Y反転後の反時計回り)。
+///
+/// 書き出しはY座標を反転する (`y_dxf = 用紙高さ - y`)。鏡像にした座標系では回転の向きが
+/// 逆になるので、角度の符号を反転しないと90度・270度のシンボルが180度ずれて置かれ、
+/// ピンが配線から離れる。弧の開始・終了角を入れ替えるのと同じ理屈 ([`Primitive::Arc`]の分岐)。
+fn dxf_angle(rotation: u16) -> f64 {
+    (360.0 - f64::from(rotation % 360)) % 360.0
+}
+
+/// DXFの群50の角度 → MadakeCADの回転角 ([`dxf_angle`]の逆。符号を戻すだけ)。
+fn paper_angle(dxf_deg: f64) -> f64 {
+    (-dxf_deg).rem_euclid(360.0)
+}
+
 /// 非ASCII文字を `\U+XXXX` にする (AutoCAD 2000形式のテキストの可搬表記)。
 pub fn encode_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -843,7 +857,7 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
                 LAYER_LABELS,
                 pt(l.at),
                 TEXT_HEIGHT,
-                f64::from(l.rotation),
+                dxf_angle(l.rotation),
                 0,
                 0,
                 &l.name,
@@ -860,7 +874,7 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
                     LAYER_MISC,
                     (t.at.x, fy(y)),
                     t.height,
-                    f64::from(t.rotation),
+                    dxf_angle(t.rotation),
                     0,
                     0,
                     line,
@@ -885,7 +899,7 @@ pub fn sheet_to_dxf(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
         w.pair(41, if inst.mirror { -1 } else { 1 });
         w.pair(42, 1);
         w.pair(43, 1);
-        w.pair(50, inst.rotation);
+        w.pair(50, num(dxf_angle(inst.rotation)));
         let top = crate::svg::symbol_top_y(inst, def);
         let (min, max) = crate::svg::symbol_bounds(inst, def);
         let cx = (min.x + max.x) / 2.0;
@@ -1334,7 +1348,7 @@ pub fn import_dxf(
                 };
                 let at = conv(x, y);
                 let text = r.text();
-                let rotation = r.num(50).unwrap_or(0.0).rem_euclid(360.0).round() as u16 % 360;
+                let rotation = paper_angle(r.num(50).unwrap_or(0.0)).round() as u16 % 360;
                 let rotation = if rotation.is_multiple_of(90) {
                     rotation
                 } else {
@@ -1410,14 +1424,16 @@ pub fn import_dxf(
                     );
                     report.junctions += 1;
                 } else if let Some(symbol_id) = symbol_id_of_block(&name) {
-                    let angle = r.num(50).unwrap_or(0.0).rem_euclid(360.0);
+                    // 群50は反時計回り、MadakeCADの回転は用紙上の時計回りなので符号を戻す
+                    let in_file = r.num(50).unwrap_or(0.0).rem_euclid(360.0);
+                    let angle = paper_angle(in_file);
                     let rounded = angle.round() as i64;
                     let rotation = if rounded % 90 == 0 {
                         (rounded % 360) as u16
                     } else {
                         report
                             .warnings
-                            .push(format!("{name}: 回転角 {} を0度に丸めました", num(angle)));
+                            .push(format!("{name}: 回転角 {} を0度に丸めました", num(in_file)));
                         0
                     };
                     let mirror = r.num(41).map(|sx| sx < 0.0).unwrap_or(false);
@@ -1734,8 +1750,8 @@ mod tests {
         assert_eq!(first.num(11), Some(40.0));
     }
 
-    /// Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with rotation, a negative X scale for mirroring, and TAG1/CAT/DESC1/RATING1/TERMnn attributes.
-    /// シンボルはMDK_<symbol_id>ブロック(1回だけ定義)のINSERTになり、回転・ミラー(X倍率-1)・TAG1/CAT/DESC1/RATING1/TERMnnの属性を持つ。
+    /// Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with a negative X scale for mirroring and TAG1/CAT/DESC1/RATING1/TERMnn attributes.
+    /// シンボルはMDK_<symbol_id>ブロック(1回だけ定義)のINSERTになり、ミラー(X倍率-1)・TAG1/CAT/DESC1/RATING1/TERMnnの属性を持つ。
     #[test]
     fn symbols_become_block_inserts_with_attributes() {
         let sheet = fixture();
@@ -1762,7 +1778,8 @@ mod tests {
             .position(|r| r.kind == "INSERT" && r.get(2) == Some("MDK_relay_coil"))
             .unwrap();
         let ins = &ents[idx];
-        assert_eq!(ins.num(50), Some(90.0));
+        // 回転角は生の値ではなく、ピンが着地する座標で確かめる
+        // (`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`)
         assert_eq!(ins.num(41), Some(-1.0));
         assert_eq!(ins.get(66), Some("1"));
         let attribs: Vec<(String, String)> = ents[idx + 1..]
@@ -2103,5 +2120,84 @@ mod tests {
         let arc = recs.iter().find(|r| r.kind == "ARC").unwrap();
         // 用紙座標で270°→450°(上→右→下の時計回り) は、DXFでは -450→-270 = 270°→90° の反時計回り
         assert_eq!((arc.num(50), arc.num(51)), (Some(270.0), Some(90.0)));
+    }
+
+    /// A rotated or mirrored symbol's pins land on exactly the paper positions the model gives them, so the exported pin still meets the wire drawn to it, and reading the file back gives the same rotation and mirror.
+    /// 回転・ミラーしたシンボルのピンはモデルどおりの用紙座標に着地するので、書き出したDXFでもピンがそのピンへ引いた配線の端と一致し、読み戻すと同じ回転角・ミラーになる。
+    #[test]
+    fn rotated_symbol_pins_meet_their_wires_in_the_exported_dxf() {
+        let def = crate::symbol::resolve_symbol("relay_coil").unwrap();
+        for rotation in [0u16, 90, 180, 270] {
+            for mirror in [false, true] {
+                let mut sheet = Sheet::new("S", PaperSize::A3, Orientation::Landscape);
+                let inst = SymbolInstance {
+                    id: Uuid::new_v4(),
+                    symbol_id: "relay_coil".into(),
+                    at: Point::new(100.0, 60.0),
+                    rotation,
+                    mirror,
+                    reference: "K1".into(),
+                    value: String::new(),
+                    attrs: Default::default(),
+                };
+                // 1本目のピンへ配線を引く (ピンと配線の端が合うことを確かめる相手)
+                let pin = crate::netlist::pin_positions(&inst, &def)[0].1;
+                let wire = Wire {
+                    id: Uuid::new_v4(),
+                    points: vec![Point::new(pin.x - 10.0, pin.y), pin],
+                    color: "black".into(),
+                    sq: 0.0,
+                    length_m: None,
+                    length_source: Default::default(),
+                    part_no: None,
+                    net: None,
+                };
+                sheet.entities.insert(wire.id, Entity::Wire(wire));
+                sheet.entities.insert(inst.id, Entity::Symbol(inst));
+                let dxf = sheet_to_dxf(&sheet, &defs(&sheet));
+                let (_, paper_h) = sheet.paper_mm();
+                let recs = records(&parse_pairs(&dxf).unwrap());
+                let ents = entity_records(&dxf);
+                let ins = ents
+                    .iter()
+                    .find(|r| r.kind == "INSERT" && r.get(2) == Some("MDK_relay_coil"))
+                    .unwrap();
+                // ブロック内の1本目のピン (TERM01の属性定義) のローカル座標に
+                // INSERTの変換 (倍率→回転→平行移動) をかけてDXF座標を出す
+                let attdef = recs
+                    .iter()
+                    .find(|r| r.kind == "ATTDEF" && r.get(2) == Some("TERM01"))
+                    .unwrap();
+                let theta = ins.num(50).unwrap().to_radians();
+                let (lx, ly) = (
+                    attdef.num(10).unwrap() * ins.num(41).unwrap(),
+                    attdef.num(20).unwrap(),
+                );
+                let x = ins.num(10).unwrap() + lx * theta.cos() - ly * theta.sin();
+                let y = ins.num(20).unwrap() + lx * theta.sin() + ly * theta.cos();
+                let got = Point::new(x, paper_h - y);
+                assert!(
+                    (got.x - pin.x).abs() < 0.01 && (got.y - pin.y).abs() < 0.01,
+                    "rotation {rotation} mirror {mirror}: {got:?} ≠ {pin:?}"
+                );
+                // 配線は真の用紙座標で書かれるので、その端とも一致する
+                let line = ents
+                    .iter()
+                    .find(|r| r.kind == "LINE" && r.layer() == LAYER_WIRES)
+                    .unwrap();
+                assert!(
+                    (line.num(11).unwrap() - x).abs() < 0.01
+                        && (line.num(21).unwrap() - y).abs() < 0.01,
+                    "rotation {rotation} mirror {mirror}: 配線の端とピンがずれている"
+                );
+                let (project, _) = import_dxf(&dxf, "t", &DxfImportOptions::default()).unwrap();
+                let Entity::Symbol(back) =
+                    find(&project.sheets[0], |e| matches!(e, Entity::Symbol(_)))
+                else {
+                    unreachable!()
+                };
+                assert_eq!((back.rotation, back.mirror), (rotation, mirror));
+            }
+        }
     }
 }

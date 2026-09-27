@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2295 specification clauses** across 6 areas.
+**2296 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -110,7 +110,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - The exported DXF is an AutoCAD 2000 (AC1015) file in millimetres with HEADER, TABLES, BLOCKS, ENTITIES and OBJECTS sections and unique entity handles. <sub>`export_writes_a_well_formed_ac1015_file`</sub>
 - Wires are written as one LINE per segment on the WIRES layer with the Y axis flipped to DXF's upward convention. <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
-- Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with rotation, a negative X scale for mirroring, and TAG1/CAT/DESC1/RATING1/TERMnn attributes. <sub>`symbols_become_block_inserts_with_attributes`</sub>
+- Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with a negative X scale for mirroring and TAG1/CAT/DESC1/RATING1/TERMnn attributes. <sub>`symbols_become_block_inserts_with_attributes`</sub>
 - Wire numbers go to the WIRENO layer, net labels to LABELS, notes to MISC, and a harness becomes a closed dashed polyline on HARNESS with its name. <sub>`texts_and_harness_go_to_their_layers`</sub>
 - Non-ASCII text is written as \U+XXXX escapes and decoded back; MTEXT paragraph breaks and formatting codes are handled on read. <sub>`unicode_is_escaped_and_decoded`</sub>
 - Exporting a sheet to DXF and importing it back keeps the paper, symbols (id, position, rotation, mirror, reference, value, attributes), wires, junctions, wire numbers, labels, notes and harness names. <sub>`export_then_import_round_trips_the_sheet`</sub>
@@ -121,6 +121,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block insert rotated by an angle that is not a multiple of 90 degrees is placed at 0 degrees with a warning. <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>
 - A file without an ENTITIES section is rejected as not a DXF, and a group code that is not a number is a syntax error with its line number. <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>
 - Symbol block graphics are written in local coordinates with Y flipped; arcs keep their sweep because the clockwise paper-space direction becomes counter-clockwise in DXF. <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
+- A rotated or mirrored symbol's pins land on exactly the paper positions the model gives them, so the exported pin still meets the wire drawn to it, and reading the file back gives the same rotation and mirror. <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
 
 ### Frame templates (plot frames)
 
