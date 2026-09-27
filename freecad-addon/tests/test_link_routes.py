@@ -11,7 +11,9 @@ from madakecad_link.routes import (  # noqa: E402
     net_highlight_objects,
     placement_command,
     placement_commands,
+    rotation_deg_about_z,
     route_stubs,
+    split_route_stubs,
 )
 
 SNAPSHOT = {
@@ -66,6 +68,24 @@ class RouteStubsTest(unittest.TestCase):
         self.assertEqual(len(route_stubs(SNAPSHOT, nets, PLACEMENTS, existing_route_ids={"w2"})), 1)
 
 
+    def test_stubs_between_parts_at_the_same_position_are_reported_instead_of_drawn(self):
+        """A stub whose two parts sit at the same position cannot be a line, so it is separated out to be reported to the user while the other stubs are still created.
+        両端の部品が同じ位置にあるスタブは線にできないので、利用者へ報告する側へ分け、残りのスタブは作る。"""
+        placements = {"Relay001": (0.0, 0.0, 0.0), "Terminal001": (0.0, 0.0, 0.0), "Button001": (10.0, 20.0, 0.0)}
+        stubs = route_stubs(SNAPSHOT, [net("101", [("K1", "k1"), ("TB1", "tb1")], ["w1"]), net("24V", [("PB1", "pb1"), ("TB1", "tb1")], ["w2"])], placements)
+        drawable, degenerate = split_route_stubs(stubs)
+        self.assertEqual([s.wire_id for s in degenerate], ["w1"])
+        self.assertEqual([s.wire_id for s in drawable], ["w2"])
+
+    def test_ends_a_thousandth_of_a_millimetre_apart_still_count_as_the_same_point(self):
+        """Ends closer together than a thousandth of a millimetre count as the same point (FreeCAD cannot make a line from them), anything further apart is drawn.
+        両端が1/1000mmより近ければ同じ点として扱い(FreeCADが線を作れない)、それより離れていれば線を作る。"""
+        stub = route_stubs(SNAPSHOT, [net("101", [("K1", "k1"), ("TB1", "tb1")], ["w1"])], {"Relay001": (0.0, 0.0, 0.0), "Terminal001": (0.0, 0.0, 0.0005)})
+        self.assertEqual(len(split_route_stubs(stub)[1]), 1)
+        stub = route_stubs(SNAPSHOT, [net("101", [("K1", "k1"), ("TB1", "tb1")], ["w1"])], {"Relay001": (0.0, 0.0, 0.0), "Terminal001": (0.0, 0.0, 0.01)})
+        self.assertEqual(len(split_route_stubs(stub)[0]), 1)
+
+
 class NetHighlightTest(unittest.TestCase):
     def test_highlighting_a_net_selects_its_linked_parts_and_routes_once_each(self):
         """Highlighting a net selects the FreeCAD objects of its linked parts and of its linked route wires, each object once, ignoring unlinked pins.
@@ -94,6 +114,15 @@ class PlacementTest(unittest.TestCase):
         self.assertEqual([c["link"]["object_name"] for c in cmds], ["Relay001"])
         self.assertEqual(format_placement({"x_mm": 120, "y_mm": 45.5, "z_mm": 0, "rotation_deg": 90}), "(120, 45.5, 0) mm / 90°")
         self.assertEqual(format_placement(None), "")
+
+    def test_only_a_rotation_about_the_z_axis_is_stored_as_a_panel_rotation(self):
+        """A rotation about Z is stored in degrees, signed by the axis direction; a part tilted about another axis has no panel rotation at all, so it is reported instead of being stored as that angle.
+        Z軸まわりの回転は軸の向きの符号つきで度で保存し、別の軸に傾いた部品は盤の回転を持たないので、その角度として保存せず報告する。"""
+        self.assertEqual(rotation_deg_about_z((0.0, 0.0, 1.0), 90.0), 90.0)
+        self.assertEqual(rotation_deg_about_z((0.0, 0.0, -1.0), 90.0), -90.0)
+        self.assertEqual(rotation_deg_about_z((1.0, 0.0, 0.0), 0.0), 0.0)
+        self.assertIsNone(rotation_deg_about_z((1.0, 0.0, 0.0), 90.0))
+        self.assertIsNone(rotation_deg_about_z((0.0, 0.707, 0.707), 45.0))
 
 
 if __name__ == "__main__":

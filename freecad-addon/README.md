@@ -37,11 +37,15 @@ Registration with the FreeCAD Addon Manager is planned for the open-source relea
    in MadakeCAD. **Link selected object** ties an object you placed yourself; **Unlink** removes a link.
 6. **Wires** tab (M5-2): **Link selected route** ties a Draft Wire (any shape) to a wire, then
    **Measure routes → write back lengths** measures every linked route and writes the lengths to
-   MadakeCAD (source `freecad`, one undo step per sheet) after a confirmation.
+   MadakeCAD (source `freecad`, **one undo step** — the whole write-back is posted as one batch)
+   after a confirmation.
 7. **Create route stubs** (Wires tab, M5-3) draws a straight line between the two linked parts of
-   every wire (tagged with the wire's `madake_id`) as a starting point for the real route; selecting a
-   net in the **Netlist** tab highlights its parts and routes in the 3D view; **Sync placements**
-   (Parts tab) writes each linked object's placement to MadakeCAD for the panel layout.
+   every wire (tagged with the wire's `madake_id`, and registered as that wire's link) as a starting
+   point for the real route. Parts that still sit at the same position cannot be joined by a line, so
+   those wires are named in the status line instead. Selecting a net in the **Netlist** tab highlights
+   its parts and routes in the 3D view; **Sync placements** (Parts tab) writes each linked object's
+   placement to MadakeCAD for the panel layout (one undo step; only rotations about Z are stored,
+   objects tilted about another axis are stored with 0° and reported).
 
 ## Layout
 

@@ -87,9 +87,11 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length) or b"null")
         Handler.calls.append(("POST", self.path, body))
-        if self.path == "/api/v1/commands":
+        if self.path.startswith("/api/v1/commands"):
             if body and body[0].get("type") == "bad":
                 return self._json({"error": "sheet not found"}, 400)
+            if "batch=true" in self.path:  # 一括実行は1回の編集 = patch1件
+                return self._json([{"revision": 8, "ops": []}])
             return self._json([{"revision": 8, "ops": []} for _ in body])
         return self._json({"error": "unknown"}, 404)
 

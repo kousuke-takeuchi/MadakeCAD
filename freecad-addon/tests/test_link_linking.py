@@ -12,6 +12,7 @@ from madakecad_link.linking import (  # noqa: E402
     measurements_from_objects,
     model_kind,
     part_rows,
+    placement_of,
     remove_mech_link_command,
     set_mech_link_command,
     wire_length_commands,
@@ -78,6 +79,17 @@ class LinkCommandsTest(unittest.TestCase):
         self.assertTrue(set_mech_link_command("k1", "", "X")["link"]["synced_at"].endswith("Z"))
         self.assertEqual(remove_mech_link_command("k1"), {"type": "remove_mech_link", "entity_id": "k1"})
 
+    def test_relinking_keeps_the_placement_freecad_already_synced(self):
+        """Linking an entity again keeps the placement FreeCAD has already synced for it, so inserting or re-linking a model never throws the panel layout's position away.
+        対応付けをやり直しても、すでにFreeCADから同期済みの配置は保たれるので、モデルの挿入や再リンクで盤レイアウトの位置が捨てられない。"""
+        placement = {"x_mm": 10.0, "y_mm": 20.0, "z_mm": 0.0, "rotation_deg": 90.0}
+        snapshot = {"project": {"mech_links": [{"entity_id": "k1", "object_name": "Relay001", "placement": placement}], "sheets": []}}
+        self.assertEqual(placement_of(snapshot, "k1"), placement)
+        self.assertIsNone(placement_of(snapshot, "tb1"))
+        kept = set_mech_link_command("k1", "/p.FCStd", "Relay002", "2026-09-27T10:00:00Z", placement=placement_of(snapshot, "k1"))
+        self.assertEqual(kept["link"]["placement"], placement)
+        self.assertNotIn("placement", set_mech_link_command("tb1", "/p.FCStd", "Terminal001")["link"])
+
 
 class WriteBackTest(unittest.TestCase):
     def test_measured_route_lengths_are_converted_to_metres_and_matched_to_wires(self):
@@ -106,6 +118,14 @@ class WriteBackTest(unittest.TestCase):
         commands = link_commands_for_routes(measurements, "/work/panel.FCStd", snapshot)
         self.assertEqual([c["link"]["entity_id"] for c in commands], ["w2"])
         self.assertEqual(commands[0]["link"]["object_name"], "Route002")
+
+    def test_relinking_a_route_to_another_object_keeps_its_synced_placement(self):
+        """Pointing a wire at a different route object keeps the placement already synced for that wire, so measuring never erases geometry FreeCAD masters.
+        配線の経路オブジェクトを別のものに付け替えても、その配線に同期済みの配置は保たれるので、計測でFreeCADがマスタのジオメトリが消えない。"""
+        placement = {"x_mm": 1.0, "y_mm": 2.0, "z_mm": 3.0, "rotation_deg": 0.0}
+        snapshot = {"project": {"mech_links": [{"entity_id": "w1", "object_name": "Route001", "placement": placement}], "sheets": []}}
+        commands = link_commands_for_routes([("s1", "w1", 1.0, "Route999")], "/work/panel.FCStd", snapshot)
+        self.assertEqual(commands[0]["link"]["placement"], placement)
 
 
 if __name__ == "__main__":

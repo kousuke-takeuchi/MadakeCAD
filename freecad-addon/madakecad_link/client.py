@@ -7,6 +7,7 @@ patch broadcast) — the add-on never edits the drawing model directly.
 
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.parse
@@ -15,6 +16,10 @@ from typing import Any, Iterable, Iterator
 
 DEFAULT_PORT = 9310
 DEFAULT_TIMEOUT = 5.0
+#: Read timeout (s) for the event stream. MadakeCAD sends SSE keep-alive comments every
+#: few seconds, so a longer silence means the connection is dead (app killed, network
+#: gone) — without it the reading thread would block for ever.
+DEFAULT_STREAM_TIMEOUT = 60.0
 
 
 class LinkError(Exception):
@@ -55,12 +60,38 @@ def parse_sse(lines: Iterable[str]) -> Iterator[tuple[str, str]]:
         yield event, "\n".join(data)
 
 
+def stream_error_message(error: BaseException, port: int) -> str:
+    """Why the event stream stopped, in one line for the panel's status label.
+
+    Everything that can break while the stream is being read — the app quitting
+    mid-message, the socket being reset, a silent connection — reaches the panel as
+    this sentence instead of a traceback in FreeCAD's Python console.
+    """
+    hint = "Press Connect to follow again."
+    if isinstance(error, http.client.IncompleteRead):
+        return f"MadakeCAD closed the event stream on port {port} mid-message. {hint}"
+    if isinstance(error, ConnectionResetError):
+        return f"MadakeCAD reset the event stream on port {port} (app closed?). {hint}"
+    if isinstance(error, TimeoutError):  # socket.timeout はこの別名
+        return f"No events from MadakeCAD on port {port} for {DEFAULT_STREAM_TIMEOUT:g}s. {hint}"
+    if isinstance(error, OSError):
+        reason = error.strerror or str(error) or type(error).__name__
+        return f"Lost the event stream from MadakeCAD on port {port} ({reason}). {hint}"
+    return f"Lost the event stream from MadakeCAD on port {port} ({type(error).__name__}: {error}). {hint}"
+
+
 class LinkClient:
     """Thin client over the Link API. One instance per port."""
 
-    def __init__(self, port: int = DEFAULT_PORT, timeout: float = DEFAULT_TIMEOUT):
+    def __init__(
+        self,
+        port: int = DEFAULT_PORT,
+        timeout: float = DEFAULT_TIMEOUT,
+        stream_timeout: float | None = DEFAULT_STREAM_TIMEOUT,
+    ):
         self.port = int(port)
         self.timeout = timeout
+        self.stream_timeout = stream_timeout
 
     @property
     def base(self) -> str:
@@ -125,9 +156,14 @@ class LinkClient:
 
     # ---- writes (always through the Command engine) ---------------------
 
-    def post_commands(self, commands: list) -> list:
-        """``POST /api/v1/commands`` — run a Command array, returns one patch per command."""
-        return self._request("POST", "/commands", commands)
+    def post_commands(self, commands: list, batch: bool = False) -> list:
+        """``POST /api/v1/commands`` — run a Command array, returns one patch per command.
+
+        With ``batch=True`` the whole array is run as **one** edit
+        (``?batch=true``): one undo step in MadakeCAD, one patch back, and nothing is
+        applied at all when a command is refused.
+        """
+        return self._request("POST", "/commands?batch=true" if batch else "/commands", commands)
 
     # ---- live follow -----------------------------------------------------
 
@@ -135,18 +171,26 @@ class LinkClient:
         """``GET /api/v1/events`` — yields ``(event, payload)`` until the stream closes.
 
         Patches arrive as ``("patch", {revision, ops})``. Blocks while waiting; run it
-        in a thread. Raises :class:`LinkError` when the connection cannot be opened.
+        in a thread. Every failure — the connection cannot be opened, the stream breaks
+        mid-message, the socket is reset, nothing arrives within ``stream_timeout`` —
+        is raised as :class:`LinkError` with a readable reason, so the caller never has
+        to handle raw socket errors.
         """
         req = urllib.request.Request(self.base + "/events", headers={"Accept": "text/event-stream"})
         try:
-            res = urllib.request.urlopen(req, timeout=None)
+            res = urllib.request.urlopen(req, timeout=self.stream_timeout)
         except urllib.error.URLError as e:
             raise LinkError(f"Could not subscribe to MadakeCAD events on port {self.port} ({e.reason})") from e
-        with res:
-            lines = (line.decode("utf-8", errors="replace") for line in res)
-            for event, data in parse_sse(lines):
-                try:
-                    payload = json.loads(data)
-                except json.JSONDecodeError:
-                    payload = data
-                yield event, payload
+        try:
+            with res:
+                lines = (line.decode("utf-8", errors="replace") for line in res)
+                for event, data in parse_sse(lines):
+                    try:
+                        payload = json.loads(data)
+                    except json.JSONDecodeError:
+                        payload = data
+                    yield event, payload
+        except LinkError:
+            raise
+        except Exception as e:
+            raise LinkError(stream_error_message(e, self.port)) from e

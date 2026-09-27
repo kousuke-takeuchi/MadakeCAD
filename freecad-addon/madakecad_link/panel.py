@@ -6,6 +6,8 @@ tested without Qt is delegated to client.py / model.py / events.py / settings.py
 
 from __future__ import annotations
 
+import math
+
 import FreeCADGui  # type: ignore
 from PySide import QtCore, QtWidgets  # type: ignore
 
@@ -16,14 +18,25 @@ from .linking import (
     measurements_from_objects,
     model_kind,
     part_rows,
+    placement_of,
     remove_mech_link_command,
     set_mech_link_command,
     wire_length_commands,
     wire_rows,
 )
 from .model import NETLIST_COLUMNS, netlist_cells, netlist_rows, summarize_project, summary_text
-from .routes import format_placement, net_highlight_objects, placement_commands, route_stubs
+from .routes import (
+    format_placement,
+    net_highlight_objects,
+    placement_commands,
+    rotation_deg_about_z,
+    route_stubs,
+    split_route_stubs,
+)
 from .settings import load_settings
+
+#: How long to wait (ms) for the event thread to notice it was interrupted.
+FOLLOW_STOP_TIMEOUT_MS = 3000
 
 PARTS_COLUMNS = ("Sheet", "Ref", "Part no.", "3D model", "FreeCAD object", "Placement")
 WIRES_COLUMNS = ("Sheet", "Net", "Length m", "Source", "Route object")
@@ -41,15 +54,24 @@ class EventThread(QtCore.QThread):
         self._client = client
 
     def run(self):
+        """Read the stream until it ends or is interrupted, always reporting the outcome.
+
+        ``ended`` is emitted exactly once, whatever happens: the panel uses it to drop
+        its reference to this thread, so an escaping exception would leave live follow
+        permanently off for the rest of the FreeCAD session.
+        """
+        error = ""
         try:
             for event, payload in self._client.events():
                 if self.isInterruptionRequested():
                     break
                 if event == "patch" and isinstance(payload, dict):
                     self.patch.emit(payload)
-            self.ended.emit("")
         except LinkError as e:
-            self.ended.emit(str(e))
+            error = str(e)
+        except Exception as e:  # noqa: BLE001 - FreeCADのコンソールへ例外を漏らさない
+            error = f"Live follow stopped ({type(e).__name__}: {e})"
+        self.ended.emit(error)
 
 
 class LinkDockWidget(QtWidgets.QDockWidget):
@@ -126,7 +148,7 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         unlink.clicked.connect(lambda: self.unlink_selected(self._parts, self._part_rows))
         parts_buttons.addWidget(unlink)
         sync = QtWidgets.QPushButton("Sync placements")
-        sync.setToolTip("Write the placement (mm, Z rotation) of every linked object to MadakeCAD for the panel layout")
+        sync.setToolTip("Write the placement (mm, Z rotation) of every linked object to MadakeCAD for the panel layout (one undo step)")
         sync.clicked.connect(self.sync_placements)
         parts_buttons.addWidget(sync)
         parts_buttons.addStretch(1)
@@ -147,11 +169,11 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         unlink_route.clicked.connect(lambda: self.unlink_selected(self._wires, self._wire_rows))
         wires_buttons.addWidget(unlink_route)
         stubs = QtWidgets.QPushButton("Create route stubs")
-        stubs.setToolTip("For every wire joining two linked parts, create a straight route line between them (tagged with the wire's madake_id); edit it into the real route, then measure")
+        stubs.setToolTip("For every wire joining two linked parts, create a straight route line between them (tagged with the wire's madake_id) and link it to the wire; edit it into the real route, then measure")
         stubs.clicked.connect(self.create_route_stubs)
         wires_buttons.addWidget(stubs)
         measure = QtWidgets.QPushButton("Measure routes → write back lengths")
-        measure.setToolTip("Measure every linked route object and write the lengths to MadakeCAD (one undo step per sheet)")
+        measure.setToolTip("Measure every linked route object and write the lengths to MadakeCAD (one undo step)")
         measure.clicked.connect(self.write_back_lengths)
         wires_buttons.addWidget(measure)
         wires_buttons.addStretch(1)
@@ -289,10 +311,11 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         setattr(obj, MADAKE_ID_PROPERTY, entity_id)
 
     def _send(self, commands: list) -> bool:
+        """Post commands as **one** edit (one undo step in MadakeCAD); False on failure."""
         if not commands:
             return True
         try:
-            self._client.post_commands(commands)
+            self._client.post_commands(commands, batch=True)
         except LinkError as e:
             self._status.setText(str(e))
             return False
@@ -326,7 +349,13 @@ class LinkDockWidget(QtWidgets.QDockWidget):
             obj = added[0]
         self._tag(obj, row.entity_id)
         doc.recompute()
-        if self._send([set_mech_link_command(row.entity_id, doc.FileName or "", obj.Name)]):
+        command = set_mech_link_command(
+            row.entity_id,
+            doc.FileName or "",
+            obj.Name,
+            placement=placement_of(self._snapshot or {}, row.entity_id),
+        )
+        if self._send([command]):
             self._status.setText(f"Inserted {obj.Label} and linked it to {row.reference}")
 
     def link_selected(self, table, rows):
@@ -339,7 +368,13 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         obj = selection[0]
         self._tag(obj, row.entity_id)
         doc = obj.Document
-        if self._send([set_mech_link_command(row.entity_id, doc.FileName or "", obj.Name)]):
+        command = set_mech_link_command(
+            row.entity_id,
+            doc.FileName or "",
+            obj.Name,
+            placement=placement_of(self._snapshot or {}, row.entity_id),
+        )
+        if self._send([command]):
             self._status.setText(f"Linked {obj.Label} to {getattr(row, 'reference', None) or row.entity_id}")
 
     def unlink_selected(self, table, rows):
@@ -375,8 +410,8 @@ class LinkDockWidget(QtWidgets.QDockWidget):
             return
         commands = link_commands_for_routes(measurements, doc.FileName or "", self._snapshot) + wire_length_commands(measurements)
         if self._send(commands):
-            self._status.setText(f"Wrote {len(measurements)} wire length(s) back to MadakeCAD")
-            self.refresh()
+            self.refresh()  # 先に読み直す (refreshはステータス行を概要で上書きする)
+            self._status.setText(f"Wrote {len(measurements)} wire length(s) back to MadakeCAD (one undo step)")
 
     # ---- M5-3: route stubs / net highlight / placements -------------------
 
@@ -391,7 +426,7 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         return out
 
     def create_route_stubs(self):
-        """Create a straight route line for every wire joining two linked parts (skips wires that already have one)."""
+        """Create a straight route line for every wire joining two linked parts, register each as the wire's link, and report the ones that could not be drawn."""
         if self._snapshot is None:
             self._status.setText("Connect first")
             return
@@ -405,18 +440,49 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         except LinkError as e:
             self._status.setText(str(e))
             return
-        stubs = route_stubs(self._snapshot, nets, self._document_placements(doc), existing)
-        if not stubs:
+        stubs, degenerate = split_route_stubs(route_stubs(self._snapshot, nets, self._document_placements(doc), existing))
+        if not stubs and not degenerate:
             self._status.setText("No new route stubs: every wire between linked parts already has a route, or the parts are not linked/placed")
             return
+        # 退化区間 (両端が同じ位置 = 挿入直後の既定配置) は線にできないので作らず報告する。
+        notes = [
+            f"{s.from_object} and {s.to_object} are at the same position — move one of them, then try again"
+            for s in degenerate
+        ]
+        created, commands = [], []
         for stub in stubs:
-            line = Part.makePolygon([FreeCAD.Vector(*stub.start), FreeCAD.Vector(*stub.end)])
-            obj = doc.addObject("Part::Feature", stub.name)
-            obj.Shape = line
-            obj.Label = f"{stub.name} ({stub.from_object} → {stub.to_object})"
-            self._tag(obj, stub.wire_id)
+            # 1本の失敗でバッチ全体を落とさない (残りのスタブは作る)。
+            try:
+                line = Part.makePolygon([FreeCAD.Vector(*stub.start), FreeCAD.Vector(*stub.end)])
+                obj = doc.addObject("Part::Feature", stub.name)
+                obj.Shape = line
+                obj.Label = f"{stub.name} ({stub.from_object} → {stub.to_object})"
+                self._tag(obj, stub.wire_id)
+            except Exception as e:  # noqa: BLE001 - OCCの例外もステータス行へ
+                notes.append(f"{stub.name}: could not be created ({type(e).__name__}: {e})")
+                continue
+            created.append(obj)
+            # ネットハイライトとWiresタブの「Route object」列は対応付けを見るので、
+            # 作ったスタブをその場で配線の対応付けとして登録する (配置は保つ)。
+            commands.append(
+                set_mech_link_command(
+                    stub.wire_id,
+                    doc.FileName or "",
+                    obj.Name,
+                    placement=placement_of(self._snapshot, stub.wire_id),
+                )
+            )
         doc.recompute()
-        self._status.setText(f"Created {len(stubs)} route stub(s); edit them into real routes, then 'Measure routes → write back lengths'")
+        message = f"Created {len(created)} route stub(s)"
+        if created:
+            if self._send(commands):
+                message += " and linked them to their wires; edit them into real routes, then 'Measure routes → write back lengths'"
+                self.refresh()
+            else:
+                message += f", but registering them in MadakeCAD failed: {self._status.text()}"
+        if notes:
+            message += f" · {len(notes)} skipped: " + "; ".join(notes)
+        self._status.setText(message)
 
     def highlight_net(self):
         """Select the linked parts and routes of the selected net in the 3D view."""
@@ -433,29 +499,33 @@ class LinkDockWidget(QtWidgets.QDockWidget):
                 FreeCADGui.Selection.addSelection(doc, name)
 
     def sync_placements(self):
-        """Write the placement of every linked object in the document to MadakeCAD."""
+        """Write the placement of every linked object in the document to MadakeCAD as one edit."""
         if self._snapshot is None:
             self._status.setText("Connect first")
             return
-        import math
-
         doc = self._active_document()
         placements = {}
+        tilted = []
         for obj in doc.Objects:
             placement = getattr(obj, "Placement", None)
             if placement is None:
                 continue
             base = placement.Base
             axis = placement.Rotation.Axis
-            angle = math.degrees(placement.Rotation.Angle) * (1 if axis.z >= 0 else -1)
+            angle = rotation_deg_about_z((axis.x, axis.y, axis.z), math.degrees(placement.Rotation.Angle))
+            if angle is None:
+                # 盤レイアウトは平面なのでZ回転しか意味がない。傾いた部品は0°で記録して報告する。
+                tilted.append(obj.Name)
+                angle = 0.0
             placements[obj.Name] = ((base.x, base.y, base.z), angle)
         commands = placement_commands(self._snapshot, placements)
+        warning = f" · {len(tilted)} object(s) are rotated about an axis other than Z; stored as 0°: " + ", ".join(tilted) if tilted else ""
         if not commands:
-            self._status.setText("Placements are already in sync (or no linked object is in this document)")
+            self._status.setText("Placements are already in sync (or no linked object is in this document)" + warning)
             return
         if self._send(commands):
-            self._status.setText(f"Synced {len(commands)} placement(s) to MadakeCAD")
-            self.refresh()
+            self.refresh()  # 先に読み直す (refreshはステータス行を概要で上書きする)
+            self._status.setText(f"Synced {len(commands)} placement(s) to MadakeCAD (one undo step)" + warning)
 
     # ---- live follow -----------------------------------------------------
 
@@ -474,10 +544,18 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         self._thread.start()
 
     def _stop_follow(self):
-        if self._thread is None:
+        """Stop live follow and wait for the thread, so reconnecting cannot leave two streams open."""
+        thread = self._thread
+        if thread is None:
             return
-        self._thread.requestInterruption()
         self._thread = None
+        for signal, slot in ((thread.patch, self._on_patch), (thread.ended, self._on_follow_ended)):
+            try:
+                signal.disconnect(slot)
+            except (RuntimeError, TypeError):  # 既に切れている
+                pass
+        thread.requestInterruption()
+        thread.wait(FOLLOW_STOP_TIMEOUT_MS)
 
     def _on_patch(self, patch: dict):
         if not self._follower.accept(patch):

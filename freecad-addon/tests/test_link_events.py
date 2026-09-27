@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from madakecad_link.events import PatchFollower, refresh_needed  # noqa: E402
+from madakecad_link.events import PatchFollower, op_sheet_id, refresh_needed  # noqa: E402
 from madakecad_link.settings import MemorySettings, normalize_port  # noqa: E402
 
 
@@ -35,6 +35,20 @@ class PatchFollowerTest(unittest.TestCase):
         """Before a sheet has been chosen, any entity change reloads the panel so the first view is current.
         シートをまだ選んでいない間は、どの要素の変更でも再読込して最初の表示が最新になるようにする。"""
         self.assertTrue(refresh_needed({"ops": [{"op": "entity_upserted", "sheet_id": "s2"}]}, None))
+
+    def test_a_change_to_the_freecad_links_reloads_whatever_sheet_is_shown(self):
+        """Adding, replacing or undoing a FreeCAD link in MadakeCAD reloads the panel even while a sheet is shown, so the linked-object and placement columns never show links that are gone.
+        MadakeCAD側で3D対応付けを追加・置換・undoすると、シート表示中でもパネルを再読込するので、対応付け列・配置列に消えた対応付けが残らない。"""
+        self.assertTrue(refresh_needed({"ops": [{"op": "mech_links_replaced", "mech_links": []}]}, "s1"))
+        self.assertTrue(refresh_needed({"ops": [{"op": "project_meta_changed", "name": "new"}]}, "s1"))
+
+    def test_an_op_that_names_no_sheet_counts_as_project_wide(self):
+        """An op is scoped to the sheet named by its sheet_id or by the sheet it carries; an op naming no sheet is project-wide and always reloads, so a new project-wide op is never missed.
+        opの範囲はsheet_idか持っているsheetのidで決まり、シートを示さないopはプロジェクト全体として常に再読込する(新しい全体opを取りこぼさない)。"""
+        self.assertEqual(op_sheet_id({"op": "entity_upserted", "sheet_id": "s2"}), "s2")
+        self.assertEqual(op_sheet_id({"op": "sheet_meta_updated", "sheet": {"id": "s2"}}), "s2")
+        self.assertIsNone(op_sheet_id({"op": "something_replaced", "items": []}))
+        self.assertTrue(refresh_needed({"ops": [{"op": "something_replaced", "items": []}]}, "s1"))
 
 
 class SettingsTest(unittest.TestCase):

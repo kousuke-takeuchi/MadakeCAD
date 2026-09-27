@@ -8,7 +8,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _fake_server import Handler, start  # noqa: E402
-from madakecad_link.client import DEFAULT_PORT, LinkClient, LinkError, base_url, parse_sse  # noqa: E402
+import http.client  # noqa: E402
+
+from madakecad_link.client import (  # noqa: E402
+    DEFAULT_PORT,
+    LinkClient,
+    LinkError,
+    base_url,
+    parse_sse,
+    stream_error_message,
+)
 
 
 class LinkClientTest(unittest.TestCase):
@@ -54,6 +63,21 @@ class LinkClientTest(unittest.TestCase):
         patches = self.client.post_commands([{"type": "rename_sheet", "sheet_id": "s1", "name": "Main"}])
         self.assertEqual(len(patches), 1)
         self.assertEqual(Handler.calls[-1][2][0]["name"], "Main")
+        self.assertEqual(Handler.calls[-1][1], "/api/v1/commands")
+
+    def test_a_batch_post_asks_madakecad_for_a_single_undo_step(self):
+        """Posting with batch asks for the whole array to be one edit (?batch=true), so a panel action costs the user a single undo in MadakeCAD.
+        batch指定で送るとコマンド配列全体を1回の編集として実行させる(?batch=true)ので、パネルの1操作はMadakeCADでundo1回で戻る。"""
+        self.client.post_commands([{"type": "rename_sheet", "sheet_id": "s1", "name": "Main"}], batch=True)
+        self.assertEqual(Handler.calls[-1][1], "/api/v1/commands?batch=true")
+
+    def test_errors_while_reading_the_event_stream_become_readable_link_errors(self):
+        """A stream that dies while being read (app quit mid-message, socket reset, nothing arriving) is reported as a sentence naming the port and telling the user to connect again, never as a raw socket error.
+        読み取り中に切れたストリーム(送信途中の終了・ソケットのリセット・無音)は、ポートと再接続の案内が入った文面で報告され、生のソケットエラーは出さない。"""
+        for error in (http.client.IncompleteRead(b""), ConnectionResetError(54, "Connection reset by peer"), TimeoutError(), OSError(9, "Bad file descriptor"), ValueError("odd")):
+            message = stream_error_message(error, 9310)
+            self.assertIn("9310", message)
+            self.assertIn("Connect", message)
 
     def test_errors_are_reported_as_link_errors_with_a_readable_message(self):
         """A refused connection, an HTTP error and invalid JSON all raise LinkError with a message that says what went wrong.

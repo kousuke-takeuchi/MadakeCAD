@@ -72,6 +72,50 @@ def route_stubs(snapshot: dict, nets: list, placements: dict, existing_route_ids
     return stubs
 
 
+#: Two ends closer than this (mm) cannot be drawn as a line (FreeCAD makes a null shape).
+DEGENERATE_TOLERANCE_MM = 0.001
+
+
+def stub_span_mm(stub: RouteStub) -> float:
+    """Straight-line distance (mm) between a stub's two ends."""
+    return sum((float(b) - float(a)) ** 2 for a, b in zip(stub.start, stub.end)) ** 0.5
+
+
+def split_route_stubs(stubs: list, tolerance: float = DEGENERATE_TOLERANCE_MM) -> tuple:
+    """Split stubs into ``(drawable, degenerate)``.
+
+    Two parts inserted into the same document sit at the same placement until the
+    user moves them, and a line between two coincident points is not a shape, so
+    those stubs must be reported instead of drawn.
+    """
+    drawable, degenerate = [], []
+    for stub in stubs:
+        (degenerate if stub_span_mm(stub) <= tolerance else drawable).append(stub)
+    return drawable, degenerate
+
+
+#: A rotation axis this far from ±Z (unit vector components) is not a planar rotation.
+ROTATION_AXIS_TOLERANCE = 1e-6
+
+
+def rotation_deg_about_z(axis: tuple, angle_deg: float, tolerance: float = ROTATION_AXIS_TOLERANCE):
+    """The planar (Z) rotation of a FreeCAD placement in degrees, or ``None`` when it is not one.
+
+    ``Rotation.Angle`` is the amount of rotation about ``Rotation.Axis``, so a part
+    tilted about X or Y would otherwise be stored as the same angle of panel rotation.
+    Only rotations about ±Z are planar (the sign comes from the axis direction);
+    anything else returns ``None`` so the caller can warn instead of storing a wrong
+    angle. A zero rotation is planar whatever the axis says.
+    """
+    angle = float(angle_deg)
+    if abs(angle) <= tolerance:
+        return 0.0
+    x, y, z = (float(v) for v in axis)
+    if abs(x) > tolerance or abs(y) > tolerance or abs(abs(z) - 1.0) > tolerance:
+        return None
+    return angle if z >= 0 else -angle
+
+
 def net_highlight_objects(net: dict, snapshot: dict) -> list:
     """Object names to select in FreeCAD for a net: its linked parts and its linked routes."""
     links = links_by_entity(snapshot)

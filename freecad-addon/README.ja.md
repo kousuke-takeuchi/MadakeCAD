@@ -29,8 +29,8 @@ FreeCADのAddon Managerへの登録はOSS公開(M6)のときに行う。
 3. ポート(既定9310)を設定して**Connect**。状態行にプロジェクト名・revision・要素数が出て、表に選択中シートのネット(ネット名・線番・ラベル・`K1:A1, TB1:3`形式のピン・配線本数)が並ぶ。
 4. **Follow live**(既定ON)でMadakeCADのイベントストリームを購読し、表示中シートが変わると再読込する。**Refresh**で手動再読込。
 5. **Parts**タブ(M5-2): 部品を選んで**Insert 3D model**(部品DBの`model_3d`にあるSTEP/IGES/BREPまたはFCStd)。オブジェクトに`madake_id`プロパティが付き、対応付けがMadakeCADに保存される。自分で置いたオブジェクトは**Link selected object**、解除は**Unlink**。
-6. **Wires**タブ(M5-2): **Link selected route**でDraft Wire(形状を持つ任意のオブジェクト)を配線に対応付け、**Measure routes → write back lengths**で対応付け済み経路をすべて計測し、確認のうえMadakeCADへ書き戻す(出所`freecad`、シートごとにundo1回)。
-7. **Create route stubs**(Wiresタブ、M5-3)は配線ごとに対応付け済み部品2つを結ぶ直線(配線の`madake_id`付き)を実経路の出発点として作る。**Netlist**タブでネットを選ぶと部品と経路が3Dビューで選択され、**Sync placements**(Partsタブ)は対応付け済みオブジェクトの配置をMadakeCADへ書き戻す(盤レイアウト用)。
+6. **Wires**タブ(M5-2): **Link selected route**でDraft Wire(形状を持つ任意のオブジェクト)を配線に対応付け、**Measure routes → write back lengths**で対応付け済み経路をすべて計測し、確認のうえMadakeCADへ書き戻す(出所`freecad`、書き戻し全体を1回の編集として送るので**undo1回**)。
+7. **Create route stubs**(Wiresタブ、M5-3)は配線ごとに対応付け済み部品2つを結ぶ直線(配線の`madake_id`付き)を実経路の出発点として作り、その場で配線の対応付けとしても登録する。部品がまだ同じ位置にあって線にできない配線はステータス行に名前を出す。**Netlist**タブでネットを選ぶと部品と経路が3Dビューで選択され、**Sync placements**(Partsタブ)は対応付け済みオブジェクトの配置をMadakeCADへ書き戻す(盤レイアウト用。undo1回。Z軸まわりの回転だけを保存し、他軸に傾いたオブジェクトは0°で保存して報告する)。
 
 ## 構成
 

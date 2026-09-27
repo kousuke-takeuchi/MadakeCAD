@@ -107,17 +107,34 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def set_mech_link_command(entity_id: str, fcstd_path: str, object_name: str, synced_at: str | None = None) -> dict:
-    """The ``set_mech_link`` command registering (or replacing) the link of one entity."""
-    return {
-        "type": "set_mech_link",
-        "link": {
-            "entity_id": entity_id,
-            "fcstd_path": fcstd_path or "",
-            "object_name": object_name,
-            "synced_at": synced_at or now_iso(),
-        },
+def placement_of(snapshot: dict, entity_id: str) -> dict | None:
+    """The placement stored on an entity's link, if it has one (``None`` when unplaced)."""
+    return (links_by_entity(snapshot).get(entity_id) or {}).get("placement") or None
+
+
+def set_mech_link_command(
+    entity_id: str,
+    fcstd_path: str,
+    object_name: str,
+    synced_at: str | None = None,
+    placement: dict | None = None,
+) -> dict:
+    """The ``set_mech_link`` command registering (or replacing) the link of one entity.
+
+    ``set_mech_link`` replaces the whole link record, so the placement synced from
+    FreeCAD (M5-3) has to be carried along or re-linking would erase it. Callers pass
+    the placement the link already has (:func:`placement_of`) unless they are
+    replacing it with a freshly measured one.
+    """
+    link = {
+        "entity_id": entity_id,
+        "fcstd_path": fcstd_path or "",
+        "object_name": object_name,
+        "synced_at": synced_at or now_iso(),
     }
+    if placement:
+        link["placement"] = placement
+    return {"type": "set_mech_link", "link": link}
 
 
 def remove_mech_link_command(entity_id: str) -> dict:
@@ -160,11 +177,22 @@ def wire_length_commands(measurements: list) -> list:
 
 
 def link_commands_for_routes(measurements: list, fcstd_path: str, snapshot: dict) -> list:
-    """``set_mech_link`` commands for route objects that are not linked yet (or linked to another object)."""
+    """``set_mech_link`` commands for route objects that are not linked yet (or linked to another object).
+
+    A placement already stored on the wire's link is carried through, so measuring
+    never erases it.
+    """
     links = links_by_entity(snapshot)
     out = []
     for _sheet_id, wire_id, _length_m, object_name in measurements:
-        current = (links.get(wire_id) or {}).get("object_name")
-        if current != object_name:
-            out.append(set_mech_link_command(wire_id, fcstd_path, object_name))
+        current = links.get(wire_id) or {}
+        if current.get("object_name") != object_name:
+            out.append(
+                set_mech_link_command(
+                    wire_id,
+                    fcstd_path,
+                    object_name,
+                    placement=current.get("placement") or None,
+                )
+            )
     return out
