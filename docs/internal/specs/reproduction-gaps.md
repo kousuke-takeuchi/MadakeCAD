@@ -619,22 +619,28 @@ plus a caption, and the symbol draws the bracket.
 > with a migration test that a v10 file loads with no legend blocks, exactly as
 > Task 4's leader-line field did for 8 → 9), draws the wire-part legend the reference
 > prints in a corner: colour / gauge / part number / total length, one row per
-> distinct combination among the sheet's wires, sorted colour-then-gauge, part number
-> resolved the same way as the wire list above. Like `PanelLegend` it holds no content
-> of its own — the rows are derived from the sheet's wires every time it is drawn — and
-> like `Shape` it is excluded by construction from the netlist, ERC, BOM and wire list
-> (tests pin all four). It is placed/moved/deleted through the existing add-entity /
-> translate / delete commands, has an SVG twin and a canvas twin with a parity test,
-> and belongs to the "annotations" (`texts`) view class. Separately, the BOM
-> (`reports::bom_rows`) now appends, after the component rows, one row per wire part
-> number with the project-wide total length in the quantity column (metres, 2
-> decimals, e.g. `12.50 m`); wires whose part number cannot be resolved roll up
-> together under one `(未割当)` row instead of being invented or dropped, and a project
-> with no wires gets no roll-up rows at all. Verified at the implementation level with
-> unit tests on both sides (Rust core + the canvas twin) and a generic (non-confidential)
-> demo SVG + BOM CSV in the task's evidence folder; see the note below on why this did
-> not include a fourth reproduction-sheet re-measurement, the same as phase 6 task 4's
-> G8/G12/G20-remainder.
+> distinct combination among the sheet's wires, sorted colour-then-gauge-then-part-number,
+> part number resolved the same way as the wire list above. A colour is grouped and
+> printed under the same name the wire annotation uses on that sheet, so wires recorded
+> as `red` and as `赤` are one stock row, not two, and the drawing never prints two names
+> for one colour. The summed length is printed in metres to two decimals, the same format
+> the BOM roll-up below uses. Like `PanelLegend` it holds no content of its own — the rows
+> are derived from the sheet's wires every time it is drawn — and like `Shape` it is
+> excluded by construction from the netlist, ERC, BOM and wire list (tests pin all four:
+> placing a block leaves the netlist, the diagnostics, the BOM rows and the wire-list rows
+> byte-identical). It is placed/moved/deleted through the existing add-entity / translate /
+> delete commands (placing, selecting and dragging are covered by their own tests), has an
+> SVG twin and a canvas twin with mirrored tests, and belongs to the "annotations"
+> (`texts`) view class. Separately, the BOM (`reports::bom_rows`) now appends, after the
+> component rows, one row per wire part number with the project-wide total length in the
+> quantity column (metres, 2 decimals, e.g. `12.50 m`); wires whose part number cannot be
+> resolved roll up together under one `(未割当)` row instead of being invented or dropped,
+> and a project with no wires gets no roll-up rows at all.
+>
+> **Re-measured on the fourth pass (2026-09-27):** 111/111 wire-list part numbers again,
+> two wire roll-up rows in the BOM, and the legend block itself draws, resolves, sums and
+> exports correctly — but **on the second sheet**, because this A4 sheet has no free
+> 90 × 15 mm area for it (G23).
 > **Still explicitly deferred:** a diagnostic for an unmatched colour+gauge combination
 > was out of this task's scope (the plan bound G9's remainder to exactly the legend
 > block and the BOM roll-up); an unresolved combination continues to show as a blank
