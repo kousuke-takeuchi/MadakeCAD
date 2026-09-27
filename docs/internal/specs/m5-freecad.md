@@ -8,13 +8,14 @@
 - 部品DBに`model_3d`(STEP/FCStdパス)・`mounting`列を予約済み
 - 対象: FreeCAD 1.1+(Python API)
 
-## M5-1: FreeCADアドオンWB「MadakeCAD Link」骨格
+## M5-1: FreeCADアドオンWB「MadakeCAD Link」骨格 — ✅ 実装 (2026-09-27)
 
-- 配置: 本リポジトリ`freecad-addon/`(Pythonワークベンチ)。FreeCADのAddon Manager対応は公開後
-- 機能: 接続設定(ポート)、接続状態表示、プロジェクト概要・**ネットリストビュー**(どのピン同士が繋がるか一覧)、SSE購読による図面変更の追従
-- MadakeCAD側: 変更不要(既存API)。必要に応じ`GET /api/v1/parts`へ`model_3d`フィルタ追加
+- 配置: 本リポジトリ`freecad-addon/`(Pythonワークベンチ、`package.xml`付き)。FreeCADのAddon Manager対応は公開後(M6)。計画: [`docs/superpowers/plans/2026-09-27-m5-1-freecad-addon-skeleton.md`](../../superpowers/plans/2026-09-27-m5-1-freecad-addon-skeleton.md)
+- 機能: 接続設定(ポート。FreeCADのユーザーパラメータ`Mod/MadakeCADLink/Port`に保存)、接続状態表示、プロジェクト概要(名前・revision・シートごとの要素数)、**ネットリストビュー**(ネット名・線番・ラベル・`K1:A1, TB1:3`形式のピン・配線本数)、`GET /api/v1/events`(SSE)購読による図面変更のライブ追従(表示中シートに関わるpatchとシート構成の変化で再読込、revisionの重複・逆行は無視)
+- 構成: FreeCAD非依存の純Python(`client.py`=標準ライブラリだけのREST+SSEクライアント / `model.py` / `events.py` / `settings.py`)を単体テストし(`python3 -m unittest discover -s freecad-addon/tests`、CIジョブ`freecad`)、Qt依存は`panel.py`/`commands.py`に閉じ込める。テストのdocstring(英日2行)は`docs/13-specification.md`の仕様項目になる
+- MadakeCAD側: 変更不要(既存APIのみ)。`model_3d`フィルタはM5-2で必要になれば追加
 
-受け入れ基準: FreeCADのパネルから起動中MadakeCADの図面概要とネットリストが見え、図面編集がリアルタイムに反映される。
+受け入れ基準: FreeCADのパネルから起動中MadakeCADの図面概要とネットリストが見え、図面編集がリアルタイムに反映される。**実FreeCADでの目視確認はユーザー確認事項**(本リポジトリのCIにFreeCADは無い。純Python部分は15テストで固定)。
 
 ## M5-2: 部品対応付け+電線長書き戻し
 

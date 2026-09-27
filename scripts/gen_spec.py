@@ -6,6 +6,8 @@ Every test doubles as a specification clause:
             (line 1 = English, line 2 = Japanese)
   - Vitest: `it("English sentence")` with a `// ja: 日本語文` comment
             on the line immediately above
+  - Python (FreeCAD add-on): `def test_...` whose docstring has two lines
+            (line 1 = English, line 2 = Japanese)
 
 Outputs (DO NOT EDIT BY HAND):
   docs/13-specification.md      (English)
@@ -33,6 +35,7 @@ RUST_SOURCES = [
     ("src-tauri/crates/madake-cli/src/*.rs", "cli"),
 ]
 TS_SOURCES = [("src/**/*.test.ts", "frontend")]
+PY_SOURCES = [("freecad-addon/tests/test_*.py", "freecad")]
 
 SECTIONS = {
     "core": ("Core domain (madake-core)", "コアドメイン (madake-core)"),
@@ -40,6 +43,7 @@ SECTIONS = {
     "agent": ("AI assistant (madake-agent)", "AIアシスタント (madake-agent)"),
     "cli": ("madake CLI", "madake CLI"),
     "frontend": ("Frontend (editor UI)", "フロントエンド (エディタUI)"),
+    "freecad": ("FreeCAD add-on (MadakeCAD Link)", "FreeCADアドオン (MadakeCAD Link)"),
 }
 
 # Module (file stem) -> readable heading (EN, JA)
@@ -93,6 +97,9 @@ MODULES = {
     "knowledge_env": ("Standards knowledge (resource file)", "規格知識 (リソースファイル)"),
     "cli": ("Argument parsing & dispatch", "引数解釈・ディスパッチ"),
     "client": ("Link API client", "Link APIクライアント"),
+    "link_client": ("Link API client (Python)", "Link APIクライアント (Python)"),
+    "link_model": ("Project overview & netlist view", "プロジェクト概要・ネットリスト表示"),
+    "link_events": ("Live follow & settings", "ライブ追従・設定"),
     "format": ("Human-readable output", "人間向け整形出力"),
 }
 
@@ -102,6 +109,8 @@ DOC = re.compile(r"^\s*///\s?(.*)$")
 TS_IT = re.compile(r"^\s*it\(\s*[\"'](.+?)[\"']\s*,")
 TS_DESCRIBE = re.compile(r"^\s*describe\(\s*[\"'](.+?)[\"']\s*,")
 TS_JA = re.compile(r"^\s*//\s*ja:\s?(.*)$")
+PY_TEST = re.compile(r"^\s*def\s+(test_[a-zA-Z0-9_]+)\s*\(")
+PY_DOC_OPEN = re.compile(r'^\s*(?:r)?"""(.*)$')
 
 missing: list[str] = []
 
@@ -165,6 +174,29 @@ def parse_ts(path: Path):
             prev_ja = None
 
 
+def parse_py(path: Path):
+    """Yield (test_name, en, ja) for each `def test_*` whose docstring has EN + JA lines."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    for idx, line in enumerate(lines):
+        m = PY_TEST.match(line)
+        if not m:
+            continue
+        name = m.group(1)
+        en = ja = None
+        j = idx + 1
+        while j < len(lines) and not lines[j].strip():
+            j += 1
+        if j < len(lines):
+            d = PY_DOC_OPEN.match(lines[j])
+            if d:
+                en = d.group(1).strip().rstrip('"').strip() or None
+                if j + 1 < len(lines) and not lines[j].rstrip().endswith('"""'):
+                    ja = lines[j + 1].strip().rstrip('"').strip() or None
+        if not en or not ja:
+            missing.append(f"{path.relative_to(ROOT)}::{name}")
+        yield name, en or name, ja or en or name
+
+
 def collect():
     """sections[key] -> {module_heading_key: [(en, ja, id)]}"""
     sections: dict[str, dict[str, list[tuple[str, str, str]]]] = {}
@@ -177,6 +209,11 @@ def collect():
         for path in sorted(ROOT.glob(glob)):
             for group, en, ja in parse_ts(path):
                 sections.setdefault(key, {}).setdefault(path.stem.replace(".test", ""), []).append((en, ja, group))
+    for glob, key in PY_SOURCES:
+        for path in sorted(ROOT.glob(glob)):
+            module = path.stem.removeprefix("test_")
+            for name, en, ja in parse_py(path):
+                sections.setdefault(key, {}).setdefault(module, []).append((en, ja, name))
     return sections
 
 

@@ -74,7 +74,7 @@ npm run tauri dev
 | 08 | [インポート/エクスポート](docs/08-import-export.ja.md) | KiCad入出力・AutoCAD Electrical / EPLANとのDXF連携・ファイル形式 |
 | 09 | [AIアシスタント](docs/09-ai-assistant.ja.md) | チャット作図・規格知識・検証ループ・テンプレート・ターン巻き戻し・整えループ・並列会話・プロバイダ設定 |
 | 10 | [自動化・API](docs/10-automation-api.ja.md) | MCPツール・REST API・CLI |
-| 11 | [機械CAD連携](docs/11-mechanical-integration.ja.md) | FreeCAD連携 |
+| 11 | [機械CAD連携](docs/11-mechanical-integration.ja.md) | FreeCADアドオン「MadakeCAD Link」(ネットリストビュー・ライブ追従)と連携ロードマップ |
 | 12 | [ロードマップ](docs/12-roadmap.ja.md) | マイルストーンM1〜M6 |
 | 13 | [詳細仕様設計書](docs/13-specification.ja.md) | **テストスイートから自動生成** — 全項目が機械検証済み |
 

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1297 specification clauses** across 5 areas.
+**1312 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1625,4 +1625,32 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - inserts a macro with no value set chosen just as it was saved <sub>`placing a macro with a value set`</sub>
 - copies the selection on Cmd+C and starts placing it on Cmd+V <sub>`Cmd+C / Cmd+V`</sub>
 - does not swallow Cmd+C with an empty selection nor Cmd+V with an empty clipboard <sub>`Cmd+C / Cmd+V`</sub>
+
+
+## FreeCAD add-on (MadakeCAD Link)
+
+
+### Link API client (Python)
+
+- The client talks to MadakeCAD's Link API on localhost, port 9310 unless told otherwise. <sub>`test_base_url_points_at_the_local_link_api`</sub>
+- The connection check and the project snapshot come back as decoded JSON. <sub>`test_health_and_project_are_decoded_from_json`</sub>
+- Netlist and parts requests pass the sheet id, search text and category as query parameters. <sub>`test_netlist_and_parts_pass_their_filters_as_query_parameters`</sub>
+- Commands are posted as a JSON array and one patch comes back per command, so every write goes through MadakeCAD's Command engine. <sub>`test_commands_are_posted_as_a_json_array_and_return_one_patch_each`</sub>
+- A refused connection, an HTTP error and invalid JSON all raise LinkError with a message that says what went wrong. <sub>`test_errors_are_reported_as_link_errors_with_a_readable_message`</sub>
+- The event stream yields each patch as ("patch", {revision, ops}), joining multi-line data and skipping keep-alive comments. <sub>`test_events_yield_patches_from_the_sse_stream`</sub>
+- Lines without an event name are "message" events, data is dispatched at the blank line, and a trailing event without a blank line is still delivered. <sub>`test_parse_sse_defaults_the_event_name_and_dispatches_on_blank_lines`</sub>
+
+### Live follow & settings
+
+- A patch is applied only when its revision is newer than the last one seen; duplicates and older patches are ignored. <sub>`test_only_newer_revisions_are_accepted`</sub>
+- The panel reloads when the shown sheet's entities change or when sheets are added, removed, renamed or the project is replaced, but not for edits on another sheet. <sub>`test_refresh_is_needed_for_the_shown_sheet_and_structural_changes`</sub>
+- Before a sheet has been chosen, any entity change reloads the panel so the first view is current. <sub>`test_with_no_sheet_shown_yet_any_entity_change_reloads`</sub>
+- The port setting keeps integers from 1 to 65535 and falls back to 9310 for anything else (text, 0, too large). <sub>`test_port_setting_accepts_valid_ports_and_falls_back_to_the_default`</sub>
+
+### Project overview & netlist view
+
+- The project summary shows the project name, the revision and, per sheet, how many symbols, wires and other entities it holds. <sub>`test_summary_carries_name_revision_and_per_sheet_entity_counts`</sub>
+- An empty or partial snapshot summarizes to an unnamed project with no sheets instead of failing. <sub>`test_an_empty_snapshot_summarizes_to_zero`</sub>
+- Each netlist row shows the net name, wire number, label, the pins as "K1:A1, TB1:3" and how many wires form the net. <sub>`test_rows_show_net_name_wire_number_label_pins_and_wire_count`</sub>
+- A pin whose symbol has no designator is shown as "?:<pin>" so the row still reads. <sub>`test_pins_without_a_designator_show_a_placeholder`</sub>
 

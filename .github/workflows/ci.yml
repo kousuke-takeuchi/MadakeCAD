@@ -33,6 +33,17 @@ jobs:
       - run: npx vitest run
       - run: npx vue-tsc --noEmit
 
+  freecad:
+    name: FreeCAD add-on tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # The add-on's pure modules (Link API client, panel model, live follow) run without FreeCAD
+      - run: python3 -m unittest discover -s freecad-addon/tests -v
+
   spec:
     name: Spec docs freshness
     runs-on: ubuntu-latest
