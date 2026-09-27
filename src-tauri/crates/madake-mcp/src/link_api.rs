@@ -125,17 +125,44 @@ async fn get_netlist(
     )))
 }
 
+#[derive(Deserialize)]
+struct CommandsQuery {
+    /// `?batch=true`: 配列全体を**1回の編集**として実行する (undo一発)。
+    #[serde(default)]
+    batch: bool,
+}
+
 /// 外部クライアント(madake CLI・FreeCADアドオン・ブラウザ検証)からの編集。
 /// 由来は`mcp`として履歴に残る(UI操作=`user`・エージェント=`agent`と区別する)。
 ///
+/// 既定では1コマンド=1履歴で順に実行し、patchをコマンドごとに返す。
+/// `?batch=true`なら配列全体が**1回の編集**になり(undo一発)、返るpatchは1件。
+///
 /// **失敗したコマンドは黙って捨てない** (G17): 拒否されたら 400 と
 /// `{ "error": 理由, "failed_command_index": 何番目か, "applied": 適用済みの件数 }`
-/// を返す。それより前のコマンドは適用済みで、まとめて取り消したいなら`undo`を
-/// `applied`回呼ぶ (1コマンド=1履歴のため)。
+/// を返す。個々のコマンドは全か無か(適用前に検査する)なので、既定モードなら
+/// `undo`を`applied`回呼べば投入前の図面へ戻る。`batch=true`なら失敗時に
+/// 何も適用されない(`applied`は常に0)。
 async fn post_commands(
     State(doc): State<SharedDoc>,
+    Query(q): Query<CommandsQuery>,
     Json(commands): Json<Vec<Command>>,
 ) -> Result<Json<Vec<Patch>>, CommandError> {
+    if q.batch {
+        let count = commands.len();
+        return match doc.execute_batch_as(commands, madake_core::EditOrigin::Mcp) {
+            Ok(patch) => Ok(Json(vec![patch])),
+            Err(e) => Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": e.to_string(),
+                    "failed_command_index": serde_json::Value::Null,
+                    "applied": 0,
+                    "batch": count,
+                })),
+            )),
+        };
+    }
     let mut patches = Vec::new();
     for (i, cmd) in commands.into_iter().enumerate() {
         match doc.execute_external(cmd) {

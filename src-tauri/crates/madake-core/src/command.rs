@@ -291,8 +291,18 @@ impl Engine {
     /// 由来は履歴エントリに残り、[`Self::revert_range`]が対象を絞るのに使う。
     /// 呼び出し経路ごとに: UI(Tauri IPC)=[`EditOrigin::User`]、エージェントの
     /// ターン実行中=[`EditOrigin::Agent`]、外部MCP/Link API/CLI=[`EditOrigin::Mcp`]。
+    ///
+    /// **何も変わらなかった編集は履歴に積まない**(同じ値の書き戻し・同じ番号の再採番
+    /// など。patchもrevisionも動かない)。空の段を積むとundoが1回空振りし、redo履歴まで
+    /// 消えてしまうため。
     pub fn execute_as(&mut self, cmd: Command, origin: EditOrigin) -> Result<Patch> {
         let (ops, inverse) = self.apply(&cmd)?;
+        if ops.is_empty() && inverse.is_empty() {
+            return Ok(Patch {
+                revision: self.revision,
+                ops,
+            });
+        }
         self.undo_stack.push(HistoryEntry {
             forward: vec![cmd],
             inverse,
@@ -870,11 +880,20 @@ impl Engine {
                     .project
                     .sheet_mut(*sheet_id)
                     .ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                // 先に**全ての**wire_idを検査する。1件でも配線として見つからなければ、
+                // 何も書き換えずに`Err`を返す(全か無か)。書き換えたあとで失敗すると、
+                // その編集は履歴に積まれないのでundoで戻せない図面が残ってしまう。
+                for WireLength { wire_id, .. } in lengths {
+                    if !matches!(sheet.entities.get(wire_id), Some(Entity::Wire(_))) {
+                        return Err(CoreError::EntityNotFound(*wire_id));
+                    }
+                }
                 let mut ops = Vec::new();
                 let mut old = Vec::new();
                 for WireLength { wire_id, length_m, source } in lengths {
+                    // 上の検査で配線であることを確認済み。
                     let Some(Entity::Wire(w)) = sheet.entities.get_mut(wire_id) else {
-                        return Err(CoreError::EntityNotFound(*wire_id));
+                        continue;
                     };
                     if w.length_m == *length_m && w.length_source == *source {
                         continue;
@@ -891,13 +910,16 @@ impl Engine {
                         entity: Entity::Wire(w.clone()),
                     });
                 }
-                Ok((
-                    ops,
+                // 1本も変わらなかったら逆コマンドも空にする(無駄なundoの段を作らない)。
+                let inverse = if old.is_empty() {
+                    Vec::new()
+                } else {
                     vec![Command::SetWireLengths {
                         sheet_id: *sheet_id,
                         lengths: old,
-                    }],
-                ))
+                    }]
+                };
+                Ok((ops, inverse))
             }
         }
     }
@@ -3015,8 +3037,8 @@ mod tests {
         ));
     }
 
-    /// Writing measured wire lengths back sets each wire's length and marks it as measured by FreeCAD in one undo step; unchanged wires are skipped and an unknown wire is an error.
-    /// 計測した電線長の書き戻しは、各配線の長さを設定して出所を「FreeCAD計測」にする1回の編集になる。変わらない配線は飛ばし、存在しない配線はエラーになる。
+    /// Writing measured wire lengths back sets each wire's length and marks it as measured by FreeCAD in one undo step; a write-back that changes nothing costs no undo step at all.
+    /// 計測した電線長の書き戻しは、各配線の長さを設定して出所を「FreeCAD計測」にする1回の編集になる。何も変わらない書き戻しはundoの段を作らない。
     #[test]
     fn wire_lengths_write_back_with_their_source() {
         let (mut engine, sheet_id) = test_engine();
@@ -3032,7 +3054,9 @@ mod tests {
         assert_eq!(patch.ops.len(), 1);
         let Entity::Wire(w) = &engine.project().sheets[0].entities[&wire_id] else { panic!() };
         assert_eq!((w.length_m, w.length_source), (Some(1.25), LengthSource::Freecad));
-        // 同じ値をもう一度: 変更なし (patchは空)
+        // 同じ値をもう一度: 変更なし (patchは空・revisionもundo履歴も動かない)
+        let before = engine.revision();
+        let history = engine.history_origins().len();
         let patch = engine
             .execute(Command::SetWireLengths {
                 sheet_id,
@@ -3040,16 +3064,35 @@ mod tests {
             })
             .unwrap();
         assert!(patch.ops.is_empty());
-        engine.undo().unwrap();
+        assert_eq!((engine.revision(), engine.history_origins().len()), (before, history));
+        // 空振りの段が無いので、undo1回で手入力の値へ戻る
         engine.undo().unwrap();
         let Entity::Wire(w) = &engine.project().sheets[0].entities[&wire_id] else { panic!() };
         assert_eq!((w.length_m, w.length_source), (Some(0.4), LengthSource::Manual));
+    }
+
+    /// A write-back naming a wire that is not on the sheet changes nothing: the other wires of the same batch keep their lengths and no undo step is created.
+    /// シートに無い配線が混ざった書き戻しは何も変えない。同じ一括分の他の配線も元のままで、undoの段もできない。
+    #[test]
+    fn wire_lengths_write_back_is_all_or_nothing() {
+        let (mut engine, sheet_id) = test_engine();
+        let wire = sample_wire();
+        let wire_id = wire.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: wire }).unwrap();
+        let revision = engine.revision();
+        let history = engine.history_origins().len();
         assert!(matches!(
             engine.execute(Command::SetWireLengths {
                 sheet_id,
-                lengths: vec![WireLength { wire_id: Uuid::new_v4(), length_m: None, source: LengthSource::Manual }],
+                lengths: vec![
+                    WireLength { wire_id, length_m: Some(9.9), source: LengthSource::Freecad },
+                    WireLength { wire_id: Uuid::new_v4(), length_m: Some(1.0), source: LengthSource::Freecad },
+                ],
             }),
             Err(CoreError::EntityNotFound(_))
         ));
+        let Entity::Wire(w) = &engine.project().sheets[0].entities[&wire_id] else { panic!() };
+        assert_eq!((w.length_m, w.length_source), (Some(0.4), LengthSource::Manual));
+        assert_eq!((engine.revision(), engine.history_origins().len()), (revision, history));
     }
 }

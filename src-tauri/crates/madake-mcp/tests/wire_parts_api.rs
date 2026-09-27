@@ -1,5 +1,5 @@
 //! 電線品番表のLink API (`GET/POST /project/wire-parts`) と、
-//! 拒否されたコマンドがきちんと400で返ること (G17) のテスト。
+//! `POST /commands` の実行規則 (拒否は400 = G17、`?batch=true`は1回の編集) のテスト。
 //!
 //! どちらも編集はCommandエンジンを通るので、undo一発で元に戻る。
 
@@ -120,6 +120,44 @@ async fn a_valid_command_list_still_succeeds() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body.as_array().expect("patch配列").len(), 1);
     assert_eq!(doc.engine.lock().unwrap().project().sheets[0].entities.len(), 1);
+}
+
+/// Asking for a batch (`?batch=true`) runs the whole command list as a single edit, so one patch comes back and one undo takes all of it away again.
+/// 一括実行(`?batch=true`)を指定すると、コマンド列全体が1回の編集になる。patchは1件返り、undo一発で全部が元に戻る。
+#[tokio::test]
+async fn a_batch_command_list_is_one_undo_step() {
+    let (doc, router) = setup();
+    let sheet = sheet_id(&doc);
+    let (status, body) = post(
+        &router,
+        "/api/v1/commands?batch=true",
+        json!([add_wire(sheet), add_wire(sheet), add_wire(sheet)]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_array().expect("patch配列").len(), 1, "1回の編集=patch1件");
+    assert_eq!(doc.engine.lock().unwrap().project().sheets[0].entities.len(), 3);
+    doc.undo().unwrap();
+    assert!(doc.engine.lock().unwrap().project().sheets[0].entities.is_empty());
+}
+
+/// A batch whose last command is refused applies nothing at all: the drawing is untouched and the reply says zero commands were applied.
+/// 一括実行の最後のコマンドが拒否されると何も適用されない。図面は手つかずで、返答は適用0件と伝える。
+#[tokio::test]
+async fn a_refused_batch_applies_nothing() {
+    let (doc, router) = setup();
+    let sheet = sheet_id(&doc);
+    let commands = json!([
+        add_wire(sheet),
+        { "type": "add_entity", "sheet_id": sheet,
+          "entity": { "kind": "symbol", "id": uuid::Uuid::new_v4(),
+              "symbol_id": "no_such_symbol", "at": {"x": 20.0, "y": 20.0}, "reference": "X1" } },
+    ]);
+    let (status, body) = post(&router, "/api/v1/commands?batch=true", commands).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["applied"], 0, "1件も適用されていない");
+    assert!(doc.engine.lock().unwrap().project().sheets[0].entities.is_empty());
+    assert!(!doc.engine.lock().unwrap().can_undo(), "履歴も積まれない");
 }
 
 /// Posting a wire-part CSV fills the project's colour+gauge table, and the wire list then prints the part number of a wire that has none of its own.
