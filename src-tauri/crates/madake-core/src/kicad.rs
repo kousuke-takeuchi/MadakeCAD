@@ -388,8 +388,12 @@ pub fn import_kicad_sch(
             report.labels += 1;
             continue;
         }
-        // lib_id → symbol_id (静的マッピング → コネクタ/端子台の動的ID)
-        let symbol_id: Option<String> = match map_lib_id(lib_id) {
+        // lib_id → symbol_id (自前エクスポートの"MadakeCAD:<id>" → 静的マッピング → コネクタ/端子台の動的ID)
+        let own_id = lib_id
+            .strip_prefix(EXPORT_LIB)
+            .filter(|id| crate::symbol::resolve_symbol(id).is_some())
+            .map(str::to_string);
+        let symbol_id: Option<String> = match own_id.as_deref().or_else(|| map_lib_id(lib_id)) {
             Some(id) => Some(id.to_string()),
             None => {
                 let name = lib_id.split(':').nth(1).unwrap_or(lib_id);
@@ -445,6 +449,365 @@ pub fn import_kicad_sch(
     let mut project = Project::new(project_name);
     project.sheets = vec![sheet];
     Ok((project, report))
+}
+
+
+// ---------------------------------------------------------------------------
+// エクスポート (.kicad_sch)
+// ---------------------------------------------------------------------------
+
+use crate::model::{Entity, Orientation, PaperSize, Sheet};
+use crate::symbol::SymbolDef;
+
+/// エクスポート時のライブラリ名接頭辞。`MadakeCAD:relay_coil` のようにsymbol_idをそのまま使う。
+/// インポーターはこの接頭辞を見て同じsymbol_idへ戻す (往復で図形が変わらない)。
+pub const EXPORT_LIB: &str = "MadakeCAD:";
+
+/// KiCadのファイル形式バージョン (KiCad 9)。
+const KICAD_VERSION: &str = "20250114";
+
+/// S式の文字列リテラル (引用符・バックスラッシュ・改行をエスケープ)。
+fn esc(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// 数値 (末尾の0を落とした最大4桁小数)。
+fn num(v: f64) -> String {
+    let s = format!("{v:.4}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".into() } else { s.to_string() }
+}
+
+fn xy(p: crate::geometry::Point) -> String {
+    format!("(xy {} {})", num(p.x), num(p.y))
+}
+
+/// ライブラリシンボルの座標系 (KiCadはY上向き) へ: yを反転する。
+fn lib_pt(p: crate::geometry::Point) -> String {
+    format!("{} {}", num(p.x), num(-p.y))
+}
+
+fn stroke(width: f64, dashed: bool) -> String {
+    format!(
+        "(stroke (width {}) (type {}))",
+        num(width),
+        if dashed { "dash" } else { "default" }
+    )
+}
+
+/// ピンの向き: KiCadの角度はピン線が接続点から本体へ伸びる向き (配線が出る向きの逆)。
+fn pin_angle(dir: crate::symbol::PinDir) -> u16 {
+    use crate::symbol::PinDir;
+    match dir {
+        PinDir::Right => 180,
+        PinDir::Left => 0,
+        PinDir::Up => 270,
+        PinDir::Down => 90,
+    }
+}
+
+/// ライブラリシンボル定義 (図形+ピン) を書く。
+fn write_lib_symbol(out: &mut String, def: &SymbolDef) {
+    use crate::symbol::Primitive;
+    let name = format!("{EXPORT_LIB}{}", def.id);
+    out.push_str(&format!(
+        "    (symbol {} (pin_numbers hide) (pin_names hide) (exclude_from_sim no) (in_bom yes) (on_board yes)\n",
+        esc(&name)
+    ));
+    out.push_str(&format!(
+        "      (property \"Reference\" {} (at 0 0 0) (effects (font (size 1.27 1.27))))\n",
+        esc(&def.ref_prefix)
+    ));
+    out.push_str(&format!(
+        "      (property \"Value\" {} (at 0 0 0) (effects (font (size 1.27 1.27))))\n",
+        esc(&def.name)
+    ));
+    // 図形ユニット
+    out.push_str(&format!("      (symbol {}\n", esc(&format!("{}_0_1", def.id))));
+    for prim in &def.primitives {
+        match prim {
+            Primitive::Line { pts } => {
+                let pts: Vec<String> = pts.iter().map(|p| format!("(xy {})", lib_pt(*p))).collect();
+                out.push_str(&format!(
+                    "        (polyline (pts {}) {} (fill (type none)))\n",
+                    pts.join(" "),
+                    stroke(0.254, false)
+                ));
+            }
+            Primitive::Circle { center, r, filled } => out.push_str(&format!(
+                "        (circle (center {}) (radius {}) {} (fill (type {})))\n",
+                lib_pt(*center),
+                num(*r),
+                stroke(0.254, false),
+                if *filled { "outline" } else { "none" }
+            )),
+            Primitive::Arc { center, r, start_deg, end_deg } => {
+                // 用紙座標(Y下向き)で始点・中点・終点を取り、Y反転してKiCadの3点弧にする
+                let mid_deg = start_deg + (end_deg - start_deg) / 2.0;
+                let at = |deg: f64| {
+                    let (s, c) = deg.to_radians().sin_cos();
+                    crate::geometry::Point::new(center.x + r * c, center.y + r * s)
+                };
+                out.push_str(&format!(
+                    "        (arc (start {}) (mid {}) (end {}) {} (fill (type none)))\n",
+                    lib_pt(at(*start_deg)),
+                    lib_pt(at(mid_deg)),
+                    lib_pt(at(*end_deg)),
+                    stroke(0.254, false)
+                ));
+            }
+            Primitive::Rect { p1, p2, filled } => out.push_str(&format!(
+                "        (rectangle (start {}) (end {}) {} (fill (type {})))\n",
+                lib_pt(*p1),
+                lib_pt(*p2),
+                stroke(0.254, false),
+                if *filled { "outline" } else { "none" }
+            )),
+            Primitive::Text { at, text, height } => out.push_str(&format!(
+                "        (text {} (at {} 0) (effects (font (size {} {}))))\n",
+                esc(text),
+                lib_pt(*at),
+                num(*height),
+                num(*height)
+            )),
+        }
+    }
+    out.push_str("      )\n");
+    // ピンユニット (長さ0: 接続点=ピン位置)
+    out.push_str(&format!("      (symbol {}\n", esc(&format!("{}_1_1", def.id))));
+    for pin in &def.pins {
+        out.push_str(&format!(
+            "        (pin passive line (at {} {}) (length 0) (name {} (effects (font (size 1.27 1.27)))) (number {} (effects (font (size 1.27 1.27)))))\n",
+            lib_pt(pin.at),
+            pin_angle(pin.dir),
+            esc(&pin.name),
+            esc(&pin.number)
+        ));
+    }
+    out.push_str("      )\n");
+    out.push_str("    )\n");
+}
+
+/// シートをKiCad回路図 (`.kicad_sch`、KiCad 9形式) の文字列にする。
+///
+/// - 用紙・表題欄・配線 (ポリラインは2点ずつのwireに分割)・ジャンクション・ネットラベル・注記を書く
+/// - シンボルは `MadakeCAD:<symbol_id>` として図形とピンをファイル内の`lib_symbols`へ埋め込む
+///   (KiCad側にライブラリが無くてもそのまま開ける)。参照記号・型番はReference/Valueプロパティ
+/// - 線番はKiCadに無いので、そのネットの最長セグメント上の**ラベル**にする (ネット名として残る)
+/// - ハーネス境界は破線の多角形と名前の注記にする (KiCadでは図形扱い)
+/// - 回転・ミラーはインポートと同じ規則で書くので、往復で配置が変わらない
+pub fn export_kicad_sch(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
+    use std::collections::BTreeMap;
+
+    let mut out = String::new();
+    out.push_str(&format!(
+        "(kicad_sch (version {KICAD_VERSION}) (generator \"madakecad\") (generator_version \"{}\")\n",
+        env!("CARGO_PKG_VERSION")
+    ));
+    out.push_str(&format!("  (uuid {})\n", esc(&sheet.id.to_string())));
+    let size = match sheet.size {
+        PaperSize::A4 => "A4",
+        PaperSize::A3 => "A3",
+        PaperSize::A2 => "A2",
+        PaperSize::A1 => "A1",
+        PaperSize::A0 => "A0",
+    };
+    match sheet.orientation {
+        Orientation::Landscape => out.push_str(&format!("  (paper {})\n", esc(size))),
+        Orientation::Portrait => out.push_str(&format!("  (paper {} portrait)\n", esc(size))),
+    }
+    let tb = &sheet.title_block;
+    out.push_str("  (title_block\n");
+    out.push_str(&format!("    (title {})\n", esc(&tb.title)));
+    out.push_str(&format!("    (date {})\n", esc(&tb.date)));
+    out.push_str(&format!("    (rev {})\n", esc(&crate::svg::effective_rev(sheet))));
+    out.push_str(&format!("    (company {})\n", esc(&tb.company)));
+    out.push_str("  )\n");
+
+    // 使われているシンボル定義だけを埋め込む (id順で決定的)
+    let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let mut used: BTreeMap<&str, &SymbolDef> = BTreeMap::new();
+    for e in sheet.entities.values() {
+        if let Entity::Symbol(inst) = e {
+            if let Some(def) = defs.get(inst.symbol_id.as_str()) {
+                used.insert(def.id.as_str(), def);
+            }
+        }
+    }
+    out.push_str("  (lib_symbols\n");
+    for def in used.values() {
+        write_lib_symbol(&mut out, def);
+    }
+    out.push_str("  )\n");
+
+    // ジャンクション
+    for e in sheet.entities.values() {
+        if let Entity::Junction(j) = e {
+            out.push_str(&format!(
+                "  (junction (at {} {}) (diameter 0) (color 0 0 0 0) (uuid {}))\n",
+                num(j.at.x),
+                num(j.at.y),
+                esc(&j.id.to_string())
+            ));
+        }
+    }
+    // 配線 (2点ずつ)
+    for e in sheet.entities.values() {
+        if let Entity::Wire(w) = e {
+            for (i, seg) in w.points.windows(2).enumerate() {
+                out.push_str(&format!(
+                    "  (wire (pts {} {}) {} (uuid {}))\n",
+                    xy(seg[0]),
+                    xy(seg[1]),
+                    stroke(0.0, false),
+                    esc(&format!("{}-{i}", w.id))
+                ));
+            }
+        }
+    }
+    // ハーネス境界: 破線の閉多角形+名前
+    for e in sheet.entities.values() {
+        if let Entity::Harness(h) = e {
+            if h.points.len() >= 2 {
+                let mut pts: Vec<String> = h.points.iter().map(|p| xy(*p)).collect();
+                pts.push(xy(h.points[0]));
+                out.push_str(&format!(
+                    "  (polyline (pts {}) {} (uuid {}))\n",
+                    pts.join(" "),
+                    stroke(0.2, true),
+                    esc(&h.id.to_string())
+                ));
+            }
+            if !h.name.is_empty() {
+                let (minx, miny) = h
+                    .points
+                    .iter()
+                    .fold((f64::MAX, f64::MAX), |(x, y), p| (x.min(p.x), y.min(p.y)));
+                out.push_str(&format!(
+                    "  (text {} (at {} {} 0) (effects (font (size 2.5 2.5)) (justify left bottom)) (uuid {}))\n",
+                    esc(&h.name),
+                    num(minx),
+                    num(miny - 1.0),
+                    esc(&format!("{}-name", h.id))
+                ));
+            }
+        }
+    }
+    // ネットラベル
+    for e in sheet.entities.values() {
+        if let Entity::NetLabel(l) = e {
+            out.push_str(&format!(
+                "  (label {} (at {} {} {}) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid {}))\n",
+                esc(&l.name),
+                num(l.at.x),
+                num(l.at.y),
+                l.rotation,
+                esc(&l.id.to_string())
+            ));
+        }
+    }
+    // 線番 → ラベル (ラベルの無いネットのみ。最長セグメントの中点)
+    for net in crate::netlist::extract_netlist(sheet, symbols) {
+        if net.label.is_some() {
+            continue;
+        }
+        let Some(no) = net.wire_no.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        let Some((a, b)) = crate::svg::longest_segment(sheet, &net.wire_ids) else { continue };
+        let mid = crate::svg::midpoint(&a, &b);
+        out.push_str(&format!(
+            "  (label {} (at {} {} 0) (effects (font (size 1.27 1.27)) (justify left bottom)))\n",
+            esc(no),
+            num(mid.x),
+            num(mid.y)
+        ));
+    }
+    // 注記
+    for e in sheet.entities.values() {
+        if let Entity::Text(t) = e {
+            out.push_str(&format!(
+                "  (text {} (at {} {} {}) (effects (font (size {} {})) (justify left bottom)) (uuid {}))\n",
+                esc(&t.text),
+                num(t.at.x),
+                num(t.at.y),
+                t.rotation,
+                num(t.height),
+                num(t.height),
+                esc(&t.id.to_string())
+            ));
+        }
+    }
+    // シンボル
+    let project_name = sheet.name.as_str();
+    for e in sheet.entities.values() {
+        let Entity::Symbol(inst) = e else { continue };
+        let Some(def) = defs.get(inst.symbol_id.as_str()) else { continue };
+        out.push_str(&format!(
+            "  (symbol (lib_id {}) (at {} {} {})",
+            esc(&format!("{EXPORT_LIB}{}", inst.symbol_id)),
+            num(inst.at.x),
+            num(inst.at.y),
+            inst.rotation
+        ));
+        if inst.mirror {
+            out.push_str(" (mirror y)");
+        }
+        out.push_str(&format!(
+            " (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid {})\n",
+            esc(&inst.id.to_string())
+        ));
+        let top = crate::svg::symbol_top_y(inst, def);
+        out.push_str(&format!(
+            "    (property \"Reference\" {} (at {} {} 0) (effects (font (size 1.27 1.27))))\n",
+            esc(&inst.reference),
+            num(inst.at.x),
+            num(top - 5.0)
+        ));
+        out.push_str(&format!(
+            "    (property \"Value\" {} (at {} {} 0) (effects (font (size 1.27 1.27))))\n",
+            esc(&inst.value),
+            num(inst.at.x),
+            num(top - 2.5)
+        ));
+        for (k, v) in &inst.attrs {
+            out.push_str(&format!(
+                "    (property {} {} (at {} {} 0) (effects (font (size 1.27 1.27)) hide))\n",
+                esc(k),
+                esc(v),
+                num(inst.at.x),
+                num(inst.at.y)
+            ));
+        }
+        for pin in &def.pins {
+            out.push_str(&format!(
+                "    (pin {} (uuid {}))\n",
+                esc(&pin.number),
+                esc(&format!("{}-{}", inst.id, pin.number))
+            ));
+        }
+        out.push_str(&format!(
+            "    (instances (project {} (path {} (reference {}) (unit 1))))\n",
+            esc(project_name),
+            esc(&format!("/{}", sheet.id)),
+            esc(&inst.reference)
+        ));
+        out.push_str("  )\n");
+    }
+    out.push_str(")\n");
+    out
 }
 
 #[cfg(test)]
@@ -606,5 +969,222 @@ mod tests {
         assert!(matches!(parse_sexpr("(a (b)"), Err(KicadError::Syntax(_, _))));
         assert!(matches!(parse_sexpr("(a)) "), Err(KicadError::Syntax(_, _))));
         assert!(matches!(parse_sexpr(r#"(a "x"#), Err(KicadError::Syntax(_, _))));
+    }
+
+    // ---- エクスポート ----
+
+    fn export_fixture() -> Sheet {
+        use crate::geometry::Point;
+        use uuid::Uuid;
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A4, Orientation::Portrait);
+        sheet.title_block.title = "動力\"系統\"図".into();
+        sheet.title_block.company = "サンプル社".into();
+        sheet.title_block.date = "2026-09-27".into();
+        let mut push = |e: Entity| {
+            sheet.entities.insert(e.id(), e);
+        };
+        push(Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "relay_coil".into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 90,
+            mirror: true,
+            reference: "K1".into(),
+            value: "MY2N".into(),
+            attrs: [("DESC".to_string(), "主回路".to_string())].into(),
+        }));
+        push(Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "terminal_block_3p".into(),
+            at: Point::new(50.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        }));
+        push(Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(10.0, 10.0), Point::new(40.0, 10.0), Point::new(40.0, 30.0)],
+            color: "red".into(),
+            sq: 0.75,
+            length_m: None,
+            part_no: None,
+            net: Some("101".into()),
+        }));
+        push(Entity::Junction(Junction { id: Uuid::new_v4(), at: Point::new(40.0, 10.0) }));
+        push(Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(60.0, 80.0),
+            name: "24V".into(),
+            rotation: 0,
+        }));
+        push(Entity::Text(TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(20.0, 90.0),
+            text: "注記 \"A\"\n2行目".into(),
+            height: 3.0,
+            rotation: 0,
+        }));
+        push(Entity::Harness(Harness {
+            id: Uuid::new_v4(),
+            points: vec![
+                Point::new(5.0, 5.0),
+                Point::new(45.0, 5.0),
+                Point::new(45.0, 35.0),
+                Point::new(5.0, 35.0),
+            ],
+            name: "W1".into(),
+            note: String::new(),
+        }));
+        sheet
+    }
+
+    fn defs(sheet: &Sheet) -> Vec<SymbolDef> {
+        crate::symbol::sheet_symbol_defs(sheet)
+    }
+
+    /// Exporting a sheet to .kicad_sch and importing it back keeps paper, title block, symbols (id, reference, value, rotation, mirror), wires, junctions, labels and text.
+    /// シートを.kicad_schへ書き出して読み戻すと、用紙・表題欄・シンボル(種類・参照記号・型番・回転・ミラー)・配線・ジャンクション・ラベル・注記が保たれる。
+    #[test]
+    fn export_then_import_round_trips_the_sheet() {
+        let sheet = export_fixture();
+        let text = export_kicad_sch(&sheet, &defs(&sheet));
+        let (project, report) = import_kicad_sch(&text, "往復").unwrap();
+        let back = &project.sheets[0];
+        assert_eq!(back.size, PaperSize::A4);
+        assert_eq!(back.orientation, Orientation::Portrait);
+        assert_eq!(back.title_block.title, "動力\"系統\"図");
+        assert_eq!(back.title_block.company, "サンプル社");
+        assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+        assert_eq!(report.symbols, 2);
+        let k1 = back
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Symbol(s) if s.reference == "K1" => Some(s),
+                _ => None,
+            })
+            .expect("K1");
+        assert_eq!(k1.symbol_id, "relay_coil");
+        assert_eq!(k1.value, "MY2N");
+        assert_eq!(k1.rotation, 90);
+        assert!(k1.mirror);
+        assert_eq!((k1.at.x, k1.at.y), (100.0, 50.0));
+        let tb1 = back
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Symbol(s) if s.reference == "TB1" => Some(s),
+                _ => None,
+            })
+            .expect("TB1");
+        assert_eq!(tb1.symbol_id, "terminal_block_3p");
+        assert_eq!(report.junctions, 1);
+        let texts: Vec<&str> = back
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                Entity::Text(t) => Some(t.text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(texts.contains(&"注記 \"A\"\n2行目"), "{texts:?}");
+    }
+
+    /// A wire drawn as a polyline is exported as one two-point KiCad wire per segment.
+    /// 折れ線で描いた配線は、セグメントごとに2点のKiCad wireとして書き出される。
+    #[test]
+    fn polyline_wires_are_split_into_segments() {
+        let sheet = export_fixture();
+        let text = export_kicad_sch(&sheet, &defs(&sheet));
+        let root = parse_sexpr(&text).unwrap();
+        let wires: Vec<_> = root.children("wire").collect();
+        assert_eq!(wires.len(), 2);
+        for w in &wires {
+            assert_eq!(w.child("pts").unwrap().children("xy").count(), 2);
+        }
+    }
+
+    /// Every symbol used on the sheet is embedded once in lib_symbols with its graphics and pins, so KiCad opens the file without MadakeCAD libraries.
+    /// シートで使うシンボルは図形とピンごとにlib_symbolsへ1回だけ埋め込まれ、KiCad側にライブラリが無くても開ける。
+    #[test]
+    fn used_symbols_are_embedded_in_lib_symbols() {
+        let sheet = export_fixture();
+        let text = export_kicad_sch(&sheet, &defs(&sheet));
+        let root = parse_sexpr(&text).unwrap();
+        let libs = root.child("lib_symbols").unwrap();
+        let names: Vec<&str> = libs.children("symbol").filter_map(|s| s.arg_str(0)).collect();
+        assert_eq!(names, vec!["MadakeCAD:relay_coil", "MadakeCAD:terminal_block_3p"]);
+        let tb = libs
+            .children("symbol")
+            .find(|s| s.arg_str(0) == Some("MadakeCAD:terminal_block_3p"))
+            .unwrap();
+        let pins = tb
+            .children("symbol")
+            .flat_map(|unit| unit.children("pin").collect::<Vec<_>>())
+            .count();
+        assert_eq!(pins, 6, "端子台3極は左右貫通で6ピン");
+    }
+
+    /// A wire number becomes a KiCad label on the numbered net, so the net keeps its name in KiCad and on re-import.
+    /// 線番はそのネット上のKiCadラベルになり、KiCadでも再インポート後もネット名として残る。
+    #[test]
+    fn wire_numbers_become_labels() {
+        let sheet = export_fixture();
+        let text = export_kicad_sch(&sheet, &defs(&sheet));
+        let root = parse_sexpr(&text).unwrap();
+        let labels: Vec<&str> = root.children("label").filter_map(|l| l.arg_str(0)).collect();
+        assert!(labels.contains(&"101"), "{labels:?}");
+        assert!(labels.contains(&"24V"), "{labels:?}");
+        let (project, _) = import_kicad_sch(&text, "往復").unwrap();
+        let nets = crate::netlist::extract_netlist(&project.sheets[0], &[]);
+        assert!(nets.iter().any(|n| n.name == "101"), "{:?}", nets.iter().map(|n| &n.name).collect::<Vec<_>>());
+    }
+
+    /// A harness boundary is exported as a dashed closed polyline plus a text with its name.
+    /// ハーネス境界は破線の閉じた多角形と、その名前の注記として書き出される。
+    #[test]
+    fn harness_becomes_dashed_polyline_with_name() {
+        let sheet = export_fixture();
+        let text = export_kicad_sch(&sheet, &defs(&sheet));
+        let root = parse_sexpr(&text).unwrap();
+        let poly = root.children("polyline").next().expect("polyline");
+        assert_eq!(poly.child("pts").unwrap().children("xy").count(), 5, "閉じるため始点を再掲");
+        assert_eq!(
+            poly.child("stroke").unwrap().child("type").unwrap().arg_str(0),
+            Some("dash")
+        );
+        assert!(root.children("text").any(|t| t.arg_str(0) == Some("W1")));
+    }
+
+    /// Quotes, backslashes and newlines in text are escaped so the exported file parses and reads back unchanged.
+    /// 注記内の引用符・バックスラッシュ・改行はエスケープされ、書き出したファイルは正しく解釈されて同じ文字列に戻る。
+    #[test]
+    fn strings_are_escaped_and_read_back() {
+        assert_eq!(esc("a\"b\\c\nd"), "\"a\\\"b\\\\c\\nd\"");
+        let e = parse_sexpr(&format!("(text {})", esc("a\"b\\c\nd"))).unwrap();
+        assert_eq!(e.arg_str(0), Some("a\"b\\c\nd"));
+    }
+
+    /// Importing a schematic exported by MadakeCAD resolves "MadakeCAD:<id>" library ids directly, including parametric terminal blocks and connectors.
+    /// MadakeCADが書き出した回路図の"MadakeCAD:<id>"ライブラリidは、端子台・コネクタの動的シンボルも含めそのまま同じシンボルに戻る。
+    #[test]
+    fn madakecad_lib_ids_resolve_directly_on_import() {
+        let text = r##"(kicad_sch (version 20250114) (generator "madakecad") (paper "A3")
+  (symbol (lib_id "MadakeCAD:connector_12p") (at 10 10 0) (property "Reference" "J1" (at 0 0 0)) (property "Value" "" (at 0 0 0)))
+  (symbol (lib_id "MadakeCAD:no_such_symbol") (at 20 10 0) (property "Reference" "X1" (at 0 0 0)) (property "Value" "" (at 0 0 0)))
+)"##;
+        let (project, report) = import_kicad_sch(text, "t").unwrap();
+        let ids: Vec<String> = project.sheets[0]
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                Entity::Symbol(s) => Some(s.symbol_id.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ids, vec!["connector_12p"]);
+        assert_eq!(report.skipped, vec!["MadakeCAD:no_such_symbol x1"]);
     }
 }

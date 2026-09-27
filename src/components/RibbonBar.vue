@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  Activity, AlignJustify, Cable, Copy, Cpu, File, FileClock, FileDown, FileOutput, FilePlus,
+  Activity, AlignJustify, Cable, Copy, Cpu, File, FileClock, FileDown, FileInput, FileOutput, FilePlus,
   FileSpreadsheet, FileText, FolderOpen, FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid,
   LayoutTemplate, ListOrdered, ListChecks, Move, MoveRight, Network, Pencil, Route, Save,
   Scissors, ShieldCheck, SquareDashed, Table2, Tag, Trash2, Type,
@@ -324,6 +324,54 @@ const homeGroups = computed<RibbonGroup[]>(() => {
   return groups;
 });
 
+/**
+ * 「読み込み/書き出し」タブ: 他CADとの受け渡し。KiCad回路図(.kicad_sch)と、
+ * AutoCAD Electrical / EPLANの中間形式であるDXFの読み込み・書き出し、帳票CSV。
+ * (ACADEの.dwg・EPLANの.elk/.zw1は非公開形式なので、両製品が読み書きできるDXFで受け渡す)
+ */
+const ioGroups = computed<RibbonGroup[]>(() => [
+  {
+    name: t("io.importGroup"),
+    big: {
+      label: t("io.open"),
+      icon: FolderOpen,
+      color: "var(--acad-blue)",
+      action: () => files.openProject(),
+    },
+    small: [
+      [
+        { label: t("io.importKicad"), icon: FileInput, action: () => files.importFile("kicad") },
+        { label: t("io.importDxf"), icon: FileInput, action: () => files.importFile("dxf") },
+      ],
+    ],
+  },
+  {
+    name: t("io.exportGroup"),
+    big: {
+      label: t("io.exportDxf"),
+      icon: FileOutput,
+      color: "var(--icon-edit)",
+      action: () => files.exportSheet("dxf"),
+    },
+    small: [
+      [
+        { label: t("io.exportKicad"), icon: FileOutput, action: () => files.exportSheet("kicad") },
+        { label: t("io.exportSvg"), icon: Image, action: () => files.exportSheet("svg") },
+        { label: t("io.exportPdf"), icon: FileDown, action: () => files.exportSheet("pdf") },
+      ],
+    ],
+  },
+  {
+    name: t("io.reportGroup"),
+    small: [
+      [
+        { label: t("io.exportBom"), icon: FileText, action: () => files.exportBom() },
+        { label: t("io.exportWireList"), icon: Cable, action: () => files.exportWireList() },
+      ],
+    ],
+  },
+]);
+
 /** 「プロジェクト」タブ: 作図を始めるための導線 (テンプレート)。 */
 const projectGroups = computed<RibbonGroup[]>(() => [
   {
@@ -444,6 +492,7 @@ const groups = computed<RibbonGroup[]>(() => [
 const activeGroups = computed<RibbonGroup[] | null>(() => {
   if (activeTab.value === "schematic") return groups.value;
   if (activeTab.value === "home") return homeGroups.value;
+  if (activeTab.value === "io") return ioGroups.value;
   if (activeTab.value === "project") return projectGroups.value;
   if (activeTab.value === "report") return reportGroups.value;
   return null;

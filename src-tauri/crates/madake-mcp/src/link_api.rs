@@ -398,9 +398,69 @@ async fn post_import_kicad(
 }
 
 #[derive(Deserialize)]
+struct ImportDxfBody {
+    path: String,
+    /// 配線とみなすレイヤ名 (省略時は名前に WIRE を含むレイヤ)。
+    #[serde(default)]
+    wire_layers: Vec<String>,
+}
+
+/// DXF (AutoCAD Electrical / EPLAN の中間形式) を読み込みプロジェクトを置き換える。
+async fn post_import_dxf(
+    State(state): State<AgentApi>,
+    Json(body): Json<ImportDxfBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let options = madake_core::dxf::DxfImportOptions { wire_layers: body.wire_layers };
+    let (patch, report) = crate::agent::import_dxf_with_chat(
+        &state.doc,
+        &state.agent,
+        std::path::Path::new(&body.path),
+        &options,
+    )
+    .map_err(bad_request)?;
+    Ok(Json(
+        serde_json::json!({ "patch": patch, "report": report }),
+    ))
+}
+
+#[derive(Deserialize)]
 struct ExportSvgBody {
     sheet_id: Option<Uuid>,
     path: String,
+}
+
+/// シートをDXF (AutoCAD 2000形式、ACADE/EPLANが読める) で書き出す。
+async fn post_export_dxf(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<ExportSvgBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let engine = doc.engine.lock().unwrap();
+    let project = engine.project();
+    let sheet = match body.sheet_id {
+        Some(id) => project.sheet(id),
+        None => project.sheets.first(),
+    }
+    .ok_or_else(|| bad_request("sheet not found"))?;
+    let dxf = madake_core::dxf::sheet_to_dxf(sheet, &sheet_symbol_defs(sheet));
+    std::fs::write(&body.path, dxf).map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "written": body.path })))
+}
+
+/// シートをKiCad回路図 (.kicad_sch) で書き出す。
+async fn post_export_kicad(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<ExportSvgBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let engine = doc.engine.lock().unwrap();
+    let project = engine.project();
+    let sheet = match body.sheet_id {
+        Some(id) => project.sheet(id),
+        None => project.sheets.first(),
+    }
+    .ok_or_else(|| bad_request("sheet not found"))?;
+    let sch = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
+    std::fs::write(&body.path, sch).map_err(bad_request)?;
+    Ok(Json(serde_json::json!({ "written": body.path })))
 }
 
 async fn post_export_svg(
@@ -877,6 +937,7 @@ fn agent_router(state: AgentApi) -> Router {
         .route("/api/v1/save", post(post_save))
         .route("/api/v1/load", post(post_load))
         .route("/api/v1/import/kicad", post(post_import_kicad))
+        .route("/api/v1/import/dxf", post(post_import_dxf))
         .route("/api/v1/agent/send", post(post_agent_send))
         .route("/api/v1/agent/cancel", post(post_agent_cancel))
         .route("/api/v1/agent/conversations", get(get_agent_conversations))
@@ -1061,6 +1122,8 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/redo", post(post_redo))
         .route("/api/v1/export/svg", post(post_export_svg))
         .route("/api/v1/export/pdf", post(post_export_pdf))
+        .route("/api/v1/export/dxf", post(post_export_dxf))
+        .route("/api/v1/export/kicad", post(post_export_kicad))
         .route("/api/v1/export/pdf-book", post(post_export_pdf_book))
         .route("/api/v1/export/report", post(post_export_report))
         .route("/api/v1/export/bom", post(post_export_bom))

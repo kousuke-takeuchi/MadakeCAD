@@ -68,10 +68,10 @@ cargo run -p madake-cli -- parts [<検索語>] [--category <c>]  # 部品DB検�
 cargo run -p madake-cli -- sim [--open SW1,K1]       # DC動作点シミュレーション
 cargo run -p madake-cli -- renumber [--sheet <ID>] [--mode append|renumber] [--start N]  # 線番の自動採番
 cargo run -p madake-cli -- terminals [--sheet <ID>]  # 端子台一覧 (参照記号・極数・ジャンパ・entity id)
-cargo run -p madake-cli -- export svg|pdf <path> [--sheet <ID>]
+cargo run -p madake-cli -- export svg|pdf|dxf|kicad <path> [--sheet <ID>]   # dxf=ACADE/EPLAN向け、kicad=.kicad_sch
 cargo run -p madake-cli -- export bom|wire-list|terminal-chart|terminal-diagram|xref-table <path> [--format csv|pdf] [--terminal <参照記号|ID>]  # 帳票5種 (形式は既定で拡張子判定)
 cargo run -p madake-cli -- export pdf-book <path> [--reports wire-list,terminal-chart,terminal-diagram,bom,xref] [--no-cover]  # 表紙+全シート+帳票を1PDFへ
-cargo run -p madake-cli -- save|open <path.mdkproj>
+cargo run -p madake-cli -- save|open <path.mdkproj>   # open は .kicad_sch / .dxf も可 (--wire-layer で配線レイヤ指定)
 cargo run -p madake-cli -- exec <commands.json>      # Command配列JSON → POST /api/v1/commands
 cargo run -p madake-cli -- undo|redo
 ```

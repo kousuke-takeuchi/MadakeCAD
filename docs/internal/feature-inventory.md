@@ -22,7 +22,8 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | リボン(表示タブ) | ✅ | 表示クラス9種(配線/シンボル/参照記号/ネットラベル/線番/ハーネス/注記/図枠/グリッド)のトグル(レイヤ。画面のみ、出力へ非反映) |
 | リボン(レポートタブ) | ✅ | 帳票(From-To/端子台チャート/端子接続図/BOM/XRef表)+端子台(端子台エディタ)+出力(PDF一括出力)。生成ダイアログで出力形式(CSV/図面シートPDF)と対象を選ぶ |
 | リボン(ホームタブ)・ファイルメニュー | ✅ | ファイル(新規/開く/保存/名前を付けて保存)+最近使ったファイル(最大8件、localStorageに保持)。タイトルバーの新規/開く/保存ボタンと`⌘N`/`⌘O`/`⌘S`/`⇧⌘S`も同じ動作。開いているファイルのパスを覚えて「保存」は上書き、未保存の編集があれば新規/開く前に確認し、タイトルバーに`*`を出す(`stores/projectFile.ts`) |
-| リボン(他タブ) | ⬜ | パネル/読み込み・書き出し/管理はプレースホルダ |
+| リボン(読み込み/書き出しタブ) | ✅ | 読み込み(開く / KiCad回路図 / DXF)+書き出し(DXF / KiCad回路図 / SVG / PDF)+帳票(部品表CSV / 電線リストCSV)。読み込みは未保存の編集を先に確認 |
+| リボン(他タブ) | ⬜ | パネル/管理はプレースホルダ |
 | キャンバス操作 | ✅ | パン(中ボタン/Space)・ホイールズーム・グリッド・スナップ・直交拘束・ピンスナップ(菱形マーカー) |
 | 選択・編集 | ✅ | クリック選択・Shift追加・矩形選択・ドラッグ移動(Command化)・削除・⌘Z/⇧⌘Z |
 | 配線ツール | ✅ | 直交ポリライン、ダブルクリック/Escで確定。線色・sq既定値 |
@@ -92,15 +93,17 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 |---|---|---|
 | KiCadインポート(.kicad_sch) | ✅ | 自前S式パーサ。用紙・表題欄・配線・ジャンクション・ラベル・テキスト・主要シンボル(マッピング表+Conn/Screw_Terminalのピン数解釈)・電源シンボル→ネットラベル化。未対応はスキップ報告(ImportReport) |
 | KiCadインポートの制限 | ⚠ | ピン形状の違いで接続が崩れ得る(ERCで洗い出す運用)。階層シート・バス未対応 |
-| KiCadエクスポート | ⬜ | 未実装(実装すると`kicad-cli sch erc`クロスチェックが可能に) |
+| KiCadエクスポート(.kicad_sch) | ✅ | `kicad.rs::export_kicad_sch`。KiCad 9形式。使用シンボルの図形・ピンを`MadakeCAD:<id>`として`lib_symbols`へ埋め込む(KiCad側にライブラリ不要)。線番はネットのラベル、ハーネスは破線多角形+名前。書き出し→読み戻しで配置が保たれる(インポーターは`MadakeCAD:`接頭辞を直接解決) |
+| DXFエクスポート(ACADE/EPLAN向け) | ✅ | `dxf.rs::sheet_to_dxf`。AutoCAD 2000形式(AC1015)・mm・`\U+XXXX`。配線=`WIRES`レイヤのLINE、線番=`WIRENO`、シンボル=`MDK_<id>`ブロック+属性(TAG1/CAT/DESC1/RATING1/TERMnn)、ジャンクション=`WDDOT`、ラベル=`LABELS`、注記=`MISC`、ハーネス=`HARNESS`(破線)。ACADE/EPLANはDXFをネイティブに読める(`.dwg`/`.elk`は非公開形式のため直接対応しない。仕様: `specs/interop.md`) |
+| DXFインポート | ✅ | `dxf.rs::import_dxf`。配線レイヤ(名前に`WIRE`、または`wire_layers`指定)の線分→配線、`WIRENO`文字→最寄り配線の線番、`MDK_<id>`ブロック→シンボル、`WDDOT`/小円→ジャンクション、インチ→mm換算、外形が収まる最小A判。ACADE/EPLAN固有のブロック名は対応表が無いためスキップ報告(未決事項) |
 
 ## 7. AI・自動化・外部連携
 
 | 機能 | 状態 | 備考 |
 |---|---|---|
-| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール29種: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / get_tidy_metrics / simulate_op / search_parts / upsert_part / delete_part / import_kicad / list_terminal_blocks / get_terminal_chart / check_terminal_block / list_templates / apply_template / list_macros / save_macro / apply_macro / export_svg・pdf・report・pdf_book・bom・wire_list / undo / redo。**検索・デバイスツリーはMCP未露出**(IPC+Link APIのみ。AIはget_projectで足りるため意図的) |
-| Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols / netlist / verify / tidy-metrics / search / devices / simulate/op / commands / undo / redo / save / load / import/kicad / terminals(+/chart・/check) / templates(+/apply) / macros(+/build・/save・/apply・/apply-inline) / export/*(svg・pdf・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/*(send・cancel・conversations・undo-turn・detect・provider・api-key(PUT/DELETE)・test-connection・events) / settings / events |
-| madake CLI | ✅ | status / project / netlist / verify / sim / parts / terminals / export(svg・pdf・pdf-book+帳票5種を`--format csv\|pdf`・`--terminal`付きで) / save / open(.kicad_sch対応) / renumber / exec / undo / redo。マクロ・検索のサブコマンドは未(Link APIを`exec`/curlで直接叩ける) |
+| 内蔵MCPサーバー | ✅ | 127.0.0.1:9310/mcp。ツール32種: get_project / list_symbols / place_symbol / draw_wire / execute_commands(set_revisions・renumber_wires・set_wire_numbers・harness追加・ジャンパ(update_entityのattrs)もここから) / get_netlist / run_verification / get_tidy_metrics / simulate_op / search_parts / upsert_part / delete_part / import_kicad / import_dxf / list_terminal_blocks / get_terminal_chart / check_terminal_block / list_templates / apply_template / list_macros / save_macro / apply_macro / export_svg・pdf・dxf・kicad・report・pdf_book・bom・wire_list / undo / redo。**検索・デバイスツリーはMCP未露出**(IPC+Link APIのみ。AIはget_projectで足りるため意図的) |
+| Link API (/api/v1) | ✅ | REST+SSEパッチ。project / symbols / netlist / verify / tidy-metrics / search / devices / simulate/op / commands / undo / redo / save / load / import/kicad / import/dxf / terminals(+/chart・/check) / templates(+/apply) / macros(+/build・/save・/apply・/apply-inline) / export/*(svg・pdf・dxf・kicad・pdf-book・report・bom・wire-list) / parts / wire-parts / agent/*(send・cancel・conversations・undo-turn・detect・provider・api-key(PUT/DELETE)・test-connection・events) / settings / events |
+| madake CLI | ✅ | status / project / netlist / verify / sim / parts / terminals / export(svg・pdf・dxf・kicad・pdf-book+帳票5種を`--format csv\|pdf`・`--terminal`付きで) / save / open(.kicad_sch・.dxf対応、`--wire-layer`) / renumber / exec / undo / redo。マクロ・検索のサブコマンドは未(Link APIを`exec`/curlで直接叩ける) |
 | AIチャット(A1) | ✅ | 左ドック+浮きカード、Claude Code CLIバックエンド(Pro/Max OAuth再利用)、ツールチップ表示、ターン単位undo、編集オーバーレイ(シアンパルス)、会話履歴のプロジェクト保存 |
 | A1の持ち越し負債(M3フェーズ1で解消) | ✅ | ターン安定ID(`turn_id`。chat.json format_version 2へ移行)・編集origin(`Engine::execute_as` / `revert_range`でagent編集だけを逆適用。衝突は`RevertConflict`)・キャンセルseq(`turn_seq`で遅延イベントを破棄) |
 | 規格知識+検証ループ(M3フェーズ1) | ✅ | 同梱`resources/knowledge/standards.md`を毎ターン注入(設定`knowledge_path`で追記可、後勝ち)。図面コンテキストに検証サマリ。プロンプトで「編集後は`run_verification`→修正→再検証(最大3回)→件数報告」を必須化 |

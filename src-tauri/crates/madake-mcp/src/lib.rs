@@ -448,6 +448,15 @@ pub struct ExportPathParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ImportDxfParams {
+    /// 読み込むDXFファイルのパス(絶対パス)。
+    pub path: String,
+    /// 配線とみなすレイヤ名。省略時は名前に WIRE を含むレイヤ(WIRENOは除く)。
+    #[serde(default)]
+    pub wire_layers: Vec<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ExportPdfBookParams {
     /// 出力先ファイルパス(絶対パス)。
     pub path: String,
@@ -1086,6 +1095,51 @@ impl MadakeMcp {
         let patch = self.doc.engine.lock().unwrap().replace_project(project);
         let _ = self.doc.patches.send(patch.clone());
         json_ok(&serde_json::json!({ "patch": patch, "report": report }))
+    }
+
+    #[tool(
+        description = "DXF(AutoCAD Electrical / EPLANが書き出した図面、またはMadakeCADのDXF)を読み込み、現在のプロジェクトを置き換える。配線レイヤの線分→配線、MDK_<symbol_id>ブロック→シンボル、WIRENOレイヤの文字→線番。未対応ブロックはスキップ報告"
+    )]
+    fn import_dxf(&self, Parameters(p): Parameters<ImportDxfParams>) -> Result<String, ErrorData> {
+        let input = std::fs::read_to_string(&p.path).map_err(internal)?;
+        let name = std::path::Path::new(&p.path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "DXFインポート".into());
+        let options = madake_core::dxf::DxfImportOptions { wire_layers: p.wire_layers };
+        let (project, report) =
+            madake_core::dxf::import_dxf(&input, &name, &options).map_err(internal)?;
+        let patch = self.doc.engine.lock().unwrap().replace_project(project);
+        let _ = self.doc.patches.send(patch.clone());
+        json_ok(&serde_json::json!({ "patch": patch, "report": report }))
+    }
+
+    #[tool(description = "シートをDXF(AutoCAD 2000形式。AutoCAD Electrical / EPLANで開ける。配線=WIRESレイヤのLINE、シンボル=MDK_<id>ブロック+TAG1/CAT属性、線番=WIRENOレイヤ)として指定パスに書き出す")]
+    fn export_dxf(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let project = engine.project();
+        let sheet = match p.sheet_id {
+            Some(id) => project.sheet(id),
+            None => project.sheets.first(),
+        }
+        .ok_or_else(|| internal("sheet not found"))?;
+        let dxf = madake_core::dxf::sheet_to_dxf(sheet, &sheet_symbol_defs(sheet));
+        std::fs::write(&p.path, dxf).map_err(internal)?;
+        json_ok(&serde_json::json!({ "written": p.path }))
+    }
+
+    #[tool(description = "シートをKiCad回路図(.kicad_sch、KiCad 9形式。シンボル図形はファイルに埋め込むのでKiCad側にライブラリ不要)として指定パスに書き出す。線番はネットのラベルになる")]
+    fn export_kicad(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let project = engine.project();
+        let sheet = match p.sheet_id {
+            Some(id) => project.sheet(id),
+            None => project.sheets.first(),
+        }
+        .ok_or_else(|| internal("sheet not found"))?;
+        let sch = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
+        std::fs::write(&p.path, sch).map_err(internal)?;
+        json_ok(&serde_json::json!({ "written": p.path }))
     }
 
     #[tool(description = "直前の編集を取り消す")]

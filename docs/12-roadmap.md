@@ -6,7 +6,7 @@ Milestones toward the vision (standards-compliant, AI-first, veteran-grade, mech
 
 ## M1 — Foundation ✅ (mostly complete)
 
-Command engine with full undo/redo · Canvas editor · JIS frame · parametric terminal blocks/connectors · netlist · ERC + ngspice-backed electrical verification · DC operating-point simulation · SVG/PDF/BOM/wire-list output · parts database · KiCad import · AI chat (Claude Code) · MCP/REST/CLI automation
+Command engine with full undo/redo · Canvas editor · JIS frame · parametric terminal blocks/connectors · netlist · ERC + ngspice-backed electrical verification · DC operating-point simulation · SVG/PDF/BOM/wire-list output · parts database · KiCad import/export · DXF interop (ACADE/EPLAN) · AI chat (Claude Code) · MCP/REST/CLI automation
 
 ## M2 — Reference-drawing parity ✅ (mostly complete)
 
@@ -52,4 +52,4 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 
 - IEC / ISO standard variants: IEC 60617 symbols, IEC 81346 structure designations, ISO 7200 title blocks, ISO 5457 sheet frames
 
-Deliberately deferred (with rationale recorded in the gap analysis): transient simulation, single-line diagrams, DWG/DXF export, multi-user editing.
+Deliberately deferred (with rationale recorded in the gap analysis): transient simulation, single-line diagrams, native DWG/EPLAN project files (DXF interop is done, see [Import & Export](08-import-export.md)), multi-user editing.

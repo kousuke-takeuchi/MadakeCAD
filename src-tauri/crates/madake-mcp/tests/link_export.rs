@@ -317,6 +317,91 @@ async fn export_pdf_writes_pdf_file() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// POST /api/v1/export/dxf and /export/kicad write the sheet as DXF and .kicad_sch, and POST /api/v1/import/dxf reads the DXF back into a project with an import report.
+/// POST /api/v1/export/dxf と /export/kicad はシートをDXFと.kicad_schへ書き出し、POST /api/v1/import/dxf はそのDXFをインポートレポート付きでプロジェクトへ読み戻す。
+#[tokio::test]
+async fn export_dxf_kicad_and_import_dxf_round_trip() {
+    let project = Project::new("DXFテスト");
+    let sheet_id = project.sheets[0].id;
+    let doc = SharedDoc::new(Engine::new(project));
+    doc.engine
+        .lock()
+        .unwrap()
+        .execute(madake_core::Command::AddEntity {
+            sheet_id,
+            entity: madake_core::Entity::Symbol(madake_core::SymbolInstance {
+                id: uuid::Uuid::new_v4(),
+                symbol_id: "resistor".into(),
+                at: madake_core::Point::new(100.0, 100.0),
+                rotation: 0,
+                mirror: false,
+                reference: "R1".into(),
+                value: "1k".into(),
+                attrs: Default::default(),
+            }),
+        })
+        .unwrap();
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude()));
+    let parts = madake_mcp::open_parts(&unique_parts_db("dxf")).expect("parts db");
+    let router = madake_mcp::link_api::router(doc.clone(), Arc::clone(&agent), parts);
+
+    let dir = std::env::temp_dir().join(format!("madake-dxf-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let call = |uri: &'static str, body: Value| {
+        let router = router.clone();
+        async move {
+            let req = Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            let res = router.oneshot(req).await.unwrap();
+            let status = res.status();
+            let bytes = res.into_body().collect().await.unwrap().to_bytes();
+            (status, serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null))
+        }
+    };
+
+    let dxf_path = dir.join("sheet.dxf");
+    let (status, body) = call("/api/v1/export/dxf", json!({ "path": dxf_path.to_string_lossy() })).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let dxf = std::fs::read_to_string(&dxf_path).unwrap();
+    assert!(dxf.contains("AC1015") && dxf.contains("MDK_resistor"), "{dxf}");
+
+    let sch_path = dir.join("sheet.kicad_sch");
+    let (status, body) = call(
+        "/api/v1/export/kicad",
+        json!({ "sheet_id": sheet_id, "path": sch_path.to_string_lossy() }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let sch = std::fs::read_to_string(&sch_path).unwrap();
+    assert!(sch.starts_with("(kicad_sch") && sch.contains("MadakeCAD:resistor"), "{sch}");
+
+    let (status, body) = call("/api/v1/import/dxf", json!({ "path": dxf_path.to_string_lossy() })).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["report"]["symbols"], 1);
+    assert!(body["patch"]["revision"].is_number());
+    {
+        let engine = doc.engine.lock().unwrap();
+        let refs: Vec<String> = engine.project().sheets[0]
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                madake_core::Entity::Symbol(s) => Some(s.reference.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(refs, vec!["R1"]);
+    }
+
+    let (status, body) = call("/api/v1/export/kicad", json!({ "sheet_id": uuid::Uuid::nil(), "path": sch_path.to_string_lossy() })).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports.
 /// POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。
 #[tokio::test]

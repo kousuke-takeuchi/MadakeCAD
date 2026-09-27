@@ -17,6 +17,10 @@ pub enum ExportKind {
     Svg,
     /// シート1枚をPDFで出力 (印刷品質)。
     Pdf,
+    /// シート1枚をDXF (AutoCAD 2000形式) で出力。AutoCAD Electrical / EPLANへの受け渡し用。
+    Dxf,
+    /// シート1枚をKiCad回路図 (.kicad_sch) で出力。
+    Kicad,
     /// 部品表 (帳票)。
     Bom,
     /// From-To電線リスト (帳票)。
@@ -46,6 +50,8 @@ impl ExportKind {
         match self {
             ExportKind::Svg => "/export/svg",
             ExportKind::Pdf => "/export/pdf",
+            ExportKind::Dxf => "/export/dxf",
+            ExportKind::Kicad => "/export/kicad",
             ExportKind::PdfBook => "/export/pdf-book",
             _ => "/export/report",
         }
@@ -60,7 +66,7 @@ impl ExportKind {
             ExportKind::TerminalDiagram => Some(ReportKind::TerminalDiagram),
             ExportKind::XrefTable => Some(ReportKind::Xref),
             ExportKind::PlcIo => Some(ReportKind::PlcIo),
-            ExportKind::Svg | ExportKind::Pdf | ExportKind::PdfBook => None,
+            ExportKind::Svg | ExportKind::Pdf | ExportKind::Dxf | ExportKind::Kicad | ExportKind::PdfBook => None,
         }
     }
 
@@ -77,6 +83,8 @@ impl ExportKind {
         match self {
             ExportKind::Svg => "SVG",
             ExportKind::Pdf => "PDF",
+            ExportKind::Dxf => "DXF",
+            ExportKind::Kicad => "KiCad回路図",
             ExportKind::Bom => "部品表(BOM)",
             ExportKind::WireList => "From-To電線リスト",
             ExportKind::TerminalChart => "端子台チャート",
@@ -300,6 +308,8 @@ pub trait LinkApi {
     fn open(&self, path: &str) -> Result<Value, CliError>;
     /// `POST /api/v1/import/kicad` (`{"path": ...}`)
     fn import_kicad(&self, path: &str) -> Result<Value, CliError>;
+    /// `POST /api/v1/import/dxf` (`{"path": ..., "wire_layers": [...]}`)
+    fn import_dxf(&self, path: &str, wire_layers: &[String]) -> Result<Value, CliError>;
     /// `GET /api/v1/terminals[?sheet_id=..]` (端子台の一覧)
     fn terminals(&self, sheet_id: Option<&str>) -> Result<Value, CliError>;
     /// `POST /api/v1/export/{svg,pdf}`
@@ -437,6 +447,10 @@ impl LinkApi for HttpClient {
         self.post("/import/kicad", json!({ "path": path }))
     }
 
+    fn import_dxf(&self, path: &str, wire_layers: &[String]) -> Result<Value, CliError> {
+        self.post("/import/dxf", json!({ "path": path, "wire_layers": wire_layers }))
+    }
+
     fn terminals(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
         self.get(terminals_url(self.port, sheet_id))
     }
@@ -449,7 +463,9 @@ impl LinkApi for HttpClient {
     ) -> Result<Value, CliError> {
         // SVG/PDFのみシート指定を受け付ける (Link API: ExportSvgBody)。
         let body = match kind {
-            ExportKind::Svg | ExportKind::Pdf => json!({ "sheet_id": sheet_id, "path": path }),
+            ExportKind::Svg | ExportKind::Pdf | ExportKind::Dxf | ExportKind::Kicad => {
+                json!({ "sheet_id": sheet_id, "path": path })
+            }
             _ => json!({ "path": path }),
         };
         self.post(kind.path(), body)

@@ -584,6 +584,8 @@ interface Ipc {
   saveProject(path: string): Promise<void>;
   loadProject(path: string): Promise<Patch>;
   importKicad(path: string): Promise<KicadImportResult>;
+  /** DXF (AutoCAD Electrical / EPLAN の中間形式) を読み込んでプロジェクトを置き換える。 */
+  importDxf(path: string, wireLayers?: string[]): Promise<KicadImportResult>;
   newProject(name: string): Promise<Patch>;
   /** 使える開始テンプレートの一覧 (同梱+ユーザーの`~/MadakeCAD/templates`)。 */
   listTemplates(): Promise<TemplateList>;
@@ -633,6 +635,10 @@ interface Ipc {
   simulateOp(sheetId: string | null, openSwitches: string[]): Promise<SimOpResult>;
   exportSvg(sheetId: string, path: string): Promise<void>;
   exportPdf(sheetId: string, path: string): Promise<void>;
+  /** シートをDXF (AutoCAD 2000形式) で書き出す。 */
+  exportDxf(sheetId: string, path: string): Promise<void>;
+  /** シートをKiCad回路図 (.kicad_sch) で書き出す。 */
+  exportKicad(sheetId: string, path: string): Promise<void>;
   exportBom(path: string): Promise<void>;
   exportWireList(path: string): Promise<void>;
   /**
@@ -688,6 +694,8 @@ const tauriIpc: Ipc = {
   saveProject: (path: string) => invoke<void>("save_project", { path }),
   loadProject: (path: string) => invoke<Patch>("load_project", { path }),
   importKicad: (path: string) => invoke<KicadImportResult>("import_kicad", { path }),
+  importDxf: (path: string, wireLayers?: string[]) =>
+    invoke<KicadImportResult>("import_dxf", { path, wireLayers: wireLayers ?? null }),
   newProject: (name: string) => invoke<Patch>("new_project", { name }),
   listTemplates: () => invoke<TemplateList>("list_templates"),
   applyTemplate: (templateId: string, sheetId: string) =>
@@ -711,6 +719,9 @@ const tauriIpc: Ipc = {
     invoke<SimOpResult>("simulate_op", { sheetId, openSwitches }),
   exportSvg: (sheetId: string, path: string) => invoke<void>("export_svg", { sheetId, path }),
   exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
+  exportDxf: (sheetId: string, path: string) => invoke<void>("export_dxf", { sheetId, path }),
+  exportKicad: (sheetId: string, path: string) =>
+    invoke<void>("export_kicad", { sheetId, path }),
   exportBom: (path: string) => invoke<void>("export_bom", { path }),
   exportWireList: (path: string) => invoke<void>("export_wire_list", { path }),
   searchProject: (query: string, kinds: SearchKind[]) =>
@@ -770,6 +781,11 @@ const httpIpc: Ipc = {
   loadProject: (path) => http<Patch>("/load", { method: "POST", body: JSON.stringify({ path }) }),
   importKicad: (path) =>
     http<KicadImportResult>("/import/kicad", { method: "POST", body: JSON.stringify({ path }) }),
+  importDxf: (path, wireLayers) =>
+    http<KicadImportResult>("/import/dxf", {
+      method: "POST",
+      body: JSON.stringify({ path, wire_layers: wireLayers ?? [] }),
+    }),
   newProject: () => Promise.reject(new Error("browser mode: not supported")),
   listTemplates: () => http<TemplateList>("/templates"),
   applyTemplate: (templateId, sheetId) =>
@@ -827,6 +843,12 @@ const httpIpc: Ipc = {
   },
   exportPdf: async (sheetId, path) => {
     await http("/export/pdf", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
+  },
+  exportDxf: async (sheetId, path) => {
+    await http("/export/dxf", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
+  },
+  exportKicad: async (sheetId, path) => {
+    await http("/export/kicad", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
   },
   exportBom: async (path) => {
     await http("/export/bom", { method: "POST", body: JSON.stringify({ path }) });

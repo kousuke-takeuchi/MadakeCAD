@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1248仕様項目**。
+全5領域・**1280仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -44,6 +44,22 @@
 - 空のバッチは何も変えない(履歴も増えず、ドキュメントrevisionも進まない)。 <sub>`empty_batch_changes_nothing`</sub>
 - その由来の編集が1件も無い区間の巻き戻しは、図面に触れず「戻すものが無い」と報告する。 <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
 
+### DXF連携 (AutoCAD Electrical / EPLAN)
+
+- 書き出したDXFはmm単位のAutoCAD 2000形式(AC1015)で、HEADER/TABLES/BLOCKS/ENTITIES/OBJECTSの各セクションと重複しないハンドルを持つ。 <sub>`export_writes_a_well_formed_ac1015_file`</sub>
+- 配線はセグメントごとに1本のLINEとしてWIRESレイヤに書かれ、Y座標はDXFの上向き座標へ反転される。 <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
+- シンボルはMDK_<symbol_id>ブロック(1回だけ定義)のINSERTになり、回転・ミラー(X倍率-1)・TAG1/CAT/DESC1/RATING1/TERMnnの属性を持つ。 <sub>`symbols_become_block_inserts_with_attributes`</sub>
+- 線番はWIRENOレイヤ、ネットラベルはLABELS、注記はMISCに書かれ、ハーネス境界はHARNESSレイヤの閉じた破線多角形と名前になる。 <sub>`texts_and_harness_go_to_their_layers`</sub>
+- 非ASCII文字は\U+XXXXで書かれ読み込み時に戻る。MTEXTの段落区切り(\P)や書式コードも読み込みで処理する。 <sub>`unicode_is_escaped_and_decoded`</sub>
+- シートをDXFへ書き出して読み戻すと、用紙・シンボル(種類・位置・回転・ミラー・参照記号・型番・属性)・配線・ジャンクション・線番・ラベル・注記・ハーネス名が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
+- AutoCAD Electrical流のDXFを読むと、配線レイヤ(WIRES・_MULTI_WIRE_*)の線分が配線になり、WIRENOの文字は最寄りの配線の線番になり、他の線分と未知のブロックはスキップ項目として報告され、文字はデコードされる。 <sub>`imports_acade_style_wires_and_reports_unknown_blocks`</sub>
+- 読み込みオプションで配線レイヤを明示すると、そのレイヤだけが配線になる。 <sub>`explicit_wire_layers_limit_what_becomes_a_wire`</sub>
+- 配線レイヤの無いDXFは全ての線分を配線として読み、その旨を警告する。近くに配線の無い線番の文字は注記になる。 <sub>`without_wire_layers_all_lines_become_wires`</sub>
+- インチ単位のDXFはmmへ換算され、用紙サイズは図面の外形が収まる最小のA判になる。 <sub>`inch_files_are_scaled_and_paper_fits_extents`</sub>
+- 90度の倍数でない角度で置かれたブロックは0度で配置され、警告が出る。 <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>
+- ENTITIESセクションの無いファイルはDXFではないとして拒否され、数値でないグループコードは行番号付きの構文エラーになる。 <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>
+- シンボルブロックの図形はY反転したローカル座標で書かれ、弧は用紙座標の時計回りがDXFでは反時計回りになる分だけ角度を入れ替えて向きを保つ。 <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
+
 ### 座標・ジオメトリ
 
 - snapped()は座標を最も近いグリッドピッチ(既定2.5mm)へ丸め、すべてがピングリッドに乗る。 <sub>`snapped_rounds_to_grid_pitch`</sub>
@@ -69,7 +85,7 @@
 - 存在しないファイルの読み込みはパニックせずエラーを返す。 <sub>`loading_missing_file_is_an_error`</sub>
 - PLC割付表が無かった頃の古いプロジェクトファイルもそのまま開ける (割付表は空になり、現行のファイル形式へ更新される)。 <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
 
-### KiCadインポート
+### KiCadインポート / エクスポート
 
 - KiCadインポートは用紙サイズ・表題欄・配線・ジャンクション・ラベル(電源シンボルはネットラベル化)・テキストを変換する。 <sub>`imports_paper_title_block_and_geometry`</sub>
 - 既知のlib_idは本ライブラリへ対応付けられ(Device:R→抵抗、Conn_01x03→connector_3p)、参照記号・値・回転・ミラーが保たれる。未知のシンボルはスキップされレポートに列挙される。 <sub>`maps_symbols_and_reports_skipped`</sub>
@@ -78,6 +94,13 @@
 - 文字列内のエスケープ(引用符・改行)と日本語などのマルチバイト文字を正しく解釈する。 <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name)は指定した先頭シンボルを持つ子リストをすべて列挙する。 <sub>`children_iterates_all_matches`</sub>
 - 括弧の不整合や閉じていない文字列は、位置付きの構文エラーとして報告される。 <sub>`syntax_errors_are_reported`</sub>
+- シートを.kicad_schへ書き出して読み戻すと、用紙・表題欄・シンボル(種類・参照記号・型番・回転・ミラー)・配線・ジャンクション・ラベル・注記が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
+- 折れ線で描いた配線は、セグメントごとに2点のKiCad wireとして書き出される。 <sub>`polyline_wires_are_split_into_segments`</sub>
+- シートで使うシンボルは図形とピンごとにlib_symbolsへ1回だけ埋め込まれ、KiCad側にライブラリが無くても開ける。 <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
+- 線番はそのネット上のKiCadラベルになり、KiCadでも再インポート後もネット名として残る。 <sub>`wire_numbers_become_labels`</sub>
+- ハーネス境界は破線の閉じた多角形と、その名前の注記として書き出される。 <sub>`harness_becomes_dashed_polyline_with_name`</sub>
+- 注記内の引用符・バックスラッシュ・改行はエスケープされ、書き出したファイルは正しく解釈されて同じ文字列に戻る。 <sub>`strings_are_escaped_and_read_back`</sub>
+- MadakeCADが書き出した回路図の"MadakeCAD:<id>"ライブラリidは、端子台・コネクタの動的シンボルも含めそのまま同じシンボルに戻る。 <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
 
 ### 回路マクロ
 
@@ -513,6 +536,7 @@
 - POST /api/v1/import/kicad は開いているプロジェクトを変換結果で置き換え、patchとインポートレポートを返す。 <sub>`import_kicad_replaces_project_and_reports`</sub>
 - POST /api/v1/simulate/op はDC動作点を解き、ネット電圧と部品電流を返す(ngspice必須。未導入時はスキップ)。 <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf は指定パスへ正しいPDFファイルを書き出す。 <sub>`export_pdf_writes_pdf_file`</sub>
+- POST /api/v1/export/dxf と /export/kicad はシートをDXFと.kicad_schへ書き出し、POST /api/v1/import/dxf はそのDXFをインポートレポート付きでプロジェクトへ読み戻す。 <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
 - POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。 <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - 端子台エンドポイントは図面の端子台を一覧し、1台のチャートとチェック結果を返す。 <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report は帳票1種をCSVまたは図枠付きPDFで書き出し、図面である端子接続図のCSVは拒否する。 <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
@@ -912,6 +936,8 @@
 - --jsonはjq等へ渡せる整形JSONをそのまま出力する。 <sub>`json_flag_emits_raw_json`</sub>
 - madake netlistは--sheetオプションをAPIへ引き渡す。 <sub>`netlist_forwards_sheet_option`</sub>
 - madake exportは種別・出力パス・シート指定をAPIへ引き渡す。 <sub>`export_forwards_kind_path_and_sheet`</sub>
+- madake export dxf / kicadはDXF・KiCadのエンドポイントでシート1枚を書き出す(シート指定可)。 <sub>`export_dxf_and_kicad_forward_to_their_endpoints`</sub>
+- madake openに.dxfを渡すと/import/dxfで読み込み(--wire-layerを引き渡す)、変換結果の要約を表示する。他のファイルで--wire-layerを付けるとエラー。 <sub>`open_dxf_imports_with_wire_layers`</sub>
 - madake execはCommand配列のJSONファイルを読み、/commandsへ送信する。 <sub>`exec_posts_command_array_from_file`</sub>
 - madake execは配列でないJSONを明確なメッセージで拒否する。 <sub>`exec_rejects_non_array_json`</sub>
 - 入力ファイルが無い場合はパニックせずファイルエラーとして報告する。 <sub>`exec_reports_missing_file`</sub>
@@ -1208,8 +1234,15 @@
 - 開くダイアログをキャンセルすると何も読み込まない <sub>`file menu: 新規と開く`</sub>
 - 未保存の編集があるときの「開く」は確認し、キャンセルするとダイアログも出ない <sub>`file menu: 新規と開く`</sub>
 - .kicad_schを選ぶとKiCad回路図として読み込み、件数をログに出す <sub>`file menu: 新規と開く`</sub>
+- .dxfを選ぶとDXF図面として読み込み、件数と警告をログに出す <sub>`file menu: 新規と開く`</sub>
+- 「読み込み」ボタンは選んだ形式のフィルタだけで開くダイアログを出し、未保存の編集があれば先に確認する <sub>`file menu: 新規と開く`</sub>
 - 最近使ったファイルはダイアログ無しで開く <sub>`file menu: 新規と開く`</sub>
 - 開けなかった最近使ったファイルは一覧から外し、理由をログに出す <sub>`file menu: 新規と開く`</sub>
+- DXF書き出しは「<シート名>.dxf」を既定にDXFフィルタで保存先を聞き、表示中のシートを書き出す <sub>`file menu: シートの書き出し`</sub>
+- KiCad書き出しは「<シート名>.kicad_sch」を既定にし、SVG/PDFは従来どおり拡張子のフィルタで保存する <sub>`file menu: シートの書き出し`</sub>
+- 保存ダイアログをキャンセルすると何も書き出さない <sub>`file menu: シートの書き出し`</sub>
+- シートが無ければダイアログを出さずにログで案内する <sub>`file menu: シートの書き出し`</sub>
+- 書き出しに失敗したら理由をログに出す <sub>`file menu: シートの書き出し`</sub>
 
 ### 整えメトリクス (交差・重なり・グリッド)
 
@@ -1399,12 +1432,14 @@
 - 保存中に届いた編集はディスクに無いので、保存後も未保存の編集ありのまま <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - 新規プロジェクトは保存先が無く、未保存の編集も無い状態から始まる <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - KiCad回路図の読み込みは保存先が無く、内容は未保存の編集として扱う <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- DXFの読み込みも保存先が無く、内容は未保存の編集として扱う <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - 起動時に保管先から最近使ったファイルを読む <sub>`projectFile store: 最近使ったファイル`</sub>
 - 開いたファイル・保存したファイルは一覧の先頭に入り、保管先へ書かれる <sub>`projectFile store: 最近使ったファイル`</sub>
 - 同じファイルを開き直すと重複せず先頭へ移る <sub>`projectFile store: 最近使ったファイル`</sub>
 - 一覧は上限件数までで、古いものから落ちる <sub>`projectFile store: 最近使ったファイル`</sub>
 - 一覧から外したファイルは保管先からも消える <sub>`projectFile store: 最近使ったファイル`</sub>
 - パスからファイル名を取り出す (`/`区切りと`\`区切りの両方) <sub>`projectFile helpers`</sub>
+- 拡張子が.dxf(大文字小文字を問わず)ならDXF図面とみなす <sub>`projectFile helpers`</sub>
 - 拡張子が.kicad_sch(大文字小文字を問わず)ならKiCad回路図とみなす <sub>`projectFile helpers`</sub>
 
 ### provider

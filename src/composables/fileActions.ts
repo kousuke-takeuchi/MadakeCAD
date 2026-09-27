@@ -7,7 +7,7 @@ import { open as dialogOpen, save as dialogSave } from "@tauri-apps/plugin-dialo
 import { i18n } from "../i18n";
 import { inTauri, ipc } from "../ipc";
 import { useDocumentStore } from "../stores/document";
-import { isKicadPath, useProjectFileStore } from "../stores/projectFile";
+import { isDxfPath, isKicadPath, useProjectFileStore } from "../stores/projectFile";
 import { useUiStore } from "../stores/ui";
 
 interface Filter {
@@ -31,6 +31,11 @@ export async function pickSave(defaultPath: string, filters: Filter[]): Promise<
   if (inTauri) return dialogSave({ defaultPath, filters });
   return window.prompt(i18n.global.t("file.promptSave"), `/tmp/${defaultPath}`);
 }
+
+/** 読み込める図面形式 (プロジェクト以外)。 */
+export type ImportKind = "kicad" | "dxf";
+/** 書き出せる図面形式 (シート1枚)。 */
+export type SheetExportKind = "svg" | "pdf" | "dxf" | "kicad";
 
 /** 拡張子から保存ダイアログのフィルタを作る (csv / pdf / svg …)。 */
 export function filterFor(extension: string): Filter[] {
@@ -74,15 +79,20 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
     return file.path ?? `${store.project?.name || t("untitled")}.mdkproj`;
   }
 
-  /** パスを開く (拡張子でKiCad読み込みとプロジェクト読み込みを振り分ける)。 */
+  const kicadFilter = (): Filter => ({ name: t("kicadFilter"), extensions: ["kicad_sch"] });
+  const dxfFilter = (): Filter => ({ name: t("dxfFilter"), extensions: ["dxf"] });
+
+  /** パスを開く (拡張子でKiCad / DXF読み込みとプロジェクト読み込みを振り分ける)。 */
   async function openPath(path: string): Promise<boolean> {
     try {
-      if (isKicadPath(path)) {
-        const { report } = await file.importKicad(path);
+      if (isKicadPath(path) || isDxfPath(path)) {
+        const kind: ImportKind = isKicadPath(path) ? "kicad" : "dxf";
+        const { report } = kind === "kicad" ? await file.importKicad(path) : await file.importDxf(path);
         const skipped = report.skipped.length
           ? t("importSkipped", { count: report.skipped.length })
           : "";
-        ui.log(t("importLog", { ...report, skipped }));
+        ui.log(t("importLog", { ...report, what: t(`importKind.${kind}`), skipped }));
+        for (const warning of report.warnings) ui.log(t("importWarningLog", { warning }));
       } else {
         await file.open(path);
         ui.log(t("openLog", { path }));
@@ -129,12 +139,40 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
     /** OSのダイアログでファイルを選んで開く。未保存の編集があれば先に確認する。 */
     async openProject(): Promise<boolean> {
       if (!confirmDiscard()) return false;
-      const path = await dialogs.pickOpen([
-        projectFilter(),
-        { name: t("kicadFilter"), extensions: ["kicad_sch"] },
-      ]);
+      const path = await dialogs.pickOpen([projectFilter(), kicadFilter(), dxfFilter()]);
       if (!path) return false;
       return openPath(path);
+    },
+    /** KiCad回路図 / DXFを選んで読み込む (リボン「読み込み/書き出し」)。未保存の編集があれば先に確認する。 */
+    async importFile(kind: ImportKind): Promise<boolean> {
+      if (!confirmDiscard()) return false;
+      const path = await dialogs.pickOpen([kind === "kicad" ? kicadFilter() : dxfFilter()]);
+      if (!path) return false;
+      return openPath(path);
+    },
+    /** 表示中のシートをDXF / KiCad回路図 / SVG / PDFで書き出す。 */
+    async exportSheet(kind: SheetExportKind): Promise<boolean> {
+      const sheet = store.activeSheet;
+      if (!sheet) {
+        ui.log(t("noSheetLog"));
+        return false;
+      }
+      const extension = kind === "kicad" ? "kicad_sch" : kind;
+      const path = await dialogs.pickSave(`${sheet.name}.${extension}`, [
+        kind === "kicad" ? kicadFilter() : kind === "dxf" ? dxfFilter() : filterFor(kind)[0],
+      ]);
+      if (!path) return false;
+      try {
+        if (kind === "svg") await ipc.exportSvg(sheet.id, path);
+        else if (kind === "pdf") await ipc.exportPdf(sheet.id, path);
+        else if (kind === "dxf") await ipc.exportDxf(sheet.id, path);
+        else await ipc.exportKicad(sheet.id, path);
+      } catch (e) {
+        ui.log(t("exportFailedLog", { what: t(`exportKind.${kind}`), path, message: String(e) }));
+        return false;
+      }
+      ui.log(t("exportLog", { what: t(`exportKind.${kind}`), path }));
+      return true;
     },
     /** 最近使ったファイルを開く。開けなければ一覧から外す。 */
     async openRecent(path: string): Promise<boolean> {
@@ -147,21 +185,11 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
       return saveTo(file.path);
     },
     saveProjectAs,
-    async exportSvg() {
-      const sheet = store.activeSheet;
-      if (!sheet) return;
-      const path = await dialogs.pickSave(`${sheet.name}.svg`, filterFor("svg"));
-      if (!path) return;
-      await ipc.exportSvg(sheet.id, path);
-      ui.log(t("exportLog", { what: t("exportSvg"), path }));
+    exportSvg(): Promise<boolean> {
+      return this.exportSheet("svg");
     },
-    async exportPdf() {
-      const sheet = store.activeSheet;
-      if (!sheet) return;
-      const path = await dialogs.pickSave(`${sheet.name}.pdf`, filterFor("pdf"));
-      if (!path) return;
-      await ipc.exportPdf(sheet.id, path);
-      ui.log(t("exportLog", { what: t("exportPdf"), path }));
+    exportPdf(): Promise<boolean> {
+      return this.exportSheet("pdf");
     },
     async exportBom() {
       const path = await dialogs.pickSave(t("bomFile"), filterFor("csv"));

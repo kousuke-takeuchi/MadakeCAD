@@ -280,19 +280,31 @@
     "newFailedLog": "NEW  新しいプロジェクトを作れませんでした: {message}",
     "openLog": "OPEN  {path} を開きました",
     "openFailedLog": "OPEN  {path} を開けませんでした: {message}",
-    "importLog": "IMPORT  KiCad回路図を読み込みました: シンボル{symbols} 配線{wires} ラベル{labels}{skipped}。接続は検証で確認してください",
+    "importLog": "IMPORT  {what}を読み込みました: シンボル{symbols} 配線{wires} ラベル{labels}{skipped}。接続は検証で確認してください",
     "importSkipped": " (スキップ {count}種)",
     "saveLog": "SAVE  {path} に保存しました",
     "saveFailedLog": "SAVE  {path} に保存できませんでした: {message}",
     "exportLog": "EXPORT  {what}を {path} に書き出しました",
-    "exportSvg": "SVG",
-    "exportPdf": "PDF",
     "exportBom": "部品表",
     "exportWireList": "電線リスト",
     "bomFile": "部品表.csv",
     "wireListFile": "電線リスト.csv",
     "promptSave": "保存先の絶対パス:",
-    "promptOpen": "開くファイルの絶対パス:"
+    "promptOpen": "開くファイルの絶対パス:",
+    "dxfFilter": "DXF図面 (AutoCAD Electrical / EPLAN)",
+    "noSheetLog": "EXPORT  シートが開かれていません",
+    "importWarningLog": "IMPORT  ⚠ {warning}",
+    "exportFailedLog": "EXPORT  {what}を {path} に書き出せませんでした: {message}",
+    "importKind": {
+      "kicad": "KiCad回路図",
+      "dxf": "DXF図面"
+    },
+    "exportKind": {
+      "svg": "SVG",
+      "pdf": "PDF",
+      "dxf": "DXF図面",
+      "kicad": "KiCad回路図"
+    }
   },
   "templates": {
     "title": "テンプレートから開始",
@@ -657,5 +669,19 @@
   "leftPanel": {
     "project": "プロジェクト",
     "agent": "エージェント"
+  },
+  "io": {
+    "importGroup": "読み込み",
+    "exportGroup": "書き出し",
+    "reportGroup": "帳票",
+    "open": "開く...",
+    "importKicad": "KiCad回路図...",
+    "importDxf": "DXF (ACADE/EPLAN)...",
+    "exportDxf": "DXF",
+    "exportKicad": "KiCad回路図...",
+    "exportSvg": "SVG...",
+    "exportPdf": "PDF...",
+    "exportBom": "部品表 CSV...",
+    "exportWireList": "電線リスト CSV..."
   }
 }

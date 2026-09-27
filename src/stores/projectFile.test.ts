@@ -8,6 +8,7 @@ import { useDocumentStore } from "./document";
 import {
   RECENT_LIMIT,
   fileNameOf,
+  isDxfPath,
   isKicadPath,
   useProjectFileStore,
   type RecentStorage,
@@ -166,6 +167,21 @@ describe("projectFile store: 開いているファイルと未保存の編集", 
     expect(file.dirty).toBe(true);
     expect(file.recent[0]).toBe("/work/board.kicad_sch");
   });
+  // ja: DXFの読み込みも保存先が無く、内容は未保存の編集として扱う
+  it("importing a DXF drawing leaves no file and counts as unsaved", async () => {
+    vi.spyOn(ipc, "importDxf").mockResolvedValue({
+      patch: replaced(10, "dxf"),
+      report: { symbols: 1, wires: 4, junctions: 0, labels: 0, texts: 0, skipped: ["HCR1 x1"], warnings: [] },
+    });
+    const file = useProjectFileStore();
+    file.attach(memoryStorage());
+    const result = await file.importDxf("/work/panel.dxf");
+    expect(ipc.importDxf).toHaveBeenCalledWith("/work/panel.dxf");
+    expect(result.report.wires).toBe(4);
+    expect(file.path).toBeNull();
+    expect(file.dirty).toBe(true);
+    expect(file.recent[0]).toBe("/work/panel.dxf");
+  });
 });
 
 describe("projectFile store: 最近使ったファイル", () => {
@@ -230,6 +246,13 @@ describe("projectFile helpers", () => {
     expect(fileNameOf("/work/panel.mdkproj")).toBe("panel.mdkproj");
     expect(fileNameOf("C:\\work\\panel.mdkproj")).toBe("panel.mdkproj");
     expect(fileNameOf("panel.mdkproj")).toBe("panel.mdkproj");
+  });
+
+  // ja: 拡張子が.dxf(大文字小文字を問わず)ならDXF図面とみなす
+  it("isDxfPath recognises the .dxf extension regardless of case", () => {
+    expect(isDxfPath("/a/b.dxf")).toBe(true);
+    expect(isDxfPath("/a/B.DXF")).toBe(true);
+    expect(isDxfPath("/a/b.dwg")).toBe(false);
   });
 
   // ja: 拡張子が.kicad_sch(大文字小文字を問わず)ならKiCad回路図とみなす

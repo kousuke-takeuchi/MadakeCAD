@@ -221,12 +221,12 @@ pub fn project(snapshot: &Value) -> String {
 }
 
 /// `madake netlist`
-/// `madake open <path.kicad_sch>` (KiCadインポート)
-pub fn kicad_imported(result: &Value, path: &str) -> String {
+/// `madake open <path.kicad_sch|path.dxf>` (KiCad / DXFインポート)。`what`は形式の表示名。
+pub fn imported(what: &str, result: &Value, path: &str) -> String {
     let r = &result["report"];
     let count = |k: &str| r[k].as_u64().unwrap_or(0);
     let mut out = format!(
-        "KiCad回路図を読み込みました: {path}\nシンボル {} / 配線 {} / ラベル {} / ジャンクション {} / 注記 {}",
+        "{what}を読み込みました: {path}\nシンボル {} / 配線 {} / ラベル {} / ジャンクション {} / 注記 {}",
         count("symbols"),
         count("wires"),
         count("labels"),

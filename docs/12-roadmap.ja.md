@@ -6,7 +6,7 @@
 
 ## M1 — 基盤 ✅(概ね完了)
 
-完全undo/redo付きCommandエンジン · キャンバスエディタ · JIS図枠 · ピン数可変端子台/コネクタ · ネットリスト · ERC+ngspice裏付けの電気検証 · DC動作点シミュレーション · SVG/PDF/BOM/電線リスト出力 · 部品DB · KiCadインポート · AIチャット(Claude Code) · MCP/REST/CLI自動化
+完全undo/redo付きCommandエンジン · キャンバスエディタ · JIS図枠 · ピン数可変端子台/コネクタ · ネットリスト · ERC+ngspice裏付けの電気検証 · DC動作点シミュレーション · SVG/PDF/BOM/電線リスト出力 · 部品DB · KiCad入出力 · DXF連携(ACADE/EPLAN) · AIチャット(Claude Code) · MCP/REST/CLI自動化
 
 ## M2 — 参考図面の完全再現 ✅(概ね完了)
 
@@ -52,4 +52,4 @@
 
 - IEC / ISO規格対応: IEC 60617記号・IEC 81346構造指定子・ISO 7200表題欄・ISO 5457図枠
 
-意識的な見送り(理由はギャップ分析に記録): 過渡解析・単線図・DWG/DXFエクスポート・マルチユーザー編集。
+意識的な見送り(理由はギャップ分析に記録): 過渡解析・単線図・DWG/EPLANネイティブ形式(DXF連携は実装済み。[インポート/エクスポート](08-import-export.ja.md)参照)・マルチユーザー編集。
