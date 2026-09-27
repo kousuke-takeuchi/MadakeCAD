@@ -192,6 +192,16 @@ export interface PanelLegend {
 }
 
 /**
+ * 電線品番凡例ブロック (色+sq+電線品番+使用長のテーブル、G9残)。回路図シート専用。
+ * `PanelLegend`と同じく**中身は持たず**、描画のたびに同じシートの配線から導出する。
+ */
+export interface WireLegend {
+  id: string;
+  /** 表の左上角 (用紙座標mm)。 */
+  at: Point;
+}
+
+/**
  * 回路図にあって、どの盤レイアウトシートにもフットプリントが無い部品
  * (未配置部品パネルの1行。Rustの`madake_core::panel::UnplacedComponent`)。
  */
@@ -222,7 +232,8 @@ export type Entity =
   | ({ kind: "din_rail" } & DinRail)
   | ({ kind: "duct" } & Duct)
   | ({ kind: "footprint" } & Footprint)
-  | ({ kind: "panel_legend" } & PanelLegend);
+  | ({ kind: "panel_legend" } & PanelLegend)
+  | ({ kind: "wire_legend" } & WireLegend);
 
 /** シート種別。回路図 (既定) と2D盤レイアウト (M4 §8)。 */
 export type SheetKind = "schematic" | "panel";

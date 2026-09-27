@@ -102,6 +102,7 @@ export function placeMacroEntities(entities: Entity[], at: Point, rotation: numb
       case "text":
         return { ...e, at: map(e.at), rotation: (e.rotation + rotation) % 360 };
       case "junction":
+      case "wire_legend":
         return { ...e, at: map(e.at) };
       // 盤レイアウトの要素はマクロ (回路の部分図) には入らない
       case "panel_outline":

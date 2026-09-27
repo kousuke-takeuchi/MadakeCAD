@@ -56,6 +56,7 @@ export function entityViewClass(e: Entity): ViewClass {
     case "net_label":
       return "net_labels";
     case "text":
+    case "wire_legend":
       return "texts";
     case "harness":
       return "harness";

@@ -180,6 +180,17 @@ describe("placeMacroEntities", () => {
     ]);
   });
 
+  // ja: 電線品番凡例ブロックの置き場所も、他のエンティティと同じ変換で移動する
+  it("moves a wire legend block's placement the same way as any other entity", () => {
+    const entities: Entity[] = [{ kind: "wire_legend", id: "l1", at: { x: 0, y: 0 } }];
+    const placed = placeMacroEntities(entities, { x: 100, y: 100 }, 90);
+    const legend = placed.find((e) => e.kind === "wire_legend") as Extract<
+      Entity,
+      { kind: "wire_legend" }
+    >;
+    expect(legend.at).toEqual({ x: 100, y: 100 });
+  });
+
   // ja: 配置は複製に対して行われ、元のマクロ定義は書き換えない(何度でも同じ形で置ける)
   it("works on copies, leaving the macro definition untouched so it can be placed again", () => {
     const entities = macroEntities(macro(), "A");

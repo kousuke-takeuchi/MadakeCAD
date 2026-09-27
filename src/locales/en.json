@@ -234,6 +234,17 @@
     "notePlaceholder": "Build instructions, etc.",
     "renamedLog": "Harness: renamed to {name} (undo with Cmd+Z)"
   },
+  "wireLegend": {
+    "ribbonButton": "Wire legend",
+    "ribbonHint": "Places a wire part-number legend block: colour, gauge, part number and total length, derived from this sheet's wires every time it is drawn. It never reaches the netlist, the checks or the parts list.",
+    "startLog": "Wire legend: click on the schematic sheet to place the block (Esc to cancel)",
+    "placedLog": "Wire legend: placed the legend block (undo with Cmd+Z)",
+    "prop": {
+      "title": "Wire legend block",
+      "rows": "Rows",
+      "hint": "The legend is derived from the wires on this sheet every time it is drawn, so it never needs editing by hand."
+    }
+  },
   "xref": {
     "propertyLabel": "Cross-ref",
     "propertyHint": "Sheets and zones where the same net label continues. Click an address to jump there.",

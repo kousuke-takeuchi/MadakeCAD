@@ -56,6 +56,8 @@ function draw() {
     // 図枠テンプレート (M4 §9) と表題欄バインドの文脈。差し替えは全シートへ効く
     frame: store.frameTemplate,
     bind: store.bindContextFor(sheet),
+    // 電線品番凡例ブロック (G9残) の品番引き当てに使うプロジェクトの電線品番表
+    wireParts: store.project?.wire_parts,
   });
   controller.renderPreview(ctx);
 }

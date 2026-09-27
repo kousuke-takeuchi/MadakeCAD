@@ -12,6 +12,7 @@ import {
 } from "../canvas/shapes";
 import { panelUpdateCommand, railOfFootprint, type PanelPatch } from "../canvas/panelTools";
 import { legendRows } from "../canvas/panel";
+import { legendRows as wireLegendRows } from "../canvas/wireLegend";
 import { autoWirePartNo } from "../canvas/wireParts";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import type { Entity, TextAnchor, TextColorToken } from "../ipc";
@@ -252,6 +253,12 @@ const footprintRail = computed(() => {
 const legendRowCount = computed(() => {
   const sheet = store.activeSheet;
   return sheet ? legendRows(sheet).length : 0;
+});
+
+/** 選択中の電線品番凡例ブロックに並ぶ行数 (中身はシートの配線から導出する)。 */
+const wireLegendRowCount = computed(() => {
+  const sheet = store.activeSheet;
+  return sheet ? wireLegendRows(sheet, store.project?.wire_parts).length : 0;
 });
 
 async function apply() {
@@ -682,6 +689,16 @@ const kindLabel = computed<Record<string, string>>(() => ({
         <span class="pvalue mono">{{ legendRowCount }}</span>
       </div>
       <div class="hint hint-block">{{ t("panel.prop.legendHint") }}</div>
+    </template>
+
+    <!-- 電線品番凡例ブロック (G9残、中身は図面から導出するので置き場所だけ) -->
+    <template v-else-if="selected?.kind === 'wire_legend'">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("wireLegend.prop.title") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("wireLegend.prop.rows") }}</span>
+        <span class="pvalue mono">{{ wireLegendRowCount }}</span>
+      </div>
+      <div class="hint hint-block">{{ t("wireLegend.prop.hint") }}</div>
     </template>
 
     <!-- 盤レイアウト: 盤の外形 (取付板つき) -->

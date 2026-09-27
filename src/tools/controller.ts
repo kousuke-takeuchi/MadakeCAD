@@ -40,6 +40,7 @@ import {
 } from "../canvas/shapes";
 import { noteBounds } from "../canvas/textStyle";
 import { panelTheme, theme, wireColorScreen } from "../canvas/theme";
+import { legendRect as wireLegendRect, wireLegendAddCommand } from "../canvas/wireLegend";
 import { Viewport, type Pt } from "../canvas/viewport";
 import { i18n } from "../i18n";
 import {
@@ -65,6 +66,7 @@ export type ToolId =
   | "place"
   | "harness"
   | "macro"
+  | "wire_legend"
   | ShapeToolId
   | PanelToolId;
 
@@ -74,6 +76,7 @@ const SCHEMATIC_TOOLS: ToolId[] = [
   "place",
   "harness",
   "macro",
+  "wire_legend",
   "shape_rect",
   "shape_line",
   "shape_circle",
@@ -408,6 +411,12 @@ export class EditorController {
         if (segmentDistance(world, a, b) <= HIT_TOLERANCE) return e.id;
       }
     }
+    // 電線品番凡例ブロックは矩形の中で掴む
+    for (const e of entities) {
+      if (e.kind === "wire_legend" && inRect(world, wireLegendRect(sheet, this.store.project?.wire_parts, e))) {
+        return e.id;
+      }
+    }
     // 盤の要素は描いた順の逆 (凡例表→フットプリント→レール→ダクト→盤外形) に拾う。
     // 盤外形は中身を選びたいことのほうが多いので最後に見る
     for (const e of entities) {
@@ -505,6 +514,9 @@ export class EditorController {
         break;
       case "panel_legend":
         void this.commitPanelLegend(this.snap(world));
+        break;
+      case "wire_legend":
+        void this.commitWireLegend(this.snap(world));
         break;
     }
     this.requestRedraw();
@@ -843,6 +855,19 @@ export class EditorController {
     if (!sheet) return;
     await this.store.execute(panelLegendAddCommand(sheet, at));
     useUiStore().log(i18n.global.t("panel.legendPlacedLog"));
+    this.setTool("select");
+    this.requestRedraw();
+  }
+
+  /**
+   * 電線品番凡例ブロックを1つ置いて選択ツールへ戻る。中身は描画のたびにシートの配線から
+   * 導出するので、ここで決めるのは置き場所だけ。
+   */
+  private async commitWireLegend(at: Pt) {
+    const sheet = this.store.activeSheet;
+    if (!sheet) return;
+    await this.store.execute(wireLegendAddCommand(sheet, at));
+    useUiStore().log(i18n.global.t("wireLegend.placedLog"));
     this.setTool("select");
     this.requestRedraw();
   }

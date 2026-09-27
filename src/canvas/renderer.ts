@@ -1,7 +1,7 @@
 // Canvas2Dレンダラ本体。純関数でDOM非依存(ctxとviewportを受け取るだけ)。
 // 描画順: 背景 → グリッド → JIS図枠 → 配線 → シンボル → ジャンクション → ラベル → 選択
 
-import type { Point, Shape, Sheet, SymbolDef, SymbolInstance } from "../ipc";
+import type { Point, Shape, Sheet, SymbolDef, SymbolInstance, WireLegend as WireLegendEntity, WirePart } from "../ipc";
 import type { Region } from "./agentOverlay";
 import {
   DEFAULT_FRAME_TEMPLATE,
@@ -67,6 +67,14 @@ import {
   rails,
   type Rect,
 } from "./panel";
+import {
+  LEGEND_COLUMNS as WIRE_LEGEND_COLUMNS,
+  LEGEND_COL_W as WIRE_LEGEND_COL_W,
+  LEGEND_FONT as WIRE_LEGEND_FONT,
+  LEGEND_ROW_H as WIRE_LEGEND_ROW_H,
+  legendRect as wireLegendRect,
+  legendRows as wireLegendRows,
+} from "./wireLegend";
 import { agentRgba, panelTheme, theme, wireColorScreen } from "./theme";
 import {
   FUNCTION_LABEL_FONT,
@@ -176,6 +184,11 @@ export interface RenderOptions {
   frame?: FrameTemplate;
   /** 表題欄バインドの文脈。省略時はシート単体 (1枚中1枚目・プロジェクト名は空)。 */
   bind?: BindContext;
+  /**
+   * プロジェクトの電線品番表 (G11)。電線品番凡例ブロック (G9残) の品番引き当てに使う。
+   * 省略時は空 (ワイヤ自身に書かれた品番だけで引く)。
+   */
+  wireParts?: WirePart[];
 }
 
 /** エージェント編集オーバーレイの描画入力。 */
@@ -1126,6 +1139,65 @@ function drawLegends(
   }
 }
 
+/**
+ * 電線品番凡例ブロック (色・sq・電線品番・使用長のテーブル、G9残) を描く。中身は
+ * 同じシートの配線から導出する (`wireLegendRows`) ので、配線を足しても図面と食い違わない。
+ * 回路図の他の表 (接点マップ等) と同じく塗りは無し。
+ */
+function drawWireLegend(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  sheet: Sheet,
+  legend: WireLegendEntity,
+  wireParts: WirePart[] | undefined,
+  selected: boolean,
+): void {
+  const rows: string[][] = [WIRE_LEGEND_COLUMNS.map((c) => c), ...wireLegendRows(sheet, wireParts)];
+  const rect = wireLegendRect(sheet, wireParts, legend);
+  const edge = selected ? theme.selection : theme.line;
+  const topLeft = vp.toScreen({ x: rect.x, y: rect.y });
+  const bottomRight = vp.toScreen({ x: rect.x + rect.w, y: rect.y + rect.h });
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = selected ? 2 : 1;
+  ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+
+  ctx.strokeStyle = theme.dim;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  let x = rect.x;
+  for (const cw of WIRE_LEGEND_COL_W.slice(0, -1)) {
+    x += cw;
+    const a = vp.toScreen({ x, y: rect.y });
+    const b = vp.toScreen({ x, y: rect.y + rect.h });
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  for (let r = 1; r < rows.length; r += 1) {
+    const y = rect.y + WIRE_LEGEND_ROW_H * r;
+    const a = vp.toScreen({ x: rect.x, y });
+    const b = vp.toScreen({ x: rect.x + rect.w, y });
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
+
+  const font = Math.max(8, WIRE_LEGEND_FONT * vp.scale);
+  rows.forEach((row, r) => {
+    const baseline = rect.y + WIRE_LEGEND_ROW_H * r + WIRE_LEGEND_ROW_H / 2 + WIRE_LEGEND_FONT / 2;
+    let cx = rect.x;
+    row.forEach((cell, i) => {
+      if (cell) {
+        const p = vp.toScreen({ x: cx + 1, y: baseline });
+        ctx.fillStyle = r === 0 ? theme.dim : theme.line;
+        ctx.font = `${r === 0 ? "600 " : ""}${font}px monospace`;
+        ctx.fillText(cell, p.x, p.y);
+      }
+      cx += WIRE_LEGEND_COL_W[i];
+    });
+  });
+  ctx.textAlign = "left";
+}
+
 export function renderSheet(
   ctx: CanvasRenderingContext2D,
   sheet: Sheet,
@@ -1289,6 +1361,12 @@ export function renderSheet(
         ctx.fill();
       }
     }
+  }
+
+  // 電線品番凡例ブロック (G9残)。表示クラスは「注記」に含める (entitiesが既に絞り込み済み)
+  for (const e of entities) {
+    if (e.kind !== "wire_legend") continue;
+    drawWireLegend(ctx, vp, sheet, e, opts.wireParts, opts.selection.has(e.id));
   }
 
   // 線番 (表示クラス "wire_numbers")。SVG出力と同じ位置・等幅フォントで描く

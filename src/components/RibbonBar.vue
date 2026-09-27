@@ -174,6 +174,19 @@ function startHarness() {
   ui.log(t("harness.startLog"));
 }
 
+/**
+ * 電線品番凡例ブロックの挿入モードに入る (リボン「配線」グループ、G9残)。回路図シートを
+ * クリックすると表が乗る。中身は描画のたびにそのシートの配線から導出する。
+ */
+function startWireLegend() {
+  if (!onSchematicSheet.value) {
+    ui.log(t("panel.schematicToolLog"));
+    return;
+  }
+  controller.setTool("wire_legend");
+  ui.log(t("wireLegend.startLog"));
+}
+
 function todo(name: string) {
   ui.log(`${name}: 未実装 (今後のフェーズで対応予定)`);
 }
@@ -678,6 +691,14 @@ const groups = computed<RibbonGroup[]>(() => [
         isActive: () => controller.tool === "harness",
         isDisabled: schematicOnly,
         title: t("harness.ribbonHint"),
+      },
+      {
+        label: t("wireLegend.ribbonButton"),
+        icon: Table2,
+        action: () => startWireLegend(),
+        isActive: () => controller.tool === "wire_legend",
+        isDisabled: schematicOnly,
+        title: t("wireLegend.ribbonHint"),
       },
     ]],
   },
