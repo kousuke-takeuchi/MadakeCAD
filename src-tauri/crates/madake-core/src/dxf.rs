@@ -1060,6 +1060,22 @@ fn polyline_points(rec: &Record, following: &[Record]) -> Vec<(f64, f64)> {
     }
 }
 
+/// `TEXT`の基準点 (単位変換前、DXF座標)。
+///
+/// **揃え指定 (群72=水平、群73=垂直) が0以外のときは群11/21が基準点**で、群10/20は
+/// 読み捨てるのがDXFの決まり。ACADEの中央揃えの線番や右寄せの文字はこれを読まないと
+/// 見当違いの場所に着き、外形の集計まで狂う。`MTEXT`は群11/21がX軸方向ベクトルなので
+/// この規則の対象外 (基準点は常に群10/20)。
+fn text_point(rec: &Record) -> Option<(f64, f64)> {
+    let justified = rec.num(72).unwrap_or(0.0) != 0.0 || rec.num(73).unwrap_or(0.0) != 0.0;
+    if rec.kind == "TEXT" && justified {
+        if let (Some(x), Some(y)) = (rec.num(11), rec.num(21)) {
+            return Some((x, y));
+        }
+    }
+    Some((rec.num(10)?, rec.num(20)?))
+}
+
 fn is_closed(rec: &Record) -> bool {
     rec.num(70).map(|f| (f as i64) & 1 == 1).unwrap_or(false)
 }
@@ -1163,27 +1179,44 @@ pub fn import_dxf(
         _ => 1.0,
     };
 
-    // 外形 (エンティティ全体) → 用紙サイズと座標変換
-    let (mut minx, mut miny, mut maxx, mut maxy) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-    let mut visit = |x: f64, y: f64| {
-        minx = minx.min(x);
-        miny = miny.min(y);
-        maxx = maxx.max(x);
-        maxy = maxy.max(y);
+    // 用紙の範囲: ヘッダの図面限界 ($LIMMIN/$LIMMAX) → 図面範囲 ($EXTMIN/$EXTMAX) →
+    // どちらも無ければエンティティの外形。ヘッダを見ないと、内容が200×100mmしか無い
+    // ACADEのA3図面がA4になって隅へ寄り、書き戻したDXFが客先の用紙と合わなくなる。
+    let header_rect = |min_var: &str, max_var: &str| -> Option<(f64, f64, f64, f64)> {
+        let (x0, y0) = (header_var(min_var, 10)?, header_var(min_var, 20)?);
+        let (x1, y1) = (header_var(max_var, 10)?, header_var(max_var, 20)?);
+        (x1 > x0 && y1 > y0).then_some((x0 * scale, y0 * scale, x1 * scale, y1 * scale))
     };
-    for (i, r) in entities.iter().enumerate() {
-        match r.kind.as_str() {
-            "LINE" | "LWPOLYLINE" | "POLYLINE" => {
-                for (x, y) in polyline_points(r, &entities[i + 1..]) {
-                    visit(x * scale, y * scale);
+    let (mut minx, mut miny, mut maxx, mut maxy) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    if let Some(rect) = header_rect("$LIMMIN", "$LIMMAX").or_else(|| header_rect("$EXTMIN", "$EXTMAX"))
+    {
+        (minx, miny, maxx, maxy) = rect;
+    } else {
+        let mut visit = |x: f64, y: f64| {
+            minx = minx.min(x);
+            miny = miny.min(y);
+            maxx = maxx.max(x);
+            maxy = maxy.max(y);
+        };
+        for (i, r) in entities.iter().enumerate() {
+            match r.kind.as_str() {
+                "LINE" | "LWPOLYLINE" | "POLYLINE" => {
+                    for (x, y) in polyline_points(r, &entities[i + 1..]) {
+                        visit(x * scale, y * scale);
+                    }
                 }
-            }
-            "INSERT" | "TEXT" | "MTEXT" | "CIRCLE" | "ARC" => {
-                if let (Some(x), Some(y)) = (r.num(10), r.num(20)) {
-                    visit(x * scale, y * scale);
+                "TEXT" => {
+                    if let Some((x, y)) = text_point(r) {
+                        visit(x * scale, y * scale);
+                    }
                 }
+                "INSERT" | "MTEXT" | "CIRCLE" | "ARC" => {
+                    if let (Some(x), Some(y)) = (r.num(10), r.num(20)) {
+                        visit(x * scale, y * scale);
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
     if minx > maxx {
@@ -1357,7 +1390,7 @@ pub fn import_dxf(
                 }
             }
             "TEXT" | "MTEXT" => {
-                let (Some(x), Some(y)) = (r.num(10), r.num(20)) else {
+                let Some((x, y)) = text_point(r) else {
                     i += 1;
                     continue;
                 };
@@ -2086,6 +2119,59 @@ mod tests {
             unreachable!()
         };
         assert_eq!(poly.points.len(), 3);
+    }
+
+    /// The paper size and origin come from the header drawing limits ($LIMMIN/$LIMMAX, else $EXTMIN/$EXTMAX) when the file has them, so an A3 drawing whose content only covers a corner still imports as A3 at the same coordinates.
+    /// ヘッダの図面限界 ($LIMMIN/$LIMMAX、無ければ$EXTMIN/$EXTMAX) がある図面は用紙サイズと原点をそこから決めるので、内容が隅にしか無いA3図面もA3のまま同じ座標で読める。
+    #[test]
+    fn header_limits_decide_the_paper_and_origin() {
+        let dxf = "  0\nSECTION\n  2\nHEADER\n  9\n$INSUNITS\n 70\n4\n  9\n$LIMMIN\n 10\n0\n 20\n0\n  9\n$LIMMAX\n 10\n420\n 20\n297\n  0\nENDSEC\n\
+  0\nSECTION\n  2\nENTITIES\n  0\nLINE\n  8\nWIRES\n 10\n10\n 20\n287\n 11\n60\n 21\n287\n  0\nENDSEC\n  0\nEOF\n";
+        let (project, _) = import_dxf(dxf, "t", &DxfImportOptions::default()).unwrap();
+        let sheet = &project.sheets[0];
+        assert_eq!(
+            (sheet.size, sheet.orientation),
+            (PaperSize::A3, Orientation::Landscape),
+            "内容は50×0mmでもヘッダのA3が効く"
+        );
+        let Entity::Wire(w) = find(sheet, |e| matches!(e, Entity::Wire(_))) else {
+            unreachable!()
+        };
+        // 用紙左上が原点 (y' = 297 - 287 = 10)
+        assert!(
+            (w.points[0].x - 10.0).abs() < 0.01 && (w.points[0].y - 10.0).abs() < 0.01,
+            "{:?}",
+            w.points
+        );
+    }
+
+    /// A justified TEXT (group 72 or 73 non-zero) is placed at its alignment point in groups 11/21, not at the ignored group 10/20.
+    /// 揃え指定のあるTEXT(群72か73が0以外)は、読み捨てられる群10/20ではなく群11/21の揃え基準点に置かれる。
+    #[test]
+    fn justified_text_is_placed_at_its_alignment_point() {
+        let dxf = "  0\nSECTION\n  2\nHEADER\n  9\n$LIMMIN\n 10\n0\n 20\n0\n  9\n$LIMMAX\n 10\n420\n 20\n297\n  0\nENDSEC\n\
+  0\nSECTION\n  2\nENTITIES\n\
+  0\nTEXT\n  8\nMISC\n 10\n0\n 20\n0\n 40\n2.5\n  1\nCENTER\n 72\n1\n 11\n100\n 21\n200\n 73\n2\n\
+  0\nTEXT\n  8\nMISC\n 10\n30\n 20\n250\n 40\n2.5\n  1\nLEFT\n 72\n0\n 11\n0\n 21\n0\n\
+  0\nENDSEC\n  0\nEOF\n";
+        let (project, report) = import_dxf(dxf, "t", &DxfImportOptions::default()).unwrap();
+        assert_eq!(report.texts, 2);
+        let sheet = &project.sheets[0];
+        let at = |text: &str| {
+            let Entity::Text(t) = find(sheet, |e| matches!(e, Entity::Text(t) if t.text == text))
+            else {
+                unreachable!()
+            };
+            t.at
+        };
+        let centered = at("CENTER");
+        assert!(
+            (centered.x - 100.0).abs() < 0.01 && (centered.y - 97.0).abs() < 0.01,
+            "{centered:?}"
+        );
+        // 揃え無し (72/73が0) は今までどおり群10/20
+        let left = at("LEFT");
+        assert!((left.x - 30.0).abs() < 0.01 && (left.y - 47.0).abs() < 0.01, "{left:?}");
     }
 
     /// A DXF in inches is converted to millimetres, and the paper size is chosen as the smallest ISO A size that fits the drawing extents.

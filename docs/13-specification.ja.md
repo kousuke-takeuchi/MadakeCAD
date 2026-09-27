@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2298仕様項目**。
+全6領域・**2300仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -119,6 +119,8 @@
 - 指定した配線レイヤに線分が1本も無いときは配線を1本も読まず、警告がそのDXFに実際にあるレイヤ名を挙げる(明示した絞り込みが「全ての線分を配線」に反転しない)。 <sub>`explicit_wire_layers_that_match_nothing_import_no_wire`</sub>
 - 小さい円がジャンクションになるのは配線レイヤの上だけ。全線分を配線として読む救済の下では、他社図面のピン円はスキップされ、ネットが勝手に繋がらない。 <sub>`small_circles_become_junctions_only_on_wire_layers`</sub>
 - 配線レイヤの無いDXFは全ての線分を配線として読み、その旨を警告する。近くに配線の無い線番の文字は注記になる。 <sub>`without_wire_layers_all_lines_become_wires`</sub>
+- ヘッダの図面限界 ($LIMMIN/$LIMMAX、無ければ$EXTMIN/$EXTMAX) がある図面は用紙サイズと原点をそこから決めるので、内容が隅にしか無いA3図面もA3のまま同じ座標で読める。 <sub>`header_limits_decide_the_paper_and_origin`</sub>
+- 揃え指定のあるTEXT(群72か73が0以外)は、読み捨てられる群10/20ではなく群11/21の揃え基準点に置かれる。 <sub>`justified_text_is_placed_at_its_alignment_point`</sub>
 - インチ単位のDXFはmmへ換算され、用紙サイズは図面の外形が収まる最小のA判になる。 <sub>`inch_files_are_scaled_and_paper_fits_extents`</sub>
 - 90度の倍数でない角度で置かれたブロックは0度で配置され、警告が出る。 <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>
 - ENTITIESセクションの無いファイルはDXFではないとして拒否され、数値でないグループコードは行番号付きの構文エラーになる。 <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>

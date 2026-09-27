@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2298 specification clauses** across 6 areas.
+**2300 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -119,6 +119,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - When the named wire layers hold no line at all, no wire is imported and the warning lists the layers the file really has (the explicit narrowing never widens into "every line is a wire"). <sub>`explicit_wire_layers_that_match_nothing_import_no_wire`</sub>
 - A small circle becomes a junction only on a wire layer: under the "every line is a wire" fallback the pin circles of a foreign drawing stay skipped instead of silently merging nets. <sub>`small_circles_become_junctions_only_on_wire_layers`</sub>
 - A DXF without any wire layer reads every line as a wire and says so in a warning; a WIRENO text with no wire nearby becomes a note. <sub>`without_wire_layers_all_lines_become_wires`</sub>
+- The paper size and origin come from the header drawing limits ($LIMMIN/$LIMMAX, else $EXTMIN/$EXTMAX) when the file has them, so an A3 drawing whose content only covers a corner still imports as A3 at the same coordinates. <sub>`header_limits_decide_the_paper_and_origin`</sub>
+- A justified TEXT (group 72 or 73 non-zero) is placed at its alignment point in groups 11/21, not at the ignored group 10/20. <sub>`justified_text_is_placed_at_its_alignment_point`</sub>
 - A DXF in inches is converted to millimetres, and the paper size is chosen as the smallest ISO A size that fits the drawing extents. <sub>`inch_files_are_scaled_and_paper_fits_extents`</sub>
 - A block insert rotated by an angle that is not a multiple of 90 degrees is placed at 0 degrees with a warning. <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>
 - A file without an ENTITIES section is rejected as not a DXF, and a group code that is not a number is a syntax error with its line number. <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>
