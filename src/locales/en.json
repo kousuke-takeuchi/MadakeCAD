@@ -649,10 +649,14 @@
       },
       "variantHead": "VARIANTS",
       "variantNone": "No variants",
-      "variantPlannedLog": "AGENT   Comparing several tidy variants is planned for phase 3",
       "startedLog": "AGENT   Tidying up ({mode}) - one turn, undo with Cmd+Z",
       "busyLog": "AGENT   The agent is still answering; wait until the turn is done",
-      "sendFailed": "AGENT   Could not send the tidy request (see the error in the chat)"
+      "sendFailed": "AGENT   Could not send the tidy request (see the error in the chat)",
+      "variantStartedLog": "AGENT   Tidying up ({mode}) as {count} variants - one conversation each, running in parallel; pick one in the comparison panel",
+      "variantNoSheetLog": "AGENT   No sheet is open to make tidy variants of",
+      "variantBusyLog": "AGENT   A variant comparison is in progress; adopt or discard it before starting another",
+      "variantStartFailedLog": "AGENT   Could not start the tidy variants: {message}",
+      "compareOpen": "Open the comparison panel"
     },
     "history": {
       "head": "CONVERSATIONS",
@@ -683,5 +687,22 @@
     "exportPdf": "PDF...",
     "exportBom": "BOM CSV...",
     "exportWireList": "Wire list CSV..."
+  },
+  "variants": {
+    "title": "Tidy variants",
+    "original": "Original",
+    "running": "running",
+    "done": "done",
+    "failed": "not sent",
+    "metrics": "crossings {crossings} · overlaps {overlaps} · off-grid {off_grid}",
+    "total": "total {total}",
+    "noMetrics": "no metrics",
+    "show": "Show",
+    "adopt": "Adopt this variant",
+    "discard": "Discard all",
+    "waiting": "Adopt becomes available once every variant has finished",
+    "adoptedLog": "AGENT   Adopted {label} (written back to the original sheet; undo with Cmd+Z)",
+    "discardedLog": "AGENT   Discarded all tidy variants (undo with Cmd+Z)",
+    "finishFailedLog": "AGENT   Could not finish the tidy variants: {message}"
   }
 }

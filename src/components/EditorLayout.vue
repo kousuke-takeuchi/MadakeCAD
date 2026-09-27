@@ -8,6 +8,7 @@ import CanvasView from "./CanvasView.vue";
 import SearchResultsPanel from "./SearchResultsPanel.vue";
 import SimulationPanel from "./SimulationPanel.vue";
 import VerificationPanel from "./VerificationPanel.vue";
+import VariantsPanel from "./VariantsPanel.vue";
 import FileTabs from "./FileTabs.vue";
 import LeftPanel from "./LeftPanel.vue";
 import PropertiesPanel from "./PropertiesPanel.vue";
@@ -175,6 +176,7 @@ onBeforeUnmount(() => {
         <CanvasView />
         <SimulationPanel />
         <VerificationPanel />
+        <VariantsPanel />
         <SearchResultsPanel />
       </div>
       <PropertiesPanel />

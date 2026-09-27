@@ -564,6 +564,27 @@ export interface PlcSheetOptions {
   placement: ModulePlacement;
 }
 
+/** 整え指標 (Rustの`TidyMetrics`)。 */
+export interface TidyMetrics {
+  crossings: number;
+  label_overlaps: number;
+  symbol_overlaps: number;
+  off_grid: number;
+}
+
+/** 整えバリアントの1案 (Rustの`VariantInfo`)。id_mapは元エンティティid→複製側id。 */
+export interface VariantInfo {
+  sheet_id: string;
+  label: string;
+  id_map: Record<string, string>;
+}
+
+/** 整えバリアントの実行情報 (Rustの`VariantRun`)。開始時に受け取り、終了時にそのまま返す。 */
+export interface VariantRun {
+  original_sheet_id: string;
+  variants: VariantInfo[];
+}
+
 /** 帳票の種類 (Rustの`ReportKind`と同じケバブケース表記)。 */
 export type ReportKind =
   | "wire-list"
@@ -587,6 +608,12 @@ interface Ipc {
   /** DXF (AutoCAD Electrical / EPLAN の中間形式) を読み込んでプロジェクトを置き換える。 */
   importDxf(path: string, wireLayers?: string[]): Promise<KicadImportResult>;
   newProject(name: string): Promise<Patch>;
+  /** シートの整え指標 (交差・重なり・グリッド外)。 */
+  getTidyMetrics(sheetId: string): Promise<TidyMetrics>;
+  /** 整えバリアントの開始: シートを`count`枚複製する (1回の編集)。 */
+  startVariants(sheetId: string, count: number): Promise<{ patch: Patch; run: VariantRun }>;
+  /** 整えバリアントの終了: 採用 (chosenSheetId) または破棄 (null)。1回の編集。 */
+  finishVariants(run: VariantRun, chosenSheetId: string | null): Promise<Patch>;
   /** 使える開始テンプレートの一覧 (同梱+ユーザーの`~/MadakeCAD/templates`)。 */
   listTemplates(): Promise<TemplateList>;
   /** テンプレートをシートへ適用する。1回の編集なのでundo一発で戻る。 */
@@ -697,6 +724,11 @@ const tauriIpc: Ipc = {
   importDxf: (path: string, wireLayers?: string[]) =>
     invoke<KicadImportResult>("import_dxf", { path, wireLayers: wireLayers ?? null }),
   newProject: (name: string) => invoke<Patch>("new_project", { name }),
+  getTidyMetrics: (sheetId) => invoke<TidyMetrics>("get_tidy_metrics", { sheetId }),
+  startVariants: (sheetId, count) =>
+    invoke<{ patch: Patch; run: VariantRun }>("start_variants", { sheetId, count }),
+  finishVariants: (run, chosenSheetId) =>
+    invoke<Patch>("finish_variants", { run, chosenSheetId }),
   listTemplates: () => invoke<TemplateList>("list_templates"),
   applyTemplate: (templateId: string, sheetId: string) =>
     invoke<Patch>("apply_template", { templateId, sheetId }),
@@ -787,6 +819,17 @@ const httpIpc: Ipc = {
       body: JSON.stringify({ path, wire_layers: wireLayers ?? [] }),
     }),
   newProject: () => Promise.reject(new Error("browser mode: not supported")),
+  getTidyMetrics: (sheetId) => http<TidyMetrics>(`/tidy-metrics?sheet_id=${sheetId}`),
+  startVariants: (sheetId, count) =>
+    http<{ patch: Patch; run: VariantRun }>("/variants/start", {
+      method: "POST",
+      body: JSON.stringify({ sheet_id: sheetId, count }),
+    }),
+  finishVariants: (run, chosenSheetId) =>
+    http<Patch>("/variants/finish", {
+      method: "POST",
+      body: JSON.stringify({ ...run, chosen_sheet_id: chosenSheetId }),
+    }),
   listTemplates: () => http<TemplateList>("/templates"),
   applyTemplate: (templateId, sheetId) =>
     http<Patch>("/templates/apply", {

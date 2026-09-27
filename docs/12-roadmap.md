@@ -15,7 +15,7 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - Harness boundaries: dashed enclosures with a name; enclosed wires get a harness column in the wire list
 - Cross-sheet references: project-wide nets from same-named labels, destination `/sheet.zone` addresses on the drawing, click-through in the properties panel, one net in reports and ERC
 
-## M3 — AI-first drafting 🔶 (phases 1-3 done)
+## M3 — AI-first drafting ✅ (phases 1-4 done)
 
 - ✅ **Robust turn management** (phase 1): stable turn IDs, user/agent/mcp edit origins, turn-revert that undoes agent edits only (manual edits survive; conflicts are reported instead of half-reverted), turn sequence numbers that discard events from a cancelled turn
 - ✅ **Standards knowledge + verification loop** (phase 1): a bundled editable standards note injected every turn, a drawing context carrying the verification summary, and a mandatory verify → fix → re-verify loop (up to three rounds) reported as error/warning counts
@@ -25,7 +25,8 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - ✅ **Parallel conversations** (phase 2): conversations run at the same time, each with its own colour for the edit overlay, the conversation list and the "N running" badge. Reverting a turn whose edits interleaved with another conversation's turn takes both back, and marks the swept turn reverted
 - ✅ **Anthropic API provider + OS keychain** (phase 2): a backend trait with a Claude Code CLI and a Messages API implementation sharing one tool bridge, the API key kept only in the OS keychain, and a provider settings page with a masked key field and a connection test
 - ✅ **Six provider routes** (phase 3): GitHub Copilot CLI (the CLI's own GitHub sign-in, no token stored), any OpenAI-compatible endpoint (OpenAI / xAI / OpenRouter) with a one-click **Ollama (local)** preset that needs no key, and Google Gemini — all on the same tool bridge and the same keychain rule. A full drafting turn has been run through Ollama; Copilot and Gemini need your own credentials to finish confirming. See [AI Assistant → Providers](09-ai-assistant.md#providers)
-- Remaining (phase 4): tidy variants — two to four alternatives side by side — and the alternative-proposal UX for parallel agents; macro value sets and the rest of the drafting features are tracked under M4
+- ✅ **Tidy variants + comparison panel** (phase 4): pick 2–4 in the tidy popup and the sheet is copied once per variant (one undo step), each copy tidied by its own conversation in parallel; the *Tidy variants* dock panel lists every variant's status and tidy metrics against the original, switches sheets with *Show*, and *Adopt* writes the chosen copy back onto the original sheet under the original entity ids and removes the copies — one undo step, as is *Discard all*. See [AI Assistant](09-ai-assistant.md)
+- Macro value sets and the rest of the drafting features are tracked under M4
 
 ## M4 — Industrial CAD core (ACADE/EPLAN benchmark) 🔶 (phases 1 and 2 done)
 

@@ -120,6 +120,70 @@ impl SharedDoc {
         Ok(patch)
     }
 
+    /// 複数コマンドを**1回の編集**として実行し、patchをブロードキャストする (undo一発)。
+    pub fn execute_batch_as(
+        &self,
+        cmds: Vec<Command>,
+        origin: EditOrigin,
+    ) -> madake_core::Result<Patch> {
+        let patch = self.engine.lock().unwrap().execute_batch(cmds, origin)?;
+        let _ = self.patches.send(patch.clone());
+        Ok(patch)
+    }
+
+    /// 整えバリアントの開始: 元シートを`count`枚複製して入れる (1回の編集)。
+    /// 戻り値は適用したpatchと、案ごとの情報 (複製シートid・ラベル・id対応表)。
+    pub fn start_variants(
+        &self,
+        sheet_id: Uuid,
+        count: usize,
+        origin: EditOrigin,
+    ) -> Result<(Patch, madake_core::variants::VariantRun), String> {
+        let (commands, run) = {
+            let engine = self.engine.lock().unwrap();
+            let project = engine.project();
+            let sheet = project
+                .sheet(sheet_id)
+                .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+            madake_core::variants::start_commands(sheet, count, project.sheets.len())?
+        };
+        let patch = self.execute_batch_as(commands, origin).map_err(|e| e.to_string())?;
+        Ok((patch, run))
+    }
+
+    /// 整えバリアントの終了: `chosen`があればその案を元シートへ写し戻して全複製を消す (採用)、
+    /// 無ければ全複製を消すだけ (破棄)。どちらも1回の編集=undo一発。
+    pub fn finish_variants(
+        &self,
+        run: &madake_core::variants::VariantRun,
+        chosen: Option<Uuid>,
+        origin: EditOrigin,
+    ) -> Result<Patch, String> {
+        let sheet_ids: Vec<Uuid> = run.variants.iter().map(|v| v.sheet_id).collect();
+        let commands = {
+            let engine = self.engine.lock().unwrap();
+            let project = engine.project();
+            match chosen {
+                Some(chosen_id) => {
+                    let info = run
+                        .variants
+                        .iter()
+                        .find(|v| v.sheet_id == chosen_id)
+                        .ok_or_else(|| format!("variant not found: {chosen_id}"))?;
+                    let original = project
+                        .sheet(run.original_sheet_id)
+                        .ok_or_else(|| format!("sheet not found: {}", run.original_sheet_id))?;
+                    let chosen_sheet = project
+                        .sheet(chosen_id)
+                        .ok_or_else(|| format!("sheet not found: {chosen_id}"))?;
+                    madake_core::variants::adopt_commands(original, chosen_sheet, &info.id_map, &sheet_ids)
+                }
+                None => madake_core::variants::discard_commands(&sheet_ids),
+            }
+        };
+        self.execute_batch_as(commands, origin).map_err(|e| e.to_string())
+    }
+
     /// 選択したエンティティから回路マクロを**組み立てるだけ**(ファイルには書かない)。
     ///
     /// 保存ダイアログのプレビューと、⌘Cの無名マクロ(メモリ上のクリップボード)が使う。
