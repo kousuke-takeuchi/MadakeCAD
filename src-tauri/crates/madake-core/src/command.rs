@@ -74,6 +74,30 @@ pub enum Command {
         sheet_id: SheetId,
         numbers: Vec<WireNumber>,
     },
+    /// FreeCADオブジェクトとの対応付けを登録・更新する (entity_idがキー。M5-2)。
+    SetMechLink {
+        link: MechLink,
+    },
+    /// FreeCADオブジェクトとの対応付けを外す。
+    RemoveMechLink {
+        entity_id: EntityId,
+    },
+    /// 配線の長さをまとめて書き換える (FreeCADの経路計測の書き戻し。出所も一緒に記録)。
+    /// 逆コマンドは書き換え前の長さと出所。
+    SetWireLengths {
+        sheet_id: SheetId,
+        lengths: Vec<WireLength>,
+    },
+}
+
+/// 1本の配線の長さと出所 (`set_wire_lengths` コマンドの要素)。length_mがnullなら長さを消す。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct WireLength {
+    pub wire_id: EntityId,
+    #[serde(default)]
+    pub length_m: Option<f64>,
+    #[serde(default)]
+    pub source: LengthSource,
 }
 
 /// エンジンからフロントエンドへ通知する差分。
@@ -98,6 +122,8 @@ pub enum PatchOp {
     WirePartsReplaced { wire_parts: Vec<WirePart> },
     /// PLC I/O割付表が置き換わった。
     PlcAssignmentsReplaced { assignments: Vec<PlcAssignment> },
+    /// FreeCAD対応付けの一覧が置き換わった (1件の登録・解除でも全体を送る)。
+    MechLinksReplaced { mech_links: Vec<MechLink> },
 }
 
 /// 編集の由来(誰の操作か)。undo履歴の各エントリに記録する。
@@ -622,6 +648,76 @@ impl Engine {
             Command::SetWireNumbers { sheet_id, numbers } => {
                 self.apply_wire_numbers(*sheet_id, numbers)
             }
+            Command::SetMechLink { link } => {
+                let previous = self
+                    .project
+                    .mech_links
+                    .iter()
+                    .position(|l| l.entity_id == link.entity_id)
+                    .map(|i| self.project.mech_links.remove(i));
+                self.project.mech_links.push(link.clone());
+                let inverse = match previous {
+                    Some(old) => Command::SetMechLink { link: old },
+                    None => Command::RemoveMechLink {
+                        entity_id: link.entity_id,
+                    },
+                };
+                Ok((
+                    vec![PatchOp::MechLinksReplaced {
+                        mech_links: self.project.mech_links.clone(),
+                    }],
+                    vec![inverse],
+                ))
+            }
+            Command::RemoveMechLink { entity_id } => {
+                let index = self
+                    .project
+                    .mech_links
+                    .iter()
+                    .position(|l| l.entity_id == *entity_id)
+                    .ok_or(CoreError::EntityNotFound(*entity_id))?;
+                let old = self.project.mech_links.remove(index);
+                Ok((
+                    vec![PatchOp::MechLinksReplaced {
+                        mech_links: self.project.mech_links.clone(),
+                    }],
+                    vec![Command::SetMechLink { link: old }],
+                ))
+            }
+            Command::SetWireLengths { sheet_id, lengths } => {
+                let sheet = self
+                    .project
+                    .sheet_mut(*sheet_id)
+                    .ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let mut ops = Vec::new();
+                let mut old = Vec::new();
+                for WireLength { wire_id, length_m, source } in lengths {
+                    let Some(Entity::Wire(w)) = sheet.entities.get_mut(wire_id) else {
+                        return Err(CoreError::EntityNotFound(*wire_id));
+                    };
+                    if w.length_m == *length_m && w.length_source == *source {
+                        continue;
+                    }
+                    old.push(WireLength {
+                        wire_id: *wire_id,
+                        length_m: w.length_m,
+                        source: w.length_source,
+                    });
+                    w.length_m = *length_m;
+                    w.length_source = *source;
+                    ops.push(PatchOp::EntityUpserted {
+                        sheet_id: *sheet_id,
+                        entity: Entity::Wire(w.clone()),
+                    });
+                }
+                Ok((
+                    ops,
+                    vec![Command::SetWireLengths {
+                        sheet_id: *sheet_id,
+                        lengths: old,
+                    }],
+                ))
+            }
         }
     }
 
@@ -692,6 +788,7 @@ mod tests {
             color: "red".into(),
             sq: 0.75,
             length_m: Some(0.4),
+            length_source: Default::default(),
             part_no: None,
             net: None,
         })
@@ -1348,5 +1445,77 @@ mod tests {
             .is_none());
         assert_eq!(engine.project().sheets[0].entities.len(), 1);
         assert_eq!(engine.revision(), revision, "revisionも進まない");
+    }
+
+    fn mech_link(entity_id: Uuid, object_name: &str) -> MechLink {
+        MechLink {
+            entity_id,
+            fcstd_path: "/work/panel.FCStd".into(),
+            object_name: object_name.into(),
+            synced_at: "2026-09-27T10:00:00Z".into(),
+        }
+    }
+
+    /// Registering a FreeCAD link stores it under the entity id, registering again replaces it, removing it takes it away, and each step undoes back to the previous list.
+    /// FreeCAD対応付けを登録するとentity idをキーに保存され、再登録で置き換わり、解除で消える。各操作はundoで直前の一覧に戻る。
+    #[test]
+    fn mech_links_are_upserted_removed_and_undone() {
+        let (mut engine, _) = test_engine();
+        let id = Uuid::new_v4();
+        let patch = engine.execute(Command::SetMechLink { link: mech_link(id, "Relay001") }).unwrap();
+        assert!(matches!(&patch.ops[0], PatchOp::MechLinksReplaced { mech_links } if mech_links.len() == 1));
+        engine.execute(Command::SetMechLink { link: mech_link(id, "Relay002") }).unwrap();
+        assert_eq!(engine.project().mech_links.len(), 1);
+        assert_eq!(engine.project().mech_links[0].object_name, "Relay002");
+        engine.execute(Command::RemoveMechLink { entity_id: id }).unwrap();
+        assert!(engine.project().mech_links.is_empty());
+        engine.undo().unwrap();
+        assert_eq!(engine.project().mech_links[0].object_name, "Relay002");
+        engine.undo().unwrap();
+        assert_eq!(engine.project().mech_links[0].object_name, "Relay001");
+        engine.undo().unwrap();
+        assert!(engine.project().mech_links.is_empty());
+        assert!(matches!(
+            engine.execute(Command::RemoveMechLink { entity_id: id }),
+            Err(CoreError::EntityNotFound(_))
+        ));
+    }
+
+    /// Writing measured wire lengths back sets each wire's length and marks it as measured by FreeCAD in one undo step; unchanged wires are skipped and an unknown wire is an error.
+    /// 計測した電線長の書き戻しは、各配線の長さを設定して出所を「FreeCAD計測」にする1回の編集になる。変わらない配線は飛ばし、存在しない配線はエラーになる。
+    #[test]
+    fn wire_lengths_write_back_with_their_source() {
+        let (mut engine, sheet_id) = test_engine();
+        let wire = sample_wire();
+        let wire_id = wire.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: wire }).unwrap();
+        let patch = engine
+            .execute(Command::SetWireLengths {
+                sheet_id,
+                lengths: vec![WireLength { wire_id, length_m: Some(1.25), source: LengthSource::Freecad }],
+            })
+            .unwrap();
+        assert_eq!(patch.ops.len(), 1);
+        let Entity::Wire(w) = &engine.project().sheets[0].entities[&wire_id] else { panic!() };
+        assert_eq!((w.length_m, w.length_source), (Some(1.25), LengthSource::Freecad));
+        // 同じ値をもう一度: 変更なし (patchは空)
+        let patch = engine
+            .execute(Command::SetWireLengths {
+                sheet_id,
+                lengths: vec![WireLength { wire_id, length_m: Some(1.25), source: LengthSource::Freecad }],
+            })
+            .unwrap();
+        assert!(patch.ops.is_empty());
+        engine.undo().unwrap();
+        engine.undo().unwrap();
+        let Entity::Wire(w) = &engine.project().sheets[0].entities[&wire_id] else { panic!() };
+        assert_eq!((w.length_m, w.length_source), (Some(0.4), LengthSource::Manual));
+        assert!(matches!(
+            engine.execute(Command::SetWireLengths {
+                sheet_id,
+                lengths: vec![WireLength { wire_id: Uuid::new_v4(), length_m: None, source: LengthSource::Manual }],
+            }),
+            Err(CoreError::EntityNotFound(_))
+        ));
     }
 }

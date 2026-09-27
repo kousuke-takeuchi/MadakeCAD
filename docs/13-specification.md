@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1312 specification clauses** across 6 areas.
+**1327 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -43,6 +43,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - If any command in a batch fails, the whole batch is refused: the drawing is unchanged and nothing lands in the history. <sub>`execute_batch_refuses_everything_when_one_command_fails`</sub>
 - An empty batch changes nothing at all: no history entry and no new document revision. <sub>`empty_batch_changes_nothing`</sub>
 - Reverting a range with no edits of that origin reports "nothing to do" instead of touching the drawing. <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
+- Registering a FreeCAD link stores it under the entity id, registering again replaces it, removing it takes it away, and each step undoes back to the previous list. <sub>`mech_links_are_upserted_removed_and_undone`</sub>
+- Writing measured wire lengths back sets each wire's length and marks it as measured by FreeCAD in one undo step; unchanged wires are skipped and an unknown wire is an error. <sub>`wire_lengths_write_back_with_their_source`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 
@@ -84,6 +86,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The saved .mdkproj file is pretty-printed JSON with a format_version field, so it diffs well in git. <sub>`saved_file_is_pretty_json_with_format_version`</sub>
 - Loading a missing file returns an error instead of panicking. <sub>`loading_missing_file_is_an_error`</sub>
 - A project file saved before the PLC assignment table existed still opens: it gets an empty table and is brought up to the current format version. <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
+- A format 2 file (no FreeCAD links, wires without a length source) opens with an empty link list and every wire length marked as manual. <sub>`a_format_2_file_opens_with_empty_mech_links_and_manual_lengths`</sub>
 
 ### KiCad import / export
 
@@ -1217,6 +1220,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - trims the entered harness name <sub>`harnessUpdateCommand`</sub>
 - sends nothing when neither the name nor the note changed <sub>`harnessUpdateCommand`</sub>
 - builds nothing for entities other than harnesses <sub>`harnessUpdateCommand`</sub>
+- sends nothing when colour, gauge, part number and length are unchanged <sub>`wireUpdateCommand`</sub>
+- a hand-edited length becomes an update whose length source is manual <sub>`wireUpdateCommand`</sub>
+- overwriting a FreeCAD-measured length by hand is flagged so the panel can warn <sub>`wireUpdateCommand`</sub>
+- changing only colour or gauge keeps the FreeCAD length source <sub>`wireUpdateCommand`</sub>
 
 ### drawingContext
 
@@ -1360,6 +1367,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sheet add/remove patches keep sheet order <sub>`document store`</sub>
 - sheet-meta patches never touch the entities <sub>`document store`</sub>
 - patches with an older revision are discarded (duplicate delivery is safe) <sub>`document store`</sub>
+- a mech_links_replaced patch replaces the FreeCAD link list <sub>`document store`</sub>
 
 ### Circuit macros
 
@@ -1646,6 +1654,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The panel reloads when the shown sheet's entities change or when sheets are added, removed, renamed or the project is replaced, but not for edits on another sheet. <sub>`test_refresh_is_needed_for_the_shown_sheet_and_structural_changes`</sub>
 - Before a sheet has been chosen, any entity change reloads the panel so the first view is current. <sub>`test_with_no_sheet_shown_yet_any_entity_change_reloads`</sub>
 - The port setting keeps integers from 1 to 65535 and falls back to 9310 for anything else (text, 0, too large). <sub>`test_port_setting_accepts_valid_ports_and_falls_back_to_the_default`</sub>
+
+### Part linking & wire-length write-back
+
+- The parts list has one row per symbol, sorted by sheet and designator, with the 3D model of its part number and the FreeCAD object it is linked to. <sub>`test_part_rows_list_symbols_with_their_3d_model_and_linked_object`</sub>
+- The wire list has one row per wire with its net or wire number, current length, where the length came from, and the linked route object. <sub>`test_wire_rows_show_net_length_source_and_linked_route`</sub>
+- STEP/IGES/BREP files are inserted as shapes, .FCStd files are merged as documents, and anything else cannot be inserted. <sub>`test_model_kind_recognises_shape_files_and_freecad_documents`</sub>
+- Linking sends a set_mech_link command with the entity id, the FreeCAD document path, the object name and the sync time; unlinking sends remove_mech_link. <sub>`test_link_commands_carry_the_entity_id_document_path_object_name_and_time`</sub>
+- Route objects are matched to wires by their madake_id; lengths are converted from millimetres to metres (1 mm resolution) and objects that are not wires are ignored. <sub>`test_measured_route_lengths_are_converted_to_metres_and_matched_to_wires`</sub>
+- The write-back is one set_wire_lengths command per sheet whose entries carry the metre length and the source "freecad", so MadakeCAD can warn before a manual overwrite. <sub>`test_write_back_is_one_command_per_sheet_with_the_freecad_source`</sub>
+- Measuring also registers the route object as the wire's link, but only when the wire is not already linked to that same object. <sub>`test_routes_are_linked_only_when_not_already_linked_to_that_object`</sub>
 
 ### Project overview & netlist view
 

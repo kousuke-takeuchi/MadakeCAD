@@ -704,5 +704,11 @@
     "adoptedLog": "AGENT   Adopted {label} (written back to the original sheet; undo with Cmd+Z)",
     "discardedLog": "AGENT   Discarded all tidy variants (undo with Cmd+Z)",
     "finishFailedLog": "AGENT   Could not finish the tidy variants: {message}"
+  },
+  "mech": {
+    "measured": "FreeCAD",
+    "measuredHint": "This length was written back from a FreeCAD route measurement; editing it by hand makes it a manual value",
+    "linkLabel": "3D link",
+    "overwroteLog": "WIRE  A FreeCAD-measured length was overwritten by hand (the next FreeCAD sync can restore the measured value)"
   }
 }

@@ -501,6 +501,7 @@ mod tests {
             color: color.into(),
             sq,
             length_m: None,
+            length_source: Default::default(),
             part_no: part.map(str::to_string),
             net: None,
         })

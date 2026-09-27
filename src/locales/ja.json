@@ -704,5 +704,11 @@
     "adoptedLog": "AGENT   {label}を採用しました (元の図面へ写し戻し。Cmd+Zで戻せます)",
     "discardedLog": "AGENT   整え案をすべて破棄しました (Cmd+Zで戻せます)",
     "finishFailedLog": "AGENT   整え案の終了に失敗しました: {message}"
+  },
+  "mech": {
+    "measured": "FreeCAD計測",
+    "measuredHint": "この長さはFreeCADの経路計測から書き戻された値です。手で変えると出所は手入力になります",
+    "linkLabel": "3D対応付け",
+    "overwroteLog": "WIRE  FreeCADで計測した長さを手入力で上書きしました (次のFreeCAD同期で計測値に戻せます)"
   }
 }

@@ -487,6 +487,7 @@ mod tests {
             color: "black".into(),
             sq: 0.75,
             length_m: None,
+            length_source: Default::default(),
             part_no: None,
             net: None,
         })

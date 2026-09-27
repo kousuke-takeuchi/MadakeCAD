@@ -335,6 +335,7 @@ mod tests {
             color: "red".into(),
             sq,
             length_m,
+            length_source: Default::default(),
             part_no: None,
             net: None,
         })

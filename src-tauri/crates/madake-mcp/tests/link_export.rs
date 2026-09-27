@@ -227,6 +227,7 @@ async fn simulate_op_returns_result() {
         color: "red".into(),
         sq: 0.75,
         length_m: None,
+        length_source: Default::default(),
         part_no: None,
         net: None,
     });
@@ -242,6 +243,7 @@ async fn simulate_op_returns_result() {
         color: "black".into(),
         sq: 0.75,
         length_m: None,
+        length_source: Default::default(),
         part_no: None,
         net: None,
     });

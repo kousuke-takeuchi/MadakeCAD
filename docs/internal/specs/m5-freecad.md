@@ -17,7 +17,15 @@
 
 受け入れ基準: FreeCADのパネルから起動中MadakeCADの図面概要とネットリストが見え、図面編集がリアルタイムに反映される。**実FreeCADでの目視確認はユーザー確認事項**(本リポジトリのCIにFreeCADは無い。純Python部分は15テストで固定)。
 
-## M5-2: 部品対応付け+電線長書き戻し
+## M5-2: 部品対応付け+電線長書き戻し — ✅ 実装 (2026-09-27)
+
+実装内容(計画: [`docs/superpowers/plans/2026-09-27-m5-2-part-linking-wire-length.md`](../../superpowers/plans/2026-09-27-m5-2-part-linking-wire-length.md)):
+- モデル: `Project.mech_links: Vec<MechLink {entity_id, fcstd_path, object_name, synced_at}>`、`Wire.length_source: manual | freecad`(既定manual)。**format_version 2→3**(旧ファイルは既定値で開ける)
+- Command: `set_mech_link`(entity_idで登録・置換)/ `remove_mech_link` / `set_wire_lengths`(シート単位の一括書き戻し。長さと出所を同時に設定、逆コマンドは書き換え前の値)。PatchOp `mech_links_replaced`。Link API `/commands`・MCP `execute_commands`でそのまま使える
+- アドオン: パネルに「Parts」タブ(シンボル一覧+部品DBの`model_3d`+対応付け済みオブジェクト。**Insert 3D model**=STEP/IGES/BREPは`Part.read`、FCStdは`mergeProject`で取り込み、`madake_id`プロパティを付けて`set_mech_link`。**Link selected object** / **Unlink**)と「Wires」タブ(配線一覧+長さ・出所+経路オブジェクト。**Link selected route**=Draft Wire等を配線に対応付け、**Measure routes → write back lengths**=`madake_id`付き経路オブジェクトの`Shape.Length`をmm→m(1mm単位)へ換算し確認ダイアログの後に`set_wire_lengths`(出所freecad)+未登録経路の`set_mech_link`)
+- MadakeCAD側UI: 配線プロパティの長さに「FreeCAD計測」バッジ、対応付け済みシンボル/配線に「3D対応付け」行(オブジェクト名)。計測値を手で変えると出所はmanualへ戻り、ログに警告
+- 同期は明示操作のみ(ボタン)。自動上書きなし
+
 
 - **部品挿入**: アドオンの部品リスト(図面のシンボル+部品DBのmodel_3d)から3DモデルをFreeCADアセンブリへ挿入。FreeCADオブジェクトに`madake_id`(entity UUID)を保存
 - **対応付けの永続化**: MadakeCAD側`Project.mech_links: Vec<MechLink {entity_id, fcstd_path, object_name, synced_at}>`を新設(format_version++)。Command `set_mech_link`
@@ -37,5 +45,5 @@
 
 ## 未決事項
 
-- [ ] `length_source`の表示方法(デザインフェーズ)
+- [x] `length_source`の表示方法 → 配線プロパティの長さ欄の右にinfoバッジ「FreeCAD計測」+ツールチップ(2026-09-27。`.pen`ボードへの反映は次回のPencil作業時)
 - [ ] アドオンの配布形態(リポジトリ同梱→Addon Manager登録のタイミング=M6と連動)

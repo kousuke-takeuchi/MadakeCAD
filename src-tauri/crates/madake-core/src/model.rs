@@ -13,7 +13,7 @@ pub type SheetId = Uuid;
 /// - v1: 初版
 /// - v2: PLC I/O割付表 ([`Project::plc_assignments`]) を追加。旧ファイルは空の割付表で開き、
 ///   読み込み時に現行版へ更新される ([`crate::io::load_project`])
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 /// プロジェクト全体。保存形式(.mdkproj)のルート。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -28,6 +28,38 @@ pub struct Project {
     /// 図面の結線から導出する ([`crate::plc::plc_points`])。
     #[serde(default)]
     pub plc_assignments: Vec<PlcAssignment>,
+    /// FreeCAD側の3Dオブジェクトとの対応付け (M5-2)。entity UUIDがキーで、
+    /// FreeCAD側は同じUUIDを`madake_id`プロパティに持つ。
+    #[serde(default)]
+    pub mech_links: Vec<MechLink>,
+}
+
+/// エンティティ (シンボル・配線) とFreeCADオブジェクトの対応 (M5仕様 M5-2)。
+/// 電気データはMadakeCAD、ジオメトリ(配置・経路長)はFreeCADがマスタ。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct MechLink {
+    /// 対応付けたシンボルまたは配線のentity id。
+    pub entity_id: EntityId,
+    /// FreeCADドキュメントのパス (.FCStd)。
+    #[serde(default)]
+    pub fcstd_path: String,
+    /// FreeCADオブジェクト名 (`obj.Name`)。
+    #[serde(default)]
+    pub object_name: String,
+    /// 最後に同期した日時 (ISO 8601文字列。FreeCAD側が書く)。
+    #[serde(default)]
+    pub synced_at: String,
+}
+
+/// 電線長の出所。FreeCADで計測した値を手入力で誤って上書きしないための印。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LengthSource {
+    /// 手入力 (既定)。
+    #[default]
+    Manual,
+    /// FreeCADの経路計測から書き戻された値。
+    Freecad,
 }
 
 impl Project {
@@ -38,6 +70,7 @@ impl Project {
             sheets: vec![Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape)],
             wire_parts: Vec::new(),
             plc_assignments: Vec::new(),
+            mech_links: Vec::new(),
         }
     }
 
@@ -278,6 +311,9 @@ pub struct Wire {
     /// 電線長(m)。BOM/電線リスト用。
     #[serde(default)]
     pub length_m: Option<f64>,
+    /// 電線長の出所 (手入力 / FreeCAD計測)。
+    #[serde(default)]
+    pub length_source: LengthSource,
     /// 電線品番。
     #[serde(default)]
     pub part_no: Option<String>,
@@ -378,6 +414,7 @@ mod tests {
             color: "red".into(),
             sq: 0.3,
             length_m: None,
+            length_source: Default::default(),
             part_no: None,
             net: None,
         });

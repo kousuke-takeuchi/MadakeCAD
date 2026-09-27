@@ -32,12 +32,18 @@ Registration with the FreeCAD Addon Manager is planned for the open-source relea
    (net name, wire number, label, pins as `K1:A1, TB1:3`, wire count).
 4. **Follow live** (on by default) subscribes to MadakeCAD's event stream and reloads the view
    when the shown sheet changes. **Refresh** reloads on demand.
+5. **Parts** tab (M5-2): select a part and press **Insert 3D model** (STEP/IGES/BREP or FCStd from
+   the parts database's `model_3d`); the object gets a `madake_id` property and the link is stored
+   in MadakeCAD. **Link selected object** ties an object you placed yourself; **Unlink** removes a link.
+6. **Wires** tab (M5-2): **Link selected route** ties a Draft Wire (any shape) to a wire, then
+   **Measure routes → write back lengths** measures every linked route and writes the lengths to
+   MadakeCAD (source `freecad`, one undo step per sheet) after a confirmation.
 
 ## Layout
 
 - `InitGui.py` — workbench registration (toolbar/menu with *MadakeCAD Link panel* and *Refresh*)
 - `madakecad_link/client.py` — Link API client (REST + SSE, standard library only)
-- `madakecad_link/model.py`, `events.py`, `settings.py` — pure helpers, unit-tested without FreeCAD
+- `madakecad_link/model.py`, `events.py`, `settings.py`, `linking.py` — pure helpers (netlist rows, live follow, port, part/wire rows and the link / write-back commands), unit-tested without FreeCAD
 - `madakecad_link/panel.py`, `commands.py` — Qt panel and commands (FreeCAD only)
 - `tests/` — `python3 -m unittest discover -s freecad-addon/tests` (also run in CI; every test doubles as a specification clause in `docs/13-specification.md`)
 
