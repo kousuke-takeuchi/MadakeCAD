@@ -1,17 +1,27 @@
 <script setup lang="ts">
 import { FilePlus, FolderOpen, Save, Printer, Settings, Undo2, Redo2 } from "lucide-vue-next";
 import AppLogo from "./AppLogo.vue";
-import { inject } from "vue";
+import { computed, inject } from "vue";
+import { useI18n } from "vue-i18n";
 import { inTauri } from "../ipc";
 import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
+import { useProjectFileStore } from "../stores/projectFile";
 import { useUiStore } from "../stores/ui";
 
 const store = useDocumentStore();
 const ui = useUiStore();
+const projectFile = useProjectFileStore();
 const controller = inject<EditorController>("controller")!;
+const { t } = useI18n();
 
-const emit = defineEmits<{ (e: "open"): void; (e: "save"): void }>();
+const emit = defineEmits<{ (e: "new"): void; (e: "open"): void; (e: "save"): void }>();
+
+/** 表示するファイル名: 開いているファイル、無ければ「<プロジェクト名>.mdkproj」。未保存なら`*`。 */
+const documentTitle = computed(() => {
+  const name = projectFile.fileName ?? `${store.project?.name || t("file.untitled")}.mdkproj`;
+  return projectFile.dirty ? `${name}${t("file.unsavedMark")}` : name;
+});
 
 async function undo() {
   await store.undo();
@@ -29,16 +39,16 @@ async function redo() {
     <div v-if="inTauri" class="traffic-space" />
     <div class="logo"><AppLogo :size="20" /></div>
     <div class="qat">
-      <button title="新規"><FilePlus :size="14" /></button>
-      <button title="開く" @click="emit('open')"><FolderOpen :size="14" /></button>
-      <button title="保存" @click="emit('save')"><Save :size="14" /></button>
+      <button :title="t('file.titleNew')" @click="emit('new')"><FilePlus :size="14" /></button>
+      <button :title="t('file.titleOpen')" @click="emit('open')"><FolderOpen :size="14" /></button>
+      <button :title="t('file.titleSave')" @click="emit('save')"><Save :size="14" /></button>
       <button title="印刷"><Printer :size="14" /></button>
       <span class="qat-sep" />
       <button title="元に戻す (Cmd+Z)" :disabled="!store.canUndo" @click="undo"><Undo2 :size="14" /></button>
       <button title="やり直し (Cmd+Shift+Z)" :disabled="!store.canRedo" @click="redo"><Redo2 :size="14" /></button>
     </div>
     <div class="doc-name" data-tauri-drag-region>
-      MadakeCAD - [{{ store.activeSheet?.name ?? "無題" }}.mdkproj]
+      MadakeCAD - [{{ documentTitle }}]
     </div>
     <div class="right-space">
       <button class="gear" title="設定" @click="ui.settingsOpen = true"><Settings :size="14" /></button>

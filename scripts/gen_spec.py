@@ -62,6 +62,8 @@ MODULES = {
     "terminal_diagram": ("Terminal connection diagrams", "端子接続図"),
     "verify": ("Verification (ERC & electrical)", "検証 (ERC・電気検証)"),
     "tidy": ("Tidy metrics (crossings / overlaps / grid)", "整えメトリクス (交差・重なり・グリッド)"),
+    "projectFile": ("Project file (open / save / recent files)", "プロジェクトファイル (開く/保存/最近使ったファイル)"),
+    "fileActions": ("File menu (new / open / save / save as)", "ファイルメニュー (新規/開く/保存/名前を付けて保存)"),
     "spice": ("SPICE netlist generation", "SPICEネットリスト生成"),
     "ngspice": ("ngspice runner", "ngspiceランナー"),
     "sim": ("DC simulation", "DCシミュレーション"),

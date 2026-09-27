@@ -1,10 +1,10 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  Activity, AlignJustify, Cable, Copy, Cpu, FileClock, FileDown, FileSpreadsheet, FileText,
-  FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid, LayoutTemplate, ListOrdered, ListChecks,
-  Move, MoveRight, Network, Pencil, Route, Scissors, ShieldCheck, SquareDashed, Table2, Tag,
-  Trash2, Type,
+  Activity, AlignJustify, Cable, Copy, Cpu, File, FileClock, FileDown, FileOutput, FilePlus,
+  FileSpreadsheet, FileText, FolderOpen, FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid,
+  LayoutTemplate, ListOrdered, ListChecks, Move, MoveRight, Network, Pencil, Route, Save,
+  Scissors, ShieldCheck, SquareDashed, Table2, Tag, Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
 import { computed, inject, ref } from "vue";
@@ -13,6 +13,7 @@ import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
 import type { ReportFormat, ReportKind } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useFileActions } from "../composables/fileActions";
+import { fileNameOf, useProjectFileStore } from "../stores/projectFile";
 import { useRevisionsStore } from "../stores/revisions";
 import { usePdfBookStore, useReportDialogStore } from "../stores/reports";
 import { useMacrosStore } from "../stores/macros";
@@ -28,6 +29,7 @@ import { useUiStore } from "../stores/ui";
 const controller = inject<EditorController>("controller")!;
 const ui = useUiStore();
 const files = useFileActions();
+const projectFile = useProjectFileStore();
 const verification = useVerificationStore();
 const simulation = useSimulationStore();
 const revisions = useRevisionsStore();
@@ -280,6 +282,48 @@ const reportGroups = computed<RibbonGroup[]>(() => [
   },
 ]);
 
+/**
+ * 「ホーム」タブ: プロジェクトファイルの新規/開く/保存/名前を付けて保存と、
+ * 最近使ったファイル (3件ずつの縦列、ボタンの表示はファイル名・ツールチップにフルパス)。
+ * ショートカットはタイトルバーのボタンと同じ (Cmd+N / Cmd+O / Cmd+S / Cmd+Shift+S)。
+ */
+const homeGroups = computed<RibbonGroup[]>(() => {
+  const groups: RibbonGroup[] = [
+    {
+      name: t("file.group"),
+      big: {
+        label: t("file.save"),
+        icon: Save,
+        color: "var(--acad-blue)",
+        action: () => files.saveProject(),
+      },
+      small: [
+        [
+          { label: t("file.new"), icon: FilePlus, action: () => files.newProject() },
+          { label: t("file.open"), icon: FolderOpen, action: () => files.openProject() },
+          { label: t("file.saveAs"), icon: FileOutput, action: () => files.saveProjectAs() },
+        ],
+      ],
+    },
+  ];
+  const recent = projectFile.recent.map<RibbonItem>((path) => ({
+    key: path,
+    label: fileNameOf(path),
+    title: path,
+    icon: File,
+    action: () => files.openRecent(path),
+  }));
+  if (recent.length) {
+    groups.push({
+      name: t("file.recentGroup"),
+      small: Array.from({ length: Math.ceil(recent.length / 3) }, (_, i) =>
+        recent.slice(i * 3, i * 3 + 3),
+      ),
+    });
+  }
+  return groups;
+});
+
 /** 「プロジェクト」タブ: 作図を始めるための導線 (テンプレート)。 */
 const projectGroups = computed<RibbonGroup[]>(() => [
   {
@@ -304,10 +348,15 @@ interface RibbonItem {
   icon: LucideIcon;
   action: () => void;
   isActive?: () => boolean;
+  /** 同じ表示名が並びうるとき(最近使ったファイル)の識別子。既定はlabel。 */
+  key?: string;
+  /** ツールチップ (フルパスなど、ボタンに書ききれない補足)。 */
+  title?: string;
 }
 interface RibbonGroup {
   name: string;
-  big: RibbonItem & { color: string };
+  /** 大ボタン。無いグループ(最近使ったファイル)は小ボタンの列だけを並べる。 */
+  big?: RibbonItem & { color: string };
   /** 小ボタンの列(リボンの縦列)。 */
   small: RibbonItem[][];
 }
@@ -394,6 +443,7 @@ const groups = computed<RibbonGroup[]>(() => [
 /** 表示中のタブのグループ。まだ実装していないタブはnull (プレースホルダを出す)。 */
 const activeGroups = computed<RibbonGroup[] | null>(() => {
   if (activeTab.value === "schematic") return groups.value;
+  if (activeTab.value === "home") return homeGroups.value;
   if (activeTab.value === "project") return projectGroups.value;
   if (activeTab.value === "report") return reportGroups.value;
   return null;
@@ -420,6 +470,7 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
           <div class="ribbon-group">
             <div class="ribbon-group-body">
               <button
+                v-if="g.big"
                 class="ribbon-big"
                 :class="{ active: g.big.isActive?.() }"
                 @click="g.big.action()"
@@ -430,9 +481,10 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
               <div v-for="(col, ci) in g.small" :key="ci" class="ribbon-smalls">
                 <button
                   v-for="s in col"
-                  :key="s.label"
+                  :key="s.key ?? s.label"
                   class="ribbon-small"
                   :class="{ active: s.isActive?.() }"
+                  :title="s.title"
                   @click="s.action()"
                 >
                   <component :is="s.icon" :size="13" class="small-icon" />

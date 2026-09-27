@@ -3,11 +3,13 @@
 import {
   ChevronDown, File, Folder, FolderOpen, FolderPlus, Pin, Printer, RefreshCw, Settings, X,
 } from "lucide-vue-next";
+import { useFileActions } from "../composables/fileActions";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 
 const store = useDocumentStore();
 const ui = useUiStore();
+const files = useFileActions();
 
 async function addSheet() {
   await store.execute({
@@ -27,7 +29,7 @@ function todo(name: string) {
 
 const toolButtons = [
   { icon: FolderPlus, title: "シートを追加", action: addSheet },
-  { icon: FolderOpen, title: "プロジェクトを開く", action: () => todo("プロジェクトを開く") },
+  { icon: FolderOpen, title: "プロジェクトを開く", action: () => files.openProject() },
   { icon: RefreshCw, title: "再読み込み", action: () => todo("再読み込み") },
   { icon: Printer, title: "印刷", action: () => todo("印刷") },
   { icon: Settings, title: "プロジェクト設定", action: () => todo("プロジェクト設定") },
