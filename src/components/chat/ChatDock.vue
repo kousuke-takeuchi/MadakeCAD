@@ -4,6 +4,7 @@
 // タブ切替でもアンマウントされない (v-show) ので、エージェントイベントの購読
 // (bootstrap/unsubscribe) はここが持つ。図面の編集は一切行わない。
 import { nextTick, computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { useChatComposer } from "../../composables/chatComposer";
 import { appliedCommandCount, useChatStore } from "../../stores/chat";
 import { useDocumentStore } from "../../stores/document";
@@ -17,6 +18,7 @@ const doc = useDocumentStore();
 const ui = useUiStore();
 const settings = useSettingsStore();
 const { draft, onKeydown } = useChatComposer();
+const { t } = useI18n();
 
 const listRef = ref<HTMLDivElement | null>(null);
 // 接続バッジ: Claude Code CLIならCLIの検出、Anthropic APIならキーの保存状況を見る
@@ -50,7 +52,7 @@ async function onUndo() {
     if (!turnId) return;
     await store.undoTurn(id, turnId);
   } catch (e) {
-    ui.log(`AGENT   元に戻す失敗: ${String(e)}`);
+    ui.log(t("chat.dock.undoFailedLog", { error: String(e) }));
   }
 }
 
@@ -79,12 +81,12 @@ watch(
   () => {
     void store
       .loadConversations()
-      .catch((e) => ui.log(`AGENT   会話履歴の再読込に失敗: ${String(e)}`));
+      .catch((e) => ui.log(t("chat.dock.reloadFailedLog", { error: String(e) })));
   },
 );
 
 onMounted(() => {
-  void store.bootstrap().catch((e) => ui.log(`AGENT   エージェント接続に失敗: ${String(e)}`));
+  void store.bootstrap().catch((e) => ui.log(t("chat.dock.connectFailedLog", { error: String(e) })));
 });
 
 onBeforeUnmount(() => store.unsubscribe());
@@ -103,8 +105,8 @@ onBeforeUnmount(() => store.unsubscribe());
       <p v-if="!store.messages.length" class="empty">
         {{
           connected
-            ? "図面について指示してください。編集は自動で適用され、あとから元に戻せます。"
-            : "Claude Code CLI が見つかりません。`claude` をインストールしてサインインしてください。"
+            ? t("chat.dock.emptyConnected")
+            : t("chat.dock.emptyDisconnected")
         }}
       </p>
     </div>
@@ -114,7 +116,7 @@ onBeforeUnmount(() => store.unsubscribe());
         v-model="draft"
         class="input"
         rows="2"
-        placeholder="返信を入力..."
+        :placeholder="t('chat.dock.replyPlaceholder')"
         @keydown="onKeydown"
       />
       <ChatComposerFooter />

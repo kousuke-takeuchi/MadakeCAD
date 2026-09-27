@@ -19,6 +19,14 @@ Currently developed and tested on macOS (the core is OS-independent; Windows/Lin
 - **The AI chat needs one provider, not a specific one.** The Claude Code CLI is the default and reuses your Claude Pro/Max sign-in (no API key), but an Anthropic API key, the GitHub Copilot CLI, any OpenAI-compatible endpoint, a local Ollama, or a Gemini key work just as well — pick one in Settings → Agent. Nothing here is required to draw by hand. See [AI Assistant → Providers](09-ai-assistant.md#providers)
 - rustup installs `cargo` into `~/.cargo/bin`; add it to PATH if needed
 
+**Per-OS build dependencies** (Tauri 2):
+
+| OS | Install |
+|---|---|
+| macOS | Xcode Command Line Tools (`xcode-select --install`) |
+| Windows 10/11 | Visual Studio 2022 Build Tools with the "Desktop development with C++" workload; WebView2 runtime (preinstalled on Windows 11) |
+| Linux (Debian/Ubuntu) | `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev` — and `fonts-noto-cjk` so PDF export has a Japanese-capable font (the app maps `sans-serif` to Noto Sans CJK JP on Linux, Yu Gothic UI on Windows, Hiragino Sans on macOS) |
+
 ## 2. Build & run
 
 ```bash
@@ -36,6 +44,8 @@ cd .. && npx vitest run
 ```
 
 While the app runs, a built-in server listens on `127.0.0.1:9310` (MCP at `/mcp`, REST at `/api/v1`).
+
+Release bundles (`.dmg` / `.msi` + `.exe` installer / `.AppImage` + `.deb`) are built with `npm run tauri build`; CI does the same on all three platforms for tags `v*` (`.github/workflows/release.yml`, draft release). Bundles are not code-signed yet.
 
 ## 3. Optional: the `madake` CLI
 

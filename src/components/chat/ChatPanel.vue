@@ -5,14 +5,16 @@
 // 最小化はローカル状態。図面の編集は一切行わない。
 import { Maximize2, Minus, SquarePen } from "lucide-vue-next";
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useChatComposer } from "../../composables/chatComposer";
 import ChatComposerFooter from "./ChatComposerFooter.vue";
 
 const { store, ui, draft, onKeydown } = useChatComposer();
+const { t } = useI18n();
 
 const minimized = ref(false);
 
-const title = computed(() => (store.messages.length ? "回路エージェント" : "新規エージェント"));
+const title = computed(() => (store.messages.length ? t("chat.panel.titleActive") : t("chat.panel.titleNew")));
 
 /** 左ドックのエージェントタブを開く。 */
 function expand() {
@@ -28,7 +30,7 @@ function expand() {
       <SquarePen :size="14" class="head-icon" />
       <span class="head-title">{{ title }}</span>
       <span class="spacer" />
-      <button class="icon-btn" title="展開" @click="expand"><Maximize2 :size="12" /></button>
+      <button class="icon-btn" :title="t('chat.panel.expand')" @click="expand"><Maximize2 :size="12" /></button>
     </div>
 
     <!-- 折りたたみ -->
@@ -37,16 +39,16 @@ function expand() {
         <SquarePen :size="14" class="head-icon" />
         <span class="head-title">{{ title }}</span>
         <span class="spacer" />
-        <button class="icon-btn" title="最小化" @click="minimized = true">
+        <button class="icon-btn" :title="t('chat.panel.minimize')" @click="minimized = true">
           <Minus :size="13" />
         </button>
-        <button class="icon-btn" title="展開" @click="expand"><Maximize2 :size="12" /></button>
+        <button class="icon-btn" :title="t('chat.panel.expand')" @click="expand"><Maximize2 :size="12" /></button>
       </div>
 
       <textarea
         v-model="draft"
         class="input"
-        placeholder="何でも指示できます... (例: 24V系にヒューズを追加して)"
+        :placeholder="t('chat.panel.placeholder')"
         @keydown="onKeydown"
       />
 

@@ -4,12 +4,15 @@ import {
   ChevronDown, File, Folder, FolderOpen, FolderPlus, Pin, Printer, RefreshCw, Settings, X,
 } from "lucide-vue-next";
 import { useFileActions } from "../composables/fileActions";
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 
 const store = useDocumentStore();
 const ui = useUiStore();
 const files = useFileActions();
+const { t } = useI18n();
 
 async function addSheet() {
   await store.execute({
@@ -20,26 +23,26 @@ async function addSheet() {
   });
   const sheets = store.project?.sheets ?? [];
   store.activeSheetId = sheets[sheets.length - 1]?.id ?? null;
-  ui.log("NEWSHEET  シートを追加しました");
+  ui.log(t("projectPanel.addedLog"));
 }
 
 function todo(name: string) {
-  ui.log(`${name}: 未実装`);
+  ui.log(t("projectPanel.todoLog", { name }));
 }
 
-const toolButtons = [
-  { icon: FolderPlus, title: "シートを追加", action: addSheet },
-  { icon: FolderOpen, title: "プロジェクトを開く", action: () => files.openProject() },
-  { icon: RefreshCw, title: "再読み込み", action: () => todo("再読み込み") },
-  { icon: Printer, title: "印刷", action: () => todo("印刷") },
-  { icon: Settings, title: "プロジェクト設定", action: () => todo("プロジェクト設定") },
-];
+const toolButtons = computed(() => [
+  { icon: FolderPlus, title: t("projectPanel.addSheet"), action: addSheet },
+  { icon: FolderOpen, title: t("projectPanel.open"), action: () => files.openProject() },
+  { icon: RefreshCw, title: t("projectPanel.reload"), action: () => todo(t("projectPanel.reload")) },
+  { icon: Printer, title: t("projectPanel.print"), action: () => todo(t("projectPanel.print")) },
+  { icon: Settings, title: t("projectPanel.settings"), action: () => todo(t("projectPanel.settings")) },
+]);
 </script>
 
 <template>
   <aside class="panel">
     <div class="panel-head">
-      <span>プロジェクト マネージャー</span>
+      <span>{{ t("projectPanel.title") }}</span>
       <span class="head-icons">
         <Pin :size="11" />
         <X :size="11" />
@@ -54,7 +57,7 @@ const toolButtons = [
       <div class="project-row">
         <ChevronDown :size="11" class="muted" />
         <Folder :size="13" class="folder" />
-        <span class="project-name">{{ store.project?.name ?? "無題" }}</span>
+        <span class="project-name">{{ store.project?.name ?? t("projectPanel.untitled") }}</span>
       </div>
       <button
         v-for="s in store.project?.sheets ?? []"
@@ -68,22 +71,22 @@ const toolButtons = [
       </button>
     </div>
     <div class="spacer" />
-    <div class="detail-head">詳細</div>
+    <div class="detail-head">{{ t("projectPanel.detail") }}</div>
     <div class="detail">
-      <div class="detail-row"><span>図面</span><b>{{ store.activeSheet?.name ?? "-" }}</b></div>
-      <div class="detail-row"><span>図番</span><b>{{ store.activeSheet?.title_block.drawing_no || "-" }}</b></div>
+      <div class="detail-row"><span>{{ t("projectPanel.drawing") }}</span><b>{{ store.activeSheet?.name ?? "-" }}</b></div>
+      <div class="detail-row"><span>{{ t("projectPanel.drawingNo") }}</span><b>{{ store.activeSheet?.title_block.drawing_no || "-" }}</b></div>
       <div class="detail-row">
-        <span>用紙</span><b>{{ store.activeSheet?.size }} {{ store.activeSheet?.orientation === "Portrait" ? "縦" : "横" }}</b>
+        <span>{{ t("projectPanel.paper") }}</span><b>{{ store.activeSheet?.size }} {{ store.activeSheet?.orientation === "Portrait" ? t("projectPanel.portrait") : t("projectPanel.landscape") }}</b>
       </div>
       <div class="detail-row">
-        <span>シート</span>
+        <span>{{ t("projectPanel.sheet") }}</span>
         <b>
           {{ (store.project?.sheets.findIndex((s) => s.id === store.activeSheet?.id) ?? 0) + 1 }} /
           {{ store.project?.sheets.length ?? 0 }}
         </b>
       </div>
       <div class="detail-row">
-        <span>要素数</span><b>{{ Object.keys(store.activeSheet?.entities ?? {}).length }}</b>
+        <span>{{ t("projectPanel.entities") }}</span><b>{{ Object.keys(store.activeSheet?.entities ?? {}).length }}</b>
       </div>
     </div>
   </aside>

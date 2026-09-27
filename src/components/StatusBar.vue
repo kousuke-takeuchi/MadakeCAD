@@ -2,12 +2,14 @@
 // ステータスバー (Pencilデザイン準拠): 座標 + トグルアイコン群 + 尺度/モード/MCP。
 import { Compass, Crosshair, Grid3x3, Magnet, MoveVertical, PenLine, Settings } from "lucide-vue-next";
 import { inject } from "vue";
+import { useI18n } from "vue-i18n";
 import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 
 const store = useDocumentStore();
 const ui = useUiStore();
+const { t } = useI18n();
 const controller = inject<EditorController>("controller")!;
 </script>
 
@@ -20,7 +22,7 @@ const controller = inject<EditorController>("controller")!;
     <button
       class="toggle"
       :class="{ on: ui.isClassVisible('grid') }"
-      title="グリッド表示"
+      :title="t('statusBar.grid')"
       @click="ui.toggleViewClass('grid')"
     >
       <Grid3x3 :size="13" />
@@ -28,7 +30,7 @@ const controller = inject<EditorController>("controller")!;
     <button
       class="toggle"
       :class="{ on: controller.snapEnabled }"
-      title="グリッドスナップ"
+      :title="t('statusBar.snap')"
       @click="controller.snapEnabled = !controller.snapEnabled"
     >
       <Magnet :size="13" />
@@ -36,23 +38,23 @@ const controller = inject<EditorController>("controller")!;
     <button
       class="toggle"
       :class="{ on: controller.orthoEnabled }"
-      title="直交モード"
+      :title="t('statusBar.ortho')"
       @click="controller.orthoEnabled = !controller.orthoEnabled"
     >
       <MoveVertical :size="13" />
     </button>
-    <button class="toggle" title="極トラッキング (未実装)" @click="ui.log('極トラッキング: 未実装')">
+    <button class="toggle" :title="t('statusBar.polar')" @click="ui.log(t('statusBar.polarLog'))">
       <Compass :size="13" />
     </button>
-    <button class="toggle on" title="オブジェクトスナップ (ピン)"><Crosshair :size="13" /></button>
-    <button class="toggle" title="線の太さ表示 (未実装)" @click="ui.log('線の太さ表示: 未実装')">
+    <button class="toggle on" :title="t('statusBar.osnap')"><Crosshair :size="13" /></button>
+    <button class="toggle" :title="t('statusBar.lineweight')" @click="ui.log(t('statusBar.lineweightLog'))">
       <PenLine :size="13" />
     </button>
     <span class="message">{{ ui.lastMessage }}</span>
     <span class="grow" />
     <span class="info">{{ store.activeSheet?.title_block.scale || "1:1" }} ▾</span>
-    <span class="info">ズーム {{ Math.round((controller.vp.scale / 4) * 100) }}%</span>
-    <span class="info">モデル</span>
+    <span class="info">{{ t("statusBar.zoom", { percent: Math.round((controller.vp.scale / 4) * 100) }) }}</span>
+    <span class="info">{{ t("statusBar.model") }}</span>
     <span class="info">{{ store.activeSheet?.name ?? "-" }}</span>
     <span class="mcp"><span class="dot" />MCP 9310</span>
     <Settings :size="12" class="gear" />

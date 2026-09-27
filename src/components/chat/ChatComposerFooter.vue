@@ -18,7 +18,7 @@ const { open: tidyOpen, toggle: toggleTidy, close: closeTidy } = usePopover();
 <template>
   <div class="footer">
     <div class="attach-wrap">
-      <button class="attach" title="コンテキストに追加" @click="toggleContext()">
+      <button class="attach" :title="t('chat.composer.addContext')" @click="toggleContext()">
         <Plus :size="13" />
       </button>
       <template v-if="contextOpen">
@@ -38,10 +38,10 @@ const { open: tidyOpen, toggle: toggleTidy, close: closeTidy } = usePopover();
     <span class="spacer" />
     <span class="token"><Zap :size="11" class="zap" />{{ tokenBadge }}</span>
     <ModelPicker :model-value="store.model" @update:model-value="store.setModel($event)" />
-    <button v-if="store.streaming" class="send stop" title="停止" @click="onCancel">
+    <button v-if="store.streaming" class="send stop" :title="t('chat.composer.stop')" @click="onCancel">
       <Square :size="11" />
     </button>
-    <button v-else class="send" :class="{ ready: canSend }" title="送信" @click="submit">
+    <button v-else class="send" :class="{ ready: canSend }" :title="t('chat.composer.send')" @click="submit">
       <ArrowUp :size="14" />
     </button>
   </div>

@@ -61,14 +61,14 @@ const viewClassColumns = Array.from(
 async function runSimulation() {
   const doc = useDocumentStore();
   await simulation.run(doc.activeSheetId);
-  if (simulation.error) ui.log(`SIM  失敗: ${simulation.error}`);
-  else ui.log(`SIM  DC動作点を計算しました (部品 ${simulation.result?.components.length ?? 0}件)`);
+  if (simulation.error) ui.log(t("ribbon.simFailedLog", { error: simulation.error }));
+  else ui.log(t("ribbon.simDoneLog", { count: simulation.result?.components.length ?? 0 }));
 }
 
 async function runVerification() {
   await verification.run(null);
   const c = verification.counts;
-  ui.log(`検証完了: エラー ${c.error} / 警告 ${c.warning} / 情報 ${c.info}`);
+  ui.log(t("ribbon.verifyDoneLog", c));
 }
 
 /**
@@ -107,7 +107,7 @@ function startHarness() {
 }
 
 function todo(name: string) {
-  ui.log(`${name}: 未実装 (今後のフェーズで対応予定)`);
+  ui.log(t("ribbon.todoLog", { name }));
 }
 
 /** 帳票生成ダイアログを開く (リボン「レポート」タブ>帳票グループ)。 */
@@ -411,18 +411,18 @@ interface RibbonGroup {
 
 const groups = computed<RibbonGroup[]>(() => [
   {
-    name: "配線",
+    name: t("ribbon.schematicGroup.wiring"),
     big: {
-      label: "配線",
+      label: t("ribbon.buttons.wire"),
       icon: Route,
       color: "var(--icon-wire)",
       action: () => controller.setTool("wire"),
       isActive: () => controller.tool === "wire",
     },
     small: [[
-      { label: "複数母線", icon: AlignJustify, action: () => todo("複数母線") },
+      { label: t("ribbon.buttons.multiBus"), icon: AlignJustify, action: () => todo(t("ribbon.buttons.multiBus")) },
       { label: t("wireNumbers.ribbonButton"), icon: ListOrdered, action: () => openWireNumbers() },
-      { label: "信号矢印", icon: MoveRight, action: () => todo("信号矢印") },
+      { label: t("ribbon.buttons.signalArrow"), icon: MoveRight, action: () => todo(t("ribbon.buttons.signalArrow")) },
       {
         label: t("harness.ribbonButton"),
         icon: SquareDashed,
@@ -432,24 +432,24 @@ const groups = computed<RibbonGroup[]>(() => [
     ]],
   },
   {
-    name: "部品を挿入",
+    name: t("ribbon.schematicGroup.insert"),
     big: {
-      label: "部品挿入",
+      label: t("ribbon.buttons.insertPart"),
       icon: Cpu,
       color: "var(--acad-blue)",
       action: () => (ui.symbolPickerOpen = true),
       isActive: () => controller.tool === "place",
     },
     small: [[
-      { label: "端子台", icon: LayoutGrid, action: () => (ui.symbolPickerOpen = true) },
+      { label: t("ribbon.buttons.terminalBlock"), icon: LayoutGrid, action: () => (ui.symbolPickerOpen = true) },
       { label: t("templates.ribbonButton"), icon: LayoutTemplate, action: () => openTemplates() },
       { label: t("macros.ribbonSave"), icon: Copy, action: () => saveMacro() },
     ]],
   },
   {
-    name: "回路図を編集",
+    name: t("ribbon.schematicGroup.edit"),
     big: {
-      label: "編集",
+      label: t("ribbon.buttons.edit"),
       icon: Pencil,
       color: "var(--icon-edit)",
       action: () => controller.setTool("select"),
@@ -457,9 +457,9 @@ const groups = computed<RibbonGroup[]>(() => [
     },
     small: [
       [
-        { label: "移動", icon: Move, action: () => { controller.setTool("select"); ui.log("移動: 選択してドラッグ (グリッドスナップ)"); } },
-        { label: "トリム", icon: Scissors, action: () => todo("トリム") },
-        { label: "削除", icon: Trash2, action: () => controller.deleteSelection() },
+        { label: t("ribbon.buttons.move"), icon: Move, action: () => { controller.setTool("select"); ui.log(t("ribbon.moveLog")); } },
+        { label: t("ribbon.buttons.trim"), icon: Scissors, action: () => todo(t("ribbon.buttons.trim")) },
+        { label: t("ribbon.buttons.delete"), icon: Trash2, action: () => controller.deleteSelection() },
       ],
       [
         { label: t("revisions.ribbonButton"), icon: FileClock, action: () => openRevisions() },
@@ -467,22 +467,22 @@ const groups = computed<RibbonGroup[]>(() => [
     ],
   },
   {
-    name: "検証/レポート",
+    name: t("ribbon.schematicGroup.verify"),
     big: {
-      label: "検証",
+      label: t("ribbon.buttons.verify"),
       icon: ShieldCheck,
       color: "var(--ok-fg)",
       action: () => runVerification(),
     },
     small: [
       [
-        { label: "部品表", icon: FileText, action: () => files.exportBom() },
-        { label: "電線リスト", icon: Cable, action: () => files.exportWireList() },
-        { label: "シミュレーション", icon: Activity, action: () => runSimulation() },
+        { label: t("ribbon.buttons.bom"), icon: FileText, action: () => files.exportBom() },
+        { label: t("ribbon.buttons.wireList"), icon: Cable, action: () => files.exportWireList() },
+        { label: t("ribbon.buttons.simulation"), icon: Activity, action: () => runSimulation() },
       ],
       [
-        { label: "SVG出力", icon: Image, action: () => files.exportSvg() },
-        { label: "PDF出力", icon: FileDown, action: () => files.exportPdf() },
+        { label: t("ribbon.buttons.svg"), icon: Image, action: () => files.exportSvg() },
+        { label: t("ribbon.buttons.pdf"), icon: FileDown, action: () => files.exportPdf() },
       ],
     ],
   },
@@ -557,15 +557,15 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
                 @click="ui.toggleViewClass(c.id)"
               >
                 <component :is="viewIcons[c.id]" :size="13" class="small-icon" />
-                {{ c.label }}
+                {{ t(`viewClass.${c.id}`) }}
               </button>
             </div>
           </div>
-          <div class="ribbon-group-label">表示クラス ▾</div>
+          <div class="ribbon-group-label">{{ t("ribbon.viewClassGroup") }} ▾</div>
         </div>
       </template>
       <div v-else class="ribbon-placeholder">
-        「{{ t(`ribbon.tab.${activeTab}`) }}」タブは今後のフェーズで実装予定です
+        {{ t("ribbon.placeholder", { tab: t(`ribbon.tab.${activeTab}`) }) }}
       </div>
     </div>
   </div>

@@ -20,6 +20,14 @@ macOSでの手順(コアはOS非依存だが、現状の動作確認はmacOSの�
 - **AIチャットは「どれか1つ」のプロバイダがあれば動く**(特定のものは必須ではない)。既定はClaude Code CLI(Pro/MaxのOAuthセッションを再利用。APIキー不要)だが、Anthropic APIキー・GitHub Copilot CLI・OpenAI互換エンドポイント・ローカルのOllama・Geminiキーでも同じように動く。設定 > エージェント で選ぶ。手で作図するだけならどれも不要。詳細は[AIアシスタント > プロバイダ](09-ai-assistant.ja.md#プロバイダ)
 - rustupの`cargo`は`~/.cargo/bin`に入る。PATHに無ければ `export PATH="$HOME/.cargo/bin:$PATH"`
 
+**OS別のビルド依存**(Tauri 2):
+
+| OS | 導入 |
+|---|---|
+| macOS | Xcode Command Line Tools(`xcode-select --install`) |
+| Windows 10/11 | Visual Studio 2022 Build Tools の「C++によるデスクトップ開発」ワークロード、WebView2ランタイム(Windows 11には同梱) |
+| Linux(Debian/Ubuntu) | `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev` と、PDF出力の日本語書体として`fonts-noto-cjk`(アプリは`sans-serif`をLinux=Noto Sans CJK JP / Windows=Yu Gothic UI / macOS=Hiragino Sansへ割り当てる) |
+
 ## 2. セットアップ
 
 ```bash
@@ -43,6 +51,8 @@ npm run tauri dev                   # vite(1420) + cargoビルド + ネイティ
 ```
 
 起動中は `127.0.0.1:9310` で内蔵サーバー(MCP `/mcp`・Link API `/api/v1`)が生きている。
+
+配布物(`.dmg` / `.msi`+`.exe`インストーラ / `.AppImage`+`.deb`)は`npm run tauri build`で作る。CIはタグ`v*`で3OS分を同じように作りドラフトリリースへ添付する(`.github/workflows/release.yml`)。コード署名はまだ行っていない。
 
 ## 3. madake CLI(任意)
 

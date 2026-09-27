@@ -16,6 +16,8 @@
 
 ## 2. 公開前チェックリスト(リポジトリ衛生)
 
+状態(2026-09-27): 道具は揃った。`scripts/audit_confidential.py`が作業ツリーと全コミット履歴を`docs/references/confidential-terms.txt`(git管理外の用語表)で走査する。公開直前に手元で実行し、ヒットがあれば「公開用エクスポート」(未決事項)で対処する。第三者権利の確認とセキュリティ既定の確認は下記のとおり。
+
 - **第三者権利の確認**(2026-08-21追加): ベンチマーク製品(ACADE/EPLAN)の素材(アイコン・画像・文言・スクリーンショット)を一切含まないことの確認。特定画面のデッドコピーが無いことのデザインレビュー。J-PlatPatでAutodesk / Friedhelm Loh(EPLAN)出願の画像意匠を簡易確認。商標言及は比較・参考の指示的使用に限る(機能概念の参考・独自実装はOSSの確立慣行であり問題ない)
 
 - 社外秘の完全排除の再監査: `docs/references/`(既にgit管理外)、コミット履歴の実品番・企業名スキャン(過去に1度除去済み: 1ff7a8f)。**必要なら履歴書き換えではなく公開用に新規リポジトリへエクスポート**
@@ -24,19 +26,19 @@
 
 ## 3. クロスプラットフォーム
 
-- **Windows / Linuxビルド**: コアはOS非依存を維持済み。残作業: PDFフォント割当(Windows=Yu Gothic UI等/Linux=Noto Sans CJK)、ngspice既定パス(実装済み)、CI(GitHub Actions: 3OSでcargo test+vitest+バンドル)
-- **配布物**: macOS `.dmg` / Windows `.msi` / Linux `.AppImage`(Tauri bundler)。コード署名は macOS notarization を優先、他は後続
+- ✅ **Windows / Linuxビルド**(2026-09-27): PDFフォント割当を`pdf.rs`の`preferred_families()`でOS別に固定(macOS=Hiragino Sans/Menlo、Windows=Yu Gothic UI/Consolas、Linux=Noto Sans CJK JP/DejaVu Sans Mono。テストで検証)。CI(`ci.yml`)はUbuntuフル+macOS 4クレート+Windows `madake-core`/`madake-cli`の`rust-cross`ジョブ。OS別のビルド依存は`docs/02-getting-started.md`に記載
+- ✅ **配布物**(2026-09-27): `release.yml`(タグ`v*`または手動)が`tauri-apps/tauri-action`で macOS(arm64/x86_64 `.dmg`)・Windows(`.msi`/NSIS)・Linux(`.AppImage`/`.deb`)をドラフトのプレリリースへ添付。コード署名(macOS notarization優先)は公開後の課題
 - 自動更新(tauri-updater)は公開後の課題
 
 ## 4. 国際化(i18n)
 
-横断仕様 [i18n.md](i18n.md) へ移管(2026-08-21)。基盤(vue-i18n・言語設定・カタログ・キー一致テスト)は即時導入し、M6では残リテラルの全面移行と zh/es/fr/de カタログ・翻訳者向けドキュメントを行う。既定言語は英語。
+横断仕様 [i18n.md](i18n.md) へ移管(2026-08-21)。基盤(vue-i18n・言語設定・カタログ・キー一致テスト)は即時導入済み。✅ **F3完了(2026-09-27)**: 残UIリテラルを全面移行、zh/es/fr/deカタログを同梱(6言語をキー・プレースホルダ・複数形の一致テストで保護)、翻訳者向け手順をi18n仕様 §6に記載。既定言語は英語。
 
 ## 5. コミュニティ整備
 
-- CONTRIBUTING.md(開発フロー: docs→design→plan→TDD、`docs/internal/architecture.md`参照)
-- 行動規範(Contributor Covenant)、Issue/PRテンプレート
-- 既存ドキュメント群(requirements/architecture/setup等)が実質のオンボーディング資料
+- ✅ `CONTRIBUTING.md`(+`.ja`。開発フロー: docs→design→plan→TDD、`docs/internal/architecture.md`参照)(2026-09-27)
+- ✅ 行動規範 `CODE_OF_CONDUCT.md`(Contributor Covenant 2.1)、`SECURITY.md`、Issueテンプレート(`bug_report`/`feature_request`+`config.yml`)、`.github/PULL_REQUEST_TEMPLATE.md`(2026-09-27)
+- 既存ドキュメント群(requirements/architecture/setup等)が実質のオンボーディング資料。READMEの「Contributing」から辿れる
 
 ## 受け入れ基準
 
@@ -45,6 +47,8 @@
 - 公開リポジトリに社外秘が存在しない(履歴含む)
 
 ## 未決事項
+
+残るのは公開そのもののユーザー判断(実装計画: `docs/superpowers/plans/2026-09-27-m6-oss-release.md`)。
 
 - [x] ライセンス: MIT OR Apache-2.0(2026-08-21決定)
 - [ ] 公開方法: 現リポジトリ公開 vs 公開用エクスポート(履歴の扱い)

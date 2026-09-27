@@ -90,11 +90,11 @@ UI · AIチャット · CLI · REST  →  Command(JSON)  →  エンジン(Rust)
 
 ## ステータスとロードマップ
 
-**アルファ版。** マイルストーンM1(基盤)とM2(参考図面の完全再現: 改訂欄・線番・ハーネス境界・シート間クロスリファレンス)は概ね完了、M3フェーズ1(規格知識・自己検証ループ・安全なターン巻き戻し・開始テンプレート)とM4フェーズ1・2(端子台チャート+帳票拡充/回路マクロ・コイル⇔接点クロスリファレンス・検索とナビゲーション)も実装済み。M3の残り〜M6(OSS公開)は[ロードマップ](docs/12-roadmap.ja.md)参照。Tauri 2 + Vue 3 + Rust製。
+**アルファ版。** マイルストーンM1(基盤)・M2(参考図面の完全再現)・M3(AIファースト作図: 規格知識・検証ループ・整えパスとバリアント・並列会話・6つのプロバイダ経路)・M5(FreeCAD連携)・M6の公開準備(3OSのCIと配布物、UI 6言語、コントリビュータ向け文書)は完了。M4(産業CAD中核)はフェーズ1・2(端子台チャート・帳票拡充・回路マクロ・コイル⇔接点クロスリファレンス・検索とナビゲーション)が実装済みで、PLC I/O図面・盤レイアウト・シンボルエディタが残っています。[ロードマップ](docs/12-roadmap.ja.md)参照。Tauri 2 + Vue 3 + Rust製。
 
 ## コントリビュート
 
-docs-first・design-first(Pencil)・TDDのワークフロー。[`docs/internal/`](docs/internal/README.md)から(アーキテクチャ・変更レシピ・機能仕様が揃っています)。ドキュメントは英語が正本、日本語版は`*.ja.md`。
+docs-first・design-first(Pencil)・TDDのワークフロー。まず[CONTRIBUTING.ja.md](CONTRIBUTING.ja.md)、次に[`docs/internal/`](docs/internal/README.md)へ(アーキテクチャ・変更レシピ・機能仕様が揃っています)。[行動規範](CODE_OF_CONDUCT.md)は全てのプロジェクト空間に適用され、脆弱性の報告方法は[SECURITY.md](SECURITY.md)にあります。UI翻訳は`src/locales/`([i18n仕様の翻訳者向け節](docs/internal/specs/i18n.ja.md#6-翻訳者向け)参照)。ドキュメントは英語が正本、日本語版は`*.ja.md`。
 
 ## ライセンス
 

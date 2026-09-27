@@ -4,6 +4,7 @@
 // (編集はエージェントがMCP経由でCommandエンジンを通し、document storeへpatchで届く)。
 
 import { defineStore } from "pinia";
+import { i18n } from "../i18n";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { agentColorAt } from "../canvas/theme";
@@ -250,50 +251,32 @@ export const agentApi: AgentApi = inTauri ? tauriAgentApi : httpAgentApi;
 // ツール要約
 // ---------------------------------------------------------------------------
 
-const WIRE_COLOR_JA: Record<string, string> = {
-  black: "黒",
-  white: "白",
-  red: "赤",
-  blue: "青",
-  yellow: "黄",
-  green: "緑",
-  light_blue: "水色",
-  orange: "橙",
-  brown: "茶",
-  gray: "灰",
-  grey: "灰",
-  purple: "紫",
-  violet: "紫",
-  pink: "桃",
-};
-
-const ENTITY_KIND_JA: Record<string, string> = {
-  symbol: "シンボル",
-  wire: "配線",
-  junction: "接続点",
-  net_label: "ネットラベル",
-  text: "テキスト",
-};
-
-/** エンティティ種別の日本語名(未知の種別は「要素」)。 */
-export function entityKindLabel(kind: string): string {
-  return ENTITY_KIND_JA[kind] ?? "要素";
+/** カタログ引き。キーが無ければfallbackを返す (未知の色名・種別・コマンド名をそのまま見せる)。 */
+function tr(key: string, fallback: string, params?: Record<string, unknown>): string {
+  return i18n.global.te(key) ? i18n.global.t(key, params ?? {}) : fallback;
 }
 
-const COMMAND_JA: Record<string, string> = {
-  add_sheet: "シート追加",
-  remove_sheet: "シート削除",
-  rename_sheet: "シート改名",
-  set_title_block: "表題欄設定",
-  set_revisions: "改訂欄設定",
-  add_entity: "要素追加",
-  update_entity: "要素更新",
-  delete_entities: "要素削除",
-  move_entities: "要素移動",
-  set_wire_parts: "電線品番表設定",
-  renumber_wires: "線番自動採番",
-  set_wire_numbers: "線番設定",
-};
+/** 線色の表示名 (未知の色はそのまま)。 */
+function wireColorLabel(color: string): string {
+  return tr(`chat.color.${color}`, color);
+}
+
+/**
+ * エンティティ種別の表示名 (未知の種別は「要素」)。既定はUI言語。
+ * エージェントへ送るプロンプトは日本語固定なので、そちらは`locale: "ja"`で呼ぶ。
+ */
+export function entityKindLabel(kind: string, locale?: "ja"): string {
+  const opts = locale ? { locale } : {};
+  const key = `chat.kind.${kind}`;
+  return i18n.global.te(key, locale)
+    ? i18n.global.t(key, {}, opts)
+    : i18n.global.t("chat.kind.other", {}, opts);
+}
+
+/** Command種別の表示名 (未知の種別はそのまま)。 */
+function commandLabel(type: string): string {
+  return tr(`chat.command.${type}`, type || i18n.global.t("chat.summary.command"));
+}
 
 function rec(input: unknown): Record<string, unknown> {
   return input && typeof input === "object" && !Array.isArray(input)
@@ -338,50 +321,56 @@ export function summarizeToolUse(tool: string, input: unknown): string {
     case "place_symbol": {
       const label = [str(p.symbol_id), str(p.reference), str(p.value)].filter(Boolean).join(" ");
       const at = `(${num(p.x)},${num(p.y)})`;
-      return label ? `${label} を ${at} に配置` : `シンボルを ${at} に配置`;
+      return label
+        ? i18n.global.t("chat.summary.place", { label, at })
+        : i18n.global.t("chat.summary.placeUnnamed", { at });
     }
     case "draw_wire": {
       const points = Array.isArray(p.points) ? p.points : [];
       const segments = Math.max(points.length - 1, 1);
       const spec = [
         typeof p.sq === "number" ? `${num(p.sq)}sq` : "",
-        p.color ? (WIRE_COLOR_JA[str(p.color)] ?? str(p.color)) : "",
+        p.color ? wireColorLabel(str(p.color)) : "",
       ]
         .filter(Boolean)
         .join(" ");
       // pointsは折れ線の頂点列。数えているのは電線本数ではなく区間数
-      return spec ? `${spec} ${segments}区間を接続` : `${segments}区間を接続`;
+      return spec
+        ? i18n.global.t("chat.summary.connect", { spec, count: segments })
+        : i18n.global.t("chat.summary.connectUnnamed", { count: segments });
     }
     case "update_entity": {
       const entity = rec(p.entity);
       const kind = entityKindLabel(str(entity.kind));
       const label = str(entity.reference) || str(entity.name) || str(entity.id);
-      return label ? `${kind} ${label} を更新` : `${kind}を更新`;
+      return label
+        ? i18n.global.t("chat.summary.update", { kind, label })
+        : i18n.global.t("chat.summary.updateUnnamed", { kind });
     }
     case "execute_commands": {
       const commands = Array.isArray(p.commands) ? p.commands : [];
       if (commands.length === 1) {
         const type = str(rec(commands[0]).type);
-        return `${COMMAND_JA[type] ?? (type || "コマンド")} を実行`;
+        return i18n.global.t("chat.summary.runCommand", { command: commandLabel(type) });
       }
-      return `編集コマンド ${commands.length}件を実行`;
+      return i18n.global.t("chat.summary.runCommands", { count: commands.length });
     }
     case "get_netlist":
-      return "ネットリストを取得";
+      return i18n.global.t("chat.summary.getNetlist");
     case "get_project":
-      return "図面全体を読み取り";
+      return i18n.global.t("chat.summary.getProject");
     case "list_symbols":
-      return "シンボル一覧を取得";
+      return i18n.global.t("chat.summary.listSymbols");
     case "export_svg":
-      return `SVGを書き出し (${baseName(p.path)})`;
+      return i18n.global.t("chat.summary.exportSvg", { file: baseName(p.path) });
     case "export_bom":
-      return `部品表CSVを書き出し (${baseName(p.path)})`;
+      return i18n.global.t("chat.summary.exportBom", { file: baseName(p.path) });
     case "export_wire_list":
-      return `電線リストCSVを書き出し (${baseName(p.path)})`;
+      return i18n.global.t("chat.summary.exportWireList", { file: baseName(p.path) });
     case "undo":
-      return "直前の編集を取り消し";
+      return i18n.global.t("chat.summary.undo");
     case "redo":
-      return "取り消した編集をやり直し";
+      return i18n.global.t("chat.summary.redo");
     default:
       return "";
   }
@@ -468,8 +457,10 @@ export function appliedCommandCount(message: ChatMessage): number {
 /** 会話履歴の行タイトルに使う最大文字数。 */
 const TITLE_MAX_CHARS = 40;
 
-/** 発話が無い会話のタイトル。 */
-export const EMPTY_CONVERSATION_TITLE = "(空の会話)";
+/** 発話が無い会話のタイトル (現在のUI言語)。 */
+export function emptyConversationTitle(): string {
+  return i18n.global.t("chat.history.emptyTitle");
+}
 
 /**
  * 会話履歴の行タイトル。最初のユーザー発話の先頭40字(改行は空白へ畳む)。
@@ -478,7 +469,7 @@ export const EMPTY_CONVERSATION_TITLE = "(空の会話)";
 export function conversationTitle(conversation: ChatConversation): string {
   const first = conversation.messages.find((m) => m.role === "user");
   const text = (first?.text ?? "").replace(/\s+/g, " ").trim();
-  if (!text) return EMPTY_CONVERSATION_TITLE;
+  if (!text) return emptyConversationTitle();
   return text.length > TITLE_MAX_CHARS ? `${text.slice(0, TITLE_MAX_CHARS)}…` : text;
 }
 
@@ -491,15 +482,15 @@ export function conversationTitle(conversation: ChatConversation): string {
 export function formatRelativeTime(updatedAt: number, now: number = Date.now()): string {
   if (!updatedAt) return "";
   const diffMin = Math.floor((now - updatedAt) / 60_000);
-  if (diffMin < 1) return "たった今";
-  if (diffMin < 60) return `${diffMin}分前`;
+  if (diffMin < 1) return i18n.global.t("chat.history.justNow");
+  if (diffMin < 60) return i18n.global.t("chat.history.minutesAgo", { n: diffMin });
 
   const at = new Date(updatedAt);
   const today = new Date(now);
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const dayDiff = Math.round((startOfDay(today) - startOfDay(at)) / 86_400_000);
-  if (dayDiff <= 0) return `${Math.floor(diffMin / 60)}時間前`;
-  if (dayDiff === 1) return "昨日";
+  if (dayDiff <= 0) return i18n.global.t("chat.history.hoursAgo", { n: Math.floor(diffMin / 60) });
+  if (dayDiff === 1) return i18n.global.t("chat.history.yesterday");
   return `${at.getMonth() + 1}/${at.getDate()}`;
 }
 
@@ -512,12 +503,12 @@ export function conversationMeta(conversation: ChatConversation, now: number = D
   const parts: string[] = [];
   const time = formatRelativeTime(conversation.updated_at, now);
   if (time) parts.push(time);
-  parts.push(`${conversation.messages.length}メッセージ`);
+  parts.push(i18n.global.t("chat.history.messages", { count: conversation.messages.length }, conversation.messages.length));
   // findLastはES2023。tsconfigのlibはES2020なので後ろから探す
   for (let i = conversation.messages.length - 1; i >= 0; i--) {
     const message = conversation.messages[i];
     if (appliedCommandCount(message) > 0 && !message.undone) {
-      parts.push(`適用済み rev ${message.applied_revisions.end}`);
+      parts.push(i18n.global.t("chat.history.applied", { rev: message.applied_revisions.end }));
       break;
     }
   }

@@ -4,10 +4,13 @@
 // (nullはCLI側の既定モデル)。
 import { ChevronDown, Plus, Search } from "lucide-vue-next";
 import { computed, nextTick, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { usePopover } from "../../composables/popover";
-import { ANTHROPIC_MODELS, type ModelOption } from "./models";
+import { anthropicModels, type ModelOption } from "./models";
 
 const props = defineProps<{ modelValue: string | null }>();
+const { t } = useI18n();
+const models = computed(() => anthropicModels(t));
 const emit = defineEmits<{ "update:modelValue": [string | null] }>();
 
 const query = ref("");
@@ -24,13 +27,13 @@ const { open, toggle, close } = usePopover({
 });
 
 const current = computed(
-  () => ANTHROPIC_MODELS.find((m) => m.id === props.modelValue) ?? ANTHROPIC_MODELS[0],
+  () => models.value.find((m) => m.id === props.modelValue) ?? models.value[0],
 );
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase();
-  if (!q) return ANTHROPIC_MODELS;
-  return ANTHROPIC_MODELS.filter(
+  if (!q) return models.value;
+  return models.value.filter(
     (m) => m.label.toLowerCase().includes(q) || (m.id ?? "").toLowerCase().includes(q),
   );
 });
@@ -43,7 +46,7 @@ function pick(option: ModelOption) {
 
 <template>
   <div class="model-picker">
-    <button class="trigger" :title="current.id ?? 'CLIの既定モデル'" @click="toggle()">
+    <button class="trigger" :title="current.id ?? t('chat.modelPicker.defaultTitle')" @click="toggle()">
       <span class="label">{{ current.label }}</span>
       <ChevronDown :size="11" class="chevron" />
     </button>
@@ -53,7 +56,7 @@ function pick(option: ModelOption) {
       <div class="popup">
         <div class="search-row">
           <Search :size="13" class="search-icon" />
-          <input ref="searchRef" v-model="query" placeholder="モデルを検索..." />
+          <input ref="searchRef" v-model="query" :placeholder="t('chat.modelPicker.search')" />
         </div>
         <div class="group">ANTHROPIC</div>
         <button
@@ -66,10 +69,10 @@ function pick(option: ModelOption) {
           <span class="option-name">{{ option.label }}</span>
           <span v-if="option.sub" class="option-sub">{{ option.sub }}</span>
         </button>
-        <div v-if="!filtered.length" class="empty">該当するモデルがありません</div>
+        <div v-if="!filtered.length" class="empty">{{ t("chat.modelPicker.empty") }}</div>
         <div class="add-row">
           <Plus :size="12" />
-          <span>他プロバイダは今後追加</span>
+          <span>{{ t("chat.modelPicker.morePlanned") }}</span>
         </div>
       </div>
     </template>

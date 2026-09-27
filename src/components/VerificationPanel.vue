@@ -3,6 +3,7 @@
 // 作図領域下部にドッキングし、行クリックで該当エンティティを選択+ズームする。
 import { X } from "lucide-vue-next";
 import { inject } from "vue";
+import { useI18n } from "vue-i18n";
 import type { Diagnostic } from "../ipc";
 import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
@@ -10,6 +11,7 @@ import { useVerificationStore } from "../stores/verification";
 
 const verification = useVerificationStore();
 const store = useDocumentStore();
+const { t } = useI18n();
 const controller = inject<EditorController>("controller")!;
 
 const marks: Record<Diagnostic["severity"], string> = {
@@ -27,13 +29,13 @@ function pick(d: Diagnostic) {
 <template>
   <div v-if="verification.panelOpen" class="panel">
     <div class="head">
-      <span class="title">検証結果</span>
+      <span class="title">{{ t("verification.title") }}</span>
       <span class="badge error" v-if="verification.counts.error">✗ {{ verification.counts.error }}</span>
       <span class="badge warning" v-if="verification.counts.warning">⚠ {{ verification.counts.warning }}</span>
       <span class="badge info" v-if="verification.counts.info">ℹ {{ verification.counts.info }}</span>
-      <span v-if="verification.diagnostics.length === 0" class="ok-note">問題は見つかりませんでした</span>
+      <span v-if="verification.diagnostics.length === 0" class="ok-note">{{ t("verification.ok") }}</span>
       <span class="spacer" />
-      <button class="rerun" @click="verification.run(null)">再検証</button>
+      <button class="rerun" @click="verification.run(null)">{{ t("verification.rerun") }}</button>
       <button class="close" @click="verification.close()"><X :size="12" /></button>
     </div>
     <div class="rows">

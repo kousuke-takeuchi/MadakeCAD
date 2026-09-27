@@ -43,11 +43,13 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - ✅ **Part linking & wire-length write-back** (M5-2): Parts/Wires tabs in the workbench insert 3D models and link objects by `madake_id` (`Project.mech_links`), and measured route lengths are written back to the wires with a `freecad` source so hand edits never overwrite them silently. File format 3
 - ✅ **Route sync & placements** (M5-3): route stubs generated from the netlist between linked parts, net highlighting in the 3D view, and placements synced back into `mech_links` (file format 4) for the future panel-layout sheet
 
-## M6 — Open-source release
+## M6 — Open-source release ✅ (preparation done; publishing itself is a project decision)
 
-- License decision, repository hygiene audit
-- Windows/Linux builds + CI, installers
-- Remaining i18n sweep + Chinese/Spanish/French/German catalogs (the i18n foundation — English default + Japanese, message catalog, language setting — lands early, before M6), contributor docs and community setup
+- ✅ License: MIT OR Apache-2.0 dual. Repository hygiene: `scripts/audit_confidential.py` scans the tree and the whole history against a git-ignored term list before publishing
+- ✅ Windows/Linux builds + CI: CI runs the Rust suites on Ubuntu, macOS and Windows, PDF fonts follow the OS (Hiragino / Yu Gothic UI / Noto Sans CJK), and `release.yml` builds `.dmg` / `.msi` / `.AppImage` bundles into a draft release on a `v*` tag
+- ✅ i18n: the remaining UI literals moved into the catalogs and six languages ship (English, Japanese, Chinese, Spanish, French, German) with key, placeholder and plural parity enforced by test; translator guide in the i18n spec
+- ✅ Community: `CONTRIBUTING.md`, Contributor Covenant code of conduct, `SECURITY.md`, issue and pull-request templates
+- Open: how to publish (this repository vs. an export without history), the project name, and the timing
 
 ## Long term
 

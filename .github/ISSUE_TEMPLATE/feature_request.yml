@@ -1,0 +1,21 @@
+name: Feature request
+description: Propose a feature or a change
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The drawing task or workflow, not the implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How should it work? If it exists in AutoCAD Electrical / EPLAN / KiCad, describe it in your own words (no screenshots or material from those products, please).
+  - type: input
+    id: spec
+    attributes:
+      label: Related spec / roadmap item
+      placeholder: docs/internal/specs/m4-industrial-core.md §8, docs/12-roadmap.md …

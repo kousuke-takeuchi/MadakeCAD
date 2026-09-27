@@ -52,7 +52,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | JIS図枠描画 | ✅ | 枠線・ゾーン番号(横=数字/縦=英字)・表題欄(図番/品名/尺度/日付/設計〜承認/社名)。画面とSVG/PDFで同一 |
 | 改訂欄 | ✅ | ISO 7200様式(表題欄直上・古い行が下・最大6行・列=記号/日付/内容/承認)。キャンバス/SVG/PDFで同一、表題欄Revは最新行に連動。編集ダイアログ(`set_revisions`コマンド1回=undo1回) |
 | SVG出力 | ✅ | 印刷品質、mm 1:1、XMLエスケープ |
-| PDF出力 | ✅ | svg2pdfでベクタ変換、日本語フォント埋め込み(macOS=Hiragino。Win/Linuxのフォント割当は未調整) |
+| PDF出力 | ✅ | svg2pdfでベクタ変換、日本語フォント埋め込み(OS別: macOS=Hiragino Sans、Windows=Yu Gothic UI、Linux=Noto Sans CJK JP。`pdf.rs::preferred_families`) |
 | BOM(部品表) | ✅ | 参照記号+型番の集計。CSV / 図枠付き図面シート |
 | From-Toワイヤリスト | ✅ | シート・From・To・線番・線色・sq・長さ・電線品番・ハーネス。From/Toはピン(`参照記号:ピン`)/ネットラベル/空。CSV / 図面シート |
 | 端子台チャート | ✅ | 端子台1台=1表。端子番号順に内部側/外部側・線番・電線・ハーネス・ジャンパ・予備端子。CSV / 図面シート(`--terminal`で1台に絞れる) |
@@ -145,10 +145,11 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 |---|---|---|
 | テスト | ✅ | cargo 561件+vitest 390件+vue-tsc。全テストに対訳仕様文が付き、`docs/13-specification.md`(951項目)を自動生成。TDD運用 |
 | macOSビルド | ✅ | 開発は`npm run tauri dev` |
-| Windows/Linuxビルド | ⬜ | 非目標(現時点)。コードはOS非依存を維持(ngspice探索・PDFフォントに一部OS別処理あり) |
-| 配布パッケージ/自動更新 | ⬜ | 未着手 |
+| Windows/Linuxビルド | ✅ | CI(`ci.yml`)の`rust-cross`ジョブがmacOS(4クレート)とWindows(`madake-core`/`madake-cli`)でcargo testを実行。OS別のビルド依存は`docs/02-getting-started.md`。ngspice探索・PDFフォントはOS別に解決(M6) |
+| 配布パッケージ/自動更新 | 🔶 | `release.yml`(タグ`v*`/手動)がtauri-actionでmacOS `.dmg`(arm64/x86_64)・Windows `.msi`/NSIS・Linux `.AppImage`/`.deb`をドラフトリリースへ添付。コード署名・notarization・自動更新は公開後 |
 | 自動保存・クラッシュ復旧 | ⬜ | 未着手 |
-| i18n | 🔶 | en/jaのメッセージカタログ+言語設定。新規UI文字列はi18n必須。他言語カタログはM6 |
+| i18n | ✅ | 6言語(en/ja/zh/es/fr/de)のカタログ+言語設定(即時反映)。全カタログのキー・プレースホルダ・複数形の一致をテストで強制。UI文字列はカタログ必須、翻訳者向け手順は`specs/i18n.md` §6(M6) |
+| コミュニティ整備 | ✅ | `CONTRIBUTING.md`(+ja)・`CODE_OF_CONDUCT.md`・`SECURITY.md`・Issue/PRテンプレート・`scripts/audit_confidential.py`(社外秘用語の履歴監査)(M6) |
 
 ## 10. 次期計画
 

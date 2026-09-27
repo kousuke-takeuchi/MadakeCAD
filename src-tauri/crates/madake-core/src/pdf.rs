@@ -54,19 +54,30 @@ impl Default for PdfBookOptions {
     }
 }
 
+/// 実行中のOSで日本語グリフを持つ標準書体 (sans-serif, monospace)。
+///
+/// SVGは`font-family="sans-serif"`(本文)と`"monospace"`(線番)で描くので、PDF化の
+/// ときにOSごとの実在書体へ割り当てる。無ければfontdbの既定にフォールバックする
+/// (Linuxは`fonts-noto-cjk`の導入を推奨。`docs/02-getting-started.md`)。
+pub fn preferred_families() -> (&'static str, &'static str) {
+    if cfg!(target_os = "macos") {
+        ("Hiragino Sans", "Menlo")
+    } else if cfg!(target_os = "windows") {
+        ("Yu Gothic UI", "Consolas")
+    } else {
+        ("Noto Sans CJK JP", "DejaVu Sans Mono")
+    }
+}
+
 /// フォントDB。システムフォント走査は高コストなのでプロセスで1回だけ行う。
 fn fontdb() -> &'static usvg::fontdb::Database {
     static DB: OnceLock<usvg::fontdb::Database> = OnceLock::new();
     DB.get_or_init(|| {
         let mut db = usvg::fontdb::Database::new();
         db.load_system_fonts();
-        // SVGはfont-family="sans-serif"。日本語グリフを持つ書体へ割り当てる
-        #[cfg(target_os = "macos")]
-        {
-            db.set_sans_serif_family("Hiragino Sans");
-            // 線番は font-family="monospace"
-            db.set_monospace_family("Menlo");
-        }
+        let (sans, mono) = preferred_families();
+        db.set_sans_serif_family(sans);
+        db.set_monospace_family(mono);
         db
     })
 }
@@ -182,6 +193,21 @@ fn svg_to_pdf(svg: String) -> Result<Vec<u8>, PdfError> {
 
 #[cfg(test)]
 mod tests {
+    /// PDF text is mapped to a Japanese-capable system font per OS: Hiragino Sans/Menlo on macOS, Yu Gothic UI/Consolas on Windows, Noto Sans CJK JP/DejaVu Sans Mono elsewhere.
+    /// PDFの文字はOSごとに日本語グリフを持つ標準書体へ割り当てる: macOS=Hiragino Sans/Menlo、Windows=Yu Gothic UI/Consolas、その他(Linux)=Noto Sans CJK JP/DejaVu Sans Mono。
+    #[test]
+    fn preferred_families_follow_the_operating_system() {
+        let (sans, mono) = preferred_families();
+        let expected = if cfg!(target_os = "macos") {
+            ("Hiragino Sans", "Menlo")
+        } else if cfg!(target_os = "windows") {
+            ("Yu Gothic UI", "Consolas")
+        } else {
+            ("Noto Sans CJK JP", "DejaVu Sans Mono")
+        };
+        assert_eq!((sans, mono), expected);
+    }
+
     use super::*;
     use crate::geometry::Point;
     use crate::model::*;

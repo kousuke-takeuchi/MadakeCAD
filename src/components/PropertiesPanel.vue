@@ -24,9 +24,7 @@ const selected = computed<Entity | null>(() => {
 });
 
 const wireColors = [
-  ["red", "赤"], ["black", "黒"], ["white", "白"], ["blue", "青"],
-  ["yellow", "黄"], ["green", "緑"], ["orange", "橙"], ["purple", "紫"],
-  ["brown", "茶"], ["gray", "灰"], ["pink", "桃"], ["light_blue", "水色"],
+  "red", "black", "white", "blue", "yellow", "green", "orange", "purple", "brown", "gray", "pink", "light_blue",
 ] as const;
 const sqValues = [0.2, 0.3, 0.5, 0.75, 1.25, 2.0, 3.5, 5.5];
 
@@ -162,34 +160,34 @@ const kindLabel = computed<Record<string, string>>(() => ({
 <template>
   <aside class="panel">
     <div class="panel-head">
-      <span>プロパティ</span>
+      <span>{{ t("properties.title") }}</span>
       <Pin :size="11" class="muted" />
     </div>
     <div class="type-row">
       <span v-if="selected">{{ kindLabel[selected.kind] }} (1)</span>
-      <span v-else-if="store.selection.size > 1">{{ store.selection.size }} 個選択</span>
-      <span v-else class="muted">選択なし</span>
+      <span v-else-if="store.selection.size > 1">{{ t("properties.selectedCount", { count: store.selection.size }) }}</span>
+      <span v-else class="muted">{{ t("properties.none") }}</span>
       <ChevronDown :size="11" class="muted" />
     </div>
 
     <template v-if="selected?.kind === 'wire'">
-      <div class="sec"><ChevronDown :size="10" /> 一般</div>
+      <div class="sec"><ChevronDown :size="10" /> {{ t("properties.general") }}</div>
       <div class="prow">
-        <span class="plabel">色</span>
+        <span class="plabel">{{ t("properties.color") }}</span>
         <span class="pvalue">
           <span class="swatch" :data-color="buf.color" />
           <select v-model="buf.color" class="bare">
-            <option v-for="[v, label] in wireColors" :key="v" :value="v">{{ label }} ({{ v }})</option>
+            <option v-for="v in wireColors" :key="v" :value="v">{{ t(`properties.colors.${v}`) }} ({{ v }})</option>
           </select>
         </span>
       </div>
       <div class="prow">
-        <span class="plabel">線種</span>
+        <span class="plabel">{{ t("properties.lineType") }}</span>
         <span class="pvalue">Continuous</span>
       </div>
-      <div class="sec"><ChevronDown :size="10" /> 電気属性</div>
+      <div class="sec"><ChevronDown :size="10" /> {{ t("properties.electrical") }}</div>
       <div class="prow">
-        <span class="plabel">線径</span>
+        <span class="plabel">{{ t("properties.gauge") }}</span>
         <span class="pvalue">
           <select v-model.number="buf.sq" class="bare">
             <option v-for="v in sqValues" :key="v" :value="v">{{ v }} sq</option>
@@ -197,11 +195,11 @@ const kindLabel = computed<Record<string, string>>(() => ({
         </span>
       </div>
       <div class="prow">
-        <span class="plabel">電線品番</span>
+        <span class="plabel">{{ t("properties.partNo") }}</span>
         <span class="pvalue"><input v-model="buf.part_no" class="bare" placeholder="SAMPLE0001" /></span>
       </div>
       <div class="prow">
-        <span class="plabel">長さ m</span>
+        <span class="plabel">{{ t("properties.length") }}</span>
         <span class="pvalue">
           <input v-model="buf.length_m" class="bare" placeholder="0.4" />
           <span v-if="selected.length_source === 'freecad'" class="badge" :title="t('mech.measuredHint')">{{ t("mech.measured") }}</span>
@@ -227,17 +225,17 @@ const kindLabel = computed<Record<string, string>>(() => ({
     </template>
 
     <template v-else-if="selected?.kind === 'symbol'">
-      <div class="sec"><ChevronDown :size="10" /> 識別</div>
+      <div class="sec"><ChevronDown :size="10" /> {{ t("properties.identity") }}</div>
       <div class="prow">
-        <span class="plabel">参照記号</span>
+        <span class="plabel">{{ t("properties.reference") }}</span>
         <span class="pvalue"><input v-model="buf.reference" class="bare" /></span>
       </div>
       <div class="prow">
-        <span class="plabel">型番/値</span>
+        <span class="plabel">{{ t("properties.value") }}</span>
         <span class="pvalue"><input v-model="buf.value" class="bare" placeholder="JZX-22F" /></span>
       </div>
       <div class="prow">
-        <span class="plabel">シンボル</span>
+        <span class="plabel">{{ t("properties.symbol") }}</span>
         <span class="pvalue">{{ selected.symbol_id }}</span>
       </div>
       <div v-if="mechLink" class="prow">
@@ -292,9 +290,9 @@ const kindLabel = computed<Record<string, string>>(() => ({
     </template>
 
     <template v-else-if="selected?.kind === 'net_label'">
-      <div class="sec"><ChevronDown :size="10" /> ネット</div>
+      <div class="sec"><ChevronDown :size="10" /> {{ t("properties.net") }}</div>
       <div class="prow">
-        <span class="plabel">ネット名</span>
+        <span class="plabel">{{ t("properties.netName") }}</span>
         <span class="pvalue"><input v-model="buf.name" class="bare" @keyup.enter="apply" /></span>
       </div>
       <div class="prow">
@@ -320,7 +318,7 @@ const kindLabel = computed<Record<string, string>>(() => ({
     </template>
 
     <div v-if="selected" class="apply-row">
-      <button class="apply" @click="apply">適用</button>
+      <button class="apply" @click="apply">{{ t("properties.apply") }}</button>
     </div>
   </aside>
 </template>
