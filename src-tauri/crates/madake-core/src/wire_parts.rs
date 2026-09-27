@@ -32,10 +32,12 @@ pub const SQ_EPS: f64 = 1e-9;
 pub const WIRE_PARTS_COLUMNS: [&str; 4] = ["線色", "線径sq", "電線品番", "備考"];
 
 /// 線色の比較キー。前後の空白を落として小文字化し、**日本語の色名へそろえる**
-/// ([`crate::wire_note::color_ja`])。図面のワイヤが`light_blue`でも、表に「水色」と
+/// ([`crate::wire_note::color_display`])。図面のワイヤが`light_blue`でも、表に「水色」と
 /// 書いてあれば同じ電線として引ける (表を作る人と図面を描く道具で表記が違うため)。
+///
+/// 図面へ色名を印字する関数と**同じ**なので、引き当てのキーと図面の表記は必ず一致する。
 fn color_key(color: &str) -> String {
-    crate::wire_note::color_ja(&color.trim().to_lowercase()).to_string()
+    crate::wire_note::color_display(color)
 }
 
 /// 線色+線径で電線品番表 (スライス) を引く。表の**先頭に近い行**が勝つ。

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2139仕様項目**。
+全5領域・**2153仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -619,6 +619,7 @@
 - 電線品番凡例ブロックは置いた場所に描かれ、そのシートの配線の線色・線径・品番・使用長合計が並ぶ。 <sub>`svg_draws_the_wire_legend_block`</sub>
 - 配線の無いシートでも、電線品番凡例ブロックの列見出しは描かれる。 <sub>`svg_draws_the_wire_legend_header_even_with_no_wires`</sub>
 - 電線品番凡例ブロックは、電線リストと同じ規則でプロジェクトの電線品番表から品番を引く。 <sub>`svg_wire_legend_resolves_part_number_from_the_project_table`</sub>
+- シート単体の書き出しでも、呼び出し元が電線品番表を渡せば凡例の品番欄は埋まる。 <sub>`svg_wire_legend_resolves_part_number_on_the_sheet_only_export`</sub>
 - 全ての配線は線径・線色・電線長を配線の下に印字する(現場が電線を作るのに必要な情報)。 <sub>`svg_annotates_each_wire_with_gauge_colour_and_length`</sub>
 - 配線注記は図面そのものの一部なので、何も設定しなくてもSVG・PDFに出る。 <sub>`wire_notes_are_exported_by_default`</sub>
 - 画面で表示クラスを消しても出力ファイルは変わらない(出力は常に図面の全部を描く)。 <sub>`export_ignores_screen_only_view_classes`</sub>
@@ -883,8 +884,14 @@
 
 ### wire_legend
 
+- 凡例ブロックを置いてもシートのネットリストは変わらない (電気的な意味を持たない作図要素だから)。 <sub>`a_legend_block_does_not_appear_in_the_netlist`</sub>
+- 凡例ブロックを置いても、そのブロックについての検証指摘は出ず、他の指摘も増減しない。 <sub>`a_legend_block_raises_no_verification_diagnostic`</sub>
+- 凡例ブロックを置いても部品表は変わらない (部品でもなく、電線の使用長も増やさない)。 <sub>`a_legend_block_does_not_change_the_bom`</sub>
+- 凡例ブロックを置いても電線リストは変わらない (導体ではないから)。 <sub>`a_legend_block_does_not_change_the_wire_list`</sub>
 - 配線が1本も無いシートでも、凡例ブロックは列見出しだけの表として出る。 <sub>`an_empty_sheet_has_only_the_header_row`</sub>
 - 線色・線径・引き当てた品番が同じ配線は1行にまとまり、使用長は合算される。 <sub>`wires_of_the_same_colour_gauge_and_part_number_are_summed_into_one_row`</sub>
+- 英語名と日本語名で書かれた同じ線色は同じ電線なので、1行にまとまり使用長も合算される。 <sub>`a_colour_written_in_english_and_in_japanese_makes_one_row`</sub>
+- 凡例に出る色名は、同じシートの配線注記が印字する色名と同じになる。 <sub>`the_legend_prints_the_same_colour_name_as_the_wire_annotation`</sub>
 - 行は線色順、同じ線色の中では線径順に並ぶ。 <sub>`rows_are_sorted_by_colour_then_gauge`</sub>
 - 足し合わせると二進小数で誠実に表せない使用長も、桁の並んだ長い数字ではなく短い小数で表示される。 <sub>`a_summed_length_is_rounded_instead_of_showing_floating_point_noise`</sub>
 - 電線品番表に無い組み合わせの配線は品番欄が空欄のままで、勝手に品番が作られることはない。 <sub>`an_unresolved_part_number_shows_as_blank`</sub>
@@ -1832,6 +1839,8 @@
 - 嵌合対の破線は表示クラス「シンボル」に属し、シンボルを隠すと一緒に消える (結ぶ相手が見えないため) <sub>`renderSheet mate links`</sub>
 - 参照記号を隠しても嵌合対の破線は残る (参照記号の表示クラスには属さない) <sub>`renderSheet mate links`</sub>
 - 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える。Rust側 svg_leader_dot_is_the_size_of_a_wire_junction_dot とparity) <sub>`renderSheet dots`</sub>
+- 凡例ブロックは列見出しと、シートの配線から導出した行 (色・線径・品番・使用長) を表として描く <sub>`wire legend block drawing`</sub>
+- 選択中の凡例ブロックは、外形の矩形を選択色で描く <sub>`wire legend block drawing`</sub>
 
 ### search
 
@@ -2020,6 +2029,8 @@
 - 線色・線径・引き当てた品番が同じ配線は1行にまとまり、使用長は合算される。 <sub>`wire legend block geometry`</sub>
 - 行は線色順、同じ線色の中では線径順に並ぶ。 <sub>`wire legend block geometry`</sub>
 - 足し合わせると二進小数で誠実に表せない使用長も、桁の並んだ長い数字ではなく短い小数で表示される。 <sub>`wire legend block geometry`</sub>
+- 英語名と日本語名で書かれた同じ線色は同じ電線なので、1行にまとまり使用長も合算される。 <sub>`wire legend block geometry`</sub>
+- 凡例に出る色名は、同じシートの配線注記が印字する色名と同じになる。 <sub>`wire legend block geometry`</sub>
 - 電線品番表に無い組み合わせの配線は品番欄が空欄のままで、勝手に品番が作られることはない。 <sub>`wire legend block geometry`</sub>
 - 凡例ブロックを置くコマンドはadd_entityでkind="wire_legend"、置き場所だけを決める。 <sub>`wire legend block geometry`</sub>
 - シート上の凡例ブロックはentityのまま取り出せる。 <sub>`wire legend block geometry`</sub>
@@ -2578,4 +2589,10 @@
 - 図形ツールは盤レイアウトシートでは使えない(回路図の作図要素なので) <sub>`drawing shapes`</sub>
 - 図形は輪郭で掴む(塗りの下の配線を選びたいので、面の中では掴まない) <sub>`selecting shapes`</sub>
 - 図形を移動すると全ての頂点が動く(move_entitiesコマンド1本) <sub>`selecting shapes`</sub>
+
+### wireLegendPlacement
+
+- 電線品番凡例ツールは、クリックした位置を表の左上にしてブロックを1つ置く (置いたらツールは選択へ戻る)。 <sub>`wire legend block on the canvas`</sub>
+- 表の矩形の中をクリックすると凡例ブロックが選べ、外をクリックすると選べない。 <sub>`wire legend block on the canvas`</sub>
+- 選んだ凡例ブロックはドラッグで動かせる (置き場所だけが動き、中身は動かした先のシートから導出し直される)。 <sub>`wire legend block on the canvas`</sub>
 

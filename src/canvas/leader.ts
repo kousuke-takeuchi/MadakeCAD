@@ -79,8 +79,13 @@ export function entityBounds(entity: Entity, defs: Map<string, SymbolDef>): Rect
       return harnessBounds(entity.points);
     case "shape":
       return shapeBounds(entity);
+    case "wire_legend":
+      // 電線品番凡例ブロックの外形はシート全体の配線から決まる (wireLegend.ts の legendRect)。
+      // ここはエンティティ単体からしか外形を求めないので、引き出し線の対象にはしない
+      // (Rust側 leader.rs の Entity::WireLegend と同じ扱い)
+      return null;
     default:
-      // 盤レイアウト専用エンティティは回路図シートには載らないので対象になり得ない
+      // 残りは盤レイアウト専用エンティティで、回路図シートには載らないので対象になり得ない
       return null;
   }
 }

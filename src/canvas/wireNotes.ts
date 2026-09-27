@@ -40,6 +40,18 @@ export function colorJa(color: string): string {
   return COLOR_JA[color] ?? color;
 }
 
+/**
+ * 図面へ印字する線色名。前後の空白と英字の大小を無視して`colorJa`の日本語名へそろえる。
+ * (Rust側 wire_note::color_display と同じ規則)。
+ *
+ * **図面に色名を書く箇所は全部これを通す** (配線注記・電線品番凡例)。電線品番表の
+ * 引き当て (`wireParts.ts`) も同じ関数を比較キーに使うので、「表と引き当ては同じ色なのに
+ * 図面の表記だけ食い違う」「`red`と`赤`が別の行になる」が起きない。
+ */
+export function colorDisplay(color: string): string {
+  return colorJa(color.trim().toLowerCase());
+}
+
 /** 図面用の数値整形。小数の末尾の0を落とす (0.75 → "0.75"、1.0 → "1")。 */
 function num(v: number): string {
   return v.toFixed(3).replace(/\.?0+$/, "");
@@ -62,7 +74,7 @@ export function wireNoteText(wire: Wire): string {
   const parts: string[] = [];
   if (wire.sq > 0) parts.push(`${num(wire.sq)}sq`);
   const color = (wire.color ?? "").trim();
-  if (color) parts.push(colorJa(color));
+  if (color) parts.push(colorDisplay(color));
   if (wire.length_m != null && wire.length_m > 0) parts.push(`${num(wire.length_m)}m`);
   return parts.join(" ");
 }

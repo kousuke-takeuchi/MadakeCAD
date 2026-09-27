@@ -74,8 +74,13 @@ fn fontdb() -> &'static usvg::fontdb::Database {
 /// シート1枚をPDF文書(バイト列)として書き出す。用紙寸法はmm 1:1。
 /// シート単体の出力なのでシート間クロスリファレンスは描かない
 /// (描くには [`project_sheet_to_pdf`] を使う)。
-pub fn sheet_to_pdf(sheet: &Sheet, symbols: &[SymbolDef]) -> Result<Vec<u8>, PdfError> {
-    svg_to_pdf(crate::svg::sheet_to_svg(sheet, symbols))
+/// `wire_parts`は[`crate::svg::sheet_to_svg`]と同じ (電線品番凡例の品番欄の引き当て元)。
+pub fn sheet_to_pdf(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    wire_parts: &[crate::model::WirePart],
+) -> Result<Vec<u8>, PdfError> {
+    svg_to_pdf(crate::svg::sheet_to_svg(sheet, symbols, wire_parts))
 }
 
 /// プロジェクト内の1シートをPDFとして書き出す。ネットラベルの脇に他シートの同名ラベルの
@@ -291,7 +296,7 @@ mod tests {
         for e in [s, w] {
             sheet.entities.insert(e.id(), e);
         }
-        let pdf = sheet_to_pdf(&sheet, &sheet_symbol_defs(&sheet)).expect("pdf");
+        let pdf = sheet_to_pdf(&sheet, &sheet_symbol_defs(&sheet), &[]).expect("pdf");
         assert!(pdf.starts_with(b"%PDF-"), "PDFヘッダ");
         assert!(pdf.len() > 1000, "非自明なサイズ: {}", pdf.len());
     }
@@ -301,7 +306,7 @@ mod tests {
     #[test]
     fn pdf_page_is_the_size_of_the_paper() {
         let sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
-        let pdf = sheet_to_pdf(&sheet, &sheet_symbol_defs(&sheet)).expect("pdf");
+        let pdf = sheet_to_pdf(&sheet, &sheet_symbol_defs(&sheet), &[]).expect("pdf");
         let (w, h) = media_boxes(&pdf)[0];
         // 1mm = 72/25.4 pt
         assert!((w - 420.0 * 72.0 / 25.4).abs() < 0.1, "幅 {w}pt");

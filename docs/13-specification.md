@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2139 specification clauses** across 5 areas.
+**2153 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -619,6 +619,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The wire part-number legend block is drawn where it was placed, listing the colour, gauge, part number and summed length of the sheet's wires. <sub>`svg_draws_the_wire_legend_block`</sub>
 - A sheet with no wires at all still draws the wire legend block's header row. <sub>`svg_draws_the_wire_legend_header_even_with_no_wires`</sub>
 - The wire legend block resolves a blank part number from the project's wire-part table, the same way the wire list does. <sub>`svg_wire_legend_resolves_part_number_from_the_project_table`</sub>
+- Exporting one sheet on its own also fills the legend's part numbers, as long as the caller hands over the project's wire-part table. <sub>`svg_wire_legend_resolves_part_number_on_the_sheet_only_export`</sub>
 - Every wire prints its gauge, colour and cut length under the wire, which is what the shop needs to make the harness. <sub>`svg_annotates_each_wire_with_gauge_colour_and_length`</sub>
 - The wire note is part of the exported drawing itself, so it comes out in SVG and PDF without turning anything on. <sub>`wire_notes_are_exported_by_default`</sub>
 - Hiding a class on screen never changes the exported file: the export always draws the whole drawing. <sub>`export_ignores_screen_only_view_classes`</sub>
@@ -883,8 +884,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### wire_legend
 
+- The netlist of a sheet is the same before and after a legend block is placed on it: the block carries no electrical meaning. <sub>`a_legend_block_does_not_appear_in_the_netlist`</sub>
+- Placing a legend block raises no verification diagnostic of its own, and leaves the sheet's other diagnostics untouched. <sub>`a_legend_block_raises_no_verification_diagnostic`</sub>
+- The BOM is the same before and after a legend block is placed: it is not a component and it adds no wire length. <sub>`a_legend_block_does_not_change_the_bom`</sub>
+- The wire list is the same before and after a legend block is placed: the block is not a conductor. <sub>`a_legend_block_does_not_change_the_wire_list`</sub>
 - A sheet with no wires at all still gets a header-only legend block (no data rows). <sub>`an_empty_sheet_has_only_the_header_row`</sub>
 - Wires that share the same colour, gauge and resolved part number collapse into one row whose length is the sum of theirs. <sub>`wires_of_the_same_colour_gauge_and_part_number_are_summed_into_one_row`</sub>
+- The same colour written in English and in Japanese is one stock item, so it makes a single row whose length is the sum of both. <sub>`a_colour_written_in_english_and_in_japanese_makes_one_row`</sub>
+- The colour printed in the legend is the same name the wire's own annotation prints on the sheet. <sub>`the_legend_prints_the_same_colour_name_as_the_wire_annotation`</sub>
 - Rows are sorted by colour, then by gauge within the same colour. <sub>`rows_are_sorted_by_colour_then_gauge`</sub>
 - Lengths that cannot be added up exactly in binary floating point still print as a short decimal, never as a long string of digits. <sub>`a_summed_length_is_rounded_instead_of_showing_floating_point_noise`</sub>
 - A wire whose colour and gauge are not in the wire-part table shows a blank part number, instead of an invented one. <sub>`an_unresolved_part_number_shows_as_blank`</sub>
@@ -1832,6 +1839,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - hides the mate link together with the symbols view class <sub>`renderSheet mate links`</sub>
 - keeps the mate link when only the reference-designator class is hidden <sub>`renderSheet mate links`</sub>
 - draws a note's leader dot exactly the size of a wire junction dot <sub>`renderSheet dots`</sub>
+- draws the header row and the rows derived from the sheet's wires <sub>`wire legend block drawing`</sub>
+- outlines the legend block in the selection colour while it is selected <sub>`wire legend block drawing`</sub>
 
 ### search
 
@@ -2020,6 +2029,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sums the length of wires sharing the same colour, gauge and part number into one row <sub>`wire legend block geometry`</sub>
 - sorts rows by colour then by gauge <sub>`wire legend block geometry`</sub>
 - rounds a summed length instead of showing floating point noise <sub>`wire legend block geometry`</sub>
+- merges a colour written in English and in Japanese into one row <sub>`wire legend block geometry`</sub>
+- prints the same colour name as the wire annotation on the same sheet <sub>`wire legend block geometry`</sub>
 - leaves the part number blank when the colour and gauge are not in the wire-part table <sub>`wire legend block geometry`</sub>
 - builds an add_entity command that only sets the placement <sub>`wire legend block geometry`</sub>
 - lists the wire legend entities placed on a sheet <sub>`wire legend block geometry`</sub>
@@ -2578,4 +2589,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - refuses the shape tools on a panel layout sheet <sub>`drawing shapes`</sub>
 - picks a shape by its outline, not by the area inside it <sub>`selecting shapes`</sub>
 - moves every point of a shape with one move_entities command <sub>`selecting shapes`</sub>
+
+### wireLegendPlacement
+
+- places one legend block with the clicked point as its top-left corner <sub>`wire legend block on the canvas`</sub>
+- selects the legend block by clicking inside its table, and not outside it <sub>`wire legend block on the canvas`</sub>
+- moves a selected legend block by dragging it <sub>`wire legend block on the canvas`</sub>
 

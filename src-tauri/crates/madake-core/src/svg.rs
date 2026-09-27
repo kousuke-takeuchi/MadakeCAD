@@ -1026,7 +1026,7 @@ fn render_legends(out: &mut String, sheet: &Sheet) {
 
 /// 電線品番凡例ブロック (色・sq・電線品番・使用長のテーブル、G9残) を描く。中身は同じ
 /// シートの配線から導出する ([`crate::wire_legend::legend_rows_with`]) ので、図面と
-/// 食い違わない。`wire_parts`はプロジェクトの電線品番表 (シート単体の書き出しでは空)。
+/// 食い違わない。`wire_parts`はプロジェクトの電線品番表 (呼び出し元から渡す)。
 fn render_wire_legends(out: &mut String, sheet: &Sheet, wire_parts: &[crate::model::WirePart]) {
     let rows = crate::wire_legend::legend_rows_with(sheet, wire_parts);
     for legend in crate::wire_legend::legends(sheet) {
@@ -1072,15 +1072,27 @@ fn render_wire_legends(out: &mut String, sheet: &Sheet, wire_parts: &[crate::mod
 /// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。図枠は既定の`jis-a3`。
 /// シート単体の出力なのでシート間クロスリファレンスは描かない
 /// (描くには [`project_sheet_to_svg`] を使う)。
-pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef]) -> String {
-    sheet_to_svg_with_frame(sheet, symbols, crate::frame_template::default_template())
+///
+/// `wire_parts`はプロジェクトの電線品番表 ([`crate::model::Project::wire_parts`])。
+/// 電線品番凡例ブロック (G9) の品番欄はこの表から引くので、**プロジェクトを持っている
+/// 呼び出し元は必ず渡すこと**(空スライスを渡すと、ワイヤ自身が品番を持たない限り
+/// 凡例の品番欄が空欄になる)。
+pub fn sheet_to_svg(sheet: &Sheet, symbols: &[SymbolDef], wire_parts: &[crate::model::WirePart]) -> String {
+    sheet_to_svg_with_frame(
+        sheet,
+        symbols,
+        crate::frame_template::default_template(),
+        wire_parts,
+    )
 }
 
 /// 図枠テンプレートを指定してシート1枚を書き出す(図枠のプレビュー・テスト用)。
+/// `wire_parts`は[`sheet_to_svg`]と同じ。
 pub fn sheet_to_svg_with_frame(
     sheet: &Sheet,
     symbols: &[SymbolDef],
     frame: &FrameTemplate,
+    wire_parts: &[crate::model::WirePart],
 ) -> String {
     sheet_to_svg_with_xrefs(
         sheet,
@@ -1091,7 +1103,7 @@ pub fn sheet_to_svg_with_frame(
         &[],
         frame,
         &BindContext::for_sheet(sheet),
-        &[],
+        wire_parts,
     )
 }
 
@@ -1369,7 +1381,7 @@ mod tests {
         for e in [w, s] {
             sheet.entities.insert(e.id(), e);
         }
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(svg.starts_with("<svg"));
         assert!(svg.contains("viewBox=\"0 0 420 297\""));
         assert!(svg.contains("MDK-001"));
@@ -1392,7 +1404,7 @@ mod tests {
             r#"{"left":[{"no":"IN1","name":"入力1"}],"right":[{"no":"OUT1","name":"出力1"}]}"#,
         );
         sheet.entities.insert(block.id(), block);
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         assert!(svg.contains(">IN1<"), "ピン番号が描かれていない");
         assert!(svg.contains(">入力1<"), "ピン名が描かれていない");
         assert!(svg.contains(">OUT1<") && svg.contains(">出力1<"));
@@ -1443,7 +1455,7 @@ mod tests {
     #[test]
     fn the_jis_a3_template_reproduces_the_previous_frame_exactly() {
         let golden = include_str!("../tests/golden/frame-jis-a3.svg");
-        let got = frame_only(&sheet_to_svg(&golden_sheet(), &builtin_symbols()));
+        let got = frame_only(&sheet_to_svg(&golden_sheet(), &builtin_symbols(), &[]));
         assert_eq!(got, golden, "図枠の出力が変わっている");
     }
 
@@ -1453,7 +1465,7 @@ mod tests {
     fn an_empty_sheet_reproduces_the_previous_frame_exactly() {
         let golden = include_str!("../tests/golden/frame-jis-a3-empty-a4.svg");
         let sheet = Sheet::new("Sheet1", PaperSize::A4, Orientation::Landscape);
-        let got = frame_only(&sheet_to_svg(&sheet, &builtin_symbols()));
+        let got = frame_only(&sheet_to_svg(&sheet, &builtin_symbols(), &[]));
         assert_eq!(got, golden, "図枠の出力が変わっている");
     }
 
@@ -1465,7 +1477,7 @@ mod tests {
         sheet.size = PaperSize::A4;
         sheet.orientation = Orientation::Portrait;
         let frame = crate::frame_template::find("jis-a4-portrait").expect("A4縦");
-        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &frame);
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &frame, &[]);
         assert!(svg.contains("viewBox=\"0 0 210 297\""), "{svg}");
         // 外枠 (10mmマージン)
         assert!(
@@ -1581,7 +1593,7 @@ mod tests {
         use crate::frame_template::LogoFrame;
         let mut frame = crate::frame_template::default_template().clone();
         frame.logo = Some(LogoFrame { x: 15.0, y: 15.0, w: 40.0, h: 20.0, path: None });
-        let svg = sheet_to_svg_with_frame(&golden_sheet(), &builtin_symbols(), &frame);
+        let svg = sheet_to_svg_with_frame(&golden_sheet(), &builtin_symbols(), &frame, &[]);
         assert!(
             svg.contains("<rect x=\"15\" y=\"15\" width=\"40\" height=\"20\" fill=\"none\""),
             "{svg}"
@@ -1594,7 +1606,7 @@ mod tests {
     fn svg_escapes_xml_special_chars() {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         sheet.title_block.title = "A<B> & \"C\"".into();
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(svg.contains("A&lt;B&gt; &amp; &quot;C&quot;"));
         assert!(!svg.contains("A<B>"));
     }
@@ -1662,7 +1674,7 @@ mod tests {
     #[test]
     fn svg_draws_revision_table_above_title_block() {
         let sheet = sheet_with_revisions(&["A", "B"]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         // 列見出しと2行分の内容が出る
         assert!(svg.contains("記号"), "{svg}");
         assert!(svg.contains("変更A") && svg.contains("変更B"), "{svg}");
@@ -1684,7 +1696,7 @@ mod tests {
     #[test]
     fn svg_omits_revision_table_when_no_revisions() {
         let sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(!svg.contains("記号"), "{svg}");
         // 表題欄より上に120mm幅の枠が増えていない
         assert!(!svg.contains("<rect x=\"290\" y=\"231\""), "{svg}");
@@ -1696,13 +1708,13 @@ mod tests {
     fn svg_title_block_rev_follows_latest_revision() {
         let mut sheet = sheet_with_revisions(&["A", "B", "C"]);
         sheet.title_block.rev = "A".into();
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(svg.contains("Rev C"), "{svg}");
         assert!(!svg.contains("Rev A"), "{svg}");
 
         let mut plain = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
         plain.title_block.rev = "A".into();
-        let svg2 = sheet_to_svg(&plain, &builtin_symbols());
+        let svg2 = sheet_to_svg(&plain, &builtin_symbols(), &[]);
         assert!(svg2.contains("Rev A"), "{svg2}");
     }
 
@@ -1712,7 +1724,7 @@ mod tests {
     fn svg_revision_table_shows_only_newest_six_rows() {
         let sheet = sheet_with_revisions(&["A", "B", "C", "D", "E", "F", "G"]);
         assert_eq!(sheet.revisions.len(), 7);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(!svg.contains("変更A"), "最も古い行は省略される: {svg}");
         for m in ["B", "C", "D", "E", "F", "G"] {
             assert!(svg.contains(&format!("変更{m}")), "{m}行が無い: {svg}");
@@ -1748,7 +1760,7 @@ mod tests {
     /// 注記1つだけのシートと、その注記のSVG行を返す。
     fn note_line(text: &TextEntity) -> String {
         let sheet = sheet_with(vec![Entity::Text(text.clone())]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         svg.lines()
             .find(|l| l.contains(&format!(">{}<", text.text)))
             .unwrap_or_else(|| panic!("注記が描かれていない: {svg}"))
@@ -1817,7 +1829,7 @@ mod tests {
     #[test]
     fn a_note_without_a_leader_target_draws_no_leader_line() {
         let count_lines = |sheet: &Sheet| {
-            sheet_to_svg(sheet, &builtin_symbols())
+            sheet_to_svg(sheet, &builtin_symbols(), &[])
                 .lines()
                 .filter(|l| l.starts_with("<line"))
                 .count()
@@ -1839,7 +1851,7 @@ mod tests {
         note.at = Point::new(100.0, 50.0);
         note.leader_to = Some(target_id);
         let sheet = sheet_with(vec![Entity::Shape(shape), Entity::Text(note)]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let line = svg
             .lines()
             .find(|l| {
@@ -1875,7 +1887,7 @@ mod tests {
         inst.attrs
             .insert(crate::text_style::FUNCTION_LABEL_ATTR.into(), "非常停止ボタン".into());
         let sheet = sheet_with(vec![Entity::Symbol(inst.clone())]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let line = svg
             .lines()
             .find(|l| l.contains(">非常停止ボタン<"))
@@ -1907,7 +1919,7 @@ mod tests {
             value: "ABC-1".into(),
             attrs: Default::default(),
         };
-        let svg = sheet_to_svg(&sheet_with(vec![Entity::Symbol(inst)]), &builtin_symbols());
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Symbol(inst)]), &builtin_symbols(), &[]);
         let labels: Vec<String> = texts(&svg)
             .into_iter()
             .filter(|(x, _, _)| (*x - 100.0).abs() < 1e-9)
@@ -1921,7 +1933,7 @@ mod tests {
     #[test]
     fn svg_draws_wire_number_above_a_horizontal_wire() {
         let sheet = sheet_with(vec![numbered_wire(&[(50.0, 100.0), (90.0, 100.0)], Some("12"))]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let line = svg
             .lines()
             .find(|l| l.contains("monospace") && l.contains(">12<"))
@@ -1936,7 +1948,7 @@ mod tests {
     #[test]
     fn svg_draws_wire_number_left_of_a_vertical_wire() {
         let sheet = sheet_with(vec![numbered_wire(&[(80.0, 40.0), (80.0, 80.0)], Some("7"))]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let line = svg
             .lines()
             .find(|l| l.contains("monospace") && l.contains(">7<"))
@@ -1955,7 +1967,7 @@ mod tests {
             numbered_wire(&[(100.0, 50.0), (100.0, 60.0)], Some("3")),
             numbered_wire(&[(100.0, 60.0), (160.0, 60.0)], Some("3")),
         ]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let hits: Vec<_> = svg
             .lines()
             .filter(|l| l.contains("monospace") && l.contains(">3<"))
@@ -1970,7 +1982,7 @@ mod tests {
     #[test]
     fn svg_omits_wire_number_for_unnumbered_nets() {
         let sheet = sheet_with(vec![numbered_wire(&[(50.0, 100.0), (90.0, 100.0)], None)]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         // 配線注記 (線径・線色) は別の文字なので、線番の文字サイズで絞って探す
         let size = format!("font-size=\"{}\"", n(WIRE_NO_FONT));
         let numbers: Vec<&str> = svg
@@ -1995,7 +2007,7 @@ mod tests {
     #[test]
     fn svg_draws_a_harness_as_a_dashed_rectangle() {
         let sheet = sheet_with(vec![harness_entity("W1", 50.0, 50.0, 150.0, 100.0)]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let line = svg
             .lines()
             .find(|l| l.starts_with("<polygon") && l.contains("stroke-dasharray"))
@@ -2010,7 +2022,7 @@ mod tests {
     #[test]
     fn svg_labels_the_harness_at_its_top_left_corner() {
         let sheet = sheet_with(vec![harness_entity("W1", 50.0, 50.0, 150.0, 100.0)]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let label = texts(&svg)
             .into_iter()
             .find(|(_, _, s)| s == "W1")
@@ -2152,7 +2164,7 @@ mod tests {
     #[test]
     fn svg_omits_the_label_of_an_unnamed_harness() {
         let sheet = sheet_with(vec![harness_entity("", 50.0, 50.0, 150.0, 100.0)]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(svg.contains("stroke-dasharray"), "囲みは描く: {svg}");
         assert!(
             !texts(&svg).iter().any(|&(x, y, _)| x == 51.0 && y == 49.0),
@@ -2176,7 +2188,7 @@ mod tests {
             crate::model::ShapeKind::Rect,
             &[(150.0, 100.0), (50.0, 50.0)],
         )]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let line = svg
             .lines()
             .find(|l| l.starts_with("<rect") && l.contains("x=\"50\"") && l.contains("y=\"50\""))
@@ -2197,7 +2209,7 @@ mod tests {
             crate::model::ShapeKind::Line,
             &[(50.0, 60.0), (150.0, 60.0)],
         )]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(
             svg.lines().any(|l| l.starts_with("<line")
                 && l.contains("x1=\"50\"")
@@ -2211,7 +2223,7 @@ mod tests {
             crate::model::ShapeKind::Polyline,
             &[(50.0, 50.0), (100.0, 50.0), (100.0, 90.0)],
         )]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(
             svg.contains("points=\"50,50 100,50 100,90\""),
             "折れ線が順にたどられていない: {svg}"
@@ -2226,7 +2238,7 @@ mod tests {
             crate::model::ShapeKind::Circle,
             &[(100.0, 50.0), (100.0, 60.0)],
         )]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let line = svg
             .lines()
             .find(|l| l.starts_with("<circle") && l.contains("r=\"10\""))
@@ -2247,7 +2259,7 @@ mod tests {
             s.fill = Some("warning".into());
         }
         let sheet = sheet_with(vec![entity]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let line = svg
             .lines()
             .find(|l| l.starts_with("<rect") && l.contains("x=\"50\""))
@@ -2279,7 +2291,7 @@ mod tests {
             wire,
             shape_entity(crate::model::ShapeKind::Rect, &[(50.0, 50.0), (150.0, 100.0)]),
         ]);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let shape_at = svg.find("<rect x=\"50\"").expect("図形の矩形");
         let wire_at = svg.find("<polyline points=\"60,60").expect("配線");
         assert!(shape_at < wire_at, "図形が配線より後に描かれている: {svg}");
@@ -2301,7 +2313,7 @@ mod tests {
             attrs: Default::default(),
         });
         sheet.entities.insert(s.id(), s);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         // 90度回転で本体矩形は縦長になる: 頂点(±5,±2)→(100∓2, 100±5) を含む
         assert!(svg.contains("98,95") || svg.contains("98,105"), "{svg}");
     }
@@ -2376,7 +2388,7 @@ mod tests {
     #[test]
     fn svg_of_a_lone_sheet_has_no_cross_reference() {
         let project = two_sheet_project();
-        let svg = sheet_to_svg(&project.sheets[0], &builtin_symbols());
+        let svg = sheet_to_svg(&project.sheets[0], &builtin_symbols(), &[]);
         assert!(svg.contains(">24V_1<"));
         assert!(!svg.contains("/2.B3"), "{svg}");
     }
@@ -2440,7 +2452,7 @@ mod tests {
     #[test]
     fn svg_of_a_lone_sheet_has_no_contact_map() {
         let project = relay_project();
-        let svg = sheet_to_svg(&project.sheets[0], &builtin_symbols());
+        let svg = sheet_to_svg(&project.sheets[0], &builtin_symbols(), &[]);
         assert!(!svg.contains(">13-14<"), "{svg}");
     }
 
@@ -2660,7 +2672,7 @@ mod tests {
     /// 盤レイアウトシートは回路図と同じ図枠つきで書き出され、そこに盤外形と取付板が描かれる。
     #[test]
     fn svg_of_a_panel_sheet_draws_the_enclosure_and_its_mounting_plate() {
-        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols());
+        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols(), &[]);
         assert!(svg.contains("viewBox=\"0 0 420 297\""));
         assert!(
             svg.contains("<rect x=\"40\" y=\"40\" width=\"200\" height=\"150\""),
@@ -2677,7 +2689,7 @@ mod tests {
     /// ダクトは45度のハッチ(斜線)で埋めた矩形として描かれる。
     #[test]
     fn svg_of_a_panel_sheet_hatches_the_duct() {
-        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols());
+        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols(), &[]);
         assert!(
             svg.contains("<rect x=\"100\" y=\"100\" width=\"20\" height=\"20\""),
             "ダクトの外形: {svg}"
@@ -2692,7 +2704,7 @@ mod tests {
     /// DINレールは取付線を中心にした横帯として描かれる。
     #[test]
     fn svg_of_a_panel_sheet_draws_the_din_rail() {
-        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols());
+        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols(), &[]);
         assert!(
             svg.contains("<rect x=\"60\" y=\"132.500\" width=\"160\" height=\"35\""),
             "DINレール: {svg}"
@@ -2703,7 +2715,7 @@ mod tests {
     /// フットプリントは外形の矩形として描かれ、その中に参照記号と型番が入る。
     #[test]
     fn svg_of_a_panel_sheet_draws_the_footprint_with_its_reference() {
-        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols());
+        let svg = sheet_to_svg(&panel_sheet(), &builtin_symbols(), &[]);
         assert!(
             svg.contains("<rect x=\"60\" y=\"132.500\" width=\"25\" height=\"65\""),
             "フットプリントの外形: {svg}"
@@ -2729,7 +2741,7 @@ mod tests {
             item_no: None,
         });
         sheet.entities.insert(fp.id(), fp);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(
             svg.contains("<rect x=\"60\" y=\"100\" width=\"65\" height=\"25\""),
             "{svg}"
@@ -2765,7 +2777,7 @@ mod tests {
     /// 採番したフットプリントにはバルーンが付く(アイテム番号を入れた白丸と、部品へ伸びる短い引出線)。
     #[test]
     fn svg_draws_a_balloon_on_a_numbered_footprint() {
-        let svg = sheet_to_svg(&panel_sheet_with(Some(7), None), &builtin_symbols());
+        let svg = sheet_to_svg(&panel_sheet_with(Some(7), None), &builtin_symbols(), &[]);
         assert!(svg.contains(">7<"), "バルーンの番号: {svg}");
         assert!(
             svg.contains(&format!("r=\"{}\"", n(crate::panel::BALLOON_R))),
@@ -2778,7 +2790,7 @@ mod tests {
     /// まだ採番していないフットプリントには図面にバルーンが出ない。
     #[test]
     fn svg_draws_no_balloon_before_numbering() {
-        let svg = sheet_to_svg(&panel_sheet_with(None, None), &builtin_symbols());
+        let svg = sheet_to_svg(&panel_sheet_with(None, None), &builtin_symbols(), &[]);
         assert!(!svg.contains(&format!("r=\"{}\"", n(crate::panel::BALLOON_R))), "{svg}");
     }
 
@@ -2789,7 +2801,7 @@ mod tests {
         let svg = sheet_to_svg(
             &panel_sheet_with(Some(1), Some(Point::new(300.0, 200.0))),
             &builtin_symbols(),
-        );
+         &[],);
         assert!(svg.contains(">参照記号<"), "列見出し: {svg}");
         assert!(svg.contains(">K1<"), "参照記号: {svg}");
         assert!(svg.contains(">MDK-RLY-24V<"), "型番: {svg}");
@@ -2821,7 +2833,7 @@ mod tests {
     /// 電線品番凡例ブロックは置いた場所に描かれ、そのシートの配線の線色・線径・品番・使用長合計が並ぶ。
     #[test]
     fn svg_draws_the_wire_legend_block() {
-        let svg = sheet_to_svg(&sheet_with_wire_legend(Point::new(300.0, 200.0)), &builtin_symbols());
+        let svg = sheet_to_svg(&sheet_with_wire_legend(Point::new(300.0, 200.0)), &builtin_symbols(), &[]);
         assert!(svg.contains(">電線品番<"), "列見出し: {svg}");
         assert!(svg.contains(">水色<"), "線色: {svg}");
         assert!(svg.contains(">SAMPLE0001<"), "ワイヤ自身に書かれた品番: {svg}");
@@ -2838,7 +2850,7 @@ mod tests {
         let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
         let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: Point::new(10.0, 10.0) });
         sheet.entities.insert(legend.id(), legend);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(svg.contains(">使用長 m<"), "{svg}");
     }
 
@@ -2872,6 +2884,38 @@ mod tests {
         assert!(svg.contains(">SAMPLE0002<"), "{svg}");
     }
 
+    /// Exporting one sheet on its own also fills the legend's part numbers, as long as the caller hands over the project's wire-part table.
+    /// シート単体の書き出しでも、呼び出し元が電線品番表を渡せば凡例の品番欄は埋まる。
+    #[test]
+    fn svg_wire_legend_resolves_part_number_on_the_sheet_only_export() {
+        let parts = vec![WirePart {
+            part_no: "SAMPLE0002".into(),
+            color: "水色".into(),
+            sq: 0.3,
+            note: String::new(),
+        }];
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let w = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(0.0, 0.0), Point::new(10.0, 0.0)],
+            color: "水色".into(),
+            sq: 0.3,
+            length_m: None,
+            part_no: None,
+            net: None,
+        });
+        sheet.entities.insert(w.id(), w);
+        let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: Point::new(10.0, 10.0) });
+        sheet.entities.insert(legend.id(), legend);
+        let with_parts = sheet_to_svg(&sheet, &builtin_symbols(), &parts);
+        assert!(with_parts.contains(">SAMPLE0002<"), "{with_parts}");
+        let without = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
+        assert!(
+            !without.contains(">SAMPLE0002<"),
+            "表を渡さなければ引きようがない (品番欄は空欄のまま)"
+        );
+    }
+
     /// シート1枚に、配線注記の付いたワイヤ1本を置く (横向き)。
     fn sheet_with_annotated_wire() -> Sheet {
         let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
@@ -2892,7 +2936,7 @@ mod tests {
     /// 全ての配線は線径・線色・電線長を配線の下に印字する(現場が電線を作るのに必要な情報)。
     #[test]
     fn svg_annotates_each_wire_with_gauge_colour_and_length() {
-        let svg = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols());
+        let svg = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols(), &[]);
         let (x, y, _) = texts(&svg)
             .into_iter()
             .find(|(_, _, t)| t == "0.75sq 白 0.4m")
@@ -2905,7 +2949,7 @@ mod tests {
     /// 配線注記は図面そのものの一部なので、何も設定しなくてもSVG・PDFに出る。
     #[test]
     fn wire_notes_are_exported_by_default() {
-        let svg = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols());
+        let svg = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols(), &[]);
         assert!(svg.contains(">0.75sq 白 0.4m<"), "既定で出力に含まれる: {svg}");
     }
 
@@ -2913,8 +2957,8 @@ mod tests {
     /// 画面で表示クラスを消しても出力ファイルは変わらない(出力は常に図面の全部を描く)。
     #[test]
     fn export_ignores_screen_only_view_classes() {
-        let a = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols());
-        let b = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols());
+        let a = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols(), &[]);
+        let b = sheet_to_svg(&sheet_with_annotated_wire(), &builtin_symbols(), &[]);
         assert_eq!(a, b, "出力に画面側の表示設定は入り込まない");
         assert!(a.contains(">0.75sq 白 0.4m<"));
     }
@@ -2934,7 +2978,7 @@ mod tests {
             net: None,
         });
         sheet.entities.insert(w.id(), w);
-        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         assert!(!svg.contains("sq "), "注記なし: {svg}");
     }
 
@@ -2960,7 +3004,7 @@ mod tests {
     /// タグ「右」のネットラベルは右を向いた旗の枠として描かれ、ネット名は置いた点の左へ伸びる本体の中に入る。
     #[test]
     fn svg_draws_a_directional_flag_around_a_tagged_net_label() {
-        let svg = sheet_to_svg(&sheet_with_net_label(Some("right")), &builtin_symbols());
+        let svg = sheet_to_svg(&sheet_with_net_label(Some("right")), &builtin_symbols(), &[]);
         let polygon = svg
             .lines()
             .find(|l| l.trim_start().starts_with("<polygon") && l.contains("100,"))
@@ -2989,9 +3033,9 @@ mod tests {
             net: Some("12".into()),
         });
         sheet.entities.insert(w.id(), w);
-        let default_svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let default_svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         sheet.annotation_text_mm = Some(1.4);
-        let small_svg = sheet_to_svg(&sheet, &builtin_symbols());
+        let small_svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
 
         let size_of = |svg: &str, text: &str| {
             svg.lines()
@@ -3018,7 +3062,7 @@ mod tests {
     /// タグの無いネットラベルは従来どおり文字だけで、周りに枠は描かれない。
     #[test]
     fn svg_draws_no_outline_for_an_untagged_net_label() {
-        let svg = sheet_to_svg(&sheet_with_net_label(None), &builtin_symbols());
+        let svg = sheet_to_svg(&sheet_with_net_label(None), &builtin_symbols(), &[]);
         assert!(svg.contains(">24V_1<"), "文字は出る");
         assert!(!svg.contains("<polygon"), "枠は描かない: {svg}");
     }
@@ -3027,7 +3071,7 @@ mod tests {
     /// 知らないタグの値は無視され、出力が壊れるのではなく文字だけの表示に戻る。
     #[test]
     fn svg_ignores_an_unknown_tag_value() {
-        let svg = sheet_to_svg(&sheet_with_net_label(Some("diagonal")), &builtin_symbols());
+        let svg = sheet_to_svg(&sheet_with_net_label(Some("diagonal")), &builtin_symbols(), &[]);
         assert!(svg.contains(">24V_1<"));
         assert!(!svg.contains("<polygon"), "{svg}");
     }
@@ -3137,7 +3181,7 @@ mod tests {
             s.mirror = mirror;
         }
         sheet.entities.insert(tb.id(), tb);
-        sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet))
+        sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[])
     }
 
     /// A jumper bar is always drawn clear of every terminal number, whatever jumpers the block carries and however it is turned or mirrored, so the numbers stay readable.
@@ -3180,7 +3224,7 @@ mod tests {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         let tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "1-2");
         sheet.entities.insert(tb.id(), tb);
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         // 端子1中心 (100, 42.5)・端子2中心 (100, 47.5)。バーは2つの印の縁の間 (44.3〜45.7)
         let bars: Vec<_> = svg_lines(&svg)
             .into_iter()
@@ -3203,7 +3247,7 @@ mod tests {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         let tb = terminal_block("TB1", "terminal_block_4p_2l", 100.0, 50.0, "1a-1b");
         sheet.entities.insert(tb.id(), tb);
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         // 極1の行は y=42.5、段aの列は x=95、段bの列は x=105。バーは2つの印の縁の間 (96.8〜103.2)
         let bars: Vec<_> = svg_lines(&svg)
             .into_iter()
@@ -3223,7 +3267,7 @@ mod tests {
             s.rotation = 90;
         }
         sheet.entities.insert(tb.id(), tb);
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         // 90度回すと端子1は(107.5,50)、端子2は(102.5,50)へ移り、バーも2つの印の縁の間で横向きになる
         let bars: Vec<_> = svg_lines(&svg)
             .into_iter()
@@ -3246,7 +3290,7 @@ mod tests {
                 s.mirror = mirror;
             }
             sheet.entities.insert(motor.id(), motor);
-            let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+            let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
             let letters: Vec<_> = svg_texts(&svg).into_iter().filter(|t| t.3 == "M").collect();
             assert_eq!(letters.len(), 1, "rot={rotation} mirror={mirror}: {letters:?}");
             // 定義ではモータの円の中心 (0,0) に高さ4mmの「M」→ ベースラインは中心の2mm下
@@ -3417,7 +3461,7 @@ mod tests {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         let tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "1-3");
         sheet.entities.insert(tb.id(), tb);
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         let bars: Vec<_> = svg_lines(&svg)
             .into_iter()
             .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
@@ -3432,7 +3476,7 @@ mod tests {
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         let tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "1-2,3-4");
         sheet.entities.insert(tb.id(), tb);
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         let bars: Vec<_> = svg_lines(&svg)
             .into_iter()
             .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
@@ -3452,7 +3496,7 @@ mod tests {
         }
         sheet.entities.insert(plain_tb.id(), plain_tb);
         sheet.entities.insert(not_tb.id(), not_tb);
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         let bars: Vec<_> = svg_lines(&svg)
             .into_iter()
             .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
@@ -3491,7 +3535,7 @@ mod tests {
             "1-4:電源",
         );
         sheet.entities.insert(tb.id(), tb);
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         assert_eq!(bracket_polylines(&svg), 1, "括弧のポリラインが無い: {svg}");
         assert!(svg.contains(">電源<"), "キャプションが無い: {svg}");
     }
@@ -3505,7 +3549,7 @@ mod tests {
         let empty = with_pin_groups(terminal_block("TB2", "terminal_block_4p", 200.0, 50.0, ""), "");
         sheet.entities.insert(plain.id(), plain);
         sheet.entities.insert(empty.id(), empty);
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         assert_eq!(bracket_polylines(&svg), 0, "{svg}");
     }
 
@@ -3519,7 +3563,7 @@ mod tests {
             "1-4:A,3-6:B,7-8:C",
         );
         sheet.entities.insert(tb.id(), tb);
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         // キャプション文字はfont-size="2" (図枠のゾーン記号A〜Fはfont-size="3"なので混同しない)
         let captioned = |letter: &str| svg.contains(&format!("font-size=\"2\" fill=\"#000\" text-anchor=\"middle\" font-family=\"sans-serif\">{letter}<"));
         assert!(!captioned("A") && !captioned("B"), "重なる2件は描かれない: {svg}");
@@ -3601,7 +3645,7 @@ mod tests {
             .into_iter()
             .map(|(min, max)| (min.x, min.y, max.x, max.y))
             .collect();
-        (sheet_to_svg(&sheet, &defs), boxes)
+        (sheet_to_svg(&sheet, &defs, &[]), boxes)
     }
 
     /// 3行に割れるキャプション (4文字×2+2文字)。
@@ -3767,7 +3811,7 @@ mod tests {
         note.leader_to = Some(target_id);
         sheet.entities.insert(target_id, target);
         sheet.entities.insert(note.id, Entity::Text(note));
-        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         let radii: Vec<f64> = svg
             .lines()
             .filter(|l| l.trim_start().starts_with("<circle "))

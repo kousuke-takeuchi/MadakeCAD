@@ -95,15 +95,17 @@ pub fn bom_rows(project: &Project) -> Vec<Vec<String>> {
     rows
 }
 
-/// 部品表末尾に足す電線集約行 (G9残)。プロジェクト全体の配線を電線品番ごとに合算し、
-/// 総使用長を「数量」欄へ m 単位・小数第2位までで書く。品番が引けない配線は
-/// [`BOM_WIRE_UNASSIGNED`]の1行にまとめる (勝手に品番を作らない)。
-/// 部品行の**後ろ**に付く (呼び出し元の[`bom_rows`])。
+/// 電線集約行のうち、電線品番が引けなかった配線をまとめる行の「型番/値」欄。
 pub const BOM_WIRE_UNASSIGNED: &str = "(未割当)";
 
 /// 電線集約行の「シンボル」欄に立てる印。回路のシンボルではなく配線の集約行であることを表す。
 pub const BOM_WIRE_KIND: &str = "電線";
 
+/// 部品表末尾に足す電線集約行 (G9残)。プロジェクト全体の配線を電線品番ごとに合算し、
+/// 総使用長を「数量」欄へ m 単位・小数第2位までで書く (電線品番凡例ブロック
+/// [`crate::wire_legend`] の使用長と同じ書式)。品番が引けない配線は
+/// [`BOM_WIRE_UNASSIGNED`]の1行にまとめる (勝手に品番を作らない)。
+/// 部品行の**後ろ**に付く (呼び出し元の[`bom_rows`])。列数は部品行と同じ5列のまま。
 fn wire_rollup_rows(project: &Project) -> Vec<Vec<String>> {
     let mut totals: BTreeMap<String, f64> = BTreeMap::new();
     let mut unassigned = 0.0_f64;

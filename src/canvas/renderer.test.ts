@@ -729,3 +729,97 @@ describe("renderSheet dots", () => {
     expect(rec.arcs[0].r).toBe(Math.max(2, JUNCTION_DOT_R_MM * vp.scale));
   });
 });
+
+describe("wire legend block drawing", () => {
+  /** 文字と外形矩形を記録するキャンバス。 */
+  function legendRecorder() {
+    const texts: { text: string; x: number; y: number }[] = [];
+    const rects: { x: number; y: number; w: number; h: number; style: string }[] = [];
+    const ctx = {
+      canvas: { width: 800, height: 600 },
+      save() {},
+      restore() {},
+      translate() {},
+      scale() {},
+      strokeStyle: "" as string,
+      fillStyle: "" as string,
+      lineWidth: 0,
+      font: "",
+      textAlign: "" as CanvasTextAlign,
+      beginPath() {},
+      moveTo() {},
+      lineTo() {},
+      closePath() {},
+      stroke() {},
+      fill() {},
+      fillRect() {},
+      arc() {},
+      setLineDash() {},
+      measureText: (t: string) => ({ width: t.length * 6 }),
+      strokeRect(x: number, y: number, w: number, h: number) {
+        rects.push({ x, y, w, h, style: ctx.strokeStyle });
+      },
+      fillText(text: string, x: number, y: number) {
+        texts.push({ text, x, y });
+      },
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, texts, rects };
+  }
+
+  /** 赤0.75sqの配線2本 (1.2m + 2.0m) と凡例ブロック1つのシート。 */
+  function legendSheet(): Sheet {
+    const wire = (id: string, length: number): Entity =>
+      ({
+        kind: "wire",
+        id,
+        points: [
+          { x: 10, y: 10 },
+          { x: 30, y: 10 },
+        ],
+        color: id === "w2" ? "赤" : "red",
+        sq: 0.75,
+        length_m: length,
+        part_no: null,
+        net: null,
+      }) as unknown as Entity;
+    return {
+      id: "s1",
+      name: "S1",
+      size: "A3",
+      orientation: "Landscape",
+      zone_cols: 4,
+      zone_rows: 6,
+      title_block: {},
+      revisions: [],
+      entities: {
+        w1: wire("w1", 1.2),
+        w2: wire("w2", 2.0),
+        l1: { kind: "wire_legend", id: "l1", at: { x: 100, y: 60 } } as unknown as Entity,
+      },
+    } as unknown as Sheet;
+  }
+
+  // ja: 凡例ブロックは列見出しと、シートの配線から導出した行 (色・線径・品番・使用長) を表として描く
+  it("draws the header row and the rows derived from the sheet's wires", () => {
+    const rec = legendRecorder();
+    const vp = new Viewport();
+    renderSheet(rec.ctx, legendSheet(), [], vp, {
+      selection: new Set(),
+      cursor: null,
+      wireParts: [{ part_no: "DEMO-R075", color: "赤", sq: 0.75, note: "" }],
+    });
+    const drawn = rec.texts.map((t) => t.text);
+    expect(drawn).toEqual(expect.arrayContaining(["線色", "sq", "電線品番", "使用長 m"]));
+    // red と 赤 は同じ電線なので1行にまとまり、使用長は合算されて小数第2位まで出る
+    expect(drawn).toEqual(expect.arrayContaining(["赤", "0.75", "DEMO-R075", "3.20"]));
+    expect(drawn.filter((t) => t === "赤")).toHaveLength(1);
+  });
+
+  // ja: 選択中の凡例ブロックは、外形の矩形を選択色で描く
+  it("outlines the legend block in the selection colour while it is selected", () => {
+    const rec = legendRecorder();
+    const vp = new Viewport();
+    renderSheet(rec.ctx, legendSheet(), [], vp, { selection: new Set(["l1"]), cursor: null });
+    expect(rec.rects.some((r) => r.style === theme.selection)).toBe(true);
+  });
+});

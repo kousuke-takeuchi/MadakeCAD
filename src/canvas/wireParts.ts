@@ -6,14 +6,15 @@
 //   線径は完全一致 (浮動小数の誤差まで)
 // - 同じ組み合わせが2行あれば先に書いた行が勝つ。無ければ空 (勝手に品番を作らない)
 import type { Project, WirePart } from "../ipc";
-import { colorJa } from "./wireNotes";
+import { colorDisplay } from "./wireNotes";
 
 /** 線径 (sq) の一致とみなす誤差。 */
 export const SQ_EPS = 1e-9;
 
 /** 線色の比較キー。空白を落として小文字化し、日本語の色名へそろえる。 */
 function colorKey(color: string): string {
-  return colorJa(color.trim().toLowerCase());
+  // 図面へ色名を印字する関数と同じなので、引き当てのキーと図面の表記は必ず一致する
+  return colorDisplay(color);
 }
 
 /** 線色+線径で電線品番表を引く (先に書いた行が勝つ)。 */

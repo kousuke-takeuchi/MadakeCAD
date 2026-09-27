@@ -65,7 +65,7 @@ fn main() {
         }
     }
 
-    let out = svg::sheet_to_svg(&sheet, &defs);
+    let out = svg::sheet_to_svg(&sheet, &defs, &[]);
     std::fs::write(&path, out).expect("書き込み");
     println!("wrote {path} ({} symbols)", defs.len());
 }

@@ -40,6 +40,15 @@ pub struct WireNote {
     pub align: NoteAlign,
 }
 
+/// 図面へ印字する線色名。前後の空白と英字の大小を無視して[`color_ja`]の日本語名へそろえる。
+///
+/// **図面に色名を書く箇所は全部これを通す**(配線注記・電線品番凡例)。電線品番表の引き当て
+/// ([`crate::wire_parts`])も同じ関数を比較キーに使うので、「表と引き当ては同じ色なのに
+/// 図面の表記だけ食い違う」「`red`と`赤`が別の行になる」が起きない。
+pub fn color_display(color: &str) -> String {
+    color_ja(&color.trim().to_lowercase()).to_string()
+}
+
 /// 線色名 → 図面に書く日本語の色名。未知の色名・`#`始まりの色はそのまま返す。
 pub fn color_ja(color: &str) -> &str {
     match color {
@@ -75,7 +84,7 @@ pub fn wire_note_text(wire: &Wire) -> Option<String> {
     }
     let color = wire.color.trim();
     if !color.is_empty() {
-        parts.push(color_ja(color).to_string());
+        parts.push(color_display(color));
     }
     if let Some(length) = wire.length_m.filter(|l| *l > 0.0) {
         parts.push(format!("{}m", num(length)));

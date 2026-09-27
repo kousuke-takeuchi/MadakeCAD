@@ -1,11 +1,15 @@
 // 電線品番凡例ブロック (G9残) の幾何計算。
 // Rust側 madake-core/src/wire_legend.rs と同じ規則で、画面とSVG/PDF出力の見た目を一致させる:
 //   - 中身は持たない。線色・sq・品番ごとに配線を集約し、使用長を合算した行を描画のたびに作る
-//   - 行は線色→線径の順に並ぶ
+//   - 線色は図面へ印字する名前へそろえてからまとめる (wireNotes.ts の colorDisplay)。
+//     同じシートの配線注記と同じ色名になり、`red`と`赤`が2行に割れない
+//   - 行は線色→線径→電線品番の順に並ぶ (線色+線径が同じでも品番が違えば別の行になるため)
 //   - 品番はワイヤ自身の指定 > 電線品番表 (wireParts.ts) の引き当ての順で決まる
+//   - 使用長は m 単位・小数第2位 (BOMの電線集約行と同じ書式)
 // 図面への反映は必ず Command 経由 (CLAUDE.md「アーキテクチャの絶対原則」)。
 
 import type { Command, Entity, Point, Sheet, Wire, WireLegend, WirePart } from "../ipc";
+import { colorDisplay } from "./wireNotes";
 import { findWirePart } from "./wireParts";
 
 /** 凡例ブロックの列見出し (`legendRows`と同じ並び)。 */
@@ -52,7 +56,8 @@ export function legendRows(sheet: Sheet, wireParts: WirePart[] | undefined): str
     { color: string; sq: string; sqValue: number; partNo: string; total: number }
   >();
   for (const w of wires(sheet)) {
-    const color = (w.color ?? "").trim();
+    // 図面へ印字する色名にそろえてからまとめる (配線注記と同じ表記。`red`と`赤`は同じ行)
+    const color = colorDisplay(w.color ?? "");
     const sqValue = w.sq ?? 0;
     const sq = fmtNum(sqValue);
     const own = (w.part_no ?? "").trim();
@@ -65,9 +70,9 @@ export function legendRows(sheet: Sheet, wireParts: WirePart[] | undefined): str
   // 線色→線径の順 (線径は文字列ではなく実際の数値で比較し、二桁以上のsqでも正しく並ぶ)
   return [...totals.values()]
     .sort((a, b) => a.color.localeCompare(b.color) || a.sqValue - b.sqValue || a.partNo.localeCompare(b.partNo))
-    // 使用長は合算なので、二進小数の誤差が桁となって出ないよう小数第2位で丸めてから整形する
-    // (0.4を8本足すと3.1999999999999997になる。丸めないとそれが図面に出る。Rust側と同じ規則)
-    .map((r) => [r.color, r.sq, r.partNo, fmtNum(Math.round(r.total * 100) / 100)]);
+    // 使用長は合算なので小数第2位で止める (BOMの電線集約行と同じ書式。Rust側と同じ規則)。
+    // 整形せずに書くと二進小数の誤差がそのまま出る (0.4を8本足すと3.1999999999999997)
+    .map((r) => [r.color, r.sq, r.partNo, r.total.toFixed(2)]);
 }
 
 /** 凡例ブロックの矩形。列見出しの1行＋本文の行数ぶんだけ下へ伸びる。 */

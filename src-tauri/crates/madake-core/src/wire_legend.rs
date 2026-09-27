@@ -10,7 +10,12 @@
 //! - 行は**そのシートの配線**を (線色, 線径sq, 電線品番) の組ごとにまとめ、使用長 (m) を
 //!   合算した1行にする。品番はワイヤリスト ([`crate::reports::wire_list_rows`]) と同じ規則
 //!   ([`crate::wire_parts::wire_part_number`]) で引き、表に無い組み合わせは空欄のまま
-//! - 行は**線色→線径**の順に並べる (同じ組み合わせは無いのでこれで一意に決まる)
+//! - 線色は**図面に印字する名前へそろえてから**まとめる ([`crate::wire_note::color_display`])。
+//!   同じシートの配線注記と同じ色名になり、`red`と`赤`が2行に割れない
+//! - 行は**線色→線径→電線品番**の順に並べる。線色+線径が同じでも、ワイヤ自身が持つ品番と
+//!   表から引いた品番が違えば別の行になるので、並び順を一意に決めるには品番まで要る
+//! - 使用長は**m単位・小数第2位**で書く (BOMの電線集約行 [`crate::reports::bom_rows`] と
+//!   同じ書式。合算値なので、丸めずに整形すると二進小数の誤差が桁となって図面に出る)
 //! - 配線が1本も無いシートでも、列見出しの1行だけは描く
 //! - ネットリスト・ERC・部品表・電線リストのどれにも出てこない (図形・ハーネス境界と同じ
 //!   扱い): 電気的な意味を持たない作図要素
@@ -53,7 +58,8 @@ pub fn legend_rows_with(sheet: &Sheet, wire_parts: &[WirePart]) -> Vec<Vec<Strin
     let mut totals: BTreeMap<(String, String, String), f64> = BTreeMap::new();
     let mut sq_values: BTreeMap<String, f64> = BTreeMap::new();
     for w in wires(sheet) {
-        let color = w.color.trim().to_string();
+        // 図面へ印字する色名にそろえてからまとめる (配線注記と同じ表記。`red`と`赤`は同じ行)
+        let color = crate::wire_note::color_display(&w.color);
         let sq_text = crate::reports::fmt_num(w.sq);
         sq_values.insert(sq_text.clone(), w.sq);
         let part_no = crate::wire_parts::wire_part_number_in(wire_parts, w).unwrap_or_default();
@@ -64,10 +70,10 @@ pub fn legend_rows_with(sheet: &Sheet, wire_parts: &[WirePart]) -> Vec<Vec<Strin
         .into_iter()
         .map(|((color, sq_text, part_no), total)| {
             let sq = sq_values.get(&sq_text).copied().unwrap_or(0.0);
-            // 使用長は合算なので、二進小数の誤差が桁となって出ないよう小数第2位で丸めてから
-            // 整形する (0.4を8本足すと3.1999999999999997になる。丸めないとそれが図面に出る)
-            let total = (total * 100.0).round() / 100.0;
-            (color, sq_text, sq, part_no, crate::reports::fmt_num(total))
+            // 使用長は合算なので小数第2位で止める。BOMの電線集約行と同じ書式で、
+            // 二進小数の誤差が桁となって図面に出ることもない
+            // (0.4を8本足すと3.1999999999999997。整形せずに書くとそれがそのまま出る)
+            (color, sq_text, sq, part_no, format!("{total:.2}"))
         })
         .collect();
     rows.sort_by(|a, b| {
@@ -123,6 +129,82 @@ mod tests {
         sheet
     }
 
+    /// 凡例ブロックを1つ置いた同じシート (「置く前」と「置いた後」を比べるための道具)。
+    fn sheet_and_sheet_with_legend() -> (ModelSheet, ModelSheet) {
+        let before = sheet_with(vec![
+            wire("red", 0.75, Some(1.2), Some("SAMPLE0001")),
+            wire("黒", 0.3, Some(0.4), None),
+        ]);
+        let mut after = before.clone();
+        let legend = Entity::WireLegend(WireLegend {
+            id: Uuid::new_v4(),
+            at: Point::new(5.0, 5.0),
+        });
+        after.entities.insert(legend.id(), legend);
+        (before, after)
+    }
+
+    /// The netlist of a sheet is the same before and after a legend block is placed on it: the block carries no electrical meaning.
+    /// 凡例ブロックを置いてもシートのネットリストは変わらない (電気的な意味を持たない作図要素だから)。
+    #[test]
+    fn a_legend_block_does_not_appear_in_the_netlist() {
+        let (before, after) = sheet_and_sheet_with_legend();
+        let nets_before = crate::netlist::extract_netlist(&before, &crate::sheet_symbol_defs(&before));
+        let nets_after = crate::netlist::extract_netlist(&after, &crate::sheet_symbol_defs(&after));
+        assert_eq!(nets_after.len(), nets_before.len());
+        let shape = |nets: &[crate::netlist::Net]| -> Vec<(String, usize, usize)> {
+            nets.iter()
+                .map(|n| (n.name.clone(), n.pins.len(), n.wire_ids.len()))
+                .collect()
+        };
+        assert_eq!(shape(&nets_after), shape(&nets_before), "ネットの中身まで同じ");
+    }
+
+    /// Placing a legend block raises no verification diagnostic of its own, and leaves the sheet's other diagnostics untouched.
+    /// 凡例ブロックを置いても、そのブロックについての検証指摘は出ず、他の指摘も増減しない。
+    #[test]
+    fn a_legend_block_raises_no_verification_diagnostic() {
+        let (before, after) = sheet_and_sheet_with_legend();
+        let diags_before = crate::verify::verify_sheet(&before, &crate::sheet_symbol_defs(&before));
+        let diags_after = crate::verify::verify_sheet(&after, &crate::sheet_symbol_defs(&after));
+        assert_eq!(diags_after.len(), diags_before.len());
+        let legend_id = legends(&after).next().expect("凡例").id;
+        assert!(
+            !diags_after.iter().any(|d| d.entity_ids.contains(&legend_id)),
+            "凡例ブロックを名指しする指摘は無い"
+        );
+    }
+
+    /// The BOM is the same before and after a legend block is placed: it is not a component and it adds no wire length.
+    /// 凡例ブロックを置いても部品表は変わらない (部品でもなく、電線の使用長も増やさない)。
+    #[test]
+    fn a_legend_block_does_not_change_the_bom() {
+        let (before, after) = sheet_and_sheet_with_legend();
+        let mut p_before = Project::new("t");
+        p_before.sheets = vec![before];
+        let mut p_after = Project::new("t");
+        p_after.sheets = vec![after];
+        assert_eq!(
+            crate::reports::bom_rows(&p_after),
+            crate::reports::bom_rows(&p_before)
+        );
+    }
+
+    /// The wire list is the same before and after a legend block is placed: the block is not a conductor.
+    /// 凡例ブロックを置いても電線リストは変わらない (導体ではないから)。
+    #[test]
+    fn a_legend_block_does_not_change_the_wire_list() {
+        let (before, after) = sheet_and_sheet_with_legend();
+        let mut p_before = Project::new("t");
+        p_before.sheets = vec![before];
+        let mut p_after = Project::new("t");
+        p_after.sheets = vec![after];
+        assert_eq!(
+            crate::reports::wire_list_rows(&p_after),
+            crate::reports::wire_list_rows(&p_before)
+        );
+    }
+
     /// A sheet with no wires at all still gets a header-only legend block (no data rows).
     /// 配線が1本も無いシートでも、凡例ブロックは列見出しだけの表として出る。
     #[test]
@@ -151,9 +233,43 @@ mod tests {
             "水色".to_string(),
             "0.3".to_string(),
             "SAMPLE0001".to_string(),
-            "4".to_string(),
+            "4.00".to_string(),
         ]];
         assert_eq!(rows, expected);
+    }
+
+    /// The same colour written in English and in Japanese is one stock item, so it makes a single row whose length is the sum of both.
+    /// 英語名と日本語名で書かれた同じ線色は同じ電線なので、1行にまとまり使用長も合算される。
+    #[test]
+    fn a_colour_written_in_english_and_in_japanese_makes_one_row() {
+        let project = Project::new("t");
+        let sheet = sheet_with(vec![
+            wire("red", 0.75, Some(1.2), None),
+            wire("赤", 0.75, Some(2.0), None),
+            wire("RED", 0.75, Some(0.8), None),
+        ]);
+        let rows = legend_rows(&project, &sheet);
+        assert_eq!(rows.len(), 1, "3本とも同じ電線なので1行");
+        assert_eq!(rows[0][0], "赤", "色名は図面に印字するのと同じ表記");
+        assert_eq!(rows[0][3], "4.00");
+    }
+
+    /// The colour printed in the legend is the same name the wire's own annotation prints on the sheet.
+    /// 凡例に出る色名は、同じシートの配線注記が印字する色名と同じになる。
+    #[test]
+    fn the_legend_prints_the_same_colour_name_as_the_wire_annotation() {
+        let project = Project::new("t");
+        let w = wire("light_blue", 0.5, Some(1.0), None);
+        let Entity::Wire(inner) = &w else { unreachable!() };
+        let note = crate::wire_note::wire_note_text(inner).expect("注記");
+        let sheet = sheet_with(vec![w.clone()]);
+        let rows = legend_rows(&project, &sheet);
+        assert_eq!(rows[0][0], "水色");
+        assert!(
+            note.contains(&rows[0][0]),
+            "配線注記 {note:?} が凡例の色名 {:?} を含む",
+            rows[0][0]
+        );
     }
 
     /// Rows are sorted by colour, then by gauge within the same colour.
@@ -188,7 +304,7 @@ mod tests {
         let sheet = sheet_with((0..8).map(|_| wire("水色", 0.3, Some(0.4), None)).collect());
         let rows = legend_rows(&project, &sheet);
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0][3], "3.2", "使用長は小数第2位までに丸めて表示する");
+        assert_eq!(rows[0][3], "3.20", "使用長は小数第2位まで (BOMの電線集約行と同じ書式)");
     }
 
     /// A wire whose colour and gauge are not in the wire-part table shows a blank part number, instead of an invented one.

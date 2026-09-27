@@ -9,6 +9,7 @@
 import type { Command, Entity, Macro, MacroValueSet, Point, Sheet, SymbolDef } from "../ipc";
 import { drawHarness, drawSymbol } from "./renderer";
 import { theme, wireColorScreen } from "./theme";
+import { LEGEND_COL_W, LEGEND_ROW_H } from "./wireLegend";
 import type { Viewport } from "./viewport";
 
 /** 既定バリアントのキー。`variants`に無くても必ず選べる (本体の`commands`)。 */
@@ -180,6 +181,17 @@ export function drawMacroGhost(
         ctx.font = `${Math.max(9, 2.5 * vp.scale)}px monospace`;
         ctx.textAlign = "left";
         ctx.fillText(e.kind === "text" ? e.text : e.name, s.x, s.y);
+        break;
+      }
+      case "wire_legend": {
+        // 中身 (行) は置いた先のシートの配線から決まるのでゴーストでは分からない。
+        // 表がどこにどれだけの幅で載るかは見せたいので、列見出し1行ぶんの外形だけ描く
+        const w = LEGEND_COL_W.reduce((a2, b2) => a2 + b2, 0);
+        const tl = vp.toScreen(e.at);
+        const br = vp.toScreen({ x: e.at.x + w, y: e.at.y + LEGEND_ROW_H });
+        ctx.strokeStyle = theme.selection;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
         break;
       }
     }

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Entity, Sheet, Wire, WireLegend, WirePart } from "../ipc";
 import { LEGEND_COL_W, LEGEND_ROW_H, legendRect, legendRows, wireLegendAddCommand, wireLegends } from "./wireLegend";
+import { wireNoteText } from "./wireNotes";
 
 function wire(color: string, sq: number, length_m: number | null, part_no: string | null): Wire {
   return {
@@ -50,7 +51,7 @@ describe("wire legend block geometry", () => {
       { ...wire("水色", 0.3, 1.5, "SAMPLE0001"), kind: "wire" },
       { ...wire("水色", 0.3, 2.5, "SAMPLE0001"), kind: "wire" },
     ]);
-    expect(legendRows(sheet, [])).toEqual([["水色", "0.3", "SAMPLE0001", "4"]]);
+    expect(legendRows(sheet, [])).toEqual([["水色", "0.3", "SAMPLE0001", "4.00"]]);
   });
 
   // ja: 行は線色順、同じ線色の中では線径順に並ぶ。
@@ -76,7 +77,29 @@ describe("wire legend block geometry", () => {
     );
     const rows = legendRows(sheet, []);
     expect(rows).toHaveLength(1);
-    expect(rows[0][3]).toBe("3.2");
+    expect(rows[0][3]).toBe("3.20");
+  });
+
+  // ja: 英語名と日本語名で書かれた同じ線色は同じ電線なので、1行にまとまり使用長も合算される。
+  it("merges a colour written in English and in Japanese into one row", () => {
+    const sheet = sheetWith([
+      { ...wire("red", 0.75, 1.2, null), kind: "wire" },
+      { ...wire("赤", 0.75, 2.0, null), kind: "wire" },
+      { ...wire("RED", 0.75, 0.8, null), kind: "wire" },
+    ]);
+    const rows = legendRows(sheet, []);
+    expect(rows).toHaveLength(1);
+    expect(rows[0][0]).toBe("赤");
+    expect(rows[0][3]).toBe("4.00");
+  });
+
+  // ja: 凡例に出る色名は、同じシートの配線注記が印字する色名と同じになる。
+  it("prints the same colour name as the wire annotation on the same sheet", () => {
+    const w = wire("light_blue", 0.5, 1.0, null);
+    const sheet = sheetWith([{ ...w, kind: "wire" }]);
+    const rows = legendRows(sheet, []);
+    expect(rows[0][0]).toBe("水色");
+    expect(wireNoteText(w)).toContain(rows[0][0]);
   });
 
   // ja: 電線品番表に無い組み合わせの配線は品番欄が空欄のままで、勝手に品番が作られることはない。
