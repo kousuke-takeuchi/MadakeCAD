@@ -312,6 +312,54 @@ fn run_verification(
 }
 
 #[tauri::command]
+fn import_dxf(
+    state: State<AppState>,
+    path: String,
+    wire_layers: Option<Vec<String>>,
+) -> Result<serde_json::Value, String> {
+    let options = madake_core::dxf::DxfImportOptions {
+        wire_layers: wire_layers.unwrap_or_default(),
+    };
+    let (patch, report) = madake_mcp::agent::import_dxf_with_chat(
+        &state.doc,
+        &state.agent,
+        std::path::Path::new(&path),
+        &options,
+    )?;
+    Ok(serde_json::json!({ "patch": patch, "report": report }))
+}
+
+#[tauri::command]
+fn export_dxf(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+    path: String,
+) -> Result<(), String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let sheet = engine
+        .project()
+        .sheet(sheet_id)
+        .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+    let dxf = madake_core::dxf::sheet_to_dxf(sheet, &sheet_symbol_defs(sheet));
+    std::fs::write(&path, dxf).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_kicad(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+    path: String,
+) -> Result<(), String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let sheet = engine
+        .project()
+        .sheet(sheet_id)
+        .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+    let sch = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
+    std::fs::write(&path, sch).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn export_pdf(
     state: State<AppState>,
     sheet_id: madake_core::SheetId,
@@ -777,8 +825,11 @@ pub fn run() {
             search_parts,
             simulate_op,
             import_kicad,
+            import_dxf,
             export_svg,
             export_pdf,
+            export_dxf,
+            export_kicad,
             export_pdf_book,
             export_report,
             search_project,

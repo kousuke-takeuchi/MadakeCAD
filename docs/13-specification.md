@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1248 specification clauses** across 5 areas.
+**1280 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -44,6 +44,22 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An empty batch changes nothing at all: no history entry and no new document revision. <sub>`empty_batch_changes_nothing`</sub>
 - Reverting a range with no edits of that origin reports "nothing to do" instead of touching the drawing. <sub>`revert_range_without_matching_edits_changes_nothing`</sub>
 
+### DXF interop (AutoCAD Electrical / EPLAN)
+
+- The exported DXF is an AutoCAD 2000 (AC1015) file in millimetres with HEADER, TABLES, BLOCKS, ENTITIES and OBJECTS sections and unique entity handles. <sub>`export_writes_a_well_formed_ac1015_file`</sub>
+- Wires are written as one LINE per segment on the WIRES layer with the Y axis flipped to DXF's upward convention. <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
+- Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with rotation, a negative X scale for mirroring, and TAG1/CAT/DESC1/RATING1/TERMnn attributes. <sub>`symbols_become_block_inserts_with_attributes`</sub>
+- Wire numbers go to the WIRENO layer, net labels to LABELS, notes to MISC, and a harness becomes a closed dashed polyline on HARNESS with its name. <sub>`texts_and_harness_go_to_their_layers`</sub>
+- Non-ASCII text is written as \U+XXXX escapes and decoded back; MTEXT paragraph breaks and formatting codes are handled on read. <sub>`unicode_is_escaped_and_decoded`</sub>
+- Exporting a sheet to DXF and importing it back keeps the paper, symbols (id, position, rotation, mirror, reference, value, attributes), wires, junctions, wire numbers, labels, notes and harness names. <sub>`export_then_import_round_trips_the_sheet`</sub>
+- Importing an AutoCAD Electrical style DXF reads lines on wire layers (WIRES, _MULTI_WIRE_*) as wires, assigns WIRENO texts to the nearest wire, keeps other lines and unknown blocks as skipped items, and decodes text. <sub>`imports_acade_style_wires_and_reports_unknown_blocks`</sub>
+- When the import options name the wire layers explicitly, only those layers become wires. <sub>`explicit_wire_layers_limit_what_becomes_a_wire`</sub>
+- A DXF without any wire layer reads every line as a wire and says so in a warning; a WIRENO text with no wire nearby becomes a note. <sub>`without_wire_layers_all_lines_become_wires`</sub>
+- A DXF in inches is converted to millimetres, and the paper size is chosen as the smallest ISO A size that fits the drawing extents. <sub>`inch_files_are_scaled_and_paper_fits_extents`</sub>
+- A block insert rotated by an angle that is not a multiple of 90 degrees is placed at 0 degrees with a warning. <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>
+- A file without an ENTITIES section is rejected as not a DXF, and a group code that is not a number is a syntax error with its line number. <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>
+- Symbol block graphics are written in local coordinates with Y flipped; arcs keep their sweep because the clockwise paper-space direction becomes counter-clockwise in DXF. <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
+
 ### Geometry & coordinates
 
 - snapped() rounds a coordinate to the nearest grid pitch (default 2.5 mm), so everything lands on the pin grid. <sub>`snapped_rounds_to_grid_pitch`</sub>
@@ -69,7 +85,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Loading a missing file returns an error instead of panicking. <sub>`loading_missing_file_is_an_error`</sub>
 - A project file saved before the PLC assignment table existed still opens: it gets an empty table and is brought up to the current format version. <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
 
-### KiCad import
+### KiCad import / export
 
 - KiCad import converts paper size, title block, wires, junctions, labels (power symbols become net labels) and text. <sub>`imports_paper_title_block_and_geometry`</sub>
 - Known lib_ids map to our symbols (Device:R -> resistor, Conn_01x03 -> connector_3p) keeping designator/value/rotation/mirror; unknown symbols are skipped and itemized in the report. <sub>`maps_symbols_and_reports_skipped`</sub>
@@ -78,6 +94,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Escaped quotes/newlines and multibyte (Japanese) text inside strings parse correctly. <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name) iterates every child list with the given head symbol. <sub>`children_iterates_all_matches`</sub>
 - Unbalanced parentheses and unterminated strings are reported as syntax errors with a position. <sub>`syntax_errors_are_reported`</sub>
+- Exporting a sheet to .kicad_sch and importing it back keeps paper, title block, symbols (id, reference, value, rotation, mirror), wires, junctions, labels and text. <sub>`export_then_import_round_trips_the_sheet`</sub>
+- A wire drawn as a polyline is exported as one two-point KiCad wire per segment. <sub>`polyline_wires_are_split_into_segments`</sub>
+- Every symbol used on the sheet is embedded once in lib_symbols with its graphics and pins, so KiCad opens the file without MadakeCAD libraries. <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
+- A wire number becomes a KiCad label on the numbered net, so the net keeps its name in KiCad and on re-import. <sub>`wire_numbers_become_labels`</sub>
+- A harness boundary is exported as a dashed closed polyline plus a text with its name. <sub>`harness_becomes_dashed_polyline_with_name`</sub>
+- Quotes, backslashes and newlines in text are escaped so the exported file parses and reads back unchanged. <sub>`strings_are_escaped_and_read_back`</sub>
+- Importing a schematic exported by MadakeCAD resolves "MadakeCAD:<id>" library ids directly, including parametric terminal blocks and connectors. <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
 
 ### Circuit macros
 
@@ -513,6 +536,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - POST /api/v1/import/kicad replaces the open project with the converted schematic and returns a patch plus an import report. <sub>`import_kicad_replaces_project_and_reports`</sub>
 - POST /api/v1/simulate/op solves the DC operating point and returns net voltages and component currents (requires ngspice; skipped otherwise). <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf writes a valid PDF file to the requested path. <sub>`export_pdf_writes_pdf_file`</sub>
+- POST /api/v1/export/dxf and /export/kicad write the sheet as DXF and .kicad_sch, and POST /api/v1/import/dxf reads the DXF back into a project with an import report. <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
 - POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports. <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - The terminal endpoints list the terminal blocks of the drawing and return one block's chart and check result. <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report writes one report as CSV or as framed PDF pages, and refuses CSV for the graphical terminal diagram. <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
@@ -912,6 +936,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - --json prints raw pretty-printed JSON for piping into jq and similar tools. <sub>`json_flag_emits_raw_json`</sub>
 - madake netlist forwards the --sheet option to the API. <sub>`netlist_forwards_sheet_option`</sub>
 - madake export forwards kind, output path and optional sheet to the API. <sub>`export_forwards_kind_path_and_sheet`</sub>
+- madake export dxf / kicad write one sheet through the DXF and KiCad endpoints (sheet selectable). <sub>`export_dxf_and_kicad_forward_to_their_endpoints`</sub>
+- madake open with a .dxf file imports it through /import/dxf, passing --wire-layer, and prints the import summary; --wire-layer is rejected for other files. <sub>`open_dxf_imports_with_wire_layers`</sub>
 - madake exec reads a JSON file containing a Command array and posts it to /commands. <sub>`exec_posts_command_array_from_file`</sub>
 - madake exec rejects JSON that is not an array, with a clear message. <sub>`exec_rejects_non_array_json`</sub>
 - A missing input file is reported as a file error, not a panic. <sub>`exec_reports_missing_file`</sub>
@@ -1208,8 +1234,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - cancelling the open dialog loads nothing <sub>`file menu: 新規と開く`</sub>
 - open asks before discarding unsaved changes; cancel shows no file dialog <sub>`file menu: 新規と開く`</sub>
 - choosing a .kicad_sch imports it as a KiCad schematic and logs the counts <sub>`file menu: 新規と開く`</sub>
+- choosing a .dxf imports it as a DXF drawing and logs the counts and warnings <sub>`file menu: 新規と開く`</sub>
+- the import buttons open the dialog with that format's filter only and confirm unsaved changes first <sub>`file menu: 新規と開く`</sub>
 - a recent file opens without a dialog <sub>`file menu: 新規と開く`</sub>
 - a recent file that fails to open is dropped from the list with the reason logged <sub>`file menu: 新規と開く`</sub>
+- exporting DXF asks for a path defaulting to <sheet>.dxf and writes the active sheet <sub>`file menu: シートの書き出し`</sub>
+- exporting KiCad defaults to <sheet>.kicad_sch, and SVG/PDF keep their extension filters <sub>`file menu: シートの書き出し`</sub>
+- cancelling the save dialog exports nothing <sub>`file menu: シートの書き出し`</sub>
+- without an open sheet the export logs a hint and shows no dialog <sub>`file menu: シートの書き出し`</sub>
+- a failed export is logged with its reason <sub>`file menu: シートの書き出し`</sub>
 
 ### Tidy metrics (crossings / overlaps / grid)
 
@@ -1399,12 +1432,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - an edit that arrives while saving still counts as unsaved afterwards <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - a new project starts with no file and no unsaved changes <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - importing a KiCad schematic leaves no file and counts as unsaved <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- importing a DXF drawing leaves no file and counts as unsaved <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - recent files are read from storage at startup <sub>`projectFile store: 最近使ったファイル`</sub>
 - opened and saved files go to the front of the list and are persisted <sub>`projectFile store: 最近使ったファイル`</sub>
 - reopening a file moves it to the front instead of duplicating it <sub>`projectFile store: 最近使ったファイル`</sub>
 - the list is capped, dropping the oldest entries <sub>`projectFile store: 最近使ったファイル`</sub>
 - removing a file drops it from the list and from storage <sub>`projectFile store: 最近使ったファイル`</sub>
 - fileNameOf returns the last path segment for both separators <sub>`projectFile helpers`</sub>
+- isDxfPath recognises the .dxf extension regardless of case <sub>`projectFile helpers`</sub>
 - isKicadPath recognises the .kicad_sch extension regardless of case <sub>`projectFile helpers`</sub>
 
 ### provider

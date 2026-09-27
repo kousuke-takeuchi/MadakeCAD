@@ -100,10 +100,13 @@ pub enum Commands {
         /// 保存先 .mdkproj
         path: String,
     },
-    /// プロジェクトを読み込む (.mdkproj / .kicad_sch)
+    /// プロジェクトを読み込む (.mdkproj / .kicad_sch / .dxf)
     Open {
-        /// 読み込むファイル (.kicad_schはKiCadインポート)
+        /// 読み込むファイル (.kicad_schはKiCadインポート、.dxfはDXFインポート)
         path: String,
+        /// DXFで配線とみなすレイヤ名 (カンマ区切り。省略時は名前にWIREを含むレイヤ)
+        #[arg(long, value_delimiter = ',', value_name = "LAYER")]
+        wire_layer: Vec<String>,
     },
     /// 線番をネット単位で自動採番する (renumber_wiresコマンド。undo可)
     Renumber {
@@ -296,13 +299,25 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
             }
             Ok(format::saved(&result))
         }
-        Commands::Open { path } => {
+        Commands::Open { path, wire_layer } => {
             if path.ends_with(".kicad_sch") {
                 let result = api.import_kicad(path)?;
                 if cli.json {
                     return Ok(pretty(&result));
                 }
-                return Ok(format::kicad_imported(&result, path));
+                return Ok(format::imported("KiCad回路図", &result, path));
+            }
+            if path.to_lowercase().ends_with(".dxf") {
+                let result = api.import_dxf(path, wire_layer)?;
+                if cli.json {
+                    return Ok(pretty(&result));
+                }
+                return Ok(format::imported("DXF", &result, path));
+            }
+            if !wire_layer.is_empty() {
+                return Err(CliError::Usage(
+                    "--wire-layer は .dxf の読み込みでのみ使えます".into(),
+                ));
             }
             let patch = api.open(path)?;
             if cli.json {
@@ -446,6 +461,10 @@ mod tests {
         fn import_kicad(&self, path: &str) -> Result<Value, CliError> {
             self.record(format!("import_kicad({path})"));
             Ok(json!({"patch": {"revision": 1}, "report": {"symbols": 0, "wires": 0, "skipped": [], "warnings": []}}))
+        }
+        fn import_dxf(&self, path: &str, wire_layers: &[String]) -> Result<Value, CliError> {
+            self.record(format!("import_dxf({path}, {wire_layers:?})"));
+            Ok(json!({"patch": {"revision": 1}, "report": {"symbols": 1, "wires": 2, "skipped": ["HCR1 x1"], "warnings": []}}))
         }
         fn open(&self, path: &str) -> Result<Value, CliError> {
             self.record(format!("open({path})"));
@@ -870,6 +889,52 @@ mod tests {
         .unwrap();
         assert_eq!(api.calls(), vec![r#"export(Svg, /tmp/a.svg, Some("s1"))"#]);
         assert!(out.contains("/tmp/a.svg"));
+    }
+
+    /// madake export dxf / kicad write one sheet through the DXF and KiCad endpoints (sheet selectable).
+    /// madake export dxf / kicadはDXF・KiCadのエンドポイントでシート1枚を書き出す(シート指定可)。
+    #[test]
+    fn export_dxf_and_kicad_forward_to_their_endpoints() {
+        let api = FakeApi::default();
+        let out = run(&parse(&["madake", "export", "dxf", "/tmp/a.dxf"]), &api).unwrap();
+        assert!(out.contains("DXF") && out.contains("/tmp/a.dxf"), "{out}");
+        run(
+            &parse(&["madake", "export", "kicad", "/tmp/a.kicad_sch", "--sheet", "s1"]),
+            &api,
+        )
+        .unwrap();
+        assert_eq!(
+            api.calls(),
+            vec![
+                r#"export(Dxf, /tmp/a.dxf, None)"#,
+                r#"export(Kicad, /tmp/a.kicad_sch, Some("s1"))"#
+            ]
+        );
+        assert_eq!(ExportKind::Dxf.path(), "/export/dxf");
+        assert_eq!(ExportKind::Kicad.path(), "/export/kicad");
+    }
+
+    /// madake open with a .dxf file imports it through /import/dxf, passing --wire-layer, and prints the import summary; --wire-layer is rejected for other files.
+    /// madake openに.dxfを渡すと/import/dxfで読み込み(--wire-layerを引き渡す)、変換結果の要約を表示する。他のファイルで--wire-layerを付けるとエラー。
+    #[test]
+    fn open_dxf_imports_with_wire_layers() {
+        let api = FakeApi::default();
+        let out = run(
+            &parse(&["madake", "open", "/tmp/panel.DXF", "--wire-layer", "WIRES,_MULTI_WIRE_1"]),
+            &api,
+        )
+        .unwrap();
+        assert_eq!(
+            api.calls(),
+            vec![r#"import_dxf(/tmp/panel.DXF, ["WIRES", "_MULTI_WIRE_1"])"#]
+        );
+        assert!(out.contains("DXF") && out.contains("HCR1 x1"), "{out}");
+        let err = run(
+            &parse(&["madake", "open", "/tmp/a.mdkproj", "--wire-layer", "WIRES"]),
+            &api,
+        )
+        .unwrap_err();
+        assert!(matches!(err, CliError::Usage(_)));
     }
 
     /// madake exec reads a JSON file containing a Command array and posts it to /commands.

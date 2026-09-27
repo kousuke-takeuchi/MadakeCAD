@@ -49,6 +49,11 @@ export function isKicadPath(path: string): boolean {
   return path.toLowerCase().endsWith(".kicad_sch");
 }
 
+/** `.dxf`ならAutoCAD Electrical / EPLAN の中間形式として読み込む (プロジェクトファイルではない)。 */
+export function isDxfPath(path: string): boolean {
+  return path.toLowerCase().endsWith(".dxf");
+}
+
 interface ProjectFileState {
   /** いま開いている`.mdkproj`のパス。新規・KiCad読込直後はnull (保存先未定)。 */
   path: string | null;
@@ -122,6 +127,18 @@ export const useProjectFileStore = defineStore("projectFile", {
      */
     async importKicad(path: string): Promise<KicadImportResult> {
       const result = await ipc.importKicad(path);
+      this.applyReplacement(result.patch);
+      this.path = null;
+      this.addRecent(path);
+      return result;
+    },
+
+    /**
+     * DXF (AutoCAD Electrical / EPLAN の中間形式) を読み込む。KiCadと同じく保存先は無く、
+     * 読み込んだ内容は未保存の編集として扱う。
+     */
+    async importDxf(path: string): Promise<KicadImportResult> {
+      const result = await ipc.importDxf(path);
       this.applyReplacement(result.patch);
       this.path = null;
       this.addRecent(path);

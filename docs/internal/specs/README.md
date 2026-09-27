@@ -15,6 +15,7 @@
 | [m4-industrial-core.md](m4-industrial-core.md) | M4 産業CAD中核機能 | ベンチマーク(ACADE/EPLAN)・端子台チャート・回路マクロ・PLC I/O・帳票群・シンボルエディタ |
 | [m5-freecad.md](m5-freecad.md) | M5 機械CAD連携 | FreeCADアドオンWB・部品対応付け・電線長書き戻し・盤レイアウト |
 | [m6-oss.md](m6-oss.md) | M6 OSS公開 | ライセンス・公開準備・クロスプラットフォーム・コミュニティ |
+| [interop.md](interop.md) | 横断(実装済み) | KiCad / EPLAN / AutoCAD Electricalとの連携。KiCad入出力・DXF入出力(ACADE/EPLANの中間形式)、形式の境界と未決事項 |
 | [i18n.md](i18n.md) | 横断(基盤は即時) | 多言語対応。必須=英語(既定)+日本語、計画=中国語/スペイン語/フランス語/ドイツ語 |
 
 ## 各仕様書の構成

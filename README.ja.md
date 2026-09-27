@@ -71,7 +71,7 @@ npm run tauri dev
 | 05 | [電線管理](docs/05-wire-management.ja.md) | 線色・線径・品番・ハーネス・端子台チャート |
 | 06 | [検証・シミュレーション](docs/06-verification-simulation.ja.md) | ERC・電気チェック・DC解析 |
 | 07 | [部品データベース](docs/07-parts-database.ja.md) | 部品マスタ・定格・購入先 |
-| 08 | [インポート/エクスポート](docs/08-import-export.ja.md) | KiCadインポート・ファイル形式 |
+| 08 | [インポート/エクスポート](docs/08-import-export.ja.md) | KiCad入出力・AutoCAD Electrical / EPLANとのDXF連携・ファイル形式 |
 | 09 | [AIアシスタント](docs/09-ai-assistant.ja.md) | チャット作図・規格知識・検証ループ・テンプレート・ターン巻き戻し・整えループ・並列会話・プロバイダ設定 |
 | 10 | [自動化・API](docs/10-automation-api.ja.md) | MCPツール・REST API・CLI |
 | 11 | [機械CAD連携](docs/11-mechanical-integration.ja.md) | FreeCAD連携 |

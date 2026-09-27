@@ -280,19 +280,31 @@
     "newFailedLog": "NEW  Could not create a new project: {message}",
     "openLog": "OPEN  Opened {path}",
     "openFailedLog": "OPEN  Could not open {path}: {message}",
-    "importLog": "IMPORT  Imported the KiCad schematic: {symbols} symbols, {wires} wires, {labels} labels{skipped}. Check connections with Verify",
+    "importLog": "IMPORT  Imported {what}: {symbols} symbols, {wires} wires, {labels} labels{skipped}. Check connections with Verify",
     "importSkipped": " ({count} kinds skipped)",
     "saveLog": "SAVE  Saved to {path}",
     "saveFailedLog": "SAVE  Could not save to {path}: {message}",
     "exportLog": "EXPORT  Wrote {what} to {path}",
-    "exportSvg": "SVG",
-    "exportPdf": "PDF",
     "exportBom": "the BOM",
     "exportWireList": "the wire list",
     "bomFile": "bom.csv",
     "wireListFile": "wire-list.csv",
     "promptSave": "Absolute path to save to:",
-    "promptOpen": "Absolute path of the file to open:"
+    "promptOpen": "Absolute path of the file to open:",
+    "dxfFilter": "DXF drawing (AutoCAD Electrical / EPLAN)",
+    "noSheetLog": "EXPORT  No sheet is open",
+    "importWarningLog": "IMPORT  ⚠ {warning}",
+    "exportFailedLog": "EXPORT  Could not write {what} to {path}: {message}",
+    "importKind": {
+      "kicad": "the KiCad schematic",
+      "dxf": "the DXF drawing"
+    },
+    "exportKind": {
+      "svg": "the SVG",
+      "pdf": "the PDF",
+      "dxf": "the DXF drawing",
+      "kicad": "the KiCad schematic"
+    }
   },
   "templates": {
     "title": "Start from a template",
@@ -657,5 +669,19 @@
   "leftPanel": {
     "project": "Project",
     "agent": "Agent"
+  },
+  "io": {
+    "importGroup": "Import",
+    "exportGroup": "Export",
+    "reportGroup": "Reports",
+    "open": "Open...",
+    "importKicad": "KiCad schematic...",
+    "importDxf": "DXF (ACADE/EPLAN)...",
+    "exportDxf": "DXF",
+    "exportKicad": "KiCad schematic...",
+    "exportSvg": "SVG...",
+    "exportPdf": "PDF...",
+    "exportBom": "BOM CSV...",
+    "exportWireList": "Wire list CSV..."
   }
 }

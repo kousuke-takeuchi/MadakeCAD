@@ -147,6 +147,7 @@ describe("file menu: 新規と開く", () => {
     expect(dialogs.pickOpen).toHaveBeenCalledWith([
       { name: "MadakeCAD project", extensions: ["mdkproj"] },
       { name: "KiCad schematic", extensions: ["kicad_sch"] },
+      { name: "DXF drawing (AutoCAD Electrical / EPLAN)", extensions: ["dxf"] },
     ]);
     expect(ipc.loadProject).toHaveBeenCalledWith("/work/other.mdkproj");
     expect(useProjectFileStore().path).toBe("/work/other.mdkproj");
@@ -182,6 +183,43 @@ describe("file menu: 新規と開く", () => {
     expect(log).toContain("2 kinds skipped");
   });
 
+  // ja: .dxfを選ぶとDXF図面として読み込み、件数と警告をログに出す
+  it("choosing a .dxf imports it as a DXF drawing and logs the counts and warnings", async () => {
+    vi.spyOn(ipc, "importDxf").mockResolvedValue({
+      patch: replaced(10, "panel"),
+      report: { symbols: 1, wires: 4, junctions: 0, labels: 0, texts: 0, skipped: [], warnings: ["unit was inches"] },
+    });
+    const dialogs = fakeDialogs({ open: "/work/panel.dxf" });
+    expect(await useFileActions(dialogs).openProject()).toBe(true);
+    expect(ipc.importDxf).toHaveBeenCalledWith("/work/panel.dxf");
+    expect(dialogs.pickOpen).toHaveBeenCalledWith([
+      { name: "MadakeCAD project", extensions: ["mdkproj"] },
+      { name: "KiCad schematic", extensions: ["kicad_sch"] },
+      { name: "DXF drawing (AutoCAD Electrical / EPLAN)", extensions: ["dxf"] },
+    ]);
+    const log = useUiStore().commandHistory.join("\n");
+    expect(log).toContain("Imported the DXF drawing: 1 symbols, 4 wires");
+    expect(log).toContain("unit was inches");
+    expect(useProjectFileStore().path).toBeNull();
+  });
+
+  // ja: 「読み込み」ボタンは選んだ形式のフィルタだけで開くダイアログを出し、未保存の編集があれば先に確認する
+  it("the import buttons open the dialog with that format's filter only and confirm unsaved changes first", async () => {
+    vi.spyOn(ipc, "importDxf").mockResolvedValue({
+      patch: replaced(10, "panel"),
+      report: { symbols: 0, wires: 0, junctions: 0, labels: 0, texts: 0, skipped: [], warnings: [] },
+    });
+    const dialogs = fakeDialogs({ open: "/work/panel.dxf" });
+    expect(await useFileActions(dialogs).importFile("dxf")).toBe(true);
+    expect(dialogs.pickOpen).toHaveBeenCalledWith([
+      { name: "DXF drawing (AutoCAD Electrical / EPLAN)", extensions: ["dxf"] },
+    ]);
+    edit(11);
+    const cancel = fakeDialogs({ open: "/work/x.kicad_sch", discard: false });
+    expect(await useFileActions(cancel).importFile("kicad")).toBe(false);
+    expect(cancel.pickOpen).not.toHaveBeenCalled();
+  });
+
   // ja: 最近使ったファイルはダイアログ無しで開く
   it("a recent file opens without a dialog", async () => {
     const dialogs = fakeDialogs({});
@@ -199,5 +237,74 @@ describe("file menu: 新規と開く", () => {
     expect(file.recent).not.toContain("/work/gone.mdkproj");
     expect(useUiStore().lastMessage).toContain("no such file");
     expect(useDocumentStore().project?.name).toBe("panel");
+  });
+});
+
+describe("file menu: シートの書き出し", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setActivePinia(createPinia());
+    const doc = useDocumentStore();
+    doc.project = project();
+    doc.project.sheets = [
+      { id: "s1", name: "Sheet1", size: "A3", orientation: "Landscape", zone_cols: 4, zone_rows: 6, title_block: {}, revisions: [], entities: {} },
+    ];
+    doc.activeSheetId = "s1";
+    doc.revision = 1;
+    useProjectFileStore().attach(memory);
+  });
+
+  // ja: DXF書き出しは「<シート名>.dxf」を既定にDXFフィルタで保存先を聞き、表示中のシートを書き出す
+  it("exporting DXF asks for a path defaulting to <sheet>.dxf and writes the active sheet", async () => {
+    vi.spyOn(ipc, "exportDxf").mockResolvedValue();
+    const dialogs = fakeDialogs({ save: "/out/panel.dxf" });
+    expect(await useFileActions(dialogs).exportSheet("dxf")).toBe(true);
+    expect(dialogs.pickSave).toHaveBeenCalledWith("Sheet1.dxf", [
+      { name: "DXF drawing (AutoCAD Electrical / EPLAN)", extensions: ["dxf"] },
+    ]);
+    expect(ipc.exportDxf).toHaveBeenCalledWith("s1", "/out/panel.dxf");
+    expect(useUiStore().lastMessage).toContain("/out/panel.dxf");
+  });
+
+  // ja: KiCad書き出しは「<シート名>.kicad_sch」を既定にし、SVG/PDFは従来どおり拡張子のフィルタで保存する
+  it("exporting KiCad defaults to <sheet>.kicad_sch, and SVG/PDF keep their extension filters", async () => {
+    vi.spyOn(ipc, "exportKicad").mockResolvedValue();
+    vi.spyOn(ipc, "exportSvg").mockResolvedValue();
+    vi.spyOn(ipc, "exportPdf").mockResolvedValue();
+    const dialogs = fakeDialogs({ save: "/out/x" });
+    const files = useFileActions(dialogs);
+    await files.exportSheet("kicad");
+    expect(dialogs.pickSave).toHaveBeenLastCalledWith("Sheet1.kicad_sch", [
+      { name: "KiCad schematic", extensions: ["kicad_sch"] },
+    ]);
+    expect(ipc.exportKicad).toHaveBeenCalledWith("s1", "/out/x");
+    await files.exportSvg();
+    expect(dialogs.pickSave).toHaveBeenLastCalledWith("Sheet1.svg", [{ name: "SVG", extensions: ["svg"] }]);
+    expect(ipc.exportSvg).toHaveBeenCalledWith("s1", "/out/x");
+    await files.exportPdf();
+    expect(ipc.exportPdf).toHaveBeenCalledWith("s1", "/out/x");
+  });
+
+  // ja: 保存ダイアログをキャンセルすると何も書き出さない
+  it("cancelling the save dialog exports nothing", async () => {
+    vi.spyOn(ipc, "exportDxf").mockResolvedValue();
+    expect(await useFileActions(fakeDialogs({ save: null })).exportSheet("dxf")).toBe(false);
+    expect(ipc.exportDxf).not.toHaveBeenCalled();
+  });
+
+  // ja: シートが無ければダイアログを出さずにログで案内する
+  it("without an open sheet the export logs a hint and shows no dialog", async () => {
+    useDocumentStore().project!.sheets = [];
+    const dialogs = fakeDialogs({ save: "/out/x.dxf" });
+    expect(await useFileActions(dialogs).exportSheet("dxf")).toBe(false);
+    expect(dialogs.pickSave).not.toHaveBeenCalled();
+    expect(useUiStore().lastMessage).toContain("No sheet");
+  });
+
+  // ja: 書き出しに失敗したら理由をログに出す
+  it("a failed export is logged with its reason", async () => {
+    vi.spyOn(ipc, "exportKicad").mockRejectedValue(new Error("permission denied"));
+    expect(await useFileActions(fakeDialogs({ save: "/out/x.kicad_sch" })).exportSheet("kicad")).toBe(false);
+    expect(useUiStore().lastMessage).toContain("permission denied");
   });
 });
