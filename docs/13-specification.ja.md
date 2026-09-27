@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2153仕様項目**。
+全5領域・**2156仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -916,7 +916,7 @@
 - 線径・線色・電線長がそろったワイヤには「0.75sq 白 0.4m」という注記が付く。 <sub>`note_shows_gauge_colour_and_length`</sub>
 - 欠けている属性は注記から省かれ、長さの無いワイヤは「0.75sq 白」と書かれる。 <sub>`note_omits_missing_attributes`</sub>
 - 線径も色も長さも無いワイヤには、空の注記ではなく注記そのものが付かない。 <sub>`wire_without_attributes_has_no_note`</sub>
-- 変換表に無い色名はそのまま書かれるので、入力した情報が消えることはない。 <sub>`unknown_colour_names_are_printed_unchanged`</sub>
+- 色名は英字の大小と前後の空白を無視して照合される。知っている色は表示用の名前で、知らない色は入力のまま (ただし小文字にそろえて) 書かれる。 <sub>`colour_names_are_matched_ignoring_capitals_and_space`</sub>
 - 横向きのワイヤの注記は配線の下に置かれ、上に出る線番とは反対側になる。 <sub>`horizontal_wire_note_sits_below_the_wire`</sub>
 - 縦向きのワイヤの注記は配線の右に置かれ、左に出る線番とは反対側になる。 <sub>`vertical_wire_note_sits_right_of_the_wire`</sub>
 - 注記はワイヤ1本ごとに付く(ネットごとに1回だけ描かれる線番とは違う)。 <sub>`each_wire_gets_its_own_note`</sub>
@@ -2040,7 +2040,7 @@
 - 線径・線色・電線長がそろったワイヤには「0.75sq 白 0.4m」という注記が付く <sub>`wireNoteText`</sub>
 - 欠けている属性は注記から省かれ、長さの無いワイヤは「0.75sq 白」と書かれる <sub>`wireNoteText`</sub>
 - 線径も色も長さも無いワイヤには、空の注記ではなく注記そのものが付かない <sub>`wireNoteText`</sub>
-- 変換表に無い色名はそのまま書かれるので、入力した情報が消えることはない <sub>`wireNoteText`</sub>
+- 色名は英字の大小と前後の空白を無視して照合される。知っている色は表示用の名前で、知らない色は入力のまま (ただし小文字にそろえて) 書かれる <sub>`wireNoteText`</sub>
 - 横向きのワイヤの注記は配線の下に置かれ、上に出る線番とは反対側になる <sub>`wireNoteLabels`</sub>
 - 縦向きのワイヤの注記は配線の右に置かれ、左に出る線番とは反対側になる <sub>`wireNoteLabels`</sub>
 - 注記はワイヤ1本ごとに付く(ネットごとに1回だけ描かれる線番とは違う) <sub>`wireNoteLabels`</sub>
@@ -2102,6 +2102,12 @@
 - 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる <sub>`G13 device cross-reference`</sub>
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる <sub>`G13 device cross-reference`</sub>
 - 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない <sub>`G13 device cross-reference`</sub>
+
+### entityKindLabels
+
+- 図面に置ける全てのエンティティ種別に「種類」行のラベルがある (電線品番凡例ブロックも盤の凡例表も含む)。 <sub>`entity kind labels`</sub>
+- ラベルが引くi18nキーは英語・日本語の両方に実体があり、空文字にならない。 <sub>`entity kind labels`</sub>
+- 電線品番凡例ブロックを選ぶと、種別の名前が出る (英語・日本語それぞれの短い名前)。 <sub>`entity kind labels`</sub>
 
 ### propertyCommands
 

@@ -15,6 +15,7 @@ import { legendRows } from "../canvas/panel";
 import { legendRows as wireLegendRows } from "../canvas/wireLegend";
 import { autoWirePartNo } from "../canvas/wireParts";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
+import { entityKindLabels } from "./entityKindLabels";
 import type { Entity, TextAnchor, TextColorToken } from "../ipc";
 import { FUNCTION_LABEL_ATTR, TEXT_ANCHORS, TEXT_COLOR_TOKENS } from "../canvas/textStyle";
 import { COIL_SYMBOL_ID, isDeviceBlock } from "../canvas/relayXref";
@@ -396,19 +397,8 @@ function editBlockPins() {
   if (e?.kind === "symbol") blockEditor.startEdit(e);
 }
 
-const kindLabel = computed<Record<string, string>>(() => ({
-  wire: "配線",
-  symbol: "シンボル",
-  junction: "ジャンクション",
-  net_label: "ネットラベル",
-  text: "テキスト",
-  harness: t("harness.kindLabel"),
-  shape: t("shapes.kindLabel"),
-  panel_outline: t("panel.prop.kind.panel_outline"),
-  din_rail: t("panel.prop.kind.din_rail"),
-  duct: t("panel.prop.kind.duct"),
-  footprint: t("panel.prop.kind.footprint"),
-}));
+// 種別ラベルは`entityKindLabels`が正 (全種類そろっているかを型とテストで守る)
+const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
 </script>
 
 <template>

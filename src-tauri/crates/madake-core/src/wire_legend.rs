@@ -129,11 +129,27 @@ mod tests {
         sheet
     }
 
+    /// 抵抗器1個 (どこにも繋がっていないので、検証は「未接続のピン」を1件出す)。
+    fn lone_resistor() -> Entity {
+        Entity::Symbol(crate::model::SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "resistor".into(),
+            at: Point::new(50.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "R1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        })
+    }
+
     /// 凡例ブロックを1つ置いた同じシート (「置く前」と「置いた後」を比べるための道具)。
+    /// 「他の指摘が増減しない」ことを確かめられるよう、置く前の時点で指摘が1件出る図面にしてある。
     fn sheet_and_sheet_with_legend() -> (ModelSheet, ModelSheet) {
         let before = sheet_with(vec![
             wire("red", 0.75, Some(1.2), Some("SAMPLE0001")),
             wire("黒", 0.3, Some(0.4), None),
+            lone_resistor(),
         ]);
         let mut after = before.clone();
         let legend = Entity::WireLegend(WireLegend {
@@ -167,7 +183,8 @@ mod tests {
         let (before, after) = sheet_and_sheet_with_legend();
         let diags_before = crate::verify::verify_sheet(&before, &crate::sheet_symbol_defs(&before));
         let diags_after = crate::verify::verify_sheet(&after, &crate::sheet_symbol_defs(&after));
-        assert_eq!(diags_after.len(), diags_before.len());
+        assert_eq!(diags_before.len(), 1, "置く前から指摘が1件ある図面で比べている");
+        assert_eq!(diags_after.len(), 1, "凡例ブロックを置いても指摘は増えも減りもしない");
         let legend_id = legends(&after).next().expect("凡例").id;
         assert!(
             !diags_after.iter().any(|d| d.entity_ids.contains(&legend_id)),

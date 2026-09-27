@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2153 specification clauses** across 5 areas.
+**2156 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -916,7 +916,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A wire that has a gauge, a colour and a cut length is annotated "0.75sq 白 0.4m" on the drawing. <sub>`note_shows_gauge_colour_and_length`</sub>
 - A missing attribute is simply left out of the note, so a wire without a length reads "0.75sq 白". <sub>`note_omits_missing_attributes`</sub>
 - A wire with no gauge, no colour and no length gets no note at all instead of an empty one. <sub>`wire_without_attributes_has_no_note`</sub>
-- A colour name the drawing does not know is printed as it was typed, so nothing is lost. <sub>`unknown_colour_names_are_printed_unchanged`</sub>
+- Colour names are matched ignoring capitals and surrounding space: a known colour prints its display name, and one the drawing does not know prints as typed but lower-cased. <sub>`colour_names_are_matched_ignoring_capitals_and_space`</sub>
 - The note of a horizontal wire sits below the wire, on the opposite side from its wire number. <sub>`horizontal_wire_note_sits_below_the_wire`</sub>
 - The note of a vertical wire sits to the right of the wire, on the opposite side from its wire number. <sub>`vertical_wire_note_sits_right_of_the_wire`</sub>
 - Every wire gets its own note, unlike the wire number which is drawn once per net. <sub>`each_wire_gets_its_own_note`</sub>
@@ -2040,7 +2040,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - annotates a wire with its gauge, colour and cut length <sub>`wireNoteText`</sub>
 - leaves out attributes the wire does not have <sub>`wireNoteText`</sub>
 - gives a wire with no attributes no note at all <sub>`wireNoteText`</sub>
-- prints an unknown colour name exactly as it was typed <sub>`wireNoteText`</sub>
+- matches colour names ignoring capitals and surrounding space <sub>`wireNoteText`</sub>
 - places the note of a horizontal wire below the wire, opposite its wire number <sub>`wireNoteLabels`</sub>
 - places the note of a vertical wire to the right of the wire, opposite its wire number <sub>`wireNoteLabels`</sub>
 - annotates every wire, unlike the wire number which is drawn once per net <sub>`wireNoteLabels`</sub>
@@ -2102,6 +2102,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - lists every other sheet for a designator on three sheets <sub>`G13 device cross-reference`</sub>
 - places the text right of the symbol outline, level with the designator label <sub>`G13 device cross-reference`</sub>
 - clears a designator label wider than the symbol itself <sub>`G13 device cross-reference`</sub>
+
+### entityKindLabels
+
+- has a label for every entity kind that can be placed on a sheet <sub>`entity kind labels`</sub>
+- resolves every label through keys that exist in both languages <sub>`entity kind labels`</sub>
+- names the wire legend block in both languages <sub>`entity kind labels`</sub>
 
 ### propertyCommands
 

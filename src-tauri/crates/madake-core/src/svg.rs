@@ -2801,7 +2801,8 @@ mod tests {
         let svg = sheet_to_svg(
             &panel_sheet_with(Some(1), Some(Point::new(300.0, 200.0))),
             &builtin_symbols(),
-         &[],);
+            &[],
+        );
         assert!(svg.contains(">参照記号<"), "列見出し: {svg}");
         assert!(svg.contains(">K1<"), "参照記号: {svg}");
         assert!(svg.contains(">MDK-RLY-24V<"), "型番: {svg}");

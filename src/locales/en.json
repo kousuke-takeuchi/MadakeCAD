@@ -236,6 +236,7 @@
   },
   "wireLegend": {
     "ribbonButton": "Wire legend",
+    "kindLabel": "Wire legend",
     "ribbonHint": "Places a wire part-number legend block: colour, gauge, part number and total length, derived from this sheet's wires every time it is drawn. It never reaches the netlist, the checks or the parts list.",
     "startLog": "Wire legend: click on the schematic sheet to place the block (Esc to cancel)",
     "placedLog": "Wire legend: placed the legend block (undo with Cmd+Z)",

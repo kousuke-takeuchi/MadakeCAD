@@ -50,10 +50,16 @@ describe("wireNoteText", () => {
     expect(wireNoteText(asWire(wire("w", [[0, 0], [10, 0]], "", 0, null)))).toBe("");
   });
 
-  // ja: 変換表に無い色名はそのまま書かれるので、入力した情報が消えることはない
-  it("prints an unknown colour name exactly as it was typed", () => {
+  // ja: 色名は英字の大小と前後の空白を無視して照合される。知っている色は表示用の名前で、知らない色は入力のまま (ただし小文字にそろえて) 書かれる
+  it("matches colour names ignoring capitals and surrounding space", () => {
+    const note = (color: string) => wireNoteText(asWire(wire("w", [[0, 0], [10, 0]], color, 0.3, null)));
+    expect(note("白")).toBe("0.3sq 白");
+    expect(note("Red")).toBe("0.3sq 赤");
+    expect(note("  red  ")).toBe("0.3sq 赤");
+    expect(note("Turquoise")).toBe("0.3sq turquoise");
+    expect(note("#FF0000")).toBe("0.3sq #ff0000");
+    // 変換表そのものは入力をそのまま引く (そろえるのは colorDisplay の役目)
     expect(colorJa("turquoise")).toBe("turquoise");
-    expect(colorJa("白")).toBe("白");
     expect(colorJa("light_blue")).toBe("水色");
   });
 });

@@ -178,14 +178,22 @@ mod tests {
         assert_eq!(wire_note_text(&w), None);
     }
 
-    /// A colour name the drawing does not know is printed as it was typed, so nothing is lost.
-    /// 変換表に無い色名はそのまま書かれるので、入力した情報が消えることはない。
+    /// Colour names are matched ignoring capitals and surrounding space: a known colour prints its display name, and one the drawing does not know prints as typed but lower-cased.
+    /// 色名は英字の大小と前後の空白を無視して照合される。知っている色は表示用の名前で、知らない色は入力のまま (ただし小文字にそろえて) 書かれる。
     #[test]
-    fn unknown_colour_names_are_printed_unchanged() {
-        let w = wire(&[(0.0, 0.0), (10.0, 0.0)], "turquoise", 0.3, None);
-        assert_eq!(wire_note_text(&w).as_deref(), Some("0.3sq turquoise"));
-        let w = wire(&[(0.0, 0.0), (10.0, 0.0)], "白", 0.3, None);
-        assert_eq!(wire_note_text(&w).as_deref(), Some("0.3sq 白"), "日本語の色名はそのまま");
+    fn colour_names_are_matched_ignoring_capitals_and_space() {
+        let note = |c: &str| {
+            wire_note_text(&wire(&[(0.0, 0.0), (10.0, 0.0)], c, 0.3, None)).unwrap_or_default()
+        };
+        assert_eq!(note("白"), "0.3sq 白", "日本語の色名はそのまま");
+        assert_eq!(note("Red"), "0.3sq 赤", "大文字で書いても同じ色として表示名になる");
+        assert_eq!(note("  red  "), "0.3sq 赤", "前後の空白は無視する");
+        assert_eq!(
+            note("Turquoise"),
+            "0.3sq turquoise",
+            "変換表に無い色名は情報を落とさず、小文字にそろえて書く"
+        );
+        assert_eq!(note("#FF0000"), "0.3sq #ff0000", "色コードも同じ規則で小文字になる");
     }
 
     /// The note of a horizontal wire sits below the wire, on the opposite side from its wire number.
