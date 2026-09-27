@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2280仕様項目**。
+全6領域・**2295仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -103,7 +103,8 @@
 - 消したプロジェクト番号をundoすると、元の番号がそのまま戻る。 <sub>`undoing_a_cleared_project_number_brings_it_back`</sub>
 - コマンドからプロジェクト番号の欄を省くと、ほかの欄を変えても既にある番号はそのまま残る。 <sub>`omitting_the_project_number_leaves_it_untouched`</sub>
 - FreeCAD対応付けを登録するとentity idをキーに保存され、再登録で置き換わり、解除で消える。各操作はundoで直前の一覧に戻る。 <sub>`mech_links_are_upserted_removed_and_undone`</sub>
-- 計測した電線長の書き戻しは、各配線の長さを設定して出所を「FreeCAD計測」にする1回の編集になる。変わらない配線は飛ばし、存在しない配線はエラーになる。 <sub>`wire_lengths_write_back_with_their_source`</sub>
+- 計測した電線長の書き戻しは、各配線の長さを設定して出所を「FreeCAD計測」にする1回の編集になる。何も変わらない書き戻しはundoの段を作らない。 <sub>`wire_lengths_write_back_with_their_source`</sub>
+- シートに無い配線が混ざった書き戻しは何も変えない。同じ一括分の他の配線も元のままで、undoの段もできない。 <sub>`wire_lengths_write_back_is_all_or_nothing`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 
@@ -1137,6 +1138,8 @@
 - エンジンが拒否したコマンドは、黙って200で返るのではなく、理由と何番目のコマンドが落ちたかを添えたHTTP 400で返る。 <sub>`a_refused_command_returns_400_with_the_reason_and_the_command_index`</sub>
 - 極数の上限を超えた極数可変シンボルも同じように拒否され、使える範囲がメッセージに書かれる。 <sub>`a_pole_count_beyond_the_limit_is_refused_over_the_api`</sub>
 - 正しいコマンド列はこれまでどおり200で、コマンドごとのpatchが返る。 <sub>`a_valid_command_list_still_succeeds`</sub>
+- 一括実行(`?batch=true`)を指定すると、コマンド列全体が1回の編集になる。patchは1件返り、undo一発で全部が元に戻る。 <sub>`a_batch_command_list_is_one_undo_step`</sub>
+- 一括実行の最後のコマンドが拒否されると何も適用されない。図面は手つかずで、返答は適用0件と伝える。 <sub>`a_refused_batch_applies_nothing`</sub>
 - 電線品番表のCSVを投げるとプロジェクトの線色+線径の表が埋まり、品番を持たないワイヤでも電線リストに品番が出る。 <sub>`importing_a_wire_part_csv_fills_the_part_number_column_of_the_wire_list`</sub>
 - 読めないCSVは400で拒否され、表は元のままになる。 <sub>`a_malformed_wire_part_csv_is_refused_and_changes_nothing`</sub>
 
@@ -2150,6 +2153,12 @@
 - ラベルが引くi18nキーは英語・日本語の両方に実体があり、空文字にならない。 <sub>`entity kind labels`</sub>
 - 電線品番凡例ブロックを選ぶと、種別の名前が出る (英語・日本語それぞれの短い名前)。 <sub>`entity kind labels`</sub>
 
+### FreeCAD対応付けの表示 (プロパティパネル)
+
+- 配置は「(120, 45.5, 0) mm / 90°」の形で、FreeCADアドオンのパネルと同じ文面になる。 <sub>`mechLink`</sub>
+- 計算で出た端数 (45.500000000000004 のような値) は有効6桁に丸めて表示する。 <sub>`mechLink`</sub>
+- 未同期の配置は空文字になり、「3D対応付け」行はオブジェクト名だけを出す。 <sub>`mechLink`</sub>
+
 ### propertyCommands
 
 - 線番を書き換えて確定するとset_wire_numbersコマンドが1件だけ組み立てられる(undoで戻せる) <sub>`wireNumberCommand`</sub>
@@ -2722,6 +2731,8 @@
 - 接続確認とプロジェクトのスナップショットはJSONを解釈した辞書で返る。 <sub>`test_health_and_project_are_decoded_from_json`</sub>
 - ネットリストと部品の要求は、シートid・検索語・カテゴリをクエリパラメータで渡す。 <sub>`test_netlist_and_parts_pass_their_filters_as_query_parameters`</sub>
 - コマンドはJSON配列として送られ、コマンドごとにpatchが1つ返る(全ての書き込みがMadakeCADのCommandエンジンを通る)。 <sub>`test_commands_are_posted_as_a_json_array_and_return_one_patch_each`</sub>
+- batch指定で送るとコマンド配列全体を1回の編集として実行させる(?batch=true)ので、パネルの1操作はMadakeCADでundo1回で戻る。 <sub>`test_a_batch_post_asks_madakecad_for_a_single_undo_step`</sub>
+- 読み取り中に切れたストリーム(送信途中の終了・ソケットのリセット・無音)は、ポートと再接続の案内が入った文面で報告され、生のソケットエラーは出さない。 <sub>`test_errors_while_reading_the_event_stream_become_readable_link_errors`</sub>
 - 接続拒否・HTTPエラー・不正なJSONはいずれも、原因が読める文面のLinkErrorになる。 <sub>`test_errors_are_reported_as_link_errors_with_a_readable_message`</sub>
 - イベントストリームはpatchごとに("patch", {revision, ops})を返し、複数行のdataは結合し、keep-aliveのコメント行は読み飛ばす。 <sub>`test_events_yield_patches_from_the_sse_stream`</sub>
 - イベント名の無い行は"message"イベントになり、dataは空行で確定し、末尾の空行が無いイベントも届く。 <sub>`test_parse_sse_defaults_the_event_name_and_dispatches_on_blank_lines`</sub>
@@ -2731,6 +2742,8 @@
 - patchは前回より新しいrevisionのときだけ受け入れられ、重複や古いpatchは無視される。 <sub>`test_only_newer_revisions_are_accepted`</sub>
 - 表示中シートの要素が変わったとき、またはシートの追加・削除・改名やプロジェクト置換のときにパネルは再読込し、別シートの編集では再読込しない。 <sub>`test_refresh_is_needed_for_the_shown_sheet_and_structural_changes`</sub>
 - シートをまだ選んでいない間は、どの要素の変更でも再読込して最初の表示が最新になるようにする。 <sub>`test_with_no_sheet_shown_yet_any_entity_change_reloads`</sub>
+- MadakeCAD側で3D対応付けを追加・置換・undoすると、シート表示中でもパネルを再読込するので、対応付け列・配置列に消えた対応付けが残らない。 <sub>`test_a_change_to_the_freecad_links_reloads_whatever_sheet_is_shown`</sub>
+- opの範囲はsheet_idか持っているsheetのidで決まり、シートを示さないopはプロジェクト全体として常に再読込する(新しい全体opを取りこぼさない)。 <sub>`test_an_op_that_names_no_sheet_counts_as_project_wide`</sub>
 - ポート設定は1〜65535の整数を保持し、それ以外(文字列・0・大きすぎる値)は既定の9310へ戻る。 <sub>`test_port_setting_accepts_valid_ports_and_falls_back_to_the_default`</sub>
 
 ### 部品対応付け・電線長書き戻し
@@ -2739,9 +2752,11 @@
 - 配線リストは配線ごとに1行で、ネット/線番・現在の長さ・長さの出所・対応付け済みの経路オブジェクトを持つ。 <sub>`test_wire_rows_show_net_length_source_and_linked_route`</sub>
 - STEP/IGES/BREPはシェイプとして挿入、.FCStdはドキュメントとして取り込み、それ以外は挿入できない。 <sub>`test_model_kind_recognises_shape_files_and_freecad_documents`</sub>
 - 対応付けはentity id・FreeCADドキュメントのパス・オブジェクト名・同期時刻を持つset_mech_linkコマンドを送り、解除はremove_mech_linkを送る。 <sub>`test_link_commands_carry_the_entity_id_document_path_object_name_and_time`</sub>
+- 対応付けをやり直しても、すでにFreeCADから同期済みの配置は保たれるので、モデルの挿入や再リンクで盤レイアウトの位置が捨てられない。 <sub>`test_relinking_keeps_the_placement_freecad_already_synced`</sub>
 - 経路オブジェクトはmadake_idで配線と突き合わせ、長さはmmからm(1mm単位)へ換算し、配線でないオブジェクトは無視する。 <sub>`test_measured_route_lengths_are_converted_to_metres_and_matched_to_wires`</sub>
 - 書き戻しはシートごとに1つのset_wire_lengthsコマンドで、各項目はm単位の長さと出所"freecad"を持つ(MadakeCADが手入力の上書きを警告できる)。 <sub>`test_write_back_is_one_command_per_sheet_with_the_freecad_source`</sub>
 - 計測時に経路オブジェクトを配線の対応付けとして登録するが、すでに同じオブジェクトに対応付いている配線は登録し直さない。 <sub>`test_routes_are_linked_only_when_not_already_linked_to_that_object`</sub>
+- 配線の経路オブジェクトを別のものに付け替えても、その配線に同期済みの配置は保たれるので、計測でFreeCADがマスタのジオメトリが消えない。 <sub>`test_relinking_a_route_to_another_object_keeps_its_synced_placement`</sub>
 
 ### プロジェクト概要・ネットリスト表示
 
@@ -2756,7 +2771,10 @@
 - 部品が対応付けられていないネットや、対応付け先のオブジェクトがFreeCADドキュメントに無いネットにはスタブができない。 <sub>`test_parts_without_a_link_or_not_in_the_document_produce_no_stub`</sub>
 - 1ネットに対応付け済み部品が3つあると名前順に2区間の鎖になり、ネットの配線へ順に割り当てる。余った配線にはスタブを作らず、配線が足りなければ余った区間は捨てる。 <sub>`test_a_net_with_three_parts_is_chained_and_segments_follow_the_wire_ids`</sub>
 - すでに経路オブジェクトのある配線は飛ばすので、スタブ生成を再実行しても重複しない。 <sub>`test_rerunning_skips_wires_that_already_have_a_route_object`</sub>
+- 両端の部品が同じ位置にあるスタブは線にできないので、利用者へ報告する側へ分け、残りのスタブは作る。 <sub>`test_stubs_between_parts_at_the_same_position_are_reported_instead_of_drawn`</sub>
+- 両端が1/1000mmより近ければ同じ点として扱い(FreeCADが線を作れない)、それより離れていれば線を作る。 <sub>`test_ends_a_thousandth_of_a_millimetre_apart_still_count_as_the_same_point`</sub>
 - ネットのハイライトは、対応付け済み部品と経路の各オブジェクトを1回ずつ選び、未対応付けのピンは無視する。 <sub>`test_highlighting_a_net_selects_its_linked_parts_and_routes_once_each`</sub>
 - 配置の同期はset_mech_linkで基点をmm(1µm単位)・回転を度で送り、既存の対応付け情報は保つ。 <sub>`test_placement_command_carries_the_base_in_mm_and_the_rotation_in_degrees`</sub>
 - 配置の同期はドキュメントにある対応付け済みオブジェクトごとに1コマンド送り、保存済みの配置と同じものは飛ばす。 <sub>`test_sync_placements_writes_only_linked_objects_whose_placement_changed`</sub>
+- Z軸まわりの回転は軸の向きの符号つきで度で保存し、別の軸に傾いた部品は盤の回転を持たないので、その角度として保存せず報告する。 <sub>`test_only_a_rotation_about_the_z_axis_is_stored_as_a_panel_rotation`</sub>
 

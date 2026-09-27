@@ -15,7 +15,7 @@ Claude Code connects automatically via this repository's `.mcp.json`.
 ### Link API (REST + SSE, for external tools)
 `127.0.0.1:9310/api/v1` — plain JSON REST used by the CLI, browser-based UI verification, and (future) the FreeCAD add-on:
 - Read: `/project`, `/symbols` (+`/symbols/user`), `/frame-templates`, `/panel/unplaced`, `/netlist`, `/verify`, `/search`, `/devices`, `/parts`, `/wire-parts`, `/terminals`, `/terminals/chart`, `/terminals/check`, `/plc/modules`
-- Write: `/commands` (Command array), `/undo`, `/redo`, `/save`, `/load`, `/import/kicad`, `/import/dxf`, `/simulate/op`, `/symbols/user/{save,delete}`, `/symbols/duplicate`, `/macros/{build,save,apply,apply-inline}`, `/templates/apply`, `/variants/{start,finish}`, `/export/{svg,pdf,dxf,kicad,pdf-book,report,bom,wire-list}`, parts CRUD
+- Write: `/commands` (Command array; `?batch=true` runs the whole array as **one** edit = one undo step, and applies nothing at all if a command is refused), `/undo`, `/redo`, `/save`, `/load`, `/import/kicad`, `/import/dxf`, `/simulate/op`, `/symbols/user/{save,delete}`, `/symbols/duplicate`, `/macros/{build,save,apply,apply-inline}`, `/templates/apply`, `/variants/{start,finish}`, `/export/{svg,pdf,dxf,kicad,pdf-book,report,bom,wire-list}`, parts CRUD
 - Live updates: `GET /events` (SSE patch stream)
 - Local-origin guard: requests from non-local web origins are rejected
 

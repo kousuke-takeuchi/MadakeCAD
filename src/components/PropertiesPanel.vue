@@ -16,6 +16,7 @@ import { legendRows as wireLegendRows } from "../canvas/wireLegend";
 import { autoWirePartNo } from "../canvas/wireParts";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import { entityKindLabels } from "./entityKindLabels";
+import { mechLinkText as formatMechLinkText } from "./mechLink";
 import type { Entity, TextAnchor, TextColorToken } from "../ipc";
 import { FUNCTION_LABEL_ATTR, TEXT_ANCHORS, TEXT_COLOR_TOKENS } from "../canvas/textStyle";
 import { COIL_SYMBOL_ID, isDeviceBlock } from "../canvas/relayXref";
@@ -130,13 +131,7 @@ const mechLink = computed(() => {
 });
 
 /** 「3D対応付け」行の文面: オブジェクト名と、同期済みなら配置 (mm / deg)。 */
-const mechLinkText = computed(() => {
-  const link = mechLink.value;
-  if (!link) return "";
-  const p = link.placement;
-  if (!p) return link.object_name;
-  return `${link.object_name} @ (${p.x_mm}, ${p.y_mm}, ${p.z_mm}) mm / ${p.rotation_deg}°`;
-});
+const mechLinkText = computed(() => formatMechLinkText(mechLink.value));
 
 /** 選択中のハーネスが囲んでいる電線の本数 (幾何学的な内包で決まる)。 */
 /**

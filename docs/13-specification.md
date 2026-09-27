@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2280 specification clauses** across 6 areas.
+**2295 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -103,7 +103,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Undoing a cleared project number brings the previous number back exactly as it was. <sub>`undoing_a_cleared_project_number_brings_it_back`</sub>
 - Leaving the project number out of the command leaves an existing number untouched, even while other fields change. <sub>`omitting_the_project_number_leaves_it_untouched`</sub>
 - Registering a FreeCAD link stores it under the entity id, registering again replaces it, removing it takes it away, and each step undoes back to the previous list. <sub>`mech_links_are_upserted_removed_and_undone`</sub>
-- Writing measured wire lengths back sets each wire's length and marks it as measured by FreeCAD in one undo step; unchanged wires are skipped and an unknown wire is an error. <sub>`wire_lengths_write_back_with_their_source`</sub>
+- Writing measured wire lengths back sets each wire's length and marks it as measured by FreeCAD in one undo step; a write-back that changes nothing costs no undo step at all. <sub>`wire_lengths_write_back_with_their_source`</sub>
+- A write-back naming a wire that is not on the sheet changes nothing: the other wires of the same batch keep their lengths and no undo step is created. <sub>`wire_lengths_write_back_is_all_or_nothing`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 
@@ -1137,6 +1138,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A command the engine refuses comes back as HTTP 400 saying what went wrong and which command in the list failed, instead of a silent 200. <sub>`a_refused_command_returns_400_with_the_reason_and_the_command_index`</sub>
 - A parametric symbol asked for beyond its pole limit is refused the same way, with a message that names the usable range. <sub>`a_pole_count_beyond_the_limit_is_refused_over_the_api`</sub>
 - A valid command list still returns 200 with one patch per command. <sub>`a_valid_command_list_still_succeeds`</sub>
+- Asking for a batch (`?batch=true`) runs the whole command list as a single edit, so one patch comes back and one undo takes all of it away again. <sub>`a_batch_command_list_is_one_undo_step`</sub>
+- A batch whose last command is refused applies nothing at all: the drawing is untouched and the reply says zero commands were applied. <sub>`a_refused_batch_applies_nothing`</sub>
 - Posting a wire-part CSV fills the project's colour+gauge table, and the wire list then prints the part number of a wire that has none of its own. <sub>`importing_a_wire_part_csv_fills_the_part_number_column_of_the_wire_list`</sub>
 - A CSV that cannot be read is refused with 400 and the table is left exactly as it was. <sub>`a_malformed_wire_part_csv_is_refused_and_changes_nothing`</sub>
 
@@ -2150,6 +2153,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - resolves every label through keys that exist in both languages <sub>`entity kind labels`</sub>
 - names the wire legend block in both languages <sub>`entity kind labels`</sub>
 
+### FreeCAD link display (properties panel)
+
+- prints a placement as (x, y, z) mm / angle°, the same text as the FreeCAD panel <sub>`mechLink`</sub>
+- rounds computed fractions to six significant digits instead of showing 45.500000000000004 <sub>`mechLink`</sub>
+- shows only the object name until a placement has been synced <sub>`mechLink`</sub>
+
 ### propertyCommands
 
 - builds a single set_wire_numbers command for an edited wire number <sub>`wireNumberCommand`</sub>
@@ -2722,6 +2731,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The connection check and the project snapshot come back as decoded JSON. <sub>`test_health_and_project_are_decoded_from_json`</sub>
 - Netlist and parts requests pass the sheet id, search text and category as query parameters. <sub>`test_netlist_and_parts_pass_their_filters_as_query_parameters`</sub>
 - Commands are posted as a JSON array and one patch comes back per command, so every write goes through MadakeCAD's Command engine. <sub>`test_commands_are_posted_as_a_json_array_and_return_one_patch_each`</sub>
+- Posting with batch asks for the whole array to be one edit (?batch=true), so a panel action costs the user a single undo in MadakeCAD. <sub>`test_a_batch_post_asks_madakecad_for_a_single_undo_step`</sub>
+- A stream that dies while being read (app quit mid-message, socket reset, nothing arriving) is reported as a sentence naming the port and telling the user to connect again, never as a raw socket error. <sub>`test_errors_while_reading_the_event_stream_become_readable_link_errors`</sub>
 - A refused connection, an HTTP error and invalid JSON all raise LinkError with a message that says what went wrong. <sub>`test_errors_are_reported_as_link_errors_with_a_readable_message`</sub>
 - The event stream yields each patch as ("patch", {revision, ops}), joining multi-line data and skipping keep-alive comments. <sub>`test_events_yield_patches_from_the_sse_stream`</sub>
 - Lines without an event name are "message" events, data is dispatched at the blank line, and a trailing event without a blank line is still delivered. <sub>`test_parse_sse_defaults_the_event_name_and_dispatches_on_blank_lines`</sub>
@@ -2731,6 +2742,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A patch is applied only when its revision is newer than the last one seen; duplicates and older patches are ignored. <sub>`test_only_newer_revisions_are_accepted`</sub>
 - The panel reloads when the shown sheet's entities change or when sheets are added, removed, renamed or the project is replaced, but not for edits on another sheet. <sub>`test_refresh_is_needed_for_the_shown_sheet_and_structural_changes`</sub>
 - Before a sheet has been chosen, any entity change reloads the panel so the first view is current. <sub>`test_with_no_sheet_shown_yet_any_entity_change_reloads`</sub>
+- Adding, replacing or undoing a FreeCAD link in MadakeCAD reloads the panel even while a sheet is shown, so the linked-object and placement columns never show links that are gone. <sub>`test_a_change_to_the_freecad_links_reloads_whatever_sheet_is_shown`</sub>
+- An op is scoped to the sheet named by its sheet_id or by the sheet it carries; an op naming no sheet is project-wide and always reloads, so a new project-wide op is never missed. <sub>`test_an_op_that_names_no_sheet_counts_as_project_wide`</sub>
 - The port setting keeps integers from 1 to 65535 and falls back to 9310 for anything else (text, 0, too large). <sub>`test_port_setting_accepts_valid_ports_and_falls_back_to_the_default`</sub>
 
 ### Part linking & wire-length write-back
@@ -2739,9 +2752,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The wire list has one row per wire with its net or wire number, current length, where the length came from, and the linked route object. <sub>`test_wire_rows_show_net_length_source_and_linked_route`</sub>
 - STEP/IGES/BREP files are inserted as shapes, .FCStd files are merged as documents, and anything else cannot be inserted. <sub>`test_model_kind_recognises_shape_files_and_freecad_documents`</sub>
 - Linking sends a set_mech_link command with the entity id, the FreeCAD document path, the object name and the sync time; unlinking sends remove_mech_link. <sub>`test_link_commands_carry_the_entity_id_document_path_object_name_and_time`</sub>
+- Linking an entity again keeps the placement FreeCAD has already synced for it, so inserting or re-linking a model never throws the panel layout's position away. <sub>`test_relinking_keeps_the_placement_freecad_already_synced`</sub>
 - Route objects are matched to wires by their madake_id; lengths are converted from millimetres to metres (1 mm resolution) and objects that are not wires are ignored. <sub>`test_measured_route_lengths_are_converted_to_metres_and_matched_to_wires`</sub>
 - The write-back is one set_wire_lengths command per sheet whose entries carry the metre length and the source "freecad", so MadakeCAD can warn before a manual overwrite. <sub>`test_write_back_is_one_command_per_sheet_with_the_freecad_source`</sub>
 - Measuring also registers the route object as the wire's link, but only when the wire is not already linked to that same object. <sub>`test_routes_are_linked_only_when_not_already_linked_to_that_object`</sub>
+- Pointing a wire at a different route object keeps the placement already synced for that wire, so measuring never erases geometry FreeCAD masters. <sub>`test_relinking_a_route_to_another_object_keeps_its_synced_placement`</sub>
 
 ### Project overview & netlist view
 
@@ -2756,7 +2771,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Nets whose parts are not linked, or whose linked objects are missing from the FreeCAD document, produce no stub. <sub>`test_parts_without_a_link_or_not_in_the_document_produce_no_stub`</sub>
 - Three linked parts on one net are chained in name order into two segments, assigned to the net's wires in order; extra wires get no stub and extra segments are dropped when wires run out. <sub>`test_a_net_with_three_parts_is_chained_and_segments_follow_the_wire_ids`</sub>
 - Wires that already have a route object in the document are skipped, so creating stubs again never duplicates them. <sub>`test_rerunning_skips_wires_that_already_have_a_route_object`</sub>
+- A stub whose two parts sit at the same position cannot be a line, so it is separated out to be reported to the user while the other stubs are still created. <sub>`test_stubs_between_parts_at_the_same_position_are_reported_instead_of_drawn`</sub>
+- Ends closer together than a thousandth of a millimetre count as the same point (FreeCAD cannot make a line from them), anything further apart is drawn. <sub>`test_ends_a_thousandth_of_a_millimetre_apart_still_count_as_the_same_point`</sub>
 - Highlighting a net selects the FreeCAD objects of its linked parts and of its linked route wires, each object once, ignoring unlinked pins. <sub>`test_highlighting_a_net_selects_its_linked_parts_and_routes_once_each`</sub>
 - Syncing a placement sends set_mech_link with the object's base point in millimetres (1 µm resolution) and its rotation in degrees, keeping the existing link data. <sub>`test_placement_command_carries_the_base_in_mm_and_the_rotation_in_degrees`</sub>
 - Sync placements writes one command per linked object present in the document and skips objects whose stored placement is already the same. <sub>`test_sync_placements_writes_only_linked_objects_whose_placement_changed`</sub>
+- A rotation about Z is stored in degrees, signed by the axis direction; a part tilted about another axis has no panel rotation at all, so it is reported instead of being stored as that angle. <sub>`test_only_a_rotation_about_the_z_axis_is_stored_as_a_panel_rotation`</sub>
 

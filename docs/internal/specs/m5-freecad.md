@@ -6,7 +6,7 @@
 
 - Link API `/api/v1`(REST+SSE)は稼働中。書き込みは全てCommandエンジン経由
 - 部品DBに`model_3d`(STEP/FCStdパス)・`mounting`列を予約済み
-- 対象: FreeCAD 1.1+(Python API)
+- 対象: FreeCAD 1.0+(Python API。アドオンの`package.xml`は`<freecadmin>1.0.0`)
 
 ## M5-1: FreeCADアドオンWB「MadakeCAD Link」骨格 — ✅ 実装 (2026-09-27)
 
@@ -20,17 +20,13 @@
 ## M5-2: 部品対応付け+電線長書き戻し — ✅ 実装 (2026-09-27)
 
 実装内容(計画: [`docs/superpowers/plans/2026-09-27-m5-2-part-linking-wire-length.md`](../../superpowers/plans/2026-09-27-m5-2-part-linking-wire-length.md)):
-- モデル: `Project.mech_links: Vec<MechLink {entity_id, fcstd_path, object_name, synced_at}>`、`Wire.length_source: manual | freecad`(既定manual)。**format_version 2→3**(旧ファイルは既定値で開ける)
+- モデル: `Project.mech_links: Vec<MechLink {entity_id, fcstd_path, object_name, synced_at}>`、`Wire.length_source: manual | freecad`(既定manual)。**format_version 12**(マージ時にクラウド側の暫定3/4を畳んだ版。旧ファイルは既定値で開ける)
 - Command: `set_mech_link`(entity_idで登録・置換)/ `remove_mech_link` / `set_wire_lengths`(シート単位の一括書き戻し。長さと出所を同時に設定、逆コマンドは書き換え前の値)。PatchOp `mech_links_replaced`。Link API `/commands`・MCP `execute_commands`でそのまま使える
 - アドオン: パネルに「Parts」タブ(シンボル一覧+部品DBの`model_3d`+対応付け済みオブジェクト。**Insert 3D model**=STEP/IGES/BREPは`Part.read`、FCStdは`mergeProject`で取り込み、`madake_id`プロパティを付けて`set_mech_link`。**Link selected object** / **Unlink**)と「Wires」タブ(配線一覧+長さ・出所+経路オブジェクト。**Link selected route**=Draft Wire等を配線に対応付け、**Measure routes → write back lengths**=`madake_id`付き経路オブジェクトの`Shape.Length`をmm→m(1mm単位)へ換算し確認ダイアログの後に`set_wire_lengths`(出所freecad)+未登録経路の`set_mech_link`)
 - MadakeCAD側UI: 配線プロパティの長さに「FreeCAD計測」バッジ、対応付け済みシンボル/配線に「3D対応付け」行(オブジェクト名)。計測値を手で変えると出所はmanualへ戻り、ログに警告
 - 同期は明示操作のみ(ボタン)。自動上書きなし
-
-
-- **部品挿入**: アドオンの部品リスト(図面のシンボル+部品DBのmodel_3d)から3DモデルをFreeCADアセンブリへ挿入。FreeCADオブジェクトに`madake_id`(entity UUID)を保存
-- **対応付けの永続化**: MadakeCAD側`Project.mech_links: Vec<MechLink {entity_id, fcstd_path, object_name, synced_at}>`を新設(format_version++)。Command `set_mech_link`
-- **電線長書き戻し**: FreeCADで経路(Draft Wire等)の長さを計測し、`POST /api/v1/commands`の`update_entity`で`Wire.length_m`へ一括反映。`Wire`に長さの出所フラグ(`length_source: manual | freecad`)を追加し、手入力での誤上書きを警告
-- 同期は明示操作のみ(自動上書きしない)
+- パネルの1操作で送るコマンドは`POST /api/v1/commands?batch=true`で**1回の編集**にする(MadakeCAD側はundo1回。途中で拒否されたら1件も適用しない)
+- `set_mech_link`は対応付けを丸ごと差し替えるので、再登録のときは既存の`placement`を引き継ぐ(M5-3の配置を消さない)
 
 受け入れ基準: FreeCADで引いた経路長がMadakeCADの電線リスト・電圧降下検証に反映される。往復してもmadake_idで再同期できる。
 
@@ -43,6 +39,7 @@ M5-2完了を受けて起こした詳細仕様(計画: [`docs/superpowers/plans/
 - ネットリストから、両端の部品が**対応付け済み**(FreeCADオブジェクトあり)の配線ごとに、FreeCADに**経路スタブ**(2点の直線 `Part::Feature`、`madake_id`=配線id)を作る。ユーザーはスタブを実際の経路(頂点追加・Draft Wire化)へ編集し、M5-2の「Measure routes → write back lengths」で長さを戻す
 - 割り当て規則: ネットの対応付け済み部品を名前順に鎖でつなぎ(N部品→N−1区間)、区間をそのネットの`wire_ids`へ順に割り当てる。配線より区間が多ければ余りは作らず、区間より配線が多ければ余った配線にはスタブを作らない(**ヒューリスティック**。回路図の配線1本と3D経路1本を1対1にする最小の規則)
 - 冪等: すでに`madake_id`が同じ配線を指すオブジェクトがあればその配線のスタブは作らない(再実行で増えない)
+- 作ったスタブはその場で`set_mech_link`で配線の対応付けとして登録する(ネットハイライトとWiresタブの「Route object」列がすぐ効く)。両端が同じ位置(挿入直後の既定配置)の区間は線にできないので作らず、理由をステータス行に出す。1本の生成が失敗しても残りは作る
 - 始点・終点はFreeCADオブジェクトの`Placement.Base`
 
 ### 可視化の同期(FreeCAD 3Dビューのハイライト)
@@ -51,7 +48,7 @@ M5-2完了を受けて起こした詳細仕様(計画: [`docs/superpowers/plans/
 
 ### 配置の同期(FreeCAD → MadakeCAD: 盤レイアウトのデータ)
 
-- `MechLink.placement: Option<MechPlacement {x_mm, y_mm, z_mm, rotation_deg}>`を追加(**format_version 3→4**、旧ファイルは`placement`無しで開ける)。FreeCADオブジェクトの`Placement`(基点mm・Z軸回転deg)を「Sync placements」で`set_mech_link`により書き戻す(明示操作。自動ではない)
+- `MechLink.placement: Option<MechPlacement {x_mm, y_mm, z_mm, rotation_deg}>`を追加(**format_version 12**、旧ファイルは`placement`無しで開ける)。FreeCADオブジェクトの`Placement`(基点mm・Z軸回転deg)を「Sync placements」で`set_mech_link`により書き戻す(明示操作。自動ではない。全件を`POST /commands?batch=true`で1回の編集として送るのでundo1回)。盤は平面なのでZ軸まわりの回転だけを保存し、他軸に傾いたオブジェクトは0°で保存して件数をステータス行に出す
 - MadakeCAD側の表示: プロパティの「3D対応付け」行にオブジェクト名と配置`(x, y, z) mm / θ°`。2D盤レイアウトシート(M4 §8)はこの`placement`を初期配置として使う設計
 - マスタ権の原則どおり、配置はFreeCADがマスタ(MadakeCADは表示のみ。編集は将来の盤シートで検討)
 
