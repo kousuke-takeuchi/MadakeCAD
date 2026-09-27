@@ -4,6 +4,7 @@
 // 図面の編集は一切行わない (エージェントがMCP→Commandエンジン経由で編集する)。
 
 import { computed } from "vue";
+import { i18n } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
 
@@ -41,7 +42,7 @@ export function useChatComposer() {
     draft.value = "";
     ui.openAgentTab();
     const id = await store.send(text);
-    if (!id) ui.log("AGENT   送信に失敗しました (詳細はチャットのエラー表示を参照)");
+    if (!id) ui.log(i18n.global.t("chat.composer.sendFailedLog"));
   }
 
   function onKeydown(ev: KeyboardEvent) {
@@ -55,7 +56,7 @@ export function useChatComposer() {
     try {
       await store.cancel();
     } catch (e) {
-      ui.log(`AGENT   キャンセル失敗: ${String(e)}`);
+      ui.log(i18n.global.t("chat.composer.cancelFailedLog", { error: String(e) }));
     }
   }
 

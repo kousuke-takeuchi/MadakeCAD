@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**1335仕様項目**。
+全6領域・**1339仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -177,6 +177,7 @@
 
 ### PDF出力
 
+- PDFの文字はOSごとに日本語グリフを持つ標準書体へ割り当てる: macOS=Hiragino Sans/Menlo、Windows=Yu Gothic UI/Consolas、その他(Linux)=Noto Sans CJK JP/DejaVu Sans Mono。 <sub>`preferred_families_follow_the_operating_system`</sub>
 - PDF出力は日本語を含む正しいPDF文書(%PDF-ヘッダ)を非自明なサイズで生成する。 <sub>`sheet_to_pdf_produces_pdf_bytes`</sub>
 - PDFのページ寸法は用紙そのもの (A3横=420×297mm) になり、100%で印刷すると原寸になる。 <sub>`pdf_page_is_the_size_of_the_paper`</sub>
 - PDF一括出力のページは 表紙 → 回路図の全シート → 選択した帳票 の順に並ぶ。 <sub>`pdf_book_is_cover_then_sheets_then_reports`</sub>
@@ -1283,9 +1284,12 @@
 ### i18n
 
 - UIの既定言語は英語で、フォールバックも英語 <sub>`i18n`</sub>
-- 実装済みロケールは英語と日本語 <sub>`i18n`</sub>
-- 英語と日本語のカタログはキーが完全に一致する(訳し漏れをCIで検出) <sub>`i18n`</sub>
-- カタログの文字列は空にできない(キーだけ足して訳し忘れることを防ぐ) <sub>`i18n`</sub>
+- 実装済みロケールは英語・日本語・中国語・スペイン語・フランス語・ドイツ語の6つ <sub>`i18n`</sub>
+- 全ロケールのカタログは英語とキーが完全に一致する(訳し漏れ・余分なキーをCIで検出) <sub>`i18n`</sub>
+- どのカタログでも文字列は空にできない(キーだけ足して訳し忘れることを防ぐ) <sub>`i18n`</sub>
+- 翻訳は英語と同じ名前付きプレースホルダを持つ(`{count}`の欠落・綴り違いを検出) <sub>`i18n`</sub>
+- 複数形の文(`|`区切り)は英語と同じ数の形を持つ <sub>`i18n`</sub>
+- 言語名は各言語の自称で表示される(英語に翻訳しない) <sub>`i18n`</sub>
 - 言語タグは大文字・余白があっても解決でき、未知・空の値は英語になる <sub>`i18n`</sub>
 
 ### chat

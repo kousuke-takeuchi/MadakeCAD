@@ -1,11 +1,13 @@
 <script setup lang="ts">
 // 図面ファイルタブ行 (Pencilデザイン準拠)。シートをタブとして表示する。
 import { Plus, X } from "lucide-vue-next";
+import { useI18n } from "vue-i18n";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 
 const store = useDocumentStore();
 const ui = useUiStore();
+const { t } = useI18n();
 
 async function addSheet() {
   await store.execute({
@@ -20,10 +22,10 @@ async function addSheet() {
 
 async function closeSheet(id: string) {
   if ((store.project?.sheets.length ?? 0) <= 1) {
-    ui.log("最後のシートは削除できません");
+    ui.log(t("fileTabs.lastSheetLog"));
     return;
   }
-  if (!window.confirm("このシートを削除しますか?(undoで戻せます)")) return;
+  if (!window.confirm(t("fileTabs.deleteConfirm"))) return;
   await store.execute({ type: "remove_sheet", sheet_id: id });
 }
 </script>
@@ -45,7 +47,7 @@ async function closeSheet(id: string) {
         @click.stop="closeSheet(s.id)"
       />
     </button>
-    <button class="add" title="シートを追加" @click="addSheet"><Plus :size="12" /></button>
+    <button class="add" :title="t('fileTabs.addSheet')" @click="addSheet"><Plus :size="12" /></button>
   </div>
 </template>
 

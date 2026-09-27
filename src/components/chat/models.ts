@@ -7,11 +7,13 @@ export interface ModelOption {
   sub?: string;
 }
 
-/** モデルIDは claude-api の現行モデル表に準拠。 */
-export const ANTHROPIC_MODELS: ModelOption[] = [
-  { id: null, label: "既定モデル", sub: "CLIの設定" },
-  { id: "claude-fable-5", label: "Claude Fable 5", sub: "サブスク" },
-  { id: "claude-opus-5", label: "Claude Opus 5" },
-  { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
-  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
-];
+/** モデルIDは claude-api の現行モデル表に準拠。表示名はカタログ (`chat.modelPicker.*`) から引く。 */
+export function anthropicModels(t: (key: string) => string): ModelOption[] {
+  return [
+    { id: null, label: t("chat.modelPicker.defaultLabel"), sub: t("chat.modelPicker.defaultSub") },
+    { id: "claude-fable-5", label: "Claude Fable 5", sub: t("chat.modelPicker.subscription") },
+    { id: "claude-opus-5", label: "Claude Opus 5" },
+    { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
+    { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+  ];
+}

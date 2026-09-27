@@ -14,7 +14,7 @@ import {
   conversationMeta,
   formatRelativeTime,
   sortedConversations,
-  EMPTY_CONVERSATION_TITLE,
+  emptyConversationTitle,
   type AgentEvent,
   type ChatConversation,
   type ChatMessage,
@@ -140,7 +140,7 @@ describe("chat store: applyAgentEvent", () => {
     const calls = store.messages[0].tool_calls;
     expect(calls).toHaveLength(2);
     expect(calls[0].status).toBe("ok");
-    expect(calls[0].summary).toBe("fuse F2 5A を (140,90) に配置");
+    expect(calls[0].summary).toBe("Placed fuse F2 5A at (140,90)");
     expect(calls[1].status).toBe("error");
   });
 
@@ -717,7 +717,7 @@ describe("chat store: アクション", () => {
     expect(store.activeId).toBe(CONV);
     expect(store.messages).toHaveLength(2);
     expect(store.messages[1].tool_calls[0].status).toBe("ok");
-    expect(store.messages[1].tool_calls[0].summary).toBe("fuse F2 を (140,90) に配置");
+    expect(store.messages[1].tool_calls[0].summary).toBe("Placed fuse F2 at (140,90)");
     // 1ターンの2メッセージは同じターンIDを持ち、巻き戻しの対象指定に使える
     expect(store.messages.map((m) => m.turn_id)).toEqual([TURN, TURN]);
     // 巻き戻し回数はrevision差(4)ではなくundo深さの増分(2)
@@ -881,9 +881,9 @@ describe("summarizeToolUse", () => {
         x: 140,
         y: 90,
       }),
-    ).toBe("fuse F2 5A を (140,90) に配置");
+    ).toBe("Placed fuse F2 5A at (140,90)");
     expect(summarizeToolUse("place_symbol", { x: 12.5, y: 7.25 })).toBe(
-      "シンボルを (12.5,7.25) に配置",
+      "Placed a symbol at (12.5,7.25)",
     );
   });
 
@@ -900,7 +900,7 @@ describe("summarizeToolUse", () => {
         sq: 0.75,
       }),
       // pointsは頂点列なので数えるのは本数ではなく区間数
-    ).toBe("0.75sq 赤 2区間を接続");
+    ).toBe("0.75sq red: connected 2 segment(s)");
     expect(
       summarizeToolUse("draw_wire", {
         points: [
@@ -908,36 +908,36 @@ describe("summarizeToolUse", () => {
           { x: 5, y: 0 },
         ],
       }),
-    ).toBe("1区間を接続");
+    ).toBe("Connected 1 segment(s)");
   });
 
   // ja: update_entity / execute_commandsはコマンド内容で要約される
   it("update_entity and execute_commands summarize by command content", () => {
     expect(
       summarizeToolUse("update_entity", { entity: { kind: "symbol", reference: "K1" } }),
-    ).toBe("シンボル K1 を更新");
+    ).toBe("Updated symbol K1");
     expect(
       summarizeToolUse("mcp__madakecad__execute_commands", {
         commands: [{ type: "move_entities" }],
       }),
-    ).toBe("要素移動 を実行");
+    ).toBe("Ran move entities");
     expect(
       summarizeToolUse("execute_commands", { commands: [{ type: "add_entity" }, { type: "undo" }] }),
-    ).toBe("編集コマンド 2件を実行");
+    ).toBe("Ran 2 edit commands");
   });
 
   // ja: 読み取り系・書き出し系ツールも適切に要約される
   it("read and export tools get appropriate summaries", () => {
-    expect(summarizeToolUse("mcp__madakecad__get_netlist", {})).toBe("ネットリストを取得");
-    expect(summarizeToolUse("mcp__madakecad__get_project", {})).toBe("図面全体を読み取り");
+    expect(summarizeToolUse("mcp__madakecad__get_netlist", {})).toBe("Read the netlist");
+    expect(summarizeToolUse("mcp__madakecad__get_project", {})).toBe("Read the whole drawing");
     expect(summarizeToolUse("export_svg", { path: "/tmp/out/a.svg" })).toBe(
-      "SVGを書き出し (a.svg)",
+      "Exported SVG (a.svg)",
     );
     expect(summarizeToolUse("export_bom", { path: "/tmp/bom.csv" })).toBe(
-      "部品表CSVを書き出し (bom.csv)",
+      "Exported BOM CSV (bom.csv)",
     );
     expect(summarizeToolUse("export_wire_list", { path: "/tmp/w.csv" })).toBe(
-      "電線リストCSVを書き出し (w.csv)",
+      "Exported wire list CSV (w.csv)",
     );
   });
 
@@ -1006,19 +1006,19 @@ describe("会話履歴ポップアップの表示ヘルパー", () => {
 
   // ja: ユーザー発話が無ければ「(空の会話)」になる
   it("without any user message the title is '(empty conversation)'", () => {
-    expect(conversationTitle(conv("a", 0))).toBe(EMPTY_CONVERSATION_TITLE);
+    expect(conversationTitle(conv("a", 0))).toBe(emptyConversationTitle());
     expect(conversationTitle(conv("a", 0, [{ role: "user", text: "   " }]))).toBe(
-      EMPTY_CONVERSATION_TITLE,
+      emptyConversationTitle(),
     );
   });
 
   // ja: 相対時刻は たった今/N分前/N時間前/昨日/M-D で表示される
   it("relative time renders as just now / N min / N h / yesterday / M-D", () => {
     const now = new Date(2026, 7, 21, 14, 0, 0).getTime();
-    expect(formatRelativeTime(now - 30_000, now)).toBe("たった今");
-    expect(formatRelativeTime(now - 8 * 60_000, now)).toBe("8分前");
-    expect(formatRelativeTime(now - 3 * 3_600_000, now)).toBe("3時間前");
-    expect(formatRelativeTime(new Date(2026, 7, 20, 22, 0, 0).getTime(), now)).toBe("昨日");
+    expect(formatRelativeTime(now - 30_000, now)).toBe("just now");
+    expect(formatRelativeTime(now - 8 * 60_000, now)).toBe("8 min ago");
+    expect(formatRelativeTime(now - 3 * 3_600_000, now)).toBe("3 h ago");
+    expect(formatRelativeTime(new Date(2026, 7, 20, 22, 0, 0).getTime(), now)).toBe("yesterday");
     expect(formatRelativeTime(new Date(2026, 7, 19, 9, 0, 0).getTime(), now)).toBe("8/19");
   });
 
@@ -1026,7 +1026,7 @@ describe("会話履歴ポップアップの表示ヘルパー", () => {
   it("unknown timestamps (legacy updated_at=0) show no relative time", () => {
     const now = Date.now();
     expect(formatRelativeTime(0, now)).toBe("");
-    expect(conversationMeta(conv("a", 0, [{ role: "user", text: "x" }]), now)).toBe("1メッセージ");
+    expect(conversationMeta(conv("a", 0, [{ role: "user", text: "x" }]), now)).toBe("1 message");
   });
 
   // ja: メタ行は時刻・件数・適用済みrevを中黒で連ねる
@@ -1041,11 +1041,11 @@ describe("会話履歴ポップアップの表示ヘルパー", () => {
         applied_undo_depth: { start: 0, end: 2 },
       },
     ]);
-    expect(conversationMeta(applied, now)).toBe("8分前 · 2メッセージ · 適用済み rev 24");
+    expect(conversationMeta(applied, now)).toBe("8 min ago · 2 messages · applied rev 24");
 
     // 巻き戻し済みのターンは「適用済み」に数えない
     applied.messages[1].undone = true;
-    expect(conversationMeta(applied, now)).toBe("8分前 · 2メッセージ");
+    expect(conversationMeta(applied, now)).toBe("8 min ago · 2 messages");
   });
 
   // ja: 会話は更新の新しい順に並ぶ(時刻不明は後ろに登録順)

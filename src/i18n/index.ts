@@ -4,9 +4,16 @@
 import { createI18n } from "vue-i18n";
 import en from "../locales/en.json";
 import ja from "../locales/ja.json";
+import zh from "../locales/zh.json";
+import es from "../locales/es.json";
+import fr from "../locales/fr.json";
+import de from "../locales/de.json";
 
-/** 実装済みロケール。追加時はsrc/locales/へカタログを置いてここに足す。 */
-export const SUPPORTED_LOCALES = ["en", "ja"] as const;
+/**
+ * 実装済みロケール。追加時はsrc/locales/へカタログを置き、ここと`messages`に足す
+ * (設定の言語ドロップダウンはこの配列から自動で増える。翻訳者向け手順: docs/internal/specs/i18n.md §6)。
+ */
+export const SUPPORTED_LOCALES = ["en", "ja", "zh", "es", "fr", "de"] as const;
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 /** 設定の言語タグを実装済みロケールへ解決する(未知・空は英語)。 */
@@ -19,7 +26,7 @@ export const i18n = createI18n({
   legacy: false,
   locale: "en",
   fallbackLocale: "en",
-  messages: { en, ja },
+  messages: { en, ja, zh, es, fr, de },
 });
 
 /** アクティブなUI言語を切り替える(設定の読込時・変更時に呼ぶ)。 */

@@ -1,7 +1,11 @@
 {
   "language": {
     "en": "English",
-    "ja": "日本語"
+    "ja": "日本語",
+    "zh": "中文",
+    "es": "Español",
+    "fr": "Français",
+    "de": "Deutsch"
   },
   "settings": {
     "title": "Settings",
@@ -20,7 +24,7 @@
     "general": {
       "languageGroup": "Language",
       "displayLanguage": "Display language:",
-      "languageHint": "English is the default. Changes apply immediately (no restart). Chinese, Spanish, French, and German are planned.",
+      "languageHint": "English is the default. Changes apply immediately (no restart). Chinese, Spanish, French and German catalogs are community-maintained; a missing string falls back to English.",
       "languageChangedLog": "Settings: display language set to {language}"
     },
     "agent": {
@@ -258,7 +262,37 @@
     },
     "projectGroup": {
       "start": "Start"
-    }
+    },
+    "schematicGroup": {
+      "wiring": "Wiring",
+      "insert": "Insert parts",
+      "edit": "Edit schematic",
+      "verify": "Verify / reports"
+    },
+    "buttons": {
+      "wire": "Wire",
+      "multiBus": "Multi-bus",
+      "signalArrow": "Signal arrow",
+      "insertPart": "Insert part",
+      "terminalBlock": "Terminal block",
+      "edit": "Edit",
+      "move": "Move",
+      "trim": "Trim",
+      "delete": "Delete",
+      "verify": "Verify",
+      "bom": "BOM",
+      "wireList": "Wire list",
+      "simulation": "Simulation",
+      "svg": "Export SVG",
+      "pdf": "Export PDF"
+    },
+    "viewClassGroup": "View classes",
+    "placeholder": "The \"{tab}\" tab is planned for a later phase",
+    "todoLog": "{name}: not implemented (planned for a later phase)",
+    "moveLog": "Move: select and drag (grid snap)",
+    "simFailedLog": "SIM  Failed: {error}",
+    "simDoneLog": "SIM  DC operating point solved ({count} components)",
+    "verifyDoneLog": "Verification done: {error} errors / {warning} warnings / {info} info"
   },
   "file": {
     "group": "File",
@@ -663,16 +697,132 @@
       "new": "New conversation",
       "empty": "No conversations yet",
       "runningRow": "This conversation is still answering",
-      "colorDot": "Edit highlight color of this conversation"
+      "colorDot": "Edit highlight color of this conversation",
+      "emptyTitle": "(empty conversation)",
+      "justNow": "just now",
+      "minutesAgo": "{n} min ago",
+      "hoursAgo": "{n} h ago",
+      "yesterday": "yesterday",
+      "messages": "{count} message | {count} messages",
+      "applied": "applied rev {rev}"
     },
     "parallel": {
       "runningBadge": "{count} running",
       "runningBadgeTitle": "{count} conversation(s) are answering right now. Their edits are highlighted in the drawing, one color per conversation."
+    },
+    "dock": {
+      "undoFailedLog": "AGENT   Undo failed: {error}",
+      "reloadFailedLog": "AGENT   Could not reload the conversation history: {error}",
+      "connectFailedLog": "AGENT   Could not connect to the agent: {error}",
+      "emptyConnected": "Tell the agent what to do with the drawing. Edits are applied automatically and can be undone later.",
+      "emptyDisconnected": "No AI provider is ready. Pick one in Settings > Agent (Claude Code CLI, API key, Copilot CLI, Ollama, ...).",
+      "replyPlaceholder": "Type a reply..."
+    },
+    "panel": {
+      "titleActive": "Circuit agent",
+      "titleNew": "New agent",
+      "expand": "Expand",
+      "minimize": "Minimize",
+      "placeholder": "Ask for anything... (e.g. add a fuse to the 24 V rail)"
+    },
+    "message": {
+      "working": "The agent is working...",
+      "applied": "✓ Applied to the drawing (rev {rev})",
+      "undone": "Undone",
+      "undo": "Undo"
+    },
+    "composer": {
+      "addContext": "Add context",
+      "stop": "Stop",
+      "send": "Send",
+      "sendFailedLog": "AGENT   Could not send (see the error in the chat)",
+      "cancelFailedLog": "AGENT   Cancel failed: {error}"
+    },
+    "context": {
+      "head": "Add context",
+      "attach": "Add image/file... (datasheet PDF etc.)",
+      "attachNote": "Attaching images/files is planned for phase A2",
+      "fromDrawing": "Add from the drawing... (sheet / selection)",
+      "partsDb": "Add from the parts database...",
+      "partsDbNote": "Parts database references are planned for phase 2",
+      "standards": "Pick a standard... (JIS C 0617 and others)",
+      "standardsNote": "Standard references are planned for phase 2"
+    },
+    "modelPicker": {
+      "defaultTitle": "CLI default model",
+      "search": "Search models...",
+      "empty": "No matching model",
+      "morePlanned": "More providers coming",
+      "defaultLabel": "Default model",
+      "defaultSub": "CLI setting",
+      "subscription": "Subscription"
+    },
+    "summary": {
+      "place": "Placed {label} at {at}",
+      "placeUnnamed": "Placed a symbol at {at}",
+      "connect": "{spec}: connected {count} segment(s)",
+      "connectUnnamed": "Connected {count} segment(s)",
+      "update": "Updated {kind} {label}",
+      "updateUnnamed": "Updated {kind}",
+      "runCommand": "Ran {command}",
+      "runCommands": "Ran {count} edit commands",
+      "getNetlist": "Read the netlist",
+      "getProject": "Read the whole drawing",
+      "listSymbols": "Listed the symbols",
+      "exportSvg": "Exported SVG ({file})",
+      "exportBom": "Exported BOM CSV ({file})",
+      "exportWireList": "Exported wire list CSV ({file})",
+      "undo": "Undid the last edit",
+      "redo": "Redid the undone edit",
+      "command": "command"
+    },
+    "kind": {
+      "symbol": "symbol",
+      "wire": "wire",
+      "junction": "junction",
+      "net_label": "net label",
+      "text": "text",
+      "other": "element"
+    },
+    "command": {
+      "add_sheet": "add sheet",
+      "remove_sheet": "remove sheet",
+      "rename_sheet": "rename sheet",
+      "set_title_block": "set title block",
+      "set_revisions": "set revisions",
+      "add_entity": "add entity",
+      "update_entity": "update entity",
+      "delete_entities": "delete entities",
+      "move_entities": "move entities",
+      "set_wire_parts": "set wire parts",
+      "renumber_wires": "renumber wires",
+      "set_wire_numbers": "set wire numbers"
+    },
+    "color": {
+      "black": "black",
+      "white": "white",
+      "red": "red",
+      "blue": "blue",
+      "yellow": "yellow",
+      "green": "green",
+      "light_blue": "light blue",
+      "orange": "orange",
+      "brown": "brown",
+      "gray": "gray",
+      "grey": "gray",
+      "purple": "purple",
+      "violet": "purple",
+      "pink": "pink"
     }
   },
   "leftPanel": {
     "project": "Project",
-    "agent": "Agent"
+    "agent": "Agent",
+    "tabsLabel": "Left panel",
+    "connected": "Connected",
+    "disconnected": "Not connected",
+    "history": "History",
+    "minimize": "Minimize"
   },
   "io": {
     "importGroup": "Import",
@@ -710,5 +860,119 @@
     "measuredHint": "This length was written back from a FreeCAD route measurement; editing it by hand makes it a manual value",
     "linkLabel": "3D link",
     "overwroteLog": "WIRE  A FreeCAD-measured length was overwritten by hand (the next FreeCAD sync can restore the measured value)"
+  },
+  "app": {
+    "bootError": "Startup error: {error}",
+    "loading": "Loading..."
+  },
+  "titleBar": {
+    "print": "Print",
+    "undo": "Undo (Cmd+Z)",
+    "redo": "Redo (Cmd+Shift+Z)",
+    "settings": "Settings"
+  },
+  "statusBar": {
+    "grid": "Show grid",
+    "snap": "Grid snap",
+    "ortho": "Ortho mode",
+    "polar": "Polar tracking (not implemented)",
+    "osnap": "Object snap (pins)",
+    "lineweight": "Show line weights (not implemented)",
+    "polarLog": "Polar tracking: not implemented",
+    "lineweightLog": "Line weight display: not implemented",
+    "zoom": "Zoom {percent}%",
+    "model": "Model"
+  },
+  "projectPanel": {
+    "title": "Project Manager",
+    "addSheet": "Add sheet",
+    "open": "Open project",
+    "reload": "Reload",
+    "print": "Print",
+    "settings": "Project settings",
+    "untitled": "Untitled",
+    "detail": "Details",
+    "drawing": "Drawing",
+    "drawingNo": "Drawing no.",
+    "paper": "Paper",
+    "portrait": "portrait",
+    "landscape": "landscape",
+    "sheet": "Sheet",
+    "entities": "Entities",
+    "addedLog": "NEWSHEET  Added a sheet",
+    "todoLog": "{name}: not implemented"
+  },
+  "fileTabs": {
+    "lastSheetLog": "The last sheet cannot be deleted",
+    "deleteConfirm": "Delete this sheet? (undo restores it)",
+    "addSheet": "Add sheet"
+  },
+  "properties": {
+    "title": "Properties",
+    "selectedCount": "{count} selected",
+    "none": "Nothing selected",
+    "general": "General",
+    "color": "Colour",
+    "lineType": "Line type",
+    "electrical": "Electrical",
+    "gauge": "Gauge",
+    "partNo": "Wire part no.",
+    "length": "Length m",
+    "identity": "Identity",
+    "reference": "Designator",
+    "value": "Part no. / value",
+    "symbol": "Symbol",
+    "net": "Net",
+    "netName": "Net name",
+    "apply": "Apply",
+    "kind": {
+      "wire": "Wire",
+      "symbol": "Symbol",
+      "junction": "Junction",
+      "net_label": "Net label",
+      "text": "Text",
+      "harness": "Harness"
+    },
+    "colors": {
+      "red": "red",
+      "black": "black",
+      "white": "white",
+      "blue": "blue",
+      "yellow": "yellow",
+      "green": "green",
+      "orange": "orange",
+      "purple": "purple",
+      "brown": "brown",
+      "gray": "gray",
+      "pink": "pink",
+      "light_blue": "light blue"
+    }
+  },
+  "viewClass": {
+    "wires": "Wires",
+    "symbols": "Symbols",
+    "refs": "Designators",
+    "net_labels": "Net labels",
+    "wire_numbers": "Wire numbers",
+    "harness": "Harness",
+    "texts": "Notes",
+    "frame": "Frame",
+    "grid": "Grid"
+  },
+  "simulation": {
+    "title": "Simulation (DC operating point)",
+    "source": "Source {volts}V",
+    "open": "Open: {switches}",
+    "rerun": "Run again",
+    "netVoltages": "Net voltages",
+    "componentCurrents": "Component currents"
+  },
+  "verification": {
+    "title": "Verification",
+    "ok": "No problems found",
+    "rerun": "Verify again"
+  },
+  "ui": {
+    "welcome": "MadakeCAD command line (L=wire E=delete U=undo)"
   }
 }

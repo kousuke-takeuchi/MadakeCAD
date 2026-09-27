@@ -1,7 +1,11 @@
 {
   "language": {
     "en": "English",
-    "ja": "日本語"
+    "ja": "日本語",
+    "zh": "中文",
+    "es": "Español",
+    "fr": "Français",
+    "de": "Deutsch"
   },
   "settings": {
     "title": "設定",
@@ -20,7 +24,7 @@
     "general": {
       "languageGroup": "言語",
       "displayLanguage": "表示言語:",
-      "languageHint": "既定はEnglish。変更は即時反映されます(再起動不要)。中国語・スペイン語・フランス語・ドイツ語を追加予定。",
+      "languageHint": "既定は英語。変更は即時反映(再起動不要)。中国語・スペイン語・フランス語・ドイツ語のカタログはコミュニティで保守し、未訳の文字列は英語になります。",
       "languageChangedLog": "設定: 表示言語を{language}にしました"
     },
     "agent": {
@@ -258,7 +262,37 @@
     },
     "projectGroup": {
       "start": "作図の開始"
-    }
+    },
+    "schematicGroup": {
+      "wiring": "配線",
+      "insert": "部品を挿入",
+      "edit": "回路図を編集",
+      "verify": "検証/レポート"
+    },
+    "buttons": {
+      "wire": "配線",
+      "multiBus": "複数母線",
+      "signalArrow": "信号矢印",
+      "insertPart": "部品挿入",
+      "terminalBlock": "端子台",
+      "edit": "編集",
+      "move": "移動",
+      "trim": "トリム",
+      "delete": "削除",
+      "verify": "検証",
+      "bom": "部品表",
+      "wireList": "電線リスト",
+      "simulation": "シミュレーション",
+      "svg": "SVG出力",
+      "pdf": "PDF出力"
+    },
+    "viewClassGroup": "表示クラス",
+    "placeholder": "「{tab}」タブは今後のフェーズで実装予定です",
+    "todoLog": "{name}: 未実装 (今後のフェーズで対応予定)",
+    "moveLog": "移動: 選択してドラッグ (グリッドスナップ)",
+    "simFailedLog": "SIM  失敗: {error}",
+    "simDoneLog": "SIM  DC動作点を計算しました (部品 {count}件)",
+    "verifyDoneLog": "検証完了: エラー {error} / 警告 {warning} / 情報 {info}"
   },
   "file": {
     "group": "ファイル",
@@ -663,16 +697,132 @@
       "new": "新規会話",
       "empty": "会話はまだありません",
       "runningRow": "この会話は応答中です",
-      "colorDot": "この会話の編集ハイライト色"
+      "colorDot": "この会話の編集ハイライト色",
+      "emptyTitle": "(空の会話)",
+      "justNow": "たった今",
+      "minutesAgo": "{n}分前",
+      "hoursAgo": "{n}時間前",
+      "yesterday": "昨日",
+      "messages": "{count}件のメッセージ | {count}件のメッセージ",
+      "applied": "適用済み rev {rev}"
     },
     "parallel": {
       "runningBadge": "{count}会話実行中",
       "runningBadgeTitle": "いま{count}件の会話が応答中です。それぞれの編集は図面上に会話ごとの色でハイライトされます。"
+    },
+    "dock": {
+      "undoFailedLog": "AGENT   元に戻す失敗: {error}",
+      "reloadFailedLog": "AGENT   会話履歴の再読込に失敗: {error}",
+      "connectFailedLog": "AGENT   エージェント接続に失敗: {error}",
+      "emptyConnected": "図面について指示してください。編集は自動で適用され、あとから元に戻せます。",
+      "emptyDisconnected": "使えるAIプロバイダがありません。設定 > エージェント で選んでください (Claude Code CLI・APIキー・Copilot CLI・Ollama など)。",
+      "replyPlaceholder": "返信を入力..."
+    },
+    "panel": {
+      "titleActive": "回路エージェント",
+      "titleNew": "新規エージェント",
+      "expand": "展開",
+      "minimize": "最小化",
+      "placeholder": "何でも指示できます... (例: 24V系にヒューズを追加して)"
+    },
+    "message": {
+      "working": "エージェントが作業しています...",
+      "applied": "✓ 図面に適用済み (rev {rev})",
+      "undone": "元に戻しました",
+      "undo": "元に戻す"
+    },
+    "composer": {
+      "addContext": "コンテキストに追加",
+      "stop": "停止",
+      "send": "送信",
+      "sendFailedLog": "AGENT   送信に失敗しました (詳細はチャットのエラー表示を参照)",
+      "cancelFailedLog": "AGENT   キャンセル失敗: {error}"
+    },
+    "context": {
+      "head": "コンテキストに追加",
+      "attach": "画像/ファイルを追加... (データシートPDF等)",
+      "attachNote": "画像/ファイルの添付はフェーズA2で対応予定です",
+      "fromDrawing": "図面から追加... (シート/選択範囲)",
+      "partsDb": "部品DBから追加...",
+      "partsDbNote": "部品DBの参照はフェーズ2で対応予定です",
+      "standards": "規格を選択... (JIS C 0617 ほか)",
+      "standardsNote": "規格の参照はフェーズ2で対応予定です"
+    },
+    "modelPicker": {
+      "defaultTitle": "CLIの既定モデル",
+      "search": "モデルを検索...",
+      "empty": "該当するモデルがありません",
+      "morePlanned": "他プロバイダは今後追加",
+      "defaultLabel": "既定モデル",
+      "defaultSub": "CLIの設定",
+      "subscription": "サブスク"
+    },
+    "summary": {
+      "place": "{label} を {at} に配置",
+      "placeUnnamed": "シンボルを {at} に配置",
+      "connect": "{spec} {count}区間を接続",
+      "connectUnnamed": "{count}区間を接続",
+      "update": "{kind} {label} を更新",
+      "updateUnnamed": "{kind}を更新",
+      "runCommand": "{command} を実行",
+      "runCommands": "編集コマンド {count}件を実行",
+      "getNetlist": "ネットリストを取得",
+      "getProject": "図面全体を読み取り",
+      "listSymbols": "シンボル一覧を取得",
+      "exportSvg": "SVGを書き出し ({file})",
+      "exportBom": "部品表CSVを書き出し ({file})",
+      "exportWireList": "電線リストCSVを書き出し ({file})",
+      "undo": "直前の編集を取り消し",
+      "redo": "取り消した編集をやり直し",
+      "command": "コマンド"
+    },
+    "kind": {
+      "symbol": "シンボル",
+      "wire": "配線",
+      "junction": "接続点",
+      "net_label": "ネットラベル",
+      "text": "テキスト",
+      "other": "要素"
+    },
+    "command": {
+      "add_sheet": "シート追加",
+      "remove_sheet": "シート削除",
+      "rename_sheet": "シート改名",
+      "set_title_block": "表題欄設定",
+      "set_revisions": "改訂欄設定",
+      "add_entity": "要素追加",
+      "update_entity": "要素更新",
+      "delete_entities": "要素削除",
+      "move_entities": "要素移動",
+      "set_wire_parts": "電線品番表設定",
+      "renumber_wires": "線番自動採番",
+      "set_wire_numbers": "線番設定"
+    },
+    "color": {
+      "black": "黒",
+      "white": "白",
+      "red": "赤",
+      "blue": "青",
+      "yellow": "黄",
+      "green": "緑",
+      "light_blue": "水色",
+      "orange": "橙",
+      "brown": "茶",
+      "gray": "灰",
+      "grey": "灰",
+      "purple": "紫",
+      "violet": "紫",
+      "pink": "桃"
     }
   },
   "leftPanel": {
     "project": "プロジェクト",
-    "agent": "エージェント"
+    "agent": "エージェント",
+    "tabsLabel": "左パネル",
+    "connected": "接続中",
+    "disconnected": "未接続",
+    "history": "履歴",
+    "minimize": "最小化"
   },
   "io": {
     "importGroup": "読み込み",
@@ -710,5 +860,119 @@
     "measuredHint": "この長さはFreeCADの経路計測から書き戻された値です。手で変えると出所は手入力になります",
     "linkLabel": "3D対応付け",
     "overwroteLog": "WIRE  FreeCADで計測した長さを手入力で上書きしました (次のFreeCAD同期で計測値に戻せます)"
+  },
+  "app": {
+    "bootError": "起動エラー: {error}",
+    "loading": "読み込み中..."
+  },
+  "titleBar": {
+    "print": "印刷",
+    "undo": "元に戻す (Cmd+Z)",
+    "redo": "やり直し (Cmd+Shift+Z)",
+    "settings": "設定"
+  },
+  "statusBar": {
+    "grid": "グリッド表示",
+    "snap": "グリッドスナップ",
+    "ortho": "直交モード",
+    "polar": "極トラッキング (未実装)",
+    "osnap": "オブジェクトスナップ (ピン)",
+    "lineweight": "線の太さ表示 (未実装)",
+    "polarLog": "極トラッキング: 未実装",
+    "lineweightLog": "線の太さ表示: 未実装",
+    "zoom": "ズーム {percent}%",
+    "model": "モデル"
+  },
+  "projectPanel": {
+    "title": "プロジェクト マネージャー",
+    "addSheet": "シートを追加",
+    "open": "プロジェクトを開く",
+    "reload": "再読み込み",
+    "print": "印刷",
+    "settings": "プロジェクト設定",
+    "untitled": "無題",
+    "detail": "詳細",
+    "drawing": "図面",
+    "drawingNo": "図番",
+    "paper": "用紙",
+    "portrait": "縦",
+    "landscape": "横",
+    "sheet": "シート",
+    "entities": "要素数",
+    "addedLog": "NEWSHEET  シートを追加しました",
+    "todoLog": "{name}: 未実装"
+  },
+  "fileTabs": {
+    "lastSheetLog": "最後のシートは削除できません",
+    "deleteConfirm": "このシートを削除しますか?(undoで戻せます)",
+    "addSheet": "シートを追加"
+  },
+  "properties": {
+    "title": "プロパティ",
+    "selectedCount": "{count} 個選択",
+    "none": "選択なし",
+    "general": "一般",
+    "color": "色",
+    "lineType": "線種",
+    "electrical": "電気属性",
+    "gauge": "線径",
+    "partNo": "電線品番",
+    "length": "長さ m",
+    "identity": "識別",
+    "reference": "参照記号",
+    "value": "型番/値",
+    "symbol": "シンボル",
+    "net": "ネット",
+    "netName": "ネット名",
+    "apply": "適用",
+    "kind": {
+      "wire": "配線",
+      "symbol": "シンボル",
+      "junction": "ジャンクション",
+      "net_label": "ネットラベル",
+      "text": "テキスト",
+      "harness": "ハーネス"
+    },
+    "colors": {
+      "red": "赤",
+      "black": "黒",
+      "white": "白",
+      "blue": "青",
+      "yellow": "黄",
+      "green": "緑",
+      "orange": "橙",
+      "purple": "紫",
+      "brown": "茶",
+      "gray": "灰",
+      "pink": "桃",
+      "light_blue": "水色"
+    }
+  },
+  "viewClass": {
+    "wires": "配線",
+    "symbols": "シンボル",
+    "refs": "参照記号",
+    "net_labels": "ネットラベル",
+    "wire_numbers": "線番",
+    "harness": "ハーネス",
+    "texts": "注記",
+    "frame": "図枠",
+    "grid": "グリッド"
+  },
+  "simulation": {
+    "title": "シミュレーション (DC動作点)",
+    "source": "電源 {volts}V",
+    "open": "開路: {switches}",
+    "rerun": "再実行",
+    "netVoltages": "ネット電圧",
+    "componentCurrents": "部品電流"
+  },
+  "verification": {
+    "title": "検証結果",
+    "ok": "問題は見つかりませんでした",
+    "rerun": "再検証"
+  },
+  "ui": {
+    "welcome": "MadakeCAD コマンドライン (L=配線 E=削除 U=元に戻す)"
   }
 }

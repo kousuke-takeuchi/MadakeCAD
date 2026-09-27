@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import EditorLayout from "./components/EditorLayout.vue";
 import { useDocumentStore } from "./stores/document";
 import { useProjectFileStore } from "./stores/projectFile";
 
 const store = useDocumentStore();
 const projectFile = useProjectFileStore();
+const { t } = useI18n();
 const ready = ref(false);
 const error = ref<string | null>(null);
 
@@ -24,8 +26,8 @@ onMounted(async () => {
 <template>
   <EditorLayout v-if="ready" />
   <div v-else class="boot">
-    <p v-if="error" class="boot-error">起動エラー: {{ error }}</p>
-    <p v-else>読み込み中...</p>
+    <p v-if="error" class="boot-error">{{ t("app.bootError", { error }) }}</p>
+    <p v-else>{{ t("app.loading") }}</p>
   </div>
 </template>
 

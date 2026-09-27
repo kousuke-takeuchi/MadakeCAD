@@ -20,6 +20,29 @@ jobs:
         working-directory: src-tauri
         run: cargo test -p madake-core -p madake-mcp -p madake-agent -p madake-cli
 
+  rust-cross:
+    name: Rust tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS runs the full suite (the agent tests use a bash fake CLI)
+          - os: macos-latest
+            packages: -p madake-core -p madake-mcp -p madake-agent -p madake-cli
+          # Windows runs the OS-independent crates (no bash for the agent fakes)
+          - os: windows-latest
+            packages: -p madake-core -p madake-cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test ${{ matrix.packages }}
+
   frontend:
     name: Frontend tests & types
     runs-on: ubuntu-latest

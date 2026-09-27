@@ -5,6 +5,8 @@
 // A1で動くのは「図面から追加...」だけ。挿し込むのはタグ文字列であって、
 // 図面そのものには一切触れない (document storeは読み取りのみ)。
 import { BookOpen, Database, FileText, Paperclip } from "lucide-vue-next";
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { appendContextTag, drawingContextTag } from "../../composables/drawingContext";
 import { useDocumentStore } from "../../stores/document";
 import { useUiStore } from "../../stores/ui";
@@ -13,6 +15,7 @@ const emit = defineEmits<{ close: [] }>();
 
 const doc = useDocumentStore();
 const ui = useUiStore();
+const { t } = useI18n();
 
 /**
  * メニュー項目。`note`があるものは未実装 (グレー表示のまま、押されたら予定を知らせる)。
@@ -22,24 +25,12 @@ const ui = useUiStore();
  * 「表示は残して操作時に予定をログする」というデザインシステムの方針
  * (docs/design-system.md「未実装機能のUI」) を満たせなくなる。
  */
-const items: { icon: typeof Paperclip; label: string; note?: string }[] = [
-  {
-    icon: Paperclip,
-    label: "画像/ファイルを追加... (データシートPDF等)",
-    note: "画像/ファイルの添付はフェーズA2で対応予定です",
-  },
-  { icon: FileText, label: "図面から追加... (シート/選択範囲)" },
-  {
-    icon: Database,
-    label: "部品DBから追加...",
-    note: "部品DBの参照はフェーズ2で対応予定です",
-  },
-  {
-    icon: BookOpen,
-    label: "規格を選択... (JIS C 0617 ほか)",
-    note: "規格の参照はフェーズ2で対応予定です",
-  },
-];
+const items = computed<{ icon: typeof Paperclip; label: string; note?: string }[]>(() => [
+  { icon: Paperclip, label: t("chat.context.attach"), note: t("chat.context.attachNote") },
+  { icon: FileText, label: t("chat.context.fromDrawing") },
+  { icon: Database, label: t("chat.context.partsDb"), note: t("chat.context.partsDbNote") },
+  { icon: BookOpen, label: t("chat.context.standards"), note: t("chat.context.standardsNote") },
+]);
 
 function onFromDrawing() {
   const tag = drawingContextTag(doc.activeSheet, doc.selection);
@@ -56,7 +47,7 @@ function onPick(note: string | undefined) {
 <template>
   <div class="context-menu">
     <div class="body">
-      <div class="head">コンテキストに追加</div>
+      <div class="head">{{ t("chat.context.head") }}</div>
 
       <button
         v-for="item in items"

@@ -26,3 +26,8 @@ dist-ssr
 # 社外秘の参考資料 (コミット禁止。READMEも企業名を含むためローカル専用)
 docs/references/*.pdf
 docs/references/README.md
+docs/references/confidential-terms.txt
+
+# Python bytecode caches (FreeCAD add-on tests)
+__pycache__/
+*.pyc

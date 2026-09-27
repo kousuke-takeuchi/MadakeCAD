@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1335 specification clauses** across 6 areas.
+**1339 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -177,6 +177,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### PDF output
 
+- PDF text is mapped to a Japanese-capable system font per OS: Hiragino Sans/Menlo on macOS, Yu Gothic UI/Consolas on Windows, Noto Sans CJK JP/DejaVu Sans Mono elsewhere. <sub>`preferred_families_follow_the_operating_system`</sub>
 - PDF export produces a valid PDF document (%PDF- header) of non-trivial size, including Japanese text. <sub>`sheet_to_pdf_produces_pdf_bytes`</sub>
 - The PDF page is exactly the size of the paper (A3 landscape = 420x297mm), so printing at 100% is 1:1. <sub>`pdf_page_is_the_size_of_the_paper`</sub>
 - A PDF book is ordered cover page, then every circuit sheet, then the selected report pages. <sub>`pdf_book_is_cover_then_sheets_then_reports`</sub>
@@ -1283,9 +1284,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### i18n
 
 - defaults to English and falls back to English <sub>`i18n`</sub>
-- ships English and Japanese catalogs <sub>`i18n`</sub>
-- keeps the English and Japanese catalogs key-identical <sub>`i18n`</sub>
-- rejects empty strings in either catalog <sub>`i18n`</sub>
+- ships English, Japanese, Chinese, Spanish, French and German catalogs <sub>`i18n`</sub>
+- keeps every catalog key-identical to the English one <sub>`i18n`</sub>
+- rejects empty strings in any catalog <sub>`i18n`</sub>
+- keeps the same named placeholders as English in every translation <sub>`i18n`</sub>
+- keeps the same number of plural forms as English in every translation <sub>`i18n`</sub>
+- shows each language name as its own endonym <sub>`i18n`</sub>
 - resolves language tags leniently and falls back to English for unknown values <sub>`i18n`</sub>
 
 ### chat

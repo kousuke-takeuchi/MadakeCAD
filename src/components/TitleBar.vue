@@ -42,16 +42,16 @@ async function redo() {
       <button :title="t('file.titleNew')" @click="emit('new')"><FilePlus :size="14" /></button>
       <button :title="t('file.titleOpen')" @click="emit('open')"><FolderOpen :size="14" /></button>
       <button :title="t('file.titleSave')" @click="emit('save')"><Save :size="14" /></button>
-      <button title="印刷"><Printer :size="14" /></button>
+      <button :title="t('titleBar.print')"><Printer :size="14" /></button>
       <span class="qat-sep" />
-      <button title="元に戻す (Cmd+Z)" :disabled="!store.canUndo" @click="undo"><Undo2 :size="14" /></button>
-      <button title="やり直し (Cmd+Shift+Z)" :disabled="!store.canRedo" @click="redo"><Redo2 :size="14" /></button>
+      <button :title="t('titleBar.undo')" :disabled="!store.canUndo" @click="undo"><Undo2 :size="14" /></button>
+      <button :title="t('titleBar.redo')" :disabled="!store.canRedo" @click="redo"><Redo2 :size="14" /></button>
     </div>
     <div class="doc-name" data-tauri-drag-region>
       MadakeCAD - [{{ documentTitle }}]
     </div>
     <div class="right-space">
-      <button class="gear" title="設定" @click="ui.settingsOpen = true"><Settings :size="14" /></button>
+      <button class="gear" :title="t('titleBar.settings')" @click="ui.settingsOpen = true"><Settings :size="14" /></button>
     </div>
   </div>
 </template>
