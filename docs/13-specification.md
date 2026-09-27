@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2113 specification clauses** across 5 areas.
+**2133 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -159,7 +159,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 10, the version that added the project number. <sub>`the_current_format_version_is_ten`</sub>
+- The current file format version is 11, the version that added the wire part-number legend block. <sub>`the_current_format_version_is_eleven`</sub>
+- A project file saved before the wire part-number legend block existed opens with no legend blocks at all, and is brought up to the current format version. <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
+- A wire part-number legend block placed on a sheet survives a save and reload with its place unchanged. <sub>`a_wire_legend_survives_a_save_and_reload`</sub>
 - A project file saved before the project number existed opens with no project number set, so the `{project.no}` title-block bind stays blank exactly as before, and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_project_number`</sub>
 - A drawing saved before the annotation text height existed opens at the default 2.0mm, so its notes look exactly as before. <sub>`an_old_project_file_opens_with_the_default_annotation_text_height`</sub>
 - The annotation text height set on a sheet is saved to the file and comes back on reload. <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
@@ -475,6 +477,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The BOM groups symbols by part number and counts quantities per group. <sub>`bom_groups_by_value_and_counts`</sub>
 - The parts list carries the panel item number as its first column, so the balloons on the panel drawing and the parts list line up. <sub>`bom_starts_with_the_panel_item_number`</sub>
 - Parts that are not on a panel yet leave the item number column empty; the rest of the parts list is unaffected. <sub>`bom_leaves_the_item_number_empty_for_unplaced_parts`</sub>
+- The BOM has no wire roll-up rows at all when the project has no wires (a project with only components is unaffected). <sub>`bom_has_no_wire_rollup_rows_without_any_wires`</sub>
+- After the component rows, the BOM adds one row per wire part number with the project-wide total length (in metres, 2 decimals) in the quantity column. <sub>`bom_rolls_up_wires_by_part_number_after_the_component_rows`</sub>
+- Wires whose part number cannot be resolved roll up under a single "(unassigned)" row, instead of being invented or dropped. <sub>`bom_rolls_up_unresolved_wires_under_one_unassigned_row`</sub>
 - BOM fields containing commas are quoted so the CSV stays valid. <sub>`bom_escapes_fields_with_commas`</sub>
 - The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, followed by the mate and remark columns (G14/G18), and the older column order (sheet, wire number, harness, ...) is no longer produced. <sub>`wire_list_is_a_from_to_list`</sub>
 - An end of a wire that lands on a symbol pin is written as "reference:pin number" (for example K1:A1). <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
@@ -611,6 +616,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A numbered footprint carries a balloon: a white circle holding the item number, joined to the part by a short leader line. <sub>`svg_draws_a_balloon_on_a_numbered_footprint`</sub>
 - A footprint that has not been numbered yet has no balloon on the drawing. <sub>`svg_draws_no_balloon_before_numbering`</sub>
 - The legend table is drawn where it was placed, listing the item number, the reference and the type number of every part on the sheet. <sub>`svg_draws_the_legend_table`</sub>
+- The wire part-number legend block is drawn where it was placed, listing the colour, gauge, part number and summed length of the sheet's wires. <sub>`svg_draws_the_wire_legend_block`</sub>
+- A sheet with no wires at all still draws the wire legend block's header row. <sub>`svg_draws_the_wire_legend_header_even_with_no_wires`</sub>
+- The wire legend block resolves a blank part number from the project's wire-part table, the same way the wire list does. <sub>`svg_wire_legend_resolves_part_number_from_the_project_table`</sub>
 - Every wire prints its gauge, colour and cut length under the wire, which is what the shop needs to make the harness. <sub>`svg_annotates_each_wire_with_gauge_colour_and_length`</sub>
 - The wire note is part of the exported drawing itself, so it comes out in SVG and PDF without turning anything on. <sub>`wire_notes_are_exported_by_default`</sub>
 - Hiding a class on screen never changes the exported file: the export always draws the whole drawing. <sub>`export_ignores_screen_only_view_classes`</sub>
@@ -832,6 +840,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A note that stops exactly at the top edge of a symbol is touching, not overlapping. <sub>`a_note_stopping_at_the_symbol_edge_does_not_overlap`</sub>
 - Symbols placed on top of each other are counted separately from label overlaps. <sub>`symbols_placed_on_top_of_each_other_are_counted_separately`</sub>
 - A symbol's own reference designator never counts as overlapping the symbol it belongs to. <sub>`a_reference_designator_never_overlaps_its_own_symbol`</sub>
+- A pin group's caption (G8) is one of the text boxes measured on a sheet, so a caption that overlaps another label is caught by the overlap metric. <sub>`a_pin_group_caption_is_measured_as_a_text_box`</sub>
 - The measured text of a tagged net label sits inside its flag, so the overlap count follows what is actually printed. <sub>`a_tagged_net_label_is_measured_inside_its_flag`</sub>
 - A smaller annotation text height makes the measured net label and wire number smaller too. <sub>`measured_annotation_text_follows_the_sheet_setting`</sub>
 - Symbol origins and wire vertices sitting on the 2.5 mm grid report no off-grid points. <sub>`entities_on_the_grid_report_no_off_grid_points`</sub>
@@ -871,6 +880,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A multi-pole breaker conducts pole by pole, so a load fed from an unwired pole is still reported as unreachable from the source. <sub>`multipole_breaker_does_not_connect_its_poles_to_each_other`</sub>
 - A panel-layout sheet is not checked against the schematic rules: it carries no wiring, so nothing there counts as an unconnected pin or a dangling wire. <sub>`a_panel_sheet_is_not_checked_against_the_schematic_rules`</sub>
 - A part placed on the panel whose reference designator is nowhere on the schematic is reported as a warning, and the whole-project check reports it together with the schematic findings. <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
+
+### wire_legend
+
+- A sheet with no wires at all still gets a header-only legend block (no data rows). <sub>`an_empty_sheet_has_only_the_header_row`</sub>
+- Wires that share the same colour, gauge and resolved part number collapse into one row whose length is the sum of theirs. <sub>`wires_of_the_same_colour_gauge_and_part_number_are_summed_into_one_row`</sub>
+- Rows are sorted by colour, then by gauge within the same colour. <sub>`rows_are_sorted_by_colour_then_gauge`</sub>
+- A wire whose colour and gauge are not in the wire-part table shows a blank part number, instead of an invented one. <sub>`an_unresolved_part_number_shows_as_blank`</sub>
 
 ### Wire numbering
 
@@ -1653,6 +1669,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - maps a point to (-y, x) for a quarter turn, in the paper coordinate system <sub>`placePoint`</sub>
 - moves each symbol to the cursor and adds the placement rotation to its own <sub>`placeMacroEntities`</sub>
 - moves wire points through the same transform, so a rotated macro keeps its shape <sub>`placeMacroEntities`</sub>
+- moves a wire legend block's placement the same way as any other entity <sub>`placeMacroEntities`</sub>
 - works on copies, leaving the macro definition untouched so it can be placed again <sub>`placeMacroEntities`</sub>
 - builds a throwaway sheet holding only the chosen variant's entities <sub>`macroSheet`</sub>
 - shows the Japanese name when the UI is Japanese and the English name otherwise <sub>`macroName`</sub>
@@ -1995,6 +2012,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - panning moves the view in screen pixels <sub>`Viewport`</sub>
 - snapping rounds to the 2.5 mm grid by default <sub>`Viewport`</sub>
 - zoom is clamped to sane bounds <sub>`Viewport`</sub>
+
+### wireLegend
+
+- has only the header row for a sheet with no wires <sub>`wire legend block geometry`</sub>
+- sums the length of wires sharing the same colour, gauge and part number into one row <sub>`wire legend block geometry`</sub>
+- sorts rows by colour then by gauge <sub>`wire legend block geometry`</sub>
+- leaves the part number blank when the colour and gauge are not in the wire-part table <sub>`wire legend block geometry`</sub>
+- builds an add_entity command that only sets the placement <sub>`wire legend block geometry`</sub>
+- lists the wire legend entities placed on a sheet <sub>`wire legend block geometry`</sub>
 
 ### wireNotes
 

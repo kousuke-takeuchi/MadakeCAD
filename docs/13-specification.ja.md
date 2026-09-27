@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2113仕様項目**。
+全5領域・**2133仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -159,7 +159,9 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは10 (プロジェクト番号を追加した版) である。 <sub>`the_current_format_version_is_ten`</sub>
+- 現行のファイル形式バージョンは11 (電線品番凡例ブロックを追加した版) である。 <sub>`the_current_format_version_is_eleven`</sub>
+- 電線品番凡例ブロックが無かった頃のプロジェクトファイルは凡例ブロックの無い状態で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
+- シートに置いた電線品番凡例ブロックは、置き場所を保ったまま保存して読み直せる。 <sub>`a_wire_legend_survives_a_save_and_reload`</sub>
 - プロジェクト番号が無かった頃のプロジェクトファイルはプロジェクト番号が未設定として開き、表題欄バインド`{project.no}`はこれまでどおり空欄のままになる。現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_project_number`</sub>
 - 注記文字高が無かった頃の図面は既定の2.0mmで開くので、注記の見た目はこれまでと変わらない。 <sub>`an_old_project_file_opens_with_the_default_annotation_text_height`</sub>
 - シートに設定した注記文字高はファイルへ保存され、読み直しても残っている。 <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
@@ -475,6 +477,9 @@
 - 部品表はシンボルを型番でまとめ、数量を集計する。 <sub>`bom_groups_by_value_and_counts`</sub>
 - 部品表の先頭列は盤のアイテム番号なので、盤図面のバルーンと部品表が突き合わせられる。 <sub>`bom_starts_with_the_panel_item_number`</sub>
 - まだ盤に置いていない部品はアイテム番号の欄が空欄になり、部品表の他の欄はそのまま出る。 <sub>`bom_leaves_the_item_number_empty_for_unplaced_parts`</sub>
+- 配線の無いプロジェクトには電線集約行が1行も付かない (部品だけの部品表はそのまま)。 <sub>`bom_has_no_wire_rollup_rows_without_any_wires`</sub>
+- 部品行の後ろに、電線品番ごとの集約行が付き、数量欄にプロジェクト全体の使用長合計 (m単位・小数第2位まで) が入る。 <sub>`bom_rolls_up_wires_by_part_number_after_the_component_rows`</sub>
+- 品番を引けない配線は「(未割当)」の1行にまとまり、勝手に品番を作ったり黙って消えたりしない。 <sub>`bom_rolls_up_unresolved_wires_under_one_unassigned_row`</sub>
 - カンマを含む項目は引用符で囲まれ、CSVが壊れない。 <sub>`bom_escapes_fields_with_commas`</sub>
 - 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先、続いて嵌合相手・備考列 (G14/G18) が並ぶ。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。 <sub>`wire_list_is_a_from_to_list`</sub>
 - シンボルのピンに届いているワイヤの端は「参照記号:ピン番号」(例 K1:A1) と書かれる。 <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
@@ -611,6 +616,9 @@
 - 採番したフットプリントにはバルーンが付く(アイテム番号を入れた白丸と、部品へ伸びる短い引出線)。 <sub>`svg_draws_a_balloon_on_a_numbered_footprint`</sub>
 - まだ採番していないフットプリントには図面にバルーンが出ない。 <sub>`svg_draws_no_balloon_before_numbering`</sub>
 - 凡例表は置いた場所に描かれ、そのシートの部品のアイテム番号・参照記号・型番が並ぶ。 <sub>`svg_draws_the_legend_table`</sub>
+- 電線品番凡例ブロックは置いた場所に描かれ、そのシートの配線の線色・線径・品番・使用長合計が並ぶ。 <sub>`svg_draws_the_wire_legend_block`</sub>
+- 配線の無いシートでも、電線品番凡例ブロックの列見出しは描かれる。 <sub>`svg_draws_the_wire_legend_header_even_with_no_wires`</sub>
+- 電線品番凡例ブロックは、電線リストと同じ規則でプロジェクトの電線品番表から品番を引く。 <sub>`svg_wire_legend_resolves_part_number_from_the_project_table`</sub>
 - 全ての配線は線径・線色・電線長を配線の下に印字する(現場が電線を作るのに必要な情報)。 <sub>`svg_annotates_each_wire_with_gauge_colour_and_length`</sub>
 - 配線注記は図面そのものの一部なので、何も設定しなくてもSVG・PDFに出る。 <sub>`wire_notes_are_exported_by_default`</sub>
 - 画面で表示クラスを消しても出力ファイルは変わらない(出力は常に図面の全部を描く)。 <sub>`export_ignores_screen_only_view_classes`</sub>
@@ -832,6 +840,7 @@
 - シンボルの外形の上端でぴたりと止まる注記は、接しているだけで重なっていない。 <sub>`a_note_stopping_at_the_symbol_edge_does_not_overlap`</sub>
 - 重ねて置かれたシンボルどうしの重なりは、ラベルの重なりとは別に数える。 <sub>`symbols_placed_on_top_of_each_other_are_counted_separately`</sub>
 - シンボル自身の参照記号は、その持ち主のシンボルとの重なりには数えない。 <sub>`a_reference_designator_never_overlaps_its_own_symbol`</sub>
+- ピングループのキャプション(G8)もシートの文字として測られるので、他の文字と重なっていれば重なりの指標が拾う。 <sub>`a_pin_group_caption_is_measured_as_a_text_box`</sub>
 - タグ付きネットラベルの文字は旗の中として測られるので、重なりの数は実際に印字される見た目と一致する。 <sub>`a_tagged_net_label_is_measured_inside_its_flag`</sub>
 - 注記文字高を小さくすると、測られるネットラベル・線番の大きさも一緒に小さくなる。 <sub>`measured_annotation_text_follows_the_sheet_setting`</sub>
 - シンボル原点も配線頂点も2.5mmグリッドに乗っていれば、グリッド外は0件になる。 <sub>`entities_on_the_grid_report_no_off_grid_points`</sub>
@@ -871,6 +880,13 @@
 - 多極の遮断器は極ごとに導通するため、結線されていない極につながる負荷は電源から到達できないと報告される。 <sub>`multipole_breaker_does_not_connect_its_poles_to_each_other`</sub>
 - 盤レイアウトシートは回路図の規則で検査しない。配線を持たないシートなので、未接続ピンや宙ぶらりんの配線として指摘されるものは無い。 <sub>`a_panel_sheet_is_not_checked_against_the_schematic_rules`</sub>
 - 回路図のどこにも無い参照記号のフットプリントが盤に置かれていると注意として報告され、プロジェクト全体の検証では回路図の指摘と一緒に出る。 <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
+
+### wire_legend
+
+- 配線が1本も無いシートでも、凡例ブロックは列見出しだけの表として出る。 <sub>`an_empty_sheet_has_only_the_header_row`</sub>
+- 線色・線径・引き当てた品番が同じ配線は1行にまとまり、使用長は合算される。 <sub>`wires_of_the_same_colour_gauge_and_part_number_are_summed_into_one_row`</sub>
+- 行は線色順、同じ線色の中では線径順に並ぶ。 <sub>`rows_are_sorted_by_colour_then_gauge`</sub>
+- 電線品番表に無い組み合わせの配線は品番欄が空欄のままで、勝手に品番が作られることはない。 <sub>`an_unresolved_part_number_shows_as_blank`</sub>
 
 ### 線番採番
 
@@ -1653,6 +1669,7 @@
 - 90度回転は用紙座標系(Y下向き)で (x,y) → (-y,x) に写る <sub>`placePoint`</sub>
 - 配置後のシンボルはカーソル位置へ移り、シンボル自身の向きにも回転が加わる <sub>`placeMacroEntities`</sub>
 - 配線の頂点もシンボルと同じ変換で動くので、回転しても回路の形は崩れない <sub>`placeMacroEntities`</sub>
+- 電線品番凡例ブロックの置き場所も、他のエンティティと同じ変換で移動する <sub>`placeMacroEntities`</sub>
 - 配置は複製に対して行われ、元のマクロ定義は書き換えない(何度でも同じ形で置ける) <sub>`placeMacroEntities`</sub>
 - プレビューは選んだバリアントのエンティティだけを載せた仮のシートを描く <sub>`macroSheet`</sub>
 - マクロ名はUI言語が日本語なら日本語名、それ以外は英語名を出す <sub>`macroName`</sub>
@@ -1995,6 +2012,15 @@
 - パンはスクリーンpx単位でビューを動かす <sub>`Viewport`</sub>
 - スナップは既定で2.5mmグリッドへ丸める <sub>`Viewport`</sub>
 - ズーム倍率は妥当な範囲に制限される <sub>`Viewport`</sub>
+
+### wireLegend
+
+- 配線が1本も無いシートでも、凡例ブロックは列見出しだけの表として出る。 <sub>`wire legend block geometry`</sub>
+- 線色・線径・引き当てた品番が同じ配線は1行にまとまり、使用長は合算される。 <sub>`wire legend block geometry`</sub>
+- 行は線色順、同じ線色の中では線径順に並ぶ。 <sub>`wire legend block geometry`</sub>
+- 電線品番表に無い組み合わせの配線は品番欄が空欄のままで、勝手に品番が作られることはない。 <sub>`wire legend block geometry`</sub>
+- 凡例ブロックを置くコマンドはadd_entityでkind="wire_legend"、置き場所だけを決める。 <sub>`wire legend block geometry`</sub>
+- シート上の凡例ブロックはentityのまま取り出せる。 <sub>`wire legend block geometry`</sub>
 
 ### wireNotes
 

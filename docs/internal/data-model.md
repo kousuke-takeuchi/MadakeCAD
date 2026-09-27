@@ -1,6 +1,6 @@
 # データ設計書
 
-作成: 2026-08-21。更新: 2026-09-22(フェーズ6タスク5: `.mdkproj` format_version 10・`Project.no`(G16、プロジェクト番号)。フェーズ6タスク4: format_version 9・`TextEntity.leader_to`(G20、注記の引き出し線)。フェーズ6: format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
+作成: 2026-08-21。更新: 2026-09-27(フェーズ6タスク6: format_version 11・電線品番凡例ブロックエンティティ`WireLegend`(G9残)。フェーズ6タスク5: `.mdkproj` format_version 10・`Project.no`(G16、プロジェクト番号)。フェーズ6タスク4: format_version 9・`TextEntity.leader_to`(G20、注記の引き出し線)。フェーズ6: format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
 
 MadakeCADの永続データは3系統ある:
 
@@ -12,7 +12,7 @@ MadakeCADの永続データは3系統ある:
 
 ## 1. 図面ドキュメント(.mdkproj)
 
-`format_version: 10`。構造(mermaid classDiagram):
+`format_version: 11`。構造(mermaid classDiagram):
 
 ```mermaid
 classDiagram
@@ -33,6 +33,7 @@ classDiagram
     Entity <|-- Duct
     Entity <|-- Footprint
     Entity <|-- PanelLegend
+    Entity <|-- WireLegend
 
     class Project {
       format_version: u32
@@ -99,6 +100,7 @@ classDiagram
       item_no: u32? %% バルーン番号。Noneなら未採番
     }
     class PanelLegend { id; at: Point  %% 行は描画のたびに導出 }
+    class WireLegend { id; at: Point  %% 回路図シート専用。行(線色/sq/品番/使用長)は描画のたびにシートの配線から導出 }
 ```
 
 規約:
@@ -108,6 +110,7 @@ classDiagram
 - **編集は必ずCommand経由**(add_entity / update_entity / remove_entity / move_entities / add_sheet / set_title_block / set_frame_template / renumber_panel_items 等)。Commandスキーマの正は`madake-core/src/command.rs`(MCPの`execute_commands`入力スキーマとして自動公開)
 - 図形`shape`は**電気的な意味を持たない**。ネットリスト・ERC・部品表・From-To電線リスト・整頓メトリクスのどれからも構造的に除外される(筐体の囲みはこれで描き、ハーネス境界は電線のグルーピング専用に保つ = G11)。線色・塗り色は注記と同じ色トークンだけで、生の色コードはCommandエンジンが拒否する
 - 盤レイアウトの5エンティティ(`panel_outline`/`din_rail`/`duct`/`footprint`/`panel_legend`)は**専用コマンドを持たない**。既存のadd/update/move/deleteに相乗りするのでundoもそのまま効く。唯一の例外がバルーン採番`renumber_panel_items`(逆コマンド=`set_panel_item_numbers`)
+- 電線品番凡例ブロック`wire_legend`(G9残)も同様に**専用コマンドを持たない**回路図シート専用エンティティ。`panel_legend`と対で、中身(線色・sq・電線品番・使用長合計)は持たずシートの配線から描画のたびに導出する(`madake-core/src/wire_legend.rs`)。ネットリスト・ERC・部品表・From-To電線リストのどれからも構造的に除外される(図形`shape`と同じ扱い)
 - **シート種別のガードはUIだけが持つ**。Commandエンジンは盤シートへ配線を置くことを拒まない
 - 図面はシンボル定義の**スナップショットを持たない**(`SymbolInstance`は`symbol_id`だけ)。ユーザーシンボルを保存し直すと配置済みの部品も新しい定義で描き直される
 - 派生データ(保存されない): ネットリスト・SPICEデッキ・診断・シミュレーション結果・盤の未配置部品リストは都度計算
@@ -126,6 +129,7 @@ classDiagram
 | 8 | 図形エンティティ`shape`(矩形・線・円・折れ線。電気的意味なし) | 図形が無いだけでそのまま開く。**逆に図形を含む新しいファイルは旧アプリでは読めない**(`shape`が未知) |
 | 9 | `TextEntity.leader_to`(G20、注記から対象エンティティへの引き出し線) | 引き出し先未設定(`None`)として開く=引き出し線を描かない |
 | 10 | `Project.no`(G16、プロジェクト番号。表題欄バインド`{project.no}`の供給元) | 番号未設定(`None`)として開く=バインドは空欄のまま(見た目は従来どおり) |
+| 11 | 電線品番凡例ブロックエンティティ`wire_legend`(G9残。`panel_legend`の回路図版) | 凡例ブロックが無いだけでそのまま開く。**逆に凡例ブロックを含む新しいファイルは旧アプリでは読めない**(`wire_legend`が未知) |
 
 `NetLabel.attrs`(方向付きタグ形状)のように**追加するだけで旧アプリも読める**変更は版を上げていない。
 版を上げるのは、旧アプリが読めなくなる要素が入ったとき(6)と、意味のある新フィールドを足したときだけ。
