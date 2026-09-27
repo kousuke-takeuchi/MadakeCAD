@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**1297仕様項目**。
+全6領域・**1312仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1625,4 +1625,32 @@
 - 値セットを選ばずに置いたマクロは、保存時の値のまま入る <sub>`placing a macro with a value set`</sub>
 - 選択範囲を⌘Cすると無名マクロとして覚え、⌘Vでそのまま配置モードに入る <sub>`Cmd+C / Cmd+V`</sub>
 - 何も選択していない⌘C・何もコピーしていない⌘Vはキー入力を横取りしない <sub>`Cmd+C / Cmd+V`</sub>
+
+
+## FreeCADアドオン (MadakeCAD Link)
+
+
+### Link APIクライアント (Python)
+
+- クライアントはローカルのMadakeCAD Link API(既定ポート9310)へ接続する。 <sub>`test_base_url_points_at_the_local_link_api`</sub>
+- 接続確認とプロジェクトのスナップショットはJSONを解釈した辞書で返る。 <sub>`test_health_and_project_are_decoded_from_json`</sub>
+- ネットリストと部品の要求は、シートid・検索語・カテゴリをクエリパラメータで渡す。 <sub>`test_netlist_and_parts_pass_their_filters_as_query_parameters`</sub>
+- コマンドはJSON配列として送られ、コマンドごとにpatchが1つ返る(全ての書き込みがMadakeCADのCommandエンジンを通る)。 <sub>`test_commands_are_posted_as_a_json_array_and_return_one_patch_each`</sub>
+- 接続拒否・HTTPエラー・不正なJSONはいずれも、原因が読める文面のLinkErrorになる。 <sub>`test_errors_are_reported_as_link_errors_with_a_readable_message`</sub>
+- イベントストリームはpatchごとに("patch", {revision, ops})を返し、複数行のdataは結合し、keep-aliveのコメント行は読み飛ばす。 <sub>`test_events_yield_patches_from_the_sse_stream`</sub>
+- イベント名の無い行は"message"イベントになり、dataは空行で確定し、末尾の空行が無いイベントも届く。 <sub>`test_parse_sse_defaults_the_event_name_and_dispatches_on_blank_lines`</sub>
+
+### ライブ追従・設定
+
+- patchは前回より新しいrevisionのときだけ受け入れられ、重複や古いpatchは無視される。 <sub>`test_only_newer_revisions_are_accepted`</sub>
+- 表示中シートの要素が変わったとき、またはシートの追加・削除・改名やプロジェクト置換のときにパネルは再読込し、別シートの編集では再読込しない。 <sub>`test_refresh_is_needed_for_the_shown_sheet_and_structural_changes`</sub>
+- シートをまだ選んでいない間は、どの要素の変更でも再読込して最初の表示が最新になるようにする。 <sub>`test_with_no_sheet_shown_yet_any_entity_change_reloads`</sub>
+- ポート設定は1〜65535の整数を保持し、それ以外(文字列・0・大きすぎる値)は既定の9310へ戻る。 <sub>`test_port_setting_accepts_valid_ports_and_falls_back_to_the_default`</sub>
+
+### プロジェクト概要・ネットリスト表示
+
+- プロジェクト概要にはプロジェクト名・revisionと、シートごとのシンボル・配線などの件数が入る。 <sub>`test_summary_carries_name_revision_and_per_sheet_entity_counts`</sub>
+- 空または欠けたスナップショットは、失敗せずにシート無しの無名プロジェクトとして要約される。 <sub>`test_an_empty_snapshot_summarizes_to_zero`</sub>
+- ネットリストの各行には、ネット名・線番・ラベル・「K1:A1, TB1:3」形式のピン一覧・配線本数が並ぶ。 <sub>`test_rows_show_net_name_wire_number_label_pins_and_wire_count`</sub>
+- 参照記号の無いシンボルのピンは「?:<ピン番号>」と表示され、行はそのまま読める。 <sub>`test_pins_without_a_designator_show_a_placeholder`</sub>
 

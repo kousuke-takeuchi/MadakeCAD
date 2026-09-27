@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+  <name>MadakeCAD Link</name>
+  <description>Electrical-mechanical link to a running MadakeCAD: connection settings, project overview and a live netlist view over the Link API (127.0.0.1:9310/api/v1).</description>
+  <version>0.1.0</version>
+  <date>2026-09-27</date>
+  <maintainer email="noreply@example.com">MadakeCAD contributors</maintainer>
+  <license file="../LICENSE-MIT">MIT OR Apache-2.0</license>
+  <url type="repository" branch="master">https://github.com/kousuke-takeuchi/MadakeCAD</url>
+  <url type="readme">https://github.com/kousuke-takeuchi/MadakeCAD/blob/master/freecad-addon/README.md</url>
+  <content>
+    <workbench>
+      <classname>MadakeCADLinkWorkbench</classname>
+      <subdirectory>./</subdirectory>
+      <freecadmin>1.0.0</freecadmin>
+      <tag>electrical</tag>
+      <tag>cad</tag>
+    </workbench>
+  </content>
+</package>

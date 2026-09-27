@@ -117,7 +117,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | プロバイダの実機確認状況 | 🔶 | **Ollama(0.32.14)は通し確認済み**(実チャンク形一致・キー無しで接続テスト成功・`gemma4:26b`で作図1ターン=ツール往復3回→revision 0→1→`undo-turn`で後始末)。Copilot CLI 1.0.80は**未認証のまま**起動フラグ・MCP設定JSONの形・未認証エラー(`No authentication information found.`)検知まで(JSONLの実イベント形はフィクスチャ+寛容パーサ)。Geminiは無効キーで実APIの`API_KEY_INVALID`→`gemini_auth`変換まで。Anthropic APIは401・キー未設定案内まで。**Copilot(`/login`)・Gemini・Anthropicの実キー通しはユーザー確認事項** |
 | キーチェーン(全プロバイダ共通) | ✅ | `keyring 4.1.6`直用。`service="MadakeCAD"`、`account`=`anthropic_api_key`/`openai_compat_api_key`/`gemini_api_key`。設定ファイル(`~/.madakecad/settings.json`)には項目自体を作らない(平文非保存はテストで固定)。`SecretStore`トレイトでテストはメモリ保管、実キーチェーンのテストは`MADAKE_KEYCHAIN_TESTS=1`のときだけ。macOSは許可ダイアログ抑制のためプロセスに1回だけ読み出しをキャッシュ。CLI経路(Claude Code / Copilot)は資格情報を一切持たない |
 | プロバイダ接続テスト | ✅ | Link API `POST /api/v1/agent/test-connection` + `GET /api/v1/agent/provider`(モデル名・キー保存済みフラグ)。CLI経路は検出+バージョン、API経路は実エンドポイントへの疎通。失敗は種類つき(`*_auth`/`*_rate_limit`/`*_model_not_found`/`*_server`/`*_request`/`*_network`/`*_no_key`/`*_no_model`)で日本語の案内文を返す |
-| FreeCAD連携(フェーズM) | 🔶 | Link API(M1の土台)は実装済み。アドオンWB・3D対応付け・電線長書き戻し・盤レイアウトが未 |
+| FreeCAD連携(フェーズM) | 🔶 | Link API(M1の土台)は実装済み。**M5-1 アドオンWB骨格を実装(2026-09-27)**: `freecad-addon/`(package.xml・InitGui.py・`madakecad_link/`)。接続設定(ポートはFreeCADユーザーパラメータ)・プロジェクト概要・ネットリストビュー・SSEライブ追従。純Python部分(client/model/events/settings)は15テストでCI(`freecad`ジョブ)。実FreeCADでの目視確認はユーザー確認事項。M5-2(部品対応付け・電線長書き戻し)・M5-3は未 |
 
 ## 8. ドメイン機能(参考図面の再現に必要な残り)
 

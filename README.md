@@ -74,7 +74,7 @@ Read in order — files are numbered:
 | 08 | [Import & Export](docs/08-import-export.md) | KiCad import/export, DXF interop with AutoCAD Electrical / EPLAN, file formats |
 | 09 | [AI Assistant](docs/09-ai-assistant.md) | Chat drafting, standards knowledge, verification loop, templates, turn revert, tidy-up passes, parallel conversations, providers |
 | 10 | [Automation & APIs](docs/10-automation-api.md) | MCP tools, REST API, CLI |
-| 11 | [Mechanical Integration](docs/11-mechanical-integration.md) | FreeCAD linkage |
+| 11 | [Mechanical Integration](docs/11-mechanical-integration.md) | FreeCAD add-on "MadakeCAD Link" (netlist view, live follow), linkage roadmap |
 | 12 | [Roadmap](docs/12-roadmap.md) | Milestones M1–M6 |
 | 13 | [Detailed Specification](docs/13-specification.md) | **Generated from the test suite** — every clause is machine-verified |
 
