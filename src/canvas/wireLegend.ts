@@ -65,7 +65,9 @@ export function legendRows(sheet: Sheet, wireParts: WirePart[] | undefined): str
   // 線色→線径の順 (線径は文字列ではなく実際の数値で比較し、二桁以上のsqでも正しく並ぶ)
   return [...totals.values()]
     .sort((a, b) => a.color.localeCompare(b.color) || a.sqValue - b.sqValue || a.partNo.localeCompare(b.partNo))
-    .map((r) => [r.color, r.sq, r.partNo, fmtNum(r.total)]);
+    // 使用長は合算なので、二進小数の誤差が桁となって出ないよう小数第2位で丸めてから整形する
+    // (0.4を8本足すと3.1999999999999997になる。丸めないとそれが図面に出る。Rust側と同じ規則)
+    .map((r) => [r.color, r.sq, r.partNo, fmtNum(Math.round(r.total * 100) / 100)]);
 }
 
 /** 凡例ブロックの矩形。列見出しの1行＋本文の行数ぶんだけ下へ伸びる。 */

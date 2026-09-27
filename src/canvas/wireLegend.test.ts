@@ -68,6 +68,17 @@ describe("wire legend block geometry", () => {
     ]);
   });
 
+  // ja: 足し合わせると二進小数で誠実に表せない使用長も、桁の並んだ長い数字ではなく短い小数で表示される。
+  it("rounds a summed length instead of showing floating point noise", () => {
+    // 0.4 を8本足すと、二進小数では 3.1999999999999997 になる
+    const sheet = sheetWith(
+      Array.from({ length: 8 }, () => ({ ...wire("水色", 0.3, 0.4, null), kind: "wire" }) as Entity),
+    );
+    const rows = legendRows(sheet, []);
+    expect(rows).toHaveLength(1);
+    expect(rows[0][3]).toBe("3.2");
+  });
+
   // ja: 電線品番表に無い組み合わせの配線は品番欄が空欄のままで、勝手に品番が作られることはない。
   it("leaves the part number blank when the colour and gauge are not in the wire-part table", () => {
     const parts: WirePart[] = [{ part_no: "SAMPLE0001", color: "水色", sq: 0.3, note: "" }];

@@ -39,6 +39,7 @@ import { useSimulationStore } from "../stores/simulation";
 import { useVerificationStore } from "../stores/verification";
 import type { EditorController } from "../tools/controller";
 import { useUiStore, type RibbonTab } from "../stores/ui";
+import { smallColumns } from "./ribbonLayout";
 
 const controller = inject<EditorController>("controller")!;
 const ui = useUiStore();
@@ -675,7 +676,9 @@ const groups = computed<RibbonGroup[]>(() => [
       isActive: () => controller.tool === "wire",
       isDisabled: schematicOnly,
     },
-    small: [[
+    // 5つ目 (電線品番凡例) は1列に入らないので、smallColumnsで2列目へ送る
+    // (1列に積むとリボンの下端からはみ出し、下の画面に隠れて押せなくなる)
+    small: smallColumns([
       { label: "複数母線", icon: AlignJustify, action: () => todo("複数母線"), isDisabled: schematicOnly },
       {
         label: t("wireNumbers.ribbonButton"),
@@ -700,7 +703,7 @@ const groups = computed<RibbonGroup[]>(() => [
         isDisabled: schematicOnly,
         title: t("wireLegend.ribbonHint"),
       },
-    ]],
+    ]),
   },
   {
     name: "部品を挿入",

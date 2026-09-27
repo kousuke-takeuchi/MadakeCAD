@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2133仕様項目**。
+全5領域・**2139仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -886,6 +886,7 @@
 - 配線が1本も無いシートでも、凡例ブロックは列見出しだけの表として出る。 <sub>`an_empty_sheet_has_only_the_header_row`</sub>
 - 線色・線径・引き当てた品番が同じ配線は1行にまとまり、使用長は合算される。 <sub>`wires_of_the_same_colour_gauge_and_part_number_are_summed_into_one_row`</sub>
 - 行は線色順、同じ線色の中では線径順に並ぶ。 <sub>`rows_are_sorted_by_colour_then_gauge`</sub>
+- 足し合わせると二進小数で誠実に表せない使用長も、桁の並んだ長い数字ではなく短い小数で表示される。 <sub>`a_summed_length_is_rounded_instead_of_showing_floating_point_noise`</sub>
 - 電線品番表に無い組み合わせの配線は品番欄が空欄のままで、勝手に品番が作られることはない。 <sub>`an_unresolved_part_number_shows_as_blank`</sub>
 
 ### 線番採番
@@ -2018,6 +2019,7 @@
 - 配線が1本も無いシートでも、凡例ブロックは列見出しだけの表として出る。 <sub>`wire legend block geometry`</sub>
 - 線色・線径・引き当てた品番が同じ配線は1行にまとまり、使用長は合算される。 <sub>`wire legend block geometry`</sub>
 - 行は線色順、同じ線色の中では線径順に並ぶ。 <sub>`wire legend block geometry`</sub>
+- 足し合わせると二進小数で誠実に表せない使用長も、桁の並んだ長い数字ではなく短い小数で表示される。 <sub>`wire legend block geometry`</sub>
 - 電線品番表に無い組み合わせの配線は品番欄が空欄のままで、勝手に品番が作られることはない。 <sub>`wire legend block geometry`</sub>
 - 凡例ブロックを置くコマンドはadd_entityでkind="wire_legend"、置き場所だけを決める。 <sub>`wire legend block geometry`</sub>
 - シート上の凡例ブロックはentityのまま取り出せる。 <sub>`wire legend block geometry`</sub>
@@ -2109,6 +2111,13 @@
 - コネクタでないシンボルを保存しても、パネルに欄の無い嵌合相手の属性は残る (MCP・CLIが書いた値を落とさない) <sub>`symbolAttrs`</sub>
 - コネクタの嵌合相手欄を空にして保存すると、その属性はキーごと消える <sub>`symbolAttrs`</sub>
 - パネルが持たない属性 (端子台のジャンパなど) は、どのシンボルでもそのまま残る <sub>`symbolAttrs`</sub>
+
+### ribbonLayout
+
+- 1列に入る数ちょうどの小ボタンは、1列のままで列が増えない。 <sub>`ribbon small-button columns`</sub>
+- 1列に入る数を超えた小ボタンは、リボンからはみ出さないよう次の列へ送られる。 <sub>`ribbon small-button columns`</sub>
+- 小ボタンが1つも無いグループは列も作らない (空の列が幅だけ取らない)。 <sub>`ribbon small-button columns`</sub>
+- 2列に収まらない数の小ボタンは、必要なだけ列を増やして全部が押せる位置に並ぶ。 <sub>`ribbon small-button columns`</sub>
 
 ### symbolPickerDynamic
 

@@ -64,6 +64,9 @@ pub fn legend_rows_with(sheet: &Sheet, wire_parts: &[WirePart]) -> Vec<Vec<Strin
         .into_iter()
         .map(|((color, sq_text, part_no), total)| {
             let sq = sq_values.get(&sq_text).copied().unwrap_or(0.0);
+            // 使用長は合算なので、二進小数の誤差が桁となって出ないよう小数第2位で丸めてから
+            // 整形する (0.4を8本足すと3.1999999999999997になる。丸めないとそれが図面に出る)
+            let total = (total * 100.0).round() / 100.0;
             (color, sq_text, sq, part_no, crate::reports::fmt_num(total))
         })
         .collect();
@@ -174,6 +177,18 @@ mod tests {
                 ("赤".to_string(), "0.5".to_string()),
             ]
         );
+    }
+
+    /// Lengths that cannot be added up exactly in binary floating point still print as a short decimal, never as a long string of digits.
+    /// 足し合わせると二進小数で誠実に表せない使用長も、桁の並んだ長い数字ではなく短い小数で表示される。
+    #[test]
+    fn a_summed_length_is_rounded_instead_of_showing_floating_point_noise() {
+        let project = Project::new("t");
+        // 0.4 を8本足すと、二進小数では 3.1999999999999997 になる
+        let sheet = sheet_with((0..8).map(|_| wire("水色", 0.3, Some(0.4), None)).collect());
+        let rows = legend_rows(&project, &sheet);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0][3], "3.2", "使用長は小数第2位までに丸めて表示する");
     }
 
     /// A wire whose colour and gauge are not in the wire-part table shows a blank part number, instead of an invented one.

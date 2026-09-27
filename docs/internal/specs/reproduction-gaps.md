@@ -1,7 +1,7 @@
 # Reproduction gap ledger — reference wiring diagram, sheet 1
 
 Created: 2026-08-23. Second pass: 2026-08-23 (after phase 5). Third pass: 2026-08-23 (after phase 6).
-Fourth pass (2026-09-27, phase 6 task 6): planned but not run this session — see below.
+Fourth pass: 2026-09-27 (after phase 6 task 6).
 Japanese version: [reproduction-gaps.ja.md](reproduction-gaps.ja.md).
 
 ## What this is
@@ -80,7 +80,7 @@ Verdicts are "first pass" (phase 4 features) → "second pass" (phase 5 features
 | Per-wire gauge / colour / length annotation on the sheet | ❌ | **✅** | G2 — automatic on all 111 conductors |
 | Per-wire-end crimp contact / ferrule part annotation | ❌ | ❌ | rest of G2 — `Wire` still has no per-end terminal field |
 | Wire colour | ✅ | ✅ | English and Japanese colour names both resolve |
-| Wire part number from colour + gauge | ❌ | **✅** | G9 — 111/111 wire-list rows filled from an imported CSV. **✅ phase 6 task 6**: wire-part legend block + BOM wire roll-up close the rest of G9 (verified at the implementation level; no fourth reproduction-sheet re-measurement, see the note after the third pass) |
+| Wire part number from colour + gauge | ❌ | **✅** | G9 — 111/111 wire-list rows filled from an imported CSV. **✅ phase 6 task 6**: wire-part legend block + BOM wire roll-up close the rest of G9. Re-measured on the fourth pass: 111/111 again, BOM carries 2 wire roll-up rows, and the legend block draws and exports — but only on the second sheet, since this A4 sheet has no free 90 × 15 mm area for it (G23) |
 | Harness boundary (dashed enclosure) | ✅ | ✅ | |
 | Enclosure / case boundary distinct from a harness | 🔶 | **✅** | G11 — draw it as a dashed `shape`; the harness column stays empty |
 | Highlight box (coloured rectangle annotation) | ❌ | **✅** | G10 — `shape` rectangle with a colour token |
@@ -132,42 +132,74 @@ One new overlap was found in the process and is recorded as G22.
 
 ---
 
-## Fourth pass — phase 6 task 6 (2026-09-27): not run this session
+## Fourth pass — after phase 6 task 6 (2026-09-27)
 
-Task 6 planned to rebuild the reproduction sheet a fourth time with every phase-6
-feature applied, and the reproduction script (`docs/references/repro/build_sheet1.py`)
-was extended for that: `set_project_meta` (G16), `device_block` on the relay coil
-(G7 — the reference draws the relay as one outline, per `NOTES.md`), `pin_groups` on
-the controller block (G8), a leader from the P/N jumper note to the terminal block it
-describes (G20), a wire-part legend block (G9 remainder), a small multi-level
-terminal-block instance with level-aware jumpers (G5/G6 — kept as a separate
-demonstration rather than merged into the existing P/18-pole and N/12-pole blocks,
-since a multi-level block needs the same pole count on every level and those two
-column counts differ), a mated `connector_2p` pair (G14 — the reproduction's own
-connectors are named-pin `block` instances, which `mates_with` does not recognise, so
-this is a small separate pair rather than a conversion of an existing one), and a
-device reused across both sheets (G13).
+The reproduction was rebuilt a fourth time with every phase-6 feature applied:
+`set_project_meta` (G16), `device_block` on the relay coil (G7 — the reference draws
+the relay as one outline), `pin_groups` on the controller block (G8), a leader from the
+jumper note to the terminal block it describes (G20), a wire-part legend block (G9
+remainder), a multi-level terminal-block instance with level-aware jumpers (G5/G6 —
+a separate demonstration rather than a merge of the two existing terminal columns, whose
+pole counts differ), a mated connector pair (G14 — likewise a separate pair, because the
+reproduction's own connectors are named-pin `block` instances that `mates_with` does not
+recognise), a device reused across both sheets (G13), and the enclosure boundary redrawn
+as a dashed shape instead of a borrowed harness (G11).
 
-**The script was not executed this session.** The app's Link API on `127.0.0.1:9310`
-was already up and answering when this task started, but it belonged to an
-already-running, long-lived instance with its own open project — not one started for
-this task — so driving it with `add_entity`/`set_project_meta`/etc. would have edited
-someone else's live document instead of a disposable reproduction. No second instance
-was started either, since the port is fixed and a second listener on it would only
-have failed or, worse, raced the first one. This is reported rather than worked around
-silently, per the task's own instructions for exactly this situation.
+The rebuild ran against a **development instance started for this task on a second port**
+(`MADAKE_MCP_PORT`), because the fixed default port was occupied by an unrelated,
+long-running installed app with its own open document. The reproduction script now takes
+its Link API base from an environment variable for exactly this reason.
 
-What follows from that: the wire-part legend block, the BOM roll-up and the
-pin-group-caption addition to the tidy metric are verified at the **implementation**
-level only — Rust unit tests (`madake-core`), the canvas twin's Vitest suite, and a
-generic (non-confidential) demo SVG + BOM CSV built from a throwaway project, not the
-reference data — the same way phase 6 task 4 verified G8, G12 and the G20 remainder
-without a sheet re-measurement (see the note at the end of this document). The
-"counts: commands / overlapping labels / ERC findings" that a real fourth pass would
-have produced were not measured and are not reported here; inventing plausible-looking
-numbers would misrepresent what was actually checked. Re-running the extended script
-once the app is free is a follow-up, not a blocker for this task's own gap (G9 is
-closed at the implementation level either way).
+**267 commands** produce the sheet. Measured on it:
+
+| Measure | 3rd pass | 4th pass |
+|---|---|---|
+| Commands | 260 | **267** |
+| Overlapping labels on sheet 1 (`tidy-metrics`) | **0** (12 at the default 2.0 mm) | **0** (12 at 2.0 mm) |
+| Overlapping symbol outlines | — | **0** |
+| ERC + electrical verification (sheet 1) | 2 | **5** (see below) |
+| Wire-list rows with a part number | 111 / 111 | **111 / 111** |
+| Wire-list rows whose harness column names the enclosure | 105 / 111 | **0 / 111** (G11: drawn as a shape) |
+| BOM rows | — | 16, including **2 wire roll-up rows** |
+| Book pages | 17 | **19** |
+
+**No regression in the overlap count**: the same zero at the reference drawing's 1.4 mm
+annotation height, and the same twelve at the 2.0 mm default. Getting there took two
+placement fixes in the reproduction script, both caused by the new elements rather than
+by the features themselves: the demonstration pair and the multi-level block were first
+placed over the left-hand connector column (10 label overlaps and 1 symbol overlap, all
+of them in that one spot) and were moved to the free band below the enclosure, and the
+relay was moved 2.5 mm because a device block's outline is about 2.5 mm wider per side
+than the coil's own pins and its right edge reached the neighbouring column's net tags.
+
+The ERC count rises from 2 to 5, and all three additions are `erc.unconnected_pin` on
+the **demonstration devices this pass added** (a mated connector pair and a multi-level
+terminal block, both deliberately left unwired). The two pre-existing findings are
+unchanged and still both about the relay (`elec.no_current_attr` info,
+`elec.unreachable_load` warning). Project-wide the count is 6, the extra one being the
+deliberately unwired device placed on sheet 2 for the cross-sheet reference.
+
+**The legend block does not fit on this sheet.** The table is a fixed 90 mm wide and
+5 mm per row (header plus one row per colour/gauge/part-number combination). An
+exhaustive 2.5 mm-step scan of sheet 1 — treating symbol outlines, text, conductors, the
+enclosure boundary and the frame's revision/title blocks as obstacles — finds **no free
+90 × 15 mm area at all**, so the legend was placed on the second sheet (where the same
+scan finds thousands of positions) and is exported and checked there. On a large sheet,
+which is what the target-quality reference uses, it fits in a corner as intended. This
+is recorded as part of G23 below rather than as a failure of G9: the block itself draws,
+resolves part numbers, sums lengths and exports correctly.
+
+Two implementation defects surfaced only because this pass drew the features on a real
+sheet, and both were fixed with a failing-test-first change in this same task:
+
+1. the legend's total-length column printed the raw accumulated float (eight 0.4 m wires
+   summed to `3.1999999999999997` on the sheet); the sum is now rounded to two decimals
+   before formatting, in the Rust core and in the canvas twin;
+2. the legend's own ribbon button was unreachable — it was the fifth small button in a
+   group whose column fits four, so it overflowed the ribbon and was covered by the panel
+   below; small buttons are now split into columns by a tested helper.
+
+One new finding that was *not* fixed is recorded as **G23**.
 
 ---
 
@@ -679,9 +711,11 @@ a small addition that unblocks G10, G11 and part of G4.
 > list and the terminal chart stays empty for conductors that merely sit inside an
 > enclosure. This is written into the drawing-notation section of
 > `docs/internal/design-system.md` and into the harness tool's own help text; no code
-> change was needed on the harness side. A fourth reproduction-sheet re-measurement
-> was planned for phase 6 task 6 but did not happen this session — see the note
-> after the third pass for why — so this line is unchanged from the second pass.
+> change was needed on the harness side. **Re-measured on the fourth pass (2026-09-27):**
+> with the enclosure redrawn as a dashed shape plus a caption, the wire list's harness
+> column is empty on **all 111 rows** (it named the enclosure on 105 of them while the
+> boundary was a harness), and the sheet's overlap count is unchanged at zero — the
+> practice change costs one extra entity and nothing else.
 
 > **Status 2026-08-23 (phase 5): unchanged.** Measured again: all 111 wire-list rows
 > report the enclosure name in the harness column.
@@ -1082,12 +1116,57 @@ canvas twin.
 
 ---
 
+### G23 — The tidy metric is blind to wire annotations and derived outlines · quality
+
+**Found on the fourth pass (2026-09-27).**
+
+**Current behaviour (verified).** `tidy::label_overlaps` measures designators, values,
+net labels, free notes, wire numbers and (since phase 6 task 6) pin-group captions
+against each other and against **symbol outlines taken from the symbol definition**.
+Two things that the sheet actually prints are not in that set:
+
+- the **per-wire annotation** (gauge / colour / length, G2) — the densest text layer on
+  an industrial sheet, one per conductor;
+- outlines that are **derived at draw time rather than declared in the symbol**: the
+  relay's device block and contact map (G7/G21), and the wire-part legend block (G9).
+
+**Consequence, measured.** The fourth pass reports zero overlapping labels while the
+exported sheet visibly contains three collisions of exactly this kind:
+
+1. a pin-group caption (G8) is drawn in the same lane as the wire annotations of the
+   conductors leaving those pins, so on a block whose grouped pins are all wired the
+   caption sits on top of them;
+2. a device block's outline (G7) extends about 2.5 mm past the coil's own pins on each
+   side, so the coil's two wire annotations fall inside the outline; the same extra width
+   also pushed the block's right edge onto the neighbouring column's net tags until the
+   relay was moved 2.5 mm by hand;
+3. the wire-part legend block (G9) has a fixed 90 mm width and no automatic placement, and
+   the metric cannot tell that a placement lands on the frame's revision block — an
+   exhaustive scan of this A4 sheet finds no free 90 × 15 mm area at all, so the block had
+   to go on the second sheet.
+
+None of the three is visible to the metric, which is why the first two survived a pass
+that reports a clean sheet, and all three were found by reading the exported SVG.
+
+**Proposed.**
+1. Measure wire annotations in `tidy::text_boxes` (they are already computed for drawing
+   in `wire_note`), and measure derived outlines (device block, contact map, wire legend)
+   in `tidy::symbol_boxes`. Both are additive: no new geometry, just the boxes the
+   renderer already knows.
+2. With the metric able to see them, give the pin-group caption and the device-block
+   outline the same "move to the first free side" treatment G22 got, and let the legend
+   block report (or refuse) a placement that overlaps the frame's title/revision blocks.
+
+**Existing spec.** Extends the tidy-metric section; no new entity.
+
+---
+
 ## Summary by impact
 
 | Impact | Gaps |
 |---|---|
 | **essential** | *(all closed in phase 5)* ✅ G1 named pins on multi-pin blocks · ✅ G2 wire annotation on the sheet · ✅ G3 directional net-label flags · ✅ G4 text styling, anchoring and a third symbol text field |
-| **quality** | ✅ G5 jumper bars on the schematic · ✅ G6 multi-level terminal blocks · ✅ G7 physical relay blocks *(display mode + contact image; manufacturer pin numbering and mechanical linkage still open)* · ✅ G8 pin-group brackets *(phase 6 task 4)* · ✅ G9 wire part number resolution, legend block and BOM roll-up *(phase 6 task 6 closes the remainder)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; a fourth reproduction-sheet re-measurement was planned for task 6 but did not happen this session)* · 🔶 G12 pictorial symbols *(4 established IEC 60617 symbols now bundled — loudspeaker/buzzer/siren/fan, phase 6 task 4; the rest still needs the user library)* · ✅ G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height and leader lines *(phase 6 task 4; the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference |
+| **quality** | ✅ G5 jumper bars on the schematic · ✅ G6 multi-level terminal blocks · ✅ G7 physical relay blocks *(display mode + contact image; manufacturer pin numbering and mechanical linkage still open)* · ✅ G8 pin-group brackets *(phase 6 task 4)* · ✅ G9 wire part number resolution, legend block and BOM roll-up *(phase 6 task 6 closes the remainder; re-measured on the fourth pass — the block needs a large sheet, see G23)* · ✅ G10 graphics-only entity · ✅ G11 enclosure boundary *(drawn with a shape; re-measured on the fourth pass — the wire list's harness column is empty on all 111 rows)* · 🔶 G12 pictorial symbols *(4 established IEC 60617 symbols now bundled — loudspeaker/buzzer/siren/fan, phase 6 task 4; the rest still needs the user library)* · ✅ G13 device-level cross-sheet reference · ✅ G19 net tag anchor side · ✅ G20 annotation text height and leader lines *(phase 6 task 4; the 2.5 mm device labels still fixed)* · ✅ G21 changeover contact cross-reference · 🔶 G23 tidy metric blind to wire annotations and derived outlines *(found on the fourth pass; three real collisions it cannot see)* |
 | **minor** | ✅ G14 mating connector pairs *(pairing link + ERC + reports + drawing, phase 6 task 5; gender on the parametric family still open)* · ✅ G15 sheet paper change command *(phase 6 task 5)* · ✅ G16 project meta command *(phase 6 task 5)* · ✅ G17 silent failures · ✅ G18 From-To list through net labels *(phase 6 task 5)* · ✅ G22 coil location vs wire note |
 
 ## Reading of the result
@@ -1128,14 +1207,20 @@ exercise — so this pass did not re-run the full reproduction script; what is r
 above is the implementation and its tests, not a re-measured sheet.
 
 **Phase 6 task 6 (2026-09-27, phase 6 complete): the last quality-impact item, G9's
-remainder, landed the same way.** The wire part-number legend block (`Entity::WireLegend`,
-`.mdkproj` format_version 11) and the BOM's per-part-number wire roll-up are both
-implemented, tested (Rust + canvas parity, migration test for the format bump) and
-demonstrated with a generic SVG/CSV in the task's evidence folder. Unlike G8/G12/G20,
-this gap's own plan called for a fourth reproduction-sheet rebuild to close the loop
-end-to-end; that rebuild did not happen this session because the app's Link API was
-occupied by an unrelated already-running instance rather than one started for this task
-(see "Fourth pass" above) — a safety call, not a shortcut. Every essential and quality
-gap this ledger tracks is now ✅ or an explicitly named 🔶 with its reason (G12's
-remaining pictorial vocabulary, and G7's manufacturer pin numbering and mechanical
-linkage); none is silently left open.
+remainder, landed — and the fourth pass proved the value of actually redrawing the
+sheet.** The wire part-number legend block (`Entity::WireLegend`, `.mdkproj`
+format_version 11) and the BOM's per-part-number wire roll-up are implemented, tested
+(Rust + canvas parity, migration test for the format bump) and now measured on the
+reference reproduction: 267 commands, the same **zero overlapping labels** as the third
+pass, 111/111 wire-list part numbers, two wire roll-up rows in the BOM, and an empty
+harness column now that the enclosure is a shape (G11). The rebuild also caught what unit
+tests had not: a summed length printed with seventeen digits of floating-point noise, and
+a new ribbon button that had been pushed out of its group and could not be clicked —
+both fixed test-first in the same task. What it could not catch by measurement is
+recorded as **G23**: the tidy metric does not see wire annotations or draw-time outlines,
+so three real collisions on the exported sheet (pin-group caption over wire notes, device
+block over its own coil's notes, and the 90 mm legend block having nowhere to go on an A4
+sheet) score as a clean zero. Every essential and quality gap this ledger tracks is now ✅
+or an explicitly named 🔶 with its reason (G12's remaining pictorial vocabulary, G7's
+manufacturer pin numbering and mechanical linkage, and G23's metric blind spot); none is
+silently left open.

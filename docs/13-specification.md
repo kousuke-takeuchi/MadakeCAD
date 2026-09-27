@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2133 specification clauses** across 5 areas.
+**2139 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -886,6 +886,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A sheet with no wires at all still gets a header-only legend block (no data rows). <sub>`an_empty_sheet_has_only_the_header_row`</sub>
 - Wires that share the same colour, gauge and resolved part number collapse into one row whose length is the sum of theirs. <sub>`wires_of_the_same_colour_gauge_and_part_number_are_summed_into_one_row`</sub>
 - Rows are sorted by colour, then by gauge within the same colour. <sub>`rows_are_sorted_by_colour_then_gauge`</sub>
+- Lengths that cannot be added up exactly in binary floating point still print as a short decimal, never as a long string of digits. <sub>`a_summed_length_is_rounded_instead_of_showing_floating_point_noise`</sub>
 - A wire whose colour and gauge are not in the wire-part table shows a blank part number, instead of an invented one. <sub>`an_unresolved_part_number_shows_as_blank`</sub>
 
 ### Wire numbering
@@ -2018,6 +2019,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - has only the header row for a sheet with no wires <sub>`wire legend block geometry`</sub>
 - sums the length of wires sharing the same colour, gauge and part number into one row <sub>`wire legend block geometry`</sub>
 - sorts rows by colour then by gauge <sub>`wire legend block geometry`</sub>
+- rounds a summed length instead of showing floating point noise <sub>`wire legend block geometry`</sub>
 - leaves the part number blank when the colour and gauge are not in the wire-part table <sub>`wire legend block geometry`</sub>
 - builds an add_entity command that only sets the placement <sub>`wire legend block geometry`</sub>
 - lists the wire legend entities placed on a sheet <sub>`wire legend block geometry`</sub>
@@ -2109,6 +2111,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps the mate attribute of a non-connector symbol, which the panel has no field for <sub>`symbolAttrs`</sub>
 - removes the mate attribute of a connector when the field is emptied <sub>`symbolAttrs`</sub>
 - leaves attributes the panel does not own untouched <sub>`symbolAttrs`</sub>
+
+### ribbonLayout
+
+- keeps one column when the buttons fit in it <sub>`ribbon small-button columns`</sub>
+- moves the buttons that no longer fit into a further column <sub>`ribbon small-button columns`</sub>
+- makes no column at all for a group with no small buttons <sub>`ribbon small-button columns`</sub>
+- adds as many columns as the buttons need <sub>`ribbon small-button columns`</sub>
 
 ### symbolPickerDynamic
 
