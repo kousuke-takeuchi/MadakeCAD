@@ -1244,12 +1244,12 @@ pub fn import_dxf(
     let any_wire_layer = entities
         .iter()
         .any(|r| line_kinds.contains(&r.kind.as_str()) && is_wire_layer(&r.layer()));
-    let fallback_all_lines = !any_wire_layer;
-    if fallback_all_lines
-        && entities
-            .iter()
-            .any(|r| line_kinds.contains(&r.kind.as_str()))
-    {
+    // 全ての線分を配線として読む救済は、**レイヤを指定されていないときだけ**。
+    // 指定したレイヤに1本も無いからといって全部を配線にすると、絞り込みの指定が
+    // 「最も広く読む」に反転してしまう (図枠・表題欄・シンボルの線まで配線になり、
+    // ネットリスト・ERC・電線リスト・部品表が狂う)。
+    let fallback_all_lines = explicit.is_empty() && !any_wire_layer;
+    if !any_wire_layer {
         let mut layers: Vec<String> = entities
             .iter()
             .filter(|r| line_kinds.contains(&r.kind.as_str()))
@@ -1257,10 +1257,22 @@ pub fn import_dxf(
             .collect();
         layers.sort();
         layers.dedup();
-        report.warnings.push(format!(
-            "配線レイヤが見つからないため全ての線分を配線として読みました (レイヤ: {}). 配線のレイヤを wire_layers で指定すると絞れます",
-            layers.join(", ")
-        ));
+        if !layers.is_empty() {
+            // レイヤ名は機械可読でも返す (UI/CLIが「このレイヤで読み直す」を出せる)
+            report.layers = layers.clone();
+            if fallback_all_lines {
+                report.warnings.push(format!(
+                    "配線レイヤが見つからないため全ての線分を配線として読みました (レイヤ: {}). 配線のレイヤを wire_layers で指定すると絞れます",
+                    layers.join(", ")
+                ));
+            } else {
+                report.warnings.push(format!(
+                    "指定した配線レイヤ ({}) に線分が1本もないため配線を読み込みませんでした。このDXFで線分があるレイヤ: {}",
+                    explicit.join(", "),
+                    layers.join(", ")
+                ));
+            }
+        }
     }
 
     let push = |sheet: &mut Sheet, e: Entity| {
@@ -1324,7 +1336,10 @@ pub fn import_dxf(
             }
             "CIRCLE" => {
                 let r_mm = r.num(40).unwrap_or(0.0) * scale;
-                if (fallback_all_lines || is_wire_layer(&layer)) && r_mm <= 1.0 {
+                // 小さい円を結線ドットとみなすのは**本物の配線レイヤの上だけ**。
+                // 全線分救済 (`fallback_all_lines`) の下でこれを許すと、ACADE/EPLANの
+                // ピン円・端子ドットまでジャンクションになり、ネットが勝手に繋がる
+                if is_wire_layer(&layer) && r_mm <= 1.0 {
                     if let (Some(x), Some(y)) = (r.num(10), r.num(20)) {
                         push(
                             &mut sheet,
@@ -1990,6 +2005,55 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    /// When the named wire layers hold no line at all, no wire is imported and the warning lists the layers the file really has (the explicit narrowing never widens into "every line is a wire").
+    /// 指定した配線レイヤに線分が1本も無いときは配線を1本も読まず、警告がそのDXFに実際にあるレイヤ名を挙げる(明示した絞り込みが「全ての線分を配線」に反転しない)。
+    #[test]
+    fn explicit_wire_layers_that_match_nothing_import_no_wire() {
+        let options = DxfImportOptions {
+            wire_layers: vec!["WIRES_TYPO".into()],
+        };
+        let (project, report) = import_dxf(ACADE_LIKE, "acade", &options).unwrap();
+        assert_eq!(report.wires, 0);
+        assert!(
+            !project.sheets[0]
+                .entities
+                .values()
+                .any(|e| matches!(e, Entity::Wire(_))),
+            "配線が1本も作られない"
+        );
+        let warning = report
+            .warnings
+            .iter()
+            .find(|w| w.contains("WIRES_TYPO"))
+            .unwrap_or_else(|| panic!("{:?}", report.warnings));
+        assert!(warning.contains("WIRES") && warning.contains("_MULTI_WIRE_1"), "{warning}");
+        assert!(!warning.contains("全ての線分を配線"), "{warning}");
+        assert_eq!(
+            report.layers,
+            vec!["MISC".to_string(), "WIRES".to_string(), "_MULTI_WIRE_1".to_string()],
+            "読み直し用にレイヤ名を機械可読で返す"
+        );
+    }
+
+    /// A small circle becomes a junction only on a wire layer: under the "every line is a wire" fallback the pin circles of a foreign drawing stay skipped instead of silently merging nets.
+    /// 小さい円がジャンクションになるのは配線レイヤの上だけ。全線分を配線として読む救済の下では、他社図面のピン円はスキップされ、ネットが勝手に繋がらない。
+    #[test]
+    fn small_circles_become_junctions_only_on_wire_layers() {
+        let body = |layer: &str| {
+            format!("  0\nSECTION\n  2\nENTITIES\n  0\nLINE\n  8\n{layer}\n 10\n0\n 20\n0\n 11\n50\n 21\n0\n\
+  0\nCIRCLE\n  8\n{layer}\n 10\n25\n 20\n0\n 40\n0.6\n  0\nENDSEC\n  0\nEOF\n")
+        };
+        let (_, fallback) = import_dxf(&body("SYMS"), "t", &DxfImportOptions::default()).unwrap();
+        assert_eq!((fallback.wires, fallback.junctions), (1, 0));
+        assert!(
+            fallback.skipped.iter().any(|s| s.starts_with("CIRCLE (レイヤ SYMS)")),
+            "{:?}",
+            fallback.skipped
+        );
+        let (_, on_wires) = import_dxf(&body("WIRES"), "t", &DxfImportOptions::default()).unwrap();
+        assert_eq!((on_wires.wires, on_wires.junctions), (1, 1));
     }
 
     /// A DXF without any wire layer reads every line as a wire and says so in a warning; a WIRENO text with no wire nearby becomes a note.

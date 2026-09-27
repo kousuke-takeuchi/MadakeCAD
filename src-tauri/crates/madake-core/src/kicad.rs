@@ -191,6 +191,12 @@ pub struct ImportReport {
     /// 未対応lib_idでスキップしたシンボル (例: "Device:Q_NPN_BCE x2")。
     pub skipped: Vec<String>,
     pub warnings: Vec<String>,
+    /// DXFの読み込みで**配線レイヤを1つも決められなかったとき**の、線分を持つレイヤ名。
+    ///
+    /// 「このレイヤで読み直す」をUI/CLIから出せるように機械可読で返す (警告文の解析を
+    /// させない)。配線レイヤが決まったときとKiCadの読み込みでは空。
+    #[serde(default)]
+    pub layers: Vec<String>,
 }
 
 /// KiCadのlib_id → 本ライブラリのsymbol_id。動的シンボル(コネクタ・端子台)はNone側で処理。

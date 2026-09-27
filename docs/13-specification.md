@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2296 specification clauses** across 6 areas.
+**2298 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -116,6 +116,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Exporting a sheet to DXF and importing it back keeps the paper, symbols (id, position, rotation, mirror, reference, value, attributes), wires, junctions, wire numbers, labels, notes and harness names. <sub>`export_then_import_round_trips_the_sheet`</sub>
 - Importing an AutoCAD Electrical style DXF reads lines on wire layers (WIRES, _MULTI_WIRE_*) as wires, assigns WIRENO texts to the nearest wire, keeps other lines and unknown blocks as skipped items, and decodes text. <sub>`imports_acade_style_wires_and_reports_unknown_blocks`</sub>
 - When the import options name the wire layers explicitly, only those layers become wires. <sub>`explicit_wire_layers_limit_what_becomes_a_wire`</sub>
+- When the named wire layers hold no line at all, no wire is imported and the warning lists the layers the file really has (the explicit narrowing never widens into "every line is a wire"). <sub>`explicit_wire_layers_that_match_nothing_import_no_wire`</sub>
+- A small circle becomes a junction only on a wire layer: under the "every line is a wire" fallback the pin circles of a foreign drawing stay skipped instead of silently merging nets. <sub>`small_circles_become_junctions_only_on_wire_layers`</sub>
 - A DXF without any wire layer reads every line as a wire and says so in a warning; a WIRENO text with no wire nearby becomes a note. <sub>`without_wire_layers_all_lines_become_wires`</sub>
 - A DXF in inches is converted to millimetres, and the paper size is chosen as the smallest ISO A size that fits the drawing extents. <sub>`inch_files_are_scaled_and_paper_fits_extents`</sub>
 - A block insert rotated by an angle that is not a multiple of 90 degrees is placed at 0 degrees with a warning. <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>

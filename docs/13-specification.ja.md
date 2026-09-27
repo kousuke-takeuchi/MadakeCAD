@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2296仕様項目**。
+全6領域・**2298仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -116,6 +116,8 @@
 - シートをDXFへ書き出して読み戻すと、用紙・シンボル(種類・位置・回転・ミラー・参照記号・型番・属性)・配線・ジャンクション・線番・ラベル・注記・ハーネス名が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
 - AutoCAD Electrical流のDXFを読むと、配線レイヤ(WIRES・_MULTI_WIRE_*)の線分が配線になり、WIRENOの文字は最寄りの配線の線番になり、他の線分と未知のブロックはスキップ項目として報告され、文字はデコードされる。 <sub>`imports_acade_style_wires_and_reports_unknown_blocks`</sub>
 - 読み込みオプションで配線レイヤを明示すると、そのレイヤだけが配線になる。 <sub>`explicit_wire_layers_limit_what_becomes_a_wire`</sub>
+- 指定した配線レイヤに線分が1本も無いときは配線を1本も読まず、警告がそのDXFに実際にあるレイヤ名を挙げる(明示した絞り込みが「全ての線分を配線」に反転しない)。 <sub>`explicit_wire_layers_that_match_nothing_import_no_wire`</sub>
+- 小さい円がジャンクションになるのは配線レイヤの上だけ。全線分を配線として読む救済の下では、他社図面のピン円はスキップされ、ネットが勝手に繋がらない。 <sub>`small_circles_become_junctions_only_on_wire_layers`</sub>
 - 配線レイヤの無いDXFは全ての線分を配線として読み、その旨を警告する。近くに配線の無い線番の文字は注記になる。 <sub>`without_wire_layers_all_lines_become_wires`</sub>
 - インチ単位のDXFはmmへ換算され、用紙サイズは図面の外形が収まる最小のA判になる。 <sub>`inch_files_are_scaled_and_paper_fits_extents`</sub>
 - 90度の倍数でない角度で置かれたブロックは0度で配置され、警告が出る。 <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>
