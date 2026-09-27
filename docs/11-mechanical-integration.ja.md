@@ -24,8 +24,14 @@ SOLIDWORKS Electrical ⇔ SOLIDWORKS の関係に相当する電気・機械の�
 - **暗黙の上書きなし**: 書き戻した長さは出所`freecad`を持つ。MadakeCADの配線プロパティでは長さの隣に「FreeCAD計測」バッジが出て、手で変えると出所は手入力に戻り警告がログに出る。同期は常にボタン操作
 - ファイル形式: `.mdkproj`形式3で`mech_links`と`length_source`が増える。旧ファイルは対応付け空・長さ手入力扱いでそのまま開ける
 
+## 利用できる機能: 経路同期・配置同期(M5-3)
+
+- **Create route stubs**(Wiresタブ): 両端の部品が対応付け済みの配線ごとに、部品の配置どうしを結ぶ直線をFreeCADに作る(配線の`madake_id`付き、ネット名で命名)。頂点を足すかDraft Wireへ置き換えて(タグは保つ)実際の経路にし、「Measure routes → write back lengths」で長さを戻す。再実行しても経路オブジェクトがある配線は飛ばす
+- **ネットのハイライト**: Netlistタブでネットを選ぶと、対応付け済みの部品と経路が3Dビューで選択される
+- **Sync placements**(Partsタブ): 対応付け済みオブジェクトの配置(基点mm・Z軸回転deg)をMadakeCADへ書き戻す(`mech_links[].placement`、ファイル形式4)。MadakeCADのプロパティ「3D対応付け」行に表示され、将来の2D盤レイアウトシート(M4 §8)がフットプリントの初期配置として使う。配置のマスタはFreeCADで、このボタンでだけ同期する
+
 ## 計画中(M5)
 
-- **M5-3 経路可視化・盤レイアウト**: 3D経路同期、2D盤面レイアウト⇔3D筐体の対応
+- **2D盤レイアウトシート**(M4 §8): 同期した配置を使うMadakeCAD側の盤図面。先にUIデザインが必要
 
 設計の記録: マスタースペック§7 / 実装分解: [specs/m5-freecad.md](internal/specs/m5-freecad.md)

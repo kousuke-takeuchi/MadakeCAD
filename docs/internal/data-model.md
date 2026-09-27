@@ -12,7 +12,7 @@ MadakeCADの永続データは3系統ある:
 
 ## 1. 図面ドキュメント(.mdkproj)
 
-`format_version: 3`(2026-09-27。1→2でPLC割付表、2→3で`mech_links`と`Wire.length_source`を追加。旧版は既定値で開ける)。構造(mermaid classDiagram):
+`format_version: 4`(2026-09-27。1→2でPLC割付表、2→3で`mech_links`と`Wire.length_source`、3→4で`MechLink.placement`を追加。旧版は既定値で開ける)。構造(mermaid classDiagram):
 
 ```mermaid
 classDiagram
@@ -71,6 +71,7 @@ classDiagram
       fcstd_path: String
       object_name: String
       synced_at: String   %% ISO 8601
+      placement: MechPlacement?  %% FreeCAD側の配置 x_mm/y_mm/z_mm/rotation_deg (M5-3)
     }
     class Junction { id; at: Point }
     class NetLabel { id; at: Point; name; rotation }

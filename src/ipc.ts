@@ -64,6 +64,15 @@ export interface MechLink {
   fcstd_path: string;
   object_name: string;
   synced_at: string;
+  /** FreeCAD側の配置 (mm・Z軸回転deg)。未同期なら省略/null。 */
+  placement?: MechPlacement | null;
+}
+
+export interface MechPlacement {
+  x_mm: number;
+  y_mm: number;
+  z_mm: number;
+  rotation_deg: number;
 }
 
 export interface Junction {

@@ -38,12 +38,16 @@ Registration with the FreeCAD Addon Manager is planned for the open-source relea
 6. **Wires** tab (M5-2): **Link selected route** ties a Draft Wire (any shape) to a wire, then
    **Measure routes → write back lengths** measures every linked route and writes the lengths to
    MadakeCAD (source `freecad`, one undo step per sheet) after a confirmation.
+7. **Create route stubs** (Wires tab, M5-3) draws a straight line between the two linked parts of
+   every wire (tagged with the wire's `madake_id`) as a starting point for the real route; selecting a
+   net in the **Netlist** tab highlights its parts and routes in the 3D view; **Sync placements**
+   (Parts tab) writes each linked object's placement to MadakeCAD for the panel layout.
 
 ## Layout
 
 - `InitGui.py` — workbench registration (toolbar/menu with *MadakeCAD Link panel* and *Refresh*)
 - `madakecad_link/client.py` — Link API client (REST + SSE, standard library only)
-- `madakecad_link/model.py`, `events.py`, `settings.py`, `linking.py` — pure helpers (netlist rows, live follow, port, part/wire rows and the link / write-back commands), unit-tested without FreeCAD
+- `madakecad_link/model.py`, `events.py`, `settings.py`, `linking.py`, `routes.py` — pure helpers (netlist rows, live follow, port, part/wire rows and the link / write-back commands), unit-tested without FreeCAD
 - `madakecad_link/panel.py`, `commands.py` — Qt panel and commands (FreeCAD only)
 - `tests/` — `python3 -m unittest discover -s freecad-addon/tests` (also run in CI; every test doubles as a specification clause in `docs/13-specification.md`)
 

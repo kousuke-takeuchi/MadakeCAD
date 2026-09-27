@@ -101,6 +101,7 @@ MODULES = {
     "link_model": ("Project overview & netlist view", "プロジェクト概要・ネットリスト表示"),
     "link_events": ("Live follow & settings", "ライブ追従・設定"),
     "link_linking": ("Part linking & wire-length write-back", "部品対応付け・電線長書き戻し"),
+    "link_routes": ("Route sync, net highlight & placements", "経路同期・ネットハイライト・配置"),
     "format": ("Human-readable output", "人間向け整形出力"),
 }
 

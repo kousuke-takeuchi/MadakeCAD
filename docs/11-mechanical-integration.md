@@ -24,8 +24,14 @@ Electrical–mechanical round-trip in the spirit of SOLIDWORKS Electrical ⇔ SO
 - **No silent overwrite**: written-back lengths carry the source `freecad`. MadakeCAD shows a *FreeCAD* badge next to such a length in the wire properties; editing it by hand switches the source back to manual and logs a warning. Sync is always a button press, never automatic
 - File format: `.mdkproj` format 3 adds `mech_links` and `length_source`; older files open unchanged with empty links and manual lengths
 
+## Available: route sync & placements (M5-3)
+
+- **Create route stubs** (Wires tab): for every wire whose net joins two linked parts, a straight line between the parts' placements is created in FreeCAD, tagged with the wire's `madake_id` and named after the net. Edit it into the real route (add vertices, replace with a Draft Wire keeping the tag) and use *Measure routes → write back lengths*. Re-running skips wires that already have a route object
+- **Net highlight**: selecting a net in the Netlist tab selects its linked parts and routes in the 3D view
+- **Sync placements** (Parts tab): writes each linked object's placement (base point in mm, Z rotation in degrees) to MadakeCAD (`mech_links[].placement`, file format 4). MadakeCAD shows it in the *3D link* row of the properties panel; the future 2D panel-layout sheet (M4 §8) will use it as the initial footprint placement. Placement is mastered by FreeCAD and only ever synced by this button
+
 ## Planned (M5)
 
-- **M5-3 Route visualization & panel layout**: 3D route sync and 2D panel-layout ⇔ 3D enclosure correspondence
+- **2D panel-layout sheet** (M4 §8): the native panel drawing that will consume the synced placements; needs its own UI design first
 
 Design record: master spec §7; implementation breakdown: [specs/m5-freecad.md](internal/specs/m5-freecad.md).

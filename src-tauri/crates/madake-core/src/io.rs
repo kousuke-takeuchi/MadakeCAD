@@ -133,4 +133,26 @@ mod tests {
         assert_eq!((w.length_m, w.length_source), (Some(0.5), LengthSource::Manual));
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    /// A format 3 file whose FreeCAD links have no placement opens with those links unplaced, and a link with a placement round-trips through save and load.
+    /// 形式3のファイル(FreeCAD対応付けに配置が無い)は配置なしの対応付けとして開け、配置付きの対応付けは保存→読み込みで保たれる。
+    #[test]
+    fn a_format_3_file_opens_with_unplaced_links_and_placements_round_trip() {
+        let dir = std::env::temp_dir().join(format!("madake-io-v3-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("v3.mdkproj");
+        std::fs::write(
+            &path,
+            r#"{"format_version":3,"name":"v3","sheets":[],"mech_links":[{"entity_id":"00000000-0000-0000-0000-000000000002","fcstd_path":"/p.FCStd","object_name":"Relay001","synced_at":""}]}"#,
+        )
+        .unwrap();
+        let mut loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
+        assert_eq!(loaded.mech_links[0].placement, None);
+        loaded.mech_links[0].placement = Some(MechPlacement { x_mm: 120.0, y_mm: 45.5, z_mm: 0.0, rotation_deg: 90.0 });
+        save_project(&path, &loaded).unwrap();
+        let again = load_project(&path).unwrap();
+        assert_eq!(again.mech_links[0].placement, Some(MechPlacement { x_mm: 120.0, y_mm: 45.5, z_mm: 0.0, rotation_deg: 90.0 }));
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
