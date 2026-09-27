@@ -47,6 +47,20 @@ const controller = reactive(new EditorController(store)) as EditorController;
 provide("controller", controller);
 const files = useFileActions();
 
+/** ⌘N=新規 / ⌘O=開く / ⌘S=保存 / ⇧⌘S=名前を付けて保存。該当しなければnull。 */
+function fileShortcut(ev: KeyboardEvent): (() => Promise<boolean>) | null {
+  switch (ev.key.toLowerCase()) {
+    case "n":
+      return ev.shiftKey ? null : files.newProject;
+    case "o":
+      return ev.shiftKey ? null : files.openProject;
+    case "s":
+      return ev.shiftKey ? files.saveProjectAs : files.saveProject;
+    default:
+      return null;
+  }
+}
+
 function isEditableTarget(ev: KeyboardEvent) {
   const t = ev.target as HTMLElement | null;
   return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
@@ -58,6 +72,15 @@ async function onKeyDown(ev: KeyboardEvent) {
     ev.preventDefault();
     search.openBar();
     return;
+  }
+  // ファイル操作 (⌘N/⌘O/⌘S/⇧⌘S)。入力欄に居ても効かせる (保存はどこからでも)
+  if (ev.metaKey || ev.ctrlKey) {
+    const fileAction = fileShortcut(ev);
+    if (fileAction) {
+      ev.preventDefault();
+      void fileAction();
+      return;
+    }
   }
   if (ev.key === "Escape" && ui.settingsOpen) {
     ui.settingsOpen = false;
@@ -142,7 +165,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="editor">
-    <TitleBar @open="files.openProject()" @save="files.saveProject()" />
+    <TitleBar @new="files.newProject()" @open="files.openProject()" @save="files.saveProject()" />
     <RibbonBar />
     <div class="main-row">
       <LeftPanel />

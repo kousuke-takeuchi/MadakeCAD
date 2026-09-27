@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1216 specification clauses** across 5 areas.
+**1248 specification clauses** across 5 areas.
 
 
 ## Core domain (madake-core)
@@ -1193,6 +1193,24 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - an empty draft receives the context as-is <sub>`appendContextTag`</sub>
 - an existing draft is separated by a newline (without doubling) <sub>`appendContextTag`</sub>
 
+### File menu (new / open / save / save as)
+
+- save overwrites the current file without showing a dialog <sub>`file menu: 保存`</sub>
+- save asks for a path when the project has none yet <sub>`file menu: 保存`</sub>
+- cancelling the save dialog writes nothing <sub>`file menu: 保存`</sub>
+- save-as defaults to the currently open file's path <sub>`file menu: 保存`</sub>
+- a failed save is logged and the save target stays unchanged <sub>`file menu: 保存`</sub>
+- new creates an untitled project with no save target <sub>`file menu: 新規と開く`</sub>
+- new asks before discarding unsaved changes, and cancel keeps the drawing <sub>`file menu: 新規と開く`</sub>
+- a failed new-project is logged and the drawing stays <sub>`file menu: 新規と開く`</sub>
+- new and open skip the confirmation when nothing is unsaved <sub>`file menu: 新規と開く`</sub>
+- open loads the chosen .mdkproj and makes it the save target <sub>`file menu: 新規と開く`</sub>
+- cancelling the open dialog loads nothing <sub>`file menu: 新規と開く`</sub>
+- open asks before discarding unsaved changes; cancel shows no file dialog <sub>`file menu: 新規と開く`</sub>
+- choosing a .kicad_sch imports it as a KiCad schematic and logs the counts <sub>`file menu: 新規と開く`</sub>
+- a recent file opens without a dialog <sub>`file menu: 新規と開く`</sub>
+- a recent file that fails to open is dropped from the list with the reason logged <sub>`file menu: 新規と開く`</sub>
+
 ### Tidy metrics (crossings / overlaps / grid)
 
 - offers three tidy modes: layout, wiring and labels <sub>`tidyPrompt`</sub>
@@ -1368,6 +1386,26 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - refuses to generate with a module placement that is not implemented yet <sub>`PLC I/O sheet generation settings`</sub>
 - saves the pending edits before generating the sheet <sub>`PLC I/O sheet generation settings`</sub>
 - falls back to the default address style when the module is not in the parts library <sub>`PLC I/O sheet generation settings`</sub>
+
+### Project file (open / save / recent files)
+
+- right after startup the loaded drawing counts as saved, with nothing unsaved <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- editing the drawing marks it as having unsaved changes <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- opening a file makes its path the save target and clears unsaved changes <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- opening a file empties the undo/redo history <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- save writes to the current file when one is known <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- save does nothing and returns null when no file is known <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- save-as writes to the new path, which becomes the save target <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- an edit that arrives while saving still counts as unsaved afterwards <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- a new project starts with no file and no unsaved changes <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- importing a KiCad schematic leaves no file and counts as unsaved <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- recent files are read from storage at startup <sub>`projectFile store: 最近使ったファイル`</sub>
+- opened and saved files go to the front of the list and are persisted <sub>`projectFile store: 最近使ったファイル`</sub>
+- reopening a file moves it to the front instead of duplicating it <sub>`projectFile store: 最近使ったファイル`</sub>
+- the list is capped, dropping the oldest entries <sub>`projectFile store: 最近使ったファイル`</sub>
+- removing a file drops it from the list and from storage <sub>`projectFile store: 最近使ったファイル`</sub>
+- fileNameOf returns the last path segment for both separators <sub>`projectFile helpers`</sub>
+- isKicadPath recognises the .kicad_sch extension regardless of case <sub>`projectFile helpers`</sub>
 
 ### provider
 

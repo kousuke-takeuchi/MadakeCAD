@@ -2,14 +2,18 @@
 import { onMounted, ref } from "vue";
 import EditorLayout from "./components/EditorLayout.vue";
 import { useDocumentStore } from "./stores/document";
+import { useProjectFileStore } from "./stores/projectFile";
 
 const store = useDocumentStore();
+const projectFile = useProjectFileStore();
 const ready = ref(false);
 const error = ref<string | null>(null);
 
 onMounted(async () => {
   try {
     await store.bootstrap();
+    // 起動時の図面を「保存済み」の基準にし、最近使ったファイルを読む
+    projectFile.attach();
     ready.value = true;
   } catch (e) {
     error.value = String(e);
