@@ -1365,6 +1365,7 @@ mod tests {
             color: "red".into(),
             sq: 0.3,
             length_m: None,
+            length_source: Default::default(),
             part_no: None,
             net: None,
         });
@@ -1744,6 +1745,7 @@ mod tests {
             color: "black".into(),
             sq: 0.3,
             length_m: None,
+            length_source: Default::default(),
             part_no: None,
             net: net.map(|s| s.to_string()),
         })
@@ -2286,6 +2288,7 @@ mod tests {
             length_m: None,
             part_no: None,
             net: None,
+            length_source: crate::model::LengthSource::Manual,
         });
         let sheet = sheet_with(vec![
             wire,
@@ -2331,6 +2334,7 @@ mod tests {
                 color: "black".into(),
                 sq: 0.75,
                 length_m: None,
+                length_source: Default::default(),
                 part_no: None,
                 net: None,
             });
@@ -2823,6 +2827,7 @@ mod tests {
             length_m: Some(1.5),
             part_no: Some("SAMPLE0001".into()),
             net: None,
+            length_source: crate::model::LengthSource::Manual,
         });
         sheet.entities.insert(w.id(), w);
         let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: legend_at });
@@ -2875,6 +2880,7 @@ mod tests {
             length_m: None,
             part_no: None,
             net: None,
+            length_source: crate::model::LengthSource::Manual,
         });
         sheet.entities.insert(w.id(), w);
         let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: Point::new(10.0, 10.0) });
@@ -2904,6 +2910,7 @@ mod tests {
             length_m: None,
             part_no: None,
             net: None,
+            length_source: crate::model::LengthSource::Manual,
         });
         sheet.entities.insert(w.id(), w);
         let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: Point::new(10.0, 10.0) });
@@ -2928,6 +2935,7 @@ mod tests {
             length_m: Some(0.4),
             part_no: None,
             net: None,
+            length_source: crate::model::LengthSource::Manual,
         });
         sheet.entities.insert(w.id(), w);
         sheet
@@ -2977,6 +2985,7 @@ mod tests {
             length_m: None,
             part_no: None,
             net: None,
+            length_source: crate::model::LengthSource::Manual,
         });
         sheet.entities.insert(w.id(), w);
         let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
@@ -3032,6 +3041,7 @@ mod tests {
             length_m: Some(0.4),
             part_no: None,
             net: Some("12".into()),
+            length_source: crate::model::LengthSource::Manual,
         });
         sheet.entities.insert(w.id(), w);
         let default_svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);

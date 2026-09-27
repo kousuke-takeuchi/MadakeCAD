@@ -30,7 +30,7 @@ Benchmark sources (researched 2026-08-21): [ACADE toolset (Autodesk)](https://ww
 | Multi-core cable management | ✅ | ✅ | 🔜 M4 (open item) | specs/m4 |
 | Project-wide device search/navigation | ✅ | ✅ | ⚠ minor gap | → added specs/m4 §10 |
 | Structure identifiers (IEC 81346 =+-) | 🔶 | ✅ | ⚠ long-term (G1) | → recorded below |
-| DWG/DXF interop | ✅ (native) | ✅ | ⚠ backlog candidate | → recorded below |
+| DWG/DXF interop | ✅ (native) | ✅ | ✅ DXF import/export (2026-09-27); DWG only via external converter | [interop.md](interop.md) |
 | Single-line diagrams | 🔶 | ✅ | ❌ not planned | decision recorded below |
 | Auto-connecting wires (UX aid) | 🔶 | ✅ | ❌ backlog (AI tidy-up partially covers) | recorded below |
 | Multi-user / rights management | ✅ | ✅ | ❌ non-goal (local-first) | requirements §6 |
@@ -41,7 +41,7 @@ Benchmark sources (researched 2026-08-21): [ACADE toolset (Autodesk)](https://ww
 2. **Frame/title-block templates** — our JIS frame layout is hardcoded; benchmark tools let organizations use their own formats, and this is a prerequisite for broad OSS adoption. **Disposition: added to M4 spec as §9.**
 3. **Project-wide search/navigation** (find device by designator, jump between sheets). **Disposition: added to M4 spec as §10 (small).**
 4. **IEC 81346 structure identifiers** (`=` function, `+` location, `-` device) — EPLAN's structuring backbone. **Disposition: recorded as long-term G1 roadmap item (post-M4); revisit with IEC symbol variants.**
-5. **DWG/DXF export** — useful for hand-off to AutoCAD-based reviewers. **Disposition: backlog candidate for M6+; not essential for the primary workflows (PDF covers review).**
+5. **DWG/DXF export** — useful for hand-off to AutoCAD-based reviewers. **Disposition (updated 2026-09-27): DXF import/export implemented ([interop.md](interop.md)); `.dwg` stays external (proprietary), converted with ODA File Converter / AutoCAD / EPLAN.**
 6. **Single-line diagrams** — power-distribution style representation. **Disposition: explicitly out of scope for now (our domain is control wiring diagrams); revisit if demanded.**
 7. **Auto-connect wiring aids** — EPLAN auto-connects aligned symbols. **Disposition: backlog UX item; AI tidy-up (M3) covers part of the need.**
 

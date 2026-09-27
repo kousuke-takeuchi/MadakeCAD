@@ -120,6 +120,70 @@ impl SharedDoc {
         Ok(patch)
     }
 
+    /// 複数コマンドを**1回の編集**として実行し、patchをブロードキャストする (undo一発)。
+    pub fn execute_batch_as(
+        &self,
+        cmds: Vec<Command>,
+        origin: EditOrigin,
+    ) -> madake_core::Result<Patch> {
+        let patch = self.engine.lock().unwrap().execute_batch(cmds, origin)?;
+        let _ = self.patches.send(patch.clone());
+        Ok(patch)
+    }
+
+    /// 整えバリアントの開始: 元シートを`count`枚複製して入れる (1回の編集)。
+    /// 戻り値は適用したpatchと、案ごとの情報 (複製シートid・ラベル・id対応表)。
+    pub fn start_variants(
+        &self,
+        sheet_id: Uuid,
+        count: usize,
+        origin: EditOrigin,
+    ) -> Result<(Patch, madake_core::variants::VariantRun), String> {
+        let (commands, run) = {
+            let engine = self.engine.lock().unwrap();
+            let project = engine.project();
+            let sheet = project
+                .sheet(sheet_id)
+                .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+            madake_core::variants::start_commands(sheet, count, project.sheets.len())?
+        };
+        let patch = self.execute_batch_as(commands, origin).map_err(|e| e.to_string())?;
+        Ok((patch, run))
+    }
+
+    /// 整えバリアントの終了: `chosen`があればその案を元シートへ写し戻して全複製を消す (採用)、
+    /// 無ければ全複製を消すだけ (破棄)。どちらも1回の編集=undo一発。
+    pub fn finish_variants(
+        &self,
+        run: &madake_core::variants::VariantRun,
+        chosen: Option<Uuid>,
+        origin: EditOrigin,
+    ) -> Result<Patch, String> {
+        let sheet_ids: Vec<Uuid> = run.variants.iter().map(|v| v.sheet_id).collect();
+        let commands = {
+            let engine = self.engine.lock().unwrap();
+            let project = engine.project();
+            match chosen {
+                Some(chosen_id) => {
+                    let info = run
+                        .variants
+                        .iter()
+                        .find(|v| v.sheet_id == chosen_id)
+                        .ok_or_else(|| format!("variant not found: {chosen_id}"))?;
+                    let original = project
+                        .sheet(run.original_sheet_id)
+                        .ok_or_else(|| format!("sheet not found: {}", run.original_sheet_id))?;
+                    let chosen_sheet = project
+                        .sheet(chosen_id)
+                        .ok_or_else(|| format!("sheet not found: {chosen_id}"))?;
+                    madake_core::variants::adopt_commands(original, chosen_sheet, &info.id_map, &sheet_ids)
+                }
+                None => madake_core::variants::discard_commands(&sheet_ids),
+            }
+        };
+        self.execute_batch_as(commands, origin).map_err(|e| e.to_string())
+    }
+
     /// 選択したエンティティから回路マクロを**組み立てるだけ**(ファイルには書かない)。
     ///
     /// 保存ダイアログのプレビューと、⌘Cの無名マクロ(メモリ上のクリップボード)が使う。
@@ -508,6 +572,15 @@ pub struct PartNoParams {
 pub struct ExportPathParams {
     /// 出力先ファイルパス(絶対パス)。
     pub path: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ImportDxfParams {
+    /// 読み込むDXFファイルのパス(絶対パス)。
+    pub path: String,
+    /// 配線とみなすレイヤ名。省略時は名前に WIRE を含むレイヤ(WIRENOは除く)。
+    #[serde(default)]
+    pub wire_layers: Vec<String>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -948,6 +1021,7 @@ impl MadakeMcp {
             color: p.color.unwrap_or_else(|| "black".into()),
             sq: p.sq.unwrap_or(0.3),
             length_m: p.length_m,
+            length_source: Default::default(),
             part_no: p.part_no,
             net: None,
         });
@@ -1209,6 +1283,51 @@ impl MadakeMcp {
         let patch = self.doc.engine.lock().unwrap().replace_project(project);
         let _ = self.doc.patches.send(patch.clone());
         json_ok(&serde_json::json!({ "patch": patch, "report": report }))
+    }
+
+    #[tool(
+        description = "DXF(AutoCAD Electrical / EPLANが書き出した図面、またはMadakeCADのDXF)を読み込み、現在のプロジェクトを置き換える。配線レイヤの線分→配線、MDK_<symbol_id>ブロック→シンボル、WIRENOレイヤの文字→線番。未対応ブロックはスキップ報告"
+    )]
+    fn import_dxf(&self, Parameters(p): Parameters<ImportDxfParams>) -> Result<String, ErrorData> {
+        let input = std::fs::read_to_string(&p.path).map_err(internal)?;
+        let name = std::path::Path::new(&p.path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "DXFインポート".into());
+        let options = madake_core::dxf::DxfImportOptions { wire_layers: p.wire_layers };
+        let (project, report) =
+            madake_core::dxf::import_dxf(&input, &name, &options).map_err(internal)?;
+        let patch = self.doc.engine.lock().unwrap().replace_project(project);
+        let _ = self.doc.patches.send(patch.clone());
+        json_ok(&serde_json::json!({ "patch": patch, "report": report }))
+    }
+
+    #[tool(description = "シートをDXF(AutoCAD 2000形式。AutoCAD Electrical / EPLANで開ける。配線=WIRESレイヤのLINE、シンボル=MDK_<id>ブロック+TAG1/CAT属性、線番=WIRENOレイヤ)として指定パスに書き出す")]
+    fn export_dxf(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let project = engine.project();
+        let sheet = match p.sheet_id {
+            Some(id) => project.sheet(id),
+            None => project.sheets.first(),
+        }
+        .ok_or_else(|| internal("sheet not found"))?;
+        let dxf = madake_core::dxf::sheet_to_dxf(sheet, &sheet_symbol_defs(sheet));
+        std::fs::write(&p.path, dxf).map_err(internal)?;
+        json_ok(&serde_json::json!({ "written": p.path }))
+    }
+
+    #[tool(description = "シートをKiCad回路図(.kicad_sch、KiCad 9形式。シンボル図形はファイルに埋め込むのでKiCad側にライブラリ不要)として指定パスに書き出す。線番はネットのラベルになる")]
+    fn export_kicad(&self, Parameters(p): Parameters<ExportSvgParams>) -> Result<String, ErrorData> {
+        let engine = self.doc.engine.lock().unwrap();
+        let project = engine.project();
+        let sheet = match p.sheet_id {
+            Some(id) => project.sheet(id),
+            None => project.sheets.first(),
+        }
+        .ok_or_else(|| internal("sheet not found"))?;
+        let sch = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
+        std::fs::write(&p.path, sch).map_err(internal)?;
+        json_ok(&serde_json::json!({ "written": p.path }))
     }
 
     #[tool(description = "直前の編集を取り消す")]

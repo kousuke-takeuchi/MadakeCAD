@@ -29,6 +29,7 @@ import {
   harnessUpdateCommand,
   symbolAttrs,
   wireNumberCommand,
+  wireUpdateCommand,
 } from "./propertyCommands";
 import {
   MAX_ANNOTATION_TEXT_MM,
@@ -50,9 +51,7 @@ const selected = computed<Entity | null>(() => {
 });
 
 const wireColors = [
-  ["red", "赤"], ["black", "黒"], ["white", "白"], ["blue", "青"],
-  ["yellow", "黄"], ["green", "緑"], ["orange", "橙"], ["purple", "紫"],
-  ["brown", "茶"], ["gray", "灰"], ["pink", "桃"], ["light_blue", "水色"],
+  "red", "black", "white", "blue", "yellow", "green", "orange", "purple", "brown", "gray", "pink", "light_blue",
 ] as const;
 const sqValues = [0.2, 0.3, 0.5, 0.75, 1.25, 2.0, 3.5, 5.5];
 /** ネットラベルのタグ向き (G3)。空 = 従来どおり文字だけ。 */
@@ -122,6 +121,22 @@ function jumpToXref(site: NetSite) {
   controller.reveal(entityIds);
   ui.log(t("xref.jumpLog", { address: site.address, sheet: site.sheet_name }));
 }
+
+/** 選択中のエンティティに対応するFreeCADオブジェクト (M5-2の対応付け。無ければnull)。 */
+const mechLink = computed(() => {
+  const e = selected.value;
+  if (!e) return null;
+  return store.project?.mech_links?.find((l) => l.entity_id === e.id) ?? null;
+});
+
+/** 「3D対応付け」行の文面: オブジェクト名と、同期済みなら配置 (mm / deg)。 */
+const mechLinkText = computed(() => {
+  const link = mechLink.value;
+  if (!link) return "";
+  const p = link.placement;
+  if (!p) return link.object_name;
+  return `${link.object_name} @ (${p.x_mm}, ${p.y_mm}, ${p.z_mm}) mm / ${p.rotation_deg}°`;
+});
 
 /** 選択中のハーネスが囲んでいる電線の本数 (幾何学的な内包で決まる)。 */
 /**
@@ -268,21 +283,12 @@ async function apply() {
   if (!sheet || !e) return;
   let entity: Entity;
   if (e.kind === "wire") {
-    entity = {
-      ...e,
-      color: buf.color,
-      sq: buf.sq,
-      part_no: buf.part_no || null,
-      length_m: buf.length_m === "" ? null : Number(buf.length_m),
-    };
+    // 色・線径・品番・長さ (長さの出所つき。FreeCAD計測値の手上書きは警告する)
+    const wireEdit = wireUpdateCommand(sheet.id, e, buf);
     // 線番はネット単位の属性なので、専用のset_wire_numbersコマンドで書き換える
     const numberCommand = wireNumberCommand(sheet.id, e, buf.wire_no);
-    const otherChanged =
-      entity.color !== e.color ||
-      entity.sq !== e.sq ||
-      entity.part_no !== e.part_no ||
-      entity.length_m !== e.length_m;
-    if (otherChanged) await store.execute({ type: "update_entity", sheet_id: sheet.id, entity });
+    if (wireEdit.command) await store.execute(wireEdit.command);
+    if (wireEdit.overwroteMeasured) ui.log(t("mech.overwroteLog"));
     if (numberCommand) {
       await store.execute(numberCommand);
       const number = buf.wire_no.trim();
@@ -404,34 +410,34 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
 <template>
   <aside class="panel">
     <div class="panel-head">
-      <span>プロパティ</span>
+      <span>{{ t("properties.title") }}</span>
       <Pin :size="11" class="muted" />
     </div>
     <div class="type-row">
       <span v-if="selected">{{ kindLabel[selected.kind] }} (1)</span>
-      <span v-else-if="store.selection.size > 1">{{ store.selection.size }} 個選択</span>
-      <span v-else class="muted">選択なし</span>
+      <span v-else-if="store.selection.size > 1">{{ t("properties.selectedCount", { count: store.selection.size }) }}</span>
+      <span v-else class="muted">{{ t("properties.none") }}</span>
       <ChevronDown :size="11" class="muted" />
     </div>
 
     <template v-if="selected?.kind === 'wire'">
-      <div class="sec"><ChevronDown :size="10" /> 一般</div>
+      <div class="sec"><ChevronDown :size="10" /> {{ t("properties.general") }}</div>
       <div class="prow">
-        <span class="plabel">色</span>
+        <span class="plabel">{{ t("properties.color") }}</span>
         <span class="pvalue">
           <span class="swatch" :data-color="buf.color" />
           <select v-model="buf.color" class="bare">
-            <option v-for="[v, label] in wireColors" :key="v" :value="v">{{ label }} ({{ v }})</option>
+            <option v-for="v in wireColors" :key="v" :value="v">{{ t(`properties.colors.${v}`) }} ({{ v }})</option>
           </select>
         </span>
       </div>
       <div class="prow">
-        <span class="plabel">線種</span>
+        <span class="plabel">{{ t("properties.lineType") }}</span>
         <span class="pvalue">Continuous</span>
       </div>
-      <div class="sec"><ChevronDown :size="10" /> 電気属性</div>
+      <div class="sec"><ChevronDown :size="10" /> {{ t("properties.electrical") }}</div>
       <div class="prow">
-        <span class="plabel">線径</span>
+        <span class="plabel">{{ t("properties.gauge") }}</span>
         <span class="pvalue">
           <select v-model.number="buf.sq" class="bare">
             <option v-for="v in sqValues" :key="v" :value="v">{{ v }} sq</option>
@@ -439,7 +445,7 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
         </span>
       </div>
       <div class="prow">
-        <span class="plabel">電線品番</span>
+        <span class="plabel">{{ t("properties.partNo") }}</span>
         <span class="pvalue">
           <input
             v-model="buf.part_no"
@@ -456,8 +462,15 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
         </span>
       </div>
       <div class="prow">
-        <span class="plabel">長さ m</span>
-        <span class="pvalue"><input v-model="buf.length_m" class="bare" placeholder="0.4" /></span>
+        <span class="plabel">{{ t("properties.length") }}</span>
+        <span class="pvalue">
+          <input v-model="buf.length_m" class="bare" placeholder="0.4" />
+          <span v-if="selected.length_source === 'freecad'" class="badge" :title="t('mech.measuredHint')">{{ t("mech.measured") }}</span>
+        </span>
+      </div>
+      <div v-if="mechLink" class="prow">
+        <span class="plabel">{{ t("mech.linkLabel") }}</span>
+        <span class="pvalue mono" :title="mechLink.fcstd_path">{{ mechLinkText }}</span>
       </div>
       <div class="prow">
         <span class="plabel">{{ t("wireNumbers.propertyLabel") }}</span>
@@ -475,13 +488,13 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
     </template>
 
     <template v-else-if="selected?.kind === 'symbol'">
-      <div class="sec"><ChevronDown :size="10" /> 識別</div>
+      <div class="sec"><ChevronDown :size="10" /> {{ t("properties.identity") }}</div>
       <div class="prow">
-        <span class="plabel">参照記号</span>
+        <span class="plabel">{{ t("properties.reference") }}</span>
         <span class="pvalue"><input v-model="buf.reference" class="bare" /></span>
       </div>
       <div class="prow">
-        <span class="plabel">型番/値</span>
+        <span class="plabel">{{ t("properties.value") }}</span>
         <span class="pvalue"><input v-model="buf.value" class="bare" placeholder="[redacted]" /></span>
       </div>
       <div class="prow">
@@ -496,8 +509,12 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
         </span>
       </div>
       <div class="prow">
-        <span class="plabel">シンボル</span>
+        <span class="plabel">{{ t("properties.symbol") }}</span>
         <span class="pvalue">{{ selected.symbol_id }}</span>
+      </div>
+      <div v-if="mechLink" class="prow">
+        <span class="plabel">{{ t("mech.linkLabel") }}</span>
+        <span class="pvalue mono" :title="mechLink.fcstd_path">{{ mechLinkText }}</span>
       </div>
       <div v-if="isRelayCoil" class="prow">
         <span class="plabel">{{ t("relay.deviceBlockRow") }}</span>
@@ -774,9 +791,9 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
     </template>
 
     <template v-else-if="selected?.kind === 'net_label'">
-      <div class="sec"><ChevronDown :size="10" /> ネット</div>
+      <div class="sec"><ChevronDown :size="10" /> {{ t("properties.net") }}</div>
       <div class="prow">
-        <span class="plabel">ネット名</span>
+        <span class="plabel">{{ t("properties.netName") }}</span>
         <span class="pvalue"><input v-model="buf.name" class="bare" @keyup.enter="apply" /></span>
       </div>
       <div class="prow">
@@ -834,7 +851,7 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
     </template>
 
     <div v-if="selected" class="apply-row">
-      <button class="apply" @click="apply">適用</button>
+      <button class="apply" @click="apply">{{ t("properties.apply") }}</button>
     </div>
   </aside>
 </template>
@@ -910,6 +927,15 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
   padding: 2px 0;
 }
 .mono { font-family: var(--mono-font); }
+.badge {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--info-fg);
+  background: var(--info-bg);
+}
 .hint { color: var(--ui-muted); }
 /* 行の下に単独で置く補足 (プロパティ行と同じ字送り・余白のcaption) */
 .hint-block {

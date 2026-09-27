@@ -9,6 +9,7 @@
 - **全テストに仕様文を必ず付ける**:
   - Rust: `#[test]`/`#[tokio::test]`の直前に`///`を2行(1行目=英語、2行目=日本語)。初心者ユーザーが読んで挙動が分かる文にする(実装用語の羅列ではなく「何がどうなる」を書く)
   - Vitest: `it("英語の仕様文")`+直前の行に`// ja: 日本語の仕様文`
+  - Python(FreeCADアドオン): `def test_…`直後のdocstringを2行(1行目=英語、2行目=日本語)
 - **機能追加・変更時はテストを網羅的に書く**(正常系・境界・エラー系)。テストが無い挙動は仕様に存在しないものとして扱う
 - テストを追加・変更したら`python3 scripts/gen_spec.py`で仕様書を再生成してコミットに含める(CIの`--check`で鮮度を強制)
 - 仕様文が書けないテストは設計を疑うサイン(1テスト=1挙動に分割する)
@@ -49,6 +50,7 @@ UI操作/MCPツール → Command(JSON) → Engine(madake-core) → Patch(JSON) 
 - `src-tauri/crates/madake-cli` — `madake` コマンド(bin名`madake`)。Link APIを叩くだけの薄いクライアントで、ロジックは持たない
 - `src-tauri/src` — Tauri本体(IPCハンドラ、MCP起動、patchのwebview転送)
 - `src/` — Vue 3 + TypeScript + Pinia。図面キャンバスはCanvas2D自作レンダラ(SVG/WebGL不使用)
+- `freecad-addon/` — FreeCADアドオンWB「MadakeCAD Link」(Python)。`madakecad_link/`のclient/model/events/settingsはFreeCAD非依存で単体テスト、panel/commandsだけがFreeCAD/Qt依存。書き込みはLink APIの`/commands`経由のみ
 
 ## コマンド
 
@@ -56,6 +58,7 @@ UI操作/MCPツール → Command(JSON) → Engine(madake-core) → Patch(JSON) 
 npm run tauri dev                 # アプリ起動(vite + cargo)
 cd src-tauri && cargo test        # Rustテスト(コアはここに集中)
 npx vue-tsc --noEmit              # フロント型チェック
+python3 -m unittest discover -s freecad-addon/tests   # FreeCADアドオン(純Python部分)のテスト
 ```
 
 ターミナルから起動中のアプリを操作する`madake` CLI(廃止したコマンドラインUIの代替):
@@ -68,10 +71,10 @@ cargo run -p madake-cli -- parts [<検索語>] [--category <c>]  # 部品DB検�
 cargo run -p madake-cli -- sim [--open SW1,K1]       # DC動作点シミュレーション
 cargo run -p madake-cli -- renumber [--sheet <ID>] [--mode append|renumber] [--start N]  # 線番の自動採番
 cargo run -p madake-cli -- terminals [--sheet <ID>]  # 端子台一覧 (参照記号・極数・ジャンパ・entity id)
-cargo run -p madake-cli -- export svg|pdf <path> [--sheet <ID>]
+cargo run -p madake-cli -- export svg|pdf|dxf|kicad <path> [--sheet <ID>]   # dxf=ACADE/EPLAN向け、kicad=.kicad_sch
 cargo run -p madake-cli -- export bom|wire-list|terminal-chart|terminal-diagram|xref-table <path> [--format csv|pdf] [--terminal <参照記号|ID>]  # 帳票5種 (形式は既定で拡張子判定)
 cargo run -p madake-cli -- export pdf-book <path> [--reports wire-list,terminal-chart,terminal-diagram,bom,xref] [--no-cover]  # 表紙+全シート+帳票を1PDFへ
-cargo run -p madake-cli -- save|open <path.mdkproj>
+cargo run -p madake-cli -- save|open <path.mdkproj>   # open は .kicad_sch / .dxf も可 (--wire-layer で配線レイヤ指定)
 cargo run -p madake-cli -- exec <commands.json>      # Command配列JSON → POST /api/v1/commands
 cargo run -p madake-cli -- undo|redo
 ```

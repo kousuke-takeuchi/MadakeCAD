@@ -73,10 +73,10 @@ npm run tauri dev
 | 05 | [電線管理](docs/05-wire-management.ja.md) | 線色・線径・品番・ハーネス・端子台チャート |
 | 06 | [検証・シミュレーション](docs/06-verification-simulation.ja.md) | ERC・電気チェック・DC解析 |
 | 07 | [部品データベース](docs/07-parts-database.ja.md) | 部品マスタ・定格・購入先 |
-| 08 | [インポート/エクスポート](docs/08-import-export.ja.md) | KiCadインポート・ファイル形式 |
+| 08 | [インポート/エクスポート](docs/08-import-export.ja.md) | KiCad入出力・AutoCAD Electrical / EPLANとのDXF連携・ファイル形式 |
 | 09 | [AIアシスタント](docs/09-ai-assistant.ja.md) | チャット作図・規格知識・検証ループ・テンプレート・ターン巻き戻し・整えループ・並列会話・プロバイダ設定 |
 | 10 | [自動化・API](docs/10-automation-api.ja.md) | MCPツール・REST API・CLI |
-| 11 | [機械CAD連携](docs/11-mechanical-integration.ja.md) | FreeCAD連携 |
+| 11 | [機械CAD連携](docs/11-mechanical-integration.ja.md) | FreeCADアドオン「MadakeCAD Link」(ネットリストビュー・ライブ追従)と連携ロードマップ |
 | 12 | [ロードマップ](docs/12-roadmap.ja.md) | マイルストーンM1〜M6 |
 | 13 | [詳細仕様設計書](docs/13-specification.ja.md) | **テストスイートから自動生成** — 全項目が機械検証済み |
 
@@ -92,11 +92,11 @@ UI · AIチャット · CLI · REST  →  Command(JSON)  →  エンジン(Rust)
 
 ## ステータスとロードマップ
 
-**アルファ版。** マイルストーンM1(基盤)・M2(産業図面の完全再現: 改訂欄・線番・ハーネス境界・シート間クロスリファレンス)・**M4(産業CAD中核)**が完了。M4はフェーズ4段階 — 端子台チャートと帳票拡充/回路マクロ・コイル⇔接点クロスリファレンス・検索とナビゲーション/シンボルライブラリ拡充・マクロ値セット・PLC I/O/そして図枠テンプレート・シンボルエディタ・2D盤レイアウト。M3もフェーズ1〜3(規格知識・自己検証ループ・安全なターン巻き戻し・開始テンプレート・整えループ・並列会話・AIプロバイダ6経路)まで実装済み。M3の残り〜M6(OSS公開)は[ロードマップ](docs/12-roadmap.ja.md)参照。Tauri 2 + Vue 3 + Rust製。
+**アルファ版。** マイルストーンM1(基盤)・M2(産業図面の完全再現: 改訂欄・線番・ハーネス境界・シート間クロスリファレンス)・M3(AIファースト作図: 規格知識・自己検証ループ・安全なターン巻き戻し・開始テンプレート・整えパスとバリアント・並列会話・プロバイダ6経路)・**M4(産業CAD中核)**・M5(FreeCAD連携)・M6の公開準備(3OSのCIと配布物、UI 6言語、コントリビュータ向け文書)が完了。M4はフェーズ4段階 — 端子台チャートと帳票拡充/回路マクロ・コイル⇔接点クロスリファレンス・検索とナビゲーション/シンボルライブラリ拡充・マクロ値セット・PLC I/O/そして図枠テンプレート・シンボルエディタ・2D盤レイアウト。[ロードマップ](docs/12-roadmap.ja.md)参照。Tauri 2 + Vue 3 + Rust製。
 
 ## コントリビュート
 
-docs-first・design-first(Pencil)・TDDのワークフロー。[`docs/internal/`](docs/internal/README.md)から(アーキテクチャ・変更レシピ・機能仕様が揃っています)。ドキュメントは英語が正本、日本語版は`*.ja.md`。
+docs-first・design-first(Pencil)・TDDのワークフロー。まず[CONTRIBUTING.ja.md](CONTRIBUTING.ja.md)、次に[`docs/internal/`](docs/internal/README.md)へ(アーキテクチャ・変更レシピ・機能仕様が揃っています)。[行動規範](CODE_OF_CONDUCT.md)は全てのプロジェクト空間に適用され、脆弱性の報告方法は[SECURITY.md](SECURITY.md)にあります。UI翻訳は`src/locales/`([i18n仕様の翻訳者向け節](docs/internal/specs/i18n.ja.md#6-翻訳者向け)参照)。ドキュメントは英語が正本、日本語版は`*.ja.md`。
 
 ## ライセンス
 

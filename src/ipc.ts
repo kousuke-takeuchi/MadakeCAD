@@ -49,8 +49,30 @@ export interface Wire {
   color: string;
   sq: number;
   length_m: number | null;
+  /** 電線長の出所 (手入力 / FreeCAD計測)。省略時は手入力。 */
+  length_source?: LengthSource;
   part_no: string | null;
   net: string | null;
+}
+
+/** 電線長の出所 (Rustの`LengthSource`)。 */
+export type LengthSource = "manual" | "freecad";
+
+/** エンティティとFreeCADオブジェクトの対応 (Rustの`MechLink`)。 */
+export interface MechLink {
+  entity_id: string;
+  fcstd_path: string;
+  object_name: string;
+  synced_at: string;
+  /** FreeCAD側の配置 (mm・Z軸回転deg)。未同期なら省略/null。 */
+  placement?: MechPlacement | null;
+}
+
+export interface MechPlacement {
+  x_mm: number;
+  y_mm: number;
+  z_mm: number;
+  rotation_deg: number;
 }
 
 export interface Junction {
@@ -278,6 +300,8 @@ export interface Project {
   frame_template?: string | null;
   /** プロジェクト番号 (G16)。表題欄バインド`{project.no}`の供給元。未設定はnull。 */
   no?: string | null;
+  /** FreeCAD対応付け (entity UUIDがキー)。省略時は空。 */
+  mech_links?: MechLink[];
 }
 
 /** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */
@@ -320,6 +344,13 @@ export type Command =
   /** PLC I/O割付表の置換 (プロジェクト単位)。 */
   | { type: "set_plc_assignments"; assignments: PlcAssignment[] }
   | { type: "set_frame_template"; frame_template: string | null }
+  | { type: "set_mech_link"; link: MechLink }
+  | { type: "remove_mech_link"; entity_id: string }
+  | {
+      type: "set_wire_lengths";
+      sheet_id: string;
+      lengths: { wire_id: string; length_m: number | null; source: LengthSource }[];
+    }
   /** 線番のネット単位自動採番。sheet_id省略(null)で全シート。 */
   | {
       type: "renumber_wires";
@@ -367,7 +398,8 @@ export type PatchOp =
   | { op: "plc_assignments_replaced"; assignments: PlcAssignment[] }
   | { op: "frame_template_changed"; frame_template: string | null }
   /** プロジェクト名・番号が変わった (G16)。表題欄側は各シートの`sheet_meta_updated`で届く。 */
-  | { op: "project_meta_changed"; name: string; no: string | null };
+  | { op: "project_meta_changed"; name: string; no: string | null }
+  | { op: "mech_links_replaced"; mech_links: MechLink[] };
 
 export interface Patch {
   revision: number;
@@ -822,6 +854,27 @@ export interface PlcSheetOptions {
   placement: ModulePlacement;
 }
 
+/** 整え指標 (Rustの`TidyMetrics`)。 */
+export interface TidyMetrics {
+  crossings: number;
+  label_overlaps: number;
+  symbol_overlaps: number;
+  off_grid: number;
+}
+
+/** 整えバリアントの1案 (Rustの`VariantInfo`)。id_mapは元エンティティid→複製側id。 */
+export interface VariantInfo {
+  sheet_id: string;
+  label: string;
+  id_map: Record<string, string>;
+}
+
+/** 整えバリアントの実行情報 (Rustの`VariantRun`)。開始時に受け取り、終了時にそのまま返す。 */
+export interface VariantRun {
+  original_sheet_id: string;
+  variants: VariantInfo[];
+}
+
 /** 帳票の種類 (Rustの`ReportKind`と同じケバブケース表記)。 */
 export type ReportKind =
   | "wire-list"
@@ -857,7 +910,15 @@ interface Ipc {
   saveProject(path: string): Promise<void>;
   loadProject(path: string): Promise<Patch>;
   importKicad(path: string): Promise<KicadImportResult>;
+  /** DXF (AutoCAD Electrical / EPLAN の中間形式) を読み込んでプロジェクトを置き換える。 */
+  importDxf(path: string, wireLayers?: string[]): Promise<KicadImportResult>;
   newProject(name: string): Promise<Patch>;
+  /** シートの整え指標 (交差・重なり・グリッド外)。 */
+  getTidyMetrics(sheetId: string): Promise<TidyMetrics>;
+  /** 整えバリアントの開始: シートを`count`枚複製する (1回の編集)。 */
+  startVariants(sheetId: string, count: number): Promise<{ patch: Patch; run: VariantRun }>;
+  /** 整えバリアントの終了: 採用 (chosenSheetId) または破棄 (null)。1回の編集。 */
+  finishVariants(run: VariantRun, chosenSheetId: string | null): Promise<Patch>;
   /** 使える開始テンプレートの一覧 (同梱+ユーザーの`~/MadakeCAD/templates`)。 */
   listTemplates(): Promise<TemplateList>;
   /** テンプレートをシートへ適用する。1回の編集なのでundo一発で戻る。 */
@@ -910,6 +971,10 @@ interface Ipc {
   simulateOp(sheetId: string | null, openSwitches: string[]): Promise<SimOpResult>;
   exportSvg(sheetId: string, path: string): Promise<void>;
   exportPdf(sheetId: string, path: string): Promise<void>;
+  /** シートをDXF (AutoCAD 2000形式) で書き出す。 */
+  exportDxf(sheetId: string, path: string): Promise<void>;
+  /** シートをKiCad回路図 (.kicad_sch) で書き出す。 */
+  exportKicad(sheetId: string, path: string): Promise<void>;
   exportBom(path: string): Promise<void>;
   exportWireList(path: string): Promise<void>;
   /**
@@ -982,7 +1047,14 @@ const tauriIpc: Ipc = {
   saveProject: (path: string) => invoke<void>("save_project", { path }),
   loadProject: (path: string) => invoke<Patch>("load_project", { path }),
   importKicad: (path: string) => invoke<KicadImportResult>("import_kicad", { path }),
+  importDxf: (path: string, wireLayers?: string[]) =>
+    invoke<KicadImportResult>("import_dxf", { path, wireLayers: wireLayers ?? null }),
   newProject: (name: string) => invoke<Patch>("new_project", { name }),
+  getTidyMetrics: (sheetId) => invoke<TidyMetrics>("get_tidy_metrics", { sheetId }),
+  startVariants: (sheetId, count) =>
+    invoke<{ patch: Patch; run: VariantRun }>("start_variants", { sheetId, count }),
+  finishVariants: (run, chosenSheetId) =>
+    invoke<Patch>("finish_variants", { run, chosenSheetId }),
   listTemplates: () => invoke<TemplateList>("list_templates"),
   applyTemplate: (templateId: string, sheetId: string) =>
     invoke<Patch>("apply_template", { templateId, sheetId }),
@@ -1007,6 +1079,9 @@ const tauriIpc: Ipc = {
     invoke<SimOpResult>("simulate_op", { sheetId, openSwitches }),
   exportSvg: (sheetId: string, path: string) => invoke<void>("export_svg", { sheetId, path }),
   exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
+  exportDxf: (sheetId: string, path: string) => invoke<void>("export_dxf", { sheetId, path }),
+  exportKicad: (sheetId: string, path: string) =>
+    invoke<void>("export_kicad", { sheetId, path }),
   exportBom: (path: string) => invoke<void>("export_bom", { path }),
   exportWireList: (path: string) => invoke<void>("export_wire_list", { path }),
   searchProject: (query: string, kinds: SearchKind[]) =>
@@ -1105,7 +1180,23 @@ const httpIpc: Ipc = {
   loadProject: (path) => http<Patch>("/load", { method: "POST", body: JSON.stringify({ path }) }),
   importKicad: (path) =>
     http<KicadImportResult>("/import/kicad", { method: "POST", body: JSON.stringify({ path }) }),
+  importDxf: (path, wireLayers) =>
+    http<KicadImportResult>("/import/dxf", {
+      method: "POST",
+      body: JSON.stringify({ path, wire_layers: wireLayers ?? [] }),
+    }),
   newProject: () => Promise.reject(new Error("browser mode: not supported")),
+  getTidyMetrics: (sheetId) => http<TidyMetrics>(`/tidy-metrics?sheet_id=${sheetId}`),
+  startVariants: (sheetId, count) =>
+    http<{ patch: Patch; run: VariantRun }>("/variants/start", {
+      method: "POST",
+      body: JSON.stringify({ sheet_id: sheetId, count }),
+    }),
+  finishVariants: (run, chosenSheetId) =>
+    http<Patch>("/variants/finish", {
+      method: "POST",
+      body: JSON.stringify({ ...run, chosen_sheet_id: chosenSheetId }),
+    }),
   listTemplates: () => http<TemplateList>("/templates"),
   applyTemplate: (templateId, sheetId) =>
     http<Patch>("/templates/apply", {
@@ -1164,6 +1255,12 @@ const httpIpc: Ipc = {
   },
   exportPdf: async (sheetId, path) => {
     await http("/export/pdf", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
+  },
+  exportDxf: async (sheetId, path) => {
+    await http("/export/dxf", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
+  },
+  exportKicad: async (sheetId, path) => {
+    await http("/export/kicad", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
   },
   exportBom: async (path) => {
     await http("/export/bom", { method: "POST", body: JSON.stringify({ path }) });

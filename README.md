@@ -73,10 +73,10 @@ Read in order — files are numbered:
 | 05 | [Wire Management](docs/05-wire-management.md) | Colors, gauges, part numbers, harnesses, terminal charts |
 | 06 | [Verification & Simulation](docs/06-verification-simulation.md) | ERC, electrical checks, DC analysis |
 | 07 | [Parts Database](docs/07-parts-database.md) | Part master, ratings, procurement |
-| 08 | [Import & Export](docs/08-import-export.md) | KiCad import, file formats |
+| 08 | [Import & Export](docs/08-import-export.md) | KiCad import/export, DXF interop with AutoCAD Electrical / EPLAN, file formats |
 | 09 | [AI Assistant](docs/09-ai-assistant.md) | Chat drafting, standards knowledge, verification loop, templates, turn revert, tidy-up passes, parallel conversations, providers |
 | 10 | [Automation & APIs](docs/10-automation-api.md) | MCP tools, REST API, CLI |
-| 11 | [Mechanical Integration](docs/11-mechanical-integration.md) | FreeCAD linkage |
+| 11 | [Mechanical Integration](docs/11-mechanical-integration.md) | FreeCAD add-on "MadakeCAD Link" (netlist view, live follow), linkage roadmap |
 | 12 | [Roadmap](docs/12-roadmap.md) | Milestones M1–M6 |
 | 13 | [Detailed Specification](docs/13-specification.md) | **Generated from the test suite** — every clause is machine-verified |
 
@@ -92,11 +92,11 @@ Every edit from every entry point is an undoable command against a single engine
 
 ## Status & Roadmap
 
-**Alpha.** Milestones M1 (foundation), M2 (industrial drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references) and **M4 (industrial CAD core)** are complete — M4 through four phases: terminal charts and the extended report set; circuit macros, coil ⇔ contact cross-references, search and navigation; the expanded symbol library, macro value sets and PLC I/O; and finally frame templates, the symbol editor and 2D panel layout. M3 phases 1-3 (standards knowledge, self-verification loop, safe turn revert, start templates, tidy-up passes, parallel conversations, six AI providers) have landed as well; see the [roadmap](docs/12-roadmap.md) for the rest of M3 through M6 (open-source release). Built with Tauri 2, Vue 3, and Rust.
+**Alpha.** Milestones M1 (foundation), M2 (industrial drawing parity: revision table, wire numbers, harness boundaries, cross-sheet references), M3 (AI-first drafting: standards knowledge, self-verification loop, safe turn revert, start templates, tidy passes and variants, parallel conversations, six provider routes), **M4 (industrial CAD core)**, M5 (FreeCAD integration) and the M6 release preparation (three-OS CI and release bundles, six UI languages, contributor docs) are complete — M4 through four phases: terminal charts and the extended report set; circuit macros, coil ⇔ contact cross-references, search and navigation; the expanded symbol library, macro value sets and PLC I/O; and finally frame templates, the symbol editor and 2D panel layout. See the [roadmap](docs/12-roadmap.md). Built with Tauri 2, Vue 3, and Rust.
 
 ## Contributing
 
-The project follows a docs-first, design-first (Pencil), TDD workflow. Start with [`docs/internal/`](docs/internal/README.md) — architecture, change recipes, and feature specs are all there. English is canonical for documentation; Japanese versions are provided as `*.ja.md`.
+The project follows a docs-first, design-first (Pencil), TDD workflow. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, then [`docs/internal/`](docs/internal/README.md) — architecture, change recipes, and feature specs are all there. The [code of conduct](CODE_OF_CONDUCT.md) applies to every project space, and [SECURITY.md](SECURITY.md) says how to report a vulnerability. UI translations live in `src/locales/` (see the translator guide in [the i18n spec](docs/internal/specs/i18n.md#6-for-translators)). English is canonical for documentation; Japanese versions are provided as `*.ja.md`.
 
 ## License
 

@@ -116,6 +116,7 @@ mod tests {
             color: color.into(),
             sq,
             length_m,
+            length_source: crate::model::LengthSource::Manual,
             part_no: part_no.map(|s| s.to_string()),
             net: None,
         })

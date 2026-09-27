@@ -73,7 +73,7 @@ watch(
 
 <template>
   <aside class="left-panel">
-    <div class="tabs" role="tablist" aria-label="左パネル">
+    <div class="tabs" role="tablist" :aria-label="t('leftPanel.tabsLabel')">
       <button
         v-for="t in tabs"
         :key="t.id"
@@ -91,7 +91,7 @@ watch(
       <template v-if="chatTab">
         <span class="badge" :class="{ off: !connected }">
           <span class="dot" />
-          {{ connected ? "接続中" : "未接続" }}
+          {{ connected ? t("leftPanel.connected") : t("leftPanel.disconnected") }}
         </span>
         <span
           v-if="running > 0"
@@ -103,13 +103,13 @@ watch(
         </span>
         <button
           class="icon-btn"
-          title="履歴"
+          :title="t('leftPanel.history')"
           :aria-expanded="historyOpen"
           @click="toggleHistory()"
         >
           <History :size="13" />
         </button>
-        <button class="icon-btn" title="最小化" @click="minimize">
+        <button class="icon-btn" :title="t('leftPanel.minimize')" @click="minimize">
           <Minus :size="13" />
         </button>
       </template>

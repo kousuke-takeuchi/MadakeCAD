@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全5領域・**2156仕様項目**。
+全6領域・**2280仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -102,6 +102,24 @@
 - プロジェクト番号にnullを送ると未設定へ戻る(間違って付けた番号を消す手段)。 <sub>`a_null_project_number_clears_it`</sub>
 - 消したプロジェクト番号をundoすると、元の番号がそのまま戻る。 <sub>`undoing_a_cleared_project_number_brings_it_back`</sub>
 - コマンドからプロジェクト番号の欄を省くと、ほかの欄を変えても既にある番号はそのまま残る。 <sub>`omitting_the_project_number_leaves_it_untouched`</sub>
+- FreeCAD対応付けを登録するとentity idをキーに保存され、再登録で置き換わり、解除で消える。各操作はundoで直前の一覧に戻る。 <sub>`mech_links_are_upserted_removed_and_undone`</sub>
+- 計測した電線長の書き戻しは、各配線の長さを設定して出所を「FreeCAD計測」にする1回の編集になる。変わらない配線は飛ばし、存在しない配線はエラーになる。 <sub>`wire_lengths_write_back_with_their_source`</sub>
+
+### DXF連携 (AutoCAD Electrical / EPLAN)
+
+- 書き出したDXFはmm単位のAutoCAD 2000形式(AC1015)で、HEADER/TABLES/BLOCKS/ENTITIES/OBJECTSの各セクションと重複しないハンドルを持つ。 <sub>`export_writes_a_well_formed_ac1015_file`</sub>
+- 配線はセグメントごとに1本のLINEとしてWIRESレイヤに書かれ、Y座標はDXFの上向き座標へ反転される。 <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
+- シンボルはMDK_<symbol_id>ブロック(1回だけ定義)のINSERTになり、回転・ミラー(X倍率-1)・TAG1/CAT/DESC1/RATING1/TERMnnの属性を持つ。 <sub>`symbols_become_block_inserts_with_attributes`</sub>
+- 線番はWIRENOレイヤ、ネットラベルはLABELS、注記はMISCに書かれ、ハーネス境界はHARNESSレイヤの閉じた破線多角形と名前になる。 <sub>`texts_and_harness_go_to_their_layers`</sub>
+- 非ASCII文字は\U+XXXXで書かれ読み込み時に戻る。MTEXTの段落区切り(\P)や書式コードも読み込みで処理する。 <sub>`unicode_is_escaped_and_decoded`</sub>
+- シートをDXFへ書き出して読み戻すと、用紙・シンボル(種類・位置・回転・ミラー・参照記号・型番・属性)・配線・ジャンクション・線番・ラベル・注記・ハーネス名が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
+- AutoCAD Electrical流のDXFを読むと、配線レイヤ(WIRES・_MULTI_WIRE_*)の線分が配線になり、WIRENOの文字は最寄りの配線の線番になり、他の線分と未知のブロックはスキップ項目として報告され、文字はデコードされる。 <sub>`imports_acade_style_wires_and_reports_unknown_blocks`</sub>
+- 読み込みオプションで配線レイヤを明示すると、そのレイヤだけが配線になる。 <sub>`explicit_wire_layers_limit_what_becomes_a_wire`</sub>
+- 配線レイヤの無いDXFは全ての線分を配線として読み、その旨を警告する。近くに配線の無い線番の文字は注記になる。 <sub>`without_wire_layers_all_lines_become_wires`</sub>
+- インチ単位のDXFはmmへ換算され、用紙サイズは図面の外形が収まる最小のA判になる。 <sub>`inch_files_are_scaled_and_paper_fits_extents`</sub>
+- 90度の倍数でない角度で置かれたブロックは0度で配置され、警告が出る。 <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>
+- ENTITIESセクションの無いファイルはDXFではないとして拒否され、数値でないグループコードは行番号付きの構文エラーになる。 <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>
+- シンボルブロックの図形はY反転したローカル座標で書かれ、弧は用紙座標の時計回りがDXFでは反時計回りになる分だけ角度を入れ替えて向きを保つ。 <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
 
 ### 図枠テンプレート (プロットフレーム)
 
@@ -159,7 +177,7 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは11 (電線品番凡例ブロックを追加した版) である。 <sub>`the_current_format_version_is_eleven`</sub>
+- 現行のファイル形式バージョンは12 (FreeCAD連携=機械側の対応付けと電線長の出所を統合した版) である。 <sub>`the_current_format_version_is_twelve`</sub>
 - 電線品番凡例ブロックが無かった頃のプロジェクトファイルは凡例ブロックの無い状態で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
 - シートに置いた電線品番凡例ブロックは、置き場所を保ったまま保存して読み直せる。 <sub>`a_wire_legend_survives_a_save_and_reload`</sub>
 - プロジェクト番号が無かった頃のプロジェクトファイルはプロジェクト番号が未設定として開き、表題欄バインド`{project.no}`はこれまでどおり空欄のままになる。現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_project_number`</sub>
@@ -167,8 +185,11 @@
 - シートに設定した注記文字高はファイルへ保存され、読み直しても残っている。 <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
 - アイテム番号が無かった頃の盤図面はバルーンの無い状態で開く。フットプリントの位置はそのままで、番号はいつでも振り直せる。 <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
 - プロジェクトに選んだ図枠テンプレートはファイルへ保存され、読み直しても残っている。 <sub>`the_frame_template_survives_a_save_and_reload`</sub>
+- 形式2のファイル(FreeCAD対応付けが無く、配線に長さの出所が無い)は、対応付けが空で全ての配線の長さが手入力扱いとして開ける。 <sub>`a_format_2_file_opens_with_empty_mech_links_and_manual_lengths`</sub>
+- 形式3のファイル(FreeCAD対応付けに配置が無い)は配置なしの対応付けとして開け、配置付きの対応付けは保存→読み込みで保たれる。 <sub>`a_format_3_file_opens_with_unplaced_links_and_placements_round_trip`</sub>
+- クラウド側のビルドが書いたファイル(独自の形式4。FreeCAD対応付けとFreeCAD計測の電線長を含む)は、それらの内容を保ったまま開き、統合後の現行形式で書き直される。 <sub>`a_cloud_format_4_file_keeps_its_mech_links_and_length_source`</sub>
 
-### KiCadインポート
+### KiCadインポート / エクスポート
 
 - KiCadインポートは用紙サイズ・表題欄・配線・ジャンクション・ラベル(電源シンボルはネットラベル化)・テキストを変換する。 <sub>`imports_paper_title_block_and_geometry`</sub>
 - 既知のlib_idは本ライブラリへ対応付けられ(Device:R→抵抗、Conn_01x03→connector_3p)、参照記号・値・回転・ミラーが保たれる。未知のシンボルはスキップされレポートに列挙される。 <sub>`maps_symbols_and_reports_skipped`</sub>
@@ -177,6 +198,13 @@
 - 文字列内のエスケープ(引用符・改行)と日本語などのマルチバイト文字を正しく解釈する。 <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name)は指定した先頭シンボルを持つ子リストをすべて列挙する。 <sub>`children_iterates_all_matches`</sub>
 - 括弧の不整合や閉じていない文字列は、位置付きの構文エラーとして報告される。 <sub>`syntax_errors_are_reported`</sub>
+- シートを.kicad_schへ書き出して読み戻すと、用紙・表題欄・シンボル(種類・参照記号・型番・回転・ミラー)・配線・ジャンクション・ラベル・注記が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
+- 折れ線で描いた配線は、セグメントごとに2点のKiCad wireとして書き出される。 <sub>`polyline_wires_are_split_into_segments`</sub>
+- シートで使うシンボルは図形とピンごとにlib_symbolsへ1回だけ埋め込まれ、KiCad側にライブラリが無くても開ける。 <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
+- 線番はそのネット上のKiCadラベルになり、KiCadでも再インポート後もネット名として残る。 <sub>`wire_numbers_become_labels`</sub>
+- ハーネス境界は破線の閉じた多角形と、その名前の注記として書き出される。 <sub>`harness_becomes_dashed_polyline_with_name`</sub>
+- 注記内の引用符・バックスラッシュ・改行はエスケープされ、書き出したファイルは正しく解釈されて同じ文字列に戻る。 <sub>`strings_are_escaped_and_read_back`</sub>
+- MadakeCADが書き出した回路図の"MadakeCAD:<id>"ライブラリidは、端子台・コネクタの動的シンボルも含めそのまま同じシンボルに戻る。 <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
 
 ### leader
 
@@ -341,6 +369,7 @@
 
 ### PDF出力
 
+- PDFの文字はOSごとに日本語グリフを持つ標準書体へ割り当てる: macOS=Hiragino Sans/Menlo、Windows=Yu Gothic UI/Consolas、その他(Linux)=Noto Sans CJK JP/DejaVu Sans Mono。 <sub>`preferred_families_follow_the_operating_system`</sub>
 - PDF出力は日本語を含む正しいPDF文書(%PDF-ヘッダ)を非自明なサイズで生成する。 <sub>`sheet_to_pdf_produces_pdf_bytes`</sub>
 - PDFのページ寸法は用紙そのもの (A3横=420×297mm) になり、100%で印刷すると原寸になる。 <sub>`pdf_page_is_the_size_of_the_paper`</sub>
 - PDF一括出力のページは 表紙 → 回路図の全シート → 選択した帳票 の順に並ぶ。 <sub>`pdf_book_is_cover_then_sheets_then_reports`</sub>
@@ -850,6 +879,14 @@
 - tidy_metricsは1枚のシートの4つの数値をまとめて1つの値で返す。 <sub>`tidy_metrics_gathers_the_four_counts`</sub>
 - 同じシートを2回測ると全く同じ数値になるので、エージェントは編集の前後を比べられる。 <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
 
+### 整えバリアント (シート複製 / 採用)
+
+- 案の複製は用紙・表題欄・全エンティティを元のまま持ち、シートidとエンティティidだけ新しく、名前にラベルが付き、元id→新idの対応表が全要素分できる。 <sub>`duplicate_keeps_content_with_fresh_ids_and_a_full_map`</sub>
+- N案で開始すると既存シートの後ろへ入るRestoreSheetがN個でき、案ごとにラベルと対応表が付く。1〜4以外の数は拒否される。 <sub>`start_builds_one_restore_sheet_per_variant`</sub>
+- 採用すると、動かした要素は元idのまま更新、案で消えた要素は削除、案で増えた要素は新idで追加、変わらない要素は触らず、最後に全ての案シートが消える。 <sub>`adopt_maps_changes_back_to_original_ids`</sub>
+- 何も変わっていない案を採用すると、案シートを消すだけになる。 <sub>`adopting_an_unchanged_variant_only_removes_sheets`</sub>
+- エンジンで開始→案を編集→採用すると、元シートが案の配置になり案シートは残らない。開始・編集・採用はそれぞれundo1回で戻る。 <sub>`engine_round_trip_is_one_undo_per_step`</sub>
+
 ### 検証 (ERC・電気検証)
 
 - 完全に結線された回路ではERCの指摘は出ない。 <sub>`fully_wired_pair_has_no_erc_findings`</sub>
@@ -1003,6 +1040,8 @@
 - POST /api/v1/import/kicad は開いているプロジェクトを変換結果で置き換え、patchとインポートレポートを返す。 <sub>`import_kicad_replaces_project_and_reports`</sub>
 - POST /api/v1/simulate/op はDC動作点を解き、ネット電圧と部品電流を返す(ngspice必須。未導入時はスキップ)。 <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf は指定パスへ正しいPDFファイルを書き出す。 <sub>`export_pdf_writes_pdf_file`</sub>
+- POST /api/v1/export/dxf と /export/kicad はシートをDXFと.kicad_schへ書き出し、POST /api/v1/import/dxf はそのDXFをインポートレポート付きでプロジェクトへ読み戻す。 <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
+- POST /api/v1/variants/start はシートを案の数だけ複製し(undo1回)、案ごとのid対応表を返す。/variants/finish は選んだ案を元idのまま元シートへ写し戻して複製を消し、nullなら複製を消すだけ。1〜4以外の数は拒否される。 <sub>`variants_start_and_finish_round_trip`</sub>
 - POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。 <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - 端子台エンドポイントは図面の端子台を一覧し、1台のチャートとチェック結果を返す。 <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report は帳票1種をCSVまたは図枠付きPDFで書き出し、図面である端子接続図のCSVは拒否する。 <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
@@ -1444,6 +1483,8 @@
 - --jsonはjq等へ渡せる整形JSONをそのまま出力する。 <sub>`json_flag_emits_raw_json`</sub>
 - madake netlistは--sheetオプションをAPIへ引き渡す。 <sub>`netlist_forwards_sheet_option`</sub>
 - madake exportは種別・出力パス・シート指定をAPIへ引き渡す。 <sub>`export_forwards_kind_path_and_sheet`</sub>
+- madake export dxf / kicadはDXF・KiCadのエンドポイントでシート1枚を書き出す(シート指定可)。 <sub>`export_dxf_and_kicad_forward_to_their_endpoints`</sub>
+- madake openに.dxfを渡すと/import/dxfで読み込み(--wire-layerを引き渡す)、変換結果の要約を表示する。他のファイルで--wire-layerを付けるとエラー。 <sub>`open_dxf_imports_with_wire_layers`</sub>
 - madake execはCommand配列のJSONファイルを読み、/commandsへ送信する。 <sub>`exec_posts_command_array_from_file`</sub>
 - madake execは配列でないJSONを明確なメッセージで拒否する。 <sub>`exec_rejects_non_array_json`</sub>
 - 入力ファイルが無い場合はパニックせずファイルエラーとして報告する。 <sub>`exec_reports_missing_file`</sub>
@@ -2128,6 +2169,10 @@
 - コネクタでないシンボルを保存しても、パネルに欄の無い嵌合相手の属性は残る (MCP・CLIが書いた値を落とさない) <sub>`symbolAttrs`</sub>
 - コネクタの嵌合相手欄を空にして保存すると、その属性はキーごと消える <sub>`symbolAttrs`</sub>
 - パネルが持たない属性 (端子台のジャンパなど) は、どのシンボルでもそのまま残る <sub>`symbolAttrs`</sub>
+- 色・線径・品番・長さのどれも変わっていなければコマンドを送らない <sub>`wireUpdateCommand`</sub>
+- 長さを手で変えると更新コマンドになり、出所は「手入力」になる <sub>`wireUpdateCommand`</sub>
+- FreeCADで計測した長さを手で上書きすると、その旨のフラグが立つ (呼び出し側が警告する) <sub>`wireUpdateCommand`</sub>
+- 長さ以外だけを変えたときはFreeCAD計測の出所を保つ <sub>`wireUpdateCommand`</sub>
 
 ### ribbonLayout
 
@@ -2163,6 +2208,31 @@
 - 空の下書きにはそのまま挿入される <sub>`appendContextTag`</sub>
 - 既存の下書きとは改行で区切る(改行済みなら重ねない) <sub>`appendContextTag`</sub>
 
+### ファイルメニュー (新規/開く/保存/名前を付けて保存)
+
+- 保存先が決まっていれば「保存」はダイアログを出さずに上書きする <sub>`file menu: 保存`</sub>
+- 保存先が未定なら「保存」は保存ダイアログを出す (名前を付けて保存と同じ) <sub>`file menu: 保存`</sub>
+- 保存ダイアログをキャンセルすると何も書かない <sub>`file menu: 保存`</sub>
+- 「名前を付けて保存」は開いているファイルのパスを既定にする <sub>`file menu: 保存`</sub>
+- 保存に失敗したら理由をログに出し、保存先は変えない <sub>`file menu: 保存`</sub>
+- 「新規」は無題のプロジェクトを作り、保存先は空になる <sub>`file menu: 新規と開く`</sub>
+- 未保存の編集があるときの「新規」は確認し、キャンセルすると図面はそのまま <sub>`file menu: 新規と開く`</sub>
+- 新規に失敗したら理由をログに出し、図面はそのまま <sub>`file menu: 新規と開く`</sub>
+- 未保存の編集が無ければ確認なしで新規・開くへ進む <sub>`file menu: 新規と開く`</sub>
+- 「開く」はダイアログで選んだ.mdkprojを読み込み、そのパスが保存先になる <sub>`file menu: 新規と開く`</sub>
+- 開くダイアログをキャンセルすると何も読み込まない <sub>`file menu: 新規と開く`</sub>
+- 未保存の編集があるときの「開く」は確認し、キャンセルするとダイアログも出ない <sub>`file menu: 新規と開く`</sub>
+- .kicad_schを選ぶとKiCad回路図として読み込み、件数をログに出す <sub>`file menu: 新規と開く`</sub>
+- .dxfを選ぶとDXF図面として読み込み、件数と警告をログに出す <sub>`file menu: 新規と開く`</sub>
+- 「読み込み」ボタンは選んだ形式のフィルタだけで開くダイアログを出し、未保存の編集があれば先に確認する <sub>`file menu: 新規と開く`</sub>
+- 最近使ったファイルはダイアログ無しで開く <sub>`file menu: 新規と開く`</sub>
+- 開けなかった最近使ったファイルは一覧から外し、理由をログに出す <sub>`file menu: 新規と開く`</sub>
+- DXF書き出しは「<シート名>.dxf」を既定にDXFフィルタで保存先を聞き、表示中のシートを書き出す <sub>`file menu: シートの書き出し`</sub>
+- KiCad書き出しは「<シート名>.kicad_sch」を既定にし、SVG/PDFは従来どおり拡張子のフィルタで保存する <sub>`file menu: シートの書き出し`</sub>
+- 保存ダイアログをキャンセルすると何も書き出さない <sub>`file menu: シートの書き出し`</sub>
+- シートが無ければダイアログを出さずにログで案内する <sub>`file menu: シートの書き出し`</sub>
+- 書き出しに失敗したら理由をログに出す <sub>`file menu: シートの書き出し`</sub>
+
 ### 整えメトリクス (交差・重なり・グリッド)
 
 - 整えモードは配置整理・配線整理・ラベル整頓の3種類 <sub>`tidyPrompt`</sub>
@@ -2185,10 +2255,13 @@
 ### i18n
 
 - UIの既定言語は英語で、フォールバックも英語 <sub>`i18n`</sub>
-- 実装済みロケールは英語と日本語 <sub>`i18n`</sub>
-- 英語と日本語のカタログはキーが完全に一致する(訳し漏れをCIで検出) <sub>`i18n`</sub>
-- カタログの文字列は空にできない(キーだけ足して訳し忘れることを防ぐ) <sub>`i18n`</sub>
+- 実装済みロケールは英語・日本語・中国語・スペイン語・フランス語・ドイツ語の6つ <sub>`i18n`</sub>
+- 全ロケールのカタログは英語とキーが完全に一致する(訳し漏れ・余分なキーをCIで検出) <sub>`i18n`</sub>
+- どのカタログでも文字列は空にできない(キーだけ足して訳し忘れることを防ぐ) <sub>`i18n`</sub>
 - カタログの文字列はすべて表示できる(`@`などの記号は書き方を誤ると画面が真っ白になる) <sub>`i18n`</sub>
+- 翻訳は英語と同じ名前付きプレースホルダを持つ(`{count}`の欠落・綴り違いを検出) <sub>`i18n`</sub>
+- 複数形の文(`|`区切り)は英語と同じ数の形を持つ <sub>`i18n`</sub>
+- 言語名は各言語の自称で表示される(英語に翻訳しない) <sub>`i18n`</sub>
 - 言語タグは大文字・余白があっても解決でき、未知・空の値は英語になる <sub>`i18n`</sub>
 
 ### chat
@@ -2273,6 +2346,7 @@
 - シート追加・削除のパッチは並び順を保つ <sub>`document store`</sub>
 - シートメタ更新のパッチはエンティティに触れない <sub>`document store`</sub>
 - 古いrevisionのパッチは破棄される(二重配信しても安全) <sub>`document store`</sub>
+- mech_links_replaced パッチでFreeCAD対応付けの一覧が置き換わる <sub>`document store`</sub>
 - 図枠テンプレートを差し替えるパッチはミラーへ反映され、undoでも即座に元へ戻る <sub>`document store`</sub>
 - 起動時に図枠テンプレートの一覧を読み込み、以降の描画はその定義で行う <sub>`document store: 図枠テンプレートの解決`</sub>
 - 図枠テンプレートの一覧が読めなくても図面は開ける(同梱のjis-a3で描く) <sub>`document store: 図枠テンプレートの解決`</sub>
@@ -2369,6 +2443,28 @@
 - 未実装の配置方針 (前モジュールと同居) では生成できない <sub>`PLC I/O sheet generation settings`</sub>
 - 未保存の編集があれば、生成の前に割付表を保存する (図面のラベルが下書きと一致する) <sub>`PLC I/O sheet generation settings`</sub>
 - 部品DBに無い型番のモジュールは、種別どおりの既定のアドレス体系 (三菱) で扱う <sub>`PLC I/O sheet generation settings`</sub>
+
+### プロジェクトファイル (開く/保存/最近使ったファイル)
+
+- 起動直後は読み込み済みの図面が「保存済み」の基準になり、未保存の編集は無い <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- 図面を編集すると未保存の編集ありになる <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- ファイルを開くとそのパスが保存先になり、未保存の編集は無くなる <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- ファイルを開くとundo/redoの履歴は空になる (前の図面には戻れない) <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- 保存先が決まっていれば「保存」はダイアログ無しで同じファイルへ上書きする <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- 保存先が無ければ「保存」は何も書かずnullを返す (名前を付けて保存へ回す) <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- 「名前を付けて保存」は新しいパスへ書き、以後そのパスが保存先になる <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- 保存中に届いた編集はディスクに無いので、保存後も未保存の編集ありのまま <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- 新規プロジェクトは保存先が無く、未保存の編集も無い状態から始まる <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- KiCad回路図の読み込みは保存先が無く、内容は未保存の編集として扱う <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- DXFの読み込みも保存先が無く、内容は未保存の編集として扱う <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- 起動時に保管先から最近使ったファイルを読む <sub>`projectFile store: 最近使ったファイル`</sub>
+- 開いたファイル・保存したファイルは一覧の先頭に入り、保管先へ書かれる <sub>`projectFile store: 最近使ったファイル`</sub>
+- 同じファイルを開き直すと重複せず先頭へ移る <sub>`projectFile store: 最近使ったファイル`</sub>
+- 一覧は上限件数までで、古いものから落ちる <sub>`projectFile store: 最近使ったファイル`</sub>
+- 一覧から外したファイルは保管先からも消える <sub>`projectFile store: 最近使ったファイル`</sub>
+- パスからファイル名を取り出す (`/`区切りと`\`区切りの両方) <sub>`projectFile helpers`</sub>
+- 拡張子が.dxf(大文字小文字を問わず)ならDXF図面とみなす <sub>`projectFile helpers`</sub>
+- 拡張子が.kicad_sch(大文字小文字を問わず)ならKiCad回路図とみなす <sub>`projectFile helpers`</sub>
 
 ### projectInfo
 
@@ -2535,6 +2631,20 @@
 - 自分で開いた表示タブは盤シートを開いても勝手に切り替わらない <sub>`シート種別に合わせた画面の切り替え`</sub>
 - エージェントと会話中は左ドックのタブを取り上げない <sub>`シート種別に合わせた画面の切り替え`</sub>
 
+### 整えバリアント (シート複製 / 採用)
+
+- 開始すると表示中のシートが案の数だけ複製され、案ごとに別の会話で同じ整え指示が送られ、比較パネルが開く <sub>`variants store: 整え案の開始`</sub>
+- 選択があれば、その要素の対応する複製側の要素だけを整える範囲として指示する <sub>`variants store: 整え案の開始`</sub>
+- 開始直後に元の図面と各案の指標が取られる <sub>`variants store: 整え案の開始`</sub>
+- シートが無い・案の数が2〜4以外・比較中は開始しない <sub>`variants store: 整え案の開始`</sub>
+- 複製に失敗したら理由をログに出し、何も始まらない <sub>`variants store: 整え案の開始`</sub>
+- 案の会話が答えている間は「実行中」で、全部終わると採用できる <sub>`variants store: 比較・採用・破棄`</sub>
+- 採用すると選んだ案が終了IPCへ渡り、元の図面へ戻って比較は終わる (undo一発で戻せる旨をログ) <sub>`variants store: 比較・採用・破棄`</sub>
+- 破棄は実行中の案の会話を止めてから全複製を消す <sub>`variants store: 比較・採用・破棄`</sub>
+- 終了に失敗したら理由をログに出し、比較はそのまま続く <sub>`variants store: 比較・採用・破棄`</sub>
+- パネルは閉じても比較は続き、開き直せる。比較が無ければ開かない <sub>`variants store: 比較・採用・破棄`</sub>
+- 指標の取り直しで取れなかった案は「指標なし」になる <sub>`variants store: 比較・採用・破棄`</sub>
+
 ### verification
 
 - runで診断を取得してパネルを開き、severity別に件数を数える <sub>`verification store`</sub>
@@ -2601,4 +2711,52 @@
 - 電線品番凡例ツールは、クリックした位置を表の左上にしてブロックを1つ置く (置いたらツールは選択へ戻る)。 <sub>`wire legend block on the canvas`</sub>
 - 表の矩形の中をクリックすると凡例ブロックが選べ、外をクリックすると選べない。 <sub>`wire legend block on the canvas`</sub>
 - 選んだ凡例ブロックはドラッグで動かせる (置き場所だけが動き、中身は動かした先のシートから導出し直される)。 <sub>`wire legend block on the canvas`</sub>
+
+
+## FreeCADアドオン (MadakeCAD Link)
+
+
+### Link APIクライアント (Python)
+
+- クライアントはローカルのMadakeCAD Link API(既定ポート9310)へ接続する。 <sub>`test_base_url_points_at_the_local_link_api`</sub>
+- 接続確認とプロジェクトのスナップショットはJSONを解釈した辞書で返る。 <sub>`test_health_and_project_are_decoded_from_json`</sub>
+- ネットリストと部品の要求は、シートid・検索語・カテゴリをクエリパラメータで渡す。 <sub>`test_netlist_and_parts_pass_their_filters_as_query_parameters`</sub>
+- コマンドはJSON配列として送られ、コマンドごとにpatchが1つ返る(全ての書き込みがMadakeCADのCommandエンジンを通る)。 <sub>`test_commands_are_posted_as_a_json_array_and_return_one_patch_each`</sub>
+- 接続拒否・HTTPエラー・不正なJSONはいずれも、原因が読める文面のLinkErrorになる。 <sub>`test_errors_are_reported_as_link_errors_with_a_readable_message`</sub>
+- イベントストリームはpatchごとに("patch", {revision, ops})を返し、複数行のdataは結合し、keep-aliveのコメント行は読み飛ばす。 <sub>`test_events_yield_patches_from_the_sse_stream`</sub>
+- イベント名の無い行は"message"イベントになり、dataは空行で確定し、末尾の空行が無いイベントも届く。 <sub>`test_parse_sse_defaults_the_event_name_and_dispatches_on_blank_lines`</sub>
+
+### ライブ追従・設定
+
+- patchは前回より新しいrevisionのときだけ受け入れられ、重複や古いpatchは無視される。 <sub>`test_only_newer_revisions_are_accepted`</sub>
+- 表示中シートの要素が変わったとき、またはシートの追加・削除・改名やプロジェクト置換のときにパネルは再読込し、別シートの編集では再読込しない。 <sub>`test_refresh_is_needed_for_the_shown_sheet_and_structural_changes`</sub>
+- シートをまだ選んでいない間は、どの要素の変更でも再読込して最初の表示が最新になるようにする。 <sub>`test_with_no_sheet_shown_yet_any_entity_change_reloads`</sub>
+- ポート設定は1〜65535の整数を保持し、それ以外(文字列・0・大きすぎる値)は既定の9310へ戻る。 <sub>`test_port_setting_accepts_valid_ports_and_falls_back_to_the_default`</sub>
+
+### 部品対応付け・電線長書き戻し
+
+- 部品リストはシンボルごとに1行(シート・参照記号順)で、型番の3Dモデルと対応付け済みのFreeCADオブジェクト名を持つ。 <sub>`test_part_rows_list_symbols_with_their_3d_model_and_linked_object`</sub>
+- 配線リストは配線ごとに1行で、ネット/線番・現在の長さ・長さの出所・対応付け済みの経路オブジェクトを持つ。 <sub>`test_wire_rows_show_net_length_source_and_linked_route`</sub>
+- STEP/IGES/BREPはシェイプとして挿入、.FCStdはドキュメントとして取り込み、それ以外は挿入できない。 <sub>`test_model_kind_recognises_shape_files_and_freecad_documents`</sub>
+- 対応付けはentity id・FreeCADドキュメントのパス・オブジェクト名・同期時刻を持つset_mech_linkコマンドを送り、解除はremove_mech_linkを送る。 <sub>`test_link_commands_carry_the_entity_id_document_path_object_name_and_time`</sub>
+- 経路オブジェクトはmadake_idで配線と突き合わせ、長さはmmからm(1mm単位)へ換算し、配線でないオブジェクトは無視する。 <sub>`test_measured_route_lengths_are_converted_to_metres_and_matched_to_wires`</sub>
+- 書き戻しはシートごとに1つのset_wire_lengthsコマンドで、各項目はm単位の長さと出所"freecad"を持つ(MadakeCADが手入力の上書きを警告できる)。 <sub>`test_write_back_is_one_command_per_sheet_with_the_freecad_source`</sub>
+- 計測時に経路オブジェクトを配線の対応付けとして登録するが、すでに同じオブジェクトに対応付いている配線は登録し直さない。 <sub>`test_routes_are_linked_only_when_not_already_linked_to_that_object`</sub>
+
+### プロジェクト概要・ネットリスト表示
+
+- プロジェクト概要にはプロジェクト名・revisionと、シートごとのシンボル・配線などの件数が入る。 <sub>`test_summary_carries_name_revision_and_per_sheet_entity_counts`</sub>
+- 空または欠けたスナップショットは、失敗せずにシート無しの無名プロジェクトとして要約される。 <sub>`test_an_empty_snapshot_summarizes_to_zero`</sub>
+- ネットリストの各行には、ネット名・線番・ラベル・「K1:A1, TB1:3」形式のピン一覧・配線本数が並ぶ。 <sub>`test_rows_show_net_name_wire_number_label_pins_and_wire_count`</sub>
+- 参照記号の無いシンボルのピンは「?:<ピン番号>」と表示され、行はそのまま読める。 <sub>`test_pins_without_a_designator_show_a_placeholder`</sub>
+
+### 経路同期・ネットハイライト・配置
+
+- 両端の部品が対応付け済みの配線には、一方の部品の配置から他方の配置へ向かう経路スタブが1本でき、配線idとネット名を持つ。 <sub>`test_a_wire_between_two_linked_parts_gets_one_stub_between_their_placements`</sub>
+- 部品が対応付けられていないネットや、対応付け先のオブジェクトがFreeCADドキュメントに無いネットにはスタブができない。 <sub>`test_parts_without_a_link_or_not_in_the_document_produce_no_stub`</sub>
+- 1ネットに対応付け済み部品が3つあると名前順に2区間の鎖になり、ネットの配線へ順に割り当てる。余った配線にはスタブを作らず、配線が足りなければ余った区間は捨てる。 <sub>`test_a_net_with_three_parts_is_chained_and_segments_follow_the_wire_ids`</sub>
+- すでに経路オブジェクトのある配線は飛ばすので、スタブ生成を再実行しても重複しない。 <sub>`test_rerunning_skips_wires_that_already_have_a_route_object`</sub>
+- ネットのハイライトは、対応付け済み部品と経路の各オブジェクトを1回ずつ選び、未対応付けのピンは無視する。 <sub>`test_highlighting_a_net_selects_its_linked_parts_and_routes_once_each`</sub>
+- 配置の同期はset_mech_linkで基点をmm(1µm単位)・回転を度で送り、既存の対応付け情報は保つ。 <sub>`test_placement_command_carries_the_base_in_mm_and_the_rotation_in_degrees`</sub>
+- 配置の同期はドキュメントにある対応付け済みオブジェクトごとに1コマンド送り、保存済みの配置と同じものは飛ばす。 <sub>`test_sync_placements_writes_only_linked_objects_whose_placement_changed`</sub>
 

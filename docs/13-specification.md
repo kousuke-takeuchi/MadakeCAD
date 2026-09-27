@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2156 specification clauses** across 5 areas.
+**2280 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -102,6 +102,24 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Sending the project number as null clears it back to unset, which is how a number set by mistake is removed. <sub>`a_null_project_number_clears_it`</sub>
 - Undoing a cleared project number brings the previous number back exactly as it was. <sub>`undoing_a_cleared_project_number_brings_it_back`</sub>
 - Leaving the project number out of the command leaves an existing number untouched, even while other fields change. <sub>`omitting_the_project_number_leaves_it_untouched`</sub>
+- Registering a FreeCAD link stores it under the entity id, registering again replaces it, removing it takes it away, and each step undoes back to the previous list. <sub>`mech_links_are_upserted_removed_and_undone`</sub>
+- Writing measured wire lengths back sets each wire's length and marks it as measured by FreeCAD in one undo step; unchanged wires are skipped and an unknown wire is an error. <sub>`wire_lengths_write_back_with_their_source`</sub>
+
+### DXF interop (AutoCAD Electrical / EPLAN)
+
+- The exported DXF is an AutoCAD 2000 (AC1015) file in millimetres with HEADER, TABLES, BLOCKS, ENTITIES and OBJECTS sections and unique entity handles. <sub>`export_writes_a_well_formed_ac1015_file`</sub>
+- Wires are written as one LINE per segment on the WIRES layer with the Y axis flipped to DXF's upward convention. <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
+- Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with rotation, a negative X scale for mirroring, and TAG1/CAT/DESC1/RATING1/TERMnn attributes. <sub>`symbols_become_block_inserts_with_attributes`</sub>
+- Wire numbers go to the WIRENO layer, net labels to LABELS, notes to MISC, and a harness becomes a closed dashed polyline on HARNESS with its name. <sub>`texts_and_harness_go_to_their_layers`</sub>
+- Non-ASCII text is written as \U+XXXX escapes and decoded back; MTEXT paragraph breaks and formatting codes are handled on read. <sub>`unicode_is_escaped_and_decoded`</sub>
+- Exporting a sheet to DXF and importing it back keeps the paper, symbols (id, position, rotation, mirror, reference, value, attributes), wires, junctions, wire numbers, labels, notes and harness names. <sub>`export_then_import_round_trips_the_sheet`</sub>
+- Importing an AutoCAD Electrical style DXF reads lines on wire layers (WIRES, _MULTI_WIRE_*) as wires, assigns WIRENO texts to the nearest wire, keeps other lines and unknown blocks as skipped items, and decodes text. <sub>`imports_acade_style_wires_and_reports_unknown_blocks`</sub>
+- When the import options name the wire layers explicitly, only those layers become wires. <sub>`explicit_wire_layers_limit_what_becomes_a_wire`</sub>
+- A DXF without any wire layer reads every line as a wire and says so in a warning; a WIRENO text with no wire nearby becomes a note. <sub>`without_wire_layers_all_lines_become_wires`</sub>
+- A DXF in inches is converted to millimetres, and the paper size is chosen as the smallest ISO A size that fits the drawing extents. <sub>`inch_files_are_scaled_and_paper_fits_extents`</sub>
+- A block insert rotated by an angle that is not a multiple of 90 degrees is placed at 0 degrees with a warning. <sub>`non_right_angle_rotation_is_rounded_with_a_warning`</sub>
+- A file without an ENTITIES section is rejected as not a DXF, and a group code that is not a number is a syntax error with its line number. <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>
+- Symbol block graphics are written in local coordinates with Y flipped; arcs keep their sweep because the clockwise paper-space direction becomes counter-clockwise in DXF. <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
 
 ### Frame templates (plot frames)
 
@@ -159,7 +177,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 11, the version that added the wire part-number legend block. <sub>`the_current_format_version_is_eleven`</sub>
+- The current file format version is 12, the version that folded the FreeCAD integration (mechanical links and the wire length source) in. <sub>`the_current_format_version_is_twelve`</sub>
 - A project file saved before the wire part-number legend block existed opens with no legend blocks at all, and is brought up to the current format version. <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
 - A wire part-number legend block placed on a sheet survives a save and reload with its place unchanged. <sub>`a_wire_legend_survives_a_save_and_reload`</sub>
 - A project file saved before the project number existed opens with no project number set, so the `{project.no}` title-block bind stays blank exactly as before, and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_project_number`</sub>
@@ -167,8 +185,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The annotation text height set on a sheet is saved to the file and comes back on reload. <sub>`the_annotation_text_height_survives_a_save_and_reload`</sub>
 - A panel drawn before item numbers existed opens with no balloons at all: the footprints keep their place and can be numbered whenever the drawing is next tidied up. <sub>`an_old_panel_file_opens_without_item_numbers`</sub>
 - The frame template chosen for a project is saved to the file and comes back on reload. <sub>`the_frame_template_survives_a_save_and_reload`</sub>
+- A format 2 file (no FreeCAD links, wires without a length source) opens with an empty link list and every wire length marked as manual. <sub>`a_format_2_file_opens_with_empty_mech_links_and_manual_lengths`</sub>
+- A format 3 file whose FreeCAD links have no placement opens with those links unplaced, and a link with a placement round-trips through save and load. <sub>`a_format_3_file_opens_with_unplaced_links_and_placements_round_trip`</sub>
+- A file written by the cloud build (its own format 4, with FreeCAD links and a wire length measured in FreeCAD) opens with those fields intact and is rewritten as the current merged format version. <sub>`a_cloud_format_4_file_keeps_its_mech_links_and_length_source`</sub>
 
-### KiCad import
+### KiCad import / export
 
 - KiCad import converts paper size, title block, wires, junctions, labels (power symbols become net labels) and text. <sub>`imports_paper_title_block_and_geometry`</sub>
 - Known lib_ids map to our symbols (Device:R -> resistor, Conn_01x03 -> connector_3p) keeping designator/value/rotation/mirror; unknown symbols are skipped and itemized in the report. <sub>`maps_symbols_and_reports_skipped`</sub>
@@ -177,6 +198,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Escaped quotes/newlines and multibyte (Japanese) text inside strings parse correctly. <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name) iterates every child list with the given head symbol. <sub>`children_iterates_all_matches`</sub>
 - Unbalanced parentheses and unterminated strings are reported as syntax errors with a position. <sub>`syntax_errors_are_reported`</sub>
+- Exporting a sheet to .kicad_sch and importing it back keeps paper, title block, symbols (id, reference, value, rotation, mirror), wires, junctions, labels and text. <sub>`export_then_import_round_trips_the_sheet`</sub>
+- A wire drawn as a polyline is exported as one two-point KiCad wire per segment. <sub>`polyline_wires_are_split_into_segments`</sub>
+- Every symbol used on the sheet is embedded once in lib_symbols with its graphics and pins, so KiCad opens the file without MadakeCAD libraries. <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
+- A wire number becomes a KiCad label on the numbered net, so the net keeps its name in KiCad and on re-import. <sub>`wire_numbers_become_labels`</sub>
+- A harness boundary is exported as a dashed closed polyline plus a text with its name. <sub>`harness_becomes_dashed_polyline_with_name`</sub>
+- Quotes, backslashes and newlines in text are escaped so the exported file parses and reads back unchanged. <sub>`strings_are_escaped_and_read_back`</sub>
+- Importing a schematic exported by MadakeCAD resolves "MadakeCAD:<id>" library ids directly, including parametric terminal blocks and connectors. <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
 
 ### leader
 
@@ -341,6 +369,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### PDF output
 
+- PDF text is mapped to a Japanese-capable system font per OS: Hiragino Sans/Menlo on macOS, Yu Gothic UI/Consolas on Windows, Noto Sans CJK JP/DejaVu Sans Mono elsewhere. <sub>`preferred_families_follow_the_operating_system`</sub>
 - PDF export produces a valid PDF document (%PDF- header) of non-trivial size, including Japanese text. <sub>`sheet_to_pdf_produces_pdf_bytes`</sub>
 - The PDF page is exactly the size of the paper (A3 landscape = 420x297mm), so printing at 100% is 1:1. <sub>`pdf_page_is_the_size_of_the_paper`</sub>
 - A PDF book is ordered cover page, then every circuit sheet, then the selected report pages. <sub>`pdf_book_is_cover_then_sheets_then_reports`</sub>
@@ -850,6 +879,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - tidy_metrics gathers the four counts of one sheet in a single value. <sub>`tidy_metrics_gathers_the_four_counts`</sub>
 - Measuring the same sheet twice gives exactly the same numbers, so the agent can compare before and after. <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
 
+### Tidy variants (sheet copies / adopt)
+
+- A variant copy keeps the paper, title block and every entity of the original, with a new sheet id, new entity ids, the label in its name, and a complete old-to-new id map. <sub>`duplicate_keeps_content_with_fresh_ids_and_a_full_map`</sub>
+- Starting a run with N variants yields N RestoreSheet commands appended after the existing sheets, each with its own label and id map; N outside 1..=4 is rejected. <sub>`start_builds_one_restore_sheet_per_variant`</sub>
+- Adopting a variant writes moved entities back under their original ids, deletes what the variant removed, adds what it created with fresh ids, leaves untouched entities alone, and finally removes every variant sheet. <sub>`adopt_maps_changes_back_to_original_ids`</sub>
+- Adopting an unchanged variant only removes the variant sheets. <sub>`adopting_an_unchanged_variant_only_removes_sheets`</sub>
+- Through the engine, start → edit a variant → adopt leaves the original sheet with the variant's placement and no variant sheets, and each of the three steps is one undo. <sub>`engine_round_trip_is_one_undo_per_step`</sub>
+
 ### Verification (ERC & electrical)
 
 - A fully wired circuit produces no ERC findings. <sub>`fully_wired_pair_has_no_erc_findings`</sub>
@@ -1003,6 +1040,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - POST /api/v1/import/kicad replaces the open project with the converted schematic and returns a patch plus an import report. <sub>`import_kicad_replaces_project_and_reports`</sub>
 - POST /api/v1/simulate/op solves the DC operating point and returns net voltages and component currents (requires ngspice; skipped otherwise). <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf writes a valid PDF file to the requested path. <sub>`export_pdf_writes_pdf_file`</sub>
+- POST /api/v1/export/dxf and /export/kicad write the sheet as DXF and .kicad_sch, and POST /api/v1/import/dxf reads the DXF back into a project with an import report. <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
+- POST /api/v1/variants/start copies the sheet once per variant (one undo step) and returns each copy's id map; /variants/finish with a chosen sheet writes it back under the original ids and removes the copies, with null it only removes them; a count outside 1..=4 is rejected. <sub>`variants_start_and_finish_round_trip`</sub>
 - POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports. <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - The terminal endpoints list the terminal blocks of the drawing and return one block's chart and check result. <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report writes one report as CSV or as framed PDF pages, and refuses CSV for the graphical terminal diagram. <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
@@ -1444,6 +1483,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - --json prints raw pretty-printed JSON for piping into jq and similar tools. <sub>`json_flag_emits_raw_json`</sub>
 - madake netlist forwards the --sheet option to the API. <sub>`netlist_forwards_sheet_option`</sub>
 - madake export forwards kind, output path and optional sheet to the API. <sub>`export_forwards_kind_path_and_sheet`</sub>
+- madake export dxf / kicad write one sheet through the DXF and KiCad endpoints (sheet selectable). <sub>`export_dxf_and_kicad_forward_to_their_endpoints`</sub>
+- madake open with a .dxf file imports it through /import/dxf, passing --wire-layer, and prints the import summary; --wire-layer is rejected for other files. <sub>`open_dxf_imports_with_wire_layers`</sub>
 - madake exec reads a JSON file containing a Command array and posts it to /commands. <sub>`exec_posts_command_array_from_file`</sub>
 - madake exec rejects JSON that is not an array, with a clear message. <sub>`exec_rejects_non_array_json`</sub>
 - A missing input file is reported as a file error, not a panic. <sub>`exec_reports_missing_file`</sub>
@@ -2128,6 +2169,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps the mate attribute of a non-connector symbol, which the panel has no field for <sub>`symbolAttrs`</sub>
 - removes the mate attribute of a connector when the field is emptied <sub>`symbolAttrs`</sub>
 - leaves attributes the panel does not own untouched <sub>`symbolAttrs`</sub>
+- sends nothing when colour, gauge, part number and length are unchanged <sub>`wireUpdateCommand`</sub>
+- a hand-edited length becomes an update whose length source is manual <sub>`wireUpdateCommand`</sub>
+- overwriting a FreeCAD-measured length by hand is flagged so the panel can warn <sub>`wireUpdateCommand`</sub>
+- changing only colour or gauge keeps the FreeCAD length source <sub>`wireUpdateCommand`</sub>
 
 ### ribbonLayout
 
@@ -2163,6 +2208,31 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - an empty draft receives the context as-is <sub>`appendContextTag`</sub>
 - an existing draft is separated by a newline (without doubling) <sub>`appendContextTag`</sub>
 
+### File menu (new / open / save / save as)
+
+- save overwrites the current file without showing a dialog <sub>`file menu: 保存`</sub>
+- save asks for a path when the project has none yet <sub>`file menu: 保存`</sub>
+- cancelling the save dialog writes nothing <sub>`file menu: 保存`</sub>
+- save-as defaults to the currently open file's path <sub>`file menu: 保存`</sub>
+- a failed save is logged and the save target stays unchanged <sub>`file menu: 保存`</sub>
+- new creates an untitled project with no save target <sub>`file menu: 新規と開く`</sub>
+- new asks before discarding unsaved changes, and cancel keeps the drawing <sub>`file menu: 新規と開く`</sub>
+- a failed new-project is logged and the drawing stays <sub>`file menu: 新規と開く`</sub>
+- new and open skip the confirmation when nothing is unsaved <sub>`file menu: 新規と開く`</sub>
+- open loads the chosen .mdkproj and makes it the save target <sub>`file menu: 新規と開く`</sub>
+- cancelling the open dialog loads nothing <sub>`file menu: 新規と開く`</sub>
+- open asks before discarding unsaved changes; cancel shows no file dialog <sub>`file menu: 新規と開く`</sub>
+- choosing a .kicad_sch imports it as a KiCad schematic and logs the counts <sub>`file menu: 新規と開く`</sub>
+- choosing a .dxf imports it as a DXF drawing and logs the counts and warnings <sub>`file menu: 新規と開く`</sub>
+- the import buttons open the dialog with that format's filter only and confirm unsaved changes first <sub>`file menu: 新規と開く`</sub>
+- a recent file opens without a dialog <sub>`file menu: 新規と開く`</sub>
+- a recent file that fails to open is dropped from the list with the reason logged <sub>`file menu: 新規と開く`</sub>
+- exporting DXF asks for a path defaulting to <sheet>.dxf and writes the active sheet <sub>`file menu: シートの書き出し`</sub>
+- exporting KiCad defaults to <sheet>.kicad_sch, and SVG/PDF keep their extension filters <sub>`file menu: シートの書き出し`</sub>
+- cancelling the save dialog exports nothing <sub>`file menu: シートの書き出し`</sub>
+- without an open sheet the export logs a hint and shows no dialog <sub>`file menu: シートの書き出し`</sub>
+- a failed export is logged with its reason <sub>`file menu: シートの書き出し`</sub>
+
 ### Tidy metrics (crossings / overlaps / grid)
 
 - offers three tidy modes: layout, wiring and labels <sub>`tidyPrompt`</sub>
@@ -2185,10 +2255,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### i18n
 
 - defaults to English and falls back to English <sub>`i18n`</sub>
-- ships English and Japanese catalogs <sub>`i18n`</sub>
-- keeps the English and Japanese catalogs key-identical <sub>`i18n`</sub>
-- rejects empty strings in either catalog <sub>`i18n`</sub>
-- compiles every message in both catalogs <sub>`i18n`</sub>
+- ships English, Japanese, Chinese, Spanish, French and German catalogs <sub>`i18n`</sub>
+- keeps every catalog key-identical to the English one <sub>`i18n`</sub>
+- rejects empty strings in any catalog <sub>`i18n`</sub>
+- compiles every message in every catalog <sub>`i18n`</sub>
+- keeps the same named placeholders as English in every translation <sub>`i18n`</sub>
+- keeps the same number of plural forms as English in every translation <sub>`i18n`</sub>
+- shows each language name as its own endonym <sub>`i18n`</sub>
 - resolves language tags leniently and falls back to English for unknown values <sub>`i18n`</sub>
 
 ### chat
@@ -2273,6 +2346,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sheet add/remove patches keep sheet order <sub>`document store`</sub>
 - sheet-meta patches never touch the entities <sub>`document store`</sub>
 - patches with an older revision are discarded (duplicate delivery is safe) <sub>`document store`</sub>
+- a mech_links_replaced patch replaces the FreeCAD link list <sub>`document store`</sub>
 - frame_template_changed patches update the mirror both ways (switch and undo) <sub>`document store`</sub>
 - loads the frame template catalogue on bootstrap <sub>`document store: 図枠テンプレートの解決`</sub>
 - still opens the drawing when the frame template catalogue cannot be read <sub>`document store: 図枠テンプレートの解決`</sub>
@@ -2369,6 +2443,28 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - refuses to generate with a module placement that is not implemented yet <sub>`PLC I/O sheet generation settings`</sub>
 - saves the pending edits before generating the sheet <sub>`PLC I/O sheet generation settings`</sub>
 - falls back to the default address style when the module is not in the parts library <sub>`PLC I/O sheet generation settings`</sub>
+
+### Project file (open / save / recent files)
+
+- right after startup the loaded drawing counts as saved, with nothing unsaved <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- editing the drawing marks it as having unsaved changes <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- opening a file makes its path the save target and clears unsaved changes <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- opening a file empties the undo/redo history <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- save writes to the current file when one is known <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- save does nothing and returns null when no file is known <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- save-as writes to the new path, which becomes the save target <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- an edit that arrives while saving still counts as unsaved afterwards <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- a new project starts with no file and no unsaved changes <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- importing a KiCad schematic leaves no file and counts as unsaved <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- importing a DXF drawing leaves no file and counts as unsaved <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- recent files are read from storage at startup <sub>`projectFile store: 最近使ったファイル`</sub>
+- opened and saved files go to the front of the list and are persisted <sub>`projectFile store: 最近使ったファイル`</sub>
+- reopening a file moves it to the front instead of duplicating it <sub>`projectFile store: 最近使ったファイル`</sub>
+- the list is capped, dropping the oldest entries <sub>`projectFile store: 最近使ったファイル`</sub>
+- removing a file drops it from the list and from storage <sub>`projectFile store: 最近使ったファイル`</sub>
+- fileNameOf returns the last path segment for both separators <sub>`projectFile helpers`</sub>
+- isDxfPath recognises the .dxf extension regardless of case <sub>`projectFile helpers`</sub>
+- isKicadPath recognises the .kicad_sch extension regardless of case <sub>`projectFile helpers`</sub>
 
 ### projectInfo
 
@@ -2535,6 +2631,20 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - leaves a ribbon tab the user chose after the panel tab is once shown <sub>`シート種別に合わせた画面の切り替え`</sub>
 - does not steal the left dock from an open agent conversation <sub>`シート種別に合わせた画面の切り替え`</sub>
 
+### Tidy variants (sheet copies / adopt)
+
+- start copies the active sheet once per variant, sends the same tidy prompt in a separate conversation per copy, and opens the panel <sub>`variants store: 整え案の開始`</sub>
+- a selection is mapped to the copy's entity ids in each prompt <sub>`variants store: 整え案の開始`</sub>
+- metrics of the original and every variant are fetched after start <sub>`variants store: 整え案の開始`</sub>
+- start refuses without a sheet, with a count outside 2..4, and while a comparison is in progress <sub>`variants store: 整え案の開始`</sub>
+- a failed copy is logged and nothing starts <sub>`variants store: 整え案の開始`</sub>
+- variants count as running while their conversation answers, and adopt waits for all of them <sub>`variants store: 比較・採用・破棄`</sub>
+- adopt finishes with the chosen sheet, returns to the original sheet and ends the comparison <sub>`variants store: 比較・採用・破棄`</sub>
+- discard cancels the conversations still running and removes every copy <sub>`variants store: 比較・採用・破棄`</sub>
+- a failed finish is logged and the comparison stays open <sub>`variants store: 比較・採用・破棄`</sub>
+- closing the panel keeps the comparison and it can be reopened; nothing opens without a run <sub>`variants store: 比較・採用・破棄`</sub>
+- refreshing metrics leaves a variant without metrics when its sheet cannot be measured <sub>`variants store: 比較・採用・破棄`</sub>
+
 ### verification
 
 - run fetches diagnostics, opens the panel, and counts by severity <sub>`verification store`</sub>
@@ -2601,4 +2711,52 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - places one legend block with the clicked point as its top-left corner <sub>`wire legend block on the canvas`</sub>
 - selects the legend block by clicking inside its table, and not outside it <sub>`wire legend block on the canvas`</sub>
 - moves a selected legend block by dragging it <sub>`wire legend block on the canvas`</sub>
+
+
+## FreeCAD add-on (MadakeCAD Link)
+
+
+### Link API client (Python)
+
+- The client talks to MadakeCAD's Link API on localhost, port 9310 unless told otherwise. <sub>`test_base_url_points_at_the_local_link_api`</sub>
+- The connection check and the project snapshot come back as decoded JSON. <sub>`test_health_and_project_are_decoded_from_json`</sub>
+- Netlist and parts requests pass the sheet id, search text and category as query parameters. <sub>`test_netlist_and_parts_pass_their_filters_as_query_parameters`</sub>
+- Commands are posted as a JSON array and one patch comes back per command, so every write goes through MadakeCAD's Command engine. <sub>`test_commands_are_posted_as_a_json_array_and_return_one_patch_each`</sub>
+- A refused connection, an HTTP error and invalid JSON all raise LinkError with a message that says what went wrong. <sub>`test_errors_are_reported_as_link_errors_with_a_readable_message`</sub>
+- The event stream yields each patch as ("patch", {revision, ops}), joining multi-line data and skipping keep-alive comments. <sub>`test_events_yield_patches_from_the_sse_stream`</sub>
+- Lines without an event name are "message" events, data is dispatched at the blank line, and a trailing event without a blank line is still delivered. <sub>`test_parse_sse_defaults_the_event_name_and_dispatches_on_blank_lines`</sub>
+
+### Live follow & settings
+
+- A patch is applied only when its revision is newer than the last one seen; duplicates and older patches are ignored. <sub>`test_only_newer_revisions_are_accepted`</sub>
+- The panel reloads when the shown sheet's entities change or when sheets are added, removed, renamed or the project is replaced, but not for edits on another sheet. <sub>`test_refresh_is_needed_for_the_shown_sheet_and_structural_changes`</sub>
+- Before a sheet has been chosen, any entity change reloads the panel so the first view is current. <sub>`test_with_no_sheet_shown_yet_any_entity_change_reloads`</sub>
+- The port setting keeps integers from 1 to 65535 and falls back to 9310 for anything else (text, 0, too large). <sub>`test_port_setting_accepts_valid_ports_and_falls_back_to_the_default`</sub>
+
+### Part linking & wire-length write-back
+
+- The parts list has one row per symbol, sorted by sheet and designator, with the 3D model of its part number and the FreeCAD object it is linked to. <sub>`test_part_rows_list_symbols_with_their_3d_model_and_linked_object`</sub>
+- The wire list has one row per wire with its net or wire number, current length, where the length came from, and the linked route object. <sub>`test_wire_rows_show_net_length_source_and_linked_route`</sub>
+- STEP/IGES/BREP files are inserted as shapes, .FCStd files are merged as documents, and anything else cannot be inserted. <sub>`test_model_kind_recognises_shape_files_and_freecad_documents`</sub>
+- Linking sends a set_mech_link command with the entity id, the FreeCAD document path, the object name and the sync time; unlinking sends remove_mech_link. <sub>`test_link_commands_carry_the_entity_id_document_path_object_name_and_time`</sub>
+- Route objects are matched to wires by their madake_id; lengths are converted from millimetres to metres (1 mm resolution) and objects that are not wires are ignored. <sub>`test_measured_route_lengths_are_converted_to_metres_and_matched_to_wires`</sub>
+- The write-back is one set_wire_lengths command per sheet whose entries carry the metre length and the source "freecad", so MadakeCAD can warn before a manual overwrite. <sub>`test_write_back_is_one_command_per_sheet_with_the_freecad_source`</sub>
+- Measuring also registers the route object as the wire's link, but only when the wire is not already linked to that same object. <sub>`test_routes_are_linked_only_when_not_already_linked_to_that_object`</sub>
+
+### Project overview & netlist view
+
+- The project summary shows the project name, the revision and, per sheet, how many symbols, wires and other entities it holds. <sub>`test_summary_carries_name_revision_and_per_sheet_entity_counts`</sub>
+- An empty or partial snapshot summarizes to an unnamed project with no sheets instead of failing. <sub>`test_an_empty_snapshot_summarizes_to_zero`</sub>
+- Each netlist row shows the net name, wire number, label, the pins as "K1:A1, TB1:3" and how many wires form the net. <sub>`test_rows_show_net_name_wire_number_label_pins_and_wire_count`</sub>
+- A pin whose symbol has no designator is shown as "?:<pin>" so the row still reads. <sub>`test_pins_without_a_designator_show_a_placeholder`</sub>
+
+### Route sync, net highlight & placements
+
+- A wire whose net joins two linked parts gets one route stub from one part's placement to the other's, tagged with the wire id and named after the net. <sub>`test_a_wire_between_two_linked_parts_gets_one_stub_between_their_placements`</sub>
+- Nets whose parts are not linked, or whose linked objects are missing from the FreeCAD document, produce no stub. <sub>`test_parts_without_a_link_or_not_in_the_document_produce_no_stub`</sub>
+- Three linked parts on one net are chained in name order into two segments, assigned to the net's wires in order; extra wires get no stub and extra segments are dropped when wires run out. <sub>`test_a_net_with_three_parts_is_chained_and_segments_follow_the_wire_ids`</sub>
+- Wires that already have a route object in the document are skipped, so creating stubs again never duplicates them. <sub>`test_rerunning_skips_wires_that_already_have_a_route_object`</sub>
+- Highlighting a net selects the FreeCAD objects of its linked parts and of its linked route wires, each object once, ignoring unlinked pins. <sub>`test_highlighting_a_net_selects_its_linked_parts_and_routes_once_each`</sub>
+- Syncing a placement sends set_mech_link with the object's base point in millimetres (1 µm resolution) and its rotation in degrees, keeping the existing link data. <sub>`test_placement_command_carries_the_base_in_mm_and_the_rotation_in_degrees`</sub>
+- Sync placements writes one command per linked object present in the document and skips objects whose stored placement is already the same. <sub>`test_sync_placements_writes_only_linked_objects_whose_placement_changed`</sub>
 

@@ -1,6 +1,7 @@
 // エディタUIの共有状態: コマンドライン履歴、モーダル表示など。
 
 import { defineStore } from "pinia";
+import { i18n } from "../i18n";
 import type { ViewClass } from "../canvas/viewClasses";
 import type { SheetKind } from "../ipc";
 import { useChatStore } from "./chat";
@@ -25,7 +26,7 @@ export type RibbonTab =
 
 export const useUiStore = defineStore("ui", {
   state: () => ({
-    commandHistory: ["MadakeCAD コマンドライン (L=配線 E=削除 U=元に戻す)"] as string[],
+    commandHistory: [i18n.global.t("ui.welcome")] as string[],
     symbolPickerOpen: false,
     settingsOpen: false,
     leftPanelTab: "project" as LeftPanelTab,

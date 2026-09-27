@@ -141,6 +141,29 @@ describe("document store", () => {
     expect(store.revision).toBe(10);
   });
 
+  // ja: mech_links_replaced パッチでFreeCAD対応付けの一覧が置き換わる
+  it("a mech_links_replaced patch replaces the FreeCAD link list", () => {
+    const store = useDocumentStore();
+    store.project = testProject();
+    store.applyPatch({
+      revision: 1,
+      ops: [
+        {
+          op: "mech_links_replaced",
+          mech_links: [
+            {
+              entity_id: "e1",
+              fcstd_path: "/work/panel.FCStd",
+              object_name: "Relay001",
+              synced_at: "2026-09-27T10:00:00Z",
+            },
+          ],
+        },
+      ],
+    });
+    expect(store.project?.mech_links?.map((l) => l.object_name)).toEqual(["Relay001"]);
+  });
+
   // ja: 図枠テンプレートを差し替えるパッチはミラーへ反映され、undoでも即座に元へ戻る
   it("frame_template_changed patches update the mirror both ways (switch and undo)", () => {
     const store = useDocumentStore();

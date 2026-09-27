@@ -35,10 +35,10 @@ async function addSheet(kind: SheetKind) {
 
 async function closeSheet(id: string) {
   if ((store.project?.sheets.length ?? 0) <= 1) {
-    ui.log("最後のシートは削除できません");
+    ui.log(t("fileTabs.lastSheetLog"));
     return;
   }
-  if (!window.confirm("このシートを削除しますか?(undoで戻せます)")) return;
+  if (!window.confirm(t("fileTabs.deleteConfirm"))) return;
   await store.execute({ type: "remove_sheet", sheet_id: id });
 }
 

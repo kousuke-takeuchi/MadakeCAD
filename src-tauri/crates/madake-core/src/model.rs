@@ -37,7 +37,10 @@ pub type SheetId = Uuid;
 ///   [`PanelLegend`]と同じく中身は持たず、そのシートの配線から毎回導出する
 ///   ([`crate::wire_legend::legend_rows`])。凡例ブロックを1つも持たない旧ファイルは
 ///   今までどおり開き、出力される図面も変わらない
-pub const FORMAT_VERSION: u32 = 11;
+/// - v12: FreeCAD連携 ([`Project::mech_links`] / [`MechLink::placement`] / [`Wire::length_source`])
+///   を追加。クラウド側の暫定番号 3/4 を統合したもので、対応付けを持たない旧ファイルは
+///   空の対応付けで開き、配線の長さは全て手入力扱い ([`LengthSource::Manual`]) になる
+pub const FORMAT_VERSION: u32 = 12;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -70,6 +73,52 @@ pub struct Project {
     /// 既定は未設定。`set_project_meta`コマンドで設定する。
     #[serde(default)]
     pub no: Option<String>,
+    /// FreeCAD側の3Dオブジェクトとの対応付け (M5-2)。entity UUIDがキーで、
+    /// FreeCAD側は同じUUIDを`madake_id`プロパティに持つ。
+    #[serde(default)]
+    pub mech_links: Vec<MechLink>,
+}
+
+/// エンティティ (シンボル・配線) とFreeCADオブジェクトの対応 (M5仕様 M5-2)。
+/// 電気データはMadakeCAD、ジオメトリ(配置・経路長)はFreeCADがマスタ。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct MechLink {
+    /// 対応付けたシンボルまたは配線のentity id。
+    pub entity_id: EntityId,
+    /// FreeCADドキュメントのパス (.FCStd)。
+    #[serde(default)]
+    pub fcstd_path: String,
+    /// FreeCADオブジェクト名 (`obj.Name`)。
+    #[serde(default)]
+    pub object_name: String,
+    /// 最後に同期した日時 (ISO 8601文字列。FreeCAD側が書く)。
+    #[serde(default)]
+    pub synced_at: String,
+    /// FreeCAD側の配置 (M5-3。盤レイアウトの初期配置に使う)。未同期ならNone。
+    #[serde(default)]
+    pub placement: Option<MechPlacement>,
+}
+
+/// FreeCADオブジェクトの配置: 基点 (mm) とZ軸まわりの回転 (度)。配置はFreeCADがマスタ。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct MechPlacement {
+    pub x_mm: f64,
+    pub y_mm: f64,
+    #[serde(default)]
+    pub z_mm: f64,
+    #[serde(default)]
+    pub rotation_deg: f64,
+}
+
+/// 電線長の出所。FreeCADで計測した値を手入力で誤って上書きしないための印。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LengthSource {
+    /// 手入力 (既定)。
+    #[default]
+    Manual,
+    /// FreeCADの経路計測から書き戻された値。
+    Freecad,
 }
 
 impl Project {
@@ -82,6 +131,7 @@ impl Project {
             plc_assignments: Vec::new(),
             frame_template: None,
             no: None,
+            mech_links: Vec::new(),
         }
     }
 
@@ -335,6 +385,25 @@ impl Entity {
         }
     }
 
+    /// idを付け替える (複製で新しいidを振るとき用)。
+    pub fn set_id(&mut self, id: EntityId) {
+        match self {
+            Entity::Symbol(e) => e.id = id,
+            Entity::Wire(e) => e.id = id,
+            Entity::Junction(e) => e.id = id,
+            Entity::NetLabel(e) => e.id = id,
+            Entity::Text(e) => e.id = id,
+            Entity::Harness(e) => e.id = id,
+            Entity::Shape(e) => e.id = id,
+            Entity::PanelOutline(e) => e.id = id,
+            Entity::DinRail(e) => e.id = id,
+            Entity::Duct(e) => e.id = id,
+            Entity::Footprint(e) => e.id = id,
+            Entity::PanelLegend(e) => e.id = id,
+            Entity::WireLegend(e) => e.id = id,
+        }
+    }
+
     pub fn translate(&mut self, dx: f64, dy: f64) {
         match self {
             Entity::Symbol(e) => e.at = e.at.translated(dx, dy),
@@ -501,6 +570,9 @@ pub struct Wire {
     /// 電線長(m)。BOM/電線リスト用。
     #[serde(default)]
     pub length_m: Option<f64>,
+    /// 電線長の出所 (手入力 / FreeCAD計測)。
+    #[serde(default)]
+    pub length_source: LengthSource,
     /// 電線品番。
     #[serde(default)]
     pub part_no: Option<String>,
@@ -715,6 +787,7 @@ mod tests {
             color: "red".into(),
             sq: 0.3,
             length_m: None,
+            length_source: Default::default(),
             part_no: None,
             net: None,
         });

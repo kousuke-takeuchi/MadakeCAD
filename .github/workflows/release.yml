@@ -1,0 +1,61 @@
+name: Release
+
+# Builds the desktop bundles on all three platforms and attaches them to a DRAFT GitHub
+# release. Trigger by pushing a tag `vX.Y.Z` (matching src-tauri/tauri.conf.json `version`)
+# or manually. Code signing / notarization and the updater are post-release work (M6 spec §3).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  bundle:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+            target: aarch64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+            target: x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            args: ""
+            target: ""
+          - platform: windows-latest
+            args: ""
+            target: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Linux build dependencies (webkit2gtk, appindicator, rsvg)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev fonts-noto-cjk
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "MadakeCAD v__VERSION__"
+          releaseBody: "Desktop bundles built by CI. See docs/12-roadmap.md for what is in this version."
+          releaseDraft: true
+          prerelease: true
+          args: ${{ matrix.args }}

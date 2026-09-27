@@ -1,11 +1,10 @@
 <script setup lang="ts">
 // リボン (Pencilデザイン準拠)。タブとグループ構成はAutoCAD Electricalの慣習に合わせる。
 import {
-  Activity, AlignJustify, Cable, Circle, Columns3, Copy, Cpu, FileClock, FileDown, FileSpreadsheet,
-  FileText,
-  FolderPlus, Frame, Grid3x3, Hash, Image, LayoutGrid, LayoutPanelTop, LayoutTemplate, ListOrdered,
-  ListChecks, Minus,
-  Move, MoveRight, Network, Package, Pencil, Route, Rows3, Ruler, Scissors, Shapes, ShieldCheck,
+  Activity, AlignJustify, Cable, Circle, Columns3, Copy, Cpu, File, FileClock, FileDown, FileInput,
+  FileOutput, FilePlus, FileSpreadsheet, FileText, FolderOpen, FolderPlus, Frame, Grid3x3, Hash,
+  Image, LayoutGrid, LayoutPanelTop, LayoutTemplate, ListOrdered, ListChecks, Minus,
+  Move, MoveRight, Network, Package, Pencil, Route, Rows3, Ruler, Save, Scissors, Shapes, ShieldCheck,
   Spline, Square, SquareDashed,
   Table2, Tag, Trash2, Type,
   type LucideIcon,
@@ -24,6 +23,7 @@ import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
 import type { ReportFormat, ReportKind } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useFileActions } from "../composables/fileActions";
+import { fileNameOf, useProjectFileStore } from "../stores/projectFile";
 import { useRevisionsStore } from "../stores/revisions";
 import { useProjectInfoStore } from "../stores/projectInfo";
 import { useSheetPaperStore } from "../stores/sheetPaper";
@@ -44,6 +44,7 @@ import { smallColumns } from "./ribbonLayout";
 const controller = inject<EditorController>("controller")!;
 const ui = useUiStore();
 const files = useFileActions();
+const projectFile = useProjectFileStore();
 const verification = useVerificationStore();
 const simulation = useSimulationStore();
 const revisions = useRevisionsStore();
@@ -88,14 +89,14 @@ const viewClassColumns = Array.from(
 async function runSimulation() {
   const doc = useDocumentStore();
   await simulation.run(doc.activeSheetId);
-  if (simulation.error) ui.log(`SIM  失敗: ${simulation.error}`);
-  else ui.log(`SIM  DC動作点を計算しました (部品 ${simulation.result?.components.length ?? 0}件)`);
+  if (simulation.error) ui.log(t("ribbon.simFailedLog", { error: simulation.error }));
+  else ui.log(t("ribbon.simDoneLog", { count: simulation.result?.components.length ?? 0 }));
 }
 
 async function runVerification() {
   await verification.run(null);
   const c = verification.counts;
-  ui.log(`検証完了: エラー ${c.error} / 警告 ${c.warning} / 情報 ${c.info}`);
+  ui.log(t("ribbon.verifyDoneLog", c));
 }
 
 /**
@@ -189,7 +190,7 @@ function startWireLegend() {
 }
 
 function todo(name: string) {
-  ui.log(`${name}: 未実装 (今後のフェーズで対応予定)`);
+  ui.log(t("ribbon.todoLog", { name }));
 }
 
 /** 未実装の小ボタン (淡く出したまま、押すとログに理由を出す)。 */
@@ -468,6 +469,96 @@ const reportGroups = computed<RibbonGroup[]>(() => [
   },
 ]);
 
+/**
+ * 「ホーム」タブ: プロジェクトファイルの新規/開く/保存/名前を付けて保存と、
+ * 最近使ったファイル (3件ずつの縦列、ボタンの表示はファイル名・ツールチップにフルパス)。
+ * ショートカットはタイトルバーのボタンと同じ (Cmd+N / Cmd+O / Cmd+S / Cmd+Shift+S)。
+ */
+const homeGroups = computed<RibbonGroup[]>(() => {
+  const groups: RibbonGroup[] = [
+    {
+      name: t("file.group"),
+      big: {
+        label: t("file.save"),
+        icon: Save,
+        color: "var(--acad-blue)",
+        action: () => files.saveProject(),
+      },
+      small: [
+        [
+          { label: t("file.new"), icon: FilePlus, action: () => files.newProject() },
+          { label: t("file.open"), icon: FolderOpen, action: () => files.openProject() },
+          { label: t("file.saveAs"), icon: FileOutput, action: () => files.saveProjectAs() },
+        ],
+      ],
+    },
+  ];
+  const recent = projectFile.recent.map<RibbonItem>((path) => ({
+    key: path,
+    label: fileNameOf(path),
+    title: path,
+    icon: File,
+    action: () => files.openRecent(path),
+  }));
+  if (recent.length) {
+    groups.push({
+      name: t("file.recentGroup"),
+      small: Array.from({ length: Math.ceil(recent.length / 3) }, (_, i) =>
+        recent.slice(i * 3, i * 3 + 3),
+      ),
+    });
+  }
+  return groups;
+});
+
+/**
+ * 「読み込み/書き出し」タブ: 他CADとの受け渡し。KiCad回路図(.kicad_sch)と、
+ * AutoCAD Electrical / EPLANの中間形式であるDXFの読み込み・書き出し、帳票CSV。
+ * (ACADEの.dwg・EPLANの.elk/.zw1は非公開形式なので、両製品が読み書きできるDXFで受け渡す)
+ */
+const ioGroups = computed<RibbonGroup[]>(() => [
+  {
+    name: t("io.importGroup"),
+    big: {
+      label: t("io.open"),
+      icon: FolderOpen,
+      color: "var(--acad-blue)",
+      action: () => files.openProject(),
+    },
+    small: [
+      [
+        { label: t("io.importKicad"), icon: FileInput, action: () => files.importFile("kicad") },
+        { label: t("io.importDxf"), icon: FileInput, action: () => files.importFile("dxf") },
+      ],
+    ],
+  },
+  {
+    name: t("io.exportGroup"),
+    big: {
+      label: t("io.exportDxf"),
+      icon: FileOutput,
+      color: "var(--icon-edit)",
+      action: () => files.exportSheet("dxf"),
+    },
+    small: [
+      [
+        { label: t("io.exportKicad"), icon: FileOutput, action: () => files.exportSheet("kicad") },
+        { label: t("io.exportSvg"), icon: Image, action: () => files.exportSheet("svg") },
+        { label: t("io.exportPdf"), icon: FileDown, action: () => files.exportSheet("pdf") },
+      ],
+    ],
+  },
+  {
+    name: t("io.reportGroup"),
+    small: [
+      [
+        { label: t("io.exportBom"), icon: FileText, action: () => files.exportBom() },
+        { label: t("io.exportWireList"), icon: Cable, action: () => files.exportWireList() },
+      ],
+    ],
+  },
+]);
+
 /** 「プロジェクト」タブ: 作図を始めるための導線 (テンプレート)。 */
 const projectGroups = computed<RibbonGroup[]>(() => [
   {
@@ -543,12 +634,15 @@ interface RibbonItem {
    * 付けない: 押しても何も起きないボタンにすると「なぜ使えないか」を伝えられないため。
    */
   isDisabled?: () => boolean;
-  /** ツールチップ (未実装のフェーズ・使えない理由)。 */
+  /** 同じ表示名が並びうるとき(最近使ったファイル)の識別子。既定はlabel。 */
+  key?: string;
+  /** ツールチップ (未実装のフェーズ・使えない理由、フルパスなどの補足)。 */
   title?: string;
 }
 interface RibbonGroup {
   name: string;
-  big: RibbonItem & { color: string };
+  /** 大ボタン。無いグループ(最近使ったファイル)は小ボタンの列だけを並べる。 */
+  big?: RibbonItem & { color: string };
   /** 小ボタンの列(リボンの縦列)。 */
   small: RibbonItem[][];
 }
@@ -667,9 +761,9 @@ const schematicOnly = () => !onSchematicSheet.value;
 
 const groups = computed<RibbonGroup[]>(() => [
   {
-    name: "配線",
+    name: t("ribbon.schematicGroup.wiring"),
     big: {
-      label: "配線",
+      label: t("ribbon.buttons.wire"),
       icon: Route,
       color: "var(--icon-wire)",
       action: () => controller.setTool("wire"),
@@ -679,14 +773,24 @@ const groups = computed<RibbonGroup[]>(() => [
     // 5つ目 (電線品番凡例) は1列に入らないので、smallColumnsで2列目へ送る
     // (1列に積むとリボンの下端からはみ出し、下の画面に隠れて押せなくなる)
     small: smallColumns([
-      { label: "複数母線", icon: AlignJustify, action: () => todo("複数母線"), isDisabled: schematicOnly },
+      {
+        label: t("ribbon.buttons.multiBus"),
+        icon: AlignJustify,
+        action: () => todo(t("ribbon.buttons.multiBus")),
+        isDisabled: schematicOnly,
+      },
       {
         label: t("wireNumbers.ribbonButton"),
         icon: ListOrdered,
         action: () => openWireNumbers(),
         isDisabled: schematicOnly,
       },
-      { label: "信号矢印", icon: MoveRight, action: () => todo("信号矢印"), isDisabled: schematicOnly },
+      {
+        label: t("ribbon.buttons.signalArrow"),
+        icon: MoveRight,
+        action: () => todo(t("ribbon.buttons.signalArrow")),
+        isDisabled: schematicOnly,
+      },
       {
         label: t("harness.ribbonButton"),
         icon: SquareDashed,
@@ -706,9 +810,9 @@ const groups = computed<RibbonGroup[]>(() => [
     ]),
   },
   {
-    name: "部品を挿入",
+    name: t("ribbon.schematicGroup.insert"),
     big: {
-      label: "部品挿入",
+      label: t("ribbon.buttons.insertPart"),
       icon: Cpu,
       color: "var(--acad-blue)",
       action: () => openSymbolPicker(),
@@ -716,7 +820,12 @@ const groups = computed<RibbonGroup[]>(() => [
       isDisabled: schematicOnly,
     },
     small: [[
-      { label: "端子台", icon: LayoutGrid, action: () => openSymbolPicker(), isDisabled: schematicOnly },
+      {
+        label: t("ribbon.buttons.terminalBlock"),
+        icon: LayoutGrid,
+        action: () => openSymbolPicker(),
+        isDisabled: schematicOnly,
+      },
       {
         label: t("templates.ribbonButton"),
         icon: LayoutTemplate,
@@ -732,9 +841,9 @@ const groups = computed<RibbonGroup[]>(() => [
     ]],
   },
   {
-    name: "回路図を編集",
+    name: t("ribbon.schematicGroup.edit"),
     big: {
-      label: "編集",
+      label: t("ribbon.buttons.edit"),
       icon: Pencil,
       color: "var(--icon-edit)",
       action: () => controller.setTool("select"),
@@ -742,9 +851,9 @@ const groups = computed<RibbonGroup[]>(() => [
     },
     small: [
       [
-        { label: "移動", icon: Move, action: () => { controller.setTool("select"); ui.log("移動: 選択してドラッグ (グリッドスナップ)"); } },
-        { label: "トリム", icon: Scissors, action: () => todo("トリム") },
-        { label: "削除", icon: Trash2, action: () => controller.deleteSelection() },
+        { label: t("ribbon.buttons.move"), icon: Move, action: () => { controller.setTool("select"); ui.log(t("ribbon.moveLog")); } },
+        { label: t("ribbon.buttons.trim"), icon: Scissors, action: () => todo(t("ribbon.buttons.trim")) },
+        { label: t("ribbon.buttons.delete"), icon: Trash2, action: () => controller.deleteSelection() },
       ],
       [
         { label: t("revisions.ribbonButton"), icon: FileClock, action: () => openRevisions() },
@@ -790,22 +899,22 @@ const groups = computed<RibbonGroup[]>(() => [
     ]],
   },
   {
-    name: "検証/レポート",
+    name: t("ribbon.schematicGroup.verify"),
     big: {
-      label: "検証",
+      label: t("ribbon.buttons.verify"),
       icon: ShieldCheck,
       color: "var(--ok-fg)",
       action: () => runVerification(),
     },
     small: [
       [
-        { label: "部品表", icon: FileText, action: () => files.exportBom() },
-        { label: "電線リスト", icon: Cable, action: () => files.exportWireList() },
-        { label: "シミュレーション", icon: Activity, action: () => runSimulation() },
+        { label: t("ribbon.buttons.bom"), icon: FileText, action: () => files.exportBom() },
+        { label: t("ribbon.buttons.wireList"), icon: Cable, action: () => files.exportWireList() },
+        { label: t("ribbon.buttons.simulation"), icon: Activity, action: () => runSimulation() },
       ],
       [
-        { label: "SVG出力", icon: Image, action: () => files.exportSvg() },
-        { label: "PDF出力", icon: FileDown, action: () => files.exportPdf() },
+        { label: t("ribbon.buttons.svg"), icon: Image, action: () => files.exportSvg() },
+        { label: t("ribbon.buttons.pdf"), icon: FileDown, action: () => files.exportPdf() },
       ],
     ],
   },
@@ -815,6 +924,8 @@ const groups = computed<RibbonGroup[]>(() => [
 const activeGroups = computed<RibbonGroup[] | null>(() => {
   if (activeTab.value === "schematic") return groups.value;
   if (activeTab.value === "panel") return panelGroups.value;
+  if (activeTab.value === "home") return homeGroups.value;
+  if (activeTab.value === "io") return ioGroups.value;
   if (activeTab.value === "project") return projectGroups.value;
   if (activeTab.value === "report") return reportGroups.value;
   if (activeTab.value === "admin") return adminGroups.value;
@@ -842,6 +953,7 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
           <div class="ribbon-group">
             <div class="ribbon-group-body">
               <button
+                v-if="g.big"
                 class="ribbon-big"
                 :class="{ active: g.big.isActive?.(), disabled: g.big.isDisabled?.() }"
                 :title="g.big.title"
@@ -853,7 +965,7 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
               <div v-for="(col, ci) in g.small" :key="ci" class="ribbon-smalls">
                 <button
                   v-for="s in col"
-                  :key="s.label"
+                  :key="s.key ?? s.label"
                   class="ribbon-small"
                   :class="{ active: s.isActive?.(), disabled: s.isDisabled?.() }"
                   :title="s.title"
@@ -889,7 +1001,7 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
         </div>
       </template>
       <div v-else class="ribbon-placeholder">
-        「{{ t(`ribbon.tab.${activeTab}`) }}」タブは今後のフェーズで実装予定です
+        {{ t("ribbon.placeholder", { tab: t(`ribbon.tab.${activeTab}`) }) }}
       </div>
     </div>
   </div>

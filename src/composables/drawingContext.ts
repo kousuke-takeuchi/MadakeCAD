@@ -12,7 +12,7 @@ const MAX_LISTED = 10;
 /** 選択エンティティの表示名。参照記号があればそれ、無ければ種別名。 */
 function entityLabel(entity: Entity): string {
   const reference = "reference" in entity ? entity.reference : "";
-  return reference || entityKindLabel(entity.kind);
+  return reference || entityKindLabel(entity.kind, "ja");
 }
 
 /**

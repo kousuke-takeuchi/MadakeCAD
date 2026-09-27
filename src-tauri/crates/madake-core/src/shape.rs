@@ -328,6 +328,7 @@ mod tests {
             length_m: Some(0.4),
             part_no: None,
             net: None,
+            length_source: crate::model::LengthSource::Manual,
         });
         for e in [coil, wire] {
             sheet.entities.insert(e.id(), e);

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 // シミュレーション結果パネル (デザイン: MadakeCAD.pen「シミュレーション結果パネル」)。
 import { X } from "lucide-vue-next";
+import { useI18n } from "vue-i18n";
 import { useDocumentStore } from "../stores/document";
 import { useSimulationStore } from "../stores/simulation";
 
 const sim = useSimulationStore();
 const store = useDocumentStore();
+const { t } = useI18n();
 
 function volts(n: { volts_min: number; volts_max: number }): string {
   if (Math.abs(n.volts_max - n.volts_min) < 0.005) return `${n.volts_max.toFixed(2)} V`;
@@ -16,17 +18,17 @@ function volts(n: { volts_min: number; volts_max: number }): string {
 <template>
   <div v-if="sim.panelOpen" class="panel">
     <div class="head">
-      <span class="title">シミュレーション (DC動作点)</span>
-      <span v-if="sim.result" class="chip">電源 {{ sim.result.voltage }}V</span>
-      <span v-if="sim.openSwitches.length" class="chip open">開路: {{ sim.openSwitches.join(", ") }}</span>
+      <span class="title">{{ t("simulation.title") }}</span>
+      <span v-if="sim.result" class="chip">{{ t("simulation.source", { volts: sim.result.voltage }) }}</span>
+      <span v-if="sim.openSwitches.length" class="chip open">{{ t("simulation.open", { switches: sim.openSwitches.join(", ") }) }}</span>
       <span class="spacer" />
-      <button class="rerun" :disabled="sim.running" @click="sim.run(store.activeSheetId)">再実行</button>
+      <button class="rerun" :disabled="sim.running" @click="sim.run(store.activeSheetId)">{{ t("simulation.rerun") }}</button>
       <button class="close" @click="sim.close()"><X :size="12" /></button>
     </div>
     <div v-if="sim.error" class="error">{{ sim.error }}</div>
     <div v-else-if="sim.result" class="body">
       <div class="col">
-        <div class="col-head">ネット電圧</div>
+        <div class="col-head">{{ t("simulation.netVoltages") }}</div>
         <div v-for="n in sim.result.nets" :key="n.name" class="row">
           <span class="mono">{{ n.name }}</span>
           <span class="spacer" />
@@ -34,7 +36,7 @@ function volts(n: { volts_min: number; volts_max: number }): string {
         </div>
       </div>
       <div class="col left-border">
-        <div class="col-head">部品電流</div>
+        <div class="col-head">{{ t("simulation.componentCurrents") }}</div>
         <div v-for="c in sim.result.components" :key="c.entity_id" class="row">
           <span class="mono">{{ c.reference }}</span>
           <span class="spacer" />

@@ -253,6 +253,9 @@ export const useDocumentStore = defineStore("document", {
               this.project.no = op.no;
             }
             break;
+          case "mech_links_replaced":
+            if (this.project) this.project.mech_links = op.mech_links;
+            break;
         }
       }
       this.revision = patch.revision;

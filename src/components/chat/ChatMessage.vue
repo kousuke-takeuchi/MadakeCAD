@@ -2,8 +2,11 @@
 // 会話1件の描画。ユーザー発話は右寄せ吹き出し、アシスタントは地の文+ツールチップ+適用済み行。
 import { CircleX, LoaderCircle } from "lucide-vue-next";
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { appliedCommandCount, type ChatMessage } from "../../stores/chat";
 import ToolChip from "./ToolChip.vue";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   message: ChatMessage;
@@ -33,7 +36,7 @@ const showProgress = computed(
 
     <div v-if="showProgress" class="progress">
       <LoaderCircle :size="12" class="spinner" />
-      <span>エージェントが作業しています...</span>
+      <span>{{ t("chat.message.working") }}</span>
     </div>
 
     <div v-if="message.error" class="error">
@@ -42,9 +45,9 @@ const showProgress = computed(
     </div>
 
     <div v-if="applied || message.undone" class="action-row">
-      <span v-if="applied" class="applied">✓ 図面に適用済み (rev {{ message.applied_revisions.end }})</span>
-      <span v-else class="undone-label">元に戻しました</span>
-      <button v-if="applied && canUndo" class="undo" @click="emit('undo')">元に戻す</button>
+      <span v-if="applied" class="applied">{{ t("chat.message.applied", { rev: message.applied_revisions.end }) }}</span>
+      <span v-else class="undone-label">{{ t("chat.message.undone") }}</span>
+      <button v-if="applied && canUndo" class="undo" @click="emit('undo')">{{ t("chat.message.undo") }}</button>
     </div>
   </div>
 </template>

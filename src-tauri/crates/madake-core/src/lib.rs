@@ -5,6 +5,7 @@
 
 pub mod block;
 pub mod command;
+pub mod dxf;
 pub mod frame_template;
 pub mod geometry;
 pub mod harness;
@@ -37,6 +38,7 @@ pub mod terminal_chart;
 pub mod terminal_diagram;
 pub mod text_style;
 pub mod tidy;
+pub mod variants;
 pub mod verify;
 pub mod wire_legend;
 pub mod wire_no;

@@ -329,15 +329,15 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 11, the version that added the wire part-number legend block.
-    /// 現行のファイル形式バージョンは11 (電線品番凡例ブロックを追加した版) である。
+    /// The current file format version is 12, the version that folded the FreeCAD integration (mechanical links and the wire length source) in.
+    /// 現行のファイル形式バージョンは12 (FreeCAD連携=機械側の対応付けと電線長の出所を統合した版) である。
     #[test]
-    fn the_current_format_version_is_eleven() {
-        assert_eq!(FORMAT_VERSION, 11);
+    fn the_current_format_version_is_twelve() {
+        assert_eq!(FORMAT_VERSION, 12);
         let mut old = Project::new("x");
-        old.format_version = 10;
+        old.format_version = 11;
         migrate(&mut old);
-        assert_eq!(old.format_version, 11);
+        assert_eq!(old.format_version, 12);
     }
 
     /// A project file saved before the wire part-number legend block existed opens with no legend blocks at all, and is brought up to the current format version.
@@ -493,6 +493,90 @@ mod tests {
         save_project(&path, engine.project()).unwrap();
         let loaded = load_project(&path).unwrap();
         assert_eq!(loaded.frame_template.as_deref(), Some("jis-a4-portrait"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A format 2 file (no FreeCAD links, wires without a length source) opens with an empty link list and every wire length marked as manual.
+    /// 形式2のファイル(FreeCAD対応付けが無く、配線に長さの出所が無い)は、対応付けが空で全ての配線の長さが手入力扱いとして開ける。
+    #[test]
+    fn a_format_2_file_opens_with_empty_mech_links_and_manual_lengths() {
+        let dir = std::env::temp_dir().join(format!("madake-io-v2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("v2.mdkproj");
+        std::fs::write(
+            &path,
+            r#"{"format_version":2,"name":"v2","wire_parts":[],"plc_assignments":[],"sheets":[{"id":"00000000-0000-0000-0000-000000000001","name":"S","size":"A3","orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},"revisions":[],"entities":{"00000000-0000-0000-0000-000000000002":{"kind":"wire","id":"00000000-0000-0000-0000-000000000002","points":[{"x":0,"y":0},{"x":10,"y":0}],"color":"red","sq":0.75,"length_m":0.5}}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert!(loaded.mech_links.is_empty());
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
+        let Entity::Wire(w) = loaded.sheets[0].entities.values().next().unwrap() else { panic!() };
+        assert_eq!((w.length_m, w.length_source), (Some(0.5), LengthSource::Manual));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A format 3 file whose FreeCAD links have no placement opens with those links unplaced, and a link with a placement round-trips through save and load.
+    /// 形式3のファイル(FreeCAD対応付けに配置が無い)は配置なしの対応付けとして開け、配置付きの対応付けは保存→読み込みで保たれる。
+    #[test]
+    fn a_format_3_file_opens_with_unplaced_links_and_placements_round_trip() {
+        let dir = std::env::temp_dir().join(format!("madake-io-v3-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("v3.mdkproj");
+        std::fs::write(
+            &path,
+            r#"{"format_version":3,"name":"v3","sheets":[],"mech_links":[{"entity_id":"00000000-0000-0000-0000-000000000002","fcstd_path":"/p.FCStd","object_name":"Relay001","synced_at":""}]}"#,
+        )
+        .unwrap();
+        let mut loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
+        assert_eq!(loaded.mech_links[0].placement, None);
+        loaded.mech_links[0].placement = Some(MechPlacement { x_mm: 120.0, y_mm: 45.5, z_mm: 0.0, rotation_deg: 90.0 });
+        save_project(&path, &loaded).unwrap();
+        let again = load_project(&path).unwrap();
+        assert_eq!(again.mech_links[0].placement, Some(MechPlacement { x_mm: 120.0, y_mm: 45.5, z_mm: 0.0, rotation_deg: 90.0 }));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A file written by the cloud build (its own format 4, with FreeCAD links and a wire length measured in FreeCAD) opens with those fields intact and is rewritten as the current merged format version.
+    /// クラウド側のビルドが書いたファイル(独自の形式4。FreeCAD対応付けとFreeCAD計測の電線長を含む)は、それらの内容を保ったまま開き、統合後の現行形式で書き直される。
+    #[test]
+    fn a_cloud_format_4_file_keeps_its_mech_links_and_length_source() {
+        let dir = std::env::temp_dir().join(format!("madake-io-cloud-v4-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cloud-v4.mdkproj");
+        // クラウド側が「format_version 4」として書いたファイル (ローカル側のv4とは別系統)
+        std::fs::write(
+            &path,
+            r#"{"format_version":4,"name":"cloud","wire_parts":[],"plc_assignments":[],
+                "mech_links":[{"entity_id":"00000000-0000-0000-0000-000000000002",
+                "fcstd_path":"/p.FCStd","object_name":"Relay001","synced_at":"2026-09-27T00:00:00Z",
+                "placement":{"x_mm":120.0,"y_mm":45.5,"z_mm":0.0,"rotation_deg":90.0}}],
+                "sheets":[{"id":"00000000-0000-0000-0000-000000000001","name":"S","size":"A3",
+                "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},"revisions":[],
+                "entities":{"00000000-0000-0000-0000-000000000002":{"kind":"wire",
+                "id":"00000000-0000-0000-0000-000000000002","points":[{"x":0.0,"y":0.0},{"x":10.0,"y":0.0}],
+                "color":"red","sq":0.75,"length_m":1.25,"length_source":"freecad"}}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.mech_links.len(), 1, "FreeCAD対応付けが残っていること");
+        assert_eq!(loaded.mech_links[0].object_name, "Relay001");
+        assert_eq!(
+            loaded.mech_links[0].placement,
+            Some(MechPlacement { x_mm: 120.0, y_mm: 45.5, z_mm: 0.0, rotation_deg: 90.0 })
+        );
+        let Some(Entity::Wire(w)) = loaded.sheets[0].entities.values().next() else {
+            panic!("配線が残っていること")
+        };
+        assert_eq!((w.length_m, w.length_source), (Some(1.25), LengthSource::Freecad));
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "統合後の現行形式(12)へ更新される");
+
+        // 書き直したファイルも現行形式で、読み直しても中身は変わらない
+        save_project(&path, &loaded).unwrap();
+        let again = load_project(&path).unwrap();
+        assert_eq!(again.format_version, 12);
+        assert_eq!(again.mech_links, loaded.mech_links);
         std::fs::remove_dir_all(&dir).ok();
     }
 }

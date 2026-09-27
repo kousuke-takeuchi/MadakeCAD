@@ -174,6 +174,45 @@ fn apply_template(
         .map_err(|e| e.to_string())
 }
 
+/// 整えバリアントの開始: シートを`count`枚複製する (UI操作=由来user、1回の編集)。
+#[tauri::command]
+fn start_variants(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+    count: usize,
+) -> Result<serde_json::Value, String> {
+    let (patch, run) = state
+        .doc
+        .start_variants(sheet_id, count, madake_core::EditOrigin::User)?;
+    Ok(serde_json::json!({ "patch": patch, "run": run }))
+}
+
+/// 整えバリアントの終了: 採用 (chosen_sheet_id) または破棄 (None)。1回の編集。
+#[tauri::command]
+fn finish_variants(
+    state: State<AppState>,
+    run: madake_core::variants::VariantRun,
+    chosen_sheet_id: Option<madake_core::SheetId>,
+) -> Result<Patch, String> {
+    state
+        .doc
+        .finish_variants(&run, chosen_sheet_id, madake_core::EditOrigin::User)
+}
+
+/// シートの整え指標 (交差・重なり・グリッド外)。比較パネルが案ごとに出す。
+#[tauri::command]
+fn get_tidy_metrics(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+) -> Result<madake_core::tidy::TidyMetrics, String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let sheet = engine
+        .project()
+        .sheet(sheet_id)
+        .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+    Ok(madake_core::tidy::tidy_metrics(sheet, &sheet_symbol_defs(sheet)))
+}
+
 /// 使える回路マクロの一覧(ユーザーの`~/MadakeCAD/macros`)。
 #[tauri::command]
 fn list_macros() -> madake_core::macros::MacroList {
@@ -399,6 +438,54 @@ fn run_verification(
         sheet,
         &sheet_symbol_defs(sheet),
     ))
+}
+
+#[tauri::command]
+fn import_dxf(
+    state: State<AppState>,
+    path: String,
+    wire_layers: Option<Vec<String>>,
+) -> Result<serde_json::Value, String> {
+    let options = madake_core::dxf::DxfImportOptions {
+        wire_layers: wire_layers.unwrap_or_default(),
+    };
+    let (patch, report) = madake_mcp::agent::import_dxf_with_chat(
+        &state.doc,
+        &state.agent,
+        std::path::Path::new(&path),
+        &options,
+    )?;
+    Ok(serde_json::json!({ "patch": patch, "report": report }))
+}
+
+#[tauri::command]
+fn export_dxf(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+    path: String,
+) -> Result<(), String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let sheet = engine
+        .project()
+        .sheet(sheet_id)
+        .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+    let dxf = madake_core::dxf::sheet_to_dxf(sheet, &sheet_symbol_defs(sheet));
+    std::fs::write(&path, dxf).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_kicad(
+    state: State<AppState>,
+    sheet_id: madake_core::SheetId,
+    path: String,
+) -> Result<(), String> {
+    let engine = state.doc.engine.lock().unwrap();
+    let sheet = engine
+        .project()
+        .sheet(sheet_id)
+        .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+    let sch = madake_core::kicad::export_kicad_sch(sheet, &sheet_symbol_defs(sheet));
+    std::fs::write(&path, sch).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -891,6 +978,9 @@ pub fn run() {
             list_frame_templates,
             unplaced_components,
             open_frame_templates_folder,
+            start_variants,
+            finish_variants,
+            get_tidy_metrics,
             list_macros,
             build_macro,
             save_macro,
@@ -907,8 +997,11 @@ pub fn run() {
             search_parts,
             simulate_op,
             import_kicad,
+            import_dxf,
             export_svg,
             export_pdf,
+            export_dxf,
+            export_kicad,
             export_pdf_book,
             export_report,
             search_project,
