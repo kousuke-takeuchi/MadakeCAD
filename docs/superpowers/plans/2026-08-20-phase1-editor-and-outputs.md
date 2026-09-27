@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-20-madakecad-design.md`
 
-**進捗 (2026-08-20):** Task 1〜9 実装・コミット済み。cargo test 20件 + vitest 9件グリーン。MCP経由のエンドツーエンド(place_symbol→draw_wire→get_netlist→export_svg)確認済み。残: 実機UIの目視スモーク(ユーザー確認待ち)、PDF出力(別プラン)、端子台動的シンボル・レイヤ(フェーズ1後半)。
+**進捗 (2026-08-20):** Task 1〜9 実装・コミット済み(チェックボックスは2026-09-27に完了状態へ整理)。cargo test 20件 + vitest 9件グリーン。MCP経由のエンドツーエンド(place_symbol→draw_wire→get_netlist→export_svg)確認済み。残: 実機UIの目視スモーク(ユーザー確認待ち)、PDF出力(別プラン)、端子台動的シンボル・レイヤ(フェーズ1後半)。
 
 ## Global Constraints
 
@@ -37,7 +37,7 @@
 - Consumes: `SymbolInstance { at, rotation, mirror, symbol_id }`, `SymbolDef::pins`
 - Produces: `pub fn pin_positions(inst: &SymbolInstance, def: &SymbolDef) -> Vec<(String, Point)>`(ピン番号→絶対座標。後続タスクがネット判定に使う)
 
-- [ ] **Step 1: 失敗するテストを書く** (`netlist.rs`内`#[cfg(test)]`)
+- [x] **Step 1: 失敗するテストを書く** (`netlist.rs`内`#[cfg(test)]`)
 
 ```rust
 #[test]
@@ -63,12 +63,12 @@ fn pin_positions_apply_rotation_and_translation() {
 }
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd src-tauri && cargo test -p madake-core pin_positions`
 Expected: FAIL(pin_positionsが未定義でコンパイルエラー)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 ```rust
 use crate::geometry::Point;
@@ -95,12 +95,12 @@ pub fn pin_positions(inst: &SymbolInstance, def: &SymbolDef) -> Vec<(String, Poi
 }
 ```
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd src-tauri && cargo test -p madake-core`
 Expected: 全テストPASS
 
-- [ ] **Step 5: コミット**
+- [x] **Step 5: コミット**
 
 ```bash
 git add src-tauri/crates/madake-core/src/
@@ -129,7 +129,7 @@ git commit -m "feat(core): シンボルピンの絶対座標解決を追加"
 - NetLabelはその座標に一致するWire頂点のネットに名前を与える。同名ラベルのネットは統合
 - 無名ネットは"N001"から連番(シート内でソートし決定的に)
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 ```rust
 fn wire(points: &[(f64, f64)]) -> Entity {
@@ -180,12 +180,12 @@ fn crossing_without_junction_stays_separate_and_label_names_net() {
 }
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd src-tauri && cargo test -p madake-core netlist`
 Expected: FAIL(extract_netlist未定義)
 
-- [ ] **Step 3: 実装**
+- [x] **Step 3: 実装**
 
 Union-Find(petgraph不要、自前の小さいdisjoint set)で実装:
 
@@ -213,12 +213,12 @@ fn near(a: &Point, b: &Point) -> bool { a.distance_to(b) < EPS }
 (5) NetLabel座標⇔Wire頂点でunion、同名ラベル同士もunion。
 最後にグループごとにNetを構築、名前はラベル優先、無名はソート後"N%03d"連番。
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd src-tauri && cargo test -p madake-core`
 Expected: 全テストPASS
 
-- [ ] **Step 5: コミット**
+- [x] **Step 5: コミット**
 
 ```bash
 git add src-tauri/crates/madake-core/src/netlist.rs
@@ -241,7 +241,7 @@ git commit -m "feat(core): ネットリスト抽出(Union-Find、Junction/ラベ
 
 CSVはUTF-8・カンマ区切り・ダブルクォートエスケープ(フィールドに`,`か`"`か改行があれば`"..."`で囲み`"`は`""`)。ヘッダ行は日本語。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 ```rust
 #[test]
@@ -278,10 +278,10 @@ fn wire_list_contains_attributes() {
 }
 ```
 
-- [ ] **Step 2: 失敗確認** Run: `cargo test -p madake-core reports` → FAIL
-- [ ] **Step 3: 実装**(BTreeMapで(value, symbol_id)集計→参照記号を", "連結。csv_escape関数を共通化)
-- [ ] **Step 4: 成功確認** Run: `cargo test -p madake-core` → PASS
-- [ ] **Step 5: コミット** `git commit -m "feat(core): BOM/電線リストCSV生成"`
+- [x] **Step 2: 失敗確認** Run: `cargo test -p madake-core reports` → FAIL
+- [x] **Step 3: 実装**(BTreeMapで(value, symbol_id)集計→参照記号を", "連結。csv_escape関数を共通化)
+- [x] **Step 4: 成功確認** Run: `cargo test -p madake-core` → PASS
+- [x] **Step 5: コミット** `git commit -m "feat(core): BOM/電線リストCSV生成"`
 
 ---
 
@@ -305,7 +305,7 @@ fn wire_list_contains_attributes() {
 - Junction: 塗り潰し円 r=0.6
 - NetLabel/Text: `<text>`(font-family="sans-serif", font-sizeはmm単位そのまま)
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 ```rust
 #[test]
@@ -329,10 +329,10 @@ fn svg_contains_frame_wire_and_symbol() {
 }
 ```
 
-- [ ] **Step 2: 失敗確認** → FAIL(sheet_to_svg未定義)
-- [ ] **Step 3: 実装**(String連結で十分。XMLエスケープ関数`xml_escape`を用意し全テキストに適用)
-- [ ] **Step 4: 成功確認** `cargo test -p madake-core` → PASS。さらに目視確認: `cargo test`後、手動で1枚書き出してブラウザで開く
-- [ ] **Step 5: コミット** `git commit -m "feat(core): JIS図枠つきSVGエクスポート"`
+- [x] **Step 2: 失敗確認** → FAIL(sheet_to_svg未定義)
+- [x] **Step 3: 実装**(String連結で十分。XMLエスケープ関数`xml_escape`を用意し全テキストに適用)
+- [x] **Step 4: 成功確認** `cargo test -p madake-core` → PASS。さらに目視確認: `cargo test`後、手動で1枚書き出してブラウザで開く
+- [x] **Step 5: コミット** `git commit -m "feat(core): JIS図枠つきSVGエクスポート"`
 
 ---
 
@@ -347,11 +347,11 @@ fn svg_contains_frame_wire_and_symbol() {
 - Produces(IPC): `export_svg(sheet_id: Uuid, path: String) -> Result<(), String>`ほか、いずれもファイル書き出し
 - Produces(MCP): `get_netlist(sheet_id?) -> String(JSON)`, `export_bom(path) -> ok`, `export_svg(sheet_id?, path) -> ok`
 
-- [ ] **Step 1: MCPツールを追加**(既存`#[tool_router]`ブロックに追記。sheet_id省略時は先頭シート=`resolve_sheet`を再利用)
-- [ ] **Step 2: Tauri IPCハンドラを追加し`generate_handler!`に登録**
-- [ ] **Step 3: ビルド確認** Run: `cd src-tauri && cargo build` → Finished
-- [ ] **Step 4: スモークテスト**(アプリ起動→curlでMCP `export_svg`→ファイル生成確認→アプリ終了。手順は前回スモークテストと同様: initialize→initialized→tools/call)
-- [ ] **Step 5: コミット** `git commit -m "feat: ネットリスト/BOM/SVGをIPCとMCPに公開"`
+- [x] **Step 1: MCPツールを追加**(既存`#[tool_router]`ブロックに追記。sheet_id省略時は先頭シート=`resolve_sheet`を再利用)
+- [x] **Step 2: Tauri IPCハンドラを追加し`generate_handler!`に登録**
+- [x] **Step 3: ビルド確認** Run: `cd src-tauri && cargo build` → Finished
+- [x] **Step 4: スモークテスト**(アプリ起動→curlでMCP `export_svg`→ファイル生成確認→アプリ終了。手順は前回スモークテストと同様: initialize→initialized→tools/call)
+- [x] **Step 5: コミット** `git commit -m "feat: ネットリスト/BOM/SVGをIPCとMCPに公開"`
 
 ---
 
@@ -370,7 +370,7 @@ fn svg_contains_frame_wire_and_symbol() {
 - Produces(store): `useDocumentStore()`: state `{ project, revision, canUndo, canRedo }`、action `applyPatch(patch: Patch)`, `bootstrap()`, `execute(cmd: Command)`
 - 型定義: `src/ipc.ts`に`Patch`/`PatchOp`/`Command`/`Entity`等のTS型をmadake-coreのserde表現(tagged union: `{type: ...}` / `{kind: ...}` / `{op: ...}`)と一致させて手書きする
 
-- [ ] **Step 1: 失敗するテストを書く**(`document.test.ts`、Tauri APIはモック)
+- [x] **Step 1: 失敗するテストを書く**(`document.test.ts`、Tauri APIはモック)
 
 ```typescript
 import { setActivePinia, createPinia } from "pinia";
@@ -409,10 +409,10 @@ describe("document store", () => {
 });
 ```
 
-- [ ] **Step 2: 失敗確認** Run: `npx vitest run` → FAIL
-- [ ] **Step 3: 実装**(store: PatchOpごとのswitch。`sheet_added`はindexにinsert、`sheet_meta_updated`はentities以外を差し替え。ipc.ts: `invoke`ラッパと`listen("doc:patch")`購読を`bootstrap()`で設定)
-- [ ] **Step 4: 成功確認** `npx vitest run` + `npx vue-tsc --noEmit` → PASS
-- [ ] **Step 5: コミット** `git commit -m "feat(ui): IPCラッパとPiniaドキュメントストア(patchミラー)"`
+- [x] **Step 2: 失敗確認** Run: `npx vitest run` → FAIL
+- [x] **Step 3: 実装**(store: PatchOpごとのswitch。`sheet_added`はindexにinsert、`sheet_meta_updated`はentities以外を差し替え。ipc.ts: `invoke`ラッパと`listen("doc:patch")`購読を`bootstrap()`で設定)
+- [x] **Step 4: 成功確認** `npx vitest run` + `npx vue-tsc --noEmit` → PASS
+- [x] **Step 5: コミット** `git commit -m "feat(ui): IPCラッパとPiniaドキュメントストア(patchミラー)"`
 
 ---
 
@@ -432,7 +432,7 @@ describe("document store", () => {
   - `class Viewport { scale: number; originX: number; originY: number; toScreen(p:{x,y}):{x,y}; toWorld(p:{x,y}):{x,y}; zoomAt(screenPt, factor): void; pan(dxPx, dyPx): void; snap(p:{x,y}, pitch?:number):{x,y} }`
   - `function renderSheet(ctx: CanvasRenderingContext2D, sheet: Sheet, symbols: SymbolDef[], vp: Viewport, opts: { selection: Set<string> }): void`
 
-- [ ] **Step 1: viewportの失敗するテストを書く**
+- [x] **Step 1: viewportの失敗するテストを書く**
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -459,10 +459,10 @@ describe("Viewport", () => {
 });
 ```
 
-- [ ] **Step 2: 失敗確認** `npx vitest run` → FAIL
-- [ ] **Step 3: viewport実装+renderer実装**(renderer: 用紙白地→グリッド点(2.5mm、ズーム閾値で間引き)→図枠/ゾーン/表題欄(svg.rsと同じ寸法ロジックをTSに移植)→Wire(色マップはtheme.ts)→Symbol(プリミティブ描画+参照記号)→Junction→選択ハイライト。rendererは純関数でDOM非依存、テストはviewportのみ)
-- [ ] **Step 4: 成功確認** `npx vitest run` + `npx vue-tsc --noEmit` → PASS
-- [ ] **Step 5: コミット** `git commit -m "feat(ui): Canvas2Dレンダラコア(ビューポート/グリッド/図枠)"`
+- [x] **Step 2: 失敗確認** `npx vitest run` → FAIL
+- [x] **Step 3: viewport実装+renderer実装**(renderer: 用紙白地→グリッド点(2.5mm、ズーム閾値で間引き)→図枠/ゾーン/表題欄(svg.rsと同じ寸法ロジックをTSに移植)→Wire(色マップはtheme.ts)→Symbol(プリミティブ描画+参照記号)→Junction→選択ハイライト。rendererは純関数でDOM非依存、テストはviewportのみ)
+- [x] **Step 4: 成功確認** `npx vitest run` + `npx vue-tsc --noEmit` → PASS
+- [x] **Step 5: コミット** `git commit -m "feat(ui): Canvas2Dレンダラコア(ビューポート/グリッド/図枠)"`
 
 ---
 
@@ -481,12 +481,12 @@ describe("Viewport", () => {
 - Consumes: Task 6 store、Task 7 renderer/viewport
 - Produces: 動くエディタ。操作仕様: 左ドラッグ=選択矩形/移動、中ドラッグorSpace+ドラッグ=パン、ホイール=ズーム、W=配線ツール、Esc=選択ツール、Delete=削除、Cmd+Z/Cmd+Shift+Z=undo/redo、配線クリックで頂点確定・ダブルクリックで終了、ピン/グリッドスナップ表示
 
-- [ ] **Step 1: デザイン承認確認**(design/にpenファイルとユーザー承認があるか。なければ停止)
-- [ ] **Step 2: レイアウトとコンポーネントをデザイントークンどおり実装**
-- [ ] **Step 3: ツール状態機械実装**(各ツール: `onPointerDown/Move/Up(world: {x,y})`+`render(ctx, vp)`のインターフェース)
-- [ ] **Step 4: 手動スモーク** `npm run tauri dev`: シンボル配置→配線→undo/redo→保存/読込→MCP経由編集のリアルタイム反映
-- [ ] **Step 5: 型チェック+テスト** `npx vue-tsc --noEmit && npx vitest run` → PASS
-- [ ] **Step 6: コミット** `git commit -m "feat(ui): エディタUI(Pencilデザイン準拠)"`
+- [x] **Step 1: デザイン承認確認**(design/にpenファイルとユーザー承認があるか。なければ停止)
+- [x] **Step 2: レイアウトとコンポーネントをデザイントークンどおり実装**
+- [x] **Step 3: ツール状態機械実装**(各ツール: `onPointerDown/Move/Up(world: {x,y})`+`render(ctx, vp)`のインターフェース)
+- [x] **Step 4: 手動スモーク** `npm run tauri dev`: シンボル配置→配線→undo/redo→保存/読込→MCP経由編集のリアルタイム反映
+- [x] **Step 5: 型チェック+テスト** `npx vue-tsc --noEmit && npx vitest run` → PASS
+- [x] **Step 6: コミット** `git commit -m "feat(ui): エディタUI(Pencilデザイン準拠)"`
 
 ---
 
@@ -496,9 +496,9 @@ describe("Viewport", () => {
 - Modify: `src/components/Toolbar.vue`ほか(ファイルメニュー: 新規/開く/保存/名前を付けて保存/エクスポート)
 - Consumes: `@tauri-apps/plugin-dialog`の`open()`/`save()`、Task 5のIPC
 
-- [ ] **Step 1: ダイアログ→IPC呼び出しを実装**(拡張子フィルタ: `.mdkproj`、SVG/CSV)
-- [ ] **Step 2: 手動スモーク**(保存→再起動→開く→同一図面)
-- [ ] **Step 3: コミット** `git commit -m "feat(ui): ファイルメニューとエクスポート統合"`
+- [x] **Step 1: ダイアログ→IPC呼び出しを実装**(拡張子フィルタ: `.mdkproj`、SVG/CSV)
+- [x] **Step 2: 手動スモーク**(保存→再起動→開く→同一図面)
+- [x] **Step 3: コミット** `git commit -m "feat(ui): ファイルメニューとエクスポート統合"`
 
 ---
 
