@@ -512,7 +512,21 @@ export interface KicadImportResult {
     texts: number;
     skipped: string[];
     warnings: string[];
+    /**
+     * DXFで配線レイヤを1つも決められなかったときの、線分があるレイヤ名。
+     * 「このレイヤで読み直す」の選択肢になる (空なら配線レイヤが決まっている)。
+     */
+    layers?: string[];
   };
+}
+
+/**
+ * 書き出し結果の内訳 (DXF / KiCad)。`counts`は種別 (`Entity["kind"]`) → 件数、
+ * `skipped`は出せなかった種別と理由。書き出しを黙らせないための報告。
+ */
+export interface ExportReport {
+  counts: Record<string, number>;
+  skipped: string[];
 }
 
 /** DC動作点シミュレーションの結果。 */
@@ -971,10 +985,10 @@ interface Ipc {
   simulateOp(sheetId: string | null, openSwitches: string[]): Promise<SimOpResult>;
   exportSvg(sheetId: string, path: string): Promise<void>;
   exportPdf(sheetId: string, path: string): Promise<void>;
-  /** シートをDXF (AutoCAD 2000形式) で書き出す。 */
-  exportDxf(sheetId: string, path: string): Promise<void>;
-  /** シートをKiCad回路図 (.kicad_sch) で書き出す。 */
-  exportKicad(sheetId: string, path: string): Promise<void>;
+  /** シートをDXF (AutoCAD 2000形式) で書き出す。戻り値=書き出した種別の内訳。 */
+  exportDxf(sheetId: string, path: string): Promise<ExportReport>;
+  /** シートをKiCad回路図 (.kicad_sch) で書き出す。戻り値=書き出した種別の内訳。 */
+  exportKicad(sheetId: string, path: string): Promise<ExportReport>;
   exportBom(path: string): Promise<void>;
   exportWireList(path: string): Promise<void>;
   /**
@@ -1079,9 +1093,10 @@ const tauriIpc: Ipc = {
     invoke<SimOpResult>("simulate_op", { sheetId, openSwitches }),
   exportSvg: (sheetId: string, path: string) => invoke<void>("export_svg", { sheetId, path }),
   exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
-  exportDxf: (sheetId: string, path: string) => invoke<void>("export_dxf", { sheetId, path }),
+  exportDxf: (sheetId: string, path: string) =>
+    invoke<ExportReport>("export_dxf", { sheetId, path }),
   exportKicad: (sheetId: string, path: string) =>
-    invoke<void>("export_kicad", { sheetId, path }),
+    invoke<ExportReport>("export_kicad", { sheetId, path }),
   exportBom: (path: string) => invoke<void>("export_bom", { path }),
   exportWireList: (path: string) => invoke<void>("export_wire_list", { path }),
   searchProject: (query: string, kinds: SearchKind[]) =>
@@ -1257,10 +1272,18 @@ const httpIpc: Ipc = {
     await http("/export/pdf", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
   },
   exportDxf: async (sheetId, path) => {
-    await http("/export/dxf", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
+    const res = await http<{ report: ExportReport }>("/export/dxf", {
+      method: "POST",
+      body: JSON.stringify({ sheet_id: sheetId, path }),
+    });
+    return res.report;
   },
   exportKicad: async (sheetId, path) => {
-    await http("/export/kicad", { method: "POST", body: JSON.stringify({ sheet_id: sheetId, path }) });
+    const res = await http<{ report: ExportReport }>("/export/kicad", {
+      method: "POST",
+      body: JSON.stringify({ sheet_id: sheetId, path }),
+    });
+    return res.report;
   },
   exportBom: async (path) => {
     await http("/export/bom", { method: "POST", body: JSON.stringify({ path }) });

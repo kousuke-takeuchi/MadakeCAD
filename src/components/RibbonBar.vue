@@ -515,8 +515,13 @@ const homeGroups = computed<RibbonGroup[]>(() => {
  * 「読み込み/書き出し」タブ: 他CADとの受け渡し。KiCad回路図(.kicad_sch)と、
  * AutoCAD Electrical / EPLANの中間形式であるDXFの読み込み・書き出し、帳票CSV。
  * (ACADEの.dwg・EPLANの.elk/.zw1は非公開形式なので、両製品が読み書きできるDXFで受け渡す)
+ *
+ * DXFの読み込みで配線レイヤが決まらなかったときだけ、「配線レイヤ」グループが増える:
+ * 読み込み報告が挙げたレイヤ名がそのまま小ボタンになり、押すとそのレイヤだけを配線と
+ * して同じファイルを読み直す (配線レイヤの指定を打ち込まずに絞れる)。
  */
-const ioGroups = computed<RibbonGroup[]>(() => [
+const ioGroups = computed<RibbonGroup[]>(() => {
+  const groups: RibbonGroup[] = [
   {
     name: t("io.importGroup"),
     big: {
@@ -557,7 +562,22 @@ const ioGroups = computed<RibbonGroup[]>(() => [
       ],
     ],
   },
-]);
+  ];
+  const lastDxf = projectFile.lastDxf;
+  if (lastDxf) {
+    groups.push({
+      name: t("io.wireLayerGroup"),
+      small: smallColumns(
+        lastDxf.layers.map((layer) => ({
+          label: layer,
+          icon: Cable,
+          action: () => files.reimportDxfWithWireLayer(layer),
+        })),
+      ),
+    });
+  }
+  return groups;
+});
 
 /** 「プロジェクト」タブ: 作図を始めるための導線 (テンプレート)。 */
 const projectGroups = computed<RibbonGroup[]>(() => [

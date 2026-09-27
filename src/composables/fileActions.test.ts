@@ -191,7 +191,7 @@ describe("file menu: 新規と開く", () => {
     });
     const dialogs = fakeDialogs({ open: "/work/panel.dxf" });
     expect(await useFileActions(dialogs).openProject()).toBe(true);
-    expect(ipc.importDxf).toHaveBeenCalledWith("/work/panel.dxf");
+    expect(ipc.importDxf).toHaveBeenCalledWith("/work/panel.dxf", undefined);
     expect(dialogs.pickOpen).toHaveBeenCalledWith([
       { name: "MadakeCAD project", extensions: ["mdkproj"] },
       { name: "KiCad schematic", extensions: ["kicad_sch"] },
@@ -256,7 +256,7 @@ describe("file menu: シートの書き出し", () => {
 
   // ja: DXF書き出しは「<シート名>.dxf」を既定にDXFフィルタで保存先を聞き、表示中のシートを書き出す
   it("exporting DXF asks for a path defaulting to <sheet>.dxf and writes the active sheet", async () => {
-    vi.spyOn(ipc, "exportDxf").mockResolvedValue();
+    vi.spyOn(ipc, "exportDxf").mockResolvedValue({ counts: {}, skipped: [] });
     const dialogs = fakeDialogs({ save: "/out/panel.dxf" });
     expect(await useFileActions(dialogs).exportSheet("dxf")).toBe(true);
     expect(dialogs.pickSave).toHaveBeenCalledWith("Sheet1.dxf", [
@@ -268,7 +268,7 @@ describe("file menu: シートの書き出し", () => {
 
   // ja: KiCad書き出しは「<シート名>.kicad_sch」を既定にし、SVG/PDFは従来どおり拡張子のフィルタで保存する
   it("exporting KiCad defaults to <sheet>.kicad_sch, and SVG/PDF keep their extension filters", async () => {
-    vi.spyOn(ipc, "exportKicad").mockResolvedValue();
+    vi.spyOn(ipc, "exportKicad").mockResolvedValue({ counts: {}, skipped: [] });
     vi.spyOn(ipc, "exportSvg").mockResolvedValue();
     vi.spyOn(ipc, "exportPdf").mockResolvedValue();
     const dialogs = fakeDialogs({ save: "/out/x" });
@@ -287,7 +287,7 @@ describe("file menu: シートの書き出し", () => {
 
   // ja: 保存ダイアログをキャンセルすると何も書き出さない
   it("cancelling the save dialog exports nothing", async () => {
-    vi.spyOn(ipc, "exportDxf").mockResolvedValue();
+    vi.spyOn(ipc, "exportDxf").mockResolvedValue({ counts: {}, skipped: [] });
     expect(await useFileActions(fakeDialogs({ save: null })).exportSheet("dxf")).toBe(false);
     expect(ipc.exportDxf).not.toHaveBeenCalled();
   });
@@ -306,5 +306,87 @@ describe("file menu: シートの書き出し", () => {
     vi.spyOn(ipc, "exportKicad").mockRejectedValue(new Error("permission denied"));
     expect(await useFileActions(fakeDialogs({ save: "/out/x.kicad_sch" })).exportSheet("kicad")).toBe(false);
     expect(useUiStore().lastMessage).toContain("permission denied");
+  });
+
+  // ja: DXF / KiCad書き出しは「何を何件書いたか」と「書けなかったもの」をコマンドログに出す
+  it("a DXF or KiCad export logs what it wrote per kind and what it could not write", async () => {
+    vi.spyOn(ipc, "exportKicad").mockResolvedValue({
+      counts: { wire: 3, symbol: 2 },
+      skipped: ["panel_outline x1: no equivalent in a KiCad schematic"],
+    });
+    expect(await useFileActions(fakeDialogs({ save: "/out/x.kicad_sch" })).exportSheet("kicad")).toBe(
+      true,
+    );
+    const log = useUiStore().commandHistory.join("\n");
+    expect(log).toContain("配線 3");
+    expect(log).toContain("シンボル 2");
+    expect(log).toContain("no equivalent in a KiCad schematic");
+  });
+});
+
+describe("file menu: DXFの配線レイヤ", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setActivePinia(createPinia());
+    useDocumentStore().project = project();
+    useDocumentStore().revision = 1;
+    useProjectFileStore().attach(memory);
+  });
+
+  /** 配線レイヤが決まらなかったDXF読み込みの応答。 */
+  function noWireLayer() {
+    return {
+      patch: replaced(10, "panel"),
+      report: {
+        symbols: 0,
+        wires: 2,
+        junctions: 0,
+        labels: 0,
+        texts: 0,
+        skipped: [],
+        warnings: ["no wire layer found"],
+        layers: ["0", "SYMS"],
+      },
+    };
+  }
+
+  // ja: 配線レイヤが決まらなかったDXF読み込みは、候補のレイヤ名をログで知らせて覚えておく
+  it("a DXF import with no wire layer logs the candidate layers and remembers them", async () => {
+    vi.spyOn(ipc, "importDxf").mockResolvedValue(noWireLayer());
+    expect(await useFileActions(fakeDialogs({ open: "/work/a.dxf" })).importFile("dxf")).toBe(true);
+    const log = useUiStore().commandHistory.join("\n");
+    expect(log).toContain("0, SYMS");
+    expect(useProjectFileStore().lastDxf).toEqual({ path: "/work/a.dxf", layers: ["0", "SYMS"] });
+  });
+
+  // ja: 選んだレイヤで読み直すと、同じファイルをそのレイヤだけを配線として読み込む
+  it("re-importing with a chosen wire layer reads the same file with only that layer as wires", async () => {
+    const importDxf = vi.spyOn(ipc, "importDxf").mockResolvedValue(noWireLayer());
+    const files = useFileActions(fakeDialogs({ open: "/work/a.dxf" }));
+    await files.importFile("dxf");
+    importDxf.mockResolvedValue({
+      patch: replaced(11, "panel"),
+      report: {
+        symbols: 0,
+        wires: 1,
+        junctions: 0,
+        labels: 0,
+        texts: 0,
+        skipped: [],
+        warnings: [],
+        layers: [],
+      },
+    });
+    expect(await files.reimportDxfWithWireLayer("SYMS")).toBe(true);
+    expect(importDxf).toHaveBeenLastCalledWith("/work/a.dxf", ["SYMS"]);
+    // 配線レイヤが決まったので候補は消える (リボンのグループも消える)
+    expect(useProjectFileStore().lastDxf).toBeNull();
+  });
+
+  // ja: 直前のDXF読み込みが無ければ読み直しは何もしない
+  it("re-importing does nothing when no DXF import is remembered", async () => {
+    const importDxf = vi.spyOn(ipc, "importDxf");
+    expect(await useFileActions(fakeDialogs({})).reimportDxfWithWireLayer("WIRES")).toBe(false);
+    expect(importDxf).not.toHaveBeenCalled();
   });
 });

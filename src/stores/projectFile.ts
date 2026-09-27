@@ -54,6 +54,13 @@ export function isDxfPath(path: string): boolean {
   return path.toLowerCase().endsWith(".dxf");
 }
 
+/** 直前に読み込んだDXFと、その読み込みが挙げた配線レイヤの候補。 */
+export interface LastDxfImport {
+  path: string;
+  /** 線分があったレイヤ名。配線レイヤが決まらなかったときだけ入る。 */
+  layers: string[];
+}
+
 interface ProjectFileState {
   /** いま開いている`.mdkproj`のパス。新規・KiCad読込直後はnull (保存先未定)。 */
   path: string | null;
@@ -62,6 +69,11 @@ interface ProjectFileState {
   /** 最近使ったファイル (新しい順)。 */
   recent: string[];
   storage: RecentStorage;
+  /**
+   * 直前のDXF読み込みで配線レイヤが決まらなかったときの、ファイルとレイヤ候補。
+   * 「このレイヤで読み直す」の導線 (リボン) がこれを使う。決まっていればnull。
+   */
+  lastDxf: LastDxfImport | null;
 }
 
 export const useProjectFileStore = defineStore("projectFile", {
@@ -70,6 +82,7 @@ export const useProjectFileStore = defineStore("projectFile", {
     savedRevision: 0,
     recent: [],
     storage: localRecentStorage(),
+    lastDxf: null,
   }),
 
   getters: {
@@ -136,12 +149,18 @@ export const useProjectFileStore = defineStore("projectFile", {
     /**
      * DXF (AutoCAD Electrical / EPLAN の中間形式) を読み込む。KiCadと同じく保存先は無く、
      * 読み込んだ内容は未保存の編集として扱う。
+     *
+     * `wireLayers`を渡すと、そのレイヤの線分だけを配線として読む (空なら自動判定)。
+     * 自動判定で配線レイヤが決まらなかったときは、報告されたレイヤ候補を`lastDxf`に
+     * 覚えておく (「このレイヤで読み直す」の導線が使う)。
      */
-    async importDxf(path: string): Promise<KicadImportResult> {
-      const result = await ipc.importDxf(path);
+    async importDxf(path: string, wireLayers?: string[]): Promise<KicadImportResult> {
+      const result = await ipc.importDxf(path, wireLayers);
       this.applyReplacement(result.patch);
       this.path = null;
       this.addRecent(path);
+      const layers = result.report.layers ?? [];
+      this.lastDxf = layers.length ? { path, layers } : null;
       return result;
     },
 

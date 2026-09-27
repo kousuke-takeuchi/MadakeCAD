@@ -1383,7 +1383,11 @@
       "pdf": "PDF-Datei",
       "dxf": "DXF-Zeichnung",
       "kicad": "KiCad-Schaltplan"
-    }
+    },
+    "exportCountsLog": "EXPORT  Geschrieben: {counts}",
+    "exportSkippedLog": "EXPORT  ⚠ Nicht geschrieben: {skipped}",
+    "dxfWireLayerHintLog": "IMPORT  Keine Leitungsebene erkannt. Mit einer Ebene aus der Gruppe \"Leitungsebene\" erneut importieren: {layers}",
+    "dxfReimportLog": "IMPORT  {path} wird mit Leitungsebene {layer} erneut importiert"
   },
   "io": {
     "importGroup": "Import",
@@ -1397,7 +1401,8 @@
     "exportSvg": "SVG...",
     "exportPdf": "PDF...",
     "exportBom": "Stückliste CSV...",
-    "exportWireList": "Leitungsliste CSV..."
+    "exportWireList": "Leitungsliste CSV...",
+    "wireLayerGroup": "Leitungsebene"
   },
   "variants": {
     "title": "Aufräumvarianten",

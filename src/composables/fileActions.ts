@@ -4,8 +4,9 @@
 // ダイアログと確認、ログ出力だけを担当する。
 
 import { open as dialogOpen, save as dialogSave } from "@tauri-apps/plugin-dialog";
+import { entityKindLabels, type EntityKind } from "../components/entityKindLabels";
 import { i18n } from "../i18n";
-import { inTauri, ipc } from "../ipc";
+import { inTauri, ipc, type ExportReport } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { isDxfPath, isKicadPath, useProjectFileStore } from "../stores/projectFile";
 import { useUiStore } from "../stores/ui";
@@ -83,16 +84,21 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
   const dxfFilter = (): Filter => ({ name: t("dxfFilter"), extensions: ["dxf"] });
 
   /** パスを開く (拡張子でKiCad / DXF読み込みとプロジェクト読み込みを振り分ける)。 */
-  async function openPath(path: string): Promise<boolean> {
+  async function openPath(path: string, wireLayers?: string[]): Promise<boolean> {
     try {
       if (isKicadPath(path) || isDxfPath(path)) {
         const kind: ImportKind = isKicadPath(path) ? "kicad" : "dxf";
-        const { report } = kind === "kicad" ? await file.importKicad(path) : await file.importDxf(path);
+        const { report } =
+          kind === "kicad" ? await file.importKicad(path) : await file.importDxf(path, wireLayers);
         const skipped = report.skipped.length
           ? t("importSkipped", { count: report.skipped.length })
           : "";
         ui.log(t("importLog", { ...report, what: t(`importKind.${kind}`), skipped }));
         for (const warning of report.warnings) ui.log(t("importWarningLog", { warning }));
+        // 配線レイヤが決まらなかったときは、レイヤを選んで読み直せることを知らせる
+        if (file.lastDxf) {
+          ui.log(t("dxfWireLayerHintLog", { layers: file.lastDxf.layers.join(", ") }));
+        }
       } else {
         await file.open(path);
         ui.log(t("openLog", { path }));
@@ -150,6 +156,17 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
       if (!path) return false;
       return openPath(path);
     },
+    /**
+     * 直前に読み込んだDXFを、選んだ配線レイヤで読み直す (リボンの「配線レイヤ」ボタン)。
+     * 警告に挙がったレイヤ名がそのままボタンになるので、指定を打ち込まなくても絞れる。
+     */
+    async reimportDxfWithWireLayer(layer: string): Promise<boolean> {
+      const last = file.lastDxf;
+      if (!last) return false;
+      if (!confirmDiscard()) return false;
+      ui.log(t("dxfReimportLog", { layer, path: last.path }));
+      return openPath(last.path, [layer]);
+    },
     /** 表示中のシートをDXF / KiCad回路図 / SVG / PDFで書き出す。 */
     async exportSheet(kind: SheetExportKind): Promise<boolean> {
       const sheet = store.activeSheet;
@@ -162,16 +179,26 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
         kind === "kicad" ? kicadFilter() : kind === "dxf" ? dxfFilter() : filterFor(kind)[0],
       ]);
       if (!path) return false;
+      let report: ExportReport | null = null;
       try {
         if (kind === "svg") await ipc.exportSvg(sheet.id, path);
         else if (kind === "pdf") await ipc.exportPdf(sheet.id, path);
-        else if (kind === "dxf") await ipc.exportDxf(sheet.id, path);
-        else await ipc.exportKicad(sheet.id, path);
+        else if (kind === "dxf") report = await ipc.exportDxf(sheet.id, path);
+        else report = await ipc.exportKicad(sheet.id, path);
       } catch (e) {
         ui.log(t("exportFailedLog", { what: t(`exportKind.${kind}`), path, message: String(e) }));
         return false;
       }
       ui.log(t("exportLog", { what: t(`exportKind.${kind}`), path }));
+      // DXF / KiCadは「何を何件出して、何を出さなかったか」を書き出し側が返す
+      if (report) {
+        const labels = entityKindLabels(i18n.global.t);
+        const counts = Object.entries(report.counts)
+          .map(([k, n]) => `${labels[k as EntityKind] ?? k} ${n}`)
+          .join(" / ");
+        if (counts) ui.log(t("exportCountsLog", { counts }));
+        for (const skipped of report.skipped) ui.log(t("exportSkippedLog", { skipped }));
+      }
       return true;
     },
     /** 最近使ったファイルを開く。開けなければ一覧から外す。 */

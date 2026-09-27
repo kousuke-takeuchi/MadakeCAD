@@ -176,7 +176,7 @@ describe("projectFile store: 開いているファイルと未保存の編集", 
     const file = useProjectFileStore();
     file.attach(memoryStorage());
     const result = await file.importDxf("/work/panel.dxf");
-    expect(ipc.importDxf).toHaveBeenCalledWith("/work/panel.dxf");
+    expect(ipc.importDxf).toHaveBeenCalledWith("/work/panel.dxf", undefined);
     expect(result.report.wires).toBe(4);
     expect(file.path).toBeNull();
     expect(file.dirty).toBe(true);

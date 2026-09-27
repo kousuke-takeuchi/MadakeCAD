@@ -1383,7 +1383,11 @@
       "pdf": "el PDF",
       "dxf": "el dibujo DXF",
       "kicad": "el esquema de KiCad"
-    }
+    },
+    "exportCountsLog": "EXPORT  Escrito: {counts}",
+    "exportSkippedLog": "EXPORT  ⚠ No escrito: {skipped}",
+    "dxfWireLayerHintLog": "IMPORT  No se identificó ninguna capa de cableado. Vuelve a importar con una capa del grupo «Capa de cableado»: {layers}",
+    "dxfReimportLog": "IMPORT  Reimportando {path} con la capa de cableado {layer}"
   },
   "io": {
     "importGroup": "Importar",
@@ -1397,7 +1401,8 @@
     "exportSvg": "SVG...",
     "exportPdf": "PDF...",
     "exportBom": "CSV de BOM...",
-    "exportWireList": "CSV de lista de hilos..."
+    "exportWireList": "CSV de lista de hilos...",
+    "wireLayerGroup": "Capa de cableado"
   },
   "variants": {
     "title": "Variantes de ordenación",

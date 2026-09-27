@@ -1383,7 +1383,11 @@
       "pdf": "PDF",
       "dxf": "DXF図面",
       "kicad": "KiCad回路図"
-    }
+    },
+    "exportCountsLog": "EXPORT  書き出した内容: {counts}",
+    "exportSkippedLog": "EXPORT  ⚠ 書き出せなかったもの: {skipped}",
+    "dxfWireLayerHintLog": "IMPORT  配線レイヤが決まりませんでした。「配線レイヤ」グループのボタンでレイヤを選んで読み直せます: {layers}",
+    "dxfReimportLog": "IMPORT  {path} を配線レイヤ {layer} で読み直します"
   },
   "io": {
     "importGroup": "読み込み",
@@ -1397,7 +1401,8 @@
     "exportSvg": "SVG...",
     "exportPdf": "PDF...",
     "exportBom": "部品表 CSV...",
-    "exportWireList": "電線リスト CSV..."
+    "exportWireList": "電線リスト CSV...",
+    "wireLayerGroup": "配線レイヤ"
   },
   "variants": {
     "title": "整え案の比較",

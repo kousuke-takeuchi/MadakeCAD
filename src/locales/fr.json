@@ -1383,7 +1383,11 @@
       "pdf": "PDF",
       "dxf": "Dessin DXF",
       "kicad": "Schéma KiCad"
-    }
+    },
+    "exportCountsLog": "EXPORT  Écrit : {counts}",
+    "exportSkippedLog": "EXPORT  ⚠ Non écrit : {skipped}",
+    "dxfWireLayerHintLog": "IMPORT  Aucun calque de câblage identifié. Réimportez avec un calque du groupe « Calque de câblage » : {layers}",
+    "dxfReimportLog": "IMPORT  Réimport de {path} avec le calque de câblage {layer}"
   },
   "io": {
     "importGroup": "Importer",
@@ -1397,7 +1401,8 @@
     "exportSvg": "SVG...",
     "exportPdf": "PDF...",
     "exportBom": "Nomenclature CSV...",
-    "exportWireList": "Liste des fils CSV..."
+    "exportWireList": "Liste des fils CSV...",
+    "wireLayerGroup": "Calque de câblage"
   },
   "variants": {
     "title": "Variantes de rangement",

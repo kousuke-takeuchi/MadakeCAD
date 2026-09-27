@@ -1383,7 +1383,11 @@
       "pdf": "PDF",
       "dxf": "DXF 图纸",
       "kicad": "KiCad 原理图"
-    }
+    },
+    "exportCountsLog": "EXPORT  已写出: {counts}",
+    "exportSkippedLog": "EXPORT  ⚠ 未写出: {skipped}",
+    "dxfWireLayerHintLog": "IMPORT  未能确定配线图层。可用「配线图层」组中的图层重新导入: {layers}",
+    "dxfReimportLog": "IMPORT  正在以配线图层 {layer} 重新导入 {path}"
   },
   "io": {
     "importGroup": "导入",
@@ -1397,7 +1401,8 @@
     "exportSvg": "SVG...",
     "exportPdf": "PDF...",
     "exportBom": "物料清单 CSV...",
-    "exportWireList": "接线表 CSV..."
+    "exportWireList": "接线表 CSV...",
+    "wireLayerGroup": "配线图层"
   },
   "variants": {
     "title": "整理方案比较",

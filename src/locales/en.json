@@ -1383,7 +1383,11 @@
       "pdf": "the PDF",
       "dxf": "the DXF drawing",
       "kicad": "the KiCad schematic"
-    }
+    },
+    "exportCountsLog": "EXPORT  Written: {counts}",
+    "exportSkippedLog": "EXPORT  ⚠ Not written: {skipped}",
+    "dxfWireLayerHintLog": "IMPORT  No wire layer was identified. Re-import with one layer from the \"Wire layer\" group: {layers}",
+    "dxfReimportLog": "IMPORT  Re-importing {path} with wire layer {layer}"
   },
   "io": {
     "importGroup": "Import",
@@ -1397,7 +1401,8 @@
     "exportSvg": "SVG...",
     "exportPdf": "PDF...",
     "exportBom": "BOM CSV...",
-    "exportWireList": "Wire list CSV..."
+    "exportWireList": "Wire list CSV...",
+    "wireLayerGroup": "Wire layer"
   },
   "variants": {
     "title": "Tidy variants",
