@@ -1024,6 +1024,51 @@ fn render_legends(out: &mut String, sheet: &Sheet) {
     }
 }
 
+/// 電線品番凡例ブロック (色・sq・電線品番・使用長のテーブル、G9残) を描く。中身は同じ
+/// シートの配線から導出する ([`crate::wire_legend::legend_rows_with`]) ので、図面と
+/// 食い違わない。`wire_parts`はプロジェクトの電線品番表 (シート単体の書き出しでは空)。
+fn render_wire_legends(out: &mut String, sheet: &Sheet, wire_parts: &[crate::model::WirePart]) {
+    let rows = crate::wire_legend::legend_rows_with(sheet, wire_parts);
+    for legend in crate::wire_legend::legends(sheet) {
+        let (min, max) = crate::wire_legend::legend_rect_with(sheet, wire_parts, legend);
+        let (w, h) = (max.x - min.x, max.y - min.y);
+        // 回路図の表 (接点マップ等) と同じく塗りは無し。下の配線・記号が透けて見える
+        rect_el(out, min.x, min.y, w, h, "none", "#000", FRAME_STROKE);
+        let row_h = crate::wire_legend::LEGEND_ROW_H;
+        let font = crate::wire_legend::LEGEND_FONT;
+        let mut x = min.x;
+        for cw in crate::wire_legend::LEGEND_COL_W
+            .iter()
+            .take(crate::wire_legend::LEGEND_COL_W.len() - 1)
+        {
+            x += cw;
+            line_el(out, x, min.y, x, max.y, RULE_STROKE, "#000");
+        }
+        line_el(out, min.x, min.y + row_h, max.x, min.y + row_h, FRAME_STROKE, "#000");
+        let cells = std::iter::once(
+            crate::wire_legend::LEGEND_COLUMNS
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+        )
+        .chain(rows.iter().cloned());
+        for (r, row) in cells.enumerate() {
+            let top = min.y + row_h * r as f64;
+            if r > 1 {
+                line_el(out, min.x, top, max.x, top, RULE_STROKE, "#000");
+            }
+            let base = top + row_h / 2.0 + font / 2.0;
+            let mut cx = min.x;
+            for (i, cell) in row.iter().enumerate() {
+                if !cell.is_empty() {
+                    text_el(out, cx + CELL_PAD, base, font, "#000", "start", cell);
+                }
+                cx += crate::wire_legend::LEGEND_COL_W[i];
+            }
+        }
+    }
+}
+
 /// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。図枠は既定の`jis-a3`。
 /// シート単体の出力なのでシート間クロスリファレンスは描かない
 /// (描くには [`project_sheet_to_svg`] を使う)。
@@ -1046,6 +1091,7 @@ pub fn sheet_to_svg_with_frame(
         &[],
         frame,
         &BindContext::for_sheet(sheet),
+        &[],
     )
 }
 
@@ -1097,6 +1143,7 @@ pub fn project_sheet_to_svg(
         &mate_links,
         &frame,
         &BindContext::for_project(project, sheet),
+        &project.wire_parts,
     ))
 }
 
@@ -1113,6 +1160,7 @@ fn sheet_to_svg_with_xrefs(
     mate_links: &[crate::mate::MateLink],
     frame: &FrameTemplate,
     ctx: &BindContext,
+    wire_parts: &[crate::model::WirePart],
 ) -> String {
     let (pw, ph) = sheet.paper_mm();
     let mut out = String::new();
@@ -1266,18 +1314,21 @@ fn sheet_to_svg_with_xrefs(
                 }
             }
             // 図形は背面のrender_shapes、ハーネス境界は背面のrender_harnesses、
-            // 盤レイアウトはrender_panelで描き済み
+            // 盤レイアウトはrender_panelで描き済み、電線品番凡例ブロックは
+            // 末尾のrender_wire_legendsで描き済み
             Entity::Shape(_)
             | Entity::Harness(_)
             | Entity::PanelOutline(_)
             | Entity::DinRail(_)
             | Entity::Duct(_)
             | Entity::Footprint(_)
-            | Entity::PanelLegend(_) => {}
+            | Entity::PanelLegend(_)
+            | Entity::WireLegend(_) => {}
         }
     }
     render_wire_numbers(&mut out, sheet, symbols);
     render_wire_notes(&mut out, sheet);
+    render_wire_legends(&mut out, sheet, wire_parts);
     out.push_str("</svg>\n");
     out
 }
@@ -1517,6 +1568,7 @@ mod tests {
             &[],
             &frame,
             &BindContext::for_project(&project, &project.sheets[0]),
+            &[],
         );
         assert!(svg.contains(">まだけ制御盤 1/2 Rev B<"), "{svg}");
         assert!(svg.contains("font-weight=\"bold\""), "太字指定が効く: {svg}");
@@ -2746,6 +2798,80 @@ mod tests {
             "置いた場所に表がある: {svg}"
         );
     }
+
+    /// シート1枚に配線1本と電線品番凡例ブロックを置く。
+    fn sheet_with_wire_legend(legend_at: Point) -> Sheet {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let w = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(50.0, 60.0), Point::new(90.0, 60.0)],
+            color: "水色".into(),
+            sq: 0.3,
+            length_m: Some(1.5),
+            part_no: Some("SAMPLE0001".into()),
+            net: None,
+        });
+        sheet.entities.insert(w.id(), w);
+        let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: legend_at });
+        sheet.entities.insert(legend.id(), legend);
+        sheet
+    }
+
+    /// The wire part-number legend block is drawn where it was placed, listing the colour, gauge, part number and summed length of the sheet's wires.
+    /// 電線品番凡例ブロックは置いた場所に描かれ、そのシートの配線の線色・線径・品番・使用長合計が並ぶ。
+    #[test]
+    fn svg_draws_the_wire_legend_block() {
+        let svg = sheet_to_svg(&sheet_with_wire_legend(Point::new(300.0, 200.0)), &builtin_symbols());
+        assert!(svg.contains(">電線品番<"), "列見出し: {svg}");
+        assert!(svg.contains(">水色<"), "線色: {svg}");
+        assert!(svg.contains(">SAMPLE0001<"), "ワイヤ自身に書かれた品番: {svg}");
+        assert!(
+            svg.contains("<rect x=\"300\" y=\"200\""),
+            "置いた場所に表がある: {svg}"
+        );
+    }
+
+    /// A sheet with no wires at all still draws the wire legend block's header row.
+    /// 配線の無いシートでも、電線品番凡例ブロックの列見出しは描かれる。
+    #[test]
+    fn svg_draws_the_wire_legend_header_even_with_no_wires() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: Point::new(10.0, 10.0) });
+        sheet.entities.insert(legend.id(), legend);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols());
+        assert!(svg.contains(">使用長 m<"), "{svg}");
+    }
+
+    /// The wire legend block resolves a blank part number from the project's wire-part table, the same way the wire list does.
+    /// 電線品番凡例ブロックは、電線リストと同じ規則でプロジェクトの電線品番表から品番を引く。
+    #[test]
+    fn svg_wire_legend_resolves_part_number_from_the_project_table() {
+        let mut project = Project::new("t");
+        project.wire_parts = vec![WirePart {
+            part_no: "SAMPLE0002".into(),
+            color: "水色".into(),
+            sq: 0.3,
+            note: String::new(),
+        }];
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let w = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(0.0, 0.0), Point::new(10.0, 0.0)],
+            color: "水色".into(),
+            sq: 0.3,
+            length_m: None,
+            part_no: None,
+            net: None,
+        });
+        sheet.entities.insert(w.id(), w);
+        let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: Point::new(10.0, 10.0) });
+        sheet.entities.insert(legend.id(), legend);
+        let sheet_id = sheet.id;
+        project.sheets[0] = sheet;
+        let svg = project_sheet_to_svg(&project, sheet_id, &builtin_symbols()).unwrap();
+        assert!(svg.contains(">SAMPLE0002<"), "{svg}");
+    }
+
     /// シート1枚に、配線注記の付いたワイヤ1本を置く (横向き)。
     fn sheet_with_annotated_wire() -> Sheet {
         let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);

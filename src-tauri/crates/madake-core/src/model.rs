@@ -33,7 +33,11 @@ pub type SheetId = Uuid;
 /// - v10: プロジェクト番号 ([`Project::no`]) を追加。表題欄バインド`{project.no}`の供給元
 ///   (G16)。番号を持たない旧ファイルは未設定 (`None`) で開き、バインドは空欄のまま
 ///   (これまでと同じ見た目)
-pub const FORMAT_VERSION: u32 = 10;
+/// - v11: 電線品番凡例ブロック ([`Entity::WireLegend`]) を追加。回路図シート専用で、
+///   [`PanelLegend`]と同じく中身は持たず、そのシートの配線から毎回導出する
+///   ([`crate::wire_legend::legend_rows`])。凡例ブロックを1つも持たない旧ファイルは
+///   今までどおり開き、出力される図面も変わらない
+pub const FORMAT_VERSION: u32 = 11;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -308,6 +312,8 @@ pub enum Entity {
     Footprint(Footprint),
     /// 凡例表 (アイテム番号↔参照記号・型番)。盤レイアウトシート専用。
     PanelLegend(PanelLegend),
+    /// 電線品番凡例ブロック (色+sq+電線品番+使用長のテーブル、G9残)。回路図シート専用。
+    WireLegend(WireLegend),
 }
 
 impl Entity {
@@ -325,6 +331,7 @@ impl Entity {
             Entity::Duct(e) => e.id,
             Entity::Footprint(e) => e.id,
             Entity::PanelLegend(e) => e.id,
+            Entity::WireLegend(e) => e.id,
         }
     }
 
@@ -358,6 +365,7 @@ impl Entity {
             Entity::Duct(e) => e.at = e.at.translated(dx, dy),
             Entity::Footprint(e) => e.at = e.at.translated(dx, dy),
             Entity::PanelLegend(e) => e.at = e.at.translated(dx, dy),
+            Entity::WireLegend(e) => e.at = e.at.translated(dx, dy),
         }
     }
 }
@@ -439,6 +447,19 @@ pub struct Footprint {
 /// 移動・削除・undoは他のエンティティと同じコマンドで効く。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct PanelLegend {
+    pub id: EntityId,
+    /// 表の左上角 (用紙座標mm)。
+    pub at: Point,
+}
+
+/// 電線品番凡例ブロック = 線色・線径sq・電線品番・使用長のテーブル (G9残)。回路図シート専用。
+///
+/// [`PanelLegend`]と同じく**中身は持たない**。表に並ぶ行は描画のたびに同じシートの
+/// 配線から導出する ([`crate::wire_legend::legend_rows`]) ので、配線を足しても
+/// 電線品番表 ([`Project::wire_parts`]) を直しても手直しが要らない。このエンティティが
+/// 決めるのは**置き場所だけ**で、移動・削除・undoは他のエンティティと同じコマンドで効く。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct WireLegend {
     pub id: EntityId,
     /// 表の左上角 (用紙座標mm)。
     pub at: Point,

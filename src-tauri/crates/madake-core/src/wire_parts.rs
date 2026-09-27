@@ -38,25 +38,36 @@ fn color_key(color: &str) -> String {
     crate::wire_note::color_ja(&color.trim().to_lowercase()).to_string()
 }
 
-/// 線色+線径で電線品番表を引く。表の**先頭に近い行**が勝つ。
-pub fn find_wire_part<'a>(project: &'a Project, color: &str, sq: f64) -> Option<&'a WirePart> {
+/// 線色+線径で電線品番表 (スライス) を引く。表の**先頭に近い行**が勝つ。
+/// [`find_wire_part`]の本体で、シート単体しか無い文脈 (プロジェクト全体を持たない
+/// SVG書き出しの一部の入口) から表だけを渡して引くのにも使う ([`crate::wire_legend`])。
+pub fn find_wire_part_in<'a>(parts: &'a [WirePart], color: &str, sq: f64) -> Option<&'a WirePart> {
     let key = color_key(color);
     if key.is_empty() || sq <= 0.0 {
         return None;
     }
-    project
-        .wire_parts
+    parts
         .iter()
         .find(|p| color_key(&p.color) == key && (p.sq - sq).abs() < SQ_EPS)
+}
+
+/// 線色+線径で電線品番表を引く。表の**先頭に近い行**が勝つ。
+pub fn find_wire_part<'a>(project: &'a Project, color: &str, sq: f64) -> Option<&'a WirePart> {
+    find_wire_part_in(&project.wire_parts, color, sq)
+}
+
+/// ワイヤの電線品番 (表はスライスで渡す)。[`wire_part_number`]の本体。
+pub fn wire_part_number_in(parts: &[WirePart], wire: &Wire) -> Option<String> {
+    if let Some(no) = wire.part_no.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        return Some(no.to_string());
+    }
+    find_wire_part_in(parts, &wire.color, wire.sq).map(|p| p.part_no.clone())
 }
 
 /// ワイヤの電線品番。**ワイヤに書かれた品番が最優先**で、無ければ線色+線径で
 /// 電線品番表から引く。どちらも無ければ`None` (帳票では空欄)。
 pub fn wire_part_number(project: &Project, wire: &Wire) -> Option<String> {
-    if let Some(no) = wire.part_no.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
-        return Some(no.to_string());
-    }
-    find_wire_part(project, &wire.color, wire.sq).map(|p| p.part_no.clone())
+    wire_part_number_in(&project.wire_parts, wire)
 }
 
 /// 電線品番表のCSV ([`WIRE_PARTS_COLUMNS`] の4列)。[`parse_wire_parts_csv`]で読み戻せる。

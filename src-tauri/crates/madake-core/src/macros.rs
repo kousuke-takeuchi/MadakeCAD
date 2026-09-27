@@ -482,6 +482,7 @@ pub fn base_point(entities: &[&Entity]) -> Point {
             Entity::Junction(j) => pts.push(j.at),
             Entity::NetLabel(l) => pts.push(l.at),
             Entity::Text(t) => pts.push(t.at),
+            Entity::WireLegend(l) => pts.push(l.at),
             // 盤レイアウトの要素はマクロ(回路の部分図)には入らない
             Entity::PanelOutline(_)
             | Entity::DinRail(_)
@@ -728,6 +729,7 @@ fn place_entity(entity: &mut Entity, rotation: u16, at: Point) {
             t.at = map(t.at);
             t.rotation = (t.rotation + rotation) % 360;
         }
+        Entity::WireLegend(l) => l.at = map(l.at),
         // 盤レイアウトの要素はマクロ(回路の部分図)には入らない
         Entity::PanelOutline(_)
         | Entity::DinRail(_)

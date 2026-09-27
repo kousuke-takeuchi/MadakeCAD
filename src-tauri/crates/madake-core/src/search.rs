@@ -188,7 +188,8 @@ pub fn search_project(project: &Project, query: &str, kinds: &[SearchKind]) -> V
                 | Entity::DinRail(_)
                 | Entity::Duct(_)
                 | Entity::Footprint(_)
-                | Entity::PanelLegend(_) => {}
+                | Entity::PanelLegend(_)
+                | Entity::WireLegend(_) => {}
             }
         }
     }

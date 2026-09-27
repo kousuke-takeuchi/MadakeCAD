@@ -38,6 +38,7 @@ pub mod terminal_diagram;
 pub mod text_style;
 pub mod tidy;
 pub mod verify;
+pub mod wire_legend;
 pub mod wire_no;
 pub mod wire_note;
 pub mod wire_parts;

@@ -329,15 +329,59 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 10, the version that added the project number.
-    /// 現行のファイル形式バージョンは10 (プロジェクト番号を追加した版) である。
+    /// The current file format version is 11, the version that added the wire part-number legend block.
+    /// 現行のファイル形式バージョンは11 (電線品番凡例ブロックを追加した版) である。
     #[test]
-    fn the_current_format_version_is_ten() {
-        assert_eq!(FORMAT_VERSION, 10);
+    fn the_current_format_version_is_eleven() {
+        assert_eq!(FORMAT_VERSION, 11);
         let mut old = Project::new("x");
-        old.format_version = 9;
+        old.format_version = 10;
         migrate(&mut old);
-        assert_eq!(old.format_version, 10);
+        assert_eq!(old.format_version, 11);
+    }
+
+    /// A project file saved before the wire part-number legend block existed opens with no legend blocks at all, and is brought up to the current format version.
+    /// 電線品番凡例ブロックが無かった頃のプロジェクトファイルは凡例ブロックの無い状態で開き、現行のファイル形式へ更新される。
+    #[test]
+    fn an_old_project_file_opens_without_any_wire_legends() {
+        let dir = std::env::temp_dir().join(format!("madake-io-wirelegend-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.mdkproj");
+        // format_version 10の頃のファイル (電線品番凡例ブロックがまだ無い)
+        std::fs::write(
+            &path,
+            r#"{"format_version":10,"name":"旧図面","wire_parts":[],"plc_assignments":[],
+                "sheets":[{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"S1","size":"A3",
+                "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},
+                "entities":{}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.sheets.len(), 1);
+        assert_eq!(crate::wire_legend::legends(&loaded.sheets[0]).count(), 0);
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A wire part-number legend block placed on a sheet survives a save and reload with its place unchanged.
+    /// シートに置いた電線品番凡例ブロックは、置き場所を保ったまま保存して読み直せる。
+    #[test]
+    fn a_wire_legend_survives_a_save_and_reload() {
+        let mut project = Project::new("wire-legend");
+        let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: Point::new(300.0, 200.0) });
+        let id = legend.id();
+        project.sheets[0].entities.insert(id, legend);
+
+        let dir = std::env::temp_dir().join(format!("madake-io-wirelegend-rt-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("wire-legend.mdkproj");
+        save_project(&path, &project).unwrap();
+        let loaded = load_project(&path).unwrap();
+        let Entity::WireLegend(back) = &loaded.sheets[0].entities[&id] else {
+            panic!("電線品番凡例ブロックであること")
+        };
+        assert_eq!(back.at, Point::new(300.0, 200.0));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// A project file saved before the project number existed opens with no project number set, so the `{project.no}` title-block bind stays blank exactly as before, and is brought up to the current format version.

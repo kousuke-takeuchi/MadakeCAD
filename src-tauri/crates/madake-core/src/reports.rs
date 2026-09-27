@@ -68,7 +68,7 @@ pub fn bom_rows(project: &Project) -> Vec<Vec<String>> {
             }
         }
     }
-    groups
+    let mut rows: Vec<Vec<String>> = groups
         .into_iter()
         .map(|((value, symbol_id), mut refs)| {
             refs.sort();
@@ -90,7 +90,53 @@ pub fn bom_rows(project: &Project) -> Vec<Vec<String>> {
                 refs.len().to_string(),
             ]
         })
-        .collect()
+        .collect();
+    rows.extend(wire_rollup_rows(project));
+    rows
+}
+
+/// 部品表末尾に足す電線集約行 (G9残)。プロジェクト全体の配線を電線品番ごとに合算し、
+/// 総使用長を「数量」欄へ m 単位・小数第2位までで書く。品番が引けない配線は
+/// [`BOM_WIRE_UNASSIGNED`]の1行にまとめる (勝手に品番を作らない)。
+/// 部品行の**後ろ**に付く (呼び出し元の[`bom_rows`])。
+pub const BOM_WIRE_UNASSIGNED: &str = "(未割当)";
+
+/// 電線集約行の「シンボル」欄に立てる印。回路のシンボルではなく配線の集約行であることを表す。
+pub const BOM_WIRE_KIND: &str = "電線";
+
+fn wire_rollup_rows(project: &Project) -> Vec<Vec<String>> {
+    let mut totals: BTreeMap<String, f64> = BTreeMap::new();
+    let mut unassigned = 0.0_f64;
+    let mut has_unassigned = false;
+    for sheet in &project.sheets {
+        for entity in sheet.entities.values() {
+            let Entity::Wire(w) = entity else { continue };
+            let len = w.length_m.unwrap_or(0.0);
+            match crate::wire_parts::wire_part_number(project, w) {
+                Some(no) => *totals.entry(no).or_insert(0.0) += len,
+                None => {
+                    has_unassigned = true;
+                    unassigned += len;
+                }
+            }
+        }
+    }
+    let mut rows: Vec<Vec<String>> = totals
+        .into_iter()
+        .map(|(part_no, total)| {
+            vec![String::new(), String::new(), part_no, BOM_WIRE_KIND.into(), format!("{total:.2} m")]
+        })
+        .collect();
+    if has_unassigned {
+        rows.push(vec![
+            String::new(),
+            String::new(),
+            BOM_WIRE_UNASSIGNED.into(),
+            BOM_WIRE_KIND.into(),
+            format!("{unassigned:.2} m"),
+        ]);
+    }
+    rows
 }
 
 /// 部品表CSV。見出しは [`BOM_COLUMNS`]。
@@ -466,6 +512,50 @@ mod tests {
         let row = bom_rows(&project).into_iter().next().expect("1行");
         assert_eq!(row[0], "");
         assert_eq!(&row[1..], ["R1", "10k", "resistor", "1"]);
+    }
+
+    /// The BOM has no wire roll-up rows at all when the project has no wires (a project with only components is unaffected).
+    /// 配線の無いプロジェクトには電線集約行が1行も付かない (部品だけの部品表はそのまま)。
+    #[test]
+    fn bom_has_no_wire_rollup_rows_without_any_wires() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let e = sym("R1", "10k");
+        project.sheet_mut(sid).unwrap().entities.insert(e.id(), e);
+        assert_eq!(bom_rows(&project).len(), 1, "電線集約行は付かない");
+    }
+
+    /// After the component rows, the BOM adds one row per wire part number with the project-wide total length (in metres, 2 decimals) in the quantity column.
+    /// 部品行の後ろに、電線品番ごとの集約行が付き、数量欄にプロジェクト全体の使用長合計 (m単位・小数第2位まで) が入る。
+    #[test]
+    fn bom_rolls_up_wires_by_part_number_after_the_component_rows() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for (len, part_no) in [(1.5, "SAMPLE0001"), (2.25, "SAMPLE0001")] {
+            let mut e = wire_between((0.0, 0.0), (10.0, 0.0));
+            if let Entity::Wire(w) = &mut e {
+                w.length_m = Some(len);
+                w.part_no = Some(part_no.into());
+            }
+            sheet.entities.insert(e.id(), e);
+        }
+        let rows = bom_rows(&project);
+        let roll_up = rows.last().expect("集約行がある");
+        assert_eq!(roll_up[2], "SAMPLE0001");
+        assert_eq!(roll_up[3], BOM_WIRE_KIND);
+        assert_eq!(roll_up[4], "3.75 m", "1.5+2.25の合計を小数第2位まで");
+    }
+
+    /// Wires whose part number cannot be resolved roll up under a single "(unassigned)" row, instead of being invented or dropped.
+    /// 品番を引けない配線は「(未割当)」の1行にまとまり、勝手に品番を作ったり黙って消えたりしない。
+    #[test]
+    fn bom_rolls_up_unresolved_wires_under_one_unassigned_row() {
+        let project = one_wire_project(|w| w.length_m = Some(4.0));
+        let rows = bom_rows(&project);
+        let roll_up = rows.last().expect("集約行がある");
+        assert_eq!(roll_up[2], BOM_WIRE_UNASSIGNED);
+        assert_eq!(roll_up[4], "4.00 m");
     }
 
     /// BOM fields containing commas are quoted so the CSV stays valid.

@@ -166,6 +166,8 @@ pub enum TextKind {
     Note,
     /// 線番の表示。
     WireNumber,
+    /// ピングループの括弧のキャプション (G8)。
+    PinGroupCaption,
 }
 
 /// 図面に印字される文字1つ分。
@@ -273,6 +275,25 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                         kind: TextKind::Value,
                         owner: Some(s.id),
                     });
+                }
+                // ピングループの括弧のキャプション (G8)。SVG出力 (render_pin_group_brackets)
+                // と同じジオメトリで、行ごとに中央寄せの1文字ぶんの矩形を積む
+                if let Some(spec) = s.attrs.get(crate::pin_groups::PIN_GROUPS_ATTR) {
+                    for bracket in crate::pin_groups::pin_group_brackets(&def, spec) {
+                        for (text, p) in crate::pin_groups::caption_line_anchors(s, &bracket) {
+                            boxes.push(TextBox {
+                                rect: text_box(
+                                    p.x,
+                                    p.y + crate::pin_groups::PIN_GROUP_CAPTION_TEXT_MM / 2.0,
+                                    crate::pin_groups::PIN_GROUP_CAPTION_TEXT_MM,
+                                    Anchor::Middle,
+                                    &text,
+                                ),
+                                kind: TextKind::PinGroupCaption,
+                                owner: Some(s.id),
+                            });
+                        }
+                    }
                 }
             }
             // タグ付きラベルの文字は旗の本体の中 (基準点の左右どちらに来るかは向き次第)
@@ -693,6 +714,48 @@ mod tests {
     fn a_reference_designator_never_overlaps_its_own_symbol() {
         let sheet = sheet_with(vec![symbol("resistor", (100.0, 100.0), "R1")]);
         assert_eq!(label_overlaps(&sheet, &builtin_symbols()), 0);
+    }
+
+    /// A pin group's caption (G8) is one of the text boxes measured on a sheet, so a caption that overlaps another label is caught by the overlap metric.
+    /// ピングループのキャプション(G8)もシートの文字として測られるので、他の文字と重なっていれば重なりの指標が拾う。
+    #[test]
+    fn a_pin_group_caption_is_measured_as_a_text_box() {
+        let mut block = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "terminal_block_4p".into(),
+            at: Point::new(100.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        block.attrs.insert(crate::pin_groups::PIN_GROUPS_ATTR.into(), "1-2:電源".into());
+        let sheet = sheet_with(vec![Entity::Symbol(block)]);
+        let defs = crate::symbol::sheet_symbol_defs(&sheet);
+        let boxes = text_boxes(&sheet, &defs);
+        assert!(
+            boxes.iter().any(|b| b.kind == TextKind::PinGroupCaption),
+            "キャプションが文字として測られる: {boxes:?}"
+        );
+
+        // 重なりの指標にも反映される: キャプションとほぼ同じ場所・大きさの注記を重ねると増える
+        let before = label_overlaps(&sheet, &defs);
+        let caption_box = boxes
+            .iter()
+            .find(|b| b.kind == TextKind::PinGroupCaption)
+            .expect("キャプションの矩形");
+        let center_x = (caption_box.rect.min.x + caption_box.rect.max.x) / 2.0;
+        let mut overlapping_note = note((center_x, caption_box.rect.max.y), "点", 2.0);
+        if let Entity::Text(t) = &mut overlapping_note {
+            t.anchor = crate::model::TextAnchor::Middle;
+        }
+        let mut with_note = sheet.clone();
+        with_note.entities.insert(overlapping_note.id(), overlapping_note);
+        assert!(
+            label_overlaps(&with_note, &defs) > before,
+            "キャプションとの重なりも数える"
+        );
     }
 
     /// The measured text of a tagged net label sits inside its flag, so the overlap count follows what is actually printed.

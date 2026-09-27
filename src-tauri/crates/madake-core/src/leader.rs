@@ -58,6 +58,10 @@ pub fn entity_bounds(entity: &Entity, defs: &DefIndex) -> Option<Rect> {
         | Entity::Duct(_)
         | Entity::Footprint(_)
         | Entity::PanelLegend(_) => None,
+        // 電線品番凡例ブロックの外形はシート全体の配線から決まる (crate::wire_legend::legend_rect)。
+        // ここはエンティティ単体からしか外形を求めない (シートの文脈を持たない) ので、
+        // 今のところ引き出し線の対象にはしない
+        Entity::WireLegend(_) => None,
     }
 }
 
