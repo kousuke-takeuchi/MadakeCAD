@@ -70,6 +70,15 @@ const mechLink = computed(() => {
   return store.project?.mech_links?.find((l) => l.entity_id === e.id) ?? null;
 });
 
+/** 「3D対応付け」行の文面: オブジェクト名と、同期済みなら配置 (mm / deg)。 */
+const mechLinkText = computed(() => {
+  const link = mechLink.value;
+  if (!link) return "";
+  const p = link.placement;
+  if (!p) return link.object_name;
+  return `${link.object_name} @ (${p.x_mm}, ${p.y_mm}, ${p.z_mm}) mm / ${p.rotation_deg}°`;
+});
+
 /** 選択中のハーネスが囲んでいる電線の本数 (幾何学的な内包で決まる)。 */
 const harnessWires = computed(() => {
   const sheet = store.activeSheet;
@@ -200,7 +209,7 @@ const kindLabel = computed<Record<string, string>>(() => ({
       </div>
       <div v-if="mechLink" class="prow">
         <span class="plabel">{{ t("mech.linkLabel") }}</span>
-        <span class="pvalue mono" :title="mechLink.fcstd_path">{{ mechLink.object_name }}</span>
+        <span class="pvalue mono" :title="mechLink.fcstd_path">{{ mechLinkText }}</span>
       </div>
       <div class="prow">
         <span class="plabel">{{ t("wireNumbers.propertyLabel") }}</span>
@@ -233,7 +242,7 @@ const kindLabel = computed<Record<string, string>>(() => ({
       </div>
       <div v-if="mechLink" class="prow">
         <span class="plabel">{{ t("mech.linkLabel") }}</span>
-        <span class="pvalue mono" :title="mechLink.fcstd_path">{{ mechLink.object_name }}</span>
+        <span class="pvalue mono" :title="mechLink.fcstd_path">{{ mechLinkText }}</span>
       </div>
     </template>
 

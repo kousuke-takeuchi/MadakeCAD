@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**1327仕様項目**。
+全6領域・**1335仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -87,6 +87,7 @@
 - 存在しないファイルの読み込みはパニックせずエラーを返す。 <sub>`loading_missing_file_is_an_error`</sub>
 - PLC割付表が無かった頃の古いプロジェクトファイルもそのまま開ける (割付表は空になり、現行のファイル形式へ更新される)。 <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
 - 形式2のファイル(FreeCAD対応付けが無く、配線に長さの出所が無い)は、対応付けが空で全ての配線の長さが手入力扱いとして開ける。 <sub>`a_format_2_file_opens_with_empty_mech_links_and_manual_lengths`</sub>
+- 形式3のファイル(FreeCAD対応付けに配置が無い)は配置なしの対応付けとして開け、配置付きの対応付けは保存→読み込みで保たれる。 <sub>`a_format_3_file_opens_with_unplaced_links_and_placements_round_trip`</sub>
 
 ### KiCadインポート / エクスポート
 
@@ -1671,4 +1672,14 @@
 - 空または欠けたスナップショットは、失敗せずにシート無しの無名プロジェクトとして要約される。 <sub>`test_an_empty_snapshot_summarizes_to_zero`</sub>
 - ネットリストの各行には、ネット名・線番・ラベル・「K1:A1, TB1:3」形式のピン一覧・配線本数が並ぶ。 <sub>`test_rows_show_net_name_wire_number_label_pins_and_wire_count`</sub>
 - 参照記号の無いシンボルのピンは「?:<ピン番号>」と表示され、行はそのまま読める。 <sub>`test_pins_without_a_designator_show_a_placeholder`</sub>
+
+### 経路同期・ネットハイライト・配置
+
+- 両端の部品が対応付け済みの配線には、一方の部品の配置から他方の配置へ向かう経路スタブが1本でき、配線idとネット名を持つ。 <sub>`test_a_wire_between_two_linked_parts_gets_one_stub_between_their_placements`</sub>
+- 部品が対応付けられていないネットや、対応付け先のオブジェクトがFreeCADドキュメントに無いネットにはスタブができない。 <sub>`test_parts_without_a_link_or_not_in_the_document_produce_no_stub`</sub>
+- 1ネットに対応付け済み部品が3つあると名前順に2区間の鎖になり、ネットの配線へ順に割り当てる。余った配線にはスタブを作らず、配線が足りなければ余った区間は捨てる。 <sub>`test_a_net_with_three_parts_is_chained_and_segments_follow_the_wire_ids`</sub>
+- すでに経路オブジェクトのある配線は飛ばすので、スタブ生成を再実行しても重複しない。 <sub>`test_rerunning_skips_wires_that_already_have_a_route_object`</sub>
+- ネットのハイライトは、対応付け済み部品と経路の各オブジェクトを1回ずつ選び、未対応付けのピンは無視する。 <sub>`test_highlighting_a_net_selects_its_linked_parts_and_routes_once_each`</sub>
+- 配置の同期はset_mech_linkで基点をmm(1µm単位)・回転を度で送り、既存の対応付け情報は保つ。 <sub>`test_placement_command_carries_the_base_in_mm_and_the_rotation_in_degrees`</sub>
+- 配置の同期はドキュメントにある対応付け済みオブジェクトごとに1コマンド送り、保存済みの配置と同じものは飛ばす。 <sub>`test_sync_placements_writes_only_linked_objects_whose_placement_changed`</sub>
 

@@ -34,9 +34,28 @@
 
 受け入れ基準: FreeCADで引いた経路長がMadakeCADの電線リスト・電圧降下検証に反映される。往復してもmadake_idで再同期できる。
 
-## M5-3: 経路同期・盤レイアウト(将来)
+## M5-3: 経路同期・盤レイアウト — ✅ 実装 (2026-09-27)
 
-- 3D経路の可視化同期、パネル図(2D盤面)⇔3D筐体配置。詳細仕様はM5-2完了後に起こす
+M5-2完了を受けて起こした詳細仕様(計画: [`docs/superpowers/plans/2026-09-27-m5-3-route-sync-placement.md`](../../superpowers/plans/2026-09-27-m5-3-route-sync-placement.md))。2D盤レイアウトシートそのもの(M4 §8)は未実装のため、M5-3は**3D側とやり取りするデータと操作**を揃え、盤シートが後から同じデータを使えるようにする。
+
+### 経路の同期(MadakeCAD → FreeCAD: 経路スタブ)
+
+- ネットリストから、両端の部品が**対応付け済み**(FreeCADオブジェクトあり)の配線ごとに、FreeCADに**経路スタブ**(2点の直線 `Part::Feature`、`madake_id`=配線id)を作る。ユーザーはスタブを実際の経路(頂点追加・Draft Wire化)へ編集し、M5-2の「Measure routes → write back lengths」で長さを戻す
+- 割り当て規則: ネットの対応付け済み部品を名前順に鎖でつなぎ(N部品→N−1区間)、区間をそのネットの`wire_ids`へ順に割り当てる。配線より区間が多ければ余りは作らず、区間より配線が多ければ余った配線にはスタブを作らない(**ヒューリスティック**。回路図の配線1本と3D経路1本を1対1にする最小の規則)
+- 冪等: すでに`madake_id`が同じ配線を指すオブジェクトがあればその配線のスタブは作らない(再実行で増えない)
+- 始点・終点はFreeCADオブジェクトの`Placement.Base`
+
+### 可視化の同期(FreeCAD 3Dビューのハイライト)
+
+- パネルのネットリストで行を選ぶと、そのネットのピンの部品オブジェクトと、そのネットの配線に対応付けた経路オブジェクトをFreeCADの選択にする(`FreeCADGui.Selection`)。MadakeCAD側は変更なし(ネットの選択・reveal は既存機能)
+
+### 配置の同期(FreeCAD → MadakeCAD: 盤レイアウトのデータ)
+
+- `MechLink.placement: Option<MechPlacement {x_mm, y_mm, z_mm, rotation_deg}>`を追加(**format_version 3→4**、旧ファイルは`placement`無しで開ける)。FreeCADオブジェクトの`Placement`(基点mm・Z軸回転deg)を「Sync placements」で`set_mech_link`により書き戻す(明示操作。自動ではない)
+- MadakeCAD側の表示: プロパティの「3D対応付け」行にオブジェクト名と配置`(x, y, z) mm / θ°`。2D盤レイアウトシート(M4 §8)はこの`placement`を初期配置として使う設計
+- マスタ権の原則どおり、配置はFreeCADがマスタ(MadakeCADは表示のみ。編集は将来の盤シートで検討)
+
+受け入れ基準: 対応付け済み部品どうしを結ぶ配線の経路スタブがFreeCADに1本ずつでき、再実行で増えない。ネット行の選択でFreeCADの該当オブジェクトが選ばれる。「Sync placements」後、MadakeCADのプロパティに配置が出て、`.mdkproj`に保存される。**実FreeCADでの目視確認はユーザー確認事項**(純Python部分はテストで固定)。
 
 ## デザイン対象
 
@@ -47,3 +66,4 @@
 
 - [x] `length_source`の表示方法 → 配線プロパティの長さ欄の右にinfoバッジ「FreeCAD計測」+ツールチップ(2026-09-27。`.pen`ボードへの反映は次回のPencil作業時)
 - [ ] アドオンの配布形態(リポジトリ同梱→Addon Manager登録のタイミング=M6と連動)
+- [ ] 2D盤レイアウトシート(M4 §8)の設計時に、`MechLink.placement`をフットプリント初期配置として読む方向と、盤シート側で動かした配置をFreeCADへ戻す方向(マスタ権の扱い)を決める

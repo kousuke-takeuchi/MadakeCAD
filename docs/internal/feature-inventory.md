@@ -9,7 +9,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 |---|---|---|
 | Commandエンジン | ✅ | 全編集がCommand経由。逆コマンドによるundo/redo、Patch(revision付き)のbroadcast |
 | ドキュメントモデル | ✅ | Project / Sheet(JIS図枠・表題欄・改訂欄・ゾーン) / Entity(Symbol・Wire・Junction・NetLabel・Text・Harness) |
-| 保存形式 `.mdkproj` | ✅ | 整形JSON(git差分可読)、format_version 3(2→3でFreeCAD対応付け`mech_links`と`Wire.length_source`)。チャット履歴は`<名前>.chat.json`を併存 |
+| 保存形式 `.mdkproj` | ✅ | 整形JSON(git差分可読)、format_version 4(2→3でFreeCAD対応付け`mech_links`と`Wire.length_source`、3→4で`MechLink.placement`)。チャット履歴は`<名前>.chat.json`を併存 |
 | シンボルライブラリ | ✅ | JIS C 0617 / IEC 60617系の静的47種(電源・変換・接地7/保護6/操作スイッチ8/リレー・電磁接触器5/半導体3/受動6/負荷・報知6/計測3/接続3)+動的シンボル`connector_{n}p`/`terminal_block_{n}p`(n=1..50、5mmピッチ中央揃え)。全記号がピンの接続方向(up/down/left/right)・属性スロット(TAG/PART/DESC/RATING)・検索キーワード(en+ja)を持つ。多極機器(遮断器・断路器・電磁接触器)は端子1/2・3/4・5/6で極ごとに導通。端子台は左右貫通端子 |
 | 座標系 | ✅ | mm・左上原点・Y下向き。2.5mmグリッド、回転0/90/180/270 |
 | ヘッドレス実行 | ✅ | コアはUI非依存(全ロジックがmadake-coreに集中) |
@@ -117,7 +117,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | プロバイダの実機確認状況 | 🔶 | **Ollama(0.32.14)は通し確認済み**(実チャンク形一致・キー無しで接続テスト成功・`gemma4:26b`で作図1ターン=ツール往復3回→revision 0→1→`undo-turn`で後始末)。Copilot CLI 1.0.80は**未認証のまま**起動フラグ・MCP設定JSONの形・未認証エラー(`No authentication information found.`)検知まで(JSONLの実イベント形はフィクスチャ+寛容パーサ)。Geminiは無効キーで実APIの`API_KEY_INVALID`→`gemini_auth`変換まで。Anthropic APIは401・キー未設定案内まで。**Copilot(`/login`)・Gemini・Anthropicの実キー通しはユーザー確認事項** |
 | キーチェーン(全プロバイダ共通) | ✅ | `keyring 4.1.6`直用。`service="MadakeCAD"`、`account`=`anthropic_api_key`/`openai_compat_api_key`/`gemini_api_key`。設定ファイル(`~/.madakecad/settings.json`)には項目自体を作らない(平文非保存はテストで固定)。`SecretStore`トレイトでテストはメモリ保管、実キーチェーンのテストは`MADAKE_KEYCHAIN_TESTS=1`のときだけ。macOSは許可ダイアログ抑制のためプロセスに1回だけ読み出しをキャッシュ。CLI経路(Claude Code / Copilot)は資格情報を一切持たない |
 | プロバイダ接続テスト | ✅ | Link API `POST /api/v1/agent/test-connection` + `GET /api/v1/agent/provider`(モデル名・キー保存済みフラグ)。CLI経路は検出+バージョン、API経路は実エンドポイントへの疎通。失敗は種類つき(`*_auth`/`*_rate_limit`/`*_model_not_found`/`*_server`/`*_request`/`*_network`/`*_no_key`/`*_no_model`)で日本語の案内文を返す |
-| FreeCAD連携(フェーズM) | 🔶 | Link API(M1の土台)は実装済み。**M5-1 アドオンWB骨格を実装(2026-09-27)**: `freecad-addon/`(package.xml・InitGui.py・`madakecad_link/`)。接続設定(ポートはFreeCADユーザーパラメータ)・プロジェクト概要・ネットリストビュー・SSEライブ追従。純Python部分(client/model/events/settings)は15テストでCI(`freecad`ジョブ)。実FreeCADでの目視確認はユーザー確認事項。**M5-2も実装(2026-09-27)**: `Project.mech_links`+`Wire.length_source`(format_version 3)、Command `set_mech_link`/`remove_mech_link`/`set_wire_lengths`、アドオンのParts/Wiresタブ(3Dモデル挿入・対応付け・経路計測→書き戻し)、プロパティの「FreeCAD計測」バッジと手上書き警告。M5-3は未 |
+| FreeCAD連携(フェーズM) | 🔶 | Link API(M1の土台)は実装済み。**M5-1 アドオンWB骨格を実装(2026-09-27)**: `freecad-addon/`(package.xml・InitGui.py・`madakecad_link/`)。接続設定(ポートはFreeCADユーザーパラメータ)・プロジェクト概要・ネットリストビュー・SSEライブ追従。純Python部分(client/model/events/settings)は15テストでCI(`freecad`ジョブ)。実FreeCADでの目視確認はユーザー確認事項。**M5-2も実装(2026-09-27)**: `Project.mech_links`+`Wire.length_source`(format_version 3)、Command `set_mech_link`/`remove_mech_link`/`set_wire_lengths`、アドオンのParts/Wiresタブ(3Dモデル挿入・対応付け・経路計測→書き戻し)、プロパティの「FreeCAD計測」バッジと手上書き警告。**M5-3も実装(2026-09-27)**: `MechLink.placement`(format_version 4)、アドオンの経路スタブ生成(ネット内の対応付け済み部品を名前順の鎖で結び配線へ順に割当、冪等)・ネット行選択→3Dビュー選択・配置同期(`set_mech_link`)、プロパティの「3D対応付け」行に配置表示。2D盤レイアウトシートはM4 §8 |
 
 ## 8. ドメイン機能(参考図面の再現に必要な残り)
 

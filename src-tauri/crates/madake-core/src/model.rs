@@ -13,7 +13,7 @@ pub type SheetId = Uuid;
 /// - v1: 初版
 /// - v2: PLC I/O割付表 ([`Project::plc_assignments`]) を追加。旧ファイルは空の割付表で開き、
 ///   読み込み時に現行版へ更新される ([`crate::io::load_project`])
-pub const FORMAT_VERSION: u32 = 3;
+pub const FORMAT_VERSION: u32 = 4;
 
 /// プロジェクト全体。保存形式(.mdkproj)のルート。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -49,6 +49,20 @@ pub struct MechLink {
     /// 最後に同期した日時 (ISO 8601文字列。FreeCAD側が書く)。
     #[serde(default)]
     pub synced_at: String,
+    /// FreeCAD側の配置 (M5-3。盤レイアウトの初期配置に使う)。未同期ならNone。
+    #[serde(default)]
+    pub placement: Option<MechPlacement>,
+}
+
+/// FreeCADオブジェクトの配置: 基点 (mm) とZ軸まわりの回転 (度)。配置はFreeCADがマスタ。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct MechPlacement {
+    pub x_mm: f64,
+    pub y_mm: f64,
+    #[serde(default)]
+    pub z_mm: f64,
+    #[serde(default)]
+    pub rotation_deg: f64,
 }
 
 /// 電線長の出所。FreeCADで計測した値を手入力で誤って上書きしないための印。

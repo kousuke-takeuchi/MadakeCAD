@@ -1453,6 +1453,7 @@ mod tests {
             fcstd_path: "/work/panel.FCStd".into(),
             object_name: object_name.into(),
             synced_at: "2026-09-27T10:00:00Z".into(),
+            placement: None,
         }
     }
 

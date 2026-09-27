@@ -22,9 +22,10 @@ from .linking import (
     wire_rows,
 )
 from .model import NETLIST_COLUMNS, netlist_cells, netlist_rows, summarize_project, summary_text
+from .routes import format_placement, net_highlight_objects, placement_commands, route_stubs
 from .settings import load_settings
 
-PARTS_COLUMNS = ("Sheet", "Ref", "Part no.", "3D model", "FreeCAD object")
+PARTS_COLUMNS = ("Sheet", "Ref", "Part no.", "3D model", "FreeCAD object", "Placement")
 WIRES_COLUMNS = ("Sheet", "Net", "Length m", "Source", "Route object")
 MADAKE_ID_PROPERTY = "madake_id"
 
@@ -103,6 +104,8 @@ class LinkDockWidget(QtWidgets.QDockWidget):
 
         # --- Netlist tab ---
         self._table = self._make_table(NETLIST_COLUMNS, stretch=3)
+        self._table.itemSelectionChanged.connect(self.highlight_net)
+        self._nets = []
         self._tabs.addTab(self._table, "Netlist")
 
         # --- Parts tab (M5-2: 3D model insertion + linking) ---
@@ -122,6 +125,10 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         unlink = QtWidgets.QPushButton("Unlink")
         unlink.clicked.connect(lambda: self.unlink_selected(self._parts, self._part_rows))
         parts_buttons.addWidget(unlink)
+        sync = QtWidgets.QPushButton("Sync placements")
+        sync.setToolTip("Write the placement (mm, Z rotation) of every linked object to MadakeCAD for the panel layout")
+        sync.clicked.connect(self.sync_placements)
+        parts_buttons.addWidget(sync)
         parts_buttons.addStretch(1)
         parts_layout.addLayout(parts_buttons)
         self._tabs.addTab(parts_page, "Parts")
@@ -139,6 +146,10 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         unlink_route = QtWidgets.QPushButton("Unlink")
         unlink_route.clicked.connect(lambda: self.unlink_selected(self._wires, self._wire_rows))
         wires_buttons.addWidget(unlink_route)
+        stubs = QtWidgets.QPushButton("Create route stubs")
+        stubs.setToolTip("For every wire joining two linked parts, create a straight route line between them (tagged with the wire's madake_id); edit it into the real route, then measure")
+        stubs.clicked.connect(self.create_route_stubs)
+        wires_buttons.addWidget(stubs)
         measure = QtWidgets.QPushButton("Measure routes → write back lengths")
         measure.setToolTip("Measure every linked route object and write the lengths to MadakeCAD (one undo step per sheet)")
         measure.clicked.connect(self.write_back_lengths)
@@ -224,6 +235,7 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         except LinkError as e:
             self._status.setText(str(e))
             return
+        self._nets = nets
         rows = netlist_rows(nets)
         self._table.setRowCount(len(rows))
         for r, row in enumerate(rows):
@@ -241,9 +253,13 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         except LinkError:
             parts = []
         self._part_rows = part_rows(self._snapshot, parts)
+        links = {l.get("entity_id"): l for l in (self._snapshot.get("project") or {}).get("mech_links") or []}
         self._fill(
             self._parts,
-            [(r.sheet_name, r.reference, r.part_no, r.model_3d, r.linked_object) for r in self._part_rows],
+            [
+                (r.sheet_name, r.reference, r.part_no, r.model_3d, r.linked_object, format_placement((links.get(r.entity_id) or {}).get("placement")))
+                for r in self._part_rows
+            ],
         )
         self._wire_rows = wire_rows(self._snapshot)
         self._fill(
@@ -360,6 +376,85 @@ class LinkDockWidget(QtWidgets.QDockWidget):
         commands = link_commands_for_routes(measurements, doc.FileName or "", self._snapshot) + wire_length_commands(measurements)
         if self._send(commands):
             self._status.setText(f"Wrote {len(measurements)} wire length(s) back to MadakeCAD")
+            self.refresh()
+
+    # ---- M5-3: route stubs / net highlight / placements -------------------
+
+    def _document_placements(self, doc) -> dict:
+        """object name → (x, y, z) mm for every object with a Placement."""
+        out = {}
+        for obj in doc.Objects:
+            placement = getattr(obj, "Placement", None)
+            if placement is not None:
+                base = placement.Base
+                out[obj.Name] = (base.x, base.y, base.z)
+        return out
+
+    def create_route_stubs(self):
+        """Create a straight route line for every wire joining two linked parts (skips wires that already have one)."""
+        if self._snapshot is None:
+            self._status.setText("Connect first")
+            return
+        import FreeCAD  # type: ignore
+        import Part  # type: ignore
+
+        doc = self._active_document()
+        existing = {getattr(o, MADAKE_ID_PROPERTY) for o in doc.Objects if getattr(o, MADAKE_ID_PROPERTY, None)}
+        try:
+            nets = self._client.netlist(self.current_sheet_id())
+        except LinkError as e:
+            self._status.setText(str(e))
+            return
+        stubs = route_stubs(self._snapshot, nets, self._document_placements(doc), existing)
+        if not stubs:
+            self._status.setText("No new route stubs: every wire between linked parts already has a route, or the parts are not linked/placed")
+            return
+        for stub in stubs:
+            line = Part.makePolygon([FreeCAD.Vector(*stub.start), FreeCAD.Vector(*stub.end)])
+            obj = doc.addObject("Part::Feature", stub.name)
+            obj.Shape = line
+            obj.Label = f"{stub.name} ({stub.from_object} → {stub.to_object})"
+            self._tag(obj, stub.wire_id)
+        doc.recompute()
+        self._status.setText(f"Created {len(stubs)} route stub(s); edit them into real routes, then 'Measure routes → write back lengths'")
+
+    def highlight_net(self):
+        """Select the linked parts and routes of the selected net in the 3D view."""
+        index = self._table.currentRow()
+        if self._snapshot is None or not (0 <= index < len(self._nets)):
+            return
+        names = net_highlight_objects(self._nets[index], self._snapshot)
+        doc = FreeCADGui.ActiveDocument.Document if FreeCADGui.ActiveDocument else None
+        if doc is None:
+            return
+        FreeCADGui.Selection.clearSelection()
+        for name in names:
+            if doc.getObject(name) is not None:
+                FreeCADGui.Selection.addSelection(doc, name)
+
+    def sync_placements(self):
+        """Write the placement of every linked object in the document to MadakeCAD."""
+        if self._snapshot is None:
+            self._status.setText("Connect first")
+            return
+        import math
+
+        doc = self._active_document()
+        placements = {}
+        for obj in doc.Objects:
+            placement = getattr(obj, "Placement", None)
+            if placement is None:
+                continue
+            base = placement.Base
+            axis = placement.Rotation.Axis
+            angle = math.degrees(placement.Rotation.Angle) * (1 if axis.z >= 0 else -1)
+            placements[obj.Name] = ((base.x, base.y, base.z), angle)
+        commands = placement_commands(self._snapshot, placements)
+        if not commands:
+            self._status.setText("Placements are already in sync (or no linked object is in this document)")
+            return
+        if self._send(commands):
+            self._status.setText(f"Synced {len(commands)} placement(s) to MadakeCAD")
             self.refresh()
 
     # ---- live follow -----------------------------------------------------

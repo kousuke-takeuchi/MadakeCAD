@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**1327 specification clauses** across 6 areas.
+**1335 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -87,6 +87,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Loading a missing file returns an error instead of panicking. <sub>`loading_missing_file_is_an_error`</sub>
 - A project file saved before the PLC assignment table existed still opens: it gets an empty table and is brought up to the current format version. <sub>`an_old_project_file_opens_with_an_empty_plc_assignment_table`</sub>
 - A format 2 file (no FreeCAD links, wires without a length source) opens with an empty link list and every wire length marked as manual. <sub>`a_format_2_file_opens_with_empty_mech_links_and_manual_lengths`</sub>
+- A format 3 file whose FreeCAD links have no placement opens with those links unplaced, and a link with a placement round-trips through save and load. <sub>`a_format_3_file_opens_with_unplaced_links_and_placements_round_trip`</sub>
 
 ### KiCad import / export
 
@@ -1671,4 +1672,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An empty or partial snapshot summarizes to an unnamed project with no sheets instead of failing. <sub>`test_an_empty_snapshot_summarizes_to_zero`</sub>
 - Each netlist row shows the net name, wire number, label, the pins as "K1:A1, TB1:3" and how many wires form the net. <sub>`test_rows_show_net_name_wire_number_label_pins_and_wire_count`</sub>
 - A pin whose symbol has no designator is shown as "?:<pin>" so the row still reads. <sub>`test_pins_without_a_designator_show_a_placeholder`</sub>
+
+### Route sync, net highlight & placements
+
+- A wire whose net joins two linked parts gets one route stub from one part's placement to the other's, tagged with the wire id and named after the net. <sub>`test_a_wire_between_two_linked_parts_gets_one_stub_between_their_placements`</sub>
+- Nets whose parts are not linked, or whose linked objects are missing from the FreeCAD document, produce no stub. <sub>`test_parts_without_a_link_or_not_in_the_document_produce_no_stub`</sub>
+- Three linked parts on one net are chained in name order into two segments, assigned to the net's wires in order; extra wires get no stub and extra segments are dropped when wires run out. <sub>`test_a_net_with_three_parts_is_chained_and_segments_follow_the_wire_ids`</sub>
+- Wires that already have a route object in the document are skipped, so creating stubs again never duplicates them. <sub>`test_rerunning_skips_wires_that_already_have_a_route_object`</sub>
+- Highlighting a net selects the FreeCAD objects of its linked parts and of its linked route wires, each object once, ignoring unlinked pins. <sub>`test_highlighting_a_net_selects_its_linked_parts_and_routes_once_each`</sub>
+- Syncing a placement sends set_mech_link with the object's base point in millimetres (1 µm resolution) and its rotation in degrees, keeping the existing link data. <sub>`test_placement_command_carries_the_base_in_mm_and_the_rotation_in_degrees`</sub>
+- Sync placements writes one command per linked object present in the document and skips objects whose stored placement is already the same. <sub>`test_sync_placements_writes_only_linked_objects_whose_placement_changed`</sub>
 
