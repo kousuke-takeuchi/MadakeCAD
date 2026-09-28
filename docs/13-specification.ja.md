@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2386仕様項目**。
+全6領域・**2417仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -89,6 +89,18 @@
 - 同じ盤をもう一度採番しても図面は何も変わらない(すでに読み順どおりの番号が入っているため)。 <sub>`numbering_an_already_numbered_panel_changes_nothing`</sub>
 - 採番コマンドは素のJSONで表現できるので、AIやCLIから送れる。 <sub>`the_panel_numbering_command_is_plain_json`</sub>
 - 存在しないシートの採番は、黙って何もせずに断られる。 <sub>`numbering_an_unknown_sheet_is_refused`</sub>
+- 8極の端子台を開始番号から採番すると、全ピンの新しい番号がピン順に書き込まれる。 <sub>`renumbering_writes_every_terminal_number_from_the_start_value`</sub>
+- 多段端子台の採番は各極の段記号を保ったまま極番号だけを変えるので、同じ極の全段が同じ新番号を共有する。 <sub>`renumbering_a_multilevel_block_keeps_the_level_letters`</sub>
+- 接頭辞と1より大きい増分はどちらも効く: 増分が極番号を進め、接頭辞は全ラベルの前に付く。 <sub>`renumbering_applies_the_step_and_prefix`</sub>
+- 採番は同じコマンド内でジャンパの指定も新しい番号へ書き換えるので、ジャンパは実際に繋ぐ端子を指したままになる。 <sub>`renumbering_rewrites_the_jumpers_to_the_new_labels`</sub>
+- 採番はピングループの範囲の両端も新しい番号へ書き換える。範囲は端子番号で指しているため。 <sub>`renumbering_rewrites_pin_group_ranges_too`</sub>
+- 採番のundoは直前の端子番号を正確に戻す: 直前に直接指定していればそれが戻り、既定値から採番していれば上書き無しの状態へ戻る。 <sub>`undoing_a_renumbering_restores_the_previous_numbers`</sub>
+- ピン数と個数が合わない番号列の指定は拒否され、図面は変わらない。 <sub>`a_terminal_number_count_mismatch_is_refused_without_changing_the_drawing`</sub>
+- 番号列に重複したラベルがあると、図面を変えずに拒否される。 <sub>`duplicate_terminal_numbers_are_refused`</sub>
+- 番号列に空要素があると、図面を変えずに拒否される。 <sub>`an_empty_terminal_number_is_refused`</sub>
+- 直接指定のあとに番号を`None`にすると、シンボルの既定番号へ戻る (`terminal_numbers`属性自体が消える)。 <sub>`setting_numbers_to_none_returns_to_the_defaults`</sub>
+- シートに無いentity idの採番は、黙って何もせずに断られる。 <sub>`renumbering_an_unknown_entity_is_refused`</sub>
+- 採番コマンドは既定の開始番号・増分を持つ素のJSONで表現できるので、AIやCLIからentity idだけでも送れる。 <sub>`the_terminal_renumbering_command_is_plain_json`</sub>
 - シートの用紙サイズ・向きを変えても (G15)、既存のエンティティは元の座標のまま動かず、消えもしない。 <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - 用紙サイズの変更をundoすると、サイズと向きの両方が元へ戻る。 <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
 - 用紙を変えてもシート独自のゾーン分割はそのまま: 独自の分割数を持つシートはその分割を保つ。 <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
@@ -674,9 +686,12 @@
 - 多段端子台で段記号付きに書かれたジャンパ ("1a-1b") は、その極の行の上、2つの段の列の印の隙間にバーとして描かれる。 <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
 - ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の間に横向きに描かれる。 <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
 - シンボルの中の文字 (モータの「M」など) はシンボル定義が決めた場所に描かれ、シンボルを回しても反転してもその場所から動かない (文字そのものは常に水平に書くため)。 <sub>`the_lettering_inside_a_symbol_stays_put_when_the_symbol_is_turned`</sub>
+- 採番後のジャンパバーは、単に幾何的に近いというだけでなく、実際に繋ぐ端子の印刷ラベルのテキストと紐付けて帰属確認する。最寄りマークのテストでは端子番号の入れ替わりを検出できなかったフェーズ6の積み残しを閉じる。 <sub>`a_jumper_bar_is_attributed_to_its_terminals_by_label_text_after_renumbering`</sub>
 - 1〜2文字の端子番号は、端子台をどの向きに回しても反転しても、自分の印(丸)の中に丸ごと収まり、その中央に載る。だから回した端子台でも端子ごとに番号が読める。 <sub>`a_turned_terminal_block_keeps_a_short_number_inside_its_own_mark`</sub>
 - 出力図面(SVG/PDF)では、回していない端子台のどの端子番号も、自分の印の中心のちょうど文字高の半分(端子番号の文字高2.0mmに対して1.0mm)だけ下にベースラインが来る。単段でも多段でも同じ(画面のキャンバスはこれより小さい独自の下げ幅を使う)。 <sub>`a_terminal_number_sits_half_a_character_below_its_mark_centre`</sub>
 - 3文字の端子番号 (多段端子台の`10a`など) は自分の印と同じ幅なので、印の中央に載せたうえで、印から出るのは最大0.3mmまでに収まる。そのうえでジャンパバーにも隣の端子の印にも掛からない。 <sub>`a_three_character_terminal_number_hangs_at_most_a_little_over_its_own_mark`</sub>
+- `attrs["terminal_numbers"]`は各印に描かれるラベルを上書きする: シンボル定義の生のピン番号は一切現れず、上書きラベルはそれぞれちょうど1回だけ現れる。 <sub>`svg_draws_the_overridden_terminal_number_instead_of_the_raw_pin_number`</sub>
+- 採番などで生じた3文字の上書きラベル (多段の"11a"や接頭辞付き"P12") も、シンボル既定の3文字番号で確かめた可読性の範囲に収まる: 自分の印の中央に載り、はみ出しは同じ許容量まで、ジャンパバーにも隣の印にも掛からない。 <sub>`an_overridden_three_character_label_hangs_at_most_a_little_over_its_own_mark`</sub>
 - ジャンパバーはシンボルの普通の線の2倍以上の太さで描かれるので、端子の印どうしの狭い隙間に入る短いバーでも、印刷したときにショートバーだと分かる。 <sub>`the_jumper_bar_is_at_least_twice_as_thick_as_a_symbol_line`</sub>
 - 隣り合わない2端子間のジャンパは(端子台チャートと同じ規則で)不正なので、バーはまったく描かれない。 <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - 複数のジャンパを持つ端子台には、ジャンパの数だけバーが描かれる。 <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
@@ -809,6 +824,9 @@
 - ジャンパは、それが繋ぐ両方の端子のジャンパ欄に表示される。 <sub>`a_jumper_is_shown_on_both_of_its_terminals`</sub>
 - 端子台チャートのCSVは 端子・Lv・内部側・線番・電線・外部側・ジャンパ の列を持ち、端子1個につき1行になる。 <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
 - 多段端子台はチャートのLv列に段記号が入り、端子列は完全なピン番号 ("1a") になるので、2つの段が同じ端子に見えることはない。 <sub>`a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column`</sub>
+- `attrs["terminal_numbers"]`が既定の番号を上書きしていると、チャートの行・ジャンパ欄・CSVはどれもシンボル既定のピン番号ではなく上書きラベルを表示する。 <sub>`an_overridden_terminal_number_shows_up_in_the_chart_and_csv`</sub>
+- 端子数と合わない上書き (ラベルが多い・少ない) は無効なので、チャートは行を失ったり異常終了したりせず、シンボル既定の番号へフォールバックする。 <sub>`an_invalid_override_falls_back_to_the_default_numbers`</sub>
+- 多段端子台で極だけを増分2以上で変える上書き (例 "11a"と"13a") でも、ジャンパの隣接判定はシンボルの生のピン配置から決めるので、表示ラベルの数値差では判定しない。だから増分2の採番後もジャンパは有効なまま。 <sub>`adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic`</sub>
 - 多段端子台のジャンパは段記号まで書く。"1a-1b" は同じ極の2つの段を繋ぐ指定として受け付けられる。 <sub>`a_jumper_can_link_the_two_levels_of_one_pole`</sub>
 - 多段端子台でも、同じ段の隣り合う極どうしのジャンパ ("1a-2a") は単段の端子台と同じように受け付けられる。 <sub>`a_jumper_can_link_neighbouring_poles_of_one_level`</sub>
 - 多段端子台に段記号なしのジャンパ ("1-2") を書くと、どの段に掛けるのか分からないので受け付けられない。 <sub>`a_jumper_without_a_level_letter_is_refused_on_a_multilevel_block`</sub>
@@ -1902,6 +1920,8 @@
 - 1〜2文字の端子番号は、どの向きに回しても反転しても自分の印(丸)の中に丸ごと収まる <sub>`drawSymbol text placement`</sub>
 - 画面のキャンバスでは、回していない端子台の番号は印の中心から文字高の約1/3(1/2.8)だけ下にベースラインが来る(出力図面の1/2より小さい) <sub>`drawSymbol text placement`</sub>
 - ジャンパバーは太い線だけで描かれ、両端に丸(円)は描かれない <sub>`drawSymbol text placement`</sub>
+- attrs["terminal_numbers"]の上書きは、シンボル定義の生のピン番号ではなく上書きラベルを描く (Rust側 svg_draws_the_overridden_terminal_number_instead_of_the_raw_pin_number とparity) <sub>`drawSymbol text placement`</sub>
+- 採番後のジャンパバーは、単なる幾何的な近さではなく実際に繋ぐ端子の印刷ラベルへ紐付けて帰属確認できる (Rust側 a_jumper_bar_is_attributed_to_its_terminals_by_label_text_after_renumbering とparity。フェーズ6の「最寄りマーク帰属のテストが端子番号の入れ替わりを検出しない」を閉じる) <sub>`drawSymbol text placement`</sub>
 - 実機ブロックをどの向きに回しても反転しても、引き出し線は必ず実際のA1/A2ピンの点から出るので、そこに繋いだ配線は繋がったまま (G7) <sub>`drawDeviceBlock`</sub>
 - 実機ブロックの表はどの回転でも正立のままで、外形の位置も大きさも変わらない (回るのはピンだけ) <sub>`drawDeviceBlock`</sub>
 - 外形がどれだけ横に広がっても、回していないコイルの引き出し線は水平のまま、配線が来るピンの高さで外形の左右の辺に届く <sub>`drawDeviceBlock`</sub>
@@ -2068,6 +2088,17 @@
 - ジャンパバーは、どの端子番号の文字にも重ならない <sub>`jumperBars`</sub>
 - 複数のジャンパはそれぞれ独立した線分になる <sub>`jumperBars`</sub>
 - 端子台に無い端子番号を指すジャンパは線分を作らない <sub>`jumperBars`</sub>
+- 個数が合い、重複も空要素も無ければ妥当 <sub>`validTerminalNumbers`</sub>
+- ピン数と合わない個数は無効 <sub>`validTerminalNumbers`</sub>
+- 重複したラベルは無効 <sub>`validTerminalNumbers`</sub>
+- 空要素は無効 <sub>`validTerminalNumbers`</sub>
+- attrs["terminal_numbers"]が無ければシンボル既定の番号のまま <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
+- 妥当な上書きはピン順のラベルとして使われ、生の番号→上書きラベルの対応が引ける <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
+- 個数が合わない上書きは既定の番号へフォールバックする <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
+- 開始番号から刻み1でピン順に振る (単段) <sub>`terminalRenumberPlan`</sub>
+- 多段端子台は段記号を保ったまま極だけ採番するので、同じ極の全段が同じ番号を共有する <sub>`terminalRenumberPlan`</sub>
+- 増分と接頭辞はどちらも効く <sub>`terminalRenumberPlan`</sub>
+- 増分2で採番したような表示ラベル(11,13,15,17)でも、隣接判定は生のピン配置で決まるので、物理的に隣り合う極どうしのジャンパは通る (Rust側 adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic とparity) <sub>`parseJumperSpec with an overridden display order`</sub>
 
 ### textStyle
 

@@ -115,6 +115,31 @@ pub enum Command {
         sheet_id: SheetId,
         numbers: Vec<PanelItemNumber>,
     },
+    /// 端子台1台の端子番号の自動採番 (spec §1.1)。ピン順に開始番号・増分・接頭辞で
+    /// 振り直す (`attrs["terminal_numbers"]`)。多段端子台は段記号を保って極だけ採番する
+    /// (`11a`,`11b`,…)。同じコマンドで`attrs["jumpers"]`・`attrs["pin_groups"]`の
+    /// 端子番号も新しい番号へ書き換える。逆コマンドは採番前の番号 (`SetTerminalNumbers`)。
+    RenumberTerminals {
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        #[serde(default = "crate::terminal_chart::default_terminal_start")]
+        start: u32,
+        #[serde(default = "crate::terminal_chart::default_terminal_step")]
+        step: u32,
+        #[serde(default)]
+        prefix: String,
+    },
+    /// 端子台1台の端子番号の直接指定 (自動採番の逆コマンド・個別編集)。
+    /// `numbers`はピン順 ([`crate::terminal_chart::terminal_numbers_of`]と同じ並び) のラベル。
+    /// 個数がピン数と合わない・重複がある・空要素があれば図面を変えずにエラーにする。
+    /// `None`ならシンボル定義の既定 (`1`,`2`,…) へ戻す。`RenumberTerminals`と同様、
+    /// `attrs["jumpers"]`・`attrs["pin_groups"]`の端子番号も同じコマンドで書き換える。
+    SetTerminalNumbers {
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        #[serde(default)]
+        numbers: Option<Vec<String>>,
+    },
     /// プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
     /// 各欄は省略 (キーごと書かない) すれば変更しない。`name`/`no`はプロジェクト単位、
     /// `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く
@@ -832,6 +857,20 @@ impl Engine {
             Command::SetPanelItemNumbers { sheet_id, numbers } => {
                 self.apply_panel_item_numbers(*sheet_id, numbers)
             }
+            Command::RenumberTerminals { sheet_id, entity_id, start, step, prefix } => {
+                let sheet = self.project.sheet(*sheet_id).ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let Some(Entity::Symbol(inst)) = sheet.entities.get(entity_id) else {
+                    return Err(CoreError::EntityNotFound(*entity_id));
+                };
+                let def = crate::symbol::resolve_symbol(&inst.symbol_id)
+                    .ok_or_else(|| CoreError::SymbolNotFound(inst.symbol_id.clone()))?;
+                let raw = crate::terminal_chart::terminal_numbers_of(&def);
+                let plan = crate::terminal_chart::terminal_renumber_plan(&raw, *start, *step, prefix);
+                self.apply_terminal_numbers(*sheet_id, *entity_id, Some(plan))
+            }
+            Command::SetTerminalNumbers { sheet_id, entity_id, numbers } => {
+                self.apply_terminal_numbers(*sheet_id, *entity_id, numbers.clone())
+            }
             Command::SetProjectMeta {
                 name,
                 no,
@@ -1039,6 +1078,96 @@ impl Engine {
         Ok((ops, inverse))
     }
 
+    /// 端子台1台の端子番号 (`attrs["terminal_numbers"]`) を書き換える。同時に
+    /// `attrs["jumpers"]`・`attrs["pin_groups"]`の端子番号も新しい表示ラベルへ追従させる
+    /// (`RenumberTerminals`/`SetTerminalNumbers`の共通実装)。
+    ///
+    /// `numbers`がSomeなら個数・重複・空要素を検証し、1つでも満たさなければ図面を変えずに
+    /// エラーを返す (部分適用しない)。検証・計算をすべて終えてから書き込むので、
+    /// エラー時は`self.project`に一切触れない。
+    fn apply_terminal_numbers(
+        &mut self,
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        numbers: Option<Vec<String>>,
+    ) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let sheet = self.project.sheet(sheet_id).ok_or(CoreError::SheetNotFound(sheet_id))?;
+        let Some(Entity::Symbol(inst)) = sheet.entities.get(&entity_id) else {
+            return Err(CoreError::EntityNotFound(entity_id));
+        };
+        let def = crate::symbol::resolve_symbol(&inst.symbol_id)
+            .ok_or_else(|| CoreError::SymbolNotFound(inst.symbol_id.clone()))?;
+        let raw = crate::terminal_chart::terminal_numbers_of(&def);
+        let old_display = crate::terminal_chart::terminal_numbers_of_instance(&def, &inst.attrs);
+        let had_override = inst.attrs.contains_key(crate::terminal_chart::TERMINAL_NUMBERS_ATTR);
+
+        let new_display = match &numbers {
+            Some(v) => {
+                if !crate::terminal_chart::valid_terminal_numbers(v, raw.len()) {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "端子番号は{}個・重複なし・空欄なしで指定してください",
+                        raw.len()
+                    )));
+                }
+                v.clone()
+            }
+            None => raw.clone(),
+        };
+
+        if new_display == old_display {
+            return Ok((Vec::new(), Vec::new()));
+        }
+
+        let rename: std::collections::BTreeMap<String, String> =
+            old_display.iter().cloned().zip(new_display.iter().cloned()).collect();
+        let new_jumpers = inst.attrs.get("jumpers").map(|spec| {
+            crate::terminal_chart::rewrite_jumper_labels(spec, &old_display, &raw, &rename)
+        });
+        let new_pin_groups = inst
+            .attrs
+            .get(crate::pin_groups::PIN_GROUPS_ATTR)
+            .map(|spec| rewrite_pin_group_ranges(spec, &rename));
+
+        // ここまでは読み取りだけ。検証・計算が済んだので、ここから先だけ書き込む
+        let sheet = self.project.sheet_mut(sheet_id).expect("直前に存在を確認済み");
+        let Some(Entity::Symbol(inst)) = sheet.entities.get_mut(&entity_id) else {
+            unreachable!("直前に存在を確認済み");
+        };
+        match &numbers {
+            Some(_) => {
+                inst.attrs.insert(
+                    crate::terminal_chart::TERMINAL_NUMBERS_ATTR.to_string(),
+                    new_display.join(","),
+                );
+            }
+            None => {
+                inst.attrs.remove(crate::terminal_chart::TERMINAL_NUMBERS_ATTR);
+            }
+        }
+        if let Some(nj) = new_jumpers {
+            if nj.is_empty() {
+                inst.attrs.remove("jumpers");
+            } else {
+                inst.attrs.insert("jumpers".to_string(), nj);
+            }
+        }
+        if let Some(npg) = new_pin_groups {
+            if npg.is_empty() {
+                inst.attrs.remove(crate::pin_groups::PIN_GROUPS_ATTR);
+            } else {
+                inst.attrs.insert(crate::pin_groups::PIN_GROUPS_ATTR.to_string(), npg);
+            }
+        }
+
+        let ops = vec![PatchOp::EntityUpserted { sheet_id, entity: Entity::Symbol(inst.clone()) }];
+        let inverse = vec![Command::SetTerminalNumbers {
+            sheet_id,
+            entity_id,
+            numbers: if had_override { Some(old_display) } else { None },
+        }];
+        Ok((ops, inverse))
+    }
+
     /// 指定Wireの線番を書き換える。値が変わるものだけをpatch・逆コマンドに含める。
     fn apply_wire_numbers(
         &mut self,
@@ -1078,6 +1207,32 @@ impl Engine {
         };
         Ok((ops, inverse))
     }
+}
+
+/// `attrs["pin_groups"]` (`"範囲:名前,…"`) の範囲の両端 (端子番号) を`rename`
+/// (旧表示ラベル→新表示ラベル) で書き換える。名前(キャプション)には触れない。
+/// `rename`に無い項 (このコマンドで変わらなかった端子や、単ピン以外の書式) はそのまま残す
+/// (壊れた指定を消してしまわないため。妥当性は読み取り側 [`crate::pin_groups`] が判定する)。
+fn rewrite_pin_group_ranges(spec: &str, rename: &std::collections::BTreeMap<String, String>) -> String {
+    spec.split(',')
+        .map(|item| {
+            let text = item.trim();
+            let Some((range, caption)) = text.split_once(':') else {
+                return text.to_string();
+            };
+            let range = range.trim();
+            let rewritten = match range.split_once('-') {
+                Some((a, b)) => {
+                    let a = rename.get(a.trim()).cloned().unwrap_or_else(|| a.trim().to_string());
+                    let b = rename.get(b.trim()).cloned().unwrap_or_else(|| b.trim().to_string());
+                    format!("{a}-{b}")
+                }
+                None => rename.get(range).cloned().unwrap_or_else(|| range.to_string()),
+            };
+            format!("{rewritten}:{}", caption.trim())
+        })
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// 図面へ入れる前のエンティティ検証。
@@ -2732,6 +2887,235 @@ mod tests {
         assert!(engine
             .execute(Command::RenumberPanelItems { sheet_id: missing })
             .is_err());
+    }
+
+    /// 端子台を1台置いたエンジン (attrsは呼び出し側で足す)。戻り値は (engine, sheet_id, entity_id)。
+    fn terminal_engine(symbol_id: &str) -> (Engine, SheetId, EntityId) {
+        let (mut engine, sheet_id) = test_engine();
+        let entity = place(symbol_id);
+        let id = entity.id();
+        engine.execute(Command::AddEntity { sheet_id, entity }).unwrap();
+        (engine, sheet_id, id)
+    }
+
+    fn terminal_numbers_attr(engine: &Engine, sheet_id: SheetId, id: EntityId) -> Option<String> {
+        match engine.project().sheet(sheet_id).unwrap().entities.get(&id) {
+            Some(Entity::Symbol(s)) => s.attrs.get("terminal_numbers").cloned(),
+            other => panic!("シンボルではない: {other:?}"),
+        }
+    }
+
+    fn jumpers_attr(engine: &Engine, sheet_id: SheetId, id: EntityId) -> Option<String> {
+        match engine.project().sheet(sheet_id).unwrap().entities.get(&id) {
+            Some(Entity::Symbol(s)) => s.attrs.get("jumpers").cloned(),
+            other => panic!("シンボルではない: {other:?}"),
+        }
+    }
+
+    fn pin_groups_attr(engine: &Engine, sheet_id: SheetId, id: EntityId) -> Option<String> {
+        match engine.project().sheet(sheet_id).unwrap().entities.get(&id) {
+            Some(Entity::Symbol(s)) => s.attrs.get("pin_groups").cloned(),
+            other => panic!("シンボルではない: {other:?}"),
+        }
+    }
+
+    /// Renumbering an 8-pole terminal block from a given start writes every pin's new label in pin order.
+    /// 8極の端子台を開始番号から採番すると、全ピンの新しい番号がピン順に書き込まれる。
+    #[test]
+    fn renumbering_writes_every_terminal_number_from_the_start_value() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("11,12,13,14,15,16,17,18")
+        );
+    }
+
+    /// On a multi-level block, renumbering keeps each pole's level letters and only changes the pole number, so every level of one pole shares the same new number.
+    /// 多段端子台の採番は各極の段記号を保ったまま極番号だけを変えるので、同じ極の全段が同じ新番号を共有する。
+    #[test]
+    fn renumbering_a_multilevel_block_keeps_the_level_letters() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("11a,11b,12a,12b,13a,13b,14a,14b")
+        );
+    }
+
+    /// A prefix and a step greater than one both apply: the step advances the pole number and the prefix is written before every label.
+    /// 接頭辞と1より大きい増分はどちらも効く: 増分が極番号を進め、接頭辞は全ラベルの前に付く。
+    #[test]
+    fn renumbering_applies_the_step_and_prefix() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 1, step: 2, prefix: "P".into() })
+            .unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("P1,P3,P5,P7"));
+    }
+
+    /// Renumbering rewrites the block's jumper spec to the new labels in the same command, so a jumper between two poles still names the terminals it actually connects.
+    /// 採番は同じコマンド内でジャンパの指定も新しい番号へ書き換えるので、ジャンパは実際に繋ぐ端子を指したままになる。
+    #[test]
+    fn renumbering_rewrites_the_jumpers_to_the_new_labels() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "1-2")).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("11-12"));
+    }
+
+    /// Renumbering also rewrites a pin-group range's endpoints to the new labels, since the range names terminals by number.
+    /// 採番はピングループの範囲の両端も新しい番号へ書き換える。範囲は端子番号で指しているため。
+    #[test]
+    fn renumbering_rewrites_pin_group_ranges_too() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "pin_groups", "1-4:電源")).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(pin_groups_attr(&engine, sheet_id, id).as_deref(), Some("11-14:電源"));
+    }
+
+    /// `key`属性を`value`へ書き換える`update_entity`コマンドを作る (シンボルでなければpanic)。
+    fn set_attr_command(engine: &Engine, sheet_id: SheetId, id: EntityId, key: &str, value: &str) -> Command {
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!("シンボルではない");
+        };
+        let mut attrs = s.attrs.clone();
+        attrs.insert(key.to_string(), value.to_string());
+        Command::UpdateEntity {
+            sheet_id,
+            entity: Entity::Symbol(SymbolInstance { attrs, ..s.clone() }),
+        }
+    }
+
+    /// Undoing a renumbering restores the previous terminal numbers exactly: a prior direct override comes back, and renumbering from the symbol's defaults undoes to no override at all.
+    /// 採番のundoは直前の端子番号を正確に戻す: 直前に直接指定していればそれが戻り、既定値から採番していれば上書き無しの状態へ戻る。
+    #[test]
+    fn undoing_a_renumbering_restores_the_previous_numbers() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["A".into(), "B".into(), "C".into(), "D".into()]),
+            })
+            .unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("11,12,13,14"));
+        engine.undo().unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("A,B,C,D"),
+            "直前の直接指定へ戻る"
+        );
+        engine.undo().unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None, "上書き無し (既定) へ戻る");
+    }
+
+    /// Setting a number list whose length does not match the pin count is refused and leaves the drawing untouched.
+    /// ピン数と個数が合わない番号列の指定は拒否され、図面は変わらない。
+    #[test]
+    fn a_terminal_number_count_mismatch_is_refused_without_changing_the_drawing() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let err = engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["1".into(), "2".into(), "3".into()]),
+            })
+            .expect_err("4個のピンに3個は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+        assert_eq!(engine.undo_depth(), 1, "配置コマンドだけが履歴に残る (採番の失敗は積まれない)");
+    }
+
+    /// A duplicate label in the number list is refused without changing the drawing.
+    /// 番号列に重複したラベルがあると、図面を変えずに拒否される。
+    #[test]
+    fn duplicate_terminal_numbers_are_refused() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let err = engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["1".into(), "1".into(), "2".into(), "3".into()]),
+            })
+            .expect_err("重複は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// An empty label in the number list is refused without changing the drawing.
+    /// 番号列に空要素があると、図面を変えずに拒否される。
+    #[test]
+    fn an_empty_terminal_number_is_refused() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let err = engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["1".into(), "".into(), "3".into(), "4".into()]),
+            })
+            .expect_err("空要素は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// Setting the numbers to `None` after a direct override returns the block to the symbol's default numbers (the `terminal_numbers` attribute itself disappears).
+    /// 直接指定のあとに番号を`None`にすると、シンボルの既定番号へ戻る (`terminal_numbers`属性自体が消える)。
+    #[test]
+    fn setting_numbers_to_none_returns_to_the_defaults() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["A".into(), "B".into(), "C".into(), "D".into()]),
+            })
+            .unwrap();
+        engine
+            .execute(Command::SetTerminalNumbers { sheet_id, entity_id: id, numbers: None })
+            .unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// Renumbering an entity id that does not exist on the sheet is refused instead of silently doing nothing.
+    /// シートに無いentity idの採番は、黙って何もせずに断られる。
+    #[test]
+    fn renumbering_an_unknown_entity_is_refused() {
+        let (mut engine, sheet_id, _) = terminal_engine("terminal_block_4p");
+        let missing = Uuid::new_v4();
+        assert!(engine
+            .execute(Command::RenumberTerminals {
+                sheet_id,
+                entity_id: missing,
+                start: 1,
+                step: 1,
+                prefix: String::new(),
+            })
+            .is_err());
+    }
+
+    /// The renumbering command is plain JSON with sensible defaults for the start and step, so agents and the CLI can send it with just an entity id.
+    /// 採番コマンドは既定の開始番号・増分を持つ素のJSONで表現できるので、AIやCLIからentity idだけでも送れる。
+    #[test]
+    fn the_terminal_renumbering_command_is_plain_json() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let json = format!(r#"{{"type":"renumber_terminals","sheet_id":"{sheet_id}","entity_id":"{id}"}}"#);
+        let command: Command = serde_json::from_str(&json).unwrap();
+        engine.execute(command).unwrap();
+        // 開始番号1・増分1は4極の端子台の既定 ("1,2,3,4") と同じ結果になるので、
+        // 図面は変わらない (属性は書き込まれない。採番済みの盤を再採番しても変わらないのと同じ)
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
     }
 
     /// Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted.

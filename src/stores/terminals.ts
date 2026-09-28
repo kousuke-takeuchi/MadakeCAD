@@ -8,12 +8,14 @@
 // 多段端子の追加・アクセサリはモデル拡張が要るためフェーズ2。
 
 import { defineStore } from "pinia";
-import { parseTerminalNo } from "../canvas/dynamicSymbol";
+import { dynamicSymbol, parseTerminalNo } from "../canvas/dynamicSymbol";
 // ジャンパ指定の正規化・並べ替え順の解釈はキャンバス描画と共通の純関数を使う
 // (Pinia非依存モジュールが正。Rust側 madake-core/src/terminal_chart.rs の双子)
 import {
   formatJumperSpec,
   parseJumperSpec,
+  terminalNumbers,
+  terminalRenumberPlan,
   terminalsAreAdjacent,
 } from "../canvas/terminalJumpers";
 import type { RevealTarget } from "../composables/reveal";
@@ -178,6 +180,20 @@ export const useTerminalsStore = defineStore("terminals", {
     jumperSpec(state): string {
       return formatJumperSpec(state.chart?.jumpers ?? []);
     },
+    /**
+     * 表示中の端子台の生の端子番号 (ピン順、シンボル定義の既定)。採番ポップオーバーの
+     * プレビュー計算に使う (取れなければ空)。
+     */
+    rawTerminalNumbers(): string[] {
+      const doc = useDocumentStore();
+      const block = this.block;
+      if (!block) return [];
+      const sheet = doc.project?.sheets.find((s) => s.id === block.sheet_id);
+      const entity = sheet?.entities[block.entity_id];
+      if (!entity || entity.kind !== "symbol") return [];
+      const def = dynamicSymbol(entity.symbol_id);
+      return def ? terminalNumbers(def) : [];
+    },
     /** 選択中の端子にジャンパを掛けられるか (隣り合う2端子以上)。 */
     canAddJumper(): boolean {
       return withJumpers(this.jumperSpec, this.selectedTerminals) !== null;
@@ -329,6 +345,48 @@ export const useTerminalsStore = defineStore("terminals", {
           sheet_id: block.sheet_id,
           entity: { ...entity, attrs },
         });
+        await this.reloadBlocks();
+        return true;
+      } catch (e) {
+        this.error = String(e);
+        return false;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    /**
+     * 採番ポップオーバーのプレビュー (開始番号・増分・接頭辞から、実際に適用したときの
+     * 端子番号一覧を計算する。図面はまだ変えない。`RenumberTerminals`コマンドと同じ
+     * アルゴリズム ([`terminalRenumberPlan`]) を使うので、プレビューと適用結果は必ず一致する)。
+     */
+    renumberPreview(start: number, step: number, prefix: string): string[] {
+      return terminalRenumberPlan(this.rawTerminalNumbers, start, step, prefix);
+    },
+
+    /** 採番 (RenumberTerminals) コマンド。端子台が見つからなければnull。 */
+    renumberCommand(start: number, step: number, prefix: string): Command | null {
+      const block = this.block;
+      if (!block) return null;
+      return {
+        type: "renumber_terminals",
+        sheet_id: block.sheet_id,
+        entity_id: block.entity_id,
+        start,
+        step,
+        prefix,
+      };
+    },
+
+    /** 開始番号・増分・接頭辞で端子番号を振り直す (Command 1回)。 */
+    async renumberTerminals(start: number, step: number, prefix: string): Promise<boolean> {
+      const command = this.renumberCommand(start, step, prefix);
+      if (!command || this.busy) return false;
+      this.busy = true;
+      this.error = null;
+      try {
+        await useDocumentStore().execute(command);
+        this.selected = [];
         await this.reloadBlocks();
         return true;
       } catch (e) {

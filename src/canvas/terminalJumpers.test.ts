@@ -10,7 +10,11 @@ import {
   jumperBars,
   parseJumperSpec,
   terminalCenter,
+  terminalNumberRename,
   terminalNumbers,
+  terminalNumbersOfInstance,
+  terminalRenumberPlan,
+  validTerminalNumbers,
 } from "./terminalJumpers";
 
 describe("parseJumperSpec", () => {
@@ -196,5 +200,114 @@ describe("jumperBars", () => {
   it("produces no segment for a jumper to a terminal the block does not have", () => {
     const def = dynamicSymbol("terminal_block_4p")!;
     expect(jumperBars(def, [["4", "5"]])).toEqual([]);
+  });
+});
+
+describe("validTerminalNumbers", () => {
+  // ja: 個数が合い、重複も空要素も無ければ妥当
+  it("accepts a list with the right length and no duplicates or empty items", () => {
+    expect(validTerminalNumbers(["11", "12", "13", "14"], 4)).toBe(true);
+  });
+
+  // ja: ピン数と合わない個数は無効
+  it("rejects a list whose length does not match the pin count", () => {
+    expect(validTerminalNumbers(["11", "12", "13"], 4)).toBe(false);
+  });
+
+  // ja: 重複したラベルは無効
+  it("rejects a list with a duplicate label", () => {
+    expect(validTerminalNumbers(["1", "1", "2", "3"], 4)).toBe(false);
+  });
+
+  // ja: 空要素は無効
+  it("rejects a list with an empty item", () => {
+    expect(validTerminalNumbers(["1", "", "3", "4"], 4)).toBe(false);
+  });
+});
+
+describe("terminalNumbersOfInstance / terminalNumberRename", () => {
+  // ja: attrs["terminal_numbers"]が無ければシンボル既定の番号のまま
+  it("falls back to the symbol's default numbers when there is no override", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    expect(terminalNumbersOfInstance(def, undefined)).toEqual(["1", "2", "3", "4"]);
+    expect(terminalNumberRename(def, undefined)).toBeNull();
+  });
+
+  // ja: 妥当な上書きはピン順のラベルとして使われ、生の番号→上書きラベルの対応が引ける
+  it("uses a valid override and builds a raw-to-display rename map", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const attrs = { terminal_numbers: "11,12,13,14" };
+    expect(terminalNumbersOfInstance(def, attrs)).toEqual(["11", "12", "13", "14"]);
+    expect(terminalNumberRename(def, attrs)).toEqual(
+      new Map([
+        ["1", "11"],
+        ["2", "12"],
+        ["3", "13"],
+        ["4", "14"],
+      ]),
+    );
+  });
+
+  // ja: 個数が合わない上書きは既定の番号へフォールバックする
+  it("falls back to the defaults when the override's item count is wrong", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    expect(terminalNumbersOfInstance(def, { terminal_numbers: "11,12,13" })).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+    ]);
+  });
+});
+
+describe("terminalRenumberPlan", () => {
+  // ja: 開始番号から刻み1でピン順に振る (単段)
+  it("numbers every pin from the start value on a single-level block", () => {
+    const raw = terminalNumbers(dynamicSymbol("terminal_block_8p")!);
+    expect(terminalRenumberPlan(raw, 11, 1, "")).toEqual([
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+    ]);
+  });
+
+  // ja: 多段端子台は段記号を保ったまま極だけ採番するので、同じ極の全段が同じ番号を共有する
+  it("keeps the level letters on a multi-level block and numbers only the pole", () => {
+    const raw = terminalNumbers(dynamicSymbol("terminal_block_4p_2l")!);
+    expect(terminalRenumberPlan(raw, 11, 1, "")).toEqual([
+      "11a",
+      "11b",
+      "12a",
+      "12b",
+      "13a",
+      "13b",
+      "14a",
+      "14b",
+    ]);
+  });
+
+  // ja: 増分と接頭辞はどちらも効く
+  it("applies the step and the prefix", () => {
+    const raw = terminalNumbers(dynamicSymbol("terminal_block_4p")!);
+    expect(terminalRenumberPlan(raw, 1, 2, "P")).toEqual(["P1", "P3", "P5", "P7"]);
+  });
+});
+
+describe("parseJumperSpec with an overridden display order", () => {
+  // ja: 増分2で採番したような表示ラベル(11,13,15,17)でも、隣接判定は生のピン配置で決まるので、物理的に隣り合う極どうしのジャンパは通る (Rust側 adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic とparity)
+  it("keeps adjacency based on the raw pin layout, not on the arithmetic difference between displayed labels", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const raw = terminalNumbers(def);
+    const display = terminalRenumberPlan(raw, 11, 2, "");
+    expect(display).toEqual(["11", "13", "15", "17"]);
+    expect(parseJumperSpec("11-13", display, raw)).toEqual([["11", "13"]]);
+    // 表示ラベルの数値差だけで見ると2つ離れているが、生のピン配置では隣り合っていない
+    // (極1と極3) 組は、それでも拒否される
+    expect(parseJumperSpec("11-15", display, raw)).toEqual([]);
   });
 });

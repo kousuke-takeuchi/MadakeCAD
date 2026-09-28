@@ -381,6 +381,30 @@ export type Command =
       numbers: { footprint_id: string; item_no: number | null }[];
     }
   /**
+   * 端子台1台の端子番号の自動採番 (spec §1.1)。ピン順に開始番号・増分・接頭辞で振り直す。
+   * 多段端子台は段記号を保って極だけ採番する (`11a`,`11b`,…)。同じコマンドで
+   * `attrs["jumpers"]`・`attrs["pin_groups"]`の端子番号も新しい番号へ書き換える。
+   */
+  | {
+      type: "renumber_terminals";
+      sheet_id: string;
+      entity_id: string;
+      start?: number;
+      step?: number;
+      prefix?: string;
+    }
+  /**
+   * 端子台1台の端子番号の直接指定 (自動採番の逆コマンド・個別編集)。`numbers`はピン順の
+   * ラベル。個数がピン数と合わない・重複がある・空要素があれば図面を変えずにエラーになる。
+   * `null`ならシンボル定義の既定 (`1`,`2`,…) へ戻す。
+   */
+  | {
+      type: "set_terminal_numbers";
+      sheet_id: string;
+      entity_id: string;
+      numbers?: string[] | null;
+    }
+  /**
    * プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
    * 各欄は省略(undefined)すれば変更しない。`name`/`no`はプロジェクト単位、
    * `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く(undo一発)。

@@ -798,7 +798,6 @@
     "generateChart": "Générer le tableau",
     "phase2Hint": "prévu pour la phase 2",
     "phase2": {
-      "autoNumber": "Renuméroter",
       "spareTerminal": "Insérer une réserve",
       "multiLevel": "Multi-étage",
       "accessory": "Accessoires",
@@ -824,7 +823,18 @@
     "goto": "Go to drawing",
     "gotoHint": "Double-click a row to jump to it on the drawing",
     "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
-    "gotoLog": "Terminal editor: jumped to {reference} on the drawing"
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing",
+    "autoNumber": "Renuméroter",
+    "renumber": {
+      "start": "Numéro de départ",
+      "step": "Incrément",
+      "prefix": "Préfixe",
+      "target": "Cible",
+      "preview": "Aperçu",
+      "cancel": "Annuler",
+      "apply": "Appliquer"
+    },
+    "renumberedLog": "Éditeur de bornier : {reference} renuméroté de {from} à {to} (annuler avec Cmd+Z)"
   },
   "plcIo": {
     "ribbonButton": "Table E/S automate",

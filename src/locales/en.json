@@ -798,7 +798,6 @@
     "generateChart": "Generate chart",
     "phase2Hint": "planned for phase 2",
     "phase2": {
-      "autoNumber": "Renumber",
       "spareTerminal": "Insert spare",
       "multiLevel": "Multi-level",
       "accessory": "Accessories",
@@ -824,7 +823,18 @@
     "goto": "Go to drawing",
     "gotoHint": "Double-click a row to jump to it on the drawing",
     "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
-    "gotoLog": "Terminal editor: jumped to {reference} on the drawing"
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing",
+    "autoNumber": "Renumber",
+    "renumber": {
+      "start": "Start number",
+      "step": "Step",
+      "prefix": "Prefix",
+      "target": "Target",
+      "preview": "Preview",
+      "cancel": "Cancel",
+      "apply": "Apply"
+    },
+    "renumberedLog": "Terminal editor: renumbered {reference} from {from} to {to} (undo with Cmd+Z)"
   },
   "plcIo": {
     "ribbonButton": "PLC I/O table",

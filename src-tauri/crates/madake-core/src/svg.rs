@@ -381,6 +381,10 @@ pub fn symbol_bounds(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> (P
 }
 
 fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &SymbolDef) {
+    // 端子番号の上書き (Task 2, spec §1.1): シンボル定義に焼き込まれた生のピン番号の
+    // テキストを、このインスタンスの表示ラベルへ差し替える。上書きが無ければNoneで、
+    // 差し替えは起きない (端子台以外のシンボルも含めて、いつもどおりの描画になる)。
+    let terminal_rename = crate::terminal_chart::terminal_number_rename(def, &inst.attrs);
     for prim in &def.primitives {
         match prim {
             Primitive::Line { pts } => {
@@ -441,7 +445,12 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
                 // 文字は常に水平に書くので、ベースラインへのずらし (文字高の半分) は
                 // シンボルと一緒に回さず、用紙の座標系で下へ取る
                 let p = transform_local(*at, inst);
-                text_el(out, p.x, p.y + height / 2.0, *height, "#000", "middle", text);
+                let label = terminal_rename
+                    .as_ref()
+                    .and_then(|m| m.get(text.as_str()))
+                    .map(String::as_str)
+                    .unwrap_or(text.as_str());
+                text_el(out, p.x, p.y + height / 2.0, *height, "#000", "middle", label);
             }
         }
     }
@@ -468,12 +477,31 @@ fn render_jumper_bars(out: &mut String, inst: &crate::model::SymbolInstance, def
     if !crate::terminal_chart::is_terminal_block(&inst.symbol_id) {
         return;
     }
-    let terminals = crate::terminal_chart::terminal_numbers_of(def);
+    let raw_terminals = crate::terminal_chart::terminal_numbers_of(def);
+    let display_terminals = crate::terminal_chart::terminal_numbers_of_instance(def, &inst.attrs);
     let jumpers = crate::terminal_chart::parse_jumpers(
         inst.attrs.get("jumpers").map(String::as_str).unwrap_or(""),
-        &terminals,
+        &display_terminals,
+        &raw_terminals,
     );
-    for (a, b) in crate::terminal_chart::jumper_bars(def, &jumpers.pairs) {
+    // ジオメトリ (jumper_bars) はシンボル定義の生のピン番号でしか端子を探せないので、
+    // 表示ラベルの組を生の番号の組へ戻してから渡す (端子番号の上書き = Task 2)
+    let disp_to_raw: std::collections::BTreeMap<&str, &str> = display_terminals
+        .iter()
+        .map(String::as_str)
+        .zip(raw_terminals.iter().map(String::as_str))
+        .collect();
+    let raw_pairs: Vec<(String, String)> = jumpers
+        .pairs
+        .iter()
+        .map(|(a, b)| {
+            (
+                disp_to_raw.get(a.as_str()).map(|s| s.to_string()).unwrap_or_else(|| a.clone()),
+                disp_to_raw.get(b.as_str()).map(|s| s.to_string()).unwrap_or_else(|| b.clone()),
+            )
+        })
+        .collect();
+    for (a, b) in crate::terminal_chart::jumper_bars(def, &raw_pairs) {
         let (pa, pb) = (transform_local(a, inst), transform_local(b, inst));
         line_el(out, pa.x, pa.y, pb.x, pb.y, JUMPER_BAR_STROKE, "#000");
     }
@@ -3329,6 +3357,48 @@ mod tests {
         (centre, (mark.0, mark.1))
     }
 
+    /// A jumper bar between two renumbered terminals is attributed to the terminals whose printed labels it actually connects, matched by the label text rather than by mere geometric proximity — closing the phase-6 follow-up where a nearest-mark test could not detect swapped terminal numbers.
+    /// 採番後のジャンパバーは、単に幾何的に近いというだけでなく、実際に繋ぐ端子の印刷ラベルのテキストと紐付けて帰属確認する。最寄りマークのテストでは端子番号の入れ替わりを検出できなかったフェーズ6の積み残しを閉じる。
+    #[test]
+    fn a_jumper_bar_is_attributed_to_its_terminals_by_label_text_after_renumbering() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let mut tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "P11-P12");
+        if let Entity::Symbol(s) = &mut tb {
+            s.attrs.insert("terminal_numbers".to_string(), "P11,P12,P13,P14".to_string());
+        }
+        sheet.entities.insert(tb.id(), tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
+
+        let mark_r = crate::symbol::TERMINAL_MARK_R;
+        let marks: Vec<_> =
+            svg_circles(&svg).into_iter().filter(|c| (c.2 - mark_r).abs() < 1e-9).collect();
+        let texts = svg_texts(&svg);
+        let mark_for = |label: &str| -> (f64, f64) {
+            let (x, y, size, _) = texts
+                .iter()
+                .find(|t| t.3 == label)
+                .unwrap_or_else(|| panic!("ラベル{label}が描かれていない: {texts:?}"));
+            let half = label.chars().count() as f64 * size * 0.6 / 2.0;
+            number_on_its_mark((x - half, y - size * 0.7, x + half, *y), &marks).1
+        };
+        let (p11, p12) = (mark_for("P11"), mark_for("P12"));
+
+        let bars: Vec<_> = svg_lines(&svg)
+            .into_iter()
+            .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
+            .collect();
+        assert_eq!(bars.len(), 1, "{bars:?}");
+        let (bx1, by1, bx2, by2, _) = bars[0];
+        let near = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).hypot(a.1 - b.1) < mark_r;
+        // バーの両端は、ラベル"P11"の印の縁と"P12"の印の縁それぞれの近くにある
+        // (印が入れ替わっていたら、あるいはラベルが取り違えられていたら失敗する)
+        assert!(
+            (near((bx1, by1), p11) && near((bx2, by2), p12))
+                || (near((bx1, by1), p12) && near((bx2, by2), p11)),
+            "バー({bx1},{by1})-({bx2},{by2}) がP11の印{p11:?}とP12の印{p12:?}に付いていない"
+        );
+    }
+
     /// A terminal number of one or two characters sits wholly inside its own round mark, centred on it, however the block is turned or mirrored, so a rotated terminal block still reads terminal by terminal.
     /// 1〜2文字の端子番号は、端子台をどの向きに回しても反転しても、自分の印(丸)の中に丸ごと収まり、その中央に載る。だから回した端子台でも端子ごとに番号が読める。
     #[test]
@@ -3449,6 +3519,68 @@ mod tests {
                             "{symbol_id} rot={rotation}: 番号{b:?}が隣の印{m:?}に入る"
                         );
                     }
+                }
+            }
+        }
+    }
+
+    /// `attrs["terminal_numbers"]` overrides which label is drawn on each mark: the symbol definition's raw pin number text never appears, and every overridden label appears exactly once.
+    /// `attrs["terminal_numbers"]`は各印に描かれるラベルを上書きする: シンボル定義の生のピン番号は一切現れず、上書きラベルはそれぞれちょうど1回だけ現れる。
+    #[test]
+    fn svg_draws_the_overridden_terminal_number_instead_of_the_raw_pin_number() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let mut tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "");
+        if let Entity::Symbol(s) = &mut tb {
+            s.attrs.insert("terminal_numbers".to_string(), "11,12,13,14".to_string());
+        }
+        sheet.entities.insert(tb.id(), tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
+        let numbers: Vec<String> = svg_texts(&svg)
+            .into_iter()
+            .filter(|t| (t.2 - crate::symbol::TERMINAL_NUMBER_HEIGHT).abs() < 1e-9)
+            .map(|t| t.3)
+            .collect();
+        let mut sorted = numbers.clone();
+        sorted.sort();
+        assert_eq!(sorted, ["11", "12", "13", "14"], "{numbers:?}");
+        for raw in ["1", "2", "3", "4"] {
+            assert!(!numbers.iter().any(|n| n == raw), "生のピン番号{raw}が残っている: {numbers:?}");
+        }
+    }
+
+    /// A three-character overridden label (a renumbered multi-level pole like "11a", or a prefixed pole like "P12") stays inside the legibility bounds already proven for a symbol-default three-character number: centred on its own mark, hanging over it by at most the same tolerance, and clear of the jumper bar and neighbouring marks.
+    /// 採番などで生じた3文字の上書きラベル (多段の"11a"や接頭辞付き"P12") も、シンボル既定の3文字番号で確かめた可読性の範囲に収まる: 自分の印の中央に載り、はみ出しは同じ許容量まで、ジャンパバーにも隣の印にも掛からない。
+    #[test]
+    fn an_overridden_three_character_label_hangs_at_most_a_little_over_its_own_mark() {
+        let mark_r = crate::symbol::TERMINAL_MARK_R;
+        const OVERHANG_MAX: f64 = 0.3;
+        for (symbol_id, numbers, jumpers, count) in [
+            ("terminal_block_4p_2l", "11a,11b,12a,12b,13a,13b,14a,14b", "11a-11b,11a-12a", 8),
+            ("terminal_block_4p", "P11,P12,P13,P14", "P11-P12", 4),
+        ] {
+            let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+            let mut tb = terminal_block("TB1", symbol_id, 200.0, 150.0, jumpers);
+            if let Entity::Symbol(s) = &mut tb {
+                s.attrs.insert("terminal_numbers".to_string(), numbers.to_string());
+            }
+            sheet.entities.insert(tb.id(), tb);
+            let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
+            let marks: Vec<_> =
+                svg_circles(&svg).into_iter().filter(|c| (c.2 - mark_r).abs() < 1e-9).collect();
+            let bars = jumper_boxes(&svg);
+            assert!(!bars.is_empty(), "{symbol_id}: バーが無い");
+            let numbers = number_boxes(&svg);
+            assert_eq!(numbers.len(), count, "{symbol_id}: {numbers:?}");
+            for b in numbers {
+                let (centre, mark) = number_on_its_mark(b, &marks);
+                let off = (centre.0 - mark.0).hypot(centre.1 - mark.1);
+                assert!(off <= mark_r / 2.0, "{symbol_id}: 番号{b:?}が印の中央から{off}mmずれている");
+                for (x, y) in [(b.0, b.1), (b.2, b.1), (b.0, b.3), (b.2, b.3)] {
+                    let over = (x - mark.0).hypot(y - mark.1) - mark_r;
+                    assert!(over <= OVERHANG_MAX, "{symbol_id}: 番号{b:?}の角が印から{over}mm出る");
+                }
+                for bar in &bars {
+                    assert!(!overlaps(*bar, b), "{symbol_id}: 番号{b:?}がジャンパバー{bar:?}に掛かる");
                 }
             }
         }

@@ -273,6 +273,114 @@ pub fn terminal_numbers_of(def: &SymbolDef) -> Vec<String> {
     keys.into_iter().map(|(_, _, no)| no).collect()
 }
 
+/// `Command::RenumberTerminals`の開始番号の既定値 (JSONで省略されたとき)。
+pub fn default_terminal_start() -> u32 {
+    1
+}
+
+/// `Command::RenumberTerminals`の増分の既定値 (JSONで省略されたとき)。
+pub fn default_terminal_step() -> u32 {
+    1
+}
+
+/// `attrs["terminal_numbers"]` のキー名 (spec §1.1)。ピン順 ([`terminal_numbers_of`] と同じ並び)
+/// のラベルのカンマ区切り。未設定ならシンボル定義の既定 ([`terminal_numbers_of`]) を使う。
+pub const TERMINAL_NUMBERS_ATTR: &str = "terminal_numbers";
+
+/// `numbers` が `count` 個の端子番号の指定として妥当か: 個数が一致し、空要素も重複も無い。
+/// [`Command::RenumberTerminals`](crate::command::Command::RenumberTerminals) /
+/// [`Command::SetTerminalNumbers`](crate::command::Command::SetTerminalNumbers) の検証に使う
+/// (図面を変えずに拒否するため、書き込み前に呼ぶこと)。
+pub fn valid_terminal_numbers(numbers: &[String], count: usize) -> bool {
+    if numbers.len() != count || numbers.iter().any(|s| s.trim().is_empty()) {
+        return false;
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    numbers.iter().all(|s| seen.insert(s.as_str()))
+}
+
+/// シンボルインスタンスの端子番号を、チャート順 (極番号→段記号) の表示ラベルとして列挙する。
+///
+/// `attrs["terminal_numbers"]` があればそれを使う (ピン順のラベルのカンマ区切り、
+/// [`terminal_numbers_of`] と同じ並び)。個数が合わない・重複がある・空要素があるなど
+/// [`valid_terminal_numbers`] を満たさない値は、図面を壊さないようシンボル定義の既定へ
+/// フォールバックする (書き込み時に [`Command`](crate::command::Command) 側が検証するので、
+/// 通常はここに無効な値は来ない)。
+pub fn terminal_numbers_of_instance(def: &SymbolDef, attrs: &BTreeMap<String, String>) -> Vec<String> {
+    let raw = terminal_numbers_of(def);
+    match attrs.get(TERMINAL_NUMBERS_ATTR) {
+        Some(spec) => {
+            let numbers: Vec<String> = spec.split(',').map(|s| s.trim().to_string()).collect();
+            if valid_terminal_numbers(&numbers, raw.len()) {
+                numbers
+            } else {
+                raw
+            }
+        }
+        None => raw,
+    }
+}
+
+/// 生の端子番号 ([`terminal_numbers_of`]) → 表示ラベル ([`terminal_numbers_of_instance`]) の
+/// 対応。上書きが無ければ`None` (呼び出し側はそのまま生の番号を使えばよい)。
+/// SVGの端子番号描画 (`svg.rs`) が、シンボル定義に焼き込まれた生のピン番号テキストを
+/// このインスタンスの表示ラベルへ差し替えるのに使う。
+pub fn terminal_number_rename(
+    def: &SymbolDef,
+    attrs: &BTreeMap<String, String>,
+) -> Option<BTreeMap<String, String>> {
+    let raw = terminal_numbers_of(def);
+    let display = terminal_numbers_of_instance(def, attrs);
+    if display == raw {
+        return None;
+    }
+    Some(raw.into_iter().zip(display).collect())
+}
+
+/// 開始番号・増分・接頭辞から採番案 ([`terminal_numbers_of`] と同じ並び) を作る
+/// (`Command::RenumberTerminals`)。多段端子台は段記号を保ったまま極だけ採番する
+/// (`11a`,`11b`,… — 同じ極の全段が同じ番号を共有する)。
+pub fn terminal_renumber_plan(raw_terminals: &[String], start: u32, step: u32, prefix: &str) -> Vec<String> {
+    let mut out = Vec::with_capacity(raw_terminals.len());
+    let mut last_pole: Option<u32> = None;
+    let mut pole_index: u32 = 0;
+    let mut n = start;
+    for t in raw_terminals {
+        let (pole, level) = parse_terminal_no(t);
+        if last_pole != Some(pole) {
+            if last_pole.is_some() {
+                pole_index += 1;
+                n = start.saturating_add(step.saturating_mul(pole_index));
+            }
+            last_pole = Some(pole);
+        }
+        out.push(match level {
+            Some(l) => format!("{prefix}{n}{l}"),
+            None => format!("{prefix}{n}"),
+        });
+    }
+    out
+}
+
+/// `attrs["jumpers"]` の端子番号を `rename` (旧表示ラベル→新表示ラベル) で書き換える。
+/// 採番・端子番号の直接指定コマンドが、同じコマンド内でジャンパの指定も追従させるために使う。
+/// 元の指定に読めない・不明な項目があれば、それは書き換え後の指定から落ちる
+/// ([`parse_jumpers`] が既に妥当と認めた項目だけを書き戻すため)。
+pub fn rewrite_jumper_labels(
+    spec: &str,
+    old_terminals: &[String],
+    raw_terminals: &[String],
+    rename: &BTreeMap<String, String>,
+) -> String {
+    let parsed = parse_jumpers(spec, old_terminals, raw_terminals);
+    let pairs: Vec<(String, String)> = parsed
+        .pairs
+        .into_iter()
+        .map(|(a, b)| (rename.get(&a).cloned().unwrap_or(a), rename.get(&b).cloned().unwrap_or(b)))
+        .collect();
+    jumpers_to_string(&pairs)
+}
+
 /// 端子台シンボルの端子数 (ピン番号の種類数)。端子台以外・未知のシンボルは0。
 /// 多段端子台 (G6) では極数×段数になる。**極数が欲しいときは
 /// [`poles_and_levels_of`] を使うこと** (多段端子台では両者が食い違う)。
@@ -469,14 +577,22 @@ fn terminals_are_adjacent(a: &str, b: &str) -> bool {
 
 /// ジャンパ指定 (`"1-2,3-4"`、多段端子台なら `"1a-1b,1a-2a"`) を解析して正規化する。
 ///
-/// - 各項は「端子番号-端子番号」。並び順 (極番号→段記号) で先に来る端子が前になるよう
-///   入れ替え、重複を除き、昇順に並べる
+/// `terminals` はその端子台の**表示ラベル** (端子番号の上書き、`attrs["terminal_numbers"]` が
+/// あればそれ、無ければ生の番号と同じ) をチャート順に並べたもの。`spec`はこのラベルで書かれて
+/// いる。`raw_terminals`は同じ並びの**生の端子番号** ([`terminal_numbers_of`]) で、隣接判定
+/// ([`terminals_are_adjacent`]) と多段判定はここから取る (上書きの表記がどうであれ、物理的な
+/// 隣接関係は生の番号の並びだけで決まるため — 例えば増分2の採番で"11-13"になっても、生の番号
+/// では隣り合う極どうしなので隣接と判定される)。2つの引数は同じ長さ・同じ並び
+/// (`terminals[i]` と `raw_terminals[i]` が同じ端子を指す)。
+///
+/// - 各項は「端子番号-端子番号」。チャート順で先に来る端子が前になるよう入れ替え、重複を除き、
+///   チャート順に並べる
 /// - 掛けられるのは**隣り合う端子どうし**だけ ([`terminals_are_adjacent`]。`"1-3"` は不正)
 /// - `terminals` (その端子台が実際に持つ端子番号) に無い番号は「存在しない端子」として報告する
 /// - 多段端子台に段記号なしの数字だけの指定 (`"1-2"`) を書いた場合は、どの段に掛けるのか
 ///   決まらないので不正として報告する (図面のバーと帳票が食い違わないようにするため)
 /// - 空白と空の項は無視する。不正な項があってもパニックせず、問題は [`Jumpers::issues`] に並ぶ
-pub fn parse_jumpers(spec: &str, terminals: &[String]) -> Jumpers {
+pub fn parse_jumpers(spec: &str, terminals: &[String], raw_terminals: &[String]) -> Jumpers {
     let mut pairs: Vec<(String, String)> = Vec::new();
     let mut issues: Vec<JumperIssue> = Vec::new();
     let issue = |text: &str, code: &str, message: String| JumperIssue {
@@ -484,8 +600,9 @@ pub fn parse_jumpers(spec: &str, terminals: &[String]) -> Jumpers {
         code: code.to_string(),
         message,
     };
-    // 段記号付きの端子を持つ=多段端子台 (G6)
-    let multilevel = terminals.iter().any(|t| parse_terminal_no(t).1.is_some());
+    // 段記号付きの端子を持つ=多段端子台 (G6)。生の番号で判定する (表示ラベルは段記号を
+    // 落とした上書きも理屈上は作れてしまうため)
+    let multilevel = raw_terminals.iter().any(|t| parse_terminal_no(t).1.is_some());
     let range = || match (terminals.first(), terminals.last()) {
         (Some(first), Some(last)) => format!("{first}〜{last}"),
         _ => "なし".to_string(),
@@ -512,24 +629,28 @@ pub fn parse_jumpers(spec: &str, terminals: &[String]) -> Jumpers {
             ));
             continue;
         }
-        let unknown: Vec<&str> = parts
-            .iter()
-            .copied()
-            .filter(|p| !terminals.iter().any(|t| t == p))
-            .collect();
-        if !unknown.is_empty() {
-            issues.push(issue(
-                text,
-                JUMPER_UNKNOWN_TERMINAL,
-                format!(
-                    "存在しない端子 {} を指しています (端子は{})",
-                    unknown.join(", "),
-                    range()
-                ),
-            ));
-            continue;
-        }
-        if !terminals_are_adjacent(parts[0], parts[1]) {
+        let idx = |p: &str| terminals.iter().position(|t| t == p);
+        let (i0, i1) = match (idx(parts[0]), idx(parts[1])) {
+            (Some(i0), Some(i1)) => (i0, i1),
+            _ => {
+                let unknown: Vec<&str> = parts
+                    .iter()
+                    .copied()
+                    .filter(|p| !terminals.iter().any(|t| t == p))
+                    .collect();
+                issues.push(issue(
+                    text,
+                    JUMPER_UNKNOWN_TERMINAL,
+                    format!(
+                        "存在しない端子 {} を指しています (端子は{})",
+                        unknown.join(", "),
+                        range()
+                    ),
+                ));
+                continue;
+            }
+        };
+        if !terminals_are_adjacent(&raw_terminals[i0], &raw_terminals[i1]) {
             issues.push(issue(
                 text,
                 JUMPER_INVALID,
@@ -537,17 +658,11 @@ pub fn parse_jumpers(spec: &str, terminals: &[String]) -> Jumpers {
             ));
             continue;
         }
-        let (a, b) = if terminal_sort_key(parts[0]) <= terminal_sort_key(parts[1]) {
-            (parts[0], parts[1])
-        } else {
-            (parts[1], parts[0])
-        };
+        let (a, b) = if i0 <= i1 { (parts[0], parts[1]) } else { (parts[1], parts[0]) };
         pairs.push((a.to_string(), b.to_string()));
     }
-    pairs.sort_by(|x, y| {
-        (terminal_sort_key(&x.0), terminal_sort_key(&x.1))
-            .cmp(&(terminal_sort_key(&y.0), terminal_sort_key(&y.1)))
-    });
+    let rank = |t: &str| terminals.iter().position(|x| x == t).unwrap_or(usize::MAX);
+    pairs.sort_by_key(|(a, b)| (rank(a), rank(b)));
     pairs.dedup();
     Jumpers { pairs, issues }
 }
@@ -697,16 +812,24 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
         let key = (num, level, pin.number.clone());
         by_no.entry(key).or_default().push(transform_local(pin.at, inst));
     }
-    let terminals: Vec<String> = by_no.keys().map(|(_, _, no)| no.clone()).collect();
-    let terminal_count = terminals.len();
+    // 生の端子番号 (シンボル定義そのまま。ジャンパの隣接判定・多段判定の正) と、
+    // 表示ラベル (`attrs["terminal_numbers"]` の上書きがあればそれ。同じ並び・同じ個数)
+    let raw_terminals: Vec<String> = by_no.keys().map(|(_, _, no)| no.clone()).collect();
+    let display_terminals = terminal_numbers_of_instance(&def, &inst.attrs);
+    let terminal_count = raw_terminals.len();
     let jumpers = parse_jumpers(
         inst.attrs.get("jumpers").map(String::as_str).unwrap_or(""),
-        &terminals,
+        &display_terminals,
+        &raw_terminals,
     );
 
     let mut rows = Vec::with_capacity(terminal_count);
     let mut page_points: Vec<Option<Point>> = Vec::with_capacity(terminal_count);
-    for ((_num, level, terminal), mut points) in by_no {
+    for (idx, ((_num, level, _raw_no), mut points)) in by_no.into_iter().enumerate() {
+        let terminal = display_terminals
+            .get(idx)
+            .cloned()
+            .unwrap_or_else(|| raw_terminals[idx].clone());
         // 用紙上の左 (同じなら上) が内部側
         points.sort_by(|a, b| {
             if (a.x - b.x).abs() < CONNECT_EPS {
@@ -1115,7 +1238,7 @@ mod tests {
     /// ジャンパの記述は正規化される。各組は小さい番号が先になり、重複は除かれ、昇順に並ぶ。
     #[test]
     fn jumpers_are_normalized() {
-        let j = parse_jumpers("3-4, 2-1 ,2-1", &numbered(4));
+        let j = parse_jumpers("3-4, 2-1 ,2-1", &numbered(4), &numbered(4));
         assert!(j.issues.is_empty(), "{:?}", j.issues);
         assert_eq!(j.pairs, pairs(&[("1", "2"), ("3", "4")]));
         assert_eq!(jumpers_to_string(&j.pairs), "1-2,3-4");
@@ -1125,7 +1248,7 @@ mod tests {
     /// 隣り合っていない端子どうしのジャンパは受け付けられず、同じ記述内の正しいジャンパは残る。
     #[test]
     fn a_jumper_between_non_adjacent_terminals_is_rejected() {
-        let j = parse_jumpers("1-3,3-4", &numbered(4));
+        let j = parse_jumpers("1-3,3-4", &numbered(4), &numbered(4));
         assert_eq!(j.pairs, pairs(&[("3", "4")]));
         assert_eq!(j.issues.len(), 1);
         assert_eq!(j.issues[0].text, "1-3");
@@ -1136,7 +1259,7 @@ mod tests {
     /// 端子番号2つの組になっていないジャンパの記述は、異常終了せずエラーとして報告される。
     #[test]
     fn unreadable_jumper_text_is_reported() {
-        let j = parse_jumpers("abc,1-,1-2-3,-,1 - 2", &numbered(4));
+        let j = parse_jumpers("abc,1-,1-2-3,-,1 - 2", &numbered(4), &numbered(4));
         assert_eq!(j.pairs, pairs(&[("1", "2")]), "空白入りの 1 - 2 は読める");
         assert_eq!(j.issues.len(), 4);
         assert!(j.issues.iter().all(|i| i.code == JUMPER_INVALID));
@@ -1146,7 +1269,7 @@ mod tests {
     /// 端子台に無い端子番号を指すジャンパは、存在しない端子として報告される。
     #[test]
     fn a_jumper_to_a_terminal_that_does_not_exist_is_reported() {
-        let j = parse_jumpers("4-5,0-1", &numbered(4));
+        let j = parse_jumpers("4-5,0-1", &numbered(4), &numbered(4));
         assert!(j.pairs.is_empty());
         assert_eq!(j.issues.len(), 2);
         assert!(j.issues.iter().all(|i| i.code == JUMPER_UNKNOWN_TERMINAL));
@@ -1157,7 +1280,7 @@ mod tests {
     /// ジャンパの記述が空なら、ジャンパは無いという意味になる。
     #[test]
     fn no_jumper_text_means_no_jumpers() {
-        let j = parse_jumpers("", &numbered(4));
+        let j = parse_jumpers("", &numbered(4), &numbered(4));
         assert!(j.pairs.is_empty() && j.issues.is_empty());
     }
 
@@ -1210,6 +1333,50 @@ mod tests {
         assert_eq!(terminals, ["1a", "1b", "2a", "2b"]);
         let levels: Vec<&str> = chart.rows.iter().map(|r| r.level.as_str()).collect();
         assert_eq!(levels, ["a", "b", "a", "b"]);
+    }
+
+    /// When `attrs["terminal_numbers"]` overrides the default numbers, the chart's rows, jumper column and CSV all show the overridden labels instead of the symbol's default pin numbers.
+    /// `attrs["terminal_numbers"]`が既定の番号を上書きしていると、チャートの行・ジャンパ欄・CSVはどれもシンボル既定のピン番号ではなく上書きラベルを表示する。
+    #[test]
+    fn an_overridden_terminal_number_shows_up_in_the_chart_and_csv() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("terminal_numbers".into(), "11,12,13,14".into());
+        s.attrs.insert("jumpers".into(), "11-12".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        let terminals: Vec<&str> = chart.rows.iter().map(|r| r.terminal.as_str()).collect();
+        assert_eq!(terminals, ["11", "12", "13", "14"]);
+        assert_eq!(row(&chart, "11").jumper, "11-12");
+        assert_eq!(row(&chart, "12").jumper, "11-12");
+        assert!(chart.jumper_issues.is_empty(), "{:?}", chart.jumper_issues);
+        let csv = terminal_chart_csv(&sheet, id);
+        assert!(csv.contains("\n11,"), "CSVも上書きラベルで出る: {csv}");
+    }
+
+    /// An override that swaps the terminal count is invalid (too few/many labels), so the chart falls back to the symbol's default numbers instead of losing rows or panicking.
+    /// 端子数と合わない上書き (ラベルが多い・少ない) は無効なので、チャートは行を失ったり異常終了したりせず、シンボル既定の番号へフォールバックする。
+    #[test]
+    fn an_invalid_override_falls_back_to_the_default_numbers() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("terminal_numbers".into(), "11,12,13".into()); // 3個しか無い(4個必要)
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        let terminals: Vec<&str> = chart.rows.iter().map(|r| r.terminal.as_str()).collect();
+        assert_eq!(terminals, ["1", "2", "3", "4"], "無効な上書きは既定へ落ちる");
+    }
+
+    /// On a multi-level block, an override that changes only the pole (keeping the step at more than 1, e.g. "11a" and "13a") still recognises its jumpers as adjacent, because adjacency is decided from the symbol's raw pin layout, not from the arithmetic difference between the displayed labels.
+    /// 多段端子台で極だけを増分2以上で変える上書き (例 "11a"と"13a") でも、ジャンパの隣接判定はシンボルの生のピン配置から決めるので、表示ラベルの数値差では判定しない。だから増分2の採番後もジャンパは有効なまま。
+    #[test]
+    fn adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        // 増分2で採番したのと同じ状況: 表示上の番号は2ずつ離れているが、物理的には隣り合う極
+        s.attrs.insert("terminal_numbers".into(), "11,13,15,17".into());
+        s.attrs.insert("jumpers".into(), "11-13".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert!(chart.jumper_issues.is_empty(), "{:?}", chart.jumper_issues);
+        assert_eq!(chart.jumpers, vec![("11".to_string(), "13".to_string())]);
     }
 
     /// On a multi-level terminal block a jumper is written with the level letter, so "1a-1b" links the two levels of the same pole and is accepted.
@@ -1509,7 +1676,7 @@ mod tests {
         ] {
             let def = resolve_symbol(id).expect("端子台");
             let terminals = terminal_numbers_of(&def);
-            let jumpers = parse_jumpers(spec, &terminals).pairs;
+            let jumpers = parse_jumpers(spec, &terminals, &terminals).pairs;
             assert!(!jumpers.is_empty(), "{id} {spec}");
             for ((ea, eb), (a, b)) in jumper_bars(&def, &jumpers).iter().zip(&jumpers) {
                 for (end, owner) in [(ea, a), (eb, b)] {

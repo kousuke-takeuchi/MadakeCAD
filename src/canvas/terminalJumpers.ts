@@ -68,28 +68,119 @@ export function terminalNumbers(def: SymbolDef): string[] {
   return out;
 }
 
+/** `attrs["terminal_numbers"]` のキー名 (spec §1.1、Rust側 TERMINAL_NUMBERS_ATTR と同一)。 */
+export const TERMINAL_NUMBERS_ATTR = "terminal_numbers";
+
+/**
+ * `numbers` が `count` 個の端子番号の指定として妥当か: 個数が一致し、空要素も重複も無い
+ * (Rust側 valid_terminal_numbers と同一)。
+ */
+export function validTerminalNumbers(numbers: readonly string[], count: number): boolean {
+  if (numbers.length !== count || numbers.some((s) => s.trim() === "")) return false;
+  return new Set(numbers).size === numbers.length;
+}
+
+/**
+ * シンボルインスタンスの端子番号を、チャート順の表示ラベルとして列挙する
+ * (Rust側 terminal_numbers_of_instance と同一)。`attrs["terminal_numbers"]`があればそれを
+ * 使い、[`validTerminalNumbers`]を満たさない無効な値はシンボル定義の既定へフォールバックする。
+ */
+export function terminalNumbersOfInstance(
+  def: SymbolDef,
+  attrs: Readonly<Record<string, string>> | undefined,
+): string[] {
+  const raw = terminalNumbers(def);
+  const spec = attrs?.[TERMINAL_NUMBERS_ATTR];
+  if (spec === undefined) return raw;
+  const numbers = spec.split(",").map((s) => s.trim());
+  return validTerminalNumbers(numbers, raw.length) ? numbers : raw;
+}
+
+/**
+ * 生の端子番号 ([`terminalNumbers`]) → 表示ラベル ([`terminalNumbersOfInstance`]) の対応
+ * (Rust側 terminal_number_rename と同一)。上書きが無ければ`null`。キャンバス描画
+ * (renderer.ts) が、シンボル定義の生のピン番号テキストをこのインスタンスの表示ラベルへ
+ * 差し替えるのに使う (SVG出力 svg.rs::render_symbol の双子)。
+ */
+export function terminalNumberRename(
+  def: SymbolDef,
+  attrs: Readonly<Record<string, string>> | undefined,
+): Map<string, string> | null {
+  const raw = terminalNumbers(def);
+  const display = terminalNumbersOfInstance(def, attrs);
+  if (raw.length === display.length && raw.every((r, i) => r === display[i])) return null;
+  const map = new Map<string, string>();
+  raw.forEach((r, i) => map.set(r, display[i]));
+  return map;
+}
+
+/**
+ * 開始番号・増分・接頭辞から採番案 ([`terminalNumbers`]と同じ並び) を作る
+ * (Rust側 terminal_renumber_plan と同一)。多段端子台は段記号を保ったまま極だけ採番する
+ * (`11a`,`11b`,… — 同じ極の全段が同じ番号を共有する)。ツールバーの採番ポップオーバーの
+ * プレビュー表示に使う (実際の適用は`RenumberTerminals`コマンドが行う)。
+ */
+export function terminalRenumberPlan(
+  rawTerminals: readonly string[],
+  start: number,
+  step: number,
+  prefix: string,
+): string[] {
+  const out: string[] = [];
+  let lastPole: number | null = null;
+  let poleIndex = 0;
+  let n = start;
+  for (const t of rawTerminals) {
+    const [pole, level] = parseTerminalNo(t);
+    if (lastPole !== pole) {
+      if (lastPole !== null) {
+        poleIndex += 1;
+        n = start + step * poleIndex;
+      }
+      lastPole = pole;
+    }
+    out.push(level !== null ? `${prefix}${n}${level}` : `${prefix}${n}`);
+  }
+  return out;
+}
+
 /**
  * ジャンパ指定 (`"1-2,3-4"`、多段端子台なら `"1a-1b"`) を解析して正規化する。
- * 並び順で先に来る端子を前にし、重複を除き、昇順に並べる。隣り合わない端子どうしの
- * 組は捨てる。`terminals` (その端子台が実際に持つ端子番号) を渡すと、そこに無い端子を
- * 指す組と、多段端子台に段記号なしで書かれた組も捨てる(Rust側 parse_jumpers と同一)。
+ *
+ * `terminals`はその端子台の**表示ラベル**(端子番号の上書きがあればそれ、無ければ生の番号と
+ * 同じ)をチャート順に並べたもの。`spec`はこのラベルで書かれている。`rawTerminals`は同じ並び
+ * の**生の端子番号**([`terminalNumbers`])で、隣接判定・多段判定はここから取る(上書きの
+ * 表記がどうであれ、物理的な隣接関係は生の番号の並びだけで決まるため。Rust側 parse_jumpers
+ * と同一)。省略時は`terminals`をそのまま使う(上書きの無い既存呼び出しと後方互換)。
  */
-export function parseJumperSpec(spec: string, terminals?: readonly string[]): [string, string][] {
-  const multilevel = (terminals ?? []).some((t) => parseTerminalNo(t)[1] !== null);
+export function parseJumperSpec(
+  spec: string,
+  terminals?: readonly string[],
+  rawTerminals: readonly string[] = terminals ?? [],
+): [string, string][] {
+  const multilevel = rawTerminals.some((t) => parseTerminalNo(t)[1] !== null);
   const pairs: [string, string][] = [];
   for (const item of spec.split(",")) {
     const parts = item.split("-").map((p) => p.trim());
     if (parts.length !== 2 || parts.some((p) => p === "")) continue;
     if (multilevel && parts.every((p) => /^\d+$/.test(p))) continue;
     if (terminals && parts.some((p) => !terminals.includes(p))) continue;
-    if (!terminalsAreAdjacent(parts[0], parts[1])) continue;
-    const [a, b] =
-      compareKeys(sortKey(parts[0]), sortKey(parts[1])) <= 0
-        ? [parts[0], parts[1]]
-        : [parts[1], parts[0]];
+    const i0 = terminals ? terminals.indexOf(parts[0]) : -1;
+    const i1 = terminals ? terminals.indexOf(parts[1]) : -1;
+    if (terminals && (i0 === -1 || i1 === -1)) continue;
+    const rawA = terminals ? rawTerminals[i0] : parts[0];
+    const rawB = terminals ? rawTerminals[i1] : parts[1];
+    if (!terminalsAreAdjacent(rawA, rawB)) continue;
+    const inOrder = terminals ? i0 <= i1 : compareKeys(sortKey(parts[0]), sortKey(parts[1])) <= 0;
+    const [a, b] = inOrder ? [parts[0], parts[1]] : [parts[1], parts[0]];
     if (!pairs.some(([x, y]) => x === a && y === b)) pairs.push([a, b]);
   }
-  pairs.sort((p, q) => compareKeys(sortKey(p[0]), sortKey(q[0])) || compareKeys(sortKey(p[1]), sortKey(q[1])));
+  const rank = (t: string) => (terminals ? terminals.indexOf(t) : -1);
+  pairs.sort((p, q) => {
+    const byFirst = terminals ? rank(p[0]) - rank(q[0]) : compareKeys(sortKey(p[0]), sortKey(q[0]));
+    if (byFirst !== 0) return byFirst;
+    return terminals ? rank(p[1]) - rank(q[1]) : compareKeys(sortKey(p[1]), sortKey(q[1]));
+  });
   return pairs;
 }
 

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2386 specification clauses** across 6 areas.
+**2417 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -89,6 +89,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Numbering the same panel a second time changes nothing on the drawing: the numbers are already the ones the reading order asks for. <sub>`numbering_an_already_numbered_panel_changes_nothing`</sub>
 - The numbering command is plain JSON, so agents and the CLI can send it. <sub>`the_panel_numbering_command_is_plain_json`</sub>
 - Numbering a sheet that does not exist is refused instead of silently doing nothing. <sub>`numbering_an_unknown_sheet_is_refused`</sub>
+- Renumbering an 8-pole terminal block from a given start writes every pin's new label in pin order. <sub>`renumbering_writes_every_terminal_number_from_the_start_value`</sub>
+- On a multi-level block, renumbering keeps each pole's level letters and only changes the pole number, so every level of one pole shares the same new number. <sub>`renumbering_a_multilevel_block_keeps_the_level_letters`</sub>
+- A prefix and a step greater than one both apply: the step advances the pole number and the prefix is written before every label. <sub>`renumbering_applies_the_step_and_prefix`</sub>
+- Renumbering rewrites the block's jumper spec to the new labels in the same command, so a jumper between two poles still names the terminals it actually connects. <sub>`renumbering_rewrites_the_jumpers_to_the_new_labels`</sub>
+- Renumbering also rewrites a pin-group range's endpoints to the new labels, since the range names terminals by number. <sub>`renumbering_rewrites_pin_group_ranges_too`</sub>
+- Undoing a renumbering restores the previous terminal numbers exactly: a prior direct override comes back, and renumbering from the symbol's defaults undoes to no override at all. <sub>`undoing_a_renumbering_restores_the_previous_numbers`</sub>
+- Setting a number list whose length does not match the pin count is refused and leaves the drawing untouched. <sub>`a_terminal_number_count_mismatch_is_refused_without_changing_the_drawing`</sub>
+- A duplicate label in the number list is refused without changing the drawing. <sub>`duplicate_terminal_numbers_are_refused`</sub>
+- An empty label in the number list is refused without changing the drawing. <sub>`an_empty_terminal_number_is_refused`</sub>
+- Setting the numbers to `None` after a direct override returns the block to the symbol's default numbers (the `terminal_numbers` attribute itself disappears). <sub>`setting_numbers_to_none_returns_to_the_defaults`</sub>
+- Renumbering an entity id that does not exist on the sheet is refused instead of silently doing nothing. <sub>`renumbering_an_unknown_entity_is_refused`</sub>
+- The renumbering command is plain JSON with sensible defaults for the start and step, so agents and the CLI can send it with just an entity id. <sub>`the_terminal_renumbering_command_is_plain_json`</sub>
 - Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted. <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - Undoing a paper size change restores both the previous size and orientation. <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
 - Changing the paper leaves the sheet's own zone division alone: a sheet divided into its own number of zones keeps that division. <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
@@ -674,9 +686,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - On a multi-level terminal block, a jumper written with level letters ("1a-1b") is drawn on that pole's row as a bar in the gap between the two level columns' marks. <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
 - A jumper bar turns with its terminal block, so on a block rotated a quarter turn the bar lies between the rotated terminals instead of staying upright. <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
 - The lettering inside a symbol (a motor's "M", for instance) is drawn at the place the symbol definition gives it and stays there whatever the symbol's rotation or mirroring, because the letters themselves are always written horizontally. <sub>`the_lettering_inside_a_symbol_stays_put_when_the_symbol_is_turned`</sub>
+- A jumper bar between two renumbered terminals is attributed to the terminals whose printed labels it actually connects, matched by the label text rather than by mere geometric proximity — closing the phase-6 follow-up where a nearest-mark test could not detect swapped terminal numbers. <sub>`a_jumper_bar_is_attributed_to_its_terminals_by_label_text_after_renumbering`</sub>
 - A terminal number of one or two characters sits wholly inside its own round mark, centred on it, however the block is turned or mirrored, so a rotated terminal block still reads terminal by terminal. <sub>`a_turned_terminal_block_keeps_a_short_number_inside_its_own_mark`</sub>
 - In the exported drawing (SVG/PDF) an unturned terminal block writes each terminal number with its baseline exactly half the character height (1.0 mm at the 2.0 mm terminal-number height) below the centre of its own mark, single-level and multi-level blocks alike; the on-screen canvas uses a smaller offset of its own. <sub>`a_terminal_number_sits_half_a_character_below_its_mark_centre`</sub>
 - A three-character terminal number (a multi-level block's "10a") is as wide as its own mark, so it is centred on the mark and hangs at most three tenths of a millimetre over it, while still never running into a jumper bar or into a neighbouring terminal's mark. <sub>`a_three_character_terminal_number_hangs_at_most_a_little_over_its_own_mark`</sub>
+- `attrs["terminal_numbers"]` overrides which label is drawn on each mark: the symbol definition's raw pin number text never appears, and every overridden label appears exactly once. <sub>`svg_draws_the_overridden_terminal_number_instead_of_the_raw_pin_number`</sub>
+- A three-character overridden label (a renumbered multi-level pole like "11a", or a prefixed pole like "P12") stays inside the legibility bounds already proven for a symbol-default three-character number: centred on its own mark, hanging over it by at most the same tolerance, and clear of the jumper bar and neighbouring marks. <sub>`an_overridden_three_character_label_hangs_at_most_a_little_over_its_own_mark`</sub>
 - A jumper bar is drawn at least twice as thick as an ordinary symbol line, so that the short bar in the narrow gap between two terminal marks still reads as a shorting bar when the sheet is printed. <sub>`the_jumper_bar_is_at_least_twice_as_thick_as_a_symbol_line`</sub>
 - A jumper written between two terminals that are not adjacent is invalid (the same rule the terminal chart enforces), so no bar is drawn for it at all. <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - A terminal block with several jumpers gets one bar per jumper. <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
@@ -809,6 +824,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A jumper appears in the jumper column of both terminals it connects. <sub>`a_jumper_is_shown_on_both_of_its_terminals`</sub>
 - The terminal chart CSV has the columns terminal, level, inside, wire number, wire, outside, jumper, and one line per terminal. <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
 - A multi-level terminal block shows its level letter in the chart's Lv column, and its terminal column carries the full pin number ("1a"), so the two levels never look like the same terminal. <sub>`a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column`</sub>
+- When `attrs["terminal_numbers"]` overrides the default numbers, the chart's rows, jumper column and CSV all show the overridden labels instead of the symbol's default pin numbers. <sub>`an_overridden_terminal_number_shows_up_in_the_chart_and_csv`</sub>
+- An override that swaps the terminal count is invalid (too few/many labels), so the chart falls back to the symbol's default numbers instead of losing rows or panicking. <sub>`an_invalid_override_falls_back_to_the_default_numbers`</sub>
+- On a multi-level block, an override that changes only the pole (keeping the step at more than 1, e.g. "11a" and "13a") still recognises its jumpers as adjacent, because adjacency is decided from the symbol's raw pin layout, not from the arithmetic difference between the displayed labels. <sub>`adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic`</sub>
 - On a multi-level terminal block a jumper is written with the level letter, so "1a-1b" links the two levels of the same pole and is accepted. <sub>`a_jumper_can_link_the_two_levels_of_one_pole`</sub>
 - On a multi-level terminal block a jumper between neighbouring poles of the same level ("1a-2a") is accepted just like on a single-level block. <sub>`a_jumper_can_link_neighbouring_poles_of_one_level`</sub>
 - A jumper written without the level letter ("1-2") on a multi-level terminal block is refused, because it does not say which level it is on. <sub>`a_jumper_without_a_level_letter_is_refused_on_a_multilevel_block`</sub>
@@ -1902,6 +1920,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps a one- or two-character terminal number inside its own mark, whatever the rotation <sub>`drawSymbol text placement`</sub>
 - puts an unturned terminal block's number just over a third of a character height below its mark centre on the canvas, a smaller offset than the exported drawing's half <sub>`drawSymbol text placement`</sub>
 - draws a jumper as a bar only, with no round mark at either end <sub>`drawSymbol text placement`</sub>
+- draws the overridden terminal number instead of the symbol's raw pin number <sub>`drawSymbol text placement`</sub>
+- attributes a jumper bar between renumbered terminals to the marks whose printed labels it connects <sub>`drawSymbol text placement`</sub>
 - keeps the lead lines on the coil's own pins, whatever the rotation <sub>`drawDeviceBlock`</sub>
 - draws the same upright outline whatever the rotation <sub>`drawDeviceBlock`</sub>
 - keeps the leads on the pin axis however wide the block grows <sub>`drawDeviceBlock`</sub>
@@ -2068,6 +2088,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - never covers a terminal number <sub>`jumperBars`</sub>
 - produces one segment per jumper when there are several <sub>`jumperBars`</sub>
 - produces no segment for a jumper to a terminal the block does not have <sub>`jumperBars`</sub>
+- accepts a list with the right length and no duplicates or empty items <sub>`validTerminalNumbers`</sub>
+- rejects a list whose length does not match the pin count <sub>`validTerminalNumbers`</sub>
+- rejects a list with a duplicate label <sub>`validTerminalNumbers`</sub>
+- rejects a list with an empty item <sub>`validTerminalNumbers`</sub>
+- falls back to the symbol's default numbers when there is no override <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
+- uses a valid override and builds a raw-to-display rename map <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
+- falls back to the defaults when the override's item count is wrong <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
+- numbers every pin from the start value on a single-level block <sub>`terminalRenumberPlan`</sub>
+- keeps the level letters on a multi-level block and numbers only the pole <sub>`terminalRenumberPlan`</sub>
+- applies the step and the prefix <sub>`terminalRenumberPlan`</sub>
+- keeps adjacency based on the raw pin layout, not on the arithmetic difference between displayed labels <sub>`parseJumperSpec with an overridden display order`</sub>
 
 ### textStyle
 

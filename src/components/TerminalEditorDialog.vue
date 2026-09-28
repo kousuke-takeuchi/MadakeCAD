@@ -4,12 +4,13 @@
 // ドロップダウン+ツールバー+白グリッド+フッタ(チェック結果+生成ボタン)。
 //
 // グリッドの中身は図面から導出した端子台チャートそのもので、ここで編集できるのは
-// ジャンパと並べ替え順 (row_order) だけ (どちらもupdate_entity コマンド1回。Cmd+Zで戻る)。
-// 並べ替え・Lv列 (多段端子台だけ)・図面へジャンプはここで実装済み。
-// v1で実装しない操作 (自動採番・多段端子・アクセサリ・内外スワップ) は
+// ジャンパ・並べ替え順 (row_order)・端子番号 (terminal_numbers) の3つ (どれも
+// update_entity/RenumberTerminals/SetTerminalNumbersコマンド1回。Cmd+Zで戻る)。
+// 並べ替え・Lv列 (多段端子台だけ)・図面へジャンプ・端子番号の自動採番はここで実装済み。
+// v1で実装しない操作 (多段端子の生成・アクセサリ・内外スワップ) は
 // 無効化したプレースホルダとして並べ、型番・配置の列は出さない (フェーズ2)。
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ArrowLeftRight, Layers, ListOrdered, Plus, ShieldCheck, SquareStack, Unplug, X } from "lucide-vue-next";
 import { filterFor, pickSave } from "../composables/fileActions";
@@ -31,14 +32,54 @@ watch(
   () => void terminals.refresh(),
 );
 
-/** フェーズ2で実装する操作 (デザインどおり並べるが押せない)。 */
+/** フェーズ2で実装する操作 (デザインどおり並べるが押せない。採番は実装済みなので除く)。 */
 const phase2 = [
-  { key: "autoNumber", icon: ListOrdered },
   { key: "spareTerminal", icon: SquareStack },
   { key: "multiLevel", icon: Layers },
   { key: "accessory", icon: Plus },
   { key: "swap", icon: ArrowLeftRight },
 ] as const;
+
+// --- 採番ポップオーバー (ツールバー「採番」→開始番号・増分・接頭辞・プレビュー・適用/キャンセル) ---
+const showRenumber = ref(false);
+const renumberStart = ref(1);
+const renumberStep = ref(1);
+const renumberPrefix = ref("");
+/** プレビュー (適用前に、実際に付く端子番号の一覧を見せる)。 */
+const renumberPreview = computed(() =>
+  terminals.renumberPreview(renumberStart.value, renumberStep.value, renumberPrefix.value),
+);
+
+function toggleRenumber() {
+  if (showRenumber.value) {
+    showRenumber.value = false;
+    return;
+  }
+  renumberStart.value = 1;
+  renumberStep.value = 1;
+  renumberPrefix.value = "";
+  showRenumber.value = true;
+}
+
+function cancelRenumber() {
+  showRenumber.value = false;
+}
+
+async function applyRenumber() {
+  const from = terminals.rawTerminalNumbers.join(",");
+  if (!(await terminals.renumberTerminals(renumberStart.value, renumberStep.value, renumberPrefix.value))) {
+    if (terminals.error) ui.log(terminals.error);
+    return;
+  }
+  showRenumber.value = false;
+  ui.log(
+    t("terminals.renumberedLog", {
+      reference: terminals.reference,
+      from,
+      to: renumberPreview.value.join(","),
+    }),
+  );
+}
 
 const title = computed(() =>
   terminals.reference
@@ -184,6 +225,43 @@ async function generateDiagram() {
           </select>
         </label>
         <span class="tool-sep" />
+        <div class="popover-anchor">
+          <button class="tool" :disabled="!terminals.entityId" @click="toggleRenumber">
+            <ListOrdered :size="12" class="tool-icon" />
+            {{ t("terminals.autoNumber") }}
+          </button>
+          <div v-if="showRenumber" class="popover" @click.stop>
+            <div class="popover-title">{{ t("terminals.autoNumber") }}</div>
+            <label class="popover-field">
+              <span>{{ t("terminals.renumber.start") }}</span>
+              <input v-model.number="renumberStart" type="number" min="0" class="popover-input mono" />
+            </label>
+            <label class="popover-field">
+              <span>{{ t("terminals.renumber.step") }}</span>
+              <input v-model.number="renumberStep" type="number" min="1" class="popover-input mono" />
+            </label>
+            <label class="popover-field">
+              <span>{{ t("terminals.renumber.prefix") }}</span>
+              <input v-model="renumberPrefix" type="text" class="popover-input mono" />
+            </label>
+            <label class="popover-field">
+              <span>{{ t("terminals.renumber.target") }}</span>
+              <span class="mono">{{ terminals.reference }}</span>
+            </label>
+            <div class="popover-preview">
+              <span>{{ t("terminals.renumber.preview") }}</span>
+              <span class="mono">{{ renumberPreview.join(",") }}</span>
+            </div>
+            <div class="popover-actions">
+              <button class="btn secondary" @click="cancelRenumber">
+                {{ t("terminals.renumber.cancel") }}
+              </button>
+              <button class="btn primary" :disabled="terminals.busy" @click="applyRenumber">
+                {{ t("terminals.renumber.apply") }}
+              </button>
+            </div>
+          </div>
+        </div>
         <button
           v-for="p in phase2"
           :key="p.key"
@@ -348,6 +426,54 @@ async function generateDiagram() {
   color: var(--ui-muted);
 }
 .sort-picker { padding: 3px 6px; font-size: 11px; }
+
+/* --- 採番ポップオーバー --- */
+.popover-anchor { position: relative; display: flex; }
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 220px;
+  padding: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--ribbon-line);
+  border-radius: 6px;
+  box-shadow: var(--shadow-panel-lg);
+}
+.popover-title { font-size: 11px; font-weight: 600; color: var(--ui-text); }
+.popover-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--ui-muted);
+}
+.popover-input {
+  width: 96px;
+  background: var(--input-bg);
+  border: 1px solid var(--ribbon-line);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--ui-text);
+}
+.popover-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--ui-muted);
+  padding-top: 4px;
+  border-top: 1px solid var(--ribbon-line);
+}
+.popover-preview .mono { color: var(--ui-text); word-break: break-all; }
+.popover-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.popover-actions .btn { min-width: 0; padding: 4px 12px; }
 
 /* --- 本体グリッド --- */
 .body {
