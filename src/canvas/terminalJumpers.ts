@@ -4,7 +4,24 @@
 // キャンバス描画 (renderer.ts) も**ここ1か所**の正規化ルールを使う。
 
 import { parseTerminalNo, TERMINAL_MARK_R } from "./dynamicSymbol";
-import type { Point, SymbolDef } from "../ipc";
+import type { Point, RowOrder, SymbolDef } from "../ipc";
+
+/**
+ * 端子台チャートの並べ替え順の一覧 (`terminals.sort.*`のドロップダウンが列挙する)。
+ * Rust側 `terminal_chart::RowOrder` の5つのバリアントと同じ並び (parityテストで確認)。
+ */
+export const ROW_ORDERS: readonly RowOrder[] = ["number", "alnum", "page", "cable", "jumper"];
+
+/**
+ * `attrs["row_order"]`を解析する。未設定・未知語は`"number"`に落ちる
+ * (Rust側 `terminal_chart::row_order_of` と同一ルール)。実際の並べ替えは常にRust側
+ * (`sort_terminal_rows`) が行うので、ここは値の解釈だけを担う (ドロップダウンの選択状態・
+ * `update_entity`へ渡す属性値の決定に使う)。
+ */
+export function rowOrderOf(attrs: Readonly<Record<string, string>> | undefined): RowOrder {
+  const raw = attrs?.row_order;
+  return raw && (ROW_ORDERS as readonly string[]).includes(raw) ? (raw as RowOrder) : "number";
+}
 
 /**
  * ジャンパバーの線幅 (mm)。Rust側 terminal_chart.rs の JUMPER_BAR_STROKE と一致させること。

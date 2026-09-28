@@ -8,16 +8,20 @@ import {
   type Command,
   type Diagnostic,
   type Project,
+  type RowOrder,
   type TerminalBlockInfo,
   type TerminalChart,
   type TerminalRow,
 } from "../ipc";
 import { useDocumentStore } from "./document";
+import type { RevealTarget } from "../composables/reveal";
 import {
   parseJumperSpec,
   formatJumperSpec,
   withJumpers,
   withoutJumpers,
+  ROW_ORDERS,
+  rowOrderOf,
   useTerminalsStore,
 } from "./terminals";
 
@@ -73,7 +77,11 @@ function row(terminal: string, extra: Partial<TerminalRow> = {}): TerminalRow {
   };
 }
 
-function chart(rows: TerminalRow[], jumpers: [string, string][] = []): TerminalChart {
+function chart(
+  rows: TerminalRow[],
+  jumpers: [string, string][] = [],
+  rowOrder: RowOrder = "number",
+): TerminalChart {
   return {
     entity_id: "tb1",
     reference: "TB1",
@@ -83,6 +91,7 @@ function chart(rows: TerminalRow[], jumpers: [string, string][] = []): TerminalC
     rows,
     jumpers,
     jumper_issues: [],
+    row_order: rowOrder,
   };
 }
 
@@ -193,6 +202,25 @@ describe("jumper specification", () => {
   });
 });
 
+describe("row order (parity with madake-core terminal_chart::RowOrder)", () => {
+  // ja: 5つの並べ替え順はRust側`RowOrder`のバリアントと同じ5つ、同じ表記
+  it("lists the same five row orders as the Rust RowOrder enum", () => {
+    expect(ROW_ORDERS).toEqual(["number", "alnum", "page", "cable", "jumper"]);
+  });
+
+  // ja: 未設定・未知語は数値順に落ちる(Rust側 row_order_of と同じ既定)
+  it("falls back to number order for an unset or unrecognised attribute", () => {
+    expect(rowOrderOf(undefined)).toBe("number");
+    expect(rowOrderOf({})).toBe("number");
+    expect(rowOrderOf({ row_order: "bogus" })).toBe("number");
+  });
+
+  // ja: 5つの既知の語はそのまま対応する並びに解決される
+  it("resolves every known word to its row order", () => {
+    for (const order of ROW_ORDERS) expect(rowOrderOf({ row_order: order })).toBe(order);
+  });
+});
+
 describe("terminal strip editor store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -226,6 +254,34 @@ describe("terminal strip editor store", () => {
       spare: false,
       selected: false,
     });
+  });
+
+  // ja: グリッドの行は段記号(Lv)も運ぶ(単段は空欄、多段端子台は"a"/"b"のような文字)
+  it("carries the level letter of each row for multi-level terminal blocks", async () => {
+    vi.spyOn(ipc, "listTerminalBlocks").mockResolvedValue([{ ...block, levels: 2 }]);
+    vi.spyOn(ipc, "getTerminalChart").mockResolvedValue(
+      chart([row("1a", { level: "a" }), row("1b", { level: "b" })]),
+    );
+    vi.spyOn(ipc, "checkTerminalBlock").mockResolvedValue([]);
+    const store = await opened();
+    expect(store.rows.map((r) => r.level)).toEqual(["a", "b"]);
+    expect(store.hasLevels).toBe(true);
+  });
+
+  // ja: 端子台の一覧より先にチャートだけが読めているときは、行の段記号からLv列の要否を判定する
+  it("falls back to the chart rows to decide whether the level column is needed", () => {
+    const store = useTerminalsStore();
+    store.chart = chart([row("1a", { level: "a" }), row("1b", { level: "b" })]);
+    expect(store.block).toBe(null);
+    expect(store.hasLevels).toBe(true);
+  });
+
+  // ja: 単段の端子台ではLv列は空欄で、多段端子台とは判定される
+  it("reports no levels for a single-level terminal block", async () => {
+    mockBackend();
+    const store = await opened();
+    expect(store.rows.every((r) => r.level === "")).toBe(true);
+    expect(store.hasLevels).toBe(false);
   });
 
   // ja: 電線が1本も繋がっていない端子は予備端子として印が付く
@@ -342,6 +398,59 @@ describe("terminal strip editor store", () => {
     await store.addJumper();
     expect(store.rows[0].jumper).toBe("1-2");
     expect(store.selected).toEqual([]);
+  });
+
+  // ja: 並べ替え順を変えると、update_entityコマンド1回で属性(row_order)に書き込まれる
+  it("changes the row order with one update_entity command", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    expect(store.rowOrder).toBe("number");
+    await store.setRowOrder("alnum");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      type: "update_entity",
+      sheet_id: "s1",
+      entity: { id: "tb1", kind: "symbol", attrs: { row_order: "alnum" } },
+    });
+  });
+
+  // ja: 既定の数値順を選び直すと、row_order属性ごと消す(未設定の端子台と同じ状態に戻す)
+  it("drops the row_order attribute entirely when number order is chosen again", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened("");
+    const tb1 = useDocumentStore().project!.sheets[0].entities.tb1 as unknown as {
+      attrs: Record<string, string>;
+    };
+    tb1.attrs = { row_order: "alnum" };
+    await store.setRowOrder("number");
+    const entity = (sent[0] as { entity: { attrs: Record<string, string> } }).entity;
+    expect(entity.attrs.row_order).toBeUndefined();
+  });
+
+  // ja: 現在のチャートの並べ替え順をそのまま見せる(サーバ側で並べ替え済み)
+  it("reflects the row order the chart already came back sorted in", async () => {
+    mockBackend({ chart: chart([row("1"), row("2")], [], "page") });
+    const store = await opened();
+    expect(store.rowOrder).toBe("page");
+  });
+
+  // ja: 「図面へジャンプ」は表示中の端子台のシート・entity idをrevealへそのまま渡す
+  it("jumps to the drawing by passing the sheet and entity id of the current block to reveal", async () => {
+    mockBackend();
+    const store = await opened();
+    const targets: RevealTarget[] = [];
+    store.gotoTerminal((t) => targets.push(t));
+    expect(targets).toEqual([{ sheetId: "s1", entityIds: ["tb1"] }]);
+  });
+
+  // ja: 端子台が無ければ「図面へジャンプ」は何もしない
+  it("does nothing when asked to jump to the drawing without a terminal block", () => {
+    const store = useTerminalsStore();
+    const targets: RevealTarget[] = [];
+    store.gotoTerminal((t) => targets.push(t));
+    expect(targets).toEqual([]);
   });
 
   // ja: 図面が外から変わったら (undoやAIの編集) グリッドを取り直し、古いチェック結果は捨てる

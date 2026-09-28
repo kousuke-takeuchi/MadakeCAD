@@ -783,7 +783,8 @@
       "internal": "Cible interne",
       "wireNo": "N° de fil",
       "wire": "Fil",
-      "status": "État"
+      "status": "État",
+      "level": "Lv"
     },
     "spare": "réserve",
     "addJumper": "Ajouter un pont",
@@ -797,13 +798,11 @@
     "generateChart": "Générer le tableau",
     "phase2Hint": "prévu pour la phase 2",
     "phase2": {
-      "sort": "Trier",
       "autoNumber": "Renuméroter",
       "spareTerminal": "Insérer une réserve",
       "multiLevel": "Multi-étage",
       "accessory": "Accessoires",
-      "swap": "Permuter int./ext.",
-      "goto": "Aller au schéma"
+      "swap": "Permuter int./ext."
     },
     "hint": "La grille est dérivée du schéma (le câblage, les numéros de fil et les fils ne sont pas modifiables ici). L'intérieur de l'armoire correspond au point de raccordement gauche, l'extérieur au point droit.",
     "openLog": "Éditeur de bornier : modification des borniers de « {sheet} »",
@@ -813,7 +812,19 @@
     "jumperRemovedLog": "Éditeur de bornier : ponts des bornes {terminals} de {reference} supprimés (annuler avec Cmd+Z)",
     "checkLog": "Éditeur de bornier : {reference} vérifié - {result}",
     "chartLog": "Éditeur de bornier : tableau de {reference} ({count} ligne(s)) écrit dans {path}",
-    "diagramLog": "Éditeur de bornier : schéma de raccordement de {reference} ({count} page(s)) écrit dans {path}"
+    "diagramLog": "Éditeur de bornier : schéma de raccordement de {reference} ({count} page(s)) écrit dans {path}",
+    "sort": {
+      "label": "Sort:",
+      "number": "Number",
+      "alnum": "Alphanumeric",
+      "page": "Page (drawing order)",
+      "cable": "External cable",
+      "jumper": "Jumper"
+    },
+    "goto": "Go to drawing",
+    "gotoHint": "Double-click a row to jump to it on the drawing",
+    "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing"
   },
   "plcIo": {
     "ribbonButton": "Table E/S automate",

@@ -783,7 +783,8 @@
       "internal": "Internes Ziel",
       "wireNo": "Leitungsnr.",
       "wire": "Leitung",
-      "status": "Status"
+      "status": "Status",
+      "level": "Lv"
     },
     "spare": "Reserve",
     "addJumper": "Brücke hinzufügen",
@@ -797,13 +798,11 @@
     "generateChart": "Klemmenplan erzeugen",
     "phase2Hint": "für Phase 2 geplant",
     "phase2": {
-      "sort": "Sortieren",
       "autoNumber": "Neu nummerieren",
       "spareTerminal": "Reserveklemme einfügen",
       "multiLevel": "Mehrstock",
       "accessory": "Zubehör",
-      "swap": "Innen/Außen tauschen",
-      "goto": "Zur Zeichnung"
+      "swap": "Innen/Außen tauschen"
     },
     "hint": "Die Tabelle wird aus der Zeichnung abgeleitet (Verdrahtung, Leitungsnummern und Leitungen können hier nicht bearbeitet werden). Die Schrankinnenseite ist der linke Anschlusspunkt, die Außenseite der rechte.",
     "openLog": "Klemmen-Editor: Klemmleisten von „{sheet}“ werden bearbeitet",
@@ -813,7 +812,19 @@
     "jumperRemovedLog": "Klemmen-Editor: Brücken an Klemme(n) {terminals} von {reference} entfernt (rückgängig mit Cmd+Z)",
     "checkLog": "Klemmen-Editor: {reference} geprüft - {result}",
     "chartLog": "Klemmen-Editor: Klemmenplan von {reference} ({count} Zeile(n)) nach {path} geschrieben",
-    "diagramLog": "Klemmen-Editor: Klemmenanschlussplan von {reference} ({count} Seite(n)) nach {path} geschrieben"
+    "diagramLog": "Klemmen-Editor: Klemmenanschlussplan von {reference} ({count} Seite(n)) nach {path} geschrieben",
+    "sort": {
+      "label": "Sort:",
+      "number": "Number",
+      "alnum": "Alphanumeric",
+      "page": "Page (drawing order)",
+      "cable": "External cable",
+      "jumper": "Jumper"
+    },
+    "goto": "Go to drawing",
+    "gotoHint": "Double-click a row to jump to it on the drawing",
+    "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing"
   },
   "plcIo": {
     "ribbonButton": "SPS-E/A-Tabelle",

@@ -4,22 +4,25 @@
 // ドロップダウン+ツールバー+白グリッド+フッタ(チェック結果+生成ボタン)。
 //
 // グリッドの中身は図面から導出した端子台チャートそのもので、ここで編集できるのは
-// ジャンパだけ (update_entity コマンド1回。Cmd+Zで戻る)。
-// v1で実装しない操作 (並べ替え・自動採番・多段端子・アクセサリ・内外スワップ・図面へ) は
-// 無効化したプレースホルダとして並べ、Lv・型番・配置の列は出さない (フェーズ2)。
+// ジャンパと並べ替え順 (row_order) だけ (どちらもupdate_entity コマンド1回。Cmd+Zで戻る)。
+// 並べ替え・Lv列 (多段端子台だけ)・図面へジャンプはここで実装済み。
+// v1で実装しない操作 (自動採番・多段端子・アクセサリ・内外スワップ) は
+// 無効化したプレースホルダとして並べ、型番・配置の列は出さない (フェーズ2)。
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
 import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowLeftRight, Layers, ListOrdered, Plus, Rows3, ShieldCheck, SquareStack, Unplug, X } from "lucide-vue-next";
+import { ArrowLeftRight, Layers, ListOrdered, Plus, ShieldCheck, SquareStack, Unplug, X } from "lucide-vue-next";
 import { filterFor, pickSave } from "../composables/fileActions";
-import { ipc } from "../ipc";
+import { useReveal } from "../composables/reveal";
+import { ipc, type RowOrder } from "../ipc";
 import { useDocumentStore } from "../stores/document";
-import { useTerminalsStore } from "../stores/terminals";
+import { ROW_ORDERS, useTerminalsStore } from "../stores/terminals";
 import { useUiStore } from "../stores/ui";
 
 const terminals = useTerminalsStore();
 const doc = useDocumentStore();
 const ui = useUiStore();
+const reveal = useReveal();
 const { t } = useI18n();
 
 // 図面が変われば (undo/redo・AIチャット・CLIからの編集も含む) グリッドを取り直す
@@ -30,13 +33,11 @@ watch(
 
 /** フェーズ2で実装する操作 (デザインどおり並べるが押せない)。 */
 const phase2 = [
-  { key: "sort", icon: Rows3 },
   { key: "autoNumber", icon: ListOrdered },
   { key: "spareTerminal", icon: SquareStack },
   { key: "multiLevel", icon: Layers },
   { key: "accessory", icon: Plus },
   { key: "swap", icon: ArrowLeftRight },
-  { key: "goto", icon: Unplug },
 ] as const;
 
 const title = computed(() =>
@@ -84,6 +85,29 @@ async function runCheck() {
     return;
   }
   ui.log(t("terminals.checkLog", { reference: terminals.reference, result: checkText.value }));
+}
+
+/** 並べ替え順のドロップダウンを変える (update_entity 1回。Cmd+Zで戻る)。 */
+async function changeSort(event: Event) {
+  const order = (event.target as HTMLSelectElement).value as RowOrder;
+  if (!(await terminals.setRowOrder(order))) {
+    if (terminals.error) ui.log(terminals.error);
+    return;
+  }
+  ui.log(
+    t("terminals.sortChangedLog", {
+      reference: terminals.reference,
+      order: t(`terminals.sort.${order}`),
+    }),
+  );
+}
+
+/** 「図面へジャンプ」 (ツールバー・行のダブルクリック共通)。既存のreveal動線をそのまま使う。 */
+function gotoTerminal() {
+  const reference = terminals.reference;
+  if (!reference) return;
+  terminals.gotoTerminal(reveal);
+  ui.log(t("terminals.gotoLog", { reference }));
 }
 
 /** 端子台チャートをCSVで書き出す (OSの保存ダイアログ経由)。 */
@@ -134,6 +158,18 @@ async function generateDiagram() {
           {{ t("terminals.removeJumper") }}
         </button>
         <span class="tool-sep" />
+        <label class="sort-label">
+          {{ t("terminals.sort.label") }}
+          <select
+            class="picker mono sort-picker"
+            :value="terminals.rowOrder"
+            :disabled="!terminals.entityId"
+            @change="changeSort"
+          >
+            <option v-for="o in ROW_ORDERS" :key="o" :value="o">{{ t(`terminals.sort.${o}`) }}</option>
+          </select>
+        </label>
+        <span class="tool-sep" />
         <button
           v-for="p in phase2"
           :key="p.key"
@@ -143,6 +179,10 @@ async function generateDiagram() {
         >
           <component :is="p.icon" :size="12" class="tool-icon" />
           {{ t(`terminals.phase2.${p.key}`) }}
+        </button>
+        <button class="tool" :disabled="!terminals.entityId" @click="gotoTerminal">
+          <Unplug :size="12" class="tool-icon" />
+          {{ t("terminals.goto") }}
         </button>
         <span class="tool-hint">{{ t("terminals.jumperHint") }}</span>
       </div>
@@ -155,6 +195,7 @@ async function generateDiagram() {
             <div class="cell cable">{{ t("terminals.col.externalCable") }}</div>
             <div class="cell jumper">{{ t("terminals.col.jumper") }}</div>
             <div class="cell terminal">{{ t("terminals.col.terminal") }}</div>
+            <div v-if="terminals.hasLevels" class="cell level">{{ t("terminals.col.level") }}</div>
             <div class="cell target">{{ t("terminals.col.internal") }}</div>
             <div class="cell wire-no">{{ t("terminals.col.wireNo") }}</div>
             <div class="cell wire">{{ t("terminals.col.wire") }}</div>
@@ -166,13 +207,16 @@ async function generateDiagram() {
             :key="r.terminal"
             class="row"
             :class="{ selected: r.selected }"
+            :title="t('terminals.gotoHint')"
             @click="terminals.toggleRow(r.terminal)"
+            @dblclick="gotoTerminal"
           >
             <div class="cell no mono">{{ r.no }}</div>
             <div class="cell target mono">{{ r.external }}</div>
             <div class="cell cable mono">{{ r.externalCable }}</div>
             <div class="cell jumper mono">{{ r.jumper }}</div>
             <div class="cell terminal mono strong">{{ r.terminal }}</div>
+            <div v-if="terminals.hasLevels" class="cell level mono">{{ r.level }}</div>
             <div class="cell target mono">{{ r.internal }}</div>
             <div class="cell wire-no mono">{{ r.wireNo }}</div>
             <div class="cell wire">{{ r.wire }}</div>
@@ -282,6 +326,14 @@ async function generateDiagram() {
 .tool-icon { color: var(--ribbon-icon); }
 .tool-sep { width: 1px; align-self: stretch; background: var(--ribbon-line); margin: 0 2px; }
 .tool-hint { font-size: 10px; color: var(--ui-muted); }
+.sort-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--ui-muted);
+}
+.sort-picker { padding: 3px 6px; font-size: 11px; }
 
 /* --- 本体グリッド --- */
 .body {
@@ -329,6 +381,7 @@ async function generateDiagram() {
 .cell.cable { width: 104px; flex: none; }
 .cell.jumper { width: 68px; flex: none; }
 .cell.terminal { width: 56px; flex: none; }
+.cell.level { width: 32px; flex: none; }
 .cell.wire-no { width: 60px; flex: none; }
 .cell.wire { flex: 1; min-width: 0; }
 .cell.status { width: 64px; flex: none; }

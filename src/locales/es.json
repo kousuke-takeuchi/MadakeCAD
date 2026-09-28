@@ -783,7 +783,8 @@
       "internal": "Destino interno",
       "wireNo": "N.º de hilo",
       "wire": "Hilo",
-      "status": "Estado"
+      "status": "Estado",
+      "level": "Lv"
     },
     "spare": "reserva",
     "addJumper": "Añadir puente",
@@ -797,13 +798,11 @@
     "generateChart": "Generar tabla",
     "phase2Hint": "previsto para la fase 2",
     "phase2": {
-      "sort": "Ordenar",
       "autoNumber": "Renumerar",
       "spareTerminal": "Insertar reserva",
       "multiLevel": "Multinivel",
       "accessory": "Accesorios",
-      "swap": "Intercambiar int./ext.",
-      "goto": "Ir al plano"
+      "swap": "Intercambiar int./ext."
     },
     "hint": "La tabla se deriva del plano (el cableado, los números de hilo y los hilos no se pueden editar aquí). El interior del panel es el punto de conexión izquierdo; el exterior, el derecho.",
     "openLog": "Editor de bornes: editando las borneras de \"{sheet}\"",
@@ -813,7 +812,19 @@
     "jumperRemovedLog": "Editor de bornes: puentes quitados del borne o bornes {terminals} de {reference} (deshacer con Cmd+Z)",
     "checkLog": "Editor de bornes: {reference} comprobada - {result}",
     "chartLog": "Editor de bornes: se escribió la tabla de {reference} ({count} fila(s)) en {path}",
-    "diagramLog": "Editor de bornes: se escribió el diagrama de conexión de {reference} ({count} página(s)) en {path}"
+    "diagramLog": "Editor de bornes: se escribió el diagrama de conexión de {reference} ({count} página(s)) en {path}",
+    "sort": {
+      "label": "Sort:",
+      "number": "Number",
+      "alnum": "Alphanumeric",
+      "page": "Page (drawing order)",
+      "cable": "External cable",
+      "jumper": "Jumper"
+    },
+    "goto": "Go to drawing",
+    "gotoHint": "Double-click a row to jump to it on the drawing",
+    "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing"
   },
   "plcIo": {
     "ribbonButton": "Tabla de E/S de PLC",

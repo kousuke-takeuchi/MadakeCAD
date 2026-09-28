@@ -783,7 +783,8 @@
       "internal": "Internal target",
       "wireNo": "Wire no.",
       "wire": "Wire",
-      "status": "State"
+      "status": "State",
+      "level": "Lv"
     },
     "spare": "spare",
     "addJumper": "Add jumper",
@@ -797,13 +798,11 @@
     "generateChart": "Generate chart",
     "phase2Hint": "planned for phase 2",
     "phase2": {
-      "sort": "Sort",
       "autoNumber": "Renumber",
       "spareTerminal": "Insert spare",
       "multiLevel": "Multi-level",
       "accessory": "Accessories",
-      "swap": "Swap in/out",
-      "goto": "Go to drawing"
+      "swap": "Swap in/out"
     },
     "hint": "The grid is derived from the drawing (wiring, wire numbers and wires cannot be edited here). The inside of the panel is the left connection point, the outside is the right one.",
     "openLog": "Terminal editor: editing the terminal blocks of \"{sheet}\"",
@@ -813,7 +812,19 @@
     "jumperRemovedLog": "Terminal editor: jumpers on terminal(s) {terminals} of {reference} removed (undo with Cmd+Z)",
     "checkLog": "Terminal editor: {reference} checked - {result}",
     "chartLog": "Terminal editor: wrote the chart of {reference} ({count} row(s)) to {path}",
-    "diagramLog": "Terminal editor: wrote the connection diagram of {reference} ({count} page(s)) to {path}"
+    "diagramLog": "Terminal editor: wrote the connection diagram of {reference} ({count} page(s)) to {path}",
+    "sort": {
+      "label": "Sort:",
+      "number": "Number",
+      "alnum": "Alphanumeric",
+      "page": "Page (drawing order)",
+      "cable": "External cable",
+      "jumper": "Jumper"
+    },
+    "goto": "Go to drawing",
+    "gotoHint": "Double-click a row to jump to it on the drawing",
+    "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing"
   },
   "plcIo": {
     "ribbonButton": "PLC I/O table",

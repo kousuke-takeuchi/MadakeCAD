@@ -600,6 +600,12 @@ export interface JumperIssue {
   message: string;
 }
 
+/**
+ * 端子台チャートの並べ替え順 (madake-coreの`RowOrder`)。`attrs["row_order"]`の値と同じ表記。
+ * 未設定・未知語は`"number"`に落ちる。
+ */
+export type RowOrder = "number" | "alnum" | "page" | "cable" | "jumper";
+
 /** 端子台1つのチャート (madake-coreの`TerminalChart`)。 */
 export interface TerminalChart {
   entity_id: string;
@@ -612,6 +618,11 @@ export interface TerminalChart {
   /** 正規化済みのジャンパ (並び順で先に来る端子番号が先)。多段端子台では段記号付き ("1a")。 */
   jumpers: [string, string][];
   jumper_issues: JumperIssue[];
+  /**
+   * この並びを作った並べ替え順 (`attrs["row_order"]`を解析した結果)。`rows`はすでにこの順に
+   * 並んでいるので、CSV・図枠付き図面シート・端子接続図もここを並べ替え直したりしない。
+   */
+  row_order: RowOrder;
 }
 
 /** 端子台1つの概要 (エディタの切替ドロップダウン・帳票の対象選択)。 */

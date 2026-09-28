@@ -8,16 +8,18 @@
 
 import { defineStore } from "pinia";
 import { parseTerminalNo } from "../canvas/dynamicSymbol";
-// ジャンパ指定の正規化はキャンバス描画と共通の純関数を使う (Pinia非依存モジュールが正)
+// ジャンパ指定の正規化・並べ替え順の解釈はキャンバス描画と共通の純関数を使う
+// (Pinia非依存モジュールが正。Rust側 madake-core/src/terminal_chart.rs の双子)
 import {
   formatJumperSpec,
   parseJumperSpec,
   terminalsAreAdjacent,
 } from "../canvas/terminalJumpers";
-import { ipc, type Command, type Diagnostic, type TerminalBlockInfo, type TerminalChart } from "../ipc";
+import type { RevealTarget } from "../composables/reveal";
+import { ipc, type Command, type Diagnostic, type RowOrder, type TerminalBlockInfo, type TerminalChart } from "../ipc";
 import { useDocumentStore } from "./document";
 
-export { formatJumperSpec, parseJumperSpec } from "../canvas/terminalJumpers";
+export { formatJumperSpec, parseJumperSpec, ROW_ORDERS, rowOrderOf } from "../canvas/terminalJumpers";
 
 /** グリッドの1行 (デザイン「端子台エディタ」の列順)。 */
 export interface TerminalEditorRow {
@@ -25,6 +27,8 @@ export interface TerminalEditorRow {
   no: number;
   /** 端子番号。 */
   terminal: string;
+  /** 段記号 (例 "a")。多段端子台だけが持ち、単段の端子台では空文字。 */
+  level: string;
   /** 外部側 (盤外) の接続先。 */
   external: string;
   /** 外部側の電線が属するハーネス・ケーブル名。 */
@@ -123,11 +127,12 @@ export const useTerminalsStore = defineStore("terminals", {
       );
       return poles.size;
     },
-    /** グリッドの行 (端子番号順)。 */
+    /** グリッドの行 (並びはチャートのまま=現在の`rowOrder`どおり)。 */
     rows(state): TerminalEditorRow[] {
       return (state.chart?.rows ?? []).map((r, i) => ({
         no: i + 1,
         terminal: r.terminal,
+        level: r.level,
         external: r.external,
         externalCable: r.external_harness,
         jumper: r.jumper,
@@ -141,6 +146,18 @@ export const useTerminalsStore = defineStore("terminals", {
     /** 予備端子 (未結線) の数。 */
     spareCount(): number {
       return this.rows.filter((r) => r.spare).length;
+    },
+    /**
+     * 多段端子台か (Lv列を出すかどうか)。一覧より先にチャートだけが読めているときは
+     * 行の段記号から判定する (`poleCount`と同じフォールバック)。
+     */
+    hasLevels(state): boolean {
+      if (this.block) return this.block.levels > 1;
+      return (state.chart?.rows ?? []).some((r) => r.level !== "");
+    },
+    /** 現在の並べ替え順 (チャートが無ければ既定の数値順)。 */
+    rowOrder(state): RowOrder {
+      return state.chart?.row_order ?? "number";
     },
     /** 選択中の端子番号 (極番号→段記号の順)。多段端子台では "1a" のような段記号付き。 */
     selectedTerminals(state): string[] {
@@ -213,7 +230,9 @@ export const useTerminalsStore = defineStore("terminals", {
       this.selected = [];
       this.diagnostics = null;
       this.error = null;
-      await this.reloadChart();
+      // 一覧 (極数・段数など) も併せて読み直す。チャートだけを取り直すと、切り替えている間に
+      // 他の編集で一覧側の情報 (Lv列の要不要など) が古いままになりうる (フェーズ6の積み残し)
+      await this.reloadBlocks();
     },
 
     /** 行の選択を切り替える。 */
@@ -272,6 +291,49 @@ export const useTerminalsStore = defineStore("terminals", {
       } finally {
         this.busy = false;
       }
+    },
+
+    /**
+     * 並べ替え順を変える (update_entity コマンド1回。既定の数値順を選んだときは
+     * `attrs["row_order"]`自体を消す=未設定の端子台と同じ状態に戻す。ジャンパの
+     * delete-when-emptyと同じ流儀)。
+     */
+    async setRowOrder(order: RowOrder): Promise<boolean> {
+      const doc = useDocumentStore();
+      const block = this.block;
+      if (!block || this.busy) return false;
+      const sheet = doc.project?.sheets.find((s) => s.id === block.sheet_id);
+      const entity = sheet?.entities[block.entity_id];
+      if (!entity || entity.kind !== "symbol") return false;
+      const attrs = { ...entity.attrs };
+      if (order === "number") delete attrs.row_order;
+      else attrs.row_order = order;
+      this.busy = true;
+      this.error = null;
+      try {
+        await doc.execute({
+          type: "update_entity",
+          sheet_id: block.sheet_id,
+          entity: { ...entity, attrs },
+        });
+        await this.reloadBlocks();
+        return true;
+      } catch (e) {
+        this.error = String(e);
+        return false;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    /**
+     * 表示中の端子台へ図面をジャンプする (検索結果・XRefと同じ reveal 経路。呼び出し側の
+     * `useReveal()`をそのまま渡す — Piniaストアからは `useReveal` 自身を呼べないため)。
+     */
+    gotoTerminal(reveal: (target: RevealTarget) => void) {
+      const block = this.block;
+      if (!block) return;
+      reveal({ sheetId: block.sheet_id, entityIds: [block.entity_id] });
     },
 
     /** 端子台チェックを実行する (未結線の端子・不正なジャンパ)。 */

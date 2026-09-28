@@ -783,7 +783,8 @@
       "internal": "内部ターゲット",
       "wireNo": "線番",
       "wire": "電線",
-      "status": "状態"
+      "status": "状態",
+      "level": "Lv"
     },
     "spare": "予備",
     "addJumper": "ジャンパ生成",
@@ -797,13 +798,11 @@
     "generateChart": "チャートを生成",
     "phase2Hint": "フェーズ2で対応予定",
     "phase2": {
-      "sort": "並べ替え",
       "autoNumber": "自動採番",
       "spareTerminal": "予備端子",
       "multiLevel": "多段生成",
       "accessory": "アクセサリ",
-      "swap": "内外スワップ",
-      "goto": "図面へ"
+      "swap": "内外スワップ"
     },
     "hint": "グリッドは図面から導出しています(結線・線番・電線はここでは編集できません)。内部側=盤内(左の接続点)、外部側=盤外(右の接続点)",
     "openLog": "端子台: 「{sheet}」の端子台を編集します",
@@ -813,7 +812,19 @@
     "jumperRemovedLog": "端子台: {reference} の端子 {terminals} のジャンパを外しました (Cmd+Zで元に戻せます)",
     "checkLog": "端子台: {reference} をチェックしました — {result}",
     "chartLog": "端子台: {reference} のチャート{count}行を {path} に書き出しました",
-    "diagramLog": "端子台: {reference} の端子接続図{count}ページを {path} に書き出しました"
+    "diagramLog": "端子台: {reference} の端子接続図{count}ページを {path} に書き出しました",
+    "sort": {
+      "label": "並べ替え:",
+      "number": "数値順",
+      "alnum": "英数順",
+      "page": "ページ順(回路図の出現順)",
+      "cable": "外部ケーブル順",
+      "jumper": "ジャンパ順"
+    },
+    "goto": "図面へジャンプ",
+    "gotoHint": "行をダブルクリックすると図面へジャンプします",
+    "sortChangedLog": "端子台: {reference} を{order}で並べ替えました (Cmd+Zで元に戻せます)",
+    "gotoLog": "端子台: {reference} へ図面をジャンプしました"
   },
   "plcIo": {
     "ribbonButton": "PLC I/O割付表",

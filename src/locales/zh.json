@@ -783,7 +783,8 @@
       "internal": "内部目标",
       "wireNo": "线号",
       "wire": "导线",
-      "status": "状态"
+      "status": "状态",
+      "level": "Lv"
     },
     "spare": "备用",
     "addJumper": "添加跳线",
@@ -797,13 +798,11 @@
     "generateChart": "生成端子排表",
     "phase2Hint": "计划在第 2 阶段实现",
     "phase2": {
-      "sort": "排序",
       "autoNumber": "重新编号",
       "spareTerminal": "插入备用端子",
       "multiLevel": "多层端子",
       "accessory": "附件",
-      "swap": "内外互换",
-      "goto": "转到图纸"
+      "swap": "内外互换"
     },
     "hint": "表格由图纸推导而来(此处无法编辑连线、线号和导线)。柜内为左侧连接点,柜外为右侧连接点。",
     "openLog": "端子排编辑器: 正在编辑“{sheet}”的端子排",
@@ -813,7 +812,19 @@
     "jumperRemovedLog": "端子排编辑器: 已删除 {reference} 端子 {terminals} 上的跳线(Cmd+Z 可撤销)",
     "checkLog": "端子排编辑器: 已检查 {reference} - {result}",
     "chartLog": "端子排编辑器: 已将 {reference} 的端子排表({count} 行)写入 {path}",
-    "diagramLog": "端子排编辑器: 已将 {reference} 的端子接线图({count} 页)写入 {path}"
+    "diagramLog": "端子排编辑器: 已将 {reference} 的端子接线图({count} 页)写入 {path}",
+    "sort": {
+      "label": "Sort:",
+      "number": "Number",
+      "alnum": "Alphanumeric",
+      "page": "Page (drawing order)",
+      "cable": "External cable",
+      "jumper": "Jumper"
+    },
+    "goto": "Go to drawing",
+    "gotoHint": "Double-click a row to jump to it on the drawing",
+    "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing"
   },
   "plcIo": {
     "ribbonButton": "PLC I/O 表",
