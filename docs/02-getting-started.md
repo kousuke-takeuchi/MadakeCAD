@@ -2,7 +2,7 @@
 
 **日本語: [02-getting-started.ja.md](02-getting-started.ja.md)** | ← [Overview](01-overview.md) | Next: [Schematic Editor →](03-schematic-editor.md)
 
-Currently developed and tested on macOS (the core is OS-independent; Windows/Linux builds are on the roadmap, M6).
+Builds and runs on macOS, Windows 10/11 and Linux (Debian/Ubuntu). Each OS has its own build dependencies — see the table in §1. CI runs the test suite on all three (`.github/workflows/ci.yml`) and `release.yml` builds the bundles on all three; day-to-day development happens on macOS, so a fresh Windows/Linux clone is the least-travelled path — if something in these steps does not work there, please open an issue.
 
 ## 1. Prerequisites
 

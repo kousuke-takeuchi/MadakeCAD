@@ -52,9 +52,10 @@
 ## M6 — オープンソース公開 ✅(準備完了。公開そのものはプロジェクトの判断)
 
 - ✅ ライセンス: MIT OR Apache-2.0デュアル。リポジトリ衛生: `scripts/audit_confidential.py`が公開前に作業ツリーと全履歴をgit管理外の用語表で走査
-- ✅ Windows/Linuxビルド+CI: CIがUbuntu・macOS・WindowsでRustスイートを実行、PDFフォントはOSに追従(Hiragino / Yu Gothic UI / Noto Sans CJK)、`release.yml`が`v*`タグで`.dmg` / `.msi` / `.AppImage`をドラフトリリースへ添付
-- ✅ i18n: 残UIリテラルをカタログへ移行し6言語(英語・日本語・中国語・スペイン語・フランス語・ドイツ語)を同梱。キー・プレースホルダ・複数形の一致をテストで強制。翻訳者向け手順はi18n仕様に記載
+- ✅ Windows/Linuxビルド+CI: CIがUbuntu・macOS・WindowsでRustスイート・フロントテスト・アドオンテストを実行し、3OSで配布物をビルド(未署名)、PDFフォントはOSに追従(Hiragino / Yu Gothic UI / Noto Sans CJK)、`release.yml`が`v*`タグで`.dmg` / `.msi` / `.AppImage`をドラフトリリースへ添付
+- ✅ i18n: 残UIリテラルをカタログへ移行し6言語(英語・日本語・中国語・スペイン語・フランス語・ドイツ語)を同梱。キー・プレースホルダ・複数形の一致をテストで強制。翻訳者向け手順はi18n仕様に記載。**英語と日本語は完備、zh/es/fr/deは約6割**で、未翻訳のキーは英語のまま表示される
 - ✅ コミュニティ: `CONTRIBUTING.md`、Contributor Covenant行動規範、`SECURITY.md`、Issue/PRテンプレート
+- ✅ 公開手順書: `docs/internal/release-runbook.md`にユーザーが手で行う手順(機密の最終確認・可視性・トピック・タグ・配布物・初動)を記載。**内容は一つも実行していない**
 - 未決: 公開方法(現リポジトリ vs 履歴を除いたエクスポート)、プロジェクト名、公開時期
 
 ## 長期

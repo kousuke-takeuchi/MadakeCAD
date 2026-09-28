@@ -2,7 +2,7 @@
 
 **English (canonical): [02-getting-started.md](02-getting-started.md)**
 
-macOSでの手順(コアはOS非依存だが、現状の動作確認はmacOSのみ)。
+macOS・Windows 10/11・Linux(Debian/Ubuntu)でビルド・実行できる。ビルド依存はOSごとに異なる(§1の表)。CIは3OSでテストスイートを実行し(`.github/workflows/ci.yml`)、`release.yml`は3OSで配布物をビルドする。日々の開発はmacOSで行っているため、WindowsとLinuxのクリーンクローンは通行量が最も少ない経路である — 手順どおりに動かない箇所があればIssueで知らせてほしい。
 
 ## 1. 必要ソフトウェア
 

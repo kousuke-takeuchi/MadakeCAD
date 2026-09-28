@@ -12,6 +12,7 @@
 | [feature-inventory.md](feature-inventory.md) | 機能インベントリ: 実装済み/未実装の棚卸し |
 | [specs/](specs/README.md) | 機能仕様集: M2〜M6の詳細仕様+[ギャップ分析](specs/gap-analysis.md)(ACADE/EPLAN比較) |
 | [release-audit.md](release-audit.md) | OSS公開前監査(M6): 機密スキャン結果・第三者権利レビュー・公開方法の推奨 |
+| [release-runbook.md](release-runbook.md) | OSS公開 手順書(M6): ユーザーが手で行う公開手順(機密の最終確認→可視性→トピック→タグ→配布物→初動)。**実行はしていない** |
 | [third-party-licenses.md](third-party-licenses.md) | 依存ライセンス一覧(`scripts/gen_licenses.py`で機械生成) |
 | [../superpowers/specs/](../superpowers/specs/2026-08-20-madakecad-design.md) | マスタースペック: アーキテクチャ設計判断の記録 |
 | [../superpowers/plans/](../superpowers/plans/) | 実装プラン(日付順、TDDステップ・進捗付き) |

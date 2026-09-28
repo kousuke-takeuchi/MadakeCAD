@@ -164,11 +164,12 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 |---|---|---|
 | テスト | ✅ | cargo 1003件+vitest 734件+vue-tsc。全テストに対訳仕様文が付き、`docs/13-specification.md`(1737項目)を自動生成。TDD運用 |
 | macOSビルド | ✅ | 開発は`npm run tauri dev` |
-| Windows/Linuxビルド | ✅ | CI(`ci.yml`)の`rust-cross`ジョブがmacOS(4クレート)とWindows(`madake-core`/`madake-cli`)でcargo testを実行。OS別のビルド依存は`docs/02-getting-started.md`。ngspice探索・PDFフォントはOS別に解決(M6) |
+| Windows/Linuxビルド | ✅ | CI(`ci.yml`): `rust-cross`がmacOS(4クレート)とWindows(`madake-core`/`madake-cli`)でcargo test、`frontend`(vitest+vue-tsc)と`freecad`(Python)は3OSマトリクス、`bundle`が3OSで`tauri build`(未署名・成果物は保存しない)。`spec`(gen_spec --check)は生成結果がOSに依らないのでUbuntuのみ。OS別のビルド依存は`docs/02-getting-started.md`。ngspice探索・PDFフォントはOS別に解決(M6) |
 | 配布パッケージ/自動更新 | 🔶 | `release.yml`(タグ`v*`/手動)がtauri-actionでmacOS `.dmg`(arm64/x86_64)・Windows `.msi`/NSIS・Linux `.AppImage`/`.deb`をドラフトリリースへ添付。コード署名・notarization・自動更新は公開後 |
 | 自動保存・クラッシュ復旧 | ⬜ | 未着手 |
-| i18n | ✅ | 6言語(en/ja/zh/es/fr/de)のカタログ+言語設定(即時反映)。全カタログのキー・プレースホルダ・複数形の一致をテストで強制。UI文字列はカタログ必須、翻訳者向け手順は`specs/i18n.md` §6(M6) |
+| i18n | ✅ | 6言語(en/ja/zh/es/fr/de)のカタログ+言語設定(即時反映)。全カタログのキー・プレースホルダ・複数形の一致をテストで強制。UI文字列はカタログ必須、翻訳者向け手順は`specs/i18n.md` §6。**翻訳率はen/jaが100%、zh/es/fr/deは約6割**(残りは英語のまま。テストでは区別できない)(M6) |
 | コミュニティ整備 | ✅ | `CONTRIBUTING.md`(+ja)・`CODE_OF_CONDUCT.md`・`SECURITY.md`・Issue/PRテンプレート・`scripts/audit_confidential.py`(社外秘用語の履歴監査)(M6) |
+| 公開手順書 | ✅ | `internal/release-runbook.md`: 機密の最終確認(唯一のゲート)→公開方法のA/B案→可視性・トピック・脉弱性報告窓口→タグと配布物→公開後の初動。**不可逆操作なので実行はしていない**(M6) |
 
 ## 10. 次期計画
 
