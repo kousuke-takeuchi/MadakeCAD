@@ -83,7 +83,7 @@ mod tests {
                     rotation: 90,
                     mirror: false,
                     reference: "K1".into(),
-                    value: "[redacted]".into(),
+                    value: "RLY-24V".into(),
                     attrs: Default::default(),
                 }),
             })

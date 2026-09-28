@@ -166,7 +166,7 @@ fn build_sheet1(engine: &mut Engine, sheet_id: SheetId) {
             // 制御分岐: F1 -> SW1 -> K1コイル
             symbol("fuse", "F1", "5A", 100.0, 85.0, 90),
             symbol("switch_spst", "SW1", "運転", 100.0, 125.0, 90),
-            symbol("relay_coil", "K1", "[redacted]", 100.0, 175.0, 90),
+            symbol("relay_coil", "K1", "RLY-24V", 100.0, 175.0, 90),
             wire(&[(100.0, 55.0), (100.0, 77.5)], "red", 0.75, 0.3),
             wire(&[(100.0, 92.5), (100.0, 117.5)], "red", 0.75, 0.3),
             wire(&[(100.0, 132.5), (100.0, 167.5)], "red", 0.75, 0.4),
@@ -254,7 +254,7 @@ fn build_sheet2(engine: &mut Engine, sheet_id: SheetId) {
             junction(180.0, 70.0),
             junction(180.0, 225.0),
             // K2コイル
-            symbol("relay_coil", "K2", "[redacted]", 250.0, 120.0, 90),
+            symbol("relay_coil", "K2", "RLY-24V", 250.0, 120.0, 90),
             wire(&[(250.0, 70.0), (250.0, 112.5)], "red", 0.75, 0.5),
             wire(&[(250.0, 127.5), (250.0, 225.0)], "black", 0.75, 1.0),
             junction(250.0, 70.0),

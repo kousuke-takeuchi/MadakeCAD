@@ -1238,7 +1238,7 @@ mod tests {
         let l1 = Entity::NetLabel(NetLabel {
             id: Uuid::new_v4(),
             at: Point::new(0.0, 10.0),
-            name: "[redacted]".into(),
+            name: "N-P1".into(),
             rotation: 0,
             attrs: Default::default(),
         });
@@ -1257,7 +1257,7 @@ mod tests {
             .collect();
         assert_eq!(conflicts.len(), 1, "{conflicts:?}");
         assert_eq!(conflicts[0].severity, Severity::Error);
-        assert!(conflicts[0].message.contains("[redacted]") && conflicts[0].message.contains("0V"));
+        assert!(conflicts[0].message.contains("N-P1") && conflicts[0].message.contains("0V"));
     }
 
     fn net_label(name: &str, x: f64, y: f64) -> Entity {
@@ -1302,12 +1302,12 @@ mod tests {
     fn a_net_label_that_floats_off_the_wire_is_reported() {
         let sheet = sheet_with(vec![
             wire(&[(0.0, 10.0), (20.0, 10.0)]),
-            net_label("[redacted]", 10.0, 10.5),
+            net_label("N-P1", 10.0, 10.5),
         ]);
         let diags = dangling_labels(&sheet);
         assert_eq!(diags.len(), 1, "{diags:?}");
         assert_eq!(diags[0].severity, Severity::Warning);
-        assert!(diags[0].message.contains("[redacted]"), "{}", diags[0].message);
+        assert!(diags[0].message.contains("N-P1"), "{}", diags[0].message);
         assert_eq!(diags[0].entity_ids.len(), 1, "指摘はそのラベルを選択できる");
     }
 
@@ -1317,7 +1317,7 @@ mod tests {
     fn a_net_label_within_the_connection_tolerance_is_still_attached() {
         let sheet = sheet_with(vec![
             wire(&[(0.0, 10.0), (20.0, 10.0)]),
-            net_label("[redacted]", 10.0, 10.005),
+            net_label("N-P1", 10.0, 10.005),
         ]);
         assert!(dangling_labels(&sheet).is_empty());
     }

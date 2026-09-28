@@ -490,7 +490,7 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
       </div>
       <div class="prow">
         <span class="plabel">{{ t("properties.value") }}</span>
-        <span class="pvalue"><input v-model="buf.value" class="bare" placeholder="[redacted]" /></span>
+        <span class="pvalue"><input v-model="buf.value" class="bare" placeholder="RLY-24V" /></span>
       </div>
       <div class="prow">
         <span class="plabel">{{ t("note.functionRow") }}</span>

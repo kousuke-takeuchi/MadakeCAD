@@ -440,7 +440,7 @@ mod tests {
         let label = Entity::NetLabel(NetLabel {
             id: Uuid::new_v4(),
             at: Point::new(0.0, 10.0),
-            name: "[redacted]".into(),
+            name: "N-P1".into(),
             rotation: 0,
             attrs: Default::default(),
         });
@@ -449,7 +449,7 @@ mod tests {
         }
         let nets = extract_netlist(&sheet, &builtin_symbols());
         assert_eq!(nets.len(), 2, "交差のみでは接続しない");
-        assert!(nets.iter().any(|n| n.name == "[redacted]"));
+        assert!(nets.iter().any(|n| n.name == "N-P1"));
     }
 
     /// A junction dot connects crossing wires, and same-named labels merge distant nets into one.
@@ -665,7 +665,7 @@ mod tests {
         let label = Entity::NetLabel(NetLabel {
             id: Uuid::new_v4(),
             at: Point::new(0.0, 0.0),
-            name: "[redacted]".into(),
+            name: "N-P1".into(),
             rotation: 0,
             attrs: Default::default(),
         });
@@ -676,7 +676,7 @@ mod tests {
         }
         let nets = extract_netlist(&sheet, &builtin_symbols());
         let labeled_net = nets.iter().find(|n| n.label.is_some()).unwrap();
-        assert_eq!(labeled_net.name, "[redacted]", "ラベルが線番に勝つ");
+        assert_eq!(labeled_net.name, "N-P1", "ラベルが線番に勝つ");
         assert_eq!(labeled_net.wire_no.as_deref(), Some("12"), "線番自体は保持される");
         let plain_net = nets.iter().find(|n| n.wire_ids == vec![plain_id]).unwrap();
         assert_eq!(plain_net.name, "N001", "名前も線番も無ければ自動名");

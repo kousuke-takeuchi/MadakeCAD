@@ -444,7 +444,7 @@ pub struct PlaceSymbolParams {
     pub rotation: Option<u16>,
     /// 参照記号(例: "K1")。
     pub reference: Option<String>,
-    /// 型番・値(例: "[redacted]")。
+    /// 型番・値(例: "RLY-24V")。
     pub value: Option<String>,
     /// 追加属性。ブロック(`symbol_id="block"`)は
     /// `block_pins` = `{"left":[{"no":"IN1","name":"入力1"}],"right":[…]}`(任意で`top`/`bottom`)、

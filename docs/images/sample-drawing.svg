@@ -123,7 +123,7 @@
 <polyline points="100,167.500 100,170" fill="none" stroke="#000" stroke-width="0.300"/>
 <polyline points="100,180 100,182.500" fill="none" stroke="#000" stroke-width="0.300"/>
 <text x="100" y="163" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">K1</text>
-<text x="100" y="166.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">[redacted]</text>
+<text x="100" y="166.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">RLY-24V</text>
 <polyline points="300,240 300,152.500 307.500,152.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="180,97.500 180,157.500" fill="none" stroke="#0000c0" stroke-width="0.350"/>
 <circle cx="180" cy="55" r="0.6" fill="#000"/>

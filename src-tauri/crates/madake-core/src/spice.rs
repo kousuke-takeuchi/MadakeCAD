@@ -453,7 +453,7 @@ mod tests {
             Entity::NetLabel(NetLabel {
                 id: Uuid::new_v4(),
                 at: Point::new(x, y),
-                name: "[redacted]".into(),
+                name: "N-P1".into(),
                 rotation: 0,
                 attrs: Default::default(),
             })

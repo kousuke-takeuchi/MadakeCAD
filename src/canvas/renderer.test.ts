@@ -457,7 +457,7 @@ describe("drawDeviceBlock", () => {
         ...demoBlock("", 0),
         contacts: [{ terminals: "11-12-14", address: "/1.B3", role: "contact_co", entityId: null }],
       },
-      demoBlock("[redacted](D)/24DC-2Z6", 0),
+      demoBlock("RLY-24V-2CO/24VDC-D", 0),
     ];
     for (const b of blocks) {
       const width = deviceBlockLayout(b).width;

@@ -171,12 +171,12 @@ fn crossing_without_junction_stays_separate_and_label_names_net() {
     let w1 = wire(&[(0.0, 10.0), (20.0, 10.0)]);
     let w2 = wire(&[(10.0, 0.0), (10.0, 20.0)]);
     let label = Entity::NetLabel(NetLabel {
-        id: Uuid::new_v4(), at: Point::new(0.0, 10.0), name: "[redacted]".into(), rotation: 0,
+        id: Uuid::new_v4(), at: Point::new(0.0, 10.0), name: "N-P1".into(), rotation: 0,
     });
     for e in [w1, w2, label] { sheet.entities.insert(e.id(), e); }
     let nets = extract_netlist(&sheet, &builtin_symbols());
     assert_eq!(nets.len(), 2, "交差のみでは接続しない");
-    assert!(nets.iter().any(|n| n.name == "[redacted]"));
+    assert!(nets.iter().any(|n| n.name == "N-P1"));
 }
 ```
 
@@ -249,7 +249,7 @@ fn bom_groups_by_value_and_counts() {
     let mut project = Project::new("t");
     let sid = project.sheets[0].id;
     let sheet = project.sheet_mut(sid).unwrap();
-    for (r, v) in [("R1", "10k"), ("R2", "10k"), ("K1", "[redacted]")] {
+    for (r, v) in [("R1", "10k"), ("R2", "10k"), ("K1", "RLY-24V")] {
         let e = /* Task2のsymbolヘルパ相当。valueを設定 */
             Entity::Symbol(SymbolInstance { id: Uuid::new_v4(), symbol_id: "resistor".into(),
                 at: Point::new(0.0, 0.0), rotation: 0, mirror: false,
@@ -260,7 +260,7 @@ fn bom_groups_by_value_and_counts() {
     let lines: Vec<_> = csv.lines().collect();
     assert_eq!(lines[0], "参照記号,型番/値,シンボル,数量");
     assert!(lines.iter().any(|l| l.starts_with("\"R1, R2\",10k,resistor,2") || l.starts_with("R1, R2") ));
-    assert!(lines.iter().any(|l| l.contains("[redacted]") && l.ends_with(",1")));
+    assert!(lines.iter().any(|l| l.contains("RLY-24V") && l.ends_with(",1")));
 }
 
 #[test]

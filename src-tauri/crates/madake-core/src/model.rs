@@ -606,7 +606,7 @@ pub struct SymbolInstance {
     /// 参照記号(例: "K1", "J3")。
     #[serde(default)]
     pub reference: String,
-    /// 型番・値(例: "[redacted]", "10kΩ")。
+    /// 型番・値(例: "RLY-24V", "10kΩ")。
     #[serde(default)]
     pub value: String,
     #[serde(default)]
@@ -663,7 +663,7 @@ pub struct Junction {
     pub at: Point,
 }
 
-/// ネットラベル(例: "[redacted]")。図面間・シート間の論理接続。
+/// ネットラベル(例: "N-P1")。図面間・シート間の論理接続。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct NetLabel {
     pub id: EntityId,

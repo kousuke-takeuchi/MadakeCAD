@@ -456,7 +456,7 @@ mod tests {
         let mut project = Project::new("t");
         let sid = project.sheets[0].id;
         let sheet = project.sheet_mut(sid).unwrap();
-        for (r, v) in [("R1", "10k"), ("R2", "10k"), ("K1", "[redacted]")] {
+        for (r, v) in [("R1", "10k"), ("R2", "10k"), ("K1", "RLY-24V")] {
             let e = sym(r, v);
             sheet.entities.insert(e.id(), e);
         }
@@ -467,7 +467,7 @@ mod tests {
             lines.iter().any(|l| l.contains("R1, R2") && l.contains("10k") && l.ends_with(",2")),
             "10kが2個に集計される: {csv}"
         );
-        assert!(lines.iter().any(|l| l.contains("[redacted]") && l.ends_with(",1")));
+        assert!(lines.iter().any(|l| l.contains("RLY-24V") && l.ends_with(",1")));
     }
 
     /// The parts list carries the panel item number as its first column, so the balloons on the panel drawing and the parts list line up.
@@ -476,7 +476,7 @@ mod tests {
     fn bom_starts_with_the_panel_item_number() {
         let mut project = Project::new("t");
         let sid = project.sheets[0].id;
-        for (r, v) in [("K1", "[redacted]"), ("K9", "[redacted]")] {
+        for (r, v) in [("K1", "RLY-24V"), ("K9", "RLY-24V")] {
             let e = sym(r, v);
             project.sheet_mut(sid).unwrap().entities.insert(e.id(), e);
         }
@@ -488,7 +488,7 @@ mod tests {
             h: 40.0,
             rotation: 0,
             reference: "K1".into(),
-            part_no: "[redacted]".into(),
+            part_no: "RLY-24V".into(),
             item_no: Some(3),
         });
         panel.entities.insert(fp.id(), fp);
@@ -568,10 +568,10 @@ mod tests {
         let mut project = Project::new("t");
         let sid = project.sheets[0].id;
         let sheet = project.sheet_mut(sid).unwrap();
-        let e = sym("K1", "[redacted](D), 24VDC");
+        let e = sym("K1", "RLY-24V, 24VDC");
         sheet.entities.insert(e.id(), e);
         let csv = bom_csv(&project);
-        assert!(csv.contains("\"[redacted](D), 24VDC\""), "カンマ入りはクォート: {csv}");
+        assert!(csv.contains("\"RLY-24V, 24VDC\""), "カンマ入りはクォート: {csv}");
     }
 
     /// The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, followed by the mate and remark columns (G14/G18), and the older column order (sheet, wire number, harness, ...) is no longer produced.

@@ -1871,7 +1871,7 @@ mod tests {
                 }],
                 ..demo_block("", 0)
             },
-            demo_block("[redacted](D)/24DC-2Z6", 0),
+            demo_block("RLY-24V-2CO/24VDC-D", 0),
         ] {
             let width = device_block_layout(&block).width;
             for mirror in [false, true] {
