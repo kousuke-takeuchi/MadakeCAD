@@ -1350,11 +1350,11 @@
     "projectFilter": "Proyecto de MadakeCAD",
     "kicadFilter": "Esquema de KiCad",
     "discardConfirm": "Hay cambios sin guardar. ¿Descartarlos y continuar?",
+    "discardTitle": "Cambios sin guardar",
     "unsavedMark": "*",
     "titleNew": "Nuevo (Cmd+N)",
     "titleOpen": "Abrir (Cmd+O)",
     "titleSave": "Guardar (Cmd+S)",
-    "titleSaveAs": "Guardar como (Cmd+Shift+S)",
     "newLog": "NEW  Proyecto nuevo creado (elija dónde guardarlo con \"Guardar como\")",
     "newFailedLog": "NEW  No se pudo crear un proyecto nuevo: {message}",
     "openLog": "OPEN  Abierto {path}",
@@ -1471,8 +1471,7 @@
   },
   "fileTabs": {
     "lastSheetLog": "No se puede eliminar la última hoja",
-    "deleteConfirm": "¿Eliminar esta hoja? (deshacer la restaura)",
-    "addSheet": "Añadir hoja"
+    "deleteConfirm": "¿Eliminar esta hoja? (deshacer la restaura)"
   },
   "properties": {
     "title": "Propiedades",

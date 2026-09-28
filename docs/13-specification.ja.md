@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2321仕様項目**。
+全6領域・**2359仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2166,6 +2166,16 @@
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる <sub>`G13 device cross-reference`</sub>
 - 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない <sub>`G13 device cross-reference`</sub>
 
+### ファイル操作のショートカット
+
+- ⌘N=新規 / ⌘O=開く / ⌘S=保存 / ⇧⌘S=名前を付けて保存 <sub>`editor shortcuts: ファイル操作`</sub>
+- WindowsとLinuxではCtrlでも同じショートカットが効く <sub>`editor shortcuts: ファイル操作`</sub>
+- 修飾キー無しのN/O/Sはファイル操作にならない (図面のショートカットのまま) <sub>`editor shortcuts: ファイル操作`</sub>
+- モーダル (シンボルエディタ等) を開いている間はファイル操作のショートカットが効かない <sub>`editor shortcuts: ファイル操作`</sub>
+- ⌥を足した組み合わせ (⌥⌘Sなど) はファイル操作にしない <sub>`editor shortcuts: ファイル操作`</sub>
+- ⇧⌘Nと⇧⌘Oはファイル操作に割り当てない (別のショートカットに残す) <sub>`editor shortcuts: ファイル操作`</sub>
+- 判定は物理キー (`code`) で行うので、非ラテン配列でも同じキーで効く <sub>`editor shortcuts: ファイル操作`</sub>
+
 ### entityKindLabels
 
 - 図面に置ける全てのエンティティ種別に「種類」行のラベルがある (電線品番凡例ブロックも盤の凡例表も含む)。 <sub>`entity kind labels`</sub>
@@ -2226,6 +2236,15 @@
 - GitHub Copilotのプレミアムリクエストは小数のままトークンと別枠で数える <sub>`sumUsage`</sub>
 - 使用量がまだ無い会話は全て0(バッジは「1x」表示になる) <sub>`sumUsage`</sub>
 
+### 閉じる・リロード時の未保存ガード
+
+- 未保存の編集を捨てないと答えると、ウィンドウは閉じない <sub>`close guard: アプリ (Tauri)`</sub>
+- 未保存の編集を捨ててよいと答えると、ウィンドウはそのまま閉じる <sub>`close guard: アプリ (Tauri)`</sub>
+- 未保存の編集が無ければ確認は出ず、すぐ閉じる <sub>`close guard: アプリ (Tauri)`</sub>
+- ガードを取り外すと閉じる要求に割り込まなくなる <sub>`close guard: アプリ (Tauri)`</sub>
+- ブラウザ検証では未保存の編集があるときだけ離脱確認を出す <sub>`close guard: ブラウザ検証`</sub>
+- ブラウザ検証でもガードを取り外すと離脱確認は出なくなる <sub>`close guard: ブラウザ検証`</sub>
+
 ### drawingContext
 
 - 選択が無ければコンテキストはシート全体になる <sub>`drawingContextTag`</sub>
@@ -2242,6 +2261,7 @@
 - 保存先が未定なら「保存」は保存ダイアログを出す (名前を付けて保存と同じ) <sub>`file menu: 保存`</sub>
 - 保存ダイアログをキャンセルすると何も書かない <sub>`file menu: 保存`</sub>
 - 「名前を付けて保存」は開いているファイルのパスを既定にする <sub>`file menu: 保存`</sub>
+- 上書き保存に失敗したら、書こうとしたパスと理由をログに出し、未保存のまま残る <sub>`file menu: 保存`</sub>
 - 保存に失敗したら理由をログに出し、保存先は変えない <sub>`file menu: 保存`</sub>
 - 「新規」は無題のプロジェクトを作り、保存先は空になる <sub>`file menu: 新規と開く`</sub>
 - 未保存の編集があるときの「新規」は確認し、キャンセルすると図面はそのまま <sub>`file menu: 新規と開く`</sub>
@@ -2254,7 +2274,9 @@
 - .dxfを選ぶとDXF図面として読み込み、件数と警告をログに出す <sub>`file menu: 新規と開く`</sub>
 - 「読み込み」ボタンは選んだ形式のフィルタだけで開くダイアログを出し、未保存の編集があれば先に確認する <sub>`file menu: 新規と開く`</sub>
 - 最近使ったファイルはダイアログ無しで開く <sub>`file menu: 新規と開く`</sub>
-- 開けなかった最近使ったファイルは一覧から外し、理由をログに出す <sub>`file menu: 新規と開く`</sub>
+- 無くなっていた最近使ったファイルは一覧から外し、理由をログに出す <sub>`file menu: 新規と開く`</sub>
+- 一時的に開けなかっただけ (権限・共有ドライブ未マウント) のファイルは一覧に残す <sub>`file menu: 新規と開く`</sub>
+- 「ファイルが無い」という失敗だけを見分ける (最近使ったファイルから外すかの判断に使う) <sub>`fileActions helpers`</sub>
 - DXF書き出しは「<シート名>.dxf」を既定にDXFフィルタで保存先を聞き、表示中のシートを書き出す <sub>`file menu: シートの書き出し`</sub>
 - KiCad書き出しは「<シート名>.kicad_sch」を既定にし、SVG/PDFは従来どおり拡張子のフィルタで保存する <sub>`file menu: シートの書き出し`</sub>
 - 保存ダイアログをキャンセルすると何も書き出さない <sub>`file menu: シートの書き出し`</sub>
@@ -2264,6 +2286,21 @@
 - 配線レイヤが決まらなかったDXF読み込みは、候補のレイヤ名をログで知らせて覚えておく <sub>`file menu: DXFの配線レイヤ`</sub>
 - 選んだレイヤで読み直すと、同じファイルをそのレイヤだけを配線として読み込む <sub>`file menu: DXFの配線レイヤ`</sub>
 - 直前のDXF読み込みが無ければ読み直しは何もしない <sub>`file menu: DXFの配線レイヤ`</sub>
+
+### ネイティブダイアログ (確認/通知/ファイル選択)
+
+- アプリ本体の確認ダイアログはプラグインの`ask`を「警告」として出し、「はい」でtrueになる <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- 確認ダイアログで「いいえ」を選ぶとfalseになり、続行しない <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- 確認ダイアログのタイトルと重大度は呼び出し側で上書きできる <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- 通知はプラグインの`message`で出す (押せるのはOKだけ) <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- 保存先はプラグインの保存ダイアログで選び、既定のファイル名とフィルタを渡す <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- 開くファイルは1つだけ選べるダイアログで選ぶ <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- 開くダイアログをキャンセルするとnullになる (複数選択の結果もnull扱い) <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- ブラウザ検証では確認は`window.confirm`で出す <sub>`native dialogs: Tauri外 (ブラウザ検証) のフォールバック`</sub>
+- ブラウザ検証では通知は`window.alert`で出す <sub>`native dialogs: Tauri外 (ブラウザ検証) のフォールバック`</sub>
+- ブラウザ検証ではネイティブのファイルダイアログが無いので、保存先はファイル名を既定にして入力してもらう <sub>`native dialogs: Tauri外 (ブラウザ検証) のフォールバック`</sub>
+- ブラウザ検証で開くパスも入力してもらい、キャンセルするとnullになる <sub>`native dialogs: Tauri外 (ブラウザ検証) のフォールバック`</sub>
+- ダイアログを持たない実行環境 (テストランナー等) では確認はfalse・入力はnullになり、例外は出さない <sub>`native dialogs: Tauri外 (ブラウザ検証) のフォールバック`</sub>
 
 ### 整えメトリクス (交差・重なり・グリッド)
 
@@ -2480,6 +2517,7 @@
 
 - 起動直後は読み込み済みの図面が「保存済み」の基準になり、未保存の編集は無い <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - 図面を編集すると未保存の編集ありになる <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- undoで保存時と同じ内容に戻しても未保存の印は消えない (revisionは戻らない) <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - ファイルを開くとそのパスが保存先になり、未保存の編集は無くなる <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - ファイルを開くとundo/redoの履歴は空になる (前の図面には戻れない) <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - 保存先が決まっていれば「保存」はダイアログ無しで同じファイルへ上書きする <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
@@ -2494,6 +2532,15 @@
 - 同じファイルを開き直すと重複せず先頭へ移る <sub>`projectFile store: 最近使ったファイル`</sub>
 - 一覧は上限件数までで、古いものから落ちる <sub>`projectFile store: 最近使ったファイル`</sub>
 - 一覧から外したファイルは保管先からも消える <sub>`projectFile store: 最近使ったファイル`</sub>
+- 保管データが重複していても起動時の一覧は重複なしになる <sub>`projectFile store: 最近使ったファイル`</sub>
+- 保管データが上限を超えていても起動時の一覧は上限件数までになる <sub>`projectFile store: 最近使ったファイル`</sub>
+- 書いた一覧はlocalStorageから読み戻せる (アプリを閉じても残る) <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- 保管が空なら一覧も空から始まる <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- 壊れたJSONが保管されていても空の一覧になる (起動を止めない) <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- 配列でない値が保管されていても空の一覧になる <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- 文字列でない要素は一覧から落とす <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- 保管できない環境 (プライベートモード・容量超過) でも例外にせず、一覧はセッション内だけ生きる <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- localStorageが無い実行環境でも一覧は空として扱う <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
 - パスからファイル名を取り出す (`/`区切りと`\`区切りの両方) <sub>`projectFile helpers`</sub>
 - 拡張子が.dxf(大文字小文字を問わず)ならDXF図面とみなす <sub>`projectFile helpers`</sub>
 - 拡張子が.kicad_sch(大文字小文字を問わず)ならKiCad回路図とみなす <sub>`projectFile helpers`</sub>

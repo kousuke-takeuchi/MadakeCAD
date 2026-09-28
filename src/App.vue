@@ -1,25 +1,39 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import EditorLayout from "./components/EditorLayout.vue";
+import { closeGuard } from "./composables/closeGuard";
+import { useFileActions } from "./composables/fileActions";
 import { useDocumentStore } from "./stores/document";
 import { useProjectFileStore } from "./stores/projectFile";
 
 const store = useDocumentStore();
 const projectFile = useProjectFileStore();
+const files = useFileActions();
 const { t } = useI18n();
 const ready = ref(false);
 const error = ref<string | null>(null);
+let detachCloseGuard: (() => void) | null = null;
 
 onMounted(async () => {
   try {
     await store.bootstrap();
     // 起動時の図面を「保存済み」の基準にし、最近使ったファイルを読む
     projectFile.attach();
+    // ウィンドウを閉じる / リロードするときも未保存の編集を確認する
+    detachCloseGuard = await closeGuard.install({
+      dirty: () => projectFile.dirty,
+      confirmDiscard: () => files.confirmClose(),
+    });
     ready.value = true;
   } catch (e) {
     error.value = String(e);
   }
+});
+
+onBeforeUnmount(() => {
+  detachCloseGuard?.();
+  detachCloseGuard = null;
 });
 </script>
 

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2321 specification clauses** across 6 areas.
+**2359 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2166,6 +2166,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - places the text right of the symbol outline, level with the designator label <sub>`G13 device cross-reference`</sub>
 - clears a designator label wider than the symbol itself <sub>`G13 device cross-reference`</sub>
 
+### File keyboard shortcuts
+
+- Cmd+N is new, Cmd+O is open, Cmd+S is save and Shift+Cmd+S is save-as <sub>`editor shortcuts: ファイル操作`</sub>
+- Ctrl works the same as Cmd on Windows and Linux <sub>`editor shortcuts: ファイル操作`</sub>
+- plain N, O and S are not file shortcuts <sub>`editor shortcuts: ファイル操作`</sub>
+- file shortcuts do nothing while a modal is open <sub>`editor shortcuts: ファイル操作`</sub>
+- adding Option/Alt makes it a different shortcut, not a file action <sub>`editor shortcuts: ファイル操作`</sub>
+- Shift+Cmd+N and Shift+Cmd+O are not file actions <sub>`editor shortcuts: ファイル操作`</sub>
+- the decision is made on the physical key, so non-Latin layouts still work <sub>`editor shortcuts: ファイル操作`</sub>
+
 ### entityKindLabels
 
 - has a label for every entity kind that can be placed on a sheet <sub>`entity kind labels`</sub>
@@ -2226,6 +2236,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Copilot's premium requests are counted separately from tokens, as a fraction <sub>`sumUsage`</sub>
 - a conversation with no usage yet counts as zero <sub>`sumUsage`</sub>
 
+### Unsaved guard when closing or reloading
+
+- answering no to the discard confirmation keeps the window open <sub>`close guard: アプリ (Tauri)`</sub>
+- answering yes to the discard confirmation lets the window close <sub>`close guard: アプリ (Tauri)`</sub>
+- with nothing unsaved the window closes without asking <sub>`close guard: アプリ (Tauri)`</sub>
+- detaching the guard stops it from intercepting close requests <sub>`close guard: アプリ (Tauri)`</sub>
+- in a plain browser the leave confirmation appears only when something is unsaved <sub>`close guard: ブラウザ検証`</sub>
+- detaching the guard removes the browser leave confirmation <sub>`close guard: ブラウザ検証`</sub>
+
 ### drawingContext
 
 - with no selection the context covers the whole sheet <sub>`drawingContextTag`</sub>
@@ -2242,6 +2261,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - save asks for a path when the project has none yet <sub>`file menu: 保存`</sub>
 - cancelling the save dialog writes nothing <sub>`file menu: 保存`</sub>
 - save-as defaults to the currently open file's path <sub>`file menu: 保存`</sub>
+- a failed overwrite logs the path it tried and the drawing stays unsaved <sub>`file menu: 保存`</sub>
 - a failed save is logged and the save target stays unchanged <sub>`file menu: 保存`</sub>
 - new creates an untitled project with no save target <sub>`file menu: 新規と開く`</sub>
 - new asks before discarding unsaved changes, and cancel keeps the drawing <sub>`file menu: 新規と開く`</sub>
@@ -2254,7 +2274,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - choosing a .dxf imports it as a DXF drawing and logs the counts and warnings <sub>`file menu: 新規と開く`</sub>
 - the import buttons open the dialog with that format's filter only and confirm unsaved changes first <sub>`file menu: 新規と開く`</sub>
 - a recent file opens without a dialog <sub>`file menu: 新規と開く`</sub>
-- a recent file that fails to open is dropped from the list with the reason logged <sub>`file menu: 新規と開く`</sub>
+- a recent file that no longer exists is dropped from the list with the reason logged <sub>`file menu: 新規と開く`</sub>
+- a recent file that failed for a temporary reason stays in the list <sub>`file menu: 新規と開く`</sub>
+- only a missing-file failure is recognised as the file being gone <sub>`fileActions helpers`</sub>
 - exporting DXF asks for a path defaulting to <sheet>.dxf and writes the active sheet <sub>`file menu: シートの書き出し`</sub>
 - exporting KiCad defaults to <sheet>.kicad_sch, and SVG/PDF keep their extension filters <sub>`file menu: シートの書き出し`</sub>
 - cancelling the save dialog exports nothing <sub>`file menu: シートの書き出し`</sub>
@@ -2264,6 +2286,21 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - a DXF import with no wire layer logs the candidate layers and remembers them <sub>`file menu: DXFの配線レイヤ`</sub>
 - re-importing with a chosen wire layer reads the same file with only that layer as wires <sub>`file menu: DXFの配線レイヤ`</sub>
 - re-importing does nothing when no DXF import is remembered <sub>`file menu: DXFの配線レイヤ`</sub>
+
+### Native dialogs (confirm / notice / file picker)
+
+- a confirmation goes through the plugin's ask as a warning and yes means true <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- choosing no in a confirmation returns false <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- the confirmation title and kind can be overridden by the caller <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- a notice goes through the plugin's message dialog <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- a save target is chosen with the plugin's save dialog, given a default name and filters <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- a file to open is chosen with a single-selection dialog <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- cancelling the open dialog yields null, and so does a multi-selection result <sub>`native dialogs: Tauriのdialogプラグイン`</sub>
+- in a plain browser a confirmation uses window.confirm <sub>`native dialogs: Tauri外 (ブラウザ検証) のフォールバック`</sub>
+- in a plain browser a notice uses window.alert <sub>`native dialogs: Tauri外 (ブラウザ検証) のフォールバック`</sub>
+- without a native file dialog the save target is typed in, defaulting to the file name <sub>`native dialogs: Tauri外 (ブラウザ検証) のフォールバック`</sub>
+- the path to open is typed in too, and cancelling yields null <sub>`native dialogs: Tauri外 (ブラウザ検証) のフォールバック`</sub>
+- a host without dialogs answers no and null instead of throwing <sub>`native dialogs: Tauri外 (ブラウザ検証) のフォールバック`</sub>
 
 ### Tidy metrics (crossings / overlaps / grid)
 
@@ -2480,6 +2517,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - right after startup the loaded drawing counts as saved, with nothing unsaved <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - editing the drawing marks it as having unsaved changes <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
+- undoing back to the saved content still counts as unsaved <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - opening a file makes its path the save target and clears unsaved changes <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - opening a file empties the undo/redo history <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
 - save writes to the current file when one is known <sub>`projectFile store: 開いているファイルと未保存の編集`</sub>
@@ -2494,6 +2532,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reopening a file moves it to the front instead of duplicating it <sub>`projectFile store: 最近使ったファイル`</sub>
 - the list is capped, dropping the oldest entries <sub>`projectFile store: 最近使ったファイル`</sub>
 - removing a file drops it from the list and from storage <sub>`projectFile store: 最近使ったファイル`</sub>
+- duplicates in stored data are removed when the list is read at startup <sub>`projectFile store: 最近使ったファイル`</sub>
+- stored data over the cap is trimmed when the list is read at startup <sub>`projectFile store: 最近使ったファイル`</sub>
+- a written list can be read back from localStorage <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- an empty store starts with an empty list <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- broken JSON in storage yields an empty list instead of failing startup <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- a stored value that is not an array yields an empty list <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- elements that are not strings are dropped from the list <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- a store that refuses writes does not throw; the list only lives for the session <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
+- a runtime without localStorage is treated as an empty list <sub>`projectFile store: 最近使ったファイルの保管 (localStorage)`</sub>
 - fileNameOf returns the last path segment for both separators <sub>`projectFile helpers`</sub>
 - isDxfPath recognises the .dxf extension regardless of case <sub>`projectFile helpers`</sub>
 - isKicadPath recognises the .kicad_sch extension regardless of case <sub>`projectFile helpers`</sub>

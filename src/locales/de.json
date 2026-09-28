@@ -1350,11 +1350,11 @@
     "projectFilter": "MadakeCAD-Projekt",
     "kicadFilter": "KiCad-Schaltplan",
     "discardConfirm": "Es gibt ungespeicherte Änderungen. Verwerfen und fortfahren?",
+    "discardTitle": "Nicht gespeicherte Änderungen",
     "unsavedMark": "*",
     "titleNew": "Neu (Cmd+N)",
     "titleOpen": "Öffnen (Cmd+O)",
     "titleSave": "Speichern (Cmd+S)",
-    "titleSaveAs": "Speichern unter (Cmd+Shift+S)",
     "newLog": "NEW  Neues Projekt erstellt (Speicherort mit „Speichern unter“ wählen)",
     "newFailedLog": "NEW  Neues Projekt konnte nicht erstellt werden: {message}",
     "openLog": "OPEN  {path} geöffnet",
@@ -1471,8 +1471,7 @@
   },
   "fileTabs": {
     "lastSheetLog": "Das letzte Blatt kann nicht gelöscht werden",
-    "deleteConfirm": "Dieses Blatt löschen? (Rückgängig stellt es wieder her)",
-    "addSheet": "Blatt hinzufügen"
+    "deleteConfirm": "Dieses Blatt löschen? (Rückgängig stellt es wieder her)"
   },
   "properties": {
     "title": "Eigenschaften",

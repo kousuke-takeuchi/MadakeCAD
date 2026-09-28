@@ -17,7 +17,11 @@ export interface RecentStorage {
   set(list: string[]): void;
 }
 
-function localRecentStorage(): RecentStorage {
+/**
+ * 既定の保管先 (localStorage)。壊れたJSON・配列でない値・文字列以外の要素は落とし、
+ * 保管できない環境 (プライベートモード・quota超過) では一覧をセッション内だけに留める。
+ */
+export function localRecentStorage(): RecentStorage {
   return {
     get() {
       try {
@@ -86,7 +90,14 @@ export const useProjectFileStore = defineStore("projectFile", {
   }),
 
   getters: {
-    /** ディスクに無い編集があるか。 */
+    /**
+     * ディスクに無い編集があるか。
+     *
+     * revisionは編集を1つ適用するたびに増えるだけで、undoでも戻らない (undoも1つの編集と
+     * して数える)。そのため**undoで保存時と同じ内容に戻しても未保存の印 (`*`) は消えない**。
+     * 内容を比較するのではなく「保存してからドキュメントが動いたか」を見る設計で、
+     * 保存を促し損なう方向には倒れない。
+     */
     dirty(state): boolean {
       return useDocumentStore().revision !== state.savedRevision;
     },
@@ -100,11 +111,12 @@ export const useProjectFileStore = defineStore("projectFile", {
     /**
      * 起動直後に呼ぶ: 読み込み済みのドキュメントを「保存済み」の基準にし、
      * 最近使ったファイルを保管先から読む。
+     * 保管データが重複・上限超えでも一覧は重複なし・上限以内にそろえる。
      */
     attach(storage?: RecentStorage) {
       if (storage) this.storage = storage;
       this.savedRevision = useDocumentStore().revision;
-      this.recent = this.storage.get().slice(0, RECENT_LIMIT);
+      this.recent = [...new Set(this.storage.get())].slice(0, RECENT_LIMIT);
     },
 
     /** 読み込んだプロジェクトをミラーへ入れる。置換なのでundo/redo履歴は空になる。 */

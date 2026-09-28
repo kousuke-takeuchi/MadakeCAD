@@ -3,12 +3,17 @@ import { setActivePinia, createPinia } from "pinia";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  ask: vi.fn(),
+  message: vi.fn(),
+  open: vi.fn(),
+  save: vi.fn(),
+}));
 import { ipc, type Patch, type Project } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useProjectFileStore, type RecentStorage } from "../stores/projectFile";
 import { useUiStore } from "../stores/ui";
-import { useFileActions, type FileDialogs } from "./fileActions";
+import { isMissingFileError, useFileActions, type FileDialogs } from "./fileActions";
 
 function project(name = "panel"): Project {
   return { format_version: 2, name, wire_parts: [], plc_assignments: [], sheets: [] };
@@ -29,7 +34,7 @@ function fakeDialogs(answers: { open?: string | null; save?: string | null; disc
   const dialogs: FileDialogs = {
     pickOpen: vi.fn(async () => answers.open ?? null),
     pickSave: vi.fn(async () => answers.save ?? null),
-    confirmDiscard: vi.fn(() => answers.discard ?? true),
+    confirmDiscard: vi.fn(async () => answers.discard ?? true),
   };
   return dialogs;
 }
@@ -82,6 +87,20 @@ describe("file menu: 保存", () => {
     await useFileActions(dialogs).saveProjectAs();
     expect(dialogs.pickSave).toHaveBeenCalledWith("/work/panel.mdkproj", expect.anything());
     expect(useProjectFileStore().path).toBe("/work/copy.mdkproj");
+  });
+
+  // ja: 上書き保存に失敗したら、書こうとしたパスと理由をログに出し、未保存のまま残る
+  it("a failed overwrite logs the path it tried and the drawing stays unsaved", async () => {
+    vi.spyOn(ipc, "saveProject").mockRejectedValue(new Error("disk full"));
+    const file = useProjectFileStore();
+    file.path = "/work/panel.mdkproj";
+    edit(2);
+    expect(await useFileActions(fakeDialogs({})).saveProject()).toBe(false);
+    expect(file.path).toBe("/work/panel.mdkproj");
+    expect(file.dirty).toBe(true);
+    const log = useUiStore().lastMessage;
+    expect(log).toContain("/work/panel.mdkproj");
+    expect(log).toContain("disk full");
   });
 
   // ja: 保存に失敗したら理由をログに出し、保存先は変えない
@@ -228,8 +247,8 @@ describe("file menu: 新規と開く", () => {
     expect(ipc.loadProject).toHaveBeenCalledWith("/work/recent.mdkproj");
   });
 
-  // ja: 開けなかった最近使ったファイルは一覧から外し、理由をログに出す
-  it("a recent file that fails to open is dropped from the list with the reason logged", async () => {
+  // ja: 無くなっていた最近使ったファイルは一覧から外し、理由をログに出す
+  it("a recent file that no longer exists is dropped from the list with the reason logged", async () => {
     vi.spyOn(ipc, "loadProject").mockRejectedValue(new Error("no such file"));
     const file = useProjectFileStore();
     file.addRecent("/work/gone.mdkproj");
@@ -237,6 +256,27 @@ describe("file menu: 新規と開く", () => {
     expect(file.recent).not.toContain("/work/gone.mdkproj");
     expect(useUiStore().lastMessage).toContain("no such file");
     expect(useDocumentStore().project?.name).toBe("panel");
+  });
+
+  // ja: 一時的に開けなかっただけ (権限・共有ドライブ未マウント) のファイルは一覧に残す
+  it("a recent file that failed for a temporary reason stays in the list", async () => {
+    vi.spyOn(ipc, "loadProject").mockRejectedValue(new Error("permission denied"));
+    const file = useProjectFileStore();
+    file.addRecent("/work/locked.mdkproj");
+    expect(await useFileActions(fakeDialogs({})).openRecent("/work/locked.mdkproj")).toBe(false);
+    expect(file.recent).toContain("/work/locked.mdkproj");
+    expect(useUiStore().lastMessage).toContain("permission denied");
+  });
+});
+
+describe("fileActions helpers", () => {
+  // ja: 「ファイルが無い」という失敗だけを見分ける (最近使ったファイルから外すかの判断に使う)
+  it("only a missing-file failure is recognised as the file being gone", () => {
+    expect(isMissingFileError("No such file or directory (os error 2)")).toBe(true);
+    expect(isMissingFileError("NotFound")).toBe(true);
+    expect(isMissingFileError("ファイルが見つかりません")).toBe(true);
+    expect(isMissingFileError("permission denied")).toBe(false);
+    expect(isMissingFileError("invalid JSON at line 3")).toBe(false);
   });
 });
 

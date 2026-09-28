@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, provide, reactive } from "vue";
 import { useFileActions } from "../composables/fileActions";
+import { fileShortcutOf, type FileShortcut } from "./editorShortcuts";
 import { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
@@ -61,19 +62,36 @@ const controller = reactive(new EditorController(store)) as EditorController;
 provide("controller", controller);
 const files = useFileActions();
 
-/** ⌘N=新規 / ⌘O=開く / ⌘S=保存 / ⇧⌘S=名前を付けて保存。該当しなければnull。 */
-function fileShortcut(ev: KeyboardEvent): (() => Promise<boolean>) | null {
-  switch (ev.key.toLowerCase()) {
-    case "n":
-      return ev.shiftKey ? null : files.newProject;
-    case "o":
-      return ev.shiftKey ? null : files.openProject;
-    case "s":
-      return ev.shiftKey ? files.saveProjectAs : files.saveProject;
-    default:
-      return null;
-  }
+/**
+ * モーダル (ダイアログ・エディタ) が開いているか。
+ * 開いている間はキャンバスのショートカットもファイル操作のショートカットも走らせない
+ * (モーダルの下でドキュメントが差し替わるのを防ぐ)。
+ */
+function anyModalOpen(): boolean {
+  return (
+    ui.settingsOpen ||
+    ui.symbolPickerOpen ||
+    revisions.open ||
+    projectInfo.open ||
+    sheetPaper.open ||
+    wireNumbers.open ||
+    terminals.open ||
+    plcIo.open ||
+    reportDialog.open ||
+    pdfBook.open ||
+    macros.saveOpen ||
+    symbolEditor.open ||
+    blockEditor.active
+  );
 }
+
+/** ショートカットの種類から実際のファイル操作へ。 */
+const fileActionOf: Record<FileShortcut, () => Promise<boolean>> = {
+  new: () => files.newProject(),
+  open: () => files.openProject(),
+  save: () => files.saveProject(),
+  saveAs: () => files.saveProjectAs(),
+};
 
 function isEditableTarget(ev: KeyboardEvent) {
   const t = ev.target as HTMLElement | null;
@@ -87,14 +105,13 @@ async function onKeyDown(ev: KeyboardEvent) {
     search.openBar();
     return;
   }
-  // ファイル操作 (⌘N/⌘O/⌘S/⇧⌘S)。入力欄に居ても効かせる (保存はどこからでも)
-  if (ev.metaKey || ev.ctrlKey) {
-    const fileAction = fileShortcut(ev);
-    if (fileAction) {
-      ev.preventDefault();
-      void fileAction();
-      return;
-    }
+  // ファイル操作 (⌘N/⌘O/⌘S/⇧⌘S)。入力欄に居ても効かせる (保存はどこからでも) が、
+  // モーダル中は効かせない (開いたままのモーダルの下で図面が差し替わるのを防ぐ)
+  const shortcut = fileShortcutOf(ev, anyModalOpen());
+  if (shortcut) {
+    ev.preventDefault();
+    void fileActionOf[shortcut]();
+    return;
   }
   if (ev.key === "Escape" && ui.settingsOpen) {
     ui.settingsOpen = false;
@@ -179,21 +196,7 @@ async function onKeyDown(ev: KeyboardEvent) {
   }
   if (isEditableTarget(ev)) return;
   // モーダル表示中はキャンバスのショートカットを走らせない
-  if (
-    revisions.open ||
-    projectInfo.open ||
-    sheetPaper.open ||
-    wireNumbers.open ||
-    terminals.open ||
-    plcIo.open ||
-    reportDialog.open ||
-    pdfBook.open ||
-    macros.saveOpen ||
-    symbolEditor.open ||
-    blockEditor.active
-  ) {
-    return;
-  }
+  if (anyModalOpen()) return;
   if (await controller.onKeyDown(ev)) ev.preventDefault();
 }
 function onKeyUp(ev: KeyboardEvent) {

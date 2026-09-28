@@ -1350,11 +1350,11 @@
     "projectFilter": "Projet MadakeCAD",
     "kicadFilter": "Schéma KiCad",
     "discardConfirm": "Il y a des modifications non enregistrées. Les abandonner et continuer ?",
+    "discardTitle": "Modifications non enregistrées",
     "unsavedMark": "*",
     "titleNew": "Nouveau (Cmd+N)",
     "titleOpen": "Ouvrir (Cmd+O)",
     "titleSave": "Enregistrer (Cmd+S)",
-    "titleSaveAs": "Enregistrer sous (Cmd+Shift+S)",
     "newLog": "NEW  Nouveau projet créé (choisissez où l'enregistrer avec « Enregistrer sous »)",
     "newFailedLog": "NEW  Impossible de créer un nouveau projet : {message}",
     "openLog": "OPEN  {path} ouvert",
@@ -1471,8 +1471,7 @@
   },
   "fileTabs": {
     "lastSheetLog": "La dernière feuille ne peut pas être supprimée",
-    "deleteConfirm": "Supprimer cette feuille ? (annuler la restaure)",
-    "addSheet": "Ajouter une feuille"
+    "deleteConfirm": "Supprimer cette feuille ? (annuler la restaure)"
   },
   "properties": {
     "title": "Propriétés",

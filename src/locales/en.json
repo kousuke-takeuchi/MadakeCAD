@@ -1350,11 +1350,11 @@
     "projectFilter": "MadakeCAD project",
     "kicadFilter": "KiCad schematic",
     "discardConfirm": "There are unsaved changes. Discard them and continue?",
+    "discardTitle": "Unsaved changes",
     "unsavedMark": "*",
     "titleNew": "New (Cmd+N)",
     "titleOpen": "Open (Cmd+O)",
     "titleSave": "Save (Cmd+S)",
-    "titleSaveAs": "Save As (Cmd+Shift+S)",
     "newLog": "NEW  Created a new project (choose where to save it with \"Save As\")",
     "newFailedLog": "NEW  Could not create a new project: {message}",
     "openLog": "OPEN  Opened {path}",
@@ -1471,8 +1471,7 @@
   },
   "fileTabs": {
     "lastSheetLog": "The last sheet cannot be deleted",
-    "deleteConfirm": "Delete this sheet? (undo restores it)",
-    "addSheet": "Add sheet"
+    "deleteConfirm": "Delete this sheet? (undo restores it)"
   },
   "properties": {
     "title": "Properties",

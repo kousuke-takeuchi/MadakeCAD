@@ -1350,11 +1350,11 @@
     "projectFilter": "MadakeCAD 项目",
     "kicadFilter": "KiCad 原理图",
     "discardConfirm": "有未保存的更改。是否放弃并继续?",
+    "discardTitle": "未保存的更改",
     "unsavedMark": "*",
     "titleNew": "新建 (Cmd+N)",
     "titleOpen": "打开 (Cmd+O)",
     "titleSave": "保存 (Cmd+S)",
-    "titleSaveAs": "另存为 (Cmd+Shift+S)",
     "newLog": "NEW  已创建新项目(请通过“另存为”选择保存位置)",
     "newFailedLog": "NEW  无法创建新项目: {message}",
     "openLog": "OPEN  已打开 {path}",
@@ -1471,8 +1471,7 @@
   },
   "fileTabs": {
     "lastSheetLog": "无法删除最后一个图页",
-    "deleteConfirm": "是否删除此图页?(撤销可恢复)",
-    "addSheet": "添加图页"
+    "deleteConfirm": "是否删除此图页?(撤销可恢复)"
   },
   "properties": {
     "title": "属性",

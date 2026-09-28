@@ -1,27 +1,26 @@
 // ファイル操作 (新規/開く/保存/名前を付けて保存/エクスポート)。
-// OSのダイアログはTauriのdialogプラグイン、Tauri外(ブラウザ検証)ではprompt入力にフォールバックする。
+// OSのダイアログ・確認ダイアログはすべて`nativeDialogs` (Tauriのdialogプラグイン、
+// Tauri外のブラウザ検証では`window.*`) を通す。webviewの`window.confirm`/`prompt`は
+// 実装が無く無言で既定値を返すので、アプリの導線から直接呼んではならない。
 // ファイルの状態(パス・未保存・最近使ったファイル)はprojectFile storeが持ち、ここは
 // ダイアログと確認、ログ出力だけを担当する。
 
-import { open as dialogOpen, save as dialogSave } from "@tauri-apps/plugin-dialog";
 import { entityKindLabels, type EntityKind } from "../components/entityKindLabels";
 import { i18n } from "../i18n";
-import { inTauri, ipc, type ExportReport } from "../ipc";
+import { ipc, type ExportReport } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { isDxfPath, isKicadPath, useProjectFileStore } from "../stores/projectFile";
 import { useUiStore } from "../stores/ui";
+import { nativeDialogs, type DialogFilter, type NativeDialogs } from "./nativeDialogs";
 
-interface Filter {
-  name: string;
-  extensions: string[];
-}
+type Filter = DialogFilter;
 
 /** ファイル操作が使うダイアログ群。テストではメモリ実装を差し込む。 */
 export interface FileDialogs {
   pickSave(defaultPath: string, filters: Filter[]): Promise<string | null>;
   pickOpen(filters: Filter[]): Promise<string | null>;
   /** 未保存の編集を捨ててよいかの確認。trueで続行。 */
-  confirmDiscard(message: string): boolean;
+  confirmDiscard(message: string): Promise<boolean>;
 }
 
 /**
@@ -29,8 +28,23 @@ export interface FileDialogs {
  * 帳票ダイアログの「参照...」もこれを使う (モーダルの上のモーダルにはならない)。
  */
 export async function pickSave(defaultPath: string, filters: Filter[]): Promise<string | null> {
-  if (inTauri) return dialogSave({ defaultPath, filters });
-  return window.prompt(i18n.global.t("file.promptSave"), `/tmp/${defaultPath}`);
+  return nativeDialogs.save(defaultPath, filters, i18n.global.t("file.promptSave"));
+}
+
+/**
+ * 「開けなかった」が「ファイルが無い」ときだけtrue。
+ * 共有ドライブ未マウント・権限の揺れのような一時的な失敗で、有効なエントリを
+ * 最近使ったファイルから恒久的に消さないための判定。
+ */
+export function isMissingFileError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("no such file") ||
+    lower.includes("not found") ||
+    lower.includes("notfound") ||
+    lower.includes("os error 2") ||
+    message.includes("見つかりません")
+  );
 }
 
 /** 読み込める図面形式 (プロジェクト以外)。 */
@@ -43,19 +57,18 @@ export function filterFor(extension: string): Filter[] {
   return [{ name: extension.toUpperCase(), extensions: [extension] }];
 }
 
-async function pickOpen(filters: Filter[]): Promise<string | null> {
-  if (inTauri) {
-    const r = await dialogOpen({ multiple: false, filters });
-    return typeof r === "string" ? r : null;
-  }
-  return window.prompt(i18n.global.t("file.promptOpen"));
+/** 既定のダイアログ群 (ネイティブ層をそのまま使う)。 */
+export function osFileDialogs(dialogs: NativeDialogs = nativeDialogs): FileDialogs {
+  return {
+    pickSave: (defaultPath, filters) =>
+      dialogs.save(defaultPath, filters, i18n.global.t("file.promptSave")),
+    pickOpen: (filters) => dialogs.open(filters, i18n.global.t("file.promptOpen")),
+    confirmDiscard: (message) =>
+      dialogs.confirm(message, { title: i18n.global.t("file.discardTitle"), kind: "warning" }),
+  };
 }
 
-const osDialogs: FileDialogs = {
-  pickSave,
-  pickOpen,
-  confirmDiscard: (message) => window.confirm(message),
-};
+const osDialogs: FileDialogs = osFileDialogs();
 
 export function useFileActions(dialogs: FileDialogs = osDialogs) {
   const store = useDocumentStore();
@@ -70,7 +83,7 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
   });
 
   /** 未保存の編集があれば捨ててよいか確認する。無ければそのまま続行。 */
-  function confirmDiscard(): boolean {
+  async function confirmDiscard(): Promise<boolean> {
     if (!file.dirty) return true;
     return dialogs.confirmDiscard(t("discardConfirm"));
   }
@@ -105,8 +118,11 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
       }
       return true;
     } catch (e) {
-      file.removeRecent(path);
-      ui.log(t("openFailedLog", { path, message: String(e) }));
+      const message = String(e);
+      // ファイルが無くなっていたときだけ一覧から外す。一時的に開けなかった (共有ドライブが
+      // 未マウント・権限の揺れ) だけのエントリは残す
+      if (isMissingFileError(message)) file.removeRecent(path);
+      ui.log(t("openFailedLog", { path, message }));
       return false;
     }
   }
@@ -130,9 +146,16 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
   }
 
   return {
+    /**
+     * 閉じる/リロードしてよいか (未保存の編集があれば確認する)。
+     * ウィンドウの閉じる要求のガード (`closeGuard`) がこれを使う。
+     */
+    confirmClose(): Promise<boolean> {
+      return confirmDiscard();
+    },
     /** 空の新規プロジェクトを始める。未保存の編集があれば先に確認する。 */
     async newProject(): Promise<boolean> {
-      if (!confirmDiscard()) return false;
+      if (!(await confirmDiscard())) return false;
       try {
         await file.create(t("untitled"));
       } catch (e) {
@@ -144,14 +167,14 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
     },
     /** OSのダイアログでファイルを選んで開く。未保存の編集があれば先に確認する。 */
     async openProject(): Promise<boolean> {
-      if (!confirmDiscard()) return false;
+      if (!(await confirmDiscard())) return false;
       const path = await dialogs.pickOpen([projectFilter(), kicadFilter(), dxfFilter()]);
       if (!path) return false;
       return openPath(path);
     },
     /** KiCad回路図 / DXFを選んで読み込む (リボン「読み込み/書き出し」)。未保存の編集があれば先に確認する。 */
     async importFile(kind: ImportKind): Promise<boolean> {
-      if (!confirmDiscard()) return false;
+      if (!(await confirmDiscard())) return false;
       const path = await dialogs.pickOpen([kind === "kicad" ? kicadFilter() : dxfFilter()]);
       if (!path) return false;
       return openPath(path);
@@ -163,7 +186,7 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
     async reimportDxfWithWireLayer(layer: string): Promise<boolean> {
       const last = file.lastDxf;
       if (!last) return false;
-      if (!confirmDiscard()) return false;
+      if (!(await confirmDiscard())) return false;
       ui.log(t("dxfReimportLog", { layer, path: last.path }));
       return openPath(last.path, [layer]);
     },
@@ -203,13 +226,25 @@ export function useFileActions(dialogs: FileDialogs = osDialogs) {
     },
     /** 最近使ったファイルを開く。開けなければ一覧から外す。 */
     async openRecent(path: string): Promise<boolean> {
-      if (!confirmDiscard()) return false;
+      if (!(await confirmDiscard())) return false;
       return openPath(path);
     },
-    /** 上書き保存。保存先が未定なら「名前を付けて保存」になる。 */
+    /**
+     * 上書き保存。保存先が未定なら「名前を付けて保存」になる。
+     * 保存先が決まっているかの判定はstoreの`save()`に任せる (分岐は1か所)。
+     */
     async saveProject(): Promise<boolean> {
-      if (!file.path) return saveProjectAs();
-      return saveTo(file.path);
+      const target = file.path;
+      try {
+        if (await file.save()) {
+          ui.log(t("saveLog", { path: target }));
+          return true;
+        }
+      } catch (e) {
+        ui.log(t("saveFailedLog", { path: target, message: String(e) }));
+        return false;
+      }
+      return saveProjectAs();
     },
     saveProjectAs,
     exportSvg(): Promise<boolean> {

@@ -7,9 +7,11 @@ import { ipc, type Patch, type Project } from "../ipc";
 import { useDocumentStore } from "./document";
 import {
   RECENT_LIMIT,
+  RECENT_STORAGE_KEY,
   fileNameOf,
   isDxfPath,
   isKicadPath,
+  localRecentStorage,
   useProjectFileStore,
   type RecentStorage,
 } from "./projectFile";
@@ -63,6 +65,20 @@ describe("projectFile store: 開いているファイルと未保存の編集", 
     const file = useProjectFileStore();
     file.attach(memoryStorage());
     edit(6);
+    expect(file.dirty).toBe(true);
+  });
+
+  // ja: undoで保存時と同じ内容に戻しても未保存の印は消えない (revisionは戻らない)
+  it("undoing back to the saved content still counts as unsaved", async () => {
+    vi.spyOn(ipc, "saveProject").mockResolvedValue();
+    const file = useProjectFileStore();
+    file.attach(memoryStorage());
+    await file.saveAs("/work/panel.mdkproj");
+    expect(file.dirty).toBe(false);
+    edit(6);
+    expect(file.dirty).toBe(true);
+    // undoも1つの編集としてrevisionを進めるので、内容が戻っても未保存のまま
+    edit(7);
     expect(file.dirty).toBe(true);
   });
 
@@ -237,6 +253,115 @@ describe("projectFile store: 最近使ったファイル", () => {
     file.removeRecent("/a.mdkproj");
     expect(file.recent).toEqual(["/b.mdkproj"]);
     expect(storage.saved[storage.saved.length - 1]).toEqual(["/b.mdkproj"]);
+  });
+
+  // ja: 保管データが重複していても起動時の一覧は重複なしになる
+  it("duplicates in stored data are removed when the list is read at startup", () => {
+    const file = useProjectFileStore();
+    file.attach(memoryStorage(["/a.mdkproj", "/b.mdkproj", "/a.mdkproj"]));
+    expect(file.recent).toEqual(["/a.mdkproj", "/b.mdkproj"]);
+  });
+
+  // ja: 保管データが上限を超えていても起動時の一覧は上限件数までになる
+  it("stored data over the cap is trimmed when the list is read at startup", () => {
+    const stored = Array.from({ length: RECENT_LIMIT + 3 }, (_, i) => `/p${i}.mdkproj`);
+    const file = useProjectFileStore();
+    file.attach(memoryStorage(stored));
+    expect(file.recent).toHaveLength(RECENT_LIMIT);
+    expect(file.recent[0]).toBe("/p0.mdkproj");
+  });
+});
+
+/** localStorageのフェイク (値を保持し、書き込みを拒否させることもできる)。 */
+function fakeLocalStorage(initial?: string, readonly = false) {
+  const values = new Map<string, string>();
+  if (initial !== undefined) values.set(RECENT_STORAGE_KEY, initial);
+  return {
+    values,
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      if (readonly) throw new Error("QuotaExceededError");
+      values.set(key, value);
+    },
+  };
+}
+
+/** `globalThis.localStorage`を差し替えて`fn`を走らせ、必ず元に戻す。 */
+function withLocalStorage<T>(stub: unknown, fn: () => T): T {
+  const target = globalThis as unknown as { localStorage?: unknown };
+  const had = "localStorage" in target;
+  const previous = target.localStorage;
+  Object.defineProperty(target, "localStorage", { value: stub, configurable: true, writable: true });
+  try {
+    return fn();
+  } finally {
+    if (had) {
+      Object.defineProperty(target, "localStorage", {
+        value: previous,
+        configurable: true,
+        writable: true,
+      });
+    } else {
+      delete target.localStorage;
+    }
+  }
+}
+
+describe("projectFile store: 最近使ったファイルの保管 (localStorage)", () => {
+  // ja: 書いた一覧はlocalStorageから読み戻せる (アプリを閉じても残る)
+  it("a written list can be read back from localStorage", () => {
+    const store = fakeLocalStorage();
+    withLocalStorage(store, () => {
+      const storage = localRecentStorage();
+      storage.set(["/a.mdkproj", "/b.mdkproj"]);
+      expect(localRecentStorage().get()).toEqual(["/a.mdkproj", "/b.mdkproj"]);
+    });
+    expect(store.values.get(RECENT_STORAGE_KEY)).toBe('["/a.mdkproj","/b.mdkproj"]');
+  });
+
+  // ja: 保管が空なら一覧も空から始まる
+  it("an empty store starts with an empty list", () => {
+    withLocalStorage(fakeLocalStorage(), () => {
+      expect(localRecentStorage().get()).toEqual([]);
+    });
+  });
+
+  // ja: 壊れたJSONが保管されていても空の一覧になる (起動を止めない)
+  it("broken JSON in storage yields an empty list instead of failing startup", () => {
+    withLocalStorage(fakeLocalStorage("{not json"), () => {
+      expect(localRecentStorage().get()).toEqual([]);
+    });
+  });
+
+  // ja: 配列でない値が保管されていても空の一覧になる
+  it("a stored value that is not an array yields an empty list", () => {
+    withLocalStorage(fakeLocalStorage('{"a":1}'), () => {
+      expect(localRecentStorage().get()).toEqual([]);
+    });
+  });
+
+  // ja: 文字列でない要素は一覧から落とす
+  it("elements that are not strings are dropped from the list", () => {
+    withLocalStorage(fakeLocalStorage('["/a.mdkproj",3,null,"/b.mdkproj"]'), () => {
+      expect(localRecentStorage().get()).toEqual(["/a.mdkproj", "/b.mdkproj"]);
+    });
+  });
+
+  // ja: 保管できない環境 (プライベートモード・容量超過) でも例外にせず、一覧はセッション内だけ生きる
+  it("a store that refuses writes does not throw; the list only lives for the session", () => {
+    withLocalStorage(fakeLocalStorage(undefined, true), () => {
+      expect(() => localRecentStorage().set(["/a.mdkproj"])).not.toThrow();
+      expect(localRecentStorage().get()).toEqual([]);
+    });
+  });
+
+  // ja: localStorageが無い実行環境でも一覧は空として扱う
+  it("a runtime without localStorage is treated as an empty list", () => {
+    withLocalStorage(undefined, () => {
+      const storage = localRecentStorage();
+      expect(storage.get()).toEqual([]);
+      expect(() => storage.set(["/a.mdkproj"])).not.toThrow();
+    });
   });
 });
 

@@ -1350,11 +1350,11 @@
     "projectFilter": "MadakeCADプロジェクト",
     "kicadFilter": "KiCad回路図",
     "discardConfirm": "保存していない編集があります。破棄して続けますか?",
+    "discardTitle": "未保存の編集",
     "unsavedMark": "*",
     "titleNew": "新規 (Cmd+N)",
     "titleOpen": "開く (Cmd+O)",
     "titleSave": "保存 (Cmd+S)",
-    "titleSaveAs": "名前を付けて保存 (Cmd+Shift+S)",
     "newLog": "NEW  新しいプロジェクトを作成しました (保存先は「名前を付けて保存」で決めます)",
     "newFailedLog": "NEW  新しいプロジェクトを作れませんでした: {message}",
     "openLog": "OPEN  {path} を開きました",
@@ -1471,8 +1471,7 @@
   },
   "fileTabs": {
     "lastSheetLog": "最後のシートは削除できません",
-    "deleteConfirm": "このシートを削除しますか?(undoで戻せます)",
-    "addSheet": "シートを追加"
+    "deleteConfirm": "このシートを削除しますか?(undoで戻せます)"
   },
   "properties": {
     "title": "プロパティ",

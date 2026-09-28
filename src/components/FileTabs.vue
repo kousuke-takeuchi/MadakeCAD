@@ -6,6 +6,7 @@ import { LayoutPanelTop, Plus, X } from "lucide-vue-next";
 import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { addSheetCommand, isPanelSheet, sheetKind, sheetKindLabelKey } from "../canvas/sheets";
+import { nativeDialogs } from "../composables/nativeDialogs";
 import { usePopover } from "../composables/popover";
 import type { SheetKind } from "../ipc";
 import { useDocumentStore } from "../stores/document";
@@ -38,7 +39,8 @@ async function closeSheet(id: string) {
     ui.log(t("fileTabs.lastSheetLog"));
     return;
   }
-  if (!window.confirm(t("fileTabs.deleteConfirm"))) return;
+  // webviewの`window.confirm`は実装が無く無言でfalseになるので、ネイティブ層を通す
+  if (!(await nativeDialogs.confirm(t("fileTabs.deleteConfirm"), { kind: "warning" }))) return;
   await store.execute({ type: "remove_sheet", sheet_id: id });
 }
 

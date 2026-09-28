@@ -469,6 +469,9 @@ const reportGroups = computed<RibbonGroup[]>(() => [
   },
 ]);
 
+/** 最近使ったファイルの1列の件数 (ファイル名は長いので上限4より詰めない)。 */
+const RECENT_COLUMN_ROWS = 3;
+
 /**
  * 「ホーム」タブ: プロジェクトファイルの新規/開く/保存/名前を付けて保存と、
  * 最近使ったファイル (3件ずつの縦列、ボタンの表示はファイル名・ツールチップにフルパス)。
@@ -484,13 +487,11 @@ const homeGroups = computed<RibbonGroup[]>(() => {
         color: "var(--acad-blue)",
         action: () => files.saveProject(),
       },
-      small: [
-        [
-          { label: t("file.new"), icon: FilePlus, action: () => files.newProject() },
-          { label: t("file.open"), icon: FolderOpen, action: () => files.openProject() },
-          { label: t("file.saveAs"), icon: FileOutput, action: () => files.saveProjectAs() },
-        ],
-      ],
+      small: smallColumns([
+        { label: t("file.new"), icon: FilePlus, action: () => files.newProject() },
+        { label: t("file.open"), icon: FolderOpen, action: () => files.openProject() },
+        { label: t("file.saveAs"), icon: FileOutput, action: () => files.saveProjectAs() },
+      ]),
     },
   ];
   const recent = projectFile.recent.map<RibbonItem>((path) => ({
@@ -503,9 +504,8 @@ const homeGroups = computed<RibbonGroup[]>(() => {
   if (recent.length) {
     groups.push({
       name: t("file.recentGroup"),
-      small: Array.from({ length: Math.ceil(recent.length / 3) }, (_, i) =>
-        recent.slice(i * 3, i * 3 + 3),
-      ),
+      // 最大8件を1列3個ずつ (最大3列)。列分けはribbonLayoutに任せる
+      small: smallColumns(recent, RECENT_COLUMN_ROWS),
     });
   }
   return groups;
