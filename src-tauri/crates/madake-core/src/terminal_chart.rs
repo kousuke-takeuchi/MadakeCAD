@@ -494,6 +494,94 @@ pub fn poles_and_levels_of(symbol_id: &str) -> (usize, usize) {
     (poles.len(), levels.len().max(1))
 }
 
+/// `attrs["terminal_numbers"]`の上書きが「効いていた」か (spec §1.1 見落としやすい入力4/
+/// Task 3 ルーリング3a)。**キーがあり、かつ値が妥当** ([`valid_terminal_numbers`]) だったときだけ
+/// その値を返す。
+///
+/// 旧実装は`old_display != raw`(展開後の表示ラベルが既定と違うか)で判定していたが、
+/// これだと2つの場合に誤って「上書きなし」を返す: (1) キーはあるが既定と**同じ値**を
+/// 明示的に書いていた場合 (展開結果が同じなので差が出ない)、(2) キーはあるが**無効な値**
+/// (個数不一致など) で [`terminal_numbers_of_instance`] が既定へフォールバックしていた場合
+/// (フォールバック後の値は既定と同じになる)。どちらも「上書きなし」と区別が付かず、
+/// 採番・段数変更の逆コマンドがそのキーを消してしまう (undoで元の`attrs`へ戻らない)。
+/// キーの有無と値の妥当性だけで判定すれば、この2つを誤判定しない。
+pub fn terminal_numbers_override(def: &SymbolDef, attrs: &BTreeMap<String, String>) -> Option<Vec<String>> {
+    let spec = attrs.get(TERMINAL_NUMBERS_ATTR)?;
+    let numbers: Vec<String> = spec.split(',').map(|s| s.trim().to_string()).collect();
+    let raw = terminal_numbers_of(def);
+    valid_terminal_numbers(&numbers, raw.len()).then(|| trimmed_terminal_numbers(&numbers))
+}
+
+/// `symbol_id`の段数を`levels`へ変える (Task 3, spec §1.1「多段端子の生成・解除」)。
+/// `terminal_block_{n}p` (単段) と `terminal_block_{n}p_{levels}l` (多段) を行き来する。
+/// 極数は現在の`symbol_id`から読み取る ([`poles_and_levels_of`])。
+///
+/// `levels`が1〜[`crate::symbol::TERMINAL_LEVEL_MAX`]の範囲外、または`symbol_id`が端子台
+/// シンボルでなければ`Err`(理由の日本語文)。**`levels == 1`は単段idへ正規化する**
+/// (`_1l`という別名idは作らない。多段解除は常にこの形になる。フェーズ6積み残し)。
+pub fn multilevel_id(symbol_id: &str, levels: usize) -> std::result::Result<String, String> {
+    if !is_terminal_block(symbol_id) {
+        return Err(format!("端子台シンボルではありません ({symbol_id})"));
+    }
+    let (poles, _) = poles_and_levels_of(symbol_id);
+    if poles == 0 {
+        return Err(format!("不明な端子台シンボルです ({symbol_id})"));
+    }
+    if !(1..=crate::symbol::TERMINAL_LEVEL_MAX).contains(&levels) {
+        return Err(format!(
+            "段数は1〜{}で指定してください",
+            crate::symbol::TERMINAL_LEVEL_MAX
+        ));
+    }
+    Ok(if levels == 1 {
+        format!("terminal_block_{poles}p")
+    } else {
+        format!("terminal_block_{poles}p_{levels}l")
+    })
+}
+
+/// 段数を変えたときの新しい表示ラベル一覧を組み立てる (`Command::SetTerminalLevels`)。
+///
+/// `old_display`は極→段の順 ([`terminal_numbers_of`]と同じ並び。長さ`poles * old_levels`)。
+/// 各極の**段a (単段なら唯一のラベル) を土台**にして、新しい段数ぶんの段記号を付け足す
+/// (`level_letter`)。土台は段aのラベルの末尾がアルファベット1文字ならそれを取り除いた文字列
+/// (段記号を保って極だけ採番した`RenumberTerminals`の結果とも整合する)。
+///
+/// - 段を増やすとき: 新しく増える段は土台+新しい段記号 (例 `"11"` → `"11a","11b"`)
+/// - 段を減らすとき: 残る段のラベルだけを返す (消える段のラベルは含まない。単段になれば
+///   段記号を落とす)。消える段に結線・ジャンパ・ピングループの指定が残っていないかは
+///   呼び出し側 ([`crate::command::Engine`]) が別に確認する
+pub fn relabel_for_levels(
+    old_display: &[String],
+    poles: usize,
+    old_levels: usize,
+    new_levels: usize,
+) -> Vec<String> {
+    let mut out = Vec::with_capacity(poles * new_levels);
+    for p in 0..poles {
+        let group = &old_display[p * old_levels..(p + 1) * old_levels];
+        let base = if old_levels == 1 {
+            group[0].clone()
+        } else {
+            let s = &group[0];
+            match s.chars().next_back() {
+                Some(last) if last.is_ascii_alphabetic() => {
+                    s[..s.len() - last.len_utf8()].to_string()
+                }
+                _ => s.clone(),
+            }
+        };
+        for j in 0..new_levels {
+            out.push(if new_levels == 1 {
+                base.clone()
+            } else {
+                format!("{base}{}", crate::symbol::level_letter(j))
+            });
+        }
+    }
+    out
+}
+
 /// 端子台シンボルの端子番号の範囲表記 (例 `"1-8"` / 多段なら `"1a-4b"`)。
 /// 端子が1つなら番号そのもの、端子が無ければ空文字。
 pub fn terminal_range_of(symbol_id: &str) -> String {
@@ -1732,6 +1820,106 @@ mod tests {
         project.sheets = vec![sheet];
         let infos = terminal_block_infos(&project, None);
         assert_eq!((infos[0].poles, infos[0].levels, infos[0].terminal_count), (4, 1, 4));
+    }
+
+    // --- multilevel_id (Task 3: 多段端子の生成・解除) ---
+
+    /// Turning a single-level 8-pole terminal block into 2 levels changes its symbol_id to the 2-level dynamic id.
+    /// 8極の単段端子台を2段化すると、symbol_idが多段の動的idに変わる。
+    #[test]
+    fn multilevel_id_turns_a_single_level_block_into_two_levels() {
+        assert_eq!(multilevel_id("terminal_block_8p", 2).unwrap(), "terminal_block_8p_2l");
+    }
+
+    /// Undoing multi-level (setting levels back to 1) returns the plain single-level id, never a "_1l" alias.
+    /// 多段を解除して1段に戻すと、`_1l`という別名ではなく元の単段idそのものに戻る。
+    #[test]
+    fn multilevel_id_normalises_one_level_to_the_plain_single_level_id() {
+        assert_eq!(multilevel_id("terminal_block_8p_2l", 1).unwrap(), "terminal_block_8p");
+    }
+
+    /// Asking for 0 levels or more levels than the symbol library supports is rejected, not silently clamped.
+    /// 0段や上限を超える段数は、勝手に丸められず拒否される。
+    #[test]
+    fn multilevel_id_rejects_zero_and_too_many_levels() {
+        assert!(multilevel_id("terminal_block_8p", 0).is_err());
+        assert!(multilevel_id("terminal_block_8p", crate::symbol::TERMINAL_LEVEL_MAX + 1).is_err());
+    }
+
+    /// A non terminal-block symbol_id is rejected outright: level count only makes sense for terminal blocks.
+    /// 端子台以外のsymbol_idはそもそも拒否する (段数は端子台にしか意味が無い)。
+    #[test]
+    fn multilevel_id_rejects_a_symbol_that_is_not_a_terminal_block() {
+        assert!(multilevel_id("relay_dpdt", 2).is_err());
+    }
+
+    /// Going from 2 levels to 3 keeps the pole count read from the current symbol_id.
+    /// 2段から3段へ増やすときも、極数は現在のsymbol_idから読み取ったものを使う。
+    #[test]
+    fn multilevel_id_keeps_the_pole_count_when_changing_between_multilevel_counts() {
+        assert_eq!(multilevel_id("terminal_block_4p_2l", 3).unwrap(), "terminal_block_4p_3l");
+    }
+
+    // --- relabel_for_levels ---
+
+    /// Increasing levels expands each pole's plain label into one label per level, pole-major with level letters appended ("11,12" -> "11a,11b,12a,12b").
+    /// 段を増やすと、極ごとのプレーンなラベルが段数ぶんに展開される。極→段の順で段記号を付け足す ("11,12" → "11a,11b,12a,12b")。
+    #[test]
+    fn relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major() {
+        let old = vec!["11".to_string(), "12".to_string()];
+        let out = relabel_for_levels(&old, 2, 1, 2);
+        assert_eq!(out, vec!["11a", "11b", "12a", "12b"]);
+    }
+
+    /// Decreasing levels back to 1 drops the vanishing level's labels and strips the level letter from what remains.
+    /// 段を減らして単段へ戻すと、消える段のラベルは落ち、残る段記号は取り除かれる。
+    #[test]
+    fn relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level() {
+        let old = vec!["11a".to_string(), "11b".to_string(), "12a".to_string(), "12b".to_string()];
+        let out = relabel_for_levels(&old, 2, 2, 1);
+        assert_eq!(out, vec!["11", "12"]);
+    }
+
+    /// Going from 2 levels to 3 keeps the existing level-a/level-b labels and adds a fresh level-c label per pole.
+    /// 2段から3段に増やすと、既存の段a・段bのラベルはそのまま残り、極ごとに新しい段cのラベルが増える。
+    #[test]
+    fn relabel_for_levels_adds_a_new_level_on_top_of_existing_ones() {
+        let old = vec!["11a".to_string(), "11b".to_string(), "12a".to_string(), "12b".to_string()];
+        let out = relabel_for_levels(&old, 2, 2, 3);
+        assert_eq!(out, vec!["11a", "11b", "11c", "12a", "12b", "12c"]);
+    }
+
+    // --- terminal_numbers_override (Task 3 ルーリング3a: had_overrideの正しい判定) ---
+
+    /// A terminal_numbers override that happens to equal the symbol's default labels is still reported as an override, because the key is present and valid (not judged only by whether the expanded value differs from the default).
+    /// 既定値と同じラベルを明示的に書いたterminal_numbersも、キーがあり値が妥当なので上書きとして扱われる (展開結果が既定と同じかどうかだけでは判定しない)。
+    #[test]
+    fn terminal_numbers_override_reports_a_key_that_matches_the_default_value() {
+        let def = resolve_symbol("terminal_block_4p").unwrap();
+        let mut attrs = BTreeMap::new();
+        attrs.insert(TERMINAL_NUMBERS_ATTR.to_string(), "1,2,3,4".to_string());
+        assert_eq!(
+            terminal_numbers_override(&def, &attrs),
+            Some(vec!["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string()])
+        );
+    }
+
+    /// An invalid terminal_numbers value (wrong element count) is not treated as an override: the display already falls back to the default, and there is nothing valid to restore.
+    /// 個数が合わない無効なterminal_numbersは上書きとして扱わない (表示は既定へフォールバック済みで、復元できる妥当な値が無い)。
+    #[test]
+    fn terminal_numbers_override_is_none_for_an_invalid_value() {
+        let def = resolve_symbol("terminal_block_4p").unwrap();
+        let mut attrs = BTreeMap::new();
+        attrs.insert(TERMINAL_NUMBERS_ATTR.to_string(), "1,2,3".to_string());
+        assert_eq!(terminal_numbers_override(&def, &attrs), None);
+    }
+
+    /// With no terminal_numbers key at all, there is no override.
+    /// terminal_numbersキー自体が無ければ上書きは無い。
+    #[test]
+    fn terminal_numbers_override_is_none_when_the_key_is_absent() {
+        let def = resolve_symbol("terminal_block_4p").unwrap();
+        assert_eq!(terminal_numbers_override(&def, &BTreeMap::new()), None);
     }
 
     /// Naming a sheet narrows the list to the terminal blocks drawn on that sheet.

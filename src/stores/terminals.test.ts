@@ -671,3 +671,62 @@ describe("renumber popover", () => {
     expect(store.renumberJumperPreview(11, 1, "")).toBeNull();
   });
 });
+
+describe("multi-level stepper (Task 3: 多段端子の生成・解除)", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.restoreAllMocks();
+  });
+
+  // ja: 段数は一覧の`levels`をそのまま見せ、単段は1になる
+  it("reports the block's current level count", async () => {
+    mockBackend();
+    const store = await opened();
+    expect(store.levels).toBe(1);
+  });
+
+  // ja: 一覧より先にチャートだけが読めているときは、行の段記号の種類数から段数を数える
+  it("falls back to counting distinct level letters in the chart rows", () => {
+    const store = useTerminalsStore();
+    store.chart = chart([row("1a", { level: "a" }), row("1b", { level: "b" })]);
+    expect(store.block).toBe(null);
+    expect(store.levels).toBe(2);
+  });
+
+  // ja: 段数を変えると、set_terminal_levelsコマンド1回だけが送られる
+  it("sends one set_terminal_levels command with the requested level count", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    expect(await store.setLevels(2)).toBe(true);
+    expect(sent).toEqual([{ type: "set_terminal_levels", sheet_id: "s1", entity_id: "tb1", levels: 2 }]);
+  });
+
+  // ja: 今と同じ段数を指定したら何もコマンドを送らない (無駄なundoの段を作らない)
+  it("sends nothing when the requested level count matches the current one", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    expect(await store.setLevels(1)).toBe(true);
+    expect(sent).toEqual([]);
+  });
+
+  // ja: 1〜TERMINAL_LEVEL_MAXの範囲外は、コマンドを送らずに断る (ステッパーの+/-ボタンが外へ出さないための門と同じ判定)
+  it("refuses an out-of-range level count without sending a command", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    expect(await store.setLevels(0)).toBe(false);
+    expect(await store.setLevels(4)).toBe(false);
+    expect(sent).toEqual([]);
+  });
+
+  // ja: Rust側が段数変更を拒否したら (消える段に参照が残っている等)、その理由を`error`へ残す (図面は変えない)
+  it("keeps the backend's refusal reason in error and leaves the drawing untouched", async () => {
+    mockBackend();
+    const store = await opened();
+    vi.spyOn(ipc, "executeCommand").mockRejectedValue(new Error("段bに結線が残っています"));
+    expect(await store.setLevels(2)).toBe(false);
+    expect(store.error).toContain("段bに結線が残っています");
+  });
+});

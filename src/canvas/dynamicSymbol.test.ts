@@ -112,9 +112,9 @@ describe("dynamicSymbol", () => {
     expect(at("2a")[0].y - at("1a")[0].y).toBeCloseTo(5, 9);
   });
 
-  // ja: 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有しない
+  // ja: 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有しない (段数1は`_1l`という別名idを作らないので対象外)
   it("keeps every connection point on the 2.5 mm grid and never lets two terminals share one", () => {
-    for (const levels of [1, 2, 3]) {
+    for (const levels of [2, 3]) {
       const def = dynamicSymbol(`terminal_block_4p_${levels}l`)!;
       const seen = new Map<string, string>();
       for (const pin of def.pins) {
@@ -131,6 +131,11 @@ describe("dynamicSymbol", () => {
   it("a terminal block with a level count outside 1-3 returns null", () => {
     expect(dynamicSymbol("terminal_block_8p_0l")).toBeNull();
     expect(dynamicSymbol("terminal_block_8p_4l")).toBeNull();
+  });
+
+  // ja: `terminal_block_8p_1l`は`terminal_block_8p`の別名として受け付けずnullになる (Task 3。単段端子台のsymbol_idの綴りは1通りだけ、Rust側resolve_symbolと同じ規則)
+  it("rejects the one-level alias spelling of a single-level terminal block", () => {
+    expect(dynamicSymbol("terminal_block_8p_1l")).toBeNull();
   });
 
   // ja: 単段の端子台id(terminal_block_{n}p)は多段対応の追加後も数字だけのピン番号のままで、既存プロジェクトとの互換を保つ

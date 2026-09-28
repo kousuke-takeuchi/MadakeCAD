@@ -140,6 +140,21 @@ pub enum Command {
         #[serde(default)]
         numbers: Option<Vec<String>>,
     },
+    /// 端子台1台の段数を変える (spec §1.1「多段端子の生成・解除」、Task 3)。
+    /// `symbol_id`を`terminal_block_{n}p` <-> `terminal_block_{n}p_{levels}l`へ書き換える
+    /// ([`crate::terminal_chart::multilevel_id`]。極数は今のidから読み取る)。同じコマンドで
+    /// `attrs["terminal_numbers"]`・`attrs["jumpers"]`・`attrs["pin_groups"]`の段記号も
+    /// 新しい段数へ追従させる (段を増やすときは極ごとに段a相当のラベルを土台に段記号を
+    /// 付け足す。段を減らすときは残る段のラベルだけにする)。
+    ///
+    /// `levels`が1〜3の範囲外、`entity_id`が端子台でない、または段を減らして**消える段に
+    /// 結線・ジャンパ・ピングループ・付属品の指定が残っている**場合は、図面を一切変えずに
+    /// エラーを返す。逆コマンドは変更前の段数へ戻す同じコマンド。
+    SetTerminalLevels {
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        levels: usize,
+    },
     /// プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
     /// 各欄は省略 (キーごと書かない) すれば変更しない。`name`/`no`はプロジェクト単位、
     /// `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く
@@ -872,6 +887,9 @@ impl Engine {
             Command::SetTerminalNumbers { sheet_id, entity_id, numbers } => {
                 self.apply_terminal_numbers(*sheet_id, *entity_id, numbers.clone())
             }
+            Command::SetTerminalLevels { sheet_id, entity_id, levels } => {
+                self.apply_terminal_levels(*sheet_id, *entity_id, *levels)
+            }
             Command::SetProjectMeta {
                 name,
                 no,
@@ -1101,9 +1119,11 @@ impl Engine {
         require_terminal_block(&inst.symbol_id)?;
         let raw = crate::terminal_chart::terminal_numbers_of(&def);
         let old_display = crate::terminal_chart::terminal_numbers_of_instance(&def, &inst.attrs);
-        // 「上書きが効いていたか」で判定する (`attrs`にキーはあるが値が無効で既定へ
-        // フォールバックしていた場合は、逆コマンドで既定を明示的に書き戻さない)
-        let had_override = old_display != raw;
+        // 「上書きが効いていたか」= キーがあり値が妥当だったか ([`terminal_numbers_override`])。
+        // 展開後の値が既定と同じかどうか (`old_display != raw`) では判定しない: キーはあるが
+        // 既定と同じ値を明示的に書いていた場合と、キーはあるが無効な値でフォールバックして
+        // いた場合の両方を「上書きなし」と誤判定し、undoでそのキーを消してしまう (Task 3 ルーリング3a)
+        let had_override = crate::terminal_chart::terminal_numbers_override(&def, &inst.attrs).is_some();
 
         let new_display = match &numbers {
             Some(v) => {
@@ -1170,6 +1190,161 @@ impl Engine {
             entity_id,
             numbers: if had_override { Some(old_display) } else { None },
         }];
+        Ok((ops, inverse))
+    }
+
+    /// 端子台1台の段数 (`symbol_id`の`terminal_block_{n}p` <-> `terminal_block_{n}p_{levels}l`)
+    /// を変える (Task 3 多段端子の生成・解除)。`RenumberTerminals`/`SetTerminalNumbers`と同様、
+    /// 検証・計算をすべて終えてから書き込むので、エラー時は`self.project`に一切触れない。
+    ///
+    /// 段を増やすときは常に成功する (極ごとに段aのラベルを土台に段記号を付け足すだけ)。
+    /// 段を減らして**消える段に参照が残っていれば**図面を一切変えずにエラーを返す:
+    /// その段のピンに繋がる結線 (端子台チャートの`spare`)・その段の端子番号を指す
+    /// ジャンパ・ピングループ・(将来実装の)付属品指定。`mates_with`はコネクタ一族だけが
+    /// 対象で端子台は最初から対象外 ([`crate::mate::is_connector_instance`]) なので、
+    /// ここでは確認しない。
+    fn apply_terminal_levels(
+        &mut self,
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        levels: usize,
+    ) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let sheet = self.project.sheet(sheet_id).ok_or(CoreError::SheetNotFound(sheet_id))?;
+        let Some(Entity::Symbol(inst)) = sheet.entities.get(&entity_id) else {
+            return Err(CoreError::EntityNotFound(entity_id));
+        };
+        let new_id = crate::terminal_chart::multilevel_id(&inst.symbol_id, levels)
+            .map_err(CoreError::InvalidCommand)?;
+        if new_id == inst.symbol_id {
+            // 今と同じ段数を指定したら何もしない (無駄なundoの段を作らない)
+            return Ok((Vec::new(), Vec::new()));
+        }
+        let old_def = crate::symbol::resolve_symbol(&inst.symbol_id)
+            .ok_or_else(|| CoreError::SymbolNotFound(inst.symbol_id.clone()))?;
+        crate::symbol::resolve_symbol(&new_id).ok_or_else(|| CoreError::SymbolNotFound(new_id.clone()))?;
+
+        let (poles, old_levels) = crate::terminal_chart::poles_and_levels_of(&inst.symbol_id);
+        let old_display = crate::terminal_chart::terminal_numbers_of_instance(&old_def, &inst.attrs);
+        let had_override = crate::terminal_chart::terminal_numbers_override(&old_def, &inst.attrs).is_some();
+        let new_display =
+            crate::terminal_chart::relabel_for_levels(&old_display, poles, old_levels, levels);
+
+        // 極→段の同じ位置 (段a・段bなど、両方に残る段) だけの旧ラベル→新ラベル対応。
+        // ジャンパ・ピングループの書き換えに使う (rewrite_jumper_labels/rewrite_pin_group_ranges
+        // は知らないラベルの項目をそのまま残す規則なので、消える段のラベルは含めない=
+        // 下の検証を通っていれば触れないし、通っていなければそもそもここへ来ない)
+        let kept = old_levels.min(levels);
+        let mut rename: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+        for p in 0..poles {
+            for j in 0..kept {
+                let old_label = old_display[p * old_levels + j].clone();
+                let new_label = new_display[p * levels + j].clone();
+                if old_label != new_label {
+                    rename.insert(old_label, new_label);
+                }
+            }
+        }
+
+        if levels < old_levels {
+            // 消える段の端子番号 (旧表示ラベル) の集合
+            let vanishing: std::collections::BTreeSet<String> = (0..poles)
+                .flat_map(|p| (levels..old_levels).map(move |j| p * old_levels + j))
+                .map(|idx| old_display[idx].clone())
+                .collect();
+
+            if let Some(chart) = crate::terminal_chart::terminal_chart(sheet, entity_id) {
+                if let Some(row) = chart.rows.iter().find(|r| vanishing.contains(&r.terminal) && !r.spare) {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "端子{}に結線が残っているため段を減らせません (先にその結線を外してください)",
+                        row.terminal
+                    )));
+                }
+            }
+
+            if let Some(spec) = inst.attrs.get("jumpers") {
+                let raw_terminals = crate::terminal_chart::terminal_numbers_of(&old_def);
+                let jumpers = crate::terminal_chart::parse_jumpers(spec, &old_display, &raw_terminals);
+                if let Some((a, b)) =
+                    jumpers.pairs.iter().find(|(a, b)| vanishing.contains(a) || vanishing.contains(b))
+                {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "ジャンパ{a}-{b}が消える段を指しているため段を減らせません (先にそのジャンパを外してください)"
+                    )));
+                }
+            }
+
+            if let Some(spec) = inst.attrs.get(crate::pin_groups::PIN_GROUPS_ATTR) {
+                let pg_order = crate::pin_groups::chart_order_pin_numbers(&old_def);
+                let labels = crate::terminal_chart::TerminalLabels::of(&old_def, &inst.attrs);
+                let display_order: Vec<String> = pg_order.iter().map(|n| labels.display_of(n)).collect();
+                let parsed = crate::pin_groups::parse_pin_groups(spec, &display_order);
+                let index_of = |label: &str| display_order.iter().position(|p| p == label);
+                if let Some(group) = parsed.groups.iter().find(|g| match (index_of(&g.first), index_of(&g.last)) {
+                    (Some(a), Some(b)) => {
+                        let (lo, hi) = (a.min(b), a.max(b));
+                        display_order[lo..=hi].iter().any(|label| vanishing.contains(label))
+                    }
+                    _ => vanishing.contains(&g.first) || vanishing.contains(&g.last),
+                }) {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "ピングループ{}が消える段の端子を含むため段を減らせません (先にそのピングループを外してください)",
+                        group.range_text
+                    )));
+                }
+            }
+
+            // 付属品 (spec §1.1・Task 5で実装予定)。属性キーはまだ書き込み口が無いが、
+            // 直接attrsへ入れられた指定 (MCP/Link API経由) が消える段を指していないかは
+            // 先に確認しておく (Task 5が実装したときに同じ検証を素通りできるように)
+            if let Some(spec) = inst.attrs.get("accessories") {
+                let refers_vanishing = spec.split(',').any(|item| {
+                    let label = item.split(':').next().unwrap_or("").trim();
+                    label != "end" && vanishing.contains(label)
+                });
+                if refers_vanishing {
+                    return Err(CoreError::InvalidCommand(
+                        "付属品指定が消える段の端子を指しているため段を減らせません (先にその指定を外してください)"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+
+        // ここまでは読み取りだけ。検証が済んだので、ここから先だけ書き込む
+        let new_jumpers = inst.attrs.get("jumpers").map(|spec| crate::terminal_chart::rewrite_jumper_labels(spec, &rename));
+        let new_pin_groups =
+            inst.attrs.get(crate::pin_groups::PIN_GROUPS_ATTR).map(|spec| rewrite_pin_group_ranges(spec, &rename));
+
+        let sheet = self.project.sheet_mut(sheet_id).expect("直前に存在を確認済み");
+        let Some(Entity::Symbol(inst)) = sheet.entities.get_mut(&entity_id) else {
+            unreachable!("直前に存在を確認済み");
+        };
+        inst.symbol_id = new_id;
+        if had_override {
+            inst.attrs.insert(
+                crate::terminal_chart::TERMINAL_NUMBERS_ATTR.to_string(),
+                new_display.join(","),
+            );
+        } else {
+            inst.attrs.remove(crate::terminal_chart::TERMINAL_NUMBERS_ATTR);
+        }
+        if let Some(nj) = new_jumpers {
+            if nj.is_empty() {
+                inst.attrs.remove("jumpers");
+            } else {
+                inst.attrs.insert("jumpers".to_string(), nj);
+            }
+        }
+        if let Some(npg) = new_pin_groups {
+            if npg.is_empty() {
+                inst.attrs.remove(crate::pin_groups::PIN_GROUPS_ATTR);
+            } else {
+                inst.attrs.insert(crate::pin_groups::PIN_GROUPS_ATTR.to_string(), npg);
+            }
+        }
+
+        let ops = vec![PatchOp::EntityUpserted { sheet_id, entity: Entity::Symbol(inst.clone()) }];
+        let inverse = vec![Command::SetTerminalLevels { sheet_id, entity_id, levels: old_levels }];
         Ok((ops, inverse))
     }
 
@@ -3063,8 +3238,8 @@ mod tests {
         );
     }
 
-    /// A jumper item the editor cannot read (or that names a terminal the block does not have) is carried through a renumbering unchanged, so the design check keeps pointing at it and undo brings the attribute back byte for byte.
-    /// 読めないジャンパの項目 (や端子台に無い端子を指す項目) は採番をそのまま通り抜けるので、図面検証はそれを指し続け、undoで属性は1バイトも変わらず戻る。
+    /// A jumper item the editor cannot read (or that names a terminal the block does not have) is carried through a renumbering unchanged, so the design check keeps pointing at it and undo brings the attribute back byte for byte here — this holds whenever the old and new label sets do not overlap (see `undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap` for the documented exception).
+    /// 読めないジャンパの項目 (や端子台に無い端子を指す項目) は採番をそのまま通り抜けるので、図面検証はそれを指し続け、undoで属性は1バイトも変わらず戻る (ここでは旧番号と新番号のラベル集合が重ならないため。重なる場合の例外は`undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap`を参照)。
     #[test]
     fn a_broken_jumper_item_survives_a_renumbering_and_comes_back_unchanged_on_undo() {
         let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
@@ -3092,6 +3267,30 @@ mod tests {
             jumpers_attr(&engine, sheet_id, id).as_deref(),
             Some(original),
             "undoで元のバイト列へ戻る"
+        );
+    }
+
+    /// The undo of a renumbering does NOT always restore an unreadable jumper item byte for byte: when the old and new label sets overlap, a token the forward rewrite could not resolve as an old label (because it never existed under the old numbering) can become resolvable as a new label on the reverse pass, so the reverse rewrite touches an item the forward rewrite left alone. This is a documented corner case (docs/05-wire-management), not a bug this task fixes.
+    /// 採番のundoは、読めないジャンパの項目を必ずしも1バイトも変えずに戻すとは限らない: 旧番号と新番号のラベル集合が重なると、順方向では旧番号として解決できなかったトークン(旧番号には存在しなかったため)が、逆方向では新番号として解決できてしまうことがあり、順方向では触れなかった項目に逆方向だけが触れてしまう。これはドキュメント化済みの境界事例 (docs/05-wire-management) であり、このタスクで直す不具合ではない。
+    #[test]
+    fn undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        // 「5」は旧番号(1..4)には存在しないが、開始番号2の採番後の新番号(2..5)には存在するようになる
+        // (旧集合{1,2,3,4}と新集合{2,3,4,5}が重なる)
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "5-2")).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 2, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(
+            jumpers_attr(&engine, sheet_id, id).as_deref(),
+            Some("5-2"),
+            "採番時点では「5」を旧番号として解決できないので、項目はそのまま残る"
+        );
+        engine.undo().unwrap();
+        assert_ne!(
+            jumpers_attr(&engine, sheet_id, id).as_deref(),
+            Some("5-2"),
+            "undoでは「5」が新番号として解決できてしまうため、1バイトも変わらずには戻らない (境界事例)"
         );
     }
 
@@ -3242,6 +3441,27 @@ mod tests {
         assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None, "上書き無し (既定) へ戻る");
     }
 
+    /// Undoing a renumbering restores an explicit override even when that override's value happened to equal the symbol's own default labels: the key was present, so it comes back, instead of being treated as "no override" and dropped (Task 3 ルーリング3a: had_overrideの判定はキーの有無と妥当性で決め、展開結果が既定と同じかどうかでは決めない).
+    /// 明示的な上書きの値がたまたま既定のラベルと同じでも、採番のundoはそのキーを復元する: キーがあった事実は「上書き無し」として消されない (Task 3 ルーリング3a)。
+    #[test]
+    fn undoing_a_renumbering_restores_an_override_that_matches_the_default_value() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        // SetTerminalNumbersは「今の表示と同じ値」を渡すと無変更として無視する (このキーを持つ
+        // 状態そのものは作れない) ので、直接update_entityでキーを書く (MCP/Link API経由の
+        // 直接編集と同じ経路。ルーリング3aが問題にしているのはまさにこの経路で作られる状態)
+        engine.execute(set_attr_command(&engine, sheet_id, id, "terminal_numbers", "1,2,3,4")).unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("1,2,3,4"));
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        engine.undo().unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("1,2,3,4"),
+            "既定と同じ値の明示的な上書きでも、キーごと復元される"
+        );
+    }
+
     /// Setting a number list whose length does not match the pin count is refused and leaves the drawing untouched.
     /// ピン数と個数が合わない番号列の指定は拒否され、図面は変わらない。
     #[test]
@@ -3337,6 +3557,212 @@ mod tests {
         // 開始番号1・増分1は4極の端子台の既定 ("1,2,3,4") と同じ結果になるので、
         // 図面は変わらない (属性は書き込まれない。採番済みの盤を再採番しても変わらないのと同じ)
         assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    // --- SetTerminalLevels (Task 3: 多段端子の生成・解除) ---
+
+    /// a-b間にワイヤを1本引く。
+    fn add_wire(sheet_id: SheetId, engine: &mut Engine, a: (f64, f64), b: (f64, f64)) {
+        let w = Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(a.0, a.1), Point::new(b.0, b.1)],
+            color: String::new(),
+            sq: 0.0,
+            length_m: None,
+            length_source: Default::default(),
+            part_no: None,
+            net: None,
+        };
+        engine.execute(Command::AddEntity { sheet_id, entity: Entity::Wire(w) }).unwrap();
+    }
+
+    /// Turning a single-level 4-pole terminal block into 2 levels rewrites its symbol_id and leaves the terminal_numbers attribute unset (no explicit override existed).
+    /// 4極の単段端子台を2段化すると、symbol_idが書き換わり、terminal_numbers属性は未設定のまま (明示的な上書きが無かったため)。
+    #[test]
+    fn setting_levels_turns_a_single_level_block_into_two_levels() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_4p_2l");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// Undoing a level increase (or setting levels back to 1 directly) restores the plain single-level symbol_id, never a "_1l" alias.
+    /// 段数を増やしたあとの解除 (直接levels=1を指定しても) は、単段のsymbol_idそのものに戻る (`_1l`という別名にはならない)。
+    #[test]
+    fn setting_levels_back_to_one_restores_the_plain_single_level_id() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 }).unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_4p");
+    }
+
+    /// Increasing levels expands an explicit terminal_numbers override into one lettered label per level, pole-major, exactly as the plan's example describes ("11,12,…" -> "11a,11b,12a,12b,…").
+    /// 段を増やすと、明示的なterminal_numbers上書きが極→段の順で段記号付きのラベルへ展開される (計画の例と同じ "11,12,…" → "11a,11b,12a,12b,…")。
+    #[test]
+    fn increasing_levels_expands_an_explicit_terminal_numbers_override() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("11a,11b,12a,12b,13a,13b,14a,14b")
+        );
+    }
+
+    /// A jumper written without a level letter on a single-level block moves to level a when the block gains a second level, so the existing connection is not silently dropped.
+    /// 段記号の無い単段のジャンパ指定は、2段化すると段aへ移る (既存の結線指定が黙って消えない)。
+    #[test]
+    fn increasing_levels_moves_a_levelless_jumper_to_level_a() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "1-2")).unwrap();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("1a-2a"));
+    }
+
+    /// Decreasing levels is refused, and the drawing is left completely untouched, when a wire is still connected to a pin of the level that would vanish.
+    /// 消える段のピンに配線が繋がったままだと、段を減らす操作は拒否され、図面は一切変わらない。
+    #[test]
+    fn decreasing_levels_is_refused_when_a_wire_is_connected_to_a_vanishing_level() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        // 極1・段bの外部側接続点 (107.5, 42.5) から配線を1本引く
+        add_wire(sheet_id, &mut engine, (107.5, 42.5), (120.0, 42.5));
+        let before = format!("{:?}", engine.project().sheet(sheet_id).unwrap().entities.get(&id));
+        let err = engine
+            .execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 })
+            .expect_err("段bに結線が残っているので拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        let after = format!("{:?}", engine.project().sheet(sheet_id).unwrap().entities.get(&id));
+        assert_eq!(after, before, "図面は一切変わらない");
+    }
+
+    /// Decreasing levels is refused when a jumper still names a terminal of the level that would vanish.
+    /// 消える段の端子を指すジャンパが残っていると、段を減らす操作は拒否される。
+    #[test]
+    fn decreasing_levels_is_refused_when_a_jumper_names_a_vanishing_level() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "1a-1b")).unwrap();
+        let err = engine
+            .execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 })
+            .expect_err("段bを指すジャンパが残っているので拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("1a-1b"), "図面は一切変わらない");
+    }
+
+    /// Decreasing levels is refused when a pin-group range spans terminals of the level that would vanish.
+    /// 消える段の端子を範囲に含むピングループが残っていると、段を減らす操作は拒否される。
+    #[test]
+    fn decreasing_levels_is_refused_when_a_pin_group_spans_a_vanishing_level() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "pin_groups", "1b-4b:信号")).unwrap();
+        let err = engine
+            .execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 })
+            .expect_err("段bを範囲に含むピングループが残っているので拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(pin_groups_attr(&engine, sheet_id, id).as_deref(), Some("1b-4b:信号"), "図面は一切変わらない");
+    }
+
+    /// Decreasing levels is refused when an accessory spec names a terminal of the level that would vanish (spec §1.1 accessories format, checked ahead of its own command landing in a later task).
+    /// 消える段の端子を指す付属品指定が残っていると、段を減らす操作は拒否される (spec §1.1 付属品の書式。専用コマンドが入る前から検証する)。
+    #[test]
+    fn decreasing_levels_is_refused_when_an_accessory_names_a_vanishing_level() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "accessories", "1b:end_bracket:TB-EB")).unwrap();
+        let err = engine
+            .execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 })
+            .expect_err("段bを指す付属品指定が残っているので拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+    }
+
+    /// When nothing references the vanishing level, decreasing levels succeeds and both the symbol_id and the terminal-number override drop that level's labels.
+    /// 消える段に何も参照が残っていなければ、段を減らす操作は成功し、symbol_idと端子番号の上書きの両方から消える段のラベルが落ちる。
+    #[test]
+    fn decreasing_levels_succeeds_and_drops_the_vanishing_levels_labels() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("11a,11b,12a,12b,13a,13b,14a,14b")
+        );
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 }).unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_4p");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("11,12,13,14"));
+    }
+
+    /// After a 1-level -> 2-level -> 1-level round trip, a wire that was connected to a kept terminal is still connected (same internal/external labels), and the terminal block check does not report it as newly unconnected.
+    /// 1段→2段→1段の往復のあと、残る端子に繋がっていた配線はそのまま繋がり続け (内部側・外部側のラベルも同じ)、端子台チェックも新たに未結線と報告しない。
+    #[test]
+    fn a_wire_stays_connected_through_a_one_to_two_to_one_level_round_trip() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        add_wire(sheet_id, &mut engine, (85.0, 42.5), (97.5, 42.5));
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 }).unwrap();
+        let sheet = engine.project().sheet(sheet_id).unwrap();
+        let chart = crate::terminal_chart::terminal_chart(sheet, id).expect("chart");
+        let r = chart.rows.iter().find(|r| r.terminal == "1").expect("row");
+        assert!(!r.spare, "往復後も端子1は結線されたまま");
+        let diags = crate::terminal_chart::check_terminal_block(sheet, id);
+        assert!(
+            !diags.iter().any(|d| d.code == crate::terminal_chart::TERMINAL_UNCONNECTED
+                && d.message.contains("端子 1 は")),
+            "往復で端子1が新たに未結線と報告されない: {diags:?}"
+        );
+    }
+
+    /// Undoing a level change restores the previous symbol_id exactly, the same one-command-one-undo shape as RenumberTerminals/SetTerminalNumbers.
+    /// 段数変更のundoは変更前のsymbol_idへ正確に戻る (RenumberTerminals/SetTerminalNumbersと同じ、1コマンド1undoの形)。
+    #[test]
+    fn undoing_a_level_change_restores_the_previous_symbol_id() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        engine.undo().unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_4p");
+    }
+
+    /// Asking for a level count outside 1-3 is refused without touching the drawing.
+    /// 1〜3の範囲外の段数指定は、図面を変えずに拒否される。
+    #[test]
+    fn setting_levels_outside_one_to_three_is_refused() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        assert!(engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 0 }).is_err());
+        assert!(engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 4 }).is_err());
+    }
+
+    /// Changing the level count of a symbol that is not a terminal block is refused, the same gate RenumberTerminals/SetTerminalNumbers already use.
+    /// 端子台以外のシンボルの段数変更は拒否される (RenumberTerminals/SetTerminalNumbersと同じ門)。
+    #[test]
+    fn setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let entity = place("resistor");
+        let id = entity.id();
+        engine.execute(Command::AddEntity { sheet_id, entity }).unwrap();
+        assert!(engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).is_err());
+    }
+
+    /// A symbol_id spelled with the "_1l" one-level alias is refused when placed on the drawing: a single-level terminal block has exactly one valid spelling of its symbol_id.
+    /// `_1l`という段数1の別名で綴ったsymbol_idは配置時に拒否される: 単段端子台のsymbol_idの綴りは1通りだけが有効。
+    #[test]
+    fn a_one_level_alias_symbol_id_is_refused_when_placed() {
+        let (mut engine, sheet_id) = test_engine();
+        let err = engine
+            .execute(Command::AddEntity { sheet_id, entity: place("terminal_block_8p_1l") })
+            .expect_err("`_1l`別名は未知のシンボルとして拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
     }
 
     /// Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted.

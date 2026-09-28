@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2448仕様項目**。
+全6領域・**2485仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -96,7 +96,8 @@
 - 採番はピングループの範囲の両端も新しい番号へ書き換える。範囲は端子番号で指しているため。 <sub>`renumbering_rewrites_pin_group_ranges_too`</sub>
 - 採番したあとでもピングループの括弧は図面に描かれ続け、図面検証も無指摘のままになる: 保存された範囲はその端子台の表示番号と突き合わせられるため。 <sub>`a_pin_group_bracket_still_draws_after_renumbering_the_terminals`</sub>
 - 多段端子台で1段ぶんの端子を指すピングループの範囲も、段記号が保たれるので採番後に括弧を描き続ける。 <sub>`a_multilevel_pin_group_bracket_survives_a_renumbering`</sub>
-- 読めないジャンパの項目 (や端子台に無い端子を指す項目) は採番をそのまま通り抜けるので、図面検証はそれを指し続け、undoで属性は1バイトも変わらず戻る。 <sub>`a_broken_jumper_item_survives_a_renumbering_and_comes_back_unchanged_on_undo`</sub>
+- 読めないジャンパの項目 (や端子台に無い端子を指す項目) は採番をそのまま通り抜けるので、図面検証はそれを指し続け、undoで属性は1バイトも変わらず戻る (ここでは旧番号と新番号のラベル集合が重ならないため。重なる場合の例外は`undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap`を参照)。 <sub>`a_broken_jumper_item_survives_a_renumbering_and_comes_back_unchanged_on_undo`</sub>
+- 採番のundoは、読めないジャンパの項目を必ずしも1バイトも変えずに戻すとは限らない: 旧番号と新番号のラベル集合が重なると、順方向では旧番号として解決できなかったトークン(旧番号には存在しなかったため)が、逆方向では新番号として解決できてしまうことがあり、順方向では触れなかった項目に逆方向だけが触れてしまう。これはドキュメント化済みの境界事例 (docs/05-wire-management) であり、このタスクで直す不具合ではない。 <sub>`undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap`</sub>
 - 採番のundoはピングループの指定を空白ごと1バイトも変えずに戻す: 書き換えは認識できた端子番号のトークンだけを置き換えるため。 <sub>`undoing_a_renumbering_restores_the_pin_group_spec_byte_for_byte`</sub>
 - 3端子にまたがるジャンパの連鎖は増分2の採番にも追従する: 各リンクの両端が新しい番号になり、連鎖のままになる。 <sub>`a_jumper_chain_follows_a_renumbering_with_a_step`</sub>
 - 端子台ではないシンボルの採番は拒否される: 端子番号の上書きはそのシンボルのピン番号テキストを図面上で書き換えてしまうため。 <sub>`renumbering_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
@@ -104,12 +105,27 @@
 - 前後の空白しか違わない2つのラベルは重複として拒否される: 保存されると同じ端子番号になってしまうため。 <sub>`terminal_numbers_that_are_duplicates_once_trimmed_are_refused`</sub>
 - カンマを含む端子番号は拒否される: カンマは保存形の区切り記号なので、読み戻すと端子の個数そのものが変わってしまうため。 <sub>`a_terminal_number_containing_a_comma_is_refused`</sub>
 - 採番のundoは直前の端子番号を正確に戻す: 直前に直接指定していればそれが戻り、既定値から採番していれば上書き無しの状態へ戻る。 <sub>`undoing_a_renumbering_restores_the_previous_numbers`</sub>
+- 明示的な上書きの値がたまたま既定のラベルと同じでも、採番のundoはそのキーを復元する: キーがあった事実は「上書き無し」として消されない (Task 3 ルーリング3a)。 <sub>`undoing_a_renumbering_restores_an_override_that_matches_the_default_value`</sub>
 - ピン数と個数が合わない番号列の指定は拒否され、図面は変わらない。 <sub>`a_terminal_number_count_mismatch_is_refused_without_changing_the_drawing`</sub>
 - 番号列に重複したラベルがあると、図面を変えずに拒否される。 <sub>`duplicate_terminal_numbers_are_refused`</sub>
 - 番号列に空要素があると、図面を変えずに拒否される。 <sub>`an_empty_terminal_number_is_refused`</sub>
 - 直接指定のあとに番号を`None`にすると、シンボルの既定番号へ戻る (`terminal_numbers`属性自体が消える)。 <sub>`setting_numbers_to_none_returns_to_the_defaults`</sub>
 - シートに無いentity idの採番は、黙って何もせずに断られる。 <sub>`renumbering_an_unknown_entity_is_refused`</sub>
 - 採番コマンドは既定の開始番号・増分を持つ素のJSONで表現できるので、AIやCLIからentity idだけでも送れる。 <sub>`the_terminal_renumbering_command_is_plain_json`</sub>
+- 4極の単段端子台を2段化すると、symbol_idが書き換わり、terminal_numbers属性は未設定のまま (明示的な上書きが無かったため)。 <sub>`setting_levels_turns_a_single_level_block_into_two_levels`</sub>
+- 段数を増やしたあとの解除 (直接levels=1を指定しても) は、単段のsymbol_idそのものに戻る (`_1l`という別名にはならない)。 <sub>`setting_levels_back_to_one_restores_the_plain_single_level_id`</sub>
+- 段を増やすと、明示的なterminal_numbers上書きが極→段の順で段記号付きのラベルへ展開される (計画の例と同じ "11,12,…" → "11a,11b,12a,12b,…")。 <sub>`increasing_levels_expands_an_explicit_terminal_numbers_override`</sub>
+- 段記号の無い単段のジャンパ指定は、2段化すると段aへ移る (既存の結線指定が黙って消えない)。 <sub>`increasing_levels_moves_a_levelless_jumper_to_level_a`</sub>
+- 消える段のピンに配線が繋がったままだと、段を減らす操作は拒否され、図面は一切変わらない。 <sub>`decreasing_levels_is_refused_when_a_wire_is_connected_to_a_vanishing_level`</sub>
+- 消える段の端子を指すジャンパが残っていると、段を減らす操作は拒否される。 <sub>`decreasing_levels_is_refused_when_a_jumper_names_a_vanishing_level`</sub>
+- 消える段の端子を範囲に含むピングループが残っていると、段を減らす操作は拒否される。 <sub>`decreasing_levels_is_refused_when_a_pin_group_spans_a_vanishing_level`</sub>
+- 消える段の端子を指す付属品指定が残っていると、段を減らす操作は拒否される (spec §1.1 付属品の書式。専用コマンドが入る前から検証する)。 <sub>`decreasing_levels_is_refused_when_an_accessory_names_a_vanishing_level`</sub>
+- 消える段に何も参照が残っていなければ、段を減らす操作は成功し、symbol_idと端子番号の上書きの両方から消える段のラベルが落ちる。 <sub>`decreasing_levels_succeeds_and_drops_the_vanishing_levels_labels`</sub>
+- 1段→2段→1段の往復のあと、残る端子に繋がっていた配線はそのまま繋がり続け (内部側・外部側のラベルも同じ)、端子台チェックも新たに未結線と報告しない。 <sub>`a_wire_stays_connected_through_a_one_to_two_to_one_level_round_trip`</sub>
+- 段数変更のundoは変更前のsymbol_idへ正確に戻る (RenumberTerminals/SetTerminalNumbersと同じ、1コマンド1undoの形)。 <sub>`undoing_a_level_change_restores_the_previous_symbol_id`</sub>
+- 1〜3の範囲外の段数指定は、図面を変えずに拒否される。 <sub>`setting_levels_outside_one_to_three_is_refused`</sub>
+- 端子台以外のシンボルの段数変更は拒否される (RenumberTerminals/SetTerminalNumbersと同じ門)。 <sub>`setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- `_1l`という段数1の別名で綴ったsymbol_idは配置時に拒否される: 単段端子台のsymbol_idの綴りは1通りだけが有効。 <sub>`a_one_level_alias_symbol_id_is_refused_when_placed`</sub>
 - シートの用紙サイズ・向きを変えても (G15)、既存のエンティティは元の座標のまま動かず、消えもしない。 <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - 用紙サイズの変更をundoすると、サイズと向きの両方が元へ戻る。 <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
 - 用紙を変えてもシート独自のゾーン分割はそのまま: 独自の分割数を持つシートはその分割を保つ。 <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
@@ -727,6 +743,7 @@
 - 同じ極の端子は段が違っても同じ行に並ぶので、1aと1bは同じ高さになり、行のピッチは単段と同じ5mmのままになる。 <sub>`every_level_of_the_same_pole_sits_on_one_row`</sub>
 - 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有することはないので、どの端子にも別々に配線できる。 <sub>`multilevel_terminal_block_pins_are_on_the_grid_and_never_coincide`</sub>
 - 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様に未知のシンボルとして拒否される。 <sub>`multilevel_terminal_block_rejects_level_count_outside_one_to_three`</sub>
+- `terminal_block_8p_1l`は`terminal_block_8p`の別名として受け付けず、未知のシンボルとして拒否する: 単段端子台のsymbol_idの綴りは1通りだけにする (Task 3 多段端子の生成・解除)。 <sub>`multilevel_terminal_block_rejects_the_one_level_alias_spelling`</sub>
 - 単段の端子台id(`terminal_block_{n}p`)は多段対応の追加後もそのままの数字だけのピン番号(1,2,…)を持ち、既存プロジェクトは有効なまま使える。 <sub>`single_level_terminal_block_id_is_unaffected_by_multilevel_support`</sub>
 - 動的生成のconnector_2pは旧静的定義と完全に同じピン座標を持ち、既存図面に影響しない。 <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
 - resolve_symbolは同梱idを見つけ、不正・範囲外の動的ID(0極・51極・数値なし)は拒否する。 <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
@@ -858,6 +875,17 @@
 - 端子台エディタの一覧には、プロジェクトの全端子台がシート順・参照記号順に、所在シート・極数・ジャンパ付きで並ぶ。 <sub>`the_editor_lists_every_terminal_block_with_its_sheet_poles_and_jumpers`</sub>
 - 多段端子台の概要は極数・段数を端子数と区別して持つ: 4極2段の端子台は極数4・段数2・端子数8になる。 <sub>`a_multilevel_terminal_block_summary_separates_poles_levels_and_terminals`</sub>
 - 単段の端子台は段数1として報告されるので、極数と端子数は同じ数になる。 <sub>`a_single_level_terminal_block_summary_has_one_level`</sub>
+- 8極の単段端子台を2段化すると、symbol_idが多段の動的idに変わる。 <sub>`multilevel_id_turns_a_single_level_block_into_two_levels`</sub>
+- 多段を解除して1段に戻すと、`_1l`という別名ではなく元の単段idそのものに戻る。 <sub>`multilevel_id_normalises_one_level_to_the_plain_single_level_id`</sub>
+- 0段や上限を超える段数は、勝手に丸められず拒否される。 <sub>`multilevel_id_rejects_zero_and_too_many_levels`</sub>
+- 端子台以外のsymbol_idはそもそも拒否する (段数は端子台にしか意味が無い)。 <sub>`multilevel_id_rejects_a_symbol_that_is_not_a_terminal_block`</sub>
+- 2段から3段へ増やすときも、極数は現在のsymbol_idから読み取ったものを使う。 <sub>`multilevel_id_keeps_the_pole_count_when_changing_between_multilevel_counts`</sub>
+- 段を増やすと、極ごとのプレーンなラベルが段数ぶんに展開される。極→段の順で段記号を付け足す ("11,12" → "11a,11b,12a,12b")。 <sub>`relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major`</sub>
+- 段を減らして単段へ戻すと、消える段のラベルは落ち、残る段記号は取り除かれる。 <sub>`relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level`</sub>
+- 2段から3段に増やすと、既存の段a・段bのラベルはそのまま残り、極ごとに新しい段cのラベルが増える。 <sub>`relabel_for_levels_adds_a_new_level_on_top_of_existing_ones`</sub>
+- 既定値と同じラベルを明示的に書いたterminal_numbersも、キーがあり値が妥当なので上書きとして扱われる (展開結果が既定と同じかどうかだけでは判定しない)。 <sub>`terminal_numbers_override_reports_a_key_that_matches_the_default_value`</sub>
+- 個数が合わない無効なterminal_numbersは上書きとして扱わない (表示は既定へフォールバック済みで、復元できる妥当な値が無い)。 <sub>`terminal_numbers_override_is_none_for_an_invalid_value`</sub>
+- terminal_numbersキー自体が無ければ上書きは無い。 <sub>`terminal_numbers_override_is_none_when_the_key_is_absent`</sub>
 - シートを指定すると、そのシートに描かれている端子台だけの一覧になる。 <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
 - 端子台ではないシンボルは一覧に出ない。 <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
 - 端子台のチャートとチェックは、どのシートにあるかを知らなくてもentity idだけで引ける。 <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
@@ -1697,8 +1725,9 @@
 - PLCモジュールのシンボルは1〜64点までで、その外の点数は存在しない <sub>`dynamicSymbol`</sub>
 - 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、1端子=左右2接続点になる <sub>`dynamicSymbol`</sub>
 - 多段端子台は段ごとに1列の端子が横に並び、同じ極の端子(1aと1b)は同じ行に載る(Rust側と同じ座標) <sub>`dynamicSymbol`</sub>
-- 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有しない <sub>`dynamicSymbol`</sub>
+- 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有しない (段数1は`_1l`という別名idを作らないので対象外) <sub>`dynamicSymbol`</sub>
 - 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様にnullになる <sub>`dynamicSymbol`</sub>
+- `terminal_block_8p_1l`は`terminal_block_8p`の別名として受け付けずnullになる (Task 3。単段端子台のsymbol_idの綴りは1通りだけ、Rust側resolve_symbolと同じ規則) <sub>`dynamicSymbol`</sub>
 - 単段の端子台id(terminal_block_{n}p)は多段対応の追加後も数字だけのピン番号のままで、既存プロジェクトとの互換を保つ <sub>`dynamicSymbol`</sub>
 - 静的定義を優先し、無ければ動的生成にフォールバックする <sub>`resolveSymbolDef`</sub>
 - ブロックのピンは箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並ぶ(Rust側と同じ座標) <sub>`blockSymbol`</sub>
@@ -1951,6 +1980,8 @@
 - 表示クラス「参照記号」を隠すと、実機ブロックの接点イメージ(端子対と所在)も消える(外形とヘッダは残る) <sub>`drawDeviceBlock`</sub>
 - 嵌合対の破線は表示クラス「シンボル」に属し、シンボルを隠すと一緒に消える (結ぶ相手が見えないため) <sub>`renderSheet mate links`</sub>
 - 参照記号を隠しても嵌合対の破線は残る (参照記号の表示クラスには属さない) <sub>`renderSheet mate links`</sub>
+- ジャンパバー(G5)は他のシンボル付随描画(嵌合対の破線など)と同じ表示クラス「シンボル」に属し、シンボルを隠すと一緒に消える (フェーズ6積み残しの解消) <sub>`jumper bar view-class gating (Task 3, フェーズ6積み残し)`</sub>
+- 参照記号を隠してもジャンパバーは残る (参照記号の表示クラスには属さない) <sub>`jumper bar view-class gating (Task 3, フェーズ6積み残し)`</sub>
 - 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える。Rust側 svg_leader_dot_is_the_size_of_a_wire_junction_dot とparity) <sub>`renderSheet dots`</sub>
 - 凡例ブロックは列見出しと、シートの配線から導出した行 (色・線径・品番・使用長) を表として描く <sub>`wire legend block drawing`</sub>
 - 選択中の凡例ブロックは、外形の矩形を選択色で描く <sub>`wire legend block drawing`</sub>
@@ -2784,6 +2815,12 @@
 - 端子台が1つも無ければ採番の対象が無いことを理由として返す <sub>`renumber popover`</sub>
 - プレビューは採番に追従したあとのジャンパ指定も見せる (適用と同じ書き換え規則) <sub>`renumber popover`</sub>
 - ジャンパが1本も無ければ追従の行は出さない <sub>`renumber popover`</sub>
+- 段数は一覧の`levels`をそのまま見せ、単段は1になる <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 一覧より先にチャートだけが読めているときは、行の段記号の種類数から段数を数える <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 段数を変えると、set_terminal_levelsコマンド1回だけが送られる <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 今と同じ段数を指定したら何もコマンドを送らない (無駄なundoの段を作らない) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 1〜TERMINAL_LEVEL_MAXの範囲外は、コマンドを送らずに断る (ステッパーの+/-ボタンが外へ出さないための門と同じ判定) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- Rust側が段数変更を拒否したら (消える段に参照が残っている等)、その理由を`error`へ残す (図面は変えない) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 
 ### ui
 

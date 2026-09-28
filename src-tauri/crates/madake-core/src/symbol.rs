@@ -1263,11 +1263,20 @@ pub(crate) fn parse_terminal_no(no: &str) -> (u32, Option<char>) {
 /// `terminal_block_`の後ろ (`rest`) を多段端子台の (極数, 段数) にパースする。
 /// `{n}p_{levels}l` の形だけを受け付け (例 "8p_2l")、単段の `{n}p` はNoneを返す
 /// (単段は呼び出し側で[`dynamic_symbol`]の既存経路がそのまま扱う=互換性を保つ)。
+///
+/// **段数は2以上だけを受け付ける** (`_1l`という別名idは作らない。Task 3
+/// 多段端子の生成・解除)。単段は常に`terminal_block_{n}p`という1つのidだけで表す
+/// ([`crate::terminal_chart::multilevel_id`]が段数変更時にこの正規化をする)。
+/// `terminal_block_8p_1l`のような別名idをここで受け付けてしまうと、図面に保存された
+/// `symbol_id`が2通りの綴りを持ててしまい (`resolve_symbol`は両方解決できるが同じ図形)、
+/// 検索・部品DB突き合わせ・段数の判定がidの綴りで割れる。呼び出し側
+/// ([`crate::command::validate_symbol_id`]) はこの関数がNoneを返すことで
+/// `terminal_block_8p_1l`を「知らないシンボル」として拒む。
 fn parse_multilevel_terminal_block(rest: &str) -> Option<(usize, usize)> {
     let (poles_part, levels_part) = rest.split_once('_')?;
     let n: usize = poles_part.strip_suffix('p')?.parse().ok()?;
     let levels: usize = levels_part.strip_suffix('l')?.parse().ok()?;
-    if !(1..=DYNAMIC_PIN_MAX).contains(&n) || !(1..=TERMINAL_LEVEL_MAX).contains(&levels) {
+    if !(1..=DYNAMIC_PIN_MAX).contains(&n) || !(2..=TERMINAL_LEVEL_MAX).contains(&levels) {
         return None;
     }
     Some((n, levels))
@@ -1631,7 +1640,8 @@ mod tests {
     /// 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有することはないので、どの端子にも別々に配線できる。
     #[test]
     fn multilevel_terminal_block_pins_are_on_the_grid_and_never_coincide() {
-        for levels in 1..=TERMINAL_LEVEL_MAX {
+        // 段数1は`_1l`という別名idを作らないので対象外 (単段は`terminal_block_4p`で別に検証済み)。
+        for levels in 2..=TERMINAL_LEVEL_MAX {
             let def = resolve_symbol(&format!("terminal_block_4p_{levels}l")).expect("端子台");
             let mut seen: std::collections::HashMap<(i64, i64), String> = Default::default();
             for p in &def.pins {
@@ -1651,6 +1661,13 @@ mod tests {
     fn multilevel_terminal_block_rejects_level_count_outside_one_to_three() {
         assert!(resolve_symbol("terminal_block_8p_0l").is_none());
         assert!(resolve_symbol("terminal_block_8p_4l").is_none());
+    }
+
+    /// "terminal_block_8p_1l" is rejected as an unknown symbol, not accepted as an alias of "terminal_block_8p": a single-level terminal block has exactly one spelling of its symbol_id (Task 3).
+    /// `terminal_block_8p_1l`は`terminal_block_8p`の別名として受け付けず、未知のシンボルとして拒否する: 単段端子台のsymbol_idの綴りは1通りだけにする (Task 3 多段端子の生成・解除)。
+    #[test]
+    fn multilevel_terminal_block_rejects_the_one_level_alias_spelling() {
+        assert!(resolve_symbol("terminal_block_8p_1l").is_none());
     }
 
     /// The single-level terminal block id keeps its plain numeric pin numbers (1, 2, ...) exactly as before, unaffected by the new multi-level id shape, so existing projects stay valid.

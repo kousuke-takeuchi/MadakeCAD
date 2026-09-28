@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2448 specification clauses** across 6 areas.
+**2485 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -96,7 +96,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Renumbering also rewrites a pin-group range's endpoints to the new labels, since the range names terminals by number. <sub>`renumbering_rewrites_pin_group_ranges_too`</sub>
 - After a renumbering, the pin-group bracket is still drawn on the drawing and the design check stays clean: the stored range is matched against the block's displayed terminal numbers. <sub>`a_pin_group_bracket_still_draws_after_renumbering_the_terminals`</sub>
 - On a multi-level block, a pin-group range that names one level's terminals still draws its bracket after a renumbering, because the level letters are kept. <sub>`a_multilevel_pin_group_bracket_survives_a_renumbering`</sub>
-- A jumper item the editor cannot read (or that names a terminal the block does not have) is carried through a renumbering unchanged, so the design check keeps pointing at it and undo brings the attribute back byte for byte. <sub>`a_broken_jumper_item_survives_a_renumbering_and_comes_back_unchanged_on_undo`</sub>
+- A jumper item the editor cannot read (or that names a terminal the block does not have) is carried through a renumbering unchanged, so the design check keeps pointing at it and undo brings the attribute back byte for byte here — this holds whenever the old and new label sets do not overlap (see `undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap` for the documented exception). <sub>`a_broken_jumper_item_survives_a_renumbering_and_comes_back_unchanged_on_undo`</sub>
+- The undo of a renumbering does NOT always restore an unreadable jumper item byte for byte: when the old and new label sets overlap, a token the forward rewrite could not resolve as an old label (because it never existed under the old numbering) can become resolvable as a new label on the reverse pass, so the reverse rewrite touches an item the forward rewrite left alone. This is a documented corner case (docs/05-wire-management), not a bug this task fixes. <sub>`undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap`</sub>
 - Undoing a renumbering restores a pin-group spec byte for byte, spacing included: the rewrite only replaces the terminal-number tokens it recognises. <sub>`undoing_a_renumbering_restores_the_pin_group_spec_byte_for_byte`</sub>
 - A chain of jumpers over three terminals follows a renumbering with a step of two: both endpoints of every link get the new label and the links stay a chain. <sub>`a_jumper_chain_follows_a_renumbering_with_a_step`</sub>
 - Renumbering a symbol that is not a terminal block is refused: the terminal-number override would rewrite that symbol's pin-number texts on the drawing. <sub>`renumbering_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
@@ -104,12 +105,27 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Two labels that differ only in their surrounding spaces count as a duplicate and are refused: they would collapse to the same terminal number in storage. <sub>`terminal_numbers_that_are_duplicates_once_trimmed_are_refused`</sub>
 - A terminal number containing a comma is refused: the comma is the separator of the stored list, so the value would read back as a different number of terminals. <sub>`a_terminal_number_containing_a_comma_is_refused`</sub>
 - Undoing a renumbering restores the previous terminal numbers exactly: a prior direct override comes back, and renumbering from the symbol's defaults undoes to no override at all. <sub>`undoing_a_renumbering_restores_the_previous_numbers`</sub>
+- Undoing a renumbering restores an explicit override even when that override's value happened to equal the symbol's own default labels: the key was present, so it comes back, instead of being treated as "no override" and dropped (Task 3 ルーリング3a: had_overrideの判定はキーの有無と妥当性で決め、展開結果が既定と同じかどうかでは決めない). <sub>`undoing_a_renumbering_restores_an_override_that_matches_the_default_value`</sub>
 - Setting a number list whose length does not match the pin count is refused and leaves the drawing untouched. <sub>`a_terminal_number_count_mismatch_is_refused_without_changing_the_drawing`</sub>
 - A duplicate label in the number list is refused without changing the drawing. <sub>`duplicate_terminal_numbers_are_refused`</sub>
 - An empty label in the number list is refused without changing the drawing. <sub>`an_empty_terminal_number_is_refused`</sub>
 - Setting the numbers to `None` after a direct override returns the block to the symbol's default numbers (the `terminal_numbers` attribute itself disappears). <sub>`setting_numbers_to_none_returns_to_the_defaults`</sub>
 - Renumbering an entity id that does not exist on the sheet is refused instead of silently doing nothing. <sub>`renumbering_an_unknown_entity_is_refused`</sub>
 - The renumbering command is plain JSON with sensible defaults for the start and step, so agents and the CLI can send it with just an entity id. <sub>`the_terminal_renumbering_command_is_plain_json`</sub>
+- Turning a single-level 4-pole terminal block into 2 levels rewrites its symbol_id and leaves the terminal_numbers attribute unset (no explicit override existed). <sub>`setting_levels_turns_a_single_level_block_into_two_levels`</sub>
+- Undoing a level increase (or setting levels back to 1 directly) restores the plain single-level symbol_id, never a "_1l" alias. <sub>`setting_levels_back_to_one_restores_the_plain_single_level_id`</sub>
+- Increasing levels expands an explicit terminal_numbers override into one lettered label per level, pole-major, exactly as the plan's example describes ("11,12,…" -> "11a,11b,12a,12b,…"). <sub>`increasing_levels_expands_an_explicit_terminal_numbers_override`</sub>
+- A jumper written without a level letter on a single-level block moves to level a when the block gains a second level, so the existing connection is not silently dropped. <sub>`increasing_levels_moves_a_levelless_jumper_to_level_a`</sub>
+- Decreasing levels is refused, and the drawing is left completely untouched, when a wire is still connected to a pin of the level that would vanish. <sub>`decreasing_levels_is_refused_when_a_wire_is_connected_to_a_vanishing_level`</sub>
+- Decreasing levels is refused when a jumper still names a terminal of the level that would vanish. <sub>`decreasing_levels_is_refused_when_a_jumper_names_a_vanishing_level`</sub>
+- Decreasing levels is refused when a pin-group range spans terminals of the level that would vanish. <sub>`decreasing_levels_is_refused_when_a_pin_group_spans_a_vanishing_level`</sub>
+- Decreasing levels is refused when an accessory spec names a terminal of the level that would vanish (spec §1.1 accessories format, checked ahead of its own command landing in a later task). <sub>`decreasing_levels_is_refused_when_an_accessory_names_a_vanishing_level`</sub>
+- When nothing references the vanishing level, decreasing levels succeeds and both the symbol_id and the terminal-number override drop that level's labels. <sub>`decreasing_levels_succeeds_and_drops_the_vanishing_levels_labels`</sub>
+- After a 1-level -> 2-level -> 1-level round trip, a wire that was connected to a kept terminal is still connected (same internal/external labels), and the terminal block check does not report it as newly unconnected. <sub>`a_wire_stays_connected_through_a_one_to_two_to_one_level_round_trip`</sub>
+- Undoing a level change restores the previous symbol_id exactly, the same one-command-one-undo shape as RenumberTerminals/SetTerminalNumbers. <sub>`undoing_a_level_change_restores_the_previous_symbol_id`</sub>
+- Asking for a level count outside 1-3 is refused without touching the drawing. <sub>`setting_levels_outside_one_to_three_is_refused`</sub>
+- Changing the level count of a symbol that is not a terminal block is refused, the same gate RenumberTerminals/SetTerminalNumbers already use. <sub>`setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- A symbol_id spelled with the "_1l" one-level alias is refused when placed on the drawing: a single-level terminal block has exactly one valid spelling of its symbol_id. <sub>`a_one_level_alias_symbol_id_is_refused_when_placed`</sub>
 - Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted. <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - Undoing a paper size change restores both the previous size and orientation. <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
 - Changing the paper leaves the sheet's own zone division alone: a sheet divided into its own number of zones keeps that division. <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
@@ -727,6 +743,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Every terminal of the same pole sits on one row across all levels, so 1a and 1b share a row and the rows keep the 5 mm pitch of a single-level block. <sub>`every_level_of_the_same_pole_sits_on_one_row`</sub>
 - Every connection point of a multi-level terminal block sits on the 2.5 mm grid, and no two terminals share a connection point, so a wire can always reach each terminal on its own. <sub>`multilevel_terminal_block_pins_are_on_the_grid_and_never_coincide`</sub>
 - A terminal block asking for 0 or 4 levels (outside the 1-3 range) is rejected as an unknown symbol, the same way an out-of-range pole count is. <sub>`multilevel_terminal_block_rejects_level_count_outside_one_to_three`</sub>
+- "terminal_block_8p_1l" is rejected as an unknown symbol, not accepted as an alias of "terminal_block_8p": a single-level terminal block has exactly one spelling of its symbol_id (Task 3). <sub>`multilevel_terminal_block_rejects_the_one_level_alias_spelling`</sub>
 - The single-level terminal block id keeps its plain numeric pin numbers (1, 2, ...) exactly as before, unaffected by the new multi-level id shape, so existing projects stay valid. <sub>`single_level_terminal_block_id_is_unaffected_by_multilevel_support`</sub>
 - connector_2p generated dynamically has exactly the same pin coordinates as the old static definition, so existing drawings are unaffected. <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
 - resolve_symbol finds built-in ids, and rejects malformed or out-of-range dynamic ids (0 poles, 51 poles, missing count). <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
@@ -858,6 +875,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The editor lists every terminal block of the project with its sheet, its pole count and its jumpers, sheet by sheet and in reference-designator order. <sub>`the_editor_lists_every_terminal_block_with_its_sheet_poles_and_jumpers`</sub>
 - The summary of a multi-level terminal block tells its pole count and its level count apart from its terminal count: a 4-pole 2-level block has 4 poles, 2 levels and 8 terminals. <sub>`a_multilevel_terminal_block_summary_separates_poles_levels_and_terminals`</sub>
 - A single-level terminal block reports one level, so its pole count and its terminal count are the same number. <sub>`a_single_level_terminal_block_summary_has_one_level`</sub>
+- Turning a single-level 8-pole terminal block into 2 levels changes its symbol_id to the 2-level dynamic id. <sub>`multilevel_id_turns_a_single_level_block_into_two_levels`</sub>
+- Undoing multi-level (setting levels back to 1) returns the plain single-level id, never a "_1l" alias. <sub>`multilevel_id_normalises_one_level_to_the_plain_single_level_id`</sub>
+- Asking for 0 levels or more levels than the symbol library supports is rejected, not silently clamped. <sub>`multilevel_id_rejects_zero_and_too_many_levels`</sub>
+- A non terminal-block symbol_id is rejected outright: level count only makes sense for terminal blocks. <sub>`multilevel_id_rejects_a_symbol_that_is_not_a_terminal_block`</sub>
+- Going from 2 levels to 3 keeps the pole count read from the current symbol_id. <sub>`multilevel_id_keeps_the_pole_count_when_changing_between_multilevel_counts`</sub>
+- Increasing levels expands each pole's plain label into one label per level, pole-major with level letters appended ("11,12" -> "11a,11b,12a,12b"). <sub>`relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major`</sub>
+- Decreasing levels back to 1 drops the vanishing level's labels and strips the level letter from what remains. <sub>`relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level`</sub>
+- Going from 2 levels to 3 keeps the existing level-a/level-b labels and adds a fresh level-c label per pole. <sub>`relabel_for_levels_adds_a_new_level_on_top_of_existing_ones`</sub>
+- A terminal_numbers override that happens to equal the symbol's default labels is still reported as an override, because the key is present and valid (not judged only by whether the expanded value differs from the default). <sub>`terminal_numbers_override_reports_a_key_that_matches_the_default_value`</sub>
+- An invalid terminal_numbers value (wrong element count) is not treated as an override: the display already falls back to the default, and there is nothing valid to restore. <sub>`terminal_numbers_override_is_none_for_an_invalid_value`</sub>
+- With no terminal_numbers key at all, there is no override. <sub>`terminal_numbers_override_is_none_when_the_key_is_absent`</sub>
 - Naming a sheet narrows the list to the terminal blocks drawn on that sheet. <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
 - Symbols that are not terminal blocks never show up in the list. <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
 - The chart and the check of a terminal block can be looked up by entity id alone, without knowing which sheet it sits on. <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
@@ -1699,6 +1727,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - draws one terminal column per level, with the same pole of every level on one row <sub>`dynamicSymbol`</sub>
 - keeps every connection point on the 2.5 mm grid and never lets two terminals share one <sub>`dynamicSymbol`</sub>
 - a terminal block with a level count outside 1-3 returns null <sub>`dynamicSymbol`</sub>
+- rejects the one-level alias spelling of a single-level terminal block <sub>`dynamicSymbol`</sub>
 - the plain single-level terminal block id keeps its numeric-only pin numbers <sub>`dynamicSymbol`</sub>
 - static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
 - puts named pins on both sides of the box, 5 mm apart on the 2.5 mm grid <sub>`blockSymbol`</sub>
@@ -1951,6 +1980,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - hides the contact image rows with the reference-designator view class <sub>`drawDeviceBlock`</sub>
 - hides the mate link together with the symbols view class <sub>`renderSheet mate links`</sub>
 - keeps the mate link when only the reference-designator class is hidden <sub>`renderSheet mate links`</sub>
+- hides the jumper bar together with the symbols view class, matching the other symbol-attached drawings <sub>`jumper bar view-class gating (Task 3, フェーズ6積み残し)`</sub>
+- keeps the jumper bar when only the reference-designator class is hidden <sub>`jumper bar view-class gating (Task 3, フェーズ6積み残し)`</sub>
 - draws a note's leader dot exactly the size of a wire junction dot <sub>`renderSheet dots`</sub>
 - draws the header row and the rows derived from the sheet's wires <sub>`wire legend block drawing`</sub>
 - outlines the legend block in the selection colour while it is selected <sub>`wire legend block drawing`</sub>
@@ -2784,6 +2815,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reports that there is nothing to renumber on a sheet without a terminal block <sub>`renumber popover`</sub>
 - previews the jumper specification as it will read after the renumbering <sub>`renumber popover`</sub>
 - shows no jumper line when the block carries no jumpers <sub>`renumber popover`</sub>
+- reports the block's current level count <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- falls back to counting distinct level letters in the chart rows <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- sends one set_terminal_levels command with the requested level count <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- sends nothing when the requested level count matches the current one <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- refuses an out-of-range level count without sending a command <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- keeps the backend's refusal reason in error and leaves the drawing untouched <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 
 ### ui
 

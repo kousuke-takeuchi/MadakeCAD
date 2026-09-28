@@ -767,6 +767,80 @@ describe("renderSheet mate links", () => {
   });
 });
 
+describe("jumper bar view-class gating (Task 3, フェーズ6積み残し)", () => {
+  /** ジャンパ付きの端子台1台だけを持つシートを、指定の表示クラスを隠して描き、ジャンパバー専用の線幅で描かれたstroke回数を返す。 */
+  function jumperBarStrokeCount(hidden: ViewClass[]): number {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const inst = {
+      kind: "symbol",
+      id: "tb1",
+      symbol_id: "terminal_block_4p",
+      at: { x: 100, y: 50 },
+      rotation: 0,
+      mirror: false,
+      reference: "TB1",
+      value: "",
+      attrs: { jumpers: "1-2" },
+    } as unknown as Entity;
+    const sheet = {
+      id: "s1",
+      name: "S1",
+      size: "A3",
+      orientation: "Landscape",
+      zone_cols: 4,
+      zone_rows: 6,
+      title_block: {},
+      revisions: [],
+      entities: { tb1: inst },
+    } as unknown as Sheet;
+    const strokeWidths: number[] = [];
+    const ctx = {
+      canvas: { width: 800, height: 600 },
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 0,
+      font: "",
+      textAlign: "" as CanvasTextAlign,
+      beginPath() {},
+      moveTo() {},
+      lineTo() {},
+      arcTo() {},
+      rect() {},
+      closePath() {},
+      stroke() {
+        strokeWidths.push(ctx.lineWidth);
+      },
+      fill() {},
+      fillRect() {},
+      strokeRect() {},
+      setLineDash() {},
+      measureText: (t: string) => ({ width: t.length * 6 }),
+      arc() {},
+      fillText() {},
+    };
+    const vp = new Viewport();
+    vp.scale = 4;
+    renderSheet(ctx as unknown as CanvasRenderingContext2D, sheet, [def], vp, {
+      selection: new Set(),
+      cursor: null,
+      hidden: new Set(hidden),
+    });
+    const barWidth = JUMPER_BAR_STROKE_MM * vp.scale;
+    return strokeWidths.filter((w) => Math.abs(w - barWidth) < 1e-9).length;
+  }
+
+  // ja: ジャンパバー(G5)は他のシンボル付随描画(嵌合対の破線など)と同じ表示クラス「シンボル」に属し、シンボルを隠すと一緒に消える (フェーズ6積み残しの解消)
+  it("hides the jumper bar together with the symbols view class, matching the other symbol-attached drawings", () => {
+    expect(jumperBarStrokeCount([])).toBe(1);
+    expect(jumperBarStrokeCount(["symbols"])).toBe(0);
+  });
+
+  // ja: 参照記号を隠してもジャンパバーは残る (参照記号の表示クラスには属さない)
+  it("keeps the jumper bar when only the reference-designator class is hidden", () => {
+    expect(jumperBarStrokeCount(["refs"])).toBe(1);
+  });
+});
+
 describe("renderSheet dots", () => {
   /** renderSheetが触るCanvas2D APIだけを備えた、arcの記録用キャンバス。 */
   function sheetRecorder() {

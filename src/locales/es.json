@@ -799,9 +799,16 @@
     "phase2Hint": "previsto para la fase 2",
     "phase2": {
       "spareTerminal": "Insertar reserva",
-      "multiLevel": "Multinivel",
       "accessory": "Accesorios",
       "swap": "Intercambiar int./ext."
+    },
+    "multiLevel": "Multinivel",
+    "levels": {
+      "label": "Niveles",
+      "description": "Cambia este bloque entre un nivel y varios niveles. La disposición de pines, la tabla y el diagrama de conexión se actualizan en consecuencia.",
+      "hint": "Reducir los niveles se rechaza si el cableado, los puentes o los grupos de pines siguen haciendo referencia al nivel que desaparecería. Niveles 1-{max}.",
+      "cancel": "Cancelar",
+      "apply": "Aplicar"
     },
     "hint": "La tabla se deriva del plano (el cableado, los números de hilo y los hilos no se pueden editar aquí). El interior del panel es el punto de conexión izquierdo; el exterior, el derecho.",
     "openLog": "Editor de bornes: editando las borneras de \"{sheet}\"",
@@ -845,7 +852,8 @@
       "issueInvalid": "Estos números no se pueden aplicar. El plano no se modifica.",
       "issueNoBlock": "No hay bloque de terminales que renumerar."
     },
-    "renumberedLog": "Editor de bornes: {reference} renumerado de {from} a {to} (deshacer con Cmd+Z)"
+    "renumberedLog": "Editor de bornes: {reference} renumerado de {from} a {to} (deshacer con Cmd+Z)",
+    "levelsChangedLog": "Editor de bornes: {reference} cambió de {from} a {to} nivel(es) (deshacer con Cmd+Z)"
   },
   "plcIo": {
     "ribbonButton": "Tabla de E/S de PLC",

@@ -799,9 +799,16 @@
     "phase2Hint": "计划在第 2 阶段实现",
     "phase2": {
       "spareTerminal": "插入备用端子",
-      "multiLevel": "多层端子",
       "accessory": "附件",
       "swap": "内外互换"
+    },
+    "multiLevel": "多层端子",
+    "levels": {
+      "label": "层数",
+      "description": "在单层与多层之间切换此端子排。引脚布局、表格和接线图都会随之更新。",
+      "hint": "如果消失的那一层仍被接线、跳线或引脚分组引用,减少层数的操作将被拒绝。层数为 1〜{max}。",
+      "cancel": "取消",
+      "apply": "应用"
     },
     "hint": "表格由图纸推导而来(此处无法编辑连线、线号和导线)。柜内为左侧连接点,柜外为右侧连接点。",
     "openLog": "端子排编辑器: 正在编辑“{sheet}”的端子排",
@@ -845,7 +852,8 @@
       "issueInvalid": "该编号无法应用。图纸不会被修改",
       "issueNoBlock": "没有可重新编号的端子台"
     },
-    "renumberedLog": "端子排编辑器: 已将 {reference} 的端子编号从 {from} 改为 {to}(Cmd+Z 可撤销)"
+    "renumberedLog": "端子排编辑器: 已将 {reference} 的端子编号从 {from} 改为 {to}(Cmd+Z 可撤销)",
+    "levelsChangedLog": "端子排编辑器: {reference} 的层数已从 {from} 改为 {to}(Cmd+Z 可撤销)"
   },
   "plcIo": {
     "ribbonButton": "PLC I/O 表",

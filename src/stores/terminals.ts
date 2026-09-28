@@ -1,14 +1,15 @@
 // 端子台エディタの状態 (仕様: docs/internal/specs/m4-industrial-core.md §1.1)。
 //
 // グリッドの中身はRust側 (madake-coreの端子台チャート) が図面から導出したものをそのまま
-// 表示するだけで、ここで結線を組み立て直したりはしない。編集できるのはジャンパと
-// 並べ替え順 (row_order) だけで、どちらも update_entity コマンド1回として送る (undo一発で戻る)。
+// 表示するだけで、ここで結線を組み立て直したりはしない。編集できるのはジャンパ・
+// 並べ替え順 (row_order)・端子番号 (terminal_numbers)・段数 (symbol_idの_{levels}l) で、
+// どれも Command 1回として送る (undo一発で戻る)。
 // v1のスコープ: 行表示 (多段端子台はLv列付き)+ジャンパ生成/削除+並べ替え+図面へジャンプ+
-// 予備端子表示+端子台チェック+チャート/接続図の生成。
-// 多段端子の追加・アクセサリはモデル拡張が要るためフェーズ2。
+// 予備端子表示+端子台チェック+チャート/接続図の生成+端子番号の自動採番+多段端子の生成/解除。
+// アクセサリ・部品割当・内外スワップ・予備端子の挿入はM4の以降のフェーズ。
 
 import { defineStore } from "pinia";
-import { dynamicSymbol, parseTerminalNo } from "../canvas/dynamicSymbol";
+import { dynamicSymbol, parseTerminalNo, TERMINAL_LEVEL_MAX } from "../canvas/dynamicSymbol";
 // ジャンパ指定の正規化・並べ替え順の解釈はキャンバス描画と共通の純関数を使う
 // (Pinia非依存モジュールが正。Rust側 madake-core/src/terminal_chart.rs の双子)
 import {
@@ -24,6 +25,8 @@ import {
 import type { RevealTarget } from "../composables/reveal";
 import { ipc, type Command, type Diagnostic, type RowOrder, type TerminalBlockInfo, type TerminalChart } from "../ipc";
 import { useDocumentStore } from "./document";
+
+export { TERMINAL_LEVEL_MAX } from "../canvas/dynamicSymbol";
 
 export { formatJumperSpec, parseJumperSpec, ROW_ORDERS, rowOrderOf } from "../canvas/terminalJumpers";
 
@@ -187,6 +190,15 @@ export const useTerminalsStore = defineStore("terminals", {
     hasLevels(state): boolean {
       if (this.block) return this.block.levels > 1;
       return (state.chart?.rows ?? []).some((r) => r.level !== "");
+    },
+    /**
+     * 現在の段数 (単段は1)。一覧より先にチャートだけが読めているときは、行の段記号の
+     * 種類数から数える (`hasLevels`と同じフォールバック)。
+     */
+    levels(state): number {
+      if (this.block) return this.block.levels;
+      const letters = new Set((state.chart?.rows ?? []).map((r) => r.level).filter((l) => l !== ""));
+      return letters.size || 1;
     },
     /** 現在の並べ替え順 (チャートが無ければ既定の数値順)。 */
     rowOrder(state): RowOrder {
@@ -484,6 +496,38 @@ export const useTerminalsStore = defineStore("terminals", {
       this.error = null;
       try {
         await useDocumentStore().execute(command);
+        this.selected = [];
+        await this.reloadBlocks();
+        return true;
+      } catch (e) {
+        this.error = String(e);
+        return false;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    /**
+     * 段数を変える (`set_terminal_levels` Command 1回。Cmd+Zで戻る)。`levels`が今と同じなら
+     * 何もしない。1〜`TERMINAL_LEVEL_MAX`の範囲チェックだけここでしておき (ステッパーの
+     * +/-ボタンがその外へ出さないための門)、消える段への参照が残っているかどうかの判定は
+     * Rust側に任せる (結線・ジャンパ・ピングループを跨いだ判定になるため、ここでは
+     * 二重に持たない)。失敗したら理由を`error`に残す (ポップオーバーが`ui.log`で見せる)。
+     */
+    async setLevels(levels: number): Promise<boolean> {
+      const block = this.block;
+      if (!block || this.busy) return false;
+      if (!Number.isInteger(levels) || levels < 1 || levels > TERMINAL_LEVEL_MAX) return false;
+      if (levels === this.levels) return true;
+      this.busy = true;
+      this.error = null;
+      try {
+        await useDocumentStore().execute({
+          type: "set_terminal_levels",
+          sheet_id: block.sheet_id,
+          entity_id: block.entity_id,
+          levels,
+        });
         this.selected = [];
         await this.reloadBlocks();
         return true;

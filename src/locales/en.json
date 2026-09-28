@@ -799,9 +799,16 @@
     "phase2Hint": "planned for phase 2",
     "phase2": {
       "spareTerminal": "Insert spare",
-      "multiLevel": "Multi-level",
       "accessory": "Accessories",
       "swap": "Swap in/out"
+    },
+    "multiLevel": "Multi-level",
+    "levels": {
+      "label": "Levels",
+      "description": "Changes this block between single-level and multi-level. The pin layout, chart and connection diagram all follow.",
+      "hint": "Decreasing levels is refused if wiring, jumpers or pin groups still reference the level that would disappear. Levels 1-{max}.",
+      "cancel": "Cancel",
+      "apply": "Apply"
     },
     "hint": "The grid is derived from the drawing (wiring, wire numbers and wires cannot be edited here). The inside of the panel is the left connection point, the outside is the right one.",
     "openLog": "Terminal editor: editing the terminal blocks of \"{sheet}\"",
@@ -845,7 +852,8 @@
       "issueInvalid": "These numbers cannot be applied. The drawing is left unchanged.",
       "issueNoBlock": "No terminal block to renumber."
     },
-    "renumberedLog": "Terminal editor: renumbered {reference} from {from} to {to} (undo with Cmd+Z)"
+    "renumberedLog": "Terminal editor: renumbered {reference} from {from} to {to} (undo with Cmd+Z)",
+    "levelsChangedLog": "Terminal editor: {reference} changed from {from} to {to} level(s) (undo with Cmd+Z)"
   },
   "plcIo": {
     "ribbonButton": "PLC I/O table",

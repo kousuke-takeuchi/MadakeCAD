@@ -93,6 +93,10 @@ export function levelLetter(levelIndex: number): string {
  * `terminal_block_`の後ろを多段端子台の(極数, 段数)にパースする
  * (Rust側 parse_multilevel_terminal_block と同一規則)。`{n}p_{levels}l`の形だけを
  * 受け付け(例 "8p_2l")、単段の`{n}p`はnullを返す(呼び出し側の既存経路がそのまま扱う)。
+ *
+ * **段数は2以上だけを受け付ける** (`_1l`という別名idは作らない。Task 3)。単段は常に
+ * `terminal_block_{n}p`という1つのidだけで表すので、`terminal_block_8p_1l`はここでnullになり
+ * 呼び出し側 (`dynamicSymbol`) は「知らないシンボル」としてnullを返す (Rust側と同じ)。
  */
 function parseMultiLevelTerminalBlock(rest: string): { n: number; levels: number } | null {
   const parts = rest.split("_");
@@ -101,7 +105,7 @@ function parseMultiLevelTerminalBlock(rest: string): { n: number; levels: number
   const m = /^([0-9]+)l$/.exec(parts[1]);
   if (n === null || !m) return null;
   const levels = Number(m[1]);
-  if (levels < 1 || levels > TERMINAL_LEVEL_MAX) return null;
+  if (levels < 2 || levels > TERMINAL_LEVEL_MAX) return null;
   return { n, levels };
 }
 

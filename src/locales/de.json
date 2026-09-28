@@ -799,9 +799,16 @@
     "phase2Hint": "für Phase 2 geplant",
     "phase2": {
       "spareTerminal": "Reserveklemme einfügen",
-      "multiLevel": "Mehrstock",
       "accessory": "Zubehör",
       "swap": "Innen/Außen tauschen"
+    },
+    "multiLevel": "Mehrstock",
+    "levels": {
+      "label": "Ebenen",
+      "description": "Wechselt diese Klemmenleiste zwischen einstufig und mehrstufig. Pinbelegung, Tabelle und Anschlussplan folgen.",
+      "hint": "Das Verringern der Ebenen wird abgelehnt, wenn Verdrahtung, Brücken oder Pin-Gruppen noch auf die verschwindende Ebene verweisen. Ebenen 1-{max}.",
+      "cancel": "Abbrechen",
+      "apply": "Anwenden"
     },
     "hint": "Die Tabelle wird aus der Zeichnung abgeleitet (Verdrahtung, Leitungsnummern und Leitungen können hier nicht bearbeitet werden). Die Schrankinnenseite ist der linke Anschlusspunkt, die Außenseite der rechte.",
     "openLog": "Klemmen-Editor: Klemmleisten von „{sheet}“ werden bearbeitet",
@@ -845,7 +852,8 @@
       "issueInvalid": "Diese Nummern können nicht angewendet werden. Die Zeichnung bleibt unverändert.",
       "issueNoBlock": "Keine Klemmenleiste zum Neunummerieren."
     },
-    "renumberedLog": "Klemmen-Editor: {reference} von {from} zu {to} neu nummeriert (rückgängig mit Cmd+Z)"
+    "renumberedLog": "Klemmen-Editor: {reference} von {from} zu {to} neu nummeriert (rückgängig mit Cmd+Z)",
+    "levelsChangedLog": "Klemmen-Editor: {reference} von {from} auf {to} Ebene(n) geändert (rückgängig mit Cmd+Z)"
   },
   "plcIo": {
     "ribbonButton": "SPS-E/A-Tabelle",

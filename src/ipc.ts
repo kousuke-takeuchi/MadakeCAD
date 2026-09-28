@@ -405,6 +405,18 @@ export type Command =
       numbers?: string[] | null;
     }
   /**
+   * 端子台1台の段数を変える (spec §1.1「多段端子の生成・解除」)。`symbol_id`を
+   * `terminal_block_{n}p` <-> `terminal_block_{n}p_{levels}l`へ書き換え、`terminal_numbers`・
+   * `jumpers`・`pin_groups`の段記号も追従させる。段を減らして消える段に結線・ジャンパ・
+   * ピングループ・付属品の指定が残っていれば、図面を変えずにエラーになる。
+   */
+  | {
+      type: "set_terminal_levels";
+      sheet_id: string;
+      entity_id: string;
+      levels: number;
+    }
+  /**
    * プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
    * 各欄は省略(undefined)すれば変更しない。`name`/`no`はプロジェクト単位、
    * `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く(undo一発)。

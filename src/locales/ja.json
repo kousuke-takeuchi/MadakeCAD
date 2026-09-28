@@ -799,9 +799,16 @@
     "phase2Hint": "フェーズ2で対応予定",
     "phase2": {
       "spareTerminal": "予備端子",
-      "multiLevel": "多段生成",
       "accessory": "アクセサリ",
       "swap": "内外スワップ"
+    },
+    "multiLevel": "多段生成",
+    "levels": {
+      "label": "段数",
+      "description": "この端子台を単段⇔多段に切り替えます。ピン配置・チャート・接続図がすべて追従します。",
+      "hint": "消える段に結線・ジャンパ・ピングループの指定が残っていると、段を減らす操作は拒否されます。段数は1〜{max}。",
+      "cancel": "キャンセル",
+      "apply": "適用"
     },
     "hint": "グリッドは図面から導出しています(結線・線番・電線はここでは編集できません)。内部側=盤内(左の接続点)、外部側=盤外(右の接続点)",
     "openLog": "端子台: 「{sheet}」の端子台を編集します",
@@ -845,7 +852,8 @@
       "issueInvalid": "この番号では適用できません。図面は変更されません",
       "issueNoBlock": "採番する端子台がありません"
     },
-    "renumberedLog": "端子台: {reference} の端子番号を {from} から {to} へ採番しました (Cmd+Zで元に戻せます)"
+    "renumberedLog": "端子台: {reference} の端子番号を {from} から {to} へ採番しました (Cmd+Zで元に戻せます)",
+    "levelsChangedLog": "端子台: {reference} の段数を {from} から {to} へ変更しました (Cmd+Zで元に戻せます)"
   },
   "plcIo": {
     "ribbonButton": "PLC I/O割付表",

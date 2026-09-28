@@ -12,12 +12,13 @@
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowLeftRight, Layers, ListOrdered, Plus, ShieldCheck, SquareStack, TriangleAlert, Unplug, X } from "lucide-vue-next";
+import { ArrowLeftRight, Layers, ListOrdered, Minus, Plus, ShieldCheck, SquareStack, TriangleAlert, Unplug, X } from "lucide-vue-next";
+import { clampLevels } from "./symbolPickerDynamic";
 import { filterFor, pickSave } from "../composables/fileActions";
 import { useReveal } from "../composables/reveal";
 import { ipc } from "../ipc";
 import { useDocumentStore } from "../stores/document";
-import { ROW_ORDERS, rowOrderOf, useTerminalsStore } from "../stores/terminals";
+import { ROW_ORDERS, rowOrderOf, TERMINAL_LEVEL_MAX, useTerminalsStore } from "../stores/terminals";
 import { useUiStore } from "../stores/ui";
 
 const terminals = useTerminalsStore();
@@ -32,10 +33,9 @@ watch(
   () => void terminals.refresh(),
 );
 
-/** フェーズ2で実装する操作 (デザインどおり並べるが押せない。採番は実装済みなので除く)。 */
+/** フェーズ2で実装する操作 (デザインどおり並べるが押せない。採番・多段は実装済みなので除く)。 */
 const phase2 = [
   { key: "spareTerminal", icon: SquareStack },
-  { key: "multiLevel", icon: Layers },
   { key: "accessory", icon: Plus },
   { key: "swap", icon: ArrowLeftRight },
 ] as const;
@@ -141,6 +141,84 @@ async function applyRenumber() {
       from,
       to: renumberPreview.value.join(","),
     }),
+  );
+}
+
+// --- 多段ポップオーバー (Task 3。デザイン「多段」準拠、採番ポップオーバーと同じ開閉の型) ---
+// 段数ステッパー (デザインシステムの共通ステッパー = SymbolPickerDialogの挿入ダイアログと
+// 同じマークアップ・CSS)。適用できない (段を減らす対象に結線・ジャンパ・ピングループ等の
+// 参照が残っている) 場合はRust側が拒否するので、その理由をポップオーバーの中に出す
+// (採番ポップオーバーがプレビューで事前に断るのに対し、こちらは適用してから理由を見せる:
+// 判定が結線・ジャンパ・ピングループを跨ぐため、双子をもう1つ持たずRust側に任せる)。
+const showLevels = ref(false);
+const levelsInput = ref(1);
+const levelsError = ref("");
+const levelsPopover = ref<HTMLElement | null>(null);
+
+function toggleLevels() {
+  if (showLevels.value) {
+    showLevels.value = false;
+    return;
+  }
+  levelsInput.value = terminals.levels;
+  levelsError.value = "";
+  showLevels.value = true;
+}
+
+function cancelLevels() {
+  showLevels.value = false;
+}
+
+function stepLevels(n: number) {
+  levelsInput.value = clampLevels(n);
+}
+
+function onLevelsKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape" && showLevels.value) {
+    e.stopPropagation();
+    showLevels.value = false;
+  }
+}
+
+function onLevelsOutsideClick(e: MouseEvent) {
+  if (!showLevels.value) return;
+  const el = levelsPopover.value;
+  const target = e.target as Node | null;
+  if (el && target && !el.contains(target) && !(target instanceof Node && el.parentElement?.contains(target))) {
+    showLevels.value = false;
+  }
+}
+
+watch(showLevels, (open) => {
+  if (open) {
+    window.addEventListener("keydown", onLevelsKeydown, true);
+    window.addEventListener("mousedown", onLevelsOutsideClick, true);
+  } else {
+    window.removeEventListener("keydown", onLevelsKeydown, true);
+    window.removeEventListener("mousedown", onLevelsOutsideClick, true);
+  }
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", onLevelsKeydown, true);
+  window.removeEventListener("mousedown", onLevelsOutsideClick, true);
+});
+
+async function applyLevels() {
+  levelsError.value = "";
+  const before = terminals.levels;
+  if (levelsInput.value === before) {
+    showLevels.value = false;
+    return;
+  }
+  if (!(await terminals.setLevels(levelsInput.value))) {
+    levelsError.value = terminals.error ?? "";
+    if (terminals.error) ui.log(terminals.error);
+    return;
+  }
+  showLevels.value = false;
+  ui.log(
+    t("terminals.levelsChangedLog", { reference: terminals.reference, from: before, to: levelsInput.value }),
   );
 }
 
@@ -352,6 +430,49 @@ async function generateDiagram() {
                 @click="applyRenumber"
               >
                 {{ t("terminals.renumber.apply") }}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="popover-anchor">
+          <button class="tool" :disabled="!terminals.entityId" @click="toggleLevels">
+            <Layers :size="12" class="tool-icon" />
+            {{ t("terminals.multiLevel") }}
+          </button>
+          <div v-if="showLevels" ref="levelsPopover" class="popover" @click.stop>
+            <div class="popover-title">{{ t("terminals.multiLevel") }}</div>
+            <div class="popover-desc">{{ t("terminals.levels.description") }}</div>
+            <label class="popover-field">
+              <span>{{ t("terminals.levels.label") }}</span>
+              <div class="stepper">
+                <button class="step" :disabled="levelsInput <= 1" @click="stepLevels(levelsInput - 1)">
+                  <Minus :size="12" />
+                </button>
+                <input
+                  class="step-value"
+                  :value="levelsInput"
+                  @change="stepLevels(Number(($event.target as HTMLInputElement).value))"
+                />
+                <button
+                  class="step"
+                  :disabled="levelsInput >= TERMINAL_LEVEL_MAX"
+                  @click="stepLevels(levelsInput + 1)"
+                >
+                  <Plus :size="12" />
+                </button>
+              </div>
+            </label>
+            <div class="popover-note">{{ t("terminals.levels.hint", { max: TERMINAL_LEVEL_MAX }) }}</div>
+            <div v-if="levelsError" class="popover-issue">
+              <TriangleAlert :size="12" class="issue-icon" />
+              <span>{{ levelsError }}</span>
+            </div>
+            <div class="popover-actions">
+              <button class="btn secondary" @click="cancelLevels">
+                {{ t("terminals.levels.cancel") }}
+              </button>
+              <button class="btn primary" :disabled="terminals.busy" @click="applyLevels">
+                {{ t("terminals.levels.apply") }}
               </button>
             </div>
           </div>
@@ -598,6 +719,43 @@ async function generateDiagram() {
 .popover-note { font-size: 10px; color: var(--ui-muted); }
 .popover-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .popover-actions .btn { min-width: 0; padding: 4px 12px; }
+
+/* --- 段数ステッパー (デザインシステムの共通ステッパー。SymbolPickerDialogと同じ見た目) --- */
+.stepper {
+  display: flex;
+  align-items: center;
+  background: var(--input-bg);
+  border: 1px solid var(--ribbon-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.step {
+  width: 22px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--ui-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.step:hover:not(:disabled) { background: var(--hover-bg); }
+.step:disabled { opacity: 0.4; cursor: default; }
+.step-value {
+  width: 36px;
+  height: 24px;
+  border: none;
+  border-left: 1px solid var(--ribbon-line);
+  border-right: 1px solid var(--ribbon-line);
+  background: var(--card-bg);
+  text-align: center;
+  font-family: var(--mono-font);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text);
+  outline: none;
+}
 
 /* --- 本体グリッド --- */
 .body {

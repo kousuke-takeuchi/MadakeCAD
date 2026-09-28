@@ -799,9 +799,16 @@
     "phase2Hint": "prévu pour la phase 2",
     "phase2": {
       "spareTerminal": "Insérer une réserve",
-      "multiLevel": "Multi-étage",
       "accessory": "Accessoires",
       "swap": "Permuter int./ext."
+    },
+    "multiLevel": "Multi-étage",
+    "levels": {
+      "label": "Étages",
+      "description": "Fait basculer ce bornier entre un étage et plusieurs étages. La disposition des broches, le tableau et le schéma de raccordement suivent.",
+      "hint": "Réduire les étages est refusé si un câblage, un pontet ou un groupe de broches fait encore référence à l'étage qui disparaîtrait. Étages 1-{max}.",
+      "cancel": "Annuler",
+      "apply": "Appliquer"
     },
     "hint": "La grille est dérivée du schéma (le câblage, les numéros de fil et les fils ne sont pas modifiables ici). L'intérieur de l'armoire correspond au point de raccordement gauche, l'extérieur au point droit.",
     "openLog": "Éditeur de bornier : modification des borniers de « {sheet} »",
@@ -845,7 +852,8 @@
       "issueInvalid": "Ces numéros ne peuvent pas être appliqués. Le plan reste inchangé.",
       "issueNoBlock": "Aucun bornier à renuméroter."
     },
-    "renumberedLog": "Éditeur de bornier : {reference} renuméroté de {from} à {to} (annuler avec Cmd+Z)"
+    "renumberedLog": "Éditeur de bornier : {reference} renuméroté de {from} à {to} (annuler avec Cmd+Z)",
+    "levelsChangedLog": "Éditeur de bornier : {reference} passé de {from} à {to} étage(s) (annuler avec Cmd+Z)"
   },
   "plcIo": {
     "ribbonButton": "Table E/S automate",
