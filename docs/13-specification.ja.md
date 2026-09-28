@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2380仕様項目**。
+全6領域・**2386仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -493,6 +493,7 @@
 - 列幅は指定した相対比に従い、指定が無ければ等分になる。 <sub>`report_page_column_widths_follow_ratios`</sub>
 - データ中のXML特殊文字はエスケープされ、ページは正しいSVGのままになる。 <sub>`report_page_escapes_xml_special_characters`</sub>
 - 端子台チャートのシートは帳票名に参照記号を含み、チャートのデータと同じ行を端子ごとに並べる。 <sub>`terminal_chart_sheet_matches_chart_rows`</sub>
+- 図枠付きの端子台チャートシートは、チャートと同じ行順でセルを描く。`row_order`を変えると図面シート上の行の位置そのものが動く (見出しだけ変わるのではない)。 <sub>`the_terminal_chart_sheet_draws_the_rows_in_the_chart_row_order`</sub>
 - 端子台でないエンティティのチャートシートは1ページも出ない。 <sub>`terminal_chart_sheet_is_none_for_other_entities`</sub>
 - From-To電線リストのシートはCSV帳票と同じ列・同じ行を使う。 <sub>`wire_list_sheet_matches_report_rows`</sub>
 - 部品表のシートは部品グループごとに参照記号と数量を並べる。 <sub>`bom_sheet_lists_parts_with_quantity`</sub>
@@ -833,14 +834,14 @@
 - 1つの端子台に複数のジャンパがあれば、それぞれ独立したバーの線分になる。 <sub>`multiple_jumpers_each_produce_their_own_bar_segment`</sub>
 - 端子台に無い端子番号を指すジャンパは、パニックせず線分を作らない。 <sub>`a_jumper_to_a_missing_terminal_produces_no_bar_segment`</sub>
 - ジャンパは通常のupdate_entityコマンドで設定するので、チャートに反映され、undoで元に戻る。 <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
-- An unset, empty or unrecognised `row_order` attribute falls back to number order. <sub>`an_unset_or_unknown_row_order_falls_back_to_number_order`</sub>
-- Number order (the default) sorts poles as integers, so it stays correct past nine poles. <sub>`number_order_sorts_poles_as_integers`</sub>
-- ("10"が"2"より前に来る)。 <sub>`alnum_order_compares_pole_numbers_as_strings`</sub>
-- 番号は逆でも、読み順で先に来る方が先になる。配線の無い極(予備)は最後に極番号順で並ぶ。 <sub>`page_order_follows_where_the_wiring_first_appears_on_the_sheet`</sub>
-- (名前の辞書順ではなく初出順)。ハーネス名の無い極は最後に極番号順で並ぶ。 <sub>`cable_order_groups_poles_by_their_external_harness_in_first_seen_order`</sub>
-- ジャンパの無い極をその後ろに極番号順で並べる。 <sub>`jumper_order_brings_every_jumpered_pole_to_the_front`</sub>
-- 必ず隣り合う (段がバラバラの位置に散らばらない)。 <sub>`every_row_order_keeps_the_three_levels_of_one_pole_adjacent`</sub>
-- (row_orderで並べ替えても、CSVは`chart.rows`をそのまま使うので食い違わない)。 <sub>`the_csv_row_order_always_matches_the_chart_row_order`</sub>
+- `attrs["row_order"]`が未設定・空・未知語なら数値順 (既定) に落ちる。 <sub>`an_unset_or_unknown_row_order_falls_back_to_number_order`</sub>
+- 数値順 (既定) は極番号を数として昇順に並べる。10極以上でも桁の大小どおりになる。 <sub>`number_order_sorts_poles_as_integers`</sub>
+- 英数順は端子番号を文字列として辞書順に並べるので、10極以上では数値順と違う結果になる ("10"が"2"より前に来る)。 <sub>`alnum_order_compares_terminal_numbers_as_text`</sub>
+- ページ順は、その極の配線が図面上で読み順(上→下、左→右)に最初に現れる位置で並べる。番号は逆でも、読み順で先に来る方が先になる。配線の無い極(予備)は最後に極番号順で並ぶ。 <sub>`page_order_follows_where_the_wiring_first_appears_on_the_sheet`</sub>
+- 外部ケーブル順は、外部ハーネス名が最初に現れた極の順にその名前の極をまとめる (名前の辞書順ではなく初出順)。ハーネス名の無い極は最後に極番号順で並ぶ。 <sub>`cable_order_groups_poles_by_their_external_harness_in_first_seen_order`</sub>
+- ジャンパ順は、ジャンパが1本でも掛かっている極を極番号順でまとめて先頭に出し、ジャンパの無い極をその後ろに極番号順で並べる。 <sub>`jumper_order_brings_every_jumpered_pole_to_the_front`</sub>
+- 3段の端子台では、どの並べ替え順を選んでも同じ極の3段 (a/b/c) が並びの中で必ず隣り合う (段がバラバラの位置に散らばらない)。 <sub>`every_row_order_keeps_the_three_levels_of_one_pole_adjacent`</sub>
+- チャートCSVの行順は、常にチャート(エディタ)の行順と一致する (row_orderで並べ替えても、CSVは`chart.rows`をそのまま使うので食い違わない)。 <sub>`the_csv_row_order_always_matches_the_chart_row_order`</sub>
 
 ### 端子接続図
 
@@ -857,6 +858,7 @@
 - 多段端子台の接続図は、段の列それぞれの上に段記号を書くので、箱の番号を読まなくてもどの列がどの段か分かる。 <sub>`a_multilevel_terminal_diagram_heads_each_level_column_with_its_letter`</sub>
 - 単段の端子台の接続図には段の見出しが付かない (端子の列が1本しかないため)。 <sub>`a_single_level_terminal_diagram_has_no_level_heading`</sub>
 - 1ページに収まらない端子は次のページへ続き、各ページの表題にそのページの端子の範囲が入る。 <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
+- ページ表題の端子の範囲は、そのページに載る端子の最小と最大を書く。ジャンパ順のように行が端子番号順に並んでいない並べ替えでも、範囲として読める表記のままになる。 <sub>`the_page_title_range_names_the_smallest_and_largest_terminal_on_the_page`</sub>
 - 端子台1つにつき1ページが出て、端子台でないものには1ページも出ない。 <sub>`one_page_per_terminal_block_and_none_for_anything_else`</sub>
 - 端子接続図のページはA4横で、JIS図枠と、端子台の参照記号が入った表題欄を持つ。 <sub>`the_page_has_the_frame_and_a_title_block`</sub>
 - 端子接続図はterminal-diagramという名前の帳票として選べ、CLI・Link API・MCPで同じ綴りになる。 <sub>`the_terminal_diagram_is_a_report_named_terminal_diagram`</sub>
@@ -2708,6 +2710,10 @@
 - 既定の数値順を選び直すと、row_order属性ごと消す(未設定の端子台と同じ状態に戻す) <sub>`terminal strip editor store`</sub>
 - 現在のチャートの並べ替え順をそのまま見せる(サーバ側で並べ替え済み) <sub>`terminal strip editor store`</sub>
 - 「図面へジャンプ」は表示中の端子台のシート・entity idをrevealへそのまま渡す <sub>`terminal strip editor store`</sub>
+- 「図面へジャンプ」はエディタを閉じてから図面を出す(全画面モーダルの下にジャンプ先が隠れないように) <sub>`terminal strip editor store`</sub>
+- ジャンプで閉じたエディタを開き直すと、同じ端子台と同じ行選択に戻る <sub>`terminal strip editor store`</sub>
+- ×やスクリムで閉じたときは覚え書きを残さない(次に開くと先頭の端子台・選択なし) <sub>`terminal strip editor store`</sub>
+- 並べ替えを変えたときの読み直しは1回だけ(自前の読み直しと図面のrevision通知で二重に取りに行かない) <sub>`terminal strip editor store`</sub>
 - 端子台が無ければ「図面へジャンプ」は何もしない <sub>`terminal strip editor store`</sub>
 - 図面が外から変わったら (undoやAIの編集) グリッドを取り直し、古いチェック結果は捨てる <sub>`terminal strip editor store`</sub>
 - 端子台エディタを閉じている間は図面が変わっても読み込みに行かない <sub>`terminal strip editor store`</sub>

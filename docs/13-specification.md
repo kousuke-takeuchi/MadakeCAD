@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2380 specification clauses** across 6 areas.
+**2386 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -493,6 +493,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Column widths follow the given ratios; without ratios the columns are equal in width. <sub>`report_page_column_widths_follow_ratios`</sub>
 - Special XML characters in the data are escaped so the page stays valid SVG. <sub>`report_page_escapes_xml_special_characters`</sub>
 - The terminal chart sheet carries the reference designator in its title and one table row per terminal, matching the chart data. <sub>`terminal_chart_sheet_matches_chart_rows`</sub>
+- The framed terminal chart sheet draws its rows in the chart's own row order, so changing `row_order` really moves the rows down the drawing sheet instead of only relabelling them. <sub>`the_terminal_chart_sheet_draws_the_rows_in_the_chart_row_order`</sub>
 - Asking for a terminal chart sheet of something that is not a terminal block yields no page at all. <sub>`terminal_chart_sheet_is_none_for_other_entities`</sub>
 - The From-To wire list sheet uses the same columns and rows as the CSV report. <sub>`wire_list_sheet_matches_report_rows`</sub>
 - The BOM sheet lists every part group with its reference designators and quantity. <sub>`bom_sheet_lists_parts_with_quantity`</sub>
@@ -833,14 +834,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Several jumpers on the same terminal block each produce their own bar segment. <sub>`multiple_jumpers_each_produce_their_own_bar_segment`</sub>
 - A jumper referencing a terminal number the block does not have produces no segment instead of panicking. <sub>`a_jumper_to_a_missing_terminal_produces_no_bar_segment`</sub>
 - Jumpers are set with the ordinary update_entity command, so the chart follows the change and undo takes it back. <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
-- `attrs["row_order"]`が未設定・空・未知語なら数値順 (既定) に落ちる。 <sub>`an_unset_or_unknown_row_order_falls_back_to_number_order`</sub>
-- 数値順 (既定) は極番号を数として昇順に並べる。10極以上でも桁の大小どおりになる。 <sub>`number_order_sorts_poles_as_integers`</sub>
-- 英数順は極番号を文字列として辞書順に並べるので、10極以上では数値順と違う結果になる <sub>`alnum_order_compares_pole_numbers_as_strings`</sub>
-- ページ順は、その極の配線が図面上で読み順(上→下、左→右)に最初に現れる位置で並べる。 <sub>`page_order_follows_where_the_wiring_first_appears_on_the_sheet`</sub>
-- 外部ケーブル順は、外部ハーネス名が最初に現れた極の順にその名前の極をまとめる <sub>`cable_order_groups_poles_by_their_external_harness_in_first_seen_order`</sub>
-- ジャンパ順は、ジャンパが1本でも掛かっている極を極番号順でまとめて先頭に出し、 <sub>`jumper_order_brings_every_jumpered_pole_to_the_front`</sub>
-- 3段の端子台では、どの並べ替え順を選んでも同じ極の3段 (a/b/c) が並びの中で <sub>`every_row_order_keeps_the_three_levels_of_one_pole_adjacent`</sub>
-- チャートCSVの行順は、常にチャート(エディタ)の行順と一致する <sub>`the_csv_row_order_always_matches_the_chart_row_order`</sub>
+- An unset, empty or unrecognised `row_order` attribute falls back to number order. <sub>`an_unset_or_unknown_row_order_falls_back_to_number_order`</sub>
+- Number order (the default) sorts poles as integers, so it stays correct past nine poles. <sub>`number_order_sorts_poles_as_integers`</sub>
+- Alphanumeric order compares terminal numbers as text, so past nine poles it disagrees with number order ("10" sorts before "2"). <sub>`alnum_order_compares_terminal_numbers_as_text`</sub>
+- Page order sorts poles by where their wiring first appears on the sheet in reading order (top-to-bottom, then left-to-right) — even against numeric order — and puts unwired (spare) poles last, in pole-number order. <sub>`page_order_follows_where_the_wiring_first_appears_on_the_sheet`</sub>
+- Cable order gathers the poles of each external harness together in the order that harness name first appears (not alphabetically), putting poles with no harness last in pole-number order. <sub>`cable_order_groups_poles_by_their_external_harness_in_first_seen_order`</sub>
+- Jumper order brings every pole that has any jumper to the front (in pole-number order), followed by the poles with no jumper (also in pole-number order). <sub>`jumper_order_brings_every_jumpered_pole_to_the_front`</sub>
+- On a 3-level terminal block, whichever row order is chosen, the three levels of one pole always stay next to each other in the resulting order. <sub>`every_row_order_keeps_the_three_levels_of_one_pole_adjacent`</sub>
+- The terminal chart CSV always lists rows in the same order as the chart (the editor), for every row order. <sub>`the_csv_row_order_always_matches_the_chart_row_order`</sub>
 
 ### Terminal connection diagrams
 
@@ -857,6 +858,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Each level column of a multi-level terminal diagram is headed by its level letter, so a reader can tell which column is which level without reading the box numbers. <sub>`a_multilevel_terminal_diagram_heads_each_level_column_with_its_letter`</sub>
 - A single-level terminal diagram gets no level heading, because it has only one column of terminals. <sub>`a_single_level_terminal_diagram_has_no_level_heading`</sub>
 - Terminals that do not fit on one page continue on the next, and each page title states the range of terminals it holds. <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
+- The page title's terminal range names the smallest and largest terminal on that page, so it still reads as a range when a row order such as jumper order puts the rows out of terminal-number sequence. <sub>`the_page_title_range_names_the_smallest_and_largest_terminal_on_the_page`</sub>
 - Every terminal block gets exactly one page; anything that is not a terminal block gets none. <sub>`one_page_per_terminal_block_and_none_for_anything_else`</sub>
 - A terminal diagram page is an A4 landscape sheet with the JIS frame and a title block naming the terminal block. <sub>`the_page_has_the_frame_and_a_title_block`</sub>
 - The terminal diagram is offered as a report named terminal-diagram, spelled the same way in the CLI, Link API and MCP. <sub>`the_terminal_diagram_is_a_report_named_terminal_diagram`</sub>
@@ -2708,6 +2710,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - drops the row_order attribute entirely when number order is chosen again <sub>`terminal strip editor store`</sub>
 - reflects the row order the chart already came back sorted in <sub>`terminal strip editor store`</sub>
 - jumps to the drawing by passing the sheet and entity id of the current block to reveal <sub>`terminal strip editor store`</sub>
+- closes the editor before revealing the drawing so the jump is not hidden behind the modal <sub>`terminal strip editor store`</sub>
+- restores the same block and row selection when the editor is reopened after a jump <sub>`terminal strip editor store`</sub>
+- keeps no resume memo when the editor is closed by hand <sub>`terminal strip editor store`</sub>
+- reloads the list and chart only once per sort change, not twice <sub>`terminal strip editor store`</sub>
 - does nothing when asked to jump to the drawing without a terminal block <sub>`terminal strip editor store`</sub>
 - reloads the grid when the drawing changes from outside the editor, e.g. an undo <sub>`terminal strip editor store`</sub>
 - does not fetch anything while the editor is closed <sub>`terminal strip editor store`</sub>
