@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2308 specification clauses** across 6 areas.
+**2321 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -891,10 +891,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Tidy variants (sheet copies / adopt)
 
-- A variant copy keeps the paper, title block and every entity of the original, with a new sheet id, new entity ids, the label in its name, and a complete old-to-new id map. <sub>`duplicate_keeps_content_with_fresh_ids_and_a_full_map`</sub>
+- A variant copy keeps the paper, title block, revision rows, sheet kind and note height of the original and every entity, with a new sheet id, new entity ids, the label in its name, a mark saying which sheet it copies, and a complete old-to-new id map. <sub>`duplicate_keeps_content_with_fresh_ids_and_a_full_map`</sub>
+- A leader note in the copy points at the copy of its target, so the copy is a valid sheet on its own: the target exists, nothing points outside the sheet, and the project's own verification finds no missing leader target. <sub>`duplicate_repoints_leader_lines_inside_the_copy`</sub>
+- While variant copies exist, the cross-reference addresses (`/2.B3`) of neither the original nor the copies change, because the copies do not count as another sheet carrying the same reference. <sub>`variant_copies_do_not_grow_cross_reference_addresses`</sub>
 - Starting a run with N variants yields N RestoreSheet commands appended after the existing sheets, each with its own label and id map; N outside 1..=4 is rejected. <sub>`start_builds_one_restore_sheet_per_variant`</sub>
 - Adopting a variant writes moved entities back under their original ids, deletes what the variant removed, adds what it created with fresh ids, leaves untouched entities alone, and finally removes every variant sheet. <sub>`adopt_maps_changes_back_to_original_ids`</sub>
-- Adopting an unchanged variant only removes the variant sheets. <sub>`adopting_an_unchanged_variant_only_removes_sheets`</sub>
+- Adopting an unchanged variant only removes the variant sheets: the leader note counts as unchanged although its target id differs between the copy and the original. <sub>`adopting_an_unchanged_variant_only_removes_sheets`</sub>
+- Adopting a variant that repointed a leader to another entity, and one that added a new note with a leader, writes both back with original-side targets and succeeds through the engine; the target of an entity the variant deleted is dropped instead of left dangling. <sub>`adopt_repoints_leaders_to_original_side_ids`</sub>
+- When the variant deletes the entity a leader pointed at, adopting drops that leader instead of writing back a target that will not exist. <sub>`adopt_drops_a_leader_whose_target_the_variant_deleted`</sub>
+- finish rejects a run whose original or variant sheets are gone, whose variant sheets are not copies of that original, whose id map points back at the original's own ids, whose adopt target is not one of the copies, or whose original sheet was hand-edited since the comparison started; discarding after a hand edit is still allowed. <sub>`finish_validates_the_run_against_the_current_drawing`</sub>
 - Through the engine, start → edit a variant → adopt leaves the original sheet with the variant's placement and no variant sheets, and each of the three steps is one undo. <sub>`engine_round_trip_is_one_undo_per_step`</sub>
 
 ### Verification (ERC & electrical)
@@ -1052,6 +1057,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - POST /api/v1/export/pdf writes a valid PDF file to the requested path. <sub>`export_pdf_writes_pdf_file`</sub>
 - POST /api/v1/export/dxf and /export/kicad write the sheet as DXF and .kicad_sch, and POST /api/v1/import/dxf reads the DXF back into a project with an import report. <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
 - POST /api/v1/variants/start copies the sheet once per variant (one undo step) and returns each copy's id map; /variants/finish with a chosen sheet writes it back under the original ids and removes the copies, with null it only removes them; a count outside 1..=4 is rejected. <sub>`variants_start_and_finish_round_trip`</sub>
+- POST /api/v1/variants/finish refuses a run whose copies no longer exist, a chosen sheet that is not one of the copies, and adopting after the original sheet was edited by hand during the comparison; discarding still works, and a count of 0 is rejected at start. <sub>`variants_finish_refuses_a_run_that_no_longer_matches_the_drawing`</sub>
 - POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports. <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - The terminal endpoints list the terminal blocks of the drawing and return one block's chart and check result. <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report writes one report as CSV or as framed PDF pages, and refuses CSV for the graphical terminal diagram. <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
@@ -1571,6 +1577,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - a region without a conversation color falls back to the default agent color <sub>`並列エージェント: 会話ごとの色`</sub>
 - regions of two conversations running at once keep their own colors side by side <sub>`並列エージェント: 会話ごとの色`</sub>
 - conversation colors follow the start order and wrap around after the fourth <sub>`並列エージェント: 会話ごとの色`</sub>
+- keeps only the ops of the sheet on screen <sub>`patchOverlayTargets`</sub>
+- uses the running conversation's color when only one is running, and the default color otherwise <sub>`patchOverlayTargets`</sub>
+- keeps the per-conversation color for a variant sheet even with several conversations running <sub>`patchOverlayTargets`</sub>
 
 ### annotationText
 
@@ -2151,6 +2160,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - shows nothing for a designator on a single sheet <sub>`G13 device cross-reference`</sub>
 - skips a relay coil and the contact it drives <sub>`G13 device cross-reference`</sub>
 - still cross-references a contactless coil that appears on two sheets <sub>`G13 device cross-reference`</sub>
+- a tidy variant copy adds no cross-reference address to the original or to itself <sub>`G13 device cross-reference`</sub>
 - maps each symbol entity id to the text drawn beside it <sub>`G13 device cross-reference`</sub>
 - lists every other sheet for a designator on three sheets <sub>`G13 device cross-reference`</sub>
 - places the text right of the symbol outline, level with the designator label <sub>`G13 device cross-reference`</sub>
@@ -2657,13 +2667,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - start copies the active sheet once per variant, sends the same tidy prompt in a separate conversation per copy, and opens the panel <sub>`variants store: 整え案の開始`</sub>
 - a selection is mapped to the copy's entity ids in each prompt <sub>`variants store: 整え案の開始`</sub>
-- metrics of the original and every variant are fetched after start <sub>`variants store: 整え案の開始`</sub>
+- metrics of the original and every variant are fetched after start, each variant measuring its own sheet <sub>`variants store: 整え案の開始`</sub>
+- each variant's prompt names its own sheet id in the measuring and verification steps <sub>`variants store: 整え案の開始`</sub>
 - start refuses without a sheet, with a count outside 2..4, and while a comparison is in progress <sub>`variants store: 整え案の開始`</sub>
 - a failed copy is logged and nothing starts <sub>`variants store: 整え案の開始`</sub>
 - variants count as running while their conversation answers, and adopt waits for all of them <sub>`variants store: 比較・採用・破棄`</sub>
 - adopt finishes with the chosen sheet, returns to the original sheet and ends the comparison <sub>`variants store: 比較・採用・破棄`</sub>
 - discard cancels the conversations still running and removes every copy <sub>`variants store: 比較・採用・破棄`</sub>
 - a failed finish is logged and the comparison stays open <sub>`variants store: 比較・採用・破棄`</sub>
+- a run whose copy sheets are gone (an undone start) is cleared with a message instead of lingering <sub>`variants store: 比較・採用・破棄`</sub>
+- the conversation of a variant sheet can be looked up from the sheet id <sub>`variants store: 比較・採用・破棄`</sub>
 - closing the panel keeps the comparison and it can be reopened; nothing opens without a run <sub>`variants store: 比較・採用・破棄`</sub>
 - refreshing metrics leaves a variant without metrics when its sheet cannot be measured <sub>`variants store: 比較・採用・破棄`</sub>
 

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2308仕様項目**。
+全6領域・**2321仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -891,10 +891,15 @@
 
 ### 整えバリアント (シート複製 / 採用)
 
-- 案の複製は用紙・表題欄・全エンティティを元のまま持ち、シートidとエンティティidだけ新しく、名前にラベルが付き、元id→新idの対応表が全要素分できる。 <sub>`duplicate_keeps_content_with_fresh_ids_and_a_full_map`</sub>
+- 案の複製は用紙・表題欄・改訂欄・シート種別・注記文字高と全エンティティを元のまま持ち、シートidとエンティティidだけ新しく、名前にラベルが付き、どのシートの複製かの印が付き、元id→新idの対応表が全要素分できる。 <sub>`duplicate_keeps_content_with_fresh_ids_and_a_full_map`</sub>
+- 複製の引き出し線つき注記は「複製側の対象」を指すので、複製だけで成り立つ正しいシートになる。対象は複製の中に実在し、シートの外を指す参照は残らず、図面検証も引き出し線の対象欠落を出さない。 <sub>`duplicate_repoints_leader_lines_inside_the_copy`</sub>
+- 案の複製がある間も、元シートと各案のシート間クロスリファレンス住所 (`/2.B3`) は増えない。複製は「同じ参照記号を持つ別シート」として数えないため。 <sub>`variant_copies_do_not_grow_cross_reference_addresses`</sub>
 - N案で開始すると既存シートの後ろへ入るRestoreSheetがN個でき、案ごとにラベルと対応表が付く。1〜4以外の数は拒否される。 <sub>`start_builds_one_restore_sheet_per_variant`</sub>
 - 採用すると、動かした要素は元idのまま更新、案で消えた要素は削除、案で増えた要素は新idで追加、変わらない要素は触らず、最後に全ての案シートが消える。 <sub>`adopt_maps_changes_back_to_original_ids`</sub>
-- 何も変わっていない案を採用すると、案シートを消すだけになる。 <sub>`adopting_an_unchanged_variant_only_removes_sheets`</sub>
+- 何も変わっていない案を採用すると、案シートを消すだけになる。引き出し線つき注記は複製側と元で対象idが違っても「変わっていない」と見なす。 <sub>`adopting_an_unchanged_variant_only_removes_sheets`</sub>
+- 案が引き出し線を張り替えた場合と、引き出し線つき注記を増やした場合の採用は、対象を元シート側のidへ写してエンジンを通る。案が消した要素を指していた引き出し線は宙ぶらりんにせず外す。 <sub>`adopt_repoints_leaders_to_original_side_ids`</sub>
+- 案が引き出し線の対象を消した場合、採用は「残らない対象」を書き戻さずに引き出し線を外す。 <sub>`adopt_drops_a_leader_whose_target_the_variant_deleted`</sub>
+- 終了は、元シートや案シートが無い実行・その元シートの案ではないシート・写し先が元シートのidになっている対応表・案に含まれない採用先・比較開始後に元シートが手編集された採用を、理由つきで断る。手編集後でも破棄はできる。 <sub>`finish_validates_the_run_against_the_current_drawing`</sub>
 - エンジンで開始→案を編集→採用すると、元シートが案の配置になり案シートは残らない。開始・編集・採用はそれぞれundo1回で戻る。 <sub>`engine_round_trip_is_one_undo_per_step`</sub>
 
 ### 検証 (ERC・電気検証)
@@ -1052,6 +1057,7 @@
 - POST /api/v1/export/pdf は指定パスへ正しいPDFファイルを書き出す。 <sub>`export_pdf_writes_pdf_file`</sub>
 - POST /api/v1/export/dxf と /export/kicad はシートをDXFと.kicad_schへ書き出し、POST /api/v1/import/dxf はそのDXFをインポートレポート付きでプロジェクトへ読み戻す。 <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
 - POST /api/v1/variants/start はシートを案の数だけ複製し(undo1回)、案ごとのid対応表を返す。/variants/finish は選んだ案を元idのまま元シートへ写し戻して複製を消し、nullなら複製を消すだけ。1〜4以外の数は拒否される。 <sub>`variants_start_and_finish_round_trip`</sub>
+- POST /api/v1/variants/finish は、複製がもう無い実行・案に含まれない採用先・比較中に元シートを手編集した後の採用を断る。破棄はそれでも通り、開始の案の数0も拒否される。 <sub>`variants_finish_refuses_a_run_that_no_longer_matches_the_drawing`</sub>
 - POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。 <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - 端子台エンドポイントは図面の端子台を一覧し、1台のチャートとチェック結果を返す。 <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report は帳票1種をCSVまたは図枠付きPDFで書き出し、図面である端子接続図のCSVは拒否する。 <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
@@ -1571,6 +1577,9 @@
 - 色を指定しない編集領域は既定色(会話1本目の色)になる <sub>`並列エージェント: 会話ごとの色`</sub>
 - 同時に走る2会話の編集領域は、それぞれの色を保ったまま並ぶ <sub>`並列エージェント: 会話ごとの色`</sub>
 - 会話の色は開始順(0始まり)で決まり、5本目からは先頭の色へ戻る <sub>`並列エージェント: 会話ごとの色`</sub>
+- 表示中のシート以外の編集は拾わない(案ごとに別シートを整える整えバリアントで、他の案の編集が表示中のシートへ幽霊のように出るのを防ぐ) <sub>`patchOverlayTargets`</sub>
+- 走っている会話が1本だけならその会話の色、2本以上あってどの会話の編集か分からなければ既定色 <sub>`patchOverlayTargets`</sub>
+- 表示中のシートが整え案の複製なら、並列に何本走っていてもその案の会話色で描く(どの会話の編集かがシートで分かるため) <sub>`patchOverlayTargets`</sub>
 
 ### annotationText
 
@@ -2151,6 +2160,7 @@
 - 1枚のシートにしか描かれていない参照記号には、クロスリファレンスが一切付かない <sub>`G13 device cross-reference`</sub>
 - 接点を従えたリレーのコイルと、その接点は、デバイス単位のクロスリファレンスの対象から外れる(コイル⇔接点クロスリファレンスが既に互いの所在を書いているため) <sub>`G13 device cross-reference`</sub>
 - 接点をどこにも持たないコイルにはコイル⇔接点クロスリファレンスが何も描かないので、そういうコイルだけの参照記号には普通のデバイス単位クロスリファレンスが付く (G13) <sub>`G13 device cross-reference`</sub>
+- 整えバリアントの複製シートがあっても、元シートにも案シートにも住所注記は生えない (複製は「同じ参照記号を持つ別シート」として数えない) <sub>`G13 device cross-reference`</sub>
 - シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける <sub>`G13 device cross-reference`</sub>
 - 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる <sub>`G13 device cross-reference`</sub>
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる <sub>`G13 device cross-reference`</sub>
@@ -2657,13 +2667,16 @@
 
 - 開始すると表示中のシートが案の数だけ複製され、案ごとに別の会話で同じ整え指示が送られ、比較パネルが開く <sub>`variants store: 整え案の開始`</sub>
 - 選択があれば、その要素の対応する複製側の要素だけを整える範囲として指示する <sub>`variants store: 整え案の開始`</sub>
-- 開始直後に元の図面と各案の指標が取られる <sub>`variants store: 整え案の開始`</sub>
+- 開始直後に元の図面と各案の指標が取られ、案ごとに自分のシートの数値になる (元シートの数値にすり替わらない) <sub>`variants store: 整え案の開始`</sub>
+- 案ごとのプロンプトは、測るときも検証するときも自分の複製シートのsheet_idを指定させる <sub>`variants store: 整え案の開始`</sub>
 - シートが無い・案の数が2〜4以外・比較中は開始しない <sub>`variants store: 整え案の開始`</sub>
 - 複製に失敗したら理由をログに出し、何も始まらない <sub>`variants store: 整え案の開始`</sub>
 - 案の会話が答えている間は「実行中」で、全部終わると採用できる <sub>`variants store: 比較・採用・破棄`</sub>
 - 採用すると選んだ案が終了IPCへ渡り、元の図面へ戻って比較は終わる (undo一発で戻せる旨をログ) <sub>`variants store: 比較・採用・破棄`</sub>
 - 破棄は実行中の案の会話を止めてから全複製を消す <sub>`variants store: 比較・採用・破棄`</sub>
 - 終了に失敗したら理由をログに出し、比較はそのまま続く <sub>`variants store: 比較・採用・破棄`</sub>
+- 開始をCmd+Zで戻して複製シートが消えたら、比較は理由つきで片付けられ、採用も破棄もしない <sub>`variants store: 比較・採用・破棄`</sub>
+- 表示中のシートが案の複製なら、その案を走らせている会話が分かる (編集オーバーレイの色に使う) <sub>`variants store: 比較・採用・破棄`</sub>
 - パネルは閉じても比較は続き、開き直せる。比較が無ければ開かない <sub>`variants store: 比較・採用・破棄`</sub>
 - 指標の取り直しで取れなかった案は「指標なし」になる <sub>`variants store: 比較・採用・破棄`</sub>
 

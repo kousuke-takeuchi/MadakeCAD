@@ -16,14 +16,14 @@
   - 比較: 下部ドックパネル「整え案の比較」に案ごとの行(ラベル / 実行中・完了 / `tidy_metrics`の交差・重なり・グリッド外と合計、元シートとの差 / 「表示」で図面タブ切替 / 「採用」)。既存のドックパネル様式(検証結果・検索結果と同じ)を使い、**新規コンポーネントは作らない**
   - 採用: 選んだ複製の内容を**元シートへ写し戻す**(対応表で元idを保ったまま`UpdateEntity`、複製で消えたものは`DeleteEntities`、複製で増えたものは`AddEntity`)+全複製を`RemoveSheet`。これを`execute_batch`1回=**undo一発**。元idを保つのはFreeCAD連携(`mech_links`はentity UUIDがキー)と選択・検索の安定のため
   - 破棄: 全複製を`RemoveSheet`する`execute_batch`1回=undo一発
-- **複製は普通のシート**(モデルに「案」フラグを足さない)。比較中はクロスリファレンスや検証に複製分が混ざるが、整えプロンプトは「エラーが増えていないか」の相対比較なので影響しない。`format_version`も上げない
+- **複製は普通のシート**(専用のエンティティも描画も足さない)。ただし**どのシートの複製かの印**だけは持つ(`Sheet.variant_of`、2026-09-28のレビュー対応で追加): 印が無いとシート間クロスリファレンス (G13) が元シートの全シンボルを「複数シートに跨る参照記号」と見なし、元シートにも各案にも存在しない住所注記 (`/2.B3`) が生える。印は複製が無いプロジェクトでは書き出されないので`format_version`は上げない。検証 (`verify_project`) には今も複製分が並ぶが、整えプロンプトは「エラーが増えていないか」の相対比較なので判断は狂わない
 - 対応表(id_map)の保持場所はフロントのvariantsストア(比較はセッション内で完結する)。Link API/Tauriには開始・終了の2口を足し、対応表はクライアントが往復させる(サーバー側に状態を持たない)
 - MCPツールには出さない(エージェント自身が案を並べる用途は無い)。Link APIには出す(CLI・外部からの自動比較が可能)
 - Pencilボード「AIチャット - ポップアップ集」の**バリアント数チップ**は既存デザインどおり(disabled→有効化のみ)。比較パネルは既存ドックパネル様式の再利用。**`.pen`ボードへの反映は次回のPencil作業時**(フェーズ3のプロバイダUIと同じ扱い)
 
 ### Task 1: コア `variants.rs`(複製と写し戻しのCommand組み立て)
 
-- [x] Step 1 (red): Rustテスト: 複製(名前・用紙・表題欄・改訂欄・全エンティティが同じ形でidだけ新しい / 対応表が全idを持つ / 複数枚で対応表が独立) / `start_commands`(RestoreSheetが末尾から順に並ぶ) / `adopt_commands`(動かした要素→元idのUpdateEntity、消えた要素→DeleteEntities、増えた要素→新idのAddEntity、変わらない要素→コマンド無し、最後に全複製のRemoveSheet) / `discard_commands` / Engineで開始→編集→採用の往復がundo1回ずつで戻る
+- [x] Step 1 (red): Rustテスト: 複製(名前・用紙・表題欄・**改訂欄**・シート種別`kind`・注記文字高`annotation_text_mm`・ゾーン数・全エンティティが同じ形でidだけ新しい / 引き出し線 (`leader_to`) が複製側へ写る / 対応表が全idを持つ / 複数枚で対応表が独立) / `start_commands`(RestoreSheetが末尾から順に並ぶ) / `adopt_commands`(動かした要素→元idのUpdateEntity、消えた要素→DeleteEntities、増えた要素→新idのAddEntity、変わらない要素→コマンド無し、引き出し線は元シート側のidへ写し戻す、最後に全複製のRemoveSheet) / `discard_commands` / `validate_run`(実在しないシート・別の比較の案・元シートの手編集を断る) / Engineで開始→編集→採用の往復がundo1回ずつで戻る
 - [x] Step 2 (green): `madake-core/src/variants.rs`実装(`Entity::set_id`をmodelへ追加)。`lib.rs`へ`pub mod variants`。gen_spec
 
 ### Task 2: Link API + Tauriコマンド
@@ -33,7 +33,8 @@
 
 ### Task 3: フロント(variantsストア・整えポップアップ・比較パネル)
 
-- [x] Step 1 (red): vitest: `stores/variants.ts`: start=複製patch適用→案ごとに新会話で`tidyPrompt`送信(範囲=複製sheet_id、選択は対応表で写す)→パネル表示 / 会話の終了で`allDone` / `refreshMetrics`で元+各案の指標 / adopt=finishへchosenを渡しpatch適用・元シートをアクティブに・runを消す / discard=finishへnull / 実行中の案があるうちは採用不可 / `tidy.ts`: `tidyVariantPrompt`の範囲写し
+- [x] Step 1 (red): vitest: `stores/variants.ts`: start=複製patch適用→案ごとに新会話で`tidyPrompt`送信(範囲=複製sheet_id、選択は対応表で写す)→パネル表示 / 会話の終了で`allDone` / `refreshMetrics`で元+各案の指標(案ごとに自分のシートを測る) / adopt=finishへchosenを渡しpatch適用・元シートをアクティブに・runを消す / discard=finishへnull / 実行中の案があるうちは採用不可 / 複製シートが消えた実行は理由つきで片付ける / `canvas/agentOverlay.ts`: patchのオーバーレイは表示中シートのopだけを拾い、案シートでは会話色を保つ
+  - **計画変更 (2026-09-28)**: `tidy.ts`に`tidyVariantPrompt`は作らない。既存の`tidyPrompt(mode, sheet, selection)`が範囲 (sheet_id) と選択を引数で受けるので、複製のシートと写した選択を渡すだけで足りる (`stores/variants.ts`)。`tidy.ts`側の変更は「進め方の各手順にもsheet_idを埋める」だけ(省略すると`get_tidy_metrics`/`run_verification`が先頭シート=元シートを見てしまい、全案が同じ数値を報告する)
 - [x] Step 2 (green): `ipc.ts`(startVariants/finishVariants/getTidyMetrics 両実装)、`stores/variants.ts`、`ChatTidyMenu.vue`(バリアント数チップを有効化。1=反復しない)、`VariantsPanel.vue`(ドックパネル)、`EditorLayout.vue`へ配置、i18n `chat.tidy.variant*`・`variants.*`。ブラウザ検証(モックAPI)
 
 ### Task 4: ドキュメント
@@ -47,6 +48,18 @@
 - Task 3: `ipc.ts`(3口)、`stores/variants.ts`(+テスト11件)、`ChatTidyMenu.vue`(バリアント数チップ有効化・「比較パネルを開く」)、`VariantsPanel.vue`(ドックパネル)、i18n。モックLink API+ブラウザで「配置整理×2案」→案A/Bのタブ・比較パネル・実行中は採用不可を確認
 - Task 4: 本ファイル、m3仕様(§3・§4・未決事項)、roadmap(M3完了)、09-ai-assistant(EN+JA)、feature-inventory、design-system、gen_spec見出し、仕様書再生成
 - Tauri本体クレートはコンテナにGTKが無く`cargo check`不可(3コマンドは既存パターンに沿った目視確認のみ)。`.pen`ボードへの反映は次回のPencil作業時
+
+## レビュー対応 (2026-09-28、`.superpowers/sdd/integration/review-3a4804f-variants.md`)
+
+- **C1 引き出し線の写し替え**: `Entity::refs` / `Entity::remap_refs`をmodelへ追加し、`duplicate_sheet`は元id→複製id、`adopt_commands`は複製id→元idで`leader_to`を写す。採用後の元シートに残らない対象への参照は落とし、増えた要素は「参照される側が先」の順に`AddEntity`する
+- **I1・I2 編集オーバーレイ**: `canvas/agentOverlay.ts`の`patchOverlayTargets`が表示中シートのopだけを拾う。色は案の複製なら会話色(シートで会話が分かる)、そうでなければ従来どおり
+- **I3 sheet_id**: 整えプロンプトの「進め方」各手順に`sheet_id`を埋め、`get_tidy_metrics`のツール説明も明示を求める
+- **I4 クロスリファレンス**: `Sheet.variant_of`を印に、`xref::device_sites`(RustとTSの両方)が複製を数えない。案シートは元シートを「自分の所在」として扱う
+- **I5 終了の検証**: `variants::validate_run`(元シート・案シートの実在、その元シートの案であること、対応表の向き、採用先が案に含まれること)
+- **I6 宙に浮いた実行**: `variants.clearIfStale()`が複製シートの消滅を検出して比較を片付ける(開始のundo・別経路の削除)
+- **I7 元シートの手編集**: 開始時に元シートの指紋 (`sheet_digest`) を`VariantRun`へ入れ、採用の直前に照合して合わなければ断る(破棄は通す)
+- **M1・M2**: 本ファイルのT3 S1・T1 S1の文言を実装に合わせ、複製テストに`revisions`・`kind`・`annotation_text_mm`・ゾーン数のassertを追加
+- レビューI6 (start/finishが組み立てと適用の間でロックを放す) も同じ機会に直した(同一ロック内で組み立てて適用)
 
 ## 受け入れ基準
 
