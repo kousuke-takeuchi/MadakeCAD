@@ -133,26 +133,39 @@ impl SharedDoc {
 
     /// 整えバリアントの開始: 元シートを`count`枚複製して入れる (1回の編集)。
     /// 戻り値は適用したpatchと、案ごとの情報 (複製シートid・ラベル・id対応表)。
+    ///
+    /// コマンドの組み立てと適用は**同じロックの中**で行う: 間でロックを放すと、その隙の
+    /// 編集が複製に入らないまま複製が古い姿で入ってしまう。
     pub fn start_variants(
         &self,
         sheet_id: Uuid,
         count: usize,
         origin: EditOrigin,
     ) -> Result<(Patch, madake_core::variants::VariantRun), String> {
-        let (commands, run) = {
-            let engine = self.engine.lock().unwrap();
-            let project = engine.project();
-            let sheet = project
-                .sheet(sheet_id)
-                .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
-            madake_core::variants::start_commands(sheet, count, project.sheets.len())?
+        let (patch, run) = {
+            let mut engine = self.engine.lock().unwrap();
+            let (commands, run) = {
+                let project = engine.project();
+                let sheet = project
+                    .sheet(sheet_id)
+                    .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
+                madake_core::variants::start_commands(sheet, count, project.sheets.len())?
+            };
+            let patch = engine
+                .execute_batch(commands, origin)
+                .map_err(|e| e.to_string())?;
+            (patch, run)
         };
-        let patch = self.execute_batch_as(commands, origin).map_err(|e| e.to_string())?;
+        let _ = self.patches.send(patch.clone());
         Ok((patch, run))
     }
 
     /// 整えバリアントの終了: `chosen`があればその案を元シートへ写し戻して全複製を消す (採用)、
     /// 無ければ全複製を消すだけ (破棄)。どちらも1回の編集=undo一発。
+    ///
+    /// 実行情報 (`run`) はクライアントが往復させるので、写し戻す前に
+    /// [`madake_core::variants::validate_run`]で今の図面と噛み合うか確かめる。組み立てと
+    /// 適用は`start_variants`と同じ理由で同じロックの中で行う。
     pub fn finish_variants(
         &self,
         run: &madake_core::variants::VariantRun,
@@ -160,28 +173,40 @@ impl SharedDoc {
         origin: EditOrigin,
     ) -> Result<Patch, String> {
         let sheet_ids: Vec<Uuid> = run.variants.iter().map(|v| v.sheet_id).collect();
-        let commands = {
-            let engine = self.engine.lock().unwrap();
-            let project = engine.project();
-            match chosen {
-                Some(chosen_id) => {
-                    let info = run
-                        .variants
-                        .iter()
-                        .find(|v| v.sheet_id == chosen_id)
-                        .ok_or_else(|| format!("variant not found: {chosen_id}"))?;
-                    let original = project
-                        .sheet(run.original_sheet_id)
-                        .ok_or_else(|| format!("sheet not found: {}", run.original_sheet_id))?;
-                    let chosen_sheet = project
-                        .sheet(chosen_id)
-                        .ok_or_else(|| format!("sheet not found: {chosen_id}"))?;
-                    madake_core::variants::adopt_commands(original, chosen_sheet, &info.id_map, &sheet_ids)
+        let patch = {
+            let mut engine = self.engine.lock().unwrap();
+            let commands = {
+                let project = engine.project();
+                madake_core::variants::validate_run(project, run, chosen)?;
+                match chosen {
+                    Some(chosen_id) => {
+                        let info = run
+                            .variants
+                            .iter()
+                            .find(|v| v.sheet_id == chosen_id)
+                            .ok_or_else(|| format!("variant not found: {chosen_id}"))?;
+                        let original = project
+                            .sheet(run.original_sheet_id)
+                            .ok_or_else(|| format!("sheet not found: {}", run.original_sheet_id))?;
+                        let chosen_sheet = project
+                            .sheet(chosen_id)
+                            .ok_or_else(|| format!("sheet not found: {chosen_id}"))?;
+                        madake_core::variants::adopt_commands(
+                            original,
+                            chosen_sheet,
+                            &info.id_map,
+                            &sheet_ids,
+                        )
+                    }
+                    None => madake_core::variants::discard_commands(&sheet_ids),
                 }
-                None => madake_core::variants::discard_commands(&sheet_ids),
-            }
+            };
+            engine
+                .execute_batch(commands, origin)
+                .map_err(|e| e.to_string())?
         };
-        self.execute_batch_as(commands, origin).map_err(|e| e.to_string())
+        let _ = self.patches.send(patch.clone());
+        Ok(patch)
     }
 
     /// 選択したエンティティから回路マクロを**組み立てるだけ**(ファイルには書かない)。
@@ -1072,7 +1097,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "図面の「整い具合」を数値で返す。crossings=配線の交差数(線分どうしが面で交わっている箇所。端点で出会う接続・T分岐は交差に含まない)、label_overlaps=文字の重なり数(文字が他の文字やシンボル外形に重なっている組の数。辺で接しているだけは数えない)、symbol_overlaps=シンボル外形どうしの重なり数、off_grid=2.5mmグリッドから外れているシンボル原点・配線頂点の数。全て0が理想。整えループの目標値として使う: 整える前に測り、編集したらもう一度測って数値が減ったか確かめ、改善が止まるか3回で終える。sheet_id省略時は先頭シート"
+        description = "図面の「整い具合」を数値で返す。crossings=配線の交差数(線分どうしが面で交わっている箇所。端点で出会う接続・T分岐は交差に含まない)、label_overlaps=文字の重なり数(文字が他の文字やシンボル外形に重なっている組の数。辺で接しているだけは数えない)、symbol_overlaps=シンボル外形どうしの重なり数、off_grid=2.5mmグリッドから外れているシンボル原点・配線頂点の数。全て0が理想。整えループの目標値として使う: 整える前に測り、編集したらもう一度測って数値が減ったか確かめ、改善が止まるか3回で終える。**測るシートのsheet_idは必ず指定する** (省略すると先頭シートを測るので、整えバリアントの比較のようにシートが複数あると別のシートの数値を見てしまう)"
     )]
     fn get_tidy_metrics(
         &self,

@@ -490,6 +490,118 @@ async fn variants_start_and_finish_round_trip() {
     assert_eq!(doc.engine.lock().unwrap().project().sheets.len(), 1);
 }
 
+/// POST /api/v1/variants/finish refuses a run whose copies no longer exist, a chosen sheet that is not one of the copies, and adopting after the original sheet was edited by hand during the comparison; discarding still works, and a count of 0 is rejected at start.
+/// POST /api/v1/variants/finish は、複製がもう無い実行・案に含まれない採用先・比較中に元シートを手編集した後の採用を断る。破棄はそれでも通り、開始の案の数0も拒否される。
+#[tokio::test]
+async fn variants_finish_refuses_a_run_that_no_longer_matches_the_drawing() {
+    let mut project = Project::new("案の検証テスト");
+    let sheet_id = project.sheets[0].id;
+    let symbol_id = uuid::Uuid::new_v4();
+    project.sheets[0].entities.insert(
+        symbol_id,
+        madake_core::Entity::Symbol(madake_core::SymbolInstance {
+            id: symbol_id,
+            symbol_id: "resistor".into(),
+            at: madake_core::Point::new(100.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "R1".into(),
+            value: "1k".into(),
+            attrs: Default::default(),
+        }),
+    );
+    let doc = SharedDoc::new(Engine::new(project));
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude()));
+    let parts = madake_mcp::open_parts(&unique_parts_db("variants_validate")).expect("parts db");
+    let router = madake_mcp::link_api::router(doc.clone(), Arc::clone(&agent), parts);
+    let call = |uri: &'static str, body: Value| {
+        let router = router.clone();
+        async move {
+            let req = Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            let res = router.oneshot(req).await.unwrap();
+            let status = res.status();
+            let bytes = res.into_body().collect().await.unwrap().to_bytes();
+            (
+                status,
+                serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null),
+            )
+        }
+    };
+
+    let (status, body) =
+        call("/api/v1/variants/start", json!({ "sheet_id": sheet_id, "count": 0 })).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+
+    let (status, body) =
+        call("/api/v1/variants/start", json!({ "sheet_id": sheet_id, "count": 2 })).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let run = body["run"].clone();
+    assert!(
+        run["original_digest"].as_str().is_some_and(|s| !s.is_empty()),
+        "元シートの指紋が返る: {run:?}"
+    );
+    let variant_sheet: uuid::Uuid =
+        serde_json::from_value(run["variants"][0]["sheet_id"].clone()).unwrap();
+
+    // 案シートが実在しない実行
+    let mut gone = run.clone();
+    gone["variants"][1]["sheet_id"] = json!(uuid::Uuid::new_v4());
+    gone["chosen_sheet_id"] = Value::Null;
+    let (status, body) = call("/api/v1/variants/finish", gone).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets.len(),
+        3,
+        "断ったので図面は動かない"
+    );
+
+    // 採用先が案に含まれない
+    let mut wrong = run.clone();
+    wrong["chosen_sheet_id"] = json!(sheet_id);
+    let (status, body) = call("/api/v1/variants/finish", wrong).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+
+    // 比較中に元シートを手編集 → 採用は断られる
+    let mut moved = doc.engine.lock().unwrap().project().sheet(sheet_id).unwrap().entities
+        [&symbol_id]
+        .clone();
+    if let madake_core::Entity::Symbol(s) = &mut moved {
+        s.at = madake_core::Point::new(300.0, 200.0);
+    }
+    let (status, _) = call(
+        "/api/v1/commands",
+        json!([{ "type": "update_entity", "sheet_id": sheet_id, "entity": moved }]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let mut adopt = run.clone();
+    adopt["chosen_sheet_id"] = json!(variant_sheet);
+    let (status, body) = call("/api/v1/variants/finish", adopt).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    {
+        let engine = doc.engine.lock().unwrap();
+        let madake_core::Entity::Symbol(s) = &engine.project().sheet(sheet_id).unwrap().entities
+            [&symbol_id]
+        else {
+            panic!()
+        };
+        assert_eq!(s.at.x, 300.0, "手編集が残る");
+    }
+
+    // 破棄は手編集後でも通る
+    let mut discard = run.clone();
+    discard["chosen_sheet_id"] = Value::Null;
+    let (status, body) = call("/api/v1/variants/finish", discard).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(doc.engine.lock().unwrap().project().sheets.len(), 1);
+}
+
 /// POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports.
 /// POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。
 #[tokio::test]
