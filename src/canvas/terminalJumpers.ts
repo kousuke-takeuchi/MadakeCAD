@@ -4,7 +4,7 @@
 // Pinia非依存の純関数だけを置き、端子台エディタのストア (stores/terminals.ts) も
 // キャンバス描画 (renderer.ts) も**ここ1か所**の正規化ルールを使う。
 
-import { parseTerminalNo, TERMINAL_MARK_R } from "./dynamicSymbol";
+import { parseTerminalNo, TERMINAL_MARK_R } from "./terminalNo";
 import type { Point, RowOrder, SymbolDef } from "../ipc";
 
 /**
@@ -72,12 +72,17 @@ export function terminalNumbers(def: SymbolDef): string[] {
 export const TERMINAL_NUMBERS_ATTR = "terminal_numbers";
 
 /**
- * `numbers` が `count` 個の端子番号の指定として妥当か: 個数が一致し、空要素も重複も無い
- * (Rust側 valid_terminal_numbers と同一)。
+ * `numbers` が `count` 個の端子番号の指定として妥当か: 個数が一致し、前後の空白を落としたあとで
+ * 空要素も重複も無く、どの要素にも区切り記号の`,`が入っていない (Rust側 valid_terminal_numbers と同一)。
+ *
+ * 判定は必ず`trim`した値で行う: 保存形はカンマ区切りの1行で、読み取り側が`split(",")`+`trim`して
+ * 戻すため、`"1 "`と`"1"`は同じ端子番号になり、要素に`,`が入ると項目数そのものが変わってしまう。
  */
 export function validTerminalNumbers(numbers: readonly string[], count: number): boolean {
-  if (numbers.length !== count || numbers.some((s) => s.trim() === "")) return false;
-  return new Set(numbers).size === numbers.length;
+  if (numbers.length !== count) return false;
+  const trimmed = numbers.map((s) => s.trim());
+  if (trimmed.some((s) => s === "" || s.includes(","))) return false;
+  return new Set(trimmed).size === trimmed.length;
 }
 
 /**
@@ -97,21 +102,92 @@ export function terminalNumbersOfInstance(
 }
 
 /**
- * 生の端子番号 ([`terminalNumbers`]) → 表示ラベル ([`terminalNumbersOfInstance`]) の対応
- * (Rust側 terminal_number_rename と同一)。上書きが無ければ`null`。キャンバス描画
- * (renderer.ts) が、シンボル定義の生のピン番号テキストをこのインスタンスの表示ラベルへ
- * 差し替えるのに使う (SVG出力 svg.rs::render_symbol の双子)。
+ * 端子番号の**生のピン番号 ↔ 表示ラベル**の対応表 (Rust側 `TerminalLabels` と同一)。
+ *
+ * 端子番号の上書き (`attrs["terminal_numbers"]`) があると、ユーザーが打つ端子番号 (ジャンパ・
+ * ピングループ) は表示ラベルで書かれるのに、図面のジオメトリはシンボル定義の生のピン番号でしか
+ * 引けない。この変換は**必ずここ1か所**を通す: キャンバスのピン番号テキストの差し替え・
+ * ジャンパバー (renderer.ts)・ピングループの括弧 (pinGroups.ts)・端子台エディタのプレビューが
+ * 同じ対応を使う。上書きが無ければ恒等変換 (`isIdentity`) になり、呼び出し側は素通しできる。
+ *
+ * 端子台以外のシンボルは常に恒等変換 (上書きは端子台シンボルだけの仕組み)。
  */
-export function terminalNumberRename(
+export interface TerminalLabels {
+  /** 上書きが無い (生の番号と表示ラベルが同じ) か。 */
+  isIdentity: boolean;
+  /** 生のピン番号→表示ラベルの対応。上書きが無ければ`null`。 */
+  renameMap: Map<string, string> | null;
+  /** 生のピン番号→表示ラベル。知らない番号はそのまま返す。 */
+  displayOf(raw: string): string;
+  /** 表示ラベル→生のピン番号 (逆変換)。知らないラベルはそのまま返す。 */
+  rawOf(display: string): string;
+}
+
+/** シンボル定義+インスタンスの`attrs`から端子番号の対応表を作る (Rust側 `TerminalLabels::of`)。 */
+export function terminalLabels(
   def: SymbolDef,
   attrs: Readonly<Record<string, string>> | undefined,
-): Map<string, string> | null {
+): TerminalLabels {
+  const identity: TerminalLabels = {
+    isIdentity: true,
+    renameMap: null,
+    displayOf: (raw) => raw,
+    rawOf: (display) => display,
+  };
+  if (!def.id.startsWith("terminal_block_")) return identity;
   const raw = terminalNumbers(def);
   const display = terminalNumbersOfInstance(def, attrs);
-  if (raw.length === display.length && raw.every((r, i) => r === display[i])) return null;
-  const map = new Map<string, string>();
-  raw.forEach((r, i) => map.set(r, display[i]));
-  return map;
+  if (raw.length === display.length && raw.every((r, i) => r === display[i])) return identity;
+  const toDisplay = new Map<string, string>();
+  const toRaw = new Map<string, string>();
+  raw.forEach((r, i) => {
+    toDisplay.set(r, display[i]);
+    toRaw.set(display[i], r);
+  });
+  return {
+    isIdentity: false,
+    renameMap: toDisplay,
+    displayOf: (r) => toDisplay.get(r) ?? r,
+    rawOf: (d) => toRaw.get(d) ?? d,
+  };
+}
+
+/**
+ * `-`で繋いだ範囲表記 (`"1-2"` / 単体 `"3"`) の端子番号トークンだけを`rename` (旧表示ラベル→
+ * 新表示ラベル) で置き換える (Rust側 rename_terminal_tokens と同一)。区切りの`-`と前後の空白は
+ * 1文字も変えない。トークンが1つでも`rename`に無ければ`null` (呼び出し側は元の文字列を残す)。
+ */
+export function renameTerminalTokens(
+  text: string,
+  rename: ReadonlyMap<string, string>,
+): string | null {
+  const parts = text.split("-");
+  const out: string[] = [];
+  for (const part of parts) {
+    const trimmed = part.trim();
+    const next = rename.get(trimmed);
+    if (next === undefined) return null;
+    const lead = part.slice(0, part.length - part.trimStart().length);
+    const trail = part.slice(part.trimEnd().length);
+    out.push(`${lead}${next}${trail}`);
+  }
+  return out.join("-");
+}
+
+/**
+ * `attrs["jumpers"]`の端子番号を`rename`で書き換える (Rust側 rewrite_jumper_labels と同一)。
+ * 書き換えは文字列の置換だけで、正規化 (並べ替え・重複除去) はしない: 「端子番号-端子番号」の形に
+ * 読めない項目や、`rename`の知らない端子番号が入っている項目は丸ごとそのまま残す (ERCが指摘して
+ * いる指定を採番が黙って消さないため)。採番ポップオーバーのプレビューがこれで追従後の指定を見せる。
+ */
+export function rewriteJumperLabels(spec: string, rename: ReadonlyMap<string, string>): string {
+  return spec
+    .split(",")
+    .map((item) => {
+      if (item.split("-").length !== 2) return item;
+      return renameTerminalTokens(item, rename) ?? item;
+    })
+    .join(",");
 }
 
 /**

@@ -287,16 +287,31 @@ pub fn default_terminal_step() -> u32 {
 /// のラベルのカンマ区切り。未設定ならシンボル定義の既定 ([`terminal_numbers_of`]) を使う。
 pub const TERMINAL_NUMBERS_ATTR: &str = "terminal_numbers";
 
-/// `numbers` が `count` 個の端子番号の指定として妥当か: 個数が一致し、空要素も重複も無い。
+/// `numbers` が `count` 個の端子番号の指定として妥当か: 個数が一致し、
+/// 前後の空白を落としたあとで空要素も重複も無く、どの要素にも区切り記号の`,`が入っていない。
 /// [`Command::RenumberTerminals`](crate::command::Command::RenumberTerminals) /
 /// [`Command::SetTerminalNumbers`](crate::command::Command::SetTerminalNumbers) の検証に使う
 /// (図面を変えずに拒否するため、書き込み前に呼ぶこと)。
+///
+/// **判定は必ず`trim`した値で行う**: 保存形はカンマ区切りの1行 ([`TERMINAL_NUMBERS_ATTR`]) で、
+/// 読み取り側 ([`terminal_numbers_of_instance`]) が`split(',')`+`trim`して戻すため、
+/// `"1 "`と`"1"`は同じ端子番号になり、要素に`,`が入ると項目数そのものが変わってしまう。
+/// 検証を通った値をそのまま書くと読み取り側が拒否する、という食い違いを作らないための規則。
 pub fn valid_terminal_numbers(numbers: &[String], count: usize) -> bool {
-    if numbers.len() != count || numbers.iter().any(|s| s.trim().is_empty()) {
+    if numbers.len() != count {
         return false;
     }
     let mut seen = std::collections::BTreeSet::new();
-    numbers.iter().all(|s| seen.insert(s.as_str()))
+    numbers.iter().all(|s| {
+        let t = s.trim();
+        !t.is_empty() && !t.contains(',') && seen.insert(t)
+    })
+}
+
+/// 検証を通った端子番号を [`TERMINAL_NUMBERS_ATTR`] へ書く形 (各要素の前後の空白を落としたもの)。
+/// [`valid_terminal_numbers`] が`trim`した値で判定するので、保存もその値で行う。
+pub fn trimmed_terminal_numbers(numbers: &[String]) -> Vec<String> {
+    numbers.iter().map(|s| s.trim().to_string()).collect()
 }
 
 /// シンボルインスタンスの端子番号を、チャート順 (極番号→段記号) の表示ラベルとして列挙する。
@@ -321,20 +336,67 @@ pub fn terminal_numbers_of_instance(def: &SymbolDef, attrs: &BTreeMap<String, St
     }
 }
 
-/// 生の端子番号 ([`terminal_numbers_of`]) → 表示ラベル ([`terminal_numbers_of_instance`]) の
-/// 対応。上書きが無ければ`None` (呼び出し側はそのまま生の番号を使えばよい)。
-/// SVGの端子番号描画 (`svg.rs`) が、シンボル定義に焼き込まれた生のピン番号テキストを
-/// このインスタンスの表示ラベルへ差し替えるのに使う。
-pub fn terminal_number_rename(
-    def: &SymbolDef,
-    attrs: &BTreeMap<String, String>,
-) -> Option<BTreeMap<String, String>> {
-    let raw = terminal_numbers_of(def);
-    let display = terminal_numbers_of_instance(def, attrs);
-    if display == raw {
-        return None;
+/// 端子番号の**生のピン番号 ↔ 表示ラベル**の対応表 (spec §1.1)。
+///
+/// 端子番号の上書き ([`TERMINAL_NUMBERS_ATTR`]) があると、**ユーザーが打つ端子番号**
+/// (ジャンパ `attrs["jumpers"]`・ピングループ `attrs["pin_groups"]`・ERCの指摘文) は
+/// 表示ラベルで書かれるのに、**図面のジオメトリ**(シンボル定義のピン) は生のピン番号でしか
+/// 引けない。この食い違いを埋める変換は**必ずここ1か所**を通す: チャートの行・
+/// [`parse_jumpers`]・[`crate::pin_groups`]の括弧と診断・[`crate::verify`]・
+/// SVG出力とcanvas描画の双子 (TS側 `terminalJumpers.ts` の `terminalLabels`) が同じ対応を使う。
+/// 上書きが無ければ恒等変換 ([`TerminalLabels::is_identity`]) になり、どの呼び出し側も
+/// 分岐を書かずに素通しできる。
+///
+/// 端子台以外のシンボル (リレー・ランプ・ブロック) は常に恒等変換
+/// (端子番号の上書きは端子台シンボルだけの仕組みで、コマンド側も端子台に限っている)。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TerminalLabels {
+    to_display: BTreeMap<String, String>,
+    to_raw: BTreeMap<String, String>,
+}
+
+impl TerminalLabels {
+    /// シンボル定義+インスタンスの`attrs`から対応表を作る。
+    pub fn of(def: &SymbolDef, attrs: &BTreeMap<String, String>) -> Self {
+        if !is_terminal_block(&def.id) {
+            return Self::default();
+        }
+        let raw = terminal_numbers_of(def);
+        let display = terminal_numbers_of_instance(def, attrs);
+        if display == raw {
+            return Self::default();
+        }
+        Self {
+            to_display: raw.iter().cloned().zip(display.iter().cloned()).collect(),
+            to_raw: display.into_iter().zip(raw).collect(),
+        }
     }
-    Some(raw.into_iter().zip(display).collect())
+
+    /// 上書きが無い (生の番号と表示ラベルが同じ) か。
+    pub fn is_identity(&self) -> bool {
+        self.to_display.is_empty()
+    }
+
+    /// 生のピン番号 → 表示ラベル。知らない番号はそのまま返す。
+    pub fn display_of(&self, raw: &str) -> String {
+        self.to_display.get(raw).cloned().unwrap_or_else(|| raw.to_string())
+    }
+
+    /// 表示ラベル → 生のピン番号 (逆変換)。知らないラベルはそのまま返す。
+    pub fn raw_of(&self, display: &str) -> String {
+        self.to_raw.get(display).cloned().unwrap_or_else(|| display.to_string())
+    }
+
+    /// 生のピン番号→表示ラベルの対応そのもの。上書きが無ければ`None`
+    /// (呼び出し側は生の番号をそのまま使えばよい)。
+    pub fn display_map(&self) -> Option<&BTreeMap<String, String>> {
+        if self.is_identity() { None } else { Some(&self.to_display) }
+    }
+
+    /// 生のピン番号の列を表示ラベルの列へ置き換える (並びはそのまま)。
+    pub fn relabel(&self, raw: &[String]) -> Vec<String> {
+        raw.iter().map(|r| self.display_of(r)).collect()
+    }
 }
 
 /// 開始番号・増分・接頭辞から採番案 ([`terminal_numbers_of`] と同じ並び) を作る
@@ -362,23 +424,45 @@ pub fn terminal_renumber_plan(raw_terminals: &[String], start: u32, step: u32, p
     out
 }
 
+/// `-`で繋いだ範囲表記 (`"1-2"` / 単体 `"3"`) の端子番号トークンだけを `rename`
+/// (旧表示ラベル→新表示ラベル) で置き換える。区切りの`-`と前後の空白は1文字も変えない。
+///
+/// トークンが1つでも`rename`に無ければ`None`を返す (呼び出し側は**元の文字列をそのまま
+/// 残す**)。これが「読めない項目・ERCが指摘済みの項目を採番で消したり書き換えたりしない」
+/// 規則の正体で、逆コマンド ([`Command::SetTerminalNumbers`](crate::command::Command::SetTerminalNumbers))
+/// が同じ規則で戻すため、採番→⌘Zで`attrs`は元のバイト列へ戻る。
+pub(crate) fn rename_terminal_tokens(text: &str, rename: &BTreeMap<String, String>) -> Option<String> {
+    let mut out = String::with_capacity(text.len());
+    for (i, part) in text.split('-').enumerate() {
+        if i > 0 {
+            out.push('-');
+        }
+        let trimmed = part.trim();
+        let new = rename.get(trimmed)?;
+        out.push_str(&part[..part.len() - part.trim_start().len()]);
+        out.push_str(new);
+        out.push_str(&part[part.trim_end().len()..]);
+    }
+    Some(out)
+}
+
 /// `attrs["jumpers"]` の端子番号を `rename` (旧表示ラベル→新表示ラベル) で書き換える。
 /// 採番・端子番号の直接指定コマンドが、同じコマンド内でジャンパの指定も追従させるために使う。
-/// 元の指定に読めない・不明な項目があれば、それは書き換え後の指定から落ちる
-/// ([`parse_jumpers`] が既に妥当と認めた項目だけを書き戻すため)。
-pub fn rewrite_jumper_labels(
-    spec: &str,
-    old_terminals: &[String],
-    raw_terminals: &[String],
-    rename: &BTreeMap<String, String>,
-) -> String {
-    let parsed = parse_jumpers(spec, old_terminals, raw_terminals);
-    let pairs: Vec<(String, String)> = parsed
-        .pairs
-        .into_iter()
-        .map(|(a, b)| (rename.get(&a).cloned().unwrap_or(a), rename.get(&b).cloned().unwrap_or(b)))
-        .collect();
-    jumpers_to_string(&pairs)
+///
+/// **書き換えは文字列の置換だけ**で、正規化 (並べ替え・重複除去) はしない: 「端子番号-端子番号」
+/// の形に読めない項目や、そこに`rename`の知らない端子番号が入っている項目は**丸ごとそのまま
+/// 残す** ([`rename_terminal_tokens`])。ERCが指摘している指定を採番が黙って消してしまうと、
+/// 逆コマンドでは戻せない (ユーザーがまだ直すべき指摘が消える) ため。
+pub fn rewrite_jumper_labels(spec: &str, rename: &BTreeMap<String, String>) -> String {
+    spec.split(',')
+        .map(|item| {
+            if item.split('-').count() != 2 {
+                return item.to_string();
+            }
+            rename_terminal_tokens(item, rename).unwrap_or_else(|| item.to_string())
+        })
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// 端子台シンボルの端子数 (ピン番号の種類数)。端子台以外・未知のシンボルは0。
@@ -1351,6 +1435,64 @@ mod tests {
         assert!(chart.jumper_issues.is_empty(), "{:?}", chart.jumper_issues);
         let csv = terminal_chart_csv(&sheet, id);
         assert!(csv.contains("\n11,"), "CSVも上書きラベルで出る: {csv}");
+    }
+
+    /// A number list is judged on its trimmed values: spaces around a label are ignored, two labels that differ only in their spacing count as a duplicate, and a label carrying the list's own separator (a comma) is refused.
+    /// 端子番号の指定は前後の空白を落とした値で判定される: ラベル前後の空白は無視され、空白しか違わない2つのラベルは重複と数え、保存形の区切り記号 (カンマ) を含むラベルは拒否される。
+    #[test]
+    fn a_number_list_is_validated_on_its_trimmed_values() {
+        let ok = vec![" 11".into(), "12 ".into(), " 13 ".into(), "14".into()];
+        assert!(valid_terminal_numbers(&ok, 4), "空白は落として受け付ける");
+        assert_eq!(trimmed_terminal_numbers(&ok), vec!["11", "12", "13", "14"], "保存はtrim後の値");
+        let trimmed_duplicate: Vec<String> = vec!["1 ".into(), "1".into(), "2".into(), "3".into()];
+        assert!(!valid_terminal_numbers(&trimmed_duplicate, 4), "trim後に重複するのは拒否");
+        let with_comma: Vec<String> = vec!["1,2".into(), "3".into(), "4".into(), "5".into()];
+        assert!(!valid_terminal_numbers(&with_comma, 4), "カンマ入りは拒否");
+        let blank: Vec<String> = vec!["1".into(), "  ".into(), "3".into(), "4".into()];
+        assert!(!valid_terminal_numbers(&blank, 4), "空白だけのラベルは拒否");
+    }
+
+    /// The label map converts a raw pin number to the block's displayed label and back again, and it is the identity map when the block carries no override (so every caller can pass it through without a branch).
+    /// ラベル対応表は生のピン番号を表示ラベルへ、表示ラベルを生のピン番号へ相互変換する。上書きの無い端子台では恒等変換になるので、呼び出し側は分岐なしで素通しできる。
+    #[test]
+    fn the_label_map_converts_a_raw_pin_number_both_ways() {
+        let def = resolve_symbol("terminal_block_4p").expect("def");
+        let mut attrs = BTreeMap::new();
+        assert!(TerminalLabels::of(&def, &attrs).is_identity(), "上書き無しは恒等変換");
+        attrs.insert(TERMINAL_NUMBERS_ATTR.to_string(), "11,12,13,14".to_string());
+        let labels = TerminalLabels::of(&def, &attrs);
+        assert!(!labels.is_identity());
+        assert_eq!(labels.display_of("1"), "11", "生のピン番号→表示ラベル");
+        assert_eq!(labels.raw_of("11"), "1", "表示ラベル→生のピン番号");
+        assert_eq!(labels.display_of("99"), "99", "知らない番号はそのまま");
+        assert_eq!(labels.raw_of("99"), "99");
+        assert_eq!(labels.relabel(&numbered(4)), vec!["11", "12", "13", "14"]);
+    }
+
+    /// A symbol that is not a terminal block never gets a label map, even if a hand-edited file left a `terminal_numbers` attribute on it: the override only applies to terminal blocks.
+    /// 端子台ではないシンボルには、手編集のファイルに`terminal_numbers`が残っていてもラベル対応表は作られない。上書きは端子台だけの仕組みであるため。
+    #[test]
+    fn a_symbol_that_is_not_a_terminal_block_has_no_label_map() {
+        let def = resolve_symbol("relay_coil").expect("def");
+        let mut attrs = BTreeMap::new();
+        attrs.insert(TERMINAL_NUMBERS_ATTR.to_string(), "X,Y".to_string());
+        assert!(TerminalLabels::of(&def, &attrs).is_identity());
+    }
+
+    /// Rewriting a jumper spec replaces only the terminal numbers it recognises and leaves everything else (spacing, separators, items it cannot read) exactly as it was, so the same rewrite run backwards restores the original text.
+    /// ジャンパ指定の書き換えは認識できた端子番号だけを置き換え、それ以外 (空白・区切り記号・読めない項目) は元のまま残すので、同じ書き換えを逆向きに走らせれば元の文字列へ戻る。
+    #[test]
+    fn rewriting_a_jumper_spec_only_touches_the_numbers_it_recognises() {
+        let forward: BTreeMap<String, String> =
+            numbered(8).into_iter().zip((11..=18).map(|n| n.to_string())).collect();
+        let backward: BTreeMap<String, String> = forward.iter().map(|(a, b)| (b.clone(), a.clone())).collect();
+        let original = "1-2, abc ,1-99,3 - 4";
+        let renamed = rewrite_jumper_labels(original, &forward);
+        assert_eq!(
+            renamed, "11-12, abc ,1-99,13 - 14",
+            "読めない項目・存在しない端子を含む項目はそのまま、空白も保たれる"
+        );
+        assert_eq!(rewrite_jumper_labels(&renamed, &backward), original, "逆向きで元のバイト列へ戻る");
     }
 
     /// An override that swaps the terminal count is invalid (too few/many labels), so the chart falls back to the symbol's default numbers instead of losing rows or panicking.

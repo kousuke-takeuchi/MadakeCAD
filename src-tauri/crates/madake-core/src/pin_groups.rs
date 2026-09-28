@@ -83,9 +83,26 @@ pub fn chart_order_pin_defs(def: &SymbolDef) -> Vec<&PinDef> {
     def.pins.iter().filter(|p| seen.insert(p.number.clone())).collect()
 }
 
-/// [`chart_order_pin_defs`]のピン番号だけの列。
+/// [`chart_order_pin_defs`]のピン番号だけの列 (**生のピン番号**)。
 pub fn chart_order_pin_numbers(def: &SymbolDef) -> Vec<String> {
     chart_order_pin_defs(def).into_iter().map(|p| p.number.clone()).collect()
+}
+
+/// `attrs["pin_groups"]`を突き合わせる相手 = チャート順の**表示ラベル**。
+///
+/// 端子台の端子番号の上書き (spec §1.1) があると、ユーザーが書いた範囲は表示ラベル
+/// (`"11-14:電源"`) なのに、括弧のジオメトリはシンボル定義の生のピン番号 (`"1"`..`"4"`) で
+/// しか引けない。`rename` (生のピン番号→表示ラベル。
+/// [`crate::terminal_chart::TerminalLabels::display_map`] が返すもの) を渡すと、
+/// この関数が突き合わせ用の列を作り、インデックスは生の列と1対1のまま保たれる。
+fn display_order(raw_order: &[String], rename: Option<&std::collections::BTreeMap<String, String>>) -> Vec<String> {
+    match rename {
+        None => raw_order.to_vec(),
+        Some(map) => raw_order
+            .iter()
+            .map(|n| map.get(n).cloned().unwrap_or_else(|| n.clone()))
+            .collect(),
+    }
 }
 
 /// 全ピンが広がる範囲の中心 (シンボルのローカル座標)。ピンが無ければNone。
@@ -352,14 +369,22 @@ pub fn caption_line_anchors(
 }
 
 /// 1つのグループが括弧を掛けるピン定義 (番号ごとに[`outer_pin_def`]で選び直したもの)。
-fn group_pin_defs<'a>(def: &'a SymbolDef, order: &[String], group: &PinGroup) -> Vec<&'a PinDef> {
+///
+/// 範囲の両端は**表示ラベル**で書かれているので`order` (表示ラベルのチャート順) で位置を求め、
+/// ピン定義は同じインデックスの**生のピン番号** (`raw_order`) で引く (端子番号の上書き = spec §1.1)。
+fn group_pin_defs<'a>(
+    def: &'a SymbolDef,
+    order: &[String],
+    raw_order: &[String],
+    group: &PinGroup,
+) -> Vec<&'a PinDef> {
     let (Some(i0), Some(i1)) = (
         order.iter().position(|p| p == &group.first),
         order.iter().position(|p| p == &group.last),
     ) else {
         return Vec::new();
     };
-    order[i0..=i1].iter().filter_map(|no| outer_pin_def(def, no)).collect()
+    raw_order[i0..=i1].iter().filter_map(|no| outer_pin_def(def, no)).collect()
 }
 
 /// あるシンボル定義+`attrs["pin_groups"]`から、描ける括弧を全部求める。
@@ -368,15 +393,24 @@ fn group_pin_defs<'a>(def: &'a SymbolDef, order: &[String], group: &PinGroup) ->
 ///
 /// 範囲の順番はチャート順 ([`chart_order_pin_numbers`]) で決めるが、括弧を掛ける位置は
 /// 番号ごとに[`outer_pin_def`]で選び直す (多段端子台で括弧が列の内側に入らないように)。
-pub fn pin_group_brackets(def: &SymbolDef, spec: &str) -> Vec<PinGroupBracket> {
+///
+/// `rename`は端子番号の上書き (spec §1.1) の対応表
+/// ([`crate::terminal_chart::TerminalLabels::display_map`])。渡すと範囲は表示ラベルで
+/// 突き合わせられるので、**採番しても括弧は描かれ続ける**。上書きの無いシンボルは`None`。
+pub fn pin_group_brackets(
+    def: &SymbolDef,
+    spec: &str,
+    rename: Option<&std::collections::BTreeMap<String, String>>,
+) -> Vec<PinGroupBracket> {
     if spec.trim().is_empty() {
         return Vec::new();
     }
-    let order = chart_order_pin_numbers(def);
+    let raw_order = chart_order_pin_numbers(def);
+    let order = display_order(&raw_order, rename);
     parse_pin_groups(spec, &order)
         .groups
         .iter()
-        .filter_map(|g| pin_group_bracket(&group_pin_defs(def, &order, g), &g.caption))
+        .filter_map(|g| pin_group_bracket(&group_pin_defs(def, &order, &raw_order, g), &g.caption))
         .collect()
 }
 
@@ -384,11 +418,18 @@ pub fn pin_group_brackets(def: &SymbolDef, spec: &str) -> Vec<PinGroupBracket> {
 ///
 /// ピンの向きが揃わない範囲がこれになる: 多段端子台で段をまたぐ範囲 (`4a-1b`。段ごとに
 /// 外側の辺が違う) や、ブロックの2辺にまたがる範囲。黙って消えないようにここで報告する。
-pub fn undrawable_group_issues(def: &SymbolDef, groups: &[PinGroup]) -> Vec<PinGroupIssue> {
-    let order = chart_order_pin_numbers(def);
+pub fn undrawable_group_issues(
+    def: &SymbolDef,
+    groups: &[PinGroup],
+    rename: Option<&std::collections::BTreeMap<String, String>>,
+) -> Vec<PinGroupIssue> {
+    let raw_order = chart_order_pin_numbers(def);
+    let order = display_order(&raw_order, rename);
     groups
         .iter()
-        .filter(|g| pin_group_bracket(&group_pin_defs(def, &order, g), &g.caption).is_none())
+        .filter(|g| {
+            pin_group_bracket(&group_pin_defs(def, &order, &raw_order, g), &g.caption).is_none()
+        })
         .map(|g| PinGroupIssue {
             text: format!("{}:{}", g.range_text, g.caption),
             code: PIN_GROUP_INVALID.into(),
@@ -398,11 +439,17 @@ pub fn undrawable_group_issues(def: &SymbolDef, groups: &[PinGroup]) -> Vec<PinG
 }
 
 /// `attrs["pin_groups"]`の診断を全部集める (読めない項目+描けない範囲)。
-pub fn pin_group_issues(def: &SymbolDef, spec: &str) -> Vec<PinGroupIssue> {
-    let order = chart_order_pin_numbers(def);
+/// `rename`は [`pin_group_brackets`] と同じ端子番号の上書きの対応表
+/// (渡さないと採番済みの端子台で「存在しないピン」を誤報する)。
+pub fn pin_group_issues(
+    def: &SymbolDef,
+    spec: &str,
+    rename: Option<&std::collections::BTreeMap<String, String>>,
+) -> Vec<PinGroupIssue> {
+    let order = display_order(&chart_order_pin_numbers(def), rename);
     let parsed = parse_pin_groups(spec, &order);
     let mut issues = parsed.issues;
-    issues.extend(undrawable_group_issues(def, &parsed.groups));
+    issues.extend(undrawable_group_issues(def, &parsed.groups, rename));
     issues
 }
 
@@ -422,8 +469,9 @@ pub fn pin_group_paper_boxes(inst: &SymbolInstance, def: &SymbolDef) -> Vec<(Poi
     let Some(spec) = inst.attrs.get(PIN_GROUPS_ATTR) else {
         return Vec::new();
     };
+    let labels = crate::terminal_chart::TerminalLabels::of(def, &inst.attrs);
     let mut out = Vec::new();
-    for bracket in pin_group_brackets(def, spec) {
+    for bracket in pin_group_brackets(def, spec, labels.display_map()) {
         let pts: Vec<Point> = bracket
             .bracket
             .iter()
@@ -606,7 +654,7 @@ mod tests {
     fn a_multilevel_group_brackets_the_outside_of_its_own_column() {
         let def = resolve_symbol("terminal_block_8p_2l").unwrap();
         // 2段の列は中心x=-5と+5、箱はそれぞれ±2.5なので右の列の外縁はx=7.5
-        let brackets = pin_group_brackets(&def, "1b-4b:B系統");
+        let brackets = pin_group_brackets(&def, "1b-4b:B系統", None);
         assert_eq!(brackets.len(), 1);
         assert!(
             brackets[0].bracket.iter().all(|p| p.x > 7.5),
@@ -620,13 +668,56 @@ mod tests {
         );
     }
 
+    /// When a terminal block's numbers are overridden, a pin-group range written with the displayed labels still finds its pins and draws its bracket, and reports no unknown pin.
+    /// 端子台の端子番号が上書きされていても、表示ラベルで書かれたピングループの範囲はピンを見つけて括弧を描き、「存在しないピン」も報告しない。
+    #[test]
+    fn a_range_written_with_the_displayed_labels_still_draws_its_bracket() {
+        let def = crate::symbol::resolve_symbol("terminal_block_8p").unwrap();
+        let mut attrs = std::collections::BTreeMap::new();
+        attrs.insert(
+            crate::terminal_chart::TERMINAL_NUMBERS_ATTR.to_string(),
+            "11,12,13,14,15,16,17,18".to_string(),
+        );
+        let labels = crate::terminal_chart::TerminalLabels::of(&def, &attrs);
+        let rename = labels.display_map();
+        assert_eq!(pin_group_brackets(&def, "11-14:電源", rename).len(), 1, "表示ラベルで引ける");
+        assert!(pin_group_issues(&def, "11-14:電源", rename).is_empty(), "誤報しない");
+        assert!(
+            pin_group_brackets(&def, "1-4:電源", rename).is_empty(),
+            "上書き後は古い生のピン番号では引けない (ERCが「存在しないピン」として報告する)"
+        );
+        assert_eq!(
+            pin_group_issues(&def, "1-4:電源", rename)[0].code,
+            PIN_GROUP_UNKNOWN_PIN
+        );
+    }
+
+    /// On a multi-level block whose numbers are overridden, a range over one level's terminals brackets that level's own column just as it does without the override.
+    /// 端子番号を上書きした多段端子台でも、1段ぶんの端子を指す範囲は上書きが無いときと同じようにその段の列に括弧を掛ける。
+    #[test]
+    fn a_multilevel_range_still_brackets_its_own_column_after_an_override() {
+        let def = crate::symbol::resolve_symbol("terminal_block_8p_2l").unwrap();
+        let raw = crate::terminal_chart::terminal_numbers_of(&def);
+        let display = crate::terminal_chart::terminal_renumber_plan(&raw, 11, 1, "");
+        let mut attrs = std::collections::BTreeMap::new();
+        attrs.insert(crate::terminal_chart::TERMINAL_NUMBERS_ATTR.to_string(), display.join(","));
+        let labels = crate::terminal_chart::TerminalLabels::of(&def, &attrs);
+        let brackets = pin_group_brackets(&def, "11b-14b:B系統", labels.display_map());
+        assert_eq!(brackets.len(), 1);
+        assert!(
+            brackets[0].bracket.iter().all(|p| p.x > 7.5),
+            "括弧が2段目の列の外側に出る: {:?}",
+            brackets[0].bracket
+        );
+    }
+
     /// A range that spans two levels of a multi-level terminal block is reported instead of quietly drawing nothing, because the two levels face opposite sides and no single bracket can hold them.
     /// 多段端子台の段をまたぐ範囲は、黙って何も描かれるのではなく報告される: 段ごとに外側の辺が逆なので、1本の括弧では囲めないため。
     #[test]
     fn a_range_across_two_levels_is_reported_instead_of_silently_skipped() {
         let def = resolve_symbol("terminal_block_8p_2l").unwrap();
-        assert!(pin_group_brackets(&def, "4a-1b:またぎ").is_empty(), "描かれない");
-        let issues = pin_group_issues(&def, "4a-1b:またぎ");
+        assert!(pin_group_brackets(&def, "4a-1b:またぎ", None).is_empty(), "描かれない");
+        let issues = pin_group_issues(&def, "4a-1b:またぎ", None);
         assert_eq!(issues.len(), 1, "{issues:?}");
         assert_eq!(issues[0].code, PIN_GROUP_INVALID);
         assert!(issues[0].text.contains("4a-1b"), "{:?}", issues[0]);

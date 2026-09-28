@@ -41,7 +41,7 @@ import {
   JUMPER_BAR_STROKE_MM,
   jumperBars,
   parseJumperSpec,
-  terminalNumberRename,
+  terminalLabels,
   terminalNumbers,
   terminalNumbersOfInstance,
 } from "./terminalJumpers";
@@ -414,7 +414,8 @@ export function drawSymbol(
   // 端子番号の上書き (Task 2, spec §1.1): シンボル定義に焼き込まれた生のピン番号のテキストを
   // このインスタンスの表示ラベルへ差し替える。上書きが無ければnullで、差し替えは起きない
   // (SVG出力 svg.rs::render_symbol の双子)。
-  const terminalRename = terminalNumberRename(def, inst.attrs);
+  const labels = terminalLabels(def, inst.attrs);
+  const terminalRename = labels.renameMap;
   for (const prim of def.primitives) {
     switch (prim.type) {
       case "line": {
@@ -506,7 +507,7 @@ export function drawSymbol(
   // pinGroupBrackets側で既に除いているので、ここでは求まったものをそのまま描くだけ
   const pinGroupsSpec = inst.attrs[PIN_GROUPS_ATTR];
   if (pinGroupsSpec) {
-    for (const bracket of pinGroupBrackets(def, pinGroupsSpec)) {
+    for (const bracket of pinGroupBrackets(def, pinGroupsSpec, terminalRename)) {
       const lineWidth = ctx.lineWidth;
       ctx.lineWidth = Math.max(1, SYMBOL_STROKE_MM * vp.scale);
       ctx.beginPath();

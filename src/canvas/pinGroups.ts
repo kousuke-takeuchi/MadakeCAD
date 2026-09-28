@@ -69,9 +69,28 @@ export function chartOrderPinDefs(def: SymbolDef): PinDef[] {
   return out;
 }
 
-/** chartOrderPinDefsのピン番号だけの列。 */
+/** chartOrderPinDefsのピン番号だけの列 (**生のピン番号**)。 */
 export function chartOrderPinNumbers(def: SymbolDef): string[] {
   return chartOrderPinDefs(def).map((p) => p.number);
+}
+
+/**
+ * attrs["pin_groups"]を突き合わせる相手 = チャート順の**表示ラベル** (Rust側 display_order と同一)。
+ *
+ * 端子台の端子番号の上書きがあると、ユーザーが書いた範囲は表示ラベル (`"11-14:電源"`) なのに、
+ * 括弧のジオメトリはシンボル定義の生のピン番号でしか引けない。`rename` (生のピン番号→表示ラベル。
+ * terminalJumpers.tsの`terminalLabels(def, attrs).renameMap`) を渡すと突き合わせ用の列ができ、
+ * インデックスは生の列と1対1のまま保たれる。
+ *
+ * `rename`を引数で受け取るのは、pinGroups.tsが座標変換もterminalJumpers.tsも参照しない葉モジュール
+ * のままでいられるようにするため (循環importを起こさない)。
+ */
+function displayOrder(
+  rawOrder: readonly string[],
+  rename: ReadonlyMap<string, string> | null | undefined,
+): string[] {
+  if (!rename) return [...rawOrder];
+  return rawOrder.map((n) => rename.get(n) ?? n);
 }
 
 /** 全ピンが広がる範囲の中心 (シンボルのローカル座標)。ピンが無ければnull。 */
@@ -266,25 +285,42 @@ export function pinGroupBracket(pins: readonly PinDef[], caption: string): PinGr
 /**
  * あるシンボル定義+attrs["pin_groups"]から、描ける括弧を全部求める (Rust側 pin_group_brackets と同一)。
  * 範囲の順番はチャート順で決めるが、括弧を掛ける位置は番号ごとにouterPinDefで選び直す。
+ *
+ * `rename`は端子番号の上書きの対応表 (terminalJumpers.tsの`terminalLabels(def, attrs).renameMap`)。
+ * 渡すと範囲は表示ラベルで突き合わせられるので、**採番しても括弧は描かれ続ける**。
  */
-export function pinGroupBrackets(def: SymbolDef, spec: string): PinGroupBracket[] {
+export function pinGroupBrackets(
+  def: SymbolDef,
+  spec: string,
+  rename?: ReadonlyMap<string, string> | null,
+): PinGroupBracket[] {
   if (spec.trim() === "") return [];
-  const order = chartOrderPinNumbers(def);
+  const rawOrder = chartOrderPinNumbers(def);
+  const order = displayOrder(rawOrder, rename);
   const parsed = parsePinGroups(spec, order);
   const out: PinGroupBracket[] = [];
   for (const g of parsed.groups) {
-    const bracket = pinGroupBracket(groupPinDefs(def, order, g), g.caption);
+    const bracket = pinGroupBracket(groupPinDefs(def, order, rawOrder, g), g.caption);
     if (bracket) out.push(bracket);
   }
   return out;
 }
 
-/** 1つのグループが括弧を掛けるピン定義 (Rust側 group_pin_defs と同一)。 */
-function groupPinDefs(def: SymbolDef, order: readonly string[], group: PinGroup): PinDef[] {
+/**
+ * 1つのグループが括弧を掛けるピン定義 (Rust側 group_pin_defs と同一)。
+ * 範囲の両端は表示ラベルなので`order`で位置を求め、ピン定義は同じインデックスの生のピン番号
+ * (`rawOrder`) で引く。
+ */
+function groupPinDefs(
+  def: SymbolDef,
+  order: readonly string[],
+  rawOrder: readonly string[],
+  group: PinGroup,
+): PinDef[] {
   const i0 = order.indexOf(group.first);
   const i1 = order.indexOf(group.last);
   if (i0 < 0 || i1 < 0) return [];
-  return order
+  return rawOrder
     .slice(i0, i1 + 1)
     .map((no) => outerPinDef(def, no))
     .filter((p): p is PinDef => p !== null);
@@ -294,10 +330,15 @@ function groupPinDefs(def: SymbolDef, order: readonly string[], group: PinGroup)
  * 書式としては読めたのに括弧を描けないグループの診断 (Rust側 undrawable_group_issues と同一)。
  * 多段端子台で段をまたぐ範囲 (`4a-1b`) や、シンボルの2辺にまたがる範囲がこれになる。
  */
-export function undrawableGroupIssues(def: SymbolDef, groups: readonly PinGroup[]): PinGroupIssue[] {
-  const order = chartOrderPinNumbers(def);
+export function undrawableGroupIssues(
+  def: SymbolDef,
+  groups: readonly PinGroup[],
+  rename?: ReadonlyMap<string, string> | null,
+): PinGroupIssue[] {
+  const rawOrder = chartOrderPinNumbers(def);
+  const order = displayOrder(rawOrder, rename);
   return groups
-    .filter((g) => pinGroupBracket(groupPinDefs(def, order, g), g.caption) === null)
+    .filter((g) => pinGroupBracket(groupPinDefs(def, order, rawOrder, g), g.caption) === null)
     .map((g) => ({
       text: `${g.rangeText}:${g.caption}`,
       code: PIN_GROUP_INVALID,
@@ -306,8 +347,16 @@ export function undrawableGroupIssues(def: SymbolDef, groups: readonly PinGroup[
     }));
 }
 
-/** attrs["pin_groups"]の診断を全部集める (Rust側 pin_group_issues と同一)。 */
-export function pinGroupIssues(def: SymbolDef, spec: string): PinGroupIssue[] {
-  const parsed = parsePinGroups(spec, chartOrderPinNumbers(def));
-  return [...parsed.issues, ...undrawableGroupIssues(def, parsed.groups)];
+/**
+ * attrs["pin_groups"]の診断を全部集める (Rust側 pin_group_issues と同一)。
+ * `rename`はpinGroupBracketsと同じ端子番号の上書きの対応表 (渡さないと採番済みの端子台で
+ * 「存在しないピン」を誤報する)。
+ */
+export function pinGroupIssues(
+  def: SymbolDef,
+  spec: string,
+  rename?: ReadonlyMap<string, string> | null,
+): PinGroupIssue[] {
+  const parsed = parsePinGroups(spec, displayOrder(chartOrderPinNumbers(def), rename));
+  return [...parsed.issues, ...undrawableGroupIssues(def, parsed.groups, rename)];
 }

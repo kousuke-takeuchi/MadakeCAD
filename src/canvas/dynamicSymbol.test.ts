@@ -289,6 +289,17 @@ describe("symbolBounds", () => {
     expect(grouped.max.x).toBe(plain.max.x);
   });
 
+  // ja: 端子番号を採番したあとでも、ピングループの箱は外形に入ったままになる (範囲は表示番号と突き合わせられるため。Rust側 pin_group_paper_boxes とparity)
+  it("still takes in a pin group's box after the terminals are renumbered", () => {
+    const def = dynamicSymbol("terminal_block_8p")!;
+    const plain = symbolBounds(tb(0, false, {}), def);
+    const renumbered = symbolBounds(
+      tb(0, false, { pin_groups: "11-14:電源系統一式", terminal_numbers: "11,12,13,14,15,16,17,18" }),
+      def,
+    );
+    expect(renumbered.min.x).toBeLessThan(plain.min.x);
+  });
+
   // ja: 実機ブロック表示のコイルは、ピングループの属性を持っていても括弧のための余白を取らない (そこには括弧を描かないため。Rust側 a_device_block_coil_reserves_no_room_for_brackets_it_never_draws とparity)
   it("reserves no room on a device-block coil for brackets it never draws", () => {
     const def = dynamicSymbol("terminal_block_8p")!;

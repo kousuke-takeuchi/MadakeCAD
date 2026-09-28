@@ -9,8 +9,9 @@ import {
   JUMPER_BAR_STROKE_MM,
   jumperBars,
   parseJumperSpec,
+  rewriteJumperLabels,
   terminalCenter,
-  terminalNumberRename,
+  terminalLabels,
   terminalNumbers,
   terminalNumbersOfInstance,
   terminalRenumberPlan,
@@ -223,14 +224,57 @@ describe("validTerminalNumbers", () => {
   it("rejects a list with an empty item", () => {
     expect(validTerminalNumbers(["1", "", "3", "4"], 4)).toBe(false);
   });
+
+  // ja: 判定はtrim後の値で行う: ラベル前後の空白は無視し、空白しか違わない2つは重複と数え、空白だけのラベルも無効 (Rust側とparity)
+  it("judges the list on its trimmed values", () => {
+    expect(validTerminalNumbers([" 11", "12 ", " 13 ", "14"], 4)).toBe(true);
+    expect(validTerminalNumbers(["1 ", "1", "2", "3"], 4)).toBe(false);
+    expect(validTerminalNumbers(["1", "  ", "3", "4"], 4)).toBe(false);
+  });
+
+  // ja: 保存形の区切り記号 (カンマ) を含むラベルは無効 (読み戻すと端子の個数が変わってしまう)
+  it("rejects a label containing the stored list's own separator", () => {
+    expect(validTerminalNumbers(["1,2", "3", "4", "5"], 4)).toBe(false);
+  });
 });
 
-describe("terminalNumbersOfInstance / terminalNumberRename", () => {
+describe("terminalLabels / rewriteJumperLabels", () => {
+  // ja: 対応表は生のピン番号と表示ラベルを相互変換し、知らない番号はそのまま返す (Rust側 TerminalLabels とparity)
+  it("converts a raw pin number to the displayed label and back", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const labels = terminalLabels(def, { terminal_numbers: "11,12,13,14" });
+    expect(labels.isIdentity).toBe(false);
+    expect(labels.displayOf("1")).toBe("11");
+    expect(labels.rawOf("11")).toBe("1");
+    expect(labels.displayOf("99")).toBe("99");
+    expect(labels.rawOf("99")).toBe("99");
+  });
+
+  // ja: 端子台以外のシンボルには対応表を作らない (上書きは端子台だけの仕組み)
+  it("never builds a label map for a symbol that is not a terminal block", () => {
+    const def = dynamicSymbol("connector_4p")!;
+    expect(terminalLabels(def, { terminal_numbers: "11,12,13,14" }).isIdentity).toBe(true);
+  });
+
+  // ja: ジャンパ指定の書き換えは認識できた端子番号だけを置き換え、空白・読めない項目・存在しない端子を含む項目はそのまま残す (逆向きで元の文字列へ戻る。Rust側 rewrite_jumper_labels とparity)
+  it("rewrites only the terminal numbers it recognises and round-trips", () => {
+    const forward = new Map(
+      ["1", "2", "3", "4", "5", "6", "7", "8"].map((n, i) => [n, String(11 + i)] as const),
+    );
+    const backward = new Map([...forward].map(([a, b]) => [b, a] as const));
+    const original = "1-2, abc ,1-99,3 - 4";
+    const renamed = rewriteJumperLabels(original, forward);
+    expect(renamed).toBe("11-12, abc ,1-99,13 - 14");
+    expect(rewriteJumperLabels(renamed, backward)).toBe(original);
+  });
+});
+
+describe("terminalNumbersOfInstance / terminalLabels", () => {
   // ja: attrs["terminal_numbers"]が無ければシンボル既定の番号のまま
   it("falls back to the symbol's default numbers when there is no override", () => {
     const def = dynamicSymbol("terminal_block_4p")!;
     expect(terminalNumbersOfInstance(def, undefined)).toEqual(["1", "2", "3", "4"]);
-    expect(terminalNumberRename(def, undefined)).toBeNull();
+    expect(terminalLabels(def, undefined).renameMap).toBeNull();
   });
 
   // ja: 妥当な上書きはピン順のラベルとして使われ、生の番号→上書きラベルの対応が引ける
@@ -238,7 +282,7 @@ describe("terminalNumbersOfInstance / terminalNumberRename", () => {
     const def = dynamicSymbol("terminal_block_4p")!;
     const attrs = { terminal_numbers: "11,12,13,14" };
     expect(terminalNumbersOfInstance(def, attrs)).toEqual(["11", "12", "13", "14"]);
-    expect(terminalNumberRename(def, attrs)).toEqual(
+    expect(terminalLabels(def, attrs).renameMap).toEqual(
       new Map([
         ["1", "11"],
         ["2", "12"],

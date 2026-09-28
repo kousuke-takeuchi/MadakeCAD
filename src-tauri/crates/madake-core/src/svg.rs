@@ -384,7 +384,8 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
     // 端子番号の上書き (Task 2, spec §1.1): シンボル定義に焼き込まれた生のピン番号の
     // テキストを、このインスタンスの表示ラベルへ差し替える。上書きが無ければNoneで、
     // 差し替えは起きない (端子台以外のシンボルも含めて、いつもどおりの描画になる)。
-    let terminal_rename = crate::terminal_chart::terminal_number_rename(def, &inst.attrs);
+    let terminal_labels = crate::terminal_chart::TerminalLabels::of(def, &inst.attrs);
+    let terminal_rename = terminal_labels.display_map();
     for prim in &def.primitives {
         match prim {
             Primitive::Line { pts } => {
@@ -446,7 +447,6 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
                 // シンボルと一緒に回さず、用紙の座標系で下へ取る
                 let p = transform_local(*at, inst);
                 let label = terminal_rename
-                    .as_ref()
                     .and_then(|m| m.get(text.as_str()))
                     .map(String::as_str)
                     .unwrap_or(text.as_str());
@@ -514,7 +514,8 @@ fn render_pin_group_brackets(out: &mut String, inst: &crate::model::SymbolInstan
     let Some(spec) = inst.attrs.get(crate::pin_groups::PIN_GROUPS_ATTR) else {
         return;
     };
-    for bracket in crate::pin_groups::pin_group_brackets(def, spec) {
+    let labels = crate::terminal_chart::TerminalLabels::of(def, &inst.attrs);
+    for bracket in crate::pin_groups::pin_group_brackets(def, spec, labels.display_map()) {
         let pts: Vec<Point> = bracket.bracket.iter().map(|p| transform_local(*p, inst)).collect();
         let _ = write!(
             out,
@@ -3681,6 +3682,23 @@ mod tests {
         let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
         assert_eq!(bracket_polylines(&svg), 1, "括弧のポリラインが無い: {svg}");
         assert!(svg.contains(">電源<"), "キャプションが無い: {svg}");
+    }
+
+    /// After the terminal numbers are renumbered, the pin-group bracket keeps being drawn: the range is matched against the block's displayed numbers, which is what the renumbering rewrote it to.
+    /// 端子番号を採番したあとでもピングループの括弧は描かれ続ける: 範囲はその端子台の表示番号と突き合わせられ、採番はその表示番号へ範囲を書き換えているため。
+    #[test]
+    fn svg_still_draws_the_bracket_after_the_terminals_are_renumbered() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let tb = terminal_block("TB1", "terminal_block_4p", 100.0, 50.0, "");
+        let Entity::Symbol(mut s) = with_pin_groups(tb, "11-14:電源") else { panic!() };
+        // 採番後の状態 (RenumberTerminals が書く2つの属性)
+        s.attrs.insert(crate::terminal_chart::TERMINAL_NUMBERS_ATTR.into(), "11,12,13,14".into());
+        let tb = Entity::Symbol(s);
+        sheet.entities.insert(tb.id(), tb);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
+        assert_eq!(bracket_polylines(&svg), 1, "採番後に括弧が消えている: {svg}");
+        assert!(svg.contains(">電源<"), "キャプションが無い: {svg}");
+        assert!(svg.contains(">11<"), "端子番号が表示ラベルで描かれる: {svg}");
     }
 
     /// A symbol with no pin_groups attribute, or an empty one, draws no bracket polyline.

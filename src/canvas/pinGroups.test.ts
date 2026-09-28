@@ -17,6 +17,7 @@ import {
   pinGroupIssues,
   wrapCaption,
 } from "./pinGroups";
+import { terminalLabels, terminalNumbers, terminalRenumberPlan } from "./terminalJumpers";
 
 /** 回転もミラーもしていない、原点に置いたインスタンス (用紙座標=ローカル座標になる)。 */
 function unrotated(symbolId: string): SymbolInstance {
@@ -161,6 +162,26 @@ describe("pinGroupBracket", () => {
     expect(issues).toHaveLength(1);
     expect(issues[0].code).toBe(PIN_GROUP_INVALID);
     expect(issues[0].text).toContain("4a-1b");
+  });
+
+  // ja: 端子番号が上書きされた端子台では、表示ラベルで書かれた範囲がピンを見つけて括弧を描き、古い生のピン番号は「存在しないピン」になる (Rust側とparity)
+  it("draws a bracket for a range written with the overridden labels", () => {
+    const def = dynamicSymbol("terminal_block_8p")!;
+    const rename = terminalLabels(def, { terminal_numbers: "11,12,13,14,15,16,17,18" }).renameMap;
+    expect(pinGroupBrackets(def, "11-14:電源", rename)).toHaveLength(1);
+    expect(pinGroupIssues(def, "11-14:電源", rename)).toEqual([]);
+    expect(pinGroupBrackets(def, "1-4:電源", rename)).toEqual([]);
+    expect(pinGroupIssues(def, "1-4:電源", rename)[0].code).toBe(PIN_GROUP_UNKNOWN_PIN);
+  });
+
+  // ja: 端子番号を上書きした多段端子台でも、1段ぶんの範囲はその段の列の外側に括弧を掛ける
+  it("keeps a multi-level bracket outside its own column after an override", () => {
+    const def = dynamicSymbol("terminal_block_8p_2l")!;
+    const numbers = terminalRenumberPlan(terminalNumbers(def), 11, 1, "").join(",");
+    const rename = terminalLabels(def, { terminal_numbers: numbers }).renameMap;
+    const brackets = pinGroupBrackets(def, "11b-14b:B系統", rename);
+    expect(brackets).toHaveLength(1);
+    expect(brackets[0].bracket.every((p) => p.x > 7.5)).toBe(true);
   });
 
   // ja: シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される

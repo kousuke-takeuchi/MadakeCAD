@@ -279,7 +279,10 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                 // ピングループの括弧のキャプション (G8)。SVG出力 (render_pin_group_brackets)
                 // と同じジオメトリで、行ごとに中央寄せの1文字ぶんの矩形を積む
                 if let Some(spec) = s.attrs.get(crate::pin_groups::PIN_GROUPS_ATTR) {
-                    for bracket in crate::pin_groups::pin_group_brackets(&def, spec) {
+                    let labels = crate::terminal_chart::TerminalLabels::of(&def, &s.attrs);
+                    for bracket in
+                        crate::pin_groups::pin_group_brackets(&def, spec, labels.display_map())
+                    {
                         for (text, p) in crate::pin_groups::caption_line_anchors(s, &bracket) {
                             boxes.push(TextBox {
                                 rect: text_box(
