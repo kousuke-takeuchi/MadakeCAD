@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2417 specification clauses** across 6 areas.
+**2448 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -94,6 +94,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A prefix and a step greater than one both apply: the step advances the pole number and the prefix is written before every label. <sub>`renumbering_applies_the_step_and_prefix`</sub>
 - Renumbering rewrites the block's jumper spec to the new labels in the same command, so a jumper between two poles still names the terminals it actually connects. <sub>`renumbering_rewrites_the_jumpers_to_the_new_labels`</sub>
 - Renumbering also rewrites a pin-group range's endpoints to the new labels, since the range names terminals by number. <sub>`renumbering_rewrites_pin_group_ranges_too`</sub>
+- After a renumbering, the pin-group bracket is still drawn on the drawing and the design check stays clean: the stored range is matched against the block's displayed terminal numbers. <sub>`a_pin_group_bracket_still_draws_after_renumbering_the_terminals`</sub>
+- On a multi-level block, a pin-group range that names one level's terminals still draws its bracket after a renumbering, because the level letters are kept. <sub>`a_multilevel_pin_group_bracket_survives_a_renumbering`</sub>
+- A jumper item the editor cannot read (or that names a terminal the block does not have) is carried through a renumbering unchanged, so the design check keeps pointing at it and undo brings the attribute back byte for byte. <sub>`a_broken_jumper_item_survives_a_renumbering_and_comes_back_unchanged_on_undo`</sub>
+- Undoing a renumbering restores a pin-group spec byte for byte, spacing included: the rewrite only replaces the terminal-number tokens it recognises. <sub>`undoing_a_renumbering_restores_the_pin_group_spec_byte_for_byte`</sub>
+- A chain of jumpers over three terminals follows a renumbering with a step of two: both endpoints of every link get the new label and the links stay a chain. <sub>`a_jumper_chain_follows_a_renumbering_with_a_step`</sub>
+- Renumbering a symbol that is not a terminal block is refused: the terminal-number override would rewrite that symbol's pin-number texts on the drawing. <sub>`renumbering_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- Terminal numbers are stored with the surrounding spaces removed, so what the command validated is exactly what the chart reads back. <sub>`terminal_numbers_are_stored_without_their_surrounding_spaces`</sub>
+- Two labels that differ only in their surrounding spaces count as a duplicate and are refused: they would collapse to the same terminal number in storage. <sub>`terminal_numbers_that_are_duplicates_once_trimmed_are_refused`</sub>
+- A terminal number containing a comma is refused: the comma is the separator of the stored list, so the value would read back as a different number of terminals. <sub>`a_terminal_number_containing_a_comma_is_refused`</sub>
 - Undoing a renumbering restores the previous terminal numbers exactly: a prior direct override comes back, and renumbering from the symbol's defaults undoes to no override at all. <sub>`undoing_a_renumbering_restores_the_previous_numbers`</sub>
 - Setting a number list whose length does not match the pin count is refused and leaves the drawing untouched. <sub>`a_terminal_number_count_mismatch_is_refused_without_changing_the_drawing`</sub>
 - A duplicate label in the number list is refused without changing the drawing. <sub>`duplicate_terminal_numbers_are_refused`</sub>
@@ -416,6 +425,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A bracket over pins on the left side of a symbol is a vertical bar to the left of the pins, spanning from the topmost to the bottommost pin, with its caption further left still. <sub>`a_bracket_on_left_pins_is_a_vertical_bar_further_left`</sub>
 - A pin whose own number contains a hyphen cannot be named in a pin group, and says so instead of being reported as a pin that does not exist. <sub>`a_pin_number_containing_a_hyphen_is_refused_with_its_own_reason`</sub>
 - On a multi-level terminal block, a group over the second level's terminals brackets the outside of that level's own column, never the gap between the columns. <sub>`a_multilevel_group_brackets_the_outside_of_its_own_column`</sub>
+- When a terminal block's numbers are overridden, a pin-group range written with the displayed labels still finds its pins and draws its bracket, and reports no unknown pin. <sub>`a_range_written_with_the_displayed_labels_still_draws_its_bracket`</sub>
+- On a multi-level block whose numbers are overridden, a range over one level's terminals brackets that level's own column just as it does without the override. <sub>`a_multilevel_range_still_brackets_its_own_column_after_an_override`</sub>
 - A range that spans two levels of a multi-level terminal block is reported instead of quietly drawing nothing, because the two levels face opposite sides and no single bracket can hold them. <sub>`a_range_across_two_levels_is_reported_instead_of_silently_skipped`</sub>
 - A bracket spans pins from two different sides of a symbol (mixed pin direction) is refused: the shape would not be a straight bracket. <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
 
@@ -697,6 +708,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A terminal block with several jumpers gets one bar per jumper. <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
 - A terminal block with no jumpers draws no bar, and a symbol that is not a terminal block never gets one even if it happened to carry a "jumpers" attribute. <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
 - A pin_groups range draws one square-bracket polyline and its caption text on the sheet. <sub>`svg_draws_a_bracket_and_caption_for_a_pin_group`</sub>
+- After the terminal numbers are renumbered, the pin-group bracket keeps being drawn: the range is matched against the block's displayed numbers, which is what the renumbering rewrote it to. <sub>`svg_still_draws_the_bracket_after_the_terminals_are_renumbered`</sub>
 - A symbol with no pin_groups attribute, or an empty one, draws no bracket polyline. <sub>`svg_draws_no_bracket_without_pin_groups`</sub>
 - Overlapping pin_groups items are reported by verify (tested in verify.rs) and draw no bracket at all, while an unrelated valid item on the same instance still draws. <sub>`svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest`</sub>
 - Pin group brackets and their captions never land on a pin number, a pin name or the symbol's designator, type or function label, for a block, a terminal block and a connector, at every rotation and mirrored. <sub>`svg_pin_group_boxes_never_land_on_any_label_at_any_rotation`</sub>
@@ -825,6 +837,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The terminal chart CSV has the columns terminal, level, inside, wire number, wire, outside, jumper, and one line per terminal. <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
 - A multi-level terminal block shows its level letter in the chart's Lv column, and its terminal column carries the full pin number ("1a"), so the two levels never look like the same terminal. <sub>`a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column`</sub>
 - When `attrs["terminal_numbers"]` overrides the default numbers, the chart's rows, jumper column and CSV all show the overridden labels instead of the symbol's default pin numbers. <sub>`an_overridden_terminal_number_shows_up_in_the_chart_and_csv`</sub>
+- A number list is judged on its trimmed values: spaces around a label are ignored, two labels that differ only in their spacing count as a duplicate, and a label carrying the list's own separator (a comma) is refused. <sub>`a_number_list_is_validated_on_its_trimmed_values`</sub>
+- The label map converts a raw pin number to the block's displayed label and back again, and it is the identity map when the block carries no override (so every caller can pass it through without a branch). <sub>`the_label_map_converts_a_raw_pin_number_both_ways`</sub>
+- A symbol that is not a terminal block never gets a label map, even if a hand-edited file left a `terminal_numbers` attribute on it: the override only applies to terminal blocks. <sub>`a_symbol_that_is_not_a_terminal_block_has_no_label_map`</sub>
+- Rewriting a jumper spec replaces only the terminal numbers it recognises and leaves everything else (spacing, separators, items it cannot read) exactly as it was, so the same rewrite run backwards restores the original text. <sub>`rewriting_a_jumper_spec_only_touches_the_numbers_it_recognises`</sub>
 - An override that swaps the terminal count is invalid (too few/many labels), so the chart falls back to the symbol's default numbers instead of losing rows or panicking. <sub>`an_invalid_override_falls_back_to_the_default_numbers`</sub>
 - On a multi-level block, an override that changes only the pole (keeping the step at more than 1, e.g. "11a" and "13a") still recognises its jumpers as adjacent, because adjacency is decided from the symbol's raw pin layout, not from the arithmetic difference between the displayed labels. <sub>`adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic`</sub>
 - On a multi-level terminal block a jumper is written with the level letter, so "1a-1b" links the two levels of the same pole and is accepted. <sub>`a_jumper_can_link_the_two_levels_of_one_pole`</sub>
@@ -1694,6 +1710,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - builds a block's definition from the instance attributes, not from its id <sub>`resolveInstanceDef`</sub>
 - returns nothing for a block whose attributes are broken <sub>`resolveInstanceDef`</sub>
 - grows to take in a pin group's bracket and caption, so labels are placed clear of them <sub>`symbolBounds`</sub>
+- still takes in a pin group's box after the terminals are renumbered <sub>`symbolBounds`</sub>
 - reserves no room on a device-block coil for brackets it never draws <sub>`symbolBounds`</sub>
 - grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption <sub>`symbolBounds`</sub>
 - never lets a bracket and its caption lines overlap each other, at any rotation <sub>`captionLineAnchors`</sub>
@@ -1872,6 +1889,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - puts a connector's bracket to the right of its pin stubs <sub>`pinGroupBracket`</sub>
 - brackets the outside of a multi-level terminal block's own column, not the gap between columns <sub>`pinGroupBracket`</sub>
 - reports a range that spans two levels instead of quietly drawing nothing <sub>`pinGroupBracket`</sub>
+- draws a bracket for a range written with the overridden labels <sub>`pinGroupBracket`</sub>
+- keeps a multi-level bracket outside its own column after an override <sub>`pinGroupBracket`</sub>
 - refuses a bracket across mixed pin directions <sub>`pinGroupBracket`</sub>
 
 ### relayXref
@@ -2092,9 +2111,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - rejects a list whose length does not match the pin count <sub>`validTerminalNumbers`</sub>
 - rejects a list with a duplicate label <sub>`validTerminalNumbers`</sub>
 - rejects a list with an empty item <sub>`validTerminalNumbers`</sub>
-- falls back to the symbol's default numbers when there is no override <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
-- uses a valid override and builds a raw-to-display rename map <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
-- falls back to the defaults when the override's item count is wrong <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
+- judges the list on its trimmed values <sub>`validTerminalNumbers`</sub>
+- rejects a label containing the stored list's own separator <sub>`validTerminalNumbers`</sub>
+- converts a raw pin number to the displayed label and back <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- never builds a label map for a symbol that is not a terminal block <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- rewrites only the terminal numbers it recognises and round-trips <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- falls back to the symbol's default numbers when there is no override <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
+- uses a valid override and builds a raw-to-display rename map <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
+- falls back to the defaults when the override's item count is wrong <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
 - numbers every pin from the start value on a single-level block <sub>`terminalRenumberPlan`</sub>
 - keeps the level letters on a multi-level block and numbers only the pole <sub>`terminalRenumberPlan`</sub>
 - applies the step and the prefix <sub>`terminalRenumberPlan`</sub>
@@ -2753,6 +2777,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - clears the selection and the previous check result when another block is picked <sub>`terminal strip editor store`</sub>
 - shows an empty grid on a sheet without any terminal block <sub>`terminal strip editor store`</sub>
 - throws away the chart, the selection and the check result when closed <sub>`terminal strip editor store`</sub>
+- previews the renumbering as an old-to-new mapping and keeps level letters <sub>`renumber popover`</sub>
+- refuses a step of zero and names the label that would repeat <sub>`renumber popover`</sub>
+- sends no command at all for a plan it cannot apply <sub>`renumber popover`</sub>
+- rounds a negative start and a fractional step into whole numbers before sending <sub>`renumber popover`</sub>
+- reports that there is nothing to renumber on a sheet without a terminal block <sub>`renumber popover`</sub>
+- previews the jumper specification as it will read after the renumbering <sub>`renumber popover`</sub>
+- shows no jumper line when the block carries no jumpers <sub>`renumber popover`</sub>
 
 ### ui
 

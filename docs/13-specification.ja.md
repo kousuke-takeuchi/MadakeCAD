@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2417仕様項目**。
+全6領域・**2448仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -94,6 +94,15 @@
 - 接頭辞と1より大きい増分はどちらも効く: 増分が極番号を進め、接頭辞は全ラベルの前に付く。 <sub>`renumbering_applies_the_step_and_prefix`</sub>
 - 採番は同じコマンド内でジャンパの指定も新しい番号へ書き換えるので、ジャンパは実際に繋ぐ端子を指したままになる。 <sub>`renumbering_rewrites_the_jumpers_to_the_new_labels`</sub>
 - 採番はピングループの範囲の両端も新しい番号へ書き換える。範囲は端子番号で指しているため。 <sub>`renumbering_rewrites_pin_group_ranges_too`</sub>
+- 採番したあとでもピングループの括弧は図面に描かれ続け、図面検証も無指摘のままになる: 保存された範囲はその端子台の表示番号と突き合わせられるため。 <sub>`a_pin_group_bracket_still_draws_after_renumbering_the_terminals`</sub>
+- 多段端子台で1段ぶんの端子を指すピングループの範囲も、段記号が保たれるので採番後に括弧を描き続ける。 <sub>`a_multilevel_pin_group_bracket_survives_a_renumbering`</sub>
+- 読めないジャンパの項目 (や端子台に無い端子を指す項目) は採番をそのまま通り抜けるので、図面検証はそれを指し続け、undoで属性は1バイトも変わらず戻る。 <sub>`a_broken_jumper_item_survives_a_renumbering_and_comes_back_unchanged_on_undo`</sub>
+- 採番のundoはピングループの指定を空白ごと1バイトも変えずに戻す: 書き換えは認識できた端子番号のトークンだけを置き換えるため。 <sub>`undoing_a_renumbering_restores_the_pin_group_spec_byte_for_byte`</sub>
+- 3端子にまたがるジャンパの連鎖は増分2の採番にも追従する: 各リンクの両端が新しい番号になり、連鎖のままになる。 <sub>`a_jumper_chain_follows_a_renumbering_with_a_step`</sub>
+- 端子台ではないシンボルの採番は拒否される: 端子番号の上書きはそのシンボルのピン番号テキストを図面上で書き換えてしまうため。 <sub>`renumbering_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- 端子番号は前後の空白を落として保存されるので、コマンドが検証した値とチャートが読み戻す値が必ず一致する。 <sub>`terminal_numbers_are_stored_without_their_surrounding_spaces`</sub>
+- 前後の空白しか違わない2つのラベルは重複として拒否される: 保存されると同じ端子番号になってしまうため。 <sub>`terminal_numbers_that_are_duplicates_once_trimmed_are_refused`</sub>
+- カンマを含む端子番号は拒否される: カンマは保存形の区切り記号なので、読み戻すと端子の個数そのものが変わってしまうため。 <sub>`a_terminal_number_containing_a_comma_is_refused`</sub>
 - 採番のundoは直前の端子番号を正確に戻す: 直前に直接指定していればそれが戻り、既定値から採番していれば上書き無しの状態へ戻る。 <sub>`undoing_a_renumbering_restores_the_previous_numbers`</sub>
 - ピン数と個数が合わない番号列の指定は拒否され、図面は変わらない。 <sub>`a_terminal_number_count_mismatch_is_refused_without_changing_the_drawing`</sub>
 - 番号列に重複したラベルがあると、図面を変えずに拒否される。 <sub>`duplicate_terminal_numbers_are_refused`</sub>
@@ -416,6 +425,8 @@
 - シンボル左側のピンにかける括弧は、いちばん上から下のピンまで縦棒でつながり、キャプションはさらに左に置かれる。 <sub>`a_bracket_on_left_pins_is_a_vertical_bar_further_left`</sub>
 - ピン番号そのものに「-」が入っている端子はピングループに指定できず、「存在しないピン」ではなく使えない理由がそのまま報告される。 <sub>`a_pin_number_containing_a_hyphen_is_refused_with_its_own_reason`</sub>
 - 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない)。 <sub>`a_multilevel_group_brackets_the_outside_of_its_own_column`</sub>
+- 端子台の端子番号が上書きされていても、表示ラベルで書かれたピングループの範囲はピンを見つけて括弧を描き、「存在しないピン」も報告しない。 <sub>`a_range_written_with_the_displayed_labels_still_draws_its_bracket`</sub>
+- 端子番号を上書きした多段端子台でも、1段ぶんの端子を指す範囲は上書きが無いときと同じようにその段の列に括弧を掛ける。 <sub>`a_multilevel_range_still_brackets_its_own_column_after_an_override`</sub>
 - 多段端子台の段をまたぐ範囲は、黙って何も描かれるのではなく報告される: 段ごとに外側の辺が逆なので、1本の括弧では囲めないため。 <sub>`a_range_across_two_levels_is_reported_instead_of_silently_skipped`</sub>
 - シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される: まっすぐな括弧にならないため。 <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
 
@@ -697,6 +708,7 @@
 - 複数のジャンパを持つ端子台には、ジャンパの数だけバーが描かれる。 <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
 - ジャンパの無い端子台にはバーが描かれず、端子台以外のシンボルは"jumpers"属性を持っていてもバーが描かれない。 <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
 - pin_groups の範囲は、角括弧のポリライン1本とそのキャプション文字をシートに描く。 <sub>`svg_draws_a_bracket_and_caption_for_a_pin_group`</sub>
+- 端子番号を採番したあとでもピングループの括弧は描かれ続ける: 範囲はその端子台の表示番号と突き合わせられ、採番はその表示番号へ範囲を書き換えているため。 <sub>`svg_still_draws_the_bracket_after_the_terminals_are_renumbered`</sub>
 - pin_groups属性が無い・空のシンボルには括弧のポリラインが描かれない。 <sub>`svg_draws_no_bracket_without_pin_groups`</sub>
 - 重なるpin_groups項目は (verify.rsで検証済みのとおり) 括弧を一切描かず、同じインスタンスの関係ない有効な項目は変わらず描かれる。 <sub>`svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest`</sub>
 - ピングループの括弧とキャプションは、ブロック・端子台・コネクタのいずれでも、全ての回転とミラーで、ピン番号・ピン名・参照記号・型番・機能ラベルのどれにも重ならない。 <sub>`svg_pin_group_boxes_never_land_on_any_label_at_any_rotation`</sub>
@@ -825,6 +837,10 @@
 - 端子台チャートのCSVは 端子・Lv・内部側・線番・電線・外部側・ジャンパ の列を持ち、端子1個につき1行になる。 <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
 - 多段端子台はチャートのLv列に段記号が入り、端子列は完全なピン番号 ("1a") になるので、2つの段が同じ端子に見えることはない。 <sub>`a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column`</sub>
 - `attrs["terminal_numbers"]`が既定の番号を上書きしていると、チャートの行・ジャンパ欄・CSVはどれもシンボル既定のピン番号ではなく上書きラベルを表示する。 <sub>`an_overridden_terminal_number_shows_up_in_the_chart_and_csv`</sub>
+- 端子番号の指定は前後の空白を落とした値で判定される: ラベル前後の空白は無視され、空白しか違わない2つのラベルは重複と数え、保存形の区切り記号 (カンマ) を含むラベルは拒否される。 <sub>`a_number_list_is_validated_on_its_trimmed_values`</sub>
+- ラベル対応表は生のピン番号を表示ラベルへ、表示ラベルを生のピン番号へ相互変換する。上書きの無い端子台では恒等変換になるので、呼び出し側は分岐なしで素通しできる。 <sub>`the_label_map_converts_a_raw_pin_number_both_ways`</sub>
+- 端子台ではないシンボルには、手編集のファイルに`terminal_numbers`が残っていてもラベル対応表は作られない。上書きは端子台だけの仕組みであるため。 <sub>`a_symbol_that_is_not_a_terminal_block_has_no_label_map`</sub>
+- ジャンパ指定の書き換えは認識できた端子番号だけを置き換え、それ以外 (空白・区切り記号・読めない項目) は元のまま残すので、同じ書き換えを逆向きに走らせれば元の文字列へ戻る。 <sub>`rewriting_a_jumper_spec_only_touches_the_numbers_it_recognises`</sub>
 - 端子数と合わない上書き (ラベルが多い・少ない) は無効なので、チャートは行を失ったり異常終了したりせず、シンボル既定の番号へフォールバックする。 <sub>`an_invalid_override_falls_back_to_the_default_numbers`</sub>
 - 多段端子台で極だけを増分2以上で変える上書き (例 "11a"と"13a") でも、ジャンパの隣接判定はシンボルの生のピン配置から決めるので、表示ラベルの数値差では判定しない。だから増分2の採番後もジャンパは有効なまま。 <sub>`adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic`</sub>
 - 多段端子台のジャンパは段記号まで書く。"1a-1b" は同じ極の2つの段を繋ぐ指定として受け付けられる。 <sub>`a_jumper_can_link_the_two_levels_of_one_pole`</sub>
@@ -1694,6 +1710,7 @@
 - 配置済みブロックの定義はインスタンスの属性から作られる(同じidでも中身が違う) <sub>`resolveInstanceDef`</sub>
 - 属性が壊れているブロックは描かれない(undefinedになる) <sub>`resolveInstanceDef`</sub>
 - ピングループ括弧はシンボルと一緒に描かれるので、参照記号・型番の位置決めに使う外形にはその箱も入る (Rust側 svg::symbol_bounds とparity) <sub>`symbolBounds`</sub>
+- 端子番号を採番したあとでも、ピングループの箱は外形に入ったままになる (範囲は表示番号と突き合わせられるため。Rust側 pin_group_paper_boxes とparity) <sub>`symbolBounds`</sub>
 - 実機ブロック表示のコイルは、ピングループの属性を持っていても括弧のための余白を取らない (そこには括弧を描かないため。Rust側 a_device_block_coil_reserves_no_room_for_brackets_it_never_draws とparity) <sub>`symbolBounds`</sub>
 - 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない) <sub>`symbolBounds`</sub>
 - ピングループの部品どうし (括弧と、折り返したキャプションの各行) は全ての回転・ミラーで決して重ならない (Rust側 svg_pin_group_pieces_never_overlap_each_other_at_any_rotation とparity) <sub>`captionLineAnchors`</sub>
@@ -1872,6 +1889,8 @@
 - コネクタは右側にピンが出るので、括弧とキャプションは足先より右に出る (Rust側の3一族テストとparity) <sub>`pinGroupBracket`</sub>
 - 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない、Rust側とparity) <sub>`pinGroupBracket`</sub>
 - 多段端子台の段をまたぐ範囲は、黙って何も描かれるのではなく報告される (段ごとに外側の辺が逆で1本の括弧では囲めないため、Rust側とparity) <sub>`pinGroupBracket`</sub>
+- 端子番号が上書きされた端子台では、表示ラベルで書かれた範囲がピンを見つけて括弧を描き、古い生のピン番号は「存在しないピン」になる (Rust側とparity) <sub>`pinGroupBracket`</sub>
+- 端子番号を上書きした多段端子台でも、1段ぶんの範囲はその段の列の外側に括弧を掛ける <sub>`pinGroupBracket`</sub>
 - シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される <sub>`pinGroupBracket`</sub>
 
 ### relayXref
@@ -2092,9 +2111,14 @@
 - ピン数と合わない個数は無効 <sub>`validTerminalNumbers`</sub>
 - 重複したラベルは無効 <sub>`validTerminalNumbers`</sub>
 - 空要素は無効 <sub>`validTerminalNumbers`</sub>
-- attrs["terminal_numbers"]が無ければシンボル既定の番号のまま <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
-- 妥当な上書きはピン順のラベルとして使われ、生の番号→上書きラベルの対応が引ける <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
-- 個数が合わない上書きは既定の番号へフォールバックする <sub>`terminalNumbersOfInstance / terminalNumberRename`</sub>
+- 判定はtrim後の値で行う: ラベル前後の空白は無視し、空白しか違わない2つは重複と数え、空白だけのラベルも無効 (Rust側とparity) <sub>`validTerminalNumbers`</sub>
+- 保存形の区切り記号 (カンマ) を含むラベルは無効 (読み戻すと端子の個数が変わってしまう) <sub>`validTerminalNumbers`</sub>
+- 対応表は生のピン番号と表示ラベルを相互変換し、知らない番号はそのまま返す (Rust側 TerminalLabels とparity) <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- 端子台以外のシンボルには対応表を作らない (上書きは端子台だけの仕組み) <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- ジャンパ指定の書き換えは認識できた端子番号だけを置き換え、空白・読めない項目・存在しない端子を含む項目はそのまま残す (逆向きで元の文字列へ戻る。Rust側 rewrite_jumper_labels とparity) <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- attrs["terminal_numbers"]が無ければシンボル既定の番号のまま <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
+- 妥当な上書きはピン順のラベルとして使われ、生の番号→上書きラベルの対応が引ける <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
+- 個数が合わない上書きは既定の番号へフォールバックする <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
 - 開始番号から刻み1でピン順に振る (単段) <sub>`terminalRenumberPlan`</sub>
 - 多段端子台は段記号を保ったまま極だけ採番するので、同じ極の全段が同じ番号を共有する <sub>`terminalRenumberPlan`</sub>
 - 増分と接頭辞はどちらも効く <sub>`terminalRenumberPlan`</sub>
@@ -2753,6 +2777,13 @@
 - 端子台を切り替えると選択と直前のチェック結果は消える <sub>`terminal strip editor store`</sub>
 - 端子台が1つも無いシートでは行が空になり、生成もチェックもできない <sub>`terminal strip editor store`</sub>
 - 閉じると選択・チャート・チェック結果を捨てる <sub>`terminal strip editor store`</sub>
+- プレビューは旧番号→新番号の対応として並び、多段端子台では段記号を保ったまま出る <sub>`renumber popover`</sub>
+- 増分0の採番は全端子を同じ番号にしてしまうので、重複するラベルと件数を理由として返す <sub>`renumber popover`</sub>
+- 適用できない案はコマンドを1本も送らずに断られる (図面は変わらない) <sub>`renumber popover`</sub>
+- 負の開始番号・小数の増分は0以上の整数へ丸めてから送る (JSONの型エラーにしない) <sub>`renumber popover`</sub>
+- 端子台が1つも無ければ採番の対象が無いことを理由として返す <sub>`renumber popover`</sub>
+- プレビューは採番に追従したあとのジャンパ指定も見せる (適用と同じ書き換え規則) <sub>`renumber popover`</sub>
+- ジャンパが1本も無ければ追従の行は出さない <sub>`renumber popover`</sub>
 
 ### ui
 
