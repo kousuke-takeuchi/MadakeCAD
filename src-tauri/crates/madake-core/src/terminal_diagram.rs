@@ -15,7 +15,7 @@ use crate::report_sheet::{
     REPORT_PAPER,
 };
 use crate::svg::{line_el, rect_el, text_el, CELL_PAD, FRAME_MARGIN, FRAME_STROKE};
-use crate::terminal_chart::{terminal_block_ids, terminal_chart, TerminalRow};
+use crate::terminal_chart::{terminal_block_ids, terminal_chart, terminal_sort_key, TerminalRow};
 
 /// 端子箱の幅 (mm)。
 const BOX_W: f64 = 24.0;
@@ -225,10 +225,16 @@ pub fn terminal_diagram_svg(project: &Project, tb_id: EntityId) -> Vec<String> {
         .into_iter()
         .enumerate()
         .map(|(i, rows)| {
-            let title = match (total, rows.first(), rows.last()) {
-                (1, _, _) | (_, None, _) | (_, _, None) => base.clone(),
-                (_, Some(first), Some(last)) => {
-                    format!("{base} (端子 {}〜{})", first.terminal, last.terminal)
+            // 表題の範囲は「そのページに載る端子の最小〜最大」。行の並べ替え順 (row_order) では
+            // 先頭・末尾の行が最小・最大とは限らないので、端子番号で取り直す
+            let span = (
+                rows.iter().min_by_key(|r| terminal_sort_key(&r.terminal)),
+                rows.iter().max_by_key(|r| terminal_sort_key(&r.terminal)),
+            );
+            let title = match (total, span) {
+                (1, _) | (_, (None, _)) | (_, (_, None)) => base.clone(),
+                (_, (Some(min), Some(max))) => {
+                    format!("{base} (端子 {}〜{})", min.terminal, max.terminal)
                 }
             };
             // 段の列はページをまたいで同じ並びになるよう、チャート全体から決める
@@ -917,6 +923,60 @@ mod tests {
         // 端子は全ページ通して1回ずつ描かれる
         let total: usize = pages.iter().map(|p| boxes(p).len()).sum();
         assert_eq!(total, per + 5);
+    }
+
+    /// The page title's terminal range names the smallest and largest terminal on that page, so it still reads as a range when a row order such as jumper order puts the rows out of terminal-number sequence.
+    /// ページ表題の端子の範囲は、そのページに載る端子の最小と最大を書く。ジャンパ順のように行が端子番号順に並んでいない並べ替えでも、範囲として読める表記のままになる。
+    #[test]
+    fn the_page_title_range_names_the_smallest_and_largest_terminal_on_the_page() {
+        let per = terminals_per_page();
+        let n = per + 5;
+        let mut project = Project::new("並べ替えた大きい端子台");
+        let mut attrs: std::collections::BTreeMap<String, String> = Default::default();
+        attrs.insert("jumpers".into(), format!("{}-{}", n - 1, n));
+        attrs.insert("row_order".into(), "jumper".into());
+        let tb = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: format!("terminal_block_{n}p"),
+            at: Point::new(150.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB9".into(),
+            value: String::new(),
+            attrs,
+        });
+        let tb_id = tb.id();
+        project.sheets[0].entities.insert(tb_id, tb);
+        let pages = terminal_diagram_svg(&project, tb_id);
+        assert_eq!(pages.len(), 2);
+        let title = |svg: &str| {
+            texts(svg)
+                .into_iter()
+                .find(|t| t.2.starts_with("端子接続図"))
+                .expect("表題")
+                .2
+        };
+        // ジャンパ順なので1ページ目の先頭は端子{n-1}・{n}、その後ろに端子1から続く
+        let first_page_numbers: Vec<String> = texts(&pages[0])
+            .into_iter()
+            .filter(|t| (t.0 - center_x()).abs() < 1e-9)
+            .map(|t| t.2)
+            .collect();
+        assert_eq!(
+            first_page_numbers[0..3],
+            [(n - 1).to_string(), n.to_string(), "1".to_string()],
+            "ジャンパ順で先頭に出る"
+        );
+        assert_eq!(
+            title(&pages[0]),
+            format!("端子接続図 TB9 (端子 1〜{n})"),
+            "先頭行が端子{}でも、範囲は最小1〜最大{n}",
+            n - 1
+        );
+        assert_eq!(
+            title(&pages[1]),
+            format!("端子接続図 TB9 (端子 {}〜{})", n - 6, n - 2)
+        );
     }
 
     /// Every terminal block gets exactly one page; anything that is not a terminal block gets none.

@@ -95,7 +95,7 @@ pub struct TerminalBlockInfo {
 }
 
 /// 端子番号の並べ替えキー (極番号→段記号→表記)。単段は段記号なし、多段 (G6) は `1a` の `a`。
-fn terminal_sort_key(no: &str) -> (u32, Option<char>, String) {
+pub(crate) fn terminal_sort_key(no: &str) -> (u32, Option<char>, String) {
     let (pole, level) = parse_terminal_no(no);
     (pole, level, no.to_string())
 }
@@ -113,8 +113,8 @@ pub enum RowOrder {
     /// 数値順 (既定)。極番号を数値として昇順に並べる (現在のチャートの自然順と同じ)。
     #[default]
     Number,
-    /// 英数順。極番号を**文字列**として辞書順に並べる (2桁以上で数値順と結果が変わる。
-    /// 例: "10" は "2" より前に来る)。
+    /// 英数順。端子番号の**表記そのもの**を文字列として辞書順に並べる (2桁以上で数値順と結果が
+    /// 変わる。例: "10" は "2" より前に来る)。多段は極の中で最も小さい表記 (`1a`) を代表にする。
     Alnum,
     /// ページ順 (回路図の出現順)。その極の配線 (内部側・外部側どちらか) が、端子台と
     /// 同じシート上で読み順 (上→下、同じ行なら左→右) に最初に現れる位置の順に並べる
@@ -168,7 +168,8 @@ fn reading_order_key(sheet: &Sheet, p: Point) -> (char, u32) {
 /// どの並びでも極→段の順が崩れない ([`RowOrder`] 参照)。
 ///
 /// ページ順だけ図面上の位置が要るので、`page_points` (`rows`と同じ順で、その行の配線の
-/// 反対側にある代表点。配線が無い行はNone) と`sheet`を渡す。それ以外の並びは`rows`自身が
+/// 反対側にある代表点。配線が無い行はNone。`rows`より短ければ足りない行は配線無しとして扱う)
+/// と`sheet`を渡す。それ以外の並びは`rows`自身が
 /// 持つ情報 (ジャンパ欄・外部ハーネス欄) だけで決まる。
 ///
 /// これがチャートの並び順を決める**唯一の関数**。CSV・図枠付き図面シート・端子接続図は
@@ -209,13 +210,21 @@ pub fn sort_terminal_rows(
 
     clusters.sort_by(|a, b| match order {
         RowOrder::Number => a.0.cmp(&b.0),
-        RowOrder::Alnum => a.0.to_string().cmp(&b.0.to_string()).then(a.0.cmp(&b.0)),
+        // 極番号の数値ではなく端子番号の表記で比較する (Task 2の`terminal_numbers`で
+        // "A1"のような表記が入っても英数順のままになるように)
+        RowOrder::Alnum => {
+            let key = |c: &(u32, Vec<usize>)| -> (&str, u32) {
+                let text = c.1.iter().map(|&i| rows[i].terminal.as_str()).min().unwrap_or("");
+                (text, c.0)
+            };
+            key(a).cmp(&key(b))
+        }
         RowOrder::Page => {
             let key = |c: &(u32, Vec<usize>)| -> (bool, Option<(char, u32)>, u32) {
                 let best = c
                     .1
                     .iter()
-                    .filter_map(|&i| page_points[i])
+                    .filter_map(|&i| page_points.get(i).copied().flatten())
                     .map(|p| reading_order_key(sheet, p))
                     .min();
                 (best.is_none(), best, c.0)
@@ -242,11 +251,14 @@ pub fn sort_terminal_rows(
         }
     });
 
-    let order_idx: Vec<usize> = clusters.into_iter().flat_map(|(_, idxs)| idxs).collect();
-    let mut taken: Vec<Option<TerminalRow>> = rows.drain(..).map(Some).collect();
-    for i in order_idx {
-        rows.push(taken[i].take().expect("各行は1回しか並べ替えに出てこない"));
+    // 各行の「並べ替え後の位置」を求め、その位置で並べ直す
+    let mut rank = vec![0usize; rows.len()];
+    for (pos, &i) in clusters.iter().flat_map(|(_, idxs)| idxs.iter()).enumerate() {
+        rank[i] = pos;
     }
+    let mut ranked: Vec<(usize, TerminalRow)> = rank.into_iter().zip(rows.drain(..)).collect();
+    ranked.sort_by_key(|(pos, _)| *pos);
+    rows.extend(ranked.into_iter().map(|(_, row)| row));
 }
 
 /// シンボル定義が持つ端子番号を、チャートに並ぶ順 (極番号→段記号) に列挙する。
@@ -1623,8 +1635,8 @@ mod tests {
         chart.rows.iter().map(|r| r.terminal.as_str()).collect()
     }
 
-    /// `attrs["row_order"]`が未設定・空・未知語なら数値順 (既定) に落ちる。
     /// An unset, empty or unrecognised `row_order` attribute falls back to number order.
+    /// `attrs["row_order"]`が未設定・空・未知語なら数値順 (既定) に落ちる。
     #[test]
     fn an_unset_or_unknown_row_order_falls_back_to_number_order() {
         assert_eq!(row_order_of(&BTreeMap::new()), RowOrder::Number);
@@ -1640,8 +1652,8 @@ mod tests {
         assert_eq!(terminal_order(&chart), ["1", "2", "3", "4"], "未知語は数値順のまま");
     }
 
-    /// 数値順 (既定) は極番号を数として昇順に並べる。10極以上でも桁の大小どおりになる。
     /// Number order (the default) sorts poles as integers, so it stays correct past nine poles.
+    /// 数値順 (既定) は極番号を数として昇順に並べる。10極以上でも桁の大小どおりになる。
     #[test]
     fn number_order_sorts_poles_as_integers() {
         let (sheet, id) = sheet_with_tb(12, 0);
@@ -1653,11 +1665,10 @@ mod tests {
         );
     }
 
-    /// 英数順は極番号を文字列として辞書順に並べるので、10極以上では数値順と違う結果になる
-    /// ("10"が"2"より前に来る)。
-    /// Alphanumeric order compares pole numbers as strings, so past nine poles it disagrees with number order ("10" sorts before "2").
+    /// Alphanumeric order compares terminal numbers as text, so past nine poles it disagrees with number order ("10" sorts before "2").
+    /// 英数順は端子番号を文字列として辞書順に並べるので、10極以上では数値順と違う結果になる ("10"が"2"より前に来る)。
     #[test]
-    fn alnum_order_compares_pole_numbers_as_strings() {
+    fn alnum_order_compares_terminal_numbers_as_text() {
         let (mut sheet, id) = sheet_with_tb(12, 0);
         let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
         s.attrs.insert("row_order".into(), "alnum".into());
@@ -1669,9 +1680,8 @@ mod tests {
         );
     }
 
-    /// ページ順は、その極の配線が図面上で読み順(上→下、左→右)に最初に現れる位置で並べる。
-    /// 番号は逆でも、読み順で先に来る方が先になる。配線の無い極(予備)は最後に極番号順で並ぶ。
     /// Page order sorts poles by where their wiring first appears on the sheet in reading order (top-to-bottom, then left-to-right) — even against numeric order — and puts unwired (spare) poles last, in pole-number order.
+    /// ページ順は、その極の配線が図面上で読み順(上→下、左→右)に最初に現れる位置で並べる。番号は逆でも、読み順で先に来る方が先になる。配線の無い極(予備)は最後に極番号順で並ぶ。
     #[test]
     fn page_order_follows_where_the_wiring_first_appears_on_the_sheet() {
         let (mut sheet, id) = sheet_with_tb(4, 0);
@@ -1691,9 +1701,8 @@ mod tests {
         );
     }
 
-    /// 外部ケーブル順は、外部ハーネス名が最初に現れた極の順にその名前の極をまとめる
-    /// (名前の辞書順ではなく初出順)。ハーネス名の無い極は最後に極番号順で並ぶ。
     /// Cable order gathers the poles of each external harness together in the order that harness name first appears (not alphabetically), putting poles with no harness last in pole-number order.
+    /// 外部ケーブル順は、外部ハーネス名が最初に現れた極の順にその名前の極をまとめる (名前の辞書順ではなく初出順)。ハーネス名の無い極は最後に極番号順で並ぶ。
     #[test]
     fn cable_order_groups_poles_by_their_external_harness_in_first_seen_order() {
         let (mut sheet, id) = sheet_with_tb(4, 0);
@@ -1730,9 +1739,8 @@ mod tests {
         );
     }
 
-    /// ジャンパ順は、ジャンパが1本でも掛かっている極を極番号順でまとめて先頭に出し、
-    /// ジャンパの無い極をその後ろに極番号順で並べる。
     /// Jumper order brings every pole that has any jumper to the front (in pole-number order), followed by the poles with no jumper (also in pole-number order).
+    /// ジャンパ順は、ジャンパが1本でも掛かっている極を極番号順でまとめて先頭に出し、ジャンパの無い極をその後ろに極番号順で並べる。
     #[test]
     fn jumper_order_brings_every_jumpered_pole_to_the_front() {
         let (mut sheet, id) = sheet_with_tb(5, 0);
@@ -1748,9 +1756,8 @@ mod tests {
         );
     }
 
-    /// 3段の端子台では、どの並べ替え順を選んでも同じ極の3段 (a/b/c) が並びの中で
-    /// 必ず隣り合う (段がバラバラの位置に散らばらない)。
     /// On a 3-level terminal block, whichever row order is chosen, the three levels of one pole always stay next to each other in the resulting order.
+    /// 3段の端子台では、どの並べ替え順を選んでも同じ極の3段 (a/b/c) が並びの中で必ず隣り合う (段がバラバラの位置に散らばらない)。
     #[test]
     fn every_row_order_keeps_the_three_levels_of_one_pole_adjacent() {
         for spec in ["number", "alnum", "page", "cable", "jumper"] {
@@ -1779,9 +1786,8 @@ mod tests {
         }
     }
 
-    /// チャートCSVの行順は、常にチャート(エディタ)の行順と一致する
-    /// (row_orderで並べ替えても、CSVは`chart.rows`をそのまま使うので食い違わない)。
     /// The terminal chart CSV always lists rows in the same order as the chart (the editor), for every row order.
+    /// チャートCSVの行順は、常にチャート(エディタ)の行順と一致する (row_orderで並べ替えても、CSVは`chart.rows`をそのまま使うので食い違わない)。
     #[test]
     fn the_csv_row_order_always_matches_the_chart_row_order() {
         let (mut sheet, id) = sheet_with_tb(12, 0);
