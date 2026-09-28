@@ -39,13 +39,18 @@ npm run tauri dev        # vite (port 1420) + cargo build + native window
 Run the tests:
 
 ```bash
-cd src-tauri && cargo test
-cd .. && npx vitest run
+cd src-tauri && cargo test          # Rust workspace (all crates; first run compiles, a few minutes)
+cd .. && npx vitest run             # frontend
+npx vue-tsc --noEmit                # type check
+python3 scripts/gen_spec.py --check # Detailed Specification is generated from tests; this fails if it is stale
+python3 -m unittest discover -s freecad-addon/tests   # FreeCAD add-on's pure-Python modules
 ```
+
+`cargo test` from `src-tauri` already covers the whole workspace (`Cargo.toml` has no `default-members`), so it is equivalent to `cargo test --workspace`.
 
 While the app runs, a built-in server listens on `127.0.0.1:9310` (MCP at `/mcp`, REST at `/api/v1`).
 
-Release bundles (`.dmg` / `.msi` + `.exe` installer / `.AppImage` + `.deb`) are built with `npm run tauri build`; CI does the same on all three platforms for tags `v*` (`.github/workflows/release.yml`, draft release). Bundles are not code-signed yet.
+Release bundles (`.dmg` / `.msi` + `.exe` installer / `.AppImage` + `.deb`) are built with `npm run tauri build`; CI does the same on all three platforms for tags `v*` (`.github/workflows/release.yml`, draft release). Bundles are not code-signed yet. To just verify the app compiles without producing installers (faster, no packaging/signing step), build the Tauri crate alone: `cd src-tauri && cargo build -p madake-cad`.
 
 ## 3. Optional: the `madake` CLI
 

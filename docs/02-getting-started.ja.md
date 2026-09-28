@@ -39,10 +39,14 @@ npm install
 動作確認(テスト):
 
 ```bash
-cd src-tauri && cargo test          # Rust(初回はビルドで数分)
+cd src-tauri && cargo test          # Rustワークスペース全体(初回はビルドで数分)
 cd .. && npx vitest run             # フロント
 npx vue-tsc --noEmit                # 型チェック
+python3 scripts/gen_spec.py --check # 詳細仕様書はテストから生成される。古ければここで失敗する
+python3 -m unittest discover -s freecad-addon/tests   # FreeCADアドオンの純Python部分
 ```
+
+`src-tauri`での`cargo test`は`Cargo.toml`に`default-members`が無いためワークスペース全体を対象にする(`cargo test --workspace`と同じ)。
 
 アプリ起動:
 
@@ -52,7 +56,7 @@ npm run tauri dev                   # vite(1420) + cargoビルド + ネイティ
 
 起動中は `127.0.0.1:9310` で内蔵サーバー(MCP `/mcp`・Link API `/api/v1`)が生きている。
 
-配布物(`.dmg` / `.msi`+`.exe`インストーラ / `.AppImage`+`.deb`)は`npm run tauri build`で作る。CIはタグ`v*`で3OS分を同じように作りドラフトリリースへ添付する(`.github/workflows/release.yml`)。コード署名はまだ行っていない。
+配布物(`.dmg` / `.msi`+`.exe`インストーラ / `.AppImage`+`.deb`)は`npm run tauri build`で作る。CIはタグ`v*`で3OS分を同じように作りドラフトリリースへ添付する(`.github/workflows/release.yml`)。コード署名はまだ行っていない。インストーラ生成なしでコンパイルだけ確認したい場合(署名・パッケージング工程を省いて速い)は`cd src-tauri && cargo build -p madake-cad`。
 
 ## 3. madake CLI(任意)
 

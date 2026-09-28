@@ -14,7 +14,7 @@ and verification grounded in a real circuit solver (ngspice).
 [![CI](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/kousuke-takeuchi/MadakeCAD/actions/workflows/ci.yml)
 [![Spec clauses](https://img.shields.io/badge/spec_clauses-1737_tested-blue)](docs/13-specification.md)
 ![Status](https://img.shields.io/badge/status-alpha-orange)
-![Platform](https://img.shields.io/badge/platform-macOS_(Win%2FLinux_planned)-lightgrey)
+![Platform](https://img.shields.io/badge/platform-macOS_%7C_Windows_%7C_Linux-lightgrey)
 ![Built with](https://img.shields.io/badge/built_with-Tauri_2_·_Vue_3_·_Rust-24C8DB)
 ![Docs](https://img.shields.io/badge/docs-EN_%7C_JA-informational)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green)](#license)
