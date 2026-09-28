@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2360 specification clauses** across 6 areas.
+**2380 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -833,10 +833,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Several jumpers on the same terminal block each produce their own bar segment. <sub>`multiple_jumpers_each_produce_their_own_bar_segment`</sub>
 - A jumper referencing a terminal number the block does not have produces no segment instead of panicking. <sub>`a_jumper_to_a_missing_terminal_produces_no_bar_segment`</sub>
 - Jumpers are set with the ordinary update_entity command, so the chart follows the change and undo takes it back. <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
+- `attrs["row_order"]`が未設定・空・未知語なら数値順 (既定) に落ちる。 <sub>`an_unset_or_unknown_row_order_falls_back_to_number_order`</sub>
+- 数値順 (既定) は極番号を数として昇順に並べる。10極以上でも桁の大小どおりになる。 <sub>`number_order_sorts_poles_as_integers`</sub>
+- 英数順は極番号を文字列として辞書順に並べるので、10極以上では数値順と違う結果になる <sub>`alnum_order_compares_pole_numbers_as_strings`</sub>
+- ページ順は、その極の配線が図面上で読み順(上→下、左→右)に最初に現れる位置で並べる。 <sub>`page_order_follows_where_the_wiring_first_appears_on_the_sheet`</sub>
+- 外部ケーブル順は、外部ハーネス名が最初に現れた極の順にその名前の極をまとめる <sub>`cable_order_groups_poles_by_their_external_harness_in_first_seen_order`</sub>
+- ジャンパ順は、ジャンパが1本でも掛かっている極を極番号順でまとめて先頭に出し、 <sub>`jumper_order_brings_every_jumpered_pole_to_the_front`</sub>
+- 3段の端子台では、どの並べ替え順を選んでも同じ極の3段 (a/b/c) が並びの中で <sub>`every_row_order_keeps_the_three_levels_of_one_pole_adjacent`</sub>
+- チャートCSVの行順は、常にチャート(エディタ)の行順と一致する <sub>`the_csv_row_order_always_matches_the_chart_row_order`</sub>
 
 ### Terminal connection diagrams
 
 - The terminal strip is drawn as one numbered box per terminal, stacked from top to bottom in terminal order. <sub>`the_strip_stacks_one_numbered_box_per_terminal`</sub>
+- The terminal diagram follows the same row order as the chart (the editor): when `row_order` groups the jumpered poles first, the strip's boxes stack in that order too, not plain terminal-number order. <sub>`the_strip_follows_the_chart_row_order_not_plain_terminal_order`</sub>
 - The outside of the panel is drawn to the left of the strip and the inside to the right, each under its own caption. <sub>`the_outside_is_on_the_left_and_the_inside_on_the_right`</sub>
 - A terminal with nothing wired to it stays in the strip as a lightly filled box marked as a spare. <sub>`a_spare_terminal_stays_in_the_strip_lightly_filled`</sub>
 - Wires of the same harness are gathered into one bracket at the outer end of their lead lines, labelled with the harness name. <sub>`wires_of_one_harness_are_gathered_into_a_bracket`</sub>
@@ -2677,8 +2686,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - chains jumpers along a run of three or more adjacent terminals <sub>`jumper specification`</sub>
 - refuses to jumper terminals that are not adjacent <sub>`jumper specification`</sub>
 - removes only the jumpers that touch the selected terminals <sub>`jumper specification`</sub>
+- lists the same five row orders as the Rust RowOrder enum <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
+- falls back to number order for an unset or unrecognised attribute <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
+- resolves every known word to its row order <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
 - loads the terminal blocks of the sheet and shows the first one <sub>`terminal strip editor store`</sub>
 - shows one grid row per terminal with the wiring taken from the drawing <sub>`terminal strip editor store`</sub>
+- carries the level letter of each row for multi-level terminal blocks <sub>`terminal strip editor store`</sub>
+- falls back to the chart rows to decide whether the level column is needed <sub>`terminal strip editor store`</sub>
+- reports no levels for a single-level terminal block <sub>`terminal strip editor store`</sub>
 - marks terminals with no wire at all as spare <sub>`terminal strip editor store`</sub>
 - writes a jumper into the symbol attributes with one update_entity command <sub>`terminal strip editor store`</sub>
 - names a terminal block by its pole count, not by its terminal count <sub>`terminal strip editor store`</sub>
@@ -2689,6 +2704,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - clears only the jumpers on the selected terminals <sub>`terminal strip editor store`</sub>
 - drops the jumper attribute entirely once no jumper is left <sub>`terminal strip editor store`</sub>
 - reloads the chart after editing a jumper so the grid keeps matching the model <sub>`terminal strip editor store`</sub>
+- changes the row order with one update_entity command <sub>`terminal strip editor store`</sub>
+- drops the row_order attribute entirely when number order is chosen again <sub>`terminal strip editor store`</sub>
+- reflects the row order the chart already came back sorted in <sub>`terminal strip editor store`</sub>
+- jumps to the drawing by passing the sheet and entity id of the current block to reveal <sub>`terminal strip editor store`</sub>
+- does nothing when asked to jump to the drawing without a terminal block <sub>`terminal strip editor store`</sub>
 - reloads the grid when the drawing changes from outside the editor, e.g. an undo <sub>`terminal strip editor store`</sub>
 - does not fetch anything while the editor is closed <sub>`terminal strip editor store`</sub>
 - summarizes the terminal block check as counts per severity <sub>`terminal strip editor store`</sub>

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2360仕様項目**。
+全6領域・**2380仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -833,10 +833,19 @@
 - 1つの端子台に複数のジャンパがあれば、それぞれ独立したバーの線分になる。 <sub>`multiple_jumpers_each_produce_their_own_bar_segment`</sub>
 - 端子台に無い端子番号を指すジャンパは、パニックせず線分を作らない。 <sub>`a_jumper_to_a_missing_terminal_produces_no_bar_segment`</sub>
 - ジャンパは通常のupdate_entityコマンドで設定するので、チャートに反映され、undoで元に戻る。 <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
+- An unset, empty or unrecognised `row_order` attribute falls back to number order. <sub>`an_unset_or_unknown_row_order_falls_back_to_number_order`</sub>
+- Number order (the default) sorts poles as integers, so it stays correct past nine poles. <sub>`number_order_sorts_poles_as_integers`</sub>
+- ("10"が"2"より前に来る)。 <sub>`alnum_order_compares_pole_numbers_as_strings`</sub>
+- 番号は逆でも、読み順で先に来る方が先になる。配線の無い極(予備)は最後に極番号順で並ぶ。 <sub>`page_order_follows_where_the_wiring_first_appears_on_the_sheet`</sub>
+- (名前の辞書順ではなく初出順)。ハーネス名の無い極は最後に極番号順で並ぶ。 <sub>`cable_order_groups_poles_by_their_external_harness_in_first_seen_order`</sub>
+- ジャンパの無い極をその後ろに極番号順で並べる。 <sub>`jumper_order_brings_every_jumpered_pole_to_the_front`</sub>
+- 必ず隣り合う (段がバラバラの位置に散らばらない)。 <sub>`every_row_order_keeps_the_three_levels_of_one_pole_adjacent`</sub>
+- (row_orderで並べ替えても、CSVは`chart.rows`をそのまま使うので食い違わない)。 <sub>`the_csv_row_order_always_matches_the_chart_row_order`</sub>
 
 ### 端子接続図
 
 - 端子ストリップは端子1個につき1つの番号入りの箱として、端子番号の順に上から下へ縦に積まれる。 <sub>`the_strip_stacks_one_numbered_box_per_terminal`</sub>
+- 端子接続図はチャート(エディタ)と同じ並び順に従う: `row_order`でジャンパの掛かった極をまとめると、ストリップの箱もその順に積まれ、単純な端子番号順にはならない。 <sub>`the_strip_follows_the_chart_row_order_not_plain_terminal_order`</sub>
 - 盤外 (外部側) はストリップの左、盤内 (内部側) は右に描かれ、それぞれ見出しが付く。 <sub>`the_outside_is_on_the_left_and_the_inside_on_the_right`</sub>
 - 何も繋がっていない端子は、薄く塗った箱に予備の注記を付けてストリップに残る。 <sub>`a_spare_terminal_stays_in_the_strip_lightly_filled`</sub>
 - 同じハーネスに属する電線は引出線の外端で1つのブラケットにまとめられ、ハーネス名が添えられる。 <sub>`wires_of_one_harness_are_gathered_into_a_bracket`</sub>
@@ -2677,8 +2686,14 @@
 - 3つ以上の端子を選ぶと隣どうしを順につないだジャンパになる <sub>`jumper specification`</sub>
 - 隣り合わない端子どうしにはジャンパを掛けられない <sub>`jumper specification`</sub>
 - ジャンパ削除は選んだ端子に掛かっているものだけを外す <sub>`jumper specification`</sub>
+- 5つの並べ替え順はRust側`RowOrder`のバリアントと同じ5つ、同じ表記 <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
+- 未設定・未知語は数値順に落ちる(Rust側 row_order_of と同じ既定) <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
+- 5つの既知の語はそのまま対応する並びに解決される <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
 - 開くとそのシートの端子台一覧を読み込み、先頭の端子台のチャートを表示する <sub>`terminal strip editor store`</sub>
 - グリッドは端子番号ごとに1行で、外部側・内部側・線番・電線が図面どおりに並ぶ <sub>`terminal strip editor store`</sub>
+- グリッドの行は段記号(Lv)も運ぶ(単段は空欄、多段端子台は"a"/"b"のような文字) <sub>`terminal strip editor store`</sub>
+- 端子台の一覧より先にチャートだけが読めているときは、行の段記号からLv列の要否を判定する <sub>`terminal strip editor store`</sub>
+- 単段の端子台ではLv列は空欄で、多段端子台とは判定される <sub>`terminal strip editor store`</sub>
 - 電線が1本も繋がっていない端子は予備端子として印が付く <sub>`terminal strip editor store`</sub>
 - 隣り合う2端子を選んでジャンパを生成すると、update_entityコマンド1回で属性に書き込まれる <sub>`terminal strip editor store`</sub>
 - 多段端子台の見出しには端子数ではなく極数を使う(4極2段は「8極」ではなく「4極」) <sub>`terminal strip editor store`</sub>
@@ -2689,6 +2704,11 @@
 - ジャンパ削除は選んだ端子に掛かるジャンパだけを外したコマンドになる <sub>`terminal strip editor store`</sub>
 - ジャンパが1本も残らないときは属性ごと消す <sub>`terminal strip editor store`</sub>
 - ジャンパを編集したらチャートを読み直し、グリッドが図面と一致し続ける <sub>`terminal strip editor store`</sub>
+- 並べ替え順を変えると、update_entityコマンド1回で属性(row_order)に書き込まれる <sub>`terminal strip editor store`</sub>
+- 既定の数値順を選び直すと、row_order属性ごと消す(未設定の端子台と同じ状態に戻す) <sub>`terminal strip editor store`</sub>
+- 現在のチャートの並べ替え順をそのまま見せる(サーバ側で並べ替え済み) <sub>`terminal strip editor store`</sub>
+- 「図面へジャンプ」は表示中の端子台のシート・entity idをrevealへそのまま渡す <sub>`terminal strip editor store`</sub>
+- 端子台が無ければ「図面へジャンプ」は何もしない <sub>`terminal strip editor store`</sub>
 - 図面が外から変わったら (undoやAIの編集) グリッドを取り直し、古いチェック結果は捨てる <sub>`terminal strip editor store`</sub>
 - 端子台エディタを閉じている間は図面が変わっても読み込みに行かない <sub>`terminal strip editor store`</sub>
 - 端子台チェックの結果は重大度ごとの件数に整形される <sub>`terminal strip editor store`</sub>
