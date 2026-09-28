@@ -14,9 +14,9 @@ import { useI18n } from "vue-i18n";
 import { ArrowLeftRight, Layers, ListOrdered, Plus, ShieldCheck, SquareStack, Unplug, X } from "lucide-vue-next";
 import { filterFor, pickSave } from "../composables/fileActions";
 import { useReveal } from "../composables/reveal";
-import { ipc, type RowOrder } from "../ipc";
+import { ipc } from "../ipc";
 import { useDocumentStore } from "../stores/document";
-import { ROW_ORDERS, useTerminalsStore } from "../stores/terminals";
+import { ROW_ORDERS, rowOrderOf, useTerminalsStore } from "../stores/terminals";
 import { useUiStore } from "../stores/ui";
 
 const terminals = useTerminalsStore();
@@ -89,7 +89,8 @@ async function runCheck() {
 
 /** 並べ替え順のドロップダウンを変える (update_entity 1回。Cmd+Zで戻る)。 */
 async function changeSort(event: Event) {
-  const order = (event.target as HTMLSelectElement).value as RowOrder;
+  // ドロップダウンが返す生の文字列は双子の純関数で`RowOrder`に落とす (未知語は数値順)
+  const order = rowOrderOf({ row_order: (event.target as HTMLSelectElement).value });
   if (!(await terminals.setRowOrder(order))) {
     if (terminals.error) ui.log(terminals.error);
     return;
@@ -102,12 +103,25 @@ async function changeSort(event: Event) {
   );
 }
 
-/** 「図面へジャンプ」 (ツールバー・行のダブルクリック共通)。既存のreveal動線をそのまま使う。 */
+/**
+ * 「図面へジャンプ」 (ツールバー・行のダブルクリック共通)。既存のreveal動線をそのまま使う。
+ * ストア側がエディタを閉じてからrevealするので、ジャンプ先がスクリムの下に隠れない
+ * (開き直せば同じ端子台・同じ行選択に戻る)。
+ */
 function gotoTerminal() {
   const reference = terminals.reference;
   if (!reference) return;
   terminals.gotoTerminal(reveal);
   ui.log(t("terminals.gotoLog", { reference }));
+}
+
+/**
+ * 行クリックで選択をトグルする。ダブルクリックの2回目 (`detail > 1`) は数えない
+ * ——数えると1回のダブルクリックで選択が2回動いてしまう (打ち消し合うのは偶然)。
+ */
+function clickRow(terminal: string, event: MouseEvent) {
+  if (event.detail > 1) return;
+  terminals.toggleRow(terminal);
 }
 
 /** 端子台チャートをCSVで書き出す (OSの保存ダイアログ経由)。 */
@@ -208,7 +222,7 @@ async function generateDiagram() {
             class="row"
             :class="{ selected: r.selected }"
             :title="t('terminals.gotoHint')"
-            @click="terminals.toggleRow(r.terminal)"
+            @click="clickRow(r.terminal, $event)"
             @dblclick="gotoTerminal"
           >
             <div class="cell no mono">{{ r.no }}</div>

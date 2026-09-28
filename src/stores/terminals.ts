@@ -1,10 +1,11 @@
 // 端子台エディタの状態 (仕様: docs/internal/specs/m4-industrial-core.md §1.1)。
 //
 // グリッドの中身はRust側 (madake-coreの端子台チャート) が図面から導出したものをそのまま
-// 表示するだけで、ここで結線を組み立て直したりはしない。編集できるのはジャンパだけで、
-// update_entity コマンド1回として送る (undo一発で戻る)。
-// v1のスコープ: 行表示+ジャンパ生成/削除+予備端子表示+端子台チェック+チャート/接続図の生成。
-// 並べ替え・多段端子・アクセサリはモデル拡張が要るためフェーズ2。
+// 表示するだけで、ここで結線を組み立て直したりはしない。編集できるのはジャンパと
+// 並べ替え順 (row_order) だけで、どちらも update_entity コマンド1回として送る (undo一発で戻る)。
+// v1のスコープ: 行表示 (多段端子台はLv列付き)+ジャンパ生成/削除+並べ替え+図面へジャンプ+
+// 予備端子表示+端子台チェック+チャート/接続図の生成。
+// 多段端子の追加・アクセサリはモデル拡張が要るためフェーズ2。
 
 import { defineStore } from "pinia";
 import { parseTerminalNo } from "../canvas/dynamicSymbol";
@@ -83,6 +84,11 @@ interface TerminalsState {
   loading: boolean;
   busy: boolean;
   error: string | null;
+  /**
+   * 「図面へジャンプ」でエディタを閉じたときの覚え書き (次に開いたときここへ戻す)。
+   * 自分で閉じた (×・スクリム) ときはnullに戻すので、復元はジャンプ直後の1回だけ。
+   */
+  resume: { sheetId: string | null; entityId: string; selected: string[] } | null;
 }
 
 /** 重大度の並び順 (エラー→警告→情報)。 */
@@ -100,6 +106,7 @@ export const useTerminalsStore = defineStore("terminals", {
     loading: false,
     busy: false,
     error: null,
+    resume: null,
   }),
 
   getters: {
@@ -193,10 +200,16 @@ export const useTerminalsStore = defineStore("terminals", {
   },
 
   actions: {
-    /** シートの端子台一覧を読み込み、先頭の端子台を表示して開く。 */
+    /**
+     * シートの端子台一覧を読み込み、先頭の端子台を表示して開く。
+     * 直前に「図面へジャンプ」で閉じていたときは、その端子台と行選択へ戻す (覚え書きは使い切る)。
+     */
     async openFor(sheetId: string | null) {
-      this.sheetId = sheetId;
-      this.selected = [];
+      const resume = this.resume;
+      this.resume = null;
+      this.sheetId = resume ? resume.sheetId : sheetId;
+      this.entityId = resume?.entityId ?? null;
+      this.selected = resume ? [...resume.selected] : [];
       this.diagnostics = null;
       this.error = null;
       this.open = true;
@@ -329,11 +342,23 @@ export const useTerminalsStore = defineStore("terminals", {
     /**
      * 表示中の端子台へ図面をジャンプする (検索結果・XRefと同じ reveal 経路。呼び出し側の
      * `useReveal()`をそのまま渡す — Piniaストアからは `useReveal` 自身を呼べないため)。
+     *
+     * エディタは全画面モーダルなので、そのままではジャンプ先がスクリムの下に隠れる。
+     * **先にエディタを閉じてから**revealし、開き直したときに同じ端子台・同じ行選択へ
+     * 戻れるよう覚え書き (`resume`) を残す。
      */
     gotoTerminal(reveal: (target: RevealTarget) => void) {
       const block = this.block;
       if (!block) return;
-      reveal({ sheetId: block.sheet_id, entityIds: [block.entity_id] });
+      const memo = {
+        sheetId: this.sheetId,
+        entityId: block.entity_id,
+        selected: [...this.selected],
+      };
+      const target: RevealTarget = { sheetId: block.sheet_id, entityIds: [block.entity_id] };
+      this.close();
+      this.resume = memo;
+      reveal(target);
     },
 
     /** 端子台チェックを実行する (未結線の端子・不正なジャンパ)。 */
@@ -355,9 +380,12 @@ export const useTerminalsStore = defineStore("terminals", {
     /**
      * 図面が変わったときにグリッドを追従させる (undo/redo・AIチャット・CLIなど、
      * このダイアログの外からの編集を含む)。直前のチェック結果は図面と食い違うので捨てる。
+     *
+     * 自分の編集 (ジャンパ・並べ替え) は`busy`の間に自分で読み直すので、その revision 通知は
+     * 無視する (list+chart を二重に取りに行かない)。
      */
     async refresh() {
-      if (!this.open) return;
+      if (!this.open || this.busy) return;
       this.selected = [];
       this.diagnostics = null;
       await this.reloadBlocks();
@@ -365,6 +393,7 @@ export const useTerminalsStore = defineStore("terminals", {
 
     close() {
       this.open = false;
+      this.resume = null;
       this.chart = null;
       this.blocks = [];
       this.entityId = null;

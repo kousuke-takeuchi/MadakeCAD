@@ -445,6 +445,69 @@ describe("terminal strip editor store", () => {
     expect(targets).toEqual([{ sheetId: "s1", entityIds: ["tb1"] }]);
   });
 
+  // ja: 「図面へジャンプ」はエディタを閉じてから図面を出す(全画面モーダルの下にジャンプ先が隠れないように)
+  it("closes the editor before revealing the drawing so the jump is not hidden behind the modal", async () => {
+    mockBackend();
+    const store = await opened();
+    let openWhenRevealed: boolean | null = null;
+    store.gotoTerminal(() => {
+      openWhenRevealed = store.open;
+    });
+    expect(openWhenRevealed).toBe(false);
+    expect(store.open).toBe(false);
+  });
+
+  // ja: ジャンプで閉じたエディタを開き直すと、同じ端子台と同じ行選択に戻る
+  it("restores the same block and row selection when the editor is reopened after a jump", async () => {
+    mockBackend({ chart: wiredChart([["1", "2"]]) });
+    vi.spyOn(ipc, "listTerminalBlocks").mockResolvedValue([
+      { ...block, entity_id: "tb0", reference: "TB0" },
+      block,
+    ]);
+    const store = await opened("1-2");
+    await store.selectBlock("tb1");
+    store.toggleRow("2");
+    store.gotoTerminal(() => {});
+
+    // 開き直す (シートを渡す経路は同じ。覚え書きがあるのでそちらが勝つ)
+    await store.openFor("s1");
+    expect(store.entityId).toBe("tb1");
+    expect(store.selected).toEqual(["2"]);
+    // 覚え書きは使い切るので、次に開くときは先頭の端子台に戻る
+    store.close();
+    await store.openFor("s1");
+    expect(store.entityId).toBe("tb0");
+    expect(store.selected).toEqual([]);
+  });
+
+  // ja: ×やスクリムで閉じたときは覚え書きを残さない(次に開くと先頭の端子台・選択なし)
+  it("keeps no resume memo when the editor is closed by hand", async () => {
+    mockBackend();
+    const store = await opened();
+    store.toggleRow("1");
+    store.close();
+    expect(store.resume).toBeNull();
+    await store.openFor("s1");
+    expect(store.selected).toEqual([]);
+  });
+
+  // ja: 並べ替えを変えたときの読み直しは1回だけ(自前の読み直しと図面のrevision通知で二重に取りに行かない)
+  it("reloads the list and chart only once per sort change, not twice", async () => {
+    mockBackend();
+    const store = await opened();
+    const listed = () => vi.mocked(ipc.listTerminalBlocks).mock.calls.length;
+    const charted = () => vi.mocked(ipc.getTerminalChart).mock.calls.length;
+    const [list0, chart0] = [listed(), charted()];
+    // TerminalEditorDialog の doc.revision 監視は、この同じコマンドで refresh() を呼ぶ
+    vi.spyOn(ipc, "executeCommand").mockImplementation(async () => {
+      void store.refresh();
+      return { revision: 2, ops: [] };
+    });
+    await store.setRowOrder("alnum");
+    expect(listed() - list0).toBe(1);
+    expect(charted() - chart0).toBe(1);
+  });
+
   // ja: 端子台が無ければ「図面へジャンプ」は何もしない
   it("does nothing when asked to jump to the drawing without a terminal block", () => {
     const store = useTerminalsStore();

@@ -1,4 +1,5 @@
-// 端子台のジャンパ (G5)。attrs["jumpers"] の解析と、シンボル上に描くバーの図形を求める。
+// 端子台のジャンパ (G5) と行の並べ替え順。attrs["jumpers"] / attrs["row_order"] の解析と、
+// シンボル上に描くバーの図形を求める。
 // Rust側 madake-core/src/terminal_chart.rs の parse_jumpers / jumper_bars と同一ルール。
 // Pinia非依存の純関数だけを置き、端子台エディタのストア (stores/terminals.ts) も
 // キャンバス描画 (renderer.ts) も**ここ1か所**の正規化ルールを使う。
@@ -15,8 +16,9 @@ export const ROW_ORDERS: readonly RowOrder[] = ["number", "alnum", "page", "cabl
 /**
  * `attrs["row_order"]`を解析する。未設定・未知語は`"number"`に落ちる
  * (Rust側 `terminal_chart::row_order_of` と同一ルール)。実際の並べ替えは常にRust側
- * (`sort_terminal_rows`) が行うので、ここは値の解釈だけを担う (ドロップダウンの選択状態・
- * `update_entity`へ渡す属性値の決定に使う)。
+ * (`sort_terminal_rows`) が行い、ドロップダウンの選択状態もRustが返したチャートの
+ * `row_order`が正なので、ここが使われるのは**未検証の文字列を`RowOrder`にする1点だけ**
+ * (並べ替えドロップダウンが返す生の`value`を`update_entity`へ渡す前に通す)。
  */
 export function rowOrderOf(attrs: Readonly<Record<string, string>> | undefined): RowOrder {
   const raw = attrs?.row_order;
