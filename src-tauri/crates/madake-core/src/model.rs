@@ -247,6 +247,17 @@ pub struct Sheet {
     /// 注記の層全体が小さくなる ([`Sheet::annotation_scale`])。
     #[serde(default)]
     pub annotation_text_mm: Option<f64>,
+    /// 整えバリアントの複製なら、その元シートのid ([`crate::variants`])。
+    ///
+    /// 比較のために一時的に増えるシートで、比較が終われば消える。**図面全体を見渡す
+    /// 自動注記から除くための印**で、これが無いとシート間クロスリファレンス (G13) が
+    /// 元シートの全シンボルを「複数シートに跨る参照記号」と見なし、元シートにも各案にも
+    /// 存在しない住所注記 (`/2.B3`) が生えてしまう ([`crate::xref::device_sites`])。
+    ///
+    /// 複製が無いプロジェクトでは書き出されない (省略=普通のシート) ので、
+    /// `format_version`は据え置き。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variant_of: Option<SheetId>,
     pub entities: BTreeMap<EntityId, Entity>,
 }
 
@@ -274,6 +285,7 @@ impl Sheet {
             title_block: TitleBlock::default(),
             revisions: Vec::new(),
             annotation_text_mm: None,
+            variant_of: None,
             entities: BTreeMap::new(),
         }
     }
@@ -281,6 +293,11 @@ impl Sheet {
     /// 盤レイアウトシートか。
     pub fn is_panel(&self) -> bool {
         self.kind == SheetKind::Panel
+    }
+
+    /// 整えバリアントの複製シートか ([`Sheet::variant_of`])。
+    pub fn is_variant(&self) -> bool {
+        self.variant_of.is_some()
     }
 
     /// このシートの注記文字高 (mm)。未設定なら既定 ([`DEFAULT_ANNOTATION_TEXT_MM`])。
@@ -401,6 +418,46 @@ impl Entity {
             Entity::Footprint(e) => e.id = id,
             Entity::PanelLegend(e) => e.id = id,
             Entity::WireLegend(e) => e.id = id,
+        }
+    }
+
+    /// このエンティティが指している**同じシート上の他エンティティ**のid。
+    ///
+    /// 今あるのは引き出し線の対象 ([`TextEntity::leader_to`]、G20) だけ。シート内参照を
+    /// 持つフィールドを足したら、ここと [`Entity::remap_refs`] の2か所を直せば、
+    /// シート複製 ([`crate::variants`]) もマクロも一緒に正しくなる。
+    pub fn refs(&self) -> Vec<EntityId> {
+        match self {
+            Entity::Text(e) => e.leader_to.into_iter().collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// シート内参照 ([`Entity::refs`]) を対応表で写し替える。対応の**無い**参照は`None`へ落とす。
+    ///
+    /// シートを複製するときは元id→複製idで、複製の内容を元シートへ写し戻すときは
+    /// 複製id→元idで通す。写さないと複製の注記は元シートのidを指したままになり、
+    /// 引き出し線が描かれず、ERC (`erc.leader_target_missing`) が複製を不正と判定し、
+    /// 写し戻しも [`crate::command::Engine::execute`] の検証で弾かれる。
+    pub fn remap_refs(&mut self, map: &BTreeMap<EntityId, EntityId>) {
+        match self {
+            Entity::Text(e) => {
+                if let Some(target) = e.leader_to {
+                    e.leader_to = map.get(&target).copied();
+                }
+            }
+            Entity::Symbol(_)
+            | Entity::Wire(_)
+            | Entity::Junction(_)
+            | Entity::NetLabel(_)
+            | Entity::Harness(_)
+            | Entity::Shape(_)
+            | Entity::PanelOutline(_)
+            | Entity::DinRail(_)
+            | Entity::Duct(_)
+            | Entity::Footprint(_)
+            | Entity::PanelLegend(_)
+            | Entity::WireLegend(_) => {}
         }
     }
 

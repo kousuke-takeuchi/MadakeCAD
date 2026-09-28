@@ -220,10 +220,18 @@ impl DeviceSite {
 /// **だけ**を対象から外す (二重に描かないため)。接点を1つも持たないコイルのように、
 /// コイル⇔接点クロスリファレンスが何も描かないリレーシンボルはここで拾う。
 /// 並びは[`label_sites`]と同じくシート順→ゾーン順→id順で決定的。
+///
+/// **整えバリアントの複製シート ([`crate::model::Sheet::variant_of`]) は数えない。**
+/// 数えると元シートの全シンボルが「複数シートに跨る参照記号」になり、比較している間だけ
+/// 元シートにも各案にも存在しない住所注記 (`/2.B3`) が生えてしまう。シート番号は複製を
+/// 飛ばしても変わらない (複製は末尾に並ぶ)。
 pub fn device_sites(project: &Project) -> BTreeMap<String, Vec<DeviceSite>> {
     let mut out: BTreeMap<String, Vec<DeviceSite>> = BTreeMap::new();
     let annotated = crate::relay_xref::annotated_instances(project);
     for (i, sheet) in project.sheets.iter().enumerate() {
+        if sheet.is_variant() {
+            continue;
+        }
         for entity in sheet.entities.values() {
             let Entity::Symbol(s) = entity else { continue };
             if annotated.contains(&s.id) {
@@ -256,12 +264,23 @@ pub fn device_xref_sites(project: &Project, sheet_id: SheetId, reference: &str) 
     if reference.is_empty() {
         return Vec::new();
     }
+    let home = home_sheet_of(project, sheet_id);
     device_sites(project)
         .remove(reference)
         .unwrap_or_default()
         .into_iter()
-        .filter(|s| s.sheet_id != sheet_id)
+        .filter(|s| s.sheet_id != home)
         .collect()
+}
+
+/// このシートが「自分の所在」として数えるシートのid。整えバリアントの複製
+/// ([`crate::model::Sheet::variant_of`]) では**元シート**。複製は元シートの写しなので、
+/// 元シートの所在を相手先として扱うと、案を開いた瞬間に全シンボルへ住所注記が生える。
+fn home_sheet_of(project: &Project, sheet_id: SheetId) -> SheetId {
+    project
+        .sheet(sheet_id)
+        .and_then(|s| s.variant_of)
+        .unwrap_or(sheet_id)
 }
 
 /// 相手先の住所一覧 (例 ["/2.B3", "/3.A1"])。同じ住所は1つにまとめる。
@@ -284,6 +303,7 @@ pub fn sheet_device_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<Enti
     };
     let sites = device_sites(project);
     let annotated = crate::relay_xref::annotated_instances(project);
+    let home = sheet.variant_of.unwrap_or(sheet_id);
     let mut out = BTreeMap::new();
     for entity in sheet.entities.values() {
         let Entity::Symbol(s) = entity else { continue };
@@ -300,7 +320,7 @@ pub fn sheet_device_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<Enti
             .map(|v| v.as_slice())
             .unwrap_or_default()
             .iter()
-            .filter(|site| site.sheet_id != sheet_id)
+            .filter(|site| site.sheet_id != home)
             .map(|site| site.address())
             .filter(|a| seen.insert(a.clone()))
             .collect();
