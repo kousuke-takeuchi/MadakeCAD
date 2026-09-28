@@ -3,7 +3,7 @@
 // 「いま編集されている領域」を用紙座標(mm)で保持し、パルス表示用のパラメータを返す。
 // 描画はrenderer.tsが担当(このファイルはDOM/Canvas非依存の純ロジック)。
 
-import type { Entity, Point } from "../ipc";
+import type { Entity, Patch, Point } from "../ipc";
 import { theme } from "./theme";
 
 /** 領域の外側に足すマージン (mm)。 */
@@ -303,6 +303,50 @@ export class AgentOverlay {
     this.entries.clear();
     this.seq = 0;
   }
+}
+
+/** [`patchOverlayTargets`]が色を決めるのに要る、いまの会話の状況。 */
+export interface OverlayPatchContext {
+  /** 図面タブで表示しているシートのid。 */
+  activeSheetId: string | null;
+  /** 応答中の会話id。 */
+  runningIds: string[];
+  /** 会話id → 編集オーバーレイ色。 */
+  conversationColors: Record<string, string>;
+  /**
+   * 表示中のシートが整えバリアントの複製なら、その案を走らせている会話id。
+   * どの会話の編集かがシートで分かるので、並列に何本走っていても会話色で描ける。
+   */
+  variantConversationId?: string | null;
+}
+
+/**
+ * 適用済みpatchから、編集オーバーレイに載せるエンティティと色を選ぶ (フェーズ2・4)。
+ *
+ * patch自体は「どの会話の編集か」を持たない(Commandエンジンの入口が共通)ので、
+ * 分かることだけで決める:
+ *
+ * - **表示中のシートのop以外は捨てる**: 整えバリアントでは案ごとに別シートを編集するので、
+ *   捨てないと他シートの編集が表示中のシートの同じ座標に幽霊のハイライトとして出る
+ *   (複製は元と同じ座標なので、それらしく見えてしまう)
+ * - 色は、表示中のシートが案の複製ならその案の会話色(シートが会話を名乗ってくれる)。
+ *   そうでなければ走っている会話が1本のときだけその色、複数なら既定色
+ */
+export function patchOverlayTargets(
+  patch: Patch,
+  ctx: OverlayPatchContext,
+): { entity: Entity; color: string | undefined }[] {
+  if (!ctx.activeSheetId) return [];
+  const conversationId =
+    ctx.variantConversationId ?? (ctx.runningIds.length === 1 ? ctx.runningIds[0] : null);
+  const color = conversationId ? ctx.conversationColors[conversationId] : undefined;
+  const out: { entity: Entity; color: string | undefined }[] = [];
+  for (const op of patch.ops) {
+    if (op.op !== "entity_upserted") continue;
+    if (op.sheet_id !== ctx.activeSheetId) continue;
+    out.push({ entity: op.entity, color });
+  }
+  return out;
 }
 
 /** 経過時間からパルス透明度(PULSE_MIN_ALPHA〜PULSE_MAX_ALPHA)を求める。 */

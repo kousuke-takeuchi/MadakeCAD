@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
-import { AgentOverlay } from "../canvas/agentOverlay";
+import { AgentOverlay, patchOverlayTargets } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
 import type { Patch } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useChatStore, type ChatToolCall } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
+import { useVariantsStore } from "../stores/variants";
 import ChatPanel from "./chat/ChatPanel.vue";
 import SearchBar from "./SearchBar.vue";
 import SurferPopup from "./SurferPopup.vue";
@@ -16,6 +17,7 @@ const store = useDocumentStore();
 const chat = useChatStore();
 const ui = useUiStore();
 const surfer = useSurferStore();
+const variants = useVariantsStore();
 
 // 左ドックのエージェントタブが開いている間は入力欄が二重になるので浮きカードを出さない。
 const dockChatOpen = computed(() => chat.panelOpen === "expanded" || ui.leftPanelTab === "chat");
@@ -133,19 +135,20 @@ watch(
 
 // エージェントのターン中に届いたpatchの対象要素も編集箇所として光らせる。
 // (document storeは書き換えず、適用済みpatchを覗くだけ)
+// 表示中のシートの編集だけを拾い、色は案の複製なら会話色(patchOverlayTargets)。
 store.$onAction(({ name, args, after }) => {
   if (name !== "applyPatch") return;
   after(() => {
     if (!chat.anyStreaming) return;
     const patch = args[0] as Patch | undefined;
     if (!patch) return;
-    // patchは「どの会話の編集か」を持たない(Commandエンジンの入口は共通)。
-    // 走っている会話が1本だけならその色、複数走っているときは既定色で描く
-    const running = chat.runningIds;
-    const color = running.length === 1 ? chat.conversationColors[running[0]] : undefined;
-    for (const op of patch.ops) {
-      if (op.op === "entity_upserted") overlay.noteEntityUpserted(op.entity, { color });
-    }
+    const targets = patchOverlayTargets(patch, {
+      activeSheetId: store.activeSheetId,
+      runningIds: chat.runningIds,
+      conversationColors: chat.conversationColors,
+      variantConversationId: variants.conversationForSheet(store.activeSheetId),
+    });
+    for (const { entity, color } of targets) overlay.noteEntityUpserted(entity, { color });
     startOverlayAnimation();
   });
 });

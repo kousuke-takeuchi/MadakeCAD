@@ -9,6 +9,7 @@ import {
   SYMBOL_EXTENT_MM,
   entityBox,
   expandBox,
+  patchOverlayTargets,
   pulseAlpha,
   toolBox,
 } from "./agentOverlay";
@@ -286,5 +287,61 @@ describe("並列エージェント: 会話ごとの色", () => {
     expect(agentColorAt(4)).toBe(agentColorAt(0));
     expect(agentColorAt(5)).toBe(agentColorAt(1));
     expect(agentColorAt(-1)).toBe(agentColorAt(3));
+  });
+});
+
+describe("patchOverlayTargets", () => {
+  const A = "sheet-a";
+  const B = "sheet-b";
+  const patch = {
+    revision: 3,
+    ops: [
+      { op: "entity_upserted" as const, sheet_id: A, entity: symbol("on-a", 20, 20) },
+      { op: "entity_upserted" as const, sheet_id: B, entity: symbol("on-b", 20, 20) },
+      { op: "entity_removed" as const, sheet_id: A, id: "gone" },
+    ],
+  };
+
+  // ja: 表示中のシート以外の編集は拾わない(案ごとに別シートを整える整えバリアントで、他の案の編集が表示中のシートへ幽霊のように出るのを防ぐ)
+  it("keeps only the ops of the sheet on screen", () => {
+    const onA = patchOverlayTargets(patch, {
+      activeSheetId: A,
+      runningIds: [],
+      conversationColors: {},
+    });
+    expect(onA.map((t) => t.entity.id)).toEqual(["on-a"]);
+    const onB = patchOverlayTargets(patch, {
+      activeSheetId: B,
+      runningIds: [],
+      conversationColors: {},
+    });
+    expect(onB.map((t) => t.entity.id)).toEqual(["on-b"]);
+    expect(patchOverlayTargets(patch, { activeSheetId: null, runningIds: [], conversationColors: {} })).toEqual([]);
+  });
+
+  // ja: 走っている会話が1本だけならその会話の色、2本以上あってどの会話の編集か分からなければ既定色
+  it("uses the running conversation's color when only one is running, and the default color otherwise", () => {
+    const colors = { c1: agentColorAt(0), c2: agentColorAt(1) };
+    const one = patchOverlayTargets(patch, { activeSheetId: A, runningIds: ["c1"], conversationColors: colors });
+    expect(one[0].color).toBe(agentColorAt(0));
+    const two = patchOverlayTargets(patch, {
+      activeSheetId: A,
+      runningIds: ["c1", "c2"],
+      conversationColors: colors,
+    });
+    expect(two[0].color).toBeUndefined();
+  });
+
+  // ja: 表示中のシートが整え案の複製なら、並列に何本走っていてもその案の会話色で描く(どの会話の編集かがシートで分かるため)
+  it("keeps the per-conversation color for a variant sheet even with several conversations running", () => {
+    const colors = { c1: agentColorAt(0), c2: agentColorAt(1) };
+    const targets = patchOverlayTargets(patch, {
+      activeSheetId: B,
+      runningIds: ["c1", "c2"],
+      conversationColors: colors,
+      variantConversationId: "c2",
+    });
+    expect(targets.map((t) => t.entity.id)).toEqual(["on-b"]);
+    expect(targets[0].color).toBe(agentColorAt(1));
   });
 });
