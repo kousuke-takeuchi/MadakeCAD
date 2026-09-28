@@ -169,7 +169,7 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 | 自動保存・クラッシュ復旧 | ⬜ | 未着手 |
 | i18n | ✅ | 6言語(en/ja/zh/es/fr/de)のカタログ+言語設定(即時反映)。全カタログのキー・プレースホルダ・複数形の一致をテストで強制。UI文字列はカタログ必須、翻訳者向け手順は`specs/i18n.md` §6。**翻訳率はen/jaが100%、zh/es/fr/deは約6割**(残りは英語のまま。テストでは区別できない)(M6) |
 | コミュニティ整備 | ✅ | `CONTRIBUTING.md`(+ja)・`CODE_OF_CONDUCT.md`・`SECURITY.md`・Issue/PRテンプレート・`scripts/audit_confidential.py`(社外秘用語の履歴監査)(M6) |
-| 公開手順書 | ✅ | `internal/release-runbook.md`: 機密の最終確認(唯一のゲート)→公開方法のA/B案→可視性・トピック・脉弱性報告窓口→タグと配布物→公開後の初動。**不可逆操作なので実行はしていない**(M6) |
+| 公開手順書 | ✅ | `internal/release-runbook.md`: 機密の最終確認(唯一のゲート)→公開方法のA/B案→可視性・トピック・脆弱性報告窓口→タグと配布物→公開後の初動。**不可逆操作なので実行はしていない**(M6) |
 
 ## 10. 次期計画
 
