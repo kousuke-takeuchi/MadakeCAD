@@ -832,7 +832,18 @@
       "target": "对象",
       "preview": "预览",
       "cancel": "取消",
-      "apply": "应用"
+      "apply": "应用",
+      "description": "按引脚顺序重新编排该端子台的所有端子。图表、端子接线图和图纸都会同步更新。",
+      "note": "跳线和引脚分组的设定会在同一条命令中改写为新编号，因此一次撤销即可全部还原。",
+      "targetAll": "全部端子",
+      "targetSelected": "选中行 ({count})",
+      "targetSelectedHint": "仅对选中行重新编号计划在后续阶段实现",
+      "jumpers": "跳线 {from} → {to}",
+      "issueDuplicate": "端子编号会重复 ({label} 共 {count} 个)。图纸不会被修改",
+      "issueEmpty": "端子编号会变为空。图纸不会被修改",
+      "issueComma": "端子编号中会含有保存格式的分隔符「,」({label})。图纸不会被修改",
+      "issueInvalid": "该编号无法应用。图纸不会被修改",
+      "issueNoBlock": "没有可重新编号的端子台"
     },
     "renumberedLog": "端子排编辑器: 已将 {reference} 的端子编号从 {from} 改为 {to}(Cmd+Z 可撤销)"
   },

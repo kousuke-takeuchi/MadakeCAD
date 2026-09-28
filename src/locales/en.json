@@ -832,7 +832,18 @@
       "target": "Target",
       "preview": "Preview",
       "cancel": "Cancel",
-      "apply": "Apply"
+      "apply": "Apply",
+      "description": "Renumbers every terminal of this block in pin order. The chart, the terminal diagram and the drawing all follow.",
+      "note": "The jumper and pin-group specs are rewritten to the new numbers in the same command, so one undo puts everything back.",
+      "targetAll": "All terminals",
+      "targetSelected": "Selected rows ({count})",
+      "targetSelectedHint": "Renumbering only the selected rows is planned for a later phase",
+      "jumpers": "Jumpers {from} → {to}",
+      "issueDuplicate": "The terminal numbers would repeat ({label} appears {count} times). The drawing is left unchanged.",
+      "issueEmpty": "A terminal number would come out empty. The drawing is left unchanged.",
+      "issueComma": "A terminal number would contain a comma ({label}), which is the separator of the stored list. The drawing is left unchanged.",
+      "issueInvalid": "These numbers cannot be applied. The drawing is left unchanged.",
+      "issueNoBlock": "No terminal block to renumber."
     },
     "renumberedLog": "Terminal editor: renumbered {reference} from {from} to {to} (undo with Cmd+Z)"
   },

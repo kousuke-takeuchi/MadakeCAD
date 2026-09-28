@@ -832,7 +832,18 @@
       "target": "Ziel",
       "preview": "Vorschau",
       "cancel": "Abbrechen",
-      "apply": "Anwenden"
+      "apply": "Anwenden",
+      "description": "Nummeriert alle Klemmen dieser Klemmenleiste in Pin-Reihenfolge neu. Tabelle, Klemmenplan und Zeichnung folgen.",
+      "note": "Brücken und Pin-Gruppen werden im selben Befehl auf die neuen Nummern umgeschrieben, ein einzelnes Rückgängig stellt alles wieder her.",
+      "targetAll": "Alle Klemmen",
+      "targetSelected": "Ausgewählte Zeilen ({count})",
+      "targetSelectedHint": "Nur die ausgewählten Zeilen neu zu nummerieren ist für eine spätere Phase geplant",
+      "jumpers": "Brücken {from} → {to}",
+      "issueDuplicate": "Die Klemmennummern würden sich wiederholen ({label} kommt {count}-mal vor). Die Zeichnung bleibt unverändert.",
+      "issueEmpty": "Eine Klemmennummer wäre leer. Die Zeichnung bleibt unverändert.",
+      "issueComma": "Eine Klemmennummer würde ein Komma enthalten ({label}), das Trennzeichen der gespeicherten Liste. Die Zeichnung bleibt unverändert.",
+      "issueInvalid": "Diese Nummern können nicht angewendet werden. Die Zeichnung bleibt unverändert.",
+      "issueNoBlock": "Keine Klemmenleiste zum Neunummerieren."
     },
     "renumberedLog": "Klemmen-Editor: {reference} von {from} zu {to} neu nummeriert (rückgängig mit Cmd+Z)"
   },

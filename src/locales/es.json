@@ -832,7 +832,18 @@
       "target": "Objetivo",
       "preview": "Vista previa",
       "cancel": "Cancelar",
-      "apply": "Aplicar"
+      "apply": "Aplicar",
+      "description": "Renumera todos los terminales de este bloque en orden de pin. La tabla, el diagrama de terminales y el plano lo siguen.",
+      "note": "Los puentes y los grupos de pines se reescriben a los números nuevos en el mismo comando, así que un solo deshacer lo devuelve todo.",
+      "targetAll": "Todos los terminales",
+      "targetSelected": "Filas seleccionadas ({count})",
+      "targetSelectedHint": "Renumerar solo las filas seleccionadas está previsto para una fase posterior",
+      "jumpers": "Puentes {from} → {to}",
+      "issueDuplicate": "Los números de terminal se repetirían ({label} aparece {count} veces). El plano no se modifica.",
+      "issueEmpty": "Un número de terminal quedaría vacío. El plano no se modifica.",
+      "issueComma": "Un número de terminal contendría una coma ({label}), que es el separador de la lista guardada. El plano no se modifica.",
+      "issueInvalid": "Estos números no se pueden aplicar. El plano no se modifica.",
+      "issueNoBlock": "No hay bloque de terminales que renumerar."
     },
     "renumberedLog": "Editor de bornes: {reference} renumerado de {from} a {to} (deshacer con Cmd+Z)"
   },

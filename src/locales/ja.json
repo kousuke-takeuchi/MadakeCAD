@@ -832,7 +832,18 @@
       "target": "対象",
       "preview": "プレビュー",
       "cancel": "キャンセル",
-      "apply": "適用"
+      "apply": "適用",
+      "description": "この端子台の全端子をピン順に振り直します。チャート・端子接続図・図面がまとめて追従します。",
+      "note": "ジャンパ・ピングループの指定も同じコマンドで新しい番号へ書き換わるので、⌘Z一発で元に戻ります。",
+      "targetAll": "全端子",
+      "targetSelected": "選択行 ({count})",
+      "targetSelectedHint": "選択行だけの採番は後のフェーズで対応予定",
+      "jumpers": "ジャンパ {from} → {to}",
+      "issueDuplicate": "端子番号が重複します ({label} が{count}件)。図面は変更されません",
+      "issueEmpty": "端子番号が空欄になります。図面は変更されません",
+      "issueComma": "端子番号に保存形の区切り記号「,」が入ります ({label})。図面は変更されません",
+      "issueInvalid": "この番号では適用できません。図面は変更されません",
+      "issueNoBlock": "採番する端子台がありません"
     },
     "renumberedLog": "端子台: {reference} の端子番号を {from} から {to} へ採番しました (Cmd+Zで元に戻せます)"
   },

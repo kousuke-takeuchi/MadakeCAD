@@ -10,9 +10,9 @@
 // v1で実装しない操作 (多段端子の生成・アクセサリ・内外スワップ) は
 // 無効化したプレースホルダとして並べ、型番・配置の列は出さない (フェーズ2)。
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
-import { computed, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowLeftRight, Layers, ListOrdered, Plus, ShieldCheck, SquareStack, Unplug, X } from "lucide-vue-next";
+import { ArrowLeftRight, Layers, ListOrdered, Plus, ShieldCheck, SquareStack, TriangleAlert, Unplug, X } from "lucide-vue-next";
 import { filterFor, pickSave } from "../composables/fileActions";
 import { useReveal } from "../composables/reveal";
 import { ipc } from "../ipc";
@@ -40,15 +40,43 @@ const phase2 = [
   { key: "swap", icon: ArrowLeftRight },
 ] as const;
 
-// --- 採番ポップオーバー (ツールバー「採番」→開始番号・増分・接頭辞・プレビュー・適用/キャンセル) ---
+// --- 採番ポップオーバー (デザイン「採番 (既定)」/「採番 (エラー)」準拠) ---
+// 開始番号・増分・接頭辞・対象・プレビュー (対応表+ジャンパの追従)・指摘行・適用/キャンセル。
+// 適用できない案は**ポップオーバーの中で**理由を出し、適用ボタンを無効にする
+// (Rust側のエラー文をログへ流すのではなく、打っている場所で断る)。
 const showRenumber = ref(false);
 const renumberStart = ref(1);
 const renumberStep = ref(1);
 const renumberPrefix = ref("");
+/**
+ * 採番の対象。「選択行」はコマンドに行単位のスコープが無いためフェーズ6送りで、
+ * デザインどおりラジオを並べたまま無効にする (読み取り専用の欄に化けさせない)。
+ */
+const renumberScope = ref<"all" | "selected">("all");
+const renumberPopover = ref<HTMLElement | null>(null);
 /** プレビュー (適用前に、実際に付く端子番号の一覧を見せる)。 */
 const renumberPreview = computed(() =>
   terminals.renumberPreview(renumberStart.value, renumberStep.value, renumberPrefix.value),
 );
+/** プレビューの対応表 (`1 → 11`)。多段端子台は段記号を保った対応がそのまま出る。 */
+const renumberMapping = computed(() =>
+  terminals.renumberMapping(renumberStart.value, renumberStep.value, renumberPrefix.value),
+);
+/** ジャンパ指定の追従 (ジャンパが無ければnull)。 */
+const renumberJumperPreview = computed(() =>
+  terminals.renumberJumperPreview(renumberStart.value, renumberStep.value, renumberPrefix.value),
+);
+/** 適用できない理由 (適用できるならnull)。 */
+const renumberIssue = computed(() =>
+  terminals.renumberIssue(renumberStart.value, renumberStep.value, renumberPrefix.value),
+);
+/** 指摘行の文。 */
+const renumberIssueText = computed(() => {
+  const issue = renumberIssue.value;
+  if (!issue) return "";
+  const key = `terminals.renumber.issue${issue.code[0].toUpperCase()}${issue.code.slice(1)}`;
+  return t(key, { ...issue });
+});
 
 function toggleRenumber() {
   if (showRenumber.value) {
@@ -58,6 +86,7 @@ function toggleRenumber() {
   renumberStart.value = 1;
   renumberStep.value = 1;
   renumberPrefix.value = "";
+  renumberScope.value = "all";
   showRenumber.value = true;
 }
 
@@ -65,8 +94,42 @@ function cancelRenumber() {
   showRenumber.value = false;
 }
 
+// Escとポップオーバーの外側クリックで閉じる (このフェーズの残り4つのポップオーバーが
+// 真似する型になるので、最初のここで閉じ方まで決めておく)
+function onRenumberKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape" && showRenumber.value) {
+    e.stopPropagation();
+    showRenumber.value = false;
+  }
+}
+
+function onRenumberOutsideClick(e: MouseEvent) {
+  if (!showRenumber.value) return;
+  const el = renumberPopover.value;
+  const target = e.target as Node | null;
+  // 採番ボタン自身のクリックは toggleRenumber に任せる (ここで閉じると開き直せない)
+  if (el && target && !el.contains(target) && !(target instanceof Node && el.parentElement?.contains(target))) {
+    showRenumber.value = false;
+  }
+}
+
+watch(showRenumber, (open) => {
+  if (open) {
+    window.addEventListener("keydown", onRenumberKeydown, true);
+    window.addEventListener("mousedown", onRenumberOutsideClick, true);
+  } else {
+    window.removeEventListener("keydown", onRenumberKeydown, true);
+    window.removeEventListener("mousedown", onRenumberOutsideClick, true);
+  }
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", onRenumberKeydown, true);
+  window.removeEventListener("mousedown", onRenumberOutsideClick, true);
+});
+
 async function applyRenumber() {
-  const from = terminals.rawTerminalNumbers.join(",");
+  const from = terminals.displayTerminalNumbers.join(",");
   if (!(await terminals.renumberTerminals(renumberStart.value, renumberStep.value, renumberPrefix.value))) {
     if (terminals.error) ui.log(terminals.error);
     return;
@@ -230,8 +293,9 @@ async function generateDiagram() {
             <ListOrdered :size="12" class="tool-icon" />
             {{ t("terminals.autoNumber") }}
           </button>
-          <div v-if="showRenumber" class="popover" @click.stop>
+          <div v-if="showRenumber" ref="renumberPopover" class="popover" @click.stop>
             <div class="popover-title">{{ t("terminals.autoNumber") }}</div>
+            <div class="popover-desc">{{ t("terminals.renumber.description") }}</div>
             <label class="popover-field">
               <span>{{ t("terminals.renumber.start") }}</span>
               <input v-model.number="renumberStart" type="number" min="0" class="popover-input mono" />
@@ -244,19 +308,49 @@ async function generateDiagram() {
               <span>{{ t("terminals.renumber.prefix") }}</span>
               <input v-model="renumberPrefix" type="text" class="popover-input mono" />
             </label>
-            <label class="popover-field">
+            <div class="popover-field">
               <span>{{ t("terminals.renumber.target") }}</span>
-              <span class="mono">{{ terminals.reference }}</span>
-            </label>
+              <span class="popover-radios">
+                <label class="popover-radio">
+                  <input v-model="renumberScope" type="radio" value="all" />
+                  {{ t("terminals.renumber.targetAll") }}
+                </label>
+                <label class="popover-radio" :title="t('terminals.renumber.targetSelectedHint')">
+                  <input v-model="renumberScope" type="radio" value="selected" disabled />
+                  {{ t("terminals.renumber.targetSelected", { count: terminals.selectedTerminals.length }) }}
+                </label>
+              </span>
+            </div>
             <div class="popover-preview">
               <span>{{ t("terminals.renumber.preview") }}</span>
-              <span class="mono">{{ renumberPreview.join(",") }}</span>
+              <div class="popover-box" :class="{ invalid: renumberIssue !== null }">
+                <span v-for="m in renumberMapping" :key="m.from" class="mono map">
+                  {{ m.from }} → {{ m.to }}
+                </span>
+              </div>
+              <span v-if="renumberJumperPreview" class="mono jumper-follow">
+                {{
+                  t("terminals.renumber.jumpers", {
+                    from: renumberJumperPreview.from,
+                    to: renumberJumperPreview.to,
+                  })
+                }}
+              </span>
             </div>
+            <div v-if="renumberIssue" class="popover-issue">
+              <TriangleAlert :size="12" class="issue-icon" />
+              <span>{{ renumberIssueText }}</span>
+            </div>
+            <div class="popover-note">{{ t("terminals.renumber.note") }}</div>
             <div class="popover-actions">
               <button class="btn secondary" @click="cancelRenumber">
                 {{ t("terminals.renumber.cancel") }}
               </button>
-              <button class="btn primary" :disabled="terminals.busy" @click="applyRenumber">
+              <button
+                class="btn primary"
+                :disabled="terminals.busy || renumberIssue !== null"
+                @click="applyRenumber"
+              >
                 {{ t("terminals.renumber.apply") }}
               </button>
             </div>
@@ -437,7 +531,7 @@ async function generateDiagram() {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 220px;
+  width: 248px;
   padding: 10px;
   background: var(--card-bg);
   border: 1px solid var(--ribbon-line);
@@ -462,6 +556,11 @@ async function generateDiagram() {
   font-size: 11px;
   color: var(--ui-text);
 }
+.popover-desc { font-size: 10px; color: var(--ui-muted); }
+.popover-radios { display: flex; gap: 10px; }
+.popover-radio { display: flex; align-items: center; gap: 4px; color: var(--ui-text); }
+.popover-radio input { margin: 0; }
+.popover-radio:has(input:disabled) { color: var(--ui-muted); }
 .popover-preview {
   display: flex;
   flex-direction: column;
@@ -472,6 +571,31 @@ async function generateDiagram() {
   border-top: 1px solid var(--ribbon-line);
 }
 .popover-preview .mono { color: var(--ui-text); word-break: break-all; }
+.popover-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  max-height: 88px;
+  overflow-y: auto;
+  padding: 4px 6px;
+  background: var(--input-bg);
+  border-radius: 4px;
+}
+.popover-box.invalid { background: var(--err-bg); }
+.popover-box.invalid .map { color: var(--err-fg); }
+.jumper-follow { padding-top: 2px; }
+.popover-issue {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  background: var(--err-bg);
+  color: var(--err-fg);
+  font-size: 10px;
+}
+.popover-issue .issue-icon { flex: none; margin-top: 1px; }
+.popover-note { font-size: 10px; color: var(--ui-muted); }
 .popover-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .popover-actions .btn { min-width: 0; padding: 4px 12px; }
 

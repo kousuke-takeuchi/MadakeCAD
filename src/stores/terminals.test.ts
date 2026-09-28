@@ -598,3 +598,76 @@ describe("terminal strip editor store", () => {
     expect(store.diagnostics).toBeNull();
   });
 });
+
+describe("renumber popover", () => {
+  // ja: プレビューは旧番号→新番号の対応として並び、多段端子台では段記号を保ったまま出る
+  it("previews the renumbering as an old-to-new mapping and keeps level letters", async () => {
+    mockBackend();
+    const store = await opened();
+    expect(store.renumberMapping(11, 1, "")).toEqual([
+      { from: "1", to: "11" },
+      { from: "2", to: "12" },
+      { from: "3", to: "13" },
+      { from: "4", to: "14" },
+    ]);
+    expect(store.renumberIssue(11, 1, "")).toBeNull();
+  });
+
+  // ja: 増分0の採番は全端子を同じ番号にしてしまうので、重複するラベルと件数を理由として返す
+  it("refuses a step of zero and names the label that would repeat", async () => {
+    mockBackend();
+    const store = await opened();
+    expect(store.renumberIssue(11, 0, "")).toEqual({ code: "duplicate", label: "11", count: 4 });
+  });
+
+  // ja: 適用できない案はコマンドを1本も送らずに断られる (図面は変わらない)
+  it("sends no command at all for a plan it cannot apply", async () => {
+    mockBackend();
+    const store = await opened();
+    const sent = spyCommands();
+    expect(await store.renumberTerminals(11, 0, "")).toBe(false);
+    expect(sent).toEqual([]);
+  });
+
+  // ja: 負の開始番号・小数の増分は0以上の整数へ丸めてから送る (JSONの型エラーにしない)
+  it("rounds a negative start and a fractional step into whole numbers before sending", async () => {
+    mockBackend();
+    const store = await opened();
+    expect(store.renumberCommand(-5, 1.7, "")).toEqual({
+      type: "renumber_terminals",
+      sheet_id: "s1",
+      entity_id: "tb1",
+      start: 0,
+      step: 1,
+      prefix: "",
+    });
+    expect(store.renumberPreview(-5, 1.7, "")).toEqual(["0", "1", "2", "3"]);
+  });
+
+  // ja: 端子台が1つも無ければ採番の対象が無いことを理由として返す
+  it("reports that there is nothing to renumber on a sheet without a terminal block", async () => {
+    vi.spyOn(ipc, "listTerminalBlocks").mockResolvedValue([]);
+    vi.spyOn(ipc, "getTerminalChart").mockResolvedValue(null);
+    const store = await opened();
+    expect(store.renumberIssue(1, 1, "")).toEqual({ code: "noBlock" });
+  });
+
+  // ja: プレビューは採番に追従したあとのジャンパ指定も見せる (適用と同じ書き換え規則)
+  it("previews the jumper specification as it will read after the renumbering", async () => {
+    vi.spyOn(ipc, "listTerminalBlocks").mockResolvedValue([{ ...block, jumpers: "1-2,3-4" }]);
+    vi.spyOn(ipc, "getTerminalChart").mockResolvedValue(wiredChart([["1", "2"]]));
+    vi.spyOn(ipc, "checkTerminalBlock").mockResolvedValue([]);
+    const store = await opened("1-2,3-4");
+    expect(store.renumberJumperPreview(11, 1, "")).toEqual({
+      from: "1-2,3-4",
+      to: "11-12,13-14",
+    });
+  });
+
+  // ja: ジャンパが1本も無ければ追従の行は出さない
+  it("shows no jumper line when the block carries no jumpers", async () => {
+    mockBackend();
+    const store = await opened();
+    expect(store.renumberJumperPreview(11, 1, "")).toBeNull();
+  });
+});

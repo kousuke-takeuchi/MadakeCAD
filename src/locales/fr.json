@@ -832,7 +832,18 @@
       "target": "Cible",
       "preview": "Aperçu",
       "cancel": "Annuler",
-      "apply": "Appliquer"
+      "apply": "Appliquer",
+      "description": "Renumérote toutes les bornes de ce bornier dans l'ordre des broches. Le tableau, le schéma de raccordement et le plan suivent.",
+      "note": "Les pontages et les groupes de broches sont réécrits avec les nouveaux numéros dans la même commande : une seule annulation rétablit tout.",
+      "targetAll": "Toutes les bornes",
+      "targetSelected": "Lignes sélectionnées ({count})",
+      "targetSelectedHint": "Renuméroter uniquement les lignes sélectionnées est prévu pour une phase ultérieure",
+      "jumpers": "Pontages {from} → {to}",
+      "issueDuplicate": "Les numéros de borne se répéteraient ({label} apparaît {count} fois). Le plan reste inchangé.",
+      "issueEmpty": "Un numéro de borne serait vide. Le plan reste inchangé.",
+      "issueComma": "Un numéro de borne contiendrait une virgule ({label}), le séparateur de la liste enregistrée. Le plan reste inchangé.",
+      "issueInvalid": "Ces numéros ne peuvent pas être appliqués. Le plan reste inchangé.",
+      "issueNoBlock": "Aucun bornier à renuméroter."
     },
     "renumberedLog": "Éditeur de bornier : {reference} renuméroté de {from} à {to} (annuler avec Cmd+Z)"
   },

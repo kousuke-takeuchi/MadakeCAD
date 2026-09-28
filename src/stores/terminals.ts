@@ -14,15 +14,39 @@ import { dynamicSymbol, parseTerminalNo } from "../canvas/dynamicSymbol";
 import {
   formatJumperSpec,
   parseJumperSpec,
+  rewriteJumperLabels,
   terminalNumbers,
+  terminalNumbersOfInstance,
   terminalRenumberPlan,
   terminalsAreAdjacent,
+  validTerminalNumbers,
 } from "../canvas/terminalJumpers";
 import type { RevealTarget } from "../composables/reveal";
 import { ipc, type Command, type Diagnostic, type RowOrder, type TerminalBlockInfo, type TerminalChart } from "../ipc";
 import { useDocumentStore } from "./document";
 
 export { formatJumperSpec, parseJumperSpec, ROW_ORDERS, rowOrderOf } from "../canvas/terminalJumpers";
+
+/**
+ * 採番案を適用できない理由 (デザイン「採番 (エラー)」の指摘行)。
+ * `code`はi18nキーの末尾 (`terminals.renumber.issue<Code>`) で、`label`/`count`はその文の穴埋め。
+ */
+export type RenumberIssue =
+  | { code: "duplicate"; label: string; count: number }
+  | { code: "empty" }
+  | { code: "comma"; label: string }
+  | { code: "invalid" }
+  | { code: "noBlock" };
+
+/**
+ * ポップオーバーの数値入力を、コマンドが受け取れる形 (0以上の整数) に丸める。
+ * `start`/`step`はRust側で`u32`なので、負数や小数のまま送るとJSONの型エラーになり、
+ * ポップオーバーではなくログに出てしまう (`min`属性は助言でしかなく、貼り付けを止められない)。
+ */
+function clampRenumberInput(start: number, step: number): [number, number] {
+  const whole = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0);
+  return [whole(start), whole(step)];
+}
 
 /** グリッドの1行 (デザイン「端子台エディタ」の列順)。 */
 export interface TerminalEditorRow {
@@ -194,6 +218,21 @@ export const useTerminalsStore = defineStore("terminals", {
       const def = dynamicSymbol(entity.symbol_id);
       return def ? terminalNumbers(def) : [];
     },
+    /**
+     * 表示中の端子台の**現在の**端子番号 (`rawTerminalNumbers`と同じ並びの表示ラベル)。
+     * 上書きが無ければ生の番号と同じ。採番プレビューがジャンパの追従を見せるのに使う
+     * (今のジャンパ指定はこのラベルで書かれている)。
+     */
+    displayTerminalNumbers(): string[] {
+      const doc = useDocumentStore();
+      const block = this.block;
+      if (!block) return [];
+      const sheet = doc.project?.sheets.find((s) => s.id === block.sheet_id);
+      const entity = sheet?.entities[block.entity_id];
+      if (!entity || entity.kind !== "symbol") return [];
+      const def = dynamicSymbol(entity.symbol_id);
+      return def ? terminalNumbersOfInstance(def, entity.attrs) : [];
+    },
     /** 選択中の端子にジャンパを掛けられるか (隣り合う2端子以上)。 */
     canAddJumper(): boolean {
       return withJumpers(this.jumperSpec, this.selectedTerminals) !== null;
@@ -361,25 +400,84 @@ export const useTerminalsStore = defineStore("terminals", {
      * アルゴリズム ([`terminalRenumberPlan`]) を使うので、プレビューと適用結果は必ず一致する)。
      */
     renumberPreview(start: number, step: number, prefix: string): string[] {
-      return terminalRenumberPlan(this.rawTerminalNumbers, start, step, prefix);
+      const [s, t] = clampRenumberInput(start, step);
+      return terminalRenumberPlan(this.rawTerminalNumbers, s, t, prefix);
+    },
+
+    /**
+     * プレビューの対応行 (`1 → 11`)。デザイン「採番 (既定)」の囲みが並べる表。
+     * 多段端子台では段記号を保ったままの対応 (`1a → 11a`) がそのまま出る。
+     */
+    renumberMapping(start: number, step: number, prefix: string): { from: string; to: string }[] {
+      const plan = this.renumberPreview(start, step, prefix);
+      // 左側は**今グリッドに出ている番号** (既に採番済みなら上書きラベル)。採番の書き換えは
+      // 旧表示ラベル→新表示ラベルで効くので、これがユーザーの見ている対応そのものになる
+      return this.displayTerminalNumbers.map((from, i) => ({ from, to: plan[i] ?? "" }));
+    },
+
+    /**
+     * 採番に追従したあとのジャンパ指定 (`"1-2,3-4" → "11-12,13-14"`)。ジャンパが無ければnull。
+     * 適用と同じ規則 ([`rewriteJumperLabels`]) で計算するので、プレビューと結果は必ず一致する。
+     */
+    renumberJumperPreview(
+      start: number,
+      step: number,
+      prefix: string,
+    ): { from: string; to: string } | null {
+      const spec = this.block?.jumpers ?? "";
+      if (!spec) return null;
+      const display = this.displayTerminalNumbers;
+      const plan = this.renumberPreview(start, step, prefix);
+      const rename = new Map(display.map((d, i) => [d, plan[i] ?? d] as const));
+      return { from: spec, to: rewriteJumperLabels(spec, rename) };
+    },
+
+    /**
+     * 採番案が適用できない理由 (適用できるならnull)。デザイン「採番 (エラー)」の指摘行が出す。
+     *
+     * 判定はRust側の`valid_terminal_numbers`と同じ規則 (個数・重複・空要素・カンマ) なので、
+     * **ここがnullでない案は必ずコマンドが拒否する**し、nullなら通る。増分0の採番が全端子を
+     * 同じ番号にしてしまうのがいちばん多い当たり方なので、重複は具体的なラベルと件数で返す。
+     */
+    renumberIssue(start: number, step: number, prefix: string): RenumberIssue | null {
+      const raw = this.rawTerminalNumbers;
+      if (raw.length === 0) return { code: "noBlock" };
+      const plan = this.renumberPreview(start, step, prefix).map((s) => s.trim());
+      const blank = plan.find((s) => s === "");
+      if (blank !== undefined) return { code: "empty" };
+      const comma = plan.find((s) => s.includes(","));
+      if (comma !== undefined) return { code: "comma", label: comma };
+      const counts = new Map<string, number>();
+      for (const s of plan) counts.set(s, (counts.get(s) ?? 0) + 1);
+      for (const [label, count] of counts) {
+        if (count > 1) return { code: "duplicate", label, count };
+      }
+      // 上の3つでRust側の検証を漏れなく写しているかを、同じ判定関数で最後に確かめる
+      return validTerminalNumbers(plan, raw.length) ? null : { code: "invalid" };
     },
 
     /** 採番 (RenumberTerminals) コマンド。端子台が見つからなければnull。 */
     renumberCommand(start: number, step: number, prefix: string): Command | null {
       const block = this.block;
       if (!block) return null;
+      const [s, t] = clampRenumberInput(start, step);
       return {
         type: "renumber_terminals",
         sheet_id: block.sheet_id,
         entity_id: block.entity_id,
-        start,
-        step,
+        start: s,
+        step: t,
         prefix,
       };
     },
 
-    /** 開始番号・増分・接頭辞で端子番号を振り直す (Command 1回)。 */
+    /**
+     * 開始番号・増分・接頭辞で端子番号を振り直す (Command 1回)。
+     * 適用できない案 ([`renumberIssue`]) は**コマンドを送らずに**断る
+     * (ポップオーバーが指摘行を出したまま適用ボタンを無効にしているので、ここは念のための門)。
+     */
     async renumberTerminals(start: number, step: number, prefix: string): Promise<boolean> {
+      if (this.renumberIssue(start, step, prefix) !== null) return false;
       const command = this.renumberCommand(start, step, prefix);
       if (!command || this.busy) return false;
       this.busy = true;
