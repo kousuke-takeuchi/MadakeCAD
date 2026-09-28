@@ -170,11 +170,17 @@ export interface DeviceSite {
  * annotatedInstances) が既に自動で所在を注記するインスタンス**だけ**を対象から外す
  * (二重に描かないため)。接点を1つも持たないコイルのように、コイル⇔接点クロスリファレンスが
  * 何も描かないリレーシンボルはここで拾う。
+ *
+ * **整えバリアントの複製シート (`Sheet.variant_of`) は数えない。** 数えると元シートの全
+ * シンボルが「複数シートに跨る参照記号」になり、比較しているあいだだけ元シートにも各案にも
+ * 存在しない住所注記 (`/2.B3`) が生えてしまう (madake-coreの`xref::device_sites`と同じ扱い)。
+ * シート番号は複製を飛ばしても変わらない (複製は末尾に並ぶ)。
  */
 export function deviceSites(project: Project): Map<string, DeviceSite[]> {
   const out = new Map<string, DeviceSite[]>();
   const annotated = annotatedInstances(project);
   project.sheets.forEach((sheet, i) => {
+    if (sheet.variant_of) return;
     for (const entity of Object.values(sheet.entities)) {
       if (entity.kind !== "symbol") continue;
       if (annotated.has(entity.id)) continue;
@@ -210,7 +216,9 @@ export function deviceSites(project: Project): Map<string, DeviceSite[]> {
 export function deviceXrefSites(project: Project, sheetId: string, reference: string): DeviceSite[] {
   const name = reference.trim();
   if (!name) return [];
-  return (deviceSites(project).get(name) ?? []).filter((s) => s.sheet_id !== sheetId);
+  // 案の複製 (Sheet.variant_of) では元シートを「自分の所在」として扱う
+  const home = project.sheets.find((s) => s.id === sheetId)?.variant_of ?? sheetId;
+  return (deviceSites(project).get(name) ?? []).filter((s) => s.sheet_id !== home);
 }
 
 /** 相手先の住所一覧 (例 ["/2.B3", "/3.A1"])。同じ住所は1つにまとめる。 */
@@ -236,6 +244,9 @@ export function sheetDeviceXrefs(project: Project | null, sheetId: string): Map<
   if (!project || !sheet) return out;
   const sites = deviceSites(project);
   const annotated = annotatedInstances(project);
+  // 案の複製は元シートの写しなので、元シートの所在を「相手先」として数えない
+  // (数えると案を開いた瞬間に全シンボルへ住所注記が生える)
+  const home = sheet.variant_of ?? sheetId;
   for (const entity of Object.values(sheet.entities)) {
     if (entity.kind !== "symbol") continue;
     if (annotated.has(entity.id)) continue;
@@ -243,7 +254,7 @@ export function sheetDeviceXrefs(project: Project | null, sheetId: string): Map<
     if (!reference) continue;
     const seen = new Set<string>();
     const addresses = (sites.get(reference) ?? [])
-      .filter((s) => s.sheet_id !== sheetId)
+      .filter((s) => s.sheet_id !== home)
       .map((s) => s.address)
       .filter((a) => (seen.has(a) ? false : (seen.add(a), true)));
     if (addresses.length) out.set(entity.id, addresses.join(XREF_SEPARATOR));

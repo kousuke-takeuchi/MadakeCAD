@@ -276,6 +276,14 @@ export interface Sheet {
    * (canvas/annotationText.ts)。未設定 (旧ファイル) は既定の2.0mm。
    */
   annotation_text_mm?: number | null;
+  /**
+   * 整えバリアントの複製なら、その元シートのid (madake-coreの`Sheet::variant_of`)。
+   *
+   * 比較のあいだだけ増える一時シートの印。シート間クロスリファレンス (G13) は
+   * この印が付いたシートを「同じ参照記号を持つ別シート」として数えない
+   * (canvas/xref.ts)。普通のシートでは省略される。
+   */
+  variant_of?: string | null;
   entities: Record<string, Entity>;
 }
 
@@ -887,6 +895,12 @@ export interface VariantInfo {
 export interface VariantRun {
   original_sheet_id: string;
   variants: VariantInfo[];
+  /**
+   * 開始時の元シートの中身の指紋 (Rustの`variants::sheet_digest`)。そのまま終了へ返す。
+   * 比較中に元シートを手で編集していると合わなくなり、採用が断られる
+   * (手編集を黙って案の状態へ戻さないため)。
+   */
+  original_digest?: string;
 }
 
 /** 帳票の種類 (Rustの`ReportKind`と同じケバブケース表記)。 */

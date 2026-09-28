@@ -228,6 +228,28 @@ describe("G13 device cross-reference", () => {
     expect(sheetDeviceXrefs(project, "s2").size).toBe(1);
   });
 
+  // ja: 整えバリアントの複製シートがあっても、元シートにも案シートにも住所注記は生えない (複製は「同じ参照記号を持つ別シート」として数えない)
+  it("a tidy variant copy adds no cross-reference address to the original or to itself", () => {
+    const project: Project = {
+      format_version: 1,
+      name: "t",
+      wire_parts: [],
+      plc_assignments: [],
+      sheets: [
+        sheet("s1", "Sheet1", [symbolEntity("e1", "motor", "M1", 20, 20)]),
+        { ...sheet("v1", "Sheet1 · 案A", [symbolEntity("c1", "motor", "M1", 20, 20)]), variant_of: "s1" },
+      ],
+    };
+    expect(sheetDeviceXrefs(project, "s1").size).toBe(0);
+    expect(sheetDeviceXrefs(project, "v1").size).toBe(0);
+    expect(deviceXrefAddresses(project, "s1", "M1")).toEqual([]);
+    expect(deviceXrefAddresses(project, "v1", "M1")).toEqual([]);
+    // 本物の2枚目 (複製ではない) は今までどおり住所が付き、案シートも元と同じ相手先を見る
+    project.sheets.push(sheet("s2", "Sheet2", [symbolEntity("e2", "motor", "M1", 250, 70)]));
+    expect(deviceXrefAddresses(project, "s1", "M1")).toEqual(["/3.B3"]);
+    expect(deviceXrefAddresses(project, "v1", "M1")).toEqual(["/3.B3"]);
+  });
+
   // ja: シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける
   it("maps each symbol entity id to the text drawn beside it", () => {
     const table = sheetDeviceXrefs(twoSheetDeviceProject("motor", "M1"), "s1");
