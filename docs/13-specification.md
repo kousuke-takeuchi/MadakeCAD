@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2359 specification clauses** across 6 areas.
+**2360 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -186,7 +186,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 12, the version that folded the FreeCAD integration (mechanical links and the wire length source) in. <sub>`the_current_format_version_is_twelve`</sub>
+- The current file format version is 13, the version that added the tidy-variant mark on a copied sheet. <sub>`the_current_format_version_is_thirteen`</sub>
+- A project file saved before tidy variants existed opens with every sheet an ordinary sheet (no variant mark), and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
 - A project file saved before the wire part-number legend block existed opens with no legend blocks at all, and is brought up to the current format version. <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
 - A wire part-number legend block placed on a sheet survives a save and reload with its place unchanged. <sub>`a_wire_legend_survives_a_save_and_reload`</sub>
 - A project file saved before the project number existed opens with no project number set, so the `{project.no}` title-block bind stays blank exactly as before, and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_project_number`</sub>

@@ -359,15 +359,39 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 12, the version that folded the FreeCAD integration (mechanical links and the wire length source) in.
-    /// 現行のファイル形式バージョンは12 (FreeCAD連携=機械側の対応付けと電線長の出所を統合した版) である。
+    /// The current file format version is 13, the version that added the tidy-variant mark on a copied sheet.
+    /// 現行のファイル形式バージョンは13 (整えバリアントの複製シートの印を追加した版) である。
     #[test]
-    fn the_current_format_version_is_twelve() {
-        assert_eq!(FORMAT_VERSION, 12);
+    fn the_current_format_version_is_thirteen() {
+        assert_eq!(FORMAT_VERSION, 13);
         let mut old = Project::new("x");
-        old.format_version = 11;
+        old.format_version = 12;
         migrate(&mut old);
-        assert_eq!(old.format_version, 12);
+        assert_eq!(old.format_version, 13);
+    }
+
+    /// A project file saved before tidy variants existed opens with every sheet an ordinary sheet (no variant mark), and is brought up to the current format version.
+    /// 整えバリアントが無かった頃のプロジェクトファイルは、全シートが印のない普通のシートとして開き、現行のファイル形式へ更新される。
+    #[test]
+    fn an_old_project_file_opens_with_no_variant_marks() {
+        let dir = std::env::temp_dir().join(format!("madake-io-variantof-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.mdkproj");
+        // format_version 12の頃のファイル (シートに variant_of が無い)
+        std::fs::write(
+            &path,
+            r#"{"format_version":12,"name":"旧図面","wire_parts":[],"plc_assignments":[],
+                "sheets":[{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"S1","size":"A3",
+                "orientation":"Landscape","zone_cols":4,"zone_rows":6,"title_block":{},
+                "entities":{}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.sheets.len(), 1);
+        assert_eq!(loaded.sheets[0].variant_of, None, "印の無いシートは普通のシート");
+        assert!(!loaded.sheets[0].is_variant(), "複製として扱われない");
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// A project file saved before the wire part-number legend block existed opens with no legend blocks at all, and is brought up to the current format version.
@@ -600,12 +624,12 @@ mod tests {
             panic!("配線が残っていること")
         };
         assert_eq!((w.length_m, w.length_source), (Some(1.25), LengthSource::Freecad));
-        assert_eq!(loaded.format_version, FORMAT_VERSION, "統合後の現行形式(12)へ更新される");
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "統合後の現行形式へ更新される");
 
         // 書き直したファイルも現行形式で、読み直しても中身は変わらない
         save_project(&path, &loaded).unwrap();
         let again = load_project(&path).unwrap();
-        assert_eq!(again.format_version, 12);
+        assert_eq!(again.format_version, FORMAT_VERSION);
         assert_eq!(again.mech_links, loaded.mech_links);
         std::fs::remove_dir_all(&dir).ok();
     }

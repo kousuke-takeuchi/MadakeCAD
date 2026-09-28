@@ -40,7 +40,10 @@ pub type SheetId = Uuid;
 /// - v12: FreeCAD連携 ([`Project::mech_links`] / [`MechLink::placement`] / [`Wire::length_source`])
 ///   を追加。クラウド側の暫定番号 3/4 を統合したもので、対応付けを持たない旧ファイルは
 ///   空の対応付けで開き、配線の長さは全て手入力扱い ([`LengthSource::Manual`]) になる
-pub const FORMAT_VERSION: u32 = 12;
+/// - v13: 整えバリアントの複製シートの印 ([`Sheet::variant_of`]) を追加。印の無い旧ファイルの
+///   シートはすべて普通のシート (`None`) として開き、クロスリファレンスの数え方も
+///   出力される図面も変わらない (印が付いているときだけ複製として扱われる)
+pub const FORMAT_VERSION: u32 = 13;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。

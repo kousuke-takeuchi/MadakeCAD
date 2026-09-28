@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2359仕様項目**。
+全6領域・**2360仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -186,7 +186,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは12 (FreeCAD連携=機械側の対応付けと電線長の出所を統合した版) である。 <sub>`the_current_format_version_is_twelve`</sub>
+- 現行のファイル形式バージョンは13 (整えバリアントの複製シートの印を追加した版) である。 <sub>`the_current_format_version_is_thirteen`</sub>
+- 整えバリアントが無かった頃のプロジェクトファイルは、全シートが印のない普通のシートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
 - 電線品番凡例ブロックが無かった頃のプロジェクトファイルは凡例ブロックの無い状態で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
 - シートに置いた電線品番凡例ブロックは、置き場所を保ったまま保存して読み直せる。 <sub>`a_wire_legend_survives_a_save_and_reload`</sub>
 - プロジェクト番号が無かった頃のプロジェクトファイルはプロジェクト番号が未設定として開き、表題欄バインド`{project.no}`はこれまでどおり空欄のままになる。現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_project_number`</sub>
