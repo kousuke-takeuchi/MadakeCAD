@@ -1419,7 +1419,8 @@
     "waiting": "Übernehmen wird verfügbar, sobald alle Varianten fertig sind",
     "adoptedLog": "AGENT   {label} übernommen (in das Originalblatt zurückgeschrieben; rückgängig mit Cmd+Z)",
     "discardedLog": "AGENT   Alle Aufräumvarianten verworfen (rückgängig mit Cmd+Z)",
-    "finishFailedLog": "AGENT   Die Aufräumvarianten konnten nicht abgeschlossen werden: {message}"
+    "finishFailedLog": "AGENT   Die Aufräumvarianten konnten nicht abgeschlossen werden: {message}",
+    "staleClearedLog": "AGENT   Die Blätter der Aufräumvarianten sind nicht mehr in der Zeichnung, daher wurde der Vergleich geschlossen (der Start wurde wahrscheinlich rückgängig gemacht)"
   },
   "mech": {
     "measured": "FreeCAD",

@@ -26,6 +26,11 @@ export interface VariantEntry extends VariantInfo {
 export interface VariantsRunState {
   mode: TidyMode;
   originalSheetId: string;
+  /**
+   * 開始時の元シートの指紋 (Rustの`sheet_digest`)。終了IPCへそのまま返す。
+   * 比較中に元シートを手編集していると、これが合わないので採用が断られる。
+   */
+  originalDigest: string;
   variants: VariantEntry[];
   /** 元シートの指標 (比較の基準)。 */
   baseline: TidyMetrics | null;
@@ -55,6 +60,7 @@ export function metricsTotal(m: TidyMetrics): number {
 function runInfo(run: VariantsRunState): VariantRun {
   return {
     original_sheet_id: run.originalSheetId,
+    original_digest: run.originalDigest,
     variants: run.variants.map(({ sheet_id, label, id_map }) => ({ sheet_id, label, id_map })),
   };
 }
@@ -79,6 +85,18 @@ export const useVariantsStore = defineStore("variants", {
     /** 全ての案が終わった (採用できる) か。 */
     allDone(state): boolean {
       return !!state.run && this.runningCount === 0;
+    },
+    /**
+     * そのシートが案の複製なら、案を走らせている会話id。
+     *
+     * 編集オーバーレイの色に使う: patchは会話を名乗らないが、案は自分の複製シートしか
+     * 編集しないので、表示中のシートから会話を逆引きできる (canvas/agentOverlay.ts)。
+     */
+    conversationForSheet(state): (sheetId: string | null) => string | null {
+      return (sheetId) => {
+        if (!sheetId || !state.run) return null;
+        return state.run.variants.find((v) => v.sheet_id === sheetId)?.conversationId ?? null;
+      };
     },
   },
 
@@ -122,14 +140,42 @@ export const useVariantsStore = defineStore("variants", {
         );
         variants.push({ ...info, conversationId, metrics: null });
       }
-      this.run = { mode, originalSheetId: sheet.id, variants, baseline: null };
+      this.run = {
+        mode,
+        originalSheetId: sheet.id,
+        originalDigest: started.run.original_digest ?? "",
+        variants,
+        baseline: null,
+      };
       this.panelOpen = true;
       await this.refreshMetrics();
       return true;
     },
 
+    /**
+     * 宙に浮いた実行を片付ける。片付けたらtrue。
+     *
+     * 実行はクライアント限りの状態なので、開始をCmd+Zで戻す・別経路で案シートが消える、の
+     * どちらでも「もう無いシートを指す比較」が残り、パネルからは採用も破棄もできなくなる
+     * (終了IPCも`validate_run`で断る)。複製シートのどれかが消えていたら比較を閉じ、
+     * 理由をログに出す。
+     */
+    clearIfStale(): boolean {
+      const run = this.run;
+      if (!run) return false;
+      const sheets = useDocumentStore().project?.sheets;
+      if (!sheets) return false;
+      const alive = run.variants.filter((v) => sheets.some((s) => s.id === v.sheet_id));
+      if (alive.length === run.variants.length) return false;
+      this.run = null;
+      this.panelOpen = false;
+      useUiStore().log(i18n.global.t("variants.staleClearedLog"));
+      return true;
+    },
+
     /** 元シートと各案の指標を取り直す (取れない案はnullのまま)。 */
     async refreshMetrics() {
+      if (this.clearIfStale()) return;
       const run = this.run;
       if (!run) return;
       const fetch = (sheetId: string) => ipc.getTidyMetrics(sheetId).catch(() => null);
@@ -151,6 +197,7 @@ export const useVariantsStore = defineStore("variants", {
 
     /** 採用: 選んだ案を元シートへ写し戻し、全複製を消す (undo一発)。実行中の案があれば断る。 */
     async adopt(sheetId: string): Promise<boolean> {
+      if (this.clearIfStale()) return false;
       const run = this.run;
       if (!run || !this.allDone || this.finishing) return false;
       const chosen = run.variants.find((v) => v.sheet_id === sheetId);
@@ -164,6 +211,7 @@ export const useVariantsStore = defineStore("variants", {
 
     /** 破棄: 走っている案の会話を止めてから全複製を消す (undo一発)。 */
     async discard(): Promise<boolean> {
+      if (this.clearIfStale()) return false;
       const run = this.run;
       if (!run || this.finishing) return false;
       for (const v of run.variants) {
@@ -196,6 +244,7 @@ export const useVariantsStore = defineStore("variants", {
     },
 
     open() {
+      if (this.clearIfStale()) return;
       if (this.run) this.panelOpen = true;
     },
     close() {

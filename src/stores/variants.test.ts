@@ -3,7 +3,7 @@ import { setActivePinia, createPinia } from "pinia";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
-import { ipc, type Patch, type Project, type Sheet, type TidyMetrics } from "../ipc";
+import { ipc, type Patch, type Project, type Sheet, type TidyMetrics, type VariantRun } from "../ipc";
 import { agentApi, useChatStore } from "./chat";
 import { useDocumentStore } from "./document";
 import { useUiStore } from "./ui";
@@ -32,7 +32,7 @@ function metrics(total: number): TidyMetrics {
 }
 
 /** 開始IPCの応答: 複製2枚が入ったpatchと、対応表つきの案情報。 */
-function startResult(): { patch: Patch; run: { original_sheet_id: string; variants: { sheet_id: string; label: string; id_map: Record<string, string> }[] } } {
+function startResult(): { patch: Patch; run: VariantRun } {
   return {
     patch: {
       revision: 2,
@@ -43,6 +43,7 @@ function startResult(): { patch: Patch; run: { original_sheet_id: string; varian
     },
     run: {
       original_sheet_id: ORIGINAL,
+      original_digest: "0123456789abcdef",
       variants: [
         { sheet_id: COPY_A, label: "案A", id_map: { e1: "e1a", e2: "e2a" } },
         { sheet_id: COPY_B, label: "案B", id_map: { e1: "e1b", e2: "e2b" } },
@@ -117,13 +118,27 @@ describe("variants store: 整え案の開始", () => {
     expect(mapSelection(["e1", "zzz"], { e1: "e1a" })).toEqual(["e1a"]);
   });
 
-  // ja: 開始直後に元の図面と各案の指標が取られる
-  it("metrics of the original and every variant are fetched after start", async () => {
+  // ja: 開始直後に元の図面と各案の指標が取られ、案ごとに自分のシートの数値になる (元シートの数値にすり替わらない)
+  it("metrics of the original and every variant are fetched after start, each variant measuring its own sheet", async () => {
     setup();
     const variants = useVariantsStore();
     await variants.start("labels", 2);
     expect(variants.run?.baseline).toEqual(metrics(5));
     expect(variants.run?.variants.map((v) => v.metrics && metricsTotal(v.metrics))).toEqual([1, 3]);
+    expect(ipc.getTidyMetrics).toHaveBeenCalledWith(ORIGINAL);
+    expect(ipc.getTidyMetrics).toHaveBeenCalledWith(COPY_A);
+    expect(ipc.getTidyMetrics).toHaveBeenCalledWith(COPY_B);
+  });
+
+  // ja: 案ごとのプロンプトは、測るときも検証するときも自分の複製シートのsheet_idを指定させる
+  it("each variant's prompt names its own sheet id in the measuring and verification steps", async () => {
+    const { sends } = setup();
+    await useVariantsStore().start("layout", 2);
+    expect(sends[0]).toContain(`get_tidy_metrics\`(sheet_id: ${COPY_A})`);
+    expect(sends[0]).toContain(`run_verification\`(sheet_id: ${COPY_A})`);
+    expect(sends[0]).not.toContain(ORIGINAL);
+    expect(sends[1]).toContain(`get_tidy_metrics\`(sheet_id: ${COPY_B})`);
+    expect(sends[1]).not.toContain(COPY_A);
   });
 
   // ja: シートが無い・案の数が2〜4以外・比較中は開始しない
@@ -191,6 +206,7 @@ describe("variants store: 比較・採用・破棄", () => {
     expect(ipc.finishVariants).toHaveBeenCalledWith(
       {
         original_sheet_id: ORIGINAL,
+        original_digest: "0123456789abcdef",
         variants: [
           { sheet_id: COPY_A, label: "案A", id_map: { e1: "e1a", e2: "e2a" } },
           { sheet_id: COPY_B, label: "案B", id_map: { e1: "e1b", e2: "e2b" } },
@@ -229,6 +245,38 @@ describe("variants store: 比較・採用・破棄", () => {
     expect(await variants.discard()).toBe(false);
     expect(variants.run).not.toBeNull();
     expect(useUiStore().lastMessage).toContain("busy");
+  });
+
+  // ja: 開始をCmd+Zで戻して複製シートが消えたら、比較は理由つきで片付けられ、採用も破棄もしない
+  it("a run whose copy sheets are gone (an undone start) is cleared with a message instead of lingering", async () => {
+    const { doc } = setup();
+    const variants = useVariantsStore();
+    const chat = useChatStore();
+    await variants.start("layout", 2);
+    chat.setRunning(CONV_A, false);
+    chat.setRunning(CONV_B, false);
+    // 開始のundo相当: 複製シートが図面から消える
+    doc.project!.sheets = doc.project!.sheets.filter((s) => s.id === ORIGINAL);
+
+    expect(await variants.adopt(COPY_A)).toBe(false);
+    expect(ipc.finishVariants).not.toHaveBeenCalled();
+    expect(variants.run).toBeNull();
+    expect(variants.panelOpen).toBe(false);
+    expect(useUiStore().lastMessage).toContain("no longer");
+    // 片付いた後は開き直しても何も出ない
+    variants.open();
+    expect(variants.panelOpen).toBe(false);
+  });
+
+  // ja: 表示中のシートが案の複製なら、その案を走らせている会話が分かる (編集オーバーレイの色に使う)
+  it("the conversation of a variant sheet can be looked up from the sheet id", async () => {
+    setup();
+    const variants = useVariantsStore();
+    await variants.start("layout", 2);
+    expect(variants.conversationForSheet(COPY_A)).toBe(CONV_A);
+    expect(variants.conversationForSheet(COPY_B)).toBe(CONV_B);
+    expect(variants.conversationForSheet(ORIGINAL)).toBeNull();
+    expect(variants.conversationForSheet(null)).toBeNull();
   });
 
   // ja: パネルは閉じても比較は続き、開き直せる。比較が無ければ開かない

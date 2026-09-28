@@ -23,6 +23,12 @@ watch(
   },
 );
 
+// 開始をCmd+Zで戻すと複製シートが消える。パネルを開いたまま宙に浮かせないよう片付ける
+watch(
+  () => doc.project?.sheets.map((s) => s.id).join(","),
+  () => variants.clearIfStale(),
+);
+
 function metricsText(m: TidyMetrics | null): string {
   if (!m) return t("variants.noMetrics");
   return t("variants.metrics", {

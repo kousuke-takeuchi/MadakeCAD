@@ -1419,7 +1419,8 @@
     "waiting": "Adopt becomes available once every variant has finished",
     "adoptedLog": "AGENT   Adopted {label} (written back to the original sheet; undo with Cmd+Z)",
     "discardedLog": "AGENT   Discarded all tidy variants (undo with Cmd+Z)",
-    "finishFailedLog": "AGENT   Could not finish the tidy variants: {message}"
+    "finishFailedLog": "AGENT   Could not finish the tidy variants: {message}",
+    "staleClearedLog": "AGENT   The tidy variant sheets are no longer in the drawing, so the comparison was closed (the start was probably undone)"
   },
   "mech": {
     "measured": "FreeCAD",

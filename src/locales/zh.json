@@ -1419,7 +1419,8 @@
     "waiting": "所有方案完成后才能采用",
     "adoptedLog": "AGENT   已采用 {label}(已写回原图页,Cmd+Z 可撤销)",
     "discardedLog": "AGENT   已放弃所有整理方案(Cmd+Z 可撤销)",
-    "finishFailedLog": "AGENT   无法结束整理方案: {message}"
+    "finishFailedLog": "AGENT   无法结束整理方案: {message}",
+    "staleClearedLog": "AGENT   整理方案的图页已不在图纸中,已关闭比较(可能是撤销了开始操作)"
   },
   "mech": {
     "measured": "FreeCAD 测量",

@@ -1419,7 +1419,8 @@
     "waiting": "Adoptar estará disponible cuando todas las variantes hayan terminado",
     "adoptedLog": "AGENT   Adoptada {label} (escrita en la hoja original; deshacer con Cmd+Z)",
     "discardedLog": "AGENT   Descartadas todas las variantes de ordenación (deshacer con Cmd+Z)",
-    "finishFailedLog": "AGENT   No se pudieron finalizar las variantes de ordenación: {message}"
+    "finishFailedLog": "AGENT   No se pudieron finalizar las variantes de ordenación: {message}",
+    "staleClearedLog": "AGENT   Las hojas de las variantes de ordenación ya no están en el dibujo, así que se cerró la comparación (probablemente se deshizo el inicio)"
   },
   "mech": {
     "measured": "FreeCAD",

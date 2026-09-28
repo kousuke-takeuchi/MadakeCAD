@@ -1419,7 +1419,8 @@
     "waiting": "実行中の案が終わると採用できます",
     "adoptedLog": "AGENT   {label}を採用しました (元の図面へ写し戻し。Cmd+Zで戻せます)",
     "discardedLog": "AGENT   整え案をすべて破棄しました (Cmd+Zで戻せます)",
-    "finishFailedLog": "AGENT   整え案の終了に失敗しました: {message}"
+    "finishFailedLog": "AGENT   整え案の終了に失敗しました: {message}",
+    "staleClearedLog": "AGENT   整え案のシートが図面に無くなったので比較を片付けました (開始を元に戻したためと思われます)"
   },
   "mech": {
     "measured": "FreeCAD計測",

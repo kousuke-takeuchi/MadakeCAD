@@ -88,6 +88,10 @@ function scopeSection(sheet: Sheet | null, selection: Iterable<string>): string 
  *
  * 「get_tidy_metricsで測る → 直す → もう一度測る」の反復と、その停止条件
  * (改善が止まる or 最大3回)、ビフォー/アフターの数値報告までを1つの指示にまとめる。
+ *
+ * **sheet_idは進め方の各手順にも埋める**: `get_tidy_metrics`も`run_verification`も
+ * sheet_idを省くと先頭シートを見るので、整えバリアント(元シート+案の複製が並ぶ)では
+ * 全案が同じ「元シートの数値」を報告してしまい、比較の材料が消える。
  */
 export function tidyPrompt(
   mode: TidyMode,
@@ -95,6 +99,7 @@ export function tidyPrompt(
   selection: Iterable<string>,
 ): string {
   const rule = MODE_RULES[mode];
+  const scope = sheet ? `sheet_id: ${sheet.id}` : "sheet_id: (不明)";
   return `\
 図面を「${rule.title}」で整えてください。
 
@@ -105,14 +110,17 @@ ${scopeSection(sheet, selection)}
 ${rule.body}
 
 ## 進め方(必須)
-1. まず\`get_tidy_metrics\`を実行して現状を測る(これがビフォーの数値)
+1. まず\`get_tidy_metrics\`(${scope})を実行して現状を測る(これがビフォーの数値)
 2. 上の「やること」だけを編集する(回路の意味は変えない)
-3. もう一度\`get_tidy_metrics\`を実行して、数値が減ったか確かめる
+3. もう一度\`get_tidy_metrics\`(${scope})を実行して、数値が減ったか確かめる
 4. 減っていれば 2〜3 をもう一度繰り返す。**改善が止まったら**(数値が減らなくなったら)\
 そこで終える。繰り返しは**最大${TIDY_LOOP_LIMIT}回**まで
-5. 最後に\`run_verification\`でエラーが増えていないことを確かめる
+5. 最後に\`run_verification\`(${scope})でエラーが増えていないことを確かめる
 6. 最終応答に**ビフォー/アフターの数値**を必ず書く\
 (例: 整え: 交差 4→1・重なり 3→0・グリッド外 6→0)
+
+**測るシート・検証するシートのsheet_idは必ず上の値を指定する**(省略すると別のシートを\
+測ってしまい、数値が比べられなくなる)。
 `;
 }
 

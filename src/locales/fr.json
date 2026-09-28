@@ -1419,7 +1419,8 @@
     "waiting": "L'adoption devient possible une fois toutes les variantes terminées",
     "adoptedLog": "AGENT   {label} adoptée (réécrite sur la feuille d'origine ; annuler avec Cmd+Z)",
     "discardedLog": "AGENT   Toutes les variantes de rangement ont été abandonnées (annuler avec Cmd+Z)",
-    "finishFailedLog": "AGENT   Impossible de terminer les variantes de rangement : {message}"
+    "finishFailedLog": "AGENT   Impossible de terminer les variantes de rangement : {message}",
+    "staleClearedLog": "AGENT   Les feuilles des variantes de rangement ne sont plus dans le dessin, la comparaison a donc été fermée (le démarrage a probablement été annulé)"
   },
   "mech": {
     "measured": "FreeCAD",
