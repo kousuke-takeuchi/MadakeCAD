@@ -100,6 +100,155 @@ fn terminal_sort_key(no: &str) -> (u32, Option<char>, String) {
     (pole, level, no.to_string())
 }
 
+/// `attrs["row_order"]` のキー名。
+pub const ROW_ORDER_ATTR: &str = "row_order";
+
+/// 端子台チャートの行の並べ替え順 (spec §1.1)。`attrs["row_order"]` の値。
+///
+/// どの並びでも**極→段の順で必ず隣り合う** ([`sort_terminal_rows`] が極単位でまとめて動かすため。
+/// EPLANの「多段端子はグループを保って移動」を、行の並べ替えではなくキーの組で満たす)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RowOrder {
+    /// 数値順 (既定)。極番号を数値として昇順に並べる (現在のチャートの自然順と同じ)。
+    #[default]
+    Number,
+    /// 英数順。極番号を**文字列**として辞書順に並べる (2桁以上で数値順と結果が変わる。
+    /// 例: "10" は "2" より前に来る)。
+    Alnum,
+    /// ページ順 (回路図の出現順)。その極の配線 (内部側・外部側どちらか) が、端子台と
+    /// 同じシート上で読み順 (上→下、同じ行なら左→右) に最初に現れる位置の順に並べる
+    /// ([`crate::xref::zone_at`] のゾーンで比較)。どちらの側にも配線が無い極 (予備) は
+    /// 最後に回り、その中では極番号順。
+    Page,
+    /// 外部ケーブル順。外部側 (盤外) のハーネス名が最初に現れた極の順にまとめる
+    /// (名前の辞書順ではなく、初出順。同じ名前の極どうしは隣り合う)。
+    /// ハーネス名を持たない極は最後に回り、その中では極番号順。
+    Cable,
+    /// ジャンパ順。ジャンパが1本でも掛かっている極を極番号順で先頭にまとめ、
+    /// ジャンパの無い極をその後ろに極番号順で並べる。
+    Jumper,
+}
+
+impl RowOrder {
+    /// `attrs["row_order"]` に書く文字列表現。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RowOrder::Number => "number",
+            RowOrder::Alnum => "alnum",
+            RowOrder::Page => "page",
+            RowOrder::Cable => "cable",
+            RowOrder::Jumper => "jumper",
+        }
+    }
+}
+
+/// `attrs["row_order"]` を解析する。未設定・未知語は [`RowOrder::Number`] に落ちる。
+pub fn row_order_of(attrs: &BTreeMap<String, String>) -> RowOrder {
+    match attrs.get(ROW_ORDER_ATTR).map(String::as_str) {
+        Some("alnum") => RowOrder::Alnum,
+        Some("page") => RowOrder::Page,
+        Some("cable") => RowOrder::Cable,
+        Some("jumper") => RowOrder::Jumper,
+        _ => RowOrder::Number,
+    }
+}
+
+/// 図面上の位置を読み順 (行=英字を上から、列=数字を左から) で比較できる形にする
+/// ([`crate::xref::zone_at`] が作る `"B3"` のような表記を`(行, 列)`へ戻すだけ)。
+fn reading_order_key(sheet: &Sheet, p: Point) -> (char, u32) {
+    let zone = crate::xref::zone_at(sheet, p);
+    let mut chars = zone.chars();
+    let row = chars.next().unwrap_or('A');
+    let col: u32 = chars.as_str().parse().unwrap_or(0);
+    (row, col)
+}
+
+/// [`TerminalChart::rows`] を`order`に並べ替える。多段端子は**極単位でまとめて動かす**ので、
+/// どの並びでも極→段の順が崩れない ([`RowOrder`] 参照)。
+///
+/// ページ順だけ図面上の位置が要るので、`page_points` (`rows`と同じ順で、その行の配線の
+/// 反対側にある代表点。配線が無い行はNone) と`sheet`を渡す。それ以外の並びは`rows`自身が
+/// 持つ情報 (ジャンパ欄・外部ハーネス欄) だけで決まる。
+///
+/// これがチャートの並び順を決める**唯一の関数**。CSV・図枠付き図面シート・端子接続図は
+/// いずれもここが返した [`TerminalChart::rows`] をそのまま使って描く (順序を独自に持たない)
+/// ので、3つの出力は常に同じ並びになる。
+pub fn sort_terminal_rows(
+    rows: &mut Vec<TerminalRow>,
+    order: RowOrder,
+    page_points: &[Option<Point>],
+    sheet: &Sheet,
+) {
+    if order == RowOrder::Number || rows.len() <= 1 {
+        return;
+    }
+    // 極ごとにまとめる (rowsは既に極→段の順で渡ってくるので、隣り合う同じ極をまとめるだけでよい)
+    let mut clusters: Vec<(u32, Vec<usize>)> = Vec::new();
+    for (i, r) in rows.iter().enumerate() {
+        let pole = parse_terminal_no(&r.terminal).0;
+        match clusters.last_mut() {
+            Some((p, idxs)) if *p == pole => idxs.push(i),
+            _ => clusters.push((pole, vec![i])),
+        }
+    }
+
+    // 外部ケーブル順: ハーネス名の初出順を先に求めておく
+    let mut cable_rank: BTreeMap<String, usize> = BTreeMap::new();
+    if order == RowOrder::Cable {
+        for (_, idxs) in &clusters {
+            for &i in idxs {
+                let h = &rows[i].external_harness;
+                if !h.is_empty() && !cable_rank.contains_key(h) {
+                    let rank = cable_rank.len();
+                    cable_rank.insert(h.clone(), rank);
+                }
+            }
+        }
+    }
+
+    clusters.sort_by(|a, b| match order {
+        RowOrder::Number => a.0.cmp(&b.0),
+        RowOrder::Alnum => a.0.to_string().cmp(&b.0.to_string()).then(a.0.cmp(&b.0)),
+        RowOrder::Page => {
+            let key = |c: &(u32, Vec<usize>)| -> (bool, Option<(char, u32)>, u32) {
+                let best = c
+                    .1
+                    .iter()
+                    .filter_map(|&i| page_points[i])
+                    .map(|p| reading_order_key(sheet, p))
+                    .min();
+                (best.is_none(), best, c.0)
+            };
+            key(a).cmp(&key(b))
+        }
+        RowOrder::Cable => {
+            let key = |c: &(u32, Vec<usize>)| -> (bool, usize, u32) {
+                let rank = c
+                    .1
+                    .iter()
+                    .filter_map(|&i| {
+                        let h = &rows[i].external_harness;
+                        if h.is_empty() { None } else { cable_rank.get(h).copied() }
+                    })
+                    .min();
+                (rank.is_none(), rank.unwrap_or(usize::MAX), c.0)
+            };
+            key(a).cmp(&key(b))
+        }
+        RowOrder::Jumper => {
+            let has_jumper = |c: &(u32, Vec<usize>)| c.1.iter().any(|&i| !rows[i].jumper.is_empty());
+            (!has_jumper(a), a.0).cmp(&(!has_jumper(b), b.0))
+        }
+    });
+
+    let order_idx: Vec<usize> = clusters.into_iter().flat_map(|(_, idxs)| idxs).collect();
+    let mut taken: Vec<Option<TerminalRow>> = rows.drain(..).map(Some).collect();
+    for i in order_idx {
+        rows.push(taken[i].take().expect("各行は1回しか並べ替えに出てこない"));
+    }
+}
+
 /// シンボル定義が持つ端子番号を、チャートに並ぶ順 (極番号→段記号) に列挙する。
 ///
 /// 貫通端子は同じ番号のピンが左右2つあるので、重複を除いた「端子の一覧」になる。
@@ -243,6 +392,10 @@ pub struct TerminalChart {
     pub jumpers: Vec<(String, String)>,
     /// 読み取れなかった・不正なジャンパ指定。
     pub jumper_issues: Vec<JumperIssue>,
+    /// この並びを作った並べ替え順 (`attrs["row_order"]` を解析した結果。未設定・未知語は
+    /// [`RowOrder::Number`])。CSV・図枠付き図面シート・端子接続図はここを見て並べ替え
+    /// 直したりしない — [`TerminalChart::rows`] がすでにこの順に並んでいる。
+    pub row_order: RowOrder,
 }
 
 impl TerminalChart {
@@ -452,6 +605,8 @@ struct Side<'a> {
     /// 相手側の表記 (`"K1:A1"` / ネットラベル名)。辞書順。
     labels: Vec<String>,
     wires: Vec<&'a Wire>,
+    /// 各配線の反対側の点 ([`RowOrder::Page`] の並べ替えに使う代表点)。
+    points: Vec<Point>,
 }
 
 fn near(a: &Point, b: &Point) -> bool {
@@ -462,6 +617,7 @@ fn near(a: &Point, b: &Point) -> bool {
 fn side_at<'a>(sheet: &'a Sheet, defs: &[SymbolDef], at: &Point) -> Side<'a> {
     let mut labels: Vec<String> = Vec::new();
     let mut wires: Vec<&Wire> = Vec::new();
+    let mut points: Vec<Point> = Vec::new();
     for entity in sheet.entities.values() {
         let Entity::Wire(w) = entity else { continue };
         if !w.points.iter().any(|p| near(p, at)) {
@@ -472,6 +628,7 @@ fn side_at<'a>(sheet: &'a Sheet, defs: &[SymbolDef], at: &Point) -> Side<'a> {
             if near(end, at) {
                 continue;
             }
+            points.push(*end);
             let label = endpoint_label(sheet, defs, end);
             if !label.is_empty() && !labels.contains(&label) {
                 labels.push(label);
@@ -479,7 +636,7 @@ fn side_at<'a>(sheet: &'a Sheet, defs: &[SymbolDef], at: &Point) -> Side<'a> {
         }
     }
     labels.sort();
-    Side { labels, wires }
+    Side { labels, wires, points }
 }
 
 /// 電線の仕様表記 (線色・線径sq・品番)。空の項目は省く。
@@ -536,6 +693,7 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
     );
 
     let mut rows = Vec::with_capacity(terminal_count);
+    let mut page_points: Vec<Option<Point>> = Vec::with_capacity(terminal_count);
     for ((_num, level, terminal), mut points) in by_no {
         // 用紙上の左 (同じなら上) が内部側
         points.sort_by(|a, b| {
@@ -547,7 +705,7 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
         });
         let inside = side_at(sheet, &defs, &points[0]);
         let outside = match points.len() {
-            0 | 1 => Side { labels: Vec::new(), wires: Vec::new() },
+            0 | 1 => Side { labels: Vec::new(), wires: Vec::new(), points: Vec::new() },
             n => side_at(sheet, &defs, &points[n - 1]),
         };
         // ジャンパは、それが実際に繋ぐ端子の行にだけ載る (同じ極の別の段には載らない)
@@ -585,7 +743,20 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
             jumper,
             spare: inside.wires.is_empty() && outside.wires.is_empty(),
         });
+        // ページ順 (RowOrder::Page) の代表点: 内部側・外部側どちらの配線でも、読み順で
+        // 最初に来る方を使う (どちらにも配線が無ければNone=予備)
+        page_points.push(
+            inside
+                .points
+                .iter()
+                .chain(outside.points.iter())
+                .copied()
+                .min_by(|a, b| reading_order_key(sheet, *a).cmp(&reading_order_key(sheet, *b))),
+        );
     }
+
+    let row_order = row_order_of(&inst.attrs);
+    sort_terminal_rows(&mut rows, row_order, &page_points, sheet);
 
     Some(TerminalChart {
         entity_id: tb_id,
@@ -596,6 +767,7 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
         rows,
         jumpers: jumpers.pairs,
         jumper_issues: jumpers.issues,
+        row_order,
     })
 }
 
@@ -735,6 +907,20 @@ mod tests {
             attrs: Default::default(),
         });
         sheet.entities.insert(e.id(), e);
+    }
+
+    /// 端子`terminal`の外部側 (盤外、右) の接続点の絶対座標 (回転0のtb向け)。
+    fn outer_point(sheet: &Sheet, id: EntityId, terminal: &str) -> Point {
+        let Some(Entity::Symbol(inst)) = sheet.entities.get(&id) else { panic!() };
+        let def = resolve_symbol(&inst.symbol_id).expect("端子台の定義");
+        let mut pts: Vec<Point> = def
+            .pins
+            .iter()
+            .filter(|p| p.number == terminal)
+            .map(|p| transform_local(p.at, inst))
+            .collect();
+        pts.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+        *pts.last().expect("ピンが無い端子番号")
     }
 
     /// a-b間にワイヤを1本引く (属性はクロージャで調整)。
@@ -1430,5 +1616,181 @@ mod tests {
         let chart = terminal_chart(&engine.project().sheets[0], tb_id).expect("chart");
         assert!(chart.jumpers.is_empty(), "undoでジャンパが消える");
         assert_eq!(row(&chart, "1").jumper, "");
+    }
+
+    /// 端子番号だけの並び (行のterminal欄の並び)。
+    fn terminal_order(chart: &TerminalChart) -> Vec<&str> {
+        chart.rows.iter().map(|r| r.terminal.as_str()).collect()
+    }
+
+    /// `attrs["row_order"]`が未設定・空・未知語なら数値順 (既定) に落ちる。
+    /// An unset, empty or unrecognised `row_order` attribute falls back to number order.
+    #[test]
+    fn an_unset_or_unknown_row_order_falls_back_to_number_order() {
+        assert_eq!(row_order_of(&BTreeMap::new()), RowOrder::Number);
+        let mut attrs = BTreeMap::new();
+        attrs.insert("row_order".to_string(), "bogus".to_string());
+        assert_eq!(row_order_of(&attrs), RowOrder::Number);
+
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("row_order".into(), "bogus".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Number);
+        assert_eq!(terminal_order(&chart), ["1", "2", "3", "4"], "未知語は数値順のまま");
+    }
+
+    /// 数値順 (既定) は極番号を数として昇順に並べる。10極以上でも桁の大小どおりになる。
+    /// Number order (the default) sorts poles as integers, so it stays correct past nine poles.
+    #[test]
+    fn number_order_sorts_poles_as_integers() {
+        let (sheet, id) = sheet_with_tb(12, 0);
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Number);
+        assert_eq!(
+            terminal_order(&chart),
+            ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
+        );
+    }
+
+    /// 英数順は極番号を文字列として辞書順に並べるので、10極以上では数値順と違う結果になる
+    /// ("10"が"2"より前に来る)。
+    /// Alphanumeric order compares pole numbers as strings, so past nine poles it disagrees with number order ("10" sorts before "2").
+    #[test]
+    fn alnum_order_compares_pole_numbers_as_strings() {
+        let (mut sheet, id) = sheet_with_tb(12, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("row_order".into(), "alnum".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Alnum);
+        assert_eq!(
+            terminal_order(&chart),
+            ["1", "10", "11", "12", "2", "3", "4", "5", "6", "7", "8", "9"]
+        );
+    }
+
+    /// ページ順は、その極の配線が図面上で読み順(上→下、左→右)に最初に現れる位置で並べる。
+    /// 番号は逆でも、読み順で先に来る方が先になる。配線の無い極(予備)は最後に極番号順で並ぶ。
+    /// Page order sorts poles by where their wiring first appears on the sheet in reading order (top-to-bottom, then left-to-right) — even against numeric order — and puts unwired (spare) poles last, in pole-number order.
+    #[test]
+    fn page_order_follows_where_the_wiring_first_appears_on_the_sheet() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        // 端子1の外部側配線は用紙の下の方 (読み順で後)、端子2の外部側配線は用紙の上の方 (読み順で先)
+        let p1 = outer_point(&sheet, id, "1");
+        add_wire(&mut sheet, (p1.x, p1.y), (390.0, 280.0), |_| {});
+        let p2 = outer_point(&sheet, id, "2");
+        add_wire(&mut sheet, (p2.x, p2.y), (15.0, 15.0), |_| {});
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("row_order".into(), "page".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Page);
+        assert_eq!(
+            terminal_order(&chart),
+            ["2", "1", "3", "4"],
+            "端子2の配線の方が読み順で先に現れるので、番号が逆でも先に来る。3・4は未結線なので最後"
+        );
+    }
+
+    /// 外部ケーブル順は、外部ハーネス名が最初に現れた極の順にその名前の極をまとめる
+    /// (名前の辞書順ではなく初出順)。ハーネス名の無い極は最後に極番号順で並ぶ。
+    /// Cable order gathers the poles of each external harness together in the order that harness name first appears (not alphabetically), putting poles with no harness last in pole-number order.
+    #[test]
+    fn cable_order_groups_poles_by_their_external_harness_in_first_seen_order() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        for (terminal, target_x) in [("1", 130.0), ("2", 135.0), ("3", 140.0)] {
+            let p = outer_point(&sheet, id, terminal);
+            add_wire(&mut sheet, (p.x, p.y), (target_x, p.y), |_| {});
+        }
+        let h = |name: &str, y: f64| {
+            Entity::Harness(Harness {
+                id: Uuid::new_v4(),
+                points: crate::harness::rect_points(Point::new(100.0, y - 2.0), Point::new(145.0, y + 2.0)),
+                name: name.into(),
+                note: String::new(),
+            })
+        };
+        let p1 = outer_point(&sheet, id, "1");
+        let p2 = outer_point(&sheet, id, "2");
+        let p3 = outer_point(&sheet, id, "3");
+        sheet.entities.insert(Uuid::new_v4(), h("W2", p1.y)); // 端子1が最初に載せる名前
+        sheet.entities.insert(Uuid::new_v4(), h("W1", p2.y)); // 端子2が最初に載せる名前
+        sheet.entities.insert(Uuid::new_v4(), h("W2", p3.y)); // 端子3は端子1と同じ"W2"
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("row_order".into(), "cable".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Cable);
+        assert_eq!(row(&chart, "1").external_harness, "W2");
+        assert_eq!(row(&chart, "2").external_harness, "W1");
+        assert_eq!(row(&chart, "3").external_harness, "W2");
+        assert_eq!(
+            terminal_order(&chart),
+            ["1", "3", "2", "4"],
+            "W2(端子1で初出)の端子がまとまって先に来て、W1(端子2で初出)がその後、\
+             ハーネスの無い端子4は最後"
+        );
+    }
+
+    /// ジャンパ順は、ジャンパが1本でも掛かっている極を極番号順でまとめて先頭に出し、
+    /// ジャンパの無い極をその後ろに極番号順で並べる。
+    /// Jumper order brings every pole that has any jumper to the front (in pole-number order), followed by the poles with no jumper (also in pole-number order).
+    #[test]
+    fn jumper_order_brings_every_jumpered_pole_to_the_front() {
+        let (mut sheet, id) = sheet_with_tb(5, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("jumpers".into(), "2-3".into());
+        s.attrs.insert("row_order".into(), "jumper".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Jumper);
+        assert_eq!(
+            terminal_order(&chart),
+            ["2", "3", "1", "4", "5"],
+            "ジャンパの掛かった2・3が先頭にまとまり、残りは番号順"
+        );
+    }
+
+    /// 3段の端子台では、どの並べ替え順を選んでも同じ極の3段 (a/b/c) が並びの中で
+    /// 必ず隣り合う (段がバラバラの位置に散らばらない)。
+    /// On a 3-level terminal block, whichever row order is chosen, the three levels of one pole always stay next to each other in the resulting order.
+    #[test]
+    fn every_row_order_keeps_the_three_levels_of_one_pole_adjacent() {
+        for spec in ["number", "alnum", "page", "cable", "jumper"] {
+            let (mut sheet, id) = sheet_with_multilevel_tb(4, 3, "1a-1b");
+            let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+            s.attrs.insert("row_order".into(), spec.into());
+            // ページ順・外部ケーブル順の差が出るよう、一部の端子に配線を足す
+            let p = outer_point(&sheet, id, "3a");
+            add_wire(&mut sheet, (p.x, p.y), (15.0, 15.0), |_| {});
+            let chart = terminal_chart(&sheet, id).expect("chart: {spec}");
+            for pole in 1..=4u32 {
+                let positions: Vec<usize> = chart
+                    .rows
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, r)| parse_terminal_no(&r.terminal).0 == pole)
+                    .map(|(i, _)| i)
+                    .collect();
+                assert_eq!(positions.len(), 3, "{spec}: 極{pole}は3段");
+                assert_eq!(
+                    positions[2] - positions[0],
+                    2,
+                    "{spec}: 極{pole}の3段が隣り合っていない ({positions:?})"
+                );
+            }
+        }
+    }
+
+    /// チャートCSVの行順は、常にチャート(エディタ)の行順と一致する
+    /// (row_orderで並べ替えても、CSVは`chart.rows`をそのまま使うので食い違わない)。
+    /// The terminal chart CSV always lists rows in the same order as the chart (the editor), for every row order.
+    #[test]
+    fn the_csv_row_order_always_matches_the_chart_row_order() {
+        let (mut sheet, id) = sheet_with_tb(12, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("row_order".into(), "alnum".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        let csv = terminal_chart_csv(&sheet, id);
+        let csv_terminals: Vec<&str> = csv.lines().skip(1).map(|line| line.split(',').next().unwrap()).collect();
+        assert_eq!(csv_terminals, terminal_order(&chart));
+        assert_eq!(csv_terminals[0..3], ["1", "10", "11"], "英数順がCSVにも反映される");
     }
 }

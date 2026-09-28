@@ -636,6 +636,41 @@ mod tests {
         assert_eq!(numbers, ["1", "2", "3", "4", "5", "6"]);
     }
 
+    /// The terminal diagram follows the same row order as the chart (the editor): when `row_order` groups the jumpered poles first, the strip's boxes stack in that order too, not plain terminal-number order.
+    /// 端子接続図はチャート(エディタ)と同じ並び順に従う: `row_order`でジャンパの掛かった極をまとめると、ストリップの箱もその順に積まれ、単純な端子番号順にはならない。
+    #[test]
+    fn the_strip_follows_the_chart_row_order_not_plain_terminal_order() {
+        let mut engine = Engine::new(Project::new("並べ替え"));
+        let sheet_id = engine.project().sheets[0].id;
+        let mut tb = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "terminal_block_6p".into(),
+            at: Point::new(150.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        tb.attrs.insert("jumpers".into(), "5-6".into());
+        tb.attrs.insert("row_order".into(), "jumper".into());
+        let tb_id = tb.id;
+        engine
+            .execute(Command::AddEntity { sheet_id, entity: Entity::Symbol(tb) })
+            .expect("追加");
+        let pages = terminal_diagram_svg(engine.project(), tb_id);
+        let numbers: Vec<String> = texts(&pages[0])
+            .into_iter()
+            .filter(|t| (t.0 - center_x()).abs() < 1e-9)
+            .map(|t| t.2)
+            .collect();
+        assert_eq!(
+            numbers,
+            ["5", "6", "1", "2", "3", "4"],
+            "ジャンパの掛かった5・6が先頭に積まれる (端子台チャートと同じ並び)"
+        );
+    }
+
     /// The outside of the panel is drawn to the left of the strip and the inside to the right, each under its own caption.
     /// 盤外 (外部側) はストリップの左、盤内 (内部側) は右に描かれ、それぞれ見出しが付く。
     #[test]
