@@ -806,7 +806,19 @@
     "levels": {
       "label": "层数",
       "description": "在单层与多层之间切换此端子排。引脚布局、表格和接线图都会随之更新。",
-      "hint": "如果消失的那一层仍被接线、跳线或引脚分组引用,减少层数的操作将被拒绝。层数为 1〜{max}。",
+      "hint": "如果消失的那一层仍被接线、跳线、引脚分组或附件引用,减少层数的操作将被拒绝。层数为 1 时会回到单层的 symbol_id(不会使用 \"_1l\" 别名)。",
+      "range": "层数为 1〜{max};超出该范围将被拒绝。",
+      "preview": "预览",
+      "previewNumbers": "端子编号 {from} → {to}",
+      "previewJumpers": "跳线 {from} → {to}",
+      "blockers": "解除后消失的层",
+      "issue": "仍有接线的层无法解除。请先拆除端子 {terminal} 的接线。",
+      "blocker": {
+        "wire": "已接线",
+        "jumper": "有跳线",
+        "pinGroup": "有引脚分组",
+        "accessory": "有附件"
+      },
       "cancel": "取消",
       "apply": "应用"
     },

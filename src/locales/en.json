@@ -806,7 +806,19 @@
     "levels": {
       "label": "Levels",
       "description": "Changes this block between single-level and multi-level. The pin layout, chart and connection diagram all follow.",
-      "hint": "Decreasing levels is refused if wiring, jumpers or pin groups still reference the level that would disappear. Levels 1-{max}.",
+      "hint": "Decreasing levels is refused if wiring, jumpers, pin groups or accessories still reference the level that would disappear. Level 1 goes back to the plain single-level symbol id (never a \"_1l\" alias).",
+      "range": "Levels 1-{max}; anything outside that range is refused.",
+      "preview": "Preview",
+      "previewNumbers": "Terminal numbers {from} → {to}",
+      "previewJumpers": "Jumpers {from} → {to}",
+      "blockers": "Levels that would disappear",
+      "issue": "A level that still has connections cannot be removed. Clear terminal {terminal} first.",
+      "blocker": {
+        "wire": "wired",
+        "jumper": "jumper",
+        "pinGroup": "pin group",
+        "accessory": "accessory"
+      },
       "cancel": "Cancel",
       "apply": "Apply"
     },

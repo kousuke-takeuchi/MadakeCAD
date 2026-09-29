@@ -10,12 +10,17 @@
 
 import { defineStore } from "pinia";
 import { dynamicSymbol, parseTerminalNo, TERMINAL_LEVEL_MAX } from "../canvas/dynamicSymbol";
+import { chartOrderPinNumbers, parsePinGroups, PIN_GROUPS_ATTR } from "../canvas/pinGroups";
 // ジャンパ指定の正規化・並べ替え順の解釈はキャンバス描画と共通の純関数を使う
 // (Pinia非依存モジュールが正。Rust側 madake-core/src/terminal_chart.rs の双子)
 import {
   formatJumperSpec,
+  multilevelSymbolId,
   parseJumperSpec,
+  polesAndLevelsOf,
+  relabelForLevels,
   rewriteJumperLabels,
+  terminalLabels,
   terminalNumbers,
   terminalNumbersOfInstance,
   terminalRenumberPlan,
@@ -23,7 +28,16 @@ import {
   validTerminalNumbers,
 } from "../canvas/terminalJumpers";
 import type { RevealTarget } from "../composables/reveal";
-import { ipc, type Command, type Diagnostic, type RowOrder, type TerminalBlockInfo, type TerminalChart } from "../ipc";
+import {
+  ipc,
+  type Command,
+  type Diagnostic,
+  type RowOrder,
+  type SymbolDef,
+  type SymbolInstance,
+  type TerminalBlockInfo,
+  type TerminalChart,
+} from "../ipc";
 import { useDocumentStore } from "./document";
 
 export { TERMINAL_LEVEL_MAX } from "../canvas/dynamicSymbol";
@@ -49,6 +63,34 @@ export type RenumberIssue =
 function clampRenumberInput(start: number, step: number): [number, number] {
   const whole = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0);
   return [whole(start), whole(step)];
+}
+
+/**
+ * 段数ポップオーバーの「プレビュー」囲み (デザイン`C8rBw`の3行)。
+ * すべて**適用と同じ純関数** ([`multilevelSymbolId`]/[`relabelForLevels`]/[`rewriteJumperLabels`]
+ * = Rust側コマンドの双子) で計算するので、プレビューと結果は必ず一致する。
+ */
+export interface LevelsPreview {
+  /** `terminal_block_8p` → `terminal_block_8p_2l`。 */
+  symbolFrom: string;
+  symbolTo: string;
+  /** 端子番号 (先頭2極ぶんだけ。続きがあれば末尾が`,…`になる)。 */
+  numbersFrom: string;
+  numbersTo: string;
+  /** ジャンパ指定の追従 (ジャンパが無ければnull)。 */
+  jumpers: { from: string; to: string } | null;
+}
+
+/**
+ * 段を減らせない理由の1件 (デザイン`j83rxy`の「解除で消える段」の囲みが並べる行)。
+ * `reason`はi18nキーの末尾 (`terminals.levels.blocker<Reason>`)。
+ */
+export interface LevelsBlocker {
+  /** 消える段の端子番号 (例 "6b")。 */
+  terminal: string;
+  /** その端子が繋がっている相手の表記 (例 "K2:A2")。無ければ空。 */
+  connection: string;
+  reason: "wire" | "jumper" | "pinGroup" | "accessory";
 }
 
 /** グリッドの1行 (デザイン「端子台エディタ」の列順)。 */
@@ -221,14 +263,25 @@ export const useTerminalsStore = defineStore("terminals", {
      * プレビュー計算に使う (取れなければ空)。
      */
     rawTerminalNumbers(): string[] {
+      const def = this.blockDef;
+      return def ? terminalNumbers(def) : [];
+    },
+    /**
+     * 表示中の端子台のシンボルインスタンス (図面の実体)。ポップオーバーのプレビューが
+     * `attrs` (ジャンパ・ピングループ・付属品・端子番号の上書き) と`symbol_id`を見るため。
+     */
+    blockInstance(): SymbolInstance | null {
       const doc = useDocumentStore();
       const block = this.block;
-      if (!block) return [];
+      if (!block) return null;
       const sheet = doc.project?.sheets.find((s) => s.id === block.sheet_id);
       const entity = sheet?.entities[block.entity_id];
-      if (!entity || entity.kind !== "symbol") return [];
-      const def = dynamicSymbol(entity.symbol_id);
-      return def ? terminalNumbers(def) : [];
+      return entity && entity.kind === "symbol" ? entity : null;
+    },
+    /** 表示中の端子台のシンボル定義 (取れなければnull)。 */
+    blockDef(): SymbolDef | null {
+      const inst = this.blockInstance;
+      return inst ? dynamicSymbol(inst.symbol_id) : null;
     },
     /**
      * 表示中の端子台の**現在の**端子番号 (`rawTerminalNumbers`と同じ並びの表示ラベル)。
@@ -236,14 +289,9 @@ export const useTerminalsStore = defineStore("terminals", {
      * (今のジャンパ指定はこのラベルで書かれている)。
      */
     displayTerminalNumbers(): string[] {
-      const doc = useDocumentStore();
-      const block = this.block;
-      if (!block) return [];
-      const sheet = doc.project?.sheets.find((s) => s.id === block.sheet_id);
-      const entity = sheet?.entities[block.entity_id];
-      if (!entity || entity.kind !== "symbol") return [];
-      const def = dynamicSymbol(entity.symbol_id);
-      return def ? terminalNumbersOfInstance(def, entity.attrs) : [];
+      const inst = this.blockInstance;
+      const def = this.blockDef;
+      return def && inst ? terminalNumbersOfInstance(def, inst.attrs) : [];
     },
     /** 選択中の端子にジャンパを掛けられるか (隣り合う2端子以上)。 */
     canAddJumper(): boolean {
@@ -508,17 +556,110 @@ export const useTerminalsStore = defineStore("terminals", {
     },
 
     /**
+     * 段数ポップオーバーのプレビュー (デザイン`C8rBw`)。`levels`を適用したときの
+     * `symbol_id`・端子番号・ジャンパ指定を、**適用と同じ純関数**で計算する (図面は変えない)。
+     * 端子台が読めない・段数が範囲外・今と同じ段数ならnull (プレビューを出さない)。
+     */
+    levelsPreview(levels: number): LevelsPreview | null {
+      const inst = this.blockInstance;
+      const def = this.blockDef;
+      if (!inst || !def) return null;
+      const symbolTo = multilevelSymbolId(inst.symbol_id, levels, def);
+      if (symbolTo === null || symbolTo === inst.symbol_id) return null;
+      const [poles, oldLevels] = polesAndLevelsOf(def);
+      const from = this.displayTerminalNumbers;
+      const to = relabelForLevels(from, poles, oldLevels, levels);
+      // 先頭2極ぶんだけ見せる (デザインの `1,2,… → 1a,1b,2a,2b,…`)
+      const head = (list: readonly string[], step: number) =>
+        list.slice(0, step * 2).join(",") + (poles > 2 ? ",…" : "");
+      const spec = inst.attrs.jumpers ?? "";
+      const rename = new Map<string, string>();
+      for (let p = 0; p < poles; p++) {
+        for (let j = 0; j < Math.min(oldLevels, levels); j++) {
+          rename.set(from[p * oldLevels + j] ?? "", to[p * levels + j] ?? "");
+        }
+      }
+      return {
+        symbolFrom: inst.symbol_id,
+        symbolTo,
+        numbersFrom: head(from, oldLevels),
+        numbersTo: head(to, levels),
+        jumpers: spec ? { from: spec, to: rewriteJumperLabels(spec, rename) } : null,
+      };
+    },
+
+    /**
+     * 段を`levels`へ減らせない理由の一覧 (デザイン`j83rxy`の「解除で消える段」)。
+     * 空配列なら (今分かっている範囲では) 適用できる。段を増やすときは常に空。
+     *
+     * 判定はRust側`SetTerminalLevels`の拒否と同じ4種 (結線・ジャンパ・ピングループ・付属品) を
+     * **すでに読み込んであるチャートと`attrs`から先読みする**もので、ポップオーバーは1件でも
+     * あれば適用ボタンを無効にする。結線の有無はチャートの行 (`spare`) 由来なので、配線を伴わない
+     * ネットラベル・ジャンクションだけが載っている端子はここには出ず、Rust側が座標一致で拒否する
+     * (そのときはApply後の`error`が理由を見せる。二重の門で、どちらも図面は変えない)。
+     */
+    levelsBlockers(levels: number): LevelsBlocker[] {
+      const inst = this.blockInstance;
+      const def = this.blockDef;
+      if (!inst || !def) return [];
+      const [poles, oldLevels] = polesAndLevelsOf(def);
+      if (levels >= oldLevels || poles === 0) return [];
+      const display = this.displayTerminalNumbers;
+      const vanishing: string[] = [];
+      for (let p = 0; p < poles; p++) {
+        for (let j = levels; j < oldLevels; j++) {
+          const label = display[p * oldLevels + j];
+          if (label !== undefined) vanishing.push(label);
+        }
+      }
+      const rows = new Map((this.chart?.rows ?? []).map((r) => [r.terminal, r]));
+      const jumperPairs = parseJumperSpec(inst.attrs.jumpers ?? "", display, this.rawTerminalNumbers);
+      const labels = terminalLabels(def, inst.attrs);
+      const pgOrder = chartOrderPinNumbers(def).map((n) => labels.displayOf(n));
+      const groups = parsePinGroups(inst.attrs[PIN_GROUPS_ATTR] ?? "", pgOrder).groups;
+      const accessoryLabels = new Set(
+        (inst.attrs.accessories ?? "")
+          .split(",")
+          .map((item) => item.split(":")[0]?.trim() ?? "")
+          .filter((label) => label !== "" && label !== "end"),
+      );
+      const out: LevelsBlocker[] = [];
+      for (const terminal of vanishing) {
+        const row = rows.get(terminal);
+        const connection = [row?.internal ?? "", row?.external ?? ""].filter((s) => s !== "").join(" / ");
+        const reason: LevelsBlocker["reason"] | null = (() => {
+          if (row && !row.spare) return "wire";
+          if (jumperPairs.some(([a, b]) => a === terminal || b === terminal)) return "jumper";
+          const inGroup = groups.some((g) => {
+            const a = pgOrder.indexOf(g.first);
+            const b = pgOrder.indexOf(g.last);
+            if (a < 0 || b < 0) return g.first === terminal || g.last === terminal;
+            return pgOrder.slice(Math.min(a, b), Math.max(a, b) + 1).includes(terminal);
+          });
+          if (inGroup) return "pinGroup";
+          if (accessoryLabels.has(terminal)) return "accessory";
+          return null;
+        })();
+        if (reason !== null) out.push({ terminal, connection, reason });
+      }
+      return out;
+    },
+
+    /**
      * 段数を変える (`set_terminal_levels` Command 1回。Cmd+Zで戻る)。`levels`が今と同じなら
-     * 何もしない。1〜`TERMINAL_LEVEL_MAX`の範囲チェックだけここでしておき (ステッパーの
-     * +/-ボタンがその外へ出さないための門)、消える段への参照が残っているかどうかの判定は
-     * Rust側に任せる (結線・ジャンパ・ピングループを跨いだ判定になるため、ここでは
-     * 二重に持たない)。失敗したら理由を`error`に残す (ポップオーバーが`ui.log`で見せる)。
+     * 何もしない。1〜`TERMINAL_LEVEL_MAX`の範囲チェックと、消える段への参照の先読み
+     * ([`levelsBlockers`]) をここで済ませ、**当たっている案はコマンドを送らずに断る**
+     * (ポップオーバーが「解除で消える段」を並べて適用ボタンを無効にしているので、ここは
+     * 念のための門。採番の`renumberIssue`と同じ形)。先読みで拾えない結線 (配線を伴わない
+     * ネットラベル・ジャンクション) はRust側が座標一致で拒否するので、失敗したら理由を
+     * `error`に残す (ポップオーバーがそのまま見せる)。
      */
     async setLevels(levels: number): Promise<boolean> {
       const block = this.block;
       if (!block || this.busy) return false;
       if (!Number.isInteger(levels) || levels < 1 || levels > TERMINAL_LEVEL_MAX) return false;
       if (levels === this.levels) return true;
+      if (this.levelsBlockers(levels).length > 0) return false;
       this.busy = true;
       this.error = null;
       try {

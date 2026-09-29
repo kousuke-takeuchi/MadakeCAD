@@ -3297,6 +3297,35 @@ mod tests {
         assert_eq!((bars[0].0, bars[0].1, bars[0].2, bars[0].3), (96.8, 42.5, 103.2, 42.5));
     }
 
+    /// A jumper bar is part of its terminal block's symbol, so it is drawn or hidden with the symbol and never on its own: the export, which has no per-view-class visibility at all, always writes it out, however the block is turned.
+    /// ジャンパバーは端子台シンボルの一部なので、シンボルと一緒に出たり隠れたりし、単独で消えることはない: 表示クラスの概念を持たない書き出しでは、端子台の向きにかかわらず常に描かれる。
+    #[test]
+    fn svg_export_always_draws_the_jumper_bar_with_its_symbol() {
+        for (symbol_id, jumpers, rotation, mirror) in [
+            ("terminal_block_4p", "1-2", 0u16, false),
+            ("terminal_block_4p", "1-2", 90, false),
+            ("terminal_block_4p_2l", "1a-1b", 0, true),
+            ("terminal_block_4p_3l", "1a-1b,1b-1c", 270, false),
+        ] {
+            let svg = jumper_sheet(symbol_id, jumpers, rotation, mirror);
+            let bars: Vec<_> = svg_lines(&svg)
+                .into_iter()
+                .filter(|l| (l.4 - JUMPER_BAR_STROKE).abs() < 1e-9)
+                .collect();
+            assert_eq!(
+                bars.len(),
+                jumpers.split(',').count(),
+                "{symbol_id} {jumpers} rot={rotation} mirror={mirror}: \
+                 書き出しにジャンパバーが全部載っていない: {bars:?}"
+            );
+            // シンボル本体 (端子の印) も同じ書き出しに載っている = バーだけが単独で出ることはない
+            assert!(
+                !svg_circles(&svg).is_empty(),
+                "{symbol_id}: 端子の印が1つも無い (バーだけが単独で描かれている)"
+            );
+        }
+    }
+
     /// A jumper bar turns with its terminal block, so on a block rotated a quarter turn the bar lies between the rotated terminals instead of staying upright.
     /// ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の間に横向きに描かれる。
     #[test]

@@ -806,7 +806,19 @@
     "levels": {
       "label": "Étages",
       "description": "Fait basculer ce bornier entre un étage et plusieurs étages. La disposition des broches, le tableau et le schéma de raccordement suivent.",
-      "hint": "Réduire les étages est refusé si un câblage, un pontet ou un groupe de broches fait encore référence à l'étage qui disparaîtrait. Étages 1-{max}.",
+      "hint": "Réduire les étages est refusé si un câblage, un pontet, un groupe de broches ou un accessoire fait encore référence à l'étage qui disparaîtrait. L'étage 1 revient au symbol_id à un seul étage (jamais un alias « _1l »).",
+      "range": "Étages 1-{max} ; hors de cette plage, c'est refusé.",
+      "preview": "Aperçu",
+      "previewNumbers": "Numéros de borne {from} → {to}",
+      "previewJumpers": "Pontets {from} → {to}",
+      "blockers": "Étages qui disparaîtraient",
+      "issue": "Un étage encore raccordé ne peut pas être supprimé. Libérez d'abord la borne {terminal}.",
+      "blocker": {
+        "wire": "raccordé",
+        "jumper": "pontet",
+        "pinGroup": "groupe de broches",
+        "accessory": "accessoire"
+      },
       "cancel": "Annuler",
       "apply": "Appliquer"
     },

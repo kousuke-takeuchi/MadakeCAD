@@ -1167,6 +1167,23 @@ pub(crate) const TERMINAL_NUMBER_HEIGHT: f64 = 2.0;
 /// 占める (両側の内側ピンの上を通る) ので、その行に配線を通す余地は無い。
 pub const TERMINAL_LEVEL_PITCH: f64 = 10.0;
 
+/// 段数を`old_levels`から`new_levels`へ変えたとき、**段aのピンを用紙上の同じ座標に
+/// 留めるために**インスタンスの`at`をずらすべき量 (シンボルのローカルX方向, mm)。
+///
+/// [`terminal_block_symbol`]の列は原点を中心に左右対称に並ぶので (`column_x`)、段数が
+/// 変わると段aの列の中心が `-(levels - 1) / 2 * ピッチ` だけ動く。段数変更コマンド
+/// ([`crate::command::Engine`]の`SetTerminalLevels`) はこの符号を反転した量だけ
+/// インスタンスを平行移動して、**段aの端子に繋がっている既存の配線が外れない**ようにする
+/// (フェーズ6の列ジオメトリはそのまま残す)。呼び出し側はこの値を
+/// [`crate::netlist::rotate_local`]に通してから`at`へ足すこと (回転・反転を通した向きで
+/// 動かす必要がある)。
+///
+/// 戻り値はピッチの半整数倍 (1<->2で±5mm、1<->3で±10mm) なのでf64で正確に表せ、
+/// 逆方向の変更がちょうど打ち消す。
+pub fn level_origin_shift(old_levels: usize, new_levels: usize) -> f64 {
+    (new_levels as f64 - old_levels as f64) / 2.0 * TERMINAL_LEVEL_PITCH
+}
+
 /// PLCモジュール(`plc_di_{n}p` / `plc_do_{n}p`)の最大点数。
 pub const PLC_POINT_MAX: usize = 64;
 

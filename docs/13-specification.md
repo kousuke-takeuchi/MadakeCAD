@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2485 specification clauses** across 6 areas.
+**2503 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -121,8 +121,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Decreasing levels is refused when a pin-group range spans terminals of the level that would vanish. <sub>`decreasing_levels_is_refused_when_a_pin_group_spans_a_vanishing_level`</sub>
 - Decreasing levels is refused when an accessory spec names a terminal of the level that would vanish (spec §1.1 accessories format, checked ahead of its own command landing in a later task). <sub>`decreasing_levels_is_refused_when_an_accessory_names_a_vanishing_level`</sub>
 - When nothing references the vanishing level, decreasing levels succeeds and both the symbol_id and the terminal-number override drop that level's labels. <sub>`decreasing_levels_succeeds_and_drops_the_vanishing_levels_labels`</sub>
-- After a 1-level -> 2-level -> 1-level round trip, a wire that was connected to a kept terminal is still connected (same internal/external labels), and the terminal block check does not report it as newly unconnected. <sub>`a_wire_stays_connected_through_a_one_to_two_to_one_level_round_trip`</sub>
-- Undoing a level change restores the previous symbol_id exactly, the same one-command-one-undo shape as RenumberTerminals/SetTerminalNumbers. <sub>`undoing_a_level_change_restores_the_previous_symbol_id`</sub>
+- Changing the level count keeps level a's terminals at exactly the same coordinates on the sheet, whatever the block's rotation or mirroring, so nothing that was drawn onto those terminals has to move. <sub>`a_level_change_keeps_level_a_terminals_at_the_same_sheet_coordinates`</sub>
+- A wire drawn to terminal 1 of a single-level block is still electrically on the same terminal (now called 1a) after a second level is added, and it is not re-mapped to the new level's terminal. <sub>`a_wire_on_terminal_one_stays_on_level_a_after_adding_a_level`</sub>
+- Decreasing levels is refused when the only thing sitting on a vanishing level's pin is a net label (no wire at all), the same coordinate-coincidence rule the netlist uses. <sub>`decreasing_levels_is_refused_when_a_net_label_sits_on_a_vanishing_pin`</sub>
+- Going from 3 levels to 2 is refused while a jumper still names a level-c terminal, and allowed once it is gone - then only level c's labels are dropped and the remaining jumper is kept. <sub>`decreasing_three_levels_to_two_is_refused_only_while_level_c_is_referenced`</sub>
+- Increasing levels rewrites the terminal label of an accessory spec the same way it rewrites jumpers, so an accessory pinned to terminal 1 follows to 1a; the kind and part number are left byte for byte. <sub>`increasing_levels_rewrites_accessory_terminal_labels`</sub>
+- A terminal_numbers value that is present but invalid (its item count does not match the pin count) survives a level change untouched and comes back byte for byte after undo; the command never deletes a key it cannot restore. <sub>`a_present_but_invalid_terminal_numbers_value_survives_a_level_change`</sub>
+- Undoing a level change restores the previous symbol_id and the instance position together, in one undo step, so the terminals land back on their original coordinates. <sub>`undoing_a_level_change_restores_the_symbol_id_and_the_position_together`</sub>
 - Asking for a level count outside 1-3 is refused without touching the drawing. <sub>`setting_levels_outside_one_to_three_is_refused`</sub>
 - Changing the level count of a symbol that is not a terminal block is refused, the same gate RenumberTerminals/SetTerminalNumbers already use. <sub>`setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
 - A symbol_id spelled with the "_1l" one-level alias is refused when placed on the drawing: a single-level terminal block has exactly one valid spelling of its symbol_id. <sub>`a_one_level_alias_symbol_id_is_refused_when_placed`</sub>
@@ -711,6 +716,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A jumper bar is always drawn clear of every terminal number, whatever jumpers the block carries and however it is turned or mirrored, so the numbers stay readable. <sub>`a_jumper_bar_never_covers_a_terminal_number`</sub>
 - A jumper between two adjacent terminals is drawn on the schematic as one short thick bar filling the gap between their two round marks, and nothing else is drawn around it. <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
 - On a multi-level terminal block, a jumper written with level letters ("1a-1b") is drawn on that pole's row as a bar in the gap between the two level columns' marks. <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
+- A jumper bar is part of its terminal block's symbol, so it is drawn or hidden with the symbol and never on its own: the export, which has no per-view-class visibility at all, always writes it out, however the block is turned. <sub>`svg_export_always_draws_the_jumper_bar_with_its_symbol`</sub>
 - A jumper bar turns with its terminal block, so on a block rotated a quarter turn the bar lies between the rotated terminals instead of staying upright. <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
 - The lettering inside a symbol (a motor's "M", for instance) is drawn at the place the symbol definition gives it and stays there whatever the symbol's rotation or mirroring, because the letters themselves are always written horizontally. <sub>`the_lettering_inside_a_symbol_stays_put_when_the_symbol_is_turned`</sub>
 - A jumper bar between two renumbered terminals is attributed to the terminals whose printed labels it actually connects, matched by the label text rather than by mere geometric proximity — closing the phase-6 follow-up where a nearest-mark test could not detect swapped terminal numbers. <sub>`a_jumper_bar_is_attributed_to_its_terminals_by_label_text_after_renumbering`</sub>
@@ -883,6 +889,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Increasing levels expands each pole's plain label into one label per level, pole-major with level letters appended ("11,12" -> "11a,11b,12a,12b"). <sub>`relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major`</sub>
 - Decreasing levels back to 1 drops the vanishing level's labels and strips the level letter from what remains. <sub>`relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level`</sub>
 - Going from 2 levels to 3 keeps the existing level-a/level-b labels and adds a fresh level-c label per pole. <sub>`relabel_for_levels_adds_a_new_level_on_top_of_existing_ones`</sub>
+- Rewriting an accessory spec touches only the leading terminal-number token of each item; the kind, the part number, the "end" sentinel and any item naming an unknown terminal stay byte for byte. <sub>`rewrite_accessory_labels_only_replaces_the_terminal_number_token`</sub>
 - A terminal_numbers override that happens to equal the symbol's default labels is still reported as an override, because the key is present and valid (not judged only by whether the expanded value differs from the default). <sub>`terminal_numbers_override_reports_a_key_that_matches_the_default_value`</sub>
 - An invalid terminal_numbers value (wrong element count) is not treated as an override: the display already falls back to the default, and there is nothing valid to restore. <sub>`terminal_numbers_override_is_none_for_an_invalid_value`</sub>
 - With no terminal_numbers key at all, there is no override. <sub>`terminal_numbers_override_is_none_when_the_key_is_absent`</sub>
@@ -2153,6 +2160,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - numbers every pin from the start value on a single-level block <sub>`terminalRenumberPlan`</sub>
 - keeps the level letters on a multi-level block and numbers only the pole <sub>`terminalRenumberPlan`</sub>
 - applies the step and the prefix <sub>`terminalRenumberPlan`</sub>
+- counts poles and levels from the terminal numbers <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- normalises one level back to the plain single-level symbol id <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- returns null for a symbol that is not a terminal block and for an out-of-range level count <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- expands labels into lettered levels and drops the vanishing ones when decreasing <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- keeps a label that does not end in a level letter intact as the base <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - keeps adjacency based on the raw pin layout, not on the arithmetic difference between displayed labels <sub>`parseJumperSpec with an overridden display order`</sub>
 
 ### textStyle
@@ -2821,6 +2833,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sends nothing when the requested level count matches the current one <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 - refuses an out-of-range level count without sending a command <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 - keeps the backend's refusal reason in error and leaves the drawing untouched <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- previews the new symbol id, the new terminal numbers and the jumpers that follow <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- shows no preview for the level count the block already has <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- lists each vanishing terminal that still has a connection, with its target <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- lists a jumper that still names a vanishing level as a blocker <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- never blocks an increase in the level count <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- refuses a level decrease that has a blocker without sending a command <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 
 ### ui
 

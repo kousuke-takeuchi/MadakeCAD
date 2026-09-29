@@ -8,7 +8,10 @@ import {
   formatJumperSpec,
   JUMPER_BAR_STROKE_MM,
   jumperBars,
+  multilevelSymbolId,
   parseJumperSpec,
+  polesAndLevelsOf,
+  relabelForLevels,
   rewriteJumperLabels,
   terminalCenter,
   terminalLabels,
@@ -339,6 +342,51 @@ describe("terminalRenumberPlan", () => {
   it("applies the step and the prefix", () => {
     const raw = terminalNumbers(dynamicSymbol("terminal_block_4p")!);
     expect(terminalRenumberPlan(raw, 1, 2, "P")).toEqual(["P1", "P3", "P5", "P7"]);
+  });
+});
+
+describe("level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)", () => {
+  // ja: 極数と段数は端子番号から数え、単段の端子台は段数1になる
+  it("counts poles and levels from the terminal numbers", () => {
+    expect(polesAndLevelsOf(dynamicSymbol("terminal_block_8p"))).toEqual([8, 1]);
+    expect(polesAndLevelsOf(dynamicSymbol("terminal_block_8p_2l"))).toEqual([8, 2]);
+    expect(polesAndLevelsOf(null)).toEqual([0, 0]);
+  });
+
+  // ja: 段数を変えたsymbol_idは、段数1のとき`_1l`の別名ではなく単段のidへ正規化される
+  it("normalises one level back to the plain single-level symbol id", () => {
+    const two = dynamicSymbol("terminal_block_8p_2l");
+    expect(multilevelSymbolId("terminal_block_8p", 2, dynamicSymbol("terminal_block_8p"))).toBe(
+      "terminal_block_8p_2l",
+    );
+    expect(multilevelSymbolId("terminal_block_8p_2l", 1, two)).toBe("terminal_block_8p");
+    expect(multilevelSymbolId("terminal_block_8p_2l", 3, two)).toBe("terminal_block_8p_3l");
+  });
+
+  // ja: 端子台以外のシンボルと範囲外の段数はnull (プレビューを出さない)
+  it("returns null for a symbol that is not a terminal block and for an out-of-range level count", () => {
+    expect(multilevelSymbolId("resistor", 2, dynamicSymbol("resistor"))).toBeNull();
+    expect(multilevelSymbolId("terminal_block_8p", 0, dynamicSymbol("terminal_block_8p"))).toBeNull();
+    expect(multilevelSymbolId("terminal_block_8p", 4, dynamicSymbol("terminal_block_8p"))).toBeNull();
+  });
+
+  // ja: 段を増やすと極ごとのラベルに段記号が付き、減らすと残る段のラベルだけになる (段数1では段記号が落ちる)
+  it("expands labels into lettered levels and drops the vanishing ones when decreasing", () => {
+    expect(relabelForLevels(["11", "12"], 2, 1, 2)).toEqual(["11a", "11b", "12a", "12b"]);
+    expect(relabelForLevels(["11a", "11b", "12a", "12b"], 2, 2, 1)).toEqual(["11", "12"]);
+    expect(relabelForLevels(["11a", "11b", "12a", "12b"], 2, 2, 3)).toEqual([
+      "11a",
+      "11b",
+      "11c",
+      "12a",
+      "12b",
+      "12c",
+    ]);
+  });
+
+  // ja: 末尾が英字でない上書きラベル (接頭辞付きの`X11`) は段記号を外す対象にならず、そのまま土台になる
+  it("keeps a label that does not end in a level letter intact as the base", () => {
+    expect(relabelForLevels(["X11", "X12"], 2, 1, 2)).toEqual(["X11a", "X11b", "X12a", "X12b"]);
   });
 });
 

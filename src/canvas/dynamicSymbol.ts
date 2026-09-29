@@ -18,14 +18,18 @@ export { textWidthMm } from "./textWidth";
 // 端子番号の読み取りと端子の印の寸法も葉モジュール (terminalNo.ts) へ移した
 // (terminalJumpers.ts の端子番号の対応表をここから使うための循環import防止)。
 // 既存のimport元のためにここから再エクスポートする
-import { TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./terminalNo";
-export { parseTerminalNo, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./terminalNo";
+import { levelLetter, TERMINAL_LEVEL_MAX, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./terminalNo";
+export {
+  levelLetter,
+  parseTerminalNo,
+  TERMINAL_LEVEL_MAX,
+  TERMINAL_MARK_R,
+  TERMINAL_NUMBER_HEIGHT,
+} from "./terminalNo";
 import { terminalLabels } from "./terminalJumpers";
 
 /** 動的シンボルの最大極数(Rust側 DYNAMIC_PIN_MAX と一致)。 */
 export const DYNAMIC_PIN_MAX = 50;
-/** 多段端子台 (`terminal_block_{n}p_{levels}l`、G6) の最大段数(Rust側 TERMINAL_LEVEL_MAX と一致)。 */
-export const TERMINAL_LEVEL_MAX = 3;
 /** 多段端子台の段(=列)の中心間隔 mm(Rust側 TERMINAL_LEVEL_PITCH と一致)。 */
 export const TERMINAL_LEVEL_PITCH = 10.0;
 /** PLCモジュールの最大点数(Rust側 PLC_POINT_MAX と一致)。 */
@@ -83,11 +87,6 @@ function plcModuleSymbol(id: string): SymbolDef | null {
 
 const p = (x: number, y: number): Point => ({ x, y });
 const offset = (i: number, n: number) => (i - (n - 1) / 2) * 5.0;
-
-/** 段番号(0始まり)を段記号('a','b','c',…)にする(Rust側 level_letter と一致)。 */
-export function levelLetter(levelIndex: number): string {
-  return String.fromCharCode(97 + levelIndex);
-}
 
 /**
  * `terminal_block_`の後ろを多段端子台の(極数, 段数)にパースする

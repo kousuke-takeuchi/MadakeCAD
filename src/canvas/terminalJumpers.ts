@@ -4,7 +4,7 @@
 // Pinia非依存の純関数だけを置き、端子台エディタのストア (stores/terminals.ts) も
 // キャンバス描画 (renderer.ts) も**ここ1か所**の正規化ルールを使う。
 
-import { parseTerminalNo, TERMINAL_MARK_R } from "./terminalNo";
+import { levelLetter, parseTerminalNo, TERMINAL_LEVEL_MAX, TERMINAL_MARK_R } from "./terminalNo";
 import type { Point, RowOrder, SymbolDef } from "../ipc";
 
 /**
@@ -188,6 +188,65 @@ export function rewriteJumperLabels(spec: string, rename: ReadonlyMap<string, st
       return renameTerminalTokens(item, rename) ?? item;
     })
     .join(",");
+}
+
+/**
+ * 端子台シンボルの (極数, 段数) を端子番号から数える (Rust側 poles_and_levels_of と同一)。
+ * 多段端子台は段数が2以上で端子数=極数×段数。端子台以外・未知のシンボルは`[0, 0]`。
+ */
+export function polesAndLevelsOf(def: SymbolDef | null): [number, number] {
+  if (!def) return [0, 0];
+  const poles = new Set<number>();
+  const levels = new Set<string>();
+  for (const no of terminalNumbers(def)) {
+    const [pole, level] = parseTerminalNo(no);
+    poles.add(pole);
+    if (level !== null) levels.add(level);
+  }
+  return [poles.size, Math.max(levels.size, 1)];
+}
+
+/**
+ * `symbol_id`の段数を`levels`へ変えたときのid (Rust側 multilevel_id と同一)。
+ * `levels === 1`は**単段idへ正規化**する (`_1l`という別名idは作らない)。
+ * 端子台でない・段数が範囲外・極数が読めないときはnull (呼び出し側はプレビューを出さない)。
+ */
+export function multilevelSymbolId(
+  symbolId: string,
+  levels: number,
+  def: SymbolDef | null,
+): string | null {
+  if (!symbolId.startsWith("terminal_block_")) return null;
+  if (!Number.isInteger(levels) || levels < 1 || levels > TERMINAL_LEVEL_MAX) return null;
+  const [poles] = polesAndLevelsOf(def);
+  if (poles === 0) return null;
+  return levels === 1 ? `terminal_block_${poles}p` : `terminal_block_${poles}p_${levels}l`;
+}
+
+/**
+ * 段数を変えたときの新しい表示ラベル一覧 (Rust側 relabel_for_levels と同一)。
+ * 極ごとに段a (単段なら唯一) のラベルを土台にし、末尾が英字1文字ならそれを外してから
+ * 新しい段数ぶんの段記号を付け直す。段を減らすときは残る段のラベルだけが返る。
+ */
+export function relabelForLevels(
+  oldDisplay: readonly string[],
+  poles: number,
+  oldLevels: number,
+  newLevels: number,
+): string[] {
+  const out: string[] = [];
+  for (let p = 0; p < poles; p++) {
+    const first = oldDisplay[p * oldLevels] ?? "";
+    let base = first;
+    if (oldLevels > 1) {
+      const last = first.slice(-1);
+      if (last !== "" && /^[A-Za-z]$/.test(last)) base = first.slice(0, -1);
+    }
+    for (let j = 0; j < newLevels; j++) {
+      out.push(newLevels === 1 ? base : `${base}${levelLetter(j)}`);
+    }
+  }
+  return out;
 }
 
 /**

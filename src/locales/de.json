@@ -806,7 +806,19 @@
     "levels": {
       "label": "Ebenen",
       "description": "Wechselt diese Klemmenleiste zwischen einstufig und mehrstufig. Pinbelegung, Tabelle und Anschlussplan folgen.",
-      "hint": "Das Verringern der Ebenen wird abgelehnt, wenn Verdrahtung, Brücken oder Pin-Gruppen noch auf die verschwindende Ebene verweisen. Ebenen 1-{max}.",
+      "hint": "Das Verringern der Ebenen wird abgelehnt, wenn Verdrahtung, Brücken, Pin-Gruppen oder Zubehör noch auf die verschwindende Ebene verweisen. Ebene 1 führt zurück zur einstufigen symbol_id (niemals zu einem \"_1l\"-Alias).",
+      "range": "Ebenen 1-{max}; außerhalb dieses Bereichs wird abgelehnt.",
+      "preview": "Vorschau",
+      "previewNumbers": "Klemmennummern {from} → {to}",
+      "previewJumpers": "Brücken {from} → {to}",
+      "blockers": "Ebenen, die verschwinden würden",
+      "issue": "Eine Ebene mit vorhandenen Anschlüssen kann nicht entfernt werden. Lösen Sie zuerst Klemme {terminal}.",
+      "blocker": {
+        "wire": "verdrahtet",
+        "jumper": "Brücke",
+        "pinGroup": "Pin-Gruppe",
+        "accessory": "Zubehör"
+      },
       "cancel": "Abbrechen",
       "apply": "Anwenden"
     },

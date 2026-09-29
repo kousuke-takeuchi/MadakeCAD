@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2485仕様項目**。
+全6領域・**2503仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -121,8 +121,13 @@
 - 消える段の端子を範囲に含むピングループが残っていると、段を減らす操作は拒否される。 <sub>`decreasing_levels_is_refused_when_a_pin_group_spans_a_vanishing_level`</sub>
 - 消える段の端子を指す付属品指定が残っていると、段を減らす操作は拒否される (spec §1.1 付属品の書式。専用コマンドが入る前から検証する)。 <sub>`decreasing_levels_is_refused_when_an_accessory_names_a_vanishing_level`</sub>
 - 消える段に何も参照が残っていなければ、段を減らす操作は成功し、symbol_idと端子番号の上書きの両方から消える段のラベルが落ちる。 <sub>`decreasing_levels_succeeds_and_drops_the_vanishing_levels_labels`</sub>
-- 1段→2段→1段の往復のあと、残る端子に繋がっていた配線はそのまま繋がり続け (内部側・外部側のラベルも同じ)、端子台チェックも新たに未結線と報告しない。 <sub>`a_wire_stays_connected_through_a_one_to_two_to_one_level_round_trip`</sub>
-- 段数変更のundoは変更前のsymbol_idへ正確に戻る (RenumberTerminals/SetTerminalNumbersと同じ、1コマンド1undoの形)。 <sub>`undoing_a_level_change_restores_the_previous_symbol_id`</sub>
+- 段数を変えても段aの端子の用紙上の座標は1mmも動かない (端子台の回転・反転にかかわらず) ので、その端子に描かれていたものは動かさずに済む。 <sub>`a_level_change_keeps_level_a_terminals_at_the_same_sheet_coordinates`</sub>
+- 単段の端子台の端子1に引いてあった配線は、2段化したあとも電気的に同じ端子 (名前は`1a`になる) に繋がったままで、新しくできた段の端子へ繋ぎ変わったりしない。 <sub>`a_wire_on_terminal_one_stays_on_level_a_after_adding_a_level`</sub>
+- 消える段のピンに載っているのがネットラベルだけ (配線は1本も無い) のときも、ネットリストと同じ座標一致の規則で段を減らす操作は拒否される。 <sub>`decreasing_levels_is_refused_when_a_net_label_sits_on_a_vanishing_pin`</sub>
+- 3段から2段へ減らす操作は、段cの端子を指すジャンパが残っている間は拒否され、外せば通る (そのとき落ちるのは段cのラベルだけで、残ったジャンパはそのまま)。 <sub>`decreasing_three_levels_to_two_is_refused_only_while_level_c_is_referenced`</sub>
+- 段を増やすと、付属品指定の端子番号もジャンパと同じように書き換わる (端子1に付けた付属品は`1a`へ追従する)。種別と型番は1バイトも変わらない。 <sub>`increasing_levels_rewrites_accessory_terminal_labels`</sub>
+- `terminal_numbers`キーがあるのに値が無効 (個数がピン数と合わない) なとき、その値は段数変更でも書き換わらず、undoで1バイトも変わらず戻る (コマンドは自分で戻せないキーを消さない)。 <sub>`a_present_but_invalid_terminal_numbers_value_survives_a_level_change`</sub>
+- 段数変更のundoは、変更前のsymbol_idと配置座標を**1回のundoでそろって**戻すので、端子は元の座標へ帰る。 <sub>`undoing_a_level_change_restores_the_symbol_id_and_the_position_together`</sub>
 - 1〜3の範囲外の段数指定は、図面を変えずに拒否される。 <sub>`setting_levels_outside_one_to_three_is_refused`</sub>
 - 端子台以外のシンボルの段数変更は拒否される (RenumberTerminals/SetTerminalNumbersと同じ門)。 <sub>`setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
 - `_1l`という段数1の別名で綴ったsymbol_idは配置時に拒否される: 単段端子台のsymbol_idの綴りは1通りだけが有効。 <sub>`a_one_level_alias_symbol_id_is_refused_when_placed`</sub>
@@ -711,6 +716,7 @@
 - ジャンパバーは、ジャンパの掛け方や端子台の向き・反転にかかわらず、どの端子番号にも重ならない場所に描かれるので、番号はいつでも読める。 <sub>`a_jumper_bar_never_covers_a_terminal_number`</sub>
 - 隣り合う2端子間のジャンパは、図面上でその2つの印(丸)の隙間を埋める短い太いバー1本として描かれ、ほかの図形は足されない。 <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
 - 多段端子台で段記号付きに書かれたジャンパ ("1a-1b") は、その極の行の上、2つの段の列の印の隙間にバーとして描かれる。 <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
+- ジャンパバーは端子台シンボルの一部なので、シンボルと一緒に出たり隠れたりし、単独で消えることはない: 表示クラスの概念を持たない書き出しでは、端子台の向きにかかわらず常に描かれる。 <sub>`svg_export_always_draws_the_jumper_bar_with_its_symbol`</sub>
 - ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の間に横向きに描かれる。 <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
 - シンボルの中の文字 (モータの「M」など) はシンボル定義が決めた場所に描かれ、シンボルを回しても反転してもその場所から動かない (文字そのものは常に水平に書くため)。 <sub>`the_lettering_inside_a_symbol_stays_put_when_the_symbol_is_turned`</sub>
 - 採番後のジャンパバーは、単に幾何的に近いというだけでなく、実際に繋ぐ端子の印刷ラベルのテキストと紐付けて帰属確認する。最寄りマークのテストでは端子番号の入れ替わりを検出できなかったフェーズ6の積み残しを閉じる。 <sub>`a_jumper_bar_is_attributed_to_its_terminals_by_label_text_after_renumbering`</sub>
@@ -883,6 +889,7 @@
 - 段を増やすと、極ごとのプレーンなラベルが段数ぶんに展開される。極→段の順で段記号を付け足す ("11,12" → "11a,11b,12a,12b")。 <sub>`relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major`</sub>
 - 段を減らして単段へ戻すと、消える段のラベルは落ち、残る段記号は取り除かれる。 <sub>`relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level`</sub>
 - 2段から3段に増やすと、既存の段a・段bのラベルはそのまま残り、極ごとに新しい段cのラベルが増える。 <sub>`relabel_for_levels_adds_a_new_level_on_top_of_existing_ones`</sub>
+- 付属品指定の書き換えは各項の先頭の端子番号トークンだけに効き、種別・型番・末尾指定の`end`・知らない端子を指す項は1バイトも変わらない。 <sub>`rewrite_accessory_labels_only_replaces_the_terminal_number_token`</sub>
 - 既定値と同じラベルを明示的に書いたterminal_numbersも、キーがあり値が妥当なので上書きとして扱われる (展開結果が既定と同じかどうかだけでは判定しない)。 <sub>`terminal_numbers_override_reports_a_key_that_matches_the_default_value`</sub>
 - 個数が合わない無効なterminal_numbersは上書きとして扱わない (表示は既定へフォールバック済みで、復元できる妥当な値が無い)。 <sub>`terminal_numbers_override_is_none_for_an_invalid_value`</sub>
 - terminal_numbersキー自体が無ければ上書きは無い。 <sub>`terminal_numbers_override_is_none_when_the_key_is_absent`</sub>
@@ -2153,6 +2160,11 @@
 - 開始番号から刻み1でピン順に振る (単段) <sub>`terminalRenumberPlan`</sub>
 - 多段端子台は段記号を保ったまま極だけ採番するので、同じ極の全段が同じ番号を共有する <sub>`terminalRenumberPlan`</sub>
 - 増分と接頭辞はどちらも効く <sub>`terminalRenumberPlan`</sub>
+- 極数と段数は端子番号から数え、単段の端子台は段数1になる <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 段数を変えたsymbol_idは、段数1のとき`_1l`の別名ではなく単段のidへ正規化される <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 端子台以外のシンボルと範囲外の段数はnull (プレビューを出さない) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 段を増やすと極ごとのラベルに段記号が付き、減らすと残る段のラベルだけになる (段数1では段記号が落ちる) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 末尾が英字でない上書きラベル (接頭辞付きの`X11`) は段記号を外す対象にならず、そのまま土台になる <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - 増分2で採番したような表示ラベル(11,13,15,17)でも、隣接判定は生のピン配置で決まるので、物理的に隣り合う極どうしのジャンパは通る (Rust側 adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic とparity) <sub>`parseJumperSpec with an overridden display order`</sub>
 
 ### textStyle
@@ -2821,6 +2833,12 @@
 - 今と同じ段数を指定したら何もコマンドを送らない (無駄なundoの段を作らない) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 - 1〜TERMINAL_LEVEL_MAXの範囲外は、コマンドを送らずに断る (ステッパーの+/-ボタンが外へ出さないための門と同じ判定) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 - Rust側が段数変更を拒否したら (消える段に参照が残っている等)、その理由を`error`へ残す (図面は変えない) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- プレビューは適用と同じ純関数で symbol_id・端子番号・ジャンパの追従を見せる (デザイン「P 段数 (既定)」の3行) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 今と同じ段数のプレビューは出さない (何も変わらないので) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 段を減らせないときは、消える段の端子とその結線相手を理由付きで並べる (デザイン「P 段数 (解除不可)」の囲み) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 消える段を指すジャンパも、結線と同じように解除を止める理由として並ぶ <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 段を増やすときは消える段が無いので、理由の一覧は常に空 (適用ボタンは有効のまま) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 理由が1件でもある段数はコマンドを送らずに断る (ポップオーバーが適用ボタンを無効にしている門と同じ判定) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 
 ### ui
 

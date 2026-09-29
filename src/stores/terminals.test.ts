@@ -729,4 +729,93 @@ describe("multi-level stepper (Task 3: 多段端子の生成・解除)", () => {
     expect(await store.setLevels(2)).toBe(false);
     expect(store.error).toContain("段bに結線が残っています");
   });
+
+  /** 段数ポップオーバー用: symbol_id・attrs・チャート行・一覧の段数を差し替えたTB1を開く。 */
+  async function openedLevels(
+    symbolId: string,
+    attrs: Record<string, string>,
+    rows: TerminalRow[],
+    levels: number,
+  ) {
+    const p = project();
+    const tb = p.sheets[0].entities.tb1 as { symbol_id: string; attrs: Record<string, string> };
+    tb.symbol_id = symbolId;
+    tb.attrs = attrs;
+    useDocumentStore().project = p;
+    vi.spyOn(ipc, "listTerminalBlocks").mockResolvedValue([
+      { ...block, levels, terminal_count: rows.length, jumpers: attrs.jumpers ?? "" },
+    ]);
+    vi.spyOn(ipc, "getTerminalChart").mockResolvedValue(chart(rows));
+    vi.spyOn(ipc, "checkTerminalBlock").mockResolvedValue([]);
+    const store = useTerminalsStore();
+    await store.openFor("s1");
+    return store;
+  }
+
+  // ja: プレビューは適用と同じ純関数で symbol_id・端子番号・ジャンパの追従を見せる (デザイン「P 段数 (既定)」の3行)
+  it("previews the new symbol id, the new terminal numbers and the jumpers that follow", async () => {
+    const store = await openedLevels("terminal_block_4p", { jumpers: "1-2" }, [row("1"), row("2"), row("3"), row("4")], 1);
+    expect(store.levelsPreview(2)).toEqual({
+      symbolFrom: "terminal_block_4p",
+      symbolTo: "terminal_block_4p_2l",
+      numbersFrom: "1,2,…",
+      numbersTo: "1a,1b,2a,2b,…",
+      jumpers: { from: "1-2", to: "1a-2a" },
+    });
+  });
+
+  // ja: 今と同じ段数のプレビューは出さない (何も変わらないので)
+  it("shows no preview for the level count the block already has", async () => {
+    const store = await openedLevels("terminal_block_4p", {}, [row("1"), row("2"), row("3"), row("4")], 1);
+    expect(store.levelsPreview(1)).toBeNull();
+  });
+
+  // ja: 段を減らせないときは、消える段の端子とその結線相手を理由付きで並べる (デザイン「P 段数 (解除不可)」の囲み)
+  it("lists each vanishing terminal that still has a connection, with its target", async () => {
+    const store = await openedLevels(
+      "terminal_block_4p_2l",
+      {},
+      [
+        row("1a", { level: "a" }),
+        row("1b", { level: "b", internal: "K2:A2", spare: false }),
+        ...["2a", "2b", "3a", "3b", "4a", "4b"].map((t) => row(t, { level: t.slice(-1) })),
+      ],
+      2,
+    );
+    expect(store.levelsBlockers(1)).toEqual([
+      { terminal: "1b", connection: "K2:A2", reason: "wire" },
+    ]);
+  });
+
+  // ja: 消える段を指すジャンパも、結線と同じように解除を止める理由として並ぶ
+  it("lists a jumper that still names a vanishing level as a blocker", async () => {
+    const store = await openedLevels(
+      "terminal_block_4p_2l",
+      { jumpers: "1a-1b" },
+      ["1a", "1b", "2a", "2b", "3a", "3b", "4a", "4b"].map((t) => row(t, { level: t.slice(-1) })),
+      2,
+    );
+    expect(store.levelsBlockers(1)).toEqual([
+      { terminal: "1b", connection: "", reason: "jumper" },
+    ]);
+  });
+
+  // ja: 段を増やすときは消える段が無いので、理由の一覧は常に空 (適用ボタンは有効のまま)
+  it("never blocks an increase in the level count", async () => {
+    const store = await openedLevels("terminal_block_4p", { jumpers: "1-2" }, [row("1", { spare: false })], 1);
+    expect(store.levelsBlockers(2)).toEqual([]);
+  });
+
+  // ja: 理由が1件でもある段数はコマンドを送らずに断る (ポップオーバーが適用ボタンを無効にしている門と同じ判定)
+  it("refuses a level decrease that has a blocker without sending a command", async () => {
+    const store = await openedLevels(
+      "terminal_block_4p_2l",
+      { jumpers: "1a-1b" },
+      ["1a", "1b", "2a", "2b", "3a", "3b", "4a", "4b"].map((t) => row(t, { level: t.slice(-1) })),
+      2,
+    );
+    const sent = spyCommands();
+    expect(await store.setLevels(1)).toBe(false);
+    expect(sent).toEqual([]);
+  });
 });

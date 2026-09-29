@@ -806,7 +806,19 @@
     "levels": {
       "label": "Niveles",
       "description": "Cambia este bloque entre un nivel y varios niveles. La disposición de pines, la tabla y el diagrama de conexión se actualizan en consecuencia.",
-      "hint": "Reducir los niveles se rechaza si el cableado, los puentes o los grupos de pines siguen haciendo referencia al nivel que desaparecería. Niveles 1-{max}.",
+      "hint": "Reducir los niveles se rechaza si el cableado, los puentes, los grupos de pines o los accesorios siguen haciendo referencia al nivel que desaparecería. El nivel 1 vuelve al symbol_id de un solo nivel (nunca a un alias \"_1l\").",
+      "range": "Niveles 1-{max}; fuera de ese rango se rechaza.",
+      "preview": "Vista previa",
+      "previewNumbers": "Números de borne {from} → {to}",
+      "previewJumpers": "Puentes {from} → {to}",
+      "blockers": "Niveles que desaparecerían",
+      "issue": "No se puede quitar un nivel que todavía tiene conexiones. Libere primero el borne {terminal}.",
+      "blocker": {
+        "wire": "cableado",
+        "jumper": "puente",
+        "pinGroup": "grupo de pines",
+        "accessory": "accesorio"
+      },
       "cancel": "Cancelar",
       "apply": "Aplicar"
     },

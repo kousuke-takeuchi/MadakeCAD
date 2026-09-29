@@ -27,3 +27,11 @@ export function parseTerminalNo(no: string): [number, string | null] {
   if (m) return [Number(m[1]), m[2]];
   return [/^[0-9]+$/.test(no) ? Number(no) : Number.MAX_SAFE_INTEGER, null];
 }
+
+/** 多段端子台 (`terminal_block_{n}p_{levels}l`、G6) の最大段数(Rust側 TERMINAL_LEVEL_MAX と一致)。 */
+export const TERMINAL_LEVEL_MAX = 3;
+
+/** 段番号(0始まり)を段記号('a','b','c',…)にする(Rust側 level_letter と一致)。[`parseTerminalNo`]の逆。 */
+export function levelLetter(levelIndex: number): string {
+  return String.fromCharCode(97 + levelIndex);
+}

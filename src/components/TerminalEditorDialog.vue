@@ -144,16 +144,19 @@ async function applyRenumber() {
   );
 }
 
-// --- 多段ポップオーバー (Task 3。デザイン「多段」準拠、採番ポップオーバーと同じ開閉の型) ---
+// --- 多段ポップオーバー (Task 3。デザイン「P 段数 (既定)」/「P 段数 (解除不可)」準拠、
+// 採番ポップオーバーと同じ開閉の型) ---
 // 段数ステッパー (デザインシステムの共通ステッパー = SymbolPickerDialogの挿入ダイアログと
-// 同じマークアップ・CSS)。適用できない (段を減らす対象に結線・ジャンパ・ピングループ等の
-// 参照が残っている) 場合はRust側が拒否するので、その理由をポップオーバーの中に出す
-// (採番ポップオーバーがプレビューで事前に断るのに対し、こちらは適用してから理由を見せる:
-// 判定が結線・ジャンパ・ピングループを跨ぐため、双子をもう1つ持たずRust側に任せる)。
+// 同じマークアップ・CSS) + プレビュー囲み (`symbol_id`・端子番号・ジャンパの追従)。
+// 段を減らす対象に参照が残っていれば「解除で消える段」を並べて**適用ボタンを先に無効化**する
+// (採番ポップオーバーと同じ、押す前に分かる形)。先読みで拾えない結線 (配線を伴わない
+// ネットラベル・ジャンクション) はRust側が拒否するので、その理由も同じ指摘行に出す。
 const showLevels = ref(false);
 const levelsInput = ref(1);
 const levelsError = ref("");
 const levelsPopover = ref<HTMLElement | null>(null);
+const levelsPreview = computed(() => terminals.levelsPreview(levelsInput.value));
+const levelsBlockers = computed(() => terminals.levelsBlockers(levelsInput.value));
 
 function toggleLevels() {
   if (showLevels.value) {
@@ -169,8 +172,20 @@ function cancelLevels() {
   showLevels.value = false;
 }
 
+// `v-model`で書き戻される生の入力を、変更確定 (change) の時点で1〜上限へ丸める。
+// `:value`束縛だと丸めた結果が現在値と同じ (例 "abc" → NaN → 1 のまま1) のときVueに変化が
+// 見えず、DOMに打った文字が残ってしまうため、モデル側を直に書き換える形にする。
 function stepLevels(n: number) {
   levelsInput.value = clampLevels(n);
+}
+
+function clampLevelsInput(e: Event) {
+  const el = e.target as HTMLInputElement;
+  const next = clampLevels(Number(el.value));
+  levelsInput.value = next;
+  // 丸めた結果が現在値と同じ (例 "abc" → 1 で、すでに1だった) ときはVueに変化が見えないので、
+  // 打った文字がDOMに残らないようここで書き戻す
+  el.value = String(next);
 }
 
 function onLevelsKeydown(e: KeyboardEvent) {
@@ -448,11 +463,7 @@ async function generateDiagram() {
                 <button class="step" :disabled="levelsInput <= 1" @click="stepLevels(levelsInput - 1)">
                   <Minus :size="12" />
                 </button>
-                <input
-                  class="step-value"
-                  :value="levelsInput"
-                  @change="stepLevels(Number(($event.target as HTMLInputElement).value))"
-                />
+                <input v-model.number="levelsInput" class="step-value" @change="clampLevelsInput" />
                 <button
                   class="step"
                   :disabled="levelsInput >= TERMINAL_LEVEL_MAX"
@@ -462,16 +473,56 @@ async function generateDiagram() {
                 </button>
               </div>
             </label>
-            <div class="popover-note">{{ t("terminals.levels.hint", { max: TERMINAL_LEVEL_MAX }) }}</div>
+            <div class="popover-note">{{ t("terminals.levels.range", { max: TERMINAL_LEVEL_MAX }) }}</div>
+            <div v-if="levelsPreview" class="popover-preview">
+              <span>{{ t("terminals.levels.preview") }}</span>
+              <div class="popover-box" :class="{ invalid: levelsBlockers.length > 0 }">
+                <span class="mono map">{{ levelsPreview.symbolFrom }} → {{ levelsPreview.symbolTo }}</span>
+                <span class="mono map">
+                  {{
+                    t("terminals.levels.previewNumbers", {
+                      from: levelsPreview.numbersFrom,
+                      to: levelsPreview.numbersTo,
+                    })
+                  }}
+                </span>
+                <span v-if="levelsPreview.jumpers" class="mono map">
+                  {{
+                    t("terminals.levels.previewJumpers", {
+                      from: levelsPreview.jumpers.from,
+                      to: levelsPreview.jumpers.to,
+                    })
+                  }}
+                </span>
+              </div>
+            </div>
+            <div v-if="levelsBlockers.length > 0" class="popover-issue">
+              <TriangleAlert :size="12" class="issue-icon" />
+              <span>{{ t("terminals.levels.issue", { terminal: levelsBlockers[0].terminal }) }}</span>
+            </div>
+            <div v-if="levelsBlockers.length > 0" class="popover-preview">
+              <span>{{ t("terminals.levels.blockers") }}</span>
+              <div class="popover-box invalid">
+                <span v-for="b in levelsBlockers" :key="b.terminal" class="mono map">
+                  {{ b.terminal }}<template v-if="b.connection"> — {{ b.connection }}</template>
+                  ({{ t(`terminals.levels.blocker.${b.reason}`) }})
+                </span>
+              </div>
+            </div>
             <div v-if="levelsError" class="popover-issue">
               <TriangleAlert :size="12" class="issue-icon" />
               <span>{{ levelsError }}</span>
             </div>
+            <div class="popover-note">{{ t("terminals.levels.hint") }}</div>
             <div class="popover-actions">
               <button class="btn secondary" @click="cancelLevels">
                 {{ t("terminals.levels.cancel") }}
               </button>
-              <button class="btn primary" :disabled="terminals.busy" @click="applyLevels">
+              <button
+                class="btn primary"
+                :disabled="terminals.busy || levelsBlockers.length > 0"
+                @click="applyLevels"
+              >
                 {{ t("terminals.levels.apply") }}
               </button>
             </div>

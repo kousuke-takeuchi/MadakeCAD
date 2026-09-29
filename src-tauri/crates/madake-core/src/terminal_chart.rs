@@ -465,6 +465,33 @@ pub fn rewrite_jumper_labels(spec: &str, rename: &BTreeMap<String, String>) -> S
         .join(",")
 }
 
+/// `attrs["accessories"]` (`"端子番号:種別:型番,…"`、spec §1.1) の**先頭トークン=端子番号**
+/// だけを `rename` (旧表示ラベル→新表示ラベル) で書き換える。
+///
+/// ジャンパ・ピングループと同じ流儀で、**認識できた端子番号のトークンだけ**を差し替え、
+/// 種別・型番・区切り記号・空白は1文字も変えない。`rename`に無いラベルを指す項・末尾指定の
+/// `end`・`:`が無い読めない項は**丸ごとそのまま残す** (専用のパーサはTask 5が入れる。それまでの
+/// 段数変更で付属品の端子指定が迷子にならないようにするための最小の追従)。
+pub fn rewrite_accessory_labels(spec: &str, rename: &BTreeMap<String, String>) -> String {
+    spec.split(',')
+        .map(|item| {
+            let Some((label, rest)) = item.split_once(':') else {
+                return item.to_string();
+            };
+            let trimmed = label.trim();
+            let Some(new) = rename.get(trimmed) else {
+                return item.to_string();
+            };
+            format!(
+                "{}{new}{}:{rest}",
+                &label[..label.len() - label.trim_start().len()],
+                &label[label.trim_end().len()..]
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 /// 端子台シンボルの端子数 (ピン番号の種類数)。端子台以外・未知のシンボルは0。
 /// 多段端子台 (G6) では極数×段数になる。**極数が欲しいときは
 /// [`poles_and_levels_of`] を使うこと** (多段端子台では両者が食い違う)。
@@ -1887,6 +1914,18 @@ mod tests {
         let old = vec!["11a".to_string(), "11b".to_string(), "12a".to_string(), "12b".to_string()];
         let out = relabel_for_levels(&old, 2, 2, 3);
         assert_eq!(out, vec!["11a", "11b", "11c", "12a", "12b", "12c"]);
+    }
+
+    /// Rewriting an accessory spec touches only the leading terminal-number token of each item; the kind, the part number, the "end" sentinel and any item naming an unknown terminal stay byte for byte.
+    /// 付属品指定の書き換えは各項の先頭の端子番号トークンだけに効き、種別・型番・末尾指定の`end`・知らない端子を指す項は1バイトも変わらない。
+    #[test]
+    fn rewrite_accessory_labels_only_replaces_the_terminal_number_token() {
+        let mut rename = BTreeMap::new();
+        rename.insert("1".to_string(), "1a".to_string());
+        assert_eq!(
+            rewrite_accessory_labels("1:end_bracket:TB-EB,end:partition:TB-PT,9:end_plate:TB-EP,壊れた項", &rename),
+            "1a:end_bracket:TB-EB,end:partition:TB-PT,9:end_plate:TB-EP,壊れた項"
+        );
     }
 
     // --- terminal_numbers_override (Task 3 ルーリング3a: had_overrideの正しい判定) ---
