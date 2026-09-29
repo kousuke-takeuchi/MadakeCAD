@@ -819,3 +819,124 @@ describe("multi-level stepper (Task 3: 多段端子の生成・解除)", () => {
     expect(sent).toEqual([]);
   });
 });
+
+describe("spare insertion popover (Task 4: 予備端子の挿入)", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.restoreAllMocks();
+  });
+
+  /** 予備挿入ポップオーバー用: symbol_id・attrs・チャート行・一覧の極数を差し替えたTB1を開く。 */
+  async function openedSpare(
+    symbolId: string,
+    attrs: Record<string, string>,
+    rows: TerminalRow[],
+    poles: number,
+  ) {
+    const p = project();
+    const tb = p.sheets[0].entities.tb1 as { symbol_id: string; attrs: Record<string, string> };
+    tb.symbol_id = symbolId;
+    tb.attrs = attrs;
+    useDocumentStore().project = p;
+    vi.spyOn(ipc, "listTerminalBlocks").mockResolvedValue([
+      { ...block, poles, terminal_count: rows.length, jumpers: attrs.jumpers ?? "" },
+    ]);
+    vi.spyOn(ipc, "getTerminalChart").mockResolvedValue(chart(rows));
+    vi.spyOn(ipc, "checkTerminalBlock").mockResolvedValue([]);
+    const store = useTerminalsStore();
+    await store.openFor("s1");
+    return store;
+  }
+
+  // ja: 予備を挿入すると、insert_spare_terminalsコマンド1回だけが送られる
+  it("sends one insert_spare_terminals command with the requested position and count", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    expect(await store.insertSpareTerminals("3", 1)).toBe(true);
+    expect(sent).toEqual([
+      { type: "insert_spare_terminals", sheet_id: "s1", entity_id: "tb1", after: "3", count: 1 },
+    ]);
+  });
+
+  // ja: 末尾挿入は`after`がnullのコマンドになる
+  it("sends null for after when inserting at the end", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    expect(await store.insertSpareTerminals(null, 1)).toBe(true);
+    expect(sent).toEqual([
+      { type: "insert_spare_terminals", sheet_id: "s1", entity_id: "tb1", after: null, count: 1 },
+    ]);
+  });
+
+  // ja: 0個以下の指定は、コマンドを送らずに断る
+  it("refuses a non-positive count without sending a command", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    expect(await store.insertSpareTerminals(null, 0)).toBe(false);
+    expect(sent).toEqual([]);
+  });
+
+  // ja: フロントの検証を通っても、Rust側が挿入を拒否したら (エンティティが図面から消えていた等) その理由をerrorへ残す (図面は変えない)
+  it("keeps the backend's refusal reason in error and leaves the drawing untouched", async () => {
+    mockBackend();
+    const store = await opened();
+    vi.spyOn(ipc, "executeCommand").mockRejectedValue(new Error("端子台が見つかりません"));
+    expect(await store.insertSpareTerminals(null, 1)).toBe(false);
+    expect(store.error).toContain("端子台が見つかりません");
+  });
+
+  // ja: プレビューは適用と同じ純関数で symbol_id と新しく増える予備のラベルを見せる (デザイン「P 予備端子の挿入 (既定)」の2行)
+  it("previews the new symbol id and the new spare's labels", async () => {
+    const store = await openedSpare("terminal_block_8p", {}, [1, 2, 3, 4, 5, 6, 7, 8].map((n) => row(String(n))), 8);
+    expect(store.sparePreview(null, 1)).toEqual({
+      symbolFrom: "terminal_block_8p",
+      symbolTo: "terminal_block_9p",
+      spareLabels: ["9"],
+    });
+    expect(store.sparePreview("3", 1)).toEqual({
+      symbolFrom: "terminal_block_8p",
+      symbolTo: "terminal_block_9p",
+      spareLabels: ["4"],
+    });
+  });
+
+  // ja: 0個以下の指定は指摘 (適用ボタンを無効にする)
+  it("flags a non-positive count as an issue", async () => {
+    const store = await openedSpare("terminal_block_8p", {}, [row("1")], 8);
+    expect(store.spareIssue(null, 0)).toEqual({ code: "count" });
+  });
+
+  // ja: 極数の上限を超える指定も指摘になる
+  it("flags a count that would exceed the pole cap", async () => {
+    const store = await openedSpare(
+      `terminal_block_${50}p`,
+      {},
+      Array.from({ length: 50 }, (_, i) => row(String(i + 1))),
+      50,
+    );
+    expect(store.spareIssue(null, 1)).toEqual({ code: "poleCap", max: 50 });
+  });
+
+  // ja: 挿入位置の選択肢は極ごとに1つ、多段端子台では段aのラベルを代表にする
+  it("lists one insertion-point option per pole, using level a's label on a multi-level block", async () => {
+    const store = await openedSpare(
+      "terminal_block_2p_2l",
+      {},
+      ["1a", "1b", "2a", "2b"].map((t) => row(t, { level: t.slice(-1) })),
+      2,
+    );
+    expect(store.spareAfterOptions).toEqual(["1a", "2a"]);
+  });
+
+  // ja: 個数ステッパーの入力は1以上の整数へ丸める
+  it("clamps the count stepper's input to a positive integer", async () => {
+    const store = await opened();
+    expect(store.clampSpareCount(0)).toBe(1);
+    expect(store.clampSpareCount(-3)).toBe(1);
+    expect(store.clampSpareCount(2.7)).toBe(2);
+    expect(store.clampSpareCount(NaN)).toBe(1);
+  });
+});

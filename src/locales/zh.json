@@ -798,9 +798,29 @@
     "generateChart": "生成端子排表",
     "phase2Hint": "计划在第 2 阶段实现",
     "phase2": {
-      "spareTerminal": "插入备用端子",
       "accessory": "附件",
       "swap": "内外互换"
+    },
+    "insertSpare": "Insert spare",
+    "spareInsert": {
+      "title": "Insert spare terminal",
+      "description": "One update_entity (symbol_id + terminal_numbers)",
+      "positionLabel": "Insert position:",
+      "positionEnd": "At the end",
+      "positionAfter": "After {after}",
+      "countLabel": "Count:",
+      "numberMode": "Numbering",
+      "modeShift": "Add a pole at the end and shift the numbers down",
+      "modeKeep": "Leave the spare with a vacant number",
+      "modeKeepHint": "This option is planned for a later phase",
+      "previewLabel": "Preview",
+      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) \u00b7 both sides unconnected",
+      "note": "Shifting the numbers never moves a pin's coordinates, so existing wiring stays connected",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "issueCount": "Enter a count of 1 or more",
+      "issuePoleCap": "Exceeds the maximum pole count (limit {max})",
+      "issueInvalid": "This cannot be applied"
     },
     "multiLevel": "多层端子",
     "levels": {
@@ -865,7 +885,8 @@
       "issueNoBlock": "没有可重新编号的端子台"
     },
     "renumberedLog": "端子排编辑器: 已将 {reference} 的端子编号从 {from} 改为 {to}(Cmd+Z 可撤销)",
-    "levelsChangedLog": "端子排编辑器: {reference} 的层数已从 {from} 改为 {to}(Cmd+Z 可撤销)"
+    "levelsChangedLog": "端子排编辑器: {reference} 的层数已从 {from} 改为 {to}(Cmd+Z 可撤销)",
+    "spareInsertedLog": "Terminal editor: inserted {count} spare terminal(s) ({labels}) into {reference} (undo with Cmd+Z)"
   },
   "plcIo": {
     "ribbonButton": "PLC I/O 表",

@@ -798,9 +798,29 @@
     "generateChart": "チャートを生成",
     "phase2Hint": "フェーズ2で対応予定",
     "phase2": {
-      "spareTerminal": "予備端子",
       "accessory": "アクセサリ",
       "swap": "内外スワップ"
+    },
+    "insertSpare": "予備挿入",
+    "spareInsert": {
+      "title": "予備端子の挿入",
+      "description": "update_entity 1回 (symbol_id + terminal_numbers)",
+      "positionLabel": "挿入位置:",
+      "positionEnd": "末尾",
+      "positionAfter": "{after}の後ろ",
+      "countLabel": "個数:",
+      "numberMode": "番号の扱い",
+      "modeShift": "末尾に極を足して番号を繰り下げる",
+      "modeKeep": "予備を空き番号のまま残す",
+      "modeKeepHint": "この扱いは後のフェーズで対応予定です",
+      "previewLabel": "プレビュー",
+      "previewLine": "{position}に予備{count} (端子 {labels}) · 両側未結線",
+      "note": "繰り下げはピン座標を動かさないので既存結線は外れない",
+      "cancel": "キャンセル",
+      "apply": "適用",
+      "issueCount": "個数は1以上を指定してください",
+      "issuePoleCap": "極数の上限を超えます (上限{max}極)",
+      "issueInvalid": "この指定では追加できません"
     },
     "multiLevel": "多段生成",
     "levels": {
@@ -865,7 +885,8 @@
       "issueNoBlock": "採番する端子台がありません"
     },
     "renumberedLog": "端子台: {reference} の端子番号を {from} から {to} へ採番しました (Cmd+Zで元に戻せます)",
-    "levelsChangedLog": "端子台: {reference} の段数を {from} から {to} へ変更しました (Cmd+Zで元に戻せます)"
+    "levelsChangedLog": "端子台: {reference} の段数を {from} から {to} へ変更しました (Cmd+Zで元に戻せます)",
+    "spareInsertedLog": "端子台: {reference} に予備端子{count}個 ({labels}) を挿入しました (Cmd+Zで元に戻せます)"
   },
   "plcIo": {
     "ribbonButton": "PLC I/O割付表",

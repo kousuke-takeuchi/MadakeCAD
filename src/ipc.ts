@@ -417,6 +417,20 @@ export type Command =
       levels: number;
     }
   /**
+   * 端子台1台に予備端子を挿入する (spec §1.1「予備端子の挿入」)。物理的にはシンボルの
+   * 末尾に`count`極を足す (多段なら1極につき段数ぶんの端子)。番号だけが`after`
+   * (表示ラベル。省略/nullなら末尾) の直後に挿入されたように繰り下がる。既存の極は
+   * 座標を保つので結線は外れない。`count`が0以下、極数の上限を超える、`entity_id`が
+   * 端子台でない、または`after`が今の端子番号のどれとも一致しなければエラーになる。
+   */
+  | {
+      type: "insert_spare_terminals";
+      sheet_id: string;
+      entity_id: string;
+      after?: string | null;
+      count: number;
+    }
+  /**
    * プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
    * 各欄は省略(undefined)すれば変更しない。`name`/`no`はプロジェクト単位、
    * `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く(undo一発)。

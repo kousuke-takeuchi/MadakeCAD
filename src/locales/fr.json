@@ -798,9 +798,29 @@
     "generateChart": "Générer le tableau",
     "phase2Hint": "prévu pour la phase 2",
     "phase2": {
-      "spareTerminal": "Insérer une réserve",
       "accessory": "Accessoires",
       "swap": "Permuter int./ext."
+    },
+    "insertSpare": "Insert spare",
+    "spareInsert": {
+      "title": "Insert spare terminal",
+      "description": "One update_entity (symbol_id + terminal_numbers)",
+      "positionLabel": "Insert position:",
+      "positionEnd": "At the end",
+      "positionAfter": "After {after}",
+      "countLabel": "Count:",
+      "numberMode": "Numbering",
+      "modeShift": "Add a pole at the end and shift the numbers down",
+      "modeKeep": "Leave the spare with a vacant number",
+      "modeKeepHint": "This option is planned for a later phase",
+      "previewLabel": "Preview",
+      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) \u00b7 both sides unconnected",
+      "note": "Shifting the numbers never moves a pin's coordinates, so existing wiring stays connected",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "issueCount": "Enter a count of 1 or more",
+      "issuePoleCap": "Exceeds the maximum pole count (limit {max})",
+      "issueInvalid": "This cannot be applied"
     },
     "multiLevel": "Multi-étage",
     "levels": {
@@ -865,7 +885,8 @@
       "issueNoBlock": "Aucun bornier à renuméroter."
     },
     "renumberedLog": "Éditeur de bornier : {reference} renuméroté de {from} à {to} (annuler avec Cmd+Z)",
-    "levelsChangedLog": "Éditeur de bornier : {reference} passé de {from} à {to} étage(s) (annuler avec Cmd+Z)"
+    "levelsChangedLog": "Éditeur de bornier : {reference} passé de {from} à {to} étage(s) (annuler avec Cmd+Z)",
+    "spareInsertedLog": "Terminal editor: inserted {count} spare terminal(s) ({labels}) into {reference} (undo with Cmd+Z)"
   },
   "plcIo": {
     "ribbonButton": "Table E/S automate",

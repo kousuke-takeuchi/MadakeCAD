@@ -280,6 +280,57 @@ export function terminalRenumberPlan(
 }
 
 /**
+ * 予備端子を`count`個挿入したときの新しい`symbol_id`と表示ラベル一覧
+ * (Rust側 insert_spare_terminals と同一。Task 4「予備端子の挿入」)。
+ *
+ * 物理的には必ずシンボルの**末尾**に極を足す (呼び出し側が既存極の座標を保つため
+ * インスタンスの`at`を平行移動する。ここではラベルの計算だけ)。**番号だけ**が`after`
+ * (表示ラベル。`null`なら末尾) の直後に挿入されたように繰り下がる: `after`より後ろの極は
+ * 表示番号が`count`だけ増え、空いた番号を新しい予備極が引き継ぐ。多段端子台は1極につき
+ * 段数ぶんの予備端子が増える (`9a`,`9b`,…)。
+ *
+ * `count`が0以下、`oldDisplay`の中に`after`が見つからない、または極数が読めない (`poles`が0)
+ * ときは`null` (呼び出し側はプレビューを出さない。極数上限の確認はRust側と同じ定数を
+ * 参照できる呼び出し側 (`stores/terminals.ts`) が別に行う — 循環importを避けるため)。
+ */
+export function insertSpareTerminals(
+  symbolId: string,
+  oldDisplay: readonly string[],
+  poles: number,
+  levels: number,
+  after: string | null,
+  count: number,
+): { symbolId: string; numbers: string[] } | null {
+  if (!Number.isInteger(count) || count <= 0) return null;
+  if (!symbolId.startsWith("terminal_block_") || poles === 0 || levels === 0) return null;
+  let afterPoleIdx: number;
+  if (after === null) {
+    afterPoleIdx = poles - 1;
+  } else {
+    const pos = oldDisplay.indexOf(after);
+    if (pos < 0) return null;
+    afterPoleIdx = Math.floor(pos / levels);
+  }
+  const baseNumber = (poleIdx: number) => parseTerminalNo(oldDisplay[poleIdx * levels] ?? "")[0];
+  const refNumber = baseNumber(afterPoleIdx);
+  const labelOf = (n: number, l: number) => (levels === 1 ? `${n}` : `${n}${levelLetter(l)}`);
+  const newPoles = poles + count;
+  const numbers: string[] = [];
+  for (let p = 0; p < poles; p++) {
+    const n = baseNumber(p) + (p > afterPoleIdx ? count : 0);
+    for (let l = 0; l < levels; l++) numbers.push(labelOf(n, l));
+  }
+  for (let k = 0; k < count; k++) {
+    const n = refNumber + 1 + k;
+    for (let l = 0; l < levels; l++) numbers.push(labelOf(n, l));
+  }
+  if (!validTerminalNumbers(numbers, newPoles * levels)) return null;
+  const newSymbolId =
+    levels === 1 ? `terminal_block_${newPoles}p` : `terminal_block_${newPoles}p_${levels}l`;
+  return { symbolId: newSymbolId, numbers };
+}
+
+/**
  * ジャンパ指定 (`"1-2,3-4"`、多段端子台なら `"1a-1b"`) を解析して正規化する。
  *
  * `terminals`はその端子台の**表示ラベル**(端子番号の上書きがあればそれ、無ければ生の番号と

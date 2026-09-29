@@ -1184,6 +1184,23 @@ pub fn level_origin_shift(old_levels: usize, new_levels: usize) -> f64 {
     (new_levels as f64 - old_levels as f64) / 2.0 * TERMINAL_LEVEL_PITCH
 }
 
+/// 端子台の極 (行) の縦ピッチ (mm)。[`terminal_block_symbol`]の`offset`が使う。
+pub const TERMINAL_POLE_PITCH: f64 = 5.0;
+
+/// 極数を`old_poles`から`new_poles`へ変えたとき、既存の極 (1..old_poles) を用紙上の同じ
+/// 座標に留めるためにインスタンスの`at`をずらすべき量 (シンボルのローカルY方向, mm)。
+///
+/// [`terminal_block_symbol`]の行 (`offset`) は原点を中心に上下対称に並ぶので、極数が
+/// 変わると**全ての行が一律に** `(new_poles - old_poles) / 2 * ピッチ` だけ動く
+/// ([`level_origin_shift`]と同じ理屈で、対称配置ゆえに全インデックスへの補正量が
+/// 一定になる)。予備端子挿入コマンド (`Command::InsertSpareTerminals`, Task 4) は
+/// この符号を反転した量だけインスタンスを平行移動して、既存の極の結線が外れない
+/// ようにする (新しく増える極は常に**末尾**に置かれる。呼び出し側は
+/// [`crate::netlist::rotate_local`]に通してから`at`へ足すこと)。
+pub fn pole_origin_shift(old_poles: usize, new_poles: usize) -> f64 {
+    (new_poles as f64 - old_poles as f64) / 2.0 * TERMINAL_POLE_PITCH
+}
+
 /// PLCモジュール(`plc_di_{n}p` / `plc_do_{n}p`)の最大点数。
 pub const PLC_POINT_MAX: usize = 64;
 
@@ -1311,7 +1328,7 @@ fn parse_multilevel_terminal_block(rest: &str) -> Option<(usize, usize)> {
 ///
 /// `levels == 1` では列が1本・ピン番号は数字だけになり、従来の単段端子台と同一の図形になる。
 fn terminal_block_symbol(id: &str, n: usize, levels: usize) -> SymbolDef {
-    let offset = |i: usize| (i as f64 - (n - 1) as f64 / 2.0) * 5.0;
+    let offset = |i: usize| (i as f64 - (n - 1) as f64 / 2.0) * TERMINAL_POLE_PITCH;
     let column_x = |j: usize| (j as f64 - (levels - 1) as f64 / 2.0) * TERMINAL_LEVEL_PITCH;
     let mut primitives: Vec<Primitive> = Vec::new();
     let mut pins = Vec::with_capacity(n * levels * 2);

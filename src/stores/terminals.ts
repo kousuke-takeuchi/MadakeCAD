@@ -9,12 +9,13 @@
 // アクセサリ・部品割当・内外スワップ・予備端子の挿入はM4の以降のフェーズ。
 
 import { defineStore } from "pinia";
-import { dynamicSymbol, parseTerminalNo, TERMINAL_LEVEL_MAX } from "../canvas/dynamicSymbol";
+import { DYNAMIC_PIN_MAX, dynamicSymbol, parseTerminalNo, TERMINAL_LEVEL_MAX } from "../canvas/dynamicSymbol";
 import { chartOrderPinNumbers, parsePinGroups, PIN_GROUPS_ATTR } from "../canvas/pinGroups";
 // ジャンパ指定の正規化・並べ替え順の解釈はキャンバス描画と共通の純関数を使う
 // (Pinia非依存モジュールが正。Rust側 madake-core/src/terminal_chart.rs の双子)
 import {
   formatJumperSpec,
+  insertSpareTerminals as insertSpareTerminalsPlan,
   multilevelSymbolId,
   parseJumperSpec,
   polesAndLevelsOf,
@@ -92,6 +93,28 @@ export interface LevelsBlocker {
   connection: string;
   reason: "wire" | "jumper" | "pinGroup" | "accessory";
 }
+
+/**
+ * 予備挿入ポップオーバーの「プレビュー」囲み (デザイン`eTFE5`の2行)。
+ * `sparePreview`が**適用と同じ純関数** ([`insertSpareTerminalsPlan`] = Rust側
+ * `insert_spare_terminals`の双子) で計算するので、プレビューと結果は必ず一致する。
+ */
+export interface SparePreview {
+  /** `terminal_block_8p` → `terminal_block_9p`。 */
+  symbolFrom: string;
+  symbolTo: string;
+  /** 新しく増える予備端子のラベル (多段なら1極につき段数ぶん、例 `["9a","9b"]`)。 */
+  spareLabels: string[];
+}
+
+/**
+ * 予備挿入案が適用できない理由 (デザイン「予備端子の挿入 (エラー)」の指摘行)。
+ * `code`はi18nキーの末尾 (`terminals.spare.issue<Code>`)。
+ */
+export type SpareIssue =
+  | { code: "count" }
+  | { code: "poleCap"; max: number }
+  | { code: "invalid" };
 
 /** グリッドの1行 (デザイン「端子台エディタ」の列順)。 */
 export interface TerminalEditorRow {
@@ -292,6 +315,18 @@ export const useTerminalsStore = defineStore("terminals", {
       const inst = this.blockInstance;
       const def = this.blockDef;
       return def && inst ? terminalNumbersOfInstance(def, inst.attrs) : [];
+    },
+    /**
+     * 「予備挿入」ポップオーバーの挿入位置ドロップダウンの選択肢 (極ごとに1つ。多段端子台では
+     * 段aのラベルを代表にする — 挿入は極単位で、段は自動で付いてくるため)。
+     */
+    spareAfterOptions(): string[] {
+      const [, levels] = polesAndLevelsOf(this.blockDef);
+      const step = Math.max(levels, 1);
+      const display = this.displayTerminalNumbers;
+      const out: string[] = [];
+      for (let i = 0; i < display.length; i += step) out.push(display[i]);
+      return out;
     },
     /** 選択中の端子にジャンパを掛けられるか (隣り合う2端子以上)。 */
     canAddJumper(): boolean {
@@ -669,6 +704,83 @@ export const useTerminalsStore = defineStore("terminals", {
           entity_id: block.entity_id,
           levels,
         });
+        this.selected = [];
+        await this.reloadBlocks();
+        return true;
+      } catch (e) {
+        this.error = String(e);
+        return false;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    /**
+     * 予備挿入ポップオーバーの数値入力を、コマンドが受け取れる形 (1以上の整数) に丸める。
+     */
+    clampSpareCount(count: number): number {
+      return Number.isFinite(count) ? Math.max(1, Math.trunc(count)) : 1;
+    },
+
+    /**
+     * 予備挿入ポップオーバーの「プレビュー」(デザイン`eTFE5`の2行)。`after`(表示ラベル。
+     * `null`なら末尾)の直後に`count`個の予備を挿入したときの`symbol_id`と新しく増える
+     * 予備端子のラベルを、**適用と同じ純関数**([`insertSpareTerminalsPlan`])で計算する
+     * (図面はまだ変えない)。適用できない案 ([`spareIssue`]) はnull (プレビューを出さない —
+     * デザイン「予備端子の挿入 (エラー)」がプレビュー枠自体を出さないのと同じ形)。
+     */
+    sparePreview(after: string | null, count: number): SparePreview | null {
+      const inst = this.blockInstance;
+      const def = this.blockDef;
+      if (!inst || !def) return null;
+      const [poles, levels] = polesAndLevelsOf(def);
+      const plan = insertSpareTerminalsPlan(inst.symbol_id, this.displayTerminalNumbers, poles, levels, after, count);
+      if (!plan) return null;
+      return {
+        symbolFrom: inst.symbol_id,
+        symbolTo: plan.symbolId,
+        spareLabels: plan.numbers.slice(poles * Math.max(levels, 1)),
+      };
+    },
+
+    /**
+     * 予備挿入案が適用できない理由 (適用できるならnull)。デザイン「予備端子の挿入 (エラー)」の
+     * 指摘行が出す。極数の上限は[`insertSpareTerminalsPlan`]自身は見ない (循環importを避けて
+     * Rust側と同じ定数[`DYNAMIC_PIN_MAX`]をここで直接確認する)ので、その門は先に通す。
+     */
+    spareIssue(after: string | null, count: number): SpareIssue | null {
+      if (!Number.isInteger(count) || count < 1) return { code: "count" };
+      const [poles] = polesAndLevelsOf(this.blockDef);
+      if (poles > 0 && poles + count > DYNAMIC_PIN_MAX) return { code: "poleCap", max: DYNAMIC_PIN_MAX };
+      return this.sparePreview(after, count) === null ? { code: "invalid" } : null;
+    },
+
+    /** 予備挿入 (InsertSpareTerminals) コマンド。端子台が見つからなければnull。 */
+    spareCommand(after: string | null, count: number): Command | null {
+      const block = this.block;
+      if (!block) return null;
+      return {
+        type: "insert_spare_terminals",
+        sheet_id: block.sheet_id,
+        entity_id: block.entity_id,
+        after,
+        count,
+      };
+    },
+
+    /**
+     * 予備を挿入する (Command 1回。Cmd+Zでsymbol_id・terminal_numbers・位置がまとめて戻る)。
+     * 適用できない案 ([`spareIssue`]) は**コマンドを送らずに**断る (ポップオーバーが指摘行を
+     * 出したまま適用ボタンを無効にしているので、ここは念のための門。採番・段数と同じ形)。
+     */
+    async insertSpareTerminals(after: string | null, count: number): Promise<boolean> {
+      if (this.spareIssue(after, count) !== null) return false;
+      const command = this.spareCommand(after, count);
+      if (!command || this.busy) return false;
+      this.busy = true;
+      this.error = null;
+      try {
+        await useDocumentStore().execute(command);
         this.selected = [];
         await this.reloadBlocks();
         return true;

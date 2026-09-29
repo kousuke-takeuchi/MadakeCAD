@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2503 specification clauses** across 6 areas.
+**2539 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -131,6 +131,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Asking for a level count outside 1-3 is refused without touching the drawing. <sub>`setting_levels_outside_one_to_three_is_refused`</sub>
 - Changing the level count of a symbol that is not a terminal block is refused, the same gate RenumberTerminals/SetTerminalNumbers already use. <sub>`setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
 - A symbol_id spelled with the "_1l" one-level alias is refused when placed on the drawing: a single-level terminal block has exactly one valid spelling of its symbol_id. <sub>`a_one_level_alias_symbol_id_is_refused_when_placed`</sub>
+- Growing a terminal block's pole count (as inserting a spare does) never moves an existing pin's sheet coordinates — the instance is shifted the opposite way to compensate — so no wire that was attached to it comes loose. <sub>`inserting_a_spare_terminal_keeps_every_existing_pins_coordinates`</sub>
+- Inserting a spare after a chosen terminal writes the renumbered label sequence and rewrites the jumper spec that used the labels which moved, so the jumper still names the same physical pair of terminals. <sub>`inserting_a_spare_after_a_terminal_renumbers_labels_and_follows_the_jumper`</sub>
+- A count of zero is refused without touching the drawing. <sub>`inserting_zero_spares_is_refused_without_touching_the_drawing`</sub>
+- Naming a terminal the block does not have as the insertion point is refused. <sub>`inserting_after_an_unknown_terminal_is_refused`</sub>
+- Inserting past the dynamic symbol family's pole cap is refused. <sub>`inserting_past_the_pole_cap_is_refused`</sub>
+- Inserting a spare into a symbol that is not a terminal block is refused, the same gate the other terminal commands already use. <sub>`inserting_a_spare_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- Undoing an inserted spare restores the symbol_id, the terminal numbers and the position together in one step. <sub>`undoing_an_inserted_spare_restores_symbol_id_numbers_and_position_together`</sub>
+- A multi-level block's inserted spare pole adds one terminal per level ("9a","9b" for a 2-level block). <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- The insertion command's JSON with `after` omitted (the minimal form MCP/the Link API/the CLI can send) is accepted as an append at the end. <sub>`the_insert_spare_terminals_command_accepts_after_omitted`</sub>
 - Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted. <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - Undoing a paper size change restores both the previous size and orientation. <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
 - Changing the paper leaves the sheet's own zone division alone: a sheet divided into its own number of zones keeps that division. <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
@@ -889,6 +898,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Increasing levels expands each pole's plain label into one label per level, pole-major with level letters appended ("11,12" -> "11a,11b,12a,12b"). <sub>`relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major`</sub>
 - Decreasing levels back to 1 drops the vanishing level's labels and strips the level letter from what remains. <sub>`relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level`</sub>
 - Going from 2 levels to 3 keeps the existing level-a/level-b labels and adds a fresh level-c label per pole. <sub>`relabel_for_levels_adds_a_new_level_on_top_of_existing_ones`</sub>
+- Inserting one spare after a chosen terminal appends the pole at the end of the symbol (so existing pins never move) while the returned number sequence shows every later pole's number pushed up by one and the vacated number handed to the new spare. <sub>`inserting_a_spare_pushes_the_numbers_after_the_chosen_terminal`</sub>
+- Inserting a spare with no chosen terminal (append) simply continues the numbering: the new pole is physically last and numerically last too, so nothing already on the block is renumbered. <sub>`inserting_a_spare_at_the_end_does_not_renumber_anything`</sub>
+- The row the pure function's numbers put in place for the new spare comes out of the chart as an ordinary spare row: both sides unconnected, `spare` set, nothing about it distinguishes it from a symbol-default terminal. <sub>`the_inserted_spares_row_is_unconnected_in_the_chart`</sub>
+- A count of zero is refused instead of producing a no-op symbol change. <sub>`inserting_zero_spares_is_refused`</sub>
+- Naming a terminal the block does not have as the insertion point is refused, not silently treated as "append at the end". <sub>`inserting_after_an_unknown_terminal_is_refused`</sub>
+- Inserting spares beyond the dynamic symbol family's pole cap is refused. <sub>`inserting_past_the_pole_cap_is_refused`</sub>
+- On a multi-level block, one inserted spare pole grows into one terminal per level (two new labels "3a"/"3b" for a 2-level block), keeping every level's own letter. <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- The chart shows the spare exactly where its number says it belongs, not where its physical pole happens to sit: default (number) order re-sorts by the parsed pole number, so an insertion in the middle of the block reads as inserted in the middle of the chart too. <sub>`the_chart_shows_the_spare_after_its_chosen_terminal_not_at_the_physical_end`</sub>
 - Rewriting an accessory spec touches only the leading terminal-number token of each item; the kind, the part number, the "end" sentinel and any item naming an unknown terminal stay byte for byte. <sub>`rewrite_accessory_labels_only_replaces_the_terminal_number_token`</sub>
 - A terminal_numbers override that happens to equal the symbol's default labels is still reported as an override, because the key is present and valid (not judged only by whether the expanded value differs from the default). <sub>`terminal_numbers_override_reports_a_key_that_matches_the_default_value`</sub>
 - An invalid terminal_numbers value (wrong element count) is not treated as an override: the display already falls back to the default, and there is nothing valid to restore. <sub>`terminal_numbers_override_is_none_for_an_invalid_value`</sub>
@@ -905,6 +922,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Jumpers are set with the ordinary update_entity command, so the chart follows the change and undo takes it back. <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
 - An unset, empty or unrecognised `row_order` attribute falls back to number order. <sub>`an_unset_or_unknown_row_order_falls_back_to_number_order`</sub>
 - Number order (the default) sorts poles as integers, so it stays correct past nine poles. <sub>`number_order_sorts_poles_as_integers`</sub>
+- Number order sorts by the parsed pole number of the displayed label, not by the physical (raw pin) order the rows started in — so an override whose labels are not physically monotonic (as spare insertion produces, Task 4) still comes out numerically ascending. <sub>`number_order_sorts_by_the_parsed_label_even_when_the_physical_order_disagrees`</sub>
 - Alphanumeric order compares terminal numbers as text, so past nine poles it disagrees with number order ("10" sorts before "2"). <sub>`alnum_order_compares_terminal_numbers_as_text`</sub>
 - Page order sorts poles by where their wiring first appears on the sheet in reading order (top-to-bottom, then left-to-right) — even against numeric order — and puts unwired (spare) poles last, in pole-number order. <sub>`page_order_follows_where_the_wiring_first_appears_on_the_sheet`</sub>
 - Cable order gathers the poles of each external harness together in the order that harness name first appears (not alphabetically), putting poles with no harness last in pole-number order. <sub>`cable_order_groups_poles_by_their_external_harness_in_first_seen_order`</sub>
@@ -925,6 +943,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A multi-level terminal block's diagram labels each box with its full level-letter terminal number (1a, 1b, 2a, 2b, ...), so the two levels are never drawn as if they were the same terminal. <sub>`a_multilevel_terminal_block_labels_boxes_with_the_level_letter`</sub>
 - A multi-level terminal block's diagram shows the levels as columns: the terminal strip is split into one column per level, level a on the left, and each terminal's box sits in its own level's column. <sub>`a_multilevel_terminal_diagram_draws_each_level_as_a_column`</sub>
 - Each level column of a multi-level terminal diagram is headed by its level letter, so a reader can tell which column is which level without reading the box numbers. <sub>`a_multilevel_terminal_diagram_heads_each_level_column_with_its_letter`</sub>
+- A jumper linking two poles of the same level ("1a-2a") skips over the other level's row in between ("1b"), so it is routed through a lane beyond every row's lead line — never through the zone where that in-between row's own lead line runs. <sub>`a_same_level_jumper_that_skips_a_row_never_crosses_the_skipped_rows_lead_line`</sub>
+- A jumper between the two levels of one pole ("1a-1b") always links physically adjacent rows (levels cluster together), so it still uses the same close lane a single-level block would, right next to the boxes. <sub>`a_cross_level_jumper_between_adjacent_rows_uses_the_same_near_lane_as_single_level`</sub>
+- Two same-level jumpers on different levels ("1a-2a" and "1b-2b") each skip over the other level's row, so each gets its own lane: the lanes are distinct, and neither one falls in the zone where any row's lead line runs. <sub>`each_level_gets_its_own_distinct_jumper_lane`</sub>
+- Even with same-level jumpers that skip rows, the staggered strip (one box per row, columns by level) keeps its outside-left/inside-right layout: box columns and lead-line directions are unaffected by which lane a jumper's line happens to use. <sub>`the_staggered_layout_keeps_outside_left_and_inside_right_with_skipping_jumpers`</sub>
 - A single-level terminal diagram gets no level heading, because it has only one column of terminals. <sub>`a_single_level_terminal_diagram_has_no_level_heading`</sub>
 - Terminals that do not fit on one page continue on the next, and each page title states the range of terminals it holds. <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
 - The page title's terminal range names the smallest and largest terminal on that page, so it still reads as a range when a row order such as jumper order puts the rows out of terminal-number sequence. <sub>`the_page_title_range_names_the_smallest_and_largest_terminal_on_the_page`</sub>
@@ -2165,6 +2187,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - returns null for a symbol that is not a terminal block and for an out-of-range level count <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - expands labels into lettered levels and drops the vanishing ones when decreasing <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - keeps a label that does not end in a level letter intact as the base <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- pushes the numbers after the chosen terminal and hands the vacated one to the new spare <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- does not renumber anything when appending at the end <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- returns null for a non-positive count <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- returns null when the insertion point names an unknown terminal <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- adds one terminal per level on a multi-level block <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - keeps adjacency based on the raw pin layout, not on the arithmetic difference between displayed labels <sub>`parseJumperSpec with an overridden display order`</sub>
 
 ### textStyle
@@ -2839,6 +2866,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - lists a jumper that still names a vanishing level as a blocker <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 - never blocks an increase in the level count <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 - refuses a level decrease that has a blocker without sending a command <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- sends one insert_spare_terminals command with the requested position and count <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- sends null for after when inserting at the end <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- refuses a non-positive count without sending a command <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- keeps the backend's refusal reason in error and leaves the drawing untouched <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- previews the new symbol id and the new spare's labels <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- flags a non-positive count as an issue <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- flags a count that would exceed the pole cap <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- lists one insertion-point option per pole, using level a's label on a multi-level block <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- clamps the count stepper's input to a positive integer <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 
 ### ui
 

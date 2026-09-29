@@ -4,11 +4,12 @@
 // ドロップダウン+ツールバー+白グリッド+フッタ(チェック結果+生成ボタン)。
 //
 // グリッドの中身は図面から導出した端子台チャートそのもので、ここで編集できるのは
-// ジャンパ・並べ替え順 (row_order)・端子番号 (terminal_numbers) の3つ (どれも
-// update_entity/RenumberTerminals/SetTerminalNumbersコマンド1回。Cmd+Zで戻る)。
-// 並べ替え・Lv列 (多段端子台だけ)・図面へジャンプ・端子番号の自動採番はここで実装済み。
-// v1で実装しない操作 (多段端子の生成・アクセサリ・内外スワップ) は
-// 無効化したプレースホルダとして並べ、型番・配置の列は出さない (フェーズ2)。
+// ジャンパ・並べ替え順 (row_order)・端子番号 (terminal_numbers)・段数 (symbol_id)・
+// 予備端子 (symbol_id+terminal_numbers) (どれもupdate_entity/RenumberTerminals/
+// SetTerminalNumbers/SetTerminalLevels/InsertSpareTerminalsコマンド1回。Cmd+Zで戻る)。
+// 並べ替え・Lv列・図面へジャンプ・端子番号の自動採番・多段端子の生成解除・予備端子の挿入は
+// ここで実装済み。v1で実装しない操作 (アクセサリ・内外スワップ) は無効化した
+// プレースホルダとして並べ、型番・配置の列は出さない (フェーズ2)。
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -33,9 +34,8 @@ watch(
   () => void terminals.refresh(),
 );
 
-/** フェーズ2で実装する操作 (デザインどおり並べるが押せない。採番・多段は実装済みなので除く)。 */
+/** フェーズ2で実装する操作 (デザインどおり並べるが押せない。採番・多段・予備挿入は実装済みなので除く)。 */
 const phase2 = [
-  { key: "spareTerminal", icon: SquareStack },
   { key: "accessory", icon: Plus },
   { key: "swap", icon: ArrowLeftRight },
 ] as const;
@@ -234,6 +234,103 @@ async function applyLevels() {
   showLevels.value = false;
   ui.log(
     t("terminals.levelsChangedLog", { reference: terminals.reference, from: before, to: levelsInput.value }),
+  );
+}
+
+// --- 予備挿入ポップオーバー (Task 4。デザイン「P 予備端子の挿入 (既定)」/「(エラー)」準拠、
+// 段数ポップオーバーと同じ開閉の型) ---
+// 挿入位置ドロップダウン ("末尾"=空文字/`null` + 極ごとの選択肢) + 個数ステッパー +
+// 番号の扱い (「末尾に極を足して番号を繰り下げる」だけが選べる。もう一方はデザインどおり
+// 並べるが選べない=フェーズ2送り) + プレビュー囲み (symbol_id・新しい予備のラベル)。
+const showSpare = ref(false);
+/** ドロップダウンの生の値。空文字が「末尾」(`after: null`) を表す。 */
+const spareAfterRaw = ref("");
+const spareCount = ref(1);
+const spareError = ref("");
+const sparePopover = ref<HTMLElement | null>(null);
+const spareAfter = computed<string | null>(() => (spareAfterRaw.value === "" ? null : spareAfterRaw.value));
+const sparePreview = computed(() => terminals.sparePreview(spareAfter.value, spareCount.value));
+const spareIssue = computed(() => terminals.spareIssue(spareAfter.value, spareCount.value));
+const spareIssueText = computed(() => {
+  const issue = spareIssue.value;
+  if (!issue) return "";
+  const key = `terminals.spareInsert.issue${issue.code[0].toUpperCase()}${issue.code.slice(1)}`;
+  return t(key, { ...issue });
+});
+
+function toggleSpare() {
+  if (showSpare.value) {
+    showSpare.value = false;
+    return;
+  }
+  spareAfterRaw.value = "";
+  spareCount.value = 1;
+  spareError.value = "";
+  showSpare.value = true;
+}
+
+function cancelSpare() {
+  showSpare.value = false;
+}
+
+function stepSpareCount(n: number) {
+  spareCount.value = terminals.clampSpareCount(n);
+}
+
+function clampSpareCountInput(e: Event) {
+  const el = e.target as HTMLInputElement;
+  const next = terminals.clampSpareCount(Number(el.value));
+  spareCount.value = next;
+  el.value = String(next);
+}
+
+function onSpareKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape" && showSpare.value) {
+    e.stopPropagation();
+    showSpare.value = false;
+  }
+}
+
+function onSpareOutsideClick(e: MouseEvent) {
+  if (!showSpare.value) return;
+  const el = sparePopover.value;
+  const target = e.target as Node | null;
+  if (el && target && !el.contains(target) && !(target instanceof Node && el.parentElement?.contains(target))) {
+    showSpare.value = false;
+  }
+}
+
+watch(showSpare, (open) => {
+  if (open) {
+    window.addEventListener("keydown", onSpareKeydown, true);
+    window.addEventListener("mousedown", onSpareOutsideClick, true);
+  } else {
+    window.removeEventListener("keydown", onSpareKeydown, true);
+    window.removeEventListener("mousedown", onSpareOutsideClick, true);
+  }
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", onSpareKeydown, true);
+  window.removeEventListener("mousedown", onSpareOutsideClick, true);
+});
+
+async function applySpare() {
+  spareError.value = "";
+  const after = spareAfter.value;
+  const count = spareCount.value;
+  if (!(await terminals.insertSpareTerminals(after, count))) {
+    spareError.value = terminals.error ?? "";
+    if (terminals.error) ui.log(terminals.error);
+    return;
+  }
+  showSpare.value = false;
+  ui.log(
+    t("terminals.spareInsertedLog", {
+      reference: terminals.reference,
+      count,
+      labels: sparePreview.value?.spareLabels.join(",") ?? "",
+    }),
   );
 }
 
@@ -524,6 +621,80 @@ async function generateDiagram() {
                 @click="applyLevels"
               >
                 {{ t("terminals.levels.apply") }}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="popover-anchor">
+          <button class="tool" :disabled="!terminals.entityId" @click="toggleSpare">
+            <SquareStack :size="12" class="tool-icon" />
+            {{ t("terminals.insertSpare") }}
+          </button>
+          <div v-if="showSpare" ref="sparePopover" class="popover" @click.stop>
+            <div class="popover-title">{{ t("terminals.spareInsert.title") }}</div>
+            <div class="popover-desc">{{ t("terminals.spareInsert.description") }}</div>
+            <label class="popover-field">
+              <span>{{ t("terminals.spareInsert.positionLabel") }}</span>
+              <select v-model="spareAfterRaw" class="picker mono">
+                <option value="">{{ t("terminals.spareInsert.positionEnd") }}</option>
+                <option v-for="a in terminals.spareAfterOptions" :key="a" :value="a">{{ a }}</option>
+              </select>
+            </label>
+            <label class="popover-field">
+              <span>{{ t("terminals.spareInsert.countLabel") }}</span>
+              <div class="stepper">
+                <button class="step" :disabled="spareCount <= 1" @click="stepSpareCount(spareCount - 1)">
+                  <Minus :size="12" />
+                </button>
+                <input v-model.number="spareCount" class="step-value" @change="clampSpareCountInput" />
+                <button class="step" @click="stepSpareCount(spareCount + 1)">
+                  <Plus :size="12" />
+                </button>
+              </div>
+            </label>
+            <div class="popover-field">
+              <span>{{ t("terminals.spareInsert.numberMode") }}</span>
+              <span class="popover-radios">
+                <label class="popover-radio">
+                  <input type="radio" checked disabled />
+                  {{ t("terminals.spareInsert.modeShift") }}
+                </label>
+                <label class="popover-radio" :title="t('terminals.spareInsert.modeKeepHint')">
+                  <input type="radio" disabled />
+                  {{ t("terminals.spareInsert.modeKeep") }}
+                </label>
+              </span>
+            </div>
+            <div v-if="sparePreview" class="popover-preview">
+              <span>{{ t("terminals.spareInsert.previewLabel") }}</span>
+              <div class="popover-box" :class="{ invalid: spareIssue !== null }">
+                <span class="mono map">{{ sparePreview.symbolFrom }} → {{ sparePreview.symbolTo }}</span>
+                <span class="mono map">
+                  {{
+                    t("terminals.spareInsert.previewLine", {
+                      position: spareAfter === null ? t("terminals.spareInsert.positionEnd") : t("terminals.spareInsert.positionAfter", { after: spareAfter }),
+                      count: spareCount,
+                      labels: sparePreview.spareLabels.join(","),
+                    })
+                  }}
+                </span>
+              </div>
+            </div>
+            <div v-if="spareIssue" class="popover-issue">
+              <TriangleAlert :size="12" class="issue-icon" />
+              <span>{{ spareIssueText }}</span>
+            </div>
+            <div v-if="spareError" class="popover-issue">
+              <TriangleAlert :size="12" class="issue-icon" />
+              <span>{{ spareError }}</span>
+            </div>
+            <div class="popover-note">{{ t("terminals.spareInsert.note") }}</div>
+            <div class="popover-actions">
+              <button class="btn secondary" @click="cancelSpare">
+                {{ t("terminals.spareInsert.cancel") }}
+              </button>
+              <button class="btn primary" :disabled="terminals.busy || spareIssue !== null" @click="applySpare">
+                {{ t("terminals.spareInsert.apply") }}
               </button>
             </div>
           </div>

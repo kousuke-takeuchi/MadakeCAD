@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2503仕様項目**。
+全6領域・**2539仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -131,6 +131,15 @@
 - 1〜3の範囲外の段数指定は、図面を変えずに拒否される。 <sub>`setting_levels_outside_one_to_three_is_refused`</sub>
 - 端子台以外のシンボルの段数変更は拒否される (RenumberTerminals/SetTerminalNumbersと同じ門)。 <sub>`setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
 - `_1l`という段数1の別名で綴ったsymbol_idは配置時に拒否される: 単段端子台のsymbol_idの綴りは1通りだけが有効。 <sub>`a_one_level_alias_symbol_id_is_refused_when_placed`</sub>
+- 端子台の極数を増やしても (予備の挿入がそうする)、既存ピンの用紙上の座標は動かない — インスタンスが逆向きにずれて打ち消すため — ので、繋がっていた配線は外れない。 <sub>`inserting_a_spare_terminal_keeps_every_existing_pins_coordinates`</sub>
+- 指定した端子の後ろに予備を挿入すると、繰り下がった番号列が書き込まれ、動いたラベルを使っていたジャンパ指定も書き換わるので、ジャンパは同じ物理的な端子の組を指したままになる。 <sub>`inserting_a_spare_after_a_terminal_renumbers_labels_and_follows_the_jumper`</sub>
+- 0個の指定は、図面を変えずに拒否される。 <sub>`inserting_zero_spares_is_refused_without_touching_the_drawing`</sub>
+- 端子台に無い端子番号を挿入位置に指定すると拒否される。 <sub>`inserting_after_an_unknown_terminal_is_refused`</sub>
+- 動的シンボルの極数上限を超える挿入は拒否される。 <sub>`inserting_past_the_pole_cap_is_refused`</sub>
+- 端子台以外のシンボルへの予備挿入は拒否される (他の端子台系コマンドと同じ門)。 <sub>`inserting_a_spare_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- 挿入した予備をundoすると、symbol_id・端子番号・位置がまとめて1回で元に戻る。 <sub>`undoing_an_inserted_spare_restores_symbol_id_numbers_and_position_together`</sub>
+- 多段端子台への予備挿入は、1極につき段数ぶんの端子が増える (2段なら"9a","9b")。 <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- `after`を省略した挿入コマンドのJSON (MCP/Link API/CLIが送れる最小形) は、末尾挿入として通る。 <sub>`the_insert_spare_terminals_command_accepts_after_omitted`</sub>
 - シートの用紙サイズ・向きを変えても (G15)、既存のエンティティは元の座標のまま動かず、消えもしない。 <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - 用紙サイズの変更をundoすると、サイズと向きの両方が元へ戻る。 <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
 - 用紙を変えてもシート独自のゾーン分割はそのまま: 独自の分割数を持つシートはその分割を保つ。 <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
@@ -889,6 +898,14 @@
 - 段を増やすと、極ごとのプレーンなラベルが段数ぶんに展開される。極→段の順で段記号を付け足す ("11,12" → "11a,11b,12a,12b")。 <sub>`relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major`</sub>
 - 段を減らして単段へ戻すと、消える段のラベルは落ち、残る段記号は取り除かれる。 <sub>`relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level`</sub>
 - 2段から3段に増やすと、既存の段a・段bのラベルはそのまま残り、極ごとに新しい段cのラベルが増える。 <sub>`relabel_for_levels_adds_a_new_level_on_top_of_existing_ones`</sub>
+- 指定した端子の後ろに予備を1個挿入すると、シンボルの極は末尾に足される (既存ピンは動かない) が、返る番号列はそれより後ろの極の番号がすべて1つ繰り下がり、空いた番号が新しい予備に渡る。 <sub>`inserting_a_spare_pushes_the_numbers_after_the_chosen_terminal`</sub>
+- 挿入位置を指定しない (末尾挿入) と、番号もそのまま続く: 新しい極は物理的にも番号的にも最後になるので、既存のどの端子の番号も変わらない。 <sub>`inserting_a_spare_at_the_end_does_not_renumber_anything`</sub>
+- 純関数の番号列で新しい予備の位置に来る行は、チャートではふつうの予備行として出る: 両側未結線で`spare`が立ち、シンボル既定の端子と見分けが付く特別扱いは何も無い。 <sub>`the_inserted_spares_row_is_unconnected_in_the_chart`</sub>
+- 0個の指定は、何もしない変更として素通しせず拒否される。 <sub>`inserting_zero_spares_is_refused`</sub>
+- 端子台に無い端子番号を挿入位置に指定すると、「末尾扱い」に読み替えず拒否される。 <sub>`inserting_after_an_unknown_terminal_is_refused`</sub>
+- 動的シンボルの極数上限を超える挿入は拒否される。 <sub>`inserting_past_the_pole_cap_is_refused`</sub>
+- 多段端子台では、挿入した1つの予備極が段の数だけの端子になる (2段なら新しいラベルは"3a"/"3b"の2つ)。各段の記号はそのまま保たれる。 <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- チャートは物理的な極の位置ではなく、番号が示す位置に予備を表示する: 既定 (数値順) は解析した極番号で並べ直すので、ブロックの途中への挿入もチャートの途中への挿入として読める。 <sub>`the_chart_shows_the_spare_after_its_chosen_terminal_not_at_the_physical_end`</sub>
 - 付属品指定の書き換えは各項の先頭の端子番号トークンだけに効き、種別・型番・末尾指定の`end`・知らない端子を指す項は1バイトも変わらない。 <sub>`rewrite_accessory_labels_only_replaces_the_terminal_number_token`</sub>
 - 既定値と同じラベルを明示的に書いたterminal_numbersも、キーがあり値が妥当なので上書きとして扱われる (展開結果が既定と同じかどうかだけでは判定しない)。 <sub>`terminal_numbers_override_reports_a_key_that_matches_the_default_value`</sub>
 - 個数が合わない無効なterminal_numbersは上書きとして扱わない (表示は既定へフォールバック済みで、復元できる妥当な値が無い)。 <sub>`terminal_numbers_override_is_none_for_an_invalid_value`</sub>
@@ -905,6 +922,7 @@
 - ジャンパは通常のupdate_entityコマンドで設定するので、チャートに反映され、undoで元に戻る。 <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
 - `attrs["row_order"]`が未設定・空・未知語なら数値順 (既定) に落ちる。 <sub>`an_unset_or_unknown_row_order_falls_back_to_number_order`</sub>
 - 数値順 (既定) は極番号を数として昇順に並べる。10極以上でも桁の大小どおりになる。 <sub>`number_order_sorts_poles_as_integers`</sub>
+- 数値順は表示ラベルを解析した極番号で並べる。行が最初に持っていた物理的な(生ピンの)並びでは決まらないので、予備端子挿入 (Task 4) が作るような物理順と食い違う上書きでも数値の昇順で出る。 <sub>`number_order_sorts_by_the_parsed_label_even_when_the_physical_order_disagrees`</sub>
 - 英数順は端子番号を文字列として辞書順に並べるので、10極以上では数値順と違う結果になる ("10"が"2"より前に来る)。 <sub>`alnum_order_compares_terminal_numbers_as_text`</sub>
 - ページ順は、その極の配線が図面上で読み順(上→下、左→右)に最初に現れる位置で並べる。番号は逆でも、読み順で先に来る方が先になる。配線の無い極(予備)は最後に極番号順で並ぶ。 <sub>`page_order_follows_where_the_wiring_first_appears_on_the_sheet`</sub>
 - 外部ケーブル順は、外部ハーネス名が最初に現れた極の順にその名前の極をまとめる (名前の辞書順ではなく初出順)。ハーネス名の無い極は最後に極番号順で並ぶ。 <sub>`cable_order_groups_poles_by_their_external_harness_in_first_seen_order`</sub>
@@ -925,6 +943,10 @@
 - 多段端子台の接続図は、各箱に段記号付きの完全な端子番号(1a,1b,2a,2b,…)を書くので、2つの段が同じ端子として描かれることはない。 <sub>`a_multilevel_terminal_block_labels_boxes_with_the_level_letter`</sub>
 - 多段端子台の接続図は段を列で表す。端子ストリップが段の数だけの列に分かれ(段aが左)、各端子の箱は自分の段の列に置かれる。 <sub>`a_multilevel_terminal_diagram_draws_each_level_as_a_column`</sub>
 - 多段端子台の接続図は、段の列それぞれの上に段記号を書くので、箱の番号を読まなくてもどの列がどの段か分かる。 <sub>`a_multilevel_terminal_diagram_heads_each_level_column_with_its_letter`</sub>
+- 同じ段の2極を繋ぐジャンパ("1a-2a")は、間に挟まる別の段の行("1b")を飛び越えるので、どの行の引出線よりも外側のレーンを通る — 間に挟まる行自身の引出線が走る帯を横切らない。 <sub>`a_same_level_jumper_that_skips_a_row_never_crosses_the_skipped_rows_lead_line`</sub>
+- 1つの極の2つの段を繋ぐジャンパ("1a-1b")は、必ず物理的に隣り合う行を繋ぐ (段はクラスタでまとまる) ので、単段の端子台と同じ、箱のすぐそばの近いレーンを使う。 <sub>`a_cross_level_jumper_between_adjacent_rows_uses_the_same_near_lane_as_single_level`</sub>
+- 段の違う2つの同段ジャンパ("1a-2a"と"1b-2b")はそれぞれ別の段の行を飛び越えるので、それぞれ専用のレーンを使う: 2つのレーンは別のXになり、どちらもどこかの行の引出線が走る帯には入らない。 <sub>`each_level_gets_its_own_distinct_jumper_lane`</sub>
+- 行を飛び越える同段ジャンパがあっても、千鳥配置 (行ごとに1箱、段は列) の外部側左・内部側右は崩れない: 箱の列や引出線の向きは、ジャンパ線がどのレーンを使うかに影響されない。 <sub>`the_staggered_layout_keeps_outside_left_and_inside_right_with_skipping_jumpers`</sub>
 - 単段の端子台の接続図には段の見出しが付かない (端子の列が1本しかないため)。 <sub>`a_single_level_terminal_diagram_has_no_level_heading`</sub>
 - 1ページに収まらない端子は次のページへ続き、各ページの表題にそのページの端子の範囲が入る。 <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
 - ページ表題の端子の範囲は、そのページに載る端子の最小と最大を書く。ジャンパ順のように行が端子番号順に並んでいない並べ替えでも、範囲として読める表記のままになる。 <sub>`the_page_title_range_names_the_smallest_and_largest_terminal_on_the_page`</sub>
@@ -2165,6 +2187,11 @@
 - 端子台以外のシンボルと範囲外の段数はnull (プレビューを出さない) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - 段を増やすと極ごとのラベルに段記号が付き、減らすと残る段のラベルだけになる (段数1では段記号が落ちる) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - 末尾が英字でない上書きラベル (接頭辞付きの`X11`) は段記号を外す対象にならず、そのまま土台になる <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 指定した端子の後ろに挿入すると、symbol_idは末尾に1極増え、番号列はそれより後ろが繰り下がって空いた番号を新しい予備が引き継ぐ <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 挿入位置を指定しない (末尾) と、番号は繰り下がらずそのまま続く <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 0個以下の指定はnull (プレビューを出さない) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 端子台に無い端子番号を挿入位置に指定するとnull <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 多段端子台では、挿入した1つの予備極が段の数だけの端子になる <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - 増分2で採番したような表示ラベル(11,13,15,17)でも、隣接判定は生のピン配置で決まるので、物理的に隣り合う極どうしのジャンパは通る (Rust側 adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic とparity) <sub>`parseJumperSpec with an overridden display order`</sub>
 
 ### textStyle
@@ -2839,6 +2866,15 @@
 - 消える段を指すジャンパも、結線と同じように解除を止める理由として並ぶ <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 - 段を増やすときは消える段が無いので、理由の一覧は常に空 (適用ボタンは有効のまま) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 - 理由が1件でもある段数はコマンドを送らずに断る (ポップオーバーが適用ボタンを無効にしている門と同じ判定) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 予備を挿入すると、insert_spare_terminalsコマンド1回だけが送られる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 末尾挿入は`after`がnullのコマンドになる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 0個以下の指定は、コマンドを送らずに断る <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- フロントの検証を通っても、Rust側が挿入を拒否したら (エンティティが図面から消えていた等) その理由をerrorへ残す (図面は変えない) <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- プレビューは適用と同じ純関数で symbol_id と新しく増える予備のラベルを見せる (デザイン「P 予備端子の挿入 (既定)」の2行) <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 0個以下の指定は指摘 (適用ボタンを無効にする) <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 極数の上限を超える指定も指摘になる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 挿入位置の選択肢は極ごとに1つ、多段端子台では段aのラベルを代表にする <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 個数ステッパーの入力は1以上の整数へ丸める <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 
 ### ui
 

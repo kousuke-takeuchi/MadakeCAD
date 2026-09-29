@@ -6,6 +6,7 @@ import type { Primitive, SymbolDef } from "../ipc";
 import { dynamicSymbol, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./dynamicSymbol";
 import {
   formatJumperSpec,
+  insertSpareTerminals,
   JUMPER_BAR_STROKE_MM,
   jumperBars,
   multilevelSymbolId,
@@ -387,6 +388,46 @@ describe("level change helpers (Rust側 poles_and_levels_of / multilevel_id / re
   // ja: 末尾が英字でない上書きラベル (接頭辞付きの`X11`) は段記号を外す対象にならず、そのまま土台になる
   it("keeps a label that does not end in a level letter intact as the base", () => {
     expect(relabelForLevels(["X11", "X12"], 2, 1, 2)).toEqual(["X11a", "X11b", "X12a", "X12b"]);
+  });
+});
+
+describe("insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)", () => {
+  const raw8 = terminalNumbers(dynamicSymbol("terminal_block_8p")!);
+
+  // ja: 指定した端子の後ろに挿入すると、symbol_idは末尾に1極増え、番号列はそれより後ろが繰り下がって空いた番号を新しい予備が引き継ぐ
+  it("pushes the numbers after the chosen terminal and hands the vacated one to the new spare", () => {
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, "3", 1)).toEqual({
+      symbolId: "terminal_block_9p",
+      numbers: ["1", "2", "3", "5", "6", "7", "8", "9", "4"],
+    });
+  });
+
+  // ja: 挿入位置を指定しない (末尾) と、番号は繰り下がらずそのまま続く
+  it("does not renumber anything when appending at the end", () => {
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, null, 1)).toEqual({
+      symbolId: "terminal_block_9p",
+      numbers: ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+    });
+  });
+
+  // ja: 0個以下の指定はnull (プレビューを出さない)
+  it("returns null for a non-positive count", () => {
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, null, 0)).toBeNull();
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, null, -1)).toBeNull();
+  });
+
+  // ja: 端子台に無い端子番号を挿入位置に指定するとnull
+  it("returns null when the insertion point names an unknown terminal", () => {
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, "99", 1)).toBeNull();
+  });
+
+  // ja: 多段端子台では、挿入した1つの予備極が段の数だけの端子になる
+  it("adds one terminal per level on a multi-level block", () => {
+    const raw = terminalNumbers(dynamicSymbol("terminal_block_4p_2l")!);
+    expect(insertSpareTerminals("terminal_block_4p_2l", raw, 4, 2, "2a", 1)).toEqual({
+      symbolId: "terminal_block_5p_2l",
+      numbers: ["1a", "1b", "2a", "2b", "4a", "4b", "5a", "5b", "3a", "3b"],
+    });
   });
 });
 

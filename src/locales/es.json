@@ -798,9 +798,29 @@
     "generateChart": "Generar tabla",
     "phase2Hint": "previsto para la fase 2",
     "phase2": {
-      "spareTerminal": "Insertar reserva",
       "accessory": "Accesorios",
       "swap": "Intercambiar int./ext."
+    },
+    "insertSpare": "Insert spare",
+    "spareInsert": {
+      "title": "Insert spare terminal",
+      "description": "One update_entity (symbol_id + terminal_numbers)",
+      "positionLabel": "Insert position:",
+      "positionEnd": "At the end",
+      "positionAfter": "After {after}",
+      "countLabel": "Count:",
+      "numberMode": "Numbering",
+      "modeShift": "Add a pole at the end and shift the numbers down",
+      "modeKeep": "Leave the spare with a vacant number",
+      "modeKeepHint": "This option is planned for a later phase",
+      "previewLabel": "Preview",
+      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) \u00b7 both sides unconnected",
+      "note": "Shifting the numbers never moves a pin's coordinates, so existing wiring stays connected",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "issueCount": "Enter a count of 1 or more",
+      "issuePoleCap": "Exceeds the maximum pole count (limit {max})",
+      "issueInvalid": "This cannot be applied"
     },
     "multiLevel": "Multinivel",
     "levels": {
@@ -865,7 +885,8 @@
       "issueNoBlock": "No hay bloque de terminales que renumerar."
     },
     "renumberedLog": "Editor de bornes: {reference} renumerado de {from} a {to} (deshacer con Cmd+Z)",
-    "levelsChangedLog": "Editor de bornes: {reference} cambió de {from} a {to} nivel(es) (deshacer con Cmd+Z)"
+    "levelsChangedLog": "Editor de bornes: {reference} cambió de {from} a {to} nivel(es) (deshacer con Cmd+Z)",
+    "spareInsertedLog": "Terminal editor: inserted {count} spare terminal(s) ({labels}) into {reference} (undo with Cmd+Z)"
   },
   "plcIo": {
     "ribbonButton": "Tabla de E/S de PLC",

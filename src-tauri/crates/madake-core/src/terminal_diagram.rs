@@ -39,6 +39,8 @@ const HARNESS_ZONE: f64 = 20.0;
 const BRACKET_ARM: f64 = 2.5;
 /// ジャンパの縦線を端子箱の内部側の縁からどれだけ離すか (mm)。
 const JUMPER_OFFSET: f64 = 3.0;
+/// 段ごとの配線レーンの間隔 (mm)。
+const JUMPER_LANE_GAP: f64 = 3.0;
 /// 見出し (外部側/内部側) の文字高さ (mm)。
 const CAPTION_FONT: f64 = 2.8;
 /// 本文上端から最初の端子の中心まで (mm)。見出しの分を空ける。
@@ -419,8 +421,25 @@ fn draw_brackets(out: &mut String, rows: &[TerminalRow], side: Side) {
     }
 }
 
+/// あるジャンパを描く縦線のX (mm)。
+///
+/// **隣り合う行どうし**(同じ極の段違い"1a-1b"のような、必ず隣り合うジャンパ。段は
+/// クラスタで必ず隣り合う並びになるので、間に他の段の行は挟まらない) は、箱のすぐ外の
+/// 共通レーン (単段の端子台と同じ位置) でよい。**隣り合わない行どうし**(同じ段の隣り合う
+/// 極どうし"1a-2a"のような、途中に**別の段**の行を挟むジャンパ) は、段ごとに割り当てた
+/// 専用レーンを使う。すべての行の引出線は`Side::Inside.lead_end()`より内側で終わる
+/// ([`draw_side`])ので、レーンをそこより外に置けば、途中に挟まる他の段の行の引出線を
+/// 一切横切らない (段ごとの配線レーン、Task 4)。
+fn jumper_lane(levels: &[String], level: &str, adjacent_rows: bool) -> f64 {
+    if adjacent_rows || levels.len() <= 1 {
+        return box_right() + JUMPER_OFFSET;
+    }
+    let idx = levels.iter().position(|l| l == level).unwrap_or(0);
+    Side::Inside.lead_end() + JUMPER_OFFSET + idx as f64 * JUMPER_LANE_GAP
+}
+
 /// サドルジャンパ。端子箱の**内部側の縁**に縦線で描く (両端に短い横線)。
-/// このページに両方の端子が載っているジャンパだけを描き、注記はページに1回だけ添える。
+/// このページに両方の端子が載っているジャンパだけを描き、注記はレーンごとに1回だけ添える。
 fn draw_jumpers(
     out: &mut String,
     rows: &[TerminalRow],
@@ -428,12 +447,13 @@ fn draw_jumpers(
     levels: &[String],
 ) {
     let index = |no: &str| rows.iter().position(|r| r.terminal == no);
-    let x = box_right() + JUMPER_OFFSET;
-    let mut noted = false;
+    let mut noted: Vec<f64> = Vec::new();
     for (a, b) in jumpers {
         let (Some(ka), Some(kb)) = (index(a), index(b)) else {
             continue;
         };
+        let adjacent_rows = ka.abs_diff(kb) == 1;
+        let x = jumper_lane(levels, &rows[ka].level, adjacent_rows);
         let (ya, yb) = (row_y(ka), row_y(kb));
         line_el(out, x, ya, x, yb, FRAME_STROKE, "#000");
         for k in [ka, kb] {
@@ -441,7 +461,7 @@ fn draw_jumpers(
             let edge = Side::Inside.cell_edge(box_cell(levels, &rows[k]));
             line_el(out, edge, y, x, y, FRAME_STROKE, "#000");
         }
-        if !noted {
+        if !noted.iter().any(|n| (n - x).abs() < 1e-9) {
             text_el(
                 out,
                 x + CELL_PAD,
@@ -451,7 +471,7 @@ fn draw_jumpers(
                 "start",
                 JUMPER_NOTE,
             );
-            noted = true;
+            noted.push(x);
         }
     }
 }
@@ -858,6 +878,103 @@ mod tests {
                 (box_left() + w + w / 2.0, "b".to_string()),
             ]
         );
+    }
+
+    /// 多段端子台TB1 (`{poles}極{levels}段`・ジャンパ`jumpers`付き) だけを置いたプロジェクトの端子接続図。
+    fn multilevel_diagram_with_jumpers(poles: usize, levels: usize, jumpers: &str) -> Vec<String> {
+        let mut project = Project::new("多段端子台デモ");
+        let mut attrs: std::collections::BTreeMap<String, String> = Default::default();
+        attrs.insert("jumpers".into(), jumpers.to_string());
+        let tb = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: format!("terminal_block_{poles}p_{levels}l"),
+            at: Point::new(150.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs,
+        });
+        let tb_id = tb.id();
+        project.sheets[0].entities.insert(tb_id, tb);
+        terminal_diagram_svg(&project, tb_id)
+    }
+
+    /// A jumper linking two poles of the same level ("1a-2a") skips over the other level's row in between ("1b"), so it is routed through a lane beyond every row's lead line — never through the zone where that in-between row's own lead line runs.
+    /// 同じ段の2極を繋ぐジャンパ("1a-2a")は、間に挟まる別の段の行("1b")を飛び越えるので、どの行の引出線よりも外側のレーンを通る — 間に挟まる行自身の引出線が走る帯を横切らない。
+    #[test]
+    fn a_same_level_jumper_that_skips_a_row_never_crosses_the_skipped_rows_lead_line() {
+        let pages = multilevel_diagram_with_jumpers(4, 2, "1a-2a");
+        let jumper: Vec<_> = vertical_lines(&pages[0])
+            .into_iter()
+            .filter(|l| (l.1, l.3) == (row_y(0), row_y(2)) || (l.1, l.3) == (row_y(2), row_y(0)))
+            .collect();
+        assert_eq!(jumper.len(), 1, "1a-2aのジャンパ線: {jumper:?}");
+        let x = jumper[0].0;
+        assert!(
+            x >= Side::Inside.lead_end(),
+            "レーンは全ての行の引出線の外側 (lead_end={}): x={x}",
+            Side::Inside.lead_end()
+        );
+    }
+
+    /// A jumper between the two levels of one pole ("1a-1b") always links physically adjacent rows (levels cluster together), so it still uses the same close lane a single-level block would, right next to the boxes.
+    /// 1つの極の2つの段を繋ぐジャンパ("1a-1b")は、必ず物理的に隣り合う行を繋ぐ (段はクラスタでまとまる) ので、単段の端子台と同じ、箱のすぐそばの近いレーンを使う。
+    #[test]
+    fn a_cross_level_jumper_between_adjacent_rows_uses_the_same_near_lane_as_single_level() {
+        let pages = multilevel_diagram_with_jumpers(4, 2, "1a-1b");
+        let jumper: Vec<_> = vertical_lines(&pages[0])
+            .into_iter()
+            .filter(|l| (l.1, l.3) == (row_y(0), row_y(1)))
+            .collect();
+        assert_eq!(jumper.len(), 1, "{jumper:?}");
+        assert_eq!(jumper[0].0, box_right() + JUMPER_OFFSET, "単段と同じ近いレーン");
+    }
+
+    /// Two same-level jumpers on different levels ("1a-2a" and "1b-2b") each skip over the other level's row, so each gets its own lane: the lanes are distinct, and neither one falls in the zone where any row's lead line runs.
+    /// 段の違う2つの同段ジャンパ("1a-2a"と"1b-2b")はそれぞれ別の段の行を飛び越えるので、それぞれ専用のレーンを使う: 2つのレーンは別のXになり、どちらもどこかの行の引出線が走る帯には入らない。
+    #[test]
+    fn each_level_gets_its_own_distinct_jumper_lane() {
+        let pages = multilevel_diagram_with_jumpers(4, 2, "1a-2a,1b-2b");
+        let lane_of = |ya: f64, yb: f64| -> f64 {
+            vertical_lines(&pages[0])
+                .into_iter()
+                .find(|l| (l.1, l.3) == (ya, yb))
+                .expect("ジャンパ線")
+                .0
+        };
+        let (lane_a, lane_b) = (lane_of(row_y(0), row_y(2)), lane_of(row_y(1), row_y(3)));
+        assert_ne!(lane_a, lane_b, "段ごとに別のレーン");
+        for x in [lane_a, lane_b] {
+            assert!(x >= Side::Inside.lead_end(), "x={x} lead_end={}", Side::Inside.lead_end());
+        }
+    }
+
+    /// Even with same-level jumpers that skip rows, the staggered strip (one box per row, columns by level) keeps its outside-left/inside-right layout: box columns and lead-line directions are unaffected by which lane a jumper's line happens to use.
+    /// 行を飛び越える同段ジャンパがあっても、千鳥配置 (行ごとに1箱、段は列) の外部側左・内部側右は崩れない: 箱の列や引出線の向きは、ジャンパ線がどのレーンを使うかに影響されない。
+    #[test]
+    fn the_staggered_layout_keeps_outside_left_and_inside_right_with_skipping_jumpers() {
+        let pages = multilevel_diagram_with_jumpers(4, 2, "1a-2a");
+        let bs = boxes(&pages[0]);
+        assert_eq!(bs.len(), 8, "4極x2段=8端子: {bs:?}");
+        let w = BOX_W / 2.0;
+        let lefts: Vec<f64> = bs.iter().map(|b| b.0).collect();
+        assert_eq!(
+            lefts,
+            vec![
+                box_left(),
+                box_left() + w,
+                box_left(),
+                box_left() + w,
+                box_left(),
+                box_left() + w,
+                box_left(),
+                box_left() + w,
+            ],
+            "段aは左列・段bは右列のまま"
+        );
+        assert!(text_at(&pages[0], OUTSIDE_CAPTION).0 < center_x(), "外部側の見出しは左のまま");
+        assert!(text_at(&pages[0], INSIDE_CAPTION).0 > center_x(), "内部側の見出しは右のまま");
     }
 
     /// A single-level terminal diagram gets no level heading, because it has only one column of terminals.
