@@ -225,8 +225,14 @@ export function multilevelSymbolId(
 
 /**
  * 段数を変えたときの新しい表示ラベル一覧 (Rust側 relabel_for_levels と同一)。
- * 極ごとに段a (単段なら唯一) のラベルを土台にし、末尾が英字1文字ならそれを外してから
- * 新しい段数ぶんの段記号を付け直す。段を減らすときは残る段のラベルだけが返る。
+ * 極ごとに段a (単段なら唯一) のラベルを土台にし、末尾が**段aの記号 (`levelLetter(0)`)**
+ * そのものならそれを外してから新しい段数ぶんの段記号を付け直す。段を減らすときは残る段の
+ * ラベルだけが返る。
+ *
+ * **末尾が英字なら何でも外す、ではない** (Task 3の再レビューで見つかった不具合。Task 4での
+ * 修正): 手で上書きした`"11X"`のような表示ラベルの`X`は段記号ではなくユーザーが書いた表記の
+ * 一部なので、段aの記号と一致するときだけ外す。そうしないと別の文字で終わる2極の土台が
+ * 同じ文字列に潰れて重複しうる。
  */
 export function relabelForLevels(
   oldDisplay: readonly string[],
@@ -235,13 +241,11 @@ export function relabelForLevels(
   newLevels: number,
 ): string[] {
   const out: string[] = [];
+  const levelA = levelLetter(0);
   for (let p = 0; p < poles; p++) {
     const first = oldDisplay[p * oldLevels] ?? "";
     let base = first;
-    if (oldLevels > 1) {
-      const last = first.slice(-1);
-      if (last !== "" && /^[A-Za-z]$/.test(last)) base = first.slice(0, -1);
-    }
+    if (oldLevels > 1 && first.slice(-1) === levelA) base = first.slice(0, -1);
     for (let j = 0; j < newLevels; j++) {
       out.push(newLevels === 1 ? base : `${base}${levelLetter(j)}`);
     }

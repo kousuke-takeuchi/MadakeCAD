@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2539 specification clauses** across 6 areas.
+**2542 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -127,6 +127,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Going from 3 levels to 2 is refused while a jumper still names a level-c terminal, and allowed once it is gone - then only level c's labels are dropped and the remaining jumper is kept. <sub>`decreasing_three_levels_to_two_is_refused_only_while_level_c_is_referenced`</sub>
 - Increasing levels rewrites the terminal label of an accessory spec the same way it rewrites jumpers, so an accessory pinned to terminal 1 follows to 1a; the kind and part number are left byte for byte. <sub>`increasing_levels_rewrites_accessory_terminal_labels`</sub>
 - A terminal_numbers value that is present but invalid (its item count does not match the pin count) survives a level change untouched and comes back byte for byte after undo; the command never deletes a key it cannot restore. <sub>`a_present_but_invalid_terminal_numbers_value_survives_a_level_change`</sub>
+- A level change whose relabelled bases would collide (one pole's level-a label ends in level a's own letter and strips to the same base as another pole's level-a label that never had a letter to strip) is refused before anything is written, instead of silently storing a `terminal_numbers` value with duplicate labels. <sub>`a_level_change_that_would_produce_duplicate_labels_is_refused_without_writing_anything`</sub>
 - Undoing a level change restores the previous symbol_id and the instance position together, in one undo step, so the terminals land back on their original coordinates. <sub>`undoing_a_level_change_restores_the_symbol_id_and_the_position_together`</sub>
 - Asking for a level count outside 1-3 is refused without touching the drawing. <sub>`setting_levels_outside_one_to_three_is_refused`</sub>
 - Changing the level count of a symbol that is not a terminal block is refused, the same gate RenumberTerminals/SetTerminalNumbers already use. <sub>`setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
@@ -898,6 +899,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Increasing levels expands each pole's plain label into one label per level, pole-major with level letters appended ("11,12" -> "11a,11b,12a,12b"). <sub>`relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major`</sub>
 - Decreasing levels back to 1 drops the vanishing level's labels and strips the level letter from what remains. <sub>`relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level`</sub>
 - Going from 2 levels to 3 keeps the existing level-a/level-b labels and adds a fresh level-c label per pole. <sub>`relabel_for_levels_adds_a_new_level_on_top_of_existing_ones`</sub>
+- Only a trailing letter that matches level a's own letter is stripped from the base; an override whose level-a label happens to end in some other letter (part of the user's own text, not a level letter this mechanism appended) keeps that letter, so two poles overridden to labels ending in different letters never collapse onto the same base (Task 3 re-review carry-over: previously any trailing alphabetic character was stripped, which could both destroy part of a hand-set label and produce duplicate bases). <sub>`relabel_for_levels_only_strips_a_trailing_letter_that_matches_level_as_own_letter`</sub>
 - Inserting one spare after a chosen terminal appends the pole at the end of the symbol (so existing pins never move) while the returned number sequence shows every later pole's number pushed up by one and the vacated number handed to the new spare. <sub>`inserting_a_spare_pushes_the_numbers_after_the_chosen_terminal`</sub>
 - Inserting a spare with no chosen terminal (append) simply continues the numbering: the new pole is physically last and numerically last too, so nothing already on the block is renumbered. <sub>`inserting_a_spare_at_the_end_does_not_renumber_anything`</sub>
 - The row the pure function's numbers put in place for the new spare comes out of the chart as an ordinary spare row: both sides unconnected, `spare` set, nothing about it distinguishes it from a symbol-default terminal. <sub>`the_inserted_spares_row_is_unconnected_in_the_chart`</sub>
@@ -2187,6 +2189,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - returns null for a symbol that is not a terminal block and for an out-of-range level count <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - expands labels into lettered levels and drops the vanishing ones when decreasing <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - keeps a label that does not end in a level letter intact as the base <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- only strips a trailing letter that matches level a's own letter, so two poles overridden with different trailing letters keep distinct bases <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - pushes the numbers after the chosen terminal and hands the vacated one to the new spare <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - does not renumber anything when appending at the end <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - returns null for a non-positive count <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>

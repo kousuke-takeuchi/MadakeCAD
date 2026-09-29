@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2539仕様項目**。
+全6領域・**2542仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -127,6 +127,7 @@
 - 3段から2段へ減らす操作は、段cの端子を指すジャンパが残っている間は拒否され、外せば通る (そのとき落ちるのは段cのラベルだけで、残ったジャンパはそのまま)。 <sub>`decreasing_three_levels_to_two_is_refused_only_while_level_c_is_referenced`</sub>
 - 段を増やすと、付属品指定の端子番号もジャンパと同じように書き換わる (端子1に付けた付属品は`1a`へ追従する)。種別と型番は1バイトも変わらない。 <sub>`increasing_levels_rewrites_accessory_terminal_labels`</sub>
 - `terminal_numbers`キーがあるのに値が無効 (個数がピン数と合わない) なとき、その値は段数変更でも書き換わらず、undoで1バイトも変わらず戻る (コマンドは自分で戻せないキーを消さない)。 <sub>`a_present_but_invalid_terminal_numbers_value_survives_a_level_change`</sub>
+- 段数変更で土台の取り違えにより重複が起きる指定 (一方の極の段aラベルは段aの記号で終わって剥がされ、もう一方の極の段aラベルはもともと記号を持たず剥がされない、その結果同じ土台になる指定) は、何も書き込む前に拒否される (重複したラベルを持つterminal_numbersを黙って保存しない)。 <sub>`a_level_change_that_would_produce_duplicate_labels_is_refused_without_writing_anything`</sub>
 - 段数変更のundoは、変更前のsymbol_idと配置座標を**1回のundoでそろって**戻すので、端子は元の座標へ帰る。 <sub>`undoing_a_level_change_restores_the_symbol_id_and_the_position_together`</sub>
 - 1〜3の範囲外の段数指定は、図面を変えずに拒否される。 <sub>`setting_levels_outside_one_to_three_is_refused`</sub>
 - 端子台以外のシンボルの段数変更は拒否される (RenumberTerminals/SetTerminalNumbersと同じ門)。 <sub>`setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
@@ -898,6 +899,7 @@
 - 段を増やすと、極ごとのプレーンなラベルが段数ぶんに展開される。極→段の順で段記号を付け足す ("11,12" → "11a,11b,12a,12b")。 <sub>`relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major`</sub>
 - 段を減らして単段へ戻すと、消える段のラベルは落ち、残る段記号は取り除かれる。 <sub>`relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level`</sub>
 - 2段から3段に増やすと、既存の段a・段bのラベルはそのまま残り、極ごとに新しい段cのラベルが増える。 <sub>`relabel_for_levels_adds_a_new_level_on_top_of_existing_ones`</sub>
+- 段aのラベルの末尾が段aの記号と一致するときだけ土台から取り除く。段aのラベルがたまたま別の文字で終わる上書き(この仕組みが付け足した段記号ではなく、ユーザーが書いた表記の一部)ではその文字を残すので、別の文字で終わる上書きをした2つの極の土台が同じになって潰れることがない(Task 3再レビューの持ち越し: 以前は末尾がアルファベットなら何でも取り除いており、手で書いたラベルの一部を壊したり土台が重複したりし得た)。 <sub>`relabel_for_levels_only_strips_a_trailing_letter_that_matches_level_as_own_letter`</sub>
 - 指定した端子の後ろに予備を1個挿入すると、シンボルの極は末尾に足される (既存ピンは動かない) が、返る番号列はそれより後ろの極の番号がすべて1つ繰り下がり、空いた番号が新しい予備に渡る。 <sub>`inserting_a_spare_pushes_the_numbers_after_the_chosen_terminal`</sub>
 - 挿入位置を指定しない (末尾挿入) と、番号もそのまま続く: 新しい極は物理的にも番号的にも最後になるので、既存のどの端子の番号も変わらない。 <sub>`inserting_a_spare_at_the_end_does_not_renumber_anything`</sub>
 - 純関数の番号列で新しい予備の位置に来る行は、チャートではふつうの予備行として出る: 両側未結線で`spare`が立ち、シンボル既定の端子と見分けが付く特別扱いは何も無い。 <sub>`the_inserted_spares_row_is_unconnected_in_the_chart`</sub>
@@ -2187,6 +2189,7 @@
 - 端子台以外のシンボルと範囲外の段数はnull (プレビューを出さない) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - 段を増やすと極ごとのラベルに段記号が付き、減らすと残る段のラベルだけになる (段数1では段記号が落ちる) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - 末尾が英字でない上書きラベル (接頭辞付きの`X11`) は段記号を外す対象にならず、そのまま土台になる <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 段aのラベルの末尾が段aの記号以外の文字 (別の文字で終わる手書きの上書き) では土台から取り除かず、2極の土台が同じ文字列に潰れて重複することもない (Task 3再レビューの持ち越し) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - 指定した端子の後ろに挿入すると、symbol_idは末尾に1極増え、番号列はそれより後ろが繰り下がって空いた番号を新しい予備が引き継ぐ <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - 挿入位置を指定しない (末尾) と、番号は繰り下がらずそのまま続く <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - 0個以下の指定はnull (プレビューを出さない) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>

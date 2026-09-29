@@ -389,6 +389,11 @@ describe("level change helpers (Rust側 poles_and_levels_of / multilevel_id / re
   it("keeps a label that does not end in a level letter intact as the base", () => {
     expect(relabelForLevels(["X11", "X12"], 2, 1, 2)).toEqual(["X11a", "X11b", "X12a", "X12b"]);
   });
+
+  // ja: 段aのラベルの末尾が段aの記号以外の文字 (別の文字で終わる手書きの上書き) では土台から取り除かず、2極の土台が同じ文字列に潰れて重複することもない (Task 3再レビューの持ち越し)
+  it("only strips a trailing letter that matches level a's own letter, so two poles overridden with different trailing letters keep distinct bases", () => {
+    expect(relabelForLevels(["1X", "1Xb", "1Y", "1Yb"], 2, 2, 2)).toEqual(["1Xa", "1Xb", "1Ya", "1Yb"]);
+  });
 });
 
 describe("insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)", () => {

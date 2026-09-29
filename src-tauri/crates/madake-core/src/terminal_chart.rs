@@ -574,12 +574,19 @@ pub fn multilevel_id(symbol_id: &str, levels: usize) -> std::result::Result<Stri
     })
 }
 
-/// 段数を変えたときの新しい表示ラベル一覧を組み立てる (`Command::SetTerminalLevels`)。
+/// 段数を変えたときの新しい表示ラベル一覧を組み立てる (`Command::SetTerminalLevels`/
+/// `Command::InsertSpareTerminals`)。
 ///
 /// `old_display`は極→段の順 ([`terminal_numbers_of`]と同じ並び。長さ`poles * old_levels`)。
 /// 各極の**段a (単段なら唯一のラベル) を土台**にして、新しい段数ぶんの段記号を付け足す
-/// (`level_letter`)。土台は段aのラベルの末尾がアルファベット1文字ならそれを取り除いた文字列
-/// (段記号を保って極だけ採番した`RenumberTerminals`の結果とも整合する)。
+/// (`level_letter`)。土台は段aのラベルの末尾が**段aの記号 (`level_letter(0)`)** そのものなら
+/// それを取り除いた文字列 (段記号を保って極だけ採番した`RenumberTerminals`の結果とも整合する)。
+///
+/// **末尾がアルファベットなら何でも取り除く、ではない** (Task 3の再レビューで見つかった不具合。
+/// Task 4での修正): 手で`terminal_numbers`を`"11X"`のように上書きしていると、`X`はこの仕組みが
+/// 付け足した段記号ではなく、ユーザーが書いた表記の一部そのもの。末尾が段aの記号と一致する
+/// ときだけ取り除くことで、`"11X"`はそのまま土台になり (`"11Xa"`,`"11Xb"`,…)、たまたま英字で
+/// 終わる上書きラベルが黙って壊れたり、2つの極の土台が同じ文字列に潰れて重複したりしない。
 ///
 /// - 段を増やすとき: 新しく増える段は土台+新しい段記号 (例 `"11"` → `"11a","11b"`)
 /// - 段を減らすとき: 残る段のラベルだけを返す (消える段のラベルは含まない。単段になれば
@@ -598,10 +605,9 @@ pub fn relabel_for_levels(
             group[0].clone()
         } else {
             let s = &group[0];
+            let level_a = crate::symbol::level_letter(0);
             match s.chars().next_back() {
-                Some(last) if last.is_ascii_alphabetic() => {
-                    s[..s.len() - last.len_utf8()].to_string()
-                }
+                Some(last) if last == level_a => s[..s.len() - last.len_utf8()].to_string(),
                 _ => s.clone(),
             }
         };
@@ -2011,6 +2017,25 @@ mod tests {
         let old = vec!["11a".to_string(), "11b".to_string(), "12a".to_string(), "12b".to_string()];
         let out = relabel_for_levels(&old, 2, 2, 3);
         assert_eq!(out, vec!["11a", "11b", "11c", "12a", "12b", "12c"]);
+    }
+
+    /// Only a trailing letter that matches level a's own letter is stripped from the base; an override whose level-a label happens to end in some other letter (part of the user's own text, not a level letter this mechanism appended) keeps that letter, so two poles overridden to labels ending in different letters never collapse onto the same base (Task 3 re-review carry-over: previously any trailing alphabetic character was stripped, which could both destroy part of a hand-set label and produce duplicate bases).
+    /// 段aのラベルの末尾が段aの記号と一致するときだけ土台から取り除く。段aのラベルがたまたま別の文字で終わる上書き(この仕組みが付け足した段記号ではなく、ユーザーが書いた表記の一部)ではその文字を残すので、別の文字で終わる上書きをした2つの極の土台が同じになって潰れることがない(Task 3再レビューの持ち越し: 以前は末尾がアルファベットなら何でも取り除いており、手で書いたラベルの一部を壊したり土台が重複したりし得た)。
+    #[test]
+    fn relabel_for_levels_only_strips_a_trailing_letter_that_matches_level_as_own_letter() {
+        let old = vec!["11X".to_string(), "11Y".to_string(), "12X".to_string(), "12Y".to_string()];
+        let out = relabel_for_levels(&old, 2, 2, 3);
+        assert_eq!(
+            out,
+            vec!["11Xa", "11Xb", "11Xc", "12Xa", "12Xb", "12Xc"],
+            "末尾のXは段記号ではないので土台に残る"
+        );
+        // 2極の段aラベルが別の文字("X"/"Y")で終わっていても、その文字は段記号ではないので
+        // 土台は別のまま保たれる (以前の実装は末尾の英字を無条件に取り除くので、
+        // "1X"→"1"・"1Y"→"1"と土台が重複していた)
+        let old2 = vec!["1X".to_string(), "1Xb".to_string(), "1Y".to_string(), "1Yb".to_string()];
+        let out2 = relabel_for_levels(&old2, 2, 2, 2);
+        assert_eq!(out2, vec!["1Xa", "1Xb", "1Ya", "1Yb"], "土台1Xと1Yは重複しない");
     }
 
     // --- insert_spare_terminals (Task 4: 予備端子の挿入) ---

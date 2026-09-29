@@ -1257,6 +1257,14 @@ impl Engine {
         let had_override = crate::terminal_chart::terminal_numbers_override(&old_def, &inst.attrs).is_some();
         let new_display =
             crate::terminal_chart::relabel_for_levels(&old_display, poles, old_levels, levels);
+        // 書き込む前に必ず検証する (Task 3再レビューの持ち越し): relabel_for_levelsが土台を
+        // 取り違えて2つの極が同じラベルに潰れるような壊れた入力でも、無効な番号列を黙って
+        // 書き込まず図面を変えずに拒否する (SetTerminalNumbers/InsertSpareTerminalsと同じ門)
+        if !crate::terminal_chart::valid_terminal_numbers(&new_display, poles * levels) {
+            return Err(CoreError::InvalidCommand(
+                "段数を変えると端子番号が重複します (先に端子番号の上書きを直してください)".to_string(),
+            ));
+        }
 
         // 極→段の同じ位置 (段a・段bなど、両方に残る段) だけの旧ラベル→新ラベル対応。
         // ジャンパ・ピングループの書き換えに使う (rewrite_jumper_labels/rewrite_pin_group_ranges
@@ -4076,6 +4084,21 @@ mod tests {
         );
         engine.undo().unwrap();
         assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("1,2"));
+    }
+
+    /// A level change whose relabelled bases would collide (one pole's level-a label ends in level a's own letter and strips to the same base as another pole's level-a label that never had a letter to strip) is refused before anything is written, instead of silently storing a `terminal_numbers` value with duplicate labels.
+    /// 段数変更で土台の取り違えにより重複が起きる指定 (一方の極の段aラベルは段aの記号で終わって剥がされ、もう一方の極の段aラベルはもともと記号を持たず剥がされない、その結果同じ土台になる指定) は、何も書き込む前に拒否される (重複したラベルを持つterminal_numbersを黙って保存しない)。
+    #[test]
+    fn a_level_change_that_would_produce_duplicate_labels_is_refused_without_writing_anything() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_2p_2l");
+        // 極1の段aは"11a"(段aの記号で終わるので土台"11"に剥がれる)、極2の段aはもともと"11"
+        // (記号を持たないので剥がれない、土台はやはり"11") -> 土台が衝突する
+        engine
+            .execute(set_attr_command(&engine, sheet_id, id, "terminal_numbers", "11a,11b,11,XX"))
+            .unwrap();
+        let before = terminal_numbers_attr(&engine, sheet_id, id);
+        assert!(engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 3 }).is_err());
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), before, "図面は一切変わらない");
     }
 
     /// Undoing a level change restores the previous symbol_id and the instance position together, in one undo step, so the terminals land back on their original coordinates.
