@@ -270,6 +270,12 @@ fn text_units(s: &str) -> f64 {
     s.chars().map(|c| if c.is_ascii() { 1.0 } else { 2.0 }).sum()
 }
 
+/// 文字列を描いたときの幅 (mm)。[`fit_text`]が収まるかどうかを判断するのと同じ見積り。
+/// レイアウトの側でテキストの分の場所を先に確保するのに使う (端子接続図の段レーンの帯)。
+pub(crate) fn text_width(s: &str, font: f64) -> f64 {
+    text_units(s) * font * HALF_CHAR_RATIO
+}
+
 /// セル内テキストを列幅に収める。溢れる場合は末尾を落として [`ELLIPSIS`] を付ける。
 pub(crate) fn fit_text(s: &str, max_w: f64, font: f64) -> String {
     let unit = font * HALF_CHAR_RATIO;

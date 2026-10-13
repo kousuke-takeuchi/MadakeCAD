@@ -855,7 +855,14 @@ describe("spare insertion popover (Task 4: 予備端子の挿入)", () => {
     const store = await opened();
     expect(await store.insertSpareTerminals("3", 1)).toBe(true);
     expect(sent).toEqual([
-      { type: "insert_spare_terminals", sheet_id: "s1", entity_id: "tb1", after: "3", count: 1 },
+      {
+        type: "insert_spare_terminals",
+        sheet_id: "s1",
+        entity_id: "tb1",
+        after: "3",
+        count: 1,
+        renumber_following: true,
+      },
     ]);
   });
 
@@ -866,8 +873,37 @@ describe("spare insertion popover (Task 4: 予備端子の挿入)", () => {
     const store = await opened();
     expect(await store.insertSpareTerminals(null, 1)).toBe(true);
     expect(sent).toEqual([
-      { type: "insert_spare_terminals", sheet_id: "s1", entity_id: "tb1", after: null, count: 1 },
+      {
+        type: "insert_spare_terminals",
+        sheet_id: "s1",
+        entity_id: "tb1",
+        after: null,
+        count: 1,
+        renumber_following: true,
+      },
     ]);
+  });
+
+  // ja: 「空き番号のまま残す」で末尾に挿入すると、後ろの番号を変えずに次の空き番号 (9) が予備に付き、renumber_following=false で送られる
+  it("keeps following labels and gives the spare the next free number when 'leave vacant' is chosen at the end", async () => {
+    const sent = spyCommands();
+    const store = await openedSpare("terminal_block_8p", {}, [1, 2, 3, 4, 5, 6, 7, 8].map((n) => row(String(n))), 8);
+    expect(store.sparePreview(null, 1, false)).toEqual({
+      symbolFrom: "terminal_block_8p",
+      symbolTo: "terminal_block_9p",
+      spareLabels: ["9"],
+    });
+    expect(await store.insertSpareTerminals(null, 1, false)).toBe(true);
+    expect(sent.map((c) => (c as { renumber_following?: boolean }).renumber_following)).toEqual([false]);
+  });
+
+  // ja: 「空き番号のまま残す」で途中に挿入して番号がぶつかるときは keepDuplicate の指摘になり、コマンドは送られない
+  it("reports keepDuplicate and sends nothing when 'leave vacant' would collide with an existing number", async () => {
+    const sent = spyCommands();
+    const store = await openedSpare("terminal_block_8p", {}, [1, 2, 3, 4, 5, 6, 7, 8].map((n) => row(String(n))), 8);
+    expect(store.spareIssue("3", 1, false)).toEqual({ code: "keepDuplicate" });
+    expect(await store.insertSpareTerminals("3", 1, false)).toBe(false);
+    expect(sent).toEqual([]);
   });
 
   // ja: 0個以下の指定は、コマンドを送らずに断る

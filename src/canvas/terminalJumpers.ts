@@ -4,7 +4,13 @@
 // Pinia非依存の純関数だけを置き、端子台エディタのストア (stores/terminals.ts) も
 // キャンバス描画 (renderer.ts) も**ここ1か所**の正規化ルールを使う。
 
-import { levelLetter, parseTerminalNo, TERMINAL_LEVEL_MAX, TERMINAL_MARK_R } from "./terminalNo";
+import {
+  bumpLabelNumber,
+  levelLetter,
+  parseTerminalNo,
+  TERMINAL_LEVEL_MAX,
+  TERMINAL_MARK_R,
+} from "./terminalNo";
 import type { Point, RowOrder, SymbolDef } from "../ipc";
 
 /**
@@ -289,13 +295,24 @@ export function terminalRenumberPlan(
  *
  * 物理的には必ずシンボルの**末尾**に極を足す (呼び出し側が既存極の座標を保つため
  * インスタンスの`at`を平行移動する。ここではラベルの計算だけ)。**番号だけ**が`after`
- * (表示ラベル。`null`なら末尾) の直後に挿入されたように繰り下がる: `after`より後ろの極は
- * 表示番号が`count`だけ増え、空いた番号を新しい予備極が引き継ぐ。多段端子台は1極につき
+ * (表示ラベル。`null`なら末尾) の直後に挿入されたように振られる。多段端子台は1極につき
  * 段数ぶんの予備端子が増える (`9a`,`9b`,…)。
  *
- * `count`が0以下、`oldDisplay`の中に`after`が見つからない、または極数が読めない (`poles`が0)
- * ときは`null` (呼び出し側はプレビューを出さない。極数上限の確認はRust側と同じ定数を
- * 参照できる呼び出し側 (`stores/terminals.ts`) が別に行う — 循環importを避けるため)。
+ * **位置は必ず「チャートに出る順」(表示ラベルの順) で数える**。生のピン順ではない:
+ * この機能自身が生の順と番号順をわざと食い違わせるので (新しい極は物理的に末尾)、
+ * 生のインデックスで数えると2回目の挿入が壊れる。
+ *
+ * `renumberFollowing`が番号の扱い (デザイン`eTFE5`の「番号の扱い」ラジオ):
+ * `true`=詰める (`after`より後ろの極の番号が`count`だけ増え、空いた番号を予備が取る)、
+ * `false`=空ける (既存の番号は変えず、予備が`after`の次の番号を取る。ぶつかれば`null`)。
+ *
+ * 新しい番号は**隣の極の表記の数値部だけを増やして**作るので、前置き・後置きは引き継がれる
+ * (`A3` → `A4`、`11a` → `12a`)。
+ *
+ * `count`が0以下、`oldDisplay`の中に`after`が見つからない、極数が読めない (`poles`が0)、
+ * 番号を決められない (数字を含まない表記)、または番号が重複するときは`null`
+ * (呼び出し側はプレビューを出さない。極数上限の確認はRust側と同じ定数を参照できる
+ * 呼び出し側 (`stores/terminals.ts`) が別に行う — 循環importを避けるため)。
  */
 export function insertSpareTerminals(
   symbolId: string,
@@ -304,29 +321,42 @@ export function insertSpareTerminals(
   levels: number,
   after: string | null,
   count: number,
+  renumberFollowing = true,
 ): { symbolId: string; numbers: string[] } | null {
   if (!Number.isInteger(count) || count <= 0) return null;
   if (!symbolId.startsWith("terminal_block_") || poles === 0 || levels === 0) return null;
-  let afterPoleIdx: number;
+  // 挿入位置はチャートに出る順で数える (Rust側 display_pole_order と一致。安定ソート)
+  const order = Array.from({ length: poles }, (_, p) => p).sort(
+    (a, b) => parseTerminalNo(oldDisplay[a * levels] ?? "")[0] - parseTerminalNo(oldDisplay[b * levels] ?? "")[0],
+  );
+  let afterPos: number;
   if (after === null) {
-    afterPoleIdx = poles - 1;
+    afterPos = order.length - 1;
   } else {
     const pos = oldDisplay.indexOf(after);
     if (pos < 0) return null;
-    afterPoleIdx = Math.floor(pos / levels);
+    afterPos = order.indexOf(Math.floor(pos / levels));
+    if (afterPos < 0) return null;
   }
-  const baseNumber = (poleIdx: number) => parseTerminalNo(oldDisplay[poleIdx * levels] ?? "")[0];
-  const refNumber = baseNumber(afterPoleIdx);
-  const labelOf = (n: number, l: number) => (levels === 1 ? `${n}` : `${n}${levelLetter(l)}`);
+  const refPole = order[afterPos];
   const newPoles = poles + count;
-  const numbers: string[] = [];
-  for (let p = 0; p < poles; p++) {
-    const n = baseNumber(p) + (p > afterPoleIdx ? count : 0);
-    for (let l = 0; l < levels; l++) numbers.push(labelOf(n, l));
+  const numbers = oldDisplay.slice();
+  if (renumberFollowing) {
+    for (const p of order.slice(afterPos + 1)) {
+      for (let l = 0; l < levels; l++) {
+        const i = p * levels + l;
+        const bumped = bumpLabelNumber(oldDisplay[i] ?? "", count);
+        if (bumped === null) return null;
+        numbers[i] = bumped;
+      }
+    }
   }
   for (let k = 0; k < count; k++) {
-    const n = refNumber + 1 + k;
-    for (let l = 0; l < levels; l++) numbers.push(labelOf(n, l));
+    for (let l = 0; l < levels; l++) {
+      const bumped = bumpLabelNumber(oldDisplay[refPole * levels + l] ?? "", k + 1);
+      if (bumped === null) return null;
+      numbers.push(bumped);
+    }
   }
   if (!validTerminalNumbers(numbers, newPoles * levels)) return null;
   const newSymbolId =

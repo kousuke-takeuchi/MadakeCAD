@@ -10,6 +10,7 @@
 
 import { defineStore } from "pinia";
 import { DYNAMIC_PIN_MAX, dynamicSymbol, parseTerminalNo, TERMINAL_LEVEL_MAX } from "../canvas/dynamicSymbol";
+import { levelLetter, splitLabelNumber } from "../canvas/terminalNo";
 import { chartOrderPinNumbers, parsePinGroups, PIN_GROUPS_ATTR } from "../canvas/pinGroups";
 // ジャンパ指定の正規化・並べ替え順の解釈はキャンバス描画と共通の純関数を使う
 // (Pinia非依存モジュールが正。Rust側 madake-core/src/terminal_chart.rs の双子)
@@ -109,11 +110,15 @@ export interface SparePreview {
 
 /**
  * 予備挿入案が適用できない理由 (デザイン「予備端子の挿入 (エラー)」の指摘行)。
- * `code`はi18nキーの末尾 (`terminals.spare.issue<Code>`)。
+ * `code`はi18nキーの末尾 (`terminals.spareInsert.issue<Code>`)。
  */
 export type SpareIssue =
   | { code: "count" }
   | { code: "poleCap"; max: number }
+  /** 挿入位置の端子番号に数字が無いので新しい番号を決められない (例 `"予備"`)。 */
+  | { code: "nonNumeric"; label: string }
+  /** 「空き番号のまま残す」指定だが、予備に渡る番号が既に使われている。 */
+  | { code: "keepDuplicate" }
   | { code: "invalid" };
 
 /** グリッドの1行 (デザイン「端子台エディタ」の列順)。 */
@@ -319,14 +324,13 @@ export const useTerminalsStore = defineStore("terminals", {
     /**
      * 「予備挿入」ポップオーバーの挿入位置ドロップダウンの選択肢 (極ごとに1つ。多段端子台では
      * 段aのラベルを代表にする — 挿入は極単位で、段は自動で付いてくるため)。
+     *
+     * **並びは隣のグリッドと同じ行順** (チャートの行をそのまま辿る)。生のピン順ではない:
+     * 予備を挿入した端子台では生の順と番号順がわざと食い違うので、生の順で並べると
+     * ドロップダウンだけが予備を末尾に見せてグリッドと食い違ってしまう。
      */
     spareAfterOptions(): string[] {
-      const [, levels] = polesAndLevelsOf(this.blockDef);
-      const step = Math.max(levels, 1);
-      const display = this.displayTerminalNumbers;
-      const out: string[] = [];
-      for (let i = 0; i < display.length; i += step) out.push(display[i]);
-      return out;
+      return this.rows.filter((r) => r.level === "" || r.level === levelLetter(0)).map((r) => r.terminal);
     },
     /** 選択中の端子にジャンパを掛けられるか (隣り合う2端子以上)。 */
     canAddJumper(): boolean {
@@ -729,12 +733,20 @@ export const useTerminalsStore = defineStore("terminals", {
      * (図面はまだ変えない)。適用できない案 ([`spareIssue`]) はnull (プレビューを出さない —
      * デザイン「予備端子の挿入 (エラー)」がプレビュー枠自体を出さないのと同じ形)。
      */
-    sparePreview(after: string | null, count: number): SparePreview | null {
+    sparePreview(after: string | null, count: number, renumberFollowing = true): SparePreview | null {
       const inst = this.blockInstance;
       const def = this.blockDef;
       if (!inst || !def) return null;
       const [poles, levels] = polesAndLevelsOf(def);
-      const plan = insertSpareTerminalsPlan(inst.symbol_id, this.displayTerminalNumbers, poles, levels, after, count);
+      const plan = insertSpareTerminalsPlan(
+        inst.symbol_id,
+        this.displayTerminalNumbers,
+        poles,
+        levels,
+        after,
+        count,
+        renumberFollowing,
+      );
       if (!plan) return null;
       return {
         symbolFrom: inst.symbol_id,
@@ -747,16 +759,33 @@ export const useTerminalsStore = defineStore("terminals", {
      * 予備挿入案が適用できない理由 (適用できるならnull)。デザイン「予備端子の挿入 (エラー)」の
      * 指摘行が出す。極数の上限は[`insertSpareTerminalsPlan`]自身は見ない (循環importを避けて
      * Rust側と同じ定数[`DYNAMIC_PIN_MAX`]をここで直接確認する)ので、その門は先に通す。
+     *
+     * 純関数は理由を返さない (`null`だけ) ので、ユーザーに直せることが分かる2つの理由は
+     * ここで切り分ける: 挿入位置のラベルに数字が無い / 「空き番号のまま残す」指定で番号が
+     * ぶつかった (詰める指定なら通る)。それ以外はまとめて`invalid`。
      */
-    spareIssue(after: string | null, count: number): SpareIssue | null {
+    spareIssue(after: string | null, count: number, renumberFollowing = true): SpareIssue | null {
       if (!Number.isInteger(count) || count < 1) return { code: "count" };
-      const [poles] = polesAndLevelsOf(this.blockDef);
+      const [poles, levels] = polesAndLevelsOf(this.blockDef);
       if (poles > 0 && poles + count > DYNAMIC_PIN_MAX) return { code: "poleCap", max: DYNAMIC_PIN_MAX };
-      return this.sparePreview(after, count) === null ? { code: "invalid" } : null;
+      if (this.sparePreview(after, count, renumberFollowing) !== null) return null;
+      const display = this.displayTerminalNumbers;
+      const step = Math.max(levels, 1);
+      const refLabel =
+        after === null
+          ? [...this.spareAfterOptions].pop()
+          : display[Math.floor(display.indexOf(after) / step) * step];
+      if (refLabel !== undefined && splitLabelNumber(refLabel) === null) {
+        return { code: "nonNumeric", label: refLabel };
+      }
+      if (!renumberFollowing && this.sparePreview(after, count, true) !== null) {
+        return { code: "keepDuplicate" };
+      }
+      return { code: "invalid" };
     },
 
     /** 予備挿入 (InsertSpareTerminals) コマンド。端子台が見つからなければnull。 */
-    spareCommand(after: string | null, count: number): Command | null {
+    spareCommand(after: string | null, count: number, renumberFollowing = true): Command | null {
       const block = this.block;
       if (!block) return null;
       return {
@@ -765,6 +794,7 @@ export const useTerminalsStore = defineStore("terminals", {
         entity_id: block.entity_id,
         after,
         count,
+        renumber_following: renumberFollowing,
       };
     },
 
@@ -773,9 +803,13 @@ export const useTerminalsStore = defineStore("terminals", {
      * 適用できない案 ([`spareIssue`]) は**コマンドを送らずに**断る (ポップオーバーが指摘行を
      * 出したまま適用ボタンを無効にしているので、ここは念のための門。採番・段数と同じ形)。
      */
-    async insertSpareTerminals(after: string | null, count: number): Promise<boolean> {
-      if (this.spareIssue(after, count) !== null) return false;
-      const command = this.spareCommand(after, count);
+    async insertSpareTerminals(
+      after: string | null,
+      count: number,
+      renumberFollowing = true,
+    ): Promise<boolean> {
+      if (this.spareIssue(after, count, renumberFollowing) !== null) return false;
+      const command = this.spareCommand(after, count, renumberFollowing);
       if (!command || this.busy) return false;
       this.busy = true;
       this.error = null;

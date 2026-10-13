@@ -415,6 +415,45 @@ describe("insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_sp
     });
   });
 
+  // ja: 接頭辞付きのラベル (A1..A8) でも数字の部分だけを繰り下げ、接頭辞は保たれる (Rust側 inserting_a_spare_keeps_a_prefixed_labels_prefix と同じ値)
+  it("keeps a prefixed label's prefix and shifts only its numeric part", () => {
+    const labels = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"];
+    expect(insertSpareTerminals("terminal_block_8p", labels, 8, 1, "A3", 1)).toEqual({
+      symbolId: "terminal_block_9p",
+      numbers: ["A1", "A2", "A3", "A5", "A6", "A7", "A8", "A9", "A4"],
+    });
+  });
+
+  // ja: 2回目の挿入は番号順 (チャートの並び) で位置を数えるので、1回目で末尾に足した極があっても末尾・途中のどちらへも挿入できる (Rust側 inserting_a_second_spare_counts_the_position_in_the_charts_order と同じ値)
+  it("counts the insertion point in the chart's number order so a second insertion still works", () => {
+    const after1 = ["1", "2", "3", "5", "6", "7", "8", "9", "4"];
+    expect(insertSpareTerminals("terminal_block_9p", after1, 9, 1, null, 1)).toEqual({
+      symbolId: "terminal_block_10p",
+      numbers: ["1", "2", "3", "5", "6", "7", "8", "9", "4", "10"],
+    });
+    expect(insertSpareTerminals("terminal_block_9p", after1, 9, 1, "4", 1)).not.toBeNull();
+    expect(insertSpareTerminals("terminal_block_9p", after1, 9, 1, "9", 1)).not.toBeNull();
+  });
+
+  // ja: 「空き番号のまま残す」(renumberFollowing=false) では後ろの番号を変えず、空いていた番号を予備が取る (Rust側 leaving_the_following_numbers_alone_gives_the_spare_the_vacant_number と同じ値)
+  it("leaves the following numbers alone and gives the spare the vacant number when not renumbering", () => {
+    expect(insertSpareTerminals("terminal_block_4p", ["1", "2", "3", "5"], 4, 1, "3", 1, false)).toEqual({
+      symbolId: "terminal_block_5p",
+      numbers: ["1", "2", "3", "5", "4"],
+    });
+  });
+
+  // ja: 「空き番号のまま残す」で予備の番号が既存の端子とぶつかるときはnull (Rust側は理由付きで拒否)
+  it("returns null when not renumbering would collide with an existing number", () => {
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, "3", 1, false)).toBeNull();
+  });
+
+  // ja: 挿入位置のラベルに数字が無い ("予備") ときはnull (Rust側は理由付きで拒否)
+  it("returns null when the insertion point's label has no digits", () => {
+    const labels = ["1", "2", "予備", "4"];
+    expect(insertSpareTerminals("terminal_block_4p", labels, 4, 1, "予備", 1)).toBeNull();
+  });
+
   // ja: 0個以下の指定はnull (プレビューを出さない)
   it("returns null for a non-positive count", () => {
     expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, null, 0)).toBeNull();

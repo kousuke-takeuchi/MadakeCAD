@@ -290,6 +290,13 @@ pub fn default_terminal_step() -> u32 {
     1
 }
 
+/// `Command::InsertSpareTerminals`の「番号の扱い」の既定値 (JSONで省略されたとき)。
+/// 繰り下げ (詰める) — このコマンドが最初から持っていた挙動なので、省略形のJSONを送る
+/// MCP/Link API/CLIの既存の呼び出しは挙動が変わらない。
+pub fn default_renumber_following() -> bool {
+    true
+}
+
 /// `attrs["terminal_numbers"]` のキー名 (spec §1.1)。ピン順 ([`terminal_numbers_of`] と同じ並び)
 /// のラベルのカンマ区切り。未設定ならシンボル定義の既定 ([`terminal_numbers_of`]) を使う。
 pub const TERMINAL_NUMBERS_ATTR: &str = "terminal_numbers";
@@ -622,6 +629,44 @@ pub fn relabel_for_levels(
     out
 }
 
+/// 端子番号の表記を「前置き・数値・後置き」に分ける (`"A3"` → `("A", 3, "")`、
+/// `"11a"` → `("", 11, "a")`、`"3"` → `("", 3, "")`)。最初に現れる数字の並びを数値部と見る。
+/// 数字が1つも無い (`"予備"`) / 数値部が`u32`に収まらない表記は`None`。
+///
+/// [`crate::symbol::parse_terminal_no`]とは役割が違う: あちらは**並べ替えのキー**なので
+/// 読めない表記を`u32::MAX`という番兵にして末尾へ回すが、こちらは**番号の計算**に使うので
+/// 読めないことをはっきり`None`で返す (番兵のまま足し算すると桁溢れする)。
+fn split_label_number(label: &str) -> Option<(&str, u32, &str)> {
+    let start = label.find(|c: char| c.is_ascii_digit())?;
+    let end = label[start..]
+        .find(|c: char| !c.is_ascii_digit())
+        .map(|i| start + i)
+        .unwrap_or(label.len());
+    let n = label[start..end].parse::<u32>().ok()?;
+    Some((&label[..start], n, &label[end..]))
+}
+
+/// 端子番号の表記の**数値部だけ**を`delta`増やした表記 (`("A3", 1)` → `"A4"`、
+/// `("11a", 1)` → `"12a"`)。前置き・後置きはそのまま引き継ぐので、接頭辞付きの採番
+/// (`RenumberTerminals`の`prefix`) や手書きの上書き表記を壊さない。
+///
+/// 数値部が無い表記・`u32`を超える結果は`None` (呼び出し側が理由を添えて拒否する。
+/// パニックも桁溢れもしない)。
+fn bump_label_number(label: &str, delta: u32) -> Option<String> {
+    let (prefix, n, suffix) = split_label_number(label)?;
+    Some(format!("{prefix}{}{suffix}", n.checked_add(delta)?))
+}
+
+/// 極 (0始まりの生のインデックス) を**チャートに出る順** ([`RowOrder::Number`] =
+/// 表示ラベルの極番号の昇順) に並べた列。読めないラベル ([`crate::symbol::parse_terminal_no`]が
+/// `u32::MAX`を返す表記。接頭辞付きの`"A3"`など) は同じキーに潰れるが、並べ替えが安定なので
+/// 生の順のまま末尾に固まる — [`sort_terminal_rows`]のクラスタ並べ替えと同じ結果になる。
+fn display_pole_order(display: &[String], poles: usize, levels: usize) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..poles).collect();
+    order.sort_by_key(|&p| parse_terminal_no(&display[p * levels]).0);
+    order
+}
+
 /// 端子台に予備端子を`count`個挿入する (spec §1.1「予備端子の挿入」、Task 4)。
 ///
 /// **物理的には必ずシンボルの末尾に極を足す**: 既存の極 (1..poles) はインスタンスの`at`を
@@ -629,9 +674,27 @@ pub fn relabel_for_levels(
 /// (`Command::InsertSpareTerminals`)が使う)、極数を増やしても既存結線が外れない
 /// (`terminal_block_8p` → `terminal_block_9p`で1〜8番ピンの座標が動かない、という
 /// Step 1のredがこの設計を固定した)。**番号だけ**が`after`(表示ラベル。`None`なら末尾)の
-/// 直後に挿入されたように繰り下がる: `after`より後ろの極は表示番号が`count`だけ増え、
-/// 空いた番号を新しい予備極が引き継ぐ。多段端子台は1極につき段数ぶんの予備端子が増える
+/// 直後に挿入されたように振られる。多段端子台は1極につき段数ぶんの予備端子が増える
 /// (`9a`,`9b`,…)。
+///
+/// **位置は必ず「チャートに出る順」(表示ラベルの順) で数える** ([`display_pole_order`])。
+/// 生のピン順ではない: この機能自身が生の順と番号順をわざと食い違わせるので (新しい極は
+/// 物理的に末尾)、生のインデックスで数えると**2回目の挿入が壊れる** — `after`の指す極も
+/// 「末尾」もチャートの見た目と違う極になり、番号が重複して拒否されてしまう
+/// (レビューのCritical 1。挿入した端子台へもう1つ挿入できないという不具合だった)。
+///
+/// `renumber_following`が番号の扱いを決める (デザイン`eTFE5`の「番号の扱い」ラジオ):
+/// - `true` (詰める。「末尾に極を足して番号を繰り下げる」): 表示順で`after`より後ろの極の
+///   番号が`count`だけ増え、空いた番号を新しい予備極が引き継ぐ (番号は連続したまま)
+/// - `false` (空ける。「予備を空き番号のまま残す」): 既存の極の番号は1つも変えず、
+///   新しい予備極が`after`の次の番号を取る。その番号が既に使われていれば`Err`
+///   (空き番号が無いのに空けられないため。詰める指定か別の位置を選ぶ)
+///
+/// 新しい番号は**隣の極の表記の数値部だけを増やして**作るので、前置き・後置きは引き継がれる
+/// (`A3` → `A4`、`11a` → `12a`)。接頭辞付きで採番した端子台 (`RenumberTerminals`の`prefix`)
+/// でも表記が壊れない。数字を含まない表記は理由を添えて`Err` (以前は
+/// [`crate::symbol::parse_terminal_no`]の`u32::MAX`番兵のまま足していたので桁溢れで
+/// パニックしていた。レビューのCritical 2)。
 ///
 /// 戻り値は新しい`symbol_id`と、新しい極数ぶんの表示ラベル (raw昇順、[`terminal_numbers_of`]と
 /// 同じ並び。既存極が先、新しい予備極が末尾)。この並びは物理的な生ピン順であって、
@@ -639,11 +702,13 @@ pub fn relabel_for_levels(
 /// 表示ラベルの数値順に並べ直すので、チャートには`after`の直後に挿入された見た目で出る)。
 ///
 /// `count`が0、極数の上限[`crate::symbol::DYNAMIC_PIN_MAX`]を超える、`inst.symbol_id`が
-/// 端子台でない、または`after`が今の端子番号のどれとも一致しない場合は`Err`(日本語文)。
+/// 端子台でない、`after`が今の端子番号のどれとも一致しない、番号を決められない (数字を
+/// 含まない表記)、または出来上がる番号が重複する場合は`Err`(日本語文)。
 pub fn insert_spare_terminals(
     inst: &SymbolInstance,
     after: Option<&str>,
     count: usize,
+    renumber_following: bool,
 ) -> std::result::Result<(String, Vec<String>), String> {
     if count == 0 {
         return Err("挿入する予備端子は1個以上にしてください".to_string());
@@ -666,42 +731,51 @@ pub fn insert_spare_terminals(
         .ok_or_else(|| format!("不明な端子台シンボルです ({})", inst.symbol_id))?;
     let old_display = terminal_numbers_of_instance(&def, &inst.attrs);
 
-    let after_pole_idx = match after {
-        None => poles - 1,
+    // 挿入位置はチャートに出る順で数える (生のピン順ではない)
+    let order = display_pole_order(&old_display, poles, levels);
+    let after_pos = match after {
+        None => order.len() - 1,
         Some(label) => {
             let pos = old_display
                 .iter()
                 .position(|l| l == label)
                 .ok_or_else(|| format!("端子番号 {label} が見つかりません"))?;
-            pos / levels
+            let pole = pos / levels;
+            order.iter().position(|&p| p == pole).expect("全極が並びに入っている")
         }
     };
-    let base_number = |pole_idx: usize| parse_terminal_no(&old_display[pole_idx * levels]).0;
-    let ref_number = base_number(after_pole_idx);
-    let label_of = |n: u32, l: usize| {
-        if levels == 1 {
-            n.to_string()
-        } else {
-            format!("{n}{}", crate::symbol::level_letter(l))
-        }
+    let ref_pole = order[after_pos];
+    let bump = |label: &str, delta: u32, what: &str| -> std::result::Result<String, String> {
+        bump_label_number(label, delta).ok_or_else(|| {
+            format!("端子番号 {label} は数字を含まないので{what}を決められません (先に端子番号を採番し直してください)")
+        })
     };
 
-    let mut new_display = Vec::with_capacity(new_poles * levels);
-    for p in 0..poles {
-        let n = base_number(p) + if p > after_pole_idx { count as u32 } else { 0 };
-        for l in 0..levels {
-            new_display.push(label_of(n, l));
+    let mut new_display = old_display.clone();
+    new_display.reserve(count * levels);
+    // 「詰める」なら表示順で後ろの極の番号を繰り下げる。「空ける」なら既存の番号は触らない
+    if renumber_following {
+        for &p in &order[after_pos + 1..] {
+            for l in 0..levels {
+                let i = p * levels + l;
+                new_display[i] = bump(&old_display[i], count as u32, "繰り下げ後の番号")?;
+            }
         }
     }
+    // 新しい予備極の番号は、直前の極の表記の数値部を1つずつ増やして作る (前置き・後置きは引き継ぐ)
     for k in 0..count {
-        let n = ref_number + 1 + k as u32;
         for l in 0..levels {
-            new_display.push(label_of(n, l));
+            let label = &old_display[ref_pole * levels + l];
+            new_display.push(bump(label, k as u32 + 1, "予備端子の番号")?);
         }
     }
 
     if !valid_terminal_numbers(&new_display, new_poles * levels) {
-        return Err("番号の組み立てに失敗しました (端子番号が重複しています)".to_string());
+        return Err(if renumber_following {
+            "端子番号が重複します (今の端子番号を採番し直してから挿入してください)".to_string()
+        } else {
+            "空き番号が無いので「予備を空き番号のまま残す」では挿入できません (番号を繰り下げるか、別の位置を選んでください)".to_string()
+        });
     }
 
     let new_symbol_id = if levels == 1 {
@@ -2059,7 +2133,7 @@ mod tests {
     #[test]
     fn inserting_a_spare_pushes_the_numbers_after_the_chosen_terminal() {
         let inst = spare_inst("terminal_block_8p");
-        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1).expect("挿入");
+        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1, true).expect("挿入");
         assert_eq!(id, "terminal_block_9p", "物理的な極は末尾に1つ増える");
         assert_eq!(
             numbers,
@@ -2073,7 +2147,7 @@ mod tests {
     #[test]
     fn inserting_a_spare_at_the_end_does_not_renumber_anything() {
         let inst = spare_inst("terminal_block_8p");
-        let (id, numbers) = insert_spare_terminals(&inst, None, 1).expect("挿入");
+        let (id, numbers) = insert_spare_terminals(&inst, None, 1, true).expect("挿入");
         assert_eq!(id, "terminal_block_9p");
         assert_eq!(numbers, ["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
     }
@@ -2084,7 +2158,7 @@ mod tests {
     fn the_inserted_spares_row_is_unconnected_in_the_chart() {
         let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
         let inst = spare_inst("terminal_block_8p");
-        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1).expect("挿入");
+        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1, true).expect("挿入");
         let mut tb = spare_inst(&id);
         tb.id = inst.id;
         tb.attrs.insert(TERMINAL_NUMBERS_ATTR.into(), numbers.join(","));
@@ -2100,7 +2174,7 @@ mod tests {
     #[test]
     fn inserting_zero_spares_is_refused() {
         let inst = spare_inst("terminal_block_8p");
-        assert!(insert_spare_terminals(&inst, None, 0).is_err());
+        assert!(insert_spare_terminals(&inst, None, 0, true).is_err());
     }
 
     /// Naming a terminal the block does not have as the insertion point is refused, not silently treated as "append at the end".
@@ -2108,7 +2182,7 @@ mod tests {
     #[test]
     fn inserting_after_an_unknown_terminal_is_refused() {
         let inst = spare_inst("terminal_block_8p");
-        assert!(insert_spare_terminals(&inst, Some("99"), 1).is_err());
+        assert!(insert_spare_terminals(&inst, Some("99"), 1, true).is_err());
     }
 
     /// Inserting spares beyond the dynamic symbol family's pole cap is refused.
@@ -2116,7 +2190,7 @@ mod tests {
     #[test]
     fn inserting_past_the_pole_cap_is_refused() {
         let inst = spare_inst(&format!("terminal_block_{}p", crate::symbol::DYNAMIC_PIN_MAX));
-        assert!(insert_spare_terminals(&inst, None, 1).is_err());
+        assert!(insert_spare_terminals(&inst, None, 1, true).is_err());
     }
 
     /// On a multi-level block, one inserted spare pole grows into one terminal per level (two new labels "3a"/"3b" for a 2-level block), keeping every level's own letter.
@@ -2124,7 +2198,7 @@ mod tests {
     #[test]
     fn inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level() {
         let inst = spare_inst("terminal_block_4p_2l");
-        let (id, numbers) = insert_spare_terminals(&inst, Some("2a"), 1).expect("挿入");
+        let (id, numbers) = insert_spare_terminals(&inst, Some("2a"), 1, true).expect("挿入");
         assert_eq!(id, "terminal_block_5p_2l");
         assert_eq!(
             numbers,
@@ -2133,13 +2207,122 @@ mod tests {
         );
     }
 
+    /// 端子番号を上書きした端子台のインスタンス (2回目以降の挿入を試すテスト用)。
+    fn spare_inst_numbered(symbol_id: &str, numbers: &[&str]) -> SymbolInstance {
+        let mut inst = spare_inst(symbol_id);
+        inst.attrs.insert(TERMINAL_NUMBERS_ATTR.into(), numbers.join(","));
+        inst
+    }
+
+    /// A second and a third spare insertion into the same block both work, because the insertion point is counted in the order the chart shows (the numbers), not in the physical pin order the first insertion deliberately left out of step.
+    /// 同じ端子台への2回目・3回目の予備挿入もそのまま通る。挿入位置をチャートに出る順 (番号順) で数えるので、1回目の挿入がわざと食い違わせた物理的なピン順には引きずられない。
+    #[test]
+    fn inserting_a_second_spare_counts_the_position_in_the_charts_order() {
+        // 1回目: 8極の3の後ろ → 物理的な極は末尾、番号は 4
+        let (id1, n1) = insert_spare_terminals(&spare_inst("terminal_block_8p"), Some("3"), 1, true)
+            .expect("1回目");
+        assert_eq!(n1, ["1", "2", "3", "5", "6", "7", "8", "9", "4"]);
+        // 2回目: 末尾 (番号順の最後は 9。生のピン順の最後は挿入した 4)
+        let inst2 = spare_inst_numbered(&id1, &n1.iter().map(String::as_str).collect::<Vec<_>>());
+        let (id2, n2) = insert_spare_terminals(&inst2, None, 1, true).expect("2回目 (末尾)");
+        assert_eq!(id2, "terminal_block_10p");
+        assert_eq!(n2, ["1", "2", "3", "5", "6", "7", "8", "9", "4", "10"], "末尾は番号順の最後 (9) の後ろ");
+        // 3回目: 5の後ろ (番号順で 5 より後ろの 6〜10 が繰り下がり、空いた 6 を予備が取る)
+        let inst3 = spare_inst_numbered(&id2, &n2.iter().map(String::as_str).collect::<Vec<_>>());
+        let (id3, n3) = insert_spare_terminals(&inst3, Some("5"), 1, true).expect("3回目");
+        assert_eq!(id3, "terminal_block_11p");
+        let mut sorted: Vec<u32> = n3.iter().map(|l| l.parse::<u32>().unwrap()).collect();
+        sorted.sort_unstable();
+        assert_eq!(sorted, (1..=11).collect::<Vec<u32>>(), "番号は1〜11の連番で重複しない");
+    }
+
+    /// Every insertion point offered after a first mid-block insertion is accepted, including the popover's default 末尾 — the position named is looked up among the displayed numbers, so none of them collides with the number the first spare took.
+    /// 1回目の途中挿入のあとに選べる挿入位置はどれも通る (ポップオーバー既定の末尾も含む)。指定した位置は表示番号の中から探すので、1回目の予備が取った番号とぶつからない。
+    #[test]
+    fn every_insertion_point_still_works_after_a_mid_block_insertion() {
+        let (id1, n1) = insert_spare_terminals(&spare_inst("terminal_block_8p"), Some("3"), 1, true)
+            .expect("1回目");
+        let labels: Vec<&str> = n1.iter().map(String::as_str).collect();
+        for after in [None, Some("3"), Some("4"), Some("5"), Some("9")] {
+            let inst = spare_inst_numbered(&id1, &labels);
+            let (_, numbers) = insert_spare_terminals(&inst, after, 1, true)
+                .unwrap_or_else(|e| panic!("after={after:?} が拒否された: {e}"));
+            let mut sorted: Vec<u32> = numbers.iter().map(|l| l.parse::<u32>().unwrap()).collect();
+            sorted.sort_unstable();
+            assert_eq!(sorted, (1..=10).collect::<Vec<u32>>(), "after={after:?}: 1〜10の連番になる");
+        }
+    }
+
+    /// A second insertion on a multi-level block also works and again adds one terminal per level, numbered after the pole that is last in the chart's order.
+    /// 多段端子台への2回目の挿入も通り、やはり1極につき段数ぶんの端子が増える。番号はチャートの順で最後の極の次になる。
+    #[test]
+    fn inserting_a_second_spare_on_a_multilevel_block_adds_one_terminal_per_level() {
+        let (id1, n1) = insert_spare_terminals(&spare_inst("terminal_block_8p_2l"), None, 1, true)
+            .expect("1回目 (末尾)");
+        assert_eq!(id1, "terminal_block_9p_2l");
+        assert_eq!(&n1[16..], ["9a", "9b"], "末尾挿入は9a・9bになる");
+        let inst2 = spare_inst_numbered(&id1, &n1.iter().map(String::as_str).collect::<Vec<_>>());
+        let (id2, n2) = insert_spare_terminals(&inst2, Some("9a"), 1, true).expect("2回目");
+        assert_eq!(id2, "terminal_block_10p_2l");
+        assert_eq!(&n2[18..], ["10a", "10b"], "9aの後ろは10a・10b");
+    }
+
+    /// Spare labels are derived by bumping only the numeric part of the neighbouring label, so a block renumbered with a prefix keeps its prefix (and never overflows on the "unreadable number" sentinel).
+    /// 予備のラベルは隣の端子の表記の数値部だけを増やして作るので、接頭辞を付けて採番した端子台は接頭辞を保つ (「読めない番号」の番兵で桁溢れすることもない)。
+    #[test]
+    fn inserting_a_spare_keeps_a_prefixed_labels_prefix() {
+        let inst = spare_inst_numbered(
+            "terminal_block_8p",
+            &["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"],
+        );
+        let (id, numbers) = insert_spare_terminals(&inst, Some("A3"), 1, true).expect("挿入");
+        assert_eq!(id, "terminal_block_9p");
+        assert_eq!(
+            numbers,
+            ["A1", "A2", "A3", "A5", "A6", "A7", "A8", "A9", "A4"],
+            "A3の後ろが繰り下がり、空いたA4を予備が取る (接頭辞Aは保たれる)"
+        );
+    }
+
+    /// A label with no digits at all cannot be numbered from, so the insertion is refused with a reason instead of panicking or silently destroying the label.
+    /// 数字を1つも含まないラベルからは番号を決められないので、パニックしたりラベルを黙って壊したりせず、理由を添えて拒否する。
+    #[test]
+    fn inserting_a_spare_next_to_a_label_without_digits_is_refused() {
+        let inst = spare_inst_numbered("terminal_block_4p", &["予備", "2", "3", "4"]);
+        let err = insert_spare_terminals(&inst, Some("予備"), 1, true).expect_err("拒否");
+        assert!(err.contains("予備"), "どのラベルが数字を含まないのか分かる: {err}");
+        // 繰り下げる側に数字を含まないラベルがあるときも同じ (番号を決められない)
+        assert!(insert_spare_terminals(&inst, Some("2"), 1, true).is_err());
+    }
+
+    /// Leaving the following numbers alone (the "leave the spare with a vacant number" mode) changes no existing label and hands the spare the vacant number after the chosen terminal.
+    /// 後ろの番号を動かさない扱い (「予備を空き番号のまま残す」) では既存のラベルが1つも変わらず、選んだ端子の次の空き番号が予備に渡る。
+    #[test]
+    fn leaving_the_following_numbers_alone_gives_the_spare_the_vacant_number() {
+        let inst = spare_inst_numbered("terminal_block_4p", &["1", "2", "3", "5"]);
+        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1, false).expect("挿入");
+        assert_eq!(id, "terminal_block_5p");
+        assert_eq!(numbers, ["1", "2", "3", "5", "4"], "5は動かず、空いていた4を予備が取る");
+    }
+
+    /// In the "leave the numbers alone" mode an insertion that would give the spare a number another terminal already uses is refused with a reason, instead of writing duplicate labels.
+    /// 「空き番号のまま残す」扱いで、予備の番号が既にある端子とぶつかる挿入は、重複したラベルを書かずに理由を添えて拒否する。
+    #[test]
+    fn leaving_the_following_numbers_alone_is_refused_when_the_number_is_taken() {
+        let inst = spare_inst("terminal_block_4p");
+        let err = insert_spare_terminals(&inst, Some("1"), 1, false).expect_err("拒否");
+        assert!(err.contains("空き番号"), "空き番号が無いことが分かる: {err}");
+        // 同じ位置でも「詰める」なら通る (後ろを繰り下げて場所を作るため)
+        assert!(insert_spare_terminals(&inst, Some("1"), 1, true).is_ok());
+    }
+
     /// The chart shows the spare exactly where its number says it belongs, not where its physical pole happens to sit: default (number) order re-sorts by the parsed pole number, so an insertion in the middle of the block reads as inserted in the middle of the chart too.
     /// チャートは物理的な極の位置ではなく、番号が示す位置に予備を表示する: 既定 (数値順) は解析した極番号で並べ直すので、ブロックの途中への挿入もチャートの途中への挿入として読める。
     #[test]
     fn the_chart_shows_the_spare_after_its_chosen_terminal_not_at_the_physical_end() {
         let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
         let inst = spare_inst("terminal_block_8p");
-        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1).expect("挿入");
+        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1, true).expect("挿入");
         let mut tb = spare_inst(&id);
         tb.id = inst.id;
         tb.attrs.insert(TERMINAL_NUMBERS_ATTR.into(), numbers.join(","));

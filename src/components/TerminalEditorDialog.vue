@@ -240,17 +240,23 @@ async function applyLevels() {
 // --- 予備挿入ポップオーバー (Task 4。デザイン「P 予備端子の挿入 (既定)」/「(エラー)」準拠、
 // 段数ポップオーバーと同じ開閉の型) ---
 // 挿入位置ドロップダウン ("末尾"=空文字/`null` + 極ごとの選択肢) + 個数ステッパー +
-// 番号の扱い (「末尾に極を足して番号を繰り下げる」だけが選べる。もう一方はデザインどおり
-// 並べるが選べない=フェーズ2送り) + プレビュー囲み (symbol_id・新しい予備のラベル)。
+// 番号の扱い (デザイン`eTFE5`の2つのラジオ。どちらも選べる: 詰める=後ろの番号を繰り下げる /
+// 空ける=既存の番号は変えず予備が空き番号を取る) + プレビュー囲み (symbol_id・新しい予備のラベル)。
 const showSpare = ref(false);
 /** ドロップダウンの生の値。空文字が「末尾」(`after: null`) を表す。 */
 const spareAfterRaw = ref("");
 const spareCount = ref(1);
+/** 番号の扱い。true=詰める (デザインで既定選択のラジオ)、false=空ける。 */
+const spareRenumberFollowing = ref(true);
 const spareError = ref("");
 const sparePopover = ref<HTMLElement | null>(null);
 const spareAfter = computed<string | null>(() => (spareAfterRaw.value === "" ? null : spareAfterRaw.value));
-const sparePreview = computed(() => terminals.sparePreview(spareAfter.value, spareCount.value));
-const spareIssue = computed(() => terminals.spareIssue(spareAfter.value, spareCount.value));
+const sparePreview = computed(() =>
+  terminals.sparePreview(spareAfter.value, spareCount.value, spareRenumberFollowing.value),
+);
+const spareIssue = computed(() =>
+  terminals.spareIssue(spareAfter.value, spareCount.value, spareRenumberFollowing.value),
+);
 const spareIssueText = computed(() => {
   const issue = spareIssue.value;
   if (!issue) return "";
@@ -265,6 +271,7 @@ function toggleSpare() {
   }
   spareAfterRaw.value = "";
   spareCount.value = 1;
+  spareRenumberFollowing.value = true;
   spareError.value = "";
   showSpare.value = true;
 }
@@ -319,19 +326,16 @@ async function applySpare() {
   spareError.value = "";
   const after = spareAfter.value;
   const count = spareCount.value;
-  if (!(await terminals.insertSpareTerminals(after, count))) {
+  // ログに出すラベルは**適用前**のプレビューから取る (適用後のプレビューは「次に挿入したら
+  // どうなるか」に変わってしまうため)
+  const labels = sparePreview.value?.spareLabels.join(",") ?? "";
+  if (!(await terminals.insertSpareTerminals(after, count, spareRenumberFollowing.value))) {
     spareError.value = terminals.error ?? "";
     if (terminals.error) ui.log(terminals.error);
     return;
   }
   showSpare.value = false;
-  ui.log(
-    t("terminals.spareInsertedLog", {
-      reference: terminals.reference,
-      count,
-      labels: sparePreview.value?.spareLabels.join(",") ?? "",
-    }),
-  );
+  ui.log(t("terminals.spareInsertedLog", { reference: terminals.reference, count, labels }));
 }
 
 const title = computed(() =>
@@ -655,12 +659,12 @@ async function generateDiagram() {
             <div class="popover-field">
               <span>{{ t("terminals.spareInsert.numberMode") }}</span>
               <span class="popover-radios">
-                <label class="popover-radio">
-                  <input type="radio" checked disabled />
+                <label class="popover-radio" :title="t('terminals.spareInsert.modeShiftHint')">
+                  <input v-model="spareRenumberFollowing" type="radio" :value="true" />
                   {{ t("terminals.spareInsert.modeShift") }}
                 </label>
                 <label class="popover-radio" :title="t('terminals.spareInsert.modeKeepHint')">
-                  <input type="radio" disabled />
+                  <input v-model="spareRenumberFollowing" type="radio" :value="false" />
                   {{ t("terminals.spareInsert.modeKeep") }}
                 </label>
               </span>

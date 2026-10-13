@@ -11,8 +11,8 @@
 
 use crate::model::{EntityId, Project};
 use crate::report_sheet::{
-    body_bottom, fit_text, page_open, report_title_block, table_top, ReportKind, ReportMeta,
-    REPORT_PAPER,
+    body_bottom, fit_text, page_open, report_title_block, table_top, text_width, ReportKind,
+    ReportMeta, REPORT_PAPER,
 };
 use crate::svg::{line_el, rect_el, text_el, CELL_PAD, FRAME_MARGIN, FRAME_STROKE};
 use crate::terminal_chart::{terminal_block_ids, terminal_chart, terminal_sort_key, TerminalRow};
@@ -71,6 +71,27 @@ fn box_left() -> f64 {
 }
 fn box_right() -> f64 {
     center_x() + BOX_W / 2.0
+}
+
+/// 本文に使える一番右のX (mm。図枠とセル余白の内側)。段レーンの帯の右端。
+fn right_inner() -> f64 {
+    REPORT_PAPER.dimensions_mm().0 - FRAME_MARGIN - CELL_PAD
+}
+
+/// 段ごとのジャンパレーンのために紙の**右端側**に確保する帯の幅 (mm)。単段なら不要 (0)。
+///
+/// レーンは`HARNESS_ZONE` (引出線の外端からブラケットとハーネス名が入る20mmの帯) の
+/// **外側**に置かなければならない。中に置くと、行を飛び越えるジャンパの縦線・横線・
+/// 「サドルジャンパ」の注記がハーネス名の文字の上を走ってしまう (レビューのImportant 4)。
+/// 接続先表記の帯の右端をこの幅だけ詰めて ([`Side::label_width`])、レーンと注記の場所を空ける。
+fn jumper_lane_band(level_count: usize) -> f64 {
+    if level_count <= 1 {
+        return 0.0;
+    }
+    (level_count - 1) as f64 * JUMPER_LANE_GAP
+        + CELL_PAD
+        + text_width(JUMPER_NOTE, NOTE_FONT)
+        + CELL_PAD
 }
 
 /// ページ内k番目 (0始まり) の端子の中心Y (mm)。
@@ -158,11 +179,13 @@ impl Side {
         }
     }
 
-    /// 接続先表記に使える幅 (mm)。
-    fn label_width(self) -> f64 {
+    /// 接続先表記に使える幅 (mm)。内部側は段レーンの帯 (`lane_band`。
+    /// [`jumper_lane_band`]。単段なら0) の分だけ短くなる — レーンの縦線と注記が
+    /// 接続先表記の文字に重ならないようにするため。
+    fn label_width(self, lane_band: f64) -> f64 {
         match self {
             Side::Outside => self.label_x() - FRAME_MARGIN - CELL_PAD,
-            Side::Inside => REPORT_PAPER.dimensions_mm().0 - FRAME_MARGIN - CELL_PAD - self.label_x(),
+            Side::Inside => right_inner() - self.label_x() - lane_band,
         }
     }
 
@@ -364,7 +387,7 @@ fn draw_side(out: &mut String, rows: &[TerminalRow], side: Side, levels: &[Strin
                 LABEL_FONT,
                 "#000",
                 side.anchor(),
-                &fit_text(target, side.label_width(), LABEL_FONT),
+                &fit_text(target, side.label_width(jumper_lane_band(levels.len())), LABEL_FONT),
             );
         }
         let wire = side.wire(row);
@@ -430,12 +453,17 @@ fn draw_brackets(out: &mut String, rows: &[TerminalRow], side: Side) {
 /// 専用レーンを使う。すべての行の引出線は`Side::Inside.lead_end()`より内側で終わる
 /// ([`draw_side`])ので、レーンをそこより外に置けば、途中に挟まる他の段の行の引出線を
 /// 一切横切らない (段ごとの配線レーン、Task 4)。
+///
+/// レーンは紙の**右端側に確保した帯** ([`jumper_lane_band`]) に並べる。
+/// `HARNESS_ZONE` (引出線の外端から20mm。ブラケットとハーネス名の帯) の中に置くと
+/// ハーネス名の上を走ってしまい、接続先表記の帯にそのまま置くと接続先の文字と重なるため
+/// (接続先表記の幅はこの帯の分だけ詰めてある)。
 fn jumper_lane(levels: &[String], level: &str, adjacent_rows: bool) -> f64 {
     if adjacent_rows || levels.len() <= 1 {
         return box_right() + JUMPER_OFFSET;
     }
     let idx = levels.iter().position(|l| l == level).unwrap_or(0);
-    Side::Inside.lead_end() + JUMPER_OFFSET + idx as f64 * JUMPER_LANE_GAP
+    right_inner() - (levels.len() - 1 - idx) as f64 * JUMPER_LANE_GAP
 }
 
 /// サドルジャンパ。端子箱の**内部側の縁**に縦線で描く (両端に短い横線)。
@@ -447,6 +475,9 @@ fn draw_jumpers(
     levels: &[String],
 ) {
     let index = |no: &str| rows.iter().position(|r| r.terminal == no);
+    // 段レーンの帯の一番左のレーン。注記はその左に (右揃えで) 添えるので、
+    // どのレーンのぶんでも紙からはみ出さず、レーンの縦線の上にも乗らない
+    let lane_left = right_inner() - levels.len().saturating_sub(1) as f64 * JUMPER_LANE_GAP;
     let mut noted: Vec<f64> = Vec::new();
     for (a, b) in jumpers {
         let (Some(ka), Some(kb)) = (index(a), index(b)) else {
@@ -462,13 +493,18 @@ fn draw_jumpers(
             line_el(out, edge, y, x, y, FRAME_STROKE, "#000");
         }
         if !noted.iter().any(|n| (n - x).abs() < 1e-9) {
+            let (note_x, anchor) = if adjacent_rows || levels.len() <= 1 {
+                (x + CELL_PAD, "start")
+            } else {
+                (lane_left - CELL_PAD, "end")
+            };
             text_el(
                 out,
-                x + CELL_PAD,
+                note_x,
                 (ya + yb) / 2.0 + NOTE_FONT * 0.35,
                 NOTE_FONT,
                 NOTE_FILL,
-                "start",
+                anchor,
                 JUMPER_NOTE,
             );
             noted.push(x);
@@ -948,6 +984,60 @@ mod tests {
         for x in [lane_a, lane_b] {
             assert!(x >= Side::Inside.lead_end(), "x={x} lead_end={}", Side::Inside.lead_end());
         }
+    }
+
+    /// Every per-level jumper lane sits outside the 20 mm harness zone (where the brackets and harness names are drawn) and still inside the printable page, on a 2-level and on a 3-level block alike, so a lane never runs over a harness name and never falls off the paper.
+    /// 段ごとのジャンパレーンはどれも、ブラケットとハーネス名が入る20mmの帯の外側で、かつ印刷できる紙の内側に収まる (2段でも3段でも) ので、レーンがハーネス名の上を走ることも紙からはみ出すこともない。
+    #[test]
+    fn every_jumper_lane_clears_the_harness_zone_and_stays_inside_the_page() {
+        for (levels, jumpers) in [(2usize, "1a-2a,1b-2b"), (3, "1a-2a,1b-2b,1c-2c")] {
+            let pages = multilevel_diagram_with_jumpers(4, levels, jumpers);
+            let lanes: Vec<f64> = (0..levels)
+                .map(|l| {
+                    let (ya, yb) = (row_y(l), row_y(l + levels));
+                    vertical_lines(&pages[0])
+                        .into_iter()
+                        .find(|line| (line.1, line.3) == (ya, yb))
+                        .unwrap_or_else(|| panic!("{levels}段: 段{l}のジャンパ線が無い"))
+                        .0
+                })
+                .collect();
+            assert_eq!(lanes.len(), levels, "段の数だけレーンがある");
+            for x in &lanes {
+                assert!(
+                    *x >= Side::Inside.label_x(),
+                    "{levels}段: レーンx={x}がハーネス帯 (lead_end={}〜label_x={}) の中にある",
+                    Side::Inside.lead_end(),
+                    Side::Inside.label_x()
+                );
+                assert!(
+                    *x <= REPORT_PAPER.dimensions_mm().0 - FRAME_MARGIN,
+                    "{levels}段: レーンx={x}が図枠の外へ出ている"
+                );
+            }
+        }
+    }
+
+    /// The inside connection labels are shortened by exactly the width of the lane band, so the text can never reach the lanes; on a single-level block the band is zero and the label width is unchanged.
+    /// 内部側の接続先表記は段レーンの帯の幅だけ短く収められるので、文字がレーンに届くことはない。単段の端子台では帯は0で、表記の幅は変わらない。
+    #[test]
+    fn the_inside_label_width_reserves_the_lane_band() {
+        assert_eq!(jumper_lane_band(1), 0.0, "単段では帯を取らない");
+        assert!(jumper_lane_band(3) > jumper_lane_band(2), "段が増えると帯も広がる");
+        for levels in [2usize, 3] {
+            let band = jumper_lane_band(levels);
+            let text_right = Side::Inside.label_x() + Side::Inside.label_width(band);
+            let leftmost_lane = right_inner() - (levels - 1) as f64 * JUMPER_LANE_GAP;
+            assert!(
+                text_right <= leftmost_lane - text_width(JUMPER_NOTE, NOTE_FONT),
+                "{levels}段: 表記の右端{text_right}が注記とレーン{leftmost_lane}に届いている"
+            );
+        }
+        assert_eq!(
+            Side::Inside.label_width(0.0),
+            right_inner() - Side::Inside.label_x(),
+            "単段の表記幅は従来どおり"
+        );
     }
 
     /// Even with same-level jumpers that skip rows, the staggered strip (one box per row, columns by level) keeps its outside-left/inside-right layout: box columns and lead-line directions are unaffected by which lane a jumper's line happens to use.
