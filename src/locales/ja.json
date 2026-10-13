@@ -812,7 +812,7 @@
       "numberMode": "番号の扱い",
       "modeShift": "末尾に極を足して番号を繰り下げる",
       "modeKeep": "予備を空き番号のまま残す",
-      "modeKeepHint": "この扱いは後のフェーズで対応予定です",
+      "modeKeepHint": "後ろの番号はそのまま残し、予備には次の空き番号を付ける (重複するなら拒否)",
       "previewLabel": "プレビュー",
       "previewLine": "{position}に予備{count} (端子 {labels}) · 両側未結線",
       "note": "繰り下げはピン座標を動かさないので既存結線は外れない",
@@ -820,7 +820,10 @@
       "apply": "適用",
       "issueCount": "個数は1以上を指定してください",
       "issuePoleCap": "極数の上限を超えます (上限{max}極)",
-      "issueInvalid": "この指定では追加できません"
+      "issueInvalid": "この指定では追加できません",
+      "modeShiftHint": "後ろの端子を繰り下げて番号を連続させる",
+      "issueNonNumeric": "挿入位置の端子番号 ({label}) に数字が無いので予備の番号を決められません",
+      "issueKeepDuplicate": "空き番号のまま残すと既存の端子と番号がぶつかります。「繰り下げる」を選んでください"
     },
     "multiLevel": "多段生成",
     "levels": {
@@ -1057,14 +1060,14 @@
       "connectFailedLog": "AGENT   エージェント接続に失敗: {error}",
       "emptyConnected": "図面について指示してください。編集は自動で適用され、あとから元に戻せます。",
       "emptyDisconnected": "使えるAIプロバイダがありません。設定 > エージェント で選んでください (Claude Code CLI・APIキー・Copilot CLI・Ollama など)。",
-      "replyPlaceholder": "返信を入力..."
+      "replyPlaceholder": "返信を入力... (⌘Enter / Ctrl+Enter で送信、Enter は改行)"
     },
     "panel": {
       "titleActive": "回路エージェント",
       "titleNew": "新規エージェント",
       "expand": "展開",
       "minimize": "最小化",
-      "placeholder": "何でも指示できます... (例: 24V系にヒューズを追加して)"
+      "placeholder": "何でも指示できます... (例: 24V系にヒューズを追加して) — ⌘Enter / Ctrl+Enter で送信"
     },
     "message": {
       "working": "エージェントが作業しています...",
@@ -1075,9 +1078,10 @@
     "composer": {
       "addContext": "コンテキストに追加",
       "stop": "停止",
-      "send": "送信",
+      "send": "送信 (⌘Enter / Ctrl+Enter)",
       "sendFailedLog": "AGENT   送信に失敗しました (詳細はチャットのエラー表示を参照)",
-      "cancelFailedLog": "AGENT   キャンセル失敗: {error}"
+      "cancelFailedLog": "AGENT   キャンセル失敗: {error}",
+      "interrupt": "割り込んで送信 (⌘Enter / Ctrl+Enter) — 実行中のターンを中断して送ります"
     },
     "context": {
       "head": "コンテキストに追加",

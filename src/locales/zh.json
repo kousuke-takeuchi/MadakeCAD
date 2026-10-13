@@ -812,15 +812,18 @@
       "numberMode": "Numbering",
       "modeShift": "Add a pole at the end and shift the numbers down",
       "modeKeep": "Leave the spare with a vacant number",
-      "modeKeepHint": "This option is planned for a later phase",
+      "modeKeepHint": "Following labels stay as they are; the spare takes the next free number (refused if it would collide)",
       "previewLabel": "Preview",
-      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) \u00b7 both sides unconnected",
+      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) · both sides unconnected",
       "note": "Shifting the numbers never moves a pin's coordinates, so existing wiring stays connected",
       "cancel": "Cancel",
       "apply": "Apply",
       "issueCount": "Enter a count of 1 or more",
       "issuePoleCap": "Exceeds the maximum pole count (limit {max})",
-      "issueInvalid": "This cannot be applied"
+      "issueInvalid": "This cannot be applied",
+      "modeShiftHint": "Following terminals are renumbered so the labels stay contiguous",
+      "issueNonNumeric": "The label at the insertion point ({label}) has no number, so the spare cannot be numbered",
+      "issueKeepDuplicate": "Leaving the number vacant would collide with an existing terminal; choose 'shift' instead"
     },
     "multiLevel": "多层端子",
     "levels": {
@@ -1057,14 +1060,14 @@
       "connectFailedLog": "AGENT   无法连接代理: {error}",
       "emptyConnected": "告诉代理要对图纸做什么。编辑会自动应用,之后可以撤销。",
       "emptyDisconnected": "没有可用的 AI 提供商。请在“设置 > 代理”中选择一个(Claude Code CLI、API 密钥、Copilot CLI、Ollama 等)。",
-      "replyPlaceholder": "输入回复..."
+      "replyPlaceholder": "输入回复... (⌘Enter / Ctrl+Enter)"
     },
     "panel": {
       "titleActive": "电路代理",
       "titleNew": "新建代理",
       "expand": "展开",
       "minimize": "最小化",
-      "placeholder": "随意提问...(例如: 在 24 V 母线上加一个熔断器)"
+      "placeholder": "随意提问...(例如: 在 24 V 母线上加一个熔断器) (⌘Enter / Ctrl+Enter)"
     },
     "message": {
       "working": "代理正在工作...",
@@ -1075,9 +1078,10 @@
     "composer": {
       "addContext": "添加上下文",
       "stop": "停止",
-      "send": "发送",
+      "send": "发送 (⌘Enter / Ctrl+Enter)",
       "sendFailedLog": "AGENT   发送失败(详见聊天中的错误信息)",
-      "cancelFailedLog": "AGENT   取消失败: {error}"
+      "cancelFailedLog": "AGENT   取消失败: {error}",
+      "interrupt": "Interrupt and send (⌘Enter / Ctrl+Enter) — stops the running turn first"
     },
     "context": {
       "head": "添加上下文",

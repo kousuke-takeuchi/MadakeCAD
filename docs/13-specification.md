@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2542 specification clauses** across 6 areas.
+**2574 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -141,6 +141,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Undoing an inserted spare restores the symbol_id, the terminal numbers and the position together in one step. <sub>`undoing_an_inserted_spare_restores_symbol_id_numbers_and_position_together`</sub>
 - A multi-level block's inserted spare pole adds one terminal per level ("9a","9b" for a 2-level block). <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
 - The insertion command's JSON with `after` omitted (the minimal form MCP/the Link API/the CLI can send) is accepted as an append at the end. <sub>`the_insert_spare_terminals_command_accepts_after_omitted`</sub>
+- Inserting a second spare into a block that already has one works, both at the end and after any terminal, because the command counts the insertion point in the order the chart shows rather than the physical pin order. <sub>`inserting_a_second_spare_into_the_same_block_succeeds`</sub>
+- Inserting a spare into a block renumbered with a prefix keeps the prefix on every label and does not panic (the prefixed labels are not readable as plain pole numbers, which used to overflow the numbering arithmetic). <sub>`inserting_a_spare_into_a_prefixed_block_keeps_the_prefix`</sub>
+- The "leave the spare with a vacant number" mode writes the spare into the vacant number and leaves every following terminal's number (and so every jumper naming them) untouched. <sub>`inserting_a_spare_without_renumbering_leaves_the_following_numbers_alone`</sub>
+- In the "leave the numbers alone" mode an insertion whose spare number is already taken is refused without touching the drawing. <sub>`inserting_a_spare_without_renumbering_is_refused_when_the_number_is_taken`</sub>
+- Inserting a spare keeps every existing terminal at exactly the same coordinates on the sheet whatever the block's rotation or mirroring, so nothing drawn onto those terminals has to move. <sub>`inserting_a_spare_keeps_pin_coordinates_at_every_rotation_and_mirroring`</sub>
 - Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted. <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - Undoing a paper size change restores both the previous size and orientation. <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
 - Changing the paper leaves the sheet's own zone division alone: a sheet divided into its own number of zones keeps that division. <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
@@ -907,6 +912,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Naming a terminal the block does not have as the insertion point is refused, not silently treated as "append at the end". <sub>`inserting_after_an_unknown_terminal_is_refused`</sub>
 - Inserting spares beyond the dynamic symbol family's pole cap is refused. <sub>`inserting_past_the_pole_cap_is_refused`</sub>
 - On a multi-level block, one inserted spare pole grows into one terminal per level (two new labels "3a"/"3b" for a 2-level block), keeping every level's own letter. <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- A second and a third spare insertion into the same block both work, because the insertion point is counted in the order the chart shows (the numbers), not in the physical pin order the first insertion deliberately left out of step. <sub>`inserting_a_second_spare_counts_the_position_in_the_charts_order`</sub>
+- Every insertion point offered after a first mid-block insertion is accepted, including the popover's default 末尾 — the position named is looked up among the displayed numbers, so none of them collides with the number the first spare took. <sub>`every_insertion_point_still_works_after_a_mid_block_insertion`</sub>
+- A second insertion on a multi-level block also works and again adds one terminal per level, numbered after the pole that is last in the chart's order. <sub>`inserting_a_second_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- Spare labels are derived by bumping only the numeric part of the neighbouring label, so a block renumbered with a prefix keeps its prefix (and never overflows on the "unreadable number" sentinel). <sub>`inserting_a_spare_keeps_a_prefixed_labels_prefix`</sub>
+- A label with no digits at all cannot be numbered from, so the insertion is refused with a reason instead of panicking or silently destroying the label. <sub>`inserting_a_spare_next_to_a_label_without_digits_is_refused`</sub>
+- Leaving the following numbers alone (the "leave the spare with a vacant number" mode) changes no existing label and hands the spare the vacant number after the chosen terminal. <sub>`leaving_the_following_numbers_alone_gives_the_spare_the_vacant_number`</sub>
+- In the "leave the numbers alone" mode an insertion that would give the spare a number another terminal already uses is refused with a reason, instead of writing duplicate labels. <sub>`leaving_the_following_numbers_alone_is_refused_when_the_number_is_taken`</sub>
 - The chart shows the spare exactly where its number says it belongs, not where its physical pole happens to sit: default (number) order re-sorts by the parsed pole number, so an insertion in the middle of the block reads as inserted in the middle of the chart too. <sub>`the_chart_shows_the_spare_after_its_chosen_terminal_not_at_the_physical_end`</sub>
 - Rewriting an accessory spec touches only the leading terminal-number token of each item; the kind, the part number, the "end" sentinel and any item naming an unknown terminal stay byte for byte. <sub>`rewrite_accessory_labels_only_replaces_the_terminal_number_token`</sub>
 - A terminal_numbers override that happens to equal the symbol's default labels is still reported as an override, because the key is present and valid (not judged only by whether the expanded value differs from the default). <sub>`terminal_numbers_override_reports_a_key_that_matches_the_default_value`</sub>
@@ -948,6 +960,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A jumper linking two poles of the same level ("1a-2a") skips over the other level's row in between ("1b"), so it is routed through a lane beyond every row's lead line — never through the zone where that in-between row's own lead line runs. <sub>`a_same_level_jumper_that_skips_a_row_never_crosses_the_skipped_rows_lead_line`</sub>
 - A jumper between the two levels of one pole ("1a-1b") always links physically adjacent rows (levels cluster together), so it still uses the same close lane a single-level block would, right next to the boxes. <sub>`a_cross_level_jumper_between_adjacent_rows_uses_the_same_near_lane_as_single_level`</sub>
 - Two same-level jumpers on different levels ("1a-2a" and "1b-2b") each skip over the other level's row, so each gets its own lane: the lanes are distinct, and neither one falls in the zone where any row's lead line runs. <sub>`each_level_gets_its_own_distinct_jumper_lane`</sub>
+- Every per-level jumper lane sits outside the 20 mm harness zone (where the brackets and harness names are drawn) and still inside the printable page, on a 2-level and on a 3-level block alike, so a lane never runs over a harness name and never falls off the paper. <sub>`every_jumper_lane_clears_the_harness_zone_and_stays_inside_the_page`</sub>
+- The inside connection labels are shortened by exactly the width of the lane band, so the text can never reach the lanes; on a single-level block the band is zero and the label width is unchanged. <sub>`the_inside_label_width_reserves_the_lane_band`</sub>
 - Even with same-level jumpers that skip rows, the staggered strip (one box per row, columns by level) keeps its outside-left/inside-right layout: box columns and lead-line directions are unaffected by which lane a jumper's line happens to use. <sub>`the_staggered_layout_keeps_outside_left_and_inside_right_with_skipping_jumpers`</sub>
 - A single-level terminal diagram gets no level heading, because it has only one column of terminals. <sub>`a_single_level_terminal_diagram_has_no_level_heading`</sub>
 - Terminals that do not fit on one page continue on the next, and each page title states the range of terminals it holds. <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
@@ -2192,6 +2206,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - only strips a trailing letter that matches level a's own letter, so two poles overridden with different trailing letters keep distinct bases <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - pushes the numbers after the chosen terminal and hands the vacated one to the new spare <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - does not renumber anything when appending at the end <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- keeps a prefixed label's prefix and shifts only its numeric part <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- counts the insertion point in the chart's number order so a second insertion still works <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- leaves the following numbers alone and gives the spare the vacant number when not renumbering <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- returns null when not renumbering would collide with an existing number <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- returns null when the insertion point's label has no digits <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - returns null for a non-positive count <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - returns null when the insertion point names an unknown terminal <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - adds one terminal per level on a multi-level block <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
@@ -2375,6 +2394,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - tokens are added up across the turns of a conversation <sub>`sumUsage`</sub>
 - Copilot's premium requests are counted separately from tokens, as a fraction <sub>`sumUsage`</sub>
 - a conversation with no usage yet counts as zero <sub>`sumUsage`</sub>
+- sends on Cmd+Enter <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- sends on Ctrl+Enter <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- does not send on a plain Enter, which stays a line break <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- does not send on Shift+Enter <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- does not send while an IME composition is in progress, even with Cmd or Ctrl <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- does not send when the Enter is reported as keyCode 229 by the IME <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- does not send on keys other than Enter <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
 
 ### Unsaved guard when closing or reloading
 
@@ -2495,6 +2521,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - send creates a conversation and adopts the server-assigned id <sub>`chat store: アクション`</sub>
 - events arriving before send resolves still land in the same conversation <sub>`chat store: アクション`</sub>
 - empty prompts and sends during streaming are ignored <sub>`chat store: アクション`</sub>
+- an interrupting send cancels the running turn and then sends the new prompt to the same conversation <sub>`chat store: アクション`</sub>
+- an interrupting send behaves like a normal send when nothing is running <sub>`chat store: アクション`</sub>
+- an interrupting send is refused while the first send is still waiting for its conversation id <sub>`chat store: アクション`</sub>
+- an empty interrupting send is ignored and leaves the running turn alone <sub>`chat store: アクション`</sub>
 - a failed send marks the message with the error and stops streaming <sub>`chat store: アクション`</sub>
 - after a failed first send, retrying sends as new without leaking the local id <sub>`chat store: アクション`</sub>
 - cancel stops only the target conversation, leaving others streaming <sub>`chat store: アクション`</sub>
@@ -2871,6 +2901,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - refuses a level decrease that has a blocker without sending a command <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 - sends one insert_spare_terminals command with the requested position and count <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - sends null for after when inserting at the end <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- keeps following labels and gives the spare the next free number when 'leave vacant' is chosen at the end <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- reports keepDuplicate and sends nothing when 'leave vacant' would collide with an existing number <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - refuses a non-positive count without sending a command <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - keeps the backend's refusal reason in error and leaves the drawing untouched <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - previews the new symbol id and the new spare's labels <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>

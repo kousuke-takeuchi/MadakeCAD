@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2542仕様項目**。
+全6領域・**2574仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -141,6 +141,11 @@
 - 挿入した予備をundoすると、symbol_id・端子番号・位置がまとめて1回で元に戻る。 <sub>`undoing_an_inserted_spare_restores_symbol_id_numbers_and_position_together`</sub>
 - 多段端子台への予備挿入は、1極につき段数ぶんの端子が増える (2段なら"9a","9b")。 <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
 - `after`を省略した挿入コマンドのJSON (MCP/Link API/CLIが送れる最小形) は、末尾挿入として通る。 <sub>`the_insert_spare_terminals_command_accepts_after_omitted`</sub>
+- 予備を入れた端子台へもう1つ予備を挿入する操作は、末尾でもどの端子の後ろでも通る。挿入位置を物理的なピン順ではなくチャートに出る順で数えるため。 <sub>`inserting_a_second_spare_into_the_same_block_succeeds`</sub>
+- 接頭辞を付けて採番した端子台への予備挿入は、どのラベルも接頭辞を保ったまま通り、パニックしない (接頭辞付きのラベルは素の極番号として読めず、以前は番号の計算が桁溢れしていた)。 <sub>`inserting_a_spare_into_a_prefixed_block_keeps_the_prefix`</sub>
+- 「予備を空き番号のまま残す」扱いは、予備を空き番号に入れ、後ろの端子の番号 (とそれを指すジャンパ) を一切変えない。 <sub>`inserting_a_spare_without_renumbering_leaves_the_following_numbers_alone`</sub>
+- 「空き番号のまま残す」扱いで予備の番号が既に使われている挿入は、図面を変えずに拒否される。 <sub>`inserting_a_spare_without_renumbering_is_refused_when_the_number_is_taken`</sub>
+- 予備を挿入しても既存の端子の用紙上の座標は1mmも動かない (端子台の回転・反転にかかわらず) ので、その端子に描かれていたものは動かさずに済む。 <sub>`inserting_a_spare_keeps_pin_coordinates_at_every_rotation_and_mirroring`</sub>
 - シートの用紙サイズ・向きを変えても (G15)、既存のエンティティは元の座標のまま動かず、消えもしない。 <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - 用紙サイズの変更をundoすると、サイズと向きの両方が元へ戻る。 <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
 - 用紙を変えてもシート独自のゾーン分割はそのまま: 独自の分割数を持つシートはその分割を保つ。 <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
@@ -907,6 +912,13 @@
 - 端子台に無い端子番号を挿入位置に指定すると、「末尾扱い」に読み替えず拒否される。 <sub>`inserting_after_an_unknown_terminal_is_refused`</sub>
 - 動的シンボルの極数上限を超える挿入は拒否される。 <sub>`inserting_past_the_pole_cap_is_refused`</sub>
 - 多段端子台では、挿入した1つの予備極が段の数だけの端子になる (2段なら新しいラベルは"3a"/"3b"の2つ)。各段の記号はそのまま保たれる。 <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- 同じ端子台への2回目・3回目の予備挿入もそのまま通る。挿入位置をチャートに出る順 (番号順) で数えるので、1回目の挿入がわざと食い違わせた物理的なピン順には引きずられない。 <sub>`inserting_a_second_spare_counts_the_position_in_the_charts_order`</sub>
+- 1回目の途中挿入のあとに選べる挿入位置はどれも通る (ポップオーバー既定の末尾も含む)。指定した位置は表示番号の中から探すので、1回目の予備が取った番号とぶつからない。 <sub>`every_insertion_point_still_works_after_a_mid_block_insertion`</sub>
+- 多段端子台への2回目の挿入も通り、やはり1極につき段数ぶんの端子が増える。番号はチャートの順で最後の極の次になる。 <sub>`inserting_a_second_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- 予備のラベルは隣の端子の表記の数値部だけを増やして作るので、接頭辞を付けて採番した端子台は接頭辞を保つ (「読めない番号」の番兵で桁溢れすることもない)。 <sub>`inserting_a_spare_keeps_a_prefixed_labels_prefix`</sub>
+- 数字を1つも含まないラベルからは番号を決められないので、パニックしたりラベルを黙って壊したりせず、理由を添えて拒否する。 <sub>`inserting_a_spare_next_to_a_label_without_digits_is_refused`</sub>
+- 後ろの番号を動かさない扱い (「予備を空き番号のまま残す」) では既存のラベルが1つも変わらず、選んだ端子の次の空き番号が予備に渡る。 <sub>`leaving_the_following_numbers_alone_gives_the_spare_the_vacant_number`</sub>
+- 「空き番号のまま残す」扱いで、予備の番号が既にある端子とぶつかる挿入は、重複したラベルを書かずに理由を添えて拒否する。 <sub>`leaving_the_following_numbers_alone_is_refused_when_the_number_is_taken`</sub>
 - チャートは物理的な極の位置ではなく、番号が示す位置に予備を表示する: 既定 (数値順) は解析した極番号で並べ直すので、ブロックの途中への挿入もチャートの途中への挿入として読める。 <sub>`the_chart_shows_the_spare_after_its_chosen_terminal_not_at_the_physical_end`</sub>
 - 付属品指定の書き換えは各項の先頭の端子番号トークンだけに効き、種別・型番・末尾指定の`end`・知らない端子を指す項は1バイトも変わらない。 <sub>`rewrite_accessory_labels_only_replaces_the_terminal_number_token`</sub>
 - 既定値と同じラベルを明示的に書いたterminal_numbersも、キーがあり値が妥当なので上書きとして扱われる (展開結果が既定と同じかどうかだけでは判定しない)。 <sub>`terminal_numbers_override_reports_a_key_that_matches_the_default_value`</sub>
@@ -948,6 +960,8 @@
 - 同じ段の2極を繋ぐジャンパ("1a-2a")は、間に挟まる別の段の行("1b")を飛び越えるので、どの行の引出線よりも外側のレーンを通る — 間に挟まる行自身の引出線が走る帯を横切らない。 <sub>`a_same_level_jumper_that_skips_a_row_never_crosses_the_skipped_rows_lead_line`</sub>
 - 1つの極の2つの段を繋ぐジャンパ("1a-1b")は、必ず物理的に隣り合う行を繋ぐ (段はクラスタでまとまる) ので、単段の端子台と同じ、箱のすぐそばの近いレーンを使う。 <sub>`a_cross_level_jumper_between_adjacent_rows_uses_the_same_near_lane_as_single_level`</sub>
 - 段の違う2つの同段ジャンパ("1a-2a"と"1b-2b")はそれぞれ別の段の行を飛び越えるので、それぞれ専用のレーンを使う: 2つのレーンは別のXになり、どちらもどこかの行の引出線が走る帯には入らない。 <sub>`each_level_gets_its_own_distinct_jumper_lane`</sub>
+- 段ごとのジャンパレーンはどれも、ブラケットとハーネス名が入る20mmの帯の外側で、かつ印刷できる紙の内側に収まる (2段でも3段でも) ので、レーンがハーネス名の上を走ることも紙からはみ出すこともない。 <sub>`every_jumper_lane_clears_the_harness_zone_and_stays_inside_the_page`</sub>
+- 内部側の接続先表記は段レーンの帯の幅だけ短く収められるので、文字がレーンに届くことはない。単段の端子台では帯は0で、表記の幅は変わらない。 <sub>`the_inside_label_width_reserves_the_lane_band`</sub>
 - 行を飛び越える同段ジャンパがあっても、千鳥配置 (行ごとに1箱、段は列) の外部側左・内部側右は崩れない: 箱の列や引出線の向きは、ジャンパ線がどのレーンを使うかに影響されない。 <sub>`the_staggered_layout_keeps_outside_left_and_inside_right_with_skipping_jumpers`</sub>
 - 単段の端子台の接続図には段の見出しが付かない (端子の列が1本しかないため)。 <sub>`a_single_level_terminal_diagram_has_no_level_heading`</sub>
 - 1ページに収まらない端子は次のページへ続き、各ページの表題にそのページの端子の範囲が入る。 <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
@@ -2192,6 +2206,11 @@
 - 段aのラベルの末尾が段aの記号以外の文字 (別の文字で終わる手書きの上書き) では土台から取り除かず、2極の土台が同じ文字列に潰れて重複することもない (Task 3再レビューの持ち越し) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
 - 指定した端子の後ろに挿入すると、symbol_idは末尾に1極増え、番号列はそれより後ろが繰り下がって空いた番号を新しい予備が引き継ぐ <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - 挿入位置を指定しない (末尾) と、番号は繰り下がらずそのまま続く <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 接頭辞付きのラベル (A1..A8) でも数字の部分だけを繰り下げ、接頭辞は保たれる (Rust側 inserting_a_spare_keeps_a_prefixed_labels_prefix と同じ値) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 2回目の挿入は番号順 (チャートの並び) で位置を数えるので、1回目で末尾に足した極があっても末尾・途中のどちらへも挿入できる (Rust側 inserting_a_second_spare_counts_the_position_in_the_charts_order と同じ値) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 「空き番号のまま残す」(renumberFollowing=false) では後ろの番号を変えず、空いていた番号を予備が取る (Rust側 leaving_the_following_numbers_alone_gives_the_spare_the_vacant_number と同じ値) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 「空き番号のまま残す」で予備の番号が既存の端子とぶつかるときはnull (Rust側は理由付きで拒否) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 挿入位置のラベルに数字が無い ("予備") ときはnull (Rust側は理由付きで拒否) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - 0個以下の指定はnull (プレビューを出さない) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - 端子台に無い端子番号を挿入位置に指定するとnull <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - 多段端子台では、挿入した1つの予備極が段の数だけの端子になる <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
@@ -2375,6 +2394,13 @@
 - 会話のトークンはターンをまたいで足し合わされる <sub>`sumUsage`</sub>
 - GitHub Copilotのプレミアムリクエストは小数のままトークンと別枠で数える <sub>`sumUsage`</sub>
 - 使用量がまだ無い会話は全て0(バッジは「1x」表示になる) <sub>`sumUsage`</sub>
+- Cmd+Enter (macOS) で送信する <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- Ctrl+Enter で送信する <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- ただのEnterは送信せず、入力欄の改行になる (日本語変換の確定で誤送信しない) <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- Shift+Enterも送信しない (改行) <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- IME変換中 (isComposing) は、Cmd/Ctrlを押していても送信しない <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- 変換確定のEnterがkeyCode 229で届く環境 (WebKit) でも送信しない <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- Enter以外のキーはCmd/Ctrlと一緒でも送信しない <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
 
 ### 閉じる・リロード時の未保存ガード
 
@@ -2495,6 +2521,10 @@
 - sendは会話を新規作成し、サーバー採番のidを引き取る <sub>`chat store: アクション`</sub>
 - send解決前に届いたイベントも同じ会話へ入る <sub>`chat store: アクション`</sub>
 - 空プロンプトとストリーミング中の送信は無視される <sub>`chat store: アクション`</sub>
+- 答えている最中の割り込み送信は、進行中のターンを中断してから同じ会話へ新しい指示を送る <sub>`chat store: アクション`</sub>
+- 答えていないときの割り込み送信は普通の送信と同じで、中断APIは呼ばない <sub>`chat store: アクション`</sub>
+- 会話idの採番を待っている間 (最初の送信が返る前) は割り込めず、何も送らない <sub>`chat store: アクション`</sub>
+- 空の割り込み送信は無視され、進行中のターンも中断しない <sub>`chat store: アクション`</sub>
 - send失敗時はメッセージにエラーを載せてストリーミングを解除する <sub>`chat store: アクション`</sub>
 - 初回送信に失敗した会話でも、再送はローカルidを渡さず新規として送れる <sub>`chat store: アクション`</sub>
 - cancelは対象の会話だけを止め、他会話のストリーミングは残す <sub>`chat store: アクション`</sub>
@@ -2871,6 +2901,8 @@
 - 理由が1件でもある段数はコマンドを送らずに断る (ポップオーバーが適用ボタンを無効にしている門と同じ判定) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
 - 予備を挿入すると、insert_spare_terminalsコマンド1回だけが送られる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - 末尾挿入は`after`がnullのコマンドになる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 「空き番号のまま残す」で末尾に挿入すると、後ろの番号を変えずに次の空き番号 (9) が予備に付き、renumber_following=false で送られる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 「空き番号のまま残す」で途中に挿入して番号がぶつかるときは keepDuplicate の指摘になり、コマンドは送られない <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - 0個以下の指定は、コマンドを送らずに断る <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - フロントの検証を通っても、Rust側が挿入を拒否したら (エンティティが図面から消えていた等) その理由をerrorへ残す (図面は変えない) <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - プレビューは適用と同じ純関数で symbol_id と新しく増える予備のラベルを見せる (デザイン「P 予備端子の挿入 (既定)」の2行) <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>

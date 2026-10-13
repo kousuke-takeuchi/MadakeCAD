@@ -812,7 +812,7 @@
       "numberMode": "Numbering",
       "modeShift": "Add a pole at the end and shift the numbers down",
       "modeKeep": "Leave the spare with a vacant number",
-      "modeKeepHint": "This option is planned for a later phase",
+      "modeKeepHint": "Following labels stay as they are; the spare takes the next free number (refused if it would collide)",
       "previewLabel": "Preview",
       "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) · both sides unconnected",
       "note": "Shifting the numbers never moves a pin's coordinates, so existing wiring stays connected",
@@ -820,7 +820,10 @@
       "apply": "Apply",
       "issueCount": "Enter a count of 1 or more",
       "issuePoleCap": "Exceeds the maximum pole count (limit {max})",
-      "issueInvalid": "This cannot be applied"
+      "issueInvalid": "This cannot be applied",
+      "modeShiftHint": "Following terminals are renumbered so the labels stay contiguous",
+      "issueNonNumeric": "The label at the insertion point ({label}) has no number, so the spare cannot be numbered",
+      "issueKeepDuplicate": "Leaving the number vacant would collide with an existing terminal; choose 'shift' instead"
     },
     "multiLevel": "Multi-level",
     "levels": {
@@ -1057,14 +1060,14 @@
       "connectFailedLog": "AGENT   Could not connect to the agent: {error}",
       "emptyConnected": "Tell the agent what to do with the drawing. Edits are applied automatically and can be undone later.",
       "emptyDisconnected": "No AI provider is ready. Pick one in Settings > Agent (Claude Code CLI, API key, Copilot CLI, Ollama, ...).",
-      "replyPlaceholder": "Type a reply..."
+      "replyPlaceholder": "Type a reply... (⌘Enter / Ctrl+Enter to send, Enter for a new line)"
     },
     "panel": {
       "titleActive": "Circuit agent",
       "titleNew": "New agent",
       "expand": "Expand",
       "minimize": "Minimize",
-      "placeholder": "Ask for anything... (e.g. add a fuse to the 24 V rail)"
+      "placeholder": "Ask for anything... (e.g. add a fuse to the 24 V rail) — ⌘Enter / Ctrl+Enter to send"
     },
     "message": {
       "working": "The agent is working...",
@@ -1075,9 +1078,10 @@
     "composer": {
       "addContext": "Add context",
       "stop": "Stop",
-      "send": "Send",
+      "send": "Send (⌘Enter / Ctrl+Enter)",
       "sendFailedLog": "AGENT   Could not send (see the error in the chat)",
-      "cancelFailedLog": "AGENT   Cancel failed: {error}"
+      "cancelFailedLog": "AGENT   Cancel failed: {error}",
+      "interrupt": "Interrupt and send (⌘Enter / Ctrl+Enter) — stops the running turn first"
     },
     "context": {
       "head": "Add context",

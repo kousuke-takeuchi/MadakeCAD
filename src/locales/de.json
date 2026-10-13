@@ -812,15 +812,18 @@
       "numberMode": "Numbering",
       "modeShift": "Add a pole at the end and shift the numbers down",
       "modeKeep": "Leave the spare with a vacant number",
-      "modeKeepHint": "This option is planned for a later phase",
+      "modeKeepHint": "Following labels stay as they are; the spare takes the next free number (refused if it would collide)",
       "previewLabel": "Preview",
-      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) \u00b7 both sides unconnected",
+      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) · both sides unconnected",
       "note": "Shifting the numbers never moves a pin's coordinates, so existing wiring stays connected",
       "cancel": "Cancel",
       "apply": "Apply",
       "issueCount": "Enter a count of 1 or more",
       "issuePoleCap": "Exceeds the maximum pole count (limit {max})",
-      "issueInvalid": "This cannot be applied"
+      "issueInvalid": "This cannot be applied",
+      "modeShiftHint": "Following terminals are renumbered so the labels stay contiguous",
+      "issueNonNumeric": "The label at the insertion point ({label}) has no number, so the spare cannot be numbered",
+      "issueKeepDuplicate": "Leaving the number vacant would collide with an existing terminal; choose 'shift' instead"
     },
     "multiLevel": "Mehrstock",
     "levels": {
@@ -1057,14 +1060,14 @@
       "connectFailedLog": "AGENT   Verbindung zum Agenten fehlgeschlagen: {error}",
       "emptyConnected": "Sagen Sie dem Agenten, was er mit der Zeichnung tun soll. Änderungen werden automatisch übernommen und können später rückgängig gemacht werden.",
       "emptyDisconnected": "Kein KI-Anbieter ist bereit. Wählen Sie einen unter Einstellungen > Agent (Claude Code CLI, API-Schlüssel, Copilot CLI, Ollama, ...).",
-      "replyPlaceholder": "Antwort eingeben..."
+      "replyPlaceholder": "Antwort eingeben... (⌘Enter / Ctrl+Enter)"
     },
     "panel": {
       "titleActive": "Schaltungsagent",
       "titleNew": "Neuer Agent",
       "expand": "Vergrößern",
       "minimize": "Minimieren",
-      "placeholder": "Fragen Sie nach Beliebigem... (z. B. Sicherung in die 24-V-Schiene einfügen)"
+      "placeholder": "Fragen Sie nach Beliebigem... (z. B. Sicherung in die 24-V-Schiene einfügen) (⌘Enter / Ctrl+Enter)"
     },
     "message": {
       "working": "Der Agent arbeitet...",
@@ -1075,9 +1078,10 @@
     "composer": {
       "addContext": "Kontext hinzufügen",
       "stop": "Stopp",
-      "send": "Senden",
+      "send": "Senden (⌘Enter / Ctrl+Enter)",
       "sendFailedLog": "AGENT   Senden fehlgeschlagen (siehe Fehler im Chat)",
-      "cancelFailedLog": "AGENT   Abbrechen fehlgeschlagen: {error}"
+      "cancelFailedLog": "AGENT   Abbrechen fehlgeschlagen: {error}",
+      "interrupt": "Interrupt and send (⌘Enter / Ctrl+Enter) — stops the running turn first"
     },
     "context": {
       "head": "Kontext hinzufügen",

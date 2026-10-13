@@ -423,6 +423,77 @@ describe("chat store: アクション", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
+  // ja: 答えている最中の割り込み送信は、進行中のターンを中断してから同じ会話へ新しい指示を送る
+  it("an interrupting send cancels the running turn and then sends the new prompt to the same conversation", async () => {
+    const order: string[] = [];
+    const send = vi.spyOn(agentApi, "send").mockImplementation(async () => {
+      order.push("send");
+      return CONV;
+    });
+    const cancel = vi.spyOn(agentApi, "cancel").mockImplementation(async () => {
+      order.push("cancel");
+    });
+    const store = useChatStore();
+    await store.send("1通目");
+    order.length = 0;
+
+    expect(await store.sendInterrupting("やっぱりこっち")).toBe(CONV);
+
+    expect(order).toEqual(["cancel", "send"]);
+    expect(cancel).toHaveBeenCalledWith(CONV);
+    expect(send).toHaveBeenLastCalledWith(CONV, "やっぱりこっち", store.model);
+    const messages = store.messages;
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
+    expect(messages[1].error).toBe("キャンセルされました");
+    expect(messages[1].streaming).toBe(false);
+    expect(messages[3].streaming).toBe(true);
+    expect(store.streaming).toBe(true);
+  });
+
+  // ja: 答えていないときの割り込み送信は普通の送信と同じで、中断APIは呼ばない
+  it("an interrupting send behaves like a normal send when nothing is running", async () => {
+    const send = vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
+    const cancel = vi.spyOn(agentApi, "cancel").mockResolvedValue();
+    const store = useChatStore();
+
+    expect(await store.sendInterrupting("最初の指示")).toBe(CONV);
+
+    expect(cancel).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  // ja: 会話idの採番を待っている間 (最初の送信が返る前) は割り込めず、何も送らない
+  it("an interrupting send is refused while the first send is still waiting for its conversation id", async () => {
+    let resolveSend: (id: string) => void = () => undefined;
+    const send = vi.spyOn(agentApi, "send").mockImplementation(
+      () => new Promise<string>((resolve) => (resolveSend = resolve)),
+    );
+    const cancel = vi.spyOn(agentApi, "cancel").mockResolvedValue();
+    const store = useChatStore();
+    const first = store.send("1通目");
+
+    expect(store.canInterrupt).toBe(false);
+    expect(await store.sendInterrupting("割り込み")).toBeNull();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(cancel).not.toHaveBeenCalled();
+
+    resolveSend(CONV);
+    await first;
+    expect(store.canInterrupt).toBe(true);
+  });
+
+  // ja: 空の割り込み送信は無視され、進行中のターンも中断しない
+  it("an empty interrupting send is ignored and leaves the running turn alone", async () => {
+    vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
+    const cancel = vi.spyOn(agentApi, "cancel").mockResolvedValue();
+    const store = useChatStore();
+    await store.send("1通目");
+
+    expect(await store.sendInterrupting("   ")).toBeNull();
+    expect(cancel).not.toHaveBeenCalled();
+    expect(store.streaming).toBe(true);
+  });
+
   // ja: send失敗時はメッセージにエラーを載せてストリーミングを解除する
   it("a failed send marks the message with the error and stops streaming", async () => {
     vi.spyOn(agentApi, "send").mockRejectedValue(new Error("claude が見つかりません"));

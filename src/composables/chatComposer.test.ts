@@ -1,6 +1,6 @@
 // チャット入力フッタの使用量表示(⚡バッジとその内訳)の仕様テスト。
 import { describe, it, expect } from "vitest";
-import { sumUsage } from "./chatComposer";
+import { isSendShortcut, sumUsage } from "./chatComposer";
 import type { ChatMessage, Usage } from "../stores/chat";
 
 function message(usage: Usage | null): ChatMessage {
@@ -55,5 +55,46 @@ describe("sumUsage", () => {
   // ja: 使用量がまだ無い会話は全て0(バッジは「1x」表示になる)
   it("a conversation with no usage yet counts as zero", () => {
     expect(sumUsage([])).toEqual({ input: 0, output: 0, tokens: 0, premium: 0 });
+  });
+});
+
+describe("isSendShortcut (チャット入力の送信キー)", () => {
+  const key = (over: Partial<KeyboardEvent>) =>
+    ({ key: "Enter", metaKey: false, ctrlKey: false, isComposing: false, keyCode: 13, ...over }) as KeyboardEvent;
+
+  // ja: Cmd+Enter (macOS) で送信する
+  it("sends on Cmd+Enter", () => {
+    expect(isSendShortcut(key({ metaKey: true }))).toBe(true);
+  });
+
+  // ja: Ctrl+Enter で送信する
+  it("sends on Ctrl+Enter", () => {
+    expect(isSendShortcut(key({ ctrlKey: true }))).toBe(true);
+  });
+
+  // ja: ただのEnterは送信せず、入力欄の改行になる (日本語変換の確定で誤送信しない)
+  it("does not send on a plain Enter, which stays a line break", () => {
+    expect(isSendShortcut(key({}))).toBe(false);
+  });
+
+  // ja: Shift+Enterも送信しない (改行)
+  it("does not send on Shift+Enter", () => {
+    expect(isSendShortcut(key({ shiftKey: true }))).toBe(false);
+  });
+
+  // ja: IME変換中 (isComposing) は、Cmd/Ctrlを押していても送信しない
+  it("does not send while an IME composition is in progress, even with Cmd or Ctrl", () => {
+    expect(isSendShortcut(key({ metaKey: true, isComposing: true }))).toBe(false);
+    expect(isSendShortcut(key({ ctrlKey: true, isComposing: true }))).toBe(false);
+  });
+
+  // ja: 変換確定のEnterがkeyCode 229で届く環境 (WebKit) でも送信しない
+  it("does not send when the Enter is reported as keyCode 229 by the IME", () => {
+    expect(isSendShortcut(key({ metaKey: true, keyCode: 229 }))).toBe(false);
+  });
+
+  // ja: Enter以外のキーはCmd/Ctrlと一緒でも送信しない
+  it("does not send on keys other than Enter", () => {
+    expect(isSendShortcut(key({ key: "a", metaKey: true, keyCode: 65 }))).toBe(false);
   });
 });
