@@ -32051,7 +32051,7 @@
                       "type": "frame",
                       "id": "SAimt",
                       "name": "h",
-                      "width": 40,
+                      "width": 50,
                       "stroke": "#C6CBD1",
                       "strokeWidth": {
                         "right": 1
@@ -32402,7 +32402,7 @@
                       "type": "frame",
                       "id": "jk17y",
                       "name": "c",
-                      "width": 40,
+                      "width": 50,
                       "stroke": "#C6CBD1",
                       "strokeWidth": {
                         "right": 1
@@ -32753,7 +32753,7 @@
                       "type": "frame",
                       "id": "Fwzh5",
                       "name": "c",
-                      "width": 40,
+                      "width": 50,
                       "stroke": "#C6CBD1",
                       "strokeWidth": {
                         "right": 1
@@ -33104,7 +33104,7 @@
                       "type": "frame",
                       "id": "OqJ5M",
                       "name": "c",
-                      "width": 40,
+                      "width": 50,
                       "stroke": "#C6CBD1",
                       "strokeWidth": {
                         "right": 1
@@ -33184,7 +33184,7 @@
                           "id": "AmIGa",
                           "name": "t",
                           "fill": "#2B2F33",
-                          "content": "M1:U",
+                          "content": "F2:2",
                           "fontFamily": "Noto Sans JP",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -33340,7 +33340,7 @@
                           "id": "l73u7d",
                           "name": "t",
                           "fill": "#2B2F33",
-                          "content": "F2:2",
+                          "content": "M1:U",
                           "fontFamily": "Noto Sans JP",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -33455,7 +33455,7 @@
                       "type": "frame",
                       "id": "A7afz",
                       "name": "c",
-                      "width": 40,
+                      "width": 50,
                       "stroke": "#C6CBD1",
                       "strokeWidth": {
                         "right": 1
@@ -33469,8 +33469,8 @@
                           "type": "text",
                           "id": "LlpVZ",
                           "name": "t",
-                          "fill": "#1F6FBF",
-                          "content": " ",
+                          "fill": "#8A9099",
+                          "content": "スワップ",
                           "fontFamily": "Noto Sans JP",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -33806,7 +33806,7 @@
                       "type": "frame",
                       "id": "L864FK",
                       "name": "c",
-                      "width": 40,
+                      "width": 50,
                       "stroke": "#C6CBD1",
                       "strokeWidth": {
                         "right": 1
@@ -34157,7 +34157,7 @@
                       "type": "frame",
                       "id": "UTevg",
                       "name": "c",
-                      "width": 40,
+                      "width": 50,
                       "stroke": "#C6CBD1",
                       "strokeWidth": {
                         "right": 1
@@ -34508,7 +34508,7 @@
                       "type": "frame",
                       "id": "E0ZvLY",
                       "name": "c",
-                      "width": 40,
+                      "width": 50,
                       "stroke": "#C6CBD1",
                       "strokeWidth": {
                         "right": 1
