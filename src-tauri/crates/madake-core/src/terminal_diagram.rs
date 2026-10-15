@@ -846,6 +846,37 @@ mod tests {
         assert!(internal.iter().all(|t| t.0 > box_right()), "{internal:?}");
     }
 
+    /// A terminal whose inside and outside are swapped is drawn with its two wires on the opposite sides; the other terminals stay where they were.
+    /// 内外をスワップした端子は、2本の電線が反対側に描かれる。ほかの端子は元の側のまま。
+    #[test]
+    fn a_swapped_terminal_draws_its_wires_on_the_opposite_sides() {
+        let (mut project, tb) = demo();
+        for sheet in &mut project.sheets {
+            if let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&tb) {
+                s.attrs
+                    .insert(crate::terminal_chart::SWAPPED_ATTR.into(), "3,5".into());
+            }
+        }
+        let svg = &terminal_diagram_svg(&project, tb)[0];
+        let (x3, _) = text_at(svg, "white 1.25sq");
+        assert!(x3 > box_right(), "端子3の外部側の電線が内部側へ移る");
+        let (x5, _) = text_at(svg, "blue 2sq");
+        assert!(x5 > box_right(), "端子5の外部側の電線も内部側へ移る");
+        let greens: Vec<_> = texts(svg)
+            .into_iter()
+            .filter(|t| t.2 == "green 0.5sq")
+            .collect();
+        assert_eq!(
+            greens.iter().filter(|t| t.0 < box_left()).count(),
+            1,
+            "端子5の内部側だけが外部側へ: {greens:?}"
+        );
+        assert!(
+            text_at(svg, "red 0.75sq KIV0.75R").0 < box_left(),
+            "端子1はそのまま"
+        );
+    }
+
     /// 多段端子台TB1 (`{poles}極{levels}段`) だけを置いたプロジェクトの端子接続図。
     fn multilevel_diagram(poles: usize, levels: usize) -> Vec<String> {
         let mut project = Project::new("多段端子台デモ");

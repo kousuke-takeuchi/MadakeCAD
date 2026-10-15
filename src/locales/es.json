@@ -789,6 +789,10 @@
     "spare": "reserva",
     "addJumper": "Añadir puente",
     "removeJumper": "Quitar puente",
+    "swap": "Swap sides",
+    "swapHint": "Swaps the inside and outside of the selected terminals (press again to swap back)",
+    "swapped": "Swapped",
+    "swapLog": "{reference}: swapped the sides of terminals {terminals}",
     "jumperHint": "Seleccione bornes contiguos y añada un puente. Cada edición pasa por un comando, así que Cmd+Z la revierte.",
     "check": "Comprobar bornera",
     "checkPending": "Sin comprobar todavía",
@@ -796,10 +800,6 @@
     "checkCounts": "{error} error(es) / {warning} advertencia(s) / {info} aviso(s)",
     "generateDiagram": "Generar diagrama de conexión",
     "generateChart": "Generar tabla",
-    "phase2Hint": "previsto para la fase 2",
-    "phase2": {
-      "swap": "Intercambiar int./ext."
-    },
     "insertSpare": "Insert spare",
     "spareInsert": {
       "title": "Insert spare terminal",

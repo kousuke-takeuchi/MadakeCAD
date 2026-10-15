@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, provide, reactive } from "vue";
 import { useFileActions } from "../composables/fileActions";
-import { fileShortcutOf, type FileShortcut } from "./editorShortcuts";
+import { fileShortcutOf, historyShortcutOf, type FileShortcut } from "./editorShortcuts";
 import { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
@@ -195,6 +195,14 @@ async function onKeyDown(ev: KeyboardEvent) {
     }
   }
   if (isEditableTarget(ev)) return;
+  // 端子台エディタは図面を編集するダイアログなので、開いたまま⌘Z/⇧⌘Zで戻せる
+  // (ダイアログは revision を見てチャートを読み直す)
+  const history = terminals.open ? historyShortcutOf(ev) : null;
+  if (history) {
+    ev.preventDefault();
+    await (history === "undo" ? store.undo() : store.redo());
+    return;
+  }
   // モーダル表示中はキャンバスのショートカットを走らせない
   if (anyModalOpen()) return;
   if (await controller.onKeyDown(ev)) ev.preventDefault();

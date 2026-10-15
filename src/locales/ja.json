@@ -789,6 +789,10 @@
     "spare": "予備",
     "addJumper": "ジャンパ生成",
     "removeJumper": "ジャンパ削除",
+    "swap": "内外スワップ",
+    "swapHint": "選んだ端子の内部側と外部側を入れ替えます (もう一度押すと戻ります)",
+    "swapped": "スワップ",
+    "swapLog": "{reference}: 端子 {terminals} の内外を入れ替えました",
     "jumperHint": "隣り合う端子を選んでサドルジャンパを掛けます。編集はCommand経由なのでCmd+Zで戻せます",
     "check": "端子台チェック",
     "checkPending": "未チェック",
@@ -796,10 +800,6 @@
     "checkCounts": "エラー{error} / 警告{warning} / 情報{info}",
     "generateDiagram": "端子接続図を生成",
     "generateChart": "チャートを生成",
-    "phase2Hint": "フェーズ2で対応予定",
-    "phase2": {
-      "swap": "内外スワップ"
-    },
     "insertSpare": "予備挿入",
     "spareInsert": {
       "title": "予備端子の挿入",

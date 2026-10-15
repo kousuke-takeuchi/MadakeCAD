@@ -789,6 +789,10 @@
     "spare": "spare",
     "addJumper": "Add jumper",
     "removeJumper": "Remove jumper",
+    "swap": "Swap sides",
+    "swapHint": "Swaps the inside and outside of the selected terminals (press again to swap back)",
+    "swapped": "Swapped",
+    "swapLog": "{reference}: swapped the sides of terminals {terminals}",
     "jumperHint": "Select neighbouring terminals and add a saddle jumper. Every edit goes through a command, so Cmd+Z takes it back.",
     "check": "Check terminal block",
     "checkPending": "Not checked yet",
@@ -796,10 +800,6 @@
     "checkCounts": "{error} error(s) / {warning} warning(s) / {info} note(s)",
     "generateDiagram": "Generate connection diagram",
     "generateChart": "Generate chart",
-    "phase2Hint": "planned for phase 2",
-    "phase2": {
-      "swap": "Swap in/out"
-    },
     "insertSpare": "Insert spare",
     "spareInsert": {
       "title": "Insert spare terminal",

@@ -24,6 +24,7 @@ import {
   withoutJumpers,
   ROW_ORDERS,
   rowOrderOf,
+  toggleSwapped,
   useTerminalsStore,
 } from "./terminals";
 
@@ -1063,5 +1064,72 @@ describe("part assignment and accessories (M4 phase 5 Task 5)", () => {
     expect(sent).toHaveLength(1);
     const cmd = sent[0] as { entity: { attrs: Record<string, string> } };
     expect(cmd.entity.attrs.accessories).toBe("end:end_bracket:SAMPLE-EB");
+  });
+});
+
+describe("inside/outside swap (M4 phase 5 Task 6)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setActivePinia(createPinia());
+  });
+
+  // ja: 選んだ端子のうち、入れ替わっていなかった端子は内外スワップの指定に加わり、入れ替わっていた端子は外れる
+  it("toggles the selected terminals in the swap setting, adding new ones and removing swapped ones", () => {
+    expect(toggleSwapped("", ["3", "4"])).toBe("3,4");
+    expect(toggleSwapped("3,4", ["4", "5"])).toBe("3,5");
+    expect(toggleSwapped("3,4", ["3", "4"])).toBe("");
+  });
+
+  // ja: 内外スワップの指定にある端子台に無い番号や余分な空白・空の項は、反転しても残るか取り除かれるだけで壊れない
+  it("keeps unknown terminal numbers and drops blank items when toggling the swap setting", () => {
+    expect(toggleSwapped(" 9 , ,3", ["3"])).toBe("9");
+  });
+
+  // ja: 端子を選んでいないと内外スワップはできず、コマンドも送られない
+  it("cannot swap while no terminal is selected", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    expect(store.canSwap).toBe(false);
+    expect(await store.toggleSwap()).toBe(false);
+    expect(sent).toEqual([]);
+  });
+
+  // ja: 内外スワップは選んだ端子の番号を swapped 属性へ書く update_entity 1回で、選択はそのまま残る
+  it("swaps the selected terminals with one update_entity that writes the swapped attribute and keeps the selection", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    store.toggleRow("3");
+    store.toggleRow("4");
+    expect(store.canSwap).toBe(true);
+    expect(await store.toggleSwap()).toBe(true);
+    expect(sent).toHaveLength(1);
+    const cmd = sent[0] as { type: string; entity: { attrs: Record<string, string> } };
+    expect(cmd.type).toBe("update_entity");
+    expect(cmd.entity.attrs.swapped).toBe("3,4");
+    expect(store.selectedTerminals).toEqual(["3", "4"]);
+  });
+
+  // ja: 入れ替え済みの端子をすべて戻すと、swapped 属性そのものが消える
+  it("drops the swapped attribute when every swapped terminal is swapped back", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    const tb = useDocumentStore().project!.sheets[0].entities.tb1 as { attrs: Record<string, string> };
+    tb.attrs.swapped = "3";
+    store.toggleRow("3");
+    expect(await store.toggleSwap()).toBe(true);
+    const cmd = sent[0] as { entity: { attrs: Record<string, string> } };
+    expect("swapped" in cmd.entity.attrs).toBe(false);
+  });
+
+  // ja: グリッドの行は、チャートで内外を入れ替えた端子かどうかを運ぶ (古いチャートで欠けていれば入れ替えなし)
+  it("carries whether each row is swapped, treating a missing flag as not swapped", async () => {
+    const c = wiredChart();
+    c.rows[2] = { ...c.rows[2], swapped: true };
+    mockBackend({ chart: c });
+    const store = await opened();
+    expect(store.rows.map((r) => r.swapped)).toEqual([false, false, true, false]);
   });
 });

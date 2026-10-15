@@ -789,6 +789,10 @@
     "spare": "备用",
     "addJumper": "添加跳线",
     "removeJumper": "删除跳线",
+    "swap": "Swap sides",
+    "swapHint": "Swaps the inside and outside of the selected terminals (press again to swap back)",
+    "swapped": "Swapped",
+    "swapLog": "{reference}: swapped the sides of terminals {terminals}",
     "jumperHint": "选择相邻端子并添加跨接跳线。所有编辑都通过命令执行,可用 Cmd+Z 撤销。",
     "check": "检查端子排",
     "checkPending": "尚未检查",
@@ -796,10 +800,6 @@
     "checkCounts": "错误 {error} / 警告 {warning} / 信息 {info}",
     "generateDiagram": "生成端子接线图",
     "generateChart": "生成端子排表",
-    "phase2Hint": "计划在第 2 阶段实现",
-    "phase2": {
-      "swap": "内外互换"
-    },
     "insertSpare": "Insert spare",
     "spareInsert": {
       "title": "Insert spare terminal",

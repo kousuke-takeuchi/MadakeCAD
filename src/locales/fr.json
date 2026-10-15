@@ -789,6 +789,10 @@
     "spare": "réserve",
     "addJumper": "Ajouter un pont",
     "removeJumper": "Supprimer le pont",
+    "swap": "Swap sides",
+    "swapHint": "Swaps the inside and outside of the selected terminals (press again to swap back)",
+    "swapped": "Swapped",
+    "swapLog": "{reference}: swapped the sides of terminals {terminals}",
     "jumperHint": "Sélectionnez des bornes voisines et ajoutez un pont de liaison. Chaque modification passe par une commande, donc Cmd+Z l'annule.",
     "check": "Vérifier le bornier",
     "checkPending": "Pas encore vérifié",
@@ -796,10 +800,6 @@
     "checkCounts": "{error} erreur(s) / {warning} avertissement(s) / {info} note(s)",
     "generateDiagram": "Générer le schéma de raccordement",
     "generateChart": "Générer le tableau",
-    "phase2Hint": "prévu pour la phase 2",
-    "phase2": {
-      "swap": "Permuter int./ext."
-    },
     "insertSpare": "Insert spare",
     "spareInsert": {
       "title": "Insert spare terminal",

@@ -654,6 +654,8 @@ export interface TerminalRow {
   jumper: string;
   /** 予備端子 (内部側・外部側とも未結線)。 */
   spare: boolean;
+  /** 内外を入れ替えた端子 (`attrs["swapped"]`)。`internal`/`external`は入れ替え後の値。 */
+  swapped?: boolean;
 }
 
 /** 読み取れなかったジャンパ指定1件。 */
@@ -690,6 +692,8 @@ export interface TerminalChart {
   accessories?: Accessory[];
   /** 読めなかった付属品の項 (端子台チェックがWarningにする)。 */
   accessory_issues?: AccessoryIssue[];
+  /** `attrs["swapped"]`が指しているが端子台に無い端子番号 (端子台チェックがWarningにする)。 */
+  swap_unknown?: string[];
 }
 
 /** 端子台付属品の種別 (M4 §1.1 の3種)。 */

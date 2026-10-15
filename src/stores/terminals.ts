@@ -174,7 +174,25 @@ export interface TerminalEditorRow {
   wire: string;
   /** 予備端子 (両側とも未結線)。 */
   spare: boolean;
+  /** 内外を入れ替えた端子 (`attrs["swapped"]`。外部側/内部側の列は入れ替え後の値)。 */
+  swapped: boolean;
   selected: boolean;
+}
+
+/**
+ * 内外スワップの指定 (`attrs["swapped"]`、`"3,4"`) で、選んだ端子の入替を反転した指定を返す。
+ * 入れ替わっていなかった端子は加え、入れ替わっていた端子は外す。並びは書いてあった順のまま
+ * 末尾に足す。端子台に無い番号 (古い指定) は触らずに残す (端子台チェックがWarningで知らせる)。
+ */
+export function toggleSwapped(spec: string, terminals: readonly string[]): string {
+  const current = spec
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t !== "");
+  const picked = new Set(terminals);
+  const kept = current.filter((t) => !picked.has(t));
+  const added = terminals.filter((t) => !current.includes(t));
+  return [...new Set([...kept, ...added])].join(",");
 }
 
 /**
@@ -290,6 +308,7 @@ export const useTerminalsStore = defineStore("terminals", {
         wireNo: r.wire_no,
         wire: r.wire,
         spare: r.spare,
+        swapped: r.swapped ?? false,
         selected: state.selected.includes(r.terminal),
       }));
     },
@@ -379,6 +398,10 @@ export const useTerminalsStore = defineStore("terminals", {
     /** 選択中の端子にジャンパを掛けられるか (隣り合う2端子以上)。 */
     canAddJumper(): boolean {
       return withJumpers(this.jumperSpec, this.selectedTerminals) !== null;
+    },
+    /** 選択中の端子があり、内外スワップを反転できるか。 */
+    canSwap(): boolean {
+      return this.selectedTerminals.length > 0 && this.blockInstance !== null;
     },
     /** 選択中の端子に外せるジャンパがあるか。 */
     canRemoveJumper(): boolean {
@@ -509,6 +532,18 @@ export const useTerminalsStore = defineStore("terminals", {
     /** 付属品の指定を書き換える (update_entity 1回。行が無ければ属性ごと消す)。 */
     async applyAccessories(rows: AccessoryDraft[]): Promise<boolean> {
       return this.applyUpdate(this.symbolUpdateCommand({ attrs: { accessories: formatAccessories(rows) } }));
+    },
+
+    /**
+     * 選択中の端子の内外スワップを反転する (update_entity 1回で`attrs["swapped"]`を書く。
+     * 1つも残らなければ属性ごと消す)。選択はそのまま残す (続けて戻せるように)。
+     */
+    async toggleSwap(): Promise<boolean> {
+      if (!this.canSwap) return false;
+      const spec = this.blockInstance?.attrs.swapped ?? "";
+      return this.applyUpdate(
+        this.symbolUpdateCommand({ attrs: { swapped: toggleSwapped(spec, this.selectedTerminals) } }),
+      );
     },
 
     /** ジャンパ指定を書き換える update_entity コマンド。端子台が見つからなければnull。 */

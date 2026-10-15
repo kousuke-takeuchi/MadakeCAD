@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2590仕様項目**。
+全6領域・**2603仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -952,6 +952,10 @@
 - 種別が3種以外・端子台に無い端子番号・書式が壊れた付属品の項は、その項だけが飛ばされて報告され、ほかの項は生きる。 <sub>`a_bad_accessory_item_is_skipped_alone_and_reported`</sub>
 - 端子台チャートでは、付属品は指定した端子の直前に自分の行を持ち、`end`の付属品は最後の端子の後ろに来る。 <sub>`accessory_rows_sit_before_their_terminal_and_end_rows_come_last`</sub>
 - 端子台チェックは、読めない付属品の項をWarningとして報告し、どの項かを名指しする。 <sub>`the_terminal_check_warns_about_a_broken_accessory_item`</sub>
+- 端子の内外をスワップすると、チャートではその端子の内部側と外部側だけが入れ替わり、ほかの端子はそのまま。 <sub>`swapping_a_terminal_exchanges_only_its_inside_and_outside`</sub>
+- 内外スワップの指定が空なら、どの端子も入れ替わらない。 <sub>`an_empty_swap_setting_swaps_nothing`</sub>
+- 内外スワップの指定に端子台に無い端子番号があると、その項目だけを無視し、端子台チェックがWarningで知らせる。 <sub>`an_unknown_swapped_terminal_is_ignored_and_warned_about`</sub>
+- 3段端子台で内外スワップと並べ替えを同時に指定しても、行は並べ替えどおりに並び、入れ替わるのは指定した端子だけ。 <sub>`swapping_and_sorting_a_three_level_block_work_together`</sub>
 
 ### 端子接続図
 
@@ -963,6 +967,7 @@
 - どのハーネスにも属さない電線にはブラケットが付かない。 <sub>`a_wire_without_a_harness_gets_no_bracket`</sub>
 - 隣り合う端子のサドルジャンパは、端子箱の内部側の縁に縦の連結線として描かれる。 <sub>`a_jumper_is_drawn_on_the_inside_edge_of_the_boxes`</sub>
 - 各引出線には、その電線の線色・線径sq・品番が線の下に小さく書かれる。 <sub>`each_lead_line_carries_the_wire_specification`</sub>
+- 内外をスワップした端子は、2本の電線が反対側に描かれる。ほかの端子は元の側のまま。 <sub>`a_swapped_terminal_draws_its_wires_on_the_opposite_sides`</sub>
 - 多段端子台の接続図は、各箱に段記号付きの完全な端子番号(1a,1b,2a,2b,…)を書くので、2つの段が同じ端子として描かれることはない。 <sub>`a_multilevel_terminal_block_labels_boxes_with_the_level_letter`</sub>
 - 多段端子台の接続図は段を列で表す。端子ストリップが段の数だけの列に分かれ(段aが左)、各端子の箱は自分の段の列に置かれる。 <sub>`a_multilevel_terminal_diagram_draws_each_level_as_a_column`</sub>
 - 多段端子台の接続図は、段の列それぞれの上に段記号を書くので、箱の番号を読まなくてもどの列がどの段か分かる。 <sub>`a_multilevel_terminal_diagram_heads_each_level_column_with_its_letter`</sub>
@@ -2343,6 +2348,8 @@
 - ⌥を足した組み合わせ (⌥⌘Sなど) はファイル操作にしない <sub>`editor shortcuts: ファイル操作`</sub>
 - ⇧⌘Nと⇧⌘Oはファイル操作に割り当てない (別のショートカットに残す) <sub>`editor shortcuts: ファイル操作`</sub>
 - 判定は物理キー (`code`) で行うので、非ラテン配列でも同じキーで効く <sub>`editor shortcuts: ファイル操作`</sub>
+- ⌘Z=元に戻す / ⇧⌘Z=やり直し で、WindowsとLinuxではCtrlでも同じ <sub>`editor shortcuts: 元に戻す・やり直し`</sub>
+- 修飾キー無しのZや⌥を足した組み合わせ、Z以外のキーは元に戻す・やり直しにならない <sub>`editor shortcuts: 元に戻す・やり直し`</sub>
 
 ### entityKindLabels
 
@@ -2926,6 +2933,12 @@
 - 種別の無い部品を割り当てると、古い種別の属性は消える <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
 - 付属品を全部消して適用すると、accessories属性そのものが消える <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
 - 付属品の行を適用すると、書式どおりの accessories 属性を update_entity 1回で書く <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 選んだ端子のうち、入れ替わっていなかった端子は内外スワップの指定に加わり、入れ替わっていた端子は外れる <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- 内外スワップの指定にある端子台に無い番号や余分な空白・空の項は、反転しても残るか取り除かれるだけで壊れない <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- 端子を選んでいないと内外スワップはできず、コマンドも送られない <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- 内外スワップは選んだ端子の番号を swapped 属性へ書く update_entity 1回で、選択はそのまま残る <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- 入れ替え済みの端子をすべて戻すと、swapped 属性そのものが消える <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- グリッドの行は、チャートで内外を入れ替えた端子かどうかを運ぶ (古いチャートで欠けていれば入れ替えなし) <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
 
 ### ui
 

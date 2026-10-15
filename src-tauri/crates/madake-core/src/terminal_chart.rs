@@ -4,7 +4,7 @@
 //! 未結線の端子も予備端子として行が残る。読み取り専用の純関数で、モデルは変更しない
 //! (ジャンパの編集は `update_entity` コマンドで `attrs["jumpers"]` を書き換える)。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +46,25 @@ pub const ACCESSORY_INVALID: &str = "terminal.accessory_invalid";
 pub const ACCESSORIES_ATTR: &str = "accessories";
 /// 付属品の位置に「端子台の末尾」を指す語。
 pub const ACCESSORY_END: &str = "end";
+/// 内外を入れ替えた端子 (`attrs["swapped"]`、spec §1.1。端子番号のカンマ列)。
+pub const SWAPPED_ATTR: &str = "swapped";
+/// `attrs["swapped"]` が端子台に無い端子番号を指している (その項目だけ無視する)。
+pub const TERMINAL_SWAP_UNKNOWN: &str = "erc.terminal_swap_unknown";
+
+/// `attrs["swapped"]` (`"3,4"`) を解析し、(入れ替える端子, 端子台に無い端子番号) を返す。
+/// `labels` は端子台の表示ラベル。空の項は無視し、空指定は入替なしと同じ。
+pub fn swapped_terminals(spec: &str, labels: &[String]) -> (BTreeSet<String>, Vec<String>) {
+    let mut swapped = BTreeSet::new();
+    let mut unknown = Vec::new();
+    for item in spec.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        if labels.iter().any(|l| l == item) {
+            swapped.insert(item.to_string());
+        } else if !unknown.iter().any(|u| u == item) {
+            unknown.push(item.to_string());
+        }
+    }
+    (swapped, unknown)
+}
 
 /// 端子台の付属品の種別 (spec §1.1 の3種だけ。EPLANの端子台アクセサリと同じ分類)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, schemars::JsonSchema)]
@@ -982,6 +1001,10 @@ pub struct TerminalRow {
     pub jumper: String,
     /// 予備端子 (内部側・外部側とも電線が繋がっていない)。
     pub spare: bool,
+    /// 内外を入れ替えた端子 (`attrs["swapped"]`)。`internal`/`external` (と電線・ハーネス) は
+    /// 入れ替え後の値が入っている。
+    #[serde(default)]
+    pub swapped: bool,
 }
 
 /// 1つの端子台から導いたチャート。
@@ -1012,6 +1035,9 @@ pub struct TerminalChart {
     /// 読めなかった付属品の項。
     #[serde(default)]
     pub accessory_issues: Vec<AccessoryIssue>,
+    /// `attrs["swapped"]` が指しているが端子台に無い端子番号 (端子台チェックがWarningにする)。
+    #[serde(default)]
+    pub swap_unknown: Vec<String>,
 }
 
 impl TerminalChart {
@@ -1392,6 +1418,7 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
             external_harness: harness_of(&outside),
             jumper,
             spare: inside.wires.is_empty() && outside.wires.is_empty(),
+            swapped: false,
         });
         // ページ順 (RowOrder::Page) の代表点: 内部側・外部側どちらの配線でも、読み順で
         // 最初に来る方を使う (どちらにも配線が無ければNone=予備)
@@ -1408,6 +1435,27 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
     let row_order = row_order_of(&inst.attrs);
     sort_terminal_rows(&mut rows, row_order, &page_points, sheet);
     let labels: Vec<String> = rows.iter().map(|r| r.terminal.clone()).collect();
+    // 内外スワップ (spec §1.1): 指定した端子だけ、内部側と外部側 (電線・ハーネスも) を入れ替える
+    let (swapped, swap_unknown) = inst
+        .attrs
+        .get(SWAPPED_ATTR)
+        .map(|spec| swapped_terminals(spec, &labels))
+        .unwrap_or_default();
+    for row in rows.iter_mut().filter(|r| swapped.contains(&r.terminal)) {
+        std::mem::swap(&mut row.internal, &mut row.external);
+        std::mem::swap(&mut row.internal_wire, &mut row.external_wire);
+        std::mem::swap(&mut row.internal_harness, &mut row.external_harness);
+        // まとめた電線の列も「内部側→外部側」の順を保つ
+        let sides = [&row.internal_wire, &row.external_wire];
+        row.wire = join_unique(
+            sides
+                .iter()
+                .flat_map(|w| w.split(" / "))
+                .map(str::to_string),
+            " / ",
+        );
+        row.swapped = true;
+    }
     let (accessories, accessory_issues) = inst
         .attrs
         .get(ACCESSORIES_ATTR)
@@ -1426,6 +1474,7 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
         row_order,
         accessories,
         accessory_issues,
+        swap_unknown,
     })
 }
 
@@ -1489,6 +1538,16 @@ pub fn check_terminal_block(sheet: &Sheet, tb_id: EntityId) -> Vec<Diagnostic> {
         message: format!(
             "端子台 {} の付属品「{}」: {}",
             chart.reference, i.text, i.message
+        ),
+        sheet_id: sheet.id,
+        entity_ids: vec![tb_id],
+    }));
+    diags.extend(chart.swap_unknown.iter().map(|t| Diagnostic {
+        severity: Severity::Warning,
+        code: TERMINAL_SWAP_UNKNOWN.into(),
+        message: format!(
+            "端子台 {} の内外スワップ指定にある端子 {} はこの端子台にありません (無視しました)",
+            chart.reference, t
         ),
         sheet_id: sheet.id,
         entity_ids: vec![tb_id],
@@ -2988,6 +3047,84 @@ mod tests {
         let d = diags.iter().find(|d| d.code == ACCESSORY_INVALID).expect("付属品の指摘");
         assert_eq!(d.severity, Severity::Warning);
         assert!(d.message.contains("5:end_bracket:TB-EB"), "{}", d.message);
+    }
+
+    fn set_attr(sheet: &mut Sheet, id: EntityId, key: &str, value: &str) {
+        if let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) {
+            s.attrs.insert(key.into(), value.into());
+        }
+    }
+
+    /// Swapping a terminal's inside and outside exchanges only that terminal's two sides in the chart; the other terminals keep theirs.
+    /// 端子の内外をスワップすると、チャートではその端子の内部側と外部側だけが入れ替わり、ほかの端子はそのまま。
+    #[test]
+    fn swapping_a_terminal_exchanges_only_its_inside_and_outside() {
+        let (mut sheet, id) = wired_tb();
+        // 内部側と外部側の電線の色を変え、まとめた電線の列の順が見えるようにする
+        for e in sheet.entities.values_mut() {
+            if let Entity::Wire(w) = e {
+                w.color = if w.points[0].x < 100.0 { "green" } else { "red" }.into();
+            }
+        }
+        let before = terminal_chart(&sheet, id).unwrap();
+        let b = row(&before, "1");
+        assert_eq!(b.wire, format!("{} / {}", b.internal_wire, b.external_wire));
+        set_attr(&mut sheet, id, SWAPPED_ATTR, "1");
+        let chart = terminal_chart(&sheet, id).unwrap();
+        let r = row(&chart, "1");
+        assert_eq!((r.internal.as_str(), r.external.as_str()), ("R2:1", "R1:2"));
+        assert!(r.swapped);
+        // まとめた電線の列も入れ替え後の「内部側→外部側」の順になる
+        assert_eq!(r.wire, format!("{} / {}", b.external_wire, b.internal_wire));
+        assert!(!row(&chart, "2").swapped);
+    }
+
+    /// An empty swap setting means no terminal is swapped.
+    /// 内外スワップの指定が空なら、どの端子も入れ替わらない。
+    #[test]
+    fn an_empty_swap_setting_swaps_nothing() {
+        let (mut sheet, id) = wired_tb();
+        set_attr(&mut sheet, id, SWAPPED_ATTR, " , ");
+        let chart = terminal_chart(&sheet, id).unwrap();
+        let r = row(&chart, "1");
+        assert_eq!((r.internal.as_str(), r.external.as_str()), ("R1:2", "R2:1"));
+        assert!(chart.rows.iter().all(|r| !r.swapped));
+    }
+
+    /// A swap setting naming a terminal the block does not have ignores just that item and the terminal check warns about it.
+    /// 内外スワップの指定に端子台に無い端子番号があると、その項目だけを無視し、端子台チェックがWarningで知らせる。
+    #[test]
+    fn an_unknown_swapped_terminal_is_ignored_and_warned_about() {
+        let (mut sheet, id) = wired_tb();
+        set_attr(&mut sheet, id, SWAPPED_ATTR, "1,9");
+        let chart = terminal_chart(&sheet, id).unwrap();
+        assert!(row(&chart, "1").swapped);
+        assert_eq!(chart.swap_unknown, ["9"]);
+        let d = check_terminal_block(&sheet, id)
+            .into_iter()
+            .find(|d| d.code == TERMINAL_SWAP_UNKNOWN)
+            .expect("警告");
+        assert_eq!(d.severity, Severity::Warning);
+        assert!(d.message.contains('9'), "{}", d.message);
+    }
+
+    /// On a three-level block, swapping and sorting at the same time keep the sorted row order and swap only the named terminals.
+    /// 3段端子台で内外スワップと並べ替えを同時に指定しても、行は並べ替えどおりに並び、入れ替わるのは指定した端子だけ。
+    #[test]
+    fn swapping_and_sorting_a_three_level_block_work_together() {
+        let (mut sheet, id) = sheet_with_multilevel_tb(2, 3, "");
+        set_attr(&mut sheet, id, SWAPPED_ATTR, "1b,2c");
+        set_attr(&mut sheet, id, ROW_ORDER_ATTR, "alnum");
+        let chart = terminal_chart(&sheet, id).unwrap();
+        let order: Vec<&str> = chart.rows.iter().map(|r| r.terminal.as_str()).collect();
+        assert_eq!(order, ["1a", "1b", "1c", "2a", "2b", "2c"]);
+        let swapped: Vec<&str> = chart
+            .rows
+            .iter()
+            .filter(|r| r.swapped)
+            .map(|r| r.terminal.as_str())
+            .collect();
+        assert_eq!(swapped, ["1b", "2c"]);
     }
 
 }

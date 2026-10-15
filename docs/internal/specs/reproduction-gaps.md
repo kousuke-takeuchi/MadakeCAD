@@ -433,13 +433,19 @@ existing jumper drawing.
 
 > **Limitation (M4 phase 5, accessories):** terminal accessories (end brackets, partitions, end plates) are listed in the terminal chart and counted in the BOM, but their widths are **not** counted by the panel layout's rail fill or spacing checks.
 
+> **Status 2026-09-28 (M4 phase 5, terminal editor):** the terminal editor grid
+> shows the `Lv` column, and levels are added or removed in place with one
+> `SetTerminalLevels` command (level a's terminals stay on the same sheet
+> coordinates, so existing wires stay connected).
+
 > **Status 2026-08-23 (phase 6, task 2): resolved (dynamic symbol id).** A new
 > parametric symbol family, `terminal_block_{n}p_{levels}l` (1–3 levels, e.g.
 > `terminal_block_8p_2l`), draws **one terminal column per level, side by side**
 > (2 levels = 2 columns), with the poles as rows, so the same pole of every level
 > sits on one row. Column centres are 10 mm apart, which keeps every connection
-> point on the 2.5 mm grid, leaves adjacent columns' inner points 5 mm apart (no
-> two terminals share a point) and leaves room for a wire between the columns.
+> point on the 2.5 mm grid and leaves adjacent columns' inner points 5 mm apart (no
+> two terminals share a point); the gap between two columns is the lane the
+> level-to-level jumpers (`1a-1b`) are drawn in, not a free wiring channel.
 > Each level's terminals are numbered with a level letter (`1a`/`1b`/…), so levels
 > never short together (independent nets). The terminal chart carries a level
 > (`Lv`) column, the terminal diagram splits the terminal strip into one column
@@ -448,9 +454,9 @@ existing jumper drawing.
 > diagram and the BOM. No `.mdkproj` format change: it is a dynamic symbol id
 > plus the existing `attrs`, and the plain `terminal_block_{n}p` id (1 level,
 > chosen by default in the part-insert dialog) produces exactly the same geometry
-> and pin numbering as before, so existing projects stay valid. The terminal
-> editor grid does not yet show the `Lv` column or let a level be added after the
-> fact — the level count is chosen once, at insertion.
+> and pin numbering as before, so existing projects stay valid. At that point the
+> terminal editor grid did not show the `Lv` column or let a level be added after
+> the fact; both arrived in M4 phase 5 (see the status above).
 >
 > **Status 2026-08-23 (phase 5): unchanged.** The two-column block was again
 > approximated with two `terminal_block_{n}p` symbols and two designators.

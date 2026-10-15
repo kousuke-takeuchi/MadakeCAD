@@ -789,6 +789,10 @@
     "spare": "Reserve",
     "addJumper": "Brücke hinzufügen",
     "removeJumper": "Brücke entfernen",
+    "swap": "Swap sides",
+    "swapHint": "Swaps the inside and outside of the selected terminals (press again to swap back)",
+    "swapped": "Swapped",
+    "swapLog": "{reference}: swapped the sides of terminals {terminals}",
     "jumperHint": "Wählen Sie benachbarte Klemmen aus und fügen Sie eine Steckbrücke hinzu. Jede Bearbeitung läuft über einen Befehl, sodass Cmd+Z sie zurücknimmt.",
     "check": "Klemmleiste prüfen",
     "checkPending": "Noch nicht geprüft",
@@ -796,10 +800,6 @@
     "checkCounts": "{error} Fehler / {warning} Warnung(en) / {info} Hinweis(e)",
     "generateDiagram": "Klemmenanschlussplan erzeugen",
     "generateChart": "Klemmenplan erzeugen",
-    "phase2Hint": "für Phase 2 geplant",
-    "phase2": {
-      "swap": "Innen/Außen tauschen"
-    },
     "insertSpare": "Insert spare",
     "spareInsert": {
       "title": "Insert spare terminal",

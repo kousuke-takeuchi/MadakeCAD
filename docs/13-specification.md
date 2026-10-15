@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2590 specification clauses** across 6 areas.
+**2603 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -952,6 +952,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An accessory item with an unknown kind, a terminal the block does not have, or a broken format is skipped on its own and reported, while the other items still count. <sub>`a_bad_accessory_item_is_skipped_alone_and_reported`</sub>
 - In the terminal chart an accessory gets its own row right before the terminal it names, and "end" accessories come after the last terminal. <sub>`accessory_rows_sit_before_their_terminal_and_end_rows_come_last`</sub>
 - The terminal check reports a broken accessory item as a warning and names the item. <sub>`the_terminal_check_warns_about_a_broken_accessory_item`</sub>
+- Swapping a terminal's inside and outside exchanges only that terminal's two sides in the chart; the other terminals keep theirs. <sub>`swapping_a_terminal_exchanges_only_its_inside_and_outside`</sub>
+- An empty swap setting means no terminal is swapped. <sub>`an_empty_swap_setting_swaps_nothing`</sub>
+- A swap setting naming a terminal the block does not have ignores just that item and the terminal check warns about it. <sub>`an_unknown_swapped_terminal_is_ignored_and_warned_about`</sub>
+- On a three-level block, swapping and sorting at the same time keep the sorted row order and swap only the named terminals. <sub>`swapping_and_sorting_a_three_level_block_work_together`</sub>
 
 ### Terminal connection diagrams
 
@@ -963,6 +967,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A wire that belongs to no harness gets no bracket at all. <sub>`a_wire_without_a_harness_gets_no_bracket`</sub>
 - A saddle jumper between neighbouring terminals is drawn as a vertical link on the inside edge of the terminal boxes. <sub>`a_jumper_is_drawn_on_the_inside_edge_of_the_boxes`</sub>
 - Each lead line carries the wire it stands for: colour, gauge in sq and part number, written small under the line. <sub>`each_lead_line_carries_the_wire_specification`</sub>
+- A terminal whose inside and outside are swapped is drawn with its two wires on the opposite sides; the other terminals stay where they were. <sub>`a_swapped_terminal_draws_its_wires_on_the_opposite_sides`</sub>
 - A multi-level terminal block's diagram labels each box with its full level-letter terminal number (1a, 1b, 2a, 2b, ...), so the two levels are never drawn as if they were the same terminal. <sub>`a_multilevel_terminal_block_labels_boxes_with_the_level_letter`</sub>
 - A multi-level terminal block's diagram shows the levels as columns: the terminal strip is split into one column per level, level a on the left, and each terminal's box sits in its own level's column. <sub>`a_multilevel_terminal_diagram_draws_each_level_as_a_column`</sub>
 - Each level column of a multi-level terminal diagram is headed by its level letter, so a reader can tell which column is which level without reading the box numbers. <sub>`a_multilevel_terminal_diagram_heads_each_level_column_with_its_letter`</sub>
@@ -2343,6 +2348,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - adding Option/Alt makes it a different shortcut, not a file action <sub>`editor shortcuts: ファイル操作`</sub>
 - Shift+Cmd+N and Shift+Cmd+O are not file actions <sub>`editor shortcuts: ファイル操作`</sub>
 - the decision is made on the physical key, so non-Latin layouts still work <sub>`editor shortcuts: ファイル操作`</sub>
+- Cmd+Z is undo and Shift+Cmd+Z is redo, with Ctrl working the same <sub>`editor shortcuts: 元に戻す・やり直し`</sub>
+- plain Z, Option combinations and other keys are not undo or redo <sub>`editor shortcuts: 元に戻す・やり直し`</sub>
 
 ### entityKindLabels
 
@@ -2926,6 +2933,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - removes a stale terminal kind when the assigned part has none <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
 - drops the accessories attribute when every accessory row is removed <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
 - writes the accessories attribute in the documented format with one update_entity <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- toggles the selected terminals in the swap setting, adding new ones and removing swapped ones <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- keeps unknown terminal numbers and drops blank items when toggling the swap setting <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- cannot swap while no terminal is selected <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- swaps the selected terminals with one update_entity that writes the swapped attribute and keeps the selection <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- drops the swapped attribute when every swapped terminal is swapped back <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- carries whether each row is swapped, treating a missing flag as not swapped <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
 
 ### ui
 

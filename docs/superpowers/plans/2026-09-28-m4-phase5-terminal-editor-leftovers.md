@@ -225,15 +225,15 @@ Task 6でその旨を仕様の状態文に明記する。
 `docs/internal/specs/m4-industrial-core.md` / `docs/12-roadmap.md` + `.ja.md` /
 `docs/internal/feature-inventory.md` / `docs/internal/specs/reproduction-gaps.md`
 
-- [ ] **Step 1 (red):** `swapped_terminals`が`attrs["swapped"]`を解析し、チャートの内部側/外部側の列と
+- [x] **Step 1 (red):** `swapped_terminals`が`attrs["swapped"]`を解析し、チャートの内部側/外部側の列と
       接続図の左右が指定した端子だけ入れ替わること / 未知の端子番号はその項目だけ無視して
       `erc.terminal_swap_unknown`(Warning) が出ること / 3段端子台で`swapped`と`row_order`を同時指定した
       ときの列見出しと行順 / 空指定は入替なしと同じ
-- [ ] **Step 2 (green):** 実装 + ツールバー「内外スワップ」(選択行に作用。`terminals.phase2.swap`を
+- [x] **Step 2 (green):** 実装 + ツールバー「内外スワップ」(選択行に作用。`terminals.phase2.swap`を
       実キーへ)。ここで`terminals.phase2`と`terminals.phase2Hint`が6カタログすべてから消えることを
       確認する。`cargo test`+`vitest`+`vue-tsc` → 実機確認 (3・4番だけスワップ → 接続図で左右が入れ替わる →
       ⌘Zで戻る) → `gen_spec.py` → コミット
-- [ ] **Step 3 (突き合わせ):** 状態文を実態へ揃える。**受け入れの結果はこのStep行に書き、
+- [x] **Step 3 (突き合わせ):** 状態文を実態へ揃える。**受け入れの結果はこのStep行に書き、
       受け入れ基準には書かない**(フェーズ6の反省)。
       - `docs/internal/specs/m4-industrial-core.md`: §1の🔶ステータスを「フェーズ5完了(2026-09-28)」へ書き換え、
         8項目それぞれの実装形 (attrsキー・Command名) と**フェーズ6で先に入った多段シンボル/ジャンパバー**を
@@ -250,6 +250,13 @@ Task 6でその旨を仕様の状態文に明記する。
       - `docs/superpowers/plans/2026-09-28-phase6-followups.md`: このフェーズで閉じた項目に
         「→ 2026-09-28 フェーズ5で解消」と付ける (消さない。棚卸しの履歴を残す)
       - `python3 scripts/gen_spec.py --check`相当が通ることを確認 → コミット
+      - **結果 (2026-10-15):** 実機確認 (TB1 8極、端子3・4を選んで「内外スワップ」) でグリッドの外部側/内部側と
+        「スワップ」バッジ、端子接続図PDFの左右 (RI3:2/RI4:2が外部側=左、RE3:1/RE4:1が内部側=右) が入れ替わり、
+        ⌘Zで`attrs`が空に戻って接続図も元の左右に戻った。実機確認で見つけた2点をこのタスクで直した:
+        (1) まとめた電線の列 (`TerminalRow.wire`) が入れ替え前の「内部側→外部側」の順のままだった → 入れ替え後の
+        内部側→外部側で組み直す。(2) 端子台エディタはモーダル扱いでキャンバスの⌘Zが止まっており、ダイアログの
+        案内文「Cmd+Zで戻せます」と食い違っていた → エディタを開いている間だけ⌘Z/⇧⌘Zを文書のundo/redoへ通す
+        (`editorShortcuts.ts`の`historyShortcutOf`。入力欄の中では従来どおり文字編集)
 
 ## 受け入れ基準
 

@@ -45,9 +45,6 @@ watch(
   () => void terminals.refresh(),
 );
 
-/** フェーズ2で実装する操作 (デザインどおり並べるが押せない。採番・多段・予備挿入は実装済みなので除く)。 */
-const phase2 = [{ key: "swap", icon: ArrowLeftRight }] as const;
-
 // --- 部品割当ポップオーバー (デザイン「P 部品割当」準拠) ---
 // 部品DBから端子台の型番を検索し、`value`=型番と`attrs["terminal_kind"]`=種別を
 // update_entity 1回で書く。候補は「端子台の種別を持つ部品」と「端子台シンボルの部品」。
@@ -478,6 +475,15 @@ async function removeJumper() {
   );
 }
 
+async function toggleSwap() {
+  const terminalList = terminals.selectedTerminals.join(", ");
+  if (!(await terminals.toggleSwap())) {
+    if (terminals.error) ui.log(terminals.error);
+    return;
+  }
+  ui.log(t("terminals.swapLog", { reference: terminals.reference, terminals: terminalList }));
+}
+
 async function runCheck() {
   await terminals.runCheck();
   if (terminals.error) {
@@ -906,15 +912,9 @@ async function generateDiagram() {
             </div>
           </template>
         </div>
-        <button
-          v-for="p in phase2"
-          :key="p.key"
-          class="tool"
-          disabled
-          :title="t('terminals.phase2Hint')"
-        >
-          <component :is="p.icon" :size="12" class="tool-icon" />
-          {{ t(`terminals.phase2.${p.key}`) }}
+        <button class="tool" :disabled="!terminals.canSwap" :title="t('terminals.swapHint')" @click="toggleSwap">
+          <ArrowLeftRight :size="12" class="tool-icon" />
+          {{ t("terminals.swap") }}
         </button>
         <button class="tool" :disabled="!terminals.entityId" @click="gotoTerminal">
           <Unplug :size="12" class="tool-icon" />
@@ -958,6 +958,7 @@ async function generateDiagram() {
             <div class="cell wire">{{ r.wire }}</div>
             <div class="cell status">
               <span v-if="r.spare" class="badge">{{ t("terminals.spare") }}</span>
+              <span v-if="r.swapped" class="badge">{{ t("terminals.swapped") }}</span>
             </div>
           </div>
         </div>

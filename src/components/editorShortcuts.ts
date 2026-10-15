@@ -36,3 +36,17 @@ export function fileShortcutOf(event: ShortcutKeyEvent, modalOpen: boolean): Fil
       return null;
   }
 }
+
+/** 元に戻す / やり直しのショートカットの種類。 */
+export type HistoryShortcut = "undo" | "redo";
+
+/**
+ * ⌘Z=元に戻す / ⇧⌘Z=やり直し (WindowsとLinuxはCtrl)。該当しない・⌥が押されているときはnull。
+ * 図面を編集するダイアログ (端子台エディタ) を開いたまま戻せるようにするための判定で、
+ * キャンバス側の⌘Zはこれまでどおり`ToolController`が受ける。
+ */
+export function historyShortcutOf(event: ShortcutKeyEvent): HistoryShortcut | null {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey) return null;
+  if (event.code !== "KeyZ") return null;
+  return event.shiftKey ? "redo" : "undo";
+}
