@@ -31,6 +31,11 @@ export const theme = {
   agent: "#29d3e6",
   /** オーバーレイのラベルチップ上の文字色。 */
   agentInk: "#0b3540",
+  /** 作図領域の操作チップ (.pen DSキャンバス操作チップ): 地・枠・主文・操作ヒント。 */
+  chipBg: "rgba(46, 51, 59, 0.9)",
+  chipBorder: "#1f6fbf",
+  chipText: "#e8eaec",
+  chipHint: "#9aa2ab",
 } as const;
 
 /**

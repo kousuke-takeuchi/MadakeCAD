@@ -243,6 +243,8 @@ watch(() => store.activeSheetId, () => {
       @wheel.prevent="(e) => controller.onWheel(toLocal(e), e.deltaY)"
       @dblclick="() => controller.onDoubleClick()"
       @contextmenu.prevent
+      @dragover.prevent
+      @drop.prevent="(e) => void controller.dropPlacement(toLocal(e))"
     />
     <SearchBar />
     <SurferPopup />

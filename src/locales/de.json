@@ -1050,11 +1050,29 @@
     },
     "menu": {
       "reveal": "Zur Zeichnung",
-      "delete": "Löschen"
+      "delete": "Löschen",
+      "place": "Place",
+      "placeAll": "Place all unplaced…"
     },
-    "phase3Hint": "Das Ziehen nicht platzierter Funktionen in die Zeichnung kommt in Phase 3",
     "revealLog": "Betriebsmittel: {function} von {reference} ({address}) angezeigt",
-    "deletedLog": "Betriebsmittel: {reference} aus der Zeichnung gelöscht ({count} Elemente — Cmd+Z macht es rückgängig)"
+    "deletedLog": "Betriebsmittel: {reference} aus der Zeichnung gelöscht ({count} Elemente — Cmd+Z macht es rückgängig)",
+    "unplaced": {
+      "contactNo": "contact {terminals} NO",
+      "contactNc": "contact {terminals} NC",
+      "contactCo": "changeover {terminals} CO"
+    },
+    "filter": {
+      "all": "All",
+      "unplaced": "Unplaced",
+      "placed": "Placed"
+    },
+    "unplacedBadge": "unplaced",
+    "unplacedHint": "A contact in the part's contact configuration that is not drawn yet. Click it or drag it onto the drawing to place it",
+    "placeAllNotImplemented": "Not implemented: placing every unplaced contact at once is not available yet. Place them one by one",
+    "placeStartLog": "Devices: placing {name} of {reference} (click to confirm, Esc to cancel)",
+    "placedLog": "Devices: placed {label} (Cmd+Z to undo)",
+    "placeChip": "Place {label}",
+    "placeChipHint": "click to confirm · R rotate · Esc cancel"
   },
   "surfer": {
     "titleDevice": "Vorkommen von {title} (Referenz-Navigator)",

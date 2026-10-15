@@ -43,7 +43,8 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - ✅ **2D panel layout** (phase 4): a `panel` sheet kind (`.mdkproj` format version 4; balloons took it to 6) with enclosure, DIN rail, duct, footprint and legend entities on the ordinary command path. Unplaced parts are derived from the schematic (one device per designator) and placed by click with rail snapping and `R` to rotate; balloons number the footprints in reading order and feed the BOM's item-number column; the panel layout table matches it row for row; and `panel.overlap` / `panel.off_rail` / `panel.rail_fill` / `panel.orphan_footprint` report into the verification panel. Footprint sizes come from the parts database (schema v6)
 - ✅ **BOM enrichment** (2026-10-15): every BOM row looks its part number up in the parts database and adds maker, name, unit price, currency, amount and purchase link, with one total row per currency
 - ✅ **Macro variants from the save dialog** (2026-10-15): save a selection as variant B–Z of an existing macro, with an overwrite prompt; placeholders follow symbols with the same designator
-- Deferred out of M4 (no phase scheduled): reserved contacts placed from the navigator; the unimplemented PLC ladder styles and placement policies; cable summary; the in-panel wiring diagram, nameplates, dimensions and align/distribute on panel sheets; a graphical plot-frame editor
+- ✅ **Reserved contacts** (2026-10-15): the device navigator lists the contacts of a relay's contact configuration that are not drawn yet; click or drag one onto the drawing to place it
+- Deferred out of M4 (no phase scheduled): the unimplemented PLC ladder styles and placement policies; cable summary; the in-panel wiring diagram, nameplates, dimensions and align/distribute on panel sheets; a graphical plot-frame editor
 
 ## M5 — Mechanical CAD integration (FreeCAD) ✅ (M5-1 to M5-3 done; the 2D panel sheet stays under M4 §8)
 

@@ -148,6 +148,12 @@ export class EditorController {
   tool: ToolId = "select";
   /** placeツールで配置するシンボルid。 */
   placeSymbolId: string | null = null;
+  /**
+   * 予約接点の配置 (デバイスナビゲータの未配置行から): 参照記号を自動採番せずこの値で置き、
+   * 1個置いたら選択ツールへ戻る。`placeLabel`はカーソル脇の操作チップの主文 (例 "K1 33-34 NO")。
+   */
+  placeReference: string | null = null;
+  placeLabel: string | null = null;
   placeRotation = 0;
   /** 部品DBから選択した部品情報 (配置時にvalue/attrsへ反映)。 */
   placePart: { value: string; attrs: Record<string, string> } | null = null;
@@ -217,6 +223,8 @@ export class EditorController {
       return;
     }
     this.tool = tool;
+    this.placeReference = null;
+    this.placeLabel = null;
     this.placeSymbolId = tool === "place" ? (symbolId ?? this.placeSymbolId) : null;
     this.placePart = tool === "place" ? (part ?? null) : null;
     if (tool !== "macro") {
@@ -228,6 +236,26 @@ export class EditorController {
     this.shapePoints = [];
     this.dragMode = "none";
     this.requestRedraw();
+  }
+
+  /**
+   * 予約接点 (デバイスナビゲータの未配置機能) を置くモードに入る。参照記号は`reference`のまま
+   * (自動採番しない)、クリックかドロップで1個置いたら選択ツールへ戻る。置くのは普通の
+   * `add_entity` 1回なのでundo一発で戻り、接点マップ・XRefは図面から導出し直される。
+   */
+  startContactPlacement(reference: string, symbolId: string, label: string) {
+    this.setTool("place", symbolId);
+    if (this.tool !== "place") return;
+    this.placeReference = reference;
+    this.placeLabel = label;
+    this.placeRotation = 0;
+    this.requestRedraw();
+  }
+
+  /** ナビゲータからドラッグした予約接点を、ドロップした位置 (キャンバス座標) へ置く。 */
+  async dropPlacement(screen: Pt) {
+    if (this.tool !== "place" || !this.placeReference) return;
+    await this.commitPlace(this.snap(this.vp.toWorld(screen)));
   }
 
   /**
@@ -884,11 +912,17 @@ export class EditorController {
       at,
       rotation: this.placeRotation,
       mirror: false,
-      reference: this.nextReference(def.ref_prefix),
+      reference: this.placeReference ?? this.nextReference(def.ref_prefix),
       value: this.placePart?.value ?? "",
       attrs: this.placePart?.attrs ?? {},
     };
+    const label = this.placeLabel;
     await this.store.execute({ type: "add_entity", sheet_id: sheet.id, entity });
+    if (this.placeReference) {
+      // 予約接点は1個ずつ: 置いたら選択ツールへ戻る (同じ接点を二重に置かない)
+      useUiStore().log(i18n.global.t("devices.placedLog", { label: label ?? entity.reference }));
+      this.setTool("select");
+    }
     this.requestRedraw();
   }
 
@@ -963,6 +997,14 @@ export class EditorController {
         ctx.globalAlpha = 0.6;
         drawSymbol(ctx, vp, ghost, def, false, theme.selection);
         ctx.globalAlpha = 1;
+      }
+      if (this.placeLabel && this.cursorScreen) {
+        drawOperationChip(
+          ctx,
+          { x: this.cursorScreen.x + 18, y: this.cursorScreen.y + 18 },
+          i18n.global.t("devices.placeChip", { label: this.placeLabel }),
+          i18n.global.t("devices.placeChipHint"),
+        );
       }
     }
     // 回路マクロの配置ゴースト: 確定後と同じ回路をカーソル位置へ半透明で描く
@@ -1102,4 +1144,31 @@ export class EditorController {
       }
     }
   }
+}
+
+/**
+ * 作図領域の操作チップ (.pen DSキャンバス操作チップ): 主文+操作ヒントを1行で、暗い地+青枠で描く。
+ * 予約接点の配置中にカーソルの右下へ出す。
+ */
+function drawOperationChip(ctx: CanvasRenderingContext2D, at: Pt, main: string, hint: string) {
+  ctx.save();
+  ctx.font = "10px 'Noto Sans JP', sans-serif";
+  ctx.textAlign = "left";
+  const pad = 8;
+  const gap = 8;
+  const w = ctx.measureText(main).width + gap + ctx.measureText(hint).width + pad * 2;
+  const h = 20;
+  ctx.fillStyle = theme.chipBg;
+  ctx.strokeStyle = theme.chipBorder;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(at.x, at.y, w, h, 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = theme.chipText;
+  ctx.fillText(main, at.x + pad, at.y + h / 2);
+  ctx.fillStyle = theme.chipHint;
+  ctx.fillText(hint, at.x + pad + ctx.measureText(main).width + gap, at.y + h / 2);
+  ctx.restore();
 }

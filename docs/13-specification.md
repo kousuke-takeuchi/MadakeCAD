@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2625 specification clauses** across 6 areas.
+**2631 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -635,6 +635,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A hit on a symbol also says what that symbol does in its device, so the result list can read "relay contact 13-14". <sub>`symbol_hits_say_what_the_symbol_does`</sub>
 - Attribute values such as the contact configuration are searched together with the part number. <sub>`attribute_values_are_searched_as_part_numbers`</sub>
 - A relay device lists its coil first and then its contacts, using the same terminal numbers as the contact map. <sub>`relay_device_lists_coil_then_contacts`</sub>
+- A relay lists the contacts of its contact configuration that are not drawn yet as unplaced functions, numbered like the unused rows of the contact map, with the symbol to place for each. <sub>`a_relay_lists_its_undrawn_contacts_as_unplaced`</sub>
+- A relay without a readable contact configuration, and any device that is not a relay, has no unplaced functions. <sub>`devices_without_a_contact_configuration_have_nothing_unplaced`</sub>
 - A terminal block appears as one "terminals" row covering every pole, with the pole count on the device. <sub>`terminal_block_device_shows_its_terminal_range`</sub>
 - A multi-level terminal block counts its poles, not its terminals: a 4-pole 2-level block is 4 poles over 2 levels, and its terminal row spans the first to the last terminal number (1a-4b). <sub>`multilevel_terminal_block_device_counts_poles_not_terminals`</sub>
 - An ordinary part that has no separable functions shows up as a single "body" row, named after its symbol. <sub>`plain_part_is_a_single_body_row`</sub>
@@ -1787,6 +1789,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - a function row reads like 'contact 13-14' with a '/2.B3' badge <sub>`見出しの文言`</sub>
 - clicking a function row switches to its sheet and selects its entity <sub>`ツリーからの操作`</sub>
 - deleting a device removes every entity of that reference designator, without duplicates <sub>`ツリーからの操作`</sub>
+- unplaced contacts follow the placed functions, one row each <sub>`未配置機能 (予約接点)`</sub>
+- a collapsed device hides its unplaced rows too <sub>`未配置機能 (予約接点)`</sub>
+- the filter keeps devices with unplaced functions, or only fully placed ones <sub>`未配置機能 (予約接点)`</sub>
+- an unplaced row is named by its contact kind and terminals <sub>`未配置機能 (予約接点)`</sub>
 
 ### dynamicSymbol
 

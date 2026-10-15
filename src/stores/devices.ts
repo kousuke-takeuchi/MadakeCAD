@@ -5,7 +5,7 @@
 // Cmd+Zで戻せる (アーキテクチャの絶対原則)。
 
 import { defineStore } from "pinia";
-import { deviceDeleteIds, deviceRows, type DeviceRow } from "../canvas/deviceTree";
+import { deviceDeleteIds, deviceRows, type DeviceFilter, type DeviceRow } from "../canvas/deviceTree";
 import { ipc, type DeviceNode } from "../ipc";
 import { useDocumentStore } from "./document";
 
@@ -18,11 +18,14 @@ interface DevicesState {
   loading: boolean;
   /** 最後に読み込んだときのドキュメントrevision (図面が変わったら読み直す)。 */
   revision: number;
+  /** ツリーの絞り込み (すべて / 未配置あり / 配置済み)。 */
+  filter: DeviceFilter;
 }
 
 /** ツリーの行のキー (選択状態の保持に使う)。 */
 export function rowKey(row: DeviceRow): string {
-  return row.type === "device" ? row.reference : `${row.reference}#${row.index}`;
+  if (row.type === "device") return row.reference;
+  return row.type === "unplaced" ? `${row.reference}#u${row.index}` : `${row.reference}#${row.index}`;
 }
 
 export const useDevicesStore = defineStore("devices", {
@@ -32,12 +35,13 @@ export const useDevicesStore = defineStore("devices", {
     selectedKey: null,
     loading: false,
     revision: -1,
+    filter: "all",
   }),
 
   getters: {
     /** 折りたたみを反映した描画用の行 (親=デバイス、子=機能)。 */
     rows(state): DeviceRow[] {
-      return deviceRows(state.devices, state.collapsed);
+      return deviceRows(state.devices, state.collapsed, state.filter);
     },
     count(state): number {
       return state.devices.length;

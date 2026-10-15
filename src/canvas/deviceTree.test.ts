@@ -7,6 +7,8 @@ import {
   deviceRows,
   functionAddress,
   functionHeadline,
+  matchesFilter,
+  unplacedHeadline,
 } from "./deviceTree";
 
 function fn(over: Partial<DeviceFunction> = {}): DeviceFunction {
@@ -179,5 +181,45 @@ describe("ツリーからの操作", () => {
       ],
     };
     expect(deviceDeleteIds(doubled)).toEqual(["e3"]);
+  });
+});
+
+describe("未配置機能 (予約接点)", () => {
+  function reserved(): DeviceNode {
+    return {
+      ...relay(),
+      unplaced: [
+        { role: "contact_no", terminals: "23-24", symbol_id: "relay_contact_no" },
+        { role: "contact_nc", terminals: "31-32", symbol_id: "relay_contact_nc" },
+      ],
+    };
+  }
+
+  // ja: 未配置の接点は、配置済みの機能の後ろに1行ずつ続く
+  it("unplaced contacts follow the placed functions, one row each", () => {
+    const rows = deviceRows([reserved()], new Set());
+    expect(rows.map((r) => r.type)).toEqual(["device", "function", "function", "unplaced", "unplaced"]);
+    const last = rows[4];
+    expect(last.type === "unplaced" && last.unplaced.terminals).toBe("31-32");
+  });
+
+  // ja: 折りたたんだデバイスは未配置行も出さない
+  it("a collapsed device hides its unplaced rows too", () => {
+    expect(deviceRows([reserved()], new Set(["K1"])).map((r) => r.type)).toEqual(["device"]);
+  });
+
+  // ja: 絞り込み「未配置あり」は未配置機能のあるデバイスだけ、「配置済み」は未配置機能の無いデバイスだけを出す
+  it("the filter keeps devices with unplaced functions, or only fully placed ones", () => {
+    const placed = relay();
+    expect(matchesFilter(reserved(), "unplaced")).toBe(true);
+    expect(matchesFilter(placed, "unplaced")).toBe(false);
+    expect(matchesFilter(placed, "placed")).toBe(true);
+    expect(matchesFilter(reserved(), "placed")).toBe(false);
+    expect(deviceRows([reserved(), { ...placed, reference: "K2" }], new Set(), "unplaced").filter((r) => r.type === "device").map((r) => r.reference)).toEqual(["K1"]);
+  });
+
+  // ja: 未配置行の名前は接点の種別と端子番号で読める (例「接点 23-24 NO」)
+  it("an unplaced row is named by its contact kind and terminals", () => {
+    expect(unplacedHeadline(reserved().unplaced![0])).toEqual({ key: "devices.unplaced.contactNo", params: { terminals: "23-24" } });
   });
 });

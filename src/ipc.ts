@@ -792,6 +792,20 @@ export interface DeviceNode {
   /** 端子台の段数 (単段は1、多段端子台は2以上。端子台以外は0)。 */
   levels: number;
   functions: DeviceFunction[];
+  /**
+   * まだ図面に描いていない機能 (予約接点)。リレーの接点構成にあって接点シンボルが置かれて
+   * いない接点。並びと端子の呼び名は接点マップの未使用行と同じ。古いバックエンドでは欠ける。
+   */
+  unplaced?: UnplacedFunction[];
+}
+
+/** 未配置の機能1つ (デバイスナビゲータの「未配置」行)。 */
+export interface UnplacedFunction {
+  role: "contact_no" | "contact_nc" | "contact_co";
+  /** 端子の呼び名 (例 "33-34")。 */
+  terminals: string;
+  /** 置くときのシンボル。 */
+  symbol_id: string;
 }
 
 /**

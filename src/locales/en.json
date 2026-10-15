@@ -1050,11 +1050,29 @@
     },
     "menu": {
       "reveal": "Go to drawing",
-      "delete": "Delete"
+      "delete": "Delete",
+      "place": "Place",
+      "placeAll": "Place all unplaced…"
     },
-    "phase3Hint": "Dragging unplaced functions onto the drawing comes in phase 3",
     "revealLog": "Devices: showing {function} of {reference} ({address})",
-    "deletedLog": "Devices: deleted {reference} from the drawing ({count} items — Cmd+Z undoes it)"
+    "deletedLog": "Devices: deleted {reference} from the drawing ({count} items — Cmd+Z undoes it)",
+    "unplaced": {
+      "contactNo": "contact {terminals} NO",
+      "contactNc": "contact {terminals} NC",
+      "contactCo": "changeover {terminals} CO"
+    },
+    "filter": {
+      "all": "All",
+      "unplaced": "Unplaced",
+      "placed": "Placed"
+    },
+    "unplacedBadge": "unplaced",
+    "unplacedHint": "A contact in the part's contact configuration that is not drawn yet. Click it or drag it onto the drawing to place it",
+    "placeAllNotImplemented": "Not implemented: placing every unplaced contact at once is not available yet. Place them one by one",
+    "placeStartLog": "Devices: placing {name} of {reference} (click to confirm, Esc to cancel)",
+    "placedLog": "Devices: placed {label} (Cmd+Z to undo)",
+    "placeChip": "Place {label}",
+    "placeChipHint": "click to confirm · R rotate · Esc cancel"
   },
   "surfer": {
     "titleDevice": "Where {title} appears (reference surfer)",

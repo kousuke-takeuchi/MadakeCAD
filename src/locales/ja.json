@@ -1050,11 +1050,29 @@
     },
     "menu": {
       "reveal": "図面へジャンプ",
-      "delete": "削除"
+      "delete": "削除",
+      "place": "配置",
+      "placeAll": "未配置をまとめて配置…"
     },
-    "phase3Hint": "未配置機能のドラッグ配置はフェーズ3で対応予定",
     "revealLog": "デバイス: {reference} の{function} ({address}) を表示しました",
-    "deletedLog": "デバイス: {reference} を図面から削除しました ({count}件。Cmd+Zで元に戻せます)"
+    "deletedLog": "デバイス: {reference} を図面から削除しました ({count}件。Cmd+Zで元に戻せます)",
+    "unplaced": {
+      "contactNo": "接点 {terminals} NO",
+      "contactNc": "接点 {terminals} NC",
+      "contactCo": "c接点 {terminals} CO"
+    },
+    "filter": {
+      "all": "すべて",
+      "unplaced": "未配置あり",
+      "placed": "配置済み"
+    },
+    "unplacedBadge": "未配置",
+    "unplacedHint": "部品DBの接点構成にあるが図面に無い接点。クリックかドラッグで作図領域へ置けます",
+    "placeAllNotImplemented": "未実装: 未配置の接点をまとめて配置する操作はまだありません。1つずつ配置してください",
+    "placeStartLog": "デバイス: {reference} の{name}を配置します (クリックで確定・Escで中止)",
+    "placedLog": "デバイス: {label} を配置しました (Cmd+Zで元に戻せます)",
+    "placeChip": "{label} を配置",
+    "placeChipHint": "クリックで確定 · R回転 · Esc中止"
   },
   "surfer": {
     "titleDevice": "{title} の所在 (参照サーフィン)",

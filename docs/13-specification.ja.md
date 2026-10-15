@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2625仕様項目**。
+全6領域・**2631仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -635,6 +635,8 @@
 - シンボルのヒットは、そのシンボルがデバイスの中で果たす機能も返すので、結果一覧に「リレー 接点 13-14」と出せる。 <sub>`symbol_hits_say_what_the_symbol_does`</sub>
 - 接点構成のような属性の値も、型番と一緒に検索できる。 <sub>`attribute_values_are_searched_as_part_numbers`</sub>
 - リレーのデバイスはコイルを先に、続けて接点を並べ、端子の呼び名は接点マップと同じになる。 <sub>`relay_device_lists_coil_then_contacts`</sub>
+- リレーは、接点構成のうちまだ図面に描いていない接点を未配置機能として並べる。端子の呼び名は接点マップの未使用行と同じで、置くときのシンボルも持つ。 <sub>`a_relay_lists_its_undrawn_contacts_as_unplaced`</sub>
+- 接点構成が無い・読めないリレーと、リレー以外のデバイスには未配置機能が無い。 <sub>`devices_without_a_contact_configuration_have_nothing_unplaced`</sub>
 - 端子台は全極をまとめた「端子」1行として並び、極数はデバイス側に持つ。 <sub>`terminal_block_device_shows_its_terminal_range`</sub>
 - 多段端子台は端子の数ではなく極数で数える: 4極2段の端子台は「4極2段」で、端子の行は最初から最後の端子番号まで (1a-4b) になる。 <sub>`multilevel_terminal_block_device_counts_poles_not_terminals`</sub>
 - 機能に分かれない普通の部品は、「本体」1行だけのデバイスとして、シンボルの名前つきで出る。 <sub>`plain_part_is_a_single_body_row`</sub>
@@ -1787,6 +1789,10 @@
 - 機能の行の名前と所在バッジは「接点 13-14」「/2.B3」の形になる <sub>`見出しの文言`</sub>
 - 機能の行をクリックすると、その機能のシートへ切り替えてエンティティを選ぶ <sub>`ツリーからの操作`</sub>
 - デバイスの削除は、その参照記号の全機能のエンティティを重複なく消す <sub>`ツリーからの操作`</sub>
+- 未配置の接点は、配置済みの機能の後ろに1行ずつ続く <sub>`未配置機能 (予約接点)`</sub>
+- 折りたたんだデバイスは未配置行も出さない <sub>`未配置機能 (予約接点)`</sub>
+- 絞り込み「未配置あり」は未配置機能のあるデバイスだけ、「配置済み」は未配置機能の無いデバイスだけを出す <sub>`未配置機能 (予約接点)`</sub>
+- 未配置行の名前は接点の種別と端子番号で読める (例「接点 23-24 NO」) <sub>`未配置機能 (予約接点)`</sub>
 
 ### dynamicSymbol
 

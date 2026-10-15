@@ -1050,11 +1050,29 @@
     },
     "menu": {
       "reveal": "转到图纸",
-      "delete": "删除"
+      "delete": "删除",
+      "place": "Place",
+      "placeAll": "Place all unplaced…"
     },
-    "phase3Hint": "将未放置的功能拖到图纸上的功能计划在第 3 阶段实现",
     "revealLog": "设备: 已显示 {reference} 的{function} ({address})",
-    "deletedLog": "设备: 已从图纸中删除 {reference}({count} 项 — Cmd+Z 可撤销)"
+    "deletedLog": "设备: 已从图纸中删除 {reference}({count} 项 — Cmd+Z 可撤销)",
+    "unplaced": {
+      "contactNo": "contact {terminals} NO",
+      "contactNc": "contact {terminals} NC",
+      "contactCo": "changeover {terminals} CO"
+    },
+    "filter": {
+      "all": "All",
+      "unplaced": "Unplaced",
+      "placed": "Placed"
+    },
+    "unplacedBadge": "unplaced",
+    "unplacedHint": "A contact in the part's contact configuration that is not drawn yet. Click it or drag it onto the drawing to place it",
+    "placeAllNotImplemented": "Not implemented: placing every unplaced contact at once is not available yet. Place them one by one",
+    "placeStartLog": "Devices: placing {name} of {reference} (click to confirm, Esc to cancel)",
+    "placedLog": "Devices: placed {label} (Cmd+Z to undo)",
+    "placeChip": "Place {label}",
+    "placeChipHint": "click to confirm · R rotate · Esc cancel"
   },
   "surfer": {
     "titleDevice": "{title} 的出现位置(引用导航)",
