@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2682仕様項目**。
+全6領域・**2711仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -222,6 +222,9 @@
 - 図枠を指定していないときも、誰も知らないidのときも、同梱のjis-a3へフォールバックするので図面は必ず出せる。 <sub>`an_unknown_frame_template_id_falls_back_to_jis_a3`</sub>
 - 図枠テンプレートは用紙に依存しない定義で、シートの用紙にそのまま描かれる(図枠を替えても用紙サイズは変わらない)。 <sub>`a_frame_template_does_not_change_the_paper_size`</sub>
 - ゾーンの目盛文字はテンプレートが決める: 数字は1,2,3…、英字はA,B,C…でZの次はAへ戻る。 <sub>`zone_labels_follow_the_configured_style`</sub>
+- 図枠エディタはユーザー図枠をユーザーの置き場へ{id}.jsonとして保存し、一覧にはその編集内容がユーザー図枠として並ぶ。 <sub>`the_frame_editor_saves_a_user_frame_that_lists_back`</sub>
+- 同梱の図枠と同じidでの保存は拒否して何も書かない(別名で保存させる)。 <sub>`saving_over_a_bundled_frame_id_is_refused`</sub>
+- 壊れた図枠(改訂欄の列幅の合計が表題欄の幅と違う)や、ファイル名にできないidは拒否して何も書かない。 <sub>`an_invalid_frame_or_id_is_not_saved`</sub>
 
 ### 座標・ジオメトリ
 
@@ -1231,6 +1234,7 @@
 - 新規プロジェクトは、アプリ設定で「グローバル既定」に選んだ図枠テンプレートで始まる。 <sub>`a_new_project_starts_with_the_default_frame_template_from_the_settings`</sub>
 - 設定にグローバル既定が無ければ、新規プロジェクトの図枠は未指定のまま(同梱のJIS A3図枠で描かれる)。 <sub>`a_new_project_without_a_default_setting_keeps_the_frame_unset`</sub>
 - 設定の既定図枠が空欄のときは、未知のidではなく「既定なし」として扱う。 <sub>`a_blank_default_frame_template_setting_is_ignored`</sub>
+- POST /frame-templates/save は同梱の図枠と同じidや、ファイル名にできないidの図枠を400で拒否して何も書かない(エディタは別名を求める)。 <sub>`the_link_api_refuses_to_save_over_a_bundled_frame`</sub>
 
 ### REST Link API
 
@@ -1268,7 +1272,7 @@
 - POST /plc/assignments/import はアドレス・信号名・コメントのCSVを1モジュールぶん取り込み、undo一発で取り込み前へ戻る。 <sub>`a_csv_of_signal_names_can_be_imported_and_undone`</sub>
 - 3列に足りない行のあるCSVは400で断られ、割付表は元のまま変わらない。 <sub>`a_malformed_csv_import_is_refused_with_a_bad_request`</sub>
 - POST /plc/generate はI/Oラダーページを1回の編集で作り、新しいシートにはモジュールのシンボルと点数ぶんのラングが載る。GET /plc/modules はその置かれたモジュールを一覧に返す。 <sub>`generating_an_io_page_over_the_link_api_is_one_undo_step`</sub>
-- まだ実装していない生成設定 (モジュールの同居) は400で断られ、図面には何も起きない。 <sub>`an_unimplemented_generation_setting_is_refused_with_a_bad_request`</sub>
+- 図面にできない生成設定 (分割の単位0点) は400で断られ、図面には何も起きない。 <sub>`an_impossible_generation_setting_is_refused_with_a_bad_request`</sub>
 - PLC I/Oレポートは他の帳票と同じ書き出し口から`plc-io`として出力され、割付済みの点ごとに1行が並ぶ。 <sub>`the_plc_io_report_is_exported_like_any_other_report`</sub>
 - PLCのMCPツールの説明には、割付表が何のためのものか・ページ生成がundo一発であることが書かれている。 <sub>`the_plc_tools_explain_the_assignment_table_and_the_generated_page`</sub>
 
@@ -1870,6 +1874,34 @@
 - 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない) <sub>`symbolBounds`</sub>
 - ピングループの部品どうし (括弧と、折り返したキャプションの各行) は全ての回転・ミラーで決して重ならない (Rust側 svg_pin_group_pieces_never_overlap_each_other_at_any_rotation とparity) <sub>`captionLineAnchors`</sub>
 - 文字はシンボルを回しても横書きのままなので、キャプションの行は用紙の上で必ず縦に積まれる (同じ中心線に並び、順に下へ下がる。Rust側 svg_pin_group_caption_lines_stack_downwards_on_paper とparity) <sub>`captionLineAnchors`</sub>
+
+### frameEditor
+
+- 図枠エディタは用紙座標で見せ、表題欄の左上角からの相対座標で保存する (A3の既定図枠なら表題欄は(290,255)) <sub>`frame editor geometry`</sub>
+- 線ツールは表題欄の罫線を1本足し、元のテンプレートは変えない <sub>`frame editor geometry`</sub>
+- 長さ0の線や幅0の矩形は何も足さない <sub>`frame editor geometry`</sub>
+- 矩形ツールは対角の2点から4本の罫線を足す (どちら向きに引いても同じ) <sub>`frame editor geometry`</sub>
+- Shiftの水平/垂直拘束は、変化の大きいほうの軸だけを残す <sub>`frame editor geometry`</sub>
+- 文字ツールは固定文字のセル、プレースホルダツールはバインドのセルを足す <sub>`frame editor geometry`</sub>
+- 表題欄セルツールは大きさ付きのバインドセルと外周の罫線4本を足す <sub>`frame editor geometry`</sub>
+- ロゴ枠ツールは矩形をロゴ枠にし、もう一度引けば置き換わる <sub>`frame editor geometry`</sub>
+- クリックは罫線の上なら罫線、セルの中ならセルを拾い、何も無い所ではnull <sub>`frame editor selection and editing`</sub>
+- 移動は要素を(dx,dy)だけずらし、消去は要素を取り除く <sub>`frame editor selection and editing`</sub>
+- セルに固定文字を入れるとバインドは消え、バインドを入れると固定文字は消える <sub>`frame editor selection and editing`</sub>
+- プレースホルダは名前の部分一致で絞れ、空の検索語なら全部出る <sub>`frame editor placeholders and pre-save checks`</sub>
+- バインド文字列から{名前}を出てくる順に取り出す <sub>`frame editor placeholders and pre-save checks`</sub>
+- 同梱の図枠は保存前チェックがすべて0件 <sub>`frame editor placeholders and pre-save checks`</sub>
+- 知らないプレースホルダと枠外の要素は数えるが、保存は止めない <sub>`frame editor placeholders and pre-save checks`</sub>
+- 改訂欄の列幅の合計が表題欄の幅と違う・文字高が0のセルは保存できない誤りになる <sub>`frame editor placeholders and pre-save checks`</sub>
+- 別名で保存の既定idは元のid+-copyで、使われていれば番号を足す。idは英数字・-・_だけ <sub>`frame editor placeholders and pre-save checks`</sub>
+- 同梱の図枠を開くと、-copyのidを付けた新しい下書きになる (同梱はそのまま上書きできない) <sub>`frame editor store`</sub>
+- エディタ内の編集は図面のコマンドを送らず、⌘Zで1段ずつ戻り⇧⌘Zでやり直せる <sub>`frame editor store`</sub>
+- 何も変えない編集は段を積まず、新しい編集はやり直しの段を捨てる。段数には上限がある <sub>`frame editor store`</sub>
+- ユーザー図枠の保存は同じidで書き、一覧を読み直して未保存の印を消す <sub>`frame editor store`</sub>
+- まだファイルの無い下書きの保存は、書かずに別名で保存の欄を開く <sub>`frame editor store`</sub>
+- 別名で保存は、ファイル名にできないidと既にあるidを断り、通れば新しいidと入力した名前で書く <sub>`frame editor store`</sub>
+- 保存前チェックに誤りがあれば保存しない <sub>`frame editor store`</sub>
+- 未保存の変更があるときに閉じると確認を出し、破棄を選べば閉じる <sub>`frame editor store`</sub>
 
 ### 図枠テンプレートの配置計算 (キャンバス)
 

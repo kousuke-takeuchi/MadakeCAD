@@ -221,6 +221,18 @@ async fn get_frame_templates() -> Json<madake_core::frame_template::FrameTemplat
     Json(madake_core::frame_template::list())
 }
 
+/// 図枠エディタの保存: ユーザー図枠を`~/MadakeCAD/templates/frames/{id}.json`へ書く。
+/// 検証に落ちたもの・同梱の図枠とidがぶつかるものは**何も書かず**400で理由を返す。
+/// 図枠はファイルのドメインなので、この保存は図面のundo履歴に乗らない。
+async fn post_save_frame_template(
+    Json(template): Json<madake_core::frame_template::FrameTemplate>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let (saved, path) = madake_core::frame_template::save(&template).map_err(bad_request)?;
+    Ok(Json(
+        serde_json::json!({ "template": saved, "path": path.display().to_string() }),
+    ))
+}
+
 #[derive(Deserialize)]
 struct ApplyTemplateBody {
     template_id: String,
@@ -1334,6 +1346,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/templates", get(get_templates))
         .route("/api/v1/templates/apply", post(post_apply_template))
         .route("/api/v1/frame-templates", get(get_frame_templates))
+        .route("/api/v1/frame-templates/save", post(post_save_frame_template))
         .route("/api/v1/macros", get(get_macros))
         .route("/api/v1/macros/build", post(post_build_macro))
         .route("/api/v1/macros/save", post(post_save_macro))

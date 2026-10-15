@@ -183,10 +183,10 @@ async fn generating_an_io_page_over_the_link_api_is_one_undo_step() {
     assert!(engine.project().plc_assignments.is_empty());
 }
 
-/// Generation settings that are not implemented yet (sharing a ladder between modules) are refused with 400 and change nothing.
-/// まだ実装していない生成設定 (モジュールの同居) は400で断られ、図面には何も起きない。
+/// Generation settings that cannot produce a drawing (a split unit of zero points) are refused with 400 and change nothing.
+/// 図面にできない生成設定 (分割の単位0点) は400で断られ、図面には何も起きない。
 #[tokio::test]
-async fn an_unimplemented_generation_setting_is_refused_with_a_bad_request() {
+async fn an_impossible_generation_setting_is_refused_with_a_bad_request() {
     let (doc, router) = setup();
     let (status, _) = send(
         &router,
@@ -196,7 +196,8 @@ async fn an_unimplemented_generation_setting_is_refused_with_a_bad_request() {
             "module_ref": "PLC1",
             "module": di16(),
             "options": { "rung_spacing_mm": 10.0, "start_skip": 0,
-                         "ladder_style": "vertical-bus", "placement": "share-or-split" }
+                         "ladder_style": "vertical-bus", "placement": "share-or-split",
+                         "split_unit": 0 }
         }),
     )
     .await;

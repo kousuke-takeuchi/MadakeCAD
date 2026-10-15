@@ -47,7 +47,8 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - ✅ **PLC ladder styles and placement** (2026-10-15): horizontal-bus ladders, sharing the last I/O page and splitting modules across pages in split units, with the settings saved in the project (format 14)
 - ✅ **Multi-core cables and cable list** (2026-10-15): cable definition lines that assign the crossed wires as cores, shield, length, core-overflow ERC, the cable list report and cable rows in the BOM (format 15)
 - ✅ **Panel nameplates, dimensions, align and in-panel wiring** (2026-10-15): nameplates attached to footprints that can follow the schematic description, associative dimensions, align/distribute as one undo step, and the in-panel wiring diagram report (format 16)
-- Deferred out of M4 (no phase scheduled): a graphical plot-frame editor
+- ✅ **Graphical frame editor** (2026-10-15): draw frames and title blocks on screen — rules, text, placeholders picked from a list, title cells, logo frame and zones — with editor-local undo and a pre-save check, saved as the same template JSON
+- M4 has no deferred items left
 
 ## M5 — Mechanical CAD integration (FreeCAD) ✅ (M5-1 to M5-3 done; the 2D panel sheet stays under M4 §8)
 

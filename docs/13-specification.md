@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2682 specification clauses** across 6 areas.
+**2711 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -222,6 +222,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Resolving no id at all, or an id nobody knows, both fall back to the bundled jis-a3 frame so the drawing still prints. <sub>`an_unknown_frame_template_id_falls_back_to_jis_a3`</sub>
 - A frame template is a paper-independent definition: it is drawn on whatever paper the sheet uses, so switching frames never resizes the sheet. <sub>`a_frame_template_does_not_change_the_paper_size`</sub>
 - Zone labels come from the template: numeric columns count 1,2,3 and alphabetic rows run A,B,C wrapping back to A after Z. <sub>`zone_labels_follow_the_configured_style`</sub>
+- The frame editor saves a user frame as {id}.json in the user folder, and the list then shows it as a user frame with the edits. <sub>`the_frame_editor_saves_a_user_frame_that_lists_back`</sub>
+- Saving under the id of a bundled frame is refused and nothing is written, so the user must save under another name. <sub>`saving_over_a_bundled_frame_id_is_refused`</sub>
+- A broken frame (revision columns not adding up to the title block width) or an id that cannot be a file name is refused and nothing is written. <sub>`an_invalid_frame_or_id_is_not_saved`</sub>
 
 ### Geometry & coordinates
 
@@ -1231,6 +1234,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A new project starts with the frame template picked as the global default in the app settings. <sub>`a_new_project_starts_with_the_default_frame_template_from_the_settings`</sub>
 - Without a global default in the settings a new project leaves the frame unset, so it is drawn with the bundled JIS A3 frame. <sub>`a_new_project_without_a_default_setting_keeps_the_frame_unset`</sub>
 - A blank default frame template in the settings is treated as "no default" instead of an unknown id. <sub>`a_blank_default_frame_template_setting_is_ignored`</sub>
+- POST /frame-templates/save refuses with 400 a frame that reuses a bundled frame's id or whose id cannot be a file name, and writes nothing (the editor then asks for another name). <sub>`the_link_api_refuses_to_save_over_a_bundled_frame`</sub>
 
 ### REST Link API
 
@@ -1268,7 +1272,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - POST /plc/assignments/import loads a CSV of address, signal name and comment for one module, and one undo takes the whole import back. <sub>`a_csv_of_signal_names_can_be_imported_and_undone`</sub>
 - A CSV whose rows do not have the three columns is refused with 400 and leaves the assignment table untouched. <sub>`a_malformed_csv_import_is_refused_with_a_bad_request`</sub>
 - POST /plc/generate builds the I/O ladder page as a single edit: the new sheet carries the module symbol and one rung per point, and GET /plc/modules then lists the placed module. <sub>`generating_an_io_page_over_the_link_api_is_one_undo_step`</sub>
-- Generation settings that are not implemented yet (sharing a ladder between modules) are refused with 400 and change nothing. <sub>`an_unimplemented_generation_setting_is_refused_with_a_bad_request`</sub>
+- Generation settings that cannot produce a drawing (a split unit of zero points) are refused with 400 and change nothing. <sub>`an_impossible_generation_setting_is_refused_with_a_bad_request`</sub>
 - The PLC I/O report is exported through the ordinary report endpoint as "plc-io", listing one row per assigned point. <sub>`the_plc_io_report_is_exported_like_any_other_report`</sub>
 - The PLC tools tell the agent what the assignment table is for and that generating a page is one undo step. <sub>`the_plc_tools_explain_the_assignment_table_and_the_generated_page`</sub>
 
@@ -1870,6 +1874,34 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption <sub>`symbolBounds`</sub>
 - never lets a bracket and its caption lines overlap each other, at any rotation <sub>`captionLineAnchors`</sub>
 - stacks caption lines downwards on the paper, sharing one centre line, at any rotation <sub>`captionLineAnchors`</sub>
+
+### frameEditor
+
+- shows paper coordinates and stores them relative to the title block corner <sub>`frame editor geometry`</sub>
+- adds one title-block grid line without touching the original template <sub>`frame editor geometry`</sub>
+- adds nothing for a zero-length line or a flat rectangle <sub>`frame editor geometry`</sub>
+- turns a rectangle into four grid lines whichever way it is dragged <sub>`frame editor geometry`</sub>
+- keeps only the dominant axis when Shift constrains a line <sub>`frame editor geometry`</sub>
+- adds a fixed-text cell for the text tool and a bound cell for the placeholder tool <sub>`frame editor geometry`</sub>
+- adds a sized bound cell with its four border lines for the title-cell tool <sub>`frame editor geometry`</sub>
+- makes the rectangle the logo frame and replaces it when drawn again <sub>`frame editor geometry`</sub>
+- picks the grid line when on it, the cell when inside it and nothing on empty paper <sub>`frame editor selection and editing`</sub>
+- moves an item by the drag and deletes it <sub>`frame editor selection and editing`</sub>
+- keeps either the fixed text or the bind on a cell, never both <sub>`frame editor selection and editing`</sub>
+- filters placeholders by part of the name and lists all for an empty query <sub>`frame editor placeholders and pre-save checks`</sub>
+- reads the {names} out of a bind string in order <sub>`frame editor placeholders and pre-save checks`</sub>
+- finds nothing to report on the bundled frame <sub>`frame editor placeholders and pre-save checks`</sub>
+- counts unknown placeholders and items outside the frame without blocking the save <sub>`frame editor placeholders and pre-save checks`</sub>
+- reports revision widths that do not add up and a zero text height as blocking errors <sub>`frame editor placeholders and pre-save checks`</sub>
+- suggests an unused -copy id and accepts only file-name-safe ids <sub>`frame editor placeholders and pre-save checks`</sub>
+- opens a bundled frame as a new draft with a -copy id <sub>`frame editor store`</sub>
+- undoes and redoes editor edits step by step without sending any drawing command <sub>`frame editor store`</sub>
+- skips no-op edits, drops the redo steps on a new edit and caps the history <sub>`frame editor store`</sub>
+- saves a user frame under its own id, reloads the list and clears the unsaved mark <sub>`frame editor store`</sub>
+- opens save-as instead of writing a draft that has no file yet <sub>`frame editor store`</sub>
+- refuses an unsafe or taken id on save-as and otherwise writes under the new id and the entered name <sub>`frame editor store`</sub>
+- does not save while the pre-save check reports an error <sub>`frame editor store`</sub>
+- asks before discarding unsaved changes and closes when told to discard <sub>`frame editor store`</sub>
 
 ### Frame template layout (canvas)
 

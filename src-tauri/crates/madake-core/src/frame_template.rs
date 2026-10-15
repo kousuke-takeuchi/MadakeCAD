@@ -555,6 +555,52 @@ fn read_dir_frames(dir: &Path, builtin: bool, out: &mut FrameTemplateList) {
     }
 }
 
+/// 図枠エディタ (M4残り⑥) の保存: ユーザー図枠の置き場 (`~/MadakeCAD/templates/frames`)
+/// へ`{id}.json`として書く。同梱の図枠とidがぶつかるものは拒否する (別名で保存させる)。
+pub fn save(template: &FrameTemplate) -> std::result::Result<(FrameTemplate, PathBuf), String> {
+    let dir = user_dir().ok_or("ユーザー図枠の置き場 (ホームディレクトリ) が見つかりません")?;
+    let builtin: Vec<String> = list_from(bundled_dir().as_deref(), None)
+        .templates
+        .into_iter()
+        .map(|t| t.id)
+        .collect();
+    save_to(&dir, template, &builtin)
+}
+
+/// ディレクトリを明示して保存する (テスト・組み込み用)。`builtin_ids`は上書きを拒む同梱のid。
+///
+/// **検証に落ちたら何も書かない** ([`FrameTemplate::validate`]と同じ判断)。idはファイル名に
+/// なるので英数字・`-`・`_`だけ。保存はCommandエンジンの外 (ファイルのドメイン) なので
+/// 図面のundo履歴には乗らない。同じidを使う図面は次に描くときから新しい図枠で描かれる。
+pub fn save_to(
+    dir: &Path,
+    template: &FrameTemplate,
+    builtin_ids: &[String],
+) -> std::result::Result<(FrameTemplate, PathBuf), String> {
+    let mut template = template.clone();
+    template.id = template.id.trim().to_string();
+    template.builtin = false;
+    if template.id.is_empty()
+        || !template.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!("id「{}」は英数字・-・_ だけで書いてください", template.id));
+    }
+    if builtin_ids.iter().any(|b| b == &template.id) {
+        return Err(format!("id「{}」は同梱の図枠と同じです。別名で保存してください", template.id));
+    }
+    template.validate()?;
+    let mut value = serde_json::to_value(&template).map_err(|e| e.to_string())?;
+    if let Some(obj) = value.as_object_mut() {
+        // 同梱かどうかは読み込んだ場所で決まるのでファイルには書かない
+        obj.remove("builtin");
+    }
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let path = dir.join(format!("{}.json", template.id));
+    let text = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text + "\n").map_err(|e| e.to_string())?;
+    Ok((template, path))
+}
+
 /// JSONを読み、[`FrameTemplate::validate`]まで通ったものだけを返す。
 fn parse(text: &str) -> std::result::Result<FrameTemplate, String> {
     let template: FrameTemplate = serde_json::from_str(text).map_err(|e| e.to_string())?;
@@ -935,5 +981,53 @@ mod tests {
         assert_eq!(LabelStyle::Alpha.label(0), "A");
         assert_eq!(LabelStyle::Alpha.label(25), "Z");
         assert_eq!(LabelStyle::Alpha.label(26), "A");
+    }
+
+    /// The frame editor saves a user frame as {id}.json in the user folder, and the list then shows it as a user frame with the edits.
+    /// 図枠エディタはユーザー図枠をユーザーの置き場へ{id}.jsonとして保存し、一覧にはその編集内容がユーザー図枠として並ぶ。
+    #[test]
+    fn the_frame_editor_saves_a_user_frame_that_lists_back() {
+        let dir = temp_dir("save");
+        let mut t = default_template().clone();
+        t.id = "custom-2026".into();
+        t.name_ja = "自社様式".into();
+        t.title_block.cells[0].text = Some("図面番号".into());
+        let (saved, path) = save_to(&dir, &t, &["jis-a3".into()]).expect("保存できる");
+        assert!(!saved.builtin);
+        assert_eq!(path, dir.join("custom-2026.json"));
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("builtin"), "builtinはファイルに書かない");
+        let list = list_from(None, Some(&dir));
+        let back = list.templates.iter().find(|x| x.id == "custom-2026").expect("一覧に出る");
+        assert!(!back.builtin);
+        assert_eq!(back.title_block.cells[0].text.as_deref(), Some("図面番号"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Saving under the id of a bundled frame is refused and nothing is written, so the user must save under another name.
+    /// 同梱の図枠と同じidでの保存は拒否して何も書かない(別名で保存させる)。
+    #[test]
+    fn saving_over_a_bundled_frame_id_is_refused() {
+        let dir = temp_dir("builtin");
+        let t = default_template().clone();
+        let err = save_to(&dir, &t, &["jis-a3".into()]).unwrap_err();
+        assert!(err.contains("別名"), "{err}");
+        assert!(!dir.join("jis-a3.json").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A broken frame (revision columns not adding up to the title block width) or an id that cannot be a file name is refused and nothing is written.
+    /// 壊れた図枠(改訂欄の列幅の合計が表題欄の幅と違う)や、ファイル名にできないidは拒否して何も書かない。
+    #[test]
+    fn an_invalid_frame_or_id_is_not_saved() {
+        let dir = temp_dir("invalid");
+        let mut broken = default_template().clone();
+        broken.id = "mine".into();
+        broken.revision_block.col_w = vec![10.0, 10.0, 10.0, 10.0];
+        assert!(save_to(&dir, &broken, &[]).unwrap_err().contains("col_w"));
+        let mut bad_id = default_template().clone();
+        bad_id.id = "../evil".into();
+        assert!(save_to(&dir, &bad_id, &[]).is_err());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0, "何も書かない");
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

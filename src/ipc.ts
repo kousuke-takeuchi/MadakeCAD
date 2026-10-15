@@ -1162,6 +1162,11 @@ interface Ipc {
   listFrameTemplates(): Promise<FrameTemplateList>;
   /** ユーザー図枠の置き場をOSのファイラで開く (無ければ作る)。戻り値=そのパス。 */
   openFrameTemplatesFolder(): Promise<string>;
+  /**
+   * 図枠エディタの保存: ユーザー図枠を`~/MadakeCAD/templates/frames/{id}.json`へ書く。
+   * 検証に落ちたもの・同梱の図枠とidがぶつかるものは何も書かずに理由を投げる。undo履歴には乗らない。
+   */
+  saveFrameTemplate(template: FrameTemplate): Promise<{ template: FrameTemplate; path: string }>;
   /** 使える回路マクロの一覧 (ユーザーの`~/MadakeCAD/macros`)。 */
   listMacros(): Promise<MacroList>;
   /** 選択範囲をマクロへ組み立てるだけ (ファイルに書かない)。プレビューと⌘Cが使う。 */
@@ -1294,6 +1299,8 @@ const tauriIpc: Ipc = {
   openTemplatesFolder: () => invoke<string>("open_templates_folder"),
   listFrameTemplates: () => invoke<FrameTemplateList>("list_frame_templates"),
   openFrameTemplatesFolder: () => invoke<string>("open_frame_templates_folder"),
+  saveFrameTemplate: (template) =>
+    invoke<{ template: FrameTemplate; path: string }>("save_frame_template", { template }),
   listMacros: () => invoke<MacroList>("list_macros"),
   buildMacro: (sheetId, entityIds, meta) =>
     invoke<Macro>("build_macro", { sheetId, entityIds, meta }),
@@ -1441,6 +1448,11 @@ const httpIpc: Ipc = {
   openTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
   listFrameTemplates: () => http<FrameTemplateList>("/frame-templates"),
   openFrameTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
+  saveFrameTemplate: (template) =>
+    http<{ template: FrameTemplate; path: string }>("/frame-templates/save", {
+      method: "POST",
+      body: JSON.stringify(template),
+    }),
   listMacros: () => http<MacroList>("/macros"),
   buildMacro: (sheetId, entityIds, meta) =>
     http<Macro>("/macros/build", {

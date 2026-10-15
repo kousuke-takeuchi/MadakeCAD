@@ -1773,5 +1773,131 @@
         "bottom": "Align bottom"
       }
     }
+  },
+  "frameEditor": {
+    "edit": "Edit…",
+    "newFromCopy": "New (from a copy)",
+    "editHint": "Open the selected frame in the frame editor (a bundled frame opens as a copy)",
+    "title": "Frame editor — {name}",
+    "titleDirty": "Frame editor — {name} · unsaved changes",
+    "close": "Close",
+    "tool": {
+      "select": "Select",
+      "line": "Line",
+      "rect": "Rectangle",
+      "text": "Text",
+      "placeholder": "Placeholder",
+      "cell": "Title cell",
+      "logo": "Logo frame",
+      "zone": "Zones"
+    },
+    "toolHint": {
+      "select": "Click to pick, drag to move, Delete to remove",
+      "line": "Drag a title-block rule (Shift = horizontal/vertical)",
+      "rect": "Drag a rectangle (four rules)",
+      "text": "Click to place fixed text",
+      "placeholder": "Click to place placeholder text (replaced by the real value on output)",
+      "cell": "Drag a sized title-block cell with its border",
+      "logo": "Drag the logo frame (one; drawing again replaces it)",
+      "zone": "Set the zone divisions and labels on the right"
+    },
+    "keysHint": "Shift = horizontal/vertical\nAlt = no snapping\n⌘Z = undo",
+    "origin": "Origin (0,0) top left",
+    "status": "Paper {paper} · grid 1 mm · {at} mm",
+    "hidePlaceholders": "Hide placeholders",
+    "showValues": "Show real values (current project)",
+    "newText": "Text",
+    "props": {
+      "head": "Properties — {what}",
+      "template": "Whole frame",
+      "line": "Rule",
+      "logo": "Logo frame",
+      "placeholder": "Placeholder text",
+      "text": "Fixed text",
+      "kind": "Kind",
+      "kindText": "Fixed text",
+      "kindBind": "Placeholder",
+      "property": "Property",
+      "content": "Text",
+      "size": "Text height",
+      "align": "Align",
+      "alignStart": "Left",
+      "alignMiddle": "Centre",
+      "alignEnd": "Right",
+      "weightNormal": "Normal",
+      "weightBold": "Bold",
+      "position": "Position X / Y",
+      "omitIfEmpty": "Skip when the value is empty",
+      "from": "Start X / Y",
+      "to": "End X / Y",
+      "sizeWH": "Width / height",
+      "logoHint": "Only the frame of the logo is drawn (images are a separate item).",
+      "nameJa": "Name (Japanese)",
+      "nameEn": "Name (English)",
+      "paper": "Paper W / H",
+      "margin": "Frame margin",
+      "zones": "Zones",
+      "zoneCountsColsRows": "Columns / rows",
+      "zoneLabels": "Labels col / row",
+      "zoneHint": "Divisions are the default for new sheets; existing sheets keep their addresses.",
+      "titleBlock": "Title block",
+      "corner": "Corner",
+      "cornerName": {
+        "bottom_right": "Bottom right",
+        "bottom_left": "Bottom left",
+        "top_right": "Top right",
+        "top_left": "Top left"
+      },
+      "rowH": "Row height",
+      "revision": "Revision table",
+      "revRows": "Max rows",
+      "revCols": "Column widths",
+      "revHint": "The column widths (rev/date/description/approved) must add up to the title block width."
+    },
+    "picker": {
+      "head": "Pick a placeholder",
+      "search": "Search: name",
+      "group": {
+        "project": "Project",
+        "sheet": "Sheet",
+        "titleBlock": "Revision / title block"
+      },
+      "label": {
+        "project_name": "Project name",
+        "project_no": "Project no.",
+        "sheet_no": "Sheet no.",
+        "sheet_total": "Total sheets",
+        "sheet_name": "Sheet name",
+        "rev_latest": "Latest revision",
+        "title_block_company": "Company",
+        "title_block_title": "Title",
+        "title_block_drawing_no": "Drawing no.",
+        "title_block_scale": "Scale",
+        "title_block_date": "Date",
+        "title_block_designed": "Designed",
+        "title_block_drawn": "Drawn",
+        "title_block_checked": "Checked",
+        "title_block_approved": "Approved",
+        "title_block_rev": "Rev field"
+      }
+    },
+    "checks": {
+      "summary": "Pre-save check: unknown placeholders {unknown} · items outside the frame {outside}",
+      "errors": "Cannot save: {list}"
+    },
+    "saveAsButton": "Save as…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saveAs": {
+      "id": "id (file name)",
+      "name": "Name",
+      "confirm": "Save",
+      "badId": "Use only letters, digits, - and _ in the id",
+      "taken": "A frame with that id already exists"
+    },
+    "confirmClose": "There are unsaved changes. Discard them and close?",
+    "discard": "Discard and close",
+    "keepEditing": "Keep editing",
+    "savedLog": "Frame: saved {id} (every sheet using this frame is updated)"
   }
 }

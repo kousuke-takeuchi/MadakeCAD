@@ -1773,5 +1773,131 @@
         "bottom": "下揃え"
       }
     }
+  },
+  "frameEditor": {
+    "edit": "編集…",
+    "newFromCopy": "新規 (コピーから)",
+    "editHint": "選んだ図枠を図枠エディタで開く (同梱の図枠はコピーとして開く)",
+    "title": "図枠エディタ — {name}",
+    "titleDirty": "図枠エディタ — {name} ・ 未保存の変更あり",
+    "close": "閉じる",
+    "tool": {
+      "select": "選択",
+      "line": "線",
+      "rect": "矩形",
+      "text": "文字",
+      "placeholder": "プレースホルダ",
+      "cell": "表題欄セル",
+      "logo": "ロゴ枠",
+      "zone": "ゾーン"
+    },
+    "toolHint": {
+      "select": "クリックで選ぶ・ドラッグで動かす・Deleteで消す",
+      "line": "ドラッグで表題欄の罫線を引く (Shift=水平/垂直)",
+      "rect": "ドラッグで矩形 (罫線4本) を描く",
+      "text": "クリックで固定文字を置く",
+      "placeholder": "クリックでプレースホルダ文字を置く (出力時に実際の値へ置換)",
+      "cell": "ドラッグで大きさ付きの表題欄セルと枠線を置く",
+      "logo": "ドラッグでロゴ枠を描く (1つ。描き直すと置き換え)",
+      "zone": "ゾーンの分割数と目盛の文字を右で設定する"
+    },
+    "keysHint": "Shift=水平/垂直\nAlt=スナップ解除\n⌘Z=元に戻す",
+    "origin": "原点 (0,0) 左上",
+    "status": "用紙 {paper} ・ グリッド 1mm ・ {at} mm",
+    "hidePlaceholders": "プレースホルダを隠す",
+    "showValues": "実値で表示 (現在のプロジェクト)",
+    "newText": "文字",
+    "props": {
+      "head": "プロパティ — {what}",
+      "template": "図枠全体",
+      "line": "罫線",
+      "logo": "ロゴ枠",
+      "placeholder": "プレースホルダ文字",
+      "text": "固定文字",
+      "kind": "種類",
+      "kindText": "固定文字",
+      "kindBind": "プレースホルダ",
+      "property": "プロパティ",
+      "content": "文字",
+      "size": "文字高",
+      "align": "揃え",
+      "alignStart": "左",
+      "alignMiddle": "中央",
+      "alignEnd": "右",
+      "weightNormal": "標準",
+      "weightBold": "太字",
+      "position": "位置 X / Y",
+      "omitIfEmpty": "値が空なら描かない",
+      "from": "始点 X / Y",
+      "to": "終点 X / Y",
+      "sizeWH": "幅 / 高さ",
+      "logoHint": "ロゴは枠だけを描く (画像の描画は別課題)。",
+      "nameJa": "名前 (日本語)",
+      "nameEn": "名前 (英語)",
+      "paper": "想定用紙 W / H",
+      "margin": "枠のマージン",
+      "zones": "ゾーン",
+      "zoneCountsColsRows": "列 / 行",
+      "zoneLabels": "目盛 列 / 行",
+      "zoneHint": "分割数は新しいシートの既定値。既存シートの住所は変わらない。",
+      "titleBlock": "表題欄",
+      "corner": "基準の隅",
+      "cornerName": {
+        "bottom_right": "右下",
+        "bottom_left": "左下",
+        "top_right": "右上",
+        "top_left": "左上"
+      },
+      "rowH": "行の高さ",
+      "revision": "改訂欄",
+      "revRows": "最大行数",
+      "revCols": "列幅",
+      "revHint": "列幅 (記号/日付/内容/承認) の合計は表題欄の幅と同じにする。"
+    },
+    "picker": {
+      "head": "プレースホルダを選ぶ",
+      "search": "検索: name",
+      "group": {
+        "project": "プロジェクト",
+        "sheet": "シート",
+        "titleBlock": "改訂・表題欄"
+      },
+      "label": {
+        "project_name": "プロジェクト名",
+        "project_no": "プロジェクト番号",
+        "sheet_no": "シート番号",
+        "sheet_total": "総シート数",
+        "sheet_name": "シート名",
+        "rev_latest": "最新改訂",
+        "title_block_company": "会社名",
+        "title_block_title": "品名",
+        "title_block_drawing_no": "図番",
+        "title_block_scale": "尺度",
+        "title_block_date": "日付",
+        "title_block_designed": "設計",
+        "title_block_drawn": "製図",
+        "title_block_checked": "検図",
+        "title_block_approved": "承認",
+        "title_block_rev": "Rev欄"
+      }
+    },
+    "checks": {
+      "summary": "保存前チェック: 未知のプレースホルダ {unknown} ・ 枠外の要素 {outside}",
+      "errors": "保存できません: {list}"
+    },
+    "saveAsButton": "別名で保存…",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "saveAs": {
+      "id": "id (ファイル名)",
+      "name": "名前",
+      "confirm": "保存",
+      "badId": "idは英数字・-・_ だけで書いてください",
+      "taken": "そのidの図枠は既にあります"
+    },
+    "confirmClose": "未保存の変更があります。破棄して閉じますか?",
+    "discard": "破棄して閉じる",
+    "keepEditing": "編集を続ける",
+    "savedLog": "図枠: {id} を保存しました (この図枠を使う全シートに反映)"
   }
 }
