@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2603仕様項目**。
+全6領域・**2611仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -435,6 +435,7 @@
 - 幅か高さの片方しか入っていない部品はフットプリント寸法を持たない扱いになる(外形を描くには両方必要なため)。 <sub>`a_half_filled_footprint_size_is_not_used`</sub>
 - DBパスの既定はOSのアプリデータフォルダで、MADAKE_PARTS_DBで上書きできる。 <sub>`default_path_respects_env_override`</sub>
 - 旧スキーマv6のDBは開いた時点でv7へ移行され、既存データを保持したまま端子台の種別列が使えるようになり、同梱の端子台サンプルに種別が入り、端子台付属品のサンプルが足される。 <sub>`v6_database_migrates_to_v7_with_terminal_kinds_and_accessory_samples`</sub>
+- 部品DBから作る部品表の引き当て表には、登録のある型番ごとにメーカ・品名・価格・通貨・購入先が入り、登録の無い型番は入らない。 <sub>`the_bom_catalog_holds_only_registered_part_numbers`</sub>
 - 新しく作った部品DBには、種別入りの端子台サンプルと端子台付属品3種のサンプルが最初から入っている。 <sub>`a_new_database_has_terminal_kinds_and_accessory_samples`</sub>
 
 ### PDF出力
@@ -558,6 +559,7 @@
 - 端子台でないエンティティのチャートシートは1ページも出ない。 <sub>`terminal_chart_sheet_is_none_for_other_entities`</sub>
 - From-To電線リストのシートはCSV帳票と同じ列・同じ行を使う。 <sub>`wire_list_sheet_matches_report_rows`</sub>
 - 部品表のシートは部品グループごとに参照記号と数量を並べる。 <sub>`bom_sheet_lists_parts_with_quantity`</sub>
+- 部品カタログを渡して部品表を書き出すと、CSVでもPDFでもカタログ由来の欄が埋まり、CSVの件数には合計行も含まれる。 <sub>`exporting_the_bom_with_a_catalog_fills_the_catalog_columns`</sub>
 - クロスリファレンス表のシートはネットごとに接続先ピンと現れるシートを並べる。 <sub>`xref_table_sheet_lists_nets_and_pins`</sub>
 - 表紙にはプロジェクト名・全シートと図番・プロジェクト全体で最新の改訂が出る。 <sub>`cover_page_shows_project_sheets_and_latest_revision`</sub>
 - 改訂が1件も無いプロジェクトの表紙は空欄ではなく「なし」と記す。 <sub>`cover_page_states_when_there_is_no_revision`</sub>
@@ -582,6 +584,12 @@
 - 配線の無いプロジェクトには電線集約行が1行も付かない (部品だけの部品表はそのまま)。 <sub>`bom_has_no_wire_rollup_rows_without_any_wires`</sub>
 - 部品行の後ろに、電線品番ごとの集約行が付き、数量欄にプロジェクト全体の使用長合計 (m単位・小数第2位まで) が入る。 <sub>`bom_rolls_up_wires_by_part_number_after_the_component_rows`</sub>
 - 品番を引けない配線は「(未割当)」の1行にまとまり、勝手に品番を作ったり黙って消えたりしない。 <sub>`bom_rolls_up_unresolved_wires_under_one_unassigned_row`</sub>
+- 部品表の各行は型番を部品カタログで引き当て、メーカ・品名・単価・通貨・金額 (数量×単価)・購入先を表示する。 <sub>`bom_fills_maker_name_price_and_amount_from_the_catalog`</sub>
+- 部品カタログに無い型番も部品表の行は残り、カタログ由来の欄だけが空欄になる。 <sub>`a_part_missing_from_the_catalog_keeps_its_row_with_empty_catalog_columns`</sub>
+- 電線の単価は1mあたりとして扱い、電線集約行の金額は合計の長さ (m) × 単価になる。 <sub>`a_wire_roll_up_row_is_priced_per_metre`</sub>
+- 単価のある行が1つでもあれば、部品表の末尾に通貨ごとの合計行が付き、単価が無くて合計から除いた行の数も書かれる。 <sub>`the_bom_ends_with_a_total_per_currency_noting_rows_without_a_price`</sub>
+- 部品カタログで引き当てる型番は、部品表に出る空でない型番を1回ずつで、電線の「(未割当)」行は含まない。 <sub>`the_part_numbers_to_look_up_skip_blanks_and_the_unassigned_wire_row`</sub>
+- 部品表CSVは部品表の図面シートと同じ11列で、カタログ由来の欄が埋まる。 <sub>`the_bom_csv_carries_the_catalog_columns`</sub>
 - 端子台の付属品は部品表に型番ごとの1行として載り、数量欄に使用個数、参照記号欄に使っている端子台が入り、電線集約行の後ろに来る。 <sub>`bom_counts_terminal_accessories_by_part_number`</sub>
 - 型番の無い付属品や、端子台チェックが読めない付属品の項は、部品表に行を作らない。 <sub>`bom_skips_accessories_without_a_part_number_or_that_cannot_be_read`</sub>
 - 品番を引けない配線に使用長が1本も入っていないときは、「(未割当) 0.00 m」の行を出さない。 <sub>`bom_adds_no_unassigned_row_when_those_wires_have_no_length`</sub>

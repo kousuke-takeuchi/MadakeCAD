@@ -578,6 +578,22 @@ impl PartsDb {
         Ok(rows.next().transpose()?)
     }
 
+    /// 部品表 (BOM拡張、M4 §5) の引き当て表。`part_nos`のうち部品DBに登録のある型番だけを
+    /// 入れる (無い型番は表に入らず、部品表ではカタログ由来の欄が空欄になる)。
+    /// 型番の一覧は [`crate::reports::bom_part_numbers`] で取る。
+    pub fn bom_catalog<'a>(
+        &self,
+        part_nos: impl IntoIterator<Item = &'a str>,
+    ) -> Result<crate::reports::BomCatalog, PartsError> {
+        let mut catalog = crate::reports::BomCatalog::new();
+        for no in part_nos {
+            if let Some(part) = self.get_part(no)? {
+                catalog.insert(no.to_string(), (&part).into());
+            }
+        }
+        Ok(catalog)
+    }
+
     /// 型番・名称・メーカの部分一致検索。categoryは完全一致で絞り込み。空クエリは全件。
     pub fn search_parts(&self, query: &str, category: Option<&str>) -> Result<Vec<Part>, PartsError> {
         let like = format!("%{}%", query.trim());
@@ -1193,6 +1209,30 @@ mod tests {
         for (no, kind) in [("MDK-TB-EB", "end_bracket"), ("MDK-TB-PT", "partition"), ("MDK-TB-EP", "end_plate")] {
             assert_eq!(db.get_part(no).unwrap().expect(no).terminal_kind, kind);
         }
+    }
+
+    /// The BOM lookup table built from the parts database holds the maker, name, price, currency and purchase link of every listed part number it knows, and leaves unknown part numbers out.
+    /// 部品DBから作る部品表の引き当て表には、登録のある型番ごとにメーカ・品名・価格・通貨・購入先が入り、登録の無い型番は入らない。
+    #[test]
+    fn the_bom_catalog_holds_only_registered_part_numbers() {
+        let path = tmp_db("bom_catalog");
+        let db = PartsDb::open(&path).unwrap();
+        db.upsert_part(&Part {
+            part_no: "SAMPLE-CAT1".into(),
+            maker: "MakerA".into(),
+            name: "Relay A".into(),
+            price: Some(1200.0),
+            currency: "JPY".into(),
+            purchase_url: "https://example.com/a".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        let catalog = db.bom_catalog(["SAMPLE-CAT1", "SAMPLE-NOPE"]).unwrap();
+        assert_eq!(catalog.len(), 1);
+        let e = &catalog["SAMPLE-CAT1"];
+        assert_eq!((e.maker.as_str(), e.name.as_str()), ("MakerA", "Relay A"));
+        assert_eq!(e.unit_price, Some(1200.0));
+        assert_eq!((e.currency.as_str(), e.purchase_url.as_str()), ("JPY", "https://example.com/a"));
     }
 
     /// A freshly created parts database already holds the terminal block sample with its kind and the three terminal accessory samples.

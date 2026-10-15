@@ -10,6 +10,7 @@
 use std::fmt::Write as _;
 
 use crate::model::{EntityId, PaperSize, Project};
+use crate::reports::BomCatalog;
 use crate::svg::{
     line_el, n, rect_el, text_el, CELL_PAD, FRAME_MARGIN, FRAME_STROKE, ROW_H, RULE_STROKE,
     TITLE_FONT, TITLE_W,
@@ -116,14 +117,20 @@ impl ReportKind {
     }
 
     /// この帳票の図面ページ (1要素=1ページのSVG)。データが空でも見出しだけのページを1枚返す。
+    /// 部品表のカタログ欄は空欄 ([`ReportKind::pages_with`] に空の表を渡したのと同じ)。
     pub fn pages(self, project: &Project) -> Vec<String> {
+        self.pages_with(project, &BomCatalog::new())
+    }
+
+    /// [`ReportKind::pages`] と同じだが、部品表は`catalog`で型番を引き当てた列を埋める。
+    pub fn pages_with(self, project: &Project, catalog: &BomCatalog) -> Vec<String> {
         match self {
             ReportKind::WireList => wire_list_sheet_svg(project),
             ReportKind::TerminalChart => terminal_charts_sheet_svg(project),
             ReportKind::TerminalDiagram => {
                 crate::terminal_diagram::terminal_diagrams_svg(project)
             }
-            ReportKind::Bom => bom_sheet_svg(project),
+            ReportKind::Bom => bom_sheet_svg_with(project, catalog),
             ReportKind::Xref => xref_table_sheet_svg(project),
             ReportKind::PlcIo => plc_io_sheet_svg(project),
             ReportKind::PanelPlacement => panel_placement_sheet_svg(project),
@@ -174,21 +181,34 @@ impl std::error::Error for ReportError {}
 ///   (Noneならプロジェクト内の全端子台)。他の帳票では無視される
 /// - 戻り値は (中身, 件数)。件数はCSVなら本文の行数、PDFならページ数
 /// - 端子接続図はグラフィカルな図面なのでCSVでは出せない ([`ReportError::UnsupportedFormat`])
+/// - 部品表のカタログ欄は空欄 (部品DBから引き当てるなら [`report_bytes_with`])
 pub fn report_bytes(
     project: &Project,
     kind: ReportKind,
     format: ReportFormat,
     entity_id: Option<EntityId>,
 ) -> Result<(Vec<u8>, usize), ReportError> {
+    report_bytes_with(project, kind, format, entity_id, &BomCatalog::new())
+}
+
+/// [`report_bytes`] と同じだが、部品表は`catalog`で型番を引き当てた列 (メーカ・品名・単価・
+/// 通貨・金額・購入先) と通貨ごとの合計行を出す。他の帳票は`catalog`を見ない。
+pub fn report_bytes_with(
+    project: &Project,
+    kind: ReportKind,
+    format: ReportFormat,
+    entity_id: Option<EntityId>,
+    catalog: &BomCatalog,
+) -> Result<(Vec<u8>, usize), ReportError> {
     match format {
         ReportFormat::Csv => {
-            let csv = report_csv(project, kind, entity_id)?;
+            let csv = report_csv_with(project, kind, entity_id, catalog)?;
             // 見出し行を除いた本文の行数
             let rows = csv.lines().count().saturating_sub(1);
             Ok((csv.into_bytes(), rows))
         }
         ReportFormat::Pdf => {
-            let pages = report_pages(project, kind, entity_id)?;
+            let pages = report_pages_with(project, kind, entity_id, catalog)?;
             let count = pages.len();
             let pdf = crate::pdf::svgs_to_pdf(&pages)
                 .map_err(|e| ReportError::Pdf(e.to_string()))?;
@@ -203,9 +223,19 @@ pub fn report_csv(
     kind: ReportKind,
     entity_id: Option<EntityId>,
 ) -> Result<String, ReportError> {
+    report_csv_with(project, kind, entity_id, &BomCatalog::new())
+}
+
+/// [`report_csv`] の部品カタログ付き版 ([`report_bytes_with`] を参照)。
+pub fn report_csv_with(
+    project: &Project,
+    kind: ReportKind,
+    entity_id: Option<EntityId>,
+    catalog: &BomCatalog,
+) -> Result<String, ReportError> {
     match (kind, entity_id) {
         (ReportKind::WireList, _) => Ok(crate::reports::wire_list_csv(project)),
-        (ReportKind::Bom, _) => Ok(crate::reports::bom_csv(project)),
+        (ReportKind::Bom, _) => Ok(crate::reports::bom_csv_with(project, catalog)),
         (ReportKind::Xref, _) => Ok(crate::xref::xref_table_csv(project)),
         (ReportKind::PlcIo, _) => Ok(crate::plc::plc_io_csv(project)),
         (ReportKind::PanelPlacement, _) => Ok(panel_placement_csv(project)),
@@ -232,6 +262,16 @@ pub fn report_pages(
     kind: ReportKind,
     entity_id: Option<EntityId>,
 ) -> Result<Vec<String>, ReportError> {
+    report_pages_with(project, kind, entity_id, &BomCatalog::new())
+}
+
+/// [`report_pages`] の部品カタログ付き版 ([`report_bytes_with`] を参照)。
+pub fn report_pages_with(
+    project: &Project,
+    kind: ReportKind,
+    entity_id: Option<EntityId>,
+    catalog: &BomCatalog,
+) -> Result<Vec<String>, ReportError> {
     match (kind, entity_id) {
         (ReportKind::TerminalChart, Some(id)) => {
             terminal_chart_sheet_svg(project, id).ok_or(ReportError::TerminalBlockNotFound)
@@ -244,7 +284,7 @@ pub fn report_pages(
                 Ok(pages)
             }
         }
-        _ => Ok(kind.pages(project)),
+        _ => Ok(kind.pages_with(project, catalog)),
     }
 }
 
@@ -557,14 +597,20 @@ pub fn panel_placement_sheet_svg(project: &Project) -> Vec<String> {
     )
 }
 
-/// 部品表の図面ページ。内容はCSV ([`crate::reports::bom_csv`]) と同一。
+/// 部品表の図面ページ (部品カタログ無し)。
 pub fn bom_sheet_svg(project: &Project) -> Vec<String> {
-    let meta =
-        ReportMeta::from_project(project).with_col_ratios(&[10.0, 26.0, 24.0, 30.0, 8.0]);
+    bom_sheet_svg_with(project, &BomCatalog::new())
+}
+
+/// 部品表の図面ページ。内容はCSV ([`crate::reports::bom_csv_with`]) と同一。
+pub fn bom_sheet_svg_with(project: &Project, catalog: &BomCatalog) -> Vec<String> {
+    let meta = ReportMeta::from_project(project).with_col_ratios(&[
+        6.0, 15.0, 15.0, 17.0, 6.0, 10.0, 14.0, 7.0, 5.0, 8.0, 17.0,
+    ]);
     report_sheet_svg(
         ReportKind::Bom.title(),
         &crate::reports::BOM_COLUMNS,
-        &crate::reports::bom_rows(project),
+        &crate::reports::bom_rows_with(project, catalog),
         &meta,
     )
 }
@@ -997,6 +1043,34 @@ mod tests {
         assert!(t.contains(&"TB1".to_string()), "{t:?}");
         assert!(t.contains(&"端子台 BN4P".to_string()), "{t:?}");
         assert!(t.contains(&"terminal_block_4p".to_string()), "{t:?}");
+    }
+
+    /// Exporting the BOM with a parts catalog fills the catalog columns in both the CSV and the PDF, and the CSV row count includes the total row.
+    /// 部品カタログを渡して部品表を書き出すと、CSVでもPDFでもカタログ由来の欄が埋まり、CSVの件数には合計行も含まれる。
+    #[test]
+    fn exporting_the_bom_with_a_catalog_fills_the_catalog_columns() {
+        let (project, _) = tb_project();
+        let catalog: BomCatalog = [(
+            "端子台 BN4P".to_string(),
+            crate::reports::CatalogEntry {
+                maker: "MakerT".into(),
+                name: "Terminal block".into(),
+                unit_price: Some(300.0),
+                currency: "JPY".into(),
+                purchase_url: String::new(),
+            },
+        )]
+        .into();
+        let (csv, count) =
+            report_bytes_with(&project, ReportKind::Bom, ReportFormat::Csv, None, &catalog).unwrap();
+        let csv = String::from_utf8(csv).unwrap();
+        assert!(csv.contains("MakerT,Terminal block,300,JPY,300,"), "{csv}");
+        let (plain, plain_count) = report_bytes(&project, ReportKind::Bom, ReportFormat::Csv, None).unwrap();
+        assert_eq!(count, plain_count + 1, "合計行のぶん1行多い");
+        assert!(!String::from_utf8(plain).unwrap().contains("MakerT"));
+        let t = texts(&ReportKind::Bom.pages_with(&project, &catalog)[0]);
+        assert!(t.contains(&"MakerT".to_string()), "{t:?}");
+        assert!(t.contains(&crate::reports::BOM_TOTAL.to_string()), "{t:?}");
     }
 
     /// The cross-reference sheet lists each net with the pins it connects and the sheet it appears on.

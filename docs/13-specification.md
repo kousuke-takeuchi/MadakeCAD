@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2603 specification clauses** across 6 areas.
+**2611 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -435,6 +435,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A part with only one of the two footprint dimensions filled in has no usable footprint size, because both width and height are needed to draw the outline. <sub>`a_half_filled_footprint_size_is_not_used`</sub>
 - The database path defaults to the OS app-data folder and can be overridden with MADAKE_PARTS_DB. <sub>`default_path_respects_env_override`</sub>
 - An old schema-v6 database migrates to v7 on open, keeping its rows, gaining the terminal kind column, filling the bundled terminal block's kind and adding the terminal accessory samples. <sub>`v6_database_migrates_to_v7_with_terminal_kinds_and_accessory_samples`</sub>
+- The BOM lookup table built from the parts database holds the maker, name, price, currency and purchase link of every listed part number it knows, and leaves unknown part numbers out. <sub>`the_bom_catalog_holds_only_registered_part_numbers`</sub>
 - A freshly created parts database already holds the terminal block sample with its kind and the three terminal accessory samples. <sub>`a_new_database_has_terminal_kinds_and_accessory_samples`</sub>
 
 ### PDF output
@@ -558,6 +559,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Asking for a terminal chart sheet of something that is not a terminal block yields no page at all. <sub>`terminal_chart_sheet_is_none_for_other_entities`</sub>
 - The From-To wire list sheet uses the same columns and rows as the CSV report. <sub>`wire_list_sheet_matches_report_rows`</sub>
 - The BOM sheet lists every part group with its reference designators and quantity. <sub>`bom_sheet_lists_parts_with_quantity`</sub>
+- Exporting the BOM with a parts catalog fills the catalog columns in both the CSV and the PDF, and the CSV row count includes the total row. <sub>`exporting_the_bom_with_a_catalog_fills_the_catalog_columns`</sub>
 - The cross-reference sheet lists each net with the pins it connects and the sheet it appears on. <sub>`xref_table_sheet_lists_nets_and_pins`</sub>
 - The cover page shows the project name, every sheet with its drawing number, and the newest revision of the whole project. <sub>`cover_page_shows_project_sheets_and_latest_revision`</sub>
 - A project without any revision says so on the cover instead of leaving the line blank. <sub>`cover_page_states_when_there_is_no_revision`</sub>
@@ -582,6 +584,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The BOM has no wire roll-up rows at all when the project has no wires (a project with only components is unaffected). <sub>`bom_has_no_wire_rollup_rows_without_any_wires`</sub>
 - After the component rows, the BOM adds one row per wire part number with the project-wide total length (in metres, 2 decimals) in the quantity column. <sub>`bom_rolls_up_wires_by_part_number_after_the_component_rows`</sub>
 - Wires whose part number cannot be resolved roll up under a single "(unassigned)" row, instead of being invented or dropped. <sub>`bom_rolls_up_unresolved_wires_under_one_unassigned_row`</sub>
+- Each BOM row looks its part number up in the parts catalog and shows the maker, name, unit price, currency, amount (quantity times unit price) and where to buy it. <sub>`bom_fills_maker_name_price_and_amount_from_the_catalog`</sub>
+- A part number the catalog does not know keeps its BOM row; only the catalog columns stay empty. <sub>`a_part_missing_from_the_catalog_keeps_its_row_with_empty_catalog_columns`</sub>
+- A wire's unit price is per metre: the amount of a wire roll-up row is its total length in metres times the unit price. <sub>`a_wire_roll_up_row_is_priced_per_metre`</sub>
+- When at least one row has a price, the BOM ends with one total row per currency, and says how many rows were left out for having no price. <sub>`the_bom_ends_with_a_total_per_currency_noting_rows_without_a_price`</sub>
+- The part numbers looked up in the parts catalog are every non-empty part number in the BOM, once each, without the "(unassigned)" wire row. <sub>`the_part_numbers_to_look_up_skip_blanks_and_the_unassigned_wire_row`</sub>
+- The BOM CSV has the same eleven columns as the BOM drawing sheet, with the catalog columns filled in. <sub>`the_bom_csv_carries_the_catalog_columns`</sub>
 - Terminal block accessories appear in the BOM as one row per part number with how many are used, listing the terminal blocks that use them, after the wire roll-up rows. <sub>`bom_counts_terminal_accessories_by_part_number`</sub>
 - An accessory without a part number, or one the terminal check cannot read, adds no row to the BOM. <sub>`bom_skips_accessories_without_a_part_number_or_that_cannot_be_read`</sub>
 - When the only wires whose part number cannot be resolved have no length, the BOM adds no "(unassigned) 0.00 m" row. <sub>`bom_adds_no_unassigned_row_when_those_wires_have_no_length`</sub>

@@ -107,6 +107,16 @@ pub fn project_sheet_to_pdf(
 /// PDF一括出力のページ順を組み立てる (1要素=1ページのSVG)。
 /// **表紙 → 回路図の全シート → 選択した帳票**の順。表紙・帳票は [`PdfBookOptions`] で選ぶ。
 pub fn project_pdf_pages(project: &Project, options: &PdfBookOptions) -> Vec<String> {
+    project_pdf_pages_with(project, options, &crate::reports::BomCatalog::new())
+}
+
+/// [`project_pdf_pages`] と同じだが、部品表のページは`catalog`で型番を引き当てた列を埋める
+/// ([`crate::report_sheet::report_bytes_with`] と同じ規則)。
+pub fn project_pdf_pages_with(
+    project: &Project,
+    options: &PdfBookOptions,
+    catalog: &crate::reports::BomCatalog,
+) -> Vec<String> {
     let mut pages = Vec::new();
     if options.cover {
         pages.push(crate::report_sheet::cover_sheet_svg(project));
@@ -118,7 +128,7 @@ pub fn project_pdf_pages(project: &Project, options: &PdfBookOptions) -> Vec<Str
         }
     }
     for kind in &options.include_reports {
-        pages.extend(kind.pages(project));
+        pages.extend(kind.pages_with(project, catalog));
     }
     pages
 }
@@ -130,6 +140,15 @@ pub fn export_project_pdf(
     options: &PdfBookOptions,
 ) -> Result<Vec<u8>, PdfError> {
     svgs_to_pdf(&project_pdf_pages(project, options))
+}
+
+/// [`export_project_pdf`] の部品カタログ付き版 ([`project_pdf_pages_with`])。
+pub fn export_project_pdf_with(
+    project: &Project,
+    options: &PdfBookOptions,
+    catalog: &crate::reports::BomCatalog,
+) -> Result<Vec<u8>, PdfError> {
+    svgs_to_pdf(&project_pdf_pages_with(project, options, catalog))
 }
 
 /// SVG文字列を1枚1ページとして1つのPDF文書に束ねる。

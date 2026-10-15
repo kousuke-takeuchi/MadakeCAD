@@ -49,13 +49,130 @@ pub(crate) fn fmt_num(v: f64) -> String {
 /// 先頭の「アイテム番号」は**盤レイアウトのバルーンと同じ番号** (M4仕様 §8)。
 /// 盤へ置いた部品だけが埋まり、まだ置いていない部品は空欄になる。
 /// この列が入ったぶん、盤レイアウト以前 (4列) のCSVとは列の並びが変わっている。
-pub const BOM_COLUMNS: [&str; 5] = ["アイテム番号", "参照記号", "型番/値", "シンボル", "数量"];
+///
+/// 「メーカ」以降の6列は部品カタログ ([`BomCatalog`]。部品DBから引いた表) で「型番/値」を
+/// 引き当てた結果 (M4 §5 BOM拡張)。引けない行は空欄になる。この6列が入ったぶん、
+/// 5列だった頃のCSVとも非互換。
+pub const BOM_COLUMNS: [&str; 11] = [
+    "アイテム番号",
+    "参照記号",
+    "型番/値",
+    "シンボル",
+    "数量",
+    "メーカ",
+    "品名",
+    "単価",
+    "通貨",
+    "金額",
+    "購入先",
+];
+
+/// 部品表の末尾に足す通貨ごとの合計行で、「型番/値」欄に立てる印。
+pub const BOM_TOTAL: &str = "合計";
+
+/// 部品カタログの1件 (部品DBの1行のうち部品表が使う欄)。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CatalogEntry {
+    pub maker: String,
+    /// 品名。
+    pub name: String,
+    /// 単価 (部品DBの参考価格)。電線は1mあたりとして扱う。
+    pub unit_price: Option<f64>,
+    pub currency: String,
+    pub purchase_url: String,
+}
+
+impl From<&crate::parts::Part> for CatalogEntry {
+    fn from(part: &crate::parts::Part) -> Self {
+        CatalogEntry {
+            maker: part.maker.clone(),
+            name: part.name.clone(),
+            unit_price: part.price,
+            currency: part.currency.clone(),
+            purchase_url: part.purchase_url.clone(),
+        }
+    }
+}
+
+/// 型番→部品カタログの1件。帳票は部品DBを直接開かず、出力する層 (Tauri・MCP・Link API) が
+/// [`crate::parts::PartsDb::bom_catalog`] で作ったこの表を受け取る。空の表なら
+/// カタログ由来の欄が空欄になるだけで、部品表はそのまま作れる。
+pub type BomCatalog = BTreeMap<String, CatalogEntry>;
+
+/// 部品表で部品カタログを引き当てる型番の一覧 (「型番/値」欄の空でない値。電線集約の
+/// `(未割当)`は除く)。[`crate::parts::PartsDb::bom_catalog`] へ渡す。
+pub fn bom_part_numbers(project: &Project) -> Vec<String> {
+    let mut out: Vec<String> = base_bom_rows(project)
+        .into_iter()
+        .map(|r| r[2].trim().to_string())
+        .filter(|p| !p.is_empty() && p != BOM_WIRE_UNASSIGNED)
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// 部品表の行。部品カタログ無し ([`bom_rows_with`] に空の表を渡したのと同じ)。
+pub fn bom_rows(project: &Project) -> Vec<Vec<String>> {
+    bom_rows_with(project, &BomCatalog::new())
+}
 
 /// 部品表の行 ([`BOM_COLUMNS`] と同じ並び)。図面シート化からも使う。
-/// 全シート横断で (型番/値, シンボル) ごとに集計し、参照記号を昇順で列挙する。
-/// アイテム番号は参照記号ごとに [`crate::panel::item_numbers`] から引き、
-/// 1行に複数の部品がまとまっているときは番号を小さい順に並べる。
-pub fn bom_rows(project: &Project) -> Vec<Vec<String>> {
+///
+/// 先頭5列は図面から: 全シート横断で (型番/値, シンボル) ごとに集計し、参照記号を昇順で
+/// 列挙する。アイテム番号は参照記号ごとに [`crate::panel::item_numbers`] から引き、
+/// 1行に複数の部品がまとまっているときは番号を小さい順に並べる。電線集約行・端子台付属品行が
+/// この順で後ろに続く。
+///
+/// 後ろ6列は「型番/値」を`catalog`で引き当てる。金額=数量×単価 (電線集約行の数量はmなので
+/// 1mあたりの単価として掛ける)。単価が1つでも引けたときだけ、末尾に**通貨ごとの合計行**
+/// ([`BOM_TOTAL`]) を足し、単価の無い行があればその数を合計行の品名欄に書く。
+pub fn bom_rows_with(project: &Project, catalog: &BomCatalog) -> Vec<Vec<String>> {
+    let mut totals: BTreeMap<String, f64> = BTreeMap::new();
+    let mut unpriced = 0usize;
+    let mut rows: Vec<Vec<String>> = base_bom_rows(project)
+        .into_iter()
+        .map(|mut row| {
+            let hit = catalog.get(row[2].trim()).filter(|_| row[2] != BOM_WIRE_UNASSIGNED);
+            let qty = row[4].split_whitespace().next().and_then(|q| q.parse::<f64>().ok());
+            let price = hit.and_then(|e| e.unit_price);
+            let amount = price.zip(qty).map(|(p, q)| p * q);
+            match (amount, hit) {
+                (Some(a), Some(e)) => *totals.entry(e.currency.clone()).or_insert(0.0) += a,
+                _ => unpriced += 1,
+            }
+            let e = hit.cloned().unwrap_or_default();
+            row.extend([
+                e.maker,
+                e.name,
+                price.map(fmt_money).unwrap_or_default(),
+                if hit.is_some() { e.currency } else { String::new() },
+                amount.map(fmt_money).unwrap_or_default(),
+                e.purchase_url,
+            ]);
+            row
+        })
+        .collect();
+    let note = if unpriced > 0 { format!("単価未登録 {unpriced} 行を除く") } else { String::new() };
+    for (currency, sum) in totals {
+        let mut total = vec![String::new(); BOM_COLUMNS.len()];
+        total[2] = BOM_TOTAL.into();
+        total[6] = note.clone();
+        total[8] = currency;
+        total[9] = fmt_money(sum);
+        rows.push(total);
+    }
+    rows
+}
+
+/// 金額・単価の表記: 小数第2位で丸め、末尾の0と小数点は書かない (`12.50`→`12.5`、`25.00`→`25`)。
+fn fmt_money(v: f64) -> String {
+    let s = format!("{v:.2}");
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// 図面から数えた部品表の先頭5列 (カタログを引く前)。
+fn base_bom_rows(project: &Project) -> Vec<Vec<String>> {
     let item_numbers = crate::panel::item_numbers(project);
     let mut groups: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
     for sheet in &project.sheets {
@@ -187,11 +304,16 @@ fn wire_rollup_rows(project: &Project) -> Vec<Vec<String>> {
     rows
 }
 
-/// 部品表CSV。見出しは [`BOM_COLUMNS`]。
+/// 部品表CSV (部品カタログ無し)。見出しは [`BOM_COLUMNS`]。
 pub fn bom_csv(project: &Project) -> String {
+    bom_csv_with(project, &BomCatalog::new())
+}
+
+/// 部品表CSV。見出しは [`BOM_COLUMNS`]、行は [`bom_rows_with`]。
+pub fn bom_csv_with(project: &Project, catalog: &BomCatalog) -> String {
     let mut out = BOM_COLUMNS.join(",");
     out.push('\n');
-    for row in bom_rows(project) {
+    for row in bom_rows_with(project, catalog) {
         out.push_str(&csv_row(&row));
         out.push('\n');
     }
@@ -508,12 +630,12 @@ mod tests {
         }
         let csv = bom_csv(&project);
         let lines: Vec<_> = csv.lines().collect();
-        assert_eq!(lines[0], "アイテム番号,参照記号,型番/値,シンボル,数量");
+        assert_eq!(lines[0], "アイテム番号,参照記号,型番/値,シンボル,数量,メーカ,品名,単価,通貨,金額,購入先");
         assert!(
-            lines.iter().any(|l| l.contains("R1, R2") && l.contains("10k") && l.ends_with(",2")),
-            "10kが2個に集計される: {csv}"
+            lines.iter().any(|l| l.contains("R1, R2") && l.contains("10k") && l.ends_with(",2,,,,,,")),
+            "10kが2個に集計される (カタログの無い6列は空欄): {csv}"
         );
-        assert!(lines.iter().any(|l| l.contains("RLY-24V") && l.ends_with(",1")));
+        assert!(lines.iter().any(|l| l.contains("RLY-24V") && l.ends_with(",1,,,,,,")));
     }
 
     /// The parts list carries the panel item number as its first column, so the balloons on the panel drawing and the parts list line up.
@@ -541,7 +663,7 @@ mod tests {
         project.sheets.push(panel);
 
         assert_eq!(BOM_COLUMNS[0], "アイテム番号");
-        assert_eq!(BOM_COLUMNS.len(), 5, "列が1本増えた (旧4列のCSVとは非互換)");
+        assert_eq!(BOM_COLUMNS.len(), 11, "アイテム番号とカタログ6列のぶん旧4列・旧5列のCSVとは非互換");
         let row = bom_rows(&project)
             .into_iter()
             .find(|r| r[1].contains("K1"))
@@ -560,7 +682,7 @@ mod tests {
         project.sheet_mut(sid).unwrap().entities.insert(e.id(), e);
         let row = bom_rows(&project).into_iter().next().expect("1行");
         assert_eq!(row[0], "");
-        assert_eq!(&row[1..], ["R1", "10k", "resistor", "1"]);
+        assert_eq!(&row[1..5], ["R1", "10k", "resistor", "1"]);
     }
 
     /// The BOM has no wire roll-up rows at all when the project has no wires (a project with only components is unaffected).
@@ -608,6 +730,133 @@ mod tests {
     }
 
     /// 端子台TB(n極)に付属品の指定を付けた記号。
+    fn entry(maker: &str, name: &str, price: Option<f64>, currency: &str) -> CatalogEntry {
+        CatalogEntry {
+            maker: maker.into(),
+            name: name.into(),
+            unit_price: price,
+            currency: currency.into(),
+            purchase_url: format!("https://example.com/{name}"),
+        }
+    }
+
+    fn priced_wire(part: &str, length_m: f64) -> Entity {
+        Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(0.0, 0.0), Point::new(10.0, 0.0)],
+            color: "red".into(),
+            sq: 0.75,
+            length_m: Some(length_m),
+            length_source: Default::default(),
+            part_no: Some(part.into()),
+            net: None,
+        })
+    }
+
+    /// 型番SAMPLE-Aの抵抗2本 (R1, R2)・型番SAMPLE-Bの抵抗1本 (R3)・電線SAMPLE-W 12.3m を置いたプロジェクト。
+    fn priced_project() -> Project {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [sym("R1", "SAMPLE-A"), sym("R2", "SAMPLE-A"), sym("R3", "SAMPLE-B"), priced_wire("SAMPLE-W", 12.3)] {
+            sheet.entities.insert(e.id(), e);
+        }
+        project
+    }
+
+    fn row_of<'a>(rows: &'a [Vec<String>], part: &str) -> &'a Vec<String> {
+        rows.iter().find(|r| r[2] == part).unwrap_or_else(|| panic!("{part}の行: {rows:?}"))
+    }
+
+    /// Each BOM row looks its part number up in the parts catalog and shows the maker, name, unit price, currency, amount (quantity times unit price) and where to buy it.
+    /// 部品表の各行は型番を部品カタログで引き当て、メーカ・品名・単価・通貨・金額 (数量×単価)・購入先を表示する。
+    #[test]
+    fn bom_fills_maker_name_price_and_amount_from_the_catalog() {
+        let catalog: BomCatalog = [("SAMPLE-A".to_string(), entry("MakerA", "Resistor A", Some(12.5), "JPY"))].into();
+        let rows = bom_rows_with(&priced_project(), &catalog);
+        assert_eq!(BOM_COLUMNS.len(), 11);
+        let a = row_of(&rows, "SAMPLE-A");
+        assert_eq!(
+            &a[4..],
+            ["2", "MakerA", "Resistor A", "12.5", "JPY", "25", "https://example.com/Resistor A"]
+        );
+    }
+
+    /// A part number the catalog does not know keeps its BOM row; only the catalog columns stay empty.
+    /// 部品カタログに無い型番も部品表の行は残り、カタログ由来の欄だけが空欄になる。
+    #[test]
+    fn a_part_missing_from_the_catalog_keeps_its_row_with_empty_catalog_columns() {
+        let rows = bom_rows_with(&priced_project(), &BomCatalog::new());
+        let b = row_of(&rows, "SAMPLE-B");
+        assert_eq!(b.len(), BOM_COLUMNS.len());
+        assert_eq!(&b[1..5], ["R3", "SAMPLE-B", "resistor", "1"]);
+        assert!(b[5..].iter().all(String::is_empty), "{b:?}");
+        assert!(rows.iter().all(|r| r[2] != BOM_TOTAL), "単価が無ければ合計行は出ない");
+    }
+
+    /// A wire's unit price is per metre: the amount of a wire roll-up row is its total length in metres times the unit price.
+    /// 電線の単価は1mあたりとして扱い、電線集約行の金額は合計の長さ (m) × 単価になる。
+    #[test]
+    fn a_wire_roll_up_row_is_priced_per_metre() {
+        let catalog: BomCatalog = [("SAMPLE-W".to_string(), entry("MakerW", "Wire", Some(50.0), "JPY"))].into();
+        let rows = bom_rows_with(&priced_project(), &catalog);
+        let w = row_of(&rows, "SAMPLE-W");
+        assert_eq!(w[4], "12.30 m");
+        assert_eq!(w[7], "50");
+        assert_eq!(w[9], "615");
+    }
+
+    /// When at least one row has a price, the BOM ends with one total row per currency, and says how many rows were left out for having no price.
+    /// 単価のある行が1つでもあれば、部品表の末尾に通貨ごとの合計行が付き、単価が無くて合計から除いた行の数も書かれる。
+    #[test]
+    fn the_bom_ends_with_a_total_per_currency_noting_rows_without_a_price() {
+        let catalog: BomCatalog = [
+            ("SAMPLE-A".to_string(), entry("MakerA", "Resistor A", Some(12.5), "JPY")),
+            ("SAMPLE-B".to_string(), entry("MakerB", "Resistor B", Some(1.25), "USD")),
+            ("SAMPLE-W".to_string(), entry("MakerW", "Wire", None, "JPY")),
+        ]
+        .into();
+        let rows = bom_rows_with(&priced_project(), &catalog);
+        let totals: Vec<&Vec<String>> = rows.iter().filter(|r| r[2] == BOM_TOTAL).collect();
+        assert_eq!(totals.len(), 2, "{rows:?}");
+        assert_eq!((totals[0][8].as_str(), totals[0][9].as_str()), ("JPY", "25"));
+        assert_eq!((totals[1][8].as_str(), totals[1][9].as_str()), ("USD", "1.25"));
+        assert_eq!(totals[0][6], "単価未登録 1 行を除く");
+        assert!(rows.len() >= 2 && rows[rows.len() - 2..].iter().all(|r| r[2] == BOM_TOTAL), "合計行は末尾");
+    }
+
+    /// The part numbers looked up in the parts catalog are every non-empty part number in the BOM, once each, without the "(unassigned)" wire row.
+    /// 部品カタログで引き当てる型番は、部品表に出る空でない型番を1回ずつで、電線の「(未割当)」行は含まない。
+    #[test]
+    fn the_part_numbers_to_look_up_skip_blanks_and_the_unassigned_wire_row() {
+        let mut project = priced_project();
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        let mut loose = priced_wire("x", 2.0);
+        if let Entity::Wire(w) = &mut loose {
+            w.part_no = None;
+            w.color = String::new();
+        }
+        for e in [sym("R9", ""), loose] {
+            sheet.entities.insert(e.id(), e);
+        }
+        assert_eq!(bom_part_numbers(&project), ["SAMPLE-A", "SAMPLE-B", "SAMPLE-W"]);
+    }
+
+    /// The BOM CSV has the same eleven columns as the BOM drawing sheet, with the catalog columns filled in.
+    /// 部品表CSVは部品表の図面シートと同じ11列で、カタログ由来の欄が埋まる。
+    #[test]
+    fn the_bom_csv_carries_the_catalog_columns() {
+        let catalog: BomCatalog = [("SAMPLE-A".to_string(), entry("MakerA", "Resistor A", Some(12.5), "JPY"))].into();
+        let csv = bom_csv_with(&priced_project(), &catalog);
+        let mut lines = csv.lines();
+        assert_eq!(lines.next().unwrap(), BOM_COLUMNS.join(","));
+        assert!(
+            csv.contains(",\"R1, R2\",SAMPLE-A,resistor,2,MakerA,Resistor A,12.5,JPY,25,https://example.com/Resistor A\n"),
+            "{csv}"
+        );
+    }
+
     fn tb_with_accessories(reference: &str, poles: usize, spec: &str) -> Entity {
         let mut attrs = std::collections::BTreeMap::new();
         attrs.insert("accessories".to_string(), spec.to_string());
@@ -639,8 +888,8 @@ mod tests {
         let rows = bom_rows(&project);
         let acc: Vec<&Vec<String>> = rows.iter().filter(|r| r[3] == BOM_ACCESSORY_KIND).collect();
         assert_eq!(acc.len(), 2);
-        assert_eq!(&acc[0][1..], ["TB1, TB2", "SAMPLE-EB", BOM_ACCESSORY_KIND, "3"]);
-        assert_eq!(&acc[1][1..], ["TB1", "SAMPLE-PT", BOM_ACCESSORY_KIND, "1"]);
+        assert_eq!(&acc[0][1..5], ["TB1, TB2", "SAMPLE-EB", BOM_ACCESSORY_KIND, "3"]);
+        assert_eq!(&acc[1][1..5], ["TB1", "SAMPLE-PT", BOM_ACCESSORY_KIND, "1"]);
     }
 
     /// An accessory without a part number, or one the terminal check cannot read, adds no row to the BOM.
