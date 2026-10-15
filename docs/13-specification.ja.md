@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2612仕様項目**。
+全6領域・**2625仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -313,6 +313,11 @@
 - 値セットを選んで挿入しても編集は1回のままなので、undo一発で値ごと回路全体が戻る。 <sub>`inserting_with_a_value_set_is_still_undone_in_one_step`</sub>
 - プレースホルダと値セットはマクロフォルダへの往復でも残るので、保存したマクロは後からどの値セットでも挿入できる。 <sub>`placeholders_and_value_sets_round_trip_through_the_user_folder`</sub>
 - プロジェクトに無いシートへの挿入は拒否され、知らないマクロidは名前を添えて拒否される。 <sub>`inserting_into_an_unknown_sheet_or_by_an_unknown_id_is_refused`</sub>
+- 既存のマクロへ新しいバリアントキーで保存すると、そのバリアントが足され、既定と他のバリアントはそのまま残る。 <sub>`saving_with_a_new_variant_key_adds_a_variant_to_the_existing_macro`</sub>
+- 登録済みのバリアントキーで保存すると、そのバリアントだけが置き換わる。キーAは既定の回路を置き換える。 <sub>`saving_over_a_registered_variant_replaces_only_that_variant`</sub>
+- バリアントキーはAからZの1文字でなければならず、空・2文字・数字は拒否される。 <sub>`a_variant_key_must_be_one_letter`</sub>
+- プレースホルダは新しいバリアントでも参照記号が同じシンボルへ結び付くので、そのバリアントを値セット付きで挿入しても値が入る。 <sub>`placeholders_follow_a_new_variant_by_designator`</sub>
+- バリアントキーが無いとき、または既存マクロが無いときは、従来どおり新しいマクロとして保存される。 <sub>`saving_without_a_variant_or_existing_macro_makes_a_new_macro`</sub>
 
 ### mate
 
@@ -2669,6 +2674,14 @@
 - 何も選択していない状態の⌘Cは何もしない(前のコピー内容も消さない) <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - コピーした無名マクロは何度でも貼り付けられる(貼り付けても消えない) <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - 何もコピーしていないときの⌘Vは何も起こさない <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+- 次の空きバリアントは登録済みでない最初の文字で、26文字すべて使っていれば無い <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- バリアントチップは登録済みのキーと次の空きキー1つを並べ、選んだキーが登録済みなら上書きの印が付く <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 名前欄に入力すると、その文字を含む既存マクロが候補に出る <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 候補から既存マクロを選ぶと、名前と分類がそのマクロのものになり、次の空きバリアントが選ばれる <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 既存マクロへの保存は、そのマクロのidと選んだバリアントキーを渡す <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 登録済みのバリアントを選んで保存すると、まず上書き確認を出し、確認してから保存する <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 上書き確認で「別のバリアントに保存」を選ぶと、次の空きキーで保存する <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 既存マクロの選択をやめると、従来どおり新しいマクロ (バリアントAだけ) として保存する <sub>`adding a variant to an existing macro from the save dialog`</sub>
 
 ### 部品データベース
 

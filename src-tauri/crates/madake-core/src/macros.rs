@@ -235,6 +235,11 @@ pub struct MacroMeta {
     /// 値セット (保存ダイアログの「値セット」節)。省略可。
     #[serde(default)]
     pub value_sets: Vec<MacroValueSet>,
+    /// 既存のマクロ (`id`) へ足すバリアントのキー (`"A"`〜`"Z"`、EPLANのバリアントA〜Z)。
+    /// 省略すると新しいマクロとして保存する。`id`のマクロが見つからないときも新しいマクロになる
+    /// ([`save_macro_into`])。
+    #[serde(default)]
+    pub variant: Option<String>,
 }
 
 /// マクロの一覧と、読み込めなかったファイルの理由。
@@ -423,19 +428,7 @@ pub fn save_macro(
         }
     }
 
-    let base = base_point(&picked);
-    let mut commands = Vec::with_capacity(picked.len());
-    for entity in picked {
-        let mut entity = entity.clone();
-        entity.translate(-base.x, -base.y);
-        if let Entity::Wire(w) = &mut entity {
-            w.net = None;
-        }
-        commands.push(serde_json::to_value(Command::AddEntity {
-            sheet_id: Uuid::nil(),
-            entity,
-        })?);
-    }
+    let (base, commands) = relative_commands(&picked)?;
 
     let id = if meta.id.trim().is_empty() {
         derive_id(&meta.name)
@@ -455,6 +448,146 @@ pub fn save_macro(
         placeholders: meta.placeholders.clone(),
         value_sets: meta.value_sets.clone(),
     })
+}
+
+/// 選択したエンティティを、選択範囲の基準点 ([`base_point`]) からの相対座標の
+/// `add_entity`列にする (線番は捨てる)。新規保存とバリアント追加で共通。
+fn relative_commands(picked: &[&Entity]) -> Result<(Point, Vec<serde_json::Value>)> {
+    let base = base_point(picked);
+    let mut commands = Vec::with_capacity(picked.len());
+    for entity in picked {
+        let mut entity = (*entity).clone();
+        entity.translate(-base.x, -base.y);
+        if let Entity::Wire(w) = &mut entity {
+            w.net = None;
+        }
+        commands.push(serde_json::to_value(Command::AddEntity {
+            sheet_id: Uuid::nil(),
+            entity,
+        })?);
+    }
+    Ok((base, commands))
+}
+
+/// バリアントキーを正規化する (`"a"`→`"A"`)。A〜Zの1文字だけを受け付ける。
+fn variant_key(key: &str) -> Result<String> {
+    let k = key.trim().to_ascii_uppercase();
+    if k.len() == 1 && k.chars().all(|c| c.is_ascii_uppercase()) {
+        Ok(k)
+    } else {
+        Err(CoreError::InvalidCommand(format!(
+            "macro variant key must be one letter A-Z: {key:?}"
+        )))
+    }
+}
+
+/// マクロのコマンド列 (既定と全バリアント) に入っているシンボルの 保存時id → 参照記号。
+fn saved_symbol_references(m: &Macro) -> BTreeMap<Uuid, String> {
+    let mut out = BTreeMap::new();
+    let all = m.commands.iter().chain(m.variants.iter().flat_map(|v| v.commands.iter()));
+    for value in all {
+        if let Ok(Command::AddEntity { entity: Entity::Symbol(s), .. }) =
+            serde_json::from_value::<Command>(value.clone())
+        {
+            out.insert(s.id, s.reference.clone());
+        }
+    }
+    out
+}
+
+/// 保存ダイアログの入口。`meta.variant`があり、`existing` (= `meta.id`で見つけた既存マクロ) が
+/// あれば [`add_macro_variant`]、そうでなければ新しいマクロ ([`save_macro`])。
+pub fn save_macro_into(
+    existing: Option<&Macro>,
+    project: &Project,
+    sheet_id: SheetId,
+    entity_ids: &[EntityId],
+    meta: &MacroMeta,
+) -> Result<Macro> {
+    match (existing, meta.variant.as_deref()) {
+        (Some(m), Some(key)) => add_macro_variant(m, project, sheet_id, entity_ids, key),
+        _ => save_macro(project, sheet_id, entity_ids, meta),
+    }
+}
+
+/// 既存のマクロへ、選択したエンティティをバリアント`key`として足す (EPLANの「名前を付けて
+/// 保存」で既存のマクロ名を選んだときと同じ)。
+///
+/// - 登録済みのキーなら**そのバリアントだけ**を置き換える。`"A"`は既定のコマンド列を置き換える。
+///   他のバリアント・名前・分類・値セットはそのまま
+/// - プレースホルダの行き先は、**参照記号が同じシンボル**へ新しいバリアントでも結び付ける
+///   (バリアントBを値セット付きで挿入しても、Aと同じキーで値が入る)。どのバリアントにも
+///   無くなった行き先は捨てる
+/// - キーはA〜Zの1文字 (大文字小文字は区別しない)。選択が空・シートに無いidはエラー
+pub fn add_macro_variant(
+    existing: &Macro,
+    project: &Project,
+    sheet_id: SheetId,
+    entity_ids: &[EntityId],
+    key: &str,
+) -> Result<Macro> {
+    let key = variant_key(key)?;
+    let sheet = project
+        .sheet(sheet_id)
+        .ok_or(CoreError::SheetNotFound(sheet_id))?;
+    if entity_ids.is_empty() {
+        return Err(CoreError::InvalidCommand("macro selection is empty".into()));
+    }
+    let mut seen: BTreeSet<EntityId> = BTreeSet::new();
+    let mut picked: Vec<&Entity> = Vec::new();
+    for id in entity_ids {
+        let entity = sheet.entities.get(id).ok_or(CoreError::EntityNotFound(*id))?;
+        if seen.insert(*id) {
+            picked.push(entity);
+        }
+    }
+    let (base, commands) = relative_commands(&picked)?;
+    // 置き換える前の 参照記号 → (欄, キー) を覚えておく
+    let before = saved_symbol_references(existing);
+    let mut m = existing.clone();
+    if key == DEFAULT_VARIANT {
+        m.commands = commands;
+        m.base_point = base;
+    } else if let Some(v) = m.variants.iter_mut().find(|v| v.key.eq_ignore_ascii_case(&key)) {
+        v.commands = commands;
+    } else {
+        m.variants.push(MacroVariant {
+            key: key.clone(),
+            name: String::new(),
+            name_ja: String::new(),
+            commands,
+        });
+        m.variants.sort_by(|a, b| a.key.cmp(&b.key));
+    }
+    let after = saved_symbol_references(&m);
+    let new_symbols: Vec<(Uuid, String)> = picked
+        .iter()
+        .filter_map(|e| match e {
+            Entity::Symbol(s) => Some((s.id, s.reference.clone())),
+            _ => None,
+        })
+        .collect();
+    for p in &mut m.placeholders {
+        let mut targets: Vec<PlaceholderTarget> = Vec::new();
+        let mut push = |t: PlaceholderTarget| {
+            if !targets.iter().any(|x| x.entity == t.entity && x.field == t.field) {
+                targets.push(t);
+            }
+        };
+        for t in &p.targets {
+            if after.contains_key(&t.entity) {
+                push(t.clone());
+            }
+            let Some(reference) = before.get(&t.entity) else { continue };
+            for (id, r) in &new_symbols {
+                if r == reference {
+                    push(PlaceholderTarget { entity: *id, field: t.field.clone() });
+                }
+            }
+        }
+        p.targets = targets;
+    }
+    Ok(m)
 }
 
 /// 選択範囲の基準点: **左下に最も近いピン**。ピンが1つも無ければバウンディング
@@ -639,6 +772,9 @@ fn apply_value_set(
         ))
     })?;
     // (行き先のエンティティid, 欄, 値) をすべて解決してから書き込む。
+    // 他のバリアントにだけある行き先は、このバリアントには関係が無いので飛ばす
+    // (どのバリアントにも無い行き先は従来どおりエラー)。
+    let in_macro = saved_symbol_references(m);
     let mut writes: Vec<(EntityId, TargetField, &str)> = Vec::new();
     for (key, value) in &set.values {
         let placeholder = m
@@ -652,6 +788,9 @@ fn apply_value_set(
                 ))
             })?;
         for target in &placeholder.targets {
+            if !remap.contains_key(&target.entity) && in_macro.contains_key(&target.entity) {
+                continue;
+            }
             let entity_id = remap.get(&target.entity).copied().ok_or_else(|| {
                 CoreError::InvalidCommand(format!(
                     "macro placeholder {key} points at an entity that is not in this macro: {} (macro {})",
@@ -2125,5 +2264,107 @@ mod tests {
         )
         .expect_err("知らないid");
         assert!(err.to_string().contains("no_such_macro"), "{err}");
+    }
+
+    /// 挿入したバリアントのシンボルの symbol_id 一覧 (並び順は symbols() と同じ)。
+    fn inserted_symbol_ids(m: &Macro, key: Option<&str>, value_set: Option<&str>) -> Vec<String> {
+        let (mut target, target_sheet) = new_engine();
+        insert_macro(&mut target, m, key, value_set, target_sheet, Point::new(100.0, 100.0), 0, EditOrigin::User)
+            .expect("挿入");
+        symbols(&target, target_sheet).into_iter().map(|s| s.1).collect()
+    }
+
+    /// Saving a selection under an existing macro with a new variant key adds that variant and keeps the default and the other variants as they were.
+    /// 既存のマクロへ新しいバリアントキーで保存すると、そのバリアントが足され、既定と他のバリアントはそのまま残る。
+    #[test]
+    fn saving_with_a_new_variant_key_adds_a_variant_to_the_existing_macro() {
+        let (mut engine, sheet_id) = new_engine();
+        let lamp = symbol(&mut engine, sheet_id, "lamp", "L1", 50.0, 50.0);
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 150.0, 50.0);
+        let m = save_macro(engine.project(), sheet_id, &[lamp], &meta("v")).expect("A");
+        let m = save_macro_into(Some(&m), engine.project(), sheet_id, &[motor], &MacroMeta { variant: Some("b".into()), ..meta("v") })
+            .expect("B");
+        assert_eq!(m.variant_keys(), ["A", "B"]);
+        assert_eq!(m.name, "Test macro", "名前・分類は既存マクロのまま");
+        assert_eq!(inserted_symbol_ids(&m, None, None), ["lamp"]);
+        assert_eq!(inserted_symbol_ids(&m, Some("B"), None), ["motor"]);
+    }
+
+    /// Saving under a variant key that is already registered replaces only that variant; key A replaces the default circuit.
+    /// 登録済みのバリアントキーで保存すると、そのバリアントだけが置き換わる。キーAは既定の回路を置き換える。
+    #[test]
+    fn saving_over_a_registered_variant_replaces_only_that_variant() {
+        let (mut engine, sheet_id) = new_engine();
+        let lamp = symbol(&mut engine, sheet_id, "lamp", "L1", 50.0, 50.0);
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 150.0, 50.0);
+        let fuse = symbol(&mut engine, sheet_id, "fuse", "F1", 250.0, 50.0);
+        let m = save_macro(engine.project(), sheet_id, &[lamp], &meta("v")).expect("A");
+        let m = add_macro_variant(&m, engine.project(), sheet_id, &[motor], "B").expect("B");
+        let m = add_macro_variant(&m, engine.project(), sheet_id, &[fuse], "B").expect("B上書き");
+        assert_eq!(m.variant_keys(), ["A", "B"], "Bは1つのまま");
+        assert_eq!(inserted_symbol_ids(&m, Some("B"), None), ["fuse"]);
+        assert_eq!(inserted_symbol_ids(&m, None, None), ["lamp"], "Aは変わらない");
+        let m = add_macro_variant(&m, engine.project(), sheet_id, &[motor], "A").expect("A上書き");
+        assert_eq!(inserted_symbol_ids(&m, None, None), ["motor"]);
+        assert_eq!(inserted_symbol_ids(&m, Some("B"), None), ["fuse"], "Bは変わらない");
+    }
+
+    /// A variant key must be a single letter from A to Z; an empty key, two letters or a digit is refused.
+    /// バリアントキーはAからZの1文字でなければならず、空・2文字・数字は拒否される。
+    #[test]
+    fn a_variant_key_must_be_one_letter() {
+        let (mut engine, sheet_id) = new_engine();
+        let lamp = symbol(&mut engine, sheet_id, "lamp", "L1", 50.0, 50.0);
+        let m = save_macro(engine.project(), sheet_id, &[lamp], &meta("v")).expect("A");
+        for bad in ["", "AB", "1", "あ"] {
+            assert!(add_macro_variant(&m, engine.project(), sheet_id, &[lamp], bad).is_err(), "{bad:?}");
+        }
+    }
+
+    /// A placeholder follows a new variant to the symbol with the same designator, so inserting that variant with a value set fills it in too.
+    /// プレースホルダは新しいバリアントでも参照記号が同じシンボルへ結び付くので、そのバリアントを値セット付きで挿入しても値が入る。
+    #[test]
+    fn placeholders_follow_a_new_variant_by_designator() {
+        let (mut engine, sheet_id) = new_engine();
+        let small = symbol(&mut engine, sheet_id, "motor", "M1", 50.0, 50.0);
+        let lamp = symbol(&mut engine, sheet_id, "lamp", "L1", 150.0, 50.0);
+        let big = symbol(&mut engine, sheet_id, "motor", "M1", 250.0, 50.0);
+        let m = save_macro(
+            engine.project(),
+            sheet_id,
+            &[small],
+            &MacroMeta {
+                placeholders: vec![placeholder("rating", &[(small, "value")])],
+                value_sets: vec![value_set("1.5kw", &[("rating", "1.5kW")])],
+                ..meta("v")
+            },
+        )
+        .expect("A");
+        let m = add_macro_variant(&m, engine.project(), sheet_id, &[lamp, big], "B").expect("B");
+        assert_eq!(m.placeholders[0].targets.len(), 2, "Aの行き先+BのM1");
+        let (mut target, target_sheet) = new_engine();
+        insert_macro(&mut target, &m, Some("B"), Some("1.5kw"), target_sheet, Point::new(100.0, 100.0), 0, EditOrigin::User)
+            .expect("Bを値セット付きで挿入");
+        assert_eq!(values(&target, target_sheet)["motor"].0, "1.5kW");
+        // Aも従来どおり
+        let (mut a, a_sheet) = new_engine();
+        insert_macro(&mut a, &m, None, Some("1.5kw"), a_sheet, Point::new(100.0, 100.0), 0, EditOrigin::User).expect("A");
+        assert_eq!(values(&a, a_sheet)["motor"].0, "1.5kW");
+    }
+
+    /// Without a variant key, or when no existing macro is given, saving makes a new macro exactly as before.
+    /// バリアントキーが無いとき、または既存マクロが無いときは、従来どおり新しいマクロとして保存される。
+    #[test]
+    fn saving_without_a_variant_or_existing_macro_makes_a_new_macro() {
+        let (mut engine, sheet_id) = new_engine();
+        let lamp = symbol(&mut engine, sheet_id, "lamp", "L1", 50.0, 50.0);
+        let motor = symbol(&mut engine, sheet_id, "motor", "M1", 150.0, 50.0);
+        let old = save_macro(engine.project(), sheet_id, &[lamp], &meta("v")).expect("A");
+        let fresh = save_macro_into(Some(&old), engine.project(), sheet_id, &[motor], &meta("v")).expect("新規");
+        assert_eq!(fresh.variant_keys(), ["A"]);
+        assert_eq!(inserted_symbol_ids(&fresh, None, None), ["motor"]);
+        let fresh = save_macro_into(None, engine.project(), sheet_id, &[motor], &MacroMeta { variant: Some("C".into()), ..meta("w") })
+            .expect("既存なし");
+        assert_eq!(fresh.variant_keys(), ["A"]);
     }
 }

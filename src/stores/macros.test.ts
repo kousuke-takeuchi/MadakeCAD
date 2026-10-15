@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 import { ipc, type Command, type Macro, type MacroMeta } from "../ipc";
-import { ALL_CATEGORIES, UNCATEGORIZED, useMacrosStore } from "./macros";
+import { ALL_CATEGORIES, UNCATEGORIZED, nextFreeVariant, useMacrosStore, variantChips } from "./macros";
 
 const NIL = "00000000-0000-0000-0000-000000000000";
 
@@ -471,5 +471,107 @@ describe("unnamed clipboard macro (Cmd+C / Cmd+V)", () => {
   // ja: 何もコピーしていないときの⌘Vは何も起こさない
   it("pastes nothing when nothing has been copied yet", () => {
     expect(useMacrosStore().paste()).toBeNull();
+  });
+});
+
+describe("adding a variant to an existing macro from the save dialog", () => {
+  /** 保存ダイアログを開き、一覧 (library) を読み込んだ状態。 */
+  async function openedWithLibrary() {
+    vi.spyOn(ipc, "buildMacro").mockResolvedValue(macro("selection", ""));
+    mockList();
+    const macros = useMacrosStore();
+    await macros.load();
+    await macros.openSave("sheet-1", ["e1", "e2"]);
+    return macros;
+  }
+
+  // ja: 次の空きバリアントは登録済みでない最初の文字で、26文字すべて使っていれば無い
+  it("picks the first letter that is not registered as the next free variant, or none when all 26 are used", () => {
+    expect(nextFreeVariant(["A"])).toBe("B");
+    expect(nextFreeVariant(["A", "c", "B"])).toBe("D");
+    const all = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+    expect(nextFreeVariant(all)).toBeNull();
+  });
+
+  // ja: バリアントチップは登録済みのキーと次の空きキー1つを並べ、選んだキーが登録済みなら上書きの印が付く
+  it("lists registered keys plus the next free key as chips, marking a selected registered key as an overwrite", () => {
+    expect(variantChips(["A", "B"], "C")).toEqual([
+      { key: "A", state: "saved", overwrite: false },
+      { key: "B", state: "saved", overwrite: false },
+      { key: "C", state: "selected", overwrite: false },
+    ]);
+    expect(variantChips(["A", "B"], "b")[1]).toEqual({ key: "B", state: "selected", overwrite: true });
+  });
+
+  // ja: 名前欄に入力すると、その文字を含む既存マクロが候補に出る
+  it("suggests existing macros whose name contains what was typed", async () => {
+    const macros = await openedWithLibrary();
+    macros.saveName = "motor";
+    expect(macros.nameMatches.map((m) => m.id)).toEqual(["motor_dol", "motor_reversing"]);
+    macros.saveName = "";
+    expect(macros.nameMatches).toEqual([]);
+  });
+
+  // ja: 候補から既存マクロを選ぶと、名前と分類がそのマクロのものになり、次の空きバリアントが選ばれる
+  it("choosing an existing macro takes its name and category and selects its next free variant", async () => {
+    const macros = await openedWithLibrary();
+    macros.chooseExisting("motor_dol");
+    expect(macros.saveName).toBe("motor_dol (ja)");
+    expect(macros.saveCategory).toBe("motor");
+    expect(macros.saveVariant).toBe("D");
+    expect(macros.saveVariantChips.map((c) => `${c.key}:${c.state}`)).toEqual(["A:saved", "B:saved", "C:saved", "D:selected"]);
+    expect(macros.nameMatches).toEqual([]);
+  });
+
+  // ja: 既存マクロへの保存は、そのマクロのidと選んだバリアントキーを渡す
+  it("saves into the existing macro by passing its id and the chosen variant key", async () => {
+    const macros = await openedWithLibrary();
+    const save = vi.spyOn(ipc, "saveMacro").mockResolvedValue({ macro: library[0], path: "/p/motor_dol.json" });
+    macros.chooseExisting("motor_dol");
+    await macros.save();
+    expect(save).toHaveBeenCalledWith("sheet-1", ["e1", "e2"], {
+      id: "motor_dol",
+      name: "motor_dol (en)",
+      name_ja: "motor_dol (ja)",
+      category: "motor",
+      variant: "D",
+    });
+    expect(macros.variantKey).toBe("D");
+  });
+
+  // ja: 登録済みのバリアントを選んで保存すると、まず上書き確認を出し、確認してから保存する
+  it("asks before overwriting a registered variant and saves only after confirmation", async () => {
+    const macros = await openedWithLibrary();
+    const save = vi.spyOn(ipc, "saveMacro").mockResolvedValue({ macro: library[0], path: "/p/motor_dol.json" });
+    macros.chooseExisting("motor_dol");
+    macros.chooseVariant("b");
+    expect(macros.saveOverwrites).toBe(true);
+    expect(await macros.save()).toBeNull();
+    expect(macros.overwriteAsk).toBe(true);
+    expect(save).not.toHaveBeenCalled();
+    await macros.save(true);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect((save.mock.calls[0][2] as MacroMeta).variant).toBe("B");
+  });
+
+  // ja: 上書き確認で「別のバリアントに保存」を選ぶと、次の空きキーで保存する
+  it("saving to another variant from the overwrite prompt uses the next free key", async () => {
+    const macros = await openedWithLibrary();
+    const save = vi.spyOn(ipc, "saveMacro").mockResolvedValue({ macro: library[0], path: "/p/motor_dol.json" });
+    macros.chooseExisting("motor_dol");
+    macros.chooseVariant("A");
+    await macros.save();
+    await macros.saveToFreeVariant();
+    expect((save.mock.calls[0][2] as MacroMeta).variant).toBe("D");
+    expect(macros.overwriteAsk).toBe(false);
+  });
+
+  // ja: 既存マクロの選択をやめると、従来どおり新しいマクロ (バリアントAだけ) として保存する
+  it("clearing the existing macro goes back to saving a new macro with only variant A", async () => {
+    const macros = await openedWithLibrary();
+    macros.chooseExisting("motor_dol");
+    macros.clearExisting();
+    expect(macros.saveTarget).toBeNull();
+    expect(macros.saveVariantChips).toEqual([{ key: "A", state: "selected", overwrite: false }]);
   });
 });

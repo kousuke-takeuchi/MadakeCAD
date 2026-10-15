@@ -915,6 +915,8 @@ export interface MacroMeta {
   placeholders?: MacroPlaceholder[];
   /** 値セット (指定しなければ値セット無しのマクロになる)。 */
   value_sets?: MacroValueSet[];
+  /** 既存のマクロ (`id`) へ足すバリアントのキー (A〜Z)。登録済みなら置き換える。 */
+  variant?: string;
 }
 
 /** 読み込めなかったマクロファイル1件 (形はテンプレートと同じ)。 */

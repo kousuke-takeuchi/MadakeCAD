@@ -239,16 +239,27 @@ impl SharedDoc {
     /// 選択したエンティティを回路マクロとして保存する(ユーザー領域へJSONを書き出す)。
     ///
     /// 図面は変更しない(読み取りのみ)ので履歴には乗らない。保存したマクロと
-    /// 書き出し先パスを返す。
+    /// 書き出し先パスを返す。`meta.variant`と`meta.id`が既存マクロを指すときは、
+    /// そのマクロへバリアントを足す (登録済みのキーなら置き換える)。
     pub fn save_macro(
         &self,
         sheet_id: Uuid,
         entity_ids: &[Uuid],
         meta: &madake_core::macros::MacroMeta,
     ) -> madake_core::Result<(madake_core::macros::Macro, String)> {
+        let existing = match (&meta.variant, meta.id.trim()) {
+            (Some(_), id) if !id.is_empty() => madake_core::macros::find(id),
+            _ => None,
+        };
         let m = {
             let engine = self.engine.lock().unwrap();
-            madake_core::macros::save_macro(engine.project(), sheet_id, entity_ids, meta)?
+            madake_core::macros::save_macro_into(
+                existing.as_ref(),
+                engine.project(),
+                sheet_id,
+                entity_ids,
+                meta,
+            )?
         };
         let path = madake_core::macros::write_macro(&m)?;
         Ok((m, path.display().to_string()))
@@ -537,6 +548,10 @@ pub struct SaveMacroParams {
     /// 値セット (例: 0.75kW / 1.5kW)。プレースホルダのkey→値。省略可。
     #[serde(default)]
     pub value_sets: Vec<madake_core::macros::MacroValueSet>,
+    /// 既存のマクロ (`id`) へ足すバリアントのキー (A〜Z)。登録済みのキーなら置き換える。
+    /// 省略すると新しいマクロとして保存する。
+    #[serde(default)]
+    pub variant: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -886,7 +901,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "図面の一部(選択したエンティティ)を回路マクロとして保存する。座標は基準点(選択範囲の左下のピン)からの相対で保存され、線番は捨てられる(挿入先で振り直すため)。図面は変更しない"
+        description = "図面の一部(選択したエンティティ)を回路マクロとして保存する。座標は基準点(選択範囲の左下のピン)からの相対で保存され、線番は捨てられる(挿入先で振り直すため)。idとvariant(A〜Z)を渡すと既存マクロのバリアントとして足す(登録済みなら置き換え、プレースホルダは参照記号が同じシンボルへ結び付く)。図面は変更しない"
     )]
     fn save_macro(&self, Parameters(p): Parameters<SaveMacroParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
@@ -899,6 +914,7 @@ impl MadakeMcp {
             category: p.category.unwrap_or_default(),
             placeholders: p.placeholders,
             value_sets: p.value_sets,
+            variant: p.variant,
         };
         let (m, path) = self
             .doc

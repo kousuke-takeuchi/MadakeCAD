@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2612 specification clauses** across 6 areas.
+**2625 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -313,6 +313,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Inserting with a value set is still one edit: a single undo takes the whole circuit, values and all, back out. <sub>`inserting_with_a_value_set_is_still_undone_in_one_step`</sub>
 - Placeholders and value sets survive the round trip through the macros folder, so a macro saved with them can be inserted later with any of its value sets. <sub>`placeholders_and_value_sets_round_trip_through_the_user_folder`</sub>
 - Inserting into a sheet that is not in the project is refused, and an unknown macro id is refused by name. <sub>`inserting_into_an_unknown_sheet_or_by_an_unknown_id_is_refused`</sub>
+- Saving a selection under an existing macro with a new variant key adds that variant and keeps the default and the other variants as they were. <sub>`saving_with_a_new_variant_key_adds_a_variant_to_the_existing_macro`</sub>
+- Saving under a variant key that is already registered replaces only that variant; key A replaces the default circuit. <sub>`saving_over_a_registered_variant_replaces_only_that_variant`</sub>
+- A variant key must be a single letter from A to Z; an empty key, two letters or a digit is refused. <sub>`a_variant_key_must_be_one_letter`</sub>
+- A placeholder follows a new variant to the symbol with the same designator, so inserting that variant with a value set fills it in too. <sub>`placeholders_follow_a_new_variant_by_designator`</sub>
+- Without a variant key, or when no existing macro is given, saving makes a new macro exactly as before. <sub>`saving_without_a_variant_or_existing_macro_makes_a_new_macro`</sub>
 
 ### mate
 
@@ -2669,6 +2674,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - does nothing on copy when nothing is selected, keeping the previous clipboard <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - hands the copied macro back on every paste, so it can be pasted repeatedly <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - pastes nothing when nothing has been copied yet <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+- picks the first letter that is not registered as the next free variant, or none when all 26 are used <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- lists registered keys plus the next free key as chips, marking a selected registered key as an overwrite <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- suggests existing macros whose name contains what was typed <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- choosing an existing macro takes its name and category and selects its next free variant <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- saves into the existing macro by passing its id and the chosen variant key <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- asks before overwriting a registered variant and saves only after confirmation <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- saving to another variant from the overwrite prompt uses the next free key <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- clearing the existing macro goes back to saving a new macro with only variant A <sub>`adding a variant to an existing macro from the save dialog`</sub>
 
 ### Parts database
 
