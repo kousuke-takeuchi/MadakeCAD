@@ -1230,14 +1230,23 @@ pub const PLC_POINT_PITCH_MM: f64 = 5.0;
 /// 縦長の箱の**左側にI/O点ぶんの接続点**を [`PLC_POINT_PITCH_MM`] ピッチで並べる
 /// (入力は外部の機器から信号が入ってくる側、出力も同じ側にまとめて配線しやすくする)。
 /// 箱の中には点番号 (1〜n) と種別 (DI/DO) を書く。参照記号の接頭辞は `PLC`。
+///
+/// **分割片** `plc_di_{n}p_s{start}` (I/O図面の生成で、1つのモジュールを複数ページへ分けたとき
+/// の1ページぶん): 点番号を`start`から振る (`plc_di_4p_s13` = 点13〜16の4点)。ピン番号も
+/// 同じ番号なので、割付表の点番号でそのまま結線を引ける ([`crate::plc::plc_points`])。
+/// `start + n - 1`が [`PLC_POINT_MAX`] を超える指定は読まない。
 fn plc_module_symbol(id: &str) -> Option<SymbolDef> {
     let (rest, input) = match (id.strip_prefix("plc_di_"), id.strip_prefix("plc_do_")) {
         (Some(rest), _) => (rest, true),
         (_, Some(rest)) => (rest, false),
         _ => return None,
     };
-    let n: usize = rest.strip_suffix('p')?.parse().ok()?;
-    if !(1..=PLC_POINT_MAX).contains(&n) {
+    let (count, start) = match rest.split_once("p_s") {
+        Some((count, start)) => (count, start.parse::<usize>().ok().filter(|s| *s >= 1)?),
+        None => (rest.strip_suffix('p')?, 1),
+    };
+    let n: usize = count.parse().ok()?;
+    if !(1..=PLC_POINT_MAX).contains(&n) || start + n - 1 > PLC_POINT_MAX {
         return None;
     }
     let pitch = PLC_POINT_PITCH_MM;
@@ -1254,9 +1263,10 @@ fn plc_module_symbol(id: &str) -> Option<SymbolDef> {
     let mut pins = Vec::with_capacity(n);
     for i in 0..n {
         let y = offset(i);
-        primitives.push(text(-2.5, y + 1.0, &(i + 1).to_string(), 2.0));
+        let no = (start + i).to_string();
+        primitives.push(text(-2.5, y + 1.0, &no, 2.0));
         primitives.push(line(&[(-7.5, y), (-5.0, y)]));
-        pins.push(pin(&(i + 1).to_string(), "", -7.5, y, PinDir::Left));
+        pins.push(pin(&no, "", -7.5, y, PinDir::Left));
     }
     let (name, name_ja) = if input {
         (format!("PLC input module {n} points"), format!("PLC入力モジュール({n}点)"))
@@ -1785,6 +1795,25 @@ mod tests {
             ysum += p.at.y;
         }
         assert!(ysum.abs() < 1e-9, "上下中央揃え");
+    }
+
+    /// A split piece of a PLC module, plc_di_{n}p_s{start}, numbers its points from the start point, so its pins carry the module's own point numbers.
+    /// PLCモジュールの分割片 plc_di_{n}p_s{start} は点番号を開始点から振るので、ピンにはモジュール本来の点番号が付く。
+    #[test]
+    fn a_split_plc_module_piece_numbers_its_points_from_the_start() {
+        let piece = resolve_symbol("plc_di_4p_s13").expect("分割片");
+        let numbers: Vec<&str> = piece.pins.iter().map(|p| p.number.as_str()).collect();
+        assert_eq!(numbers, ["13", "14", "15", "16"]);
+        let whole = resolve_symbol("plc_di_4p").unwrap();
+        assert_eq!(
+            piece.pins.iter().map(|p| p.at).collect::<Vec<_>>(),
+            whole.pins.iter().map(|p| p.at).collect::<Vec<_>>(),
+            "形は同じ点数のモジュールと同じ"
+        );
+        assert!(resolve_symbol("plc_do_8p_s57").is_some(), "57〜64は上限内");
+        for bad in ["plc_di_8p_s58", "plc_di_4p_s0", "plc_di_4p_sx"] {
+            assert!(resolve_symbol(bad).is_none(), "{bad}");
+        }
     }
 
     /// PLC modules come in an input and an output flavour, and both carry the PLC reference prefix.

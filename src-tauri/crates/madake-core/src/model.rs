@@ -43,7 +43,9 @@ pub type SheetId = Uuid;
 /// - v13: 整えバリアントの複製シートの印 ([`Sheet::variant_of`]) を追加。印の無い旧ファイルの
 ///   シートはすべて普通のシート (`None`) として開き、クロスリファレンスの数え方も
 ///   出力される図面も変わらない (印が付いているときだけ複製として扱われる)
-pub const FORMAT_VERSION: u32 = 13;
+/// - v14: PLC I/O図面の生成設定をプロジェクトに保存する ([`Project::plc_generate`])。設定の無い
+///   旧ファイルは「保存なし」(`None`) で開き、生成ダイアログは既定値から始まる
+pub const FORMAT_VERSION: u32 = 14;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -80,6 +82,10 @@ pub struct Project {
     /// FreeCAD側は同じUUIDを`madake_id`プロパティに持つ。
     #[serde(default)]
     pub mech_links: Vec<MechLink>,
+    /// PLC I/O図面の生成設定 (M4仕様 §3。生成ダイアログで「プロジェクトに保存」したもの)。
+    /// 次に生成ダイアログを開いたときの初期値になる。`None`=保存なし (既定値)。
+    #[serde(default)]
+    pub plc_generate: Option<crate::plc::PlcSheetOptions>,
 }
 
 /// エンティティ (シンボル・配線) とFreeCADオブジェクトの対応 (M5仕様 M5-2)。
@@ -135,6 +141,7 @@ impl Project {
             frame_template: None,
             no: None,
             mech_links: Vec::new(),
+            plc_generate: None,
         }
     }
 

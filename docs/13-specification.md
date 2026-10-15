@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2631 specification clauses** across 6 areas.
+**2641 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -59,6 +59,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Clearing the annotation text height with null puts the sheet back to the default 2.0mm. <sub>`clearing_the_annotation_text_height_restores_the_default`</sub>
 - An annotation text height outside 1.0-3.5mm is rejected with a reason, and the sheet is left untouched. <sub>`an_out_of_range_annotation_text_height_is_rejected`</sub>
 - The annotation text height command is plain JSON, so AI agents and the CLI can send it. <sub>`set_sheet_annotation_text_is_plain_json`</sub>
+- SetPlcSheetOptions saves the PLC I/O drawing settings with the project, and undo puts back what was saved before. <sub>`set_plc_sheet_options_saves_the_settings_and_undo_restores_them`</sub>
 - SetPlcAssignments replaces the whole PLC I/O assignment table of the project; undo restores the previous table. <sub>`set_plc_assignments_is_undoable`</sub>
 - SetFrameTemplate switches the frame template of the whole project in one edit, and undo puts the previous one back (undoing the very first switch returns to the default frame). <sub>`set_frame_template_is_undoable`</sub>
 - SetFrameTemplate accepts an id nobody knows: the drawing keeps printing with the default frame, so a project made elsewhere still opens. <sub>`set_frame_template_accepts_an_unknown_id`</sub>
@@ -243,7 +244,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 13, the version that added the tidy-variant mark on a copied sheet. <sub>`the_current_format_version_is_thirteen`</sub>
+- The current file format version is 14, the version that saves the PLC I/O drawing settings with the project. <sub>`the_current_format_version_is_fourteen`</sub>
+- A version-13 file, written before PLC drawing settings could be saved, opens with no saved settings. <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - A project file saved before tidy variants existed opens with every sheet an ordinary sheet (no variant mark), and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
 - A project file saved before the wire part-number legend block existed opens with no legend blocks at all, and is brought up to the current format version. <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
 - A wire part-number legend block placed on a sheet survives a save and reload with its place unchanged. <sub>`a_wire_legend_survives_a_save_and_reload`</sub>
@@ -496,8 +498,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A generated I/O page has no ERC complaints: every point is wired and every wire end lands on something. <sub>`a_generated_io_page_passes_the_electrical_rule_check`</sub>
 - Generating for a module with no assignments fills the table with auto-numbered addresses in the same single edit. <sub>`generating_fills_an_empty_assignment_table_with_auto_addresses`</sub>
 - Existing signal names are kept when the page is generated: the assignment table stays the master of names and comments. <sub>`generating_keeps_the_signal_names_already_in_the_table`</sub>
-- The two module-placement policies that are not implemented yet are refused with a clear error, and the drawing is left untouched. <sub>`the_unimplemented_placement_policies_are_refused`</sub>
-- The horizontal-bus ladder style is not implemented yet and is refused the same way. <sub>`the_horizontal_bus_ladder_style_is_refused`</sub>
+- The horizontal-bus style lays the bus along the top and drops one vertical rung per point to the module lying below it, points running left to right; the page passes the ERC. <sub>`the_horizontal_bus_style_drops_vertical_rungs_left_to_right`</sub>
+- With "share if it fits", a module that fits in the rungs left on the last generated page goes onto that page instead of a new one. <sub>`share_if_fits_puts_a_small_module_on_the_last_page`</sub>
+- With "share if it fits", a module too big for the rungs left goes onto a new page whole. <sub>`share_if_fits_starts_a_new_page_when_the_module_does_not_fit`</sub>
+- With "share and split", the rungs left on the last page are filled in whole split units and the rest of the module continues on a new page, each piece drawn as a split module with continuation references; one undo removes everything. <sub>`share_or_split_fills_the_last_page_and_continues_on_a_new_one`</sub>
+- With "share and split", a module larger than a whole page is spread over as many pages as it needs, each piece no longer than a page. <sub>`share_or_split_spreads_a_big_module_over_several_pages`</sub>
+- Splitting is refused for a split unit of zero, and a start skip that leaves no rung on a page is refused too; the drawing is not touched. <sub>`a_zero_split_unit_or_an_oversized_start_skip_is_refused`</sub>
+- Only a page generated with the same ladder style and rung spacing can be shared; otherwise the next module starts a new page. <sub>`a_page_of_another_style_or_spacing_is_not_shared`</sub>
 - A rung spacing that is not a positive multiple of the 2.5 mm grid is refused, so generated pages stay on grid. <sub>`an_off_grid_rung_spacing_is_refused`</sub>
 - The I/O report lists every point as address, signal name, target, wire number and comment, with the module reference in front for the whole project. <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
 
@@ -790,6 +797,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - resolve_symbol finds built-in ids, and rejects malformed or out-of-range dynamic ids (0 poles, 51 poles, missing count). <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defs returns the built-in library plus definitions for every dynamic symbol actually used on the sheet. <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
 - A PLC input module symbol (e.g. 16 points) is a tall box with one connection point per I/O point on its left side, all on the 2.5 mm grid. <sub>`a_plc_input_module_has_one_connection_point_per_io_point`</sub>
+- A split piece of a PLC module, plc_di_{n}p_s{start}, numbers its points from the start point, so its pins carry the module's own point numbers. <sub>`a_split_plc_module_piece_numbers_its_points_from_the_start`</sub>
 - PLC modules come in an input and an output flavour, and both carry the PLC reference prefix. <sub>`plc_modules_come_in_input_and_output_flavours`</sub>
 - PLC module symbols exist from 1 to 64 points; anything outside that range is not a symbol. <sub>`plc_module_point_counts_are_limited_to_one_through_sixty_four`</sub>
 - The relay coil symbol carries the JIS coil terminal names A1 and A2 and the reference prefix K. <sub>`relay_coil_has_a1_a2_terminals`</sub>
@@ -1802,6 +1810,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - PLC modules come in an input and an output flavour <sub>`dynamicSymbol`</sub>
 - malformed dynamic ids return null <sub>`dynamicSymbol`</sub>
 - PLC module symbols exist from 1 to 64 points only <sub>`dynamicSymbol`</sub>
+- a split PLC module piece numbers its points from the start point and keeps the shape of a module of that size <sub>`dynamicSymbol`</sub>
 - a multi-level terminal block (4 poles, 2 levels) numbers its pins with a level letter <sub>`dynamicSymbol`</sub>
 - draws one terminal column per level, with the same pole of every level on one row <sub>`dynamicSymbol`</sub>
 - keeps every connection point on the 2.5 mm grid and never lets two terminals share one <sub>`dynamicSymbol`</sub>
@@ -2721,9 +2730,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - shows an empty table when no PLC module is placed <sub>`PLC I/O assignment editor`</sub>
 - throws away the draft when the editor is closed <sub>`PLC I/O assignment editor`</sub>
 - defaults to a vertical bus ladder with a 10mm rung spacing <sub>`PLC I/O sheet generation settings`</sub>
-- generates the I/O sheet from the settings and the module spec of the parts library <sub>`PLC I/O sheet generation settings`</sub>
-- refuses to generate with a ladder style that is not implemented yet <sub>`PLC I/O sheet generation settings`</sub>
-- refuses to generate with a module placement that is not implemented yet <sub>`PLC I/O sheet generation settings`</sub>
+- saves the settings to the project and generates the I/O sheet from them and the module spec <sub>`PLC I/O sheet generation settings`</sub>
+- generates with the horizontal bus style and the share-or-split placement <sub>`PLC I/O sheet generation settings`</sub>
+- starts from the settings saved with the project and does not save them again when unchanged <sub>`PLC I/O sheet generation settings`</sub>
+- does not save the settings when saving with the project is unchecked <sub>`PLC I/O sheet generation settings`</sub>
 - saves the pending edits before generating the sheet <sub>`PLC I/O sheet generation settings`</sub>
 - falls back to the default address style when the module is not in the parts library <sub>`PLC I/O sheet generation settings`</sub>
 

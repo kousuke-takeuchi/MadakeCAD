@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2631仕様項目**。
+全6領域・**2641仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -59,6 +59,7 @@
 - 注記文字高をnullで消すと、シートは既定の2.0mmに戻る。 <sub>`clearing_the_annotation_text_height_restores_the_default`</sub>
 - 1.0〜3.5mmの範囲を外れた注記文字高は理由付きで拒否され、シートは書き換わらない。 <sub>`an_out_of_range_annotation_text_height_is_rejected`</sub>
 - 注記文字高のコマンドは素のJSONで表現でき、AIやCLIから送れる。 <sub>`set_sheet_annotation_text_is_plain_json`</sub>
+- SetPlcSheetOptionsはPLC I/O図面の生成設定をプロジェクトに保存し、undoで保存前の状態に戻る。 <sub>`set_plc_sheet_options_saves_the_settings_and_undo_restores_them`</sub>
 - SetPlcAssignmentsはプロジェクトのPLC I/O割付表を丸ごと置き換え、undoで以前の表に戻る。 <sub>`set_plc_assignments_is_undoable`</sub>
 - SetFrameTemplateはプロジェクト全体の図枠テンプレートを1回の編集で差し替え、undoで元の図枠へ戻る(最初の差し替えをundoすると未指定=既定の図枠へ戻る)。 <sub>`set_frame_template_is_undoable`</sub>
 - SetFrameTemplateは知らないidも受け付ける(図面は既定の図枠で描かれ続けるので、他所で作ったプロジェクトも開ける)。 <sub>`set_frame_template_accepts_an_unknown_id`</sub>
@@ -243,7 +244,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは13 (整えバリアントの複製シートの印を追加した版) である。 <sub>`the_current_format_version_is_thirteen`</sub>
+- 現行のファイル形式バージョンは14 (PLC I/O図面の生成設定をプロジェクトに保存する版) である。 <sub>`the_current_format_version_is_fourteen`</sub>
+- PLC図面の生成設定を保存できなかった頃 (format_version 13) のファイルは、保存なしの状態で開く。 <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - 整えバリアントが無かった頃のプロジェクトファイルは、全シートが印のない普通のシートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
 - 電線品番凡例ブロックが無かった頃のプロジェクトファイルは凡例ブロックの無い状態で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
 - シートに置いた電線品番凡例ブロックは、置き場所を保ったまま保存して読み直せる。 <sub>`a_wire_legend_survives_a_save_and_reload`</sub>
@@ -496,8 +498,13 @@
 - 生成したI/Oページには ERC の指摘が出ない (全ての点が結線され、電線の端はどこかに繋がっている)。 <sub>`a_generated_io_page_passes_the_electrical_rule_check`</sub>
 - 割付表が空のモジュールを生成すると、同じ1回の編集の中で自動採番したアドレスが表に入る。 <sub>`generating_fills_an_empty_assignment_table_with_auto_addresses`</sub>
 - 生成しても既存の信号名は保たれる (信号名・コメントは割付表が正)。 <sub>`generating_keeps_the_signal_names_already_in_the_table`</sub>
-- まだ実装していない2つのモジュール配置方針ははっきりしたエラーで断られ、図面には何も起きない。 <sub>`the_unimplemented_placement_policies_are_refused`</sub>
-- 横バス+縦ラングのラダー形式もまだ実装しておらず、同じように断られる。 <sub>`the_horizontal_bus_ladder_style_is_refused`</sub>
+- 横バス形式は上にバスを横に引き、点ごとに縦のラングを下のモジュールへ下ろす (点は左から右へ並ぶ)。ページはERCを通る。 <sub>`the_horizontal_bus_style_drops_vertical_rungs_left_to_right`</sub>
+- 「収まる場合のみ同居」では、最後に生成したページの残りのラングに丸ごと入るモジュールは、新しいページではなくそのページへ入る。 <sub>`share_if_fits_puts_a_small_module_on_the_last_page`</sub>
+- 「収まる場合のみ同居」で残りのラングに入らないモジュールは、丸ごと新しいページへ行く。 <sub>`share_if_fits_starts_a_new_page_when_the_module_does_not_fit`</sub>
+- 「同居し必要なら分割」では、最後のページの残りのラングを分割の単位ごとに埋め、残りは新しいページへ続ける。各片は分割片のシンボルで描かれ続き参照が付き、undo一発ですべて消える。 <sub>`share_or_split_fills_the_last_page_and_continues_on_a_new_one`</sub>
+- 「同居し必要なら分割」では、1ページに入らない大きなモジュールは必要な枚数のページに分かれ、どの片も1ページに収まる。 <sub>`share_or_split_spreads_a_big_module_over_several_pages`</sub>
+- 分割の単位0や、ページにラングが1つも残らない先頭スキップは断られ、図面は変わらない。 <sub>`a_zero_split_unit_or_an_oversized_start_skip_is_refused`</sub>
+- 同居できるのは同じラダー形式・同じラング間隔で生成したページだけで、違えば次のモジュールは新しいページから始まる。 <sub>`a_page_of_another_style_or_spacing_is_not_shared`</sub>
 - 2.5mmグリッドの正の倍数でないラング間隔は断られるので、生成したページは必ずグリッドに乗る。 <sub>`an_off_grid_rung_spacing_is_refused`</sub>
 - I/Oレポートは各点をアドレス・信号名・接続先・線番・コメントで並べ、プロジェクト全体版では先頭にモジュールの参照記号が付く。 <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
 
@@ -790,6 +797,7 @@
 - resolve_symbolは同梱idを見つけ、不正・範囲外の動的ID(0極・51極・数値なし)は拒否する。 <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defsは同梱ライブラリに加え、シートで実際に使われている動的シンボルの定義を返す。 <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
 - PLC入力モジュールのシンボル (例: 16点) は縦長の箱で、左側に点数ぶんの接続点が2.5mmグリッド上に並ぶ。 <sub>`a_plc_input_module_has_one_connection_point_per_io_point`</sub>
+- PLCモジュールの分割片 plc_di_{n}p_s{start} は点番号を開始点から振るので、ピンにはモジュール本来の点番号が付く。 <sub>`a_split_plc_module_piece_numbers_its_points_from_the_start`</sub>
 - PLCモジュールには入力用と出力用があり、どちらも参照記号の接頭辞はPLCになる。 <sub>`plc_modules_come_in_input_and_output_flavours`</sub>
 - PLCモジュールのシンボルは1〜64点まで作れ、その外の点数はシンボルとして存在しない。 <sub>`plc_module_point_counts_are_limited_to_one_through_sixty_four`</sub>
 - リレーコイルのシンボルは、JISのコイル端子記号A1・A2と参照記号の接頭辞Kを持つ。 <sub>`relay_coil_has_a1_a2_terminals`</sub>
@@ -1802,6 +1810,7 @@
 - PLCモジュールには入力用と出力用があり、名前で見分けられる <sub>`dynamicSymbol`</sub>
 - 不正な動的IDはnullになる <sub>`dynamicSymbol`</sub>
 - PLCモジュールのシンボルは1〜64点までで、その外の点数は存在しない <sub>`dynamicSymbol`</sub>
+- PLCモジュールの分割片 plc_di_{n}p_s{start} は点番号を開始点から振り、形は同じ点数のモジュールと同じ (Rust側と一致) <sub>`dynamicSymbol`</sub>
 - 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、1端子=左右2接続点になる <sub>`dynamicSymbol`</sub>
 - 多段端子台は段ごとに1列の端子が横に並び、同じ極の端子(1aと1b)は同じ行に載る(Rust側と同じ座標) <sub>`dynamicSymbol`</sub>
 - 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有しない (段数1は`_1l`という別名idを作らないので対象外) <sub>`dynamicSymbol`</sub>
@@ -2720,10 +2729,11 @@
 - エディタを閉じている間は図面が変わっても読み込みに行かない <sub>`PLC I/O assignment editor`</sub>
 - PLCモジュールが1つも置かれていなければ表は空になり、保存も生成もできない <sub>`PLC I/O assignment editor`</sub>
 - 閉じると下書きと選択を捨てる <sub>`PLC I/O assignment editor`</sub>
-- 生成設定の既定はJIS慣行の縦バス+横ラング・ラング間隔10mm・先頭スキップ0 <sub>`PLC I/O sheet generation settings`</sub>
-- 生成は選んだ設定と、部品DBから引いたモジュール定義でI/O図面を1ページ作る (undo一発) <sub>`PLC I/O sheet generation settings`</sub>
-- 未実装のラダー形式 (横バス) では生成できない <sub>`PLC I/O sheet generation settings`</sub>
-- 未実装の配置方針 (前モジュールと同居) では生成できない <sub>`PLC I/O sheet generation settings`</sub>
+- 生成設定の既定はJIS慣行の縦バス+横ラング・ラング間隔10mm・先頭スキップ0・新しいページ・分割の単位8点 <sub>`PLC I/O sheet generation settings`</sub>
+- 生成は選んだ設定と、部品DBから引いたモジュール定義でI/O図面を作る。設定はその前にプロジェクトへ保存する <sub>`PLC I/O sheet generation settings`</sub>
+- 横バス+縦ラングと「同居し必要なら分割」(分割の単位つき) でも生成できる <sub>`PLC I/O sheet generation settings`</sub>
+- プロジェクトに保存した設定は、次に生成ダイアログを開いたときの初期値になり、変えずに生成すれば保存し直さない <sub>`PLC I/O sheet generation settings`</sub>
+- 「プロジェクトに保存」を外して生成すると、設定は保存しない <sub>`PLC I/O sheet generation settings`</sub>
 - 未保存の編集があれば、生成の前に割付表を保存する (図面のラベルが下書きと一致する) <sub>`PLC I/O sheet generation settings`</sub>
 - 部品DBに無い型番のモジュールは、種別どおりの既定のアドレス体系 (三菱) で扱う <sub>`PLC I/O sheet generation settings`</sub>
 

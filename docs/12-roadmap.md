@@ -44,7 +44,8 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - ✅ **BOM enrichment** (2026-10-15): every BOM row looks its part number up in the parts database and adds maker, name, unit price, currency, amount and purchase link, with one total row per currency
 - ✅ **Macro variants from the save dialog** (2026-10-15): save a selection as variant B–Z of an existing macro, with an overwrite prompt; placeholders follow symbols with the same designator
 - ✅ **Reserved contacts** (2026-10-15): the device navigator lists the contacts of a relay's contact configuration that are not drawn yet; click or drag one onto the drawing to place it
-- Deferred out of M4 (no phase scheduled): the unimplemented PLC ladder styles and placement policies; cable summary; the in-panel wiring diagram, nameplates, dimensions and align/distribute on panel sheets; a graphical plot-frame editor
+- ✅ **PLC ladder styles and placement** (2026-10-15): horizontal-bus ladders, sharing the last I/O page and splitting modules across pages in split units, with the settings saved in the project (format 14)
+- Deferred out of M4 (no phase scheduled): cable summary; the in-panel wiring diagram, nameplates, dimensions and align/distribute on panel sheets; a graphical plot-frame editor
 
 ## M5 — Mechanical CAD integration (FreeCAD) ✅ (M5-1 to M5-3 done; the 2D panel sheet stays under M4 §8)
 

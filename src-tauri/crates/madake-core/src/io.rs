@@ -359,15 +359,33 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 13, the version that added the tidy-variant mark on a copied sheet.
-    /// 現行のファイル形式バージョンは13 (整えバリアントの複製シートの印を追加した版) である。
+    /// The current file format version is 14, the version that saves the PLC I/O drawing settings with the project.
+    /// 現行のファイル形式バージョンは14 (PLC I/O図面の生成設定をプロジェクトに保存する版) である。
     #[test]
-    fn the_current_format_version_is_thirteen() {
-        assert_eq!(FORMAT_VERSION, 13);
+    fn the_current_format_version_is_fourteen() {
+        assert_eq!(FORMAT_VERSION, 14);
         let mut old = Project::new("x");
-        old.format_version = 12;
+        old.format_version = 13;
         migrate(&mut old);
-        assert_eq!(old.format_version, 13);
+        assert_eq!(old.format_version, 14);
+    }
+
+    /// A version-13 file, written before PLC drawing settings could be saved, opens with no saved settings.
+    /// PLC図面の生成設定を保存できなかった頃 (format_version 13) のファイルは、保存なしの状態で開く。
+    #[test]
+    fn a_version_13_file_opens_without_saved_plc_settings() {
+        let dir = std::env::temp_dir().join(format!("madake-io-v13-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("v13.mdkproj");
+        std::fs::write(
+            &path,
+            r#"{"format_version":13,"name":"旧図面","sheets":[],"wire_parts":[],"plc_assignments":[]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).expect("読める");
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        assert!(loaded.plc_generate.is_none());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// A project file saved before tidy variants existed opens with every sheet an ordinary sheet (no variant mark), and is brought up to the current format version.

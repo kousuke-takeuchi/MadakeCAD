@@ -980,8 +980,7 @@
       "share-if-fits": "Mit dem vorherigen Modul teilen, wenn es passt",
       "share-or-split": "Teilen und das Modul bei Bedarf aufteilen"
     },
-    "notImplemented": "noch nicht implementiert",
-    "generateNote": "Jeder Kanal wird zu einem Strompfad, in Adressreihenfolge nummeriert und mit dem Signalnamen daneben. Die Seite wird mit einer einzigen Bearbeitung erstellt, sodass Cmd+Z sie wieder entfernt. Die Einstellungen gelten nur für diese Sitzung.",
+    "generateNote": "One rung per point, with the signal name next to each address. Modules share the last I/O page generated with the same style and rung spacing; split pieces get continuation references. Generating is one edit, so Cmd+Z takes it all back",
     "generate": "Erzeugen",
     "cancel": "Abbrechen",
     "openLog": "SPS-E/A: Zuordnungstabelle der platzierten Module wird bearbeitet",
@@ -994,7 +993,11 @@
     "csvFailedLog": "SPS-E/A: {file} konnte nicht gelesen werden",
     "generateOpenLog": "SPS-E/A: Erzeugungseinstellungen für {reference}",
     "generatedLog": "SPS-E/A: E/A-Blatt von {reference} erzeugt (Strompfadabstand {spacing}mm, rückgängig mit Cmd+Z)",
-    "generateFailedLog": "SPS-E/A: E/A-Blatt von {reference} konnte nicht erzeugt werden"
+    "generateFailedLog": "SPS-E/A: E/A-Blatt von {reference} konnte nicht erzeugt werden",
+    "horizontalHint": "(I/O runs left to right)",
+    "splitUnit": "Split unit:",
+    "splitUnitOption": "{count} points",
+    "saveOptions": "Save these settings with the project (defaults for the next generation)"
   },
   "search": {
     "placeholder": "Suchen (BMK, Artikelnr., Netz)",

@@ -83,6 +83,12 @@ pub enum Command {
     SetPlcAssignments {
         assignments: Vec<PlcAssignment>,
     },
+    /// PLC I/O図面の生成設定をプロジェクトに保存する (`None`で保存を消す)。生成ダイアログの
+    /// 「この設定をプロジェクトに保存」。逆コマンドは保存前の設定。
+    SetPlcSheetOptions {
+        #[serde(default)]
+        options: Option<crate::plc::PlcSheetOptions>,
+    },
     /// 図枠テンプレートの差し替え (プロジェクト単位。M4仕様 §9)。全シートの図枠・
     /// 表題欄・改訂欄が一括で変わる。nullで既定 (`jis-a3`) へ戻す。
     /// 逆コマンドは差し替え前のid。
@@ -266,6 +272,8 @@ pub enum PatchOp {
     PlcAssignmentsReplaced { assignments: Vec<PlcAssignment> },
     /// 図枠テンプレートが差し替わった (全シートの図枠を描き直す)。
     FrameTemplateChanged { frame_template: Option<String> },
+    /// PLC I/O図面の生成設定 (プロジェクトに保存したもの) が変わった。
+    PlcSheetOptionsChanged { options: Option<crate::plc::PlcSheetOptions> },
     /// プロジェクト名・番号が変わった (G16)。表題欄側の変更は各シートの
     /// [`PatchOp::SheetMetaUpdated`]で別に届く。
     ProjectMetaChanged { name: String, no: Option<String> },
@@ -825,6 +833,14 @@ impl Engine {
                         assignments: assignments.clone(),
                     }],
                     vec![Command::SetPlcAssignments { assignments: old }],
+                ))
+            }
+            Command::SetPlcSheetOptions { options } => {
+                let old = self.project.plc_generate.clone();
+                self.project.plc_generate = options.clone();
+                Ok((
+                    vec![PatchOp::PlcSheetOptionsChanged { options: options.clone() }],
+                    vec![Command::SetPlcSheetOptions { options: old }],
                 ))
             }
             Command::SetFrameTemplate { frame_template } => {
@@ -2480,6 +2496,24 @@ mod tests {
         let cmd: Command = serde_json::from_str(&json).unwrap();
         engine.execute(cmd).unwrap();
         assert_eq!(engine.project().sheets[0].annotation_text_mm, Some(1.4));
+    }
+
+    /// SetPlcSheetOptions saves the PLC I/O drawing settings with the project, and undo puts back what was saved before.
+    /// SetPlcSheetOptionsはPLC I/O図面の生成設定をプロジェクトに保存し、undoで保存前の状態に戻る。
+    #[test]
+    fn set_plc_sheet_options_saves_the_settings_and_undo_restores_them() {
+        let mut engine = Engine::new(Project::new("t"));
+        let options = crate::plc::PlcSheetOptions {
+            ladder_style: crate::plc::LadderStyle::HorizontalBus,
+            ..Default::default()
+        };
+        let patch = engine
+            .execute(Command::SetPlcSheetOptions { options: Some(options.clone()) })
+            .unwrap();
+        assert!(matches!(patch.ops[0], PatchOp::PlcSheetOptionsChanged { .. }));
+        assert_eq!(engine.project().plc_generate, Some(options));
+        engine.undo().unwrap();
+        assert_eq!(engine.project().plc_generate, None);
     }
 
     /// SetPlcAssignments replaces the whole PLC I/O assignment table of the project; undo restores the previous table.

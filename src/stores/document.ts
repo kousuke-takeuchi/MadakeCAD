@@ -247,6 +247,9 @@ export const useDocumentStore = defineStore("document", {
           case "frame_template_changed":
             if (this.project) this.project.frame_template = op.frame_template;
             break;
+          case "plc_sheet_options_changed":
+            if (this.project) this.project.plc_generate = op.options;
+            break;
           case "project_meta_changed":
             if (this.project) {
               this.project.name = op.name;

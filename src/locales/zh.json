@@ -980,8 +980,7 @@
       "share-if-fits": "放得下时与上一个模块共用",
       "share-or-split": "共用,必要时拆分模块"
     },
-    "notImplemented": "尚未实现",
-    "generateNote": "每个 I/O 点对应一个梯级,按地址顺序编号并在旁边标注信号名称。页面通过一次编辑创建,因此 Cmd+Z 可将其整页撤销。设置仅在本次会话内保留。",
+    "generateNote": "One rung per point, with the signal name next to each address. Modules share the last I/O page generated with the same style and rung spacing; split pieces get continuation references. Generating is one edit, so Cmd+Z takes it all back",
     "generate": "生成",
     "cancel": "取消",
     "openLog": "PLC I/O: 正在编辑已放置模块的分配表",
@@ -994,7 +993,11 @@
     "csvFailedLog": "PLC I/O: 无法读取 {file}",
     "generateOpenLog": "PLC I/O: {reference} 的生成设置",
     "generatedLog": "PLC I/O: 已生成 {reference} 的 I/O 图页(梯级间距 {spacing}mm,Cmd+Z 可撤销)",
-    "generateFailedLog": "PLC I/O: 无法生成 {reference} 的 I/O 图页"
+    "generateFailedLog": "PLC I/O: 无法生成 {reference} 的 I/O 图页",
+    "horizontalHint": "(I/O runs left to right)",
+    "splitUnit": "Split unit:",
+    "splitUnitOption": "{count} points",
+    "saveOptions": "Save these settings with the project (defaults for the next generation)"
   },
   "search": {
     "placeholder": "搜索(位号、型号、网络)",

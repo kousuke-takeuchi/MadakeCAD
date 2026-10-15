@@ -980,8 +980,7 @@
       "share-if-fits": "Compartir con el módulo anterior cuando quepa",
       "share-or-split": "Compartir y dividir el módulo cuando sea necesario"
     },
-    "notImplemented": "todavía no implementado",
-    "generateNote": "Cada punto se convierte en un escalón, numerado por orden de dirección y con el nombre de señal escrito al lado. La página se crea con una sola edición, así que Cmd+Z la elimina de nuevo. Los ajustes se conservan solo durante esta sesión.",
+    "generateNote": "One rung per point, with the signal name next to each address. Modules share the last I/O page generated with the same style and rung spacing; split pieces get continuation references. Generating is one edit, so Cmd+Z takes it all back",
     "generate": "Generar",
     "cancel": "Cancelar",
     "openLog": "E/S de PLC: editando la tabla de asignación de los módulos colocados",
@@ -994,7 +993,11 @@
     "csvFailedLog": "E/S de PLC: no se pudo leer {file}",
     "generateOpenLog": "E/S de PLC: ajustes de generación para {reference}",
     "generatedLog": "E/S de PLC: hoja de E/S de {reference} generada (separación entre escalones {spacing}mm, deshacer con Cmd+Z)",
-    "generateFailedLog": "E/S de PLC: no se pudo generar la hoja de E/S de {reference}"
+    "generateFailedLog": "E/S de PLC: no se pudo generar la hoja de E/S de {reference}",
+    "horizontalHint": "(I/O runs left to right)",
+    "splitUnit": "Split unit:",
+    "splitUnitOption": "{count} points",
+    "saveOptions": "Save these settings with the project (defaults for the next generation)"
   },
   "search": {
     "placeholder": "Buscar (designador, n.º de pieza, red)",

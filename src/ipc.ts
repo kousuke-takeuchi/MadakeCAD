@@ -310,6 +310,8 @@ export interface Project {
   no?: string | null;
   /** FreeCAD対応付け (entity UUIDがキー)。省略時は空。 */
   mech_links?: MechLink[];
+  /** PLC I/O図面の生成設定 (生成ダイアログで「プロジェクトに保存」したもの。format v14)。 */
+  plc_generate?: PlcSheetOptions | null;
 }
 
 /** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */
@@ -352,6 +354,7 @@ export type Command =
   /** PLC I/O割付表の置換 (プロジェクト単位)。 */
   | { type: "set_plc_assignments"; assignments: PlcAssignment[] }
   | { type: "set_frame_template"; frame_template: string | null }
+  | { type: "set_plc_sheet_options"; options: PlcSheetOptions | null }
   | { type: "set_mech_link"; link: MechLink }
   | { type: "remove_mech_link"; entity_id: string }
   | {
@@ -463,6 +466,7 @@ export type PatchOp =
   | { op: "wire_parts_replaced"; wire_parts: WirePart[] }
   | { op: "plc_assignments_replaced"; assignments: PlcAssignment[] }
   | { op: "frame_template_changed"; frame_template: string | null }
+  | { op: "plc_sheet_options_changed"; options: PlcSheetOptions | null }
   /** プロジェクト名・番号が変わった (G16)。表題欄側は各シートの`sheet_meta_updated`で届く。 */
   | { op: "project_meta_changed"; name: string; no: string | null }
   | { op: "mech_links_replaced"; mech_links: MechLink[] };
@@ -979,9 +983,9 @@ export interface PlcPoint {
   wire_no: string;
 }
 
-/** ラダーの形式 (v1は縦バス+横ラングのみ実装)。 */
+/** ラダーの形式 (縦バス+横ラング / 横バス+縦ラング)。 */
 export type LadderStyle = "vertical-bus" | "horizontal-bus";
-/** モジュールの配置方針 (v1はモジュールごとに新ラダーのみ実装)。 */
+/** モジュールの配置方針 (新しいページ / 収まれば同居 / 同居し必要なら分割)。 */
 export type ModulePlacement = "new-ladder" | "share-if-fits" | "share-or-split";
 
 /** I/O図面の生成設定。 */
@@ -990,6 +994,8 @@ export interface PlcSheetOptions {
   start_skip: number;
   ladder_style: LadderStyle;
   placement: ModulePlacement;
+  /** 「同居し必要なら分割」で分ける単位 (点)。古いバックエンドでは欠ける (既定8)。 */
+  split_unit?: number;
 }
 
 /** 整え指標 (Rustの`TidyMetrics`)。 */

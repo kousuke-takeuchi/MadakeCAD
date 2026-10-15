@@ -980,8 +980,7 @@
       "share-if-fits": "Partager avec le module précédent si la place le permet",
       "share-or-split": "Partager et scinder le module si nécessaire"
     },
-    "notImplemented": "pas encore implémenté",
-    "generateNote": "Chaque point devient une ligne, numérotée dans l'ordre des adresses avec le nom du signal inscrit à côté. La page est créée en une seule modification, donc Cmd+Z la supprime. Les paramètres ne sont conservés que pour cette session.",
+    "generateNote": "One rung per point, with the signal name next to each address. Modules share the last I/O page generated with the same style and rung spacing; split pieces get continuation references. Generating is one edit, so Cmd+Z takes it all back",
     "generate": "Générer",
     "cancel": "Annuler",
     "openLog": "E/S automate : modification de la table d'affectation des modules placés",
@@ -994,7 +993,11 @@
     "csvFailedLog": "E/S automate : impossible de lire {file}",
     "generateOpenLog": "E/S automate : paramètres de génération pour {reference}",
     "generatedLog": "E/S automate : feuille E/S de {reference} générée (espacement des lignes {spacing}mm, annuler avec Cmd+Z)",
-    "generateFailedLog": "E/S automate : impossible de générer la feuille E/S de {reference}"
+    "generateFailedLog": "E/S automate : impossible de générer la feuille E/S de {reference}",
+    "horizontalHint": "(I/O runs left to right)",
+    "splitUnit": "Split unit:",
+    "splitUnitOption": "{count} points",
+    "saveOptions": "Save these settings with the project (defaults for the next generation)"
   },
   "search": {
     "placeholder": "Rechercher (repère, référence, réseau)",

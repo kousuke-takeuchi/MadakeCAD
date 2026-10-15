@@ -470,43 +470,65 @@ pub fn import_assignments_csv(
     engine.execute_batch(vec![Command::SetPlcAssignments { assignments }], origin)
 }
 
-/// ラダーの形式 (生成設定)。
+/// ラダーの形式 (生成設定。ACADE「Spreadsheet to PLC I/O Utility」のSetupと同じ2択)。
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum LadderStyle {
-    /// 縦バス+横ラング (既定)。
+    /// 縦バス+横ラング (既定。JIS慣行)。I/O点は上から下へ並ぶ。
     #[default]
     VerticalBus,
-    /// 横バス+縦ラング。**未実装** (設定だけ用意してある)。
+    /// 横バス+縦ラング。I/O点は左から右へ並び、モジュールはバスの下に横倒しで置く。
     HorizontalBus,
 }
 
-/// モジュールの配置方針 (生成設定)。
+impl LadderStyle {
+    fn key(self) -> &'static str {
+        match self {
+            LadderStyle::VerticalBus => "vertical-bus",
+            LadderStyle::HorizontalBus => "horizontal-bus",
+        }
+    }
+}
+
+/// モジュールの配置方針 (生成設定)。同居先は**最後に生成したI/Oページ**
+/// (同じラダー形式・同じラング間隔のもの)。
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum ModulePlacement {
-    /// モジュールごとに新しいラダー (既定)。
+    /// モジュールごとに新しいラダー (既定)。必ず新しいページから始める。
     #[default]
     NewLadder,
-    /// 収まる場合のみ前のモジュールと同居させる。**未実装**。
+    /// 前のページの残りのラングにモジュールが丸ごと入るときだけ同居させる。入らなければ新しいページ。
     ShareIfFits,
-    /// 前のモジュールと同居させ、必要ならページを分割する。**未実装**。
+    /// 前のページの残りのラングに詰め、入らない分は分割の単位 ([`PlcSheetOptions::split_unit`])
+    /// で次のページへ送る (1ページに収まらない大きなモジュールも複数ページに分ける)。
     ShareOrSplit,
 }
 
-/// I/O図面の生成設定 (デザイン「生成設定ダイアログ」準拠)。
+/// 分割の単位の既定 (点)。コモン端子の区切り (8点) に合わせる。
+pub const DEFAULT_SPLIT_UNIT: usize = 8;
+
+fn default_split_unit() -> usize {
+    DEFAULT_SPLIT_UNIT
+}
+
+/// I/O図面の生成設定 (デザイン「生成設定ダイアログ」「M4残りデザイン③」準拠)。
+/// 「この設定をプロジェクトに保存」すると [`crate::model::Project::plc_generate`] に入る。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct PlcSheetOptions {
     /// ラング間隔 (mm)。2.5mmグリッドの正の倍数。
     pub rung_spacing_mm: f64,
-    /// 先頭で空けるラング位置の数 (図枠の上や注記のためのスペース)。
+    /// 新しいページの先頭で空けるラング位置の数 (図枠の上や注記のためのスペース)。
     pub start_skip: usize,
     pub ladder_style: LadderStyle,
     pub placement: ModulePlacement,
+    /// [`ModulePlacement::ShareOrSplit`] でモジュールを分けるときの単位 (点)。1以上。
+    #[serde(default = "default_split_unit")]
+    pub split_unit: usize,
 }
 
 impl Default for PlcSheetOptions {
@@ -516,32 +538,180 @@ impl Default for PlcSheetOptions {
             start_skip: 0,
             ladder_style: LadderStyle::default(),
             placement: ModulePlacement::default(),
+            split_unit: DEFAULT_SPLIT_UNIT,
         }
     }
 }
 
 /// 既定のラング間隔 (mm)。
 pub const DEFAULT_RUNG_SPACING_MM: f64 = 10.0;
-/// 生成したラダーの1本目のラングのY (mm。先頭スキップはここから下へ数える)。
+/// 生成したラダーの1本目のラングの位置 (mm。縦バスならY、横バスならX。先頭スキップはここから数える)。
 pub const LADDER_TOP_MM: f64 = 40.0;
 /// 縦バスのX (mm)。
 pub const LADDER_BUS_X_MM: f64 = 40.0;
-/// モジュールの接続点が並ぶX (mm)。
+/// モジュールの接続点が並ぶX (mm。縦バス)。
 pub const LADDER_POINT_X_MM: f64 = 250.0;
+/// 横バスのY (mm)。
+pub const LADDER_BUS_Y_MM: f64 = 40.0;
+/// モジュールの接続点が並ぶY (mm。横バス)。
+pub const LADDER_POINT_Y_MM: f64 = 230.0;
+/// ラングを置ける最後の位置 (mm)。A3横の図枠・表題欄に掛からない範囲 (縦バス=Y、横バス=X)。
+pub const LADDER_END_VERTICAL_MM: f64 = 255.0;
+pub const LADDER_END_HORIZONTAL_MM: f64 = 395.0;
 /// ラング用の作図グリッド (mm)。
 const GRID_MM: f64 = 2.5;
 /// 縦バスに付ける電源のネット名 (直流24V制御電源)。
 pub const LADDER_RAIL_NET: &str = "P24";
+/// 生成したモジュールシンボルに付ける印: ラダー形式 (`vertical-bus` / `horizontal-bus`)。
+/// 次の生成がこのページへ同居できるかの判定に使う。
+pub const PLC_LADDER_ATTR: &str = "plc_ladder";
+/// 同じく、ラング間隔 (mm。`"10"`)。
+pub const PLC_RUNG_SPACING_ATTR: &str = "plc_rung_spacing";
+/// 同じく、このモジュール片が使っているラング位置 (`"開始-終了"`。0起点・両端含む)。
+pub const PLC_RUNGS_ATTR: &str = "plc_rungs";
 
-/// PLC I/O図面 (ラダーページ) を1枚生成してプロジェクトへ足す。
+/// 1ページに置けるラング位置の数。
+fn page_capacity(options: &PlcSheetOptions) -> usize {
+    let end = match options.ladder_style {
+        LadderStyle::VerticalBus => LADDER_END_VERTICAL_MM,
+        LadderStyle::HorizontalBus => LADDER_END_HORIZONTAL_MM,
+    };
+    ((end - LADDER_TOP_MM) / options.rung_spacing_mm).floor() as usize + 1
+}
+
+/// 生成したモジュール片が置かれた位置 (同居の判定用)。
+struct LadderPage {
+    sheet_id: SheetId,
+    /// 1始まりのシート表示順 (続き参照の表記)。
+    sheet_no: usize,
+    /// 次に使えるラング位置 (前のモジュールとの間を1つ空ける)。
+    next_rung: usize,
+}
+
+/// 同居先の候補 = 最後のシートが、同じ形式・同じラング間隔で生成したI/Oページならそのページ。
+fn last_ladder_page(project: &Project, options: &PlcSheetOptions) -> Option<LadderPage> {
+    let (index, sheet) = project.sheets.iter().enumerate().last()?;
+    let spacing = fmt_mm(options.rung_spacing_mm);
+    let mut end: Option<usize> = None;
+    for e in sheet.entities.values() {
+        let Entity::Symbol(s) = e else { continue };
+        if s.attrs.get(PLC_LADDER_ATTR).map(String::as_str) != Some(options.ladder_style.key())
+            || s.attrs.get(PLC_RUNG_SPACING_ATTR) != Some(&spacing)
+        {
+            continue;
+        }
+        let last = s
+            .attrs
+            .get(PLC_RUNGS_ATTR)
+            .and_then(|r| r.split_once('-'))
+            .and_then(|(_, b)| b.parse::<usize>().ok())?;
+        end = Some(end.map_or(last, |e: usize| e.max(last)));
+    }
+    end.map(|last| LadderPage {
+        sheet_id: sheet.id,
+        sheet_no: index + 1,
+        next_rung: last + 2,
+    })
+}
+
+fn fmt_mm(v: f64) -> String {
+    let s = format!("{v:.2}");
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// モジュールの点をページへ割り付けた1片。
+#[derive(Debug, Clone, PartialEq)]
+struct Chunk {
+    /// `None` = 新しいページ (何枚目の新ページか)。`Some` = 既存の同居先ページ。
+    page: ChunkPage,
+    /// そのページでの最初のラング位置。
+    first_rung: usize,
+    /// モジュールの点の範囲 (0起点・終端を含まない)。
+    points: std::ops::Range<usize>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ChunkPage {
+    Existing,
+    New(usize),
+}
+
+/// 点をページへ割り付ける (配置方針どおり)。純関数。
+fn plan_chunks(
+    points: usize,
+    options: &PlcSheetOptions,
+    shared: Option<&LadderPage>,
+) -> Result<Vec<Chunk>> {
+    let capacity = page_capacity(options);
+    let fresh = capacity.saturating_sub(options.start_skip);
+    if fresh == 0 {
+        return Err(CoreError::InvalidCommand(format!(
+            "先頭スキップ ({}) が1ページのラング数 ({capacity}) 以上です",
+            options.start_skip
+        )));
+    }
+    let mut chunks = Vec::new();
+    let mut done = 0usize;
+    let free_on_shared = shared.map_or(0, |p| capacity.saturating_sub(p.next_rung));
+    match options.placement {
+        ModulePlacement::NewLadder => {}
+        ModulePlacement::ShareIfFits => {
+            if shared.is_some() && points <= free_on_shared {
+                return Ok(vec![Chunk {
+                    page: ChunkPage::Existing,
+                    first_rung: shared.unwrap().next_rung,
+                    points: 0..points,
+                }]);
+            }
+        }
+        ModulePlacement::ShareOrSplit => {
+            if let Some(page) = shared {
+                let take = if points <= free_on_shared {
+                    points
+                } else {
+                    free_on_shared / options.split_unit * options.split_unit
+                };
+                if take > 0 {
+                    chunks.push(Chunk {
+                        page: ChunkPage::Existing,
+                        first_rung: page.next_rung,
+                        points: 0..take,
+                    });
+                    done = take;
+                }
+            }
+        }
+    }
+    let mut new_pages = 0;
+    while done < points {
+        let left = points - done;
+        let take = if options.placement == ModulePlacement::ShareOrSplit && left > fresh {
+            (fresh / options.split_unit * options.split_unit).max(1).min(fresh)
+        } else {
+            // 分割しない方針では、ページに収まらなくても1ページに描く (従来どおり)
+            left
+        };
+        chunks.push(Chunk {
+            page: ChunkPage::New(new_pages),
+            first_rung: options.start_skip,
+            points: done..done + take,
+        });
+        new_pages += 1;
+        done += take;
+    }
+    Ok(chunks)
+}
+
+/// PLC I/O図面 (ラダーページ) を生成してプロジェクトへ足す。
 ///
-/// - **1点=1ラング**。左の縦バスから各点へ横ラングを引き、モジュールの点ピッチと
-///   ラング間隔が違っても線が重ならないよう、点ごとに違う列で縦に振り分ける
+/// - **1点=1ラング**。バスから各点へラングを引き、モジュールの点ピッチとラング間隔が
+///   違っても線が重ならないよう、点ごとに違う列で振り分ける
+/// - ラダー形式: 縦バス+横ラング (既定) / 横バス+縦ラング ([`LadderStyle`])
+/// - 配置方針: 新しいページ / 前のページに丸ごと入れば同居 / 同居し入らない分を分割
+///   ([`ModulePlacement`])。分割したモジュールは片ごとに分割片シンボル
+///   (`plc_di_{n}p_s{start}`) で描き、片の切れ目に「続き」の参照を書く
 /// - 割付表に足りない行は自動採番したアドレスで補う (信号名・コメントは表が正なので触らない)
-/// - 生成物 (シート+割付表の追記) は**1回の編集**なのでundo一発で元に戻る
-///
-/// v1が対応するのは [`LadderStyle::VerticalBus`] + [`ModulePlacement::NewLadder`] だけで、
-/// 他の設定は「未実装」のエラーになる (図面は変わらない)。
+/// - 生成物 (シート+同居先への追記+割付表の追記) は**1回の編集**なのでundo一発で元に戻る
 pub fn generate_plc_sheet(
     engine: &mut Engine,
     module_ref: &str,
@@ -555,22 +725,14 @@ pub fn generate_plc_sheet(
             "モジュールの参照記号 (例 PLC1) を指定してください".into(),
         ));
     }
-    if options.ladder_style != LadderStyle::VerticalBus {
-        return Err(CoreError::InvalidCommand(
-            "横バス+縦ラングのラダー形式は未実装です (縦バス+横ラングを選んでください)".into(),
-        ));
-    }
-    if options.placement != ModulePlacement::NewLadder {
-        return Err(CoreError::InvalidCommand(
-            "モジュールを同居させる配置方針は未実装です (モジュールごとに新ラダーを選んでください)"
-                .into(),
-        ));
-    }
     let spacing = options.rung_spacing_mm;
     if !(spacing > 0.0 && (spacing / GRID_MM - (spacing / GRID_MM).round()).abs() < 1e-9) {
         return Err(CoreError::InvalidCommand(format!(
             "ラング間隔は{GRID_MM}mmグリッドの正の倍数にしてください (指定: {spacing})"
         )));
+    }
+    if options.split_unit == 0 {
+        return Err(CoreError::InvalidCommand("分割の単位は1点以上にしてください".into()));
     }
     if !(1..=PLC_POINT_MAX).contains(&spec.points) {
         return Err(CoreError::InvalidCommand(format!(
@@ -603,128 +765,241 @@ pub fn generate_plc_sheet(
             assignments: replaced_assignments(engine.project(), module_ref, rows.clone()),
         });
     }
-    let sheet = build_ladder_sheet(module_ref, spec, options, &rows);
-    commands.push(Command::RestoreSheet {
-        index: engine.project().sheets.len(),
-        sheet: Box::new(sheet),
-    });
+
+    let shared = match options.placement {
+        ModulePlacement::NewLadder => None,
+        _ => last_ladder_page(engine.project(), options),
+    };
+    let chunks = plan_chunks(spec.points, options, shared.as_ref())?;
+    let first_new_index = engine.project().sheets.len();
+    let sheet_no = |page: ChunkPage| match page {
+        ChunkPage::Existing => shared.as_ref().map_or(0, |p| p.sheet_no),
+        ChunkPage::New(k) => first_new_index + k + 1,
+    };
+    let mut new_sheets: Vec<Sheet> = Vec::new();
+    for (k, chunk) in chunks.iter().enumerate() {
+        let prev = k.checked_sub(1).map(|i| sheet_no(chunks[i].page));
+        let next = chunks.get(k + 1).map(|c| sheet_no(c.page));
+        let entities = ladder_entities(module_ref, spec, options, &rows, chunk, prev, next);
+        match chunk.page {
+            ChunkPage::Existing => {
+                let sheet_id = shared.as_ref().map(|p| p.sheet_id).expect("同居先");
+                commands.extend(entities.into_iter().map(|entity| Command::AddEntity { sheet_id, entity }));
+            }
+            ChunkPage::New(n) => {
+                let suffix = if chunks.iter().filter(|c| matches!(c.page, ChunkPage::New(_))).count() > 1 {
+                    format!(" ({}/{})", n + 1, chunks.iter().filter(|c| matches!(c.page, ChunkPage::New(_))).count())
+                } else {
+                    String::new()
+                };
+                let mut sheet = Sheet::new(
+                    &format!("PLC {module_ref}{suffix}"),
+                    PaperSize::A3,
+                    Orientation::Landscape,
+                );
+                sheet.title_block.title = format!("PLC I/O {module_ref}{suffix}");
+                for entity in entities {
+                    sheet.entities.insert(entity.id(), entity);
+                }
+                new_sheets.push(sheet);
+            }
+        }
+    }
+    for (i, sheet) in new_sheets.into_iter().enumerate() {
+        commands.push(Command::RestoreSheet {
+            index: first_new_index + i,
+            sheet: Box::new(sheet),
+        });
+    }
     engine.execute_batch(commands, origin)
 }
 
-/// ラダーページ1枚を組み立てる (図面には触れない純関数)。
-fn build_ladder_sheet(
+/// ラダー形式ごとの座標の向き。`along`=バスに沿う向き (ラングの並び)、`across`=バスから
+/// モジュールへ向かう向き。縦バスは (along, across) = (Y, X)、横バスは (X, Y)。
+#[derive(Clone, Copy)]
+struct Axes {
+    style: LadderStyle,
+}
+
+impl Axes {
+    fn pt(self, along: f64, across: f64) -> Point {
+        match self.style {
+            LadderStyle::VerticalBus => Point::new(across, along),
+            LadderStyle::HorizontalBus => Point::new(along, across),
+        }
+    }
+    fn bus(self) -> f64 {
+        match self.style {
+            LadderStyle::VerticalBus => LADDER_BUS_X_MM,
+            LadderStyle::HorizontalBus => LADDER_BUS_Y_MM,
+        }
+    }
+    fn points(self) -> f64 {
+        match self.style {
+            LadderStyle::VerticalBus => LADDER_POINT_X_MM,
+            LadderStyle::HorizontalBus => LADDER_POINT_Y_MM,
+        }
+    }
+}
+
+/// モジュール1片ぶんのラダー (シンボル・バス・ラング・接続点・見出し・続き参照)。純関数。
+fn ladder_entities(
     module_ref: &str,
     spec: &PlcModuleSpec,
     options: &PlcSheetOptions,
     rows: &[PlcAssignment],
-) -> Sheet {
-    let n = spec.points;
+    chunk: &Chunk,
+    prev_sheet: Option<usize>,
+    next_sheet: Option<usize>,
+) -> Vec<Entity> {
+    let axes = Axes { style: options.ladder_style };
     let spacing = options.rung_spacing_mm;
-    let top = LADDER_TOP_MM + options.start_skip as f64 * spacing;
-    let rung_y = |i: usize| top + i as f64 * spacing;
-    let point_y = |i: usize| top + i as f64 * PLC_POINT_PITCH_MM;
+    let m = chunk.points.len();
+    let rung = |j: usize| LADDER_TOP_MM + (chunk.first_rung + j) as f64 * spacing;
+    let point = |j: usize| rung(0) + j as f64 * PLC_POINT_PITCH_MM;
+    let mut out: Vec<Entity> = Vec::new();
 
-    let mut sheet = Sheet::new(
-        &format!("PLC {module_ref}"),
-        PaperSize::A3,
-        Orientation::Landscape,
-    );
-    sheet.title_block.title = format!("PLC I/O {module_ref}");
-    let mut add = |entity: Entity| {
-        sheet.entities.insert(entity.id(), entity);
+    // モジュールのシンボル: 丸ごとなら plc_di_{n}p、分割片なら plc_di_{m}p_s{開始点}
+    let whole = m == spec.points;
+    let symbol_id = if whole {
+        spec.symbol_id()
+    } else {
+        format!(
+            "{}{m}p_s{}",
+            match spec.kind {
+                PlcIoKind::Di => PLC_DI_PREFIX,
+                PlcIoKind::Do => PLC_DO_PREFIX,
+            },
+            chunk.points.start + 1
+        )
     };
-
-    // モジュールのシンボル (点は左側・中央揃えなので、点1が1本目のラングに来るよう置く)
-    add(Entity::Symbol(SymbolInstance {
+    let mut attrs = std::collections::BTreeMap::new();
+    attrs.insert(PLC_LADDER_ATTR.to_string(), options.ladder_style.key().to_string());
+    attrs.insert(PLC_RUNG_SPACING_ATTR.to_string(), fmt_mm(spacing));
+    attrs.insert(
+        PLC_RUNGS_ATTR.to_string(),
+        format!("{}-{}", chunk.first_rung, chunk.first_rung + m - 1),
+    );
+    let mut inst = SymbolInstance {
         id: Uuid::new_v4(),
-        symbol_id: spec.symbol_id(),
-        at: Point::new(
-            LADDER_POINT_X_MM + 7.5,
-            point_y(0) + (n - 1) as f64 * PLC_POINT_PITCH_MM / 2.0,
-        ),
+        symbol_id,
+        at: Point::new(0.0, 0.0),
         rotation: 0,
         mirror: false,
         reference: module_ref.to_string(),
         value: String::new(),
-        attrs: Default::default(),
-    }));
+        attrs,
+    };
+    if let Some(def) = resolve_symbol(&inst.symbol_id) {
+        // 横バスはピンがバス側 (上) を向き、点番号が左→右に並ぶ向きを選ぶ
+        if options.ladder_style == LadderStyle::HorizontalBus {
+            // 回転だけでは「ピンが上」と「左→右」を両立できない向きがあるので、反転も試す
+            'search: for mirror in [false, true] {
+                for rotation in [90u16, 270] {
+                    inst.rotation = rotation;
+                    inst.mirror = mirror;
+                    let pins = pin_positions(&inst, &def);
+                    let upward = pins.first().is_some_and(|p| p.1.y < 0.0);
+                    let rightward = pins.len() < 2 || pins[1].1.x > pins[0].1.x;
+                    if upward && rightward {
+                        break 'search;
+                    }
+                }
+            }
+        }
+        // 1点目のピンが1本目のラングの位置へ来るよう平行移動する
+        let first = pin_positions(&inst, &def)
+            .into_iter()
+            .next()
+            .map(|(_, p)| p)
+            .unwrap_or(Point::new(0.0, 0.0));
+        let target = axes.pt(point(0), axes.points());
+        inst.at = Point::new(target.x - first.x, target.y - first.y);
+    }
+    out.push(Entity::Symbol(inst));
 
-    // 縦バス: 1本目のラングの5mm上から最後のラングまで。上端にはネットラベルを付ける
-    let bus_top = rung_y(0) - 5.0;
-    add(Entity::Wire(Wire {
+    // バス: 1本目のラングの5mm手前から最後のラングまで。始端にネットラベル
+    let bus_start = rung(0) - 5.0;
+    out.push(wire(vec![axes.pt(bus_start, axes.bus()), axes.pt(rung(m - 1), axes.bus())]));
+    out.push(Entity::NetLabel(NetLabel {
         id: Uuid::new_v4(),
-        points: vec![
-            Point::new(LADDER_BUS_X_MM, bus_top),
-            Point::new(LADDER_BUS_X_MM, rung_y(n - 1)),
-        ],
-        color: String::new(),
-        sq: 0.0,
-        length_m: None,
-        length_source: Default::default(),
-        part_no: None,
-        net: None,
-    }));
-    add(Entity::NetLabel(NetLabel {
-        id: Uuid::new_v4(),
-        at: Point::new(LADDER_BUS_X_MM, bus_top),
+        at: axes.pt(bus_start, axes.bus()),
         name: LADDER_RAIL_NET.into(),
         rotation: 0,
         attrs: Default::default(),
     }));
 
-    for (i, row) in rows.iter().enumerate().take(n) {
-        let (ry, py) = (rung_y(i), point_y(i));
-        // 点ごとに違う列で縦へ振り分ける (ラング間隔と点ピッチが違っても線が重ならない)
-        let drop_x = LADDER_POINT_X_MM - 5.0 - (n - 1 - i) as f64 * GRID_MM;
-        let points = if (py - ry).abs() < 1e-9 {
-            vec![
-                Point::new(LADDER_BUS_X_MM, ry),
-                Point::new(LADDER_POINT_X_MM, ry),
-            ]
+    for j in 0..m {
+        let (r, pt) = (rung(j), point(j));
+        let row = &rows[chunk.points.start + j];
+        // 点ごとに違う列で振り分ける (ラング間隔と点ピッチが違っても線が重ならない)
+        let drop = axes.points() - 5.0 - (m - 1 - j) as f64 * GRID_MM;
+        let points = if (pt - r).abs() < 1e-9 {
+            vec![axes.pt(r, axes.bus()), axes.pt(r, axes.points())]
         } else {
             vec![
-                Point::new(LADDER_BUS_X_MM, ry),
-                Point::new(drop_x, ry),
-                Point::new(drop_x, py),
-                Point::new(LADDER_POINT_X_MM, py),
+                axes.pt(r, axes.bus()),
+                axes.pt(r, drop),
+                axes.pt(pt, drop),
+                axes.pt(pt, axes.points()),
             ]
         };
-        add(Entity::Wire(Wire {
+        out.push(wire(points));
+        out.push(Entity::Junction(Junction {
             id: Uuid::new_v4(),
-            points,
-            color: String::new(),
-            sq: 0.0,
-            length_m: None,
-            length_source: Default::default(),
-            part_no: None,
-            net: None,
+            at: axes.pt(r, axes.bus()),
         }));
-        // バスとの接続点 (ドット)
-        add(Entity::Junction(Junction {
-            id: Uuid::new_v4(),
-            at: Point::new(LADDER_BUS_X_MM, ry),
-        }));
-        // ラングの見出し: アドレス+信号名
+        // ラングの見出し: アドレス+信号名。横バスでは隣と重ならないよう2段に互い違いで置く
         let label = [row.address.as_str(), row.signal_name.as_str()]
             .into_iter()
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join(" ");
         if !label.is_empty() {
-            add(Entity::Text(TextEntity {
-                id: Uuid::new_v4(),
-                at: Point::new(LADDER_BUS_X_MM + 5.0, ry - 2.0),
-                text: label,
-                height: 2.5,
-                rotation: 0,
-                anchor: crate::model::TextAnchor::Start,
-                color: None,
-                bold: false,
-            leader_to: None,
-            }));
+            let at = match options.ladder_style {
+                LadderStyle::VerticalBus => Point::new(LADDER_BUS_X_MM + 5.0, r - 2.0),
+                LadderStyle::HorizontalBus => {
+                    Point::new(r + 1.0, LADDER_BUS_Y_MM + 5.0 + (j % 2) as f64 * 4.0)
+                }
+            };
+            out.push(text(at, label));
         }
     }
-    sheet
+    // 分割したときの続き参照: 片の前後に「/シート番号」を書く
+    if let Some(no) = prev_sheet {
+        out.push(text(axes.pt(bus_start - 5.0, axes.bus() + 5.0), format!("← /{no} から")));
+    }
+    if let Some(no) = next_sheet {
+        out.push(text(axes.pt(rung(m - 1) + 5.0, axes.bus() + 5.0), format!("続き → /{no}")));
+    }
+    out
+}
+
+fn wire(points: Vec<Point>) -> Entity {
+    Entity::Wire(Wire {
+        id: Uuid::new_v4(),
+        points,
+        color: String::new(),
+        sq: 0.0,
+        length_m: None,
+        length_source: Default::default(),
+        part_no: None,
+        net: None,
+    })
+}
+
+fn text(at: Point, body: String) -> Entity {
+    Entity::Text(TextEntity {
+        id: Uuid::new_v4(),
+        at,
+        text: body,
+        height: 2.5,
+        rotation: 0,
+        anchor: crate::model::TextAnchor::Start,
+        color: None,
+        bold: false,
+        leader_to: None,
+    })
 }
 
 #[cfg(test)]
@@ -1225,46 +1500,193 @@ mod tests {
         );
     }
 
-    /// The two module-placement policies that are not implemented yet are refused with a clear error, and the drawing is left untouched.
-    /// まだ実装していない2つのモジュール配置方針ははっきりしたエラーで断られ、図面には何も起きない。
-    #[test]
-    fn the_unimplemented_placement_policies_are_refused() {
-        let (project, _) = project_with_module(4);
-        let mut engine = Engine::new(project);
-        let module = spec(4, PlcIoKind::Di, "X", PlcAddressStyle::Mitsubishi);
-        for placement in [ModulePlacement::ShareIfFits, ModulePlacement::ShareOrSplit] {
-            let options = PlcSheetOptions {
-                placement,
-                ..Default::default()
-            };
-            let err = generate_plc_sheet(&mut engine, "PLC1", &module, &options, EditOrigin::User)
-                .unwrap_err()
-                .to_string();
-            assert!(err.contains("未実装"), "理由が書かれている: {err}");
-        }
-        assert_eq!(engine.project().sheets.len(), 1, "図面は変わらない");
+    /// 生成して、最後のシートのERC指摘 (erc.*) を返す。
+    fn erc_of(sheet: &Sheet) -> Vec<crate::verify::Diagnostic> {
+        crate::verify::verify_sheet(sheet, &crate::symbol::sheet_symbol_defs(sheet))
+            .into_iter()
+            .filter(|d| d.code.starts_with("erc."))
+            .collect()
     }
 
-    /// The horizontal-bus ladder style is not implemented yet and is refused the same way.
-    /// 横バス+縦ラングのラダー形式もまだ実装しておらず、同じように断られる。
-    #[test]
-    fn the_horizontal_bus_ladder_style_is_refused() {
-        let (project, _) = project_with_module(4);
-        let mut engine = Engine::new(project);
-        let options = PlcSheetOptions {
-            ladder_style: LadderStyle::HorizontalBus,
-            ..Default::default()
-        };
-        let err = generate_plc_sheet(
-            &mut engine,
-            "PLC1",
-            &spec(4, PlcIoKind::Di, "X", PlcAddressStyle::Mitsubishi),
-            &options,
+    fn generate(engine: &mut Engine, module_ref: &str, points: usize, options: &PlcSheetOptions) {
+        generate_plc_sheet(
+            engine,
+            module_ref,
+            &spec(points, PlcIoKind::Di, "X", PlcAddressStyle::Mitsubishi),
+            options,
             EditOrigin::User,
         )
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("未実装"), "{err}");
+        .expect("生成");
+    }
+
+    /// シート上の参照記号 `reference` のモジュールシンボルの symbol_id。
+    fn module_symbols(sheet: &Sheet, reference: &str) -> Vec<String> {
+        let mut ids: Vec<String> = sheet
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                Entity::Symbol(s) if s.reference == reference => Some(s.symbol_id.clone()),
+                _ => None,
+            })
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    /// The horizontal-bus style lays the bus along the top and drops one vertical rung per point to the module lying below it, points running left to right; the page passes the ERC.
+    /// 横バス形式は上にバスを横に引き、点ごとに縦のラングを下のモジュールへ下ろす (点は左から右へ並ぶ)。ページはERCを通る。
+    #[test]
+    fn the_horizontal_bus_style_drops_vertical_rungs_left_to_right() {
+        let mut engine = Engine::new(Project::new("t"));
+        let options = PlcSheetOptions { ladder_style: LadderStyle::HorizontalBus, ..Default::default() };
+        generate(&mut engine, "PLC1", 6, &options);
+        let sheet = engine.project().sheets.last().unwrap();
+        let starts: Vec<(f64, f64)> = sheet
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                Entity::Wire(w) if (w.points[0].y - LADDER_BUS_Y_MM).abs() < 1e-9
+                    && (w.points.last().unwrap().y - LADDER_POINT_Y_MM).abs() < 1e-9 =>
+                {
+                    Some((w.points[0].x, w.points.last().unwrap().x))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(starts.len(), 6, "1点=1本の縦ラング: {starts:?}");
+        let mut xs: Vec<f64> = starts.iter().map(|s| s.0).collect();
+        xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert_eq!(xs[0], LADDER_TOP_MM);
+        assert!((xs[1] - xs[0] - DEFAULT_RUNG_SPACING_MM).abs() < 1e-9, "ラング間隔: {xs:?}");
+        let erc = erc_of(sheet);
+        assert!(erc.is_empty(), "ERC指摘なし: {erc:?}");
+        // モジュールはバスの下に横倒しで置かれ、接続点はバス側 (上) を向いて左→右に並ぶ
+        let module = sheet.entities.values().find_map(|e| match e {
+            Entity::Symbol(s) if s.reference == "PLC1" => Some(s.clone()),
+            _ => None,
+        }).unwrap();
+        let def = resolve_symbol(&module.symbol_id).unwrap();
+        let pins = pin_positions(&module, &def);
+        assert!(pins.iter().all(|p| p.1.y < module.at.y), "接続点は箱の上: {pins:?}");
+        assert!(pins.windows(2).all(|w| w[1].1.x > w[0].1.x), "左→右: {pins:?}");
+        assert!(pins.iter().all(|p| (p.1.y - LADDER_POINT_Y_MM).abs() < 1e-9));
+    }
+
+    /// With "share if it fits", a module that fits in the rungs left on the last generated page goes onto that page instead of a new one.
+    /// 「収まる場合のみ同居」では、最後に生成したページの残りのラングに丸ごと入るモジュールは、新しいページではなくそのページへ入る。
+    #[test]
+    fn share_if_fits_puts_a_small_module_on_the_last_page() {
+        let mut engine = Engine::new(Project::new("t"));
+        let options = PlcSheetOptions { placement: ModulePlacement::ShareIfFits, ..Default::default() };
+        generate(&mut engine, "PLC1", 8, &options);
+        let sheets = engine.project().sheets.len();
+        generate(&mut engine, "PLC2", 8, &options);
+        assert_eq!(engine.project().sheets.len(), sheets, "ページは増えない");
+        let sheet = engine.project().sheets.last().unwrap();
+        assert_eq!(module_symbols(sheet, "PLC2"), ["plc_di_8p"]);
+        assert!(erc_of(sheet).is_empty(), "{:?}", erc_of(sheet));
+        // 2つ目は前のモジュールの1ラング後ろから始まる
+        let rungs = |r: &str| {
+            sheet.entities.values().find_map(|e| match e {
+                Entity::Symbol(s) if s.reference == r => s.attrs.get(PLC_RUNGS_ATTR).cloned(),
+                _ => None,
+            })
+        };
+        assert_eq!(rungs("PLC1").as_deref(), Some("0-7"));
+        assert_eq!(rungs("PLC2").as_deref(), Some("9-16"));
+    }
+
+    /// With "share if it fits", a module too big for the rungs left goes onto a new page whole.
+    /// 「収まる場合のみ同居」で残りのラングに入らないモジュールは、丸ごと新しいページへ行く。
+    #[test]
+    fn share_if_fits_starts_a_new_page_when_the_module_does_not_fit() {
+        let mut engine = Engine::new(Project::new("t"));
+        let options = PlcSheetOptions { placement: ModulePlacement::ShareIfFits, ..Default::default() };
+        generate(&mut engine, "PLC1", 16, &options);
+        let sheets = engine.project().sheets.len();
+        generate(&mut engine, "PLC2", 8, &options);
+        assert_eq!(engine.project().sheets.len(), sheets + 1);
+        assert_eq!(module_symbols(engine.project().sheets.last().unwrap(), "PLC2"), ["plc_di_8p"]);
+    }
+
+    /// With "share and split", the rungs left on the last page are filled in whole split units and the rest of the module continues on a new page, each piece drawn as a split module with continuation references; one undo removes everything.
+    /// 「同居し必要なら分割」では、最後のページの残りのラングを分割の単位ごとに埋め、残りは新しいページへ続ける。各片は分割片のシンボルで描かれ続き参照が付き、undo一発ですべて消える。
+    #[test]
+    fn share_or_split_fills_the_last_page_and_continues_on_a_new_one() {
+        let mut engine = Engine::new(Project::new("t"));
+        let options = PlcSheetOptions {
+            placement: ModulePlacement::ShareOrSplit,
+            split_unit: 4,
+            ..Default::default()
+        };
+        generate(&mut engine, "PLC1", 16, &options);
+        let before = engine.project().sheets.len();
+        let depth = engine.undo_depth();
+        // 1ページ22ラング: PLC1が0〜15を使い、16を空けて17〜21の5ラングが残る → 4点だけ入る
+        generate(&mut engine, "PLC2", 16, &options);
+        let sheets = &engine.project().sheets;
+        assert_eq!(sheets.len(), before + 1, "新しいページは1枚");
+        assert_eq!(module_symbols(&sheets[before - 1], "PLC2"), ["plc_di_4p_s1"]);
+        assert_eq!(module_symbols(&sheets[before], "PLC2"), ["plc_di_12p_s5"]);
+        let texts = |sheet: &Sheet| -> Vec<String> {
+            sheet.entities.values().filter_map(|e| match e {
+                Entity::Text(t) => Some(t.text.clone()),
+                _ => None,
+            }).collect()
+        };
+        assert!(texts(&sheets[before - 1]).contains(&format!("続き → /{}", before + 1)));
+        assert!(texts(&sheets[before]).contains(&format!("← /{before} から")));
+        for sheet in &sheets[before - 1..] {
+            assert!(erc_of(sheet).is_empty(), "{}: {:?}", sheet.name, erc_of(sheet));
+        }
+        assert_eq!(engine.undo_depth(), depth + 1, "1回の編集");
+        engine.undo().unwrap();
+        assert_eq!(engine.project().sheets.len(), before);
+        assert_eq!(module_symbols(engine.project().sheets.last().unwrap(), "PLC2"), Vec::<String>::new());
+    }
+
+    /// With "share and split", a module larger than a whole page is spread over as many pages as it needs, each piece no longer than a page.
+    /// 「同居し必要なら分割」では、1ページに入らない大きなモジュールは必要な枚数のページに分かれ、どの片も1ページに収まる。
+    #[test]
+    fn share_or_split_spreads_a_big_module_over_several_pages() {
+        let mut engine = Engine::new(Project::new("t"));
+        let options = PlcSheetOptions { placement: ModulePlacement::ShareOrSplit, ..Default::default() };
+        let before = engine.project().sheets.len();
+        generate(&mut engine, "PLC1", 64, &options);
+        let pieces: Vec<String> = engine.project().sheets[before..]
+            .iter()
+            .flat_map(|s| module_symbols(s, "PLC1"))
+            .collect();
+        assert_eq!(pieces, ["plc_di_16p_s1", "plc_di_16p_s17", "plc_di_16p_s33", "plc_di_16p_s49"]);
+    }
+
+    /// Splitting is refused for a split unit of zero, and a start skip that leaves no rung on a page is refused too; the drawing is not touched.
+    /// 分割の単位0や、ページにラングが1つも残らない先頭スキップは断られ、図面は変わらない。
+    #[test]
+    fn a_zero_split_unit_or_an_oversized_start_skip_is_refused() {
+        let mut engine = Engine::new(Project::new("t"));
+        let module = spec(4, PlcIoKind::Di, "X", PlcAddressStyle::Mitsubishi);
+        for options in [
+            PlcSheetOptions { split_unit: 0, ..Default::default() },
+            PlcSheetOptions { start_skip: 40, ..Default::default() },
+        ] {
+            assert!(generate_plc_sheet(&mut engine, "PLC1", &module, &options, EditOrigin::User).is_err());
+        }
+        assert_eq!(engine.project().sheets.len(), 1);
+    }
+
+    /// Only a page generated with the same ladder style and rung spacing can be shared; otherwise the next module starts a new page.
+    /// 同居できるのは同じラダー形式・同じラング間隔で生成したページだけで、違えば次のモジュールは新しいページから始まる。
+    #[test]
+    fn a_page_of_another_style_or_spacing_is_not_shared() {
+        let mut engine = Engine::new(Project::new("t"));
+        let share = PlcSheetOptions { placement: ModulePlacement::ShareIfFits, ..Default::default() };
+        generate(&mut engine, "PLC1", 4, &share);
+        let n = engine.project().sheets.len();
+        generate(&mut engine, "PLC2", 4, &PlcSheetOptions { rung_spacing_mm: 12.5, ..share.clone() });
+        assert_eq!(engine.project().sheets.len(), n + 1, "間隔が違う");
+        generate(&mut engine, "PLC3", 4, &PlcSheetOptions { ladder_style: LadderStyle::HorizontalBus, ..share });
+        assert_eq!(engine.project().sheets.len(), n + 2, "形式が違う");
     }
 
     /// A rung spacing that is not a positive multiple of the 2.5 mm grid is refused, so generated pages stay on grid.

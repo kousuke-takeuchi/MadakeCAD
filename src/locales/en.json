@@ -980,8 +980,7 @@
       "share-if-fits": "Share with the previous module when it fits",
       "share-or-split": "Share and split the module when needed"
     },
-    "notImplemented": "not implemented yet",
-    "generateNote": "One point becomes one rung, numbered in address order with the signal name written next to it. The page is created with a single edit, so Cmd+Z removes it again. The settings are kept for this session only.",
+    "generateNote": "One rung per point, with the signal name next to each address. Modules share the last I/O page generated with the same style and rung spacing; split pieces get continuation references. Generating is one edit, so Cmd+Z takes it all back",
     "generate": "Generate",
     "cancel": "Cancel",
     "openLog": "PLC I/O: editing the assignment table of the placed modules",
@@ -994,7 +993,11 @@
     "csvFailedLog": "PLC I/O: could not read {file}",
     "generateOpenLog": "PLC I/O: generation settings for {reference}",
     "generatedLog": "PLC I/O: generated the I/O sheet of {reference} (rung spacing {spacing}mm, undo with Cmd+Z)",
-    "generateFailedLog": "PLC I/O: could not generate the I/O sheet of {reference}"
+    "generateFailedLog": "PLC I/O: could not generate the I/O sheet of {reference}",
+    "horizontalHint": "(I/O runs left to right)",
+    "splitUnit": "Split unit:",
+    "splitUnitOption": "{count} points",
+    "saveOptions": "Save these settings with the project (defaults for the next generation)"
   },
   "search": {
     "placeholder": "Search (designator, part no., net)",
