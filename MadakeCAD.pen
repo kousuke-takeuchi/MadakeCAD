@@ -3495,7 +3495,7 @@
                           "id": "RVnjK",
                           "name": "チャット入力プレースホルダ",
                           "fill": "$pw-faint",
-                          "content": "何でも指示できます... (例: 24V系にヒューズを追加して)",
+                          "content": "何でも指示できます... (例: 24V系にヒューズを追加して) — ⌘Enter / Ctrl+Enter で送信",
                           "fontFamily": "Noto Sans JP",
                           "fontSize": 12,
                           "fontWeight": "normal"
@@ -5202,7 +5202,7 @@
               "id": "pcNkW",
               "name": "展開入力プレースホルダ",
               "fill": "$pw-faint",
-              "content": "返信を入力...",
+              "content": "返信を入力... (⌘Enter / Ctrl+Enter で送信、Enter は改行)",
               "fontFamily": "Noto Sans JP",
               "fontSize": 12,
               "fontWeight": "normal"
@@ -19759,7 +19759,7 @@
                       "id": "V3Yvaj",
                       "name": "展開入力プレースホルダ",
                       "fill": "$pw-faint",
-                      "content": "返信を入力...",
+                      "content": "返信を入力... (⌘Enter / Ctrl+Enter で送信、Enter は改行)",
                       "fontFamily": "Noto Sans JP",
                       "fontSize": 12,
                       "fontWeight": "normal"
@@ -70410,6 +70410,643 @@
                   "fontWeight": "normal"
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "ChMe8",
+      "x": 1520,
+      "y": 3652,
+      "name": "AIチャット - 入力フッタの状態 (送信・停止・割り込み)",
+      "clip": true,
+      "width": 420,
+      "fill": "$pw-bg",
+      "cornerRadius": 14,
+      "layout": "vertical",
+      "gap": 14,
+      "padding": 20,
+      "children": [
+        {
+          "type": "text",
+          "id": "TE2Ht",
+          "name": "見出し",
+          "fill": "$pw-text",
+          "content": "入力フッタの状態",
+          "fontFamily": "Inter",
+          "fontSize": 14,
+          "fontWeight": "600"
+        },
+        {
+          "type": "text",
+          "id": "hclfJ",
+          "name": "キー操作",
+          "fill": "$pw-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "送信は ⌘Enter (macOS) / Ctrl+Enter。Enter は改行 (IMEの変換確定で送信されない)。変換中は修飾キー付きでも送らない。",
+          "lineHeight": 1.5,
+          "fontFamily": "Inter",
+          "fontSize": 11,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "jrYM1",
+          "name": "状態 待機中 (入力あり)",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 6,
+          "children": [
+            {
+              "type": "text",
+              "id": "D9d4mx",
+              "name": "状態名 待機中 (入力あり)",
+              "fill": "$pw-text",
+              "content": "待機中 (入力あり)",
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "WBlOW",
+              "name": "フッタ 待機中 (入力あり)",
+              "width": "fill_container",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "P1q40",
+                  "name": "展開添付",
+                  "width": 24,
+                  "height": 24,
+                  "cornerRadius": 12,
+                  "stroke": "$pw-border",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "Gp0L0",
+                      "name": "展開添付アイコン",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "plus",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "LCquA",
+                  "name": "整えボタン",
+                  "width": 24,
+                  "height": 24,
+                  "cornerRadius": 12,
+                  "stroke": "$pw-border",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "rWhyN",
+                      "name": "整えボタンアイコン",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "wand-sparkles",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "VRJlK",
+                  "name": "展開フッタ余白",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "s1ACa",
+                  "name": "展開トークン",
+                  "gap": 3,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "xoR9P",
+                      "name": "展開トークンアイコン",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "zap",
+                      "library": "lucide",
+                      "fill": "#D97706"
+                    },
+                    {
+                      "type": "text",
+                      "id": "kSx4r",
+                      "name": "展開トークン値",
+                      "fill": "$pw-muted",
+                      "content": "12.4k",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "neMb3",
+                  "name": "展開モデル",
+                  "cornerRadius": 7,
+                  "gap": 4,
+                  "padding": [
+                    3,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Iz2Qq",
+                      "name": "展開モデル名",
+                      "fill": "$pw-text",
+                      "content": "Claude Fable 5",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "GFeO1",
+                      "name": "展開モデル矢印",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "tyayz",
+                  "name": "展開送信",
+                  "width": 26,
+                  "height": 26,
+                  "fill": "$pw-accent",
+                  "cornerRadius": 13,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "VejIt",
+                      "name": "展開送信アイコン",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "arrow-up",
+                      "library": "lucide",
+                      "fill": "#FFFFFF"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "T7VRPf",
+              "name": "状態説明 待機中 (入力あり)",
+              "fill": "$pw-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "送信のみ。入力が空なら送信ボタンは淡色",
+              "lineHeight": 1.4,
+              "fontFamily": "Inter",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "D4BcA",
+          "name": "状態 応答中 (入力なし)",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 6,
+          "children": [
+            {
+              "type": "text",
+              "id": "wSpfR",
+              "name": "状態名 応答中 (入力なし)",
+              "fill": "$pw-text",
+              "content": "応答中 (入力なし)",
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "YX1iM",
+              "name": "フッタ 応答中 (入力なし)",
+              "width": "fill_container",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "db5tk",
+                  "name": "展開添付",
+                  "width": 24,
+                  "height": 24,
+                  "cornerRadius": 12,
+                  "stroke": "$pw-border",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "hd7sB",
+                      "name": "展開添付アイコン",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "plus",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "P5J3S",
+                  "name": "整えボタン",
+                  "width": 24,
+                  "height": 24,
+                  "cornerRadius": 12,
+                  "stroke": "$pw-border",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "m4j45",
+                      "name": "整えボタンアイコン",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "wand-sparkles",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "K97RQB",
+                  "name": "展開フッタ余白",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "i342eb",
+                  "name": "展開トークン",
+                  "gap": 3,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "ZdNhK",
+                      "name": "展開トークンアイコン",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "zap",
+                      "library": "lucide",
+                      "fill": "#D97706"
+                    },
+                    {
+                      "type": "text",
+                      "id": "ZtlWl",
+                      "name": "展開トークン値",
+                      "fill": "$pw-muted",
+                      "content": "12.4k",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "vWOEY",
+                  "name": "展開モデル",
+                  "cornerRadius": 7,
+                  "gap": 4,
+                  "padding": [
+                    3,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "l7F1i",
+                      "name": "展開モデル名",
+                      "fill": "$pw-text",
+                      "content": "Claude Fable 5",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "HAofG",
+                      "name": "展開モデル矢印",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "o8aAUp",
+                  "name": "停止ボタン",
+                  "width": 26,
+                  "height": 26,
+                  "fill": "$pw-accent",
+                  "cornerRadius": 13,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "GQqLV",
+                      "name": "停止アイコン",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "square",
+                      "library": "lucide",
+                      "fill": "#FFFFFF"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "z6W3P",
+              "name": "状態説明 応答中 (入力なし)",
+              "fill": "$pw-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "停止のみ。押すと進行中のターンを中断",
+              "lineHeight": 1.4,
+              "fontFamily": "Inter",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "DgSUT",
+          "name": "状態 応答中 (入力あり)",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 6,
+          "children": [
+            {
+              "type": "text",
+              "id": "WX9tR",
+              "name": "状態名 応答中 (入力あり)",
+              "fill": "$pw-text",
+              "content": "応答中 (入力あり)",
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "qeEBa",
+              "name": "フッタ 応答中 (入力あり)",
+              "width": "fill_container",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Uo89e",
+                  "name": "展開添付",
+                  "width": 24,
+                  "height": 24,
+                  "cornerRadius": 12,
+                  "stroke": "$pw-border",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "udBZw",
+                      "name": "展開添付アイコン",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "plus",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "v3oIc",
+                  "name": "整えボタン",
+                  "width": 24,
+                  "height": 24,
+                  "cornerRadius": 12,
+                  "stroke": "$pw-border",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "f8Jxqj",
+                      "name": "整えボタンアイコン",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "wand-sparkles",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "gtuNu",
+                  "name": "展開フッタ余白",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "ooKo4",
+                  "name": "展開トークン",
+                  "gap": 3,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "XtfLF",
+                      "name": "展開トークンアイコン",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "zap",
+                      "library": "lucide",
+                      "fill": "#D97706"
+                    },
+                    {
+                      "type": "text",
+                      "id": "x0PH3G",
+                      "name": "展開トークン値",
+                      "fill": "$pw-muted",
+                      "content": "12.4k",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "t18nb",
+                  "name": "展開モデル",
+                  "cornerRadius": 7,
+                  "gap": 4,
+                  "padding": [
+                    3,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "djxQa",
+                      "name": "展開モデル名",
+                      "fill": "$pw-text",
+                      "content": "Claude Fable 5",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "w4qLt",
+                      "name": "展開モデル矢印",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$pw-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "bKgR9",
+                  "name": "停止ボタン",
+                  "width": 26,
+                  "height": 26,
+                  "fill": "$pw-accent",
+                  "cornerRadius": 13,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "ZsCmH",
+                      "name": "停止アイコン",
+                      "width": 11,
+                      "height": 11,
+                      "icon": "square",
+                      "library": "lucide",
+                      "fill": "#FFFFFF"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "e8zxaw",
+                  "name": "割り込み送信ボタン",
+                  "width": 26,
+                  "height": 26,
+                  "fill": "$pw-accent",
+                  "cornerRadius": 13,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "q7L9q",
+                      "name": "割り込み送信アイコン",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "arrow-up",
+                      "library": "lucide",
+                      "fill": "#FFFFFF"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "O9vOS",
+              "name": "ツールチップ 割り込み",
+              "fill": "$pw-text",
+              "cornerRadius": 6,
+              "padding": [
+                4,
+                8
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "wkKTm",
+                  "name": "ツールチップ文",
+                  "fill": "$pw-bg",
+                  "content": "割り込んで送信 (⌘Enter / Ctrl+Enter) — 実行中のターンを中断して送ります",
+                  "fontFamily": "Inter",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "BxLxA",
+              "name": "状態説明 応答中 (入力あり)",
+              "fill": "$pw-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "停止 + 割り込み送信。送信は進行中のターンを中断してから同じ会話へ送る (ツールチップ「割り込んで送信」)",
+              "lineHeight": 1.4,
+              "fontFamily": "Inter",
+              "fontSize": 11,
+              "fontWeight": "normal"
             }
           ]
         }
