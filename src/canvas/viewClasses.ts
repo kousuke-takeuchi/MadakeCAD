@@ -68,6 +68,8 @@ export function entityViewClass(e: Entity): ViewClass {
     case "duct":
     case "footprint":
     case "panel_legend":
+    case "nameplate":
+    case "dimension":
       return "panel";
   }
 }

@@ -119,6 +119,41 @@ export interface TextEntity {
  * ハーネス境界 (IEC 61082-1 のグループ囲み)。所属配線は幾何学的な内包で決まる。
  * **電線をまとめる境界専用**で、筐体・強調枠の囲みは`Shape`で描く (G11)。
  */
+/** 銘板 (盤レイアウト。フットプリントに結び付くか単独。format v16)。 */
+export interface Nameplate {
+  id: string;
+  /** 結び付くフットプリント (nullなら単独)。 */
+  footprint: string | null;
+  /** 単独の銘板の左上角。 */
+  at: Point;
+  w: number;
+  h: number;
+  /** 文字 (1〜2行)。 */
+  lines: string[];
+  /** 文字高 mm。 */
+  text_mm: number;
+  position: "below" | "above";
+  /** 1行目を回路図の説明 (機能ラベル) に追従させる。 */
+  follow_description: boolean;
+  part_no: string;
+}
+
+/** 寸法線の端点 (点か、フットプリントの中心)。 */
+export type DimAnchor = { kind: "point"; at: Point } | { kind: "footprint"; id: string };
+
+/** 関連付き寸法線 (盤レイアウト。format v16)。 */
+export interface Dimension {
+  id: string;
+  a: DimAnchor;
+  b: DimAnchor;
+  axis: "horizontal" | "vertical";
+  /** 寸法線の位置: 水平寸法ならY、垂直寸法ならX。 */
+  at: number;
+}
+
+/** 盤のフットプリントの揃え方 (基準=最初に選んだ部品)。 */
+export type AlignMode = "left" | "center_x" | "right" | "top" | "center_y" | "bottom";
+
 /** 多芯ケーブル (定義線で配線を横切り、芯線を割り当てる。format v15)。 */
 export interface Cable {
   id: string;
@@ -290,7 +325,9 @@ export type Entity =
   | ({ kind: "footprint" } & Footprint)
   | ({ kind: "panel_legend" } & PanelLegend)
   | ({ kind: "wire_legend" } & WireLegend)
-  | ({ kind: "cable" } & Cable);
+  | ({ kind: "cable" } & Cable)
+  | ({ kind: "nameplate" } & Nameplate)
+  | ({ kind: "dimension" } & Dimension);
 
 /** シート種別。回路図 (既定) と2D盤レイアウト (M4 §8)。 */
 export type SheetKind = "schematic" | "panel";
@@ -391,6 +428,14 @@ export type Command =
   | { type: "set_frame_template"; frame_template: string | null }
   | { type: "set_plc_sheet_options"; options: PlcSheetOptions | null }
   | { type: "add_cable"; sheet_id: string; cable: Cable }
+  | { type: "align_footprints"; sheet_id: string; ids: string[]; mode: AlignMode }
+  | {
+      type: "distribute_footprints";
+      sheet_id: string;
+      ids: string[];
+      axis: "horizontal" | "vertical";
+      pitch?: number | null;
+    }
   | { type: "set_mech_link"; link: MechLink }
   | { type: "remove_mech_link"; entity_id: string }
   | {
@@ -1070,7 +1115,8 @@ export type ReportKind =
   | "xref"
   | "plc-io"
   | "panel-placement"
-  | "cable-list";
+  | "cable-list"
+  | "panel-wiring";
 /** 帳票の出力形式 (CSV or 図枠付き図面シートのPDF)。 */
 export type ReportFormat = "csv" | "pdf";
 

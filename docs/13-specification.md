@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2659 specification clauses** across 6 areas.
+**2682 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -255,7 +255,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 15, the version that added multi-core cables. <sub>`the_current_format_version_is_fifteen`</sub>
+- The current file format version is 16, the version that added nameplates and associative dimensions to panel sheets. <sub>`the_current_format_version_is_sixteen`</sub>
 - A cable with its definition line, core assignments, shield and length survives a save and reload unchanged. <sub>`a_cable_round_trips_through_a_saved_file`</sub>
 - A version-13 file, written before PLC drawing settings could be saved, opens with no saved settings. <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - A project file saved before tidy variants existed opens with every sheet an ordinary sheet (no variant mark), and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
@@ -435,6 +435,22 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Every DIN rail reports how much of its length is taken up by parts. <sub>`each_rail_reports_how_full_it_is`</sub>
 - A rail packed beyond 80 percent is raised to a warning: there is no room left to fit or to service the parts. <sub>`a_rail_packed_over_eighty_percent_becomes_a_warning`</sub>
 - The checks only look at panel sheets, so a schematic never produces panel diagnostics. <sub>`the_panel_checks_ignore_schematic_sheets`</sub>
+- A nameplate tied to a footprint sits centred under it with a small gap, or above it when asked; a standalone one stays where it was put. <sub>`a_tied_nameplate_sits_centred_under_its_footprint`</sub>
+- When it follows the description, a tied nameplate's first line is the schematic description of the same designator; otherwise it keeps its own text. <sub>`a_nameplate_can_follow_the_schematic_description`</sub>
+- A dimension between two footprints measures the distance between their centres along its axis, and follows when a footprint moves. <sub>`a_dimension_measures_between_footprint_centres_and_follows_them`</sub>
+- Moving a dimension moves its line (the measured ends stay on their parts). <sub>`moving_a_dimension_moves_its_line`</sub>
+- Nameplates with a part number are counted per part number in the BOM. <sub>`nameplates_are_counted_in_the_bom`</sub>
+- The printed panel sheet draws the nameplate text and the dimension value. <sub>`the_printed_panel_sheet_draws_nameplates_and_dimensions`</sub>
+- A nameplate tied to a footprint that is not on the sheet, or a dimension end pointing at a missing part, is refused. <sub>`nameplates_and_dimensions_must_point_at_footprints_on_the_sheet`</sub>
+- Aligning moves the other selected footprints so their edge or centre lines up with the first one, in one undoable command. <sub>`aligning_lines_footprints_up_with_the_first_one`</sub>
+- Vertical alignment leaves a footprint mounted on a DIN rail where it is, so nothing is pulled off its rail. <sub>`vertical_alignment_keeps_rail_mounted_footprints_on_their_rail`</sub>
+- Distributing spaces the footprints evenly between the outer two, or at a given centre pitch from the first. <sub>`distributing_spaces_footprints_evenly_or_at_a_pitch`</sub>
+- Aligning fewer than two footprints, distributing fewer than three without a pitch, or a non-positive pitch is refused. <sub>`too_few_footprints_or_a_bad_pitch_is_refused`</sub>
+
+### panel_wiring
+
+- The panel wiring lists, for each part on a panel sheet, every wire on its pins in the schematic: pin, wire number, the other end, colour and gauge. <sub>`the_panel_wiring_lists_each_pin_wire_with_its_destination`</sub>
+- The panel wiring sheet draws each part with its terminal rows, and is an empty heading page when no panel has parts. <sub>`the_panel_wiring_sheet_draws_parts_or_an_empty_page`</sub>
 
 ### Parts database
 
@@ -1660,6 +1676,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake export terminal-chart writes the whole project's chart, choosing CSV from the .csv extension. <sub>`export_terminal_chart_defaults_to_csv_for_the_whole_project`</sub>
 - A .pdf output path selects the PDF (framed drawing sheet) form of a report without asking for --format. <sub>`export_report_picks_pdf_from_the_extension`</sub>
 - `madake export cable-list` writes the cable list report (CSV by default). <sub>`export_cable_list_writes_the_cable_list_report`</sub>
+- `madake export panel-wiring` writes the panel wiring diagram report. <sub>`export_panel_wiring_writes_the_panel_wiring_report`</sub>
 - --format wins over the file extension. <sub>`export_report_format_option_overrides_the_extension`</sub>
 - --terminal takes a reference designator (TB1) and looks its entity id up in the terminal list. <sub>`export_terminal_diagram_resolves_a_reference_designator`</sub>
 - A --terminal value spelled as an entity id is sent as-is, with no lookup. <sub>`export_terminal_chart_accepts_an_entity_id_directly`</sub>
@@ -1980,6 +1997,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - drops a part from the list once it has been placed <sub>`unplaced parts store`</sub>
 - keeps the panel open when the list cannot be read <sub>`unplaced parts store`</sub>
 - highlights the row of the part being placed <sub>`unplaced parts store`</sub>
+
+### panelMarks
+
+- sits centred under its footprint, above it when asked, and a standalone one stays put <sub>`盤の銘板`</sub>
+- takes the schematic description as its first line when it follows it <sub>`盤の銘板`</sub>
+- measures the horizontal distance between two footprint centres <sub>`盤の寸法線`</sub>
+- places a dimension along the larger distance, 10mm outside, and nothing for the same point <sub>`盤の寸法線`</sub>
+- finds the footprint under a click and picks dimensions and nameplates <sub>`盤の寸法線`</sub>
 
 ### panelTools
 
@@ -2439,6 +2464,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - writes part, cores, gauge, shield and length in one update and keeps the core assignments <sub>`cableUpdateCommand`</sub>
 - refuses a core count below one or a gauge or length that is not a number <sub>`cableUpdateCommand`</sub>
 - sends nothing when nothing changed <sub>`cableUpdateCommand`</sub>
+- writes text, height, position, following and part in one update without an empty second line <sub>`nameplateUpdateCommand`</sub>
+- sends nothing for a non-positive text height or when nothing changed <sub>`nameplateUpdateCommand`</sub>
 
 ### ribbonLayout
 
@@ -2722,6 +2749,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - saving to another variant from the overwrite prompt uses the next free key <sub>`adding a variant to an existing macro from the save dialog`</sub>
 - clearing the existing macro goes back to saving a new macro with only variant A <sub>`adding a variant to an existing macro from the save dialog`</sub>
 
+### nameplates
+
+- starts the first line from the schematic description when opened on a part <sub>`銘板の挿入`</sub>
+- inserts a nameplate tied to the part with one add_entity, or a standalone one <sub>`銘板の挿入`</sub>
+
 ### Parts database
 
 - search stores the results from the parts API <sub>`parts store`</sub>
@@ -2842,7 +2874,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Reports (BOM / wire list)
 
-- offers the eight report kinds of the reports tab <sub>`report generation dialog store`</sub>
+- offers the nine report kinds of the reports tab <sub>`report generation dialog store`</sub>
 - opens a project-wide report as a CSV export <sub>`report generation dialog store`</sub>
 - switches the same report to a framed drawing-sheet PDF <sub>`report generation dialog store`</sub>
 - lets the terminal chart target one terminal block as well as the whole project <sub>`report generation dialog store`</sub>

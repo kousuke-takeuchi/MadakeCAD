@@ -212,6 +212,8 @@ fn base_bom_rows(project: &Project) -> Vec<Vec<String>> {
     rows.extend(accessory_rows(project));
     // 多芯ケーブル (型番ごと。長さが分かれば合計m、分からなければ本数)
     rows.extend(crate::cable::cable_bom_rows(project));
+    // 盤の銘板 (型番ごとの枚数)
+    rows.extend(crate::panel::nameplate_bom_rows(project));
     rows
 }
 

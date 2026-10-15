@@ -61,6 +61,22 @@ pub enum Command {
         sheet_id: SheetId,
         entity: Entity,
     },
+    /// 盤のフットプリントを揃える (M4 §8。基準=`ids`の先頭)。上下方向の揃えでは、DINレールに
+    /// 乗っている部品は動かさない (レールから外さない)。逆コマンドは動かす前の位置へ戻す。
+    AlignFootprints {
+        sheet_id: SheetId,
+        ids: Vec<EntityId>,
+        mode: crate::panel::AlignMode,
+    },
+    /// 盤のフットプリントを等間隔に並べる (M4 §8)。`pitch`を指定すれば先頭からその中心間隔で、
+    /// 省略すれば両端の部品はそのままに間を等分する。上下方向ではレールに乗った部品は動かさない。
+    DistributeFootprints {
+        sheet_id: SheetId,
+        ids: Vec<EntityId>,
+        axis: crate::model::DimAxis,
+        #[serde(default)]
+        pitch: Option<f64>,
+    },
     /// 多芯ケーブルを置く (M4 §5)。定義線 (`cable.points`) が横切った配線を、始点に近い順に
     /// 芯 "1", "2", … として割り当てる (芯の色=配線の線色)。`cable.cores`は無視して作り直す。
     /// `core_count`が0なら横切った本数 (最低1) にする。逆コマンドは削除。
@@ -561,6 +577,28 @@ impl Engine {
     }
 
     /// コマンドを適用し、(生成patch, 逆コマンド列) を返す。履歴には触れない。
+    /// フットプリントを新しい左上角へ動かす (揃え・等間隔の共通部分)。逆コマンドは元の位置への
+    /// `UpdateEntity`。動かないもの (移動量0) は触らない。
+    fn apply_footprint_moves(
+        &mut self,
+        sheet_id: SheetId,
+        moves: Vec<(EntityId, crate::geometry::Point)>,
+    ) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let sheet = self.project.sheet_mut(sheet_id).ok_or(CoreError::SheetNotFound(sheet_id))?;
+        let mut ops = Vec::new();
+        let mut inverse = Vec::new();
+        for (id, at) in moves {
+            let Some(Entity::Footprint(fp)) = sheet.entities.get_mut(&id) else { continue };
+            if (fp.at.x - at.x).abs() < 1e-9 && (fp.at.y - at.y).abs() < 1e-9 {
+                continue;
+            }
+            inverse.push(Command::UpdateEntity { sheet_id, entity: Entity::Footprint(fp.clone()) });
+            fp.at = at;
+            ops.push(PatchOp::EntityUpserted { sheet_id, entity: Entity::Footprint(fp.clone()) });
+        }
+        Ok((ops, inverse))
+    }
+
     fn apply(&mut self, cmd: &Command) -> Result<(Vec<PatchOp>, Vec<Command>)> {
         match cmd {
             Command::AddSheet {
@@ -734,6 +772,16 @@ impl Engine {
                         ids: vec![id],
                     }],
                 ))
+            }
+            Command::AlignFootprints { sheet_id, ids, mode } => {
+                let sheet = self.project.sheet(*sheet_id).ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let moves = crate::panel::align_moves(sheet, ids, *mode)?;
+                self.apply_footprint_moves(*sheet_id, moves)
+            }
+            Command::DistributeFootprints { sheet_id, ids, axis, pitch } => {
+                let sheet = self.project.sheet(*sheet_id).ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let moves = crate::panel::distribute_moves(sheet, ids, *axis, *pitch)?;
+                self.apply_footprint_moves(*sheet_id, moves)
             }
             Command::AddCable { sheet_id, cable } => {
                 let sheet = self
@@ -1711,7 +1759,33 @@ fn validate_symbol_id(id: &str) -> Result<()> {
 }
 
 fn validate_entity(entity: &Entity, sheet: &Sheet) -> Result<()> {
+    let is_footprint = |id: &EntityId| matches!(sheet.entities.get(id), Some(Entity::Footprint(_)));
     match entity {
+        Entity::Nameplate(n) => {
+            if !(n.w > 0.0 && n.h > 0.0 && n.text_mm > 0.0) {
+                return Err(CoreError::InvalidCommand(
+                    "a nameplate needs a positive width, height and text height".into(),
+                ));
+            }
+            if let Some(fp) = n.footprint {
+                if !is_footprint(&fp) {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "nameplate footprint is not on this sheet: {fp}"
+                    )));
+                }
+            }
+        }
+        Entity::Dimension(d) => {
+            for anchor in [&d.a, &d.b] {
+                if let Some(id) = anchor.entity() {
+                    if !is_footprint(&id) {
+                        return Err(CoreError::InvalidCommand(format!(
+                            "dimension end points at a footprint that is not on this sheet: {id}"
+                        )));
+                    }
+                }
+            }
+        }
         Entity::Cable(c) => {
             if c.points.len() != 2 {
                 return Err(CoreError::InvalidCommand(

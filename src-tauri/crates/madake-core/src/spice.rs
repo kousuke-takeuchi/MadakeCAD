@@ -105,7 +105,8 @@ pub fn build_deck_with(
             | Entity::Footprint(_)
             | Entity::PanelLegend(_)
             | Entity::WireLegend(_)
-            | Entity::Cable(_) => {}
+            | Entity::Cable(_) | Entity::Nameplate(_)
+            | Entity::Dimension(_) => {}
         }
     }
     if batteries.is_empty() {

@@ -60,6 +60,8 @@ function draw() {
     bind: store.bindContextFor(sheet),
     // 電線品番凡例ブロック (G9残) の品番引き当てに使うプロジェクトの電線品番表
     wireParts: store.project?.wire_parts,
+    // 盤の銘板の1行目を回路図の説明に追従させる
+    deviceDescriptions: annotations?.deviceDescriptions,
   });
   controller.renderPreview(ctx);
 }

@@ -638,7 +638,8 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
             | Entity::Footprint(_)
             | Entity::PanelLegend(_)
             | Entity::WireLegend(_)
-            | Entity::Cable(_) => {}
+            | Entity::Cable(_) | Entity::Nameplate(_)
+            | Entity::Dimension(_) => {}
         }
     }
     for w in &wires {

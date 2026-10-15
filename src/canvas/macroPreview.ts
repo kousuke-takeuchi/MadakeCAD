@@ -112,6 +112,8 @@ export function placeMacroEntities(entities: Entity[], at: Point, rotation: numb
       case "duct":
       case "footprint":
       case "panel_legend":
+      case "nameplate":
+      case "dimension":
         return e;
     }
   });

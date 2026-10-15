@@ -27,6 +27,8 @@ import PdfBookDialog from "./PdfBookDialog.vue";
 import TemplateDialog from "./TemplateDialog.vue";
 import FrameTemplateDialog from "./FrameTemplateDialog.vue";
 import MacroSaveDialog from "./MacroSaveDialog.vue";
+import NameplateDialog from "./NameplateDialog.vue";
+import { useNameplatesStore } from "../stores/nameplates";
 import SymbolPickerDialog from "./SymbolPickerDialog.vue";
 import SymbolEditorDialog from "./SymbolEditorDialog.vue";
 import BlockEditorDialog from "./BlockEditorDialog.vue";
@@ -56,6 +58,7 @@ const plcIo = usePlcIoStore();
 const reportDialog = useReportDialogStore();
 const pdfBook = usePdfBookStore();
 const macros = useMacrosStore();
+const nameplates = useNameplatesStore();
 const symbolEditor = useSymbolEditorStore();
 const blockEditor = useBlockEditorStore();
 const controller = reactive(new EditorController(store)) as EditorController;
@@ -80,6 +83,7 @@ function anyModalOpen(): boolean {
     reportDialog.open ||
     pdfBook.open ||
     macros.saveOpen ||
+    nameplates.open ||
     symbolEditor.open ||
     blockEditor.active
   );
@@ -175,6 +179,11 @@ async function onKeyDown(ev: KeyboardEvent) {
     ev.preventDefault();
     return;
   }
+  if (ev.key === "Escape" && nameplates.open) {
+    nameplates.cancel();
+    ev.preventDefault();
+    return;
+  }
   if (ev.key === "Escape" && macros.saveOpen) {
     macros.cancelSave();
     ev.preventDefault();
@@ -254,6 +263,7 @@ onBeforeUnmount(() => {
     <TemplateDialog />
     <FrameTemplateDialog />
     <MacroSaveDialog />
+    <NameplateDialog />
     <SymbolEditorDialog />
     <BlockEditorDialog />
   </div>

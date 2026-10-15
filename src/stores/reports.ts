@@ -17,6 +17,7 @@ export const REPORT_KINDS: ReportKind[] = [
   "xref",
   "plc-io",
   "panel-placement",
+  "panel-wiring",
 ];
 
 /** 端子台1つを対象に選べる帳票 (それ以外は常にプロジェクト全体)。 */

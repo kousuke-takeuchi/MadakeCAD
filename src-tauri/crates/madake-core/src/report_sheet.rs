@@ -102,6 +102,8 @@ pub enum ReportKind {
     PanelPlacement,
     /// ケーブル一覧 (多芯ケーブル単位: 型番・芯数・長さ・両端の機器・使用芯/予備芯)。
     CableList,
+    /// 盤内配線図 (盤に置いた部品ごとに、端子の線番・行き先・線色/sq)。
+    PanelWiring,
 }
 
 impl ReportKind {
@@ -116,6 +118,7 @@ impl ReportKind {
             ReportKind::PlcIo => "PLC I/Oレポート",
             ReportKind::PanelPlacement => "盤内部品配置表",
             ReportKind::CableList => "ケーブル一覧",
+            ReportKind::PanelWiring => "盤内配線図",
         }
     }
 
@@ -138,6 +141,7 @@ impl ReportKind {
             ReportKind::PlcIo => plc_io_sheet_svg(project),
             ReportKind::PanelPlacement => panel_placement_sheet_svg(project),
             ReportKind::CableList => cable_list_sheet_svg(project),
+            ReportKind::PanelWiring => crate::panel_wiring::panel_wiring_svg(project),
         }
     }
 }
@@ -244,6 +248,7 @@ pub fn report_csv_with(
         (ReportKind::PlcIo, _) => Ok(crate::plc::plc_io_csv(project)),
         (ReportKind::PanelPlacement, _) => Ok(panel_placement_csv(project)),
         (ReportKind::CableList, _) => Ok(crate::cable::cable_list_csv(project)),
+        (ReportKind::PanelWiring, _) => Ok(crate::panel_wiring::panel_wiring_csv(project)),
         (ReportKind::TerminalChart, None) => {
             Ok(crate::terminal_chart::terminal_charts_csv(project))
         }

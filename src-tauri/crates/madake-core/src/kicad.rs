@@ -674,6 +674,9 @@ pub fn export_kicad_sch(
                 Entity::Duct(_) => "duct",
                 Entity::Footprint(_) => "footprint",
                 Entity::PanelLegend(_) => "panel_legend",
+                Entity::Cable(_) => "cable",
+                Entity::Nameplate(_) => "nameplate",
+                Entity::Dimension(_) => "dimension",
                 _ => continue,
             };
             *not_exported.entry(kind).or_insert(0) += 1;

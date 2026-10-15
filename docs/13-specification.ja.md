@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2659仕様項目**。
+全6領域・**2682仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -255,7 +255,7 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは15 (多芯ケーブルを追加した版) である。 <sub>`the_current_format_version_is_fifteen`</sub>
+- 現行のファイル形式バージョンは16 (盤レイアウトに銘板と関連付き寸法線を追加した版) である。 <sub>`the_current_format_version_is_sixteen`</sub>
 - 定義線・芯線割当・シールド・長さを持つケーブルは、保存して読み直しても変わらない。 <sub>`a_cable_round_trips_through_a_saved_file`</sub>
 - PLC図面の生成設定を保存できなかった頃 (format_version 13) のファイルは、保存なしの状態で開く。 <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - 整えバリアントが無かった頃のプロジェクトファイルは、全シートが印のない普通のシートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
@@ -435,6 +435,22 @@
 - DINレールごとに、長さのどれだけが部品で埋まっているか(充填率)が出る。 <sub>`each_rail_reports_how_full_it_is`</sub>
 - 充填率が80%を超えたレールは注意になる(部品を足す・触る余地が残っていないため)。 <sub>`a_rail_packed_over_eighty_percent_becomes_a_warning`</sub>
 - これらの検査は盤シートだけを見るので、回路図シートから盤の指摘は出ない。 <sub>`the_panel_checks_ignore_schematic_sheets`</sub>
+- フットプリントに結び付いた銘板はその下に少し隙間を空けて中央揃えで付き、指定すれば上に付く。単独の銘板は置いた位置のまま。 <sub>`a_tied_nameplate_sits_centred_under_its_footprint`</sub>
+- 説明に追従する銘板は、1行目が回路図の同じ参照記号の説明になる。追従しなければ自分の文字のまま。 <sub>`a_nameplate_can_follow_the_schematic_description`</sub>
+- 2つのフットプリントの間の寸法線は、軸方向の中心間距離を測り、部品を動かすと追従する。 <sub>`a_dimension_measures_between_footprint_centres_and_follows_them`</sub>
+- 寸法線を動かすと線の位置が動く (測っている端は部品に付いたまま)。 <sub>`moving_a_dimension_moves_its_line`</sub>
+- 型番の付いた銘板は、部品表に型番ごとの枚数で載る。 <sub>`nameplates_are_counted_in_the_bom`</sub>
+- 印刷される盤シートには、銘板の文字と寸法の値が描かれる。 <sub>`the_printed_panel_sheet_draws_nameplates_and_dimensions`</sub>
+- シートに無いフットプリントに結び付いた銘板や、無い部品を指す寸法線の端は拒否される。 <sub>`nameplates_and_dimensions_must_point_at_footprints_on_the_sheet`</sub>
+- 揃えると、選んだ他のフットプリントの端または中心が最初に選んだ部品に揃い、1回のコマンドでundoできる。 <sub>`aligning_lines_footprints_up_with_the_first_one`</sub>
+- 上下方向の揃えでは、DINレールに乗っている部品は動かさない (レールから外さない)。 <sub>`vertical_alignment_keeps_rail_mounted_footprints_on_their_rail`</sub>
+- 等間隔にすると、両端の部品の間を等分して並べるか、指定の中心間隔で先頭から並べる。 <sub>`distributing_spaces_footprints_evenly_or_at_a_pitch`</sub>
+- 2個未満の揃え・ピッチ無しで3個未満の等間隔・0以下のピッチは拒否される。 <sub>`too_few_footprints_or_a_bad_pitch_is_refused`</sub>
+
+### panel_wiring
+
+- 盤内配線図は、盤に置いた部品ごとに、回路図でそのピンに繋がる電線を端子・線番・行き先・線色・線径で並べる。 <sub>`the_panel_wiring_lists_each_pin_wire_with_its_destination`</sub>
+- 盤内配線図の図面ページは部品ごとに端子の行を描き、盤に部品が無ければ見出しだけのページになる。 <sub>`the_panel_wiring_sheet_draws_parts_or_an_empty_page`</sub>
 
 ### 部品データベース
 
@@ -1660,6 +1676,7 @@
 - madake export terminal-chart は図面全体のチャートを、拡張子.csvからCSVと判断して書き出す。 <sub>`export_terminal_chart_defaults_to_csv_for_the_whole_project`</sub>
 - 出力先が.pdfなら--format無しでも帳票のPDF(図枠付き図面シート)形式になる。 <sub>`export_report_picks_pdf_from_the_extension`</sub>
 - `madake export cable-list` はケーブル一覧の帳票を書き出す (既定はCSV)。 <sub>`export_cable_list_writes_the_cable_list_report`</sub>
+- `madake export panel-wiring` は盤内配線図の帳票を書き出す。 <sub>`export_panel_wiring_writes_the_panel_wiring_report`</sub>
 - --formatは拡張子より優先される。 <sub>`export_report_format_option_overrides_the_extension`</sub>
 - --terminalは参照記号(TB1)を受け取り、端子台一覧からentity idを引く。 <sub>`export_terminal_diagram_resolves_a_reference_designator`</sub>
 - --terminalにentity idを渡した場合は一覧を引かずそのまま送る。 <sub>`export_terminal_chart_accepts_an_entity_id_directly`</sub>
@@ -1980,6 +1997,14 @@
 - 部品を盤へ置いて図面が変わると、次の読み込みで一覧から消える。 <sub>`unplaced parts store`</sub>
 - 一覧が読めなくても画面は開いたまま (理由を控えて空一覧にする)。 <sub>`unplaced parts store`</sub>
 - 配置する部品を選ぶと、その行だけが選択表示になる。 <sub>`unplaced parts store`</sub>
+
+### panelMarks
+
+- 部品に結び付いた銘板は部品の下に中央揃えで付き、指定すれば上に付く。単独の銘板は置いた位置のまま (Rust側と同じ) <sub>`盤の銘板`</sub>
+- 説明に追従する銘板は1行目が回路図の説明になる (説明は回路図シンボルの機能ラベルから集める) <sub>`盤の銘板`</sub>
+- 2つの部品の間の寸法は中心間の水平距離を測り、線は指定の高さに引く <sub>`盤の寸法線`</sub>
+- 寸法ツールは2点の距離が大きい向きの寸法を、端点の外側 (水平なら上) 10mmに置き、同じ点なら何も作らない <sub>`盤の寸法線`</sub>
+- クリックした位置の部品を見つけ、寸法線は線の近く、銘板は外形の中で掴める <sub>`盤の寸法線`</sub>
 
 ### panelTools
 
@@ -2439,6 +2464,8 @@
 - ケーブルのプロパティは型番・芯数・線径・シールド・長さを1回のupdate_entityで書き、芯線割当はそのまま残す <sub>`cableUpdateCommand`</sub>
 - 芯数が1以上の整数でない、線径や長さが数値でない入力は図面を変えない <sub>`cableUpdateCommand`</sub>
 - 何も変えていなければコマンドを送らない <sub>`cableUpdateCommand`</sub>
+- 銘板の文字・文字高・位置・追従・型番を1回のupdate_entityで書き、空の2行目は付けない <sub>`nameplateUpdateCommand`</sub>
+- 文字高が正の数でなければ、また何も変えていなければ図面を変えない <sub>`nameplateUpdateCommand`</sub>
 
 ### ribbonLayout
 
@@ -2722,6 +2749,11 @@
 - 上書き確認で「別のバリアントに保存」を選ぶと、次の空きキーで保存する <sub>`adding a variant to an existing macro from the save dialog`</sub>
 - 既存マクロの選択をやめると、従来どおり新しいマクロ (バリアントAだけ) として保存する <sub>`adding a variant to an existing macro from the save dialog`</sub>
 
+### nameplates
+
+- 部品をクリックして開くと、1行目は回路図の説明から始まり、説明への追従が付く <sub>`銘板の挿入`</sub>
+- 挿入は部品に結び付いた銘板をadd_entity 1回で置き、何も無い所で開けば単独の銘板になる <sub>`銘板の挿入`</sub>
+
 ### 部品データベース
 
 - searchは部品APIの結果を保持する <sub>`parts store`</sub>
@@ -2842,7 +2874,7 @@
 
 ### 帳票 (部品表 / 電線リスト)
 
-- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・ケーブル一覧・XRef表・PLC I/Oレポート・盤内部品配置表 の8つ <sub>`report generation dialog store`</sub>
+- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・ケーブル一覧・XRef表・PLC I/Oレポート・盤内部品配置表・盤内配線図 の9つ <sub>`report generation dialog store`</sub>
 - 部品表はプロジェクト全体が対象で、既定はCSV出力 <sub>`report generation dialog store`</sub>
 - 出力形式を図面シートPDFにすると、同じ帳票がPDF要求になる <sub>`report generation dialog store`</sub>
 - 端子台チャートは「プロジェクト全体」に加えて端子台1つを対象に選べる <sub>`report generation dialog store`</sub>

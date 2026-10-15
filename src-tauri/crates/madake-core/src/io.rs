@@ -359,15 +359,15 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 15, the version that added multi-core cables.
-    /// 現行のファイル形式バージョンは15 (多芯ケーブルを追加した版) である。
+    /// The current file format version is 16, the version that added nameplates and associative dimensions to panel sheets.
+    /// 現行のファイル形式バージョンは16 (盤レイアウトに銘板と関連付き寸法線を追加した版) である。
     #[test]
-    fn the_current_format_version_is_fifteen() {
-        assert_eq!(FORMAT_VERSION, 15);
+    fn the_current_format_version_is_sixteen() {
+        assert_eq!(FORMAT_VERSION, 16);
         let mut old = Project::new("x");
-        old.format_version = 14;
+        old.format_version = 15;
         migrate(&mut old);
-        assert_eq!(old.format_version, 15);
+        assert_eq!(old.format_version, 16);
     }
 
     /// A cable with its definition line, core assignments, shield and length survives a save and reload unchanged.

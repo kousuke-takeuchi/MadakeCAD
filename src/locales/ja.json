@@ -732,7 +732,8 @@
       "xref": "クロスリファレンス表",
       "plc-io": "PLC I/Oレポート",
       "panel-placement": "盤内部品配置表",
-      "cable-list": "ケーブル一覧"
+      "cable-list": "ケーブル一覧",
+      "panel-wiring": "盤内配線図"
     },
     "targetLabel": "対象:",
     "targetProject": "プロジェクト全体",
@@ -1384,7 +1385,9 @@
       "panel_outline": "盤筐体: 矩形にドラッグして盤の外形を描きます (Escで中止)",
       "din_rail": "DINレール: 取付線の高さで水平にドラッグします (Escで中止)",
       "duct": "ダクト: 矩形にドラッグして配線ダクトを描きます (Escで中止)",
-      "panel_legend": "凡例表: 盤面をクリックすると表を置きます (Escで中止)"
+      "panel_legend": "凡例表: 盤面をクリックすると表を置きます (Escで中止)",
+      "nameplate": "盤: 銘板を付ける部品か置き場所をクリックしてください",
+      "dimension": "寸法: 1点目をクリックしてください (部品の上なら部品の中心)"
     },
     "added": {
       "panel_outline": "盤: 盤の外形を追加しました (Cmd+Zで戻せます)",
@@ -1713,5 +1716,62 @@
     "spare": "予備",
     "overflowHint": "芯数より多い配線が割り当てられています (ERC: ケーブル芯数超過)",
     "hint": "芯線は定義線が横切った配線から決まります。割り当てを変えるには定義線を引き直してください"
+  },
+  "panelMarks": {
+    "cancel": "キャンセル",
+    "nameplate": {
+      "kindLabel": "銘板",
+      "ribbonHint": "部品 (フットプリント) をクリックすると銘板を結び付け、何も無い所なら単独の銘板を置きます",
+      "titleFor": "銘板の挿入 — {reference}",
+      "titleAlone": "銘板の挿入 (単独)",
+      "alone": "単独の銘板",
+      "line1": "1行目",
+      "line2": "2行目",
+      "source": "説明の出典",
+      "sourceSchematic": "回路図 {reference} の説明 (自動)",
+      "sourceNone": "回路図に説明がありません",
+      "sourceAlone": "単独 (部品に付けない)",
+      "size": "大きさ",
+      "textHeight": "文字高",
+      "position": "位置",
+      "below": "フットプリントの下",
+      "above": "フットプリントの上",
+      "partNo": "型番",
+      "follow": "回路図の説明が変わったら追従",
+      "insert": "挿入",
+      "hint": "単独の銘板 (部品に付けない) はフットプリントを選ばずに挿入。部品表には銘板の型番ごとの数量行が付く。",
+      "insertedLog": "盤: {reference} に銘板を置きました (Cmd+Zで元に戻せます)",
+      "updatedLog": "盤: 銘板を更新しました"
+    },
+    "dimension": {
+      "kindLabel": "寸法線",
+      "ribbonHint": "2点 (部品の上なら部品の中心) をクリックして関連付き寸法線を置きます。部品を動かすと値が追従します",
+      "secondLog": "寸法: 2点目をクリックしてください",
+      "placedLog": "寸法: 寸法線を置きました (Cmd+Zで元に戻せます)",
+      "valueRow": "値",
+      "axisRow": "向き",
+      "horizontal": "水平",
+      "vertical": "垂直"
+    },
+    "align": {
+      "ribbonHint": "選んだ部品を最初に選んだ部品に揃える/等間隔に並べる",
+      "title": "整列 (選択{count}個・基準={base})",
+      "needTwo": "部品を2つ以上選んでください (Shift+クリック)",
+      "pitch": "ピッチ",
+      "pitchAuto": "自動",
+      "distributeH": "水平に等間隔",
+      "distributeV": "垂直に等間隔",
+      "hint": "Command 1回でundo一発。レール上の部品は上下方向には動かさない。",
+      "doneLog": "盤: {count}個を{mode}に揃えました (Cmd+Zで元に戻せます)",
+      "distributedLog": "盤: {count}個を等間隔に並べました (Cmd+Zで元に戻せます)",
+      "mode": {
+        "left": "左揃え",
+        "center_x": "左右中央",
+        "right": "右揃え",
+        "top": "上揃え",
+        "center_y": "上下中央",
+        "bottom": "下揃え"
+      }
+    }
   }
 }

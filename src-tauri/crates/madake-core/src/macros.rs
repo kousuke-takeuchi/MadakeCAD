@@ -622,7 +622,9 @@ pub fn base_point(entities: &[&Entity]) -> Point {
             | Entity::DinRail(_)
             | Entity::Duct(_)
             | Entity::Footprint(_)
-            | Entity::PanelLegend(_) => {}
+            | Entity::PanelLegend(_)
+            | Entity::Nameplate(_)
+            | Entity::Dimension(_) => {}
         }
     }
     if pts.is_empty() {
@@ -880,7 +882,9 @@ fn place_entity(entity: &mut Entity, rotation: u16, at: Point) {
         | Entity::DinRail(_)
         | Entity::Duct(_)
         | Entity::Footprint(_)
-        | Entity::PanelLegend(_) => {}
+        | Entity::PanelLegend(_)
+        | Entity::Nameplate(_)
+        | Entity::Dimension(_) => {}
     }
 }
 

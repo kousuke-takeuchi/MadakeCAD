@@ -21,7 +21,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::geometry::Point;
 use crate::model::{
-    DinRail, Duct, Entity, EntityId, Footprint, PanelLegend, PanelOutline, Project, Sheet, SheetId,
+    DimAnchor, DimAxis, Dimension, DinRail, Duct, Entity, EntityId, Footprint, Nameplate,
+    NameplatePosition, PanelLegend, PanelOutline, Project, Sheet, SheetId,
 };
 use crate::verify::{Diagnostic, Severity};
 
@@ -180,6 +181,265 @@ pub fn legends(sheet: &Sheet) -> impl Iterator<Item = &PanelLegend> {
         Entity::PanelLegend(l) => Some(l),
         _ => None,
     })
+}
+
+/// 銘板とフットプリントの隙間 (mm)。
+pub const NAMEPLATE_GAP: f64 = 2.0;
+/// 寸法の補助線が端点から離れる量 (mm)。
+pub const DIM_EXT_GAP: f64 = 1.0;
+/// 寸法線の端の目盛り (矢印の代わりの斜線) の長さ (mm)。
+pub const DIM_TICK: f64 = 1.5;
+/// 寸法値の文字高 (mm)。
+pub const DIM_FONT: f64 = 2.5;
+/// 部品表で銘板行の「シンボル」欄に立てる印。
+pub const BOM_NAMEPLATE_KIND: &str = "銘板";
+
+/// シート上の銘板 (id順)。
+pub fn nameplates(sheet: &Sheet) -> impl Iterator<Item = &Nameplate> {
+    sheet.entities.values().filter_map(|e| match e {
+        Entity::Nameplate(n) => Some(n),
+        _ => None,
+    })
+}
+
+/// シート上の寸法線 (id順)。
+pub fn dimensions(sheet: &Sheet) -> impl Iterator<Item = &Dimension> {
+    sheet.entities.values().filter_map(|e| match e {
+        Entity::Dimension(d) => Some(d),
+        _ => None,
+    })
+}
+
+/// 銘板の外形 (左上, 右下)。結び付いた銘板はフットプリントの下 (上) に中央揃えで付く。
+/// 結び付き先がシートに無ければNone (描かない)。
+pub fn nameplate_rect(sheet: &Sheet, np: &Nameplate) -> Option<(Point, Point)> {
+    let Some(fp_id) = np.footprint else {
+        return Some((np.at, Point::new(np.at.x + np.w, np.at.y + np.h)));
+    };
+    let Some(Entity::Footprint(fp)) = sheet.entities.get(&fp_id) else {
+        return None;
+    };
+    let (min, max) = footprint_rect(fp);
+    let x = (min.x + max.x) / 2.0 - np.w / 2.0;
+    let y = match np.position {
+        NameplatePosition::Below => max.y + NAMEPLATE_GAP,
+        NameplatePosition::Above => min.y - NAMEPLATE_GAP - np.h,
+    };
+    Some((Point::new(x, y), Point::new(x + np.w, y + np.h)))
+}
+
+/// 回路図の参照記号 → 説明 (シンボルの機能ラベル。最初に見つかった空でないもの)。
+/// 銘板の1行目を回路図に追従させるのに使う ([`nameplate_lines`])。
+pub fn device_descriptions(project: &Project) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    for sheet in &project.sheets {
+        for e in sheet.entities.values() {
+            if let Entity::Symbol(s) = e {
+                if let Some(label) = crate::text_style::function_label(s) {
+                    out.entry(s.reference.trim().to_string()).or_insert_with(|| label.to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// 銘板に書く文字の行。`follow_description`で結び付いていれば、1行目を回路図の同じ参照記号の
+/// 説明 ([`device_descriptions`]) にする (見つからなければ保存した1行目のまま)。
+pub fn nameplate_lines(
+    sheet: &Sheet,
+    np: &Nameplate,
+    descriptions: &BTreeMap<String, String>,
+) -> Vec<String> {
+    let mut lines = np.lines.clone();
+    if !np.follow_description {
+        return lines;
+    }
+    let reference = np.footprint.and_then(|id| match sheet.entities.get(&id) {
+        Some(Entity::Footprint(fp)) => Some(fp.reference.trim().to_string()),
+        _ => None,
+    });
+    let Some(reference) = reference.filter(|r| !r.is_empty()) else {
+        return lines;
+    };
+    if let Some(d) = descriptions.get(&reference).cloned() {
+        if lines.is_empty() {
+            lines.push(d);
+        } else {
+            lines[0] = d;
+        }
+    }
+    lines
+}
+
+/// 寸法線の端点の位置 (フットプリントは中心)。指している部品が無ければNone。
+pub fn dim_anchor_point(sheet: &Sheet, anchor: &DimAnchor) -> Option<Point> {
+    match anchor {
+        DimAnchor::Point { at } => Some(*at),
+        DimAnchor::Footprint { id } => match sheet.entities.get(id) {
+            Some(Entity::Footprint(fp)) => Some(footprint_center(fp)),
+            _ => None,
+        },
+    }
+}
+
+/// 寸法線の描き方 (補助線2本・寸法線・値の位置と文字)。端点が引けなければNone。
+#[derive(Debug, Clone, PartialEq)]
+pub struct DimGeometry {
+    /// 補助線 (端点の近くから寸法線を少し越えるところまで)。
+    pub extensions: [(Point, Point); 2],
+    /// 寸法線の両端。
+    pub line: (Point, Point),
+    /// 値の文字の位置 (寸法線の中央、少し外側)。
+    pub text_at: Point,
+    /// 値 (mm、小数第1位まで。末尾の0は書かない)。
+    pub text: String,
+}
+
+/// 寸法線を描くための形。値は端点の水平 (または垂直) 距離。
+pub fn dimension_geometry(sheet: &Sheet, d: &Dimension) -> Option<DimGeometry> {
+    let a = dim_anchor_point(sheet, &d.a)?;
+    let b = dim_anchor_point(sheet, &d.b)?;
+    let (pa, pb, value) = match d.axis {
+        DimAxis::Horizontal => (Point::new(a.x, d.at), Point::new(b.x, d.at), (b.x - a.x).abs()),
+        DimAxis::Vertical => (Point::new(d.at, a.y), Point::new(d.at, b.y), (b.y - a.y).abs()),
+    };
+    let ext = |from: Point, to: Point| -> (Point, Point) {
+        let (dx, dy) = (to.x - from.x, to.y - from.y);
+        let len = (dx * dx + dy * dy).sqrt();
+        if len < 1e-9 {
+            return (to, to);
+        }
+        let (ux, uy) = (dx / len, dy / len);
+        (
+            Point::new(from.x + ux * DIM_EXT_GAP, from.y + uy * DIM_EXT_GAP),
+            Point::new(to.x + ux * DIM_EXT_GAP, to.y + uy * DIM_EXT_GAP),
+        )
+    };
+    let mid = Point::new((pa.x + pb.x) / 2.0, (pa.y + pb.y) / 2.0);
+    let text_at = match d.axis {
+        DimAxis::Horizontal => Point::new(mid.x, mid.y - 1.0),
+        DimAxis::Vertical => Point::new(mid.x - 1.0, mid.y),
+    };
+    let text = format!("{:.1}", value).trim_end_matches('0').trim_end_matches('.').to_string();
+    Some(DimGeometry { extensions: [ext(a, pa), ext(b, pb)], line: (pa, pb), text_at, text })
+}
+
+/// 揃え方 (基準=最初に選んだ部品)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AlignMode {
+    Left,
+    CenterX,
+    Right,
+    Top,
+    CenterY,
+    Bottom,
+}
+
+impl AlignMode {
+    fn vertical(self) -> bool {
+        matches!(self, AlignMode::Top | AlignMode::CenterY | AlignMode::Bottom)
+    }
+}
+
+/// `ids`をシートのフットプリントとして引く (無い・フットプリントでないidはエラー)。
+fn picked_footprints<'a>(sheet: &'a Sheet, ids: &[EntityId]) -> crate::Result<Vec<&'a Footprint>> {
+    ids.iter()
+        .map(|id| match sheet.entities.get(id) {
+            Some(Entity::Footprint(fp)) => Ok(fp),
+            _ => Err(crate::CoreError::InvalidCommand(format!("not a footprint on this sheet: {id}"))),
+        })
+        .collect()
+}
+
+/// 揃えの移動先 (フットプリントid, 新しい左上角)。2個未満はエラー。上下の揃えではDINレールに
+/// 乗っている部品を動かさない (レールから外さない)。基準 (先頭) は動かない。
+pub fn align_moves(sheet: &Sheet, ids: &[EntityId], mode: AlignMode) -> crate::Result<Vec<(EntityId, Point)>> {
+    let fps = picked_footprints(sheet, ids)?;
+    if fps.len() < 2 {
+        return Err(crate::CoreError::InvalidCommand("select at least two footprints to align".into()));
+    }
+    let (rmin, rmax) = footprint_rect(fps[0]);
+    let mut out = Vec::new();
+    for fp in &fps[1..] {
+        if mode.vertical() && rail_of_footprint(sheet, fp).is_some() {
+            continue;
+        }
+        let (min, max) = footprint_rect(fp);
+        let (w, h) = (max.x - min.x, max.y - min.y);
+        let at = match mode {
+            AlignMode::Left => Point::new(rmin.x, fp.at.y),
+            AlignMode::CenterX => Point::new((rmin.x + rmax.x) / 2.0 - w / 2.0, fp.at.y),
+            AlignMode::Right => Point::new(rmax.x - w, fp.at.y),
+            AlignMode::Top => Point::new(fp.at.x, rmin.y),
+            AlignMode::CenterY => Point::new(fp.at.x, (rmin.y + rmax.y) / 2.0 - h / 2.0),
+            AlignMode::Bottom => Point::new(fp.at.x, rmax.y - h),
+        };
+        out.push((fp.id, at));
+    }
+    Ok(out)
+}
+
+/// 等間隔の移動先。部品を軸方向の中心の順に並べ、`pitch`なら先頭から中心間隔`pitch`で、
+/// 省略なら両端はそのままに間を等分する。3個未満 (pitch省略時) / 2個未満はエラー。
+/// 上下方向ではDINレールに乗っている部品を動かさない。
+pub fn distribute_moves(
+    sheet: &Sheet,
+    ids: &[EntityId],
+    axis: DimAxis,
+    pitch: Option<f64>,
+) -> crate::Result<Vec<(EntityId, Point)>> {
+    let mut fps = picked_footprints(sheet, ids)?;
+    let need = if pitch.is_some() { 2 } else { 3 };
+    if fps.len() < need {
+        return Err(crate::CoreError::InvalidCommand(format!(
+            "select at least {need} footprints to distribute"
+        )));
+    }
+    if pitch.is_some_and(|p| !(p > 0.0)) {
+        return Err(crate::CoreError::InvalidCommand("the pitch must be positive".into()));
+    }
+    let along = |fp: &Footprint| {
+        let c = footprint_center(fp);
+        match axis {
+            DimAxis::Horizontal => c.x,
+            DimAxis::Vertical => c.y,
+        }
+    };
+    fps.sort_by(|a, b| along(a).partial_cmp(&along(b)).unwrap_or(std::cmp::Ordering::Equal));
+    let first = along(fps[0]);
+    let step = pitch.unwrap_or_else(|| (along(fps[fps.len() - 1]) - first) / (fps.len() - 1) as f64);
+    let mut out = Vec::new();
+    for (k, fp) in fps.iter().enumerate().skip(1) {
+        if axis == DimAxis::Vertical && rail_of_footprint(sheet, fp).is_some() {
+            continue;
+        }
+        let shift = first + step * k as f64 - along(fp);
+        let at = match axis {
+            DimAxis::Horizontal => Point::new(fp.at.x + shift, fp.at.y),
+            DimAxis::Vertical => Point::new(fp.at.x, fp.at.y + shift),
+        };
+        out.push((fp.id, at));
+    }
+    Ok(out)
+}
+
+/// 部品表の銘板行 (型番ごとの数。部品表の先頭5列の形)。型番の無い銘板は載せない。
+pub fn nameplate_bom_rows(project: &Project) -> Vec<Vec<String>> {
+    let mut groups: BTreeMap<String, usize> = BTreeMap::new();
+    for sheet in &project.sheets {
+        for np in nameplates(sheet) {
+            let part = np.part_no.trim();
+            if !part.is_empty() {
+                *groups.entry(part.to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(part, n)| vec![String::new(), String::new(), part, BOM_NAMEPLATE_KIND.into(), n.to_string()])
+        .collect()
 }
 
 /// フットプリントの中心 (用紙座標mm)。回転後の外形の中心。
@@ -1193,5 +1453,249 @@ mod tests {
     fn the_panel_checks_ignore_schematic_sheets() {
         let project = Project::new("t");
         assert!(panel_diagnostics(&project).is_empty());
+    }
+
+    fn nameplate(footprint: Option<EntityId>, lines: &[&str]) -> Nameplate {
+        Nameplate {
+            id: Uuid::new_v4(),
+            footprint,
+            at: Point::new(300.0, 200.0),
+            w: 30.0,
+            h: 10.0,
+            lines: lines.iter().map(|l| l.to_string()).collect(),
+            text_mm: 3.5,
+            position: NameplatePosition::Below,
+            follow_description: false,
+            part_no: String::new(),
+        }
+    }
+
+    /// A nameplate tied to a footprint sits centred under it with a small gap, or above it when asked; a standalone one stays where it was put.
+    /// フットプリントに結び付いた銘板はその下に少し隙間を空けて中央揃えで付き、指定すれば上に付く。単独の銘板は置いた位置のまま。
+    #[test]
+    fn a_tied_nameplate_sits_centred_under_its_footprint() {
+        let fp = footprint("K1", (100.0, 50.0), (40.0, 60.0), 0);
+        let id = fp.id();
+        let sheet = panel_sheet(vec![fp]);
+        let below = nameplate(Some(id), &["主回路"]);
+        assert_eq!(
+            nameplate_rect(&sheet, &below),
+            Some((Point::new(105.0, 112.0), Point::new(135.0, 122.0)))
+        );
+        let above = Nameplate { position: NameplatePosition::Above, ..below.clone() };
+        assert_eq!(nameplate_rect(&sheet, &above).unwrap().0, Point::new(105.0, 38.0));
+        let alone = nameplate(None, &["主電源"]);
+        assert_eq!(nameplate_rect(&sheet, &alone).unwrap().0, Point::new(300.0, 200.0));
+        let orphan = nameplate(Some(Uuid::new_v4()), &[]);
+        assert_eq!(nameplate_rect(&sheet, &orphan), None, "結び付き先が無ければ描かない");
+    }
+
+    /// When it follows the description, a tied nameplate's first line is the schematic description of the same designator; otherwise it keeps its own text.
+    /// 説明に追従する銘板は、1行目が回路図の同じ参照記号の説明になる。追従しなければ自分の文字のまま。
+    #[test]
+    fn a_nameplate_can_follow_the_schematic_description() {
+        let fp = footprint("K1", (100.0, 50.0), (40.0, 60.0), 0);
+        let id = fp.id();
+        let sheet = panel_sheet(vec![fp]);
+        let descriptions: BTreeMap<String, String> = [("K1".to_string(), "主回路接触器".to_string())].into();
+        let mut np = nameplate(Some(id), &["旧い説明", "200V 9A"]);
+        assert_eq!(nameplate_lines(&sheet, &np, &descriptions), ["旧い説明", "200V 9A"]);
+        np.follow_description = true;
+        assert_eq!(nameplate_lines(&sheet, &np, &descriptions), ["主回路接触器", "200V 9A"]);
+        assert_eq!(nameplate_lines(&sheet, &np, &BTreeMap::new()), ["旧い説明", "200V 9A"], "説明が無ければそのまま");
+    }
+
+    fn dimension(a: DimAnchor, b: DimAnchor, axis: DimAxis, at: f64) -> Dimension {
+        Dimension { id: Uuid::new_v4(), a, b, axis, at }
+    }
+
+    /// A dimension between two footprints measures the distance between their centres along its axis, and follows when a footprint moves.
+    /// 2つのフットプリントの間の寸法線は、軸方向の中心間距離を測り、部品を動かすと追従する。
+    #[test]
+    fn a_dimension_measures_between_footprint_centres_and_follows_them() {
+        let k1 = footprint("K1", (100.0, 50.0), (40.0, 60.0), 0);
+        let k2 = footprint("K2", (185.0, 50.0), (40.0, 60.0), 0);
+        let (a, b) = (k1.id(), k2.id());
+        let mut sheet = panel_sheet(vec![k1, k2]);
+        let d = dimension(DimAnchor::Footprint { id: a }, DimAnchor::Footprint { id: b }, DimAxis::Horizontal, 40.0);
+        let g = dimension_geometry(&sheet, &d).unwrap();
+        assert_eq!(g.text, "85");
+        assert_eq!(g.line, (Point::new(120.0, 40.0), Point::new(205.0, 40.0)));
+        if let Some(Entity::Footprint(f)) = sheet.entities.get_mut(&b) {
+            f.at.x += 2.5;
+        }
+        assert_eq!(dimension_geometry(&sheet, &d).unwrap().text, "87.5", "動かすと値が変わる");
+        let v = dimension(DimAnchor::Point { at: Point::new(0.0, 10.0) }, DimAnchor::Point { at: Point::new(0.0, 70.0) }, DimAxis::Vertical, 20.0);
+        let gv = dimension_geometry(&sheet, &v).unwrap();
+        assert_eq!((gv.text.as_str(), gv.line), ("60", (Point::new(20.0, 10.0), Point::new(20.0, 70.0))));
+        let missing = dimension(DimAnchor::Footprint { id: Uuid::new_v4() }, DimAnchor::Footprint { id: b }, DimAxis::Horizontal, 40.0);
+        assert!(dimension_geometry(&sheet, &missing).is_none());
+    }
+
+    /// Moving a dimension moves its line (the measured ends stay on their parts).
+    /// 寸法線を動かすと線の位置が動く (測っている端は部品に付いたまま)。
+    #[test]
+    fn moving_a_dimension_moves_its_line() {
+        let mut e = Entity::Dimension(dimension(
+            DimAnchor::Footprint { id: Uuid::new_v4() },
+            DimAnchor::Point { at: Point::new(10.0, 10.0) },
+            DimAxis::Horizontal,
+            40.0,
+        ));
+        e.translate(5.0, -7.5);
+        let Entity::Dimension(d) = e else { panic!() };
+        assert_eq!(d.at, 32.5);
+        assert_eq!(d.b, DimAnchor::Point { at: Point::new(15.0, 2.5) });
+    }
+
+    /// Nameplates with a part number are counted per part number in the BOM.
+    /// 型番の付いた銘板は、部品表に型番ごとの枚数で載る。
+    #[test]
+    fn nameplates_are_counted_in_the_bom() {
+        let mut project = Project::new("t");
+        let mut sheet = panel_sheet(vec![]);
+        for part in ["SAMPLE-NP", "SAMPLE-NP", ""] {
+            let np = Nameplate { part_no: part.into(), ..nameplate(None, &["x"]) };
+            sheet.entities.insert(np.id, Entity::Nameplate(np));
+        }
+        project.sheets.push(sheet);
+        assert_eq!(
+            nameplate_bom_rows(&project),
+            vec![vec![String::new(), String::new(), "SAMPLE-NP".into(), BOM_NAMEPLATE_KIND.into(), "2".into()]]
+        );
+    }
+
+    /// The printed panel sheet draws the nameplate text and the dimension value.
+    /// 印刷される盤シートには、銘板の文字と寸法の値が描かれる。
+    #[test]
+    fn the_printed_panel_sheet_draws_nameplates_and_dimensions() {
+        let k1 = footprint("K1", (100.0, 50.0), (40.0, 60.0), 0);
+        let k2 = footprint("K2", (185.0, 50.0), (40.0, 60.0), 0);
+        let (a, b) = (k1.id(), k2.id());
+        let mut project = Project::new("t");
+        let mut sheet = panel_sheet(vec![k1, k2]);
+        let np = nameplate(Some(a), &["主回路"]);
+        sheet.entities.insert(np.id, Entity::Nameplate(np));
+        let d = dimension(DimAnchor::Footprint { id: a }, DimAnchor::Footprint { id: b }, DimAxis::Horizontal, 40.0);
+        sheet.entities.insert(d.id, Entity::Dimension(d));
+        let sid = sheet.id;
+        project.sheets.push(sheet);
+        let svg = crate::svg::project_sheet_to_svg(&project, sid, &[]).unwrap();
+        assert!(svg.contains(">主回路<"), "銘板の文字");
+        assert!(svg.contains(">85<"), "寸法の値");
+    }
+
+    /// A nameplate tied to a footprint that is not on the sheet, or a dimension end pointing at a missing part, is refused.
+    /// シートに無いフットプリントに結び付いた銘板や、無い部品を指す寸法線の端は拒否される。
+    #[test]
+    fn nameplates_and_dimensions_must_point_at_footprints_on_the_sheet() {
+        let mut project = Project::new("t");
+        let sheet = panel_sheet(vec![]);
+        let sid = sheet.id;
+        project.sheets.push(sheet);
+        let mut engine = crate::command::Engine::new(project);
+        let np = Entity::Nameplate(nameplate(Some(Uuid::new_v4()), &["x"]));
+        assert!(engine.execute(crate::command::Command::AddEntity { sheet_id: sid, entity: np }).is_err());
+        let d = Entity::Dimension(dimension(
+            DimAnchor::Footprint { id: Uuid::new_v4() },
+            DimAnchor::Point { at: Point::new(0.0, 0.0) },
+            DimAxis::Horizontal,
+            0.0,
+        ));
+        assert!(engine.execute(crate::command::Command::AddEntity { sheet_id: sid, entity: d }).is_err());
+        let ok = Entity::Nameplate(nameplate(None, &["単独"]));
+        assert!(engine.execute(crate::command::Command::AddEntity { sheet_id: sid, entity: ok }).is_ok());
+    }
+
+    /// 盤シート1枚と、それを持つエンジン。戻り値は (エンジン, シートid)。
+    fn panel_engine(entities: Vec<Entity>) -> (crate::command::Engine, SheetId) {
+        let mut project = Project::new("t");
+        let sheet = panel_sheet(entities);
+        let sid = sheet.id;
+        project.sheets.push(sheet);
+        (crate::command::Engine::new(project), sid)
+    }
+
+    fn fp_at(engine: &crate::command::Engine, sid: SheetId, id: EntityId) -> Point {
+        match engine.project().sheet(sid).unwrap().entities.get(&id) {
+            Some(Entity::Footprint(f)) => f.at,
+            _ => panic!("フットプリント"),
+        }
+    }
+
+    /// Aligning moves the other selected footprints so their edge or centre lines up with the first one, in one undoable command.
+    /// 揃えると、選んだ他のフットプリントの端または中心が最初に選んだ部品に揃い、1回のコマンドでundoできる。
+    #[test]
+    fn aligning_lines_footprints_up_with_the_first_one() {
+        let k1 = footprint("K1", (100.0, 50.0), (40.0, 60.0), 0);
+        let k2 = footprint("K2", (160.0, 70.0), (20.0, 30.0), 0);
+        let (a, b) = (k1.id(), k2.id());
+        let (mut engine, sid) = panel_engine(vec![k1, k2]);
+        let run = |engine: &mut crate::command::Engine, mode| {
+            engine
+                .execute(crate::command::Command::AlignFootprints { sheet_id: sid, ids: vec![a, b], mode })
+                .unwrap();
+        };
+        run(&mut engine, AlignMode::Top);
+        assert_eq!(fp_at(&engine, sid, b), Point::new(160.0, 50.0));
+        run(&mut engine, AlignMode::CenterY);
+        assert_eq!(fp_at(&engine, sid, b), Point::new(160.0, 65.0));
+        run(&mut engine, AlignMode::Right);
+        assert_eq!(fp_at(&engine, sid, b), Point::new(120.0, 65.0));
+        assert_eq!(fp_at(&engine, sid, a), Point::new(100.0, 50.0), "基準は動かない");
+        engine.undo().unwrap();
+        assert_eq!(fp_at(&engine, sid, b), Point::new(160.0, 65.0), "undo一発で1つ前へ");
+    }
+
+    /// Vertical alignment leaves a footprint mounted on a DIN rail where it is, so nothing is pulled off its rail.
+    /// 上下方向の揃えでは、DINレールに乗っている部品は動かさない (レールから外さない)。
+    #[test]
+    fn vertical_alignment_keeps_rail_mounted_footprints_on_their_rail() {
+        let k1 = footprint("K1", (100.0, 50.0), (40.0, 60.0), 0);
+        // レール (y=200) に中心が乗った部品
+        let k2 = footprint("K2", (160.0, 170.0), (20.0, 60.0), 0);
+        let (a, b) = (k1.id(), k2.id());
+        let (mut engine, sid) = panel_engine(vec![k1, k2, rail(200.0, 50.0, 400.0)]);
+        engine
+            .execute(crate::command::Command::AlignFootprints { sheet_id: sid, ids: vec![a, b], mode: AlignMode::Top })
+            .unwrap();
+        assert_eq!(fp_at(&engine, sid, b), Point::new(160.0, 170.0));
+    }
+
+    /// Distributing spaces the footprints evenly between the outer two, or at a given centre pitch from the first.
+    /// 等間隔にすると、両端の部品の間を等分して並べるか、指定の中心間隔で先頭から並べる。
+    #[test]
+    fn distributing_spaces_footprints_evenly_or_at_a_pitch() {
+        let f1 = footprint("F1", (100.0, 50.0), (20.0, 40.0), 0);
+        let f2 = footprint("F2", (130.0, 50.0), (20.0, 40.0), 0);
+        let f3 = footprint("F3", (200.0, 50.0), (20.0, 40.0), 0);
+        let ids = vec![f3.id(), f1.id(), f2.id()];
+        let (a, b, c) = (f1.id(), f2.id(), f3.id());
+        let (mut engine, sid) = panel_engine(vec![f1, f2, f3]);
+        engine
+            .execute(crate::command::Command::DistributeFootprints { sheet_id: sid, ids: ids.clone(), axis: DimAxis::Horizontal, pitch: None })
+            .unwrap();
+        assert_eq!(fp_at(&engine, sid, b).x, 150.0, "100と200の間を等分");
+        assert_eq!(fp_at(&engine, sid, c).x, 200.0, "端はそのまま");
+        engine
+            .execute(crate::command::Command::DistributeFootprints { sheet_id: sid, ids, axis: DimAxis::Horizontal, pitch: Some(45.0) })
+            .unwrap();
+        assert_eq!((fp_at(&engine, sid, a).x, fp_at(&engine, sid, b).x, fp_at(&engine, sid, c).x), (100.0, 145.0, 190.0));
+    }
+
+    /// Aligning fewer than two footprints, distributing fewer than three without a pitch, or a non-positive pitch is refused.
+    /// 2個未満の揃え・ピッチ無しで3個未満の等間隔・0以下のピッチは拒否される。
+    #[test]
+    fn too_few_footprints_or_a_bad_pitch_is_refused() {
+        let k1 = footprint("K1", (100.0, 50.0), (40.0, 60.0), 0);
+        let k2 = footprint("K2", (160.0, 70.0), (20.0, 30.0), 0);
+        let (a, b) = (k1.id(), k2.id());
+        let (_engine, sid) = panel_engine(vec![]);
+        let sheet = panel_sheet(vec![k1, k2]);
+        let _ = sid;
+        assert!(align_moves(&sheet, &[a], AlignMode::Left).is_err());
+        assert!(distribute_moves(&sheet, &[a, b], DimAxis::Horizontal, None).is_err());
+        assert!(distribute_moves(&sheet, &[a, b], DimAxis::Horizontal, Some(0.0)).is_err());
+        assert!(distribute_moves(&sheet, &[a, b], DimAxis::Horizontal, Some(30.0)).is_ok());
     }
 }

@@ -216,7 +216,8 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
             | Entity::Footprint(_)
             | Entity::PanelLegend(_)
             | Entity::WireLegend(_)
-            | Entity::Cable(_) => {}
+            | Entity::Cable(_) | Entity::Nameplate(_)
+            | Entity::Dimension(_) => {}
         }
     }
 

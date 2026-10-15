@@ -121,6 +121,43 @@ export function harnessUpdateCommand(
   };
 }
 
+/** プロパティパネルで編集する銘板の欄。 */
+export interface NameplatePatch {
+  line1: string;
+  line2: string;
+  text_mm: string;
+  position: "below" | "above";
+  follow: boolean;
+  part_no: string;
+}
+
+/**
+ * 銘板のプロパティ編集コマンド (M4 §8)。文字高が正の数でなければnull、何も変わっていなければnull。
+ * 2行目が空なら1行だけにする。説明への追従は部品に結び付いた銘板だけ。
+ */
+export function nameplateUpdateCommand(sheetId: string, entity: Entity, patch: NameplatePatch): Command | null {
+  if (entity.kind !== "nameplate") return null;
+  const text = Number(patch.text_mm);
+  if (!Number.isFinite(text) || text <= 0) return null;
+  const lines = [patch.line1.trim(), patch.line2.trim()];
+  while (lines.length && lines[lines.length - 1] === "") lines.pop();
+  const next = {
+    ...entity,
+    lines,
+    text_mm: text,
+    position: patch.position,
+    follow_description: entity.footprint !== null && patch.follow,
+    part_no: patch.part_no.trim(),
+  };
+  const same =
+    JSON.stringify(next.lines) === JSON.stringify(entity.lines) &&
+    next.text_mm === entity.text_mm &&
+    next.position === entity.position &&
+    next.follow_description === entity.follow_description &&
+    next.part_no === entity.part_no;
+  return same ? null : { type: "update_entity", sheet_id: sheetId, entity: next };
+}
+
 /** プロパティパネルで編集するケーブルの欄 (入力欄の文字列のまま受け取る)。 */
 export interface CablePatch {
   reference: string;

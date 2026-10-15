@@ -192,7 +192,9 @@ pub fn search_project(project: &Project, query: &str, kinds: &[SearchKind]) -> V
                 | Entity::Duct(_)
                 | Entity::Footprint(_)
                 | Entity::PanelLegend(_)
-                | Entity::WireLegend(_) => {}
+                | Entity::WireLegend(_)
+                | Entity::Nameplate(_)
+                | Entity::Dimension(_) => {}
                 Entity::Cable(c) => {
                     let at = c.points.first().copied().unwrap_or_default();
                     if want(SearchKind::Reference) && matches(&c.reference, &needle) {

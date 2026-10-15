@@ -20,6 +20,7 @@ pub mod net_tag;
 pub mod netlist;
 pub mod ngspice;
 pub mod panel;
+pub mod panel_wiring;
 pub mod parts;
 pub mod pdf;
 pub mod pin_groups;

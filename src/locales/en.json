@@ -732,7 +732,8 @@
       "xref": "Cross-reference table",
       "plc-io": "PLC I/O report",
       "panel-placement": "Panel placement table",
-      "cable-list": "Cable list"
+      "cable-list": "Cable list",
+      "panel-wiring": "Panel wiring diagram"
     },
     "targetLabel": "Target:",
     "targetProject": "Whole project",
@@ -1384,7 +1385,9 @@
       "panel_outline": "Enclosure: drag a rectangle for the panel (Esc to cancel)",
       "din_rail": "DIN rail: drag horizontally at the mounting line (Esc to cancel)",
       "duct": "Duct: drag a rectangle for the wiring duct (Esc to cancel)",
-      "panel_legend": "Legend table: click on the panel sheet to place the table (Esc to cancel)"
+      "panel_legend": "Legend table: click on the panel sheet to place the table (Esc to cancel)",
+      "nameplate": "Panel: click a part or a place for the nameplate",
+      "dimension": "Dimension: click the first point (on a part = its centre)"
     },
     "added": {
       "panel_outline": "Panel: added an enclosure (undo with Cmd+Z)",
@@ -1713,5 +1716,62 @@
     "spare": "spare",
     "overflowHint": "More wires are assigned than the cable has cores (ERC: cable core overflow)",
     "hint": "Cores come from the wires the definition line crosses; redraw the line to change the assignment"
+  },
+  "panelMarks": {
+    "cancel": "Cancel",
+    "nameplate": {
+      "kindLabel": "Nameplate",
+      "ribbonHint": "Click a part (footprint) to attach a nameplate to it, or empty space for a standalone one",
+      "titleFor": "Insert nameplate — {reference}",
+      "titleAlone": "Insert nameplate (standalone)",
+      "alone": "standalone",
+      "line1": "Line 1",
+      "line2": "Line 2",
+      "source": "Description",
+      "sourceSchematic": "from the schematic {reference} (automatic)",
+      "sourceNone": "no description in the schematic",
+      "sourceAlone": "standalone (not on a part)",
+      "size": "Size",
+      "textHeight": "Text height",
+      "position": "Position",
+      "below": "below the footprint",
+      "above": "above the footprint",
+      "partNo": "Part no.",
+      "follow": "Follow the schematic description when it changes",
+      "insert": "Insert",
+      "hint": "Insert without choosing a footprint for a standalone nameplate. The BOM gets a row per nameplate part number.",
+      "insertedLog": "Panel: placed a nameplate on {reference} (Cmd+Z to undo)",
+      "updatedLog": "Panel: updated the nameplate"
+    },
+    "dimension": {
+      "kindLabel": "Dimension",
+      "ribbonHint": "Click two points (on a part = its centre) to place an associative dimension that follows the parts",
+      "secondLog": "Dimension: click the second point",
+      "placedLog": "Dimension: placed (Cmd+Z to undo)",
+      "valueRow": "Value",
+      "axisRow": "Direction",
+      "horizontal": "horizontal",
+      "vertical": "vertical"
+    },
+    "align": {
+      "ribbonHint": "Align the selected parts to the first one, or distribute them evenly",
+      "title": "Align ({count} selected, base = {base})",
+      "needTwo": "Select two or more parts (Shift+click)",
+      "pitch": "Pitch",
+      "pitchAuto": "auto",
+      "distributeH": "Distribute horizontally",
+      "distributeV": "Distribute vertically",
+      "hint": "One command, one undo. Parts on a rail are not moved vertically.",
+      "doneLog": "Panel: aligned {count} parts ({mode}) (Cmd+Z to undo)",
+      "distributedLog": "Panel: distributed {count} parts (Cmd+Z to undo)",
+      "mode": {
+        "left": "Align left",
+        "center_x": "Centre horizontally",
+        "right": "Align right",
+        "top": "Align top",
+        "center_y": "Centre vertically",
+        "bottom": "Align bottom"
+      }
+    }
   }
 }

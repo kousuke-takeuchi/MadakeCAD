@@ -6,6 +6,7 @@ import {
   annotationTextCommand,
   harnessUpdateCommand,
   cableUpdateCommand,
+  nameplateUpdateCommand,
   symbolAttrs,
   wireNumberCommand,
   wireUpdateCommand,
@@ -261,5 +262,33 @@ describe("cableUpdateCommand", () => {
   // ja: 何も変えていなければコマンドを送らない
   it("sends nothing when nothing changed", () => {
     expect(cableUpdateCommand("s1", cable(), { reference: "W1", part_no: "", core_count: "3", sq: "", shield: false, grounded: false, length_m: "" })).toBeNull();
+  });
+});
+
+describe("nameplateUpdateCommand", () => {
+  const plate = (): Entity => ({
+    kind: "nameplate",
+    id: "n1",
+    footprint: "k1",
+    at: { x: 0, y: 0 },
+    w: 30,
+    h: 10,
+    lines: ["主回路"],
+    text_mm: 3.5,
+    position: "below",
+    follow_description: false,
+    part_no: "",
+  });
+
+  // ja: 銘板の文字・文字高・位置・追従・型番を1回のupdate_entityで書き、空の2行目は付けない
+  it("writes text, height, position, following and part in one update without an empty second line", () => {
+    const c = nameplateUpdateCommand("s1", plate(), { line1: "主回路", line2: "", text_mm: "5", position: "above", follow: true, part_no: "SAMPLE-NP" });
+    expect((c as { entity: Entity }).entity).toMatchObject({ lines: ["主回路"], text_mm: 5, position: "above", follow_description: true, part_no: "SAMPLE-NP" });
+  });
+
+  // ja: 文字高が正の数でなければ、また何も変えていなければ図面を変えない
+  it("sends nothing for a non-positive text height or when nothing changed", () => {
+    expect(nameplateUpdateCommand("s1", plate(), { line1: "主回路", line2: "", text_mm: "0", position: "below", follow: false, part_no: "" })).toBeNull();
+    expect(nameplateUpdateCommand("s1", plate(), { line1: "主回路", line2: "", text_mm: "3.5", position: "below", follow: false, part_no: "" })).toBeNull();
   });
 });

@@ -46,7 +46,8 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 - ✅ **Reserved contacts** (2026-10-15): the device navigator lists the contacts of a relay's contact configuration that are not drawn yet; click or drag one onto the drawing to place it
 - ✅ **PLC ladder styles and placement** (2026-10-15): horizontal-bus ladders, sharing the last I/O page and splitting modules across pages in split units, with the settings saved in the project (format 14)
 - ✅ **Multi-core cables and cable list** (2026-10-15): cable definition lines that assign the crossed wires as cores, shield, length, core-overflow ERC, the cable list report and cable rows in the BOM (format 15)
-- Deferred out of M4 (no phase scheduled): the in-panel wiring diagram, nameplates, dimensions and align/distribute on panel sheets; a graphical plot-frame editor
+- ✅ **Panel nameplates, dimensions, align and in-panel wiring** (2026-10-15): nameplates attached to footprints that can follow the schematic description, associative dimensions, align/distribute as one undo step, and the in-panel wiring diagram report (format 16)
+- Deferred out of M4 (no phase scheduled): a graphical plot-frame editor
 
 ## M5 — Mechanical CAD integration (FreeCAD) ✅ (M5-1 to M5-3 done; the 2D panel sheet stays under M4 §8)
 

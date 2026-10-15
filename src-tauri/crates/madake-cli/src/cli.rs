@@ -712,6 +712,18 @@ mod tests {
         );
     }
 
+    /// `madake export panel-wiring` writes the panel wiring diagram report.
+    /// `madake export panel-wiring` は盤内配線図の帳票を書き出す。
+    #[test]
+    fn export_panel_wiring_writes_the_panel_wiring_report() {
+        let api = FakeApi::default();
+        run(&parse(&["madake", "export", "panel-wiring", "/tmp/p.pdf"]), &api).unwrap();
+        assert_eq!(
+            api.calls(),
+            vec!["export_report(panel-wiring, pdf, /tmp/p.pdf, None)".to_string()]
+        );
+    }
+
     /// --format wins over the file extension.
     /// --formatは拡張子より優先される。
     #[test]

@@ -117,6 +117,12 @@ export const panelTheme = {
   partNo: "#6b7178",
   /** 盤の名前。 */
   label: "#6b7178",
+  /** 銘板の面・輪郭・文字。 */
+  nameplate: "#ffffff",
+  nameplateEdge: "#2b2f33",
+  nameplateText: "#2b2f33",
+  /** 寸法線・補助線・寸法値。 */
+  dimension: "#6b7178",
   /** バルーン (アイテム番号) の白丸・輪郭と引出線・番号。 */
   balloon: "#ffffff",
   balloonEdge: "#2b2f33",

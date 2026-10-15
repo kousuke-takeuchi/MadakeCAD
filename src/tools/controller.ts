@@ -2,6 +2,8 @@
 
 import { harnessAddCommand, harnessRectPoints, harnessWireCount } from "../canvas/harness";
 import { cableAddCommand, cableHit } from "../canvas/cable";
+import { dimensionAddCommand, footprintAt, panelMarkHit } from "../canvas/panelMarks";
+import { useNameplatesStore } from "../stores/nameplates";
 import {
   DEFAULT_VARIANT,
   drawMacroGhost,
@@ -51,6 +53,7 @@ import {
   type Point,
   type SymbolInstance,
   type UnplacedComponent,
+  type DimAnchor,
 } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useMacrosStore } from "../stores/macros";
@@ -92,6 +95,8 @@ const PANEL_TOOLS: ToolId[] = [
   "duct",
   "footprint",
   "panel_legend",
+  "nameplate",
+  "dimension",
 ];
 
 /** 配置中のマクロ。`fromLibrary=false`は⌘Vの無名マクロ (ファイルに無いのでidを引けない)。 */
@@ -156,6 +161,8 @@ export class EditorController {
    * 1個置いたら選択ツールへ戻る。`placeLabel`はカーソル脇の操作チップの主文 (例 "K1 33-34 NO")。
    */
   placeReference: string | null = null;
+  /** 寸法ツールで打った1点目 (2点目で寸法線を置く)。 */
+  dimFirst: DimAnchor | null = null;
   placeLabel: string | null = null;
   placeRotation = 0;
   /** 部品DBから選択した部品情報 (配置時にvalue/attrsへ反映)。 */
@@ -227,6 +234,7 @@ export class EditorController {
       return;
     }
     this.tool = tool;
+    this.dimFirst = null;
     this.placeReference = null;
     this.placeLabel = null;
     this.placeSymbolId = tool === "place" ? (symbolId ?? this.placeSymbolId) : null;
@@ -458,6 +466,12 @@ export class EditorController {
     for (const e of entities) {
       if (e.kind === "panel_legend" && inRect(world, legendRect(sheet, e))) return e.id;
     }
+    // 銘板・寸法線はフットプリントより手前に描くので先に拾う
+    for (const e of entities) {
+      if ((e.kind === "nameplate" || e.kind === "dimension") && panelMarkHit(sheet, e, world, HIT_TOLERANCE)) {
+        return e.id;
+      }
+    }
     for (const e of entities) {
       if (e.kind === "footprint" && inRect(world, footprintRect(e))) return e.id;
     }
@@ -558,6 +572,33 @@ export class EditorController {
       case "panel_legend":
         void this.commitPanelLegend(this.snap(world));
         break;
+      case "nameplate": {
+        // 部品をクリックすればその部品に結び付け、何も無い所なら単独の銘板にする
+        const sheet = this.store.activeSheet;
+        if (sheet) {
+          const fp = footprintAt(sheet, world);
+          useNameplatesStore().openFor(fp?.id ?? null, this.snap(world));
+        }
+        break;
+      }
+      case "dimension": {
+        // 1点目・2点目をクリック (部品の上なら部品の中心に結び付く)。2点目で寸法線を置く
+        const sheet = this.store.activeSheet;
+        if (!sheet) break;
+        const fp = footprintAt(sheet, world);
+        const anchor: DimAnchor = fp ? { kind: "footprint", id: fp.id } : { kind: "point", at: this.snap(world) };
+        if (!this.dimFirst) {
+          this.dimFirst = anchor;
+          useUiStore().log(i18n.global.t("panelMarks.dimension.secondLog"));
+        } else {
+          const command = dimensionAddCommand(sheet, this.dimFirst, anchor);
+          this.dimFirst = null;
+          if (command) {
+            void this.store.execute(command).then(() => useUiStore().log(i18n.global.t("panelMarks.dimension.placedLog")));
+          }
+        }
+        break;
+      }
       case "wire_legend":
         void this.commitWireLegend(this.snap(world));
         break;
@@ -624,7 +665,7 @@ export class EditorController {
               const pts: Point[] =
                 e.kind === "wire" || e.kind === "harness" || e.kind === "shape" || e.kind === "cable"
                   ? e.points
-                  : "at" in e
+                  : "at" in e && e.kind !== "dimension"
                     ? [e.at]
                     : [];
               if (pts.length && pts.every((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1)) {
@@ -721,7 +762,7 @@ export class EditorController {
               y: (first.points[0].y + first.points[first.points.length - 1].y) / 2,
             }
           : null
-        : "at" in first
+        : "at" in first && first.kind !== "dimension"
           ? first.at
           : null;
     if (target && this.viewSize.w > 0) {
@@ -1073,7 +1114,7 @@ export class EditorController {
               drawSymbol(ctx, vp, moved, def, false, theme.selection);
               ctx.globalAlpha = 1;
             }
-          } else if ("at" in e) {
+          } else if ("at" in e && e.kind !== "dimension") {
             const s = vp.toScreen({ x: e.at.x + this.moveDelta.x, y: e.at.y + this.moveDelta.y });
             ctx.strokeRect(s.x - 4, s.y - 4, 8, 8);
           }
