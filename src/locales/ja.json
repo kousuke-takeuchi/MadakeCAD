@@ -783,11 +783,16 @@
       "internal": "内部ターゲット",
       "wireNo": "線番",
       "wire": "電線",
-      "status": "状態"
+      "status": "状態",
+      "level": "Lv"
     },
     "spare": "予備",
     "addJumper": "ジャンパ生成",
     "removeJumper": "ジャンパ削除",
+    "swap": "内外スワップ",
+    "swapHint": "選んだ端子の内部側と外部側を入れ替えます (もう一度押すと戻ります)",
+    "swapped": "スワップ",
+    "swapLog": "{reference}: 端子 {terminals} の内外を入れ替えました",
     "jumperHint": "隣り合う端子を選んでサドルジャンパを掛けます。編集はCommand経由なのでCmd+Zで戻せます",
     "check": "端子台チェック",
     "checkPending": "未チェック",
@@ -795,15 +800,49 @@
     "checkCounts": "エラー{error} / 警告{warning} / 情報{info}",
     "generateDiagram": "端子接続図を生成",
     "generateChart": "チャートを生成",
-    "phase2Hint": "フェーズ2で対応予定",
-    "phase2": {
-      "sort": "並べ替え",
-      "autoNumber": "自動採番",
-      "spareTerminal": "予備端子",
-      "multiLevel": "多段生成",
-      "accessory": "アクセサリ",
-      "swap": "内外スワップ",
-      "goto": "図面へ"
+    "insertSpare": "予備挿入",
+    "spareInsert": {
+      "title": "予備端子の挿入",
+      "description": "update_entity 1回 (symbol_id + terminal_numbers)",
+      "positionLabel": "挿入位置:",
+      "positionEnd": "末尾",
+      "positionAfter": "{after}の後ろ",
+      "countLabel": "個数:",
+      "numberMode": "番号の扱い",
+      "modeShift": "末尾に極を足して番号を繰り下げる",
+      "modeKeep": "予備を空き番号のまま残す",
+      "modeKeepHint": "後ろの番号はそのまま残し、予備には次の空き番号を付ける (重複するなら拒否)",
+      "previewLabel": "プレビュー",
+      "previewLine": "{position}に予備{count} (端子 {labels}) · 両側未結線",
+      "note": "繰り下げはピン座標を動かさないので既存結線は外れない",
+      "cancel": "キャンセル",
+      "apply": "適用",
+      "issueCount": "個数は1以上を指定してください",
+      "issuePoleCap": "極数の上限を超えます (上限{max}極)",
+      "issueInvalid": "この指定では追加できません",
+      "modeShiftHint": "後ろの端子を繰り下げて番号を連続させる",
+      "issueNonNumeric": "挿入位置の端子番号 ({label}) に数字が無いので予備の番号を決められません",
+      "issueKeepDuplicate": "空き番号のまま残すと既存の端子と番号がぶつかります。「繰り下げる」を選んでください"
+    },
+    "multiLevel": "多段生成",
+    "levels": {
+      "label": "段数",
+      "description": "この端子台を単段⇔多段に切り替えます。ピン配置・チャート・接続図がすべて追従します。",
+      "hint": "消える段に結線・ジャンパ・ピングループ・付属品の指定が残っていると、段を減らす操作は拒否されます。段数1は`_1l`の別名ではなく単段のsymbol_idへ戻ります。",
+      "range": "1〜{max}。範囲外 (0段・4段以上) は拒否",
+      "preview": "プレビュー",
+      "previewNumbers": "端子番号 {from} → {to}",
+      "previewJumpers": "ジャンパ {from} → {to} へ移行",
+      "blockers": "解除で消える段",
+      "issue": "結線がある段は解除できません。端子 {terminal} の結線を外してから解除してください",
+      "blocker": {
+        "wire": "結線あり",
+        "jumper": "ジャンパあり",
+        "pinGroup": "ピングループあり",
+        "accessory": "付属品あり"
+      },
+      "cancel": "キャンセル",
+      "apply": "適用"
     },
     "hint": "グリッドは図面から導出しています(結線・線番・電線はここでは編集できません)。内部側=盤内(左の接続点)、外部側=盤外(右の接続点)",
     "openLog": "端子台: 「{sheet}」の端子台を編集します",
@@ -813,7 +852,85 @@
     "jumperRemovedLog": "端子台: {reference} の端子 {terminals} のジャンパを外しました (Cmd+Zで元に戻せます)",
     "checkLog": "端子台: {reference} をチェックしました — {result}",
     "chartLog": "端子台: {reference} のチャート{count}行を {path} に書き出しました",
-    "diagramLog": "端子台: {reference} の端子接続図{count}ページを {path} に書き出しました"
+    "diagramLog": "端子台: {reference} の端子接続図{count}ページを {path} に書き出しました",
+    "sort": {
+      "label": "並べ替え:",
+      "number": "数値順",
+      "alnum": "英数順",
+      "page": "ページ順(回路図の出現順)",
+      "cable": "外部ケーブル順",
+      "jumper": "ジャンパ順"
+    },
+    "goto": "図面へジャンプ",
+    "gotoHint": "行をダブルクリックすると図面へジャンプします",
+    "sortChangedLog": "端子台: {reference} を{order}で並べ替えました (Cmd+Zで元に戻せます)",
+    "gotoLog": "端子台: {reference} へ図面をジャンプしました",
+    "autoNumber": "自動採番",
+    "renumber": {
+      "start": "開始番号",
+      "step": "増分",
+      "prefix": "接頭辞",
+      "target": "対象",
+      "preview": "プレビュー",
+      "cancel": "キャンセル",
+      "apply": "適用",
+      "description": "この端子台の全端子をピン順に振り直します。チャート・端子接続図・図面がまとめて追従します。",
+      "note": "ジャンパ・ピングループの指定も同じコマンドで新しい番号へ書き換わるので、⌘Z一発で元に戻ります。",
+      "targetAll": "全端子",
+      "targetSelected": "選択行 ({count})",
+      "targetSelectedHint": "選択行だけの採番は後のフェーズで対応予定",
+      "jumpers": "ジャンパ {from} → {to}",
+      "issueDuplicate": "端子番号が重複します ({label} が{count}件)。図面は変更されません",
+      "issueEmpty": "端子番号が空欄になります。図面は変更されません",
+      "issueComma": "端子番号に保存形の区切り記号「,」が入ります ({label})。図面は変更されません",
+      "issueInvalid": "この番号では適用できません。図面は変更されません",
+      "issueNoBlock": "採番する端子台がありません"
+    },
+    "renumberedLog": "端子台: {reference} の端子番号を {from} から {to} へ採番しました (Cmd+Zで元に戻せます)",
+    "levelsChangedLog": "端子台: {reference} の段数を {from} から {to} へ変更しました (Cmd+Zで元に戻せます)",
+    "spareInsertedLog": "端子台: {reference} に予備端子{count}個 ({labels}) を挿入しました (Cmd+Zで元に戻せます)",
+    "assignPart": {
+      "button": "部品割当",
+      "title": "部品割当 (端子ブロック型番)",
+      "description": "部品DBの型番を割り当てます。型番と端子台の種別を1回の編集で書き込みます (Cmd+Zで元に戻せます)",
+      "search": "型番・品名で検索",
+      "results": "結果 ({count}件)",
+      "empty": "端子台の部品が見つかりません",
+      "hint": "種別は部品DBの terminal_kind 列。割当時に端子台へ写し、チャートの「型番」と端子台チェックが読みます",
+      "cancel": "キャンセル",
+      "apply": "割当",
+      "assignedLog": "端子台: {reference} に型番 {partNo} を割り当てました (Cmd+Zで元に戻せます)"
+    },
+    "accessory": {
+      "button": "付属品",
+      "title": "付属品 (アクセサリ)",
+      "description": "エンドブラケット・仕切り板・エンドプレートを端子台に付けます",
+      "position": "位置",
+      "kind": "種別",
+      "partNo": "型番",
+      "positionEnd": "末尾",
+      "positionBefore": "{terminal}の前",
+      "addRow": "行を追加",
+      "removeRow": "この行を削除",
+      "unknownPart": "{partNo} は部品DBにありません (適用はできます。部品表にはこの型番のまま載ります)",
+      "skipped": "読めない項は飛ばされています: {items}",
+      "hint": "位置=その端子の直前に入る。末尾は最後の端子の後ろ。種別はエンドブラケット / 仕切り板 / エンドプレートの3種",
+      "bomNote": "部品表には型番ごとの数量行として載ります。付属品の幅は盤レイアウトの間隔チェックには数えません",
+      "cancel": "キャンセル",
+      "apply": "適用",
+      "appliedLog": "端子台: {reference} の付属品を{count}件に更新しました (Cmd+Zで元に戻せます)"
+    },
+    "accessoryKind": {
+      "end_bracket": "エンドブラケット",
+      "partition": "仕切り板",
+      "end_plate": "エンドプレート"
+    },
+    "terminalKind": {
+      "feed_through": "貫通",
+      "multi_level": "多段",
+      "fuse": "ヒューズ",
+      "disconnect": "断路"
+    }
   },
   "plcIo": {
     "ribbonButton": "PLC I/O割付表",
@@ -984,14 +1101,14 @@
       "connectFailedLog": "AGENT   エージェント接続に失敗: {error}",
       "emptyConnected": "図面について指示してください。編集は自動で適用され、あとから元に戻せます。",
       "emptyDisconnected": "使えるAIプロバイダがありません。設定 > エージェント で選んでください (Claude Code CLI・APIキー・Copilot CLI・Ollama など)。",
-      "replyPlaceholder": "返信を入力..."
+      "replyPlaceholder": "返信を入力... (⌘Enter / Ctrl+Enter で送信、Enter は改行)"
     },
     "panel": {
       "titleActive": "回路エージェント",
       "titleNew": "新規エージェント",
       "expand": "展開",
       "minimize": "最小化",
-      "placeholder": "何でも指示できます... (例: 24V系にヒューズを追加して)"
+      "placeholder": "何でも指示できます... (例: 24V系にヒューズを追加して) — ⌘Enter / Ctrl+Enter で送信"
     },
     "message": {
       "working": "エージェントが作業しています...",
@@ -1002,9 +1119,10 @@
     "composer": {
       "addContext": "コンテキストに追加",
       "stop": "停止",
-      "send": "送信",
+      "send": "送信 (⌘Enter / Ctrl+Enter)",
       "sendFailedLog": "AGENT   送信に失敗しました (詳細はチャットのエラー表示を参照)",
-      "cancelFailedLog": "AGENT   キャンセル失敗: {error}"
+      "cancelFailedLog": "AGENT   キャンセル失敗: {error}",
+      "interrupt": "割り込んで送信 (⌘Enter / Ctrl+Enter) — 実行中のターンを中断して送ります"
     },
     "context": {
       "head": "コンテキストに追加",

@@ -651,6 +651,13 @@ export const useChatStore = defineStore("chat", {
     streaming(state): boolean {
       return state.activeId ? !!state.running[state.activeId] : false;
     },
+    /**
+     * 開いている会話へ割り込み送信できるか(答えている最中で、かつサーバーの会話idが
+     * 採番済み)。採番前は中断の宛先が無いので割り込めない。
+     */
+    canInterrupt(state): boolean {
+      return !!state.activeId && !!state.running[state.activeId] && !isLocalId(state.activeId);
+    },
     /** どれか1つでも会話が答えている最中か。 */
     anyStreaming(): boolean {
       return this.runningIds.length > 0;
@@ -968,6 +975,26 @@ export const useChatStore = defineStore("chat", {
         }
         return null;
       }
+    },
+
+    /**
+     * 開いている会話が答えている最中に、新しい指示を**割り込み**で送る。
+     *
+     * 進行中のターンを中断してから同じ会話へ送り直す(会話の文脈は残る。サーバー側の
+     * `cancel`は同期的に「送信中」を外すので、直後の送信は拒否されない)。答えていない
+     * ときは普通の送信と同じ。
+     *
+     * 採番前(`local-`)の会話が答えている間だけは割り込めない: 中断を届ける先のidが
+     * まだ無く、ここで送ると別の新規会話が出来てしまう。その短い間は`null`を返す。
+     */
+    async sendInterrupting(prompt: string): Promise<string | null> {
+      const text = prompt.trim();
+      if (!text) return null;
+      if (this.streaming) {
+        if (!this.canInterrupt) return null;
+        await this.cancel();
+      }
+      return this.send(text);
     },
 
     /**

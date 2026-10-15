@@ -11,11 +11,11 @@
 
 use crate::model::{EntityId, Project};
 use crate::report_sheet::{
-    body_bottom, fit_text, page_open, report_title_block, table_top, ReportKind, ReportMeta,
-    REPORT_PAPER,
+    body_bottom, fit_text, page_open, report_title_block, table_top, text_width, ReportKind,
+    ReportMeta, REPORT_PAPER,
 };
 use crate::svg::{line_el, rect_el, text_el, CELL_PAD, FRAME_MARGIN, FRAME_STROKE};
-use crate::terminal_chart::{terminal_block_ids, terminal_chart, TerminalRow};
+use crate::terminal_chart::{terminal_block_ids, terminal_chart, terminal_sort_key, TerminalRow};
 
 /// 端子箱の幅 (mm)。
 const BOX_W: f64 = 24.0;
@@ -39,6 +39,8 @@ const HARNESS_ZONE: f64 = 20.0;
 const BRACKET_ARM: f64 = 2.5;
 /// ジャンパの縦線を端子箱の内部側の縁からどれだけ離すか (mm)。
 const JUMPER_OFFSET: f64 = 3.0;
+/// 段ごとの配線レーンの間隔 (mm)。
+const JUMPER_LANE_GAP: f64 = 3.0;
 /// 見出し (外部側/内部側) の文字高さ (mm)。
 const CAPTION_FONT: f64 = 2.8;
 /// 本文上端から最初の端子の中心まで (mm)。見出しの分を空ける。
@@ -69,6 +71,27 @@ fn box_left() -> f64 {
 }
 fn box_right() -> f64 {
     center_x() + BOX_W / 2.0
+}
+
+/// 本文に使える一番右のX (mm。図枠とセル余白の内側)。段レーンの帯の右端。
+fn right_inner() -> f64 {
+    REPORT_PAPER.dimensions_mm().0 - FRAME_MARGIN - CELL_PAD
+}
+
+/// 段ごとのジャンパレーンのために紙の**右端側**に確保する帯の幅 (mm)。単段なら不要 (0)。
+///
+/// レーンは`HARNESS_ZONE` (引出線の外端からブラケットとハーネス名が入る20mmの帯) の
+/// **外側**に置かなければならない。中に置くと、行を飛び越えるジャンパの縦線・横線・
+/// 「サドルジャンパ」の注記がハーネス名の文字の上を走ってしまう (レビューのImportant 4)。
+/// 接続先表記の帯の右端をこの幅だけ詰めて ([`Side::label_width`])、レーンと注記の場所を空ける。
+fn jumper_lane_band(level_count: usize) -> f64 {
+    if level_count <= 1 {
+        return 0.0;
+    }
+    (level_count - 1) as f64 * JUMPER_LANE_GAP
+        + CELL_PAD
+        + text_width(JUMPER_NOTE, NOTE_FONT)
+        + CELL_PAD
 }
 
 /// ページ内k番目 (0始まり) の端子の中心Y (mm)。
@@ -156,11 +179,13 @@ impl Side {
         }
     }
 
-    /// 接続先表記に使える幅 (mm)。
-    fn label_width(self) -> f64 {
+    /// 接続先表記に使える幅 (mm)。内部側は段レーンの帯 (`lane_band`。
+    /// [`jumper_lane_band`]。単段なら0) の分だけ短くなる — レーンの縦線と注記が
+    /// 接続先表記の文字に重ならないようにするため。
+    fn label_width(self, lane_band: f64) -> f64 {
         match self {
             Side::Outside => self.label_x() - FRAME_MARGIN - CELL_PAD,
-            Side::Inside => REPORT_PAPER.dimensions_mm().0 - FRAME_MARGIN - CELL_PAD - self.label_x(),
+            Side::Inside => right_inner() - self.label_x() - lane_band,
         }
     }
 
@@ -225,10 +250,16 @@ pub fn terminal_diagram_svg(project: &Project, tb_id: EntityId) -> Vec<String> {
         .into_iter()
         .enumerate()
         .map(|(i, rows)| {
-            let title = match (total, rows.first(), rows.last()) {
-                (1, _, _) | (_, None, _) | (_, _, None) => base.clone(),
-                (_, Some(first), Some(last)) => {
-                    format!("{base} (端子 {}〜{})", first.terminal, last.terminal)
+            // 表題の範囲は「そのページに載る端子の最小〜最大」。行の並べ替え順 (row_order) では
+            // 先頭・末尾の行が最小・最大とは限らないので、端子番号で取り直す
+            let span = (
+                rows.iter().min_by_key(|r| terminal_sort_key(&r.terminal)),
+                rows.iter().max_by_key(|r| terminal_sort_key(&r.terminal)),
+            );
+            let title = match (total, span) {
+                (1, _) | (_, (None, _)) | (_, (_, None)) => base.clone(),
+                (_, (Some(min), Some(max))) => {
+                    format!("{base} (端子 {}〜{})", min.terminal, max.terminal)
                 }
             };
             // 段の列はページをまたいで同じ並びになるよう、チャート全体から決める
@@ -356,7 +387,7 @@ fn draw_side(out: &mut String, rows: &[TerminalRow], side: Side, levels: &[Strin
                 LABEL_FONT,
                 "#000",
                 side.anchor(),
-                &fit_text(target, side.label_width(), LABEL_FONT),
+                &fit_text(target, side.label_width(jumper_lane_band(levels.len())), LABEL_FONT),
             );
         }
         let wire = side.wire(row);
@@ -413,8 +444,30 @@ fn draw_brackets(out: &mut String, rows: &[TerminalRow], side: Side) {
     }
 }
 
+/// あるジャンパを描く縦線のX (mm)。
+///
+/// **隣り合う行どうし**(同じ極の段違い"1a-1b"のような、必ず隣り合うジャンパ。段は
+/// クラスタで必ず隣り合う並びになるので、間に他の段の行は挟まらない) は、箱のすぐ外の
+/// 共通レーン (単段の端子台と同じ位置) でよい。**隣り合わない行どうし**(同じ段の隣り合う
+/// 極どうし"1a-2a"のような、途中に**別の段**の行を挟むジャンパ) は、段ごとに割り当てた
+/// 専用レーンを使う。すべての行の引出線は`Side::Inside.lead_end()`より内側で終わる
+/// ([`draw_side`])ので、レーンをそこより外に置けば、途中に挟まる他の段の行の引出線を
+/// 一切横切らない (段ごとの配線レーン、Task 4)。
+///
+/// レーンは紙の**右端側に確保した帯** ([`jumper_lane_band`]) に並べる。
+/// `HARNESS_ZONE` (引出線の外端から20mm。ブラケットとハーネス名の帯) の中に置くと
+/// ハーネス名の上を走ってしまい、接続先表記の帯にそのまま置くと接続先の文字と重なるため
+/// (接続先表記の幅はこの帯の分だけ詰めてある)。
+fn jumper_lane(levels: &[String], level: &str, adjacent_rows: bool) -> f64 {
+    if adjacent_rows || levels.len() <= 1 {
+        return box_right() + JUMPER_OFFSET;
+    }
+    let idx = levels.iter().position(|l| l == level).unwrap_or(0);
+    right_inner() - (levels.len() - 1 - idx) as f64 * JUMPER_LANE_GAP
+}
+
 /// サドルジャンパ。端子箱の**内部側の縁**に縦線で描く (両端に短い横線)。
-/// このページに両方の端子が載っているジャンパだけを描き、注記はページに1回だけ添える。
+/// このページに両方の端子が載っているジャンパだけを描き、注記はレーンごとに1回だけ添える。
 fn draw_jumpers(
     out: &mut String,
     rows: &[TerminalRow],
@@ -422,12 +475,16 @@ fn draw_jumpers(
     levels: &[String],
 ) {
     let index = |no: &str| rows.iter().position(|r| r.terminal == no);
-    let x = box_right() + JUMPER_OFFSET;
-    let mut noted = false;
+    // 段レーンの帯の一番左のレーン。注記はその左に (右揃えで) 添えるので、
+    // どのレーンのぶんでも紙からはみ出さず、レーンの縦線の上にも乗らない
+    let lane_left = right_inner() - levels.len().saturating_sub(1) as f64 * JUMPER_LANE_GAP;
+    let mut noted: Vec<f64> = Vec::new();
     for (a, b) in jumpers {
         let (Some(ka), Some(kb)) = (index(a), index(b)) else {
             continue;
         };
+        let adjacent_rows = ka.abs_diff(kb) == 1;
+        let x = jumper_lane(levels, &rows[ka].level, adjacent_rows);
         let (ya, yb) = (row_y(ka), row_y(kb));
         line_el(out, x, ya, x, yb, FRAME_STROKE, "#000");
         for k in [ka, kb] {
@@ -435,17 +492,22 @@ fn draw_jumpers(
             let edge = Side::Inside.cell_edge(box_cell(levels, &rows[k]));
             line_el(out, edge, y, x, y, FRAME_STROKE, "#000");
         }
-        if !noted {
+        if !noted.iter().any(|n| (n - x).abs() < 1e-9) {
+            let (note_x, anchor) = if adjacent_rows || levels.len() <= 1 {
+                (x + CELL_PAD, "start")
+            } else {
+                (lane_left - CELL_PAD, "end")
+            };
             text_el(
                 out,
-                x + CELL_PAD,
+                note_x,
                 (ya + yb) / 2.0 + NOTE_FONT * 0.35,
                 NOTE_FONT,
                 NOTE_FILL,
-                "start",
+                anchor,
                 JUMPER_NOTE,
             );
-            noted = true;
+            noted.push(x);
         }
     }
 }
@@ -636,6 +698,41 @@ mod tests {
         assert_eq!(numbers, ["1", "2", "3", "4", "5", "6"]);
     }
 
+    /// The terminal diagram follows the same row order as the chart (the editor): when `row_order` groups the jumpered poles first, the strip's boxes stack in that order too, not plain terminal-number order.
+    /// 端子接続図はチャート(エディタ)と同じ並び順に従う: `row_order`でジャンパの掛かった極をまとめると、ストリップの箱もその順に積まれ、単純な端子番号順にはならない。
+    #[test]
+    fn the_strip_follows_the_chart_row_order_not_plain_terminal_order() {
+        let mut engine = Engine::new(Project::new("並べ替え"));
+        let sheet_id = engine.project().sheets[0].id;
+        let mut tb = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "terminal_block_6p".into(),
+            at: Point::new(150.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        };
+        tb.attrs.insert("jumpers".into(), "5-6".into());
+        tb.attrs.insert("row_order".into(), "jumper".into());
+        let tb_id = tb.id;
+        engine
+            .execute(Command::AddEntity { sheet_id, entity: Entity::Symbol(tb) })
+            .expect("追加");
+        let pages = terminal_diagram_svg(engine.project(), tb_id);
+        let numbers: Vec<String> = texts(&pages[0])
+            .into_iter()
+            .filter(|t| (t.0 - center_x()).abs() < 1e-9)
+            .map(|t| t.2)
+            .collect();
+        assert_eq!(
+            numbers,
+            ["5", "6", "1", "2", "3", "4"],
+            "ジャンパの掛かった5・6が先頭に積まれる (端子台チャートと同じ並び)"
+        );
+    }
+
     /// The outside of the panel is drawn to the left of the strip and the inside to the right, each under its own caption.
     /// 盤外 (外部側) はストリップの左、盤内 (内部側) は右に描かれ、それぞれ見出しが付く。
     #[test]
@@ -749,6 +846,37 @@ mod tests {
         assert!(internal.iter().all(|t| t.0 > box_right()), "{internal:?}");
     }
 
+    /// A terminal whose inside and outside are swapped is drawn with its two wires on the opposite sides; the other terminals stay where they were.
+    /// 内外をスワップした端子は、2本の電線が反対側に描かれる。ほかの端子は元の側のまま。
+    #[test]
+    fn a_swapped_terminal_draws_its_wires_on_the_opposite_sides() {
+        let (mut project, tb) = demo();
+        for sheet in &mut project.sheets {
+            if let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&tb) {
+                s.attrs
+                    .insert(crate::terminal_chart::SWAPPED_ATTR.into(), "3,5".into());
+            }
+        }
+        let svg = &terminal_diagram_svg(&project, tb)[0];
+        let (x3, _) = text_at(svg, "white 1.25sq");
+        assert!(x3 > box_right(), "端子3の外部側の電線が内部側へ移る");
+        let (x5, _) = text_at(svg, "blue 2sq");
+        assert!(x5 > box_right(), "端子5の外部側の電線も内部側へ移る");
+        let greens: Vec<_> = texts(svg)
+            .into_iter()
+            .filter(|t| t.2 == "green 0.5sq")
+            .collect();
+        assert_eq!(
+            greens.iter().filter(|t| t.0 < box_left()).count(),
+            1,
+            "端子5の内部側だけが外部側へ: {greens:?}"
+        );
+        assert!(
+            text_at(svg, "red 0.75sq KIV0.75R").0 < box_left(),
+            "端子1はそのまま"
+        );
+    }
+
     /// 多段端子台TB1 (`{poles}極{levels}段`) だけを置いたプロジェクトの端子接続図。
     fn multilevel_diagram(poles: usize, levels: usize) -> Vec<String> {
         let mut project = Project::new("多段端子台デモ");
@@ -819,6 +947,157 @@ mod tests {
         );
     }
 
+    /// 多段端子台TB1 (`{poles}極{levels}段`・ジャンパ`jumpers`付き) だけを置いたプロジェクトの端子接続図。
+    fn multilevel_diagram_with_jumpers(poles: usize, levels: usize, jumpers: &str) -> Vec<String> {
+        let mut project = Project::new("多段端子台デモ");
+        let mut attrs: std::collections::BTreeMap<String, String> = Default::default();
+        attrs.insert("jumpers".into(), jumpers.to_string());
+        let tb = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: format!("terminal_block_{poles}p_{levels}l"),
+            at: Point::new(150.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs,
+        });
+        let tb_id = tb.id();
+        project.sheets[0].entities.insert(tb_id, tb);
+        terminal_diagram_svg(&project, tb_id)
+    }
+
+    /// A jumper linking two poles of the same level ("1a-2a") skips over the other level's row in between ("1b"), so it is routed through a lane beyond every row's lead line — never through the zone where that in-between row's own lead line runs.
+    /// 同じ段の2極を繋ぐジャンパ("1a-2a")は、間に挟まる別の段の行("1b")を飛び越えるので、どの行の引出線よりも外側のレーンを通る — 間に挟まる行自身の引出線が走る帯を横切らない。
+    #[test]
+    fn a_same_level_jumper_that_skips_a_row_never_crosses_the_skipped_rows_lead_line() {
+        let pages = multilevel_diagram_with_jumpers(4, 2, "1a-2a");
+        let jumper: Vec<_> = vertical_lines(&pages[0])
+            .into_iter()
+            .filter(|l| (l.1, l.3) == (row_y(0), row_y(2)) || (l.1, l.3) == (row_y(2), row_y(0)))
+            .collect();
+        assert_eq!(jumper.len(), 1, "1a-2aのジャンパ線: {jumper:?}");
+        let x = jumper[0].0;
+        assert!(
+            x >= Side::Inside.lead_end(),
+            "レーンは全ての行の引出線の外側 (lead_end={}): x={x}",
+            Side::Inside.lead_end()
+        );
+    }
+
+    /// A jumper between the two levels of one pole ("1a-1b") always links physically adjacent rows (levels cluster together), so it still uses the same close lane a single-level block would, right next to the boxes.
+    /// 1つの極の2つの段を繋ぐジャンパ("1a-1b")は、必ず物理的に隣り合う行を繋ぐ (段はクラスタでまとまる) ので、単段の端子台と同じ、箱のすぐそばの近いレーンを使う。
+    #[test]
+    fn a_cross_level_jumper_between_adjacent_rows_uses_the_same_near_lane_as_single_level() {
+        let pages = multilevel_diagram_with_jumpers(4, 2, "1a-1b");
+        let jumper: Vec<_> = vertical_lines(&pages[0])
+            .into_iter()
+            .filter(|l| (l.1, l.3) == (row_y(0), row_y(1)))
+            .collect();
+        assert_eq!(jumper.len(), 1, "{jumper:?}");
+        assert_eq!(jumper[0].0, box_right() + JUMPER_OFFSET, "単段と同じ近いレーン");
+    }
+
+    /// Two same-level jumpers on different levels ("1a-2a" and "1b-2b") each skip over the other level's row, so each gets its own lane: the lanes are distinct, and neither one falls in the zone where any row's lead line runs.
+    /// 段の違う2つの同段ジャンパ("1a-2a"と"1b-2b")はそれぞれ別の段の行を飛び越えるので、それぞれ専用のレーンを使う: 2つのレーンは別のXになり、どちらもどこかの行の引出線が走る帯には入らない。
+    #[test]
+    fn each_level_gets_its_own_distinct_jumper_lane() {
+        let pages = multilevel_diagram_with_jumpers(4, 2, "1a-2a,1b-2b");
+        let lane_of = |ya: f64, yb: f64| -> f64 {
+            vertical_lines(&pages[0])
+                .into_iter()
+                .find(|l| (l.1, l.3) == (ya, yb))
+                .expect("ジャンパ線")
+                .0
+        };
+        let (lane_a, lane_b) = (lane_of(row_y(0), row_y(2)), lane_of(row_y(1), row_y(3)));
+        assert_ne!(lane_a, lane_b, "段ごとに別のレーン");
+        for x in [lane_a, lane_b] {
+            assert!(x >= Side::Inside.lead_end(), "x={x} lead_end={}", Side::Inside.lead_end());
+        }
+    }
+
+    /// Every per-level jumper lane sits outside the 20 mm harness zone (where the brackets and harness names are drawn) and still inside the printable page, on a 2-level and on a 3-level block alike, so a lane never runs over a harness name and never falls off the paper.
+    /// 段ごとのジャンパレーンはどれも、ブラケットとハーネス名が入る20mmの帯の外側で、かつ印刷できる紙の内側に収まる (2段でも3段でも) ので、レーンがハーネス名の上を走ることも紙からはみ出すこともない。
+    #[test]
+    fn every_jumper_lane_clears_the_harness_zone_and_stays_inside_the_page() {
+        for (levels, jumpers) in [(2usize, "1a-2a,1b-2b"), (3, "1a-2a,1b-2b,1c-2c")] {
+            let pages = multilevel_diagram_with_jumpers(4, levels, jumpers);
+            let lanes: Vec<f64> = (0..levels)
+                .map(|l| {
+                    let (ya, yb) = (row_y(l), row_y(l + levels));
+                    vertical_lines(&pages[0])
+                        .into_iter()
+                        .find(|line| (line.1, line.3) == (ya, yb))
+                        .unwrap_or_else(|| panic!("{levels}段: 段{l}のジャンパ線が無い"))
+                        .0
+                })
+                .collect();
+            assert_eq!(lanes.len(), levels, "段の数だけレーンがある");
+            for x in &lanes {
+                assert!(
+                    *x >= Side::Inside.label_x(),
+                    "{levels}段: レーンx={x}がハーネス帯 (lead_end={}〜label_x={}) の中にある",
+                    Side::Inside.lead_end(),
+                    Side::Inside.label_x()
+                );
+                assert!(
+                    *x <= REPORT_PAPER.dimensions_mm().0 - FRAME_MARGIN,
+                    "{levels}段: レーンx={x}が図枠の外へ出ている"
+                );
+            }
+        }
+    }
+
+    /// The inside connection labels are shortened by exactly the width of the lane band, so the text can never reach the lanes; on a single-level block the band is zero and the label width is unchanged.
+    /// 内部側の接続先表記は段レーンの帯の幅だけ短く収められるので、文字がレーンに届くことはない。単段の端子台では帯は0で、表記の幅は変わらない。
+    #[test]
+    fn the_inside_label_width_reserves_the_lane_band() {
+        assert_eq!(jumper_lane_band(1), 0.0, "単段では帯を取らない");
+        assert!(jumper_lane_band(3) > jumper_lane_band(2), "段が増えると帯も広がる");
+        for levels in [2usize, 3] {
+            let band = jumper_lane_band(levels);
+            let text_right = Side::Inside.label_x() + Side::Inside.label_width(band);
+            let leftmost_lane = right_inner() - (levels - 1) as f64 * JUMPER_LANE_GAP;
+            assert!(
+                text_right <= leftmost_lane - text_width(JUMPER_NOTE, NOTE_FONT),
+                "{levels}段: 表記の右端{text_right}が注記とレーン{leftmost_lane}に届いている"
+            );
+        }
+        assert_eq!(
+            Side::Inside.label_width(0.0),
+            right_inner() - Side::Inside.label_x(),
+            "単段の表記幅は従来どおり"
+        );
+    }
+
+    /// Even with same-level jumpers that skip rows, the staggered strip (one box per row, columns by level) keeps its outside-left/inside-right layout: box columns and lead-line directions are unaffected by which lane a jumper's line happens to use.
+    /// 行を飛び越える同段ジャンパがあっても、千鳥配置 (行ごとに1箱、段は列) の外部側左・内部側右は崩れない: 箱の列や引出線の向きは、ジャンパ線がどのレーンを使うかに影響されない。
+    #[test]
+    fn the_staggered_layout_keeps_outside_left_and_inside_right_with_skipping_jumpers() {
+        let pages = multilevel_diagram_with_jumpers(4, 2, "1a-2a");
+        let bs = boxes(&pages[0]);
+        assert_eq!(bs.len(), 8, "4極x2段=8端子: {bs:?}");
+        let w = BOX_W / 2.0;
+        let lefts: Vec<f64> = bs.iter().map(|b| b.0).collect();
+        assert_eq!(
+            lefts,
+            vec![
+                box_left(),
+                box_left() + w,
+                box_left(),
+                box_left() + w,
+                box_left(),
+                box_left() + w,
+                box_left(),
+                box_left() + w,
+            ],
+            "段aは左列・段bは右列のまま"
+        );
+        assert!(text_at(&pages[0], OUTSIDE_CAPTION).0 < center_x(), "外部側の見出しは左のまま");
+        assert!(text_at(&pages[0], INSIDE_CAPTION).0 > center_x(), "内部側の見出しは右のまま");
+    }
+
     /// A single-level terminal diagram gets no level heading, because it has only one column of terminals.
     /// 単段の端子台の接続図には段の見出しが付かない (端子の列が1本しかないため)。
     #[test]
@@ -882,6 +1161,60 @@ mod tests {
         // 端子は全ページ通して1回ずつ描かれる
         let total: usize = pages.iter().map(|p| boxes(p).len()).sum();
         assert_eq!(total, per + 5);
+    }
+
+    /// The page title's terminal range names the smallest and largest terminal on that page, so it still reads as a range when a row order such as jumper order puts the rows out of terminal-number sequence.
+    /// ページ表題の端子の範囲は、そのページに載る端子の最小と最大を書く。ジャンパ順のように行が端子番号順に並んでいない並べ替えでも、範囲として読める表記のままになる。
+    #[test]
+    fn the_page_title_range_names_the_smallest_and_largest_terminal_on_the_page() {
+        let per = terminals_per_page();
+        let n = per + 5;
+        let mut project = Project::new("並べ替えた大きい端子台");
+        let mut attrs: std::collections::BTreeMap<String, String> = Default::default();
+        attrs.insert("jumpers".into(), format!("{}-{}", n - 1, n));
+        attrs.insert("row_order".into(), "jumper".into());
+        let tb = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: format!("terminal_block_{n}p"),
+            at: Point::new(150.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB9".into(),
+            value: String::new(),
+            attrs,
+        });
+        let tb_id = tb.id();
+        project.sheets[0].entities.insert(tb_id, tb);
+        let pages = terminal_diagram_svg(&project, tb_id);
+        assert_eq!(pages.len(), 2);
+        let title = |svg: &str| {
+            texts(svg)
+                .into_iter()
+                .find(|t| t.2.starts_with("端子接続図"))
+                .expect("表題")
+                .2
+        };
+        // ジャンパ順なので1ページ目の先頭は端子{n-1}・{n}、その後ろに端子1から続く
+        let first_page_numbers: Vec<String> = texts(&pages[0])
+            .into_iter()
+            .filter(|t| (t.0 - center_x()).abs() < 1e-9)
+            .map(|t| t.2)
+            .collect();
+        assert_eq!(
+            first_page_numbers[0..3],
+            [(n - 1).to_string(), n.to_string(), "1".to_string()],
+            "ジャンパ順で先頭に出る"
+        );
+        assert_eq!(
+            title(&pages[0]),
+            format!("端子接続図 TB9 (端子 1〜{n})"),
+            "先頭行が端子{}でも、範囲は最小1〜最大{n}",
+            n - 1
+        );
+        assert_eq!(
+            title(&pages[1]),
+            format!("端子接続図 TB9 (端子 {}〜{})", n - 6, n - 2)
+        );
     }
 
     /// Every terminal block gets exactly one page; anything that is not a terminal block gets none.

@@ -6,11 +6,20 @@ import type { Primitive, SymbolDef } from "../ipc";
 import { dynamicSymbol, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./dynamicSymbol";
 import {
   formatJumperSpec,
+  insertSpareTerminals,
   JUMPER_BAR_STROKE_MM,
   jumperBars,
+  multilevelSymbolId,
   parseJumperSpec,
+  polesAndLevelsOf,
+  relabelForLevels,
+  rewriteJumperLabels,
   terminalCenter,
+  terminalLabels,
   terminalNumbers,
+  terminalNumbersOfInstance,
+  terminalRenumberPlan,
+  validTerminalNumbers,
 } from "./terminalJumpers";
 
 describe("parseJumperSpec", () => {
@@ -196,5 +205,286 @@ describe("jumperBars", () => {
   it("produces no segment for a jumper to a terminal the block does not have", () => {
     const def = dynamicSymbol("terminal_block_4p")!;
     expect(jumperBars(def, [["4", "5"]])).toEqual([]);
+  });
+});
+
+describe("validTerminalNumbers", () => {
+  // ja: 個数が合い、重複も空要素も無ければ妥当
+  it("accepts a list with the right length and no duplicates or empty items", () => {
+    expect(validTerminalNumbers(["11", "12", "13", "14"], 4)).toBe(true);
+  });
+
+  // ja: ピン数と合わない個数は無効
+  it("rejects a list whose length does not match the pin count", () => {
+    expect(validTerminalNumbers(["11", "12", "13"], 4)).toBe(false);
+  });
+
+  // ja: 重複したラベルは無効
+  it("rejects a list with a duplicate label", () => {
+    expect(validTerminalNumbers(["1", "1", "2", "3"], 4)).toBe(false);
+  });
+
+  // ja: 空要素は無効
+  it("rejects a list with an empty item", () => {
+    expect(validTerminalNumbers(["1", "", "3", "4"], 4)).toBe(false);
+  });
+
+  // ja: 判定はtrim後の値で行う: ラベル前後の空白は無視し、空白しか違わない2つは重複と数え、空白だけのラベルも無効 (Rust側とparity)
+  it("judges the list on its trimmed values", () => {
+    expect(validTerminalNumbers([" 11", "12 ", " 13 ", "14"], 4)).toBe(true);
+    expect(validTerminalNumbers(["1 ", "1", "2", "3"], 4)).toBe(false);
+    expect(validTerminalNumbers(["1", "  ", "3", "4"], 4)).toBe(false);
+  });
+
+  // ja: 保存形の区切り記号 (カンマ) を含むラベルは無効 (読み戻すと端子の個数が変わってしまう)
+  it("rejects a label containing the stored list's own separator", () => {
+    expect(validTerminalNumbers(["1,2", "3", "4", "5"], 4)).toBe(false);
+  });
+});
+
+describe("terminalLabels / rewriteJumperLabels", () => {
+  // ja: 対応表は生のピン番号と表示ラベルを相互変換し、知らない番号はそのまま返す (Rust側 TerminalLabels とparity)
+  it("converts a raw pin number to the displayed label and back", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const labels = terminalLabels(def, { terminal_numbers: "11,12,13,14" });
+    expect(labels.isIdentity).toBe(false);
+    expect(labels.displayOf("1")).toBe("11");
+    expect(labels.rawOf("11")).toBe("1");
+    expect(labels.displayOf("99")).toBe("99");
+    expect(labels.rawOf("99")).toBe("99");
+  });
+
+  // ja: 端子台以外のシンボルには対応表を作らない (上書きは端子台だけの仕組み)
+  it("never builds a label map for a symbol that is not a terminal block", () => {
+    const def = dynamicSymbol("connector_4p")!;
+    expect(terminalLabels(def, { terminal_numbers: "11,12,13,14" }).isIdentity).toBe(true);
+  });
+
+  // ja: ジャンパ指定の書き換えは認識できた端子番号だけを置き換え、空白・読めない項目・存在しない端子を含む項目はそのまま残す (逆向きで元の文字列へ戻る。Rust側 rewrite_jumper_labels とparity)
+  it("rewrites only the terminal numbers it recognises and round-trips", () => {
+    const forward = new Map(
+      ["1", "2", "3", "4", "5", "6", "7", "8"].map((n, i) => [n, String(11 + i)] as const),
+    );
+    const backward = new Map([...forward].map(([a, b]) => [b, a] as const));
+    const original = "1-2, abc ,1-99,3 - 4";
+    const renamed = rewriteJumperLabels(original, forward);
+    expect(renamed).toBe("11-12, abc ,1-99,13 - 14");
+    expect(rewriteJumperLabels(renamed, backward)).toBe(original);
+  });
+});
+
+describe("terminalNumbersOfInstance / terminalLabels", () => {
+  // ja: attrs["terminal_numbers"]が無ければシンボル既定の番号のまま
+  it("falls back to the symbol's default numbers when there is no override", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    expect(terminalNumbersOfInstance(def, undefined)).toEqual(["1", "2", "3", "4"]);
+    expect(terminalLabels(def, undefined).renameMap).toBeNull();
+  });
+
+  // ja: 妥当な上書きはピン順のラベルとして使われ、生の番号→上書きラベルの対応が引ける
+  it("uses a valid override and builds a raw-to-display rename map", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const attrs = { terminal_numbers: "11,12,13,14" };
+    expect(terminalNumbersOfInstance(def, attrs)).toEqual(["11", "12", "13", "14"]);
+    expect(terminalLabels(def, attrs).renameMap).toEqual(
+      new Map([
+        ["1", "11"],
+        ["2", "12"],
+        ["3", "13"],
+        ["4", "14"],
+      ]),
+    );
+  });
+
+  // ja: 個数が合わない上書きは既定の番号へフォールバックする
+  it("falls back to the defaults when the override's item count is wrong", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    expect(terminalNumbersOfInstance(def, { terminal_numbers: "11,12,13" })).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+    ]);
+  });
+});
+
+describe("terminalRenumberPlan", () => {
+  // ja: 開始番号から刻み1でピン順に振る (単段)
+  it("numbers every pin from the start value on a single-level block", () => {
+    const raw = terminalNumbers(dynamicSymbol("terminal_block_8p")!);
+    expect(terminalRenumberPlan(raw, 11, 1, "")).toEqual([
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+    ]);
+  });
+
+  // ja: 多段端子台は段記号を保ったまま極だけ採番するので、同じ極の全段が同じ番号を共有する
+  it("keeps the level letters on a multi-level block and numbers only the pole", () => {
+    const raw = terminalNumbers(dynamicSymbol("terminal_block_4p_2l")!);
+    expect(terminalRenumberPlan(raw, 11, 1, "")).toEqual([
+      "11a",
+      "11b",
+      "12a",
+      "12b",
+      "13a",
+      "13b",
+      "14a",
+      "14b",
+    ]);
+  });
+
+  // ja: 増分と接頭辞はどちらも効く
+  it("applies the step and the prefix", () => {
+    const raw = terminalNumbers(dynamicSymbol("terminal_block_4p")!);
+    expect(terminalRenumberPlan(raw, 1, 2, "P")).toEqual(["P1", "P3", "P5", "P7"]);
+  });
+});
+
+describe("level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)", () => {
+  // ja: 極数と段数は端子番号から数え、単段の端子台は段数1になる
+  it("counts poles and levels from the terminal numbers", () => {
+    expect(polesAndLevelsOf(dynamicSymbol("terminal_block_8p"))).toEqual([8, 1]);
+    expect(polesAndLevelsOf(dynamicSymbol("terminal_block_8p_2l"))).toEqual([8, 2]);
+    expect(polesAndLevelsOf(null)).toEqual([0, 0]);
+  });
+
+  // ja: 段数を変えたsymbol_idは、段数1のとき`_1l`の別名ではなく単段のidへ正規化される
+  it("normalises one level back to the plain single-level symbol id", () => {
+    const two = dynamicSymbol("terminal_block_8p_2l");
+    expect(multilevelSymbolId("terminal_block_8p", 2, dynamicSymbol("terminal_block_8p"))).toBe(
+      "terminal_block_8p_2l",
+    );
+    expect(multilevelSymbolId("terminal_block_8p_2l", 1, two)).toBe("terminal_block_8p");
+    expect(multilevelSymbolId("terminal_block_8p_2l", 3, two)).toBe("terminal_block_8p_3l");
+  });
+
+  // ja: 端子台以外のシンボルと範囲外の段数はnull (プレビューを出さない)
+  it("returns null for a symbol that is not a terminal block and for an out-of-range level count", () => {
+    expect(multilevelSymbolId("resistor", 2, dynamicSymbol("resistor"))).toBeNull();
+    expect(multilevelSymbolId("terminal_block_8p", 0, dynamicSymbol("terminal_block_8p"))).toBeNull();
+    expect(multilevelSymbolId("terminal_block_8p", 4, dynamicSymbol("terminal_block_8p"))).toBeNull();
+  });
+
+  // ja: 段を増やすと極ごとのラベルに段記号が付き、減らすと残る段のラベルだけになる (段数1では段記号が落ちる)
+  it("expands labels into lettered levels and drops the vanishing ones when decreasing", () => {
+    expect(relabelForLevels(["11", "12"], 2, 1, 2)).toEqual(["11a", "11b", "12a", "12b"]);
+    expect(relabelForLevels(["11a", "11b", "12a", "12b"], 2, 2, 1)).toEqual(["11", "12"]);
+    expect(relabelForLevels(["11a", "11b", "12a", "12b"], 2, 2, 3)).toEqual([
+      "11a",
+      "11b",
+      "11c",
+      "12a",
+      "12b",
+      "12c",
+    ]);
+  });
+
+  // ja: 末尾が英字でない上書きラベル (接頭辞付きの`X11`) は段記号を外す対象にならず、そのまま土台になる
+  it("keeps a label that does not end in a level letter intact as the base", () => {
+    expect(relabelForLevels(["X11", "X12"], 2, 1, 2)).toEqual(["X11a", "X11b", "X12a", "X12b"]);
+  });
+
+  // ja: 段aのラベルの末尾が段aの記号以外の文字 (別の文字で終わる手書きの上書き) では土台から取り除かず、2極の土台が同じ文字列に潰れて重複することもない (Task 3再レビューの持ち越し)
+  it("only strips a trailing letter that matches level a's own letter, so two poles overridden with different trailing letters keep distinct bases", () => {
+    expect(relabelForLevels(["1X", "1Xb", "1Y", "1Yb"], 2, 2, 2)).toEqual(["1Xa", "1Xb", "1Ya", "1Yb"]);
+  });
+});
+
+describe("insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)", () => {
+  const raw8 = terminalNumbers(dynamicSymbol("terminal_block_8p")!);
+
+  // ja: 指定した端子の後ろに挿入すると、symbol_idは末尾に1極増え、番号列はそれより後ろが繰り下がって空いた番号を新しい予備が引き継ぐ
+  it("pushes the numbers after the chosen terminal and hands the vacated one to the new spare", () => {
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, "3", 1)).toEqual({
+      symbolId: "terminal_block_9p",
+      numbers: ["1", "2", "3", "5", "6", "7", "8", "9", "4"],
+    });
+  });
+
+  // ja: 挿入位置を指定しない (末尾) と、番号は繰り下がらずそのまま続く
+  it("does not renumber anything when appending at the end", () => {
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, null, 1)).toEqual({
+      symbolId: "terminal_block_9p",
+      numbers: ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+    });
+  });
+
+  // ja: 接頭辞付きのラベル (A1..A8) でも数字の部分だけを繰り下げ、接頭辞は保たれる (Rust側 inserting_a_spare_keeps_a_prefixed_labels_prefix と同じ値)
+  it("keeps a prefixed label's prefix and shifts only its numeric part", () => {
+    const labels = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"];
+    expect(insertSpareTerminals("terminal_block_8p", labels, 8, 1, "A3", 1)).toEqual({
+      symbolId: "terminal_block_9p",
+      numbers: ["A1", "A2", "A3", "A5", "A6", "A7", "A8", "A9", "A4"],
+    });
+  });
+
+  // ja: 2回目の挿入は番号順 (チャートの並び) で位置を数えるので、1回目で末尾に足した極があっても末尾・途中のどちらへも挿入できる (Rust側 inserting_a_second_spare_counts_the_position_in_the_charts_order と同じ値)
+  it("counts the insertion point in the chart's number order so a second insertion still works", () => {
+    const after1 = ["1", "2", "3", "5", "6", "7", "8", "9", "4"];
+    expect(insertSpareTerminals("terminal_block_9p", after1, 9, 1, null, 1)).toEqual({
+      symbolId: "terminal_block_10p",
+      numbers: ["1", "2", "3", "5", "6", "7", "8", "9", "4", "10"],
+    });
+    expect(insertSpareTerminals("terminal_block_9p", after1, 9, 1, "4", 1)).not.toBeNull();
+    expect(insertSpareTerminals("terminal_block_9p", after1, 9, 1, "9", 1)).not.toBeNull();
+  });
+
+  // ja: 「空き番号のまま残す」(renumberFollowing=false) では後ろの番号を変えず、空いていた番号を予備が取る (Rust側 leaving_the_following_numbers_alone_gives_the_spare_the_vacant_number と同じ値)
+  it("leaves the following numbers alone and gives the spare the vacant number when not renumbering", () => {
+    expect(insertSpareTerminals("terminal_block_4p", ["1", "2", "3", "5"], 4, 1, "3", 1, false)).toEqual({
+      symbolId: "terminal_block_5p",
+      numbers: ["1", "2", "3", "5", "4"],
+    });
+  });
+
+  // ja: 「空き番号のまま残す」で予備の番号が既存の端子とぶつかるときはnull (Rust側は理由付きで拒否)
+  it("returns null when not renumbering would collide with an existing number", () => {
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, "3", 1, false)).toBeNull();
+  });
+
+  // ja: 挿入位置のラベルに数字が無い ("予備") ときはnull (Rust側は理由付きで拒否)
+  it("returns null when the insertion point's label has no digits", () => {
+    const labels = ["1", "2", "予備", "4"];
+    expect(insertSpareTerminals("terminal_block_4p", labels, 4, 1, "予備", 1)).toBeNull();
+  });
+
+  // ja: 0個以下の指定はnull (プレビューを出さない)
+  it("returns null for a non-positive count", () => {
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, null, 0)).toBeNull();
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, null, -1)).toBeNull();
+  });
+
+  // ja: 端子台に無い端子番号を挿入位置に指定するとnull
+  it("returns null when the insertion point names an unknown terminal", () => {
+    expect(insertSpareTerminals("terminal_block_8p", raw8, 8, 1, "99", 1)).toBeNull();
+  });
+
+  // ja: 多段端子台では、挿入した1つの予備極が段の数だけの端子になる
+  it("adds one terminal per level on a multi-level block", () => {
+    const raw = terminalNumbers(dynamicSymbol("terminal_block_4p_2l")!);
+    expect(insertSpareTerminals("terminal_block_4p_2l", raw, 4, 2, "2a", 1)).toEqual({
+      symbolId: "terminal_block_5p_2l",
+      numbers: ["1a", "1b", "2a", "2b", "4a", "4b", "5a", "5b", "3a", "3b"],
+    });
+  });
+});
+
+describe("parseJumperSpec with an overridden display order", () => {
+  // ja: 増分2で採番したような表示ラベル(11,13,15,17)でも、隣接判定は生のピン配置で決まるので、物理的に隣り合う極どうしのジャンパは通る (Rust側 adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic とparity)
+  it("keeps adjacency based on the raw pin layout, not on the arithmetic difference between displayed labels", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const raw = terminalNumbers(def);
+    const display = terminalRenumberPlan(raw, 11, 2, "");
+    expect(display).toEqual(["11", "13", "15", "17"]);
+    expect(parseJumperSpec("11-13", display, raw)).toEqual([["11", "13"]]);
+    // 表示ラベルの数値差だけで見ると2つ離れているが、生のピン配置では隣り合っていない
+    // (極1と極3) 組は、それでも拒否される
+    expect(parseJumperSpec("11-15", display, raw)).toEqual([]);
   });
 });

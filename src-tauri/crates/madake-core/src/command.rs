@@ -115,6 +115,72 @@ pub enum Command {
         sheet_id: SheetId,
         numbers: Vec<PanelItemNumber>,
     },
+    /// 端子台1台の端子番号の自動採番 (spec §1.1)。ピン順に開始番号・増分・接頭辞で
+    /// 振り直す (`attrs["terminal_numbers"]`)。多段端子台は段記号を保って極だけ採番する
+    /// (`11a`,`11b`,…)。同じコマンドで`attrs["jumpers"]`・`attrs["pin_groups"]`の
+    /// 端子番号も新しい番号へ書き換える。逆コマンドは採番前の番号 (`SetTerminalNumbers`)。
+    RenumberTerminals {
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        #[serde(default = "crate::terminal_chart::default_terminal_start")]
+        start: u32,
+        #[serde(default = "crate::terminal_chart::default_terminal_step")]
+        step: u32,
+        #[serde(default)]
+        prefix: String,
+    },
+    /// 端子台1台の端子番号の直接指定 (自動採番の逆コマンド・個別編集)。
+    /// `numbers`はピン順 ([`crate::terminal_chart::terminal_numbers_of`]と同じ並び) のラベル。
+    /// 個数がピン数と合わない・重複がある・空要素があれば図面を変えずにエラーにする。
+    /// `None`ならシンボル定義の既定 (`1`,`2`,…) へ戻す。`RenumberTerminals`と同様、
+    /// `attrs["jumpers"]`・`attrs["pin_groups"]`の端子番号も同じコマンドで書き換える。
+    SetTerminalNumbers {
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        #[serde(default)]
+        numbers: Option<Vec<String>>,
+    },
+    /// 端子台1台の段数を変える (spec §1.1「多段端子の生成・解除」、Task 3)。
+    /// `symbol_id`を`terminal_block_{n}p` <-> `terminal_block_{n}p_{levels}l`へ書き換える
+    /// ([`crate::terminal_chart::multilevel_id`]。極数は今のidから読み取る)。同じコマンドで
+    /// `attrs["terminal_numbers"]`・`attrs["jumpers"]`・`attrs["pin_groups"]`の段記号も
+    /// 新しい段数へ追従させる (段を増やすときは極ごとに段a相当のラベルを土台に段記号を
+    /// 付け足す。段を減らすときは残る段のラベルだけにする)。
+    ///
+    /// `levels`が1〜3の範囲外、`entity_id`が端子台でない、または段を減らして**消える段に
+    /// 結線・ジャンパ・ピングループ・付属品の指定が残っている**場合は、図面を一切変えずに
+    /// エラーを返す。逆コマンドは変更前の段数へ戻す同じコマンド。
+    SetTerminalLevels {
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        levels: usize,
+    },
+    /// 端子台1台に予備端子を挿入する (spec §1.1「予備端子の挿入」、Task 4)。物理的には
+    /// シンボルの**末尾**に`count`極を足す (多段なら1極につき段数ぶんの端子。
+    /// [`crate::terminal_chart::insert_spare_terminals`])。**番号だけ**が`after`
+    /// (表示ラベル。`None`なら末尾) の直後に挿入されたように振られる。既存の極は`at`の
+    /// 平行移動でシート上の座標に留まるので ([`crate::symbol::pole_origin_shift`])、
+    /// 極数が増えても結線は外れない。位置は**チャートに出る順**で数えるので、挿入済みの
+    /// 端子台へもう1つ挿入しても見た目どおりの位置に入る。
+    ///
+    /// `count`が0、極数の上限[`crate::symbol::DYNAMIC_PIN_MAX`]を超える、`entity_id`が
+    /// 端子台でない、`after`が今の端子番号のどれとも一致しない、番号を決められない、または
+    /// 出来上がる番号が重複する場合は図面を一切変えずにエラーを返す。逆コマンドは挿入前の
+    /// インスタンスへ戻す`UpdateEntity` (symbol_id・terminal_numbers・atが1回のundoで
+    /// そろって戻る)。
+    InsertSpareTerminals {
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        #[serde(default)]
+        after: Option<String>,
+        count: usize,
+        /// 番号の扱い (デザイン`eTFE5`の「番号の扱い」ラジオ)。`true`=詰める
+        /// (`after`より後ろの端子の番号を繰り下げて番号を連続させる)、`false`=空ける
+        /// (既存の番号は変えず、予備が空き番号を取る。空きが無ければ拒否)。
+        /// 省略時は`true` (繰り下げ。このコマンドが最初から持っていた挙動)。
+        #[serde(default = "crate::terminal_chart::default_renumber_following")]
+        renumber_following: bool,
+    },
     /// プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
     /// 各欄は省略 (キーごと書かない) すれば変更しない。`name`/`no`はプロジェクト単位、
     /// `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く
@@ -832,6 +898,32 @@ impl Engine {
             Command::SetPanelItemNumbers { sheet_id, numbers } => {
                 self.apply_panel_item_numbers(*sheet_id, numbers)
             }
+            Command::RenumberTerminals { sheet_id, entity_id, start, step, prefix } => {
+                let sheet = self.project.sheet(*sheet_id).ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let Some(Entity::Symbol(inst)) = sheet.entities.get(entity_id) else {
+                    return Err(CoreError::EntityNotFound(*entity_id));
+                };
+                let def = crate::symbol::resolve_symbol(&inst.symbol_id)
+                    .ok_or_else(|| CoreError::SymbolNotFound(inst.symbol_id.clone()))?;
+                require_terminal_block(&inst.symbol_id)?;
+                let raw = crate::terminal_chart::terminal_numbers_of(&def);
+                let plan = crate::terminal_chart::terminal_renumber_plan(&raw, *start, *step, prefix);
+                self.apply_terminal_numbers(*sheet_id, *entity_id, Some(plan))
+            }
+            Command::SetTerminalNumbers { sheet_id, entity_id, numbers } => {
+                self.apply_terminal_numbers(*sheet_id, *entity_id, numbers.clone())
+            }
+            Command::SetTerminalLevels { sheet_id, entity_id, levels } => {
+                self.apply_terminal_levels(*sheet_id, *entity_id, *levels)
+            }
+            Command::InsertSpareTerminals { sheet_id, entity_id, after, count, renumber_following } => self
+                .apply_insert_spare_terminals(
+                    *sheet_id,
+                    *entity_id,
+                    after.as_deref(),
+                    *count,
+                    *renumber_following,
+                ),
             Command::SetProjectMeta {
                 name,
                 no,
@@ -1039,6 +1131,429 @@ impl Engine {
         Ok((ops, inverse))
     }
 
+    /// 端子台1台の端子番号 (`attrs["terminal_numbers"]`) を書き換える。同時に
+    /// `attrs["jumpers"]`・`attrs["pin_groups"]`の端子番号も新しい表示ラベルへ追従させる
+    /// (`RenumberTerminals`/`SetTerminalNumbers`の共通実装)。
+    ///
+    /// `numbers`がSomeなら個数・重複・空要素を検証し、1つでも満たさなければ図面を変えずに
+    /// エラーを返す (部分適用しない)。検証・計算をすべて終えてから書き込むので、
+    /// エラー時は`self.project`に一切触れない。
+    fn apply_terminal_numbers(
+        &mut self,
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        numbers: Option<Vec<String>>,
+    ) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let sheet = self.project.sheet(sheet_id).ok_or(CoreError::SheetNotFound(sheet_id))?;
+        let Some(Entity::Symbol(inst)) = sheet.entities.get(&entity_id) else {
+            return Err(CoreError::EntityNotFound(entity_id));
+        };
+        let def = crate::symbol::resolve_symbol(&inst.symbol_id)
+            .ok_or_else(|| CoreError::SymbolNotFound(inst.symbol_id.clone()))?;
+        require_terminal_block(&inst.symbol_id)?;
+        let raw = crate::terminal_chart::terminal_numbers_of(&def);
+        let old_display = crate::terminal_chart::terminal_numbers_of_instance(&def, &inst.attrs);
+        // 「上書きが効いていたか」= キーがあり値が妥当だったか ([`terminal_numbers_override`])。
+        // 展開後の値が既定と同じかどうか (`old_display != raw`) では判定しない: キーはあるが
+        // 既定と同じ値を明示的に書いていた場合と、キーはあるが無効な値でフォールバックして
+        // いた場合の両方を「上書きなし」と誤判定し、undoでそのキーを消してしまう (Task 3 ルーリング3a)
+        let had_override = crate::terminal_chart::terminal_numbers_override(&def, &inst.attrs).is_some();
+
+        let new_display = match &numbers {
+            Some(v) => {
+                if !crate::terminal_chart::valid_terminal_numbers(v, raw.len()) {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "端子番号は{}個・重複なし・空欄なしで指定してください (要素に「,」は使えません)",
+                        raw.len()
+                    )));
+                }
+                crate::terminal_chart::trimmed_terminal_numbers(v)
+            }
+            None => raw.clone(),
+        };
+
+        if new_display == old_display {
+            return Ok((Vec::new(), Vec::new()));
+        }
+
+        let rename: std::collections::BTreeMap<String, String> =
+            old_display.iter().cloned().zip(new_display.iter().cloned()).collect();
+        let new_jumpers = inst
+            .attrs
+            .get("jumpers")
+            .map(|spec| crate::terminal_chart::rewrite_jumper_labels(spec, &rename));
+        let new_pin_groups = inst
+            .attrs
+            .get(crate::pin_groups::PIN_GROUPS_ATTR)
+            .map(|spec| rewrite_pin_group_ranges(spec, &rename));
+
+        // ここまでは読み取りだけ。検証・計算が済んだので、ここから先だけ書き込む
+        let sheet = self.project.sheet_mut(sheet_id).expect("直前に存在を確認済み");
+        let Some(Entity::Symbol(inst)) = sheet.entities.get_mut(&entity_id) else {
+            unreachable!("直前に存在を確認済み");
+        };
+        match &numbers {
+            Some(_) => {
+                inst.attrs.insert(
+                    crate::terminal_chart::TERMINAL_NUMBERS_ATTR.to_string(),
+                    new_display.join(","),
+                );
+            }
+            None => {
+                inst.attrs.remove(crate::terminal_chart::TERMINAL_NUMBERS_ATTR);
+            }
+        }
+        if let Some(nj) = new_jumpers {
+            if nj.is_empty() {
+                inst.attrs.remove("jumpers");
+            } else {
+                inst.attrs.insert("jumpers".to_string(), nj);
+            }
+        }
+        if let Some(npg) = new_pin_groups {
+            if npg.is_empty() {
+                inst.attrs.remove(crate::pin_groups::PIN_GROUPS_ATTR);
+            } else {
+                inst.attrs.insert(crate::pin_groups::PIN_GROUPS_ATTR.to_string(), npg);
+            }
+        }
+
+        let ops = vec![PatchOp::EntityUpserted { sheet_id, entity: Entity::Symbol(inst.clone()) }];
+        let inverse = vec![Command::SetTerminalNumbers {
+            sheet_id,
+            entity_id,
+            numbers: if had_override { Some(old_display) } else { None },
+        }];
+        Ok((ops, inverse))
+    }
+
+    /// 端子台1台の段数 (`symbol_id`の`terminal_block_{n}p` <-> `terminal_block_{n}p_{levels}l`)
+    /// を変える (Task 3 多段端子の生成・解除)。`RenumberTerminals`/`SetTerminalNumbers`と同様、
+    /// 検証・計算をすべて終えてから書き込むので、エラー時は`self.project`に一切触れない。
+    ///
+    /// **段aのピンは用紙上の同じ座標に留まる**: 段の列は原点を中心に左右対称に並ぶので
+    /// (フェーズ6のジオメトリ。[`crate::symbol::TERMINAL_LEVEL_PITCH`])、段数が変わると
+    /// 段aの列の中心が動いてしまう。そのぶんだけインスタンスの`at`を逆向きに平行移動して
+    /// ([`crate::symbol::level_origin_shift`] を回転・反転を通した向きで足す)、段aの端子に
+    /// 繋がっていた配線が黙って別の段の端子へ繋ぎ変わったり宙に浮いたりしないようにする。
+    /// 逆コマンドは同じ計算を逆向きに行うので、`symbol_id`と`at`が1回のundoでそろって戻る。
+    ///
+    /// 段を増やすときは常に成功する (極ごとに段aのラベルを土台に段記号を付け足すだけ)。
+    /// 段を減らして**消える段に参照が残っていれば**図面を一切変えずにエラーを返す:
+    /// 消えるピンの座標に何か載っていれば (配線・ネットラベル・ジャンクション・他シンボルの
+    /// ピン。[`crate::netlist::point_is_attached`]) 結線ありと見なし、その段の端子番号を指す
+    /// ジャンパ・ピングループ・(将来実装の)付属品指定も拒否する。`mates_with`はコネクタ一族
+    /// だけが対象で端子台は最初から対象外 ([`crate::mate::is_connector_instance`]) なので、
+    /// ここでは確認しない。
+    fn apply_terminal_levels(
+        &mut self,
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        levels: usize,
+    ) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let sheet = self.project.sheet(sheet_id).ok_or(CoreError::SheetNotFound(sheet_id))?;
+        let Some(Entity::Symbol(inst)) = sheet.entities.get(&entity_id) else {
+            return Err(CoreError::EntityNotFound(entity_id));
+        };
+        let new_id = crate::terminal_chart::multilevel_id(&inst.symbol_id, levels)
+            .map_err(CoreError::InvalidCommand)?;
+        if new_id == inst.symbol_id {
+            // 今と同じ段数を指定したら何もしない (無駄なundoの段を作らない)
+            return Ok((Vec::new(), Vec::new()));
+        }
+        let old_def = crate::symbol::resolve_symbol(&inst.symbol_id)
+            .ok_or_else(|| CoreError::SymbolNotFound(inst.symbol_id.clone()))?;
+        crate::symbol::resolve_symbol(&new_id).ok_or_else(|| CoreError::SymbolNotFound(new_id.clone()))?;
+
+        let (poles, old_levels) = crate::terminal_chart::poles_and_levels_of(&inst.symbol_id);
+        let old_display = crate::terminal_chart::terminal_numbers_of_instance(&old_def, &inst.attrs);
+        let had_override = crate::terminal_chart::terminal_numbers_override(&old_def, &inst.attrs).is_some();
+        let new_display =
+            crate::terminal_chart::relabel_for_levels(&old_display, poles, old_levels, levels);
+        // 書き込む前に必ず検証する (Task 3再レビューの持ち越し): relabel_for_levelsが土台を
+        // 取り違えて2つの極が同じラベルに潰れるような壊れた入力でも、無効な番号列を黙って
+        // 書き込まず図面を変えずに拒否する (SetTerminalNumbers/InsertSpareTerminalsと同じ門)
+        if !crate::terminal_chart::valid_terminal_numbers(&new_display, poles * levels) {
+            return Err(CoreError::InvalidCommand(
+                "段数を変えると端子番号が重複します (先に端子番号の上書きを直してください)".to_string(),
+            ));
+        }
+
+        // 極→段の同じ位置 (段a・段bなど、両方に残る段) だけの旧ラベル→新ラベル対応。
+        // ジャンパ・ピングループの書き換えに使う (rewrite_jumper_labels/rewrite_pin_group_ranges
+        // は知らないラベルの項目をそのまま残す規則なので、消える段のラベルは含めない=
+        // 下の検証を通っていれば触れないし、通っていなければそもそもここへ来ない)
+        let kept = old_levels.min(levels);
+        let mut rename: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+        for p in 0..poles {
+            for j in 0..kept {
+                let old_label = old_display[p * old_levels + j].clone();
+                let new_label = new_display[p * levels + j].clone();
+                if old_label != new_label {
+                    rename.insert(old_label, new_label);
+                }
+            }
+        }
+
+        if levels < old_levels {
+            // 消える段の端子番号 (旧表示ラベル) の集合
+            let vanishing: std::collections::BTreeSet<String> = (0..poles)
+                .flat_map(|p| (levels..old_levels).map(move |j| p * old_levels + j))
+                .map(|idx| old_display[idx].clone())
+                .collect();
+
+            // 結線の判定は**図面から消えるピンの座標**を見る。チャートの`spare`は配線だけを
+            // 数えるので、ネットラベル・ジャンクション・他シンボルのピンだけが載っている端子を
+            // 予備と見てしまう。チャートは取れないほうが異常なので、黙って素通りさせず落とす
+            // (この guard が段を減らすときの唯一の結線の門なので、抜けを作らない)
+            let chart = crate::terminal_chart::terminal_chart(sheet, entity_id).ok_or_else(|| {
+                CoreError::InvalidCommand(
+                    "端子台チャートを組み立てられないため段数を変更できません".to_string(),
+                )
+            })?;
+            let defs = crate::symbol::sheet_symbol_defs(sheet);
+            let labels = crate::terminal_chart::TerminalLabels::of(&old_def, &inst.attrs);
+            let pin_at = crate::netlist::pin_positions(inst, &old_def);
+            for label in &vanishing {
+                let row = chart.rows.iter().find(|r| &r.terminal == label);
+                let attached = pin_at.iter().any(|(no, pos)| {
+                    labels.display_of(no) == *label
+                        && crate::netlist::point_is_attached(sheet, &defs, pos, Some(entity_id))
+                });
+                if !attached && !row.is_some_and(|r| !r.spare) {
+                    continue;
+                }
+                let target = row
+                    .map(|r| {
+                        [r.internal.as_str(), r.external.as_str()]
+                            .into_iter()
+                            .filter(|s| !s.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" / ")
+                    })
+                    .unwrap_or_default();
+                let where_ = if target.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({target})")
+                };
+                return Err(CoreError::InvalidCommand(format!(
+                    "端子{label}{where_}に結線が残っているため段を減らせません (先にその結線を外してください)"
+                )));
+            }
+
+            if let Some(spec) = inst.attrs.get("jumpers") {
+                let raw_terminals = crate::terminal_chart::terminal_numbers_of(&old_def);
+                let jumpers = crate::terminal_chart::parse_jumpers(spec, &old_display, &raw_terminals);
+                if let Some((a, b)) =
+                    jumpers.pairs.iter().find(|(a, b)| vanishing.contains(a) || vanishing.contains(b))
+                {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "ジャンパ{a}-{b}が消える段を指しているため段を減らせません (先にそのジャンパを外してください)"
+                    )));
+                }
+            }
+
+            if let Some(spec) = inst.attrs.get(crate::pin_groups::PIN_GROUPS_ATTR) {
+                let pg_order = crate::pin_groups::chart_order_pin_numbers(&old_def);
+                let labels = crate::terminal_chart::TerminalLabels::of(&old_def, &inst.attrs);
+                let display_order: Vec<String> = pg_order.iter().map(|n| labels.display_of(n)).collect();
+                let parsed = crate::pin_groups::parse_pin_groups(spec, &display_order);
+                let index_of = |label: &str| display_order.iter().position(|p| p == label);
+                if let Some(group) = parsed.groups.iter().find(|g| match (index_of(&g.first), index_of(&g.last)) {
+                    (Some(a), Some(b)) => {
+                        let (lo, hi) = (a.min(b), a.max(b));
+                        display_order[lo..=hi].iter().any(|label| vanishing.contains(label))
+                    }
+                    _ => vanishing.contains(&g.first) || vanishing.contains(&g.last),
+                }) {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "ピングループ{}が消える段の端子を含むため段を減らせません (先にそのピングループを外してください)",
+                        group.range_text
+                    )));
+                }
+            }
+
+            // 付属品 (spec §1.1・Task 5で実装予定)。属性キーはまだ書き込み口が無いが、
+            // 直接attrsへ入れられた指定 (MCP/Link API経由) が消える段を指していないかは
+            // 先に確認しておく (Task 5が実装したときに同じ検証を素通りできるように)
+            if let Some(spec) = inst.attrs.get("accessories") {
+                let refers_vanishing = spec.split(',').any(|item| {
+                    let label = item.split(':').next().unwrap_or("").trim();
+                    label != "end" && vanishing.contains(label)
+                });
+                if refers_vanishing {
+                    return Err(CoreError::InvalidCommand(
+                        "付属品指定が消える段の端子を指しているため段を減らせません (先にその指定を外してください)"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+
+        // ここまでは読み取りだけ。検証が済んだので、ここから先だけ書き込む
+        let new_jumpers = inst.attrs.get("jumpers").map(|spec| crate::terminal_chart::rewrite_jumper_labels(spec, &rename));
+        let new_pin_groups =
+            inst.attrs.get(crate::pin_groups::PIN_GROUPS_ATTR).map(|spec| rewrite_pin_group_ranges(spec, &rename));
+        let new_accessories = inst
+            .attrs
+            .get("accessories")
+            .map(|spec| crate::terminal_chart::rewrite_accessory_labels(spec, &rename));
+        // 段aのピンを用紙上の同じ座標に留めるための平行移動 (回転・反転を通した向きで)
+        let shift = crate::netlist::rotate_local(
+            crate::geometry::Point::new(crate::symbol::level_origin_shift(old_levels, levels), 0.0),
+            inst.rotation,
+            inst.mirror,
+        );
+
+        let sheet = self.project.sheet_mut(sheet_id).expect("直前に存在を確認済み");
+        let Some(Entity::Symbol(inst)) = sheet.entities.get_mut(&entity_id) else {
+            unreachable!("直前に存在を確認済み");
+        };
+        inst.symbol_id = new_id;
+        inst.at = crate::geometry::Point::new(inst.at.x + shift.x, inst.at.y + shift.y);
+        // 値が無効な`terminal_numbers`キー (個数不一致など) はそのまま残す: `had_override`は
+        // 「キーがあり、かつ値が妥当」なので、ここで消してしまうと逆コマンドが復元できない
+        // (undoで元のバイト列へ戻らない)。キーが無ければ書かないだけで足りる
+        if had_override {
+            inst.attrs.insert(
+                crate::terminal_chart::TERMINAL_NUMBERS_ATTR.to_string(),
+                new_display.join(","),
+            );
+        }
+        if let Some(nj) = new_jumpers {
+            if nj.is_empty() {
+                inst.attrs.remove("jumpers");
+            } else {
+                inst.attrs.insert("jumpers".to_string(), nj);
+            }
+        }
+        if let Some(npg) = new_pin_groups {
+            if npg.is_empty() {
+                inst.attrs.remove(crate::pin_groups::PIN_GROUPS_ATTR);
+            } else {
+                inst.attrs.insert(crate::pin_groups::PIN_GROUPS_ATTR.to_string(), npg);
+            }
+        }
+        if let Some(na) = new_accessories {
+            if na.is_empty() {
+                inst.attrs.remove("accessories");
+            } else {
+                inst.attrs.insert("accessories".to_string(), na);
+            }
+        }
+
+        let ops = vec![PatchOp::EntityUpserted { sheet_id, entity: Entity::Symbol(inst.clone()) }];
+        let inverse = vec![Command::SetTerminalLevels { sheet_id, entity_id, levels: old_levels }];
+        Ok((ops, inverse))
+    }
+
+    /// [`Command::InsertSpareTerminals`]の実装 (Task 4)。検証・計算
+    /// ([`crate::terminal_chart::insert_spare_terminals`]) をすべて終えてから書き込むので、
+    /// エラー時は`self.project`に一切触れない。
+    ///
+    /// 「詰める」指定では`after`より後ろの極の番号が繰り下がる (表示ラベルが変わる) ので、
+    /// `RenumberTerminals`/`SetTerminalLevels`と同じく`attrs["jumpers"]`・ピングループ・
+    /// 付属品指定もその変わったラベルへ追従させる (古いラベルのまま残すと、テキストは同じなのに
+    /// 指す端子が変わってしまう)。「空ける」指定では既存のラベルが1つも変わらないので、
+    /// 追従の対応表は空になり指定はそのまま残る。新しく増える予備極は追従の対象にならない
+    /// (旧ラベルが無いため)。
+    ///
+    /// 逆コマンドは挿入前のインスタンスへ丸ごと戻す`UpdateEntity`にする
+    /// (`SetTerminalLevels`のような対称なコマンドを新たに作らなくても、symbol_id・
+    /// terminal_numbers・jumpers・atが1回のundoでそろって戻る。`UpdateEntity`自身がその
+    /// 逆コマンドを「置換前のエンティティへのUpdateEntity」にする既存の仕組みと同じ形)。
+    fn apply_insert_spare_terminals(
+        &mut self,
+        sheet_id: SheetId,
+        entity_id: EntityId,
+        after: Option<&str>,
+        count: usize,
+        renumber_following: bool,
+    ) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let sheet = self.project.sheet(sheet_id).ok_or(CoreError::SheetNotFound(sheet_id))?;
+        let Some(Entity::Symbol(inst)) = sheet.entities.get(&entity_id) else {
+            return Err(CoreError::EntityNotFound(entity_id));
+        };
+        let (new_id, new_display) =
+            crate::terminal_chart::insert_spare_terminals(inst, after, count, renumber_following)
+                .map_err(CoreError::InvalidCommand)?;
+        let new_def = crate::symbol::resolve_symbol(&new_id)
+            .ok_or_else(|| CoreError::SymbolNotFound(new_id.clone()))?;
+        let new_raw = crate::terminal_chart::terminal_numbers_of(&new_def);
+        let old_def = crate::symbol::resolve_symbol(&inst.symbol_id)
+            .ok_or_else(|| CoreError::SymbolNotFound(inst.symbol_id.clone()))?;
+        let old_display = crate::terminal_chart::terminal_numbers_of_instance(&old_def, &inst.attrs);
+        let (poles, _) = crate::terminal_chart::poles_and_levels_of(&inst.symbol_id);
+        let new_poles = poles + count;
+        let shift = crate::netlist::rotate_local(
+            crate::geometry::Point::new(0.0, crate::symbol::pole_origin_shift(poles, new_poles)),
+            inst.rotation,
+            inst.mirror,
+        );
+
+        // 既存の極 (先頭poles*levels個) だけの旧ラベル→新ラベル対応。新しく増える予備極には
+        // 旧ラベルが無いので含めない (rewrite_*_labels は知らないラベルの項目をそのまま
+        // 残す規則なので、対応が無くても素通しされるだけで壊れない)
+        let mut rename: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+        for (old_label, new_label) in old_display.iter().zip(new_display.iter()) {
+            if old_label != new_label {
+                rename.insert(old_label.clone(), new_label.clone());
+            }
+        }
+        let new_jumpers =
+            inst.attrs.get("jumpers").map(|spec| crate::terminal_chart::rewrite_jumper_labels(spec, &rename));
+        let new_pin_groups = inst
+            .attrs
+            .get(crate::pin_groups::PIN_GROUPS_ATTR)
+            .map(|spec| rewrite_pin_group_ranges(spec, &rename));
+        let new_accessories = inst
+            .attrs
+            .get("accessories")
+            .map(|spec| crate::terminal_chart::rewrite_accessory_labels(spec, &rename));
+        let old = inst.clone();
+
+        let sheet = self.project.sheet_mut(sheet_id).expect("直前に存在を確認済み");
+        let Some(Entity::Symbol(inst)) = sheet.entities.get_mut(&entity_id) else {
+            unreachable!("直前に存在を確認済み");
+        };
+        inst.symbol_id = new_id;
+        inst.at = crate::geometry::Point::new(inst.at.x + shift.x, inst.at.y + shift.y);
+        if new_display == new_raw {
+            inst.attrs.remove(crate::terminal_chart::TERMINAL_NUMBERS_ATTR);
+        } else {
+            inst.attrs.insert(
+                crate::terminal_chart::TERMINAL_NUMBERS_ATTR.to_string(),
+                new_display.join(","),
+            );
+        }
+        if let Some(nj) = new_jumpers {
+            if nj.is_empty() {
+                inst.attrs.remove("jumpers");
+            } else {
+                inst.attrs.insert("jumpers".to_string(), nj);
+            }
+        }
+        if let Some(npg) = new_pin_groups {
+            if npg.is_empty() {
+                inst.attrs.remove(crate::pin_groups::PIN_GROUPS_ATTR);
+            } else {
+                inst.attrs.insert(crate::pin_groups::PIN_GROUPS_ATTR.to_string(), npg);
+            }
+        }
+        if let Some(na) = new_accessories {
+            if na.is_empty() {
+                inst.attrs.remove("accessories");
+            } else {
+                inst.attrs.insert("accessories".to_string(), na);
+            }
+        }
+
+        let ops = vec![PatchOp::EntityUpserted { sheet_id, entity: Entity::Symbol(inst.clone()) }];
+        let inverse = vec![Command::UpdateEntity { sheet_id, entity: Entity::Symbol(old) }];
+        Ok((ops, inverse))
+    }
+
     /// 指定Wireの線番を書き換える。値が変わるものだけをpatch・逆コマンドに含める。
     fn apply_wire_numbers(
         &mut self,
@@ -1078,6 +1593,44 @@ impl Engine {
         };
         Ok((ops, inverse))
     }
+}
+
+/// `attrs["pin_groups"]` (`"範囲:名前,…"`) の範囲の両端 (端子番号) を`rename`
+/// (旧表示ラベル→新表示ラベル) で書き換える。名前(キャプション)には触れない。
+///
+/// **書き換えるのは認識できた端子番号のトークンだけ**で、区切り記号・空白・キャプションは
+/// 1文字も変えない ([`crate::terminal_chart::rename_terminal_tokens`])。`rename`に無い
+/// 端子番号が入った項・`:`が無い読めない項は**丸ごとそのまま残す**ので、ERCが指摘している
+/// 指定が採番で消えることはなく、逆コマンドで`attrs`は元のバイト列へ戻る。
+fn rewrite_pin_group_ranges(spec: &str, rename: &std::collections::BTreeMap<String, String>) -> String {
+    spec.split(',')
+        .map(|item| {
+            let Some(colon) = item.find(':') else {
+                return item.to_string();
+            };
+            let (range, rest) = item.split_at(colon);
+            match crate::terminal_chart::rename_terminal_tokens(range, rename) {
+                Some(renamed) => format!("{renamed}{rest}"),
+                None => item.to_string(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// 端子番号を振れるのは端子台シンボルだけ (`RenumberTerminals`/`SetTerminalNumbers`)。
+///
+/// `attrs["terminal_numbers"]` はチャート・接続図・図面のピン番号テキストを差し替えるので、
+/// リレーやランプへ書けてしまうと、そのシンボルのピン番号が図面上で別の文字に化ける。
+/// 端子台チャート・ジャンパ・端子台チェックが揃って`is_terminal_block`で門を作っているので、
+/// 書き込み口も同じ門を通す (MCP/Link API経由の指定も同じ)。
+fn require_terminal_block(symbol_id: &str) -> Result<()> {
+    if crate::terminal_chart::is_terminal_block(symbol_id) {
+        return Ok(());
+    }
+    Err(CoreError::InvalidCommand(format!(
+        "端子番号を振れるのは端子台シンボルだけです ({symbol_id})"
+    )))
 }
 
 /// 図面へ入れる前のエンティティ検証。
@@ -2732,6 +3285,1206 @@ mod tests {
         assert!(engine
             .execute(Command::RenumberPanelItems { sheet_id: missing })
             .is_err());
+    }
+
+    /// 端子台を1台置いたエンジン (attrsは呼び出し側で足す)。戻り値は (engine, sheet_id, entity_id)。
+    fn terminal_engine(symbol_id: &str) -> (Engine, SheetId, EntityId) {
+        let (mut engine, sheet_id) = test_engine();
+        let entity = place(symbol_id);
+        let id = entity.id();
+        engine.execute(Command::AddEntity { sheet_id, entity }).unwrap();
+        (engine, sheet_id, id)
+    }
+
+    fn terminal_numbers_attr(engine: &Engine, sheet_id: SheetId, id: EntityId) -> Option<String> {
+        match engine.project().sheet(sheet_id).unwrap().entities.get(&id) {
+            Some(Entity::Symbol(s)) => s.attrs.get("terminal_numbers").cloned(),
+            other => panic!("シンボルではない: {other:?}"),
+        }
+    }
+
+    fn jumpers_attr(engine: &Engine, sheet_id: SheetId, id: EntityId) -> Option<String> {
+        match engine.project().sheet(sheet_id).unwrap().entities.get(&id) {
+            Some(Entity::Symbol(s)) => s.attrs.get("jumpers").cloned(),
+            other => panic!("シンボルではない: {other:?}"),
+        }
+    }
+
+    fn pin_groups_attr(engine: &Engine, sheet_id: SheetId, id: EntityId) -> Option<String> {
+        match engine.project().sheet(sheet_id).unwrap().entities.get(&id) {
+            Some(Entity::Symbol(s)) => s.attrs.get("pin_groups").cloned(),
+            other => panic!("シンボルではない: {other:?}"),
+        }
+    }
+
+    /// Renumbering an 8-pole terminal block from a given start writes every pin's new label in pin order.
+    /// 8極の端子台を開始番号から採番すると、全ピンの新しい番号がピン順に書き込まれる。
+    #[test]
+    fn renumbering_writes_every_terminal_number_from_the_start_value() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("11,12,13,14,15,16,17,18")
+        );
+    }
+
+    /// On a multi-level block, renumbering keeps each pole's level letters and only changes the pole number, so every level of one pole shares the same new number.
+    /// 多段端子台の採番は各極の段記号を保ったまま極番号だけを変えるので、同じ極の全段が同じ新番号を共有する。
+    #[test]
+    fn renumbering_a_multilevel_block_keeps_the_level_letters() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("11a,11b,12a,12b,13a,13b,14a,14b")
+        );
+    }
+
+    /// A prefix and a step greater than one both apply: the step advances the pole number and the prefix is written before every label.
+    /// 接頭辞と1より大きい増分はどちらも効く: 増分が極番号を進め、接頭辞は全ラベルの前に付く。
+    #[test]
+    fn renumbering_applies_the_step_and_prefix() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 1, step: 2, prefix: "P".into() })
+            .unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("P1,P3,P5,P7"));
+    }
+
+    /// Renumbering rewrites the block's jumper spec to the new labels in the same command, so a jumper between two poles still names the terminals it actually connects.
+    /// 採番は同じコマンド内でジャンパの指定も新しい番号へ書き換えるので、ジャンパは実際に繋ぐ端子を指したままになる。
+    #[test]
+    fn renumbering_rewrites_the_jumpers_to_the_new_labels() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "1-2")).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("11-12"));
+    }
+
+    /// Renumbering also rewrites a pin-group range's endpoints to the new labels, since the range names terminals by number.
+    /// 採番はピングループの範囲の両端も新しい番号へ書き換える。範囲は端子番号で指しているため。
+    #[test]
+    fn renumbering_rewrites_pin_group_ranges_too() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "pin_groups", "1-4:電源")).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(pin_groups_attr(&engine, sheet_id, id).as_deref(), Some("11-14:電源"));
+    }
+
+    /// その端子台の表示ラベル対応表 ([`crate::terminal_chart::TerminalLabels`]) を作る。
+    fn labels_of(engine: &Engine, sheet_id: SheetId, id: EntityId) -> crate::terminal_chart::TerminalLabels {
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!("シンボルではない");
+        };
+        let def = crate::symbol::resolve_symbol(&s.symbol_id).unwrap();
+        crate::terminal_chart::TerminalLabels::of(&def, &s.attrs)
+    }
+
+    /// その端子台のシンボル定義。
+    fn def_of(engine: &Engine, sheet_id: SheetId, id: EntityId) -> crate::symbol::SymbolDef {
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!("シンボルではない");
+        };
+        crate::symbol::resolve_symbol(&s.symbol_id).unwrap()
+    }
+
+    /// After a renumbering, the pin-group bracket is still drawn on the drawing and the design check stays clean: the stored range is matched against the block's displayed terminal numbers.
+    /// 採番したあとでもピングループの括弧は図面に描かれ続け、図面検証も無指摘のままになる: 保存された範囲はその端子台の表示番号と突き合わせられるため。
+    #[test]
+    fn a_pin_group_bracket_still_draws_after_renumbering_the_terminals() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "pin_groups", "1-4:電源")).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        let (def, labels) = (def_of(&engine, sheet_id, id), labels_of(&engine, sheet_id, id));
+        let spec = pin_groups_attr(&engine, sheet_id, id).unwrap();
+        assert_eq!(
+            crate::pin_groups::pin_group_brackets(&def, &spec, labels.display_map()).len(),
+            1,
+            "採番後も括弧が1本描かれる (spec={spec})"
+        );
+        assert!(
+            crate::pin_groups::pin_group_issues(&def, &spec, labels.display_map()).is_empty(),
+            "採番後に「存在しないピン」を誤報しない"
+        );
+        let sheet = engine.project().sheet(sheet_id).unwrap();
+        let diags = crate::verify::verify_sheet(sheet, &crate::symbol::sheet_symbol_defs(sheet));
+        assert!(
+            !diags.iter().any(|d| d.code == crate::pin_groups::PIN_GROUP_UNKNOWN_PIN),
+            "採番だけでERCが増えない: {diags:?}"
+        );
+    }
+
+    /// On a multi-level block, a pin-group range that names one level's terminals still draws its bracket after a renumbering, because the level letters are kept.
+    /// 多段端子台で1段ぶんの端子を指すピングループの範囲も、段記号が保たれるので採番後に括弧を描き続ける。
+    #[test]
+    fn a_multilevel_pin_group_bracket_survives_a_renumbering() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "pin_groups", "1a-4a:電源")).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        let spec = pin_groups_attr(&engine, sheet_id, id).unwrap();
+        assert_eq!(spec, "11a-14a:電源");
+        let (def, labels) = (def_of(&engine, sheet_id, id), labels_of(&engine, sheet_id, id));
+        assert_eq!(
+            crate::pin_groups::pin_group_brackets(&def, &spec, labels.display_map()).len(),
+            1,
+            "多段でも採番後に括弧が描かれる"
+        );
+    }
+
+    /// A jumper item the editor cannot read (or that names a terminal the block does not have) is carried through a renumbering unchanged, so the design check keeps pointing at it and undo brings the attribute back byte for byte here — this holds whenever the old and new label sets do not overlap (see `undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap` for the documented exception).
+    /// 読めないジャンパの項目 (や端子台に無い端子を指す項目) は採番をそのまま通り抜けるので、図面検証はそれを指し続け、undoで属性は1バイトも変わらず戻る (ここでは旧番号と新番号のラベル集合が重ならないため。重なる場合の例外は`undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap`を参照)。
+    #[test]
+    fn a_broken_jumper_item_survives_a_renumbering_and_comes_back_unchanged_on_undo() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        let original = "1-2, abc ,1-99";
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", original)).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(
+            jumpers_attr(&engine, sheet_id, id).as_deref(),
+            Some("11-12, abc ,1-99"),
+            "読める項目だけが追従し、読めない項目はそのまま残る"
+        );
+        let diags = crate::terminal_chart::check_terminal_block(engine.project().sheet(sheet_id).unwrap(), id);
+        assert!(
+            diags.iter().any(|d| d.message.contains("abc")),
+            "採番後も読めない項目を指摘し続ける: {diags:?}"
+        );
+        assert!(
+            diags.iter().any(|d| d.code == crate::terminal_chart::JUMPER_UNKNOWN_TERMINAL),
+            "存在しない端子の指摘も残る: {diags:?}"
+        );
+        engine.undo().unwrap();
+        assert_eq!(
+            jumpers_attr(&engine, sheet_id, id).as_deref(),
+            Some(original),
+            "undoで元のバイト列へ戻る"
+        );
+    }
+
+    /// The undo of a renumbering does NOT always restore an unreadable jumper item byte for byte: when the old and new label sets overlap, a token the forward rewrite could not resolve as an old label (because it never existed under the old numbering) can become resolvable as a new label on the reverse pass, so the reverse rewrite touches an item the forward rewrite left alone. This is a documented corner case (docs/05-wire-management), not a bug this task fixes.
+    /// 採番のundoは、読めないジャンパの項目を必ずしも1バイトも変えずに戻すとは限らない: 旧番号と新番号のラベル集合が重なると、順方向では旧番号として解決できなかったトークン(旧番号には存在しなかったため)が、逆方向では新番号として解決できてしまうことがあり、順方向では触れなかった項目に逆方向だけが触れてしまう。これはドキュメント化済みの境界事例 (docs/05-wire-management) であり、このタスクで直す不具合ではない。
+    #[test]
+    fn undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        // 「5」は旧番号(1..4)には存在しないが、開始番号2の採番後の新番号(2..5)には存在するようになる
+        // (旧集合{1,2,3,4}と新集合{2,3,4,5}が重なる)
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "5-2")).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 2, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(
+            jumpers_attr(&engine, sheet_id, id).as_deref(),
+            Some("5-2"),
+            "採番時点では「5」を旧番号として解決できないので、項目はそのまま残る"
+        );
+        engine.undo().unwrap();
+        assert_ne!(
+            jumpers_attr(&engine, sheet_id, id).as_deref(),
+            Some("5-2"),
+            "undoでは「5」が新番号として解決できてしまうため、1バイトも変わらずには戻らない (境界事例)"
+        );
+    }
+
+    /// Undoing a renumbering restores a pin-group spec byte for byte, spacing included: the rewrite only replaces the terminal-number tokens it recognises.
+    /// 採番のundoはピングループの指定を空白ごと1バイトも変えずに戻す: 書き換えは認識できた端子番号のトークンだけを置き換えるため。
+    #[test]
+    fn undoing_a_renumbering_restores_the_pin_group_spec_byte_for_byte() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        let original = "1 - 4 : 電源 ,こわれた項目,5-8:信号";
+        engine.execute(set_attr_command(&engine, sheet_id, id, "pin_groups", original)).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(
+            pin_groups_attr(&engine, sheet_id, id).as_deref(),
+            Some("11 - 14 : 電源 ,こわれた項目,15-18:信号")
+        );
+        engine.undo().unwrap();
+        assert_eq!(pin_groups_attr(&engine, sheet_id, id).as_deref(), Some(original));
+    }
+
+    /// A chain of jumpers over three terminals follows a renumbering with a step of two: both endpoints of every link get the new label and the links stay a chain.
+    /// 3端子にまたがるジャンパの連鎖は増分2の採番にも追従する: 各リンクの両端が新しい番号になり、連鎖のままになる。
+    #[test]
+    fn a_jumper_chain_follows_a_renumbering_with_a_step() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "1-2,2-3")).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 2, prefix: String::new() })
+            .unwrap();
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("11-13,13-15"));
+        let chart = crate::terminal_chart::terminal_chart(engine.project().sheet(sheet_id).unwrap(), id).unwrap();
+        assert_eq!(
+            chart.jumpers,
+            vec![("11".to_string(), "13".to_string()), ("13".to_string(), "15".to_string())],
+            "採番後もチャートが連鎖として読む"
+        );
+        assert!(chart.jumper_issues.is_empty(), "{:?}", chart.jumper_issues);
+    }
+
+    /// Renumbering a symbol that is not a terminal block is refused: the terminal-number override would rewrite that symbol's pin-number texts on the drawing.
+    /// 端子台ではないシンボルの採番は拒否される: 端子番号の上書きはそのシンボルのピン番号テキストを図面上で書き換えてしまうため。
+    #[test]
+    fn renumbering_a_symbol_that_is_not_a_terminal_block_is_refused() {
+        let (mut engine, sheet_id, id) = terminal_engine("relay_coil");
+        let err = engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .expect_err("端子台以外は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+        assert!(engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["X".into(), "Y".into()]),
+            })
+            .is_err());
+    }
+
+    /// Terminal numbers are stored with the surrounding spaces removed, so what the command validated is exactly what the chart reads back.
+    /// 端子番号は前後の空白を落として保存されるので、コマンドが検証した値とチャートが読み戻す値が必ず一致する。
+    #[test]
+    fn terminal_numbers_are_stored_without_their_surrounding_spaces() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec![" 11".into(), "12 ".into(), " 13 ".into(), "14".into()]),
+            })
+            .unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("11,12,13,14"));
+        let chart = crate::terminal_chart::terminal_chart(engine.project().sheet(sheet_id).unwrap(), id).unwrap();
+        assert_eq!(
+            chart.rows.iter().map(|r| r.terminal.as_str()).collect::<Vec<_>>(),
+            vec!["11", "12", "13", "14"]
+        );
+    }
+
+    /// Two labels that differ only in their surrounding spaces count as a duplicate and are refused: they would collapse to the same terminal number in storage.
+    /// 前後の空白しか違わない2つのラベルは重複として拒否される: 保存されると同じ端子番号になってしまうため。
+    #[test]
+    fn terminal_numbers_that_are_duplicates_once_trimmed_are_refused() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let err = engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["1 ".into(), "1".into(), "2".into(), "3".into()]),
+            })
+            .expect_err("trim後の重複は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// A terminal number containing a comma is refused: the comma is the separator of the stored list, so the value would read back as a different number of terminals.
+    /// カンマを含む端子番号は拒否される: カンマは保存形の区切り記号なので、読み戻すと端子の個数そのものが変わってしまうため。
+    #[test]
+    fn a_terminal_number_containing_a_comma_is_refused() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let err = engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["1,2".into(), "3".into(), "4".into(), "5".into()]),
+            })
+            .expect_err("カンマ入りは拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// `key`属性を`value`へ書き換える`update_entity`コマンドを作る (シンボルでなければpanic)。
+    fn set_attr_command(engine: &Engine, sheet_id: SheetId, id: EntityId, key: &str, value: &str) -> Command {
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!("シンボルではない");
+        };
+        let mut attrs = s.attrs.clone();
+        attrs.insert(key.to_string(), value.to_string());
+        Command::UpdateEntity {
+            sheet_id,
+            entity: Entity::Symbol(SymbolInstance { attrs, ..s.clone() }),
+        }
+    }
+
+    /// Undoing a renumbering restores the previous terminal numbers exactly: a prior direct override comes back, and renumbering from the symbol's defaults undoes to no override at all.
+    /// 採番のundoは直前の端子番号を正確に戻す: 直前に直接指定していればそれが戻り、既定値から採番していれば上書き無しの状態へ戻る。
+    #[test]
+    fn undoing_a_renumbering_restores_the_previous_numbers() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["A".into(), "B".into(), "C".into(), "D".into()]),
+            })
+            .unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("11,12,13,14"));
+        engine.undo().unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("A,B,C,D"),
+            "直前の直接指定へ戻る"
+        );
+        engine.undo().unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None, "上書き無し (既定) へ戻る");
+    }
+
+    /// Undoing a renumbering restores an explicit override even when that override's value happened to equal the symbol's own default labels: the key was present, so it comes back, instead of being treated as "no override" and dropped (Task 3 ルーリング3a: had_overrideの判定はキーの有無と妥当性で決め、展開結果が既定と同じかどうかでは決めない).
+    /// 明示的な上書きの値がたまたま既定のラベルと同じでも、採番のundoはそのキーを復元する: キーがあった事実は「上書き無し」として消されない (Task 3 ルーリング3a)。
+    #[test]
+    fn undoing_a_renumbering_restores_an_override_that_matches_the_default_value() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        // SetTerminalNumbersは「今の表示と同じ値」を渡すと無変更として無視する (このキーを持つ
+        // 状態そのものは作れない) ので、直接update_entityでキーを書く (MCP/Link API経由の
+        // 直接編集と同じ経路。ルーリング3aが問題にしているのはまさにこの経路で作られる状態)
+        engine.execute(set_attr_command(&engine, sheet_id, id, "terminal_numbers", "1,2,3,4")).unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("1,2,3,4"));
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        engine.undo().unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("1,2,3,4"),
+            "既定と同じ値の明示的な上書きでも、キーごと復元される"
+        );
+    }
+
+    /// Setting a number list whose length does not match the pin count is refused and leaves the drawing untouched.
+    /// ピン数と個数が合わない番号列の指定は拒否され、図面は変わらない。
+    #[test]
+    fn a_terminal_number_count_mismatch_is_refused_without_changing_the_drawing() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let err = engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["1".into(), "2".into(), "3".into()]),
+            })
+            .expect_err("4個のピンに3個は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+        assert_eq!(engine.undo_depth(), 1, "配置コマンドだけが履歴に残る (採番の失敗は積まれない)");
+    }
+
+    /// A duplicate label in the number list is refused without changing the drawing.
+    /// 番号列に重複したラベルがあると、図面を変えずに拒否される。
+    #[test]
+    fn duplicate_terminal_numbers_are_refused() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let err = engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["1".into(), "1".into(), "2".into(), "3".into()]),
+            })
+            .expect_err("重複は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// An empty label in the number list is refused without changing the drawing.
+    /// 番号列に空要素があると、図面を変えずに拒否される。
+    #[test]
+    fn an_empty_terminal_number_is_refused() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let err = engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["1".into(), "".into(), "3".into(), "4".into()]),
+            })
+            .expect_err("空要素は拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// Setting the numbers to `None` after a direct override returns the block to the symbol's default numbers (the `terminal_numbers` attribute itself disappears).
+    /// 直接指定のあとに番号を`None`にすると、シンボルの既定番号へ戻る (`terminal_numbers`属性自体が消える)。
+    #[test]
+    fn setting_numbers_to_none_returns_to_the_defaults() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["A".into(), "B".into(), "C".into(), "D".into()]),
+            })
+            .unwrap();
+        engine
+            .execute(Command::SetTerminalNumbers { sheet_id, entity_id: id, numbers: None })
+            .unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// Renumbering an entity id that does not exist on the sheet is refused instead of silently doing nothing.
+    /// シートに無いentity idの採番は、黙って何もせずに断られる。
+    #[test]
+    fn renumbering_an_unknown_entity_is_refused() {
+        let (mut engine, sheet_id, _) = terminal_engine("terminal_block_4p");
+        let missing = Uuid::new_v4();
+        assert!(engine
+            .execute(Command::RenumberTerminals {
+                sheet_id,
+                entity_id: missing,
+                start: 1,
+                step: 1,
+                prefix: String::new(),
+            })
+            .is_err());
+    }
+
+    /// The renumbering command is plain JSON with sensible defaults for the start and step, so agents and the CLI can send it with just an entity id.
+    /// 採番コマンドは既定の開始番号・増分を持つ素のJSONで表現できるので、AIやCLIからentity idだけでも送れる。
+    #[test]
+    fn the_terminal_renumbering_command_is_plain_json() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let json = format!(r#"{{"type":"renumber_terminals","sheet_id":"{sheet_id}","entity_id":"{id}"}}"#);
+        let command: Command = serde_json::from_str(&json).unwrap();
+        engine.execute(command).unwrap();
+        // 開始番号1・増分1は4極の端子台の既定 ("1,2,3,4") と同じ結果になるので、
+        // 図面は変わらない (属性は書き込まれない。採番済みの盤を再採番しても変わらないのと同じ)
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    // --- SetTerminalLevels (Task 3: 多段端子の生成・解除) ---
+
+    /// a-b間にワイヤを1本引く (entity idを返す)。
+    fn add_wire(sheet_id: SheetId, engine: &mut Engine, a: (f64, f64), b: (f64, f64)) -> EntityId {
+        let w = Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(a.0, a.1), Point::new(b.0, b.1)],
+            color: String::new(),
+            sq: 0.0,
+            length_m: None,
+            length_source: Default::default(),
+            part_no: None,
+            net: None,
+        };
+        let id = w.id;
+        engine.execute(Command::AddEntity { sheet_id, entity: Entity::Wire(w) }).unwrap();
+        id
+    }
+
+    /// 端子台を回転・反転を指定して1台置く (段数変更で座標がどう動くかを見るテスト用)。
+    fn terminal_engine_turned(
+        symbol_id: &str,
+        rotation: u16,
+        mirror: bool,
+    ) -> (Engine, SheetId, EntityId) {
+        let (mut engine, sheet_id) = test_engine();
+        let mut entity = place(symbol_id);
+        if let Entity::Symbol(s) = &mut entity {
+            s.rotation = rotation;
+            s.mirror = mirror;
+        }
+        let id = entity.id();
+        engine.execute(Command::AddEntity { sheet_id, entity }).unwrap();
+        (engine, sheet_id, id)
+    }
+
+    /// 端子番号`label`の接続点 (貫通端子なので左右2つ) の**用紙上絶対座標**を並べて返す。
+    fn terminal_pin_points(
+        engine: &Engine,
+        sheet_id: SheetId,
+        id: EntityId,
+        label: &str,
+    ) -> Vec<Point> {
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id)
+        else {
+            panic!("シンボルではない");
+        };
+        let def = crate::symbol::resolve_symbol(&s.symbol_id).expect("シンボル定義");
+        let labels = crate::terminal_chart::TerminalLabels::of(&def, &s.attrs);
+        let mut points: Vec<Point> = crate::netlist::pin_positions(s, &def)
+            .into_iter()
+            .filter(|(no, _)| labels.display_of(no) == label)
+            .map(|(_, p)| p)
+            .collect();
+        points.sort_by(|a, b| (a.x, a.y).partial_cmp(&(b.x, b.y)).expect("NaNは無い"));
+        points
+    }
+
+    /// エンティティ`wire`が属するネットに載っているピン (`(entity_id, ピン番号)`)。
+    fn net_pins_of_wire(engine: &Engine, sheet_id: SheetId, wire: EntityId) -> Vec<(EntityId, String)> {
+        let sheet = engine.project().sheet(sheet_id).unwrap();
+        let nets = crate::netlist::extract_netlist(sheet, &crate::symbol::sheet_symbol_defs(sheet));
+        nets.iter()
+            .find(|n| n.wire_ids.contains(&wire))
+            .map(|n| n.pins.iter().map(|p| (p.entity_id, p.pin.clone())).collect())
+            .unwrap_or_default()
+    }
+
+    /// Turning a single-level 4-pole terminal block into 2 levels rewrites its symbol_id and leaves the terminal_numbers attribute unset (no explicit override existed).
+    /// 4極の単段端子台を2段化すると、symbol_idが書き換わり、terminal_numbers属性は未設定のまま (明示的な上書きが無かったため)。
+    #[test]
+    fn setting_levels_turns_a_single_level_block_into_two_levels() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_4p_2l");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// Undoing a level increase (or setting levels back to 1 directly) restores the plain single-level symbol_id, never a "_1l" alias.
+    /// 段数を増やしたあとの解除 (直接levels=1を指定しても) は、単段のsymbol_idそのものに戻る (`_1l`という別名にはならない)。
+    #[test]
+    fn setting_levels_back_to_one_restores_the_plain_single_level_id() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 }).unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_4p");
+    }
+
+    /// Increasing levels expands an explicit terminal_numbers override into one lettered label per level, pole-major, exactly as the plan's example describes ("11,12,…" -> "11a,11b,12a,12b,…").
+    /// 段を増やすと、明示的なterminal_numbers上書きが極→段の順で段記号付きのラベルへ展開される (計画の例と同じ "11,12,…" → "11a,11b,12a,12b,…")。
+    #[test]
+    fn increasing_levels_expands_an_explicit_terminal_numbers_override() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("11a,11b,12a,12b,13a,13b,14a,14b")
+        );
+    }
+
+    /// A jumper written without a level letter on a single-level block moves to level a when the block gains a second level, so the existing connection is not silently dropped.
+    /// 段記号の無い単段のジャンパ指定は、2段化すると段aへ移る (既存の結線指定が黙って消えない)。
+    #[test]
+    fn increasing_levels_moves_a_levelless_jumper_to_level_a() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "1-2")).unwrap();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("1a-2a"));
+    }
+
+    /// Decreasing levels is refused, and the drawing is left completely untouched, when a wire is still connected to a pin of the level that would vanish.
+    /// 消える段のピンに配線が繋がったままだと、段を減らす操作は拒否され、図面は一切変わらない。
+    #[test]
+    fn decreasing_levels_is_refused_when_a_wire_is_connected_to_a_vanishing_level() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        // 極1・段bの外部側接続点 (107.5, 42.5) から配線を1本引く
+        add_wire(sheet_id, &mut engine, (107.5, 42.5), (120.0, 42.5));
+        let before = format!("{:?}", engine.project().sheet(sheet_id).unwrap().entities.get(&id));
+        let err = engine
+            .execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 })
+            .expect_err("段bに結線が残っているので拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        let after = format!("{:?}", engine.project().sheet(sheet_id).unwrap().entities.get(&id));
+        assert_eq!(after, before, "図面は一切変わらない");
+    }
+
+    /// Decreasing levels is refused when a jumper still names a terminal of the level that would vanish.
+    /// 消える段の端子を指すジャンパが残っていると、段を減らす操作は拒否される。
+    #[test]
+    fn decreasing_levels_is_refused_when_a_jumper_names_a_vanishing_level() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "1a-1b")).unwrap();
+        let err = engine
+            .execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 })
+            .expect_err("段bを指すジャンパが残っているので拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("1a-1b"), "図面は一切変わらない");
+    }
+
+    /// Decreasing levels is refused when a pin-group range spans terminals of the level that would vanish.
+    /// 消える段の端子を範囲に含むピングループが残っていると、段を減らす操作は拒否される。
+    #[test]
+    fn decreasing_levels_is_refused_when_a_pin_group_spans_a_vanishing_level() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "pin_groups", "1b-4b:信号")).unwrap();
+        let err = engine
+            .execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 })
+            .expect_err("段bを範囲に含むピングループが残っているので拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(pin_groups_attr(&engine, sheet_id, id).as_deref(), Some("1b-4b:信号"), "図面は一切変わらない");
+    }
+
+    /// Decreasing levels is refused when an accessory spec names a terminal of the level that would vanish (spec §1.1 accessories format, checked ahead of its own command landing in a later task).
+    /// 消える段の端子を指す付属品指定が残っていると、段を減らす操作は拒否される (spec §1.1 付属品の書式。専用コマンドが入る前から検証する)。
+    #[test]
+    fn decreasing_levels_is_refused_when_an_accessory_names_a_vanishing_level() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "accessories", "1b:end_bracket:TB-EB")).unwrap();
+        let err = engine
+            .execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 })
+            .expect_err("段bを指す付属品指定が残っているので拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+    }
+
+    /// When nothing references the vanishing level, decreasing levels succeeds and both the symbol_id and the terminal-number override drop that level's labels.
+    /// 消える段に何も参照が残っていなければ、段を減らす操作は成功し、symbol_idと端子番号の上書きの両方から消える段のラベルが落ちる。
+    #[test]
+    fn decreasing_levels_succeeds_and_drops_the_vanishing_levels_labels() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("11a,11b,12a,12b,13a,13b,14a,14b")
+        );
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 }).unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_4p");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("11,12,13,14"));
+    }
+
+    /// Changing the level count keeps level a's terminals at exactly the same coordinates on the sheet, whatever the block's rotation or mirroring, so nothing that was drawn onto those terminals has to move.
+    /// 段数を変えても段aの端子の用紙上の座標は1mmも動かない (端子台の回転・反転にかかわらず) ので、その端子に描かれていたものは動かさずに済む。
+    #[test]
+    fn a_level_change_keeps_level_a_terminals_at_the_same_sheet_coordinates() {
+        for (rotation, mirror) in [(0u16, false), (90, false), (0, true), (90, true)] {
+            // 単段 (端子番号 "1") → 2段 (段aは "1a") → 単段
+            let (mut engine, sheet_id, id) = terminal_engine_turned("terminal_block_4p", rotation, mirror);
+            let before = terminal_pin_points(&engine, sheet_id, id, "1");
+            engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+            assert_eq!(
+                terminal_pin_points(&engine, sheet_id, id, "1a"),
+                before,
+                "rot={rotation} mirror={mirror}: 1→2段で段aの端子が動いた"
+            );
+            engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 }).unwrap();
+            assert_eq!(
+                terminal_pin_points(&engine, sheet_id, id, "1"),
+                before,
+                "rot={rotation} mirror={mirror}: 2→1段で端子が元の座標に戻らない"
+            );
+            // 3段への一足飛びでも同じ (段aは常に元の位置)
+            engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 3 }).unwrap();
+            assert_eq!(
+                terminal_pin_points(&engine, sheet_id, id, "1a"),
+                before,
+                "rot={rotation} mirror={mirror}: 1→3段で段aの端子が動いた"
+            );
+        }
+    }
+
+    /// A wire drawn to terminal 1 of a single-level block is still electrically on the same terminal (now called 1a) after a second level is added, and it is not re-mapped to the new level's terminal.
+    /// 単段の端子台の端子1に引いてあった配線は、2段化したあとも電気的に同じ端子 (名前は`1a`になる) に繋がったままで、新しくできた段の端子へ繋ぎ変わったりしない。
+    #[test]
+    fn a_wire_on_terminal_one_stays_on_level_a_after_adding_a_level() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        // 端子1の内部側 (左) 接続点 (97.5, 42.5) へ1本引く
+        let wire = add_wire(sheet_id, &mut engine, (85.0, 42.5), (97.5, 42.5));
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        let pins = net_pins_of_wire(&engine, sheet_id, wire);
+        assert!(
+            pins.contains(&(id, "1a".to_string())),
+            "2段化後も配線は段aの端子に繋がったまま: {pins:?}"
+        );
+        assert!(
+            !pins.iter().any(|(_, p)| p == "1b"),
+            "配線が新しくできた段bの端子へ繋ぎ変わっていない: {pins:?}"
+        );
+        let sheet = engine.project().sheet(sheet_id).unwrap();
+        let chart = crate::terminal_chart::terminal_chart(sheet, id).expect("chart");
+        let row = chart.rows.iter().find(|r| r.terminal == "1a").expect("row 1a");
+        assert!(!row.spare, "端子1aは予備にならない");
+    }
+
+    /// Decreasing levels is refused when the only thing sitting on a vanishing level's pin is a net label (no wire at all), the same coordinate-coincidence rule the netlist uses.
+    /// 消える段のピンに載っているのがネットラベルだけ (配線は1本も無い) のときも、ネットリストと同じ座標一致の規則で段を減らす操作は拒否される。
+    #[test]
+    fn decreasing_levels_is_refused_when_a_net_label_sits_on_a_vanishing_pin() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        let label = Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(107.5, 42.5),
+            name: "N-P1".into(),
+            rotation: 0,
+            attrs: Default::default(),
+        });
+        engine.execute(Command::AddEntity { sheet_id, entity: label }).unwrap();
+        let before = format!("{:?}", engine.project().sheet(sheet_id).unwrap().entities.get(&id));
+        let err = engine
+            .execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 1 })
+            .expect_err("段bのピンにネットラベルが載っているので拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        let after = format!("{:?}", engine.project().sheet(sheet_id).unwrap().entities.get(&id));
+        assert_eq!(after, before, "図面は一切変わらない");
+    }
+
+    /// Going from 3 levels to 2 is refused while a jumper still names a level-c terminal, and allowed once it is gone - then only level c's labels are dropped and the remaining jumper is kept.
+    /// 3段から2段へ減らす操作は、段cの端子を指すジャンパが残っている間は拒否され、外せば通る (そのとき落ちるのは段cのラベルだけで、残ったジャンパはそのまま)。
+    #[test]
+    fn decreasing_three_levels_to_two_is_refused_only_while_level_c_is_referenced() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_3l");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "1a-2a,1b-1c")).unwrap();
+        let err = engine
+            .execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 })
+            .expect_err("段cを指すジャンパが残っているので拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("1a-2a,1b-1c"));
+
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "1a-2a")).unwrap();
+        engine
+            .execute(Command::RenumberTerminals { sheet_id, entity_id: id, start: 11, step: 1, prefix: String::new() })
+            .unwrap();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_4p_2l");
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("11a,11b,12a,12b,13a,13b,14a,14b"),
+            "段cのラベルだけが落ちる"
+        );
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("11a-12a"), "残ったジャンパは採番に追従したまま");
+    }
+
+    /// Increasing levels rewrites the terminal label of an accessory spec the same way it rewrites jumpers, so an accessory pinned to terminal 1 follows to 1a; the kind and part number are left byte for byte.
+    /// 段を増やすと、付属品指定の端子番号もジャンパと同じように書き換わる (端子1に付けた付属品は`1a`へ追従する)。種別と型番は1バイトも変わらない。
+    #[test]
+    fn increasing_levels_rewrites_accessory_terminal_labels() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(set_attr_command(
+                &engine,
+                sheet_id,
+                id,
+                "accessories",
+                "1:end_bracket:TB-EB,end:end_bracket:TB-EB",
+            ))
+            .unwrap();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(
+            s.attrs.get("accessories").map(String::as_str),
+            Some("1a:end_bracket:TB-EB,end:end_bracket:TB-EB"),
+            "末尾指定の`end`は書き換えない"
+        );
+    }
+
+    /// A terminal_numbers value that is present but invalid (its item count does not match the pin count) survives a level change untouched and comes back byte for byte after undo; the command never deletes a key it cannot restore.
+    /// `terminal_numbers`キーがあるのに値が無効 (個数がピン数と合わない) なとき、その値は段数変更でも書き換わらず、undoで1バイトも変わらず戻る (コマンドは自分で戻せないキーを消さない)。
+    #[test]
+    fn a_present_but_invalid_terminal_numbers_value_survives_a_level_change() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "terminal_numbers", "1,2")).unwrap();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("1,2"),
+            "無効な値でも消さず・書き換えず残す"
+        );
+        engine.undo().unwrap();
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id).as_deref(), Some("1,2"));
+    }
+
+    /// A level change whose relabelled bases would collide (one pole's level-a label ends in level a's own letter and strips to the same base as another pole's level-a label that never had a letter to strip) is refused before anything is written, instead of silently storing a `terminal_numbers` value with duplicate labels.
+    /// 段数変更で土台の取り違えにより重複が起きる指定 (一方の極の段aラベルは段aの記号で終わって剥がされ、もう一方の極の段aラベルはもともと記号を持たず剥がされない、その結果同じ土台になる指定) は、何も書き込む前に拒否される (重複したラベルを持つterminal_numbersを黙って保存しない)。
+    #[test]
+    fn a_level_change_that_would_produce_duplicate_labels_is_refused_without_writing_anything() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_2p_2l");
+        // 極1の段aは"11a"(段aの記号で終わるので土台"11"に剥がれる)、極2の段aはもともと"11"
+        // (記号を持たないので剥がれない、土台はやはり"11") -> 土台が衝突する
+        engine
+            .execute(set_attr_command(&engine, sheet_id, id, "terminal_numbers", "11a,11b,11,XX"))
+            .unwrap();
+        let before = terminal_numbers_attr(&engine, sheet_id, id);
+        assert!(engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 3 }).is_err());
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), before, "図面は一切変わらない");
+    }
+
+    /// Undoing a level change restores the previous symbol_id and the instance position together, in one undo step, so the terminals land back on their original coordinates.
+    /// 段数変更のundoは、変更前のsymbol_idと配置座標を**1回のundoでそろって**戻すので、端子は元の座標へ帰る。
+    #[test]
+    fn undoing_a_level_change_restores_the_symbol_id_and_the_position_together() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        let before_at = match engine.project().sheet(sheet_id).unwrap().entities.get(&id) {
+            Some(Entity::Symbol(s)) => s.at,
+            other => panic!("シンボルではない: {other:?}"),
+        };
+        let before_pins = terminal_pin_points(&engine, sheet_id, id, "1");
+        let depth = engine.undo_depth();
+        engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).unwrap();
+        assert_eq!(engine.undo_depth(), depth + 1, "段数変更はundo1段だけ積む");
+        engine.undo().unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_4p");
+        assert_eq!(s.at, before_at, "配置座標も一緒に戻る");
+        assert_eq!(terminal_pin_points(&engine, sheet_id, id, "1"), before_pins);
+    }
+
+    /// Asking for a level count outside 1-3 is refused without touching the drawing.
+    /// 1〜3の範囲外の段数指定は、図面を変えずに拒否される。
+    #[test]
+    fn setting_levels_outside_one_to_three_is_refused() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        assert!(engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 0 }).is_err());
+        assert!(engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 4 }).is_err());
+    }
+
+    /// Changing the level count of a symbol that is not a terminal block is refused, the same gate RenumberTerminals/SetTerminalNumbers already use.
+    /// 端子台以外のシンボルの段数変更は拒否される (RenumberTerminals/SetTerminalNumbersと同じ門)。
+    #[test]
+    fn setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let entity = place("resistor");
+        let id = entity.id();
+        engine.execute(Command::AddEntity { sheet_id, entity }).unwrap();
+        assert!(engine.execute(Command::SetTerminalLevels { sheet_id, entity_id: id, levels: 2 }).is_err());
+    }
+
+    /// A symbol_id spelled with the "_1l" one-level alias is refused when placed on the drawing: a single-level terminal block has exactly one valid spelling of its symbol_id.
+    /// `_1l`という段数1の別名で綴ったsymbol_idは配置時に拒否される: 単段端子台のsymbol_idの綴りは1通りだけが有効。
+    #[test]
+    fn a_one_level_alias_symbol_id_is_refused_when_placed() {
+        let (mut engine, sheet_id) = test_engine();
+        let err = engine
+            .execute(Command::AddEntity { sheet_id, entity: place("terminal_block_8p_1l") })
+            .expect_err("`_1l`別名は未知のシンボルとして拒否される");
+        assert!(matches!(err, CoreError::InvalidCommand(_)), "{err:?}");
+    }
+
+    // --- InsertSpareTerminals (Task 4: 予備端子の挿入) ---
+
+    /// Growing a terminal block's pole count (as inserting a spare does) never moves an existing pin's sheet coordinates — the instance is shifted the opposite way to compensate — so no wire that was attached to it comes loose.
+    /// 端子台の極数を増やしても (予備の挿入がそうする)、既存ピンの用紙上の座標は動かない — インスタンスが逆向きにずれて打ち消すため — ので、繋がっていた配線は外れない。
+    #[test]
+    fn inserting_a_spare_terminal_keeps_every_existing_pins_coordinates() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        let before: Vec<Vec<Point>> =
+            (1..=8).map(|n| terminal_pin_points(&engine, sheet_id, id, &n.to_string())).collect();
+        engine
+            .execute(Command::InsertSpareTerminals { sheet_id, entity_id: id, after: None, count: 1, renumber_following: true })
+            .unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_9p");
+        for (n, points) in (1..=8).zip(before) {
+            assert_eq!(
+                terminal_pin_points(&engine, sheet_id, id, &n.to_string()),
+                points,
+                "端子{n}の座標が動いた"
+            );
+        }
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None, "末尾挿入は既定の番号列と同じ");
+    }
+
+    /// Inserting a spare after a chosen terminal writes the renumbered label sequence and rewrites the jumper spec that used the labels which moved, so the jumper still names the same physical pair of terminals.
+    /// 指定した端子の後ろに予備を挿入すると、繰り下がった番号列が書き込まれ、動いたラベルを使っていたジャンパ指定も書き換わるので、ジャンパは同じ物理的な端子の組を指したままになる。
+    #[test]
+    fn inserting_a_spare_after_a_terminal_renumbers_labels_and_follows_the_jumper() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "4-5")).unwrap();
+        engine
+            .execute(Command::InsertSpareTerminals {
+                sheet_id,
+                entity_id: id,
+                after: Some("3".to_string()),
+                count: 1,
+                renumber_following: true,
+            })
+            .unwrap();
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("1,2,3,5,6,7,8,9,4")
+        );
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("5-6"), "4→5・5→6に追従");
+    }
+
+    /// A count of zero is refused without touching the drawing.
+    /// 0個の指定は、図面を変えずに拒否される。
+    #[test]
+    fn inserting_zero_spares_is_refused_without_touching_the_drawing() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        assert!(engine
+            .execute(Command::InsertSpareTerminals { sheet_id, entity_id: id, after: None, count: 0, renumber_following: true })
+            .is_err());
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_8p");
+    }
+
+    /// Naming a terminal the block does not have as the insertion point is refused.
+    /// 端子台に無い端子番号を挿入位置に指定すると拒否される。
+    #[test]
+    fn inserting_after_an_unknown_terminal_is_refused() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        assert!(engine
+            .execute(Command::InsertSpareTerminals {
+                sheet_id,
+                entity_id: id,
+                after: Some("99".to_string()),
+                count: 1,
+                renumber_following: true,
+            })
+            .is_err());
+    }
+
+    /// Inserting past the dynamic symbol family's pole cap is refused.
+    /// 動的シンボルの極数上限を超える挿入は拒否される。
+    #[test]
+    fn inserting_past_the_pole_cap_is_refused() {
+        let (mut engine, sheet_id, id) =
+            terminal_engine(&format!("terminal_block_{}p", crate::symbol::DYNAMIC_PIN_MAX));
+        assert!(engine
+            .execute(Command::InsertSpareTerminals { sheet_id, entity_id: id, after: None, count: 1, renumber_following: true })
+            .is_err());
+    }
+
+    /// Inserting a spare into a symbol that is not a terminal block is refused, the same gate the other terminal commands already use.
+    /// 端子台以外のシンボルへの予備挿入は拒否される (他の端子台系コマンドと同じ門)。
+    #[test]
+    fn inserting_a_spare_on_a_symbol_that_is_not_a_terminal_block_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let entity = place("resistor");
+        let id = entity.id();
+        engine.execute(Command::AddEntity { sheet_id, entity }).unwrap();
+        assert!(engine
+            .execute(Command::InsertSpareTerminals { sheet_id, entity_id: id, after: None, count: 1, renumber_following: true })
+            .is_err());
+    }
+
+    /// Undoing an inserted spare restores the symbol_id, the terminal numbers and the position together in one step.
+    /// 挿入した予備をundoすると、symbol_id・端子番号・位置がまとめて1回で元に戻る。
+    #[test]
+    fn undoing_an_inserted_spare_restores_symbol_id_numbers_and_position_together() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        let before_at = match engine.project().sheet(sheet_id).unwrap().entities.get(&id) {
+            Some(Entity::Symbol(s)) => s.at,
+            other => panic!("シンボルではない: {other:?}"),
+        };
+        let before_pins = terminal_pin_points(&engine, sheet_id, id, "1");
+        let depth = engine.undo_depth();
+        engine
+            .execute(Command::InsertSpareTerminals {
+                sheet_id,
+                entity_id: id,
+                after: Some("3".to_string()),
+                count: 1,
+                renumber_following: true,
+            })
+            .unwrap();
+        assert_eq!(engine.undo_depth(), depth + 1, "予備挿入はundo1段だけ積む");
+        engine.undo().unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_8p");
+        assert_eq!(s.at, before_at, "配置座標も一緒に戻る");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+        assert_eq!(terminal_pin_points(&engine, sheet_id, id, "1"), before_pins);
+    }
+
+    /// A multi-level block's inserted spare pole adds one terminal per level ("9a","9b" for a 2-level block).
+    /// 多段端子台への予備挿入は、1極につき段数ぶんの端子が増える (2段なら"9a","9b")。
+    #[test]
+    fn inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p_2l");
+        engine
+            .execute(Command::InsertSpareTerminals { sheet_id, entity_id: id, after: None, count: 1, renumber_following: true })
+            .unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_5p_2l");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None, "末尾挿入は既定と同じ並び");
+    }
+
+    /// The insertion command's JSON with `after` omitted (the minimal form MCP/the Link API/the CLI can send) is accepted as an append at the end.
+    /// `after`を省略した挿入コマンドのJSON (MCP/Link API/CLIが送れる最小形) は、末尾挿入として通る。
+    #[test]
+    fn the_insert_spare_terminals_command_accepts_after_omitted() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        let json = format!(r#"{{"type":"insert_spare_terminals","sheet_id":"{sheet_id}","entity_id":"{id}","count":1}}"#);
+        let command: Command = serde_json::from_str(&json).unwrap();
+        engine.execute(command).unwrap();
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id) else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_9p", "afterを省略すると末尾挿入");
+    }
+
+    /// Inserting a second spare into a block that already has one works, both at the end and after any terminal, because the command counts the insertion point in the order the chart shows rather than the physical pin order.
+    /// 予備を入れた端子台へもう1つ予備を挿入する操作は、末尾でもどの端子の後ろでも通る。挿入位置を物理的なピン順ではなくチャートに出る順で数えるため。
+    #[test]
+    fn inserting_a_second_spare_into_the_same_block_succeeds() {
+        for after in [None, Some("4".to_string()), Some("5".to_string()), Some("9".to_string())] {
+            let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+            engine
+                .execute(Command::InsertSpareTerminals {
+                    sheet_id,
+                    entity_id: id,
+                    after: Some("3".to_string()),
+                    count: 1,
+                    renumber_following: true,
+                })
+                .expect("1回目");
+            engine
+                .execute(Command::InsertSpareTerminals {
+                    sheet_id,
+                    entity_id: id,
+                    after: after.clone(),
+                    count: 1,
+                    renumber_following: true,
+                })
+                .unwrap_or_else(|e| panic!("after={after:?} の2回目が拒否された: {e}"));
+            let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id)
+            else {
+                panic!()
+            };
+            assert_eq!(s.symbol_id, "terminal_block_10p", "after={after:?}");
+            let chart = crate::terminal_chart::terminal_chart(
+                engine.project().sheet(sheet_id).unwrap(),
+                id,
+            )
+            .expect("chart");
+            let shown: Vec<&str> = chart.rows.iter().map(|r| r.terminal.as_str()).collect();
+            assert_eq!(
+                shown,
+                ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                "after={after:?}: チャートは1〜10の連番で出る"
+            );
+        }
+    }
+
+    /// Inserting a spare into a block renumbered with a prefix keeps the prefix on every label and does not panic (the prefixed labels are not readable as plain pole numbers, which used to overflow the numbering arithmetic).
+    /// 接頭辞を付けて採番した端子台への予備挿入は、どのラベルも接頭辞を保ったまま通り、パニックしない (接頭辞付きのラベルは素の極番号として読めず、以前は番号の計算が桁溢れしていた)。
+    #[test]
+    fn inserting_a_spare_into_a_prefixed_block_keeps_the_prefix() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_8p");
+        engine
+            .execute(Command::RenumberTerminals {
+                sheet_id,
+                entity_id: id,
+                start: 1,
+                step: 1,
+                prefix: "A".to_string(),
+            })
+            .unwrap();
+        engine
+            .execute(Command::InsertSpareTerminals {
+                sheet_id,
+                entity_id: id,
+                after: Some("A3".to_string()),
+                count: 1,
+                renumber_following: true,
+            })
+            .expect("接頭辞付きでも挿入できる");
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("A1,A2,A3,A5,A6,A7,A8,A9,A4")
+        );
+    }
+
+    /// The "leave the spare with a vacant number" mode writes the spare into the vacant number and leaves every following terminal's number (and so every jumper naming them) untouched.
+    /// 「予備を空き番号のまま残す」扱いは、予備を空き番号に入れ、後ろの端子の番号 (とそれを指すジャンパ) を一切変えない。
+    #[test]
+    fn inserting_a_spare_without_renumbering_leaves_the_following_numbers_alone() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        engine
+            .execute(Command::SetTerminalNumbers {
+                sheet_id,
+                entity_id: id,
+                numbers: Some(vec!["1".into(), "2".into(), "3".into(), "5".into()]),
+            })
+            .unwrap();
+        engine.execute(set_attr_command(&engine, sheet_id, id, "jumpers", "3-5")).unwrap();
+        engine
+            .execute(Command::InsertSpareTerminals {
+                sheet_id,
+                entity_id: id,
+                after: Some("3".to_string()),
+                count: 1,
+                renumber_following: false,
+            })
+            .expect("空き番号4へ挿入できる");
+        assert_eq!(
+            terminal_numbers_attr(&engine, sheet_id, id).as_deref(),
+            Some("1,2,3,5,4"),
+            "5は繰り下がらず、空いていた4が予備になる"
+        );
+        assert_eq!(jumpers_attr(&engine, sheet_id, id).as_deref(), Some("3-5"), "ジャンパも変わらない");
+    }
+
+    /// In the "leave the numbers alone" mode an insertion whose spare number is already taken is refused without touching the drawing.
+    /// 「空き番号のまま残す」扱いで予備の番号が既に使われている挿入は、図面を変えずに拒否される。
+    #[test]
+    fn inserting_a_spare_without_renumbering_is_refused_when_the_number_is_taken() {
+        let (mut engine, sheet_id, id) = terminal_engine("terminal_block_4p");
+        assert!(engine
+            .execute(Command::InsertSpareTerminals {
+                sheet_id,
+                entity_id: id,
+                after: Some("1".to_string()),
+                count: 1,
+                renumber_following: false,
+            })
+            .is_err());
+        let Some(Entity::Symbol(s)) = engine.project().sheet(sheet_id).unwrap().entities.get(&id)
+        else {
+            panic!()
+        };
+        assert_eq!(s.symbol_id, "terminal_block_4p", "図面は変わらない");
+        assert_eq!(terminal_numbers_attr(&engine, sheet_id, id), None);
+    }
+
+    /// Inserting a spare keeps every existing terminal at exactly the same coordinates on the sheet whatever the block's rotation or mirroring, so nothing drawn onto those terminals has to move.
+    /// 予備を挿入しても既存の端子の用紙上の座標は1mmも動かない (端子台の回転・反転にかかわらず) ので、その端子に描かれていたものは動かさずに済む。
+    #[test]
+    fn inserting_a_spare_keeps_pin_coordinates_at_every_rotation_and_mirroring() {
+        for (rotation, mirror) in [(0u16, false), (90, false), (0, true), (90, true)] {
+            let (mut engine, sheet_id, id) =
+                terminal_engine_turned("terminal_block_8p", rotation, mirror);
+            let before: Vec<Vec<Point>> =
+                (1..=8).map(|n| terminal_pin_points(&engine, sheet_id, id, &n.to_string())).collect();
+            engine
+                .execute(Command::InsertSpareTerminals {
+                    sheet_id,
+                    entity_id: id,
+                    after: Some("3".to_string()),
+                    count: 1,
+                    renumber_following: true,
+                })
+                .unwrap();
+            // 3の後ろに挿入したので4以降の番号は繰り下がっている (端子nは挿入後 n<=3 ならn、そうでなければn+1)
+            for (n, points) in (1..=8).zip(before) {
+                let label = if n <= 3 { n } else { n + 1 };
+                assert_eq!(
+                    terminal_pin_points(&engine, sheet_id, id, &label.to_string()),
+                    points,
+                    "rot={rotation} mirror={mirror}: 端子{n} (挿入後{label}) の座標が動いた"
+                );
+            }
+        }
     }
 
     /// Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted.

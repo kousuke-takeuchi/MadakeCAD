@@ -1,10 +1,35 @@
-// 端子台のジャンパ (G5)。attrs["jumpers"] の解析と、シンボル上に描くバーの図形を求める。
+// 端子台のジャンパ (G5) と行の並べ替え順。attrs["jumpers"] / attrs["row_order"] の解析と、
+// シンボル上に描くバーの図形を求める。
 // Rust側 madake-core/src/terminal_chart.rs の parse_jumpers / jumper_bars と同一ルール。
 // Pinia非依存の純関数だけを置き、端子台エディタのストア (stores/terminals.ts) も
 // キャンバス描画 (renderer.ts) も**ここ1か所**の正規化ルールを使う。
 
-import { parseTerminalNo, TERMINAL_MARK_R } from "./dynamicSymbol";
-import type { Point, SymbolDef } from "../ipc";
+import {
+  bumpLabelNumber,
+  levelLetter,
+  parseTerminalNo,
+  TERMINAL_LEVEL_MAX,
+  TERMINAL_MARK_R,
+} from "./terminalNo";
+import type { Point, RowOrder, SymbolDef } from "../ipc";
+
+/**
+ * 端子台チャートの並べ替え順の一覧 (`terminals.sort.*`のドロップダウンが列挙する)。
+ * Rust側 `terminal_chart::RowOrder` の5つのバリアントと同じ並び (parityテストで確認)。
+ */
+export const ROW_ORDERS: readonly RowOrder[] = ["number", "alnum", "page", "cable", "jumper"];
+
+/**
+ * `attrs["row_order"]`を解析する。未設定・未知語は`"number"`に落ちる
+ * (Rust側 `terminal_chart::row_order_of` と同一ルール)。実際の並べ替えは常にRust側
+ * (`sort_terminal_rows`) が行い、ドロップダウンの選択状態もRustが返したチャートの
+ * `row_order`が正なので、ここが使われるのは**未検証の文字列を`RowOrder`にする1点だけ**
+ * (並べ替えドロップダウンが返す生の`value`を`update_entity`へ渡す前に通す)。
+ */
+export function rowOrderOf(attrs: Readonly<Record<string, string>> | undefined): RowOrder {
+  const raw = attrs?.row_order;
+  return raw && (ROW_ORDERS as readonly string[]).includes(raw) ? (raw as RowOrder) : "number";
+}
 
 /**
  * ジャンパバーの線幅 (mm)。Rust側 terminal_chart.rs の JUMPER_BAR_STROKE と一致させること。
@@ -49,28 +74,333 @@ export function terminalNumbers(def: SymbolDef): string[] {
   return out;
 }
 
+/** `attrs["terminal_numbers"]` のキー名 (spec §1.1、Rust側 TERMINAL_NUMBERS_ATTR と同一)。 */
+export const TERMINAL_NUMBERS_ATTR = "terminal_numbers";
+
+/**
+ * `numbers` が `count` 個の端子番号の指定として妥当か: 個数が一致し、前後の空白を落としたあとで
+ * 空要素も重複も無く、どの要素にも区切り記号の`,`が入っていない (Rust側 valid_terminal_numbers と同一)。
+ *
+ * 判定は必ず`trim`した値で行う: 保存形はカンマ区切りの1行で、読み取り側が`split(",")`+`trim`して
+ * 戻すため、`"1 "`と`"1"`は同じ端子番号になり、要素に`,`が入ると項目数そのものが変わってしまう。
+ */
+export function validTerminalNumbers(numbers: readonly string[], count: number): boolean {
+  if (numbers.length !== count) return false;
+  const trimmed = numbers.map((s) => s.trim());
+  if (trimmed.some((s) => s === "" || s.includes(","))) return false;
+  return new Set(trimmed).size === trimmed.length;
+}
+
+/**
+ * シンボルインスタンスの端子番号を、チャート順の表示ラベルとして列挙する
+ * (Rust側 terminal_numbers_of_instance と同一)。`attrs["terminal_numbers"]`があればそれを
+ * 使い、[`validTerminalNumbers`]を満たさない無効な値はシンボル定義の既定へフォールバックする。
+ */
+export function terminalNumbersOfInstance(
+  def: SymbolDef,
+  attrs: Readonly<Record<string, string>> | undefined,
+): string[] {
+  const raw = terminalNumbers(def);
+  const spec = attrs?.[TERMINAL_NUMBERS_ATTR];
+  if (spec === undefined) return raw;
+  const numbers = spec.split(",").map((s) => s.trim());
+  return validTerminalNumbers(numbers, raw.length) ? numbers : raw;
+}
+
+/**
+ * 端子番号の**生のピン番号 ↔ 表示ラベル**の対応表 (Rust側 `TerminalLabels` と同一)。
+ *
+ * 端子番号の上書き (`attrs["terminal_numbers"]`) があると、ユーザーが打つ端子番号 (ジャンパ・
+ * ピングループ) は表示ラベルで書かれるのに、図面のジオメトリはシンボル定義の生のピン番号でしか
+ * 引けない。この変換は**必ずここ1か所**を通す: キャンバスのピン番号テキストの差し替え・
+ * ジャンパバー (renderer.ts)・ピングループの括弧 (pinGroups.ts)・端子台エディタのプレビューが
+ * 同じ対応を使う。上書きが無ければ恒等変換 (`isIdentity`) になり、呼び出し側は素通しできる。
+ *
+ * 端子台以外のシンボルは常に恒等変換 (上書きは端子台シンボルだけの仕組み)。
+ */
+export interface TerminalLabels {
+  /** 上書きが無い (生の番号と表示ラベルが同じ) か。 */
+  isIdentity: boolean;
+  /** 生のピン番号→表示ラベルの対応。上書きが無ければ`null`。 */
+  renameMap: Map<string, string> | null;
+  /** 生のピン番号→表示ラベル。知らない番号はそのまま返す。 */
+  displayOf(raw: string): string;
+  /** 表示ラベル→生のピン番号 (逆変換)。知らないラベルはそのまま返す。 */
+  rawOf(display: string): string;
+}
+
+/** シンボル定義+インスタンスの`attrs`から端子番号の対応表を作る (Rust側 `TerminalLabels::of`)。 */
+export function terminalLabels(
+  def: SymbolDef,
+  attrs: Readonly<Record<string, string>> | undefined,
+): TerminalLabels {
+  const identity: TerminalLabels = {
+    isIdentity: true,
+    renameMap: null,
+    displayOf: (raw) => raw,
+    rawOf: (display) => display,
+  };
+  if (!def.id.startsWith("terminal_block_")) return identity;
+  const raw = terminalNumbers(def);
+  const display = terminalNumbersOfInstance(def, attrs);
+  if (raw.length === display.length && raw.every((r, i) => r === display[i])) return identity;
+  const toDisplay = new Map<string, string>();
+  const toRaw = new Map<string, string>();
+  raw.forEach((r, i) => {
+    toDisplay.set(r, display[i]);
+    toRaw.set(display[i], r);
+  });
+  return {
+    isIdentity: false,
+    renameMap: toDisplay,
+    displayOf: (r) => toDisplay.get(r) ?? r,
+    rawOf: (d) => toRaw.get(d) ?? d,
+  };
+}
+
+/**
+ * `-`で繋いだ範囲表記 (`"1-2"` / 単体 `"3"`) の端子番号トークンだけを`rename` (旧表示ラベル→
+ * 新表示ラベル) で置き換える (Rust側 rename_terminal_tokens と同一)。区切りの`-`と前後の空白は
+ * 1文字も変えない。トークンが1つでも`rename`に無ければ`null` (呼び出し側は元の文字列を残す)。
+ */
+export function renameTerminalTokens(
+  text: string,
+  rename: ReadonlyMap<string, string>,
+): string | null {
+  const parts = text.split("-");
+  const out: string[] = [];
+  for (const part of parts) {
+    const trimmed = part.trim();
+    const next = rename.get(trimmed);
+    if (next === undefined) return null;
+    const lead = part.slice(0, part.length - part.trimStart().length);
+    const trail = part.slice(part.trimEnd().length);
+    out.push(`${lead}${next}${trail}`);
+  }
+  return out.join("-");
+}
+
+/**
+ * `attrs["jumpers"]`の端子番号を`rename`で書き換える (Rust側 rewrite_jumper_labels と同一)。
+ * 書き換えは文字列の置換だけで、正規化 (並べ替え・重複除去) はしない: 「端子番号-端子番号」の形に
+ * 読めない項目や、`rename`の知らない端子番号が入っている項目は丸ごとそのまま残す (ERCが指摘して
+ * いる指定を採番が黙って消さないため)。採番ポップオーバーのプレビューがこれで追従後の指定を見せる。
+ */
+export function rewriteJumperLabels(spec: string, rename: ReadonlyMap<string, string>): string {
+  return spec
+    .split(",")
+    .map((item) => {
+      if (item.split("-").length !== 2) return item;
+      return renameTerminalTokens(item, rename) ?? item;
+    })
+    .join(",");
+}
+
+/**
+ * 端子台シンボルの (極数, 段数) を端子番号から数える (Rust側 poles_and_levels_of と同一)。
+ * 多段端子台は段数が2以上で端子数=極数×段数。端子台以外・未知のシンボルは`[0, 0]`。
+ */
+export function polesAndLevelsOf(def: SymbolDef | null): [number, number] {
+  if (!def) return [0, 0];
+  const poles = new Set<number>();
+  const levels = new Set<string>();
+  for (const no of terminalNumbers(def)) {
+    const [pole, level] = parseTerminalNo(no);
+    poles.add(pole);
+    if (level !== null) levels.add(level);
+  }
+  return [poles.size, Math.max(levels.size, 1)];
+}
+
+/**
+ * `symbol_id`の段数を`levels`へ変えたときのid (Rust側 multilevel_id と同一)。
+ * `levels === 1`は**単段idへ正規化**する (`_1l`という別名idは作らない)。
+ * 端子台でない・段数が範囲外・極数が読めないときはnull (呼び出し側はプレビューを出さない)。
+ */
+export function multilevelSymbolId(
+  symbolId: string,
+  levels: number,
+  def: SymbolDef | null,
+): string | null {
+  if (!symbolId.startsWith("terminal_block_")) return null;
+  if (!Number.isInteger(levels) || levels < 1 || levels > TERMINAL_LEVEL_MAX) return null;
+  const [poles] = polesAndLevelsOf(def);
+  if (poles === 0) return null;
+  return levels === 1 ? `terminal_block_${poles}p` : `terminal_block_${poles}p_${levels}l`;
+}
+
+/**
+ * 段数を変えたときの新しい表示ラベル一覧 (Rust側 relabel_for_levels と同一)。
+ * 極ごとに段a (単段なら唯一) のラベルを土台にし、末尾が**段aの記号 (`levelLetter(0)`)**
+ * そのものならそれを外してから新しい段数ぶんの段記号を付け直す。段を減らすときは残る段の
+ * ラベルだけが返る。
+ *
+ * **末尾が英字なら何でも外す、ではない** (Task 3の再レビューで見つかった不具合。Task 4での
+ * 修正): 手で上書きした`"11X"`のような表示ラベルの`X`は段記号ではなくユーザーが書いた表記の
+ * 一部なので、段aの記号と一致するときだけ外す。そうしないと別の文字で終わる2極の土台が
+ * 同じ文字列に潰れて重複しうる。
+ */
+export function relabelForLevels(
+  oldDisplay: readonly string[],
+  poles: number,
+  oldLevels: number,
+  newLevels: number,
+): string[] {
+  const out: string[] = [];
+  const levelA = levelLetter(0);
+  for (let p = 0; p < poles; p++) {
+    const first = oldDisplay[p * oldLevels] ?? "";
+    let base = first;
+    if (oldLevels > 1 && first.slice(-1) === levelA) base = first.slice(0, -1);
+    for (let j = 0; j < newLevels; j++) {
+      out.push(newLevels === 1 ? base : `${base}${levelLetter(j)}`);
+    }
+  }
+  return out;
+}
+
+/**
+ * 開始番号・増分・接頭辞から採番案 ([`terminalNumbers`]と同じ並び) を作る
+ * (Rust側 terminal_renumber_plan と同一)。多段端子台は段記号を保ったまま極だけ採番する
+ * (`11a`,`11b`,… — 同じ極の全段が同じ番号を共有する)。ツールバーの採番ポップオーバーの
+ * プレビュー表示に使う (実際の適用は`RenumberTerminals`コマンドが行う)。
+ */
+export function terminalRenumberPlan(
+  rawTerminals: readonly string[],
+  start: number,
+  step: number,
+  prefix: string,
+): string[] {
+  const out: string[] = [];
+  let lastPole: number | null = null;
+  let poleIndex = 0;
+  let n = start;
+  for (const t of rawTerminals) {
+    const [pole, level] = parseTerminalNo(t);
+    if (lastPole !== pole) {
+      if (lastPole !== null) {
+        poleIndex += 1;
+        n = start + step * poleIndex;
+      }
+      lastPole = pole;
+    }
+    out.push(level !== null ? `${prefix}${n}${level}` : `${prefix}${n}`);
+  }
+  return out;
+}
+
+/**
+ * 予備端子を`count`個挿入したときの新しい`symbol_id`と表示ラベル一覧
+ * (Rust側 insert_spare_terminals と同一。Task 4「予備端子の挿入」)。
+ *
+ * 物理的には必ずシンボルの**末尾**に極を足す (呼び出し側が既存極の座標を保つため
+ * インスタンスの`at`を平行移動する。ここではラベルの計算だけ)。**番号だけ**が`after`
+ * (表示ラベル。`null`なら末尾) の直後に挿入されたように振られる。多段端子台は1極につき
+ * 段数ぶんの予備端子が増える (`9a`,`9b`,…)。
+ *
+ * **位置は必ず「チャートに出る順」(表示ラベルの順) で数える**。生のピン順ではない:
+ * この機能自身が生の順と番号順をわざと食い違わせるので (新しい極は物理的に末尾)、
+ * 生のインデックスで数えると2回目の挿入が壊れる。
+ *
+ * `renumberFollowing`が番号の扱い (デザイン`eTFE5`の「番号の扱い」ラジオ):
+ * `true`=詰める (`after`より後ろの極の番号が`count`だけ増え、空いた番号を予備が取る)、
+ * `false`=空ける (既存の番号は変えず、予備が`after`の次の番号を取る。ぶつかれば`null`)。
+ *
+ * 新しい番号は**隣の極の表記の数値部だけを増やして**作るので、前置き・後置きは引き継がれる
+ * (`A3` → `A4`、`11a` → `12a`)。
+ *
+ * `count`が0以下、`oldDisplay`の中に`after`が見つからない、極数が読めない (`poles`が0)、
+ * 番号を決められない (数字を含まない表記)、または番号が重複するときは`null`
+ * (呼び出し側はプレビューを出さない。極数上限の確認はRust側と同じ定数を参照できる
+ * 呼び出し側 (`stores/terminals.ts`) が別に行う — 循環importを避けるため)。
+ */
+export function insertSpareTerminals(
+  symbolId: string,
+  oldDisplay: readonly string[],
+  poles: number,
+  levels: number,
+  after: string | null,
+  count: number,
+  renumberFollowing = true,
+): { symbolId: string; numbers: string[] } | null {
+  if (!Number.isInteger(count) || count <= 0) return null;
+  if (!symbolId.startsWith("terminal_block_") || poles === 0 || levels === 0) return null;
+  // 挿入位置はチャートに出る順で数える (Rust側 display_pole_order と一致。安定ソート)
+  const order = Array.from({ length: poles }, (_, p) => p).sort(
+    (a, b) => parseTerminalNo(oldDisplay[a * levels] ?? "")[0] - parseTerminalNo(oldDisplay[b * levels] ?? "")[0],
+  );
+  let afterPos: number;
+  if (after === null) {
+    afterPos = order.length - 1;
+  } else {
+    const pos = oldDisplay.indexOf(after);
+    if (pos < 0) return null;
+    afterPos = order.indexOf(Math.floor(pos / levels));
+    if (afterPos < 0) return null;
+  }
+  const refPole = order[afterPos];
+  const newPoles = poles + count;
+  const numbers = oldDisplay.slice();
+  if (renumberFollowing) {
+    for (const p of order.slice(afterPos + 1)) {
+      for (let l = 0; l < levels; l++) {
+        const i = p * levels + l;
+        const bumped = bumpLabelNumber(oldDisplay[i] ?? "", count);
+        if (bumped === null) return null;
+        numbers[i] = bumped;
+      }
+    }
+  }
+  for (let k = 0; k < count; k++) {
+    for (let l = 0; l < levels; l++) {
+      const bumped = bumpLabelNumber(oldDisplay[refPole * levels + l] ?? "", k + 1);
+      if (bumped === null) return null;
+      numbers.push(bumped);
+    }
+  }
+  if (!validTerminalNumbers(numbers, newPoles * levels)) return null;
+  const newSymbolId =
+    levels === 1 ? `terminal_block_${newPoles}p` : `terminal_block_${newPoles}p_${levels}l`;
+  return { symbolId: newSymbolId, numbers };
+}
+
 /**
  * ジャンパ指定 (`"1-2,3-4"`、多段端子台なら `"1a-1b"`) を解析して正規化する。
- * 並び順で先に来る端子を前にし、重複を除き、昇順に並べる。隣り合わない端子どうしの
- * 組は捨てる。`terminals` (その端子台が実際に持つ端子番号) を渡すと、そこに無い端子を
- * 指す組と、多段端子台に段記号なしで書かれた組も捨てる(Rust側 parse_jumpers と同一)。
+ *
+ * `terminals`はその端子台の**表示ラベル**(端子番号の上書きがあればそれ、無ければ生の番号と
+ * 同じ)をチャート順に並べたもの。`spec`はこのラベルで書かれている。`rawTerminals`は同じ並び
+ * の**生の端子番号**([`terminalNumbers`])で、隣接判定・多段判定はここから取る(上書きの
+ * 表記がどうであれ、物理的な隣接関係は生の番号の並びだけで決まるため。Rust側 parse_jumpers
+ * と同一)。省略時は`terminals`をそのまま使う(上書きの無い既存呼び出しと後方互換)。
  */
-export function parseJumperSpec(spec: string, terminals?: readonly string[]): [string, string][] {
-  const multilevel = (terminals ?? []).some((t) => parseTerminalNo(t)[1] !== null);
+export function parseJumperSpec(
+  spec: string,
+  terminals?: readonly string[],
+  rawTerminals: readonly string[] = terminals ?? [],
+): [string, string][] {
+  const multilevel = rawTerminals.some((t) => parseTerminalNo(t)[1] !== null);
   const pairs: [string, string][] = [];
   for (const item of spec.split(",")) {
     const parts = item.split("-").map((p) => p.trim());
     if (parts.length !== 2 || parts.some((p) => p === "")) continue;
     if (multilevel && parts.every((p) => /^\d+$/.test(p))) continue;
     if (terminals && parts.some((p) => !terminals.includes(p))) continue;
-    if (!terminalsAreAdjacent(parts[0], parts[1])) continue;
-    const [a, b] =
-      compareKeys(sortKey(parts[0]), sortKey(parts[1])) <= 0
-        ? [parts[0], parts[1]]
-        : [parts[1], parts[0]];
+    const i0 = terminals ? terminals.indexOf(parts[0]) : -1;
+    const i1 = terminals ? terminals.indexOf(parts[1]) : -1;
+    if (terminals && (i0 === -1 || i1 === -1)) continue;
+    const rawA = terminals ? rawTerminals[i0] : parts[0];
+    const rawB = terminals ? rawTerminals[i1] : parts[1];
+    if (!terminalsAreAdjacent(rawA, rawB)) continue;
+    const inOrder = terminals ? i0 <= i1 : compareKeys(sortKey(parts[0]), sortKey(parts[1])) <= 0;
+    const [a, b] = inOrder ? [parts[0], parts[1]] : [parts[1], parts[0]];
     if (!pairs.some(([x, y]) => x === a && y === b)) pairs.push([a, b]);
   }
-  pairs.sort((p, q) => compareKeys(sortKey(p[0]), sortKey(q[0])) || compareKeys(sortKey(p[1]), sortKey(q[1])));
+  const rank = (t: string) => (terminals ? terminals.indexOf(t) : -1);
+  pairs.sort((p, q) => {
+    const byFirst = terminals ? rank(p[0]) - rank(q[0]) : compareKeys(sortKey(p[0]), sortKey(q[0]));
+    if (byFirst !== 0) return byFirst;
+    return terminals ? rank(p[1]) - rank(q[1]) : compareKeys(sortKey(p[1]), sortKey(q[1]));
+  });
   return pairs;
 }
 

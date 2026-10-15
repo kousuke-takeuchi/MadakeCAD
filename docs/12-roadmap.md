@@ -30,7 +30,7 @@ Command engine with full undo/redo · Canvas editor · JIS frame · parametric t
 
 ## M4 — Industrial CAD core (ACADE/EPLAN benchmark) ✅ (phases 1-4 done)
 
-- ✅ **Terminal charts** (phase 1): terminal strip editor with saddle jumpers and terminal checks, terminal chart (CSV / drawing sheet), graphical terminal connection diagram. Sorting, multi-level terminals and accessories need a model extension and come later
+- ✅ **Terminal charts** (phase 1): terminal strip editor with saddle jumpers and terminal checks, terminal chart (CSV / drawing sheet), graphical terminal connection diagram. Phase 5 (2026-09-28) completed the editor: sorting, renumbering, multi-level terminals added and removed in place, spare insertion, part assignment, accessories (counted in the BOM), inside/outside swap and go-to-drawing, each one undoable command
 - ✅ **Extended report set** (phase 1): from–to wire list, cross-reference table, every report as a framed drawing sheet, and a combined PDF (cover → schematic sheets → reports)
 - ✅ **Circuit macros** (phase 2): save a selection as a macro (base point = its bottom-left pin) in `~/MadakeCAD/macros` and insert it from the Macros tab with a ghost preview, `R` to rotate and `Tab` to switch variants. Designators are renumbered above the ones already in use and wire numbers cleared, so repeated inserts never collide; `⌘C` / `⌘V` share the mechanism, and one insert is one undo step
 - ✅ **Coil ⇔ contact cross-references** (phase 2): symbols sharing a designator form one device, with an IEC 60947-1 contact map under the coil, the coil's address beside each contact, and ERC rules for overusing a contact configuration, orphan contacts and coils with no contact. The parts database carries the contact configuration (schema v3)

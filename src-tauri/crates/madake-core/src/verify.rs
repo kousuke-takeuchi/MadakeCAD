@@ -557,7 +557,10 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                     vec![s.id],
                 ));
             }
-            for issue in crate::pin_groups::pin_group_issues(&def, spec) {
+            // 端子番号の上書き (spec §1.1) がある端子台では、範囲は表示ラベルで書かれている
+            // (採番しても括弧が消えず「存在しないピン」の誤報も出ない)
+            let labels = crate::terminal_chart::TerminalLabels::of(&def, &s.attrs);
+            for issue in crate::pin_groups::pin_group_issues(&def, spec, labels.display_map()) {
                 diags.push(diag(
                     Severity::Error,
                     &issue.code,

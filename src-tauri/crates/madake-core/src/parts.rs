@@ -15,7 +15,9 @@ use serde::{Deserialize, Serialize};
 ///     入れ損ねたDBがあり、PLC I/O図面を作るときにモジュールを1つも選べなかったため)。
 /// v6: partsに`footprint_w`/`footprint_h`列を追加 (2D盤レイアウトのフットプリント寸法。
 ///     mm。両方入っているときだけ使う)。同梱サンプルにも寸法を追補する。
-pub const SCHEMA_VERSION: u32 = 6;
+/// v7: partsに`terminal_kind`列を追加 (端子台・端子台付属品の種別。M4 §1.1 の部品割当)。
+///     同梱の端子台サンプルへ種別を追補し、付属品 (エンドブラケット等) のサンプルを足す。
+pub const SCHEMA_VERSION: u32 = 7;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PartsError {
@@ -79,7 +81,15 @@ pub struct Part {
     /// フットプリントの高さ mm (同上)。
     #[serde(default)]
     pub footprint_h: Option<f64>,
+    /// 端子台・端子台付属品の種別 (v7)。端子台なら [`TERMINAL_KINDS`]、付属品なら
+    /// `end_bracket` / `partition` / `end_plate`。端子台エディタの部品割当で
+    /// 端子台シンボルの`attrs["terminal_kind"]`へ写る。それ以外の部品は空。
+    #[serde(default)]
+    pub terminal_kind: String,
 }
+
+/// 端子台の種別 (部品DBの`terminal_kind`列。M4 §1.1)。
+pub const TERMINAL_KINDS: [&str; 4] = ["feed_through", "multi_level", "fuse", "disconnect"];
 
 impl Part {
     /// 盤レイアウトで使えるフットプリント寸法 (幅, 高さ) mm。
@@ -162,6 +172,26 @@ fn plc_sample_parts() -> Vec<Part> {
     ]
 }
 
+/// 同梱する端子台付属品のサンプル (M4 §1.1 の3種)。新規作成時と、v6以前のDBを
+/// v7へ移行するときの追補の両方で使う。型番はダミー。
+fn terminal_accessory_sample_parts() -> Vec<Part> {
+    [
+        ("MDK-TB-EB", "端子台用エンドブラケット", "end_bracket", 30.0),
+        ("MDK-TB-PT", "端子台用仕切り板", "partition", 20.0),
+        ("MDK-TB-EP", "端子台用エンドプレート", "end_plate", 15.0),
+    ]
+    .into_iter()
+    .map(|(part_no, name, kind, price)| Part {
+        part_no: part_no.into(),
+        name: name.into(),
+        category: "terminal_accessory".into(),
+        price: Some(price),
+        terminal_kind: kind.into(),
+        ..Default::default()
+    })
+    .collect()
+}
+
 /// 同梱サンプルのフットプリント寸法 (型番, 幅mm, 高さmm)。**ダミー寸法**で、実物の
 /// カタログ値ではない。盤レイアウトを試すのに十分な大きさを2.5mmグリッドで置いてある。
 const SAMPLE_FOOTPRINT_SIZES: &[(&str, f64, f64)] = &[
@@ -224,7 +254,7 @@ pub fn default_db_path() -> PathBuf {
 
 const PART_COLUMNS: &str = "part_no, maker, name, category, symbol_id, rated_voltage, \
      rated_current_a, purchase_url, datasheet_url, price, currency, note, model_3d, mounting, \
-     spice_model, contact_config, plc_module, footprint_w, footprint_h";
+     spice_model, contact_config, plc_module, footprint_w, footprint_h, terminal_kind";
 
 fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
     Ok(Part {
@@ -247,6 +277,7 @@ fn row_to_part(row: &rusqlite::Row<'_>) -> rusqlite::Result<Part> {
         plc_module: row.get(16)?,
         footprint_w: row.get(17)?,
         footprint_h: row.get(18)?,
+        terminal_kind: row.get(19)?,
     })
 }
 
@@ -278,7 +309,8 @@ impl PartsDb {
                contact_config TEXT NOT NULL DEFAULT '',
                plc_module TEXT NOT NULL DEFAULT '',
                footprint_w REAL,
-               footprint_h REAL
+               footprint_h REAL,
+               terminal_kind TEXT NOT NULL DEFAULT ''
              );
              CREATE TABLE IF NOT EXISTS wire_parts (
                part_no TEXT PRIMARY KEY,
@@ -351,6 +383,11 @@ impl PartsDb {
             self.add_column("ALTER TABLE parts ADD COLUMN footprint_w REAL")?;
             self.add_column("ALTER TABLE parts ADD COLUMN footprint_h REAL")?;
         }
+        if from < 7 {
+            // v6→v7: 端子台・付属品の種別列。**列の追加はデータの追補より先**に済ませる
+            // (下の追補は全列を読み書きするので、列が欠けたままだと古いDBで失敗する)
+            self.add_column("ALTER TABLE parts ADD COLUMN terminal_kind TEXT NOT NULL DEFAULT ''")?;
+        }
         if from < 5 {
             // v4→v5: PLCモジュールのサンプルを追補する。
             // 既に作られていたDBには列が増えただけでサンプルが1件も入らず、そのままでは
@@ -375,6 +412,23 @@ impl PartsDb {
                         footprint_h: Some(*h),
                         ..part
                     })?;
+                }
+            }
+        }
+        if from < 7 {
+            // v6→v7: 同梱サンプルを追補する (利用者が直したサンプルは種別が空のときだけ埋め、
+            // 付属品は無ければ足す)
+            if let Some(tb) = self.get_part("MDK-TB-8P")? {
+                if tb.terminal_kind.is_empty() {
+                    self.upsert_part(&Part {
+                        terminal_kind: "feed_through".into(),
+                        ..tb
+                    })?;
+                }
+            }
+            for part in terminal_accessory_sample_parts() {
+                if self.get_part(&part.part_no)?.is_none() {
+                    self.upsert_part(&as_sample(&part))?;
                 }
             }
         }
@@ -429,6 +483,7 @@ impl PartsDb {
                 rated_voltage: "AC600V".into(),
                 rated_current_a: Some(20.0),
                 price: Some(450.0),
+                terminal_kind: "feed_through".into(),
                 ..Default::default()
             },
             Part {
@@ -452,7 +507,11 @@ impl PartsDb {
             },
         ];
         // PLC I/Oモジュール (M4仕様 §3)。メーカ別のアドレス体系をひと通り揃える
-        for p in samples.iter().chain(plc_sample_parts().iter()) {
+        for p in samples
+            .iter()
+            .chain(plc_sample_parts().iter())
+            .chain(terminal_accessory_sample_parts().iter())
+        {
             self.upsert_part(&as_sample(p))?;
         }
         for (part_no, color, sq) in [
@@ -477,12 +536,13 @@ impl PartsDb {
         self.conn.execute(
             &format!(
                 "INSERT INTO parts ({PART_COLUMNS}) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20) \
                  ON CONFLICT(part_no) DO UPDATE SET \
                  maker=?2, name=?3, category=?4, symbol_id=?5, rated_voltage=?6, \
                  rated_current_a=?7, purchase_url=?8, datasheet_url=?9, price=?10, \
                  currency=?11, note=?12, model_3d=?13, mounting=?14, spice_model=?15, \
-                 contact_config=?16, plc_module=?17, footprint_w=?18, footprint_h=?19"
+                 contact_config=?16, plc_module=?17, footprint_w=?18, footprint_h=?19, \
+                 terminal_kind=?20"
             ),
             rusqlite::params![
                 part.part_no,
@@ -504,6 +564,7 @@ impl PartsDb {
                 part.plc_module,
                 part.footprint_w,
                 part.footprint_h,
+                part.terminal_kind,
             ],
         )?;
         Ok(())
@@ -1093,4 +1154,56 @@ mod tests {
         std::env::remove_var("MADAKE_PARTS_DB");
         assert!(default_db_path().ends_with("MadakeCAD/parts.sqlite"));
     }
+    /// An old schema-v6 database migrates to v7 on open, keeping its rows, gaining the terminal kind column, filling the bundled terminal block's kind and adding the terminal accessory samples.
+    /// 旧スキーマv6のDBは開いた時点でv7へ移行され、既存データを保持したまま端子台の種別列が使えるようになり、同梱の端子台サンプルに種別が入り、端子台付属品のサンプルが足される。
+    #[test]
+    fn v6_database_migrates_to_v7_with_terminal_kinds_and_accessory_samples() {
+        let path = tmp_db("migrate-v7");
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO meta VALUES ('schema_version', '6');
+                 CREATE TABLE parts (
+                   part_no TEXT PRIMARY KEY,
+                   maker TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '',
+                   category TEXT NOT NULL DEFAULT '', symbol_id TEXT NOT NULL DEFAULT '',
+                   rated_voltage TEXT NOT NULL DEFAULT '', rated_current_a REAL,
+                   purchase_url TEXT NOT NULL DEFAULT '', datasheet_url TEXT NOT NULL DEFAULT '',
+                   price REAL, currency TEXT NOT NULL DEFAULT 'JPY',
+                   note TEXT NOT NULL DEFAULT '', model_3d TEXT NOT NULL DEFAULT '',
+                   mounting TEXT NOT NULL DEFAULT '', spice_model TEXT NOT NULL DEFAULT '',
+                   contact_config TEXT NOT NULL DEFAULT '', plc_module TEXT NOT NULL DEFAULT '',
+                   footprint_w REAL, footprint_h REAL
+                 );
+                 INSERT INTO parts (part_no, name, symbol_id) VALUES ('MDK-TB-8P', '端子台 8極', 'terminal_block_8p');
+                 INSERT INTO parts (part_no, name) VALUES ('OLD-6', '旧部品');
+                 CREATE TABLE wire_parts (
+                   part_no TEXT PRIMARY KEY, color TEXT NOT NULL, sq REAL NOT NULL,
+                   purchase_url TEXT NOT NULL DEFAULT '', price_per_m REAL,
+                   note TEXT NOT NULL DEFAULT ''
+                 );",
+            )
+            .unwrap();
+        }
+        let db = PartsDb::open(&path).unwrap();
+        assert_eq!(db.get_part("OLD-6").unwrap().unwrap().name, "旧部品");
+        assert_eq!(db.get_part("OLD-6").unwrap().unwrap().terminal_kind, "");
+        assert_eq!(db.get_part("MDK-TB-8P").unwrap().unwrap().terminal_kind, "feed_through");
+        for (no, kind) in [("MDK-TB-EB", "end_bracket"), ("MDK-TB-PT", "partition"), ("MDK-TB-EP", "end_plate")] {
+            assert_eq!(db.get_part(no).unwrap().expect(no).terminal_kind, kind);
+        }
+    }
+
+    /// A freshly created parts database already holds the terminal block sample with its kind and the three terminal accessory samples.
+    /// 新しく作った部品DBには、種別入りの端子台サンプルと端子台付属品3種のサンプルが最初から入っている。
+    #[test]
+    fn a_new_database_has_terminal_kinds_and_accessory_samples() {
+        let db = PartsDb::open(&tmp_db("v7-new")).unwrap();
+        assert_eq!(db.get_part("MDK-TB-8P").unwrap().unwrap().terminal_kind, "feed_through");
+        let eb = db.get_part("MDK-TB-EB").unwrap().unwrap();
+        assert_eq!(eb.terminal_kind, "end_bracket");
+        assert_eq!(eb.category, "terminal_accessory");
+    }
+
 }

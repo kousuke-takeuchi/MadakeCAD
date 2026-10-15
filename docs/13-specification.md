@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2360 specification clauses** across 6 areas.
+**2603 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -89,6 +89,63 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Numbering the same panel a second time changes nothing on the drawing: the numbers are already the ones the reading order asks for. <sub>`numbering_an_already_numbered_panel_changes_nothing`</sub>
 - The numbering command is plain JSON, so agents and the CLI can send it. <sub>`the_panel_numbering_command_is_plain_json`</sub>
 - Numbering a sheet that does not exist is refused instead of silently doing nothing. <sub>`numbering_an_unknown_sheet_is_refused`</sub>
+- Renumbering an 8-pole terminal block from a given start writes every pin's new label in pin order. <sub>`renumbering_writes_every_terminal_number_from_the_start_value`</sub>
+- On a multi-level block, renumbering keeps each pole's level letters and only changes the pole number, so every level of one pole shares the same new number. <sub>`renumbering_a_multilevel_block_keeps_the_level_letters`</sub>
+- A prefix and a step greater than one both apply: the step advances the pole number and the prefix is written before every label. <sub>`renumbering_applies_the_step_and_prefix`</sub>
+- Renumbering rewrites the block's jumper spec to the new labels in the same command, so a jumper between two poles still names the terminals it actually connects. <sub>`renumbering_rewrites_the_jumpers_to_the_new_labels`</sub>
+- Renumbering also rewrites a pin-group range's endpoints to the new labels, since the range names terminals by number. <sub>`renumbering_rewrites_pin_group_ranges_too`</sub>
+- After a renumbering, the pin-group bracket is still drawn on the drawing and the design check stays clean: the stored range is matched against the block's displayed terminal numbers. <sub>`a_pin_group_bracket_still_draws_after_renumbering_the_terminals`</sub>
+- On a multi-level block, a pin-group range that names one level's terminals still draws its bracket after a renumbering, because the level letters are kept. <sub>`a_multilevel_pin_group_bracket_survives_a_renumbering`</sub>
+- A jumper item the editor cannot read (or that names a terminal the block does not have) is carried through a renumbering unchanged, so the design check keeps pointing at it and undo brings the attribute back byte for byte here — this holds whenever the old and new label sets do not overlap (see `undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap` for the documented exception). <sub>`a_broken_jumper_item_survives_a_renumbering_and_comes_back_unchanged_on_undo`</sub>
+- The undo of a renumbering does NOT always restore an unreadable jumper item byte for byte: when the old and new label sets overlap, a token the forward rewrite could not resolve as an old label (because it never existed under the old numbering) can become resolvable as a new label on the reverse pass, so the reverse rewrite touches an item the forward rewrite left alone. This is a documented corner case (docs/05-wire-management), not a bug this task fixes. <sub>`undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap`</sub>
+- Undoing a renumbering restores a pin-group spec byte for byte, spacing included: the rewrite only replaces the terminal-number tokens it recognises. <sub>`undoing_a_renumbering_restores_the_pin_group_spec_byte_for_byte`</sub>
+- A chain of jumpers over three terminals follows a renumbering with a step of two: both endpoints of every link get the new label and the links stay a chain. <sub>`a_jumper_chain_follows_a_renumbering_with_a_step`</sub>
+- Renumbering a symbol that is not a terminal block is refused: the terminal-number override would rewrite that symbol's pin-number texts on the drawing. <sub>`renumbering_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- Terminal numbers are stored with the surrounding spaces removed, so what the command validated is exactly what the chart reads back. <sub>`terminal_numbers_are_stored_without_their_surrounding_spaces`</sub>
+- Two labels that differ only in their surrounding spaces count as a duplicate and are refused: they would collapse to the same terminal number in storage. <sub>`terminal_numbers_that_are_duplicates_once_trimmed_are_refused`</sub>
+- A terminal number containing a comma is refused: the comma is the separator of the stored list, so the value would read back as a different number of terminals. <sub>`a_terminal_number_containing_a_comma_is_refused`</sub>
+- Undoing a renumbering restores the previous terminal numbers exactly: a prior direct override comes back, and renumbering from the symbol's defaults undoes to no override at all. <sub>`undoing_a_renumbering_restores_the_previous_numbers`</sub>
+- Undoing a renumbering restores an explicit override even when that override's value happened to equal the symbol's own default labels: the key was present, so it comes back, instead of being treated as "no override" and dropped (Task 3 ルーリング3a: had_overrideの判定はキーの有無と妥当性で決め、展開結果が既定と同じかどうかでは決めない). <sub>`undoing_a_renumbering_restores_an_override_that_matches_the_default_value`</sub>
+- Setting a number list whose length does not match the pin count is refused and leaves the drawing untouched. <sub>`a_terminal_number_count_mismatch_is_refused_without_changing_the_drawing`</sub>
+- A duplicate label in the number list is refused without changing the drawing. <sub>`duplicate_terminal_numbers_are_refused`</sub>
+- An empty label in the number list is refused without changing the drawing. <sub>`an_empty_terminal_number_is_refused`</sub>
+- Setting the numbers to `None` after a direct override returns the block to the symbol's default numbers (the `terminal_numbers` attribute itself disappears). <sub>`setting_numbers_to_none_returns_to_the_defaults`</sub>
+- Renumbering an entity id that does not exist on the sheet is refused instead of silently doing nothing. <sub>`renumbering_an_unknown_entity_is_refused`</sub>
+- The renumbering command is plain JSON with sensible defaults for the start and step, so agents and the CLI can send it with just an entity id. <sub>`the_terminal_renumbering_command_is_plain_json`</sub>
+- Turning a single-level 4-pole terminal block into 2 levels rewrites its symbol_id and leaves the terminal_numbers attribute unset (no explicit override existed). <sub>`setting_levels_turns_a_single_level_block_into_two_levels`</sub>
+- Undoing a level increase (or setting levels back to 1 directly) restores the plain single-level symbol_id, never a "_1l" alias. <sub>`setting_levels_back_to_one_restores_the_plain_single_level_id`</sub>
+- Increasing levels expands an explicit terminal_numbers override into one lettered label per level, pole-major, exactly as the plan's example describes ("11,12,…" -> "11a,11b,12a,12b,…"). <sub>`increasing_levels_expands_an_explicit_terminal_numbers_override`</sub>
+- A jumper written without a level letter on a single-level block moves to level a when the block gains a second level, so the existing connection is not silently dropped. <sub>`increasing_levels_moves_a_levelless_jumper_to_level_a`</sub>
+- Decreasing levels is refused, and the drawing is left completely untouched, when a wire is still connected to a pin of the level that would vanish. <sub>`decreasing_levels_is_refused_when_a_wire_is_connected_to_a_vanishing_level`</sub>
+- Decreasing levels is refused when a jumper still names a terminal of the level that would vanish. <sub>`decreasing_levels_is_refused_when_a_jumper_names_a_vanishing_level`</sub>
+- Decreasing levels is refused when a pin-group range spans terminals of the level that would vanish. <sub>`decreasing_levels_is_refused_when_a_pin_group_spans_a_vanishing_level`</sub>
+- Decreasing levels is refused when an accessory spec names a terminal of the level that would vanish (spec §1.1 accessories format, checked ahead of its own command landing in a later task). <sub>`decreasing_levels_is_refused_when_an_accessory_names_a_vanishing_level`</sub>
+- When nothing references the vanishing level, decreasing levels succeeds and both the symbol_id and the terminal-number override drop that level's labels. <sub>`decreasing_levels_succeeds_and_drops_the_vanishing_levels_labels`</sub>
+- Changing the level count keeps level a's terminals at exactly the same coordinates on the sheet, whatever the block's rotation or mirroring, so nothing that was drawn onto those terminals has to move. <sub>`a_level_change_keeps_level_a_terminals_at_the_same_sheet_coordinates`</sub>
+- A wire drawn to terminal 1 of a single-level block is still electrically on the same terminal (now called 1a) after a second level is added, and it is not re-mapped to the new level's terminal. <sub>`a_wire_on_terminal_one_stays_on_level_a_after_adding_a_level`</sub>
+- Decreasing levels is refused when the only thing sitting on a vanishing level's pin is a net label (no wire at all), the same coordinate-coincidence rule the netlist uses. <sub>`decreasing_levels_is_refused_when_a_net_label_sits_on_a_vanishing_pin`</sub>
+- Going from 3 levels to 2 is refused while a jumper still names a level-c terminal, and allowed once it is gone - then only level c's labels are dropped and the remaining jumper is kept. <sub>`decreasing_three_levels_to_two_is_refused_only_while_level_c_is_referenced`</sub>
+- Increasing levels rewrites the terminal label of an accessory spec the same way it rewrites jumpers, so an accessory pinned to terminal 1 follows to 1a; the kind and part number are left byte for byte. <sub>`increasing_levels_rewrites_accessory_terminal_labels`</sub>
+- A terminal_numbers value that is present but invalid (its item count does not match the pin count) survives a level change untouched and comes back byte for byte after undo; the command never deletes a key it cannot restore. <sub>`a_present_but_invalid_terminal_numbers_value_survives_a_level_change`</sub>
+- A level change whose relabelled bases would collide (one pole's level-a label ends in level a's own letter and strips to the same base as another pole's level-a label that never had a letter to strip) is refused before anything is written, instead of silently storing a `terminal_numbers` value with duplicate labels. <sub>`a_level_change_that_would_produce_duplicate_labels_is_refused_without_writing_anything`</sub>
+- Undoing a level change restores the previous symbol_id and the instance position together, in one undo step, so the terminals land back on their original coordinates. <sub>`undoing_a_level_change_restores_the_symbol_id_and_the_position_together`</sub>
+- Asking for a level count outside 1-3 is refused without touching the drawing. <sub>`setting_levels_outside_one_to_three_is_refused`</sub>
+- Changing the level count of a symbol that is not a terminal block is refused, the same gate RenumberTerminals/SetTerminalNumbers already use. <sub>`setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- A symbol_id spelled with the "_1l" one-level alias is refused when placed on the drawing: a single-level terminal block has exactly one valid spelling of its symbol_id. <sub>`a_one_level_alias_symbol_id_is_refused_when_placed`</sub>
+- Growing a terminal block's pole count (as inserting a spare does) never moves an existing pin's sheet coordinates — the instance is shifted the opposite way to compensate — so no wire that was attached to it comes loose. <sub>`inserting_a_spare_terminal_keeps_every_existing_pins_coordinates`</sub>
+- Inserting a spare after a chosen terminal writes the renumbered label sequence and rewrites the jumper spec that used the labels which moved, so the jumper still names the same physical pair of terminals. <sub>`inserting_a_spare_after_a_terminal_renumbers_labels_and_follows_the_jumper`</sub>
+- A count of zero is refused without touching the drawing. <sub>`inserting_zero_spares_is_refused_without_touching_the_drawing`</sub>
+- Naming a terminal the block does not have as the insertion point is refused. <sub>`inserting_after_an_unknown_terminal_is_refused`</sub>
+- Inserting past the dynamic symbol family's pole cap is refused. <sub>`inserting_past_the_pole_cap_is_refused`</sub>
+- Inserting a spare into a symbol that is not a terminal block is refused, the same gate the other terminal commands already use. <sub>`inserting_a_spare_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- Undoing an inserted spare restores the symbol_id, the terminal numbers and the position together in one step. <sub>`undoing_an_inserted_spare_restores_symbol_id_numbers_and_position_together`</sub>
+- A multi-level block's inserted spare pole adds one terminal per level ("9a","9b" for a 2-level block). <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- The insertion command's JSON with `after` omitted (the minimal form MCP/the Link API/the CLI can send) is accepted as an append at the end. <sub>`the_insert_spare_terminals_command_accepts_after_omitted`</sub>
+- Inserting a second spare into a block that already has one works, both at the end and after any terminal, because the command counts the insertion point in the order the chart shows rather than the physical pin order. <sub>`inserting_a_second_spare_into_the_same_block_succeeds`</sub>
+- Inserting a spare into a block renumbered with a prefix keeps the prefix on every label and does not panic (the prefixed labels are not readable as plain pole numbers, which used to overflow the numbering arithmetic). <sub>`inserting_a_spare_into_a_prefixed_block_keeps_the_prefix`</sub>
+- The "leave the spare with a vacant number" mode writes the spare into the vacant number and leaves every following terminal's number (and so every jumper naming them) untouched. <sub>`inserting_a_spare_without_renumbering_leaves_the_following_numbers_alone`</sub>
+- In the "leave the numbers alone" mode an insertion whose spare number is already taken is refused without touching the drawing. <sub>`inserting_a_spare_without_renumbering_is_refused_when_the_number_is_taken`</sub>
+- Inserting a spare keeps every existing terminal at exactly the same coordinates on the sheet whatever the block's rotation or mirroring, so nothing drawn onto those terminals has to move. <sub>`inserting_a_spare_keeps_pin_coordinates_at_every_rotation_and_mirroring`</sub>
 - Changing a sheet's paper size and orientation (G15) keeps every existing entity at its original coordinates; nothing is moved or deleted. <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - Undoing a paper size change restores both the previous size and orientation. <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
 - Changing the paper leaves the sheet's own zone division alone: a sheet divided into its own number of zones keeps that division. <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
@@ -377,6 +434,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Opening an older parts database fills in the footprint sizes of the bundled samples that have none yet, without touching sizes someone entered by hand. <sub>`an_older_database_gains_the_bundled_footprint_sizes`</sub>
 - A part with only one of the two footprint dimensions filled in has no usable footprint size, because both width and height are needed to draw the outline. <sub>`a_half_filled_footprint_size_is_not_used`</sub>
 - The database path defaults to the OS app-data folder and can be overridden with MADAKE_PARTS_DB. <sub>`default_path_respects_env_override`</sub>
+- An old schema-v6 database migrates to v7 on open, keeping its rows, gaining the terminal kind column, filling the bundled terminal block's kind and adding the terminal accessory samples. <sub>`v6_database_migrates_to_v7_with_terminal_kinds_and_accessory_samples`</sub>
+- A freshly created parts database already holds the terminal block sample with its kind and the three terminal accessory samples. <sub>`a_new_database_has_terminal_kinds_and_accessory_samples`</sub>
 
 ### PDF output
 
@@ -404,6 +463,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A bracket over pins on the left side of a symbol is a vertical bar to the left of the pins, spanning from the topmost to the bottommost pin, with its caption further left still. <sub>`a_bracket_on_left_pins_is_a_vertical_bar_further_left`</sub>
 - A pin whose own number contains a hyphen cannot be named in a pin group, and says so instead of being reported as a pin that does not exist. <sub>`a_pin_number_containing_a_hyphen_is_refused_with_its_own_reason`</sub>
 - On a multi-level terminal block, a group over the second level's terminals brackets the outside of that level's own column, never the gap between the columns. <sub>`a_multilevel_group_brackets_the_outside_of_its_own_column`</sub>
+- When a terminal block's numbers are overridden, a pin-group range written with the displayed labels still finds its pins and draws its bracket, and reports no unknown pin. <sub>`a_range_written_with_the_displayed_labels_still_draws_its_bracket`</sub>
+- On a multi-level block whose numbers are overridden, a range over one level's terminals brackets that level's own column just as it does without the override. <sub>`a_multilevel_range_still_brackets_its_own_column_after_an_override`</sub>
 - A range that spans two levels of a multi-level terminal block is reported instead of quietly drawing nothing, because the two levels face opposite sides and no single bracket can hold them. <sub>`a_range_across_two_levels_is_reported_instead_of_silently_skipped`</sub>
 - A bracket spans pins from two different sides of a symbol (mixed pin direction) is refused: the shape would not be a straight bracket. <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
 
@@ -493,6 +554,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Column widths follow the given ratios; without ratios the columns are equal in width. <sub>`report_page_column_widths_follow_ratios`</sub>
 - Special XML characters in the data are escaped so the page stays valid SVG. <sub>`report_page_escapes_xml_special_characters`</sub>
 - The terminal chart sheet carries the reference designator in its title and one table row per terminal, matching the chart data. <sub>`terminal_chart_sheet_matches_chart_rows`</sub>
+- The framed terminal chart sheet draws its rows in the chart's own row order, so changing `row_order` really moves the rows down the drawing sheet instead of only relabelling them. <sub>`the_terminal_chart_sheet_draws_the_rows_in_the_chart_row_order`</sub>
 - Asking for a terminal chart sheet of something that is not a terminal block yields no page at all. <sub>`terminal_chart_sheet_is_none_for_other_entities`</sub>
 - The From-To wire list sheet uses the same columns and rows as the CSV report. <sub>`wire_list_sheet_matches_report_rows`</sub>
 - The BOM sheet lists every part group with its reference designators and quantity. <sub>`bom_sheet_lists_parts_with_quantity`</sub>
@@ -520,6 +582,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The BOM has no wire roll-up rows at all when the project has no wires (a project with only components is unaffected). <sub>`bom_has_no_wire_rollup_rows_without_any_wires`</sub>
 - After the component rows, the BOM adds one row per wire part number with the project-wide total length (in metres, 2 decimals) in the quantity column. <sub>`bom_rolls_up_wires_by_part_number_after_the_component_rows`</sub>
 - Wires whose part number cannot be resolved roll up under a single "(unassigned)" row, instead of being invented or dropped. <sub>`bom_rolls_up_unresolved_wires_under_one_unassigned_row`</sub>
+- Terminal block accessories appear in the BOM as one row per part number with how many are used, listing the terminal blocks that use them, after the wire roll-up rows. <sub>`bom_counts_terminal_accessories_by_part_number`</sub>
+- An accessory without a part number, or one the terminal check cannot read, adds no row to the BOM. <sub>`bom_skips_accessories_without_a_part_number_or_that_cannot_be_read`</sub>
+- When the only wires whose part number cannot be resolved have no length, the BOM adds no "(unassigned) 0.00 m" row. <sub>`bom_adds_no_unassigned_row_when_those_wires_have_no_length`</sub>
 - BOM fields containing commas are quoted so the CSV stays valid. <sub>`bom_escapes_fields_with_commas`</sub>
 - The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, followed by the mate and remark columns (G14/G18), and the older column order (sheet, wire number, harness, ...) is no longer produced. <sub>`wire_list_is_a_from_to_list`</sub>
 - An end of a wire that lands on a symbol pin is written as "reference:pin number" (for example K1:A1). <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
@@ -671,16 +736,21 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A jumper bar is always drawn clear of every terminal number, whatever jumpers the block carries and however it is turned or mirrored, so the numbers stay readable. <sub>`a_jumper_bar_never_covers_a_terminal_number`</sub>
 - A jumper between two adjacent terminals is drawn on the schematic as one short thick bar filling the gap between their two round marks, and nothing else is drawn around it. <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
 - On a multi-level terminal block, a jumper written with level letters ("1a-1b") is drawn on that pole's row as a bar in the gap between the two level columns' marks. <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
+- A jumper bar is part of its terminal block's symbol, so it is drawn or hidden with the symbol and never on its own: the export, which has no per-view-class visibility at all, always writes it out, however the block is turned. <sub>`svg_export_always_draws_the_jumper_bar_with_its_symbol`</sub>
 - A jumper bar turns with its terminal block, so on a block rotated a quarter turn the bar lies between the rotated terminals instead of staying upright. <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
 - The lettering inside a symbol (a motor's "M", for instance) is drawn at the place the symbol definition gives it and stays there whatever the symbol's rotation or mirroring, because the letters themselves are always written horizontally. <sub>`the_lettering_inside_a_symbol_stays_put_when_the_symbol_is_turned`</sub>
+- A jumper bar between two renumbered terminals is attributed to the terminals whose printed labels it actually connects, matched by the label text rather than by mere geometric proximity — closing the phase-6 follow-up where a nearest-mark test could not detect swapped terminal numbers. <sub>`a_jumper_bar_is_attributed_to_its_terminals_by_label_text_after_renumbering`</sub>
 - A terminal number of one or two characters sits wholly inside its own round mark, centred on it, however the block is turned or mirrored, so a rotated terminal block still reads terminal by terminal. <sub>`a_turned_terminal_block_keeps_a_short_number_inside_its_own_mark`</sub>
 - In the exported drawing (SVG/PDF) an unturned terminal block writes each terminal number with its baseline exactly half the character height (1.0 mm at the 2.0 mm terminal-number height) below the centre of its own mark, single-level and multi-level blocks alike; the on-screen canvas uses a smaller offset of its own. <sub>`a_terminal_number_sits_half_a_character_below_its_mark_centre`</sub>
 - A three-character terminal number (a multi-level block's "10a") is as wide as its own mark, so it is centred on the mark and hangs at most three tenths of a millimetre over it, while still never running into a jumper bar or into a neighbouring terminal's mark. <sub>`a_three_character_terminal_number_hangs_at_most_a_little_over_its_own_mark`</sub>
+- `attrs["terminal_numbers"]` overrides which label is drawn on each mark: the symbol definition's raw pin number text never appears, and every overridden label appears exactly once. <sub>`svg_draws_the_overridden_terminal_number_instead_of_the_raw_pin_number`</sub>
+- A three-character overridden label (a renumbered multi-level pole like "11a", or a prefixed pole like "P12") stays inside the legibility bounds already proven for a symbol-default three-character number: centred on its own mark, hanging over it by at most the same tolerance, and clear of the jumper bar and neighbouring marks. <sub>`an_overridden_three_character_label_hangs_at_most_a_little_over_its_own_mark`</sub>
 - A jumper bar is drawn at least twice as thick as an ordinary symbol line, so that the short bar in the narrow gap between two terminal marks still reads as a shorting bar when the sheet is printed. <sub>`the_jumper_bar_is_at_least_twice_as_thick_as_a_symbol_line`</sub>
 - A jumper written between two terminals that are not adjacent is invalid (the same rule the terminal chart enforces), so no bar is drawn for it at all. <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - A terminal block with several jumpers gets one bar per jumper. <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
 - A terminal block with no jumpers draws no bar, and a symbol that is not a terminal block never gets one even if it happened to carry a "jumpers" attribute. <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
 - A pin_groups range draws one square-bracket polyline and its caption text on the sheet. <sub>`svg_draws_a_bracket_and_caption_for_a_pin_group`</sub>
+- After the terminal numbers are renumbered, the pin-group bracket keeps being drawn: the range is matched against the block's displayed numbers, which is what the renumbering rewrote it to. <sub>`svg_still_draws_the_bracket_after_the_terminals_are_renumbered`</sub>
 - A symbol with no pin_groups attribute, or an empty one, draws no bracket polyline. <sub>`svg_draws_no_bracket_without_pin_groups`</sub>
 - Overlapping pin_groups items are reported by verify (tested in verify.rs) and draw no bracket at all, while an unrelated valid item on the same instance still draws. <sub>`svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest`</sub>
 - Pin group brackets and their captions never land on a pin number, a pin name or the symbol's designator, type or function label, for a block, a terminal block and a connector, at every rotation and mirrored. <sub>`svg_pin_group_boxes_never_land_on_any_label_at_any_rotation`</sub>
@@ -699,6 +769,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Every terminal of the same pole sits on one row across all levels, so 1a and 1b share a row and the rows keep the 5 mm pitch of a single-level block. <sub>`every_level_of_the_same_pole_sits_on_one_row`</sub>
 - Every connection point of a multi-level terminal block sits on the 2.5 mm grid, and no two terminals share a connection point, so a wire can always reach each terminal on its own. <sub>`multilevel_terminal_block_pins_are_on_the_grid_and_never_coincide`</sub>
 - A terminal block asking for 0 or 4 levels (outside the 1-3 range) is rejected as an unknown symbol, the same way an out-of-range pole count is. <sub>`multilevel_terminal_block_rejects_level_count_outside_one_to_three`</sub>
+- "terminal_block_8p_1l" is rejected as an unknown symbol, not accepted as an alias of "terminal_block_8p": a single-level terminal block has exactly one spelling of its symbol_id (Task 3). <sub>`multilevel_terminal_block_rejects_the_one_level_alias_spelling`</sub>
 - The single-level terminal block id keeps its plain numeric pin numbers (1, 2, ...) exactly as before, unaffected by the new multi-level id shape, so existing projects stay valid. <sub>`single_level_terminal_block_id_is_unaffected_by_multilevel_support`</sub>
 - connector_2p generated dynamically has exactly the same pin coordinates as the old static definition, so existing drawings are unaffected. <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
 - resolve_symbol finds built-in ids, and rejects malformed or out-of-range dynamic ids (0 poles, 51 poles, missing count). <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
@@ -808,6 +879,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A jumper appears in the jumper column of both terminals it connects. <sub>`a_jumper_is_shown_on_both_of_its_terminals`</sub>
 - The terminal chart CSV has the columns terminal, level, inside, wire number, wire, outside, jumper, and one line per terminal. <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
 - A multi-level terminal block shows its level letter in the chart's Lv column, and its terminal column carries the full pin number ("1a"), so the two levels never look like the same terminal. <sub>`a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column`</sub>
+- When `attrs["terminal_numbers"]` overrides the default numbers, the chart's rows, jumper column and CSV all show the overridden labels instead of the symbol's default pin numbers. <sub>`an_overridden_terminal_number_shows_up_in_the_chart_and_csv`</sub>
+- A number list is judged on its trimmed values: spaces around a label are ignored, two labels that differ only in their spacing count as a duplicate, and a label carrying the list's own separator (a comma) is refused. <sub>`a_number_list_is_validated_on_its_trimmed_values`</sub>
+- The label map converts a raw pin number to the block's displayed label and back again, and it is the identity map when the block carries no override (so every caller can pass it through without a branch). <sub>`the_label_map_converts_a_raw_pin_number_both_ways`</sub>
+- A symbol that is not a terminal block never gets a label map, even if a hand-edited file left a `terminal_numbers` attribute on it: the override only applies to terminal blocks. <sub>`a_symbol_that_is_not_a_terminal_block_has_no_label_map`</sub>
+- Rewriting a jumper spec replaces only the terminal numbers it recognises and leaves everything else (spacing, separators, items it cannot read) exactly as it was, so the same rewrite run backwards restores the original text. <sub>`rewriting_a_jumper_spec_only_touches_the_numbers_it_recognises`</sub>
+- An override that swaps the terminal count is invalid (too few/many labels), so the chart falls back to the symbol's default numbers instead of losing rows or panicking. <sub>`an_invalid_override_falls_back_to_the_default_numbers`</sub>
+- On a multi-level block, an override that changes only the pole (keeping the step at more than 1, e.g. "11a" and "13a") still recognises its jumpers as adjacent, because adjacency is decided from the symbol's raw pin layout, not from the arithmetic difference between the displayed labels. <sub>`adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic`</sub>
 - On a multi-level terminal block a jumper is written with the level letter, so "1a-1b" links the two levels of the same pole and is accepted. <sub>`a_jumper_can_link_the_two_levels_of_one_pole`</sub>
 - On a multi-level terminal block a jumper between neighbouring poles of the same level ("1a-2a") is accepted just like on a single-level block. <sub>`a_jumper_can_link_neighbouring_poles_of_one_level`</sub>
 - A jumper written without the level letter ("1-2") on a multi-level terminal block is refused, because it does not say which level it is on. <sub>`a_jumper_without_a_level_letter_is_refused_on_a_multilevel_block`</sub>
@@ -823,6 +901,34 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The editor lists every terminal block of the project with its sheet, its pole count and its jumpers, sheet by sheet and in reference-designator order. <sub>`the_editor_lists_every_terminal_block_with_its_sheet_poles_and_jumpers`</sub>
 - The summary of a multi-level terminal block tells its pole count and its level count apart from its terminal count: a 4-pole 2-level block has 4 poles, 2 levels and 8 terminals. <sub>`a_multilevel_terminal_block_summary_separates_poles_levels_and_terminals`</sub>
 - A single-level terminal block reports one level, so its pole count and its terminal count are the same number. <sub>`a_single_level_terminal_block_summary_has_one_level`</sub>
+- Turning a single-level 8-pole terminal block into 2 levels changes its symbol_id to the 2-level dynamic id. <sub>`multilevel_id_turns_a_single_level_block_into_two_levels`</sub>
+- Undoing multi-level (setting levels back to 1) returns the plain single-level id, never a "_1l" alias. <sub>`multilevel_id_normalises_one_level_to_the_plain_single_level_id`</sub>
+- Asking for 0 levels or more levels than the symbol library supports is rejected, not silently clamped. <sub>`multilevel_id_rejects_zero_and_too_many_levels`</sub>
+- A non terminal-block symbol_id is rejected outright: level count only makes sense for terminal blocks. <sub>`multilevel_id_rejects_a_symbol_that_is_not_a_terminal_block`</sub>
+- Going from 2 levels to 3 keeps the pole count read from the current symbol_id. <sub>`multilevel_id_keeps_the_pole_count_when_changing_between_multilevel_counts`</sub>
+- Increasing levels expands each pole's plain label into one label per level, pole-major with level letters appended ("11,12" -> "11a,11b,12a,12b"). <sub>`relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major`</sub>
+- Decreasing levels back to 1 drops the vanishing level's labels and strips the level letter from what remains. <sub>`relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level`</sub>
+- Going from 2 levels to 3 keeps the existing level-a/level-b labels and adds a fresh level-c label per pole. <sub>`relabel_for_levels_adds_a_new_level_on_top_of_existing_ones`</sub>
+- Only a trailing letter that matches level a's own letter is stripped from the base; an override whose level-a label happens to end in some other letter (part of the user's own text, not a level letter this mechanism appended) keeps that letter, so two poles overridden to labels ending in different letters never collapse onto the same base (Task 3 re-review carry-over: previously any trailing alphabetic character was stripped, which could both destroy part of a hand-set label and produce duplicate bases). <sub>`relabel_for_levels_only_strips_a_trailing_letter_that_matches_level_as_own_letter`</sub>
+- Inserting one spare after a chosen terminal appends the pole at the end of the symbol (so existing pins never move) while the returned number sequence shows every later pole's number pushed up by one and the vacated number handed to the new spare. <sub>`inserting_a_spare_pushes_the_numbers_after_the_chosen_terminal`</sub>
+- Inserting a spare with no chosen terminal (append) simply continues the numbering: the new pole is physically last and numerically last too, so nothing already on the block is renumbered. <sub>`inserting_a_spare_at_the_end_does_not_renumber_anything`</sub>
+- The row the pure function's numbers put in place for the new spare comes out of the chart as an ordinary spare row: both sides unconnected, `spare` set, nothing about it distinguishes it from a symbol-default terminal. <sub>`the_inserted_spares_row_is_unconnected_in_the_chart`</sub>
+- A count of zero is refused instead of producing a no-op symbol change. <sub>`inserting_zero_spares_is_refused`</sub>
+- Naming a terminal the block does not have as the insertion point is refused, not silently treated as "append at the end". <sub>`inserting_after_an_unknown_terminal_is_refused`</sub>
+- Inserting spares beyond the dynamic symbol family's pole cap is refused. <sub>`inserting_past_the_pole_cap_is_refused`</sub>
+- On a multi-level block, one inserted spare pole grows into one terminal per level (two new labels "3a"/"3b" for a 2-level block), keeping every level's own letter. <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- A second and a third spare insertion into the same block both work, because the insertion point is counted in the order the chart shows (the numbers), not in the physical pin order the first insertion deliberately left out of step. <sub>`inserting_a_second_spare_counts_the_position_in_the_charts_order`</sub>
+- Every insertion point offered after a first mid-block insertion is accepted, including the popover's default 末尾 — the position named is looked up among the displayed numbers, so none of them collides with the number the first spare took. <sub>`every_insertion_point_still_works_after_a_mid_block_insertion`</sub>
+- A second insertion on a multi-level block also works and again adds one terminal per level, numbered after the pole that is last in the chart's order. <sub>`inserting_a_second_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- Spare labels are derived by bumping only the numeric part of the neighbouring label, so a block renumbered with a prefix keeps its prefix (and never overflows on the "unreadable number" sentinel). <sub>`inserting_a_spare_keeps_a_prefixed_labels_prefix`</sub>
+- A label with no digits at all cannot be numbered from, so the insertion is refused with a reason instead of panicking or silently destroying the label. <sub>`inserting_a_spare_next_to_a_label_without_digits_is_refused`</sub>
+- Leaving the following numbers alone (the "leave the spare with a vacant number" mode) changes no existing label and hands the spare the vacant number after the chosen terminal. <sub>`leaving_the_following_numbers_alone_gives_the_spare_the_vacant_number`</sub>
+- In the "leave the numbers alone" mode an insertion that would give the spare a number another terminal already uses is refused with a reason, instead of writing duplicate labels. <sub>`leaving_the_following_numbers_alone_is_refused_when_the_number_is_taken`</sub>
+- The chart shows the spare exactly where its number says it belongs, not where its physical pole happens to sit: default (number) order re-sorts by the parsed pole number, so an insertion in the middle of the block reads as inserted in the middle of the chart too. <sub>`the_chart_shows_the_spare_after_its_chosen_terminal_not_at_the_physical_end`</sub>
+- Rewriting an accessory spec touches only the leading terminal-number token of each item; the kind, the part number, the "end" sentinel and any item naming an unknown terminal stay byte for byte. <sub>`rewrite_accessory_labels_only_replaces_the_terminal_number_token`</sub>
+- A terminal_numbers override that happens to equal the symbol's default labels is still reported as an override, because the key is present and valid (not judged only by whether the expanded value differs from the default). <sub>`terminal_numbers_override_reports_a_key_that_matches_the_default_value`</sub>
+- An invalid terminal_numbers value (wrong element count) is not treated as an override: the display already falls back to the default, and there is nothing valid to restore. <sub>`terminal_numbers_override_is_none_for_an_invalid_value`</sub>
+- With no terminal_numbers key at all, there is no override. <sub>`terminal_numbers_override_is_none_when_the_key_is_absent`</sub>
 - Naming a sheet narrows the list to the terminal blocks drawn on that sheet. <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
 - Symbols that are not terminal blocks never show up in the list. <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
 - The chart and the check of a terminal block can be looked up by entity id alone, without knowing which sheet it sits on. <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
@@ -833,21 +939,47 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Several jumpers on the same terminal block each produce their own bar segment. <sub>`multiple_jumpers_each_produce_their_own_bar_segment`</sub>
 - A jumper referencing a terminal number the block does not have produces no segment instead of panicking. <sub>`a_jumper_to_a_missing_terminal_produces_no_bar_segment`</sub>
 - Jumpers are set with the ordinary update_entity command, so the chart follows the change and undo takes it back. <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
+- An unset, empty or unrecognised `row_order` attribute falls back to number order. <sub>`an_unset_or_unknown_row_order_falls_back_to_number_order`</sub>
+- Number order (the default) sorts poles as integers, so it stays correct past nine poles. <sub>`number_order_sorts_poles_as_integers`</sub>
+- Number order sorts by the parsed pole number of the displayed label, not by the physical (raw pin) order the rows started in — so an override whose labels are not physically monotonic (as spare insertion produces, Task 4) still comes out numerically ascending. <sub>`number_order_sorts_by_the_parsed_label_even_when_the_physical_order_disagrees`</sub>
+- Alphanumeric order compares terminal numbers as text, so past nine poles it disagrees with number order ("10" sorts before "2"). <sub>`alnum_order_compares_terminal_numbers_as_text`</sub>
+- Page order sorts poles by where their wiring first appears on the sheet in reading order (top-to-bottom, then left-to-right) — even against numeric order — and puts unwired (spare) poles last, in pole-number order. <sub>`page_order_follows_where_the_wiring_first_appears_on_the_sheet`</sub>
+- Cable order gathers the poles of each external harness together in the order that harness name first appears (not alphabetically), putting poles with no harness last in pole-number order. <sub>`cable_order_groups_poles_by_their_external_harness_in_first_seen_order`</sub>
+- Jumper order brings every pole that has any jumper to the front (in pole-number order), followed by the poles with no jumper (also in pole-number order). <sub>`jumper_order_brings_every_jumpered_pole_to_the_front`</sub>
+- On a 3-level terminal block, whichever row order is chosen, the three levels of one pole always stay next to each other in the resulting order. <sub>`every_row_order_keeps_the_three_levels_of_one_pole_adjacent`</sub>
+- The terminal chart CSV always lists rows in the same order as the chart (the editor), for every row order. <sub>`the_csv_row_order_always_matches_the_chart_row_order`</sub>
+- An accessory spec lists each accessory as "terminal:kind:part number"; "end" places it after the last terminal, and the part number may be left out. <sub>`accessories_are_read_in_order_with_end_and_optional_part_number`</sub>
+- An accessory item with an unknown kind, a terminal the block does not have, or a broken format is skipped on its own and reported, while the other items still count. <sub>`a_bad_accessory_item_is_skipped_alone_and_reported`</sub>
+- In the terminal chart an accessory gets its own row right before the terminal it names, and "end" accessories come after the last terminal. <sub>`accessory_rows_sit_before_their_terminal_and_end_rows_come_last`</sub>
+- The terminal check reports a broken accessory item as a warning and names the item. <sub>`the_terminal_check_warns_about_a_broken_accessory_item`</sub>
+- Swapping a terminal's inside and outside exchanges only that terminal's two sides in the chart; the other terminals keep theirs. <sub>`swapping_a_terminal_exchanges_only_its_inside_and_outside`</sub>
+- An empty swap setting means no terminal is swapped. <sub>`an_empty_swap_setting_swaps_nothing`</sub>
+- A swap setting naming a terminal the block does not have ignores just that item and the terminal check warns about it. <sub>`an_unknown_swapped_terminal_is_ignored_and_warned_about`</sub>
+- On a three-level block, swapping and sorting at the same time keep the sorted row order and swap only the named terminals. <sub>`swapping_and_sorting_a_three_level_block_work_together`</sub>
 
 ### Terminal connection diagrams
 
 - The terminal strip is drawn as one numbered box per terminal, stacked from top to bottom in terminal order. <sub>`the_strip_stacks_one_numbered_box_per_terminal`</sub>
+- The terminal diagram follows the same row order as the chart (the editor): when `row_order` groups the jumpered poles first, the strip's boxes stack in that order too, not plain terminal-number order. <sub>`the_strip_follows_the_chart_row_order_not_plain_terminal_order`</sub>
 - The outside of the panel is drawn to the left of the strip and the inside to the right, each under its own caption. <sub>`the_outside_is_on_the_left_and_the_inside_on_the_right`</sub>
 - A terminal with nothing wired to it stays in the strip as a lightly filled box marked as a spare. <sub>`a_spare_terminal_stays_in_the_strip_lightly_filled`</sub>
 - Wires of the same harness are gathered into one bracket at the outer end of their lead lines, labelled with the harness name. <sub>`wires_of_one_harness_are_gathered_into_a_bracket`</sub>
 - A wire that belongs to no harness gets no bracket at all. <sub>`a_wire_without_a_harness_gets_no_bracket`</sub>
 - A saddle jumper between neighbouring terminals is drawn as a vertical link on the inside edge of the terminal boxes. <sub>`a_jumper_is_drawn_on_the_inside_edge_of_the_boxes`</sub>
 - Each lead line carries the wire it stands for: colour, gauge in sq and part number, written small under the line. <sub>`each_lead_line_carries_the_wire_specification`</sub>
+- A terminal whose inside and outside are swapped is drawn with its two wires on the opposite sides; the other terminals stay where they were. <sub>`a_swapped_terminal_draws_its_wires_on_the_opposite_sides`</sub>
 - A multi-level terminal block's diagram labels each box with its full level-letter terminal number (1a, 1b, 2a, 2b, ...), so the two levels are never drawn as if they were the same terminal. <sub>`a_multilevel_terminal_block_labels_boxes_with_the_level_letter`</sub>
 - A multi-level terminal block's diagram shows the levels as columns: the terminal strip is split into one column per level, level a on the left, and each terminal's box sits in its own level's column. <sub>`a_multilevel_terminal_diagram_draws_each_level_as_a_column`</sub>
 - Each level column of a multi-level terminal diagram is headed by its level letter, so a reader can tell which column is which level without reading the box numbers. <sub>`a_multilevel_terminal_diagram_heads_each_level_column_with_its_letter`</sub>
+- A jumper linking two poles of the same level ("1a-2a") skips over the other level's row in between ("1b"), so it is routed through a lane beyond every row's lead line — never through the zone where that in-between row's own lead line runs. <sub>`a_same_level_jumper_that_skips_a_row_never_crosses_the_skipped_rows_lead_line`</sub>
+- A jumper between the two levels of one pole ("1a-1b") always links physically adjacent rows (levels cluster together), so it still uses the same close lane a single-level block would, right next to the boxes. <sub>`a_cross_level_jumper_between_adjacent_rows_uses_the_same_near_lane_as_single_level`</sub>
+- Two same-level jumpers on different levels ("1a-2a" and "1b-2b") each skip over the other level's row, so each gets its own lane: the lanes are distinct, and neither one falls in the zone where any row's lead line runs. <sub>`each_level_gets_its_own_distinct_jumper_lane`</sub>
+- Every per-level jumper lane sits outside the 20 mm harness zone (where the brackets and harness names are drawn) and still inside the printable page, on a 2-level and on a 3-level block alike, so a lane never runs over a harness name and never falls off the paper. <sub>`every_jumper_lane_clears_the_harness_zone_and_stays_inside_the_page`</sub>
+- The inside connection labels are shortened by exactly the width of the lane band, so the text can never reach the lanes; on a single-level block the band is zero and the label width is unchanged. <sub>`the_inside_label_width_reserves_the_lane_band`</sub>
+- Even with same-level jumpers that skip rows, the staggered strip (one box per row, columns by level) keeps its outside-left/inside-right layout: box columns and lead-line directions are unaffected by which lane a jumper's line happens to use. <sub>`the_staggered_layout_keeps_outside_left_and_inside_right_with_skipping_jumpers`</sub>
 - A single-level terminal diagram gets no level heading, because it has only one column of terminals. <sub>`a_single_level_terminal_diagram_has_no_level_heading`</sub>
 - Terminals that do not fit on one page continue on the next, and each page title states the range of terminals it holds. <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
+- The page title's terminal range names the smallest and largest terminal on that page, so it still reads as a range when a row order such as jumper order puts the rows out of terminal-number sequence. <sub>`the_page_title_range_names_the_smallest_and_largest_terminal_on_the_page`</sub>
 - Every terminal block gets exactly one page; anything that is not a terminal block gets none. <sub>`one_page_per_terminal_block_and_none_for_anything_else`</sub>
 - A terminal diagram page is an A4 landscape sheet with the JIS frame and a title block naming the terminal block. <sub>`the_page_has_the_frame_and_a_title_block`</sub>
 - The terminal diagram is offered as a report named terminal-diagram, spelled the same way in the CLI, Link API and MCP. <sub>`the_terminal_diagram_is_a_report_named_terminal_diagram`</sub>
@@ -1654,6 +1786,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - draws one terminal column per level, with the same pole of every level on one row <sub>`dynamicSymbol`</sub>
 - keeps every connection point on the 2.5 mm grid and never lets two terminals share one <sub>`dynamicSymbol`</sub>
 - a terminal block with a level count outside 1-3 returns null <sub>`dynamicSymbol`</sub>
+- rejects the one-level alias spelling of a single-level terminal block <sub>`dynamicSymbol`</sub>
 - the plain single-level terminal block id keeps its numeric-only pin numbers <sub>`dynamicSymbol`</sub>
 - static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
 - puts named pins on both sides of the box, 5 mm apart on the 2.5 mm grid <sub>`blockSymbol`</sub>
@@ -1665,6 +1798,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - builds a block's definition from the instance attributes, not from its id <sub>`resolveInstanceDef`</sub>
 - returns nothing for a block whose attributes are broken <sub>`resolveInstanceDef`</sub>
 - grows to take in a pin group's bracket and caption, so labels are placed clear of them <sub>`symbolBounds`</sub>
+- still takes in a pin group's box after the terminals are renumbered <sub>`symbolBounds`</sub>
 - reserves no room on a device-block coil for brackets it never draws <sub>`symbolBounds`</sub>
 - grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption <sub>`symbolBounds`</sub>
 - never lets a bracket and its caption lines overlap each other, at any rotation <sub>`captionLineAnchors`</sub>
@@ -1843,6 +1977,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - puts a connector's bracket to the right of its pin stubs <sub>`pinGroupBracket`</sub>
 - brackets the outside of a multi-level terminal block's own column, not the gap between columns <sub>`pinGroupBracket`</sub>
 - reports a range that spans two levels instead of quietly drawing nothing <sub>`pinGroupBracket`</sub>
+- draws a bracket for a range written with the overridden labels <sub>`pinGroupBracket`</sub>
+- keeps a multi-level bracket outside its own column after an override <sub>`pinGroupBracket`</sub>
 - refuses a bracket across mixed pin directions <sub>`pinGroupBracket`</sub>
 
 ### relayXref
@@ -1891,6 +2027,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps a one- or two-character terminal number inside its own mark, whatever the rotation <sub>`drawSymbol text placement`</sub>
 - puts an unturned terminal block's number just over a third of a character height below its mark centre on the canvas, a smaller offset than the exported drawing's half <sub>`drawSymbol text placement`</sub>
 - draws a jumper as a bar only, with no round mark at either end <sub>`drawSymbol text placement`</sub>
+- draws the overridden terminal number instead of the symbol's raw pin number <sub>`drawSymbol text placement`</sub>
+- attributes a jumper bar between renumbered terminals to the marks whose printed labels it connects <sub>`drawSymbol text placement`</sub>
 - keeps the lead lines on the coil's own pins, whatever the rotation <sub>`drawDeviceBlock`</sub>
 - draws the same upright outline whatever the rotation <sub>`drawDeviceBlock`</sub>
 - keeps the leads on the pin axis however wide the block grows <sub>`drawDeviceBlock`</sub>
@@ -1901,6 +2039,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - hides the contact image rows with the reference-designator view class <sub>`drawDeviceBlock`</sub>
 - hides the mate link together with the symbols view class <sub>`renderSheet mate links`</sub>
 - keeps the mate link when only the reference-designator class is hidden <sub>`renderSheet mate links`</sub>
+- hides the jumper bar together with the symbols view class, matching the other symbol-attached drawings <sub>`jumper bar view-class gating (Task 3, フェーズ6積み残し)`</sub>
+- keeps the jumper bar when only the reference-designator class is hidden <sub>`jumper bar view-class gating (Task 3, フェーズ6積み残し)`</sub>
 - draws a note's leader dot exactly the size of a wire junction dot <sub>`renderSheet dots`</sub>
 - draws the header row and the rows derived from the sheet's wires <sub>`wire legend block drawing`</sub>
 - outlines the legend block in the selection colour while it is selected <sub>`wire legend block drawing`</sub>
@@ -2057,6 +2197,38 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - never covers a terminal number <sub>`jumperBars`</sub>
 - produces one segment per jumper when there are several <sub>`jumperBars`</sub>
 - produces no segment for a jumper to a terminal the block does not have <sub>`jumperBars`</sub>
+- accepts a list with the right length and no duplicates or empty items <sub>`validTerminalNumbers`</sub>
+- rejects a list whose length does not match the pin count <sub>`validTerminalNumbers`</sub>
+- rejects a list with a duplicate label <sub>`validTerminalNumbers`</sub>
+- rejects a list with an empty item <sub>`validTerminalNumbers`</sub>
+- judges the list on its trimmed values <sub>`validTerminalNumbers`</sub>
+- rejects a label containing the stored list's own separator <sub>`validTerminalNumbers`</sub>
+- converts a raw pin number to the displayed label and back <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- never builds a label map for a symbol that is not a terminal block <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- rewrites only the terminal numbers it recognises and round-trips <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- falls back to the symbol's default numbers when there is no override <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
+- uses a valid override and builds a raw-to-display rename map <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
+- falls back to the defaults when the override's item count is wrong <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
+- numbers every pin from the start value on a single-level block <sub>`terminalRenumberPlan`</sub>
+- keeps the level letters on a multi-level block and numbers only the pole <sub>`terminalRenumberPlan`</sub>
+- applies the step and the prefix <sub>`terminalRenumberPlan`</sub>
+- counts poles and levels from the terminal numbers <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- normalises one level back to the plain single-level symbol id <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- returns null for a symbol that is not a terminal block and for an out-of-range level count <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- expands labels into lettered levels and drops the vanishing ones when decreasing <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- keeps a label that does not end in a level letter intact as the base <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- only strips a trailing letter that matches level a's own letter, so two poles overridden with different trailing letters keep distinct bases <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- pushes the numbers after the chosen terminal and hands the vacated one to the new spare <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- does not renumber anything when appending at the end <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- keeps a prefixed label's prefix and shifts only its numeric part <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- counts the insertion point in the chart's number order so a second insertion still works <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- leaves the following numbers alone and gives the spare the vacant number when not renumbering <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- returns null when not renumbering would collide with an existing number <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- returns null when the insertion point's label has no digits <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- returns null for a non-positive count <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- returns null when the insertion point names an unknown terminal <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- adds one terminal per level on a multi-level block <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- keeps adjacency based on the raw pin layout, not on the arithmetic difference between displayed labels <sub>`parseJumperSpec with an overridden display order`</sub>
 
 ### textStyle
 
@@ -2176,6 +2348,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - adding Option/Alt makes it a different shortcut, not a file action <sub>`editor shortcuts: ファイル操作`</sub>
 - Shift+Cmd+N and Shift+Cmd+O are not file actions <sub>`editor shortcuts: ファイル操作`</sub>
 - the decision is made on the physical key, so non-Latin layouts still work <sub>`editor shortcuts: ファイル操作`</sub>
+- Cmd+Z is undo and Shift+Cmd+Z is redo, with Ctrl working the same <sub>`editor shortcuts: 元に戻す・やり直し`</sub>
+- plain Z, Option combinations and other keys are not undo or redo <sub>`editor shortcuts: 元に戻す・やり直し`</sub>
 
 ### entityKindLabels
 
@@ -2236,6 +2410,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - tokens are added up across the turns of a conversation <sub>`sumUsage`</sub>
 - Copilot's premium requests are counted separately from tokens, as a fraction <sub>`sumUsage`</sub>
 - a conversation with no usage yet counts as zero <sub>`sumUsage`</sub>
+- sends on Cmd+Enter <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- sends on Ctrl+Enter <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- does not send on a plain Enter, which stays a line break <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- does not send on Shift+Enter <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- does not send while an IME composition is in progress, even with Cmd or Ctrl <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- does not send when the Enter is reported as keyCode 229 by the IME <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- does not send on keys other than Enter <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
 
 ### Unsaved guard when closing or reloading
 
@@ -2356,6 +2537,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - send creates a conversation and adopts the server-assigned id <sub>`chat store: アクション`</sub>
 - events arriving before send resolves still land in the same conversation <sub>`chat store: アクション`</sub>
 - empty prompts and sends during streaming are ignored <sub>`chat store: アクション`</sub>
+- an interrupting send cancels the running turn and then sends the new prompt to the same conversation <sub>`chat store: アクション`</sub>
+- an interrupting send behaves like a normal send when nothing is running <sub>`chat store: アクション`</sub>
+- an interrupting send is refused while the first send is still waiting for its conversation id <sub>`chat store: アクション`</sub>
+- an empty interrupting send is ignored and leaves the running turn alone <sub>`chat store: アクション`</sub>
 - a failed send marks the message with the error and stops streaming <sub>`chat store: アクション`</sub>
 - after a failed first send, retrying sends as new without leaking the local id <sub>`chat store: アクション`</sub>
 - cancel stops only the target conversation, leaving others streaming <sub>`chat store: アクション`</sub>
@@ -2677,8 +2862,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - chains jumpers along a run of three or more adjacent terminals <sub>`jumper specification`</sub>
 - refuses to jumper terminals that are not adjacent <sub>`jumper specification`</sub>
 - removes only the jumpers that touch the selected terminals <sub>`jumper specification`</sub>
+- lists the same five row orders as the Rust RowOrder enum <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
+- falls back to number order for an unset or unrecognised attribute <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
+- resolves every known word to its row order <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
 - loads the terminal blocks of the sheet and shows the first one <sub>`terminal strip editor store`</sub>
 - shows one grid row per terminal with the wiring taken from the drawing <sub>`terminal strip editor store`</sub>
+- carries the level letter of each row for multi-level terminal blocks <sub>`terminal strip editor store`</sub>
+- falls back to the chart rows to decide whether the level column is needed <sub>`terminal strip editor store`</sub>
+- reports no levels for a single-level terminal block <sub>`terminal strip editor store`</sub>
 - marks terminals with no wire at all as spare <sub>`terminal strip editor store`</sub>
 - writes a jumper into the symbol attributes with one update_entity command <sub>`terminal strip editor store`</sub>
 - names a terminal block by its pole count, not by its terminal count <sub>`terminal strip editor store`</sub>
@@ -2689,6 +2880,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - clears only the jumpers on the selected terminals <sub>`terminal strip editor store`</sub>
 - drops the jumper attribute entirely once no jumper is left <sub>`terminal strip editor store`</sub>
 - reloads the chart after editing a jumper so the grid keeps matching the model <sub>`terminal strip editor store`</sub>
+- changes the row order with one update_entity command <sub>`terminal strip editor store`</sub>
+- drops the row_order attribute entirely when number order is chosen again <sub>`terminal strip editor store`</sub>
+- reflects the row order the chart already came back sorted in <sub>`terminal strip editor store`</sub>
+- jumps to the drawing by passing the sheet and entity id of the current block to reveal <sub>`terminal strip editor store`</sub>
+- closes the editor before revealing the drawing so the jump is not hidden behind the modal <sub>`terminal strip editor store`</sub>
+- restores the same block and row selection when the editor is reopened after a jump <sub>`terminal strip editor store`</sub>
+- keeps no resume memo when the editor is closed by hand <sub>`terminal strip editor store`</sub>
+- reloads the list and chart only once per sort change, not twice <sub>`terminal strip editor store`</sub>
+- does nothing when asked to jump to the drawing without a terminal block <sub>`terminal strip editor store`</sub>
 - reloads the grid when the drawing changes from outside the editor, e.g. an undo <sub>`terminal strip editor store`</sub>
 - does not fetch anything while the editor is closed <sub>`terminal strip editor store`</sub>
 - summarizes the terminal block check as counts per severity <sub>`terminal strip editor store`</sub>
@@ -2696,6 +2896,49 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - clears the selection and the previous check result when another block is picked <sub>`terminal strip editor store`</sub>
 - shows an empty grid on a sheet without any terminal block <sub>`terminal strip editor store`</sub>
 - throws away the chart, the selection and the check result when closed <sub>`terminal strip editor store`</sub>
+- previews the renumbering as an old-to-new mapping and keeps level letters <sub>`renumber popover`</sub>
+- refuses a step of zero and names the label that would repeat <sub>`renumber popover`</sub>
+- sends no command at all for a plan it cannot apply <sub>`renumber popover`</sub>
+- rounds a negative start and a fractional step into whole numbers before sending <sub>`renumber popover`</sub>
+- reports that there is nothing to renumber on a sheet without a terminal block <sub>`renumber popover`</sub>
+- previews the jumper specification as it will read after the renumbering <sub>`renumber popover`</sub>
+- shows no jumper line when the block carries no jumpers <sub>`renumber popover`</sub>
+- reports the block's current level count <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- falls back to counting distinct level letters in the chart rows <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- sends one set_terminal_levels command with the requested level count <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- sends nothing when the requested level count matches the current one <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- refuses an out-of-range level count without sending a command <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- keeps the backend's refusal reason in error and leaves the drawing untouched <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- previews the new symbol id, the new terminal numbers and the jumpers that follow <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- shows no preview for the level count the block already has <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- lists each vanishing terminal that still has a connection, with its target <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- lists a jumper that still names a vanishing level as a blocker <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- never blocks an increase in the level count <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- refuses a level decrease that has a blocker without sending a command <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- sends one insert_spare_terminals command with the requested position and count <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- sends null for after when inserting at the end <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- keeps following labels and gives the spare the next free number when 'leave vacant' is chosen at the end <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- reports keepDuplicate and sends nothing when 'leave vacant' would collide with an existing number <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- refuses a non-positive count without sending a command <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- keeps the backend's refusal reason in error and leaves the drawing untouched <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- previews the new symbol id and the new spare's labels <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- flags a non-positive count as an issue <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- flags a count that would exceed the pole cap <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- lists one insertion-point option per pole, using level a's label on a multi-level block <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- clamps the count stepper's input to a positive integer <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- formats accessory rows as terminal:kind:part, trimming the part number and dropping commas and colons <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- formats no rows as an empty string <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- turns chart accessories into popover rows, mapping the end position to 'end' <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- assigns a part with one update_entity that writes the part number and the terminal kind <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- removes a stale terminal kind when the assigned part has none <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- drops the accessories attribute when every accessory row is removed <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- writes the accessories attribute in the documented format with one update_entity <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- toggles the selected terminals in the swap setting, adding new ones and removing swapped ones <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- keeps unknown terminal numbers and drops blank items when toggling the swap setting <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- cannot swap while no terminal is selected <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- swaps the selected terminals with one update_entity that writes the swapped attribute and keeps the selection <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- drops the swapped attribute when every swapped terminal is swapped back <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- carries whether each row is swapped, treating a missing flag as not swapped <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
 
 ### ui
 

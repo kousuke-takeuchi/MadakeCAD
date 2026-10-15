@@ -381,6 +381,64 @@ export type Command =
       numbers: { footprint_id: string; item_no: number | null }[];
     }
   /**
+   * 端子台1台の端子番号の自動採番 (spec §1.1)。ピン順に開始番号・増分・接頭辞で振り直す。
+   * 多段端子台は段記号を保って極だけ採番する (`11a`,`11b`,…)。同じコマンドで
+   * `attrs["jumpers"]`・`attrs["pin_groups"]`の端子番号も新しい番号へ書き換える。
+   */
+  | {
+      type: "renumber_terminals";
+      sheet_id: string;
+      entity_id: string;
+      start?: number;
+      step?: number;
+      prefix?: string;
+    }
+  /**
+   * 端子台1台の端子番号の直接指定 (自動採番の逆コマンド・個別編集)。`numbers`はピン順の
+   * ラベル。個数がピン数と合わない・重複がある・空要素があれば図面を変えずにエラーになる。
+   * `null`ならシンボル定義の既定 (`1`,`2`,…) へ戻す。
+   */
+  | {
+      type: "set_terminal_numbers";
+      sheet_id: string;
+      entity_id: string;
+      numbers?: string[] | null;
+    }
+  /**
+   * 端子台1台の段数を変える (spec §1.1「多段端子の生成・解除」)。`symbol_id`を
+   * `terminal_block_{n}p` <-> `terminal_block_{n}p_{levels}l`へ書き換え、`terminal_numbers`・
+   * `jumpers`・`pin_groups`の段記号も追従させる。段を減らして消える段に結線・ジャンパ・
+   * ピングループ・付属品の指定が残っていれば、図面を変えずにエラーになる。
+   */
+  | {
+      type: "set_terminal_levels";
+      sheet_id: string;
+      entity_id: string;
+      levels: number;
+    }
+  /**
+   * 端子台1台に予備端子を挿入する (spec §1.1「予備端子の挿入」)。物理的にはシンボルの
+   * 末尾に`count`極を足す (多段なら1極につき段数ぶんの端子)。番号だけが`after`
+   * (表示ラベル。省略/nullなら末尾) の直後に挿入されたように振られる。位置は
+   * **チャートに出る順**で数えるので、挿入済みの端子台へもう1つ挿入しても見た目どおりの
+   * 位置に入る。既存の極は座標を保つので結線は外れない。`count`が0以下、極数の上限を
+   * 超える、`entity_id`が端子台でない、`after`が今の端子番号のどれとも一致しない、
+   * 番号を決められない、または番号が重複するとエラーになる。
+   */
+  | {
+      type: "insert_spare_terminals";
+      sheet_id: string;
+      entity_id: string;
+      after?: string | null;
+      count: number;
+      /**
+       * 番号の扱い。`true`(省略時)=詰める (`after`より後ろの端子の番号を繰り下げて
+       * 番号を連続させる)、`false`=空ける (既存の番号は変えず、予備が空き番号を取る。
+       * 空きが無ければエラー)。
+       */
+      renumber_following?: boolean;
+    }
+  /**
    * プロジェクト名・番号と、全シート共通の表題欄の供給元となる項目の一括設定 (G16)。
    * 各欄は省略(undefined)すれば変更しない。`name`/`no`はプロジェクト単位、
    * `company`/`drawing_no`/`title`は**全シートの表題欄**へ同じ値を書く(undo一発)。
@@ -507,6 +565,11 @@ export interface Part {
   contact_config?: string;
   /** PLC I/Oモジュールの定義JSON (空欄ならPLCモジュールではない)。 */
   plc_module?: string;
+  /**
+   * 端子台・端子台付属品の種別 (部品DB v7)。端子台なら feed_through / multi_level / fuse /
+   * disconnect、付属品なら end_bracket / partition / end_plate。それ以外の部品は空。
+   */
+  terminal_kind?: string;
 }
 
 /** KiCadインポートの結果要約。 */
@@ -591,6 +654,8 @@ export interface TerminalRow {
   jumper: string;
   /** 予備端子 (内部側・外部側とも未結線)。 */
   spare: boolean;
+  /** 内外を入れ替えた端子 (`attrs["swapped"]`)。`internal`/`external`は入れ替え後の値。 */
+  swapped?: boolean;
 }
 
 /** 読み取れなかったジャンパ指定1件。 */
@@ -599,6 +664,12 @@ export interface JumperIssue {
   code: string;
   message: string;
 }
+
+/**
+ * 端子台チャートの並べ替え順 (madake-coreの`RowOrder`)。`attrs["row_order"]`の値と同じ表記。
+ * 未設定・未知語は`"number"`に落ちる。
+ */
+export type RowOrder = "number" | "alnum" | "page" | "cable" | "jumper";
 
 /** 端子台1つのチャート (madake-coreの`TerminalChart`)。 */
 export interface TerminalChart {
@@ -612,6 +683,35 @@ export interface TerminalChart {
   /** 正規化済みのジャンパ (並び順で先に来る端子番号が先)。多段端子台では段記号付き ("1a")。 */
   jumpers: [string, string][];
   jumper_issues: JumperIssue[];
+  /**
+   * この並びを作った並べ替え順 (`attrs["row_order"]`を解析した結果)。`rows`はすでにこの順に
+   * 並んでいるので、CSV・図枠付き図面シート・端子接続図もここを並べ替え直したりしない。
+   */
+  row_order: RowOrder;
+  /** 付属品 (`attrs["accessories"]`)。書いた順。`before`がnullなら末尾。 */
+  accessories?: Accessory[];
+  /** 読めなかった付属品の項 (端子台チェックがWarningにする)。 */
+  accessory_issues?: AccessoryIssue[];
+  /** `attrs["swapped"]`が指しているが端子台に無い端子番号 (端子台チェックがWarningにする)。 */
+  swap_unknown?: string[];
+}
+
+/** 端子台付属品の種別 (M4 §1.1 の3種)。 */
+export type AccessoryKind = "end_bracket" | "partition" | "end_plate";
+
+/** 端子台の付属品1個。 */
+export interface Accessory {
+  /** この端子の直前に入る (表示ラベル)。nullは末尾。 */
+  before: string | null;
+  kind: AccessoryKind;
+  /** 型番 (空なら部品表に載せない)。 */
+  part_no: string;
+}
+
+/** 読めなかった付属品の項。 */
+export interface AccessoryIssue {
+  text: string;
+  message: string;
 }
 
 /** 端子台1つの概要 (エディタの切替ドロップダウン・帳票の対象選択)。 */

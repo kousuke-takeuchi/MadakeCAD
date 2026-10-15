@@ -313,6 +313,110 @@ describe("drawSymbol text placement", () => {
       expect(a.r, `円の半径 ${a.r}`).toBeCloseTo(TERMINAL_MARK_R * vp.scale, 9);
     }
   });
+
+  /** 端子台1台を、ジャンパに加えて任意のattrs(端子番号の上書きなど)付きで画面に描く。 */
+  function drawTerminalBlockWithAttrs(
+    symbolId: string,
+    attrs: Record<string, string>,
+    rotation = 0,
+  ) {
+    const def = dynamicSymbol(symbolId)!;
+    const rec = recorder();
+    const vp = new Viewport();
+    vp.scale = 4;
+    const inst: SymbolInstance = {
+      id: "s",
+      symbol_id: symbolId,
+      at: { x: 100, y: 50 },
+      rotation,
+      mirror: false,
+      reference: "",
+      value: "",
+      attrs,
+    };
+    drawSymbol(rec.ctx, vp, inst, def, false, undefined, false);
+    return { ...rec, def, vp, inst };
+  }
+
+  // ja: attrs["terminal_numbers"]の上書きは、シンボル定義の生のピン番号ではなく上書きラベルを描く (Rust側 svg_draws_the_overridden_terminal_number_instead_of_the_raw_pin_number とparity)
+  it("draws the overridden terminal number instead of the symbol's raw pin number", () => {
+    const { texts } = drawTerminalBlockWithAttrs("terminal_block_4p", {
+      terminal_numbers: "11,12,13,14",
+    });
+    const bodies = texts.map((t) => t.text).sort();
+    expect(bodies).toEqual(["11", "12", "13", "14"]);
+    for (const raw of ["1", "2", "3", "4"]) {
+      expect(texts.some((t) => t.text === raw), `生のピン番号${raw}が残っている`).toBe(false);
+    }
+  });
+
+  // ja: 採番後のジャンパバーは、単なる幾何的な近さではなく実際に繋ぐ端子の印刷ラベルへ紐付けて帰属確認できる (Rust側 a_jumper_bar_is_attributed_to_its_terminals_by_label_text_after_renumbering とparity。フェーズ6の「最寄りマーク帰属のテストが端子番号の入れ替わりを検出しない」を閉じる)
+  it("attributes a jumper bar between renumbered terminals to the marks whose printed labels it connects", () => {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const vp = new Viewport();
+    vp.scale = 4;
+    const texts: { text: string; x: number; y: number }[] = [];
+    const arcs: { x: number; y: number; r: number }[] = [];
+    // ジャンパバー専用の線幅で引かれた線分の始点・終点だけを拾う
+    const barSegments: { a: { x: number; y: number }; b: { x: number; y: number } }[] = [];
+    let cursor = { x: 0, y: 0 };
+    const ctx = {
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 0,
+      font: "",
+      textAlign: "" as CanvasTextAlign,
+      beginPath() {},
+      moveTo(x: number, y: number) {
+        cursor = { x, y };
+      },
+      lineTo(x: number, y: number) {
+        // 線幅はstroke()の前、moveTo/lineToより先に設定される(drawSymbolの描画順)ので、
+        // ここでctx.lineWidthを直接見ればそのセグメントの太さが分かる
+        if (Math.abs(ctx.lineWidth - JUMPER_BAR_STROKE_MM * vp.scale) < 1e-9) {
+          barSegments.push({ a: cursor, b: { x, y } });
+        }
+        cursor = { x, y };
+      },
+      closePath() {},
+      stroke() {},
+      fill() {},
+      arc(x: number, y: number, r: number) {
+        arcs.push({ x, y, r });
+      },
+      fillText(text: string, x: number, y: number) {
+        texts.push({ text, x, y });
+      },
+    };
+    const inst: SymbolInstance = {
+      id: "s",
+      symbol_id: "terminal_block_4p",
+      at: { x: 100, y: 50 },
+      rotation: 0,
+      mirror: false,
+      reference: "",
+      value: "",
+      attrs: { terminal_numbers: "P11,P12,P13,P14", jumpers: "P11-P12" },
+    };
+    drawSymbol(ctx as unknown as CanvasRenderingContext2D, vp, inst, def, false, undefined, false);
+
+    const markFor = (label: string) => {
+      const t = texts.find((q) => q.text === label);
+      expect(t, `ラベル${label}が描かれていない`).toBeDefined();
+      return arcs.reduce((best, a) =>
+        Math.hypot(t!.x - a.x, t!.y - a.y) < Math.hypot(t!.x - best.x, t!.y - best.y) ? a : best,
+      );
+    };
+    const p11 = markFor("P11");
+    const p12 = markFor("P12");
+
+    expect(barSegments).toHaveLength(1);
+    const near = (p: { x: number; y: number }, m: { x: number; y: number }) =>
+      Math.hypot(p.x - m.x, p.y - m.y) < TERMINAL_MARK_R * vp.scale;
+    const { a, b } = barSegments[0];
+    // 印が入れ替わっていたら、あるいはラベルが取り違えられていたら失敗する
+    expect((near(a, p11) && near(b, p12)) || (near(a, p12) && near(b, p11))).toBe(true);
+  });
 });
 
 describe("drawDeviceBlock", () => {
@@ -660,6 +764,80 @@ describe("renderSheet mate links", () => {
   // ja: 参照記号を隠しても嵌合対の破線は残る (参照記号の表示クラスには属さない)
   it("keeps the mate link when only the reference-designator class is hidden", () => {
     expect(dashedMateLines(["refs"])).toBe(1);
+  });
+});
+
+describe("jumper bar view-class gating (Task 3, フェーズ6積み残し)", () => {
+  /** ジャンパ付きの端子台1台だけを持つシートを、指定の表示クラスを隠して描き、ジャンパバー専用の線幅で描かれたstroke回数を返す。 */
+  function jumperBarStrokeCount(hidden: ViewClass[]): number {
+    const def = dynamicSymbol("terminal_block_4p")!;
+    const inst = {
+      kind: "symbol",
+      id: "tb1",
+      symbol_id: "terminal_block_4p",
+      at: { x: 100, y: 50 },
+      rotation: 0,
+      mirror: false,
+      reference: "TB1",
+      value: "",
+      attrs: { jumpers: "1-2" },
+    } as unknown as Entity;
+    const sheet = {
+      id: "s1",
+      name: "S1",
+      size: "A3",
+      orientation: "Landscape",
+      zone_cols: 4,
+      zone_rows: 6,
+      title_block: {},
+      revisions: [],
+      entities: { tb1: inst },
+    } as unknown as Sheet;
+    const strokeWidths: number[] = [];
+    const ctx = {
+      canvas: { width: 800, height: 600 },
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 0,
+      font: "",
+      textAlign: "" as CanvasTextAlign,
+      beginPath() {},
+      moveTo() {},
+      lineTo() {},
+      arcTo() {},
+      rect() {},
+      closePath() {},
+      stroke() {
+        strokeWidths.push(ctx.lineWidth);
+      },
+      fill() {},
+      fillRect() {},
+      strokeRect() {},
+      setLineDash() {},
+      measureText: (t: string) => ({ width: t.length * 6 }),
+      arc() {},
+      fillText() {},
+    };
+    const vp = new Viewport();
+    vp.scale = 4;
+    renderSheet(ctx as unknown as CanvasRenderingContext2D, sheet, [def], vp, {
+      selection: new Set(),
+      cursor: null,
+      hidden: new Set(hidden),
+    });
+    const barWidth = JUMPER_BAR_STROKE_MM * vp.scale;
+    return strokeWidths.filter((w) => Math.abs(w - barWidth) < 1e-9).length;
+  }
+
+  // ja: ジャンパバー(G5)は他のシンボル付随描画(嵌合対の破線など)と同じ表示クラス「シンボル」に属し、シンボルを隠すと一緒に消える (フェーズ6積み残しの解消)
+  it("hides the jumper bar together with the symbols view class, matching the other symbol-attached drawings", () => {
+    expect(jumperBarStrokeCount([])).toBe(1);
+    expect(jumperBarStrokeCount(["symbols"])).toBe(0);
+  });
+
+  // ja: 参照記号を隠してもジャンパバーは残る (参照記号の表示クラスには属さない)
+  it("keeps the jumper bar when only the reference-designator class is hidden", () => {
+    expect(jumperBarStrokeCount(["refs"])).toBe(1);
   });
 });
 

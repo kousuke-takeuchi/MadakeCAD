@@ -28,6 +28,22 @@ export function sumUsage(messages: ChatMessage[]) {
   return { input, output, tokens: input + output, premium };
 }
 
+/**
+ * 送信のキーボードショートカットか: **Cmd+Enter (macOS) / Ctrl+Enter**。
+ *
+ * ただのEnterは改行にする。日本語などのIME変換を確定するEnterで送信されてしまう
+ * 事故を防ぐため (WebKitは変換確定のEnterを`isComposing=false`で届けることがあり、
+ * `isComposing`だけでは防げない)。変換中 (`isComposing` / keyCode 229) は修飾キーが
+ * あっても送らない。
+ */
+export function isSendShortcut(
+  ev: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "isComposing" | "keyCode">,
+): boolean {
+  if (ev.key !== "Enter") return false;
+  if (ev.isComposing || ev.keyCode === 229) return false;
+  return ev.metaKey || ev.ctrlKey;
+}
+
 export function useChatComposer() {
   const store = useChatStore();
   const ui = useUiStore();
@@ -39,7 +55,13 @@ export function useChatComposer() {
     set: (v: string) => ui.setChatDraft(v),
   });
 
-  const canSend = computed(() => draft.value.trim().length > 0 && !store.streaming);
+  /**
+   * 送信できるか。答えている最中でも**割り込み**で送れる (進行中のターンを中断して
+   * 送り直す)。割り込めないのは会話idの採番を待っている短い間だけ。
+   */
+  const canSend = computed(
+    () => draft.value.trim().length > 0 && (!store.streaming || store.canInterrupt),
+  );
 
   /** 会話全体の使用量の合計 (プロバイダによって埋まる欄が違う)。 */
   const usageTotals = computed(() => sumUsage(store.messages));
@@ -74,7 +96,7 @@ export function useChatComposer() {
   });
 
   /**
-   * プロンプトを送信する。
+   * プロンプトを送信する (答えている最中なら割り込み送信)。
    *
    * 浮きカードには会話エリアが無いため、送信したら必ず左ドックのエージェントタブを
    * 開いて応答を見せる (panelOpen="expanded" = ドックのエージェントタブ表示)。
@@ -84,12 +106,12 @@ export function useChatComposer() {
     const text = draft.value;
     draft.value = "";
     ui.openAgentTab();
-    const id = await store.send(text);
+    const id = await store.sendInterrupting(text);
     if (!id) ui.log(i18n.global.t("chat.composer.sendFailedLog"));
   }
 
   function onKeydown(ev: KeyboardEvent) {
-    if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) return;
+    if (!isSendShortcut(ev)) return;
     ev.preventDefault();
     void submit();
   }

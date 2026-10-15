@@ -41,7 +41,13 @@ const { open: tidyOpen, toggle: toggleTidy, close: closeTidy } = usePopover();
     <button v-if="store.streaming" class="send stop" :title="t('chat.composer.stop')" @click="onCancel">
       <Square :size="11" />
     </button>
-    <button v-else class="send" :class="{ ready: canSend }" :title="t('chat.composer.send')" @click="submit">
+    <button
+      v-if="!store.streaming || canSend"
+      class="send"
+      :class="{ ready: canSend }"
+      :title="store.streaming ? t('chat.composer.interrupt') : t('chat.composer.send')"
+      @click="submit"
+    >
       <ArrowUp :size="14" />
     </button>
   </div>

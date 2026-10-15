@@ -783,11 +783,16 @@
       "internal": "内部目标",
       "wireNo": "线号",
       "wire": "导线",
-      "status": "状态"
+      "status": "状态",
+      "level": "Lv"
     },
     "spare": "备用",
     "addJumper": "添加跳线",
     "removeJumper": "删除跳线",
+    "swap": "Swap sides",
+    "swapHint": "Swaps the inside and outside of the selected terminals (press again to swap back)",
+    "swapped": "Swapped",
+    "swapLog": "{reference}: swapped the sides of terminals {terminals}",
     "jumperHint": "选择相邻端子并添加跨接跳线。所有编辑都通过命令执行,可用 Cmd+Z 撤销。",
     "check": "检查端子排",
     "checkPending": "尚未检查",
@@ -795,15 +800,49 @@
     "checkCounts": "错误 {error} / 警告 {warning} / 信息 {info}",
     "generateDiagram": "生成端子接线图",
     "generateChart": "生成端子排表",
-    "phase2Hint": "计划在第 2 阶段实现",
-    "phase2": {
-      "sort": "排序",
-      "autoNumber": "重新编号",
-      "spareTerminal": "插入备用端子",
-      "multiLevel": "多层端子",
-      "accessory": "附件",
-      "swap": "内外互换",
-      "goto": "转到图纸"
+    "insertSpare": "Insert spare",
+    "spareInsert": {
+      "title": "Insert spare terminal",
+      "description": "One update_entity (symbol_id + terminal_numbers)",
+      "positionLabel": "Insert position:",
+      "positionEnd": "At the end",
+      "positionAfter": "After {after}",
+      "countLabel": "Count:",
+      "numberMode": "Numbering",
+      "modeShift": "Add a pole at the end and shift the numbers down",
+      "modeKeep": "Leave the spare with a vacant number",
+      "modeKeepHint": "Following labels stay as they are; the spare takes the next free number (refused if it would collide)",
+      "previewLabel": "Preview",
+      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) · both sides unconnected",
+      "note": "Shifting the numbers never moves a pin's coordinates, so existing wiring stays connected",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "issueCount": "Enter a count of 1 or more",
+      "issuePoleCap": "Exceeds the maximum pole count (limit {max})",
+      "issueInvalid": "This cannot be applied",
+      "modeShiftHint": "Following terminals are renumbered so the labels stay contiguous",
+      "issueNonNumeric": "The label at the insertion point ({label}) has no number, so the spare cannot be numbered",
+      "issueKeepDuplicate": "Leaving the number vacant would collide with an existing terminal; choose 'shift' instead"
+    },
+    "multiLevel": "多层端子",
+    "levels": {
+      "label": "层数",
+      "description": "在单层与多层之间切换此端子排。引脚布局、表格和接线图都会随之更新。",
+      "hint": "如果消失的那一层仍被接线、跳线、引脚分组或附件引用,减少层数的操作将被拒绝。层数为 1 时会回到单层的 symbol_id(不会使用 \"_1l\" 别名)。",
+      "range": "层数为 1〜{max};超出该范围将被拒绝。",
+      "preview": "预览",
+      "previewNumbers": "端子编号 {from} → {to}",
+      "previewJumpers": "跳线 {from} → {to}",
+      "blockers": "解除后消失的层",
+      "issue": "仍有接线的层无法解除。请先拆除端子 {terminal} 的接线。",
+      "blocker": {
+        "wire": "已接线",
+        "jumper": "有跳线",
+        "pinGroup": "有引脚分组",
+        "accessory": "有附件"
+      },
+      "cancel": "取消",
+      "apply": "应用"
     },
     "hint": "表格由图纸推导而来(此处无法编辑连线、线号和导线)。柜内为左侧连接点,柜外为右侧连接点。",
     "openLog": "端子排编辑器: 正在编辑“{sheet}”的端子排",
@@ -813,7 +852,85 @@
     "jumperRemovedLog": "端子排编辑器: 已删除 {reference} 端子 {terminals} 上的跳线(Cmd+Z 可撤销)",
     "checkLog": "端子排编辑器: 已检查 {reference} - {result}",
     "chartLog": "端子排编辑器: 已将 {reference} 的端子排表({count} 行)写入 {path}",
-    "diagramLog": "端子排编辑器: 已将 {reference} 的端子接线图({count} 页)写入 {path}"
+    "diagramLog": "端子排编辑器: 已将 {reference} 的端子接线图({count} 页)写入 {path}",
+    "sort": {
+      "label": "Sort:",
+      "number": "Number",
+      "alnum": "Alphanumeric",
+      "page": "Page (drawing order)",
+      "cable": "External cable",
+      "jumper": "Jumper"
+    },
+    "goto": "Go to drawing",
+    "gotoHint": "Double-click a row to jump to it on the drawing",
+    "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing",
+    "autoNumber": "重新编号",
+    "renumber": {
+      "start": "起始编号",
+      "step": "增量",
+      "prefix": "前缀",
+      "target": "对象",
+      "preview": "预览",
+      "cancel": "取消",
+      "apply": "应用",
+      "description": "按引脚顺序重新编排该端子台的所有端子。图表、端子接线图和图纸都会同步更新。",
+      "note": "跳线和引脚分组的设定会在同一条命令中改写为新编号，因此一次撤销即可全部还原。",
+      "targetAll": "全部端子",
+      "targetSelected": "选中行 ({count})",
+      "targetSelectedHint": "仅对选中行重新编号计划在后续阶段实现",
+      "jumpers": "跳线 {from} → {to}",
+      "issueDuplicate": "端子编号会重复 ({label} 共 {count} 个)。图纸不会被修改",
+      "issueEmpty": "端子编号会变为空。图纸不会被修改",
+      "issueComma": "端子编号中会含有保存格式的分隔符「,」({label})。图纸不会被修改",
+      "issueInvalid": "该编号无法应用。图纸不会被修改",
+      "issueNoBlock": "没有可重新编号的端子台"
+    },
+    "renumberedLog": "端子排编辑器: 已将 {reference} 的端子编号从 {from} 改为 {to}(Cmd+Z 可撤销)",
+    "levelsChangedLog": "端子排编辑器: {reference} 的层数已从 {from} 改为 {to}(Cmd+Z 可撤销)",
+    "spareInsertedLog": "Terminal editor: inserted {count} spare terminal(s) ({labels}) into {reference} (undo with Cmd+Z)",
+    "assignPart": {
+      "button": "Assign part",
+      "title": "Assign part (terminal block part number)",
+      "description": "Assigns a part number from the parts database. The part number and the terminal kind are written in one edit (Cmd+Z undoes it)",
+      "search": "Search by part number or name",
+      "results": "Results ({count})",
+      "empty": "No terminal block parts found",
+      "hint": "The kind comes from the parts database's terminal_kind column. It is copied to the terminal block on assignment and read by the chart and the terminal check",
+      "cancel": "Cancel",
+      "apply": "Assign",
+      "assignedLog": "Terminal block: assigned part {partNo} to {reference} (Cmd+Z undoes it)"
+    },
+    "accessory": {
+      "button": "Accessories",
+      "title": "Accessories",
+      "description": "Adds end brackets, partitions and end plates to the terminal block",
+      "position": "Position",
+      "kind": "Kind",
+      "partNo": "Part no.",
+      "positionEnd": "End",
+      "positionBefore": "Before {terminal}",
+      "addRow": "Add row",
+      "removeRow": "Remove this row",
+      "unknownPart": "{partNo} is not in the parts database (you can still apply; the BOM lists it under this part number)",
+      "skipped": "Items that cannot be read are skipped: {items}",
+      "hint": "Position = the accessory goes right before that terminal; End = after the last terminal. Kinds: end bracket / partition / end plate",
+      "bomNote": "The BOM lists one quantity row per part number. Accessory widths are not counted by the panel layout spacing check",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "appliedLog": "Terminal block: {reference} now has {count} accessories (Cmd+Z undoes it)"
+    },
+    "accessoryKind": {
+      "end_bracket": "End bracket",
+      "partition": "Partition",
+      "end_plate": "End plate"
+    },
+    "terminalKind": {
+      "feed_through": "Feed-through",
+      "multi_level": "Multi-level",
+      "fuse": "Fuse",
+      "disconnect": "Disconnect"
+    }
   },
   "plcIo": {
     "ribbonButton": "PLC I/O 表",
@@ -984,14 +1101,14 @@
       "connectFailedLog": "AGENT   无法连接代理: {error}",
       "emptyConnected": "告诉代理要对图纸做什么。编辑会自动应用,之后可以撤销。",
       "emptyDisconnected": "没有可用的 AI 提供商。请在“设置 > 代理”中选择一个(Claude Code CLI、API 密钥、Copilot CLI、Ollama 等)。",
-      "replyPlaceholder": "输入回复..."
+      "replyPlaceholder": "输入回复... (⌘Enter / Ctrl+Enter)"
     },
     "panel": {
       "titleActive": "电路代理",
       "titleNew": "新建代理",
       "expand": "展开",
       "minimize": "最小化",
-      "placeholder": "随意提问...(例如: 在 24 V 母线上加一个熔断器)"
+      "placeholder": "随意提问...(例如: 在 24 V 母线上加一个熔断器) (⌘Enter / Ctrl+Enter)"
     },
     "message": {
       "working": "代理正在工作...",
@@ -1002,9 +1119,10 @@
     "composer": {
       "addContext": "添加上下文",
       "stop": "停止",
-      "send": "发送",
+      "send": "发送 (⌘Enter / Ctrl+Enter)",
       "sendFailedLog": "AGENT   发送失败(详见聊天中的错误信息)",
-      "cancelFailedLog": "AGENT   取消失败: {error}"
+      "cancelFailedLog": "AGENT   取消失败: {error}",
+      "interrupt": "Interrupt and send (⌘Enter / Ctrl+Enter) — stops the running turn first"
     },
     "context": {
       "head": "添加上下文",

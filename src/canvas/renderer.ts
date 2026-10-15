@@ -41,7 +41,9 @@ import {
   JUMPER_BAR_STROKE_MM,
   jumperBars,
   parseJumperSpec,
+  terminalLabels,
   terminalNumbers,
+  terminalNumbersOfInstance,
 } from "./terminalJumpers";
 import { PIN_GROUP_CAPTION_TEXT_MM, PIN_GROUPS_ATTR, pinGroupBrackets } from "./pinGroups";
 import { entityViewClass, type ViewClass } from "./viewClasses";
@@ -409,6 +411,11 @@ export function drawSymbol(
   ctx.strokeStyle = colorOverride ?? (selected ? theme.selection : theme.line);
   ctx.fillStyle = ctx.strokeStyle;
   ctx.lineWidth = Math.max(1, SYMBOL_STROKE_MM * vp.scale);
+  // 端子番号の上書き (Task 2, spec §1.1): シンボル定義に焼き込まれた生のピン番号のテキストを
+  // このインスタンスの表示ラベルへ差し替える。上書きが無ければnullで、差し替えは起きない
+  // (SVG出力 svg.rs::render_symbol の双子)。
+  const labels = terminalLabels(def, inst.attrs);
+  const terminalRename = labels.renameMap;
   for (const prim of def.primitives) {
     switch (prim.type) {
       case "line": {
@@ -461,7 +468,8 @@ export function drawSymbol(
         const p = vp.toScreen(transformLocal(prim.at, inst));
         ctx.font = `${Math.max(8, prim.height * vp.scale)}px sans-serif`;
         ctx.textAlign = "center";
-        ctx.fillText(prim.text, p.x, p.y + (prim.height * vp.scale) / 2.8);
+        const label = terminalRename?.get(prim.text) ?? prim.text;
+        ctx.fillText(label, p.x, p.y + (prim.height * vp.scale) / 2.8);
         break;
       }
     }
@@ -469,8 +477,17 @@ export function drawSymbol(
   // ジャンパバー (G5): 端子台のattrs.jumpersを、端子の印の隙間を埋める太い線として描く
   // (SVG出力のrender_jumper_barsと同じジオメトリ。表示クラスは"symbols"に含まれる)
   if (inst.symbol_id.startsWith("terminal_block_")) {
-    const pairs = parseJumperSpec(inst.attrs.jumpers ?? "", terminalNumbers(def));
-    const bars = jumperBars(def, pairs);
+    const rawTerminals = terminalNumbers(def);
+    const displayTerminals = terminalNumbersOfInstance(def, inst.attrs);
+    const pairs = parseJumperSpec(inst.attrs.jumpers ?? "", displayTerminals, rawTerminals);
+    // ジオメトリ(jumperBars)はシンボル定義の生のピン番号でしか端子を探せないので、
+    // 表示ラベルの組を生の番号の組へ戻してから渡す(端子番号の上書き = Task 2)
+    const dispToRaw = new Map(displayTerminals.map((d, i) => [d, rawTerminals[i]] as const));
+    const rawPairs: [string, string][] = pairs.map(([a, b]) => [
+      dispToRaw.get(a) ?? a,
+      dispToRaw.get(b) ?? b,
+    ]);
+    const bars = jumperBars(def, rawPairs);
     if (bars.length > 0) {
       const lineWidth = ctx.lineWidth;
       ctx.lineWidth = Math.max(1, JUMPER_BAR_STROKE_MM * vp.scale);
@@ -490,7 +507,7 @@ export function drawSymbol(
   // pinGroupBrackets側で既に除いているので、ここでは求まったものをそのまま描くだけ
   const pinGroupsSpec = inst.attrs[PIN_GROUPS_ATTR];
   if (pinGroupsSpec) {
-    for (const bracket of pinGroupBrackets(def, pinGroupsSpec)) {
+    for (const bracket of pinGroupBrackets(def, pinGroupsSpec, terminalRename)) {
       const lineWidth = ctx.lineWidth;
       ctx.lineWidth = Math.max(1, SYMBOL_STROKE_MM * vp.scale);
       ctx.beginPath();

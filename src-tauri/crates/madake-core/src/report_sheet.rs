@@ -270,6 +270,12 @@ fn text_units(s: &str) -> f64 {
     s.chars().map(|c| if c.is_ascii() { 1.0 } else { 2.0 }).sum()
 }
 
+/// 文字列を描いたときの幅 (mm)。[`fit_text`]が収まるかどうかを判断するのと同じ見積り。
+/// レイアウトの側でテキストの分の場所を先に確保するのに使う (端子接続図の段レーンの帯)。
+pub(crate) fn text_width(s: &str, font: f64) -> f64 {
+    text_units(s) * font * HALF_CHAR_RATIO
+}
+
 /// セル内テキストを列幅に収める。溢れる場合は末尾を落として [`ELLIPSIS`] を付ける。
 pub(crate) fn fit_text(s: &str, max_w: f64, font: f64) -> String {
     let unit = font * HALF_CHAR_RATIO;
@@ -895,6 +901,66 @@ mod tests {
         assert_eq!(chart.rows.len(), 4);
         for cell in chart.cells().iter().flatten().filter(|c| !c.is_empty()) {
             assert!(t.contains(cell), "{cell}: {t:?}");
+        }
+    }
+
+    /// The framed terminal chart sheet draws its rows in the chart's own row order, so changing `row_order` really moves the rows down the drawing sheet instead of only relabelling them.
+    /// 図枠付きの端子台チャートシートは、チャートと同じ行順でセルを描く。`row_order`を変えると図面シート上の行の位置そのものが動く (見出しだけ変わるのではない)。
+    #[test]
+    fn the_terminal_chart_sheet_draws_the_rows_in_the_chart_row_order() {
+        // 12極なら英数順("1","10",…)が数値順と、ジャンパ順(2・3が先頭)が両方と食い違う
+        let tb12 = |order: &str| {
+            let mut project = Project::new("並べ替え");
+            let mut attrs: std::collections::BTreeMap<String, String> = Default::default();
+            attrs.insert("jumpers".into(), "2-3".into());
+            attrs.insert("row_order".into(), order.into());
+            let tb = Entity::Symbol(SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: "terminal_block_12p".into(),
+                at: Point::new(150.0, 100.0),
+                rotation: 0,
+                mirror: false,
+                reference: "TB1".into(),
+                value: String::new(),
+                attrs,
+            });
+            let tb_id = tb.id();
+            project.sheets[0].entities.insert(tb_id, tb);
+            (project, tb_id)
+        };
+        // 見出し行の直後から、空でないセルが行→列の順に並ぶ
+        let cell_texts = |svg: &str| -> Vec<String> {
+            let all = texts(svg);
+            let head = all.iter().position(|s| s == "端子").expect("見出し行");
+            all[head + crate::terminal_chart::TERMINAL_CHART_COLUMNS.len()..].to_vec()
+        };
+        let terminal_column = |svg: &str, chart: &crate::terminal_chart::TerminalChart| -> Vec<String> {
+            let known: Vec<&str> = chart.rows.iter().map(|r| r.terminal.as_str()).collect();
+            cell_texts(svg)
+                .into_iter()
+                .filter(|s| known.contains(&s.as_str()))
+                .collect()
+        };
+
+        for (order, expected) in [
+            ("alnum", ["1", "10", "11", "12", "2", "3", "4", "5", "6", "7", "8", "9"]),
+            ("jumper", ["2", "3", "1", "4", "5", "6", "7", "8", "9", "10", "11", "12"]),
+        ] {
+            let (project, tb) = tb12(order);
+            let chart = crate::terminal_chart::terminal_chart(&project.sheets[0], tb).expect("チャート");
+            let pages = terminal_chart_sheet_svg(&project, tb).expect("端子台");
+            assert_eq!(pages.len(), 1, "{order}: 12行は1ページ");
+            // 端子列の並びが並べ替え順そのもの (contains ではなく位置で確かめる)
+            assert_eq!(terminal_column(&pages[0], &chart), expected, "{order}: 端子列の並び");
+            // 全セルも行→列の順でチャートと一致する (行が丸ごと動いている)
+            let want: Vec<String> = chart
+                .cells()
+                .iter()
+                .flatten()
+                .filter(|c| !c.is_empty())
+                .cloned()
+                .collect();
+            assert_eq!(cell_texts(&pages[0])[..want.len()], want[..], "{order}: 全セルの並び");
         }
     }
 

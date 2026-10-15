@@ -783,11 +783,16 @@
       "internal": "Cible interne",
       "wireNo": "N° de fil",
       "wire": "Fil",
-      "status": "État"
+      "status": "État",
+      "level": "Lv"
     },
     "spare": "réserve",
     "addJumper": "Ajouter un pont",
     "removeJumper": "Supprimer le pont",
+    "swap": "Swap sides",
+    "swapHint": "Swaps the inside and outside of the selected terminals (press again to swap back)",
+    "swapped": "Swapped",
+    "swapLog": "{reference}: swapped the sides of terminals {terminals}",
     "jumperHint": "Sélectionnez des bornes voisines et ajoutez un pont de liaison. Chaque modification passe par une commande, donc Cmd+Z l'annule.",
     "check": "Vérifier le bornier",
     "checkPending": "Pas encore vérifié",
@@ -795,15 +800,49 @@
     "checkCounts": "{error} erreur(s) / {warning} avertissement(s) / {info} note(s)",
     "generateDiagram": "Générer le schéma de raccordement",
     "generateChart": "Générer le tableau",
-    "phase2Hint": "prévu pour la phase 2",
-    "phase2": {
-      "sort": "Trier",
-      "autoNumber": "Renuméroter",
-      "spareTerminal": "Insérer une réserve",
-      "multiLevel": "Multi-étage",
-      "accessory": "Accessoires",
-      "swap": "Permuter int./ext.",
-      "goto": "Aller au schéma"
+    "insertSpare": "Insert spare",
+    "spareInsert": {
+      "title": "Insert spare terminal",
+      "description": "One update_entity (symbol_id + terminal_numbers)",
+      "positionLabel": "Insert position:",
+      "positionEnd": "At the end",
+      "positionAfter": "After {after}",
+      "countLabel": "Count:",
+      "numberMode": "Numbering",
+      "modeShift": "Add a pole at the end and shift the numbers down",
+      "modeKeep": "Leave the spare with a vacant number",
+      "modeKeepHint": "Following labels stay as they are; the spare takes the next free number (refused if it would collide)",
+      "previewLabel": "Preview",
+      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) · both sides unconnected",
+      "note": "Shifting the numbers never moves a pin's coordinates, so existing wiring stays connected",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "issueCount": "Enter a count of 1 or more",
+      "issuePoleCap": "Exceeds the maximum pole count (limit {max})",
+      "issueInvalid": "This cannot be applied",
+      "modeShiftHint": "Following terminals are renumbered so the labels stay contiguous",
+      "issueNonNumeric": "The label at the insertion point ({label}) has no number, so the spare cannot be numbered",
+      "issueKeepDuplicate": "Leaving the number vacant would collide with an existing terminal; choose 'shift' instead"
+    },
+    "multiLevel": "Multi-étage",
+    "levels": {
+      "label": "Étages",
+      "description": "Fait basculer ce bornier entre un étage et plusieurs étages. La disposition des broches, le tableau et le schéma de raccordement suivent.",
+      "hint": "Réduire les étages est refusé si un câblage, un pontet, un groupe de broches ou un accessoire fait encore référence à l'étage qui disparaîtrait. L'étage 1 revient au symbol_id à un seul étage (jamais un alias « _1l »).",
+      "range": "Étages 1-{max} ; hors de cette plage, c'est refusé.",
+      "preview": "Aperçu",
+      "previewNumbers": "Numéros de borne {from} → {to}",
+      "previewJumpers": "Pontets {from} → {to}",
+      "blockers": "Étages qui disparaîtraient",
+      "issue": "Un étage encore raccordé ne peut pas être supprimé. Libérez d'abord la borne {terminal}.",
+      "blocker": {
+        "wire": "raccordé",
+        "jumper": "pontet",
+        "pinGroup": "groupe de broches",
+        "accessory": "accessoire"
+      },
+      "cancel": "Annuler",
+      "apply": "Appliquer"
     },
     "hint": "La grille est dérivée du schéma (le câblage, les numéros de fil et les fils ne sont pas modifiables ici). L'intérieur de l'armoire correspond au point de raccordement gauche, l'extérieur au point droit.",
     "openLog": "Éditeur de bornier : modification des borniers de « {sheet} »",
@@ -813,7 +852,85 @@
     "jumperRemovedLog": "Éditeur de bornier : ponts des bornes {terminals} de {reference} supprimés (annuler avec Cmd+Z)",
     "checkLog": "Éditeur de bornier : {reference} vérifié - {result}",
     "chartLog": "Éditeur de bornier : tableau de {reference} ({count} ligne(s)) écrit dans {path}",
-    "diagramLog": "Éditeur de bornier : schéma de raccordement de {reference} ({count} page(s)) écrit dans {path}"
+    "diagramLog": "Éditeur de bornier : schéma de raccordement de {reference} ({count} page(s)) écrit dans {path}",
+    "sort": {
+      "label": "Sort:",
+      "number": "Number",
+      "alnum": "Alphanumeric",
+      "page": "Page (drawing order)",
+      "cable": "External cable",
+      "jumper": "Jumper"
+    },
+    "goto": "Go to drawing",
+    "gotoHint": "Double-click a row to jump to it on the drawing",
+    "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing",
+    "autoNumber": "Renuméroter",
+    "renumber": {
+      "start": "Numéro de départ",
+      "step": "Incrément",
+      "prefix": "Préfixe",
+      "target": "Cible",
+      "preview": "Aperçu",
+      "cancel": "Annuler",
+      "apply": "Appliquer",
+      "description": "Renumérote toutes les bornes de ce bornier dans l'ordre des broches. Le tableau, le schéma de raccordement et le plan suivent.",
+      "note": "Les pontages et les groupes de broches sont réécrits avec les nouveaux numéros dans la même commande : une seule annulation rétablit tout.",
+      "targetAll": "Toutes les bornes",
+      "targetSelected": "Lignes sélectionnées ({count})",
+      "targetSelectedHint": "Renuméroter uniquement les lignes sélectionnées est prévu pour une phase ultérieure",
+      "jumpers": "Pontages {from} → {to}",
+      "issueDuplicate": "Les numéros de borne se répéteraient ({label} apparaît {count} fois). Le plan reste inchangé.",
+      "issueEmpty": "Un numéro de borne serait vide. Le plan reste inchangé.",
+      "issueComma": "Un numéro de borne contiendrait une virgule ({label}), le séparateur de la liste enregistrée. Le plan reste inchangé.",
+      "issueInvalid": "Ces numéros ne peuvent pas être appliqués. Le plan reste inchangé.",
+      "issueNoBlock": "Aucun bornier à renuméroter."
+    },
+    "renumberedLog": "Éditeur de bornier : {reference} renuméroté de {from} à {to} (annuler avec Cmd+Z)",
+    "levelsChangedLog": "Éditeur de bornier : {reference} passé de {from} à {to} étage(s) (annuler avec Cmd+Z)",
+    "spareInsertedLog": "Terminal editor: inserted {count} spare terminal(s) ({labels}) into {reference} (undo with Cmd+Z)",
+    "assignPart": {
+      "button": "Assign part",
+      "title": "Assign part (terminal block part number)",
+      "description": "Assigns a part number from the parts database. The part number and the terminal kind are written in one edit (Cmd+Z undoes it)",
+      "search": "Search by part number or name",
+      "results": "Results ({count})",
+      "empty": "No terminal block parts found",
+      "hint": "The kind comes from the parts database's terminal_kind column. It is copied to the terminal block on assignment and read by the chart and the terminal check",
+      "cancel": "Cancel",
+      "apply": "Assign",
+      "assignedLog": "Terminal block: assigned part {partNo} to {reference} (Cmd+Z undoes it)"
+    },
+    "accessory": {
+      "button": "Accessories",
+      "title": "Accessories",
+      "description": "Adds end brackets, partitions and end plates to the terminal block",
+      "position": "Position",
+      "kind": "Kind",
+      "partNo": "Part no.",
+      "positionEnd": "End",
+      "positionBefore": "Before {terminal}",
+      "addRow": "Add row",
+      "removeRow": "Remove this row",
+      "unknownPart": "{partNo} is not in the parts database (you can still apply; the BOM lists it under this part number)",
+      "skipped": "Items that cannot be read are skipped: {items}",
+      "hint": "Position = the accessory goes right before that terminal; End = after the last terminal. Kinds: end bracket / partition / end plate",
+      "bomNote": "The BOM lists one quantity row per part number. Accessory widths are not counted by the panel layout spacing check",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "appliedLog": "Terminal block: {reference} now has {count} accessories (Cmd+Z undoes it)"
+    },
+    "accessoryKind": {
+      "end_bracket": "End bracket",
+      "partition": "Partition",
+      "end_plate": "End plate"
+    },
+    "terminalKind": {
+      "feed_through": "Feed-through",
+      "multi_level": "Multi-level",
+      "fuse": "Fuse",
+      "disconnect": "Disconnect"
+    }
   },
   "plcIo": {
     "ribbonButton": "Table E/S automate",
@@ -984,14 +1101,14 @@
       "connectFailedLog": "AGENT   Impossible de se connecter à l'agent : {error}",
       "emptyConnected": "Dites à l'agent ce qu'il doit faire sur le schéma. Les modifications sont appliquées automatiquement et peuvent être annulées ensuite.",
       "emptyDisconnected": "Aucun fournisseur d'IA n'est prêt. Choisissez-en un dans Paramètres > Agent (Claude Code CLI, clé API, Copilot CLI, Ollama...).",
-      "replyPlaceholder": "Saisissez une réponse..."
+      "replyPlaceholder": "Saisissez une réponse... (⌘Enter / Ctrl+Enter)"
     },
     "panel": {
       "titleActive": "Agent de circuit",
       "titleNew": "Nouvel agent",
       "expand": "Agrandir",
       "minimize": "Réduire",
-      "placeholder": "Demandez ce que vous voulez... (ex. ajouter un fusible sur le rail 24 V)"
+      "placeholder": "Demandez ce que vous voulez... (ex. ajouter un fusible sur le rail 24 V) (⌘Enter / Ctrl+Enter)"
     },
     "message": {
       "working": "L'agent travaille...",
@@ -1002,9 +1119,10 @@
     "composer": {
       "addContext": "Ajouter du contexte",
       "stop": "Arrêter",
-      "send": "Envoyer",
+      "send": "Envoyer (⌘Enter / Ctrl+Enter)",
       "sendFailedLog": "AGENT   Envoi impossible (voir l'erreur dans le chat)",
-      "cancelFailedLog": "AGENT   Échec de l'arrêt : {error}"
+      "cancelFailedLog": "AGENT   Échec de l'arrêt : {error}",
+      "interrupt": "Interrupt and send (⌘Enter / Ctrl+Enter) — stops the running turn first"
     },
     "context": {
       "head": "Ajouter du contexte",

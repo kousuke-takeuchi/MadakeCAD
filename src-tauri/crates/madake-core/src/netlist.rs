@@ -145,6 +145,40 @@ pub fn label_is_attached(sheet: &Sheet, symbols: &[SymbolDef], at: &Point) -> bo
     })
 }
 
+/// 点`at`に**電気的な接続物が載っているか** (座標一致の判定)。
+///
+/// [`extract_netlist`]がネットを繋ぐのと同じ4通りを見る: 配線の線分上 ([`on_wire`]。
+/// 端点だけでなく途中も含む)・ジャンクション・ネットラベル・**他のシンボルのピン**。
+/// `exclude`に渡したエンティティ (通常は判定対象の端子台そのもの) は無視するので、
+/// 「自分のピンがそこにある」ことは接続とは数えない。
+///
+/// 端子台チャートの`spare`は配線 (`Entity::Wire`) だけを数えるので、ネットラベルや
+/// ジャンクションだけが載っている端子を「予備」と見てしまう。段数を減らす
+/// ([`crate::command::Engine`]の`SetTerminalLevels`) ときの拒否判定は、
+/// **図面から消えるピンに何か繋がっていないか**をこの関数で見る。
+pub fn point_is_attached(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    at: &Point,
+    exclude: Option<EntityId>,
+) -> bool {
+    let defs = crate::symbol::DefIndex::new(symbols);
+    sheet.entities.values().any(|entity| {
+        if Some(entity.id()) == exclude {
+            return false;
+        }
+        match entity {
+            Entity::Wire(w) => on_wire(w, at),
+            Entity::Junction(j) => near(&j.at, at),
+            Entity::NetLabel(l) => near(&l.at, at),
+            Entity::Symbol(s) => defs
+                .get(s)
+                .is_some_and(|def| pin_positions(s, &def).iter().any(|(_, pos)| near(pos, at))),
+            _ => false,
+        }
+    })
+}
+
 /// シートからネットリストを導出する。
 ///
 /// 接続ルール:

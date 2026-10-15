@@ -92,7 +92,51 @@ pub fn bom_rows(project: &Project) -> Vec<Vec<String>> {
         })
         .collect();
     rows.extend(wire_rollup_rows(project));
+    rows.extend(accessory_rows(project));
     rows
+}
+
+/// 付属品行の「シンボル」欄に立てる印 (回路のシンボルではなく端子台付属品の行であることを表す)。
+pub const BOM_ACCESSORY_KIND: &str = "端子台付属品";
+
+/// 部品表末尾に足す端子台付属品の行 (M4 §1.1)。全端子台の`attrs["accessories"]`を
+/// 型番ごとに数え、「数量」欄へ個数、「参照記号」欄へ使っている端子台を書く。
+/// **型番が空の付属品は載せない** (部品表に空行を作らない)。端子台チャートと同じ解析
+/// ([`crate::terminal_chart::parse_accessories`]) を通るので、読めない項も数えない。
+/// 電線集約行の**後ろ**に付く。
+fn accessory_rows(project: &Project) -> Vec<Vec<String>> {
+    let mut groups: BTreeMap<String, (usize, Vec<String>)> = BTreeMap::new();
+    for sheet in &project.sheets {
+        for (id, entity) in &sheet.entities {
+            let Entity::Symbol(s) = entity else { continue };
+            if !crate::terminal_chart::is_terminal_block(&s.symbol_id) {
+                continue;
+            }
+            let Some(chart) = crate::terminal_chart::terminal_chart(sheet, *id) else {
+                continue;
+            };
+            for a in chart.accessories.iter().filter(|a| !a.part_no.is_empty()) {
+                let entry = groups.entry(a.part_no.clone()).or_default();
+                entry.0 += 1;
+                if !entry.1.contains(&s.reference) {
+                    entry.1.push(s.reference.clone());
+                }
+            }
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(part_no, (count, mut refs))| {
+            refs.sort();
+            vec![
+                String::new(),
+                refs.join(", "),
+                part_no,
+                BOM_ACCESSORY_KIND.into(),
+                count.to_string(),
+            ]
+        })
+        .collect()
 }
 
 /// 電線集約行のうち、電線品番が引けなかった配線をまとめる行の「型番/値」欄。
@@ -104,7 +148,8 @@ pub const BOM_WIRE_KIND: &str = "電線";
 /// 部品表末尾に足す電線集約行 (G9残)。プロジェクト全体の配線を電線品番ごとに合算し、
 /// 総使用長を「数量」欄へ m 単位・小数第2位までで書く (電線品番凡例ブロック
 /// [`crate::wire_legend`] の使用長と同じ書式)。品番が引けない配線は
-/// [`BOM_WIRE_UNASSIGNED`]の1行にまとめる (勝手に品番を作らない)。
+/// [`BOM_WIRE_UNASSIGNED`]の1行にまとめる (勝手に品番を作らない。合計が0mなら行を出さない)。
+/// 数量欄は部品行と違い**単位付き** (`"3.75 m"`)。個数ではなく長さであることを一目で示すため。
 /// 部品行の**後ろ**に付く (呼び出し元の[`bom_rows`])。列数は部品行と同じ5列のまま。
 fn wire_rollup_rows(project: &Project) -> Vec<Vec<String>> {
     let mut totals: BTreeMap<String, f64> = BTreeMap::new();
@@ -129,7 +174,8 @@ fn wire_rollup_rows(project: &Project) -> Vec<Vec<String>> {
             vec![String::new(), String::new(), part_no, BOM_WIRE_KIND.into(), format!("{total:.2} m")]
         })
         .collect();
-    if has_unassigned {
+    // 使用長の入っていない配線しか無いとき「(未割当) 0.00 m」は何も伝えないので出さない
+    if has_unassigned && unassigned > 0.0 {
         rows.push(vec![
             String::new(),
             String::new(),
@@ -559,6 +605,63 @@ mod tests {
         let roll_up = rows.last().expect("集約行がある");
         assert_eq!(roll_up[2], BOM_WIRE_UNASSIGNED);
         assert_eq!(roll_up[4], "4.00 m");
+    }
+
+    /// 端子台TB(n極)に付属品の指定を付けた記号。
+    fn tb_with_accessories(reference: &str, poles: usize, spec: &str) -> Entity {
+        let mut attrs = std::collections::BTreeMap::new();
+        attrs.insert("accessories".to_string(), spec.to_string());
+        Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: format!("terminal_block_{poles}p"),
+            at: Point::new(100.0, 100.0),
+            rotation: 0,
+            mirror: false,
+            reference: reference.into(),
+            value: "SAMPLE0001".into(),
+            attrs,
+        })
+    }
+
+    /// Terminal block accessories appear in the BOM as one row per part number with how many are used, listing the terminal blocks that use them, after the wire roll-up rows.
+    /// 端子台の付属品は部品表に型番ごとの1行として載り、数量欄に使用個数、参照記号欄に使っている端子台が入り、電線集約行の後ろに来る。
+    #[test]
+    fn bom_counts_terminal_accessories_by_part_number() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        for e in [
+            tb_with_accessories("TB1", 4, "1:end_bracket:SAMPLE-EB,end:end_bracket:SAMPLE-EB,3:partition:SAMPLE-PT"),
+            tb_with_accessories("TB2", 2, "end:end_bracket:SAMPLE-EB"),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let rows = bom_rows(&project);
+        let acc: Vec<&Vec<String>> = rows.iter().filter(|r| r[3] == BOM_ACCESSORY_KIND).collect();
+        assert_eq!(acc.len(), 2);
+        assert_eq!(&acc[0][1..], ["TB1, TB2", "SAMPLE-EB", BOM_ACCESSORY_KIND, "3"]);
+        assert_eq!(&acc[1][1..], ["TB1", "SAMPLE-PT", BOM_ACCESSORY_KIND, "1"]);
+    }
+
+    /// An accessory without a part number, or one the terminal check cannot read, adds no row to the BOM.
+    /// 型番の無い付属品や、端子台チェックが読めない付属品の項は、部品表に行を作らない。
+    #[test]
+    fn bom_skips_accessories_without_a_part_number_or_that_cannot_be_read() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let e = tb_with_accessories("TB1", 2, "1:end_bracket,9:end_plate:SAMPLE-EP,2:clip:SAMPLE-X");
+        project.sheet_mut(sid).unwrap().entities.insert(e.id(), e);
+        let rows = bom_rows(&project);
+        assert!(rows.iter().all(|r| r[3] != BOM_ACCESSORY_KIND), "{rows:?}");
+    }
+
+    /// When the only wires whose part number cannot be resolved have no length, the BOM adds no "(unassigned) 0.00 m" row.
+    /// 品番を引けない配線に使用長が1本も入っていないときは、「(未割当) 0.00 m」の行を出さない。
+    #[test]
+    fn bom_adds_no_unassigned_row_when_those_wires_have_no_length() {
+        let project = one_wire_project(|w| w.length_m = None);
+        let rows = bom_rows(&project);
+        assert!(rows.iter().all(|r| r[2] != BOM_WIRE_UNASSIGNED), "{rows:?}");
     }
 
     /// BOM fields containing commas are quoted so the CSV stays valid.

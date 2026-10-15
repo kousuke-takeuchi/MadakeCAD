@@ -1167,6 +1167,40 @@ pub(crate) const TERMINAL_NUMBER_HEIGHT: f64 = 2.0;
 /// 占める (両側の内側ピンの上を通る) ので、その行に配線を通す余地は無い。
 pub const TERMINAL_LEVEL_PITCH: f64 = 10.0;
 
+/// 段数を`old_levels`から`new_levels`へ変えたとき、**段aのピンを用紙上の同じ座標に
+/// 留めるために**インスタンスの`at`をずらすべき量 (シンボルのローカルX方向, mm)。
+///
+/// [`terminal_block_symbol`]の列は原点を中心に左右対称に並ぶので (`column_x`)、段数が
+/// 変わると段aの列の中心が `-(levels - 1) / 2 * ピッチ` だけ動く。段数変更コマンド
+/// ([`crate::command::Engine`]の`SetTerminalLevels`) はこの符号を反転した量だけ
+/// インスタンスを平行移動して、**段aの端子に繋がっている既存の配線が外れない**ようにする
+/// (フェーズ6の列ジオメトリはそのまま残す)。呼び出し側はこの値を
+/// [`crate::netlist::rotate_local`]に通してから`at`へ足すこと (回転・反転を通した向きで
+/// 動かす必要がある)。
+///
+/// 戻り値はピッチの半整数倍 (1<->2で±5mm、1<->3で±10mm) なのでf64で正確に表せ、
+/// 逆方向の変更がちょうど打ち消す。
+pub fn level_origin_shift(old_levels: usize, new_levels: usize) -> f64 {
+    (new_levels as f64 - old_levels as f64) / 2.0 * TERMINAL_LEVEL_PITCH
+}
+
+/// 端子台の極 (行) の縦ピッチ (mm)。[`terminal_block_symbol`]の`offset`が使う。
+pub const TERMINAL_POLE_PITCH: f64 = 5.0;
+
+/// 極数を`old_poles`から`new_poles`へ変えたとき、既存の極 (1..old_poles) を用紙上の同じ
+/// 座標に留めるためにインスタンスの`at`をずらすべき量 (シンボルのローカルY方向, mm)。
+///
+/// [`terminal_block_symbol`]の行 (`offset`) は原点を中心に上下対称に並ぶので、極数が
+/// 変わると**全ての行が一律に** `(new_poles - old_poles) / 2 * ピッチ` だけ動く
+/// ([`level_origin_shift`]と同じ理屈で、対称配置ゆえに全インデックスへの補正量が
+/// 一定になる)。予備端子挿入コマンド (`Command::InsertSpareTerminals`, Task 4) は
+/// この符号を反転した量だけインスタンスを平行移動して、既存の極の結線が外れない
+/// ようにする (新しく増える極は常に**末尾**に置かれる。呼び出し側は
+/// [`crate::netlist::rotate_local`]に通してから`at`へ足すこと)。
+pub fn pole_origin_shift(old_poles: usize, new_poles: usize) -> f64 {
+    (new_poles as f64 - old_poles as f64) / 2.0 * TERMINAL_POLE_PITCH
+}
+
 /// PLCモジュール(`plc_di_{n}p` / `plc_do_{n}p`)の最大点数。
 pub const PLC_POINT_MAX: usize = 64;
 
@@ -1263,11 +1297,20 @@ pub(crate) fn parse_terminal_no(no: &str) -> (u32, Option<char>) {
 /// `terminal_block_`の後ろ (`rest`) を多段端子台の (極数, 段数) にパースする。
 /// `{n}p_{levels}l` の形だけを受け付け (例 "8p_2l")、単段の `{n}p` はNoneを返す
 /// (単段は呼び出し側で[`dynamic_symbol`]の既存経路がそのまま扱う=互換性を保つ)。
+///
+/// **段数は2以上だけを受け付ける** (`_1l`という別名idは作らない。Task 3
+/// 多段端子の生成・解除)。単段は常に`terminal_block_{n}p`という1つのidだけで表す
+/// ([`crate::terminal_chart::multilevel_id`]が段数変更時にこの正規化をする)。
+/// `terminal_block_8p_1l`のような別名idをここで受け付けてしまうと、図面に保存された
+/// `symbol_id`が2通りの綴りを持ててしまい (`resolve_symbol`は両方解決できるが同じ図形)、
+/// 検索・部品DB突き合わせ・段数の判定がidの綴りで割れる。呼び出し側
+/// ([`crate::command::validate_symbol_id`]) はこの関数がNoneを返すことで
+/// `terminal_block_8p_1l`を「知らないシンボル」として拒む。
 fn parse_multilevel_terminal_block(rest: &str) -> Option<(usize, usize)> {
     let (poles_part, levels_part) = rest.split_once('_')?;
     let n: usize = poles_part.strip_suffix('p')?.parse().ok()?;
     let levels: usize = levels_part.strip_suffix('l')?.parse().ok()?;
-    if !(1..=DYNAMIC_PIN_MAX).contains(&n) || !(1..=TERMINAL_LEVEL_MAX).contains(&levels) {
+    if !(1..=DYNAMIC_PIN_MAX).contains(&n) || !(2..=TERMINAL_LEVEL_MAX).contains(&levels) {
         return None;
     }
     Some((n, levels))
@@ -1285,7 +1328,7 @@ fn parse_multilevel_terminal_block(rest: &str) -> Option<(usize, usize)> {
 ///
 /// `levels == 1` では列が1本・ピン番号は数字だけになり、従来の単段端子台と同一の図形になる。
 fn terminal_block_symbol(id: &str, n: usize, levels: usize) -> SymbolDef {
-    let offset = |i: usize| (i as f64 - (n - 1) as f64 / 2.0) * 5.0;
+    let offset = |i: usize| (i as f64 - (n - 1) as f64 / 2.0) * TERMINAL_POLE_PITCH;
     let column_x = |j: usize| (j as f64 - (levels - 1) as f64 / 2.0) * TERMINAL_LEVEL_PITCH;
     let mut primitives: Vec<Primitive> = Vec::new();
     let mut pins = Vec::with_capacity(n * levels * 2);
@@ -1631,7 +1674,8 @@ mod tests {
     /// 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有することはないので、どの端子にも別々に配線できる。
     #[test]
     fn multilevel_terminal_block_pins_are_on_the_grid_and_never_coincide() {
-        for levels in 1..=TERMINAL_LEVEL_MAX {
+        // 段数1は`_1l`という別名idを作らないので対象外 (単段は`terminal_block_4p`で別に検証済み)。
+        for levels in 2..=TERMINAL_LEVEL_MAX {
             let def = resolve_symbol(&format!("terminal_block_4p_{levels}l")).expect("端子台");
             let mut seen: std::collections::HashMap<(i64, i64), String> = Default::default();
             for p in &def.pins {
@@ -1651,6 +1695,13 @@ mod tests {
     fn multilevel_terminal_block_rejects_level_count_outside_one_to_three() {
         assert!(resolve_symbol("terminal_block_8p_0l").is_none());
         assert!(resolve_symbol("terminal_block_8p_4l").is_none());
+    }
+
+    /// "terminal_block_8p_1l" is rejected as an unknown symbol, not accepted as an alias of "terminal_block_8p": a single-level terminal block has exactly one spelling of its symbol_id (Task 3).
+    /// `terminal_block_8p_1l`は`terminal_block_8p`の別名として受け付けず、未知のシンボルとして拒否する: 単段端子台のsymbol_idの綴りは1通りだけにする (Task 3 多段端子の生成・解除)。
+    #[test]
+    fn multilevel_terminal_block_rejects_the_one_level_alias_spelling() {
+        assert!(resolve_symbol("terminal_block_8p_1l").is_none());
     }
 
     /// The single-level terminal block id keeps its plain numeric pin numbers (1, 2, ...) exactly as before, unaffected by the new multi-level id shape, so existing projects stay valid.

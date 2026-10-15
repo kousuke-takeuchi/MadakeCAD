@@ -4,7 +4,7 @@
 //! 未結線の端子も予備端子として行が残る。読み取り専用の純関数で、モデルは変更しない
 //! (ジャンパの編集は `update_entity` コマンドで `attrs["jumpers"]` を書き換える)。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -40,6 +40,139 @@ pub const JUMPER_INVALID: &str = "terminal.jumper_invalid";
 pub const JUMPER_UNKNOWN_TERMINAL: &str = "terminal.jumper_unknown_terminal";
 /// 端子に電線が1本も繋がっていない (予備端子)。
 pub const TERMINAL_UNCONNECTED: &str = "terminal.unconnected";
+/// 付属品の指定 (`attrs["accessories"]`) の1項が読めない・種別が3種以外・端子台に無い端子番号を指す。
+pub const ACCESSORY_INVALID: &str = "terminal.accessory_invalid";
+/// 付属品の指定を持つ属性キー (spec §1.1、`端子番号:種別:型番` のカンマ列)。
+pub const ACCESSORIES_ATTR: &str = "accessories";
+/// 付属品の位置に「端子台の末尾」を指す語。
+pub const ACCESSORY_END: &str = "end";
+/// 内外を入れ替えた端子 (`attrs["swapped"]`、spec §1.1。端子番号のカンマ列)。
+pub const SWAPPED_ATTR: &str = "swapped";
+/// `attrs["swapped"]` が端子台に無い端子番号を指している (その項目だけ無視する)。
+pub const TERMINAL_SWAP_UNKNOWN: &str = "erc.terminal_swap_unknown";
+
+/// `attrs["swapped"]` (`"3,4"`) を解析し、(入れ替える端子, 端子台に無い端子番号) を返す。
+/// `labels` は端子台の表示ラベル。空の項は無視し、空指定は入替なしと同じ。
+pub fn swapped_terminals(spec: &str, labels: &[String]) -> (BTreeSet<String>, Vec<String>) {
+    let mut swapped = BTreeSet::new();
+    let mut unknown = Vec::new();
+    for item in spec.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        if labels.iter().any(|l| l == item) {
+            swapped.insert(item.to_string());
+        } else if !unknown.iter().any(|u| u == item) {
+            unknown.push(item.to_string());
+        }
+    }
+    (swapped, unknown)
+}
+
+/// 端子台の付属品の種別 (spec §1.1 の3種だけ。EPLANの端子台アクセサリと同じ分類)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AccessoryKind {
+    /// エンドブラケット (端子台の両端の固定金具)。
+    EndBracket,
+    /// 仕切り板 (端子の間の絶縁板)。
+    Partition,
+    /// エンドプレート (端子台の端を覆う板)。
+    EndPlate,
+}
+
+impl AccessoryKind {
+    /// 属性の書式で使う語 (`end_bracket` / `partition` / `end_plate`)。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AccessoryKind::EndBracket => "end_bracket",
+            AccessoryKind::Partition => "partition",
+            AccessoryKind::EndPlate => "end_plate",
+        }
+    }
+    /// 帳票に出す名前。
+    pub fn label(self) -> &'static str {
+        match self {
+            AccessoryKind::EndBracket => "エンドブラケット",
+            AccessoryKind::Partition => "仕切り板",
+            AccessoryKind::EndPlate => "エンドプレート",
+        }
+    }
+    fn parse(s: &str) -> Option<Self> {
+        match s {
+            "end_bracket" => Some(AccessoryKind::EndBracket),
+            "partition" => Some(AccessoryKind::Partition),
+            "end_plate" => Some(AccessoryKind::EndPlate),
+            _ => None,
+        }
+    }
+}
+
+/// 端子台の付属品1個 (`attrs["accessories"]` の1項)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Accessory {
+    /// この端子の**直前**に入る (表示ラベル)。`None` は端子台の末尾。
+    pub before: Option<String>,
+    pub kind: AccessoryKind,
+    /// 型番 (空なら部品表に載せない)。
+    pub part_no: String,
+}
+
+/// 読めなかった付属品の項。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AccessoryIssue {
+    /// 元の項の文字列 (前後の空白を除いたもの)。
+    pub text: String,
+    pub message: String,
+}
+
+/// `attrs["accessories"]` (`"端子番号:種別:型番,…"`) を解析する。`labels` は端子台の表示ラベル。
+///
+/// 読めた項は書いた順に返す。読めない項・3種以外の種別・`labels`に無い端子番号を指す項は
+/// **その項だけ**を飛ばして`issues`に載せる (端子台チェックがWarningにする)。空の項は無視。
+/// 型番は省略できる (`"1:end_bracket:"` や `"1:end_bracket"`。部品表には載らない)。
+pub fn parse_accessories(spec: &str, labels: &[String]) -> (Vec<Accessory>, Vec<AccessoryIssue>) {
+    let mut items = Vec::new();
+    let mut issues = Vec::new();
+    for raw in spec.split(',') {
+        let text = raw.trim();
+        if text.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = text.split(':').map(str::trim).collect();
+        if parts.len() < 2 || parts.len() > 3 || parts[0].is_empty() {
+            issues.push(AccessoryIssue {
+                text: text.into(),
+                message: "「端子番号:種別:型番」の形で書いてください".into(),
+            });
+            continue;
+        }
+        let Some(kind) = AccessoryKind::parse(parts[1]) else {
+            issues.push(AccessoryIssue {
+                text: text.into(),
+                message: format!(
+                    "種別「{}」は使えません (end_bracket / partition / end_plate のいずれか)",
+                    parts[1]
+                ),
+            });
+            continue;
+        };
+        let before = if parts[0] == ACCESSORY_END {
+            None
+        } else if labels.iter().any(|l| l == parts[0]) {
+            Some(parts[0].to_string())
+        } else {
+            issues.push(AccessoryIssue {
+                text: text.into(),
+                message: format!("端子 {} はこの端子台にありません", parts[0]),
+            });
+            continue;
+        };
+        items.push(Accessory {
+            before,
+            kind,
+            part_no: parts.get(2).copied().unwrap_or("").to_string(),
+        });
+    }
+    (items, issues)
+}
 
 /// `symbol_id` が端子台シンボル (`terminal_block_{n}p`) かどうか。
 pub fn is_terminal_block(symbol_id: &str) -> bool {
@@ -95,9 +228,177 @@ pub struct TerminalBlockInfo {
 }
 
 /// 端子番号の並べ替えキー (極番号→段記号→表記)。単段は段記号なし、多段 (G6) は `1a` の `a`。
-fn terminal_sort_key(no: &str) -> (u32, Option<char>, String) {
+pub(crate) fn terminal_sort_key(no: &str) -> (u32, Option<char>, String) {
     let (pole, level) = parse_terminal_no(no);
     (pole, level, no.to_string())
+}
+
+/// `attrs["row_order"]` のキー名。
+pub const ROW_ORDER_ATTR: &str = "row_order";
+
+/// 端子台チャートの行の並べ替え順 (spec §1.1)。`attrs["row_order"]` の値。
+///
+/// どの並びでも**極→段の順で必ず隣り合う** ([`sort_terminal_rows`] が極単位でまとめて動かすため。
+/// EPLANの「多段端子はグループを保って移動」を、行の並べ替えではなくキーの組で満たす)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RowOrder {
+    /// 数値順 (既定)。極番号を数値として昇順に並べる (現在のチャートの自然順と同じ)。
+    #[default]
+    Number,
+    /// 英数順。端子番号の**表記そのもの**を文字列として辞書順に並べる (2桁以上で数値順と結果が
+    /// 変わる。例: "10" は "2" より前に来る)。多段は極の中で最も小さい表記 (`1a`) を代表にする。
+    Alnum,
+    /// ページ順 (回路図の出現順)。その極の配線 (内部側・外部側どちらか) が、端子台と
+    /// 同じシート上で読み順 (上→下、同じ行なら左→右) に最初に現れる位置の順に並べる
+    /// ([`crate::xref::zone_at`] のゾーンで比較)。どちらの側にも配線が無い極 (予備) は
+    /// 最後に回り、その中では極番号順。
+    Page,
+    /// 外部ケーブル順。外部側 (盤外) のハーネス名が最初に現れた極の順にまとめる
+    /// (名前の辞書順ではなく、初出順。同じ名前の極どうしは隣り合う)。
+    /// ハーネス名を持たない極は最後に回り、その中では極番号順。
+    Cable,
+    /// ジャンパ順。ジャンパが1本でも掛かっている極を極番号順で先頭にまとめ、
+    /// ジャンパの無い極をその後ろに極番号順で並べる。
+    Jumper,
+}
+
+impl RowOrder {
+    /// `attrs["row_order"]` に書く文字列表現。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RowOrder::Number => "number",
+            RowOrder::Alnum => "alnum",
+            RowOrder::Page => "page",
+            RowOrder::Cable => "cable",
+            RowOrder::Jumper => "jumper",
+        }
+    }
+}
+
+/// `attrs["row_order"]` を解析する。未設定・未知語は [`RowOrder::Number`] に落ちる。
+pub fn row_order_of(attrs: &BTreeMap<String, String>) -> RowOrder {
+    match attrs.get(ROW_ORDER_ATTR).map(String::as_str) {
+        Some("alnum") => RowOrder::Alnum,
+        Some("page") => RowOrder::Page,
+        Some("cable") => RowOrder::Cable,
+        Some("jumper") => RowOrder::Jumper,
+        _ => RowOrder::Number,
+    }
+}
+
+/// 図面上の位置を読み順 (行=英字を上から、列=数字を左から) で比較できる形にする
+/// ([`crate::xref::zone_at`] が作る `"B3"` のような表記を`(行, 列)`へ戻すだけ)。
+fn reading_order_key(sheet: &Sheet, p: Point) -> (char, u32) {
+    let zone = crate::xref::zone_at(sheet, p);
+    let mut chars = zone.chars();
+    let row = chars.next().unwrap_or('A');
+    let col: u32 = chars.as_str().parse().unwrap_or(0);
+    (row, col)
+}
+
+/// [`TerminalChart::rows`] を`order`に並べ替える。多段端子は**極単位でまとめて動かす**ので、
+/// どの並びでも極→段の順が崩れない ([`RowOrder`] 参照)。
+///
+/// ページ順だけ図面上の位置が要るので、`page_points` (`rows`と同じ順で、その行の配線の
+/// 反対側にある代表点。配線が無い行はNone。`rows`より短ければ足りない行は配線無しとして扱う)
+/// と`sheet`を渡す。それ以外の並びは`rows`自身が
+/// 持つ情報 (ジャンパ欄・外部ハーネス欄) だけで決まる。
+///
+/// これがチャートの並び順を決める**唯一の関数**。CSV・図枠付き図面シート・端子接続図は
+/// いずれもここが返した [`TerminalChart::rows`] をそのまま使って描く (順序を独自に持たない)
+/// ので、3つの出力は常に同じ並びになる。
+///
+/// **`RowOrder::Number`も並べ替える** (以前は「生のピン順=既に数値順」という前提で
+/// 素通ししていたが、予備端子挿入 (Task 4) は新しい極を必ず**末尾**に足すため、生のピン順と
+/// 表示番号の昇順が食い違う — 挿入した予備の番号は指定した端子の直後になるが、
+/// 物理的な行は末尾に生まれる。素通しのままだと予備行が末尾に描かれてしまい、
+/// 「番号の後ろに挿入した」という見た目にならない。ここで`Number`も他の並びと同じ
+/// クラスタ+ソートを通すことで、`terminal_numbers`が振った番号どおりの見た目になる)。
+pub fn sort_terminal_rows(
+    rows: &mut Vec<TerminalRow>,
+    order: RowOrder,
+    page_points: &[Option<Point>],
+    sheet: &Sheet,
+) {
+    if rows.len() <= 1 {
+        return;
+    }
+    // 極ごとにまとめる (rowsは既に極→段の順で渡ってくるので、隣り合う同じ極をまとめるだけでよい)
+    let mut clusters: Vec<(u32, Vec<usize>)> = Vec::new();
+    for (i, r) in rows.iter().enumerate() {
+        let pole = parse_terminal_no(&r.terminal).0;
+        match clusters.last_mut() {
+            Some((p, idxs)) if *p == pole => idxs.push(i),
+            _ => clusters.push((pole, vec![i])),
+        }
+    }
+
+    // 外部ケーブル順: ハーネス名の初出順を先に求めておく
+    let mut cable_rank: BTreeMap<String, usize> = BTreeMap::new();
+    if order == RowOrder::Cable {
+        for (_, idxs) in &clusters {
+            for &i in idxs {
+                let h = &rows[i].external_harness;
+                if !h.is_empty() && !cable_rank.contains_key(h) {
+                    let rank = cable_rank.len();
+                    cable_rank.insert(h.clone(), rank);
+                }
+            }
+        }
+    }
+
+    clusters.sort_by(|a, b| match order {
+        RowOrder::Number => a.0.cmp(&b.0),
+        // 極番号の数値ではなく端子番号の表記で比較する (Task 2の`terminal_numbers`で
+        // "A1"のような表記が入っても英数順のままになるように)
+        RowOrder::Alnum => {
+            let key = |c: &(u32, Vec<usize>)| -> (&str, u32) {
+                let text = c.1.iter().map(|&i| rows[i].terminal.as_str()).min().unwrap_or("");
+                (text, c.0)
+            };
+            key(a).cmp(&key(b))
+        }
+        RowOrder::Page => {
+            let key = |c: &(u32, Vec<usize>)| -> (bool, Option<(char, u32)>, u32) {
+                let best = c
+                    .1
+                    .iter()
+                    .filter_map(|&i| page_points.get(i).copied().flatten())
+                    .map(|p| reading_order_key(sheet, p))
+                    .min();
+                (best.is_none(), best, c.0)
+            };
+            key(a).cmp(&key(b))
+        }
+        RowOrder::Cable => {
+            let key = |c: &(u32, Vec<usize>)| -> (bool, usize, u32) {
+                let rank = c
+                    .1
+                    .iter()
+                    .filter_map(|&i| {
+                        let h = &rows[i].external_harness;
+                        if h.is_empty() { None } else { cable_rank.get(h).copied() }
+                    })
+                    .min();
+                (rank.is_none(), rank.unwrap_or(usize::MAX), c.0)
+            };
+            key(a).cmp(&key(b))
+        }
+        RowOrder::Jumper => {
+            let has_jumper = |c: &(u32, Vec<usize>)| c.1.iter().any(|&i| !rows[i].jumper.is_empty());
+            (!has_jumper(a), a.0).cmp(&(!has_jumper(b), b.0))
+        }
+    });
+
+    // 各行の「並べ替え後の位置」を求め、その位置で並べ直す
+    let mut rank = vec![0usize; rows.len()];
+    for (pos, &i) in clusters.iter().flat_map(|(_, idxs)| idxs.iter()).enumerate() {
+        rank[i] = pos;
+    }
+    let mut ranked: Vec<(usize, TerminalRow)> = rank.into_iter().zip(rows.drain(..)).collect();
+    ranked.sort_by_key(|(pos, _)| *pos);
+    rows.extend(ranked.into_iter().map(|(_, row)| row));
 }
 
 /// シンボル定義が持つ端子番号を、チャートに並ぶ順 (極番号→段記号) に列挙する。
@@ -110,6 +411,232 @@ pub fn terminal_numbers_of(def: &SymbolDef) -> Vec<String> {
     keys.sort();
     keys.dedup();
     keys.into_iter().map(|(_, _, no)| no).collect()
+}
+
+/// `Command::RenumberTerminals`の開始番号の既定値 (JSONで省略されたとき)。
+pub fn default_terminal_start() -> u32 {
+    1
+}
+
+/// `Command::RenumberTerminals`の増分の既定値 (JSONで省略されたとき)。
+pub fn default_terminal_step() -> u32 {
+    1
+}
+
+/// `Command::InsertSpareTerminals`の「番号の扱い」の既定値 (JSONで省略されたとき)。
+/// 繰り下げ (詰める) — このコマンドが最初から持っていた挙動なので、省略形のJSONを送る
+/// MCP/Link API/CLIの既存の呼び出しは挙動が変わらない。
+pub fn default_renumber_following() -> bool {
+    true
+}
+
+/// `attrs["terminal_numbers"]` のキー名 (spec §1.1)。ピン順 ([`terminal_numbers_of`] と同じ並び)
+/// のラベルのカンマ区切り。未設定ならシンボル定義の既定 ([`terminal_numbers_of`]) を使う。
+pub const TERMINAL_NUMBERS_ATTR: &str = "terminal_numbers";
+
+/// `numbers` が `count` 個の端子番号の指定として妥当か: 個数が一致し、
+/// 前後の空白を落としたあとで空要素も重複も無く、どの要素にも区切り記号の`,`が入っていない。
+/// [`Command::RenumberTerminals`](crate::command::Command::RenumberTerminals) /
+/// [`Command::SetTerminalNumbers`](crate::command::Command::SetTerminalNumbers) の検証に使う
+/// (図面を変えずに拒否するため、書き込み前に呼ぶこと)。
+///
+/// **判定は必ず`trim`した値で行う**: 保存形はカンマ区切りの1行 ([`TERMINAL_NUMBERS_ATTR`]) で、
+/// 読み取り側 ([`terminal_numbers_of_instance`]) が`split(',')`+`trim`して戻すため、
+/// `"1 "`と`"1"`は同じ端子番号になり、要素に`,`が入ると項目数そのものが変わってしまう。
+/// 検証を通った値をそのまま書くと読み取り側が拒否する、という食い違いを作らないための規則。
+pub fn valid_terminal_numbers(numbers: &[String], count: usize) -> bool {
+    if numbers.len() != count {
+        return false;
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    numbers.iter().all(|s| {
+        let t = s.trim();
+        !t.is_empty() && !t.contains(',') && seen.insert(t)
+    })
+}
+
+/// 検証を通った端子番号を [`TERMINAL_NUMBERS_ATTR`] へ書く形 (各要素の前後の空白を落としたもの)。
+/// [`valid_terminal_numbers`] が`trim`した値で判定するので、保存もその値で行う。
+pub fn trimmed_terminal_numbers(numbers: &[String]) -> Vec<String> {
+    numbers.iter().map(|s| s.trim().to_string()).collect()
+}
+
+/// シンボルインスタンスの端子番号を、チャート順 (極番号→段記号) の表示ラベルとして列挙する。
+///
+/// `attrs["terminal_numbers"]` があればそれを使う (ピン順のラベルのカンマ区切り、
+/// [`terminal_numbers_of`] と同じ並び)。個数が合わない・重複がある・空要素があるなど
+/// [`valid_terminal_numbers`] を満たさない値は、図面を壊さないようシンボル定義の既定へ
+/// フォールバックする (書き込み時に [`Command`](crate::command::Command) 側が検証するので、
+/// 通常はここに無効な値は来ない)。
+pub fn terminal_numbers_of_instance(def: &SymbolDef, attrs: &BTreeMap<String, String>) -> Vec<String> {
+    let raw = terminal_numbers_of(def);
+    match attrs.get(TERMINAL_NUMBERS_ATTR) {
+        Some(spec) => {
+            let numbers: Vec<String> = spec.split(',').map(|s| s.trim().to_string()).collect();
+            if valid_terminal_numbers(&numbers, raw.len()) {
+                numbers
+            } else {
+                raw
+            }
+        }
+        None => raw,
+    }
+}
+
+/// 端子番号の**生のピン番号 ↔ 表示ラベル**の対応表 (spec §1.1)。
+///
+/// 端子番号の上書き ([`TERMINAL_NUMBERS_ATTR`]) があると、**ユーザーが打つ端子番号**
+/// (ジャンパ `attrs["jumpers"]`・ピングループ `attrs["pin_groups"]`・ERCの指摘文) は
+/// 表示ラベルで書かれるのに、**図面のジオメトリ**(シンボル定義のピン) は生のピン番号でしか
+/// 引けない。この食い違いを埋める変換は**必ずここ1か所**を通す: チャートの行・
+/// [`parse_jumpers`]・[`crate::pin_groups`]の括弧と診断・[`crate::verify`]・
+/// SVG出力とcanvas描画の双子 (TS側 `terminalJumpers.ts` の `terminalLabels`) が同じ対応を使う。
+/// 上書きが無ければ恒等変換 ([`TerminalLabels::is_identity`]) になり、どの呼び出し側も
+/// 分岐を書かずに素通しできる。
+///
+/// 端子台以外のシンボル (リレー・ランプ・ブロック) は常に恒等変換
+/// (端子番号の上書きは端子台シンボルだけの仕組みで、コマンド側も端子台に限っている)。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TerminalLabels {
+    to_display: BTreeMap<String, String>,
+    to_raw: BTreeMap<String, String>,
+}
+
+impl TerminalLabels {
+    /// シンボル定義+インスタンスの`attrs`から対応表を作る。
+    pub fn of(def: &SymbolDef, attrs: &BTreeMap<String, String>) -> Self {
+        if !is_terminal_block(&def.id) {
+            return Self::default();
+        }
+        let raw = terminal_numbers_of(def);
+        let display = terminal_numbers_of_instance(def, attrs);
+        if display == raw {
+            return Self::default();
+        }
+        Self {
+            to_display: raw.iter().cloned().zip(display.iter().cloned()).collect(),
+            to_raw: display.into_iter().zip(raw).collect(),
+        }
+    }
+
+    /// 上書きが無い (生の番号と表示ラベルが同じ) か。
+    pub fn is_identity(&self) -> bool {
+        self.to_display.is_empty()
+    }
+
+    /// 生のピン番号 → 表示ラベル。知らない番号はそのまま返す。
+    pub fn display_of(&self, raw: &str) -> String {
+        self.to_display.get(raw).cloned().unwrap_or_else(|| raw.to_string())
+    }
+
+    /// 表示ラベル → 生のピン番号 (逆変換)。知らないラベルはそのまま返す。
+    pub fn raw_of(&self, display: &str) -> String {
+        self.to_raw.get(display).cloned().unwrap_or_else(|| display.to_string())
+    }
+
+    /// 生のピン番号→表示ラベルの対応そのもの。上書きが無ければ`None`
+    /// (呼び出し側は生の番号をそのまま使えばよい)。
+    pub fn display_map(&self) -> Option<&BTreeMap<String, String>> {
+        if self.is_identity() { None } else { Some(&self.to_display) }
+    }
+
+    /// 生のピン番号の列を表示ラベルの列へ置き換える (並びはそのまま)。
+    pub fn relabel(&self, raw: &[String]) -> Vec<String> {
+        raw.iter().map(|r| self.display_of(r)).collect()
+    }
+}
+
+/// 開始番号・増分・接頭辞から採番案 ([`terminal_numbers_of`] と同じ並び) を作る
+/// (`Command::RenumberTerminals`)。多段端子台は段記号を保ったまま極だけ採番する
+/// (`11a`,`11b`,… — 同じ極の全段が同じ番号を共有する)。
+pub fn terminal_renumber_plan(raw_terminals: &[String], start: u32, step: u32, prefix: &str) -> Vec<String> {
+    let mut out = Vec::with_capacity(raw_terminals.len());
+    let mut last_pole: Option<u32> = None;
+    let mut pole_index: u32 = 0;
+    let mut n = start;
+    for t in raw_terminals {
+        let (pole, level) = parse_terminal_no(t);
+        if last_pole != Some(pole) {
+            if last_pole.is_some() {
+                pole_index += 1;
+                n = start.saturating_add(step.saturating_mul(pole_index));
+            }
+            last_pole = Some(pole);
+        }
+        out.push(match level {
+            Some(l) => format!("{prefix}{n}{l}"),
+            None => format!("{prefix}{n}"),
+        });
+    }
+    out
+}
+
+/// `-`で繋いだ範囲表記 (`"1-2"` / 単体 `"3"`) の端子番号トークンだけを `rename`
+/// (旧表示ラベル→新表示ラベル) で置き換える。区切りの`-`と前後の空白は1文字も変えない。
+///
+/// トークンが1つでも`rename`に無ければ`None`を返す (呼び出し側は**元の文字列をそのまま
+/// 残す**)。これが「読めない項目・ERCが指摘済みの項目を採番で消したり書き換えたりしない」
+/// 規則の正体で、逆コマンド ([`Command::SetTerminalNumbers`](crate::command::Command::SetTerminalNumbers))
+/// が同じ規則で戻すため、採番→⌘Zで`attrs`は元のバイト列へ戻る。
+pub(crate) fn rename_terminal_tokens(text: &str, rename: &BTreeMap<String, String>) -> Option<String> {
+    let mut out = String::with_capacity(text.len());
+    for (i, part) in text.split('-').enumerate() {
+        if i > 0 {
+            out.push('-');
+        }
+        let trimmed = part.trim();
+        let new = rename.get(trimmed)?;
+        out.push_str(&part[..part.len() - part.trim_start().len()]);
+        out.push_str(new);
+        out.push_str(&part[part.trim_end().len()..]);
+    }
+    Some(out)
+}
+
+/// `attrs["jumpers"]` の端子番号を `rename` (旧表示ラベル→新表示ラベル) で書き換える。
+/// 採番・端子番号の直接指定コマンドが、同じコマンド内でジャンパの指定も追従させるために使う。
+///
+/// **書き換えは文字列の置換だけ**で、正規化 (並べ替え・重複除去) はしない: 「端子番号-端子番号」
+/// の形に読めない項目や、そこに`rename`の知らない端子番号が入っている項目は**丸ごとそのまま
+/// 残す** ([`rename_terminal_tokens`])。ERCが指摘している指定を採番が黙って消してしまうと、
+/// 逆コマンドでは戻せない (ユーザーがまだ直すべき指摘が消える) ため。
+pub fn rewrite_jumper_labels(spec: &str, rename: &BTreeMap<String, String>) -> String {
+    spec.split(',')
+        .map(|item| {
+            if item.split('-').count() != 2 {
+                return item.to_string();
+            }
+            rename_terminal_tokens(item, rename).unwrap_or_else(|| item.to_string())
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// `attrs["accessories"]` (`"端子番号:種別:型番,…"`、spec §1.1) の**先頭トークン=端子番号**
+/// だけを `rename` (旧表示ラベル→新表示ラベル) で書き換える。
+///
+/// ジャンパ・ピングループと同じ流儀で、**認識できた端子番号のトークンだけ**を差し替え、
+/// 種別・型番・区切り記号・空白は1文字も変えない。`rename`に無いラベルを指す項・末尾指定の
+/// `end`・`:`が無い読めない項は**丸ごとそのまま残す** (専用のパーサはTask 5が入れる。それまでの
+/// 段数変更で付属品の端子指定が迷子にならないようにするための最小の追従)。
+pub fn rewrite_accessory_labels(spec: &str, rename: &BTreeMap<String, String>) -> String {
+    spec.split(',')
+        .map(|item| {
+            let Some((label, rest)) = item.split_once(':') else {
+                return item.to_string();
+            };
+            let trimmed = label.trim();
+            let Some(new) = rename.get(trimmed) else {
+                return item.to_string();
+            };
+            format!(
+                "{}{new}{}:{rest}",
+                &label[..label.len() - label.trim_start().len()],
+                &label[label.trim_end().len()..]
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// 端子台シンボルの端子数 (ピン番号の種類数)。端子台以外・未知のシンボルは0。
@@ -139,6 +666,257 @@ pub fn poles_and_levels_of(symbol_id: &str) -> (usize, usize) {
         }
     }
     (poles.len(), levels.len().max(1))
+}
+
+/// `attrs["terminal_numbers"]`の上書きが「効いていた」か (spec §1.1 見落としやすい入力4/
+/// Task 3 ルーリング3a)。**キーがあり、かつ値が妥当** ([`valid_terminal_numbers`]) だったときだけ
+/// その値を返す。
+///
+/// 旧実装は`old_display != raw`(展開後の表示ラベルが既定と違うか)で判定していたが、
+/// これだと2つの場合に誤って「上書きなし」を返す: (1) キーはあるが既定と**同じ値**を
+/// 明示的に書いていた場合 (展開結果が同じなので差が出ない)、(2) キーはあるが**無効な値**
+/// (個数不一致など) で [`terminal_numbers_of_instance`] が既定へフォールバックしていた場合
+/// (フォールバック後の値は既定と同じになる)。どちらも「上書きなし」と区別が付かず、
+/// 採番・段数変更の逆コマンドがそのキーを消してしまう (undoで元の`attrs`へ戻らない)。
+/// キーの有無と値の妥当性だけで判定すれば、この2つを誤判定しない。
+pub fn terminal_numbers_override(def: &SymbolDef, attrs: &BTreeMap<String, String>) -> Option<Vec<String>> {
+    let spec = attrs.get(TERMINAL_NUMBERS_ATTR)?;
+    let numbers: Vec<String> = spec.split(',').map(|s| s.trim().to_string()).collect();
+    let raw = terminal_numbers_of(def);
+    valid_terminal_numbers(&numbers, raw.len()).then(|| trimmed_terminal_numbers(&numbers))
+}
+
+/// `symbol_id`の段数を`levels`へ変える (Task 3, spec §1.1「多段端子の生成・解除」)。
+/// `terminal_block_{n}p` (単段) と `terminal_block_{n}p_{levels}l` (多段) を行き来する。
+/// 極数は現在の`symbol_id`から読み取る ([`poles_and_levels_of`])。
+///
+/// `levels`が1〜[`crate::symbol::TERMINAL_LEVEL_MAX`]の範囲外、または`symbol_id`が端子台
+/// シンボルでなければ`Err`(理由の日本語文)。**`levels == 1`は単段idへ正規化する**
+/// (`_1l`という別名idは作らない。多段解除は常にこの形になる。フェーズ6積み残し)。
+pub fn multilevel_id(symbol_id: &str, levels: usize) -> std::result::Result<String, String> {
+    if !is_terminal_block(symbol_id) {
+        return Err(format!("端子台シンボルではありません ({symbol_id})"));
+    }
+    let (poles, _) = poles_and_levels_of(symbol_id);
+    if poles == 0 {
+        return Err(format!("不明な端子台シンボルです ({symbol_id})"));
+    }
+    if !(1..=crate::symbol::TERMINAL_LEVEL_MAX).contains(&levels) {
+        return Err(format!(
+            "段数は1〜{}で指定してください",
+            crate::symbol::TERMINAL_LEVEL_MAX
+        ));
+    }
+    Ok(if levels == 1 {
+        format!("terminal_block_{poles}p")
+    } else {
+        format!("terminal_block_{poles}p_{levels}l")
+    })
+}
+
+/// 段数を変えたときの新しい表示ラベル一覧を組み立てる (`Command::SetTerminalLevels`/
+/// `Command::InsertSpareTerminals`)。
+///
+/// `old_display`は極→段の順 ([`terminal_numbers_of`]と同じ並び。長さ`poles * old_levels`)。
+/// 各極の**段a (単段なら唯一のラベル) を土台**にして、新しい段数ぶんの段記号を付け足す
+/// (`level_letter`)。土台は段aのラベルの末尾が**段aの記号 (`level_letter(0)`)** そのものなら
+/// それを取り除いた文字列 (段記号を保って極だけ採番した`RenumberTerminals`の結果とも整合する)。
+///
+/// **末尾がアルファベットなら何でも取り除く、ではない** (Task 3の再レビューで見つかった不具合。
+/// Task 4での修正): 手で`terminal_numbers`を`"11X"`のように上書きしていると、`X`はこの仕組みが
+/// 付け足した段記号ではなく、ユーザーが書いた表記の一部そのもの。末尾が段aの記号と一致する
+/// ときだけ取り除くことで、`"11X"`はそのまま土台になり (`"11Xa"`,`"11Xb"`,…)、たまたま英字で
+/// 終わる上書きラベルが黙って壊れたり、2つの極の土台が同じ文字列に潰れて重複したりしない。
+///
+/// - 段を増やすとき: 新しく増える段は土台+新しい段記号 (例 `"11"` → `"11a","11b"`)
+/// - 段を減らすとき: 残る段のラベルだけを返す (消える段のラベルは含まない。単段になれば
+///   段記号を落とす)。消える段に結線・ジャンパ・ピングループの指定が残っていないかは
+///   呼び出し側 ([`crate::command::Engine`]) が別に確認する
+pub fn relabel_for_levels(
+    old_display: &[String],
+    poles: usize,
+    old_levels: usize,
+    new_levels: usize,
+) -> Vec<String> {
+    let mut out = Vec::with_capacity(poles * new_levels);
+    for p in 0..poles {
+        let group = &old_display[p * old_levels..(p + 1) * old_levels];
+        let base = if old_levels == 1 {
+            group[0].clone()
+        } else {
+            let s = &group[0];
+            let level_a = crate::symbol::level_letter(0);
+            match s.chars().next_back() {
+                Some(last) if last == level_a => s[..s.len() - last.len_utf8()].to_string(),
+                _ => s.clone(),
+            }
+        };
+        for j in 0..new_levels {
+            out.push(if new_levels == 1 {
+                base.clone()
+            } else {
+                format!("{base}{}", crate::symbol::level_letter(j))
+            });
+        }
+    }
+    out
+}
+
+/// 端子番号の表記を「前置き・数値・後置き」に分ける (`"A3"` → `("A", 3, "")`、
+/// `"11a"` → `("", 11, "a")`、`"3"` → `("", 3, "")`)。最初に現れる数字の並びを数値部と見る。
+/// 数字が1つも無い (`"予備"`) / 数値部が`u32`に収まらない表記は`None`。
+///
+/// [`crate::symbol::parse_terminal_no`]とは役割が違う: あちらは**並べ替えのキー**なので
+/// 読めない表記を`u32::MAX`という番兵にして末尾へ回すが、こちらは**番号の計算**に使うので
+/// 読めないことをはっきり`None`で返す (番兵のまま足し算すると桁溢れする)。
+fn split_label_number(label: &str) -> Option<(&str, u32, &str)> {
+    let start = label.find(|c: char| c.is_ascii_digit())?;
+    let end = label[start..]
+        .find(|c: char| !c.is_ascii_digit())
+        .map(|i| start + i)
+        .unwrap_or(label.len());
+    let n = label[start..end].parse::<u32>().ok()?;
+    Some((&label[..start], n, &label[end..]))
+}
+
+/// 端子番号の表記の**数値部だけ**を`delta`増やした表記 (`("A3", 1)` → `"A4"`、
+/// `("11a", 1)` → `"12a"`)。前置き・後置きはそのまま引き継ぐので、接頭辞付きの採番
+/// (`RenumberTerminals`の`prefix`) や手書きの上書き表記を壊さない。
+///
+/// 数値部が無い表記・`u32`を超える結果は`None` (呼び出し側が理由を添えて拒否する。
+/// パニックも桁溢れもしない)。
+fn bump_label_number(label: &str, delta: u32) -> Option<String> {
+    let (prefix, n, suffix) = split_label_number(label)?;
+    Some(format!("{prefix}{}{suffix}", n.checked_add(delta)?))
+}
+
+/// 極 (0始まりの生のインデックス) を**チャートに出る順** ([`RowOrder::Number`] =
+/// 表示ラベルの極番号の昇順) に並べた列。読めないラベル ([`crate::symbol::parse_terminal_no`]が
+/// `u32::MAX`を返す表記。接頭辞付きの`"A3"`など) は同じキーに潰れるが、並べ替えが安定なので
+/// 生の順のまま末尾に固まる — [`sort_terminal_rows`]のクラスタ並べ替えと同じ結果になる。
+fn display_pole_order(display: &[String], poles: usize, levels: usize) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..poles).collect();
+    order.sort_by_key(|&p| parse_terminal_no(&display[p * levels]).0);
+    order
+}
+
+/// 端子台に予備端子を`count`個挿入する (spec §1.1「予備端子の挿入」、Task 4)。
+///
+/// **物理的には必ずシンボルの末尾に極を足す**: 既存の極 (1..poles) はインスタンスの`at`を
+/// 平行移動して用紙上の座標を保つので ([`crate::symbol::pole_origin_shift`]を呼び出し側
+/// (`Command::InsertSpareTerminals`)が使う)、極数を増やしても既存結線が外れない
+/// (`terminal_block_8p` → `terminal_block_9p`で1〜8番ピンの座標が動かない、という
+/// Step 1のredがこの設計を固定した)。**番号だけ**が`after`(表示ラベル。`None`なら末尾)の
+/// 直後に挿入されたように振られる。多段端子台は1極につき段数ぶんの予備端子が増える
+/// (`9a`,`9b`,…)。
+///
+/// **位置は必ず「チャートに出る順」(表示ラベルの順) で数える** ([`display_pole_order`])。
+/// 生のピン順ではない: この機能自身が生の順と番号順をわざと食い違わせるので (新しい極は
+/// 物理的に末尾)、生のインデックスで数えると**2回目の挿入が壊れる** — `after`の指す極も
+/// 「末尾」もチャートの見た目と違う極になり、番号が重複して拒否されてしまう
+/// (レビューのCritical 1。挿入した端子台へもう1つ挿入できないという不具合だった)。
+///
+/// `renumber_following`が番号の扱いを決める (デザイン`eTFE5`の「番号の扱い」ラジオ):
+/// - `true` (詰める。「末尾に極を足して番号を繰り下げる」): 表示順で`after`より後ろの極の
+///   番号が`count`だけ増え、空いた番号を新しい予備極が引き継ぐ (番号は連続したまま)
+/// - `false` (空ける。「予備を空き番号のまま残す」): 既存の極の番号は1つも変えず、
+///   新しい予備極が`after`の次の番号を取る。その番号が既に使われていれば`Err`
+///   (空き番号が無いのに空けられないため。詰める指定か別の位置を選ぶ)
+///
+/// 新しい番号は**隣の極の表記の数値部だけを増やして**作るので、前置き・後置きは引き継がれる
+/// (`A3` → `A4`、`11a` → `12a`)。接頭辞付きで採番した端子台 (`RenumberTerminals`の`prefix`)
+/// でも表記が壊れない。数字を含まない表記は理由を添えて`Err` (以前は
+/// [`crate::symbol::parse_terminal_no`]の`u32::MAX`番兵のまま足していたので桁溢れで
+/// パニックしていた。レビューのCritical 2)。
+///
+/// 戻り値は新しい`symbol_id`と、新しい極数ぶんの表示ラベル (raw昇順、[`terminal_numbers_of`]と
+/// 同じ並び。既存極が先、新しい予備極が末尾)。この並びは物理的な生ピン順であって、
+/// チャートの見た目の並び順ではない ([`sort_terminal_rows`]が`RowOrder::Number`でも
+/// 表示ラベルの数値順に並べ直すので、チャートには`after`の直後に挿入された見た目で出る)。
+///
+/// `count`が0、極数の上限[`crate::symbol::DYNAMIC_PIN_MAX`]を超える、`inst.symbol_id`が
+/// 端子台でない、`after`が今の端子番号のどれとも一致しない、番号を決められない (数字を
+/// 含まない表記)、または出来上がる番号が重複する場合は`Err`(日本語文)。
+pub fn insert_spare_terminals(
+    inst: &SymbolInstance,
+    after: Option<&str>,
+    count: usize,
+    renumber_following: bool,
+) -> std::result::Result<(String, Vec<String>), String> {
+    if count == 0 {
+        return Err("挿入する予備端子は1個以上にしてください".to_string());
+    }
+    if !is_terminal_block(&inst.symbol_id) {
+        return Err(format!("端子台シンボルではありません ({})", inst.symbol_id));
+    }
+    let (poles, levels) = poles_and_levels_of(&inst.symbol_id);
+    if poles == 0 {
+        return Err(format!("不明な端子台シンボルです ({})", inst.symbol_id));
+    }
+    let new_poles = poles + count;
+    if new_poles > crate::symbol::DYNAMIC_PIN_MAX {
+        return Err(format!(
+            "端子台の極数は{}までです (現在{poles}極、{count}極追加すると{new_poles}極になります)",
+            crate::symbol::DYNAMIC_PIN_MAX
+        ));
+    }
+    let def = resolve_symbol(&inst.symbol_id)
+        .ok_or_else(|| format!("不明な端子台シンボルです ({})", inst.symbol_id))?;
+    let old_display = terminal_numbers_of_instance(&def, &inst.attrs);
+
+    // 挿入位置はチャートに出る順で数える (生のピン順ではない)
+    let order = display_pole_order(&old_display, poles, levels);
+    let after_pos = match after {
+        None => order.len() - 1,
+        Some(label) => {
+            let pos = old_display
+                .iter()
+                .position(|l| l == label)
+                .ok_or_else(|| format!("端子番号 {label} が見つかりません"))?;
+            let pole = pos / levels;
+            order.iter().position(|&p| p == pole).expect("全極が並びに入っている")
+        }
+    };
+    let ref_pole = order[after_pos];
+    let bump = |label: &str, delta: u32, what: &str| -> std::result::Result<String, String> {
+        bump_label_number(label, delta).ok_or_else(|| {
+            format!("端子番号 {label} は数字を含まないので{what}を決められません (先に端子番号を採番し直してください)")
+        })
+    };
+
+    let mut new_display = old_display.clone();
+    new_display.reserve(count * levels);
+    // 「詰める」なら表示順で後ろの極の番号を繰り下げる。「空ける」なら既存の番号は触らない
+    if renumber_following {
+        for &p in &order[after_pos + 1..] {
+            for l in 0..levels {
+                let i = p * levels + l;
+                new_display[i] = bump(&old_display[i], count as u32, "繰り下げ後の番号")?;
+            }
+        }
+    }
+    // 新しい予備極の番号は、直前の極の表記の数値部を1つずつ増やして作る (前置き・後置きは引き継ぐ)
+    for k in 0..count {
+        for l in 0..levels {
+            let label = &old_display[ref_pole * levels + l];
+            new_display.push(bump(label, k as u32 + 1, "予備端子の番号")?);
+        }
+    }
+
+    if !valid_terminal_numbers(&new_display, new_poles * levels) {
+        return Err(if renumber_following {
+            "端子番号が重複します (今の端子番号を採番し直してから挿入してください)".to_string()
+        } else {
+            "空き番号が無いので「予備を空き番号のまま残す」では挿入できません (番号を繰り下げるか、別の位置を選んでください)".to_string()
+        });
+    }
+
+    let new_symbol_id = if levels == 1 {
+        format!("terminal_block_{new_poles}p")
+    } else {
+        format!("terminal_block_{new_poles}p_{levels}l")
+    };
+    Ok((new_symbol_id, new_display))
 }
 
 /// 端子台シンボルの端子番号の範囲表記 (例 `"1-8"` / 多段なら `"1a-4b"`)。
@@ -223,6 +1001,10 @@ pub struct TerminalRow {
     pub jumper: String,
     /// 予備端子 (内部側・外部側とも電線が繋がっていない)。
     pub spare: bool,
+    /// 内外を入れ替えた端子 (`attrs["swapped"]`)。`internal`/`external` (と電線・ハーネス) は
+    /// 入れ替え後の値が入っている。
+    #[serde(default)]
+    pub swapped: bool,
 }
 
 /// 1つの端子台から導いたチャート。
@@ -243,25 +1025,57 @@ pub struct TerminalChart {
     pub jumpers: Vec<(String, String)>,
     /// 読み取れなかった・不正なジャンパ指定。
     pub jumper_issues: Vec<JumperIssue>,
+    /// この並びを作った並べ替え順 (`attrs["row_order"]` を解析した結果。未設定・未知語は
+    /// [`RowOrder::Number`])。CSV・図枠付き図面シート・端子接続図はここを見て並べ替え
+    /// 直したりしない — [`TerminalChart::rows`] がすでにこの順に並んでいる。
+    pub row_order: RowOrder,
+    /// 付属品 (`attrs["accessories"]`、spec §1.1)。書いた順。
+    #[serde(default)]
+    pub accessories: Vec<Accessory>,
+    /// 読めなかった付属品の項。
+    #[serde(default)]
+    pub accessory_issues: Vec<AccessoryIssue>,
+    /// `attrs["swapped"]` が指しているが端子台に無い端子番号 (端子台チェックがWarningにする)。
+    #[serde(default)]
+    pub swap_unknown: Vec<String>,
 }
 
 impl TerminalChart {
     /// [`TERMINAL_CHART_COLUMNS`] と同じ並びのセル行。CSV・図面シート化から使う。
+    ///
+    /// 付属品 ([`TerminalChart::accessories`]) は**その端子の直前**に1行ずつ入る
+    /// (`end`指定は全端子の後ろ)。付属品の行は「端子」列だけに `[種別 型番]` を書き、
+    /// 他の列は空にする。
     pub fn cells(&self) -> Vec<Vec<String>> {
-        self.rows
-            .iter()
-            .map(|r| {
-                vec![
-                    r.terminal.clone(),
-                    r.level.clone(),
-                    r.internal.clone(),
-                    r.wire_no.clone(),
-                    r.wire.clone(),
-                    r.external.clone(),
-                    r.jumper.clone(),
-                ]
-            })
-            .collect()
+        let accessory_row = |a: &Accessory| {
+            let text = if a.part_no.is_empty() {
+                format!("[{}]", a.kind.label())
+            } else {
+                format!("[{} {}]", a.kind.label(), a.part_no)
+            };
+            let mut row = vec![String::new(); TERMINAL_CHART_COLUMNS.len()];
+            row[0] = text;
+            row
+        };
+        let mut out = Vec::new();
+        for r in &self.rows {
+            for a in self.accessories.iter().filter(|a| a.before.as_deref() == Some(r.terminal.as_str())) {
+                out.push(accessory_row(a));
+            }
+            out.push(vec![
+                r.terminal.clone(),
+                r.level.clone(),
+                r.internal.clone(),
+                r.wire_no.clone(),
+                r.wire.clone(),
+                r.external.clone(),
+                r.jumper.clone(),
+            ]);
+        }
+        for a in self.accessories.iter().filter(|a| a.before.is_none()) {
+            out.push(accessory_row(a));
+        }
+        out
     }
 }
 
@@ -304,14 +1118,22 @@ fn terminals_are_adjacent(a: &str, b: &str) -> bool {
 
 /// ジャンパ指定 (`"1-2,3-4"`、多段端子台なら `"1a-1b,1a-2a"`) を解析して正規化する。
 ///
-/// - 各項は「端子番号-端子番号」。並び順 (極番号→段記号) で先に来る端子が前になるよう
-///   入れ替え、重複を除き、昇順に並べる
+/// `terminals` はその端子台の**表示ラベル** (端子番号の上書き、`attrs["terminal_numbers"]` が
+/// あればそれ、無ければ生の番号と同じ) をチャート順に並べたもの。`spec`はこのラベルで書かれて
+/// いる。`raw_terminals`は同じ並びの**生の端子番号** ([`terminal_numbers_of`]) で、隣接判定
+/// ([`terminals_are_adjacent`]) と多段判定はここから取る (上書きの表記がどうであれ、物理的な
+/// 隣接関係は生の番号の並びだけで決まるため — 例えば増分2の採番で"11-13"になっても、生の番号
+/// では隣り合う極どうしなので隣接と判定される)。2つの引数は同じ長さ・同じ並び
+/// (`terminals[i]` と `raw_terminals[i]` が同じ端子を指す)。
+///
+/// - 各項は「端子番号-端子番号」。チャート順で先に来る端子が前になるよう入れ替え、重複を除き、
+///   チャート順に並べる
 /// - 掛けられるのは**隣り合う端子どうし**だけ ([`terminals_are_adjacent`]。`"1-3"` は不正)
 /// - `terminals` (その端子台が実際に持つ端子番号) に無い番号は「存在しない端子」として報告する
 /// - 多段端子台に段記号なしの数字だけの指定 (`"1-2"`) を書いた場合は、どの段に掛けるのか
 ///   決まらないので不正として報告する (図面のバーと帳票が食い違わないようにするため)
 /// - 空白と空の項は無視する。不正な項があってもパニックせず、問題は [`Jumpers::issues`] に並ぶ
-pub fn parse_jumpers(spec: &str, terminals: &[String]) -> Jumpers {
+pub fn parse_jumpers(spec: &str, terminals: &[String], raw_terminals: &[String]) -> Jumpers {
     let mut pairs: Vec<(String, String)> = Vec::new();
     let mut issues: Vec<JumperIssue> = Vec::new();
     let issue = |text: &str, code: &str, message: String| JumperIssue {
@@ -319,8 +1141,9 @@ pub fn parse_jumpers(spec: &str, terminals: &[String]) -> Jumpers {
         code: code.to_string(),
         message,
     };
-    // 段記号付きの端子を持つ=多段端子台 (G6)
-    let multilevel = terminals.iter().any(|t| parse_terminal_no(t).1.is_some());
+    // 段記号付きの端子を持つ=多段端子台 (G6)。生の番号で判定する (表示ラベルは段記号を
+    // 落とした上書きも理屈上は作れてしまうため)
+    let multilevel = raw_terminals.iter().any(|t| parse_terminal_no(t).1.is_some());
     let range = || match (terminals.first(), terminals.last()) {
         (Some(first), Some(last)) => format!("{first}〜{last}"),
         _ => "なし".to_string(),
@@ -347,24 +1170,28 @@ pub fn parse_jumpers(spec: &str, terminals: &[String]) -> Jumpers {
             ));
             continue;
         }
-        let unknown: Vec<&str> = parts
-            .iter()
-            .copied()
-            .filter(|p| !terminals.iter().any(|t| t == p))
-            .collect();
-        if !unknown.is_empty() {
-            issues.push(issue(
-                text,
-                JUMPER_UNKNOWN_TERMINAL,
-                format!(
-                    "存在しない端子 {} を指しています (端子は{})",
-                    unknown.join(", "),
-                    range()
-                ),
-            ));
-            continue;
-        }
-        if !terminals_are_adjacent(parts[0], parts[1]) {
+        let idx = |p: &str| terminals.iter().position(|t| t == p);
+        let (i0, i1) = match (idx(parts[0]), idx(parts[1])) {
+            (Some(i0), Some(i1)) => (i0, i1),
+            _ => {
+                let unknown: Vec<&str> = parts
+                    .iter()
+                    .copied()
+                    .filter(|p| !terminals.iter().any(|t| t == p))
+                    .collect();
+                issues.push(issue(
+                    text,
+                    JUMPER_UNKNOWN_TERMINAL,
+                    format!(
+                        "存在しない端子 {} を指しています (端子は{})",
+                        unknown.join(", "),
+                        range()
+                    ),
+                ));
+                continue;
+            }
+        };
+        if !terminals_are_adjacent(&raw_terminals[i0], &raw_terminals[i1]) {
             issues.push(issue(
                 text,
                 JUMPER_INVALID,
@@ -372,17 +1199,11 @@ pub fn parse_jumpers(spec: &str, terminals: &[String]) -> Jumpers {
             ));
             continue;
         }
-        let (a, b) = if terminal_sort_key(parts[0]) <= terminal_sort_key(parts[1]) {
-            (parts[0], parts[1])
-        } else {
-            (parts[1], parts[0])
-        };
+        let (a, b) = if i0 <= i1 { (parts[0], parts[1]) } else { (parts[1], parts[0]) };
         pairs.push((a.to_string(), b.to_string()));
     }
-    pairs.sort_by(|x, y| {
-        (terminal_sort_key(&x.0), terminal_sort_key(&x.1))
-            .cmp(&(terminal_sort_key(&y.0), terminal_sort_key(&y.1)))
-    });
+    let rank = |t: &str| terminals.iter().position(|x| x == t).unwrap_or(usize::MAX);
+    pairs.sort_by_key(|(a, b)| (rank(a), rank(b)));
     pairs.dedup();
     Jumpers { pairs, issues }
 }
@@ -452,6 +1273,8 @@ struct Side<'a> {
     /// 相手側の表記 (`"K1:A1"` / ネットラベル名)。辞書順。
     labels: Vec<String>,
     wires: Vec<&'a Wire>,
+    /// 各配線の反対側の点 ([`RowOrder::Page`] の並べ替えに使う代表点)。
+    points: Vec<Point>,
 }
 
 fn near(a: &Point, b: &Point) -> bool {
@@ -462,6 +1285,7 @@ fn near(a: &Point, b: &Point) -> bool {
 fn side_at<'a>(sheet: &'a Sheet, defs: &[SymbolDef], at: &Point) -> Side<'a> {
     let mut labels: Vec<String> = Vec::new();
     let mut wires: Vec<&Wire> = Vec::new();
+    let mut points: Vec<Point> = Vec::new();
     for entity in sheet.entities.values() {
         let Entity::Wire(w) = entity else { continue };
         if !w.points.iter().any(|p| near(p, at)) {
@@ -472,6 +1296,7 @@ fn side_at<'a>(sheet: &'a Sheet, defs: &[SymbolDef], at: &Point) -> Side<'a> {
             if near(end, at) {
                 continue;
             }
+            points.push(*end);
             let label = endpoint_label(sheet, defs, end);
             if !label.is_empty() && !labels.contains(&label) {
                 labels.push(label);
@@ -479,7 +1304,7 @@ fn side_at<'a>(sheet: &'a Sheet, defs: &[SymbolDef], at: &Point) -> Side<'a> {
         }
     }
     labels.sort();
-    Side { labels, wires }
+    Side { labels, wires, points }
 }
 
 /// 電線の仕様表記 (線色・線径sq・品番)。空の項目は省く。
@@ -528,15 +1353,24 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
         let key = (num, level, pin.number.clone());
         by_no.entry(key).or_default().push(transform_local(pin.at, inst));
     }
-    let terminals: Vec<String> = by_no.keys().map(|(_, _, no)| no.clone()).collect();
-    let terminal_count = terminals.len();
+    // 生の端子番号 (シンボル定義そのまま。ジャンパの隣接判定・多段判定の正) と、
+    // 表示ラベル (`attrs["terminal_numbers"]` の上書きがあればそれ。同じ並び・同じ個数)
+    let raw_terminals: Vec<String> = by_no.keys().map(|(_, _, no)| no.clone()).collect();
+    let display_terminals = terminal_numbers_of_instance(&def, &inst.attrs);
+    let terminal_count = raw_terminals.len();
     let jumpers = parse_jumpers(
         inst.attrs.get("jumpers").map(String::as_str).unwrap_or(""),
-        &terminals,
+        &display_terminals,
+        &raw_terminals,
     );
 
     let mut rows = Vec::with_capacity(terminal_count);
-    for ((_num, level, terminal), mut points) in by_no {
+    let mut page_points: Vec<Option<Point>> = Vec::with_capacity(terminal_count);
+    for (idx, ((_num, level, _raw_no), mut points)) in by_no.into_iter().enumerate() {
+        let terminal = display_terminals
+            .get(idx)
+            .cloned()
+            .unwrap_or_else(|| raw_terminals[idx].clone());
         // 用紙上の左 (同じなら上) が内部側
         points.sort_by(|a, b| {
             if (a.x - b.x).abs() < CONNECT_EPS {
@@ -547,7 +1381,7 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
         });
         let inside = side_at(sheet, &defs, &points[0]);
         let outside = match points.len() {
-            0 | 1 => Side { labels: Vec::new(), wires: Vec::new() },
+            0 | 1 => Side { labels: Vec::new(), wires: Vec::new(), points: Vec::new() },
             n => side_at(sheet, &defs, &points[n - 1]),
         };
         // ジャンパは、それが実際に繋ぐ端子の行にだけ載る (同じ極の別の段には載らない)
@@ -584,8 +1418,49 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
             external_harness: harness_of(&outside),
             jumper,
             spare: inside.wires.is_empty() && outside.wires.is_empty(),
+            swapped: false,
         });
+        // ページ順 (RowOrder::Page) の代表点: 内部側・外部側どちらの配線でも、読み順で
+        // 最初に来る方を使う (どちらにも配線が無ければNone=予備)
+        page_points.push(
+            inside
+                .points
+                .iter()
+                .chain(outside.points.iter())
+                .copied()
+                .min_by(|a, b| reading_order_key(sheet, *a).cmp(&reading_order_key(sheet, *b))),
+        );
     }
+
+    let row_order = row_order_of(&inst.attrs);
+    sort_terminal_rows(&mut rows, row_order, &page_points, sheet);
+    let labels: Vec<String> = rows.iter().map(|r| r.terminal.clone()).collect();
+    // 内外スワップ (spec §1.1): 指定した端子だけ、内部側と外部側 (電線・ハーネスも) を入れ替える
+    let (swapped, swap_unknown) = inst
+        .attrs
+        .get(SWAPPED_ATTR)
+        .map(|spec| swapped_terminals(spec, &labels))
+        .unwrap_or_default();
+    for row in rows.iter_mut().filter(|r| swapped.contains(&r.terminal)) {
+        std::mem::swap(&mut row.internal, &mut row.external);
+        std::mem::swap(&mut row.internal_wire, &mut row.external_wire);
+        std::mem::swap(&mut row.internal_harness, &mut row.external_harness);
+        // まとめた電線の列も「内部側→外部側」の順を保つ
+        let sides = [&row.internal_wire, &row.external_wire];
+        row.wire = join_unique(
+            sides
+                .iter()
+                .flat_map(|w| w.split(" / "))
+                .map(str::to_string),
+            " / ",
+        );
+        row.swapped = true;
+    }
+    let (accessories, accessory_issues) = inst
+        .attrs
+        .get(ACCESSORIES_ATTR)
+        .map(|spec| parse_accessories(spec, &labels))
+        .unwrap_or_default();
 
     Some(TerminalChart {
         entity_id: tb_id,
@@ -596,6 +1471,10 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
         rows,
         jumpers: jumpers.pairs,
         jumper_issues: jumpers.issues,
+        row_order,
+        accessories,
+        accessory_issues,
+        swap_unknown,
     })
 }
 
@@ -653,6 +1532,26 @@ pub fn check_terminal_block(sheet: &Sheet, tb_id: EntityId) -> Vec<Diagnostic> {
             entity_ids: vec![tb_id],
         })
         .collect();
+    diags.extend(chart.accessory_issues.iter().map(|i| Diagnostic {
+        severity: Severity::Warning,
+        code: ACCESSORY_INVALID.into(),
+        message: format!(
+            "端子台 {} の付属品「{}」: {}",
+            chart.reference, i.text, i.message
+        ),
+        sheet_id: sheet.id,
+        entity_ids: vec![tb_id],
+    }));
+    diags.extend(chart.swap_unknown.iter().map(|t| Diagnostic {
+        severity: Severity::Warning,
+        code: TERMINAL_SWAP_UNKNOWN.into(),
+        message: format!(
+            "端子台 {} の内外スワップ指定にある端子 {} はこの端子台にありません (無視しました)",
+            chart.reference, t
+        ),
+        sheet_id: sheet.id,
+        entity_ids: vec![tb_id],
+    }));
     diags.extend(chart.rows.iter().filter(|r| r.spare).map(|r| Diagnostic {
         severity: Severity::Info,
         code: TERMINAL_UNCONNECTED.into(),
@@ -735,6 +1634,20 @@ mod tests {
             attrs: Default::default(),
         });
         sheet.entities.insert(e.id(), e);
+    }
+
+    /// 端子`terminal`の外部側 (盤外、右) の接続点の絶対座標 (回転0のtb向け)。
+    fn outer_point(sheet: &Sheet, id: EntityId, terminal: &str) -> Point {
+        let Some(Entity::Symbol(inst)) = sheet.entities.get(&id) else { panic!() };
+        let def = resolve_symbol(&inst.symbol_id).expect("端子台の定義");
+        let mut pts: Vec<Point> = def
+            .pins
+            .iter()
+            .filter(|p| p.number == terminal)
+            .map(|p| transform_local(p.at, inst))
+            .collect();
+        pts.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+        *pts.last().expect("ピンが無い端子番号")
     }
 
     /// a-b間にワイヤを1本引く (属性はクロージャで調整)。
@@ -917,7 +1830,7 @@ mod tests {
     /// ジャンパの記述は正規化される。各組は小さい番号が先になり、重複は除かれ、昇順に並ぶ。
     #[test]
     fn jumpers_are_normalized() {
-        let j = parse_jumpers("3-4, 2-1 ,2-1", &numbered(4));
+        let j = parse_jumpers("3-4, 2-1 ,2-1", &numbered(4), &numbered(4));
         assert!(j.issues.is_empty(), "{:?}", j.issues);
         assert_eq!(j.pairs, pairs(&[("1", "2"), ("3", "4")]));
         assert_eq!(jumpers_to_string(&j.pairs), "1-2,3-4");
@@ -927,7 +1840,7 @@ mod tests {
     /// 隣り合っていない端子どうしのジャンパは受け付けられず、同じ記述内の正しいジャンパは残る。
     #[test]
     fn a_jumper_between_non_adjacent_terminals_is_rejected() {
-        let j = parse_jumpers("1-3,3-4", &numbered(4));
+        let j = parse_jumpers("1-3,3-4", &numbered(4), &numbered(4));
         assert_eq!(j.pairs, pairs(&[("3", "4")]));
         assert_eq!(j.issues.len(), 1);
         assert_eq!(j.issues[0].text, "1-3");
@@ -938,7 +1851,7 @@ mod tests {
     /// 端子番号2つの組になっていないジャンパの記述は、異常終了せずエラーとして報告される。
     #[test]
     fn unreadable_jumper_text_is_reported() {
-        let j = parse_jumpers("abc,1-,1-2-3,-,1 - 2", &numbered(4));
+        let j = parse_jumpers("abc,1-,1-2-3,-,1 - 2", &numbered(4), &numbered(4));
         assert_eq!(j.pairs, pairs(&[("1", "2")]), "空白入りの 1 - 2 は読める");
         assert_eq!(j.issues.len(), 4);
         assert!(j.issues.iter().all(|i| i.code == JUMPER_INVALID));
@@ -948,7 +1861,7 @@ mod tests {
     /// 端子台に無い端子番号を指すジャンパは、存在しない端子として報告される。
     #[test]
     fn a_jumper_to_a_terminal_that_does_not_exist_is_reported() {
-        let j = parse_jumpers("4-5,0-1", &numbered(4));
+        let j = parse_jumpers("4-5,0-1", &numbered(4), &numbered(4));
         assert!(j.pairs.is_empty());
         assert_eq!(j.issues.len(), 2);
         assert!(j.issues.iter().all(|i| i.code == JUMPER_UNKNOWN_TERMINAL));
@@ -959,7 +1872,7 @@ mod tests {
     /// ジャンパの記述が空なら、ジャンパは無いという意味になる。
     #[test]
     fn no_jumper_text_means_no_jumpers() {
-        let j = parse_jumpers("", &numbered(4));
+        let j = parse_jumpers("", &numbered(4), &numbered(4));
         assert!(j.pairs.is_empty() && j.issues.is_empty());
     }
 
@@ -1012,6 +1925,108 @@ mod tests {
         assert_eq!(terminals, ["1a", "1b", "2a", "2b"]);
         let levels: Vec<&str> = chart.rows.iter().map(|r| r.level.as_str()).collect();
         assert_eq!(levels, ["a", "b", "a", "b"]);
+    }
+
+    /// When `attrs["terminal_numbers"]` overrides the default numbers, the chart's rows, jumper column and CSV all show the overridden labels instead of the symbol's default pin numbers.
+    /// `attrs["terminal_numbers"]`が既定の番号を上書きしていると、チャートの行・ジャンパ欄・CSVはどれもシンボル既定のピン番号ではなく上書きラベルを表示する。
+    #[test]
+    fn an_overridden_terminal_number_shows_up_in_the_chart_and_csv() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("terminal_numbers".into(), "11,12,13,14".into());
+        s.attrs.insert("jumpers".into(), "11-12".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        let terminals: Vec<&str> = chart.rows.iter().map(|r| r.terminal.as_str()).collect();
+        assert_eq!(terminals, ["11", "12", "13", "14"]);
+        assert_eq!(row(&chart, "11").jumper, "11-12");
+        assert_eq!(row(&chart, "12").jumper, "11-12");
+        assert!(chart.jumper_issues.is_empty(), "{:?}", chart.jumper_issues);
+        let csv = terminal_chart_csv(&sheet, id);
+        assert!(csv.contains("\n11,"), "CSVも上書きラベルで出る: {csv}");
+    }
+
+    /// A number list is judged on its trimmed values: spaces around a label are ignored, two labels that differ only in their spacing count as a duplicate, and a label carrying the list's own separator (a comma) is refused.
+    /// 端子番号の指定は前後の空白を落とした値で判定される: ラベル前後の空白は無視され、空白しか違わない2つのラベルは重複と数え、保存形の区切り記号 (カンマ) を含むラベルは拒否される。
+    #[test]
+    fn a_number_list_is_validated_on_its_trimmed_values() {
+        let ok = vec![" 11".into(), "12 ".into(), " 13 ".into(), "14".into()];
+        assert!(valid_terminal_numbers(&ok, 4), "空白は落として受け付ける");
+        assert_eq!(trimmed_terminal_numbers(&ok), vec!["11", "12", "13", "14"], "保存はtrim後の値");
+        let trimmed_duplicate: Vec<String> = vec!["1 ".into(), "1".into(), "2".into(), "3".into()];
+        assert!(!valid_terminal_numbers(&trimmed_duplicate, 4), "trim後に重複するのは拒否");
+        let with_comma: Vec<String> = vec!["1,2".into(), "3".into(), "4".into(), "5".into()];
+        assert!(!valid_terminal_numbers(&with_comma, 4), "カンマ入りは拒否");
+        let blank: Vec<String> = vec!["1".into(), "  ".into(), "3".into(), "4".into()];
+        assert!(!valid_terminal_numbers(&blank, 4), "空白だけのラベルは拒否");
+    }
+
+    /// The label map converts a raw pin number to the block's displayed label and back again, and it is the identity map when the block carries no override (so every caller can pass it through without a branch).
+    /// ラベル対応表は生のピン番号を表示ラベルへ、表示ラベルを生のピン番号へ相互変換する。上書きの無い端子台では恒等変換になるので、呼び出し側は分岐なしで素通しできる。
+    #[test]
+    fn the_label_map_converts_a_raw_pin_number_both_ways() {
+        let def = resolve_symbol("terminal_block_4p").expect("def");
+        let mut attrs = BTreeMap::new();
+        assert!(TerminalLabels::of(&def, &attrs).is_identity(), "上書き無しは恒等変換");
+        attrs.insert(TERMINAL_NUMBERS_ATTR.to_string(), "11,12,13,14".to_string());
+        let labels = TerminalLabels::of(&def, &attrs);
+        assert!(!labels.is_identity());
+        assert_eq!(labels.display_of("1"), "11", "生のピン番号→表示ラベル");
+        assert_eq!(labels.raw_of("11"), "1", "表示ラベル→生のピン番号");
+        assert_eq!(labels.display_of("99"), "99", "知らない番号はそのまま");
+        assert_eq!(labels.raw_of("99"), "99");
+        assert_eq!(labels.relabel(&numbered(4)), vec!["11", "12", "13", "14"]);
+    }
+
+    /// A symbol that is not a terminal block never gets a label map, even if a hand-edited file left a `terminal_numbers` attribute on it: the override only applies to terminal blocks.
+    /// 端子台ではないシンボルには、手編集のファイルに`terminal_numbers`が残っていてもラベル対応表は作られない。上書きは端子台だけの仕組みであるため。
+    #[test]
+    fn a_symbol_that_is_not_a_terminal_block_has_no_label_map() {
+        let def = resolve_symbol("relay_coil").expect("def");
+        let mut attrs = BTreeMap::new();
+        attrs.insert(TERMINAL_NUMBERS_ATTR.to_string(), "X,Y".to_string());
+        assert!(TerminalLabels::of(&def, &attrs).is_identity());
+    }
+
+    /// Rewriting a jumper spec replaces only the terminal numbers it recognises and leaves everything else (spacing, separators, items it cannot read) exactly as it was, so the same rewrite run backwards restores the original text.
+    /// ジャンパ指定の書き換えは認識できた端子番号だけを置き換え、それ以外 (空白・区切り記号・読めない項目) は元のまま残すので、同じ書き換えを逆向きに走らせれば元の文字列へ戻る。
+    #[test]
+    fn rewriting_a_jumper_spec_only_touches_the_numbers_it_recognises() {
+        let forward: BTreeMap<String, String> =
+            numbered(8).into_iter().zip((11..=18).map(|n| n.to_string())).collect();
+        let backward: BTreeMap<String, String> = forward.iter().map(|(a, b)| (b.clone(), a.clone())).collect();
+        let original = "1-2, abc ,1-99,3 - 4";
+        let renamed = rewrite_jumper_labels(original, &forward);
+        assert_eq!(
+            renamed, "11-12, abc ,1-99,13 - 14",
+            "読めない項目・存在しない端子を含む項目はそのまま、空白も保たれる"
+        );
+        assert_eq!(rewrite_jumper_labels(&renamed, &backward), original, "逆向きで元のバイト列へ戻る");
+    }
+
+    /// An override that swaps the terminal count is invalid (too few/many labels), so the chart falls back to the symbol's default numbers instead of losing rows or panicking.
+    /// 端子数と合わない上書き (ラベルが多い・少ない) は無効なので、チャートは行を失ったり異常終了したりせず、シンボル既定の番号へフォールバックする。
+    #[test]
+    fn an_invalid_override_falls_back_to_the_default_numbers() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("terminal_numbers".into(), "11,12,13".into()); // 3個しか無い(4個必要)
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        let terminals: Vec<&str> = chart.rows.iter().map(|r| r.terminal.as_str()).collect();
+        assert_eq!(terminals, ["1", "2", "3", "4"], "無効な上書きは既定へ落ちる");
+    }
+
+    /// On a multi-level block, an override that changes only the pole (keeping the step at more than 1, e.g. "11a" and "13a") still recognises its jumpers as adjacent, because adjacency is decided from the symbol's raw pin layout, not from the arithmetic difference between the displayed labels.
+    /// 多段端子台で極だけを増分2以上で変える上書き (例 "11a"と"13a") でも、ジャンパの隣接判定はシンボルの生のピン配置から決めるので、表示ラベルの数値差では判定しない。だから増分2の採番後もジャンパは有効なまま。
+    #[test]
+    fn adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        // 増分2で採番したのと同じ状況: 表示上の番号は2ずつ離れているが、物理的には隣り合う極
+        s.attrs.insert("terminal_numbers".into(), "11,13,15,17".into());
+        s.attrs.insert("jumpers".into(), "11-13".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert!(chart.jumper_issues.is_empty(), "{:?}", chart.jumper_issues);
+        assert_eq!(chart.jumpers, vec![("11".to_string(), "13".to_string())]);
     }
 
     /// On a multi-level terminal block a jumper is written with the level letter, so "1a-1b" links the two levels of the same pole and is accepted.
@@ -1227,6 +2242,362 @@ mod tests {
         assert_eq!((infos[0].poles, infos[0].levels, infos[0].terminal_count), (4, 1, 4));
     }
 
+    // --- multilevel_id (Task 3: 多段端子の生成・解除) ---
+
+    /// Turning a single-level 8-pole terminal block into 2 levels changes its symbol_id to the 2-level dynamic id.
+    /// 8極の単段端子台を2段化すると、symbol_idが多段の動的idに変わる。
+    #[test]
+    fn multilevel_id_turns_a_single_level_block_into_two_levels() {
+        assert_eq!(multilevel_id("terminal_block_8p", 2).unwrap(), "terminal_block_8p_2l");
+    }
+
+    /// Undoing multi-level (setting levels back to 1) returns the plain single-level id, never a "_1l" alias.
+    /// 多段を解除して1段に戻すと、`_1l`という別名ではなく元の単段idそのものに戻る。
+    #[test]
+    fn multilevel_id_normalises_one_level_to_the_plain_single_level_id() {
+        assert_eq!(multilevel_id("terminal_block_8p_2l", 1).unwrap(), "terminal_block_8p");
+    }
+
+    /// Asking for 0 levels or more levels than the symbol library supports is rejected, not silently clamped.
+    /// 0段や上限を超える段数は、勝手に丸められず拒否される。
+    #[test]
+    fn multilevel_id_rejects_zero_and_too_many_levels() {
+        assert!(multilevel_id("terminal_block_8p", 0).is_err());
+        assert!(multilevel_id("terminal_block_8p", crate::symbol::TERMINAL_LEVEL_MAX + 1).is_err());
+    }
+
+    /// A non terminal-block symbol_id is rejected outright: level count only makes sense for terminal blocks.
+    /// 端子台以外のsymbol_idはそもそも拒否する (段数は端子台にしか意味が無い)。
+    #[test]
+    fn multilevel_id_rejects_a_symbol_that_is_not_a_terminal_block() {
+        assert!(multilevel_id("relay_dpdt", 2).is_err());
+    }
+
+    /// Going from 2 levels to 3 keeps the pole count read from the current symbol_id.
+    /// 2段から3段へ増やすときも、極数は現在のsymbol_idから読み取ったものを使う。
+    #[test]
+    fn multilevel_id_keeps_the_pole_count_when_changing_between_multilevel_counts() {
+        assert_eq!(multilevel_id("terminal_block_4p_2l", 3).unwrap(), "terminal_block_4p_3l");
+    }
+
+    // --- relabel_for_levels ---
+
+    /// Increasing levels expands each pole's plain label into one label per level, pole-major with level letters appended ("11,12" -> "11a,11b,12a,12b").
+    /// 段を増やすと、極ごとのプレーンなラベルが段数ぶんに展開される。極→段の順で段記号を付け足す ("11,12" → "11a,11b,12a,12b")。
+    #[test]
+    fn relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major() {
+        let old = vec!["11".to_string(), "12".to_string()];
+        let out = relabel_for_levels(&old, 2, 1, 2);
+        assert_eq!(out, vec!["11a", "11b", "12a", "12b"]);
+    }
+
+    /// Decreasing levels back to 1 drops the vanishing level's labels and strips the level letter from what remains.
+    /// 段を減らして単段へ戻すと、消える段のラベルは落ち、残る段記号は取り除かれる。
+    #[test]
+    fn relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level() {
+        let old = vec!["11a".to_string(), "11b".to_string(), "12a".to_string(), "12b".to_string()];
+        let out = relabel_for_levels(&old, 2, 2, 1);
+        assert_eq!(out, vec!["11", "12"]);
+    }
+
+    /// Going from 2 levels to 3 keeps the existing level-a/level-b labels and adds a fresh level-c label per pole.
+    /// 2段から3段に増やすと、既存の段a・段bのラベルはそのまま残り、極ごとに新しい段cのラベルが増える。
+    #[test]
+    fn relabel_for_levels_adds_a_new_level_on_top_of_existing_ones() {
+        let old = vec!["11a".to_string(), "11b".to_string(), "12a".to_string(), "12b".to_string()];
+        let out = relabel_for_levels(&old, 2, 2, 3);
+        assert_eq!(out, vec!["11a", "11b", "11c", "12a", "12b", "12c"]);
+    }
+
+    /// Only a trailing letter that matches level a's own letter is stripped from the base; an override whose level-a label happens to end in some other letter (part of the user's own text, not a level letter this mechanism appended) keeps that letter, so two poles overridden to labels ending in different letters never collapse onto the same base (Task 3 re-review carry-over: previously any trailing alphabetic character was stripped, which could both destroy part of a hand-set label and produce duplicate bases).
+    /// 段aのラベルの末尾が段aの記号と一致するときだけ土台から取り除く。段aのラベルがたまたま別の文字で終わる上書き(この仕組みが付け足した段記号ではなく、ユーザーが書いた表記の一部)ではその文字を残すので、別の文字で終わる上書きをした2つの極の土台が同じになって潰れることがない(Task 3再レビューの持ち越し: 以前は末尾がアルファベットなら何でも取り除いており、手で書いたラベルの一部を壊したり土台が重複したりし得た)。
+    #[test]
+    fn relabel_for_levels_only_strips_a_trailing_letter_that_matches_level_as_own_letter() {
+        let old = vec!["11X".to_string(), "11Y".to_string(), "12X".to_string(), "12Y".to_string()];
+        let out = relabel_for_levels(&old, 2, 2, 3);
+        assert_eq!(
+            out,
+            vec!["11Xa", "11Xb", "11Xc", "12Xa", "12Xb", "12Xc"],
+            "末尾のXは段記号ではないので土台に残る"
+        );
+        // 2極の段aラベルが別の文字("X"/"Y")で終わっていても、その文字は段記号ではないので
+        // 土台は別のまま保たれる (以前の実装は末尾の英字を無条件に取り除くので、
+        // "1X"→"1"・"1Y"→"1"と土台が重複していた)
+        let old2 = vec!["1X".to_string(), "1Xb".to_string(), "1Y".to_string(), "1Yb".to_string()];
+        let out2 = relabel_for_levels(&old2, 2, 2, 2);
+        assert_eq!(out2, vec!["1Xa", "1Xb", "1Ya", "1Yb"], "土台1Xと1Yは重複しない");
+    }
+
+    // --- insert_spare_terminals (Task 4: 予備端子の挿入) ---
+
+    /// 4極の端子台のインスタンス (attrsは呼び出し側で足す)。
+    fn spare_inst(symbol_id: &str) -> SymbolInstance {
+        SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: symbol_id.into(),
+            at: Point::new(100.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: "TB1".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        }
+    }
+
+    /// Inserting one spare after a chosen terminal appends the pole at the end of the symbol (so existing pins never move) while the returned number sequence shows every later pole's number pushed up by one and the vacated number handed to the new spare.
+    /// 指定した端子の後ろに予備を1個挿入すると、シンボルの極は末尾に足される (既存ピンは動かない) が、返る番号列はそれより後ろの極の番号がすべて1つ繰り下がり、空いた番号が新しい予備に渡る。
+    #[test]
+    fn inserting_a_spare_pushes_the_numbers_after_the_chosen_terminal() {
+        let inst = spare_inst("terminal_block_8p");
+        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1, true).expect("挿入");
+        assert_eq!(id, "terminal_block_9p", "物理的な極は末尾に1つ増える");
+        assert_eq!(
+            numbers,
+            ["1", "2", "3", "5", "6", "7", "8", "9", "4"],
+            "4以降が繰り下がり、空いた4を末尾の新しい極が引き継ぐ"
+        );
+    }
+
+    /// Inserting a spare with no chosen terminal (append) simply continues the numbering: the new pole is physically last and numerically last too, so nothing already on the block is renumbered.
+    /// 挿入位置を指定しない (末尾挿入) と、番号もそのまま続く: 新しい極は物理的にも番号的にも最後になるので、既存のどの端子の番号も変わらない。
+    #[test]
+    fn inserting_a_spare_at_the_end_does_not_renumber_anything() {
+        let inst = spare_inst("terminal_block_8p");
+        let (id, numbers) = insert_spare_terminals(&inst, None, 1, true).expect("挿入");
+        assert_eq!(id, "terminal_block_9p");
+        assert_eq!(numbers, ["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+    }
+
+    /// The row the pure function's numbers put in place for the new spare comes out of the chart as an ordinary spare row: both sides unconnected, `spare` set, nothing about it distinguishes it from a symbol-default terminal.
+    /// 純関数の番号列で新しい予備の位置に来る行は、チャートではふつうの予備行として出る: 両側未結線で`spare`が立ち、シンボル既定の端子と見分けが付く特別扱いは何も無い。
+    #[test]
+    fn the_inserted_spares_row_is_unconnected_in_the_chart() {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+        let inst = spare_inst("terminal_block_8p");
+        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1, true).expect("挿入");
+        let mut tb = spare_inst(&id);
+        tb.id = inst.id;
+        tb.attrs.insert(TERMINAL_NUMBERS_ATTR.into(), numbers.join(","));
+        sheet.entities.insert(tb.id, Entity::Symbol(tb));
+        let chart = terminal_chart(&sheet, inst.id).expect("chart");
+        let r = row(&chart, "4");
+        assert!(r.spare, "挿入した予備はspare");
+        assert_eq!((r.internal.as_str(), r.external.as_str()), ("", ""));
+    }
+
+    /// A count of zero is refused instead of producing a no-op symbol change.
+    /// 0個の指定は、何もしない変更として素通しせず拒否される。
+    #[test]
+    fn inserting_zero_spares_is_refused() {
+        let inst = spare_inst("terminal_block_8p");
+        assert!(insert_spare_terminals(&inst, None, 0, true).is_err());
+    }
+
+    /// Naming a terminal the block does not have as the insertion point is refused, not silently treated as "append at the end".
+    /// 端子台に無い端子番号を挿入位置に指定すると、「末尾扱い」に読み替えず拒否される。
+    #[test]
+    fn inserting_after_an_unknown_terminal_is_refused() {
+        let inst = spare_inst("terminal_block_8p");
+        assert!(insert_spare_terminals(&inst, Some("99"), 1, true).is_err());
+    }
+
+    /// Inserting spares beyond the dynamic symbol family's pole cap is refused.
+    /// 動的シンボルの極数上限を超える挿入は拒否される。
+    #[test]
+    fn inserting_past_the_pole_cap_is_refused() {
+        let inst = spare_inst(&format!("terminal_block_{}p", crate::symbol::DYNAMIC_PIN_MAX));
+        assert!(insert_spare_terminals(&inst, None, 1, true).is_err());
+    }
+
+    /// On a multi-level block, one inserted spare pole grows into one terminal per level (two new labels "3a"/"3b" for a 2-level block), keeping every level's own letter.
+    /// 多段端子台では、挿入した1つの予備極が段の数だけの端子になる (2段なら新しいラベルは"3a"/"3b"の2つ)。各段の記号はそのまま保たれる。
+    #[test]
+    fn inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level() {
+        let inst = spare_inst("terminal_block_4p_2l");
+        let (id, numbers) = insert_spare_terminals(&inst, Some("2a"), 1, true).expect("挿入");
+        assert_eq!(id, "terminal_block_5p_2l");
+        assert_eq!(
+            numbers,
+            ["1a", "1b", "2a", "2b", "4a", "4b", "5a", "5b", "3a", "3b"],
+            "2極目の後ろが繰り下がり、新しい極は段a・段bの2端子になる"
+        );
+    }
+
+    /// 端子番号を上書きした端子台のインスタンス (2回目以降の挿入を試すテスト用)。
+    fn spare_inst_numbered(symbol_id: &str, numbers: &[&str]) -> SymbolInstance {
+        let mut inst = spare_inst(symbol_id);
+        inst.attrs.insert(TERMINAL_NUMBERS_ATTR.into(), numbers.join(","));
+        inst
+    }
+
+    /// A second and a third spare insertion into the same block both work, because the insertion point is counted in the order the chart shows (the numbers), not in the physical pin order the first insertion deliberately left out of step.
+    /// 同じ端子台への2回目・3回目の予備挿入もそのまま通る。挿入位置をチャートに出る順 (番号順) で数えるので、1回目の挿入がわざと食い違わせた物理的なピン順には引きずられない。
+    #[test]
+    fn inserting_a_second_spare_counts_the_position_in_the_charts_order() {
+        // 1回目: 8極の3の後ろ → 物理的な極は末尾、番号は 4
+        let (id1, n1) = insert_spare_terminals(&spare_inst("terminal_block_8p"), Some("3"), 1, true)
+            .expect("1回目");
+        assert_eq!(n1, ["1", "2", "3", "5", "6", "7", "8", "9", "4"]);
+        // 2回目: 末尾 (番号順の最後は 9。生のピン順の最後は挿入した 4)
+        let inst2 = spare_inst_numbered(&id1, &n1.iter().map(String::as_str).collect::<Vec<_>>());
+        let (id2, n2) = insert_spare_terminals(&inst2, None, 1, true).expect("2回目 (末尾)");
+        assert_eq!(id2, "terminal_block_10p");
+        assert_eq!(n2, ["1", "2", "3", "5", "6", "7", "8", "9", "4", "10"], "末尾は番号順の最後 (9) の後ろ");
+        // 3回目: 5の後ろ (番号順で 5 より後ろの 6〜10 が繰り下がり、空いた 6 を予備が取る)
+        let inst3 = spare_inst_numbered(&id2, &n2.iter().map(String::as_str).collect::<Vec<_>>());
+        let (id3, n3) = insert_spare_terminals(&inst3, Some("5"), 1, true).expect("3回目");
+        assert_eq!(id3, "terminal_block_11p");
+        let mut sorted: Vec<u32> = n3.iter().map(|l| l.parse::<u32>().unwrap()).collect();
+        sorted.sort_unstable();
+        assert_eq!(sorted, (1..=11).collect::<Vec<u32>>(), "番号は1〜11の連番で重複しない");
+    }
+
+    /// Every insertion point offered after a first mid-block insertion is accepted, including the popover's default 末尾 — the position named is looked up among the displayed numbers, so none of them collides with the number the first spare took.
+    /// 1回目の途中挿入のあとに選べる挿入位置はどれも通る (ポップオーバー既定の末尾も含む)。指定した位置は表示番号の中から探すので、1回目の予備が取った番号とぶつからない。
+    #[test]
+    fn every_insertion_point_still_works_after_a_mid_block_insertion() {
+        let (id1, n1) = insert_spare_terminals(&spare_inst("terminal_block_8p"), Some("3"), 1, true)
+            .expect("1回目");
+        let labels: Vec<&str> = n1.iter().map(String::as_str).collect();
+        for after in [None, Some("3"), Some("4"), Some("5"), Some("9")] {
+            let inst = spare_inst_numbered(&id1, &labels);
+            let (_, numbers) = insert_spare_terminals(&inst, after, 1, true)
+                .unwrap_or_else(|e| panic!("after={after:?} が拒否された: {e}"));
+            let mut sorted: Vec<u32> = numbers.iter().map(|l| l.parse::<u32>().unwrap()).collect();
+            sorted.sort_unstable();
+            assert_eq!(sorted, (1..=10).collect::<Vec<u32>>(), "after={after:?}: 1〜10の連番になる");
+        }
+    }
+
+    /// A second insertion on a multi-level block also works and again adds one terminal per level, numbered after the pole that is last in the chart's order.
+    /// 多段端子台への2回目の挿入も通り、やはり1極につき段数ぶんの端子が増える。番号はチャートの順で最後の極の次になる。
+    #[test]
+    fn inserting_a_second_spare_on_a_multilevel_block_adds_one_terminal_per_level() {
+        let (id1, n1) = insert_spare_terminals(&spare_inst("terminal_block_8p_2l"), None, 1, true)
+            .expect("1回目 (末尾)");
+        assert_eq!(id1, "terminal_block_9p_2l");
+        assert_eq!(&n1[16..], ["9a", "9b"], "末尾挿入は9a・9bになる");
+        let inst2 = spare_inst_numbered(&id1, &n1.iter().map(String::as_str).collect::<Vec<_>>());
+        let (id2, n2) = insert_spare_terminals(&inst2, Some("9a"), 1, true).expect("2回目");
+        assert_eq!(id2, "terminal_block_10p_2l");
+        assert_eq!(&n2[18..], ["10a", "10b"], "9aの後ろは10a・10b");
+    }
+
+    /// Spare labels are derived by bumping only the numeric part of the neighbouring label, so a block renumbered with a prefix keeps its prefix (and never overflows on the "unreadable number" sentinel).
+    /// 予備のラベルは隣の端子の表記の数値部だけを増やして作るので、接頭辞を付けて採番した端子台は接頭辞を保つ (「読めない番号」の番兵で桁溢れすることもない)。
+    #[test]
+    fn inserting_a_spare_keeps_a_prefixed_labels_prefix() {
+        let inst = spare_inst_numbered(
+            "terminal_block_8p",
+            &["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"],
+        );
+        let (id, numbers) = insert_spare_terminals(&inst, Some("A3"), 1, true).expect("挿入");
+        assert_eq!(id, "terminal_block_9p");
+        assert_eq!(
+            numbers,
+            ["A1", "A2", "A3", "A5", "A6", "A7", "A8", "A9", "A4"],
+            "A3の後ろが繰り下がり、空いたA4を予備が取る (接頭辞Aは保たれる)"
+        );
+    }
+
+    /// A label with no digits at all cannot be numbered from, so the insertion is refused with a reason instead of panicking or silently destroying the label.
+    /// 数字を1つも含まないラベルからは番号を決められないので、パニックしたりラベルを黙って壊したりせず、理由を添えて拒否する。
+    #[test]
+    fn inserting_a_spare_next_to_a_label_without_digits_is_refused() {
+        let inst = spare_inst_numbered("terminal_block_4p", &["予備", "2", "3", "4"]);
+        let err = insert_spare_terminals(&inst, Some("予備"), 1, true).expect_err("拒否");
+        assert!(err.contains("予備"), "どのラベルが数字を含まないのか分かる: {err}");
+        // 繰り下げる側に数字を含まないラベルがあるときも同じ (番号を決められない)
+        assert!(insert_spare_terminals(&inst, Some("2"), 1, true).is_err());
+    }
+
+    /// Leaving the following numbers alone (the "leave the spare with a vacant number" mode) changes no existing label and hands the spare the vacant number after the chosen terminal.
+    /// 後ろの番号を動かさない扱い (「予備を空き番号のまま残す」) では既存のラベルが1つも変わらず、選んだ端子の次の空き番号が予備に渡る。
+    #[test]
+    fn leaving_the_following_numbers_alone_gives_the_spare_the_vacant_number() {
+        let inst = spare_inst_numbered("terminal_block_4p", &["1", "2", "3", "5"]);
+        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1, false).expect("挿入");
+        assert_eq!(id, "terminal_block_5p");
+        assert_eq!(numbers, ["1", "2", "3", "5", "4"], "5は動かず、空いていた4を予備が取る");
+    }
+
+    /// In the "leave the numbers alone" mode an insertion that would give the spare a number another terminal already uses is refused with a reason, instead of writing duplicate labels.
+    /// 「空き番号のまま残す」扱いで、予備の番号が既にある端子とぶつかる挿入は、重複したラベルを書かずに理由を添えて拒否する。
+    #[test]
+    fn leaving_the_following_numbers_alone_is_refused_when_the_number_is_taken() {
+        let inst = spare_inst("terminal_block_4p");
+        let err = insert_spare_terminals(&inst, Some("1"), 1, false).expect_err("拒否");
+        assert!(err.contains("空き番号"), "空き番号が無いことが分かる: {err}");
+        // 同じ位置でも「詰める」なら通る (後ろを繰り下げて場所を作るため)
+        assert!(insert_spare_terminals(&inst, Some("1"), 1, true).is_ok());
+    }
+
+    /// The chart shows the spare exactly where its number says it belongs, not where its physical pole happens to sit: default (number) order re-sorts by the parsed pole number, so an insertion in the middle of the block reads as inserted in the middle of the chart too.
+    /// チャートは物理的な極の位置ではなく、番号が示す位置に予備を表示する: 既定 (数値順) は解析した極番号で並べ直すので、ブロックの途中への挿入もチャートの途中への挿入として読める。
+    #[test]
+    fn the_chart_shows_the_spare_after_its_chosen_terminal_not_at_the_physical_end() {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+        let inst = spare_inst("terminal_block_8p");
+        let (id, numbers) = insert_spare_terminals(&inst, Some("3"), 1, true).expect("挿入");
+        let mut tb = spare_inst(&id);
+        tb.id = inst.id;
+        tb.attrs.insert(TERMINAL_NUMBERS_ATTR.into(), numbers.join(","));
+        sheet.entities.insert(tb.id, Entity::Symbol(tb));
+        let chart = terminal_chart(&sheet, inst.id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Number, "既定の並び");
+        assert_eq!(
+            terminal_order(&chart),
+            ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "予備(4)が末尾ではなく3の直後に見える"
+        );
+        assert!(row(&chart, "4").spare);
+    }
+
+    /// Rewriting an accessory spec touches only the leading terminal-number token of each item; the kind, the part number, the "end" sentinel and any item naming an unknown terminal stay byte for byte.
+    /// 付属品指定の書き換えは各項の先頭の端子番号トークンだけに効き、種別・型番・末尾指定の`end`・知らない端子を指す項は1バイトも変わらない。
+    #[test]
+    fn rewrite_accessory_labels_only_replaces_the_terminal_number_token() {
+        let mut rename = BTreeMap::new();
+        rename.insert("1".to_string(), "1a".to_string());
+        assert_eq!(
+            rewrite_accessory_labels("1:end_bracket:TB-EB,end:partition:TB-PT,9:end_plate:TB-EP,壊れた項", &rename),
+            "1a:end_bracket:TB-EB,end:partition:TB-PT,9:end_plate:TB-EP,壊れた項"
+        );
+    }
+
+    // --- terminal_numbers_override (Task 3 ルーリング3a: had_overrideの正しい判定) ---
+
+    /// A terminal_numbers override that happens to equal the symbol's default labels is still reported as an override, because the key is present and valid (not judged only by whether the expanded value differs from the default).
+    /// 既定値と同じラベルを明示的に書いたterminal_numbersも、キーがあり値が妥当なので上書きとして扱われる (展開結果が既定と同じかどうかだけでは判定しない)。
+    #[test]
+    fn terminal_numbers_override_reports_a_key_that_matches_the_default_value() {
+        let def = resolve_symbol("terminal_block_4p").unwrap();
+        let mut attrs = BTreeMap::new();
+        attrs.insert(TERMINAL_NUMBERS_ATTR.to_string(), "1,2,3,4".to_string());
+        assert_eq!(
+            terminal_numbers_override(&def, &attrs),
+            Some(vec!["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string()])
+        );
+    }
+
+    /// An invalid terminal_numbers value (wrong element count) is not treated as an override: the display already falls back to the default, and there is nothing valid to restore.
+    /// 個数が合わない無効なterminal_numbersは上書きとして扱わない (表示は既定へフォールバック済みで、復元できる妥当な値が無い)。
+    #[test]
+    fn terminal_numbers_override_is_none_for_an_invalid_value() {
+        let def = resolve_symbol("terminal_block_4p").unwrap();
+        let mut attrs = BTreeMap::new();
+        attrs.insert(TERMINAL_NUMBERS_ATTR.to_string(), "1,2,3".to_string());
+        assert_eq!(terminal_numbers_override(&def, &attrs), None);
+    }
+
+    /// With no terminal_numbers key at all, there is no override.
+    /// terminal_numbersキー自体が無ければ上書きは無い。
+    #[test]
+    fn terminal_numbers_override_is_none_when_the_key_is_absent() {
+        let def = resolve_symbol("terminal_block_4p").unwrap();
+        assert_eq!(terminal_numbers_override(&def, &BTreeMap::new()), None);
+    }
+
     /// Naming a sheet narrows the list to the terminal blocks drawn on that sheet.
     /// シートを指定すると、そのシートに描かれている端子台だけの一覧になる。
     #[test]
@@ -1311,7 +2682,7 @@ mod tests {
         ] {
             let def = resolve_symbol(id).expect("端子台");
             let terminals = terminal_numbers_of(&def);
-            let jumpers = parse_jumpers(spec, &terminals).pairs;
+            let jumpers = parse_jumpers(spec, &terminals, &terminals).pairs;
             assert!(!jumpers.is_empty(), "{id} {spec}");
             for ((ea, eb), (a, b)) in jumper_bars(&def, &jumpers).iter().zip(&jumpers) {
                 for (end, owner) in [(ea, a), (eb, b)] {
@@ -1431,4 +2802,329 @@ mod tests {
         assert!(chart.jumpers.is_empty(), "undoでジャンパが消える");
         assert_eq!(row(&chart, "1").jumper, "");
     }
+
+    /// 端子番号だけの並び (行のterminal欄の並び)。
+    fn terminal_order(chart: &TerminalChart) -> Vec<&str> {
+        chart.rows.iter().map(|r| r.terminal.as_str()).collect()
+    }
+
+    /// An unset, empty or unrecognised `row_order` attribute falls back to number order.
+    /// `attrs["row_order"]`が未設定・空・未知語なら数値順 (既定) に落ちる。
+    #[test]
+    fn an_unset_or_unknown_row_order_falls_back_to_number_order() {
+        assert_eq!(row_order_of(&BTreeMap::new()), RowOrder::Number);
+        let mut attrs = BTreeMap::new();
+        attrs.insert("row_order".to_string(), "bogus".to_string());
+        assert_eq!(row_order_of(&attrs), RowOrder::Number);
+
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("row_order".into(), "bogus".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Number);
+        assert_eq!(terminal_order(&chart), ["1", "2", "3", "4"], "未知語は数値順のまま");
+    }
+
+    /// Number order (the default) sorts poles as integers, so it stays correct past nine poles.
+    /// 数値順 (既定) は極番号を数として昇順に並べる。10極以上でも桁の大小どおりになる。
+    #[test]
+    fn number_order_sorts_poles_as_integers() {
+        let (sheet, id) = sheet_with_tb(12, 0);
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Number);
+        assert_eq!(
+            terminal_order(&chart),
+            ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
+        );
+    }
+
+    /// Number order sorts by the parsed pole number of the displayed label, not by the physical (raw pin) order the rows started in — so an override whose labels are not physically monotonic (as spare insertion produces, Task 4) still comes out numerically ascending.
+    /// 数値順は表示ラベルを解析した極番号で並べる。行が最初に持っていた物理的な(生ピンの)並びでは決まらないので、予備端子挿入 (Task 4) が作るような物理順と食い違う上書きでも数値の昇順で出る。
+    #[test]
+    fn number_order_sorts_by_the_parsed_label_even_when_the_physical_order_disagrees() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert(TERMINAL_NUMBERS_ATTR.into(), "4,3,2,1".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Number);
+        assert_eq!(terminal_order(&chart), ["1", "2", "3", "4"]);
+    }
+
+    /// Alphanumeric order compares terminal numbers as text, so past nine poles it disagrees with number order ("10" sorts before "2").
+    /// 英数順は端子番号を文字列として辞書順に並べるので、10極以上では数値順と違う結果になる ("10"が"2"より前に来る)。
+    #[test]
+    fn alnum_order_compares_terminal_numbers_as_text() {
+        let (mut sheet, id) = sheet_with_tb(12, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("row_order".into(), "alnum".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Alnum);
+        assert_eq!(
+            terminal_order(&chart),
+            ["1", "10", "11", "12", "2", "3", "4", "5", "6", "7", "8", "9"]
+        );
+    }
+
+    /// Page order sorts poles by where their wiring first appears on the sheet in reading order (top-to-bottom, then left-to-right) — even against numeric order — and puts unwired (spare) poles last, in pole-number order.
+    /// ページ順は、その極の配線が図面上で読み順(上→下、左→右)に最初に現れる位置で並べる。番号は逆でも、読み順で先に来る方が先になる。配線の無い極(予備)は最後に極番号順で並ぶ。
+    #[test]
+    fn page_order_follows_where_the_wiring_first_appears_on_the_sheet() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        // 端子1の外部側配線は用紙の下の方 (読み順で後)、端子2の外部側配線は用紙の上の方 (読み順で先)
+        let p1 = outer_point(&sheet, id, "1");
+        add_wire(&mut sheet, (p1.x, p1.y), (390.0, 280.0), |_| {});
+        let p2 = outer_point(&sheet, id, "2");
+        add_wire(&mut sheet, (p2.x, p2.y), (15.0, 15.0), |_| {});
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("row_order".into(), "page".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Page);
+        assert_eq!(
+            terminal_order(&chart),
+            ["2", "1", "3", "4"],
+            "端子2の配線の方が読み順で先に現れるので、番号が逆でも先に来る。3・4は未結線なので最後"
+        );
+    }
+
+    /// Cable order gathers the poles of each external harness together in the order that harness name first appears (not alphabetically), putting poles with no harness last in pole-number order.
+    /// 外部ケーブル順は、外部ハーネス名が最初に現れた極の順にその名前の極をまとめる (名前の辞書順ではなく初出順)。ハーネス名の無い極は最後に極番号順で並ぶ。
+    #[test]
+    fn cable_order_groups_poles_by_their_external_harness_in_first_seen_order() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        for (terminal, target_x) in [("1", 130.0), ("2", 135.0), ("3", 140.0)] {
+            let p = outer_point(&sheet, id, terminal);
+            add_wire(&mut sheet, (p.x, p.y), (target_x, p.y), |_| {});
+        }
+        let h = |name: &str, y: f64| {
+            Entity::Harness(Harness {
+                id: Uuid::new_v4(),
+                points: crate::harness::rect_points(Point::new(100.0, y - 2.0), Point::new(145.0, y + 2.0)),
+                name: name.into(),
+                note: String::new(),
+            })
+        };
+        let p1 = outer_point(&sheet, id, "1");
+        let p2 = outer_point(&sheet, id, "2");
+        let p3 = outer_point(&sheet, id, "3");
+        sheet.entities.insert(Uuid::new_v4(), h("W2", p1.y)); // 端子1が最初に載せる名前
+        sheet.entities.insert(Uuid::new_v4(), h("W1", p2.y)); // 端子2が最初に載せる名前
+        sheet.entities.insert(Uuid::new_v4(), h("W2", p3.y)); // 端子3は端子1と同じ"W2"
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("row_order".into(), "cable".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Cable);
+        assert_eq!(row(&chart, "1").external_harness, "W2");
+        assert_eq!(row(&chart, "2").external_harness, "W1");
+        assert_eq!(row(&chart, "3").external_harness, "W2");
+        assert_eq!(
+            terminal_order(&chart),
+            ["1", "3", "2", "4"],
+            "W2(端子1で初出)の端子がまとまって先に来て、W1(端子2で初出)がその後、\
+             ハーネスの無い端子4は最後"
+        );
+    }
+
+    /// Jumper order brings every pole that has any jumper to the front (in pole-number order), followed by the poles with no jumper (also in pole-number order).
+    /// ジャンパ順は、ジャンパが1本でも掛かっている極を極番号順でまとめて先頭に出し、ジャンパの無い極をその後ろに極番号順で並べる。
+    #[test]
+    fn jumper_order_brings_every_jumpered_pole_to_the_front() {
+        let (mut sheet, id) = sheet_with_tb(5, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("jumpers".into(), "2-3".into());
+        s.attrs.insert("row_order".into(), "jumper".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(chart.row_order, RowOrder::Jumper);
+        assert_eq!(
+            terminal_order(&chart),
+            ["2", "3", "1", "4", "5"],
+            "ジャンパの掛かった2・3が先頭にまとまり、残りは番号順"
+        );
+    }
+
+    /// On a 3-level terminal block, whichever row order is chosen, the three levels of one pole always stay next to each other in the resulting order.
+    /// 3段の端子台では、どの並べ替え順を選んでも同じ極の3段 (a/b/c) が並びの中で必ず隣り合う (段がバラバラの位置に散らばらない)。
+    #[test]
+    fn every_row_order_keeps_the_three_levels_of_one_pole_adjacent() {
+        for spec in ["number", "alnum", "page", "cable", "jumper"] {
+            let (mut sheet, id) = sheet_with_multilevel_tb(4, 3, "1a-1b");
+            let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+            s.attrs.insert("row_order".into(), spec.into());
+            // ページ順・外部ケーブル順の差が出るよう、一部の端子に配線を足す
+            let p = outer_point(&sheet, id, "3a");
+            add_wire(&mut sheet, (p.x, p.y), (15.0, 15.0), |_| {});
+            let chart = terminal_chart(&sheet, id).expect("chart: {spec}");
+            for pole in 1..=4u32 {
+                let positions: Vec<usize> = chart
+                    .rows
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, r)| parse_terminal_no(&r.terminal).0 == pole)
+                    .map(|(i, _)| i)
+                    .collect();
+                assert_eq!(positions.len(), 3, "{spec}: 極{pole}は3段");
+                assert_eq!(
+                    positions[2] - positions[0],
+                    2,
+                    "{spec}: 極{pole}の3段が隣り合っていない ({positions:?})"
+                );
+            }
+        }
+    }
+
+    /// The terminal chart CSV always lists rows in the same order as the chart (the editor), for every row order.
+    /// チャートCSVの行順は、常にチャート(エディタ)の行順と一致する (row_orderで並べ替えても、CSVは`chart.rows`をそのまま使うので食い違わない)。
+    #[test]
+    fn the_csv_row_order_always_matches_the_chart_row_order() {
+        let (mut sheet, id) = sheet_with_tb(12, 0);
+        let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) else { panic!() };
+        s.attrs.insert("row_order".into(), "alnum".into());
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        let csv = terminal_chart_csv(&sheet, id);
+        let csv_terminals: Vec<&str> = csv.lines().skip(1).map(|line| line.split(',').next().unwrap()).collect();
+        assert_eq!(csv_terminals, terminal_order(&chart));
+        assert_eq!(csv_terminals[0..3], ["1", "10", "11"], "英数順がCSVにも反映される");
+    }
+    /// An accessory spec lists each accessory as "terminal:kind:part number"; "end" places it after the last terminal, and the part number may be left out.
+    /// 付属品の指定は「端子番号:種別:型番」を並べたもので、`end`は最後の端子の後ろを指し、型番は省略できる。
+    #[test]
+    fn accessories_are_read_in_order_with_end_and_optional_part_number() {
+        let labels = numbered(4);
+        let (items, issues) = parse_accessories("1:end_bracket:TB-EB, 3:partition, end:end_plate:TB-EP", &labels);
+        assert!(issues.is_empty(), "{issues:?}");
+        assert_eq!(
+            items,
+            vec![
+                Accessory { before: Some("1".into()), kind: AccessoryKind::EndBracket, part_no: "TB-EB".into() },
+                Accessory { before: Some("3".into()), kind: AccessoryKind::Partition, part_no: String::new() },
+                Accessory { before: None, kind: AccessoryKind::EndPlate, part_no: "TB-EP".into() },
+            ]
+        );
+    }
+
+    /// An accessory item with an unknown kind, a terminal the block does not have, or a broken format is skipped on its own and reported, while the other items still count.
+    /// 種別が3種以外・端子台に無い端子番号・書式が壊れた付属品の項は、その項だけが飛ばされて報告され、ほかの項は生きる。
+    #[test]
+    fn a_bad_accessory_item_is_skipped_alone_and_reported() {
+        let labels = numbered(4);
+        let (items, issues) =
+            parse_accessories("1:end_bracket:TB-EB,2:clip:X,9:partition:P,壊れた項,end:end_plate", &labels);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].before.as_deref(), Some("1"));
+        assert_eq!(items[1].before, None);
+        let texts: Vec<&str> = issues.iter().map(|i| i.text.as_str()).collect();
+        assert_eq!(texts, ["2:clip:X", "9:partition:P", "壊れた項"]);
+    }
+
+    /// In the terminal chart an accessory gets its own row right before the terminal it names, and "end" accessories come after the last terminal.
+    /// 端子台チャートでは、付属品は指定した端子の直前に自分の行を持ち、`end`の付属品は最後の端子の後ろに来る。
+    #[test]
+    fn accessory_rows_sit_before_their_terminal_and_end_rows_come_last() {
+        let (mut sheet, id) = sheet_with_tb(3, 0);
+        if let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) {
+            s.attrs.insert(
+                ACCESSORIES_ATTR.into(),
+                "1:end_bracket:TB-EB,2:partition:,end:end_bracket:TB-EB".into(),
+            );
+        }
+        let chart = terminal_chart(&sheet, id).unwrap();
+        let first: Vec<String> = chart.cells().into_iter().map(|r| r[0].clone()).collect();
+        assert_eq!(
+            first,
+            ["[エンドブラケット TB-EB]", "1", "[仕切り板]", "2", "3", "[エンドブラケット TB-EB]"]
+        );
+        assert!(chart.cells().iter().all(|r| r.len() == TERMINAL_CHART_COLUMNS.len()));
+    }
+
+    /// The terminal check reports a broken accessory item as a warning and names the item.
+    /// 端子台チェックは、読めない付属品の項をWarningとして報告し、どの項かを名指しする。
+    #[test]
+    fn the_terminal_check_warns_about_a_broken_accessory_item() {
+        let (mut sheet, id) = sheet_with_tb(2, 0);
+        if let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) {
+            s.attrs.insert(ACCESSORIES_ATTR.into(), "5:end_bracket:TB-EB".into());
+        }
+        let diags = check_terminal_block(&sheet, id);
+        let d = diags.iter().find(|d| d.code == ACCESSORY_INVALID).expect("付属品の指摘");
+        assert_eq!(d.severity, Severity::Warning);
+        assert!(d.message.contains("5:end_bracket:TB-EB"), "{}", d.message);
+    }
+
+    fn set_attr(sheet: &mut Sheet, id: EntityId, key: &str, value: &str) {
+        if let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) {
+            s.attrs.insert(key.into(), value.into());
+        }
+    }
+
+    /// Swapping a terminal's inside and outside exchanges only that terminal's two sides in the chart; the other terminals keep theirs.
+    /// 端子の内外をスワップすると、チャートではその端子の内部側と外部側だけが入れ替わり、ほかの端子はそのまま。
+    #[test]
+    fn swapping_a_terminal_exchanges_only_its_inside_and_outside() {
+        let (mut sheet, id) = wired_tb();
+        // 内部側と外部側の電線の色を変え、まとめた電線の列の順が見えるようにする
+        for e in sheet.entities.values_mut() {
+            if let Entity::Wire(w) = e {
+                w.color = if w.points[0].x < 100.0 { "green" } else { "red" }.into();
+            }
+        }
+        let before = terminal_chart(&sheet, id).unwrap();
+        let b = row(&before, "1");
+        assert_eq!(b.wire, format!("{} / {}", b.internal_wire, b.external_wire));
+        set_attr(&mut sheet, id, SWAPPED_ATTR, "1");
+        let chart = terminal_chart(&sheet, id).unwrap();
+        let r = row(&chart, "1");
+        assert_eq!((r.internal.as_str(), r.external.as_str()), ("R2:1", "R1:2"));
+        assert!(r.swapped);
+        // まとめた電線の列も入れ替え後の「内部側→外部側」の順になる
+        assert_eq!(r.wire, format!("{} / {}", b.external_wire, b.internal_wire));
+        assert!(!row(&chart, "2").swapped);
+    }
+
+    /// An empty swap setting means no terminal is swapped.
+    /// 内外スワップの指定が空なら、どの端子も入れ替わらない。
+    #[test]
+    fn an_empty_swap_setting_swaps_nothing() {
+        let (mut sheet, id) = wired_tb();
+        set_attr(&mut sheet, id, SWAPPED_ATTR, " , ");
+        let chart = terminal_chart(&sheet, id).unwrap();
+        let r = row(&chart, "1");
+        assert_eq!((r.internal.as_str(), r.external.as_str()), ("R1:2", "R2:1"));
+        assert!(chart.rows.iter().all(|r| !r.swapped));
+    }
+
+    /// A swap setting naming a terminal the block does not have ignores just that item and the terminal check warns about it.
+    /// 内外スワップの指定に端子台に無い端子番号があると、その項目だけを無視し、端子台チェックがWarningで知らせる。
+    #[test]
+    fn an_unknown_swapped_terminal_is_ignored_and_warned_about() {
+        let (mut sheet, id) = wired_tb();
+        set_attr(&mut sheet, id, SWAPPED_ATTR, "1,9");
+        let chart = terminal_chart(&sheet, id).unwrap();
+        assert!(row(&chart, "1").swapped);
+        assert_eq!(chart.swap_unknown, ["9"]);
+        let d = check_terminal_block(&sheet, id)
+            .into_iter()
+            .find(|d| d.code == TERMINAL_SWAP_UNKNOWN)
+            .expect("警告");
+        assert_eq!(d.severity, Severity::Warning);
+        assert!(d.message.contains('9'), "{}", d.message);
+    }
+
+    /// On a three-level block, swapping and sorting at the same time keep the sorted row order and swap only the named terminals.
+    /// 3段端子台で内外スワップと並べ替えを同時に指定しても、行は並べ替えどおりに並び、入れ替わるのは指定した端子だけ。
+    #[test]
+    fn swapping_and_sorting_a_three_level_block_work_together() {
+        let (mut sheet, id) = sheet_with_multilevel_tb(2, 3, "");
+        set_attr(&mut sheet, id, SWAPPED_ATTR, "1b,2c");
+        set_attr(&mut sheet, id, ROW_ORDER_ATTR, "alnum");
+        let chart = terminal_chart(&sheet, id).unwrap();
+        let order: Vec<&str> = chart.rows.iter().map(|r| r.terminal.as_str()).collect();
+        assert_eq!(order, ["1a", "1b", "1c", "2a", "2b", "2c"]);
+        let swapped: Vec<&str> = chart
+            .rows
+            .iter()
+            .filter(|r| r.swapped)
+            .map(|r| r.terminal.as_str())
+            .collect();
+        assert_eq!(swapped, ["1b", "2c"]);
+    }
+
 }

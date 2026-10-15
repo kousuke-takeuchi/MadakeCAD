@@ -1,6 +1,6 @@
 // ファイル操作のショートカット判定の仕様テスト。
 import { describe, expect, it } from "vitest";
-import { fileShortcutOf, type ShortcutKeyEvent } from "./editorShortcuts";
+import { fileShortcutOf, historyShortcutOf, type ShortcutKeyEvent } from "./editorShortcuts";
 
 /** キーイベントを組み立てる (既定は⌘だけを押した状態)。 */
 function key(code: string, extra: Partial<ShortcutKeyEvent> = {}): ShortcutKeyEvent {
@@ -52,5 +52,21 @@ describe("editor shortcuts: ファイル操作", () => {
     // ロシア語配列で⌘Sを押したイベント: `key`は"ы"だが`code`は"KeyS"
     expect(fileShortcutOf(key("KeyS"), false)).toBe("save");
     expect(fileShortcutOf(key("Digit1"), false)).toBeNull();
+  });
+});
+
+describe("editor shortcuts: 元に戻す・やり直し", () => {
+  // ja: ⌘Z=元に戻す / ⇧⌘Z=やり直し で、WindowsとLinuxではCtrlでも同じ
+  it("Cmd+Z is undo and Shift+Cmd+Z is redo, with Ctrl working the same", () => {
+    expect(historyShortcutOf(key("KeyZ"))).toBe("undo");
+    expect(historyShortcutOf(key("KeyZ", { shiftKey: true }))).toBe("redo");
+    expect(historyShortcutOf(key("KeyZ", { metaKey: false, ctrlKey: true }))).toBe("undo");
+  });
+
+  // ja: 修飾キー無しのZや⌥を足した組み合わせ、Z以外のキーは元に戻す・やり直しにならない
+  it("plain Z, Option combinations and other keys are not undo or redo", () => {
+    expect(historyShortcutOf(key("KeyZ", { metaKey: false }))).toBeNull();
+    expect(historyShortcutOf(key("KeyZ", { altKey: true }))).toBeNull();
+    expect(historyShortcutOf(key("KeyY"))).toBeNull();
   });
 });

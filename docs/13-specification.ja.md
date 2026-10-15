@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2360仕様項目**。
+全6領域・**2603仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -89,6 +89,63 @@
 - 同じ盤をもう一度採番しても図面は何も変わらない(すでに読み順どおりの番号が入っているため)。 <sub>`numbering_an_already_numbered_panel_changes_nothing`</sub>
 - 採番コマンドは素のJSONで表現できるので、AIやCLIから送れる。 <sub>`the_panel_numbering_command_is_plain_json`</sub>
 - 存在しないシートの採番は、黙って何もせずに断られる。 <sub>`numbering_an_unknown_sheet_is_refused`</sub>
+- 8極の端子台を開始番号から採番すると、全ピンの新しい番号がピン順に書き込まれる。 <sub>`renumbering_writes_every_terminal_number_from_the_start_value`</sub>
+- 多段端子台の採番は各極の段記号を保ったまま極番号だけを変えるので、同じ極の全段が同じ新番号を共有する。 <sub>`renumbering_a_multilevel_block_keeps_the_level_letters`</sub>
+- 接頭辞と1より大きい増分はどちらも効く: 増分が極番号を進め、接頭辞は全ラベルの前に付く。 <sub>`renumbering_applies_the_step_and_prefix`</sub>
+- 採番は同じコマンド内でジャンパの指定も新しい番号へ書き換えるので、ジャンパは実際に繋ぐ端子を指したままになる。 <sub>`renumbering_rewrites_the_jumpers_to_the_new_labels`</sub>
+- 採番はピングループの範囲の両端も新しい番号へ書き換える。範囲は端子番号で指しているため。 <sub>`renumbering_rewrites_pin_group_ranges_too`</sub>
+- 採番したあとでもピングループの括弧は図面に描かれ続け、図面検証も無指摘のままになる: 保存された範囲はその端子台の表示番号と突き合わせられるため。 <sub>`a_pin_group_bracket_still_draws_after_renumbering_the_terminals`</sub>
+- 多段端子台で1段ぶんの端子を指すピングループの範囲も、段記号が保たれるので採番後に括弧を描き続ける。 <sub>`a_multilevel_pin_group_bracket_survives_a_renumbering`</sub>
+- 読めないジャンパの項目 (や端子台に無い端子を指す項目) は採番をそのまま通り抜けるので、図面検証はそれを指し続け、undoで属性は1バイトも変わらず戻る (ここでは旧番号と新番号のラベル集合が重ならないため。重なる場合の例外は`undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap`を参照)。 <sub>`a_broken_jumper_item_survives_a_renumbering_and_comes_back_unchanged_on_undo`</sub>
+- 採番のundoは、読めないジャンパの項目を必ずしも1バイトも変えずに戻すとは限らない: 旧番号と新番号のラベル集合が重なると、順方向では旧番号として解決できなかったトークン(旧番号には存在しなかったため)が、逆方向では新番号として解決できてしまうことがあり、順方向では触れなかった項目に逆方向だけが触れてしまう。これはドキュメント化済みの境界事例 (docs/05-wire-management) であり、このタスクで直す不具合ではない。 <sub>`undoing_a_renumbering_of_an_unreadable_item_is_not_byte_identical_when_old_and_new_labels_overlap`</sub>
+- 採番のundoはピングループの指定を空白ごと1バイトも変えずに戻す: 書き換えは認識できた端子番号のトークンだけを置き換えるため。 <sub>`undoing_a_renumbering_restores_the_pin_group_spec_byte_for_byte`</sub>
+- 3端子にまたがるジャンパの連鎖は増分2の採番にも追従する: 各リンクの両端が新しい番号になり、連鎖のままになる。 <sub>`a_jumper_chain_follows_a_renumbering_with_a_step`</sub>
+- 端子台ではないシンボルの採番は拒否される: 端子番号の上書きはそのシンボルのピン番号テキストを図面上で書き換えてしまうため。 <sub>`renumbering_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- 端子番号は前後の空白を落として保存されるので、コマンドが検証した値とチャートが読み戻す値が必ず一致する。 <sub>`terminal_numbers_are_stored_without_their_surrounding_spaces`</sub>
+- 前後の空白しか違わない2つのラベルは重複として拒否される: 保存されると同じ端子番号になってしまうため。 <sub>`terminal_numbers_that_are_duplicates_once_trimmed_are_refused`</sub>
+- カンマを含む端子番号は拒否される: カンマは保存形の区切り記号なので、読み戻すと端子の個数そのものが変わってしまうため。 <sub>`a_terminal_number_containing_a_comma_is_refused`</sub>
+- 採番のundoは直前の端子番号を正確に戻す: 直前に直接指定していればそれが戻り、既定値から採番していれば上書き無しの状態へ戻る。 <sub>`undoing_a_renumbering_restores_the_previous_numbers`</sub>
+- 明示的な上書きの値がたまたま既定のラベルと同じでも、採番のundoはそのキーを復元する: キーがあった事実は「上書き無し」として消されない (Task 3 ルーリング3a)。 <sub>`undoing_a_renumbering_restores_an_override_that_matches_the_default_value`</sub>
+- ピン数と個数が合わない番号列の指定は拒否され、図面は変わらない。 <sub>`a_terminal_number_count_mismatch_is_refused_without_changing_the_drawing`</sub>
+- 番号列に重複したラベルがあると、図面を変えずに拒否される。 <sub>`duplicate_terminal_numbers_are_refused`</sub>
+- 番号列に空要素があると、図面を変えずに拒否される。 <sub>`an_empty_terminal_number_is_refused`</sub>
+- 直接指定のあとに番号を`None`にすると、シンボルの既定番号へ戻る (`terminal_numbers`属性自体が消える)。 <sub>`setting_numbers_to_none_returns_to_the_defaults`</sub>
+- シートに無いentity idの採番は、黙って何もせずに断られる。 <sub>`renumbering_an_unknown_entity_is_refused`</sub>
+- 採番コマンドは既定の開始番号・増分を持つ素のJSONで表現できるので、AIやCLIからentity idだけでも送れる。 <sub>`the_terminal_renumbering_command_is_plain_json`</sub>
+- 4極の単段端子台を2段化すると、symbol_idが書き換わり、terminal_numbers属性は未設定のまま (明示的な上書きが無かったため)。 <sub>`setting_levels_turns_a_single_level_block_into_two_levels`</sub>
+- 段数を増やしたあとの解除 (直接levels=1を指定しても) は、単段のsymbol_idそのものに戻る (`_1l`という別名にはならない)。 <sub>`setting_levels_back_to_one_restores_the_plain_single_level_id`</sub>
+- 段を増やすと、明示的なterminal_numbers上書きが極→段の順で段記号付きのラベルへ展開される (計画の例と同じ "11,12,…" → "11a,11b,12a,12b,…")。 <sub>`increasing_levels_expands_an_explicit_terminal_numbers_override`</sub>
+- 段記号の無い単段のジャンパ指定は、2段化すると段aへ移る (既存の結線指定が黙って消えない)。 <sub>`increasing_levels_moves_a_levelless_jumper_to_level_a`</sub>
+- 消える段のピンに配線が繋がったままだと、段を減らす操作は拒否され、図面は一切変わらない。 <sub>`decreasing_levels_is_refused_when_a_wire_is_connected_to_a_vanishing_level`</sub>
+- 消える段の端子を指すジャンパが残っていると、段を減らす操作は拒否される。 <sub>`decreasing_levels_is_refused_when_a_jumper_names_a_vanishing_level`</sub>
+- 消える段の端子を範囲に含むピングループが残っていると、段を減らす操作は拒否される。 <sub>`decreasing_levels_is_refused_when_a_pin_group_spans_a_vanishing_level`</sub>
+- 消える段の端子を指す付属品指定が残っていると、段を減らす操作は拒否される (spec §1.1 付属品の書式。専用コマンドが入る前から検証する)。 <sub>`decreasing_levels_is_refused_when_an_accessory_names_a_vanishing_level`</sub>
+- 消える段に何も参照が残っていなければ、段を減らす操作は成功し、symbol_idと端子番号の上書きの両方から消える段のラベルが落ちる。 <sub>`decreasing_levels_succeeds_and_drops_the_vanishing_levels_labels`</sub>
+- 段数を変えても段aの端子の用紙上の座標は1mmも動かない (端子台の回転・反転にかかわらず) ので、その端子に描かれていたものは動かさずに済む。 <sub>`a_level_change_keeps_level_a_terminals_at_the_same_sheet_coordinates`</sub>
+- 単段の端子台の端子1に引いてあった配線は、2段化したあとも電気的に同じ端子 (名前は`1a`になる) に繋がったままで、新しくできた段の端子へ繋ぎ変わったりしない。 <sub>`a_wire_on_terminal_one_stays_on_level_a_after_adding_a_level`</sub>
+- 消える段のピンに載っているのがネットラベルだけ (配線は1本も無い) のときも、ネットリストと同じ座標一致の規則で段を減らす操作は拒否される。 <sub>`decreasing_levels_is_refused_when_a_net_label_sits_on_a_vanishing_pin`</sub>
+- 3段から2段へ減らす操作は、段cの端子を指すジャンパが残っている間は拒否され、外せば通る (そのとき落ちるのは段cのラベルだけで、残ったジャンパはそのまま)。 <sub>`decreasing_three_levels_to_two_is_refused_only_while_level_c_is_referenced`</sub>
+- 段を増やすと、付属品指定の端子番号もジャンパと同じように書き換わる (端子1に付けた付属品は`1a`へ追従する)。種別と型番は1バイトも変わらない。 <sub>`increasing_levels_rewrites_accessory_terminal_labels`</sub>
+- `terminal_numbers`キーがあるのに値が無効 (個数がピン数と合わない) なとき、その値は段数変更でも書き換わらず、undoで1バイトも変わらず戻る (コマンドは自分で戻せないキーを消さない)。 <sub>`a_present_but_invalid_terminal_numbers_value_survives_a_level_change`</sub>
+- 段数変更で土台の取り違えにより重複が起きる指定 (一方の極の段aラベルは段aの記号で終わって剥がされ、もう一方の極の段aラベルはもともと記号を持たず剥がされない、その結果同じ土台になる指定) は、何も書き込む前に拒否される (重複したラベルを持つterminal_numbersを黙って保存しない)。 <sub>`a_level_change_that_would_produce_duplicate_labels_is_refused_without_writing_anything`</sub>
+- 段数変更のundoは、変更前のsymbol_idと配置座標を**1回のundoでそろって**戻すので、端子は元の座標へ帰る。 <sub>`undoing_a_level_change_restores_the_symbol_id_and_the_position_together`</sub>
+- 1〜3の範囲外の段数指定は、図面を変えずに拒否される。 <sub>`setting_levels_outside_one_to_three_is_refused`</sub>
+- 端子台以外のシンボルの段数変更は拒否される (RenumberTerminals/SetTerminalNumbersと同じ門)。 <sub>`setting_levels_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- `_1l`という段数1の別名で綴ったsymbol_idは配置時に拒否される: 単段端子台のsymbol_idの綴りは1通りだけが有効。 <sub>`a_one_level_alias_symbol_id_is_refused_when_placed`</sub>
+- 端子台の極数を増やしても (予備の挿入がそうする)、既存ピンの用紙上の座標は動かない — インスタンスが逆向きにずれて打ち消すため — ので、繋がっていた配線は外れない。 <sub>`inserting_a_spare_terminal_keeps_every_existing_pins_coordinates`</sub>
+- 指定した端子の後ろに予備を挿入すると、繰り下がった番号列が書き込まれ、動いたラベルを使っていたジャンパ指定も書き換わるので、ジャンパは同じ物理的な端子の組を指したままになる。 <sub>`inserting_a_spare_after_a_terminal_renumbers_labels_and_follows_the_jumper`</sub>
+- 0個の指定は、図面を変えずに拒否される。 <sub>`inserting_zero_spares_is_refused_without_touching_the_drawing`</sub>
+- 端子台に無い端子番号を挿入位置に指定すると拒否される。 <sub>`inserting_after_an_unknown_terminal_is_refused`</sub>
+- 動的シンボルの極数上限を超える挿入は拒否される。 <sub>`inserting_past_the_pole_cap_is_refused`</sub>
+- 端子台以外のシンボルへの予備挿入は拒否される (他の端子台系コマンドと同じ門)。 <sub>`inserting_a_spare_on_a_symbol_that_is_not_a_terminal_block_is_refused`</sub>
+- 挿入した予備をundoすると、symbol_id・端子番号・位置がまとめて1回で元に戻る。 <sub>`undoing_an_inserted_spare_restores_symbol_id_numbers_and_position_together`</sub>
+- 多段端子台への予備挿入は、1極につき段数ぶんの端子が増える (2段なら"9a","9b")。 <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- `after`を省略した挿入コマンドのJSON (MCP/Link API/CLIが送れる最小形) は、末尾挿入として通る。 <sub>`the_insert_spare_terminals_command_accepts_after_omitted`</sub>
+- 予備を入れた端子台へもう1つ予備を挿入する操作は、末尾でもどの端子の後ろでも通る。挿入位置を物理的なピン順ではなくチャートに出る順で数えるため。 <sub>`inserting_a_second_spare_into_the_same_block_succeeds`</sub>
+- 接頭辞を付けて採番した端子台への予備挿入は、どのラベルも接頭辞を保ったまま通り、パニックしない (接頭辞付きのラベルは素の極番号として読めず、以前は番号の計算が桁溢れしていた)。 <sub>`inserting_a_spare_into_a_prefixed_block_keeps_the_prefix`</sub>
+- 「予備を空き番号のまま残す」扱いは、予備を空き番号に入れ、後ろの端子の番号 (とそれを指すジャンパ) を一切変えない。 <sub>`inserting_a_spare_without_renumbering_leaves_the_following_numbers_alone`</sub>
+- 「空き番号のまま残す」扱いで予備の番号が既に使われている挿入は、図面を変えずに拒否される。 <sub>`inserting_a_spare_without_renumbering_is_refused_when_the_number_is_taken`</sub>
+- 予備を挿入しても既存の端子の用紙上の座標は1mmも動かない (端子台の回転・反転にかかわらず) ので、その端子に描かれていたものは動かさずに済む。 <sub>`inserting_a_spare_keeps_pin_coordinates_at_every_rotation_and_mirroring`</sub>
 - シートの用紙サイズ・向きを変えても (G15)、既存のエンティティは元の座標のまま動かず、消えもしない。 <sub>`changing_sheet_paper_keeps_entity_coordinates`</sub>
 - 用紙サイズの変更をundoすると、サイズと向きの両方が元へ戻る。 <sub>`undoing_a_paper_change_restores_size_and_orientation`</sub>
 - 用紙を変えてもシート独自のゾーン分割はそのまま: 独自の分割数を持つシートはその分割を保つ。 <sub>`changing_paper_keeps_the_sheets_own_zone_division`</sub>
@@ -377,6 +434,8 @@
 - 前のバージョンで作られた部品DBを開くと、寸法の無い同梱サンプルにフットプリント寸法が追補される(自分で入れた寸法は書き換えない)。 <sub>`an_older_database_gains_the_bundled_footprint_sizes`</sub>
 - 幅か高さの片方しか入っていない部品はフットプリント寸法を持たない扱いになる(外形を描くには両方必要なため)。 <sub>`a_half_filled_footprint_size_is_not_used`</sub>
 - DBパスの既定はOSのアプリデータフォルダで、MADAKE_PARTS_DBで上書きできる。 <sub>`default_path_respects_env_override`</sub>
+- 旧スキーマv6のDBは開いた時点でv7へ移行され、既存データを保持したまま端子台の種別列が使えるようになり、同梱の端子台サンプルに種別が入り、端子台付属品のサンプルが足される。 <sub>`v6_database_migrates_to_v7_with_terminal_kinds_and_accessory_samples`</sub>
+- 新しく作った部品DBには、種別入りの端子台サンプルと端子台付属品3種のサンプルが最初から入っている。 <sub>`a_new_database_has_terminal_kinds_and_accessory_samples`</sub>
 
 ### PDF出力
 
@@ -404,6 +463,8 @@
 - シンボル左側のピンにかける括弧は、いちばん上から下のピンまで縦棒でつながり、キャプションはさらに左に置かれる。 <sub>`a_bracket_on_left_pins_is_a_vertical_bar_further_left`</sub>
 - ピン番号そのものに「-」が入っている端子はピングループに指定できず、「存在しないピン」ではなく使えない理由がそのまま報告される。 <sub>`a_pin_number_containing_a_hyphen_is_refused_with_its_own_reason`</sub>
 - 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない)。 <sub>`a_multilevel_group_brackets_the_outside_of_its_own_column`</sub>
+- 端子台の端子番号が上書きされていても、表示ラベルで書かれたピングループの範囲はピンを見つけて括弧を描き、「存在しないピン」も報告しない。 <sub>`a_range_written_with_the_displayed_labels_still_draws_its_bracket`</sub>
+- 端子番号を上書きした多段端子台でも、1段ぶんの端子を指す範囲は上書きが無いときと同じようにその段の列に括弧を掛ける。 <sub>`a_multilevel_range_still_brackets_its_own_column_after_an_override`</sub>
 - 多段端子台の段をまたぐ範囲は、黙って何も描かれるのではなく報告される: 段ごとに外側の辺が逆なので、1本の括弧では囲めないため。 <sub>`a_range_across_two_levels_is_reported_instead_of_silently_skipped`</sub>
 - シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される: まっすぐな括弧にならないため。 <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
 
@@ -493,6 +554,7 @@
 - 列幅は指定した相対比に従い、指定が無ければ等分になる。 <sub>`report_page_column_widths_follow_ratios`</sub>
 - データ中のXML特殊文字はエスケープされ、ページは正しいSVGのままになる。 <sub>`report_page_escapes_xml_special_characters`</sub>
 - 端子台チャートのシートは帳票名に参照記号を含み、チャートのデータと同じ行を端子ごとに並べる。 <sub>`terminal_chart_sheet_matches_chart_rows`</sub>
+- 図枠付きの端子台チャートシートは、チャートと同じ行順でセルを描く。`row_order`を変えると図面シート上の行の位置そのものが動く (見出しだけ変わるのではない)。 <sub>`the_terminal_chart_sheet_draws_the_rows_in_the_chart_row_order`</sub>
 - 端子台でないエンティティのチャートシートは1ページも出ない。 <sub>`terminal_chart_sheet_is_none_for_other_entities`</sub>
 - From-To電線リストのシートはCSV帳票と同じ列・同じ行を使う。 <sub>`wire_list_sheet_matches_report_rows`</sub>
 - 部品表のシートは部品グループごとに参照記号と数量を並べる。 <sub>`bom_sheet_lists_parts_with_quantity`</sub>
@@ -520,6 +582,9 @@
 - 配線の無いプロジェクトには電線集約行が1行も付かない (部品だけの部品表はそのまま)。 <sub>`bom_has_no_wire_rollup_rows_without_any_wires`</sub>
 - 部品行の後ろに、電線品番ごとの集約行が付き、数量欄にプロジェクト全体の使用長合計 (m単位・小数第2位まで) が入る。 <sub>`bom_rolls_up_wires_by_part_number_after_the_component_rows`</sub>
 - 品番を引けない配線は「(未割当)」の1行にまとまり、勝手に品番を作ったり黙って消えたりしない。 <sub>`bom_rolls_up_unresolved_wires_under_one_unassigned_row`</sub>
+- 端子台の付属品は部品表に型番ごとの1行として載り、数量欄に使用個数、参照記号欄に使っている端子台が入り、電線集約行の後ろに来る。 <sub>`bom_counts_terminal_accessories_by_part_number`</sub>
+- 型番の無い付属品や、端子台チェックが読めない付属品の項は、部品表に行を作らない。 <sub>`bom_skips_accessories_without_a_part_number_or_that_cannot_be_read`</sub>
+- 品番を引けない配線に使用長が1本も入っていないときは、「(未割当) 0.00 m」の行を出さない。 <sub>`bom_adds_no_unassigned_row_when_those_wires_have_no_length`</sub>
 - カンマを含む項目は引用符で囲まれ、CSVが壊れない。 <sub>`bom_escapes_fields_with_commas`</sub>
 - 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先、続いて嵌合相手・備考列 (G14/G18) が並ぶ。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。 <sub>`wire_list_is_a_from_to_list`</sub>
 - シンボルのピンに届いているワイヤの端は「参照記号:ピン番号」(例 K1:A1) と書かれる。 <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
@@ -671,16 +736,21 @@
 - ジャンパバーは、ジャンパの掛け方や端子台の向き・反転にかかわらず、どの端子番号にも重ならない場所に描かれるので、番号はいつでも読める。 <sub>`a_jumper_bar_never_covers_a_terminal_number`</sub>
 - 隣り合う2端子間のジャンパは、図面上でその2つの印(丸)の隙間を埋める短い太いバー1本として描かれ、ほかの図形は足されない。 <sub>`svg_draws_a_jumper_bar_between_adjacent_terminals`</sub>
 - 多段端子台で段記号付きに書かれたジャンパ ("1a-1b") は、その極の行の上、2つの段の列の印の隙間にバーとして描かれる。 <sub>`svg_draws_a_jumper_bar_across_the_levels_of_a_multilevel_block`</sub>
+- ジャンパバーは端子台シンボルの一部なので、シンボルと一緒に出たり隠れたりし、単独で消えることはない: 表示クラスの概念を持たない書き出しでは、端子台の向きにかかわらず常に描かれる。 <sub>`svg_export_always_draws_the_jumper_bar_with_its_symbol`</sub>
 - ジャンパバーは端子台と一緒に回るので、90度回した端子台では、バーも回転後の端子の間に横向きに描かれる。 <sub>`svg_draws_the_jumper_bar_turned_with_a_rotated_terminal_block`</sub>
 - シンボルの中の文字 (モータの「M」など) はシンボル定義が決めた場所に描かれ、シンボルを回しても反転してもその場所から動かない (文字そのものは常に水平に書くため)。 <sub>`the_lettering_inside_a_symbol_stays_put_when_the_symbol_is_turned`</sub>
+- 採番後のジャンパバーは、単に幾何的に近いというだけでなく、実際に繋ぐ端子の印刷ラベルのテキストと紐付けて帰属確認する。最寄りマークのテストでは端子番号の入れ替わりを検出できなかったフェーズ6の積み残しを閉じる。 <sub>`a_jumper_bar_is_attributed_to_its_terminals_by_label_text_after_renumbering`</sub>
 - 1〜2文字の端子番号は、端子台をどの向きに回しても反転しても、自分の印(丸)の中に丸ごと収まり、その中央に載る。だから回した端子台でも端子ごとに番号が読める。 <sub>`a_turned_terminal_block_keeps_a_short_number_inside_its_own_mark`</sub>
 - 出力図面(SVG/PDF)では、回していない端子台のどの端子番号も、自分の印の中心のちょうど文字高の半分(端子番号の文字高2.0mmに対して1.0mm)だけ下にベースラインが来る。単段でも多段でも同じ(画面のキャンバスはこれより小さい独自の下げ幅を使う)。 <sub>`a_terminal_number_sits_half_a_character_below_its_mark_centre`</sub>
 - 3文字の端子番号 (多段端子台の`10a`など) は自分の印と同じ幅なので、印の中央に載せたうえで、印から出るのは最大0.3mmまでに収まる。そのうえでジャンパバーにも隣の端子の印にも掛からない。 <sub>`a_three_character_terminal_number_hangs_at_most_a_little_over_its_own_mark`</sub>
+- `attrs["terminal_numbers"]`は各印に描かれるラベルを上書きする: シンボル定義の生のピン番号は一切現れず、上書きラベルはそれぞれちょうど1回だけ現れる。 <sub>`svg_draws_the_overridden_terminal_number_instead_of_the_raw_pin_number`</sub>
+- 採番などで生じた3文字の上書きラベル (多段の"11a"や接頭辞付き"P12") も、シンボル既定の3文字番号で確かめた可読性の範囲に収まる: 自分の印の中央に載り、はみ出しは同じ許容量まで、ジャンパバーにも隣の印にも掛からない。 <sub>`an_overridden_three_character_label_hangs_at_most_a_little_over_its_own_mark`</sub>
 - ジャンパバーはシンボルの普通の線の2倍以上の太さで描かれるので、端子の印どうしの狭い隙間に入る短いバーでも、印刷したときにショートバーだと分かる。 <sub>`the_jumper_bar_is_at_least_twice_as_thick_as_a_symbol_line`</sub>
 - 隣り合わない2端子間のジャンパは(端子台チャートと同じ規則で)不正なので、バーはまったく描かれない。 <sub>`svg_draws_no_bar_for_a_jumper_between_non_adjacent_terminals`</sub>
 - 複数のジャンパを持つ端子台には、ジャンパの数だけバーが描かれる。 <sub>`svg_draws_one_bar_per_jumper_when_there_are_several`</sub>
 - ジャンパの無い端子台にはバーが描かれず、端子台以外のシンボルは"jumpers"属性を持っていてもバーが描かれない。 <sub>`svg_draws_no_bar_without_jumpers_or_on_a_non_terminal_block`</sub>
 - pin_groups の範囲は、角括弧のポリライン1本とそのキャプション文字をシートに描く。 <sub>`svg_draws_a_bracket_and_caption_for_a_pin_group`</sub>
+- 端子番号を採番したあとでもピングループの括弧は描かれ続ける: 範囲はその端子台の表示番号と突き合わせられ、採番はその表示番号へ範囲を書き換えているため。 <sub>`svg_still_draws_the_bracket_after_the_terminals_are_renumbered`</sub>
 - pin_groups属性が無い・空のシンボルには括弧のポリラインが描かれない。 <sub>`svg_draws_no_bracket_without_pin_groups`</sub>
 - 重なるpin_groups項目は (verify.rsで検証済みのとおり) 括弧を一切描かず、同じインスタンスの関係ない有効な項目は変わらず描かれる。 <sub>`svg_draws_nothing_for_overlapping_pin_groups_but_keeps_the_rest`</sub>
 - ピングループの括弧とキャプションは、ブロック・端子台・コネクタのいずれでも、全ての回転とミラーで、ピン番号・ピン名・参照記号・型番・機能ラベルのどれにも重ならない。 <sub>`svg_pin_group_boxes_never_land_on_any_label_at_any_rotation`</sub>
@@ -699,6 +769,7 @@
 - 同じ極の端子は段が違っても同じ行に並ぶので、1aと1bは同じ高さになり、行のピッチは単段と同じ5mmのままになる。 <sub>`every_level_of_the_same_pole_sits_on_one_row`</sub>
 - 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有することはないので、どの端子にも別々に配線できる。 <sub>`multilevel_terminal_block_pins_are_on_the_grid_and_never_coincide`</sub>
 - 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様に未知のシンボルとして拒否される。 <sub>`multilevel_terminal_block_rejects_level_count_outside_one_to_three`</sub>
+- `terminal_block_8p_1l`は`terminal_block_8p`の別名として受け付けず、未知のシンボルとして拒否する: 単段端子台のsymbol_idの綴りは1通りだけにする (Task 3 多段端子の生成・解除)。 <sub>`multilevel_terminal_block_rejects_the_one_level_alias_spelling`</sub>
 - 単段の端子台id(`terminal_block_{n}p`)は多段対応の追加後もそのままの数字だけのピン番号(1,2,…)を持ち、既存プロジェクトは有効なまま使える。 <sub>`single_level_terminal_block_id_is_unaffected_by_multilevel_support`</sub>
 - 動的生成のconnector_2pは旧静的定義と完全に同じピン座標を持ち、既存図面に影響しない。 <sub>`dynamic_connector_2p_matches_legacy_static_def`</sub>
 - resolve_symbolは同梱idを見つけ、不正・範囲外の動的ID(0極・51極・数値なし)は拒否する。 <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
@@ -808,6 +879,13 @@
 - ジャンパは、それが繋ぐ両方の端子のジャンパ欄に表示される。 <sub>`a_jumper_is_shown_on_both_of_its_terminals`</sub>
 - 端子台チャートのCSVは 端子・Lv・内部側・線番・電線・外部側・ジャンパ の列を持ち、端子1個につき1行になる。 <sub>`the_terminal_chart_csv_has_the_designed_columns`</sub>
 - 多段端子台はチャートのLv列に段記号が入り、端子列は完全なピン番号 ("1a") になるので、2つの段が同じ端子に見えることはない。 <sub>`a_multilevel_terminal_block_shows_its_level_letter_in_the_lv_column`</sub>
+- `attrs["terminal_numbers"]`が既定の番号を上書きしていると、チャートの行・ジャンパ欄・CSVはどれもシンボル既定のピン番号ではなく上書きラベルを表示する。 <sub>`an_overridden_terminal_number_shows_up_in_the_chart_and_csv`</sub>
+- 端子番号の指定は前後の空白を落とした値で判定される: ラベル前後の空白は無視され、空白しか違わない2つのラベルは重複と数え、保存形の区切り記号 (カンマ) を含むラベルは拒否される。 <sub>`a_number_list_is_validated_on_its_trimmed_values`</sub>
+- ラベル対応表は生のピン番号を表示ラベルへ、表示ラベルを生のピン番号へ相互変換する。上書きの無い端子台では恒等変換になるので、呼び出し側は分岐なしで素通しできる。 <sub>`the_label_map_converts_a_raw_pin_number_both_ways`</sub>
+- 端子台ではないシンボルには、手編集のファイルに`terminal_numbers`が残っていてもラベル対応表は作られない。上書きは端子台だけの仕組みであるため。 <sub>`a_symbol_that_is_not_a_terminal_block_has_no_label_map`</sub>
+- ジャンパ指定の書き換えは認識できた端子番号だけを置き換え、それ以外 (空白・区切り記号・読めない項目) は元のまま残すので、同じ書き換えを逆向きに走らせれば元の文字列へ戻る。 <sub>`rewriting_a_jumper_spec_only_touches_the_numbers_it_recognises`</sub>
+- 端子数と合わない上書き (ラベルが多い・少ない) は無効なので、チャートは行を失ったり異常終了したりせず、シンボル既定の番号へフォールバックする。 <sub>`an_invalid_override_falls_back_to_the_default_numbers`</sub>
+- 多段端子台で極だけを増分2以上で変える上書き (例 "11a"と"13a") でも、ジャンパの隣接判定はシンボルの生のピン配置から決めるので、表示ラベルの数値差では判定しない。だから増分2の採番後もジャンパは有効なまま。 <sub>`adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic`</sub>
 - 多段端子台のジャンパは段記号まで書く。"1a-1b" は同じ極の2つの段を繋ぐ指定として受け付けられる。 <sub>`a_jumper_can_link_the_two_levels_of_one_pole`</sub>
 - 多段端子台でも、同じ段の隣り合う極どうしのジャンパ ("1a-2a") は単段の端子台と同じように受け付けられる。 <sub>`a_jumper_can_link_neighbouring_poles_of_one_level`</sub>
 - 多段端子台に段記号なしのジャンパ ("1-2") を書くと、どの段に掛けるのか分からないので受け付けられない。 <sub>`a_jumper_without_a_level_letter_is_refused_on_a_multilevel_block`</sub>
@@ -823,6 +901,34 @@
 - 端子台エディタの一覧には、プロジェクトの全端子台がシート順・参照記号順に、所在シート・極数・ジャンパ付きで並ぶ。 <sub>`the_editor_lists_every_terminal_block_with_its_sheet_poles_and_jumpers`</sub>
 - 多段端子台の概要は極数・段数を端子数と区別して持つ: 4極2段の端子台は極数4・段数2・端子数8になる。 <sub>`a_multilevel_terminal_block_summary_separates_poles_levels_and_terminals`</sub>
 - 単段の端子台は段数1として報告されるので、極数と端子数は同じ数になる。 <sub>`a_single_level_terminal_block_summary_has_one_level`</sub>
+- 8極の単段端子台を2段化すると、symbol_idが多段の動的idに変わる。 <sub>`multilevel_id_turns_a_single_level_block_into_two_levels`</sub>
+- 多段を解除して1段に戻すと、`_1l`という別名ではなく元の単段idそのものに戻る。 <sub>`multilevel_id_normalises_one_level_to_the_plain_single_level_id`</sub>
+- 0段や上限を超える段数は、勝手に丸められず拒否される。 <sub>`multilevel_id_rejects_zero_and_too_many_levels`</sub>
+- 端子台以外のsymbol_idはそもそも拒否する (段数は端子台にしか意味が無い)。 <sub>`multilevel_id_rejects_a_symbol_that_is_not_a_terminal_block`</sub>
+- 2段から3段へ増やすときも、極数は現在のsymbol_idから読み取ったものを使う。 <sub>`multilevel_id_keeps_the_pole_count_when_changing_between_multilevel_counts`</sub>
+- 段を増やすと、極ごとのプレーンなラベルが段数ぶんに展開される。極→段の順で段記号を付け足す ("11,12" → "11a,11b,12a,12b")。 <sub>`relabel_for_levels_expands_plain_labels_into_lettered_levels_pole_major`</sub>
+- 段を減らして単段へ戻すと、消える段のラベルは落ち、残る段記号は取り除かれる。 <sub>`relabel_for_levels_drops_vanishing_levels_and_strips_the_letter_at_one_level`</sub>
+- 2段から3段に増やすと、既存の段a・段bのラベルはそのまま残り、極ごとに新しい段cのラベルが増える。 <sub>`relabel_for_levels_adds_a_new_level_on_top_of_existing_ones`</sub>
+- 段aのラベルの末尾が段aの記号と一致するときだけ土台から取り除く。段aのラベルがたまたま別の文字で終わる上書き(この仕組みが付け足した段記号ではなく、ユーザーが書いた表記の一部)ではその文字を残すので、別の文字で終わる上書きをした2つの極の土台が同じになって潰れることがない(Task 3再レビューの持ち越し: 以前は末尾がアルファベットなら何でも取り除いており、手で書いたラベルの一部を壊したり土台が重複したりし得た)。 <sub>`relabel_for_levels_only_strips_a_trailing_letter_that_matches_level_as_own_letter`</sub>
+- 指定した端子の後ろに予備を1個挿入すると、シンボルの極は末尾に足される (既存ピンは動かない) が、返る番号列はそれより後ろの極の番号がすべて1つ繰り下がり、空いた番号が新しい予備に渡る。 <sub>`inserting_a_spare_pushes_the_numbers_after_the_chosen_terminal`</sub>
+- 挿入位置を指定しない (末尾挿入) と、番号もそのまま続く: 新しい極は物理的にも番号的にも最後になるので、既存のどの端子の番号も変わらない。 <sub>`inserting_a_spare_at_the_end_does_not_renumber_anything`</sub>
+- 純関数の番号列で新しい予備の位置に来る行は、チャートではふつうの予備行として出る: 両側未結線で`spare`が立ち、シンボル既定の端子と見分けが付く特別扱いは何も無い。 <sub>`the_inserted_spares_row_is_unconnected_in_the_chart`</sub>
+- 0個の指定は、何もしない変更として素通しせず拒否される。 <sub>`inserting_zero_spares_is_refused`</sub>
+- 端子台に無い端子番号を挿入位置に指定すると、「末尾扱い」に読み替えず拒否される。 <sub>`inserting_after_an_unknown_terminal_is_refused`</sub>
+- 動的シンボルの極数上限を超える挿入は拒否される。 <sub>`inserting_past_the_pole_cap_is_refused`</sub>
+- 多段端子台では、挿入した1つの予備極が段の数だけの端子になる (2段なら新しいラベルは"3a"/"3b"の2つ)。各段の記号はそのまま保たれる。 <sub>`inserting_a_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- 同じ端子台への2回目・3回目の予備挿入もそのまま通る。挿入位置をチャートに出る順 (番号順) で数えるので、1回目の挿入がわざと食い違わせた物理的なピン順には引きずられない。 <sub>`inserting_a_second_spare_counts_the_position_in_the_charts_order`</sub>
+- 1回目の途中挿入のあとに選べる挿入位置はどれも通る (ポップオーバー既定の末尾も含む)。指定した位置は表示番号の中から探すので、1回目の予備が取った番号とぶつからない。 <sub>`every_insertion_point_still_works_after_a_mid_block_insertion`</sub>
+- 多段端子台への2回目の挿入も通り、やはり1極につき段数ぶんの端子が増える。番号はチャートの順で最後の極の次になる。 <sub>`inserting_a_second_spare_on_a_multilevel_block_adds_one_terminal_per_level`</sub>
+- 予備のラベルは隣の端子の表記の数値部だけを増やして作るので、接頭辞を付けて採番した端子台は接頭辞を保つ (「読めない番号」の番兵で桁溢れすることもない)。 <sub>`inserting_a_spare_keeps_a_prefixed_labels_prefix`</sub>
+- 数字を1つも含まないラベルからは番号を決められないので、パニックしたりラベルを黙って壊したりせず、理由を添えて拒否する。 <sub>`inserting_a_spare_next_to_a_label_without_digits_is_refused`</sub>
+- 後ろの番号を動かさない扱い (「予備を空き番号のまま残す」) では既存のラベルが1つも変わらず、選んだ端子の次の空き番号が予備に渡る。 <sub>`leaving_the_following_numbers_alone_gives_the_spare_the_vacant_number`</sub>
+- 「空き番号のまま残す」扱いで、予備の番号が既にある端子とぶつかる挿入は、重複したラベルを書かずに理由を添えて拒否する。 <sub>`leaving_the_following_numbers_alone_is_refused_when_the_number_is_taken`</sub>
+- チャートは物理的な極の位置ではなく、番号が示す位置に予備を表示する: 既定 (数値順) は解析した極番号で並べ直すので、ブロックの途中への挿入もチャートの途中への挿入として読める。 <sub>`the_chart_shows_the_spare_after_its_chosen_terminal_not_at_the_physical_end`</sub>
+- 付属品指定の書き換えは各項の先頭の端子番号トークンだけに効き、種別・型番・末尾指定の`end`・知らない端子を指す項は1バイトも変わらない。 <sub>`rewrite_accessory_labels_only_replaces_the_terminal_number_token`</sub>
+- 既定値と同じラベルを明示的に書いたterminal_numbersも、キーがあり値が妥当なので上書きとして扱われる (展開結果が既定と同じかどうかだけでは判定しない)。 <sub>`terminal_numbers_override_reports_a_key_that_matches_the_default_value`</sub>
+- 個数が合わない無効なterminal_numbersは上書きとして扱わない (表示は既定へフォールバック済みで、復元できる妥当な値が無い)。 <sub>`terminal_numbers_override_is_none_for_an_invalid_value`</sub>
+- terminal_numbersキー自体が無ければ上書きは無い。 <sub>`terminal_numbers_override_is_none_when_the_key_is_absent`</sub>
 - シートを指定すると、そのシートに描かれている端子台だけの一覧になる。 <sub>`naming_a_sheet_narrows_the_terminal_block_list_to_that_sheet`</sub>
 - 端子台ではないシンボルは一覧に出ない。 <sub>`other_symbols_never_show_up_in_the_terminal_block_list`</sub>
 - 端子台のチャートとチェックは、どのシートにあるかを知らなくてもentity idだけで引ける。 <sub>`a_terminal_block_can_be_looked_up_by_id_across_sheets`</sub>
@@ -833,21 +939,47 @@
 - 1つの端子台に複数のジャンパがあれば、それぞれ独立したバーの線分になる。 <sub>`multiple_jumpers_each_produce_their_own_bar_segment`</sub>
 - 端子台に無い端子番号を指すジャンパは、パニックせず線分を作らない。 <sub>`a_jumper_to_a_missing_terminal_produces_no_bar_segment`</sub>
 - ジャンパは通常のupdate_entityコマンドで設定するので、チャートに反映され、undoで元に戻る。 <sub>`setting_jumpers_through_update_entity_is_undoable`</sub>
+- `attrs["row_order"]`が未設定・空・未知語なら数値順 (既定) に落ちる。 <sub>`an_unset_or_unknown_row_order_falls_back_to_number_order`</sub>
+- 数値順 (既定) は極番号を数として昇順に並べる。10極以上でも桁の大小どおりになる。 <sub>`number_order_sorts_poles_as_integers`</sub>
+- 数値順は表示ラベルを解析した極番号で並べる。行が最初に持っていた物理的な(生ピンの)並びでは決まらないので、予備端子挿入 (Task 4) が作るような物理順と食い違う上書きでも数値の昇順で出る。 <sub>`number_order_sorts_by_the_parsed_label_even_when_the_physical_order_disagrees`</sub>
+- 英数順は端子番号を文字列として辞書順に並べるので、10極以上では数値順と違う結果になる ("10"が"2"より前に来る)。 <sub>`alnum_order_compares_terminal_numbers_as_text`</sub>
+- ページ順は、その極の配線が図面上で読み順(上→下、左→右)に最初に現れる位置で並べる。番号は逆でも、読み順で先に来る方が先になる。配線の無い極(予備)は最後に極番号順で並ぶ。 <sub>`page_order_follows_where_the_wiring_first_appears_on_the_sheet`</sub>
+- 外部ケーブル順は、外部ハーネス名が最初に現れた極の順にその名前の極をまとめる (名前の辞書順ではなく初出順)。ハーネス名の無い極は最後に極番号順で並ぶ。 <sub>`cable_order_groups_poles_by_their_external_harness_in_first_seen_order`</sub>
+- ジャンパ順は、ジャンパが1本でも掛かっている極を極番号順でまとめて先頭に出し、ジャンパの無い極をその後ろに極番号順で並べる。 <sub>`jumper_order_brings_every_jumpered_pole_to_the_front`</sub>
+- 3段の端子台では、どの並べ替え順を選んでも同じ極の3段 (a/b/c) が並びの中で必ず隣り合う (段がバラバラの位置に散らばらない)。 <sub>`every_row_order_keeps_the_three_levels_of_one_pole_adjacent`</sub>
+- チャートCSVの行順は、常にチャート(エディタ)の行順と一致する (row_orderで並べ替えても、CSVは`chart.rows`をそのまま使うので食い違わない)。 <sub>`the_csv_row_order_always_matches_the_chart_row_order`</sub>
+- 付属品の指定は「端子番号:種別:型番」を並べたもので、`end`は最後の端子の後ろを指し、型番は省略できる。 <sub>`accessories_are_read_in_order_with_end_and_optional_part_number`</sub>
+- 種別が3種以外・端子台に無い端子番号・書式が壊れた付属品の項は、その項だけが飛ばされて報告され、ほかの項は生きる。 <sub>`a_bad_accessory_item_is_skipped_alone_and_reported`</sub>
+- 端子台チャートでは、付属品は指定した端子の直前に自分の行を持ち、`end`の付属品は最後の端子の後ろに来る。 <sub>`accessory_rows_sit_before_their_terminal_and_end_rows_come_last`</sub>
+- 端子台チェックは、読めない付属品の項をWarningとして報告し、どの項かを名指しする。 <sub>`the_terminal_check_warns_about_a_broken_accessory_item`</sub>
+- 端子の内外をスワップすると、チャートではその端子の内部側と外部側だけが入れ替わり、ほかの端子はそのまま。 <sub>`swapping_a_terminal_exchanges_only_its_inside_and_outside`</sub>
+- 内外スワップの指定が空なら、どの端子も入れ替わらない。 <sub>`an_empty_swap_setting_swaps_nothing`</sub>
+- 内外スワップの指定に端子台に無い端子番号があると、その項目だけを無視し、端子台チェックがWarningで知らせる。 <sub>`an_unknown_swapped_terminal_is_ignored_and_warned_about`</sub>
+- 3段端子台で内外スワップと並べ替えを同時に指定しても、行は並べ替えどおりに並び、入れ替わるのは指定した端子だけ。 <sub>`swapping_and_sorting_a_three_level_block_work_together`</sub>
 
 ### 端子接続図
 
 - 端子ストリップは端子1個につき1つの番号入りの箱として、端子番号の順に上から下へ縦に積まれる。 <sub>`the_strip_stacks_one_numbered_box_per_terminal`</sub>
+- 端子接続図はチャート(エディタ)と同じ並び順に従う: `row_order`でジャンパの掛かった極をまとめると、ストリップの箱もその順に積まれ、単純な端子番号順にはならない。 <sub>`the_strip_follows_the_chart_row_order_not_plain_terminal_order`</sub>
 - 盤外 (外部側) はストリップの左、盤内 (内部側) は右に描かれ、それぞれ見出しが付く。 <sub>`the_outside_is_on_the_left_and_the_inside_on_the_right`</sub>
 - 何も繋がっていない端子は、薄く塗った箱に予備の注記を付けてストリップに残る。 <sub>`a_spare_terminal_stays_in_the_strip_lightly_filled`</sub>
 - 同じハーネスに属する電線は引出線の外端で1つのブラケットにまとめられ、ハーネス名が添えられる。 <sub>`wires_of_one_harness_are_gathered_into_a_bracket`</sub>
 - どのハーネスにも属さない電線にはブラケットが付かない。 <sub>`a_wire_without_a_harness_gets_no_bracket`</sub>
 - 隣り合う端子のサドルジャンパは、端子箱の内部側の縁に縦の連結線として描かれる。 <sub>`a_jumper_is_drawn_on_the_inside_edge_of_the_boxes`</sub>
 - 各引出線には、その電線の線色・線径sq・品番が線の下に小さく書かれる。 <sub>`each_lead_line_carries_the_wire_specification`</sub>
+- 内外をスワップした端子は、2本の電線が反対側に描かれる。ほかの端子は元の側のまま。 <sub>`a_swapped_terminal_draws_its_wires_on_the_opposite_sides`</sub>
 - 多段端子台の接続図は、各箱に段記号付きの完全な端子番号(1a,1b,2a,2b,…)を書くので、2つの段が同じ端子として描かれることはない。 <sub>`a_multilevel_terminal_block_labels_boxes_with_the_level_letter`</sub>
 - 多段端子台の接続図は段を列で表す。端子ストリップが段の数だけの列に分かれ(段aが左)、各端子の箱は自分の段の列に置かれる。 <sub>`a_multilevel_terminal_diagram_draws_each_level_as_a_column`</sub>
 - 多段端子台の接続図は、段の列それぞれの上に段記号を書くので、箱の番号を読まなくてもどの列がどの段か分かる。 <sub>`a_multilevel_terminal_diagram_heads_each_level_column_with_its_letter`</sub>
+- 同じ段の2極を繋ぐジャンパ("1a-2a")は、間に挟まる別の段の行("1b")を飛び越えるので、どの行の引出線よりも外側のレーンを通る — 間に挟まる行自身の引出線が走る帯を横切らない。 <sub>`a_same_level_jumper_that_skips_a_row_never_crosses_the_skipped_rows_lead_line`</sub>
+- 1つの極の2つの段を繋ぐジャンパ("1a-1b")は、必ず物理的に隣り合う行を繋ぐ (段はクラスタでまとまる) ので、単段の端子台と同じ、箱のすぐそばの近いレーンを使う。 <sub>`a_cross_level_jumper_between_adjacent_rows_uses_the_same_near_lane_as_single_level`</sub>
+- 段の違う2つの同段ジャンパ("1a-2a"と"1b-2b")はそれぞれ別の段の行を飛び越えるので、それぞれ専用のレーンを使う: 2つのレーンは別のXになり、どちらもどこかの行の引出線が走る帯には入らない。 <sub>`each_level_gets_its_own_distinct_jumper_lane`</sub>
+- 段ごとのジャンパレーンはどれも、ブラケットとハーネス名が入る20mmの帯の外側で、かつ印刷できる紙の内側に収まる (2段でも3段でも) ので、レーンがハーネス名の上を走ることも紙からはみ出すこともない。 <sub>`every_jumper_lane_clears_the_harness_zone_and_stays_inside_the_page`</sub>
+- 内部側の接続先表記は段レーンの帯の幅だけ短く収められるので、文字がレーンに届くことはない。単段の端子台では帯は0で、表記の幅は変わらない。 <sub>`the_inside_label_width_reserves_the_lane_band`</sub>
+- 行を飛び越える同段ジャンパがあっても、千鳥配置 (行ごとに1箱、段は列) の外部側左・内部側右は崩れない: 箱の列や引出線の向きは、ジャンパ線がどのレーンを使うかに影響されない。 <sub>`the_staggered_layout_keeps_outside_left_and_inside_right_with_skipping_jumpers`</sub>
 - 単段の端子台の接続図には段の見出しが付かない (端子の列が1本しかないため)。 <sub>`a_single_level_terminal_diagram_has_no_level_heading`</sub>
 - 1ページに収まらない端子は次のページへ続き、各ページの表題にそのページの端子の範囲が入る。 <sub>`terminals_that_do_not_fit_continue_on_the_next_page`</sub>
+- ページ表題の端子の範囲は、そのページに載る端子の最小と最大を書く。ジャンパ順のように行が端子番号順に並んでいない並べ替えでも、範囲として読める表記のままになる。 <sub>`the_page_title_range_names_the_smallest_and_largest_terminal_on_the_page`</sub>
 - 端子台1つにつき1ページが出て、端子台でないものには1ページも出ない。 <sub>`one_page_per_terminal_block_and_none_for_anything_else`</sub>
 - 端子接続図のページはA4横で、JIS図枠と、端子台の参照記号が入った表題欄を持つ。 <sub>`the_page_has_the_frame_and_a_title_block`</sub>
 - 端子接続図はterminal-diagramという名前の帳票として選べ、CLI・Link API・MCPで同じ綴りになる。 <sub>`the_terminal_diagram_is_a_report_named_terminal_diagram`</sub>
@@ -1652,8 +1784,9 @@
 - PLCモジュールのシンボルは1〜64点までで、その外の点数は存在しない <sub>`dynamicSymbol`</sub>
 - 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、1端子=左右2接続点になる <sub>`dynamicSymbol`</sub>
 - 多段端子台は段ごとに1列の端子が横に並び、同じ極の端子(1aと1b)は同じ行に載る(Rust側と同じ座標) <sub>`dynamicSymbol`</sub>
-- 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有しない <sub>`dynamicSymbol`</sub>
+- 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有しない (段数1は`_1l`という別名idを作らないので対象外) <sub>`dynamicSymbol`</sub>
 - 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様にnullになる <sub>`dynamicSymbol`</sub>
+- `terminal_block_8p_1l`は`terminal_block_8p`の別名として受け付けずnullになる (Task 3。単段端子台のsymbol_idの綴りは1通りだけ、Rust側resolve_symbolと同じ規則) <sub>`dynamicSymbol`</sub>
 - 単段の端子台id(terminal_block_{n}p)は多段対応の追加後も数字だけのピン番号のままで、既存プロジェクトとの互換を保つ <sub>`dynamicSymbol`</sub>
 - 静的定義を優先し、無ければ動的生成にフォールバックする <sub>`resolveSymbolDef`</sub>
 - ブロックのピンは箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並ぶ(Rust側と同じ座標) <sub>`blockSymbol`</sub>
@@ -1665,6 +1798,7 @@
 - 配置済みブロックの定義はインスタンスの属性から作られる(同じidでも中身が違う) <sub>`resolveInstanceDef`</sub>
 - 属性が壊れているブロックは描かれない(undefinedになる) <sub>`resolveInstanceDef`</sub>
 - ピングループ括弧はシンボルと一緒に描かれるので、参照記号・型番の位置決めに使う外形にはその箱も入る (Rust側 svg::symbol_bounds とparity) <sub>`symbolBounds`</sub>
+- 端子番号を採番したあとでも、ピングループの箱は外形に入ったままになる (範囲は表示番号と突き合わせられるため。Rust側 pin_group_paper_boxes とparity) <sub>`symbolBounds`</sub>
 - 実機ブロック表示のコイルは、ピングループの属性を持っていても括弧のための余白を取らない (そこには括弧を描かないため。Rust側 a_device_block_coil_reserves_no_room_for_brackets_it_never_draws とparity) <sub>`symbolBounds`</sub>
 - 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない) <sub>`symbolBounds`</sub>
 - ピングループの部品どうし (括弧と、折り返したキャプションの各行) は全ての回転・ミラーで決して重ならない (Rust側 svg_pin_group_pieces_never_overlap_each_other_at_any_rotation とparity) <sub>`captionLineAnchors`</sub>
@@ -1843,6 +1977,8 @@
 - コネクタは右側にピンが出るので、括弧とキャプションは足先より右に出る (Rust側の3一族テストとparity) <sub>`pinGroupBracket`</sub>
 - 多段端子台で2段目の端子にかけたグループの括弧は、その段の列の外側に出る (列と列の間には入らない、Rust側とparity) <sub>`pinGroupBracket`</sub>
 - 多段端子台の段をまたぐ範囲は、黙って何も描かれるのではなく報告される (段ごとに外側の辺が逆で1本の括弧では囲めないため、Rust側とparity) <sub>`pinGroupBracket`</sub>
+- 端子番号が上書きされた端子台では、表示ラベルで書かれた範囲がピンを見つけて括弧を描き、古い生のピン番号は「存在しないピン」になる (Rust側とparity) <sub>`pinGroupBracket`</sub>
+- 端子番号を上書きした多段端子台でも、1段ぶんの範囲はその段の列の外側に括弧を掛ける <sub>`pinGroupBracket`</sub>
 - シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される <sub>`pinGroupBracket`</sub>
 
 ### relayXref
@@ -1891,6 +2027,8 @@
 - 1〜2文字の端子番号は、どの向きに回しても反転しても自分の印(丸)の中に丸ごと収まる <sub>`drawSymbol text placement`</sub>
 - 画面のキャンバスでは、回していない端子台の番号は印の中心から文字高の約1/3(1/2.8)だけ下にベースラインが来る(出力図面の1/2より小さい) <sub>`drawSymbol text placement`</sub>
 - ジャンパバーは太い線だけで描かれ、両端に丸(円)は描かれない <sub>`drawSymbol text placement`</sub>
+- attrs["terminal_numbers"]の上書きは、シンボル定義の生のピン番号ではなく上書きラベルを描く (Rust側 svg_draws_the_overridden_terminal_number_instead_of_the_raw_pin_number とparity) <sub>`drawSymbol text placement`</sub>
+- 採番後のジャンパバーは、単なる幾何的な近さではなく実際に繋ぐ端子の印刷ラベルへ紐付けて帰属確認できる (Rust側 a_jumper_bar_is_attributed_to_its_terminals_by_label_text_after_renumbering とparity。フェーズ6の「最寄りマーク帰属のテストが端子番号の入れ替わりを検出しない」を閉じる) <sub>`drawSymbol text placement`</sub>
 - 実機ブロックをどの向きに回しても反転しても、引き出し線は必ず実際のA1/A2ピンの点から出るので、そこに繋いだ配線は繋がったまま (G7) <sub>`drawDeviceBlock`</sub>
 - 実機ブロックの表はどの回転でも正立のままで、外形の位置も大きさも変わらない (回るのはピンだけ) <sub>`drawDeviceBlock`</sub>
 - 外形がどれだけ横に広がっても、回していないコイルの引き出し線は水平のまま、配線が来るピンの高さで外形の左右の辺に届く <sub>`drawDeviceBlock`</sub>
@@ -1901,6 +2039,8 @@
 - 表示クラス「参照記号」を隠すと、実機ブロックの接点イメージ(端子対と所在)も消える(外形とヘッダは残る) <sub>`drawDeviceBlock`</sub>
 - 嵌合対の破線は表示クラス「シンボル」に属し、シンボルを隠すと一緒に消える (結ぶ相手が見えないため) <sub>`renderSheet mate links`</sub>
 - 参照記号を隠しても嵌合対の破線は残る (参照記号の表示クラスには属さない) <sub>`renderSheet mate links`</sub>
+- ジャンパバー(G5)は他のシンボル付随描画(嵌合対の破線など)と同じ表示クラス「シンボル」に属し、シンボルを隠すと一緒に消える (フェーズ6積み残しの解消) <sub>`jumper bar view-class gating (Task 3, フェーズ6積み残し)`</sub>
+- 参照記号を隠してもジャンパバーは残る (参照記号の表示クラスには属さない) <sub>`jumper bar view-class gating (Task 3, フェーズ6積み残し)`</sub>
 - 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える。Rust側 svg_leader_dot_is_the_size_of_a_wire_junction_dot とparity) <sub>`renderSheet dots`</sub>
 - 凡例ブロックは列見出しと、シートの配線から導出した行 (色・線径・品番・使用長) を表として描く <sub>`wire legend block drawing`</sub>
 - 選択中の凡例ブロックは、外形の矩形を選択色で描く <sub>`wire legend block drawing`</sub>
@@ -2057,6 +2197,38 @@
 - ジャンパバーは、どの端子番号の文字にも重ならない <sub>`jumperBars`</sub>
 - 複数のジャンパはそれぞれ独立した線分になる <sub>`jumperBars`</sub>
 - 端子台に無い端子番号を指すジャンパは線分を作らない <sub>`jumperBars`</sub>
+- 個数が合い、重複も空要素も無ければ妥当 <sub>`validTerminalNumbers`</sub>
+- ピン数と合わない個数は無効 <sub>`validTerminalNumbers`</sub>
+- 重複したラベルは無効 <sub>`validTerminalNumbers`</sub>
+- 空要素は無効 <sub>`validTerminalNumbers`</sub>
+- 判定はtrim後の値で行う: ラベル前後の空白は無視し、空白しか違わない2つは重複と数え、空白だけのラベルも無効 (Rust側とparity) <sub>`validTerminalNumbers`</sub>
+- 保存形の区切り記号 (カンマ) を含むラベルは無効 (読み戻すと端子の個数が変わってしまう) <sub>`validTerminalNumbers`</sub>
+- 対応表は生のピン番号と表示ラベルを相互変換し、知らない番号はそのまま返す (Rust側 TerminalLabels とparity) <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- 端子台以外のシンボルには対応表を作らない (上書きは端子台だけの仕組み) <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- ジャンパ指定の書き換えは認識できた端子番号だけを置き換え、空白・読めない項目・存在しない端子を含む項目はそのまま残す (逆向きで元の文字列へ戻る。Rust側 rewrite_jumper_labels とparity) <sub>`terminalLabels / rewriteJumperLabels`</sub>
+- attrs["terminal_numbers"]が無ければシンボル既定の番号のまま <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
+- 妥当な上書きはピン順のラベルとして使われ、生の番号→上書きラベルの対応が引ける <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
+- 個数が合わない上書きは既定の番号へフォールバックする <sub>`terminalNumbersOfInstance / terminalLabels`</sub>
+- 開始番号から刻み1でピン順に振る (単段) <sub>`terminalRenumberPlan`</sub>
+- 多段端子台は段記号を保ったまま極だけ採番するので、同じ極の全段が同じ番号を共有する <sub>`terminalRenumberPlan`</sub>
+- 増分と接頭辞はどちらも効く <sub>`terminalRenumberPlan`</sub>
+- 極数と段数は端子番号から数え、単段の端子台は段数1になる <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 段数を変えたsymbol_idは、段数1のとき`_1l`の別名ではなく単段のidへ正規化される <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 端子台以外のシンボルと範囲外の段数はnull (プレビューを出さない) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 段を増やすと極ごとのラベルに段記号が付き、減らすと残る段のラベルだけになる (段数1では段記号が落ちる) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 末尾が英字でない上書きラベル (接頭辞付きの`X11`) は段記号を外す対象にならず、そのまま土台になる <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 段aのラベルの末尾が段aの記号以外の文字 (別の文字で終わる手書きの上書き) では土台から取り除かず、2極の土台が同じ文字列に潰れて重複することもない (Task 3再レビューの持ち越し) <sub>`level change helpers (Rust側 poles_and_levels_of / multilevel_id / relabel_for_levels の双子)`</sub>
+- 指定した端子の後ろに挿入すると、symbol_idは末尾に1極増え、番号列はそれより後ろが繰り下がって空いた番号を新しい予備が引き継ぐ <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 挿入位置を指定しない (末尾) と、番号は繰り下がらずそのまま続く <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 接頭辞付きのラベル (A1..A8) でも数字の部分だけを繰り下げ、接頭辞は保たれる (Rust側 inserting_a_spare_keeps_a_prefixed_labels_prefix と同じ値) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 2回目の挿入は番号順 (チャートの並び) で位置を数えるので、1回目で末尾に足した極があっても末尾・途中のどちらへも挿入できる (Rust側 inserting_a_second_spare_counts_the_position_in_the_charts_order と同じ値) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 「空き番号のまま残す」(renumberFollowing=false) では後ろの番号を変えず、空いていた番号を予備が取る (Rust側 leaving_the_following_numbers_alone_gives_the_spare_the_vacant_number と同じ値) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 「空き番号のまま残す」で予備の番号が既存の端子とぶつかるときはnull (Rust側は理由付きで拒否) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 挿入位置のラベルに数字が無い ("予備") ときはnull (Rust側は理由付きで拒否) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 0個以下の指定はnull (プレビューを出さない) <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 端子台に無い端子番号を挿入位置に指定するとnull <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 多段端子台では、挿入した1つの予備極が段の数だけの端子になる <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
+- 増分2で採番したような表示ラベル(11,13,15,17)でも、隣接判定は生のピン配置で決まるので、物理的に隣り合う極どうしのジャンパは通る (Rust側 adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic とparity) <sub>`parseJumperSpec with an overridden display order`</sub>
 
 ### textStyle
 
@@ -2176,6 +2348,8 @@
 - ⌥を足した組み合わせ (⌥⌘Sなど) はファイル操作にしない <sub>`editor shortcuts: ファイル操作`</sub>
 - ⇧⌘Nと⇧⌘Oはファイル操作に割り当てない (別のショートカットに残す) <sub>`editor shortcuts: ファイル操作`</sub>
 - 判定は物理キー (`code`) で行うので、非ラテン配列でも同じキーで効く <sub>`editor shortcuts: ファイル操作`</sub>
+- ⌘Z=元に戻す / ⇧⌘Z=やり直し で、WindowsとLinuxではCtrlでも同じ <sub>`editor shortcuts: 元に戻す・やり直し`</sub>
+- 修飾キー無しのZや⌥を足した組み合わせ、Z以外のキーは元に戻す・やり直しにならない <sub>`editor shortcuts: 元に戻す・やり直し`</sub>
 
 ### entityKindLabels
 
@@ -2236,6 +2410,13 @@
 - 会話のトークンはターンをまたいで足し合わされる <sub>`sumUsage`</sub>
 - GitHub Copilotのプレミアムリクエストは小数のままトークンと別枠で数える <sub>`sumUsage`</sub>
 - 使用量がまだ無い会話は全て0(バッジは「1x」表示になる) <sub>`sumUsage`</sub>
+- Cmd+Enter (macOS) で送信する <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- Ctrl+Enter で送信する <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- ただのEnterは送信せず、入力欄の改行になる (日本語変換の確定で誤送信しない) <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- Shift+Enterも送信しない (改行) <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- IME変換中 (isComposing) は、Cmd/Ctrlを押していても送信しない <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- 変換確定のEnterがkeyCode 229で届く環境 (WebKit) でも送信しない <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
+- Enter以外のキーはCmd/Ctrlと一緒でも送信しない <sub>`isSendShortcut (チャット入力の送信キー)`</sub>
 
 ### 閉じる・リロード時の未保存ガード
 
@@ -2356,6 +2537,10 @@
 - sendは会話を新規作成し、サーバー採番のidを引き取る <sub>`chat store: アクション`</sub>
 - send解決前に届いたイベントも同じ会話へ入る <sub>`chat store: アクション`</sub>
 - 空プロンプトとストリーミング中の送信は無視される <sub>`chat store: アクション`</sub>
+- 答えている最中の割り込み送信は、進行中のターンを中断してから同じ会話へ新しい指示を送る <sub>`chat store: アクション`</sub>
+- 答えていないときの割り込み送信は普通の送信と同じで、中断APIは呼ばない <sub>`chat store: アクション`</sub>
+- 会話idの採番を待っている間 (最初の送信が返る前) は割り込めず、何も送らない <sub>`chat store: アクション`</sub>
+- 空の割り込み送信は無視され、進行中のターンも中断しない <sub>`chat store: アクション`</sub>
 - send失敗時はメッセージにエラーを載せてストリーミングを解除する <sub>`chat store: アクション`</sub>
 - 初回送信に失敗した会話でも、再送はローカルidを渡さず新規として送れる <sub>`chat store: アクション`</sub>
 - cancelは対象の会話だけを止め、他会話のストリーミングは残す <sub>`chat store: アクション`</sub>
@@ -2677,8 +2862,14 @@
 - 3つ以上の端子を選ぶと隣どうしを順につないだジャンパになる <sub>`jumper specification`</sub>
 - 隣り合わない端子どうしにはジャンパを掛けられない <sub>`jumper specification`</sub>
 - ジャンパ削除は選んだ端子に掛かっているものだけを外す <sub>`jumper specification`</sub>
+- 5つの並べ替え順はRust側`RowOrder`のバリアントと同じ5つ、同じ表記 <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
+- 未設定・未知語は数値順に落ちる(Rust側 row_order_of と同じ既定) <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
+- 5つの既知の語はそのまま対応する並びに解決される <sub>`row order (parity with madake-core terminal_chart::RowOrder)`</sub>
 - 開くとそのシートの端子台一覧を読み込み、先頭の端子台のチャートを表示する <sub>`terminal strip editor store`</sub>
 - グリッドは端子番号ごとに1行で、外部側・内部側・線番・電線が図面どおりに並ぶ <sub>`terminal strip editor store`</sub>
+- グリッドの行は段記号(Lv)も運ぶ(単段は空欄、多段端子台は"a"/"b"のような文字) <sub>`terminal strip editor store`</sub>
+- 端子台の一覧より先にチャートだけが読めているときは、行の段記号からLv列の要否を判定する <sub>`terminal strip editor store`</sub>
+- 単段の端子台ではLv列は空欄で、多段端子台とは判定される <sub>`terminal strip editor store`</sub>
 - 電線が1本も繋がっていない端子は予備端子として印が付く <sub>`terminal strip editor store`</sub>
 - 隣り合う2端子を選んでジャンパを生成すると、update_entityコマンド1回で属性に書き込まれる <sub>`terminal strip editor store`</sub>
 - 多段端子台の見出しには端子数ではなく極数を使う(4極2段は「8極」ではなく「4極」) <sub>`terminal strip editor store`</sub>
@@ -2689,6 +2880,15 @@
 - ジャンパ削除は選んだ端子に掛かるジャンパだけを外したコマンドになる <sub>`terminal strip editor store`</sub>
 - ジャンパが1本も残らないときは属性ごと消す <sub>`terminal strip editor store`</sub>
 - ジャンパを編集したらチャートを読み直し、グリッドが図面と一致し続ける <sub>`terminal strip editor store`</sub>
+- 並べ替え順を変えると、update_entityコマンド1回で属性(row_order)に書き込まれる <sub>`terminal strip editor store`</sub>
+- 既定の数値順を選び直すと、row_order属性ごと消す(未設定の端子台と同じ状態に戻す) <sub>`terminal strip editor store`</sub>
+- 現在のチャートの並べ替え順をそのまま見せる(サーバ側で並べ替え済み) <sub>`terminal strip editor store`</sub>
+- 「図面へジャンプ」は表示中の端子台のシート・entity idをrevealへそのまま渡す <sub>`terminal strip editor store`</sub>
+- 「図面へジャンプ」はエディタを閉じてから図面を出す(全画面モーダルの下にジャンプ先が隠れないように) <sub>`terminal strip editor store`</sub>
+- ジャンプで閉じたエディタを開き直すと、同じ端子台と同じ行選択に戻る <sub>`terminal strip editor store`</sub>
+- ×やスクリムで閉じたときは覚え書きを残さない(次に開くと先頭の端子台・選択なし) <sub>`terminal strip editor store`</sub>
+- 並べ替えを変えたときの読み直しは1回だけ(自前の読み直しと図面のrevision通知で二重に取りに行かない) <sub>`terminal strip editor store`</sub>
+- 端子台が無ければ「図面へジャンプ」は何もしない <sub>`terminal strip editor store`</sub>
 - 図面が外から変わったら (undoやAIの編集) グリッドを取り直し、古いチェック結果は捨てる <sub>`terminal strip editor store`</sub>
 - 端子台エディタを閉じている間は図面が変わっても読み込みに行かない <sub>`terminal strip editor store`</sub>
 - 端子台チェックの結果は重大度ごとの件数に整形される <sub>`terminal strip editor store`</sub>
@@ -2696,6 +2896,49 @@
 - 端子台を切り替えると選択と直前のチェック結果は消える <sub>`terminal strip editor store`</sub>
 - 端子台が1つも無いシートでは行が空になり、生成もチェックもできない <sub>`terminal strip editor store`</sub>
 - 閉じると選択・チャート・チェック結果を捨てる <sub>`terminal strip editor store`</sub>
+- プレビューは旧番号→新番号の対応として並び、多段端子台では段記号を保ったまま出る <sub>`renumber popover`</sub>
+- 増分0の採番は全端子を同じ番号にしてしまうので、重複するラベルと件数を理由として返す <sub>`renumber popover`</sub>
+- 適用できない案はコマンドを1本も送らずに断られる (図面は変わらない) <sub>`renumber popover`</sub>
+- 負の開始番号・小数の増分は0以上の整数へ丸めてから送る (JSONの型エラーにしない) <sub>`renumber popover`</sub>
+- 端子台が1つも無ければ採番の対象が無いことを理由として返す <sub>`renumber popover`</sub>
+- プレビューは採番に追従したあとのジャンパ指定も見せる (適用と同じ書き換え規則) <sub>`renumber popover`</sub>
+- ジャンパが1本も無ければ追従の行は出さない <sub>`renumber popover`</sub>
+- 段数は一覧の`levels`をそのまま見せ、単段は1になる <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 一覧より先にチャートだけが読めているときは、行の段記号の種類数から段数を数える <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 段数を変えると、set_terminal_levelsコマンド1回だけが送られる <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 今と同じ段数を指定したら何もコマンドを送らない (無駄なundoの段を作らない) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 1〜TERMINAL_LEVEL_MAXの範囲外は、コマンドを送らずに断る (ステッパーの+/-ボタンが外へ出さないための門と同じ判定) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- Rust側が段数変更を拒否したら (消える段に参照が残っている等)、その理由を`error`へ残す (図面は変えない) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- プレビューは適用と同じ純関数で symbol_id・端子番号・ジャンパの追従を見せる (デザイン「P 段数 (既定)」の3行) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 今と同じ段数のプレビューは出さない (何も変わらないので) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 段を減らせないときは、消える段の端子とその結線相手を理由付きで並べる (デザイン「P 段数 (解除不可)」の囲み) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 消える段を指すジャンパも、結線と同じように解除を止める理由として並ぶ <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 段を増やすときは消える段が無いので、理由の一覧は常に空 (適用ボタンは有効のまま) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 理由が1件でもある段数はコマンドを送らずに断る (ポップオーバーが適用ボタンを無効にしている門と同じ判定) <sub>`multi-level stepper (Task 3: 多段端子の生成・解除)`</sub>
+- 予備を挿入すると、insert_spare_terminalsコマンド1回だけが送られる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 末尾挿入は`after`がnullのコマンドになる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 「空き番号のまま残す」で末尾に挿入すると、後ろの番号を変えずに次の空き番号 (9) が予備に付き、renumber_following=false で送られる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 「空き番号のまま残す」で途中に挿入して番号がぶつかるときは keepDuplicate の指摘になり、コマンドは送られない <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 0個以下の指定は、コマンドを送らずに断る <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- フロントの検証を通っても、Rust側が挿入を拒否したら (エンティティが図面から消えていた等) その理由をerrorへ残す (図面は変えない) <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- プレビューは適用と同じ純関数で symbol_id と新しく増える予備のラベルを見せる (デザイン「P 予備端子の挿入 (既定)」の2行) <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 0個以下の指定は指摘 (適用ボタンを無効にする) <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 極数の上限を超える指定も指摘になる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 挿入位置の選択肢は極ごとに1つ、多段端子台では段aのラベルを代表にする <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 個数ステッパーの入力は1以上の整数へ丸める <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 付属品の行は「端子番号:種別:型番」のカンマ列になり、型番の前後の空白と書式を壊す「,」「:」は取り除かれる <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 付属品が1つも無いときは空文字になる (ストアは属性ごと消す) <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- チャートの付属品は、末尾 (before=null) を "end" にしてポップオーバーの行へ写る <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 部品割当は update_entity 1回で、端子台の型番 (value) と種別 (attrs.terminal_kind) を同時に書く <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 種別の無い部品を割り当てると、古い種別の属性は消える <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 付属品を全部消して適用すると、accessories属性そのものが消える <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 付属品の行を適用すると、書式どおりの accessories 属性を update_entity 1回で書く <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 選んだ端子のうち、入れ替わっていなかった端子は内外スワップの指定に加わり、入れ替わっていた端子は外れる <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- 内外スワップの指定にある端子台に無い番号や余分な空白・空の項は、反転しても残るか取り除かれるだけで壊れない <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- 端子を選んでいないと内外スワップはできず、コマンドも送られない <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- 内外スワップは選んだ端子の番号を swapped 属性へ書く update_entity 1回で、選択はそのまま残る <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- 入れ替え済みの端子をすべて戻すと、swapped 属性そのものが消える <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
+- グリッドの行は、チャートで内外を入れ替えた端子かどうかを運ぶ (古いチャートで欠けていれば入れ替えなし) <sub>`inside/outside swap (M4 phase 5 Task 6)`</sub>
 
 ### ui
 

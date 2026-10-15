@@ -15,21 +15,23 @@ import {
 import { isDeviceBlock } from "./relayXref";
 import { textWidthMm } from "./textWidth";
 export { textWidthMm } from "./textWidth";
+// 端子番号の読み取りと端子の印の寸法も葉モジュール (terminalNo.ts) へ移した
+// (terminalJumpers.ts の端子番号の対応表をここから使うための循環import防止)。
+// 既存のimport元のためにここから再エクスポートする
+import { levelLetter, TERMINAL_LEVEL_MAX, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./terminalNo";
+export {
+  levelLetter,
+  parseTerminalNo,
+  TERMINAL_LEVEL_MAX,
+  TERMINAL_MARK_R,
+  TERMINAL_NUMBER_HEIGHT,
+} from "./terminalNo";
+import { terminalLabels } from "./terminalJumpers";
 
 /** 動的シンボルの最大極数(Rust側 DYNAMIC_PIN_MAX と一致)。 */
 export const DYNAMIC_PIN_MAX = 50;
-/** 多段端子台 (`terminal_block_{n}p_{levels}l`、G6) の最大段数(Rust側 TERMINAL_LEVEL_MAX と一致)。 */
-export const TERMINAL_LEVEL_MAX = 3;
 /** 多段端子台の段(=列)の中心間隔 mm(Rust側 TERMINAL_LEVEL_PITCH と一致)。 */
 export const TERMINAL_LEVEL_PITCH = 10.0;
-/** 端子の印(貫通端子を表す丸)の半径 mm(Rust側 TERMINAL_MARK_R と一致)。 */
-export const TERMINAL_MARK_R = 1.8;
-/**
- * 端子番号の文字高さ mm(Rust側 TERMINAL_NUMBER_HEIGHT と一致)。
- * 文字の基準点は端子の印の中心そのもの。描画側がベースラインを基準点から
- * 文字高の半分だけ画面の下へ取るので、端子台を回しても番号は印の中に留まる。
- */
-export const TERMINAL_NUMBER_HEIGHT = 2.0;
 /** PLCモジュールの最大点数(Rust側 PLC_POINT_MAX と一致)。 */
 export const PLC_POINT_MAX = 64;
 /** PLCモジュールのI/O点の縦ピッチ mm(Rust側 PLC_POINT_PITCH_MM と一致)。 */
@@ -86,26 +88,14 @@ function plcModuleSymbol(id: string): SymbolDef | null {
 const p = (x: number, y: number): Point => ({ x, y });
 const offset = (i: number, n: number) => (i - (n - 1) / 2) * 5.0;
 
-/** 段番号(0始まり)を段記号('a','b','c',…)にする(Rust側 level_letter と一致)。 */
-export function levelLetter(levelIndex: number): string {
-  return String.fromCharCode(97 + levelIndex);
-}
-
-/**
- * 端子番号の表記から(極番号, 段記号)を取り出す(Rust側 parse_terminal_no と一致)。
- * 単段は数字だけ("8" → [8, null])、多段端子台 (G6) は末尾に段記号が付く("8a" → [8,"a"])。
- * 読み取れない番号は極番号を Number.MAX_SAFE_INTEGER として末尾に回す。
- */
-export function parseTerminalNo(no: string): [number, string | null] {
-  const m = /^([0-9]+)([a-zA-Z])$/.exec(no);
-  if (m) return [Number(m[1]), m[2]];
-  return [/^[0-9]+$/.test(no) ? Number(no) : Number.MAX_SAFE_INTEGER, null];
-}
-
 /**
  * `terminal_block_`の後ろを多段端子台の(極数, 段数)にパースする
  * (Rust側 parse_multilevel_terminal_block と同一規則)。`{n}p_{levels}l`の形だけを
  * 受け付け(例 "8p_2l")、単段の`{n}p`はnullを返す(呼び出し側の既存経路がそのまま扱う)。
+ *
+ * **段数は2以上だけを受け付ける** (`_1l`という別名idは作らない。Task 3)。単段は常に
+ * `terminal_block_{n}p`という1つのidだけで表すので、`terminal_block_8p_1l`はここでnullになり
+ * 呼び出し側 (`dynamicSymbol`) は「知らないシンボル」としてnullを返す (Rust側と同じ)。
  */
 function parseMultiLevelTerminalBlock(rest: string): { n: number; levels: number } | null {
   const parts = rest.split("_");
@@ -114,7 +104,7 @@ function parseMultiLevelTerminalBlock(rest: string): { n: number; levels: number
   const m = /^([0-9]+)l$/.exec(parts[1]);
   if (n === null || !m) return null;
   const levels = Number(m[1]);
-  if (levels < 1 || levels > TERMINAL_LEVEL_MAX) return null;
+  if (levels < 2 || levels > TERMINAL_LEVEL_MAX) return null;
   return { n, levels };
 }
 
@@ -365,8 +355,10 @@ export function pinGroupPaperBoxes(
   if (isDeviceBlock(inst)) return [];
   const spec = inst.attrs?.[PIN_GROUPS_ATTR];
   if (!spec) return [];
+  // 端子番号の上書き (spec §1.1) がある端子台では、範囲は表示ラベルで書かれている
+  const rename = terminalLabels(def, inst.attrs).renameMap;
   const out: [Point, Point][] = [];
-  for (const bracket of pinGroupBrackets(def, spec)) {
+  for (const bracket of pinGroupBrackets(def, spec, rename)) {
     const pts = bracket.bracket.map((p) => transformLocal(p, inst));
     if (pts.length > 0) {
       const min = { x: Infinity, y: Infinity };

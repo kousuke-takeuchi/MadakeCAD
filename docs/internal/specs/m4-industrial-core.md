@@ -9,11 +9,11 @@
 | 機能領域 | ACADE | EPLAN | MadakeCAD現状 | 本仕様 |
 |---|---|---|---|---|
 | 線番自動採番(連番/参照ベース) | ✅ | ✅ | ⬜ | M2で連番、参照ベースは§6 |
-| 端子台管理・端子台チャート | ✅ | ✅(端子台ごとの結線図) | 🔶 **フェーズ1実装済** (エディタ+チャート+接続図。並べ替え/多段/アクセサリが残り) | §1 |
-| 回路の再利用(回路コピー/マクロ) | ✅ | ✅(マクロが中核) | 🔶 **フェーズ3実装済** (保存/挿入/Tabバリアント/⌘C・V/プレースホルダ+値セット。保存UIからのバリアント追加が残り) | §2 |
-| PLC I/O図面・レポート | ✅(表から自動生成) | ✅(PLCカード図) | 🔶 **フェーズ3実装済** (モジュール定義+割付表+CSV+ラダー生成+レポート。横バス様式・同居/分割の配置方針が残り) | §3 |
+| 端子台管理・端子台チャート | ✅ | ✅(端子台ごとの結線図) | ✅ **フェーズ5完了** (エディタ+チャート+接続図。並べ替え・採番・多段・予備挿入・部品割当・付属品・内外スワップ・図面へジャンプ) | §1 |
+| 回路の再利用(回路コピー/マクロ) | ✅ | ✅(マクロが中核) | 🔶 **フェーズ3実装済** (保存/挿入/Tabバリアント/⌘C・V/プレースホルダ+値セット。保存UIからのバリアント追加が残り=別計画) | §2 |
+| PLC I/O図面・レポート | ✅(表から自動生成) | ✅(PLCカード図) | 🔶 **フェーズ3実装済** (モジュール定義+割付表+CSV+ラダー生成+レポート。横バス様式・同居/分割の配置方針が残り=別計画) | §3 |
 | クロスリファレンス(コイル⇔接点) | ✅ | ✅(自動) | ✅ **フェーズ2実装済** (接点マップ+コイル所在+ERC+Surfer) | §4 |
-| 帳票群(BOM/From-To/ケーブル/端子) | ✅ | ✅(自動生成) | 🔶 **フェーズ1実装済** (From-To/端子台/接続図/BOM/XRef+図面シート化+PDF一括。ケーブル一覧とBOM拡張が残り) | §5 |
+| 帳票群(BOM/From-To/ケーブル/端子) | ✅ | ✅(自動生成) | 🔶 **フェーズ1実装済** (From-To/端子台/接続図/BOM/XRef+図面シート化+PDF一括。ケーブル一覧とBOM拡張が残り=別計画) | §5 |
 | シンボルエディタ | ✅ | ✅ | ✅ **フェーズ4実装済** (複製から作成+2.5mmグリッド+属性スロット+保存前検証+回転バリアント) | §7 |
 | 2D盤レイアウト | ✅ | ✅ | ✅ **フェーズ4実装済** (盤枠/レール/ダクト/フットプリント/凡例・バルーン・配置表・検査) | §8 |
 | 図枠・表題欄テンプレート | ✅ | ✅(プロットフレーム) | ✅ **フェーズ4実装済** (JSON定義+バインド+一括差し替え) | §9 |
@@ -21,7 +21,11 @@
 
 ## 1. 端子台管理(端子台エディタ+端子台チャート)
 
-> **ステータス: 🔶 フェーズ1完了(2026-08-22)。** 実装済み = §1.1のうち行の導出表示・サドルジャンパ(生成/削除。`attrs["jumpers"]`を`update_entity`で書き換えundo可)・予備端子表示・端子台チェック(未結線/不正ジャンパ)・チャート/接続図の生成起点、および§1.2の両様式(チャート=CSV+図枠付き図面シート、端子接続図=外部左/内部右のグラフィカルページ)。**フェーズ2に残した項目**(モデル拡張が必要): 並べ替え・多段端子(レベル)・アクセサリ・部品割当・内外スワップ・図面へジャンプ・端子番号の自動採番・予備端子の挿入。計画=`docs/superpowers/plans/2026-08-22-m4-phase1-terminals-reports.md`
+> **ステータス: ✅ フェーズ5完了(2026-09-28)。** §1.1の操作はすべて`Engine::execute`経由のCommandで、1操作=⌘Z一発で戻る(端子台エディタを開いたまま⌘Z/⇧⌘Zも効く)。実装形: 並べ替え=`attrs["row_order"]`(`update_entity`) / 自動採番=`RenumberTerminals`・`SetTerminalNumbers`(`attrs["terminal_numbers"]`。ジャンパ・ピングループ・付属品の端子番号も同じコマンドで追従) / 多段端子の生成・解除=`SetTerminalLevels`(`symbol_id`を`terminal_block_{n}p`⇔`terminal_block_{n}p_{levels}l`へ書き換え、`at`を半ピッチずらして段aの端子を同じ座標に留める) / 予備端子の挿入=`InsertSpareTerminals { after, count, renumber_following }` / ジャンパ=`attrs["jumpers"]`(段記号付き`1a-1b`も可) / 付属品=`attrs["accessories"]`(`端子番号:種別:型番`、`end`=末尾。チャートに行が入り、BOMは型番ごとに集計) / 内外スワップ=`attrs["swapped"]`(端子番号のカンマ列。チャートと端子接続図の内部側・外部側だけを入れ替え、結線は変えない) / 部品割当=`value`+`attrs["terminal_kind"]`(部品DBスキーマv7の`terminal_kind`列) / 図面へジャンプ=検索結果と同じreveal動線。端子台チェックは未結線・不正ジャンパに加え、読めない付属品の項と端子台に無い端子を指すスワップ指定をWarningにする。**フェーズ6(品質ギャップ、2026-08-23)で先に入ったもの**: 多段端子台の動的シンボル`terminal_block_{n}p_{levels}l`(段ごとに1列、1機器)と回路図上のジャンパバー描画 — フェーズ5はこれを前提に、エディタからの段の生成・解除とLv列を足した。フェーズ1(2026-08-22)の実装 = 行の導出表示・サドルジャンパ(生成/削除)・予備端子表示・端子台チェック(未結線/不正ジャンパ)・チャート/接続図の生成起点、および§1.2の両様式(チャート=CSV+図枠付き図面シート、端子接続図=外部左/内部右のグラフィカルページ)。計画=`docs/superpowers/plans/2026-08-22-m4-phase1-terminals-reports.md`・`docs/superpowers/plans/2026-09-28-m4-phase5-terminal-editor-leftovers.md`
+>
+> **並べ替え・図面へジャンプ: 2026-09-28実装。** `attrs["row_order"]`(数値順=既定/英数順/ページ順(回路図の出現順)/外部ケーブル順/ジャンパ順の1語、未設定・未知語は数値順)を`update_entity`でundo可能に書き換える。並べ替え関数は`madake-core::terminal_chart::sort_terminal_rows`の1箇所が正で、チャートCSV・図枠付き図面シート・端子接続図は`TerminalChart.rows`をそのまま使うので常に同じ並びになる。多段端子は極→段の順で必ず隣り合う(段だけがバラバラの位置に移動することはない)。エディタのLv列(`terminals.col.level`)は多段端子台だけに出る。図面へジャンプはツールバーのボタンと行のダブルクリックから、検索結果と同じreveal動線(シート切替+選択+ズーム)を呼ぶ。残りの項目(多段端子の生成/解除・付属品・部品割当・内外スワップ・予備端子の挿入)は同じ計画のTask 3〜6で実装済み(上のステータス)。計画=`docs/superpowers/plans/2026-09-28-m4-phase5-terminal-editor-leftovers.md` Task 1
+>
+> **端子番号の自動採番: 2026-09-29実装。** `attrs["terminal_numbers"]`(ピン順=`terminal_numbers_of`と同じ並びのラベルのカンマ区切り。未設定=シンボル定義の既定`1`,`2`,…/多段は`1a`,`1b`,…)を新Command`RenumberTerminals { sheet_id, entity_id, start, step, prefix }`(開始番号・増分・接頭辞からピン順に振り直す。多段端子台は段記号を保って極だけ採番=`11a`,`11b`,…)/`SetTerminalNumbers { sheet_id, entity_id, numbers }`(直接指定。`numbers`が`None`なら既定へ戻す)で書き換える。個数不一致・重複・空要素の`numbers`は図面を変えずに拒否(部分適用しない)。**同じコマンド内で`attrs["jumpers"]`・`attrs["pin_groups"]`の端子番号も新しい表示ラベルへ書き換える**ので、採番後もジャンパ・ピングループは実際に繋ぐ端子を指したままになる。ジャンパの隣接判定は表示ラベルの数値差ではなくシンボル定義の生のピン配置で決めるので、増分2以上の採番でも隣り合う極どうしのジャンパは有効なまま。表示ラベルはチャート・CSV・端子接続図・端子台チェック・SVG/PDF出力・キャンバス描画のすべてに反映される(`madake-core::terminal_chart::terminal_numbers_of_instance`が正。SVGは`svg.rs::render_symbol`、キャンバスは`src/canvas/terminalJumpers.ts`の`terminalNumberRename`が同じ対応表で描く)。ツールバー「採番」ポップオーバー(開始番号・増分・接頭辞・プレビュー・適用/キャンセル)から呼ぶ。逆コマンドは採番前の番号への`SetTerminalNumbers`1回(undo一発)。計画=`docs/superpowers/plans/2026-09-28-m4-phase5-terminal-editor-leftovers.md` Task 2
 
 **ベンチマーク: EPLANの「端子台の編集」ダイアログ+ACADE Terminal Strip Editor。** 単なる一覧表ではなく、端子台を編集する専用グリッドエディタを設ける。
 
@@ -47,7 +51,7 @@
 
 ## 2. 回路マクロ(回路の保存・再利用)
 
-> **ステータス: 🔶 フェーズ2完了(2026-08-22)。** 実装済み = 保存(選択範囲→Command列+相対座標化。基準点=選択範囲の左下ピンを自動決定)、`~/MadakeCAD/macros/*.json`への書き出しと一覧(壊れたJSONはissueとして報告)、挿入(UUID振り直し+参照記号の再採番(既存最大+1、マクロ内の関係は保持)+線番クリア。`execute_batch`で1編集=undo一発)、バリアントの列挙と選択(配置中`Tab`)、部品挿入ダイアログの「マクロ」タブ(カテゴリツリー+バリアント数バッジ+プレビュー)、保存ダイアログ、ゴースト配置(`R`回転・Esc・連続配置)、⌘C/Vの無名マクロ。露出=Tauri IPC(`list_macros`/`save_macro`/`apply_macro`/`open_macros_folder`)・Link API(`GET /macros`・`POST /macros/build|save|apply|apply-inline`)・MCP(`list_macros`/`save_macro`/`apply_macro`)。**フェーズ3に残した項目**: プレースホルダと値セット、保存ダイアログからのバリアント追加(UIはdisabledプレースホルダで示す)。計画=`docs/superpowers/plans/2026-08-22-m4-phase2-macros-xref-nav.md`
+> **ステータス: 🔶 フェーズ2完了(2026-08-22)。** 実装済み = 保存(選択範囲→Command列+相対座標化。基準点=選択範囲の左下ピンを自動決定)、`~/MadakeCAD/macros/*.json`への書き出しと一覧(壊れたJSONはissueとして報告)、挿入(UUID振り直し+参照記号の再採番(既存最大+1、マクロ内の関係は保持)+線番クリア。`execute_batch`で1編集=undo一発)、バリアントの列挙と選択(配置中`Tab`)、部品挿入ダイアログの「マクロ」タブ(カテゴリツリー+バリアント数バッジ+プレビュー)、保存ダイアログ、ゴースト配置(`R`回転・Esc・連続配置)、⌘C/Vの無名マクロ。露出=Tauri IPC(`list_macros`/`save_macro`/`apply_macro`/`open_macros_folder`)・Link API(`GET /macros`・`POST /macros/build|save|apply|apply-inline`)・MCP(`list_macros`/`save_macro`/`apply_macro`)。**フェーズ3に残した項目**: プレースホルダと値セット、保存ダイアログからのバリアント追加(UIはdisabledプレースホルダで示す。値セットはフェーズ3で実装済み、バリアント追加UIは別計画)。計画=`docs/superpowers/plans/2026-08-22-m4-phase2-macros-xref-nav.md`
 >
 > **値セット: 🔶 フェーズ3完了(2026-08-22)。** マクロ形式へ`placeholders`(key+label(英/日)+行き先`{entity, field: "value"|"attrs.<名前>"}`)と`value_sets`(id+label(英/日)+`{key: 値}`)を追加(どちらも省略可・旧マクロJSONはそのまま読める)。挿入時に値セットidを渡すと、行き先の欄へ値が入った状態で`execute_batch`されるので**undo一発**のまま。知らない値セットid・宣言されていないキー・マクロに無い行き先は図面を変えずにエラー(部分適用しない)。UI=保存ダイアログの「プレースホルダ」表(選択範囲の型番欄・属性にキー名を付ける。同じキー名の欄は1つのプレースホルダにまとまる)+「値セット」表(名前+キーごとの値。idは名前から自動生成)、挿入ダイアログの値セットドロップダウン(値セットを持つマクロにだけ出る)。⌘C/Vの無名マクロには値セットが無い。露出=Tauri IPC(`apply_macro`/`apply_macro_inline`の`value_set`)・Link API(`POST /macros/apply|apply-inline`の`value_set`、`POST /macros/save`の`placeholders`/`value_sets`)・MCP(`apply_macro`の`value_set`、`save_macro`の`placeholders`/`value_sets`、`list_macros`の返却)。計画=`docs/superpowers/plans/2026-08-22-m4-phase3-library-valuesets-plc.md` Task 2
 
@@ -74,7 +78,7 @@
 > I/Oレポート(`plc-io`。CSV/図面シート/PDF一括)、割付表エディタ(下書き方式・自動採番の
 > プレビュー・保存で`set_plc_assignments`1回)と生成設定ダイアログ、リボン「レポート」タブの
 > PLC I/Oグループ。露出=Tauri IPC・Link API(`/plc/*`)・MCPツール3種・CLIの`plc-io`帳票。
-> **残り(フェーズ4)**: ラダー形式=横バス、配置方針の②同居・③同居+分割(ページ分割)、
+> **残り(フェーズ4では未着手。別計画)**: ラダー形式=横バス、配置方針の②同居・③同居+分割(ページ分割)、
 > 生成設定のプロジェクト保存(現状はセッション限り)。
 > 計画=`docs/superpowers/plans/2026-08-22-m4-phase3-library-valuesets-plc.md` Task 3・4
 >
@@ -99,7 +103,7 @@
 
 ## 4. クロスリファレンスとナビゲーション(コイル⇔接点・Surfer)
 
-> **ステータス: ✅ フェーズ2完了(2026-08-22)。** 実装済み = 同一参照記号のコイル+接点群=1デバイス(`relay_xref.rs`)、接点の読み順(シート番号→ゾーン→id)による端子対の割当(IEC 60947-1。コイル=A1-A2)、コイル外形下端+2.5mmの接点マップ(端子対|所在。`contact_config`が読めるとき未使用は「—」)、接点の外形右端+1mmのコイル所在、キャンバス/SVGの同一数式(`contact_map_layout`/`contactMapLayout`)、ERC 4種(`contact_overflow`=Error / `orphan_contact`=Error / `coil_without_contact`=Warning / `invalid_contact_config`=Warning)、部品DBの`contact_config`(スキーマv3。配置時に`attrs`へ写す)、シンボル`relay_contact_nc`の追加、参照サーフィン(キャンバスでAlt+クリック→所在一覧→↑↓/Enterで巡回)。**残り**: 表現形式(表/グリッド)の図枠テンプレート側選択(§9と同時)
+> **ステータス: ✅ フェーズ2完了(2026-08-22)。** 実装済み = 同一参照記号のコイル+接点群=1デバイス(`relay_xref.rs`)、接点の読み順(シート番号→ゾーン→id)による端子対の割当(IEC 60947-1。コイル=A1-A2)、コイル外形下端+2.5mmの接点マップ(端子対|所在。`contact_config`が読めるとき未使用は「—」)、接点の外形右端+1mmのコイル所在、キャンバス/SVGの同一数式(`contact_map_layout`/`contactMapLayout`)、ERC 4種(`contact_overflow`=Error / `orphan_contact`=Error / `coil_without_contact`=Warning / `invalid_contact_config`=Warning)、部品DBの`contact_config`(スキーマv3。配置時に`attrs`へ写す)、シンボル`relay_contact_nc`の追加、参照サーフィン(キャンバスでAlt+クリック→所在一覧→↑↓/Enterで巡回)。**残り(別計画)**: 表現形式(表/グリッド)の図枠テンプレート側選択(§9と同時)
 
 - コイル下の**接点マップ**(端子対+所在「/シート.ゾーン」の表)+接点脇のコイル所在を自動描画。表現形式(表/グリッド)は図枠テンプレート側で選択
 - 接点数超過の検証(部品DBに接点構成を持たせ、使用数>実装数でERC Error)。**例外レポート**: 親の無い接点・接点の無いコイル(ACADEのException report相当)
@@ -107,7 +111,7 @@
 
 ## 5. 帳票群の拡充
 
-> **ステータス: 🔶 フェーズ1完了(2026-08-22)。** 実装済み = From-Toワイヤリスト・端子台チャート・端子接続図・BOM・クロスリファレンス表の5帳票、全帳票のCSV/図枠付き図面シート出力(`report_sheet::report_bytes`が統一の出力口)、PDF一括出力(表紙→回路図全シート→帳票)。露出はリボン「レポート」タブ・Tauri IPC・Link API(`POST /export/report`・`POST /export/pdf-book`)・MCP(`export_report`・`export_pdf_book`)・CLI(`madake export <帳票> --format csv|pdf [--terminal]`)。**残り**: ケーブル一覧(Cableエンティティ待ち)・BOM拡張(部品DBのメーカ/価格/購入先)・コイル⇔接点XRef(§4)
+> **ステータス: 🔶 フェーズ1完了(2026-08-22)。** 実装済み = From-Toワイヤリスト・端子台チャート・端子接続図・BOM・クロスリファレンス表の5帳票、全帳票のCSV/図枠付き図面シート出力(`report_sheet::report_bytes`が統一の出力口)、PDF一括出力(表紙→回路図全シート→帳票)。露出はリボン「レポート」タブ・Tauri IPC・Link API(`POST /export/report`・`POST /export/pdf-book`)・MCP(`export_report`・`export_pdf_book`)・CLI(`madake export <帳票> --format csv|pdf [--terminal]`)。**残り(別計画)**: ケーブル一覧(Cableエンティティ待ち)・BOM拡張(部品DBのメーカ/価格/購入先)。端子台チャート/接続図の分(並べ替え・付属品行・内外スワップ)はM4フェーズ5で閉じた。コイル⇔接点XRefは§4で実装済み
 
 | 帳票 | 内容 |
 |---|---|
@@ -229,7 +233,7 @@
 
 ## 10. プロジェクト内検索・ナビゲーション(ギャップ分析 2026-08-21で追加)
 
-> **ステータス: 🔶 フェーズ2完了(2026-08-22)。** 実装済み = 横断検索(`search.rs`。対象5種・部分一致・大文字小文字無視・空クエリは0件・決定的な並び)、⌘Fの浮き検索バー(フィルタチップ+件数+Enter/Shift+Enterの巡回)と下部ドックの結果パネル、デバイスツリーの導出(参照記号→機能)と左パネル「デバイス」タブ(行クリックでreveal、右クリックでジャンプ/削除)、参照サーフィン(§4)、4経路共通のreveal(`composables/reveal.ts`)。露出=Tauri IPC(`search_project`/`get_device_tree`)・Link API(`GET /search?q=&kinds=`・`GET /devices`)。MCP・CLIには未露出(AIは`get_project`で足りるため)。**フェーズ3に残した項目**: 未配置機能(予約接点)のドラッグ配置(予約接点のモデルが必要)
+> **ステータス: 🔶 フェーズ2完了(2026-08-22)。** 実装済み = 横断検索(`search.rs`。対象5種・部分一致・大文字小文字無視・空クエリは0件・決定的な並び)、⌘Fの浮き検索バー(フィルタチップ+件数+Enter/Shift+Enterの巡回)と下部ドックの結果パネル、デバイスツリーの導出(参照記号→機能)と左パネル「デバイス」タブ(行クリックでreveal、右クリックでジャンプ/削除)、参照サーフィン(§4)、4経路共通のreveal(`composables/reveal.ts`)。露出=Tauri IPC(`search_project`/`get_device_tree`)・Link API(`GET /search?q=&kinds=`・`GET /devices`)。MCP・CLIには未露出(AIは`get_project`で足りるため)。**フェーズ3に残した項目(別計画)**: 未配置機能(予約接点)のドラッグ配置(予約接点のモデルが必要)
 
 - 参照記号・型番・ネット名・線番・テキストの横断検索(⌘F)。結果は下部ドックパネル、クリックでシート切替+選択+ズーム
 - **デバイスナビゲータ(EPLANの中核機能)**: 左パネルに「デバイス」タブを追加。プロジェクト内の全デバイスを参照記号ツリーで表示(K1─コイル/接点13-14/接点21-22 のように機能単位まで展開)。未配置の機能(予約済み接点等)はドラッグで図面へ配置。右クリック=図面へジャンプ/プロパティ/削除

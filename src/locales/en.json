@@ -783,11 +783,16 @@
       "internal": "Internal target",
       "wireNo": "Wire no.",
       "wire": "Wire",
-      "status": "State"
+      "status": "State",
+      "level": "Lv"
     },
     "spare": "spare",
     "addJumper": "Add jumper",
     "removeJumper": "Remove jumper",
+    "swap": "Swap sides",
+    "swapHint": "Swaps the inside and outside of the selected terminals (press again to swap back)",
+    "swapped": "Swapped",
+    "swapLog": "{reference}: swapped the sides of terminals {terminals}",
     "jumperHint": "Select neighbouring terminals and add a saddle jumper. Every edit goes through a command, so Cmd+Z takes it back.",
     "check": "Check terminal block",
     "checkPending": "Not checked yet",
@@ -795,15 +800,49 @@
     "checkCounts": "{error} error(s) / {warning} warning(s) / {info} note(s)",
     "generateDiagram": "Generate connection diagram",
     "generateChart": "Generate chart",
-    "phase2Hint": "planned for phase 2",
-    "phase2": {
-      "sort": "Sort",
-      "autoNumber": "Renumber",
-      "spareTerminal": "Insert spare",
-      "multiLevel": "Multi-level",
-      "accessory": "Accessories",
-      "swap": "Swap in/out",
-      "goto": "Go to drawing"
+    "insertSpare": "Insert spare",
+    "spareInsert": {
+      "title": "Insert spare terminal",
+      "description": "One update_entity (symbol_id + terminal_numbers)",
+      "positionLabel": "Insert position:",
+      "positionEnd": "At the end",
+      "positionAfter": "After {after}",
+      "countLabel": "Count:",
+      "numberMode": "Numbering",
+      "modeShift": "Add a pole at the end and shift the numbers down",
+      "modeKeep": "Leave the spare with a vacant number",
+      "modeKeepHint": "Following labels stay as they are; the spare takes the next free number (refused if it would collide)",
+      "previewLabel": "Preview",
+      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) · both sides unconnected",
+      "note": "Shifting the numbers never moves a pin's coordinates, so existing wiring stays connected",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "issueCount": "Enter a count of 1 or more",
+      "issuePoleCap": "Exceeds the maximum pole count (limit {max})",
+      "issueInvalid": "This cannot be applied",
+      "modeShiftHint": "Following terminals are renumbered so the labels stay contiguous",
+      "issueNonNumeric": "The label at the insertion point ({label}) has no number, so the spare cannot be numbered",
+      "issueKeepDuplicate": "Leaving the number vacant would collide with an existing terminal; choose 'shift' instead"
+    },
+    "multiLevel": "Multi-level",
+    "levels": {
+      "label": "Levels",
+      "description": "Changes this block between single-level and multi-level. The pin layout, chart and connection diagram all follow.",
+      "hint": "Decreasing levels is refused if wiring, jumpers, pin groups or accessories still reference the level that would disappear. Level 1 goes back to the plain single-level symbol id (never a \"_1l\" alias).",
+      "range": "Levels 1-{max}; anything outside that range is refused.",
+      "preview": "Preview",
+      "previewNumbers": "Terminal numbers {from} → {to}",
+      "previewJumpers": "Jumpers {from} → {to}",
+      "blockers": "Levels that would disappear",
+      "issue": "A level that still has connections cannot be removed. Clear terminal {terminal} first.",
+      "blocker": {
+        "wire": "wired",
+        "jumper": "jumper",
+        "pinGroup": "pin group",
+        "accessory": "accessory"
+      },
+      "cancel": "Cancel",
+      "apply": "Apply"
     },
     "hint": "The grid is derived from the drawing (wiring, wire numbers and wires cannot be edited here). The inside of the panel is the left connection point, the outside is the right one.",
     "openLog": "Terminal editor: editing the terminal blocks of \"{sheet}\"",
@@ -813,7 +852,85 @@
     "jumperRemovedLog": "Terminal editor: jumpers on terminal(s) {terminals} of {reference} removed (undo with Cmd+Z)",
     "checkLog": "Terminal editor: {reference} checked - {result}",
     "chartLog": "Terminal editor: wrote the chart of {reference} ({count} row(s)) to {path}",
-    "diagramLog": "Terminal editor: wrote the connection diagram of {reference} ({count} page(s)) to {path}"
+    "diagramLog": "Terminal editor: wrote the connection diagram of {reference} ({count} page(s)) to {path}",
+    "sort": {
+      "label": "Sort:",
+      "number": "Number",
+      "alnum": "Alphanumeric",
+      "page": "Page (drawing order)",
+      "cable": "External cable",
+      "jumper": "Jumper"
+    },
+    "goto": "Go to drawing",
+    "gotoHint": "Double-click a row to jump to it on the drawing",
+    "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing",
+    "autoNumber": "Renumber",
+    "renumber": {
+      "start": "Start number",
+      "step": "Step",
+      "prefix": "Prefix",
+      "target": "Target",
+      "preview": "Preview",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "description": "Renumbers every terminal of this block in pin order. The chart, the terminal diagram and the drawing all follow.",
+      "note": "The jumper and pin-group specs are rewritten to the new numbers in the same command, so one undo puts everything back.",
+      "targetAll": "All terminals",
+      "targetSelected": "Selected rows ({count})",
+      "targetSelectedHint": "Renumbering only the selected rows is planned for a later phase",
+      "jumpers": "Jumpers {from} → {to}",
+      "issueDuplicate": "The terminal numbers would repeat ({label} appears {count} times). The drawing is left unchanged.",
+      "issueEmpty": "A terminal number would come out empty. The drawing is left unchanged.",
+      "issueComma": "A terminal number would contain a comma ({label}), which is the separator of the stored list. The drawing is left unchanged.",
+      "issueInvalid": "These numbers cannot be applied. The drawing is left unchanged.",
+      "issueNoBlock": "No terminal block to renumber."
+    },
+    "renumberedLog": "Terminal editor: renumbered {reference} from {from} to {to} (undo with Cmd+Z)",
+    "levelsChangedLog": "Terminal editor: {reference} changed from {from} to {to} level(s) (undo with Cmd+Z)",
+    "spareInsertedLog": "Terminal editor: inserted {count} spare terminal(s) ({labels}) into {reference} (undo with Cmd+Z)",
+    "assignPart": {
+      "button": "Assign part",
+      "title": "Assign part (terminal block part number)",
+      "description": "Assigns a part number from the parts database. The part number and the terminal kind are written in one edit (Cmd+Z undoes it)",
+      "search": "Search by part number or name",
+      "results": "Results ({count})",
+      "empty": "No terminal block parts found",
+      "hint": "The kind comes from the parts database's terminal_kind column. It is copied to the terminal block on assignment and read by the chart and the terminal check",
+      "cancel": "Cancel",
+      "apply": "Assign",
+      "assignedLog": "Terminal block: assigned part {partNo} to {reference} (Cmd+Z undoes it)"
+    },
+    "accessory": {
+      "button": "Accessories",
+      "title": "Accessories",
+      "description": "Adds end brackets, partitions and end plates to the terminal block",
+      "position": "Position",
+      "kind": "Kind",
+      "partNo": "Part no.",
+      "positionEnd": "End",
+      "positionBefore": "Before {terminal}",
+      "addRow": "Add row",
+      "removeRow": "Remove this row",
+      "unknownPart": "{partNo} is not in the parts database (you can still apply; the BOM lists it under this part number)",
+      "skipped": "Items that cannot be read are skipped: {items}",
+      "hint": "Position = the accessory goes right before that terminal; End = after the last terminal. Kinds: end bracket / partition / end plate",
+      "bomNote": "The BOM lists one quantity row per part number. Accessory widths are not counted by the panel layout spacing check",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "appliedLog": "Terminal block: {reference} now has {count} accessories (Cmd+Z undoes it)"
+    },
+    "accessoryKind": {
+      "end_bracket": "End bracket",
+      "partition": "Partition",
+      "end_plate": "End plate"
+    },
+    "terminalKind": {
+      "feed_through": "Feed-through",
+      "multi_level": "Multi-level",
+      "fuse": "Fuse",
+      "disconnect": "Disconnect"
+    }
   },
   "plcIo": {
     "ribbonButton": "PLC I/O table",
@@ -984,14 +1101,14 @@
       "connectFailedLog": "AGENT   Could not connect to the agent: {error}",
       "emptyConnected": "Tell the agent what to do with the drawing. Edits are applied automatically and can be undone later.",
       "emptyDisconnected": "No AI provider is ready. Pick one in Settings > Agent (Claude Code CLI, API key, Copilot CLI, Ollama, ...).",
-      "replyPlaceholder": "Type a reply..."
+      "replyPlaceholder": "Type a reply... (⌘Enter / Ctrl+Enter to send, Enter for a new line)"
     },
     "panel": {
       "titleActive": "Circuit agent",
       "titleNew": "New agent",
       "expand": "Expand",
       "minimize": "Minimize",
-      "placeholder": "Ask for anything... (e.g. add a fuse to the 24 V rail)"
+      "placeholder": "Ask for anything... (e.g. add a fuse to the 24 V rail) — ⌘Enter / Ctrl+Enter to send"
     },
     "message": {
       "working": "The agent is working...",
@@ -1002,9 +1119,10 @@
     "composer": {
       "addContext": "Add context",
       "stop": "Stop",
-      "send": "Send",
+      "send": "Send (⌘Enter / Ctrl+Enter)",
       "sendFailedLog": "AGENT   Could not send (see the error in the chat)",
-      "cancelFailedLog": "AGENT   Cancel failed: {error}"
+      "cancelFailedLog": "AGENT   Cancel failed: {error}",
+      "interrupt": "Interrupt and send (⌘Enter / Ctrl+Enter) — stops the running turn first"
     },
     "context": {
       "head": "Add context",

@@ -783,11 +783,16 @@
       "internal": "Internes Ziel",
       "wireNo": "Leitungsnr.",
       "wire": "Leitung",
-      "status": "Status"
+      "status": "Status",
+      "level": "Lv"
     },
     "spare": "Reserve",
     "addJumper": "Brücke hinzufügen",
     "removeJumper": "Brücke entfernen",
+    "swap": "Swap sides",
+    "swapHint": "Swaps the inside and outside of the selected terminals (press again to swap back)",
+    "swapped": "Swapped",
+    "swapLog": "{reference}: swapped the sides of terminals {terminals}",
     "jumperHint": "Wählen Sie benachbarte Klemmen aus und fügen Sie eine Steckbrücke hinzu. Jede Bearbeitung läuft über einen Befehl, sodass Cmd+Z sie zurücknimmt.",
     "check": "Klemmleiste prüfen",
     "checkPending": "Noch nicht geprüft",
@@ -795,15 +800,49 @@
     "checkCounts": "{error} Fehler / {warning} Warnung(en) / {info} Hinweis(e)",
     "generateDiagram": "Klemmenanschlussplan erzeugen",
     "generateChart": "Klemmenplan erzeugen",
-    "phase2Hint": "für Phase 2 geplant",
-    "phase2": {
-      "sort": "Sortieren",
-      "autoNumber": "Neu nummerieren",
-      "spareTerminal": "Reserveklemme einfügen",
-      "multiLevel": "Mehrstock",
-      "accessory": "Zubehör",
-      "swap": "Innen/Außen tauschen",
-      "goto": "Zur Zeichnung"
+    "insertSpare": "Insert spare",
+    "spareInsert": {
+      "title": "Insert spare terminal",
+      "description": "One update_entity (symbol_id + terminal_numbers)",
+      "positionLabel": "Insert position:",
+      "positionEnd": "At the end",
+      "positionAfter": "After {after}",
+      "countLabel": "Count:",
+      "numberMode": "Numbering",
+      "modeShift": "Add a pole at the end and shift the numbers down",
+      "modeKeep": "Leave the spare with a vacant number",
+      "modeKeepHint": "Following labels stay as they are; the spare takes the next free number (refused if it would collide)",
+      "previewLabel": "Preview",
+      "previewLine": "{count} spare(s) inserted at {position} (terminal {labels}) · both sides unconnected",
+      "note": "Shifting the numbers never moves a pin's coordinates, so existing wiring stays connected",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "issueCount": "Enter a count of 1 or more",
+      "issuePoleCap": "Exceeds the maximum pole count (limit {max})",
+      "issueInvalid": "This cannot be applied",
+      "modeShiftHint": "Following terminals are renumbered so the labels stay contiguous",
+      "issueNonNumeric": "The label at the insertion point ({label}) has no number, so the spare cannot be numbered",
+      "issueKeepDuplicate": "Leaving the number vacant would collide with an existing terminal; choose 'shift' instead"
+    },
+    "multiLevel": "Mehrstock",
+    "levels": {
+      "label": "Ebenen",
+      "description": "Wechselt diese Klemmenleiste zwischen einstufig und mehrstufig. Pinbelegung, Tabelle und Anschlussplan folgen.",
+      "hint": "Das Verringern der Ebenen wird abgelehnt, wenn Verdrahtung, Brücken, Pin-Gruppen oder Zubehör noch auf die verschwindende Ebene verweisen. Ebene 1 führt zurück zur einstufigen symbol_id (niemals zu einem \"_1l\"-Alias).",
+      "range": "Ebenen 1-{max}; außerhalb dieses Bereichs wird abgelehnt.",
+      "preview": "Vorschau",
+      "previewNumbers": "Klemmennummern {from} → {to}",
+      "previewJumpers": "Brücken {from} → {to}",
+      "blockers": "Ebenen, die verschwinden würden",
+      "issue": "Eine Ebene mit vorhandenen Anschlüssen kann nicht entfernt werden. Lösen Sie zuerst Klemme {terminal}.",
+      "blocker": {
+        "wire": "verdrahtet",
+        "jumper": "Brücke",
+        "pinGroup": "Pin-Gruppe",
+        "accessory": "Zubehör"
+      },
+      "cancel": "Abbrechen",
+      "apply": "Anwenden"
     },
     "hint": "Die Tabelle wird aus der Zeichnung abgeleitet (Verdrahtung, Leitungsnummern und Leitungen können hier nicht bearbeitet werden). Die Schrankinnenseite ist der linke Anschlusspunkt, die Außenseite der rechte.",
     "openLog": "Klemmen-Editor: Klemmleisten von „{sheet}“ werden bearbeitet",
@@ -813,7 +852,85 @@
     "jumperRemovedLog": "Klemmen-Editor: Brücken an Klemme(n) {terminals} von {reference} entfernt (rückgängig mit Cmd+Z)",
     "checkLog": "Klemmen-Editor: {reference} geprüft - {result}",
     "chartLog": "Klemmen-Editor: Klemmenplan von {reference} ({count} Zeile(n)) nach {path} geschrieben",
-    "diagramLog": "Klemmen-Editor: Klemmenanschlussplan von {reference} ({count} Seite(n)) nach {path} geschrieben"
+    "diagramLog": "Klemmen-Editor: Klemmenanschlussplan von {reference} ({count} Seite(n)) nach {path} geschrieben",
+    "sort": {
+      "label": "Sort:",
+      "number": "Number",
+      "alnum": "Alphanumeric",
+      "page": "Page (drawing order)",
+      "cable": "External cable",
+      "jumper": "Jumper"
+    },
+    "goto": "Go to drawing",
+    "gotoHint": "Double-click a row to jump to it on the drawing",
+    "sortChangedLog": "Terminal editor: {reference} sorted by {order} (undo with Cmd+Z)",
+    "gotoLog": "Terminal editor: jumped to {reference} on the drawing",
+    "autoNumber": "Neu nummerieren",
+    "renumber": {
+      "start": "Startnummer",
+      "step": "Schrittweite",
+      "prefix": "Präfix",
+      "target": "Ziel",
+      "preview": "Vorschau",
+      "cancel": "Abbrechen",
+      "apply": "Anwenden",
+      "description": "Nummeriert alle Klemmen dieser Klemmenleiste in Pin-Reihenfolge neu. Tabelle, Klemmenplan und Zeichnung folgen.",
+      "note": "Brücken und Pin-Gruppen werden im selben Befehl auf die neuen Nummern umgeschrieben, ein einzelnes Rückgängig stellt alles wieder her.",
+      "targetAll": "Alle Klemmen",
+      "targetSelected": "Ausgewählte Zeilen ({count})",
+      "targetSelectedHint": "Nur die ausgewählten Zeilen neu zu nummerieren ist für eine spätere Phase geplant",
+      "jumpers": "Brücken {from} → {to}",
+      "issueDuplicate": "Die Klemmennummern würden sich wiederholen ({label} kommt {count}-mal vor). Die Zeichnung bleibt unverändert.",
+      "issueEmpty": "Eine Klemmennummer wäre leer. Die Zeichnung bleibt unverändert.",
+      "issueComma": "Eine Klemmennummer würde ein Komma enthalten ({label}), das Trennzeichen der gespeicherten Liste. Die Zeichnung bleibt unverändert.",
+      "issueInvalid": "Diese Nummern können nicht angewendet werden. Die Zeichnung bleibt unverändert.",
+      "issueNoBlock": "Keine Klemmenleiste zum Neunummerieren."
+    },
+    "renumberedLog": "Klemmen-Editor: {reference} von {from} zu {to} neu nummeriert (rückgängig mit Cmd+Z)",
+    "levelsChangedLog": "Klemmen-Editor: {reference} von {from} auf {to} Ebene(n) geändert (rückgängig mit Cmd+Z)",
+    "spareInsertedLog": "Terminal editor: inserted {count} spare terminal(s) ({labels}) into {reference} (undo with Cmd+Z)",
+    "assignPart": {
+      "button": "Assign part",
+      "title": "Assign part (terminal block part number)",
+      "description": "Assigns a part number from the parts database. The part number and the terminal kind are written in one edit (Cmd+Z undoes it)",
+      "search": "Search by part number or name",
+      "results": "Results ({count})",
+      "empty": "No terminal block parts found",
+      "hint": "The kind comes from the parts database's terminal_kind column. It is copied to the terminal block on assignment and read by the chart and the terminal check",
+      "cancel": "Cancel",
+      "apply": "Assign",
+      "assignedLog": "Terminal block: assigned part {partNo} to {reference} (Cmd+Z undoes it)"
+    },
+    "accessory": {
+      "button": "Accessories",
+      "title": "Accessories",
+      "description": "Adds end brackets, partitions and end plates to the terminal block",
+      "position": "Position",
+      "kind": "Kind",
+      "partNo": "Part no.",
+      "positionEnd": "End",
+      "positionBefore": "Before {terminal}",
+      "addRow": "Add row",
+      "removeRow": "Remove this row",
+      "unknownPart": "{partNo} is not in the parts database (you can still apply; the BOM lists it under this part number)",
+      "skipped": "Items that cannot be read are skipped: {items}",
+      "hint": "Position = the accessory goes right before that terminal; End = after the last terminal. Kinds: end bracket / partition / end plate",
+      "bomNote": "The BOM lists one quantity row per part number. Accessory widths are not counted by the panel layout spacing check",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "appliedLog": "Terminal block: {reference} now has {count} accessories (Cmd+Z undoes it)"
+    },
+    "accessoryKind": {
+      "end_bracket": "End bracket",
+      "partition": "Partition",
+      "end_plate": "End plate"
+    },
+    "terminalKind": {
+      "feed_through": "Feed-through",
+      "multi_level": "Multi-level",
+      "fuse": "Fuse",
+      "disconnect": "Disconnect"
+    }
   },
   "plcIo": {
     "ribbonButton": "SPS-E/A-Tabelle",
@@ -984,14 +1101,14 @@
       "connectFailedLog": "AGENT   Verbindung zum Agenten fehlgeschlagen: {error}",
       "emptyConnected": "Sagen Sie dem Agenten, was er mit der Zeichnung tun soll. Änderungen werden automatisch übernommen und können später rückgängig gemacht werden.",
       "emptyDisconnected": "Kein KI-Anbieter ist bereit. Wählen Sie einen unter Einstellungen > Agent (Claude Code CLI, API-Schlüssel, Copilot CLI, Ollama, ...).",
-      "replyPlaceholder": "Antwort eingeben..."
+      "replyPlaceholder": "Antwort eingeben... (⌘Enter / Ctrl+Enter)"
     },
     "panel": {
       "titleActive": "Schaltungsagent",
       "titleNew": "Neuer Agent",
       "expand": "Vergrößern",
       "minimize": "Minimieren",
-      "placeholder": "Fragen Sie nach Beliebigem... (z. B. Sicherung in die 24-V-Schiene einfügen)"
+      "placeholder": "Fragen Sie nach Beliebigem... (z. B. Sicherung in die 24-V-Schiene einfügen) (⌘Enter / Ctrl+Enter)"
     },
     "message": {
       "working": "Der Agent arbeitet...",
@@ -1002,9 +1119,10 @@
     "composer": {
       "addContext": "Kontext hinzufügen",
       "stop": "Stopp",
-      "send": "Senden",
+      "send": "Senden (⌘Enter / Ctrl+Enter)",
       "sendFailedLog": "AGENT   Senden fehlgeschlagen (siehe Fehler im Chat)",
-      "cancelFailedLog": "AGENT   Abbrechen fehlgeschlagen: {error}"
+      "cancelFailedLog": "AGENT   Abbrechen fehlgeschlagen: {error}",
+      "interrupt": "Interrupt and send (⌘Enter / Ctrl+Enter) — stops the running turn first"
     },
     "context": {
       "head": "Kontext hinzufügen",
