@@ -4,7 +4,7 @@
 // 「折りたたみを反映して行の並びに均す」「見出しの文言を組み立てる」「行クリックの
 // ジャンプ先を求める」だけを持つ。文言はi18nカタログが持ち、ここが返すのはキーと引数。
 
-import type { DeviceFunction, DeviceNode } from "../ipc";
+import type { DeviceFunction, DeviceNode, UnplacedFunction } from "../ipc";
 import { functionLabel, type LabelSpec } from "./search";
 
 /** ツリーに描く1行 (親=デバイス、子=機能)。 */
@@ -23,23 +23,55 @@ export type DeviceRow =
       fn: DeviceFunction;
       /** 同じデバイスの中での通し番号 (行のキーに使う)。 */
       index: number;
+    }
+  | {
+      type: "unplaced";
+      reference: string;
+      device: DeviceNode;
+      unplaced: UnplacedFunction;
+      /** 同じデバイスの未配置機能の中での通し番号 (行のキーに使う)。 */
+      index: number;
     };
+
+/** ツリーの絞り込み (.pen「M4残りデザイン②」の すべて / 未配置あり / 配置済み)。 */
+export type DeviceFilter = "all" | "unplaced" | "placed";
+
+/** 絞り込みに合うデバイスか。「配置済み」= 未配置機能が1つも無いデバイス。 */
+export function matchesFilter(device: DeviceNode, filter: DeviceFilter): boolean {
+  const open = (device.unplaced ?? []).length > 0;
+  return filter === "all" || (filter === "unplaced" ? open : !open);
+}
 
 /**
  * ツリーを描画用の行の並びへ均す。`collapsed`に入っている参照記号は子行を出さない。
  * デバイスの並び (参照記号順) と機能の並び (コイル→接点 / 読み順) はRust側が決めた順を保つ。
  */
-export function deviceRows(devices: DeviceNode[], collapsed: Set<string>): DeviceRow[] {
+export function deviceRows(
+  devices: DeviceNode[],
+  collapsed: Set<string>,
+  filter: DeviceFilter = "all",
+): DeviceRow[] {
   const rows: DeviceRow[] = [];
   for (const device of devices) {
+    if (!matchesFilter(device, filter)) continue;
     const expanded = !collapsed.has(device.reference);
     rows.push({ type: "device", reference: device.reference, device, expanded });
     if (!expanded) continue;
     device.functions.forEach((fn, index) => {
       rows.push({ type: "function", reference: device.reference, device, fn, index });
     });
+    // 未配置機能 (予約接点) は配置済みの機能の後ろに続ける (接点マップの未使用行と同じ並び)
+    (device.unplaced ?? []).forEach((unplaced, index) => {
+      rows.push({ type: "unplaced", reference: device.reference, device, unplaced, index });
+    });
   }
   return rows;
+}
+
+/** 未配置行の名前 (例 「接点 33-34 NO」)。 */
+export function unplacedHeadline(u: UnplacedFunction): LabelSpec {
+  const key = { contact_no: "contactNo", contact_nc: "contactNc", contact_co: "contactCo" }[u.role];
+  return { key: `devices.unplaced.${key}`, params: { terminals: u.terminals } };
 }
 
 /**

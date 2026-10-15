@@ -43,7 +43,13 @@ pub type SheetId = Uuid;
 /// - v13: 整えバリアントの複製シートの印 ([`Sheet::variant_of`]) を追加。印の無い旧ファイルの
 ///   シートはすべて普通のシート (`None`) として開き、クロスリファレンスの数え方も
 ///   出力される図面も変わらない (印が付いているときだけ複製として扱われる)
-pub const FORMAT_VERSION: u32 = 13;
+/// - v14: PLC I/O図面の生成設定をプロジェクトに保存する ([`Project::plc_generate`])。設定の無い
+///   旧ファイルは「保存なし」(`None`) で開き、生成ダイアログは既定値から始まる
+/// - v15: 多芯ケーブル ([`Entity::Cable`]。定義線・芯線割当・シールド・長さ)。ケーブルの無い
+///   旧ファイルはそのまま開ける (逆にケーブルを含むファイルは旧アプリでは開けない)
+/// - v16: 盤レイアウトの銘板 ([`Entity::Nameplate`]) と関連付き寸法線 ([`Entity::Dimension`])。
+///   どちらも無い旧ファイルはそのまま開ける
+pub const FORMAT_VERSION: u32 = 16;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -80,6 +86,10 @@ pub struct Project {
     /// FreeCAD側は同じUUIDを`madake_id`プロパティに持つ。
     #[serde(default)]
     pub mech_links: Vec<MechLink>,
+    /// PLC I/O図面の生成設定 (M4仕様 §3。生成ダイアログで「プロジェクトに保存」したもの)。
+    /// 次に生成ダイアログを開いたときの初期値になる。`None`=保存なし (既定値)。
+    #[serde(default)]
+    pub plc_generate: Option<crate::plc::PlcSheetOptions>,
 }
 
 /// エンティティ (シンボル・配線) とFreeCADオブジェクトの対応 (M5仕様 M5-2)。
@@ -135,6 +145,7 @@ impl Project {
             frame_template: None,
             no: None,
             mech_links: Vec::new(),
+            plc_generate: None,
         }
     }
 
@@ -384,6 +395,12 @@ pub enum Entity {
     PanelLegend(PanelLegend),
     /// 電線品番凡例ブロック (色+sq+電線品番+使用長のテーブル、G9残)。回路図シート専用。
     WireLegend(WireLegend),
+    /// 多芯ケーブル (定義線で配線を横切り、芯線を割り当てる。M4 §5 ケーブル一覧)。
+    Cable(Cable),
+    /// 銘板 (フットプリントに結び付くか単独)。盤レイアウトシート専用 (M4 §8)。
+    Nameplate(Nameplate),
+    /// 関連付き寸法線 (2つの部品・点の間の距離)。盤レイアウトシート専用 (M4 §8)。
+    Dimension(Dimension),
 }
 
 impl Entity {
@@ -402,6 +419,9 @@ impl Entity {
             Entity::Footprint(e) => e.id,
             Entity::PanelLegend(e) => e.id,
             Entity::WireLegend(e) => e.id,
+            Entity::Cable(e) => e.id,
+            Entity::Nameplate(e) => e.id,
+            Entity::Dimension(e) => e.id,
         }
     }
 
@@ -421,6 +441,9 @@ impl Entity {
             Entity::Footprint(e) => e.id = id,
             Entity::PanelLegend(e) => e.id = id,
             Entity::WireLegend(e) => e.id = id,
+            Entity::Cable(e) => e.id = id,
+            Entity::Nameplate(e) => e.id = id,
+            Entity::Dimension(e) => e.id = id,
         }
     }
 
@@ -432,6 +455,11 @@ impl Entity {
     pub fn refs(&self) -> Vec<EntityId> {
         match self {
             Entity::Text(e) => e.leader_to.into_iter().collect(),
+            // ケーブルの芯線が割り当てられた配線
+            Entity::Cable(e) => e.cores.iter().filter_map(|c| c.wire).collect(),
+            // 銘板が結び付くフットプリント・寸法線が測る部品
+            Entity::Nameplate(e) => e.footprint.into_iter().collect(),
+            Entity::Dimension(e) => [&e.a, &e.b].into_iter().filter_map(DimAnchor::entity).collect(),
             _ => Vec::new(),
         }
     }
@@ -447,6 +475,27 @@ impl Entity {
             Entity::Text(e) => {
                 if let Some(target) = e.leader_to {
                     e.leader_to = map.get(&target).copied();
+                }
+            }
+            Entity::Cable(e) => {
+                for core in &mut e.cores {
+                    if let Some(w) = core.wire {
+                        core.wire = map.get(&w).copied();
+                    }
+                }
+            }
+            Entity::Nameplate(e) => {
+                if let Some(fp) = e.footprint {
+                    e.footprint = map.get(&fp).copied();
+                }
+            }
+            Entity::Dimension(e) => {
+                for anchor in [&mut e.a, &mut e.b] {
+                    if let DimAnchor::Footprint { id } = anchor {
+                        if let Some(new) = map.get(id) {
+                            *id = *new;
+                        }
+                    }
                 }
             }
             Entity::Symbol(_)
@@ -495,8 +544,166 @@ impl Entity {
             Entity::Footprint(e) => e.at = e.at.translated(dx, dy),
             Entity::PanelLegend(e) => e.at = e.at.translated(dx, dy),
             Entity::WireLegend(e) => e.at = e.at.translated(dx, dy),
+            Entity::Cable(e) => {
+                for p in &mut e.points {
+                    *p = p.translated(dx, dy);
+                }
+            }
+            // 結び付いた銘板はフットプリントに付いて動くので、自分の位置は単独のときだけ使う
+            Entity::Nameplate(e) => e.at = e.at.translated(dx, dy),
+            Entity::Dimension(e) => {
+                for anchor in [&mut e.a, &mut e.b] {
+                    if let DimAnchor::Point { at } = anchor {
+                        *at = at.translated(dx, dy);
+                    }
+                }
+                e.at += match e.axis {
+                    DimAxis::Horizontal => dy,
+                    DimAxis::Vertical => dx,
+                };
+            }
         }
     }
+}
+
+/// 銘板 (M4仕様 §8。ACADEのNameplate相当)。盤レイアウトシート専用。
+///
+/// フットプリントに結び付けると、その下 (または上) に中央揃えで付いて動き、
+/// `follow_description`なら1行目は回路図の同じ参照記号のシンボルの機能ラベル (説明) になる
+/// ([`crate::panel::nameplate_lines`])。結び付けない単独の銘板は`at`に置く。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Nameplate {
+    pub id: EntityId,
+    /// 結び付くフットプリント (Noneなら単独の銘板)。
+    #[serde(default)]
+    pub footprint: Option<EntityId>,
+    /// 単独の銘板の左上角 (用紙座標mm)。結び付いているときは使わない。
+    #[serde(default)]
+    pub at: Point,
+    /// 銘板の幅・高さ mm。
+    pub w: f64,
+    pub h: f64,
+    /// 文字 (1〜2行)。
+    #[serde(default)]
+    pub lines: Vec<String>,
+    /// 文字高 mm。
+    pub text_mm: f64,
+    /// 結び付いた部品に対する位置 (下/上)。
+    #[serde(default)]
+    pub position: NameplatePosition,
+    /// 1行目を回路図の説明 (機能ラベル) に追従させるか。
+    #[serde(default)]
+    pub follow_description: bool,
+    /// 型番 (部品表に載る。空なら載らない)。
+    #[serde(default)]
+    pub part_no: String,
+}
+
+/// 銘板の位置 (結び付いたフットプリントに対して)。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum NameplatePosition {
+    #[default]
+    Below,
+    Above,
+}
+
+/// 関連付き寸法線 (M4仕様 §8)。盤レイアウトシート専用。
+///
+/// 端点は部品 (フットプリントの中心) か点。部品を動かすと寸法の値と線が描画のたびに追従する。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Dimension {
+    pub id: EntityId,
+    pub a: DimAnchor,
+    pub b: DimAnchor,
+    pub axis: DimAxis,
+    /// 寸法線の位置: 水平寸法ならY、垂直寸法ならX (mm)。
+    pub at: f64,
+}
+
+/// 寸法線の端点。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DimAnchor {
+    /// 用紙上の点。
+    Point { at: Point },
+    /// フットプリントの中心 (部品を動かすと追従する)。
+    Footprint { id: EntityId },
+}
+
+impl DimAnchor {
+    /// 指しているエンティティ (点ならNone)。
+    pub fn entity(&self) -> Option<EntityId> {
+        match self {
+            DimAnchor::Footprint { id } => Some(*id),
+            DimAnchor::Point { .. } => None,
+        }
+    }
+}
+
+/// 寸法の向き。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DimAxis {
+    /// 水平距離 (x方向) を測る。
+    Horizontal,
+    /// 垂直距離 (y方向) を測る。
+    Vertical,
+}
+
+/// 多芯ケーブル (EPLANのケーブル定義に相当。M4 §5)。
+///
+/// 回路図では、まとめる配線を斜めに横切る**定義線** (`points`の2点) で表す。芯線は
+/// 定義線が横切った配線に交差順で割り当てる ([`crate::command::Command::AddCable`])。
+/// シールドは定義線を囲む楕円で描く。ハーネス ([`Harness`]。配線の束を名前で囲むだけ) とは
+/// 別物で、ケーブルは型番・芯数・芯線割当を持つ**部品**。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Cable {
+    pub id: EntityId,
+    /// 参照記号 (W1, W2 …)。
+    pub reference: String,
+    /// 型番 (部品表に載る。未設定は空)。
+    #[serde(default)]
+    pub part_no: String,
+    /// 芯数。割り当てた芯がこれを超えると端子台チェックと同じくERCがErrorにする。
+    pub core_count: usize,
+    /// 線径 sq (0 = 未設定)。
+    #[serde(default)]
+    pub sq: f64,
+    /// 定義線の2点 (用紙座標mm)。
+    pub points: Vec<Point>,
+    /// 芯線割当 (定義線が横切った配線を交差順に)。芯数より少なければ残りは予備芯。
+    #[serde(default)]
+    pub cores: Vec<CableCore>,
+    /// シールド (無ければNone)。
+    #[serde(default)]
+    pub shield: Option<CableShield>,
+    /// 長さ m (未設定はNone)。
+    #[serde(default)]
+    pub length_m: Option<f64>,
+}
+
+/// ケーブルの芯線1本の割当。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct CableCore {
+    /// 芯の呼び (例 "1")。
+    pub core: String,
+    /// 芯の色 (割り当てた配線の線色)。
+    #[serde(default)]
+    pub color: String,
+    /// 割り当てた配線。配線が消えていればNone (帳票では予備芯と同じ扱い)。
+    #[serde(default)]
+    pub wire: Option<EntityId>,
+}
+
+/// ケーブルのシールド。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct CableShield {
+    /// シールドを接地するか (片端接地の印を描く)。
+    #[serde(default)]
+    pub grounded: bool,
 }
 
 /// 盤の外形 (筐体) と取付板 (M4仕様 §8)。

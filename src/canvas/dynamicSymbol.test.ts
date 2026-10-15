@@ -84,6 +84,15 @@ describe("dynamicSymbol", () => {
     expect(dynamicSymbol("plc_do_xp")).toBeNull();
   });
 
+  // ja: PLCモジュールの分割片 plc_di_{n}p_s{start} は点番号を開始点から振り、形は同じ点数のモジュールと同じ (Rust側と一致)
+  it("a split PLC module piece numbers its points from the start point and keeps the shape of a module of that size", () => {
+    const piece = dynamicSymbol("plc_di_4p_s13")!;
+    expect(piece.pins.map((p) => p.number)).toEqual(["13", "14", "15", "16"]);
+    expect(piece.pins.map((p) => p.at)).toEqual(dynamicSymbol("plc_di_4p")!.pins.map((p) => p.at));
+    expect(dynamicSymbol("plc_do_8p_s57")).not.toBeNull();
+    for (const bad of ["plc_di_8p_s58", "plc_di_4p_s0", "plc_di_4p_sx"]) expect(dynamicSymbol(bad)).toBeNull();
+  });
+
   // ja: 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、1端子=左右2接続点になる
   it("a multi-level terminal block (4 poles, 2 levels) numbers its pins with a level letter", () => {
     const def = dynamicSymbol("terminal_block_4p_2l");

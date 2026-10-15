@@ -30,16 +30,18 @@ describe("report generation dialog store", () => {
     mockBlocks();
   });
 
-  // ja: 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・XRef表・PLC I/Oレポート・盤内部品配置表 の7つ
-  it("offers the seven report kinds of the reports tab", () => {
+  // ja: 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・ケーブル一覧・XRef表・PLC I/Oレポート・盤内部品配置表・盤内配線図 の9つ
+  it("offers the nine report kinds of the reports tab", () => {
     expect(REPORT_KINDS).toEqual([
       "wire-list",
       "terminal-chart",
       "terminal-diagram",
       "bom",
+      "cable-list",
       "xref",
       "plc-io",
       "panel-placement",
+      "panel-wiring",
     ]);
   });
 

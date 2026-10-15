@@ -24,7 +24,9 @@ export type PanelToolId =
   | "din_rail"
   | "duct"
   | "footprint"
-  | "panel_legend";
+  | "panel_legend"
+  | "nameplate"
+  | "dimension";
 
 /** これより小さいドラッグは作図にしない (クリックだけの誤操作を弾く) mm。 */
 export const MIN_PANEL_SIZE = 0.5;

@@ -1,6 +1,9 @@
 // 対話ツールの状態機械。ドラッグ中はローカルプレビュー、確定時にCommandを発行する。
 
 import { harnessAddCommand, harnessRectPoints, harnessWireCount } from "../canvas/harness";
+import { cableAddCommand, cableHit } from "../canvas/cable";
+import { dimensionAddCommand, footprintAt, panelMarkHit } from "../canvas/panelMarks";
+import { useNameplatesStore } from "../stores/nameplates";
 import {
   DEFAULT_VARIANT,
   drawMacroGhost,
@@ -50,6 +53,7 @@ import {
   type Point,
   type SymbolInstance,
   type UnplacedComponent,
+  type DimAnchor,
 } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useMacrosStore } from "../stores/macros";
@@ -65,6 +69,7 @@ export type ToolId =
   | "wire"
   | "place"
   | "harness"
+  | "cable"
   | "macro"
   | "wire_legend"
   | ShapeToolId
@@ -75,6 +80,7 @@ const SCHEMATIC_TOOLS: ToolId[] = [
   "wire",
   "place",
   "harness",
+  "cable",
   "macro",
   "wire_legend",
   "shape_rect",
@@ -89,6 +95,8 @@ const PANEL_TOOLS: ToolId[] = [
   "duct",
   "footprint",
   "panel_legend",
+  "nameplate",
+  "dimension",
 ];
 
 /** 配置中のマクロ。`fromLibrary=false`は⌘Vの無名マクロ (ファイルに無いのでidを引けない)。 */
@@ -148,6 +156,14 @@ export class EditorController {
   tool: ToolId = "select";
   /** placeツールで配置するシンボルid。 */
   placeSymbolId: string | null = null;
+  /**
+   * 予約接点の配置 (デバイスナビゲータの未配置行から): 参照記号を自動採番せずこの値で置き、
+   * 1個置いたら選択ツールへ戻る。`placeLabel`はカーソル脇の操作チップの主文 (例 "K1 33-34 NO")。
+   */
+  placeReference: string | null = null;
+  /** 寸法ツールで打った1点目 (2点目で寸法線を置く)。 */
+  dimFirst: DimAnchor | null = null;
+  placeLabel: string | null = null;
   placeRotation = 0;
   /** 部品DBから選択した部品情報 (配置時にvalue/attrsへ反映)。 */
   placePart: { value: string; attrs: Record<string, string> } | null = null;
@@ -180,6 +196,7 @@ export class EditorController {
     | "move"
     | "rubber"
     | "harness"
+    | "cable"
     | "shape"
     | "panel_rect"
     | "panel_rail" = "none";
@@ -217,6 +234,9 @@ export class EditorController {
       return;
     }
     this.tool = tool;
+    this.dimFirst = null;
+    this.placeReference = null;
+    this.placeLabel = null;
     this.placeSymbolId = tool === "place" ? (symbolId ?? this.placeSymbolId) : null;
     this.placePart = tool === "place" ? (part ?? null) : null;
     if (tool !== "macro") {
@@ -228,6 +248,26 @@ export class EditorController {
     this.shapePoints = [];
     this.dragMode = "none";
     this.requestRedraw();
+  }
+
+  /**
+   * 予約接点 (デバイスナビゲータの未配置機能) を置くモードに入る。参照記号は`reference`のまま
+   * (自動採番しない)、クリックかドロップで1個置いたら選択ツールへ戻る。置くのは普通の
+   * `add_entity` 1回なのでundo一発で戻り、接点マップ・XRefは図面から導出し直される。
+   */
+  startContactPlacement(reference: string, symbolId: string, label: string) {
+    this.setTool("place", symbolId);
+    if (this.tool !== "place") return;
+    this.placeReference = reference;
+    this.placeLabel = label;
+    this.placeRotation = 0;
+    this.requestRedraw();
+  }
+
+  /** ナビゲータからドラッグした予約接点を、ドロップした位置 (キャンバス座標) へ置く。 */
+  async dropPlacement(screen: Pt) {
+    if (this.tool !== "place" || !this.placeReference) return;
+    await this.commitPlace(this.snap(this.vp.toWorld(screen)));
   }
 
   /**
@@ -402,6 +442,10 @@ export class EditorController {
     for (const e of entities) {
       if (e.kind === "shape" && shapeHitTest(e, world, HIT_TOLERANCE)) return e.id;
     }
+    // ケーブル定義線 (配線を横切る斜線そのもの)
+    for (const e of entities) {
+      if (e.kind === "cable" && cableHit(e, world, HIT_TOLERANCE)) return e.id;
+    }
     // ハーネス境界は最後 (囲みの中身を選びたいことのほうが多い)。破線そのものを掴む
     for (const e of entities) {
       if (e.kind !== "harness" || e.points.length < 2) continue;
@@ -421,6 +465,12 @@ export class EditorController {
     // 盤外形は中身を選びたいことのほうが多いので最後に見る
     for (const e of entities) {
       if (e.kind === "panel_legend" && inRect(world, legendRect(sheet, e))) return e.id;
+    }
+    // 銘板・寸法線はフットプリントより手前に描くので先に拾う
+    for (const e of entities) {
+      if ((e.kind === "nameplate" || e.kind === "dimension") && panelMarkHit(sheet, e, world, HIT_TOLERANCE)) {
+        return e.id;
+      }
     }
     for (const e of entities) {
       if (e.kind === "footprint" && inRect(world, footprintRect(e))) return e.id;
@@ -488,6 +538,13 @@ export class EditorController {
         this.dragMode = "harness";
         break;
       }
+      case "cable": {
+        // ケーブル定義線は配線を斜めに横切るドラッグ (始点・終点をグリッドに乗せる)
+        this.dragStartWorld = this.snap(world);
+        this.rubberEnd = this.dragStartWorld;
+        this.dragMode = "cable";
+        break;
+      }
       // 図形 (G10): 矩形・線・円はドラッグ、折れ線はクリックを重ねてダブルクリックで確定
       case "shape_rect":
       case "shape_line":
@@ -515,6 +572,33 @@ export class EditorController {
       case "panel_legend":
         void this.commitPanelLegend(this.snap(world));
         break;
+      case "nameplate": {
+        // 部品をクリックすればその部品に結び付け、何も無い所なら単独の銘板にする
+        const sheet = this.store.activeSheet;
+        if (sheet) {
+          const fp = footprintAt(sheet, world);
+          useNameplatesStore().openFor(fp?.id ?? null, this.snap(world));
+        }
+        break;
+      }
+      case "dimension": {
+        // 1点目・2点目をクリック (部品の上なら部品の中心に結び付く)。2点目で寸法線を置く
+        const sheet = this.store.activeSheet;
+        if (!sheet) break;
+        const fp = footprintAt(sheet, world);
+        const anchor: DimAnchor = fp ? { kind: "footprint", id: fp.id } : { kind: "point", at: this.snap(world) };
+        if (!this.dimFirst) {
+          this.dimFirst = anchor;
+          useUiStore().log(i18n.global.t("panelMarks.dimension.secondLog"));
+        } else {
+          const command = dimensionAddCommand(sheet, this.dimFirst, anchor);
+          this.dimFirst = null;
+          if (command) {
+            void this.store.execute(command).then(() => useUiStore().log(i18n.global.t("panelMarks.dimension.placedLog")));
+          }
+        }
+        break;
+      }
       case "wire_legend":
         void this.commitWireLegend(this.snap(world));
         break;
@@ -543,6 +627,7 @@ export class EditorController {
         this.rubberEnd = world;
         break;
       case "harness":
+      case "cable":
       case "shape":
       case "panel_rect":
       case "panel_rail":
@@ -578,9 +663,9 @@ export class EditorController {
             const sel = new Set(this.store.selection);
             for (const e of Object.values(sheet.entities)) {
               const pts: Point[] =
-                e.kind === "wire" || e.kind === "harness" || e.kind === "shape"
+                e.kind === "wire" || e.kind === "harness" || e.kind === "shape" || e.kind === "cable"
                   ? e.points
-                  : "at" in e
+                  : "at" in e && e.kind !== "dimension"
                     ? [e.at]
                     : [];
               if (pts.length && pts.every((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1)) {
@@ -624,6 +709,20 @@ export class EditorController {
         }
         break;
       }
+      case "cable": {
+        // 定義線を1回のadd_cableコマンドで置く (芯線割当はRust側が交差順に決める。undo一発)
+        if (sheet) {
+          const command = cableAddCommand(sheet, this.dragStartWorld, this.rubberEnd);
+          if (command && command.type === "add_cable") {
+            await this.store.execute(command);
+            const after = this.store.activeSheet;
+            const placed = after?.entities[command.cable.id];
+            const cores = placed && placed.kind === "cable" ? placed.cores.length : 0;
+            useUiStore().log(i18n.global.t("cable.createdLog", { reference: command.cable.reference, cores }));
+          }
+        }
+        break;
+      }
       case "harness": {
         // 囲みを1回のadd_entityコマンドで作る (undo一発で消える)
         if (sheet) {
@@ -656,14 +755,14 @@ export class EditorController {
     const first = entityIds.map((id) => sheet.entities[id]).find(Boolean);
     if (!first) return;
     const target: Pt | null =
-      first.kind === "wire" || first.kind === "harness" || first.kind === "shape"
+      first.kind === "wire" || first.kind === "harness" || first.kind === "shape" || first.kind === "cable"
         ? first.points.length
           ? {
               x: (first.points[0].x + first.points[first.points.length - 1].x) / 2,
               y: (first.points[0].y + first.points[first.points.length - 1].y) / 2,
             }
           : null
-        : "at" in first
+        : "at" in first && first.kind !== "dimension"
           ? first.at
           : null;
     if (target && this.viewSize.w > 0) {
@@ -884,11 +983,17 @@ export class EditorController {
       at,
       rotation: this.placeRotation,
       mirror: false,
-      reference: this.nextReference(def.ref_prefix),
+      reference: this.placeReference ?? this.nextReference(def.ref_prefix),
       value: this.placePart?.value ?? "",
       attrs: this.placePart?.attrs ?? {},
     };
+    const label = this.placeLabel;
     await this.store.execute({ type: "add_entity", sheet_id: sheet.id, entity });
+    if (this.placeReference) {
+      // 予約接点は1個ずつ: 置いたら選択ツールへ戻る (同じ接点を二重に置かない)
+      useUiStore().log(i18n.global.t("devices.placedLog", { label: label ?? entity.reference }));
+      this.setTool("select");
+    }
     this.requestRedraw();
   }
 
@@ -964,6 +1069,14 @@ export class EditorController {
         drawSymbol(ctx, vp, ghost, def, false, theme.selection);
         ctx.globalAlpha = 1;
       }
+      if (this.placeLabel && this.cursorScreen) {
+        drawOperationChip(
+          ctx,
+          { x: this.cursorScreen.x + 18, y: this.cursorScreen.y + 18 },
+          i18n.global.t("devices.placeChip", { label: this.placeLabel }),
+          i18n.global.t("devices.placeChipHint"),
+        );
+      }
     }
     // 回路マクロの配置ゴースト: 確定後と同じ回路をカーソル位置へ半透明で描く
     if (this.tool === "macro" && this.placeMacro) {
@@ -984,7 +1097,7 @@ export class EditorController {
         for (const id of this.store.selection) {
           const e = sheet.entities[id];
           if (!e) continue;
-          if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape") {
+          if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape" || e.kind === "cable") {
             ctx.beginPath();
             e.points.forEach((p, i) => {
               const s = vp.toScreen({ x: p.x + this.moveDelta.x, y: p.y + this.moveDelta.y });
@@ -1001,13 +1114,24 @@ export class EditorController {
               drawSymbol(ctx, vp, moved, def, false, theme.selection);
               ctx.globalAlpha = 1;
             }
-          } else if ("at" in e) {
+          } else if ("at" in e && e.kind !== "dimension") {
             const s = vp.toScreen({ x: e.at.x + this.moveDelta.x, y: e.at.y + this.moveDelta.y });
             ctx.strokeRect(s.x - 4, s.y - 4, 8, 8);
           }
         }
         ctx.setLineDash([]);
       }
+    }
+    // ケーブル定義線のドラッグプレビュー
+    if (this.dragMode === "cable") {
+      const a = vp.toScreen(this.dragStartWorld);
+      const b = vp.toScreen(this.rubberEnd);
+      ctx.strokeStyle = theme.selection;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
     }
     // ハーネス境界のドラッグプレビュー (確定後と同じ破線で見せる)
     if (this.dragMode === "harness") {
@@ -1102,4 +1226,31 @@ export class EditorController {
       }
     }
   }
+}
+
+/**
+ * 作図領域の操作チップ (.pen DSキャンバス操作チップ): 主文+操作ヒントを1行で、暗い地+青枠で描く。
+ * 予約接点の配置中にカーソルの右下へ出す。
+ */
+function drawOperationChip(ctx: CanvasRenderingContext2D, at: Pt, main: string, hint: string) {
+  ctx.save();
+  ctx.font = "10px 'Noto Sans JP', sans-serif";
+  ctx.textAlign = "left";
+  const pad = 8;
+  const gap = 8;
+  const w = ctx.measureText(main).width + gap + ctx.measureText(hint).width + pad * 2;
+  const h = 20;
+  ctx.fillStyle = theme.chipBg;
+  ctx.strokeStyle = theme.chipBorder;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(at.x, at.y, w, h, 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = theme.chipText;
+  ctx.fillText(main, at.x + pad, at.y + h / 2);
+  ctx.fillStyle = theme.chipHint;
+  ctx.fillText(hint, at.x + pad + ctx.measureText(main).width + gap, at.y + h / 2);
+  ctx.restore();
 }

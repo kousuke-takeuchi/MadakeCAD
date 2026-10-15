@@ -9,7 +9,7 @@ import {
   Table2, Tag, Trash2, Type,
   type LucideIcon,
 } from "lucide-vue-next";
-import { computed, inject } from "vue";
+import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   panelToolsAllowed,
@@ -40,8 +40,11 @@ import { useVerificationStore } from "../stores/verification";
 import type { EditorController } from "../tools/controller";
 import { useUiStore, type RibbonTab } from "../stores/ui";
 import { smallColumns } from "./ribbonLayout";
+import PanelAlignPopover from "./PanelAlignPopover.vue";
 
 const controller = inject<EditorController>("controller")!;
+/** 整列・等間隔ポップオーバー (リボン「パネル」タブ>配置)。 */
+const alignOpen = ref(false);
 const ui = useUiStore();
 const files = useFileActions();
 const projectFile = useProjectFileStore();
@@ -164,6 +167,16 @@ function startShape(tool: ShapeToolId) {
   }
   controller.setTool(tool);
   ui.log(t(`shapes.startLog.${SHAPE_TOOLS[tool]}`));
+}
+
+/** ケーブル定義線のツールに切り替える (リボン「配線」グループ)。配線を横切るドラッグで置く。 */
+function startCable() {
+  if (!useDocumentStore().activeSheet) {
+    ui.log(t("harness.noSheetLog"));
+    return;
+  }
+  controller.setTool("cable");
+  ui.log(t("cable.startLog"));
 }
 
 /** ハーネス境界の作図ツールに切り替える (リボン「配線」グループ)。矩形ドラッグで囲みを作る。 */
@@ -381,7 +394,6 @@ function openPlcGenerate() {
 
 /**
  * 「レポート」タブ (.pen「M4デザイン - リボン パネル/レポート/管理タブ」準拠)。
- * ケーブル一覧は帳票そのものが未実装なのでログのみ。
  * 電線リストはTask 1でFrom-Toリストへ統合したため1ボタンにまとめている。
  */
 const reportGroups = computed<RibbonGroup[]>(() => [
@@ -397,11 +409,7 @@ const reportGroups = computed<RibbonGroup[]>(() => [
       [
         { label: t("reports.kind.bom"), icon: FileText, action: () => openReport("bom") },
         { label: t("reports.kind.wire-list"), icon: Cable, action: () => openReport("wire-list") },
-        {
-          label: t("reports.ribbonCableList"),
-          icon: Cable,
-          action: () => ui.log(t("reports.todoLog", { report: t("reports.ribbonCableList") })),
-        },
+        { label: t("reports.kind.cable-list"), icon: Cable, action: () => openReport("cable-list") },
       ],
       [
         { label: t("reports.kind.xref"), icon: Network, action: () => openReport("xref") },
@@ -723,7 +731,14 @@ const panelGroups = computed<RibbonGroup[]>(() => [
       [
         todoItem(t("ribbon.panelSmall.insertByPart"), Cpu),
         todoItem(t("ribbon.panelSmall.lookupEdit"), Table2),
-        todoItem(t("ribbon.panelSmall.nameplate"), Tag),
+        {
+          label: t("ribbon.panelSmall.nameplate"),
+          icon: Tag,
+          action: () => startPanelTool("nameplate"),
+          isActive: () => controller.tool === "nameplate",
+          isDisabled: () => !onPanelSheet.value,
+          title: t("panelMarks.nameplate.ribbonHint"),
+        },
       ],
     ],
   },
@@ -738,12 +753,31 @@ const panelGroups = computed<RibbonGroup[]>(() => [
     },
     small: [
       [
-        todoItem(t("ribbon.panelSmall.align"), AlignJustify),
-        todoItem(t("ribbon.panelSmall.distribute"), Move),
+        {
+          label: t("ribbon.panelSmall.align"),
+          icon: AlignJustify,
+          action: () => (alignOpen.value = true),
+          isDisabled: () => !onPanelSheet.value,
+          title: t("panelMarks.align.ribbonHint"),
+        },
+        {
+          label: t("ribbon.panelSmall.distribute"),
+          icon: Move,
+          action: () => (alignOpen.value = true),
+          isDisabled: () => !onPanelSheet.value,
+          title: t("panelMarks.align.ribbonHint"),
+        },
         todoItem(t("ribbon.panelSmall.alignRail"), Rows3),
       ],
       [
-        todoItem(t("ribbon.panelSmall.dimension"), Ruler),
+        {
+          label: t("ribbon.panelSmall.dimension"),
+          icon: Ruler,
+          action: () => startPanelTool("dimension"),
+          isActive: () => controller.tool === "dimension",
+          isDisabled: () => !onPanelSheet.value,
+          title: t("panelMarks.dimension.ribbonHint"),
+        },
         {
           // 「間隔チェック」= 検証の実行。盤の重なり・吊り配置・レール充填率が検証結果に出る
           label: t("ribbon.panelSmall.clearance"),
@@ -763,7 +797,7 @@ const panelGroups = computed<RibbonGroup[]>(() => [
     },
     small: [
       [
-        todoItem(t("ribbon.panelSmall.panelWiring"), Route),
+        { label: t("ribbon.panelSmall.panelWiring"), icon: Route, action: () => void openReport("panel-wiring") },
         {
           label: t("ribbon.panelSmall.legend"),
           icon: FileText,
@@ -818,6 +852,14 @@ const groups = computed<RibbonGroup[]>(() => [
         isActive: () => controller.tool === "harness",
         isDisabled: schematicOnly,
         title: t("harness.ribbonHint"),
+      },
+      {
+        label: t("cable.ribbonButton"),
+        icon: Cable,
+        action: () => startCable(),
+        isActive: () => controller.tool === "cable",
+        isDisabled: schematicOnly,
+        title: t("cable.ribbonHint"),
       },
       {
         label: t("wireLegend.ribbonButton"),
@@ -1024,6 +1066,7 @@ const activeGroups = computed<RibbonGroup[] | null>(() => {
         {{ t("ribbon.placeholder", { tab: t(`ribbon.tab.${activeTab}`) }) }}
       </div>
     </div>
+    <PanelAlignPopover v-if="alignOpen" @close="alignOpen = false" />
   </div>
 </template>
 

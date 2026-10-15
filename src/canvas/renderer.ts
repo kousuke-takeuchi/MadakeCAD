@@ -28,6 +28,8 @@ import {
 // 循環import防止のため定義はdynamicSymbol.tsへ移した。他モジュールとの互換のため再エクスポートする
 export { symbolBounds, transformLocal } from "./dynamicSymbol";
 import { LEADER_STROKE_MM, leaderFor } from "./leader";
+import { drawCable } from "./cable";
+import { DIM_FONT, DIM_TICK, dimensionGeometry, nameplateLines, nameplateRect } from "./panelMarks";
 import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
 import { MATE_LINE_DASH, mateLinkSegment, type MateLink } from "./mate";
 import {
@@ -191,6 +193,8 @@ export interface RenderOptions {
    * 省略時は空 (ワイヤ自身に書かれた品番だけで引く)。
    */
   wireParts?: WirePart[];
+  /** 参照記号 → 回路図の説明 (盤の銘板の1行目を追従させる。`deviceDescriptions()`の戻り)。 */
+  deviceDescriptions?: ReadonlyMap<string, string>;
 }
 
 /** エージェント編集オーバーレイの描画入力。 */
@@ -979,6 +983,7 @@ export function drawPanel(
   vp: Viewport,
   sheet: Sheet,
   selection: Set<string>,
+  descriptions: ReadonlyMap<string, string> = new Map(),
 ): void {
   const edge = (id: string, normal: string) => (selection.has(id) ? theme.selection : normal);
   const width = (id: string, normal = 1) => (selection.has(id) ? 2 : normal);
@@ -1067,6 +1072,64 @@ export function drawPanel(
 
   drawBalloons(ctx, vp, sheet);
   drawLegends(ctx, vp, sheet, selection);
+  drawPanelMarks(ctx, vp, sheet, selection, descriptions);
+}
+
+/** 銘板 (枠+中央揃えの文字) と関連付き寸法線を描く (SVG出力と同じ形)。 */
+function drawPanelMarks(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  sheet: Sheet,
+  selection: Set<string>,
+  descriptions: ReadonlyMap<string, string>,
+): void {
+  for (const e of Object.values(sheet.entities)) {
+    if (e.kind !== "nameplate") continue;
+    const r = nameplateRect(sheet, e);
+    if (!r) continue;
+    const selected = selection.has(e.id);
+    paintRect(ctx, vp, r, panelTheme.nameplate, selected ? theme.selection : panelTheme.nameplateEdge, selected ? 2 : 1);
+    const lines = nameplateLines(sheet, e, descriptions);
+    const pitch = e.text_mm * 1.3;
+    const top = r.y + r.h / 2 - (pitch * (Math.max(lines.length, 1) - 1)) / 2 + e.text_mm * 0.35;
+    ctx.fillStyle = panelTheme.nameplateText;
+    ctx.font = `${Math.max(8, e.text_mm * vp.scale)}px sans-serif`;
+    ctx.textAlign = "center";
+    lines.forEach((line, i) => {
+      const s = vp.toScreen({ x: r.x + r.w / 2, y: top + i * pitch });
+      ctx.fillText(line, s.x, s.y);
+    });
+    ctx.textAlign = "left";
+  }
+  for (const e of Object.values(sheet.entities)) {
+    if (e.kind !== "dimension") continue;
+    const g = dimensionGeometry(sheet, e);
+    if (!g) continue;
+    const color = selection.has(e.id) ? theme.selection : panelTheme.dimension;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = selection.has(e.id) ? 2 : 1;
+    ctx.beginPath();
+    for (const [a, b] of [...g.extensions, g.line]) {
+      const sa = vp.toScreen(a);
+      const sb = vp.toScreen(b);
+      ctx.moveTo(sa.x, sa.y);
+      ctx.lineTo(sb.x, sb.y);
+    }
+    const t = DIM_TICK / 2;
+    for (const p of g.line) {
+      const sa = vp.toScreen({ x: p.x - t, y: p.y + t });
+      const sb = vp.toScreen({ x: p.x + t, y: p.y - t });
+      ctx.moveTo(sa.x, sa.y);
+      ctx.lineTo(sb.x, sb.y);
+    }
+    ctx.stroke();
+    const s = vp.toScreen(g.textAt);
+    ctx.fillStyle = color;
+    ctx.font = `${Math.max(8, DIM_FONT * vp.scale)}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText(g.text, s.x, s.y);
+    ctx.textAlign = "left";
+  }
 }
 
 /**
@@ -1239,7 +1302,7 @@ export function renderSheet(
   const noteFont = wireNoteFont(sheet);
 
   // 盤レイアウト (盤外形・ダクト・レール・フットプリント) は最背面
-  if (!hidden.has("panel")) drawPanel(ctx, vp, sheet, opts.selection);
+  if (!hidden.has("panel")) drawPanel(ctx, vp, sheet, opts.selection, opts.deviceDescriptions);
 
   // 図形 (G10) は配線・シンボルの背面 (塗りつぶした強調枠が回路を隠さない)
   for (const e of entities) {
@@ -1251,6 +1314,8 @@ export function renderSheet(
     if (e.kind !== "harness") continue;
     drawHarness(ctx, vp, e.points, e.name, opts.selection.has(e.id));
   }
+  // 多芯ケーブルの定義線は配線の上に重ねて描く (配線を横切る斜線なので後で描く)
+  const cables = entities.filter((e) => e.kind === "cable");
   // 嵌合コネクタ対 (G14) の破線も配線・シンボルの背面。シンボルどうしを結ぶ線なので
   // 表示クラスは「シンボル」に属する (シンボルを隠せば線も消える)
   if (!hidden.has("symbols")) {
@@ -1270,6 +1335,9 @@ export function renderSheet(
       else ctx.lineTo(s.x, s.y);
     });
     ctx.stroke();
+  }
+  for (const e of cables) {
+    if (e.kind === "cable") drawCable(ctx, vp, e, opts.selection.has(e.id));
   }
   for (const e of entities) {
     if (e.kind !== "symbol") continue;

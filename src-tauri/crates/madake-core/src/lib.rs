@@ -4,6 +4,7 @@
 //! [`command::Engine`] で実行され、UI(Tauri IPC)とAI(MCPサーバー)が同じAPIを共有する。
 
 pub mod block;
+pub mod cable;
 pub mod command;
 pub mod dxf;
 pub mod frame_template;
@@ -19,6 +20,7 @@ pub mod net_tag;
 pub mod netlist;
 pub mod ngspice;
 pub mod panel;
+pub mod panel_wiring;
 pub mod parts;
 pub mod pdf;
 pub mod pin_groups;

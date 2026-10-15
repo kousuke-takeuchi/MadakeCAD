@@ -16,7 +16,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::geometry::Point;
 use crate::model::{Entity, EntityId, Project, SheetId, Wire};
-use crate::relay_xref::{relay_devices, relay_role, terminal_pair, RelayDevice, RelayRole};
+use crate::relay_xref::{
+    relay_devices, relay_role, terminal_pair, RelayDevice, RelayRole, CONTACT_CO_SYMBOL_ID,
+    CONTACT_NC_SYMBOL_ID, CONTACT_NO_SYMBOL_ID,
+};
 use crate::symbol::resolve_symbol;
 use crate::terminal_chart::{is_terminal_block, poles_and_levels_of, terminal_range_of};
 use crate::xref::zone_at;
@@ -189,7 +192,18 @@ pub fn search_project(project: &Project, query: &str, kinds: &[SearchKind]) -> V
                 | Entity::Duct(_)
                 | Entity::Footprint(_)
                 | Entity::PanelLegend(_)
-                | Entity::WireLegend(_) => {}
+                | Entity::WireLegend(_)
+                | Entity::Nameplate(_)
+                | Entity::Dimension(_) => {}
+                Entity::Cable(c) => {
+                    let at = c.points.first().copied().unwrap_or_default();
+                    if want(SearchKind::Reference) && matches(&c.reference, &needle) {
+                        push(SearchKind::Reference, &c.reference, &c.part_no, c.id, at);
+                    }
+                    if want(SearchKind::Value) && matches(&c.part_no, &needle) {
+                        push(SearchKind::Value, &c.part_no, &c.reference, c.id, at);
+                    }
+                }
             }
         }
     }
@@ -290,6 +304,21 @@ pub struct DeviceNode {
     pub levels: usize,
     /// この参照記号が図面で果たしている機能の一覧。
     pub functions: Vec<DeviceFunction>,
+    /// まだ図面に描いていない機能 (予約接点)。リレーの接点構成 (`attrs["contact_config"]`) に
+    /// あって接点シンボルが置かれていない接点を、接点マップの未使用行と同じ並び・端子番号で持つ。
+    /// 接点構成が無い・読めないデバイスは空 (数を推測しない)。
+    #[serde(default)]
+    pub unplaced: Vec<UnplacedFunction>,
+}
+
+/// 未配置の機能1つ (デバイスナビゲータの「未配置」行)。置くときのシンボルも持つ。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct UnplacedFunction {
+    pub role: RelayRole,
+    /// 端子の呼び名 (接点マップの未使用行と同じ。例 `"33-34"`)。
+    pub terminals: String,
+    /// 置くときのシンボル (a接点=`relay_contact_no`、b接点=`relay_contact_nc`、c接点=`relay_contact_co`)。
+    pub symbol_id: String,
 }
 
 /// シンボル1個分の所在 (デバイスツリーの組み立て用)。
@@ -382,7 +411,12 @@ pub fn device_tree(project: &Project) -> Vec<DeviceNode> {
             } else {
                 (0, 0)
             };
+            let unplaced = match (kind, relays.get(&reference)) {
+                (DeviceKind::Relay, Some(relay)) => unplaced_contacts(relay),
+                _ => Vec::new(),
+            };
             DeviceNode {
+                unplaced,
                 reference,
                 kind,
                 value,
@@ -393,6 +427,28 @@ pub fn device_tree(project: &Project) -> Vec<DeviceNode> {
                 symbol_id,
                 functions,
             }
+        })
+        .collect()
+}
+
+/// リレーの予約接点 = 接点マップの未使用行 ([`RelayDevice::contact_map`])。
+fn unplaced_contacts(relay: &RelayDevice) -> Vec<UnplacedFunction> {
+    relay
+        .contact_map()
+        .into_iter()
+        .filter(|row| row.entity_id.is_none())
+        .filter_map(|row| {
+            let symbol_id = match row.role {
+                RelayRole::ContactNo => CONTACT_NO_SYMBOL_ID,
+                RelayRole::ContactNc => CONTACT_NC_SYMBOL_ID,
+                RelayRole::ContactCo => CONTACT_CO_SYMBOL_ID,
+                RelayRole::Coil => return None,
+            };
+            Some(UnplacedFunction {
+                role: row.role,
+                terminals: row.terminals,
+                symbol_id: symbol_id.to_string(),
+            })
         })
         .collect()
 }
@@ -463,7 +519,7 @@ fn terminal_functions(places: &[Placement]) -> Vec<DeviceFunction> {
 mod tests {
     use super::*;
     use crate::model::*;
-    use crate::relay_xref::{COIL_SYMBOL_ID, CONTACT_NC_SYMBOL_ID, CONTACT_NO_SYMBOL_ID};
+    use crate::relay_xref::COIL_SYMBOL_ID;
     use uuid::Uuid;
 
     fn symbol(symbol_id: &str, reference: &str, value: &str, x: f64, y: f64) -> Entity {
@@ -743,6 +799,54 @@ mod tests {
                 (DeviceFunctionKind::ContactNc, "21-22".to_string(), "/2.A1".to_string()),
             ]
         );
+    }
+
+    /// A relay lists the contacts of its contact configuration that are not drawn yet as unplaced functions, numbered like the unused rows of the contact map, with the symbol to place for each.
+    /// リレーは、接点構成のうちまだ図面に描いていない接点を未配置機能として並べる。端子の呼び名は接点マップの未使用行と同じで、置くときのシンボルも持つ。
+    #[test]
+    fn a_relay_lists_its_undrawn_contacts_as_unplaced() {
+        let mut project = project_with(
+            1,
+            vec![
+                (0, symbol(COIL_SYMBOL_ID, "K1", "MY2N", 30.0, 100.0)),
+                (0, symbol(CONTACT_NO_SYMBOL_ID, "K1", "", 200.0, 40.0)),
+            ],
+        );
+        let sheet_id = project.sheets[0].id;
+        for e in project.sheet_mut(sheet_id).unwrap().entities.values_mut() {
+            if let Entity::Symbol(s) = e {
+                if s.symbol_id == COIL_SYMBOL_ID {
+                    s.attrs.insert("contact_config".into(), "2NO+1NC".into());
+                }
+            }
+        }
+        let tree = device_tree(&project);
+        let unplaced: Vec<(RelayRole, &str, &str)> = tree[0]
+            .unplaced
+            .iter()
+            .map(|u| (u.role, u.terminals.as_str(), u.symbol_id.as_str()))
+            .collect();
+        assert_eq!(
+            unplaced,
+            [
+                (RelayRole::ContactNo, "23-24", CONTACT_NO_SYMBOL_ID),
+                (RelayRole::ContactNc, "31-32", CONTACT_NC_SYMBOL_ID),
+            ]
+        );
+    }
+
+    /// A relay without a readable contact configuration, and any device that is not a relay, has no unplaced functions.
+    /// 接点構成が無い・読めないリレーと、リレー以外のデバイスには未配置機能が無い。
+    #[test]
+    fn devices_without_a_contact_configuration_have_nothing_unplaced() {
+        let project = project_with(
+            1,
+            vec![
+                (0, symbol(COIL_SYMBOL_ID, "K1", "", 30.0, 100.0)),
+                (0, symbol("terminal_block_8p", "TB1", "", 100.0, 30.0)),
+            ],
+        );
+        assert!(device_tree(&project).iter().all(|d| d.unplaced.is_empty()));
     }
 
     /// A terminal block appears as one "terminals" row covering every pole, with the pole count on the device.

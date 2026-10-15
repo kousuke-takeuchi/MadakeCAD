@@ -12,9 +12,10 @@
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { FolderPlus, X } from "lucide-vue-next";
+import { CopyPlus, FolderPlus, PencilRuler, X } from "lucide-vue-next";
 import { bindNames, frameTemplateName } from "../canvas/frameTemplate";
 import { useDocumentStore } from "../stores/document";
+import { useFrameEditorStore } from "../stores/frameEditor";
 import { useFrameTemplatesStore, type FrameApplyResult } from "../stores/frameTemplates";
 import { useUiStore } from "../stores/ui";
 import FrameTemplatePreview from "./FrameTemplatePreview.vue";
@@ -43,6 +44,13 @@ function cancel() {
 }
 
 /** ユーザー図枠の置き場をファイラで開く (開けない環境ではパスを案内する)。 */
+const frameEditor = useFrameEditorStore();
+
+/** 選んだ図枠を図枠エディタで開く (同梱の図枠は-copyの新しい下書きになる)。 */
+function openEditor(mode: "edit" | "copy") {
+  if (frames.selected) frameEditor.openFor(frames.selected, mode);
+}
+
 async function addUserFrame() {
   const { path, opened } = await frames.openUserFolder();
   ui.log(t(opened ? "frameTemplates.folderOpenedLog" : "frameTemplates.folderHintLog", { path }));
@@ -102,6 +110,17 @@ async function ok() {
             <FolderPlus :size="13" />
             {{ t("frameTemplates.addUser") }}
           </button>
+          <!-- 図枠エディタ (M4残り⑥): 選んだ図枠を編集 / コピーから新規 -->
+          <div class="edit-row">
+            <button class="add" :disabled="!frames.selected" :title="t('frameEditor.editHint')" @click="openEditor('edit')">
+              <PencilRuler :size="13" />
+              {{ t("frameEditor.edit") }}
+            </button>
+            <button class="add" :disabled="!frames.selected" @click="openEditor('copy')">
+              <CopyPlus :size="13" />
+              {{ t("frameEditor.newFromCopy") }}
+            </button>
+          </div>
         </div>
 
         <!-- 中央: ライブプレビュー + 情報行 + 適用範囲 -->
@@ -214,6 +233,9 @@ async function ok() {
 </template>
 
 <style scoped>
+.edit-row { display: flex; gap: 6px; }
+.edit-row .add { flex: 1; }
+.add:disabled { opacity: 0.5; cursor: default; }
 .overlay {
   position: fixed;
   inset: 0;

@@ -193,3 +193,18 @@ fn a_blank_default_frame_template_setting_is_ignored() {
         None
     );
 }
+
+/// POST /frame-templates/save refuses with 400 a frame that reuses a bundled frame's id or whose id cannot be a file name, and writes nothing (the editor then asks for another name).
+/// POST /frame-templates/save は同梱の図枠と同じidや、ファイル名にできないidの図枠を400で拒否して何も書かない(エディタは別名を求める)。
+#[tokio::test]
+async fn the_link_api_refuses_to_save_over_a_bundled_frame() {
+    let (_doc, router) = setup();
+    let (_s, list) = get(&router, "/api/v1/frame-templates").await;
+    let mut frame = list["templates"][0].clone();
+    assert_eq!(frame["id"], "jis-a3");
+    let (status, body) = post(&router, "/api/v1/frame-templates/save", frame.clone()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    frame["id"] = json!("../outside");
+    let (status, _body) = post(&router, "/api/v1/frame-templates/save", frame).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2612 specification clauses** across 6 areas.
+**2711 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -29,6 +29,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block cannot exceed the pin limit, so a runaway pin table fails loudly. <sub>`too_many_pins_are_rejected`</sub>
 - The attribute slots (tag, part number, function, rating) stack at the centre of the box. <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
 - Rotating or mirroring a block moves its pins with the body but never renumbers them. <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
+
+### cable
+
+- Placing a cable assigns the wires its definition line crosses as cores 1, 2, 3 in order from the line's start, each with the wire's colour; one undo removes the cable. <sub>`placing_a_cable_assigns_the_crossed_wires_as_cores_in_order`</sub>
+- A cable placed with no core count takes as many cores as wires it crosses; wires the line does not reach are left out. <sub>`a_cable_without_a_core_count_takes_the_number_of_crossed_wires`</sub>
+- The label next to a cable reads designator, part number, cores times gauge and length. <sub>`the_cable_label_reads_designator_part_cores_gauge_and_length`</sub>
+- Assigning more wires than the cable has cores is an ERC error naming the cable. <sub>`more_assigned_wires_than_cores_is_an_erc_error`</sub>
+- The cable list shows each cable with its part, cores, gauge, length, the devices at both ends of its wires, used and spare cores, shield and sheet. <sub>`the_cable_list_shows_ends_used_and_spare_cores`</sub>
+- In the BOM, cables are counted per part number: by total length when every cable has a length, otherwise by the number of cables; a cable without a part number is left out. <sub>`the_bom_counts_cables_per_part_number`</sub>
+- The printed sheet draws the cable's definition line, the shield ellipse when it has a shield, and the label. <sub>`the_printed_sheet_draws_the_definition_line_shield_and_label`</sub>
+- A cable whose definition line does not have two points, that has no cores, or whose core points at a wire not on the sheet is refused. <sub>`a_malformed_cable_is_refused`</sub>
 
 ### Command engine (undo/redo)
 
@@ -59,6 +70,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Clearing the annotation text height with null puts the sheet back to the default 2.0mm. <sub>`clearing_the_annotation_text_height_restores_the_default`</sub>
 - An annotation text height outside 1.0-3.5mm is rejected with a reason, and the sheet is left untouched. <sub>`an_out_of_range_annotation_text_height_is_rejected`</sub>
 - The annotation text height command is plain JSON, so AI agents and the CLI can send it. <sub>`set_sheet_annotation_text_is_plain_json`</sub>
+- SetPlcSheetOptions saves the PLC I/O drawing settings with the project, and undo puts back what was saved before. <sub>`set_plc_sheet_options_saves_the_settings_and_undo_restores_them`</sub>
 - SetPlcAssignments replaces the whole PLC I/O assignment table of the project; undo restores the previous table. <sub>`set_plc_assignments_is_undoable`</sub>
 - SetFrameTemplate switches the frame template of the whole project in one edit, and undo puts the previous one back (undoing the very first switch returns to the default frame). <sub>`set_frame_template_is_undoable`</sub>
 - SetFrameTemplate accepts an id nobody knows: the drawing keeps printing with the default frame, so a project made elsewhere still opens. <sub>`set_frame_template_accepts_an_unknown_id`</sub>
@@ -210,6 +222,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Resolving no id at all, or an id nobody knows, both fall back to the bundled jis-a3 frame so the drawing still prints. <sub>`an_unknown_frame_template_id_falls_back_to_jis_a3`</sub>
 - A frame template is a paper-independent definition: it is drawn on whatever paper the sheet uses, so switching frames never resizes the sheet. <sub>`a_frame_template_does_not_change_the_paper_size`</sub>
 - Zone labels come from the template: numeric columns count 1,2,3 and alphabetic rows run A,B,C wrapping back to A after Z. <sub>`zone_labels_follow_the_configured_style`</sub>
+- The frame editor saves a user frame as {id}.json in the user folder, and the list then shows it as a user frame with the edits. <sub>`the_frame_editor_saves_a_user_frame_that_lists_back`</sub>
+- Saving under the id of a bundled frame is refused and nothing is written, so the user must save under another name. <sub>`saving_over_a_bundled_frame_id_is_refused`</sub>
+- A broken frame (revision columns not adding up to the title block width) or an id that cannot be a file name is refused and nothing is written. <sub>`an_invalid_frame_or_id_is_not_saved`</sub>
 
 ### Geometry & coordinates
 
@@ -243,7 +258,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 13, the version that added the tidy-variant mark on a copied sheet. <sub>`the_current_format_version_is_thirteen`</sub>
+- The current file format version is 16, the version that added nameplates and associative dimensions to panel sheets. <sub>`the_current_format_version_is_sixteen`</sub>
+- A cable with its definition line, core assignments, shield and length survives a save and reload unchanged. <sub>`a_cable_round_trips_through_a_saved_file`</sub>
+- A version-13 file, written before PLC drawing settings could be saved, opens with no saved settings. <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - A project file saved before tidy variants existed opens with every sheet an ordinary sheet (no variant mark), and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
 - A project file saved before the wire part-number legend block existed opens with no legend blocks at all, and is brought up to the current format version. <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
 - A wire part-number legend block placed on a sheet survives a save and reload with its place unchanged. <sub>`a_wire_legend_survives_a_save_and_reload`</sub>
@@ -313,6 +330,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Inserting with a value set is still one edit: a single undo takes the whole circuit, values and all, back out. <sub>`inserting_with_a_value_set_is_still_undone_in_one_step`</sub>
 - Placeholders and value sets survive the round trip through the macros folder, so a macro saved with them can be inserted later with any of its value sets. <sub>`placeholders_and_value_sets_round_trip_through_the_user_folder`</sub>
 - Inserting into a sheet that is not in the project is refused, and an unknown macro id is refused by name. <sub>`inserting_into_an_unknown_sheet_or_by_an_unknown_id_is_refused`</sub>
+- Saving a selection under an existing macro with a new variant key adds that variant and keeps the default and the other variants as they were. <sub>`saving_with_a_new_variant_key_adds_a_variant_to_the_existing_macro`</sub>
+- Saving under a variant key that is already registered replaces only that variant; key A replaces the default circuit. <sub>`saving_over_a_registered_variant_replaces_only_that_variant`</sub>
+- A variant key must be a single letter from A to Z; an empty key, two letters or a digit is refused. <sub>`a_variant_key_must_be_one_letter`</sub>
+- A placeholder follows a new variant to the symbol with the same designator, so inserting that variant with a value set fills it in too. <sub>`placeholders_follow_a_new_variant_by_designator`</sub>
+- Without a variant key, or when no existing macro is given, saving makes a new macro exactly as before. <sub>`saving_without_a_variant_or_existing_macro_makes_a_new_macro`</sub>
 
 ### mate
 
@@ -416,6 +438,22 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Every DIN rail reports how much of its length is taken up by parts. <sub>`each_rail_reports_how_full_it_is`</sub>
 - A rail packed beyond 80 percent is raised to a warning: there is no room left to fit or to service the parts. <sub>`a_rail_packed_over_eighty_percent_becomes_a_warning`</sub>
 - The checks only look at panel sheets, so a schematic never produces panel diagnostics. <sub>`the_panel_checks_ignore_schematic_sheets`</sub>
+- A nameplate tied to a footprint sits centred under it with a small gap, or above it when asked; a standalone one stays where it was put. <sub>`a_tied_nameplate_sits_centred_under_its_footprint`</sub>
+- When it follows the description, a tied nameplate's first line is the schematic description of the same designator; otherwise it keeps its own text. <sub>`a_nameplate_can_follow_the_schematic_description`</sub>
+- A dimension between two footprints measures the distance between their centres along its axis, and follows when a footprint moves. <sub>`a_dimension_measures_between_footprint_centres_and_follows_them`</sub>
+- Moving a dimension moves its line (the measured ends stay on their parts). <sub>`moving_a_dimension_moves_its_line`</sub>
+- Nameplates with a part number are counted per part number in the BOM. <sub>`nameplates_are_counted_in_the_bom`</sub>
+- The printed panel sheet draws the nameplate text and the dimension value. <sub>`the_printed_panel_sheet_draws_nameplates_and_dimensions`</sub>
+- A nameplate tied to a footprint that is not on the sheet, or a dimension end pointing at a missing part, is refused. <sub>`nameplates_and_dimensions_must_point_at_footprints_on_the_sheet`</sub>
+- Aligning moves the other selected footprints so their edge or centre lines up with the first one, in one undoable command. <sub>`aligning_lines_footprints_up_with_the_first_one`</sub>
+- Vertical alignment leaves a footprint mounted on a DIN rail where it is, so nothing is pulled off its rail. <sub>`vertical_alignment_keeps_rail_mounted_footprints_on_their_rail`</sub>
+- Distributing spaces the footprints evenly between the outer two, or at a given centre pitch from the first. <sub>`distributing_spaces_footprints_evenly_or_at_a_pitch`</sub>
+- Aligning fewer than two footprints, distributing fewer than three without a pitch, or a non-positive pitch is refused. <sub>`too_few_footprints_or_a_bad_pitch_is_refused`</sub>
+
+### panel_wiring
+
+- The panel wiring lists, for each part on a panel sheet, every wire on its pins in the schematic: pin, wire number, the other end, colour and gauge. <sub>`the_panel_wiring_lists_each_pin_wire_with_its_destination`</sub>
+- The panel wiring sheet draws each part with its terminal rows, and is an empty heading page when no panel has parts. <sub>`the_panel_wiring_sheet_draws_parts_or_an_empty_page`</sub>
 
 ### Parts database
 
@@ -491,8 +529,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A generated I/O page has no ERC complaints: every point is wired and every wire end lands on something. <sub>`a_generated_io_page_passes_the_electrical_rule_check`</sub>
 - Generating for a module with no assignments fills the table with auto-numbered addresses in the same single edit. <sub>`generating_fills_an_empty_assignment_table_with_auto_addresses`</sub>
 - Existing signal names are kept when the page is generated: the assignment table stays the master of names and comments. <sub>`generating_keeps_the_signal_names_already_in_the_table`</sub>
-- The two module-placement policies that are not implemented yet are refused with a clear error, and the drawing is left untouched. <sub>`the_unimplemented_placement_policies_are_refused`</sub>
-- The horizontal-bus ladder style is not implemented yet and is refused the same way. <sub>`the_horizontal_bus_ladder_style_is_refused`</sub>
+- The horizontal-bus style lays the bus along the top and drops one vertical rung per point to the module lying below it, points running left to right; the page passes the ERC. <sub>`the_horizontal_bus_style_drops_vertical_rungs_left_to_right`</sub>
+- With "share if it fits", a module that fits in the rungs left on the last generated page goes onto that page instead of a new one. <sub>`share_if_fits_puts_a_small_module_on_the_last_page`</sub>
+- With "share if it fits", a module too big for the rungs left goes onto a new page whole. <sub>`share_if_fits_starts_a_new_page_when_the_module_does_not_fit`</sub>
+- With "share and split", the rungs left on the last page are filled in whole split units and the rest of the module continues on a new page, each piece drawn as a split module with continuation references; one undo removes everything. <sub>`share_or_split_fills_the_last_page_and_continues_on_a_new_one`</sub>
+- With "share and split", a module larger than a whole page is spread over as many pages as it needs, each piece no longer than a page. <sub>`share_or_split_spreads_a_big_module_over_several_pages`</sub>
+- Splitting is refused for a split unit of zero, and a start skip that leaves no rung on a page is refused too; the drawing is not touched. <sub>`a_zero_split_unit_or_an_oversized_start_skip_is_refused`</sub>
+- Only a page generated with the same ladder style and rung spacing can be shared; otherwise the next module starts a new page. <sub>`a_page_of_another_style_or_spacing_is_not_shared`</sub>
 - A rung spacing that is not a positive multiple of the 2.5 mm grid is refused, so generated pages stay on grid. <sub>`an_off_grid_rung_spacing_is_refused`</sub>
 - The I/O report lists every point as address, signal name, target, wire number and comment, with the module reference in front for the whole project. <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
 
@@ -630,6 +673,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A hit on a symbol also says what that symbol does in its device, so the result list can read "relay contact 13-14". <sub>`symbol_hits_say_what_the_symbol_does`</sub>
 - Attribute values such as the contact configuration are searched together with the part number. <sub>`attribute_values_are_searched_as_part_numbers`</sub>
 - A relay device lists its coil first and then its contacts, using the same terminal numbers as the contact map. <sub>`relay_device_lists_coil_then_contacts`</sub>
+- A relay lists the contacts of its contact configuration that are not drawn yet as unplaced functions, numbered like the unused rows of the contact map, with the symbol to place for each. <sub>`a_relay_lists_its_undrawn_contacts_as_unplaced`</sub>
+- A relay without a readable contact configuration, and any device that is not a relay, has no unplaced functions. <sub>`devices_without_a_contact_configuration_have_nothing_unplaced`</sub>
 - A terminal block appears as one "terminals" row covering every pole, with the pole count on the device. <sub>`terminal_block_device_shows_its_terminal_range`</sub>
 - A multi-level terminal block counts its poles, not its terminals: a 4-pole 2-level block is 4 poles over 2 levels, and its terminal row spans the first to the last terminal number (1a-4b). <sub>`multilevel_terminal_block_device_counts_poles_not_terminals`</sub>
 - An ordinary part that has no separable functions shows up as a single "body" row, named after its symbol. <sub>`plain_part_is_a_single_body_row`</sub>
@@ -783,6 +828,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - resolve_symbol finds built-in ids, and rejects malformed or out-of-range dynamic ids (0 poles, 51 poles, missing count). <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defs returns the built-in library plus definitions for every dynamic symbol actually used on the sheet. <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
 - A PLC input module symbol (e.g. 16 points) is a tall box with one connection point per I/O point on its left side, all on the 2.5 mm grid. <sub>`a_plc_input_module_has_one_connection_point_per_io_point`</sub>
+- A split piece of a PLC module, plc_di_{n}p_s{start}, numbers its points from the start point, so its pins carry the module's own point numbers. <sub>`a_split_plc_module_piece_numbers_its_points_from_the_start`</sub>
 - PLC modules come in an input and an output flavour, and both carry the PLC reference prefix. <sub>`plc_modules_come_in_input_and_output_flavours`</sub>
 - PLC module symbols exist from 1 to 64 points; anything outside that range is not a symbol. <sub>`plc_module_point_counts_are_limited_to_one_through_sixty_four`</sub>
 - The relay coil symbol carries the JIS coil terminal names A1 and A2 and the reference prefix K. <sub>`relay_coil_has_a1_a2_terminals`</sub>
@@ -1188,6 +1234,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A new project starts with the frame template picked as the global default in the app settings. <sub>`a_new_project_starts_with_the_default_frame_template_from_the_settings`</sub>
 - Without a global default in the settings a new project leaves the frame unset, so it is drawn with the bundled JIS A3 frame. <sub>`a_new_project_without_a_default_setting_keeps_the_frame_unset`</sub>
 - A blank default frame template in the settings is treated as "no default" instead of an unknown id. <sub>`a_blank_default_frame_template_setting_is_ignored`</sub>
+- POST /frame-templates/save refuses with 400 a frame that reuses a bundled frame's id or whose id cannot be a file name, and writes nothing (the editor then asks for another name). <sub>`the_link_api_refuses_to_save_over_a_bundled_frame`</sub>
 
 ### REST Link API
 
@@ -1225,7 +1272,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - POST /plc/assignments/import loads a CSV of address, signal name and comment for one module, and one undo takes the whole import back. <sub>`a_csv_of_signal_names_can_be_imported_and_undone`</sub>
 - A CSV whose rows do not have the three columns is refused with 400 and leaves the assignment table untouched. <sub>`a_malformed_csv_import_is_refused_with_a_bad_request`</sub>
 - POST /plc/generate builds the I/O ladder page as a single edit: the new sheet carries the module symbol and one rung per point, and GET /plc/modules then lists the placed module. <sub>`generating_an_io_page_over_the_link_api_is_one_undo_step`</sub>
-- Generation settings that are not implemented yet (sharing a ladder between modules) are refused with 400 and change nothing. <sub>`an_unimplemented_generation_setting_is_refused_with_a_bad_request`</sub>
+- Generation settings that cannot produce a drawing (a split unit of zero points) are refused with 400 and change nothing. <sub>`an_impossible_generation_setting_is_refused_with_a_bad_request`</sub>
 - The PLC I/O report is exported through the ordinary report endpoint as "plc-io", listing one row per assigned point. <sub>`the_plc_io_report_is_exported_like_any_other_report`</sub>
 - The PLC tools tell the agent what the assignment table is for and that generating a page is one undo step. <sub>`the_plc_tools_explain_the_assignment_table_and_the_generated_page`</sub>
 
@@ -1632,6 +1679,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake terminals lists the terminal blocks of the whole project, or of one sheet with --sheet. <sub>`terminals_lists_blocks_and_forwards_sheet`</sub>
 - madake export terminal-chart writes the whole project's chart, choosing CSV from the .csv extension. <sub>`export_terminal_chart_defaults_to_csv_for_the_whole_project`</sub>
 - A .pdf output path selects the PDF (framed drawing sheet) form of a report without asking for --format. <sub>`export_report_picks_pdf_from_the_extension`</sub>
+- `madake export cable-list` writes the cable list report (CSV by default). <sub>`export_cable_list_writes_the_cable_list_report`</sub>
+- `madake export panel-wiring` writes the panel wiring diagram report. <sub>`export_panel_wiring_writes_the_panel_wiring_report`</sub>
 - --format wins over the file extension. <sub>`export_report_format_option_overrides_the_extension`</sub>
 - --terminal takes a reference designator (TB1) and looks its entity id up in the terminal list. <sub>`export_terminal_diagram_resolves_a_reference_designator`</sub>
 - A --terminal value spelled as an entity id is sent as-is, with no lookup. <sub>`export_terminal_chart_accepts_an_entity_id_directly`</sub>
@@ -1769,6 +1818,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - stays quiet when the deleted pin had no wire on it <sub>`warning about wired pins`</sub>
 - still allows applying the edit, warning and all <sub>`warning about wired pins`</sub>
 
+### cable
+
+- labels a cable with designator, part, cores times gauge and length, skipping empty items <sub>`多芯ケーブル`</sub>
+- draws the shield as an ellipse around the definition line, a little longer than it <sub>`多芯ケーブル`</sub>
+- numbers a new cable after the W numbers of the cables and harnesses on the sheet <sub>`多芯ケーブル`</sub>
+- turns a drag into an add_cable command with no core count, and a mere click into nothing <sub>`多芯ケーブル`</sub>
+- is picked by clicking near its definition line <sub>`多芯ケーブル`</sub>
+
 ### deviceTree
 
 - an expanded device is followed by one row per function <sub>`デバイスツリーの整形`</sub>
@@ -1782,6 +1839,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - a function row reads like 'contact 13-14' with a '/2.B3' badge <sub>`見出しの文言`</sub>
 - clicking a function row switches to its sheet and selects its entity <sub>`ツリーからの操作`</sub>
 - deleting a device removes every entity of that reference designator, without duplicates <sub>`ツリーからの操作`</sub>
+- unplaced contacts follow the placed functions, one row each <sub>`未配置機能 (予約接点)`</sub>
+- a collapsed device hides its unplaced rows too <sub>`未配置機能 (予約接点)`</sub>
+- the filter keeps devices with unplaced functions, or only fully placed ones <sub>`未配置機能 (予約接点)`</sub>
+- an unplaced row is named by its contact kind and terminals <sub>`未配置機能 (予約接点)`</sub>
 
 ### dynamicSymbol
 
@@ -1791,6 +1852,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - PLC modules come in an input and an output flavour <sub>`dynamicSymbol`</sub>
 - malformed dynamic ids return null <sub>`dynamicSymbol`</sub>
 - PLC module symbols exist from 1 to 64 points only <sub>`dynamicSymbol`</sub>
+- a split PLC module piece numbers its points from the start point and keeps the shape of a module of that size <sub>`dynamicSymbol`</sub>
 - a multi-level terminal block (4 poles, 2 levels) numbers its pins with a level letter <sub>`dynamicSymbol`</sub>
 - draws one terminal column per level, with the same pole of every level on one row <sub>`dynamicSymbol`</sub>
 - keeps every connection point on the 2.5 mm grid and never lets two terminals share one <sub>`dynamicSymbol`</sub>
@@ -1812,6 +1874,34 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption <sub>`symbolBounds`</sub>
 - never lets a bracket and its caption lines overlap each other, at any rotation <sub>`captionLineAnchors`</sub>
 - stacks caption lines downwards on the paper, sharing one centre line, at any rotation <sub>`captionLineAnchors`</sub>
+
+### frameEditor
+
+- shows paper coordinates and stores them relative to the title block corner <sub>`frame editor geometry`</sub>
+- adds one title-block grid line without touching the original template <sub>`frame editor geometry`</sub>
+- adds nothing for a zero-length line or a flat rectangle <sub>`frame editor geometry`</sub>
+- turns a rectangle into four grid lines whichever way it is dragged <sub>`frame editor geometry`</sub>
+- keeps only the dominant axis when Shift constrains a line <sub>`frame editor geometry`</sub>
+- adds a fixed-text cell for the text tool and a bound cell for the placeholder tool <sub>`frame editor geometry`</sub>
+- adds a sized bound cell with its four border lines for the title-cell tool <sub>`frame editor geometry`</sub>
+- makes the rectangle the logo frame and replaces it when drawn again <sub>`frame editor geometry`</sub>
+- picks the grid line when on it, the cell when inside it and nothing on empty paper <sub>`frame editor selection and editing`</sub>
+- moves an item by the drag and deletes it <sub>`frame editor selection and editing`</sub>
+- keeps either the fixed text or the bind on a cell, never both <sub>`frame editor selection and editing`</sub>
+- filters placeholders by part of the name and lists all for an empty query <sub>`frame editor placeholders and pre-save checks`</sub>
+- reads the {names} out of a bind string in order <sub>`frame editor placeholders and pre-save checks`</sub>
+- finds nothing to report on the bundled frame <sub>`frame editor placeholders and pre-save checks`</sub>
+- counts unknown placeholders and items outside the frame without blocking the save <sub>`frame editor placeholders and pre-save checks`</sub>
+- reports revision widths that do not add up and a zero text height as blocking errors <sub>`frame editor placeholders and pre-save checks`</sub>
+- suggests an unused -copy id and accepts only file-name-safe ids <sub>`frame editor placeholders and pre-save checks`</sub>
+- opens a bundled frame as a new draft with a -copy id <sub>`frame editor store`</sub>
+- undoes and redoes editor edits step by step without sending any drawing command <sub>`frame editor store`</sub>
+- skips no-op edits, drops the redo steps on a new edit and caps the history <sub>`frame editor store`</sub>
+- saves a user frame under its own id, reloads the list and clears the unsaved mark <sub>`frame editor store`</sub>
+- opens save-as instead of writing a draft that has no file yet <sub>`frame editor store`</sub>
+- refuses an unsafe or taken id on save-as and otherwise writes under the new id and the entered name <sub>`frame editor store`</sub>
+- does not save while the pre-save check reports an error <sub>`frame editor store`</sub>
+- asks before discarding unsaved changes and closes when told to discard <sub>`frame editor store`</sub>
 
 ### Frame template layout (canvas)
 
@@ -1939,6 +2029,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - drops a part from the list once it has been placed <sub>`unplaced parts store`</sub>
 - keeps the panel open when the list cannot be read <sub>`unplaced parts store`</sub>
 - highlights the row of the part being placed <sub>`unplaced parts store`</sub>
+
+### panelMarks
+
+- sits centred under its footprint, above it when asked, and a standalone one stays put <sub>`盤の銘板`</sub>
+- takes the schematic description as its first line when it follows it <sub>`盤の銘板`</sub>
+- measures the horizontal distance between two footprint centres <sub>`盤の寸法線`</sub>
+- places a dimension along the larger distance, 10mm outside, and nothing for the same point <sub>`盤の寸法線`</sub>
+- finds the footprint under a click and picks dimensions and nameplates <sub>`盤の寸法線`</sub>
 
 ### panelTools
 
@@ -2395,6 +2493,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - a hand-edited length becomes an update whose length source is manual <sub>`wireUpdateCommand`</sub>
 - overwriting a FreeCAD-measured length by hand is flagged so the panel can warn <sub>`wireUpdateCommand`</sub>
 - changing only colour or gauge keeps the FreeCAD length source <sub>`wireUpdateCommand`</sub>
+- writes part, cores, gauge, shield and length in one update and keeps the core assignments <sub>`cableUpdateCommand`</sub>
+- refuses a core count below one or a gauge or length that is not a number <sub>`cableUpdateCommand`</sub>
+- sends nothing when nothing changed <sub>`cableUpdateCommand`</sub>
+- writes text, height, position, following and part in one update without an empty second line <sub>`nameplateUpdateCommand`</sub>
+- sends nothing for a non-positive text height or when nothing changed <sub>`nameplateUpdateCommand`</sub>
 
 ### ribbonLayout
 
@@ -2669,6 +2772,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - does nothing on copy when nothing is selected, keeping the previous clipboard <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - hands the copied macro back on every paste, so it can be pasted repeatedly <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - pastes nothing when nothing has been copied yet <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+- picks the first letter that is not registered as the next free variant, or none when all 26 are used <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- lists registered keys plus the next free key as chips, marking a selected registered key as an overwrite <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- suggests existing macros whose name contains what was typed <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- choosing an existing macro takes its name and category and selects its next free variant <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- saves into the existing macro by passing its id and the chosen variant key <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- asks before overwriting a registered variant and saves only after confirmation <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- saving to another variant from the overwrite prompt uses the next free key <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- clearing the existing macro goes back to saving a new macro with only variant A <sub>`adding a variant to an existing macro from the save dialog`</sub>
+
+### nameplates
+
+- starts the first line from the schematic description when opened on a part <sub>`銘板の挿入`</sub>
+- inserts a nameplate tied to the part with one add_entity, or a standalone one <sub>`銘板の挿入`</sub>
 
 ### Parts database
 
@@ -2702,9 +2818,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - shows an empty table when no PLC module is placed <sub>`PLC I/O assignment editor`</sub>
 - throws away the draft when the editor is closed <sub>`PLC I/O assignment editor`</sub>
 - defaults to a vertical bus ladder with a 10mm rung spacing <sub>`PLC I/O sheet generation settings`</sub>
-- generates the I/O sheet from the settings and the module spec of the parts library <sub>`PLC I/O sheet generation settings`</sub>
-- refuses to generate with a ladder style that is not implemented yet <sub>`PLC I/O sheet generation settings`</sub>
-- refuses to generate with a module placement that is not implemented yet <sub>`PLC I/O sheet generation settings`</sub>
+- saves the settings to the project and generates the I/O sheet from them and the module spec <sub>`PLC I/O sheet generation settings`</sub>
+- generates with the horizontal bus style and the share-or-split placement <sub>`PLC I/O sheet generation settings`</sub>
+- starts from the settings saved with the project and does not save them again when unchanged <sub>`PLC I/O sheet generation settings`</sub>
+- does not save the settings when saving with the project is unchecked <sub>`PLC I/O sheet generation settings`</sub>
 - saves the pending edits before generating the sheet <sub>`PLC I/O sheet generation settings`</sub>
 - falls back to the default address style when the module is not in the parts library <sub>`PLC I/O sheet generation settings`</sub>
 
@@ -2789,7 +2906,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Reports (BOM / wire list)
 
-- offers the seven report kinds of the reports tab <sub>`report generation dialog store`</sub>
+- offers the nine report kinds of the reports tab <sub>`report generation dialog store`</sub>
 - opens a project-wide report as a CSV export <sub>`report generation dialog store`</sub>
 - switches the same report to a framed drawing-sheet PDF <sub>`report generation dialog store`</sub>
 - lets the terminal chart target one terminal block as well as the whole project <sub>`report generation dialog store`</sub>

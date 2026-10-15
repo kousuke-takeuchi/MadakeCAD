@@ -400,7 +400,7 @@ describe("PLC I/O sheet generation settings", () => {
     vi.restoreAllMocks();
   });
 
-  // ja: 生成設定の既定はJIS慣行の縦バス+横ラング・ラング間隔10mm・先頭スキップ0
+  // ja: 生成設定の既定はJIS慣行の縦バス+横ラング・ラング間隔10mm・先頭スキップ0・新しいページ・分割の単位8点
   it("defaults to a vertical bus ladder with a 10mm rung spacing", async () => {
     mockBackend();
     const store = await opened();
@@ -411,49 +411,73 @@ describe("PLC I/O sheet generation settings", () => {
       start_skip: 0,
       ladder_style: "vertical-bus",
       placement: "new-ladder",
+      split_unit: 8,
     });
+    expect(store.saveOptions).toBe(true);
   });
 
-  // ja: 生成は選んだ設定と、部品DBから引いたモジュール定義でI/O図面を1ページ作る (undo一発)
-  it("generates the I/O sheet from the settings and the module spec of the parts library", async () => {
+  // ja: 生成は選んだ設定と、部品DBから引いたモジュール定義でI/O図面を作る。設定はその前にプロジェクトへ保存する
+  it("saves the settings to the project and generates the I/O sheet from them and the module spec", async () => {
     mockBackend();
+    const sent = spyCommands();
     const generate = vi.spyOn(ipc, "generatePlcSheet").mockResolvedValue({ revision: 3, ops: [] });
     const store = await opened([assignment("PLC1", "X0", "非常停止入力")]);
     store.openGenerate();
     store.options.rung_spacing_mm = 12.5;
     store.options.start_skip = 2;
     expect(await store.generate()).toBe(true);
-    expect(generate).toHaveBeenCalledWith("PLC1", di16, {
+    const expected = {
       rung_spacing_mm: 12.5,
       start_skip: 2,
       ladder_style: "vertical-bus",
       placement: "new-ladder",
-    });
+      split_unit: 8,
+    };
+    expect(sent).toEqual([{ type: "set_plc_sheet_options", options: expected }]);
+    expect(generate).toHaveBeenCalledWith("PLC1", di16, expected);
     expect(store.generateOpen).toBe(false);
   });
 
-  // ja: 未実装のラダー形式 (横バス) では生成できない
-  it("refuses to generate with a ladder style that is not implemented yet", async () => {
+  // ja: 横バス+縦ラングと「同居し必要なら分割」(分割の単位つき) でも生成できる
+  it("generates with the horizontal bus style and the share-or-split placement", async () => {
     mockBackend();
+    spyCommands();
     const generate = vi.spyOn(ipc, "generatePlcSheet").mockResolvedValue({ revision: 3, ops: [] });
     const store = await opened();
     store.openGenerate();
     store.options.ladder_style = "horizontal-bus";
-    expect(store.canGenerate).toBe(false);
-    expect(await store.generate()).toBe(false);
-    expect(generate).not.toHaveBeenCalled();
+    store.options.placement = "share-or-split";
+    store.options.split_unit = 4;
+    expect(store.canGenerate).toBe(true);
+    expect(await store.generate()).toBe(true);
+    expect(generate.mock.calls[0][2]).toMatchObject({ ladder_style: "horizontal-bus", placement: "share-or-split", split_unit: 4 });
   });
 
-  // ja: 未実装の配置方針 (前モジュールと同居) では生成できない
-  it("refuses to generate with a module placement that is not implemented yet", async () => {
+  // ja: プロジェクトに保存した設定は、次に生成ダイアログを開いたときの初期値になり、変えずに生成すれば保存し直さない
+  it("starts from the settings saved with the project and does not save them again when unchanged", async () => {
     mockBackend();
-    const generate = vi.spyOn(ipc, "generatePlcSheet").mockResolvedValue({ revision: 3, ops: [] });
+    const sent = spyCommands();
+    vi.spyOn(ipc, "generatePlcSheet").mockResolvedValue({ revision: 3, ops: [] });
+    const store = await opened();
+    const saved = { rung_spacing_mm: 15, start_skip: 1, ladder_style: "horizontal-bus" as const, placement: "share-if-fits" as const, split_unit: 16 };
+    useDocumentStore().project!.plc_generate = saved;
+    store.openGenerate();
+    expect(store.options).toEqual(saved);
+    expect(await store.generate()).toBe(true);
+    expect(sent).toEqual([]);
+  });
+
+  // ja: 「プロジェクトに保存」を外して生成すると、設定は保存しない
+  it("does not save the settings when saving with the project is unchecked", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    vi.spyOn(ipc, "generatePlcSheet").mockResolvedValue({ revision: 3, ops: [] });
     const store = await opened();
     store.openGenerate();
-    store.options.placement = "share-or-split";
-    expect(store.canGenerate).toBe(false);
-    expect(await store.generate()).toBe(false);
-    expect(generate).not.toHaveBeenCalled();
+    store.saveOptions = false;
+    store.options.rung_spacing_mm = 15;
+    expect(await store.generate()).toBe(true);
+    expect(sent).toEqual([]);
   });
 
   // ja: 未保存の編集があれば、生成の前に割付表を保存する (図面のラベルが下書きと一致する)
@@ -465,8 +489,8 @@ describe("PLC I/O sheet generation settings", () => {
     store.updateRow(0, { address: "X0", signalName: "非常停止入力" });
     store.openGenerate();
     expect(await store.generate()).toBe(true);
-    expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ type: "set_plc_assignments" });
+    expect(sent[1]).toMatchObject({ type: "set_plc_sheet_options" });
   });
 
   // ja: 部品DBに無い型番のモジュールは、種別どおりの既定のアドレス体系 (三菱) で扱う

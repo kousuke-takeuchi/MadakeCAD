@@ -5,6 +5,8 @@ import type { Entity, Sheet, SymbolInstance } from "../ipc";
 import {
   annotationTextCommand,
   harnessUpdateCommand,
+  cableUpdateCommand,
+  nameplateUpdateCommand,
   symbolAttrs,
   wireNumberCommand,
   wireUpdateCommand,
@@ -223,5 +225,70 @@ describe("wireUpdateCommand", () => {
     expect(entity.color).toBe("red");
     expect(entity.length_source).toBe("freecad");
     expect(result.overwroteMeasured).toBe(false);
+  });
+});
+
+describe("cableUpdateCommand", () => {
+  const cable = (): Entity => ({
+    kind: "cable",
+    id: "c1",
+    reference: "W1",
+    part_no: "",
+    core_count: 3,
+    sq: 0,
+    points: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+    cores: [{ core: "1", color: "black", wire: "w1" }],
+    shield: null,
+    length_m: null,
+  });
+  const patch = { reference: "W1", part_no: "SAMPLE-CBL", core_count: "4", sq: "1.25", shield: true, grounded: true, length_m: "12.5" };
+
+  // ja: ケーブルのプロパティは型番・芯数・線径・シールド・長さを1回のupdate_entityで書き、芯線割当はそのまま残す
+  it("writes part, cores, gauge, shield and length in one update and keeps the core assignments", () => {
+    const command = cableUpdateCommand("s1", cable(), patch);
+    expect(command?.type).toBe("update_entity");
+    const e = (command as { entity: Entity }).entity;
+    expect(e).toMatchObject({ part_no: "SAMPLE-CBL", core_count: 4, sq: 1.25, shield: { grounded: true }, length_m: 12.5 });
+    expect(e.kind === "cable" && e.cores).toEqual([{ core: "1", color: "black", wire: "w1" }]);
+  });
+
+  // ja: 芯数が1以上の整数でない、線径や長さが数値でない入力は図面を変えない
+  it("refuses a core count below one or a gauge or length that is not a number", () => {
+    for (const bad of [{ core_count: "0" }, { core_count: "2.5" }, { sq: "abc" }, { length_m: "-1" }]) {
+      expect(cableUpdateCommand("s1", cable(), { ...patch, ...bad })).toBeNull();
+    }
+  });
+
+  // ja: 何も変えていなければコマンドを送らない
+  it("sends nothing when nothing changed", () => {
+    expect(cableUpdateCommand("s1", cable(), { reference: "W1", part_no: "", core_count: "3", sq: "", shield: false, grounded: false, length_m: "" })).toBeNull();
+  });
+});
+
+describe("nameplateUpdateCommand", () => {
+  const plate = (): Entity => ({
+    kind: "nameplate",
+    id: "n1",
+    footprint: "k1",
+    at: { x: 0, y: 0 },
+    w: 30,
+    h: 10,
+    lines: ["主回路"],
+    text_mm: 3.5,
+    position: "below",
+    follow_description: false,
+    part_no: "",
+  });
+
+  // ja: 銘板の文字・文字高・位置・追従・型番を1回のupdate_entityで書き、空の2行目は付けない
+  it("writes text, height, position, following and part in one update without an empty second line", () => {
+    const c = nameplateUpdateCommand("s1", plate(), { line1: "主回路", line2: "", text_mm: "5", position: "above", follow: true, part_no: "SAMPLE-NP" });
+    expect((c as { entity: Entity }).entity).toMatchObject({ lines: ["主回路"], text_mm: 5, position: "above", follow_description: true, part_no: "SAMPLE-NP" });
+  });
+
+  // ja: 文字高が正の数でなければ、また何も変えていなければ図面を変えない
+  it("sends nothing for a non-positive text height or when nothing changed", () => {
+    expect(nameplateUpdateCommand("s1", plate(), { line1: "主回路", line2: "", text_mm: "0", position: "below", follow: false, part_no: "" })).toBeNull();
+    expect(nameplateUpdateCommand("s1", plate(), { line1: "主回路", line2: "", text_mm: "3.5", position: "below", follow: false, part_no: "" })).toBeNull();
   });
 });

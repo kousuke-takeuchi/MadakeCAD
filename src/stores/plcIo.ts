@@ -129,13 +129,29 @@ function newId(): string {
 }
 
 /** 生成設定の既定値 (Rustの`PlcSheetOptions::default`と同じ)。 */
-function defaultOptions(): PlcSheetOptions {
+export function defaultOptions(): PlcSheetOptions {
   return {
     rung_spacing_mm: 10,
     start_skip: 0,
     ladder_style: "vertical-bus",
     placement: "new-ladder",
+    split_unit: 8,
   };
+}
+
+/** 分割の単位の選択肢 (点。8=コモンの区切り)。 */
+export const SPLIT_UNITS = [4, 8, 16] as const;
+
+/** 2つの生成設定が同じか (保存済みの設定から変わったかの判定)。 */
+export function sameOptions(a: PlcSheetOptions | null | undefined, b: PlcSheetOptions): boolean {
+  if (!a) return false;
+  return (
+    a.rung_spacing_mm === b.rung_spacing_mm &&
+    a.start_skip === b.start_skip &&
+    a.ladder_style === b.ladder_style &&
+    a.placement === b.placement &&
+    (a.split_unit ?? 8) === (b.split_unit ?? 8)
+  );
 }
 
 interface PlcIoState {
@@ -157,6 +173,8 @@ interface PlcIoState {
   /** 自動採番の開始アドレス (空欄なら先頭から)。 */
   startAddress: string;
   options: PlcSheetOptions;
+  /** 生成時に設定をプロジェクトに保存するか (生成ダイアログのチェック)。 */
+  saveOptions: boolean;
   loading: boolean;
   saving: boolean;
   error: string | null;
@@ -174,6 +192,7 @@ export const usePlcIoStore = defineStore("plcIo", {
     original: [],
     startAddress: "",
     options: defaultOptions(),
+    saveOptions: true,
     loading: false,
     saving: false,
     error: null,
@@ -243,12 +262,10 @@ export const usePlcIoStore = defineStore("plcIo", {
       if (!inserted) out.push(...rows);
       return out;
     },
-    /** I/O図面を生成できるか (v1が対応する設定で、モジュールが選ばれているか)。 */
+    /** I/O図面を生成できるか (モジュールが選ばれ、分割の単位が1以上か)。 */
     canGenerate(state): boolean {
       if (!this.module || !this.spec) return false;
-      return (
-        state.options.ladder_style === "vertical-bus" && state.options.placement === "new-ladder"
-      );
+      return (state.options.split_unit ?? 8) >= 1;
     },
   },
 
@@ -364,9 +381,11 @@ export const usePlcIoStore = defineStore("plcIo", {
       return true;
     },
 
-    /** 生成設定ダイアログを開く。 */
+    /** 生成設定ダイアログを開く。プロジェクトに保存した設定があればそれを初期値にする。 */
     openGenerate() {
       this.error = null;
+      const saved = useDocumentStore().project?.plc_generate;
+      this.options = saved ? { ...defaultOptions(), ...saved } : defaultOptions();
       this.generateOpen = true;
     },
 
@@ -377,7 +396,8 @@ export const usePlcIoStore = defineStore("plcIo", {
 
     /**
      * I/O図面 (ラダーページ) を生成する。未保存の編集があれば先に割付表を保存する。
-     * v1が対応しない設定 (横バス・同居配置) では何もしない。
+     * 「プロジェクトに保存」が付いていて設定が保存済みのものと違えば、生成の前に
+     * `set_plc_sheet_options`で保存する (生成そのものは別の1回の編集なのでundo一発で消える)。
      */
     async generate(): Promise<boolean> {
       const module = this.module;
@@ -386,6 +406,10 @@ export const usePlcIoStore = defineStore("plcIo", {
       this.error = null;
       if (this.dirty && (await this.save()) === null) return false;
       try {
+        const doc = useDocumentStore();
+        if (this.saveOptions && !sameOptions(doc.project?.plc_generate, this.options)) {
+          await doc.execute({ type: "set_plc_sheet_options", options: { ...this.options } });
+        }
         const patch = await ipc.generatePlcSheet(module.reference, spec, { ...this.options });
         useDocumentStore().applyEdit(patch);
       } catch (e) {

@@ -130,6 +130,17 @@ fn list_frame_templates() -> madake_core::frame_template::FrameTemplateList {
     madake_core::frame_template::list()
 }
 
+/// 図枠エディタの保存: ユーザー図枠を`~/MadakeCAD/templates/frames/{id}.json`へ書く。
+/// 検証に落ちたもの・同梱の図枠とidがぶつかるものは何も書かずに理由を返す。
+/// 図枠はファイルのドメインなので**undo履歴には乗らない**。
+#[tauri::command]
+fn save_frame_template(
+    template: madake_core::frame_template::FrameTemplate,
+) -> Result<serde_json::Value, String> {
+    let (saved, path) = madake_core::frame_template::save(&template)?;
+    Ok(serde_json::json!({ "template": saved, "path": path.display().to_string() }))
+}
+
 /// ユーザー図枠の置き場(`~/MadakeCAD/templates/frames`)をOSのファイラで開く。
 /// 無ければ作ってから開く。
 #[tauri::command]
@@ -988,6 +999,7 @@ pub fn run() {
             apply_template,
             open_templates_folder,
             list_frame_templates,
+            save_frame_template,
             unplaced_components,
             open_frame_templates_folder,
             start_variants,

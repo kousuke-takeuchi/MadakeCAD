@@ -359,15 +359,64 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 13, the version that added the tidy-variant mark on a copied sheet.
-    /// 現行のファイル形式バージョンは13 (整えバリアントの複製シートの印を追加した版) である。
+    /// The current file format version is 16, the version that added nameplates and associative dimensions to panel sheets.
+    /// 現行のファイル形式バージョンは16 (盤レイアウトに銘板と関連付き寸法線を追加した版) である。
     #[test]
-    fn the_current_format_version_is_thirteen() {
-        assert_eq!(FORMAT_VERSION, 13);
+    fn the_current_format_version_is_sixteen() {
+        assert_eq!(FORMAT_VERSION, 16);
         let mut old = Project::new("x");
-        old.format_version = 12;
+        old.format_version = 15;
         migrate(&mut old);
-        assert_eq!(old.format_version, 13);
+        assert_eq!(old.format_version, 16);
+    }
+
+    /// A cable with its definition line, core assignments, shield and length survives a save and reload unchanged.
+    /// 定義線・芯線割当・シールド・長さを持つケーブルは、保存して読み直しても変わらない。
+    #[test]
+    fn a_cable_round_trips_through_a_saved_file() {
+        let mut project = Project::new("ケーブル");
+        let wire = Uuid::new_v4();
+        let cable = Entity::Cable(crate::model::Cable {
+            id: Uuid::new_v4(),
+            reference: "W1".into(),
+            part_no: "SAMPLE-CBL".into(),
+            core_count: 4,
+            sq: 1.25,
+            points: vec![Point::new(10.0, 10.0), Point::new(20.0, 40.0)],
+            cores: vec![crate::model::CableCore { core: "1".into(), color: "black".into(), wire: Some(wire) }],
+            shield: Some(crate::model::CableShield { grounded: true }),
+            length_m: Some(12.5),
+        });
+        let id = cable.id();
+        project.sheets[0].entities.insert(id, cable);
+        let dir = std::env::temp_dir().join(format!("madake-io-cable-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("c.mdkproj");
+        save_project(&path, &project).unwrap();
+        let loaded = load_project(&path).unwrap();
+        let Entity::Cable(c) = &loaded.sheets[0].entities[&id] else { panic!("ケーブル") };
+        assert_eq!((c.reference.as_str(), c.core_count, c.sq, c.length_m), ("W1", 4, 1.25, Some(12.5)));
+        assert_eq!(c.cores[0].wire, Some(wire));
+        assert_eq!(c.shield, Some(crate::model::CableShield { grounded: true }));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A version-13 file, written before PLC drawing settings could be saved, opens with no saved settings.
+    /// PLC図面の生成設定を保存できなかった頃 (format_version 13) のファイルは、保存なしの状態で開く。
+    #[test]
+    fn a_version_13_file_opens_without_saved_plc_settings() {
+        let dir = std::env::temp_dir().join(format!("madake-io-v13-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("v13.mdkproj");
+        std::fs::write(
+            &path,
+            r#"{"format_version":13,"name":"旧図面","sheets":[],"wire_parts":[],"plc_assignments":[]}"#,
+        )
+        .unwrap();
+        let loaded = load_project(&path).expect("読める");
+        assert_eq!(loaded.format_version, FORMAT_VERSION, "現行形式へ更新される");
+        assert!(loaded.plc_generate.is_none());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// A project file saved before tidy variants existed opens with every sheet an ordinary sheet (no variant mark), and is brought up to the current format version.

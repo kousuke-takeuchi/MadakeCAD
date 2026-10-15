@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2612仕様項目**。
+全6領域・**2711仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -29,6 +29,17 @@
 - ブロックのピン数には上限があり、桁違いのピン表ははっきりエラーになる。 <sub>`too_many_pins_are_rejected`</sub>
 - 属性スロット(参照記号・型番・機能・定格)は箱の中央に縦に積まれる。 <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
 - ブロックを回転・ミラーしてもピンは本体と一緒に動くだけで、番号は付け替わらない。 <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
+
+### cable
+
+- ケーブルを置くと、定義線が横切った配線が始点に近い順に芯1・2・3として割り当たり、芯の色は配線の線色になる。undo一発でケーブルが消える。 <sub>`placing_a_cable_assigns_the_crossed_wires_as_cores_in_order`</sub>
+- 芯数を指定せずに置いたケーブルは、横切った配線の本数を芯数にする。定義線が届かない配線は入らない。 <sub>`a_cable_without_a_core_count_takes_the_number_of_crossed_wires`</sub>
+- ケーブルの注記は参照記号・型番・芯数×線径・長さの順に並ぶ。 <sub>`the_cable_label_reads_designator_part_cores_gauge_and_length`</sub>
+- ケーブルの芯数より多い配線を割り当てるとERCのErrorになり、そのケーブルを指す。 <sub>`more_assigned_wires_than_cores_is_an_erc_error`</sub>
+- ケーブル一覧は、ケーブルごとに型番・芯数・線径・長さ・配線両端の機器・使用芯/予備芯・シールド・シートを並べる。 <sub>`the_cable_list_shows_ends_used_and_spare_cores`</sub>
+- 部品表ではケーブルを型番ごとに数え、全部に長さがあれば合計の長さ、1本でも無ければ本数にする。型番の無いケーブルは載せない。 <sub>`the_bom_counts_cables_per_part_number`</sub>
+- 印刷される図面には、ケーブルの定義線と、シールドがあればシールドの楕円、注記が描かれる。 <sub>`the_printed_sheet_draws_the_definition_line_shield_and_label`</sub>
+- 定義線が2点でない・芯数が0・シートに無い配線を指す芯を持つケーブルは拒否される。 <sub>`a_malformed_cable_is_refused`</sub>
 
 ### Commandエンジン (undo/redo)
 
@@ -59,6 +70,7 @@
 - 注記文字高をnullで消すと、シートは既定の2.0mmに戻る。 <sub>`clearing_the_annotation_text_height_restores_the_default`</sub>
 - 1.0〜3.5mmの範囲を外れた注記文字高は理由付きで拒否され、シートは書き換わらない。 <sub>`an_out_of_range_annotation_text_height_is_rejected`</sub>
 - 注記文字高のコマンドは素のJSONで表現でき、AIやCLIから送れる。 <sub>`set_sheet_annotation_text_is_plain_json`</sub>
+- SetPlcSheetOptionsはPLC I/O図面の生成設定をプロジェクトに保存し、undoで保存前の状態に戻る。 <sub>`set_plc_sheet_options_saves_the_settings_and_undo_restores_them`</sub>
 - SetPlcAssignmentsはプロジェクトのPLC I/O割付表を丸ごと置き換え、undoで以前の表に戻る。 <sub>`set_plc_assignments_is_undoable`</sub>
 - SetFrameTemplateはプロジェクト全体の図枠テンプレートを1回の編集で差し替え、undoで元の図枠へ戻る(最初の差し替えをundoすると未指定=既定の図枠へ戻る)。 <sub>`set_frame_template_is_undoable`</sub>
 - SetFrameTemplateは知らないidも受け付ける(図面は既定の図枠で描かれ続けるので、他所で作ったプロジェクトも開ける)。 <sub>`set_frame_template_accepts_an_unknown_id`</sub>
@@ -210,6 +222,9 @@
 - 図枠を指定していないときも、誰も知らないidのときも、同梱のjis-a3へフォールバックするので図面は必ず出せる。 <sub>`an_unknown_frame_template_id_falls_back_to_jis_a3`</sub>
 - 図枠テンプレートは用紙に依存しない定義で、シートの用紙にそのまま描かれる(図枠を替えても用紙サイズは変わらない)。 <sub>`a_frame_template_does_not_change_the_paper_size`</sub>
 - ゾーンの目盛文字はテンプレートが決める: 数字は1,2,3…、英字はA,B,C…でZの次はAへ戻る。 <sub>`zone_labels_follow_the_configured_style`</sub>
+- 図枠エディタはユーザー図枠をユーザーの置き場へ{id}.jsonとして保存し、一覧にはその編集内容がユーザー図枠として並ぶ。 <sub>`the_frame_editor_saves_a_user_frame_that_lists_back`</sub>
+- 同梱の図枠と同じidでの保存は拒否して何も書かない(別名で保存させる)。 <sub>`saving_over_a_bundled_frame_id_is_refused`</sub>
+- 壊れた図枠(改訂欄の列幅の合計が表題欄の幅と違う)や、ファイル名にできないidは拒否して何も書かない。 <sub>`an_invalid_frame_or_id_is_not_saved`</sub>
 
 ### 座標・ジオメトリ
 
@@ -243,7 +258,9 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは13 (整えバリアントの複製シートの印を追加した版) である。 <sub>`the_current_format_version_is_thirteen`</sub>
+- 現行のファイル形式バージョンは16 (盤レイアウトに銘板と関連付き寸法線を追加した版) である。 <sub>`the_current_format_version_is_sixteen`</sub>
+- 定義線・芯線割当・シールド・長さを持つケーブルは、保存して読み直しても変わらない。 <sub>`a_cable_round_trips_through_a_saved_file`</sub>
+- PLC図面の生成設定を保存できなかった頃 (format_version 13) のファイルは、保存なしの状態で開く。 <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - 整えバリアントが無かった頃のプロジェクトファイルは、全シートが印のない普通のシートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
 - 電線品番凡例ブロックが無かった頃のプロジェクトファイルは凡例ブロックの無い状態で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
 - シートに置いた電線品番凡例ブロックは、置き場所を保ったまま保存して読み直せる。 <sub>`a_wire_legend_survives_a_save_and_reload`</sub>
@@ -313,6 +330,11 @@
 - 値セットを選んで挿入しても編集は1回のままなので、undo一発で値ごと回路全体が戻る。 <sub>`inserting_with_a_value_set_is_still_undone_in_one_step`</sub>
 - プレースホルダと値セットはマクロフォルダへの往復でも残るので、保存したマクロは後からどの値セットでも挿入できる。 <sub>`placeholders_and_value_sets_round_trip_through_the_user_folder`</sub>
 - プロジェクトに無いシートへの挿入は拒否され、知らないマクロidは名前を添えて拒否される。 <sub>`inserting_into_an_unknown_sheet_or_by_an_unknown_id_is_refused`</sub>
+- 既存のマクロへ新しいバリアントキーで保存すると、そのバリアントが足され、既定と他のバリアントはそのまま残る。 <sub>`saving_with_a_new_variant_key_adds_a_variant_to_the_existing_macro`</sub>
+- 登録済みのバリアントキーで保存すると、そのバリアントだけが置き換わる。キーAは既定の回路を置き換える。 <sub>`saving_over_a_registered_variant_replaces_only_that_variant`</sub>
+- バリアントキーはAからZの1文字でなければならず、空・2文字・数字は拒否される。 <sub>`a_variant_key_must_be_one_letter`</sub>
+- プレースホルダは新しいバリアントでも参照記号が同じシンボルへ結び付くので、そのバリアントを値セット付きで挿入しても値が入る。 <sub>`placeholders_follow_a_new_variant_by_designator`</sub>
+- バリアントキーが無いとき、または既存マクロが無いときは、従来どおり新しいマクロとして保存される。 <sub>`saving_without_a_variant_or_existing_macro_makes_a_new_macro`</sub>
 
 ### mate
 
@@ -416,6 +438,22 @@
 - DINレールごとに、長さのどれだけが部品で埋まっているか(充填率)が出る。 <sub>`each_rail_reports_how_full_it_is`</sub>
 - 充填率が80%を超えたレールは注意になる(部品を足す・触る余地が残っていないため)。 <sub>`a_rail_packed_over_eighty_percent_becomes_a_warning`</sub>
 - これらの検査は盤シートだけを見るので、回路図シートから盤の指摘は出ない。 <sub>`the_panel_checks_ignore_schematic_sheets`</sub>
+- フットプリントに結び付いた銘板はその下に少し隙間を空けて中央揃えで付き、指定すれば上に付く。単独の銘板は置いた位置のまま。 <sub>`a_tied_nameplate_sits_centred_under_its_footprint`</sub>
+- 説明に追従する銘板は、1行目が回路図の同じ参照記号の説明になる。追従しなければ自分の文字のまま。 <sub>`a_nameplate_can_follow_the_schematic_description`</sub>
+- 2つのフットプリントの間の寸法線は、軸方向の中心間距離を測り、部品を動かすと追従する。 <sub>`a_dimension_measures_between_footprint_centres_and_follows_them`</sub>
+- 寸法線を動かすと線の位置が動く (測っている端は部品に付いたまま)。 <sub>`moving_a_dimension_moves_its_line`</sub>
+- 型番の付いた銘板は、部品表に型番ごとの枚数で載る。 <sub>`nameplates_are_counted_in_the_bom`</sub>
+- 印刷される盤シートには、銘板の文字と寸法の値が描かれる。 <sub>`the_printed_panel_sheet_draws_nameplates_and_dimensions`</sub>
+- シートに無いフットプリントに結び付いた銘板や、無い部品を指す寸法線の端は拒否される。 <sub>`nameplates_and_dimensions_must_point_at_footprints_on_the_sheet`</sub>
+- 揃えると、選んだ他のフットプリントの端または中心が最初に選んだ部品に揃い、1回のコマンドでundoできる。 <sub>`aligning_lines_footprints_up_with_the_first_one`</sub>
+- 上下方向の揃えでは、DINレールに乗っている部品は動かさない (レールから外さない)。 <sub>`vertical_alignment_keeps_rail_mounted_footprints_on_their_rail`</sub>
+- 等間隔にすると、両端の部品の間を等分して並べるか、指定の中心間隔で先頭から並べる。 <sub>`distributing_spaces_footprints_evenly_or_at_a_pitch`</sub>
+- 2個未満の揃え・ピッチ無しで3個未満の等間隔・0以下のピッチは拒否される。 <sub>`too_few_footprints_or_a_bad_pitch_is_refused`</sub>
+
+### panel_wiring
+
+- 盤内配線図は、盤に置いた部品ごとに、回路図でそのピンに繋がる電線を端子・線番・行き先・線色・線径で並べる。 <sub>`the_panel_wiring_lists_each_pin_wire_with_its_destination`</sub>
+- 盤内配線図の図面ページは部品ごとに端子の行を描き、盤に部品が無ければ見出しだけのページになる。 <sub>`the_panel_wiring_sheet_draws_parts_or_an_empty_page`</sub>
 
 ### 部品データベース
 
@@ -491,8 +529,13 @@
 - 生成したI/Oページには ERC の指摘が出ない (全ての点が結線され、電線の端はどこかに繋がっている)。 <sub>`a_generated_io_page_passes_the_electrical_rule_check`</sub>
 - 割付表が空のモジュールを生成すると、同じ1回の編集の中で自動採番したアドレスが表に入る。 <sub>`generating_fills_an_empty_assignment_table_with_auto_addresses`</sub>
 - 生成しても既存の信号名は保たれる (信号名・コメントは割付表が正)。 <sub>`generating_keeps_the_signal_names_already_in_the_table`</sub>
-- まだ実装していない2つのモジュール配置方針ははっきりしたエラーで断られ、図面には何も起きない。 <sub>`the_unimplemented_placement_policies_are_refused`</sub>
-- 横バス+縦ラングのラダー形式もまだ実装しておらず、同じように断られる。 <sub>`the_horizontal_bus_ladder_style_is_refused`</sub>
+- 横バス形式は上にバスを横に引き、点ごとに縦のラングを下のモジュールへ下ろす (点は左から右へ並ぶ)。ページはERCを通る。 <sub>`the_horizontal_bus_style_drops_vertical_rungs_left_to_right`</sub>
+- 「収まる場合のみ同居」では、最後に生成したページの残りのラングに丸ごと入るモジュールは、新しいページではなくそのページへ入る。 <sub>`share_if_fits_puts_a_small_module_on_the_last_page`</sub>
+- 「収まる場合のみ同居」で残りのラングに入らないモジュールは、丸ごと新しいページへ行く。 <sub>`share_if_fits_starts_a_new_page_when_the_module_does_not_fit`</sub>
+- 「同居し必要なら分割」では、最後のページの残りのラングを分割の単位ごとに埋め、残りは新しいページへ続ける。各片は分割片のシンボルで描かれ続き参照が付き、undo一発ですべて消える。 <sub>`share_or_split_fills_the_last_page_and_continues_on_a_new_one`</sub>
+- 「同居し必要なら分割」では、1ページに入らない大きなモジュールは必要な枚数のページに分かれ、どの片も1ページに収まる。 <sub>`share_or_split_spreads_a_big_module_over_several_pages`</sub>
+- 分割の単位0や、ページにラングが1つも残らない先頭スキップは断られ、図面は変わらない。 <sub>`a_zero_split_unit_or_an_oversized_start_skip_is_refused`</sub>
+- 同居できるのは同じラダー形式・同じラング間隔で生成したページだけで、違えば次のモジュールは新しいページから始まる。 <sub>`a_page_of_another_style_or_spacing_is_not_shared`</sub>
 - 2.5mmグリッドの正の倍数でないラング間隔は断られるので、生成したページは必ずグリッドに乗る。 <sub>`an_off_grid_rung_spacing_is_refused`</sub>
 - I/Oレポートは各点をアドレス・信号名・接続先・線番・コメントで並べ、プロジェクト全体版では先頭にモジュールの参照記号が付く。 <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
 
@@ -630,6 +673,8 @@
 - シンボルのヒットは、そのシンボルがデバイスの中で果たす機能も返すので、結果一覧に「リレー 接点 13-14」と出せる。 <sub>`symbol_hits_say_what_the_symbol_does`</sub>
 - 接点構成のような属性の値も、型番と一緒に検索できる。 <sub>`attribute_values_are_searched_as_part_numbers`</sub>
 - リレーのデバイスはコイルを先に、続けて接点を並べ、端子の呼び名は接点マップと同じになる。 <sub>`relay_device_lists_coil_then_contacts`</sub>
+- リレーは、接点構成のうちまだ図面に描いていない接点を未配置機能として並べる。端子の呼び名は接点マップの未使用行と同じで、置くときのシンボルも持つ。 <sub>`a_relay_lists_its_undrawn_contacts_as_unplaced`</sub>
+- 接点構成が無い・読めないリレーと、リレー以外のデバイスには未配置機能が無い。 <sub>`devices_without_a_contact_configuration_have_nothing_unplaced`</sub>
 - 端子台は全極をまとめた「端子」1行として並び、極数はデバイス側に持つ。 <sub>`terminal_block_device_shows_its_terminal_range`</sub>
 - 多段端子台は端子の数ではなく極数で数える: 4極2段の端子台は「4極2段」で、端子の行は最初から最後の端子番号まで (1a-4b) になる。 <sub>`multilevel_terminal_block_device_counts_poles_not_terminals`</sub>
 - 機能に分かれない普通の部品は、「本体」1行だけのデバイスとして、シンボルの名前つきで出る。 <sub>`plain_part_is_a_single_body_row`</sub>
@@ -783,6 +828,7 @@
 - resolve_symbolは同梱idを見つけ、不正・範囲外の動的ID(0極・51極・数値なし)は拒否する。 <sub>`resolve_symbol_rejects_invalid_ids_and_finds_builtins`</sub>
 - sheet_symbol_defsは同梱ライブラリに加え、シートで実際に使われている動的シンボルの定義を返す。 <sub>`sheet_symbol_defs_includes_dynamic_ids_in_use`</sub>
 - PLC入力モジュールのシンボル (例: 16点) は縦長の箱で、左側に点数ぶんの接続点が2.5mmグリッド上に並ぶ。 <sub>`a_plc_input_module_has_one_connection_point_per_io_point`</sub>
+- PLCモジュールの分割片 plc_di_{n}p_s{start} は点番号を開始点から振るので、ピンにはモジュール本来の点番号が付く。 <sub>`a_split_plc_module_piece_numbers_its_points_from_the_start`</sub>
 - PLCモジュールには入力用と出力用があり、どちらも参照記号の接頭辞はPLCになる。 <sub>`plc_modules_come_in_input_and_output_flavours`</sub>
 - PLCモジュールのシンボルは1〜64点まで作れ、その外の点数はシンボルとして存在しない。 <sub>`plc_module_point_counts_are_limited_to_one_through_sixty_four`</sub>
 - リレーコイルのシンボルは、JISのコイル端子記号A1・A2と参照記号の接頭辞Kを持つ。 <sub>`relay_coil_has_a1_a2_terminals`</sub>
@@ -1188,6 +1234,7 @@
 - 新規プロジェクトは、アプリ設定で「グローバル既定」に選んだ図枠テンプレートで始まる。 <sub>`a_new_project_starts_with_the_default_frame_template_from_the_settings`</sub>
 - 設定にグローバル既定が無ければ、新規プロジェクトの図枠は未指定のまま(同梱のJIS A3図枠で描かれる)。 <sub>`a_new_project_without_a_default_setting_keeps_the_frame_unset`</sub>
 - 設定の既定図枠が空欄のときは、未知のidではなく「既定なし」として扱う。 <sub>`a_blank_default_frame_template_setting_is_ignored`</sub>
+- POST /frame-templates/save は同梱の図枠と同じidや、ファイル名にできないidの図枠を400で拒否して何も書かない(エディタは別名を求める)。 <sub>`the_link_api_refuses_to_save_over_a_bundled_frame`</sub>
 
 ### REST Link API
 
@@ -1225,7 +1272,7 @@
 - POST /plc/assignments/import はアドレス・信号名・コメントのCSVを1モジュールぶん取り込み、undo一発で取り込み前へ戻る。 <sub>`a_csv_of_signal_names_can_be_imported_and_undone`</sub>
 - 3列に足りない行のあるCSVは400で断られ、割付表は元のまま変わらない。 <sub>`a_malformed_csv_import_is_refused_with_a_bad_request`</sub>
 - POST /plc/generate はI/Oラダーページを1回の編集で作り、新しいシートにはモジュールのシンボルと点数ぶんのラングが載る。GET /plc/modules はその置かれたモジュールを一覧に返す。 <sub>`generating_an_io_page_over_the_link_api_is_one_undo_step`</sub>
-- まだ実装していない生成設定 (モジュールの同居) は400で断られ、図面には何も起きない。 <sub>`an_unimplemented_generation_setting_is_refused_with_a_bad_request`</sub>
+- 図面にできない生成設定 (分割の単位0点) は400で断られ、図面には何も起きない。 <sub>`an_impossible_generation_setting_is_refused_with_a_bad_request`</sub>
 - PLC I/Oレポートは他の帳票と同じ書き出し口から`plc-io`として出力され、割付済みの点ごとに1行が並ぶ。 <sub>`the_plc_io_report_is_exported_like_any_other_report`</sub>
 - PLCのMCPツールの説明には、割付表が何のためのものか・ページ生成がundo一発であることが書かれている。 <sub>`the_plc_tools_explain_the_assignment_table_and_the_generated_page`</sub>
 
@@ -1632,6 +1679,8 @@
 - madake terminalsは図面全体の端子台を一覧し、--sheetでシートを絞れる。 <sub>`terminals_lists_blocks_and_forwards_sheet`</sub>
 - madake export terminal-chart は図面全体のチャートを、拡張子.csvからCSVと判断して書き出す。 <sub>`export_terminal_chart_defaults_to_csv_for_the_whole_project`</sub>
 - 出力先が.pdfなら--format無しでも帳票のPDF(図枠付き図面シート)形式になる。 <sub>`export_report_picks_pdf_from_the_extension`</sub>
+- `madake export cable-list` はケーブル一覧の帳票を書き出す (既定はCSV)。 <sub>`export_cable_list_writes_the_cable_list_report`</sub>
+- `madake export panel-wiring` は盤内配線図の帳票を書き出す。 <sub>`export_panel_wiring_writes_the_panel_wiring_report`</sub>
 - --formatは拡張子より優先される。 <sub>`export_report_format_option_overrides_the_extension`</sub>
 - --terminalは参照記号(TB1)を受け取り、端子台一覧からentity idを引く。 <sub>`export_terminal_diagram_resolves_a_reference_designator`</sub>
 - --terminalにentity idを渡した場合は一覧を引かずそのまま送る。 <sub>`export_terminal_chart_accepts_an_entity_id_directly`</sub>
@@ -1769,6 +1818,14 @@
 - 配線されていないピンを消しても警告は出ない <sub>`warning about wired pins`</sub>
 - 警告が出ていても適用はできる(承知のうえで直せる) <sub>`warning about wired pins`</sub>
 
+### cable
+
+- ケーブルの注記は参照記号・型番・芯数×線径・長さの順に並び、空の項は飛ばす (Rust側と同じ) <sub>`多芯ケーブル`</sub>
+- シールドの楕円は定義線の中点を中心に、定義線より少し長く囲む <sub>`多芯ケーブル`</sub>
+- 新しいケーブルの参照記号は、シート上のケーブルとハーネスのW番号の続きになる <sub>`多芯ケーブル`</sub>
+- 定義線のドラッグは、芯数0 (横切った本数にする) のadd_cableコマンドになり、クリックしただけでは何も作らない <sub>`多芯ケーブル`</sub>
+- 定義線の近くをクリックするとケーブルを掴める <sub>`多芯ケーブル`</sub>
+
 ### deviceTree
 
 - 展開中のデバイスは、見出しの下に機能の行が続く <sub>`デバイスツリーの整形`</sub>
@@ -1782,6 +1839,10 @@
 - 機能の行の名前と所在バッジは「接点 13-14」「/2.B3」の形になる <sub>`見出しの文言`</sub>
 - 機能の行をクリックすると、その機能のシートへ切り替えてエンティティを選ぶ <sub>`ツリーからの操作`</sub>
 - デバイスの削除は、その参照記号の全機能のエンティティを重複なく消す <sub>`ツリーからの操作`</sub>
+- 未配置の接点は、配置済みの機能の後ろに1行ずつ続く <sub>`未配置機能 (予約接点)`</sub>
+- 折りたたんだデバイスは未配置行も出さない <sub>`未配置機能 (予約接点)`</sub>
+- 絞り込み「未配置あり」は未配置機能のあるデバイスだけ、「配置済み」は未配置機能の無いデバイスだけを出す <sub>`未配置機能 (予約接点)`</sub>
+- 未配置行の名前は接点の種別と端子番号で読める (例「接点 23-24 NO」) <sub>`未配置機能 (予約接点)`</sub>
 
 ### dynamicSymbol
 
@@ -1791,6 +1852,7 @@
 - PLCモジュールには入力用と出力用があり、名前で見分けられる <sub>`dynamicSymbol`</sub>
 - 不正な動的IDはnullになる <sub>`dynamicSymbol`</sub>
 - PLCモジュールのシンボルは1〜64点までで、その外の点数は存在しない <sub>`dynamicSymbol`</sub>
+- PLCモジュールの分割片 plc_di_{n}p_s{start} は点番号を開始点から振り、形は同じ点数のモジュールと同じ (Rust側と一致) <sub>`dynamicSymbol`</sub>
 - 多段端子台(4極2段)は段記号付きのピン番号(1a,1b,…4b)を持ち、1端子=左右2接続点になる <sub>`dynamicSymbol`</sub>
 - 多段端子台は段ごとに1列の端子が横に並び、同じ極の端子(1aと1b)は同じ行に載る(Rust側と同じ座標) <sub>`dynamicSymbol`</sub>
 - 多段端子台の接続点はすべて2.5mmグリッド上にあり、別の端子どうしが同じ点を共有しない (段数1は`_1l`という別名idを作らないので対象外) <sub>`dynamicSymbol`</sub>
@@ -1812,6 +1874,34 @@
 - 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない) <sub>`symbolBounds`</sub>
 - ピングループの部品どうし (括弧と、折り返したキャプションの各行) は全ての回転・ミラーで決して重ならない (Rust側 svg_pin_group_pieces_never_overlap_each_other_at_any_rotation とparity) <sub>`captionLineAnchors`</sub>
 - 文字はシンボルを回しても横書きのままなので、キャプションの行は用紙の上で必ず縦に積まれる (同じ中心線に並び、順に下へ下がる。Rust側 svg_pin_group_caption_lines_stack_downwards_on_paper とparity) <sub>`captionLineAnchors`</sub>
+
+### frameEditor
+
+- 図枠エディタは用紙座標で見せ、表題欄の左上角からの相対座標で保存する (A3の既定図枠なら表題欄は(290,255)) <sub>`frame editor geometry`</sub>
+- 線ツールは表題欄の罫線を1本足し、元のテンプレートは変えない <sub>`frame editor geometry`</sub>
+- 長さ0の線や幅0の矩形は何も足さない <sub>`frame editor geometry`</sub>
+- 矩形ツールは対角の2点から4本の罫線を足す (どちら向きに引いても同じ) <sub>`frame editor geometry`</sub>
+- Shiftの水平/垂直拘束は、変化の大きいほうの軸だけを残す <sub>`frame editor geometry`</sub>
+- 文字ツールは固定文字のセル、プレースホルダツールはバインドのセルを足す <sub>`frame editor geometry`</sub>
+- 表題欄セルツールは大きさ付きのバインドセルと外周の罫線4本を足す <sub>`frame editor geometry`</sub>
+- ロゴ枠ツールは矩形をロゴ枠にし、もう一度引けば置き換わる <sub>`frame editor geometry`</sub>
+- クリックは罫線の上なら罫線、セルの中ならセルを拾い、何も無い所ではnull <sub>`frame editor selection and editing`</sub>
+- 移動は要素を(dx,dy)だけずらし、消去は要素を取り除く <sub>`frame editor selection and editing`</sub>
+- セルに固定文字を入れるとバインドは消え、バインドを入れると固定文字は消える <sub>`frame editor selection and editing`</sub>
+- プレースホルダは名前の部分一致で絞れ、空の検索語なら全部出る <sub>`frame editor placeholders and pre-save checks`</sub>
+- バインド文字列から{名前}を出てくる順に取り出す <sub>`frame editor placeholders and pre-save checks`</sub>
+- 同梱の図枠は保存前チェックがすべて0件 <sub>`frame editor placeholders and pre-save checks`</sub>
+- 知らないプレースホルダと枠外の要素は数えるが、保存は止めない <sub>`frame editor placeholders and pre-save checks`</sub>
+- 改訂欄の列幅の合計が表題欄の幅と違う・文字高が0のセルは保存できない誤りになる <sub>`frame editor placeholders and pre-save checks`</sub>
+- 別名で保存の既定idは元のid+-copyで、使われていれば番号を足す。idは英数字・-・_だけ <sub>`frame editor placeholders and pre-save checks`</sub>
+- 同梱の図枠を開くと、-copyのidを付けた新しい下書きになる (同梱はそのまま上書きできない) <sub>`frame editor store`</sub>
+- エディタ内の編集は図面のコマンドを送らず、⌘Zで1段ずつ戻り⇧⌘Zでやり直せる <sub>`frame editor store`</sub>
+- 何も変えない編集は段を積まず、新しい編集はやり直しの段を捨てる。段数には上限がある <sub>`frame editor store`</sub>
+- ユーザー図枠の保存は同じidで書き、一覧を読み直して未保存の印を消す <sub>`frame editor store`</sub>
+- まだファイルの無い下書きの保存は、書かずに別名で保存の欄を開く <sub>`frame editor store`</sub>
+- 別名で保存は、ファイル名にできないidと既にあるidを断り、通れば新しいidと入力した名前で書く <sub>`frame editor store`</sub>
+- 保存前チェックに誤りがあれば保存しない <sub>`frame editor store`</sub>
+- 未保存の変更があるときに閉じると確認を出し、破棄を選べば閉じる <sub>`frame editor store`</sub>
 
 ### 図枠テンプレートの配置計算 (キャンバス)
 
@@ -1939,6 +2029,14 @@
 - 部品を盤へ置いて図面が変わると、次の読み込みで一覧から消える。 <sub>`unplaced parts store`</sub>
 - 一覧が読めなくても画面は開いたまま (理由を控えて空一覧にする)。 <sub>`unplaced parts store`</sub>
 - 配置する部品を選ぶと、その行だけが選択表示になる。 <sub>`unplaced parts store`</sub>
+
+### panelMarks
+
+- 部品に結び付いた銘板は部品の下に中央揃えで付き、指定すれば上に付く。単独の銘板は置いた位置のまま (Rust側と同じ) <sub>`盤の銘板`</sub>
+- 説明に追従する銘板は1行目が回路図の説明になる (説明は回路図シンボルの機能ラベルから集める) <sub>`盤の銘板`</sub>
+- 2つの部品の間の寸法は中心間の水平距離を測り、線は指定の高さに引く <sub>`盤の寸法線`</sub>
+- 寸法ツールは2点の距離が大きい向きの寸法を、端点の外側 (水平なら上) 10mmに置き、同じ点なら何も作らない <sub>`盤の寸法線`</sub>
+- クリックした位置の部品を見つけ、寸法線は線の近く、銘板は外形の中で掴める <sub>`盤の寸法線`</sub>
 
 ### panelTools
 
@@ -2395,6 +2493,11 @@
 - 長さを手で変えると更新コマンドになり、出所は「手入力」になる <sub>`wireUpdateCommand`</sub>
 - FreeCADで計測した長さを手で上書きすると、その旨のフラグが立つ (呼び出し側が警告する) <sub>`wireUpdateCommand`</sub>
 - 長さ以外だけを変えたときはFreeCAD計測の出所を保つ <sub>`wireUpdateCommand`</sub>
+- ケーブルのプロパティは型番・芯数・線径・シールド・長さを1回のupdate_entityで書き、芯線割当はそのまま残す <sub>`cableUpdateCommand`</sub>
+- 芯数が1以上の整数でない、線径や長さが数値でない入力は図面を変えない <sub>`cableUpdateCommand`</sub>
+- 何も変えていなければコマンドを送らない <sub>`cableUpdateCommand`</sub>
+- 銘板の文字・文字高・位置・追従・型番を1回のupdate_entityで書き、空の2行目は付けない <sub>`nameplateUpdateCommand`</sub>
+- 文字高が正の数でなければ、また何も変えていなければ図面を変えない <sub>`nameplateUpdateCommand`</sub>
 
 ### ribbonLayout
 
@@ -2669,6 +2772,19 @@
 - 何も選択していない状態の⌘Cは何もしない(前のコピー内容も消さない) <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - コピーした無名マクロは何度でも貼り付けられる(貼り付けても消えない) <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
 - 何もコピーしていないときの⌘Vは何も起こさない <sub>`unnamed clipboard macro (Cmd+C / Cmd+V)`</sub>
+- 次の空きバリアントは登録済みでない最初の文字で、26文字すべて使っていれば無い <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- バリアントチップは登録済みのキーと次の空きキー1つを並べ、選んだキーが登録済みなら上書きの印が付く <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 名前欄に入力すると、その文字を含む既存マクロが候補に出る <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 候補から既存マクロを選ぶと、名前と分類がそのマクロのものになり、次の空きバリアントが選ばれる <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 既存マクロへの保存は、そのマクロのidと選んだバリアントキーを渡す <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 登録済みのバリアントを選んで保存すると、まず上書き確認を出し、確認してから保存する <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 上書き確認で「別のバリアントに保存」を選ぶと、次の空きキーで保存する <sub>`adding a variant to an existing macro from the save dialog`</sub>
+- 既存マクロの選択をやめると、従来どおり新しいマクロ (バリアントAだけ) として保存する <sub>`adding a variant to an existing macro from the save dialog`</sub>
+
+### nameplates
+
+- 部品をクリックして開くと、1行目は回路図の説明から始まり、説明への追従が付く <sub>`銘板の挿入`</sub>
+- 挿入は部品に結び付いた銘板をadd_entity 1回で置き、何も無い所で開けば単独の銘板になる <sub>`銘板の挿入`</sub>
 
 ### 部品データベース
 
@@ -2701,10 +2817,11 @@
 - エディタを閉じている間は図面が変わっても読み込みに行かない <sub>`PLC I/O assignment editor`</sub>
 - PLCモジュールが1つも置かれていなければ表は空になり、保存も生成もできない <sub>`PLC I/O assignment editor`</sub>
 - 閉じると下書きと選択を捨てる <sub>`PLC I/O assignment editor`</sub>
-- 生成設定の既定はJIS慣行の縦バス+横ラング・ラング間隔10mm・先頭スキップ0 <sub>`PLC I/O sheet generation settings`</sub>
-- 生成は選んだ設定と、部品DBから引いたモジュール定義でI/O図面を1ページ作る (undo一発) <sub>`PLC I/O sheet generation settings`</sub>
-- 未実装のラダー形式 (横バス) では生成できない <sub>`PLC I/O sheet generation settings`</sub>
-- 未実装の配置方針 (前モジュールと同居) では生成できない <sub>`PLC I/O sheet generation settings`</sub>
+- 生成設定の既定はJIS慣行の縦バス+横ラング・ラング間隔10mm・先頭スキップ0・新しいページ・分割の単位8点 <sub>`PLC I/O sheet generation settings`</sub>
+- 生成は選んだ設定と、部品DBから引いたモジュール定義でI/O図面を作る。設定はその前にプロジェクトへ保存する <sub>`PLC I/O sheet generation settings`</sub>
+- 横バス+縦ラングと「同居し必要なら分割」(分割の単位つき) でも生成できる <sub>`PLC I/O sheet generation settings`</sub>
+- プロジェクトに保存した設定は、次に生成ダイアログを開いたときの初期値になり、変えずに生成すれば保存し直さない <sub>`PLC I/O sheet generation settings`</sub>
+- 「プロジェクトに保存」を外して生成すると、設定は保存しない <sub>`PLC I/O sheet generation settings`</sub>
 - 未保存の編集があれば、生成の前に割付表を保存する (図面のラベルが下書きと一致する) <sub>`PLC I/O sheet generation settings`</sub>
 - 部品DBに無い型番のモジュールは、種別どおりの既定のアドレス体系 (三菱) で扱う <sub>`PLC I/O sheet generation settings`</sub>
 
@@ -2789,7 +2906,7 @@
 
 ### 帳票 (部品表 / 電線リスト)
 
-- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・XRef表・PLC I/Oレポート・盤内部品配置表 の7つ <sub>`report generation dialog store`</sub>
+- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・ケーブル一覧・XRef表・PLC I/Oレポート・盤内部品配置表・盤内配線図 の9つ <sub>`report generation dialog store`</sub>
 - 部品表はプロジェクト全体が対象で、既定はCSV出力 <sub>`report generation dialog store`</sub>
 - 出力形式を図面シートPDFにすると、同じ帳票がPDF要求になる <sub>`report generation dialog store`</sub>
 - 端子台チャートは「プロジェクト全体」に加えて端子台1つを対象に選べる <sub>`report generation dialog store`</sub>

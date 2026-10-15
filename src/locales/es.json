@@ -584,8 +584,18 @@
     "basePointPending": "Derivado de la selección",
     "variantRow": "Variantes",
     "variantDefault": "A (predeterminada)",
-    "variantAdd": "+ Añadir",
-    "variantAddHint": "Añadir variantes llegará en una fase posterior. Por ahora la macro se guarda como variante A.",
+    "existingNote": "existing · {keys} saved · {category}",
+    "uncategorized": "uncategorized",
+    "saveAsVariant": "Save as variant {key}",
+    "variantSavedHint": "Already saved (saving it asks before overwriting)",
+    "variantNew": "{key} new",
+    "variantExistingHint": "Adds variant {key} to the existing macro. ✓ = already saved (choosing one asks before overwriting). Placeholders and value sets are kept from the macro and follow symbols with the same designator.",
+    "compareSaved": "A (saved)",
+    "compareCurrent": "{key} (this selection)",
+    "overwriteTitle": "Overwrite variant {key}?",
+    "overwriteBody": "Variant {key} of \"{name}\" will be replaced with this selection ({count} entities). The other variants and the value sets stay as they are.",
+    "saveToFree": "Save to another variant ({key})",
+    "overwrite": "Overwrite",
     "previewCount": "Vista previa de la selección: {count} entidades",
     "saveHint": "Los designadores de referencia y los números de hilo se guardan tal cual y se renumeran o se borran al insertar. Guardado en: {path}",
     "cancel": "Cancelar",
@@ -721,7 +731,9 @@
       "bom": "Lista de materiales (BOM)",
       "xref": "Tabla de referencias cruzadas",
       "plc-io": "Informe de E/S de PLC",
-      "panel-placement": "Panel placement table"
+      "panel-placement": "Panel placement table",
+      "cable-list": "Cable list",
+      "panel-wiring": "Panel wiring diagram"
     },
     "targetLabel": "Alcance:",
     "targetProject": "Todo el proyecto",
@@ -739,15 +751,13 @@
     "cancel": "Cancelar",
     "run": "Generar",
     "running": "Generando...",
-    "ribbonCableList": "Lista de cables",
     "ribbonPlcIo": "Informe de E/S de PLC",
     "ribbonSheetify": "Informe como hoja de plano",
     "ribbonCsv": "Exportar como CSV",
     "ribbonPickTargets": "Elegir qué exportar",
     "openLog": "Informes: generando \"{report}\"",
     "doneCsvLog": "Informes: se escribieron {count} fila(s) de \"{report}\" en {path}",
-    "donePdfLog": "Informes: se escribieron {count} página(s) de \"{report}\" en {path}",
-    "todoLog": "{report}: previsto para una fase posterior (M4)"
+    "donePdfLog": "Informes: se escribieron {count} página(s) de \"{report}\" en {path}"
   },
   "pdfBook": {
     "ribbonButton": "Libro PDF",
@@ -970,8 +980,7 @@
       "share-if-fits": "Compartir con el módulo anterior cuando quepa",
       "share-or-split": "Compartir y dividir el módulo cuando sea necesario"
     },
-    "notImplemented": "todavía no implementado",
-    "generateNote": "Cada punto se convierte en un escalón, numerado por orden de dirección y con el nombre de señal escrito al lado. La página se crea con una sola edición, así que Cmd+Z la elimina de nuevo. Los ajustes se conservan solo durante esta sesión.",
+    "generateNote": "One rung per point, with the signal name next to each address. Modules share the last I/O page generated with the same style and rung spacing; split pieces get continuation references. Generating is one edit, so Cmd+Z takes it all back",
     "generate": "Generar",
     "cancel": "Cancelar",
     "openLog": "E/S de PLC: editando la tabla de asignación de los módulos colocados",
@@ -984,7 +993,11 @@
     "csvFailedLog": "E/S de PLC: no se pudo leer {file}",
     "generateOpenLog": "E/S de PLC: ajustes de generación para {reference}",
     "generatedLog": "E/S de PLC: hoja de E/S de {reference} generada (separación entre escalones {spacing}mm, deshacer con Cmd+Z)",
-    "generateFailedLog": "E/S de PLC: no se pudo generar la hoja de E/S de {reference}"
+    "generateFailedLog": "E/S de PLC: no se pudo generar la hoja de E/S de {reference}",
+    "horizontalHint": "(I/O runs left to right)",
+    "splitUnit": "Split unit:",
+    "splitUnitOption": "{count} points",
+    "saveOptions": "Save these settings with the project (defaults for the next generation)"
   },
   "search": {
     "placeholder": "Buscar (designador, n.º de pieza, red)",
@@ -1040,11 +1053,29 @@
     },
     "menu": {
       "reveal": "Ir al plano",
-      "delete": "Eliminar"
+      "delete": "Eliminar",
+      "place": "Place",
+      "placeAll": "Place all unplaced…"
     },
-    "phase3Hint": "Arrastrar funciones sin colocar al plano llegará en la fase 3",
     "revealLog": "Dispositivos: mostrando {function} de {reference} ({address})",
-    "deletedLog": "Dispositivos: {reference} eliminado del plano ({count} elementos — Cmd+Z lo deshace)"
+    "deletedLog": "Dispositivos: {reference} eliminado del plano ({count} elementos — Cmd+Z lo deshace)",
+    "unplaced": {
+      "contactNo": "contact {terminals} NO",
+      "contactNc": "contact {terminals} NC",
+      "contactCo": "changeover {terminals} CO"
+    },
+    "filter": {
+      "all": "All",
+      "unplaced": "Unplaced",
+      "placed": "Placed"
+    },
+    "unplacedBadge": "unplaced",
+    "unplacedHint": "A contact in the part's contact configuration that is not drawn yet. Click it or drag it onto the drawing to place it",
+    "placeAllNotImplemented": "Not implemented: placing every unplaced contact at once is not available yet. Place them one by one",
+    "placeStartLog": "Devices: placing {name} of {reference} (click to confirm, Esc to cancel)",
+    "placedLog": "Devices: placed {label} (Cmd+Z to undo)",
+    "placeChip": "Place {label}",
+    "placeChipHint": "click to confirm · R rotate · Esc cancel"
   },
   "surfer": {
     "titleDevice": "Dónde aparece {title} (navegador de referencias)",
@@ -1354,7 +1385,9 @@
       "panel_outline": "Enclosure: drag a rectangle for the panel (Esc to cancel)",
       "din_rail": "DIN rail: drag horizontally at the mounting line (Esc to cancel)",
       "duct": "Duct: drag a rectangle for the wiring duct (Esc to cancel)",
-      "panel_legend": "Legend table: click on the panel sheet to place the table (Esc to cancel)"
+      "panel_legend": "Legend table: click on the panel sheet to place the table (Esc to cancel)",
+      "nameplate": "Panel: click a part or a place for the nameplate",
+      "dimension": "Dimension: click the first point (on a part = its centre)"
     },
     "added": {
       "panel_outline": "Panel: added an enclosure (undo with Cmd+Z)",
@@ -1658,5 +1691,213 @@
   },
   "ui": {
     "welcome": "Línea de comandos de MadakeCAD (L=hilo E=eliminar U=deshacer)"
+  },
+  "cable": {
+    "kindLabel": "Cable",
+    "ribbonButton": "Cable",
+    "ribbonHint": "Drag across wires to place a multi-core cable's definition line; the crossed wires become its cores",
+    "startLog": "Cable: drag across the wires (cores 1, 2, 3… from the wire nearest the start)",
+    "createdLog": "Cable: placed {reference} ({cores} cores assigned; Cmd+Z to undo)",
+    "updatedLog": "Cable: updated the properties of {reference}",
+    "invalidLog": "Cable: the core count must be a whole number of at least 1, and gauge and length non-negative numbers (nothing is sent when nothing changed)",
+    "referenceRow": "Designator",
+    "partRow": "Part no.",
+    "coresRow": "Cores",
+    "sqRow": "Gauge sq",
+    "shieldRow": "Shield",
+    "shieldOn": "yes",
+    "grounded": "grounded",
+    "lengthRow": "Length m",
+    "coresSection": "Core assignment",
+    "colCore": "Core",
+    "colColor": "Colour",
+    "colWire": "Wire",
+    "assigned": "assigned",
+    "spare": "spare",
+    "overflowHint": "More wires are assigned than the cable has cores (ERC: cable core overflow)",
+    "hint": "Cores come from the wires the definition line crosses; redraw the line to change the assignment"
+  },
+  "panelMarks": {
+    "cancel": "Cancel",
+    "nameplate": {
+      "kindLabel": "Nameplate",
+      "ribbonHint": "Click a part (footprint) to attach a nameplate to it, or empty space for a standalone one",
+      "titleFor": "Insert nameplate — {reference}",
+      "titleAlone": "Insert nameplate (standalone)",
+      "alone": "standalone",
+      "line1": "Line 1",
+      "line2": "Line 2",
+      "source": "Description",
+      "sourceSchematic": "from the schematic {reference} (automatic)",
+      "sourceNone": "no description in the schematic",
+      "sourceAlone": "standalone (not on a part)",
+      "size": "Size",
+      "textHeight": "Text height",
+      "position": "Position",
+      "below": "below the footprint",
+      "above": "above the footprint",
+      "partNo": "Part no.",
+      "follow": "Follow the schematic description when it changes",
+      "insert": "Insert",
+      "hint": "Insert without choosing a footprint for a standalone nameplate. The BOM gets a row per nameplate part number.",
+      "insertedLog": "Panel: placed a nameplate on {reference} (Cmd+Z to undo)",
+      "updatedLog": "Panel: updated the nameplate"
+    },
+    "dimension": {
+      "kindLabel": "Dimension",
+      "ribbonHint": "Click two points (on a part = its centre) to place an associative dimension that follows the parts",
+      "secondLog": "Dimension: click the second point",
+      "placedLog": "Dimension: placed (Cmd+Z to undo)",
+      "valueRow": "Value",
+      "axisRow": "Direction",
+      "horizontal": "horizontal",
+      "vertical": "vertical"
+    },
+    "align": {
+      "ribbonHint": "Align the selected parts to the first one, or distribute them evenly",
+      "title": "Align ({count} selected, base = {base})",
+      "needTwo": "Select two or more parts (Shift+click)",
+      "pitch": "Pitch",
+      "pitchAuto": "auto",
+      "distributeH": "Distribute horizontally",
+      "distributeV": "Distribute vertically",
+      "hint": "One command, one undo. Parts on a rail are not moved vertically.",
+      "doneLog": "Panel: aligned {count} parts ({mode}) (Cmd+Z to undo)",
+      "distributedLog": "Panel: distributed {count} parts (Cmd+Z to undo)",
+      "mode": {
+        "left": "Align left",
+        "center_x": "Centre horizontally",
+        "right": "Align right",
+        "top": "Align top",
+        "center_y": "Centre vertically",
+        "bottom": "Align bottom"
+      }
+    }
+  },
+  "frameEditor": {
+    "edit": "Edit…",
+    "newFromCopy": "New (from a copy)",
+    "editHint": "Open the selected frame in the frame editor (a bundled frame opens as a copy)",
+    "title": "Frame editor — {name}",
+    "titleDirty": "Frame editor — {name} · unsaved changes",
+    "close": "Close",
+    "tool": {
+      "select": "Select",
+      "line": "Line",
+      "rect": "Rectangle",
+      "text": "Text",
+      "placeholder": "Placeholder",
+      "cell": "Title cell",
+      "logo": "Logo frame",
+      "zone": "Zones"
+    },
+    "toolHint": {
+      "select": "Click to pick, drag to move, Delete to remove",
+      "line": "Drag a title-block rule (Shift = horizontal/vertical)",
+      "rect": "Drag a rectangle (four rules)",
+      "text": "Click to place fixed text",
+      "placeholder": "Click to place placeholder text (replaced by the real value on output)",
+      "cell": "Drag a sized title-block cell with its border",
+      "logo": "Drag the logo frame (one; drawing again replaces it)",
+      "zone": "Set the zone divisions and labels on the right"
+    },
+    "keysHint": "Shift = horizontal/vertical\nAlt = no snapping\n⌘Z = undo",
+    "origin": "Origin (0,0) top left",
+    "status": "Paper {paper} · grid 1 mm · {at} mm",
+    "hidePlaceholders": "Hide placeholders",
+    "showValues": "Show real values (current project)",
+    "newText": "Text",
+    "props": {
+      "head": "Properties — {what}",
+      "template": "Whole frame",
+      "line": "Rule",
+      "logo": "Logo frame",
+      "placeholder": "Placeholder text",
+      "text": "Fixed text",
+      "kind": "Kind",
+      "kindText": "Fixed text",
+      "kindBind": "Placeholder",
+      "property": "Property",
+      "content": "Text",
+      "size": "Text height",
+      "align": "Align",
+      "alignStart": "Left",
+      "alignMiddle": "Centre",
+      "alignEnd": "Right",
+      "weightNormal": "Normal",
+      "weightBold": "Bold",
+      "position": "Position X / Y",
+      "omitIfEmpty": "Skip when the value is empty",
+      "from": "Start X / Y",
+      "to": "End X / Y",
+      "sizeWH": "Width / height",
+      "logoHint": "Only the frame of the logo is drawn (images are a separate item).",
+      "nameJa": "Name (Japanese)",
+      "nameEn": "Name (English)",
+      "paper": "Paper W / H",
+      "margin": "Frame margin",
+      "zones": "Zones",
+      "zoneCountsColsRows": "Columns / rows",
+      "zoneLabels": "Labels col / row",
+      "zoneHint": "Divisions are the default for new sheets; existing sheets keep their addresses.",
+      "titleBlock": "Title block",
+      "corner": "Corner",
+      "cornerName": {
+        "bottom_right": "Bottom right",
+        "bottom_left": "Bottom left",
+        "top_right": "Top right",
+        "top_left": "Top left"
+      },
+      "rowH": "Row height",
+      "revision": "Revision table",
+      "revRows": "Max rows",
+      "revCols": "Column widths",
+      "revHint": "The column widths (rev/date/description/approved) must add up to the title block width."
+    },
+    "picker": {
+      "head": "Pick a placeholder",
+      "search": "Search: name",
+      "group": {
+        "project": "Project",
+        "sheet": "Sheet",
+        "titleBlock": "Revision / title block"
+      },
+      "label": {
+        "project_name": "Project name",
+        "project_no": "Project no.",
+        "sheet_no": "Sheet no.",
+        "sheet_total": "Total sheets",
+        "sheet_name": "Sheet name",
+        "rev_latest": "Latest revision",
+        "title_block_company": "Company",
+        "title_block_title": "Title",
+        "title_block_drawing_no": "Drawing no.",
+        "title_block_scale": "Scale",
+        "title_block_date": "Date",
+        "title_block_designed": "Designed",
+        "title_block_drawn": "Drawn",
+        "title_block_checked": "Checked",
+        "title_block_approved": "Approved",
+        "title_block_rev": "Rev field"
+      }
+    },
+    "checks": {
+      "summary": "Pre-save check: unknown placeholders {unknown} · items outside the frame {outside}",
+      "errors": "Cannot save: {list}"
+    },
+    "saveAsButton": "Save as…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saveAs": {
+      "id": "id (file name)",
+      "name": "Name",
+      "confirm": "Save",
+      "badId": "Use only letters, digits, - and _ in the id",
+      "taken": "A frame with that id already exists"
+    },
+    "confirmClose": "There are unsaved changes. Discard them and close?",
+    "discard": "Discard and close",
+    "keepEditing": "Keep editing",
+    "savedLog": "Frame: saved {id} (every sheet using this frame is updated)"
   }
 }

@@ -41,6 +41,12 @@ pub enum ExportKind {
     /// 盤内部品配置表 (帳票。アイテム番号・参照記号・型番・位置・レール)。
     #[value(name = "panel-placement", alias = "panel")]
     PanelPlacement,
+    /// ケーブル一覧 (帳票。多芯ケーブル単位の型番・芯数・長さ・両端の機器・使用芯/予備芯)。
+    #[value(name = "cable-list", alias = "cables")]
+    CableList,
+    /// 盤内配線図 (帳票。盤に置いた部品ごとの端子の線番・行き先・線色/sq)。
+    #[value(name = "panel-wiring")]
+    PanelWiring,
     /// 図面一式を1つのPDFへ (表紙+回路図全シート+選択帳票)。
     #[value(name = "pdf-book")]
     PdfBook,
@@ -70,6 +76,8 @@ impl ExportKind {
             ExportKind::XrefTable => Some(ReportKind::Xref),
             ExportKind::PlcIo => Some(ReportKind::PlcIo),
             ExportKind::PanelPlacement => Some(ReportKind::PanelPlacement),
+            ExportKind::CableList => Some(ReportKind::CableList),
+            ExportKind::PanelWiring => Some(ReportKind::PanelWiring),
             ExportKind::Svg
             | ExportKind::Pdf
             | ExportKind::Dxf
@@ -100,6 +108,8 @@ impl ExportKind {
             ExportKind::XrefTable => "クロスリファレンス表",
             ExportKind::PlcIo => "PLC I/Oレポート",
             ExportKind::PanelPlacement => "盤内部品配置表",
+            ExportKind::CableList => "ケーブル一覧",
+            ExportKind::PanelWiring => "盤内配線図",
             ExportKind::PdfBook => "図面一式PDF",
         }
     }
@@ -164,6 +174,12 @@ pub enum ReportKind {
     /// 盤内部品配置表 (盤レイアウトシートのフットプリント一覧)。
     #[value(name = "panel-placement")]
     PanelPlacement,
+    /// ケーブル一覧。
+    #[value(name = "cable-list")]
+    CableList,
+    /// 盤内配線図。
+    #[value(name = "panel-wiring")]
+    PanelWiring,
 }
 
 impl ReportKind {
@@ -177,6 +193,8 @@ impl ReportKind {
             ReportKind::Xref => "xref",
             ReportKind::PlcIo => "plc-io",
             ReportKind::PanelPlacement => "panel-placement",
+            ReportKind::CableList => "cable-list",
+            ReportKind::PanelWiring => "panel-wiring",
         }
     }
 }

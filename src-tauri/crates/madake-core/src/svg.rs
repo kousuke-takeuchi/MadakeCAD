@@ -64,6 +64,8 @@ const MATE_LINE_DASH: (f64, f64) = (1.5, 1.0);
 const MATE_LINE_STROKE: f64 = 0.25;
 /// 引き出し線 (G20) の線幅 (mm)。ハーネス境界の細線と同じ太さ。
 const LEADER_STROKE: f64 = 0.25;
+/// ケーブル定義線とシールド楕円の線幅 mm。
+const CABLE_STROKE: f64 = 0.35;
 /// 丸印の半径 (mm)。配線の分岐点 (ジャンクション) と、引き出し線 (G20) の対象端に
 /// 同じ大きさで描く。図面上で「ここに繋がっている」を表す印は1種類だけにする。
 pub const JUNCTION_DOT_R: f64 = 0.6;
@@ -921,7 +923,11 @@ fn render_mate_links(
 /// 盤レイアウト (M4仕様 §8) を描く。奥から順に **盤外形+取付板 → ダクト → DINレール →
 /// フットプリント**。寸法の数式は [`crate::panel`] が正で、画面 (`src/canvas/panel.ts`) と
 /// 同じ結果になる。紙面なので白地・黒線で、面は塗らない (ダクトは斜線で表す)。
-fn render_panel(out: &mut String, sheet: &Sheet) {
+fn render_panel(
+    out: &mut String,
+    sheet: &Sheet,
+    descriptions: &std::collections::BTreeMap<String, String>,
+) {
     for entity in sheet.entities.values() {
         let Entity::PanelOutline(o) = entity else {
             continue;
@@ -972,6 +978,43 @@ fn render_panel(out: &mut String, sheet: &Sheet) {
     }
     render_balloons(out, sheet);
     render_legends(out, sheet);
+    render_nameplates_and_dimensions(out, sheet, descriptions);
+}
+
+/// 銘板 (枠+中央揃えの文字) と関連付き寸法線 (補助線・寸法線・端の斜線・値) を描く。
+fn render_nameplates_and_dimensions(
+    out: &mut String,
+    sheet: &Sheet,
+    descriptions: &std::collections::BTreeMap<String, String>,
+) {
+    for np in crate::panel::nameplates(sheet) {
+        let Some((min, max)) = crate::panel::nameplate_rect(sheet, np) else {
+            continue;
+        };
+        rect_el(out, min.x, min.y, max.x - min.x, max.y - min.y, "#fff", "#000", RULE_STROKE);
+        let lines = crate::panel::nameplate_lines(sheet, np, descriptions);
+        let n = lines.len().max(1) as f64;
+        let pitch = np.text_mm * 1.3;
+        let top = (min.y + max.y) / 2.0 - pitch * (n - 1.0) / 2.0 + np.text_mm * 0.35;
+        for (i, line) in lines.iter().enumerate() {
+            text_el(out, (min.x + max.x) / 2.0, top + i as f64 * pitch, np.text_mm, "#000", "middle", line);
+        }
+    }
+    for d in crate::panel::dimensions(sheet) {
+        let Some(g) = crate::panel::dimension_geometry(sheet, d) else {
+            continue;
+        };
+        for (a, b) in g.extensions {
+            line_el(out, a.x, a.y, b.x, b.y, DUCT_HATCH_STROKE, "#000");
+        }
+        let (a, b) = g.line;
+        line_el(out, a.x, a.y, b.x, b.y, DUCT_HATCH_STROKE, "#000");
+        let t = crate::panel::DIM_TICK / 2.0;
+        for p in [a, b] {
+            line_el(out, p.x - t, p.y + t, p.x + t, p.y - t, DUCT_HATCH_STROKE, "#000");
+        }
+        text_el(out, g.text_at.x, g.text_at.y, crate::panel::DIM_FONT, "#000", "middle", &g.text);
+    }
 }
 
 /// バルーン (アイテム番号) を描く。採番済みのフットプリントだけに付き、
@@ -1150,6 +1193,8 @@ pub struct RelayAnnotations {
     /// コイルのentity id → 実機ブロック表示の中身 (G7、`attrs["device_block"]`のコイルだけ)。
     pub device_blocks:
         std::collections::BTreeMap<crate::model::EntityId, crate::relay_xref::DeviceBlock>,
+    /// 参照記号 → 回路図の説明 (盤レイアウトの銘板の1行目を追従させる。M4 §8)。
+    pub device_descriptions: std::collections::BTreeMap<String, String>,
 }
 
 /// プロジェクト内の1シートをSVGとして書き出す。図枠はプロジェクトの図枠テンプレート
@@ -1169,6 +1214,7 @@ pub fn project_sheet_to_svg(
         contact_maps: crate::relay_xref::sheet_contact_maps(project, sheet_id),
         coil_locations: crate::relay_xref::sheet_coil_locations(project, sheet_id),
         device_blocks: crate::relay_xref::sheet_device_blocks(project, sheet_id),
+        device_descriptions: crate::panel::device_descriptions(project),
     };
     let frame = crate::frame_template::for_project(project);
     let mate_links: Vec<crate::mate::MateLink> = crate::mate::mate_links(project)
@@ -1217,7 +1263,7 @@ fn sheet_to_svg_with_xrefs(
     );
     frame_and_title_block(&mut out, sheet, frame, ctx);
     // 盤レイアウト (盤外形・ダクト・レール・フットプリント) は最背面
-    render_panel(&mut out, sheet);
+    render_panel(&mut out, sheet, &relay.device_descriptions);
     // 図形 (G10) は配線・シンボルの背面に置く (塗りつぶしの強調枠が回路を隠さない)
     render_shapes(&mut out, sheet);
     // ハーネス境界は配線・シンボルの背面に置く
@@ -1364,7 +1410,24 @@ fn sheet_to_svg_with_xrefs(
             | Entity::Duct(_)
             | Entity::Footprint(_)
             | Entity::PanelLegend(_)
+            | Entity::Nameplate(_)
+            | Entity::Dimension(_)
             | Entity::WireLegend(_) => {}
+            // 多芯ケーブル: 定義線 (配線を斜めに横切る線)・シールドの楕円・注記
+            Entity::Cable(c) => {
+                if let [a, b, ..] = c.points.as_slice() {
+                    line_el(&mut out, a.x, a.y, b.x, b.y, CABLE_STROKE, "#000");
+                    if let Some((center, rx, ry, angle)) = crate::cable::shield_ellipse(c) {
+                        let _ = write!(
+                            out,
+                            "<ellipse cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\" transform=\"rotate({} {} {})\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+                            n(center.x), n(center.y), n(rx), n(ry), n(angle), n(center.x), n(center.y), n(CABLE_STROKE)
+                        );
+                    }
+                    let top = if a.y <= b.y { a } else { b };
+                    text_el(&mut out, top.x + 1.5, top.y - 1.5, 2.5, "#000", "start", &crate::cable::cable_label(c));
+                }
+            }
         }
     }
     render_wire_numbers(&mut out, sheet, symbols);

@@ -2,6 +2,7 @@
 // 信頼できる唯一の情報源はRust側(madake-core)。ここはpatch(doc:patchイベント)だけを
 // 適用するミラーで、モデルを直接書き換えるコードを置いてはならない。
 
+import { deviceDescriptions } from "../canvas/panelMarks";
 import { defineStore } from "pinia";
 import { resolveInstanceDef, resolveSymbolDef } from "../canvas/dynamicSymbol";
 import {
@@ -46,6 +47,8 @@ export interface SheetAnnotations {
   deviceXrefs: Map<string, string>;
   /** このシート上で図面に破線を描くべき嵌合コネクタ対 (G14)。 */
   mateLinks: MateLink[];
+  /** 参照記号 → 回路図の説明 (盤の銘板の1行目、M4 §8)。 */
+  deviceDescriptions: Map<string, string>;
 }
 
 interface DocumentState {
@@ -139,6 +142,7 @@ export const useDocumentStore = defineStore("document", {
         },
         deviceXrefs: sheetDeviceXrefs(project, sheet.id),
         mateLinks: project ? mateLinks(project, this.symbolDefs).filter((l) => l.sheetId === sheet.id) : [],
+        deviceDescriptions: sheet.kind === "panel" ? deviceDescriptions(project) : new Map(),
       };
     },
 
@@ -246,6 +250,9 @@ export const useDocumentStore = defineStore("document", {
             break;
           case "frame_template_changed":
             if (this.project) this.project.frame_template = op.frame_template;
+            break;
+          case "plc_sheet_options_changed":
+            if (this.project) this.project.plc_generate = op.options;
             break;
           case "project_meta_changed":
             if (this.project) {

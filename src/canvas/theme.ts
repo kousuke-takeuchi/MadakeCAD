@@ -31,6 +31,11 @@ export const theme = {
   agent: "#29d3e6",
   /** オーバーレイのラベルチップ上の文字色。 */
   agentInk: "#0b3540",
+  /** 作図領域の操作チップ (.pen DSキャンバス操作チップ): 地・枠・主文・操作ヒント。 */
+  chipBg: "rgba(46, 51, 59, 0.9)",
+  chipBorder: "#1f6fbf",
+  chipText: "#e8eaec",
+  chipHint: "#9aa2ab",
 } as const;
 
 /**
@@ -82,6 +87,30 @@ export const symbolEditorTheme = {
 } as const;
 
 /**
+ * 図枠エディタの配色 (.pen「M4残りデザイン⑥」`dhP9P`)。白い用紙に黒い枠線、
+ * プレースホルダは青文字、原点は赤丸 (シンボルエディタと同じ明るい地の配色)。
+ */
+export const frameEditorTheme = {
+  /** 用紙の外 (作業領域)。 */
+  background: "#eef0f2",
+  /** 用紙の面。 */
+  paper: "#ffffff",
+  /** 枠線・罫線・固定文字。 */
+  line: "#2b2f33",
+  /** ゾーン目盛・改訂欄の見出しなど、編集しない補助表示。 */
+  dim: "#9aa2ab",
+  /** 10mmごとの補助グリッド。 */
+  grid: "#e3e6ea",
+  /** プレースホルダ文字 `{...}` とロゴ枠。 */
+  placeholder: "#1f6fbf",
+  /** 選択ハイライトとドラッグ中のラバーバンド。 */
+  selection: "#1f6fbf",
+  selectionFill: "rgba(31, 111, 191, 0.12)",
+  /** 原点マーク。 */
+  origin: "#dc2626",
+} as const;
+
+/**
  * 盤レイアウトシートの配色 (.pen「M4デザイン - 盤レイアウト」)。
  *
  * 暗い作図領域 (`theme`) の上に**白い盤面**が乗るので、盤の中に描くものは
@@ -112,6 +141,12 @@ export const panelTheme = {
   partNo: "#6b7178",
   /** 盤の名前。 */
   label: "#6b7178",
+  /** 銘板の面・輪郭・文字。 */
+  nameplate: "#ffffff",
+  nameplateEdge: "#2b2f33",
+  nameplateText: "#2b2f33",
+  /** 寸法線・補助線・寸法値。 */
+  dimension: "#6b7178",
   /** バルーン (アイテム番号) の白丸・輪郭と引出線・番号。 */
   balloon: "#ffffff",
   balloonEdge: "#2b2f33",

@@ -60,6 +60,8 @@ function draw() {
     bind: store.bindContextFor(sheet),
     // 電線品番凡例ブロック (G9残) の品番引き当てに使うプロジェクトの電線品番表
     wireParts: store.project?.wire_parts,
+    // 盤の銘板の1行目を回路図の説明に追従させる
+    deviceDescriptions: annotations?.deviceDescriptions,
   });
   controller.renderPreview(ctx);
 }
@@ -243,6 +245,8 @@ watch(() => store.activeSheetId, () => {
       @wheel.prevent="(e) => controller.onWheel(toLocal(e), e.deltaY)"
       @dblclick="() => controller.onDoubleClick()"
       @contextmenu.prevent
+      @dragover.prevent
+      @drop.prevent="(e) => void controller.dropPlacement(toLocal(e))"
     />
     <SearchBar />
     <SurferPopup />

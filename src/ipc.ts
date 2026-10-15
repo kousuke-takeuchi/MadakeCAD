@@ -119,6 +119,75 @@ export interface TextEntity {
  * ハーネス境界 (IEC 61082-1 のグループ囲み)。所属配線は幾何学的な内包で決まる。
  * **電線をまとめる境界専用**で、筐体・強調枠の囲みは`Shape`で描く (G11)。
  */
+/** 銘板 (盤レイアウト。フットプリントに結び付くか単独。format v16)。 */
+export interface Nameplate {
+  id: string;
+  /** 結び付くフットプリント (nullなら単独)。 */
+  footprint: string | null;
+  /** 単独の銘板の左上角。 */
+  at: Point;
+  w: number;
+  h: number;
+  /** 文字 (1〜2行)。 */
+  lines: string[];
+  /** 文字高 mm。 */
+  text_mm: number;
+  position: "below" | "above";
+  /** 1行目を回路図の説明 (機能ラベル) に追従させる。 */
+  follow_description: boolean;
+  part_no: string;
+}
+
+/** 寸法線の端点 (点か、フットプリントの中心)。 */
+export type DimAnchor = { kind: "point"; at: Point } | { kind: "footprint"; id: string };
+
+/** 関連付き寸法線 (盤レイアウト。format v16)。 */
+export interface Dimension {
+  id: string;
+  a: DimAnchor;
+  b: DimAnchor;
+  axis: "horizontal" | "vertical";
+  /** 寸法線の位置: 水平寸法ならY、垂直寸法ならX。 */
+  at: number;
+}
+
+/** 盤のフットプリントの揃え方 (基準=最初に選んだ部品)。 */
+export type AlignMode = "left" | "center_x" | "right" | "top" | "center_y" | "bottom";
+
+/** 多芯ケーブル (定義線で配線を横切り、芯線を割り当てる。format v15)。 */
+export interface Cable {
+  id: string;
+  /** 参照記号 (W1, W2 …)。 */
+  reference: string;
+  /** 型番 (未設定は空)。 */
+  part_no: string;
+  /** 芯数。 */
+  core_count: number;
+  /** 線径 sq (0 = 未設定)。 */
+  sq: number;
+  /** 定義線の2点。 */
+  points: Point[];
+  /** 芯線割当 (定義線が横切った配線を交差順に)。 */
+  cores: CableCore[];
+  shield: CableShield | null;
+  /** 長さ m (未設定はnull)。 */
+  length_m: number | null;
+}
+
+/** ケーブルの芯線1本の割当。 */
+export interface CableCore {
+  core: string;
+  color: string;
+  /** 割り当てた配線 (消えていればnull)。 */
+  wire: string | null;
+}
+
+/** ケーブルのシールド。 */
+export interface CableShield {
+  /** シールドを接地するか。 */
+  grounded: boolean;
+}
+
 export interface Harness {
   id: string;
   /** 囲みの頂点 (現状は矩形の4点)。 */
@@ -255,7 +324,10 @@ export type Entity =
   | ({ kind: "duct" } & Duct)
   | ({ kind: "footprint" } & Footprint)
   | ({ kind: "panel_legend" } & PanelLegend)
-  | ({ kind: "wire_legend" } & WireLegend);
+  | ({ kind: "wire_legend" } & WireLegend)
+  | ({ kind: "cable" } & Cable)
+  | ({ kind: "nameplate" } & Nameplate)
+  | ({ kind: "dimension" } & Dimension);
 
 /** シート種別。回路図 (既定) と2D盤レイアウト (M4 §8)。 */
 export type SheetKind = "schematic" | "panel";
@@ -310,6 +382,8 @@ export interface Project {
   no?: string | null;
   /** FreeCAD対応付け (entity UUIDがキー)。省略時は空。 */
   mech_links?: MechLink[];
+  /** PLC I/O図面の生成設定 (生成ダイアログで「プロジェクトに保存」したもの。format v14)。 */
+  plc_generate?: PlcSheetOptions | null;
 }
 
 /** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */
@@ -352,6 +426,16 @@ export type Command =
   /** PLC I/O割付表の置換 (プロジェクト単位)。 */
   | { type: "set_plc_assignments"; assignments: PlcAssignment[] }
   | { type: "set_frame_template"; frame_template: string | null }
+  | { type: "set_plc_sheet_options"; options: PlcSheetOptions | null }
+  | { type: "add_cable"; sheet_id: string; cable: Cable }
+  | { type: "align_footprints"; sheet_id: string; ids: string[]; mode: AlignMode }
+  | {
+      type: "distribute_footprints";
+      sheet_id: string;
+      ids: string[];
+      axis: "horizontal" | "vertical";
+      pitch?: number | null;
+    }
   | { type: "set_mech_link"; link: MechLink }
   | { type: "remove_mech_link"; entity_id: string }
   | {
@@ -463,6 +547,7 @@ export type PatchOp =
   | { op: "wire_parts_replaced"; wire_parts: WirePart[] }
   | { op: "plc_assignments_replaced"; assignments: PlcAssignment[] }
   | { op: "frame_template_changed"; frame_template: string | null }
+  | { op: "plc_sheet_options_changed"; options: PlcSheetOptions | null }
   /** プロジェクト名・番号が変わった (G16)。表題欄側は各シートの`sheet_meta_updated`で届く。 */
   | { op: "project_meta_changed"; name: string; no: string | null }
   | { op: "mech_links_replaced"; mech_links: MechLink[] };
@@ -792,6 +877,20 @@ export interface DeviceNode {
   /** 端子台の段数 (単段は1、多段端子台は2以上。端子台以外は0)。 */
   levels: number;
   functions: DeviceFunction[];
+  /**
+   * まだ図面に描いていない機能 (予約接点)。リレーの接点構成にあって接点シンボルが置かれて
+   * いない接点。並びと端子の呼び名は接点マップの未使用行と同じ。古いバックエンドでは欠ける。
+   */
+  unplaced?: UnplacedFunction[];
+}
+
+/** 未配置の機能1つ (デバイスナビゲータの「未配置」行)。 */
+export interface UnplacedFunction {
+  role: "contact_no" | "contact_nc" | "contact_co";
+  /** 端子の呼び名 (例 "33-34")。 */
+  terminals: string;
+  /** 置くときのシンボル。 */
+  symbol_id: string;
 }
 
 /**
@@ -915,6 +1014,8 @@ export interface MacroMeta {
   placeholders?: MacroPlaceholder[];
   /** 値セット (指定しなければ値セット無しのマクロになる)。 */
   value_sets?: MacroValueSet[];
+  /** 既存のマクロ (`id`) へ足すバリアントのキー (A〜Z)。登録済みなら置き換える。 */
+  variant?: string;
 }
 
 /** 読み込めなかったマクロファイル1件 (形はテンプレートと同じ)。 */
@@ -963,9 +1064,9 @@ export interface PlcPoint {
   wire_no: string;
 }
 
-/** ラダーの形式 (v1は縦バス+横ラングのみ実装)。 */
+/** ラダーの形式 (縦バス+横ラング / 横バス+縦ラング)。 */
 export type LadderStyle = "vertical-bus" | "horizontal-bus";
-/** モジュールの配置方針 (v1はモジュールごとに新ラダーのみ実装)。 */
+/** モジュールの配置方針 (新しいページ / 収まれば同居 / 同居し必要なら分割)。 */
 export type ModulePlacement = "new-ladder" | "share-if-fits" | "share-or-split";
 
 /** I/O図面の生成設定。 */
@@ -974,6 +1075,8 @@ export interface PlcSheetOptions {
   start_skip: number;
   ladder_style: LadderStyle;
   placement: ModulePlacement;
+  /** 「同居し必要なら分割」で分ける単位 (点)。古いバックエンドでは欠ける (既定8)。 */
+  split_unit?: number;
 }
 
 /** 整え指標 (Rustの`TidyMetrics`)。 */
@@ -1011,7 +1114,9 @@ export type ReportKind =
   | "bom"
   | "xref"
   | "plc-io"
-  | "panel-placement";
+  | "panel-placement"
+  | "cable-list"
+  | "panel-wiring";
 /** 帳票の出力形式 (CSV or 図枠付き図面シートのPDF)。 */
 export type ReportFormat = "csv" | "pdf";
 
@@ -1057,6 +1162,11 @@ interface Ipc {
   listFrameTemplates(): Promise<FrameTemplateList>;
   /** ユーザー図枠の置き場をOSのファイラで開く (無ければ作る)。戻り値=そのパス。 */
   openFrameTemplatesFolder(): Promise<string>;
+  /**
+   * 図枠エディタの保存: ユーザー図枠を`~/MadakeCAD/templates/frames/{id}.json`へ書く。
+   * 検証に落ちたもの・同梱の図枠とidがぶつかるものは何も書かずに理由を投げる。undo履歴には乗らない。
+   */
+  saveFrameTemplate(template: FrameTemplate): Promise<{ template: FrameTemplate; path: string }>;
   /** 使える回路マクロの一覧 (ユーザーの`~/MadakeCAD/macros`)。 */
   listMacros(): Promise<MacroList>;
   /** 選択範囲をマクロへ組み立てるだけ (ファイルに書かない)。プレビューと⌘Cが使う。 */
@@ -1189,6 +1299,8 @@ const tauriIpc: Ipc = {
   openTemplatesFolder: () => invoke<string>("open_templates_folder"),
   listFrameTemplates: () => invoke<FrameTemplateList>("list_frame_templates"),
   openFrameTemplatesFolder: () => invoke<string>("open_frame_templates_folder"),
+  saveFrameTemplate: (template) =>
+    invoke<{ template: FrameTemplate; path: string }>("save_frame_template", { template }),
   listMacros: () => invoke<MacroList>("list_macros"),
   buildMacro: (sheetId, entityIds, meta) =>
     invoke<Macro>("build_macro", { sheetId, entityIds, meta }),
@@ -1336,6 +1448,11 @@ const httpIpc: Ipc = {
   openTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
   listFrameTemplates: () => http<FrameTemplateList>("/frame-templates"),
   openFrameTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
+  saveFrameTemplate: (template) =>
+    http<{ template: FrameTemplate; path: string }>("/frame-templates/save", {
+      method: "POST",
+      body: JSON.stringify(template),
+    }),
   listMacros: () => http<MacroList>("/macros"),
   buildMacro: (sheetId, entityIds, meta) =>
     http<Macro>("/macros/build", {

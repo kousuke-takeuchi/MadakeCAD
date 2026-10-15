@@ -121,6 +121,93 @@ export function harnessUpdateCommand(
   };
 }
 
+/** プロパティパネルで編集する銘板の欄。 */
+export interface NameplatePatch {
+  line1: string;
+  line2: string;
+  text_mm: string;
+  position: "below" | "above";
+  follow: boolean;
+  part_no: string;
+}
+
+/**
+ * 銘板のプロパティ編集コマンド (M4 §8)。文字高が正の数でなければnull、何も変わっていなければnull。
+ * 2行目が空なら1行だけにする。説明への追従は部品に結び付いた銘板だけ。
+ */
+export function nameplateUpdateCommand(sheetId: string, entity: Entity, patch: NameplatePatch): Command | null {
+  if (entity.kind !== "nameplate") return null;
+  const text = Number(patch.text_mm);
+  if (!Number.isFinite(text) || text <= 0) return null;
+  const lines = [patch.line1.trim(), patch.line2.trim()];
+  while (lines.length && lines[lines.length - 1] === "") lines.pop();
+  const next = {
+    ...entity,
+    lines,
+    text_mm: text,
+    position: patch.position,
+    follow_description: entity.footprint !== null && patch.follow,
+    part_no: patch.part_no.trim(),
+  };
+  const same =
+    JSON.stringify(next.lines) === JSON.stringify(entity.lines) &&
+    next.text_mm === entity.text_mm &&
+    next.position === entity.position &&
+    next.follow_description === entity.follow_description &&
+    next.part_no === entity.part_no;
+  return same ? null : { type: "update_entity", sheet_id: sheetId, entity: next };
+}
+
+/** プロパティパネルで編集するケーブルの欄 (入力欄の文字列のまま受け取る)。 */
+export interface CablePatch {
+  reference: string;
+  part_no: string;
+  /** 芯数 (1以上の整数)。 */
+  core_count: string;
+  /** 線径 sq (空欄=未設定)。 */
+  sq: string;
+  shield: boolean;
+  grounded: boolean;
+  /** 長さ m (空欄=未設定)。 */
+  length_m: string;
+}
+
+/**
+ * ケーブルのプロパティ編集コマンド (M4 §5)。芯線割当 (定義線が決めたもの) はそのまま残す。
+ * 芯数が1以上の整数でない・線径や長さが負/数値でない入力はnull (図面を変えない)。
+ * 何も変わっていなければnull。
+ */
+export function cableUpdateCommand(sheetId: string, entity: Entity, patch: CablePatch): Command | null {
+  if (entity.kind !== "cable") return null;
+  const cores = Number(patch.core_count);
+  if (!Number.isInteger(cores) || cores < 1) return null;
+  const optional = (text: string): number | null | undefined => {
+    if (text.trim() === "") return null;
+    const v = Number(text);
+    return Number.isFinite(v) && v >= 0 ? v : undefined;
+  };
+  const sq = optional(patch.sq);
+  const length = optional(patch.length_m);
+  if (sq === undefined || length === undefined) return null;
+  const next = {
+    ...entity,
+    reference: patch.reference.trim(),
+    part_no: patch.part_no.trim(),
+    core_count: cores,
+    sq: sq ?? 0,
+    shield: patch.shield ? { grounded: patch.grounded } : null,
+    length_m: length,
+  };
+  const same =
+    next.reference === entity.reference &&
+    next.part_no === entity.part_no &&
+    next.core_count === entity.core_count &&
+    next.sq === entity.sq &&
+    JSON.stringify(next.shield) === JSON.stringify(entity.shield ?? null) &&
+    next.length_m === (entity.length_m ?? null);
+  return same ? null : { type: "update_entity", sheet_id: sheetId, entity: next };
+}
+
 /**
  * シートの注記文字高の編集コマンド (G20)。配線注記・線番・ネットタグの大きさが変わる。
  *

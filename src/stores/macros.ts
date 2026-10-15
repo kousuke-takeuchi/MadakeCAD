@@ -66,6 +66,38 @@ export function deriveValueSetId(label: string): string {
   return id.replace(/^_+|_+$/g, "");
 }
 
+/** バリアントキーに使える文字 (EPLANと同じA〜Zの26個)。 */
+export const VARIANT_LETTERS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+
+/** 保存ダイアログのバリアントチップ1つ (.pen DSバリアントチップ 登録済/選択/空き)。 */
+export interface VariantChip {
+  key: string;
+  state: "saved" | "selected" | "free";
+  /** 登録済みのキーを選んでいる (保存すると上書き確認になる)。 */
+  overwrite: boolean;
+}
+
+/** 登録済みのキーに無い最初の文字 (26個すべて使っていればnull)。 */
+export function nextFreeVariant(keys: readonly string[]): string | null {
+  const used = new Set(keys.map((k) => k.toUpperCase()));
+  return VARIANT_LETTERS.find((l) => !used.has(l)) ?? null;
+}
+
+/**
+ * 保存ダイアログのバリアントチップの並び: 登録済みのキー (A〜) と、次の空きキー1つ。
+ * 選んでいるキーは`selected`。登録済みのキーを選んでいれば`overwrite`。
+ */
+export function variantChips(keys: readonly string[], selected: string): VariantChip[] {
+  const used = VARIANT_LETTERS.filter((l) => keys.some((k) => k.toUpperCase() === l));
+  const free = nextFreeVariant(keys);
+  const shown = free ? [...used, free] : used;
+  return shown.map((key) => {
+    const saved = used.includes(key);
+    const isSel = key === selected.toUpperCase();
+    return { key, state: isSel ? "selected" : saved ? "saved" : "free", overwrite: isSel && saved };
+  });
+}
+
 interface MacroState {
   macros: Macro[];
   /** 読み込めなかったマクロファイル (ユーザーのフォルダに壊れたJSONがある等)。 */
@@ -98,6 +130,12 @@ interface MacroState {
   placeholderKeys: Record<string, string>;
   /** 値セット表で入力中の行。 */
   valueSetDrafts: ValueSetDraft[];
+  /** 名前欄の候補から選んだ既存マクロ (選ぶとそのマクロへバリアントを足す)。 */
+  saveTargetId: string | null;
+  /** 既存マクロへ足すバリアントのキー。 */
+  saveVariant: string;
+  /** 登録済みのバリアントを上書きする確認を出しているか。 */
+  overwriteAsk: boolean;
 
   /** ⌘Cで覚えた無名マクロ (ファイルには書かない)。 */
   clipboard: Macro | null;
@@ -125,6 +163,9 @@ export const useMacrosStore = defineStore("macros", {
     saving: false,
     placeholderKeys: {},
     valueSetDrafts: [],
+    saveTargetId: null,
+    saveVariant: DEFAULT_VARIANT,
+    overwriteAsk: false,
     clipboard: null,
     error: null,
   }),
@@ -252,6 +293,28 @@ export const useMacrosStore = defineStore("macros", {
     },
 
     /** 保存できるか (名前が空のあいだは保存させない。名前がマクロのidになるため)。 */
+    /** 名前欄の候補 = 入力中の名前を含む既存マクロ (最大5件)。既存マクロを選んだ後は出さない。 */
+    nameMatches(state): Macro[] {
+      const q = state.saveName.trim().toLowerCase();
+      if (!q || state.saveTargetId) return [];
+      return state.macros
+        .filter((m) => m.name.toLowerCase().includes(q) || m.name_ja.toLowerCase().includes(q))
+        .slice(0, 5);
+    },
+    /** 選んだ既存マクロ (無ければnull = 新しいマクロとして保存)。 */
+    saveTarget(state): Macro | null {
+      return state.macros.find((m) => m.id === state.saveTargetId) ?? null;
+    },
+    /** 保存ダイアログのバリアントチップ。新しいマクロなら既定のAだけ。 */
+    saveVariantChips(): VariantChip[] {
+      const target = this.saveTarget;
+      if (!target) return [{ key: DEFAULT_VARIANT, state: "selected", overwrite: false }];
+      return variantChips(macroVariantKeys(target), this.saveVariant);
+    },
+    /** 選んでいるキーが登録済み (保存すると上書き)。 */
+    saveOverwrites(): boolean {
+      return this.saveVariantChips.some((c) => c.overwrite);
+    },
     canSave(state): boolean {
       return state.saveEntityIds.length > 0 && state.saveName.trim().length > 0 && !state.saving;
     },
@@ -344,6 +407,9 @@ export const useMacrosStore = defineStore("macros", {
       this.savePreview = null;
       this.placeholderKeys = {};
       this.valueSetDrafts = [];
+      this.saveTargetId = null;
+      this.saveVariant = DEFAULT_VARIANT;
+      this.overwriteAsk = false;
       this.error = null;
       try {
         this.savePreview = await ipc.buildMacro(sheetId, this.saveEntityIds, { name: "" });
@@ -355,15 +421,70 @@ export const useMacrosStore = defineStore("macros", {
 
     cancelSave() {
       this.saveOpen = false;
+      this.overwriteAsk = false;
       this.error = null;
+    },
+
+    /**
+     * 名前欄の候補から既存マクロを選ぶ: 名前・カテゴリをそのマクロのものにし、
+     * 次の空きバリアントを選んだ状態にする (26個すべて使っていればAの上書き)。
+     */
+    chooseExisting(id: string) {
+      const m = this.macros.find((x) => x.id === id);
+      if (!m) return;
+      this.saveTargetId = m.id;
+      this.saveName = m.name_ja || m.name;
+      this.saveCategory = m.category;
+      this.saveVariant = nextFreeVariant(macroVariantKeys(m)) ?? DEFAULT_VARIANT;
+      this.overwriteAsk = false;
+    },
+
+    /** 既存マクロの選択をやめ、新しいマクロとして保存する状態へ戻す。 */
+    clearExisting() {
+      this.saveTargetId = null;
+      this.saveVariant = DEFAULT_VARIANT;
+      this.overwriteAsk = false;
+    },
+
+    /** バリアントチップを選ぶ (既存マクロを選んでいるときだけ意味を持つ)。 */
+    chooseVariant(key: string) {
+      if (!this.saveTargetId) return;
+      this.saveVariant = key.toUpperCase();
+      this.overwriteAsk = false;
+    },
+
+    /** 上書き確認で「別のバリアントに保存」: 次の空きキーへ切り替えて保存する。 */
+    async saveToFreeVariant(): Promise<{ macro: Macro; path: string } | null> {
+      const target = this.saveTarget;
+      const free = target ? nextFreeVariant(macroVariantKeys(target)) : null;
+      if (!free) return null;
+      this.saveVariant = free;
+      this.overwriteAsk = false;
+      return this.save();
     },
 
     /**
      * 入力した名前・カテゴリで選択範囲をユーザー領域へ保存し、一覧を読み直して閉じる。
      * 失敗したらダイアログは開いたまま理由を残す (入力をやり直せる)。
      */
-    async save(): Promise<{ macro: Macro; path: string } | null> {
+    async save(confirmOverwrite = false): Promise<{ macro: Macro; path: string } | null> {
       if (!this.saveSheetId || !this.canSave) return null;
+      const target = this.saveTarget;
+      if (target) {
+        // 既存マクロへバリアントを足す。登録済みのキーは確認してから上書きする
+        if (this.saveOverwrites && !confirmOverwrite) {
+          this.overwriteAsk = true;
+          return null;
+        }
+        this.overwriteAsk = false;
+        return this.submitSave({
+          id: target.id,
+          name: target.name,
+          name_ja: target.name_ja,
+          category: target.category,
+          variant: this.saveVariant,
+        });
+      }
       const name = this.saveName.trim();
       const meta: MacroMeta = {
         name,
@@ -375,6 +496,12 @@ export const useMacrosStore = defineStore("macros", {
       const valueSets = this.saveValueSets;
       if (placeholders.length) meta.placeholders = placeholders;
       if (valueSets.length) meta.value_sets = valueSets;
+      return this.submitSave(meta);
+    },
+
+    /** 保存を実行し、一覧を読み直して閉じる (失敗したら開いたまま理由を残す)。 */
+    async submitSave(meta: MacroMeta): Promise<{ macro: Macro; path: string } | null> {
+      if (!this.saveSheetId) return null;
       this.saving = true;
       this.error = null;
       try {
@@ -382,7 +509,7 @@ export const useMacrosStore = defineStore("macros", {
         this.saving = false;
         await this.load();
         this.selectedId = result.macro.id;
-        this.variantKey = DEFAULT_VARIANT;
+        this.variantKey = meta.variant ?? DEFAULT_VARIANT;
         this.valueSetId = null;
         this.saveOpen = false;
         return result;

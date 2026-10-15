@@ -4,32 +4,21 @@
 // 「ラダー」(形式ラジオ+ラング間隔/先頭スキップ) と「モジュール配置」(方針ラジオ)+
 // 注記+フッタ(生成/キャンセル)。割付表エディタのフッタから開く。
 //
-// v1が対応するのは縦バス+横ラング・モジュールごとに新ラダーだけで、他の選択肢は
-// デザインどおり並べるが押せない (disabled + 「未実装」のtitle)。
-// ラダー幅はv1の生成では使わないので列ごと出さない。
+// 横バス+縦ラング・同居/分割の配置方針・分割の単位・プロジェクトへの保存は
+// .pen「M4残りデザイン③」(`lmUn9`) どおり。ラダー幅は生成では使わないので出さない。
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
 import { useI18n } from "vue-i18n";
 import { X } from "lucide-vue-next";
 import type { LadderStyle, ModulePlacement } from "../ipc";
-import { usePlcIoStore } from "../stores/plcIo";
+import { SPLIT_UNITS, usePlcIoStore } from "../stores/plcIo";
 import { useUiStore } from "../stores/ui";
 
 const plc = usePlcIoStore();
 const ui = useUiStore();
 const { t } = useI18n();
 
-/** ラダー形式 (v1は縦バスのみ実装)。 */
-const styles: { id: LadderStyle; ready: boolean }[] = [
-  { id: "vertical-bus", ready: true },
-  { id: "horizontal-bus", ready: false },
-];
-
-/** 配置方針 (v1はモジュールごとに新ラダーのみ実装)。 */
-const placements: { id: ModulePlacement; ready: boolean }[] = [
-  { id: "new-ladder", ready: true },
-  { id: "share-if-fits", ready: false },
-  { id: "share-or-split", ready: false },
-];
+const styles: LadderStyle[] = ["vertical-bus", "horizontal-bus"];
+const placements: ModulePlacement[] = ["new-ladder", "share-if-fits", "share-or-split"];
 
 function cancel() {
   plc.cancelGenerate();
@@ -56,15 +45,10 @@ async function run() {
       <div class="body">
         <div class="group">
           <div class="group-head"><span>{{ t("plcIo.ladderGroup") }}</span><i /></div>
-          <label v-for="s in styles" :key="s.id" class="choice" :title="s.ready ? '' : t('plcIo.notImplemented')">
-            <input
-              v-model="plc.options.ladder_style"
-              type="radio"
-              :value="s.id"
-              :disabled="!s.ready"
-            />
-            {{ t(`plcIo.ladderStyle.${s.id}`) }}
-            <span class="tag">{{ s.ready ? t("plcIo.jisHint") : t("plcIo.notImplemented") }}</span>
+          <label v-for="s in styles" :key="s" class="choice">
+            <input v-model="plc.options.ladder_style" type="radio" :value="s" />
+            {{ t(`plcIo.ladderStyle.${s}`) }}
+            <span class="tag">{{ s === "vertical-bus" ? t("plcIo.jisHint") : t("plcIo.horizontalHint") }}</span>
           </label>
           <div class="form-row">
             <label class="label">{{ t("plcIo.rungSpacing") }}</label>
@@ -88,17 +72,21 @@ async function run() {
 
         <div class="group">
           <div class="group-head"><span>{{ t("plcIo.placementGroup") }}</span><i /></div>
-          <label
-            v-for="p in placements"
-            :key="p.id"
-            class="choice"
-            :title="p.ready ? '' : t('plcIo.notImplemented')"
-          >
-            <input v-model="plc.options.placement" type="radio" :value="p.id" :disabled="!p.ready" />
-            {{ t(`plcIo.placement.${p.id}`) }}
-            <span v-if="!p.ready" class="tag">{{ t("plcIo.notImplemented") }}</span>
+          <label v-for="p in placements" :key="p" class="choice">
+            <input v-model="plc.options.placement" type="radio" :value="p" />
+            {{ t(`plcIo.placement.${p}`) }}
           </label>
+          <div v-if="plc.options.placement === 'share-or-split'" class="form-row indent">
+            <label class="label">{{ t("plcIo.splitUnit") }}</label>
+            <select v-model.number="plc.options.split_unit" class="input">
+              <option v-for="u in SPLIT_UNITS" :key="u" :value="u">{{ t("plcIo.splitUnitOption", { count: u }) }}</option>
+            </select>
+          </div>
         </div>
+        <label class="choice save">
+          <input v-model="plc.saveOptions" type="checkbox" />
+          {{ t("plcIo.saveOptions") }}
+        </label>
 
         <p class="caption">{{ t("plcIo.generateNote") }}</p>
         <p v-if="plc.error" class="error">{{ plc.error }}</p>
@@ -174,6 +162,8 @@ async function run() {
 .choice:has(input:disabled) { color: var(--ui-muted); }
 .tag { font-size: 10px; color: var(--ui-muted); }
 .form-row { display: flex; align-items: center; gap: 8px; }
+.form-row.indent { padding-left: 22px; }
+.choice.save { margin-top: 2px; }
 .label { font-size: 11px; color: var(--ui-text); flex: none; }
 .label.skip { margin-left: 6px; }
 .input {

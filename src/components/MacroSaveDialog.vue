@@ -5,11 +5,12 @@
 // フッタ=キャンセル+保存。
 //
 // 基準点は選択範囲の左下ピンからRust側が自動で決めるので、ここでは表示だけ。
-// バリアントの追加はフェーズ3のため、無効チップ+titleでフェーズを示す。
+// 名前欄の候補から既存マクロを選ぶと、そのマクロへバリアントを足す (.pen「M4残りデザイン①」
+// `TSvHz`: 候補リスト・バリアントチップ 登録済/選択/空き・比較プレビュー・上書き確認)。
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { X } from "lucide-vue-next";
+import { TriangleAlert, X } from "lucide-vue-next";
 import { useMacrosStore } from "../stores/macros";
 import { useUiStore } from "../stores/ui";
 import MacroPreview from "./MacroPreview.vue";
@@ -36,8 +37,43 @@ function inputValue(event: Event): string {
   return (event.target as HTMLInputElement).value;
 }
 
-async function save() {
-  const result = await macros.save();
+// 名前欄の候補は一覧から出すので、開いたときに一覧が無ければ読む
+watch(
+  () => macros.saveOpen,
+  (open) => {
+    if (open && macros.macros.length === 0) void macros.load();
+  },
+  { immediate: true },
+);
+
+/** 名前を打ち直したら既存マクロの選択をやめる (新しいマクロとして保存する)。 */
+function onNameInput() {
+  if (macros.saveTargetId) macros.clearExisting();
+}
+
+/** 既存マクロ候補の右側の説明 (登録済みのキーと分類)。 */
+function matchNote(m: (typeof macros.macros)[number]): string {
+  const keys = ["A", ...m.variants.map((v) => v.key)].join(" ");
+  return t("macros.existingNote", { keys, category: m.category || t("macros.uncategorized") });
+}
+
+const saveLabel = computed(() => {
+  if (macros.saving) return t("macros.saving");
+  if (!macros.saveTarget) return t("macros.save");
+  return t("macros.saveAsVariant", { key: macros.saveVariant });
+});
+
+async function save(confirm = false) {
+  const result = await macros.save(confirm);
+  if (!result && macros.overwriteAsk) return;
+  report(result);
+}
+
+async function saveToFree() {
+  report(await macros.saveToFreeVariant());
+}
+
+function report(result: Awaited<ReturnType<typeof macros.save>>) {
   if (!result) {
     if (macros.error) ui.log(macros.error);
     return;
@@ -62,15 +98,26 @@ async function save() {
           <input
             v-model="macros.saveName"
             class="input"
+            :class="{ target: macros.saveTarget }"
             :placeholder="t('macros.namePlaceholder')"
             autofocus
+            @input="onNameInput"
           />
         </label>
+        <ul v-if="macros.nameMatches.length" class="matches">
+          <li v-for="m in macros.nameMatches" :key="m.id">
+            <button type="button" class="match" @mousedown.prevent @click="macros.chooseExisting(m.id)">
+              <span class="match-name">{{ m.name_ja || m.name }}</span>
+              <span class="match-note">{{ matchNote(m) }}</span>
+            </button>
+          </li>
+        </ul>
         <label class="row">
           <span class="label">{{ t("macros.categoryRow") }}</span>
           <input
             v-model="macros.saveCategory"
             class="input"
+            :disabled="!!macros.saveTarget"
             :placeholder="t('macros.categoryPlaceholder')"
             list="macro-categories"
           />
@@ -85,13 +132,25 @@ async function save() {
         <div class="row">
           <span class="label">{{ t("macros.variantRow") }}</span>
           <span class="variants">
-            <span class="chip current">{{ t("macros.variantDefault") }}</span>
-            <button class="chip add" disabled :title="t('macros.variantAddHint')">
-              {{ t("macros.variantAdd") }}
-            </button>
+            <span v-if="!macros.saveTarget" class="chip current">{{ t("macros.variantDefault") }}</span>
+            <template v-else>
+              <button
+                v-for="c in macros.saveVariantChips"
+                :key="c.key"
+                class="chip variant"
+                :class="c.state"
+                :title="c.state === 'saved' ? t('macros.variantSavedHint') : ''"
+                @click="macros.chooseVariant(c.key)"
+              >
+                {{ c.state === "saved" || c.overwrite ? `${c.key} ✓` : c.state === "selected" ? t("macros.variantNew", { key: c.key }) : c.key }}
+              </button>
+            </template>
           </span>
         </div>
+        <p v-if="macros.saveTarget" class="hint">{{ t("macros.variantExistingHint", { key: macros.saveVariant }) }}</p>
 
+        <!-- 既存マクロへのバリアント追加では、プレースホルダと値セットはマクロのものを引き継ぐ -->
+        <template v-if="!macros.saveTarget">
         <!-- プレースホルダ: 現場ごとに決める欄にキー名を付ける (v1=表形式) -->
         <p class="section">{{ t("macros.placeholderSection") }}</p>
         <p class="hint">{{ t("macros.placeholderHint") }}</p>
@@ -166,7 +225,22 @@ async function save() {
           {{ t("macros.valueSetAdd") }}
         </button>
 
-        <div class="preview-frame">
+        </template>
+        <div v-if="macros.saveTarget" class="compare">
+          <div class="compare-col">
+            <span class="compare-label">{{ t("macros.compareSaved") }}</span>
+            <div class="preview-frame small">
+              <MacroPreview :macro="macros.saveTarget" :width="214" :height="110" />
+            </div>
+          </div>
+          <div class="compare-col">
+            <span class="compare-label current">{{ t("macros.compareCurrent", { key: macros.saveVariant }) }}</span>
+            <div class="preview-frame small current">
+              <MacroPreview v-if="macros.savePreview" :macro="macros.savePreview" :width="214" :height="110" />
+            </div>
+          </div>
+        </div>
+        <div v-else class="preview-frame">
           <MacroPreview
             v-if="macros.savePreview"
             :macro="macros.savePreview"
@@ -185,9 +259,29 @@ async function save() {
         <button class="btn secondary" @click="macros.cancelSave()">
           {{ t("macros.cancel") }}
         </button>
-        <button class="btn primary" :disabled="!macros.canSave" @click="save">
-          {{ macros.saving ? t("macros.saving") : t("macros.save") }}
+        <button class="btn primary" :disabled="!macros.canSave" @click="save()">
+          {{ saveLabel }}
         </button>
+      </div>
+
+      <!-- 上書き確認 (登録済みのバリアントを選んで保存したとき) -->
+      <div v-if="macros.overwriteAsk" class="confirm-scrim">
+        <div class="confirm">
+          <div class="titlebar">
+            <span class="title">{{ t("macros.overwriteTitle", { key: macros.saveVariant }) }}</span>
+          </div>
+          <div class="confirm-body">
+            <TriangleAlert :size="14" class="warn-icon" />
+            <span>{{ t("macros.overwriteBody", { name: macros.saveTarget?.name_ja || macros.saveTarget?.name || "", key: macros.saveVariant, count: macros.saveEntityCount }) }}</span>
+          </div>
+          <div class="footer">
+            <button v-if="macros.saveTarget && macros.saveVariantChips.some((c) => c.state === 'free')" class="btn secondary" @click="saveToFree">
+              {{ t("macros.saveToFree", { key: macros.saveVariantChips.find((c) => c.state === "free")?.key ?? "" }) }}
+            </button>
+            <button class="btn primary" @click="save(true)">{{ t("macros.overwrite") }}</button>
+            <button class="btn secondary" @click="macros.overwriteAsk = false">{{ t("macros.cancel") }}</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -274,13 +368,88 @@ async function save() {
   border: 1px solid var(--acad-blue);
   color: var(--ui-text);
 }
-.chip.add {
-  background: transparent;
-  border: 1px dashed var(--ribbon-line);
-  color: var(--ui-muted);
-  cursor: default;
-  opacity: 0.6;
+/* DSバリアントチップ 登録済/選択/空き (.pen dfMl4 / h7DZn / UhfCL) */
+.chip.variant {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  padding: 3px 8px;
+  cursor: pointer;
 }
+.chip.variant.saved {
+  background: var(--card-bg);
+  border: 1px solid var(--ribbon-line);
+  color: var(--ui-muted);
+  font-weight: 400;
+}
+.chip.variant.selected {
+  background: var(--sel-blue);
+  border: 1px solid var(--acad-blue);
+  color: var(--ui-text);
+}
+.chip.variant.free {
+  background: var(--input-bg);
+  border: 1px solid var(--ribbon-line);
+  color: var(--ui-placeholder);
+  font-weight: 400;
+}
+.input.target { border-color: var(--acad-blue); }
+.matches {
+  list-style: none;
+  margin: -4px 0 0 84px;
+  padding: 4px 0;
+  background: var(--card-bg);
+  border: 1px solid var(--ribbon-line);
+  border-radius: 4px;
+}
+.match {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.match:hover, .match:focus-visible { background: var(--sel-blue); outline: none; }
+.match-name { font-size: 11px; font-weight: 600; color: var(--ui-text); }
+.match-note { font-size: 10px; color: var(--ui-muted); }
+.compare { display: flex; gap: 8px; }
+.compare-col { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.compare-label { font-size: 10px; font-weight: 600; color: var(--ui-muted); }
+.compare-label.current { color: var(--acad-blue); }
+.preview-frame.small { height: 110px; }
+.preview-frame.current { border-color: var(--acad-blue); }
+.dialog { position: relative; }
+.confirm-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.confirm {
+  width: min(420px, 90%);
+  background: var(--ribbon-bg);
+  border: 1px solid var(--ribbon-line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-panel-lg);
+  overflow: hidden;
+}
+.confirm-body {
+  display: flex;
+  gap: 8px;
+  margin: 14px;
+  padding: 8px 10px;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-fg);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--ui-text);
+}
+.warn-icon { color: var(--warn-fg); flex: none; }
 .section {
   margin: 6px 0 0;
   font-size: 11px;

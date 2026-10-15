@@ -57,8 +57,12 @@ function plcModuleSymbol(id: string): SymbolDef | null {
   const input = id.startsWith("plc_di_");
   const output = id.startsWith("plc_do_");
   if (!input && !output) return null;
-  const n = parseCount(id.slice("plc_di_".length), PLC_POINT_MAX);
-  if (n === null) return null;
+  // 分割片 `plc_di_{n}p_s{start}` は点番号を start から振る (Rust側と同じ規則)
+  const rest = id.slice("plc_di_".length);
+  const split = /^([0-9]+)p_s([0-9]+)$/.exec(rest);
+  const n = split ? Number(split[1]) : parseCount(rest, PLC_POINT_MAX);
+  const start = split ? Number(split[2]) : 1;
+  if (n === null || n < 1 || n > PLC_POINT_MAX || start < 1 || start + n - 1 > PLC_POINT_MAX) return null;
   const pitch = PLC_POINT_PITCH_MM;
   const at = (i: number) => (i - (n - 1) / 2) * pitch;
   const top = at(0) - pitch;
@@ -70,9 +74,10 @@ function plcModuleSymbol(id: string): SymbolDef | null {
   const pins: PinDef[] = [];
   for (let i = 0; i < n; i++) {
     const y = at(i);
-    primitives.push({ type: "text", at: p(-2.5, y + 1), text: String(i + 1), height: 2 });
+    const no = String(start + i);
+    primitives.push({ type: "text", at: p(-2.5, y + 1), text: no, height: 2 });
     primitives.push({ type: "line", pts: [p(-7.5, y), p(-5, y)] });
-    pins.push({ number: String(i + 1), name: "", at: p(-7.5, y), dir: "left" });
+    pins.push({ number: no, name: "", at: p(-7.5, y), dir: "left" });
   }
   return {
     id,

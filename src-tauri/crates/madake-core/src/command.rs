@@ -61,6 +61,29 @@ pub enum Command {
         sheet_id: SheetId,
         entity: Entity,
     },
+    /// 盤のフットプリントを揃える (M4 §8。基準=`ids`の先頭)。上下方向の揃えでは、DINレールに
+    /// 乗っている部品は動かさない (レールから外さない)。逆コマンドは動かす前の位置へ戻す。
+    AlignFootprints {
+        sheet_id: SheetId,
+        ids: Vec<EntityId>,
+        mode: crate::panel::AlignMode,
+    },
+    /// 盤のフットプリントを等間隔に並べる (M4 §8)。`pitch`を指定すれば先頭からその中心間隔で、
+    /// 省略すれば両端の部品はそのままに間を等分する。上下方向ではレールに乗った部品は動かさない。
+    DistributeFootprints {
+        sheet_id: SheetId,
+        ids: Vec<EntityId>,
+        axis: crate::model::DimAxis,
+        #[serde(default)]
+        pitch: Option<f64>,
+    },
+    /// 多芯ケーブルを置く (M4 §5)。定義線 (`cable.points`) が横切った配線を、始点に近い順に
+    /// 芯 "1", "2", … として割り当てる (芯の色=配線の線色)。`cable.cores`は無視して作り直す。
+    /// `core_count`が0なら横切った本数 (最低1) にする。逆コマンドは削除。
+    AddCable {
+        sheet_id: SheetId,
+        cable: crate::model::Cable,
+    },
     /// idで既存エンティティを完全置換。
     UpdateEntity {
         sheet_id: SheetId,
@@ -82,6 +105,12 @@ pub enum Command {
     /// PLC I/O割付表の置換 (プロジェクト単位)。逆コマンドは置換前のリスト。
     SetPlcAssignments {
         assignments: Vec<PlcAssignment>,
+    },
+    /// PLC I/O図面の生成設定をプロジェクトに保存する (`None`で保存を消す)。生成ダイアログの
+    /// 「この設定をプロジェクトに保存」。逆コマンドは保存前の設定。
+    SetPlcSheetOptions {
+        #[serde(default)]
+        options: Option<crate::plc::PlcSheetOptions>,
     },
     /// 図枠テンプレートの差し替え (プロジェクト単位。M4仕様 §9)。全シートの図枠・
     /// 表題欄・改訂欄が一括で変わる。nullで既定 (`jis-a3`) へ戻す。
@@ -266,6 +295,8 @@ pub enum PatchOp {
     PlcAssignmentsReplaced { assignments: Vec<PlcAssignment> },
     /// 図枠テンプレートが差し替わった (全シートの図枠を描き直す)。
     FrameTemplateChanged { frame_template: Option<String> },
+    /// PLC I/O図面の生成設定 (プロジェクトに保存したもの) が変わった。
+    PlcSheetOptionsChanged { options: Option<crate::plc::PlcSheetOptions> },
     /// プロジェクト名・番号が変わった (G16)。表題欄側の変更は各シートの
     /// [`PatchOp::SheetMetaUpdated`]で別に届く。
     ProjectMetaChanged { name: String, no: Option<String> },
@@ -546,6 +577,28 @@ impl Engine {
     }
 
     /// コマンドを適用し、(生成patch, 逆コマンド列) を返す。履歴には触れない。
+    /// フットプリントを新しい左上角へ動かす (揃え・等間隔の共通部分)。逆コマンドは元の位置への
+    /// `UpdateEntity`。動かないもの (移動量0) は触らない。
+    fn apply_footprint_moves(
+        &mut self,
+        sheet_id: SheetId,
+        moves: Vec<(EntityId, crate::geometry::Point)>,
+    ) -> Result<(Vec<PatchOp>, Vec<Command>)> {
+        let sheet = self.project.sheet_mut(sheet_id).ok_or(CoreError::SheetNotFound(sheet_id))?;
+        let mut ops = Vec::new();
+        let mut inverse = Vec::new();
+        for (id, at) in moves {
+            let Some(Entity::Footprint(fp)) = sheet.entities.get_mut(&id) else { continue };
+            if (fp.at.x - at.x).abs() < 1e-9 && (fp.at.y - at.y).abs() < 1e-9 {
+                continue;
+            }
+            inverse.push(Command::UpdateEntity { sheet_id, entity: Entity::Footprint(fp.clone()) });
+            fp.at = at;
+            ops.push(PatchOp::EntityUpserted { sheet_id, entity: Entity::Footprint(fp.clone()) });
+        }
+        Ok((ops, inverse))
+    }
+
     fn apply(&mut self, cmd: &Command) -> Result<(Vec<PatchOp>, Vec<Command>)> {
         match cmd {
             Command::AddSheet {
@@ -720,6 +773,45 @@ impl Engine {
                     }],
                 ))
             }
+            Command::AlignFootprints { sheet_id, ids, mode } => {
+                let sheet = self.project.sheet(*sheet_id).ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let moves = crate::panel::align_moves(sheet, ids, *mode)?;
+                self.apply_footprint_moves(*sheet_id, moves)
+            }
+            Command::DistributeFootprints { sheet_id, ids, axis, pitch } => {
+                let sheet = self.project.sheet(*sheet_id).ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let moves = crate::panel::distribute_moves(sheet, ids, *axis, *pitch)?;
+                self.apply_footprint_moves(*sheet_id, moves)
+            }
+            Command::AddCable { sheet_id, cable } => {
+                let sheet = self
+                    .project
+                    .sheet(*sheet_id)
+                    .ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let mut cable = cable.clone();
+                let [a, b] = cable.points.as_slice() else {
+                    return Err(CoreError::InvalidCommand(
+                        "a cable definition line needs exactly two points".into(),
+                    ));
+                };
+                let crossed = crate::cable::crossed_wires(sheet, *a, *b);
+                cable.cores = crossed
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, (wire, color))| crate::model::CableCore {
+                        core: (i + 1).to_string(),
+                        color,
+                        wire: Some(wire),
+                    })
+                    .collect();
+                if cable.core_count == 0 {
+                    cable.core_count = cable.cores.len().max(1);
+                }
+                self.apply(&Command::AddEntity {
+                    sheet_id: *sheet_id,
+                    entity: Entity::Cable(cable),
+                })
+            }
             Command::UpdateEntity { sheet_id, entity } => {
                 validate_entity(
                     entity,
@@ -825,6 +917,14 @@ impl Engine {
                         assignments: assignments.clone(),
                     }],
                     vec![Command::SetPlcAssignments { assignments: old }],
+                ))
+            }
+            Command::SetPlcSheetOptions { options } => {
+                let old = self.project.plc_generate.clone();
+                self.project.plc_generate = options.clone();
+                Ok((
+                    vec![PatchOp::PlcSheetOptionsChanged { options: options.clone() }],
+                    vec![Command::SetPlcSheetOptions { options: old }],
                 ))
             }
             Command::SetFrameTemplate { frame_template } => {
@@ -1659,7 +1759,53 @@ fn validate_symbol_id(id: &str) -> Result<()> {
 }
 
 fn validate_entity(entity: &Entity, sheet: &Sheet) -> Result<()> {
+    let is_footprint = |id: &EntityId| matches!(sheet.entities.get(id), Some(Entity::Footprint(_)));
     match entity {
+        Entity::Nameplate(n) => {
+            if !(n.w > 0.0 && n.h > 0.0 && n.text_mm > 0.0) {
+                return Err(CoreError::InvalidCommand(
+                    "a nameplate needs a positive width, height and text height".into(),
+                ));
+            }
+            if let Some(fp) = n.footprint {
+                if !is_footprint(&fp) {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "nameplate footprint is not on this sheet: {fp}"
+                    )));
+                }
+            }
+        }
+        Entity::Dimension(d) => {
+            for anchor in [&d.a, &d.b] {
+                if let Some(id) = anchor.entity() {
+                    if !is_footprint(&id) {
+                        return Err(CoreError::InvalidCommand(format!(
+                            "dimension end points at a footprint that is not on this sheet: {id}"
+                        )));
+                    }
+                }
+            }
+        }
+        Entity::Cable(c) => {
+            if c.points.len() != 2 {
+                return Err(CoreError::InvalidCommand(
+                    "a cable definition line needs exactly two points".into(),
+                ));
+            }
+            if c.core_count == 0 {
+                return Err(CoreError::InvalidCommand("a cable needs at least one core".into()));
+            }
+            for core in &c.cores {
+                if let Some(w) = core.wire {
+                    if !matches!(sheet.entities.get(&w), Some(Entity::Wire(_))) {
+                        return Err(CoreError::InvalidCommand(format!(
+                            "cable core {} points at a wire that is not on this sheet: {w}",
+                            core.core
+                        )));
+                    }
+                }
+            }
+        }
         Entity::Symbol(s) if s.symbol_id == crate::block::BLOCK_SYMBOL_ID => {
             crate::block::parse_block_spec(&s.attrs).map_err(CoreError::InvalidCommand)?;
         }
@@ -2480,6 +2626,24 @@ mod tests {
         let cmd: Command = serde_json::from_str(&json).unwrap();
         engine.execute(cmd).unwrap();
         assert_eq!(engine.project().sheets[0].annotation_text_mm, Some(1.4));
+    }
+
+    /// SetPlcSheetOptions saves the PLC I/O drawing settings with the project, and undo puts back what was saved before.
+    /// SetPlcSheetOptionsはPLC I/O図面の生成設定をプロジェクトに保存し、undoで保存前の状態に戻る。
+    #[test]
+    fn set_plc_sheet_options_saves_the_settings_and_undo_restores_them() {
+        let mut engine = Engine::new(Project::new("t"));
+        let options = crate::plc::PlcSheetOptions {
+            ladder_style: crate::plc::LadderStyle::HorizontalBus,
+            ..Default::default()
+        };
+        let patch = engine
+            .execute(Command::SetPlcSheetOptions { options: Some(options.clone()) })
+            .unwrap();
+        assert!(matches!(patch.ops[0], PatchOp::PlcSheetOptionsChanged { .. }));
+        assert_eq!(engine.project().plc_generate, Some(options));
+        engine.undo().unwrap();
+        assert_eq!(engine.project().plc_generate, None);
     }
 
     /// SetPlcAssignments replaces the whole PLC I/O assignment table of the project; undo restores the previous table.

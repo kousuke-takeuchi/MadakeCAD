@@ -98,6 +98,7 @@ export function placeMacroEntities(entities: Entity[], at: Point, rotation: numb
       case "wire":
       case "harness":
       case "shape":
+      case "cable":
         return { ...e, points: e.points.map(map) };
       case "net_label":
       case "text":
@@ -111,6 +112,8 @@ export function placeMacroEntities(entities: Entity[], at: Point, rotation: numb
       case "duct":
       case "footprint":
       case "panel_legend":
+      case "nameplate":
+      case "dimension":
         return e;
     }
   });
