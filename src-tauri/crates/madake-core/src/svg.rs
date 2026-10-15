@@ -64,6 +64,8 @@ const MATE_LINE_DASH: (f64, f64) = (1.5, 1.0);
 const MATE_LINE_STROKE: f64 = 0.25;
 /// 引き出し線 (G20) の線幅 (mm)。ハーネス境界の細線と同じ太さ。
 const LEADER_STROKE: f64 = 0.25;
+/// ケーブル定義線とシールド楕円の線幅 mm。
+const CABLE_STROKE: f64 = 0.35;
 /// 丸印の半径 (mm)。配線の分岐点 (ジャンクション) と、引き出し線 (G20) の対象端に
 /// 同じ大きさで描く。図面上で「ここに繋がっている」を表す印は1種類だけにする。
 pub const JUNCTION_DOT_R: f64 = 0.6;
@@ -1365,6 +1367,21 @@ fn sheet_to_svg_with_xrefs(
             | Entity::Footprint(_)
             | Entity::PanelLegend(_)
             | Entity::WireLegend(_) => {}
+            // 多芯ケーブル: 定義線 (配線を斜めに横切る線)・シールドの楕円・注記
+            Entity::Cable(c) => {
+                if let [a, b, ..] = c.points.as_slice() {
+                    line_el(&mut out, a.x, a.y, b.x, b.y, CABLE_STROKE, "#000");
+                    if let Some((center, rx, ry, angle)) = crate::cable::shield_ellipse(c) {
+                        let _ = write!(
+                            out,
+                            "<ellipse cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\" transform=\"rotate({} {} {})\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+                            n(center.x), n(center.y), n(rx), n(ry), n(angle), n(center.x), n(center.y), n(CABLE_STROKE)
+                        );
+                    }
+                    let top = if a.y <= b.y { a } else { b };
+                    text_el(&mut out, top.x + 1.5, top.y - 1.5, 2.5, "#000", "start", &crate::cable::cable_label(c));
+                }
+            }
         }
     }
     render_wire_numbers(&mut out, sheet, symbols);

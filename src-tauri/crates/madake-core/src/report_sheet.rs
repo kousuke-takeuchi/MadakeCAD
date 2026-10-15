@@ -100,6 +100,8 @@ pub enum ReportKind {
     PlcIo,
     /// 盤内部品配置表 (盤レイアウトシートのフットプリント一覧)。
     PanelPlacement,
+    /// ケーブル一覧 (多芯ケーブル単位: 型番・芯数・長さ・両端の機器・使用芯/予備芯)。
+    CableList,
 }
 
 impl ReportKind {
@@ -113,6 +115,7 @@ impl ReportKind {
             ReportKind::Xref => "クロスリファレンス表",
             ReportKind::PlcIo => "PLC I/Oレポート",
             ReportKind::PanelPlacement => "盤内部品配置表",
+            ReportKind::CableList => "ケーブル一覧",
         }
     }
 
@@ -134,6 +137,7 @@ impl ReportKind {
             ReportKind::Xref => xref_table_sheet_svg(project),
             ReportKind::PlcIo => plc_io_sheet_svg(project),
             ReportKind::PanelPlacement => panel_placement_sheet_svg(project),
+            ReportKind::CableList => cable_list_sheet_svg(project),
         }
     }
 }
@@ -239,6 +243,7 @@ pub fn report_csv_with(
         (ReportKind::Xref, _) => Ok(crate::xref::xref_table_csv(project)),
         (ReportKind::PlcIo, _) => Ok(crate::plc::plc_io_csv(project)),
         (ReportKind::PanelPlacement, _) => Ok(panel_placement_csv(project)),
+        (ReportKind::CableList, _) => Ok(crate::cable::cable_list_csv(project)),
         (ReportKind::TerminalChart, None) => {
             Ok(crate::terminal_chart::terminal_charts_csv(project))
         }
@@ -611,6 +616,18 @@ pub fn bom_sheet_svg_with(project: &Project, catalog: &BomCatalog) -> Vec<String
         ReportKind::Bom.title(),
         &crate::reports::BOM_COLUMNS,
         &crate::reports::bom_rows_with(project, catalog),
+        &meta,
+    )
+}
+
+/// ケーブル一覧の図面ページ。内容はCSV ([`crate::cable::cable_list_csv`]) と同一。
+pub fn cable_list_sheet_svg(project: &Project) -> Vec<String> {
+    let meta = ReportMeta::from_project(project)
+        .with_col_ratios(&[8.0, 14.0, 6.0, 7.0, 7.0, 14.0, 14.0, 6.0, 6.0, 9.0, 9.0]);
+    report_sheet_svg(
+        ReportKind::CableList.title(),
+        &crate::cable::CABLE_LIST_COLUMNS,
+        &crate::cable::cable_list_rows(project),
         &meta,
     )
 }

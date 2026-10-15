@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2641 specification clauses** across 6 areas.
+**2659 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -29,6 +29,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block cannot exceed the pin limit, so a runaway pin table fails loudly. <sub>`too_many_pins_are_rejected`</sub>
 - The attribute slots (tag, part number, function, rating) stack at the centre of the box. <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
 - Rotating or mirroring a block moves its pins with the body but never renumbers them. <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
+
+### cable
+
+- Placing a cable assigns the wires its definition line crosses as cores 1, 2, 3 in order from the line's start, each with the wire's colour; one undo removes the cable. <sub>`placing_a_cable_assigns_the_crossed_wires_as_cores_in_order`</sub>
+- A cable placed with no core count takes as many cores as wires it crosses; wires the line does not reach are left out. <sub>`a_cable_without_a_core_count_takes_the_number_of_crossed_wires`</sub>
+- The label next to a cable reads designator, part number, cores times gauge and length. <sub>`the_cable_label_reads_designator_part_cores_gauge_and_length`</sub>
+- Assigning more wires than the cable has cores is an ERC error naming the cable. <sub>`more_assigned_wires_than_cores_is_an_erc_error`</sub>
+- The cable list shows each cable with its part, cores, gauge, length, the devices at both ends of its wires, used and spare cores, shield and sheet. <sub>`the_cable_list_shows_ends_used_and_spare_cores`</sub>
+- In the BOM, cables are counted per part number: by total length when every cable has a length, otherwise by the number of cables; a cable without a part number is left out. <sub>`the_bom_counts_cables_per_part_number`</sub>
+- The printed sheet draws the cable's definition line, the shield ellipse when it has a shield, and the label. <sub>`the_printed_sheet_draws_the_definition_line_shield_and_label`</sub>
+- A cable whose definition line does not have two points, that has no cores, or whose core points at a wire not on the sheet is refused. <sub>`a_malformed_cable_is_refused`</sub>
 
 ### Command engine (undo/redo)
 
@@ -244,7 +255,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 14, the version that saves the PLC I/O drawing settings with the project. <sub>`the_current_format_version_is_fourteen`</sub>
+- The current file format version is 15, the version that added multi-core cables. <sub>`the_current_format_version_is_fifteen`</sub>
+- A cable with its definition line, core assignments, shield and length survives a save and reload unchanged. <sub>`a_cable_round_trips_through_a_saved_file`</sub>
 - A version-13 file, written before PLC drawing settings could be saved, opens with no saved settings. <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - A project file saved before tidy variants existed opens with every sheet an ordinary sheet (no variant mark), and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
 - A project file saved before the wire part-number legend block existed opens with no legend blocks at all, and is brought up to the current format version. <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
@@ -1647,6 +1659,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake terminals lists the terminal blocks of the whole project, or of one sheet with --sheet. <sub>`terminals_lists_blocks_and_forwards_sheet`</sub>
 - madake export terminal-chart writes the whole project's chart, choosing CSV from the .csv extension. <sub>`export_terminal_chart_defaults_to_csv_for_the_whole_project`</sub>
 - A .pdf output path selects the PDF (framed drawing sheet) form of a report without asking for --format. <sub>`export_report_picks_pdf_from_the_extension`</sub>
+- `madake export cable-list` writes the cable list report (CSV by default). <sub>`export_cable_list_writes_the_cable_list_report`</sub>
 - --format wins over the file extension. <sub>`export_report_format_option_overrides_the_extension`</sub>
 - --terminal takes a reference designator (TB1) and looks its entity id up in the terminal list. <sub>`export_terminal_diagram_resolves_a_reference_designator`</sub>
 - A --terminal value spelled as an entity id is sent as-is, with no lookup. <sub>`export_terminal_chart_accepts_an_entity_id_directly`</sub>
@@ -1783,6 +1796,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - warns the same way when a wired pin is deleted <sub>`warning about wired pins`</sub>
 - stays quiet when the deleted pin had no wire on it <sub>`warning about wired pins`</sub>
 - still allows applying the edit, warning and all <sub>`warning about wired pins`</sub>
+
+### cable
+
+- labels a cable with designator, part, cores times gauge and length, skipping empty items <sub>`多芯ケーブル`</sub>
+- draws the shield as an ellipse around the definition line, a little longer than it <sub>`多芯ケーブル`</sub>
+- numbers a new cable after the W numbers of the cables and harnesses on the sheet <sub>`多芯ケーブル`</sub>
+- turns a drag into an add_cable command with no core count, and a mere click into nothing <sub>`多芯ケーブル`</sub>
+- is picked by clicking near its definition line <sub>`多芯ケーブル`</sub>
 
 ### deviceTree
 
@@ -2415,6 +2436,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - a hand-edited length becomes an update whose length source is manual <sub>`wireUpdateCommand`</sub>
 - overwriting a FreeCAD-measured length by hand is flagged so the panel can warn <sub>`wireUpdateCommand`</sub>
 - changing only colour or gauge keeps the FreeCAD length source <sub>`wireUpdateCommand`</sub>
+- writes part, cores, gauge, shield and length in one update and keeps the core assignments <sub>`cableUpdateCommand`</sub>
+- refuses a core count below one or a gauge or length that is not a number <sub>`cableUpdateCommand`</sub>
+- sends nothing when nothing changed <sub>`cableUpdateCommand`</sub>
 
 ### ribbonLayout
 
@@ -2818,7 +2842,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Reports (BOM / wire list)
 
-- offers the seven report kinds of the reports tab <sub>`report generation dialog store`</sub>
+- offers the eight report kinds of the reports tab <sub>`report generation dialog store`</sub>
 - opens a project-wide report as a CSV export <sub>`report generation dialog store`</sub>
 - switches the same report to a framed drawing-sheet PDF <sub>`report generation dialog store`</sub>
 - lets the terminal chart target one terminal block as well as the whole project <sub>`report generation dialog store`</sub>

@@ -79,6 +79,9 @@ export function entityBounds(entity: Entity, defs: Map<string, SymbolDef>): Rect
       return harnessBounds(entity.points);
     case "shape":
       return shapeBounds(entity);
+    case "cable":
+      // Rust側 leader.rs と同じ: 定義線の2点の外接矩形
+      return boundsOfPoints(entity.points);
     case "wire_legend":
       // 電線品番凡例ブロックの外形はシート全体の配線から決まる (wireLegend.ts の legendRect)。
       // ここはエンティティ単体からしか外形を求めないので、引き出し線の対象にはしない

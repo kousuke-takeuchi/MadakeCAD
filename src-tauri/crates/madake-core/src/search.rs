@@ -193,6 +193,15 @@ pub fn search_project(project: &Project, query: &str, kinds: &[SearchKind]) -> V
                 | Entity::Footprint(_)
                 | Entity::PanelLegend(_)
                 | Entity::WireLegend(_) => {}
+                Entity::Cable(c) => {
+                    let at = c.points.first().copied().unwrap_or_default();
+                    if want(SearchKind::Reference) && matches(&c.reference, &needle) {
+                        push(SearchKind::Reference, &c.reference, &c.part_no, c.id, at);
+                    }
+                    if want(SearchKind::Value) && matches(&c.part_no, &needle) {
+                        push(SearchKind::Value, &c.part_no, &c.reference, c.id, at);
+                    }
+                }
             }
         }
     }

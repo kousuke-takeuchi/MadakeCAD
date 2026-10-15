@@ -28,6 +28,7 @@ import type { EditorController } from "../tools/controller";
 import {
   annotationTextCommand,
   harnessUpdateCommand,
+  cableUpdateCommand,
   symbolAttrs,
   wireNumberCommand,
   wireUpdateCommand,
@@ -102,6 +103,12 @@ const buf = reactive({
   railX2: "",
   /** シートの注記文字高 (mm。G20)。空欄 = 既定 (2.0mm)。数値入力欄なので数値も入る。 */
   annotationText: "" as string | number,
+  /** 多芯ケーブル (M4 §5): 芯数・線径・シールド・接地・長さ (入力欄の文字列)。 */
+  cableCores: "" as string | number,
+  cableSq: "" as string | number,
+  cableShield: false,
+  cableGrounded: false,
+  cableLength: "" as string | number,
 });
 
 /**
@@ -174,6 +181,14 @@ watch(
     } else if (e.kind === "harness") {
       buf.name = e.name ?? "";
       buf.note = e.note ?? "";
+    } else if (e.kind === "cable") {
+      buf.reference = e.reference;
+      buf.part_no = e.part_no;
+      buf.cableCores = String(e.core_count);
+      buf.cableSq = e.sq > 0 ? String(e.sq) : "";
+      buf.cableShield = e.shield != null;
+      buf.cableGrounded = e.shield?.grounded ?? false;
+      buf.cableLength = e.length_m != null ? String(e.length_m) : "";
     } else if (e.kind === "shape") {
       buf.shapeStroke = e.stroke;
       buf.shapeWidth = e.stroke_width_mm;
@@ -329,6 +344,24 @@ async function apply() {
       const tag = tagDirs.find(([v]) => v === buf.tag)?.[1] ?? "netLabel.tagNone";
       ui.log(t("netLabel.tagChangedLog", { name: buf.name.trim(), tag: t(tag) }));
     }
+  } else if (e.kind === "cable") {
+    // ケーブルは型番・芯数・線径・シールド・長さを書き換える (芯線割当は定義線が決めたまま)
+    const command = cableUpdateCommand(sheet.id, e, {
+      reference: buf.reference,
+      part_no: buf.part_no,
+      core_count: String(buf.cableCores),
+      sq: String(buf.cableSq),
+      shield: buf.cableShield,
+      grounded: buf.cableGrounded,
+      length_m: String(buf.cableLength),
+    });
+    if (command) {
+      await store.execute(command);
+      ui.log(t("cable.updatedLog", { reference: buf.reference.trim() }));
+    } else {
+      ui.log(t("cable.invalidLog"));
+    }
+    return;
   } else if (e.kind === "harness") {
     // ハーネスは名前・備考だけを書き換える (囲みの形はキャンバス側の操作で変える)
     const command = harnessUpdateCommand(sheet.id, e, buf.name, buf.note);
@@ -588,6 +621,58 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
           />
         </span>
       </div>
+    </template>
+
+    <!-- 多芯ケーブル (M4 §5、.pen「M4残りデザイン④」): 型番・芯数・線径・シールド・長さと芯線割当 -->
+    <template v-else-if="selected?.kind === 'cable'">
+      <div class="sec"><ChevronDown :size="10" /> {{ t("cable.kindLabel") }}</div>
+      <div class="prow">
+        <span class="plabel">{{ t("cable.referenceRow") }}</span>
+        <span class="pvalue"><input v-model="buf.reference" class="bare mono" spellcheck="false" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("cable.partRow") }}</span>
+        <span class="pvalue"><input v-model="buf.part_no" class="bare mono" spellcheck="false" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("cable.coresRow") }}</span>
+        <span class="pvalue"><input v-model="buf.cableCores" class="bare mono" type="number" min="1" step="1" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("cable.sqRow") }}</span>
+        <span class="pvalue"><input v-model="buf.cableSq" class="bare mono" type="number" min="0" step="0.25" placeholder="—" @keyup.enter="apply" /></span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("cable.shieldRow") }}</span>
+        <span class="pvalue">
+          <label><input v-model="buf.cableShield" type="checkbox" /> {{ t("cable.shieldOn") }}</label>
+          <label v-if="buf.cableShield"><input v-model="buf.cableGrounded" type="checkbox" /> {{ t("cable.grounded") }}</label>
+        </span>
+      </div>
+      <div class="prow">
+        <span class="plabel">{{ t("cable.lengthRow") }}</span>
+        <span class="pvalue"><input v-model="buf.cableLength" class="bare mono" type="number" min="0" step="0.1" placeholder="—" @keyup.enter="apply" /></span>
+      </div>
+      <div class="sec"><ChevronDown :size="10" /> {{ t("cable.coresSection") }}</div>
+      <table class="cores">
+        <thead>
+          <tr><th>{{ t("cable.colCore") }}</th><th>{{ t("cable.colColor") }}</th><th>{{ t("cable.colWire") }}</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="c in selected.cores" :key="c.core">
+            <td class="mono">{{ c.core }}</td>
+            <td>{{ c.color }}</td>
+            <td class="mono">{{ c.wire ? t("cable.assigned") : t("cable.spare") }}</td>
+          </tr>
+          <tr v-for="n in Math.max(0, selected.core_count - selected.cores.length)" :key="`spare-${n}`" class="spare">
+            <td class="mono">{{ selected.cores.length + n }}</td>
+            <td>—</td>
+            <td>{{ t("cable.spare") }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-if="selected.cores.length > selected.core_count" class="cable-hint warn">{{ t("cable.overflowHint") }}</p>
+      <p class="cable-hint">{{ t("cable.hint") }}</p>
     </template>
 
     <!-- 図形 (G10): 電気的な意味を持たない作図要素。見た目だけを編集する -->
@@ -1009,4 +1094,10 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
   font-size: 12px;
   cursor: pointer;
 }
+.cores { width: 100%; border-collapse: collapse; font-size: 10px; color: var(--ui-text); }
+.cores th { text-align: left; font-weight: 600; color: var(--ui-muted); padding: 2px 10px; border-bottom: 1px solid var(--ribbon-line); }
+.cores td { padding: 2px 10px; border-bottom: 1px solid var(--ribbon-line); }
+.cores tr.spare td { color: var(--ui-placeholder); }
+.cable-hint { margin: 0; padding: 4px 10px; font-size: 10px; line-height: 1.4; color: var(--ui-muted); }
+.cable-hint.warn { color: var(--err-fg); }
 </style>

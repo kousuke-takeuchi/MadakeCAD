@@ -61,6 +61,13 @@ pub enum Command {
         sheet_id: SheetId,
         entity: Entity,
     },
+    /// 多芯ケーブルを置く (M4 §5)。定義線 (`cable.points`) が横切った配線を、始点に近い順に
+    /// 芯 "1", "2", … として割り当てる (芯の色=配線の線色)。`cable.cores`は無視して作り直す。
+    /// `core_count`が0なら横切った本数 (最低1) にする。逆コマンドは削除。
+    AddCable {
+        sheet_id: SheetId,
+        cable: crate::model::Cable,
+    },
     /// idで既存エンティティを完全置換。
     UpdateEntity {
         sheet_id: SheetId,
@@ -727,6 +734,35 @@ impl Engine {
                         ids: vec![id],
                     }],
                 ))
+            }
+            Command::AddCable { sheet_id, cable } => {
+                let sheet = self
+                    .project
+                    .sheet(*sheet_id)
+                    .ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let mut cable = cable.clone();
+                let [a, b] = cable.points.as_slice() else {
+                    return Err(CoreError::InvalidCommand(
+                        "a cable definition line needs exactly two points".into(),
+                    ));
+                };
+                let crossed = crate::cable::crossed_wires(sheet, *a, *b);
+                cable.cores = crossed
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, (wire, color))| crate::model::CableCore {
+                        core: (i + 1).to_string(),
+                        color,
+                        wire: Some(wire),
+                    })
+                    .collect();
+                if cable.core_count == 0 {
+                    cable.core_count = cable.cores.len().max(1);
+                }
+                self.apply(&Command::AddEntity {
+                    sheet_id: *sheet_id,
+                    entity: Entity::Cable(cable),
+                })
             }
             Command::UpdateEntity { sheet_id, entity } => {
                 validate_entity(
@@ -1676,6 +1712,26 @@ fn validate_symbol_id(id: &str) -> Result<()> {
 
 fn validate_entity(entity: &Entity, sheet: &Sheet) -> Result<()> {
     match entity {
+        Entity::Cable(c) => {
+            if c.points.len() != 2 {
+                return Err(CoreError::InvalidCommand(
+                    "a cable definition line needs exactly two points".into(),
+                ));
+            }
+            if c.core_count == 0 {
+                return Err(CoreError::InvalidCommand("a cable needs at least one core".into()));
+            }
+            for core in &c.cores {
+                if let Some(w) = core.wire {
+                    if !matches!(sheet.entities.get(&w), Some(Entity::Wire(_))) {
+                        return Err(CoreError::InvalidCommand(format!(
+                            "cable core {} points at a wire that is not on this sheet: {w}",
+                            core.core
+                        )));
+                    }
+                }
+            }
+        }
         Entity::Symbol(s) if s.symbol_id == crate::block::BLOCK_SYMBOL_ID => {
             crate::block::parse_block_spec(&s.attrs).map_err(CoreError::InvalidCommand)?;
         }

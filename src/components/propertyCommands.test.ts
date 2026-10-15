@@ -5,6 +5,7 @@ import type { Entity, Sheet, SymbolInstance } from "../ipc";
 import {
   annotationTextCommand,
   harnessUpdateCommand,
+  cableUpdateCommand,
   symbolAttrs,
   wireNumberCommand,
   wireUpdateCommand,
@@ -223,5 +224,42 @@ describe("wireUpdateCommand", () => {
     expect(entity.color).toBe("red");
     expect(entity.length_source).toBe("freecad");
     expect(result.overwroteMeasured).toBe(false);
+  });
+});
+
+describe("cableUpdateCommand", () => {
+  const cable = (): Entity => ({
+    kind: "cable",
+    id: "c1",
+    reference: "W1",
+    part_no: "",
+    core_count: 3,
+    sq: 0,
+    points: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+    cores: [{ core: "1", color: "black", wire: "w1" }],
+    shield: null,
+    length_m: null,
+  });
+  const patch = { reference: "W1", part_no: "SAMPLE-CBL", core_count: "4", sq: "1.25", shield: true, grounded: true, length_m: "12.5" };
+
+  // ja: ケーブルのプロパティは型番・芯数・線径・シールド・長さを1回のupdate_entityで書き、芯線割当はそのまま残す
+  it("writes part, cores, gauge, shield and length in one update and keeps the core assignments", () => {
+    const command = cableUpdateCommand("s1", cable(), patch);
+    expect(command?.type).toBe("update_entity");
+    const e = (command as { entity: Entity }).entity;
+    expect(e).toMatchObject({ part_no: "SAMPLE-CBL", core_count: 4, sq: 1.25, shield: { grounded: true }, length_m: 12.5 });
+    expect(e.kind === "cable" && e.cores).toEqual([{ core: "1", color: "black", wire: "w1" }]);
+  });
+
+  // ja: 芯数が1以上の整数でない、線径や長さが数値でない入力は図面を変えない
+  it("refuses a core count below one or a gauge or length that is not a number", () => {
+    for (const bad of [{ core_count: "0" }, { core_count: "2.5" }, { sq: "abc" }, { length_m: "-1" }]) {
+      expect(cableUpdateCommand("s1", cable(), { ...patch, ...bad })).toBeNull();
+    }
+  });
+
+  // ja: 何も変えていなければコマンドを送らない
+  it("sends nothing when nothing changed", () => {
+    expect(cableUpdateCommand("s1", cable(), { reference: "W1", part_no: "", core_count: "3", sq: "", shield: false, grounded: false, length_m: "" })).toBeNull();
   });
 });

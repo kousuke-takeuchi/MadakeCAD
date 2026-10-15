@@ -1,6 +1,7 @@
 // 対話ツールの状態機械。ドラッグ中はローカルプレビュー、確定時にCommandを発行する。
 
 import { harnessAddCommand, harnessRectPoints, harnessWireCount } from "../canvas/harness";
+import { cableAddCommand, cableHit } from "../canvas/cable";
 import {
   DEFAULT_VARIANT,
   drawMacroGhost,
@@ -65,6 +66,7 @@ export type ToolId =
   | "wire"
   | "place"
   | "harness"
+  | "cable"
   | "macro"
   | "wire_legend"
   | ShapeToolId
@@ -75,6 +77,7 @@ const SCHEMATIC_TOOLS: ToolId[] = [
   "wire",
   "place",
   "harness",
+  "cable",
   "macro",
   "wire_legend",
   "shape_rect",
@@ -186,6 +189,7 @@ export class EditorController {
     | "move"
     | "rubber"
     | "harness"
+    | "cable"
     | "shape"
     | "panel_rect"
     | "panel_rail" = "none";
@@ -430,6 +434,10 @@ export class EditorController {
     for (const e of entities) {
       if (e.kind === "shape" && shapeHitTest(e, world, HIT_TOLERANCE)) return e.id;
     }
+    // ケーブル定義線 (配線を横切る斜線そのもの)
+    for (const e of entities) {
+      if (e.kind === "cable" && cableHit(e, world, HIT_TOLERANCE)) return e.id;
+    }
     // ハーネス境界は最後 (囲みの中身を選びたいことのほうが多い)。破線そのものを掴む
     for (const e of entities) {
       if (e.kind !== "harness" || e.points.length < 2) continue;
@@ -516,6 +524,13 @@ export class EditorController {
         this.dragMode = "harness";
         break;
       }
+      case "cable": {
+        // ケーブル定義線は配線を斜めに横切るドラッグ (始点・終点をグリッドに乗せる)
+        this.dragStartWorld = this.snap(world);
+        this.rubberEnd = this.dragStartWorld;
+        this.dragMode = "cable";
+        break;
+      }
       // 図形 (G10): 矩形・線・円はドラッグ、折れ線はクリックを重ねてダブルクリックで確定
       case "shape_rect":
       case "shape_line":
@@ -571,6 +586,7 @@ export class EditorController {
         this.rubberEnd = world;
         break;
       case "harness":
+      case "cable":
       case "shape":
       case "panel_rect":
       case "panel_rail":
@@ -606,7 +622,7 @@ export class EditorController {
             const sel = new Set(this.store.selection);
             for (const e of Object.values(sheet.entities)) {
               const pts: Point[] =
-                e.kind === "wire" || e.kind === "harness" || e.kind === "shape"
+                e.kind === "wire" || e.kind === "harness" || e.kind === "shape" || e.kind === "cable"
                   ? e.points
                   : "at" in e
                     ? [e.at]
@@ -652,6 +668,20 @@ export class EditorController {
         }
         break;
       }
+      case "cable": {
+        // 定義線を1回のadd_cableコマンドで置く (芯線割当はRust側が交差順に決める。undo一発)
+        if (sheet) {
+          const command = cableAddCommand(sheet, this.dragStartWorld, this.rubberEnd);
+          if (command && command.type === "add_cable") {
+            await this.store.execute(command);
+            const after = this.store.activeSheet;
+            const placed = after?.entities[command.cable.id];
+            const cores = placed && placed.kind === "cable" ? placed.cores.length : 0;
+            useUiStore().log(i18n.global.t("cable.createdLog", { reference: command.cable.reference, cores }));
+          }
+        }
+        break;
+      }
       case "harness": {
         // 囲みを1回のadd_entityコマンドで作る (undo一発で消える)
         if (sheet) {
@@ -684,7 +714,7 @@ export class EditorController {
     const first = entityIds.map((id) => sheet.entities[id]).find(Boolean);
     if (!first) return;
     const target: Pt | null =
-      first.kind === "wire" || first.kind === "harness" || first.kind === "shape"
+      first.kind === "wire" || first.kind === "harness" || first.kind === "shape" || first.kind === "cable"
         ? first.points.length
           ? {
               x: (first.points[0].x + first.points[first.points.length - 1].x) / 2,
@@ -1026,7 +1056,7 @@ export class EditorController {
         for (const id of this.store.selection) {
           const e = sheet.entities[id];
           if (!e) continue;
-          if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape") {
+          if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape" || e.kind === "cable") {
             ctx.beginPath();
             e.points.forEach((p, i) => {
               const s = vp.toScreen({ x: p.x + this.moveDelta.x, y: p.y + this.moveDelta.y });
@@ -1050,6 +1080,17 @@ export class EditorController {
         }
         ctx.setLineDash([]);
       }
+    }
+    // ケーブル定義線のドラッグプレビュー
+    if (this.dragMode === "cable") {
+      const a = vp.toScreen(this.dragStartWorld);
+      const b = vp.toScreen(this.rubberEnd);
+      ctx.strokeStyle = theme.selection;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
     }
     // ハーネス境界のドラッグプレビュー (確定後と同じ破線で見せる)
     if (this.dragMode === "harness") {

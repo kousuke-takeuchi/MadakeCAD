@@ -731,7 +731,8 @@
       "bom": "Bill of materials (BOM)",
       "xref": "Cross-reference table",
       "plc-io": "PLC I/O report",
-      "panel-placement": "Panel placement table"
+      "panel-placement": "Panel placement table",
+      "cable-list": "Cable list"
     },
     "targetLabel": "Target:",
     "targetProject": "Whole project",
@@ -749,15 +750,13 @@
     "cancel": "Cancel",
     "run": "Generate",
     "running": "Generating...",
-    "ribbonCableList": "Cable list",
     "ribbonPlcIo": "PLC I/O report",
     "ribbonSheetify": "Report as drawing sheet",
     "ribbonCsv": "Export as CSV",
     "ribbonPickTargets": "Pick what to output",
     "openLog": "Reports: generating \"{report}\"",
     "doneCsvLog": "Reports: wrote {count} row(s) of \"{report}\" to {path}",
-    "donePdfLog": "Reports: wrote {count} page(s) of \"{report}\" to {path}",
-    "todoLog": "{report}: planned for a later phase (M4)"
+    "donePdfLog": "Reports: wrote {count} page(s) of \"{report}\" to {path}"
   },
   "pdfBook": {
     "ribbonButton": "PDF book",
@@ -1689,5 +1688,30 @@
   },
   "ui": {
     "welcome": "MadakeCAD command line (L=wire E=delete U=undo)"
+  },
+  "cable": {
+    "kindLabel": "Cable",
+    "ribbonButton": "Cable",
+    "ribbonHint": "Drag across wires to place a multi-core cable's definition line; the crossed wires become its cores",
+    "startLog": "Cable: drag across the wires (cores 1, 2, 3… from the wire nearest the start)",
+    "createdLog": "Cable: placed {reference} ({cores} cores assigned; Cmd+Z to undo)",
+    "updatedLog": "Cable: updated the properties of {reference}",
+    "invalidLog": "Cable: the core count must be a whole number of at least 1, and gauge and length non-negative numbers (nothing is sent when nothing changed)",
+    "referenceRow": "Designator",
+    "partRow": "Part no.",
+    "coresRow": "Cores",
+    "sqRow": "Gauge sq",
+    "shieldRow": "Shield",
+    "shieldOn": "yes",
+    "grounded": "grounded",
+    "lengthRow": "Length m",
+    "coresSection": "Core assignment",
+    "colCore": "Core",
+    "colColor": "Colour",
+    "colWire": "Wire",
+    "assigned": "assigned",
+    "spare": "spare",
+    "overflowHint": "More wires are assigned than the cable has cores (ERC: cable core overflow)",
+    "hint": "Cores come from the wires the definition line crosses; redraw the line to change the assignment"
   }
 }

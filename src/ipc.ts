@@ -119,6 +119,40 @@ export interface TextEntity {
  * ハーネス境界 (IEC 61082-1 のグループ囲み)。所属配線は幾何学的な内包で決まる。
  * **電線をまとめる境界専用**で、筐体・強調枠の囲みは`Shape`で描く (G11)。
  */
+/** 多芯ケーブル (定義線で配線を横切り、芯線を割り当てる。format v15)。 */
+export interface Cable {
+  id: string;
+  /** 参照記号 (W1, W2 …)。 */
+  reference: string;
+  /** 型番 (未設定は空)。 */
+  part_no: string;
+  /** 芯数。 */
+  core_count: number;
+  /** 線径 sq (0 = 未設定)。 */
+  sq: number;
+  /** 定義線の2点。 */
+  points: Point[];
+  /** 芯線割当 (定義線が横切った配線を交差順に)。 */
+  cores: CableCore[];
+  shield: CableShield | null;
+  /** 長さ m (未設定はnull)。 */
+  length_m: number | null;
+}
+
+/** ケーブルの芯線1本の割当。 */
+export interface CableCore {
+  core: string;
+  color: string;
+  /** 割り当てた配線 (消えていればnull)。 */
+  wire: string | null;
+}
+
+/** ケーブルのシールド。 */
+export interface CableShield {
+  /** シールドを接地するか。 */
+  grounded: boolean;
+}
+
 export interface Harness {
   id: string;
   /** 囲みの頂点 (現状は矩形の4点)。 */
@@ -255,7 +289,8 @@ export type Entity =
   | ({ kind: "duct" } & Duct)
   | ({ kind: "footprint" } & Footprint)
   | ({ kind: "panel_legend" } & PanelLegend)
-  | ({ kind: "wire_legend" } & WireLegend);
+  | ({ kind: "wire_legend" } & WireLegend)
+  | ({ kind: "cable" } & Cable);
 
 /** シート種別。回路図 (既定) と2D盤レイアウト (M4 §8)。 */
 export type SheetKind = "schematic" | "panel";
@@ -355,6 +390,7 @@ export type Command =
   | { type: "set_plc_assignments"; assignments: PlcAssignment[] }
   | { type: "set_frame_template"; frame_template: string | null }
   | { type: "set_plc_sheet_options"; options: PlcSheetOptions | null }
+  | { type: "add_cable"; sheet_id: string; cable: Cable }
   | { type: "set_mech_link"; link: MechLink }
   | { type: "remove_mech_link"; entity_id: string }
   | {
@@ -1033,7 +1069,8 @@ export type ReportKind =
   | "bom"
   | "xref"
   | "plc-io"
-  | "panel-placement";
+  | "panel-placement"
+  | "cable-list";
 /** 帳票の出力形式 (CSV or 図枠付き図面シートのPDF)。 */
 export type ReportFormat = "csv" | "pdf";
 

@@ -700,6 +700,18 @@ mod tests {
         assert!(out.contains("3 ページ"), "{out}");
     }
 
+    /// `madake export cable-list` writes the cable list report (CSV by default).
+    /// `madake export cable-list` はケーブル一覧の帳票を書き出す (既定はCSV)。
+    #[test]
+    fn export_cable_list_writes_the_cable_list_report() {
+        let api = FakeApi::default();
+        run(&parse(&["madake", "export", "cable-list", "/tmp/c.csv"]), &api).unwrap();
+        assert_eq!(
+            api.calls(),
+            vec!["export_report(cable-list, csv, /tmp/c.csv, None)".to_string()]
+        );
+    }
+
     /// --format wins over the file extension.
     /// --formatは拡張子より優先される。
     #[test]

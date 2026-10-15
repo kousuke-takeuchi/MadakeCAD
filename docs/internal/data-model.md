@@ -1,6 +1,6 @@
 # データ設計書
 
-作成: 2026-08-21。更新: 2026-10-15(PLC I/O図面の生成設定のプロジェクト保存: format_version 14・`Project.plc_generate`)。その前の更新: 2026-09-28(整えバリアントの複製シートの印: format_version 13・`Sheet.variant_of`)。その前: 2026-09-28(クラウド側のFreeCAD連携M5-1〜3を統合: format_version 12・`Project.mech_links`・`MechLink.placement`・`Wire.length_source`。クラウド側の暫定番号3/4はこの12へ畳んだ)。フェーズ6タスク6: format_version 11・電線品番凡例ブロックエンティティ`WireLegend`(G9残)。フェーズ6タスク5: `.mdkproj` format_version 10・`Project.no`(G16、プロジェクト番号)。フェーズ6タスク4: format_version 9・`TextEntity.leader_to`(G20、注記の引き出し線)。フェーズ6: format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
+作成: 2026-08-21。更新: 2026-10-15(多芯ケーブル: format_version 15・`Entity::Cable`。同日にPLC I/O図面の生成設定のプロジェクト保存: format_version 14・`Project.plc_generate`)。その前の更新: 2026-09-28(整えバリアントの複製シートの印: format_version 13・`Sheet.variant_of`)。その前: 2026-09-28(クラウド側のFreeCAD連携M5-1〜3を統合: format_version 12・`Project.mech_links`・`MechLink.placement`・`Wire.length_source`。クラウド側の暫定番号3/4はこの12へ畳んだ)。フェーズ6タスク6: format_version 11・電線品番凡例ブロックエンティティ`WireLegend`(G9残)。フェーズ6タスク5: `.mdkproj` format_version 10・`Project.no`(G16、プロジェクト番号)。フェーズ6タスク4: format_version 9・`TextEntity.leader_to`(G20、注記の引き出し線)。フェーズ6: format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
 
 MadakeCADの永続データは3系統ある:
 
@@ -143,6 +143,7 @@ classDiagram
 | 12 | FreeCAD連携(M5): `Project.mech_links`+`MechLink.placement`+`Wire.length_source`。クラウド側が同時期に別系統で付けた暫定版3・4をこの1版へ畳んだもの | 対応付けが無いファイルは空の対応付けで開き、配線の長さは全て手入力扱い(`manual`)。クラウド側の暫定版(`format_version: 3`/`4`)のファイルも、`mech_links`と`length_source`をそのまま保って12へ更新される |
 | 13 | 整えバリアントの複製シートの印`Sheet.variant_of`(元シートのid。`None`なら普通のシート) | 印の無いファイルのシートはすべて普通のシート(`None`)として開き、クロスリファレンスの数え方も出力する図面も変わらない。印はnoneのとき書き出さない(`skip_serializing_if`)ので、複製シートを持たない新しいファイルは旧アプリでも読める |
 | 14 | PLC I/O図面の生成設定`Project.plc_generate`(ラダー形式・ラング間隔・先頭スキップ・配置方針・分割の単位。生成ダイアログの「プロジェクトに保存」) | 設定の無いファイルは保存なし(`None`)として開き、生成ダイアログは既定値から始まる |
+| 15 | 多芯ケーブル`cable`エンティティ(定義線2点・参照記号・型番・芯数・線径・芯線割当`cores[{core,color,wire}]`・シールド・長さ) | ケーブルが無いだけでそのまま開く。**逆にケーブルを含む新しいファイルは旧アプリでは開けない**(未知のエンティティ種別) |
 
 `NetLabel.attrs`(方向付きタグ形状)のように**追加するだけで旧アプリも読める**変更は版を上げていない。
 版を上げるのは、旧アプリが読めなくなる要素が入ったとき(6)と、意味のある新フィールドを足したときだけ。

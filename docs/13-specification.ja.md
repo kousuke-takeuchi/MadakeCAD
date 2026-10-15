@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2641仕様項目**。
+全6領域・**2659仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -29,6 +29,17 @@
 - ブロックのピン数には上限があり、桁違いのピン表ははっきりエラーになる。 <sub>`too_many_pins_are_rejected`</sub>
 - 属性スロット(参照記号・型番・機能・定格)は箱の中央に縦に積まれる。 <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
 - ブロックを回転・ミラーしてもピンは本体と一緒に動くだけで、番号は付け替わらない。 <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
+
+### cable
+
+- ケーブルを置くと、定義線が横切った配線が始点に近い順に芯1・2・3として割り当たり、芯の色は配線の線色になる。undo一発でケーブルが消える。 <sub>`placing_a_cable_assigns_the_crossed_wires_as_cores_in_order`</sub>
+- 芯数を指定せずに置いたケーブルは、横切った配線の本数を芯数にする。定義線が届かない配線は入らない。 <sub>`a_cable_without_a_core_count_takes_the_number_of_crossed_wires`</sub>
+- ケーブルの注記は参照記号・型番・芯数×線径・長さの順に並ぶ。 <sub>`the_cable_label_reads_designator_part_cores_gauge_and_length`</sub>
+- ケーブルの芯数より多い配線を割り当てるとERCのErrorになり、そのケーブルを指す。 <sub>`more_assigned_wires_than_cores_is_an_erc_error`</sub>
+- ケーブル一覧は、ケーブルごとに型番・芯数・線径・長さ・配線両端の機器・使用芯/予備芯・シールド・シートを並べる。 <sub>`the_cable_list_shows_ends_used_and_spare_cores`</sub>
+- 部品表ではケーブルを型番ごとに数え、全部に長さがあれば合計の長さ、1本でも無ければ本数にする。型番の無いケーブルは載せない。 <sub>`the_bom_counts_cables_per_part_number`</sub>
+- 印刷される図面には、ケーブルの定義線と、シールドがあればシールドの楕円、注記が描かれる。 <sub>`the_printed_sheet_draws_the_definition_line_shield_and_label`</sub>
+- 定義線が2点でない・芯数が0・シートに無い配線を指す芯を持つケーブルは拒否される。 <sub>`a_malformed_cable_is_refused`</sub>
 
 ### Commandエンジン (undo/redo)
 
@@ -244,7 +255,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは14 (PLC I/O図面の生成設定をプロジェクトに保存する版) である。 <sub>`the_current_format_version_is_fourteen`</sub>
+- 現行のファイル形式バージョンは15 (多芯ケーブルを追加した版) である。 <sub>`the_current_format_version_is_fifteen`</sub>
+- 定義線・芯線割当・シールド・長さを持つケーブルは、保存して読み直しても変わらない。 <sub>`a_cable_round_trips_through_a_saved_file`</sub>
 - PLC図面の生成設定を保存できなかった頃 (format_version 13) のファイルは、保存なしの状態で開く。 <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - 整えバリアントが無かった頃のプロジェクトファイルは、全シートが印のない普通のシートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
 - 電線品番凡例ブロックが無かった頃のプロジェクトファイルは凡例ブロックの無い状態で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_without_any_wire_legends`</sub>
@@ -1647,6 +1659,7 @@
 - madake terminalsは図面全体の端子台を一覧し、--sheetでシートを絞れる。 <sub>`terminals_lists_blocks_and_forwards_sheet`</sub>
 - madake export terminal-chart は図面全体のチャートを、拡張子.csvからCSVと判断して書き出す。 <sub>`export_terminal_chart_defaults_to_csv_for_the_whole_project`</sub>
 - 出力先が.pdfなら--format無しでも帳票のPDF(図枠付き図面シート)形式になる。 <sub>`export_report_picks_pdf_from_the_extension`</sub>
+- `madake export cable-list` はケーブル一覧の帳票を書き出す (既定はCSV)。 <sub>`export_cable_list_writes_the_cable_list_report`</sub>
 - --formatは拡張子より優先される。 <sub>`export_report_format_option_overrides_the_extension`</sub>
 - --terminalは参照記号(TB1)を受け取り、端子台一覧からentity idを引く。 <sub>`export_terminal_diagram_resolves_a_reference_designator`</sub>
 - --terminalにentity idを渡した場合は一覧を引かずそのまま送る。 <sub>`export_terminal_chart_accepts_an_entity_id_directly`</sub>
@@ -1783,6 +1796,14 @@
 - 配線済みのピンを消しても同じ警告が出る <sub>`warning about wired pins`</sub>
 - 配線されていないピンを消しても警告は出ない <sub>`warning about wired pins`</sub>
 - 警告が出ていても適用はできる(承知のうえで直せる) <sub>`warning about wired pins`</sub>
+
+### cable
+
+- ケーブルの注記は参照記号・型番・芯数×線径・長さの順に並び、空の項は飛ばす (Rust側と同じ) <sub>`多芯ケーブル`</sub>
+- シールドの楕円は定義線の中点を中心に、定義線より少し長く囲む <sub>`多芯ケーブル`</sub>
+- 新しいケーブルの参照記号は、シート上のケーブルとハーネスのW番号の続きになる <sub>`多芯ケーブル`</sub>
+- 定義線のドラッグは、芯数0 (横切った本数にする) のadd_cableコマンドになり、クリックしただけでは何も作らない <sub>`多芯ケーブル`</sub>
+- 定義線の近くをクリックするとケーブルを掴める <sub>`多芯ケーブル`</sub>
 
 ### deviceTree
 
@@ -2415,6 +2436,9 @@
 - 長さを手で変えると更新コマンドになり、出所は「手入力」になる <sub>`wireUpdateCommand`</sub>
 - FreeCADで計測した長さを手で上書きすると、その旨のフラグが立つ (呼び出し側が警告する) <sub>`wireUpdateCommand`</sub>
 - 長さ以外だけを変えたときはFreeCAD計測の出所を保つ <sub>`wireUpdateCommand`</sub>
+- ケーブルのプロパティは型番・芯数・線径・シールド・長さを1回のupdate_entityで書き、芯線割当はそのまま残す <sub>`cableUpdateCommand`</sub>
+- 芯数が1以上の整数でない、線径や長さが数値でない入力は図面を変えない <sub>`cableUpdateCommand`</sub>
+- 何も変えていなければコマンドを送らない <sub>`cableUpdateCommand`</sub>
 
 ### ribbonLayout
 
@@ -2818,7 +2842,7 @@
 
 ### 帳票 (部品表 / 電線リスト)
 
-- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・XRef表・PLC I/Oレポート・盤内部品配置表 の7つ <sub>`report generation dialog store`</sub>
+- 帳票の種類は From-To電線リスト・端子台チャート・端子接続図・部品表・ケーブル一覧・XRef表・PLC I/Oレポート・盤内部品配置表 の8つ <sub>`report generation dialog store`</sub>
 - 部品表はプロジェクト全体が対象で、既定はCSV出力 <sub>`report generation dialog store`</sub>
 - 出力形式を図面シートPDFにすると、同じ帳票がPDF要求になる <sub>`report generation dialog store`</sub>
 - 端子台チャートは「プロジェクト全体」に加えて端子台1つを対象に選べる <sub>`report generation dialog store`</sub>

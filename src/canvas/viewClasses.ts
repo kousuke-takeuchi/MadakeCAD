@@ -59,6 +59,7 @@ export function entityViewClass(e: Entity): ViewClass {
     case "wire_legend":
       return "texts";
     case "harness":
+    case "cable":
       return "harness";
     case "shape":
       return "shapes";

@@ -111,6 +111,8 @@ pub(crate) fn verify_sheet_with(
 ) -> Vec<Diagnostic> {
     let mut diags = erc(sheet, symbols);
     diags.extend(electrical(sheet, symbols, sim));
+    // 多芯ケーブルの芯数超過 (M4 §5)
+    diags.extend(crate::cable::check_cables(sheet));
     diags
 }
 
@@ -635,7 +637,8 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
             | Entity::Duct(_)
             | Entity::Footprint(_)
             | Entity::PanelLegend(_)
-            | Entity::WireLegend(_) => {}
+            | Entity::WireLegend(_)
+            | Entity::Cable(_) => {}
         }
     }
     for w in &wires {

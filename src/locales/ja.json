@@ -731,7 +731,8 @@
       "bom": "部品表 (BOM)",
       "xref": "クロスリファレンス表",
       "plc-io": "PLC I/Oレポート",
-      "panel-placement": "盤内部品配置表"
+      "panel-placement": "盤内部品配置表",
+      "cable-list": "ケーブル一覧"
     },
     "targetLabel": "対象:",
     "targetProject": "プロジェクト全体",
@@ -749,15 +750,13 @@
     "cancel": "キャンセル",
     "run": "生成",
     "running": "生成中...",
-    "ribbonCableList": "ケーブル一覧",
     "ribbonPlcIo": "PLC I/Oレポート",
     "ribbonSheetify": "帳票のシート化",
     "ribbonCsv": "CSV書き出し",
     "ribbonPickTargets": "出力対象の選択",
     "openLog": "帳票: 「{report}」を生成します",
     "doneCsvLog": "帳票: 「{report}」{count}行を {path} に書き出しました",
-    "donePdfLog": "帳票: 「{report}」{count}ページを {path} に書き出しました",
-    "todoLog": "{report}: 今後のフェーズ(M4)で対応予定です"
+    "donePdfLog": "帳票: 「{report}」{count}ページを {path} に書き出しました"
   },
   "pdfBook": {
     "ribbonButton": "PDF一括",
@@ -1689,5 +1688,30 @@
   },
   "ui": {
     "welcome": "MadakeCAD コマンドライン (L=配線 E=削除 U=元に戻す)"
+  },
+  "cable": {
+    "kindLabel": "ケーブル",
+    "ribbonButton": "ケーブル",
+    "ribbonHint": "配線を横切るようにドラッグすると多芯ケーブルの定義線を置き、横切った配線を芯線に割り当てます",
+    "startLog": "ケーブル: 配線を横切るようにドラッグしてください (始点に近い配線から芯1,2,3…)",
+    "createdLog": "ケーブル: {reference} を置きました (芯線 {cores} 本を割当。Cmd+Zで元に戻せます)",
+    "updatedLog": "ケーブル: {reference} のプロパティを更新しました",
+    "invalidLog": "ケーブル: 芯数は1以上の整数、線径・長さは0以上の数値にしてください (変更なしなら何もしません)",
+    "referenceRow": "参照記号",
+    "partRow": "型番",
+    "coresRow": "芯数",
+    "sqRow": "線径sq",
+    "shieldRow": "シールド",
+    "shieldOn": "あり",
+    "grounded": "接地",
+    "lengthRow": "長さm",
+    "coresSection": "芯線割当",
+    "colCore": "芯",
+    "colColor": "色",
+    "colWire": "配線",
+    "assigned": "割当済",
+    "spare": "予備",
+    "overflowHint": "芯数より多い配線が割り当てられています (ERC: ケーブル芯数超過)",
+    "hint": "芯線は定義線が横切った配線から決まります。割り当てを変えるには定義線を引き直してください"
   }
 }

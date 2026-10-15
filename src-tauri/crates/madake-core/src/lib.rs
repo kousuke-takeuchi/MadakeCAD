@@ -4,6 +4,7 @@
 //! [`command::Engine`] で実行され、UI(Tauri IPC)とAI(MCPサーバー)が同じAPIを共有する。
 
 pub mod block;
+pub mod cable;
 pub mod command;
 pub mod dxf;
 pub mod frame_template;

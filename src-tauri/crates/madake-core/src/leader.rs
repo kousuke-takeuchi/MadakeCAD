@@ -62,6 +62,7 @@ pub fn entity_bounds(entity: &Entity, defs: &DefIndex) -> Option<Rect> {
         // ここはエンティティ単体からしか外形を求めない (シートの文脈を持たない) ので、
         // 今のところ引き出し線の対象にはしない
         Entity::WireLegend(_) => None,
+        Entity::Cable(c) => bounds_of_points(&c.points),
     }
 }
 

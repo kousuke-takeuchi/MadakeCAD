@@ -13,6 +13,7 @@ export const REPORT_KINDS: ReportKind[] = [
   "terminal-chart",
   "terminal-diagram",
   "bom",
+  "cable-list",
   "xref",
   "plc-io",
   "panel-placement",

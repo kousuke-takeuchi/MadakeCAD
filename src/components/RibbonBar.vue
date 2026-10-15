@@ -166,6 +166,16 @@ function startShape(tool: ShapeToolId) {
   ui.log(t(`shapes.startLog.${SHAPE_TOOLS[tool]}`));
 }
 
+/** ケーブル定義線のツールに切り替える (リボン「配線」グループ)。配線を横切るドラッグで置く。 */
+function startCable() {
+  if (!useDocumentStore().activeSheet) {
+    ui.log(t("harness.noSheetLog"));
+    return;
+  }
+  controller.setTool("cable");
+  ui.log(t("cable.startLog"));
+}
+
 /** ハーネス境界の作図ツールに切り替える (リボン「配線」グループ)。矩形ドラッグで囲みを作る。 */
 function startHarness() {
   if (!useDocumentStore().activeSheet) {
@@ -381,7 +391,6 @@ function openPlcGenerate() {
 
 /**
  * 「レポート」タブ (.pen「M4デザイン - リボン パネル/レポート/管理タブ」準拠)。
- * ケーブル一覧は帳票そのものが未実装なのでログのみ。
  * 電線リストはTask 1でFrom-Toリストへ統合したため1ボタンにまとめている。
  */
 const reportGroups = computed<RibbonGroup[]>(() => [
@@ -397,11 +406,7 @@ const reportGroups = computed<RibbonGroup[]>(() => [
       [
         { label: t("reports.kind.bom"), icon: FileText, action: () => openReport("bom") },
         { label: t("reports.kind.wire-list"), icon: Cable, action: () => openReport("wire-list") },
-        {
-          label: t("reports.ribbonCableList"),
-          icon: Cable,
-          action: () => ui.log(t("reports.todoLog", { report: t("reports.ribbonCableList") })),
-        },
+        { label: t("reports.kind.cable-list"), icon: Cable, action: () => openReport("cable-list") },
       ],
       [
         { label: t("reports.kind.xref"), icon: Network, action: () => openReport("xref") },
@@ -818,6 +823,14 @@ const groups = computed<RibbonGroup[]>(() => [
         isActive: () => controller.tool === "harness",
         isDisabled: schematicOnly,
         title: t("harness.ribbonHint"),
+      },
+      {
+        label: t("cable.ribbonButton"),
+        icon: Cable,
+        action: () => startCable(),
+        isActive: () => controller.tool === "cable",
+        isDisabled: schematicOnly,
+        title: t("cable.ribbonHint"),
       },
       {
         label: t("wireLegend.ribbonButton"),

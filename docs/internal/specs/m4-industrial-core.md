@@ -13,7 +13,7 @@
 | 回路の再利用(回路コピー/マクロ) | ✅ | ✅(マクロが中核) | 🔶 **フェーズ3実装済** (保存/挿入/Tabバリアント/⌘C・V/プレースホルダ+値セット。保存UIからのバリアント追加も2026-10-15実装) | §2 |
 | PLC I/O図面・レポート | ✅(表から自動生成) | ✅(PLCカード図) | 🔶 **フェーズ3実装済** (モジュール定義+割付表+CSV+ラダー生成+レポート。横バス様式・同居/分割の配置方針も2026-10-15実装) | §3 |
 | クロスリファレンス(コイル⇔接点) | ✅ | ✅(自動) | ✅ **フェーズ2実装済** (接点マップ+コイル所在+ERC+Surfer) | §4 |
-| 帳票群(BOM/From-To/ケーブル/端子) | ✅ | ✅(自動生成) | 🔶 **フェーズ1実装済** (From-To/端子台/接続図/BOM/XRef+図面シート化+PDF一括。BOM拡張は2026-10-15実装。ケーブル一覧が残り=別計画) | §5 |
+| 帳票群(BOM/From-To/ケーブル/端子) | ✅ | ✅(自動生成) | 🔶 **フェーズ1実装済** (From-To/端子台/接続図/BOM/XRef+図面シート化+PDF一括。BOM拡張とケーブル一覧も2026-10-15実装) | §5 |
 | シンボルエディタ | ✅ | ✅ | ✅ **フェーズ4実装済** (複製から作成+2.5mmグリッド+属性スロット+保存前検証+回転バリアント) | §7 |
 | 2D盤レイアウト | ✅ | ✅ | ✅ **フェーズ4実装済** (盤枠/レール/ダクト/フットプリント/凡例・バルーン・配置表・検査) | §8 |
 | 図枠・表題欄テンプレート | ✅ | ✅(プロットフレーム) | ✅ **フェーズ4実装済** (JSON定義+バインド+一括差し替え) | §9 |
@@ -110,7 +110,7 @@
 
 ## 5. 帳票群の拡充
 
-> **ステータス: 🔶 フェーズ1完了(2026-08-22)。** 実装済み = From-Toワイヤリスト・端子台チャート・端子接続図・BOM・クロスリファレンス表の5帳票、全帳票のCSV/図枠付き図面シート出力(`report_sheet::report_bytes`が統一の出力口)、PDF一括出力(表紙→回路図全シート→帳票)。露出はリボン「レポート」タブ・Tauri IPC・Link API(`POST /export/report`・`POST /export/pdf-book`)・MCP(`export_report`・`export_pdf_book`)・CLI(`madake export <帳票> --format csv|pdf [--terminal]`)。**BOM拡張: 2026-10-15実装。** 部品表は型番を部品DBで引き当て、数量の後ろにメーカ/品名/単価/通貨/金額/購入先の6列を足す(全11列)。帳票は部品DBを直接開かず、出力口(Tauri・MCP・Link API)が`PartsDb::bom_catalog`で作った引き当て表`reports::BomCatalog`を`report_bytes_with`/`project_pdf_pages_with`へ渡す。電線の単価は1mあたり、単価が1つでもあれば通貨ごとの合計行。計画=`docs/superpowers/plans/2026-10-15-m4-bom-enrichment.md`。**残り(別計画)**: ケーブル一覧(Cableエンティティ待ち)。端子台チャート/接続図の分(並べ替え・付属品行・内外スワップ)はM4フェーズ5で閉じた。コイル⇔接点XRefは§4で実装済み
+> **ステータス: 🔶 フェーズ1完了(2026-08-22)。** 実装済み = From-Toワイヤリスト・端子台チャート・端子接続図・BOM・クロスリファレンス表の5帳票、全帳票のCSV/図枠付き図面シート出力(`report_sheet::report_bytes`が統一の出力口)、PDF一括出力(表紙→回路図全シート→帳票)。露出はリボン「レポート」タブ・Tauri IPC・Link API(`POST /export/report`・`POST /export/pdf-book`)・MCP(`export_report`・`export_pdf_book`)・CLI(`madake export <帳票> --format csv|pdf [--terminal]`)。**BOM拡張: 2026-10-15実装。** 部品表は型番を部品DBで引き当て、数量の後ろにメーカ/品名/単価/通貨/金額/購入先の6列を足す(全11列)。帳票は部品DBを直接開かず、出力口(Tauri・MCP・Link API)が`PartsDb::bom_catalog`で作った引き当て表`reports::BomCatalog`を`report_bytes_with`/`project_pdf_pages_with`へ渡す。電線の単価は1mあたり、単価が1つでもあれば通貨ごとの合計行。計画=`docs/superpowers/plans/2026-10-15-m4-bom-enrichment.md`。**ケーブル一覧: 2026-10-15実装。** `Entity::Cable` (定義線2点・参照記号・型番・芯数・線径・芯線割当・シールド・長さ。format 15)、`AddCable`コマンドが定義線の横切った配線を交差順に芯へ割り当てる、ERC `erc.cable_core_overflow`、帳票`ReportKind::CableList` (11列)、部品表のケーブル行。計画=`docs/superpowers/plans/2026-10-15-m4-remaining-items.md` Task 4。端子台チャート/接続図の分(並べ替え・付属品行・内外スワップ)はM4フェーズ5で閉じた。コイル⇔接点XRefは§4で実装済み
 
 | 帳票 | 内容 |
 |---|---|

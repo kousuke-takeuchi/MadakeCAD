@@ -50,7 +50,7 @@ export function entityBounds(entities: Entity[]): Bounds | null {
     }
   };
   for (const e of entities) {
-    if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape")
+    if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape" || e.kind === "cable")
       e.points.forEach((p) => consider(p.x, p.y));
     else if (e.kind === "din_rail") {
       consider(e.x1, e.y);
