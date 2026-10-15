@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2611仕様項目**。
+全6領域・**2612仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1202,6 +1202,7 @@
 - POST /api/v1/export/pdf-book は表紙・全シート・指定した帳票を1つのPDFにまとめて書き出す。 <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - 端子台エンドポイントは図面の端子台を一覧し、1台のチャートとチェック結果を返す。 <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report は帳票1種をCSVまたは図枠付きPDFで書き出し、図面である端子接続図のCSVは拒否する。 <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
+- POST /api/v1/export/report の部品表は、部品DBからメーカ・品名・単価・金額・購入先の欄を埋め、部品DBに無い型番ではそれらを空欄にする。 <sub>`export_report_bom_looks_part_numbers_up_in_the_parts_database`</sub>
 
 ### 回路マクロ (REST)
 

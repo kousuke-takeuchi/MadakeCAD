@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2611 specification clauses** across 6 areas.
+**2612 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1202,6 +1202,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - POST /api/v1/export/pdf-book writes one PDF holding the cover, every sheet and the requested reports. <sub>`export_pdf_book_writes_cover_sheets_and_reports`</sub>
 - The terminal endpoints list the terminal blocks of the drawing and return one block's chart and check result. <sub>`terminal_endpoints_list_chart_and_check`</sub>
 - POST /api/v1/export/report writes one report as CSV or as framed PDF pages, and refuses CSV for the graphical terminal diagram. <sub>`export_report_writes_csv_and_pdf_per_report`</sub>
+- POST /api/v1/export/report fills the BOM's maker, name, price, amount and purchase columns from the parts database, and leaves them empty for a part number the database does not know. <sub>`export_report_bom_looks_part_numbers_up_in_the_parts_database`</sub>
 
 ### Circuit macros (REST)
 

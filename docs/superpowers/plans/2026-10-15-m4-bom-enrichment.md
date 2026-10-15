@@ -54,9 +54,9 @@
 **Files:** `src-tauri/src/lib.rs` / `src-tauri/crates/madake-mcp/src/lib.rs` /
 `src-tauri/crates/madake-mcp/src/link_api.rs` / docs 04 (EN+JA)・仕様§5・ロードマップ・機能インベントリ
 
-- [ ] **Step 1 (red):** Link API `POST /export/report` (bom, csv) が部品DBの値を列に出すこと
+- [x] **Step 1 (red):** Link API `POST /export/report` (bom, csv) が部品DBの値を列に出すこと
       (テスト用の一時DB) / DBに無い型番は空欄
-- [ ] **Step 2 (green):** 3つの入口 (`export_report`・`export_bom`・`export_pdf_book`) で
+- [x] **Step 2 (green):** 3つの入口 (`export_report`・`export_bom`・`export_pdf_book`) で
       `SharedParts`から引き当て表を作って渡す
-- [ ] **Step 3:** docs/04 (EN+JA) にBOMの新しい列と非互換を書き、仕様§5・§0表・ロードマップ・
+- [x] **Step 3:** docs/04 (EN+JA) にBOMの新しい列と非互換を書き、仕様§5・§0表・ロードマップ・
       `feature-inventory.md`の状態文を更新 → `gen_spec.py` → 監査 → コミット

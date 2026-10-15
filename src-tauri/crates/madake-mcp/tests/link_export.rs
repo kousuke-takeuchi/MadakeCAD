@@ -771,3 +771,66 @@ async fn export_report_writes_csv_and_pdf_per_report() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// POST /api/v1/export/report fills the BOM's maker, name, price, amount and purchase columns from the parts database, and leaves them empty for a part number the database does not know.
+/// POST /api/v1/export/report の部品表は、部品DBからメーカ・品名・単価・金額・購入先の欄を埋め、部品DBに無い型番ではそれらを空欄にする。
+#[tokio::test]
+async fn export_report_bom_looks_part_numbers_up_in_the_parts_database() {
+    use madake_core::geometry::Point;
+    use madake_core::model::{Entity, SymbolInstance};
+    let mut engine = Engine::new(Project::new("BOM引き当て"));
+    let sheet_id = engine.project().sheets[0].id;
+    for (reference, value) in [("K1", "TEST-BOM-01"), ("K2", "TEST-BOM-01"), ("K3", "TEST-BOM-99")] {
+        let entity = Entity::Symbol(SymbolInstance {
+            id: uuid::Uuid::new_v4(),
+            symbol_id: "relay_coil".into(),
+            at: Point::new(50.0, 50.0),
+            rotation: 0,
+            mirror: false,
+            reference: reference.into(),
+            value: value.into(),
+            attrs: Default::default(),
+        });
+        engine.execute(madake_core::Command::AddEntity { sheet_id, entity }).unwrap();
+    }
+    let doc = SharedDoc::new(engine);
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    agent.set_executable(Some(fake_claude()));
+    let parts = madake_mcp::open_parts(&unique_parts_db("bom")).expect("parts db");
+    parts
+        .lock()
+        .unwrap()
+        .upsert_part(&madake_core::parts::Part {
+            part_no: "TEST-BOM-01".into(),
+            maker: "MakerR".into(),
+            name: "Relay".into(),
+            price: Some(1500.0),
+            currency: "JPY".into(),
+            purchase_url: "https://example.com/relay".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
+
+    let dir = std::env::temp_dir().join(format!("madake-bom-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv_path = dir.join("bom.csv");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/export/report")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({ "path": csv_path.to_string_lossy(), "kind": "bom", "format": "csv" }).to_string(),
+        ))
+        .unwrap();
+    let res = router.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let csv = std::fs::read_to_string(&csv_path).unwrap();
+    assert!(
+        csv.contains(",\"K1, K2\",TEST-BOM-01,relay_coil,2,MakerR,Relay,1500,JPY,3000,https://example.com/relay\n"),
+        "{csv}"
+    );
+    assert!(csv.contains(",K3,TEST-BOM-99,relay_coil,1,,,,,,\n"), "{csv}");
+    assert!(csv.contains(",,合計,,,,単価未登録 1 行を除く,,JPY,3000,\n"), "{csv}");
+    std::fs::remove_dir_all(&dir).ok();
+}

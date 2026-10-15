@@ -754,17 +754,18 @@ fn default_true() -> bool {
 
 /// 表紙+回路図全シート+選択帳票を1つのPDFにまとめて書き出す。
 async fn post_export_pdf_book(
-    State(doc): State<SharedDoc>,
+    State(api): State<DocPartsApi>,
     Json(body): Json<ExportPdfBookBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let engine = doc.engine.lock().unwrap();
+    let engine = api.doc.engine.lock().unwrap();
     let options = madake_core::pdf::PdfBookOptions {
         include_reports: body.include_reports,
         cover: body.cover,
     };
-    let pages = madake_core::pdf::project_pdf_pages(engine.project(), &options).len();
-    let pdf =
-        madake_core::pdf::export_project_pdf(engine.project(), &options).map_err(bad_request)?;
+    let catalog = crate::bom_catalog(engine.project(), &api.parts);
+    let svgs = madake_core::pdf::project_pdf_pages_with(engine.project(), &options, &catalog);
+    let pages = svgs.len();
+    let pdf = madake_core::pdf::svgs_to_pdf(&svgs).map_err(bad_request)?;
     std::fs::write(&body.path, pdf).map_err(bad_request)?;
     Ok(Json(
         serde_json::json!({ "written": body.path, "pages": pages }),
@@ -867,15 +868,17 @@ struct ExportReportBody {
 
 /// 帳票1種を1ファイルへ書き出す。`count`はCSVなら行数、PDFならページ数。
 async fn post_export_report(
-    State(doc): State<SharedDoc>,
+    State(api): State<DocPartsApi>,
     Json(body): Json<ExportReportBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let engine = doc.engine.lock().unwrap();
-    let (bytes, count) = madake_core::report_sheet::report_bytes(
+    let engine = api.doc.engine.lock().unwrap();
+    let catalog = crate::bom_catalog(engine.project(), &api.parts);
+    let (bytes, count) = madake_core::report_sheet::report_bytes_with(
         engine.project(),
         body.kind,
         body.format,
         body.entity_id,
+        &catalog,
     )
     .map_err(bad_request)?;
     std::fs::write(&body.path, bytes).map_err(bad_request)?;
@@ -885,11 +888,12 @@ async fn post_export_report(
 }
 
 async fn post_export_bom(
-    State(doc): State<SharedDoc>,
+    State(api): State<DocPartsApi>,
     Json(body): Json<PathBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let engine = doc.engine.lock().unwrap();
-    std::fs::write(&body.path, madake_core::reports::bom_csv(engine.project()))
+    let engine = api.doc.engine.lock().unwrap();
+    let catalog = crate::bom_catalog(engine.project(), &api.parts);
+    std::fs::write(&body.path, madake_core::reports::bom_csv_with(engine.project(), &catalog))
         .map_err(bad_request)?;
     Ok(Json(serde_json::json!({ "written": body.path })))
 }
@@ -1237,9 +1241,10 @@ async fn post_wire_part(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-/// 盤レイアウトAPIの状態 (ドキュメント + 部品DB)。未配置部品の外形寸法を部品DBから引く。
+/// ドキュメントと部品DBの両方を読むルートの状態。盤レイアウト (未配置部品の外形寸法) と
+/// 帳票出力 (部品表の引き当て) が部品DBを引く。
 #[derive(Clone)]
-struct PanelApi {
+struct DocPartsApi {
     doc: SharedDoc,
     parts: SharedParts,
 }
@@ -1247,7 +1252,7 @@ struct PanelApi {
 /// 未配置部品 = 回路図にあって、どの盤レイアウトシートにもフットプリントが無い部品
 /// (M4仕様 §8)。外形寸法は部品DBの`footprint_w`/`footprint_h`、登録の無い型番は既定の矩形。
 async fn get_unplaced_components(
-    State(api): State<PanelApi>,
+    State(api): State<DocPartsApi>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let sizes = {
         let db = api.parts.lock().unwrap();
@@ -1273,9 +1278,13 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         doc: doc.clone(),
         agent,
     });
+    // 部品DBも引く入口 (未配置部品の外形・帳票のBOM引き当て)
     let panel_routes = Router::new()
         .route("/api/v1/panel/unplaced", get(get_unplaced_components))
-        .with_state(PanelApi {
+        .route("/api/v1/export/pdf-book", post(post_export_pdf_book))
+        .route("/api/v1/export/report", post(post_export_report))
+        .route("/api/v1/export/bom", post(post_export_bom))
+        .with_state(DocPartsApi {
             doc: doc.clone(),
             parts: parts.clone(),
         });
@@ -1342,9 +1351,6 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/export/pdf", post(post_export_pdf))
         .route("/api/v1/export/dxf", post(post_export_dxf))
         .route("/api/v1/export/kicad", post(post_export_kicad))
-        .route("/api/v1/export/pdf-book", post(post_export_pdf_book))
-        .route("/api/v1/export/report", post(post_export_report))
-        .route("/api/v1/export/bom", post(post_export_bom))
         .route("/api/v1/export/wire-list", post(post_export_wire_list))
         .route("/api/v1/events", get(get_events))
         .with_state(doc)

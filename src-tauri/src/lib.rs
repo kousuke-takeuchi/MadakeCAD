@@ -522,9 +522,10 @@ fn export_pdf_book(
         include_reports,
         cover: cover.unwrap_or(true),
     };
-    let pages = madake_core::pdf::project_pdf_pages(engine.project(), &options).len();
-    let pdf = madake_core::pdf::export_project_pdf(engine.project(), &options)
-        .map_err(|e| e.to_string())?;
+    let catalog = madake_mcp::bom_catalog(engine.project(), &state.parts);
+    let svgs = madake_core::pdf::project_pdf_pages_with(engine.project(), &options, &catalog);
+    let pages = svgs.len();
+    let pdf = madake_core::pdf::svgs_to_pdf(&svgs).map_err(|e| e.to_string())?;
     std::fs::write(&path, pdf).map_err(|e| e.to_string())?;
     Ok(pages)
 }
@@ -666,9 +667,15 @@ fn export_report(
     path: String,
 ) -> Result<usize, String> {
     let engine = state.doc.engine.lock().unwrap();
-    let (bytes, count) =
-        madake_core::report_sheet::report_bytes(engine.project(), kind, format, entity_id)
-            .map_err(|e| e.to_string())?;
+    let catalog = madake_mcp::bom_catalog(engine.project(), &state.parts);
+    let (bytes, count) = madake_core::report_sheet::report_bytes_with(
+        engine.project(),
+        kind,
+        format,
+        entity_id,
+        &catalog,
+    )
+    .map_err(|e| e.to_string())?;
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     Ok(count)
 }
@@ -676,7 +683,8 @@ fn export_report(
 #[tauri::command]
 fn export_bom(state: State<AppState>, path: String) -> Result<(), String> {
     let engine = state.doc.engine.lock().unwrap();
-    std::fs::write(&path, madake_core::reports::bom_csv(engine.project()))
+    let catalog = madake_mcp::bom_catalog(engine.project(), &state.parts);
+    std::fs::write(&path, madake_core::reports::bom_csv_with(engine.project(), &catalog))
         .map_err(|e| e.to_string())
 }
 

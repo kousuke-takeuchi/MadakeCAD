@@ -32,6 +32,20 @@ pub fn open_parts(path: &std::path::Path) -> Result<SharedParts, madake_core::pa
     Ok(Arc::new(Mutex::new(madake_core::parts::PartsDb::open(path)?)))
 }
 
+/// 部品表 (BOM拡張) の引き当て表を部品DBから作る。UI・MCP・Link APIの帳票出力が共通で使う。
+/// 部品DBが読めなければ空の表 (部品表のカタログ欄が空欄になるだけで、出力は止めない)。
+pub fn bom_catalog(
+    project: &madake_core::model::Project,
+    parts: &SharedParts,
+) -> madake_core::reports::BomCatalog {
+    let numbers = madake_core::reports::bom_part_numbers(project);
+    let db = parts.lock().unwrap();
+    db.bom_catalog(numbers.iter().map(String::as_str)).unwrap_or_else(|e| {
+        eprintln!("部品表の引き当てに部品DBを使えませんでした: {e}");
+        Default::default()
+    })
+}
+
 #[derive(Clone)]
 pub struct SharedDoc {
     pub engine: Arc<Mutex<Engine>>,
@@ -1158,28 +1172,31 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "帳票1種を1ファイルへ書き出す。kind= wire-list(From-To電線リスト: From/To/嵌合相手/備考/線番/色/sq/長さ/品番/ハーネス。嵌合相手はG14の`mates_with`宣言、備考はネットラベルを1対1で辿れなかった行に付く`multi`の印) / terminal-chart(端子台チャート) / terminal-diagram(端子接続図。外部側=左・内部側=右のグラフィカル図) / bom(部品表) / xref(クロスリファレンス表)。format= csv または pdf(図枠+表題欄付きA4横。行が多ければ自動でページ分割)。端子接続図は図面のためCSV不可。entity_idで端子台1台に絞れる。戻り値のcountはCSVなら行数、PDFならページ数"
+        description = "帳票1種を1ファイルへ書き出す。kind= wire-list(From-To電線リスト: From/To/嵌合相手/備考/線番/色/sq/長さ/品番/ハーネス。嵌合相手はG14の`mates_with`宣言、備考はネットラベルを1対1で辿れなかった行に付く`multi`の印) / terminal-chart(端子台チャート) / terminal-diagram(端子接続図。外部側=左・内部側=右のグラフィカル図) / bom(部品表。型番を部品DBで引き当てたメーカ・品名・単価・通貨・金額・購入先の列と通貨ごとの合計行付き) / xref(クロスリファレンス表)。format= csv または pdf(図枠+表題欄付きA4横。行が多ければ自動でページ分割)。端子接続図は図面のためCSV不可。entity_idで端子台1台に絞れる。戻り値のcountはCSVなら行数、PDFならページ数"
     )]
     fn export_report(
         &self,
         Parameters(p): Parameters<ExportReportParams>,
     ) -> Result<String, ErrorData> {
         let engine = self.doc.engine.lock().unwrap();
-        let (bytes, count) = madake_core::report_sheet::report_bytes(
+        let catalog = bom_catalog(engine.project(), &self.parts);
+        let (bytes, count) = madake_core::report_sheet::report_bytes_with(
             engine.project(),
             p.kind,
             p.format,
             p.entity_id,
+            &catalog,
         )
         .map_err(|e| ErrorData::invalid_params(e.to_string(), None))?;
         std::fs::write(&p.path, bytes).map_err(internal)?;
         json_ok(&serde_json::json!({ "written": p.path, "count": count }))
     }
 
-    #[tool(description = "部品表(BOM)CSVを指定パスに書き出す")]
+    #[tool(description = "部品表(BOM)CSVを指定パスに書き出す。型番を部品DBで引き当て、メーカ・品名・単価・通貨・金額・購入先の列と通貨ごとの合計行を付ける")]
     fn export_bom(&self, Parameters(p): Parameters<ExportPathParams>) -> Result<String, ErrorData> {
         let engine = self.doc.engine.lock().unwrap();
-        let csv = madake_core::reports::bom_csv(engine.project());
+        let catalog = bom_catalog(engine.project(), &self.parts);
+        let csv = madake_core::reports::bom_csv_with(engine.project(), &catalog);
         std::fs::write(&p.path, csv).map_err(internal)?;
         json_ok(&serde_json::json!({ "written": p.path }))
     }
@@ -1238,9 +1255,10 @@ impl MadakeMcp {
             include_reports: p.include_reports,
             cover: p.cover.unwrap_or(true),
         };
-        let pages = madake_core::pdf::project_pdf_pages(engine.project(), &options).len();
-        let pdf =
-            madake_core::pdf::export_project_pdf(engine.project(), &options).map_err(internal)?;
+        let catalog = bom_catalog(engine.project(), &self.parts);
+        let svgs = madake_core::pdf::project_pdf_pages_with(engine.project(), &options, &catalog);
+        let pages = svgs.len();
+        let pdf = madake_core::pdf::svgs_to_pdf(&svgs).map_err(internal)?;
         std::fs::write(&p.path, pdf).map_err(internal)?;
         json_ok(&serde_json::json!({ "written": p.path, "pages": pages }))
     }
