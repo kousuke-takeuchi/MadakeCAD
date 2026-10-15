@@ -565,6 +565,11 @@ export interface Part {
   contact_config?: string;
   /** PLC I/Oモジュールの定義JSON (空欄ならPLCモジュールではない)。 */
   plc_module?: string;
+  /**
+   * 端子台・端子台付属品の種別 (部品DB v7)。端子台なら feed_through / multi_level / fuse /
+   * disconnect、付属品なら end_bracket / partition / end_plate。それ以外の部品は空。
+   */
+  terminal_kind?: string;
 }
 
 /** KiCadインポートの結果要約。 */
@@ -681,6 +686,28 @@ export interface TerminalChart {
    * 並んでいるので、CSV・図枠付き図面シート・端子接続図もここを並べ替え直したりしない。
    */
   row_order: RowOrder;
+  /** 付属品 (`attrs["accessories"]`)。書いた順。`before`がnullなら末尾。 */
+  accessories?: Accessory[];
+  /** 読めなかった付属品の項 (端子台チェックがWarningにする)。 */
+  accessory_issues?: AccessoryIssue[];
+}
+
+/** 端子台付属品の種別 (M4 §1.1 の3種)。 */
+export type AccessoryKind = "end_bracket" | "partition" | "end_plate";
+
+/** 端子台の付属品1個。 */
+export interface Accessory {
+  /** この端子の直前に入る (表示ラベル)。nullは末尾。 */
+  before: string | null;
+  kind: AccessoryKind;
+  /** 型番 (空なら部品表に載せない)。 */
+  part_no: string;
+}
+
+/** 読めなかった付属品の項。 */
+export interface AccessoryIssue {
+  text: string;
+  message: string;
 }
 
 /** 端子台1つの概要 (エディタの切替ドロップダウン・帳票の対象選択)。 */

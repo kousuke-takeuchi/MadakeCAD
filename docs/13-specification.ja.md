@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2574仕様項目**。
+全6領域・**2590仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -434,6 +434,8 @@
 - 前のバージョンで作られた部品DBを開くと、寸法の無い同梱サンプルにフットプリント寸法が追補される(自分で入れた寸法は書き換えない)。 <sub>`an_older_database_gains_the_bundled_footprint_sizes`</sub>
 - 幅か高さの片方しか入っていない部品はフットプリント寸法を持たない扱いになる(外形を描くには両方必要なため)。 <sub>`a_half_filled_footprint_size_is_not_used`</sub>
 - DBパスの既定はOSのアプリデータフォルダで、MADAKE_PARTS_DBで上書きできる。 <sub>`default_path_respects_env_override`</sub>
+- 旧スキーマv6のDBは開いた時点でv7へ移行され、既存データを保持したまま端子台の種別列が使えるようになり、同梱の端子台サンプルに種別が入り、端子台付属品のサンプルが足される。 <sub>`v6_database_migrates_to_v7_with_terminal_kinds_and_accessory_samples`</sub>
+- 新しく作った部品DBには、種別入りの端子台サンプルと端子台付属品3種のサンプルが最初から入っている。 <sub>`a_new_database_has_terminal_kinds_and_accessory_samples`</sub>
 
 ### PDF出力
 
@@ -580,6 +582,9 @@
 - 配線の無いプロジェクトには電線集約行が1行も付かない (部品だけの部品表はそのまま)。 <sub>`bom_has_no_wire_rollup_rows_without_any_wires`</sub>
 - 部品行の後ろに、電線品番ごとの集約行が付き、数量欄にプロジェクト全体の使用長合計 (m単位・小数第2位まで) が入る。 <sub>`bom_rolls_up_wires_by_part_number_after_the_component_rows`</sub>
 - 品番を引けない配線は「(未割当)」の1行にまとまり、勝手に品番を作ったり黙って消えたりしない。 <sub>`bom_rolls_up_unresolved_wires_under_one_unassigned_row`</sub>
+- 端子台の付属品は部品表に型番ごとの1行として載り、数量欄に使用個数、参照記号欄に使っている端子台が入り、電線集約行の後ろに来る。 <sub>`bom_counts_terminal_accessories_by_part_number`</sub>
+- 型番の無い付属品や、端子台チェックが読めない付属品の項は、部品表に行を作らない。 <sub>`bom_skips_accessories_without_a_part_number_or_that_cannot_be_read`</sub>
+- 品番を引けない配線に使用長が1本も入っていないときは、「(未割当) 0.00 m」の行を出さない。 <sub>`bom_adds_no_unassigned_row_when_those_wires_have_no_length`</sub>
 - カンマを含む項目は引用符で囲まれ、CSVが壊れない。 <sub>`bom_escapes_fields_with_commas`</sub>
 - 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先、続いて嵌合相手・備考列 (G14/G18) が並ぶ。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。 <sub>`wire_list_is_a_from_to_list`</sub>
 - シンボルのピンに届いているワイヤの端は「参照記号:ピン番号」(例 K1:A1) と書かれる。 <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
@@ -943,6 +948,10 @@
 - ジャンパ順は、ジャンパが1本でも掛かっている極を極番号順でまとめて先頭に出し、ジャンパの無い極をその後ろに極番号順で並べる。 <sub>`jumper_order_brings_every_jumpered_pole_to_the_front`</sub>
 - 3段の端子台では、どの並べ替え順を選んでも同じ極の3段 (a/b/c) が並びの中で必ず隣り合う (段がバラバラの位置に散らばらない)。 <sub>`every_row_order_keeps_the_three_levels_of_one_pole_adjacent`</sub>
 - チャートCSVの行順は、常にチャート(エディタ)の行順と一致する (row_orderで並べ替えても、CSVは`chart.rows`をそのまま使うので食い違わない)。 <sub>`the_csv_row_order_always_matches_the_chart_row_order`</sub>
+- 付属品の指定は「端子番号:種別:型番」を並べたもので、`end`は最後の端子の後ろを指し、型番は省略できる。 <sub>`accessories_are_read_in_order_with_end_and_optional_part_number`</sub>
+- 種別が3種以外・端子台に無い端子番号・書式が壊れた付属品の項は、その項だけが飛ばされて報告され、ほかの項は生きる。 <sub>`a_bad_accessory_item_is_skipped_alone_and_reported`</sub>
+- 端子台チャートでは、付属品は指定した端子の直前に自分の行を持ち、`end`の付属品は最後の端子の後ろに来る。 <sub>`accessory_rows_sit_before_their_terminal_and_end_rows_come_last`</sub>
+- 端子台チェックは、読めない付属品の項をWarningとして報告し、どの項かを名指しする。 <sub>`the_terminal_check_warns_about_a_broken_accessory_item`</sub>
 
 ### 端子接続図
 
@@ -2910,6 +2919,13 @@
 - 極数の上限を超える指定も指摘になる <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - 挿入位置の選択肢は極ごとに1つ、多段端子台では段aのラベルを代表にする <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - 個数ステッパーの入力は1以上の整数へ丸める <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- 付属品の行は「端子番号:種別:型番」のカンマ列になり、型番の前後の空白と書式を壊す「,」「:」は取り除かれる <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 付属品が1つも無いときは空文字になる (ストアは属性ごと消す) <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- チャートの付属品は、末尾 (before=null) を "end" にしてポップオーバーの行へ写る <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 部品割当は update_entity 1回で、端子台の型番 (value) と種別 (attrs.terminal_kind) を同時に書く <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 種別の無い部品を割り当てると、古い種別の属性は消える <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 付属品を全部消して適用すると、accessories属性そのものが消える <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- 付属品の行を適用すると、書式どおりの accessories 属性を update_entity 1回で書く <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
 
 ### ui
 

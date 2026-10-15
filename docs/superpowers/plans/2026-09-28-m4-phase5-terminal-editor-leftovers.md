@@ -116,20 +116,20 @@ Task 6でその旨を仕様の状態文に明記する。
 図面へジャンプ) / `src/ipc.ts` (`TerminalRow.level`・`TerminalChart.row_order`) / 6カタログ /
 `docs/05-wire-management(.ja).md`
 
-- [ ] **Step 1 (red):** `terminal_chart.rs`に5種の並びのテスト (数値順=既定 / 英数順 / ページ順=回路図の
+- [x] **Step 1 (red):** `terminal_chart.rs`に5種の並びのテスト (数値順=既定 / 英数順 / ページ順=回路図の
       出現順 / 外部ケーブル順 / ジャンパ順)、未設定・未知語が`number`に落ちること、3段端子台で
       極→段の順が崩れないこと、`TerminalChart.row_order`がCSV・図面シート・接続図の生成で同じ並びを
       返すこと (チャートCSVの行順=エディタの行順)。`src/stores/terminals.test.ts`に
       `rows`が`level`を運ぶこと・`setRowOrder`が`update_entity`1回になること・`gotoTerminal`が
       `useReveal`へ`{sheetId, entityId}`を渡すこと
-- [ ] **Step 2 (green):** 実装。ダイアログにLv列 (`terminals.col.level`。単段は空欄) と並べ替え
+- [x] **Step 2 (green):** 実装。ダイアログにLv列 (`terminals.col.level`。単段は空欄) と並べ替え
       ドロップダウン、「図面へジャンプ」ボタン+行のダブルクリックを足し、`terminals.phase2.sort`/
       `terminals.phase2.goto`のdisabledプレースホルダを外す (6カタログから`phase2.sort`/`phase2.goto`を
       削除し実キーへ。キー同値テストが落ちないよう全カタログを同時に直す)。
       ストアが端子一覧を持たないまま`reloadChart`だけ走る経路 (フェーズ6積み残し) を`reloadBlocks`
       経由に統一する。`cargo test`+`npx vitest run`+`npx vue-tsc --noEmit` → 実機確認 (TB1で
       5種の並べ替えとジャンプ、⌘Zで並びが戻る) → `python3 scripts/gen_spec.py` → コミット
-- [ ] **Step 3 (docs):** `docs/05-wire-management.md`と`.ja.md`の端子台エディタ節に並べ替え・Lv列・
+- [x] **Step 3 (docs):** `docs/05-wire-management.md`と`.ja.md`の端子台エディタ節に並べ替え・Lv列・
       ジャンプを追記 (並べ替えは図面の状態なので⌘Zで戻ることを明記)。`docs/internal/feature-inventory.md:140`
       の「Lv列表示…は未実装」を実態へ、`:68`の端子台チャートCSVにLv列が入った互換性の注記
       (フェーズ6積み残し) を1行足す → コミット
@@ -141,7 +141,7 @@ Task 6でその旨を仕様の状態文に明記する。
 `src-tauri/crates/madake-core/src/svg.rs` + `src/canvas/dynamicSymbol.ts` (ラベル上書きの双子) /
 `src/stores/terminals.ts` / `src/components/TerminalEditorDialog.vue` / 6カタログ
 
-- [ ] **Step 1 (red):** `command.rs`に`RenumberTerminals { sheet_id, entity_id, start, step, prefix }`の
+- [x] **Step 1 (red):** `command.rs`に`RenumberTerminals { sheet_id, entity_id, start, step, prefix }`の
       テスト (逆コマンド=`SetTerminalNumbers { sheet_id, entity_id, numbers: Option<Vec<String>> }`で
       ⌘Z一発。`None`=既定へ戻す)。既存の`RenumberWires`/`SetWireNumbers`・`RenumberPanelItems`/
       `SetPanelItemNumbers`と**同じ形**にすること。押さえる挙動: 採番と同時に`attrs["jumpers"]`の
@@ -149,11 +149,11 @@ Task 6でその旨を仕様の状態文に明記する。
       個数不一致・重複・空要素の`numbers`は図面を変えずにエラー / 存在しないentity idはエラー。
       `terminal_chart.rs`にチャート・接続図・端子台チェックが上書き番号で出ること、`svg.rs`と
       `src/canvas/dynamicSymbol.ts`が同じラベルを描くこと (双子の突き合わせテストを両側に1本ずつ)
-- [ ] **Step 2 (green):** 実装 + ツールバー「採番」→開始番号・刻み・接頭辞のポップオーバー
+- [x] **Step 2 (green):** 実装 + ツールバー「採番」→開始番号・刻み・接頭辞のポップオーバー
       (`terminals.phase2.autoNumber`を実キーへ)。Tauri IPC/Link API/MCPは`execute_commands`で
       そのまま通るので新しい口は作らない。`cargo test`+`vitest`+`vue-tsc` → 実機確認 (8極を11から
       採番 → ジャンパ`11-12`が追従 → ⌘Zで`1`..`8`へ戻る) → `gen_spec.py` → コミット
-- [ ] **Step 3 (docs):** `docs/05-wire-management(.ja).md`に採番を追記。フェーズ6積み残しの
+- [x] **Step 3 (docs):** `docs/05-wire-management(.ja).md`に採番を追記。フェーズ6積み残しの
       「最寄りマーク帰属のテストが端子番号の入れ替わりを検出しない」を、採番後のショートバー帰属を
       固定するテストで閉じる (`src/canvas/terminalJumpers.test.ts` + Rust側の対になるテスト) → コミット
 
@@ -163,14 +163,14 @@ Task 6でその旨を仕様の状態文に明記する。
 `src-tauri/crates/madake-core/src/symbol.rs` (`_1l`の正規化) / `src/stores/terminals.ts` /
 `src/components/TerminalEditorDialog.vue` / 6カタログ / `docs/internal/feature-inventory.md`
 
-- [ ] **Step 1 (red):** `terminal_chart::multilevel_id(symbol_id, levels)`のテスト:
+- [x] **Step 1 (red):** `terminal_chart::multilevel_id(symbol_id, levels)`のテスト:
       `terminal_block_8p` + 2段 → `terminal_block_8p_2l` / 解除 (1段) → `terminal_block_8p`に戻る
       (`_1l`の別名idは作らない = フェーズ6積み残し。`symbol.rs`側は`terminal_block_8p_1l`を
       **拒否**するか単段idへ正規化するかを1本のテストで固定する) / 4段以上と0段は拒否 /
       段を増やしても既存のジャンパ指定・結線が壊れない (段記号の付かない`1-2`は`1a-2a`へ移行) /
       段を減らすとき消える段に結線が残っていれば図面を変えずにエラー。
       `jumper_bars`の可視性が他のシンボル付随描画と同じ表示クラスで扱われること (フェーズ6積み残し)
-- [ ] **Step 2 (green):** 実装 + ツールバー「多段」→段数ステッパー (`terminals.phase2.multiLevel`を
+- [x] **Step 2 (green):** 実装 + ツールバー「多段」→段数ステッパー (`terminals.phase2.multiLevel`を
       実キーへ)。`cargo test`+`vitest`+`vue-tsc` → 実機確認 (8極を2段化 → 接続図が列に分かれる →
       ⌘Zで単段へ) → `gen_spec.py` → `feature-inventory.md:140`の「既存端子台への段の後付けは未実装」を
       実態へ → コミット
@@ -181,14 +181,14 @@ Task 6でその旨を仕様の状態文に明記する。
 `src-tauri/crates/madake-core/src/terminal_diagram.rs` / `src/stores/terminals.ts` /
 `src/components/TerminalEditorDialog.vue` / 6カタログ / `docs/internal/feature-inventory.md:69`
 
-- [ ] **Step 1 (red):** まず**既存挙動を固定するred**: `terminal_block_8p` → `terminal_block_9p`にした
+- [x] **Step 1 (red):** まず**既存挙動を固定するred**: `terminal_block_8p` → `terminal_block_9p`にした
       とき1〜8番ピンの座標が動かないこと (動くなら既存結線が外れるので、挿入の設計をその場で
       「末尾に極を足して番号だけ繰り下げる」へ確定する)。続いて`insert_spare_terminals(inst, after, count)`が
       返す`(symbol_id, terminal_numbers)`のテスト: 指定端子の後ろに予備が入った番号列になる /
       予備行は`TerminalRow.spare=true`で両側未結線 / 末尾挿入 / 0個・負数の拒否。
       `terminal_diagram.rs`: ある段のジャンパが他の段の行を横切らない (段ごとの配線レーン) /
       千鳥配置 (行ごとに1箱) で外部左・内部右が崩れないこと
-- [ ] **Step 2 (green):** 実装 + ツールバー「予備挿入」→位置と個数のポップオーバー
+- [x] **Step 2 (green):** 実装 + ツールバー「予備挿入」→位置と個数のポップオーバー
       (`terminals.phase2.spareTerminal`を実キーへ)。挿入は`update_entity`1回 (symbol_id + 
       terminal_numbers) にまとめてundo一発にする。`cargo test`+`vitest`+`vue-tsc` → 実機確認
       (3番の後ろに予備1 → チャートに予備行 → 接続図PDFで段ジャンパが他段を横切らない) →
@@ -201,19 +201,19 @@ Task 6でその旨を仕様の状態文に明記する。
 `src-tauri/crates/madake-core/src/reports.rs` (BOMの付属品行) / `src/stores/terminals.ts` /
 `src/components/TerminalEditorDialog.vue` / 6カタログ / `docs/04-standards-output(.ja).md`
 
-- [ ] **Step 1 (red):** `parts.rs`: `terminal_kind`列の追加とv6→v7マイグレーション (既存DBが開ける・
+- [x] **Step 1 (red):** `parts.rs`: `terminal_kind`列の追加とv6→v7マイグレーション (既存DBが開ける・
       サンプルに端子台種別が入る)。`terminal_chart.rs`: `accessories_of`が`端子番号:種別:型番`を解析し
       3種以外・不明な端子番号・書式エラーはその項目だけ飛ばして端子台チェックのWarningになること /
       チャートに付属品行が端子行の間の正しい位置に入ること (`end`は末尾)。`reports.rs`: BOMに付属品が
       型番ごとの数量行として載ること / 型番が空・部品DBに無いときBOMへ空行を作らないこと。
       併せてフェーズ6積み残しの2件: BOMの電線集約行が数量欄へ単位付き`"3.75 m"`と書く逸脱 (docs/04か
       台帳へ1行) と、使用長の無い配線しか無いプロジェクトで`(未割当) 0.00 m`の行が出ること (行を出さない)
-- [ ] **Step 2 (green):** 実装 + ツールバー「部品割当」(部品DB検索ポップオーバー → `value`と
+- [x] **Step 2 (green):** 実装 + ツールバー「部品割当」(部品DB検索ポップオーバー → `value`と
       `attrs["terminal_kind"]`を`update_entity`1回で書く) と「付属品」(位置・種別・型番の表)
       (`terminals.phase2.accessory`を実キーへ、`terminals.assignPart`を新設)。`cargo test`+`vitest`+
       `vue-tsc` → 実機確認 (TB1へ端子台型番を割当 → 両端にエンドブラケット → BOMに型番と数量2が載る) →
       `gen_spec.py` → コミット
-- [ ] **Step 3 (docs):** `docs/04-standards-output.md`と`.ja.md`のBOM節に付属品行と電線集約の数量表記を
+- [x] **Step 3 (docs):** `docs/04-standards-output.md`と`.ja.md`のBOM節に付属品行と電線集約の数量表記を
       追記し、**付属品の幅は盤レイアウトの`panel.rail_fill`/間隔チェックに数えない**ことを制限として
       1行明記 (`docs/internal/specs/reproduction-gaps.md`にも同じ1行) → コミット
 

@@ -16,6 +16,8 @@ import {
 import { useDocumentStore } from "./document";
 import type { RevealTarget } from "../composables/reveal";
 import {
+  accessoryDrafts,
+  formatAccessories,
   parseJumperSpec,
   formatJumperSpec,
   withJumpers,
@@ -974,5 +976,92 @@ describe("spare insertion popover (Task 4: 予備端子の挿入)", () => {
     expect(store.clampSpareCount(-3)).toBe(1);
     expect(store.clampSpareCount(2.7)).toBe(2);
     expect(store.clampSpareCount(NaN)).toBe(1);
+  });
+});
+
+describe("part assignment and accessories (M4 phase 5 Task 5)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setActivePinia(createPinia());
+  });
+
+  // ja: 付属品の行は「端子番号:種別:型番」のカンマ列になり、型番の前後の空白と書式を壊す「,」「:」は取り除かれる
+  it("formats accessory rows as terminal:kind:part, trimming the part number and dropping commas and colons", () => {
+    expect(
+      formatAccessories([
+        { position: "1", kind: "end_bracket", partNo: " SAMPLE-EB " },
+        { position: "end", kind: "end_plate", partNo: "SA:MP,LE" },
+      ]),
+    ).toBe("1:end_bracket:SAMPLE-EB,end:end_plate:SAMPLE");
+  });
+
+  // ja: 付属品が1つも無いときは空文字になる (ストアは属性ごと消す)
+  it("formats no rows as an empty string", () => {
+    expect(formatAccessories([])).toBe("");
+  });
+
+  // ja: チャートの付属品は、末尾 (before=null) を "end" にしてポップオーバーの行へ写る
+  it("turns chart accessories into popover rows, mapping the end position to 'end'", () => {
+    expect(
+      accessoryDrafts([
+        { before: "2", kind: "partition", part_no: "" },
+        { before: null, kind: "end_bracket", part_no: "SAMPLE-EB" },
+      ]),
+    ).toEqual([
+      { position: "2", kind: "partition", partNo: "" },
+      { position: "end", kind: "end_bracket", partNo: "SAMPLE-EB" },
+    ]);
+  });
+
+  // ja: 部品割当は update_entity 1回で、端子台の型番 (value) と種別 (attrs.terminal_kind) を同時に書く
+  it("assigns a part with one update_entity that writes the part number and the terminal kind", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    expect(await store.assignPart({ part_no: "SAMPLE0001", terminal_kind: "feed_through" })).toBe(true);
+    expect(sent).toHaveLength(1);
+    const cmd = sent[0] as { type: string; entity: { value: string; attrs: Record<string, string> } };
+    expect(cmd.type).toBe("update_entity");
+    expect(cmd.entity.value).toBe("SAMPLE0001");
+    expect(cmd.entity.attrs.terminal_kind).toBe("feed_through");
+  });
+
+  // ja: 種別の無い部品を割り当てると、古い種別の属性は消える
+  it("removes a stale terminal kind when the assigned part has none", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    const doc = useDocumentStore();
+    const tb = doc.project!.sheets[0].entities.tb1 as { attrs: Record<string, string> };
+    tb.attrs.terminal_kind = "fuse";
+    expect(await store.assignPart({ part_no: "SAMPLE0002", terminal_kind: "" })).toBe(true);
+    const cmd = sent[0] as { entity: { attrs: Record<string, string> } };
+    expect("terminal_kind" in cmd.entity.attrs).toBe(false);
+  });
+
+  // ja: 付属品を全部消して適用すると、accessories属性そのものが消える
+  it("drops the accessories attribute when every accessory row is removed", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    const doc = useDocumentStore();
+    const tb = doc.project!.sheets[0].entities.tb1 as { attrs: Record<string, string> };
+    tb.attrs.accessories = "1:end_bracket:SAMPLE-EB";
+    expect(await store.applyAccessories([])).toBe(true);
+    const cmd = sent[0] as { entity: { attrs: Record<string, string> } };
+    expect("accessories" in cmd.entity.attrs).toBe(false);
+  });
+
+  // ja: 付属品の行を適用すると、書式どおりの accessories 属性を update_entity 1回で書く
+  it("writes the accessories attribute in the documented format with one update_entity", async () => {
+    mockBackend();
+    const sent = spyCommands();
+    const store = await opened();
+    expect(
+      await store.applyAccessories([{ position: "end", kind: "end_bracket", partNo: "SAMPLE-EB" }]),
+    ).toBe(true);
+    expect(sent).toHaveLength(1);
+    const cmd = sent[0] as { entity: { attrs: Record<string, string> } };
+    expect(cmd.entity.attrs.accessories).toBe("end:end_bracket:SAMPLE-EB");
   });
 });

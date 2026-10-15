@@ -431,6 +431,8 @@ existing jumper drawing.
 
 ### G6 — A terminal block is one column of terminals · quality
 
+> **Limitation (M4 phase 5, accessories):** terminal accessories (end brackets, partitions, end plates) are listed in the terminal chart and counted in the BOM, but their widths are **not** counted by the panel layout's rail fill or spacing checks.
+
 > **Status 2026-08-23 (phase 6, task 2): resolved (dynamic symbol id).** A new
 > parametric symbol family, `terminal_block_{n}p_{levels}l` (1–3 levels, e.g.
 > `terminal_block_8p_2l`), draws **one terminal column per level, side by side**

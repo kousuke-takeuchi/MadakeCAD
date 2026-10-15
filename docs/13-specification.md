@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2574 specification clauses** across 6 areas.
+**2590 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -434,6 +434,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Opening an older parts database fills in the footprint sizes of the bundled samples that have none yet, without touching sizes someone entered by hand. <sub>`an_older_database_gains_the_bundled_footprint_sizes`</sub>
 - A part with only one of the two footprint dimensions filled in has no usable footprint size, because both width and height are needed to draw the outline. <sub>`a_half_filled_footprint_size_is_not_used`</sub>
 - The database path defaults to the OS app-data folder and can be overridden with MADAKE_PARTS_DB. <sub>`default_path_respects_env_override`</sub>
+- An old schema-v6 database migrates to v7 on open, keeping its rows, gaining the terminal kind column, filling the bundled terminal block's kind and adding the terminal accessory samples. <sub>`v6_database_migrates_to_v7_with_terminal_kinds_and_accessory_samples`</sub>
+- A freshly created parts database already holds the terminal block sample with its kind and the three terminal accessory samples. <sub>`a_new_database_has_terminal_kinds_and_accessory_samples`</sub>
 
 ### PDF output
 
@@ -580,6 +582,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The BOM has no wire roll-up rows at all when the project has no wires (a project with only components is unaffected). <sub>`bom_has_no_wire_rollup_rows_without_any_wires`</sub>
 - After the component rows, the BOM adds one row per wire part number with the project-wide total length (in metres, 2 decimals) in the quantity column. <sub>`bom_rolls_up_wires_by_part_number_after_the_component_rows`</sub>
 - Wires whose part number cannot be resolved roll up under a single "(unassigned)" row, instead of being invented or dropped. <sub>`bom_rolls_up_unresolved_wires_under_one_unassigned_row`</sub>
+- Terminal block accessories appear in the BOM as one row per part number with how many are used, listing the terminal blocks that use them, after the wire roll-up rows. <sub>`bom_counts_terminal_accessories_by_part_number`</sub>
+- An accessory without a part number, or one the terminal check cannot read, adds no row to the BOM. <sub>`bom_skips_accessories_without_a_part_number_or_that_cannot_be_read`</sub>
+- When the only wires whose part number cannot be resolved have no length, the BOM adds no "(unassigned) 0.00 m" row. <sub>`bom_adds_no_unassigned_row_when_those_wires_have_no_length`</sub>
 - BOM fields containing commas are quoted so the CSV stays valid. <sub>`bom_escapes_fields_with_commas`</sub>
 - The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, followed by the mate and remark columns (G14/G18), and the older column order (sheet, wire number, harness, ...) is no longer produced. <sub>`wire_list_is_a_from_to_list`</sub>
 - An end of a wire that lands on a symbol pin is written as "reference:pin number" (for example K1:A1). <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
@@ -943,6 +948,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Jumper order brings every pole that has any jumper to the front (in pole-number order), followed by the poles with no jumper (also in pole-number order). <sub>`jumper_order_brings_every_jumpered_pole_to_the_front`</sub>
 - On a 3-level terminal block, whichever row order is chosen, the three levels of one pole always stay next to each other in the resulting order. <sub>`every_row_order_keeps_the_three_levels_of_one_pole_adjacent`</sub>
 - The terminal chart CSV always lists rows in the same order as the chart (the editor), for every row order. <sub>`the_csv_row_order_always_matches_the_chart_row_order`</sub>
+- An accessory spec lists each accessory as "terminal:kind:part number"; "end" places it after the last terminal, and the part number may be left out. <sub>`accessories_are_read_in_order_with_end_and_optional_part_number`</sub>
+- An accessory item with an unknown kind, a terminal the block does not have, or a broken format is skipped on its own and reported, while the other items still count. <sub>`a_bad_accessory_item_is_skipped_alone_and_reported`</sub>
+- In the terminal chart an accessory gets its own row right before the terminal it names, and "end" accessories come after the last terminal. <sub>`accessory_rows_sit_before_their_terminal_and_end_rows_come_last`</sub>
+- The terminal check reports a broken accessory item as a warning and names the item. <sub>`the_terminal_check_warns_about_a_broken_accessory_item`</sub>
 
 ### Terminal connection diagrams
 
@@ -2910,6 +2919,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - flags a count that would exceed the pole cap <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - lists one insertion-point option per pole, using level a's label on a multi-level block <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
 - clamps the count stepper's input to a positive integer <sub>`spare insertion popover (Task 4: 予備端子の挿入)`</sub>
+- formats accessory rows as terminal:kind:part, trimming the part number and dropping commas and colons <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- formats no rows as an empty string <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- turns chart accessories into popover rows, mapping the end position to 'end' <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- assigns a part with one update_entity that writes the part number and the terminal kind <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- removes a stale terminal kind when the assigned part has none <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- drops the accessories attribute when every accessory row is removed <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
+- writes the accessories attribute in the documented format with one update_entity <sub>`part assignment and accessories (M4 phase 5 Task 5)`</sub>
 
 ### ui
 

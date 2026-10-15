@@ -32,15 +32,47 @@ import {
 import type { RevealTarget } from "../composables/reveal";
 import {
   ipc,
+  type Accessory,
+  type AccessoryKind,
   type Command,
   type Diagnostic,
   type RowOrder,
   type SymbolDef,
   type SymbolInstance,
   type TerminalBlockInfo,
+  type Part,
   type TerminalChart,
 } from "../ipc";
 import { useDocumentStore } from "./document";
+
+
+/** 付属品の種別 (並びはポップオーバーのドロップダウン順)。 */
+export const ACCESSORY_KINDS: AccessoryKind[] = ["end_bracket", "partition", "end_plate"];
+/** 付属品の位置で「端子台の末尾」を表す語 (Rust側`ACCESSORY_END`と同じ)。 */
+export const ACCESSORY_END = "end";
+
+/** 付属品ポップオーバーの1行 (編集中の値)。位置は端子の表示ラベルか`"end"`。 */
+export interface AccessoryDraft {
+  position: string;
+  kind: AccessoryKind;
+  partNo: string;
+}
+
+/** チャートの付属品をポップオーバーの行へ写す。 */
+export function accessoryDrafts(items: Accessory[]): AccessoryDraft[] {
+  return items.map((a) => ({ position: a.before ?? ACCESSORY_END, kind: a.kind, partNo: a.part_no }));
+}
+
+/**
+ * ポップオーバーの行を`attrs["accessories"]`の書式 (`端子番号:種別:型番` のカンマ列) へ戻す。
+ * 型番は前後の空白を落とし、`,`と`:`は書式を壊すので取り除く。行が無ければ空文字
+ * (呼び出し側で属性ごと消す)。
+ */
+export function formatAccessories(rows: AccessoryDraft[]): string {
+  return rows
+    .map((r) => `${r.position}:${r.kind}:${r.partNo.replace(/[,:]/g, "").trim()}`)
+    .join(",");
+}
 
 export { TERMINAL_LEVEL_MAX } from "../canvas/dynamicSymbol";
 
@@ -214,6 +246,18 @@ export const useTerminalsStore = defineStore("terminals", {
       return state.blocks.find((b) => b.entity_id === state.entityId) ?? null;
     },
     /** 表示中の端子台の参照記号 (例 "TB1")。 */
+    /** 付属品 (チャートが解析したもの。書いた順)。 */
+    accessories(state): Accessory[] {
+      return state.chart?.accessories ?? [];
+    },
+    /** 読めなかった付属品の項。 */
+    accessoryIssues(state) {
+      return state.chart?.accessory_issues ?? [];
+    },
+    /** 端子台の現在の型番 (`SymbolInstance.value`)。 */
+    partNo(state): string {
+      return state.chart?.value ?? "";
+    },
     reference(state): string {
       return state.chart?.reference ?? this.block?.reference ?? "";
     },
@@ -407,6 +451,64 @@ export const useTerminalsStore = defineStore("terminals", {
       const i = this.selected.indexOf(terminal);
       if (i >= 0) this.selected.splice(i, 1);
       else this.selected.push(terminal);
+    },
+
+    /**
+     * 端子台シンボルの`value`と属性を書き換える update_entity コマンド。`attrs`の値が`null`の
+     * キーは属性ごと消す。端子台が見つからなければnull。
+     */
+    symbolUpdateCommand(patch: { value?: string; attrs?: Record<string, string | null> }): Command | null {
+      const doc = useDocumentStore();
+      const block = this.block;
+      if (!block) return null;
+      const sheet = doc.project?.sheets.find((s) => s.id === block.sheet_id);
+      const entity = sheet?.entities[block.entity_id];
+      if (!entity || entity.kind !== "symbol") return null;
+      const attrs = { ...entity.attrs };
+      for (const [k, v] of Object.entries(patch.attrs ?? {})) {
+        if (v === null || v === "") delete attrs[k];
+        else attrs[k] = v;
+      }
+      return {
+        type: "update_entity",
+        sheet_id: block.sheet_id,
+        entity: { ...entity, value: patch.value ?? entity.value, attrs },
+      };
+    },
+
+    /** update_entity を1回実行してチャートを読み直す (失敗は`error`へ)。 */
+    async applyUpdate(command: Command | null): Promise<boolean> {
+      if (!command || this.busy) return false;
+      this.busy = true;
+      this.error = null;
+      try {
+        await useDocumentStore().execute(command);
+        await this.reloadBlocks();
+        return true;
+      } catch (e) {
+        this.error = String(e);
+        return false;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    /**
+     * 部品DBの端子台型番を割り当てる (update_entity 1回で`value`=型番と
+     * `attrs["terminal_kind"]`=種別を書く。種別が空の部品なら属性を消す)。
+     */
+    async assignPart(part: Pick<Part, "part_no" | "terminal_kind">): Promise<boolean> {
+      return this.applyUpdate(
+        this.symbolUpdateCommand({
+          value: part.part_no,
+          attrs: { terminal_kind: part.terminal_kind ?? null },
+        }),
+      );
+    },
+
+    /** 付属品の指定を書き換える (update_entity 1回。行が無ければ属性ごと消す)。 */
+    async applyAccessories(rows: AccessoryDraft[]): Promise<boolean> {
+      return this.applyUpdate(this.symbolUpdateCommand({ attrs: { accessories: formatAccessories(rows) } }));
     },
 
     /** ジャンパ指定を書き換える update_entity コマンド。端子台が見つからなければnull。 */

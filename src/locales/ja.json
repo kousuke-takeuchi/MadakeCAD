@@ -798,7 +798,6 @@
     "generateChart": "チャートを生成",
     "phase2Hint": "フェーズ2で対応予定",
     "phase2": {
-      "accessory": "アクセサリ",
       "swap": "内外スワップ"
     },
     "insertSpare": "予備挿入",
@@ -889,7 +888,49 @@
     },
     "renumberedLog": "端子台: {reference} の端子番号を {from} から {to} へ採番しました (Cmd+Zで元に戻せます)",
     "levelsChangedLog": "端子台: {reference} の段数を {from} から {to} へ変更しました (Cmd+Zで元に戻せます)",
-    "spareInsertedLog": "端子台: {reference} に予備端子{count}個 ({labels}) を挿入しました (Cmd+Zで元に戻せます)"
+    "spareInsertedLog": "端子台: {reference} に予備端子{count}個 ({labels}) を挿入しました (Cmd+Zで元に戻せます)",
+    "assignPart": {
+      "button": "部品割当",
+      "title": "部品割当 (端子ブロック型番)",
+      "description": "部品DBの型番を割り当てます。型番と端子台の種別を1回の編集で書き込みます (Cmd+Zで元に戻せます)",
+      "search": "型番・品名で検索",
+      "results": "結果 ({count}件)",
+      "empty": "端子台の部品が見つかりません",
+      "hint": "種別は部品DBの terminal_kind 列。割当時に端子台へ写し、チャートの「型番」と端子台チェックが読みます",
+      "cancel": "キャンセル",
+      "apply": "割当",
+      "assignedLog": "端子台: {reference} に型番 {partNo} を割り当てました (Cmd+Zで元に戻せます)"
+    },
+    "accessory": {
+      "button": "付属品",
+      "title": "付属品 (アクセサリ)",
+      "description": "エンドブラケット・仕切り板・エンドプレートを端子台に付けます",
+      "position": "位置",
+      "kind": "種別",
+      "partNo": "型番",
+      "positionEnd": "末尾",
+      "positionBefore": "{terminal}の前",
+      "addRow": "行を追加",
+      "removeRow": "この行を削除",
+      "unknownPart": "{partNo} は部品DBにありません (適用はできます。部品表にはこの型番のまま載ります)",
+      "skipped": "読めない項は飛ばされています: {items}",
+      "hint": "位置=その端子の直前に入る。末尾は最後の端子の後ろ。種別はエンドブラケット / 仕切り板 / エンドプレートの3種",
+      "bomNote": "部品表には型番ごとの数量行として載ります。付属品の幅は盤レイアウトの間隔チェックには数えません",
+      "cancel": "キャンセル",
+      "apply": "適用",
+      "appliedLog": "端子台: {reference} の付属品を{count}件に更新しました (Cmd+Zで元に戻せます)"
+    },
+    "accessoryKind": {
+      "end_bracket": "エンドブラケット",
+      "partition": "仕切り板",
+      "end_plate": "エンドプレート"
+    },
+    "terminalKind": {
+      "feed_through": "貫通",
+      "multi_level": "多段",
+      "fuse": "ヒューズ",
+      "disconnect": "断路"
+    }
   },
   "plcIo": {
     "ribbonButton": "PLC I/O割付表",

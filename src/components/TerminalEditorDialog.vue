@@ -13,13 +13,24 @@
 // 文字列はすべてi18nカタログ経由 (docs/internal/specs/i18n.md)。
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowLeftRight, Layers, ListOrdered, Minus, Plus, ShieldCheck, SquareStack, TriangleAlert, Unplug, X } from "lucide-vue-next";
+import { ArrowLeftRight, Layers, ListOrdered, Minus, Package, Plus, Puzzle, ShieldCheck, SquareStack, Trash2, TriangleAlert, Unplug, X } from "lucide-vue-next";
 import { clampLevels } from "./symbolPickerDynamic";
 import { filterFor, pickSave } from "../composables/fileActions";
 import { useReveal } from "../composables/reveal";
 import { ipc } from "../ipc";
 import { useDocumentStore } from "../stores/document";
-import { ROW_ORDERS, rowOrderOf, TERMINAL_LEVEL_MAX, useTerminalsStore } from "../stores/terminals";
+import { usePopover } from "../composables/popover";
+import { type Part } from "../ipc";
+import {
+  ACCESSORY_END,
+  ACCESSORY_KINDS,
+  accessoryDrafts,
+  type AccessoryDraft,
+  ROW_ORDERS,
+  rowOrderOf,
+  TERMINAL_LEVEL_MAX,
+  useTerminalsStore,
+} from "../stores/terminals";
 import { useUiStore } from "../stores/ui";
 
 const terminals = useTerminalsStore();
@@ -35,10 +46,101 @@ watch(
 );
 
 /** フェーズ2で実装する操作 (デザインどおり並べるが押せない。採番・多段・予備挿入は実装済みなので除く)。 */
-const phase2 = [
-  { key: "accessory", icon: Plus },
-  { key: "swap", icon: ArrowLeftRight },
-] as const;
+const phase2 = [{ key: "swap", icon: ArrowLeftRight }] as const;
+
+// --- 部品割当ポップオーバー (デザイン「P 部品割当」準拠) ---
+// 部品DBから端子台の型番を検索し、`value`=型番と`attrs["terminal_kind"]`=種別を
+// update_entity 1回で書く。候補は「端子台の種別を持つ部品」と「端子台シンボルの部品」。
+const TERMINAL_ACCESSORY_KINDS = new Set<string>(ACCESSORY_KINDS);
+const partQuery = ref("");
+const partResults = ref<Part[]>([]);
+const partPicked = ref<Part | null>(null);
+const partError = ref("");
+let partSearchSeq = 0;
+
+async function searchTerminalParts() {
+  const seq = ++partSearchSeq;
+  try {
+    const found = await ipc.searchParts(partQuery.value.trim());
+    if (seq !== partSearchSeq) return;
+    partResults.value = found.filter(
+      (p) =>
+        (p.terminal_kind && !TERMINAL_ACCESSORY_KINDS.has(p.terminal_kind)) ||
+        p.symbol_id.startsWith("terminal_block_"),
+    );
+  } catch (e) {
+    if (seq === partSearchSeq) partError.value = String(e);
+  }
+}
+
+const partPop = usePopover({
+  onOpen: () => {
+    partQuery.value = "";
+    partPicked.value = null;
+    partError.value = "";
+    void searchTerminalParts();
+  },
+});
+watch(partQuery, () => void searchTerminalParts());
+
+function terminalKindLabel(kind: string | undefined): string {
+  return kind ? t(`terminals.terminalKind.${kind}`) : "";
+}
+
+async function applyPart() {
+  const part = partPicked.value;
+  if (!part) return;
+  partError.value = "";
+  if (!(await terminals.assignPart(part))) {
+    partError.value = terminals.error ?? "";
+    return;
+  }
+  partPop.close();
+  ui.log(t("terminals.assignPart.assignedLog", { reference: terminals.reference, partNo: part.part_no }));
+}
+
+// --- 付属品ポップオーバー (デザイン「P 付属品 (既定)」/「(型番が部品DBに無い)」準拠) ---
+// 位置 (その端子の直前 / 末尾)・種別 (3種)・型番の表。部品DBに無い型番は**警告だけ**出して
+// 適用は止めない (BOMにはその型番で載り、端子台チェックは読めない項だけを知らせる)。
+const accessoryRows = ref<AccessoryDraft[]>([]);
+const accessoryKnownParts = ref<Set<string>>(new Set());
+const accessoryError = ref("");
+const accPop = usePopover({
+  onOpen: async () => {
+    accessoryRows.value = accessoryDrafts(terminals.accessories);
+    accessoryError.value = "";
+    try {
+      const parts = await ipc.searchParts("", "terminal_accessory");
+      accessoryKnownParts.value = new Set(parts.map((p) => p.part_no));
+    } catch {
+      accessoryKnownParts.value = new Set();
+    }
+  },
+});
+const accessoryPositions = computed(() => [...terminals.rows.map((r) => r.terminal), ACCESSORY_END]);
+const unknownAccessoryParts = computed(() =>
+  [...new Set(accessoryRows.value.map((r) => r.partNo.trim()))].filter(
+    (no) => no !== "" && !accessoryKnownParts.value.has(no),
+  ),
+);
+
+function addAccessoryRow() {
+  accessoryRows.value.push({ position: ACCESSORY_END, kind: "end_bracket", partNo: "" });
+}
+
+function removeAccessoryRow(i: number) {
+  accessoryRows.value.splice(i, 1);
+}
+
+async function applyAccessoryRows() {
+  accessoryError.value = "";
+  if (!(await terminals.applyAccessories(accessoryRows.value))) {
+    accessoryError.value = terminals.error ?? "";
+    return;
+  }
+  accPop.close();
+  ui.log(t("terminals.accessory.appliedLog", { reference: terminals.reference, count: accessoryRows.value.length }));
+}
 
 // --- 採番ポップオーバー (デザイン「採番 (既定)」/「採番 (エラー)」準拠) ---
 // 開始番号・増分・接頭辞・対象・プレビュー (対応表+ジャンパの追従)・指摘行・適用/キャンセル。
@@ -703,6 +805,107 @@ async function generateDiagram() {
             </div>
           </div>
         </div>
+        <div class="popover-anchor">
+          <button class="tool" :disabled="!terminals.entityId" @click="partPop.toggle()">
+            <Package :size="12" class="tool-icon" />
+            {{ t("terminals.assignPart.button") }}
+          </button>
+          <template v-if="partPop.open.value">
+            <div class="backdrop" @click="partPop.close()" />
+            <div class="popover wide" @click.stop>
+              <div class="popover-title">{{ t("terminals.assignPart.title") }}</div>
+              <div class="popover-desc">{{ t("terminals.assignPart.description") }}</div>
+              <input
+                v-model="partQuery"
+                type="search"
+                class="popover-input full"
+                :placeholder="t('terminals.assignPart.search')"
+              />
+              <div class="popover-note">{{ t("terminals.assignPart.results", { count: partResults.length }) }}</div>
+              <div class="part-list">
+                <button
+                  v-for="p in partResults"
+                  :key="p.part_no"
+                  class="part-row"
+                  :class="{ picked: partPicked?.part_no === p.part_no, current: terminals.partNo === p.part_no }"
+                  @click="partPicked = p"
+                >
+                  <span class="mono">{{ p.part_no }}</span>
+                  <span class="kind">{{ terminalKindLabel(p.terminal_kind) }}<span v-if="p.terminal_kind" class="mono muted"> {{ p.terminal_kind }}</span></span>
+                  <span class="muted">{{ p.maker }}</span>
+                </button>
+                <div v-if="partResults.length === 0" class="popover-note">{{ t("terminals.assignPart.empty") }}</div>
+              </div>
+              <div v-if="partError" class="popover-issue">
+                <TriangleAlert :size="12" class="issue-icon" />
+                <span>{{ partError }}</span>
+              </div>
+              <div class="popover-note">{{ t("terminals.assignPart.hint") }}</div>
+              <div class="popover-actions">
+                <button class="btn secondary" @click="partPop.close()">{{ t("terminals.assignPart.cancel") }}</button>
+                <button class="btn primary" :disabled="terminals.busy || !partPicked" @click="applyPart">
+                  {{ t("terminals.assignPart.apply") }}
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+        <div class="popover-anchor">
+          <button class="tool" :disabled="!terminals.entityId" @click="accPop.toggle()">
+            <Puzzle :size="12" class="tool-icon" />
+            {{ t("terminals.accessory.button") }}
+          </button>
+          <template v-if="accPop.open.value">
+            <div class="backdrop" @click="accPop.close()" />
+            <div class="popover wide" @click.stop>
+              <div class="popover-title">{{ t("terminals.accessory.title") }}</div>
+              <div class="popover-desc">{{ t("terminals.accessory.description") }}</div>
+              <div class="acc-table">
+                <span class="acc-head">{{ t("terminals.accessory.position") }}</span>
+                <span class="acc-head">{{ t("terminals.accessory.kind") }}</span>
+                <span class="acc-head">{{ t("terminals.accessory.partNo") }}</span>
+                <span />
+                <template v-for="(row, i) in accessoryRows" :key="i">
+                  <select v-model="row.position" class="popover-input full">
+                    <option v-for="pos in accessoryPositions" :key="pos" :value="pos">
+                      {{ pos === ACCESSORY_END ? t("terminals.accessory.positionEnd") : t("terminals.accessory.positionBefore", { terminal: pos }) }}
+                    </option>
+                  </select>
+                  <select v-model="row.kind" class="popover-input full">
+                    <option v-for="k in ACCESSORY_KINDS" :key="k" :value="k">{{ t(`terminals.accessoryKind.${k}`) }}</option>
+                  </select>
+                  <input v-model="row.partNo" type="text" class="popover-input full mono" />
+                  <button class="icon-btn" :title="t('terminals.accessory.removeRow')" @click="removeAccessoryRow(i)">
+                    <Trash2 :size="11" />
+                  </button>
+                </template>
+              </div>
+              <button class="btn secondary add-row" @click="addAccessoryRow">
+                <Plus :size="11" /> {{ t("terminals.accessory.addRow") }}
+              </button>
+              <div v-if="unknownAccessoryParts.length > 0" class="popover-issue warn">
+                <TriangleAlert :size="12" class="issue-icon" />
+                <span>{{ t("terminals.accessory.unknownPart", { partNo: unknownAccessoryParts.join(", ") }) }}</span>
+              </div>
+              <div v-if="terminals.accessoryIssues.length > 0" class="popover-issue warn">
+                <TriangleAlert :size="12" class="issue-icon" />
+                <span>{{ t("terminals.accessory.skipped", { items: terminals.accessoryIssues.map((i) => i.text).join(", ") }) }}</span>
+              </div>
+              <div v-if="accessoryError" class="popover-issue">
+                <TriangleAlert :size="12" class="issue-icon" />
+                <span>{{ accessoryError }}</span>
+              </div>
+              <div class="popover-note">{{ t("terminals.accessory.hint") }}</div>
+              <div class="popover-note">{{ t("terminals.accessory.bomNote") }}</div>
+              <div class="popover-actions">
+                <button class="btn secondary" @click="accPop.close()">{{ t("terminals.accessory.cancel") }}</button>
+                <button class="btn primary" :disabled="terminals.busy" @click="applyAccessoryRows">
+                  {{ t("terminals.accessory.apply") }}
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
         <button
           v-for="p in phase2"
           :key="p.key"
@@ -886,6 +1089,34 @@ async function generateDiagram() {
   box-shadow: var(--shadow-panel-lg);
 }
 .popover-title { font-size: 11px; font-weight: 600; color: var(--ui-text); }
+.popover.wide { width: 420px; left: auto; right: 0; }
+.popover-input.full { width: 100%; box-sizing: border-box; }
+.backdrop { position: fixed; inset: 0; z-index: 9; }
+.part-list { display: flex; flex-direction: column; max-height: 180px; overflow-y: auto; border: 1px solid var(--ribbon-line); border-radius: 4px; }
+.part-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1.4fr 0.8fr;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 6px;
+  font-size: 11px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--ribbon-line);
+  color: var(--ui-text);
+  cursor: pointer;
+}
+.part-row:hover { background: var(--hover-bg); }
+.part-row.picked { background: var(--sel-blue); outline: 1px solid var(--acad-blue); }
+.part-row .muted { color: var(--ui-muted); }
+.part-row .kind .muted { margin-left: 4px; }
+.acc-table { display: grid; grid-template-columns: 0.9fr 1.5fr 1fr 20px; gap: 4px 6px; align-items: center; }
+.acc-head { font-size: 10px; color: var(--ui-muted); }
+.add-row { align-self: flex-start; display: flex; align-items: center; gap: 4px; }
+.icon-btn { display: flex; align-items: center; justify-content: center; background: none; border: none; color: var(--ui-muted); cursor: pointer; }
+.popover-issue.warn { color: var(--warn-fg); }
+
 .popover-field {
   display: flex;
   align-items: center;

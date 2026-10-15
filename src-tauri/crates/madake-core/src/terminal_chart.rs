@@ -40,6 +40,120 @@ pub const JUMPER_INVALID: &str = "terminal.jumper_invalid";
 pub const JUMPER_UNKNOWN_TERMINAL: &str = "terminal.jumper_unknown_terminal";
 /// 端子に電線が1本も繋がっていない (予備端子)。
 pub const TERMINAL_UNCONNECTED: &str = "terminal.unconnected";
+/// 付属品の指定 (`attrs["accessories"]`) の1項が読めない・種別が3種以外・端子台に無い端子番号を指す。
+pub const ACCESSORY_INVALID: &str = "terminal.accessory_invalid";
+/// 付属品の指定を持つ属性キー (spec §1.1、`端子番号:種別:型番` のカンマ列)。
+pub const ACCESSORIES_ATTR: &str = "accessories";
+/// 付属品の位置に「端子台の末尾」を指す語。
+pub const ACCESSORY_END: &str = "end";
+
+/// 端子台の付属品の種別 (spec §1.1 の3種だけ。EPLANの端子台アクセサリと同じ分類)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AccessoryKind {
+    /// エンドブラケット (端子台の両端の固定金具)。
+    EndBracket,
+    /// 仕切り板 (端子の間の絶縁板)。
+    Partition,
+    /// エンドプレート (端子台の端を覆う板)。
+    EndPlate,
+}
+
+impl AccessoryKind {
+    /// 属性の書式で使う語 (`end_bracket` / `partition` / `end_plate`)。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AccessoryKind::EndBracket => "end_bracket",
+            AccessoryKind::Partition => "partition",
+            AccessoryKind::EndPlate => "end_plate",
+        }
+    }
+    /// 帳票に出す名前。
+    pub fn label(self) -> &'static str {
+        match self {
+            AccessoryKind::EndBracket => "エンドブラケット",
+            AccessoryKind::Partition => "仕切り板",
+            AccessoryKind::EndPlate => "エンドプレート",
+        }
+    }
+    fn parse(s: &str) -> Option<Self> {
+        match s {
+            "end_bracket" => Some(AccessoryKind::EndBracket),
+            "partition" => Some(AccessoryKind::Partition),
+            "end_plate" => Some(AccessoryKind::EndPlate),
+            _ => None,
+        }
+    }
+}
+
+/// 端子台の付属品1個 (`attrs["accessories"]` の1項)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Accessory {
+    /// この端子の**直前**に入る (表示ラベル)。`None` は端子台の末尾。
+    pub before: Option<String>,
+    pub kind: AccessoryKind,
+    /// 型番 (空なら部品表に載せない)。
+    pub part_no: String,
+}
+
+/// 読めなかった付属品の項。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AccessoryIssue {
+    /// 元の項の文字列 (前後の空白を除いたもの)。
+    pub text: String,
+    pub message: String,
+}
+
+/// `attrs["accessories"]` (`"端子番号:種別:型番,…"`) を解析する。`labels` は端子台の表示ラベル。
+///
+/// 読めた項は書いた順に返す。読めない項・3種以外の種別・`labels`に無い端子番号を指す項は
+/// **その項だけ**を飛ばして`issues`に載せる (端子台チェックがWarningにする)。空の項は無視。
+/// 型番は省略できる (`"1:end_bracket:"` や `"1:end_bracket"`。部品表には載らない)。
+pub fn parse_accessories(spec: &str, labels: &[String]) -> (Vec<Accessory>, Vec<AccessoryIssue>) {
+    let mut items = Vec::new();
+    let mut issues = Vec::new();
+    for raw in spec.split(',') {
+        let text = raw.trim();
+        if text.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = text.split(':').map(str::trim).collect();
+        if parts.len() < 2 || parts.len() > 3 || parts[0].is_empty() {
+            issues.push(AccessoryIssue {
+                text: text.into(),
+                message: "「端子番号:種別:型番」の形で書いてください".into(),
+            });
+            continue;
+        }
+        let Some(kind) = AccessoryKind::parse(parts[1]) else {
+            issues.push(AccessoryIssue {
+                text: text.into(),
+                message: format!(
+                    "種別「{}」は使えません (end_bracket / partition / end_plate のいずれか)",
+                    parts[1]
+                ),
+            });
+            continue;
+        };
+        let before = if parts[0] == ACCESSORY_END {
+            None
+        } else if labels.iter().any(|l| l == parts[0]) {
+            Some(parts[0].to_string())
+        } else {
+            issues.push(AccessoryIssue {
+                text: text.into(),
+                message: format!("端子 {} はこの端子台にありません", parts[0]),
+            });
+            continue;
+        };
+        items.push(Accessory {
+            before,
+            kind,
+            part_no: parts.get(2).copied().unwrap_or("").to_string(),
+        });
+    }
+    (items, issues)
+}
 
 /// `symbol_id` が端子台シンボル (`terminal_block_{n}p`) かどうか。
 pub fn is_terminal_block(symbol_id: &str) -> bool {
@@ -892,25 +1006,50 @@ pub struct TerminalChart {
     /// [`RowOrder::Number`])。CSV・図枠付き図面シート・端子接続図はここを見て並べ替え
     /// 直したりしない — [`TerminalChart::rows`] がすでにこの順に並んでいる。
     pub row_order: RowOrder,
+    /// 付属品 (`attrs["accessories"]`、spec §1.1)。書いた順。
+    #[serde(default)]
+    pub accessories: Vec<Accessory>,
+    /// 読めなかった付属品の項。
+    #[serde(default)]
+    pub accessory_issues: Vec<AccessoryIssue>,
 }
 
 impl TerminalChart {
     /// [`TERMINAL_CHART_COLUMNS`] と同じ並びのセル行。CSV・図面シート化から使う。
+    ///
+    /// 付属品 ([`TerminalChart::accessories`]) は**その端子の直前**に1行ずつ入る
+    /// (`end`指定は全端子の後ろ)。付属品の行は「端子」列だけに `[種別 型番]` を書き、
+    /// 他の列は空にする。
     pub fn cells(&self) -> Vec<Vec<String>> {
-        self.rows
-            .iter()
-            .map(|r| {
-                vec![
-                    r.terminal.clone(),
-                    r.level.clone(),
-                    r.internal.clone(),
-                    r.wire_no.clone(),
-                    r.wire.clone(),
-                    r.external.clone(),
-                    r.jumper.clone(),
-                ]
-            })
-            .collect()
+        let accessory_row = |a: &Accessory| {
+            let text = if a.part_no.is_empty() {
+                format!("[{}]", a.kind.label())
+            } else {
+                format!("[{} {}]", a.kind.label(), a.part_no)
+            };
+            let mut row = vec![String::new(); TERMINAL_CHART_COLUMNS.len()];
+            row[0] = text;
+            row
+        };
+        let mut out = Vec::new();
+        for r in &self.rows {
+            for a in self.accessories.iter().filter(|a| a.before.as_deref() == Some(r.terminal.as_str())) {
+                out.push(accessory_row(a));
+            }
+            out.push(vec![
+                r.terminal.clone(),
+                r.level.clone(),
+                r.internal.clone(),
+                r.wire_no.clone(),
+                r.wire.clone(),
+                r.external.clone(),
+                r.jumper.clone(),
+            ]);
+        }
+        for a in self.accessories.iter().filter(|a| a.before.is_none()) {
+            out.push(accessory_row(a));
+        }
+        out
     }
 }
 
@@ -1268,6 +1407,12 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
 
     let row_order = row_order_of(&inst.attrs);
     sort_terminal_rows(&mut rows, row_order, &page_points, sheet);
+    let labels: Vec<String> = rows.iter().map(|r| r.terminal.clone()).collect();
+    let (accessories, accessory_issues) = inst
+        .attrs
+        .get(ACCESSORIES_ATTR)
+        .map(|spec| parse_accessories(spec, &labels))
+        .unwrap_or_default();
 
     Some(TerminalChart {
         entity_id: tb_id,
@@ -1279,6 +1424,8 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
         jumpers: jumpers.pairs,
         jumper_issues: jumpers.issues,
         row_order,
+        accessories,
+        accessory_issues,
     })
 }
 
@@ -1336,6 +1483,16 @@ pub fn check_terminal_block(sheet: &Sheet, tb_id: EntityId) -> Vec<Diagnostic> {
             entity_ids: vec![tb_id],
         })
         .collect();
+    diags.extend(chart.accessory_issues.iter().map(|i| Diagnostic {
+        severity: Severity::Warning,
+        code: ACCESSORY_INVALID.into(),
+        message: format!(
+            "端子台 {} の付属品「{}」: {}",
+            chart.reference, i.text, i.message
+        ),
+        sheet_id: sheet.id,
+        entity_ids: vec![tb_id],
+    }));
     diags.extend(chart.rows.iter().filter(|r| r.spare).map(|r| Diagnostic {
         severity: Severity::Info,
         code: TERMINAL_UNCONNECTED.into(),
@@ -2768,4 +2925,69 @@ mod tests {
         assert_eq!(csv_terminals, terminal_order(&chart));
         assert_eq!(csv_terminals[0..3], ["1", "10", "11"], "英数順がCSVにも反映される");
     }
+    /// An accessory spec lists each accessory as "terminal:kind:part number"; "end" places it after the last terminal, and the part number may be left out.
+    /// 付属品の指定は「端子番号:種別:型番」を並べたもので、`end`は最後の端子の後ろを指し、型番は省略できる。
+    #[test]
+    fn accessories_are_read_in_order_with_end_and_optional_part_number() {
+        let labels = numbered(4);
+        let (items, issues) = parse_accessories("1:end_bracket:TB-EB, 3:partition, end:end_plate:TB-EP", &labels);
+        assert!(issues.is_empty(), "{issues:?}");
+        assert_eq!(
+            items,
+            vec![
+                Accessory { before: Some("1".into()), kind: AccessoryKind::EndBracket, part_no: "TB-EB".into() },
+                Accessory { before: Some("3".into()), kind: AccessoryKind::Partition, part_no: String::new() },
+                Accessory { before: None, kind: AccessoryKind::EndPlate, part_no: "TB-EP".into() },
+            ]
+        );
+    }
+
+    /// An accessory item with an unknown kind, a terminal the block does not have, or a broken format is skipped on its own and reported, while the other items still count.
+    /// 種別が3種以外・端子台に無い端子番号・書式が壊れた付属品の項は、その項だけが飛ばされて報告され、ほかの項は生きる。
+    #[test]
+    fn a_bad_accessory_item_is_skipped_alone_and_reported() {
+        let labels = numbered(4);
+        let (items, issues) =
+            parse_accessories("1:end_bracket:TB-EB,2:clip:X,9:partition:P,壊れた項,end:end_plate", &labels);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].before.as_deref(), Some("1"));
+        assert_eq!(items[1].before, None);
+        let texts: Vec<&str> = issues.iter().map(|i| i.text.as_str()).collect();
+        assert_eq!(texts, ["2:clip:X", "9:partition:P", "壊れた項"]);
+    }
+
+    /// In the terminal chart an accessory gets its own row right before the terminal it names, and "end" accessories come after the last terminal.
+    /// 端子台チャートでは、付属品は指定した端子の直前に自分の行を持ち、`end`の付属品は最後の端子の後ろに来る。
+    #[test]
+    fn accessory_rows_sit_before_their_terminal_and_end_rows_come_last() {
+        let (mut sheet, id) = sheet_with_tb(3, 0);
+        if let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) {
+            s.attrs.insert(
+                ACCESSORIES_ATTR.into(),
+                "1:end_bracket:TB-EB,2:partition:,end:end_bracket:TB-EB".into(),
+            );
+        }
+        let chart = terminal_chart(&sheet, id).unwrap();
+        let first: Vec<String> = chart.cells().into_iter().map(|r| r[0].clone()).collect();
+        assert_eq!(
+            first,
+            ["[エンドブラケット TB-EB]", "1", "[仕切り板]", "2", "3", "[エンドブラケット TB-EB]"]
+        );
+        assert!(chart.cells().iter().all(|r| r.len() == TERMINAL_CHART_COLUMNS.len()));
+    }
+
+    /// The terminal check reports a broken accessory item as a warning and names the item.
+    /// 端子台チェックは、読めない付属品の項をWarningとして報告し、どの項かを名指しする。
+    #[test]
+    fn the_terminal_check_warns_about_a_broken_accessory_item() {
+        let (mut sheet, id) = sheet_with_tb(2, 0);
+        if let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&id) {
+            s.attrs.insert(ACCESSORIES_ATTR.into(), "5:end_bracket:TB-EB".into());
+        }
+        let diags = check_terminal_block(&sheet, id);
+        let d = diags.iter().find(|d| d.code == ACCESSORY_INVALID).expect("付属品の指摘");
+        assert_eq!(d.severity, Severity::Warning);
+        assert!(d.message.contains("5:end_bracket:TB-EB"), "{}", d.message);
+    }
+
 }
