@@ -1,38 +1,102 @@
 name: Release
 
-# Builds the desktop bundles on all three platforms and attaches them to a DRAFT GitHub
-# release. Trigger by pushing a tag `vX.Y.Z` (matching src-tauri/tauri.conf.json `version`)
-# or manually. Code signing / notarization and the updater are post-release work (M6 spec §3).
+# Publishing a GitHub release (Releases → "Draft a new release" → "Publish release", a
+# pre-release works too) builds the installers on macOS, Windows and Linux and attaches them
+# to that same release:
+#
+#   macOS   .dmg (Apple silicon and Intel)
+#   Windows .msi and the NSIS setup .exe
+#   Linux   .AppImage, .deb and .rpm
+#
+# The release tag decides the version: tag `v1.2.3` builds version 1.2.3 (stamped into
+# src-tauri/tauri.conf.json on the runner only, so the repository never needs a version bump
+# commit first). The tag must be `vX.Y.Z` with numbers only, because the Windows .msi format
+# accepts nothing else; mark test builds with GitHub's "Set as a pre-release" instead of a
+# `-beta` suffix.
+#
+# GitHub does not start workflows for unpublished drafts, so the installers appear only after
+# "Publish release" (allow 20-30 minutes). To rebuild the installers of a release that already
+# exists, run this workflow by hand with its tag (Actions → Release → Run workflow).
+#
+# Bundles are not code-signed or notarized yet (M6 spec §3), and there is no auto-updater.
 
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag of an existing published release to (re)build the installers for, e.g. v0.2.0"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Resolve the release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          RELEASE_ID: ${{ github.event.release.id }}
+        run: |
+          version="${TAG#v}"
+          if ! [[ "$TAG" == v* && "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag '$TAG' must look like v1.2.3 (numbers only: the Windows .msi accepts no other version). Use 'Set as a pre-release' for test builds."
+            exit 1
+          fi
+          if [ -z "$RELEASE_ID" ]; then
+            # Started by hand: find the published release for the tag
+            RELEASE_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id)
+          fi
+          {
+            echo "tag=$TAG"
+            echo "version=$version"
+            echo "release_id=$RELEASE_ID"
+          } >> "$GITHUB_OUTPUT"
+          echo "Building MadakeCAD $version for release $TAG (id $RELEASE_ID)"
+
   bundle:
-    permissions:
-      contents: write
+    name: Installers (${{ matrix.name }})
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - name: macOS Apple silicon
+            platform: macos-latest
             args: --target aarch64-apple-darwin
             target: aarch64-apple-darwin
-          - platform: macos-latest
+          - name: macOS Intel
+            platform: macos-latest
             args: --target x86_64-apple-darwin
             target: x86_64-apple-darwin
-          - platform: ubuntu-22.04
+          # 22.04 rather than the latest image: an older glibc lets the AppImage/.deb run on
+          # more distributions
+          - name: Linux
+            platform: ubuntu-22.04
             args: ""
             target: ""
-          - platform: windows-latest
+          - name: Windows
+            platform: windows-latest
             args: ""
             target: ""
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -41,21 +105,32 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: Linux build dependencies (webkit2gtk, appindicator, rsvg)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev fonts-noto-cjk
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: release-${{ matrix.target }}
       - run: npm ci
+      - name: Stamp the release version into tauri.conf.json (runner copy only)
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = "src-tauri/tauri.conf.json";
+            const conf = JSON.parse(fs.readFileSync(path, "utf8"));
+            conf.version = process.env.VERSION;
+            fs.writeFileSync(path, JSON.stringify(conf, null, 2) + "\n");
+          '
+          grep '"version"' src-tauri/tauri.conf.json
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v__VERSION__
-          releaseName: "MadakeCAD v__VERSION__"
-          releaseBody: "Desktop bundles built by CI. See docs/12-roadmap.md for what is in this version."
-          releaseDraft: true
-          prerelease: true
+          releaseId: ${{ needs.prepare.outputs.release_id }}
           args: ${{ matrix.args }}
+          retryAttempts: 1

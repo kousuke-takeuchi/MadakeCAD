@@ -56,7 +56,7 @@ npm run tauri dev                   # vite(1420) + cargoビルド + ネイティ
 
 起動中は `127.0.0.1:9310` で内蔵サーバー(MCP `/mcp`・Link API `/api/v1`)が生きている。
 
-配布物(`.dmg` / `.msi`+`.exe`インストーラ / `.AppImage`+`.deb`)は`npm run tauri build`で作る。CIはタグ`v*`で3OS分を同じように作りドラフトリリースへ添付する(`.github/workflows/release.yml`)。コード署名はまだ行っていない。インストーラ生成なしでコンパイルだけ確認したい場合(署名・パッケージング工程を省いて速い)は`cd src-tauri && cargo build -p madake-cad`。
+配布物(`.dmg` / `.msi`+`.exe`インストーラ / `.AppImage`+`.deb`)は`npm run tauri build`で作る。CIはGitHubでリリースを公開すると3OS分を同じように作り、そのリリースへ添付する(`.github/workflows/release.yml`)。リリースのタグ`vX.Y.Z`がバージョンになり、macOSの`.dmg`(Apple silicon/Intel)・Windowsの`.msi`/`.exe`・Linuxの`.AppImage`/`.deb`/`.rpm`が付く。コード署名はまだ行っていない。インストーラ生成なしでコンパイルだけ確認したい場合(署名・パッケージング工程を省いて速い)は`cd src-tauri && cargo build -p madake-cad`。
 
 ## 3. madake CLI(任意)
 

@@ -57,24 +57,25 @@ B案の要点: 作業ツリーを別ディレクトリへコピー → `.git` �
 6. **Branch protection** (`master`): PR必須 + CI必須チェック (`Rust tests`,
    `Rust tests (…)`, `Frontend tests & types`, `FreeCAD add-on tests`,
    `Spec docs freshness`, `Bundle build (…)`)
-7. **Actions**: 既定のまま (`ci.yml` は push/PR、`release.yml` はタグ `v*` と手動)
+7. **Actions**: 既定のまま (`ci.yml` は push/PR、`release.yml` はリリースの公開と手動)
 
 ## 4. 最初のリリース (タグと配布物)
 
-1. `src-tauri/tauri.conf.json` の `version` と `package.json` の `version` を合わせる
-   (例 `0.1.0`)。合っていないと `tauri-action` の `v__VERSION__` がずれる
-2. ローカルで `npm run tauri build` が通ることを確認 (少なくとも手元のOSで)
-3. タグを打つ: `git tag v0.1.0 && git push origin v0.1.0`
-4. `release.yml` が macOS (arm64 / x86_64 `.dmg`)・Windows (`.msi` / NSIS)・
-   Linux (`.AppImage` / `.deb`) をビルドし、**ドラフトのプレリリース**へ添付する
-   (`releaseDraft: true` / `prerelease: true`)
-5. ドラフトのリリースノートを書く。最低限:
+1. ローカルで `npm run tauri build` が通ることを確認 (少なくとも手元のOSで)
+2. GitHub の Releases →「Draft a new release」で新しいタグ `v0.1.0` (数字だけの `vX.Y.Z`。
+   Windows の `.msi` がそれ以外を受け付けない) を作り、リリースノートを書く。最初は
+   「Set as a pre-release」を付けておく。`tauri.conf.json` の `version` はタグから
+   ランナー上で書き込まれるので、事前のバージョン上げコミットは要らない
+3. リリースノートには最低限次を書く:
    - アルファ版であること・対応OS
    - **配布物はコード署名/notarization されていない** (macOSは「開発元を確認できません」、
      Windowsは SmartScreen の警告が出る。回避手順を1行添える)
    - **Linuxの`.deb`利用者はPDF出力の日本語書体に`fonts-noto-cjk`が必要** (無いと豆腐になる)
    - 既知の未実装 (`docs/12-roadmap.md` へのリンク)
-6. 4つの配布物が揃ってからドラフトを公開する (Publish release)
+4.「Publish release」すると `release.yml` が macOS (Apple silicon / Intel `.dmg`)・
+   Windows (`.msi` / NSIS `.exe`)・Linux (`.AppImage` / `.deb` / `.rpm`) をビルドし、
+   そのリリースへ添付する (20〜30分)。下書きのままでは GitHub がワークフローを起動しない
+5. 配布物を作り直すときは Actions → Release → Run workflow にタグを入れて実行する
 
 ## 5. 公開直後の初動 (最初の1週間)
 
@@ -113,8 +114,9 @@ This runbook lists the steps **the user performs by hand**; none of them have be
 2. Decide between publishing this repository as-is and exporting a squashed snapshot.
 3. Configure the repository: visibility → public, description, topics, Issues/Discussions,
    private vulnerability reporting, branch protection with the CI checks as required.
-4. Cut the first release: align `version` in `tauri.conf.json` and `package.json`, push the
-   `v*` tag, let `release.yml` attach the four bundles to the **draft pre-release**, write the
-   notes (unsigned bundles, `fonts-noto-cjk` for the `.deb`), then publish.
+4. Cut the first release: draft a GitHub release with a new `vX.Y.Z` tag (numbers only), write
+   the notes (unsigned bundles, `fonts-noto-cjk` for the `.deb`), then publish it; `release.yml`
+   stamps the tag's version, builds the installers on all three platforms and attaches them to
+   that release.
 5. First week: clean-clone build check, 72-hour first-response target, vulnerability reports
    through the private channel only.
