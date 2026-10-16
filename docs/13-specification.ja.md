@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2721仕様項目**。
+全6領域・**2727仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2517,6 +2517,15 @@
 - 段数を2段にすると2段の端子台 (terminal_block_8p_2l) が置かれる <sub>`dynamicSymbolId`</sub>
 - コネクタは段数を上げても段は付かない (コネクタに段は無い) <sub>`dynamicSymbolId`</sub>
 - 段数ステッパーのラベルと範囲ヒントは英語カタログにも日本語カタログにも入っている <sub>`段数ステッパーの表示文字列`</sub>
+
+### updateStatus
+
+- 最新のときは最終確認の時刻つきで「最新です」を緑で出す <sub>`update status line`</sub>
+- 新しい版があるときは版と公開日を出し、公開日が無ければ版だけを出す <sub>`update status line`</sub>
+- ダウンロード中はMB単位の進み具合を出し、全体が分からなければ受け取った量だけを出す <sub>`update status line`</sub>
+- 失敗は理由つきで赤く出す <sub>`update status line`</sub>
+- 開発ビルドとブラウザ検証モードでは、確認しないことを淡く出す <sub>`update status line`</sub>
+- リリースノートは空行を除いた先頭3行を抜粋し、公開日は日付の部分だけを使う <sub>`update status line`</sub>
 
 ### chatComposer
 

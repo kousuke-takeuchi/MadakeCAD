@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2721 specification clauses** across 6 areas.
+**2727 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2517,6 +2517,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - places the multi-level terminal block id when the level count is raised <sub>`dynamicSymbolId`</sub>
 - never adds a level suffix to a connector, whatever the level count says <sub>`dynamicSymbolId`</sub>
 - has the levels stepper label and hint in both the English and the Japanese catalogue <sub>`段数ステッパーの表示文字列`</sub>
+
+### updateStatus
+
+- says up to date in green with the time of the last check <sub>`update status line`</sub>
+- names the new version with its release date, or the version alone without a date <sub>`update status line`</sub>
+- shows the download in MB, or only what arrived when the total is unknown <sub>`update status line`</sub>
+- shows a failure in red with its reason <sub>`update status line`</sub>
+- says quietly that a development build or browser mode does not check <sub>`update status line`</sub>
+- excerpts the first three non-empty note lines and keeps only the date part of the release date <sub>`update status line`</sub>
 
 ### chatComposer
 

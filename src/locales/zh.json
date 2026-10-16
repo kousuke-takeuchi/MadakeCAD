@@ -1899,5 +1899,36 @@
     "discard": "Discard and close",
     "keepEditing": "Keep editing",
     "savedLog": "Frame: saved {id} (every sheet using this frame is updated)"
+  },
+  "updates": {
+    "group": "Updates",
+    "current": "Current version",
+    "autoCheck": "Check for updates at startup",
+    "autoCheckDesc": "When GitHub has a newer release, a notice appears at the bottom right of the drawing. \"Check now\" works even when this is off.",
+    "statusLabel": "Status",
+    "checkNow": "Check now",
+    "releaseNotes": "Release notes",
+    "installRestart": "Update and restart",
+    "openReleasePage": "Open the release page",
+    "manualHint": "An app installed from a package (.deb / .rpm) is not replaced automatically. Install the new package from the release page.",
+    "unsavedConfirm": "Unsaved changes will be lost. Update and restart now?",
+    "status": {
+      "idle": "Not checked yet",
+      "checking": "Checking…",
+      "upToDate": "✓ Up to date (last checked {time})",
+      "available": "v{version} is available",
+      "availableOn": "v{version} is available ({date})",
+      "downloading": "Downloading {done} / {total} MB",
+      "downloadingUnknown": "Downloading {done} MB",
+      "installing": "Installing… the app restarts in a moment",
+      "error": "Could not update: {error}",
+      "dev": "Development builds do not check for updates",
+      "unsupported": "Browser mode does not check for updates"
+    },
+    "notice": {
+      "title": "MadakeCAD v{version} is available",
+      "sub": "Current {current} · found at startup",
+      "later": "Later"
+    }
   }
 }

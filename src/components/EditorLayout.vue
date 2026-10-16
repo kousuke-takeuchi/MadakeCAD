@@ -32,6 +32,7 @@ import { useNameplatesStore } from "../stores/nameplates";
 import SymbolPickerDialog from "./SymbolPickerDialog.vue";
 import SymbolEditorDialog from "./SymbolEditorDialog.vue";
 import FrameEditorDialog from "./FrameEditorDialog.vue";
+import UpdateNotice from "./UpdateNotice.vue";
 import BlockEditorDialog from "./BlockEditorDialog.vue";
 import TitleBar from "./TitleBar.vue";
 import SettingsDialog from "./settings/SettingsDialog.vue";
@@ -270,6 +271,7 @@ onBeforeUnmount(() => {
     <NameplateDialog />
     <SymbolEditorDialog />
     <FrameEditorDialog />
+    <UpdateNotice />
     <BlockEditorDialog />
   </div>
 </template>

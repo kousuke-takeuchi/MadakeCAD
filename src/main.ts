@@ -3,6 +3,7 @@ import { createPinia } from "pinia";
 import App from "./App.vue";
 import { i18n, setLocale } from "./i18n";
 import { useSettingsStore } from "./stores/settings";
+import { useUpdatesStore } from "./stores/updates";
 
 const pinia = createPinia();
 const app = createApp(App).use(pinia).use(i18n);
@@ -13,6 +14,10 @@ const app = createApp(App).use(pinia).use(i18n);
 const settings = useSettingsStore(pinia);
 settings.load().then(() => {
   setLocale(settings.settings.language);
+  // アプリ内アップデート: 起動して数秒後に1回だけ確認する (設定`check_updates`。失敗は黙る)
+  const updates = useUpdatesStore(pinia);
+  void updates.init();
+  setTimeout(() => void updates.startupCheck(settings.settings.check_updates), 5000);
   return settings.loadProviderStatus();
 });
 
