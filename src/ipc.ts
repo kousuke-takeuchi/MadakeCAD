@@ -931,6 +931,9 @@ export interface TemplateList {
 import type { FrameTemplate } from "./canvas/frameTemplate";
 export type { FrameTemplate };
 
+/** アプリ内アップデートの扱い (src-tauri/src/updates.rs の`UpdateSupport`+ブラウザ検証モード)。 */
+export type UpdateSupport = "supported" | "manual" | "dev" | "unsupported";
+
 /** 図枠テンプレート一覧と、読み込めなかったファイルの理由 (madake-coreの`FrameTemplateList`)。 */
 export interface FrameTemplateList {
   templates: FrameTemplate[];
@@ -1167,6 +1170,11 @@ interface Ipc {
    * 検証に落ちたもの・同梱の図枠とidがぶつかるものは何も書かずに理由を投げる。undo履歴には乗らない。
    */
   saveFrameTemplate(template: FrameTemplate): Promise<{ template: FrameTemplate; path: string }>;
+  /**
+   * この実行環境でのアプリ内アップデートの扱い (`supported`=入れ替えまで / `manual`=知らせるだけ
+   * (Linuxの.deb/.rpm) / `dev`=開発ビルドなので確認しない / `unsupported`=ブラウザ検証モード)。
+   */
+  updateSupport(): Promise<UpdateSupport>;
   /** 使える回路マクロの一覧 (ユーザーの`~/MadakeCAD/macros`)。 */
   listMacros(): Promise<MacroList>;
   /** 選択範囲をマクロへ組み立てるだけ (ファイルに書かない)。プレビューと⌘Cが使う。 */
@@ -1301,6 +1309,7 @@ const tauriIpc: Ipc = {
   openFrameTemplatesFolder: () => invoke<string>("open_frame_templates_folder"),
   saveFrameTemplate: (template) =>
     invoke<{ template: FrameTemplate; path: string }>("save_frame_template", { template }),
+  updateSupport: () => invoke<UpdateSupport>("update_support_info"),
   listMacros: () => invoke<MacroList>("list_macros"),
   buildMacro: (sheetId, entityIds, meta) =>
     invoke<Macro>("build_macro", { sheetId, entityIds, meta }),
@@ -1448,6 +1457,8 @@ const httpIpc: Ipc = {
   openTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
   listFrameTemplates: () => http<FrameTemplateList>("/frame-templates"),
   openFrameTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
+  // ブラウザ検証モードはアプリ本体ではないので更新の対象外
+  updateSupport: () => Promise.resolve("unsupported"),
   saveFrameTemplate: (template) =>
     http<{ template: FrameTemplate; path: string }>("/frame-templates/save", {
       method: "POST",

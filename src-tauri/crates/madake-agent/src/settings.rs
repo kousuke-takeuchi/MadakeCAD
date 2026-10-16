@@ -116,6 +116,11 @@ pub struct AppSettings {
     /// 変えない**(図面ごとの図枠は[`madake_core`]の`Project::frame_template`が持ち、
     /// 差し替えはCommandを通る)。idは秘密ではないので平文で保存してよい。
     pub default_frame_template: Option<String>,
+    /// 起動時に新しい版を確認する (アプリ内アップデート)。既定はtrue。
+    ///
+    /// 確認先はGitHub Releasesの`latest.json` (tauri-plugin-updater)。オフにしても設定の
+    /// 「今すぐ確認」からは確認できる。
+    pub check_updates: bool,
 }
 
 impl Default for AppSettings {
@@ -134,6 +139,7 @@ impl Default for AppSettings {
             openai_model: String::new(),
             gemini_model: crate::gemini::DEFAULT_GEMINI_MODEL.into(),
             default_frame_template: None,
+            check_updates: true,
         }
     }
 }

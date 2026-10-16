@@ -94,6 +94,8 @@ export interface AppSettings {
    * **図枠の選択ダイアログの「グローバル既定」**がここへ入る (既存の図面は変えない)。
    */
   default_frame_template: string | null;
+  /** 起動時に新しい版を確認する (アプリ内アップデート。既定はtrue) */
+  check_updates: boolean;
 }
 
 export function defaultSettings(): AppSettings {
@@ -111,6 +113,7 @@ export function defaultSettings(): AppSettings {
     openai_model: "",
     gemini_model: DEFAULT_GEMINI_MODEL,
     default_frame_template: null,
+    check_updates: true,
   };
 }
 

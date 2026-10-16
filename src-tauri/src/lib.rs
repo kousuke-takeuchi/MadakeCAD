@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+mod updates;
+
 use std::sync::Arc;
 
 use madake_agent::{AgentManager, AppSettings, Conversation, DetectResult};
@@ -930,6 +932,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState {
             parts: parts.clone(),
             doc: doc.clone(),
@@ -987,6 +991,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            updates::update_support_info,
             get_project,
             list_symbols,
             list_user_symbols,

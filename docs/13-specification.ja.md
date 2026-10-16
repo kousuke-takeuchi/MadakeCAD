@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2711仕様項目**。
+全6領域・**2721仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1655,6 +1655,7 @@
 - 既定図枠の項目が無かった頃の設定ファイルもそのまま読め、「既定なし」として扱われる。 <sub>`old_settings_file_without_default_frame_template_loads_as_unset`</sub>
 - 既定図枠のidは前後の空白が取り除かれ、空欄は空のidではなく「既定なし」になる。 <sub>`default_frame_template_is_trimmed_and_blank_means_unset`</sub>
 - 選んだ既定の図枠テンプレートは、設定を保存して読み直しても残っている。 <sub>`default_frame_template_round_trips_through_save_and_load`</sub>
+- 既定では起動時に新しい版を確認する。この項目が無かった頃の設定ファイルも「確認する」として読む。 <sub>`update_checks_are_on_by_default_and_for_old_settings_files`</sub>
 
 ### tool_bridge
 
@@ -3079,6 +3080,18 @@
 - 回路図シートへ戻すと回路図タブとプロジェクトツリーへ戻る <sub>`シート種別に合わせた画面の切り替え`</sub>
 - 自分で開いた表示タブは盤シートを開いても勝手に切り替わらない <sub>`シート種別に合わせた画面の切り替え`</sub>
 - エージェントと会話中は左ドックのタブを取り上げない <sub>`シート種別に合わせた画面の切り替え`</sub>
+
+### updates
+
+- 起動時の確認で新しい版が見つかると、その版と公開日・リリースノートを持って右下の通知を出す <sub>`updates store`</sub>
+- 設定で起動時の確認をオフにしていれば確認しない。開発ビルドとブラウザ検証モードでも確認しない <sub>`updates store`</sub>
+- 起動時の確認が通信できずに失敗しても、何も表示しない <sub>`updates store`</sub>
+- 「今すぐ確認」は、最新なら「最新です」、失敗なら理由を出す <sub>`updates store`</sub>
+- 「更新して再起動」はダウンロードの進み具合を数え、入れ替えが済んだらアプリを再起動する <sub>`updates store`</sub>
+- 未保存の図面があるときは先に確認し、断られたらダウンロードしない <sub>`updates store`</sub>
+- ダウンロードや入れ替えに失敗したら理由を出し、再起動しない <sub>`updates store`</sub>
+- 「後で」を押した版は、この起動中は通知を出さない <sub>`updates store`</sub>
+- Linuxの.deb/.rpmでは入れ替えず、リリースページを開くだけにする <sub>`updates store`</sub>
 
 ### 整えバリアント (シート複製 / 採用)
 

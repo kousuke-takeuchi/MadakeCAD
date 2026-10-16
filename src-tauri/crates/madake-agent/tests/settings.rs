@@ -55,6 +55,7 @@ fn saved_settings_round_trip() {
         openai_model: String::new(),
         gemini_model: "gemini-2.5-flash".into(),
         default_frame_template: Some("jis-a4-portrait".into()),
+        check_updates: false,
     };
 
     save_settings(&path, &settings).unwrap();
@@ -715,5 +716,17 @@ fn default_frame_template_round_trips_through_save_and_load() {
         load_settings(&path).unwrap().default_frame_template.as_deref(),
         Some("jis-a4-portrait")
     );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Out of the box the app checks for a newer version at startup; a settings file written before the option existed also checks.
+/// 既定では起動時に新しい版を確認する。この項目が無かった頃の設定ファイルも「確認する」として読む。
+#[test]
+fn update_checks_are_on_by_default_and_for_old_settings_files() {
+    assert!(AppSettings::default().check_updates);
+    let dir = temp_dir();
+    let path = dir.join("settings.json");
+    std::fs::write(&path, r#"{ "language": "ja" }"#).unwrap();
+    assert!(load_settings(&path).unwrap().check_updates);
     std::fs::remove_dir_all(&dir).ok();
 }

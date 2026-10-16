@@ -77,6 +77,26 @@ B案の要点: 作業ツリーを別ディレクトリへコピー → `.git` �
    そのリリースへ添付する (20〜30分)。下書きのままでは GitHub がワークフローを起動しない
 5. 配布物を作り直すときは Actions → Release → Run workflow にタグを入れて実行する
 
+### 4.1 アプリ内アップデートの署名鍵 (最初のリリースの前に1回だけ)
+
+インストール済みのアプリは起動時に `https://github.com/kousuke-takeuchi/MadakeCAD/releases/latest/download/latest.json`
+を見て新しい版を知らせ、更新ファイルの**署名**をアプリに埋め込んだ公開鍵で確かめてから入れ替える
+(tauri-plugin-updater)。鍵は利用者の手元で作り、秘密鍵はリポジトリに入れない。
+
+1. 鍵を作る (パスワードを聞かれる。空にしない):
+   `npx tauri signer generate -w ~/.tauri/madakecad.key`
+   → `~/.tauri/madakecad.key` (秘密鍵) と `~/.tauri/madakecad.key.pub` (公開鍵) ができる
+2. 公開鍵 (`.pub` の中身1行) を `src-tauri/tauri.conf.json` の `plugins.updater.pubkey` に入れてコミットする
+3. GitHub の Settings → Secrets and variables → Actions に2つ登録する:
+   `TAURI_SIGNING_PRIVATE_KEY` = 秘密鍵ファイルの中身、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = 1. のパスワード
+4. 秘密鍵とパスワードはパスワード管理ツール等にも保管する。**失くすと、配布済みのアプリへ更新を届けられなくなる**
+   (新しい鍵で署名した更新は古いアプリが受け付けない)
+
+秘密鍵が未登録のままリリースしても、インストーラは作られる (更新ファイルと `latest.json` が付かないだけ)。
+秘密鍵を登録したのに公開鍵が空なら、`release.yml` は止まる。**プレリリースは「最新」に含まれない**ので、
+更新として配られるのは通常のリリースだけ。リポジトリが非公開のままだと、利用者のアプリは `latest.json`
+を取得できない (公開後に有効になる)。
+
 ## 5. 公開直後の初動 (最初の1週間)
 
 | いつ | やること |
@@ -118,5 +138,10 @@ This runbook lists the steps **the user performs by hand**; none of them have be
    the notes (unsigned bundles, `fonts-noto-cjk` for the `.deb`), then publish it; `release.yml`
    stamps the tag's version, builds the installers on all three platforms and attaches them to
    that release.
-5. First week: clean-clone build check, 72-hour first-response target, vulnerability reports
+5. Before the first release, create the updater signing key (`npx tauri signer generate -w
+   ~/.tauri/madakecad.key`), put the public key in `plugins.updater.pubkey` of
+   `src-tauri/tauri.conf.json`, and store the private key and its password as the repository
+   secrets `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Keep a backup:
+   losing the key means installed apps can no longer be updated.
+6. First week: clean-clone build check, 72-hour first-response target, vulnerability reports
    through the private channel only.

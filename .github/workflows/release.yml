@@ -18,7 +18,15 @@ name: Release
 # "Publish release" (allow 20-30 minutes). To rebuild the installers of a release that already
 # exists, run this workflow by hand with its tag (Actions → Release → Run workflow).
 #
-# Bundles are not code-signed or notarized yet (M6 spec §3), and there is no auto-updater.
+# In-app updates: when the repository secrets TAURI_SIGNING_PRIVATE_KEY (and
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD) are set, the build also produces signed update archives
+# and attaches latest.json, which installed apps read from
+# https://github.com/<owner>/<repo>/releases/latest/download/latest.json (pre-releases are not
+# "latest", so they are never offered as updates). Without the secret the installers are still
+# built, only without update files. The matching public key lives in
+# src-tauri/tauri.conf.json (plugins.updater.pubkey).
+#
+# Bundles are not code-signed or notarized yet (M6 spec §3).
 
 on:
   release:
@@ -114,23 +122,39 @@ jobs:
           workspaces: src-tauri
           key: release-${{ matrix.target }}
       - run: npm ci
-      - name: Stamp the release version into tauri.conf.json (runner copy only)
+      - name: Stamp the release version (and updater artifacts) into tauri.conf.json (runner copy only)
+        id: stamp
         shell: bash
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          HAS_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
         run: |
           node -e '
             const fs = require("fs");
             const path = "src-tauri/tauri.conf.json";
             const conf = JSON.parse(fs.readFileSync(path, "utf8"));
             conf.version = process.env.VERSION;
+            const signing = process.env.HAS_SIGNING_KEY === "true";
+            if (signing && !conf.plugins?.updater?.pubkey) {
+              console.error("::error::TAURI_SIGNING_PRIVATE_KEY is set but plugins.updater.pubkey in src-tauri/tauri.conf.json is empty: installed apps could not verify the update.");
+              process.exit(1);
+            }
+            if (!signing) console.log("::warning::TAURI_SIGNING_PRIVATE_KEY is not set: building installers without in-app update files.");
+            conf.bundle.createUpdaterArtifacts = signing;
             fs.writeFileSync(path, JSON.stringify(conf, null, 2) + "\n");
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `updater=${signing}\n`);
           '
-          grep '"version"' src-tauri/tauri.conf.json
+          grep -E '"version"|createUpdaterArtifacts' src-tauri/tauri.conf.json
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.prepare.outputs.release_id }}
           args: ${{ matrix.args }}
           retryAttempts: 1
+          includeUpdaterJson: ${{ steps.stamp.outputs.updater == 'true' }}
+          # Windows updates through the NSIS setup.exe (it can update a per-user install
+          # without asking for admin rights)
+          updaterJsonPreferNsis: true
