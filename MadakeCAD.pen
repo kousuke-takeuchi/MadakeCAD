@@ -14940,6 +14940,237 @@
               ]
             }
           ]
+        },
+        {
+          "type": "text",
+          "id": "B5gY2m",
+          "name": "DS M4残り見出し",
+          "fill": "$pw-text",
+          "content": "コンポーネント (M4残り: マクロのバリアント・予約接点・盤ツール)",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 14,
+          "fontWeight": "700"
+        },
+        {
+          "type": "frame",
+          "id": "Vb6EG",
+          "name": "DS部品行M4残り",
+          "width": "fill_container",
+          "gap": 14,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "dfMl4",
+              "name": "DSバリアントチップ 登録済",
+              "reusable": true,
+              "fill": "#FFFFFF",
+              "cornerRadius": 4,
+              "stroke": "$ribbon-line",
+              "strokeWidth": 1,
+              "padding": [
+                3,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "QY8cN",
+                  "name": "DSバリアントチップ 登録済文字",
+                  "fill": "$ui-muted",
+                  "content": "A ✓",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "h7DZn",
+              "name": "DSバリアントチップ 選択",
+              "reusable": true,
+              "fill": "$sel-blue",
+              "cornerRadius": 4,
+              "stroke": "$acad-blue",
+              "strokeWidth": 1,
+              "padding": [
+                3,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "aBQzj",
+                  "name": "DSバリアントチップ 選択文字",
+                  "fill": "$ui-text",
+                  "content": "C 新規",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "UhfCL",
+              "name": "DSバリアントチップ 空き",
+              "reusable": true,
+              "fill": "$input-bg",
+              "cornerRadius": 4,
+              "stroke": "$ribbon-line",
+              "strokeWidth": 1,
+              "padding": [
+                3,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "zwCdg",
+                  "name": "DSバリアントチップ 空き文字",
+                  "fill": "$ui-placeholder",
+                  "content": "D",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "mgvgv",
+              "name": "DSアイコンボタン",
+              "reusable": true,
+              "width": 26,
+              "height": 24,
+              "fill": "#FFFFFF",
+              "cornerRadius": 4,
+              "stroke": "$ribbon-line",
+              "strokeWidth": 1,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "TLztP",
+                  "name": "DSアイコンボタンアイコン",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "align-start-horizontal",
+                  "library": "lucide",
+                  "fill": "$ribbon-icon"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "fecB1",
+              "name": "DSアイコンボタンON",
+              "reusable": true,
+              "width": 26,
+              "height": 24,
+              "fill": "$sel-blue",
+              "cornerRadius": 4,
+              "stroke": "$acad-blue",
+              "strokeWidth": 1,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "X45D8W",
+                  "name": "DSアイコンボタンONアイコン",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "align-start-horizontal",
+                  "library": "lucide",
+                  "fill": "$acad-blue"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "p3f12h",
+              "name": "DS未配置ラベル",
+              "reusable": true,
+              "gap": 4,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "un3T3",
+                  "name": "DS未配置ラベル印",
+                  "fill": "$warn-fg",
+                  "content": "◌",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "F2i6nk",
+                  "name": "DS未配置ラベル文字",
+                  "fill": "$warn-fg",
+                  "content": "未配置",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "fEuvw",
+              "name": "DSキャンバス操作チップ台",
+              "fill": "$model-bg",
+              "cornerRadius": 4,
+              "padding": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "LrtqI",
+                  "name": "DSキャンバス操作チップ",
+                  "reusable": true,
+                  "fill": "#2E333BE6",
+                  "cornerRadius": 4,
+                  "stroke": "$acad-blue",
+                  "strokeWidth": 1,
+                  "gap": 8,
+                  "padding": [
+                    3,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "WhH0x",
+                      "name": "DSキャンバス操作チップ主",
+                      "fill": "$draw-line",
+                      "content": "K1 33-34 NO を配置",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "DmHKR",
+                      "name": "DSキャンバス操作チップ補",
+                      "fill": "$draw-dim",
+                      "content": "クリックで確定 · Esc中止",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
       ]
     },
