@@ -50,7 +50,7 @@ python3 -m unittest discover -s freecad-addon/tests   # FreeCAD add-on's pure-Py
 
 While the app runs, a built-in server listens on `127.0.0.1:9310` (MCP at `/mcp`, REST at `/api/v1`).
 
-Release bundles (`.dmg` / `.msi` + `.exe` installer / `.AppImage` + `.deb`) are built with `npm run tauri build`; CI does the same on all three platforms whenever a GitHub release is published (`.github/workflows/release.yml`): the release tag `vX.Y.Z` sets the version, and the macOS `.dmg` (Apple silicon and Intel), Windows `.msi`/`.exe` and Linux `.AppImage`/`.deb`/`.rpm` are attached to that release. Bundles are not code-signed yet. To just verify the app compiles without producing installers (faster, no packaging/signing step), build the Tauri crate alone: `cd src-tauri && cargo build -p madake-cad`.
+Release bundles (`.dmg` / `.msi` + `.exe` installer / `.AppImage` + `.deb`) are built with `npm run tauri build`; CI does the same on all three platforms whenever a GitHub release is published (`.github/workflows/release.yml`): the release tag `vX.Y.Z` sets the version, and the macOS `.dmg` (Apple silicon and Intel), Windows `.msi`/`.exe` and Linux `.AppImage`/`.deb`/`.rpm` are attached to that release. When the signing secret is configured, the release also carries signed update archives and `latest.json`, which installed apps use for in-app updates (Settings → General → Updates). Bundles are not code-signed yet. To just verify the app compiles without producing installers (faster, no packaging/signing step), build the Tauri crate alone: `cd src-tauri && cargo build -p madake-cad`.
 
 ## 3. Optional: the `madake` CLI
 

@@ -60,6 +60,7 @@
 
 - ✅ ライセンス: MIT OR Apache-2.0デュアル。リポジトリ衛生: `scripts/audit_confidential.py`が公開前に作業ツリーと全履歴をgit管理外の用語表で走査
 - ✅ Windows/Linuxビルド+CI: CIがUbuntu・macOS・WindowsでRustスイート・フロントテスト・アドオンテストを実行し、3OSで配布物をビルド(未署名)、PDFフォントはOSに追従(Hiragino / Yu Gothic UI / Noto Sans CJK)、`release.yml`がGitHubのリリース公開を合図に`.dmg` / `.msi` / `.exe` / `.AppImage` / `.deb` / `.rpm`をビルドしてそのリリースへ添付(タグ`vX.Y.Z`がバージョン)
+- ✅ アプリ内アップデート(2026-10-16): 起動時(設定 > 一般 > アップデートでオフにできる)にGitHubの最新リリースの`latest.json`を見て、新しい版があれば作図画面の右下で知らせる。「更新して再起動」でダウンロードし、アプリに埋め込んだ公開鍵で署名を確かめてから入れ替えて再起動する(未保存の図面があれば先に確認)。プレリリースは配らない。Linuxの`.deb`/`.rpm`はリリースページを開くだけ(AppImageは自分で入れ替える)。開発ビルドは確認しない
 - ✅ i18n: 残UIリテラルをカタログへ移行し6言語(英語・日本語・中国語・スペイン語・フランス語・ドイツ語)を同梱。キー・プレースホルダ・複数形の一致をテストで強制。翻訳者向け手順はi18n仕様に記載。**英語と日本語は完備、zh/es/fr/deは約6割**で、未翻訳のキーは英語のまま表示される
 - ✅ コミュニティ: `CONTRIBUTING.md`、Contributor Covenant行動規範、`SECURITY.md`、Issue/PRテンプレート
 - ✅ 公開手順書: `docs/internal/release-runbook.md`にユーザーが手で行う手順(機密の最終確認・可視性・トピック・タグ・配布物・初動)を記載。**内容は一つも実行していない**

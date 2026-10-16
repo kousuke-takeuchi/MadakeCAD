@@ -16,8 +16,15 @@ import {
   type AgentProvider,
 } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
+import { useUpdatesStore } from "../../stores/updates";
+import { notesExcerpt, updateStatusLine } from "../updateStatus";
 
 const ui = useUiStore();
+/** アプリ内アップデート (.pen「自動更新デザイン」`qyYGO`の設定 > 一般 > アップデート)。 */
+const updates = useUpdatesStore();
+const updateLine = computed(() => updateStatusLine(updates.$state));
+const updateNotes = computed(() => notesExcerpt(updates.available?.notes ?? ""));
+const updateBusy = computed(() => ["checking", "downloading", "installing"].includes(updates.status));
 const settings = useSettingsStore();
 // claude CLIの検出状態はチャットストアが持つ(チャットパネルの接続バッジと共通)
 const chat = useChatStore();
@@ -403,6 +410,56 @@ async function changeLanguage(ev: Event) {
                 </select>
               </div>
               <p class="caption indent-label">{{ t("settings.general.languageHint") }}</p>
+            </div>
+
+            <!-- アップデート (.pen「自動更新デザイン」`qyYGO`) -->
+            <div class="group">
+              <div class="group-head"><span>{{ t("updates.group") }}</span><i /></div>
+              <div class="form-row">
+                <span class="form-label">{{ t("updates.current") }}</span>
+                <span class="mono update-value">{{ updates.currentVersion || "—" }}</span>
+              </div>
+              <label class="check-row">
+                <button
+                  class="checkbox"
+                  :class="{ on: settings.settings.check_updates }"
+                  role="checkbox"
+                  :aria-checked="settings.settings.check_updates"
+                  :disabled="settings.saving"
+                  @click="settings.save({ check_updates: !settings.settings.check_updates })"
+                >
+                  <Check v-if="settings.settings.check_updates" :size="11" :stroke-width="3" />
+                </button>
+                <span class="check-label">{{ t("updates.autoCheck") }}</span>
+              </label>
+              <p class="caption indent-check">{{ t("updates.autoCheckDesc") }}</p>
+              <div class="form-row">
+                <span class="form-label">{{ t("updates.statusLabel") }}</span>
+                <span class="update-status" :class="updateLine.tone">{{ t(updateLine.key, updateLine.params) }}</span>
+              </div>
+              <div v-if="updates.available && updates.status === 'available' && updateNotes.length" class="update-notes indent-label">
+                <span v-for="(line, i) in updateNotes" :key="i">{{ line }}</span>
+              </div>
+              <div v-if="updates.status === 'downloading'" class="update-progress">
+                <i :style="{ width: `${Math.round((updates.progress ?? 0.1) * 100)}%` }" />
+              </div>
+              <p v-if="updates.support === 'manual' && updates.available" class="caption indent-label">{{ t("updates.manualHint") }}</p>
+              <div class="update-actions">
+                <button
+                  v-if="!updates.available || updates.status === 'error'"
+                  class="btn secondary"
+                  :disabled="!updates.canCheck || updateBusy"
+                  @click="updates.check()"
+                >
+                  {{ t("updates.checkNow") }}
+                </button>
+                <template v-else>
+                  <button class="btn secondary" @click="updates.openReleasePage()">{{ t("updates.releaseNotes") }}</button>
+                  <button class="btn primary" :disabled="updateBusy" @click="updates.install(t('updates.unsavedConfirm'))">
+                    {{ updates.support === "manual" ? t("updates.openReleasePage") : t("updates.installRestart") }}
+                  </button>
+                </template>
+              </div>
             </div>
             <p v-if="settings.error" class="error">{{ settings.error }}</p>
           </template>
@@ -958,6 +1015,16 @@ async function changeLanguage(ev: Event) {
 .test-btn { flex: none; }
 .indent-label { padding-left: 140px; }
 .indent-check { padding-left: 22px; margin-top: -3px; }
+.update-value { font-size: 11px; color: var(--ui-text); }
+.update-status { font-size: 11px; color: var(--ui-muted); }
+.update-status.ok { color: var(--ok-fg); }
+.update-status.info { color: var(--info-fg); font-weight: 600; }
+.update-status.err { color: var(--err-fg); }
+.update-notes { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: var(--ui-text); }
+.update-notes span { background: var(--input-bg); padding: 1px 8px; }
+.update-progress { margin-left: 140px; height: 6px; background: var(--input-bg); border-radius: 3px; overflow: hidden; }
+.update-progress i { display: block; height: 100%; background: var(--acad-blue); }
+.update-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* --- 状態表示 --- */
 .status { display: flex; align-items: center; gap: 5px; font-size: 10px; flex: none; }

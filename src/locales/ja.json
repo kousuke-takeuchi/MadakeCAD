@@ -1899,5 +1899,36 @@
     "discard": "破棄して閉じる",
     "keepEditing": "編集を続ける",
     "savedLog": "図枠: {id} を保存しました (この図枠を使う全シートに反映)"
+  },
+  "updates": {
+    "group": "アップデート",
+    "current": "現在のバージョン",
+    "autoCheck": "起動時に更新を確認",
+    "autoCheckDesc": "新しい版がGitHubのリリースにあれば作図画面の右下で知らせる。オフでも「今すぐ確認」は使える。",
+    "statusLabel": "状態",
+    "checkNow": "今すぐ確認",
+    "releaseNotes": "リリースノート",
+    "installRestart": "更新して再起動",
+    "openReleasePage": "リリースページを開く",
+    "manualHint": "パッケージ (.deb / .rpm) で入れたアプリは自動では入れ替えない。リリースページから新しいパッケージを入れてください。",
+    "unsavedConfirm": "未保存の変更は失われます。更新して再起動しますか?",
+    "status": {
+      "idle": "まだ確認していません",
+      "checking": "確認中…",
+      "upToDate": "✓ 最新です (最終確認 {time})",
+      "available": "v{version} が利用できます",
+      "availableOn": "v{version} が利用できます ({date})",
+      "downloading": "ダウンロード中 {done} / {total} MB",
+      "downloadingUnknown": "ダウンロード中 {done} MB",
+      "installing": "入れ替え中… まもなく再起動します",
+      "error": "更新できませんでした: {error}",
+      "dev": "開発ビルドでは更新を確認しません",
+      "unsupported": "ブラウザ検証モードでは更新を確認しません"
+    },
+    "notice": {
+      "title": "MadakeCAD v{version} が利用できます",
+      "sub": "現在 {current} ・ 起動時の確認で見つかりました",
+      "later": "後で"
+    }
   }
 }

@@ -28,7 +28,7 @@
 
 - ✅ **Windows / Linuxビルド**(2026-09-27): PDFフォント割当を`pdf.rs`の`preferred_families()`でOS別に固定(macOS=Hiragino Sans/Menlo、Windows=Yu Gothic UI/Consolas、Linux=Noto Sans CJK JP/DejaVu Sans Mono。テストで検証)。CI(`ci.yml`)はUbuntuフル+macOS 4クレート+Windows `madake-core`/`madake-cli`の`rust-cross`ジョブ。OS別のビルド依存は`docs/02-getting-started.md`に記載
 - ✅ **配布物**(2026-09-27): `release.yml`(タグ`v*`または手動)が`tauri-apps/tauri-action`で macOS(arm64/x86_64 `.dmg`)・Windows(`.msi`/NSIS)・Linux(`.AppImage`/`.deb`)をドラフトのプレリリースへ添付。**2026-10-16変更**: 起点をGitHubのリリース公開(`release: published`)に変え、公開したそのリリースへ添付する(`releaseId`。手動実行は既存リリースのタグを指定)。バージョンはタグ`vX.Y.Z`からランナー上の`tauri.conf.json`へ書き込み、Linuxは`.rpm`も付く。コード署名(macOS notarization優先)は公開後の課題
-- 自動更新(tauri-updater)は公開後の課題
+- ✅ 自動更新(tauri-plugin-updater、2026-10-16): GitHubの最新リリースの`latest.json`を起動時に確認し、署名を確かめてから入れ替えて再起動する。鍵の作り方は`release-runbook.md` §4.1
 
 ## 4. 国際化(i18n)
 

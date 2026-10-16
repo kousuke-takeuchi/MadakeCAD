@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2711 specification clauses** across 6 areas.
+**2727 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1655,6 +1655,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A settings file written before the default frame template existed still loads, with no default frame chosen. <sub>`old_settings_file_without_default_frame_template_loads_as_unset`</sub>
 - The default frame template id is trimmed, and an empty entry means "no default" rather than an empty id. <sub>`default_frame_template_is_trimmed_and_blank_means_unset`</sub>
 - The chosen default frame template is still there after saving and reloading the settings. <sub>`default_frame_template_round_trips_through_save_and_load`</sub>
+- Out of the box the app checks for a newer version at startup; a settings file written before the option existed also checks. <sub>`update_checks_are_on_by_default_and_for_old_settings_files`</sub>
 
 ### tool_bridge
 
@@ -2517,6 +2518,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - never adds a level suffix to a connector, whatever the level count says <sub>`dynamicSymbolId`</sub>
 - has the levels stepper label and hint in both the English and the Japanese catalogue <sub>`段数ステッパーの表示文字列`</sub>
 
+### updateStatus
+
+- says up to date in green with the time of the last check <sub>`update status line`</sub>
+- names the new version with its release date, or the version alone without a date <sub>`update status line`</sub>
+- shows the download in MB, or only what arrived when the total is unknown <sub>`update status line`</sub>
+- shows a failure in red with its reason <sub>`update status line`</sub>
+- says quietly that a development build or browser mode does not check <sub>`update status line`</sub>
+- excerpts the first three non-empty note lines and keeps only the date part of the release date <sub>`update status line`</sub>
+
 ### chatComposer
 
 - tokens are added up across the turns of a conversation <sub>`sumUsage`</sub>
@@ -3079,6 +3089,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - returns to the schematic tab and the project tree on a schematic sheet <sub>`シート種別に合わせた画面の切り替え`</sub>
 - leaves a ribbon tab the user chose after the panel tab is once shown <sub>`シート種別に合わせた画面の切り替え`</sub>
 - does not steal the left dock from an open agent conversation <sub>`シート種別に合わせた画面の切り替え`</sub>
+
+### updates
+
+- shows the notice with the version, date and notes when the startup check finds an update <sub>`updates store`</sub>
+- does not check at startup when turned off, in a development build or in browser mode <sub>`updates store`</sub>
+- stays silent when the startup check cannot reach the server <sub>`updates store`</sub>
+- reports up to date or the reason of a failure when checked by hand <sub>`updates store`</sub>
+- counts the download progress and relaunches once the update is installed <sub>`updates store`</sub>
+- asks first when the drawing has unsaved changes and does nothing if refused <sub>`updates store`</sub>
+- shows the reason and does not relaunch when the download or install fails <sub>`updates store`</sub>
+- hides the notice for the dismissed version for the rest of the session <sub>`updates store`</sub>
+- only opens the release page for a Linux .deb or .rpm install <sub>`updates store`</sub>
 
 ### Tidy variants (sheet copies / adopt)
 

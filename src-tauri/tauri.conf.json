@@ -41,5 +41,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ0M0NDOUE2MTQ3RTJDOEUKUldTT0xINFVwc2s4MUVkdzdLS3czWklXamZaeks0MmI2NGpHVzB6SjdzMlVXajA3TEEwOG4rK2sK",
+      "endpoints": [
+        "https://github.com/kousuke-takeuchi/MadakeCAD/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

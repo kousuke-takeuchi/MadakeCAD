@@ -22,6 +22,7 @@ describe("settings store", () => {
       openai_model: "",
       gemini_model: "gemini-2.5-flash",
       default_frame_template: null,
+      check_updates: true,
     });
     expect(useSettingsStore().settings).toEqual(defaultSettings());
   });
@@ -58,6 +59,7 @@ describe("settings store", () => {
       openai_model: "",
       gemini_model: "gemini-2.5-flash",
       default_frame_template: "jis-a4-portrait",
+      check_updates: false,
     };
     vi.spyOn(settingsApi, "get").mockResolvedValue(stored);
 

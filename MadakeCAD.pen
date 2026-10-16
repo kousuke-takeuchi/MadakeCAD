@@ -80520,6 +80520,777 @@
           "fontWeight": "normal"
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "qyYGO",
+      "x": 1340,
+      "y": 11403,
+      "name": "自動更新デザイン - バージョン確認と更新",
+      "width": 1240,
+      "fill": "$ribbon-bg",
+      "cornerRadius": 12,
+      "layout": "vertical",
+      "gap": 16,
+      "padding": 28,
+      "children": [
+        {
+          "type": "text",
+          "id": "t6DhC",
+          "name": "タイトル",
+          "fill": "$ui-text",
+          "content": "自動更新 — 起動時にバージョンを確認し、署名済みの更新を入れて再起動する",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 17,
+          "fontWeight": "700"
+        },
+        {
+          "type": "text",
+          "id": "zGEMu",
+          "name": "説明",
+          "fill": "$ui-muted",
+          "content": "Tauri updaterプラグイン準拠: GitHub Releases の最新リリースに添付された latest.json を見て、今より新しい版があれば知らせる。更新ファイルはリリース用の鍵で署名され、アプリに埋め込んだ公開鍵で確かめてから入れ替える (改ざんされたファイルは入れない)。プレリリースは対象外。確認は起動時に1回 (設定でオフにできる) と、設定の「今すぐ確認」。出典: v2.tauri.app/plugin/updater",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "t8AVN",
+          "name": "設定の3状態",
+          "width": "fill_container",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "QvUES",
+              "name": "状態a",
+              "width": "fill_container",
+              "fill": "$card-bg",
+              "cornerRadius": 8,
+              "stroke": "$ribbon-line",
+              "layout": "vertical",
+              "gap": 10,
+              "padding": 14,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Wl2On",
+                  "name": "状態名",
+                  "fill": "$ui-muted",
+                  "content": "① 最新のとき (設定 > 一般)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "olp0q",
+                  "name": "グループ見出し",
+                  "width": "fill_container",
+                  "fill": "$palette-head",
+                  "cornerRadius": 4,
+                  "padding": [
+                    4,
+                    8
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "odBa2",
+                      "name": "見出し",
+                      "fill": "$ui-text",
+                      "content": "アップデート",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Qaj6B",
+                  "name": "現在のバージョン",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "cwqN4",
+                      "name": "ラベル",
+                      "fill": "$ui-muted",
+                      "content": "現在のバージョン",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "WgRQF",
+                      "name": "値",
+                      "fill": "$ui-text",
+                      "content": "0.2.0",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "kvDfK",
+                  "name": "自動確認",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "KiDnz",
+                      "name": "ラベル",
+                      "fill": "$ui-muted",
+                      "content": "起動時に更新を確認",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "id": "y183T",
+                      "type": "ref",
+                      "ref": "NXUR4",
+                      "name": "トグル"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "XJjXe",
+                  "name": "状態行",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "P1geZC",
+                      "name": "ラベル",
+                      "fill": "$ui-muted",
+                      "content": "状態",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "kfvrY",
+                      "name": "値",
+                      "fill": "$ok-fg",
+                      "content": "✓ 最新です (最終確認 10:32)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Nh4sA",
+                  "name": "ボタン行",
+                  "width": "fill_container",
+                  "justifyContent": "end",
+                  "children": [
+                    {
+                      "id": "i9FxMx",
+                      "type": "ref",
+                      "ref": "x4Qvxy",
+                      "name": "今すぐ確認",
+                      "descendants": {
+                        "jkIc9": {
+                          "content": "今すぐ確認"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "JiIBl",
+              "name": "状態b",
+              "width": "fill_container",
+              "fill": "$card-bg",
+              "cornerRadius": 8,
+              "stroke": "$ribbon-line",
+              "layout": "vertical",
+              "gap": 10,
+              "padding": 14,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Nx4Zx",
+                  "name": "状態名",
+                  "fill": "$ui-muted",
+                  "content": "② 新しい版があるとき",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "wqipz",
+                  "name": "グループ見出し",
+                  "width": "fill_container",
+                  "fill": "$palette-head",
+                  "cornerRadius": 4,
+                  "padding": [
+                    4,
+                    8
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "cTct4",
+                      "name": "見出し",
+                      "fill": "$ui-text",
+                      "content": "アップデート",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "eYMMq",
+                  "name": "現在のバージョン",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "sPdPK",
+                      "name": "ラベル",
+                      "fill": "$ui-muted",
+                      "content": "現在のバージョン",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "zKcV9",
+                      "name": "値",
+                      "fill": "$ui-text",
+                      "content": "0.2.0",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "SXgHN",
+                  "name": "自動確認",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "tkor9",
+                      "name": "ラベル",
+                      "fill": "$ui-muted",
+                      "content": "起動時に更新を確認",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "id": "em3ai",
+                      "type": "ref",
+                      "ref": "NXUR4",
+                      "name": "トグル"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "S3s7g",
+                  "name": "状態行",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "rd79N",
+                      "name": "ラベル",
+                      "fill": "$ui-muted",
+                      "content": "状態",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "w1rLjO",
+                      "name": "値",
+                      "fill": "$info-fg",
+                      "content": "v0.3.0 が利用できます (2026-10-20)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "FSGQP",
+                  "name": "リリースノート抜粋",
+                  "width": "fill_container",
+                  "fill": "$input-bg",
+                  "cornerRadius": 4,
+                  "layout": "vertical",
+                  "gap": 3,
+                  "padding": 8,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "k6SCd",
+                      "name": "行",
+                      "fill": "$ui-text",
+                      "content": "・盤の銘板・寸法線・整列",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "N3QQP",
+                      "name": "行",
+                      "fill": "$ui-text",
+                      "content": "・図枠エディタ",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "N2Qrx",
+                      "name": "行",
+                      "fill": "$ui-text",
+                      "content": "・不具合修正 12件",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "aGgru",
+                  "name": "ボタン行",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "justifyContent": "end",
+                  "children": [
+                    {
+                      "id": "fMvcE",
+                      "type": "ref",
+                      "ref": "x4Qvxy",
+                      "name": "リリースノート",
+                      "descendants": {
+                        "jkIc9": {
+                          "content": "リリースノート"
+                        }
+                      }
+                    },
+                    {
+                      "id": "Z4OWw9",
+                      "type": "ref",
+                      "ref": "Axj7d",
+                      "name": "更新して再起動",
+                      "descendants": {
+                        "gsbC2": {
+                          "content": "更新して再起動"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "B4I0b",
+              "name": "状態c",
+              "width": "fill_container",
+              "fill": "$card-bg",
+              "cornerRadius": 8,
+              "stroke": "$ribbon-line",
+              "layout": "vertical",
+              "gap": 10,
+              "padding": 14,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "VoYZ1",
+                  "name": "状態名",
+                  "fill": "$ui-muted",
+                  "content": "③ ダウンロード中",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "kCznX",
+                  "name": "グループ見出し",
+                  "width": "fill_container",
+                  "fill": "$palette-head",
+                  "cornerRadius": 4,
+                  "padding": [
+                    4,
+                    8
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "dv0RI",
+                      "name": "見出し",
+                      "fill": "$ui-text",
+                      "content": "アップデート",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ZwsSb",
+                  "name": "現在のバージョン",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "eGBcN",
+                      "name": "ラベル",
+                      "fill": "$ui-muted",
+                      "content": "現在のバージョン",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "gN8mf",
+                      "name": "値",
+                      "fill": "$ui-text",
+                      "content": "0.2.0",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "m9b7SX",
+                  "name": "自動確認",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "y5lVm",
+                      "name": "ラベル",
+                      "fill": "$ui-muted",
+                      "content": "起動時に更新を確認",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "id": "veYhM",
+                      "type": "ref",
+                      "ref": "NXUR4",
+                      "name": "トグル"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "aIe4O",
+                  "name": "状態行",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "r7Hw9",
+                      "name": "ラベル",
+                      "fill": "$ui-muted",
+                      "content": "状態",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Wvtz7",
+                      "name": "値",
+                      "fill": "$info-fg",
+                      "content": "ダウンロード中 12.4 / 20.0 MB",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "lvOBm",
+                  "name": "進捗バー",
+                  "width": "fill_container",
+                  "height": 6,
+                  "fill": "$input-bg",
+                  "cornerRadius": 3,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "GCV4B",
+                      "name": "進捗",
+                      "width": 200,
+                      "height": 6,
+                      "fill": "$acad-blue",
+                      "cornerRadius": 3
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "mgS5U",
+                  "name": "注",
+                  "fill": "$ui-muted",
+                  "content": "完了すると署名を確かめてから入れ替え、アプリを再起動します。",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "LcdxW",
+          "name": "起動時の通知",
+          "width": "fill_container",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "JcsK0",
+              "name": "作図画面 (右下に通知)",
+              "width": 760,
+              "height": 300,
+              "fill": "$model-bg",
+              "cornerRadius": 8,
+              "layout": "vertical",
+              "padding": 16,
+              "justifyContent": "end",
+              "alignItems": "end",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "zZ2Bn",
+                  "name": "更新の通知カード",
+                  "width": 360,
+                  "fill": "$card-bg",
+                  "cornerRadius": 8,
+                  "stroke": "$acad-blue",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 14,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "FENjE",
+                      "name": "見出し行",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "k2GEnL",
+                          "name": "印",
+                          "width": 8,
+                          "height": 8,
+                          "fill": "$acad-blue",
+                          "cornerRadius": 4
+                        },
+                        {
+                          "type": "text",
+                          "id": "FdlvG",
+                          "name": "見出し",
+                          "fill": "$ui-text",
+                          "content": "MadakeCAD v0.3.0 が利用できます",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "B5XSF7",
+                      "name": "補足",
+                      "fill": "$ui-muted",
+                      "content": "現在 0.2.0 ・ 起動時の確認で見つかりました",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "XZwtY",
+                      "name": "ボタン行",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "justifyContent": "end",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "dLhzy",
+                          "name": "リンク",
+                          "fill": "$acad-blue",
+                          "content": "リリースノート",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "id": "d9s4su",
+                          "type": "ref",
+                          "ref": "x4Qvxy",
+                          "name": "後で",
+                          "descendants": {
+                            "jkIc9": {
+                              "content": "後で"
+                            }
+                          }
+                        },
+                        {
+                          "id": "c4Hik",
+                          "type": "ref",
+                          "ref": "Axj7d",
+                          "name": "更新して再起動",
+                          "descendants": {
+                            "gsbC2": {
+                              "content": "更新して再起動"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "IwMin",
+              "name": "振る舞い",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "pxWLF",
+                  "name": "行",
+                  "fill": "$ui-text",
+                  "content": "・起動して数秒後に1回だけ確認する。見つからない・通信できないときは何も出さない (オフラインで邪魔をしない)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "t8VHh",
+                  "name": "行",
+                  "fill": "$ui-text",
+                  "content": "・「後で」はその版について今回の起動中は出さない。次回起動で再び知らせる",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "lrNyX",
+                  "name": "行",
+                  "fill": "$ui-text",
+                  "content": "・「更新して再起動」: 未保存の図面があれば「未保存の変更は失われます。更新して再起動しますか?」の確認 (OS標準の確認ダイアログ) を先に出し、キャンセルなら何もしない",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "hZXHF",
+                  "name": "行",
+                  "fill": "$ui-text",
+                  "content": "・ダウンロード中は通知カードが進捗バーに変わる (設定③と同じ部品)。失敗したら理由を出して閉じられる",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "v1FzY",
+                  "name": "行",
+                  "fill": "$ui-text",
+                  "content": "・ブラウザ検証モード (localhost:1420) と開発ビルドでは確認しない",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "udszo",
+                  "name": "行",
+                  "fill": "$ui-text",
+                  "content": "・Linuxは AppImage のみ自動更新できる。.deb / .rpm で入れた場合は「リリースページを開く」だけを出す",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "N7Tli",
+          "name": "注",
+          "fill": "$ui-muted",
+          "content": "DS部品の再利用: DSボタン主/副・DSトグルON。通知カードは新しい部品ではなく、既存のカード (card-bg + acad-blue枠、角丸8) を作図画面の右下に重ねたもの。文言はUIカタログ (6言語) に置く。",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 10,
+          "fontWeight": "normal"
+        }
+      ]
     }
   ],
   "variables": {

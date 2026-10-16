@@ -30,6 +30,9 @@ madake-mcp = { path = "crates/madake-mcp" }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
+# アプリ内アップデート (GitHub Releasesのlatest.jsonを見て、署名を確かめてから入れ替える) と再起動
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
