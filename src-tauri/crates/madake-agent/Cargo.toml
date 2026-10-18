@@ -9,6 +9,7 @@ description = "AIエージェント基盤: Claude Code CLIのstream-json駆動�
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
+base64 = "0.22"
 thiserror = { workspace = true }
 tokio = { version = "1", features = ["process", "io-util", "sync", "macros", "rt"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }

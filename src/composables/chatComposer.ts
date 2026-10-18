@@ -7,6 +7,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { i18n } from "../i18n";
 import { useChatStore, type ChatMessage } from "../stores/chat";
+import { useChatAttachmentsStore } from "../stores/chatAttachments";
 import { useUiStore } from "../stores/ui";
 
 /**
@@ -59,8 +60,16 @@ export function useChatComposer() {
    * 送信できるか。答えている最中でも**割り込み**で送れる (進行中のターンを中断して
    * 送り直す)。割り込めないのは会話idの採番を待っている短い間だけ。
    */
+  const attachments = useChatAttachmentsStore();
+  /**
+   * 送れない添付 (種類・大きさ・件数・モデルが読めないPDF) があるあいだは送れない
+   * (.pen「添付デザイン」③。送信ボタンは淡色、⌘Enterも効かない)。
+   */
   const canSend = computed(
-    () => draft.value.trim().length > 0 && (!store.streaming || store.canInterrupt),
+    () =>
+      draft.value.trim().length > 0 &&
+      !attachments.blocking &&
+      (!store.streaming || store.canInterrupt),
   );
 
   /** 会話全体の使用量の合計 (プロバイダによって埋まる欄が違う)。 */
@@ -104,9 +113,11 @@ export function useChatComposer() {
   async function submit() {
     if (!canSend.value) return;
     const text = draft.value;
+    const outgoing = attachments.outgoing;
     draft.value = "";
+    attachments.clear();
     ui.openAgentTab();
-    const id = await store.sendInterrupting(text);
+    const id = await store.sendInterrupting(text, outgoing);
     if (!id) ui.log(i18n.global.t("chat.composer.sendFailedLog"));
   }
 
@@ -125,5 +136,5 @@ export function useChatComposer() {
     }
   }
 
-  return { store, ui, draft, canSend, tokenBadge, usageTooltip, submit, onKeydown, onCancel };
+  return { store, ui, draft, attachments, canSend, tokenBadge, usageTooltip, submit, onKeydown, onCancel };
 }

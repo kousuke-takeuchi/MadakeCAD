@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use madake_agent::backend::{AgentBackend, TurnRequest};
+use madake_agent::Attachment;
 use madake_agent::gemini::{GeminiBackend, DEFAULT_GEMINI_BASE_URL, DEFAULT_GEMINI_MODEL};
 use madake_agent::tools::{ToolBridge, ToolDef, ToolFuture, ToolOutcome};
 use madake_agent::AgentEvent;
@@ -284,6 +285,7 @@ async fn run(backend: &GeminiBackend, prompt: &str, system: Option<&str>) -> Vec
         session: None,
         system_prompt: system,
         history: &[],
+        attachments: &[],
     };
     let _ = backend.run_turn(request, tx).await;
     let mut events = Vec::new();
@@ -773,6 +775,7 @@ async fn earlier_turns_of_the_conversation_are_replayed() {
                 session: None,
                 system_prompt: None,
                 history: &history,
+                attachments: &[],
             },
             tx,
         )
@@ -876,4 +879,46 @@ async fn an_empty_model_name_stops_before_any_request() {
 
     assert_eq!(api.request_count(), 0, "モデル名が無いのに通信している");
     assert!(message.contains("モデル"), "理由が読めない: {message}");
+}
+
+/// 添付つきで1ターン回す (添付の扱いの確認用)。
+async fn run_with_attachments<B: AgentBackend>(backend: &B, prompt: &str, attachments: &[Attachment]) -> Vec<AgentEvent> {
+    let (tx, mut rx) = mpsc::channel(64);
+    let request = TurnRequest {
+        prompt,
+        session: None,
+        system_prompt: None,
+        history: &[],
+        attachments,
+    };
+    let _ = backend.run_turn(request, tx).await;
+    let mut events = Vec::new();
+    while let Some(event) = rx.recv().await {
+        events.push(event);
+    }
+    events
+}
+
+fn png() -> Attachment {
+    Attachment { name: "回路写真.png".into(), mime: "image/png".into(), data: vec![1, 2, 3] }
+}
+
+fn pdf() -> Attachment {
+    Attachment { name: "データシート.pdf".into(), mime: "application/pdf".into(), data: b"%PDF".to_vec() }
+}
+
+/// An image and a PDF attached to the message reach Gemini as inline data parts before the text part.
+/// 発言に付けた画像とPDFは、inline_dataの部品として本文の部品の前に載ってGeminiへ届く。
+#[tokio::test]
+async fn attachments_reach_gemini_as_inline_data_parts() {
+    let api = MockApi::start(vec![Scripted::Sse(vec![text_chunk("ok")])]).await;
+    let backend = backend_with_key(&api);
+
+    run_with_attachments(&backend, "照合して", &[png(), pdf()]).await;
+
+    let parts = &api.request(0).body["contents"][0]["parts"];
+    assert_eq!(parts[0]["inline_data"]["mime_type"], "image/png");
+    assert_eq!(parts[0]["inline_data"]["data"], "AQID");
+    assert_eq!(parts[1]["inline_data"]["mime_type"], "application/pdf");
+    assert_eq!(parts[2]["text"], "照合して");
 }

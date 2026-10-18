@@ -476,6 +476,23 @@ impl AgentManager {
         model: Option<String>,
         context: Option<String>,
     ) -> Result<Uuid> {
+        self.send_with_attachments(conversation_id, prompt, Vec::new(), model, context)
+            .await
+    }
+
+    /// [`Self::send`]の添付つき版 (画像・PDF。[`crate::attachments`])。
+    ///
+    /// 添付は送る前に確かめ (種類・大きさ・件数)、外れたら会話に何も積まずに断る。
+    /// 会話には添付の名前・種類・大きさだけを残す (中身は保存しない)。
+    pub async fn send_with_attachments(
+        &self,
+        conversation_id: Option<Uuid>,
+        prompt: &str,
+        attachments: Vec<crate::attachments::Attachment>,
+        model: Option<String>,
+        context: Option<String>,
+    ) -> Result<Uuid> {
+        crate::attachments::validate(&attachments)?;
         let settings = self.settings();
         // プロバイダごとの前提を先に確かめる(claude CLIが無くてもAPIキーがあれば送れる)
         let executable = match settings.provider {
@@ -540,7 +557,8 @@ impl AgentManager {
             }
             // API直結は文脈をこちらで送り直すので、ターン開始より前の履歴を控えておく
             let history = api_history(conversation);
-            conversation.begin_turn(prompt, doc_state);
+            let metas: Vec<_> = attachments.iter().map(|a| a.meta()).collect();
+            conversation.begin_turn_with_attachments(prompt, metas, doc_state);
             let session = conversation.session_id.clone();
             let turn_model = conversation.model.clone();
             (id, seq, session, turn_model, context, history)
@@ -589,6 +607,7 @@ impl AgentManager {
             conversation_id: id,
             seq,
             prompt: prompt.to_string(),
+            attachments,
             session,
             context,
             history,
@@ -761,6 +780,8 @@ struct Turn {
     conversation_id: Uuid,
     seq: u64,
     prompt: String,
+    /// このターンの添付 (送るのはこのターンだけ。履歴としては送り直さない)
+    attachments: Vec<crate::attachments::Attachment>,
     session: Option<String>,
     context: Option<String>,
     /// この会話の過去のやりとり(API直結バックエンドが文脈として送り直す)
@@ -792,6 +813,7 @@ impl Turn {
         let session = self.session.clone();
         let context = self.context.clone();
         let history = self.history.clone();
+        let attachments = self.attachments.clone();
         // バックエンドの駆動は別タスク。こちらがabortされるとrxが落ち、CLIバックエンドは
         // 子プロセスをkillして、API直結バックエンドは送信をやめて自然に終わる
         let backend_task = tokio::spawn(async move {
@@ -802,6 +824,7 @@ impl Turn {
                         session: session.as_deref(),
                         system_prompt: context.as_deref(),
                         history: &history,
+                        attachments: &attachments,
                     },
                     tx,
                 )

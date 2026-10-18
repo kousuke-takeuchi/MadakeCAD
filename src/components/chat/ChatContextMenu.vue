@@ -8,6 +8,7 @@ import { BookOpen, Database, FileText, Paperclip } from "lucide-vue-next";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { appendContextTag, drawingContextTag } from "../../composables/drawingContext";
+import { pickAttachments } from "../../composables/chatDrop";
 import { useDocumentStore } from "../../stores/document";
 import { useUiStore } from "../../stores/ui";
 
@@ -25,8 +26,8 @@ const { t } = useI18n();
  * 「表示は残して操作時に予定をログする」というデザインシステムの方針
  * (docs/design-system.md「未実装機能のUI」) を満たせなくなる。
  */
-const items = computed<{ icon: typeof Paperclip; label: string; note?: string }[]>(() => [
-  { icon: Paperclip, label: t("chat.context.attach"), note: t("chat.context.attachNote") },
+const items = computed<{ icon: typeof Paperclip; label: string; note?: string; action?: "attach" }[]>(() => [
+  { icon: Paperclip, label: t("chat.context.attach"), action: "attach" },
   { icon: FileText, label: t("chat.context.fromDrawing") },
   { icon: Database, label: t("chat.context.partsDb"), note: t("chat.context.partsDbNote") },
   { icon: BookOpen, label: t("chat.context.standards"), note: t("chat.context.standardsNote") },
@@ -38,8 +39,19 @@ function onFromDrawing() {
   emit("close");
 }
 
-function onPick(note: string | undefined) {
-  if (note) ui.log(`AGENT   ${note}`);
+/** 「画像/ファイルを追加...」: OSのファイル選択から添付する (.pen「添付デザイン」⑤)。 */
+async function onAttach() {
+  emit("close");
+  try {
+    await pickAttachments(t("chat.attach.filterName"));
+  } catch (e) {
+    ui.log(`AGENT   ${String(e)}`);
+  }
+}
+
+function onPick(item: { note?: string; action?: "attach" }) {
+  if (item.action === "attach") void onAttach();
+  else if (item.note) ui.log(`AGENT   ${item.note}`);
   else onFromDrawing();
 }
 </script>
@@ -55,7 +67,7 @@ function onPick(note: string | undefined) {
         class="item"
         :class="{ disabled: !!item.note }"
         :title="item.note"
-        @click="onPick(item.note)"
+        @click="onPick(item)"
       >
         <component :is="item.icon" :size="14" class="icon" />
         <span class="label">{{ item.label }}</span>

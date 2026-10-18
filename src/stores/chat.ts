@@ -86,6 +86,23 @@ export interface WireChatMessage {
   /** 旧`chat.json`には無いフィールド(Rust側は`serde(default)`で{0,0})。 */
   applied_undo_depth?: AppliedUndoDepth;
   error?: string | null;
+  /** ユーザー発言の添付 (名前・種類・大きさ。中身は持たない)。添付の無い発言には無い。 */
+  attachments?: AttachmentMeta[];
+}
+
+/** 添付の情報 (Rust `madake_agent::AttachmentMeta`)。 */
+export interface AttachmentMeta {
+  name: string;
+  mime: string;
+  size: number;
+}
+
+/** 送る添付の指定 (Rust `madake_agent::AttachmentInput`)。ファイルのパスかbase64の中身。 */
+export interface AttachmentInput {
+  name: string;
+  mime: string;
+  path?: string | null;
+  data?: string | null;
 }
 
 /** Rust側 `Conversation` のJSON表現。 */
@@ -166,6 +183,8 @@ export interface ChatMessage {
   streaming: boolean;
   /** 「元に戻す」実行済み */
   undone: boolean;
+  /** ユーザー発言の添付 (表示用。中身は持たない) */
+  attachments: AttachmentMeta[];
 }
 
 export interface ChatConversation {
@@ -183,7 +202,12 @@ export interface ChatConversation {
 
 interface AgentApi {
   /** プロンプトを送る。戻り値は会話id(新規会話ならサーバー採番)。 */
-  send(conversationId: string | null, prompt: string, model: string | null): Promise<string>;
+  send(
+    conversationId: string | null,
+    prompt: string,
+    model: string | null,
+    attachments?: AttachmentInput[],
+  ): Promise<string>;
   cancel(conversationId: string | null): Promise<void>;
   listConversations(): Promise<WireConversation[]>;
   undoTurn(conversationId: string, turnId: string): Promise<void>;
@@ -192,8 +216,8 @@ interface AgentApi {
 }
 
 const tauriAgentApi: AgentApi = {
-  send: (conversationId, prompt, model) =>
-    invoke<string>("agent_send", { conversationId, prompt, model }),
+  send: (conversationId, prompt, model, attachments) =>
+    invoke<string>("agent_send", { conversationId, prompt, model, attachments: attachments ?? [] }),
   cancel: (conversationId) => invoke<void>("agent_cancel", { conversationId }),
   listConversations: () => invoke<WireConversation[]>("agent_list_conversations"),
   undoTurn: (conversationId, turnId) =>
@@ -216,10 +240,10 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const httpAgentApi: AgentApi = {
-  send: async (conversationId, prompt, model) => {
+  send: async (conversationId, prompt, model, attachments) => {
     const out = await http<string | { conversation_id: string }>("/agent/send", {
       method: "POST",
-      body: JSON.stringify({ conversation_id: conversationId, prompt, model }),
+      body: JSON.stringify({ conversation_id: conversationId, prompt, model, attachments: attachments ?? [] }),
     });
     return typeof out === "string" ? out : out.conversation_id;
   },
@@ -427,6 +451,7 @@ function newMessage(role: ChatRole, text: string, streaming: boolean): ChatMessa
     usage: null,
     streaming,
     undone: false,
+    attachments: [],
   };
 }
 
@@ -440,6 +465,14 @@ function normalizeToolCall(call: WireToolCall): ChatToolCall {
   };
 }
 
+/** 送信する添付 (バックエンドへ渡す指定と、発言に表示する情報)。 */
+export interface OutgoingAttachments {
+  inputs: AttachmentInput[];
+  metas: AttachmentMeta[];
+}
+
+const NO_ATTACHMENTS: OutgoingAttachments = { inputs: [], metas: [] };
+
 function normalizeMessage(message: WireChatMessage): ChatMessage {
   return {
     turn_id: message.turn_id ?? "",
@@ -452,6 +485,7 @@ function normalizeMessage(message: WireChatMessage): ChatMessage {
     usage: null,
     streaming: false,
     undone: false,
+    attachments: message.attachments ?? [],
   };
 }
 
@@ -927,7 +961,7 @@ export const useChatStore = defineStore("chat", {
      * プロンプトを送信する(必要なら会話を新規作成)。戻り値は会話id。
      * ユーザー発話とアシスタントの空ターンを即座に積み、以降はイベントで埋まる。
      */
-    async send(prompt: string): Promise<string | null> {
+    async send(prompt: string, attachments: OutgoingAttachments = NO_ATTACHMENTS): Promise<string | null> {
       const text = prompt.trim();
       if (!text || this.streaming) return null;
 
@@ -951,13 +985,15 @@ export const useChatStore = defineStore("chat", {
       this.cancelRequested = false;
       conv.updated_at = Date.now();
 
-      conv.messages.push(newMessage("user", text, false));
+      const userMessage = newMessage("user", text, false);
+      userMessage.attachments = attachments.metas;
+      conv.messages.push(userMessage);
       conv.messages.push(newMessage("assistant", "", true));
       this.setRunning(conv.id, true);
       const localId = pending ? conv.id : null;
 
       try {
-        const id = await agentApi.send(pending ? null : conv.id, text, this.model);
+        const id = await agentApi.send(pending ? null : conv.id, text, this.model, attachments.inputs);
         this.adoptConversationId(id, localId);
         return id;
       } catch (e) {
@@ -987,14 +1023,17 @@ export const useChatStore = defineStore("chat", {
      * 採番前(`local-`)の会話が答えている間だけは割り込めない: 中断を届ける先のidが
      * まだ無く、ここで送ると別の新規会話が出来てしまう。その短い間は`null`を返す。
      */
-    async sendInterrupting(prompt: string): Promise<string | null> {
+    async sendInterrupting(
+      prompt: string,
+      attachments: OutgoingAttachments = NO_ATTACHMENTS,
+    ): Promise<string | null> {
       const text = prompt.trim();
       if (!text) return null;
       if (this.streaming) {
         if (!this.canInterrupt) return null;
         await this.cancel();
       }
-      return this.send(text);
+      return this.send(text, attachments);
     },
 
     /**

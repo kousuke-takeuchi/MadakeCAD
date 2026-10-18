@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use madake_agent::backend::{AgentBackend, TurnRequest};
+use madake_agent::Attachment;
 use madake_agent::tools::{ToolBridge, ToolDef, ToolFuture, ToolOutcome};
 use madake_agent::{AgentEvent, AnthropicApiBackend};
 use serde_json::{json, Value};
@@ -242,6 +243,7 @@ async fn run(backend: &AnthropicApiBackend, prompt: &str, system: Option<&str>) 
         session: None,
         system_prompt: system,
         history: &[],
+        attachments: &[],
     };
     let _ = backend.run_turn(request, tx).await;
     let mut events = Vec::new();
@@ -557,6 +559,7 @@ async fn earlier_turns_of_the_conversation_are_replayed() {
                 session: None,
                 system_prompt: None,
                 history: &history,
+                attachments: &[],
             },
             tx,
         )
@@ -595,4 +598,47 @@ async fn the_connection_test_reports_success_or_a_readable_reason() {
     // 区分はUIが翻訳するため、文言だけでなく機械可読な種類も返す
     assert_eq!(error.kind, "auth", "エラーの種類が違う: {error:?}");
     assert!(error.message.contains("APIキー"), "理由が読めない: {error:?}");
+}
+
+/// 添付つきで1ターン回す (添付の扱いの確認用)。
+async fn run_with_attachments<B: AgentBackend>(backend: &B, prompt: &str, attachments: &[Attachment]) -> Vec<AgentEvent> {
+    let (tx, mut rx) = mpsc::channel(64);
+    let request = TurnRequest {
+        prompt,
+        session: None,
+        system_prompt: None,
+        history: &[],
+        attachments,
+    };
+    let _ = backend.run_turn(request, tx).await;
+    let mut events = Vec::new();
+    while let Some(event) = rx.recv().await {
+        events.push(event);
+    }
+    events
+}
+
+fn png() -> Attachment {
+    Attachment { name: "回路写真.png".into(), mime: "image/png".into(), data: vec![1, 2, 3] }
+}
+
+fn pdf() -> Attachment {
+    Attachment { name: "データシート.pdf".into(), mime: "application/pdf".into(), data: b"%PDF".to_vec() }
+}
+
+/// An image and a PDF attached to the message reach the API as an image block and a document block before the text.
+/// 発言に付けた画像とPDFは、画像ブロックと文書ブロックとして本文の前に載ってAPIへ届く。
+#[tokio::test]
+async fn attachments_reach_the_api_as_image_and_document_blocks() {
+    let api = MockApi::start(vec![turn(vec![text_block(0, &["ok"])], "end_turn")]).await;
+    let backend = AnthropicApiBackend::new("sk-test", "claude-sonnet-5").with_base_url(api.base_url());
+
+    run_with_attachments(&backend, "照合して", &[png(), pdf()]).await;
+
+    let content = &api.request(0)["messages"][0]["content"];
+    assert_eq!(content[0]["type"], "image");
+    assert_eq!(content[0]["source"]["data"], "AQID");
+    assert_eq!(content[1]["type"], "document");
+    assert_eq!(content[1]["source"]["media_type"], "application/pdf");
+    assert_eq!(content[2]["text"], "照合して");
 }

@@ -42,6 +42,8 @@ pub struct TurnRequest<'a> {
     pub system_prompt: Option<&'a str>,
     /// この会話の過去のやりとり(古い順)
     pub history: &'a [HistoryMessage],
+    /// このターンの発言に付いた添付 (画像・PDF。[`crate::attachments`])
+    pub attachments: &'a [crate::attachments::Attachment],
 }
 
 impl<'a> TurnRequest<'a> {
@@ -51,6 +53,7 @@ impl<'a> TurnRequest<'a> {
             session: None,
             system_prompt: None,
             history: &[],
+            attachments: &[],
         }
     }
 }
@@ -129,6 +132,18 @@ impl ClaudeCodeCliBackend {
         mcp_config_path: &Path,
         append_system_prompt: Option<&str>,
     ) -> Vec<String> {
+        self.build_args_for(session, mcp_config_path, append_system_prompt, false)
+    }
+
+    /// [`Self::build_args`]の添付つき版。`stream_json_input`なら`--input-format stream-json`
+    /// を足し、標準入力から内容ブロック (画像・PDF) つきのユーザーメッセージを1行で受ける。
+    pub fn build_args_for(
+        &self,
+        session: Option<&str>,
+        mcp_config_path: &Path,
+        append_system_prompt: Option<&str>,
+        stream_json_input: bool,
+    ) -> Vec<String> {
         let mut args = vec![
             "-p".to_string(),
             "--output-format".to_string(),
@@ -137,6 +152,10 @@ impl ClaudeCodeCliBackend {
             // 無指定だと完成メッセージ単位でしか出ないため、デルタ配信に必須
             "--include-partial-messages".to_string(),
         ];
+        if stream_json_input {
+            args.push("--input-format".to_string());
+            args.push("stream-json".to_string());
+        }
         if let Some(session) = session {
             args.push("--resume".to_string());
             args.push(session.to_string());
@@ -186,9 +205,22 @@ impl ClaudeCodeCliBackend {
         append_system_prompt: Option<&str>,
         tx: mpsc::Sender<AgentEvent>,
     ) -> Result<()> {
+        self.send_with_attachments(prompt, &[], session, append_system_prompt, tx)
+            .await
+    }
+
+    /// [`Self::send_with_context`]の添付つき版 (添付があれば内容ブロックで渡す)。
+    pub async fn send_with_attachments(
+        &self,
+        prompt: &str,
+        attachments: &[crate::attachments::Attachment],
+        session: Option<&str>,
+        append_system_prompt: Option<&str>,
+        tx: mpsc::Sender<AgentEvent>,
+    ) -> Result<()> {
         let error_tx = tx.clone();
         match self
-            .stream_turn(prompt, session, append_system_prompt, tx)
+            .stream_turn(prompt, attachments, session, append_system_prompt, tx)
             .await
         {
             Ok(()) => Ok(()),
@@ -207,12 +239,21 @@ impl ClaudeCodeCliBackend {
     async fn stream_turn(
         &self,
         prompt: &str,
+        attachments: &[crate::attachments::Attachment],
         session: Option<&str>,
         append_system_prompt: Option<&str>,
         tx: mpsc::Sender<AgentEvent>,
     ) -> Result<()> {
+        crate::attachments::validate(attachments)?;
         let config = TempMcpConfig::create(&self.mcp_config_json())?;
-        let args = self.build_args(session, config.path(), append_system_prompt);
+        let with_attachments = !attachments.is_empty();
+        let args = self.build_args_for(session, config.path(), append_system_prompt, with_attachments);
+        // 添付があれば内容ブロックつきのユーザーメッセージ1行 (stream-json)、無ければ本文そのまま
+        let input = if with_attachments {
+            crate::attachments::claude_cli_input_line(prompt, attachments)
+        } else {
+            prompt.to_string()
+        };
 
         let mut child = Command::new(&self.executable)
             .args(&args)
@@ -226,9 +267,8 @@ impl ClaudeCodeCliBackend {
         // プロンプトはstdin経由(`-`始まりでもフラグ扱いされない)。書き終えたら閉じる。
         // stdoutの読み出しと並行させないと、長いプロンプトでデッドロックし得る
         let stdin_task = child.stdin.take().map(|mut stdin| {
-            let prompt = prompt.to_string();
             tokio::spawn(async move {
-                stdin.write_all(prompt.as_bytes()).await?;
+                stdin.write_all(input.as_bytes()).await?;
                 stdin.shutdown().await
             })
         });
@@ -396,8 +436,14 @@ impl AgentBackend for ClaudeCodeCliBackend {
     ) -> TurnFuture<'a> {
         // CLIは会話の文脈をセッション(`--resume`)で持つので`history`は使わない
         Box::pin(async move {
-            self.send_with_context(request.prompt, request.session, request.system_prompt, tx)
-                .await
+            self.send_with_attachments(
+                request.prompt,
+                request.attachments,
+                request.session,
+                request.system_prompt,
+                tx,
+            )
+            .await
         })
     }
 }

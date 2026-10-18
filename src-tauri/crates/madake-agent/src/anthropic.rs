@@ -163,7 +163,14 @@ impl AnthropicApiBackend {
             .map(|bridge| api_tool_definitions(&bridge.tools()))
             .unwrap_or_default();
         let mut messages = history_messages(request.history);
-        messages.push(json!({"role": "user", "content": request.prompt}));
+        // 添付が無ければ本文だけ (従来どおりの文字列)、あれば画像・文書ブロック+本文
+        crate::attachments::validate(request.attachments)?;
+        let content = if request.attachments.is_empty() {
+            json!(request.prompt)
+        } else {
+            crate::attachments::anthropic_content(request.prompt, request.attachments)
+        };
+        messages.push(json!({"role": "user", "content": content}));
 
         let mut usage = Usage::default();
         for _round in 0..self.max_tool_rounds {

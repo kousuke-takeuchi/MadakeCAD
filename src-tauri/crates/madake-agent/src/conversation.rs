@@ -136,6 +136,10 @@ pub struct ChatMessage {
     pub applied_undo_depth: AppliedUndoDepth,
     #[serde(default)]
     pub error: Option<String>,
+    /// ユーザー発言に付いた添付の名前・種類・大きさ (中身は保存しない)。
+    /// 添付の無い発言では書き出さないので、添付以前のチャット履歴と同じ形のまま。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<crate::attachments::AttachmentMeta>,
 }
 
 impl ChatMessage {
@@ -148,6 +152,7 @@ impl ChatMessage {
             applied_revisions: AppliedRevisions::at(state.revision),
             applied_undo_depth: AppliedUndoDepth::at(state.undo_depth),
             error: None,
+            attachments: Vec::new(),
         }
     }
 
@@ -230,14 +235,21 @@ impl Conversation {
     /// `state`は送信直前のドキュメント状態。戻り値はこのターンの安定ID
     /// (巻き戻しの対象指定に使う)。2つのメッセージは同じIDを共有する。
     pub fn begin_turn(&mut self, prompt: &str, state: DocState) -> Uuid {
+        self.begin_turn_with_attachments(prompt, Vec::new(), state)
+    }
+
+    /// [`Self::begin_turn`]の添付つき版 (ユーザー発言に添付の情報を残す)。
+    pub fn begin_turn_with_attachments(
+        &mut self,
+        prompt: &str,
+        attachments: Vec<crate::attachments::AttachmentMeta>,
+        state: DocState,
+    ) -> Uuid {
         self.touch();
         let turn_id = Uuid::new_v4();
-        self.messages.push(ChatMessage::new(
-            turn_id,
-            Role::User,
-            prompt.to_string(),
-            state,
-        ));
+        let mut user = ChatMessage::new(turn_id, Role::User, prompt.to_string(), state);
+        user.attachments = attachments;
+        self.messages.push(user);
         self.messages.push(ChatMessage::new(
             turn_id,
             Role::Assistant,
