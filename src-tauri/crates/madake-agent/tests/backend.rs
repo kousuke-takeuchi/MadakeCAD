@@ -1,7 +1,7 @@
 //! ClaudeCodeCliBackendのテスト。本物のclaudeは呼ばず、fixtureを吐くフェイクCLIを使う。
 
 use madake_agent::backend::ClaudeCodeCliBackend;
-use madake_agent::AgentEvent;
+use madake_agent::{AgentEvent, Attachment};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -321,4 +321,36 @@ fn default_candidates_include_known_install_paths() {
             "{candidates:?}"
         );
     }
+}
+
+/// With attachments the CLI is started with stream-json input and receives one user message whose image and PDF blocks come before the text.
+/// 添付があるとCLIをstream-json入力で起動し、画像・PDFのブロックを本文より前に並べたユーザーメッセージを1行で渡す。
+#[tokio::test]
+async fn attachments_reach_the_cli_as_stream_json_content_blocks() {
+    let backend = backend("fake_claude_stdin_json.sh");
+    let attachments = [
+        Attachment { name: "a.png".into(), mime: "image/png".into(), data: vec![1, 2, 3] },
+        Attachment { name: "b.pdf".into(), mime: "application/pdf".into(), data: b"%PDF".to_vec() },
+    ];
+    let (tx, mut rx) = mpsc::channel(1024);
+    backend
+        .send_with_attachments("照合して", &attachments, None, None, tx)
+        .await
+        .expect("send成功");
+    let mut last = None;
+    while let Some(ev) = rx.recv().await {
+        last = Some(ev);
+    }
+    match last {
+        Some(AgentEvent::TurnCompleted { result, .. }) => assert_eq!(result, "image,document|照合して"),
+        other => panic!("最後はTurnCompletedのはず: {other:?}"),
+    }
+}
+
+/// Without attachments the arguments stay as before (no stream-json input), so plain turns are unchanged.
+/// 添付が無ければ引数は従来どおり (stream-json入力にしない) で、ふつうのターンは何も変わらない。
+#[test]
+fn plain_turns_keep_the_text_input() {
+    let args = backend("fake_claude.sh").build_args(None, Path::new("/tmp/mcp.json"), None);
+    assert!(!args.iter().any(|a| a == "--input-format"));
 }

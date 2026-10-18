@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2727仕様項目**。
+全6領域・**2757仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1364,6 +1364,7 @@
 - ストリームの途中で届いたエラーもユーザーへ伝える(黙って途切れさせない)。 <sub>`an_error_event_inside_the_stream_is_surfaced`</sub>
 - 会話の前のやりとりも一緒に送るので、モデルは前に話した内容を覚えている。 <sub>`earlier_turns_of_the_conversation_are_replayed`</sub>
 - 接続テストは、使えるキーなら成功を、駄目なキーなら読める理由を返す。 <sub>`the_connection_test_reports_success_or_a_readable_reason`</sub>
+- 発言に付けた画像とPDFは、画像ブロックと文書ブロックとして本文の前に載ってAPIへ届く。 <sub>`attachments_reach_the_api_as_image_and_document_blocks`</sub>
 
 ### Claude CLIバックエンド
 
@@ -1383,6 +1384,8 @@
 - 検出は候補パスを順に試し、動くものが見つかるまでフォールバックする。 <sub>`detect_falls_back_to_later_candidates`</sub>
 - どの候補も動かない場合、試した内容が分かるエラーを報告する。 <sub>`detect_from_reports_error_when_no_candidate_works`</sub>
 - 既定の候補にはClaude CLIの既知のインストール先が含まれる。 <sub>`default_candidates_include_known_install_paths`</sub>
+- 添付があるとCLIをstream-json入力で起動し、画像・PDFのブロックを本文より前に並べたユーザーメッセージを1行で渡す。 <sub>`attachments_reach_the_cli_as_stream_json_content_blocks`</sub>
+- 添付が無ければ引数は従来どおり (stream-json入力にしない) で、ふつうのターンは何も変わらない。 <sub>`plain_turns_keep_the_text_input`</sub>
 
 ### 会話・履歴
 
@@ -1426,6 +1429,7 @@
 - Copilotの実行ファイルが入っていない場合、検出は明確に失敗する。 <sub>`detect_fails_when_copilot_is_not_installed`</sub>
 - 検出はPATHと、npmの一般的なインストール先からcopilotを探す。 <sub>`default_candidates_include_the_known_install_paths`</sub>
 - 接続テストは、CLIが応答すれば成功を、サインインしていなければサインイン案内を返す。 <sub>`the_connection_test_distinguishes_success_from_being_signed_out`</sub>
+- Copilotへは添付を読める場所 (--add-dir) のフォルダへ保存し、本文の後ろにパスを並べて渡す。フォルダはターンの後に消す。 <sub>`copilot_reads_attachments_from_a_temporary_allowed_folder`</sub>
 
 ### copilot_events
 
@@ -1475,6 +1479,7 @@
 - 接続先と既定のモデル名はGoogleが公開しているGemini APIのものになっている。 <sub>`the_defaults_match_the_published_gemini_api`</sub>
 - 「models/」付きで貼り付けたモデル名でも、正しいエンドポイントへ1回だけつながる。 <sub>`a_model_name_with_the_models_prefix_still_works`</sub>
 - モデル名が無いときは通信する前にターンを止め、どこを埋めればよいかを伝える。 <sub>`an_empty_model_name_stops_before_any_request`</sub>
+- 発言に付けた画像とPDFは、inline_dataの部品として本文の部品の前に載ってGeminiへ届く。 <sub>`attachments_reach_gemini_as_inline_data_parts`</sub>
 
 ### 規格知識の注入
 
@@ -1530,6 +1535,8 @@
 - 2つの会話が同時に入れた編集は、どれも失われずrevisionの順に図面へ収まる。 <sub>`parallel_turns_keep_every_edit_in_revision_order`</sub>
 - ターン通し番号は会話ごとに独立しているので、片方を中断してももう片方のイベントは捨てられない。 <sub>`each_conversation_keeps_its_own_turn_seq`</sub>
 - 並行していたターンの編集ごと巻き戻したときは、そのターンも巻き戻し済みになる(適用済みのまま残らない)。 <sub>`undo_turn_marks_the_parallel_turn_whose_edits_it_swept`</sub>
+- 添付つきの発言は会話に名前・種類・大きさだけを残し (中身は残さない)、ターンには添付が渡る。 <sub>`a_message_keeps_the_attachment_names_but_not_their_content`</sub>
+- 添付が条件 (種類・大きさ・件数) から外れた発言は、会話に何も積まずに断る。 <sub>`invalid_attachments_are_refused_before_the_turn_starts`</sub>
 
 ### manager_api_provider
 
@@ -1584,6 +1591,8 @@
 - 接続テストは、使える設定なら成功を、駄目な設定なら区分つきの読める理由を返す。 <sub>`the_connection_test_reports_success_or_a_readable_reason`</sub>
 - Ollamaプリセットはローカルのollamaが持つOpenAI互換エンドポイントを指し、既定の接続先はOpenAI本体である。 <sub>`the_ollama_preset_points_at_the_local_ollama_server`</sub>
 - 末尾に「/」を付けて貼り付けたベースURLでも、/chat/completions へ正しく1回だけつながる。 <sub>`a_base_url_with_a_trailing_slash_still_works`</sub>
+- 添付した画像は、OpenAI互換サーバーへdata URLの部品として本文の前に載って届く。 <sub>`an_attached_image_reaches_the_server_as_a_data_url`</sub>
+- OpenAI互換のモデルはPDFを読めないので、PDFを添付すると何も送らずに理由つきで断る。 <sub>`an_attached_pdf_is_refused_before_sending`</sub>
 
 ### stream-jsonパーサ
 
@@ -1665,6 +1674,19 @@
 - `"type": "object"`が抜けたスキーマは、そのまま送らずに補って直す。 <sub>`a_schema_missing_its_object_type_is_repaired`</sub>
 - ブリッジしたツール名は全てAPIが許す文字種・長さに収まる(ツールが弾かれない)。 <sub>`bridged_tool_names_fit_the_api_name_rules`</sub>
 - 説明が空のツールには説明の代わりを入れる(説明無しのツールをAPIへ渡さない)。 <sub>`a_tool_without_a_description_still_carries_some_text`</sub>
+
+### attachments
+
+- 画像 (PNG/JPEG/GIF/WebP) とPDFは添付でき、それ以外の種類・6件以上・20MBを超えるファイルは全体を断る。 <sub>`only_images_and_pdfs_within_the_limits_are_accepted`</sub>
+- 選んだファイルの種類は拡張子 (大文字小文字は問わない) で決まり、知らない拡張子は添付できない。 <sub>`the_kind_of_a_picked_file_comes_from_its_extension`</sub>
+- Anthropic APIへは画像を画像ブロック、PDFを文書ブロックにして、本文より前に置く。 <sub>`anthropic_gets_image_and_document_blocks_before_the_text`</sub>
+- Geminiへは添付をinline_dataの部品にして、本文の部品の前に置く。 <sub>`gemini_gets_inline_data_parts`</sub>
+- OpenAI互換のモデルへは画像をdata URLで渡し、PDFは何も送る前に断る。 <sub>`openai_gets_data_url_images_and_refuses_pdfs`</sub>
+- Claude Code CLIへは同じ内容ブロックを持つstream-jsonのユーザーメッセージを1行で渡す。 <sub>`claude_cli_gets_one_stream_json_line`</sub>
+- CLI向けの保存はファイル名を保ち、区切り文字を無害にし、同名には番号を足す。保存先のパスは本文の後ろに並ぶ。 <sub>`saving_for_a_cli_keeps_safe_unique_names`</sub>
+- 選んだファイルは拡張子の種類で読み込み、貼り付けのbase64は復号する。壊れたbase64は断る。 <sub>`files_and_pasted_content_become_attachments`</sub>
+- 選んだファイルの下見は名前・種類・大きさを返し、添付できないとき (種類違い・ファイルが無い) はその理由を返す。 <sub>`previewing_a_file_reports_its_kind_size_and_problems`</sub>
+- 画面から届く添付はファイルのパスから読むかbase64を復号し、1件でも読めなければ発言全体を断る。 <sub>`inputs_from_the_screen_resolve_from_a_path_or_base64`</sub>
 
 
 ## madake CLI
@@ -2656,6 +2678,8 @@
 - 自分のターンが進行中の間は、未知会話のイベントで一覧を取り直さない <sub>`chat store: applyAgentEvent`</sub>
 - 進行中ターンの無い会話へのturn_completed/errorは捨てられる <sub>`chat store: applyAgentEvent`</sub>
 - 送信に失敗したら、その理由が最初の1通目からチャットに表示される <sub>`chat store: アクション`</sub>
+- 添付つきの送信は添付の指定をバックエンドへ渡し、発言には添付の名前・種類・大きさを残す <sub>`chat store: アクション`</sub>
+- 保存された会話の発言にも添付の情報が載り、添付の無い発言は空になる <sub>`chat store: アクション`</sub>
 - sendは会話を新規作成し、サーバー採番のidを引き取る <sub>`chat store: アクション`</sub>
 - send解決前に届いたイベントも同じ会話へ入る <sub>`chat store: アクション`</sub>
 - 空プロンプトとストリーミング中の送信は無視される <sub>`chat store: アクション`</sub>
@@ -2703,6 +2727,18 @@
 - 開いている会話が答えている間は、その会話への追加送信をしない <sub>`chat store: 並列エージェント`</sub>
 - 会話一覧を取り直しても、実行中の会話は実行中のまま表示できる <sub>`chat store: 並列エージェント`</sub>
 - ターンが終わった会話は実行中の一覧から外れる <sub>`chat store: 並列エージェント`</sub>
+
+### chatAttachments
+
+- 画像 (PNG/JPEG/GIF/WebP) とPDFだけを添付でき、種類は拡張子でも判断する (大文字小文字は問わない) <sub>`pending chat attachments`</sub>
+- 20MBを超えるファイルは大きさつきで「大きすぎます」になり、大きさはMB/KBで表示する <sub>`pending chat attachments`</sub>
+- 貼り付け・ブラウザのファイルは中身をbase64で持ち、送信する添付と発言に出す情報になる <sub>`pending chat attachments`</sub>
+- ⌘Vの画像には「貼り付け画像 N.png」の名前を順に付ける (クリップボードに名前が無いため) <sub>`pending chat attachments`</sub>
+- アプリで選んだ・落としたファイルはパスで持ち、名前・種類・大きさと読めない理由はRustの下見から取る <sub>`pending chat attachments`</sub>
+- 6件目以降は件数オーバーで送れない状態になり、1件外すと5件以内に戻ったものは送れるようになる <sub>`pending chat attachments`</sub>
+- OpenAI互換のモデルを選んでいるとPDFは送れない状態になり (注意帯)、他のプロバイダでは送れる <sub>`pending chat attachments`</sub>
+- 送れない添付は送信する添付に入れない <sub>`pending chat attachments`</sub>
+- 貼り付けで添付するのは画像だけで、ドラッグはファイルを含むときだけ受ける <sub>`pending chat attachments`</sub>
 
 ### devices
 

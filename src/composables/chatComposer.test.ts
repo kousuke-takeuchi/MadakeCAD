@@ -15,6 +15,7 @@ function message(usage: Usage | null): ChatMessage {
     usage,
     streaming: false,
     undone: false,
+    attachments: [],
   } as ChatMessage;
 }
 

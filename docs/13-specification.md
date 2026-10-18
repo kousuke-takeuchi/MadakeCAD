@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2727 specification clauses** across 6 areas.
+**2757 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1364,6 +1364,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An error event that arrives mid-stream is surfaced to the user too. <sub>`an_error_event_inside_the_stream_is_surfaced`</sub>
 - Earlier turns of the conversation are replayed so the model remembers what was said before. <sub>`earlier_turns_of_the_conversation_are_replayed`</sub>
 - The connection test reports success for a working key and a readable reason for a bad one. <sub>`the_connection_test_reports_success_or_a_readable_reason`</sub>
+- An image and a PDF attached to the message reach the API as an image block and a document block before the text. <sub>`attachments_reach_the_api_as_image_and_document_blocks`</sub>
 
 ### Claude CLI backend
 
@@ -1383,6 +1384,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Detection falls back through the candidate path list until one works. <sub>`detect_falls_back_to_later_candidates`</sub>
 - When no candidate works, detection reports an error listing what was tried. <sub>`detect_from_reports_error_when_no_candidate_works`</sub>
 - Default candidates include the well-known Claude CLI install locations. <sub>`default_candidates_include_known_install_paths`</sub>
+- With attachments the CLI is started with stream-json input and receives one user message whose image and PDF blocks come before the text. <sub>`attachments_reach_the_cli_as_stream_json_content_blocks`</sub>
+- Without attachments the arguments stay as before (no stream-json input), so plain turns are unchanged. <sub>`plain_turns_keep_the_text_input`</sub>
 
 ### Conversations & history
 
@@ -1426,6 +1429,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Detection fails cleanly when the Copilot executable is not installed. <sub>`detect_fails_when_copilot_is_not_installed`</sub>
 - Detection looks for copilot on PATH and in the usual npm install locations. <sub>`default_candidates_include_the_known_install_paths`</sub>
 - The connection test reports success when the CLI answers, and the sign-in guidance when it is signed out. <sub>`the_connection_test_distinguishes_success_from_being_signed_out`</sub>
+- Copilot gets attachments as files saved in a folder it is allowed to read (--add-dir), listed by path after the text; the folder is removed after the turn. <sub>`copilot_reads_attachments_from_a_temporary_allowed_folder`</sub>
 
 ### copilot_events
 
@@ -1475,6 +1479,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The endpoint and the default model match Google's published Gemini API. <sub>`the_defaults_match_the_published_gemini_api`</sub>
 - A model name pasted with the "models/" prefix still reaches the right endpoint exactly once. <sub>`a_model_name_with_the_models_prefix_still_works`</sub>
 - With no model name saved the turn stops before any request, telling the user which box to fill in. <sub>`an_empty_model_name_stops_before_any_request`</sub>
+- An image and a PDF attached to the message reach Gemini as inline data parts before the text part. <sub>`attachments_reach_gemini_as_inline_data_parts`</sub>
 
 ### Standards knowledge injection
 
@@ -1530,6 +1535,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Edits made by two conversations at once all land in the document, in revision order and without loss. <sub>`parallel_turns_keep_every_edit_in_revision_order`</sub>
 - Each conversation gets its own turn sequence numbers, so cancelling one never discards the other's events. <sub>`each_conversation_keeps_its_own_turn_seq`</sub>
 - Undoing a turn that swallowed a parallel turn's edits marks that turn as reverted too, instead of leaving it looking applied. <sub>`undo_turn_marks_the_parallel_turn_whose_edits_it_swept`</sub>
+- A message with attachments keeps only their name, kind and size in the conversation (not their content), and the turn receives the files. <sub>`a_message_keeps_the_attachment_names_but_not_their_content`</sub>
+- A message whose attachments break the limits is refused before anything is added to the conversation. <sub>`invalid_attachments_are_refused_before_the_turn_starts`</sub>
 
 ### manager_api_provider
 
@@ -1584,6 +1591,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The connection test reports success for a working setup and a readable, machine-tagged reason for a broken one. <sub>`the_connection_test_reports_success_or_a_readable_reason`</sub>
 - The Ollama preset points at the local Ollama server's OpenAI-compatible endpoint, while the default is OpenAI itself. <sub>`the_ollama_preset_points_at_the_local_ollama_server`</sub>
 - A base URL pasted with a trailing slash still reaches /chat/completions exactly once. <sub>`a_base_url_with_a_trailing_slash_still_works`</sub>
+- An attached image reaches an OpenAI-compatible server as a data URL part before the text. <sub>`an_attached_image_reaches_the_server_as_a_data_url`</sub>
+- An attached PDF is refused with a reason before anything is sent, because OpenAI-compatible models cannot read PDFs. <sub>`an_attached_pdf_is_refused_before_sending`</sub>
 
 ### stream-json parser
 
@@ -1665,6 +1674,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A schema that forgot `"type": "object"` is repaired instead of being sent as-is. <sub>`a_schema_missing_its_object_type_is_repaired`</sub>
 - Every bridged tool name fits the API's allowed name pattern, so no tool is rejected. <sub>`bridged_tool_names_fit_the_api_name_rules`</sub>
 - A tool with an empty description keeps an explanatory placeholder rather than nothing. <sub>`a_tool_without_a_description_still_carries_some_text`</sub>
+
+### attachments
+
+- Images (PNG/JPEG/GIF/WebP) and PDFs can be attached; anything else, more than five files or a file over 20MB is refused as a whole. <sub>`only_images_and_pdfs_within_the_limits_are_accepted`</sub>
+- The kind of a picked file comes from its extension, case-insensitively; unknown extensions are not attachable. <sub>`the_kind_of_a_picked_file_comes_from_its_extension`</sub>
+- For the Anthropic API an image becomes an image block and a PDF a document block, both before the text. <sub>`anthropic_gets_image_and_document_blocks_before_the_text`</sub>
+- Gemini receives attachments as inline data parts followed by the text part. <sub>`gemini_gets_inline_data_parts`</sub>
+- An OpenAI-compatible model gets images as data URLs, and a PDF is refused before anything is sent. <sub>`openai_gets_data_url_images_and_refuses_pdfs`</sub>
+- The Claude Code CLI gets one stream-json user message line carrying the same content blocks. <sub>`claude_cli_gets_one_stream_json_line`</sub>
+- Saving for a CLI keeps the file names, makes path separators harmless and numbers duplicates, and the paths are listed after the text. <sub>`saving_for_a_cli_keeps_safe_unique_names`</sub>
+- A picked file is read with its kind from the extension, and pasted base64 content is decoded; broken base64 is refused. <sub>`files_and_pasted_content_become_attachments`</sub>
+- Previewing a picked file reports its name, kind and size, and the reason when it cannot be attached (wrong kind or missing file). <sub>`previewing_a_file_reports_its_kind_size_and_problems`</sub>
+- An attachment given by the screen is read from its file path or decoded from base64, and one unreadable item refuses the whole message. <sub>`inputs_from_the_screen_resolve_from_a_path_or_base64`</sub>
 
 
 ## madake CLI
@@ -2656,6 +2678,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - while our own turn is running, unknown-conversation events do not trigger a refetch <sub>`chat store: applyAgentEvent`</sub>
 - turn_completed/error for a conversation with no running turn is dropped <sub>`chat store: applyAgentEvent`</sub>
 - a failed first send shows the reason in the chat right away <sub>`chat store: アクション`</sub>
+- passes attachments to the backend and shows their names on the message <sub>`chat store: アクション`</sub>
+- reads attachment information back from saved conversations <sub>`chat store: アクション`</sub>
 - send creates a conversation and adopts the server-assigned id <sub>`chat store: アクション`</sub>
 - events arriving before send resolves still land in the same conversation <sub>`chat store: アクション`</sub>
 - empty prompts and sends during streaming are ignored <sub>`chat store: アクション`</sub>
@@ -2703,6 +2727,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - does not send again while the open conversation is still answering <sub>`chat store: 並列エージェント`</sub>
 - keeps conversations that are still answering marked as running across a history reload <sub>`chat store: 並列エージェント`</sub>
 - drops a conversation from the running list once its turn ends <sub>`chat store: 並列エージェント`</sub>
+
+### chatAttachments
+
+- accepts images and PDFs only, judging the kind by extension too <sub>`pending chat attachments`</sub>
+- marks files over 20 MB as too large and shows sizes in MB or KB <sub>`pending chat attachments`</sub>
+- keeps pasted or browser files as base64 and turns them into outgoing attachments <sub>`pending chat attachments`</sub>
+- names pasted images in order since the clipboard has no file name <sub>`pending chat attachments`</sub>
+- keeps picked or dropped files as paths with the preview from Rust <sub>`pending chat attachments`</sub>
+- blocks the sixth attachment and unblocks it once one is removed <sub>`pending chat attachments`</sub>
+- blocks a PDF for an OpenAI-compatible model but not for other providers <sub>`pending chat attachments`</sub>
+- leaves attachments with a problem out of what is sent <sub>`pending chat attachments`</sub>
+- takes only images from a paste and reacts only to drags that carry files <sub>`pending chat attachments`</sub>
 
 ### devices
 

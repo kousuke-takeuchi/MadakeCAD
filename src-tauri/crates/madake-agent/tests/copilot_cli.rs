@@ -5,6 +5,7 @@
 //! 「未認証時の文面」で、JSONLの中身はもっともらしい形をフィクスチャで固定している。
 
 use madake_agent::copilot_cli::{CopilotCliBackend, DEFAULT_COPILOT_MODEL};
+use madake_agent::Attachment;
 use madake_agent::AgentEvent;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -400,4 +401,26 @@ async fn the_connection_test_distinguishes_success_from_being_signed_out() {
         .await
         .expect_err("実行ファイルが無ければ失敗");
     assert_eq!(missing.kind, "copilot_missing");
+}
+
+/// Copilot gets attachments as files saved in a folder it is allowed to read (--add-dir), listed by path after the text; the folder is removed after the turn.
+/// Copilotへは添付を読める場所 (--add-dir) のフォルダへ保存し、本文の後ろにパスを並べて渡す。フォルダはターンの後に消す。
+#[tokio::test]
+async fn copilot_reads_attachments_from_a_temporary_allowed_folder() {
+    let attachments = [
+        Attachment { name: "a.png".into(), mime: "image/png".into(), data: vec![1, 2, 3] },
+        Attachment { name: "b.pdf".into(), mime: "application/pdf".into(), data: b"%PDF".to_vec() },
+    ];
+    let (tx, rx) = mpsc::channel(1024);
+    backend("fake_copilot_attachments.sh")
+        .send_with_attachments("照合して", &attachments, None, None, tx)
+        .await
+        .expect("send成功");
+    let result = match collect(rx).await.last() {
+        Some(AgentEvent::TurnCompleted { result, .. }) => result.clone(),
+        other => panic!("最後はcompletedのはず: {other:?}"),
+    };
+    assert!(result.starts_with("ok:2:"), "{result}");
+    let dir = result.trim_start_matches("ok:2:");
+    assert!(!std::path::Path::new(dir).exists(), "ターンの後に一時フォルダが残っている: {dir}");
 }

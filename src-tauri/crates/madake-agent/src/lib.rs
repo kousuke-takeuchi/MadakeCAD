@@ -17,6 +17,7 @@
 //! [`events::AgentEvent`] のストリームになる(UIは違いを知らない)。
 
 pub mod anthropic;
+pub mod attachments;
 pub mod backend;
 pub mod conversation;
 pub mod copilot_cli;
@@ -31,6 +32,7 @@ pub mod settings;
 pub mod tools;
 
 pub use anthropic::{AnthropicApiBackend, ANTHROPIC_API_BASE, DEFAULT_API_MODEL};
+pub use attachments::{Attachment, AttachmentInput, AttachmentMeta};
 pub use backend::{AgentBackend, ClaudeCodeCliBackend, DetectResult, HistoryMessage, TurnRequest};
 pub use conversation::{
     chat_path_for, load_chat, save_chat, AppliedRevisions, AppliedUndoDepth, ChatMessage,
@@ -63,6 +65,9 @@ pub enum AgentError {
     UnsupportedChatFormat { found: u32, supported: u32 },
     #[error("この会話は送信中です")]
     Busy,
+    /// 添付を送れない (種類・大きさ・件数、またはモデルが読めない種類)。
+    #[error("添付を送れません: {0}")]
+    Attachment(String),
     #[error("会話が見つかりません: {0}")]
     NoConversation(uuid::Uuid),
     #[error("ターンが見つかりません: {0}")]

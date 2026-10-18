@@ -238,7 +238,14 @@ impl OpenAiCompatBackend {
             messages.push(json!({"role": "system", "content": system}));
         }
         messages.extend(history_messages(request.history));
-        messages.push(json!({"role": "user", "content": request.prompt}));
+        // 添付が無ければ本文だけ (従来どおりの文字列)、あれば画像のdata URL+本文 (PDFは断る)
+        crate::attachments::validate(request.attachments)?;
+        let content = if request.attachments.is_empty() {
+            json!(request.prompt)
+        } else {
+            crate::attachments::openai_content(request.prompt, request.attachments)?
+        };
+        messages.push(json!({"role": "user", "content": content}));
 
         let mut usage = Usage::default();
         for _round in 0..self.max_tool_rounds {

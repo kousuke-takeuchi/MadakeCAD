@@ -367,6 +367,36 @@ describe("chat store: アクション", () => {
     expect(store.streaming).toBe(false);
   });
 
+  // ja: 添付つきの送信は添付の指定をバックエンドへ渡し、発言には添付の名前・種類・大きさを残す
+  it("passes attachments to the backend and shows their names on the message", async () => {
+    const send = vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
+    const store = useChatStore();
+    const inputs = [{ name: "sheet.pdf", mime: "application/pdf", path: "/tmp/sheet.pdf" }];
+    const metas = [{ name: "sheet.pdf", mime: "application/pdf", size: 2048 }];
+
+    await store.send("要約して", { inputs, metas });
+
+    expect(send).toHaveBeenCalledWith(null, "要約して", store.model, inputs);
+    expect(store.messages[0].attachments).toEqual(metas);
+    expect(store.messages[1].attachments).toEqual([]);
+  });
+
+  // ja: 保存された会話の発言にも添付の情報が載り、添付の無い発言は空になる
+  it("reads attachment information back from saved conversations", () => {
+    const conversation = normalizeConversation({
+      id: CONV,
+      session_id: null,
+      model: null,
+      updated_at: 0,
+      messages: [
+        { role: "user", text: "見て", attachments: [{ name: "a.png", mime: "image/png", size: 3 }] },
+        { role: "assistant", text: "ok" },
+      ],
+    } as never);
+    expect(conversation.messages[0].attachments).toEqual([{ name: "a.png", mime: "image/png", size: 3 }]);
+    expect(conversation.messages[1].attachments).toEqual([]);
+  });
+
   // ja: sendは会話を新規作成し、サーバー採番のidを引き取る
   it("send creates a conversation and adopts the server-assigned id", async () => {
     const send = vi.spyOn(agentApi, "send").mockResolvedValue(CONV);
@@ -376,7 +406,7 @@ describe("chat store: アクション", () => {
     const id = await store.send("  F2を追加して  ");
 
     expect(id).toBe(CONV);
-    expect(send).toHaveBeenCalledWith(null, "F2を追加して", "claude-opus-4");
+    expect(send).toHaveBeenCalledWith(null, "F2を追加して", "claude-opus-4", []);
     expect(store.conversations).toHaveLength(1);
     expect(store.activeId).toBe(CONV);
     expect(store.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
@@ -387,7 +417,7 @@ describe("chat store: アクション", () => {
     send.mockResolvedValue(CONV);
     feed(store, [{ type: "turn_completed", result: "ok", usage: null }]);
     await store.send("次の指示");
-    expect(send).toHaveBeenLastCalledWith(CONV, "次の指示", "claude-opus-4");
+    expect(send).toHaveBeenLastCalledWith(CONV, "次の指示", "claude-opus-4", []);
     expect(store.conversations).toHaveLength(1);
   });
 
@@ -441,7 +471,7 @@ describe("chat store: アクション", () => {
 
     expect(order).toEqual(["cancel", "send"]);
     expect(cancel).toHaveBeenCalledWith(CONV);
-    expect(send).toHaveBeenLastCalledWith(CONV, "やっぱりこっち", store.model);
+    expect(send).toHaveBeenLastCalledWith(CONV, "やっぱりこっち", store.model, []);
     const messages = store.messages;
     expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
     expect(messages[1].error).toBe("キャンセルされました");
@@ -521,7 +551,7 @@ describe("chat store: アクション", () => {
     const id = await store.send("やっぱりやって");
 
     // 2回目もconversation_id=null(local-idは絶対にAPIへ渡さない)
-    expect(send).toHaveBeenNthCalledWith(2, null, "やっぱりやって", null);
+    expect(send).toHaveBeenNthCalledWith(2, null, "やっぱりやって", null, []);
     expect(id).toBe(CONV);
     expect(store.conversations).toHaveLength(1);
     expect(store.activeId).toBe(CONV);
@@ -1178,7 +1208,7 @@ describe("chat store: 並列エージェント", () => {
     expect(store.streaming).toBe(false);
     expect(await store.send("端子台を1個足して")).toBe(CONV2);
 
-    expect(send).toHaveBeenCalledWith(CONV2, "端子台を1個足して", null);
+    expect(send).toHaveBeenCalledWith(CONV2, "端子台を1個足して", null, []);
     expect(store.runningIds).toEqual([CONV, CONV2]);
     expect(store.runningCount).toBe(2);
     // 先に走っている会話のターンは中断されない

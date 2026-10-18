@@ -11,13 +11,16 @@ import { useDocumentStore } from "../../stores/document";
 import { useSettingsStore } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
 import ChatComposerFooter from "./ChatComposerFooter.vue";
+import ChatAttachmentBar from "./ChatAttachmentBar.vue";
+import { useChatDropHandlers } from "../../composables/chatDrop";
 import ChatMessage from "./ChatMessage.vue";
 
 const store = useChatStore();
 const doc = useDocumentStore();
 const ui = useUiStore();
 const settings = useSettingsStore();
-const { draft, onKeydown } = useChatComposer();
+const { draft, attachments, onKeydown } = useChatComposer();
+const drop = useChatDropHandlers(() => t("chat.attach.pastedName"));
 const { t } = useI18n();
 
 const listRef = ref<HTMLDivElement | null>(null);
@@ -111,13 +114,23 @@ onBeforeUnmount(() => store.unsubscribe());
       </p>
     </div>
 
-    <div class="input-area">
+    <div
+      class="input-area"
+      :class="{ dragging: attachments.dragOver }"
+      data-chat-drop
+      @dragover="drop.onDragOver"
+      @dragleave="drop.onDragLeave"
+      @drop="drop.onDrop"
+    >
+      <ChatAttachmentBar />
       <textarea
+        v-show="!attachments.dragOver"
         v-model="draft"
         class="input"
         rows="2"
         :placeholder="t('chat.dock.replyPlaceholder')"
         @keydown="onKeydown"
+        @paste="drop.onPaste"
       />
       <ChatComposerFooter />
     </div>
@@ -160,6 +173,10 @@ onBeforeUnmount(() => store.unsubscribe());
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid var(--ribbon-line);
+}
+/* ドラッグ中 (.pen「添付デザイン」②) */
+.input-area.dragging {
+  box-shadow: inset 0 0 0 2px var(--acad-blue);
 }
 .input {
   border: none;

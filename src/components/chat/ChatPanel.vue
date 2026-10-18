@@ -8,9 +8,12 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useChatComposer } from "../../composables/chatComposer";
 import ChatComposerFooter from "./ChatComposerFooter.vue";
+import ChatAttachmentBar from "./ChatAttachmentBar.vue";
+import { useChatDropHandlers } from "../../composables/chatDrop";
 
-const { store, ui, draft, onKeydown } = useChatComposer();
+const { store, ui, draft, attachments, onKeydown } = useChatComposer();
 const { t } = useI18n();
+const drop = useChatDropHandlers(() => t("chat.attach.pastedName"));
 
 const minimized = ref(false);
 
@@ -34,7 +37,15 @@ function expand() {
     </div>
 
     <!-- 折りたたみ -->
-    <div v-else class="panel collapsed">
+    <div
+      v-else
+      class="panel collapsed"
+      :class="{ dragging: attachments.dragOver }"
+      data-chat-drop
+      @dragover="drop.onDragOver"
+      @dragleave="drop.onDragLeave"
+      @drop="drop.onDrop"
+    >
       <div class="head">
         <SquarePen :size="14" class="head-icon" />
         <span class="head-title">{{ title }}</span>
@@ -45,11 +56,14 @@ function expand() {
         <button class="icon-btn" :title="t('chat.panel.expand')" @click="expand"><Maximize2 :size="12" /></button>
       </div>
 
+      <ChatAttachmentBar />
       <textarea
+        v-show="!attachments.dragOver"
         v-model="draft"
         class="input"
         :placeholder="t('chat.panel.placeholder')"
         @keydown="onKeydown"
+        @paste="drop.onPaste"
       />
 
       <ChatComposerFooter />
@@ -90,7 +104,8 @@ function expand() {
 }
 .panel.collapsed {
   width: 330px;
-  height: 148px;
+  /* 添付チップが並ぶと下へ伸びる (入力欄の高さは保つ) */
+  min-height: 148px;
   gap: 8px;
   padding: 10px 12px;
   border-radius: 12px;
@@ -129,10 +144,16 @@ function expand() {
   color: var(--ui-text);
 }
 
+/* ドラッグ中 (.pen「添付デザイン」②): 入力欄を青枠に */
+.panel.collapsed.dragging {
+  border-color: var(--acad-blue);
+  box-shadow: 0 0 0 1px var(--acad-blue), var(--shadow-panel);
+}
+
 /* 入力 */
 .input {
   flex: 1;
-  min-height: 0;
+  min-height: 48px;
   border: none;
   outline: none;
   background: transparent;

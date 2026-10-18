@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use madake_agent::manager::{AgentManager, ConversationEvent, DocBridge, RevertError, RevertReport};
-use madake_agent::{AgentEvent, AppSettings, DocState};
+use madake_agent::{AgentEvent, AppSettings, Attachment, DocState};
 use tokio::sync::broadcast::Receiver;
 use uuid::Uuid;
 
@@ -1166,4 +1166,46 @@ async fn undo_turn_marks_the_parallel_turn_whose_edits_it_swept() {
     let err = manager.undo_turn(b, second.turn_id).unwrap_err().to_string();
     assert!(err.contains("巻き戻し済み"), "{err}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A message with attachments keeps only their name, kind and size in the conversation (not their content), and the turn receives the files.
+/// 添付つきの発言は会話に名前・種類・大きさだけを残し (中身は残さない)、ターンには添付が渡る。
+#[tokio::test]
+async fn a_message_keeps_the_attachment_names_but_not_their_content() {
+    let doc = FakeDoc::new(0);
+    let manager = manager(doc, "fake_claude_stdin_json.sh");
+    let mut rx = manager.subscribe();
+    let png = Attachment { name: "回路写真.png".into(), mime: "image/png".into(), data: vec![1, 2, 3] };
+
+    let id = manager
+        .send_with_attachments(None, "見て", vec![png], None, None)
+        .await
+        .expect("送信成功");
+    assert_eq!(turn_result(&mut rx).await, "image|見て");
+
+    let conversation = manager.conversations().into_iter().find(|c| c.id == id).unwrap();
+    let user = &conversation.messages[0];
+    assert_eq!(user.attachments.len(), 1);
+    assert_eq!(
+        (user.attachments[0].name.as_str(), user.attachments[0].mime.as_str(), user.attachments[0].size),
+        ("回路写真.png", "image/png", 3)
+    );
+    let saved = serde_json::to_string(user).unwrap();
+    assert!(!saved.contains("AQID"), "中身は保存しない");
+    let plain = serde_json::to_string(&conversation.messages[1]).unwrap();
+    assert!(!plain.contains("attachments"), "添付の無い発言には欄を書かない");
+}
+
+/// A message whose attachments break the limits is refused before anything is added to the conversation.
+/// 添付が条件 (種類・大きさ・件数) から外れた発言は、会話に何も積まずに断る。
+#[tokio::test]
+async fn invalid_attachments_are_refused_before_the_turn_starts() {
+    let doc = FakeDoc::new(0);
+    let manager = manager(doc, "fake_claude_stdin_json.sh");
+    let zip = Attachment { name: "a.zip".into(), mime: "application/zip".into(), data: vec![0] };
+
+    let err = manager.send_with_attachments(None, "見て", vec![zip], None, None).await.unwrap_err();
+
+    assert!(err.to_string().contains("添付"), "{err}");
+    assert!(manager.conversations().is_empty());
 }

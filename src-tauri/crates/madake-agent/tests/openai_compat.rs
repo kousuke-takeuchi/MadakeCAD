@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use madake_agent::backend::{AgentBackend, TurnRequest};
+use madake_agent::Attachment;
 use madake_agent::openai_compat::{OpenAiCompatBackend, DEFAULT_OPENAI_BASE_URL, OLLAMA_BASE_URL};
 use madake_agent::tools::{ToolBridge, ToolDef, ToolFuture, ToolOutcome};
 use madake_agent::AgentEvent;
@@ -240,6 +241,7 @@ async fn run(backend: &OpenAiCompatBackend, prompt: &str, system: Option<&str>) 
         session: None,
         system_prompt: system,
         history: &[],
+        attachments: &[],
     };
     let _ = backend.run_turn(request, tx).await;
     let mut events = Vec::new();
@@ -635,6 +637,7 @@ async fn earlier_turns_of_the_conversation_are_replayed() {
                 session: None,
                 system_prompt: None,
                 history: &history,
+                attachments: &[],
             },
             tx,
         )
@@ -699,4 +702,57 @@ async fn a_base_url_with_a_trailing_slash_still_works() {
     run(&backend, "こんにちは", None).await;
 
     assert_eq!(api.request(0).path, "/v1/chat/completions");
+}
+
+/// 添付つきで1ターン回す (添付の扱いの確認用)。
+async fn run_with_attachments<B: AgentBackend>(backend: &B, prompt: &str, attachments: &[Attachment]) -> Vec<AgentEvent> {
+    let (tx, mut rx) = mpsc::channel(64);
+    let request = TurnRequest {
+        prompt,
+        session: None,
+        system_prompt: None,
+        history: &[],
+        attachments,
+    };
+    let _ = backend.run_turn(request, tx).await;
+    let mut events = Vec::new();
+    while let Some(event) = rx.recv().await {
+        events.push(event);
+    }
+    events
+}
+
+fn png() -> Attachment {
+    Attachment { name: "回路写真.png".into(), mime: "image/png".into(), data: vec![1, 2, 3] }
+}
+
+fn pdf() -> Attachment {
+    Attachment { name: "データシート.pdf".into(), mime: "application/pdf".into(), data: b"%PDF".to_vec() }
+}
+
+/// An attached image reaches an OpenAI-compatible server as a data URL part before the text.
+/// 添付した画像は、OpenAI互換サーバーへdata URLの部品として本文の前に載って届く。
+#[tokio::test]
+async fn an_attached_image_reaches_the_server_as_a_data_url() {
+    let api = MockApi::start(vec![Scripted::Sse(vec![text_chunk("ok"), finish("stop")])]).await;
+    let backend = backend_with_key(&api);
+
+    run_with_attachments(&backend, "見て", &[png()]).await;
+
+    let content = &api.request(0).body["messages"][0]["content"];
+    assert_eq!(content[0]["image_url"]["url"], "data:image/png;base64,AQID");
+    assert_eq!(content[1]["text"], "見て");
+}
+
+/// An attached PDF is refused with a reason before anything is sent, because OpenAI-compatible models cannot read PDFs.
+/// OpenAI互換のモデルはPDFを読めないので、PDFを添付すると何も送らずに理由つきで断る。
+#[tokio::test]
+async fn an_attached_pdf_is_refused_before_sending() {
+    let api = MockApi::start(vec![]).await;
+    let backend = backend_with_key(&api);
+
+    let events = run_with_attachments(&backend, "要約して", &[pdf()]).await;
+
+    assert!(error_message(&events).contains("PDF"));
+    assert_eq!(api.request_count(), 0);
 }

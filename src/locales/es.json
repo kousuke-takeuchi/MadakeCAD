@@ -1158,7 +1158,6 @@
     "context": {
       "head": "Añadir contexto",
       "attach": "Añadir imagen/archivo... (PDF de hoja de datos, etc.)",
-      "attachNote": "Adjuntar imágenes/archivos está previsto para la fase A2",
       "fromDrawing": "Añadir desde el plano... (hoja / selección)",
       "partsDb": "Añadir desde la base de datos de piezas...",
       "partsDbNote": "Las referencias a la base de datos de piezas están previstas para la fase 2",
@@ -1235,6 +1234,18 @@
       "purple": "morado",
       "violet": "morado",
       "pink": "rosa"
+    },
+    "attach": {
+      "unsupported": "Only images (PNG/JPEG/GIF/WebP) and PDFs can be attached",
+      "tooLarge": "Too large ({size} > {max} MB)",
+      "tooMany": "Up to {max} attachments per message",
+      "cannotRead": "{reason}",
+      "pdfUnsupported": "The selected model (OpenAI-compatible) cannot read PDFs. Send images only, or switch models",
+      "dropTitle": "Drop here to attach",
+      "dropHint": "Images (PNG/JPEG/GIF/WebP) and PDFs · up to {max} MB each · {count} files max",
+      "remove": "Remove attachment",
+      "pastedName": "Pasted image",
+      "filterName": "Images and PDFs"
     }
   },
   "leftPanel": {

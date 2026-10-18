@@ -958,6 +958,9 @@ struct AgentSendBody {
     conversation_id: Option<Uuid>,
     prompt: String,
     model: Option<String>,
+    /// 添付 (画像・PDF)。ファイルのパスかbase64の中身。省略時は添付なし。
+    #[serde(default)]
+    attachments: Vec<madake_agent::AttachmentInput>,
 }
 
 async fn post_agent_send(
@@ -965,11 +968,14 @@ async fn post_agent_send(
     Json(body): Json<AgentSendBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let context = crate::agent::drawing_context(&state.doc);
+    let attachments =
+        madake_agent::attachments::resolve_all(&body.attachments).map_err(bad_request)?;
     let id = state
         .agent
-        .send(
+        .send_with_attachments(
             body.conversation_id,
             &body.prompt,
+            attachments,
             body.model,
             Some(context),
         )

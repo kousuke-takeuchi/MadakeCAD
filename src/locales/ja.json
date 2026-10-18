@@ -1158,7 +1158,6 @@
     "context": {
       "head": "コンテキストに追加",
       "attach": "画像/ファイルを追加... (データシートPDF等)",
-      "attachNote": "画像/ファイルの添付はフェーズA2で対応予定です",
       "fromDrawing": "図面から追加... (シート/選択範囲)",
       "partsDb": "部品DBから追加...",
       "partsDbNote": "部品DBの参照はフェーズ2で対応予定です",
@@ -1235,6 +1234,18 @@
       "purple": "紫",
       "violet": "紫",
       "pink": "桃"
+    },
+    "attach": {
+      "unsupported": "画像 (PNG/JPEG/GIF/WebP) かPDFだけ添付できます",
+      "tooLarge": "大きすぎます ({size} > {max} MB)",
+      "tooMany": "添付は1回{max}件までです",
+      "cannotRead": "{reason}",
+      "pdfUnsupported": "選んだモデル (OpenAI互換) はPDFを読めません。画像だけ送るか、モデルを替えてください",
+      "dropTitle": "ここにドロップして添付",
+      "dropHint": "画像 (PNG/JPEG/GIF/WebP)・PDF ・ 1件{max}MBまで ・ 最大{count}件",
+      "remove": "添付を外す",
+      "pastedName": "貼り付け画像",
+      "filterName": "画像・PDF"
     }
   },
   "leftPanel": {

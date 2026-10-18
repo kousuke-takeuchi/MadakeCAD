@@ -4,6 +4,7 @@ import App from "./App.vue";
 import { i18n, setLocale } from "./i18n";
 import { useSettingsStore } from "./stores/settings";
 import { useUpdatesStore } from "./stores/updates";
+import { installNativeChatDrop } from "./composables/chatDrop";
 
 const pinia = createPinia();
 const app = createApp(App).use(pinia).use(i18n);
@@ -22,3 +23,5 @@ settings.load().then(() => {
 });
 
 app.mount("#app");
+// エージェントへの添付: OSからチャット欄へのファイルドロップを受ける (アプリのときだけ)
+void installNativeChatDrop();

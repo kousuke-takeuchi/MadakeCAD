@@ -717,13 +717,26 @@ async fn agent_send(
     conversation_id: Option<Uuid>,
     prompt: String,
     model: Option<String>,
+    attachments: Option<Vec<madake_agent::AttachmentInput>>,
 ) -> Result<Uuid, String> {
     let context = madake_mcp::agent::drawing_context(&state.doc);
+    // 添付 (画像・PDF) はファイルのパスかbase64で届く。読めないものがあれば何も送らない
+    let attachments = madake_agent::attachments::resolve_all(&attachments.unwrap_or_default())
+        .map_err(|e| e.to_string())?;
     state
         .agent
-        .send(conversation_id, &prompt, model, Some(context))
+        .send_with_attachments(conversation_id, &prompt, attachments, model, Some(context))
         .await
         .map_err(|e| e.to_string())
+}
+
+/// 添付するファイルを下見する (名前・種類・大きさ・添付できない理由)。中身は読まない。
+#[tauri::command]
+fn agent_inspect_attachments(paths: Vec<String>) -> Vec<madake_agent::attachments::AttachmentInfo> {
+    paths
+        .iter()
+        .map(|p| madake_agent::attachments::inspect_path(std::path::Path::new(p)))
+        .collect()
 }
 
 /// 実行中のターンを中断する(中断した場合のみtrue)。
@@ -992,6 +1005,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             updates::update_support_info,
+            agent_inspect_attachments,
             get_project,
             list_symbols,
             list_user_symbols,

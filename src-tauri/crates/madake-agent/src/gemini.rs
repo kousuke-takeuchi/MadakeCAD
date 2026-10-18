@@ -201,7 +201,11 @@ impl GeminiBackend {
             .unwrap_or_default();
 
         let mut contents = history_contents(request.history);
-        contents.push(json!({"role": "user", "parts": [{"text": request.prompt}]}));
+        crate::attachments::validate(request.attachments)?;
+        contents.push(json!({
+            "role": "user",
+            "parts": crate::attachments::gemini_parts(request.prompt, request.attachments),
+        }));
 
         let mut usage = Usage::default();
         for _round in 0..self.max_tool_rounds {

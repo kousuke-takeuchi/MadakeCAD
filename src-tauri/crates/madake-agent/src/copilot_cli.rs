@@ -188,8 +188,31 @@ impl CopilotCliBackend {
         system_prompt: Option<&str>,
         tx: mpsc::Sender<AgentEvent>,
     ) -> Result<()> {
+        self.send_with_attachments(prompt, &[], session, system_prompt, tx)
+            .await
+    }
+
+    /// [`Self::send_with_context`]の添付つき版。Copilot CLIは本文しか受け取らないので、
+    /// 添付はこのターン用の一時フォルダへ保存し、`--add-dir`で読める場所にしてパスを本文へ添える
+    /// (フォルダはターンの終わりに消す)。
+    pub async fn send_with_attachments(
+        &self,
+        prompt: &str,
+        attachments: &[crate::attachments::Attachment],
+        session: Option<&str>,
+        system_prompt: Option<&str>,
+        tx: mpsc::Sender<AgentEvent>,
+    ) -> Result<()> {
         let error_tx = tx.clone();
-        match self.stream_turn(prompt, session, system_prompt, tx).await {
+        let result = async {
+            crate::attachments::validate(attachments)?;
+            let staged = StagedAttachments::create(attachments)?;
+            let prompt = crate::attachments::prompt_with_paths(prompt, &staged.paths);
+            self.stream_turn(&prompt, staged.dir.as_deref(), session, system_prompt, tx)
+                .await
+        }
+        .await;
+        match result {
             Ok(()) => Ok(()),
             Err(e) => {
                 let _ = error_tx
@@ -206,6 +229,7 @@ impl CopilotCliBackend {
     async fn stream_turn(
         &self,
         prompt: &str,
+        attachment_dir: Option<&Path>,
         session: Option<&str>,
         system_prompt: Option<&str>,
         tx: mpsc::Sender<AgentEvent>,
@@ -213,7 +237,11 @@ impl CopilotCliBackend {
         let config = TempMcpConfig::create(&self.mcp_config_json())?;
         let new_session_id = uuid::Uuid::new_v4().to_string();
         let composed = Self::compose_prompt(system_prompt, prompt);
-        let args = self.build_args(&composed, session, &new_session_id, config.path());
+        let mut args = self.build_args(&composed, session, &new_session_id, config.path());
+        if let Some(dir) = attachment_dir {
+            args.push("--add-dir".to_string());
+            args.push(dir.display().to_string());
+        }
 
         let mut child = Command::new(&self.executable)
             .args(&args)
@@ -466,8 +494,39 @@ impl AgentBackend for CopilotCliBackend {
     ) -> TurnFuture<'a> {
         // 会話の文脈はCopilotのセッション(`--resume`)が持つので`history`は使わない
         Box::pin(async move {
-            self.send_with_context(request.prompt, request.session, request.system_prompt, tx)
-                .await
+            self.send_with_attachments(
+                request.prompt,
+                request.attachments,
+                request.session,
+                request.system_prompt,
+                tx,
+            )
+            .await
         })
+    }
+}
+
+/// Copilot CLIへ渡す添付の一時フォルダ (dropで削除)。添付が無ければフォルダも作らない。
+struct StagedAttachments {
+    dir: Option<std::path::PathBuf>,
+    paths: Vec<std::path::PathBuf>,
+}
+
+impl StagedAttachments {
+    fn create(attachments: &[crate::attachments::Attachment]) -> Result<Self> {
+        if attachments.is_empty() {
+            return Ok(Self { dir: None, paths: Vec::new() });
+        }
+        let dir = crate::attachments::conversation_dir(uuid::Uuid::new_v4());
+        let paths = crate::attachments::save_to_dir(&dir, attachments)?;
+        Ok(Self { dir: Some(dir), paths })
+    }
+}
+
+impl Drop for StagedAttachments {
+    fn drop(&mut self) {
+        if let Some(dir) = &self.dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 }

@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { appliedCommandCount, type ChatMessage } from "../../stores/chat";
 import ToolChip from "./ToolChip.vue";
+import AttachmentChip from "./AttachmentChip.vue";
 
 const { t } = useI18n();
 
@@ -26,7 +27,8 @@ const showProgress = computed(
 
 <template>
   <div v-if="message.role === 'user'" class="user-row">
-    <div class="bubble">{{ message.text }}</div>
+    <!-- 送信した添付 (.pen「添付デザイン」④。×の無いチップ)。本文はpre-wrapなので余白を入れずに置く -->
+    <div class="bubble"><div v-if="message.attachments?.length" class="attachments"><AttachmentChip v-for="(a, i) in message.attachments" :key="i" :name="a.name" :mime="a.mime" :size="a.size" /></div>{{ message.text }}</div>
   </div>
 
   <div v-else class="assistant">
@@ -53,6 +55,13 @@ const showProgress = computed(
 </template>
 
 <style scoped>
+.attachments {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 6px;
+}
 .user-row {
   display: flex;
   justify-content: flex-end;
