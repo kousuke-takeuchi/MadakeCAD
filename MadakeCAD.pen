@@ -15169,6 +15169,148 @@
                   ]
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "sIHcy",
+              "name": "DS添付チップ",
+              "reusable": true,
+              "fill": "$card-bg",
+              "cornerRadius": 6,
+              "stroke": "$ribbon-line",
+              "strokeWidth": 1,
+              "gap": 6,
+              "padding": [
+                4,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "d8nua",
+                  "name": "種別",
+                  "width": 22,
+                  "height": 16,
+                  "fill": "$sel-blue",
+                  "cornerRadius": 3,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "uQhTw",
+                      "name": "種別文字",
+                      "fill": "$acad-blue",
+                      "content": "IMG",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 8,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "v6pre",
+                  "name": "ファイル名",
+                  "fill": "$ui-text",
+                  "content": "回路写真.jpg",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "F2Kx0H",
+                  "name": "大きさ",
+                  "fill": "$ui-muted",
+                  "content": "1.2 MB",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "Sz0Xo",
+                  "name": "削除",
+                  "fill": "$ui-muted",
+                  "content": "×",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cUmIA",
+              "name": "DS添付チップ エラー",
+              "reusable": true,
+              "fill": "$err-bg",
+              "cornerRadius": 6,
+              "stroke": "$err-fg",
+              "strokeWidth": 1,
+              "gap": 6,
+              "padding": [
+                4,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "GljW6",
+                  "name": "種別",
+                  "width": 22,
+                  "height": 16,
+                  "fill": "$err-bg",
+                  "cornerRadius": 3,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "RBzLH",
+                      "name": "種別文字",
+                      "fill": "$err-fg",
+                      "content": "PDF",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 8,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "D9QEKa",
+                  "name": "ファイル名",
+                  "fill": "$ui-text",
+                  "content": "大きな資料.pdf",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "JIF2I",
+                  "name": "大きさ",
+                  "fill": "$err-fg",
+                  "content": "25 MB > 20 MB",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "Gkiqe",
+                  "name": "削除",
+                  "fill": "$ui-muted",
+                  "content": "×",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
             }
           ]
         }
@@ -81286,6 +81428,1272 @@
           "name": "注",
           "fill": "$ui-muted",
           "content": "DS部品の再利用: DSボタン主/副・DSトグルON。通知カードは新しい部品ではなく、既存のカード (card-bg + acad-blue枠、角丸8) を作図画面の右下に重ねたもの。文言はUIカタログ (6言語) に置く。",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 10,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "s8nJcQ",
+      "x": 1340,
+      "y": 13799,
+      "name": "添付デザイン - エージェントへ画像・PDFを添付",
+      "width": 1240,
+      "fill": "$ribbon-bg",
+      "cornerRadius": 12,
+      "layout": "vertical",
+      "gap": 16,
+      "padding": 28,
+      "children": [
+        {
+          "type": "text",
+          "id": "mMY81",
+          "name": "タイトル",
+          "fill": "$ui-text",
+          "content": "エージェントへの添付 — 画像・PDF (データシート) を会話に添える",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 17,
+          "fontWeight": "700"
+        },
+        {
+          "type": "text",
+          "id": "RnuGC",
+          "name": "説明",
+          "fill": "$ui-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "入力欄の「+」→「画像/ファイルを追加...」、チャットへのドラッグ&ドロップ、⌘V (画像の貼り付け) の3通りで添付する。添付は入力欄の上にチップで並び、送信するとメッセージに残る。対象は画像 (PNG/JPEG/GIF/WebP) とPDF、1件20MBまで・1回5件まで。APIのプロバイダ (Anthropic/Gemini/OpenAI互換) は画像・PDFをそのまま渡し、CLIのプロバイダ (Claude Code/Copilot) は会話ごとの一時フォルダへ保存したファイルを読ませる。出典: Claude Code / ChatGPT / Cursor のチャット添付UI",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "Rb8sk",
+          "name": "入力欄の3状態",
+          "width": "fill_container",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "vY1uA",
+              "name": "状態①",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "OVV9S",
+                  "name": "状態名",
+                  "fill": "$ui-text",
+                  "content": "① 添付あり",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "neuke",
+                  "name": "入力欄",
+                  "width": "fill_container",
+                  "fill": "$card-bg",
+                  "cornerRadius": 10,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "U8aIe",
+                      "name": "添付チップ列",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "id": "c1LNoY",
+                          "type": "ref",
+                          "ref": "sIHcy",
+                          "name": "画像チップ"
+                        },
+                        {
+                          "id": "QG5Mn",
+                          "type": "ref",
+                          "ref": "sIHcy",
+                          "name": "PDFチップ",
+                          "descendants": {
+                            "d8nua": {
+                              "fill": "$err-bg"
+                            },
+                            "uQhTw": {
+                              "content": "PDF",
+                              "fill": "$err-fg"
+                            },
+                            "v6pre": {
+                              "content": "SAMPLE-RY データシート.pdf"
+                            },
+                            "F2Kx0H": {
+                              "content": "2.4 MB"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "uhhPG",
+                      "name": "本文",
+                      "fill": "$ui-text",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "このリレーの接点定格を図面の型番と照合して",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "GI5Qp",
+                      "name": "フッタ",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "ChvCv",
+                          "name": "丸ボタン",
+                          "width": 26,
+                          "height": 26,
+                          "cornerRadius": 13,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "BLSnX",
+                              "name": "記号",
+                              "fill": "$ui-muted",
+                              "content": "+",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "N6fSjU",
+                          "name": "丸ボタン",
+                          "width": 26,
+                          "height": 26,
+                          "cornerRadius": 13,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "vBsPd",
+                              "name": "記号",
+                              "fill": "$ui-muted",
+                              "content": "✎",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ybsTQ",
+                          "name": "余白",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "text",
+                          "id": "k72fCh",
+                          "name": "トークン",
+                          "fill": "$ui-muted",
+                          "content": "⚡ 12.4k",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "SUIdM",
+                          "name": "モデル",
+                          "fill": "$ui-text",
+                          "content": "Claude Fable 5 ⌄",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "B6RdYl",
+                          "name": "送信",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "$acad-blue",
+                          "cornerRadius": 14,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "mqdhi",
+                              "name": "矢印",
+                              "fill": "$card-bg",
+                              "content": "↑",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 13,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "yohK0",
+                  "name": "注",
+                  "fill": "$ui-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "チップの×で外す。画像は小さなサムネイル、PDFはPDF印。ホバーでフルパスと種類",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Np5fR",
+              "name": "状態②",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "KsF9a",
+                  "name": "状態名",
+                  "fill": "$ui-text",
+                  "content": "② ドラッグ中",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "ikDuW",
+                  "name": "入力欄",
+                  "width": "fill_container",
+                  "fill": "$sel-blue",
+                  "cornerRadius": 10,
+                  "stroke": "$acad-blue",
+                  "strokeWidth": 2,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "H54hp5",
+                      "name": "ドロップ案内",
+                      "width": "fill_container",
+                      "height": 96,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "mXcI2",
+                          "name": "見出し",
+                          "fill": "$acad-blue",
+                          "content": "ここにドロップして添付",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "m8BoKq",
+                          "name": "補足",
+                          "fill": "$ui-muted",
+                          "content": "画像 (PNG/JPEG/GIF/WebP)・PDF ・ 1件20MBまで ・ 最大5件",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "kpQGa",
+                      "name": "フッタ",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "LpjGL",
+                          "name": "丸ボタン",
+                          "width": 26,
+                          "height": 26,
+                          "cornerRadius": 13,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "RRXDX",
+                              "name": "記号",
+                              "fill": "$ui-muted",
+                              "content": "+",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "t0Unr",
+                          "name": "丸ボタン",
+                          "width": 26,
+                          "height": 26,
+                          "cornerRadius": 13,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "F9rGK",
+                              "name": "記号",
+                              "fill": "$ui-muted",
+                              "content": "✎",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "slns4",
+                          "name": "余白",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "text",
+                          "id": "Rjq3q",
+                          "name": "トークン",
+                          "fill": "$ui-muted",
+                          "content": "⚡ 12.4k",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "gAnWf",
+                          "name": "モデル",
+                          "fill": "$ui-text",
+                          "content": "Claude Fable 5 ⌄",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "VhHcO",
+                          "name": "送信",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "$off-bg",
+                          "cornerRadius": 14,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "dzfcO",
+                              "name": "矢印",
+                              "fill": "$off-fg",
+                              "content": "↑",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 13,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "dGaAL",
+                  "name": "注",
+                  "fill": "$ui-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "ファイルをチャット欄 (浮きカード・左ドック) の上に持ってくると入力欄が青枠に変わる。離すと①へ",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "E6su5",
+              "name": "状態③",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "zwQ0D",
+                  "name": "状態名",
+                  "fill": "$ui-text",
+                  "content": "③ 添付できない",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "jVgef",
+                  "name": "入力欄",
+                  "width": "fill_container",
+                  "fill": "$card-bg",
+                  "cornerRadius": 10,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ekJC7",
+                      "name": "添付チップ列",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "id": "ZxM5m",
+                          "type": "ref",
+                          "ref": "cUmIA",
+                          "name": "大きすぎるPDF"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "af10P",
+                      "name": "注意帯",
+                      "width": "fill_container",
+                      "fill": "$warn-bg",
+                      "cornerRadius": 6,
+                      "padding": [
+                        6,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "l2ii9A",
+                          "name": "文",
+                          "fill": "$warn-fg",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "選んだモデル (OpenAI互換) はPDFを読めません。画像だけ送るか、モデルを替えてください",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "p672La",
+                      "name": "本文",
+                      "fill": "$ui-text",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "この仕様書を要約して",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "EhRpA",
+                      "name": "フッタ",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Xro7b",
+                          "name": "丸ボタン",
+                          "width": 26,
+                          "height": 26,
+                          "cornerRadius": 13,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "WzkNx",
+                              "name": "記号",
+                              "fill": "$ui-muted",
+                              "content": "+",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "W1S8f",
+                          "name": "丸ボタン",
+                          "width": 26,
+                          "height": 26,
+                          "cornerRadius": 13,
+                          "stroke": "$ribbon-line",
+                          "strokeWidth": 1,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "v9qBPC",
+                              "name": "記号",
+                              "fill": "$ui-muted",
+                              "content": "✎",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "FiyEc",
+                          "name": "余白",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "text",
+                          "id": "sKPA0",
+                          "name": "トークン",
+                          "fill": "$ui-muted",
+                          "content": "⚡ 12.4k",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "S7H7hM",
+                          "name": "モデル",
+                          "fill": "$ui-text",
+                          "content": "Claude Fable 5 ⌄",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "WkWr6",
+                          "name": "送信",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "$off-bg",
+                          "cornerRadius": 14,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "DDat6",
+                              "name": "矢印",
+                              "fill": "$off-fg",
+                              "content": "↑",
+                              "fontFamily": "Noto Sans JP",
+                              "fontSize": 13,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "M0JZ9o",
+                  "name": "注",
+                  "fill": "$ui-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "送れない添付があるあいだは送信ボタンを淡色にする (⌘Enterも効かない)。理由はチップと注意帯に出す",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "qXSSn",
+          "name": "送信後とメニュー",
+          "width": "fill_container",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "sI93t",
+              "name": "送信したメッセージ",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ZeCar",
+                  "name": "状態名",
+                  "fill": "$ui-text",
+                  "content": "④ 送信したメッセージ",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "Lmhsv",
+                  "name": "会話",
+                  "width": "fill_container",
+                  "fill": "$card-bg",
+                  "cornerRadius": 10,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 12,
+                  "alignItems": "end",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "T3P1ID",
+                      "name": "ユーザー吹き出し",
+                      "width": 300,
+                      "fill": "$sel-blue",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 10,
+                      "children": [
+                        {
+                          "id": "g2o1G",
+                          "type": "ref",
+                          "ref": "sIHcy",
+                          "name": "送信済みの画像",
+                          "descendants": {
+                            "Sz0Xo": {
+                              "enabled": false
+                            }
+                          }
+                        },
+                        {
+                          "id": "I3X9NV",
+                          "type": "ref",
+                          "ref": "sIHcy",
+                          "name": "送信済みのPDF",
+                          "descendants": {
+                            "d8nua": {
+                              "fill": "$err-bg"
+                            },
+                            "uQhTw": {
+                              "content": "PDF",
+                              "fill": "$err-fg"
+                            },
+                            "v6pre": {
+                              "content": "SAMPLE-RY データシート.pdf"
+                            },
+                            "F2Kx0H": {
+                              "content": "2.4 MB"
+                            },
+                            "Sz0Xo": {
+                              "enabled": false
+                            }
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "id": "XRPEO",
+                          "name": "本文",
+                          "fill": "$ui-text",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "このリレーの接点定格を図面の型番と照合して",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "H1vB7S",
+                  "name": "注",
+                  "fill": "$ui-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "送信後は×の無いチップで残る。クリックで開く (画像はプレビュー、PDFは既定のアプリ)。会話の保存にも添付名・種類・大きさが残る",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "HAUck",
+              "name": "コンテキストに追加",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "F9397q",
+                  "name": "状態名",
+                  "fill": "$ui-text",
+                  "content": "⑤「+」メニュー (添付が使えるように)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "pHWwR",
+                  "name": "メニュー",
+                  "width": "fill_container",
+                  "fill": "$card-bg",
+                  "cornerRadius": 10,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 2,
+                  "padding": 8,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "IrN5I",
+                      "name": "見出し",
+                      "fill": "$ui-muted",
+                      "content": "コンテキストに追加",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "r9NCn1",
+                      "name": "項目",
+                      "width": "fill_container",
+                      "fill": "$hover-bg",
+                      "cornerRadius": 6,
+                      "padding": [
+                        6,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "P2q6n",
+                          "name": "文字",
+                          "fill": "$ui-text",
+                          "content": "📎  画像/ファイルを追加... (データシートPDF等)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "XLY2H",
+                      "name": "項目",
+                      "width": "fill_container",
+                      "cornerRadius": 6,
+                      "padding": [
+                        6,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "XV5d7",
+                          "name": "文字",
+                          "fill": "$ui-text",
+                          "content": "▤  図面から追加... (シート/選択範囲)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "op0u5",
+                      "name": "項目",
+                      "width": "fill_container",
+                      "cornerRadius": 6,
+                      "padding": [
+                        6,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "gJOXP",
+                          "name": "文字",
+                          "fill": "$off-fg",
+                          "content": "◫  部品DBから追加...",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "oQxUq",
+                      "name": "項目",
+                      "width": "fill_container",
+                      "cornerRadius": 6,
+                      "padding": [
+                        6,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Yp231",
+                          "name": "文字",
+                          "fill": "$off-fg",
+                          "content": "▢  規格を選択... (JIS C 0617 ほか)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "cFyMG",
+                  "name": "注",
+                  "fill": "$ui-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "「画像/ファイルを追加...」はOSのファイル選択 (画像・PDFで絞り込み、複数選択可) を開く。淡色は従来どおり未実装 (押すと予定をログ)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "NHqxB",
+              "name": "プロバイダ別",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "X4qWU",
+                  "name": "状態名",
+                  "fill": "$ui-text",
+                  "content": "⑥ プロバイダ別の渡し方",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "FgiIh",
+                  "name": "表",
+                  "width": "fill_container",
+                  "fill": "$card-bg",
+                  "cornerRadius": 8,
+                  "stroke": "$ribbon-line",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "e5sPz",
+                      "name": "行",
+                      "width": "fill_container",
+                      "fill": "$input-bg",
+                      "gap": 6,
+                      "padding": [
+                        5,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "huGzR",
+                          "name": "名",
+                          "fill": "$ui-text",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "プロバイダ",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "hyMIB",
+                          "name": "画像",
+                          "fill": "$ui-text",
+                          "textGrowth": "fixed-width",
+                          "width": 80,
+                          "content": "画像",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "vjTVe",
+                          "name": "PDF",
+                          "fill": "$ui-text",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "PDF",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "m5zzC7",
+                      "name": "行",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "padding": [
+                        5,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "FqlK6",
+                          "name": "名",
+                          "fill": "$ui-text",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "Anthropic API",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "q81Oh",
+                          "name": "画像",
+                          "fill": "$ui-muted",
+                          "textGrowth": "fixed-width",
+                          "width": 80,
+                          "content": "○ そのまま",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "q1gXl",
+                          "name": "PDF",
+                          "fill": "$ui-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "○ そのまま",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "V9Xp6m",
+                      "name": "行",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "padding": [
+                        5,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "iUY3r",
+                          "name": "名",
+                          "fill": "$ui-text",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "Gemini",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "D4w2xZ",
+                          "name": "画像",
+                          "fill": "$ui-muted",
+                          "textGrowth": "fixed-width",
+                          "width": 80,
+                          "content": "○ そのまま",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "QBWJ0",
+                          "name": "PDF",
+                          "fill": "$ui-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "○ そのまま",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wDxwl",
+                      "name": "行",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "padding": [
+                        5,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "W1hdf9",
+                          "name": "名",
+                          "fill": "$ui-text",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "OpenAI互換",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PdAMI",
+                          "name": "画像",
+                          "fill": "$ui-muted",
+                          "textGrowth": "fixed-width",
+                          "width": 80,
+                          "content": "○ そのまま",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "zy9jF",
+                          "name": "PDF",
+                          "fill": "$ui-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "× (注意帯)",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "B1ANk",
+                      "name": "行",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "padding": [
+                        5,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "joaGZ",
+                          "name": "名",
+                          "fill": "$ui-text",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "Claude Code CLI",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "SSCni",
+                          "name": "画像",
+                          "fill": "$ui-muted",
+                          "textGrowth": "fixed-width",
+                          "width": 80,
+                          "content": "○ 一時フォルダ",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "W5F4OX",
+                          "name": "PDF",
+                          "fill": "$ui-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "○ 一時フォルダ",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "syPts",
+                      "name": "行",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "padding": [
+                        5,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "EfUhn",
+                          "name": "名",
+                          "fill": "$ui-text",
+                          "textGrowth": "fixed-width",
+                          "width": 110,
+                          "content": "Copilot CLI",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "NUDlv",
+                          "name": "画像",
+                          "fill": "$ui-muted",
+                          "textGrowth": "fixed-width",
+                          "width": 80,
+                          "content": "○ 一時フォルダ",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "mC7NW",
+                          "name": "PDF",
+                          "fill": "$ui-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "○ 一時フォルダ",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "pO5cl",
+                  "name": "注",
+                  "fill": "$ui-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "一時フォルダは会話ごとに作り、アプリ終了時に消す。CLIには「添付: <パス>」の行を本文に足して読ませる",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "twulI",
+          "name": "注",
+          "fill": "$ui-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "DS追加: DS添付チップ (`sIHcy`) / DS添付チップ エラー (`cUmIA`) を「DS部品行M4残り」に追加。入力欄・メニュー・送信ボタンは既存部品のまま。⌘V は画像だけ (クリップボードのファイル名が無いので「貼り付け画像 1.png」の名前を付ける)",
           "fontFamily": "Noto Sans JP",
           "fontSize": 10,
           "fontWeight": "normal"
