@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2775仕様項目**。
+全6領域・**2789仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2485,6 +2485,24 @@
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる <sub>`G13 device cross-reference`</sub>
 - 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない <sub>`G13 device cross-reference`</sub>
 
+### blocks
+
+- 続けて並んだツールは1つのまとまりになり、本文か思考が来るとまとまりが切れる。失敗や実行中の手順があればまとまりにその印が付く <sub>`agent reply display`</sub>
+- ブロックの無い古いメッセージは、本文のあとにツールを1つのまとまりで並べる <sub>`agent reply display`</sub>
+- 応答中は最後の行だけが開き、履歴の会話や終わったターンではどの行も閉じている。利用者が開閉した行はその状態を保つ <sub>`agent reply display`</sub>
+- 思考の時間は秒に丸め、1秒未満や不明なら秒数を出さない <sub>`agent reply display`</sub>
+- 切り詰めた結果は省いた量をKB (切り上げ) で示し、全部あるときは何も示さない <sub>`agent reply display`</sub>
+- ツールの入力は2字下げのJSONで表示し、文字列はそのまま出す <sub>`agent reply display`</sub>
+
+### markdown
+
+- 見出し・箇条書き・表・強調・インラインコード・引用・区切り線を描画する <sub>`reply markdown`</sub>
+- コードブロックには言語名とコピーボタンが付き、閉じていないコードブロックも届いた分までをコードとして描く <sub>`reply markdown`</sub>
+- 返答の生のHTMLは動かさず文字として表示する <sub>`reply markdown`</sub>
+- リンクはhttp(s)だけをリンクにし、javascript:・file:・data:はただの文字にする <sub>`reply markdown`</sub>
+- 画像は読み込まず、代替文字を表示したリンクにする <sub>`reply markdown`</sub>
+- 外部で開いてよいURLはhttp(s)だけ <sub>`reply markdown`</sub>
+
 ### ファイル操作のショートカット
 
 - ⌘N=新規 / ⌘O=開く / ⌘S=保存 / ⇧⌘S=名前を付けて保存 <sub>`editor shortcuts: ファイル操作`</sub>
@@ -2681,6 +2699,8 @@
 - turn_completedでストリーミングを解除し、トークン使用量を確定する <sub>`chat store: applyAgentEvent`</sub>
 - デルタが来なかった場合はturn_completedのresultで本文を埋める <sub>`chat store: applyAgentEvent`</sub>
 - ツール呼び出しはチップになり、idで成功/失敗が確定する <sub>`chat store: applyAgentEvent`</sub>
+- 応答は起きた順のブロックとして組み立てられ、同じ種類が続く間は1つにまとまり、思考には最初から最後の差分までの時間が付く <sub>`chat store: applyAgentEvent`</sub>
+- 会話一覧から読み込んだメッセージはブロックとツールの結果を持ち、知らない種類のブロックは捨てる <sub>`chat store: applyAgentEvent`</sub>
 - 同じtool_use_idの重複開始は無視される <sub>`chat store: applyAgentEvent`</sub>
 - id無しのtool_use_finishedは同名の実行中チップへ対応付けられる <sub>`chat store: applyAgentEvent`</sub>
 - errorイベントはメッセージにエラーを付与し、ストリーミングを解除する <sub>`chat store: applyAgentEvent`</sub>

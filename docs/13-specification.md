@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2775 specification clauses** across 6 areas.
+**2789 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2485,6 +2485,24 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - places the text right of the symbol outline, level with the designator label <sub>`G13 device cross-reference`</sub>
 - clears a designator label wider than the symbol itself <sub>`G13 device cross-reference`</sub>
 
+### blocks
+
+- groups consecutive tool calls into one run that text or thinking ends, flagging failures and running steps <sub>`agent reply display`</sub>
+- shows a message without blocks the old way: the text, then its tools as one run <sub>`agent reply display`</sub>
+- opens only the last row while streaming, keeps finished and loaded replies closed, and honours the user's choice <sub>`agent reply display`</sub>
+- rounds thinking time to seconds and hides it below one second or when unknown <sub>`agent reply display`</sub>
+- reports how many KB of a truncated result were left out, and nothing when it is complete <sub>`agent reply display`</sub>
+- pretty-prints tool input as two-space JSON and shows strings as they are <sub>`agent reply display`</sub>
+
+### markdown
+
+- renders headings, lists, tables, emphasis, inline code, quotes and rules <sub>`reply markdown`</sub>
+- gives code blocks a language label and a copy button, and draws an unclosed block up to what has arrived <sub>`reply markdown`</sub>
+- shows raw HTML in a reply as text instead of running it <sub>`reply markdown`</sub>
+- keeps only http(s) links and turns javascript:, file: and data: links into plain text <sub>`reply markdown`</sub>
+- does not load images; an image becomes a link labelled with its alt text <sub>`reply markdown`</sub>
+- treats only http(s) URLs as safe to open externally <sub>`reply markdown`</sub>
+
 ### File keyboard shortcuts
 
 - Cmd+N is new, Cmd+O is open, Cmd+S is save and Shift+Cmd+S is save-as <sub>`editor shortcuts: ファイル操作`</sub>
@@ -2681,6 +2699,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - turn_completed stops streaming and finalizes the token usage <sub>`chat store: applyAgentEvent`</sub>
 - when no deltas arrived, the body is filled from turn_completed's result <sub>`chat store: applyAgentEvent`</sub>
 - tool calls become chips, resolved to success/failure by id <sub>`chat store: applyAgentEvent`</sub>
+- builds the reply as blocks in the order they happened, joining runs of one kind and timing the thinking <sub>`chat store: applyAgentEvent`</sub>
+- messages loaded from the conversation list keep their blocks and tool results, dropping block kinds it does not know <sub>`chat store: applyAgentEvent`</sub>
 - duplicate tool starts with the same id are ignored <sub>`chat store: applyAgentEvent`</sub>
 - tool completions without an id match the running chip of the same name <sub>`chat store: applyAgentEvent`</sub>
 - an error event marks the message and stops streaming <sub>`chat store: applyAgentEvent`</sub>
