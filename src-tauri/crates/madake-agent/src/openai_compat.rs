@@ -624,12 +624,13 @@ async fn apply_chunk(
         return;
     };
     // 思考 (Ollama・DeepSeekなど)。サーバーによって名前が違う
-    for key in ["reasoning_content", "reasoning"] {
-        if let Some(text) = delta.get(key).and_then(Value::as_str) {
-            if !text.is_empty() {
-                send(tx, AgentEvent::ThinkingDelta { text: text.to_string() }).await;
-            }
-        }
+    // 両方を載せるプロキシがあるので、1つの差分につき多くても1回だけ送る
+    let reasoning = ["reasoning_content", "reasoning"]
+        .iter()
+        .filter_map(|key| delta.get(*key).and_then(Value::as_str))
+        .find(|text| !text.is_empty());
+    if let Some(text) = reasoning {
+        send(tx, AgentEvent::ThinkingDelta { text: text.to_string() }).await;
     }
     if let Some(text) = delta.get("content").and_then(Value::as_str) {
         if !text.is_empty() {

@@ -63,6 +63,12 @@ fn a_tool_result_carries_what_the_tool_returned() {
         Some(AgentEvent::ToolUseFinished { output, .. }) => assert_eq!(output.as_deref(), Some("{\"id\":\"e1\"}")),
         other => panic!("tool_endのはず: {other:?}"),
     }
+    // テキストの無い配列 (画像だけなど) は結果なし
+    let line = r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"image","source":{}}],"is_error":false}]}}"#;
+    match parse_stream_line(line) {
+        Some(AgentEvent::ToolUseFinished { output, .. }) => assert_eq!(output, None),
+        other => panic!("tool_endのはず: {other:?}"),
+    }
 }
 
 /// A completed assistant tool_use block (with full input) starts a tool-use event.

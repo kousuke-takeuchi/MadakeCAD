@@ -172,6 +172,11 @@ fn reasoning_chunk(field: &str, text: &str) -> Value {
     json!({"choices": [{"index": 0, "delta": {field: text}, "finish_reason": null}]})
 }
 
+/// 思考を`reasoning_content`と`reasoning`の両方に載せた差分チャンク。
+fn mirrored_reasoning_chunk(text: &str) -> Value {
+    json!({"choices": [{"index": 0, "delta": {"reasoning_content": text, "reasoning": text}, "finish_reason": null}]})
+}
+
 /// ツール呼び出しの開始チャンク(id・名前つき)。
 fn tool_head(index: u64, id: &str, name: &str) -> Value {
     json!({"choices": [{"index": 0, "delta": {"tool_calls": [
@@ -373,6 +378,30 @@ async fn streamed_reasoning_becomes_thinking_events() {
         .collect();
     assert_eq!(thinking, ["24V系を", "確かめる"]);
     assert_eq!(texts(&events), "はい");
+}
+
+/// A delta that carries the same reasoning in both reasoning_content and reasoning (some proxies mirror them) yields one thinking event, not two.
+/// 同じ思考をreasoning_contentとreasoningの両方に載せる差分 (ミラーするプロキシがある) は、思考イベントを2回ではなく1回だけ出す。
+#[tokio::test]
+async fn mirrored_reasoning_fields_are_not_doubled() {
+    let api = MockApi::start(vec![Scripted::Sse(vec![
+        mirrored_reasoning_chunk("24V系を確かめる"),
+        text_chunk("はい"),
+        finish("stop"),
+    ])])
+    .await;
+    let backend = backend_with_key(&api);
+
+    let events = run(&backend, "考えて", None).await;
+
+    let thinking: Vec<_> = events
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::ThinkingDelta { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(thinking, ["24V系を確かめる"]);
 }
 
 /// A tool the model asks for is executed locally and its result is sent back as a tool message so the model can continue. The finish event carries the tool's result.

@@ -180,12 +180,13 @@ fn parse_user(v: &Value) -> Vec<AgentEvent> {
 fn tool_result_text(block: &Value) -> Option<String> {
     match block.get("content")? {
         Value::String(text) => Some(text.clone()),
-        Value::Array(parts) => Some(
-            parts
+        Value::Array(parts) => {
+            let text: String = parts
                 .iter()
                 .filter_map(|p| p.get("text").and_then(Value::as_str))
-                .collect(),
-        ),
+                .collect();
+            (!text.is_empty()).then_some(text)
+        }
         _ => None,
     }
 }
