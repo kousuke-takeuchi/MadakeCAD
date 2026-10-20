@@ -155,6 +155,25 @@ fn text_block(index: u64, chunks: &[&str]) -> Vec<(&'static str, Value)> {
     out
 }
 
+fn thinking_block(index: u64, chunks: &[&str]) -> Vec<(&'static str, Value)> {
+    let mut out = vec![(
+        "content_block_start",
+        json!({"type": "content_block_start", "index": index, "content_block": {"type": "thinking", "thinking": ""}}),
+    )];
+    for chunk in chunks {
+        out.push((
+            "content_block_delta",
+            json!({"type": "content_block_delta", "index": index, "delta": {"type": "thinking_delta", "thinking": chunk}}),
+        ));
+    }
+    out.push((
+        "content_block_delta",
+        json!({"type": "content_block_delta", "index": index, "delta": {"type": "signature_delta", "signature": "sig"}}),
+    ));
+    out.push(("content_block_stop", json!({"type": "content_block_stop", "index": index})));
+    out
+}
+
 fn tool_block(index: u64, id: &str, name: &str, input_json: &str) -> Vec<(&'static str, Value)> {
     vec![
         (
@@ -342,8 +361,32 @@ async fn the_bridged_mcp_tools_are_offered_to_the_api() {
     assert_eq!(body["tools"][0]["input_schema"]["type"], "object");
 }
 
-/// A tool the model asks for is executed locally and its result is sent back so the model can continue.
-/// モデルが要求したツールはその場で実行され、結果を返して会話を続ける(1ターンで完結する)。
+/// Thinking the API streams arrives as thinking events in order (empty pieces and signatures are skipped), separate from the reply text.
+/// APIが送ってくる思考は、返答の本文とは別の思考イベントとして順に届く (空の差分と署名は飛ばす)。
+#[tokio::test]
+async fn streamed_thinking_becomes_thinking_events() {
+    let api = MockApi::start(vec![turn(
+        vec![thinking_block(0, &["24V系を", "", "確かめる"]), text_block(1, &["はい"])],
+        "end_turn",
+    )])
+    .await;
+    let backend = AnthropicApiBackend::new("sk-test", "claude-sonnet-5").with_base_url(api.base_url());
+
+    let events = run(&backend, "考えて", None).await;
+
+    let thinking: Vec<_> = events
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::ThinkingDelta { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(thinking, ["24V系を", "確かめる"]);
+    assert_eq!(texts(&events), "はい");
+}
+
+/// A tool the model asks for is executed locally and its result is sent back so the model can continue. The finish event carries the tool's result.
+/// モデルが要求したツールはその場で実行され、結果を返して会話を続ける(1ターンで完結する)。完了イベントにはツールの結果が載る。
 #[tokio::test]
 async fn a_requested_tool_is_executed_and_its_result_is_sent_back() {
     let tools = Arc::new(FakeTools::new("{\"id\":\"e1\"}"));
@@ -378,9 +421,10 @@ async fn a_requested_tool_is_executed_and_its_result_is_sent_back() {
         "ツール開始イベントが無い: {events:?}"
     );
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::ToolUseFinished { id, tool, is_error }
-            if id == "toolu_1" && tool == "place_symbol" && !*is_error)),
-        "ツール完了イベントが無い: {events:?}"
+        events.iter().any(|e| matches!(e, AgentEvent::ToolUseFinished { id, tool, is_error, output }
+            if id == "toolu_1" && tool == "place_symbol" && !*is_error
+                && output.as_deref() == Some("{\"id\":\"e1\"}"))),
+        "ツール完了イベント (結果つき) が無い: {events:?}"
     );
 
     // 2回目のリクエストにはツール要求と実行結果が積まれている

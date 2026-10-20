@@ -97,27 +97,35 @@ fn a_tool_execution_start_reports_the_tool_and_its_arguments() {
     }
 }
 
-/// Finishing a tool closes the matching call and reports whether it succeeded.
-/// ツールの実行完了は対応する呼び出しを閉じ、成功したかどうかを伝える。
+/// Finishing a tool closes the matching call, reports whether it succeeded and carries the result text the CLI printed.
+/// ツールの実行完了は対応する呼び出しを閉じ、成功したかどうかと、CLIが出した結果の文字を伝える。
 #[test]
 fn a_tool_execution_complete_closes_the_call_with_its_outcome() {
-    for (line, expected_error) in [
+    for (line, expected_error, expected_output) in [
         (
             r#"{"type":"tool.execution_complete","data":{"toolCallId":"toolu_01","success":true,"result":{"content":"{}"}},"id":"e1"}"#,
             false,
+            "{}",
         ),
         (
             r#"{"type":"tool.execution_complete","data":{"toolCallId":"toolu_01","success":false,"result":{"content":"不明なシンボルです"}},"id":"e1"}"#,
             true,
+            "不明なシンボルです",
         ),
     ] {
         match one(line) {
-            AgentEvent::ToolUseFinished { id, is_error, .. } => {
+            AgentEvent::ToolUseFinished { id, is_error, output, .. } => {
                 assert_eq!(id, "toolu_01", "{line}");
                 assert_eq!(is_error, expected_error, "{line}");
+                assert_eq!(output.as_deref(), Some(expected_output), "{line}");
             }
             other => panic!("tool_endのはず ({line}): {other:?}"),
         }
+    }
+    // 結果の文字が無い完了は結果なし
+    match one(r#"{"type":"tool_result","tool_call_id":"call_1"}"#) {
+        AgentEvent::ToolUseFinished { output, .. } => assert_eq!(output, None),
+        other => panic!("tool_endのはず: {other:?}"),
     }
 }
 

@@ -459,8 +459,19 @@ async fn schema_keywords_gemini_rejects_are_dropped_from_tool_definitions() {
     );
 }
 
-/// A tool the model asks for is executed locally and its result is sent back as a functionResponse so the model can continue.
-/// モデルが要求したツールはその場で実行され、結果をfunctionResponseとして返して会話を続ける(1ターンで完結する)。
+/// Gemini is not asked for its thoughts, so a reply never produces thinking events.
+/// Geminiには思考を求めないので、返答から思考イベントは出ない。
+#[tokio::test]
+async fn gemini_replies_produce_no_thinking_events() {
+    let api = MockApi::start(vec![Scripted::Sse(vec![text_chunk("はい")])]).await;
+    let backend = backend_with_key(&api);
+    let events = run(&backend, "考えて", None).await;
+    assert!(!events.iter().any(|e| matches!(e, AgentEvent::ThinkingDelta { .. })), "{events:?}");
+    assert_eq!(texts(&events), "はい");
+}
+
+/// A tool the model asks for is executed locally and its result is sent back as a functionResponse so the model can continue. The finish event carries the tool's result.
+/// モデルが要求したツールはその場で実行され、結果をfunctionResponseとして返して会話を続ける(1ターンで完結する)。完了イベントにはツールの結果が載る。
 #[tokio::test]
 async fn a_requested_tool_is_executed_and_its_result_is_sent_back() {
     let tools = Arc::new(FakeTools::new("{\"id\":\"e1\"}"));
@@ -497,10 +508,11 @@ async fn a_requested_tool_is_executed_and_its_result_is_sent_back() {
     );
     assert!(
         events.iter().any(
-            |e| matches!(e, AgentEvent::ToolUseFinished { id, tool, is_error }
-            if id == "call_1" && tool == "place_symbol" && !*is_error)
+            |e| matches!(e, AgentEvent::ToolUseFinished { id, tool, is_error, output }
+            if id == "call_1" && tool == "place_symbol" && !*is_error
+                && output.as_deref() == Some("{\"id\":\"e1\"}"))
         ),
-        "ツール完了イベントが無い: {events:?}"
+        "ツール完了イベント (結果つき) が無い: {events:?}"
     );
 
     // 2回目のリクエストにはモデルの発言と実行結果が積まれている

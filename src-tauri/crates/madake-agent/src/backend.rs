@@ -297,7 +297,7 @@ impl ClaudeCodeCliBackend {
         let mut last_plain_line: Option<String> = None;
         'read: loop {
             // 受信側のcloseは`send`の失敗だけでは検知できない。イベントにならない行
-            // (thinking_delta・未知の行)が続く間はsendが呼ばれず、キャンセル後も
+            // (signature_delta・未知の行)が続く間はsendが呼ばれず、キャンセル後も
             // CLIが走り続けて編集を重ねてしまうため、行の待ち受けと同時に監視する。
             // どちらもキャンセル安全(`Lines::next_line` / `Sender::closed`)。
             let line = tokio::select! {

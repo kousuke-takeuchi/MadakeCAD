@@ -167,6 +167,16 @@ fn text_chunk(text: &str) -> Value {
     json!({"choices": [{"index": 0, "delta": {"content": text}, "finish_reason": null}]})
 }
 
+/// 思考の差分チャンク (`field`は`reasoning_content`か`reasoning`)。
+fn reasoning_chunk(field: &str, text: &str) -> Value {
+    json!({"choices": [{"index": 0, "delta": {field: text}, "finish_reason": null}]})
+}
+
+/// 思考を`reasoning_content`と`reasoning`の両方に載せた差分チャンク。
+fn mirrored_reasoning_chunk(text: &str) -> Value {
+    json!({"choices": [{"index": 0, "delta": {"reasoning_content": text, "reasoning": text}, "finish_reason": null}]})
+}
+
 /// ツール呼び出しの開始チャンク(id・名前つき)。
 fn tool_head(index: u64, id: &str, name: &str) -> Value {
     json!({"choices": [{"index": 0, "delta": {"tool_calls": [
@@ -343,8 +353,59 @@ async fn the_bridged_mcp_tools_are_offered_as_openai_functions() {
     assert_eq!(body["tools"][0]["function"]["parameters"]["type"], "object");
 }
 
-/// A tool the model asks for is executed locally and its result is sent back as a tool message so the model can continue.
-/// モデルが要求したツールはその場で実行され、結果をツールメッセージとして返して会話を続ける(1ターンで完結する)。
+/// Reasoning that a model streams as reasoning_content or reasoning (Ollama, DeepSeek and others) arrives as thinking events, separate from the reply text; empty pieces are skipped.
+/// モデルがreasoning_contentかreasoningで送ってくる思考 (Ollama・DeepSeekなど) は、返答の本文とは別の思考イベントとして届く。空の差分は飛ばす。
+#[tokio::test]
+async fn streamed_reasoning_becomes_thinking_events() {
+    let api = MockApi::start(vec![Scripted::Sse(vec![
+        reasoning_chunk("reasoning_content", "24V系を"),
+        reasoning_chunk("reasoning", ""),
+        reasoning_chunk("reasoning", "確かめる"),
+        text_chunk("はい"),
+        finish("stop"),
+    ])])
+    .await;
+    let backend = backend_with_key(&api);
+
+    let events = run(&backend, "考えて", None).await;
+
+    let thinking: Vec<_> = events
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::ThinkingDelta { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(thinking, ["24V系を", "確かめる"]);
+    assert_eq!(texts(&events), "はい");
+}
+
+/// A delta that carries the same reasoning in both reasoning_content and reasoning (some proxies mirror them) yields one thinking event, not two.
+/// 同じ思考をreasoning_contentとreasoningの両方に載せる差分 (ミラーするプロキシがある) は、思考イベントを2回ではなく1回だけ出す。
+#[tokio::test]
+async fn mirrored_reasoning_fields_are_not_doubled() {
+    let api = MockApi::start(vec![Scripted::Sse(vec![
+        mirrored_reasoning_chunk("24V系を確かめる"),
+        text_chunk("はい"),
+        finish("stop"),
+    ])])
+    .await;
+    let backend = backend_with_key(&api);
+
+    let events = run(&backend, "考えて", None).await;
+
+    let thinking: Vec<_> = events
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::ThinkingDelta { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(thinking, ["24V系を確かめる"]);
+}
+
+/// A tool the model asks for is executed locally and its result is sent back as a tool message so the model can continue. The finish event carries the tool's result.
+/// モデルが要求したツールはその場で実行され、結果をツールメッセージとして返して会話を続ける(1ターンで完結する)。完了イベントにはツールの結果が載る。
 #[tokio::test]
 async fn a_requested_tool_is_executed_and_its_result_is_sent_back() {
     let tools = Arc::new(FakeTools::new("{\"id\":\"e1\"}"));
@@ -381,10 +442,11 @@ async fn a_requested_tool_is_executed_and_its_result_is_sent_back() {
     );
     assert!(
         events.iter().any(
-            |e| matches!(e, AgentEvent::ToolUseFinished { id, tool, is_error }
-            if id == "call_1" && tool == "place_symbol" && !*is_error)
+            |e| matches!(e, AgentEvent::ToolUseFinished { id, tool, is_error, output }
+            if id == "call_1" && tool == "place_symbol" && !*is_error
+                && output.as_deref() == Some("{\"id\":\"e1\"}"))
         ),
-        "ツール完了イベントが無い: {events:?}"
+        "ツール完了イベント (結果つき) が無い: {events:?}"
     );
 
     // 2回目のリクエストにはツール要求と実行結果が積まれている
