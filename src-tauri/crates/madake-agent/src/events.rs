@@ -6,10 +6,10 @@
 //! 実測した行の種類(claude 2.1.237, `-p --output-format stream-json --verbose
 //! --include-partial-messages`):
 //! - `system`/`init`: session_id
-//! - `stream_event`: 生APIイベント。`content_block_delta`の`text_delta`のみ採用
-//!   (`thinking_delta`/`signature_delta`/`input_json_delta`は無視)
+//! - `stream_event`: 生APIイベント。`content_block_delta`の`text_delta`と`thinking_delta`を採用
+//!   (`signature_delta`/`input_json_delta`は無視)
 //! - `assistant`: 完成したcontent block。`tool_use`は完全なinputを持つ
-//! - `user`: `tool_result`(is_error付き)
+//! - `user`: `tool_result`(is_error・結果の文字付き)
 //! - `result`: ターン終了(subtype=success、result/usage)
 //! - `system`/`status`、`system`/`thinking_tokens`、`rate_limit_event` 等はスキップ
 
@@ -135,13 +135,15 @@ fn parse_stream_event(v: &Value) -> Vec<AgentEvent> {
         Some(d) => d,
         None => return Vec::new(),
     };
-    if delta.get("type").and_then(Value::as_str) != Some("text_delta") {
-        return Vec::new();
-    }
-    match delta.get("text").and_then(Value::as_str) {
-        Some(text) if !text.is_empty() => vec![AgentEvent::TextDelta {
-            text: text.to_string(),
-        }],
+    match delta.get("type").and_then(Value::as_str) {
+        Some("text_delta") => match delta.get("text").and_then(Value::as_str) {
+            Some(text) if !text.is_empty() => vec![AgentEvent::TextDelta { text: text.to_string() }],
+            _ => Vec::new(),
+        },
+        Some("thinking_delta") => match delta.get("thinking").and_then(Value::as_str) {
+            Some(text) if !text.is_empty() => vec![AgentEvent::ThinkingDelta { text: text.to_string() }],
+            _ => Vec::new(),
+        },
         _ => Vec::new(),
     }
 }
@@ -169,9 +171,23 @@ fn parse_user(v: &Value) -> Vec<AgentEvent> {
             // tool_resultにツール名は含まれない。StreamParserがidから補完する
             tool: String::new(),
             is_error: b.get("is_error").and_then(Value::as_bool).unwrap_or(false),
-            output: None,
+            output: tool_result_text(b),
         })
         .collect()
+}
+
+/// `tool_result.content`の文字 (文字列か、テキストブロックの配列をつないだもの)。
+fn tool_result_text(block: &Value) -> Option<String> {
+    match block.get("content")? {
+        Value::String(text) => Some(text.clone()),
+        Value::Array(parts) => Some(
+            parts
+                .iter()
+                .filter_map(|p| p.get("text").and_then(Value::as_str))
+                .collect(),
+        ),
+        _ => None,
+    }
 }
 
 fn parse_result(v: &Value) -> Vec<AgentEvent> {

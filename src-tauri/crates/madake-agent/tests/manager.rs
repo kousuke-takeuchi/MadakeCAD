@@ -376,7 +376,10 @@ async fn send_creates_conversation_and_broadcasts_events() {
     // 編集が無いターンではTurnAppliedは流れない
     assert_eq!(
         kinds(&events),
-        vec!["session", "tool_start", "tool_end", "text", "completed"]
+        vec![
+            "session", "thinking", "thinking", "thinking", "tool_start", "tool_end", "thinking", "thinking", "text",
+            "completed"
+        ]
     );
 
     let conversations = manager.conversations();

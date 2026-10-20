@@ -121,8 +121,8 @@ fn mcp_config_points_at_local_mcp_server() {
     );
 }
 
-/// A turn streams events (text deltas, tool use, completion) parsed from the CLI's stream-json output.
-/// ターンはCLIのstream-json出力から解釈したイベント(テキスト差分・ツール実行・完了)を流す。
+/// A turn streams events (thinking and text deltas, tool use, completion) parsed from the CLI's stream-json output.
+/// ターンはCLIのstream-json出力から解釈したイベント(思考・テキスト差分・ツール実行・完了)を流す。
 #[tokio::test]
 async fn send_streams_events_from_fake_cli() {
     let backend = backend("fake_claude.sh");
@@ -135,9 +135,12 @@ async fn send_streams_events_from_fake_cli() {
     }
     assert_eq!(
         kinds(&events),
-        vec!["session", "tool_start", "tool_end", "text", "completed"]
+        vec![
+            "session", "thinking", "thinking", "thinking", "tool_start", "tool_end", "thinking", "thinking", "text",
+            "completed"
+        ]
     );
-    match &events[2] {
+    match &events[5] {
         AgentEvent::ToolUseFinished { tool, is_error, .. } => {
             assert_eq!(tool, "Bash", "tool_use_idからツール名が補完されること");
             assert!(!is_error);

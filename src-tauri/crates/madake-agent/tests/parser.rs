@@ -32,13 +32,37 @@ fn init_line_yields_session_started() {
     );
 }
 
-/// Only text deltas become text events; thinking deltas are ignored.
-/// テキスト差分のみがテキストイベントになり、thinking差分は無視される。
+/// Text deltas become text events and thinking deltas become thinking events, each joined in order; signature deltas are ignored.
+/// テキスト差分はテキストイベント、thinking差分は思考イベントになり、それぞれ順につながる。signature差分は無視される。
 #[test]
-fn only_text_deltas_become_text_events() {
-    // thinking_delta / signature_delta は無視され、text_deltaのみ連結される
+fn text_and_thinking_deltas_become_their_own_events() {
     assert_eq!(joined_text(&events(TOOLUSE)), "done.");
     assert_eq!(joined_text(&events(TEXT)), "hello");
+    let thinking: String = events(TOOLUSE)
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::ThinkingDelta { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(thinking.starts_with("The user is asking me to run a specific bash command"), "{thinking}");
+    assert!(thinking.contains("The command executed successfully"), "{thinking}");
+}
+
+/// A tool result carries what the tool returned, whether the CLI sends it as a string or as an array of text blocks.
+/// ツールの完了には、ツールが返した内容が載る。CLIが文字列で送っても、テキストブロックの配列で送っても同じ。
+#[test]
+fn a_tool_result_carries_what_the_tool_returned() {
+    let output = events(TOOLUSE).into_iter().find_map(|e| match e {
+        AgentEvent::ToolUseFinished { output, .. } => output,
+        _ => None,
+    });
+    assert_eq!(output.as_deref(), Some("madake-test"));
+    let line = r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"{\"id\":"},{"type":"text","text":"\"e1\"}"}],"is_error":false}]}}"#;
+    match parse_stream_line(line) {
+        Some(AgentEvent::ToolUseFinished { output, .. }) => assert_eq!(output.as_deref(), Some("{\"id\":\"e1\"}")),
+        other => panic!("tool_endのはず: {other:?}"),
+    }
 }
 
 /// A completed assistant tool_use block (with full input) starts a tool-use event.
@@ -104,7 +128,7 @@ fn unknown_and_noise_lines_are_none() {
         r#"{"type":"system","subtype":"status","status":"requesting"}"#,
         r#"{"type":"system","subtype":"thinking_tokens","estimated_tokens":5}"#,
         r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed"}}"#,
-        r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hm"}}}"#,
+        r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"hm"}}}"#,
         r#"{"type":"stream_event","event":{"type":"message_stop"}}"#,
         r#"{"type":"future_unknown_type"}"#,
         "not json at all",
@@ -148,7 +172,10 @@ fn full_event_sequence_of_tooluse_fixture() {
         .collect();
     assert_eq!(
         kinds,
-        vec!["session", "tool_start", "tool_end", "text", "completed"]
+        vec![
+            "session", "thinking", "thinking", "thinking", "tool_start", "tool_end", "thinking", "thinking", "text",
+            "completed"
+        ]
     );
 }
 
@@ -168,7 +195,7 @@ fn stream_parser_fills_tool_name_on_finish() {
     // 単体のparse_stream_lineではtool_resultにツール名が無いが、
     // StreamParserはtool_use_idから補完する
     assert_eq!(finished, "Bash");
-    assert_eq!(evs.len(), 5);
+    assert_eq!(evs.len(), 10);
 }
 
 /// Duplicate tool-use-started events for the same id are dropped.
