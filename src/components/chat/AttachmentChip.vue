@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // DS添付チップ / DS添付チップ エラー (.pen `sIHcy` / `cUmIA`)。
-// 種別印 (IMG=sel-blue / PDF=err-bg) +ファイル名+大きさ+× (送信前だけ)。
+// 種別印 (IMG=sel-blue / PDF=err-bg / XLSX・CSV=ok-bg) +ファイル名+大きさ+× (送信前だけ)。
 // 添付できないものはチップを赤くし、大きさの代わりに理由を出す。
 import { computed } from "vue";
-import { formatSize, isAttachableMime, isPdf } from "../../stores/chatAttachments";
+import { CSV_MIME, formatSize, isAttachableMime, isPdf, isSpreadsheet } from "../../stores/chatAttachments";
 
 const props = defineProps<{
   name: string;
@@ -18,13 +18,18 @@ const props = defineProps<{
 defineEmits<{ remove: [] }>();
 
 const pdf = computed(() => isPdf(props.mime));
-/** 種別印: PDF / IMG / 添付できない種類は「?」。 */
-const kindLabel = computed(() => (pdf.value ? "PDF" : isAttachableMime(props.mime) ? "IMG" : "?"));
+const sheet = computed(() => isSpreadsheet(props.mime));
+/** 種別印: PDF / XLSX / CSV / IMG / 添付できない種類は「?」。 */
+const kindLabel = computed(() => {
+  if (pdf.value) return "PDF";
+  if (sheet.value) return props.mime === CSV_MIME ? "CSV" : "XLSX";
+  return isAttachableMime(props.mime) ? "IMG" : "?";
+});
 </script>
 
 <template>
   <span class="chip" :class="{ error: !!problem }" :title="problem ?? `${name} (${mime})`">
-    <span class="kind" :class="{ pdf }">{{ kindLabel }}</span>
+    <span class="kind" :class="{ pdf, sheet }">{{ kindLabel }}</span>
     <span class="name">{{ name }}</span>
     <span class="size">{{ problem ?? formatSize(size) }}</span>
     <button v-if="removable" class="remove" :title="removeTitle" @click="$emit('remove')">×</button>
@@ -65,6 +70,12 @@ const kindLabel = computed(() => (pdf.value ? "PDF" : isAttachableMime(props.mim
 .kind.pdf {
   background: var(--err-bg);
   color: var(--err-fg);
+}
+.kind.sheet {
+  width: auto;
+  padding: 0 3px;
+  background: var(--ok-bg);
+  color: var(--ok-fg);
 }
 .name {
   flex: none;

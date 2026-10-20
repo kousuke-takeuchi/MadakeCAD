@@ -168,7 +168,7 @@ impl AnthropicApiBackend {
         let content = if request.attachments.is_empty() {
             json!(request.prompt)
         } else {
-            crate::attachments::anthropic_content(request.prompt, request.attachments)
+            crate::attachments::anthropic_content(request.prompt, request.attachments)?
         };
         messages.push(json!({"role": "user", "content": content}));
 

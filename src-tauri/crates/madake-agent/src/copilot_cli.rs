@@ -194,7 +194,7 @@ impl CopilotCliBackend {
 
     /// [`Self::send_with_context`]の添付つき版。Copilot CLIは本文しか受け取らないので、
     /// 添付はこのターン用の一時フォルダへ保存し、`--add-dir`で読める場所にしてパスを本文へ添える
-    /// (フォルダはターンの終わりに消す)。
+    /// (フォルダはターンの終わりに消す)。表計算はテキストにして本文の前へ直接入れる。
     pub async fn send_with_attachments(
         &self,
         prompt: &str,
@@ -207,7 +207,8 @@ impl CopilotCliBackend {
         let result = async {
             crate::attachments::validate(attachments)?;
             let staged = StagedAttachments::create(attachments)?;
-            let prompt = crate::attachments::prompt_with_paths(prompt, &staged.paths);
+            let prompt = crate::attachments::prompt_with_spreadsheets(prompt, attachments)?;
+            let prompt = crate::attachments::prompt_with_paths(&prompt, &staged.paths);
             self.stream_turn(&prompt, staged.dir.as_deref(), session, system_prompt, tx)
                 .await
         }
@@ -513,12 +514,18 @@ struct StagedAttachments {
 }
 
 impl StagedAttachments {
+    /// 表計算は本文へ直接入れるので保存しない ([`crate::attachments::prompt_with_spreadsheets`])。
     fn create(attachments: &[crate::attachments::Attachment]) -> Result<Self> {
-        if attachments.is_empty() {
+        let files: Vec<_> = attachments
+            .iter()
+            .filter(|a| a.kind() != Some(crate::attachments::AttachmentKind::Spreadsheet))
+            .cloned()
+            .collect();
+        if files.is_empty() {
             return Ok(Self { dir: None, paths: Vec::new() });
         }
         let dir = crate::attachments::conversation_dir(uuid::Uuid::new_v4());
-        let paths = crate::attachments::save_to_dir(&dir, attachments)?;
+        let paths = crate::attachments::save_to_dir(&dir, &files)?;
         Ok(Self { dir: Some(dir), paths })
     }
 }
@@ -528,5 +535,24 @@ impl Drop for StagedAttachments {
         if let Some(dir) = &self.dir {
             let _ = std::fs::remove_dir_all(dir);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::attachments::{Attachment, CSV_MIME};
+
+    /// For the Copilot CLI only images and PDFs are saved to the turn's folder; a spreadsheet is not saved because it goes into the message as text, and with nothing to save no folder is made.
+    /// Copilot CLI向けにターンのフォルダへ保存するのは画像とPDFだけ。表計算は本文にテキストで入るので保存せず、保存するものが無ければフォルダも作らない。
+    #[test]
+    fn only_images_and_pdfs_are_saved_for_the_copilot_cli() {
+        let png = Attachment { name: "a.png".into(), mime: "image/png".into(), data: vec![1] };
+        let csv = Attachment { name: "b.csv".into(), mime: CSV_MIME.into(), data: b"x".to_vec() };
+        let staged = StagedAttachments::create(&[png, csv.clone()]).unwrap();
+        let names: Vec<_> = staged.paths.iter().map(|p| p.file_name().unwrap().to_str().unwrap().to_string()).collect();
+        assert_eq!(names, ["a.png"]);
+        let none = StagedAttachments::create(&[csv]).unwrap();
+        assert!(none.dir.is_none() && none.paths.is_empty());
     }
 }

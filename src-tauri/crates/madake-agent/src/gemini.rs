@@ -204,7 +204,7 @@ impl GeminiBackend {
         crate::attachments::validate(request.attachments)?;
         contents.push(json!({
             "role": "user",
-            "parts": crate::attachments::gemini_parts(request.prompt, request.attachments),
+            "parts": crate::attachments::gemini_parts(request.prompt, request.attachments)?,
         }));
 
         let mut usage = Usage::default();

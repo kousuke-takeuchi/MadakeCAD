@@ -6,10 +6,13 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 import { invoke } from "@tauri-apps/api/core";
 import { pastedImages, draggingFiles } from "../composables/chatDrop";
 import {
+  CSV_MIME,
   MAX_ATTACHMENTS,
+  XLSX_MIME,
   attachmentProblem,
   formatSize,
   mimeFromName,
+  providerProblem,
   useChatAttachmentsStore,
 } from "./chatAttachments";
 import { useSettingsStore } from "./settings";
@@ -25,13 +28,32 @@ describe("pending chat attachments", () => {
     vi.clearAllMocks();
   });
 
-  // ja: 画像 (PNG/JPEG/GIF/WebP) とPDFだけを添付でき、種類は拡張子でも判断する (大文字小文字は問わない)
-  it("accepts images and PDFs only, judging the kind by extension too", () => {
+  // ja: 画像 (PNG/JPEG/GIF/WebP)・PDF・Excel (.xlsx)・CSVだけを添付でき、種類は拡張子でも判断する (大文字小文字は問わない)
+  it("accepts images, PDFs, Excel workbooks and CSV files only, judging the kind by extension too", () => {
     expect(mimeFromName("回路写真.JPG")).toBe("image/jpeg");
     expect(mimeFromName("sheet.pdf")).toBe("application/pdf");
+    expect(mimeFromName("AOGU_COCO_BOM.XLSX")).toBe(XLSX_MIME);
+    expect(mimeFromName("部品.csv")).toBe(CSV_MIME);
     expect(mimeFromName("notes.txt")).toBe("");
+    expect(mimeFromName("old.xls")).toBe("");
     expect(attachmentProblem("image/png", 10)).toBeNull();
+    expect(attachmentProblem(XLSX_MIME, 10)).toBeNull();
+    expect(attachmentProblem(CSV_MIME, 10)).toBeNull();
     expect(attachmentProblem("text/plain", 10)?.key).toBe("chat.attach.unsupported");
+  });
+
+  // ja: ブラウザが別の種類を名乗っても、知っている拡張子なら拡張子で決める (WindowsはCSVをExcelの種類と名乗る)
+  it("trusts a known extension over the type the browser reports, since Windows labels CSV files as Excel", async () => {
+    const store = useChatAttachmentsStore();
+    await store.addFiles([file("部品.csv", "application/vnd.ms-excel", [0x61])]);
+    expect(store.items[0]).toMatchObject({ mime: CSV_MIME, problem: null, data: "YQ==" });
+  });
+
+  // ja: 表計算はPDFを読めないOpenAI互換のモデルにも送れる (テキストにして渡すため)
+  it("lets spreadsheets go to OpenAI-compatible models, which cannot read PDFs, because they are sent as text", () => {
+    const sheet = { id: "1", name: "BOM.xlsx", mime: XLSX_MIME, size: 1, problem: null };
+    expect(providerProblem([sheet], "openai_compat")).toBeNull();
+    expect(providerProblem([{ ...sheet, mime: "application/pdf" }], "openai_compat")?.key).toBe("chat.attach.pdfUnsupported");
   });
 
   // ja: 20MBを超えるファイルは大きさつきで「大きすぎます」になり、大きさはMB/KBで表示する

@@ -4,10 +4,10 @@
 // ドラッグ&ドロップ・⌘V (画像の貼り付け)。浮きカードと左ドックの入力欄で共有する
 // (下書き本文と同じく、どちらから送っても同じ添付が付く)。
 //
-// 規則はRust (`madake_agent::attachments`) と同じ: 画像 (PNG/JPEG/GIF/WebP) とPDF、1件20MB、
+// 規則はRust (`madake_agent::attachments`) と同じ: 画像 (PNG/JPEG/GIF/WebP)・PDF・Excel (.xlsx)・CSV、1件20MB、
 // 1回5件まで。外れたものはチップを赤くして理由を出し、送信ボタンを淡色にする
 // (最終判断は送るときにRustがもう一度行う)。OpenAI互換のモデルはPDFを読めないので、
-// その組み合わせも送れない状態として扱う。
+// その組み合わせも送れない状態として扱う (表計算はRustがテキストにして渡すので、どのモデルにも送れる)。
 //
 // アプリ (Tauri) ではファイルのパスを持ち、中身はRustが読む。貼り付け・ブラウザ検証モードでは
 // 中身をbase64で持つ。
@@ -20,12 +20,14 @@ import { useSettingsStore } from "./settings";
 
 export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
 export const PDF_MIME = "application/pdf";
+export const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+export const CSV_MIME = "text/csv";
 /** 1件の上限 (Rust `MAX_ATTACHMENT_BYTES`)。 */
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 /** 1回の上限 (Rust `MAX_ATTACHMENTS`)。 */
 export const MAX_ATTACHMENTS = 5;
 /** ファイル選択の絞り込み。 */
-export const ATTACHMENT_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "pdf"];
+export const ATTACHMENT_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "pdf", "xlsx", "csv"];
 
 /** 文言のキーと差し込み値 (UIカタログ`chat.attach.*`)。 */
 export interface AttachmentProblem {
@@ -54,6 +56,8 @@ export function mimeFromName(name: string): string {
   if (ext === "gif") return "image/gif";
   if (ext === "webp") return "image/webp";
   if (ext === "pdf") return PDF_MIME;
+  if (ext === "xlsx") return XLSX_MIME;
+  if (ext === "csv") return CSV_MIME;
   return "";
 }
 
@@ -61,8 +65,13 @@ export function isPdf(mime: string): boolean {
   return mime === PDF_MIME;
 }
 
+/** Excel (.xlsx) かCSV (Rustがテキストにして渡す)。 */
+export function isSpreadsheet(mime: string): boolean {
+  return mime === XLSX_MIME || mime === CSV_MIME;
+}
+
 export function isAttachableMime(mime: string): boolean {
-  return (IMAGE_MIMES as readonly string[]).includes(mime) || mime === PDF_MIME;
+  return (IMAGE_MIMES as readonly string[]).includes(mime) || mime === PDF_MIME || isSpreadsheet(mime);
 }
 
 /** 大きさの表示 (1.2 MB / 340 KB)。 */
@@ -169,7 +178,9 @@ export const useChatAttachmentsStore = defineStore("chatAttachments", {
      */
     async addFiles(files: File[], pastedLabel?: string) {
       for (const file of files) {
-        const mime = file.type || mimeFromName(file.name);
+        // ファイルは知っている拡張子を優先する (WindowsはCSVを`application/vnd.ms-excel`と名乗る)。
+        // 貼り付けの名前は仮のもの (「image.png」) なので、クリップボードの種類を優先する
+        const mime = pastedLabel ? file.type || mimeFromName(file.name) : mimeFromName(file.name) || file.type;
         let name = file.name;
         if (pastedLabel) {
           this.pasted += 1;
