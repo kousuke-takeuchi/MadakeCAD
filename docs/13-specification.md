@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2757 specification clauses** across 6 areas.
+**2765 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1430,6 +1430,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Detection looks for copilot on PATH and in the usual npm install locations. <sub>`default_candidates_include_the_known_install_paths`</sub>
 - The connection test reports success when the CLI answers, and the sign-in guidance when it is signed out. <sub>`the_connection_test_distinguishes_success_from_being_signed_out`</sub>
 - Copilot gets attachments as files saved in a folder it is allowed to read (--add-dir), listed by path after the text; the folder is removed after the turn. <sub>`copilot_reads_attachments_from_a_temporary_allowed_folder`</sub>
+- For the Copilot CLI only images and PDFs are saved to the turn's folder; a spreadsheet is not saved because it goes into the message as text, and with nothing to save no folder is made. <sub>`only_images_and_pdfs_are_saved_for_the_copilot_cli`</sub>
 
 ### copilot_events
 
@@ -1677,7 +1678,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### attachments
 
-- Images (PNG/JPEG/GIF/WebP) and PDFs can be attached; anything else, more than five files or a file over 20MB is refused as a whole. <sub>`only_images_and_pdfs_within_the_limits_are_accepted`</sub>
+- An Excel workbook becomes text: every sheet in order under its own heading, one row per line with tab-separated columns, empty rows left out, whole numbers without ".0", and date cells written as dates. <sub>`an_excel_workbook_becomes_tab_separated_text_per_sheet`</sub>
+- A workbook too long to send whole is cut at a row boundary and says how many rows were left out. <sub>`a_long_workbook_is_cut_and_says_how_many_rows_were_left_out`</sub>
+- A file that is not a readable workbook is refused with its file name, and nothing is sent. <sub>`a_broken_workbook_is_refused_with_its_name`</sub>
+- A CSV file is sent as its text with a leading byte order mark removed; a CSV that is not UTF-8 (for example Shift_JIS) is refused with a hint to save it as UTF-8. <sub>`a_csv_is_sent_as_text_and_must_be_utf8`</sub>
+- Every provider gets a spreadsheet as plain text placed before the message: a text block for Anthropic and the Claude Code CLI, a text part for Gemini and OpenAI-compatible models (so models that cannot read PDFs can still read Excel), and inline in the message for the Copilot CLI. <sub>`every_provider_gets_a_spreadsheet_as_text_before_the_message`</sub>
+- Images (PNG/JPEG/GIF/WebP), PDFs, Excel workbooks (.xlsx) and CSV files can be attached; anything else, more than five files or a file over 20MB is refused as a whole. <sub>`only_images_pdfs_and_spreadsheets_within_the_limits_are_accepted`</sub>
 - The kind of a picked file comes from its extension, case-insensitively; unknown extensions are not attachable. <sub>`the_kind_of_a_picked_file_comes_from_its_extension`</sub>
 - For the Anthropic API an image becomes an image block and a PDF a document block, both before the text. <sub>`anthropic_gets_image_and_document_blocks_before_the_text`</sub>
 - Gemini receives attachments as inline data parts followed by the text part. <sub>`gemini_gets_inline_data_parts`</sub>
@@ -2730,7 +2736,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### chatAttachments
 
-- accepts images and PDFs only, judging the kind by extension too <sub>`pending chat attachments`</sub>
+- accepts images, PDFs, Excel workbooks and CSV files only, judging the kind by extension too <sub>`pending chat attachments`</sub>
+- trusts a known extension over the type the browser reports, since Windows labels CSV files as Excel <sub>`pending chat attachments`</sub>
+- lets spreadsheets go to OpenAI-compatible models, which cannot read PDFs, because they are sent as text <sub>`pending chat attachments`</sub>
 - marks files over 20 MB as too large and shows sizes in MB or KB <sub>`pending chat attachments`</sub>
 - keeps pasted or browser files as base64 and turns them into outgoing attachments <sub>`pending chat attachments`</sub>
 - names pasted images in order since the clipboard has no file name <sub>`pending chat attachments`</sub>

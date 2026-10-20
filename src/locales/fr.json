@@ -1236,16 +1236,16 @@
       "pink": "rose"
     },
     "attach": {
-      "unsupported": "Only images (PNG/JPEG/GIF/WebP) and PDFs can be attached",
+      "unsupported": "Only images (PNG/JPEG/GIF/WebP), PDFs, Excel workbooks (.xlsx) and CSV files can be attached",
       "tooLarge": "Too large ({size} > {max} MB)",
       "tooMany": "Up to {max} attachments per message",
       "cannotRead": "{reason}",
       "pdfUnsupported": "The selected model (OpenAI-compatible) cannot read PDFs. Send images only, or switch models",
       "dropTitle": "Drop here to attach",
-      "dropHint": "Images (PNG/JPEG/GIF/WebP) and PDFs · up to {max} MB each · {count} files max",
+      "dropHint": "Images (PNG/JPEG/GIF/WebP), PDFs, Excel (.xlsx) and CSV · up to {max} MB each · {count} files max",
       "remove": "Remove attachment",
       "pastedName": "Pasted image",
-      "filterName": "Images and PDFs"
+      "filterName": "Images, PDFs, Excel and CSV"
     }
   },
   "leftPanel": {

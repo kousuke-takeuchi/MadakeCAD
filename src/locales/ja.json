@@ -1236,16 +1236,16 @@
       "pink": "桃"
     },
     "attach": {
-      "unsupported": "画像 (PNG/JPEG/GIF/WebP) かPDFだけ添付できます",
+      "unsupported": "画像 (PNG/JPEG/GIF/WebP)・PDF・Excel (.xlsx)・CSVだけ添付できます",
       "tooLarge": "大きすぎます ({size} > {max} MB)",
       "tooMany": "添付は1回{max}件までです",
       "cannotRead": "{reason}",
       "pdfUnsupported": "選んだモデル (OpenAI互換) はPDFを読めません。画像だけ送るか、モデルを替えてください",
       "dropTitle": "ここにドロップして添付",
-      "dropHint": "画像 (PNG/JPEG/GIF/WebP)・PDF ・ 1件{max}MBまで ・ 最大{count}件",
+      "dropHint": "画像 (PNG/JPEG/GIF/WebP)・PDF・Excel (.xlsx)・CSV ・ 1件{max}MBまで ・ 最大{count}件",
       "remove": "添付を外す",
       "pastedName": "貼り付け画像",
-      "filterName": "画像・PDF"
+      "filterName": "画像・PDF・Excel・CSV"
     }
   },
   "leftPanel": {

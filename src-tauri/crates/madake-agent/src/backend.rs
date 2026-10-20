@@ -250,7 +250,7 @@ impl ClaudeCodeCliBackend {
         let args = self.build_args_for(session, config.path(), append_system_prompt, with_attachments);
         // 添付があれば内容ブロックつきのユーザーメッセージ1行 (stream-json)、無ければ本文そのまま
         let input = if with_attachments {
-            crate::attachments::claude_cli_input_line(prompt, attachments)
+            crate::attachments::claude_cli_input_line(prompt, attachments)?
         } else {
             prompt.to_string()
         };

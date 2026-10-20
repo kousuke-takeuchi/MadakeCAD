@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2757仕様項目**。
+全6領域・**2765仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1430,6 +1430,7 @@
 - 検出はPATHと、npmの一般的なインストール先からcopilotを探す。 <sub>`default_candidates_include_the_known_install_paths`</sub>
 - 接続テストは、CLIが応答すれば成功を、サインインしていなければサインイン案内を返す。 <sub>`the_connection_test_distinguishes_success_from_being_signed_out`</sub>
 - Copilotへは添付を読める場所 (--add-dir) のフォルダへ保存し、本文の後ろにパスを並べて渡す。フォルダはターンの後に消す。 <sub>`copilot_reads_attachments_from_a_temporary_allowed_folder`</sub>
+- Copilot CLI向けにターンのフォルダへ保存するのは画像とPDFだけ。表計算は本文にテキストで入るので保存せず、保存するものが無ければフォルダも作らない。 <sub>`only_images_and_pdfs_are_saved_for_the_copilot_cli`</sub>
 
 ### copilot_events
 
@@ -1677,7 +1678,12 @@
 
 ### attachments
 
-- 画像 (PNG/JPEG/GIF/WebP) とPDFは添付でき、それ以外の種類・6件以上・20MBを超えるファイルは全体を断る。 <sub>`only_images_and_pdfs_within_the_limits_are_accepted`</sub>
+- Excelのブックはテキストになる: シートごとに見出しを付けて順に並べ、1行1行・列はタブ区切り。空の行は省き、整数は「.0」を付けず、日付のセルは日付で書く。 <sub>`an_excel_workbook_becomes_tab_separated_text_per_sheet`</sub>
+- 長すぎて全部は送れないブックは行の切れ目で切り、省いた行数を書き添える。 <sub>`a_long_workbook_is_cut_and_says_how_many_rows_were_left_out`</sub>
+- ブックとして読めないファイルはファイル名を添えて断り、何も送らない。 <sub>`a_broken_workbook_is_refused_with_its_name`</sub>
+- CSVは先頭のBOMを除いた本文をそのまま送る。UTF-8でないCSV (Shift_JISなど) は「UTF-8で保存し直す」案内を付けて断る。 <sub>`a_csv_is_sent_as_text_and_must_be_utf8`</sub>
+- 表計算はどのプロバイダにも本文より前のテキストとして渡す: Anthropic・Claude Code CLIはテキストブロック、Gemini・OpenAI互換はテキスト部品 (PDFを読めないモデルでもExcelは読める)、Copilot CLIは本文に直接入れる。 <sub>`every_provider_gets_a_spreadsheet_as_text_before_the_message`</sub>
+- 画像 (PNG/JPEG/GIF/WebP)・PDF・Excel (.xlsx)・CSVは添付でき、それ以外の種類・6件以上・20MBを超えるファイルは全体を断る。 <sub>`only_images_pdfs_and_spreadsheets_within_the_limits_are_accepted`</sub>
 - 選んだファイルの種類は拡張子 (大文字小文字は問わない) で決まり、知らない拡張子は添付できない。 <sub>`the_kind_of_a_picked_file_comes_from_its_extension`</sub>
 - Anthropic APIへは画像を画像ブロック、PDFを文書ブロックにして、本文より前に置く。 <sub>`anthropic_gets_image_and_document_blocks_before_the_text`</sub>
 - Geminiへは添付をinline_dataの部品にして、本文の部品の前に置く。 <sub>`gemini_gets_inline_data_parts`</sub>
@@ -2730,7 +2736,9 @@
 
 ### chatAttachments
 
-- 画像 (PNG/JPEG/GIF/WebP) とPDFだけを添付でき、種類は拡張子でも判断する (大文字小文字は問わない) <sub>`pending chat attachments`</sub>
+- 画像 (PNG/JPEG/GIF/WebP)・PDF・Excel (.xlsx)・CSVだけを添付でき、種類は拡張子でも判断する (大文字小文字は問わない) <sub>`pending chat attachments`</sub>
+- ブラウザが別の種類を名乗っても、知っている拡張子なら拡張子で決める (WindowsはCSVをExcelの種類と名乗る) <sub>`pending chat attachments`</sub>
+- 表計算はPDFを読めないOpenAI互換のモデルにも送れる (テキストにして渡すため) <sub>`pending chat attachments`</sub>
 - 20MBを超えるファイルは大きさつきで「大きすぎます」になり、大きさはMB/KBで表示する <sub>`pending chat attachments`</sub>
 - 貼り付け・ブラウザのファイルは中身をbase64で持ち、送信する添付と発言に出す情報になる <sub>`pending chat attachments`</sub>
 - ⌘Vの画像には「貼り付け画像 N.png」の名前を順に付ける (クリップボードに名前が無いため) <sub>`pending chat attachments`</sub>
