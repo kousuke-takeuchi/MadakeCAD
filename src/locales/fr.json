@@ -1145,7 +1145,18 @@
       "working": "L'agent travaille...",
       "applied": "✓ Appliqué au schéma (rév. {rev})",
       "undone": "Annulé",
-      "undo": "Annuler"
+      "undo": "Annuler",
+      "thought": "Thought for {s} s",
+      "thoughtShort": "Thought",
+      "thinking": "Thinking…",
+      "usedTools": "Used {n} tool | Used {n} tools",
+      "usingTools": "Using tools ({n})",
+      "input": "Input",
+      "result": "Result",
+      "noResult": "No result",
+      "omitted": "… {kb} KB more not shown",
+      "copy": "Copy",
+      "copied": "Copied"
     },
     "composer": {
       "addContext": "Ajouter du contexte",

@@ -1,11 +1,15 @@
 <script setup lang="ts">
-// 会話1件の描画。ユーザー発話は右寄せ吹き出し、アシスタントは地の文+ツールチップ+適用済み行。
+// 会話1件の描画。ユーザー発話は右寄せ吹き出し、アシスタントは起きた順の行
+// (本文のMarkdown・思考・ツールのまとまり。.pen「AIチャット 作業過程」) +適用済み行。
 import { CircleX, LoaderCircle } from "lucide-vue-next";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { displayItems, isOpen } from "../../chat/blocks";
 import { appliedCommandCount, type ChatMessage } from "../../stores/chat";
-import ToolChip from "./ToolChip.vue";
 import AttachmentChip from "./AttachmentChip.vue";
+import ChatMarkdown from "./ChatMarkdown.vue";
+import ThinkingRow from "./ThinkingRow.vue";
+import ToolGroup from "./ToolGroup.vue";
 
 const { t } = useI18n();
 
@@ -19,10 +23,20 @@ const emit = defineEmits<{ undo: [] }>();
 /** 「✓ 図面に適用済み (rev N)」を出すか。 */
 const applied = computed(() => appliedCommandCount(props.message) > 0 && !props.message.undone);
 
-/** 実行中ツールがある間はそのチップが進行を示すので、進行行は出さない。 */
-const showProgress = computed(
-  () => props.message.streaming && !props.message.tool_calls.some((c) => c.status === "running"),
-);
+const items = computed(() => displayItems(props.message));
+/** 利用者が開閉した行 (パネルを開いている間だけ覚える)。 */
+const overrides = ref<Record<string, boolean>>({});
+const opened = (key: string) => isOpen(key, items.value, props.message.streaming, overrides.value);
+function toggle(key: string) {
+  overrides.value = { ...overrides.value, [key]: !opened(key) };
+}
+
+/** 最後の行が思考・ツールなら、その行が進行を示すので進行行は出さない。 */
+const showProgress = computed(() => {
+  if (!props.message.streaming) return false;
+  const last = items.value[items.value.length - 1];
+  return !last || last.kind === "text";
+});
 </script>
 
 <template>
@@ -32,9 +46,25 @@ const showProgress = computed(
   </div>
 
   <div v-else class="assistant">
-    <p v-if="message.text" class="text">{{ message.text }}</p>
-
-    <ToolChip v-for="call in message.tool_calls" :key="call.id" :call="call" />
+    <template v-for="(item, index) in items" :key="item.key">
+      <ChatMarkdown v-if="item.kind === 'text'" :text="item.text" />
+      <ThinkingRow
+        v-else-if="item.kind === 'thinking'"
+        :text="item.text"
+        :duration-ms="item.duration_ms"
+        :open="opened(item.key)"
+        :live="message.streaming && index === items.length - 1"
+        @toggle="toggle(item.key)"
+      />
+      <ToolGroup
+        v-else
+        :calls="item.calls"
+        :failed="item.failed"
+        :running="item.running"
+        :open="opened(item.key)"
+        @toggle="toggle(item.key)"
+      />
+    </template>
 
     <div v-if="showProgress" class="progress">
       <LoaderCircle :size="12" class="spinner" />
@@ -84,14 +114,6 @@ const showProgress = computed(
   align-items: flex-start;
   gap: 8px;
   width: 100%;
-}
-.text {
-  margin: 0;
-  font-size: 12px;
-  line-height: 19px;
-  color: var(--ui-text);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 .progress {
   display: flex;
