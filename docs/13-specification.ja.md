@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2765仕様項目**。
+全6領域・**2774仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1356,7 +1356,8 @@
 - APIから届いた本文はそのまま文字の差分として流れ、ターンの終わりに組み立てた返答とトークン使用量が付く。 <sub>`streamed_text_becomes_deltas_and_a_completed_turn`</sub>
 - APIへ送るリクエストには設定したモデル・ストリーミング指定・システムプロンプト・ユーザーの発言が載る。 <sub>`the_request_carries_the_model_system_prompt_and_user_message`</sub>
 - ブリッジしたMCPツールは毎回のリクエストでAPIへ渡る(エージェントが図面を編集できる)。 <sub>`the_bridged_mcp_tools_are_offered_to_the_api`</sub>
-- モデルが要求したツールはその場で実行され、結果を返して会話を続ける(1ターンで完結する)。 <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- APIが送ってくる思考は、返答の本文とは別の思考イベントとして順に届く (空の差分と署名は飛ばす)。 <sub>`streamed_thinking_becomes_thinking_events`</sub>
+- モデルが要求したツールはその場で実行され、結果を返して会話を続ける(1ターンで完結する)。完了イベントにはツールの結果が載る。 <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
 - 失敗したツールはターンを中断せず、エラーとしてモデルへ返す(モデルが直せる)。 <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
 - ツール実行の往復には上限があり、堂々巡りになったモデルが延々と動き続けない。 <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
 - APIキーが弾かれたときは、生のHTTPコードではなく「キーの問題」と分かる文言を表示する。 <sub>`a_rejected_api_key_is_explained_as_a_key_problem`</sub>
@@ -1372,7 +1373,7 @@
 - 同梱ドキュメントのフォルダは読み取り可能なディレクトリとしてエージェントへ開かれ、マニュアルを引用できる。 <sub>`args_open_the_bundled_documentation_for_reading`</sub>
 - セッション再開ID・モデル指定・追加システムプロンプトは、指定時にCLIへ引き渡される。 <sub>`args_include_resume_model_and_system_prompt_when_given`</sub>
 - エージェントのMCP設定はMadakeCAD自身のローカルMCPサーバーを指し、他クライアントと同じツールを使う。 <sub>`mcp_config_points_at_local_mcp_server`</sub>
-- ターンはCLIのstream-json出力から解釈したイベント(テキスト差分・ツール実行・完了)を流す。 <sub>`send_streams_events_from_fake_cli`</sub>
+- ターンはCLIのstream-json出力から解釈したイベント(思考・テキスト差分・ツール実行・完了)を流す。 <sub>`send_streams_events_from_fake_cli`</sub>
 - CLIが非ゼロ終了した場合はハングせずエラーイベントとして報告される。 <sub>`send_reports_nonzero_exit_as_error_event`</sub>
 - CLIが理由(利用上限など)をstdoutの素のテキストで出して異常終了したとき、その理由がチャットのエラーに載る。 <sub>`a_plain_stdout_reason_reaches_the_error_message`</sub>
 - プロンプトはargvではなくstdin経由で渡される(OSの引数長・クォート問題を避ける)。 <sub>`prompt_is_passed_through_stdin_not_argv`</sub>
@@ -1408,6 +1409,10 @@
 - 旧フォーマット(ターンID無し)のチャット履歴は、ターン境界からIDを採番して読み込まれる。 <sub>`load_chat_migrates_legacy_files_by_assigning_turn_ids`</sub>
 - チャット履歴の保存は現在のフォーマット版を記録する(移行済みファイルを再移行しない)。 <sub>`save_chat_stamps_the_current_format_version`</sub>
 - チャットファイルはプロジェクトの隣に<名前>.chat.jsonとして置かれる。 <sub>`chat_path_sits_next_to_project_file`</sub>
+- 応答は起きた順のブロックとして記録される。同じ種類が続く間は1つのブロックにまとまり、種類が変わると新しいブロックになる。本文とツールの一覧も今までどおり埋まる。 <sub>`replies_are_recorded_as_blocks_in_the_order_they_happened`</sub>
+- 8 KBより長いツールの結果は先頭だけを残し、上限をまたぐ文字の手前で切る。省いた量を画面が示せるよう、全体の大きさも残す。 <sub>`a_long_tool_result_is_cut_on_a_character_boundary`</sub>
+- idの無いツール完了 (Copilotの一部の行) でも、今までどおり同じツールの未完了の呼び出しに結果が付く。 <sub>`a_finish_without_an_id_puts_the_result_on_the_open_call_of_that_tool`</sub>
+- ブロックとツールの結果が無かった頃に保存した会話ファイルも読み込め、メッセージのブロックは空になる。保存し直しても空のブロックや結果は書き出さない。 <sub>`an_old_chat_file_without_blocks_still_loads`</sub>
 
 ### copilot_cli
 
@@ -1438,7 +1443,7 @@
 - モデルの思考(reasoning)は回答と同じ形で流れてくるが、チャットには表示しない。 <sub>`reasoning_deltas_are_not_shown_in_the_chat`</sub>
 - 完成したアシスタントメッセージには、モデルが頼んだツール呼び出しと引数が入っている。 <sub>`a_completed_message_carries_the_requested_tool_calls`</sub>
 - ツールの実行開始はツール名と引数を伝えるので、チャットには今なにをしているかが出る。 <sub>`a_tool_execution_start_reports_the_tool_and_its_arguments`</sub>
-- ツールの実行完了は対応する呼び出しを閉じ、成功したかどうかを伝える。 <sub>`a_tool_execution_complete_closes_the_call_with_its_outcome`</sub>
+- ツールの実行完了は対応する呼び出しを閉じ、成功したかどうかと、CLIが出した結果の文字を伝える。 <sub>`a_tool_execution_complete_closes_the_call_with_its_outcome`</sub>
 - 最終行はターンを終わらせ、そのターンが使ったCopilotのプレミアムリクエスト数を伝える。 <sub>`the_final_line_completes_the_turn_with_the_premium_requests_used`</sub>
 - 最終行の終了コードが0でなければ、通常の回答ではなくエラーとしてチャットに出る。 <sub>`a_failed_final_line_becomes_an_error`</sub>
 - CLIが実際に使ったセッションIDが伝わるので、次のターンは同じ会話を再開できる。 <sub>`the_session_line_reports_the_id_to_resume`</sub>
@@ -1465,7 +1470,8 @@
 - リクエストは設定したモデルのストリーミング用エンドポイントへ行き、システム指示とユーザーの発言を載せる。 <sub>`the_request_goes_to_the_streaming_endpoint_with_the_system_instruction_and_message`</sub>
 - ブリッジしたMCPツールはGeminiのfunctionDeclarations形式で渡る(エージェントが図面を編集できる)。 <sub>`the_bridged_mcp_tools_are_offered_as_function_declarations`</sub>
 - Geminiが受け付けないスキーマの項目はツール定義から落とし、型が無くなったプロパティにも型を補う。 <sub>`schema_keywords_gemini_rejects_are_dropped_from_tool_definitions`</sub>
-- モデルが要求したツールはその場で実行され、結果をfunctionResponseとして返して会話を続ける(1ターンで完結する)。 <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- Geminiには思考を求めないので、返答から思考イベントは出ない。 <sub>`gemini_replies_produce_no_thinking_events`</sub>
+- モデルが要求したツールはその場で実行され、結果をfunctionResponseとして返して会話を続ける(1ターンで完結する)。完了イベントにはツールの結果が載る。 <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
 - 呼び出しIDを付けてこないモデルにも、関数名で対応づけて結果を返す。 <sub>`a_call_without_an_id_is_answered_by_function_name`</sub>
 - 失敗したツールはターンを中断せず、エラーの欄に理由を入れてモデルへ返す(モデルが直せる)。 <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
 - 関数呼び出しの往復には上限があり、堂々巡りになったモデルが延々と動き続けない。 <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
@@ -1579,7 +1585,9 @@
 - OpenAI互換サーバーから届いた本文はそのまま文字の差分として流れ、ターンの終わりに組み立てた返答とトークン使用量が付く。 <sub>`streamed_text_becomes_deltas_and_a_completed_turn`</sub>
 - リクエストは設定したベースURL配下の /chat/completions へ行き、モデル・ストリーミング指定・システムプロンプト・ユーザーの発言を載せる。 <sub>`the_request_goes_to_chat_completions_with_the_model_system_prompt_and_message`</sub>
 - ブリッジしたMCPツールはOpenAIのfunction形式で渡る(エージェントが図面を編集できる)。 <sub>`the_bridged_mcp_tools_are_offered_as_openai_functions`</sub>
-- モデルが要求したツールはその場で実行され、結果をツールメッセージとして返して会話を続ける(1ターンで完結する)。 <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- モデルがreasoning_contentかreasoningで送ってくる思考 (Ollama・DeepSeekなど) は、返答の本文とは別の思考イベントとして届く。空の差分は飛ばす。 <sub>`streamed_reasoning_becomes_thinking_events`</sub>
+- 同じ思考をreasoning_contentとreasoningの両方に載せる差分 (ミラーするプロキシがある) は、思考イベントを2回ではなく1回だけ出す。 <sub>`mirrored_reasoning_fields_are_not_doubled`</sub>
+- モデルが要求したツールはその場で実行され、結果をツールメッセージとして返して会話を続ける(1ターンで完結する)。完了イベントにはツールの結果が載る。 <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
 - 失敗したツールはターンを中断せず、エラーと分かる印をつけてモデルへ返す(モデルが直せる)。 <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
 - ツール実行の往復には上限があり、堂々巡りになったモデルが延々と動き続けない。 <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
 - 保存したキーはBearerトークンとして送られ、ユーザーに見える文言には一切現れない。 <sub>`a_saved_key_is_sent_as_a_bearer_token`</sub>
@@ -1598,7 +1606,8 @@
 ### stream-jsonパーサ
 
 - CLIのsystem/init行はセッションIDを載せたセッション開始イベントになる。 <sub>`init_line_yields_session_started`</sub>
-- テキスト差分のみがテキストイベントになり、thinking差分は無視される。 <sub>`only_text_deltas_become_text_events`</sub>
+- テキスト差分はテキストイベント、thinking差分は思考イベントになり、それぞれ順につながる。signature差分は無視される。 <sub>`text_and_thinking_deltas_become_their_own_events`</sub>
+- ツールの完了には、ツールが返した内容が載る。CLIが文字列で送っても、テキストブロックの配列で送っても同じ。 <sub>`a_tool_result_carries_what_the_tool_returned`</sub>
 - assistantのtool_useブロック(完全な入力付き)がツール実行開始イベントになる。 <sub>`assistant_tool_use_block_yields_tool_use_started`</sub>
 - userのtool_result行が対応するツール実行を完了させ、エラーフラグを伝える。 <sub>`tool_result_yields_tool_use_finished`</sub>
 - result行はトークン使用量付きでターンを完了させる。 <sub>`result_line_yields_turn_completed_with_usage`</sub>

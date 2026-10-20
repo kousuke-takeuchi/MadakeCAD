@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2765 specification clauses** across 6 areas.
+**2774 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1356,7 +1356,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Streamed assistant text arrives as text deltas and the turn ends with the assembled reply and its token usage. <sub>`streamed_text_becomes_deltas_and_a_completed_turn`</sub>
 - The request carries the configured model, a streaming flag, the system prompt and the user's message. <sub>`the_request_carries_the_model_system_prompt_and_user_message`</sub>
 - The bridged MCP tools are offered to the API on every request, so the agent can edit the drawing. <sub>`the_bridged_mcp_tools_are_offered_to_the_api`</sub>
-- A tool the model asks for is executed locally and its result is sent back so the model can continue. <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- Thinking the API streams arrives as thinking events in order (empty pieces and signatures are skipped), separate from the reply text. <sub>`streamed_thinking_becomes_thinking_events`</sub>
+- A tool the model asks for is executed locally and its result is sent back so the model can continue. The finish event carries the tool's result. <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
 - A tool that fails is reported back to the model as an error result instead of aborting the turn. <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
 - The tool loop stops after a bounded number of rounds so a looping model cannot run forever. <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
 - A rejected API key produces a message that says the key is the problem, not a raw HTTP code. <sub>`a_rejected_api_key_is_explained_as_a_key_problem`</sub>
@@ -1372,7 +1373,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The bundled documentation folder is opened to the agent as a readable directory, so it can quote the manual. <sub>`args_open_the_bundled_documentation_for_reading`</sub>
 - Resume session id, model choice and an appended system prompt are passed through when provided. <sub>`args_include_resume_model_and_system_prompt_when_given`</sub>
 - The agent's MCP config points at MadakeCAD's own local MCP server, so it uses the same tools as any client. <sub>`mcp_config_points_at_local_mcp_server`</sub>
-- A turn streams events (text deltas, tool use, completion) parsed from the CLI's stream-json output. <sub>`send_streams_events_from_fake_cli`</sub>
+- A turn streams events (thinking and text deltas, tool use, completion) parsed from the CLI's stream-json output. <sub>`send_streams_events_from_fake_cli`</sub>
 - A CLI exiting non-zero is reported as an error event instead of hanging. <sub>`send_reports_nonzero_exit_as_error_event`</sub>
 - When the CLI dies with the reason printed as plain text on stdout (e.g. a usage limit), that reason reaches the chat error. <sub>`a_plain_stdout_reason_reaches_the_error_message`</sub>
 - The prompt is passed via stdin, never via argv (avoids OS argument-length and quoting issues). <sub>`prompt_is_passed_through_stdin_not_argv`</sub>
@@ -1408,6 +1409,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A legacy chat file (older format version, no turn ids) loads with turn ids assigned per turn boundary. <sub>`load_chat_migrates_legacy_files_by_assigning_turn_ids`</sub>
 - Saving chat history stamps the current format version so migrated files are not re-migrated. <sub>`save_chat_stamps_the_current_format_version`</sub>
 - The chat file lives next to the project file as <name>.chat.json. <sub>`chat_path_sits_next_to_project_file`</sub>
+- A reply is recorded as blocks in the order it happened: consecutive pieces of the same kind join one block, and a change of kind starts a new block, while the plain text and tool list are still filled as before. <sub>`replies_are_recorded_as_blocks_in_the_order_they_happened`</sub>
+- A tool result longer than 8 KB keeps only its head, cut before a character that would cross the limit, and the full size is kept so the screen can say how much was left out. <sub>`a_long_tool_result_is_cut_on_a_character_boundary`</sub>
+- A tool finish without an id (some Copilot lines) still puts its result on the open call of the same tool, as before. <sub>`a_finish_without_an_id_puts_the_result_on_the_open_call_of_that_tool`</sub>
+- A chat file saved before blocks and tool results existed still loads, its messages have no blocks, and saving it again does not write empty blocks or results. <sub>`an_old_chat_file_without_blocks_still_loads`</sub>
 
 ### copilot_cli
 
@@ -1438,7 +1443,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The model's private reasoning is not shown in the chat, even though it streams like the answer. <sub>`reasoning_deltas_are_not_shown_in_the_chat`</sub>
 - A completed assistant message carries the tool calls the model asked for, with their arguments. <sub>`a_completed_message_carries_the_requested_tool_calls`</sub>
 - Starting a tool reports its name and arguments, so the chat can show what the agent is doing. <sub>`a_tool_execution_start_reports_the_tool_and_its_arguments`</sub>
-- Finishing a tool closes the matching call and reports whether it succeeded. <sub>`a_tool_execution_complete_closes_the_call_with_its_outcome`</sub>
+- Finishing a tool closes the matching call, reports whether it succeeded and carries the result text the CLI printed. <sub>`a_tool_execution_complete_closes_the_call_with_its_outcome`</sub>
 - The final line ends the turn and reports how many Copilot premium requests it used. <sub>`the_final_line_completes_the_turn_with_the_premium_requests_used`</sub>
 - A non-zero exit code in the final line is reported to the chat as an error, not as a normal answer. <sub>`a_failed_final_line_becomes_an_error`</sub>
 - The session id the CLI actually used is reported, so the next turn resumes the same conversation. <sub>`the_session_line_reports_the_id_to_resume`</sub>
@@ -1465,7 +1470,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The request goes to the streaming endpoint of the configured model and carries the system instruction and the user's message. <sub>`the_request_goes_to_the_streaming_endpoint_with_the_system_instruction_and_message`</sub>
 - The bridged MCP tools are offered as Gemini function declarations so the agent can edit the drawing. <sub>`the_bridged_mcp_tools_are_offered_as_function_declarations`</sub>
 - Schema keywords Gemini does not accept are dropped from the tool definitions, and a property left without a type still gets one. <sub>`schema_keywords_gemini_rejects_are_dropped_from_tool_definitions`</sub>
-- A tool the model asks for is executed locally and its result is sent back as a functionResponse so the model can continue. <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- Gemini is not asked for its thoughts, so a reply never produces thinking events. <sub>`gemini_replies_produce_no_thinking_events`</sub>
+- A tool the model asks for is executed locally and its result is sent back as a functionResponse so the model can continue. The finish event carries the tool's result. <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
 - A model that omits the call id still gets its result back, matched by the function name. <sub>`a_call_without_an_id_is_answered_by_function_name`</sub>
 - A tool that fails is reported back to the model as an error field instead of aborting the turn. <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
 - The tool loop stops after a bounded number of rounds so a looping model cannot run forever. <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
@@ -1579,7 +1585,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Streamed assistant text arrives as text deltas and the turn ends with the assembled reply and its token usage. <sub>`streamed_text_becomes_deltas_and_a_completed_turn`</sub>
 - The request goes to /chat/completions under the configured base URL and carries the model, the streaming flag, the system prompt and the user's message. <sub>`the_request_goes_to_chat_completions_with_the_model_system_prompt_and_message`</sub>
 - The bridged MCP tools are offered in the OpenAI function format so the agent can edit the drawing. <sub>`the_bridged_mcp_tools_are_offered_as_openai_functions`</sub>
-- A tool the model asks for is executed locally and its result is sent back as a tool message so the model can continue. <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
+- Reasoning that a model streams as reasoning_content or reasoning (Ollama, DeepSeek and others) arrives as thinking events, separate from the reply text; empty pieces are skipped. <sub>`streamed_reasoning_becomes_thinking_events`</sub>
+- A delta that carries the same reasoning in both reasoning_content and reasoning (some proxies mirror them) yields one thinking event, not two. <sub>`mirrored_reasoning_fields_are_not_doubled`</sub>
+- A tool the model asks for is executed locally and its result is sent back as a tool message so the model can continue. The finish event carries the tool's result. <sub>`a_requested_tool_is_executed_and_its_result_is_sent_back`</sub>
 - A tool that fails is reported back to the model as a clearly marked error instead of aborting the turn. <sub>`a_failing_tool_is_reported_to_the_model_as_an_error_result`</sub>
 - The tool loop stops after a bounded number of rounds so a looping model cannot run forever. <sub>`the_tool_loop_stops_after_a_bounded_number_of_rounds`</sub>
 - A saved key is sent as a bearer token, and never appears in any message shown to the user. <sub>`a_saved_key_is_sent_as_a_bearer_token`</sub>
@@ -1598,7 +1606,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### stream-json parser
 
 - The CLI's system/init line yields a session-started event carrying the session id. <sub>`init_line_yields_session_started`</sub>
-- Only text deltas become text events; thinking deltas are ignored. <sub>`only_text_deltas_become_text_events`</sub>
+- Text deltas become text events and thinking deltas become thinking events, each joined in order; signature deltas are ignored. <sub>`text_and_thinking_deltas_become_their_own_events`</sub>
+- A tool result carries what the tool returned, whether the CLI sends it as a string or as an array of text blocks. <sub>`a_tool_result_carries_what_the_tool_returned`</sub>
 - A completed assistant tool_use block (with full input) starts a tool-use event. <sub>`assistant_tool_use_block_yields_tool_use_started`</sub>
 - A user tool_result line finishes the matching tool use, carrying the error flag. <sub>`tool_result_yields_tool_use_finished`</sub>
 - The result line completes the turn with token usage attached. <sub>`result_line_yields_turn_completed_with_usage`</sub>
