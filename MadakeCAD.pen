@@ -81541,6 +81541,32 @@
                               "content": "2.4 MB"
                             }
                           }
+                        },
+                        {
+                          "id": "liPvK",
+                          "type": "ref",
+                          "ref": "sIHcy",
+                          "name": "Excelチップ",
+                          "descendants": {
+                            "d8nua": {
+                              "fill": "$ok-bg",
+                              "width": "fit_content",
+                              "padding": [
+                                0,
+                                3
+                              ]
+                            },
+                            "uQhTw": {
+                              "content": "XLSX",
+                              "fill": "$ok-fg"
+                            },
+                            "v6pre": {
+                              "content": "AOGU_COCO_BOM.xlsx"
+                            },
+                            "F2Kx0H": {
+                              "content": "48 KB"
+                            }
+                          }
                         }
                       ]
                     },
