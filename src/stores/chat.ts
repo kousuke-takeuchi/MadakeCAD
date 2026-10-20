@@ -33,8 +33,11 @@ export interface Usage {
 export type AgentEvent =
   | { type: "session_started"; session_id: string }
   | { type: "text_delta"; text: string }
+  /** 思考 (thinking / reasoning) の差分。送ってこないプロバイダもある */
+  | { type: "thinking_delta"; text: string }
   | { type: "tool_use_started"; id: string; tool: string; input: unknown }
-  | { type: "tool_use_finished"; id: string; tool: string; is_error: boolean }
+  /** `output`はツールが返した結果の全文 (会話に残るのはRust側が切り詰めた先頭) */
+  | { type: "tool_use_finished"; id: string; tool: string; is_error: boolean; output?: string | null }
   | { type: "turn_completed"; result: string; usage: Usage | null }
   | { type: "error"; message: string }
   /** ターンの編集が図面へ適用された時にマネージャが合成するイベント。 */
@@ -68,6 +71,10 @@ export interface WireToolCall {
   input: unknown;
   finished: boolean;
   is_error: boolean;
+  /** ツールの結果の先頭 (8 KBまで)。結果を返さないプロバイダ・旧履歴には無い */
+  output?: string | null;
+  /** 結果全体の大きさ (バイト)。`output`より大きければ切り詰めてある */
+  output_size?: number | null;
 }
 
 /** Rust側 `ChatMessage` のJSON表現。 */
@@ -88,7 +95,15 @@ export interface WireChatMessage {
   error?: string | null;
   /** ユーザー発言の添付 (名前・種類・大きさ。中身は持たない)。添付の無い発言には無い。 */
   attachments?: AttachmentMeta[];
+  /** 起きた順の応答 (本文・思考・ツール)。この形式より前の履歴には無い */
+  blocks?: Array<{ type: string; [key: string]: unknown }>;
 }
+
+/** 応答を起きた順に並べたときの1区切り (Rust `MessageBlock`)。 */
+export type ChatBlock =
+  | { type: "text"; text: string }
+  | { type: "thinking"; text: string; duration_ms: number | null }
+  | { type: "tool"; id: string };
 
 /** 添付の情報 (Rust `madake_agent::AttachmentMeta`)。 */
 export interface AttachmentMeta {
@@ -160,6 +175,10 @@ export interface ChatToolCall {
   status: ToolStatus;
   /** 表示用の日本語要約 */
   summary: string;
+  /** ツールの結果 (保存された先頭)。まだ無い・返さないプロバイダでは`null` */
+  output: string | null;
+  /** 結果全体の大きさ (バイト)。`output`より大きければ切り詰めてある */
+  output_size: number | null;
 }
 
 export interface ChatMessage {
@@ -185,6 +204,10 @@ export interface ChatMessage {
   undone: boolean;
   /** ユーザー発言の添付 (表示用。中身は持たない) */
   attachments: AttachmentMeta[];
+  /** 起きた順の応答。空なら旧表示 (本文のあとにツール) */
+  blocks: ChatBlock[];
+  /** いま伸ばしている思考ブロックの開始時刻 (時間を測るためだけ。表示しない) */
+  thinking_started_at: number | null;
 }
 
 export interface ChatConversation {
@@ -452,6 +475,8 @@ function newMessage(role: ChatRole, text: string, streaming: boolean): ChatMessa
     streaming,
     undone: false,
     attachments: [],
+    blocks: [],
+    thinking_started_at: null,
   };
 }
 
@@ -462,7 +487,19 @@ function normalizeToolCall(call: WireToolCall): ChatToolCall {
     input: call.input,
     status: !call.finished ? "running" : call.is_error ? "error" : "ok",
     summary: summarizeToolUse(call.tool, call.input),
+    output: call.output ?? null,
+    output_size: call.output_size ?? null,
   };
+}
+
+/** 保存されたブロックを表示用へ。知らない種類 (`unknown`や後の版で足された種類) は捨てる。 */
+function toChatBlock(block: { type: string; [key: string]: unknown }): ChatBlock[] {
+  if (block.type === "text" && typeof block.text === "string") return [{ type: "text", text: block.text }];
+  if (block.type === "thinking" && typeof block.text === "string") {
+    return [{ type: "thinking", text: block.text, duration_ms: typeof block.duration_ms === "number" ? block.duration_ms : null }];
+  }
+  if (block.type === "tool" && typeof block.id === "string") return [{ type: "tool", id: block.id }];
+  return [];
 }
 
 /** 送信する添付 (バックエンドへ渡す指定と、発言に表示する情報)。 */
@@ -486,6 +523,8 @@ function normalizeMessage(message: WireChatMessage): ChatMessage {
     streaming: false,
     undone: false,
     attachments: message.attachments ?? [],
+    blocks: (message.blocks ?? []).flatMap(toChatBlock),
+    thinking_started_at: null,
   };
 }
 
@@ -810,8 +849,15 @@ export const useChatStore = defineStore("chat", {
           conv.session_id = event.session_id;
           break;
 
-        case "text_delta":
-          this.openTurn(conv).text += event.text;
+        case "text_delta": {
+          const turn = this.openTurn(conv);
+          turn.text += event.text;
+          pushText(turn, event.text);
+          break;
+        }
+
+        case "thinking_delta":
+          pushThinking(this.openTurn(conv), event.text, Date.now());
           break;
 
         case "tool_use_started": {
@@ -823,7 +869,11 @@ export const useChatStore = defineStore("chat", {
             input: event.input,
             status: "running",
             summary: summarizeToolUse(event.tool, event.input),
+            output: null,
+            output_size: null,
           });
+          turn.thinking_started_at = null;
+          turn.blocks.push({ type: "tool", id: event.id });
           break;
         }
 
@@ -834,7 +884,14 @@ export const useChatStore = defineStore("chat", {
               (event.id && c.id === event.id) ||
               (!event.id && c.status === "running" && c.tool === event.tool),
           );
-          if (call) call.status = event.is_error ? "error" : "ok";
+          if (call) {
+            call.status = event.is_error ? "error" : "ok";
+            // 画面のミラーなので切り詰めない (正はRust側。会話の再取得で保存された先頭に置き換わる)
+            if (event.output != null) {
+              call.output = event.output;
+              call.output_size = new TextEncoder().encode(event.output).length;
+            }
+          }
           break;
         }
 
@@ -843,7 +900,11 @@ export const useChatStore = defineStore("chat", {
           const turn = streamingTurn(conv);
           if (!turn) break;
           // デルタが来ない構成でも本文を埋める
-          if (!turn.text) turn.text = event.result;
+          if (!turn.text) {
+            turn.text = event.result;
+            if (event.result) pushText(turn, event.result);
+          }
+          turn.thinking_started_at = null;
           turn.usage = event.usage;
           turn.streaming = false;
           break;
@@ -1170,6 +1231,28 @@ function streamingTurn(conv: ChatConversation): ChatMessage | undefined {
 }
 
 /** 直近のアシスタントメッセージ(ストリーミング中かどうかは問わない)。 */
+/** 本文の差分を最後の本文ブロックへ足す (最後が本文でなければ新しく作る)。Rust `ChatMessage::push_text`と同じ規則。 */
+function pushText(turn: ChatMessage, text: string) {
+  turn.thinking_started_at = null;
+  const last = turn.blocks[turn.blocks.length - 1];
+  if (last?.type === "text") last.text += text;
+  else turn.blocks.push({ type: "text", text });
+}
+
+/** 思考の差分を最後の思考ブロックへ足し、時間を測り直す (空は無視)。Rust `push_thinking`と同じ規則。 */
+function pushThinking(turn: ChatMessage, text: string, now: number) {
+  if (!text) return;
+  if (turn.thinking_started_at === null) turn.thinking_started_at = now;
+  const duration = now - turn.thinking_started_at;
+  const last = turn.blocks[turn.blocks.length - 1];
+  if (last?.type === "thinking") {
+    last.text += text;
+    last.duration_ms = duration;
+  } else {
+    turn.blocks.push({ type: "thinking", text, duration_ms: duration });
+  }
+}
+
 function lastAssistant(conv: ChatConversation): ChatMessage | undefined {
   for (let i = conv.messages.length - 1; i >= 0; i--) {
     if (conv.messages[i].role === "assistant") return conv.messages[i];

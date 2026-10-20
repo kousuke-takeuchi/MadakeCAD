@@ -1145,7 +1145,18 @@
       "working": "The agent is working...",
       "applied": "✓ Applied to the drawing (rev {rev})",
       "undone": "Undone",
-      "undo": "Undo"
+      "undo": "Undo",
+      "thought": "Thought for {s} s",
+      "thoughtShort": "Thought",
+      "thinking": "Thinking…",
+      "usedTools": "Used {n} tool | Used {n} tools",
+      "usingTools": "Using tools ({n})",
+      "input": "Input",
+      "result": "Result",
+      "noResult": "No result",
+      "omitted": "… {kb} KB more not shown",
+      "copy": "Copy",
+      "copied": "Copied"
     },
     "composer": {
       "addContext": "Add context",

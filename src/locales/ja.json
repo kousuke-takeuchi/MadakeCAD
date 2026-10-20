@@ -1145,7 +1145,18 @@
       "working": "エージェントが作業しています...",
       "applied": "✓ 図面に適用済み (rev {rev})",
       "undone": "元に戻しました",
-      "undo": "元に戻す"
+      "undo": "元に戻す",
+      "thought": "{s}秒考えました",
+      "thoughtShort": "考えました",
+      "thinking": "考えています…",
+      "usedTools": "ツールを{n}件使いました | ツールを{n}件使いました",
+      "usingTools": "ツールを使っています ({n}件)",
+      "input": "入力",
+      "result": "結果",
+      "noResult": "結果はありません",
+      "omitted": "…残り {kb} KB は省略",
+      "copy": "コピー",
+      "copied": "コピーしました"
     },
     "composer": {
       "addContext": "コンテキストに追加",

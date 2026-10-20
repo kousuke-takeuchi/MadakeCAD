@@ -144,6 +144,65 @@ describe("chat store: applyAgentEvent", () => {
     expect(calls[1].status).toBe("error");
   });
 
+  // ja: 応答は起きた順のブロックとして組み立てられ、同じ種類が続く間は1つにまとまり、思考には最初から最後の差分までの時間が付く
+  it("builds the reply as blocks in the order they happened, joining runs of one kind and timing the thinking", () => {
+    const store = useChatStore();
+    seed(store);
+    const now = vi.spyOn(Date, "now");
+    now.mockReturnValue(1_000);
+    feed(store, [{ type: "thinking_delta", text: "24V系を" }]);
+    now.mockReturnValue(1_400);
+    feed(store, [
+      { type: "thinking_delta", text: "確かめる" },
+      { type: "text_delta", text: "確認します。" },
+      { type: "tool_use_started", id: "t1", tool: "mcp__madakecad__get_netlist", input: {} },
+      { type: "tool_use_finished", id: "t1", tool: "mcp__madakecad__get_netlist", is_error: false, output: '{"nets":3}' },
+      { type: "text_delta", text: "完了" },
+    ]);
+    now.mockRestore();
+    const m = store.messages[store.messages.length - 1];
+    expect(m.blocks).toEqual([
+      { type: "thinking", text: "24V系を確かめる", duration_ms: 400 },
+      { type: "text", text: "確認します。" },
+      { type: "tool", id: "t1" },
+      { type: "text", text: "完了" },
+    ]);
+    expect(m.text).toBe("確認します。完了");
+    expect(m.tool_calls[0].output).toBe('{"nets":3}');
+  });
+
+  // ja: 会話一覧から読み込んだメッセージはブロックとツールの結果を持ち、知らない種類のブロックは捨てる
+  it("messages loaded from the conversation list keep their blocks and tool results, dropping block kinds it does not know", () => {
+    const conv = normalizeConversation({
+      id: CONV,
+      session_id: null,
+      model: null,
+      updated_at: 0,
+      messages: [
+        {
+          turn_id: TURN,
+          role: "assistant",
+          text: "済み",
+          tool_calls: [
+            { id: "t1", tool: "mcp__madakecad__get_project", input: {}, finished: true, is_error: false, output: "{}", output_size: 9000 },
+          ],
+          blocks: [
+            { type: "thinking", text: "考え", duration_ms: 1500 },
+            { type: "unknown" },
+            { type: "tool", id: "t1" },
+            { type: "text", text: "済み" },
+          ],
+          applied_revisions: { start: 0, end: 0 },
+          applied_undo_depth: { start: 0, end: 0 },
+          error: null,
+        },
+      ],
+    } as never);
+    const m = conv.messages[0];
+    expect(m.blocks.map((b) => b.type)).toEqual(["thinking", "tool", "text"]);
+    expect(m.tool_calls[0]).toMatchObject({ output: "{}", output_size: 9000 });
+  });
+
   // ja: 同じtool_use_idの重複開始は無視される
   it("duplicate tool starts with the same id are ignored", () => {
     const store = useChatStore();

@@ -1145,7 +1145,18 @@
       "working": "El agente está trabajando...",
       "applied": "✓ Aplicado al plano (rev {rev})",
       "undone": "Deshecho",
-      "undo": "Deshacer"
+      "undo": "Deshacer",
+      "thought": "Thought for {s} s",
+      "thoughtShort": "Thought",
+      "thinking": "Thinking…",
+      "usedTools": "Used {n} tool | Used {n} tools",
+      "usingTools": "Using tools ({n})",
+      "input": "Input",
+      "result": "Result",
+      "noResult": "No result",
+      "omitted": "… {kb} KB more not shown",
+      "copy": "Copy",
+      "copied": "Copied"
     },
     "composer": {
       "addContext": "Añadir contexto",

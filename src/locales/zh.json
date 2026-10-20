@@ -1145,7 +1145,18 @@
       "working": "代理正在工作...",
       "applied": "✓ 已应用到图纸 (rev {rev})",
       "undone": "已撤销",
-      "undo": "撤销"
+      "undo": "撤销",
+      "thought": "Thought for {s} s",
+      "thoughtShort": "Thought",
+      "thinking": "Thinking…",
+      "usedTools": "Used {n} tool | Used {n} tools",
+      "usingTools": "Using tools ({n})",
+      "input": "Input",
+      "result": "Result",
+      "noResult": "No result",
+      "omitted": "… {kb} KB more not shown",
+      "copy": "Copy",
+      "copied": "Copied"
     },
     "composer": {
       "addContext": "添加上下文",

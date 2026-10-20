@@ -1145,7 +1145,18 @@
       "working": "Der Agent arbeitet...",
       "applied": "✓ In die Zeichnung übernommen (Rev. {rev})",
       "undone": "Rückgängig gemacht",
-      "undo": "Rückgängig"
+      "undo": "Rückgängig",
+      "thought": "Thought for {s} s",
+      "thoughtShort": "Thought",
+      "thinking": "Thinking…",
+      "usedTools": "Used {n} tool | Used {n} tools",
+      "usingTools": "Using tools ({n})",
+      "input": "Input",
+      "result": "Result",
+      "noResult": "No result",
+      "omitted": "… {kb} KB more not shown",
+      "copy": "Copy",
+      "copied": "Copied"
     },
     "composer": {
       "addContext": "Kontext hinzufügen",
