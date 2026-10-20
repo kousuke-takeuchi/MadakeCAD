@@ -41,17 +41,22 @@ pub enum AgentEvent {
     SessionStarted { session_id: String },
     /// アシスタント本文のストリーミング差分
     TextDelta { text: String },
+    /// 思考 (thinking / reasoning) のストリーミング差分。送ってこないプロバイダもある
+    ThinkingDelta { text: String },
     /// ツール呼び出し開始(inputは完全なJSON)
     ToolUseStarted {
         id: String,
         tool: String,
         input: Value,
     },
-    /// ツール呼び出し完了。`tool`は[`StreamParser`]経由の場合のみ補完される
+    /// ツール呼び出し完了。`tool`は[`StreamParser`]経由の場合のみ補完される。
+    /// `output`はツールが返した結果の全文 (会話へ残すときに[`crate::conversation::truncate_output`]で切る)
     ToolUseFinished {
         id: String,
         tool: String,
         is_error: bool,
+        #[serde(default)]
+        output: Option<String>,
     },
     /// ターン完了(最終テキストと使用量)
     TurnCompleted {
@@ -164,6 +169,7 @@ fn parse_user(v: &Value) -> Vec<AgentEvent> {
             // tool_resultにツール名は含まれない。StreamParserがidから補完する
             tool: String::new(),
             is_error: b.get("is_error").and_then(Value::as_bool).unwrap_or(false),
+            output: None,
         })
         .collect()
 }

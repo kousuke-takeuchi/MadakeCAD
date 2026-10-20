@@ -497,7 +497,7 @@ async fn a_requested_tool_is_executed_and_its_result_is_sent_back() {
     );
     assert!(
         events.iter().any(
-            |e| matches!(e, AgentEvent::ToolUseFinished { id, tool, is_error }
+            |e| matches!(e, AgentEvent::ToolUseFinished { id, tool, is_error, .. }
             if id == "call_1" && tool == "place_symbol" && !*is_error)
         ),
         "ツール完了イベントが無い: {events:?}"

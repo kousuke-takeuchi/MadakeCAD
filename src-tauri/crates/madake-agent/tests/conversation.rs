@@ -2,7 +2,7 @@
 
 use madake_agent::conversation::{
     chat_path_for, load_chat, save_chat, AppliedRevisions, AppliedUndoDepth, Conversation,
-    DocState, Role, CHAT_FORMAT_VERSION,
+    DocState, MessageBlock, Role, CHAT_FORMAT_VERSION, MAX_TOOL_OUTPUT_BYTES,
 };
 use madake_agent::AgentEvent;
 use serde_json::json;
@@ -47,6 +47,7 @@ fn run_turn_between(conv: &mut Conversation, start: DocState, end: DocState) {
             id: "toolu_1".to_string(),
             tool: "mcp__madakecad__place_symbol".to_string(),
             is_error: false,
+            output: None,
         },
         DocState::new(start.revision + 1, start.undo_depth + 1),
     );
@@ -63,6 +64,7 @@ fn run_turn_between(conv: &mut Conversation, start: DocState, end: DocState) {
             id: "toolu_2".to_string(),
             tool: "mcp__madakecad__draw_wire".to_string(),
             is_error: false,
+            output: None,
         },
         end,
     );
@@ -489,4 +491,126 @@ fn chat_path_sits_next_to_project_file() {
         chat_path_for(Path::new("/work/plant.mdkproj")),
         PathBuf::from("/work/plant.chat.json")
     );
+}
+
+fn ev_text(t: &str) -> AgentEvent {
+    AgentEvent::TextDelta { text: t.to_string() }
+}
+fn ev_think(t: &str) -> AgentEvent {
+    AgentEvent::ThinkingDelta { text: t.to_string() }
+}
+fn ev_start(id: &str) -> AgentEvent {
+    AgentEvent::ToolUseStarted { id: id.into(), tool: "mcp__madakecad__place_symbol".into(), input: json!({}) }
+}
+fn ev_end(id: &str, output: Option<&str>) -> AgentEvent {
+    AgentEvent::ToolUseFinished {
+        id: id.into(),
+        tool: "mcp__madakecad__place_symbol".into(),
+        is_error: false,
+        output: output.map(str::to_string),
+    }
+}
+
+/// A reply is recorded as blocks in the order it happened: consecutive pieces of the same kind join one block, and a change of kind starts a new block, while the plain text and tool list are still filled as before.
+/// 応答は起きた順のブロックとして記録される。同じ種類が続く間は1つのブロックにまとまり、種類が変わると新しいブロックになる。本文とツールの一覧も今までどおり埋まる。
+#[test]
+fn replies_are_recorded_as_blocks_in_the_order_they_happened() {
+    let mut conv = Conversation::new();
+    let s = edits(0);
+    conv.begin_turn("F2を足して", s);
+    for (t, ev) in [
+        (1_000, ev_think("24V系を")),
+        (1_400, ev_think("確かめる")),
+        (1_500, ev_text("確認します。")),
+        (1_600, ev_start("t1")),
+        (1_700, ev_end("t1", Some("{\"net\":\"N3\"}"))),
+        (1_800, ev_start("t2")),
+        (1_900, ev_end("t2", None)),
+        (2_000, ev_think("配置できた")),
+        (2_100, ev_text("F2を")),
+        (2_200, ev_text("追加しました")),
+    ] {
+        conv.apply_event_at(&ev, s, t);
+    }
+    let m = conv.last_turn().unwrap();
+    assert_eq!(
+        m.blocks,
+        vec![
+            MessageBlock::Thinking { text: "24V系を確かめる".into(), duration_ms: Some(400) },
+            MessageBlock::Text { text: "確認します。".into() },
+            MessageBlock::Tool { id: "t1".into() },
+            MessageBlock::Tool { id: "t2".into() },
+            MessageBlock::Thinking { text: "配置できた".into(), duration_ms: Some(0) },
+            MessageBlock::Text { text: "F2を追加しました".into() },
+        ]
+    );
+    assert_eq!(m.text, "確認します。F2を追加しました");
+    assert_eq!(m.tool_calls.len(), 2);
+    assert_eq!(m.tool_calls[0].output.as_deref(), Some("{\"net\":\"N3\"}"));
+    assert_eq!(m.tool_calls[0].output_size, Some(12));
+    assert_eq!(m.tool_calls[1].output, None);
+}
+
+/// A tool result longer than 8 KB keeps only its head, cut before a character that would cross the limit, and the full size is kept so the screen can say how much was left out.
+/// 8 KBより長いツールの結果は先頭だけを残し、上限をまたぐ文字の手前で切る。省いた量を画面が示せるよう、全体の大きさも残す。
+#[test]
+fn a_long_tool_result_is_cut_on_a_character_boundary() {
+    // 「あ」は3バイト。8192 = 3 * 2730 + 2 なので、2731文字目が上限をまたぐ
+    let long = "あ".repeat(3000);
+    let mut conv = Conversation::new();
+    conv.begin_turn("全体を見せて", edits(0));
+    conv.apply_event(&ev_start("t1"), edits(0));
+    conv.apply_event(&ev_end("t1", Some(&long)), edits(0));
+    let call = &conv.last_turn().unwrap().tool_calls[0];
+    let kept = call.output.as_deref().unwrap();
+    assert_eq!(kept.len(), 2730 * 3);
+    assert!(kept.len() <= MAX_TOOL_OUTPUT_BYTES);
+    assert!(kept.chars().all(|c| c == 'あ'));
+    assert_eq!(call.output_size, Some(9000));
+}
+
+/// A tool finish without an id (some Copilot lines) still puts its result on the open call of the same tool, as before.
+/// idの無いツール完了 (Copilotの一部の行) でも、今までどおり同じツールの未完了の呼び出しに結果が付く。
+#[test]
+fn a_finish_without_an_id_puts_the_result_on_the_open_call_of_that_tool() {
+    let mut conv = Conversation::new();
+    conv.begin_turn("置いて", edits(0));
+    conv.apply_event(&ev_start("t1"), edits(0));
+    conv.apply_event(&ev_end("", Some("ok")), edits(1));
+    let call = &conv.last_turn().unwrap().tool_calls[0];
+    assert!(call.finished);
+    assert_eq!(call.output.as_deref(), Some("ok"));
+}
+
+/// A chat file saved before blocks and tool results existed still loads, its messages have no blocks, and saving it again does not write empty blocks or results.
+/// ブロックとツールの結果が無かった頃に保存した会話ファイルも読み込め、メッセージのブロックは空になる。保存し直しても空のブロックや結果は書き出さない。
+#[test]
+fn an_old_chat_file_without_blocks_still_loads() {
+    let dir = temp_dir();
+    let path = dir.join("old.chat.json");
+    let mut conv = Conversation::new();
+    run_turn(&mut conv, 0, 2);
+    save_chat(&path, &[conv.clone()]).unwrap();
+    // 今の形式から blocks / output を取り除いて、旧形式のファイルを作る
+    let mut v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    for m in v["conversations"][0]["messages"].as_array_mut().unwrap() {
+        m.as_object_mut().unwrap().remove("blocks");
+        for c in m["tool_calls"].as_array_mut().unwrap() {
+            c.as_object_mut().unwrap().remove("output");
+            c.as_object_mut().unwrap().remove("output_size");
+        }
+    }
+    std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+
+    let loaded = load_chat(&path).unwrap();
+    let m = loaded[0].last_turn().unwrap();
+    assert!(m.blocks.is_empty());
+    assert_eq!(m.tool_calls.len(), 2);
+    assert_eq!(m.tool_calls[0].output, None);
+
+    save_chat(&path, &loaded).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(!text.contains("\"blocks\""), "空のblocksを書き出している");
+    assert!(!text.contains("\"output\""), "空のoutputを書き出している");
+    std::fs::remove_dir_all(&dir).ok();
 }

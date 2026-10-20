@@ -244,6 +244,7 @@ impl AnthropicApiBackend {
                         id: tool_use.id.clone(),
                         tool: tool_use.name.clone(),
                         is_error: outcome.is_error,
+                        output: None,
                     },
                 )
                 .await;

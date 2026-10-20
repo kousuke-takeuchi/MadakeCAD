@@ -138,6 +138,7 @@ fn full_event_sequence_of_tooluse_fixture() {
         .map(|e| match e {
             AgentEvent::SessionStarted { .. } => "session",
             AgentEvent::TextDelta { .. } => "text",
+            AgentEvent::ThinkingDelta { .. } => "thinking",
             AgentEvent::ToolUseStarted { .. } => "tool_start",
             AgentEvent::ToolUseFinished { .. } => "tool_end",
             AgentEvent::TurnCompleted { .. } => "completed",
@@ -189,6 +190,7 @@ fn stream_parser_drops_duplicate_tool_use_started() {
             id: "toolu_dup".to_string(),
             tool: "Bash".to_string(),
             is_error: false,
+            output: None,
         }]
     );
 }

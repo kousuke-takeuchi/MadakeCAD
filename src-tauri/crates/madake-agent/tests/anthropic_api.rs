@@ -378,7 +378,7 @@ async fn a_requested_tool_is_executed_and_its_result_is_sent_back() {
         "ツール開始イベントが無い: {events:?}"
     );
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::ToolUseFinished { id, tool, is_error }
+        events.iter().any(|e| matches!(e, AgentEvent::ToolUseFinished { id, tool, is_error, .. }
             if id == "toolu_1" && tool == "place_symbol" && !*is_error)),
         "ツール完了イベントが無い: {events:?}"
     );

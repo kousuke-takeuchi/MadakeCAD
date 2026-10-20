@@ -218,6 +218,7 @@ fn tool_end_event(v: &Value) -> Vec<AgentEvent> {
         // ツール名は完了の行に無い。[`CopilotParser`]が呼び出しから補完する
         tool: tool_name(v).unwrap_or_default(),
         is_error: is_error(v),
+        output: None,
     }]
 }
 

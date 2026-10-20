@@ -101,6 +101,9 @@ impl DocState {
     }
 }
 
+/// ツールの結果を会話に残す上限 (バイト)。超えた分は[`truncate_output`]で省く。
+pub const MAX_TOOL_OUTPUT_BYTES: usize = 8 * 1024;
+
 /// 1回のツール呼び出し(UIのツールチップ表示に使う)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCall {
@@ -110,6 +113,39 @@ pub struct ToolCall {
     pub input: Value,
     pub finished: bool,
     pub is_error: bool,
+    /// ツールが返した結果の先頭 ([`MAX_TOOL_OUTPUT_BYTES`]まで)。結果を返さないプロバイダ・旧履歴では`None`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    /// 結果全体の大きさ (バイト)。`output`より大きければ切り詰めてある
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_size: Option<u64>,
+}
+
+/// 応答を起きた順に並べたときの1区切り (画面はこの順に描く)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum MessageBlock {
+    Text { text: String },
+    /// 思考。`duration_ms`は最初の差分から最後の差分までの時間 (アプリが測る)
+    Thinking {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u64>,
+    },
+    /// ツール呼び出し ([`ChatMessage::tool_calls`]の`id`を指す)
+    Tool { id: String },
+}
+
+/// 結果の先頭を[`MAX_TOOL_OUTPUT_BYTES`]以内で、UTF-8の文字の切れ目に合わせて返す。
+pub fn truncate_output(output: &str) -> String {
+    if output.len() <= MAX_TOOL_OUTPUT_BYTES {
+        return output.to_string();
+    }
+    let mut end = MAX_TOOL_OUTPUT_BYTES;
+    while !output.is_char_boundary(end) {
+        end -= 1;
+    }
+    output[..end].to_string()
 }
 
 /// 会話中の1メッセージ。
@@ -140,6 +176,12 @@ pub struct ChatMessage {
     /// 添付の無い発言では書き出さないので、添付以前のチャット履歴と同じ形のまま。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<crate::attachments::AttachmentMeta>,
+    /// 起きた順の応答 (本文・思考・ツール)。この変更より前の履歴には無い (画面は旧表示にする)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocks: Vec<MessageBlock>,
+    /// いま伸ばしている思考ブロックの開始時刻 (時間を測るためだけ。保存しない)
+    #[serde(skip)]
+    thinking_started_ms: Option<u64>,
 }
 
 impl ChatMessage {
@@ -153,7 +195,39 @@ impl ChatMessage {
             applied_undo_depth: AppliedUndoDepth::at(state.undo_depth),
             error: None,
             attachments: Vec::new(),
+            blocks: Vec::new(),
+            thinking_started_ms: None,
         }
+    }
+
+    /// 本文の差分を最後の本文ブロックへ足す (最後が本文でなければ新しく作る)。
+    fn push_text(&mut self, text: &str) {
+        self.end_thinking();
+        if let Some(MessageBlock::Text { text: last }) = self.blocks.last_mut() {
+            last.push_str(text);
+        } else {
+            self.blocks.push(MessageBlock::Text { text: text.to_string() });
+        }
+    }
+
+    /// 思考の差分を最後の思考ブロックへ足し、時間を測り直す (空の差分は無視)。
+    fn push_thinking(&mut self, text: &str, now_ms: u64) {
+        if text.is_empty() {
+            return;
+        }
+        let started = *self.thinking_started_ms.get_or_insert(now_ms);
+        let duration = Some(now_ms.saturating_sub(started));
+        if let Some(MessageBlock::Thinking { text: last, duration_ms }) = self.blocks.last_mut() {
+            last.push_str(text);
+            *duration_ms = duration;
+        } else {
+            self.blocks.push(MessageBlock::Thinking { text: text.to_string(), duration_ms: duration });
+        }
+    }
+
+    /// 思考ブロックを閉じる (次の思考は新しいブロックになり、時間も測り直す)。
+    fn end_thinking(&mut self) {
+        self.thinking_started_ms = None;
     }
 
     /// このターンで確定した編集コマンド数(undo履歴の深さの増分)。
@@ -263,6 +337,11 @@ impl Conversation {
     ///
     /// `state`はイベント受信時点のドキュメント状態(ターン終了時の記録に使う)。
     pub fn apply_event(&mut self, event: &AgentEvent, state: DocState) {
+        self.apply_event_at(event, state, now_millis());
+    }
+
+    /// [`Self::apply_event`]の時刻指定版 (思考の時間を測る時刻。テストで時刻を決めるため)。
+    pub fn apply_event_at(&mut self, event: &AgentEvent, state: DocState, now_ms: u64) {
         self.touch();
         if let AgentEvent::SessionStarted { session_id } = event {
             self.session_id = Some(session_id.clone());
@@ -273,15 +352,25 @@ impl Conversation {
         };
         match event {
             AgentEvent::SessionStarted { .. } => {}
-            AgentEvent::TextDelta { text } => message.text.push_str(text),
-            AgentEvent::ToolUseStarted { id, tool, input } => message.tool_calls.push(ToolCall {
-                id: id.clone(),
-                tool: tool.clone(),
-                input: input.clone(),
-                finished: false,
-                is_error: false,
-            }),
-            AgentEvent::ToolUseFinished { id, tool, is_error } => {
+            AgentEvent::TextDelta { text } => {
+                message.text.push_str(text);
+                message.push_text(text);
+            }
+            AgentEvent::ThinkingDelta { text } => message.push_thinking(text, now_ms),
+            AgentEvent::ToolUseStarted { id, tool, input } => {
+                message.tool_calls.push(ToolCall {
+                    id: id.clone(),
+                    tool: tool.clone(),
+                    input: input.clone(),
+                    finished: false,
+                    is_error: false,
+                    output: None,
+                    output_size: None,
+                });
+                message.end_thinking();
+                message.blocks.push(MessageBlock::Tool { id: id.clone() });
+            }
+            AgentEvent::ToolUseFinished { id, tool, is_error, output } => {
                 if let Some(call) = message
                     .tool_calls
                     .iter_mut()
@@ -289,19 +378,28 @@ impl Conversation {
                 {
                     call.finished = true;
                     call.is_error = *is_error;
+                    if let Some(output) = output {
+                        call.output = Some(truncate_output(output));
+                        call.output_size = Some(output.len() as u64);
+                    }
                 }
             }
             AgentEvent::TurnCompleted { result, .. } => {
                 // デルタが来ない構成(--include-partial-messages無し)でも本文を埋める
                 if message.text.is_empty() {
                     message.text = result.clone();
+                    if !result.is_empty() {
+                        message.push_text(result);
+                    }
                 }
+                message.end_thinking();
                 message.finish_turn(state);
             }
             // マネージャがターン確定後に合成するだけの通知。会話状態は既に更新済み
             AgentEvent::TurnApplied { .. } => {}
             AgentEvent::Error { message: err } => {
                 message.error = Some(err.clone());
+                message.end_thinking();
                 message.finish_turn(state);
             }
         }

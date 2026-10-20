@@ -315,6 +315,7 @@ impl OpenAiCompatBackend {
                         id: call.id.clone(),
                         tool: call.name.clone(),
                         is_error: outcome.is_error,
+                        output: None,
                     },
                 )
                 .await;
