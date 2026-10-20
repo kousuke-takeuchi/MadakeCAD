@@ -26,7 +26,10 @@ name: Release
 # built, only without update files. The matching public key lives in
 # src-tauri/tauri.conf.json (plugins.updater.pubkey).
 #
-# Bundles are not code-signed or notarized yet (M6 spec §3).
+# The macOS app is ad-hoc signed (bundle.macOS.signingIdentity "-" in tauri.conf.json), not
+# signed with a Developer ID or notarized yet (M6 spec §3). Without any signature, Apple silicon
+# Macs refuse a downloaded app as "damaged"; ad-hoc signed, they show "cannot verify the
+# developer" instead, which the user can allow in System Settings → Privacy & Security.
 
 on:
   release:

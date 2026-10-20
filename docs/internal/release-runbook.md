@@ -68,8 +68,12 @@ B案の要点: 作業ツリーを別ディレクトリへコピー → `.git` �
    ランナー上で書き込まれるので、事前のバージョン上げコミットは要らない
 3. リリースノートには最低限次を書く:
    - アルファ版であること・対応OS
-   - **配布物はコード署名/notarization されていない** (macOSは「開発元を確認できません」、
-     Windowsは SmartScreen の警告が出る。回避手順を1行添える)
+   - **配布物は Developer ID 署名/notarization されていない** (macOSは「開発元を確認できません」、
+     Windowsは SmartScreen の警告が出る。回避手順を1行添える。macOSは「システム設定 >
+     プライバシーとセキュリティ」の「このまま開く」)。macOSのアプリは ad-hoc 署名だけ付く
+     (`tauri.conf.json` の `bundle.macOS.signingIdentity: "-"`)。v0.3.0 までは ad-hoc 署名も
+     無く、Apple silicon では「壊れているため開けません」になって開けなかった。その版を
+     入れた人には `xattr -dr com.apple.quarantine /Applications/MadakeCAD.app` を案内する
    - **Linuxの`.deb`利用者はPDF出力の日本語書体に`fonts-noto-cjk`が必要** (無いと豆腐になる)
    - 既知の未実装 (`docs/12-roadmap.md` へのリンク)
 4.「Publish release」すると `release.yml` が macOS (Apple silicon / Intel `.dmg`)・
@@ -110,7 +114,7 @@ B案の要点: 作業ツリーを別ディレクトリへコピー → `.git` �
 
 ## 6. 公開後に残る課題 (このリリースの範囲外)
 
-- コード署名 / notarization (M6仕様 §3。macOS notarization を優先)。アプリ内アップデートは実装済み (§4.1 の鍵が前提)
+- コード署名 / notarization (M6仕様 §3。macOS notarization を優先。macOSは ad-hoc 署名のみ済み)。アプリ内アップデートは実装済み (§4.1 の鍵が前提)
 - `.deb` の依存に `fonts-noto-cjk` を入れる (現状はビルドマシンにしか入っていない)
 - zh/es/fr/de カタログの翻訳の埋め (現状は約6割。[§7](#7-未決事項) )
 - `.mcp.json` / `.claude/` を同梱し続けるかの判断 (社外の人には意味の無いローカルパスを含む)
