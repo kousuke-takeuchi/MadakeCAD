@@ -315,7 +315,7 @@ impl OpenAiCompatBackend {
                         id: call.id.clone(),
                         tool: call.name.clone(),
                         is_error: outcome.is_error,
-                        output: None,
+                        output: Some(outcome.content.clone()),
                     },
                 )
                 .await;
@@ -623,6 +623,14 @@ async fn apply_chunk(
     let Some(delta) = event.pointer("/choices/0/delta") else {
         return;
     };
+    // 思考 (Ollama・DeepSeekなど)。サーバーによって名前が違う
+    for key in ["reasoning_content", "reasoning"] {
+        if let Some(text) = delta.get(key).and_then(Value::as_str) {
+            if !text.is_empty() {
+                send(tx, AgentEvent::ThinkingDelta { text: text.to_string() }).await;
+            }
+        }
+    }
     if let Some(text) = delta.get("content").and_then(Value::as_str) {
         if !text.is_empty() {
             round.text.push_str(text);
