@@ -244,7 +244,7 @@ impl AnthropicApiBackend {
                         id: tool_use.id.clone(),
                         tool: tool_use.name.clone(),
                         is_error: outcome.is_error,
-                        output: None,
+                        output: Some(outcome.content.clone()),
                     },
                 )
                 .await;
@@ -461,7 +461,16 @@ async fn apply_stream_event(
                             .unwrap_or_default(),
                     );
                 }
-                // thinking_delta / signature_delta などは表示しない
+                (Some("thinking_delta"), _) => {
+                    let chunk = delta
+                        .and_then(|d| d.get("thinking"))
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    if !chunk.is_empty() {
+                        send(tx, AgentEvent::ThinkingDelta { text: chunk.to_string() }).await;
+                    }
+                }
+                // signature_delta などは表示しない
                 _ => {}
             }
         }
