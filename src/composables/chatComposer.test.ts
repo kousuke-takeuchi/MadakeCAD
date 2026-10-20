@@ -16,6 +16,8 @@ function message(usage: Usage | null): ChatMessage {
     streaming: false,
     undone: false,
     attachments: [],
+    blocks: [],
+    thinking_started_at: null,
   } as ChatMessage;
 }
 
