@@ -282,7 +282,7 @@ impl GeminiBackend {
                         id: call.event_id(),
                         tool: call.name.clone(),
                         is_error: outcome.is_error,
-                        output: None,
+                        output: Some(outcome.content.clone()),
                     },
                 )
                 .await;
