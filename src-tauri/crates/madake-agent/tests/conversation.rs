@@ -614,3 +614,30 @@ fn an_old_chat_file_without_blocks_still_loads() {
     assert!(!text.contains("\"output\""), "空のoutputを書き出している");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// A chat file containing a block kind this build does not know still loads: the unknown block is kept as an unknown placeholder and the rest of the history is intact.
+/// このビルドが知らない種類のブロックを含む会話ファイルも読み込める。知らないブロックは「不明」として受け止め、残りの履歴はそのまま残る。
+#[test]
+fn a_chat_file_with_an_unknown_block_kind_still_loads() {
+    let dir = temp_dir();
+    let path = dir.join("future.chat.json");
+    let mut conv = Conversation::new();
+    run_turn(&mut conv, 0, 2);
+    save_chat(&path, &[conv.clone()]).unwrap();
+    let mut v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let msgs = v["conversations"][0]["messages"].as_array_mut().unwrap();
+    let blocks = msgs.last_mut().unwrap()["blocks"].as_array_mut().unwrap();
+    let known = blocks.len();
+    assert!(known >= 1, "テストの前提: 既知のブロックがある");
+    blocks.insert(1.min(known), serde_json::json!({"type": "future_kind", "foo": 1}));
+    std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+
+    let loaded = load_chat(&path).unwrap();
+    assert_eq!(loaded.len(), 1);
+    let m = loaded[0].last_turn().unwrap();
+    assert_eq!(m.blocks.len(), known + 1);
+    assert_eq!(m.blocks[1], MessageBlock::Unknown);
+    assert_eq!(m.blocks[0], conv.last_turn().unwrap().blocks[0]);
+    assert_eq!(m.tool_calls.len(), 2);
+    std::fs::remove_dir_all(&dir).ok();
+}

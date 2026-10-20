@@ -134,6 +134,10 @@ pub enum MessageBlock {
     },
     /// ツール呼び出し ([`ChatMessage::tool_calls`]の`id`を指す)
     Tool { id: String },
+    /// このビルドが知らない種類のブロック (後の版で足された種類)。読み込みで会話ファイル全体を
+    /// 捨てないために受け止めるだけで、画面には出さない
+    #[serde(other)]
+    Unknown,
 }
 
 /// 結果の先頭を[`MAX_TOOL_OUTPUT_BYTES`]以内で、UTF-8の文字の切れ目に合わせて返す。

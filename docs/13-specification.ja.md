@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2774仕様項目**。
+全6領域・**2775仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1413,6 +1413,7 @@
 - 8 KBより長いツールの結果は先頭だけを残し、上限をまたぐ文字の手前で切る。省いた量を画面が示せるよう、全体の大きさも残す。 <sub>`a_long_tool_result_is_cut_on_a_character_boundary`</sub>
 - idの無いツール完了 (Copilotの一部の行) でも、今までどおり同じツールの未完了の呼び出しに結果が付く。 <sub>`a_finish_without_an_id_puts_the_result_on_the_open_call_of_that_tool`</sub>
 - ブロックとツールの結果が無かった頃に保存した会話ファイルも読み込め、メッセージのブロックは空になる。保存し直しても空のブロックや結果は書き出さない。 <sub>`an_old_chat_file_without_blocks_still_loads`</sub>
+- このビルドが知らない種類のブロックを含む会話ファイルも読み込める。知らないブロックは「不明」として受け止め、残りの履歴はそのまま残る。 <sub>`a_chat_file_with_an_unknown_block_kind_still_loads`</sub>
 
 ### copilot_cli
 

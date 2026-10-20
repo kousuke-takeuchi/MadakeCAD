@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2774 specification clauses** across 6 areas.
+**2775 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1413,6 +1413,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A tool result longer than 8 KB keeps only its head, cut before a character that would cross the limit, and the full size is kept so the screen can say how much was left out. <sub>`a_long_tool_result_is_cut_on_a_character_boundary`</sub>
 - A tool finish without an id (some Copilot lines) still puts its result on the open call of the same tool, as before. <sub>`a_finish_without_an_id_puts_the_result_on_the_open_call_of_that_tool`</sub>
 - A chat file saved before blocks and tool results existed still loads, its messages have no blocks, and saving it again does not write empty blocks or results. <sub>`an_old_chat_file_without_blocks_still_loads`</sub>
+- A chat file containing a block kind this build does not know still loads: the unknown block is kept as an unknown placeholder and the rest of the history is intact. <sub>`a_chat_file_with_an_unknown_block_kind_still_loads`</sub>
 
 ### copilot_cli
 
