@@ -445,6 +445,11 @@ impl AgentManager {
     }
 
     /// 指定会話がターン実行中か。
+    /// いま応答中のターンの数 (全会話)。
+    pub fn running_count(&self) -> usize {
+        self.state.lock().unwrap().running.len()
+    }
+
     pub fn is_sending(&self, conversation_id: Uuid) -> bool {
         self.state
             .lock()

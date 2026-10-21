@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2789仕様項目**。
+全6領域・**2795仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1275,6 +1275,15 @@
 - 図面にできない生成設定 (分割の単位0点) は400で断られ、図面には何も起きない。 <sub>`an_impossible_generation_setting_is_refused_with_a_bad_request`</sub>
 - PLC I/Oレポートは他の帳票と同じ書き出し口から`plc-io`として出力され、割付済みの点ごとに1行が並ぶ。 <sub>`the_plc_io_report_is_exported_like_any_other_report`</sub>
 - PLCのMCPツールの説明には、割付表が何のためのものか・ページ生成がundo一発であることが書かれている。 <sub>`the_plc_tools_explain_the_assignment_table_and_the_generated_page`</sub>
+
+### project_tools
+
+- save_project で保存したプロジェクトは open_project で開き直せ、開いていた図面と置き換わる。 <sub>`a_saved_project_opens_again_and_replaces_the_open_drawing`</sub>
+- 無いファイルや MadakeCAD のプロジェクトでないファイルを開こうとすると理由つきで失敗し、開いている図面はそのまま残る。 <sub>`opening_a_missing_or_foreign_file_fails_and_keeps_the_drawing`</sub>
+- アプリ内エージェント用のツール窓口 (エージェント管理が付いていない) からはプロジェクトを開けない。自分の応答中に図面が差し替わってしまうため。 <sub>`the_in_app_tool_window_cannot_open_a_project`</sub>
+- エージェントの応答中は、open_project はそのターンを中断せずに断る。MCP でつながったエージェントが自分の応答を断ち切らないようにするため。 <sub>`opening_is_refused_while_an_agent_turn_is_running`</sub>
+- アプリ内のツール窓口から保存すると図面だけを書く。チャット履歴はエージェント管理が付いているときだけ保存する。 <sub>`saving_without_the_agent_manager_writes_the_drawing_only`</sub>
+- MCP サーバーは open_project と save_project を公開し、説明には扱うファイルの種類と「開くと図面が置き換わる」ことが書かれている。 <sub>`the_server_offers_open_and_save_with_clear_descriptions`</sub>
 
 ### provider_api
 
