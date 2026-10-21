@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2795 specification clauses** across 6 areas.
+**2797 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2178,6 +2178,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - shows the newest revision mark in the title block Rev cell, falling back to the stored value or a dash <sub>`visibleRevisions / effectiveRev`</sub>
 - turns arcs with the symbol so the contactor half circle keeps facing its moving contact <sub>`rotateArcAngles`</sub>
 - mirrors arcs left to right while keeping the clockwise drawing direction <sub>`rotateArcAngles`</sub>
+- shrinks symbol lettering with the zoom instead of keeping a minimum size, and drops it when unreadable <sub>`drawSymbol text placement`</sub>
 - keeps the lettering inside a symbol where the symbol definition puts it, whatever the rotation <sub>`drawSymbol text placement`</sub>
 - keeps a one- or two-character terminal number inside its own mark, whatever the rotation <sub>`drawSymbol text placement`</sub>
 - puts an unturned terminal block's number just over a third of a character height below its mark centre on the canvas, a smaller offset than the exported drawing's half <sub>`drawSymbol text placement`</sub>
@@ -2384,6 +2385,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - returns null when the insertion point names an unknown terminal <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - adds one terminal per level on a multi-level block <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - keeps adjacency based on the raw pin layout, not on the arithmetic difference between displayed labels <sub>`parseJumperSpec with an overridden display order`</sub>
+
+### textSize
+
+- scales drawing text with the zoom like the shapes, and drops it once it is too small to read <sub>`drawing text size on screen`</sub>
 
 ### textStyle
 

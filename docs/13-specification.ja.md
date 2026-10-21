@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2795仕様項目**。
+全6領域・**2797仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2178,6 +2178,7 @@
 - 表題欄のRev欄は最新改訂の記号を出し、改訂が無ければ表題欄の値、それも空ならハイフンを出す <sub>`visibleRevisions / effectiveRev`</sub>
 - シンボル内の弧はシンボルと一緒に回るので、電磁接触器の半円はどの回転角でも可動接点の側を向く <sub>`rotateArcAngles`</sub>
 - ミラーは弧を左右反転させるが、描画方向(開始→終了を時計回り)は保つ <sub>`rotateArcAngles`</sub>
+- ズームアウトしても文字だけ大きいまま残らない。図形と同じ割合で縮み、読めない大きさになったら描かない <sub>`drawSymbol text placement`</sub>
 - シンボルの中の文字は、シンボルを回しても反転しても定義どおりの場所に描かれる <sub>`drawSymbol text placement`</sub>
 - 1〜2文字の端子番号は、どの向きに回しても反転しても自分の印(丸)の中に丸ごと収まる <sub>`drawSymbol text placement`</sub>
 - 画面のキャンバスでは、回していない端子台の番号は印の中心から文字高の約1/3(1/2.8)だけ下にベースラインが来る(出力図面の1/2より小さい) <sub>`drawSymbol text placement`</sub>
@@ -2384,6 +2385,10 @@
 - 端子台に無い端子番号を挿入位置に指定するとnull <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - 多段端子台では、挿入した1つの予備極が段の数だけの端子になる <sub>`insertSpareTerminals (Task 4: 予備端子の挿入, Rust側 insert_spare_terminals の双子)`</sub>
 - 増分2で採番したような表示ラベル(11,13,15,17)でも、隣接判定は生のピン配置で決まるので、物理的に隣り合う極どうしのジャンパは通る (Rust側 adjacency_after_an_override_is_based_on_the_raw_pin_layout_not_the_label_arithmetic とparity) <sub>`parseJumperSpec with an overridden display order`</sub>
+
+### textSize
+
+- 図面の文字は図形と同じ割合で拡大・縮小し、画面上で小さすぎて読めない大きさになったら描かない (大きさ 0) <sub>`drawing text size on screen`</sub>
 
 ### textStyle
 

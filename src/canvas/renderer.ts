@@ -111,6 +111,7 @@ import {
   type DeviceBlock,
 } from "./relayXref";
 import { GRID_PITCH, type Viewport } from "./viewport";
+import { textPx } from "./textSize";
 
 /** セル内テキストの左余白 (mm)。 */
 const CELL_PAD = 2;
@@ -325,7 +326,7 @@ function drawFrame(
   for (const cell of tb.cells) {
     ctx.textAlign = canvasAlign(cell.align);
     const bold = cell.weight === "bold" ? "bold " : "";
-    ctx.font = `${bold}${Math.max(8, cell.size * vp.scale)}px sans-serif`;
+    ctx.font = `${bold}${textPx(cell.size, vp.scale)}px sans-serif`;
     const p = vp.toScreen({ x: cell.x, y: cell.y });
     ctx.fillText(cell.text, p.x, p.y);
   }
@@ -377,7 +378,7 @@ function drawRevisionBlock(
   ctx.textAlign = "left";
   // 列見出し (最下段、表題欄側)
   ctx.fillStyle = theme.dim;
-  ctx.font = `${Math.max(8, REV_HEADER_FONT * vp.scale)}px sans-serif`;
+  ctx.font = `${textPx(REV_HEADER_FONT, vp.scale)}px sans-serif`;
   REV_HEADERS.forEach((label, i) => {
     const p = vp.toScreen({
       x: l.colLefts[i] + CELL_PAD,
@@ -387,7 +388,7 @@ function drawRevisionBlock(
   });
   // 改訂行
   ctx.fillStyle = theme.line;
-  ctx.font = `${Math.max(8, REV_FONT * vp.scale)}px sans-serif`;
+  ctx.font = `${textPx(REV_FONT, vp.scale)}px sans-serif`;
   for (const row of l.rows) {
     const cells = [row.rev.mark, row.rev.date, row.rev.description, row.rev.by];
     cells.forEach((value, c) => {
@@ -470,7 +471,7 @@ export function drawSymbol(
         // 文字は常に水平に書くので、ベースラインへのずらしはシンボルと一緒に回さず
         // 画面の下向きに取る(Rust側svg.rsと同じ規則)
         const p = vp.toScreen(transformLocal(prim.at, inst));
-        ctx.font = `${Math.max(8, prim.height * vp.scale)}px sans-serif`;
+        ctx.font = `${textPx(prim.height, vp.scale)}px sans-serif`;
         ctx.textAlign = "center";
         const label = terminalRename?.get(prim.text) ?? prim.text;
         ctx.fillText(label, p.x, p.y + (prim.height * vp.scale) / 2.8);
@@ -522,7 +523,7 @@ export function drawSymbol(
       });
       ctx.stroke();
       ctx.lineWidth = lineWidth;
-      ctx.font = `${Math.max(8, PIN_GROUP_CAPTION_TEXT_MM * vp.scale)}px sans-serif`;
+      ctx.font = `${textPx(PIN_GROUP_CAPTION_TEXT_MM, vp.scale)}px sans-serif`;
       ctx.textAlign = "center";
       // キャプションの行は用紙座標で積む (文字は回転しても横書きなので、ローカル座標で
       // 積むと回転90/270度で行が横に並んで重なる。Rust側 caption_line_anchors と同じ)
@@ -537,7 +538,7 @@ export function drawSymbol(
   // 参照記号・型番: シンボル外形の上に併記(縦長シンボルでも重ならない。Rust側svg.rsと同ルール)
   const top = symbolTopY(inst, def);
   ctx.fillStyle = colorOverride ?? (selected ? theme.selection : theme.annotation);
-  ctx.font = `${Math.max(9, LABEL_FONT * vp.scale)}px monospace`;
+  ctx.font = `${textPx(LABEL_FONT, vp.scale)}px monospace`;
   ctx.textAlign = "center";
   if (inst.reference) {
     const p = vp.toScreen({ x: inst.at.x, y: top - REF_LABEL_DY });
@@ -555,7 +556,7 @@ export function drawSymbol(
       ? transformLocal(slot.at, inst)
       : functionLabelFallbackAt(inst, symbolBounds(inst, def));
     const height = slot?.height ?? FUNCTION_LABEL_FONT;
-    ctx.font = `${Math.max(9, height * vp.scale)}px monospace`;
+    ctx.font = `${textPx(height, vp.scale)}px monospace`;
     const p = vp.toScreen(at);
     ctx.fillText(functionLabel, p.x, p.y);
   }
@@ -599,7 +600,7 @@ export function drawContactMap(
   }
   ctx.stroke();
   ctx.fillStyle = theme.xref;
-  ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
+  ctx.font = `${textPx(CONTACT_MAP_FONT, vp.scale)}px monospace`;
   ctx.textAlign = "left";
   rows.forEach((row, i) => {
     const y = vp.toScreen({ x: layout.x, y: layout.baseline(i) }).y;
@@ -676,7 +677,7 @@ export function drawDeviceBlock(
   ctx.stroke();
   // 文字 (ヘッダは中央揃え、接点の行は左揃え)。接点の行は表示クラス「参照記号」で消える
   ctx.fillStyle = selected ? theme.selection : theme.xref;
-  ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
+  ctx.font = `${textPx(CONTACT_MAP_FONT, vp.scale)}px monospace`;
   for (const t of deviceBlockTexts(inst, block)) {
     if (!showContacts && t.align === "left") continue;
     ctx.textAlign = t.align === "center" ? "center" : "left";
@@ -686,7 +687,7 @@ export function drawDeviceBlock(
   // 機能ラベル (G4): 分散配置と同じく外形の下に置く (ここではブロックの外形の下)
   const functionLabel = functionLabelText(inst);
   if (functionLabel) {
-    ctx.font = `${Math.max(9, FUNCTION_LABEL_FONT * vp.scale)}px monospace`;
+    ctx.font = `${textPx(FUNCTION_LABEL_FONT, vp.scale)}px monospace`;
     ctx.textAlign = "center";
     const at = vp.toScreen(functionLabelBelow((bounds.min.x + bounds.max.x) / 2, bounds.max.y));
     ctx.fillText(functionLabel, at.x, at.y);
@@ -870,7 +871,7 @@ export function drawHarness(
   if (!at) return;
   const s = vp.toScreen(at);
   ctx.fillStyle = selected ? theme.selection : theme.harness;
-  ctx.font = `${Math.max(9, HARNESS_FONT * vp.scale)}px monospace`;
+  ctx.font = `${textPx(HARNESS_FONT, vp.scale)}px monospace`;
   ctx.textAlign = "left";
   ctx.fillText(name, s.x, s.y);
 }
@@ -1003,7 +1004,7 @@ export function drawPanel(
     if (name) {
       const s = vp.toScreen({ x: o.at.x + 2, y: o.at.y - PANEL_LABEL_DY });
       ctx.fillStyle = edge(o.id, panelTheme.label);
-      ctx.font = `${Math.max(9, 3 * vp.scale)}px sans-serif`;
+      ctx.font = `${textPx(3, vp.scale)}px sans-serif`;
       ctx.textAlign = "left";
       ctx.fillText(name, s.x, s.y);
     }
@@ -1058,13 +1059,13 @@ export function drawPanel(
     const reference = fp.reference?.trim();
     if (reference) {
       ctx.fillStyle = panelTheme.reference;
-      ctx.font = `${Math.max(9, LABEL_FONT * vp.scale)}px monospace`;
+      ctx.font = `${textPx(LABEL_FONT, vp.scale)}px monospace`;
       ctx.fillText(reference, center.x, center.y);
     }
     const partNo = fp.part_no?.trim();
     if (partNo) {
       ctx.fillStyle = panelTheme.partNo;
-      ctx.font = `${Math.max(8, FOOTPRINT_PART_NO_FONT * vp.scale)}px sans-serif`;
+      ctx.font = `${textPx(FOOTPRINT_PART_NO_FONT, vp.scale)}px sans-serif`;
       ctx.fillText(partNo, center.x, center.y + Math.max(9, FOOTPRINT_PART_NO_DY * vp.scale));
     }
     ctx.textAlign = "left";
@@ -1093,7 +1094,7 @@ function drawPanelMarks(
     const pitch = e.text_mm * 1.3;
     const top = r.y + r.h / 2 - (pitch * (Math.max(lines.length, 1) - 1)) / 2 + e.text_mm * 0.35;
     ctx.fillStyle = panelTheme.nameplateText;
-    ctx.font = `${Math.max(8, e.text_mm * vp.scale)}px sans-serif`;
+    ctx.font = `${textPx(e.text_mm, vp.scale)}px sans-serif`;
     ctx.textAlign = "center";
     lines.forEach((line, i) => {
       const s = vp.toScreen({ x: r.x + r.w / 2, y: top + i * pitch });
@@ -1125,7 +1126,7 @@ function drawPanelMarks(
     ctx.stroke();
     const s = vp.toScreen(g.textAt);
     ctx.fillStyle = color;
-    ctx.font = `${Math.max(8, DIM_FONT * vp.scale)}px sans-serif`;
+    ctx.font = `${textPx(DIM_FONT, vp.scale)}px sans-serif`;
     ctx.textAlign = "center";
     ctx.fillText(g.text, s.x, s.y);
     ctx.textAlign = "left";
@@ -1158,7 +1159,7 @@ function drawBalloons(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet)
     ctx.stroke();
 
     ctx.fillStyle = panelTheme.balloonText;
-    ctx.font = `600 ${Math.max(9, BALLOON_FONT * vp.scale)}px monospace`;
+    ctx.font = `600 ${textPx(BALLOON_FONT, vp.scale)}px monospace`;
     ctx.textAlign = "center";
     ctx.fillText(String(b.itemNo), center.x, center.y + Math.max(3, (BALLOON_FONT / 2) * vp.scale));
     ctx.textAlign = "left";
@@ -1363,7 +1364,7 @@ export function renderSheet(
         coilLocationAt(e, symbolBounds(e, def), location, wireNotes, noteFont),
       );
       ctx.fillStyle = theme.xref;
-      ctx.font = `${Math.max(8, CONTACT_MAP_FONT * vp.scale)}px monospace`;
+      ctx.font = `${textPx(CONTACT_MAP_FONT, vp.scale)}px monospace`;
       ctx.textAlign = "left";
       ctx.fillText(location, at.x, at.y);
     }
@@ -1371,7 +1372,7 @@ export function renderSheet(
     if (deviceXref) {
       const at = vp.toScreen(deviceXrefAt(e, symbolBounds(e, def), symbolTopY(e, def)));
       ctx.fillStyle = theme.xref;
-      ctx.font = `${Math.max(8, XREF_FONT * vp.scale)}px monospace`;
+      ctx.font = `${textPx(XREF_FONT, vp.scale)}px monospace`;
       ctx.textAlign = "left";
       ctx.fillText(deviceXref, at.x, at.y);
     }
@@ -1388,7 +1389,7 @@ export function renderSheet(
       const labelFont = TAG_FONT * annotationScale(sheet);
       const tag = netTag(e, labelFont);
       ctx.fillStyle = theme.annotation;
-      ctx.font = `${Math.max(9, labelFont * vp.scale)}px monospace`;
+      ctx.font = `${textPx(labelFont, vp.scale)}px monospace`;
       ctx.textAlign = "left";
       if (tag) {
         ctx.strokeStyle = theme.annotation;
@@ -1423,7 +1424,7 @@ export function renderSheet(
       const s = vp.toScreen(e.at);
       ctx.fillStyle = noteColor(e.color, opts.selection.has(e.id));
       const weight = e.bold ? "600 " : "";
-      ctx.font = `${weight}${Math.max(9, e.height * vp.scale)}px sans-serif`;
+      ctx.font = `${weight}${textPx(e.height, vp.scale)}px sans-serif`;
       ctx.textAlign = canvasTextAlign(e.anchor);
       ctx.fillText(e.text, s.x, s.y);
       ctx.textAlign = "left";
