@@ -11,6 +11,7 @@ import { drawHarness, drawSymbol } from "./renderer";
 import { theme, wireColorScreen } from "./theme";
 import { LEGEND_COL_W, LEGEND_ROW_H } from "./wireLegend";
 import type { Viewport } from "./viewport";
+import { textPx } from "./textSize";
 
 /** 既定バリアントのキー。`variants`に無くても必ず選べる (本体の`commands`)。 */
 export const DEFAULT_VARIANT = "A";
@@ -181,7 +182,7 @@ export function drawMacroGhost(
       case "text": {
         const s = vp.toScreen(e.at);
         ctx.fillStyle = theme.selection;
-        ctx.font = `${Math.max(9, 2.5 * vp.scale)}px monospace`;
+        ctx.font = `${textPx(2.5, vp.scale)}px monospace`;
         ctx.textAlign = "left";
         ctx.fillText(e.kind === "text" ? e.text : e.name, s.x, s.y);
         break;

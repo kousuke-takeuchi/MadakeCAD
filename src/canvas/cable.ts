@@ -8,6 +8,7 @@
 import type { Cable, Command, Point, Sheet } from "../ipc";
 import { theme } from "./theme";
 import type { Viewport } from "./viewport";
+import { textPx } from "./textSize";
 
 /** ケーブルの参照記号の接頭辞 (ハーネスと同じ W 系)。 */
 export const CABLE_PREFIX = "W";
@@ -114,7 +115,7 @@ export function drawCable(ctx: CanvasRenderingContext2D, vp: Viewport, c: Cable,
   const top = a.y <= b.y ? a : b;
   const at = vp.toScreen({ x: top.x + 1.5, y: top.y - 1.5 });
   ctx.fillStyle = color;
-  ctx.font = `${Math.max(9, CABLE_FONT * vp.scale)}px monospace`;
+  ctx.font = `${textPx(CABLE_FONT, vp.scale)}px monospace`;
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.fillText(cableLabel(c), at.x, at.y);
