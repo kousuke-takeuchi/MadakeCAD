@@ -259,7 +259,7 @@ async fn place_mate_puts_a_pair_that_one_undo_removes() {
             placed["second"]["x"].as_f64(),
             placed["second"]["y"].as_f64()
         ),
-        (Some(100.0), Some(61.0))
+        (Some(100.0), Some(62.5))
     );
     assert_eq!(
         doc.engine.lock().unwrap().project().sheets[0]

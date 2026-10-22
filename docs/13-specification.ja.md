@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2823仕様項目**。
+全6領域・**2824仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -520,10 +520,11 @@
 - すでに一直線に並んだピンは、向きにかかわらず直線1本で結ばれる。 <sub>`aligned_pins_get_a_straight_wire`</sub>
 - グリッドから外れたピンでも端点はピンの位置のままで、曲がる位置だけグリッドにそろう。 <sub>`off_grid_pins_keep_their_ends`</sub>
 - 経由点があると順に通り、そろっていない区間には水平を先にした角を1つ足す。 <sub>`via_points_are_passed_in_order`</sub>
-- かみ合わせの組は、どちらの向きでもオスがどちら側でも、プラグとソケットを3.5mm離して向かい合わせに置く。参照記号は両方に、値はソケットに付く。 <sub>`a_mate_pair_faces_each_other_in_every_layout`</sub>
+- かみ合わせの組は、どちらの向きでもオスがどちら側でも、プラグとソケットを5mm離して向かい合わせに置く。参照記号は両方に、値はソケットに付く。 <sub>`a_mate_pair_faces_each_other_in_every_layout`</sub>
 - 経路が別のピンの上を通るとネットリスト上そのピンもつながってしまうので断り、どのピンかを知らせる。 <sub>`a_route_that_passes_over_another_pin_is_refused`</sub>
 - 同じピンどうしの配線は、番号で書いても名前で書いても断られる。 <sub>`wiring_a_pin_to_itself_is_refused`</sub>
 - 1つの部品に同じピン番号が2つある(貫通端子)ときは、番号だけの指定を両方の候補つきで断り、「#n」で片方を選べる。 <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
+- かみ合わせの組は2.5mmグリッドにのり、2つは接するだけなので、整頓指標は組を重なりにもグリッド外にも数えない。 <sub>`a_mate_pair_is_tidy`</sub>
 
 ### PLC I/O
 

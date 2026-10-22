@@ -385,7 +385,7 @@ pub enum MaleSide {
 }
 
 /// プラグとソケットの中心の間隔 (mm)。
-pub const MATE_GAP: f64 = 3.5;
+pub const MATE_GAP: f64 = 5.0;
 
 /// 置く前のかみ合わせの組と、外側の2つの接続点。
 #[derive(Debug, Clone)]
@@ -700,8 +700,8 @@ mod tests {
         }
     }
 
-    /// A mate pair puts the plug and the socket 3.5 mm apart facing each other, in both orientations and with the male part on either side; both carry the designator and the socket carries the value.
-    /// かみ合わせの組は、どちらの向きでもオスがどちら側でも、プラグとソケットを3.5mm離して向かい合わせに置く。参照記号は両方に、値はソケットに付く。
+    /// A mate pair puts the plug and the socket 5 mm apart facing each other, in both orientations and with the male part on either side; both carry the designator and the socket carries the value.
+    /// かみ合わせの組は、どちらの向きでもオスがどちら側でも、プラグとソケットを5mm離して向かい合わせに置く。参照記号は両方に、値はソケットに付く。
     #[test]
     fn a_mate_pair_faces_each_other_in_every_layout() {
         let at = p(100.0, 50.0);
@@ -712,7 +712,7 @@ mod tests {
         );
         assert_eq!(
             (h1.first_point, h1.second_point),
-            (p(92.5, 50.0), p(111.0, 50.0))
+            (p(92.5, 50.0), p(112.5, 50.0))
         );
         assert_eq!(
             (h1.second.reference.as_str(), h1.second.value.as_str()),
@@ -726,20 +726,20 @@ mod tests {
         assert_eq!(h2.first.symbol_id, "connector_socket");
         assert_eq!(
             (h2.first_point, h2.second_point),
-            (p(92.5, 50.0), p(111.0, 50.0))
+            (p(92.5, 50.0), p(112.5, 50.0))
         );
         assert_eq!(h2.first.reference, "J1");
         let v1 = mate_pair(at, MateOrientation::Vertical, MaleSide::First, "J1", "");
         assert_eq!(v1.first.symbol_id, "connector_plug");
         assert_eq!(
             (v1.first_point, v1.second_point),
-            (p(100.0, 42.5), p(100.0, 61.0))
+            (p(100.0, 42.5), p(100.0, 62.5))
         );
         let v2 = mate_pair(at, MateOrientation::Vertical, MaleSide::Second, "J1", "");
         assert_eq!(v2.first.symbol_id, "connector_socket");
         assert_eq!(
             (v2.first_point, v2.second_point),
-            (p(100.0, 42.5), p(100.0, 61.0))
+            (p(100.0, 42.5), p(100.0, 62.5))
         );
     }
 
@@ -785,5 +785,26 @@ mod tests {
         assert!(left.pin.x < right.pin.x);
         assert_eq!(right.pin.dir, PinDir::Right);
         assert!(resolve_pin(&sheet, &defs, "TB1.1#3").is_err());
+    }
+
+    /// A mate pair sits on the 2.5 mm grid and its two halves only touch, so the tidy metrics count no overlap and no off-grid point for it.
+    /// かみ合わせの組は2.5mmグリッドにのり、2つは接するだけなので、整頓指標は組を重なりにもグリッド外にも数えない。
+    #[test]
+    fn a_mate_pair_is_tidy() {
+        for orientation in [MateOrientation::Horizontal, MateOrientation::Vertical] {
+            for side in [MaleSide::First, MaleSide::Second] {
+                let pair = mate_pair(p(100.0, 50.0), orientation, side, "J1", "");
+                let sheet = sheet_with(vec![pair.first, pair.second]);
+                let m = crate::tidy::tidy_metrics(&sheet, &sheet_symbol_defs(&sheet));
+                assert_eq!(
+                    (m.symbol_overlaps, m.off_grid),
+                    (0, 0),
+                    "{orientation:?} {side:?}"
+                );
+                for q in [pair.first_point, pair.second_point] {
+                    assert!(crate::tidy::is_on_grid(&q), "{q:?}");
+                }
+            }
+        }
     }
 }
