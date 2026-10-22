@@ -100,6 +100,8 @@ fn project_label_conflicts(project: &crate::model::Project) -> Vec<Diagnostic> {
 
 /// ネットラベル競合の診断コード。シート単位・プロジェクト全体で共通。
 const LABEL_CONFLICT: &str = "erc.label_conflict";
+/// 参照記号の重複判定で、嵌合1極のプラグ/ソケットをまとめる分類名。
+const MATE_HALF: &str = "mate_half";
 
 /// 浮きネットラベル (配線にもピンにも載っていない) の診断コード。
 pub const DANGLING_LABEL: &str = "erc.dangling_label";
@@ -588,7 +590,7 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
         }
     }
 
-    // 参照記号の重複。リレー同士(コイル+接点、多接点)は正当なので除外
+    // 参照記号の重複。リレー同士(コイル+接点、多接点)と、嵌合するプラグ+ソケットは正当なので除外
     let mut by_ref: BTreeMap<&str, Vec<(EntityId, String)>> = BTreeMap::new();
     for e in sheet.entities.values() {
         if let Entity::Symbol(s) = e {
@@ -599,11 +601,18 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 .get(s)
                 .map(|d| d.category.clone())
                 .unwrap_or_default();
-            by_ref.entry(s.reference.as_str()).or_default().push((s.id, category));
+            let kind = if matches!(s.symbol_id.as_str(), "connector_plug" | "connector_socket") {
+                MATE_HALF.to_string()
+            } else {
+                category
+            };
+            by_ref.entry(s.reference.as_str()).or_default().push((s.id, kind));
         }
     }
     for (reference, members) in &by_ref {
-        if members.len() >= 2 && !members.iter().all(|(_, cat)| cat == "relay") {
+        let shared_ok = members.iter().all(|(_, cat)| cat == "relay")
+            || members.iter().all(|(_, cat)| cat == MATE_HALF);
+        if members.len() >= 2 && !shared_ok {
             diags.push(diag(
                 Severity::Error,
                 "erc.duplicate_reference",
@@ -948,6 +957,24 @@ mod tests {
         assert!(dups[0].message.contains("R1"));
         assert_eq!(dups[0].entity_ids.len(), 2);
         assert!(!diags.iter().any(|d| d.code == "erc.duplicate_reference" && d.message.contains("K1")));
+    }
+
+    /// A plug and a socket that share one designator are one mated connector, so they raise no duplicate error, while a plug sharing a designator with an unrelated part still does.
+    /// 同じ参照記号を持つプラグとソケットは1つの嵌合コネクタなので重複エラーにならないが、無関係な部品と同じ記号のプラグは指摘される。
+    #[test]
+    fn a_plug_and_socket_may_share_a_designator() {
+        let sheet = sheet_with(vec![
+            symbol("connector_plug", "J5", 100.0, 50.0),
+            symbol("connector_socket", "J5", 103.5, 50.0),
+            symbol("connector_plug", "J6", 100.0, 80.0),
+            symbol("resistor", "J6", 150.0, 80.0),
+        ]);
+        let dups: Vec<_> = run(&sheet)
+            .into_iter()
+            .filter(|d| d.code == "erc.duplicate_reference")
+            .collect();
+        assert_eq!(dups.len(), 1, "{dups:?}");
+        assert!(dups[0].message.contains("J6"));
     }
 
     /// A pin_groups attribute that overlaps another group, or names a pin the terminal block does not have, is reported as an ERC error naming the terminal block and the bad item, instead of being silently ignored.
