@@ -306,3 +306,126 @@ async fn connect_pins_refuses_a_route_over_another_pin() {
     assert!(e.contains("CTRL1.OUT1") && e.contains("via"), "{e}");
     assert_eq!(count(&doc), before);
 }
+
+/// connect_pins takes a list of connections and draws them all in one call that one undo removes, so the agent can wire a whole sheet without one call per wire.
+/// connect_pins は配線のリストを受け取って1回で全部引き、1回の取り消しで全部消えるので、エージェントは配線1本ごとに呼ばずにシートを配線できる。
+#[tokio::test]
+async fn connect_pins_draws_a_list_of_connections_in_one_edit() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    place_block(&bridge, sheet, "U1", 60.0, 60.0, RIGHT_PIN_BLOCK).await;
+    place_block(&bridge, sheet, "U2", 120.0, 90.0, ONE_PIN_BLOCK).await;
+    place_block(&bridge, sheet, "U3", 60.0, 120.0, RIGHT_PIN_BLOCK).await;
+    place_block(&bridge, sheet, "U4", 120.0, 150.0, ONE_PIN_BLOCK).await;
+    let depth = doc.engine.lock().unwrap().undo_depth();
+    let wired = call(
+        &bridge,
+        "connect_pins",
+        json!({"sheet_id": sheet, "color": "red", "connections": [
+            {"from": "U1.1", "to": "U2.1"},
+            {"from": "U3.1", "to": "U4.1", "color": "black", "sq": 0.75}
+        ]}),
+    )
+    .await;
+    let wires = wired["wires"].as_array().expect("wires");
+    assert_eq!(wires.len(), 2);
+    assert!(wires[0]["points"].as_array().unwrap().len() >= 2);
+    assert_eq!(doc.engine.lock().unwrap().undo_depth(), depth + 1);
+    let diags = call(&bridge, "run_verification", json!({"sheet_id": sheet})).await;
+    assert_eq!(unconnected_pins(&diags), 0);
+    let colors: Vec<String> = doc.engine.lock().unwrap().project().sheets[0]
+        .entities
+        .values()
+        .filter_map(|e| match e {
+            madake_core::Entity::Wire(w) => Some(format!("{}/{}", w.color, w.sq)),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        colors.contains(&"red/0.3".to_string()) && colors.contains(&"black/0.75".to_string()),
+        "{colors:?}"
+    );
+    doc.undo().expect("元に戻せる");
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len(),
+        4
+    );
+}
+
+/// If any connection in the list is wrong, connect_pins names its index and creates none of them.
+/// リストの配線のどれか1本でも誤っていれば、connect_pins はその番号を知らせて1本も作らない。
+#[tokio::test]
+async fn connect_pins_list_is_all_or_nothing() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    place_block(&bridge, sheet, "U1", 60.0, 60.0, RIGHT_PIN_BLOCK).await;
+    place_block(&bridge, sheet, "U2", 120.0, 90.0, ONE_PIN_BLOCK).await;
+    let before = doc.engine.lock().unwrap().project().sheets[0]
+        .entities
+        .len();
+    let e = call_err(
+        &bridge,
+        "connect_pins",
+        json!({"sheet_id": sheet, "connections": [
+            {"from": "U1.1", "to": "U2.1"},
+            {"from": "U9.1", "to": "U2.1"}
+        ]}),
+    )
+    .await;
+    assert!(e.contains("connections[1]") && e.contains("U9"), "{e}");
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len(),
+        before
+    );
+    let both = call_err(
+        &bridge,
+        "connect_pins",
+        json!({"sheet_id": sheet, "from": "U1.1", "to": "U2.1", "connections": [{"from": "U1.1", "to": "U2.1"}]}),
+    )
+    .await;
+    assert!(both.contains("connections"), "{both}");
+}
+
+/// place_mate takes a list of pairs and places them all in one call that one undo removes.
+/// place_mate は組のリストを受け取って1回で全部置き、1回の取り消しで全部消える。
+#[tokio::test]
+async fn place_mate_places_a_list_of_pairs_in_one_edit() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    let placed = call(
+        &bridge,
+        "place_mate",
+        json!({"sheet_id": sheet, "mates": [
+            {"x": 100.0, "y": 50.0, "reference": "J5", "value": "XH-3P"},
+            {"x": 100.0, "y": 57.5},
+            {"x": 100.0, "y": 65.0, "orientation": "vertical", "male_side": "second"}
+        ]}),
+    )
+    .await;
+    let pairs = placed["mates"].as_array().expect("mates");
+    assert_eq!(pairs.len(), 3);
+    assert_eq!(
+        (
+            pairs[1]["first"]["x"].as_f64(),
+            pairs[1]["first"]["y"].as_f64()
+        ),
+        (Some(92.5), Some(57.5))
+    );
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len(),
+        6
+    );
+    doc.undo().expect("元に戻せる");
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len(),
+        0
+    );
+}

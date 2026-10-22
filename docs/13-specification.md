@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2819 specification clauses** across 6 areas.
+**2822 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1253,6 +1253,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - connect_pins refuses an unknown part, an unknown pin, an ambiguous reference and a pin wired to itself, and creates nothing. <sub>`connect_pins_refuses_bad_specifiers_and_creates_nothing`</sub>
 - place_mate puts a plug/socket pair in one step, returns both outer connection points, and one undo removes the pair. <sub>`place_mate_puts_a_pair_that_one_undo_removes`</sub>
 - connect_pins refuses a route that would run over a third pin and creates nothing, so no pin is joined to a net by accident. <sub>`connect_pins_refuses_a_route_over_another_pin`</sub>
+- connect_pins takes a list of connections and draws them all in one call that one undo removes, so the agent can wire a whole sheet without one call per wire. <sub>`connect_pins_draws_a_list_of_connections_in_one_edit`</sub>
+- If any connection in the list is wrong, connect_pins names its index and creates none of them. <sub>`connect_pins_list_is_all_or_nothing`</sub>
+- place_mate takes a list of pairs and places them all in one call that one undo removes. <sub>`place_mate_places_a_list_of_pairs_in_one_edit`</sub>
 
 ### Frame templates (REST)
 
@@ -1545,7 +1548,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Parts selection searches the parts database and answers with a comparison table. <sub>`system_prompt_carries_the_parts_comparison_table`</sub>
 - An unreadable knowledge file is skipped without losing the bundled note. <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
 - The system prompt tells the agent to measure tidiness with get_tidy_metrics and to stop once it stops improving. <sub>`system_prompt_carries_the_tidy_loop`</sub>
-- The system prompt tells the agent to wire diagrams by pin name with the pin tools instead of computing pin coordinates. <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
+- The system prompt tells the agent to wire diagrams by pin name with the pin tools, batched in one call, instead of computing pin coordinates. <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
 
 ### knowledge_docs
 

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2819仕様項目**。
+全6領域・**2822仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1253,6 +1253,9 @@
 - connect_pins は不明な部品・不明なピン・どれか決まらない参照記号・同じピンどうしを断り、何も作らない。 <sub>`connect_pins_refuses_bad_specifiers_and_creates_nothing`</sub>
 - place_mate はプラグとソケットの組を1回で置き、外側の2つの接続点を返し、1回の取り消しで組ごと消える。 <sub>`place_mate_puts_a_pair_that_one_undo_removes`</sub>
 - connect_pins は別のピンの上を通る経路を断って何も作らないので、ピンが誤って回路に入ることがない。 <sub>`connect_pins_refuses_a_route_over_another_pin`</sub>
+- connect_pins は配線のリストを受け取って1回で全部引き、1回の取り消しで全部消えるので、エージェントは配線1本ごとに呼ばずにシートを配線できる。 <sub>`connect_pins_draws_a_list_of_connections_in_one_edit`</sub>
+- リストの配線のどれか1本でも誤っていれば、connect_pins はその番号を知らせて1本も作らない。 <sub>`connect_pins_list_is_all_or_nothing`</sub>
+- place_mate は組のリストを受け取って1回で全部置き、1回の取り消しで全部消える。 <sub>`place_mate_places_a_list_of_pairs_in_one_edit`</sub>
 
 ### 図枠テンプレート (REST)
 
@@ -1545,7 +1548,7 @@
 - 部品選定では部品DBを検索し、比較表で答える。 <sub>`system_prompt_carries_the_parts_comparison_table`</sub>
 - 読めない知識ファイルは読み飛ばされ、同梱ノートは失われない。 <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
 - システムプロンプトは、整えるときは`get_tidy_metrics`で数値を測り、改善が止まったらやめるよう指示する。 <sub>`system_prompt_carries_the_tidy_loop`</sub>
-- システムプロンプトは、配線図はピン操作ツールでピン名を指定して描き、ピン座標を手で計算しないよう指示する。 <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
+- システムプロンプトは、配線図はピン操作ツールでピン名を指定し、まとめて1回で描き、ピン座標を手で計算しないよう指示する。 <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
 
 ### knowledge_docs
 
