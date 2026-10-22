@@ -504,6 +504,26 @@ pub struct GetPinsParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ConnectPinsParams {
+    /// 配線先シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 始点のピン指定 "参照記号.ピン" (例: "U1.SDA")。ピンは番号でも名前でもよい。参照記号の代わりにentity idも書ける。
+    pub from: String,
+    /// 終点のピン指定 (fromと同じ書き方)。
+    pub to: String,
+    /// 経由点(mm)。順に通る。省略時は両端のピンの向きでZ字・L字・直線を選ぶ。
+    pub via: Option<Vec<Point>>,
+    /// 線色(例: "red", "black", "light_blue")。
+    pub color: Option<String>,
+    /// 線径 sq (mm2)。例: 0.3, 0.75, 3.5。
+    pub sq: Option<f64>,
+    /// 電線長(m)。
+    pub length_m: Option<f64>,
+    /// 電線品番。
+    pub part_no: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct SheetRefParams {
     /// 対象シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
@@ -1168,6 +1188,56 @@ impl MadakeMcp {
             .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
         let parts = madake_core::pin_wiring::find_parts(sheet, &sheet_symbol_defs(sheet), &key);
         json_ok(&serde_json::json!({ "parts": parts }))
+    }
+
+    #[tool(
+        description = "2本のピンをピン名で指定して配線する(座標は計算しなくてよい)。from/toは\"参照記号.ピン\"(例: \"U1.SDA\"、\"J1.2\"。ピンは番号でも名前でも、参照記号の代わりにentity idでもよい)。経由点viaが無ければ両端の向きでZ字・L字・直線の直角配線を引き、折れ点は2.5mmグリッドにそろえる。部品は避けないので、引いた後にget_tidy_metricsで重なりを確かめ、必要ならviaを足して引き直す。color/sq/length_m/part_noはdraw_wireと同じ。作成した配線idと頂点列pointsを返す"
+    )]
+    fn connect_pins(
+        &self,
+        Parameters(p): Parameters<ConnectPinsParams>,
+    ) -> Result<String, ErrorData> {
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let points = {
+            let engine = self.doc.engine.lock().unwrap();
+            let sheet = engine
+                .project()
+                .sheet(sheet_id)
+                .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+            let defs = sheet_symbol_defs(sheet);
+            let invalid = |e: String| ErrorData::invalid_params(e, None);
+            let from = madake_core::pin_wiring::resolve_pin(sheet, &defs, &p.from).map_err(invalid)?;
+            let to = madake_core::pin_wiring::resolve_pin(sheet, &defs, &p.to).map_err(invalid)?;
+            if from.entity_id == to.entity_id && from.pin.number == to.pin.number {
+                return Err(ErrorData::invalid_params(
+                    format!("from と to が同じピンです ({})", p.from),
+                    None,
+                ));
+            }
+            madake_core::pin_wiring::route(
+                Point::new(from.pin.x, from.pin.y),
+                from.pin.dir,
+                Point::new(to.pin.x, to.pin.y),
+                to.pin.dir,
+                p.via.as_deref().unwrap_or_default(),
+            )
+        };
+        let id = Uuid::new_v4();
+        let entity = Entity::Wire(Wire {
+            id,
+            points: points.clone(),
+            color: p.color.unwrap_or_else(|| "black".into()),
+            sq: p.sq.unwrap_or(0.3),
+            length_m: p.length_m,
+            length_source: Default::default(),
+            part_no: p.part_no,
+            net: None,
+        });
+        let patch = self
+            .doc
+            .execute(Command::AddEntity { sheet_id, entity })
+            .map_err(internal)?;
+        json_ok(&serde_json::json!({ "entity_id": id, "points": points, "revision": patch.revision }))
     }
 
     #[tool(

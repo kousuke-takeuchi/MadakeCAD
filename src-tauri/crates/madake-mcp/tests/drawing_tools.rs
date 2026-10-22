@@ -109,3 +109,92 @@ fn the_pin_tools_tell_the_agent_not_to_compute_coordinates() {
     assert!(get("get_pins").contains("用紙座標"));
     assert!(get("place_symbol").contains("pins"));
 }
+
+fn unconnected_pins(diagnostics: &Value) -> usize {
+    diagnostics
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|d| d["code"] == "erc.unconnected_pin")
+        .count()
+}
+
+const RIGHT_PIN_BLOCK: &str = r#"{"right":[{"no":"1","name":"A"}]}"#;
+
+/// connect_pins wires two pins by name with right-angle segments, and verification then finds no unconnected pin.
+/// connect_pins はピン名を指定した2本のピンを直角の線分で結び、その後の検証で未接続ピンが出ない。
+#[tokio::test]
+async fn connect_pins_wires_two_pins_by_name() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    place_block(&bridge, sheet, "U1", 60.0, 60.0, RIGHT_PIN_BLOCK).await;
+    place_block(&bridge, sheet, "U2", 120.0, 90.0, ONE_PIN_BLOCK).await;
+    let before = unconnected_pins(&call(&bridge, "run_verification", json!({"sheet_id": sheet})).await);
+    assert_eq!(before, 2);
+    let wired = call(
+        &bridge,
+        "connect_pins",
+        json!({"sheet_id": sheet, "from": "U1.A", "to": "U2.1", "color": "red", "sq": 0.5}),
+    )
+    .await;
+    let pts = wired["points"].as_array().unwrap();
+    assert_eq!(pts.len(), 4, "Z 字になっていない: {pts:?}");
+    for w in pts.windows(2) {
+        assert!(w[0]["x"] == w[1]["x"] || w[0]["y"] == w[1]["y"], "斜めの線分: {w:?}");
+    }
+    let after = unconnected_pins(&call(&bridge, "run_verification", json!({"sheet_id": sheet})).await);
+    assert_eq!(after, 0);
+    let engine = doc.engine.lock().unwrap();
+    let wire = engine.project().sheets[0]
+        .entities
+        .values()
+        .find_map(|e| match e {
+            madake_core::Entity::Wire(w) => Some(w.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!((wire.color.as_str(), wire.sq), ("red", 0.5));
+}
+
+/// connect_pins passes the given via points in order.
+/// connect_pins は渡した経由点を順に通る。
+#[tokio::test]
+async fn connect_pins_passes_via_points() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    place_block(&bridge, sheet, "U1", 60.0, 60.0, RIGHT_PIN_BLOCK).await;
+    place_block(&bridge, sheet, "U2", 120.0, 90.0, ONE_PIN_BLOCK).await;
+    let wired = call(
+        &bridge,
+        "connect_pins",
+        json!({"sheet_id": sheet, "from": "U1.1", "to": "U2.1", "via": [{"x": 90.0, "y": 40.0}]}),
+    )
+    .await;
+    assert!(wired["points"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["x"] == 90.0 && p["y"] == 40.0));
+}
+
+/// connect_pins refuses an unknown part, an unknown pin, an ambiguous reference and a pin wired to itself, and creates nothing.
+/// connect_pins は不明な部品・不明なピン・どれか決まらない参照記号・同じピンどうしを断り、何も作らない。
+#[tokio::test]
+async fn connect_pins_refuses_bad_specifiers_and_creates_nothing() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    place_block(&bridge, sheet, "U1", 60.0, 60.0, TWO_PIN_BLOCK).await;
+    place_block(&bridge, sheet, "J1", 20.0, 20.0, ONE_PIN_BLOCK).await;
+    place_block(&bridge, sheet, "J1", 20.0, 60.0, ONE_PIN_BLOCK).await;
+    let count = |doc: &SharedDoc| doc.engine.lock().unwrap().project().sheets[0].entities.len();
+    let before = count(&doc);
+    let e = call_err(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "U9.1", "to": "U1.IN1"})).await;
+    assert!(e.contains("U1"), "{e}");
+    let e = call_err(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "U1.IN9", "to": "U1.IN1"})).await;
+    assert!(e.contains("OUT1"), "{e}");
+    let e = call_err(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "J1.1", "to": "U1.IN1"})).await;
+    assert!(e.contains("entity id"), "{e}");
+    let e = call_err(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "U1.IN1", "to": "U1.入力1"})).await;
+    assert!(e.contains("同じピン"), "{e}");
+    assert_eq!(count(&doc), before);
+}
