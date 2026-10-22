@@ -198,3 +198,31 @@ async fn connect_pins_refuses_bad_specifiers_and_creates_nothing() {
     assert!(e.contains("同じピン"), "{e}");
     assert_eq!(count(&doc), before);
 }
+
+/// place_mate puts a plug/socket pair in one step, returns both outer connection points, and one undo removes the pair.
+/// place_mate はプラグとソケットの組を1回で置き、外側の2つの接続点を返し、1回の取り消しで組ごと消える。
+#[tokio::test]
+async fn place_mate_puts_a_pair_that_one_undo_removes() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    let placed = call(
+        &bridge,
+        "place_mate",
+        json!({"sheet_id": sheet, "x": 100.0, "y": 50.0, "orientation": "vertical",
+               "male_side": "first", "reference": "J5", "value": "XH-3P"}),
+    )
+    .await;
+    assert_eq!(
+        (placed["first"]["x"].as_f64(), placed["first"]["y"].as_f64()),
+        (Some(100.0), Some(42.5))
+    );
+    assert_eq!(
+        (placed["second"]["x"].as_f64(), placed["second"]["y"].as_f64()),
+        (Some(100.0), Some(61.0))
+    );
+    assert_eq!(doc.engine.lock().unwrap().project().sheets[0].entities.len(), 2);
+    let pins = call(&bridge, "get_pins", json!({"sheet_id": sheet, "reference": "J5"})).await;
+    assert_eq!(pins["parts"][0]["symbol_id"], "connector_socket");
+    doc.undo().expect("元に戻せる");
+    assert_eq!(doc.engine.lock().unwrap().project().sheets[0].entities.len(), 0);
+}

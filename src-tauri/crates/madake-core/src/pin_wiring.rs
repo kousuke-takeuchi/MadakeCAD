@@ -8,8 +8,9 @@ use serde::Serialize;
 use crate::geometry::Point;
 use crate::model::{Entity, EntityId, Sheet, SymbolInstance};
 use crate::netlist::{rotate_local, transform_local};
-use crate::symbol::{instance_symbol_def, sheet_symbol_defs, PinDir, SymbolDef};
+use crate::symbol::{instance_symbol_def, resolve_symbol, sheet_symbol_defs, PinDir, SymbolDef};
 use crate::tidy::{symbol_bounds, Rect};
+use uuid::Uuid;
 
 /// 配置済みピン1本 (用紙座標・回転と反転の後の向き)。
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
@@ -269,11 +270,97 @@ fn simplify(pts: Vec<Point>) -> Vec<Point> {
     out
 }
 
+/// かみ合わせの組の並べ方。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MateOrientation {
+    /// 左右に並べる (first=左)。
+    Horizontal,
+    /// 上下に並べる (first=上)。
+    Vertical,
+}
+
+/// どちら側をオス (プラグ) にするか。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MaleSide {
+    /// 左/上がオス。
+    First,
+    /// 右/下がオス。
+    Second,
+}
+
+/// プラグとソケットの中心の間隔 (mm)。
+pub const MATE_GAP: f64 = 3.5;
+
+/// 置く前のかみ合わせの組と、外側の2つの接続点。
+#[derive(Debug, Clone)]
+pub struct MatePair {
+    pub first: SymbolInstance,
+    pub second: SymbolInstance,
+    pub first_point: Point,
+    pub second_point: Point,
+}
+
+/// プラグとソケットを [`MATE_GAP`] 離して向かい合わせに並べる。参照記号と値はソケットに付ける。
+pub fn mate_pair(
+    at: Point,
+    orientation: MateOrientation,
+    male_side: MaleSide,
+    reference: &str,
+    value: &str,
+) -> MatePair {
+    let second_at = match orientation {
+        MateOrientation::Horizontal => at.translated(MATE_GAP, 0.0),
+        MateOrientation::Vertical => at.translated(0.0, MATE_GAP),
+    };
+    // (symbol_id, 回転, 反転) を first・second の順に
+    let (first_spec, second_spec) = match (orientation, male_side) {
+        (MateOrientation::Horizontal, MaleSide::First) => {
+            (("connector_plug", 0, false), ("connector_socket", 0, false))
+        }
+        (MateOrientation::Horizontal, MaleSide::Second) => {
+            (("connector_socket", 0, true), ("connector_plug", 0, true))
+        }
+        (MateOrientation::Vertical, MaleSide::First) => {
+            (("connector_plug", 90, false), ("connector_socket", 90, false))
+        }
+        (MateOrientation::Vertical, MaleSide::Second) => {
+            (("connector_socket", 270, false), ("connector_plug", 270, false))
+        }
+    };
+    let make = |(symbol_id, rotation, mirror): (&str, u16, bool), at: Point| {
+        let is_socket = symbol_id == "connector_socket";
+        SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: symbol_id.into(),
+            at,
+            rotation,
+            mirror,
+            reference: if is_socket { reference.into() } else { String::new() },
+            value: if is_socket { value.into() } else { String::new() },
+            attrs: Default::default(),
+        }
+    };
+    let first = make(first_spec, at);
+    let second = make(second_spec, second_at);
+    let point = |inst: &SymbolInstance| {
+        let def = resolve_symbol(&inst.symbol_id).expect("同梱のプラグ/ソケット");
+        let pin = &part_pins(inst, &def).pins[0];
+        Point::new(pin.x, pin.y)
+    };
+    MatePair {
+        first_point: point(&first),
+        second_point: point(&second),
+        first,
+        second,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::{Entity, Orientation, PaperSize, Sheet, SymbolInstance};
-    use crate::symbol::{resolve_symbol, sheet_symbol_defs};
     use std::collections::BTreeMap;
     use uuid::Uuid;
 
@@ -464,5 +551,30 @@ mod tests {
         for w in pts.windows(2) {
             assert!(w[0].x == w[1].x || w[0].y == w[1].y, "斜めの線分: {w:?}");
         }
+    }
+
+    /// A mate pair puts the plug and the socket 3.5 mm apart facing each other, in both orientations and with the male part on either side.
+    /// かみ合わせの組は、どちらの向きでもオスがどちら側でも、プラグとソケットを3.5mm離して向かい合わせに置く。
+    #[test]
+    fn a_mate_pair_faces_each_other_in_every_layout() {
+        let at = p(100.0, 50.0);
+        let h1 = mate_pair(at, MateOrientation::Horizontal, MaleSide::First, "J1", "XH");
+        assert_eq!(
+            (h1.first.symbol_id.as_str(), h1.second.symbol_id.as_str()),
+            ("connector_plug", "connector_socket")
+        );
+        assert_eq!((h1.first_point, h1.second_point), (p(92.5, 50.0), p(111.0, 50.0)));
+        assert_eq!((h1.second.reference.as_str(), h1.second.value.as_str()), ("J1", "XH"));
+        assert!(h1.first.reference.is_empty());
+        let h2 = mate_pair(at, MateOrientation::Horizontal, MaleSide::Second, "J1", "");
+        assert_eq!(h2.first.symbol_id, "connector_socket");
+        assert_eq!((h2.first_point, h2.second_point), (p(92.5, 50.0), p(111.0, 50.0)));
+        assert_eq!(h2.first.reference, "J1");
+        let v1 = mate_pair(at, MateOrientation::Vertical, MaleSide::First, "J1", "");
+        assert_eq!(v1.first.symbol_id, "connector_plug");
+        assert_eq!((v1.first_point, v1.second_point), (p(100.0, 42.5), p(100.0, 61.0)));
+        let v2 = mate_pair(at, MateOrientation::Vertical, MaleSide::Second, "J1", "");
+        assert_eq!(v2.first.symbol_id, "connector_socket");
+        assert_eq!((v2.first_point, v2.second_point), (p(100.0, 42.5), p(100.0, 61.0)));
     }
 }

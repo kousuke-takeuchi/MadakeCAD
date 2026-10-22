@@ -524,6 +524,23 @@ pub struct ConnectPinsParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PlaceMateParams {
+    /// 配置先シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 左(縦向きなら上)の部品の位置(mm)。
+    pub x: f64,
+    pub y: f64,
+    /// horizontal(左右に並べる、既定) / vertical(上下に並べる)。
+    pub orientation: Option<madake_core::pin_wiring::MateOrientation>,
+    /// first(左/上がオス、既定) / second(右/下がオス)。
+    pub male_side: Option<madake_core::pin_wiring::MaleSide>,
+    /// 参照記号(ソケット側に付く)。
+    pub reference: Option<String>,
+    /// 型番・値(ソケット側に付く)。
+    pub value: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct SheetRefParams {
     /// 対象シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
@@ -1238,6 +1255,37 @@ impl MadakeMcp {
             .execute(Command::AddEntity { sheet_id, entity })
             .map_err(internal)?;
         json_ok(&serde_json::json!({ "entity_id": id, "points": points, "revision": patch.revision }))
+    }
+
+    #[tool(
+        description = "差し込み1極のかみ合わせ(connector_plug=オスとconnector_socket=メス)を3.5mm離して向かい合わせに1回で置く(undo一発で組ごと消える)。orientation=horizontal(左右、既定)/vertical(上下)、male_side=first(左/上がオス、既定)/second。参照記号と値はソケット側に付く。外側の2つの接続点first/second(用紙座標)と2つのentity idを返す。多極は極ごとに置き、配線はconnect_pins(\"<entity_id>.1\")か返した座標で行う"
+    )]
+    fn place_mate(&self, Parameters(p): Parameters<PlaceMateParams>) -> Result<String, ErrorData> {
+        use madake_core::pin_wiring::{mate_pair, MaleSide, MateOrientation};
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let pair = mate_pair(
+            Point::new(p.x, p.y),
+            p.orientation.unwrap_or(MateOrientation::Horizontal),
+            p.male_side.unwrap_or(MaleSide::First),
+            p.reference.as_deref().unwrap_or_default(),
+            p.value.as_deref().unwrap_or_default(),
+        );
+        let (first_id, second_id) = (pair.first.id, pair.second.id);
+        let commands = vec![
+            Command::AddEntity { sheet_id, entity: Entity::Symbol(pair.first) },
+            Command::AddEntity { sheet_id, entity: Entity::Symbol(pair.second) },
+        ];
+        let patch = self
+            .doc
+            .execute_batch_as(commands, self.doc.mcp_origin())
+            .map_err(internal)?;
+        json_ok(&serde_json::json!({
+            "first_entity_id": first_id,
+            "second_entity_id": second_id,
+            "first": pair.first_point,
+            "second": pair.second_point,
+            "revision": patch.revision,
+        }))
     }
 
     #[tool(
