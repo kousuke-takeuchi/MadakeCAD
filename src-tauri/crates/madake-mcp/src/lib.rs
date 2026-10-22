@@ -494,6 +494,16 @@ pub struct DrawWireParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct GetPinsParams {
+    /// 対象シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 参照記号 (例: "U1")。同じ参照記号の部品が複数あれば全部返す。
+    pub reference: Option<String>,
+    /// 部品のentity id。referenceの代わりに使う。
+    pub entity_id: Option<Uuid>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct SheetRefParams {
     /// 対象シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
@@ -1069,7 +1079,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "シンボルをシートに配置する。作成されたエンティティidを返す。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る"
+        description = "シンボルをシートに配置する。作成されたエンティティidと、置いた部品のピン(pins: 番号・名前・用紙座標x/y・向きdir)を返す。配線はこの座標を使うかconnect_pinsでピン名を指定する。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る"
     )]
     fn place_symbol(
         &self,
@@ -1097,7 +1107,16 @@ impl MadakeMcp {
             .doc
             .execute(Command::AddEntity { sheet_id, entity })
             .map_err(internal)?;
-        json_ok(&serde_json::json!({ "entity_id": id, "revision": patch.revision }))
+        let pins = {
+            let engine = self.doc.engine.lock().unwrap();
+            engine
+                .project()
+                .sheet(sheet_id)
+                .and_then(|sheet| madake_core::pin_wiring::sheet_part_pins(sheet, id))
+                .map(|p| p.pins)
+                .unwrap_or_default()
+        };
+        json_ok(&serde_json::json!({ "entity_id": id, "revision": patch.revision, "pins": pins }))
     }
 
     #[tool(description = "配線(ポリライン)をシートに描く。作成されたエンティティidを返す")]
@@ -1125,6 +1144,30 @@ impl MadakeMcp {
             .execute(Command::AddEntity { sheet_id, entity })
             .map_err(internal)?;
         json_ok(&serde_json::json!({ "entity_id": id, "revision": patch.revision }))
+    }
+
+    #[tool(
+        description = "配置済み部品のピンを返す。reference(参照記号)かentity_idで指定する。部品ごとにentity_id・参照記号・symbol_id・外形bbox(ブロックは5mm丸めの後)と、各ピンの番号・名前・用紙座標x/y・向きdir(回転と反転の後。電線が出ていく向き)を返す。ピン座標は自分で計算せずこのツールで読む"
+    )]
+    fn get_pins(&self, Parameters(p): Parameters<GetPinsParams>) -> Result<String, ErrorData> {
+        let key = match (p.reference, p.entity_id) {
+            (Some(r), _) => r,
+            (None, Some(id)) => id.to_string(),
+            (None, None) => {
+                return Err(ErrorData::invalid_params(
+                    "reference か entity_id のどちらかを指定する",
+                    None,
+                ))
+            }
+        };
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let engine = self.doc.engine.lock().unwrap();
+        let sheet = engine
+            .project()
+            .sheet(sheet_id)
+            .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+        let parts = madake_core::pin_wiring::find_parts(sheet, &sheet_symbol_defs(sheet), &key);
+        json_ok(&serde_json::json!({ "parts": parts }))
     }
 
     #[tool(
