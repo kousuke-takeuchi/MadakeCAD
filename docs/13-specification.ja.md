@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2795仕様項目**。
+全6領域・**2797仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1075,6 +1075,7 @@
 - 何も置かれていないシートは完全に整っており、全てのメトリクスが0になる。 <sub>`an_empty_sheet_scores_zero_on_every_metric`</sub>
 - tidy_metricsは1枚のシートの4つの数値をまとめて1つの値で返す。 <sub>`tidy_metrics_gathers_the_four_counts`</sub>
 - 同じシートを2回測ると全く同じ数値になるので、エージェントは編集の前後を比べられる。 <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
+- tidy_issuesは数えた問題を1件ずつ、種類・関係するエンティティ・文字・場所つきで並べ、件数と一致するので、エージェントは1件ずつ見つけて直せる。 <sub>`tidy_issues_name_each_counted_problem`</sub>
 
 ### 整えバリアント (シート複製 / 採用)
 
@@ -1327,6 +1328,7 @@
 
 - 整えメトリクスのツール説明には「整えループの目標値として使う」ことと、数える3つの対象が書かれている。 <sub>`the_tidy_metrics_tool_is_advertised_as_the_tidy_loop_target`</sub>
 - GET /api/v1/tidy-metrics はシートの交差数・ラベル重なり数・シンボル重なり数・グリッド外数をJSONで返す。 <sub>`tidy_metrics_endpoint_returns_the_four_counts`</sub>
+- 整えメトリクスは数えた問題を1件ずつ (種類・エンティティ・文字・場所) 並べるので、エージェントは直す場所を見つけられる。一覧には上限があり、省いた件数も返す。 <sub>`tidy_metrics_list_each_problem_with_its_place`</sub>
 
 ### tool_bridge
 
