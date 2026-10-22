@@ -121,6 +121,21 @@ fn mcp_config_points_at_local_mcp_server() {
     );
 }
 
+/// The agent's MCP config carries this app run's instance id as a header, so a CLI left over from an earlier run is refused by the server; without an id no header is sent.
+/// エージェントのMCP設定にはこの起動のインスタンスidがヘッダで入るので、前の起動から残ったCLIはサーバーに断られる。idが無ければヘッダは送らない。
+#[test]
+fn mcp_config_carries_the_instance_header() {
+    let mut backend = backend("fake_claude.sh");
+    let cfg: serde_json::Value = serde_json::from_str(&backend.mcp_config_json()).unwrap();
+    assert!(cfg["mcpServers"]["madakecad"].get("headers").is_none());
+    backend.instance_id = Some("run-1".into());
+    let cfg: serde_json::Value = serde_json::from_str(&backend.mcp_config_json()).unwrap();
+    assert_eq!(
+        cfg["mcpServers"]["madakecad"]["headers"][madake_agent::INSTANCE_HEADER],
+        "run-1"
+    );
+}
+
 /// A turn streams events (thinking and text deltas, tool use, completion) parsed from the CLI's stream-json output.
 /// ターンはCLIのstream-json出力から解釈したイベント(思考・テキスト差分・ツール実行・完了)を流す。
 #[tokio::test]
