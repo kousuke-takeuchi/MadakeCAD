@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2815仕様項目**。
+全6領域・**2819仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -521,6 +521,9 @@
 - グリッドから外れたピンでも端点はピンの位置のままで、曲がる位置だけグリッドにそろう。 <sub>`off_grid_pins_keep_their_ends`</sub>
 - 経由点があると順に通り、そろっていない区間には水平を先にした角を1つ足す。 <sub>`via_points_are_passed_in_order`</sub>
 - かみ合わせの組は、どちらの向きでもオスがどちら側でも、プラグとソケットを3.5mm離して向かい合わせに置く。 <sub>`a_mate_pair_faces_each_other_in_every_layout`</sub>
+- 経路が別のピンの上を通るとネットリスト上そのピンもつながってしまうので断り、どのピンかを知らせる。 <sub>`a_route_that_passes_over_another_pin_is_refused`</sub>
+- 同じピンどうしの配線は、番号で書いても名前で書いても断られる。 <sub>`wiring_a_pin_to_itself_is_refused`</sub>
+- 1つの部品に同じピン番号が2つある(貫通端子)ときは、番号だけの指定を両方の候補つきで断り、「#n」で片方を選べる。 <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
 
 ### PLC I/O
 
@@ -1249,6 +1252,7 @@
 - connect_pins は渡した経由点を順に通る。 <sub>`connect_pins_passes_via_points`</sub>
 - connect_pins は不明な部品・不明なピン・どれか決まらない参照記号・同じピンどうしを断り、何も作らない。 <sub>`connect_pins_refuses_bad_specifiers_and_creates_nothing`</sub>
 - place_mate はプラグとソケットの組を1回で置き、外側の2つの接続点を返し、1回の取り消しで組ごと消える。 <sub>`place_mate_puts_a_pair_that_one_undo_removes`</sub>
+- connect_pins は別のピンの上を通る経路を断って何も作らないので、ピンが誤って回路に入ることがない。 <sub>`connect_pins_refuses_a_route_over_another_pin`</sub>
 
 ### 図枠テンプレート (REST)
 

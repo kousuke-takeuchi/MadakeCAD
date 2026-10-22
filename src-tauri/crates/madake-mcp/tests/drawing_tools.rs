@@ -282,3 +282,27 @@ async fn place_mate_puts_a_pair_that_one_undo_removes() {
         0
     );
 }
+
+/// connect_pins refuses a route that would run over a third pin and creates nothing, so no pin is joined to a net by accident.
+/// connect_pins は別のピンの上を通る経路を断って何も作らないので、ピンが誤って回路に入ることがない。
+#[tokio::test]
+async fn connect_pins_refuses_a_route_over_another_pin() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    place_block(&bridge, sheet, "CTRL1", 100.0, 50.0, TWO_PIN_BLOCK).await;
+    place_block(&bridge, sheet, "U2", 200.0, 50.0, ONE_PIN_BLOCK).await;
+    let count = |doc: &SharedDoc| {
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len()
+    };
+    let before = count(&doc);
+    let e = call_err(
+        &bridge,
+        "connect_pins",
+        json!({"sheet_id": sheet, "from": "CTRL1.IN1", "to": "U2.1"}),
+    )
+    .await;
+    assert!(e.contains("CTRL1.OUT1") && e.contains("via"), "{e}");
+    assert_eq!(count(&doc), before);
+}

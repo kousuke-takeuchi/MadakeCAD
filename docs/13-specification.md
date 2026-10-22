@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2815 specification clauses** across 6 areas.
+**2819 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -521,6 +521,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Pins off the grid keep their exact end points while the bend snaps to the grid. <sub>`off_grid_pins_keep_their_ends`</sub>
 - With via points the wire passes each one in order, adding a horizontal-first corner where two points are not aligned. <sub>`via_points_are_passed_in_order`</sub>
 - A mate pair puts the plug and the socket 3.5 mm apart facing each other, in both orientations and with the male part on either side. <sub>`a_mate_pair_faces_each_other_in_every_layout`</sub>
+- A route that would run over a third pin is refused, because the netlist would join that pin to the wire; the message names the pin. <sub>`a_route_that_passes_over_another_pin_is_refused`</sub>
+- Wiring a pin to itself is refused, whether it is named by number or by name. <sub>`wiring_a_pin_to_itself_is_refused`</sub>
+- When one part has the same pin number twice (a through terminal), the bare number is refused with both choices, and "#n" picks one. <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
 
 ### PLC I/O
 
@@ -1249,6 +1252,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - connect_pins passes the given via points in order. <sub>`connect_pins_passes_via_points`</sub>
 - connect_pins refuses an unknown part, an unknown pin, an ambiguous reference and a pin wired to itself, and creates nothing. <sub>`connect_pins_refuses_bad_specifiers_and_creates_nothing`</sub>
 - place_mate puts a plug/socket pair in one step, returns both outer connection points, and one undo removes the pair. <sub>`place_mate_puts_a_pair_that_one_undo_removes`</sub>
+- connect_pins refuses a route that would run over a third pin and creates nothing, so no pin is joined to a net by accident. <sub>`connect_pins_refuses_a_route_over_another_pin`</sub>
 
 ### Frame templates (REST)
 

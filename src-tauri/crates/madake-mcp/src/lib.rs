@@ -1208,52 +1208,47 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "2本のピンをピン名で指定して配線する(座標は計算しなくてよい)。from/toは\"参照記号.ピン\"(例: \"U1.SDA\"、\"J1.2\"。ピンは番号でも名前でも、参照記号の代わりにentity idでもよい)。経由点viaが無ければ両端の向きでZ字・L字・直線の直角配線を引き、折れ点は2.5mmグリッドにそろえる。部品は避けないので、引いた後にget_tidy_metricsで重なりを確かめ、必要ならviaを足して引き直す。color/sq/length_m/part_noはdraw_wireと同じ。作成した配線idと頂点列pointsを返す"
+        description = "2本のピンをピン名で指定して配線する(座標は計算しなくてよい)。from/toは\"参照記号.ピン\"(例: \"U1.SDA\"、\"J1.2\"。ピンは番号でも名前でも、参照記号の代わりにentity idでもよい)。同じ番号のピンが2つある部品(貫通端子の左右など)は\"TB1.1#2\"のように#で何番目かを選ぶ。経由点viaが無ければ両端の向きでZ字・L字・直線の直角配線を引き、折れ点は2.5mmグリッドにそろえる。部品は避けない。経路が別のピンの上を通ると(そのピンまで接続されてしまうので)何も作らずに断り、そのピンを知らせるので、viaで経由点を足して引き直す。color/sq/length_m/part_noはdraw_wireと同じ。作成した配線idと頂点列pointsを返す"
     )]
     fn connect_pins(
         &self,
         Parameters(p): Parameters<ConnectPinsParams>,
     ) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;
-        let points = {
-            let engine = self.doc.engine.lock().unwrap();
-            let sheet = engine
-                .project()
-                .sheet(sheet_id)
-                .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
-            let defs = sheet_symbol_defs(sheet);
-            let invalid = |e: String| ErrorData::invalid_params(e, None);
-            let from = madake_core::pin_wiring::resolve_pin(sheet, &defs, &p.from).map_err(invalid)?;
-            let to = madake_core::pin_wiring::resolve_pin(sheet, &defs, &p.to).map_err(invalid)?;
-            if from.entity_id == to.entity_id && from.pin.number == to.pin.number {
-                return Err(ErrorData::invalid_params(
-                    format!("from と to が同じピンです ({})", p.from),
-                    None,
-                ));
-            }
-            madake_core::pin_wiring::route(
-                Point::new(from.pin.x, from.pin.y),
-                from.pin.dir,
-                Point::new(to.pin.x, to.pin.y),
-                to.pin.dir,
-                p.via.as_deref().unwrap_or_default(),
-            )
-        };
         let id = Uuid::new_v4();
-        let entity = Entity::Wire(Wire {
-            id,
-            points: points.clone(),
-            color: p.color.unwrap_or_else(|| "black".into()),
-            sq: p.sq.unwrap_or(0.3),
-            length_m: p.length_m,
-            length_source: Default::default(),
-            part_no: p.part_no,
-            net: None,
-        });
-        let patch = self
-            .doc
-            .execute(Command::AddEntity { sheet_id, entity })
-            .map_err(internal)?;
+        // ピンの解決から追加までを同じロックの中で行う (間で部品が動くと端点がピンから外れる)
+        let (points, patch) = {
+            let mut engine = self.doc.engine.lock().unwrap();
+            let points = {
+                let sheet = engine
+                    .project()
+                    .sheet(sheet_id)
+                    .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+                madake_core::pin_wiring::plan_connection(
+                    sheet,
+                    &sheet_symbol_defs(sheet),
+                    &p.from,
+                    &p.to,
+                    p.via.as_deref().unwrap_or_default(),
+                )
+                .map_err(|e| ErrorData::invalid_params(e, None))?
+            };
+            let entity = Entity::Wire(Wire {
+                id,
+                points: points.clone(),
+                color: p.color.unwrap_or_else(|| "black".into()),
+                sq: p.sq.unwrap_or(0.3),
+                length_m: p.length_m,
+                length_source: Default::default(),
+                part_no: p.part_no,
+                net: None,
+            });
+            let patch = engine
+                .execute_as(Command::AddEntity { sheet_id, entity }, self.doc.mcp_origin())
+                .map_err(internal)?;
+            (points, patch)
+        };
+        let _ = self.doc.patches.send(patch.clone());
         json_ok(&serde_json::json!({ "entity_id": id, "points": points, "revision": patch.revision }))
     }
 

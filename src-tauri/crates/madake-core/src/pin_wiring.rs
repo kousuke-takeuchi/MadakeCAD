@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::geometry::Point;
 use crate::model::{Entity, EntityId, Sheet, SymbolInstance};
-use crate::netlist::{rotate_local, transform_local};
+use crate::netlist::{rotate_local, segment_distance, transform_local, CONNECT_EPS};
 use crate::symbol::{instance_symbol_def, resolve_symbol, sheet_symbol_defs, PinDir, SymbolDef};
 use crate::tidy::{symbol_bounds, Rect};
 use uuid::Uuid;
@@ -135,16 +135,41 @@ pub fn resolve_pin(sheet: &Sheet, defs: &[SymbolDef], spec: &str) -> Result<Reso
             similar_references(sheet, key).join(", ")
         ));
     }
-    let hits: Vec<(&PartPins, &PinInfo)> = parts
-        .iter()
-        .filter_map(|part| {
-            part.pins
-                .iter()
-                .find(|x| x.number == pin)
-                .or_else(|| part.pins.iter().find(|x| x.name == pin))
-                .map(|x| (part, x))
-        })
-        .collect();
+    // 「1#2」= 同じ番号の2つ目 (貫通端子の右側など)
+    let (pin, occurrence) = match pin.rsplit_once('#') {
+        Some((base, n)) => match n.parse::<usize>() {
+            Ok(n) if n >= 1 => (base, Some(n)),
+            _ => (pin, None),
+        },
+        None => (pin, None),
+    };
+    let mut hits: Vec<(&PartPins, &PinInfo)> = Vec::new();
+    for part in &parts {
+        let mut matches: Vec<&PinInfo> = part.pins.iter().filter(|x| x.number == pin).collect();
+        if matches.is_empty() {
+            matches = part.pins.iter().filter(|x| x.name == pin).collect();
+        }
+        match occurrence {
+            Some(n) => {
+                if let Some(x) = matches.get(n - 1) {
+                    hits.push((part, x));
+                }
+            }
+            None if matches.len() > 1 => {
+                return Err(format!(
+                    "{key} にはピン「{pin}」が{}つあります。「#番号」で選ぶ: {}",
+                    matches.len(),
+                    matches
+                        .iter()
+                        .enumerate()
+                        .map(|(i, x)| format!("{key}.{pin}#{} ({:.1}, {:.1})", i + 1, x.x, x.y))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            None => hits.extend(matches.first().map(|x| (part, *x))),
+        }
+    }
     match hits.as_slice() {
         [] => {
             let listed: Vec<String> = parts
@@ -254,6 +279,69 @@ pub fn route(
     }
     pts.push(to);
     simplify(pts)
+}
+
+/// ピン指定2つから配線の頂点列を決める (connect_pins の中身)。
+pub fn plan_connection(
+    sheet: &Sheet,
+    defs: &[SymbolDef],
+    from: &str,
+    to: &str,
+    via: &[Point],
+) -> Result<Vec<Point>, String> {
+    let a = resolve_pin(sheet, defs, from)?;
+    let b = resolve_pin(sheet, defs, to)?;
+    let (pa, pb) = (Point::new(a.pin.x, a.pin.y), Point::new(b.pin.x, b.pin.y));
+    if a.entity_id == b.entity_id && pa.distance_to(&pb) < EPS {
+        return Err(format!("from と to が同じピンです ({from})"));
+    }
+    let pts = route(pa, a.pin.dir, pb, b.pin.dir, via);
+    // ネットリストは線分上のどこにピンがあっても接続とみなすので、両端以外のピンを通る経路は断る
+    let crossed = pins_on_route(sheet, defs, &pts, &[&a, &b]);
+    if !crossed.is_empty() {
+        return Err(format!(
+            "経路が別のピンの上を通るため、そのピンまでつながってしまいます: {}。viaで経由点を足して避ける",
+            crossed.join(", ")
+        ));
+    }
+    Ok(pts)
+}
+
+/// 経路の線分上にあるピン (両端のピンと、それと同じ部品の同じ番号のピンは除く)。
+fn pins_on_route(
+    sheet: &Sheet,
+    defs: &[SymbolDef],
+    pts: &[Point],
+    ends: &[&ResolvedPin],
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for e in sheet.entities.values() {
+        let Entity::Symbol(s) = e else { continue };
+        let Some(def) = instance_symbol_def(s, defs) else {
+            continue;
+        };
+        for pin in part_pins(s, &def).pins {
+            if ends
+                .iter()
+                .any(|r| r.entity_id == s.id && r.pin.number == pin.number)
+            {
+                continue;
+            }
+            let at = Point::new(pin.x, pin.y);
+            if pts
+                .windows(2)
+                .any(|seg| segment_distance(&at, &seg[0], &seg[1]) < CONNECT_EPS)
+            {
+                let owner = if s.reference.is_empty() {
+                    s.id.to_string()
+                } else {
+                    s.reference.clone()
+                };
+                out.push(format!("{owner}.{}", pin.number));
+            }
+        }
+    }
+    out
 }
 
 /// 重なった頂点と、一直線上の途中の頂点を落とす。
@@ -654,5 +742,49 @@ mod tests {
             (v2.first_point, v2.second_point),
             (p(100.0, 42.5), p(100.0, 61.0))
         );
+    }
+
+    /// A route that would run over a third pin is refused, because the netlist would join that pin to the wire; the message names the pin.
+    /// 経路が別のピンの上を通るとネットリスト上そのピンもつながってしまうので断り、どのピンかを知らせる。
+    #[test]
+    fn a_route_that_passes_over_another_pin_is_refused() {
+        let ctrl = block("CTRL1", 100.0, 50.0);
+        let mut target = block("U2", 200.0, 50.0);
+        target.attrs.insert(
+            "block_pins".into(),
+            r#"{"left":[{"no":"1","name":"A"}]}"#.into(),
+        );
+        let sheet = sheet_with(vec![ctrl, target]);
+        let defs = sheet_symbol_defs(&sheet);
+        let err = plan_connection(&sheet, &defs, "CTRL1.IN1", "U2.1", &[]).unwrap_err();
+        assert!(err.contains("CTRL1.OUT1"), "{err}");
+        let ok = plan_connection(&sheet, &defs, "CTRL1.OUT1", "U2.1", &[]).unwrap();
+        assert_eq!(ok.len(), 2);
+    }
+
+    /// Wiring a pin to itself is refused, whether it is named by number or by name.
+    /// 同じピンどうしの配線は、番号で書いても名前で書いても断られる。
+    #[test]
+    fn wiring_a_pin_to_itself_is_refused() {
+        let sheet = sheet_with(vec![block("CTRL1", 100.0, 50.0)]);
+        let defs = sheet_symbol_defs(&sheet);
+        let err = plan_connection(&sheet, &defs, "CTRL1.IN1", "CTRL1.入力1", &[]).unwrap_err();
+        assert!(err.contains("同じピン"), "{err}");
+    }
+
+    /// When one part has the same pin number twice (a through terminal), the bare number is refused with both choices, and "#n" picks one.
+    /// 1つの部品に同じピン番号が2つある(貫通端子)ときは、番号だけの指定を両方の候補つきで断り、「#n」で片方を選べる。
+    #[test]
+    fn a_through_terminal_side_is_chosen_with_an_occurrence() {
+        let tb = inst("terminal_block_2p", 50.0, 50.0, 0, false, "TB1");
+        let sheet = sheet_with(vec![tb]);
+        let defs = sheet_symbol_defs(&sheet);
+        let err = resolve_pin(&sheet, &defs, "TB1.1").unwrap_err();
+        assert!(err.contains("TB1.1#1") && err.contains("TB1.1#2"), "{err}");
+        let left = resolve_pin(&sheet, &defs, "TB1.1#1").unwrap();
+        let right = resolve_pin(&sheet, &defs, "TB1.1#2").unwrap();
+        assert!(left.pin.x < right.pin.x);
+        assert_eq!(right.pin.dir, PinDir::Right);
+        assert!(resolve_pin(&sheet, &defs, "TB1.1#3").is_err());
     }
 }
