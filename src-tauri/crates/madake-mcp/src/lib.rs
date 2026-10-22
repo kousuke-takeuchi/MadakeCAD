@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use madake_core::{resolve_symbol, sheet_symbol_defs, Command, EditOrigin, Engine, Entity, Patch, Point, SymbolInstance, Wire};
+use axum::response::IntoResponse;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{ErrorData, ServerCapabilities, ServerInfo};
 use rmcp::transport::streamable_http_server::{
@@ -1467,12 +1468,17 @@ impl ServerHandler for MadakeMcp {
 ///
 /// `agent`はUI(Tauri IPC)と共有するエージェントマネージャ。Link APIの
 /// `/api/v1/agent/*`は同じマネージャを叩くので、ブラウザ検証でもUIと同じ会話を見る。
-pub async fn serve(
+/// MCP (`/mcp`) と Link API (`/api/v1`) をまとめたルーター。
+///
+/// `/mcp` は、この起動とは別のインスタンスid ([`madake_agent::INSTANCE_HEADER`]) を名乗る
+/// 接続を断る。アプリが強制終了・再起動しても子プロセスのエージェントCLIは残ることがあり、
+/// 同じポートの新しいアプリへつなぎ直して別の会話の図面へ書き込んでしまうため。
+/// ヘッダの無い接続は外部のMCPクライアント (Claude Codeなど) として今までどおり通す。
+pub fn router(
     doc: SharedDoc,
     agent: std::sync::Arc<madake_agent::AgentManager>,
     parts: SharedParts,
-    port: u16,
-) -> std::io::Result<()> {
+) -> axum::Router {
     let mcp_doc = doc.clone();
     let mcp_parts = parts.clone();
     let mcp_agent = Arc::clone(&agent);
@@ -1481,9 +1487,39 @@ pub async fn serve(
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
-    let router = axum::Router::new()
+    let instance = agent.instance_id().to_string();
+    let guard = axum::middleware::from_fn(
+        move |req: axum::extract::Request, next: axum::middleware::Next| {
+            let instance = instance.clone();
+            async move {
+                let claimed = req
+                    .headers()
+                    .get(madake_agent::INSTANCE_HEADER)
+                    .map(|v| v.to_str().unwrap_or_default().to_string());
+                match claimed {
+                    Some(id) if id != instance => (
+                        axum::http::StatusCode::FORBIDDEN,
+                        "このエージェントは前のMadakeCADの起動で始まったものです。今の図面は編集できません",
+                    )
+                        .into_response(),
+                    _ => next.run(req).await,
+                }
+            }
+        },
+    );
+    axum::Router::new()
         .nest_service("/mcp", service)
-        .merge(link_api::router(doc, agent, parts));
+        .layer(guard)
+        .merge(link_api::router(doc, agent, parts))
+}
+
+pub async fn serve(
+    doc: SharedDoc,
+    agent: std::sync::Arc<madake_agent::AgentManager>,
+    parts: SharedParts,
+    port: u16,
+) -> std::io::Result<()> {
+    let router = router(doc, agent, parts);
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, router).await
