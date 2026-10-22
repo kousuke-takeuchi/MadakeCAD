@@ -320,6 +320,40 @@ pub fn save_project_with_chat(
     Ok(())
 }
 
+/// MCP ツール open_project の本体。`.mdkproj` を開き、開いていた図面と置き換える。
+///
+/// - `agent` が無い窓口 (アプリ内エージェントの API バックエンド用ツール) からは開けない。
+///   応答中の自分のターンの下で図面が差し替わってしまうため
+/// - どの会話かが応答中なら断る (中断はしない)。MCP で接続した Claude Code CLI が
+///   自分の応答を断ち切らないようにするため
+/// - KiCad / DXF は import_kicad / import_dxf へ案内する
+pub fn open_project_tool(doc: &SharedDoc, agent: Option<&AgentManager>, path: &Path) -> Result<Patch, String> {
+    let Some(agent) = agent else {
+        return Err("この窓口 (アプリ内エージェントのツール) からはプロジェクトを開けません。アプリの画面か外部の MCP クライアントから開いてください".into());
+    };
+    if agent.running_count() > 0 {
+        return Err("エージェントの応答中はプロジェクトを開けません。応答が終わってから開いてください".into());
+    }
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    match ext.as_str() {
+        "kicad_sch" => return Err("KiCad 回路図は import_kicad で読み込んでください".into()),
+        "dxf" => return Err("DXF は import_dxf で読み込んでください".into()),
+        _ => {}
+    }
+    load_project_with_chat(doc, agent, path)
+}
+
+/// MCP ツール save_project の本体。`agent` があればチャット履歴も隣に保存する (画面の保存と同じ)。
+pub fn save_project_tool(doc: &SharedDoc, agent: Option<&AgentManager>, path: &Path) -> Result<(), String> {
+    match agent {
+        Some(agent) => save_project_with_chat(doc, agent, path),
+        None => {
+            let engine = doc.engine.lock().unwrap();
+            madake_core::io::save_project(path, engine.project()).map_err(|e| e.to_string())
+        }
+    }
+}
+
 /// プロジェクトの隣(`<stem>.chat.json`)へチャット履歴を保存する。
 ///
 /// 会話が1本も無ければファイルを作らない(空ファイルを撒かない)。

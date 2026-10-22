@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2789 specification clauses** across 6 areas.
+**2795 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1275,6 +1275,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Generation settings that cannot produce a drawing (a split unit of zero points) are refused with 400 and change nothing. <sub>`an_impossible_generation_setting_is_refused_with_a_bad_request`</sub>
 - The PLC I/O report is exported through the ordinary report endpoint as "plc-io", listing one row per assigned point. <sub>`the_plc_io_report_is_exported_like_any_other_report`</sub>
 - The PLC tools tell the agent what the assignment table is for and that generating a page is one undo step. <sub>`the_plc_tools_explain_the_assignment_table_and_the_generated_page`</sub>
+
+### project_tools
+
+- A project saved with save_project opens again with open_project, replacing the drawing that was open. <sub>`a_saved_project_opens_again_and_replaces_the_open_drawing`</sub>
+- Opening a missing file or a file that is not a MadakeCAD project fails with the reason and leaves the open drawing as it was. <sub>`opening_a_missing_or_foreign_file_fails_and_keeps_the_drawing`</sub>
+- The in-app agent's own tool window (no agent manager attached) cannot open a project, because that would replace the drawing under its own running turn. <sub>`the_in_app_tool_window_cannot_open_a_project`</sub>
+- While an agent turn is running, open_project refuses instead of cancelling that turn, so an agent connected over MCP cannot cut off its own reply. <sub>`opening_is_refused_while_an_agent_turn_is_running`</sub>
+- Saving from the in-app tool window writes the drawing only; the chat history is saved only where the agent manager is attached. <sub>`saving_without_the_agent_manager_writes_the_drawing_only`</sub>
+- The MCP server offers open_project and save_project, and their descriptions say which file types they take and that opening replaces the drawing. <sub>`the_server_offers_open_and_save_with_clear_descriptions`</sub>
 
 ### provider_api
 

@@ -687,11 +687,19 @@ pub struct ExportSheetParams {
 pub struct MadakeMcp {
     doc: SharedDoc,
     parts: SharedParts,
+    /// 外部の MCP クライアント向けの窓口だけが持つ (open_project / save_project がチャット履歴も扱う)。
+    /// アプリ内エージェントのツール窓口 ([`crate::tool_bridge`]) では `None`。
+    agent: Option<Arc<madake_agent::AgentManager>>,
 }
 
 impl MadakeMcp {
     pub fn new(doc: SharedDoc, parts: SharedParts) -> Self {
-        Self { doc, parts }
+        Self { doc, parts, agent: None }
+    }
+
+    /// 外部の MCP クライアント向け (エージェント管理つき)。
+    pub fn with_agent(doc: SharedDoc, parts: SharedParts, agent: Arc<madake_agent::AgentManager>) -> Self {
+        Self { doc, parts, agent: Some(agent) }
     }
 
     fn resolve_sheet(&self, sheet_id: Option<Uuid>) -> Result<Uuid, ErrorData> {
@@ -734,8 +742,39 @@ pub fn tool_descriptions() -> Vec<(String, String)> {
         .collect()
 }
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ProjectPathParams {
+    /// プロジェクトファイルのパス (絶対パス、拡張子 .mdkproj)。
+    pub path: String,
+}
+
 #[tool_router]
 impl MadakeMcp {
+    #[tool(
+        description = "MadakeCAD のプロジェクトファイル (.mdkproj) を開き、いま開いている図面と置き換える (隣の <名前>.chat.json があればチャット履歴も読む)。置き換えは undo で戻らないので、必要なら先に save_project で保存すること。エージェントの応答中は断る。KiCad 回路図は import_kicad、DXF は import_dxf を使う"
+    )]
+    fn open_project(&self, Parameters(p): Parameters<ProjectPathParams>) -> Result<String, ErrorData> {
+        agent::open_project_tool(&self.doc, self.agent.as_deref(), std::path::Path::new(&p.path))
+            .map_err(|e| ErrorData::invalid_params(e, None))?;
+        let engine = self.doc.engine.lock().unwrap();
+        let project = engine.project();
+        json_ok(&serde_json::json!({
+            "opened": p.path,
+            "name": project.name,
+            "sheets": project.sheets.iter().map(|s| s.name.clone()).collect::<Vec<_>>(),
+            "revision": engine.revision(),
+        }))
+    }
+
+    #[tool(
+        description = "いま開いている図面をプロジェクトファイル (.mdkproj) として保存する (画面の「保存」と同じ。チャット履歴があれば隣に <名前>.chat.json も書く)。同じパスがあれば上書きする"
+    )]
+    fn save_project(&self, Parameters(p): Parameters<ProjectPathParams>) -> Result<String, ErrorData> {
+        agent::save_project_tool(&self.doc, self.agent.as_deref(), std::path::Path::new(&p.path))
+            .map_err(|e| ErrorData::invalid_params(e, None))?;
+        json_ok(&serde_json::json!({ "written": p.path }))
+    }
+
     #[tool(
         description = "現在開いているMadakeCADプロジェクト全体(全シート・全エンティティ)をJSONで返す"
     )]
@@ -1436,8 +1475,9 @@ pub async fn serve(
 ) -> std::io::Result<()> {
     let mcp_doc = doc.clone();
     let mcp_parts = parts.clone();
+    let mcp_agent = Arc::clone(&agent);
     let service = StreamableHttpService::new(
-        move || Ok(MadakeMcp::new(mcp_doc.clone(), mcp_parts.clone())),
+        move || Ok(MadakeMcp::with_agent(mcp_doc.clone(), mcp_parts.clone(), Arc::clone(&mcp_agent))),
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
