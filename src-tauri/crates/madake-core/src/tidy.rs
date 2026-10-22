@@ -171,9 +171,11 @@ pub enum TextKind {
 }
 
 /// 図面に印字される文字1つ分。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TextBox {
     pub rect: Rect,
+    /// 印字される文字。
+    pub text: String,
     pub kind: TextKind,
     /// 持ち主のエンティティ (参照記号・型番ならシンボル、注記なら注記自身)。
     pub owner: Option<EntityId>,
@@ -259,6 +261,7 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                             Anchor::Middle,
                             &s.reference,
                         ),
+                        text: s.reference.clone(),
                         kind: TextKind::Reference,
                         owner: Some(s.id),
                     });
@@ -272,6 +275,7 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                             Anchor::Middle,
                             &s.value,
                         ),
+                        text: s.value.clone(),
                         kind: TextKind::Value,
                         owner: Some(s.id),
                     });
@@ -292,6 +296,7 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                                     Anchor::Middle,
                                     &text,
                                 ),
+                                text: text.clone(),
                                 kind: TextKind::PinGroupCaption,
                                 owner: Some(s.id),
                             });
@@ -308,12 +313,14 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                 };
                 boxes.push(TextBox {
                     rect: text_box(x, baseline, font, Anchor::Start, &l.name),
+                    text: l.name.clone(),
                     kind: TextKind::NetLabel,
                     owner: Some(l.id),
                 });
             }
             Entity::Text(t) if !t.text.is_empty() => boxes.push(TextBox {
                 rect: text_box(t.at.x, t.at.y, t.height, Anchor::Start, &t.text),
+                text: t.text.clone(),
                 kind: TextKind::Note,
                 owner: Some(t.id),
             }),
@@ -337,6 +344,7 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
         };
         boxes.push(TextBox {
             rect,
+            text: no.to_string(),
             kind: TextKind::WireNumber,
             owner: None,
         });
@@ -349,13 +357,23 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
 /// 辺で接しているだけは数えない。シンボル自身の参照記号・型番は、その持ち主の外形とは
 /// 重ならない扱いにする (SVG出力では必ず外形の上へ逃がして描かれるため)。
 pub fn label_overlaps(sheet: &Sheet, symbols: &[SymbolDef]) -> usize {
+    label_overlap_issues(sheet, symbols).len()
+}
+
+/// [`label_overlaps`]が数える組を1件ずつ (重なりの中心・関係するエンティティ・文字つき)。
+pub fn label_overlap_issues(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TidyIssue> {
     let texts = text_boxes(sheet, symbols);
     let symbol_rects = symbol_boxes(sheet, symbols);
-    let mut count = 0;
+    let mut issues = Vec::new();
     for (i, a) in texts.iter().enumerate() {
         for b in texts.iter().skip(i + 1) {
             if a.rect.overlaps(&b.rect) {
-                count += 1;
+                issues.push(TidyIssue {
+                    kind: TidyIssueKind::LabelOverlap,
+                    entity_ids: a.owner.into_iter().chain(b.owner).collect(),
+                    texts: vec![a.text.clone(), b.text.clone()],
+                    at: overlap_center(&a.rect, &b.rect),
+                });
             }
         }
         for (id, rect) in &symbol_rects {
@@ -363,25 +381,48 @@ pub fn label_overlaps(sheet: &Sheet, symbols: &[SymbolDef]) -> usize {
                 continue;
             }
             if a.rect.overlaps(rect) {
-                count += 1;
+                issues.push(TidyIssue {
+                    kind: TidyIssueKind::LabelOverlap,
+                    entity_ids: a.owner.into_iter().chain(Some(*id)).collect(),
+                    texts: vec![a.text.clone()],
+                    at: overlap_center(&a.rect, rect),
+                });
             }
         }
     }
-    count
+    issues
 }
 
 /// シンボル外形どうしが重なっている組の数。辺で接しているだけは数えない。
 pub fn symbol_overlaps(sheet: &Sheet, symbols: &[SymbolDef]) -> usize {
+    symbol_overlap_issues(sheet, symbols).len()
+}
+
+/// [`symbol_overlaps`]が数える組を1件ずつ。
+pub fn symbol_overlap_issues(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TidyIssue> {
     let rects = symbol_boxes(sheet, symbols);
-    let mut count = 0;
-    for (i, (_, a)) in rects.iter().enumerate() {
-        for (_, b) in rects.iter().skip(i + 1) {
+    let mut issues = Vec::new();
+    for (i, (ia, a)) in rects.iter().enumerate() {
+        for (ib, b) in rects.iter().skip(i + 1) {
             if a.overlaps(b) {
-                count += 1;
+                issues.push(TidyIssue {
+                    kind: TidyIssueKind::SymbolOverlap,
+                    entity_ids: vec![*ia, *ib],
+                    texts: Vec::new(),
+                    at: overlap_center(a, b),
+                });
             }
         }
     }
-    count
+    issues
+}
+
+/// 2つの矩形の重なり部分の中心。
+fn overlap_center(a: &Rect, b: &Rect) -> Point {
+    Point::new(
+        (a.min.x.max(b.min.x) + a.max.x.min(b.max.x)) / 2.0,
+        (a.min.y.max(b.min.y) + a.max.y.min(b.max.y)) / 2.0,
+    )
 }
 
 /// 2線分の位置関係。
@@ -447,17 +488,22 @@ fn segment_hit(a1: Point, a2: Point, b1: Point, b2: Point) -> SegHit {
 /// 端点で出会う接続 (L字の突き合わせ・T分岐) と、同じ配線の連続する線分 (曲がり角) は
 /// 交差に数えない。同一直線上に二重に引かれた部分重なりは1件として数える。
 pub fn wire_crossings(sheet: &Sheet) -> usize {
-    // (配線の通し番号, 配線内の線分番号, 始点, 終点)
-    let mut segments: Vec<(usize, usize, Point, Point)> = Vec::new();
-    for (wire_index, entity) in sheet.entities.values().enumerate() {
+    crossing_issues(sheet).len()
+}
+
+/// [`wire_crossings`]が数える箇所を1件ずつ (交点と2本の配線)。
+pub fn crossing_issues(sheet: &Sheet) -> Vec<TidyIssue> {
+    // (配線id, 配線内の線分番号, 始点, 終点)
+    let mut segments: Vec<(EntityId, usize, Point, Point)> = Vec::new();
+    for entity in sheet.entities.values() {
         let Entity::Wire(w) = entity else {
             continue;
         };
         for (seg_index, seg) in w.points.windows(2).enumerate() {
-            segments.push((wire_index, seg_index, seg[0], seg[1]));
+            segments.push((w.id, seg_index, seg[0], seg[1]));
         }
     }
-    let mut count = 0;
+    let mut issues = Vec::new();
     for (i, a) in segments.iter().enumerate() {
         for b in segments.iter().skip(i + 1) {
             // 同じ配線の連続する線分 (曲がり角) は接続なので数えない
@@ -465,11 +511,29 @@ pub fn wire_crossings(sheet: &Sheet) -> usize {
                 continue;
             }
             if segment_hit(a.2, a.3, b.2, b.3) == SegHit::Cross {
-                count += 1;
+                let ids = if a.0 == b.0 { vec![a.0] } else { vec![a.0, b.0] };
+                issues.push(TidyIssue {
+                    kind: TidyIssueKind::Crossing,
+                    entity_ids: ids,
+                    texts: Vec::new(),
+                    at: crossing_point(a.2, a.3, b.2, b.3),
+                });
             }
         }
     }
-    count
+    issues
+}
+
+/// 交わる2線分の交点。同一直線上の二重引きは、重なっている部分の中心。
+fn crossing_point(a1: Point, a2: Point, b1: Point, b2: Point) -> Point {
+    let (rx, ry) = (a2.x - a1.x, a2.y - a1.y);
+    let (sx, sy) = (b2.x - b1.x, b2.y - b1.y);
+    let denom = cross2(rx, ry, sx, sy);
+    if denom.abs() > PARALLEL_EPS * a1.distance_to(&a2) * b1.distance_to(&b2) {
+        let t = cross2(b1.x - a1.x, b1.y - a1.y, sx, sy) / denom;
+        return Point::new(a1.x + t * rx, a1.y + t * ry);
+    }
+    overlap_center(&Rect::from_corners(a1, a2), &Rect::from_corners(b1, b2))
 }
 
 /// 点が2.5mmグリッドに乗っているか (許容誤差は[`CONNECT_EPS`])。
@@ -480,15 +544,93 @@ pub fn is_on_grid(p: &Point) -> bool {
 
 /// 2.5mmグリッドから外れている点の数 (シンボル原点・配線頂点)。ずれた点1つにつき1件。
 pub fn off_grid_count(sheet: &Sheet) -> usize {
-    sheet
-        .entities
-        .values()
-        .map(|entity| match entity {
-            Entity::Symbol(s) => usize::from(!is_on_grid(&s.at)),
-            Entity::Wire(w) => w.points.iter().filter(|p| !is_on_grid(p)).count(),
-            _ => 0,
-        })
-        .sum()
+    off_grid_issues(sheet).len()
+}
+
+/// [`off_grid_count`]が数える点を1件ずつ。
+pub fn off_grid_issues(sheet: &Sheet) -> Vec<TidyIssue> {
+    let issue = |id: EntityId, at: Point| TidyIssue {
+        kind: TidyIssueKind::OffGrid,
+        entity_ids: vec![id],
+        texts: Vec::new(),
+        at,
+    };
+    let mut issues = Vec::new();
+    for entity in sheet.entities.values() {
+        match entity {
+            Entity::Symbol(s) if !is_on_grid(&s.at) => issues.push(issue(s.id, s.at)),
+            Entity::Wire(w) => issues.extend(
+                w.points.iter().filter(|p| !is_on_grid(p)).map(|p| issue(w.id, *p)),
+            ),
+            _ => {}
+        }
+    }
+    issues
+}
+
+/// 整えメトリクスが数えた問題の種類。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TidyIssueKind {
+    /// 配線の交差 ([`wire_crossings`])。
+    Crossing,
+    /// 文字の重なり ([`label_overlaps`])。
+    LabelOverlap,
+    /// シンボル外形の重なり ([`symbol_overlaps`])。
+    SymbolOverlap,
+    /// グリッド外の点 ([`off_grid_count`])。
+    OffGrid,
+}
+
+/// 整えメトリクスが数えた問題1件。数値の1件ずつに対応する。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TidyIssue {
+    pub kind: TidyIssueKind,
+    /// 関係するエンティティ (交差なら2本の配線、重なりなら持ち主どうし)。
+    pub entity_ids: Vec<EntityId>,
+    /// 重なっている文字 (文字の重なりのときだけ)。
+    pub texts: Vec<String>,
+    /// 問題の場所 (交点・重なりの中心・ずれた点)。
+    pub at: Point,
+}
+
+/// シート1枚で数えた問題を全部、種類の順 (交差・文字・シンボル・グリッド外) に並べる。
+/// 種類ごとの件数は [`tidy_metrics`] の数値と一致する。
+pub fn tidy_issues(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TidyIssue> {
+    let mut issues = crossing_issues(sheet);
+    issues.extend(label_overlap_issues(sheet, symbols));
+    issues.extend(symbol_overlap_issues(sheet, symbols));
+    issues.extend(off_grid_issues(sheet));
+    issues
+}
+
+/// [`TidyReport::details`] に載せる件数の上限 (応答を大きくしすぎない)。
+pub const TIDY_DETAILS_LIMIT: usize = 50;
+
+/// 4つの数値と、数えた問題の一覧 (先頭から [`TIDY_DETAILS_LIMIT`] 件)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TidyReport {
+    #[serde(flatten)]
+    pub metrics: TidyMetrics,
+    /// 数えた問題 (種類・エンティティ・文字・場所)。種類の順。
+    pub details: Vec<TidyIssue>,
+    /// 上限を超えて省いた件数。
+    pub details_omitted: usize,
+}
+
+/// シート1枚の [`TidyReport`]。数値は [`tidy_metrics`] と同じ。
+pub fn tidy_report(sheet: &Sheet, symbols: &[SymbolDef]) -> TidyReport {
+    let mut details = tidy_issues(sheet, symbols);
+    let count = |k: TidyIssueKind| details.iter().filter(|i| i.kind == k).count();
+    let metrics = TidyMetrics {
+        crossings: count(TidyIssueKind::Crossing),
+        label_overlaps: count(TidyIssueKind::LabelOverlap),
+        symbol_overlaps: count(TidyIssueKind::SymbolOverlap),
+        off_grid: count(TidyIssueKind::OffGrid),
+    };
+    let details_omitted = details.len().saturating_sub(TIDY_DETAILS_LIMIT);
+    details.truncate(TIDY_DETAILS_LIMIT);
+    TidyReport { metrics, details, details_omitted }
 }
 
 #[cfg(test)]
@@ -869,5 +1011,38 @@ mod tests {
         ]);
         let symbols = builtin_symbols();
         assert_eq!(tidy_metrics(&sheet, &symbols), tidy_metrics(&sheet, &symbols));
+    }
+
+    /// tidy_issues lists every counted problem with its kind, the entities involved, the text and where it is, one entry per count, so the agent can find and fix each one.
+    /// tidy_issuesは数えた問題を1件ずつ、種類・関係するエンティティ・文字・場所つきで並べ、件数と一致するので、エージェントは1件ずつ見つけて直せる。
+    #[test]
+    fn tidy_issues_name_each_counted_problem() {
+        let a = wire(&[(50.0, 50.0), (100.0, 50.0)]);
+        let b = wire(&[(75.0, 25.0), (75.0, 75.1)]);
+        let r1 = symbol("resistor", (100.0, 100.0), "");
+        let r2 = symbol("resistor", (105.0, 100.0), "");
+        let n = note((95.0, 101.0), "注記", 2.5);
+        let ids = (a.id(), b.id(), r1.id(), r2.id(), n.id());
+        let sheet = sheet_with(vec![a, b, r1, r2, n]);
+        let symbols = builtin_symbols();
+        let m = tidy_metrics(&sheet, &symbols);
+        let issues = tidy_issues(&sheet, &symbols);
+        let count = |k: TidyIssueKind| issues.iter().filter(|i| i.kind == k).count();
+        assert_eq!(count(TidyIssueKind::Crossing), m.crossings);
+        assert_eq!(count(TidyIssueKind::LabelOverlap), m.label_overlaps);
+        assert_eq!(count(TidyIssueKind::SymbolOverlap), m.symbol_overlaps);
+        assert_eq!(count(TidyIssueKind::OffGrid), m.off_grid);
+
+        let crossing = issues.iter().find(|i| i.kind == TidyIssueKind::Crossing).unwrap();
+        assert!(crossing.entity_ids.contains(&ids.0) && crossing.entity_ids.contains(&ids.1));
+        assert_eq!((crossing.at.x, crossing.at.y), (75.0, 50.0));
+        let overlap = issues.iter().find(|i| i.kind == TidyIssueKind::SymbolOverlap).unwrap();
+        assert!(overlap.entity_ids.contains(&ids.2) && overlap.entity_ids.contains(&ids.3));
+        let label = issues.iter().find(|i| i.kind == TidyIssueKind::LabelOverlap).unwrap();
+        assert!(label.entity_ids.contains(&ids.4), "{label:?}");
+        assert!(label.texts.iter().any(|t| t == "注記"), "{label:?}");
+        let off = issues.iter().find(|i| i.kind == TidyIssueKind::OffGrid).unwrap();
+        assert_eq!(off.entity_ids, vec![ids.1]);
+        assert_eq!((off.at.x, off.at.y), (75.0, 75.1));
     }
 }
