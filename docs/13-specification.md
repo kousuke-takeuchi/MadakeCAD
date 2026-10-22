@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2795 specification clauses** across 6 areas.
+**2803 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -538,6 +538,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Only a page generated with the same ladder style and rung spacing can be shared; otherwise the next module starts a new page. <sub>`a_page_of_another_style_or_spacing_is_not_shared`</sub>
 - A rung spacing that is not a positive multiple of the 2.5 mm grid is refused, so generated pages stay on grid. <sub>`an_off_grid_rung_spacing_is_refused`</sub>
 - The I/O report lists every point as address, signal name, target, wire number and comment, with the module reference in front for the whole project. <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
+
+### raster
+
+- A sheet becomes a PNG whose size is the paper size times the requested pixels per millimetre. <sub>`a_sheet_becomes_a_png_of_the_paper_size`</sub>
+- A region in millimetres crops the image, so the agent can zoom into one part of the sheet. <sub>`a_region_crops_the_image`</sub>
+- An image larger than the limit is scaled down to fit, and the scale actually used is reported. <sub>`a_large_image_is_scaled_down_to_the_limit`</sub>
+- A region outside the paper or with no area is refused. <sub>`an_empty_region_is_refused`</sub>
 
 ### relay_xref
 
@@ -1302,6 +1309,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - GET /devices returns the reference-designator tree the device navigator draws, with each function's terminals and location. <sub>`the_device_tree_comes_back_over_the_link_api`</sub>
 - A drawing with nothing on it has an empty device tree rather than an error. <sub>`an_empty_drawing_has_an_empty_device_tree`</sub>
 
+### sheet_image
+
+- The sheet image is a PNG of the whole sheet at 4 px/mm by default, and a region in millimetres zooms into part of it. <sub>`the_sheet_image_is_a_png_of_the_sheet_or_a_region`</sub>
+- Backends that cannot show tool images (API and Copilot routes through the tool bridge) get a short note instead of a huge base64 string. <sub>`the_bridge_replaces_the_image_with_a_short_note`</sub>
+- The tool tells the agent to look at the drawing after editing it. <sub>`the_image_tool_tells_the_agent_to_look_after_editing`</sub>
+
 ### User symbol library (REST)
 
 - GET /symbols lists the bundled library and the user's own symbols together, with the user symbols last and always in the "user" category. <sub>`the_link_api_lists_bundled_and_user_symbols_together`</sub>
@@ -1516,6 +1529,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Parts selection searches the parts database and answers with a comparison table. <sub>`system_prompt_carries_the_parts_comparison_table`</sub>
 - An unreadable knowledge file is skipped without losing the bundled note. <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
 - The system prompt tells the agent to measure tidiness with get_tidy_metrics and to stop once it stops improving. <sub>`system_prompt_carries_the_tidy_loop`</sub>
+- The system prompt tells the agent to look at the sheet image after drawing, instead of judging the layout by numbers alone. <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
 
 ### knowledge_docs
 

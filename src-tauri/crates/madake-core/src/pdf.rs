@@ -70,7 +70,7 @@ pub fn preferred_families() -> (&'static str, &'static str) {
 }
 
 /// フォントDB。システムフォント走査は高コストなのでプロセスで1回だけ行う。
-fn fontdb() -> &'static usvg::fontdb::Database {
+pub(crate) fn fontdb() -> &'static usvg::fontdb::Database {
     static DB: OnceLock<usvg::fontdb::Database> = OnceLock::new();
     DB.get_or_init(|| {
         let mut db = usvg::fontdb::Database::new();
