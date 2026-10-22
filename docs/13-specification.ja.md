@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2795仕様項目**。
+全6領域・**2815仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -506,6 +506,21 @@
 - 端子番号を上書きした多段端子台でも、1段ぶんの端子を指す範囲は上書きが無いときと同じようにその段の列に括弧を掛ける。 <sub>`a_multilevel_range_still_brackets_its_own_column_after_an_override`</sub>
 - 多段端子台の段をまたぐ範囲は、黙って何も描かれるのではなく報告される: 段ごとに外側の辺が逆なので、1本の括弧では囲めないため。 <sub>`a_range_across_two_levels_is_reported_instead_of_silently_skipped`</sub>
 - シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される: まっすぐな括弧にならないため。 <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
+
+### pin_wiring
+
+- プラグのピンは用紙上の位置で返り、向きは回転と反転に合わせて変わる。 <sub>`pin_direction_follows_rotation_and_mirror`</sub>
+- ブロックの名前付きピンは番号・名前・外側の位置で返り、外形は丸めた後の大きさで返る。 <sub>`block_pins_and_outline_are_reported`</sub>
+- 参照記号で引くとその参照記号の部品を全部返し、entity id で引くとその部品だけを返す。 <sub>`parts_are_found_by_reference_or_entity_id`</sub>
+- ピン指定は最後の「.」で分け、ピン番号で探してから名前で探す。 <sub>`a_pin_is_resolved_by_number_then_by_name`</sub>
+- 誤ったピン指定は、直すのに要るもの(書き方・似た参照記号・部品のピン・選ぶentity id)を添えて断られる。 <sub>`a_wrong_specifier_is_refused_with_candidates`</sub>
+- 左右向きのピンどうしは Z 字で結ばれ、縦の区間は2本の中央の2.5mmグリッド上に来る。 <sub>`horizontal_pins_get_a_z_route`</sub>
+- 上下向きのピンどうしは Z 字で結ばれ、横の区間は中央に来る。 <sub>`vertical_pins_get_a_z_route`</sub>
+- 左右向きと上下向きのピンは L 字で結ばれ、各端は自分の向きへ出る。 <sub>`mixed_pins_get_an_l_route`</sub>
+- すでに一直線に並んだピンは、向きにかかわらず直線1本で結ばれる。 <sub>`aligned_pins_get_a_straight_wire`</sub>
+- グリッドから外れたピンでも端点はピンの位置のままで、曲がる位置だけグリッドにそろう。 <sub>`off_grid_pins_keep_their_ends`</sub>
+- 経由点があると順に通り、そろっていない区間には水平を先にした角を1つ足す。 <sub>`via_points_are_passed_in_order`</sub>
+- かみ合わせの組は、どちらの向きでもオスがどちら側でも、プラグとソケットを3.5mm離して向かい合わせに置く。 <sub>`a_mate_pair_faces_each_other_in_every_layout`</sub>
 
 ### PLC I/O
 
@@ -1225,6 +1240,16 @@
 - 図面コンテキストは検証サマリ(重要度ごとの件数と先頭数件のcode・メッセージ)を含む。 <sub>`drawing_context_summarizes_the_verification_result`</sub>
 - AI設定のエンドポイントは変更を永続化し、エージェントマネージャへ適用する。 <sub>`settings_endpoints_persist_and_apply`</sub>
 
+### drawing_tools
+
+- place_symbol は置いた部品のピンを用紙上の位置つきで返すので、エージェントは座標を計算せずに配線できる。 <sub>`place_symbol_returns_the_pins_of_the_new_part`</sub>
+- get_pins は参照記号か entity id で部品を探し、ピンと外形を返す。 <sub>`get_pins_finds_parts_by_reference_or_entity_id`</sub>
+- ピン操作ツールの説明には、ピン座標を計算せずピン名で配線するよう書かれている。 <sub>`the_pin_tools_tell_the_agent_not_to_compute_coordinates`</sub>
+- connect_pins はピン名を指定した2本のピンを直角の線分で結び、その後の検証で未接続ピンが出ない。 <sub>`connect_pins_wires_two_pins_by_name`</sub>
+- connect_pins は渡した経由点を順に通る。 <sub>`connect_pins_passes_via_points`</sub>
+- connect_pins は不明な部品・不明なピン・どれか決まらない参照記号・同じピンどうしを断り、何も作らない。 <sub>`connect_pins_refuses_bad_specifiers_and_creates_nothing`</sub>
+- place_mate はプラグとソケットの組を1回で置き、外側の2つの接続点を返し、1回の取り消しで組ごと消える。 <sub>`place_mate_puts_a_pair_that_one_undo_removes`</sub>
+
 ### 図枠テンプレート (REST)
 
 - GET /frame-templates は同梱の図枠テンプレートを英日の名前つきで返し、ユーザーが自分の図枠を置くフォルダの場所も添える。 <sub>`the_link_api_lists_the_bundled_frame_templates`</sub>
@@ -1516,6 +1541,7 @@
 - 部品選定では部品DBを検索し、比較表で答える。 <sub>`system_prompt_carries_the_parts_comparison_table`</sub>
 - 読めない知識ファイルは読み飛ばされ、同梱ノートは失われない。 <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
 - システムプロンプトは、整えるときは`get_tidy_metrics`で数値を測り、改善が止まったらやめるよう指示する。 <sub>`system_prompt_carries_the_tidy_loop`</sub>
+- システムプロンプトは、配線図はピン操作ツールでピン名を指定して描き、ピン座標を手で計算しないよう指示する。 <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
 
 ### knowledge_docs
 

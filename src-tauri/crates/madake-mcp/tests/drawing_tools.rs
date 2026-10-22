@@ -29,7 +29,11 @@ async fn call(bridge: &McpToolBridge, name: &str, input: Value) -> Value {
 
 async fn call_err(bridge: &McpToolBridge, name: &str, input: Value) -> String {
     let outcome = bridge.call(name, input).await;
-    assert!(outcome.is_error, "{name} が成功してしまった: {}", outcome.content);
+    assert!(
+        outcome.is_error,
+        "{name} が成功してしまった: {}",
+        outcome.content
+    );
     outcome.content
 }
 
@@ -77,7 +81,12 @@ async fn get_pins_finds_parts_by_reference_or_entity_id() {
     let (doc, bridge) = fixture();
     let sheet = first_sheet(&doc);
     let placed = place_block(&bridge, sheet, "U1", 60.0, 60.0, ONE_PIN_BLOCK).await;
-    let by_ref = call(&bridge, "get_pins", json!({"sheet_id": sheet, "reference": "U1"})).await;
+    let by_ref = call(
+        &bridge,
+        "get_pins",
+        json!({"sheet_id": sheet, "reference": "U1"}),
+    )
+    .await;
     let parts = by_ref["parts"].as_array().unwrap();
     assert_eq!(parts.len(), 1);
     assert_eq!(parts[0]["pins"][0]["number"], "1");
@@ -129,7 +138,8 @@ async fn connect_pins_wires_two_pins_by_name() {
     let sheet = first_sheet(&doc);
     place_block(&bridge, sheet, "U1", 60.0, 60.0, RIGHT_PIN_BLOCK).await;
     place_block(&bridge, sheet, "U2", 120.0, 90.0, ONE_PIN_BLOCK).await;
-    let before = unconnected_pins(&call(&bridge, "run_verification", json!({"sheet_id": sheet})).await);
+    let before =
+        unconnected_pins(&call(&bridge, "run_verification", json!({"sheet_id": sheet})).await);
     assert_eq!(before, 2);
     let wired = call(
         &bridge,
@@ -140,9 +150,13 @@ async fn connect_pins_wires_two_pins_by_name() {
     let pts = wired["points"].as_array().unwrap();
     assert_eq!(pts.len(), 4, "Z 字になっていない: {pts:?}");
     for w in pts.windows(2) {
-        assert!(w[0]["x"] == w[1]["x"] || w[0]["y"] == w[1]["y"], "斜めの線分: {w:?}");
+        assert!(
+            w[0]["x"] == w[1]["x"] || w[0]["y"] == w[1]["y"],
+            "斜めの線分: {w:?}"
+        );
     }
-    let after = unconnected_pins(&call(&bridge, "run_verification", json!({"sheet_id": sheet})).await);
+    let after =
+        unconnected_pins(&call(&bridge, "run_verification", json!({"sheet_id": sheet})).await);
     assert_eq!(after, 0);
     let engine = doc.engine.lock().unwrap();
     let wire = engine.project().sheets[0]
@@ -186,15 +200,39 @@ async fn connect_pins_refuses_bad_specifiers_and_creates_nothing() {
     place_block(&bridge, sheet, "U1", 60.0, 60.0, TWO_PIN_BLOCK).await;
     place_block(&bridge, sheet, "J1", 20.0, 20.0, ONE_PIN_BLOCK).await;
     place_block(&bridge, sheet, "J1", 20.0, 60.0, ONE_PIN_BLOCK).await;
-    let count = |doc: &SharedDoc| doc.engine.lock().unwrap().project().sheets[0].entities.len();
+    let count = |doc: &SharedDoc| {
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len()
+    };
     let before = count(&doc);
-    let e = call_err(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "U9.1", "to": "U1.IN1"})).await;
+    let e = call_err(
+        &bridge,
+        "connect_pins",
+        json!({"sheet_id": sheet, "from": "U9.1", "to": "U1.IN1"}),
+    )
+    .await;
     assert!(e.contains("U1"), "{e}");
-    let e = call_err(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "U1.IN9", "to": "U1.IN1"})).await;
+    let e = call_err(
+        &bridge,
+        "connect_pins",
+        json!({"sheet_id": sheet, "from": "U1.IN9", "to": "U1.IN1"}),
+    )
+    .await;
     assert!(e.contains("OUT1"), "{e}");
-    let e = call_err(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "J1.1", "to": "U1.IN1"})).await;
+    let e = call_err(
+        &bridge,
+        "connect_pins",
+        json!({"sheet_id": sheet, "from": "J1.1", "to": "U1.IN1"}),
+    )
+    .await;
     assert!(e.contains("entity id"), "{e}");
-    let e = call_err(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "U1.IN1", "to": "U1.入力1"})).await;
+    let e = call_err(
+        &bridge,
+        "connect_pins",
+        json!({"sheet_id": sheet, "from": "U1.IN1", "to": "U1.入力1"}),
+    )
+    .await;
     assert!(e.contains("同じピン"), "{e}");
     assert_eq!(count(&doc), before);
 }
@@ -217,12 +255,30 @@ async fn place_mate_puts_a_pair_that_one_undo_removes() {
         (Some(100.0), Some(42.5))
     );
     assert_eq!(
-        (placed["second"]["x"].as_f64(), placed["second"]["y"].as_f64()),
+        (
+            placed["second"]["x"].as_f64(),
+            placed["second"]["y"].as_f64()
+        ),
         (Some(100.0), Some(61.0))
     );
-    assert_eq!(doc.engine.lock().unwrap().project().sheets[0].entities.len(), 2);
-    let pins = call(&bridge, "get_pins", json!({"sheet_id": sheet, "reference": "J5"})).await;
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len(),
+        2
+    );
+    let pins = call(
+        &bridge,
+        "get_pins",
+        json!({"sheet_id": sheet, "reference": "J5"}),
+    )
+    .await;
     assert_eq!(pins["parts"][0]["symbol_id"], "connector_socket");
     doc.undo().expect("元に戻せる");
-    assert_eq!(doc.engine.lock().unwrap().project().sheets[0].entities.len(), 0);
+    assert_eq!(
+        doc.engine.lock().unwrap().project().sheets[0]
+            .entities
+            .len(),
+        0
+    );
 }

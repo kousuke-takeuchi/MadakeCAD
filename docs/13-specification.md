@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2795 specification clauses** across 6 areas.
+**2815 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -506,6 +506,21 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - On a multi-level block whose numbers are overridden, a range over one level's terminals brackets that level's own column just as it does without the override. <sub>`a_multilevel_range_still_brackets_its_own_column_after_an_override`</sub>
 - A range that spans two levels of a multi-level terminal block is reported instead of quietly drawing nothing, because the two levels face opposite sides and no single bracket can hold them. <sub>`a_range_across_two_levels_is_reported_instead_of_silently_skipped`</sub>
 - A bracket spans pins from two different sides of a symbol (mixed pin direction) is refused: the shape would not be a straight bracket. <sub>`a_bracket_across_mixed_pin_directions_is_refused`</sub>
+
+### pin_wiring
+
+- A plug's pin is reported at its paper position, and its direction follows rotation and mirror. <sub>`pin_direction_follows_rotation_and_mirror`</sub>
+- A block's named pins are reported with their numbers, names, outside positions and the rounded outline. <sub>`block_pins_and_outline_are_reported`</sub>
+- Looking up a reference returns every part that carries it, and an entity id finds exactly that part. <sub>`parts_are_found_by_reference_or_entity_id`</sub>
+- A pin specifier finds the pin by number first and by name second, splitting at the last dot. <sub>`a_pin_is_resolved_by_number_then_by_name`</sub>
+- A wrong specifier is refused with what the agent needs to fix it: the format, similar references, the part's pins, or the entity ids to choose from. <sub>`a_wrong_specifier_is_refused_with_candidates`</sub>
+- Two left/right pins are joined with a Z whose vertical leg sits midway on the 2.5 mm grid. <sub>`horizontal_pins_get_a_z_route`</sub>
+- Two up/down pins are joined with a Z whose horizontal leg sits midway. <sub>`vertical_pins_get_a_z_route`</sub>
+- A left/right pin and an up/down pin are joined with an L, each end leaving in its own direction. <sub>`mixed_pins_get_an_l_route`</sub>
+- Pins that are already aligned get one straight segment, whatever their directions. <sub>`aligned_pins_get_a_straight_wire`</sub>
+- Pins off the grid keep their exact end points while the bend snaps to the grid. <sub>`off_grid_pins_keep_their_ends`</sub>
+- With via points the wire passes each one in order, adding a horizontal-first corner where two points are not aligned. <sub>`via_points_are_passed_in_order`</sub>
+- A mate pair puts the plug and the socket 3.5 mm apart facing each other, in both orientations and with the male part on either side. <sub>`a_mate_pair_faces_each_other_in_every_layout`</sub>
 
 ### PLC I/O
 
@@ -1225,6 +1240,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The drawing context summarizes verification: severity counts plus the first few findings. <sub>`drawing_context_summarizes_the_verification_result`</sub>
 - AI settings endpoints persist changes and apply them to the agent manager. <sub>`settings_endpoints_persist_and_apply`</sub>
 
+### drawing_tools
+
+- place_symbol returns the new part's pins with paper positions, so the agent can wire it without computing coordinates. <sub>`place_symbol_returns_the_pins_of_the_new_part`</sub>
+- get_pins finds parts by reference or entity id and returns their pins and outline. <sub>`get_pins_finds_parts_by_reference_or_entity_id`</sub>
+- The pin tools tell the agent to wire by pin name instead of computing pin coordinates. <sub>`the_pin_tools_tell_the_agent_not_to_compute_coordinates`</sub>
+- connect_pins wires two pins by name with right-angle segments, and verification then finds no unconnected pin. <sub>`connect_pins_wires_two_pins_by_name`</sub>
+- connect_pins passes the given via points in order. <sub>`connect_pins_passes_via_points`</sub>
+- connect_pins refuses an unknown part, an unknown pin, an ambiguous reference and a pin wired to itself, and creates nothing. <sub>`connect_pins_refuses_bad_specifiers_and_creates_nothing`</sub>
+- place_mate puts a plug/socket pair in one step, returns both outer connection points, and one undo removes the pair. <sub>`place_mate_puts_a_pair_that_one_undo_removes`</sub>
+
 ### Frame templates (REST)
 
 - GET /frame-templates lists the bundled frame templates with their names in both languages and the folder where the user can drop their own. <sub>`the_link_api_lists_the_bundled_frame_templates`</sub>
@@ -1516,6 +1541,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Parts selection searches the parts database and answers with a comparison table. <sub>`system_prompt_carries_the_parts_comparison_table`</sub>
 - An unreadable knowledge file is skipped without losing the bundled note. <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
 - The system prompt tells the agent to measure tidiness with get_tidy_metrics and to stop once it stops improving. <sub>`system_prompt_carries_the_tidy_loop`</sub>
+- The system prompt tells the agent to wire diagrams by pin name with the pin tools instead of computing pin coordinates. <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
 
 ### knowledge_docs
 

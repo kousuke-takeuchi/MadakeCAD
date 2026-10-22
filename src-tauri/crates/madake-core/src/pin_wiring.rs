@@ -216,7 +216,13 @@ fn aligned(a: Point, b: Point) -> bool {
 /// ピンどうしを結ぶ直角配線の頂点列。経由点が無ければ両端の向きで Z 字・L 字・直線を選び、
 /// 経由点があれば順に通る (そろっていない区間は水平を先にした角を1つ足す)。
 /// 端点はピンの位置のまま、折れ点だけ [`ROUTE_GRID`] にそろえる。部品は避けない。
-pub fn route(from: Point, from_dir: PinDir, to: Point, to_dir: PinDir, via: &[Point]) -> Vec<Point> {
+pub fn route(
+    from: Point,
+    from_dir: PinDir,
+    to: Point,
+    to_dir: PinDir,
+    via: &[Point],
+) -> Vec<Point> {
     let mut pts = vec![from];
     if via.is_empty() {
         if !aligned(from, to) {
@@ -322,12 +328,14 @@ pub fn mate_pair(
         (MateOrientation::Horizontal, MaleSide::Second) => {
             (("connector_socket", 0, true), ("connector_plug", 0, true))
         }
-        (MateOrientation::Vertical, MaleSide::First) => {
-            (("connector_plug", 90, false), ("connector_socket", 90, false))
-        }
-        (MateOrientation::Vertical, MaleSide::Second) => {
-            (("connector_socket", 270, false), ("connector_plug", 270, false))
-        }
+        (MateOrientation::Vertical, MaleSide::First) => (
+            ("connector_plug", 90, false),
+            ("connector_socket", 90, false),
+        ),
+        (MateOrientation::Vertical, MaleSide::Second) => (
+            ("connector_socket", 270, false),
+            ("connector_plug", 270, false),
+        ),
     };
     let make = |(symbol_id, rotation, mirror): (&str, u16, bool), at: Point| {
         let is_socket = symbol_id == "connector_socket";
@@ -337,8 +345,16 @@ pub fn mate_pair(
             at,
             rotation,
             mirror,
-            reference: if is_socket { reference.into() } else { String::new() },
-            value: if is_socket { value.into() } else { String::new() },
+            reference: if is_socket {
+                reference.into()
+            } else {
+                String::new()
+            },
+            value: if is_socket {
+                value.into()
+            } else {
+                String::new()
+            },
             attrs: Default::default(),
         }
     };
@@ -364,7 +380,14 @@ mod tests {
     use std::collections::BTreeMap;
     use uuid::Uuid;
 
-    fn inst(symbol_id: &str, x: f64, y: f64, rotation: u16, mirror: bool, reference: &str) -> SymbolInstance {
+    fn inst(
+        symbol_id: &str,
+        x: f64,
+        y: f64,
+        rotation: u16,
+        mirror: bool,
+        reference: &str,
+    ) -> SymbolInstance {
         SymbolInstance {
             id: Uuid::new_v4(),
             symbol_id: symbol_id.into(),
@@ -381,7 +404,8 @@ mod tests {
         let mut b = inst("block", x, y, 0, false, reference);
         b.attrs.insert(
             "block_pins".into(),
-            r#"{"left":[{"no":"IN1","name":"入力1"}],"right":[{"no":"OUT1","name":"出力1"}]}"#.into(),
+            r#"{"left":[{"no":"IN1","name":"入力1"}],"right":[{"no":"OUT1","name":"出力1"}]}"#
+                .into(),
         );
         b
     }
@@ -459,11 +483,17 @@ mod tests {
         let dotted = block("X1.A", 40.0, 50.0);
         let sheet = sheet_with(vec![b.clone(), dotted]);
         let defs = sheet_symbol_defs(&sheet);
-        assert_eq!(resolve_pin(&sheet, &defs, "CTRL1.IN1").unwrap().pin.number, "IN1");
+        assert_eq!(
+            resolve_pin(&sheet, &defs, "CTRL1.IN1").unwrap().pin.number,
+            "IN1"
+        );
         let by_name = resolve_pin(&sheet, &defs, "CTRL1.出力1").unwrap();
         assert_eq!(by_name.pin.number, "OUT1");
         assert_eq!(by_name.entity_id, b.id);
-        assert_eq!(resolve_pin(&sheet, &defs, "X1.A.IN1").unwrap().reference, "X1.A");
+        assert_eq!(
+            resolve_pin(&sheet, &defs, "X1.A.IN1").unwrap().reference,
+            "X1.A"
+        );
         let by_id = resolve_pin(&sheet, &defs, &format!("{}.IN1", b.id)).unwrap();
         assert_eq!(by_id.entity_id, b.id);
     }
@@ -481,7 +511,10 @@ mod tests {
         let missing = resolve_pin(&sheet, &defs, "CTRL2.IN1").unwrap_err();
         assert!(missing.contains("CTRL1"), "{missing}");
         let no_pin = resolve_pin(&sheet, &defs, "CTRL1.IN9").unwrap_err();
-        assert!(no_pin.contains("IN1") && no_pin.contains("入力1"), "{no_pin}");
+        assert!(
+            no_pin.contains("IN1") && no_pin.contains("入力1"),
+            "{no_pin}"
+        );
         let ambiguous = resolve_pin(&sheet, &defs, "J2.1").unwrap_err();
         assert!(
             ambiguous.contains(&a.id.to_string()) && ambiguous.contains(&b.id.to_string()),
@@ -493,8 +526,17 @@ mod tests {
     /// 左右向きのピンどうしは Z 字で結ばれ、縦の区間は2本の中央の2.5mmグリッド上に来る。
     #[test]
     fn horizontal_pins_get_a_z_route() {
-        let pts = route(p(10.0, 10.0), PinDir::Right, p(41.0, 30.0), PinDir::Left, &[]);
-        assert_eq!(pts, vec![p(10.0, 10.0), p(25.0, 10.0), p(25.0, 30.0), p(41.0, 30.0)]);
+        let pts = route(
+            p(10.0, 10.0),
+            PinDir::Right,
+            p(41.0, 30.0),
+            PinDir::Left,
+            &[],
+        );
+        assert_eq!(
+            pts,
+            vec![p(10.0, 10.0), p(25.0, 10.0), p(25.0, 30.0), p(41.0, 30.0)]
+        );
     }
 
     /// Two up/down pins are joined with a Z whose horizontal leg sits midway.
@@ -502,7 +544,10 @@ mod tests {
     #[test]
     fn vertical_pins_get_a_z_route() {
         let pts = route(p(10.0, 10.0), PinDir::Down, p(30.0, 40.0), PinDir::Up, &[]);
-        assert_eq!(pts, vec![p(10.0, 10.0), p(10.0, 25.0), p(30.0, 25.0), p(30.0, 40.0)]);
+        assert_eq!(
+            pts,
+            vec![p(10.0, 10.0), p(10.0, 25.0), p(30.0, 25.0), p(30.0, 40.0)]
+        );
     }
 
     /// A left/right pin and an up/down pin are joined with an L, each end leaving in its own direction.
@@ -533,7 +578,13 @@ mod tests {
     /// グリッドから外れたピンでも端点はピンの位置のままで、曲がる位置だけグリッドにそろう。
     #[test]
     fn off_grid_pins_keep_their_ends() {
-        let pts = route(p(10.3, 10.0), PinDir::Right, p(41.1, 30.0), PinDir::Left, &[]);
+        let pts = route(
+            p(10.3, 10.0),
+            PinDir::Right,
+            p(41.1, 30.0),
+            PinDir::Left,
+            &[],
+        );
         assert_eq!(pts.first(), Some(&p(10.3, 10.0)));
         assert_eq!(pts.last(), Some(&p(41.1, 30.0)));
         assert_eq!(pts[1].x, 25.0);
@@ -543,10 +594,22 @@ mod tests {
     /// 経由点があると順に通り、そろっていない区間には水平を先にした角を1つ足す。
     #[test]
     fn via_points_are_passed_in_order() {
-        let pts = route(p(10.0, 10.0), PinDir::Right, p(50.0, 50.0), PinDir::Left, &[p(20.0, 30.0)]);
+        let pts = route(
+            p(10.0, 10.0),
+            PinDir::Right,
+            p(50.0, 50.0),
+            PinDir::Left,
+            &[p(20.0, 30.0)],
+        );
         assert_eq!(
             pts,
-            vec![p(10.0, 10.0), p(20.0, 10.0), p(20.0, 30.0), p(50.0, 30.0), p(50.0, 50.0)]
+            vec![
+                p(10.0, 10.0),
+                p(20.0, 10.0),
+                p(20.0, 30.0),
+                p(50.0, 30.0),
+                p(50.0, 50.0)
+            ]
         );
         for w in pts.windows(2) {
             assert!(w[0].x == w[1].x || w[0].y == w[1].y, "斜めの線分: {w:?}");
@@ -563,18 +626,33 @@ mod tests {
             (h1.first.symbol_id.as_str(), h1.second.symbol_id.as_str()),
             ("connector_plug", "connector_socket")
         );
-        assert_eq!((h1.first_point, h1.second_point), (p(92.5, 50.0), p(111.0, 50.0)));
-        assert_eq!((h1.second.reference.as_str(), h1.second.value.as_str()), ("J1", "XH"));
+        assert_eq!(
+            (h1.first_point, h1.second_point),
+            (p(92.5, 50.0), p(111.0, 50.0))
+        );
+        assert_eq!(
+            (h1.second.reference.as_str(), h1.second.value.as_str()),
+            ("J1", "XH")
+        );
         assert!(h1.first.reference.is_empty());
         let h2 = mate_pair(at, MateOrientation::Horizontal, MaleSide::Second, "J1", "");
         assert_eq!(h2.first.symbol_id, "connector_socket");
-        assert_eq!((h2.first_point, h2.second_point), (p(92.5, 50.0), p(111.0, 50.0)));
+        assert_eq!(
+            (h2.first_point, h2.second_point),
+            (p(92.5, 50.0), p(111.0, 50.0))
+        );
         assert_eq!(h2.first.reference, "J1");
         let v1 = mate_pair(at, MateOrientation::Vertical, MaleSide::First, "J1", "");
         assert_eq!(v1.first.symbol_id, "connector_plug");
-        assert_eq!((v1.first_point, v1.second_point), (p(100.0, 42.5), p(100.0, 61.0)));
+        assert_eq!(
+            (v1.first_point, v1.second_point),
+            (p(100.0, 42.5), p(100.0, 61.0))
+        );
         let v2 = mate_pair(at, MateOrientation::Vertical, MaleSide::Second, "J1", "");
         assert_eq!(v2.first.symbol_id, "connector_socket");
-        assert_eq!((v2.first_point, v2.second_point), (p(100.0, 42.5), p(100.0, 61.0)));
+        assert_eq!(
+            (v2.first_point, v2.second_point),
+            (p(100.0, 42.5), p(100.0, 61.0))
+        );
     }
 }
