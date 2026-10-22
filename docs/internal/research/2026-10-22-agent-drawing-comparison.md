@@ -41,3 +41,27 @@ The agent did these things well:
 - 1 and 2: [MCP pin tools spec](../../superpowers/specs/2026-10-22-mcp-pin-tools-design.md).
 - 6: next.
 - 3, 4 and 7: these need design discussion first.
+
+## Rerun with the pin tools (2026-10-22)
+
+Same prompt and attachments, dev build of `feature/mcp-pin-tools` (batch forms included, mate gap still 3.5 mm, plug designator allowed).
+
+| | First run | Rerun |
+|---|---|---|
+| Time | about 40 min | 22.5 min (1351 s) |
+| Tool calls | 44 | 62 |
+| Pin tools | none | `place_mate` 3 calls (70 pairs), `connect_pins` 7 calls (about 110 wires), `get_pins` 2 |
+| Verification | 0 errors | 0 errors, 0 unconnected pins |
+
+- `execute_commands` was still used 15 times: symbols, text, shapes and 34 wires.
+- 3 `connect_pins` calls failed because the agent sent broken JSON in a 5200-byte input; it split the list and went on.
+- Earlier attempts in the same session showed that the agent never called one-wire-per-call tools. It preferred `execute_commands` batches of up to 181 commands. This is why `connections[]` and `mates[]` were added.
+
+Remaining problems, by impact:
+
+1. **The agent left plug designators empty (102 warnings).** With the same designator on both halves, the text is drawn twice on top of itself. One half of a pair needs to hide its designator.
+2. **The tidy metrics counted every pair as an overlap and two off-grid points.** Fixed in the same branch: the mate gap is now 5 mm.
+3. **The agent cannot look at the sheet.** It said it could not render a PNG without a shell, so it checked text overlaps by numbers only.
+4. **The tidy metrics do not say what overlaps.** The agent could not find its 5 and 21 text overlaps.
+5. **Still present:** the agent reads the source with Grep, and the reply runs intermediate texts together.
+6. **New bug: a CLI process survives an app restart.** When the dev app restarted, the agent CLI of the aborted run kept running. It reconnected to the new app's MCP endpoint and wrote 334 edits into the next run's drawing. Those edits were recorded as the next conversation's turn.
