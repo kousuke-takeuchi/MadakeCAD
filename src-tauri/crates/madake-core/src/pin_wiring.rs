@@ -103,6 +103,172 @@ pub fn sheet_part_pins(sheet: &Sheet, entity_id: EntityId) -> Option<PartPins> {
     }
 }
 
+/// 配線の折れ点をそろえるグリッド (mm)。
+pub const ROUTE_GRID: f64 = 2.5;
+
+const EPS: f64 = 1e-6;
+
+/// エラーに並べる候補の上限。
+const MAX_CANDIDATES: usize = 20;
+
+/// ピン指定 ("参照記号.ピン") を解決した結果。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedPin {
+    pub entity_id: EntityId,
+    pub reference: String,
+    pub pin: PinInfo,
+}
+
+/// ピン指定を解決する。最後の「.」で参照記号 (またはentity id) とピンに分け、
+/// ピンは番号で探してから名前で探す。エラーの文には直すための候補を添える。
+pub fn resolve_pin(sheet: &Sheet, defs: &[SymbolDef], spec: &str) -> Result<ResolvedPin, String> {
+    let Some((key, pin)) = spec.rsplit_once('.') else {
+        return Err(format!(
+            "ピン指定「{spec}」は「参照記号.ピン」の形で書く (例: U1.SDA、J1.2)"
+        ));
+    };
+    let parts = find_parts(sheet, defs, key);
+    if parts.is_empty() {
+        return Err(format!(
+            "参照記号「{key}」の部品がシートにありません。シート上の参照記号: {}",
+            similar_references(sheet, key).join(", ")
+        ));
+    }
+    let hits: Vec<(&PartPins, &PinInfo)> = parts
+        .iter()
+        .filter_map(|part| {
+            part.pins
+                .iter()
+                .find(|x| x.number == pin)
+                .or_else(|| part.pins.iter().find(|x| x.name == pin))
+                .map(|x| (part, x))
+        })
+        .collect();
+    match hits.as_slice() {
+        [] => {
+            let listed: Vec<String> = parts
+                .iter()
+                .flat_map(|part| part.pins.iter())
+                .map(|x| {
+                    if x.name.is_empty() {
+                        x.number.clone()
+                    } else {
+                        format!("{}({})", x.number, x.name)
+                    }
+                })
+                .collect();
+            Err(format!(
+                "{key} にピン「{pin}」がありません。ピン: {}",
+                listed.join(", ")
+            ))
+        }
+        [(part, info)] => Ok(ResolvedPin {
+            entity_id: part.entity_id,
+            reference: part.reference.clone(),
+            pin: (*info).clone(),
+        }),
+        many => Err(format!(
+            "参照記号「{key}」の部品が複数あり、どれにもピン「{pin}」があります。entity idで指定し直す: {}",
+            many.iter()
+                .map(|(part, _)| format!("{}.{pin}", part.entity_id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
+}
+
+/// 見つからない参照記号に似た、シート上の参照記号 (先頭の英字が同じもの。無ければ全部)。
+fn similar_references(sheet: &Sheet, key: &str) -> Vec<String> {
+    let mut refs: Vec<String> = sheet
+        .entities
+        .values()
+        .filter_map(|e| match e {
+            Entity::Symbol(s) if !s.reference.is_empty() => Some(s.reference.clone()),
+            _ => None,
+        })
+        .collect();
+    refs.sort();
+    refs.dedup();
+    let prefix: String = key.chars().take_while(|c| !c.is_ascii_digit()).collect();
+    let similar: Vec<String> = refs
+        .iter()
+        .filter(|r| !prefix.is_empty() && r.starts_with(&prefix))
+        .cloned()
+        .collect();
+    let mut out = if similar.is_empty() { refs } else { similar };
+    out.truncate(MAX_CANDIDATES);
+    out
+}
+
+fn snap(v: f64) -> f64 {
+    (v / ROUTE_GRID).round() * ROUTE_GRID
+}
+
+fn is_horizontal(dir: PinDir) -> bool {
+    matches!(dir, PinDir::Left | PinDir::Right)
+}
+
+fn aligned(a: Point, b: Point) -> bool {
+    (a.x - b.x).abs() < EPS || (a.y - b.y).abs() < EPS
+}
+
+/// ピンどうしを結ぶ直角配線の頂点列。経由点が無ければ両端の向きで Z 字・L 字・直線を選び、
+/// 経由点があれば順に通る (そろっていない区間は水平を先にした角を1つ足す)。
+/// 端点はピンの位置のまま、折れ点だけ [`ROUTE_GRID`] にそろえる。部品は避けない。
+pub fn route(from: Point, from_dir: PinDir, to: Point, to_dir: PinDir, via: &[Point]) -> Vec<Point> {
+    let mut pts = vec![from];
+    if via.is_empty() {
+        if !aligned(from, to) {
+            match (is_horizontal(from_dir), is_horizontal(to_dir)) {
+                (true, true) => {
+                    let xm = snap((from.x + to.x) / 2.0);
+                    pts.push(Point::new(xm, from.y));
+                    pts.push(Point::new(xm, to.y));
+                }
+                (false, false) => {
+                    let ym = snap((from.y + to.y) / 2.0);
+                    pts.push(Point::new(from.x, ym));
+                    pts.push(Point::new(to.x, ym));
+                }
+                (true, false) => pts.push(Point::new(to.x, from.y)),
+                (false, true) => pts.push(Point::new(from.x, to.y)),
+            }
+        }
+    } else {
+        let mut prev = from;
+        for &next in via.iter().chain(std::iter::once(&to)) {
+            if !aligned(prev, next) {
+                pts.push(Point::new(next.x, prev.y));
+            }
+            pts.push(next);
+            prev = next;
+        }
+        return simplify(pts);
+    }
+    pts.push(to);
+    simplify(pts)
+}
+
+/// 重なった頂点と、一直線上の途中の頂点を落とす。
+fn simplify(pts: Vec<Point>) -> Vec<Point> {
+    let mut out: Vec<Point> = Vec::with_capacity(pts.len());
+    for p in pts {
+        if out.last().is_some_and(|q| q.distance_to(&p) < EPS) {
+            continue;
+        }
+        if out.len() >= 2 {
+            let (a, b) = (out[out.len() - 2], out[out.len() - 1]);
+            let same_x = (a.x - b.x).abs() < EPS && (b.x - p.x).abs() < EPS;
+            let same_y = (a.y - b.y).abs() < EPS && (b.y - p.y).abs() < EPS;
+            if same_x || same_y {
+                out.pop();
+            }
+        }
+        out.push(p);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,5 +358,111 @@ mod tests {
         assert_eq!(by_id.len(), 1);
         assert_eq!(by_id[0].entity_id, a.id);
         assert!(find_parts(&sheet, &defs, "J9").is_empty());
+    }
+
+    fn p(x: f64, y: f64) -> Point {
+        Point::new(x, y)
+    }
+
+    /// A pin specifier finds the pin by number first and by name second, splitting at the last dot.
+    /// ピン指定は最後の「.」で分け、ピン番号で探してから名前で探す。
+    #[test]
+    fn a_pin_is_resolved_by_number_then_by_name() {
+        let b = block("CTRL1", 100.0, 50.0);
+        let dotted = block("X1.A", 40.0, 50.0);
+        let sheet = sheet_with(vec![b.clone(), dotted]);
+        let defs = sheet_symbol_defs(&sheet);
+        assert_eq!(resolve_pin(&sheet, &defs, "CTRL1.IN1").unwrap().pin.number, "IN1");
+        let by_name = resolve_pin(&sheet, &defs, "CTRL1.出力1").unwrap();
+        assert_eq!(by_name.pin.number, "OUT1");
+        assert_eq!(by_name.entity_id, b.id);
+        assert_eq!(resolve_pin(&sheet, &defs, "X1.A.IN1").unwrap().reference, "X1.A");
+        let by_id = resolve_pin(&sheet, &defs, &format!("{}.IN1", b.id)).unwrap();
+        assert_eq!(by_id.entity_id, b.id);
+    }
+
+    /// A wrong specifier is refused with what the agent needs to fix it: the format, similar references, the part's pins, or the entity ids to choose from.
+    /// 誤ったピン指定は、直すのに要るもの(書き方・似た参照記号・部品のピン・選ぶentity id)を添えて断られる。
+    #[test]
+    fn a_wrong_specifier_is_refused_with_candidates() {
+        let a = inst("connector_socket", 10.0, 10.0, 0, false, "J2");
+        let b = inst("connector_socket", 10.0, 30.0, 0, false, "J2");
+        let sheet = sheet_with(vec![block("CTRL1", 100.0, 50.0), a.clone(), b.clone()]);
+        let defs = sheet_symbol_defs(&sheet);
+        let no_dot = resolve_pin(&sheet, &defs, "CTRL1").unwrap_err();
+        assert!(no_dot.contains("参照記号.ピン"), "{no_dot}");
+        let missing = resolve_pin(&sheet, &defs, "CTRL2.IN1").unwrap_err();
+        assert!(missing.contains("CTRL1"), "{missing}");
+        let no_pin = resolve_pin(&sheet, &defs, "CTRL1.IN9").unwrap_err();
+        assert!(no_pin.contains("IN1") && no_pin.contains("入力1"), "{no_pin}");
+        let ambiguous = resolve_pin(&sheet, &defs, "J2.1").unwrap_err();
+        assert!(
+            ambiguous.contains(&a.id.to_string()) && ambiguous.contains(&b.id.to_string()),
+            "{ambiguous}"
+        );
+    }
+
+    /// Two left/right pins are joined with a Z whose vertical leg sits midway on the 2.5 mm grid.
+    /// 左右向きのピンどうしは Z 字で結ばれ、縦の区間は2本の中央の2.5mmグリッド上に来る。
+    #[test]
+    fn horizontal_pins_get_a_z_route() {
+        let pts = route(p(10.0, 10.0), PinDir::Right, p(41.0, 30.0), PinDir::Left, &[]);
+        assert_eq!(pts, vec![p(10.0, 10.0), p(25.0, 10.0), p(25.0, 30.0), p(41.0, 30.0)]);
+    }
+
+    /// Two up/down pins are joined with a Z whose horizontal leg sits midway.
+    /// 上下向きのピンどうしは Z 字で結ばれ、横の区間は中央に来る。
+    #[test]
+    fn vertical_pins_get_a_z_route() {
+        let pts = route(p(10.0, 10.0), PinDir::Down, p(30.0, 40.0), PinDir::Up, &[]);
+        assert_eq!(pts, vec![p(10.0, 10.0), p(10.0, 25.0), p(30.0, 25.0), p(30.0, 40.0)]);
+    }
+
+    /// A left/right pin and an up/down pin are joined with an L, each end leaving in its own direction.
+    /// 左右向きと上下向きのピンは L 字で結ばれ、各端は自分の向きへ出る。
+    #[test]
+    fn mixed_pins_get_an_l_route() {
+        let pts = route(p(10.0, 10.0), PinDir::Right, p(30.0, 40.0), PinDir::Up, &[]);
+        assert_eq!(pts, vec![p(10.0, 10.0), p(30.0, 10.0), p(30.0, 40.0)]);
+        let back = route(p(30.0, 40.0), PinDir::Up, p(10.0, 10.0), PinDir::Right, &[]);
+        assert_eq!(back, vec![p(30.0, 40.0), p(30.0, 10.0), p(10.0, 10.0)]);
+    }
+
+    /// Pins that are already aligned get one straight segment, whatever their directions.
+    /// すでに一直線に並んだピンは、向きにかかわらず直線1本で結ばれる。
+    #[test]
+    fn aligned_pins_get_a_straight_wire() {
+        assert_eq!(
+            route(p(10.0, 10.0), PinDir::Right, p(40.0, 10.0), PinDir::Up, &[]),
+            vec![p(10.0, 10.0), p(40.0, 10.0)]
+        );
+        assert_eq!(
+            route(p(10.0, 10.0), PinDir::Down, p(10.0, 40.0), PinDir::Up, &[]),
+            vec![p(10.0, 10.0), p(10.0, 40.0)]
+        );
+    }
+
+    /// Pins off the grid keep their exact end points while the bend snaps to the grid.
+    /// グリッドから外れたピンでも端点はピンの位置のままで、曲がる位置だけグリッドにそろう。
+    #[test]
+    fn off_grid_pins_keep_their_ends() {
+        let pts = route(p(10.3, 10.0), PinDir::Right, p(41.1, 30.0), PinDir::Left, &[]);
+        assert_eq!(pts.first(), Some(&p(10.3, 10.0)));
+        assert_eq!(pts.last(), Some(&p(41.1, 30.0)));
+        assert_eq!(pts[1].x, 25.0);
+    }
+
+    /// With via points the wire passes each one in order, adding a horizontal-first corner where two points are not aligned.
+    /// 経由点があると順に通り、そろっていない区間には水平を先にした角を1つ足す。
+    #[test]
+    fn via_points_are_passed_in_order() {
+        let pts = route(p(10.0, 10.0), PinDir::Right, p(50.0, 50.0), PinDir::Left, &[p(20.0, 30.0)]);
+        assert_eq!(
+            pts,
+            vec![p(10.0, 10.0), p(20.0, 10.0), p(20.0, 30.0), p(50.0, 30.0), p(50.0, 50.0)]
+        );
+        for w in pts.windows(2) {
+            assert!(w[0].x == w[1].x || w[0].y == w[1].y, "斜めの線分: {w:?}");
+        }
     }
 }
