@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2797 specification clauses** across 6 areas.
+**2798 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2389,6 +2389,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### textSize
 
 - scales drawing text with the zoom like the shapes, and drops it once it is too small to read <sub>`drawing text size on screen`</sub>
+- skips unreadably small text without setting a 0px font, which WebKit ignores and would draw at the previous size <sub>`drawing text size on screen`</sub>
 
 ### textStyle
 

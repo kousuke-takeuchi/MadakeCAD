@@ -241,7 +241,8 @@ describe("drawSymbol text placement", () => {
     const mid = fontSizesAt(4);
     expect(near.length).toBeGreaterThan(0);
     near.forEach((px, i) => expect(mid[i]).toBeCloseTo(px / 2, 9));
-    expect(fontSizesAt(0.5).every((px) => px === 0)).toBe(true);
+    // 小さすぎる文字は描かない (フォント 0px に頼らない: WebKit は 0px を受け付けず直前の大きさで描く)
+    expect(fontSizesAt(0.5)).toEqual([]);
   });
 
   // ja: シンボルの中の文字は、シンボルを回しても反転しても定義どおりの場所に描かれる
