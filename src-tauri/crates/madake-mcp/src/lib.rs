@@ -556,7 +556,7 @@ pub struct PlaceMateParams {
     pub orientation: Option<madake_core::pin_wiring::MateOrientation>,
     /// first(左/上がオス、既定) / second(右/下がオス)。
     pub male_side: Option<madake_core::pin_wiring::MaleSide>,
-    /// 参照記号(ソケット側に付く)。
+    /// 参照記号(プラグとソケットの両方に付く)。
     pub reference: Option<String>,
     /// 型番・値(ソケット側に付く)。
     pub value: Option<String>,
@@ -573,7 +573,7 @@ pub struct MateSpec {
     pub orientation: Option<madake_core::pin_wiring::MateOrientation>,
     /// first(既定) / second。
     pub male_side: Option<madake_core::pin_wiring::MaleSide>,
-    /// 参照記号(ソケット側に付く)。
+    /// 参照記号(プラグとソケットの両方に付く)。
     pub reference: Option<String>,
     /// 型番・値(ソケット側に付く)。
     pub value: Option<String>,
@@ -1329,7 +1329,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "差し込み1極のかみ合わせ(connector_plug=オスとconnector_socket=メス)を3.5mm離して向かい合わせに1回で置く(undo一発で組ごと消える)。orientation=horizontal(左右、既定)/vertical(上下)、male_side=first(左/上がオス、既定)/second。参照記号と値はソケット側に付く。外側の2つの接続点first/second(用紙座標)と2つのentity idを返す。**複数の組(多極コネクタの各極など)はmatesに並べて1回で置く**(undo一発で全部消える)。配線はconnect_pins(\"<entity_id>.1\")か返した座標で行う"
+        description = "差し込み1極のかみ合わせ(connector_plug=オスとconnector_socket=メス)を3.5mm離して向かい合わせに1回で置く(undo一発で組ごと消える)。orientation=horizontal(左右、既定)/vertical(上下)、male_side=first(左/上がオス、既定)/second。参照記号はプラグとソケットの両方(同じ記号の組は重複エラーにならない)、値はソケット側に付く。外側の2つの接続点first/second(用紙座標)と2つのentity idを返す。**複数の組(多極コネクタの各極など)はmatesに並べて1回で置く**(undo一発で全部消える)。配線はconnect_pins(\"<entity_id>.1\")か返した座標で行う"
     )]
     fn place_mate(&self, Parameters(p): Parameters<PlaceMateParams>) -> Result<String, ErrorData> {
         use madake_core::pin_wiring::{mate_pair, MaleSide, MateOrientation};

@@ -52,7 +52,7 @@ A pin is named as `"<ref>.<pin>"`, e.g. `"U1.SDA"` or `"J1.2"`. The string is sp
 ### 3. `place_mate`
 
 - Input: `sheet_id`, `x`, `y`, `orientation` (`horizontal` | `vertical`), `male_side` (`first` | `second`: whether the left/top part is the plug), `reference`, `value`.
-- Places `connector_plug` and `connector_socket` facing each other, 3.5 mm apart, the same layout as the skill's `mate` / `vmate`. The socket carries `reference` and `value`.
+- Places `connector_plug` and `connector_socket` facing each other, 3.5 mm apart, the same layout as the skill's `mate` / `vmate`. Both parts carry `reference`; the socket carries `value`. A plug and a socket that share a designator raise no `erc.duplicate_reference`.
 - Output: both entity ids, and the two outer connection points (`first`, `second`).
 
 ### 4. `place_symbol` returns pins
@@ -101,3 +101,4 @@ One PR from `feature/mcp-pin-tools`: tools, tests, system prompt rule, docs, and
 - 2026-10-22: Route shape: right-angle L/Z only, no obstacle avoidance (user choice 1 of 3). Predictable, small; the agent fixes overlaps with `via`.
 - 2026-10-22: Approach A (three low-level tools) over B (one declarative "draw the whole diagram" tool) and C (allow the in-app agent to run the Python helper). A keeps the same granularity as existing tools, so it also helps partial edits; C would weaken the shell ban.
 - 2026-10-22: Batch forms added after the live run: `connect_pins.connections[]` and `place_mate.mates[]`, each one undoable edit, all-or-nothing with the failing index named. The agent never called the one-wire-per-call tools; it sent `execute_commands` batches of up to 181 commands with hand-computed coordinates instead.
+- 2026-10-22: The plug carries the same designator as the socket (user choice). Before, the plug was left blank and every pair raised `erc.empty_reference` (111 warnings in the live run), and the agent spent time reading the ERC source to check whether that was expected. ERC now treats plug/socket halves sharing a designator like relay coil and contacts.

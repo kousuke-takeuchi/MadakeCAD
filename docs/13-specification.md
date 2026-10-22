@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2822 specification clauses** across 6 areas.
+**2823 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -520,7 +520,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Pins that are already aligned get one straight segment, whatever their directions. <sub>`aligned_pins_get_a_straight_wire`</sub>
 - Pins off the grid keep their exact end points while the bend snaps to the grid. <sub>`off_grid_pins_keep_their_ends`</sub>
 - With via points the wire passes each one in order, adding a horizontal-first corner where two points are not aligned. <sub>`via_points_are_passed_in_order`</sub>
-- A mate pair puts the plug and the socket 3.5 mm apart facing each other, in both orientations and with the male part on either side. <sub>`a_mate_pair_faces_each_other_in_every_layout`</sub>
+- A mate pair puts the plug and the socket 3.5 mm apart facing each other, in both orientations and with the male part on either side; both carry the designator and the socket carries the value. <sub>`a_mate_pair_faces_each_other_in_every_layout`</sub>
 - A route that would run over a third pin is refused, because the netlist would join that pin to the wire; the message names the pin. <sub>`a_route_that_passes_over_another_pin_is_refused`</sub>
 - Wiring a pin to itself is refused, whether it is named by number or by name. <sub>`wiring_a_pin_to_itself_is_refused`</sub>
 - When one part has the same pin number twice (a through terminal), the bare number is refused with both choices, and "#n" picks one. <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
@@ -1117,6 +1117,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Unconnected pins of a block are listed by their pin names, so a controller's dangling input is named, not numbered. <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
 - A terminal-block terminal counts as connected if either its left or right side is wired. <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - Missing and duplicate reference designators are flagged, but relay coil + contacts legitimately share one designator. <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
+- A plug and a socket that share one designator are one mated connector, so they raise no duplicate error, while a plug sharing a designator with an unrelated part still does. <sub>`a_plug_and_socket_may_share_a_designator`</sub>
 - A pin_groups attribute that overlaps another group, or names a pin the terminal block does not have, is reported as an ERC error naming the terminal block and the bad item, instead of being silently ignored. <sub>`a_bad_pin_groups_item_is_reported_as_an_erc_error`</sub>
 - A coil drawn as a device block cannot carry pin group brackets, and says so as an ERC error instead of dropping them without a word. <sub>`pin_groups_on_a_device_block_coil_are_reported_instead_of_silently_dropped`</sub>
 - A note whose leader target was deleted afterwards is reported, so the drawing never keeps a leader pointing at nothing without saying so. <sub>`a_note_whose_leader_target_was_deleted_is_reported`</sub>
@@ -1251,7 +1252,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - connect_pins wires two pins by name with right-angle segments, and verification then finds no unconnected pin. <sub>`connect_pins_wires_two_pins_by_name`</sub>
 - connect_pins passes the given via points in order. <sub>`connect_pins_passes_via_points`</sub>
 - connect_pins refuses an unknown part, an unknown pin, an ambiguous reference and a pin wired to itself, and creates nothing. <sub>`connect_pins_refuses_bad_specifiers_and_creates_nothing`</sub>
-- place_mate puts a plug/socket pair in one step, returns both outer connection points, and one undo removes the pair. <sub>`place_mate_puts_a_pair_that_one_undo_removes`</sub>
+- place_mate puts a plug/socket pair in one step, both carrying the designator without any reference warning, returns both outer connection points, and one undo removes the pair. <sub>`place_mate_puts_a_pair_that_one_undo_removes`</sub>
 - connect_pins refuses a route that would run over a third pin and creates nothing, so no pin is joined to a net by accident. <sub>`connect_pins_refuses_a_route_over_another_pin`</sub>
 - connect_pins takes a list of connections and draws them all in one call that one undo removes, so the agent can wire a whole sheet without one call per wire. <sub>`connect_pins_draws_a_list_of_connections_in_one_edit`</sub>
 - If any connection in the list is wrong, connect_pins names its index and creates none of them. <sub>`connect_pins_list_is_all_or_nothing`</sub>

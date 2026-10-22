@@ -396,7 +396,7 @@ pub struct MatePair {
     pub second_point: Point,
 }
 
-/// プラグとソケットを [`MATE_GAP`] 離して向かい合わせに並べる。参照記号と値はソケットに付ける。
+/// プラグとソケットを [`MATE_GAP`] 離して向かい合わせに並べる。参照記号は両方、値はソケットに付ける。
 pub fn mate_pair(
     at: Point,
     orientation: MateOrientation,
@@ -433,11 +433,7 @@ pub fn mate_pair(
             at,
             rotation,
             mirror,
-            reference: if is_socket {
-                reference.into()
-            } else {
-                String::new()
-            },
+            reference: reference.into(),
             value: if is_socket {
                 value.into()
             } else {
@@ -704,8 +700,8 @@ mod tests {
         }
     }
 
-    /// A mate pair puts the plug and the socket 3.5 mm apart facing each other, in both orientations and with the male part on either side.
-    /// かみ合わせの組は、どちらの向きでもオスがどちら側でも、プラグとソケットを3.5mm離して向かい合わせに置く。
+    /// A mate pair puts the plug and the socket 3.5 mm apart facing each other, in both orientations and with the male part on either side; both carry the designator and the socket carries the value.
+    /// かみ合わせの組は、どちらの向きでもオスがどちら側でも、プラグとソケットを3.5mm離して向かい合わせに置く。参照記号は両方に、値はソケットに付く。
     #[test]
     fn a_mate_pair_faces_each_other_in_every_layout() {
         let at = p(100.0, 50.0);
@@ -722,7 +718,10 @@ mod tests {
             (h1.second.reference.as_str(), h1.second.value.as_str()),
             ("J1", "XH")
         );
-        assert!(h1.first.reference.is_empty());
+        assert_eq!(
+            (h1.first.reference.as_str(), h1.first.value.as_str()),
+            ("J1", "")
+        );
         let h2 = mate_pair(at, MateOrientation::Horizontal, MaleSide::Second, "J1", "");
         assert_eq!(h2.first.symbol_id, "connector_socket");
         assert_eq!(

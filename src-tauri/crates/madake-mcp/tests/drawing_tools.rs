@@ -237,8 +237,8 @@ async fn connect_pins_refuses_bad_specifiers_and_creates_nothing() {
     assert_eq!(count(&doc), before);
 }
 
-/// place_mate puts a plug/socket pair in one step, returns both outer connection points, and one undo removes the pair.
-/// place_mate はプラグとソケットの組を1回で置き、外側の2つの接続点を返し、1回の取り消しで組ごと消える。
+/// place_mate puts a plug/socket pair in one step, both carrying the designator without any reference warning, returns both outer connection points, and one undo removes the pair.
+/// place_mate はプラグとソケットの組を1回で置き、両方に参照記号が付いて参照記号の警告は出ず、外側の2つの接続点を返し、1回の取り消しで組ごと消える。
 #[tokio::test]
 async fn place_mate_puts_a_pair_that_one_undo_removes() {
     let (doc, bridge) = fixture();
@@ -273,7 +273,23 @@ async fn place_mate_puts_a_pair_that_one_undo_removes() {
         json!({"sheet_id": sheet, "reference": "J5"}),
     )
     .await;
-    assert_eq!(pins["parts"][0]["symbol_id"], "connector_socket");
+    let mut kinds: Vec<&str> = pins["parts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["symbol_id"].as_str().unwrap())
+        .collect();
+    kinds.sort();
+    assert_eq!(kinds, ["connector_plug", "connector_socket"]);
+    let diags = call(&bridge, "run_verification", json!({"sheet_id": sheet})).await;
+    assert!(
+        !diags
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d["code"] == "erc.empty_reference" || d["code"] == "erc.duplicate_reference"),
+        "{diags}"
+    );
     doc.undo().expect("元に戻せる");
     assert_eq!(
         doc.engine.lock().unwrap().project().sheets[0]
