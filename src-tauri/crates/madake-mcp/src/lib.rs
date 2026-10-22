@@ -474,6 +474,8 @@ pub struct PlaceSymbolParams {
     /// 追加属性。ブロック(`symbol_id="block"`)は
     /// `block_pins` = `{"left":[{"no":"IN1","name":"入力1"}],"right":[…]}`(任意で`top`/`bottom`)、
     /// 任意で `block_size` = `{"w":40,"h":30}` を渡して名前付きピンの機器を1回で作る。
+    /// `hide_reference` = `"true"` で参照記号を印字しない (データには残る)。嵌合するプラグ/ソケットの
+    /// 組のように同じ記号を2つの部品に付けるとき、片方に付けて二重表示を避ける。
     pub attrs: Option<std::collections::BTreeMap<String, String>>,
 }
 
