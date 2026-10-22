@@ -115,6 +115,16 @@ fn result_text(result: &rmcp::model::CallToolResult) -> String {
     let mut parts = Vec::new();
     for block in &result.content {
         let value = serde_json::to_value(block).unwrap_or(Value::Null);
+        // 画像はこの経路のモデルへ見せられない。巨大なbase64を流さず、何が返ったかだけ伝える
+        if value.get("type").and_then(Value::as_str) == Some("image") {
+            let mime = value.get("mimeType").and_then(Value::as_str).unwrap_or("image");
+            let bytes = value.get("data").and_then(Value::as_str).map_or(0, |d| d.len() * 3 / 4);
+            parts.push(format!(
+                "[{mime} の画像 約{}KB。このプロバイダーではツール結果の画像を表示できません]",
+                bytes / 1024
+            ));
+            continue;
+        }
         match value.get("text").and_then(Value::as_str) {
             Some(text) => parts.push(text.to_string()),
             None => parts.push(value.to_string()),

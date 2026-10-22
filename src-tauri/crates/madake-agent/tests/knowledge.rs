@@ -243,3 +243,11 @@ fn system_prompt_carries_the_tidy_loop() {
     // 最終応答にビフォー/アフターの数値を書く
     assert!(prompt.contains("ビフォー"), "{prompt}");
 }
+
+/// The system prompt tells the agent to look at the sheet image after drawing, instead of judging the layout by numbers alone.
+/// システムプロンプトは、描いた後にシート画像を見て確かめるよう指示する(数値だけで見た目を判断しない)。
+#[test]
+fn system_prompt_tells_the_agent_to_look_at_the_sheet() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    assert!(prompt.contains("get_sheet_image"), "{prompt}");
+}

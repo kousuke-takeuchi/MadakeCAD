@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2795仕様項目**。
+全6領域・**2803仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -538,6 +538,13 @@
 - 同居できるのは同じラダー形式・同じラング間隔で生成したページだけで、違えば次のモジュールは新しいページから始まる。 <sub>`a_page_of_another_style_or_spacing_is_not_shared`</sub>
 - 2.5mmグリッドの正の倍数でないラング間隔は断られるので、生成したページは必ずグリッドに乗る。 <sub>`an_off_grid_rung_spacing_is_refused`</sub>
 - I/Oレポートは各点をアドレス・信号名・接続先・線番・コメントで並べ、プロジェクト全体版では先頭にモジュールの参照記号が付く。 <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
+
+### raster
+
+- シートは用紙寸法×指定した1mmあたりのピクセル数の大きさのPNGになる。 <sub>`a_sheet_becomes_a_png_of_the_paper_size`</sub>
+- mm で指定した範囲で切り抜けるので、エージェントはシートの一部を拡大して見られる。 <sub>`a_region_crops_the_image`</sub>
+- 上限より大きい画像は収まるように縮め、実際に使った倍率を返す。 <sub>`a_large_image_is_scaled_down_to_the_limit`</sub>
+- 用紙の外や面積の無い範囲は断る。 <sub>`an_empty_region_is_refused`</sub>
 
 ### relay_xref
 
@@ -1302,6 +1309,12 @@
 - GET /devices はデバイスナビゲータが描く参照記号ツリーを、機能ごとの端子と所在つきで返す。 <sub>`the_device_tree_comes_back_over_the_link_api`</sub>
 - 何も置いていない図面のデバイスツリーは、エラーではなく空になる。 <sub>`an_empty_drawing_has_an_empty_device_tree`</sub>
 
+### sheet_image
+
+- シート画像は既定で 4 px/mm のシート全体のPNGで、mm で範囲を指定すると一部を拡大できる。 <sub>`the_sheet_image_is_a_png_of_the_sheet_or_a_region`</sub>
+- ツール結果の画像を表示できない経路 (ツール窓口を通るAPI系) には、巨大なbase64の代わりに短い説明を返す。 <sub>`the_bridge_replaces_the_image_with_a_short_note`</sub>
+- ツールの説明には、編集した後に図面を目で確かめるよう書かれている。 <sub>`the_image_tool_tells_the_agent_to_look_after_editing`</sub>
+
 ### ユーザーシンボルライブラリ (REST)
 
 - GET /symbols は同梱ライブラリとユーザーが作ったシンボルをまとめて返す。ユーザーのシンボルは最後に並び、分類は常に「user」になる。 <sub>`the_link_api_lists_bundled_and_user_symbols_together`</sub>
@@ -1516,6 +1529,7 @@
 - 部品選定では部品DBを検索し、比較表で答える。 <sub>`system_prompt_carries_the_parts_comparison_table`</sub>
 - 読めない知識ファイルは読み飛ばされ、同梱ノートは失われない。 <sub>`an_unreadable_knowledge_file_is_skipped`</sub>
 - システムプロンプトは、整えるときは`get_tidy_metrics`で数値を測り、改善が止まったらやめるよう指示する。 <sub>`system_prompt_carries_the_tidy_loop`</sub>
+- システムプロンプトは、描いた後にシート画像を見て確かめるよう指示する(数値だけで見た目を判断しない)。 <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
 
 ### knowledge_docs
 

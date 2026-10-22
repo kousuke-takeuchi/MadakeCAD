@@ -2827,6 +2827,7 @@ version = "0.1.0"
 dependencies = [
  "dirs 6.0.0",
  "pdf-writer",
+ "resvg",
  "rusqlite",
  "schemars 1.2.2",
  "serde",
@@ -2841,6 +2842,7 @@ name = "madake-mcp"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "futures",
  "http-body-util",
  "madake-agent",
