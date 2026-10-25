@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2917 specification clauses** across 6 areas.
+**2927 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -442,6 +442,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A single-line cable between two connectors (3.5 mm AUX: L, R, GND) gives one net per core even though no wire is drawn. <sub>`a_connector_to_connector_run_gives_one_net_per_core`</sub>
 - Nets made only of cable cores are named after the nets that have wires, so adding such a cable does not rename existing nets. <sub>`core_only_nets_are_named_after_wire_nets`</sub>
 - Moving the part a single line lands on keeps every core connected to the same pin: connectivity follows the assignment, not the drawing. <sub>`moving_the_landing_part_keeps_core_connectivity`</sub>
+- Two port pins joined by one wire give one net per contact, named N001.<contact> in contact order, each holding both pins with that contact and the shared wire. <sub>`two_ports_joined_by_one_wire_split_into_one_net_per_contact`</sub>
+- The unsplit view keeps one net for the USB wire, and a drawing without ports gives exactly the same nets (and JSON, with no contact keys) from both functions. <sub>`without_ports_nothing_changes`</sub>
+- A mate half passes every contact through inside its own net, but plug and socket are still not joined: port → socket | plug → label … port gives two groups of contact nets. <sub>`a_mate_half_passes_contacts_through_but_does_not_conduct`</sub>
+- In a port net a plain pin named like a contact joins that contact; a plain pin with another name goes to a residual net named like the base and is listed in the port report. <sub>`a_plain_pin_joins_the_contact_with_its_name`</sub>
+- The LTE harness drawn as four board wires into one run that ends on the single port pin 39.U3 gives four nets, each one board pin and one contact of the port. <sub>`the_lte_harness_lands_on_one_port_pin`</sub>
+- A label named <port label>.<contact> on a plain wire joins that one contact of the port net. <sub>`a_dotted_label_taps_one_contact`</sub>
+- A single-line run between two port pins with no wire at all still gives one net per core, each with both ports. <sub>`a_run_between_two_ports_gives_one_net_per_core`</sub>
+- Two ports with different contact sets join only the shared contacts; the others stay alone on their port, with no residual net, and the report lists them. <sub>`ports_with_different_contacts_join_only_the_shared_ones`</sub>
+- When a core joins two port clusters, the contact net takes the base name a cluster already has from an earlier net, and no new number is used for it. <sub>`a_contact_net_across_two_port_clusters_reuses_the_earlier_base`</sub>
+- A net pin prints as REF:PIN, with /CONTACT added when it carries a port contact. <sub>`a_net_pin_prints_with_its_contact`</sub>
 
 ### ngspice runner
 

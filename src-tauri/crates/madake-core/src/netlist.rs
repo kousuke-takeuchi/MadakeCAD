@@ -1,12 +1,12 @@
 //! ネットリスト抽出: 配置済みシンボルのピン座標解決と、配線・ジャンクション・
 //! ネットラベルからの接続グラフ導出。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
 use crate::geometry::Point;
-use crate::model::{CoreEnd, Entity, EntityId, Sheet, SymbolInstance};
+use crate::model::{Cable, CableCore, CoreEnd, Entity, EntityId, Sheet, SymbolInstance};
 use crate::symbol::SymbolDef;
 
 /// 接続判定の座標一致許容誤差 (mm)。
@@ -64,16 +64,19 @@ pub struct NetPin {
     pub entity_id: EntityId,
     /// ピン番号。
     pub pin: String,
+    /// このネットで運ぶポートの接点 (ポートのピン・かみ合わせの片側だけ。例 "VBUS")。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contact: Option<String>,
 }
 
 /// 電気的に接続された1ネット。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Net {
-    /// 表示名。優先順は ネットラベル > 線番 > 自動名 (N001…)。
+    /// 表示名。優先順は ネットラベル > 線番 > 自動名 (N001…)。ポートの接点のネットは「<名前>.<接点>」。
     pub name: String,
     pub pins: Vec<NetPin>,
     pub wire_ids: Vec<EntityId>,
-    /// ネットラベル由来の名前 (手動指定)。
+    /// ネットラベル由来の名前 (手動指定)。接点のネットでは「<ラベル>.<接点>」。
     #[serde(default)]
     pub label: Option<String>,
     /// 線番 (`Wire::net`)。ネット内の全Wireで同値になる。
@@ -82,6 +85,24 @@ pub struct Net {
     /// このネットを通る区間ケーブルの芯 (v17)。ケーブルid・参照記号・芯の呼びの順に並ぶ。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cable_cores: Vec<NetCableCore>,
+    /// ポートから分けたネットなら、その接点 (v18。例 "VBUS")。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contact: Option<String>,
+    /// ポートから分けたネットが、シートを跨いで呼ばれる名前 (ポートのラベルは「L.接点」、導体1本の部分の
+    /// ラベルはそのまま)。空なら [`crate::xref`] は今までどおりシートの上でラベルを探す。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contact_labels: Vec<String>,
+}
+
+impl std::fmt::Display for NetPin {
+    /// `REF:PIN`、接点を運ぶなら `REF:PIN/接点` (例 `39:U3/VBUS`)。
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.reference, self.pin)?;
+        match &self.contact {
+            Some(c) => write!(f, "/{c}"),
+            None => Ok(()),
+        }
+    }
 }
 
 /// ネットを通る区間ケーブルの芯1本。
@@ -92,6 +113,123 @@ pub struct NetCableCore {
     pub reference: String,
     /// 芯の呼び (例 "D-")。
     pub core: String,
+}
+
+/// ポート (接点を持つピン) のまわりで ERC が知らせること ([`crate::port::check_ports`])。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PortReport {
+    /// ポートのかたまりに載っているネットラベルの名前。
+    pub port_labels: BTreeSet<String>,
+    /// ポートのかたまりの中で、どの接点とも名前が合わない普通のピン。
+    pub plain_pins: Vec<PlainOnPort>,
+    /// ポートのピンが2本以上あるかたまりで、1本にしか無い接点。
+    pub lonely_contacts: Vec<LonelyContact>,
+    /// 接点を決められない区間ケーブルの芯の端。
+    pub stray_cores: Vec<StrayCore>,
+}
+
+/// ポートのネットにいる、接点の分からない普通のピン。
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlainOnPort {
+    pub entity_id: EntityId,
+    /// "J45:1"
+    pub pin: String,
+    /// 同じかたまりのポートのピン ("39:U3")。
+    pub ports: Vec<String>,
+    /// そのかたまりの接点の並び。
+    pub contacts: Vec<String>,
+}
+
+/// 1本のポートのピンにしか無い接点。
+#[derive(Debug, Clone, PartialEq)]
+pub struct LonelyContact {
+    pub contact: String,
+    /// "39:U3"
+    pub port: String,
+    pub entity_ids: Vec<EntityId>,
+}
+
+/// 接点を決められない区間ケーブルの芯。
+#[derive(Debug, Clone, PartialEq)]
+pub struct StrayCore {
+    pub cable_id: EntityId,
+    pub reference: String,
+    pub core: String,
+    pub why: String,
+}
+
+/// 配置済みピン1本 (ネットリストのノード)。
+struct PinNode {
+    entity_id: EntityId,
+    reference: String,
+    no: String,
+    /// ピン名 (前後の空白を落としたもの)。ポートの接点と名前で合わせる。
+    name: String,
+    /// ポートの接点。空 = 普通のピン。
+    contacts: Vec<String>,
+    /// かみ合わせの片側のピン (ポートの接点を全部素通しにする)。
+    pass: bool,
+    pos: Point,
+}
+
+impl PinNode {
+    fn label(&self) -> String {
+        format!("{}:{}", self.reference, self.no)
+    }
+}
+
+/// かたまり (芯を入れずに作った接続のまとまり) ごとの枠の割り振り。導体1本のかたまりは枠1つ、
+/// ポートのかたまりは接点ごとに1つと残りの枠1つ (最後)。
+struct Slots {
+    first: BTreeMap<usize, usize>,
+    contacts: BTreeMap<usize, Vec<String>>,
+    count: usize,
+}
+
+impl Slots {
+    fn new(roots: &[usize], contacts: BTreeMap<usize, Vec<String>>) -> Self {
+        let mut first = BTreeMap::new();
+        let mut count = 0;
+        for &r in roots {
+            if let std::collections::btree_map::Entry::Vacant(v) = first.entry(r) {
+                v.insert(count);
+                count += contacts.get(&r).map_or(1, |l| l.len() + 1);
+            }
+        }
+        Self { first, contacts, count }
+    }
+
+    fn is_port(&self, root: usize) -> bool {
+        self.contacts.contains_key(&root)
+    }
+
+    /// 導体1本のかたまりならその枠、ポートのかたまりなら残りの枠。
+    fn single_or_residual(&self, root: usize) -> usize {
+        self.first[&root] + self.contacts.get(&root).map_or(0, Vec::len)
+    }
+
+    fn contact(&self, root: usize, name: &str) -> Option<usize> {
+        let i = self.contacts.get(&root)?.iter().position(|c| c == name)?;
+        Some(self.first[&root] + i)
+    }
+
+    /// 配線・ラベルが入る枠 (導体1本ならその枠、ポートなら接点の枠全部と残りの枠)。
+    fn every(&self, root: usize) -> std::ops::RangeInclusive<usize> {
+        self.first[&root]..=self.single_or_residual(root)
+    }
+}
+
+/// 線番の選び方: 手動の名前 (数字以外) を自動採番より先に、その次は辞書順。
+fn pick_wire_no(nos: &[String]) -> Option<String> {
+    nos.iter()
+        .min_by(|a, b| {
+            (crate::wire_no::is_generated_number(a), *a).cmp(&(crate::wire_no::is_generated_number(b), *b))
+        })
+        .cloned()
+}
+
+fn stray(report: &mut PortReport, c: &Cable, core: &CableCore, why: String) {
+    report.stray_cores.push(StrayCore { cable_id: c.id, reference: c.reference.clone(), core: core.core.clone(), why });
 }
 
 struct DisjointSet {
@@ -192,7 +330,7 @@ pub fn point_is_attached(
     })
 }
 
-/// シートからネットリストを導出する。
+/// シートからネットリストを導出する (ポートは接点ごとに分ける)。
 ///
 /// 接続ルール:
 /// - Wire同士は「端点同士の一致」または「一致点上のJunction経由」でのみ接続(交差だけでは非接続)
@@ -202,7 +340,26 @@ pub fn point_is_attached(
 ///   だけ繋がる。区間の線は位置では何にも繋がらない (ピン列の上を通っても短絡しない)
 /// - 配線か区間ケーブルの芯を1つ以上含むまとまりをネットにする。芯だけのネットは配線のあるネットの後ろ
 /// - 無名ネットは決定的な順序で "N001" から連番
+/// - **ポート** (接点を持つピン、[`crate::symbol::PinDef::contacts`]) を含むまとまりは接点ごとのネット
+///   「<名前>.<接点>」に分かれる。配線・ラベル・かみ合わせの片側は全部の接点を運び、普通のピンは
+///   ピン名と同じ接点に入る (仕様 2026-10-25-port-contacts-design §2)。ポートが無ければ
+///   [`extract_wire_nets`] と全く同じ
 pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
+    build(sheet, symbols, true).0
+}
+
+/// 描いた配線のまとまりごとに1ネットのネットリスト (ポートを分けない、v17までの [`extract_netlist`])。
+/// 線番の採番・線番の描画・電線リストのように、配線1本を1件として扱う所が使う。
+pub fn extract_wire_nets(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
+    build(sheet, symbols, false).0
+}
+
+/// ポートのまわりの ERC の材料 ([`crate::port::check_ports`])。
+pub(crate) fn port_report(sheet: &Sheet, symbols: &[SymbolDef]) -> PortReport {
+    build(sheet, symbols, true).1
+}
+
+fn build(sheet: &Sheet, symbols: &[SymbolDef], split: bool) -> (Vec<Net>, PortReport) {
     let defs = crate::symbol::DefIndex::new(symbols);
 
     // ノード列挙 (BTreeMap順なので決定的)
@@ -210,7 +367,7 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
     let mut junctions = Vec::new();
     let mut labels = Vec::new();
     let mut cables = Vec::new();
-    let mut pins = Vec::new(); // (entity_id, reference, pin_no, pos)
+    let mut pins: Vec<PinNode> = Vec::new();
     for entity in sheet.entities.values() {
         match entity {
             Entity::Wire(w) => wires.push(w),
@@ -219,8 +376,17 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
             Entity::Cable(c) if c.is_run() => cables.push(c),
             Entity::Symbol(s) => {
                 if let Some(def) = defs.get(s) {
-                    for (no, pos) in pin_positions(s, &def) {
-                        pins.push((s.id, s.reference.clone(), no, pos));
+                    let pass = crate::mate::is_mate_half(&s.symbol_id);
+                    for pin in &def.pins {
+                        pins.push(PinNode {
+                            entity_id: s.id,
+                            reference: s.reference.clone(),
+                            no: pin.number.clone(),
+                            name: pin.name.trim().to_string(),
+                            contacts: pin.contacts.clone(),
+                            pass,
+                            pos: transform_local(pin.at, s),
+                        });
                     }
                 }
             }
@@ -240,18 +406,17 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
         }
     }
 
-    // ノード番号: [wires][pins][junctions][labels]
+    // ノード番号: [wires][pins][junctions][labels]。芯はかたまりを作った後で枠どうしを結ぶ
     let wi = 0;
     let pi = wi + wires.len();
     let ji = pi + pins.len();
     let li = ji + junctions.len();
-    // 区間ケーブルの芯: 1芯1ノード (ノード番号は labels の後ろ)
     let ci = li + labels.len();
-    let cores: Vec<(&crate::model::Cable, &crate::model::CableCore)> = cables
+    let cores: Vec<(&Cable, &CableCore)> = cables
         .iter()
         .flat_map(|c| c.cores.iter().map(move |k| (*c, k)))
         .collect();
-    let mut ds = DisjointSet::new(ci + cores.len());
+    let mut ds = DisjointSet::new(ci);
 
     let endpoints = |w: &crate::model::Wire| -> Vec<Point> {
         match (w.points.first(), w.points.last()) {
@@ -280,17 +445,17 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
         }
     }
     // ピン ⇔ Wire上の任意点
-    for (p, (_, _, _, pos)) in pins.iter().enumerate() {
+    for (p, node) in pins.iter().enumerate() {
         for (a, w) in wires.iter().enumerate() {
-            if on_wire(w, pos) {
+            if on_wire(w, &node.pos) {
                 ds.union(pi + p, wi + a);
             }
         }
     }
     // 同一シンボル内の同一ピン番号の接続点は内部短絡(端子台の左右貫通)
-    for (p, (eid, _, no, _)) in pins.iter().enumerate() {
-        for (p2, (eid2, _, no2, _)) in pins.iter().enumerate().skip(p + 1) {
-            if eid == eid2 && no == no2 {
+    for (p, a) in pins.iter().enumerate() {
+        for (p2, b) in pins.iter().enumerate().skip(p + 1) {
+            if a.entity_id == b.entity_id && a.no == b.no {
                 ds.union(pi + p, pi + p2);
             }
         }
@@ -303,8 +468,8 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
                 ds.union(li + l, wi + a);
             }
         }
-        for (p, (_, _, _, pos)) in pins.iter().enumerate() {
-            if near(pos, &lab.at) {
+        for (p, node) in pins.iter().enumerate() {
+            if near(&node.pos, &lab.at) {
                 ds.union(li + l, pi + p);
             }
         }
@@ -315,20 +480,118 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
         }
     }
 
-    // 芯 ⇔ 行き先 (割当てだけで結ぶ。区間の線はどの位置判定にも出てこない)
-    for (k, (_, core)) in cores.iter().enumerate() {
-        for end in [&core.end_a, &core.end_b].into_iter().flatten() {
-            match end {
-                CoreEnd::Wire { wire } => {
-                    if let Some(a) = wires.iter().position(|w| w.id == *wire) {
-                        ds.union(ci + k, wi + a);
-                    }
+    // かたまり (芯を入れない) と、ポートのかたまりの接点の並び
+    let roots: Vec<usize> = (0..ci).map(|i| ds.find(i)).collect();
+    let mut port_contacts: BTreeMap<usize, Vec<String>> = BTreeMap::new();
+    if split {
+        let mut order: Vec<usize> = (0..pins.len()).filter(|&p| !pins[p].contacts.is_empty()).collect();
+        order.sort_by(|&a, &b| {
+            (&pins[a].reference, &pins[a].no, pins[a].entity_id).cmp(&(&pins[b].reference, &pins[b].no, pins[b].entity_id))
+        });
+        for p in order {
+            let list = port_contacts.entry(roots[pi + p]).or_default();
+            for c in &pins[p].contacts {
+                if !list.contains(c) {
+                    list.push(c.clone());
                 }
-                // 同じ番号の接続点は上で内部短絡済みなので、番号の一致だけを見る (index は描画用)
-                CoreEnd::Pin { part, pin, .. } => {
-                    for (p, (eid, _, no, _)) in pins.iter().enumerate() {
-                        if eid == part && no == pin {
-                            ds.union(ci + k, pi + p);
+            }
+        }
+    }
+    let slots = Slots::new(&roots, port_contacts);
+    // 枠どうしを結ぶ。枠番号 slots.count + k が芯 k
+    let mut sd = DisjointSet::new(slots.count + cores.len());
+    let mut report = PortReport::default();
+
+    // ピン p が入る枠と、そこで運ぶ接点
+    let pin_slots = |p: usize| -> Vec<(usize, Option<String>)> {
+        let node = &pins[p];
+        let r = roots[pi + p];
+        let Some(list) = slots.contacts.get(&r) else {
+            return vec![(slots.first[&r], None)];
+        };
+        if !node.contacts.is_empty() {
+            node.contacts.iter().filter_map(|c| slots.contact(r, c).map(|s| (s, Some(c.clone())))).collect()
+        } else if node.pass {
+            list.iter().enumerate().map(|(i, c)| (slots.first[&r] + i, Some(c.clone()))).collect()
+        } else {
+            vec![(slots.contact(r, &node.name).unwrap_or_else(|| slots.single_or_residual(r)), None)]
+        }
+    };
+
+    // 芯 ⇔ 行き先 (割当てだけで結ぶ。区間の線はどの位置判定にも出てこない)
+    for (k, (c, core)) in cores.iter().enumerate() {
+        let me = slots.count + k;
+        for end in [&core.end_a, &core.end_b].into_iter().flatten() {
+            let target = match end {
+                CoreEnd::Wire { wire } => match wires.iter().position(|w| w.id == *wire) {
+                    Some(a) => {
+                        let r = roots[wi + a];
+                        if slots.is_port(r) {
+                            stray(&mut report, c, core, "分岐の配線がポートのネットに触れています".into());
+                        }
+                        Some(slots.single_or_residual(r))
+                    }
+                    None => None,
+                },
+                // 同じ番号の接続点は内部短絡済みなので、最初の1つを見れば足りる (index は描画用)
+                CoreEnd::Pin { part, pin, contact, .. } => match pins.iter().position(|n| n.entity_id == *part && n.no == *pin) {
+                    None => None,
+                    Some(p) => {
+                        let node = &pins[p];
+                        let r = roots[pi + p];
+                        if !slots.is_port(r) {
+                            Some(slots.first[&r])
+                        } else if node.contacts.is_empty() && node.pass {
+                            stray(&mut report, c, core, format!("{} はかみ合わせの片側なので、どの接点か決められません", node.label()));
+                            Some(slots.single_or_residual(r))
+                        } else if node.contacts.is_empty() {
+                            Some(pin_slots(p)[0].0)
+                        } else {
+                            let want = contact.clone().unwrap_or_else(|| core.core.trim().to_string());
+                            let found = if node.contacts.contains(&want) { slots.contact(r, &want) } else { None };
+                            match found {
+                                Some(s) => Some(s),
+                                None => {
+                                    let why = match contact {
+                                        Some(x) => format!("接点 {x} は {} にありません (接点: {})", node.label(), node.contacts.join(", ")),
+                                        None => format!(
+                                            "{} はポート (接点: {}) ですが、芯に接点の指定が無く、芯の名前もどの接点でもありません",
+                                            node.label(),
+                                            node.contacts.join(", ")
+                                        ),
+                                    };
+                                    stray(&mut report, c, core, why);
+                                    Some(slots.single_or_residual(r))
+                                }
+                            }
+                        }
+                    }
+                },
+            };
+            if let Some(s) = target {
+                sd.union(me, s);
+            }
+        }
+    }
+
+    // 点付きラベル: 導体1本のかたまりの「L.接点」は、ラベル L のポートのかたまりのその接点の枠へ
+    if !slots.contacts.is_empty() {
+        let port_labels: Vec<(&str, usize)> = labels
+            .iter()
+            .enumerate()
+            .filter(|(l, _)| slots.is_port(roots[li + l]))
+            .map(|(l, lab)| (lab.name.as_str(), roots[li + l]))
+            .collect();
+        for (l, lab) in labels.iter().enumerate() {
+            let r = roots[li + l];
+            if slots.is_port(r) {
+                continue;
+            }
+            for (name, pr) in &port_labels {
+                for c in &slots.contacts[pr] {
+                    if lab.name == format!("{name}.{c}") {
+                        if let Some(s) = slots.contact(*pr, c) {
+                            sd.union(slots.first[&r], s);
                         }
                     }
                 }
@@ -341,93 +604,215 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
     struct Group {
         wire_ids: Vec<EntityId>,
         pins: Vec<NetPin>,
-        label: Option<String>,
-        /// グループ内のWireに書かれた線番 (重複可)。
+        /// 名前の候補になるラベル (ポートの接点の枠では「L.接点」)。
+        labels: BTreeSet<String>,
+        /// グループ内のWireに書かれた生の線番 (重複可)。
         wire_nos: Vec<String>,
+        /// 名前の候補になる線番 (ポートの接点の枠では「W.接点」)。
+        name_wire_nos: Vec<String>,
         cable_cores: Vec<NetCableCore>,
+        /// このまとまりのポートの枠: (かたまりの根, 接点の順位, 接点名。残りの枠は None)。
+        ports: Vec<(usize, usize, Option<String>)>,
     }
     let mut groups: BTreeMap<usize, Group> = BTreeMap::new();
+    let mut cluster_nos: BTreeMap<usize, Vec<String>> = BTreeMap::new();
     for (a, w) in wires.iter().enumerate() {
-        let g = groups.entry(ds.find(wi + a)).or_default();
-        g.wire_ids.push(w.id);
-        if let Some(no) = w.net.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
-            g.wire_nos.push(no.to_string());
+        let r = roots[wi + a];
+        let no = w.net.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty());
+        if let Some(no) = no {
+            cluster_nos.entry(r).or_default().push(no.to_string());
+        }
+        for s in slots.every(r) {
+            let g = groups.entry(sd.find(s)).or_default();
+            g.wire_ids.push(w.id);
+            if let Some(no) = no {
+                g.wire_nos.push(no.to_string());
+                if !slots.is_port(r) {
+                    g.name_wire_nos.push(no.to_string());
+                }
+            }
         }
     }
     for (k, (c, core)) in cores.iter().enumerate() {
-        groups.entry(ds.find(ci + k)).or_default().cable_cores.push(NetCableCore {
+        groups.entry(sd.find(slots.count + k)).or_default().cable_cores.push(NetCableCore {
             cable_id: c.id,
             reference: c.reference.clone(),
             core: core.core.clone(),
         });
     }
-    for (p, (eid, reference, no, _)) in pins.iter().enumerate() {
-        let root = ds.find(pi + p);
-        if let Some(g) = groups.get_mut(&root) {
-            // 同一シンボル同一番号の接続点(内部短絡済み)は1エントリに集約
-            if !g.pins.iter().any(|np| np.entity_id == *eid && np.pin == *no) {
-                g.pins.push(NetPin {
-                    reference: reference.clone(),
-                    entity_id: *eid,
-                    pin: no.clone(),
-                });
+    for (p, node) in pins.iter().enumerate() {
+        for (s, contact) in pin_slots(p) {
+            if let Some(g) = groups.get_mut(&sd.find(s)) {
+                // 同一シンボル同一番号の接続点(内部短絡済み)は1エントリに集約
+                if !g.pins.iter().any(|np| np.entity_id == node.entity_id && np.pin == node.no && np.contact == contact) {
+                    g.pins.push(NetPin {
+                        reference: node.reference.clone(),
+                        entity_id: node.entity_id,
+                        pin: node.no.clone(),
+                        contact,
+                    });
+                }
             }
         }
     }
     for (l, lab) in labels.iter().enumerate() {
-        let root = ds.find(li + l);
-        if let Some(g) = groups.get_mut(&root) {
-            match &g.label {
-                Some(cur) if *cur <= lab.name => {}
-                _ => g.label = Some(lab.name.clone()),
+        let r = roots[li + l];
+        match slots.contacts.get(&r) {
+            None => {
+                if let Some(g) = groups.get_mut(&sd.find(slots.first[&r])) {
+                    g.labels.insert(lab.name.clone());
+                }
+            }
+            Some(list) => {
+                for (i, c) in list.iter().enumerate() {
+                    if let Some(g) = groups.get_mut(&sd.find(slots.first[&r] + i)) {
+                        g.labels.insert(format!("{}.{c}", lab.name));
+                    }
+                }
+                if let Some(g) = groups.get_mut(&sd.find(slots.single_or_residual(r))) {
+                    g.labels.insert(lab.name.clone());
+                }
+            }
+        }
+    }
+    for (&r, list) in &slots.contacts {
+        let base_no = pick_wire_no(cluster_nos.get(&r).map(Vec::as_slice).unwrap_or_default());
+        for (i, c) in list.iter().enumerate() {
+            if let Some(g) = groups.get_mut(&sd.find(slots.first[&r] + i)) {
+                g.ports.push((r, i, Some(c.clone())));
+                if let Some(w) = &base_no {
+                    g.name_wire_nos.push(format!("{w}.{c}"));
+                }
+            }
+        }
+        if let Some(g) = groups.get_mut(&sd.find(slots.single_or_residual(r))) {
+            g.ports.push((r, list.len(), None));
+            if let Some(w) = &base_no {
+                g.name_wire_nos.push(w.clone());
+            }
+        }
+    }
+    // 普通のピンも芯も無い残りの枠は出さない (共有の配線は接点のネット全部に入っている)
+    groups.retain(|_, g| {
+        let residual_only = !g.ports.is_empty() && g.ports.iter().all(|(_, _, c)| c.is_none());
+        !(residual_only && g.pins.is_empty() && g.cable_cores.is_empty())
+    });
+
+    // ポートの報告
+    if !slots.contacts.is_empty() {
+        let mut port_pins_of: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        for (p, node) in pins.iter().enumerate() {
+            let r = roots[pi + p];
+            if slots.is_port(r) && !node.contacts.is_empty() {
+                let list = port_pins_of.entry(r).or_default();
+                if !list.iter().any(|&q| pins[q].entity_id == node.entity_id && pins[q].no == node.no) {
+                    list.push(p);
+                }
+            }
+        }
+        for (l, lab) in labels.iter().enumerate() {
+            if slots.is_port(roots[li + l]) {
+                report.port_labels.insert(lab.name.clone());
+            }
+        }
+        for (p, node) in pins.iter().enumerate() {
+            let r = roots[pi + p];
+            let Some(list) = slots.contacts.get(&r) else { continue };
+            let label = node.label();
+            if node.contacts.is_empty()
+                && !node.pass
+                && !list.contains(&node.name)
+                && !report.plain_pins.iter().any(|x| x.entity_id == node.entity_id && x.pin == label)
+            {
+                report.plain_pins.push(PlainOnPort {
+                    entity_id: node.entity_id,
+                    pin: label,
+                    ports: port_pins_of.get(&r).map(|v| v.iter().map(|&q| pins[q].label()).collect()).unwrap_or_default(),
+                    contacts: list.clone(),
+                });
+            }
+        }
+        for (&r, list) in &port_pins_of {
+            if list.len() < 2 {
+                continue;
+            }
+            for c in &slots.contacts[&r] {
+                let holders: Vec<usize> = list.iter().copied().filter(|&q| pins[q].contacts.contains(c)).collect();
+                if let [only] = holders.as_slice() {
+                    report.lonely_contacts.push(LonelyContact {
+                        contact: c.clone(),
+                        port: pins[*only].label(),
+                        entity_ids: vec![pins[*only].entity_id],
+                    });
+                }
             }
         }
     }
 
-    // 決定的順序: グループ内最小wire idで整列し、無名ネットへ連番付与
+    // 決定的順序: 配線のあるネットが先 (最小wire id)、芯だけのネットはその後ろ、同じかたまりの接点は接点の順
     let mut ordered: Vec<Group> = groups.into_values().collect();
-    // 配線のあるネットが先 (これまでと同じ順・同じ自動名)、芯だけのネットはその後ろにケーブルid・芯の順
+    for g in &mut ordered {
+        g.ports.sort();
+    }
     ordered.sort_by_key(|g| {
         (
             g.wire_ids.is_empty(),
             g.wire_ids.iter().min().copied(),
             g.cable_cores.iter().map(|c| (c.cable_id, c.core.clone())).min(),
+            g.ports.first().map_or(0, |p| p.1),
         )
     });
     let mut seq = 0;
-    ordered
-        .into_iter()
-        .map(|mut g| {
-            g.wire_ids.sort();
-            g.pins.sort_by(|a, b| (&a.reference, &a.pin).cmp(&(&b.reference, &b.pin)));
-            g.cable_cores.sort_by(|a, b| (a.cable_id, &a.core).cmp(&(b.cable_id, &b.core)));
-            // 線番: 混在時は手動の名前 (数字以外) を優先し、以降は辞書順で決定的に選ぶ
-            let wire_no = g
-                .wire_nos
-                .iter()
-                .min_by(|a, b| {
-                    (crate::wire_no::is_generated_number(a), *a)
-                        .cmp(&(crate::wire_no::is_generated_number(b), *b))
-                })
-                .cloned();
-            let name = g
-                .label
-                .clone()
-                .or_else(|| wire_no.clone())
-                .unwrap_or_else(|| {
+    // ポートのかたまりの根 → (付けた順の番号, 元の名前 Nxxx)
+    let mut port_base: BTreeMap<usize, (usize, String)> = BTreeMap::new();
+    let mut nets = Vec::with_capacity(ordered.len());
+    for mut g in ordered {
+        g.wire_ids.sort();
+        g.pins.sort_by(|a, b| (&a.reference, &a.pin, &a.contact).cmp(&(&b.reference, &b.pin, &b.contact)));
+        g.cable_cores.sort_by(|a, b| (a.cable_id, &a.core).cmp(&(b.cable_id, &b.core)));
+        let wire_no = pick_wire_no(&g.wire_nos);
+        let label = g.labels.iter().next().cloned();
+        let contact = g.ports.iter().find_map(|(_, _, c)| c.clone());
+        let name = match label.clone().or_else(|| pick_wire_no(&g.name_wire_nos)) {
+            Some(n) => n,
+            None => match g.ports.first() {
+                Some((first, ..)) => {
+                    // 芯で2つ以上のポートのかたまりが繋がったら、ネットの順で先のかたまりの元の名前を使う
+                    // (既に付いた名前があればそれ。新しい番号は使わない。仕様 §2.3)
+                    let earlier = g.ports.iter().filter_map(|(r, ..)| port_base.get(r)).min_by_key(|(n, _)| *n);
+                    let base = match earlier {
+                        Some((_, b)) => b.clone(),
+                        None => {
+                            seq += 1;
+                            let b = format!("N{seq:03}");
+                            port_base.insert(*first, (seq, b.clone()));
+                            b
+                        }
+                    };
+                    match &contact {
+                        Some(c) => format!("{base}.{c}"),
+                        None => base,
+                    }
+                }
+                None => {
                     seq += 1;
                     format!("N{seq:03}")
-                });
-            Net {
-                name,
-                pins: g.pins,
-                wire_ids: g.wire_ids,
-                label: g.label,
-                wire_no,
-                cable_cores: g.cable_cores,
-            }
-        })
-        .collect()
+                }
+            },
+        };
+        let contact_labels = if g.ports.is_empty() { Vec::new() } else { g.labels.iter().cloned().collect() };
+        nets.push(Net {
+            name,
+            pins: g.pins,
+            wire_ids: g.wire_ids,
+            label,
+            wire_no,
+            cable_cores: g.cable_cores,
+            contact,
+            contact_labels,
+        });
+    }
+    (nets, report)
 }
 
 #[cfg(test)]
@@ -934,5 +1319,247 @@ mod tests {
         let nets = extract_netlist(&lte.sheet, &crate::symbol::sheet_symbol_defs(&lte.sheet));
         assert_eq!(nets.len(), 4);
         assert!(nets.iter().all(|n| n.pins.len() == 2 && n.pins[0].pin == n.pins[1].pin), "{nets:?}");
+    }
+
+    use crate::block::port_fixtures::{pin_at, port_block, USB};
+    use crate::cable::test_support::insert as put;
+
+
+    /// Hub port 39.U3 and dongle port LTE1.P1 joined by one wire (A3 sheet).
+    fn usb_link() -> (Sheet, EntityId, EntityId, EntityId) {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let hub = put(&mut sheet, Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB)));
+        let dongle = put(&mut sheet, Entity::Symbol(port_block("LTE1", 200.0, 100.0, "left", "P1", &USB)));
+        let (a, b) = (pin_at(&sheet, hub, "U3"), pin_at(&sheet, dongle, "P1"));
+        let w = put(&mut sheet, wire(&[(a.x, a.y), (b.x, b.y)]));
+        (sheet, hub, dongle, w)
+    }
+
+    fn pins_of(net: &Net) -> Vec<String> {
+        net.pins.iter().map(ToString::to_string).collect()
+    }
+
+    /// Two port pins joined by one wire give one net per contact, named N001.<contact> in contact order, each holding both pins with that contact and the shared wire.
+    /// 2本のポートのピンを配線1本で結ぶと接点ごとに1ネットになり、名前は接点の順に N001.<接点>、どれにも両方のピンがその接点付きで、共有の配線と一緒に載る。
+    #[test]
+    fn two_ports_joined_by_one_wire_split_into_one_net_per_contact() {
+        let (sheet, _, _, w) = usb_link();
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let names: Vec<&str> = nets.iter().map(|n| n.name.as_str()).collect();
+        assert_eq!(names, vec!["N001.VBUS", "N001.D-", "N001.D+", "N001.GND"]);
+        assert_eq!(pins_of(&nets[2]), vec!["39:U3/D+", "LTE1:P1/D+"]);
+        assert_eq!(nets[2].contact.as_deref(), Some("D+"));
+        assert!(nets.iter().all(|n| n.wire_ids == vec![w]));
+    }
+
+    /// The unsplit view keeps one net for the USB wire, and a drawing without ports gives exactly the same nets (and JSON, with no contact keys) from both functions.
+    /// 分けない方では USB の配線は1ネットのまま。ポートの無い図面は、どちらの関数でも全く同じネット (JSON も同じで、contact のキーは無い) になる。
+    #[test]
+    fn without_ports_nothing_changes() {
+        let (sheet, ..) = usb_link();
+        let defs = crate::symbol::sheet_symbol_defs(&sheet);
+        let one = extract_wire_nets(&sheet, &defs);
+        assert_eq!(one.len(), 1);
+        assert!(one[0].pins.iter().all(|p| p.contact.is_none()));
+        let lte = crate::cable::test_support::lte_sheet().sheet;
+        let defs = crate::symbol::sheet_symbol_defs(&lte);
+        let split = serde_json::to_string(&extract_netlist(&lte, &defs)).unwrap();
+        let wire = serde_json::to_string(&extract_wire_nets(&lte, &defs)).unwrap();
+        assert_eq!(split, wire);
+        assert!(!split.contains("contact"), "{split}");
+    }
+
+    /// A mate half passes every contact through inside its own net, but plug and socket are still not joined: port → socket | plug → label … port gives two groups of contact nets.
+    /// かみ合わせの片側は自分のネットの中で全部の接点を素通しにするが、プラグとソケットは今も繋がらない: ポート → ソケット | プラグ → ラベル … ポートは接点のネットの組2つになる。
+    #[test]
+    fn a_mate_half_passes_contacts_through_but_does_not_conduct() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let hub = put(&mut sheet, Entity::Symbol(port_block("39", 50.0, 100.0, "right", "U3", &USB)));
+        let socket = put(&mut sheet, symbol("connector_socket", "J1", 100.0, 100.0));
+        let plug = put(&mut sheet, symbol("connector_plug", "J1", 140.0, 100.0));
+        let dongle = put(&mut sheet, Entity::Symbol(port_block("LTE1", 250.0, 100.0, "left", "P1", &USB)));
+        let (h, s) = (pin_at(&sheet, hub, "U3"), pin_at(&sheet, socket, "1"));
+        let (p, d) = (pin_at(&sheet, plug, "1"), pin_at(&sheet, dongle, "P1"));
+        put(&mut sheet, wire(&[(h.x, h.y), (s.x, s.y)]));
+        put(&mut sheet, wire(&[(p.x, p.y), (p.x, 120.0)]));
+        put(&mut sheet, wire(&[(d.x, d.y), (d.x, 120.0)]));
+        for (x, y) in [(p.x, 120.0), (d.x, 120.0)] {
+            put(&mut sheet, Entity::NetLabel(NetLabel { id: Uuid::new_v4(), at: Point::new(x, y), name: "USB_MIC".into(), rotation: 0, attrs: Default::default() }));
+        }
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        assert_eq!(nets.len(), 8, "{:?}", nets.iter().map(|n| &n.name).collect::<Vec<_>>());
+        let vbus = nets.iter().find(|n| n.name == "USB_MIC.VBUS").expect("USB_MIC.VBUS");
+        assert!(vbus.pins.iter().any(|x| x.entity_id == plug && x.contact.as_deref() == Some("VBUS")));
+        assert!(vbus.pins.iter().any(|x| x.entity_id == dongle));
+        assert!(!vbus.pins.iter().any(|x| x.entity_id == socket || x.entity_id == hub));
+        let hub_side = nets.iter().find(|n| n.pins.iter().any(|x| x.entity_id == hub) && n.contact.as_deref() == Some("GND")).unwrap();
+        assert!(hub_side.pins.iter().any(|x| x.entity_id == socket));
+    }
+
+    /// In a port net a plain pin named like a contact joins that contact; a plain pin with another name goes to a residual net named like the base and is listed in the port report.
+    /// ポートのネットの中で、接点と同じ名前の普通のピンはその接点に入る。名前の違う普通のピンは元の名前の残りのネットに入り、ポートの報告に載る。
+    #[test]
+    fn a_plain_pin_joins_the_contact_with_its_name() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let hub = put(&mut sheet, Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB)));
+        let pwr = put(&mut sheet, crate::block::test_block("PWR", "", 200.0, 100.0, r#"{"left":[{"no":"3","name":"GND"}]}"#));
+        let r1 = put(&mut sheet, symbol("resistor", "R1", 150.0, 140.0));
+        let (h, g, r) = (pin_at(&sheet, hub, "U3"), pin_at(&sheet, pwr, "3"), pin_at(&sheet, r1, "1"));
+        put(&mut sheet, wire(&[(h.x, h.y), (g.x, g.y)]));
+        put(&mut sheet, wire(&[(h.x, h.y), (h.x, r.y), (r.x, r.y)]));
+        let defs = crate::symbol::sheet_symbol_defs(&sheet);
+        let nets = extract_netlist(&sheet, &defs);
+        let gnd = nets.iter().find(|n| n.name == "N001.GND").unwrap();
+        assert_eq!(pins_of(gnd), vec!["39:U3/GND", "PWR:3"]);
+        let residual = nets.iter().find(|n| n.name == "N001").expect("残りのネット");
+        assert_eq!(pins_of(residual), vec!["R1:1"]);
+        assert_eq!(residual.contact, None);
+        let report = port_report(&sheet, &defs);
+        assert_eq!(report.plain_pins.len(), 1);
+        assert_eq!(report.plain_pins[0].pin, "R1:1");
+        assert_eq!(report.plain_pins[0].ports, vec!["39:U3"]);
+    }
+
+    /// The LTE harness drawn as four board wires into one run that ends on the single port pin 39.U3 gives four nets, each one board pin and one contact of the port.
+    /// LTE ハーネスを、基板側4本の配線から1本線になってポートのピン 39.U3 1本で終わる形で描くと4ネットになり、どれも基板のピン1本とポートの接点1つを持つ。
+    #[test]
+    fn the_lte_harness_lands_on_one_port_pin() {
+        let mut lte = crate::cable::test_support::lte_sheet();
+        let mut hub = port_block("39", 200.0, 100.0, "left", "U3", &USB);
+        hub.id = lte.usb;
+        lte.sheet.entities.insert(lte.usb, Entity::Symbol(hub));
+        let Entity::Cable(c) = lte.sheet.entities.get_mut(&lte.cable).unwrap() else { panic!() };
+        for core in &mut c.cores {
+            core.end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "U3".into(), index: None, contact: Some(core.core.clone()) });
+        }
+        let nets = extract_netlist(&lte.sheet, &crate::symbol::sheet_symbol_defs(&lte.sheet));
+        let mut got: Vec<Vec<String>> = nets.iter().map(pins_of).collect();
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                vec!["39:U3/D+".to_string(), "J45:3".to_string()],
+                vec!["39:U3/D-".to_string(), "J45:2".to_string()],
+                vec!["39:U3/GND".to_string(), "J45:4".to_string()],
+                vec!["39:U3/VBUS".to_string(), "J45:1".to_string()],
+            ]
+        );
+    }
+
+    /// A label named <port label>.<contact> on a plain wire joins that one contact of the port net.
+    /// 普通の配線に「<ポートのラベル>.<接点>」という名前のラベルを置くと、ポートのネットのその接点1つに繋がる。
+    #[test]
+    fn a_dotted_label_taps_one_contact() {
+        let (mut sheet, hub, ..) = usb_link();
+        let h = pin_at(&sheet, hub, "U3");
+        put(&mut sheet, Entity::NetLabel(NetLabel { id: Uuid::new_v4(), at: Point::new(h.x + 10.0, h.y), name: "USB_MIC".into(), rotation: 0, attrs: Default::default() }));
+        let r1 = put(&mut sheet, symbol("resistor", "R1", 150.0, 150.0));
+        let r = pin_at(&sheet, r1, "1");
+        put(&mut sheet, wire(&[(r.x, r.y), (r.x - 20.0, r.y)]));
+        put(&mut sheet, Entity::NetLabel(NetLabel { id: Uuid::new_v4(), at: Point::new(r.x - 20.0, r.y), name: "USB_MIC.VBUS".into(), rotation: 0, attrs: Default::default() }));
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let vbus = nets.iter().find(|n| n.name == "USB_MIC.VBUS").unwrap();
+        assert!(pins_of(vbus).contains(&"R1:1".to_string()), "{:?}", pins_of(vbus));
+        assert_eq!(vbus.contact_labels, vec!["USB_MIC.VBUS"]);
+        assert_eq!(vbus.label.as_deref(), Some("USB_MIC.VBUS"));
+    }
+
+    /// A single-line run between two port pins with no wire at all still gives one net per core, each with both ports.
+    /// 配線が1本も無く、2本のポートのピンの間を1本線で結んでも、芯ごとに1ネットになり、どれにも両方のポートが載る。
+    #[test]
+    fn a_run_between_two_ports_gives_one_net_per_core() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let hub = put(&mut sheet, Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB)));
+        let dongle = put(&mut sheet, Entity::Symbol(port_block("LTE1", 200.0, 100.0, "left", "P1", &USB)));
+        let (a, b) = (pin_at(&sheet, hub, "U3"), pin_at(&sheet, dongle, "P1"));
+        let cores = USB
+            .iter()
+            .map(|c| CableCore {
+                core: (*c).into(),
+                end_a: Some(CoreEnd::Pin { part: hub, pin: "U3".into(), index: None, contact: Some((*c).into()) }),
+                end_b: Some(CoreEnd::Pin { part: dongle, pin: "P1".into(), index: None, contact: Some((*c).into()) }),
+                ..Default::default()
+            })
+            .collect();
+        put(&mut sheet, Entity::Cable(Cable {
+            id: Uuid::new_v4(), reference: "W1".into(), part_no: String::new(), core_count: 4, sq: 0.0,
+            points: Vec::new(), cores, shield: None, length_m: None, run: vec![a, b],
+        }));
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        assert_eq!(nets.len(), 4);
+        for n in &nets {
+            let c = n.contact.clone().expect("接点のネット");
+            assert_eq!(pins_of(n), vec![format!("39:U3/{c}"), format!("LTE1:P1/{c}")]);
+            assert!(n.wire_ids.is_empty() && n.cable_cores.len() == 1);
+        }
+    }
+
+    /// Two ports with different contact sets join only the shared contacts; the others stay alone on their port, with no residual net, and the report lists them.
+    /// 接点の組が違う2つのポートは共通の接点だけが繋がる。それ以外は自分のポートだけのネットになり、残りのネットは出ず、報告に載る。
+    #[test]
+    fn ports_with_different_contacts_join_only_the_shared_ones() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let hub = put(&mut sheet, Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB)));
+        let otg = put(&mut sheet, Entity::Symbol(port_block("OTG1", 200.0, 100.0, "left", "P1", &["VBUS", "GND", "ID"])));
+        let (a, b) = (pin_at(&sheet, hub, "U3"), pin_at(&sheet, otg, "P1"));
+        put(&mut sheet, wire(&[(a.x, a.y), (b.x, b.y)]));
+        let defs = crate::symbol::sheet_symbol_defs(&sheet);
+        let nets = extract_netlist(&sheet, &defs);
+        let names: Vec<&str> = nets.iter().map(|n| n.name.as_str()).collect();
+        assert_eq!(names, vec!["N001.VBUS", "N001.D-", "N001.D+", "N001.GND", "N001.ID"]);
+        assert_eq!(pins_of(&nets[0]), vec!["39:U3/VBUS", "OTG1:P1/VBUS"]);
+        assert_eq!(pins_of(&nets[1]), vec!["39:U3/D-"]);
+        let lonely: Vec<(String, String)> = port_report(&sheet, &defs).lonely_contacts.into_iter().map(|l| (l.contact, l.port)).collect();
+        assert_eq!(
+            lonely,
+            vec![("D-".into(), "39:U3".into()), ("D+".into(), "39:U3".into()), ("ID".into(), "OTG1:P1".into())]
+        );
+    }
+
+    /// When a core joins two port clusters, the contact net takes the base name a cluster already has from an earlier net, and no new number is used for it.
+    /// 芯が2つのポートのかたまりを繋ぐと、接点のネットは前のネットで付いた元の名前をそのまま使い、新しい番号は使わない。
+    #[test]
+    fn a_contact_net_across_two_port_clusters_reuses_the_earlier_base() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let hub = put(&mut sheet, Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB)));
+        let otg = put(&mut sheet, Entity::Symbol(port_block("OTG1", 200.0, 100.0, "left", "P1", &["VBUS", "GND", "ID"])));
+        let (h, o) = (pin_at(&sheet, hub, "U3"), pin_at(&sheet, otg, "P1"));
+        let with_id = |n: u128, mut e: Entity| {
+            if let Entity::Wire(w) = &mut e {
+                w.id = Uuid::from_u128(n);
+            }
+            e
+        };
+        // ハブ側は配線 1 と 3、OTG 側は配線 2。ハブのネットが先に並ぶ
+        put(&mut sheet, with_id(1, wire(&[(h.x, h.y), (h.x + 10.0, h.y)])));
+        put(&mut sheet, with_id(3, wire(&[(h.x + 10.0, h.y), (h.x + 10.0, h.y + 10.0)])));
+        put(&mut sheet, with_id(2, wire(&[(o.x, o.y), (o.x - 10.0, o.y)])));
+        let cores = ["VBUS", "GND"]
+            .iter()
+            .map(|c| CableCore {
+                core: (*c).into(),
+                end_a: Some(CoreEnd::Pin { part: hub, pin: "U3".into(), index: None, contact: Some((*c).into()) }),
+                end_b: Some(CoreEnd::Pin { part: otg, pin: "P1".into(), index: None, contact: Some((*c).into()) }),
+                ..Default::default()
+            })
+            .collect();
+        put(&mut sheet, Entity::Cable(Cable {
+            id: Uuid::new_v4(), reference: "W1".into(), part_no: String::new(), core_count: 2, sq: 0.0,
+            points: Vec::new(), cores, shield: None, length_m: None, run: vec![Point::new(130.0, 120.0), Point::new(170.0, 120.0)],
+        }));
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let names: Vec<&str> = nets.iter().map(|n| n.name.as_str()).collect();
+        assert_eq!(names, vec!["N001.D-", "N001.D+", "N001.GND", "N001.VBUS", "N002.ID"]);
+        assert_eq!(pins_of(&nets[3]), vec!["39:U3/VBUS", "OTG1:P1/VBUS"]);
+    }
+
+    /// A net pin prints as REF:PIN, with /CONTACT added when it carries a port contact.
+    /// ネットのピンは「参照記号:ピン」と書き、ポートの接点を運ぶなら「/接点」を添える。
+    #[test]
+    fn a_net_pin_prints_with_its_contact() {
+        let mut p = NetPin { reference: "39".into(), entity_id: Uuid::nil(), pin: "U3".into(), contact: None };
+        assert_eq!(p.to_string(), "39:U3");
+        p.contact = Some("VBUS".into());
+        assert_eq!(p.to_string(), "39:U3/VBUS");
     }
 }

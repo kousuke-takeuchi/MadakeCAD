@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2917仕様項目**。
+全6領域・**2927仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -442,6 +442,16 @@
 - 2つのコネクタを全長1本線で結ぶケーブル (3.5mm AUX の L・R・GND) は、配線が1本も無くても芯ごとに1ネットになる。 <sub>`a_connector_to_connector_run_gives_one_net_per_core`</sub>
 - 芯だけのネットは配線のあるネットの後ろに名前が付くので、そういうケーブルを足しても今あるネットの名前は変わらない。 <sub>`core_only_nets_are_named_after_wire_nets`</sub>
 - 1本線が着く部品を動かしても、どの芯も同じピンに繋がったまま (接続は割当てで決まり、描いた位置では決まらない)。 <sub>`moving_the_landing_part_keeps_core_connectivity`</sub>
+- 2本のポートのピンを配線1本で結ぶと接点ごとに1ネットになり、名前は接点の順に N001.<接点>、どれにも両方のピンがその接点付きで、共有の配線と一緒に載る。 <sub>`two_ports_joined_by_one_wire_split_into_one_net_per_contact`</sub>
+- 分けない方では USB の配線は1ネットのまま。ポートの無い図面は、どちらの関数でも全く同じネット (JSON も同じで、contact のキーは無い) になる。 <sub>`without_ports_nothing_changes`</sub>
+- かみ合わせの片側は自分のネットの中で全部の接点を素通しにするが、プラグとソケットは今も繋がらない: ポート → ソケット | プラグ → ラベル … ポートは接点のネットの組2つになる。 <sub>`a_mate_half_passes_contacts_through_but_does_not_conduct`</sub>
+- ポートのネットの中で、接点と同じ名前の普通のピンはその接点に入る。名前の違う普通のピンは元の名前の残りのネットに入り、ポートの報告に載る。 <sub>`a_plain_pin_joins_the_contact_with_its_name`</sub>
+- LTE ハーネスを、基板側4本の配線から1本線になってポートのピン 39.U3 1本で終わる形で描くと4ネットになり、どれも基板のピン1本とポートの接点1つを持つ。 <sub>`the_lte_harness_lands_on_one_port_pin`</sub>
+- 普通の配線に「<ポートのラベル>.<接点>」という名前のラベルを置くと、ポートのネットのその接点1つに繋がる。 <sub>`a_dotted_label_taps_one_contact`</sub>
+- 配線が1本も無く、2本のポートのピンの間を1本線で結んでも、芯ごとに1ネットになり、どれにも両方のポートが載る。 <sub>`a_run_between_two_ports_gives_one_net_per_core`</sub>
+- 接点の組が違う2つのポートは共通の接点だけが繋がる。それ以外は自分のポートだけのネットになり、残りのネットは出ず、報告に載る。 <sub>`ports_with_different_contacts_join_only_the_shared_ones`</sub>
+- 芯が2つのポートのかたまりを繋ぐと、接点のネットは前のネットで付いた元の名前をそのまま使い、新しい番号は使わない。 <sub>`a_contact_net_across_two_port_clusters_reuses_the_earlier_base`</sub>
+- ネットのピンは「参照記号:ピン」と書き、ポートの接点を運ぶなら「/接点」を添える。 <sub>`a_net_pin_prints_with_its_contact`</sub>
 
 ### ngspiceランナー
 

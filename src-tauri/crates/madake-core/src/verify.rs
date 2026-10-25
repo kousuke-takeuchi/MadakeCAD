@@ -601,7 +601,7 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 .get(s)
                 .map(|d| d.category.clone())
                 .unwrap_or_default();
-            let kind = if matches!(s.symbol_id.as_str(), "connector_plug" | "connector_socket") {
+            let kind = if crate::mate::is_mate_half(&s.symbol_id) {
                 MATE_HALF.to_string()
             } else {
                 category
