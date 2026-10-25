@@ -716,7 +716,7 @@ fn render_wire_numbers(out: &mut String, sheet: &Sheet, symbols: &[SymbolDef]) {
     // 文字も配線からの逃がしも、シートの注記文字高 (G20) に合わせて一緒に伸縮する
     let scale = sheet.annotation_scale();
     let (font, gap) = (WIRE_NO_FONT * scale, WIRE_NO_GAP * scale);
-    for net in crate::netlist::extract_netlist(sheet, symbols) {
+    for net in crate::netlist::extract_wire_nets(sheet, symbols) {
         let Some(no) = net.wire_no.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
             continue;
         };

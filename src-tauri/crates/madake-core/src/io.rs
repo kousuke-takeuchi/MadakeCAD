@@ -33,9 +33,13 @@ impl ExportReport {
     }
 }
 
-/// プロジェクトを整形JSONで保存する(git差分が読める形式)。
+/// プロジェクトを整形JSONで保存する(git差分が読める形式)。接点のあるブロックは種類`port_block`で書く
+/// ([`crate::model::FileWriteGuard`])。
 pub fn save_project(path: &Path, project: &Project) -> Result<()> {
-    let json = serde_json::to_string_pretty(project)?;
+    let json = {
+        let _file = crate::model::FileWriteGuard::new();
+        serde_json::to_string_pretty(project)?
+    };
     std::fs::write(path, json)?;
     Ok(())
 }
@@ -380,15 +384,35 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 17, the version that added single-line cable runs (saved as "run_cable").
-    /// 現行のファイル形式バージョンは17 (1本線の区間を持つケーブルを追加し、種類「run_cable」で保存する版) である。
+    /// The current file format version is 18, the version that added port contacts on block pins (blocks with contacts are saved as "port_block").
+    /// 現行のファイル形式バージョンは18 (ブロックのピンにポートの接点を追加し、接点のあるブロックを種類「port_block」で保存する版) である。
     #[test]
-    fn the_current_format_version_is_seventeen() {
-        assert_eq!(FORMAT_VERSION, 17);
+    fn the_current_format_version_is_eighteen() {
+        assert_eq!(FORMAT_VERSION, 18);
         let mut old = Project::new("x");
-        old.format_version = 16;
+        old.format_version = 17;
         migrate(&mut old);
-        assert_eq!(old.format_version, 17);
+        assert_eq!(old.format_version, 18);
+    }
+
+    /// A version 17 file without ports loads unchanged apart from being moved up to the current version.
+    /// ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。
+    #[test]
+    fn a_version_17_file_loads_unchanged() {
+        let mut project = Project::new("old");
+        let block = crate::block::test_block("U1", "", 50.0, 50.0, r#"{"left":[{"no":"1","name":"A"}]}"#);
+        let id = block.id();
+        project.sheets[0].entities.insert(id, block);
+        project.format_version = 17;
+        let dir = std::env::temp_dir().join(format!("madake-io-v17-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.mdkproj");
+        std::fs::write(&path, serde_json::to_string_pretty(&project).unwrap()).unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
+        assert!(matches!(&loaded.sheets[0].entities[&id], Entity::Symbol(s) if s.symbol_id == "block"));
+        assert_eq!(loaded.sheets[0].entities.len(), 1);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable".
@@ -411,7 +435,7 @@ mod tests {
         assert_eq!(c.cores[1].end_a, Some(CoreEnd::Wire { wire: lte.wires[1] }));
         assert_eq!(
             c.cores[1].end_b,
-            Some(CoreEnd::Pin { part: lte.usb, pin: "2".into(), index: None })
+            Some(CoreEnd::Pin { part: lte.usb, pin: "2".into(), index: None, contact: None })
         );
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -764,5 +788,73 @@ mod tests {
         assert_eq!(again.format_version, FORMAT_VERSION);
         assert_eq!(again.mech_links, loaded.mech_links);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn port_project() -> (Project, EntityId) {
+        use crate::block::port_fixtures::{port_block, USB};
+        let mut project = Project::new("p");
+        let hub = port_block("39", 100.0, 100.0, "right", "U3", &USB);
+        let id = hub.id;
+        project.sheets[0].entities.insert(id, Entity::Symbol(hub));
+        (project, id)
+    }
+
+    fn save_text(project: &Project, tag: &str) -> (String, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("madake-io-port-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.mdkproj");
+        save_project(&path, project).unwrap();
+        (std::fs::read_to_string(&path).unwrap(), path)
+    }
+
+    /// A block with port contacts is saved under the kind "port_block" and comes back as a symbol with its contacts, while the same project sent over IPC/MCP still says "symbol".
+    /// ポートの接点を持つブロックは種類「port_block」で保存され、読み直すと接点付きのシンボルに戻る。同じプロジェクトを IPC・MCP で送るときは「symbol」のまま。
+    #[test]
+    fn a_port_block_is_saved_as_port_block() {
+        let (project, id) = port_project();
+        let (text, path) = save_text(&project, "kind");
+        assert!(text.contains("\"kind\": \"port_block\""), "{text}");
+        assert!(!text.contains("\"kind\": \"symbol\""));
+        let loaded = load_project(&path).unwrap();
+        let Entity::Symbol(s) = &loaded.sheets[0].entities[&id] else { panic!("シンボルに戻る") };
+        assert!(crate::block::parse_block_spec(&s.attrs).unwrap().has_contacts());
+        assert_eq!(serde_json::to_value(&project.sheets[0].entities[&id]).unwrap()["kind"], "symbol");
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    /// A project without port contacts is written byte for byte as serde writes it (no key reordering), with plain blocks still "symbol".
+    /// ポートの接点の無いプロジェクトは、serde がそのまま書いたものと1バイトも違わない (キーの並びも変わらない)。普通のブロックは「symbol」のまま。
+    #[test]
+    fn a_project_without_ports_is_written_unchanged() {
+        let mut project = Project::new("plain");
+        let block = crate::block::test_block("U1", "", 50.0, 50.0, r#"{"left":[{"no":"1","name":"A"}]}"#);
+        project.sheets[0].entities.insert(block.id(), block);
+        let (text, path) = save_text(&project, "plain");
+        assert_eq!(text, serde_json::to_string_pretty(&project).unwrap());
+        assert!(!text.contains("port_block"));
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    /// A "port_block" entry without contacts (hand-edited) opens as a plain symbol.
+    /// 接点の無い「port_block」(手で直したファイル) は普通のシンボルとして開く。
+    #[test]
+    fn a_port_block_without_contacts_opens_as_a_symbol() {
+        let id = Uuid::new_v4();
+        let json = format!(r#"{{"kind":"port_block","id":"{id}","symbol_id":"block","at":{{"x":0.0,"y":0.0}},"attrs":{{"block_pins":"{{\"left\":[{{\"no\":\"1\"}}]}}"}}}}"#);
+        let e: Entity = serde_json::from_str(&json).unwrap();
+        assert!(matches!(&e, Entity::Symbol(s) if s.symbol_id == "block"));
+        assert_eq!(serde_json::to_value(&e).unwrap()["kind"], "symbol");
+    }
+
+    /// A block whose contacts were all removed again is saved with the kind "symbol", so older builds can open the file again.
+    /// 接点をすべて消したブロックは種類「symbol」で保存されるので、古いビルドでもまたそのファイルを開ける。
+    #[test]
+    fn a_block_whose_contacts_were_removed_is_saved_as_symbol_again() {
+        let (mut project, id) = port_project();
+        let Entity::Symbol(s) = project.sheets[0].entities.get_mut(&id).unwrap() else { panic!() };
+        s.attrs.insert("block_pins".into(), r#"{"right":[{"no":"U3"}]}"#.into());
+        let (text, path) = save_text(&project, "removed");
+        assert!(text.contains("\"kind\": \"symbol\"") && !text.contains("port_block"), "{text}");
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
     }
 }

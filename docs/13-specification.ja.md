@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2911仕様項目**。
+全6領域・**2959仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -29,6 +29,8 @@
 - ブロックのピン数には上限があり、桁違いのピン表ははっきりエラーになる。 <sub>`too_many_pins_are_rejected`</sub>
 - 属性スロット(参照記号・型番・機能・定格)は箱の中央に縦に積まれる。 <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
 - ブロックを回転・ミラーしてもピンは本体と一緒に動くだけで、番号は付け替わらない。 <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
+- ブロックのピンは接点を並べて持てる。接点は前後の空白を落とした順にピン定義へ届き、接点の無いピンは空のまま。 <sub>`contacts_are_trimmed`</sub>
+- 空の接点・1本のピンで重なる接点・1つだけの接点 (導体1本は普通のピン)・32を超える接点は、ピン番号入りの文で断る。 <sub>`bad_contacts_are_refused`</sub>
 
 ### cable
 
@@ -56,6 +58,8 @@
 - 両端とも未割当の区間ケーブルの芯は「行き先なし」で報告し、浮いたネットや短絡など別の指摘を重ねない。 <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
 - ケーブル一覧は1本線のケーブルの両端の機器 (分岐の配線が行く基板、1本線が着くプラグ) を示し、両端のある芯を使用芯と数える。 <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
 - 印刷される図面は、1本線のケーブルを太い線と斜線、着いたプラグのピンを横切る棒、分岐の配線への扇と芯の呼び名、注記で描く。 <sub>`the_printed_sheet_draws_a_run_cable`</sub>
+- 1本のポートのピンには、接点が違えば芯を何本でも着けられる。同じ接点に芯2本は断る。 <sub>`cores_on_one_port_pin_need_different_contacts`</sub>
+- 接点の無い芯の端は「contact」キーを書かないので、ポートの無いファイルは変わらない。 <sub>`a_pin_end_without_contact_has_no_contact_key`</sub>
 
 ### cable_run
 
@@ -70,6 +74,9 @@
 - 分岐の配線は線径も線色も持たず (線色は芯が持つ)、配線注記が付かない。電線リストには芯の線色が出る。 <sub>`breakout_wires_carry_no_note`</sub>
 - 分岐の配線が縦に出てラベルが横に並ぶときは、芯の間隔が最も長いラベルの幅に余白を足した値まで広がり、ラベルどうしが重ならない。区間の向きは最初の経由点に従う。 <sub>`side_by_side_labels_do_not_overlap_and_via_sets_the_direction`</sub>
 - 同じ名前 (前後の空白を除いて) のラベルが片側に2つあるときは、重なった名前を示して断る。 <sub>`duplicate_label_names_are_refused`</sub>
+- 片側をポートのピン1本に着けられる。接点と同じ名前の芯は名前で対応し、1本線はそのピンで終わり (横棒なし)、ネットリストは芯ごとに1ネットになる。 <sub>`a_side_lands_on_one_port_pin_by_contact_name`</sub>
+- 「<ポートのラベル>.<接点>」という名前の分岐のラベルは、芯をポートのネットのその接点に繋ぐ。labels 側のケーブルで、シートの別の場所に描いたポートへ ERC の指摘なしに給電できる。 <sub>`breakout_labels_named_like_port_contacts_join_them`</sub>
+- 芯の名前がどれも接点でなく数が同じなら並び順で対応する。名前の一部だけの一致・数の違い・ポートへの style multi は、接点を並べて断る。 <sub>`port_landing_by_order_and_refusals`</sub>
 
 ### Commandエンジン (undo/redo)
 
@@ -289,7 +296,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは17 (1本線の区間を持つケーブルを追加し、種類「run_cable」で保存する版) である。 <sub>`the_current_format_version_is_seventeen`</sub>
+- 現行のファイル形式バージョンは18 (ブロックのピンにポートの接点を追加し、接点のあるブロックを種類「port_block」で保存する版) である。 <sub>`the_current_format_version_is_eighteen`</sub>
+- ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_17_file_loads_unchanged`</sub>
 - 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - 区間が空の「run_cable」(ファイルを手で直したときなど) は普通の定義線ケーブルとして開き、書き戻すと種類「cable」になる。 <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
 - 新しいMadakeCADで保存されたファイル (形式の版が大きい) は、一部が欠けたまま開くのではなく、両方の版を示す理由付きで断られる。 <sub>`a_file_from_a_newer_app_is_refused`</sub>
@@ -306,6 +314,10 @@
 - 形式2のファイル(FreeCAD対応付けが無く、配線に長さの出所が無い)は、対応付けが空で全ての配線の長さが手入力扱いとして開ける。 <sub>`a_format_2_file_opens_with_empty_mech_links_and_manual_lengths`</sub>
 - 形式3のファイル(FreeCAD対応付けに配置が無い)は配置なしの対応付けとして開け、配置付きの対応付けは保存→読み込みで保たれる。 <sub>`a_format_3_file_opens_with_unplaced_links_and_placements_round_trip`</sub>
 - クラウド側のビルドが書いたファイル(独自の形式4。FreeCAD対応付けとFreeCAD計測の電線長を含む)は、それらの内容を保ったまま開き、統合後の現行形式で書き直される。 <sub>`a_cloud_format_4_file_keeps_its_mech_links_and_length_source`</sub>
+- ポートの接点を持つブロックは種類「port_block」で保存され、読み直すと接点付きのシンボルに戻る。同じプロジェクトを IPC・MCP で送るときは「symbol」のまま。 <sub>`a_port_block_is_saved_as_port_block`</sub>
+- ポートの接点の無いプロジェクトは、serde がそのまま書いたものと1バイトも違わない (キーの並びも変わらない)。普通のブロックは「symbol」のまま。 <sub>`a_project_without_ports_is_written_unchanged`</sub>
+- 接点の無い「port_block」(手で直したファイル) は普通のシンボルとして開く。 <sub>`a_port_block_without_contacts_opens_as_a_symbol`</sub>
+- 接点をすべて消したブロックは種類「symbol」で保存されるので、古いビルドでもまたそのファイルを開ける。 <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
 
 ### KiCadインポート / エクスポート
 
@@ -438,6 +450,16 @@
 - 2つのコネクタを全長1本線で結ぶケーブル (3.5mm AUX の L・R・GND) は、配線が1本も無くても芯ごとに1ネットになる。 <sub>`a_connector_to_connector_run_gives_one_net_per_core`</sub>
 - 芯だけのネットは配線のあるネットの後ろに名前が付くので、そういうケーブルを足しても今あるネットの名前は変わらない。 <sub>`core_only_nets_are_named_after_wire_nets`</sub>
 - 1本線が着く部品を動かしても、どの芯も同じピンに繋がったまま (接続は割当てで決まり、描いた位置では決まらない)。 <sub>`moving_the_landing_part_keeps_core_connectivity`</sub>
+- 2本のポートのピンを配線1本で結ぶと接点ごとに1ネットになり、名前は接点の順に N001.<接点>、どれにも両方のピンがその接点付きで、共有の配線と一緒に載る。 <sub>`two_ports_joined_by_one_wire_split_into_one_net_per_contact`</sub>
+- 分けない方では USB の配線は1ネットのまま。ポートの無い図面は、どちらの関数でも全く同じネット (JSON も同じで、contact のキーは無い) になる。 <sub>`without_ports_nothing_changes`</sub>
+- かみ合わせの片側は自分のネットの中で全部の接点を素通しにするが、プラグとソケットは今も繋がらない: ポート → ソケット | プラグ → ラベル … ポートは接点のネットの組2つになる。 <sub>`a_mate_half_passes_contacts_through_but_does_not_conduct`</sub>
+- ポートのネットの中で、接点と同じ名前の普通のピンはその接点に入る。名前の違う普通のピンは元の名前の残りのネットに入り、ポートの報告に載る。 <sub>`a_plain_pin_joins_the_contact_with_its_name`</sub>
+- LTE ハーネスを、基板側4本の配線から1本線になってポートのピン 39.U3 1本で終わる形で描くと4ネットになり、どれも基板のピン1本とポートの接点1つを持つ。 <sub>`the_lte_harness_lands_on_one_port_pin`</sub>
+- 普通の配線に「<ポートのラベル>.<接点>」という名前のラベルを置くと、ポートのネットのその接点1つに繋がる。 <sub>`a_dotted_label_taps_one_contact`</sub>
+- 配線が1本も無く、2本のポートのピンの間を1本線で結んでも、芯ごとに1ネットになり、どれにも両方のポートが載る。 <sub>`a_run_between_two_ports_gives_one_net_per_core`</sub>
+- 接点の組が違う2つのポートは共通の接点だけが繋がる。それ以外は自分のポートだけのネットになり、残りのネットは出ず、報告に載る。 <sub>`ports_with_different_contacts_join_only_the_shared_ones`</sub>
+- 芯が2つのポートのかたまりを繋ぐと、接点のネットは前のネットで付いた元の名前をそのまま使い、新しい番号は使わない。 <sub>`a_contact_net_across_two_port_clusters_reuses_the_earlier_base`</sub>
+- ネットのピンは「参照記号:ピン」と書き、ポートの接点を運ぶなら「/接点」を添える。 <sub>`a_net_pin_prints_with_its_contact`</sub>
 
 ### ngspiceランナー
 
@@ -569,6 +591,7 @@
 - 1つの部品に同じピン番号が2つある(貫通端子)ときは、番号だけの指定を両方の候補つきで断り、「#n」で片方を選べる。 <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
 - かみ合わせの組は2.5mmグリッドにのり、2つは接するだけなので、整頓指標は組を重なりにもグリッド外にも数えない。 <sub>`a_mate_pair_is_tidy`</sub>
 - かみ合わせの組のプラグ側は参照記号を印字しないので、共有する記号はソケット側に1回だけ描かれる。 <sub>`the_plug_hides_the_shared_designator`</sub>
+- get_pins はポートのピンの接点を出し、普通のピンには出さない。 <sub>`part_pins_show_contacts`</sub>
 
 ### PLC I/O
 
@@ -601,6 +624,14 @@
 - 同居できるのは同じラダー形式・同じラング間隔で生成したページだけで、違えば次のモジュールは新しいページから始まる。 <sub>`a_page_of_another_style_or_spacing_is_not_shared`</sub>
 - 2.5mmグリッドの正の倍数でないラング間隔は断られるので、生成したページは必ずグリッドに乗る。 <sub>`an_off_grid_rung_spacing_is_refused`</sub>
 - I/Oレポートは各点をアドレス・信号名・接続先・線番・コメントで並べ、プロジェクト全体版では先頭にモジュールの参照記号が付く。 <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
+
+### port
+
+- ポートに繋がった普通のピンで、名前がどの接点とも合わないものは、ピン・ポート・接点を書いた警告になる。接点と同じ名前のピンは警告にならない。 <sub>`a_plain_pin_on_a_port_is_a_warning`</sub>
+- 繋がった2つのポートのうち1つにしか無い接点は情報として知らせる。かみ合わせの片側にだけ繋いだポートでは出さない。 <sub>`a_contact_on_only_one_of_two_ports_is_reported_as_info`</sub>
+- 区間ケーブルの芯の接点がポートのピンからなくなった (後でブロックを直した) ときは、その接点を書いた「芯の行き先なし」として知らせる。 <sub>`a_core_on_a_removed_contact_is_reported`</sub>
+- 接点をすべて消したピンで、接点を指定している芯は、その接点を名指しで割当て無しと報告される (黙って普通のピンに載せない)。 <sub>`a_core_on_a_pin_without_contacts_is_reported`</sub>
+- あるシートではポートのラベルなのに、別のシートではポートの無いネットに載っているラベルは、シートが繋がらないのでプロジェクトの警告になる。 <sub>`a_port_label_without_a_port_on_another_sheet_is_a_warning`</sub>
 
 ### raster
 
@@ -734,6 +765,8 @@
 - 分岐の配線の先がネットラベルで、シート上にそのラベルを持つ他の相手が無いとき (続きは別シート)、芯の行はラベル名と備考「none」を出す。 <sub>`a_breakout_wire_ending_on_a_label_shows_the_label`</sub>
 - ケーブルの芯になっている配線 (1本線のケーブルの分岐の配線と、定義線が横切った配線) は、ケーブル行が数えているので部品表の電線集約に重ねて足さない。 <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
 - 極番号 (pole) を持つ静的なプラグ・ソケットは、電線リストで唯一のピン1の代わりにその極番号 (X44A:2) で表記される。極番号の無いものは従来どおり。 <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
+- ポートのピンに着く区間ケーブルの芯は、From-To の行に接点を書く (39:U3/VBUS)。 <sub>`a_core_on_a_port_pin_shows_its_contact`</sub>
+- 電線リストでは、2つの USB ポートの間の配線はポートのピンからポートのピンへの1行のまま (接点は書かない)。 <sub>`a_usb_wire_is_one_wire_list_row`</sub>
 
 ### search
 
@@ -779,6 +812,7 @@
 - 不正なngspice実行ファイルでのシミュレーションは明示的なエラーになる(暗黙のフォールバックはしない)。 <sub>`missing_ngspice_is_an_explicit_error`</sub>
 - DC動作点はネットごとの電圧(この例では0〜24V)と部品ごとの電流・電力を報告する(2Aランプは約2A/約48W)。 <sub>`op_reports_net_voltages_and_component_currents`</sub>
 - what-ifでスイッチを開路指定すると負荷電流はゼロになり、結果にどのスイッチを開いたかが明記される。 <sub>`open_switch_cuts_the_current`</sub>
+- 2つのポートを結ぶ配線は、電圧の一覧で1ネットになる (SPICE はポートを知らないので、接点ごとに同じ電圧を写したネットにはしない)。 <sub>`a_port_wire_is_one_net_in_the_voltages`</sub>
 
 ### SPICEネットリスト生成
 
@@ -1201,6 +1235,8 @@
 - 多極の遮断器は極ごとに導通するため、結線されていない極につながる負荷は電源から到達できないと報告される。 <sub>`multipole_breaker_does_not_connect_its_poles_to_each_other`</sub>
 - 盤レイアウトシートは回路図の規則で検査しない。配線を持たないシートなので、未接続ピンや宙ぶらりんの配線として指摘されるものは無い。 <sub>`a_panel_sheet_is_not_checked_against_the_schematic_rules`</sub>
 - 回路図のどこにも無い参照記号のフットプリントが盤に置かれていると注意として報告され、プロジェクト全体の検証では回路図の指摘と一緒に出る。 <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
+- 配線1本で結んだ2つの USB ポートには、未接続ピンもほかの ERC の指摘も出ない。 <sub>`a_wired_usb_link_has_no_erc_findings`</sub>
+- ポートのネットでは、ラベル USB_MIC と、取り出した配線の点付きラベル USB_MIC.VBUS は同じ名前で、ラベルの競合にならない。 <sub>`a_dotted_label_is_not_a_label_conflict`</sub>
 
 ### wire_legend
 
@@ -1232,6 +1268,7 @@
 - 線番は1本ずつ直接編集でき、undoで以前の値に戻る。 <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - 採番コマンドは素のJSON ({"type":"renumber_wires","mode":"append","start":1}) で表現でき、AIやCLIから送れる。 <sub>`renumber_command_is_plain_json`</sub>
 - コネクタ同士を結ぶ1本線ケーブルがあるシートで線番を振り直しても、配線は1, 2と飛ばずに番号が付く (配線の無い芯のネットは番号を使わない)。 <sub>`core_only_nets_take_no_wire_number`</sub>
+- 2つの USB ポートの間の配線は接点のネットを4つ運ぶが線番は1つで、次の配線には次の番号が付く。 <sub>`a_usb_wire_between_two_ports_gets_one_wire_number`</sub>
 
 ### wire_note
 
@@ -1287,6 +1324,7 @@
 - 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる。 <sub>`a_designator_on_three_sheets_lists_every_other_sheet`</sub>
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる。 <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
 - 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない。 <sub>`device_cross_reference_clears_a_designator_label_wider_than_the_symbol`</sub>
+- 2枚のシートでラベル USB_MIC が付いたポートのネットは、シートを跨いで接点ごとに統合され、別の接点とは統合されない。3本目の配線の点付きラベル USB_MIC.D+ は D+ にだけ繋がる。 <sub>`port_nets_merge_contact_by_contact_across_sheets`</sub>
 
 
 ## 自動化API (MCP / REST)
@@ -1328,6 +1366,10 @@
 - 基板側にlabelsを指定した connect_cable は、芯ごとにラベル付きの配線を1回の編集で描き、芯の端としてラベル名を返し、芯ごとにそのラベルのネットへ繋ぎ、single との併用や数違いは断り、説明にlabelsを載せる。 <sub>`connect_cable_labels_end_the_breakout_wires_at_net_labels`</sub>
 - リストのケーブルのどれか1本でも誤っていれば、connect_cable はその番号を知らせて1本も描かない。正しいリストは1回の編集で描く。 <sub>`connect_cable_list_is_all_or_nothing`</sub>
 - connect_cable の説明は、芯がピン順に対応することと、偽の分岐ブロックの代わりに使うことをエージェントに伝える。 <sub>`connect_cable_is_described_for_the_agent`</sub>
+- Tasks 1-8 の挙動の回帰テスト (最初から通る): place_symbol と get_pins はポートのピンの接点を返し、2つのポートを connect_pins で結ぶと get_netlist は接点ごとに1ネットを返す。 <sub>`two_ports_wired_by_connect_pins_give_one_net_per_contact`</sub>
+- Tasks 1-8 の挙動の回帰テスト (最初から通る): connect_cable はハーネスをポートのピン1本 ("39.U3") に着ける。芯は同じ名前の接点に対応し、芯ごとに別のネットになる。 <sub>`connect_cable_lands_on_a_port_pin`</sub>
+- ツールの説明は、USB のようなコネクタを接点付きのブロックのピン1本で描くことと、そこへのケーブルの着け方をエージェントに伝える。 <sub>`the_tools_describe_port_contacts`</sub>
+- エージェントが受け取る execute_commands のスキーマはピンの contacts を含むが、ファイル専用の種類 "port_block" は含まない (PortBlock の schemars skip が効いている)。 <sub>`the_agent_schema_hides_port_block`</sub>
 
 ### 図枠テンプレート (REST)
 
@@ -1463,6 +1505,7 @@
 - テンプレートのツール説明には「作図の雛形であること」「ERC指摘ゼロで入ること」「undo一発で戻せること」が書かれている。 <sub>`the_template_tools_explain_what_a_template_is`</sub>
 - 公開ツールには全て説明文が付いており、説明の無いツールをエージェントへ見せない。 <sub>`every_published_tool_has_a_description`</sub>
 - 編集ツールの説明には多段端子台のジャンパの書き方 (段記号つき) が書かれているので、エージェントが拒否される数字だけの指定を送らずに済む。 <sub>`the_edit_tool_explains_the_multilevel_jumper_form`</sub>
+- 配置ツールの説明は接点の決まり (1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない) を書き、ケーブルのツールの説明はポートへの並び順の対応は数が同じときだけで、名前の一部だけの一致と style multi は断ると書く。 <sub>`the_port_tools_state_the_contact_rules`</sub>
 
 ### 電線品番・コマンドエラー (REST)
 
@@ -1638,6 +1681,8 @@
 - システムプロンプトは、整えるときは`get_tidy_metrics`で数値を測り、改善が止まったらやめるよう指示する。 <sub>`system_prompt_carries_the_tidy_loop`</sub>
 - システムプロンプトは、配線図はピン操作ツールでピン名を指定し、まとめて1回で描き、ピン座標を手で計算しないよう指示する。 <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
 - システムプロンプトは、描いた後にシート画像を見て確かめるよう指示する(数値だけで見た目を判断しない)。 <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
+- システムプロンプトは、複数の導体を運ぶコネクタ (USB) を接点付きのブロックのピン1本で描くようエージェントに伝える。 <sub>`system_prompt_explains_port_contacts`</sub>
+- システムプロンプトは接点の決まり (1ピンに2〜32個、前後の空白は除き、重ならない) と、ポートへの connect_cable は数が同じときだけ並び順で、名前の一部だけの一致と style multi は断られることを伝える。 <sub>`system_prompt_states_the_contact_rules`</sub>
 
 ### knowledge_docs
 
@@ -1908,6 +1953,7 @@
 - madake terminalsは多段端子台を極数で数えて段数を併記するので、4極2段の端子台が8極の端子台に見えることはない。 <sub>`terminals_shows_a_multilevel_block_as_poles_and_levels`</sub>
 - 端子台が無い場合は空の表ではなく分かりやすいメッセージを出す。 <sub>`terminals_handles_empty`</sub>
 - openのメッセージには読み込んだパスと結果のrevisionが含まれる。 <sub>`opened_reports_path_and_revision`</sub>
+- madake netlist はポートのピンを接点付き (39:U3/VBUS) で書く。 <sub>`netlist_shows_port_contacts`</sub>
 
 
 ## フロントエンド (エディタUI)
@@ -1973,6 +2019,9 @@
 - 配線が1本も届いていないブロックには配線済みピンが無い <sub>`pins that are already wired`</sub>
 - 配線済みのピンを消す・番号を変えると、そのピンが「接続が外れる」として挙がる <sub>`pins that are already wired`</sub>
 - 配線済みのピンをそのまま残す編集では警告は出ない <sub>`pins that are already wired`</sub>
+- 接点はカンマ (半角・読点・全角) で区切り、前後の空白を落として空のものを捨てる <sub>`pins that are already wired`</sub>
+- 接点を書いた行は block_pins に contacts として入り、読み戻すとカンマ区切りの文字に戻る。接点の無い行の書き出しは今までと同じ <sub>`pins that are already wired`</sub>
+- 接点が1つだけ・同じ接点が2つ・32を超える行は指摘になる <sub>`pins that are already wired`</sub>
 - 部品挿入で「ブロック(汎用)」を選ぶと、左右1本ずつのピン表が開く <sub>`starting a new block from the insert dialog`</sub>
 - 編集したピン表はそのまま配置に使う属性になる(配置後もこの形で描かれる) <sub>`starting a new block from the insert dialog`</sub>
 - 「手動」に切り替えると、そのときの自動寸法が編集できる初期値として入る <sub>`starting a new block from the insert dialog`</sub>
@@ -2000,6 +2049,7 @@
 - 区間ケーブルの印は区間のいちばん長い線分の中点を通る45度の斜線で、芯数の文字・注記・シールドの楕円もそこを基準にする (Rust側と同じ) <sub>`多芯ケーブル`</sub>
 - 部品に着く端は着いたピンの先を結ぶ棒、分岐の端は区間の端から各芯の配線の端への扇になる <sub>`多芯ケーブル`</sub>
 - 区間ケーブルは区間の線の近くをクリックすると掴める <sub>`多芯ケーブル`</sub>
+- 区間の片側の芯が全部1つのポートのピンに着くと、その側には横棒を描かない (Rust の run_bars と同じ) <sub>`多芯ケーブル`</sub>
 
 ### deviceTree
 
@@ -2049,6 +2099,7 @@
 - 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない) <sub>`symbolBounds`</sub>
 - ピングループの部品どうし (括弧と、折り返したキャプションの各行) は全ての回転・ミラーで決して重ならない (Rust側 svg_pin_group_pieces_never_overlap_each_other_at_any_rotation とparity) <sub>`captionLineAnchors`</sub>
 - 文字はシンボルを回しても横書きのままなので、キャプションの行は用紙の上で必ず縦に積まれる (同じ中心線に並び、順に下へ下がる。Rust側 svg_pin_group_caption_lines_stack_downwards_on_paper とparity) <sub>`captionLineAnchors`</sub>
+- ブロックのピンの接点は Rust と同じく空白を落として PinDef に入り、1つだけの接点や重なる接点は同じ理由で断る <sub>`captionLineAnchors`</sub>
 
 ### frameEditor
 

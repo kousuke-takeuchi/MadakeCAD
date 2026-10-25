@@ -66,6 +66,8 @@ pub fn verify_project(project: &crate::model::Project) -> Vec<Diagnostic> {
     diags.extend(crate::panel::panel_diagnostics(project));
     // 嵌合コネクタ対 (G14) もmates_withが他シートの参照記号を指しうるので、プロジェクト全体で評価する
     diags.extend(crate::mate::mate_diagnostics(project));
+    // ポートのラベルはシートを跨ぐので、プロジェクト全体で評価する
+    diags.extend(crate::port::port_label_diagnostics(project));
     diags
 }
 
@@ -115,6 +117,7 @@ pub(crate) fn verify_sheet_with(
     diags.extend(electrical(sheet, symbols, sim));
     // 多芯ケーブルの芯数超過 (M4 §5)
     diags.extend(crate::cable::check_cables(sheet));
+    diags.extend(crate::port::check_ports(sheet));
     diags
 }
 
@@ -202,19 +205,19 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> 
         entity_ids: ids,
     };
 
-    // (シンボルid, ピン番号) → ネット番号
-    let mut pin_net: BTreeMap<(EntityId, &str), usize> = BTreeMap::new();
+    // (シンボルid, ピン番号) → ネット番号 (ポートのピンは接点ごとに複数のネットに入る)
+    let mut pin_net: BTreeMap<(EntityId, &str), Vec<usize>> = BTreeMap::new();
     for (ni, net) in nets.iter().enumerate() {
         for p in &net.pins {
-            pin_net.insert((p.entity_id, p.pin.as_str()), ni);
+            pin_net.entry((p.entity_id, p.pin.as_str())).or_default().push(ni);
         }
     }
     // シンボルの接続先ネット一覧 (重複除去)
     let nets_of = |s: &crate::model::SymbolInstance, def: &SymbolDef| -> Vec<usize> {
         let mut out = BTreeSet::new();
         for pin in &def.pins {
-            if let Some(ni) = pin_net.get(&(s.id, pin.number.as_str())) {
-                out.insert(*ni);
+            if let Some(v) = pin_net.get(&(s.id, pin.number.as_str())) {
+                out.extend(v.iter().copied());
             }
         }
         out.into_iter().collect()
@@ -277,8 +280,8 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> 
             for group in crate::symbol::conducting_pin_groups(&def) {
                 let mut ns = BTreeSet::new();
                 for no in group {
-                    if let Some(ni) = pin_net.get(&(s.id, no)) {
-                        ns.insert(*ni);
+                    if let Some(v) = pin_net.get(&(s.id, no)) {
+                        ns.extend(v.iter().copied());
                     }
                 }
                 if ns.len() >= 2 {
@@ -601,7 +604,7 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 .get(s)
                 .map(|d| d.category.clone())
                 .unwrap_or_default();
-            let kind = if matches!(s.symbol_id.as_str(), "connector_plug" | "connector_socket") {
+            let kind = if crate::mate::is_mate_half(&s.symbol_id) {
                 MATE_HALF.to_string()
             } else {
                 category
@@ -722,6 +725,10 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                     label_ids.push(l.id);
                 }
             }
+        }
+        // ポートの接点のネットは、シートを跨ぐときと同じ名前 (「L.接点」) で比べる
+        if !net.contact_labels.is_empty() {
+            names = net.contact_labels.iter().map(String::as_str).collect();
         }
         if names.len() >= 2 {
             diags.push(diag(
@@ -1532,5 +1539,41 @@ mod tests {
         assert_eq!(orphans.len(), 1, "{orphans:?}");
         assert_eq!(orphans[0].severity, Severity::Warning);
         assert!(orphans[0].message.contains("K9"));
+    }
+
+    /// Two USB ports joined by one wire have no unconnected pin and no other ERC finding.
+    /// 配線1本で結んだ2つの USB ポートには、未接続ピンもほかの ERC の指摘も出ない。
+    #[test]
+    fn a_wired_usb_link_has_no_erc_findings() {
+        use crate::block::port_fixtures::{pin_at, port_block, USB};
+        let hub = Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB));
+        let dongle = Entity::Symbol(port_block("LTE1", 200.0, 100.0, "left", "P1", &USB));
+        let (h, d) = (hub.id(), dongle.id());
+        let mut sheet = sheet_with(vec![hub, dongle]);
+        let (a, b) = (pin_at(&sheet, h, "U3"), pin_at(&sheet, d, "P1"));
+        let w = wire(&[(a.x, a.y), (b.x, b.y)]);
+        sheet.entities.insert(w.id(), w);
+        let erc: Vec<_> = run(&sheet).into_iter().filter(|d| d.code.starts_with("erc.")).collect();
+        assert!(erc.is_empty(), "{erc:?}");
+    }
+
+    /// On a port net the label USB_MIC and a dotted label USB_MIC.VBUS on a tapped wire are one name, not a label conflict.
+    /// ポートのネットでは、ラベル USB_MIC と、取り出した配線の点付きラベル USB_MIC.VBUS は同じ名前で、ラベルの競合にならない。
+    #[test]
+    fn a_dotted_label_is_not_a_label_conflict() {
+        use crate::block::port_fixtures::{pin_at, port_block, USB};
+        let hub = Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB));
+        let h = hub.id();
+        let mut sheet = sheet_with(vec![hub, symbol("resistor", "R1", 150.0, 150.0)]);
+        let p = pin_at(&sheet, h, "U3");
+        for e in [
+            wire(&[(p.x, p.y), (p.x + 20.0, p.y)]),
+            net_label("USB_MIC", p.x + 20.0, p.y),
+            wire(&[(157.5, 150.0), (170.0, 150.0)]),
+            net_label("USB_MIC.VBUS", 170.0, 150.0),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        assert!(!run(&sheet).iter().any(|d| d.code == "erc.label_conflict"), "{:?}", run(&sheet));
     }
 }

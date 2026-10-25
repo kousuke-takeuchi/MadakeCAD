@@ -21,6 +21,9 @@ pub struct PinInfo {
     pub y: f64,
     /// 電線が出ていく向き (回転・反転の後)。
     pub dir: PinDir,
+    /// ポートの接点 (空なら出さない)。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub contacts: Vec<String>,
 }
 
 /// 配置済み部品1個のピン一覧と外形。
@@ -69,6 +72,7 @@ pub fn part_pins(inst: &SymbolInstance, def: &SymbolDef) -> PartPins {
                 x: at.x,
                 y: at.y,
                 dir: world_dir(pin.dir, inst),
+                contacts: pin.contacts.clone(),
             }
         })
         .collect();
@@ -826,5 +830,22 @@ mod tests {
                 assert_eq!(half.reference, "J1");
             }
         }
+    }
+
+    /// get_pins shows a port pin's contacts and leaves them out for plain pins.
+    /// get_pins はポートのピンの接点を出し、普通のピンには出さない。
+    #[test]
+    fn part_pins_show_contacts() {
+        use crate::block::port_fixtures::{port_block, USB};
+        let inst = port_block("39", 100.0, 100.0, "right", "U3", &USB);
+        let def = crate::block::block_symbol(&inst.attrs).unwrap();
+        let pins = part_pins(&inst, &def);
+        assert_eq!(pins.pins[0].contacts, vec!["VBUS", "D-", "D+", "GND"]);
+        let json = serde_json::to_value(&pins).unwrap();
+        assert_eq!(json["pins"][0]["contacts"][1], "D-");
+        let plain = crate::symbol::resolve_symbol("resistor").unwrap();
+        let r = SymbolInstance { symbol_id: "resistor".into(), ..inst.clone() };
+        let json = serde_json::to_value(part_pins(&r, &plain)).unwrap();
+        assert!(json["pins"][0].get("contacts").is_none(), "{json}");
     }
 }

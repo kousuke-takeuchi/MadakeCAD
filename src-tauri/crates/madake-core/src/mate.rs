@@ -41,6 +41,12 @@ pub fn is_connector_instance(symbol_id: &str) -> bool {
     symbol_id.starts_with("connector_")
 }
 
+/// かみ合わせの片側 (1極のプラグ/ソケット)。ネットリストでは、ポートの接点を全部素通しにするピン
+/// ([`crate::netlist`])。参照記号の重複の例外 ([`crate::verify`]) も同じ判定を使う。
+pub fn is_mate_half(symbol_id: &str) -> bool {
+    matches!(symbol_id, "connector_plug" | "connector_socket")
+}
+
 /// プロジェクト内のコネクタインスタンス1つぶんの索引情報。
 struct MateEntry {
     sheet_id: SheetId,

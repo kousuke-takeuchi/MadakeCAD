@@ -261,3 +261,22 @@ fn system_prompt_tells_the_agent_to_look_at_the_sheet() {
     let prompt = system_prompt(&AppSettings::default(), None);
     assert!(prompt.contains("get_sheet_image"), "{prompt}");
 }
+
+/// The system prompt tells the agent to draw a multi-conductor connector (USB) as one block pin with contacts.
+/// システムプロンプトは、複数の導体を運ぶコネクタ (USB) を接点付きのブロックのピン1本で描くようエージェントに伝える。
+#[test]
+fn system_prompt_explains_port_contacts() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    assert!(prompt.contains("`contacts`を持つブロックのピン1本(ポート)"), "{prompt}");
+    assert!(prompt.contains("style: single"), "{prompt}");
+}
+
+/// The system prompt states the contact rule (2 to 32 per pin, trimmed, unique) and that connect_cable on a port maps by order only with equal counts and refuses a partial name match and style multi.
+/// システムプロンプトは接点の決まり (1ピンに2〜32個、前後の空白は除き、重ならない) と、ポートへの connect_cable は数が同じときだけ並び順で、名前の一部だけの一致と style multi は断られることを伝える。
+#[test]
+fn system_prompt_states_the_contact_rules() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    for needle in ["1ピンに2〜32個", "前後の空白は除き", "ピンの中で重ならない", "同数のときだけ並び順", "名前の一部だけの一致", "`style: multi`は断られる"] {
+        assert!(prompt.contains(needle), "「{needle}」が無い: {prompt}");
+    }
+}

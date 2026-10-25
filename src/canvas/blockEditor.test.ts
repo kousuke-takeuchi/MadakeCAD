@@ -13,6 +13,8 @@ import {
   droppedWiredPins,
   moveRow,
   nextPinNo,
+  portPinCount,
+  splitContacts,
   removeRow,
   wiredPinNumbers,
   type BlockDraft,
@@ -256,5 +258,37 @@ describe("pins that are already wired", () => {
     const d = draft();
     d.rows.left[0].name = "運転指令";
     expect(droppedWiredPins(["IN1", "OUT1"], d)).toEqual([]);
+  });
+
+  // ja: 接点はカンマ (半角・読点・全角) で区切り、前後の空白を落として空のものを捨てる
+  it("splits contacts on ASCII, Japanese and full-width commas and trims them", () => {
+    expect(splitContacts(" VBUS 、D-，D+, GND ,")).toEqual(["VBUS", "D-", "D+", "GND"]);
+    expect(splitContacts("")).toEqual([]);
+  });
+
+  // ja: 接点を書いた行は block_pins に contacts として入り、読み戻すとカンマ区切りの文字に戻る。接点の無い行の書き出しは今までと同じ
+  it("writes contacts into block_pins and reads them back as comma-separated text", () => {
+    const d = draft();
+    d.rows.right[0].contacts = "VBUS, D-, D+, GND";
+    const attrs = attrsFromDraft(d);
+    const pins = JSON.parse(attrs.block_pins);
+    expect(pins.right[0]).toEqual({ no: "OUT1", name: "出力1", contacts: ["VBUS", "D-", "D+", "GND"] });
+    expect(pins.left[0]).toEqual({ no: "IN1", name: "入力1" });
+    expect(draftFromAttrs(attrs).rows.right[0].contacts).toBe("VBUS, D-, D+, GND");
+    expect(draftFromAttrs(attrs).rows.left[0]).toEqual({ no: "IN1", name: "入力1" });
+    expect(portPinCount(draftSymbol(d)!)).toBe(1);
+  });
+
+  // ja: 接点が1つだけ・同じ接点が2つ・32を超える行は指摘になる
+  it("flags a single contact, a repeated contact and too many contacts", () => {
+    const d = draft();
+    d.rows.left[0].contacts = "VBUS";
+    d.rows.left[1].contacts = "A, A";
+    d.rows.right[0].contacts = Array.from({ length: 33 }, (_, i) => `C${i}`).join(",");
+    expect(draftIssues(d)).toEqual([
+      { code: "contactsTooFew", side: "left", index: 0 },
+      { code: "duplicateContact", side: "left", index: 1, contact: "A" },
+      { code: "tooManyContacts", side: "right", index: 0, count: 33, max: 32 },
+    ]);
   });
 });

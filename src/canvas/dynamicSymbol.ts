@@ -243,6 +243,8 @@ export const BLOCK_MIN_W_MM = 15.0;
 export const BLOCK_MIN_H_MM = 10.0;
 /** 1ブロックに置けるピンの最大数(全辺の合計)。 */
 export const BLOCK_PIN_MAX = 200;
+/** 1本のピンが持てる接点の最大数 (Rust側 BLOCK_CONTACT_MAX)。 */
+export const BLOCK_CONTACT_MAX = 32;
 /** 属性スロットの行送り mm。 */
 export const BLOCK_SLOT_PITCH_MM = 2.5;
 /** 属性スロットのキー(Rust側 SLOT_TAG などと同じ)。 */
@@ -252,6 +254,8 @@ const BLOCK_SLOT_KEYS = ["TAG", "PART", "DESC", "RATING"];
 export interface BlockPin {
   no: string;
   name?: string;
+  /** ポートの接点 (Rust側 BlockPin::contacts)。 */
+  contacts?: string[];
 }
 
 /** ブロックのピン配置(辺ごと。左右は上→下、上下は左→右)。 */
@@ -444,6 +448,24 @@ function sideOf(pins: BlockPins, key: (typeof BLOCK_SIDES)[number]): BlockPin[] 
  * 属性からピン表と外形寸法を読み取る。Rust側 `parse_block_spec` と同じ検証をし、
  * 同じ理由でエラーを投げる(番号の重複・空番号・ピン過多・寸法不足・壊れたJSON)。
  */
+/** ピンの接点を調べる (Rust側 check_contacts と同じ順・同じ文)。 */
+function checkContacts(no: string, contacts: string[]): void {
+  if (contacts.length === 0) return;
+  if (contacts.length > BLOCK_CONTACT_MAX) {
+    throw new Error(`block pin ${no}: too many contacts: ${contacts.length} (max ${BLOCK_CONTACT_MAX})`);
+  }
+  if (contacts.length < 2) {
+    throw new Error(`block pin ${no}: a port needs at least two contacts (one conductor is a plain pin)`);
+  }
+  const seen = new Set<string>();
+  for (const raw of contacts) {
+    const c = raw.trim();
+    if (!c) throw new Error(`block pin ${no}: contact names must not be empty`);
+    if (seen.has(c)) throw new Error(`block pin ${no}: duplicate contact ${c}`);
+    seen.add(c);
+  }
+}
+
 export function parseBlockSpec(attrs: Record<string, string>): {
   pins: BlockPins;
   size: { w: number; h: number } | null;
@@ -477,6 +499,7 @@ export function parseBlockSpec(attrs: Record<string, string>): {
     if (!no) throw new Error("block pin number must not be empty");
     if (seen.has(no)) throw new Error(`duplicate block pin number: ${no}`);
     seen.add(no);
+    checkContacts(no, pin.contacts ?? []);
   }
 
   const rawSize = attrs[BLOCK_SIZE_ATTR];
@@ -577,7 +600,8 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
       if (name) {
         primitives.push({ type: "text", at: nameAt, text: name, height: BLOCK_PIN_TEXT_MM });
       }
-      pins.push({ number: no, name, at, dir });
+      const contacts = (bp.contacts ?? []).map((c) => c.trim());
+      pins.push(contacts.length ? { number: no, name, at, dir, contacts } : { number: no, name, at, dir });
     }
   };
   push(sideOf(table, "left"), "left");

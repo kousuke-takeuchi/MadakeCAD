@@ -400,4 +400,13 @@ describe("captionLineAnchors", () => {
       }
     }
   });
+
+  // ja: ブロックのピンの接点は Rust と同じく空白を落として PinDef に入り、1つだけの接点や重なる接点は同じ理由で断る
+  it("copies block pin contacts into the pin definition and refuses bad contacts like Rust", () => {
+    const def = blockSymbol({ block_pins: '{"right":[{"no":"U3","contacts":[" VBUS ","D-","D+","GND"]}],"left":[{"no":"1"}]}' });
+    expect(def.pins.find((p) => p.number === "U3")!.contacts).toEqual(["VBUS", "D-", "D+", "GND"]);
+    expect(def.pins.find((p) => p.number === "1")!.contacts).toBeUndefined();
+    expect(() => blockSymbol({ block_pins: '{"left":[{"no":"P1","contacts":["A"]}]}' })).toThrow("at least two contacts");
+    expect(() => blockSymbol({ block_pins: '{"left":[{"no":"P1","contacts":["A","A"]}]}' })).toThrow("duplicate contact A");
+  });
 });

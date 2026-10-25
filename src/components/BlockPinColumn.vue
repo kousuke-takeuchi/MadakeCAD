@@ -10,7 +10,7 @@ const props = defineProps<{ side: BlockSide }>();
 const editor = useBlockEditorStore();
 const { t } = useI18n();
 
-function edit(index: number, patch: { no?: string; name?: string }) {
+function edit(index: number, patch: { no?: string; name?: string; contacts?: string }) {
   editor.updateRow(props.side, index, patch);
 }
 </script>
@@ -24,6 +24,7 @@ function edit(index: number, patch: { no?: string; name?: string }) {
     <div class="col-labels">
       <span class="lbl no">{{ t("blockEditor.colNo") }}</span>
       <span class="lbl">{{ t("blockEditor.colName") }}</span>
+      <span class="lbl">{{ t("blockEditor.colContacts") }}</span>
     </div>
     <div v-for="(row, i) in editor.draft.rows[side]" :key="`${side}-${i}`" class="row">
       <span class="row-no">{{ i + 1 }}</span>
@@ -40,6 +41,14 @@ function edit(index: number, patch: { no?: string; name?: string }) {
         :aria-label="t('blockEditor.colName')"
         :placeholder="t('blockEditor.namePlaceholder')"
         @input="edit(i, { name: ($event.target as HTMLInputElement).value })"
+      />
+      <input
+        class="cell"
+        :value="row.contacts ?? ''"
+        :aria-label="t('blockEditor.colContacts')"
+        :placeholder="t('blockEditor.contactsPlaceholder')"
+        spellcheck="false"
+        @input="edit(i, { contacts: ($event.target as HTMLInputElement).value })"
       />
       <button class="icon-btn" :title="t('blockEditor.moveUp')" @click="editor.moveRow(side, i, -1)">
         <ChevronUp :size="11" />

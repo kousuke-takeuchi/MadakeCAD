@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::geometry::Point;
 use crate::model::{Cable, CableCore, CoreEnd, Entity, Project, RunEnd, Sheet, Wire};
-use crate::netlist::{extract_netlist, pin_positions, Net, NetPin, CONNECT_EPS};
+use crate::netlist::{extract_wire_nets, pin_positions, Net, NetPin, CONNECT_EPS};
 use crate::symbol::{sheet_symbol_defs, SymbolDef};
 
 /// 電線リスト・From-To帳票の備考欄に立てる、ネットの相手が**複数**あって1つに絞れなかった
@@ -353,9 +353,17 @@ pub const WIRE_LIST_COLUMNS: [&str; 12] = [
 /// ワイヤ端点1つの解決結果。ピンかネットラベルかを区別する (G18: ラベル端をネット越しに
 /// 辿るには、反対端がピンかどうかを先に知る必要があるため`endpoint_label`より詳しい)。
 enum EndKind {
-    Pin { entity_id: crate::EntityId, reference: String, pin: String },
+    Pin { entity_id: crate::EntityId, reference: String, pin: String, contact: Option<String> },
     Label(String),
     None,
+}
+
+/// ピンの表記にポートの接点を添える (`39:U3` → `39:U3/VBUS`)。接点が無ければそのまま。
+fn with_contact(text: String, contact: Option<&str>) -> String {
+    match contact {
+        Some(c) => format!("{text}/{c}"),
+        None => text,
+    }
 }
 
 /// 電線リストに載せるピンの表記。静的なプラグ・ソケットが極番号 (`pole`) を持てば、唯一のピン番号の
@@ -400,7 +408,7 @@ fn resolve_endpoint(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> EndKind {
         }
     }
     match (pin_hit, label_hit) {
-        (Some((_, entity_id, reference, pin)), _) => EndKind::Pin { entity_id, reference, pin },
+        (Some((_, entity_id, reference, pin)), _) => EndKind::Pin { entity_id, reference, pin, contact: None },
         (None, Some(l)) => EndKind::Label(l),
         (None, None) => EndKind::None,
     }
@@ -418,8 +426,8 @@ fn resolve_endpoint(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> EndKind {
 /// 内側・外側どちらのワイヤも同じ `TB1:1` 表記になる。
 pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
     match resolve_endpoint(sheet, defs, at) {
-        EndKind::Pin { entity_id, reference, pin } => {
-            format!("{reference}:{}", pin_display(sheet, entity_id, &pin))
+        EndKind::Pin { entity_id, reference, pin, contact } => {
+            with_contact(format!("{reference}:{}", pin_display(sheet, entity_id, &pin)), contact.as_deref())
         }
         EndKind::Label(name) => name,
         EndKind::None => String::new(),
@@ -472,7 +480,7 @@ fn reference_of(display: &str) -> Option<&str> {
 ///   多端点で絞れなければ[`REMARK_MULTI_ENDED`] ("multi")、辿る先のデバイスが
 ///   無ければ[`REMARK_NO_DEVICE`] ("none")。両方当てはまるときは"multi"を優先する
 ///
-/// `nets`はこのシートのネットリスト ([`extract_netlist`]) を呼び出し側から渡す
+/// `nets`はこのシートの配線ごとのネットリスト ([`crate::netlist::extract_wire_nets`]) を呼び出し側から渡す
 /// (電線リストは1シートに何十本もワイヤがあるので、シートに1回だけ作る)。
 pub fn wire_from_to(
     sheet: &Sheet,
@@ -494,8 +502,8 @@ fn from_to(sheet: &Sheet, nets: &[Net], kinds: [EndKind; 2]) -> (String, String,
     let mut resolved: Vec<String> = Vec::with_capacity(2);
     for (i, kind) in kinds.iter().enumerate() {
         let text = match kind {
-            EndKind::Pin { entity_id, reference, pin } => {
-                format!("{reference}:{}", pin_display(sheet, *entity_id, pin))
+            EndKind::Pin { entity_id, reference, pin, contact } => {
+                with_contact(format!("{reference}:{}", pin_display(sheet, *entity_id, pin)), contact.as_deref())
             }
             EndKind::None => String::new(),
             EndKind::Label(name) => {
@@ -539,11 +547,12 @@ fn from_to(sheet: &Sheet, nets: &[Net], kinds: [EndKind; 2]) -> (String, String,
 /// 配線と同じに解決する (ピンかネットラベル)。
 fn core_end_kind(sheet: &Sheet, defs: &[SymbolDef], c: &Cable, core: &CableCore, end: RunEnd) -> EndKind {
     match core.end(end) {
-        Some(CoreEnd::Pin { part, pin, .. }) => match sheet.entities.get(part) {
+        Some(CoreEnd::Pin { part, pin, contact, .. }) => match sheet.entities.get(part) {
             Some(Entity::Symbol(s)) => EndKind::Pin {
                 entity_id: s.id,
                 reference: s.reference.clone(),
                 pin: pin.clone(),
+                contact: contact.clone(),
             },
             _ => EndKind::None,
         },
@@ -562,7 +571,7 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
     for sheet in &project.sheets {
         let defs = sheet_symbol_defs(sheet);
         // ネットリストはワイヤごとではなくシートごとに1回だけ作る (G18の解決に全ワイヤが使う)
-        let nets = extract_netlist(sheet, &defs);
+        let nets = extract_wire_nets(sheet, &defs);
         // 区間ケーブルの分岐の配線は芯の行に畳み込む (別の行にしない)
         let breakout = crate::cable::breakout_wire_ids(sheet);
         let core_labels = crate::cable::definition_core_labels(sheet);
@@ -1620,5 +1629,45 @@ mod tests {
         };
         assert_eq!(from(Some("2")), ("R1:2".to_string(), "X44A:2".to_string()));
         assert_eq!(from(None), ("R1:2".to_string(), "X44A:1".to_string()));
+    }
+
+    /// A run-cable core that lands on a port pin shows its contact in the From-To row (39:U3/VBUS).
+    /// ポートのピンに着く区間ケーブルの芯は、From-To の行に接点を書く (39:U3/VBUS)。
+    #[test]
+    fn a_core_on_a_port_pin_shows_its_contact() {
+        use crate::block::port_fixtures::{port_block, USB};
+        let mut lte = crate::cable::test_support::lte_sheet();
+        let mut hub = port_block("39", 200.0, 100.0, "left", "U3", &USB);
+        hub.id = lte.usb;
+        lte.sheet.entities.insert(lte.usb, Entity::Symbol(hub));
+        let Entity::Cable(c) = lte.sheet.entities.get_mut(&lte.cable).unwrap() else { panic!() };
+        for core in &mut c.cores {
+            core.end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "U3".into(), index: None, contact: Some(core.core.clone()) });
+        }
+        let project = crate::cable::test_support::project_with(lte.sheet);
+        let rows = wire_list_rows(&project);
+        let ends: Vec<String> = rows.iter().map(|r| format!("{} {}", r[1], r[2])).collect();
+        assert!(ends.contains(&"39:U3/VBUS J45:1".to_string()) || ends.contains(&"J45:1 39:U3/VBUS".to_string()), "{ends:?}");
+    }
+
+    /// The wire list keeps one row for a wire between two USB ports, from port pin to port pin, with no contact in the text.
+    /// 電線リストでは、2つの USB ポートの間の配線はポートのピンからポートのピンへの1行のまま (接点は書かない)。
+    #[test]
+    fn a_usb_wire_is_one_wire_list_row() {
+        use crate::block::port_fixtures::{pin_at, port_block, USB};
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        let hub = Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB));
+        let dongle = Entity::Symbol(port_block("LTE1", 200.0, 100.0, "left", "P1", &USB));
+        let (h, d) = (hub.id(), dongle.id());
+        sheet.entities.insert(h, hub);
+        sheet.entities.insert(d, dongle);
+        let (a, b) = (pin_at(sheet, h, "U3"), pin_at(sheet, d, "P1"));
+        let w = wire_between((a.x, a.y), (b.x, b.y));
+        sheet.entities.insert(w.id(), w);
+        let rows = wire_list_rows(&project);
+        assert_eq!(rows.len(), 1);
+        assert_eq!((rows[0][1].as_str(), rows[0][2].as_str()), ("39:U3", "LTE1:P1"));
     }
 }

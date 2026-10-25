@@ -32,6 +32,24 @@ function issueText(issue: BlockIssue): string {
   if (issue.code === "tooMany") {
     return t("blockEditor.issue.tooMany", { count: issue.count, max: issue.max });
   }
+  if (issue.code === "contactsTooFew") {
+    return t("blockEditor.issue.contactsTooFew", { side: t(`blockEditor.side.${issue.side}`), row: issue.index + 1 });
+  }
+  if (issue.code === "duplicateContact") {
+    return t("blockEditor.issue.duplicateContact", {
+      side: t(`blockEditor.side.${issue.side}`),
+      row: issue.index + 1,
+      contact: issue.contact,
+    });
+  }
+  if (issue.code === "tooManyContacts") {
+    return t("blockEditor.issue.tooManyContacts", {
+      side: t(`blockEditor.side.${issue.side}`),
+      row: issue.index + 1,
+      count: issue.count,
+      max: issue.max,
+    });
+  }
   return t("blockEditor.issue.sizeTooSmall", { w: issue.w, h: issue.h });
 }
 

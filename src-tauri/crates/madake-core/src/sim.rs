@@ -87,7 +87,8 @@ pub fn simulate_op_with(
     }
 
     // ネット電圧: ネットの配線に対応するSPICE素子の両端ノード電圧のmin/max
-    let nets = crate::netlist::extract_netlist(sheet, symbols);
+    // SPICE はポートを知らないので、描いた配線のまとまりごと (接点に分けない)
+    let nets = crate::netlist::extract_wire_nets(sheet, symbols);
     let mut net_voltages = Vec::new();
     for net in &nets {
         let mut min = f64::INFINITY;
@@ -262,5 +263,25 @@ mod tests {
         let l1 = r.components.iter().find(|c| c.reference == "L1").unwrap();
         assert!(l1.amps < 1e-3, "開路で電流はほぼ0: {l1:?}");
         assert!(r.warnings.iter().any(|w| w.contains("SW1")));
+    }
+
+    /// A wire between two ports is one net in the voltage list, not one per contact with the same copied voltage, because SPICE does not know ports.
+    /// 2つのポートを結ぶ配線は、電圧の一覧で1ネットになる (SPICE はポートを知らないので、接点ごとに同じ電圧を写したネットにはしない)。
+    #[test]
+    fn a_port_wire_is_one_net_in_the_voltages() {
+        let Some(exe) = crate::ngspice::find_ngspice() else {
+            eprintln!("ngspice未検出のためスキップ");
+            return;
+        };
+        use crate::block::port_fixtures::{pin_at, port_block, USB};
+        use crate::cable::test_support::{insert, wire};
+        let mut sheet = series_circuit("2");
+        let a = insert(&mut sheet, Entity::Symbol(port_block("39", 100.0, 200.0, "right", "U3", &USB)));
+        let b = insert(&mut sheet, Entity::Symbol(port_block("40", 200.0, 200.0, "left", "U1", &USB)));
+        let (pa, pb) = (pin_at(&sheet, a, "U3"), pin_at(&sheet, b, "U1"));
+        let w = insert(&mut sheet, Entity::Wire(wire(&[(pa.x, pa.y), (pb.x, pb.y)])));
+        let r = simulate_op_with(&exe, &sheet, &sheet_symbol_defs(&sheet), &[]).unwrap();
+        let on_port: Vec<&NetVoltage> = r.nets.iter().filter(|n| n.wire_ids.contains(&w)).collect();
+        assert_eq!(on_port.len(), 1, "{on_port:?}");
     }
 }

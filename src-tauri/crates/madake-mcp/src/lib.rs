@@ -475,6 +475,8 @@ pub struct PlaceSymbolParams {
     /// 追加属性。ブロック(`symbol_id="block"`)は
     /// `block_pins` = `{"left":[{"no":"IN1","name":"入力1"}],"right":[…]}`(任意で`top`/`bottom`)、
     /// 任意で `block_size` = `{"w":40,"h":30}` を渡して名前付きピンの機器を1回で作る。
+    /// ピンに `contacts` (例 `["VBUS","D-","D+","GND"]`) を書くと、1本のピンで複数の導体を運ぶポートになる
+    /// (ネットリストは接点ごとに分かれる)。接点は1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない。
     /// `hide_reference` = `"true"` で参照記号を印字しない (データには残る)。嵌合するプラグ/ソケットの
     /// 組のように同じ記号を2つの部品に付けるとき、片方に付けて二重表示を避ける。
     pub attrs: Option<std::collections::BTreeMap<String, String>>,
@@ -1237,7 +1239,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "シンボルをシートに配置する。作成されたエンティティidと、置いた部品のピン(pins: 番号・名前・用紙座標x/y・向きdir)を返す。配線はこの座標を使うかconnect_pinsでピン名を指定する。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る"
+        description = "シンボルをシートに配置する。作成されたエンティティidと、置いた部品のピン(pins: 番号・名前・用紙座標x/y・向きdir)を返す。配線はこの座標を使うかconnect_pinsでピン名を指定する。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る。USB・3.5mmオーディオ・DCジャックのように複数の導体を運ぶコネクタは、導体ごとのピンにせず block_pins のピンに contacts (例 {\"no\":\"U3\",\"name\":\"USB-A メス\",\"contacts\":[\"VBUS\",\"D-\",\"D+\",\"GND\"]}) を付けたポートのピン1本で描く (接点は1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない)"
     )]
     fn place_symbol(
         &self,
@@ -1305,7 +1307,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "配置済み部品のピンを返す。reference(参照記号)かentity_idで指定する。部品ごとにentity_id・参照記号・symbol_id・外形bbox(ブロックは5mm丸めの後)と、各ピンの番号・名前・用紙座標x/y・向きdir(回転と反転の後。電線が出ていく向き)を返す。ピン座標は自分で計算せずこのツールで読む"
+        description = "配置済み部品のピンを返す。reference(参照記号)かentity_idで指定する。部品ごとにentity_id・参照記号・symbol_id・外形bbox(ブロックは5mm丸めの後)と、各ピンの番号・名前・用紙座標x/y・向きdir(回転と反転の後。電線が出ていく向き)を返す。ピン座標は自分で計算せずこのツールで読む。ポートのピンは contacts (接点の並び) も返す"
     )]
     fn get_pins(&self, Parameters(p): Parameters<GetPinsParams>) -> Result<String, ErrorData> {
         let key = match (p.reference, p.entity_id) {
@@ -1518,7 +1520,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "多芯ケーブルを、片側(または両側)を1本線で描いて1回で引く(例: USBプラグ側は1本線、基板側は芯ごとの配線4本)。cores=芯の名前の並び(または{core,color})。a/b=端ごとに pins(\"J45.1\"の並び。partを書けばピン番号か名前だけでもよい。同じ番号の2つ目は\"TB1.1#2\")か part(参照記号かentity id。pins省略でその部品のピンを順に使う)と style: multi=ピンから分岐点まで芯ごとに配線を引く(breakout_atで分岐点、省略でピンの先10mm。分岐の配線は線径・線色を持たず、線色は芯が持つ) / single=1本線をその部品に着ける。pins/partの代わりにlabels(芯と同じ数のネットラベル名の並び)を書くと、芯ごとの分岐の配線を区間と反対向きに10mm引いてその名前のネットラベルで終える(styleはmultiのみ、breakout_at必須。別シートの同名ラベルへ繋ぐ配線に使う)。**芯はピン順に対応する**(芯の数=ピンの数)。ネットリスト・電線リスト・ERCは芯ごとに端から端まで繋がり、1本線は位置では何にも繋がらない。偽の「分岐」ブロックや、1本の配線を複数のピンに触れさせる描き方(全ピンが短絡する)の代わりに使う。reference/part_no/sq/length_m(ケーブル全長)/shield/color/via(1本線の経由点)は任意。**複数のケーブルはcablesに並べて1回で引く**(全部引けるときだけ引き、undo一発で全部消える。誤りがあれば何番目かを知らせて1本も引かない)。ケーブルid・参照記号・1本線の点列runと、芯ごとの両端(a/b)と分岐の配線id(wire_ids)を返す"
+        description = "多芯ケーブルを、片側(または両側)を1本線で描いて1回で引く(例: USBプラグ側は1本線、基板側は芯ごとの配線4本)。cores=芯の名前の並び(または{core,color})。a/b=端ごとに pins(\"J45.1\"の並び。partを書けばピン番号か名前だけでもよい。同じ番号の2つ目は\"TB1.1#2\")か part(参照記号かentity id。pins省略でその部品のピンを順に使う)と style: multi=ピンから分岐点まで芯ごとに配線を引く(breakout_atで分岐点、省略でピンの先10mm。分岐の配線は線径・線色を持たず、線色は芯が持つ) / single=1本線をその部品に着ける。pins/partの代わりにlabels(芯と同じ数のネットラベル名の並び)を書くと、芯ごとの分岐の配線を区間と反対向きに10mm引いてその名前のネットラベルで終える(styleはmultiのみ、breakout_at必須。別シートの同名ラベルへ繋ぐ配線に使う)。**芯はピン順に対応する**(芯の数=ピンの数)。ネットリスト・電線リスト・ERCは芯ごとに端から端まで繋がり、1本線は位置では何にも繋がらない。偽の「分岐」ブロックや、1本の配線を複数のピンに触れさせる描き方(全ピンが短絡する)の代わりに使う。reference/part_no/sq/length_m(ケーブル全長)/shield/color/via(1本線の経由点)は任意。**複数のケーブルはcablesに並べて1回で引く**(全部引けるときだけ引き、undo一発で全部消える。誤りがあれば何番目かを知らせて1本も引かない)。ケーブルid・参照記号・1本線の点列runと、芯ごとの両端(a/b)と分岐の配線id(wire_ids)を返す。**ポートのピン1本に着けるとき**は pins にそのピンだけを書き (\"39.U3\"、style=single)、芯は同じ名前の接点に対応する (名前がどれも接点でなく数が同じなら並び順。並び順の対応は芯と接点の数が同じときだけ)。名前の一部の芯だけが接点と一致する場合と、ポートへの style=multi は断る"
     )]
     fn connect_cable(&self, Parameters(p): Parameters<ConnectCableParams>) -> Result<String, ErrorData> {
         use madake_core::cable_run::{plan_cable_run, CableRunSpec};
@@ -1614,7 +1616,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "シートのネットリスト(電気的接続グラフ)を返す。各ネットは名前・所属ピン(参照記号+ピン番号)・配線idを持つ"
+        description = "シートのネットリスト(電気的接続グラフ)を返す。各ネットは名前・所属ピン(参照記号+ピン番号)・配線idを持つ。ポート (接点を持つピン) を含むネットは接点ごとに「<名前>.<接点>」のネットに分かれ、ピンに contact が付く"
     )]
     fn get_netlist(&self, Parameters(p): Parameters<SheetRefParams>) -> Result<String, ErrorData> {
         let sheet_id = self.resolve_sheet(p.sheet_id)?;

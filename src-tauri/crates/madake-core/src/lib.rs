@@ -26,6 +26,7 @@ pub mod parts;
 pub mod pdf;
 pub mod pin_groups;
 pub mod pin_wiring;
+pub mod port;
 pub mod raster;
 pub mod plc;
 pub mod relay_xref;

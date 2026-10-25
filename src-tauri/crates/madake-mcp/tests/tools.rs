@@ -66,3 +66,17 @@ fn the_edit_tool_explains_the_multilevel_jumper_form() {
         );
     }
 }
+
+/// The placement tool states the contact rule (2 to 32 per pin, trimmed, unique within the pin), and the cable tool says order mapping onto a port needs equal counts and that a partial name match and style multi are refused.
+/// 配置ツールの説明は接点の決まり (1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない) を書き、ケーブルのツールの説明はポートへの並び順の対応は数が同じときだけで、名前の一部だけの一致と style multi は断ると書く。
+#[test]
+fn the_port_tools_state_the_contact_rules() {
+    let place = description_of("place_symbol");
+    for needle in ["1ピンに2〜32個", "前後の空白は除き", "ピンの中で重ならない"] {
+        assert!(place.contains(needle), "place_symbolの説明に「{needle}」が無い: {place}");
+    }
+    let cable = description_of("connect_cable");
+    for needle in ["数が同じときだけ", "名前の一部", "style=multi は断る"] {
+        assert!(cable.contains(needle), "connect_cableの説明に「{needle}」が無い: {cable}");
+    }
+}

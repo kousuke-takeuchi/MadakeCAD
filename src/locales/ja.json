@@ -647,7 +647,9 @@
     "pinTableHint": "ピン番号はブロック内で一意・ピンは5mmピッチ",
     "colNo": "番号",
     "colName": "ピン名",
+    "colContacts": "接点",
     "namePlaceholder": "例: 運転指令",
+    "contactsPlaceholder": "例: VBUS, D-, D+, GND",
     "addPin": "ピンを追加",
     "moveUp": "上へ",
     "moveDown": "下へ",
@@ -670,7 +672,10 @@
       "duplicate": "ピン番号 {no} が重複しています",
       "emptyNo": "{side}の{row}行目にピン番号がありません",
       "tooMany": "ピンが多すぎます: {count}本 (最大{max}本)",
-      "sizeTooSmall": "外形がピンに対して小さすぎます (最低 {w}×{h}mm)"
+      "sizeTooSmall": "外形がピンに対して小さすぎます (最低 {w}×{h}mm)",
+      "contactsTooFew": "{side}の{row}行目は接点が1つです。ポートには2つ以上要ります",
+      "duplicateContact": "{side}の{row}行目で接点 {contact} が2回あります",
+      "tooManyContacts": "{side}の{row}行目の接点が多すぎます: {count} (最大 {max})"
     },
     "wiredWarning": "ピン {pins} は配線済みです。番号を変える・削除すると接続が外れます",
     "placeHint": "「配置」でカーソルにゴーストが付きます (Rで回転・Escで解除)",
@@ -682,6 +687,7 @@
     "editHint": "このブロックのピン(番号・名前・並び・外形)を編集します",
     "pinsRow": "ピン",
     "pinCounts": "左{left} / 右{right}",
+    "portCount": "ポート {count}",
     "broken": "読み取れません",
     "updatedLog": "{reference}: ピン表を更新しました (ピン{pins}本)",
     "droppedLog": "ピン {pins} が無くなりました: その配線の接続は外れています"

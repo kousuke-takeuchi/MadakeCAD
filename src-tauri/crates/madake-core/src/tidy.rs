@@ -353,7 +353,7 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
         }
     }
     // 線番はネットごとに代表線分の脇へ1回だけ描かれる (SVG出力と同じ位置)
-    for net in crate::netlist::extract_netlist(sheet, symbols) {
+    for net in crate::netlist::extract_wire_nets(sheet, symbols) {
         let Some(no) = net.wire_no.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
             continue;
         };

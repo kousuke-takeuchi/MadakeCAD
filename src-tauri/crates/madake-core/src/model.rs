@@ -53,7 +53,11 @@ pub type SheetId = Uuid;
 ///   [`CableCore::end_b`])。区間のあるケーブルは種類`run_cable`で書く ([`EntityRepr`]) ので、
 ///   この版より前のアプリはそのファイルを開けない (区間を黙って捨てない)。区間の無いファイルは
 ///   版番号以外これまでと同じに書かれる
-pub const FORMAT_VERSION: u32 = 17;
+/// - v18: ブロックのピンのポートの接点 ([`crate::symbol::PinDef::contacts`]) と、区間ケーブルの芯の
+///   接点 (`CoreEnd::Pin::contact`)。接点のあるブロックはファイルの中だけ種類`port_block`で書く
+///   ([`EntityRepr::PortBlock`]、IPC・MCP は`symbol`のまま) ので、v0.4.0 以前はそのファイルを開けない
+///   (ブロックを黙って消さない)。形式17のビルドは版番号で断る。接点の無いファイルは版番号以外これまでと同じ
+pub const FORMAT_VERSION: u32 = 18;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -581,6 +585,36 @@ impl Entity {
     }
 }
 
+thread_local! {
+    /// ファイルへ書いている最中か ([`crate::io::save_project`] だけが [`FileWriteGuard`] で立てる)。
+    static WRITING_FILE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// 生きている間、エンティティを「ファイルの形」で書く: 接点のあるブロックを種類`port_block`にする。
+/// IPC・MCP・Link API の JSON はこれを立てないので`symbol`のまま (フロントエンドと FreeCAD アドオンは
+/// `kind == "symbol"`を見ている)。serde_json は preserve_order 無しなので、Value を経由して書き換えると
+/// キーの並びが変わる。だから書き出しの途中でこの印を見る。
+pub(crate) struct FileWriteGuard;
+
+impl FileWriteGuard {
+    pub(crate) fn new() -> Self {
+        WRITING_FILE.with(|f| f.set(true));
+        Self
+    }
+}
+
+impl Drop for FileWriteGuard {
+    fn drop(&mut self) {
+        WRITING_FILE.with(|f| f.set(false));
+    }
+}
+
+/// 接点を持つピンがあるブロックか (ファイルでは種類`port_block`)。
+fn is_port_block(s: &SymbolInstance) -> bool {
+    s.symbol_id == crate::block::BLOCK_SYMBOL_ID
+        && crate::block::parse_block_spec(&s.attrs).is_ok_and(|spec| spec.has_contacts())
+}
+
 /// 保存・送受信するときのエンティティの形 (JSONの`kind`タグ)。
 ///
 /// メモリ上は区間のあるケーブルも無いケーブルも同じ [`Entity::Cable`] だが、JSONでは区間
@@ -588,6 +622,7 @@ impl Entity {
 /// エンティティを含むファイルを開けないので、区間を黙って捨てて保存し直すことが起こらない
 /// (serdeは既存の構造体の知らないフィールドを無視するため、フィールドを足すだけでは守れない)。
 /// 読むときはどちらの種類も [`Entity::Cable`] になる。ファイル・Tauri IPC・MCPの全てがこの形。
+/// 接点のあるブロックは、ファイルへ書くとき ([`FileWriteGuard`]) だけ種類`port_block`で書く (v18)。
 #[derive(Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EntityRepr {
@@ -609,12 +644,15 @@ pub enum EntityRepr {
     RunCable(Cable),
     Nameplate(Nameplate),
     Dimension(Dimension),
+    /// 接点を持つピンがあるブロック (v18)。ファイルへ書くときだけ使う種類で、読むと [`Entity::Symbol`]。
+    #[schemars(skip)]
+    PortBlock(SymbolInstance),
 }
 
 impl From<EntityRepr> for Entity {
     fn from(r: EntityRepr) -> Self {
         match r {
-            EntityRepr::Symbol(e) => Entity::Symbol(e),
+            EntityRepr::Symbol(e) | EntityRepr::PortBlock(e) => Entity::Symbol(e),
             EntityRepr::Wire(e) => Entity::Wire(e),
             EntityRepr::Junction(e) => Entity::Junction(e),
             EntityRepr::NetLabel(e) => Entity::NetLabel(e),
@@ -637,6 +675,7 @@ impl From<EntityRepr> for Entity {
 impl From<Entity> for EntityRepr {
     fn from(e: Entity) -> Self {
         match e {
+            Entity::Symbol(e) if WRITING_FILE.with(|f| f.get()) && is_port_block(&e) => EntityRepr::PortBlock(e),
             Entity::Symbol(e) => EntityRepr::Symbol(e),
             Entity::Wire(e) => EntityRepr::Wire(e),
             Entity::Junction(e) => EntityRepr::Junction(e),
@@ -857,6 +896,9 @@ pub enum CoreEnd {
         pin: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         index: Option<u32>,
+        /// ポートのピン ([`crate::symbol::PinDef::contacts`]) のどの接点か (v18)。普通のピンでは None。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        contact: Option<String>,
     },
     /// 分岐: 芯はこの配線として続く (外被を剥いて出した芯そのもの)。配線の端点のうち区間の端に
     /// 近い方が分岐側の端 ([`crate::cable::breakout_point`])。
@@ -876,7 +918,7 @@ impl CoreEnd {
     pub fn remapped(&self, map: &BTreeMap<EntityId, EntityId>) -> Option<CoreEnd> {
         let to = *map.get(&self.target())?;
         Some(match self {
-            CoreEnd::Pin { pin, index, .. } => CoreEnd::Pin { part: to, pin: pin.clone(), index: *index },
+            CoreEnd::Pin { pin, index, contact, .. } => CoreEnd::Pin { part: to, pin: pin.clone(), index: *index, contact: contact.clone() },
             CoreEnd::Wire { .. } => CoreEnd::Wire { wire: to },
         })
     }
@@ -1577,7 +1619,7 @@ mod tests {
         e.remap_refs(&map);
         let Entity::Cable(c) = &e else { panic!("ケーブル") };
         assert_eq!(c.cores[0].end_a, Some(CoreEnd::Wire { wire: map[&lte.wires[0]] }));
-        assert_eq!(c.cores[0].end_b, Some(CoreEnd::Pin { part: new_usb, pin: "1".into(), index: None }));
+        assert_eq!(c.cores[0].end_b, Some(CoreEnd::Pin { part: new_usb, pin: "1".into(), index: None, contact: None }));
         e.remap_refs(&BTreeMap::new());
         let Entity::Cable(c) = &e else { panic!("ケーブル") };
         assert!(c.cores.iter().all(|k| k.end_a.is_none() && k.end_b.is_none()));

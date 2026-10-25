@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2911 specification clauses** across 6 areas.
+**2959 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -29,6 +29,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block cannot exceed the pin limit, so a runaway pin table fails loudly. <sub>`too_many_pins_are_rejected`</sub>
 - The attribute slots (tag, part number, function, rating) stack at the centre of the box. <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
 - Rotating or mirroring a block moves its pins with the body but never renumbers them. <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
+- A block pin may list contacts; they reach the pin definition in order, trimmed, and a pin without contacts has none. <sub>`contacts_are_trimmed`</sub>
+- Contacts that are empty, repeated on one pin, alone (one conductor is a plain pin) or more than 32 are refused with the pin number in the message. <sub>`bad_contacts_are_refused`</sub>
 
 ### cable
 
@@ -56,6 +58,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A run-cable core with both ends unassigned is reported as unassigned, with no extra floating-net or short finding. <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
 - The cable list names the devices at each end of a single-line cable (the board its breakout wires go to, the plug its run lands on) and counts the cores that have both ends as used. <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
 - The printed sheet draws a single-line cable as a thick line with a slash, a bar across the plug pins it lands on, fan lines to the breakout wires with the core names, and the cable label. <sub>`the_printed_sheet_draws_a_run_cable`</sub>
+- Several cores may land on one port pin as long as each names a different contact; two cores on the same contact are refused. <sub>`cores_on_one_port_pin_need_different_contacts`</sub>
+- A core end without a contact is written without a "contact" key, so files without ports do not change. <sub>`a_pin_end_without_contact_has_no_contact_key`</sub>
 
 ### cable_run
 
@@ -70,6 +74,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Breakout wires get no gauge and no colour of their own (the colour stays on the cable core), so they carry no wire note, while the wire list still shows each core's colour. <sub>`breakout_wires_carry_no_note`</sub>
 - When the label wires run vertically the labels sit side by side, so the core pitch grows to the widest label plus a gap and no two labels overlap; the run direction follows the first via point. <sub>`side_by_side_labels_do_not_overlap_and_via_sets_the_direction`</sub>
 - Two labels with the same name (after trimming) on one side are refused naming the duplicate. <sub>`duplicate_label_names_are_refused`</sub>
+- A side may land on one port pin: cores named like the contacts map by name, the line ends at the pin with no bar, and the netlist gives one net per core. <sub>`a_side_lands_on_one_port_pin_by_contact_name`</sub>
+- Breakout labels named <port label>.<contact> join each core to that contact of the port net, so a labels-side cable can feed a port drawn elsewhere on the sheet with no ERC finding. <sub>`breakout_labels_named_like_port_contacts_join_them`</sub>
+- Cores whose names are none of the contacts map by order when the counts match; a partial name match, a count mismatch or style multi on a port is refused, listing the contacts. <sub>`port_landing_by_order_and_refusals`</sub>
 
 ### Command engine (undo/redo)
 
@@ -289,7 +296,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 17, the version that added single-line cable runs (saved as "run_cable"). <sub>`the_current_format_version_is_seventeen`</sub>
+- The current file format version is 18, the version that added port contacts on block pins (blocks with contacts are saved as "port_block"). <sub>`the_current_format_version_is_eighteen`</sub>
+- A version 17 file without ports loads unchanged apart from being moved up to the current version. <sub>`a_version_17_file_loads_unchanged`</sub>
 - A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable". <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - A "run_cable" entry whose run is empty (for example after hand-editing the file) opens as a plain definition-line cable and is written back with the kind "cable". <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
 - A file saved by a newer MadakeCAD (a higher format version) is refused with a message naming both versions, instead of being opened with parts missing. <sub>`a_file_from_a_newer_app_is_refused`</sub>
@@ -306,6 +314,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A format 2 file (no FreeCAD links, wires without a length source) opens with an empty link list and every wire length marked as manual. <sub>`a_format_2_file_opens_with_empty_mech_links_and_manual_lengths`</sub>
 - A format 3 file whose FreeCAD links have no placement opens with those links unplaced, and a link with a placement round-trips through save and load. <sub>`a_format_3_file_opens_with_unplaced_links_and_placements_round_trip`</sub>
 - A file written by the cloud build (its own format 4, with FreeCAD links and a wire length measured in FreeCAD) opens with those fields intact and is rewritten as the current merged format version. <sub>`a_cloud_format_4_file_keeps_its_mech_links_and_length_source`</sub>
+- A block with port contacts is saved under the kind "port_block" and comes back as a symbol with its contacts, while the same project sent over IPC/MCP still says "symbol". <sub>`a_port_block_is_saved_as_port_block`</sub>
+- A project without port contacts is written byte for byte as serde writes it (no key reordering), with plain blocks still "symbol". <sub>`a_project_without_ports_is_written_unchanged`</sub>
+- A "port_block" entry without contacts (hand-edited) opens as a plain symbol. <sub>`a_port_block_without_contacts_opens_as_a_symbol`</sub>
+- A block whose contacts were all removed again is saved with the kind "symbol", so older builds can open the file again. <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
 
 ### KiCad import / export
 
@@ -438,6 +450,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A single-line cable between two connectors (3.5 mm AUX: L, R, GND) gives one net per core even though no wire is drawn. <sub>`a_connector_to_connector_run_gives_one_net_per_core`</sub>
 - Nets made only of cable cores are named after the nets that have wires, so adding such a cable does not rename existing nets. <sub>`core_only_nets_are_named_after_wire_nets`</sub>
 - Moving the part a single line lands on keeps every core connected to the same pin: connectivity follows the assignment, not the drawing. <sub>`moving_the_landing_part_keeps_core_connectivity`</sub>
+- Two port pins joined by one wire give one net per contact, named N001.<contact> in contact order, each holding both pins with that contact and the shared wire. <sub>`two_ports_joined_by_one_wire_split_into_one_net_per_contact`</sub>
+- The unsplit view keeps one net for the USB wire, and a drawing without ports gives exactly the same nets (and JSON, with no contact keys) from both functions. <sub>`without_ports_nothing_changes`</sub>
+- A mate half passes every contact through inside its own net, but plug and socket are still not joined: port → socket | plug → label … port gives two groups of contact nets. <sub>`a_mate_half_passes_contacts_through_but_does_not_conduct`</sub>
+- In a port net a plain pin named like a contact joins that contact; a plain pin with another name goes to a residual net named like the base and is listed in the port report. <sub>`a_plain_pin_joins_the_contact_with_its_name`</sub>
+- The LTE harness drawn as four board wires into one run that ends on the single port pin 39.U3 gives four nets, each one board pin and one contact of the port. <sub>`the_lte_harness_lands_on_one_port_pin`</sub>
+- A label named <port label>.<contact> on a plain wire joins that one contact of the port net. <sub>`a_dotted_label_taps_one_contact`</sub>
+- A single-line run between two port pins with no wire at all still gives one net per core, each with both ports. <sub>`a_run_between_two_ports_gives_one_net_per_core`</sub>
+- Two ports with different contact sets join only the shared contacts; the others stay alone on their port, with no residual net, and the report lists them. <sub>`ports_with_different_contacts_join_only_the_shared_ones`</sub>
+- When a core joins two port clusters, the contact net takes the base name a cluster already has from an earlier net, and no new number is used for it. <sub>`a_contact_net_across_two_port_clusters_reuses_the_earlier_base`</sub>
+- A net pin prints as REF:PIN, with /CONTACT added when it carries a port contact. <sub>`a_net_pin_prints_with_its_contact`</sub>
 
 ### ngspice runner
 
@@ -569,6 +591,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - When one part has the same pin number twice (a through terminal), the bare number is refused with both choices, and "#n" picks one. <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
 - A mate pair sits on the 2.5 mm grid and its two halves only touch, so the tidy metrics count no overlap and no off-grid point for it. <sub>`a_mate_pair_is_tidy`</sub>
 - The plug half of a mate pair hides its designator, so the shared designator is printed once, on the socket. <sub>`the_plug_hides_the_shared_designator`</sub>
+- get_pins shows a port pin's contacts and leaves them out for plain pins. <sub>`part_pins_show_contacts`</sub>
 
 ### PLC I/O
 
@@ -601,6 +624,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Only a page generated with the same ladder style and rung spacing can be shared; otherwise the next module starts a new page. <sub>`a_page_of_another_style_or_spacing_is_not_shared`</sub>
 - A rung spacing that is not a positive multiple of the 2.5 mm grid is refused, so generated pages stay on grid. <sub>`an_off_grid_rung_spacing_is_refused`</sub>
 - The I/O report lists every point as address, signal name, target, wire number and comment, with the module reference in front for the whole project. <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
+
+### port
+
+- A plain pin wired to a port whose name matches no contact is a warning that names the pin, the port and its contacts; a pin named like a contact is not. <sub>`a_plain_pin_on_a_port_is_a_warning`</sub>
+- A contact on only one of two joined ports is reported as info; a port wired only to a mate half gives no such info. <sub>`a_contact_on_only_one_of_two_ports_is_reported_as_info`</sub>
+- A run-cable core whose contact is no longer on the port pin (the block was edited after) is reported as an unassigned core naming the contact. <sub>`a_core_on_a_removed_contact_is_reported`</sub>
+- A core that names a contact on a pin edited to have no contacts at all is reported as unassigned with that contact named, not silently put on the plain pin. <sub>`a_core_on_a_pin_without_contacts_is_reported`</sub>
+- A label that is a port label on one sheet but sits on a net without a port on another sheet is a project warning, because those sheets are not joined. <sub>`a_port_label_without_a_port_on_another_sheet_is_a_warning`</sub>
 
 ### raster
 
@@ -734,6 +765,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - When a breakout wire ends on a net label and nothing else on the sheet carries that label (the continuation is on another sheet), the core's row shows the label name and the "none" remark. <sub>`a_breakout_wire_ending_on_a_label_shows_the_label`</sub>
 - Wires that are cores of a cable (breakout wires of a single-line cable, and wires crossed by a definition line) are not added again to the BOM wire roll-up, since the cable row already counts them. <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
 - A static plug or socket carrying a pole number shows it in the wire list (X44A:2) instead of its only pin 1; one without a pole is unchanged. <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
+- A run-cable core that lands on a port pin shows its contact in the From-To row (39:U3/VBUS). <sub>`a_core_on_a_port_pin_shows_its_contact`</sub>
+- The wire list keeps one row for a wire between two USB ports, from port pin to port pin, with no contact in the text. <sub>`a_usb_wire_is_one_wire_list_row`</sub>
 
 ### search
 
@@ -779,6 +812,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Simulation with an invalid ngspice binary fails with an explicit error (no silent fallback). <sub>`missing_ngspice_is_an_explicit_error`</sub>
 - The DC operating point reports per-net voltages (0-24 V here) and per-component current and power (a 2 A lamp shows ~2 A / ~48 W). <sub>`op_reports_net_voltages_and_component_currents`</sub>
 - Declaring a switch open in the what-if analysis drops the load current to zero, and the result notes which switches were opened. <sub>`open_switch_cuts_the_current`</sub>
+- A wire between two ports is one net in the voltage list, not one per contact with the same copied voltage, because SPICE does not know ports. <sub>`a_port_wire_is_one_net_in_the_voltages`</sub>
 
 ### SPICE netlist generation
 
@@ -1201,6 +1235,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A multi-pole breaker conducts pole by pole, so a load fed from an unwired pole is still reported as unreachable from the source. <sub>`multipole_breaker_does_not_connect_its_poles_to_each_other`</sub>
 - A panel-layout sheet is not checked against the schematic rules: it carries no wiring, so nothing there counts as an unconnected pin or a dangling wire. <sub>`a_panel_sheet_is_not_checked_against_the_schematic_rules`</sub>
 - A part placed on the panel whose reference designator is nowhere on the schematic is reported as a warning, and the whole-project check reports it together with the schematic findings. <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
+- Two USB ports joined by one wire have no unconnected pin and no other ERC finding. <sub>`a_wired_usb_link_has_no_erc_findings`</sub>
+- On a port net the label USB_MIC and a dotted label USB_MIC.VBUS on a tapped wire are one name, not a label conflict. <sub>`a_dotted_label_is_not_a_label_conflict`</sub>
 
 ### wire_legend
 
@@ -1232,6 +1268,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A single wire number can be edited directly, and undo puts the previous value back. <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - The renumber command is plain JSON ({"type":"renumber_wires","mode":"append","start":1}), so AI agents and the CLI can send it. <sub>`renumber_command_is_plain_json`</sub>
 - Renumbering wires on a sheet with a connector-to-connector single-line cable numbers the drawn wires 1, 2 with no gap left by the cable's wire-less core nets. <sub>`core_only_nets_take_no_wire_number`</sub>
+- A wire between two USB ports carries four contact nets but gets one wire number, and the next wire gets the next number. <sub>`a_usb_wire_between_two_ports_gets_one_wire_number`</sub>
 
 ### wire_note
 
@@ -1287,6 +1324,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A designator on three sheets lists every other sheet's address, in sheet order, on one line. <sub>`a_designator_on_three_sheets_lists_every_other_sheet`</sub>
 - The device cross-reference text sits to the right of the symbol outline, on the same row as the designator label. <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
 - A designator label wider than its symbol pushes the device cross-reference further right, so the two never overlap. <sub>`device_cross_reference_clears_a_designator_label_wider_than_the_symbol`</sub>
+- A port net labelled USB_MIC on two sheets merges contact by contact across the sheets, never across contacts, and a dotted label USB_MIC.D+ on a third wire joins only D+. <sub>`port_nets_merge_contact_by_contact_across_sheets`</sub>
 
 
 ## Automation APIs (MCP / REST)
@@ -1328,6 +1366,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - connect_cable with labels on the board side draws a labelled wire per core in one edit, answers the label names as the core ends, joins each core to its label net, refuses labels with single or a wrong count, and its description mentions labels. <sub>`connect_cable_labels_end_the_breakout_wires_at_net_labels`</sub>
 - If any cable in the list is wrong, connect_cable names its index and draws none of them; a correct list is drawn in one edit. <sub>`connect_cable_list_is_all_or_nothing`</sub>
 - connect_cable's description tells the agent that cores follow pin order and to use it instead of a fake breakout block. <sub>`connect_cable_is_described_for_the_agent`</sub>
+- Regression test for Tasks 1-8 (already passes): place_symbol and get_pins show a port pin's contacts, and connect_pins between two ports gives get_netlist one net per contact. <sub>`two_ports_wired_by_connect_pins_give_one_net_per_contact`</sub>
+- Regression test for Tasks 1-8 (already passes): connect_cable lands a harness on one port pin ("39.U3"); cores map to the same-named contacts and each core is its own net. <sub>`connect_cable_lands_on_a_port_pin`</sub>
+- The tool descriptions tell the agent to draw a USB-like connector as one block pin with contacts and how to land a cable on it. <sub>`the_tools_describe_port_contacts`</sub>
+- The schema agents get for execute_commands shows pin contacts but never the file-only kind "port_block" (the schemars skip on EntityRepr::PortBlock holds). <sub>`the_agent_schema_hides_port_block`</sub>
 
 ### Frame templates (REST)
 
@@ -1463,6 +1505,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The template tools explain that a template is a starting skeleton, that it lands ERC-clean, and that applying it is a single undo step. <sub>`the_template_tools_explain_what_a_template_is`</sub>
 - Every published tool carries a description, so no tool is offered to the agent unexplained. <sub>`every_published_tool_has_a_description`</sub>
 - The edit tool tells an agent how to write a jumper on a multi-level terminal block (with the level letter), so it does not send a plain numeric pair that would be refused. <sub>`the_edit_tool_explains_the_multilevel_jumper_form`</sub>
+- The placement tool states the contact rule (2 to 32 per pin, trimmed, unique within the pin), and the cable tool says order mapping onto a port needs equal counts and that a partial name match and style multi are refused. <sub>`the_port_tools_state_the_contact_rules`</sub>
 
 ### Wire part numbers / command errors (REST)
 
@@ -1638,6 +1681,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The system prompt tells the agent to measure tidiness with get_tidy_metrics and to stop once it stops improving. <sub>`system_prompt_carries_the_tidy_loop`</sub>
 - The system prompt tells the agent to wire diagrams by pin name with the pin tools, batched in one call, instead of computing pin coordinates. <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
 - The system prompt tells the agent to look at the sheet image after drawing, instead of judging the layout by numbers alone. <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
+- The system prompt tells the agent to draw a multi-conductor connector (USB) as one block pin with contacts. <sub>`system_prompt_explains_port_contacts`</sub>
+- The system prompt states the contact rule (2 to 32 per pin, trimmed, unique) and that connect_cable on a port maps by order only with equal counts and refuses a partial name match and style multi. <sub>`system_prompt_states_the_contact_rules`</sub>
 
 ### knowledge_docs
 
@@ -1908,6 +1953,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake terminals counts a multi-level terminal block by its poles and names its level count, so a 4-pole 2-level block is not mistaken for an 8-pole one. <sub>`terminals_shows_a_multilevel_block_as_poles_and_levels`</sub>
 - An empty terminal list prints a friendly message instead of an empty table. <sub>`terminals_handles_empty`</sub>
 - Open messages include the loaded path and resulting revision. <sub>`opened_reports_path_and_revision`</sub>
+- madake netlist writes a port pin with its contact (39:U3/VBUS). <sub>`netlist_shows_port_contacts`</sub>
 
 
 ## Frontend (editor UI)
@@ -1973,6 +2019,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - finds no wired pins on a block that nothing is connected to <sub>`pins that are already wired`</sub>
 - flags a wired pin that the edit deletes or renumbers <sub>`pins that are already wired`</sub>
 - stays quiet when the wired pins survive the edit <sub>`pins that are already wired`</sub>
+- splits contacts on ASCII, Japanese and full-width commas and trims them <sub>`pins that are already wired`</sub>
+- writes contacts into block_pins and reads them back as comma-separated text <sub>`pins that are already wired`</sub>
+- flags a single contact, a repeated contact and too many contacts <sub>`pins that are already wired`</sub>
 - opens a pin table with one pin per side when the generic block is picked <sub>`starting a new block from the insert dialog`</sub>
 - hands the edited table to the placement as block attributes <sub>`starting a new block from the insert dialog`</sub>
 - seeds the hand-set size with the automatic one when switching to manual <sub>`starting a new block from the insert dialog`</sub>
@@ -2000,6 +2049,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - marks a run with a slash through the middle of its longest segment, like the printed sheet <sub>`多芯ケーブル`</sub>
 - draws a bar across the landed pins and a fan to each breakout wire <sub>`多芯ケーブル`</sub>
 - is picked by clicking near its run <sub>`多芯ケーブル`</sub>
+- draws no bar when every core of a side lands on one port pin <sub>`多芯ケーブル`</sub>
 
 ### deviceTree
 
@@ -2049,6 +2099,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption <sub>`symbolBounds`</sub>
 - never lets a bracket and its caption lines overlap each other, at any rotation <sub>`captionLineAnchors`</sub>
 - stacks caption lines downwards on the paper, sharing one centre line, at any rotation <sub>`captionLineAnchors`</sub>
+- copies block pin contacts into the pin definition and refuses bad contacts like Rust <sub>`captionLineAnchors`</sub>
 
 ### frameEditor
 

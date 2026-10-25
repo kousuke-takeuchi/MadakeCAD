@@ -42,6 +42,8 @@ pub const BLOCK_MIN_W_MM: f64 = 15.0;
 pub const BLOCK_MIN_H_MM: f64 = 10.0;
 /// 1つのブロックに置けるピンの最大数(全辺の合計)。
 pub const BLOCK_PIN_MAX: usize = 200;
+/// 1本のピンが持てる接点の最大数。
+pub const BLOCK_CONTACT_MAX: usize = 32;
 /// 属性スロット(TAG/型番/機能/定格)の行送り (mm)。
 pub const BLOCK_SLOT_PITCH_MM: f64 = 2.5;
 
@@ -54,6 +56,9 @@ pub struct BlockPin {
     /// ピン名(空可)。外形の内側に書く。
     #[serde(default)]
     pub name: String,
+    /// ポートの接点 (例 `["VBUS","D-","D+","GND"]`)。空 = 普通のピン。描き方は変わらない。
+    #[serde(default)]
+    pub contacts: Vec<String>,
 }
 
 /// ブロックのピン配置(辺ごと)。各辺は上→下 / 左→右の順。
@@ -84,6 +89,13 @@ pub struct BlockSpec {
     pub pins: BlockPins,
     /// 明示指定の外形寸法(5mm刻みへ切り上げ済み)。未指定なら`None`。
     pub size: Option<BlockSize>,
+}
+
+impl BlockSpec {
+    /// どれかのピンが接点を持つか (ファイルでは種類 `port_block` で書く。[`crate::model::EntityRepr`])。
+    pub fn has_contacts(&self) -> bool {
+        self.pins.all().any(|p| !p.contacts.is_empty())
+    }
 }
 
 impl BlockPins {
@@ -155,6 +167,7 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
         if !seen.insert(no) {
             return Err(format!("duplicate block pin number: {no}"));
         }
+        check_contacts(no, &pin.contacts)?;
     }
 
     let size = match attrs.get(BLOCK_SIZE_ATTR) {
@@ -181,6 +194,36 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
         }
     }
     Ok(BlockSpec { pins, size })
+}
+
+/// ピン`no`の接点を調べる: 空でない・ピンの中で重ならない・2つ以上・[`BLOCK_CONTACT_MAX`]まで。
+/// 接点が無いのは普通のピンなので通す。
+fn check_contacts(no: &str, contacts: &[String]) -> Result<(), String> {
+    if contacts.is_empty() {
+        return Ok(());
+    }
+    if contacts.len() > BLOCK_CONTACT_MAX {
+        return Err(format!(
+            "block pin {no}: too many contacts: {} (max {BLOCK_CONTACT_MAX})",
+            contacts.len()
+        ));
+    }
+    if contacts.len() < 2 {
+        return Err(format!(
+            "block pin {no}: a port needs at least two contacts (one conductor is a plain pin)"
+        ));
+    }
+    let mut seen: std::collections::BTreeSet<&str> = Default::default();
+    for c in contacts {
+        let c = c.trim();
+        if c.is_empty() {
+            return Err(format!("block pin {no}: contact names must not be empty"));
+        }
+        if !seen.insert(c) {
+            return Err(format!("block pin {no}: duplicate contact {c}"));
+        }
+    }
+    Ok(())
 }
 
 /// ピンが収まる最小の外形寸法 (mm)。辺のピン数×ピッチ(両端に半ピッチの余白)。
@@ -308,6 +351,7 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
                 name: bp.name.clone(),
                 at,
                 dir,
+                contacts: bp.contacts.iter().map(|c| c.trim().to_string()).collect(),
             });
         }
     };
@@ -356,6 +400,40 @@ pub(crate) fn test_block(
             .into_iter()
             .collect(),
     })
+}
+
+/// テスト用: ポート (接点を持つピン) のブロックと、ピンの位置 (他モジュールのテストが共有する)。
+#[cfg(test)]
+pub(crate) mod port_fixtures {
+    use crate::geometry::Point;
+    use crate::model::{Entity, EntityId, Sheet, SymbolInstance};
+
+    /// USB 2.0 の接点。
+    pub(crate) const USB: [&str; 4] = ["VBUS", "D-", "D+", "GND"];
+
+    /// 辺 `side` ("left" / "right") にピン `no` を1本だけ持ち、そのピンが接点 `contacts` を持つブロック。
+    pub(crate) fn port_block(reference: &str, x: f64, y: f64, side: &str, no: &str, contacts: &[&str]) -> SymbolInstance {
+        let json = format!(
+            r#"{{"{side}":[{{"no":"{no}","contacts":{}}}]}}"#,
+            serde_json::to_string(contacts).unwrap()
+        );
+        match super::test_block(reference, "", x, y, &json) {
+            Entity::Symbol(s) => s,
+            _ => unreachable!(),
+        }
+    }
+
+    /// 部品 `id` のピン `no` の用紙上の位置 (最初の接続点)。
+    pub(crate) fn pin_at(sheet: &Sheet, id: EntityId, no: &str) -> Point {
+        let Some(Entity::Symbol(s)) = sheet.entities.get(&id) else { panic!("部品 {id} が無い") };
+        let defs = crate::symbol::sheet_symbol_defs(sheet);
+        let def = crate::symbol::instance_symbol_def(s, &defs).expect("定義");
+        crate::netlist::pin_positions(s, &def)
+            .into_iter()
+            .find(|(n, _)| n == no)
+            .unwrap_or_else(|| panic!("ピン {no} が無い"))
+            .1
+    }
 }
 
 /// 属性スロットは外形の中央に縦積み(TAG→型番→機能→定格)。
@@ -604,5 +682,40 @@ mod tests {
         // ミラー: 左辺のピンが右へ移るが、番号はIN1のまま
         assert_eq!(transform_local(in1, &inst(0, true)), Point::new(112.5, 47.5));
         assert_eq!(def.pins[0].number, "IN1");
+    }
+
+    /// A block pin may list contacts; they reach the pin definition in order, trimmed, and a pin without contacts has none.
+    /// ブロックのピンは接点を並べて持てる。接点は前後の空白を落とした順にピン定義へ届き、接点の無いピンは空のまま。
+    #[test]
+    fn contacts_are_trimmed() {
+        let def = block_symbol(&attrs(&[(
+            "block_pins",
+            r#"{"right":[{"no":"U3","name":"USB-A メス","contacts":[" VBUS ","D-","D+","GND"]}],"left":[{"no":"1"}]}"#,
+        )]))
+        .expect("ブロック定義");
+        let u3 = def.pins.iter().find(|p| p.number == "U3").unwrap();
+        assert_eq!(u3.contacts, vec!["VBUS", "D-", "D+", "GND"]);
+        assert!(u3.is_port());
+        let one = def.pins.iter().find(|p| p.number == "1").unwrap();
+        assert!(one.contacts.is_empty() && !one.is_port());
+        let spec = parse_block_spec(&attrs(&[("block_pins", r#"{"left":[{"no":"1","contacts":["A","B"]}]}"#)])).unwrap();
+        assert!(spec.has_contacts());
+        assert!(!parse_block_spec(&attrs(&[("block_pins", r#"{"left":[{"no":"1"}]}"#)])).unwrap().has_contacts());
+    }
+
+    /// Contacts that are empty, repeated on one pin, alone (one conductor is a plain pin) or more than 32 are refused with the pin number in the message.
+    /// 空の接点・1本のピンで重なる接点・1つだけの接点 (導体1本は普通のピン)・32を超える接点は、ピン番号入りの文で断る。
+    #[test]
+    fn bad_contacts_are_refused() {
+        let err = |json: &str| block_symbol(&attrs(&[("block_pins", json)])).expect_err("断る");
+        assert!(err(r#"{"left":[{"no":"P1","contacts":["A"," "]}]}"#).contains("P1"));
+        assert!(err(r#"{"left":[{"no":"P1","contacts":["A","A"]}]}"#).contains("duplicate contact A"));
+        assert!(err(r#"{"left":[{"no":"P1","contacts":["A"]}]}"#).contains("at least two contacts"));
+        let many: Vec<String> = (0..=BLOCK_CONTACT_MAX).map(|i| format!("C{i}")).collect();
+        let json = format!(r#"{{"left":[{{"no":"P1","contacts":{}}}]}}"#, serde_json::to_string(&many).unwrap());
+        assert!(err(&json).contains("too many contacts"));
+        // 別のピンと同じ接点名は使ってよい (USB ポートはどれも VBUS を持つ)
+        block_symbol(&attrs(&[("block_pins", r#"{"left":[{"no":"1","contacts":["A","B"]},{"no":"2","contacts":["A","B"]}]}"#)]))
+            .expect("別のピンなら同じ名前でよい");
     }
 }
