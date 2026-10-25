@@ -188,7 +188,7 @@ pub struct BlockPin {
 
 - `FORMAT_VERSION` は18。`model.rs` の版の履歴に v18 の行を足す。古いファイルはそのまま開く。ポートのピンが無いファイルは、版番号を除いて今までと1バイトも違わずに書かれる。
 - **ファイルの上の種類 `port_block`。** `symbol_id == "block"` で、`block_pins` のどれかのピンが接点を持つシンボルは、`"kind": "port_block"` (中身は同じ `SymbolInstance`) で書く。`v0.4.0` 以前はそのファイルを読み込めず (知らない種類のエンティティ)、ブロックをネットリストから黙って落とすことが無い。形式17のビルドは、形式18のファイルを版番号で既に断る。
-- **ファイルの中だけで変え、`EntityRepr` は変えない。** `EntityRepr` は IPC・MCP・Link API の形でもあり、フロントエンドのあちこちと FreeCAD アドオン (`linking.py`) が `kind == "symbol"` を見ている。フロントエンドに覚えさせた新しい種類 `run_cable` と違い、ポートのブロックはそこでは `symbol` のままにする。そこで種類の書き換えは `io.rs` で行う: `save_project` は `serde_json::Value` にしてから、`sheets[].entities` の当てはまる項目の `kind` を書き換え、整形して書く。`load_project` は (`check_format_version` の後で) `Value` として読み、`port_block` を `symbol` に戻してから型へ読む。接点の無い `port_block` (手で直したファイル) は普通のシンボルとして開き、`symbol` で書き戻す。区間の無い `run_cable` と同じ。
+- **ファイルの中だけで変え、IPC・MCP では変えない。** `EntityRepr` は IPC・MCP・Link API の形でもあり、フロントエンドのあちこちと FreeCAD アドオン (`linking.py`) が `kind == "symbol"` を見ている。フロントエンドに覚えさせた新しい種類 `run_cable` と違い、ポートのブロックはそこでは `symbol` のままにする。serde_json は `preserve_order` 無しで作られているので、`serde_json::Value` の上で `kind` を書き換えると、保存するファイルすべてでキーの並びが変わる。そこで `EntityRepr` に `PortBlock(SymbolInstance)` を足し (JSON スキーマには出さない)、`From<Entity> for EntityRepr` はスレッドごとの印が立っている間だけそれを選ぶ。印を立てるのは `io::save_project` だけ (`FileWriteGuard`)。読むときはどこでも `port_block` を受け取り、`Entity::Symbol` にする。接点の無い `port_block` (手で直したファイル) は普通のシンボルとして開き、`symbol` で書き戻す。区間の無い `run_cable` と同じ。
 - ファイルへの書き込みは全部 `io::save_project` を通る (Tauri の `save_project`、MCP と Link API は `agent.rs` 経由)。マクロのファイル (`macros.rs` の `write_macro_to`) は書き換えない。古いビルドは、知らない `contacts` キーで `Engine` の検証が失敗するので、そのマクロの挿入を断る。黙ってではなく、目に見えて失敗する。
 - `CoreEnd::Pin.contact` には種類の工夫は要らない。区間ケーブルは既に `v0.4.0` の知らない `run_cable` で、形式18は形式17のビルドを止める。
 
@@ -243,6 +243,7 @@ PR はどれも `master` 向け。依存する PR は積み重ねず、「先に
 | 2026-10-25 | ファイル形式18。ポートのブロックはファイルの中だけ `port_block`、IPC・MCP では `symbol` | 利用者は古いビルドにそのファイルを開かせない方を選んだ。古いビルドでは (deny_unknown_fields のため) 接点が捨てられるのではなくブロックが消える。ファイルの中だけの種類にすれば、フロントエンドと FreeCAD アドオンにたくさんある `kind == "symbol"` の判定に手を入れずに済む |
 | 2026-10-25 | 接点は1本のピンに2つ以上32まで、ピンの中で重ならない | 導体1本なら普通のピン。上限でエディタとネットを扱える大きさに保つ |
 | 2026-10-25 | SPICE は変えない | ノードはネットではなく座標の一致で作る。ポートは今も模擬していない |
+| 2026-10-25 | `port_block` は `serde_json::Value` の書き換えではなく、`EntityRepr` の「ファイルへ書いている」印 (スレッドごと) で作る | 計画のレビュー: serde_json に `preserve_order` が無いので、`Value` を経由すると保存するファイルすべてのキーの並びが変わり、「ポートの無いファイルは変わらない」が守れない |
 | 2026-10-25 | 今回は設計書の下書きだけで、製品のコードはまだ書かない | 利用者は先に調査と設計を求めた |
 | 2026-10-25 | 設計書が出した案を利用者が承認: 点付きラベル `L.c` で接点1つを取り出す、接点は1本のピンに2〜32、ポートへの `connect_cable` で芯の名前が一部だけ一致するときは断る、普通のピンはピンの名前だけで接点に入る | 設計書のレビューへの回答 |
 | 2026-10-25 | 利用者の決定: かみ合わせの導通 (プラグのピン n とソケットのピン n) は別の変更にし、今回は入れない | かみ合わせのある既存の図面すべてのネットが変わるため |
