@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2848仕様項目**。
+全6領域・**2853仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -258,7 +258,10 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは16 (盤レイアウトに銘板と関連付き寸法線を追加した版) である。 <sub>`the_current_format_version_is_sixteen`</sub>
+- 現行のファイル形式バージョンは17 (1本線の区間を持つケーブルを追加し、種類「run_cable」で保存する版) である。 <sub>`the_current_format_version_is_seventeen`</sub>
+- 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
+- 区間が空の「run_cable」(ファイルを手で直したときなど) は普通の定義線ケーブルとして開き、書き戻すと種類「cable」になる。 <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
+- 新しいMadakeCADで保存されたファイル (形式の版が大きい) は、一部が欠けたまま開くのではなく、両方の版を示す理由付きで断られる。 <sub>`a_file_from_a_newer_app_is_refused`</sub>
 - 定義線・芯線割当・シールド・長さを持つケーブルは、保存して読み直しても変わらない。 <sub>`a_cable_round_trips_through_a_saved_file`</sub>
 - PLC図面の生成設定を保存できなかった頃 (format_version 13) のファイルは、保存なしの状態で開く。 <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - 整えバリアントが無かった頃のプロジェクトファイルは、全シートが印のない普通のシートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
@@ -366,6 +369,8 @@
 - 4種類の図形はいずれも snake_case でJSONを往復する。 <sub>`the_shape_kinds_are_serialized_in_snake_case`</sub>
 - 見た目の欄を省いて送られた図形は、既定色・細線・塗りなし・実線という素の形で開く。 <sub>`a_shape_without_look_fields_opens_plain`</sub>
 - Entity::id()は種別によらず内側エンティティのUUIDを返す。 <sub>`entity_id_is_uniform_across_kinds`</sub>
+- 区間ケーブルは芯が着く配線と部品をシート内参照として挙げ、写し替え (シート複製) で芯の端がすべて複製先を指す。複製先の無い端は落とす。 <sub>`a_run_cable_remaps_its_core_ends`</sub>
+- 区間ケーブルを動かすと、1本線の区間の全頂点が動く。 <sub>`translating_a_run_cable_moves_its_run`</sub>
 
 ### net_tag
 

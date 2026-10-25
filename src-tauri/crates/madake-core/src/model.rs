@@ -49,7 +49,11 @@ pub type SheetId = Uuid;
 ///   旧ファイルはそのまま開ける (逆にケーブルを含むファイルは旧アプリでは開けない)
 /// - v16: 盤レイアウトの銘板 ([`Entity::Nameplate`]) と関連付き寸法線 ([`Entity::Dimension`])。
 ///   どちらも無い旧ファイルはそのまま開ける
-pub const FORMAT_VERSION: u32 = 16;
+/// - v17: 1本線の区間を持つケーブル ([`Cable::run`]) と芯ごとの行き先 ([`CableCore::end_a`] /
+///   [`CableCore::end_b`])。区間のあるケーブルは種類`run_cable`で書く ([`EntityRepr`]) ので、
+///   この版より前のアプリはそのファイルを開けない (区間を黙って捨てない)。区間の無いファイルは
+///   版番号以外これまでと同じに書かれる
+pub const FORMAT_VERSION: u32 = 17;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -373,7 +377,7 @@ pub struct Revision {
 
 /// シート上に置ける図形要素。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(from = "EntityRepr", into = "EntityRepr")]
 pub enum Entity {
     Symbol(SymbolInstance),
     Wire(Wire),
@@ -455,8 +459,17 @@ impl Entity {
     pub fn refs(&self) -> Vec<EntityId> {
         match self {
             Entity::Text(e) => e.leader_to.into_iter().collect(),
-            // ケーブルの芯線が割り当てられた配線
-            Entity::Cable(e) => e.cores.iter().filter_map(|c| c.wire).collect(),
+            // ケーブルの芯が割り当てられた配線と、区間ケーブルの芯の行き先 (部品・分岐の配線)
+            Entity::Cable(e) => e
+                .cores
+                .iter()
+                .flat_map(|c| {
+                    c.wire
+                        .into_iter()
+                        .chain(c.end_a.as_ref().map(CoreEnd::target))
+                        .chain(c.end_b.as_ref().map(CoreEnd::target))
+                })
+                .collect(),
             // 銘板が結び付くフットプリント・寸法線が測る部品
             Entity::Nameplate(e) => e.footprint.into_iter().collect(),
             Entity::Dimension(e) => [&e.a, &e.b].into_iter().filter_map(DimAnchor::entity).collect(),
@@ -482,6 +495,8 @@ impl Entity {
                     if let Some(w) = core.wire {
                         core.wire = map.get(&w).copied();
                     }
+                    core.end_a = core.end_a.as_ref().and_then(|end| end.remapped(map));
+                    core.end_b = core.end_b.as_ref().and_then(|end| end.remapped(map));
                 }
             }
             Entity::Nameplate(e) => {
@@ -545,7 +560,7 @@ impl Entity {
             Entity::PanelLegend(e) => e.at = e.at.translated(dx, dy),
             Entity::WireLegend(e) => e.at = e.at.translated(dx, dy),
             Entity::Cable(e) => {
-                for p in &mut e.points {
+                for p in e.points.iter_mut().chain(e.run.iter_mut()) {
                     *p = p.translated(dx, dy);
                 }
             }
@@ -562,6 +577,83 @@ impl Entity {
                     DimAxis::Vertical => dx,
                 };
             }
+        }
+    }
+}
+
+/// 保存・送受信するときのエンティティの形 (JSONの`kind`タグ)。
+///
+/// メモリ上は区間のあるケーブルも無いケーブルも同じ [`Entity::Cable`] だが、JSONでは区間
+/// ([`Cable::run`]) のあるケーブルだけを種類`run_cable`で書く。v16以前のアプリは知らない種類の
+/// エンティティを含むファイルを開けないので、区間を黙って捨てて保存し直すことが起こらない
+/// (serdeは既存の構造体の知らないフィールドを無視するため、フィールドを足すだけでは守れない)。
+/// 読むときはどちらの種類も [`Entity::Cable`] になる。ファイル・Tauri IPC・MCPの全てがこの形。
+#[derive(Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum EntityRepr {
+    Symbol(SymbolInstance),
+    Wire(Wire),
+    Junction(Junction),
+    NetLabel(NetLabel),
+    Text(TextEntity),
+    Harness(Harness),
+    Shape(Shape),
+    PanelOutline(PanelOutline),
+    DinRail(DinRail),
+    Duct(Duct),
+    Footprint(Footprint),
+    PanelLegend(PanelLegend),
+    WireLegend(WireLegend),
+    Cable(Cable),
+    /// 区間のあるケーブル (v17)。
+    RunCable(Cable),
+    Nameplate(Nameplate),
+    Dimension(Dimension),
+}
+
+impl From<EntityRepr> for Entity {
+    fn from(r: EntityRepr) -> Self {
+        match r {
+            EntityRepr::Symbol(e) => Entity::Symbol(e),
+            EntityRepr::Wire(e) => Entity::Wire(e),
+            EntityRepr::Junction(e) => Entity::Junction(e),
+            EntityRepr::NetLabel(e) => Entity::NetLabel(e),
+            EntityRepr::Text(e) => Entity::Text(e),
+            EntityRepr::Harness(e) => Entity::Harness(e),
+            EntityRepr::Shape(e) => Entity::Shape(e),
+            EntityRepr::PanelOutline(e) => Entity::PanelOutline(e),
+            EntityRepr::DinRail(e) => Entity::DinRail(e),
+            EntityRepr::Duct(e) => Entity::Duct(e),
+            EntityRepr::Footprint(e) => Entity::Footprint(e),
+            EntityRepr::PanelLegend(e) => Entity::PanelLegend(e),
+            EntityRepr::WireLegend(e) => Entity::WireLegend(e),
+            EntityRepr::Cable(e) | EntityRepr::RunCable(e) => Entity::Cable(e),
+            EntityRepr::Nameplate(e) => Entity::Nameplate(e),
+            EntityRepr::Dimension(e) => Entity::Dimension(e),
+        }
+    }
+}
+
+impl From<Entity> for EntityRepr {
+    fn from(e: Entity) -> Self {
+        match e {
+            Entity::Symbol(e) => EntityRepr::Symbol(e),
+            Entity::Wire(e) => EntityRepr::Wire(e),
+            Entity::Junction(e) => EntityRepr::Junction(e),
+            Entity::NetLabel(e) => EntityRepr::NetLabel(e),
+            Entity::Text(e) => EntityRepr::Text(e),
+            Entity::Harness(e) => EntityRepr::Harness(e),
+            Entity::Shape(e) => EntityRepr::Shape(e),
+            Entity::PanelOutline(e) => EntityRepr::PanelOutline(e),
+            Entity::DinRail(e) => EntityRepr::DinRail(e),
+            Entity::Duct(e) => EntityRepr::Duct(e),
+            Entity::Footprint(e) => EntityRepr::Footprint(e),
+            Entity::PanelLegend(e) => EntityRepr::PanelLegend(e),
+            Entity::WireLegend(e) => EntityRepr::WireLegend(e),
+            Entity::Cable(c) if c.is_run() => EntityRepr::RunCable(c),
+            Entity::Cable(c) => EntityRepr::Cable(c),
+            Entity::Nameplate(e) => EntityRepr::Nameplate(e),
+            Entity::Dimension(e) => EntityRepr::Dimension(e),
         }
     }
 }
@@ -683,19 +775,111 @@ pub struct Cable {
     /// 長さ m (未設定はNone)。
     #[serde(default)]
     pub length_m: Option<f64>,
+    /// 1本線の区間 (用紙座標mm。配線と同じ直交の折れ線)。空 = 定義線ケーブル (v15の形)。
+    /// 区間があると、芯ごとの行き先 ([`CableCore::end_a`] / [`CableCore::end_b`]) でネットが繋がり、
+    /// 区間の線そのものには位置では何も繋がらない ([`crate::netlist::extract_netlist`])。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub run: Vec<Point>,
+}
+
+/// 区間の端。A = [`Cable::run`]の最初の点、B = 最後の点。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunEnd {
+    A,
+    B,
+}
+
+impl RunEnd {
+    /// 両端 (A, B の順)。
+    pub const BOTH: [RunEnd; 2] = [RunEnd::A, RunEnd::B];
+
+    /// 文字 ("a" / "b")。エラーや診断の文に使う。
+    pub fn letter(self) -> &'static str {
+        match self {
+            RunEnd::A => "a",
+            RunEnd::B => "b",
+        }
+    }
+}
+
+impl Cable {
+    /// 1本線の区間を持つか (区間ケーブル)。
+    pub fn is_run(&self) -> bool {
+        !self.run.is_empty()
+    }
+
+    /// 区間の端の点。区間が無ければNone。
+    pub fn run_end(&self, end: RunEnd) -> Option<Point> {
+        match end {
+            RunEnd::A => self.run.first().copied(),
+            RunEnd::B => self.run.last().copied(),
+        }
+    }
 }
 
 /// ケーブルの芯線1本の割当。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CableCore {
-    /// 芯の呼び (例 "1")。
+    /// 芯の呼び (例 "1"、"VBUS")。
     pub core: String,
     /// 芯の色 (割り当てた配線の線色)。
     #[serde(default)]
     pub color: String,
-    /// 割り当てた配線。配線が消えていればNone (帳票では予備芯と同じ扱い)。
+    /// 割り当てた配線 (定義線ケーブル)。配線が消えていればNone (帳票では予備芯と同じ扱い)。
     #[serde(default)]
     pub wire: Option<EntityId>,
+    /// 区間の始点 (A) 側でこの芯がどこへ出るか (区間ケーブル、v17)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_a: Option<CoreEnd>,
+    /// 区間の終点 (B) 側でこの芯がどこへ出るか (区間ケーブル、v17)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_b: Option<CoreEnd>,
+}
+
+impl CableCore {
+    /// 区間の端`end`での行き先。
+    pub fn end(&self, end: RunEnd) -> Option<&CoreEnd> {
+        match end {
+            RunEnd::A => self.end_a.as_ref(),
+            RunEnd::B => self.end_b.as_ref(),
+        }
+    }
+}
+
+/// 区間ケーブルの芯が区間の端からどこへ出るか (v17)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CoreEnd {
+    /// 区間が部品に着き、この芯はそのピンになる。`index`は同じ番号の接続点が複数あるとき何番目か
+    /// (1始まり。"TB1.1#2"の2)。省略 = 最初の接続点。
+    Pin {
+        part: EntityId,
+        pin: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
+    },
+    /// 分岐: 芯はこの配線として続く (外被を剥いて出した芯そのもの)。配線の端点のうち区間の端に
+    /// 近い方が分岐側の端 ([`crate::cable::breakout_point`])。
+    Wire { wire: EntityId },
+}
+
+impl CoreEnd {
+    /// 指している部品か配線のid。
+    pub fn target(&self) -> EntityId {
+        match self {
+            CoreEnd::Pin { part, .. } => *part,
+            CoreEnd::Wire { wire } => *wire,
+        }
+    }
+
+    /// 対応表で写し替える。対応の無い参照はNone (シート複製で相手が複製されていないとき)。
+    pub fn remapped(&self, map: &BTreeMap<EntityId, EntityId>) -> Option<CoreEnd> {
+        let to = *map.get(&self.target())?;
+        Some(match self {
+            CoreEnd::Pin { pin, index, .. } => CoreEnd::Pin { part: to, pin: pin.clone(), index: *index },
+            CoreEnd::Wire { .. } => CoreEnd::Wire { wire: to },
+        })
+    }
 }
 
 /// ケーブルのシールド。
@@ -1372,5 +1556,41 @@ mod tests {
         let id = uuid::Uuid::new_v4();
         let j = Entity::Junction(Junction { id, at: Point::new(0.0, 0.0) });
         assert_eq!(j.id(), id);
+    }
+
+    /// A run cable lists the wires and parts its cores land on as in-sheet references, and remapping (sheet duplication) points every core end at the copies; ends with no copy are dropped.
+    /// 区間ケーブルは芯が着く配線と部品をシート内参照として挙げ、写し替え (シート複製) で芯の端がすべて複製先を指す。複製先の無い端は落とす。
+    #[test]
+    fn a_run_cable_remaps_its_core_ends() {
+        let lte = crate::cable::test_support::lte_sheet();
+        let mut e = lte.sheet.entities[&lte.cable].clone();
+        let refs = e.refs();
+        assert!(refs.contains(&lte.usb), "{refs:?}");
+        assert!(lte.wires.iter().all(|w| refs.contains(w)), "{refs:?}");
+        let new_usb = uuid::Uuid::new_v4();
+        let map: BTreeMap<EntityId, EntityId> = lte
+            .wires
+            .iter()
+            .map(|w| (*w, uuid::Uuid::new_v4()))
+            .chain([(lte.usb, new_usb)])
+            .collect();
+        e.remap_refs(&map);
+        let Entity::Cable(c) = &e else { panic!("ケーブル") };
+        assert_eq!(c.cores[0].end_a, Some(CoreEnd::Wire { wire: map[&lte.wires[0]] }));
+        assert_eq!(c.cores[0].end_b, Some(CoreEnd::Pin { part: new_usb, pin: "1".into(), index: None }));
+        e.remap_refs(&BTreeMap::new());
+        let Entity::Cable(c) = &e else { panic!("ケーブル") };
+        assert!(c.cores.iter().all(|k| k.end_a.is_none() && k.end_b.is_none()));
+    }
+
+    /// Moving a run cable moves every point of its single-line run.
+    /// 区間ケーブルを動かすと、1本線の区間の全頂点が動く。
+    #[test]
+    fn translating_a_run_cable_moves_its_run() {
+        let lte = crate::cable::test_support::lte_sheet();
+        let mut e = lte.sheet.entities[&lte.cable].clone();
+        e.translate(5.0, 2.5);
+        let Entity::Cable(c) = &e else { panic!("ケーブル") };
+        assert_eq!(c.run, vec![Point::new(85.0, 102.5), Point::new(197.5, 102.5)]);
     }
 }

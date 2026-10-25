@@ -802,6 +802,7 @@ impl Engine {
                         core: (i + 1).to_string(),
                         color,
                         wire: Some(wire),
+                        ..Default::default()
                     })
                     .collect();
                 if cable.core_count == 0 {

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2848 specification clauses** across 6 areas.
+**2853 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -258,7 +258,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 16, the version that added nameplates and associative dimensions to panel sheets. <sub>`the_current_format_version_is_sixteen`</sub>
+- The current file format version is 17, the version that added single-line cable runs (saved as "run_cable"). <sub>`the_current_format_version_is_seventeen`</sub>
+- A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable". <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
+- A "run_cable" entry whose run is empty (for example after hand-editing the file) opens as a plain definition-line cable and is written back with the kind "cable". <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
+- A file saved by a newer MadakeCAD (a higher format version) is refused with a message naming both versions, instead of being opened with parts missing. <sub>`a_file_from_a_newer_app_is_refused`</sub>
 - A cable with its definition line, core assignments, shield and length survives a save and reload unchanged. <sub>`a_cable_round_trips_through_a_saved_file`</sub>
 - A version-13 file, written before PLC drawing settings could be saved, opens with no saved settings. <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - A project file saved before tidy variants existed opens with every sheet an ordinary sheet (no variant mark), and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
@@ -366,6 +369,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The four kinds of shape all travel in snake_case. <sub>`the_shape_kinds_are_serialized_in_snake_case`</sub>
 - A shape sent without the optional look fields opens plain: default colour, hairline stroke, no fill, solid line. <sub>`a_shape_without_look_fields_opens_plain`</sub>
 - Entity::id() returns the inner entity's UUID regardless of the entity kind. <sub>`entity_id_is_uniform_across_kinds`</sub>
+- A run cable lists the wires and parts its cores land on as in-sheet references, and remapping (sheet duplication) points every core end at the copies; ends with no copy are dropped. <sub>`a_run_cable_remaps_its_core_ends`</sub>
+- Moving a run cable moves every point of its single-line run. <sub>`translating_a_run_cable_moves_its_run`</sub>
 
 ### net_tag
 

@@ -226,6 +226,158 @@ pub fn check_cables(sheet: &Sheet) -> Vec<Diagnostic> {
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    //! 区間ケーブルのテスト用の図面 (model・io・command・netlist・verify・reports・svg・cable_run のテストが共有する)。
+    use crate::command::Engine;
+    use crate::geometry::Point;
+    use crate::model::*;
+    use uuid::Uuid;
+
+    /// `connector_{n}p` のインスタンス。`mirror`ならピンが左向き (x - 7.5) になる。
+    pub(crate) fn connector(n: usize, reference: &str, x: f64, y: f64, mirror: bool) -> SymbolInstance {
+        SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: format!("connector_{n}p"),
+            at: Point::new(x, y),
+            rotation: 0,
+            mirror,
+            reference: reference.into(),
+            value: String::new(),
+            attrs: Default::default(),
+        }
+    }
+
+    /// 黒 0.3sq の配線。
+    pub(crate) fn wire(points: &[(f64, f64)]) -> Wire {
+        Wire {
+            id: Uuid::new_v4(),
+            points: points.iter().map(|&(x, y)| Point::new(x, y)).collect(),
+            color: "black".into(),
+            sq: 0.3,
+            length_m: None,
+            length_source: Default::default(),
+            part_no: None,
+            net: None,
+        }
+    }
+
+    /// エンティティをシートへ入れてidを返す。
+    pub(crate) fn insert(sheet: &mut Sheet, e: Entity) -> EntityId {
+        let id = e.id();
+        sheet.entities.insert(id, e);
+        id
+    }
+
+    /// LTEハーネス45の芯 (呼び名, 線色)。
+    pub(crate) const LTE_CORES: [(&str, &str); 4] =
+        [("VBUS", "red"), ("D-", "white"), ("D+", "green"), ("GND", "black")];
+
+    /// LTEハーネス45の図面とid。
+    pub(crate) struct Lte {
+        pub sheet: Sheet,
+        pub cable: EntityId,
+        pub j45: EntityId,
+        pub usb: EntityId,
+        pub wires: Vec<EntityId>,
+    }
+
+    /// 基板 J45 (connector_4p、(50,100)、ピンは x=57.5 の y=92.5/97.5/102.5/107.5 で右向き) から
+    /// 芯ごとの配線4本が x=77.5 まで出て、区間 (80,100)→(192.5,100) が USB1 (connector_4p を
+    /// 反転して (200,100)、ピンは x=192.5 で左向き) に着く。芯は VBUS / D- / D+ / GND をピン順に。
+    pub(crate) fn lte_sheet() -> Lte {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+        let j45 = insert(&mut sheet, Entity::Symbol(connector(4, "J45", 50.0, 100.0, false)));
+        let usb = insert(&mut sheet, Entity::Symbol(connector(4, "USB1", 200.0, 100.0, true)));
+        let mut wires = Vec::new();
+        let mut cores = Vec::new();
+        for (i, (name, color)) in LTE_CORES.into_iter().enumerate() {
+            let y = 92.5 + 5.0 * i as f64;
+            let mut w = wire(&[(57.5, y), (77.5, y)]);
+            w.color = color.into();
+            let id = insert(&mut sheet, Entity::Wire(w));
+            wires.push(id);
+            cores.push(CableCore {
+                core: name.into(),
+                color: color.into(),
+                wire: None,
+                end_a: Some(CoreEnd::Wire { wire: id }),
+                end_b: Some(CoreEnd::Pin { part: usb, pin: (i + 1).to_string(), index: None }),
+            });
+        }
+        let cable = Cable {
+            id: Uuid::new_v4(),
+            reference: "W45".into(),
+            part_no: String::new(),
+            core_count: 4,
+            sq: 0.2,
+            points: Vec::new(),
+            cores,
+            shield: None,
+            length_m: Some(0.3),
+            run: vec![Point::new(80.0, 100.0), Point::new(192.5, 100.0)],
+        };
+        let cable = insert(&mut sheet, Entity::Cable(cable));
+        Lte { sheet, cable, j45, usb, wires }
+    }
+
+    /// 3.5mm AUXケーブル: J1 (connector_3p、(50,50)、ピン x=57.5 の y=45/50/55) と J2 (反転、(150,50)、
+    /// ピン x=142.5) を全長1本線の区間 (57.5,50)→(142.5,50) で結ぶ。芯 L / R / GND はどちらの端もピン。
+    /// 戻り値は (シート, ケーブルid)。
+    pub(crate) fn aux_sheet() -> (Sheet, EntityId) {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+        let j1 = insert(&mut sheet, Entity::Symbol(connector(3, "J1", 50.0, 50.0, false)));
+        let j2 = insert(&mut sheet, Entity::Symbol(connector(3, "J2", 150.0, 50.0, true)));
+        let cores = ["L", "R", "GND"]
+            .into_iter()
+            .enumerate()
+            .map(|(i, name)| CableCore {
+                core: name.into(),
+                end_a: Some(CoreEnd::Pin { part: j1, pin: (i + 1).to_string(), index: None }),
+                end_b: Some(CoreEnd::Pin { part: j2, pin: (i + 1).to_string(), index: None }),
+                ..Default::default()
+            })
+            .collect();
+        let cable = Cable {
+            id: Uuid::new_v4(),
+            reference: "W58".into(),
+            part_no: String::new(),
+            core_count: 3,
+            sq: 0.0,
+            points: Vec::new(),
+            cores,
+            shield: None,
+            length_m: None,
+            run: vec![Point::new(57.5, 50.0), Point::new(142.5, 50.0)],
+        };
+        let id = insert(&mut sheet, Entity::Cable(cable));
+        (sheet, id)
+    }
+
+    /// シート上のケーブル。
+    pub(crate) fn cable_of(sheet: &Sheet, id: EntityId) -> &Cable {
+        match &sheet.entities[&id] {
+            Entity::Cable(c) => c,
+            other => panic!("ケーブルではない: {other:?}"),
+        }
+    }
+
+    /// シートを1枚だけ持つプロジェクト (シートのidはプロジェクトの先頭シートのものにそろえる)。
+    pub(crate) fn project_with(mut sheet: Sheet) -> Project {
+        let mut project = Project::new("t");
+        sheet.id = project.sheets[0].id;
+        project.sheets[0] = sheet;
+        project
+    }
+
+    /// シートを1枚だけ持つエンジンと、そのシートid。
+    pub(crate) fn engine_with(sheet: Sheet) -> (Engine, SheetId) {
+        let project = project_with(sheet);
+        let id = project.sheets[0].id;
+        (Engine::new(project), id)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::command::{Command, Engine};
@@ -281,6 +433,7 @@ mod tests {
             cores: Vec::new(),
             shield: None,
             length_m: Some(12.5),
+            run: Vec::new(),
         }
     }
 
@@ -429,7 +582,7 @@ mod tests {
         one_point.points.pop();
         let zero = cable(0, (0.0, 0.0), (1.0, 1.0));
         let mut stray = cable(2, (0.0, 0.0), (1.0, 1.0));
-        stray.cores = vec![crate::model::CableCore { core: "1".into(), color: String::new(), wire: Some(Uuid::new_v4()) }];
+        stray.cores = vec![crate::model::CableCore { core: "1".into(), color: String::new(), wire: Some(Uuid::new_v4()), ..Default::default() }];
         for c in [one_point, zero, stray] {
             assert!(engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(c) }).is_err());
         }

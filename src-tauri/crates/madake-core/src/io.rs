@@ -40,12 +40,33 @@ pub fn save_project(path: &Path, project: &Project) -> Result<()> {
     Ok(())
 }
 
-/// プロジェクトを読み込む。古い形式のファイルは現行形式へ移行してから返す ([`migrate`])。
+/// プロジェクトを読み込む。アプリより新しい形式のファイルは断り ([`check_format_version`])、
+/// 古い形式のファイルは現行形式へ移行してから返す ([`migrate`])。
 pub fn load_project(path: &Path) -> Result<Project> {
     let json = std::fs::read_to_string(path)?;
+    check_format_version(&json)?;
     let mut project: Project = serde_json::from_str(&json)?;
     migrate(&mut project);
     Ok(project)
+}
+
+/// ファイルの`format_version`がこのアプリの読める版 ([`crate::model::FORMAT_VERSION`]) より新しければ
+/// 断る。中身全体を読む前に版番号だけを見るので、新しい版で増えたエンティティの種類 (例: v17の
+/// `run_cable`) に当たって分かりにくいJSONのエラーになる前に、理由を伝えられる。
+fn check_format_version(json: &str) -> Result<()> {
+    #[derive(serde::Deserialize)]
+    struct Head {
+        #[serde(default)]
+        format_version: u32,
+    }
+    let head: Head = serde_json::from_str(json)?;
+    if head.format_version > crate::model::FORMAT_VERSION {
+        return Err(crate::CoreError::NewerFormat {
+            found: head.format_version,
+            supported: crate::model::FORMAT_VERSION,
+        });
+    }
+    Ok(())
 }
 
 /// 旧形式のプロジェクトを現行形式へ移行する。
@@ -359,15 +380,76 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 16, the version that added nameplates and associative dimensions to panel sheets.
-    /// 現行のファイル形式バージョンは16 (盤レイアウトに銘板と関連付き寸法線を追加した版) である。
+    /// The current file format version is 17, the version that added single-line cable runs (saved as "run_cable").
+    /// 現行のファイル形式バージョンは17 (1本線の区間を持つケーブルを追加し、種類「run_cable」で保存する版) である。
     #[test]
-    fn the_current_format_version_is_sixteen() {
-        assert_eq!(FORMAT_VERSION, 16);
+    fn the_current_format_version_is_seventeen() {
+        assert_eq!(FORMAT_VERSION, 17);
         let mut old = Project::new("x");
-        old.format_version = 15;
+        old.format_version = 16;
         migrate(&mut old);
-        assert_eq!(old.format_version, 16);
+        assert_eq!(old.format_version, 17);
+    }
+
+    /// A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable".
+    /// 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。
+    #[test]
+    fn a_run_cable_is_saved_as_run_cable_and_round_trips() {
+        let lte = crate::cable::test_support::lte_sheet();
+        let project = crate::cable::test_support::project_with(lte.sheet);
+        let dir = std::env::temp_dir().join(format!("madake-io-run-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("r.mdkproj");
+        save_project(&path, &project).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"kind\": \"run_cable\""), "{text}");
+        assert!(!text.contains("\"kind\": \"cable\""), "区間のあるケーブルは cable では書かない");
+        let loaded = load_project(&path).unwrap();
+        let c = crate::cable::test_support::cable_of(&loaded.sheets[0], lte.cable);
+        assert_eq!(c.run, vec![Point::new(80.0, 100.0), Point::new(192.5, 100.0)]);
+        assert_eq!(c.cores[1].core, "D-");
+        assert_eq!(c.cores[1].end_a, Some(CoreEnd::Wire { wire: lte.wires[1] }));
+        assert_eq!(
+            c.cores[1].end_b,
+            Some(CoreEnd::Pin { part: lte.usb, pin: "2".into(), index: None })
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A "run_cable" entry whose run is empty (for example after hand-editing the file) opens as a plain definition-line cable and is written back with the kind "cable".
+    /// 区間が空の「run_cable」(ファイルを手で直したときなど) は普通の定義線ケーブルとして開き、書き戻すと種類「cable」になる。
+    #[test]
+    fn a_run_cable_without_a_run_opens_as_a_plain_cable() {
+        let id = Uuid::new_v4();
+        let json = format!(
+            r#"{{"kind":"run_cable","id":"{id}","reference":"W1","core_count":2,"points":[{{"x":0.0,"y":0.0}},{{"x":10.0,"y":10.0}}]}}"#
+        );
+        let e: Entity = serde_json::from_str(&json).unwrap();
+        let Entity::Cable(c) = &e else { panic!("ケーブル") };
+        assert!(!c.is_run());
+        assert_eq!(serde_json::to_value(&e).unwrap()["kind"], "cable");
+    }
+
+    /// A file saved by a newer MadakeCAD (a higher format version) is refused with a message naming both versions, instead of being opened with parts missing.
+    /// 新しいMadakeCADで保存されたファイル (形式の版が大きい) は、一部が欠けたまま開くのではなく、両方の版を示す理由付きで断られる。
+    #[test]
+    fn a_file_from_a_newer_app_is_refused() {
+        let dir = std::env::temp_dir().join(format!("madake-io-newer-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("newer.mdkproj");
+        std::fs::write(
+            &path,
+            format!(r#"{{"format_version":{},"name":"未来","sheets":[]}}"#, FORMAT_VERSION + 1),
+        )
+        .unwrap();
+        let err = load_project(&path).unwrap_err();
+        assert!(
+            matches!(err, crate::CoreError::NewerFormat { found, supported }
+                if found == FORMAT_VERSION + 1 && supported == FORMAT_VERSION),
+            "{err}"
+        );
+        assert!(err.to_string().contains("update MadakeCAD"), "{err}");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// A cable with its definition line, core assignments, shield and length survives a save and reload unchanged.
@@ -383,9 +465,10 @@ mod tests {
             core_count: 4,
             sq: 1.25,
             points: vec![Point::new(10.0, 10.0), Point::new(20.0, 40.0)],
-            cores: vec![crate::model::CableCore { core: "1".into(), color: "black".into(), wire: Some(wire) }],
+            cores: vec![crate::model::CableCore { core: "1".into(), color: "black".into(), wire: Some(wire), ..Default::default() }],
             shield: Some(crate::model::CableShield { grounded: true }),
             length_m: Some(12.5),
+            run: Vec::new(),
         });
         let id = cable.id();
         project.sheets[0].entities.insert(id, cable);

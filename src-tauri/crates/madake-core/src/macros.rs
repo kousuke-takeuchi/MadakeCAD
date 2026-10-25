@@ -616,7 +616,7 @@ pub fn base_point(entities: &[&Entity]) -> Point {
             Entity::NetLabel(l) => pts.push(l.at),
             Entity::Text(t) => pts.push(t.at),
             Entity::WireLegend(l) => pts.push(l.at),
-            Entity::Cable(c) => pts.extend(c.points.iter().copied()),
+            Entity::Cable(c) => pts.extend(c.points.iter().chain(&c.run).copied()),
             // 盤レイアウトの要素はマクロ(回路の部分図)には入らない
             Entity::PanelOutline(_)
             | Entity::DinRail(_)
@@ -873,7 +873,7 @@ fn place_entity(entity: &mut Entity, rotation: u16, at: Point) {
         }
         Entity::WireLegend(l) => l.at = map(l.at),
         Entity::Cable(c) => {
-            for p in &mut c.points {
+            for p in c.points.iter_mut().chain(c.run.iter_mut()) {
                 *p = map(*p);
             }
         }
