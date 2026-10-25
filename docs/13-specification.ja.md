@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2945仕様項目**。
+全6領域・**2950仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1364,6 +1364,10 @@
 - 基板側にlabelsを指定した connect_cable は、芯ごとにラベル付きの配線を1回の編集で描き、芯の端としてラベル名を返し、芯ごとにそのラベルのネットへ繋ぎ、single との併用や数違いは断り、説明にlabelsを載せる。 <sub>`connect_cable_labels_end_the_breakout_wires_at_net_labels`</sub>
 - リストのケーブルのどれか1本でも誤っていれば、connect_cable はその番号を知らせて1本も描かない。正しいリストは1回の編集で描く。 <sub>`connect_cable_list_is_all_or_nothing`</sub>
 - connect_cable の説明は、芯がピン順に対応することと、偽の分岐ブロックの代わりに使うことをエージェントに伝える。 <sub>`connect_cable_is_described_for_the_agent`</sub>
+- Tasks 1-8 の挙動の回帰テスト (最初から通る): place_symbol と get_pins はポートのピンの接点を返し、2つのポートを connect_pins で結ぶと get_netlist は接点ごとに1ネットを返す。 <sub>`two_ports_wired_by_connect_pins_give_one_net_per_contact`</sub>
+- Tasks 1-8 の挙動の回帰テスト (最初から通る): connect_cable はハーネスをポートのピン1本 ("39.U3") に着ける。芯は同じ名前の接点に対応し、芯ごとに別のネットになる。 <sub>`connect_cable_lands_on_a_port_pin`</sub>
+- ツールの説明は、USB のようなコネクタを接点付きのブロックのピン1本で描くことと、そこへのケーブルの着け方をエージェントに伝える。 <sub>`the_tools_describe_port_contacts`</sub>
+- エージェントが受け取る execute_commands のスキーマはピンの contacts を含むが、ファイル専用の種類 "port_block" は含まない (PortBlock の schemars skip が効いている)。 <sub>`the_agent_schema_hides_port_block`</sub>
 
 ### 図枠テンプレート (REST)
 
@@ -1674,6 +1678,7 @@
 - システムプロンプトは、整えるときは`get_tidy_metrics`で数値を測り、改善が止まったらやめるよう指示する。 <sub>`system_prompt_carries_the_tidy_loop`</sub>
 - システムプロンプトは、配線図はピン操作ツールでピン名を指定し、まとめて1回で描き、ピン座標を手で計算しないよう指示する。 <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
 - システムプロンプトは、描いた後にシート画像を見て確かめるよう指示する(数値だけで見た目を判断しない)。 <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
+- システムプロンプトは、複数の導体を運ぶコネクタ (USB) を接点付きのブロックのピン1本で描くようエージェントに伝える。 <sub>`system_prompt_explains_port_contacts`</sub>
 
 ### knowledge_docs
 

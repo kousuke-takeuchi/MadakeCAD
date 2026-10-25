@@ -636,3 +636,64 @@ fn connect_cable_is_described_for_the_agent() {
     let (_, d) = tools.iter().find(|(n, _)| n == "connect_cable").expect("connect_cable");
     assert!(d.contains("ピン順") && d.contains("分岐"), "{d}");
 }
+
+// ---- 多接点ポート (ブロックのピンの contacts) ----
+
+const HUB: &str = r#"{"right":[{"no":"U3","name":"USB-A メス","contacts":["VBUS","D-","D+","GND"]}]}"#;
+const DONGLE: &str = r#"{"left":[{"no":"P1","name":"USB-A オス","contacts":["VBUS","D-","D+","GND"]}]}"#;
+
+/// Regression test for Tasks 1-8 (already passes): place_symbol and get_pins show a port pin's contacts, and connect_pins between two ports gives get_netlist one net per contact.
+/// Tasks 1-8 の挙動の回帰テスト (最初から通る): place_symbol と get_pins はポートのピンの接点を返し、2つのポートを connect_pins で結ぶと get_netlist は接点ごとに1ネットを返す。
+#[tokio::test]
+async fn two_ports_wired_by_connect_pins_give_one_net_per_contact() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    let hub = place_block(&bridge, sheet, "39", 100.0, 100.0, HUB).await;
+    assert_eq!(hub["pins"][0]["contacts"], json!(["VBUS", "D-", "D+", "GND"]));
+    place_block(&bridge, sheet, "LTE1", 200.0, 100.0, DONGLE).await;
+    let pins = call(&bridge, "get_pins", json!({"sheet_id": sheet, "reference": "LTE1"})).await;
+    assert_eq!(pins["parts"][0]["pins"][0]["contacts"][3], "GND");
+    call(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "39.U3", "to": "LTE1.P1"})).await;
+    let nets = call(&bridge, "get_netlist", json!({"sheet_id": sheet})).await;
+    let nets = nets.as_array().unwrap();
+    assert_eq!(nets.len(), 4, "{nets:?}");
+    assert_eq!(nets[0]["contact"], "VBUS");
+    assert_eq!(nets[0]["pins"][0]["contact"], "VBUS");
+}
+
+/// Regression test for Tasks 1-8 (already passes): connect_cable lands a harness on one port pin ("39.U3"); cores map to the same-named contacts and each core is its own net.
+/// Tasks 1-8 の挙動の回帰テスト (最初から通る): connect_cable はハーネスをポートのピン1本 ("39.U3") に着ける。芯は同じ名前の接点に対応し、芯ごとに別のネットになる。
+#[tokio::test]
+async fn connect_cable_lands_on_a_port_pin() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    call(&bridge, "place_symbol", json!({"sheet_id": sheet, "symbol_id": "connector_4p", "x": 50.0, "y": 100.0, "reference": "J45"})).await;
+    place_block(&bridge, sheet, "39", 210.0, 100.0, r#"{"left":[{"no":"U3","contacts":["VBUS","D-","D+","GND"]}]}"#).await;
+    let out = call(&bridge, "connect_cable", json!({"sheet_id": sheet, "cores": ["VBUS", "D-", "D+", "GND"],
+        "a": {"part": "J45", "style": "multi"}, "b": {"pins": ["39.U3"], "style": "single"}})).await;
+    assert_eq!(out["cores"][1]["b"], "39.U3/D-");
+    let nets = call(&bridge, "get_netlist", json!({"sheet_id": sheet})).await;
+    assert_eq!(nets.as_array().unwrap().len(), 4, "{nets}");
+}
+
+/// The tool descriptions tell the agent to draw a USB-like connector as one block pin with contacts and how to land a cable on it.
+/// ツールの説明は、USB のようなコネクタを接点付きのブロックのピン1本で描くことと、そこへのケーブルの着け方をエージェントに伝える。
+#[test]
+fn the_tools_describe_port_contacts() {
+    let tools = tool_descriptions();
+    let get = |n: &str| tools.iter().find(|(t, _)| t == n).unwrap_or_else(|| panic!("{n}")).1.clone();
+    assert!(get("place_symbol").contains("contacts"));
+    assert!(get("get_pins").contains("contacts"));
+    assert!(get("connect_cable").contains("ポート"));
+    assert!(get("get_netlist").contains("接点"));
+}
+
+/// The schema agents get for execute_commands shows pin contacts but never the file-only kind "port_block" (the schemars skip on EntityRepr::PortBlock holds).
+/// エージェントが受け取る execute_commands のスキーマはピンの contacts を含むが、ファイル専用の種類 "port_block" は含まない (PortBlock の schemars skip が効いている)。
+#[test]
+fn the_agent_schema_hides_port_block() {
+    let schema = serde_json::to_string(&schemars::schema_for!(madake_mcp::ExecuteCommandsParams)).unwrap();
+    assert!(schema.contains("contacts"), "スキーマにピンの contacts が無い");
+    assert!(!schema.contains("port_block"), "port_block がエージェント向けスキーマに漏れている");
+    assert!(!schema.contains("PortBlock"));
+}

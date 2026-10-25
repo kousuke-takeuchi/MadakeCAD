@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2945 specification clauses** across 6 areas.
+**2950 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1364,6 +1364,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - connect_cable with labels on the board side draws a labelled wire per core in one edit, answers the label names as the core ends, joins each core to its label net, refuses labels with single or a wrong count, and its description mentions labels. <sub>`connect_cable_labels_end_the_breakout_wires_at_net_labels`</sub>
 - If any cable in the list is wrong, connect_cable names its index and draws none of them; a correct list is drawn in one edit. <sub>`connect_cable_list_is_all_or_nothing`</sub>
 - connect_cable's description tells the agent that cores follow pin order and to use it instead of a fake breakout block. <sub>`connect_cable_is_described_for_the_agent`</sub>
+- Regression test for Tasks 1-8 (already passes): place_symbol and get_pins show a port pin's contacts, and connect_pins between two ports gives get_netlist one net per contact. <sub>`two_ports_wired_by_connect_pins_give_one_net_per_contact`</sub>
+- Regression test for Tasks 1-8 (already passes): connect_cable lands a harness on one port pin ("39.U3"); cores map to the same-named contacts and each core is its own net. <sub>`connect_cable_lands_on_a_port_pin`</sub>
+- The tool descriptions tell the agent to draw a USB-like connector as one block pin with contacts and how to land a cable on it. <sub>`the_tools_describe_port_contacts`</sub>
+- The schema agents get for execute_commands shows pin contacts but never the file-only kind "port_block" (the schemars skip on EntityRepr::PortBlock holds). <sub>`the_agent_schema_hides_port_block`</sub>
 
 ### Frame templates (REST)
 
@@ -1674,6 +1678,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The system prompt tells the agent to measure tidiness with get_tidy_metrics and to stop once it stops improving. <sub>`system_prompt_carries_the_tidy_loop`</sub>
 - The system prompt tells the agent to wire diagrams by pin name with the pin tools, batched in one call, instead of computing pin coordinates. <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
 - The system prompt tells the agent to look at the sheet image after drawing, instead of judging the layout by numbers alone. <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
+- The system prompt tells the agent to draw a multi-conductor connector (USB) as one block pin with contacts. <sub>`system_prompt_explains_port_contacts`</sub>
 
 ### knowledge_docs
 

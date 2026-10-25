@@ -261,3 +261,12 @@ fn system_prompt_tells_the_agent_to_look_at_the_sheet() {
     let prompt = system_prompt(&AppSettings::default(), None);
     assert!(prompt.contains("get_sheet_image"), "{prompt}");
 }
+
+/// The system prompt tells the agent to draw a multi-conductor connector (USB) as one block pin with contacts.
+/// システムプロンプトは、複数の導体を運ぶコネクタ (USB) を接点付きのブロックのピン1本で描くようエージェントに伝える。
+#[test]
+fn system_prompt_explains_port_contacts() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    assert!(prompt.contains("`contacts`を持つブロックのピン1本(ポート)"), "{prompt}");
+    assert!(prompt.contains("style: single"), "{prompt}");
+}
