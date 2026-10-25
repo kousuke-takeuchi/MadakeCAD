@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2942仕様項目**。
+全6領域・**2945仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -74,6 +74,9 @@
 - 分岐の配線は線径も線色も持たず (線色は芯が持つ)、配線注記が付かない。電線リストには芯の線色が出る。 <sub>`breakout_wires_carry_no_note`</sub>
 - 分岐の配線が縦に出てラベルが横に並ぶときは、芯の間隔が最も長いラベルの幅に余白を足した値まで広がり、ラベルどうしが重ならない。区間の向きは最初の経由点に従う。 <sub>`side_by_side_labels_do_not_overlap_and_via_sets_the_direction`</sub>
 - 同じ名前 (前後の空白を除いて) のラベルが片側に2つあるときは、重なった名前を示して断る。 <sub>`duplicate_label_names_are_refused`</sub>
+- 片側をポートのピン1本に着けられる。接点と同じ名前の芯は名前で対応し、1本線はそのピンで終わり (横棒なし)、ネットリストは芯ごとに1ネットになる。 <sub>`a_side_lands_on_one_port_pin_by_contact_name`</sub>
+- 「<ポートのラベル>.<接点>」という名前の分岐のラベルは、芯をポートのネットのその接点に繋ぐ。labels 側のケーブルで、シートの別の場所に描いたポートへ ERC の指摘なしに給電できる。 <sub>`breakout_labels_named_like_port_contacts_join_them`</sub>
+- 芯の名前がどれも接点でなく数が同じなら並び順で対応する。名前の一部だけの一致・数の違い・ポートへの style multi は、接点を並べて断る。 <sub>`port_landing_by_order_and_refusals`</sub>
 
 ### Commandエンジン (undo/redo)
 

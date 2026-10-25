@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2942 specification clauses** across 6 areas.
+**2945 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -74,6 +74,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Breakout wires get no gauge and no colour of their own (the colour stays on the cable core), so they carry no wire note, while the wire list still shows each core's colour. <sub>`breakout_wires_carry_no_note`</sub>
 - When the label wires run vertically the labels sit side by side, so the core pitch grows to the widest label plus a gap and no two labels overlap; the run direction follows the first via point. <sub>`side_by_side_labels_do_not_overlap_and_via_sets_the_direction`</sub>
 - Two labels with the same name (after trimming) on one side are refused naming the duplicate. <sub>`duplicate_label_names_are_refused`</sub>
+- A side may land on one port pin: cores named like the contacts map by name, the line ends at the pin with no bar, and the netlist gives one net per core. <sub>`a_side_lands_on_one_port_pin_by_contact_name`</sub>
+- Breakout labels named <port label>.<contact> join each core to that contact of the port net, so a labels-side cable can feed a port drawn elsewhere on the sheet with no ERC finding. <sub>`breakout_labels_named_like_port_contacts_join_them`</sub>
+- Cores whose names are none of the contacts map by order when the counts match; a partial name match, a count mismatch or style multi on a port is refused, listing the contacts. <sub>`port_landing_by_order_and_refusals`</sub>
 
 ### Command engine (undo/redo)
 
