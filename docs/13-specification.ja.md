@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2986仕様項目**。
+全6領域・**2991仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2049,6 +2049,10 @@
 - 接点はカンマ (半角・読点・全角) で区切り、前後の空白を落として空のものを捨てる <sub>`pins that are already wired`</sub>
 - 接点を書いた行は block_pins に contacts として入り、読み戻すとカンマ区切りの文字に戻る。接点の無い行の書き出しは今までと同じ <sub>`pins that are already wired`</sub>
 - 接点が1つだけ・同じ接点が2つ・32を超える行は指摘になる <sub>`pins that are already wired`</sub>
+- コネクタとまとめ名を書いた行は block_pins に connector / connector_ref として入り、読み戻すと同じ属性に戻る <sub>`connector columns`</sub>
+- コネクタだけを選んだ行も書き出す行として数える (番号が空なら指摘が出る) <sub>`connector columns`</sub>
+- 端子台・JST 以外のまとめ名と、2つのコネクタに分かれたまとめ名は指摘になる <sub>`connector columns`</sub>
+- 空白だけのまとめ名は書き出さず、指摘にもならない <sub>`connector columns`</sub>
 - 部品挿入で「ブロック(汎用)」を選ぶと、左右1本ずつのピン表が開く <sub>`starting a new block from the insert dialog`</sub>
 - 編集したピン表はそのまま配置に使う属性になる(配置後もこの形で描かれる) <sub>`starting a new block from the insert dialog`</sub>
 - 「手動」に切り替えると、そのときの自動寸法が編集できる初期値として入る <sub>`starting a new block from the insert dialog`</sub>
@@ -2063,6 +2067,7 @@
 - 配線済みのピンを消しても同じ警告が出る <sub>`warning about wired pins`</sub>
 - 配線されていないピンを消しても警告は出ない <sub>`warning about wired pins`</sub>
 - 警告が出ていても適用はできる(承知のうえで直せる) <sub>`warning about wired pins`</sub>
+- コネクタを「なし」かまとめない種類に変えるとまとめ名は消え、端子台・JST のあいだで変えるだけなら残る <sub>`connector columns in the pin table`</sub>
 
 ### cable
 

@@ -18,6 +18,7 @@ import {
   draftSymbol,
   droppedWiredPins,
   moveRow,
+  patchRow,
   removeRow,
   wiredPinNumbers,
   type BlockDraft,
@@ -174,7 +175,7 @@ export const useBlockEditorStore = defineStore("blockEditor", {
 
     updateRow(side: BlockSide, index: number, patch: Partial<BlockPinRow>) {
       const row = this.draft?.rows[side][index];
-      if (row) Object.assign(row, patch);
+      if (row) patchRow(row, patch);
     },
 
     /** 外形を自動/手動へ切り替える (手動にした瞬間の寸法は自動と同じ)。 */

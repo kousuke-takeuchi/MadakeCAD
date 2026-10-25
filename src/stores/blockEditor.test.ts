@@ -260,3 +260,20 @@ describe("warning about wired pins", () => {
     expect(sent).toHaveLength(1);
   });
 });
+
+describe("connector columns in the pin table", () => {
+  // ja: コネクタを「なし」かまとめない種類に変えるとまとめ名は消え、端子台・JST のあいだで変えるだけなら残る
+  it("clears the group name when the connector becomes none or a kind that cannot be grouped", () => {
+    seed([]);
+    const editor = useBlockEditorStore();
+    editor.startInsert();
+    editor.updateRow("left", 0, { connector: "jst_ph_f", connectorRef: "J3" });
+    editor.updateRow("left", 0, { connector: "screw" });
+    expect(editor.draft?.rows.left[0].connectorRef).toBe("J3");
+    editor.updateRow("left", 0, { connector: "usb_a_f" });
+    expect(editor.draft?.rows.left[0].connectorRef).toBeUndefined();
+    editor.updateRow("left", 0, { connector: "screw", connectorRef: "TB1" });
+    editor.updateRow("left", 0, { connector: "" });
+    expect(editor.draft?.rows.left[0]).toEqual({ no: "1", name: "", connector: "" });
+  });
+});

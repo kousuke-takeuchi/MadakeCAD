@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2986 specification clauses** across 6 areas.
+**2991 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2049,6 +2049,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - splits contacts on ASCII, Japanese and full-width commas and trims them <sub>`pins that are already wired`</sub>
 - writes contacts into block_pins and reads them back as comma-separated text <sub>`pins that are already wired`</sub>
 - flags a single contact, a repeated contact and too many contacts <sub>`pins that are already wired`</sub>
+- writes the connector and group name into block_pins and reads them back unchanged <sub>`connector columns`</sub>
+- counts a row with only a connector as filled, so a missing number is reported <sub>`connector columns`</sub>
+- flags a group name on a kind that cannot have one and a group name split over two connectors <sub>`connector columns`</sub>
+- drops a group name made only of spaces without reporting it <sub>`connector columns`</sub>
 - opens a pin table with one pin per side when the generic block is picked <sub>`starting a new block from the insert dialog`</sub>
 - hands the edited table to the placement as block attributes <sub>`starting a new block from the insert dialog`</sub>
 - seeds the hand-set size with the automatic one when switching to manual <sub>`starting a new block from the insert dialog`</sub>
@@ -2063,6 +2067,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - warns the same way when a wired pin is deleted <sub>`warning about wired pins`</sub>
 - stays quiet when the deleted pin had no wire on it <sub>`warning about wired pins`</sub>
 - still allows applying the edit, warning and all <sub>`warning about wired pins`</sub>
+- clears the group name when the connector becomes none or a kind that cannot be grouped <sub>`connector columns in the pin table`</sub>
 
 ### cable
 

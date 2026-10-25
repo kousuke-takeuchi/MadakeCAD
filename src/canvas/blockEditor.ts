@@ -18,6 +18,7 @@ import {
   type BlockPin,
   type BlockPins,
 } from "./dynamicSymbol";
+import { connectorGroups, isGroupedConnector, type ConnectorKind } from "./connector";
 import { transformLocal } from "./renderer";
 import type { Point, Sheet, SymbolDef, SymbolInstance } from "../ipc";
 
@@ -36,11 +37,16 @@ export interface BlockSize {
   h: number;
 }
 
-/** ピン表の1行。`contacts`はカンマ区切りの接点 (空・省略 = 普通のピン)。 */
+/**
+ * ピン表の1行。`contacts`はカンマ区切りの接点 (空・省略 = 普通のピン)。
+ * `connector`は外形に描くコネクタの形 (空・省略 = 絵なし)、`connectorRef`は端子台・JST のまとめ名。
+ */
 export interface BlockPinRow {
   no: string;
   name: string;
   contacts?: string;
+  connector?: ConnectorKind | "";
+  connectorRef?: string;
 }
 
 /** 編集中のピン表。`size`がnullなら外形はピンから自動で決まる。 */
@@ -64,7 +70,11 @@ export type BlockIssue =
   /** 1本のピンで同じ接点が2回。 */
   | { code: "duplicateContact"; side: BlockSide; index: number; contact: string }
   /** 接点が多すぎる。 */
-  | { code: "tooManyContacts"; side: BlockSide; index: number; count: number; max: number };
+  | { code: "tooManyContacts"; side: BlockSide; index: number; count: number; max: number }
+  /** まとめ名は端子台・JST にしか付けられない。 */
+  | { code: "connectorRefNotGrouped"; side: BlockSide; index: number }
+  /** 1つのまとめ名が2つのコネクタに分かれている。 */
+  | { code: "connectorRefSplit"; ref: string };
 
 /** 配線が接続点に載っているとみなす距離 (mm)。Rust側 netlist::CONNECT_EPS と同じ。 */
 const CONNECT_EPS = 0.01;
@@ -88,7 +98,21 @@ function allRows(draft: BlockDraft): BlockPinRow[] {
 
 /** 書き出す価値のある行か (番号もピン名も空の行はピンにしない)。 */
 function isFilled(row: BlockPinRow): boolean {
-  return row.no.trim() !== "" || row.name.trim() !== "" || (row.contacts ?? "").trim() !== "";
+  return (
+    row.no.trim() !== "" ||
+    row.name.trim() !== "" ||
+    (row.contacts ?? "").trim() !== "" ||
+    (row.connector ?? "") !== "" ||
+    (row.connectorRef ?? "").trim() !== ""
+  );
+}
+
+/** 行を書き換える。コネクタを「なし」かまとめない種類へ変えたら、まとめ名は消す (付けられないため)。 */
+export function patchRow(row: BlockPinRow, patch: Partial<BlockPinRow>): void {
+  Object.assign(row, patch);
+  if ("connector" in patch && !(row.connector && isGroupedConnector(row.connector))) {
+    delete row.connectorRef;
+  }
 }
 
 /** 接点の文字をカンマ (半角「,」・読点「、」・全角「，」) で区切り、前後の空白を落として空のものを捨てる。 */
@@ -148,6 +172,9 @@ function pinsOf(draft: BlockDraft): BlockPins {
         const pin: BlockPin = name ? { no: row.no.trim(), name } : { no: row.no.trim() };
         const contacts = splitContacts(row.contacts ?? "");
         if (contacts.length) pin.contacts = contacts;
+        if (row.connector) pin.connector = row.connector;
+        const ref = (row.connectorRef ?? "").trim();
+        if (ref) pin.connector_ref = ref;
         return pin;
       });
     if (rows.length) pins[side] = rows;
@@ -186,6 +213,8 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
       no: p.no ?? "",
       name: p.name ?? "",
       ...(p.contacts?.length ? { contacts: p.contacts.join(", ") } : {}),
+      ...(p.connector ? { connector: p.connector } : {}),
+      ...(p.connector_ref ? { connectorRef: p.connector_ref } : {}),
     }));
   }
   return { rows, size };
@@ -230,12 +259,24 @@ export function draftIssues(draft: BlockDraft): BlockIssue[] {
         const dup = contacts.find((c, i) => contacts.indexOf(c) !== i);
         if (dup) issues.push({ code: "duplicateContact", side, index, contact: dup });
       }
+      if ((row.connectorRef ?? "").trim() !== "" && !(row.connector && isGroupedConnector(row.connector))) {
+        issues.push({ code: "connectorRefNotGrouped", side, index });
+      }
     });
+  }
+  // 1つのまとめ名は1つのまとまり (同じ辺の隣り合うピン、同じ種類) だけ (Rust側 check_connectors の最後の決まり)
+  const pins = pinsOf(draft);
+  const seenRefs = new Set<string>();
+  for (const side of BLOCK_SIDES) {
+    for (const group of connectorGroups(pins[side] ?? [])) {
+      if (group.ref === null || !isGroupedConnector(group.kind)) continue;
+      if (seenRefs.has(group.ref)) issues.push({ code: "connectorRefSplit", ref: group.ref });
+      seenRefs.add(group.ref);
+    }
   }
   const count = allRows(draft).filter(isFilled).length;
   if (count > BLOCK_PIN_MAX) issues.push({ code: "tooMany", count, max: BLOCK_PIN_MAX });
   if (draft.size) {
-    const pins = pinsOf(draft);
     const rows = Math.max(pins.left?.length ?? 0, pins.right?.length ?? 0);
     const cols = Math.max(pins.top?.length ?? 0, pins.bottom?.length ?? 0);
     const w = Math.max(cols * BLOCK_PIN_PITCH_MM, BLOCK_PIN_PITCH_MM);
