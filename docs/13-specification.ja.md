@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2937仕様項目**。
+全6領域・**2942仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -293,7 +293,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは17 (1本線の区間を持つケーブルを追加し、種類「run_cable」で保存する版) である。 <sub>`the_current_format_version_is_seventeen`</sub>
+- 現行のファイル形式バージョンは18 (ブロックのピンにポートの接点を追加し、接点のあるブロックを種類「port_block」で保存する版) である。 <sub>`the_current_format_version_is_eighteen`</sub>
+- ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_17_file_loads_unchanged`</sub>
 - 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - 区間が空の「run_cable」(ファイルを手で直したときなど) は普通の定義線ケーブルとして開き、書き戻すと種類「cable」になる。 <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
 - 新しいMadakeCADで保存されたファイル (形式の版が大きい) は、一部が欠けたまま開くのではなく、両方の版を示す理由付きで断られる。 <sub>`a_file_from_a_newer_app_is_refused`</sub>
@@ -310,6 +311,10 @@
 - 形式2のファイル(FreeCAD対応付けが無く、配線に長さの出所が無い)は、対応付けが空で全ての配線の長さが手入力扱いとして開ける。 <sub>`a_format_2_file_opens_with_empty_mech_links_and_manual_lengths`</sub>
 - 形式3のファイル(FreeCAD対応付けに配置が無い)は配置なしの対応付けとして開け、配置付きの対応付けは保存→読み込みで保たれる。 <sub>`a_format_3_file_opens_with_unplaced_links_and_placements_round_trip`</sub>
 - クラウド側のビルドが書いたファイル(独自の形式4。FreeCAD対応付けとFreeCAD計測の電線長を含む)は、それらの内容を保ったまま開き、統合後の現行形式で書き直される。 <sub>`a_cloud_format_4_file_keeps_its_mech_links_and_length_source`</sub>
+- ポートの接点を持つブロックは種類「port_block」で保存され、読み直すと接点付きのシンボルに戻る。同じプロジェクトを IPC・MCP で送るときは「symbol」のまま。 <sub>`a_port_block_is_saved_as_port_block`</sub>
+- ポートの接点の無いプロジェクトは、serde がそのまま書いたものと1バイトも違わない (キーの並びも変わらない)。普通のブロックは「symbol」のまま。 <sub>`a_project_without_ports_is_written_unchanged`</sub>
+- 接点の無い「port_block」(手で直したファイル) は普通のシンボルとして開く。 <sub>`a_port_block_without_contacts_opens_as_a_symbol`</sub>
+- 接点をすべて消したブロックは種類「symbol」で保存されるので、古いビルドでもまたそのファイルを開ける。 <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
 
 ### KiCadインポート / エクスポート
 
