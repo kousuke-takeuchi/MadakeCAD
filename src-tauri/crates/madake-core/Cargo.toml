@@ -15,6 +15,8 @@ schemars = { version = "1", features = ["uuid1"] }
 svg2pdf = "0.13"
 # 複数ページPDFの組み立て。svg2pdf 0.13が使うのと同じバージョンに固定する
 pdf-writer = "0.12"
+# シートのPNG化 (エージェントが図面を目で確かめる)。svg2pdf 0.13と同じusvg 0.45系に合わせる
+resvg = "0.45"
 # 部品DB (グローバル共有マスタ)。bundledでOS非依存にSQLiteを同梱
 rusqlite = { version = "0.40", features = ["bundled"] }
 dirs = "6"

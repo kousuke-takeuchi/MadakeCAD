@@ -496,6 +496,52 @@ pub struct DrawWireParams {
     pub part_no: Option<String>,
 }
 
+/// シート画像で切り抜く範囲 (mm、用紙左上原点)。
+#[derive(Debug, Clone, Copy, serde::Deserialize, schemars::JsonSchema)]
+pub struct ImageRegion {
+    pub min_x: f64,
+    pub min_y: f64,
+    pub max_x: f64,
+    pub max_y: f64,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SheetImageParams {
+    /// 対象シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 1mmあたりのピクセル数 (既定4。A3全体で1680×1188px)。長辺2400pxを超えると自動で縮める。
+    pub px_per_mm: Option<f32>,
+    /// 切り抜く範囲 (mm)。省略時はシート全体。文字の重なりなどは範囲を絞り倍率を上げて見る。
+    pub region: Option<ImageRegion>,
+}
+
+/// シート画像の既定の倍率 (px/mm)。
+pub const DEFAULT_IMAGE_PX_PER_MM: f32 = 4.0;
+
+/// シートをPNGにする (get_sheet_image の中身)。出力はSVG出力と同じ見た目。
+pub fn sheet_image(
+    doc: &SharedDoc,
+    sheet_id: Option<Uuid>,
+    px_per_mm: Option<f32>,
+    region: Option<ImageRegion>,
+) -> Result<madake_core::raster::SheetImage, String> {
+    let svg = {
+        let engine = doc.engine.lock().unwrap();
+        let project = engine.project();
+        let sheet = match sheet_id {
+            Some(id) => project.sheet(id),
+            None => project.sheets.first(),
+        }
+        .ok_or("sheet not found")?;
+        madake_core::svg::project_sheet_to_svg(project, sheet.id, &sheet_symbol_defs(sheet))
+            .ok_or("sheet not found")?
+    };
+    let region = region.map(|r| {
+        madake_core::tidy::Rect::from_corners(Point::new(r.min_x, r.min_y), Point::new(r.max_x, r.max_y))
+    });
+    madake_core::raster::svg_to_png(&svg, px_per_mm.unwrap_or(DEFAULT_IMAGE_PX_PER_MM), region)
+}
+
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct GetPinsParams {
     /// 対象シートID。省略時は先頭シート。
@@ -1533,6 +1579,32 @@ impl MadakeMcp {
         let csv = madake_core::reports::wire_list_csv(engine.project());
         std::fs::write(&p.path, csv).map_err(internal)?;
         json_ok(&serde_json::json!({ "written": p.path }))
+    }
+
+    #[tool(
+        description = "シートをPNG画像で返す(SVG出力と同じ見た目)。描いた・整えた後は必ずこれで図面を目で見て、文字の重なり・線のはみ出し・読みにくさを確かめる(整頓指標の数値だけで判断しない)。px_per_mm=1mmあたりのピクセル数(既定4、長辺2400pxまで)、region={min_x,min_y,max_x,max_y}(mm)で一部を切り抜いて拡大できる。画像と、幅・高さ・実際の倍率を返す"
+    )]
+    fn get_sheet_image(
+        &self,
+        Parameters(p): Parameters<SheetImageParams>,
+    ) -> Result<rmcp::model::CallToolResult, ErrorData> {
+        use base64::Engine as _;
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let image = sheet_image(&self.doc, Some(sheet_id), p.px_per_mm, p.region)
+            .map_err(|e| ErrorData::invalid_params(e, None))?;
+        let info = serde_json::json!({
+            "width": image.width,
+            "height": image.height,
+            "px_per_mm": image.px_per_mm,
+            "region": p.region.map(|r| serde_json::json!([r.min_x, r.min_y, r.max_x, r.max_y])),
+        });
+        Ok(rmcp::model::CallToolResult::success(vec![
+            rmcp::model::ContentBlock::image(
+                base64::engine::general_purpose::STANDARD.encode(&image.png),
+                "image/png",
+            ),
+            rmcp::model::ContentBlock::text(info.to_string()),
+        ]))
     }
 
     #[tool(description = "シートをJIS図枠つきSVGとして指定パスに書き出す(改訂欄・線番・ハーネス破線囲み・ネットラベルのシート間クロスリファレンス「/2.B3」を含む)")]
