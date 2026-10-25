@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2975 specification clauses** across 6 areas.
+**2979 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -36,6 +36,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - One connector name may not be used by two separate connectors: on two sides, split by another pin, or with two different kinds. <sub>`a_connector_ref_used_by_two_groups_is_refused`</sub>
 - Unnamed connectors may repeat anywhere, and a named connector may run over several neighbouring pins. <sub>`unnamed_connectors_may_repeat`</sub>
 - Every connector kind on every side, and the AOGU hub and amplifier, are drawn exactly as recorded in the golden file that the TypeScript twin is also checked against (rewrite it with MADAKE_UPDATE_GOLDEN=1). <sub>`connector_blocks_match_the_shared_golden_file`</sub>
+- A pin with a connector reaches 5 mm out of the box: its lead starts at the outer end of the picture, its number sits 0.25 mm beyond the picture above the lead, and its name starts 3 mm inside; a plain pin in the same block is drawn as before. <sub>`a_connector_pin_reaches_five_millimetres_out`</sub>
+- On the top and bottom sides a connector pin's number moves outside the box, right of the lead beyond the picture, while its name stays inside like a plain pin's. <sub>`top_and_bottom_connector_numbers_sit_beside_the_lead`</sub>
+- A block without connectors keeps its single outline rectangle, while a block with connectors draws the outline as lines with a gap exactly where each picture crosses the edge. <sub>`the_outline_has_gaps_exactly_at_the_pictures`</sub>
+- The automatic outline grows by 1.5 mm on each side that has a connector, because the names there start 3 mm inside instead of 1.5 mm. <sub>`the_outline_makes_room_for_connector_bodies`</sub>
 
 ### cable
 

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2975仕様項目**。
+全6領域・**2979仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -36,6 +36,10 @@
 - 1つのコネクタの名前を別々の2つのコネクタに使うことはできない (2つの辺に分かれる・別のピンで途切れる・種類が違う)。 <sub>`a_connector_ref_used_by_two_groups_is_refused`</sub>
 - 名前の無いコネクタはどこで繰り返してもよく、名前のあるコネクタは隣り合う数本のピンにまたがってよい。 <sub>`unnamed_connectors_may_repeat`</sub>
 - 全種類のコネクタを全辺に置いた例と AOGU のハブ・アンプは、TS 側も突き合わせる golden ファイルのとおりに描かれる (MADAKE_UPDATE_GOLDEN=1 で書き直す)。 <sub>`connector_blocks_match_the_shared_golden_file`</sub>
+- コネクタのあるピンは外形から5mm外まで伸びる: リードは絵の外端から始まり、番号はリードの上で絵の0.25mm外、名前は3mm内側から書く。同じブロックの普通のピンは今までどおり。 <sub>`a_connector_pin_reaches_five_millimetres_out`</sub>
+- 上辺・下辺では、コネクタのあるピンの番号は外形の外 (絵より先のリードの右) へ出て、名前は普通のピンと同じく内側に残る。 <sub>`top_and_bottom_connector_numbers_sit_beside_the_lead`</sub>
+- コネクタの無いブロックは外形の長方形1つのまま。コネクタのあるブロックは、絵が辺と交わる所だけを空けた線分で外形を描く。 <sub>`the_outline_has_gaps_exactly_at_the_pictures`</sub>
+- 外形の自動寸法は、コネクタのある辺ごとに1.5mm広がる (その辺のピン名は1.5mmではなく3mm内側から書くため)。 <sub>`the_outline_makes_room_for_connector_bodies`</sub>
 
 ### cable
 

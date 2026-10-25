@@ -15,7 +15,10 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
-use crate::connector::{connector_groups, ConnectorKind};
+use crate::connector::{
+    connector_groups, connector_primitives, outline_segments, ConnectorKind, CONNECTOR_IN_MM,
+    CONNECTOR_LEAD_MM, CONNECTOR_NUM_GAP_MM, CONNECTOR_NUM_SIDE_MM, CONNECTOR_OUT_MM,
+};
 use crate::geometry::Point;
 use crate::symbol::{PinDef, PinDir, Primitive, SymbolDef, TextSlot};
 use crate::symbol::{SLOT_DESC, SLOT_PART, SLOT_RATING, SLOT_TAG};
@@ -128,7 +131,7 @@ fn snap_up(v: f64, step: f64) -> f64 {
 
 /// 辺のピン`i`番目(全`n`個)の中央揃えオフセット (mm)。
 /// 他の動的シンボル([`crate::symbol::dynamic_symbol`])と同じ規則。
-fn offset(i: usize, n: usize) -> f64 {
+pub(crate) fn offset(i: usize, n: usize) -> f64 {
     (i as f64 - (n - 1) as f64 / 2.0) * BLOCK_PIN_PITCH_MM
 }
 
@@ -289,6 +292,15 @@ fn min_size(pins: &BlockPins) -> (f64, f64) {
     )
 }
 
+/// 左右の辺の、外形からピン名までの余白 (mm)。コネクタのある辺は絵の内側の深さぶん広い。
+fn side_pad(side: &[BlockPin]) -> f64 {
+    if side.iter().any(|p| p.connector.is_some()) {
+        BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM
+    } else {
+        BLOCK_TEXT_PAD_MM
+    }
+}
+
 /// 外形寸法を決める。明示指定があればそれ、無ければピン数とピン名の長さから自動。
 ///
 /// 自動のときは
@@ -303,7 +315,9 @@ pub fn block_box(spec: &BlockSpec) -> (f64, f64) {
     let pins = &spec.pins;
     let rows = pins.left.len().max(pins.right.len());
     let cols = pins.top.len().max(pins.bottom.len());
-    let w_names = 2.0 * BLOCK_TEXT_PAD_MM
+    // コネクタの無いブロックでは 1.5 + 1.5 = 3.0 で、今までの 2.0 × 1.5 と同じ値になる
+    let w_names = side_pad(&pins.left)
+        + side_pad(&pins.right)
         + max_name_width(&pins.left)
         + max_name_width(&pins.right)
         + BLOCK_PIN_PITCH_MM;
@@ -324,6 +338,7 @@ pub fn block_box(spec: &BlockSpec) -> (f64, f64) {
 /// 外形は原点中心の長方形。ピンは辺ごとに中央揃え・5mmピッチで並び、
 /// **ピン番号は外形の外側(リードの上)・ピン名は外形の内側**に描く
 /// (上下辺は縦に書けないので番号・名前とも内側に置く)。
+/// ピンに `connector` があると、そのピンは外形から5mmまで伸び、外形の辺にコネクタの絵を描く ([`crate::connector`])。
 pub fn block_symbol(attrs: &BTreeMap<String, String>) -> Result<SymbolDef, String> {
     let spec = parse_block_spec(attrs)?;
     Ok(block_symbol_from_spec(&spec))
@@ -348,61 +363,124 @@ fn lead(x1: f64, y1: f64, x2: f64, y2: f64) -> Primitive {
     }
 }
 
+/// ピンが外形と交わる点。
+fn edge_point(dir: PinDir, off: f64, hw: f64, hh: f64) -> Point {
+    match dir {
+        PinDir::Left => Point::new(-hw, off),
+        PinDir::Right => Point::new(hw, off),
+        PinDir::Up => Point::new(off, -hh),
+        PinDir::Down => Point::new(off, hh),
+    }
+}
+
+/// 1本のピンの接続点・リードの始点・番号の位置・名前の位置。
+struct PinLayout {
+    at: Point,
+    lead_from: Point,
+    num_at: Point,
+    name_at: Point,
+}
+
+/// ピンの描き位置。コネクタの無いピンは今までどおり。コネクタのあるピンは接続点が外形から5mm、
+/// リードは絵の外端から、番号は絵の外 (左右はリードの上、上下はリードの右)、左右の名前は3mm内側から。
+fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64) -> PinLayout {
+    let edge = edge_point(dir, off, hw, hh);
+    if bp.connector.is_none() {
+        let (at, num_at, name_at) = match dir {
+            PinDir::Left => (
+                Point::new(-hw - BLOCK_LEAD_MM, off),
+                Point::new(-hw - BLOCK_LEAD_MM / 2.0, off - BLOCK_PIN_TEXT_MM),
+                Point::new(-hw + BLOCK_TEXT_PAD_MM + name_width(&bp.name) / 2.0, off),
+            ),
+            PinDir::Right => (
+                Point::new(hw + BLOCK_LEAD_MM, off),
+                Point::new(hw + BLOCK_LEAD_MM / 2.0, off - BLOCK_PIN_TEXT_MM),
+                Point::new(hw - BLOCK_TEXT_PAD_MM - name_width(&bp.name) / 2.0, off),
+            ),
+            PinDir::Up => (
+                Point::new(off, -hh - BLOCK_LEAD_MM),
+                Point::new(off, -hh + BLOCK_PIN_TEXT_MM),
+                Point::new(off, -hh + BLOCK_PIN_TEXT_MM + BLOCK_PIN_PITCH_MM / 2.0),
+            ),
+            PinDir::Down => (
+                Point::new(off, hh + BLOCK_LEAD_MM),
+                Point::new(off, hh - BLOCK_PIN_TEXT_MM),
+                Point::new(off, hh - BLOCK_PIN_TEXT_MM - BLOCK_PIN_PITCH_MM / 2.0),
+            ),
+        };
+        return PinLayout { at, lead_from: edge, num_at, name_at };
+    }
+    let num_w = name_width(bp.no.trim());
+    let name_w = name_width(&bp.name);
+    let num_out = CONNECTOR_OUT_MM + CONNECTOR_NUM_GAP_MM;
+    let name_in = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
+    let num_tb = (CONNECTOR_OUT_MM + CONNECTOR_LEAD_MM) / 2.0;
+    let (at, lead_from, num_at, name_at) = match dir {
+        PinDir::Left => (
+            Point::new(-hw - CONNECTOR_LEAD_MM, off),
+            Point::new(-hw - CONNECTOR_OUT_MM, off),
+            Point::new(-(hw + num_out + num_w / 2.0), off - BLOCK_PIN_TEXT_MM),
+            Point::new(-hw + name_in + name_w / 2.0, off),
+        ),
+        PinDir::Right => (
+            Point::new(hw + CONNECTOR_LEAD_MM, off),
+            Point::new(hw + CONNECTOR_OUT_MM, off),
+            Point::new(hw + num_out + num_w / 2.0, off - BLOCK_PIN_TEXT_MM),
+            Point::new(hw - name_in - name_w / 2.0, off),
+        ),
+        PinDir::Up => (
+            Point::new(off, -hh - CONNECTOR_LEAD_MM),
+            Point::new(off, -hh - CONNECTOR_OUT_MM),
+            Point::new(off + CONNECTOR_NUM_SIDE_MM + num_w / 2.0, -(hh + num_tb)),
+            Point::new(off, -hh + BLOCK_PIN_TEXT_MM + BLOCK_PIN_PITCH_MM / 2.0),
+        ),
+        PinDir::Down => (
+            Point::new(off, hh + CONNECTOR_LEAD_MM),
+            Point::new(off, hh + CONNECTOR_OUT_MM),
+            Point::new(off + CONNECTOR_NUM_SIDE_MM + num_w / 2.0, hh + num_tb),
+            Point::new(off, hh - BLOCK_PIN_TEXT_MM - BLOCK_PIN_PITCH_MM / 2.0),
+        ),
+    };
+    PinLayout { at, lead_from, num_at, name_at }
+}
+
 fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     let (w, h) = block_box(spec);
     let (hw, hh) = (w / 2.0, h / 2.0);
-    let mut primitives = vec![Primitive::Rect {
-        p1: Point::new(-hw, -hh),
-        p2: Point::new(hw, hh),
-        filled: false,
-    }];
+    // コネクタの無いブロックは今までどおり長方形1つ。あれば絵の所を空けた線分 (白い口に見せる)
+    let mut primitives = if spec.has_connectors() {
+        outline_segments(&spec.pins, hw, hh)
+    } else {
+        vec![Primitive::Rect {
+            p1: Point::new(-hw, -hh),
+            p2: Point::new(hw, hh),
+            filled: false,
+        }]
+    };
     let mut pins: Vec<PinDef> = Vec::new();
     let pins_spec = &spec.pins;
 
     let side = |list: &[BlockPin], dir: PinDir, primitives: &mut Vec<Primitive>, pins: &mut Vec<PinDef>| {
         let n = list.len();
+        let groups = connector_groups(list);
         for (i, bp) in list.iter().enumerate() {
-            let off = offset(i, n);
-            let (at, num_at, name_at) = match dir {
-                PinDir::Left => (
-                    Point::new(-hw - BLOCK_LEAD_MM, off),
-                    Point::new(-hw - BLOCK_LEAD_MM / 2.0, off - BLOCK_PIN_TEXT_MM),
-                    Point::new(
-                        -hw + BLOCK_TEXT_PAD_MM + name_width(&bp.name) / 2.0,
-                        off,
-                    ),
-                ),
-                PinDir::Right => (
-                    Point::new(hw + BLOCK_LEAD_MM, off),
-                    Point::new(hw + BLOCK_LEAD_MM / 2.0, off - BLOCK_PIN_TEXT_MM),
-                    Point::new(hw - BLOCK_TEXT_PAD_MM - name_width(&bp.name) / 2.0, off),
-                ),
-                PinDir::Up => (
-                    Point::new(off, -hh - BLOCK_LEAD_MM),
-                    Point::new(off, -hh + BLOCK_PIN_TEXT_MM),
-                    Point::new(off, -hh + BLOCK_PIN_TEXT_MM + BLOCK_PIN_PITCH_MM / 2.0),
-                ),
-                PinDir::Down => (
-                    Point::new(off, hh + BLOCK_LEAD_MM),
-                    Point::new(off, hh - BLOCK_PIN_TEXT_MM),
-                    Point::new(off, hh - BLOCK_PIN_TEXT_MM - BLOCK_PIN_PITCH_MM / 2.0),
-                ),
-            };
-            let edge = match dir {
-                PinDir::Left => Point::new(-hw, off),
-                PinDir::Right => Point::new(hw, off),
-                PinDir::Up => Point::new(off, -hh),
-                PinDir::Down => Point::new(off, hh),
-            };
-            primitives.push(lead(edge.x, edge.y, at.x, at.y));
-            primitives.push(text(num_at.x, num_at.y, bp.no.trim(), BLOCK_PIN_TEXT_MM));
+            // まとまりの最初のピンの前に、そのまとまりの絵を描く
+            if let Some(group) = groups.iter().find(|g| g.start == i) {
+                let edges: Vec<Point> = (group.start..group.end)
+                    .map(|j| edge_point(dir, offset(j, n), hw, hh))
+                    .collect();
+                primitives.extend(connector_primitives(group.kind, dir, &edges));
+            }
+            let layout = pin_layout(bp, offset(i, n), dir, hw, hh);
+            primitives.push(lead(layout.lead_from.x, layout.lead_from.y, layout.at.x, layout.at.y));
+            primitives.push(text(layout.num_at.x, layout.num_at.y, bp.no.trim(), BLOCK_PIN_TEXT_MM));
             if !bp.name.is_empty() {
-                primitives.push(text(name_at.x, name_at.y, &bp.name, BLOCK_PIN_TEXT_MM));
+                primitives.push(text(layout.name_at.x, layout.name_at.y, &bp.name, BLOCK_PIN_TEXT_MM));
             }
             pins.push(PinDef {
                 number: bp.no.trim().into(),
                 name: bp.name.clone(),
-                at,
+                at: layout.at,
                 dir,
                 contacts: bp.contacts.iter().map(|c| c.trim().to_string()).collect(),
             });
@@ -412,6 +490,7 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     side(&pins_spec.right, PinDir::Right, &mut primitives, &mut pins);
     side(&pins_spec.top, PinDir::Up, &mut primitives, &mut pins);
     side(&pins_spec.bottom, PinDir::Down, &mut primitives, &mut pins);
+
 
     SymbolDef {
         id: BLOCK_SYMBOL_ID.into(),
@@ -917,5 +996,110 @@ mod tests {
             .unwrap_or_else(|_| panic!("{CONNECTOR_GOLDEN} が無い: MADAKE_UPDATE_GOLDEN=1 を付けて作る"));
         let got: serde_json::Value = serde_json::from_str(&text).expect("golden の JSON");
         assert!(got == want, "golden と違う: MADAKE_UPDATE_GOLDEN=1 で書き直し、git diff で変化を確かめる");
+    }
+
+    /// 線 (2点以上) の点の並び。線以外は None。
+    fn line_pts(p: &Primitive) -> Option<Vec<(f64, f64)>> {
+        match p {
+            Primitive::Line { pts } => Some(pts.iter().map(|q| (q.x, q.y)).collect()),
+            _ => None,
+        }
+    }
+
+    /// 接続点 `at` で終わるリード (外形側の端, 接続点)。
+    fn lead_to(def: &SymbolDef, at: Point) -> (Point, Point) {
+        def.primitives
+            .iter()
+            .find_map(|p| match p {
+                Primitive::Line { pts } if pts.len() == 2 && pts[1] == at => Some((pts[0], pts[1])),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("{at:?} へのリードが無い"))
+    }
+
+    /// A pin with a connector reaches 5 mm out of the box: its lead starts at the outer end of the picture, its number sits 0.25 mm beyond the picture above the lead, and its name starts 3 mm inside; a plain pin in the same block is drawn as before.
+    /// コネクタのあるピンは外形から5mm外まで伸びる: リードは絵の外端から始まり、番号はリードの上で絵の0.25mm外、名前は3mm内側から書く。同じブロックの普通のピンは今までどおり。
+    #[test]
+    fn a_connector_pin_reaches_five_millimetres_out() {
+        let def = block_symbol(&attrs(&[(
+            "block_pins",
+            r#"{"left":[{"no":"1","name":"A","connector":"usb_a_f"},{"no":"2","name":"B"}],"right":[{"no":"33","name":"C","connector":"dc_m"}]}"#,
+        )]))
+        .expect("ブロック定義");
+        // 外形 15×15 (hw = hh = 7.5)
+        assert_eq!(pin_at(&def, "1"), Point::new(-12.5, -2.5));
+        assert_eq!(lead_to(&def, Point::new(-12.5, -2.5)).0, Point::new(-10.0, -2.5));
+        assert_eq!(text_at(&def, "1"), Point::new(-10.85, -4.5), "番号の内端は絵の0.25mm外 (-10.25)");
+        assert_eq!(text_at(&def, "A"), Point::new(-3.9, -2.5), "名前は外形の3mm内側から");
+        assert_eq!(pin_at(&def, "33"), Point::new(12.5, 0.0));
+        assert_eq!(lead_to(&def, Point::new(12.5, 0.0)).0, Point::new(10.0, 0.0));
+        assert_eq!(text_at(&def, "33"), Point::new(11.45, -2.0));
+        assert_eq!(text_at(&def, "C"), Point::new(3.9, 0.0));
+        // 普通のピンは今までどおり (2.5mmのリード、番号はリードの上の中央、名前は1.5mm内側)
+        assert_eq!(pin_at(&def, "2"), Point::new(-10.0, 2.5));
+        assert_eq!(lead_to(&def, Point::new(-10.0, 2.5)).0, Point::new(-7.5, 2.5));
+        assert_eq!(text_at(&def, "2"), Point::new(-8.75, 0.5));
+        assert_eq!(text_at(&def, "B"), Point::new(-5.4, 2.5));
+    }
+
+    /// On the top and bottom sides a connector pin's number moves outside the box, right of the lead beyond the picture, while its name stays inside like a plain pin's.
+    /// 上辺・下辺では、コネクタのあるピンの番号は外形の外 (絵より先のリードの右) へ出て、名前は普通のピンと同じく内側に残る。
+    #[test]
+    fn top_and_bottom_connector_numbers_sit_beside_the_lead() {
+        let def = block_symbol(&attrs(&[(
+            "block_pins",
+            r#"{"top":[{"no":"U1","name":"A","connector":"usb_a_f"},{"no":"2","name":"B"}],"bottom":[{"no":"P","connector":"micro_b_f"}]}"#,
+        )]))
+        .expect("ブロック定義");
+        // 外形 15×20 (hw = 7.5, hh = 10)
+        assert_eq!(pin_at(&def, "U1"), Point::new(-2.5, -15.0));
+        assert_eq!(lead_to(&def, Point::new(-2.5, -15.0)).0, Point::new(-2.5, -12.5));
+        assert_eq!(text_at(&def, "U1"), Point::new(-0.8, -13.75));
+        assert_eq!(text_at(&def, "A"), Point::new(-2.5, -5.5), "名前は普通のピンと同じ4.5mm内側");
+        assert_eq!(text_at(&def, "2"), Point::new(2.5, -8.0), "普通のピンの番号は内側のまま");
+        assert_eq!(pin_at(&def, "P"), Point::new(0.0, 15.0));
+        assert_eq!(text_at(&def, "P"), Point::new(1.1, 13.75));
+    }
+
+    /// A block without connectors keeps its single outline rectangle, while a block with connectors draws the outline as lines with a gap exactly where each picture crosses the edge.
+    /// コネクタの無いブロックは外形の長方形1つのまま。コネクタのあるブロックは、絵が辺と交わる所だけを空けた線分で外形を描く。
+    #[test]
+    fn the_outline_has_gaps_exactly_at_the_pictures() {
+        let plain = block_symbol(&attrs(&[("block_pins", SAMPLE)])).expect("ブロック定義");
+        assert!(matches!(plain.primitives[0], Primitive::Rect { filled: false, .. }));
+        assert_eq!(plain.primitives.iter().filter(|p| matches!(p, Primitive::Rect { .. })).count(), 1);
+
+        let def = block_symbol(&attrs(&[(
+            "block_pins",
+            r#"{"left":[{"no":"1","connector":"usb_a_f"},{"no":"2"},{"no":"3","connector":"screw"},{"no":"4","connector":"screw"}]}"#,
+        )]))
+        .expect("ブロック定義");
+        // 外形 15×25 (hw = 7.5, hh = 12.5)。左辺のピンは y = -7.5, -2.5, 2.5, 7.5
+        let outline: Vec<Vec<(f64, f64)>> = def.primitives[..6].iter().map(|p| line_pts(p).expect("線")).collect();
+        assert_eq!(
+            outline,
+            vec![
+                vec![(-7.5, -12.5), (7.5, -12.5)],
+                vec![(7.5, -12.5), (7.5, 12.5)],
+                vec![(-7.5, 12.5), (7.5, 12.5)],
+                vec![(-7.5, -12.5), (-7.5, -9.5)],
+                vec![(-7.5, -5.5), (-7.5, 0.5)],
+                vec![(-7.5, 9.5), (-7.5, 12.5)],
+            ]
+        );
+        assert!(matches!(def.primitives[6], Primitive::Rect { .. }), "外形の次は1本目のピンの絵");
+    }
+
+    /// The automatic outline grows by 1.5 mm on each side that has a connector, because the names there start 3 mm inside instead of 1.5 mm.
+    /// 外形の自動寸法は、コネクタのある辺ごとに1.5mm広がる (その辺のピン名は1.5mmではなく3mm内側から書くため)。
+    #[test]
+    fn the_outline_makes_room_for_connector_bodies() {
+        let size = |json: &str| block_box(&parse_block_spec(&attrs(&[("block_pins", json)])).unwrap());
+        assert_eq!(size(r#"{"left":[{"no":"1","name":"ABCDE"}],"right":[{"no":"2","name":"ABCDE"}]}"#), (20.0, 10.0));
+        assert_eq!(
+            size(r#"{"left":[{"no":"1","name":"ABCDE","connector":"usb_a_f"}],"right":[{"no":"2","name":"ABCDE"}]}"#),
+            (25.0, 10.0),
+            "3 + 1.5 + 6 + 6 + 5 = 21.5 → 25"
+        );
     }
 }

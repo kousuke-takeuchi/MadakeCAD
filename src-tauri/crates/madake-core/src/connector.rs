@@ -7,7 +7,7 @@
 
 use serde::Deserialize;
 
-use crate::block::BlockPin;
+use crate::block::{offset, BlockPin, BlockPins};
 use crate::geometry::Point;
 use crate::symbol::{PinDir, Primitive};
 
@@ -269,6 +269,43 @@ pub fn connector_primitives(kind: ConnectorKind, dir: PinDir, edges: &[Point]) -
     }
 }
 
+/// コネクタのあるブロックの外形: 絵が辺と交わる所を空けた線分 (上→右→下→左、各辺は座標の小さい方から)。
+/// 白い口が辺の線で塗りつぶされずに見えるのはこのすき間のおかげ。長さ0の線分は作らない。
+pub fn outline_segments(pins: &BlockPins, hw: f64, hh: f64) -> Vec<Primitive> {
+    let gaps = |side: &[BlockPin]| -> Vec<(f64, f64)> {
+        let n = side.len();
+        connector_groups(side)
+            .iter()
+            .map(|g| {
+                (
+                    offset(g.start, n) - CONNECTOR_HALF_SPAN_MM,
+                    offset(g.end - 1, n) + CONNECTOR_HALF_SPAN_MM,
+                )
+            })
+            .collect()
+    };
+    let mut out = Vec::new();
+    edge_segments(&mut out, hw, &gaps(&pins.top), |x| Point::new(x, -hh));
+    edge_segments(&mut out, hh, &gaps(&pins.right), |y| Point::new(hw, y));
+    edge_segments(&mut out, hw, &gaps(&pins.bottom), |x| Point::new(x, hh));
+    edge_segments(&mut out, hh, &gaps(&pins.left), |y| Point::new(-hw, y));
+    out
+}
+
+/// 1辺 (`-half`〜`half`) を、すき間 `gaps` (小さい順) を除いた線分にする。
+fn edge_segments(out: &mut Vec<Primitive>, half: f64, gaps: &[(f64, f64)], at: impl Fn(f64) -> Point) {
+    let mut cursor = -half;
+    for &(lo, hi) in gaps {
+        if lo > cursor {
+            out.push(Primitive::Line { pts: vec![at(cursor), at(lo)] });
+        }
+        cursor = cursor.max(hi);
+    }
+    if half > cursor {
+        out.push(Primitive::Line { pts: vec![at(cursor), at(half)] });
+    }
+}
+
 /// テスト用: プリミティブが占める範囲 (最小, 最大)。円・弧は中心±半径。
 #[cfg(test)]
 pub(crate) fn primitive_extent(p: &Primitive) -> (Point, Point) {
@@ -289,7 +326,6 @@ pub(crate) fn primitive_extent(p: &Primitive) -> (Point, Point) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::block::BlockPins;
 
     fn left_side(json: &str) -> Vec<BlockPin> {
         let pins: BlockPins = serde_json::from_str(json).expect("ピン表");
