@@ -445,3 +445,74 @@ async fn place_mate_places_a_list_of_pairs_in_one_edit() {
         0
     );
 }
+
+/// connect_cable draws the LTE harness in one call: four board wires to a breakout, one line to the USB plug, cores mapped by pin order; the netlist has four nets, ERC finds no unconnected pin, and one undo removes it all.
+/// connect_cable は LTE ハーネスを1回で描く: 基板側の配線4本と分岐、USBプラグまでの1本線、ピン順の芯の対応。ネットリストは4ネット、ERC は未接続ピンを出さず、undo 1回で全部消える。
+#[tokio::test]
+async fn connect_cable_draws_a_breakout_harness_in_one_edit() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    call(&bridge, "place_symbol", json!({"sheet_id": sheet, "symbol_id": "connector_4p", "x": 50.0, "y": 100.0, "reference": "J45"})).await;
+    call(&bridge, "place_symbol", json!({"sheet_id": sheet, "symbol_id": "connector_4p", "x": 200.0, "y": 100.0, "rotation": 180, "reference": "USB1"})).await;
+    let depth = doc.engine.lock().unwrap().undo_depth();
+    let out = call(
+        &bridge,
+        "connect_cable",
+        json!({"sheet_id": sheet, "reference": "W45",
+               "cores": ["VBUS", "D-", "D+", "GND"],
+               "a": {"part": "J45", "style": "multi"},
+               "b": {"part": "USB1", "style": "single"}}),
+    )
+    .await;
+    assert_eq!(out["reference"], "W45");
+    let cores = out["cores"].as_array().expect("cores");
+    assert_eq!(cores.len(), 4);
+    assert_eq!(cores[1]["a"], "J45.2");
+    assert_eq!(cores[1]["b"], "USB1.2");
+    assert_eq!(cores[1]["wire_ids"].as_array().unwrap().len(), 1);
+    assert_eq!(doc.engine.lock().unwrap().undo_depth(), depth + 1);
+    let nets = call(&bridge, "get_netlist", json!({"sheet_id": sheet})).await;
+    assert_eq!(nets.as_array().unwrap().len(), 4, "{nets}");
+    let diags = call(&bridge, "run_verification", json!({"sheet_id": sheet})).await;
+    assert_eq!(unconnected_pins(&diags), 0);
+    doc.undo().expect("元に戻せる");
+    assert_eq!(doc.engine.lock().unwrap().project().sheets[0].entities.len(), 2);
+}
+
+/// If any cable in the list is wrong, connect_cable names its index and draws none of them; a correct list is drawn in one edit.
+/// リストのケーブルのどれか1本でも誤っていれば、connect_cable はその番号を知らせて1本も描かない。正しいリストは1回の編集で描く。
+#[tokio::test]
+async fn connect_cable_list_is_all_or_nothing() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    call(&bridge, "place_symbol", json!({"sheet_id": sheet, "symbol_id": "connector_3p", "x": 50.0, "y": 50.0, "reference": "J1"})).await;
+    call(&bridge, "place_symbol", json!({"sheet_id": sheet, "symbol_id": "connector_3p", "x": 150.0, "y": 50.0, "rotation": 180, "reference": "J2"})).await;
+    call(&bridge, "place_symbol", json!({"sheet_id": sheet, "symbol_id": "connector_4p", "x": 50.0, "y": 120.0, "reference": "J45"})).await;
+    let count = || doc.engine.lock().unwrap().project().sheets[0].entities.len();
+    let before = count();
+    let aux = json!({"cores": ["L", "R", "GND"], "a": {"part": "J1", "style": "single"}, "b": {"part": "J2", "style": "single"}});
+    let err = call_err(
+        &bridge,
+        "connect_cable",
+        json!({"sheet_id": sheet, "cables": [
+            aux.clone(),
+            {"cores": ["VBUS", "D-"], "a": {"part": "J45", "style": "multi"}, "b": {"part": "J2", "style": "single"}}
+        ]}),
+    )
+    .await;
+    assert!(err.contains("cables[1]") && err.contains("a 側のピンが 4 本で、芯は 2 本"), "{err}");
+    assert_eq!(count(), before);
+    let out = call(&bridge, "connect_cable", json!({"sheet_id": sheet, "cables": [aux]})).await;
+    assert_eq!(out["cables"].as_array().unwrap().len(), 1);
+    assert_eq!(out["cables"][0]["reference"], "W1");
+    assert_eq!(count(), before + 1);
+}
+
+/// connect_cable's description tells the agent that cores follow pin order and to use it instead of a fake breakout block.
+/// connect_cable の説明は、芯がピン順に対応することと、偽の分岐ブロックの代わりに使うことをエージェントに伝える。
+#[test]
+fn connect_cable_is_described_for_the_agent() {
+    let tools = tool_descriptions();
+    let (_, d) = tools.iter().find(|(n, _)| n == "connect_cable").expect("connect_cable");
+    assert!(d.contains("ピン順") && d.contains("分岐"), "{d}");
+}

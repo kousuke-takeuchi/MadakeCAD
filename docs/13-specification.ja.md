@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2877仕様項目**。
+全6領域・**2881仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1302,6 +1302,9 @@
 - connect_pins は配線のリストを受け取って1回で全部引き、1回の取り消しで全部消えるので、エージェントは配線1本ごとに呼ばずにシートを配線できる。 <sub>`connect_pins_draws_a_list_of_connections_in_one_edit`</sub>
 - リストの配線のどれか1本でも誤っていれば、connect_pins はその番号を知らせて1本も作らない。 <sub>`connect_pins_list_is_all_or_nothing`</sub>
 - place_mate は組のリストを受け取って1回で全部置き、1回の取り消しで全部消える。 <sub>`place_mate_places_a_list_of_pairs_in_one_edit`</sub>
+- connect_cable は LTE ハーネスを1回で描く: 基板側の配線4本と分岐、USBプラグまでの1本線、ピン順の芯の対応。ネットリストは4ネット、ERC は未接続ピンを出さず、undo 1回で全部消える。 <sub>`connect_cable_draws_a_breakout_harness_in_one_edit`</sub>
+- リストのケーブルのどれか1本でも誤っていれば、connect_cable はその番号を知らせて1本も描かない。正しいリストは1回の編集で描く。 <sub>`connect_cable_list_is_all_or_nothing`</sub>
+- connect_cable の説明は、芯がピン順に対応することと、偽の分岐ブロックの代わりに使うことをエージェントに伝える。 <sub>`connect_cable_is_described_for_the_agent`</sub>
 
 ### 図枠テンプレート (REST)
 
@@ -1429,6 +1432,7 @@
 - 読み取り系のツールも窓口経由で動く(エージェントは編集の前に図面を見られる)。 <sub>`reading_tools_work_through_the_bridge`</sub>
 - 存在しないツール名は、ターンを落とさずにエラーの結果として返る(モデルが言い直せる)。 <sub>`an_unknown_tool_name_comes_back_as_an_error_result`</sub>
 - 引数が間違っているときも理由つきのエラーの結果として返り、モデルが自分で直せる。 <sub>`bad_arguments_come_back_with_a_reason`</sub>
+- execute_commands の入力スキーマに run_cable の種類が載り、エージェントが区間のあるケーブルの書き方を知れる。 <sub>`execute_commands_schema_lists_the_run_cable_kind`</sub>
 
 ### tools
 

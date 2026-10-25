@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2877 specification clauses** across 6 areas.
+**2881 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1302,6 +1302,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - connect_pins takes a list of connections and draws them all in one call that one undo removes, so the agent can wire a whole sheet without one call per wire. <sub>`connect_pins_draws_a_list_of_connections_in_one_edit`</sub>
 - If any connection in the list is wrong, connect_pins names its index and creates none of them. <sub>`connect_pins_list_is_all_or_nothing`</sub>
 - place_mate takes a list of pairs and places them all in one call that one undo removes. <sub>`place_mate_places_a_list_of_pairs_in_one_edit`</sub>
+- connect_cable draws the LTE harness in one call: four board wires to a breakout, one line to the USB plug, cores mapped by pin order; the netlist has four nets, ERC finds no unconnected pin, and one undo removes it all. <sub>`connect_cable_draws_a_breakout_harness_in_one_edit`</sub>
+- If any cable in the list is wrong, connect_cable names its index and draws none of them; a correct list is drawn in one edit. <sub>`connect_cable_list_is_all_or_nothing`</sub>
+- connect_cable's description tells the agent that cores follow pin order and to use it instead of a fake breakout block. <sub>`connect_cable_is_described_for_the_agent`</sub>
 
 ### Frame templates (REST)
 
@@ -1429,6 +1432,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Reading tools work through the bridge too, so the agent can look at the drawing before editing. <sub>`reading_tools_work_through_the_bridge`</sub>
 - A tool name that does not exist comes back as an error result instead of killing the turn. <sub>`an_unknown_tool_name_comes_back_as_an_error_result`</sub>
 - Bad arguments come back as an error result carrying the reason, so the model can correct itself. <sub>`bad_arguments_come_back_with_a_reason`</sub>
+- The input schema published for execute_commands lists the run_cable entity kind, so an agent can see how a cable with a run is written. <sub>`execute_commands_schema_lists_the_run_cable_kind`</sub>
 
 ### tools
 

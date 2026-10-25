@@ -629,6 +629,34 @@ pub struct MateSpec {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ConnectCableParams {
+    /// 配線先シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 参照記号 (省略時はシートの次のW番号)。1本だけ引くときに使う (複数はcables)。
+    pub reference: Option<String>,
+    /// 型番 (部品表に載る)。
+    pub part_no: Option<String>,
+    /// 線径 sq。
+    pub sq: Option<f64>,
+    /// ケーブル全長 m (分岐の先も含む)。
+    pub length_m: Option<f64>,
+    /// シールド。
+    pub shield: Option<madake_core::CableShield>,
+    /// 芯の線色の既定。
+    pub color: Option<String>,
+    /// 芯 (名前の並び、または {core, color})。両端のピンへピン順に対応する。
+    pub cores: Option<Vec<madake_core::cable_run::CoreSpec>>,
+    /// 区間の始点側 (pins か part と style)。
+    pub a: Option<madake_core::cable_run::CableSide>,
+    /// 区間の終点側。
+    pub b: Option<madake_core::cable_run::CableSide>,
+    /// 1本線の経由点 (mm)。
+    pub via: Option<Vec<Point>>,
+    /// 複数のケーブルを1回で引く (上の欄の代わり)。全部引けるときだけ引き、undo一発で全部消える。
+    pub cables: Option<Vec<madake_core::cable_run::CableRunSpec>>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct SheetRefParams {
     /// 対象シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
@@ -1439,6 +1467,102 @@ impl MadakeMcp {
             return json_ok(&out);
         }
         json_ok(&serde_json::json!({ "mates": placed, "revision": patch.revision }))
+    }
+
+    #[tool(
+        description = "多芯ケーブルを、片側(または両側)を1本線で描いて1回で引く(例: USBプラグ側は1本線、基板側は芯ごとの配線4本)。cores=芯の名前の並び(または{core,color})。a/b=端ごとに pins(\"J45.1\"の並び。partを書けばピン番号か名前だけでもよい。同じ番号の2つ目は\"TB1.1#2\")か part(参照記号かentity id。pins省略でその部品のピンを順に使う)と style: multi=ピンから分岐点まで芯ごとに配線を引く(breakout_atで分岐点、省略でピンの先10mm) / single=1本線をその部品に着ける。**芯はピン順に対応する**(芯の数=ピンの数)。ネットリスト・電線リスト・ERCは芯ごとに端から端まで繋がり、1本線は位置では何にも繋がらない。偽の「分岐」ブロックや、1本の配線を複数のピンに触れさせる描き方(全ピンが短絡する)の代わりに使う。reference/part_no/sq/length_m(ケーブル全長)/shield/color/via(1本線の経由点)は任意。**複数のケーブルはcablesに並べて1回で引く**(全部引けるときだけ引き、undo一発で全部消える。誤りがあれば何番目かを知らせて1本も引かない)。ケーブルid・参照記号・1本線の点列runと、芯ごとの両端(a/b)と分岐の配線id(wire_ids)を返す"
+    )]
+    fn connect_cable(&self, Parameters(p): Parameters<ConnectCableParams>) -> Result<String, ErrorData> {
+        use madake_core::cable_run::{plan_cable_run, CableRunSpec};
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let single = p.cables.is_none();
+        let specs = match (p.cables, p.cores, p.a, p.b) {
+            (Some(list), None, None, None) if !list.is_empty() => list,
+            (None, Some(cores), Some(a), Some(b)) => vec![CableRunSpec {
+                reference: p.reference,
+                part_no: p.part_no,
+                sq: p.sq,
+                length_m: p.length_m,
+                shield: p.shield,
+                color: p.color,
+                cores,
+                a,
+                b,
+                via: p.via,
+            }],
+            _ => {
+                return Err(ErrorData::invalid_params(
+                    "cores と a と b (1本) か cables (複数) のどちらか一方を指定する",
+                    None,
+                ))
+            }
+        };
+        // 計画から追加までを同じロックの中で行う (間で部品が動くと端がピンから外れる)
+        let (planned, patch) = {
+            let mut engine = self.doc.engine.lock().unwrap();
+            let sheet = engine
+                .project()
+                .sheet(sheet_id)
+                .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+            let defs = sheet_symbol_defs(sheet);
+            // 前のケーブルで引いた配線・付けた参照記号を次の計画が見るよう、写しのシートへ順に足す
+            let mut working = sheet.clone();
+            let mut planned = Vec::with_capacity(specs.len());
+            for (i, spec) in specs.iter().enumerate() {
+                let plan = plan_cable_run(&working, &defs, spec).map_err(|e| {
+                    let e = if single { e } else { format!("cables[{i}]: {e}。1本も引いていません") };
+                    ErrorData::invalid_params(e, None)
+                })?;
+                for e in plan.entities() {
+                    working.entities.insert(e.id(), e);
+                }
+                planned.push(plan);
+            }
+            let commands = planned
+                .iter()
+                .flat_map(|plan| plan.entities())
+                .map(|entity| Command::AddEntity { sheet_id, entity })
+                .collect();
+            let patch = engine
+                .execute_batch(commands, self.doc.mcp_origin())
+                .map_err(|e| ErrorData::invalid_params(e.to_string(), None))?;
+            (planned, patch)
+        };
+        let _ = self.doc.patches.send(patch.clone());
+        let out: Vec<serde_json::Value> = planned
+            .iter()
+            .map(|plan| {
+                let cores: Vec<serde_json::Value> = plan
+                    .cable
+                    .cores
+                    .iter()
+                    .zip(&plan.ends)
+                    .map(|(core, ends)| {
+                        let wire_ids: Vec<Uuid> = [&core.end_a, &core.end_b]
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|e| match e {
+                                madake_core::CoreEnd::Wire { wire } => Some(*wire),
+                                madake_core::CoreEnd::Pin { .. } => None,
+                            })
+                            .collect();
+                        serde_json::json!({ "core": core.core, "a": ends[0], "b": ends[1], "wire_ids": wire_ids })
+                    })
+                    .collect();
+                serde_json::json!({
+                    "cable_id": plan.cable.id,
+                    "reference": plan.cable.reference,
+                    "run": plan.cable.run,
+                    "cores": cores,
+                })
+            })
+            .collect();
+        if single {
+            let mut one = out.into_iter().next().unwrap_or_default();
+            one["revision"] = serde_json::json!(patch.revision);
+            return json_ok(&one);
+        }
+        json_ok(&serde_json::json!({ "cables": out, "revision": patch.revision }))
     }
 
     #[tool(
