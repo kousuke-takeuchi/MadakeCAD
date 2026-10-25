@@ -65,3 +65,20 @@ Remaining problems, by impact:
 4. **The tidy metrics do not say what overlaps.** The agent could not find its 5 and 21 text overlaps.
 5. **Still present:** the agent reads the source with Grep, and the reply runs intermediate texts together.
 6. **New bug: a CLI process survives an app restart.** When the dev app restarted, the agent CLI of the aborted run kept running. It reconnected to the new app's MCP endpoint and wrote 334 edits into the next run's drawing. Those edits were recorded as the next conversation's turn.
+
+## Run with all follow-ups (2026-10-23)
+
+Same prompt and attachments, local build with #8 to #12 merged, plus the plug hiding its designator (this change).
+
+| | First run | Pin tools (#8) | All follow-ups |
+|---|---|---|---|
+| Time | about 40 min | 22.5 min | 29 min |
+| Warnings | 2 | 104 | 2 (both the known power-reachability false positive) |
+| Label overlaps (per sheet) | not measured | 5 / 21 / 0 | 0 / 0 / 0 |
+| Symbol overlaps, off-grid | n/a | on every sheet | 0 |
+| Sheet images viewed | 0 | 0 | 11 (7 of them zoomed into a region) |
+| Unconnected pins | 0 | 0 | 0 |
+
+- The extra minutes went into looking at the sheet and fixing what the agent saw. The only remaining tidy problem is one crossing that the layout cannot avoid.
+- 7 tool calls failed. The agent tried to remove the "黒" note on every wire by sending `color: ""`, and the empty string was lost on the way (`"color": }`). Fixed separately: a plain black wire no longer gets a note (#13).
+- #9 was checked in the app as well. After a forced restart, the old CLI's next request was refused with the "previous run" message, the CLI stopped, and the new drawing stayed empty for 7 minutes.
