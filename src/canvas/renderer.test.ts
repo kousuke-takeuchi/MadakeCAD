@@ -1024,3 +1024,57 @@ describe("wire legend block drawing", () => {
     expect(rec.rects.some((r) => r.style === theme.selection)).toBe(true);
   });
 });
+
+describe("hidden designator", () => {
+  const plug: SymbolDef = {
+    id: "connector_plug",
+    name: "plug",
+    name_ja: "プラグ",
+    category: "connector",
+    ref_prefix: "J",
+    primitives: [{ type: "line", pts: [{ x: -7.5, y: 0 }, { x: 2.5, y: 0 }] }],
+    pins: [{ number: "1", name: "", at: { x: -7.5, y: 0 } }],
+  } as SymbolDef;
+
+  const texts = (attrs: Record<string, string>) => {
+    const drawn: string[] = [];
+    const ctx = {
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 0,
+      font: "",
+      textAlign: "" as CanvasTextAlign,
+      beginPath() {},
+      moveTo() {},
+      lineTo() {},
+      closePath() {},
+      stroke() {},
+      fill() {},
+      arc() {},
+      fillText(text: string) {
+        drawn.push(text);
+      },
+    } as unknown as CanvasRenderingContext2D;
+    const vp = new Viewport();
+    vp.scale = 4;
+    const inst: SymbolInstance = {
+      id: "j5",
+      symbol_id: "connector_plug",
+      at: { x: 100, y: 50 },
+      rotation: 0,
+      mirror: false,
+      reference: "J5",
+      value: "",
+      attrs,
+    };
+    drawSymbol(ctx, vp, inst, plug, false, undefined, true);
+    return drawn;
+  };
+
+  // ja: hide_reference="true" のシンボルは参照記号を画面に描かない (嵌合の組の片方が同じ記号を二重に描かない。svg.rsと同ルール)
+  it("does not draw the designator when hide_reference is true", () => {
+    expect(texts({})).toContain("J5");
+    expect(texts({ hide_reference: "true" })).not.toContain("J5");
+  });
+});
+
