@@ -477,6 +477,10 @@ pub struct PlaceSymbolParams {
     /// 任意で `block_size` = `{"w":40,"h":30}` を渡して名前付きピンの機器を1回で作る。
     /// ピンに `contacts` (例 `["VBUS","D-","D+","GND"]`) を書くと、1本のピンで複数の導体を運ぶポートになる
     /// (ネットリストは接点ごとに分かれる)。接点は1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない。
+    /// ピンに `connector` (`usb_a_f` `usb_a_m` `usb_c_f` `usb_c_m` `micro_b_f` `micro_b_m` `jack35_f` `jack35_m`
+    /// `dc_f` `dc_m` `screw` `jst_ph_f` `jst_xh_f`。`_f` = メス、`_m` = オス) を書くと外形の辺にそのコネクタの絵を描く
+    /// (絵だけで、導体は `contacts` に書く)。続けて並ぶ `screw` / `jst_*` のピンに同じ `connector_ref` (例 `"J3"`) を
+    /// 書くと1つの本体になる。コネクタのあるピンの接続点は外形から5mm (位置は `get_pins` で読む)。
     /// `hide_reference` = `"true"` で参照記号を印字しない (データには残る)。嵌合するプラグ/ソケットの
     /// 組のように同じ記号を2つの部品に付けるとき、片方に付けて二重表示を避ける。
     pub attrs: Option<std::collections::BTreeMap<String, String>>,
@@ -1239,7 +1243,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "シンボルをシートに配置する。作成されたエンティティidと、置いた部品のピン(pins: 番号・名前・用紙座標x/y・向きdir)を返す。配線はこの座標を使うかconnect_pinsでピン名を指定する。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る。USB・3.5mmオーディオ・DCジャックのように複数の導体を運ぶコネクタは、導体ごとのピンにせず block_pins のピンに contacts (例 {\"no\":\"U3\",\"name\":\"USB-A メス\",\"contacts\":[\"VBUS\",\"D-\",\"D+\",\"GND\"]}) を付けたポートのピン1本で描く (接点は1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない)"
+        description = "シンボルをシートに配置する。作成されたエンティティidと、置いた部品のピン(pins: 番号・名前・用紙座標x/y・向きdir)を返す。配線はこの座標を使うかconnect_pinsでピン名を指定する。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る。USB・3.5mmオーディオ・DCジャックのように複数の導体を運ぶコネクタは、導体ごとのピンにせず block_pins のピンに contacts (例 {\"no\":\"U3\",\"name\":\"USB-A メス\",\"contacts\":[\"VBUS\",\"D-\",\"D+\",\"GND\"]}) を付けたポートのピン1本で描く (接点は1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない)。ピンに connector (usb_a_f usb_a_m usb_c_f usb_c_m micro_b_f micro_b_m jack35_f jack35_m dc_f dc_m screw jst_ph_f jst_xh_f。_f=メス、_m=オス) を付けると外形の辺にそのコネクタの絵を描く (絵だけで、導体は contacts に書く)。続けて並ぶ screw / jst_ph_f / jst_xh_f のピンに同じ connector_ref (例 J3) を付けると1つの本体になる。コネクタのあるピンの接続点は外形から5mmなので、位置は get_pins で読む"
     )]
     fn place_symbol(
         &self,

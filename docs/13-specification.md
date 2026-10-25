@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2992 specification clauses** across 6 areas.
+**2996 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1397,6 +1397,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Regression test for Tasks 1-8 (already passes): connect_cable lands a harness on one port pin ("39.U3"); cores map to the same-named contacts and each core is its own net. <sub>`connect_cable_lands_on_a_port_pin`</sub>
 - The tool descriptions tell the agent to draw a USB-like connector as one block pin with contacts and how to land a cable on it. <sub>`the_tools_describe_port_contacts`</sub>
 - The schema agents get for execute_commands shows pin contacts but never the file-only kind "port_block" (the schemars skip on EntityRepr::PortBlock holds). <sub>`the_agent_schema_hides_port_block`</sub>
+- Regression test for Tasks 1-8 (already passes): place_symbol with a connector on a block pin returns that pin 5 mm from the box edge, and the sheet image of such a block renders. <sub>`a_connector_pin_is_placed_five_millimetres_from_the_box`</sub>
+- Regression test for Tasks 1-8 (already passes): place_symbol refuses an unknown connector kind and a connector name on a USB socket, with the reason. <sub>`place_symbol_refuses_a_bad_connector`</sub>
+- place_symbol tells the agent which connector kinds exist, how to group terminal blocks and JST sockets with connector_ref, and to read pin positions with get_pins, both in its description and in the attrs schema. <sub>`place_symbol_describes_connectors`</sub>
 
 ### Frame templates (REST)
 
@@ -1710,6 +1713,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The system prompt tells the agent to look at the sheet image after drawing, instead of judging the layout by numbers alone. <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
 - The system prompt tells the agent to draw a multi-conductor connector (USB) as one block pin with contacts. <sub>`system_prompt_explains_port_contacts`</sub>
 - The system prompt states the contact rule (2 to 32 per pin, trimmed, unique) and that connect_cable on a port maps by order only with equal counts and refuses a partial name match and style multi. <sub>`system_prompt_states_the_contact_rules`</sub>
+- The system prompt tells the agent to give real connector pins their connector kind, to group terminal blocks and JST sockets with one connector_ref, to keep conductors in contacts and to re-read pin positions afterwards. <sub>`system_prompt_explains_connector_pictures`</sub>
 
 ### knowledge_docs
 

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2992仕様項目**。
+全6領域・**2996仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1397,6 +1397,9 @@
 - Tasks 1-8 の挙動の回帰テスト (最初から通る): connect_cable はハーネスをポートのピン1本 ("39.U3") に着ける。芯は同じ名前の接点に対応し、芯ごとに別のネットになる。 <sub>`connect_cable_lands_on_a_port_pin`</sub>
 - ツールの説明は、USB のようなコネクタを接点付きのブロックのピン1本で描くことと、そこへのケーブルの着け方をエージェントに伝える。 <sub>`the_tools_describe_port_contacts`</sub>
 - エージェントが受け取る execute_commands のスキーマはピンの contacts を含むが、ファイル専用の種類 "port_block" は含まない (PortBlock の schemars skip が効いている)。 <sub>`the_agent_schema_hides_port_block`</sub>
+- Tasks 1-8 の挙動の回帰テスト (最初から通る): ブロックのピンに connector を付けた place_symbol は、そのピンを外形から5mmの位置で返し、そのブロックのシート画像も描ける。 <sub>`a_connector_pin_is_placed_five_millimetres_from_the_box`</sub>
+- Tasks 1-8 の挙動の回帰テスト (最初から通る): place_symbol は知らないコネクタの種類と、USB の口に付けたコネクタの名前を理由付きで断る。 <sub>`place_symbol_refuses_a_bad_connector`</sub>
+- place_symbol は説明と attrs のスキーマの両方で、コネクタの種類、端子台・JST を connector_ref でまとめること、ピンの位置を get_pins で読むことをエージェントに伝える。 <sub>`place_symbol_describes_connectors`</sub>
 
 ### 図枠テンプレート (REST)
 
@@ -1710,6 +1713,7 @@
 - システムプロンプトは、描いた後にシート画像を見て確かめるよう指示する(数値だけで見た目を判断しない)。 <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
 - システムプロンプトは、複数の導体を運ぶコネクタ (USB) を接点付きのブロックのピン1本で描くようエージェントに伝える。 <sub>`system_prompt_explains_port_contacts`</sub>
 - システムプロンプトは接点の決まり (1ピンに2〜32個、前後の空白は除き、重ならない) と、ポートへの connect_cable は数が同じときだけ並び順で、名前の一部だけの一致と style multi は断られることを伝える。 <sub>`system_prompt_states_the_contact_rules`</sub>
+- システムプロンプトは、実物のコネクタのピンに connector の種類を付け、端子台・JST は1つの connector_ref でまとめ、導体は contacts に書き、付けた後にピンの位置を読み直すようエージェントに伝える。 <sub>`system_prompt_explains_connector_pictures`</sub>
 
 ### knowledge_docs
 
