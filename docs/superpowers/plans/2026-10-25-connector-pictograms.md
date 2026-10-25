@@ -2,12 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A block pin can name the physical connector it is (`connector`, 13 fixed kinds, plus `connector_ref` for screw terminals and JST sockets), and the block draws a small monochrome picture of it on the box edge, identically in Rust (SVG / PDF / PNG / `get_sheet_image`) and in TypeScript (canvas, editor preview).
+**Goal:** A block pin can name the physical connector it is (`connector`, 13 fixed kinds, plus `connector_ref` for screw terminals and JST sockets), and the block draws a small monochrome picture of it on the box edge, identically in Rust (SVG / PDF / PNG / `get_sheet_image`, and DXF / KiCad through per-shape block definitions) and in TypeScript (canvas, editor preview).
 
 **Architecture:**
 - **Data and validation.** `BlockPin` gains `connector: Option<ConnectorKind>` and `connector_ref: Option<String>`. A new module `madake-core/src/connector.rs` owns the kinds, the grouping, the labels, the pictures (local edge frames) and the gapped outline. `block.rs` calls it from validation, `block_box` and `block_symbol_from_spec`.
 - **Twin.** `src/canvas/connector.ts` and `src/canvas/dynamicSymbol.ts` mirror every function in the same order. A shared golden file `src-tauri/crates/madake-core/tests/golden/connector-blocks.json` is written by a Rust test and compared by a Vitest test. It is introduced in Task 3, before any geometry, and every geometry task regenerates it and then makes the TS twin match it.
 - **File format 19.** A block with any connector is also saved as the file-only kind `port_block`.
+- **Exporters.** DXF and KiCad write one definition per distinct block shape (Tasks 12, 13; spec §3.1) and read our own names back as blocks.
 - **UI, MCP, agent, docs** follow the core.
 
 **Tech Stack:** Rust (madake-core, madake-mcp, madake-agent; serde 1, serde_json 1 without `preserve_order`), Vue 3 + TypeScript (Vitest, vue-tsc), Tauri 2.
@@ -48,9 +49,9 @@
 
 ## Rulings (this plan)
 
-- **DXF and KiCad do not show the pictures (spec Goal bullet 4 and the Testing "Renderers" line are wrong for those two).** `dxf::sheet_to_dxf_with_frame` and `kicad::export_kicad_sch` pick one definition per `symbol_id` (`defs.get(inst.symbol_id)`), and every generic block has the id `block`, so both exporters write the empty `block` template box for every block. A probe on the current tree gave identical DXF/KiCad output for a 1-pin and an 8-pin block (`LINE=10 LWPOLYLINE=4`, KiCad `polyline=0 pin=0`). Pin names reach DXF only as attributes. This plan does not change the exporters. The renderer test covers SVG, and therefore PDF, PNG and `get_sheet_image`, which are built from the SVG. The docs say that DXF/KiCad still export a block as a plain box. Cost if wrong: a separate change that emits per-instance block definitions in `dxf.rs` / `kicad.rs` and teaches the DXF/KiCad importers to read them.
+- **DXF and KiCad show each block's real drawing (user decision 2026-10-25, overturning this plan's first ruling).** Both exporters picked one definition per `symbol_id` (`defs.get(inst.symbol_id)`), so every block exported as the empty `block` template (a 1-pin and an 8-pin block gave identical output). Tasks 12 and 13 export one definition per distinct block shape (`MDK_block_<16 hex>`, `MadakeCAD:block_<16 hex>`, key = FNV-1a 64 of the drawn primitives + pins, spec §3.1), keep `block` for a template-equal block and keep library symbols byte-identical. The importers map those names back to `block` and restore `block_pins` / `block_size` from the DXF attributes / KiCad properties; graphics are not read back. Cost if wrong: names in exported files only (key scheme), or two importer branches.
 - **A wired pin that gets a connector does not always lose its wire (spec §2.2 says it does).** A pin connects to any point of a wire (`netlist.rs`, "ピン ⇔ Wire上の任意点"). A wire that leaves the pin straight outward still passes through the new pin point, so the net is unchanged and only the old wire end dangles. Review Focus 2 pins the ERC signal. Cost if wrong: none in code; the docs wording changes.
-- **Commit grouping.** The spec's Delivery lists four commit groups (core, TS, UI, MCP/docs). This plan pairs Rust and TS inside each geometry task (Tasks 5 and 6), so the golden file never disagrees with the TS twin at any commit. There are 12 commits, still one PR. Cost if wrong: history shape only.
+- **Commit grouping.** The spec's Delivery lists four commit groups (core, TS, UI, MCP/docs). This plan pairs Rust and TS inside each geometry task (Tasks 5 and 6), so the golden file never disagrees with the TS twin at any commit. There are 14 commits, still one PR. Cost if wrong: history shape only.
 - **Golden file shape.** One case per line (diffable), 13 kinds × 4 sides as the connector pin alone (grouped kinds: two pins with ref `J1`), plus `aogu-hub-39`, `aogu-amp-53`, `mixed-left-right`, `top-bottom` and `plain` (the existing `SAMPLE`, no connectors). About 80 KB. The TS twin of the §2.5 no-overlap test is the golden equality on the same four fixtures: TS has no second copy of the overlap checker.
 - **TS-only input checks.** TS cannot rely on serde, so `parseBlockSpec` also refuses a non-string `connector_ref` with `block_pins is not valid JSON: connector_ref must be a string` (Rust refuses it during deserialisation). `null` is treated as absent in both. Cost if wrong: one message.
 - **Group-name clearing** lives in a pure `patchRow` in `blockEditor.ts`. The store's `updateRow` calls it, so the store test covers it.
@@ -63,9 +64,10 @@
 |---|---|
 | `src-tauri/crates/madake-core/src/connector.rs` (new) | `ConnectorKind`, constants, `connector_groups`, `group_label`, edge frames, `connector_primitives`, `outline_segments`, test helper `primitive_extent` |
 | `src-tauri/crates/madake-core/src/lib.rs` | `pub mod connector;` |
-| `src-tauri/crates/madake-core/src/block.rs` | `BlockPin` fields, `check_connectors`, `has_connectors`, `side_pad`, `side_text_width`, `caption_inset`, `block_box`, `edge_point`, `pin_layout`, `label_at`, `block_symbol_from_spec`, golden test and fixtures, overlap test |
+| `src-tauri/crates/madake-core/src/block.rs` | `block_export_id`, `is_block_export_id`, `export_def`, `imported_block_attrs`, `export_blocks_sheet`; `BlockPin` fields, `check_connectors`, `has_connectors`, `side_pad`, `side_text_width`, `caption_inset`, `block_box`, `edge_point`, `pin_layout`, `label_at`, `block_symbol_from_spec`, golden test and fixtures, overlap test |
 | `src-tauri/crates/madake-core/tests/golden/connector-blocks.json` (new, generated) | shared Rust ↔ TS golden |
 | `src-tauri/crates/madake-core/src/command.rs` | refusal test only |
+| `src-tauri/crates/madake-core/src/dxf.rs`, `kicad.rs` | per-shape block definitions on export, `block` + pin table on import (Tasks 12, 13) |
 | `src-tauri/crates/madake-core/src/svg.rs`, `verify.rs` | regression tests only |
 | `src-tauri/crates/madake-core/src/model.rs`, `io.rs` | format 19, `is_port_block`, doc comments, tests |
 | `src/canvas/connector.ts` (new) | TS twin of `connector.rs` |
@@ -3633,7 +3635,228 @@ git commit -m "feat(mcp): place_symbol とエージェントにコネクタの�
 
 ---
 
-### Task 12: Docs (EN + JA) and the final check
+### Task 12: Per-shape block definitions in DXF (export key, export, import)
+
+**Files:**
+- Modify: `src-tauri/crates/madake-core/src/block.rs` (`block_export_id`, `is_block_export_id`, `export_def`, `imported_block_attrs`, test fixture `export_blocks_sheet`, one test)
+- Modify: `src-tauri/crates/madake-core/src/dxf.rs` (`sheet_to_dxf_with_frame`, `symbol_id_of_block`, `import_dxf` INSERT branch, three tests)
+- Modify: `docs/13-specification.md`, `docs/13-specification.ja.md` (generated)
+
+**Interfaces:**
+- Produces (`block.rs`, used by Task 13):
+  - `pub fn block_export_id(def: &SymbolDef) -> String` — `"block"` when primitives + pins equal `block_template()`'s, else `"block_" + {:016x}` of FNV-1a 64 over `serde_json::to_string(&(&def.primitives, &def.pins))` (spec §3.1).
+  - `pub fn is_block_export_id(id: &str) -> bool` — `block`, or `block_` + exactly 16 of `0-9a-f`.
+  - `pub fn export_def<'a>(inst: &SymbolInstance, index: &crate::symbol::DefIndex<'a>) -> Option<Cow<'a, SymbolDef>>` — `index.get(inst)`; for `symbol_id == BLOCK_SYMBOL_ID` an owned clone whose `id` is `block_export_id`; library symbols borrowed unchanged.
+  - `pub fn imported_block_attrs(pins: Option<&str>, size: Option<&str>) -> Option<BTreeMap<String, String>>` — the non-empty values under `block_pins` / `block_size`; `None` when `block_symbol` refuses them.
+  - `#[cfg(test)] pub(crate) fn export_blocks_sheet() -> Sheet` — next to `test_block`.
+- Consumes: `symbol::DefIndex` (exists), `block::test_block` (exists).
+
+- [ ] **Step 1: Write the failing tests**
+
+In `block.rs`, next to `test_block` (same `#[cfg(test)]`):
+
+```rust
+#[cfg(test)]
+pub(crate) fn export_blocks_sheet() -> crate::model::Sheet {
+    use crate::model::{Orientation, PaperSize, Sheet};
+    let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+    for e in [
+        test_block("B0", "", 40.0, 40.0, "{}"),
+        test_block("B1", "", 80.0, 40.0, r#"{"left":[{"no":"1","name":"IN"}]}"#),
+        test_block("B2", "", 120.0, 40.0, r#"{ "left": [ {"no": "1", "name": "IN"} ] }"#),
+        test_block(
+            "B8", "", 160.0, 40.0,
+            r#"{"left":[{"no":"1"},{"no":"2"},{"no":"3"},{"no":"4"}],"right":[{"no":"5"},{"no":"6"},{"no":"7"},{"no":"8","name":"OUT"}]}"#,
+        ),
+        test_block("BU", "", 200.0, 40.0, r#"{"left":[{"no":"1","name":"USB","connector":"usb_a_m"}]}"#),
+    ] {
+        sheet.entities.insert(e.id(), e);
+    }
+    sheet
+}
+```
+
+(If `"{}"` is refused by `parse_block_spec`, give `B0` no attributes instead; the test only needs one block equal to the template.)
+
+In `block::tests`, test `block_export_id_follows_the_drawn_shape_only`: (a) `block_export_id(&block_template()) == "block"`; (b) `B1`'s and `B2`'s tables (different whitespace) give the same id; (c) these each give a different id from `B1`'s and from each other: name `IN` → `IN2`, an extra pin `2`, `"connector":"usb_a_f"`, and `B1`'s table plus `block_size` `{"w":30,"h":20}`; (d) every id from (b)/(c) passes `is_block_export_id`; (e) `is_block_export_id` is false for `block_x`, `block_` + 15 hex, `block_` + 17 hex, `block_` + 16 hex with an upper-case `A`, and `relay_coil`.
+RED: does not compile (`cannot find function block_export_id`).
+
+In `dxf::tests`:
+- `each_block_shape_is_its_own_dxf_block`: `sheet_to_dxf(&sheet, &defs(&sheet), &[])` of `crate::block::export_blocks_sheet()`. BLOCK names (as in `symbols_become_block_inserts_with_attributes`) contain `MDK_block` once and exactly three names `MDK_block_<16 hex>`; with `entity_records`, the INSERTs of `B1` and `B2` (find by the following `TAG1` ATTRIB) name the same block, `B8` and `BU` two others, `B0` names `MDK_block`; the records between the `BLOCK` of `BU`'s name and its `ENDBLK` include a `SOLID`; `B8`'s ATTRIBs include `TERM01` … `TERM08`.
+  RED: `assert` on the three `MDK_block_` names fails (today only `MDK_block`).
+- `our_block_shapes_import_back_as_blocks_with_their_pin_table`: export as above, `import_dxf(&dxf, "往復", &DxfImportOptions::default())`; `report.skipped` empty, `report.symbols == 5`, every symbol has `symbol_id == "block"`, and `B8`'s `attrs["block_pins"]` equals the fixture's text; no key `BLOCK_PINS` remains.
+  RED: `report.skipped` lists `MDK_block_… x4` (`symbol_id_of_block` cannot resolve them).
+- `an_unreadable_block_pin_table_imports_as_the_template_with_a_warning`: export, then replace the encoded value of `B1`'s table in the text (`encode_text(r#"{"left":[{"no":"1","name":"IN"}]}"#)`, unique in the file) by `not json`; import; `B1` is `block` with no `block_pins` attribute and `report.warnings` has one entry containing `B1` and `見本の箱`.
+  RED: `B1` is missing (skipped).
+
+Each test has the two `///` lines (EN, JA) above `#[test]`.
+
+- [ ] **Step 2: Run to verify RED**
+
+Run (one at a time):
+`cd /Users/ktakeuchi/Documents/MadakeCAD/.worktrees/connector-pictograms && touch src-tauri/crates/madake-core/src/lib.rs src-tauri/crates/madake-mcp/src/lib.rs src-tauri/crates/madake-agent/src/lib.rs && cd src-tauri && cargo test -p madake-core each_block_shape_is_its_own_dxf_block 2>&1 | grep -E "error\[|panicked|test result"` — Expected: `error[E0425]` for `block_export_id` / `export_blocks_sheet` until Step 3 adds them. After adding only the `block.rs` functions (Step 3 part 1), re-run: Expected `panicked` on the `MDK_block_` count. Same for the other two DXF test names (panicked on `skipped` / missing `B1`).
+
+- [ ] **Step 3: Implement**
+
+Part 1, `block.rs` (non-obvious, so in full):
+
+```rust
+fn shape_key(def: &SymbolDef) -> String {
+    serde_json::to_string(&(&def.primitives, &def.pins)).expect("SymbolDef serialises")
+}
+
+/// Name of a block's drawn shape in DXF / KiCad export (spec §3.1).
+pub fn block_export_id(def: &SymbolDef) -> String {
+    let key = shape_key(def);
+    if key == shape_key(&block_template()) {
+        return BLOCK_SYMBOL_ID.to_string();
+    }
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in key.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{BLOCK_SYMBOL_ID}_{h:016x}")
+}
+
+pub fn is_block_export_id(id: &str) -> bool {
+    id == BLOCK_SYMBOL_ID
+        || id.strip_prefix("block_").is_some_and(|h| {
+            h.len() == 16 && h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        })
+}
+
+pub fn export_def<'a>(
+    inst: &crate::model::SymbolInstance,
+    index: &crate::symbol::DefIndex<'a>,
+) -> Option<std::borrow::Cow<'a, SymbolDef>> {
+    let def = index.get(inst)?;
+    if inst.symbol_id != BLOCK_SYMBOL_ID {
+        return Some(def);
+    }
+    let mut def = def.into_owned();
+    def.id = block_export_id(&def);
+    Some(std::borrow::Cow::Owned(def))
+}
+
+pub fn imported_block_attrs(pins: Option<&str>, size: Option<&str>) -> Option<BTreeMap<String, String>> {
+    let mut attrs = BTreeMap::new();
+    for (k, v) in [(BLOCK_PINS_ATTR, pins), (BLOCK_SIZE_ATTR, size)] {
+        if let Some(v) = v.filter(|v| !v.is_empty()) {
+            attrs.insert(k.to_string(), v.to_string());
+        }
+    }
+    block_symbol(&attrs).ok().map(|_| attrs)
+}
+```
+
+Give each `pub fn` a short doc comment in the file's language (Japanese), as the neighbours have.
+
+Part 2, `dxf.rs` `sheet_to_dxf_with_frame`:
+- Replace the `defs` / `used` collection (`let defs: BTreeMap<&str, &SymbolDef> = …` and the loop that fills `used`) with `let index = crate::symbol::DefIndex::new(symbols);` and `let mut used: BTreeMap<String, std::borrow::Cow<SymbolDef>> = BTreeMap::new();`, filled by `if let Some(def) = crate::block::export_def(inst, &index) { used.entry(def.id.clone()).or_insert(def); }`.
+- The BLOCKS loop `for (id, def) in &used` keeps its body (`def` is now a `Cow`; pass `&**def` / `def` where a `&SymbolDef` is needed).
+- The INSERT loop: `let Some(def) = crate::block::export_def(inst, &index) else { … unresolved … };` and the block name `format!("{BLOCK_PREFIX}{}", def.id)` instead of `inst.symbol_id`. Pass `&def` on to `symbol_top_y` / `instance_attributes`.
+- Any other `defs.get(` in the function: same replacement (`grep -n "defs.get" src-tauri/crates/madake-core/src/dxf.rs` must print nothing afterwards).
+
+Part 3, `dxf.rs` import:
+- `symbol_id_of_block`: after `strip_prefix`, `if crate::block::is_block_export_id(id) { return Some(crate::block::BLOCK_SYMBOL_ID.to_string()); }`.
+- In the `INSERT` branch, after the attribute loop and before `push(… Entity::Symbol …)`: when `symbol_id == BLOCK_SYMBOL_ID`, `let pins = attrs.remove("BLOCK_PINS"); let size = attrs.remove("BLOCK_SIZE");` then `match crate::block::imported_block_attrs(pins.as_deref(), size.as_deref())` — `Some(a)` → `attrs.extend(a)`; `None` → `report.warnings.push(format!("{reference}: ブロックのピン表を読めないので見本の箱にしました"))`.
+
+- [ ] **Step 4: Run to verify GREEN**
+
+- `cd /Users/ktakeuchi/Documents/MadakeCAD/.worktrees/connector-pictograms && touch src-tauri/crates/madake-core/src/lib.rs src-tauri/crates/madake-mcp/src/lib.rs src-tauri/crates/madake-agent/src/lib.rs && cd src-tauri && cargo test -p madake-core block_export_id_follows_the_drawn_shape_only 2>&1 | grep "test result"` — Expected: `ok. 1 passed`.
+- Same command with `each_block_shape_is_its_own_dxf_block`, then `our_block_shapes_import_back_as_blocks_with_their_pin_table`, then `an_unreadable_block_pin_table_imports_as_the_template_with_a_warning` — Expected: `ok. 1 passed` each.
+- `cd /Users/ktakeuchi/Documents/MadakeCAD/.worktrees/connector-pictograms/src-tauri && cargo test -p madake-core dxf:: 2>&1 | grep -E "FAILED|test result"` — Expected: `ok`, 0 failed (existing DXF tests, incl. `export_then_import_round_trips_the_sheet`, unchanged).
+
+- [ ] **Step 5: Spec docs and commit**
+
+Run: `cd /Users/ktakeuchi/Documents/MadakeCAD/.worktrees/connector-pictograms && python3 scripts/gen_spec.py && python3 scripts/gen_spec.py --check` — Expected: `spec docs up to date; all tests have bilingual spec comments`.
+
+```bash
+cd /Users/ktakeuchi/Documents/MadakeCAD/.worktrees/connector-pictograms
+git add src-tauri/crates/madake-core/src/block.rs src-tauri/crates/madake-core/src/dxf.rs docs/13-specification.md docs/13-specification.ja.md
+git commit -m "feat(dxf): ブロックを形ごとの定義で書き出し、読み戻す"
+```
+
+---
+
+### Task 13: Per-shape block symbols in KiCad (export, import)
+
+**Files:**
+- Modify: `src-tauri/crates/madake-core/src/kicad.rs` (`export_kicad_sch`, `import_kicad_sch`, two tests)
+- Modify: `docs/13-specification.md`, `docs/13-specification.ja.md` (generated)
+
+**Interfaces:**
+- Consumes: `block::{export_def, is_block_export_id, imported_block_attrs, export_blocks_sheet, BLOCK_SYMBOL_ID}` (Task 12), `symbol::DefIndex`.
+- Produces: no new API. `write_lib_symbol` is unchanged (it already names the entry and its units from `def.id` and writes pins and fills).
+
+- [ ] **Step 1: Write the failing tests**
+
+In `kicad::tests`:
+- `each_block_shape_is_its_own_kicad_lib_symbol`: `export_kicad_sch(&sheet, &defs(&sheet))` of `crate::block::export_blocks_sheet()`; parse with `parse_sexpr`. `lib_symbols` names (as in `used_symbols_are_embedded_in_lib_symbols`) are `MadakeCAD:block` plus exactly three `MadakeCAD:block_<16 hex>`; the entry used by `B8` has 8 `pin`s in its units, numbers `1`…`8`, one with name `OUT`; the entry used by `BU` has a `rectangle` whose `fill` `type` is `outline`; top-level `symbol`s: `B1` and `B2` share one `lib_id`, `B8` has 8 `(pin …)` children, `B0` has `lib_id` `MadakeCAD:block`.
+  RED: names are only `["MadakeCAD:block"]`.
+- `our_block_lib_symbols_import_back_as_blocks_with_their_pin_table`: export, `import_kicad_sch(&text, "往復")`; `report.skipped` empty, `report.symbols == 5`, all `symbol_id == "block"`, `B8`'s `attrs["block_pins"]` equals the fixture's text.
+  RED: `report.skipped` lists `MadakeCAD:block_… x1` entries.
+
+Two `///` lines (EN, JA) above each `#[test]`.
+
+- [ ] **Step 2: Run to verify RED**
+
+`cd /Users/ktakeuchi/Documents/MadakeCAD/.worktrees/connector-pictograms && touch src-tauri/crates/madake-core/src/lib.rs src-tauri/crates/madake-mcp/src/lib.rs src-tauri/crates/madake-agent/src/lib.rs && cd src-tauri && cargo test -p madake-core each_block_shape_is_its_own_kicad_lib_symbol 2>&1 | grep -E "panicked|test result"` — Expected: `panicked` (left `["MadakeCAD:block"]`). Then the same with `our_block_lib_symbols_import_back_as_blocks_with_their_pin_table` — Expected: `panicked` on `skipped`.
+
+- [ ] **Step 3: Implement**
+
+`export_kicad_sch`: the same three replacements as in DXF (Task 12 Part 2): `DefIndex::new(symbols)`, `used: BTreeMap<String, Cow<SymbolDef>>` filled from `crate::block::export_def`, and per instance `let Some(def) = crate::block::export_def(inst, &index) else { … unresolved … }` with `lib_id` `format!("{EXPORT_LIB}{}", def.id)` instead of `inst.symbol_id`. `for def in used.values() { write_lib_symbol(&mut out, def); }` stays. Afterwards `grep -n "defs.get" src-tauri/crates/madake-core/src/kicad.rs` prints nothing.
+
+`import_kicad_sch`:
+
+```rust
+let own_id = lib_id.strip_prefix(EXPORT_LIB).and_then(|id| {
+    if crate::block::is_block_export_id(id) {
+        Some(crate::block::BLOCK_SYMBOL_ID.to_string())
+    } else {
+        crate::symbol::resolve_symbol(id).is_some().then(|| id.to_string())
+    }
+});
+```
+
+and before `push(… Entity::Symbol …)`:
+
+```rust
+let mut attrs = BTreeMap::new();
+if symbol_id == crate::block::BLOCK_SYMBOL_ID {
+    let opt = |n: &str| Some(prop(n)).filter(|v| !v.is_empty());
+    match crate::block::imported_block_attrs(opt("block_pins").as_deref(), opt("block_size").as_deref()) {
+        Some(a) => attrs = a,
+        None => report.warnings.push(format!(
+            "{}: ブロックのピン表を読めないので見本の箱にしました",
+            prop("Reference")
+        )),
+    }
+}
+```
+
+with `attrs` instead of `attrs: Default::default()` (use the `BTreeMap` path already imported in the file, or `std::collections::BTreeMap`).
+
+- [ ] **Step 4: Run to verify GREEN**
+
+- The two test names, one per run, with the Step 2 command — Expected: `ok. 1 passed` each.
+- `cd /Users/ktakeuchi/Documents/MadakeCAD/.worktrees/connector-pictograms/src-tauri && cargo test -p madake-core kicad:: 2>&1 | grep -E "FAILED|test result"` — Expected: `ok`, 0 failed (`used_symbols_are_embedded_in_lib_symbols`, `export_then_import_round_trips_the_sheet` unchanged).
+- `cd /Users/ktakeuchi/Documents/MadakeCAD/.worktrees/connector-pictograms/src-tauri && cargo test -p madake-mcp --test link_export 2>&1 | grep -E "FAILED|test result"` — Expected: `ok`.
+
+- [ ] **Step 5: Spec docs and commit**
+
+Run: `cd /Users/ktakeuchi/Documents/MadakeCAD/.worktrees/connector-pictograms && python3 scripts/gen_spec.py && python3 scripts/gen_spec.py --check` — Expected: `spec docs up to date; all tests have bilingual spec comments`.
+
+```bash
+cd /Users/ktakeuchi/Documents/MadakeCAD/.worktrees/connector-pictograms
+git add src-tauri/crates/madake-core/src/kicad.rs docs/13-specification.md docs/13-specification.ja.md
+git commit -m "feat(kicad): ブロックを形ごとのシンボルで書き出し、読み戻す"
+```
+
+---
+
+### Task 14: Docs (EN + JA) and the final check
 
 **Files:**
 - Modify: `docs/03-schematic-editor.md`, `docs/03-schematic-editor.ja.md`, `docs/05-wire-management.md`, `docs/05-wire-management.ja.md`, `docs/10-automation-api.md`, `docs/10-automation-api.ja.md`, `docs/internal/feature-inventory.md`
@@ -3646,13 +3869,13 @@ git commit -m "feat(mcp): place_symbol とエージェントにコネクタの�
 In `docs/03-schematic-editor.md`, replace `and confirming it is one undo step` (end of the *Device blocks with named pins* bullet) with:
 
 ```markdown
-and confirming it is one undo step. A pin can also say which **physical connector** it is (*Connector* column: USB-A, USB-C or micro-B socket or plug, 3.5 mm jack or plug, DC jack or plug, screw terminals, JST PH or XH socket): a small black-and-white picture is drawn on the box edge — a socket as an open body set into the edge, a plug as a black insert sticking out — and that pin's connection point moves 5 mm out from the box (ERC then reports the wire end to tidy up, or the pin if the wire no longer reaches it). Consecutive screw-terminal or JST pins with the same *Group name* (`J3`, `TB1`) share one body labelled `J3 PH` / `TB1`. The picture is drawing-only: contacts, nets and reports do not change. It appears on the canvas and in SVG, PDF and PNG output; DXF and KiCad export still write a generic block as its plain template box
+and confirming it is one undo step. A pin can also say which **physical connector** it is (*Connector* column: USB-A, USB-C or micro-B socket or plug, 3.5 mm jack or plug, DC jack or plug, screw terminals, JST PH or XH socket): a small black-and-white picture is drawn on the box edge — a socket as an open body set into the edge, a plug as a black insert sticking out — and that pin's connection point moves 5 mm out from the box (ERC then reports the wire end to tidy up, or the pin if the wire no longer reaches it). Consecutive screw-terminal or JST pins with the same *Group name* (`J3`, `TB1`) share one body labelled `J3 PH` / `TB1`. The picture is drawing-only: contacts, nets and reports do not change. It appears on the canvas and in SVG, PDF, PNG, DXF and KiCad output (DXF and KiCad write one block definition per distinct block shape, and read it back as a block with its pin table)
 ```
 
 In `docs/03-schematic-editor.ja.md`, replace `確定は**undo一発**` with:
 
 ```markdown
-確定は**undo一発**。ピンには**実物のコネクタの形**も書ける(「コネクタ」列: USB-A・USB-C・micro-B のメス/オス、3.5mm ジャック/プラグ、DC ジャック/プラグ、端子台(ネジ)、JST PH/XH メス)。外形の辺に小さな白黒の絵を描き(メスは辺にはめ込んだ白い口、オスは外へ出る黒い差し込み)、そのピンの接続点は外形から5mmへ伸びる(ERC が付け直す配線の端か、配線が届かなくなったピンを知らせる)。同じ「まとめ名」(`J3`・`TB1`)の端子台・JST のピンが続けば本体は1つになり、`J3 PH`・`TB1` と書く。絵は描くだけで、接点・ネット・帳票は変わらない。キャンバスと SVG・PDF・PNG 出力に出る。DXF・KiCad 出力は汎用ブロックを今も見本の箱で書き出す
+確定は**undo一発**。ピンには**実物のコネクタの形**も書ける(「コネクタ」列: USB-A・USB-C・micro-B のメス/オス、3.5mm ジャック/プラグ、DC ジャック/プラグ、端子台(ネジ)、JST PH/XH メス)。外形の辺に小さな白黒の絵を描き(メスは辺にはめ込んだ白い口、オスは外へ出る黒い差し込み)、そのピンの接続点は外形から5mmへ伸びる(ERC が付け直す配線の端か、配線が届かなくなったピンを知らせる)。同じ「まとめ名」(`J3`・`TB1`)の端子台・JST のピンが続けば本体は1つになり、`J3 PH`・`TB1` と書く。絵は描くだけで、接点・ネット・帳票は変わらない。キャンバスと SVG・PDF・PNG・DXF・KiCad 出力に出る(DXF・KiCad はブロックの形ごとに定義を書き、読み戻すとピン表付きのブロックになる)
 ```
 
 - [ ] **Step 2: Wire management (port paragraph)**
@@ -3714,7 +3937,7 @@ Claude Codeはリポジトリの`.mcp.json`で自動接続。
 In `docs/internal/feature-inventory.md`, replace `ピン名は外形の内側・ピン番号は外側、5mmピッチ)。` with:
 
 ```markdown
-ピン名は外形の内側・ピン番号は外側、5mmピッチ)。ピンの`connector`(13種: USB-A/USB-C/micro-B のメス・オス、3.5mm・DC のジャック・プラグ、端子台、JST PH/XH メス)で外形の辺に白黒のコネクタの絵を描き、続く端子台・JST のピンは同じ`connector_ref`で1つの本体と名前(`J3 PH`・`TB1`)になる。コネクタのあるピンの接続点は外形から5mm。絵だけで接点・ネットは変えない(キャンバスと SVG/PDF/PNG。DXF・KiCad はブロックを見本の箱で書き出すので出ない)。Rust↔TS の一致は`madake-core/tests/golden/connector-blocks.json`で確かめる。形式19、コネクタのあるブロックはファイルでは種類`port_block`。
+ピン名は外形の内側・ピン番号は外側、5mmピッチ)。ピンの`connector`(13種: USB-A/USB-C/micro-B のメス・オス、3.5mm・DC のジャック・プラグ、端子台、JST PH/XH メス)で外形の辺に白黒のコネクタの絵を描き、続く端子台・JST のピンは同じ`connector_ref`で1つの本体と名前(`J3 PH`・`TB1`)になる。コネクタのあるピンの接続点は外形から5mm。絵だけで接点・ネットは変えない(キャンバスと SVG/PDF/PNG/DXF/KiCad。DXF・KiCad はブロックの形ごとに`MDK_block_<16桁>`・`MadakeCAD:block_<16桁>`の定義を書き、読み戻すと`block`とピン表に戻る)。Rust↔TS の一致は`madake-core/tests/golden/connector-blocks.json`で確かめる。形式19、コネクタのあるブロックはファイルでは種類`port_block`。
 ```
 
 - [ ] **Step 5: Final verification**
@@ -3752,8 +3975,9 @@ git commit -m "docs: コネクタの絵の付け方と形式19を説明に書く
 | §2.3 outline gaps / single `Rect` without connectors | 5 |
 | §2.4 box size | 5 (pad), 6 (labels, caption inset) |
 | §2.5 no-overlap | 7 (Rust), golden fixtures in 3 (TS twin) |
-| §3 rendering path, no renderer changes | 5, 6, 7 (SVG); DXF/KiCad: see Rulings |
+| §3 rendering path, no primitive-drawing changes | 5, 6, 7 (SVG) |
+| §3.1 per-shape block definitions, DXF / KiCad import back | 12 (key + DXF), 13 (KiCad) |
 | §4 format 19, `port_block` | 8 |
 | §5 editor, store, issues, locales, preview | 9, 10 |
-| §6 MCP, agent, docs | 11, 12 |
+| §6 MCP, agent, docs | 11, 14 |
 | Testing: twin golden | 3, regenerated in 5 and 6 |

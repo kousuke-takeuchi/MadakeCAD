@@ -11,7 +11,7 @@ Success, with the AOGU drawing (applied after merge, see Delivery):
 - Hub block `39` shows four USB-A sockets in a row on its top edge (`U1`–`U4`), a micro-B socket `PWR` on the bottom edge and the captive OTG cable as a micro-B plug `OTG` on the right edge.
 - Amplifier `53` shows a 3.5 mm jack `IN` and one screw terminal body `TB1` around its `5V` and `GND` pins.
 - Board `33` shows `J3` and `J9` as JST PH sockets labelled `J3 PH` / `J9 PH`; board `44` shows a JST XH socket.
-- The same picture appears on the canvas, in SVG / PDF / PNG / `get_sheet_image`, in DXF and in KiCad export.
+- The same picture appears on the canvas, in SVG / PDF / PNG / `get_sheet_image`, in DXF and in KiCad export. DXF and KiCad get it through per-shape block definitions (§3.1); today both write every block as the same empty `block` template box.
 - Drawings without connectors look, export and save exactly as before (apart from the file format number).
 
 ## The problem today
@@ -197,7 +197,32 @@ One case is "touching": a plain pin's number whose pin sits 5 mm below a connect
 - **`madake-core/src/connector.rs`** (new, `pub mod connector`): `ConnectorKind`, the constants, `connector_groups`, `group_label`, `connector_primitives(kind, dir: PinDir, edges: &[Point]) -> Vec<Primitive>` (§2.1 for one group or single pin, given its pins' edge points; no leads, no texts) and `outline_segments(pins: &BlockPins, hw, hh) -> Vec<Primitive>` (§2.3).
 - **`block.rs`**: `BlockPin` fields, `check_connectors`, `block_box` (§2.4), `block_symbol_from_spec`: when any pin has a connector, the outline lines of §2.3; then per side, per pin in table order: when the pin starts a group, that group's picture primitives and then its label `Text`; then the pin's lead, number and name (as today, with §2.2 positions for connector pins). `BlockSpec::has_connectors()`.
 - **`src/canvas/connector.ts`** (new) and **`dynamicSymbol.ts`** (`BlockPin`, `parseBlockSpec`, `blockBox`, `blockSymbol`): the same, in the same order.
-- **No renderer changes.** SVG / PDF / PNG / `get_sheet_image`, DXF, KiCad and the canvas draw the new primitives with their existing code. Accepted differences, all existing behaviour: DXF draws a filled circle as a square `SOLID` inside its outline (`dxf.rs:420-436`), and the canvas fills filled shapes without a stroke (0.15 mm smaller each side than SVG).
+- **No primitive-drawing changes.** SVG / PDF / PNG / `get_sheet_image`, DXF, KiCad and the canvas draw the new primitives with their existing code. DXF and KiCad change only in **which definition** they write for a block (§3.1). Accepted differences, all existing behaviour: DXF draws a filled circle as a square `SOLID` inside its outline (`dxf.rs:420-436`), and the canvas fills filled shapes without a stroke (0.15 mm smaller each side than SVG).
+
+### 3.1 Exporters: per-instance block definitions
+
+**Today (verified).** `dxf::sheet_to_dxf_with_frame` and `kicad::export_kicad_sch` build `defs: BTreeMap<&str, &SymbolDef>` from the symbol list and look up `defs.get(inst.symbol_id)`. Every generic block has `symbol_id` `block`, so both write one definition, the empty template (`block::block_template`), and every block instance references it: `MDK_block` (DXF BLOCK + INSERT) and `MadakeCAD:block` (KiCad `lib_symbols` + `lib_id`). A 1-pin and an 8-pin block export identically; pins, names and pictures are lost (DXF keeps `block_pins` only as an invisible `BLOCK_PINS` attribute, KiCad as a hidden property). The per-instance resolver already exists: `symbol::DefIndex::get(inst)` builds a block's definition from its attributes.
+
+**Shape key.** A block instance's export definition is `DefIndex::get(inst)` (the same `SymbolDef` SVG draws) with its `id` replaced by `block::block_export_id(&def)`:
+
+- `"block"` when the definition's primitives and pins equal the template's (a block without a pin table exports exactly as today);
+- otherwise `"block_" + 16 lowercase hex digits` of FNV-1a 64 over the canonical form `serde_json::to_string(&(&def.primitives, &def.pins))`.
+
+The key is the drawn geometry, so two blocks with the same shape share one definition whatever the attribute text (whitespace, key order), and any attribute that changes the drawing (`block_pins`, `block_size`, connectors) changes the key. FNV-1a is written in `block.rs` (about 8 lines, no new dependency); `std`'s `DefaultHasher` is not used because its output may change between Rust releases. `block::is_block_export_id(id)` is true for `block` and for `block_` + exactly 16 lowercase hex digits.
+
+**DXF.** One `BLOCK` named `MDK_<export id>` per distinct shape (`MDK_block_0123456789abcdef`), written by the existing `write_symbol_block_body`; each block `INSERT` references its shape's name. `TERMnn` attributes come from the per-instance pins, so a block's pin numbers reach DXF. Other attributes are written as today.
+
+**KiCad.** One `lib_symbols` entry `MadakeCAD:<export id>` per distinct shape, written by the existing `write_lib_symbol` (units `<export id>_0_1` / `_1_1`, pins with number and name, length 0; filled `Rect` / `Circle` → `(fill (type outline))`, unfilled → `none`, as for every symbol). Each instance's `lib_id` and `(pin …)` list follow its shape. Hidden properties are written as today (`block_pins`, `block_size` included).
+
+**Library symbols** (every `symbol_id` other than `block`) export byte for byte as today: same names, same one-definition-per-id rule.
+
+**A block whose attributes do not parse** resolves to no definition (as in SVG, where it is not drawn) and is counted in the exporters' existing "unresolved symbol" report instead of being written as the template box. The Engine refuses such attributes, so this happens only for hand-edited files.
+
+**Importers (our round trip only).**
+
+- DXF `import_dxf`: an `INSERT` of `MDK_<id>` where `is_block_export_id(id)` becomes a `block` instance. Its attributes `BLOCK_PINS` / `BLOCK_SIZE` (the exporter upper-cases attribute tags, the importer keeps them upper-case) are stored back as `block_pins` / `block_size`; when `block::block_symbol` refuses them, both are dropped and a warning `<reference>: ブロックのピン表を読めないので見本の箱にしました` is added. Today `MDK_block` already imports as `block` (with upper-case keys, so its pin table is lost); this rule also fixes that.
+- KiCad `import_kicad_sch`: a `lib_id` `MadakeCAD:<id>` where `is_block_export_id(id)` becomes a `block` instance; the properties `block_pins` / `block_size` are copied into its attributes with the same check and warning (all other properties stay dropped, as today).
+- Foreign files are unaffected: other DXF block names and KiCad `lib_id`s follow today's rules. The imported shape comes from the attributes, not from the exported graphics, so editing the graphics in another CAD tool is not read back.
 
 ### 4. File format 19
 
@@ -230,14 +255,19 @@ Rust tests carry the two doc lines (English, then Japanese) above `#[test]`; Vit
 - `block.rs` geometry: a connector pin's point is 5 mm out, its lead 2.5 → 5.0, its number's inner end 2.75 mm out (left / right) or right of the lead (top / bottom), its left / right name starts 3.0 mm in; a plain pin in the same block is unchanged; the outline has gaps exactly at the pictures and is a single `Rect` without connectors; group labels (`J3 PH`, `PH`, `TB1`, none for unnamed screw) at the §2.2 positions for n = 1, 2, 3 and on top.
 - `block.rs` size: `block_box` unchanged for every existing test table; width grows by 1.5 per side with connectors and by a label wider than the names; `caption_inset` 10.0 with a top label.
 - **No-overlap** (`block.rs` and the twin): for a block with every kind on left and right (mixed with plain pins, numbers of 1–4 characters, names), a hub with four `usb_a_f` on top, a JST group of 1 and of 3, and screw groups, no two text boxes overlap and no text box overlaps another pin's picture, lead or outline segment (§2.5).
-- Renderers: an SVG of a block with `usb_a_m` contains a black-filled polygon; DXF has a `SOLID` for it; KiCad has `(fill (type outline))`; output of a block without connectors is unchanged (existing golden / tests keep passing).
+- Renderers: an SVG of a block with `usb_a_m` contains a black-filled polygon; output of a block without connectors is unchanged (existing golden / tests keep passing).
+- `block.rs` export key: the template gives `block`; the same table with other whitespace gives the same key; another pin, another name, another connector or another `block_size` gives another key; every key passes `is_block_export_id`; `block_x`, `block_` + 15 or 17 hex digits and upper-case hex do not.
+- DXF export: a sheet with a template block, two identical 1-pin blocks, an 8-pin block and a `usb_a_m` block writes `MDK_block` and exactly three `MDK_block_<hex>` BLOCKs; each INSERT names its own shape; the two 1-pin blocks share one; the `usb_a_m` BLOCK has a `SOLID`; the 8-pin INSERT has `TERM01`…`TERM08`. A sheet without blocks is unchanged (existing tests).
+- DXF import: that file imports back with every block as `symbol_id` `block` and its `block_pins` text unchanged, nothing skipped; an unreadable `BLOCK_PINS` gives a template block and the warning.
+- KiCad export: the same sheet gives one `lib_symbols` entry per shape (`MadakeCAD:block` plus three `MadakeCAD:block_<hex>`); the 8-pin one has eight pins with their numbers and names; the `usb_a_m` one has a `(fill (type outline))` rectangle; each instance's `lib_id` and pin list match its shape. Library symbols are unchanged (existing `used_symbols_are_embedded_in_lib_symbols`).
+- KiCad import: that file imports back as `block` instances with `block_pins` restored, nothing skipped.
 - `io.rs` / `model.rs`: format 19; a block with only connectors (no contacts) is saved as `port_block` and loads back with its connectors; a file without connectors is unchanged apart from the version; a format-18 file opens unchanged; IPC JSON keeps `kind: "symbol"`.
 - `command.rs`: `add_entity` / `update_entity` with a bad connector table is refused.
 - MCP (`drawing_tools.rs`): `place_symbol` with `connector: usb_a_f` returns the pin 5 mm from the box; an unknown kind and a ref on `usb_a_f` are refused with the §1 text; `get_sheet_image` of such a block succeeds.
 - Agent (`madake-agent/tests/knowledge.rs`): the prompt mentions `connector` and `connector_ref`.
 - Vitest `blockEditor.test.ts`: connector / ref round trip (attrs → draft → attrs identical); ref cleared when the kind becomes non-grouped; `connectorRefNotGrouped`, `connectorRefSplit`; a row with only a connector is filled (and reports `emptyNo`). `dynamicSymbol.test.ts`: same validation as Rust; golden equality. `i18n.test.ts`: key parity (existing test).
 
-**Review focus candidates:** the §2.5 overlap rule and its test model; outline gaps vs. the female look in SVG and on the canvas; the frame/arc angle mapping (twin equality on arcs); format 19 + `port_block` extension; that a block without connectors produces byte-identical primitives, SVG and files.
+**Review focus candidates:** the §2.5 overlap rule and its test model; the §3.1 shape key (template stays `block`, library symbols byte-identical); outline gaps vs. the female look in SVG and on the canvas; the frame/arc angle mapping (twin equality on arcs); format 19 + `port_block` extension; that a block without connectors produces byte-identical primitives, SVG and files.
 
 ## Delivery
 
@@ -246,7 +276,8 @@ One PR to `master` from `feature/connector-pictograms` (user rule: one PR per ch
 1. Core: `connector.rs`, `BlockPin` fields + validation + grouping, geometry and outline gaps, `block_box`, format 19 + `port_block` extension, golden file, Rust tests.
 2. TS twin: `connector.ts`, `dynamicSymbol.ts`, golden equality and validation tests.
 3. UI: editor columns, store, issues, six locales.
-4. MCP descriptions, `knowledge.rs`, docs EN + JA, spec regeneration.
+4. Exporters: per-shape block definitions in DXF and KiCad and their import back (§3.1).
+5. MCP descriptions, `knowledge.rs`, docs EN + JA, spec regeneration.
 
 **Out of scope:** library symbols (`connector_plug` / `connector_socket` mates stay as they are); the `MadakeCAD.pen` design file; colour; filling `contacts` automatically from the kind; any electrical meaning of the kind (no ERC for plug ↔ socket mismatch, no netlist or BOM change); pictures on non-block symbols.
 
@@ -293,3 +324,9 @@ None. The rulings below are the author's; each states what it costs if the user 
 | 2026-10-25 | Author ruling: a shared golden JSON file proves Rust ↔ TS equality for every kind and side | 13 × 4 hand-copied expectations would drift. Cost if wrong: none; hand tests are kept for the left side. |
 | 2026-10-25 | Author ruling: corners of a hand-set minimum `block_size` with connectors on both sides, wide top / bottom labels and top / bottom numbers over 4 mm are not guaranteed overlap-free | Same as today's limits for names; guarding them would enlarge `min_size`. Cost if wrong: add margins to `min_size`. |
 | 2026-10-25 | Author ruling: DXF's square fill for filled circles and the canvas's strokeless fill are accepted | Existing renderer behaviour, same for every symbol. Cost if wrong: renderer change outside this feature. |
+| 2026-10-25 | User decision (overrides "all renderers get it for free" for DXF / KiCad): DXF and KiCad export must show each block instance's real drawing (pins, names, connector pictures), not the single empty `block` template box | The planner found both exporters write one definition per `symbol_id`, so every block exported as the same empty box. |
+| 2026-10-25 | Author ruling: the export key is the drawn geometry (FNV-1a 64 over the canonical JSON of primitives + pins), 16 hex digits, not the attribute text | Same shape, same definition, whatever the JSON spelling; no new dependency; `DefaultHasher` is not stable across Rust releases. Cost if wrong: switch to a sequence number or the attribute text; only names in exported files change. |
+| 2026-10-25 | Author ruling: a block equal to the template keeps the name `block` (`MDK_block`, `MadakeCAD:block`) | Blocks without a pin table and every existing export stay byte-identical. Cost if wrong: one special case removed. |
+| 2026-10-25 | Author ruling: a block with unparsable attributes is reported as unresolved in DXF / KiCad instead of exported as the template box | Same as SVG, which does not draw it; the Engine refuses such attributes, so only hand-edited files hit it. Cost if wrong: fall back to the template in two places. |
+| 2026-10-25 | Author ruling: importers map our `MDK_block_<hex>` / `MadakeCAD:block_<hex>` back to `block` and restore `block_pins` / `block_size` from the DXF attributes / KiCad properties; the exported graphics are not read back | Without the mapping, today's DXF/KiCad round trip of a block would turn into a skipped symbol; reading the attributes is a few lines, reading graphics back would be a new importer. Cost if wrong: graphics edited in another CAD tool are ignored on import (already true for every symbol). |
+| 2026-10-25 | Author ruling: DXF import also fixes today's upper-case `BLOCK_PINS` key for `MDK_block` | The same code path; without it a round-tripped block loses its pins. Cost if wrong: none found (no other reader of upper-case block keys). |
