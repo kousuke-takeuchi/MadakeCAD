@@ -1436,26 +1436,38 @@ impl MadakeMcp {
             }
         };
         // 極番号なしで同じ参照記号が複数回並ぶ組は、並び順に 1, 2, 3 … と振る (1回だけの参照記号には付けない)
+        // 規則: 空白だけの極番号は無指定。無指定が同じ参照記号に2組以上あれば、明示された極番号を飛ばして
+        // 1から順に振る
+        let explicit_pole = |m: &MateSpec| m.pole.as_deref().map(str::trim).filter(|p| !p.is_empty()).map(str::to_string);
         let mut unnumbered: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
-        for m in specs.iter().filter(|m| m.pole.is_none()) {
-            if let Some(r) = m.reference.as_deref().filter(|r| !r.is_empty()) {
-                *unnumbered.entry(r).or_default() += 1;
+        let mut taken: std::collections::BTreeSet<(&str, String)> = std::collections::BTreeSet::new();
+        for m in &specs {
+            let Some(r) = m.reference.as_deref().filter(|r| !r.is_empty()) else { continue };
+            match explicit_pole(m) {
+                Some(p) => {
+                    taken.insert((r, p));
+                }
+                None => *unnumbered.entry(r).or_default() += 1,
             }
         }
         let mut next_pole: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
         let poles: Vec<Option<String>> = specs
             .iter()
             .map(|m| {
-                if let Some(p) = m.pole.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
-                    return Some(p.to_string());
+                if let Some(p) = explicit_pole(m) {
+                    return Some(p);
                 }
                 let r = m.reference.as_deref().filter(|r| !r.is_empty())?;
                 if unnumbered.get(r).copied().unwrap_or(0) < 2 {
                     return None;
                 }
                 let n = next_pole.entry(r).or_default();
-                *n += 1;
-                Some(n.to_string())
+                loop {
+                    *n += 1;
+                    if !taken.contains(&(r, n.to_string())) {
+                        return Some(n.to_string());
+                    }
+                }
             })
             .collect();
         let pairs: Vec<_> = specs

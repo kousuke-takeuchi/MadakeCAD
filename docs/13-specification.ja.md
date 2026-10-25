@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2904仕様項目**。
+全6領域・**2911仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -68,6 +68,8 @@
 - 片側にlabelsを指定すると、芯ごとに区間から真っ直ぐ10mm離れる分岐の配線を引いてその名前のネットラベルで終え、芯の端はその配線になる。同じラベルのある別シートとは、プロジェクトのネットリストで芯ごとに繋がる。 <sub>`breakout_wires_end_at_net_labels`</sub>
 - labelsを1本線と一緒に指定、ラベルの数が芯と違う、pinsと同時に指定、breakout_atが無い、はそれぞれ日本語の理由で断る。 <sub>`bad_label_sides_are_refused`</sub>
 - 分岐の配線は線径も線色も持たず (線色は芯が持つ)、配線注記が付かない。電線リストには芯の線色が出る。 <sub>`breakout_wires_carry_no_note`</sub>
+- 分岐の配線が縦に出てラベルが横に並ぶときは、芯の間隔が最も長いラベルの幅に余白を足した値まで広がり、ラベルどうしが重ならない。区間の向きは最初の経由点に従う。 <sub>`side_by_side_labels_do_not_overlap_and_via_sets_the_direction`</sub>
+- 同じ名前 (前後の空白を除いて) のラベルが片側に2つあるときは、重なった名前を示して断る。 <sub>`duplicate_label_names_are_refused`</sub>
 
 ### Commandエンジン (undo/redo)
 
@@ -493,6 +495,7 @@
 ### panel_wiring
 
 - 盤内配線図は、盤に置いた部品ごとに、回路図でそのピンに繋がる電線を端子・線番・行き先・線色・線径で並べる。 <sub>`the_panel_wiring_lists_each_pin_wire_with_its_destination`</sub>
+- ピンに着く区間ケーブルの分岐の配線は、空欄ではなく芯の線色とケーブルの線径で並ぶ。 <sub>`a_breakout_wire_is_listed_with_the_core_colour_and_cable_gauge`</sub>
 - 盤内配線図の図面ページは部品ごとに端子の行を描き、盤に部品が無ければ見出しだけのページになる。 <sub>`the_panel_wiring_sheet_draws_parts_or_an_empty_page`</sub>
 
 ### 部品データベース
@@ -995,6 +998,7 @@
 - 端子台を90度回して横向きに置くと接続点は上下に並び、上側が内部側として扱われる。 <sub>`a_sideways_terminal_block_takes_the_upper_connection_as_the_inside`</sub>
 - どちら側にも電線が繋がっていない端子は、内部側・外部側とも空欄の予備端子として行が残る。 <sub>`an_unwired_terminal_stays_as_a_spare_row`</sub>
 - 各行にはその電線に振られた線番と、電線の仕様 (線色・線径sq・品番) が載る。 <sub>`a_row_shows_the_wire_number_and_the_wire_specification`</sub>
+- 区間ケーブルの分岐の配線は線色も線径も持たないので、行には芯の線色とケーブルの線径・型番が載る。 <sub>`a_breakout_wire_row_shows_the_core_and_cable_specification`</sub>
 - 内部側と外部側で電線が違うときは、行に両方の電線が並ぶ。 <sub>`both_wires_are_listed_when_the_inside_and_outside_differ`</sub>
 - 行はまとめた電線欄とは別に、内部側の電線と外部側の電線を分けて持つ。 <sub>`a_row_keeps_the_wire_of_each_side_separately`</sub>
 - 行は各側の電線が属するハーネス名を持ち、どのハーネスにも属さない電線では空欄になる。 <sub>`a_row_records_the_harness_of_each_side`</sub>
@@ -1200,6 +1204,7 @@
 
 ### wire_legend
 
+- 区間ケーブルの分岐の配線は芯の線色とケーブルの線径で数えるので、空欄の行を増やさない。 <sub>`a_breakout_wire_adds_no_blank_row`</sub>
 - 凡例ブロックを置いてもシートのネットリストは変わらない (電気的な意味を持たない作図要素だから)。 <sub>`a_legend_block_does_not_appear_in_the_netlist`</sub>
 - 凡例ブロックを置いても、そのブロックについての検証指摘は出ず、他の指摘も増減しない。 <sub>`a_legend_block_raises_no_verification_diagnostic`</sub>
 - 凡例ブロックを置いても部品表は変わらない (部品でもなく、電線の使用長も増やさない)。 <sub>`a_legend_block_does_not_change_the_bom`</sub>
@@ -1318,6 +1323,7 @@
 - リストの配線のどれか1本でも誤っていれば、connect_pins はその番号を知らせて1本も作らない。 <sub>`connect_pins_list_is_all_or_nothing`</sub>
 - place_mate は組のリストを受け取って1回で全部置き、1回の取り消しで全部消える。 <sub>`place_mate_places_a_list_of_pairs_in_one_edit`</sub>
 - place_mate のリストで、極番号なしで同じ参照記号を繰り返す組は並び順に 1, 2, 3 と番号が付き、明示した極番号が優先され、1組だけの参照記号には付かず、プラグとソケットの両方が pole 属性を持つ。 <sub>`place_mate_list_numbers_the_poles`</sub>
+- place_mate の番号振りは、同じ参照記号で明示された極番号を飛ばし、空白だけの極番号は無指定として数える。[X, X 極1, X] は 2, 1, 3 になる。 <sub>`place_mate_numbering_skips_explicit_poles`</sub>
 - connect_cable は LTE ハーネスを1回で描く: 基板側の配線4本と分岐、USBプラグまでの1本線、ピン順の芯の対応。ネットリストは4ネット、ERC は未接続ピンを出さず、undo 1回で全部消える。 <sub>`connect_cable_draws_a_breakout_harness_in_one_edit`</sub>
 - 基板側にlabelsを指定した connect_cable は、芯ごとにラベル付きの配線を1回の編集で描き、芯の端としてラベル名を返し、芯ごとにそのラベルのネットへ繋ぎ、single との併用や数違いは断り、説明にlabelsを載せる。 <sub>`connect_cable_labels_end_the_breakout_wires_at_net_labels`</sub>
 - リストのケーブルのどれか1本でも誤っていれば、connect_cable はその番号を知らせて1本も描かない。正しいリストは1回の編集で描く。 <sub>`connect_cable_list_is_all_or_nothing`</sub>
@@ -2543,6 +2549,7 @@
 
 ### wireLegend
 
+- 区間ケーブルの分岐の配線は線色も線径も持たないので、芯の線色とケーブルの線径で数え、空欄の行を増やさない。 <sub>`wire legend with run-cable breakout wires`</sub>
 - 配線が1本も無いシートでも、凡例ブロックは列見出しだけの表として出る。 <sub>`wire legend block geometry`</sub>
 - 線色・線径・引き当てた品番が同じ配線は1行にまとまり、使用長は合算される。 <sub>`wire legend block geometry`</sub>
 - 行は線色順、同じ線色の中では線径順に並ぶ。 <sub>`wire legend block geometry`</sub>

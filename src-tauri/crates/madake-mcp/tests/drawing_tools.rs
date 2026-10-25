@@ -481,6 +481,36 @@ async fn place_mate_list_numbers_the_poles() {
     assert_eq!(poles, ["1", "1", "2", "2", "9", "9", "", ""], "{seen:?}");
 }
 
+/// place_mate numbering skips poles given explicitly for the same reference and treats a blank pole as none: [X, X pole "1", X] gets poles 2, 1, 3.
+/// place_mate の番号振りは、同じ参照記号で明示された極番号を飛ばし、空白だけの極番号は無指定として数える。[X, X 極1, X] は 2, 1, 3 になる。
+#[tokio::test]
+async fn place_mate_numbering_skips_explicit_poles() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    call(
+        &bridge,
+        "place_mate",
+        json!({"sheet_id": sheet, "mates": [
+            {"x": 100.0, "y": 50.0, "reference": "X1"},
+            {"x": 100.0, "y": 57.5, "reference": "X1", "pole": "1"},
+            {"x": 100.0, "y": 65.0, "reference": "X1", "pole": "  "}
+        ]}),
+    )
+    .await;
+    let engine = doc.engine.lock().unwrap();
+    let mut seen: Vec<(f64, String)> = engine.project().sheets[0]
+        .entities
+        .values()
+        .filter_map(|e| match e {
+            madake_core::Entity::Symbol(s) => Some((s.at.y, s.attrs.get("pole").cloned().unwrap_or_default())),
+            _ => None,
+        })
+        .collect();
+    seen.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let poles: Vec<&str> = seen.iter().map(|s| s.1.as_str()).collect();
+    assert_eq!(poles, ["2", "2", "1", "1", "3", "3"], "{seen:?}");
+}
+
 /// connect_cable draws the LTE harness in one call: four board wires to a breakout, one line to the USB plug, cores mapped by pin order; the netlist has four nets, ERC finds no unconnected pin, and one undo removes it all.
 /// connect_cable は LTE ハーネスを1回で描く: 基板側の配線4本と分岐、USBプラグまでの1本線、ピン順の芯の対応。ネットリストは4ネット、ERC は未接続ピンを出さず、undo 1回で全部消える。
 #[tokio::test]

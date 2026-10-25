@@ -1411,9 +1411,9 @@ pub fn terminal_chart(sheet: &Sheet, tb_id: EntityId) -> Option<TerminalChart> {
             internal: inside.labels.join(", "),
             external: outside.labels.join(", "),
             wire_no: join_unique(numbers, "/"),
-            wire: join_unique(all_wires().map(wire_desc), " / "),
-            internal_wire: join_unique(inside.wires.iter().copied().map(wire_desc), " / "),
-            external_wire: join_unique(outside.wires.iter().copied().map(wire_desc), " / "),
+            wire: join_unique(all_wires().map(|w| wire_desc(&crate::cable::effective_wire(sheet, w))), " / "),
+            internal_wire: join_unique(inside.wires.iter().copied().map(|w| wire_desc(&crate::cable::effective_wire(sheet, w))), " / "),
+            external_wire: join_unique(outside.wires.iter().copied().map(|w| wire_desc(&crate::cable::effective_wire(sheet, w))), " / "),
             internal_harness: harness_of(&inside),
             external_harness: harness_of(&outside),
             jumper,
@@ -1764,6 +1764,19 @@ mod tests {
         let r = row(&chart, "1");
         assert_eq!(r.wire_no, "12");
         assert_eq!(r.wire, "red 0.75sq SAMPLE0001");
+    }
+
+    /// A run-cable breakout wire has no colour or gauge of its own, so the row shows the core's colour and the cable's gauge and part number.
+    /// 区間ケーブルの分岐の配線は線色も線径も持たないので、行には芯の線色とケーブルの線径・型番が載る。
+    #[test]
+    fn a_breakout_wire_row_shows_the_core_and_cable_specification() {
+        let (mut sheet, id) = sheet_with_tb(4, 0);
+        add_resistor(&mut sheet, "R1", 85.0, 42.5);
+        add_wire(&mut sheet, (92.5, 42.5), (97.5, 42.5), |_| {});
+        let wire = sheet.entities.values().find_map(|e| if let Entity::Wire(w) = e { Some(w.id) } else { None }).unwrap();
+        crate::cable::test_support::attach_breakout_core(&mut sheet, wire, "green", 0.2, "CAB-4C");
+        let chart = terminal_chart(&sheet, id).expect("chart");
+        assert_eq!(row(&chart, "1").wire, "green 0.2sq CAB-4C");
     }
 
     /// When the wire on the inside differs from the wire on the outside, the row lists both.

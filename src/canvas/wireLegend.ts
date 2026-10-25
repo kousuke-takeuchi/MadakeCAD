@@ -9,6 +9,7 @@
 // 図面への反映は必ず Command 経由 (CLAUDE.md「アーキテクチャの絶対原則」)。
 
 import type { Command, Entity, Point, Sheet, Wire, WireLegend, WirePart } from "../ipc";
+import { effectiveWire } from "./cable";
 import { colorDisplay } from "./wireNotes";
 import { findWirePart } from "./wireParts";
 
@@ -55,7 +56,9 @@ export function legendRows(sheet: Sheet, wireParts: WirePart[] | undefined): str
     string,
     { color: string; sq: string; sqValue: number; partNo: string; total: number }
   >();
-  for (const w of wires(sheet)) {
+  for (const raw of wires(sheet)) {
+    // 区間ケーブルの分岐の配線は芯の線色・ケーブルの線径・型番で数える (空の行を作らない)
+    const w = effectiveWire(sheet, raw);
     // 図面へ印字する色名にそろえてからまとめる (配線注記と同じ表記。`red`と`赤`は同じ行)
     const color = colorDisplay(w.color ?? "");
     const sqValue = w.sq ?? 0;

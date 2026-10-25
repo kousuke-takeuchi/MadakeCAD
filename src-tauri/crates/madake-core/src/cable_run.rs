@@ -19,7 +19,9 @@ pub const BREAKOUT_OFFSET_MM: f64 = 10.0;
 pub const FAN_LENGTH_MM: f64 = 2.5;
 /// ネットラベルで終える分岐の配線の長さ (mm)。扇の端から区間と反対の向きへ真っ直ぐ。
 pub const LABEL_WIRE_MM: f64 = 10.0;
-/// ネットラベルで終える分岐の配線の間隔 (mm)。ラベルの文字が重ならない間隔。
+/// ラベルが横に並ぶとき、隣のラベルとの最小の余白 (mm)。
+pub const LABEL_GAP_MM: f64 = 2.5;
+/// ネットラベルで終える分岐の配線の間隔 (mm)。ラベルが縦に並ぶときの間隔で、横に並ぶときは文字の幅に合わせて広げる。
 pub const LABEL_PITCH_MM: f64 = 5.0;
 
 /// 端の描き方。
@@ -161,12 +163,18 @@ pub fn plan_cable_run(sheet: &Sheet, defs: &[SymbolDef], spec: &CableRunSpec) ->
         .map(|c| c.color().or(spec.color.as_deref()).unwrap_or("").to_string())
         .collect();
     // ラベルで終える端は区間の向きを相手の端から決めるので、ピンの端を先に計画する
+    // 経由点があれば区間は最初 (a 側) / 最後 (b 側) の経由点へ向かって出る
+    let via = spec.via.as_deref().unwrap_or_default();
     let a_first = if spec.a.labels.is_none() { Some(plan_side(sheet, defs, spec, "a", &spec.a, None)?) } else { None };
-    let toward_b = a_first.as_ref().map(|p| p.at).or(spec.a.breakout_at.map(|p| p.snapped(ROUTE_GRID)));
+    let toward_b = via
+        .last()
+        .copied()
+        .or(a_first.as_ref().map(|p| p.at))
+        .or(spec.a.breakout_at.map(|p| p.snapped(ROUTE_GRID)));
     let b = plan_side(sheet, defs, spec, "b", &spec.b, toward_b)?;
     let a = match a_first {
         Some(a) => a,
-        None => plan_side(sheet, defs, spec, "a", &spec.a, Some(b.at))?,
+        None => plan_side(sheet, defs, spec, "a", &spec.a, Some(via.first().copied().unwrap_or(b.at)))?,
     };
     let run = route(a.at, a.dir, b.at, b.dir, spec.via.as_deref().unwrap_or_default());
     if run.len() < 2 {
@@ -414,6 +422,11 @@ fn plan_label_side(
     if names.iter().any(|n| n.trim().is_empty()) {
         return Err(format!("{name} 側の labels に空の名前があります"));
     }
+    if let Some(dup) = names.iter().enumerate().find_map(|(i, n)| {
+        names[..i].iter().find(|m| m.trim() == n.trim()).map(|_| n.trim().to_string())
+    }) {
+        return Err(format!("{name} 側の labels に名前 {dup} が重複しています。ラベル名は芯ごとに変える"));
+    }
     let Some(at) = side.breakout_at.map(|p| p.snapped(ROUTE_GRID)) else {
         return Err(format!("{name} 側は labels なので breakout_at (分岐点) が必要です (ピンが無く位置を決められません)"));
     };
@@ -432,13 +445,22 @@ fn plan_label_side(
         PinDir::Up
     };
     let d = unit(dir);
-    let perp = Point::new(-d.y, d.x);
+    // 芯は上から下 / 左から右の順に並べる
+    let perp = if d.x != 0.0 { Point::new(0.0, 1.0) } else { Point::new(1.0, 0.0) };
     let n = names.len();
+    // 縦に出る配線のラベルは横に並ぶので、いちばん長いラベルの幅 + 余白を2.5mmグリッドへ切り上げた間隔にする
+    let pitch = if d.x == 0.0 {
+        let font = crate::svg::LABEL_FONT * sheet.annotation_scale();
+        let widest = names.iter().map(|l| crate::tidy::text_width(l.trim(), font)).fold(0.0, f64::max);
+        (((widest + LABEL_GAP_MM) / ROUTE_GRID).ceil() * ROUTE_GRID).max(LABEL_PITCH_MM)
+    } else {
+        LABEL_PITCH_MM
+    };
     let mut wires = Vec::new();
     let mut net_labels = Vec::new();
     let mut ends = Vec::new();
     for (i, label) in names.iter().enumerate() {
-        let offset = (i as f64 - (n as f64 - 1.0) / 2.0) * LABEL_PITCH_MM;
+        let offset = ((i as f64 - (n as f64 - 1.0) / 2.0) * pitch / ROUTE_GRID).round() * ROUTE_GRID;
         let fan = Point::new(
             at.x - d.x * FAN_LENGTH_MM + perp.x * offset,
             at.y - d.y * FAN_LENGTH_MM + perp.y * offset,
@@ -813,5 +835,43 @@ mod tests {
         let rows = crate::reports::wire_list_rows(&project);
         assert_eq!(rows.len(), 4);
         assert!(rows.iter().any(|r| r[6] == "green" && r[11] == "W45/D+"), "{rows:?}");
+    }
+
+    /// When the label wires run vertically the labels sit side by side, so the core pitch grows to the widest label plus a gap and no two labels overlap; the run direction follows the first via point.
+    /// 分岐の配線が縦に出てラベルが横に並ぶときは、芯の間隔が最も長いラベルの幅に余白を足した値まで広がり、ラベルどうしが重ならない。区間の向きは最初の経由点に従う。
+    #[test]
+    fn side_by_side_labels_do_not_overlap_and_via_sets_the_direction() {
+        let mut sheet = board_and_plug();
+        let defs = sheet_symbol_defs(&sheet);
+        let names = ["LTE_VBUS_SENSE", "LTE_DM_LONG_NAME", "LTE_DP_LONG_NAME", "LTE_GND_RETURN"];
+        let mut s = label_spec(serde_json::json!({"labels": names, "breakout_at": {"x": 120.0, "y": 100.0}}));
+        s.via = Some(vec![Point::new(120.0, 150.0)]);
+        let planned = plan_cable_run(&sheet, &defs, &s).unwrap();
+        // 経由点が真下なので区間は下へ出て、ラベルの配線は上へ向かう
+        assert_eq!(planned.cable.run[0], Point::new(120.0, 100.0));
+        assert_eq!(planned.cable.run[1], Point::new(120.0, 150.0));
+        for w in &planned.wires {
+            assert_eq!(w.points[0].x, w.points[1].x);
+            assert!(w.points[1].y < w.points[0].y);
+        }
+        let xs: Vec<f64> = planned.labels.iter().map(|l| l.at.x).collect();
+        let widest = names.iter().map(|n| crate::tidy::text_width(n, crate::svg::LABEL_FONT)).fold(0.0, f64::max);
+        assert!(xs.windows(2).all(|p| p[1] - p[0] >= widest + 2.5 - 1e-9), "{xs:?} {widest}");
+        assert!(xs.iter().all(|x| (x / 2.5).fract().abs() < 1e-9), "グリッド上: {xs:?}");
+        for e in planned.entities() {
+            insert(&mut sheet, e);
+        }
+        let issues = crate::tidy::label_overlap_issues(&sheet, &defs);
+        assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    /// Two labels with the same name (after trimming) on one side are refused naming the duplicate.
+    /// 同じ名前 (前後の空白を除いて) のラベルが片側に2つあるときは、重なった名前を示して断る。
+    #[test]
+    fn duplicate_label_names_are_refused() {
+        let sheet = board_and_plug();
+        let defs = sheet_symbol_defs(&sheet);
+        let err = plan_cable_run(&sheet, &defs, &label_spec(serde_json::json!({"labels": ["A", "B", " A", "C"]}))).unwrap_err();
+        assert!(err.contains("A") && err.contains("labels") && err.contains("重複"), "{err}");
     }
 }
