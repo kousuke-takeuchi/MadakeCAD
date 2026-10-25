@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2984仕様項目**。
+全6領域・**2986仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -319,7 +319,7 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは18 (ブロックのピンにポートの接点を追加し、接点のあるブロックを種類「port_block」で保存する版) である。 <sub>`the_current_format_version_is_eighteen`</sub>
+- 現行のファイル形式バージョンは19 (ブロックのピンにコネクタの絵を追加し、接点かコネクタのあるブロックを種類「port_block」で保存する版) である。 <sub>`the_current_format_version_is_nineteen`</sub>
 - ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_17_file_loads_unchanged`</sub>
 - 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - 区間が空の「run_cable」(ファイルを手で直したときなど) は普通の定義線ケーブルとして開き、書き戻すと種類「cable」になる。 <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
@@ -341,6 +341,8 @@
 - ポートの接点の無いプロジェクトは、serde がそのまま書いたものと1バイトも違わない (キーの並びも変わらない)。普通のブロックは「symbol」のまま。 <sub>`a_project_without_ports_is_written_unchanged`</sub>
 - 接点の無い「port_block」(手で直したファイル) は普通のシンボルとして開く。 <sub>`a_port_block_without_contacts_opens_as_a_symbol`</sub>
 - 接点をすべて消したブロックは種類「symbol」で保存されるので、古いビルドでもまたそのファイルを開ける。 <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
+- 回帰テスト (最初から通る): ポートのブロックを含む形式18のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_18_file_loads_unchanged`</sub>
+- 接点が無くコネクタだけを持つブロックも種類「port_block」で保存され、読み直すとコネクタ付きで戻り、IPC・MCP の JSON は「symbol」のまま。コネクタを消せばまた「symbol」で保存される。 <sub>`a_block_with_connectors_is_saved_as_port_block`</sub>
 
 ### KiCadインポート / エクスポート
 

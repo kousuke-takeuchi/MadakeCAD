@@ -33,7 +33,7 @@ impl ExportReport {
     }
 }
 
-/// プロジェクトを整形JSONで保存する(git差分が読める形式)。接点のあるブロックは種類`port_block`で書く
+/// プロジェクトを整形JSONで保存する(git差分が読める形式)。接点かコネクタのあるブロックは種類`port_block`で書く
 /// ([`crate::model::FileWriteGuard`])。
 pub fn save_project(path: &Path, project: &Project) -> Result<()> {
     let json = {
@@ -384,15 +384,15 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 18, the version that added port contacts on block pins (blocks with contacts are saved as "port_block").
-    /// 現行のファイル形式バージョンは18 (ブロックのピンにポートの接点を追加し、接点のあるブロックを種類「port_block」で保存する版) である。
+    /// The current file format version is 19, the version that added connector pictures on block pins (blocks with contacts or connectors are saved as "port_block").
+    /// 現行のファイル形式バージョンは19 (ブロックのピンにコネクタの絵を追加し、接点かコネクタのあるブロックを種類「port_block」で保存する版) である。
     #[test]
-    fn the_current_format_version_is_eighteen() {
-        assert_eq!(FORMAT_VERSION, 18);
+    fn the_current_format_version_is_nineteen() {
+        assert_eq!(FORMAT_VERSION, 19);
         let mut old = Project::new("x");
-        old.format_version = 17;
+        old.format_version = 18;
         migrate(&mut old);
-        assert_eq!(old.format_version, 18);
+        assert_eq!(old.format_version, 19);
     }
 
     /// A version 17 file without ports loads unchanged apart from being moved up to the current version.
@@ -854,6 +854,44 @@ mod tests {
         let Entity::Symbol(s) = project.sheets[0].entities.get_mut(&id).unwrap() else { panic!() };
         s.attrs.insert("block_pins".into(), r#"{"right":[{"no":"U3"}]}"#.into());
         let (text, path) = save_text(&project, "removed");
+        assert!(text.contains("\"kind\": \"symbol\"") && !text.contains("port_block"), "{text}");
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    /// Regression test (already passes): a version 18 file with a port block opens unchanged apart from being moved up to the current version.
+    /// 回帰テスト (最初から通る): ポートのブロックを含む形式18のファイルは、現行版へ上がる以外そのまま開ける。
+    #[test]
+    fn a_version_18_file_loads_unchanged() {
+        let (mut project, id) = port_project();
+        project.format_version = 18;
+        let (_, path) = save_text(&project, "v18");
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
+        let Entity::Symbol(s) = &loaded.sheets[0].entities[&id] else { panic!("シンボルに戻る") };
+        assert!(crate::block::parse_block_spec(&s.attrs).unwrap().has_contacts());
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    /// A block whose pins have only connectors (no contacts) is also saved under the kind "port_block" and comes back with its connectors, IPC/MCP JSON still says "symbol", and once its connectors are removed it is saved as "symbol" again.
+    /// 接点が無くコネクタだけを持つブロックも種類「port_block」で保存され、読み直すとコネクタ付きで戻り、IPC・MCP の JSON は「symbol」のまま。コネクタを消せばまた「symbol」で保存される。
+    #[test]
+    fn a_block_with_connectors_is_saved_as_port_block() {
+        let mut project = Project::new("connector");
+        let block = crate::block::test_block("39", "", 100.0, 100.0, r#"{"top":[{"no":"U1","connector":"usb_a_f"}]}"#);
+        let id = block.id();
+        project.sheets[0].entities.insert(id, block);
+        let (text, path) = save_text(&project, "connector");
+        assert!(text.contains("\"kind\": \"port_block\""), "{text}");
+        let loaded = load_project(&path).unwrap();
+        let Entity::Symbol(s) = &loaded.sheets[0].entities[&id] else { panic!("シンボルに戻る") };
+        let spec = crate::block::parse_block_spec(&s.attrs).unwrap();
+        assert!(spec.has_connectors() && !spec.has_contacts());
+        assert_eq!(serde_json::to_value(&project.sheets[0].entities[&id]).unwrap()["kind"], "symbol");
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+
+        let Entity::Symbol(s) = project.sheets[0].entities.get_mut(&id).unwrap() else { panic!() };
+        s.attrs.insert("block_pins".into(), r#"{"top":[{"no":"U1"}]}"#.into());
+        let (text, path) = save_text(&project, "connector-removed");
         assert!(text.contains("\"kind\": \"symbol\"") && !text.contains("port_block"), "{text}");
         std::fs::remove_dir_all(path.parent().unwrap()).ok();
     }

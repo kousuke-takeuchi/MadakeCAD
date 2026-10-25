@@ -57,7 +57,10 @@ pub type SheetId = Uuid;
 ///   接点 (`CoreEnd::Pin::contact`)。接点のあるブロックはファイルの中だけ種類`port_block`で書く
 ///   ([`EntityRepr::PortBlock`]、IPC・MCP は`symbol`のまま) ので、v0.4.0 以前はそのファイルを開けない
 ///   (ブロックを黙って消さない)。形式17のビルドは版番号で断る。接点の無いファイルは版番号以外これまでと同じ
-pub const FORMAT_VERSION: u32 = 18;
+/// - v19: ブロックのピンのコネクタの絵 ([`crate::block::BlockPin::connector`] / `connector_ref`)。コネクタのある
+///   ブロックも種類`port_block`で書くので、v0.4.0 以前はそのファイルを開けない (知らないキーのブロックを黙って
+///   消さない)。形式17・18のビルドは版番号で断る。コネクタの無いファイルは版番号以外これまでと同じ
+pub const FORMAT_VERSION: u32 = 19;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -590,7 +593,7 @@ thread_local! {
     static WRITING_FILE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// 生きている間、エンティティを「ファイルの形」で書く: 接点のあるブロックを種類`port_block`にする。
+/// 生きている間、エンティティを「ファイルの形」で書く: 接点かコネクタのあるブロックを種類`port_block`にする。
 /// IPC・MCP・Link API の JSON はこれを立てないので`symbol`のまま (フロントエンドと FreeCAD アドオンは
 /// `kind == "symbol"`を見ている)。serde_json は preserve_order 無しなので、Value を経由して書き換えると
 /// キーの並びが変わる。だから書き出しの途中でこの印を見る。
@@ -609,10 +612,10 @@ impl Drop for FileWriteGuard {
     }
 }
 
-/// 接点を持つピンがあるブロックか (ファイルでは種類`port_block`)。
+/// 接点かコネクタを持つピンがあるブロックか (ファイルでは種類`port_block`)。
 fn is_port_block(s: &SymbolInstance) -> bool {
     s.symbol_id == crate::block::BLOCK_SYMBOL_ID
-        && crate::block::parse_block_spec(&s.attrs).is_ok_and(|spec| spec.has_contacts())
+        && crate::block::parse_block_spec(&s.attrs).is_ok_and(|spec| spec.has_contacts() || spec.has_connectors())
 }
 
 /// 保存・送受信するときのエンティティの形 (JSONの`kind`タグ)。
@@ -622,7 +625,7 @@ fn is_port_block(s: &SymbolInstance) -> bool {
 /// エンティティを含むファイルを開けないので、区間を黙って捨てて保存し直すことが起こらない
 /// (serdeは既存の構造体の知らないフィールドを無視するため、フィールドを足すだけでは守れない)。
 /// 読むときはどちらの種類も [`Entity::Cable`] になる。ファイル・Tauri IPC・MCPの全てがこの形。
-/// 接点のあるブロックは、ファイルへ書くとき ([`FileWriteGuard`]) だけ種類`port_block`で書く (v18)。
+/// 接点のあるブロック (v18) とコネクタのあるブロック (v19) は、ファイルへ書くとき ([`FileWriteGuard`]) だけ種類`port_block`で書く。
 #[derive(Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EntityRepr {
@@ -644,7 +647,7 @@ pub enum EntityRepr {
     RunCable(Cable),
     Nameplate(Nameplate),
     Dimension(Dimension),
-    /// 接点を持つピンがあるブロック (v18)。ファイルへ書くときだけ使う種類で、読むと [`Entity::Symbol`]。
+    /// 接点 (v18) かコネクタ (v19) を持つピンがあるブロック。ファイルへ書くときだけ使う種類で、読むと [`Entity::Symbol`]。
     #[schemars(skip)]
     PortBlock(SymbolInstance),
 }

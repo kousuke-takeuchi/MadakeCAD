@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2984 specification clauses** across 6 areas.
+**2986 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -319,7 +319,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 18, the version that added port contacts on block pins (blocks with contacts are saved as "port_block"). <sub>`the_current_format_version_is_eighteen`</sub>
+- The current file format version is 19, the version that added connector pictures on block pins (blocks with contacts or connectors are saved as "port_block"). <sub>`the_current_format_version_is_nineteen`</sub>
 - A version 17 file without ports loads unchanged apart from being moved up to the current version. <sub>`a_version_17_file_loads_unchanged`</sub>
 - A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable". <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - A "run_cable" entry whose run is empty (for example after hand-editing the file) opens as a plain definition-line cable and is written back with the kind "cable". <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
@@ -341,6 +341,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project without port contacts is written byte for byte as serde writes it (no key reordering), with plain blocks still "symbol". <sub>`a_project_without_ports_is_written_unchanged`</sub>
 - A "port_block" entry without contacts (hand-edited) opens as a plain symbol. <sub>`a_port_block_without_contacts_opens_as_a_symbol`</sub>
 - A block whose contacts were all removed again is saved with the kind "symbol", so older builds can open the file again. <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
+- Regression test (already passes): a version 18 file with a port block opens unchanged apart from being moved up to the current version. <sub>`a_version_18_file_loads_unchanged`</sub>
+- A block whose pins have only connectors (no contacts) is also saved under the kind "port_block" and comes back with its connectors, IPC/MCP JSON still says "symbol", and once its connectors are removed it is saved as "symbol" again. <sub>`a_block_with_connectors_is_saved_as_port_block`</sub>
 
 ### KiCad import / export
 
