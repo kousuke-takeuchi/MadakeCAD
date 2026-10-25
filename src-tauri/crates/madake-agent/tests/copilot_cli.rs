@@ -140,6 +140,19 @@ fn the_mcp_config_points_at_the_local_madakecad_server() {
     assert_eq!(server["tools"][0], "*", "MadakeCADのツールは全て使わせる");
 }
 
+/// Copilot's MCP config carries this app run's instance id as a header, so a Copilot left over from an earlier run is refused.
+/// CopilotのMCP設定にもこの起動のインスタンスidがヘッダで入るので、前の起動から残ったCopilotは断られる。
+#[test]
+fn the_mcp_config_carries_the_instance_header() {
+    let mut b = backend("fake_copilot.sh");
+    b.instance_id = Some("run-1".into());
+    let config: serde_json::Value = serde_json::from_str(&b.mcp_config_json()).unwrap();
+    assert_eq!(
+        config["mcpServers"]["madakecad"]["headers"][madake_agent::INSTANCE_HEADER],
+        "run-1"
+    );
+}
+
 /// Because the Copilot CLI has no system-prompt flag, MadakeCAD's drawing rules are prepended to the prompt under a clear heading.
 /// Copilot CLIにはシステムプロンプト用のフラグが無いため、MadakeCADの作図ルールは見出し付きでプロンプトの先頭へ前置される。
 #[test]
