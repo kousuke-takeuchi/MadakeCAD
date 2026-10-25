@@ -801,6 +801,10 @@ pub struct WireLegend {
     pub at: Point,
 }
 
+/// この属性が`"true"`のシンボルは参照記号を印字しない (データには残す)。
+/// 嵌合するプラグ/ソケットの組のように、同じ記号を2つの部品が持つときに片方だけ描くため。
+pub const HIDE_REFERENCE_ATTR: &str = "hide_reference";
+
 /// ライブラリシンボルの配置インスタンス。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct SymbolInstance {
@@ -821,6 +825,14 @@ pub struct SymbolInstance {
     pub value: String,
     #[serde(default)]
     pub attrs: BTreeMap<String, String>,
+}
+
+impl SymbolInstance {
+    /// 参照記号を印字するか ([`HIDE_REFERENCE_ATTR`]が`"true"`でなく、記号が空でない)。
+    pub fn shows_reference(&self) -> bool {
+        !self.reference.is_empty()
+            && self.attrs.get(HIDE_REFERENCE_ATTR).map(String::as_str) != Some("true")
+    }
 }
 
 /// 配線。直交セグメントのポリライン。
