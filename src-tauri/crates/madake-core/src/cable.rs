@@ -510,6 +510,34 @@ pub fn breakout_wire_ids(sheet: &Sheet) -> BTreeSet<EntityId> {
     out
 }
 
+/// 帳票に載せる配線の仕様: 区間ケーブルの分岐の配線は線色・線径・品番を持たない (芯とケーブルが持つ) ので、
+/// 空の項目を芯の線色・ケーブルの線径・型番で補った写しを返す。分岐の配線でなければそのまま。
+pub fn effective_wire(sheet: &Sheet, w: &crate::model::Wire) -> crate::model::Wire {
+    let mut out = w.clone();
+    for e in sheet.entities.values() {
+        let Entity::Cable(c) = e else { continue };
+        for core in &c.cores {
+            let hit = RunEnd::BOTH
+                .iter()
+                .any(|&end| matches!(core.end(end), Some(CoreEnd::Wire { wire }) if *wire == w.id));
+            if !hit || !c.is_run() {
+                continue;
+            }
+            if out.color.trim().is_empty() {
+                out.color = core.color.clone();
+            }
+            if out.sq <= 0.0 {
+                out.sq = c.sq;
+            }
+            if out.part_no.as_deref().is_none_or(|p| p.trim().is_empty()) && !c.part_no.trim().is_empty() {
+                out.part_no = Some(c.part_no.trim().to_string());
+            }
+            return out;
+        }
+    }
+    out
+}
+
 /// どれかのケーブルの芯になっている配線 (定義線ケーブルの芯の配線と、区間ケーブルの分岐の配線)。
 /// 部品表の電線集約から除く (ケーブル行がもう数えている)。
 pub fn core_wire_ids(sheet: &Sheet) -> BTreeSet<EntityId> {
@@ -686,6 +714,29 @@ pub(crate) mod test_support {
             part_no: None,
             net: None,
         }
+    }
+
+    /// 配線 `wire` を芯 (線色 `color`) の端にもつ区間ケーブル (線径 `sq`・型番 `part_no`) をシートへ入れる。
+    pub(crate) fn attach_breakout_core(sheet: &mut Sheet, wire: EntityId, color: &str, sq: f64, part_no: &str) {
+        let cable = Cable {
+            id: Uuid::new_v4(),
+            reference: "W1".into(),
+            part_no: part_no.into(),
+            core_count: 1,
+            sq,
+            points: Vec::new(),
+            cores: vec![CableCore {
+                core: "C1".into(),
+                color: color.into(),
+                wire: None,
+                end_a: Some(CoreEnd::Wire { wire }),
+                end_b: None,
+            }],
+            shield: None,
+            length_m: None,
+            run: vec![Point::new(0.0, 0.0), Point::new(10.0, 0.0)],
+        };
+        insert(sheet, Entity::Cable(cable));
     }
 
     /// エンティティをシートへ入れてidを返す。

@@ -446,6 +446,71 @@ async fn place_mate_places_a_list_of_pairs_in_one_edit() {
     );
 }
 
+/// In a place_mate list, mates repeating the same reference without poles are numbered 1, 2, 3 in list order, an explicit pole wins, a lone reference gets none, and both halves carry the pole attribute.
+/// place_mate のリストで、極番号なしで同じ参照記号を繰り返す組は並び順に 1, 2, 3 と番号が付き、明示した極番号が優先され、1組だけの参照記号には付かず、プラグとソケットの両方が pole 属性を持つ。
+#[tokio::test]
+async fn place_mate_list_numbers_the_poles() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    call(
+        &bridge,
+        "place_mate",
+        json!({"sheet_id": sheet, "mates": [
+            {"x": 100.0, "y": 50.0, "reference": "X44A"},
+            {"x": 100.0, "y": 57.5, "reference": "X44A"},
+            {"x": 100.0, "y": 65.0, "reference": "X44A", "pole": "9"},
+            {"x": 100.0, "y": 72.5, "reference": "X45"}
+        ]}),
+    )
+    .await;
+    let engine = doc.engine.lock().unwrap();
+    let mut seen: Vec<(String, f64, String)> = engine.project().sheets[0]
+        .entities
+        .values()
+        .filter_map(|e| match e {
+            madake_core::Entity::Symbol(s) => Some((
+                s.reference.clone(),
+                s.at.y,
+                s.attrs.get("pole").cloned().unwrap_or_default(),
+            )),
+            _ => None,
+        })
+        .collect();
+    seen.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    let poles: Vec<&str> = seen.iter().map(|s| s.2.as_str()).collect();
+    assert_eq!(poles, ["1", "1", "2", "2", "9", "9", "", ""], "{seen:?}");
+}
+
+/// place_mate numbering skips poles given explicitly for the same reference and treats a blank pole as none: [X, X pole "1", X] gets poles 2, 1, 3.
+/// place_mate の番号振りは、同じ参照記号で明示された極番号を飛ばし、空白だけの極番号は無指定として数える。[X, X 極1, X] は 2, 1, 3 になる。
+#[tokio::test]
+async fn place_mate_numbering_skips_explicit_poles() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    call(
+        &bridge,
+        "place_mate",
+        json!({"sheet_id": sheet, "mates": [
+            {"x": 100.0, "y": 50.0, "reference": "X1"},
+            {"x": 100.0, "y": 57.5, "reference": "X1", "pole": "1"},
+            {"x": 100.0, "y": 65.0, "reference": "X1", "pole": "  "}
+        ]}),
+    )
+    .await;
+    let engine = doc.engine.lock().unwrap();
+    let mut seen: Vec<(f64, String)> = engine.project().sheets[0]
+        .entities
+        .values()
+        .filter_map(|e| match e {
+            madake_core::Entity::Symbol(s) => Some((s.at.y, s.attrs.get("pole").cloned().unwrap_or_default())),
+            _ => None,
+        })
+        .collect();
+    seen.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let poles: Vec<&str> = seen.iter().map(|s| s.1.as_str()).collect();
+    assert_eq!(poles, ["2", "2", "1", "1", "3", "3"], "{seen:?}");
+}
+
 /// connect_cable draws the LTE harness in one call: four board wires to a breakout, one line to the USB plug, cores mapped by pin order; the netlist has four nets, ERC finds no unconnected pin, and one undo removes it all.
 /// connect_cable は LTE ハーネスを1回で描く: 基板側の配線4本と分岐、USBプラグまでの1本線、ピン順の芯の対応。ネットリストは4ネット、ERC は未接続ピンを出さず、undo 1回で全部消える。
 #[tokio::test]
@@ -477,6 +542,61 @@ async fn connect_cable_draws_a_breakout_harness_in_one_edit() {
     assert_eq!(unconnected_pins(&diags), 0);
     doc.undo().expect("元に戻せる");
     assert_eq!(doc.engine.lock().unwrap().project().sheets[0].entities.len(), 2);
+}
+
+/// connect_cable with labels on the board side draws a labelled wire per core in one edit, answers the label names as the core ends, joins each core to its label net, refuses labels with single or a wrong count, and its description mentions labels.
+/// 基板側にlabelsを指定した connect_cable は、芯ごとにラベル付きの配線を1回の編集で描き、芯の端としてラベル名を返し、芯ごとにそのラベルのネットへ繋ぎ、single との併用や数違いは断り、説明にlabelsを載せる。
+#[tokio::test]
+async fn connect_cable_labels_end_the_breakout_wires_at_net_labels() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    call(&bridge, "place_symbol", json!({"sheet_id": sheet, "symbol_id": "connector_4p", "x": 200.0, "y": 100.0, "rotation": 180, "reference": "USB1"})).await;
+    let depth = doc.engine.lock().unwrap().undo_depth();
+    let out = call(
+        &bridge,
+        "connect_cable",
+        json!({"sheet_id": sheet, "reference": "W46",
+               "cores": ["VBUS", "D-", "D+", "GND"],
+               "a": {"labels": ["VBUS", "D-", "D+", "GND"], "style": "multi", "breakout_at": {"x": 80.0, "y": 100.0}},
+               "b": {"part": "USB1", "style": "single"}}),
+    )
+    .await;
+    let cores = out["cores"].as_array().expect("cores");
+    assert_eq!(cores[2]["a"], "D+");
+    assert_eq!(cores[2]["b"], "USB1.3");
+    assert_eq!(cores[2]["wire_ids"].as_array().unwrap().len(), 1);
+    assert_eq!(doc.engine.lock().unwrap().undo_depth(), depth + 1);
+    let labels = doc.engine.lock().unwrap().project().sheets[0]
+        .entities
+        .values()
+        .filter(|e| matches!(e, madake_core::Entity::NetLabel(_)))
+        .count();
+    assert_eq!(labels, 4);
+    let nets = call(&bridge, "get_netlist", json!({"sheet_id": sheet})).await;
+    assert_eq!(nets.as_array().unwrap().len(), 4, "{nets}");
+    let single = call_err(
+        &bridge,
+        "connect_cable",
+        json!({"sheet_id": sheet, "cores": ["A", "B", "C", "D"],
+               "a": {"labels": ["A", "B", "C", "D"], "style": "single", "breakout_at": {"x": 80.0, "y": 150.0}},
+               "b": {"part": "USB1", "style": "single"}}),
+    )
+    .await;
+    assert!(single.contains("labels") && single.contains("single"), "{single}");
+    let count = call_err(
+        &bridge,
+        "connect_cable",
+        json!({"sheet_id": sheet, "cores": ["A", "B", "C", "D"],
+               "a": {"labels": ["A"], "style": "multi", "breakout_at": {"x": 80.0, "y": 150.0}},
+               "b": {"part": "USB1", "style": "single"}}),
+    )
+    .await;
+    assert!(count.contains("ラベル"), "{count}");
+    let tools = tool_descriptions();
+    let (_, d) = tools.iter().find(|(n, _)| n == "connect_cable").expect("connect_cable");
+    assert!(d.contains("labels"), "{d}");
+    doc.undo().expect("元に戻せる");
+    assert_eq!(doc.engine.lock().unwrap().project().sheets[0].entities.len(), 1);
 }
 
 /// If any cable in the list is wrong, connect_cable names its index and draws none of them; a correct list is drawn in one edit.

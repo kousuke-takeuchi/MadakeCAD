@@ -35,6 +35,31 @@ function sheetWith(entities: Entity[]): Sheet {
   } as unknown as Sheet;
 }
 
+describe("wire legend with run-cable breakout wires", () => {
+  // ja: 区間ケーブルの分岐の配線は線色も線径も持たないので、芯の線色とケーブルの線径で数え、空欄の行を増やさない。
+  it("counts a breakout wire under its core colour and cable gauge instead of a blank row", () => {
+    const w = wire("", 0, null, null);
+    const cable = {
+      kind: "run_cable",
+      id: "c1",
+      reference: "W1",
+      part_no: "",
+      core_count: 1,
+      sq: 0.2,
+      points: [],
+      cores: [{ core: "C1", color: "green", end_a: { kind: "wire", wire: w.id }, end_b: null }],
+      shield: null,
+      length_m: null,
+      run: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+      ],
+    } as unknown as Entity;
+    const rows = legendRows(sheetWith([{ kind: "wire", ...w } as unknown as Entity, cable]), []);
+    expect(rows).toEqual([["緑", "0.2", "", "0.00"]]);
+  });
+});
+
 describe("wire legend block geometry", () => {
   // ja: 配線が1本も無いシートでも、凡例ブロックは列見出しだけの表として出る。
   it("has only the header row for a sheet with no wires", () => {

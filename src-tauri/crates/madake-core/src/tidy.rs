@@ -168,6 +168,8 @@ pub enum TextKind {
     WireNumber,
     /// ピングループの括弧のキャプション (G8)。
     PinGroupCaption,
+    /// 区間ケーブルの文字: 注記・芯数・扇の芯の呼び名。
+    CableLabel,
 }
 
 /// 図面に印字される文字1つ分。
@@ -317,6 +319,29 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                     kind: TextKind::NetLabel,
                     owner: Some(l.id),
                 });
+            }
+            // 区間ケーブルの文字は SVG 出力 (render_run_cable) と同じ位置・大きさ
+            Entity::Cable(c) if c.is_run() => {
+                let mut push = |x: f64, baseline: f64, font: f64, anchor: Anchor, text: String| {
+                    if text.is_empty() {
+                        return;
+                    }
+                    boxes.push(TextBox {
+                        rect: text_box(x, baseline, font, anchor, &text),
+                        text,
+                        kind: TextKind::CableLabel,
+                        owner: Some(c.id),
+                    });
+                };
+                if let Some(at) = crate::cable::run_label_at(c) {
+                    push(at.x, at.y, 2.5, Anchor::Start, crate::cable::cable_label(c));
+                }
+                if let Some(at) = crate::cable::run_count_at(c) {
+                    push(at.x, at.y, 2.0, Anchor::Start, c.core_count.to_string());
+                }
+                for (_, p, core) in crate::cable::run_fans(sheet, c) {
+                    push(p.x, p.y - 0.8, crate::cable::CORE_LABEL_MM, Anchor::Middle, core);
+                }
             }
             Entity::Text(t) if !t.text.is_empty() => boxes.push(TextBox {
                 rect: text_box(t.at.x, t.at.y, t.height, Anchor::Start, &t.text),
@@ -1058,5 +1083,40 @@ mod tests {
         let off = issues.iter().find(|i| i.kind == TidyIssueKind::OffGrid).unwrap();
         assert_eq!(off.entity_ids, vec![ids.1]);
         assert_eq!((off.at.x, off.at.y), (75.0, 75.1));
+    }
+
+    /// A run cable's text (label, core count, fan core names) is measured as text boxes owned by the cable, so a label lying over a block's outline is a label overlap that shows up in the issue details, while an unobstructed one is not.
+    /// 区間ケーブルの文字 (注記・芯数・扇の芯の呼び名) はケーブルが持つ文字として測られるので、ブロックの外形に乗った注記は文字の重なりとして詳細にも出て、何も無い所の注記は出ない。
+    #[test]
+    fn run_cable_text_is_measured_and_can_overlap() {
+        let cable = |id: Uuid| {
+            Entity::Cable(crate::model::Cable {
+                id,
+                reference: "W1".into(),
+                part_no: String::new(),
+                core_count: 4,
+                sq: 0.0,
+                points: Vec::new(),
+                cores: Vec::new(),
+                shield: None,
+                length_m: None,
+                run: vec![Point::new(100.0, 100.0), Point::new(140.0, 100.0)],
+            })
+        };
+        let id = Uuid::new_v4();
+        let free = sheet_with(vec![cable(id)]);
+        let boxes = text_boxes(&free, &builtin_symbols());
+        assert_eq!(boxes.len(), 2, "注記と芯数: {boxes:?}");
+        assert!(boxes.iter().all(|b| b.kind == TextKind::CableLabel && b.owner == Some(id)));
+        assert!(boxes.iter().any(|b| b.text == "4"));
+        assert_eq!(label_overlaps(&free, &builtin_symbols()), 0);
+
+        // 注記 (斜線の右下) の上に抵抗の外形を置く
+        let covered = sheet_with(vec![cable(id), symbol("resistor", (130.0, 104.0), "")]);
+        let defs = builtin_symbols();
+        assert_eq!(label_overlaps(&covered, &defs), 1);
+        let issues = label_overlap_issues(&covered, &defs);
+        assert!(issues[0].entity_ids.contains(&id));
+        assert!(issues[0].texts.iter().any(|t| t.starts_with("W1")), "{issues:?}");
     }
 }

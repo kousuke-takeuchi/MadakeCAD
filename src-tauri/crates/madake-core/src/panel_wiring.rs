@@ -66,6 +66,7 @@ pub fn panel_wiring(project: &Project) -> Vec<DeviceWiring> {
                             Entity::Wire(w) if on_wire(w, &at) => Some(w),
                             _ => None,
                         }) {
+                            let spec = crate::cable::effective_wire(sheet, w);
                             let far = [w.points.first(), w.points.last()]
                                 .into_iter()
                                 .flatten()
@@ -74,8 +75,8 @@ pub fn panel_wiring(project: &Project) -> Vec<DeviceWiring> {
                                 pin: pin.clone(),
                                 wire_no: w.net.clone().unwrap_or_default(),
                                 dest: far.map(|p| endpoint_label(sheet, &defs, p)).unwrap_or_default(),
-                                color: w.color.clone(),
-                                sq: w.sq,
+                                color: spec.color,
+                                sq: spec.sq,
                             });
                         }
                     }
@@ -267,6 +268,22 @@ mod tests {
         let csv = panel_wiring_csv(&project());
         assert!(csv.starts_with(&PANEL_WIRING_COLUMNS.join(",")));
         assert!(csv.contains("盤 CP-1,K1,SAMPLE-K,2,101,F1:1,black,1.25\n"), "{csv}");
+    }
+
+    /// A run-cable breakout wire on a pin is listed with its core's colour and the cable's gauge, not blank.
+    /// ピンに着く区間ケーブルの分岐の配線は、空欄ではなく芯の線色とケーブルの線径で並ぶ。
+    #[test]
+    fn a_breakout_wire_is_listed_with_the_core_colour_and_cable_gauge() {
+        let mut p = project();
+        let sch = &mut p.sheets[0];
+        let wire = sch.entities.values().find_map(|e| if let Entity::Wire(w) = e { Some(w.id) } else { None }).unwrap();
+        if let Some(Entity::Wire(w)) = sch.entities.get_mut(&wire) {
+            w.color = String::new();
+            w.sq = 0.0;
+        }
+        crate::cable::test_support::attach_breakout_core(sch, wire, "green", 0.2, "");
+        let rows = &panel_wiring(&p)[0].rows;
+        assert_eq!((rows[0].color.as_str(), rows[0].sq), ("green", 0.2));
     }
 
     /// The panel wiring sheet draws each part with its terminal rows, and is an empty heading page when no panel has parts.

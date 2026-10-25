@@ -358,6 +358,19 @@ enum EndKind {
     None,
 }
 
+/// 電線リストに載せるピンの表記。静的なプラグ・ソケットが極番号 (`pole`) を持てば、唯一のピン番号の
+/// 代わりにその極番号を使う (`X44A:2`)。極番号が無ければピン番号のまま。
+fn pin_display(sheet: &Sheet, entity_id: crate::EntityId, pin: &str) -> String {
+    if let Some(Entity::Symbol(s)) = sheet.entities.get(&entity_id) {
+        if matches!(s.symbol_id.as_str(), "connector_plug" | "connector_socket") {
+            if let Some(pole) = s.attrs.get(crate::mate::POLE_ATTR).map(|p| p.trim()).filter(|p| !p.is_empty()) {
+                return pole.to_string();
+            }
+        }
+    }
+    pin.to_string()
+}
+
 fn resolve_endpoint(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> EndKind {
     let by_id = crate::symbol::DefIndex::new(defs);
     let mut pin_hit: Option<(String, crate::EntityId, String, String)> = None;
@@ -405,7 +418,9 @@ fn resolve_endpoint(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> EndKind {
 /// 内側・外側どちらのワイヤも同じ `TB1:1` 表記になる。
 pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
     match resolve_endpoint(sheet, defs, at) {
-        EndKind::Pin { reference, pin, .. } => format!("{reference}:{pin}"),
+        EndKind::Pin { entity_id, reference, pin } => {
+            format!("{reference}:{}", pin_display(sheet, entity_id, &pin))
+        }
         EndKind::Label(name) => name,
         EndKind::None => String::new(),
     }
@@ -419,6 +434,7 @@ pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
 /// [`REMARK_NO_DEVICE`]、2個以上(多端点で1つに絞れない)なら[`REMARK_MULTI_ENDED`]の印を
 /// 添えて、表記はラベル名のまま残す。
 fn resolve_label_end(
+    sheet: &Sheet,
     nets: &[Net],
     label_name: &str,
     exclude: Option<&(crate::EntityId, String)>,
@@ -432,7 +448,7 @@ fn resolve_label_end(
         .filter(|p| exclude.is_none_or(|(id, pin)| *id != p.entity_id || pin != &p.pin))
         .collect();
     match others.as_slice() {
-        [only] => (format!("{}:{}", only.reference, only.pin), ""),
+        [only] => (format!("{}:{}", only.reference, pin_display(sheet, only.entity_id, &only.pin)), ""),
         [] => (label_name.to_string(), REMARK_NO_DEVICE),
         _ => (label_name.to_string(), REMARK_MULTI_ENDED),
     }
@@ -478,14 +494,16 @@ fn from_to(sheet: &Sheet, nets: &[Net], kinds: [EndKind; 2]) -> (String, String,
     let mut resolved: Vec<String> = Vec::with_capacity(2);
     for (i, kind) in kinds.iter().enumerate() {
         let text = match kind {
-            EndKind::Pin { reference, pin, .. } => format!("{reference}:{pin}"),
+            EndKind::Pin { entity_id, reference, pin } => {
+                format!("{reference}:{}", pin_display(sheet, *entity_id, pin))
+            }
             EndKind::None => String::new(),
             EndKind::Label(name) => {
                 let exclude = match &kinds[1 - i] {
                     EndKind::Pin { entity_id, pin, .. } => Some((*entity_id, pin.clone())),
                     _ => None,
                 };
-                let (text, mark) = resolve_label_end(nets, name, exclude.as_ref());
+                let (text, mark) = resolve_label_end(sheet, nets, name, exclude.as_ref());
                 multi |= mark == REMARK_MULTI_ENDED;
                 no_device |= mark == REMARK_NO_DEVICE;
                 text
@@ -1580,5 +1598,27 @@ mod tests {
         };
         crate::cable::test_support::insert(&mut project.sheets[0], Entity::Cable(defline));
         assert!(wire_rows(&project).is_empty(), "{:?}", wire_rows(&project));
+    }
+
+    /// A static plug or socket carrying a pole number shows it in the wire list (X44A:2) instead of its only pin 1; one without a pole is unchanged.
+    /// 極番号 (pole) を持つ静的なプラグ・ソケットは、電線リストで唯一のピン1の代わりにその極番号 (X44A:2) で表記される。極番号の無いものは従来どおり。
+    #[test]
+    fn wire_list_shows_the_pole_of_a_mate_half() {
+        let from = |pole: Option<&str>| {
+            let mut project = Project::new("t");
+            let sid = project.sheets[0].id;
+            let sheet = project.sheet_mut(sid).unwrap();
+            let mut plug = connector("X44A", None, 20.0, 0.0);
+            if let (Some(p), Entity::Symbol(s)) = (pole, &mut plug) {
+                s.attrs.insert(crate::mate::POLE_ATTR.to_string(), p.to_string());
+            }
+            for e in [plug, resistor("R1", 0.0, 0.0), wire_between((7.5, 0.0), (12.5, 0.0))] {
+                sheet.entities.insert(e.id(), e);
+            }
+            let row = wire_list_rows(&project)[0].clone();
+            (row[1].clone(), row[2].clone())
+        };
+        assert_eq!(from(Some("2")), ("R1:2".to_string(), "X44A:2".to_string()));
+        assert_eq!(from(None), ("R1:2".to_string(), "X44A:1".to_string()));
     }
 }
