@@ -244,6 +244,16 @@ fn system_prompt_carries_the_tidy_loop() {
     assert!(prompt.contains("ビフォー"), "{prompt}");
 }
 
+/// The system prompt tells the agent to wire diagrams by pin name with the pin tools, batched in one call, instead of computing pin coordinates.
+/// システムプロンプトは、配線図はピン操作ツールでピン名を指定し、まとめて1回で描き、ピン座標を手で計算しないよう指示する。
+#[test]
+fn system_prompt_tells_the_agent_to_wire_by_pin_name() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    for needle in ["get_pins", "connect_pins", "place_mate", "手で計算しない", "connections", "mates"] {
+        assert!(prompt.contains(needle), "「{needle}」が無い: {prompt}");
+    }
+}
+
 /// The system prompt tells the agent to look at the sheet image after drawing, instead of judging the layout by numbers alone.
 /// システムプロンプトは、描いた後にシート画像を見て確かめるよう指示する(数値だけで見た目を判断しない)。
 #[test]
