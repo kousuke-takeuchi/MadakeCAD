@@ -64,6 +64,8 @@ pub struct CopilotCliBackend {
     pub mcp_port: u16,
     /// 既定で前置する図面コンテキスト+作図ルール
     pub system_prompt: Option<String>,
+    /// この起動のインスタンスid。MCP接続のヘッダ([`crate::INSTANCE_HEADER`])に載せる
+    pub instance_id: Option<String>,
 }
 
 impl CopilotCliBackend {
@@ -73,6 +75,7 @@ impl CopilotCliBackend {
             model: Some(DEFAULT_COPILOT_MODEL.to_string()),
             mcp_port,
             system_prompt: None,
+            instance_id: None,
         }
     }
 
@@ -81,16 +84,13 @@ impl CopilotCliBackend {
     /// 形は`~/.copilot/mcp-config.json`と同じ(`copilot mcp add --transport http`が
     /// 書き出す形を実機で確認済み)。
     pub fn mcp_config_json(&self) -> String {
-        serde_json::json!({
-            "mcpServers": {
-                "madakecad": {
-                    "type": "http",
-                    "url": format!("http://127.0.0.1:{}/mcp", self.mcp_port),
-                    "tools": ["*"],
-                }
-            }
-        })
-        .to_string()
+        let mut server = serde_json::json!({
+            "type": "http",
+            "url": format!("http://127.0.0.1:{}/mcp", self.mcp_port),
+            "tools": ["*"],
+        });
+        crate::backend::add_instance_header(&mut server, self.instance_id.as_deref());
+        serde_json::json!({ "mcpServers": { "madakecad": server } }).to_string()
     }
 
     /// システム指示をユーザーの発言の前へ置いた、CLIへ渡す1本のプロンプトを作る。
