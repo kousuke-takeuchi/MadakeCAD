@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2798 specification clauses** across 6 areas.
+**2800 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1154,6 +1154,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - A wire that has a gauge, a colour and a cut length is annotated "0.75sq 白 0.4m" on the drawing. <sub>`note_shows_gauge_colour_and_length`</sub>
 - A missing attribute is simply left out of the note, so a wire without a length reads "0.75sq 白". <sub>`note_omits_missing_attributes`</sub>
+- A plain black wire with no gauge and no length gets no note, because black is the default colour and "黒" on every line only clutters the sheet; a black wire with a gauge or length still names its colour. <sub>`a_plain_black_wire_gets_no_note`</sub>
 - A wire with no gauge, no colour and no length gets no note at all instead of an empty one. <sub>`wire_without_attributes_has_no_note`</sub>
 - Colour names are matched ignoring capitals and surrounding space: a known colour prints its display name, and one the drawing does not know prints as typed but lower-cased. <sub>`colour_names_are_matched_ignoring_capitals_and_space`</sub>
 - The note of a horizontal wire sits below the wire, on the opposite side from its wire number. <sub>`horizontal_wire_note_sits_below_the_wire`</sub>
@@ -2436,6 +2437,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - annotates a wire with its gauge, colour and cut length <sub>`wireNoteText`</sub>
 - leaves out attributes the wire does not have <sub>`wireNoteText`</sub>
 - gives a wire with no attributes no note at all <sub>`wireNoteText`</sub>
+- gives a plain black wire no note <sub>`wireNoteText`</sub>
 - matches colour names ignoring capitals and surrounding space <sub>`wireNoteText`</sub>
 - places the note of a horizontal wire below the wire, opposite its wire number <sub>`wireNoteLabels`</sub>
 - places the note of a vertical wire to the right of the wire, opposite its wire number <sub>`wireNoteLabels`</sub>
