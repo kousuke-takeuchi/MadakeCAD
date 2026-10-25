@@ -58,6 +58,7 @@ import {
 import { useDocumentStore } from "../stores/document";
 import { useMacrosStore } from "../stores/macros";
 import { useUiStore } from "../stores/ui";
+import { drawingText, setDrawingFont } from "../canvas/textSize";
 
 /**
  * 対話ツール。回路図のツール (配線・部品挿入・ハーネス・マクロ) と
@@ -1183,10 +1184,10 @@ export class EditorController {
       ctx.fillRect(s.x, s.y, size.w * vp.scale, size.h * vp.scale);
       ctx.strokeRect(s.x, s.y, size.w * vp.scale, size.h * vp.scale);
       ctx.fillStyle = panelTheme.reference;
-      ctx.font = `600 ${Math.max(9, 3 * vp.scale)}px var(--mono-font, monospace)`;
+      setDrawingFont(ctx, 3, vp.scale, "var(--mono-font, monospace)", "600 ");
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(component.reference, s.x + (size.w * vp.scale) / 2, s.y + (size.h * vp.scale) / 2);
+      drawingText(ctx, component.reference, s.x + (size.w * vp.scale) / 2, s.y + (size.h * vp.scale) / 2);
       ctx.textAlign = "start";
       ctx.textBaseline = "alphabetic";
       ctx.globalAlpha = 1;
