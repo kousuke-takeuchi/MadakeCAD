@@ -100,6 +100,75 @@ pub fn bar_ends(positions: &[Point]) -> Option<(Point, Point)> {
     Some((*first, *last))
 }
 
+/// 区間の線の太さ (mm)。配線 (0.35mm) より太く描く。
+pub const RUN_STROKE_MM: f64 = 0.7;
+/// 区間の斜線の印の半分の長さ (x・y方向それぞれ、mm)。
+pub const RUN_SLASH_HALF_MM: f64 = 1.5;
+/// 分岐の配線の端に添える芯の呼び名の文字高 (mm)。
+pub const CORE_LABEL_MM: f64 = 1.5;
+
+/// 区間のいちばん長い線分の中点 (同じ長さなら後ろの線分)。斜線の印・芯数・注記の基準。
+pub fn run_mid(c: &Cable) -> Option<Point> {
+    c.run
+        .windows(2)
+        .max_by(|a, b| {
+            a[0].distance_to(&a[1])
+                .partial_cmp(&b[0].distance_to(&b[1]))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|s| Point::new((s[0].x + s[1].x) / 2.0, (s[0].y + s[1].y) / 2.0))
+}
+
+/// 単線図の印: 区間の中点を通る45度の短い斜線。
+pub fn run_slash(c: &Cable) -> Option<(Point, Point)> {
+    let m = run_mid(c)?;
+    let h = RUN_SLASH_HALF_MM;
+    Some((Point::new(m.x - h, m.y + h), Point::new(m.x + h, m.y - h)))
+}
+
+/// 芯数の文字の位置 (斜線の右上)。
+pub fn run_count_at(c: &Cable) -> Option<Point> {
+    run_mid(c).map(|m| Point::new(m.x + 2.0, m.y - 2.0))
+}
+
+/// ケーブル注記の位置 (斜線の右下)。
+pub fn run_label_at(c: &Cable) -> Option<Point> {
+    run_mid(c).map(|m| Point::new(m.x + 3.5, m.y + 4.0))
+}
+
+/// 部品に着く端の棒: 端ごとに、着いたピンの先を結ぶ線分 (ピンが1本だけなら描かない)。
+pub fn run_bars(sheet: &Sheet, defs: &[SymbolDef], c: &Cable) -> Vec<(Point, Point)> {
+    RunEnd::BOTH
+        .iter()
+        .filter_map(|&end| {
+            let positions: Vec<Point> = c
+                .cores
+                .iter()
+                .filter_map(|k| k.end(end))
+                .filter_map(|e| pin_end_position(sheet, defs, e))
+                .collect();
+            let (a, b) = bar_ends(&positions)?;
+            (a.distance_to(&b) > 1e-6).then_some((a, b))
+        })
+        .collect()
+}
+
+/// 分岐の扇: 区間の端から各芯の配線の分岐側の端への線と、その芯の呼び名。
+pub fn run_fans(sheet: &Sheet, c: &Cable) -> Vec<(Point, Point, String)> {
+    let mut out = Vec::new();
+    for end in RunEnd::BOTH {
+        let Some(at) = c.run_end(end) else { continue };
+        for core in &c.cores {
+            if let Some(CoreEnd::Wire { wire }) = core.end(end) {
+                if let Some(p) = breakout_point(sheet, c, end, *wire) {
+                    out.push((at, p, core.core.clone()));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// 線分 `a-b` と `c-d` の交点の、`a-b` 上の位置 (0〜1)。交わらなければNone。
 fn segment_hit(a: Point, b: Point, c: Point, d: Point) -> Option<f64> {
     let r = (b.x - a.x, b.y - a.y);
@@ -131,8 +200,12 @@ pub fn crossed_wires(sheet: &Sheet, a: Point, b: Point) -> Vec<(EntityId, String
     hits.into_iter().map(|(_, id, color)| (id, color)).collect()
 }
 
-/// シールドの楕円 (中心, 長半径, 短半径, 定義線の向きの角度 [度])。定義線を少し長めに囲む。
+/// シールドの楕円 (中心, 長半径, 短半径, 向きの角度 [度])。定義線ケーブルは定義線を少し長めに囲み、
+/// 区間ケーブルは区間の斜線の印を囲む。
 pub fn shield_ellipse(c: &Cable) -> Option<(Point, f64, f64, f64)> {
+    if c.is_run() {
+        return run_mid(c).map(|m| (m, 3.0, 2.0, -45.0));
+    }
     let (a, b) = (c.points.first()?, c.points.get(1)?);
     let center = Point::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
     let len = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
@@ -1107,5 +1180,26 @@ mod tests {
             cable_list_rows(&project),
             vec![["W45", "", "4", "0.2", "0.3", "J45", "USB1", "4", "0", "", "Sheet1"].map(String::from).to_vec()]
         );
+    }
+
+    /// The printed sheet draws a single-line cable as a thick line with a slash, a bar across the plug pins it lands on, fan lines to the breakout wires with the core names, and the cable label.
+    /// 印刷される図面は、1本線のケーブルを太い線と斜線、着いたプラグのピンを横切る棒、分岐の配線への扇と芯の呼び名、注記で描く。
+    #[test]
+    fn the_printed_sheet_draws_a_run_cable() {
+        let lte = test_support::lte_sheet();
+        let project = test_support::project_with(lte.sheet);
+        let sid = project.sheets[0].id;
+        let defs = sheet_symbol_defs(&project.sheets[0]);
+        let svg = crate::svg::project_sheet_to_svg(&project, sid, &defs).unwrap();
+        assert!(
+            svg.contains("<polyline points=\"80,100 192.500,100\" fill=\"none\" stroke=\"#000\" stroke-width=\"0.700\"/>"),
+            "区間"
+        );
+        assert!(svg.contains("x1=\"134.750\" y1=\"101.500\" x2=\"137.750\" y2=\"98.500\""), "斜線");
+        assert!(svg.contains("x1=\"192.500\" y1=\"92.500\" x2=\"192.500\" y2=\"107.500\""), "棒");
+        assert!(svg.contains("x1=\"80\" y1=\"100\" x2=\"77.500\" y2=\"97.500\""), "扇");
+        assert!(svg.contains(">D-</text>"), "芯の呼び名");
+        assert!(svg.contains("W45  4C×0.2sq  0.3m"), "注記");
+        assert!(!svg.contains("<ellipse"), "シールドが無ければ楕円は描かない");
     }
 }

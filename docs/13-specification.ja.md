@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2881仕様項目**。
+全6領域・**2882仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -50,6 +50,7 @@
 - 芯数より多い芯を持つ区間ケーブルは、定義線ケーブルと同じ芯数超過のエラーになる。 <sub>`a_run_cable_with_too_many_cores_overflows`</sub>
 - 両端とも未割当の区間ケーブルの芯は「行き先なし」で報告し、浮いたネットや短絡など別の指摘を重ねない。 <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
 - ケーブル一覧は1本線のケーブルの両端の機器 (分岐の配線が行く基板、1本線が着くプラグ) を示し、両端のある芯を使用芯と数える。 <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
+- 印刷される図面は、1本線のケーブルを太い線と斜線、着いたプラグのピンを横切る棒、分岐の配線への扇と芯の呼び名、注記で描く。 <sub>`the_printed_sheet_draws_a_run_cable`</sub>
 
 ### cable_run
 

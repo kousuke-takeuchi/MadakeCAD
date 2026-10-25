@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2881 specification clauses** across 6 areas.
+**2882 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -50,6 +50,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A run cable with more cores than its core count is the same core-overflow error as a definition-line cable. <sub>`a_run_cable_with_too_many_cores_overflows`</sub>
 - A run-cable core with both ends unassigned is reported as unassigned, with no extra floating-net or short finding. <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
 - The cable list names the devices at each end of a single-line cable (the board its breakout wires go to, the plug its run lands on) and counts the cores that have both ends as used. <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
+- The printed sheet draws a single-line cable as a thick line with a slash, a bar across the plug pins it lands on, fan lines to the breakout wires with the core names, and the cable label. <sub>`the_printed_sheet_draws_a_run_cable`</sub>
 
 ### cable_run
 
