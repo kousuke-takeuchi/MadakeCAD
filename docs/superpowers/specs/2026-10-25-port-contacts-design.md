@@ -1,6 +1,6 @@
 # Port contacts: one drawn pin that carries several conductors
 
-Date: 2026-10-25 · Status: design approved by the user in chat, awaiting spec review · Japanese: [2026-10-25-port-contacts-design.ja.md](2026-10-25-port-contacts-design.ja.md)
+Date: 2026-10-25 · Status: spec approved by the user, ready for planning · Japanese: [2026-10-25-port-contacts-design.ja.md](2026-10-25-port-contacts-design.ja.md)
 
 ## Goal
 
@@ -126,7 +126,7 @@ Sort key: `(wire_ids.is_empty(), min wire id, min (cable_id, core), contact rank
 
 #### 2.5 Mates
 
-Mates still do not conduct (§ What exists). A hub → socket | plug → dongle chain stays two drawn groups; each is a port cluster (one port pin plus a pass-through pin) and is split per contact, with the mate half listed in every contact net. The two sides are not joined by contact, exactly as they are not joined at all today. Making mate halves conduct is a separate change (Open questions).
+Mates still do not conduct (§ What exists). A hub → socket | plug → dongle chain stays two drawn groups; each is a port cluster (one port pin plus a pass-through pin) and is split per contact, with the mate half listed in every contact net. The two sides are not joined by contact, exactly as they are not joined at all today. Making mate halves conduct is a separate change (decided 2026-10-25, see the decision log).
 
 The user's choice for the common case (option 1): a plain wire, or a chain through pass-through elements, between two port pins **connects same-named contacts**. That is steps 2–4 in one cluster.
 
@@ -224,7 +224,7 @@ Each PR targets `master`; dependent PRs say "merge #N first" instead of stacking
 
 ## Open questions
 
-1. **Should mate halves conduct?** Today a plug/socket pair does not join its two nets in the netlist at all, so contacts cannot be followed through a mate either. Recommendation: leave it for a separate change (it would change nets of every existing drawing with mates); this spec only makes mate halves pass-through inside their own net.
+None. Mate conduction (a plug/socket pair joining its two nets) was decided on 2026-10-25 to be a separate change; this spec only makes mate halves pass-through inside their own net.
 
 ## Decision log
 
@@ -239,8 +239,10 @@ Each PR targets `master`; dependent PRs say "merge #N first" instead of stacking
 | 2026-10-25 | Keep the unsplit netlist as `extract_wire_nets` for wire numbering, wire-number drawing and the wire list | Split nets share wires; per-net wire numbering would give one wire four numbers. The user asked that wire list and BOM stay one row. |
 | 2026-10-25 | Splitting runs on clusters built without cable cores, then cores and dotted labels join slots | A breakout wire carries one core; built after the cores it would sit in the port group and look multi-contact. |
 | 2026-10-25 | Cross-sheet merge uses qualified names (`USB_MIC.VBUS`) via `Net.contact_labels` | Split nets share their wires, so the geometric label scan would merge all contacts again. |
-| 2026-10-25 | Dotted labels `L.c` tap one contact (same sheet and across sheets) | Needed for cross-sheet consistency; gives a by-name way to reach one conductor. Recommended in this spec; not yet discussed with the user. |
+| 2026-10-25 | Dotted labels `L.c` tap one contact (same sheet and across sheets) | Needed for cross-sheet consistency; gives a by-name way to reach one conductor. Proposed in this spec; confirmed by the user on 2026-10-25. |
 | 2026-10-25 | File format 18; port blocks are written as `port_block` in the file only, `symbol` in IPC/MCP | User chose that old builds must refuse such files. Old builds would make the block vanish (deny_unknown_fields), not drop the contacts; a file-only kind avoids touching the many `kind == "symbol"` checks in the frontend and the FreeCAD add-on. |
 | 2026-10-25 | Contacts need at least 2 names, at most 32, unique per pin | One conductor is a plain pin; limits keep the editor and nets sane. |
 | 2026-10-25 | SPICE unchanged | Its nodes are coordinate clusters, not nets; ports are not simulated today. |
 | 2026-10-25 | The spec is a draft only; no product code yet | The user asked for research and a design first. |
+| 2026-10-25 | User confirmed the spec's own proposals: dotted labels `L.c` tap one contact; 2 to 32 contacts per pin; `connect_cable` refuses a partial core-name match on a port; plain pins join a contact by pin name only | Spec review answer |
+| 2026-10-25 | User decided: mate conduction (plug pin n to socket pin n) is a separate change, not part of this one | It would change the nets of every existing drawing with mates |
