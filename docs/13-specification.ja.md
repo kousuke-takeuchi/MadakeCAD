@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2830仕様項目**。
+全6領域・**2831仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -525,6 +525,7 @@
 - 同じピンどうしの配線は、番号で書いても名前で書いても断られる。 <sub>`wiring_a_pin_to_itself_is_refused`</sub>
 - 1つの部品に同じピン番号が2つある(貫通端子)ときは、番号だけの指定を両方の候補つきで断り、「#n」で片方を選べる。 <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
 - かみ合わせの組は2.5mmグリッドにのり、2つは接するだけなので、整頓指標は組を重なりにもグリッド外にも数えない。 <sub>`a_mate_pair_is_tidy`</sub>
+- かみ合わせの組のプラグ側は参照記号を印字しないので、共有する記号はソケット側に1回だけ描かれる。 <sub>`the_plug_hides_the_shared_designator`</sub>
 
 ### PLC I/O
 
