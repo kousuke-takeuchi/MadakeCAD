@@ -48,7 +48,13 @@ fn the_tidy_metrics_tool_is_advertised_as_the_tidy_loop_target() {
         .find(|(tool, _)| tool == "get_tidy_metrics")
         .expect("MCPツール「get_tidy_metrics」が公開されていない")
         .1;
-    for needle in ["整えループの目標値として使う", "交差", "重なり", "グリッド"] {
+    for needle in [
+        "整えループの目標値として使う",
+        "交差",
+        "重なり",
+        "グリッド",
+        "details",
+    ] {
         assert!(
             description.contains(needle),
             "get_tidy_metricsの説明に「{needle}」が無い: {description}"
@@ -104,9 +110,63 @@ async fn tidy_metrics_endpoint_returns_the_four_counts() {
     // 存在しないシートは400
     let request = Request::builder()
         .method("GET")
-        .uri(format!("/api/v1/tidy-metrics?sheet_id={}", uuid::Uuid::new_v4()))
+        .uri(format!(
+            "/api/v1/tidy-metrics?sheet_id={}",
+            uuid::Uuid::new_v4()
+        ))
         .body(Body::empty())
         .unwrap();
     let response = router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+/// The tidy metrics also list each counted problem (kind, entities, text, place), so the agent can find what to fix; the list is capped and says how many were left out.
+/// 整えメトリクスは数えた問題を1件ずつ (種類・エンティティ・文字・場所) 並べるので、エージェントは直す場所を見つけられる。一覧には上限があり、省いた件数も返す。
+#[tokio::test]
+async fn tidy_metrics_list_each_problem_with_its_place() {
+    let mut project = Project::new("整え詳細");
+    let a = wire(&[(50.0, 50.0), (100.0, 50.0)]);
+    let b = wire(&[(75.0, 25.0), (75.0, 75.1)]);
+    let ids = (a.id(), b.id());
+    for e in [a, b] {
+        project.sheets[0].entities.insert(e.id(), e);
+    }
+    // グリッド外の点を上限より多く作る
+    for i in 0..60 {
+        let w = wire(&[
+            (10.1 + i as f64 * 3.0, 200.0),
+            (10.1 + i as f64 * 3.0, 210.0),
+        ]);
+        project.sheets[0].entities.insert(w.id(), w);
+    }
+    let doc = SharedDoc::new(Engine::new(project));
+    let agent = madake_mcp::agent::manager(&doc, 9310);
+    let parts = madake_mcp::open_parts(&unique_parts_db("tidy-details")).expect("parts db");
+    let router = madake_mcp::link_api::router(doc, Arc::clone(&agent), parts);
+    let request = Request::builder()
+        .method("GET")
+        .uri("/api/v1/tidy-metrics")
+        .body(Body::empty())
+        .unwrap();
+    let response = router.oneshot(request).await.unwrap();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["crossings"], 1);
+    let details = body["details"].as_array().expect("details");
+    assert_eq!(details.len(), madake_core::tidy::TIDY_DETAILS_LIMIT);
+    let crossing = &details[0];
+    assert_eq!(crossing["kind"], "crossing");
+    assert_eq!(crossing["at"]["x"], 75.0);
+    let wires: Vec<String> = crossing["entity_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    assert!(wires.contains(&ids.0.to_string()) && wires.contains(&ids.1.to_string()));
+    let total = body["crossings"].as_u64().unwrap() + body["off_grid"].as_u64().unwrap();
+    assert_eq!(
+        body["details_omitted"].as_u64().unwrap(),
+        total - madake_core::tidy::TIDY_DETAILS_LIMIT as u64
+    );
 }
