@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2955 specification clauses** across 6 areas.
+**2959 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -630,6 +630,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A plain pin wired to a port whose name matches no contact is a warning that names the pin, the port and its contacts; a pin named like a contact is not. <sub>`a_plain_pin_on_a_port_is_a_warning`</sub>
 - A contact on only one of two joined ports is reported as info; a port wired only to a mate half gives no such info. <sub>`a_contact_on_only_one_of_two_ports_is_reported_as_info`</sub>
 - A run-cable core whose contact is no longer on the port pin (the block was edited after) is reported as an unassigned core naming the contact. <sub>`a_core_on_a_removed_contact_is_reported`</sub>
+- A core that names a contact on a pin edited to have no contacts at all is reported as unassigned with that contact named, not silently put on the plain pin. <sub>`a_core_on_a_pin_without_contacts_is_reported`</sub>
 - A label that is a port label on one sheet but sits on a net without a port on another sheet is a project warning, because those sheets are not joined. <sub>`a_port_label_without_a_port_on_another_sheet_is_a_warning`</sub>
 
 ### raster
@@ -811,6 +812,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Simulation with an invalid ngspice binary fails with an explicit error (no silent fallback). <sub>`missing_ngspice_is_an_explicit_error`</sub>
 - The DC operating point reports per-net voltages (0-24 V here) and per-component current and power (a 2 A lamp shows ~2 A / ~48 W). <sub>`op_reports_net_voltages_and_component_currents`</sub>
 - Declaring a switch open in the what-if analysis drops the load current to zero, and the result notes which switches were opened. <sub>`open_switch_cuts_the_current`</sub>
+- A wire between two ports is one net in the voltage list, not one per contact with the same copied voltage, because SPICE does not know ports. <sub>`a_port_wire_is_one_net_in_the_voltages`</sub>
 
 ### SPICE netlist generation
 
@@ -1503,6 +1505,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The template tools explain that a template is a starting skeleton, that it lands ERC-clean, and that applying it is a single undo step. <sub>`the_template_tools_explain_what_a_template_is`</sub>
 - Every published tool carries a description, so no tool is offered to the agent unexplained. <sub>`every_published_tool_has_a_description`</sub>
 - The edit tool tells an agent how to write a jumper on a multi-level terminal block (with the level letter), so it does not send a plain numeric pair that would be refused. <sub>`the_edit_tool_explains_the_multilevel_jumper_form`</sub>
+- The placement tool states the contact rule (2 to 32 per pin, trimmed, unique within the pin), and the cable tool says order mapping onto a port needs equal counts and that a partial name match and style multi are refused. <sub>`the_port_tools_state_the_contact_rules`</sub>
 
 ### Wire part numbers / command errors (REST)
 
@@ -1679,6 +1682,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The system prompt tells the agent to wire diagrams by pin name with the pin tools, batched in one call, instead of computing pin coordinates. <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
 - The system prompt tells the agent to look at the sheet image after drawing, instead of judging the layout by numbers alone. <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
 - The system prompt tells the agent to draw a multi-conductor connector (USB) as one block pin with contacts. <sub>`system_prompt_explains_port_contacts`</sub>
+- The system prompt states the contact rule (2 to 32 per pin, trimmed, unique) and that connect_cable on a port maps by order only with equal counts and refuses a partial name match and style multi. <sub>`system_prompt_states_the_contact_rules`</sub>
 
 ### knowledge_docs
 

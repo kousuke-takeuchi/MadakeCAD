@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2955仕様項目**。
+全6領域・**2959仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -630,6 +630,7 @@
 - ポートに繋がった普通のピンで、名前がどの接点とも合わないものは、ピン・ポート・接点を書いた警告になる。接点と同じ名前のピンは警告にならない。 <sub>`a_plain_pin_on_a_port_is_a_warning`</sub>
 - 繋がった2つのポートのうち1つにしか無い接点は情報として知らせる。かみ合わせの片側にだけ繋いだポートでは出さない。 <sub>`a_contact_on_only_one_of_two_ports_is_reported_as_info`</sub>
 - 区間ケーブルの芯の接点がポートのピンからなくなった (後でブロックを直した) ときは、その接点を書いた「芯の行き先なし」として知らせる。 <sub>`a_core_on_a_removed_contact_is_reported`</sub>
+- 接点をすべて消したピンで、接点を指定している芯は、その接点を名指しで割当て無しと報告される (黙って普通のピンに載せない)。 <sub>`a_core_on_a_pin_without_contacts_is_reported`</sub>
 - あるシートではポートのラベルなのに、別のシートではポートの無いネットに載っているラベルは、シートが繋がらないのでプロジェクトの警告になる。 <sub>`a_port_label_without_a_port_on_another_sheet_is_a_warning`</sub>
 
 ### raster
@@ -811,6 +812,7 @@
 - 不正なngspice実行ファイルでのシミュレーションは明示的なエラーになる(暗黙のフォールバックはしない)。 <sub>`missing_ngspice_is_an_explicit_error`</sub>
 - DC動作点はネットごとの電圧(この例では0〜24V)と部品ごとの電流・電力を報告する(2Aランプは約2A/約48W)。 <sub>`op_reports_net_voltages_and_component_currents`</sub>
 - what-ifでスイッチを開路指定すると負荷電流はゼロになり、結果にどのスイッチを開いたかが明記される。 <sub>`open_switch_cuts_the_current`</sub>
+- 2つのポートを結ぶ配線は、電圧の一覧で1ネットになる (SPICE はポートを知らないので、接点ごとに同じ電圧を写したネットにはしない)。 <sub>`a_port_wire_is_one_net_in_the_voltages`</sub>
 
 ### SPICEネットリスト生成
 
@@ -1503,6 +1505,7 @@
 - テンプレートのツール説明には「作図の雛形であること」「ERC指摘ゼロで入ること」「undo一発で戻せること」が書かれている。 <sub>`the_template_tools_explain_what_a_template_is`</sub>
 - 公開ツールには全て説明文が付いており、説明の無いツールをエージェントへ見せない。 <sub>`every_published_tool_has_a_description`</sub>
 - 編集ツールの説明には多段端子台のジャンパの書き方 (段記号つき) が書かれているので、エージェントが拒否される数字だけの指定を送らずに済む。 <sub>`the_edit_tool_explains_the_multilevel_jumper_form`</sub>
+- 配置ツールの説明は接点の決まり (1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない) を書き、ケーブルのツールの説明はポートへの並び順の対応は数が同じときだけで、名前の一部だけの一致と style multi は断ると書く。 <sub>`the_port_tools_state_the_contact_rules`</sub>
 
 ### 電線品番・コマンドエラー (REST)
 
@@ -1679,6 +1682,7 @@
 - システムプロンプトは、配線図はピン操作ツールでピン名を指定し、まとめて1回で描き、ピン座標を手で計算しないよう指示する。 <sub>`system_prompt_tells_the_agent_to_wire_by_pin_name`</sub>
 - システムプロンプトは、描いた後にシート画像を見て確かめるよう指示する(数値だけで見た目を判断しない)。 <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
 - システムプロンプトは、複数の導体を運ぶコネクタ (USB) を接点付きのブロックのピン1本で描くようエージェントに伝える。 <sub>`system_prompt_explains_port_contacts`</sub>
+- システムプロンプトは接点の決まり (1ピンに2〜32個、前後の空白は除き、重ならない) と、ポートへの connect_cable は数が同じときだけ並び順で、名前の一部だけの一致と style multi は断られることを伝える。 <sub>`system_prompt_states_the_contact_rules`</sub>
 
 ### knowledge_docs
 
