@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2959 specification clauses** across 6 areas.
+**2967 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -31,6 +31,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Rotating or mirroring a block moves its pins with the body but never renumbers them. <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
 - A block pin may list contacts; they reach the pin definition in order, trimmed, and a pin without contacts has none. <sub>`contacts_are_trimmed`</sub>
 - Contacts that are empty, repeated on one pin, alone (one conductor is a plain pin) or more than 32 are refused with the pin number in the message. <sub>`bad_contacts_are_refused`</sub>
+- A pin may name its physical connector, also together with contacts, and null means no connector; an unknown kind is refused as invalid JSON. <sub>`a_connector_kind_is_read_and_an_unknown_one_is_refused`</sub>
+- A connector name (connector_ref) must not be blank, needs a screw or JST connector and is refused on any other kind, with the pin number in the message. <sub>`a_bad_connector_ref_is_refused`</sub>
+- One connector name may not be used by two separate connectors: on two sides, split by another pin, or with two different kinds. <sub>`a_connector_ref_used_by_two_groups_is_refused`</sub>
+- Unnamed connectors may repeat anywhere, and a named connector may run over several neighbouring pins. <sub>`unnamed_connectors_may_repeat`</sub>
 
 ### cable
 
@@ -86,6 +90,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Changing an existing symbol to an unknown id is refused too, so a symbol on the sheet can always be drawn. <sub>`changing_a_symbol_to_an_unknown_id_is_refused`</sub>
 - A block whose pin table is broken (duplicate numbers) is refused when added, and the sheet is left untouched. <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - Editing a good block into a broken one is refused too, so a block on the sheet always has a drawable pin table. <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
+- A block whose connector table is wrong (a connector name on a USB socket, or a blank name) is refused when added or edited, with the reason. <sub>`a_block_with_a_bad_connector_table_is_refused`</sub>
 - A note whose colour is a name the drawing does not know (a typo, or a raw colour code) is refused instead of being stored and silently drawn in black. <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
 - A note that uses one of the drawing's colour tokens (or no colour at all) is accepted. <sub>`a_note_with_a_known_colour_token_is_accepted`</sub>
 - Changing an existing note to an unknown colour is refused too, and the note keeps the colour it had. <sub>`recolouring_a_note_to_an_unknown_colour_is_refused`</sub>
@@ -212,6 +217,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Registering a FreeCAD link stores it under the entity id, registering again replaces it, removing it takes it away, and each step undoes back to the previous list. <sub>`mech_links_are_upserted_removed_and_undone`</sub>
 - Writing measured wire lengths back sets each wire's length and marks it as measured by FreeCAD in one undo step; a write-back that changes nothing costs no undo step at all. <sub>`wire_lengths_write_back_with_their_source`</sub>
 - A write-back naming a wire that is not on the sheet changes nothing: the other wires of the same batch keep their lengths and no undo step is created. <sub>`wire_lengths_write_back_is_all_or_nothing`</sub>
+
+### connector
+
+- Every connector kind is read from its snake_case name (usb_a_f … jst_xh_f); only screw terminals and JST sockets are grouped, and only JST has a series. <sub>`every_connector_kind_has_its_json_name`</sub>
+- Consecutive screw or JST pins with the same kind and the same name (or both unnamed) form one connector; a different name, a different kind or a pin in between starts a new one, and USB-like kinds are always one pin each. <sub>`consecutive_pins_with_the_same_kind_and_name_form_one_connector`</sub>
+- A JST connector is labelled with its name and series ("J3 PH", or "XH" alone), a screw terminal block with its name, and an unnamed screw block or a USB socket gets no label. <sub>`group_labels_name_the_connector_and_its_series`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 

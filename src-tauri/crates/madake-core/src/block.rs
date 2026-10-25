@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use crate::connector::{connector_groups, ConnectorKind};
 use crate::geometry::Point;
 use crate::symbol::{PinDef, PinDir, Primitive, SymbolDef, TextSlot};
 use crate::symbol::{SLOT_DESC, SLOT_PART, SLOT_RATING, SLOT_TAG};
@@ -59,6 +60,12 @@ pub struct BlockPin {
     /// ポートの接点 (例 `["VBUS","D-","D+","GND"]`)。空 = 普通のピン。描き方は変わらない。
     #[serde(default)]
     pub contacts: Vec<String>,
+    /// 外形の辺に描くコネクタの形。`None` = 普通のピン (今までどおりに描く)。絵だけで、接点・ネットは変えない。
+    #[serde(default)]
+    pub connector: Option<ConnectorKind>,
+    /// まとめて1つの本体に描くコネクタ (端子台・JST) の名前 (例 `"J3"`, `"TB1"`)。
+    #[serde(default)]
+    pub connector_ref: Option<String>,
 }
 
 /// ブロックのピン配置(辺ごと)。各辺は上→下 / 左→右の順。
@@ -95,6 +102,11 @@ impl BlockSpec {
     /// どれかのピンが接点を持つか (ファイルでは種類 `port_block` で書く。[`crate::model::EntityRepr`])。
     pub fn has_contacts(&self) -> bool {
         self.pins.all().any(|p| !p.contacts.is_empty())
+    }
+
+    /// どれかのピンがコネクタの絵を持つか (外形を線分で描き、ファイルでは種類 `port_block` で書く)。
+    pub fn has_connectors(&self) -> bool {
+        self.pins.all().any(|p| p.connector.is_some())
     }
 }
 
@@ -146,6 +158,7 @@ fn caption_inset(side: &[BlockPin]) -> f64 {
 /// - `block_pins`が無ければピン0本(注記だけの箱)
 /// - JSONが壊れている・知らないキーがある・ピン番号が空または重複・ピンが多すぎる → エラー
 /// - `block_size`は5mm刻みへ切り上げ、ピンが収まらない大きさならエラー
+/// - `connector_ref` が空・まとめない種類に付いている・2つのまとまりに使われている → エラー ([`check_connectors`])
 pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, String> {
     let pins: BlockPins = match attrs.get(BLOCK_PINS_ATTR) {
         Some(raw) if !raw.trim().is_empty() => serde_json::from_str(raw)
@@ -169,6 +182,7 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
         }
         check_contacts(no, &pin.contacts)?;
     }
+    check_connectors(&pins)?;
 
     let size = match attrs.get(BLOCK_SIZE_ATTR) {
         Some(raw) if !raw.trim().is_empty() => {
@@ -221,6 +235,45 @@ fn check_contacts(no: &str, contacts: &[String]) -> Result<(), String> {
         }
         if !seen.insert(c) {
             return Err(format!("block pin {no}: duplicate contact {c}"));
+        }
+    }
+    Ok(())
+}
+
+/// コネクタの名前 (`connector_ref`) を調べる: 空でない・まとめる種類 (端子台・JST) だけが持つ・
+/// 1つの名前は1つのまとまり (1辺の隣り合うピン、同じ種類) だけが使う。
+fn check_connectors(pins: &BlockPins) -> Result<(), String> {
+    for pin in pins.all() {
+        let Some(reference) = &pin.connector_ref else { continue };
+        let no = pin.no.trim();
+        if reference.trim().is_empty() {
+            return Err(format!("block pin {no}: connector_ref must not be empty"));
+        }
+        match pin.connector {
+            None => {
+                return Err(format!(
+                    "block pin {no}: connector_ref needs a grouped connector (screw, jst_ph_f, jst_xh_f)"
+                ))
+            }
+            Some(kind) if !kind.is_grouped() => {
+                return Err(format!(
+                    "block pin {no}: connector_ref is only for screw, jst_ph_f and jst_xh_f, not {}",
+                    kind.name()
+                ))
+            }
+            Some(_) => {}
+        }
+    }
+    let mut seen: std::collections::BTreeSet<String> = Default::default();
+    for side in [&pins.left, &pins.right, &pins.top, &pins.bottom] {
+        for group in connector_groups(side) {
+            let Some(reference) = group.reference else { continue };
+            if !seen.insert(reference.clone()) {
+                return Err(format!(
+                    "block pin {}: connector_ref {reference} is used by another group; its pins must be next to each other on one side",
+                    side[group.start].no.trim()
+                ));
+            }
         }
     }
     Ok(())
@@ -717,5 +770,74 @@ mod tests {
         // 別のピンと同じ接点名は使ってよい (USB ポートはどれも VBUS を持つ)
         block_symbol(&attrs(&[("block_pins", r#"{"left":[{"no":"1","contacts":["A","B"]},{"no":"2","contacts":["A","B"]}]}"#)]))
             .expect("別のピンなら同じ名前でよい");
+    }
+
+    // ---- コネクタの絵 (connector / connector_ref) ----
+
+    /// A pin may name its physical connector, also together with contacts, and null means no connector; an unknown kind is refused as invalid JSON.
+    /// ピンは自分のコネクタの形を書ける (接点と一緒でもよい)。null は書かなかったのと同じ。知らない種類は壊れた JSON として断る。
+    #[test]
+    fn a_connector_kind_is_read_and_an_unknown_one_is_refused() {
+        let spec = parse_block_spec(&attrs(&[(
+            "block_pins",
+            r#"{"top":[{"no":"U1","connector":"usb_a_f","contacts":["VBUS","D-","D+","GND"]}]}"#,
+        )]))
+        .expect("コネクタと接点の両方を持てる");
+        assert_eq!(spec.pins.top[0].connector, Some(ConnectorKind::UsbAF));
+        assert!(spec.has_connectors() && spec.has_contacts());
+        assert!(!parse_block_spec(&attrs(&[("block_pins", SAMPLE)])).unwrap().has_connectors());
+        let nulls = parse_block_spec(&attrs(&[("block_pins", r#"{"left":[{"no":"1","connector":null,"connector_ref":null}]}"#)]))
+            .expect("null は書かなかったのと同じ");
+        assert!(!nulls.has_connectors());
+        let err = parse_block_spec(&attrs(&[("block_pins", r#"{"left":[{"no":"1","connector":"usb_z"}]}"#)]))
+            .expect_err("知らない種類");
+        assert!(err.starts_with("block_pins is not valid JSON") && err.contains("unknown variant"), "{err}");
+    }
+
+    /// A connector name (connector_ref) must not be blank, needs a screw or JST connector and is refused on any other kind, with the pin number in the message.
+    /// コネクタの名前 (connector_ref) は空ではいけない・端子台か JST のコネクタが要る・ほかの種類には付けられない。断る文にはピン番号が入る。
+    #[test]
+    fn a_bad_connector_ref_is_refused() {
+        let err = |json: &str| parse_block_spec(&attrs(&[("block_pins", json)])).expect_err("断る");
+        assert_eq!(
+            err(r#"{"left":[{"no":"P1","connector":"screw","connector_ref":"  "}]}"#),
+            "block pin P1: connector_ref must not be empty"
+        );
+        assert_eq!(
+            err(r#"{"left":[{"no":"P1","connector_ref":"J3"}]}"#),
+            "block pin P1: connector_ref needs a grouped connector (screw, jst_ph_f, jst_xh_f)"
+        );
+        assert_eq!(
+            err(r#"{"left":[{"no":"P1","connector":"usb_a_f","connector_ref":"J3"}]}"#),
+            "block pin P1: connector_ref is only for screw, jst_ph_f and jst_xh_f, not usb_a_f"
+        );
+    }
+
+    /// One connector name may not be used by two separate connectors: on two sides, split by another pin, or with two different kinds.
+    /// 1つのコネクタの名前を別々の2つのコネクタに使うことはできない (2つの辺に分かれる・別のピンで途切れる・種類が違う)。
+    #[test]
+    fn a_connector_ref_used_by_two_groups_is_refused() {
+        let msg = "block pin 2: connector_ref J3 is used by another group; its pins must be next to each other on one side";
+        for json in [
+            r#"{"left":[{"no":"1","connector":"jst_ph_f","connector_ref":"J3"}],"right":[{"no":"2","connector":"jst_ph_f","connector_ref":"J3"}]}"#,
+            r#"{"left":[{"no":"1","connector":"jst_ph_f","connector_ref":"J3"},{"no":"X"},{"no":"2","connector":"jst_ph_f","connector_ref":"J3"}]}"#,
+            r#"{"left":[{"no":"1","connector":"screw","connector_ref":"J3"},{"no":"2","connector":"jst_ph_f","connector_ref":"J3"}]}"#,
+        ] {
+            let err = parse_block_spec(&attrs(&[("block_pins", json)])).expect_err("断る");
+            assert_eq!(err, msg, "{json}");
+        }
+    }
+
+    /// Unnamed connectors may repeat anywhere, and a named connector may run over several neighbouring pins.
+    /// 名前の無いコネクタはどこで繰り返してもよく、名前のあるコネクタは隣り合う数本のピンにまたがってよい。
+    #[test]
+    fn unnamed_connectors_may_repeat() {
+        parse_block_spec(&attrs(&[(
+            "block_pins",
+            r#"{"left":[{"no":"1","connector":"screw"},{"no":"2"},{"no":"3","connector":"screw"}],
+                "right":[{"no":"4","connector":"jst_ph_f","connector_ref":"J3"},{"no":"5","connector":"jst_ph_f","connector_ref":"J3"}],
+                "top":[{"no":"6","connector":"jst_xh_f"},{"no":"7","connector":"usb_a_f"},{"no":"8","connector":"usb_a_f"}]}"#,
+        )]))
+        .expect("通る");
     }
 }

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2959仕様項目**。
+全6領域・**2967仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -31,6 +31,10 @@
 - ブロックを回転・ミラーしてもピンは本体と一緒に動くだけで、番号は付け替わらない。 <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
 - ブロックのピンは接点を並べて持てる。接点は前後の空白を落とした順にピン定義へ届き、接点の無いピンは空のまま。 <sub>`contacts_are_trimmed`</sub>
 - 空の接点・1本のピンで重なる接点・1つだけの接点 (導体1本は普通のピン)・32を超える接点は、ピン番号入りの文で断る。 <sub>`bad_contacts_are_refused`</sub>
+- ピンは自分のコネクタの形を書ける (接点と一緒でもよい)。null は書かなかったのと同じ。知らない種類は壊れた JSON として断る。 <sub>`a_connector_kind_is_read_and_an_unknown_one_is_refused`</sub>
+- コネクタの名前 (connector_ref) は空ではいけない・端子台か JST のコネクタが要る・ほかの種類には付けられない。断る文にはピン番号が入る。 <sub>`a_bad_connector_ref_is_refused`</sub>
+- 1つのコネクタの名前を別々の2つのコネクタに使うことはできない (2つの辺に分かれる・別のピンで途切れる・種類が違う)。 <sub>`a_connector_ref_used_by_two_groups_is_refused`</sub>
+- 名前の無いコネクタはどこで繰り返してもよく、名前のあるコネクタは隣り合う数本のピンにまたがってよい。 <sub>`unnamed_connectors_may_repeat`</sub>
 
 ### cable
 
@@ -86,6 +90,7 @@
 - 既にある部品を知らないシンボルidへ変更するのも拒否されるので、図面の部品は常に描ける。 <sub>`changing_a_symbol_to_an_unknown_id_is_refused`</sub>
 - ピン表が壊れている(番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。 <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - 正しいブロックを壊れた内容へ編集するのも拒否されるので、図面上のブロックは常に描けるピン表を持つ。 <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
+- コネクタの表が誤っているブロック (USB の口にコネクタの名前、または空の名前) は、追加でも編集でも理由付きで拒否される。 <sub>`a_block_with_a_bad_connector_table_is_refused`</sub>
 - 図面が知らない色名 (打ち間違いや生の色コード) を付けた注記は、黙って黒で描かれるのではなく拒否される。 <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
 - 図面の色トークンを使った注記 (色を指定しない注記も) は受け付けられる。 <sub>`a_note_with_a_known_colour_token_is_accepted`</sub>
 - 既にある注記を知らない色へ変える更新も拒否され、注記は元の色のままになる。 <sub>`recolouring_a_note_to_an_unknown_colour_is_refused`</sub>
@@ -212,6 +217,12 @@
 - FreeCAD対応付けを登録するとentity idをキーに保存され、再登録で置き換わり、解除で消える。各操作はundoで直前の一覧に戻る。 <sub>`mech_links_are_upserted_removed_and_undone`</sub>
 - 計測した電線長の書き戻しは、各配線の長さを設定して出所を「FreeCAD計測」にする1回の編集になる。何も変わらない書き戻しはundoの段を作らない。 <sub>`wire_lengths_write_back_with_their_source`</sub>
 - シートに無い配線が混ざった書き戻しは何も変えない。同じ一括分の他の配線も元のままで、undoの段もできない。 <sub>`wire_lengths_write_back_is_all_or_nothing`</sub>
+
+### connector
+
+- コネクタの種類はどれも snake_case の名前 (usb_a_f … jst_xh_f) で読め、まとめて描くのは端子台と JST だけで、シリーズ名を持つのは JST だけ。 <sub>`every_connector_kind_has_its_json_name`</sub>
+- 同じ種類で同じ名前 (どちらも名前なしを含む) の端子台・JST のピンが続けば1つのコネクタになり、名前・種類が違うか間に別のピンがあれば別のコネクタになる。USB などはいつも1本で1つ。 <sub>`consecutive_pins_with_the_same_kind_and_name_form_one_connector`</sub>
+- JST のコネクタには名前とシリーズ (「J3 PH」、名前が無ければ「XH」だけ)、端子台には名前を書き、名前の無い端子台と USB の口には何も書かない。 <sub>`group_labels_name_the_connector_and_its_series`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 
