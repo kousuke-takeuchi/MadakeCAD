@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2855 specification clauses** across 6 areas.
+**2861 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -403,6 +403,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Pin positions honor the symbol's rotation (clockwise in the Y-down paper coordinate system) and placement. <sub>`pin_positions_apply_rotation_and_translation`</sub>
 - Mirroring flips pins across the vertical axis before rotation is applied. <sub>`pin_positions_apply_mirror_before_rotation`</sub>
 - An arc inside a symbol turns with the symbol, so the contactor's half circle keeps facing its moving contact at every rotation, and mirroring flips it without reversing the drawing direction. <sub>`arc_angles_follow_symbol_rotation_and_mirror`</sub>
+- The LTE harness (four board wires breaking out of a single line that lands on the USB plug) gives four separate nets, each joining one board pin to the matching plug pin through its cable core. <sub>`a_run_cable_keeps_each_core_its_own_net`</sub>
+- A single line lying across every pin of a connector joins none of them: a cable's run never connects by position. <sub>`a_run_over_a_pin_column_joins_nothing`</sub>
+- A single-line cable between two connectors (3.5 mm AUX: L, R, GND) gives one net per core even though no wire is drawn. <sub>`a_connector_to_connector_run_gives_one_net_per_core`</sub>
+- Nets made only of cable cores are named after the nets that have wires, so adding such a cable does not rename existing nets. <sub>`core_only_nets_are_named_after_wire_nets`</sub>
+- Moving the part a single line lands on keeps every core connected to the same pin: connectivity follows the assignment, not the drawing. <sub>`moving_the_landing_part_keeps_core_connectivity`</sub>
 
 ### ngspice runner
 
@@ -1187,6 +1192,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Without a sheet id every sheet of the project is numbered in sheet order with numbers unique across the whole project. <sub>`numbering_without_a_sheet_covers_the_whole_project`</sub>
 - A single wire number can be edited directly, and undo puts the previous value back. <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - The renumber command is plain JSON ({"type":"renumber_wires","mode":"append","start":1}), so AI agents and the CLI can send it. <sub>`renumber_command_is_plain_json`</sub>
+- Renumbering wires on a sheet with a connector-to-connector single-line cable numbers the drawn wires 1, 2 with no gap left by the cable's wire-less core nets. <sub>`core_only_nets_take_no_wire_number`</sub>
 
 ### wire_note
 

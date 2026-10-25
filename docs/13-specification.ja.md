@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2855仕様項目**。
+全6領域・**2861仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -403,6 +403,11 @@
 - ピン座標はシンボルの回転(Y下向き座標系で時計回り)と配置位置を反映する。 <sub>`pin_positions_apply_rotation_and_translation`</sub>
 - ミラーは回転より先に、縦軸に対してピンを反転する。 <sub>`pin_positions_apply_mirror_before_rotation`</sub>
 - シンボル内の弧はシンボルと一緒に回るので、電磁接触器の半円はどの回転角でも可動接点の側を向き続け、ミラーでは描画方向を保ったまま左右が入れ替わる。 <sub>`arc_angles_follow_symbol_rotation_and_mirror`</sub>
+- LTEハーネス (基板側の配線4本が1本線に分岐し、その線がUSBプラグに着く) は別々の4ネットになり、各ネットは芯を通して基板のピン1本とプラグの同じ番号のピンを結ぶ。 <sub>`a_run_cable_keeps_each_core_its_own_net`</sub>
+- コネクタの全ピンの上を通る1本線でも、どのピンも繋がない (ケーブルの区間は位置では繋がらない)。 <sub>`a_run_over_a_pin_column_joins_nothing`</sub>
+- 2つのコネクタを全長1本線で結ぶケーブル (3.5mm AUX の L・R・GND) は、配線が1本も無くても芯ごとに1ネットになる。 <sub>`a_connector_to_connector_run_gives_one_net_per_core`</sub>
+- 芯だけのネットは配線のあるネットの後ろに名前が付くので、そういうケーブルを足しても今あるネットの名前は変わらない。 <sub>`core_only_nets_are_named_after_wire_nets`</sub>
+- 1本線が着く部品を動かしても、どの芯も同じピンに繋がったまま (接続は割当てで決まり、描いた位置では決まらない)。 <sub>`moving_the_landing_part_keeps_core_connectivity`</sub>
 
 ### ngspiceランナー
 
@@ -1187,6 +1192,7 @@
 - シートを指定しない採番はプロジェクトの全シートをシート順に処理し、番号は図面全体で重複しない。 <sub>`numbering_without_a_sheet_covers_the_whole_project`</sub>
 - 線番は1本ずつ直接編集でき、undoで以前の値に戻る。 <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - 採番コマンドは素のJSON ({"type":"renumber_wires","mode":"append","start":1}) で表現でき、AIやCLIから送れる。 <sub>`renumber_command_is_plain_json`</sub>
+- コネクタ同士を結ぶ1本線ケーブルがあるシートで線番を振り直しても、配線は1, 2と飛ばずに番号が付く (配線の無い芯のネットは番号を使わない)。 <sub>`core_only_nets_take_no_wire_number`</sub>
 
 ### wire_note
 

@@ -716,6 +716,15 @@ export interface Net {
   label?: string | null;
   /** 線番。ネット内の全Wireで同値。 */
   wire_no?: string | null;
+  /** このネットを通る区間ケーブルの芯 (v17)。 */
+  cable_cores?: NetCableCore[];
+}
+
+/** ネットを通る区間ケーブルの芯1本 (madake-coreの`NetCableCore`)。 */
+export interface NetCableCore {
+  cable_id: string;
+  reference: string;
+  core: string;
 }
 
 /** 端子台チャートの1行 = 端子1個 (madake-coreの`TerminalRow`)。 */

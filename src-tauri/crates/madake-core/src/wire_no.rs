@@ -400,4 +400,21 @@ mod tests {
         .unwrap();
         assert!(back.contains("\"mode\":\"renumber\""), "{back}");
     }
+
+    /// Renumbering wires on a sheet with a connector-to-connector single-line cable numbers the drawn wires 1, 2 with no gap left by the cable's wire-less core nets.
+    /// コネクタ同士を結ぶ1本線ケーブルがあるシートで線番を振り直しても、配線は1, 2と飛ばずに番号が付く (配線の無い芯のネットは番号を使わない)。
+    #[test]
+    fn core_only_nets_take_no_wire_number() {
+        let (aux, _) = crate::cable::test_support::aux_sheet();
+        let w1 = wire(&[(0.0, 200.0), (20.0, 200.0)], None);
+        let w2 = wire(&[(0.0, 210.0), (20.0, 210.0)], None);
+        let (id1, id2) = (w1.id(), w2.id());
+        let mut all: Vec<Entity> = aux.entities.into_values().collect();
+        all.push(w1);
+        all.push(w2);
+        let (mut engine, sid, _) = engine_with(all);
+        renumber(&mut engine, Some(sid), RenumberMode::Renumber, 1);
+        assert_eq!(net_of(&engine, sid, id1).as_deref(), Some("1"));
+        assert_eq!(net_of(&engine, sid, id2).as_deref(), Some("2"));
+    }
 }
