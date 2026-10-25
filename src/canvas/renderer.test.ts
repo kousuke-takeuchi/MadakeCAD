@@ -222,6 +222,29 @@ describe("drawSymbol text placement", () => {
     return texts;
   };
 
+  /** 文字を描いたときのフォントの大きさ (px) を集める。 */
+  const fontSizesAt = (scale: number) => {
+    const sizes: number[] = [];
+    const { ctx } = recorder();
+    (ctx as unknown as { fillText: (t: string) => void }).fillText = () => {
+      sizes.push(parseFloat(/([\d.]+)px/.exec(ctx.font)?.[1] ?? "NaN"));
+    };
+    const vp = new Viewport();
+    vp.scale = scale;
+    drawSymbol(ctx, vp, { ...placed(0), reference: "M1", value: "0.75kW" }, motor, false, undefined, false);
+    return sizes;
+  };
+
+  // ja: ズームアウトしても文字だけ大きいまま残らない。図形と同じ割合で縮み、読めない大きさになったら描かない
+  it("shrinks symbol lettering with the zoom instead of keeping a minimum size, and drops it when unreadable", () => {
+    const near = fontSizesAt(8);
+    const mid = fontSizesAt(4);
+    expect(near.length).toBeGreaterThan(0);
+    near.forEach((px, i) => expect(mid[i]).toBeCloseTo(px / 2, 9));
+    // 小さすぎる文字は描かない (フォント 0px に頼らない: WebKit は 0px を受け付けず直前の大きさで描く)
+    expect(fontSizesAt(0.5)).toEqual([]);
+  });
+
   // ja: シンボルの中の文字は、シンボルを回しても反転しても定義どおりの場所に描かれる
   it("keeps the lettering inside a symbol where the symbol definition puts it, whatever the rotation", () => {
     for (const [rotation, mirror] of [
