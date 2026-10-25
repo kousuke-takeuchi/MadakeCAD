@@ -52,7 +52,7 @@ A pin is named as `"<ref>.<pin>"`, e.g. `"U1.SDA"` or `"J1.2"`. The string is sp
 ### 3. `place_mate`
 
 - Input: `sheet_id`, `x`, `y`, `orientation` (`horizontal` | `vertical`), `male_side` (`first` | `second`: whether the left/top part is the plug), `reference`, `value`.
-- Places `connector_plug` and `connector_socket` facing each other, 5 mm apart, so both outer points sit on the 2.5 mm grid and the two outlines only touch. Both parts carry `reference`; the socket carries `value`. A plug and a socket that share a designator raise no `erc.duplicate_reference`.
+- Places `connector_plug` and `connector_socket` facing each other, 5 mm apart, so both outer points sit on the 2.5 mm grid and the two outlines only touch. Both parts carry `reference`, but only the socket prints it (the plug has `hide_reference`); the socket carries `value`. A plug and a socket that share a designator raise no `erc.duplicate_reference`.
 - Output: both entity ids, and the two outer connection points (`first`, `second`).
 
 ### 4. `place_symbol` returns pins
