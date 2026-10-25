@@ -687,7 +687,6 @@ pub(crate) mod test_support {
     pub(crate) struct Lte {
         pub sheet: Sheet,
         pub cable: EntityId,
-        pub j45: EntityId,
         pub usb: EntityId,
         pub wires: Vec<EntityId>,
     }
@@ -697,7 +696,7 @@ pub(crate) mod test_support {
     /// 反転して (200,100)、ピンは x=192.5 で左向き) に着く。芯は VBUS / D- / D+ / GND をピン順に。
     pub(crate) fn lte_sheet() -> Lte {
         let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
-        let j45 = insert(&mut sheet, Entity::Symbol(connector(4, "J45", 50.0, 100.0, false)));
+        insert(&mut sheet, Entity::Symbol(connector(4, "J45", 50.0, 100.0, false)));
         let usb = insert(&mut sheet, Entity::Symbol(connector(4, "USB1", 200.0, 100.0, true)));
         let mut wires = Vec::new();
         let mut cores = Vec::new();
@@ -728,7 +727,7 @@ pub(crate) mod test_support {
             run: vec![Point::new(80.0, 100.0), Point::new(192.5, 100.0)],
         };
         let cable = insert(&mut sheet, Entity::Cable(cable));
-        Lte { sheet, cable, j45, usb, wires }
+        Lte { sheet, cable, usb, wires }
     }
 
     /// 3.5mm AUXケーブル: J1 (connector_3p、(50,50)、ピン x=57.5 の y=45/50/55) と J2 (反転、(150,50)、
