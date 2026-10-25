@@ -1097,6 +1097,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An empty sheet is perfectly tidy: every metric is zero. <sub>`an_empty_sheet_scores_zero_on_every_metric`</sub>
 - tidy_metrics gathers the four counts of one sheet in a single value. <sub>`tidy_metrics_gathers_the_four_counts`</sub>
 - Measuring the same sheet twice gives exactly the same numbers, so the agent can compare before and after. <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
+- tidy_issues lists every counted problem with its kind, the entities involved, the text and where it is, one entry per count, so the agent can find and fix each one. <sub>`tidy_issues_name_each_counted_problem`</sub>
 
 ### Tidy variants (sheet copies / adopt)
 
@@ -1371,6 +1372,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - The tidy metrics tool tells the agent it is the target to aim at while tidying, and names the three things it counts. <sub>`the_tidy_metrics_tool_is_advertised_as_the_tidy_loop_target`</sub>
 - GET /api/v1/tidy-metrics returns the sheet's crossing, label overlap, symbol overlap and off-grid counts as JSON. <sub>`tidy_metrics_endpoint_returns_the_four_counts`</sub>
+- The tidy metrics also list each counted problem (kind, entities, text, place), so the agent can find what to fix; the list is capped and says how many were left out. <sub>`tidy_metrics_list_each_problem_with_its_place`</sub>
 
 ### tool_bridge
 
