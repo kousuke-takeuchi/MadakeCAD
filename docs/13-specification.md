@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2831 specification clauses** across 6 areas.
+**2836 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1273,6 +1273,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A blank default frame template in the settings is treated as "no default" instead of an unknown id. <sub>`a_blank_default_frame_template_setting_is_ignored`</sub>
 - POST /frame-templates/save refuses with 400 a frame that reuses a bundled frame's id or whose id cannot be a file name, and writes nothing (the editor then asks for another name). <sub>`the_link_api_refuses_to_save_over_a_bundled_frame`</sub>
 
+### instance_guard
+
+- A request carrying another app run's instance id is refused before it reaches the drawing, so an agent CLI left over from a crashed or restarted app cannot edit the new session. <sub>`a_request_from_an_earlier_app_run_is_refused`</sub>
+- The agent's own requests (this run's id) and external clients without the header are served as before. <sub>`this_run_and_external_clients_are_served`</sub>
+- Every app run gets its own instance id. <sub>`each_app_run_gets_its_own_instance_id`</sub>
+
 ### REST Link API
 
 - The REST parts endpoints support searching (sample data included), upserting, category filtering, deleting, and listing wire parts. <sub>`parts_endpoints_search_upsert_delete`</sub>
@@ -1419,6 +1425,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The bundled documentation folder is opened to the agent as a readable directory, so it can quote the manual. <sub>`args_open_the_bundled_documentation_for_reading`</sub>
 - Resume session id, model choice and an appended system prompt are passed through when provided. <sub>`args_include_resume_model_and_system_prompt_when_given`</sub>
 - The agent's MCP config points at MadakeCAD's own local MCP server, so it uses the same tools as any client. <sub>`mcp_config_points_at_local_mcp_server`</sub>
+- The agent's MCP config carries this app run's instance id as a header, so a CLI left over from an earlier run is refused by the server; without an id no header is sent. <sub>`mcp_config_carries_the_instance_header`</sub>
 - A turn streams events (thinking and text deltas, tool use, completion) parsed from the CLI's stream-json output. <sub>`send_streams_events_from_fake_cli`</sub>
 - A CLI exiting non-zero is reported as an error event instead of hanging. <sub>`send_reports_nonzero_exit_as_error_event`</sub>
 - When the CLI dies with the reason printed as plain text on stdout (e.g. a usage limit), that reason reaches the chat error. <sub>`a_plain_stdout_reason_reaches_the_error_message`</sub>
@@ -1468,6 +1475,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A follow-up turn resumes the same Copilot session instead of starting a new one, so the agent remembers the conversation. <sub>`a_follow_up_turn_resumes_the_same_session`</sub>
 - The configured Copilot model is passed to the CLI ("auto" lets Copilot pick). <sub>`the_configured_model_is_passed_to_the_cli`</sub>
 - Copilot is pointed at MadakeCAD's own MCP server, so it edits drawings through the same commands as every other client. <sub>`the_mcp_config_points_at_the_local_madakecad_server`</sub>
+- Copilot's MCP config carries this app run's instance id as a header, so a Copilot left over from an earlier run is refused. <sub>`the_mcp_config_carries_the_instance_header`</sub>
 - Because the Copilot CLI has no system-prompt flag, MadakeCAD's drawing rules are prepended to the prompt under a clear heading. <sub>`the_system_prompt_is_prepended_to_the_user_prompt`</sub>
 - A turn streams the events parsed from Copilot's JSON lines (session, text, tool use, completion). <sub>`a_turn_streams_events_from_the_fake_cli`</sub>
 - The session id MadakeCAD pinned is the one the CLI reports back, so it is announced only once. <sub>`the_pinned_session_id_is_announced_once`</sub>

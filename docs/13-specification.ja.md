@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2831仕様項目**。
+全6領域・**2836仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1273,6 +1273,12 @@
 - 設定の既定図枠が空欄のときは、未知のidではなく「既定なし」として扱う。 <sub>`a_blank_default_frame_template_setting_is_ignored`</sub>
 - POST /frame-templates/save は同梱の図枠と同じidや、ファイル名にできないidの図枠を400で拒否して何も書かない(エディタは別名を求める)。 <sub>`the_link_api_refuses_to_save_over_a_bundled_frame`</sub>
 
+### instance_guard
+
+- 別の起動のインスタンスidを持つリクエストは図面に届く前に断られるので、落ちた・再起動したアプリから残ったエージェントCLIは新しいセッションを編集できない。 <sub>`a_request_from_an_earlier_app_run_is_refused`</sub>
+- この起動のidを持つエージェント自身のリクエストと、ヘッダの無い外部クライアントは今までどおり通る。 <sub>`this_run_and_external_clients_are_served`</sub>
+- アプリを起動するたびに別のインスタンスidになる。 <sub>`each_app_run_gets_its_own_instance_id`</sub>
+
 ### REST Link API
 
 - RESTの部品エンドポイントは検索(サンプル含む)・登録更新・カテゴリ絞り込み・削除・電線品番一覧に対応する。 <sub>`parts_endpoints_search_upsert_delete`</sub>
@@ -1419,6 +1425,7 @@
 - 同梱ドキュメントのフォルダは読み取り可能なディレクトリとしてエージェントへ開かれ、マニュアルを引用できる。 <sub>`args_open_the_bundled_documentation_for_reading`</sub>
 - セッション再開ID・モデル指定・追加システムプロンプトは、指定時にCLIへ引き渡される。 <sub>`args_include_resume_model_and_system_prompt_when_given`</sub>
 - エージェントのMCP設定はMadakeCAD自身のローカルMCPサーバーを指し、他クライアントと同じツールを使う。 <sub>`mcp_config_points_at_local_mcp_server`</sub>
+- エージェントのMCP設定にはこの起動のインスタンスidがヘッダで入るので、前の起動から残ったCLIはサーバーに断られる。idが無ければヘッダは送らない。 <sub>`mcp_config_carries_the_instance_header`</sub>
 - ターンはCLIのstream-json出力から解釈したイベント(思考・テキスト差分・ツール実行・完了)を流す。 <sub>`send_streams_events_from_fake_cli`</sub>
 - CLIが非ゼロ終了した場合はハングせずエラーイベントとして報告される。 <sub>`send_reports_nonzero_exit_as_error_event`</sub>
 - CLIが理由(利用上限など)をstdoutの素のテキストで出して異常終了したとき、その理由がチャットのエラーに載る。 <sub>`a_plain_stdout_reason_reaches_the_error_message`</sub>
@@ -1468,6 +1475,7 @@
 - 2ターン目以降は新しいセッションを作らず同じCopilotセッションを再開するので、エージェントは会話を覚えている。 <sub>`a_follow_up_turn_resumes_the_same_session`</sub>
 - 設定したCopilotのモデルはCLIへ渡される(`auto`ならCopilotが自動で選ぶ)。 <sub>`the_configured_model_is_passed_to_the_cli`</sub>
 - CopilotにはMadakeCAD自身のMCPサーバーを渡すので、他のクライアントと同じコマンド経由で図面を編集する。 <sub>`the_mcp_config_points_at_the_local_madakecad_server`</sub>
+- CopilotのMCP設定にもこの起動のインスタンスidがヘッダで入るので、前の起動から残ったCopilotは断られる。 <sub>`the_mcp_config_carries_the_instance_header`</sub>
 - Copilot CLIにはシステムプロンプト用のフラグが無いため、MadakeCADの作図ルールは見出し付きでプロンプトの先頭へ前置される。 <sub>`the_system_prompt_is_prepended_to_the_user_prompt`</sub>
 - ターンはCopilotのJSONLから解釈したイベント(セッション・本文・ツール実行・完了)を流す。 <sub>`a_turn_streams_events_from_the_fake_cli`</sub>
 - MadakeCADが決めたセッションIDはCLIがそのまま返してくるので、通知は一度だけになる。 <sub>`the_pinned_session_id_is_announced_once`</sub>
