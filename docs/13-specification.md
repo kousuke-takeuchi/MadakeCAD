@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2832 specification clauses** across 6 areas.
+**2835 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -779,6 +779,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The sheet holding the coil shows a contact map under it: one row per contact with its terminal pair and its address. <sub>`svg_draws_the_contact_map_under_the_coil`</sub>
 - The sheet holding the contact shows the coil's address in parentheses beside it. <sub>`svg_draws_the_coil_location_beside_the_contact`</sub>
 - Exporting a single sheet on its own draws no contact map, because the counterpart sheets are unknown. <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
+- A symbol whose "hide_reference" attribute is "true" keeps its designator in the data but does not print it, so one half of a mated plug/socket pair does not draw the same designator twice. <sub>`svg_does_not_print_a_hidden_designator`</sub>
 - A coil whose "device_block" attribute is "true" is drawn as one outline with its designator, part number and contact image, instead of the small coil symbol and the separate hanging contact map. <sub>`svg_draws_a_device_block_for_a_flagged_coil`</sub>
 - However a device-block coil is turned or mirrored, each lead line still starts exactly on one of the coil's A1/A2 pin points, so the wires attached there stay connected. <sub>`a_turned_device_block_keeps_its_leads_on_the_coil_pins`</sub>
 - However a device-block coil is turned or mirrored, its table is drawn upright: every line of text stays inside the outline and no two lines are drawn on top of each other. <sub>`a_turned_device_block_keeps_its_lettering_upright_and_inside_the_outline`</sub>
@@ -1091,6 +1092,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A smaller annotation text height makes the measured net label and wire number smaller too. <sub>`measured_annotation_text_follows_the_sheet_setting`</sub>
 - Symbol origins and wire vertices sitting on the 2.5 mm grid report no off-grid points. <sub>`entities_on_the_grid_report_no_off_grid_points`</sub>
 - A point shifted by 0.1 mm off the grid is counted, and each stray vertex counts once. <sub>`a_point_shifted_a_tenth_of_a_millimetre_is_off_grid`</sub>
+- A hidden designator takes no space in the tidy metrics, because it is not printed. <sub>`a_hidden_designator_has_no_text_box`</sub>
 - An empty sheet is perfectly tidy: every metric is zero. <sub>`an_empty_sheet_scores_zero_on_every_metric`</sub>
 - tidy_metrics gathers the four counts of one sheet in a single value. <sub>`tidy_metrics_gathers_the_four_counts`</sub>
 - Measuring the same sheet twice gives exactly the same numbers, so the agent can compare before and after. <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
@@ -2243,6 +2245,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - draws a note's leader dot exactly the size of a wire junction dot <sub>`renderSheet dots`</sub>
 - draws the header row and the rows derived from the sheet's wires <sub>`wire legend block drawing`</sub>
 - outlines the legend block in the selection colour while it is selected <sub>`wire legend block drawing`</sub>
+- does not draw the designator when hide_reference is true <sub>`hidden designator`</sub>
 
 ### search
 

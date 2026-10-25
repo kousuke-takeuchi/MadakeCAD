@@ -539,7 +539,8 @@ export function drawSymbol(
   ctx.fillStyle = colorOverride ?? (selected ? theme.selection : theme.annotation);
   setDrawingFont(ctx, LABEL_FONT, vp.scale, "monospace");
   ctx.textAlign = "center";
-  if (inst.reference) {
+  // hide_reference="true" は印字しない (嵌合の組の片方。svg.rsのshows_referenceと同ルール)
+  if (inst.reference && inst.attrs?.hide_reference !== "true") {
     const p = vp.toScreen({ x: inst.at.x, y: top - REF_LABEL_DY });
     drawingText(ctx, inst.reference, p.x, p.y);
   }

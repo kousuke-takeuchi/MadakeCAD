@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2832仕様項目**。
+全6領域・**2835仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -779,6 +779,7 @@
 - コイルのあるシートには、コイルの下に接点マップ(端子対と所在の行)が描かれる。 <sub>`svg_draws_the_contact_map_under_the_coil`</sub>
 - 接点のあるシートには、その脇にコイルの住所が丸括弧付きで描かれる。 <sub>`svg_draws_the_coil_location_beside_the_contact`</sub>
 - シート単体の書き出しでは相手のシートが分からないので、接点マップは描かれない。 <sub>`svg_of_a_lone_sheet_has_no_contact_map`</sub>
+- `hide_reference`属性が`"true"`のシンボルは、参照記号をデータには持ったまま印字しないので、嵌合するプラグ/ソケットの片方が同じ記号を二重に描かない。 <sub>`svg_does_not_print_a_hidden_designator`</sub>
 - `device_block`属性が`"true"`のコイルは、小さなコイル図形と別表の接点マップの代わりに、参照記号・型番・接点イメージをまとめた1つの外形として描かれる (G7)。 <sub>`svg_draws_a_device_block_for_a_flagged_coil`</sub>
 - 実機ブロックのコイルをどの向きに回しても反転しても、引き出し線は必ず実際のA1/A2ピンの点から出るので、そこに繋いだ配線は繋がったまま (G7)。 <sub>`a_turned_device_block_keeps_its_leads_on_the_coil_pins`</sub>
 - 実機ブロックのコイルをどの向きに回しても反転しても、表は正立したまま描かれる: どの行の文字も外形の中に収まり、行どうしが重なることはない (G7)。 <sub>`a_turned_device_block_keeps_its_lettering_upright_and_inside_the_outline`</sub>
@@ -1091,6 +1092,7 @@
 - 注記文字高を小さくすると、測られるネットラベル・線番の大きさも一緒に小さくなる。 <sub>`measured_annotation_text_follows_the_sheet_setting`</sub>
 - シンボル原点も配線頂点も2.5mmグリッドに乗っていれば、グリッド外は0件になる。 <sub>`entities_on_the_grid_report_no_off_grid_points`</sub>
 - グリッドから0.1mmずれた点は数えられ、ずれた頂点1つにつき1件になる。 <sub>`a_point_shifted_a_tenth_of_a_millimetre_is_off_grid`</sub>
+- 印字しない参照記号は、整えメトリクスの文字の当たり判定に入らない。 <sub>`a_hidden_designator_has_no_text_box`</sub>
 - 何も置かれていないシートは完全に整っており、全てのメトリクスが0になる。 <sub>`an_empty_sheet_scores_zero_on_every_metric`</sub>
 - tidy_metricsは1枚のシートの4つの数値をまとめて1つの値で返す。 <sub>`tidy_metrics_gathers_the_four_counts`</sub>
 - 同じシートを2回測ると全く同じ数値になるので、エージェントは編集の前後を比べられる。 <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
@@ -2243,6 +2245,7 @@
 - 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える。Rust側 svg_leader_dot_is_the_size_of_a_wire_junction_dot とparity) <sub>`renderSheet dots`</sub>
 - 凡例ブロックは列見出しと、シートの配線から導出した行 (色・線径・品番・使用長) を表として描く <sub>`wire legend block drawing`</sub>
 - 選択中の凡例ブロックは、外形の矩形を選択色で描く <sub>`wire legend block drawing`</sub>
+- hide_reference="true" のシンボルは参照記号を画面に描かない (嵌合の組の片方が同じ記号を二重に描かない。svg.rsと同ルール) <sub>`hidden designator`</sub>
 
 ### search
 
