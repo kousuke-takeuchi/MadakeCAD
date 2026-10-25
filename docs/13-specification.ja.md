@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2888仕様項目**。
+全6領域・**2897仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -39,8 +39,13 @@
 - ケーブル一覧は、ケーブルごとに型番・芯数・線径・長さ・配線両端の機器・使用芯/予備芯・シールド・シートを並べる。 <sub>`the_cable_list_shows_ends_used_and_spare_cores`</sub>
 - 部品表ではケーブルを型番ごとに数え、全部に長さがあれば合計の長さ、1本でも無ければ本数にする。型番の無いケーブルは載せない。 <sub>`the_bom_counts_cables_per_part_number`</sub>
 - 印刷される図面には、ケーブルの定義線と、シールドがあればシールドの楕円、注記が描かれる。 <sub>`the_printed_sheet_draws_the_definition_line_shield_and_label`</sub>
-- 定義線が2点でない・芯数が0・シートに無い配線を指す芯を持つケーブルは拒否される。 <sub>`a_malformed_cable_is_refused`</sub>
-- 区間ケーブルは、どの芯も両端がこのシートにあれば受け付け、端の無い芯・無いピンや配線を指す芯・同じ配線の使い回し・定義線用の欄を使った芯・2点未満の区間があれば断る。芯の行き先を持つ定義線ケーブルも断る。 <sub>`a_run_cable_is_checked_when_placed`</sub>
+- 定義線が2点でない・芯数が0のケーブルは拒否される。芯の配線がシートに無い (先に消された) だけなら受け付けてERCに任せる (ケーブルの削除の取り消しが失敗しないように)。 <sub>`a_malformed_cable_is_refused`</sub>
+- 芯の配線が消えた定義線ケーブルでも、ネットリスト・ERC・ケーブル一覧・電線リスト・部品表・印刷図面は落ちずに作れる。名前も変えられ、ケーブルを消してから2回元に戻すとケーブルも配線も戻る。 <sub>`a_definition_cable_whose_wire_is_gone_still_works`</sub>
+- 区間ケーブルは、端の無い芯・同じ配線やピンの使い回し・配線の端が部品を指す/ピンの端が配線を指す芯・定義線用の欄を使った芯・2点未満の区間があれば断る。芯の行き先を持つ定義線ケーブルも断る。行き先の配線・部品・ピンがシートに無いだけなら受け付ける (ERCが知らせる)。 <sub>`a_run_cable_is_checked_when_placed`</sub>
+- 区間ケーブルの芯2本が同じ呼び名 (前後の空白を除いて) なら置くときに断り、重なった呼び名を示す。 <sub>`a_run_cable_with_duplicate_core_names_is_refused`</sub>
+- 分岐の配線を1本消し、別の編集でケーブルを消してから2回元に戻すと、ケーブルも配線も戻り、やり直すとまた消える。 <sub>`deleting_a_breakout_wire_then_the_cable_can_be_undone`</sub>
+- 区間ケーブルが着く部品を消し、別の編集でケーブルを消してから2回元に戻すと両方が戻り、やり直すとまた消える。 <sub>`deleting_the_landing_part_then_the_cable_can_be_undone`</sub>
+- 分岐の配線が消えた区間ケーブルも更新 (名前の変更) ができ、ERCは行き先の無い芯を知らせ続ける。 <sub>`a_run_cable_whose_wire_is_gone_can_be_updated`</sub>
 - 区間ケーブルを分岐の配線と着く先の部品と一緒に消してから元に戻すと全部が戻り、やり直すとまた消える (ケーブルは指す相手の後に戻す)。 <sub>`deleting_a_run_cable_with_its_wires_can_be_undone`</sub>
 - 1本線の区間で描いたLTEハーネスはERCを通る: 短絡も、未接続のプラグのピンも、宙ぶらりんの分岐の配線も、ケーブルの指摘も出ない。 <sub>`the_lte_harness_passes_erc`</sub>
 - 1本のケーブルの芯2本が同じネットにあるとERCのエラーになり、ケーブルと両方の芯を示す (区間ケーブルでも定義線ケーブルでも)。 <sub>`two_cores_in_one_net_is_a_short`</sub>
@@ -57,6 +62,7 @@
 - LTEハーネスを計画すると、基板のピンから10mm先の分岐点まで芯ごとに1本ずつ配線を引き、そこからプラグまで1本線を通し、芯をピン順にピンへ対応させる。結果は4ネットになる。 <sub>`plans_the_lte_harness`</sub>
 - 全長1本線で結ぶ2つのコネクタ (3.5mm AUX) は、ピン列の間に1本線が通り、配線は無い。 <sub>`plans_a_single_line_between_two_connectors`</sub>
 - ピンは番号でも名前でも指定でき、ピンの数が芯の数と違う端は、その端と両方の数を示して断る。 <sub>`pins_by_name_and_a_count_mismatch`</sub>
+- 同じ呼び名 (前後の空白を除いて) の芯が2本あるケーブルの計画は断り、重なった呼び名を示す。 <sub>`duplicate_core_names_are_refused`</sub>
 - 貫通端子台に着く1本線は、芯を端子番号1つずつに対応させ、ふだんは左の接続点、「#2」を付ければ右の接続点に着く。 <sub>`a_single_line_on_a_through_terminal_block`</sub>
 - ピンより後ろに置いた分岐点や、芯の配線の端が別の配線に乗る分岐点は、breakout_at をずらすよう伝えて断る。 <sub>`a_bad_breakout_is_refused`</sub>
 
@@ -105,6 +111,7 @@
 - execute/undo/redoのたびにドキュメントrevisionが増加し、クライアントは古いpatchを破棄できる。 <sub>`revision_increases_monotonically`</sub>
 - 存在しないシートへのCommandはエラーになり、何も変更されない。 <sub>`unknown_sheet_is_rejected`</sub>
 - 履歴が空のときのundoはエラーではなくNoneを返す。 <sub>`undo_on_empty_history_returns_none`</sub>
+- 適用できないundoは図面を何も変えず、その編集をundo履歴に残す (半分だけ戻ることも、失われることもない)。 <sub>`a_failed_undo_keeps_the_edit_in_the_history`</sub>
 - undo後に新しい編集をするとredo履歴は消える(一般的なエディタと同じ挙動)。 <sub>`new_edit_after_undo_clears_redo`</sub>
 - 存在しないエンティティの更新は失敗し、その要素がシートへ紛れ込むこともない。 <sub>`updating_a_missing_entity_fails_without_inserting_it`</sub>
 - 履歴の各エントリは編集の由来(誰の編集か)を記録し、通常のexecute()はユーザー編集として扱う。 <sub>`execute_as_records_the_edit_origin`</sub>
@@ -357,6 +364,7 @@
 - バリアントキーはAからZの1文字でなければならず、空・2文字・数字は拒否される。 <sub>`a_variant_key_must_be_one_letter`</sub>
 - プレースホルダは新しいバリアントでも参照記号が同じシンボルへ結び付くので、そのバリアントを値セット付きで挿入しても値が入る。 <sub>`placeholders_follow_a_new_variant_by_designator`</sub>
 - バリアントキーが無いとき、または既存マクロが無いときは、従来どおり新しいマクロとして保存される。 <sub>`saving_without_a_variant_or_existing_macro_makes_a_new_macro`</sub>
+- ケーブルを配線や部品より先に選んで写したハーネスは、ケーブルを最後にして保存され、1回の編集で貼り付けられ、貼ったケーブルの芯は貼った配線と部品を指す。 <sub>`a_cable_selected_first_pastes_after_its_wires`</sub>
 
 ### mate
 
@@ -741,6 +749,7 @@
 - 空のプロジェクトにデバイスは無く、ツリーは参照記号の順に並ぶ。 <sub>`device_tree_is_ordered_and_can_be_empty`</sub>
 - 機能の行はジャンプ先のシートとゾーンを持つ。ナビゲータと参照サーフィンはこれを使って図面を表示する。 <sub>`every_function_knows_where_to_jump`</sub>
 - フィルタ名はAPI上ではsnake_caseの文字列で、未知の名前は推測せずに拒否する。 <sub>`filter_names_parse_from_the_api`</sub>
+- 1本線のケーブル (定義線を持たない) のヒットは、用紙の原点ではなく区間の始点の位置になる。 <sub>`a_run_cable_hit_is_at_its_run`</sub>
 
 ### shape
 
