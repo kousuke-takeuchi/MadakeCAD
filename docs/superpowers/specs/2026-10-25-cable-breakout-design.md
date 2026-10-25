@@ -87,6 +87,8 @@ A `Wire` gets a member list; wires touching it pick their member by their net la
 
 ### 1. Data model (`model.rs`, format 17)
 
+In memory this is one `Cable` struct. On disk, a cable that has a `run` is written with the entity kind `run_cable` and one without keeps `cable` (see §6: old builds must fail to load run cables rather than drop them).
+
 ```rust
 pub struct Cable {
     // ... existing fields unchanged: id, reference, part_no, core_count, sq,

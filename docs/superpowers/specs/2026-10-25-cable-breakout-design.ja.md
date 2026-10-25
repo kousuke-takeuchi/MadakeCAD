@@ -87,6 +87,8 @@ AOGUの配線図で今これが要る:
 
 ### 1. データモデル (`model.rs`、形式17)
 
+メモリ上は `Cable` の構造体1つ。ファイルには、`run` を持つケーブルをエンティティの種類 `run_cable` で、持たないものを今までどおり `cable` で書く (6章: 古いビルドには区間ケーブルを捨てさせず、読み込みに失敗させる)。
+
 ```rust
 pub struct Cable {
     // ... 既存のフィールドはそのまま: id, reference, part_no, core_count, sq,
