@@ -1822,10 +1822,12 @@ fn validate_entity(entity: &Entity, sheet: &Sheet) -> Result<()> {
                             core.core
                         )));
                     }
+                    // 芯の配線が今シートにあるかは調べない (配線を先に消してからケーブルを消し、両方を
+                    // 元に戻すとケーブルが先に戻るため。消えた配線の芯はケーブル一覧で数えないだけ)
                     if let Some(w) = core.wire {
-                        if !matches!(sheet.entities.get(&w), Some(Entity::Wire(_))) {
+                        if matches!(sheet.entities.get(&w), Some(other) if !matches!(other, Entity::Wire(_))) {
                             return Err(CoreError::InvalidCommand(format!(
-                                "cable core {} points at a wire that is not on this sheet: {w}",
+                                "cable core {} points at {w}, which is not a wire",
                                 core.core
                             )));
                         }

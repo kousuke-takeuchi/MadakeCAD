@@ -584,13 +584,16 @@ pub fn pin_end_position(sheet: &Sheet, defs: &[SymbolDef], end: &CoreEnd) -> Opt
 
 /// 区間ケーブルの形を調べる ([`crate::command::Engine`]が置く・更新するときに通す)。
 ///
-/// 区間が2点以上・どの芯も両端を持つ・芯の`wire` (定義線ケーブルの欄) は使わない・行き先の
-/// 部品にそのピンがあり配線がこのシートにある・1本の配線/1つのピンを2本の芯で使わない。
+/// 区間が2点以上・どの芯も両端を持つ・芯の`wire` (定義線ケーブルの欄) は使わない・
+/// 1本の配線/1つのピンを2本の芯で使わない・配線の端が部品を、ピンの端が配線を指さない。
+///
+/// **行き先が今シートにあるかは調べない**: 部品や分岐の配線を先に消してからケーブルを消し、
+/// 両方を元に戻すと、ケーブルは行き先より先に戻る。ここで断ると undo が失敗してケーブルが
+/// 失われる。行き先の無い芯は ERC ([`CABLE_CORE_UNASSIGNED`]) が知らせる (仕様 §1)。
 pub fn validate_run_cable(sheet: &Sheet, c: &Cable) -> Result<(), String> {
     if c.run.len() < 2 {
         return Err(format!("cable {} needs a run of at least two points", c.reference));
     }
-    let defs = sheet_symbol_defs(sheet);
     let mut used_wires: Vec<EntityId> = Vec::new();
     let mut used_pins: Vec<(EntityId, String, u32)> = Vec::new();
     for core in &c.cores {
@@ -606,10 +609,12 @@ pub fn validate_run_cable(sheet: &Sheet, c: &Cable) -> Result<(), String> {
             };
             match e {
                 CoreEnd::Wire { wire } => {
-                    if !matches!(sheet.entities.get(wire), Some(Entity::Wire(_))) {
+                    if matches!(sheet.entities.get(wire), Some(other) if !matches!(other, Entity::Wire(_))) {
                         return Err(format!(
-                            "cable {} core {} points at a wire that is not on this sheet: {wire}",
-                            c.reference, core.core
+                            "cable {} core {} end_{} points at {wire}, which is not a wire",
+                            c.reference,
+                            core.core,
+                            end.letter()
                         ));
                     }
                     if used_wires.contains(wire) {
@@ -618,10 +623,12 @@ pub fn validate_run_cable(sheet: &Sheet, c: &Cable) -> Result<(), String> {
                     used_wires.push(*wire);
                 }
                 CoreEnd::Pin { part, pin, index } => {
-                    if pin_end_position(sheet, &defs, e).is_none() {
+                    if matches!(sheet.entities.get(part), Some(other) if !matches!(other, Entity::Symbol(_))) {
                         return Err(format!(
-                            "cable {} core {} points at pin {pin} of {part}, which is not on this sheet",
-                            c.reference, core.core
+                            "cable {} core {} end_{} points at {part}, which is not a part",
+                            c.reference,
+                            core.core,
+                            end.letter()
                         ));
                     }
                     let key = (*part, pin.clone(), index.unwrap_or(1));
@@ -983,23 +990,52 @@ mod tests {
         assert!(svg.contains("W1  SAMPLE-CBL  4C×1.25sq  12.5m"), "注記");
     }
 
-    /// A cable whose definition line does not have two points, that has no cores, or whose core points at a wire not on the sheet is refused.
-    /// 定義線が2点でない・芯数が0・シートに無い配線を指す芯を持つケーブルは拒否される。
+    /// A cable whose definition line does not have two points or that has no cores is refused; a core whose wire is not on the sheet (deleted earlier) is accepted and left to ERC, so undoing a cable deletion never fails.
+    /// 定義線が2点でない・芯数が0のケーブルは拒否される。芯の配線がシートに無い (先に消された) だけなら受け付けてERCに任せる (ケーブルの削除の取り消しが失敗しないように)。
     #[test]
     fn a_malformed_cable_is_refused() {
         let (mut engine, sheet_id, _) = three_wires();
         let mut one_point = cable(2, (0.0, 0.0), (1.0, 1.0));
         one_point.points.pop();
         let zero = cable(0, (0.0, 0.0), (1.0, 1.0));
-        let mut stray = cable(2, (0.0, 0.0), (1.0, 1.0));
-        stray.cores = vec![crate::model::CableCore { core: "1".into(), color: String::new(), wire: Some(Uuid::new_v4()), ..Default::default() }];
-        for c in [one_point, zero, stray] {
+        for c in [one_point, zero] {
             assert!(engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(c) }).is_err());
         }
+        let mut stray = cable(2, (0.0, 0.0), (1.0, 1.0));
+        stray.cores = vec![crate::model::CableCore { core: "1".into(), color: String::new(), wire: Some(Uuid::new_v4()), ..Default::default() }];
+        engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(stray) }).unwrap();
     }
 
-    /// A run cable is accepted when every core has both ends on this sheet, and refused when a core lacks an end, points at a missing pin or wire, reuses a wire, still uses the definition-line field, or the run has fewer than two points; a definition-line cable with core ends is refused too.
-    /// 区間ケーブルは、どの芯も両端がこのシートにあれば受け付け、端の無い芯・無いピンや配線を指す芯・同じ配線の使い回し・定義線用の欄を使った芯・2点未満の区間があれば断る。芯の行き先を持つ定義線ケーブルも断る。
+    /// A definition-line cable whose core wire was deleted still renders in the netlist, ERC, cable list, wire list, BOM and printed sheet without panicking; it can be renamed, and deleting it then undoing twice brings back both the cable and the wire.
+    /// 芯の配線が消えた定義線ケーブルでも、ネットリスト・ERC・ケーブル一覧・電線リスト・部品表・印刷図面は落ちずに作れる。名前も変えられ、ケーブルを消してから2回元に戻すとケーブルも配線も戻る。
+    #[test]
+    fn a_definition_cable_whose_wire_is_gone_still_works() {
+        let (mut engine, sheet_id, wires) = three_wires();
+        engine.execute(Command::AddCable { sheet_id, cable: cable(3, (50.0, 5.0), (50.0, 35.0)) }).unwrap();
+        let before = engine.project().sheet(sheet_id).unwrap().entities.len();
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![wires[1]] }).unwrap();
+        let sheet = engine.project().sheet(sheet_id).unwrap();
+        let defs = sheet_symbol_defs(sheet);
+        let _ = crate::netlist::extract_netlist(sheet, &defs);
+        let _ = check_cables(sheet);
+        let _ = crate::verify::verify_sheet(sheet, &defs);
+        let _ = cable_list_rows(engine.project());
+        let _ = crate::reports::wire_list_csv(engine.project());
+        let _ = cable_bom_rows(engine.project());
+        let _ = crate::svg::project_sheet_to_svg(engine.project(), sheet_id, &defs).unwrap();
+        let mut c = placed(&engine, sheet_id);
+        c.reference = "W2".into();
+        let cable_id = c.id;
+        engine.execute(Command::UpdateEntity { sheet_id, entity: Entity::Cable(c) }).unwrap();
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![cable_id] }).unwrap();
+        engine.undo().unwrap();
+        engine.undo().unwrap();
+        engine.undo().unwrap();
+        assert_eq!(engine.project().sheet(sheet_id).unwrap().entities.len(), before);
+    }
+
+    /// A run cable is refused when a core lacks an end, reuses a wire or a pin, points a wire end at a part or a pin end at a wire, still uses the definition-line field, or the run has fewer than two points; a definition-line cable with core ends is refused too. An end whose wire, part or pin is not on the sheet is accepted (ERC reports it).
+    /// 区間ケーブルは、端の無い芯・同じ配線やピンの使い回し・配線の端が部品を指す/ピンの端が配線を指す芯・定義線用の欄を使った芯・2点未満の区間があれば断る。芯の行き先を持つ定義線ケーブルも断る。行き先の配線・部品・ピンがシートに無いだけなら受け付ける (ERCが知らせる)。
     #[test]
     fn a_run_cable_is_checked_when_placed() {
         let lte = test_support::lte_sheet();
@@ -1015,9 +1051,10 @@ mod tests {
         };
         let refused = [
             bad(&|c| c.cores[0].end_a = None),
-            bad(&|c| c.cores[1].end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "9".into(), index: None })),
-            bad(&|c| c.cores[2].end_a = Some(CoreEnd::Wire { wire: Uuid::new_v4() })),
             bad(&|c| c.cores[3].end_a = Some(CoreEnd::Wire { wire: lte.wires[0] })),
+            bad(&|c| c.cores[3].end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "1".into(), index: None })),
+            bad(&|c| c.cores[1].end_a = Some(CoreEnd::Wire { wire: lte.usb })),
+            bad(&|c| c.cores[1].end_b = Some(CoreEnd::Pin { part: lte.wires[0], pin: "1".into(), index: None })),
             bad(&|c| c.cores[0].wire = Some(lte.wires[0])),
             bad(&|c| c.run.truncate(1)),
             bad(&|c| {
@@ -1031,7 +1068,73 @@ mod tests {
                 "断るはず"
             );
         }
+        // 行き先がシートに無い (先に消された) だけの芯は形として正しいので受け付け、ERCが知らせる
+        let gone = [
+            bad(&|c| c.cores[1].end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "9".into(), index: None })),
+            bad(&|c| c.cores[2].end_a = Some(CoreEnd::Wire { wire: Uuid::new_v4() })),
+            bad(&|c| c.cores[2].end_b = Some(CoreEnd::Pin { part: Uuid::new_v4(), pin: "1".into(), index: None })),
+        ];
+        for c in gone {
+            let id = c.id;
+            engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(c) }).unwrap();
+            engine.execute(Command::DeleteEntities { sheet_id, ids: vec![id] }).unwrap();
+        }
         engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(cable) }).unwrap();
+    }
+
+    /// Deleting one breakout wire, then the cable as a separate edit, then undoing twice brings back the cable and the wire; redo deletes them again.
+    /// 分岐の配線を1本消し、別の編集でケーブルを消してから2回元に戻すと、ケーブルも配線も戻り、やり直すとまた消える。
+    #[test]
+    fn deleting_a_breakout_wire_then_the_cable_can_be_undone() {
+        let lte = test_support::lte_sheet();
+        let (mut engine, sheet_id) = test_support::engine_with(lte.sheet);
+        let count = |e: &Engine| e.project().sheet(sheet_id).unwrap().entities.len();
+        let before = count(&engine);
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![lte.wires[0]] }).unwrap();
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![lte.cable] }).unwrap();
+        engine.undo().unwrap();
+        assert!(engine.project().sheet(sheet_id).unwrap().entities.contains_key(&lte.cable));
+        engine.undo().unwrap();
+        assert_eq!(count(&engine), before);
+        assert!(check_cables(engine.project().sheet(sheet_id).unwrap()).is_empty());
+        engine.redo().unwrap();
+        engine.redo().unwrap();
+        assert_eq!(count(&engine), before - 2);
+    }
+
+    /// Deleting the part a run cable lands on, then the cable as a separate edit, then undoing twice brings back both; redo deletes them again.
+    /// 区間ケーブルが着く部品を消し、別の編集でケーブルを消してから2回元に戻すと両方が戻り、やり直すとまた消える。
+    #[test]
+    fn deleting_the_landing_part_then_the_cable_can_be_undone() {
+        let lte = test_support::lte_sheet();
+        let (mut engine, sheet_id) = test_support::engine_with(lte.sheet);
+        let count = |e: &Engine| e.project().sheet(sheet_id).unwrap().entities.len();
+        let before = count(&engine);
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![lte.usb] }).unwrap();
+        let diags = check_cables(engine.project().sheet(sheet_id).unwrap());
+        assert!(diags.iter().any(|d| d.code == CABLE_CORE_UNASSIGNED), "{diags:?}");
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![lte.cable] }).unwrap();
+        engine.undo().unwrap();
+        engine.undo().unwrap();
+        assert_eq!(count(&engine), before);
+        engine.redo().unwrap();
+        engine.redo().unwrap();
+        assert_eq!(count(&engine), before - 2);
+    }
+
+    /// A run cable whose breakout wire was deleted can still be updated (renamed); ERC keeps reporting the missing core.
+    /// 分岐の配線が消えた区間ケーブルも更新 (名前の変更) ができ、ERCは行き先の無い芯を知らせ続ける。
+    #[test]
+    fn a_run_cable_whose_wire_is_gone_can_be_updated() {
+        let lte = test_support::lte_sheet();
+        let (mut engine, sheet_id) = test_support::engine_with(lte.sheet);
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![lte.wires[0]] }).unwrap();
+        let mut c = test_support::cable_of(engine.project().sheet(sheet_id).unwrap(), lte.cable).clone();
+        c.reference = "W46".into();
+        engine.execute(Command::UpdateEntity { sheet_id, entity: Entity::Cable(c) }).unwrap();
+        let diags = check_cables(engine.project().sheet(sheet_id).unwrap());
+        let hit = diags.iter().find(|d| d.code == CABLE_CORE_UNASSIGNED).expect("行き先なし");
+        assert!(hit.message.contains("W46") && hit.message.contains("VBUS"), "{}", hit.message);
     }
 
     /// Deleting a run cable together with its breakout wires and the part it lands on, then undoing, brings all of them back, and redo deletes them again (the cable is restored after what it points at).
