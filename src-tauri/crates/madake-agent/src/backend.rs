@@ -97,6 +97,8 @@ pub struct ClaudeCodeCliBackend {
     pub mcp_port: u16,
     /// 既定で付与する図面コンテキスト(`--append-system-prompt`)
     pub append_system_prompt: Option<String>,
+    /// この起動のインスタンスid。MCP接続のヘッダ([`crate::INSTANCE_HEADER`])に載せる
+    pub instance_id: Option<String>,
 }
 
 impl ClaudeCodeCliBackend {
@@ -106,20 +108,18 @@ impl ClaudeCodeCliBackend {
             model: None,
             mcp_port,
             append_system_prompt: None,
+            instance_id: None,
         }
     }
 
     /// `--mcp-config`へ渡す一時ファイルの中身。
     pub fn mcp_config_json(&self) -> String {
-        serde_json::json!({
-            "mcpServers": {
-                "madakecad": {
-                    "type": "http",
-                    "url": format!("http://127.0.0.1:{}/mcp", self.mcp_port),
-                }
-            }
-        })
-        .to_string()
+        let mut server = serde_json::json!({
+            "type": "http",
+            "url": format!("http://127.0.0.1:{}/mcp", self.mcp_port),
+        });
+        add_instance_header(&mut server, self.instance_id.as_deref());
+        serde_json::json!({ "mcpServers": { "madakecad": server } }).to_string()
     }
 
     /// claude CLIへ渡す引数列を組み立てる。
@@ -470,5 +470,12 @@ impl TempMcpConfig {
 impl Drop for TempMcpConfig {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// MCPサーバー設定へこの起動のインスタンスidのヘッダを足す(idが無ければ何もしない)。
+pub(crate) fn add_instance_header(server: &mut serde_json::Value, instance_id: Option<&str>) {
+    if let Some(id) = instance_id {
+        server["headers"] = serde_json::json!({ crate::INSTANCE_HEADER: id });
     }
 }

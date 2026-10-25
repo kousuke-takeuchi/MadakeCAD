@@ -172,6 +172,8 @@ pub struct AgentManager {
     state: Arc<Mutex<ManagerState>>,
     events: broadcast::Sender<ConversationEvent>,
     mcp_port: u16,
+    /// この起動のインスタンスid (CLIのMCP接続ヘッダに載せる。[`crate::INSTANCE_HEADER`])
+    instance_id: String,
     /// API直結バックエンドが図面編集ツールを呼ぶための窓口(madake-mcpが差す)。
     ///
     /// Claude Code CLIバックエンドはCLI自身がMCPサーバーへ接続するため使わない。
@@ -186,8 +188,14 @@ impl AgentManager {
             state: Arc::new(Mutex::new(ManagerState::default())),
             events,
             mcp_port,
+            instance_id: uuid::Uuid::new_v4().to_string(),
             tools: Mutex::new(None),
         }
+    }
+
+    /// この起動のインスタンスid。MCPサーバーは別のidを名乗る接続を断る。
+    pub fn instance_id(&self) -> &str {
+        &self.instance_id
     }
 
     /// 図面編集ツールの窓口をつなぐ(API直結バックエンド用)。
@@ -358,6 +366,7 @@ impl AgentManager {
             }
         };
         let mut backend = CopilotCliBackend::new(executable, self.mcp_port);
+        backend.instance_id = Some(self.instance_id.clone());
         backend.model = Some(settings.copilot_model.clone());
         backend.check_connection().await?;
         Ok(settings.copilot_model)
@@ -573,6 +582,7 @@ impl AgentManager {
             (AgentProvider::ClaudeCli, Some(executable)) => {
                 let mut backend = ClaudeCodeCliBackend::new(executable, self.mcp_port);
                 backend.model = turn_model;
+                backend.instance_id = Some(self.instance_id.clone());
                 Box::new(backend)
             }
             (AgentProvider::OpenAiCompat, _) => {
@@ -585,6 +595,7 @@ impl AgentManager {
             }
             (AgentProvider::CopilotCli, Some(executable)) => {
                 let mut backend = CopilotCliBackend::new(executable, self.mcp_port);
+                backend.instance_id = Some(self.instance_id.clone());
                 // 会話ごとのモデル指定はclaude CLI用のIDなのでCopilotには使わず、設定を使う
                 backend.model = Some(settings.normalized().copilot_model.clone());
                 Box::new(backend)

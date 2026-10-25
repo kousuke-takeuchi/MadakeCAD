@@ -31,6 +31,12 @@ pub mod secrets;
 pub mod settings;
 pub mod tools;
 
+/// アプリ内エージェントのCLIがMCPへ送る、この起動のインスタンスidのヘッダ名。
+///
+/// アプリが強制終了・再起動しても子プロセスのCLIは残ることがあり、同じポートの新しい
+/// アプリへつなぎ直して編集を書き込んでしまう。idが今の起動と違う接続はMCP側で断る。
+pub const INSTANCE_HEADER: &str = "x-madake-instance";
+
 pub use anthropic::{AnthropicApiBackend, ANTHROPIC_API_BASE, DEFAULT_API_MODEL};
 pub use attachments::{Attachment, AttachmentInput, AttachmentMeta};
 pub use backend::{AgentBackend, ClaudeCodeCliBackend, DetectResult, HistoryMessage, TurnRequest};
