@@ -596,7 +596,7 @@ fn run_end_devices(sheet: &Sheet, c: &Cable, end: RunEnd) -> String {
 /// `CoreEnd::Pin`が指すピンの用紙上の位置 (`index`番目、省略 = 最初の接続点)。
 /// 部品・ピンが無いとき、ピンでない行き先のときはNone。
 pub fn pin_end_position(sheet: &Sheet, defs: &[SymbolDef], end: &CoreEnd) -> Option<Point> {
-    let CoreEnd::Pin { part, pin, index } = end else {
+    let CoreEnd::Pin { part, pin, index, .. } = end else {
         return None;
     };
     let Some(Entity::Symbol(s)) = sheet.entities.get(part) else {
@@ -626,7 +626,7 @@ pub fn validate_run_cable(sheet: &Sheet, c: &Cable) -> Result<(), String> {
         return Err(format!("ケーブル {} に芯の呼び名 {name} が2本あります。呼び名は芯ごとに変える", c.reference));
     }
     let mut used_wires: Vec<EntityId> = Vec::new();
-    let mut used_pins: Vec<(EntityId, String, u32)> = Vec::new();
+    let mut used_pins: Vec<(EntityId, String, u32, Option<String>)> = Vec::new();
     for core in &c.cores {
         if core.wire.is_some() {
             return Err(format!(
@@ -653,7 +653,7 @@ pub fn validate_run_cable(sheet: &Sheet, c: &Cable) -> Result<(), String> {
                     }
                     used_wires.push(*wire);
                 }
-                CoreEnd::Pin { part, pin, index } => {
+                CoreEnd::Pin { part, pin, index, contact } => {
                     if matches!(sheet.entities.get(part), Some(other) if !matches!(other, Entity::Symbol(_))) {
                         return Err(format!(
                             "cable {} core {} end_{} points at {part}, which is not a part",
@@ -662,7 +662,8 @@ pub fn validate_run_cable(sheet: &Sheet, c: &Cable) -> Result<(), String> {
                             end.letter()
                         ));
                     }
-                    let key = (*part, pin.clone(), index.unwrap_or(1));
+                    // 1本のポートのピンには接点が違えば何本でも着く (接点がブロックにあるかは ERC が見る)
+                    let key = (*part, pin.clone(), index.unwrap_or(1), contact.clone());
                     if used_pins.contains(&key) {
                         return Err(format!("cable {}: pin {pin} of {part} is used by two cores", c.reference));
                     }
@@ -778,7 +779,7 @@ pub(crate) mod test_support {
                 color: color.into(),
                 wire: None,
                 end_a: Some(CoreEnd::Wire { wire: id }),
-                end_b: Some(CoreEnd::Pin { part: usb, pin: (i + 1).to_string(), index: None }),
+                end_b: Some(CoreEnd::Pin { part: usb, pin: (i + 1).to_string(), index: None, contact: None }),
             });
         }
         let cable = Cable {
@@ -809,8 +810,8 @@ pub(crate) mod test_support {
             .enumerate()
             .map(|(i, name)| CableCore {
                 core: name.into(),
-                end_a: Some(CoreEnd::Pin { part: j1, pin: (i + 1).to_string(), index: None }),
-                end_b: Some(CoreEnd::Pin { part: j2, pin: (i + 1).to_string(), index: None }),
+                end_a: Some(CoreEnd::Pin { part: j1, pin: (i + 1).to_string(), index: None, contact: None }),
+                end_b: Some(CoreEnd::Pin { part: j2, pin: (i + 1).to_string(), index: None, contact: None }),
                 ..Default::default()
             })
             .collect();
@@ -1112,9 +1113,9 @@ mod tests {
         let refused = [
             bad(&|c| c.cores[0].end_a = None),
             bad(&|c| c.cores[3].end_a = Some(CoreEnd::Wire { wire: lte.wires[0] })),
-            bad(&|c| c.cores[3].end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "1".into(), index: None })),
+            bad(&|c| c.cores[3].end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "1".into(), index: None, contact: None })),
             bad(&|c| c.cores[1].end_a = Some(CoreEnd::Wire { wire: lte.usb })),
-            bad(&|c| c.cores[1].end_b = Some(CoreEnd::Pin { part: lte.wires[0], pin: "1".into(), index: None })),
+            bad(&|c| c.cores[1].end_b = Some(CoreEnd::Pin { part: lte.wires[0], pin: "1".into(), index: None, contact: None })),
             bad(&|c| c.cores[0].wire = Some(lte.wires[0])),
             bad(&|c| c.run.truncate(1)),
             bad(&|c| {
@@ -1130,9 +1131,9 @@ mod tests {
         }
         // 行き先がシートに無い (先に消された) だけの芯は形として正しいので受け付け、ERCが知らせる
         let gone = [
-            bad(&|c| c.cores[1].end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "9".into(), index: None })),
+            bad(&|c| c.cores[1].end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "9".into(), index: None, contact: None })),
             bad(&|c| c.cores[2].end_a = Some(CoreEnd::Wire { wire: Uuid::new_v4() })),
-            bad(&|c| c.cores[2].end_b = Some(CoreEnd::Pin { part: Uuid::new_v4(), pin: "1".into(), index: None })),
+            bad(&|c| c.cores[2].end_b = Some(CoreEnd::Pin { part: Uuid::new_v4(), pin: "1".into(), index: None, contact: None })),
         ];
         for c in gone {
             let id = c.id;
@@ -1378,5 +1379,37 @@ mod tests {
         assert!(svg.contains(">D-</text>"), "芯の呼び名");
         assert!(svg.contains("W45  4C×0.2sq  0.3m"), "注記");
         assert!(!svg.contains("<ellipse"), "シールドが無ければ楕円は描かない");
+    }
+
+    /// Several cores may land on one port pin as long as each names a different contact; two cores on the same contact are refused.
+    /// 1本のポートのピンには、接点が違えば芯を何本でも着けられる。同じ接点に芯2本は断る。
+    #[test]
+    fn cores_on_one_port_pin_need_different_contacts() {
+        let mut lte = test_support::lte_sheet();
+        let usb = lte.usb;
+        let on_port = |c: &mut Cable, contacts: [&str; 4]| {
+            for (core, contact) in c.cores.iter_mut().zip(contacts) {
+                core.end_b = Some(CoreEnd::Pin { part: usb, pin: "1".into(), index: None, contact: Some(contact.into()) });
+            }
+        };
+        let Entity::Cable(c) = lte.sheet.entities.get_mut(&lte.cable).unwrap() else { panic!() };
+        on_port(c, ["VBUS", "D-", "D+", "GND"]);
+        let c = test_support::cable_of(&lte.sheet, lte.cable).clone();
+        validate_run_cable(&lte.sheet, &c).expect("接点が違えば同じピンでよい");
+        let mut twice = c.clone();
+        on_port(&mut twice, ["VBUS", "VBUS", "D+", "GND"]);
+        let err = validate_run_cable(&lte.sheet, &twice).expect_err("同じ接点に2本");
+        assert!(err.contains("used by two cores"), "{err}");
+    }
+
+    /// A core end without a contact is written without a "contact" key, so files without ports do not change.
+    /// 接点の無い芯の端は「contact」キーを書かないので、ポートの無いファイルは変わらない。
+    #[test]
+    fn a_pin_end_without_contact_has_no_contact_key() {
+        let end = CoreEnd::Pin { part: uuid::Uuid::nil(), pin: "1".into(), index: None, contact: None };
+        let json = serde_json::to_string(&end).unwrap();
+        assert!(!json.contains("contact"), "{json}");
+        let back: CoreEnd = serde_json::from_str(r#"{"kind":"pin","part":"00000000-0000-0000-0000-000000000000","pin":"U3","contact":"D+"}"#).unwrap();
+        assert!(matches!(back, CoreEnd::Pin { contact: Some(c), .. } if c == "D+"));
     }
 }

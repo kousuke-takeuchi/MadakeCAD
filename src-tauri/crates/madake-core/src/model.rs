@@ -857,6 +857,9 @@ pub enum CoreEnd {
         pin: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         index: Option<u32>,
+        /// ポートのピン ([`crate::symbol::PinDef::contacts`]) のどの接点か (v18)。普通のピンでは None。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        contact: Option<String>,
     },
     /// 分岐: 芯はこの配線として続く (外被を剥いて出した芯そのもの)。配線の端点のうち区間の端に
     /// 近い方が分岐側の端 ([`crate::cable::breakout_point`])。
@@ -876,7 +879,7 @@ impl CoreEnd {
     pub fn remapped(&self, map: &BTreeMap<EntityId, EntityId>) -> Option<CoreEnd> {
         let to = *map.get(&self.target())?;
         Some(match self {
-            CoreEnd::Pin { pin, index, .. } => CoreEnd::Pin { part: to, pin: pin.clone(), index: *index },
+            CoreEnd::Pin { pin, index, contact, .. } => CoreEnd::Pin { part: to, pin: pin.clone(), index: *index, contact: contact.clone() },
             CoreEnd::Wire { .. } => CoreEnd::Wire { wire: to },
         })
     }
@@ -1577,7 +1580,7 @@ mod tests {
         e.remap_refs(&map);
         let Entity::Cable(c) = &e else { panic!("ケーブル") };
         assert_eq!(c.cores[0].end_a, Some(CoreEnd::Wire { wire: map[&lte.wires[0]] }));
-        assert_eq!(c.cores[0].end_b, Some(CoreEnd::Pin { part: new_usb, pin: "1".into(), index: None }));
+        assert_eq!(c.cores[0].end_b, Some(CoreEnd::Pin { part: new_usb, pin: "1".into(), index: None, contact: None }));
         e.remap_refs(&BTreeMap::new());
         let Entity::Cable(c) = &e else { panic!("ケーブル") };
         assert!(c.cores.iter().all(|k| k.end_a.is_none() && k.end_b.is_none()));

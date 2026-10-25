@@ -411,7 +411,7 @@ mod tests {
         assert_eq!(c.cores[1].end_a, Some(CoreEnd::Wire { wire: lte.wires[1] }));
         assert_eq!(
             c.cores[1].end_b,
-            Some(CoreEnd::Pin { part: lte.usb, pin: "2".into(), index: None })
+            Some(CoreEnd::Pin { part: lte.usb, pin: "2".into(), index: None, contact: None })
         );
         std::fs::remove_dir_all(&dir).ok();
     }

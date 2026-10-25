@@ -353,9 +353,17 @@ pub const WIRE_LIST_COLUMNS: [&str; 12] = [
 /// ワイヤ端点1つの解決結果。ピンかネットラベルかを区別する (G18: ラベル端をネット越しに
 /// 辿るには、反対端がピンかどうかを先に知る必要があるため`endpoint_label`より詳しい)。
 enum EndKind {
-    Pin { entity_id: crate::EntityId, reference: String, pin: String },
+    Pin { entity_id: crate::EntityId, reference: String, pin: String, contact: Option<String> },
     Label(String),
     None,
+}
+
+/// ピンの表記にポートの接点を添える (`39:U3` → `39:U3/VBUS`)。接点が無ければそのまま。
+fn with_contact(text: String, contact: Option<&str>) -> String {
+    match contact {
+        Some(c) => format!("{text}/{c}"),
+        None => text,
+    }
 }
 
 /// 電線リストに載せるピンの表記。静的なプラグ・ソケットが極番号 (`pole`) を持てば、唯一のピン番号の
@@ -400,7 +408,7 @@ fn resolve_endpoint(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> EndKind {
         }
     }
     match (pin_hit, label_hit) {
-        (Some((_, entity_id, reference, pin)), _) => EndKind::Pin { entity_id, reference, pin },
+        (Some((_, entity_id, reference, pin)), _) => EndKind::Pin { entity_id, reference, pin, contact: None },
         (None, Some(l)) => EndKind::Label(l),
         (None, None) => EndKind::None,
     }
@@ -418,8 +426,8 @@ fn resolve_endpoint(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> EndKind {
 /// 内側・外側どちらのワイヤも同じ `TB1:1` 表記になる。
 pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
     match resolve_endpoint(sheet, defs, at) {
-        EndKind::Pin { entity_id, reference, pin } => {
-            format!("{reference}:{}", pin_display(sheet, entity_id, &pin))
+        EndKind::Pin { entity_id, reference, pin, contact } => {
+            with_contact(format!("{reference}:{}", pin_display(sheet, entity_id, &pin)), contact.as_deref())
         }
         EndKind::Label(name) => name,
         EndKind::None => String::new(),
@@ -494,8 +502,8 @@ fn from_to(sheet: &Sheet, nets: &[Net], kinds: [EndKind; 2]) -> (String, String,
     let mut resolved: Vec<String> = Vec::with_capacity(2);
     for (i, kind) in kinds.iter().enumerate() {
         let text = match kind {
-            EndKind::Pin { entity_id, reference, pin } => {
-                format!("{reference}:{}", pin_display(sheet, *entity_id, pin))
+            EndKind::Pin { entity_id, reference, pin, contact } => {
+                with_contact(format!("{reference}:{}", pin_display(sheet, *entity_id, pin)), contact.as_deref())
             }
             EndKind::None => String::new(),
             EndKind::Label(name) => {
@@ -539,11 +547,12 @@ fn from_to(sheet: &Sheet, nets: &[Net], kinds: [EndKind; 2]) -> (String, String,
 /// 配線と同じに解決する (ピンかネットラベル)。
 fn core_end_kind(sheet: &Sheet, defs: &[SymbolDef], c: &Cable, core: &CableCore, end: RunEnd) -> EndKind {
     match core.end(end) {
-        Some(CoreEnd::Pin { part, pin, .. }) => match sheet.entities.get(part) {
+        Some(CoreEnd::Pin { part, pin, contact, .. }) => match sheet.entities.get(part) {
             Some(Entity::Symbol(s)) => EndKind::Pin {
                 entity_id: s.id,
                 reference: s.reference.clone(),
                 pin: pin.clone(),
+                contact: contact.clone(),
             },
             _ => EndKind::None,
         },
@@ -1620,5 +1629,24 @@ mod tests {
         };
         assert_eq!(from(Some("2")), ("R1:2".to_string(), "X44A:2".to_string()));
         assert_eq!(from(None), ("R1:2".to_string(), "X44A:1".to_string()));
+    }
+
+    /// A run-cable core that lands on a port pin shows its contact in the From-To row (39:U3/VBUS).
+    /// ポートのピンに着く区間ケーブルの芯は、From-To の行に接点を書く (39:U3/VBUS)。
+    #[test]
+    fn a_core_on_a_port_pin_shows_its_contact() {
+        use crate::block::port_fixtures::{port_block, USB};
+        let mut lte = crate::cable::test_support::lte_sheet();
+        let mut hub = port_block("39", 200.0, 100.0, "left", "U3", &USB);
+        hub.id = lte.usb;
+        lte.sheet.entities.insert(lte.usb, Entity::Symbol(hub));
+        let Entity::Cable(c) = lte.sheet.entities.get_mut(&lte.cable).unwrap() else { panic!() };
+        for core in &mut c.cores {
+            core.end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "U3".into(), index: None, contact: Some(core.core.clone()) });
+        }
+        let project = crate::cable::test_support::project_with(lte.sheet);
+        let rows = wire_list_rows(&project);
+        let ends: Vec<String> = rows.iter().map(|r| format!("{} {}", r[1], r[2])).collect();
+        assert!(ends.contains(&"39:U3/VBUS J45:1".to_string()) || ends.contains(&"J45:1 39:U3/VBUS".to_string()), "{ends:?}");
     }
 }

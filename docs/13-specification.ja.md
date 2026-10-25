@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2914仕様項目**。
+全6領域・**2917仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -58,6 +58,8 @@
 - 両端とも未割当の区間ケーブルの芯は「行き先なし」で報告し、浮いたネットや短絡など別の指摘を重ねない。 <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
 - ケーブル一覧は1本線のケーブルの両端の機器 (分岐の配線が行く基板、1本線が着くプラグ) を示し、両端のある芯を使用芯と数える。 <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
 - 印刷される図面は、1本線のケーブルを太い線と斜線、着いたプラグのピンを横切る棒、分岐の配線への扇と芯の呼び名、注記で描く。 <sub>`the_printed_sheet_draws_a_run_cable`</sub>
+- 1本のポートのピンには、接点が違えば芯を何本でも着けられる。同じ接点に芯2本は断る。 <sub>`cores_on_one_port_pin_need_different_contacts`</sub>
+- 接点の無い芯の端は「contact」キーを書かないので、ポートの無いファイルは変わらない。 <sub>`a_pin_end_without_contact_has_no_contact_key`</sub>
 
 ### cable_run
 
@@ -737,6 +739,7 @@
 - 分岐の配線の先がネットラベルで、シート上にそのラベルを持つ他の相手が無いとき (続きは別シート)、芯の行はラベル名と備考「none」を出す。 <sub>`a_breakout_wire_ending_on_a_label_shows_the_label`</sub>
 - ケーブルの芯になっている配線 (1本線のケーブルの分岐の配線と、定義線が横切った配線) は、ケーブル行が数えているので部品表の電線集約に重ねて足さない。 <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
 - 極番号 (pole) を持つ静的なプラグ・ソケットは、電線リストで唯一のピン1の代わりにその極番号 (X44A:2) で表記される。極番号の無いものは従来どおり。 <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
+- ポートのピンに着く区間ケーブルの芯は、From-To の行に接点を書く (39:U3/VBUS)。 <sub>`a_core_on_a_port_pin_shows_its_contact`</sub>
 
 ### search
 

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2914 specification clauses** across 6 areas.
+**2917 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -58,6 +58,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A run-cable core with both ends unassigned is reported as unassigned, with no extra floating-net or short finding. <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
 - The cable list names the devices at each end of a single-line cable (the board its breakout wires go to, the plug its run lands on) and counts the cores that have both ends as used. <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
 - The printed sheet draws a single-line cable as a thick line with a slash, a bar across the plug pins it lands on, fan lines to the breakout wires with the core names, and the cable label. <sub>`the_printed_sheet_draws_a_run_cable`</sub>
+- Several cores may land on one port pin as long as each names a different contact; two cores on the same contact are refused. <sub>`cores_on_one_port_pin_need_different_contacts`</sub>
+- A core end without a contact is written without a "contact" key, so files without ports do not change. <sub>`a_pin_end_without_contact_has_no_contact_key`</sub>
 
 ### cable_run
 
@@ -737,6 +739,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - When a breakout wire ends on a net label and nothing else on the sheet carries that label (the continuation is on another sheet), the core's row shows the label name and the "none" remark. <sub>`a_breakout_wire_ending_on_a_label_shows_the_label`</sub>
 - Wires that are cores of a cable (breakout wires of a single-line cable, and wires crossed by a definition line) are not added again to the BOM wire roll-up, since the cable row already counts them. <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
 - A static plug or socket carrying a pole number shows it in the wire list (X44A:2) instead of its only pin 1; one without a pole is unchanged. <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
+- A run-cable core that lands on a port pin shows its contact in the From-To row (39:U3/VBUS). <sub>`a_core_on_a_port_pin_shows_its_contact`</sub>
 
 ### search
 

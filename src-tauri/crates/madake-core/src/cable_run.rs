@@ -328,7 +328,7 @@ fn plan_side(
             let at = Point::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0);
             let ends = pins
                 .iter()
-                .map(|(r, index)| CoreEnd::Pin { part, pin: r.pin.number.clone(), index: *index })
+                .map(|(r, index)| CoreEnd::Pin { part, pin: r.pin.number.clone(), index: *index, contact: None })
                 .collect();
             Ok(SidePlan { at, dir, ends, wires: Vec::new(), net_labels: Vec::new(), labels })
         }
@@ -582,7 +582,7 @@ mod tests {
         .unwrap();
         assert!(planned.wires.is_empty());
         assert_eq!(planned.cable.run, vec![Point::new(57.5, 50.0), Point::new(142.5, 50.0)]);
-        assert_eq!(planned.cable.cores[0].end_a, Some(CoreEnd::Pin { part: j1, pin: "1".into(), index: None }));
+        assert_eq!(planned.cable.cores[0].end_a, Some(CoreEnd::Pin { part: j1, pin: "1".into(), index: None, contact: None }));
         assert_eq!(planned.cable.reference, "W1");
     }
 
@@ -672,7 +672,7 @@ mod tests {
             })),
         )
         .unwrap();
-        assert_eq!(by_part.cable.cores[2].end_b, Some(CoreEnd::Pin { part: tb, pin: "3".into(), index: None }));
+        assert_eq!(by_part.cable.cores[2].end_b, Some(CoreEnd::Pin { part: tb, pin: "3".into(), index: None, contact: None }));
         assert_eq!(by_part.cable.run.last().unwrap().x, 97.5);
         let right = plan_cable_run(
             &sheet,
@@ -684,7 +684,7 @@ mod tests {
             })),
         )
         .unwrap();
-        assert_eq!(right.cable.cores[0].end_b, Some(CoreEnd::Pin { part: tb, pin: "1".into(), index: Some(2) }));
+        assert_eq!(right.cable.cores[0].end_b, Some(CoreEnd::Pin { part: tb, pin: "1".into(), index: Some(2), contact: None }));
         assert_eq!(right.cable.run.last().unwrap().x, 102.5);
         assert_eq!(right.ends[0][1], "TB1.1#2");
     }
