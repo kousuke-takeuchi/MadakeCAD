@@ -609,6 +609,8 @@ pub struct PlaceMateParams {
     pub reference: Option<String>,
     /// 型番・値(ソケット側に付く)。
     pub value: Option<String>,
+    /// 極番号 (電線リストに `参照記号:極番号` と出る)。1組だけ置くときに使う (複数はmatesの各組)。
+    pub pole: Option<String>,
     /// 複数の組を1回で置く (x/yの代わり)。undo一発で全部消える。
     pub mates: Option<Vec<MateSpec>>,
 }
@@ -626,6 +628,9 @@ pub struct MateSpec {
     pub reference: Option<String>,
     /// 型番・値(ソケット側に付く)。
     pub value: Option<String>,
+    /// 極番号 (文字列。プラグとソケットの両方の属性poleに入り、電線リストが `参照記号:極番号` と書く)。
+    /// 省略時、同じ参照記号が極番号なしで複数回並ぶと、その並び順に 1, 2, 3 … と振る。
+    pub pole: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -1406,7 +1411,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "差し込み1極のかみ合わせ(connector_plug=オスとconnector_socket=メス)を5mm離して(2.5mmグリッド上・外形は接するだけ)向かい合わせに1回で置く(undo一発で組ごと消える)。orientation=horizontal(左右、既定)/vertical(上下)、male_side=first(左/上がオス、既定)/second。参照記号はプラグとソケットの両方に付くが、印字はソケット側だけ(プラグはhide_reference。同じ記号の組は重複エラーにならない)、値はソケット側に付く。外側の2つの接続点first/second(用紙座標)と2つのentity idを返す。**複数の組(多極コネクタの各極など)はmatesに並べて1回で置く**(undo一発で全部消える)。配線はconnect_pins(\"<entity_id>.1\")か返した座標で行う"
+        description = "差し込み1極のかみ合わせ(connector_plug=オスとconnector_socket=メス)を5mm離して(2.5mmグリッド上・外形は接するだけ)向かい合わせに1回で置く(undo一発で組ごと消える)。orientation=horizontal(左右、既定)/vertical(上下)、male_side=first(左/上がオス、既定)/second。参照記号はプラグとソケットの両方に付くが、印字はソケット側だけ(プラグはhide_reference。同じ記号の組は重複エラーにならない)、値はソケット側に付く。外側の2つの接続点first/second(用紙座標)と2つのentity idを返す。**複数の組(多極コネクタの各極など)はmatesに並べて1回で置く**(undo一発で全部消える)。極番号poleを付けると(プラグ・ソケット両方のpole属性)電線リストが「参照記号:1」の代わりに「参照記号:極番号」と書く。matesで極番号なしに同じ参照記号を並べると並び順に1,2,3…と振る。配線はconnect_pins(\"<entity_id>.1\")か返した座標で行う"
     )]
     fn place_mate(&self, Parameters(p): Parameters<PlaceMateParams>) -> Result<String, ErrorData> {
         use madake_core::pin_wiring::{mate_pair, MaleSide, MateOrientation};
@@ -1421,6 +1426,7 @@ impl MadakeMcp {
                 male_side: p.male_side,
                 reference: p.reference,
                 value: p.value,
+                pole: p.pole,
             }],
             _ => {
                 return Err(ErrorData::invalid_params(
@@ -1429,16 +1435,46 @@ impl MadakeMcp {
                 ))
             }
         };
-        let pairs: Vec<_> = specs
+        // 極番号なしで同じ参照記号が複数回並ぶ組は、並び順に 1, 2, 3 … と振る (1回だけの参照記号には付けない)
+        let mut unnumbered: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+        for m in specs.iter().filter(|m| m.pole.is_none()) {
+            if let Some(r) = m.reference.as_deref().filter(|r| !r.is_empty()) {
+                *unnumbered.entry(r).or_default() += 1;
+            }
+        }
+        let mut next_pole: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+        let poles: Vec<Option<String>> = specs
             .iter()
             .map(|m| {
-                mate_pair(
+                if let Some(p) = m.pole.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+                    return Some(p.to_string());
+                }
+                let r = m.reference.as_deref().filter(|r| !r.is_empty())?;
+                if unnumbered.get(r).copied().unwrap_or(0) < 2 {
+                    return None;
+                }
+                let n = next_pole.entry(r).or_default();
+                *n += 1;
+                Some(n.to_string())
+            })
+            .collect();
+        let pairs: Vec<_> = specs
+            .iter()
+            .zip(&poles)
+            .map(|(m, pole)| {
+                let mut pair = mate_pair(
                     Point::new(m.x, m.y),
                     m.orientation.unwrap_or(MateOrientation::Horizontal),
                     m.male_side.unwrap_or(MaleSide::First),
                     m.reference.as_deref().unwrap_or_default(),
                     m.value.as_deref().unwrap_or_default(),
-                )
+                );
+                if let Some(p) = pole {
+                    for half in [&mut pair.first, &mut pair.second] {
+                        half.attrs.insert(madake_core::mate::POLE_ATTR.to_string(), p.clone());
+                    }
+                }
+                pair
             })
             .collect();
         let commands = pairs
@@ -1470,7 +1506,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "多芯ケーブルを、片側(または両側)を1本線で描いて1回で引く(例: USBプラグ側は1本線、基板側は芯ごとの配線4本)。cores=芯の名前の並び(または{core,color})。a/b=端ごとに pins(\"J45.1\"の並び。partを書けばピン番号か名前だけでもよい。同じ番号の2つ目は\"TB1.1#2\")か part(参照記号かentity id。pins省略でその部品のピンを順に使う)と style: multi=ピンから分岐点まで芯ごとに配線を引く(breakout_atで分岐点、省略でピンの先10mm) / single=1本線をその部品に着ける。**芯はピン順に対応する**(芯の数=ピンの数)。ネットリスト・電線リスト・ERCは芯ごとに端から端まで繋がり、1本線は位置では何にも繋がらない。偽の「分岐」ブロックや、1本の配線を複数のピンに触れさせる描き方(全ピンが短絡する)の代わりに使う。reference/part_no/sq/length_m(ケーブル全長)/shield/color/via(1本線の経由点)は任意。**複数のケーブルはcablesに並べて1回で引く**(全部引けるときだけ引き、undo一発で全部消える。誤りがあれば何番目かを知らせて1本も引かない)。ケーブルid・参照記号・1本線の点列runと、芯ごとの両端(a/b)と分岐の配線id(wire_ids)を返す"
+        description = "多芯ケーブルを、片側(または両側)を1本線で描いて1回で引く(例: USBプラグ側は1本線、基板側は芯ごとの配線4本)。cores=芯の名前の並び(または{core,color})。a/b=端ごとに pins(\"J45.1\"の並び。partを書けばピン番号か名前だけでもよい。同じ番号の2つ目は\"TB1.1#2\")か part(参照記号かentity id。pins省略でその部品のピンを順に使う)と style: multi=ピンから分岐点まで芯ごとに配線を引く(breakout_atで分岐点、省略でピンの先10mm。分岐の配線は線径・線色を持たず、線色は芯が持つ) / single=1本線をその部品に着ける。pins/partの代わりにlabels(芯と同じ数のネットラベル名の並び)を書くと、芯ごとの分岐の配線を区間と反対向きに10mm引いてその名前のネットラベルで終える(styleはmultiのみ、breakout_at必須。別シートの同名ラベルへ繋ぐ配線に使う)。**芯はピン順に対応する**(芯の数=ピンの数)。ネットリスト・電線リスト・ERCは芯ごとに端から端まで繋がり、1本線は位置では何にも繋がらない。偽の「分岐」ブロックや、1本の配線を複数のピンに触れさせる描き方(全ピンが短絡する)の代わりに使う。reference/part_no/sq/length_m(ケーブル全長)/shield/color/via(1本線の経由点)は任意。**複数のケーブルはcablesに並べて1回で引く**(全部引けるときだけ引き、undo一発で全部消える。誤りがあれば何番目かを知らせて1本も引かない)。ケーブルid・参照記号・1本線の点列runと、芯ごとの両端(a/b)と分岐の配線id(wire_ids)を返す"
     )]
     fn connect_cable(&self, Parameters(p): Parameters<ConnectCableParams>) -> Result<String, ErrorData> {
         use madake_core::cable_run::{plan_cable_run, CableRunSpec};
