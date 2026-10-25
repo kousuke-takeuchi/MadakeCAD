@@ -52,7 +52,7 @@
 ### 3. `place_mate`
 
 - 入力: `sheet_id`、`x`、`y`、`orientation` (`horizontal` | `vertical`)、`male_side` (`first` | `second`: 左か上の部品がプラグかどうか)、`reference`、`value`。
-- `connector_plug` と `connector_socket` を 5mm 離して向かい合わせに置く。外側の接続点は 2.5mm グリッドにのり、2 つの外形は接するだけになる。`reference` は両方に、`value` はソケット側に付ける。同じ参照記号のプラグとソケットは `erc.duplicate_reference` にならない。
+- `connector_plug` と `connector_socket` を 5mm 離して向かい合わせに置く。外側の接続点は 2.5mm グリッドにのり、2 つの外形は接するだけになる。`reference` は両方に付けるが、印字はソケット側だけ (プラグは `hide_reference`)。`value` はソケット側に付ける。同じ参照記号のプラグとソケットは `erc.duplicate_reference` にならない。
 - 出力: 2 つの entity id と、外側の 2 つの接続点 (`first`、`second`)。
 
 ### 4. `place_symbol` がピンを返す
