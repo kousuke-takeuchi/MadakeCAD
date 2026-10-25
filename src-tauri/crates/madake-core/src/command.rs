@@ -521,11 +521,15 @@ impl Engine {
         let Some(entry) = self.undo_stack.pop() else {
             return Ok(None);
         };
-        let mut ops = Vec::new();
-        for inv in &entry.inverse {
-            let (mut o, _) = self.apply(inv)?;
-            ops.append(&mut o);
-        }
+        // 戻せなかったら図面は適用前のまま (apply_all が戻す)、編集も履歴へ戻す。
+        // 取り出したまま返すと、その編集は二度と元に戻せなくなる
+        let ops = match self.apply_all(&entry.inverse) {
+            Ok((ops, _)) => ops,
+            Err(e) => {
+                self.undo_stack.push(entry);
+                return Err(e);
+            }
+        };
         self.redo_stack.push(entry);
         self.revision += 1;
         Ok(Some(Patch {
@@ -538,7 +542,14 @@ impl Engine {
         let Some(entry) = self.redo_stack.pop() else {
             return Ok(None);
         };
-        let (ops, inverse) = self.apply_all(&entry.forward)?;
+        // undo と同じく、やり直せなかった編集は redo 履歴へ戻す
+        let (ops, inverse) = match self.apply_all(&entry.forward) {
+            Ok(applied) => applied,
+            Err(e) => {
+                self.redo_stack.push(entry);
+                return Err(e);
+            }
+        };
         self.undo_stack.push(HistoryEntry {
             forward: entry.forward,
             inverse,
@@ -3038,6 +3049,43 @@ mod tests {
         let (mut engine, _) = test_engine();
         assert!(engine.undo().unwrap().is_none());
         assert!(engine.redo().unwrap().is_none());
+    }
+
+    /// An undo that cannot be applied changes nothing and keeps the edit in the undo history (it is neither half applied nor lost).
+    /// 適用できないundoは図面を何も変えず、その編集をundo履歴に残す (半分だけ戻ることも、失われることもない)。
+    #[test]
+    fn a_failed_undo_keeps_the_edit_in_the_history() {
+        let (mut engine, sheet_id) = test_engine();
+        let target = sample_wire();
+        let target_id = target.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: target }).unwrap();
+        let other = sample_wire();
+        let other_id = other.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: other }).unwrap();
+        let note = Entity::Text(TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(20.0, 20.0),
+            text: "対象あり".into(),
+            height: 2.5,
+            rotation: 0,
+            anchor: TextAnchor::Start,
+            color: None,
+            bold: false,
+            leader_to: Some(target_id),
+        });
+        let note_id = note.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: note }).unwrap();
+        // 引き出し先を先に消し、別の編集で注記ともう1本の配線を消す。後の編集のundoは注記を戻せない
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![target_id] }).unwrap();
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![other_id, note_id] }).unwrap();
+        let depth = engine.undo_depth();
+        let before = engine.project().sheet(sheet_id).unwrap().entities.len();
+        assert!(engine.undo().is_err());
+        assert_eq!(engine.undo_depth(), depth, "履歴に残る");
+        assert!(!engine.can_redo());
+        let sheet = engine.project().sheet(sheet_id).unwrap();
+        assert_eq!(sheet.entities.len(), before, "半分だけ戻さない");
+        assert!(!sheet.entities.contains_key(&other_id));
     }
 
     /// A new edit after undo clears the redo history (standard editor behavior).
