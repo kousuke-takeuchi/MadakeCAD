@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2950仕様項目**。
+全6領域・**2955仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2015,6 +2015,9 @@
 - 配線が1本も届いていないブロックには配線済みピンが無い <sub>`pins that are already wired`</sub>
 - 配線済みのピンを消す・番号を変えると、そのピンが「接続が外れる」として挙がる <sub>`pins that are already wired`</sub>
 - 配線済みのピンをそのまま残す編集では警告は出ない <sub>`pins that are already wired`</sub>
+- 接点はカンマ (半角・読点・全角) で区切り、前後の空白を落として空のものを捨てる <sub>`pins that are already wired`</sub>
+- 接点を書いた行は block_pins に contacts として入り、読み戻すとカンマ区切りの文字に戻る。接点の無い行の書き出しは今までと同じ <sub>`pins that are already wired`</sub>
+- 接点が1つだけ・同じ接点が2つ・32を超える行は指摘になる <sub>`pins that are already wired`</sub>
 - 部品挿入で「ブロック(汎用)」を選ぶと、左右1本ずつのピン表が開く <sub>`starting a new block from the insert dialog`</sub>
 - 編集したピン表はそのまま配置に使う属性になる(配置後もこの形で描かれる) <sub>`starting a new block from the insert dialog`</sub>
 - 「手動」に切り替えると、そのときの自動寸法が編集できる初期値として入る <sub>`starting a new block from the insert dialog`</sub>
@@ -2042,6 +2045,7 @@
 - 区間ケーブルの印は区間のいちばん長い線分の中点を通る45度の斜線で、芯数の文字・注記・シールドの楕円もそこを基準にする (Rust側と同じ) <sub>`多芯ケーブル`</sub>
 - 部品に着く端は着いたピンの先を結ぶ棒、分岐の端は区間の端から各芯の配線の端への扇になる <sub>`多芯ケーブル`</sub>
 - 区間ケーブルは区間の線の近くをクリックすると掴める <sub>`多芯ケーブル`</sub>
+- 区間の片側の芯が全部1つのポートのピンに着くと、その側には横棒を描かない (Rust の run_bars と同じ) <sub>`多芯ケーブル`</sub>
 
 ### deviceTree
 
@@ -2091,6 +2095,7 @@
 - 回転しても同じで、90度回すと括弧は上に出るので外形は上へ広がる (回転したシンボルで参照記号が括弧の文字に重ならない) <sub>`symbolBounds`</sub>
 - ピングループの部品どうし (括弧と、折り返したキャプションの各行) は全ての回転・ミラーで決して重ならない (Rust側 svg_pin_group_pieces_never_overlap_each_other_at_any_rotation とparity) <sub>`captionLineAnchors`</sub>
 - 文字はシンボルを回しても横書きのままなので、キャプションの行は用紙の上で必ず縦に積まれる (同じ中心線に並び、順に下へ下がる。Rust側 svg_pin_group_caption_lines_stack_downwards_on_paper とparity) <sub>`captionLineAnchors`</sub>
+- ブロックのピンの接点は Rust と同じく空白を落として PinDef に入り、1つだけの接点や重なる接点は同じ理由で断る <sub>`captionLineAnchors`</sub>
 
 ### frameEditor
 

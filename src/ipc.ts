@@ -190,7 +190,7 @@ export interface CableCore {
 
 /** 区間ケーブルの芯の行き先: 1本線が着く部品のピンか、分岐して続く配線 (madake-coreの`CoreEnd`)。 */
 export type CoreEnd =
-  | { kind: "pin"; part: string; pin: string; index?: number | null }
+  | { kind: "pin"; part: string; pin: string; index?: number | null; contact?: string | null }
   | { kind: "wire"; wire: string };
 
 /** ケーブルのシールド。 */
@@ -584,6 +584,8 @@ export interface PinDef {
   name: string;
   at: Point;
   dir?: PinDir;
+  /** ポートの接点 (この1本のピンが運ぶ導体の名前)。普通のピンには無い。 */
+  contacts?: string[];
 }
 
 /** 属性テキストの流し込み位置 (参照記号・型番・説明・定格)。 */
@@ -717,6 +719,8 @@ export interface NetPin {
   reference: string;
   entity_id: string;
   pin: string;
+  /** このネットで運ぶポートの接点 (例 "VBUS")。 */
+  contact?: string | null;
 }
 
 export interface Net {
@@ -730,6 +734,10 @@ export interface Net {
   wire_no?: string | null;
   /** このネットを通る区間ケーブルの芯 (v17)。 */
   cable_cores?: NetCableCore[];
+  /** ポートから分けたネットなら、その接点 (v18)。 */
+  contact?: string | null;
+  /** 分けたネットがシートを跨いで呼ばれる名前 ("USB_MIC.VBUS")。 */
+  contact_labels?: string[];
 }
 
 /** ネットを通る区間ケーブルの芯1本 (madake-coreの`NetCableCore`)。 */

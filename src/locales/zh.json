@@ -647,7 +647,9 @@
     "pinTableHint": "Pin numbers are unique within the block; pins sit on a 5 mm pitch",
     "colNo": "Number",
     "colName": "Pin name",
+    "colContacts": "触点",
     "namePlaceholder": "e.g. Run command",
+    "contactsPlaceholder": "例如 VBUS, D-, D+, GND",
     "addPin": "Add a pin",
     "moveUp": "Move up",
     "moveDown": "Move down",
@@ -670,7 +672,10 @@
       "duplicate": "Pin number {no} is used twice",
       "emptyNo": "Row {row} of the {side} has a name but no pin number",
       "tooMany": "Too many pins: {count} (at most {max})",
-      "sizeTooSmall": "The outline is too small for these pins (at least {w}x{h} mm)"
+      "sizeTooSmall": "The outline is too small for these pins (at least {w}x{h} mm)",
+      "contactsTooFew": "{side}第{row}行只有一个触点：端口至少需要两个",
+      "duplicateContact": "{side}第{row}行的触点 {contact} 出现了两次",
+      "tooManyContacts": "{side}第{row}行触点过多：{count}（最多 {max}）"
     },
     "wiredWarning": "Pins {pins} are wired: renumbering or deleting them disconnects those wires",
     "placeHint": "Place puts a ghost on the cursor (R rotates, Esc cancels)",
@@ -682,6 +687,7 @@
     "editHint": "Edit the pins of this block (numbers, names, order and outline)",
     "pinsRow": "Pins",
     "pinCounts": "{left} left / {right} right",
+    "portCount": "端口 {count}",
     "broken": "Cannot be read",
     "updatedLog": "{reference}: pin table updated ({pins} pins)",
     "droppedLog": "Pins {pins} are gone: their wires are no longer connected"

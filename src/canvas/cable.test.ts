@@ -134,4 +134,12 @@ describe("多芯ケーブル", () => {
     expect(cableHit(c, { x: 120, y: 100.5 }, 1)).toBe(true);
     expect(cableHit(c, { x: 120, y: 105 }, 1)).toBe(false);
   });
+
+  // ja: 区間の片側の芯が全部1つのポートのピンに着くと、その側には横棒を描かない (Rust の run_bars と同じ)
+  it("draws no bar when every core of a side lands on one port pin", () => {
+    const s = lteSheet();
+    const c = s.entities.w45 as Cable;
+    c.cores = c.cores.map((k) => ({ ...k, end_b: { kind: "pin" as const, part: "usb", pin: "1", contact: k.core } }));
+    expect(runBars(s, c, new Map())).toEqual([]);
+  });
 });

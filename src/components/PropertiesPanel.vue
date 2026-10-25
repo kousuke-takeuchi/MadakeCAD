@@ -24,6 +24,7 @@ import { FUNCTION_LABEL_ATTR, TEXT_ANCHORS, TEXT_COLOR_TOKENS } from "../canvas/
 import { COIL_SYMBOL_ID, isDeviceBlock } from "../canvas/relayXref";
 import { MATES_WITH_ATTR, isConnectorInstance } from "../canvas/mate";
 import { useBlockEditorStore } from "../stores/blockEditor";
+import { portPinCount } from "../canvas/blockEditor";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import type { EditorController } from "../tools/controller";
@@ -471,7 +472,9 @@ const blockPinCounts = computed(() => {
   const def = store.resolveInstance(e);
   if (!def) return t("blockEditor.broken");
   const count = (dir: string) => def.pins.filter((p) => p.dir === dir).length;
-  return t("blockEditor.pinCounts", { left: count("left"), right: count("right") });
+  const counts = t("blockEditor.pinCounts", { left: count("left"), right: count("right") });
+  const ports = portPinCount(def);
+  return ports ? `${counts} · ${t("blockEditor.portCount", { count: ports })}` : counts;
 });
 
 /** ピン表エディタを開く (確定でupdate_entityコマンド)。 */

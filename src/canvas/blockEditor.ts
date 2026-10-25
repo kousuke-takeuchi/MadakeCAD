@@ -7,6 +7,7 @@
 // 図面への反映はこのモジュールでは行わない (必ずCommand経由。stores/blockEditor.ts)。
 
 import {
+  BLOCK_CONTACT_MAX,
   BLOCK_PINS_ATTR,
   BLOCK_PIN_MAX,
   BLOCK_PIN_PITCH_MM,
@@ -35,10 +36,11 @@ export interface BlockSize {
   h: number;
 }
 
-/** ピン表の1行。 */
+/** ピン表の1行。`contacts`はカンマ区切りの接点 (空・省略 = 普通のピン)。 */
 export interface BlockPinRow {
   no: string;
   name: string;
+  contacts?: string;
 }
 
 /** 編集中のピン表。`size`がnullなら外形はピンから自動で決まる。 */
@@ -56,7 +58,13 @@ export type BlockIssue =
   /** ピンが多すぎる。 */
   | { code: "tooMany"; count: number; max: number }
   /** 手動の外形がピンの並びより小さい。 */
-  | { code: "sizeTooSmall"; w: number; h: number };
+  | { code: "sizeTooSmall"; w: number; h: number }
+  /** 接点が1つだけ (導体1本なら普通のピン)。 */
+  | { code: "contactsTooFew"; side: BlockSide; index: number }
+  /** 1本のピンで同じ接点が2回。 */
+  | { code: "duplicateContact"; side: BlockSide; index: number; contact: string }
+  /** 接点が多すぎる。 */
+  | { code: "tooManyContacts"; side: BlockSide; index: number; count: number; max: number };
 
 /** 配線が接続点に載っているとみなす距離 (mm)。Rust側 netlist::CONNECT_EPS と同じ。 */
 const CONNECT_EPS = 0.01;
@@ -80,7 +88,20 @@ function allRows(draft: BlockDraft): BlockPinRow[] {
 
 /** 書き出す価値のある行か (番号もピン名も空の行はピンにしない)。 */
 function isFilled(row: BlockPinRow): boolean {
-  return row.no.trim() !== "" || row.name.trim() !== "";
+  return row.no.trim() !== "" || row.name.trim() !== "" || (row.contacts ?? "").trim() !== "";
+}
+
+/** 接点の文字をカンマ (半角「,」・読点「、」・全角「，」) で区切り、前後の空白を落として空のものを捨てる。 */
+export function splitContacts(text: string): string[] {
+  return text
+    .split(/[,、，]/)
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+}
+
+/** 定義のうち接点を持つピン (ポート) の本数。 */
+export function portPinCount(def: SymbolDef): number {
+  return def.pins.filter((p) => (p.contacts?.length ?? 0) > 0).length;
 }
 
 /**
@@ -124,7 +145,10 @@ function pinsOf(draft: BlockDraft): BlockPins {
       .filter(isFilled)
       .map((row): BlockPin => {
         const name = row.name.trim();
-        return name ? { no: row.no.trim(), name } : { no: row.no.trim() };
+        const pin: BlockPin = name ? { no: row.no.trim(), name } : { no: row.no.trim() };
+        const contacts = splitContacts(row.contacts ?? "");
+        if (contacts.length) pin.contacts = contacts;
+        return pin;
       });
     if (rows.length) pins[side] = rows;
   }
@@ -158,7 +182,11 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
   }
   const rows = emptyRows();
   for (const side of BLOCK_SIDES) {
-    rows[side] = (pins[side] ?? []).map((p) => ({ no: p.no ?? "", name: p.name ?? "" }));
+    rows[side] = (pins[side] ?? []).map((p) => ({
+      no: p.no ?? "",
+      name: p.name ?? "",
+      ...(p.contacts?.length ? { contacts: p.contacts.join(", ") } : {}),
+    }));
   }
   return { rows, size };
 }
@@ -193,6 +221,15 @@ export function draftIssues(draft: BlockDraft): BlockIssue[] {
       }
       if (seen.has(no)) issues.push({ code: "duplicate", no });
       seen.add(no);
+      const contacts = splitContacts(row.contacts ?? "");
+      if (contacts.length > BLOCK_CONTACT_MAX) {
+        issues.push({ code: "tooManyContacts", side, index, count: contacts.length, max: BLOCK_CONTACT_MAX });
+      } else if (contacts.length === 1) {
+        issues.push({ code: "contactsTooFew", side, index });
+      } else {
+        const dup = contacts.find((c, i) => contacts.indexOf(c) !== i);
+        if (dup) issues.push({ code: "duplicateContact", side, index, contact: dup });
+      }
     });
   }
   const count = allRows(draft).filter(isFilled).length;

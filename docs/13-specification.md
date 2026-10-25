@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2950 specification clauses** across 6 areas.
+**2955 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2015,6 +2015,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - finds no wired pins on a block that nothing is connected to <sub>`pins that are already wired`</sub>
 - flags a wired pin that the edit deletes or renumbers <sub>`pins that are already wired`</sub>
 - stays quiet when the wired pins survive the edit <sub>`pins that are already wired`</sub>
+- splits contacts on ASCII, Japanese and full-width commas and trims them <sub>`pins that are already wired`</sub>
+- writes contacts into block_pins and reads them back as comma-separated text <sub>`pins that are already wired`</sub>
+- flags a single contact, a repeated contact and too many contacts <sub>`pins that are already wired`</sub>
 - opens a pin table with one pin per side when the generic block is picked <sub>`starting a new block from the insert dialog`</sub>
 - hands the edited table to the placement as block attributes <sub>`starting a new block from the insert dialog`</sub>
 - seeds the hand-set size with the automatic one when switching to manual <sub>`starting a new block from the insert dialog`</sub>
@@ -2042,6 +2045,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - marks a run with a slash through the middle of its longest segment, like the printed sheet <sub>`多芯ケーブル`</sub>
 - draws a bar across the landed pins and a fan to each breakout wire <sub>`多芯ケーブル`</sub>
 - is picked by clicking near its run <sub>`多芯ケーブル`</sub>
+- draws no bar when every core of a side lands on one port pin <sub>`多芯ケーブル`</sub>
 
 ### deviceTree
 
@@ -2091,6 +2095,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - grows upward instead when the symbol is turned 90 degrees, keeping labels off the caption <sub>`symbolBounds`</sub>
 - never lets a bracket and its caption lines overlap each other, at any rotation <sub>`captionLineAnchors`</sub>
 - stacks caption lines downwards on the paper, sharing one centre line, at any rotation <sub>`captionLineAnchors`</sub>
+- copies block pin contacts into the pin definition and refuses bad contacts like Rust <sub>`captionLineAnchors`</sub>
 
 ### frameEditor
 
