@@ -727,8 +727,8 @@ mod tests {
     /// シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される: まっすぐな括弧にならないため。
     #[test]
     fn a_bracket_across_mixed_pin_directions_is_refused() {
-        let left = PinDef { number: "1".into(), name: String::new(), at: Point::new(-10.0, 0.0), dir: PinDir::Left };
-        let top = PinDef { number: "2".into(), name: String::new(), at: Point::new(0.0, -10.0), dir: PinDir::Up };
+        let left = PinDef { number: "1".into(), name: String::new(), at: Point::new(-10.0, 0.0), dir: PinDir::Left, contacts: Vec::new() };
+        let top = PinDef { number: "2".into(), name: String::new(), at: Point::new(0.0, -10.0), dir: PinDir::Up, contacts: Vec::new() };
         assert!(pin_group_bracket(&[&left, &top], "x").is_none());
     }
 }

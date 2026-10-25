@@ -91,6 +91,17 @@ pub struct PinDef {
     /// 接続方向(シンボルの外側へ電線が出る向き)。配線の自動接続・引き出しに使う。
     #[serde(default)]
     pub dir: PinDir,
+    /// ポートの接点 (この1本のピンが運ぶ導体の名前、順に)。空 = 普通のピン。
+    /// 今はブロック ([`crate::block`]) だけが持つ。ネットリストは接点ごとにネットを分ける。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contacts: Vec<String>,
+}
+
+impl PinDef {
+    /// 接点を持つピン (ポート) か。
+    pub fn is_port(&self) -> bool {
+        !self.contacts.is_empty()
+    }
 }
 
 /// ピンの接続方向(回転0度のときの向き)。
@@ -142,6 +153,7 @@ fn pin(number: &str, name: &str, x: f64, y: f64, dir: PinDir) -> PinDef {
         name: name.into(),
         at: p(x, y),
         dir,
+        contacts: Vec::new(),
     }
 }
 

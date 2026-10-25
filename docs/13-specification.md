@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2911 specification clauses** across 6 areas.
+**2914 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -29,6 +29,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block cannot exceed the pin limit, so a runaway pin table fails loudly. <sub>`too_many_pins_are_rejected`</sub>
 - The attribute slots (tag, part number, function, rating) stack at the centre of the box. <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
 - Rotating or mirroring a block moves its pins with the body but never renumbers them. <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
+- A block pin may list contacts; they reach the pin definition in order, trimmed, and a pin without contacts has none. <sub>`contacts_are_trimmed`</sub>
+- Contacts that are empty, repeated on one pin, alone (one conductor is a plain pin) or more than 32 are refused with the pin number in the message. <sub>`bad_contacts_are_refused`</sub>
 
 ### cable
 
@@ -569,6 +571,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - When one part has the same pin number twice (a through terminal), the bare number is refused with both choices, and "#n" picks one. <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
 - A mate pair sits on the 2.5 mm grid and its two halves only touch, so the tidy metrics count no overlap and no off-grid point for it. <sub>`a_mate_pair_is_tidy`</sub>
 - The plug half of a mate pair hides its designator, so the shared designator is printed once, on the socket. <sub>`the_plug_hides_the_shared_designator`</sub>
+- get_pins shows a port pin's contacts and leaves them out for plain pins. <sub>`part_pins_show_contacts`</sub>
 
 ### PLC I/O
 

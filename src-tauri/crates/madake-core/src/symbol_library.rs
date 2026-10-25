@@ -509,6 +509,7 @@ mod tests {
             name: String::new(),
             at: Point::new(x, y),
             dir: PinDir::Left,
+            contacts: Vec::new(),
         }
     }
 
