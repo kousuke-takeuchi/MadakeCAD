@@ -360,7 +360,10 @@ pub fn netlist(nets: &Value) -> String {
             let pins = net["pins"].as_array().cloned().unwrap_or_default();
             let refs: Vec<String> = pins
                 .iter()
-                .map(|p| format!("{}:{}", text(p, "reference"), text(p, "pin")))
+                .map(|p| match p["contact"].as_str() {
+                    Some(c) => format!("{}:{}/{c}", text(p, "reference"), text(p, "pin")),
+                    None => format!("{}:{}", text(p, "reference"), text(p, "pin")),
+                })
                 .collect();
             vec![
                 text(net, "name"),
@@ -807,5 +810,14 @@ mod tests {
         let out = opened(&patch, "/tmp/a.mdkproj");
         assert!(out.contains("/tmp/a.mdkproj"));
         assert!(out.contains("revision 1"));
+    }
+
+    /// madake netlist writes a port pin with its contact (39:U3/VBUS).
+    /// madake netlist はポートのピンを接点付き (39:U3/VBUS) で書く。
+    #[test]
+    fn netlist_shows_port_contacts() {
+        let nets = json!([{ "name": "N001.VBUS", "pins": [{ "reference": "39", "pin": "U3", "contact": "VBUS" }, { "reference": "R1", "pin": "1" }], "wire_ids": ["w1"] }]);
+        let out = netlist(&nets);
+        assert!(out.contains("39:U3/VBUS") && out.contains("R1:1"), "{out}");
     }
 }

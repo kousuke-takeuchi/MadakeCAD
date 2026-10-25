@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2930 specification clauses** across 6 areas.
+**2933 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1219,6 +1219,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A panel-layout sheet is not checked against the schematic rules: it carries no wiring, so nothing there counts as an unconnected pin or a dangling wire. <sub>`a_panel_sheet_is_not_checked_against_the_schematic_rules`</sub>
 - A part placed on the panel whose reference designator is nowhere on the schematic is reported as a warning, and the whole-project check reports it together with the schematic findings. <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
 - Two USB ports joined by one wire have no unconnected pin and no other ERC finding. <sub>`a_wired_usb_link_has_no_erc_findings`</sub>
+- On a port net the label USB_MIC and a dotted label USB_MIC.VBUS on a tapped wire are one name, not a label conflict. <sub>`a_dotted_label_is_not_a_label_conflict`</sub>
 
 ### wire_legend
 
@@ -1306,6 +1307,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A designator on three sheets lists every other sheet's address, in sheet order, on one line. <sub>`a_designator_on_three_sheets_lists_every_other_sheet`</sub>
 - The device cross-reference text sits to the right of the symbol outline, on the same row as the designator label. <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
 - A designator label wider than its symbol pushes the device cross-reference further right, so the two never overlap. <sub>`device_cross_reference_clears_a_designator_label_wider_than_the_symbol`</sub>
+- A port net labelled USB_MIC on two sheets merges contact by contact across the sheets, never across contacts, and a dotted label USB_MIC.D+ on a third wire joins only D+. <sub>`port_nets_merge_contact_by_contact_across_sheets`</sub>
 
 
 ## Automation APIs (MCP / REST)
@@ -1927,6 +1929,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake terminals counts a multi-level terminal block by its poles and names its level count, so a 4-pole 2-level block is not mistaken for an 8-pole one. <sub>`terminals_shows_a_multilevel_block_as_poles_and_levels`</sub>
 - An empty terminal list prints a friendly message instead of an empty table. <sub>`terminals_handles_empty`</sub>
 - Open messages include the loaded path and resulting revision. <sub>`opened_reports_path_and_revision`</sub>
+- madake netlist writes a port pin with its contact (39:U3/VBUS). <sub>`netlist_shows_port_contacts`</sub>
 
 
 ## Frontend (editor UI)

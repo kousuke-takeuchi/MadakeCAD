@@ -723,6 +723,10 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 }
             }
         }
+        // ポートの接点のネットは、シートを跨ぐときと同じ名前 (「L.接点」) で比べる
+        if !net.contact_labels.is_empty() {
+            names = net.contact_labels.iter().map(String::as_str).collect();
+        }
         if names.len() >= 2 {
             diags.push(diag(
                 Severity::Error,
@@ -1548,5 +1552,25 @@ mod tests {
         sheet.entities.insert(w.id(), w);
         let erc: Vec<_> = run(&sheet).into_iter().filter(|d| d.code.starts_with("erc.")).collect();
         assert!(erc.is_empty(), "{erc:?}");
+    }
+
+    /// On a port net the label USB_MIC and a dotted label USB_MIC.VBUS on a tapped wire are one name, not a label conflict.
+    /// ポートのネットでは、ラベル USB_MIC と、取り出した配線の点付きラベル USB_MIC.VBUS は同じ名前で、ラベルの競合にならない。
+    #[test]
+    fn a_dotted_label_is_not_a_label_conflict() {
+        use crate::block::port_fixtures::{pin_at, port_block, USB};
+        let hub = Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB));
+        let h = hub.id();
+        let mut sheet = sheet_with(vec![hub, symbol("resistor", "R1", 150.0, 150.0)]);
+        let p = pin_at(&sheet, h, "U3");
+        for e in [
+            wire(&[(p.x, p.y), (p.x + 20.0, p.y)]),
+            net_label("USB_MIC", p.x + 20.0, p.y),
+            wire(&[(157.5, 150.0), (170.0, 150.0)]),
+            net_label("USB_MIC.VBUS", 170.0, 150.0),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        assert!(!run(&sheet).iter().any(|d| d.code == "erc.label_conflict"), "{:?}", run(&sheet));
     }
 }

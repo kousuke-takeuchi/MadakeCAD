@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2930仕様項目**。
+全6領域・**2933仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1219,6 +1219,7 @@
 - 盤レイアウトシートは回路図の規則で検査しない。配線を持たないシートなので、未接続ピンや宙ぶらりんの配線として指摘されるものは無い。 <sub>`a_panel_sheet_is_not_checked_against_the_schematic_rules`</sub>
 - 回路図のどこにも無い参照記号のフットプリントが盤に置かれていると注意として報告され、プロジェクト全体の検証では回路図の指摘と一緒に出る。 <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
 - 配線1本で結んだ2つの USB ポートには、未接続ピンもほかの ERC の指摘も出ない。 <sub>`a_wired_usb_link_has_no_erc_findings`</sub>
+- ポートのネットでは、ラベル USB_MIC と、取り出した配線の点付きラベル USB_MIC.VBUS は同じ名前で、ラベルの競合にならない。 <sub>`a_dotted_label_is_not_a_label_conflict`</sub>
 
 ### wire_legend
 
@@ -1306,6 +1307,7 @@
 - 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる。 <sub>`a_designator_on_three_sheets_lists_every_other_sheet`</sub>
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる。 <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
 - 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない。 <sub>`device_cross_reference_clears_a_designator_label_wider_than_the_symbol`</sub>
+- 2枚のシートでラベル USB_MIC が付いたポートのネットは、シートを跨いで接点ごとに統合され、別の接点とは統合されない。3本目の配線の点付きラベル USB_MIC.D+ は D+ にだけ繋がる。 <sub>`port_nets_merge_contact_by_contact_across_sheets`</sub>
 
 
 ## 自動化API (MCP / REST)
@@ -1927,6 +1929,7 @@
 - madake terminalsは多段端子台を極数で数えて段数を併記するので、4極2段の端子台が8極の端子台に見えることはない。 <sub>`terminals_shows_a_multilevel_block_as_poles_and_levels`</sub>
 - 端子台が無い場合は空の表ではなく分かりやすいメッセージを出す。 <sub>`terminals_handles_empty`</sub>
 - openのメッセージには読み込んだパスと結果のrevisionが含まれる。 <sub>`opened_reports_path_and_revision`</sub>
+- madake netlist はポートのピンを接点付き (39:U3/VBUS) で書く。 <sub>`netlist_shows_port_contacts`</sub>
 
 
 ## フロントエンド (エディタUI)

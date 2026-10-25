@@ -376,6 +376,8 @@ pub fn extract_netlist_project(project: &Project) -> ProjectNetlist {
         let defs = crate::symbol::sheet_symbol_defs(sheet);
         for net in extract_netlist(sheet, &defs) {
             let (label_ids, names) = labels_on_net(sheet, &net);
+            // ポートから分けたネットは「L.接点」の名前で統合する (配線を共有するので、位置で探すと全接点が1つになる)
+            let names = if net.contact_labels.is_empty() { names } else { net.contact_labels.iter().cloned().collect() };
             members.push(NetMember {
                 sheet_id: sheet.id,
                 sheet_no: i + 1,
@@ -478,7 +480,7 @@ pub fn xref_table_rows(project: &Project) -> Vec<Vec<String>> {
                     wire_nos.insert(no.clone());
                 }
                 for p in &m.net.pins {
-                    pins.insert(format!("{}:{}", p.reference, p.pin));
+                    pins.insert(p.to_string());
                 }
                 sheet_nos.insert(m.sheet_no);
             }
@@ -515,7 +517,7 @@ pub fn xref_table_csv(project: &Project) -> String {
 }
 
 /// シート内でそのネットの配線に載っているネットラベル (entity id, 名前)。
-fn labels_on_net(sheet: &Sheet, net: &Net) -> (Vec<EntityId>, BTreeSet<String>) {
+pub(crate) fn labels_on_net(sheet: &Sheet, net: &Net) -> (Vec<EntityId>, BTreeSet<String>) {
     let wires: Vec<&crate::model::Wire> = net
         .wire_ids
         .iter()
@@ -956,5 +958,42 @@ mod tests {
         assert!(label_right > max.x, "ラベルが外形より長い前提: {label_right} vs {}", max.x);
         let at = device_xref_at(&inst, &def);
         assert!(at.x >= label_right + XREF_GAP - 1e-9, "ラベルの右に逃げる: {at:?}");
+    }
+
+    /// A port net labelled USB_MIC on two sheets merges contact by contact across the sheets, never across contacts, and a dotted label USB_MIC.D+ on a third wire joins only D+.
+    /// 2枚のシートでラベル USB_MIC が付いたポートのネットは、シートを跨いで接点ごとに統合され、別の接点とは統合されない。3本目の配線の点付きラベル USB_MIC.D+ は D+ にだけ繋がる。
+    #[test]
+    fn port_nets_merge_contact_by_contact_across_sheets() {
+        use crate::block::port_fixtures::{pin_at, port_block, USB};
+        let mut project = Project::new("t");
+        project.sheets.push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let (s1, s2) = (project.sheets[0].id, project.sheets[1].id);
+        for (sid, reference, side, no) in [(s1, "39", "right", "U3"), (s2, "LTE1", "left", "P1")] {
+            let sheet = project.sheet_mut(sid).unwrap();
+            let port = Entity::Symbol(port_block(reference, 100.0, 100.0, side, no, &USB));
+            let id = port.id();
+            sheet.entities.insert(id, port);
+            let p = pin_at(sheet, id, no);
+            let end = if side == "right" { p.x + 20.0 } else { p.x - 20.0 };
+            for e in [wire(&[(p.x, p.y), (end, p.y)]), label("USB_MIC", end, p.y)] {
+                sheet.entities.insert(e.id(), e);
+            }
+        }
+        let sheet2 = project.sheet_mut(s2).unwrap();
+        for e in [symbol("resistor", "R9", 150.0, 150.0), wire(&[(157.5, 150.0), (170.0, 150.0)]), label("USB_MIC.D+", 170.0, 150.0)] {
+            sheet2.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist_project(&project).nets;
+        let names: Vec<&str> = nets.iter().map(|n| n.name.as_str()).collect();
+        for c in USB {
+            let n = nets.iter().find(|n| n.name == format!("USB_MIC.{c}")).unwrap_or_else(|| panic!("{names:?}"));
+            assert_eq!(n.members.len(), 2, "{c}");
+        }
+        let dplus = nets.iter().find(|n| n.name == "USB_MIC.D+").unwrap();
+        assert!(dplus.members.iter().any(|m| m.net.pins.iter().any(|p| p.reference == "R9")));
+        let vbus = nets.iter().find(|n| n.name == "USB_MIC.VBUS").unwrap();
+        assert!(!vbus.members.iter().any(|m| m.net.pins.iter().any(|p| p.reference == "R9")));
+        let rows = xref_table_rows(&project);
+        assert!(rows.iter().any(|r| r[2].contains("39:U3/VBUS")), "{rows:?}");
     }
 }
