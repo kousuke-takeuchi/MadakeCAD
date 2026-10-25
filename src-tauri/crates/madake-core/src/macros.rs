@@ -452,10 +452,16 @@ pub fn save_macro(
 
 /// 選択したエンティティを、選択範囲の基準点 ([`base_point`]) からの相対座標の
 /// `add_entity`列にする (線番は捨てる)。新規保存とバリアント追加で共通。
+///
+/// 他のエンティティを指すもの ([`Entity::refs`]。ケーブル・引き出し線付きの注記など) は
+/// 指す相手より後に並べる (選択順のままだと、ケーブルを先に選んだハーネスの貼り付けで
+/// ケーブルが配線や部品より先に置かれる。削除の逆コマンドと同じ並べ方)。
 fn relative_commands(picked: &[&Entity]) -> Result<(Point, Vec<serde_json::Value>)> {
     let base = base_point(picked);
-    let mut commands = Vec::with_capacity(picked.len());
-    for entity in picked {
+    let mut ordered: Vec<&Entity> = picked.to_vec();
+    ordered.sort_by_key(|e| !e.refs().is_empty());
+    let mut commands = Vec::with_capacity(ordered.len());
+    for entity in ordered {
         let mut entity = (*entity).clone();
         entity.translate(-base.x, -base.y);
         if let Entity::Wire(w) = &mut entity {
@@ -2376,5 +2382,37 @@ mod tests {
         let fresh = save_macro_into(None, engine.project(), sheet_id, &[motor], &MacroMeta { variant: Some("C".into()), ..meta("w") })
             .expect("既存なし");
         assert_eq!(fresh.variant_keys(), ["A"]);
+    }
+
+    /// A harness copied with the cable selected before its wires and part is saved with the cable last, pastes in one edit, and the pasted cable's cores point at the pasted wires and part.
+    /// ケーブルを配線や部品より先に選んで写したハーネスは、ケーブルを最後にして保存され、1回の編集で貼り付けられ、貼ったケーブルの芯は貼った配線と部品を指す。
+    #[test]
+    fn a_cable_selected_first_pastes_after_its_wires() {
+        let lte = crate::cable::test_support::lte_sheet();
+        let (mut engine, sheet_id) = crate::cable::test_support::engine_with(lte.sheet);
+        let mut ids = vec![lte.cable];
+        ids.extend(lte.wires.iter().copied());
+        ids.push(lte.usb);
+        let m = save_macro(engine.project(), sheet_id, &ids, &meta("harness")).expect("保存");
+        let last: Command = serde_json::from_value(m.commands.last().unwrap().clone()).unwrap();
+        assert!(matches!(last, Command::AddEntity { entity: Entity::Cable(_), .. }), "ケーブルは最後");
+        let before = engine.project().sheet(sheet_id).unwrap().entities.len();
+        insert_macro(&mut engine, &m, None, None, sheet_id, Point::new(100.0, 200.0), 0, EditOrigin::User)
+            .expect("貼り付け");
+        let sheet = engine.project().sheet(sheet_id).unwrap();
+        assert_eq!(sheet.entities.len(), before + 6);
+        let pasted = sheet
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Cable(c) if c.id != lte.cable => Some(c),
+                _ => None,
+            })
+            .expect("貼ったケーブル");
+        let refs = Entity::Cable(pasted.clone()).refs();
+        assert_eq!(refs.len(), 8);
+        for r in refs {
+            assert!(sheet.entities.contains_key(&r) && !ids.contains(&r), "貼った相手を指す: {r}");
+        }
     }
 }
