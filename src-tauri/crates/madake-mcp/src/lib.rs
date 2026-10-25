@@ -494,6 +494,92 @@ pub struct DrawWireParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct GetPinsParams {
+    /// 対象シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 参照記号 (例: "U1")。同じ参照記号の部品が複数あれば全部返す。
+    pub reference: Option<String>,
+    /// 部品のentity id。referenceの代わりに使う。
+    pub entity_id: Option<Uuid>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ConnectPinsParams {
+    /// 配線先シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 始点のピン指定 "参照記号.ピン" (例: "U1.SDA")。ピンは番号でも名前でもよい。参照記号の代わりにentity idも書ける。
+    /// 1本だけ引くときに使う (複数はconnections)。
+    pub from: Option<String>,
+    /// 終点のピン指定 (fromと同じ書き方)。
+    pub to: Option<String>,
+    /// 経由点(mm)。順に通る。省略時は両端のピンの向きでZ字・L字・直線を選ぶ。
+    pub via: Option<Vec<Point>>,
+    /// 線色(例: "red", "black", "light_blue")。connectionsでは各配線の既定値。
+    pub color: Option<String>,
+    /// 線径 sq (mm2)。例: 0.3, 0.75, 3.5。connectionsでは各配線の既定値。
+    pub sq: Option<f64>,
+    /// 電線長(m)。
+    pub length_m: Option<f64>,
+    /// 電線品番。connectionsでは各配線の既定値。
+    pub part_no: Option<String>,
+    /// 複数の配線を1回で引く (from/toの代わり)。全部引けるときだけ引き、undo一発で全部消える。
+    pub connections: Option<Vec<PinConnection>>,
+}
+
+/// connect_pins の connections の1本。
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PinConnection {
+    /// 始点のピン指定 "参照記号.ピン"。
+    pub from: String,
+    /// 終点のピン指定。
+    pub to: String,
+    /// 経由点(mm)。
+    pub via: Option<Vec<Point>>,
+    /// 線色 (省略時は上位のcolor)。
+    pub color: Option<String>,
+    /// 線径 sq (省略時は上位のsq)。
+    pub sq: Option<f64>,
+    /// 電線長(m)。
+    pub length_m: Option<f64>,
+    /// 電線品番 (省略時は上位のpart_no)。
+    pub part_no: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PlaceMateParams {
+    /// 配置先シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 左(縦向きなら上)の部品の位置(mm)。1組だけ置くときに使う (複数はmates)。
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    /// horizontal(左右に並べる、既定) / vertical(上下に並べる)。
+    pub orientation: Option<madake_core::pin_wiring::MateOrientation>,
+    /// first(左/上がオス、既定) / second(右/下がオス)。
+    pub male_side: Option<madake_core::pin_wiring::MaleSide>,
+    /// 参照記号(プラグとソケットの両方に付く)。
+    pub reference: Option<String>,
+    /// 型番・値(ソケット側に付く)。
+    pub value: Option<String>,
+    /// 複数の組を1回で置く (x/yの代わり)。undo一発で全部消える。
+    pub mates: Option<Vec<MateSpec>>,
+}
+
+/// place_mate の mates の1組。
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct MateSpec {
+    pub x: f64,
+    pub y: f64,
+    /// horizontal(既定) / vertical。
+    pub orientation: Option<madake_core::pin_wiring::MateOrientation>,
+    /// first(既定) / second。
+    pub male_side: Option<madake_core::pin_wiring::MaleSide>,
+    /// 参照記号(プラグとソケットの両方に付く)。
+    pub reference: Option<String>,
+    /// 型番・値(ソケット側に付く)。
+    pub value: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct SheetRefParams {
     /// 対象シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
@@ -1069,7 +1155,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "シンボルをシートに配置する。作成されたエンティティidを返す。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る"
+        description = "シンボルをシートに配置する。作成されたエンティティidと、置いた部品のピン(pins: 番号・名前・用紙座標x/y・向きdir)を返す。配線はこの座標を使うかconnect_pinsでピン名を指定する。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る"
     )]
     fn place_symbol(
         &self,
@@ -1097,7 +1183,16 @@ impl MadakeMcp {
             .doc
             .execute(Command::AddEntity { sheet_id, entity })
             .map_err(internal)?;
-        json_ok(&serde_json::json!({ "entity_id": id, "revision": patch.revision }))
+        let pins = {
+            let engine = self.doc.engine.lock().unwrap();
+            engine
+                .project()
+                .sheet(sheet_id)
+                .and_then(|sheet| madake_core::pin_wiring::sheet_part_pins(sheet, id))
+                .map(|p| p.pins)
+                .unwrap_or_default()
+        };
+        json_ok(&serde_json::json!({ "entity_id": id, "revision": patch.revision, "pins": pins }))
     }
 
     #[tool(description = "配線(ポリライン)をシートに描く。作成されたエンティティidを返す")]
@@ -1125,6 +1220,176 @@ impl MadakeMcp {
             .execute(Command::AddEntity { sheet_id, entity })
             .map_err(internal)?;
         json_ok(&serde_json::json!({ "entity_id": id, "revision": patch.revision }))
+    }
+
+    #[tool(
+        description = "配置済み部品のピンを返す。reference(参照記号)かentity_idで指定する。部品ごとにentity_id・参照記号・symbol_id・外形bbox(ブロックは5mm丸めの後)と、各ピンの番号・名前・用紙座標x/y・向きdir(回転と反転の後。電線が出ていく向き)を返す。ピン座標は自分で計算せずこのツールで読む"
+    )]
+    fn get_pins(&self, Parameters(p): Parameters<GetPinsParams>) -> Result<String, ErrorData> {
+        let key = match (p.reference, p.entity_id) {
+            (Some(r), _) => r,
+            (None, Some(id)) => id.to_string(),
+            (None, None) => {
+                return Err(ErrorData::invalid_params(
+                    "reference か entity_id のどちらかを指定する",
+                    None,
+                ))
+            }
+        };
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let engine = self.doc.engine.lock().unwrap();
+        let sheet = engine
+            .project()
+            .sheet(sheet_id)
+            .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+        let parts = madake_core::pin_wiring::find_parts(sheet, &sheet_symbol_defs(sheet), &key);
+        json_ok(&serde_json::json!({ "parts": parts }))
+    }
+
+    #[tool(
+        description = "2本のピンをピン名で指定して配線する(座標は計算しなくてよい)。from/toは\"参照記号.ピン\"(例: \"U1.SDA\"、\"J1.2\"。ピンは番号でも名前でも、参照記号の代わりにentity idでもよい)。同じ番号のピンが2つある部品(貫通端子の左右など)は\"TB1.1#2\"のように#で何番目かを選ぶ。経由点viaが無ければ両端の向きでZ字・L字・直線の直角配線を引き、折れ点は2.5mmグリッドにそろえる。部品は避けない。経路が別のピンの上を通ると(そのピンまで接続されてしまうので)何も作らずに断り、そのピンを知らせるので、viaで経由点を足して引き直す。color/sq/length_m/part_noはdraw_wireと同じ。作成した配線idと頂点列pointsを返す。**複数の配線はconnectionsに並べて1回で引く**(配線1本ごとに呼ばない。全部引けるときだけ引き、undo一発で全部消える。誤りがあれば何番目かを知らせて1本も引かない。上位のcolor/sq/part_noは各配線の既定値)"
+    )]
+    fn connect_pins(
+        &self,
+        Parameters(p): Parameters<ConnectPinsParams>,
+    ) -> Result<String, ErrorData> {
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let single = p.connections.is_none();
+        let connections = match (p.connections, p.from, p.to) {
+            (Some(list), None, None) if !list.is_empty() => list,
+            (None, Some(from), Some(to)) => vec![PinConnection {
+                from,
+                to,
+                via: p.via,
+                color: None,
+                sq: None,
+                length_m: p.length_m,
+                part_no: None,
+            }],
+            _ => {
+                return Err(ErrorData::invalid_params(
+                    "from と to (1本) か connections (複数) のどちらか一方を指定する",
+                    None,
+                ))
+            }
+        };
+        // ピンの解決から追加までを同じロックの中で行う (間で部品が動くと端点がピンから外れる)
+        let (wires, patch) = {
+            let mut engine = self.doc.engine.lock().unwrap();
+            let mut wires = Vec::with_capacity(connections.len());
+            {
+                let sheet = engine
+                    .project()
+                    .sheet(sheet_id)
+                    .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
+                let defs = sheet_symbol_defs(sheet);
+                for (i, c) in connections.into_iter().enumerate() {
+                    let points = madake_core::pin_wiring::plan_connection(
+                        sheet,
+                        &defs,
+                        &c.from,
+                        &c.to,
+                        c.via.as_deref().unwrap_or_default(),
+                    )
+                    .map_err(|e| {
+                        let e = if single { e } else { format!("connections[{i}] ({} → {}): {e}。1本も引いていません", c.from, c.to) };
+                        ErrorData::invalid_params(e, None)
+                    })?;
+                    wires.push(Wire {
+                        id: Uuid::new_v4(),
+                        points,
+                        color: c.color.or_else(|| p.color.clone()).unwrap_or_else(|| "black".into()),
+                        sq: c.sq.or(p.sq).unwrap_or(0.3),
+                        length_m: c.length_m,
+                        length_source: Default::default(),
+                        part_no: c.part_no.or_else(|| p.part_no.clone()),
+                        net: None,
+                    });
+                }
+            }
+            let commands = wires
+                .iter()
+                .map(|w| Command::AddEntity { sheet_id, entity: Entity::Wire(w.clone()) })
+                .collect();
+            let patch = engine
+                .execute_batch(commands, self.doc.mcp_origin())
+                .map_err(internal)?;
+            (wires, patch)
+        };
+        let _ = self.doc.patches.send(patch.clone());
+        if single {
+            let w = &wires[0];
+            return json_ok(&serde_json::json!({ "entity_id": w.id, "points": w.points, "revision": patch.revision }));
+        }
+        let wires: Vec<_> = wires
+            .iter()
+            .map(|w| serde_json::json!({ "entity_id": w.id, "points": w.points }))
+            .collect();
+        json_ok(&serde_json::json!({ "wires": wires, "revision": patch.revision }))
+    }
+
+    #[tool(
+        description = "差し込み1極のかみ合わせ(connector_plug=オスとconnector_socket=メス)を5mm離して(2.5mmグリッド上・外形は接するだけ)向かい合わせに1回で置く(undo一発で組ごと消える)。orientation=horizontal(左右、既定)/vertical(上下)、male_side=first(左/上がオス、既定)/second。参照記号はプラグとソケットの両方(同じ記号の組は重複エラーにならない)、値はソケット側に付く。外側の2つの接続点first/second(用紙座標)と2つのentity idを返す。**複数の組(多極コネクタの各極など)はmatesに並べて1回で置く**(undo一発で全部消える)。配線はconnect_pins(\"<entity_id>.1\")か返した座標で行う"
+    )]
+    fn place_mate(&self, Parameters(p): Parameters<PlaceMateParams>) -> Result<String, ErrorData> {
+        use madake_core::pin_wiring::{mate_pair, MaleSide, MateOrientation};
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let single = p.mates.is_none();
+        let specs = match (p.mates, p.x, p.y) {
+            (Some(list), None, None) if !list.is_empty() => list,
+            (None, Some(x), Some(y)) => vec![MateSpec {
+                x,
+                y,
+                orientation: p.orientation,
+                male_side: p.male_side,
+                reference: p.reference,
+                value: p.value,
+            }],
+            _ => {
+                return Err(ErrorData::invalid_params(
+                    "x と y (1組) か mates (複数) のどちらか一方を指定する",
+                    None,
+                ))
+            }
+        };
+        let pairs: Vec<_> = specs
+            .iter()
+            .map(|m| {
+                mate_pair(
+                    Point::new(m.x, m.y),
+                    m.orientation.unwrap_or(MateOrientation::Horizontal),
+                    m.male_side.unwrap_or(MaleSide::First),
+                    m.reference.as_deref().unwrap_or_default(),
+                    m.value.as_deref().unwrap_or_default(),
+                )
+            })
+            .collect();
+        let commands = pairs
+            .iter()
+            .flat_map(|pair| [pair.first.clone(), pair.second.clone()])
+            .map(|inst| Command::AddEntity { sheet_id, entity: Entity::Symbol(inst) })
+            .collect();
+        let patch = self
+            .doc
+            .execute_batch_as(commands, self.doc.mcp_origin())
+            .map_err(internal)?;
+        let placed: Vec<_> = pairs
+            .iter()
+            .map(|pair| {
+                serde_json::json!({
+                    "first_entity_id": pair.first.id,
+                    "second_entity_id": pair.second.id,
+                    "first": pair.first_point,
+                    "second": pair.second_point,
+                })
+            })
+            .collect();
+        if single {
+            let mut out = placed.into_iter().next().unwrap_or_default();
+            out["revision"] = serde_json::json!(patch.revision);
+            return json_ok(&out);
+        }
+        json_ok(&serde_json::json!({ "mates": placed, "revision": patch.revision }))
     }
 
     #[tool(
