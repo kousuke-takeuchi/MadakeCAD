@@ -179,7 +179,7 @@ Unchanged. A plain wire between two ports is one `Wire`, one wire-list row, one 
 ### 7. UI
 
 - `BlockPinColumn.vue`: a third input per row, **接点 / Contacts**, comma separated (`,` `、` `，` accepted), placeholder `VBUS, D−, D+, GND`. Empty = plain pin.
-- `blockEditor.ts`: `BlockPinRow` gains `contacts: string` (the text); `pinsOf` splits, trims and drops empties, and writes `contacts` only when non-empty; `draftFromAttrs` joins with `, `; `draftIssues` gains `contactsTooFew`, `duplicateContact`, `tooManyContacts` (same rules as Rust).
+- `blockEditor.ts`: `BlockPinRow` gains `contacts: string` (the text); `pinsOf` splits, trims and drops empties, and writes `contacts` only when non-empty (TS `BlockPinRow.contacts` is optional: rows without contacts write no key); `draftFromAttrs` joins with `, `; `draftIssues` gains `contactsTooFew`, `duplicateContact`, `tooManyContacts` (same rules as Rust).
 - `dynamicSymbol.ts`: `BlockPin.contacts?: string[]`; `parseBlockSpec` gets the same checks; `blockSymbol` copies contacts into `PinDef`. `src/ipc.ts` `PinDef.contacts?: string[]`, `NetPin.contact?`, `Net.contact?`, `Net.contact_labels?`, `CoreEnd` pin `contact?`.
 - `PropertiesPanel.vue`: the block summary adds the port count when non-zero (`ポート 2`). The drawing does not change.
 - i18n keys in both locales; MadakeCAD.pen gets the extra column in the block pin table frame.
@@ -215,7 +215,7 @@ Rust tests carry the two doc lines (English, then Japanese) above `#[test]`; Vit
 
 ## Delivery
 
-Each PR targets `master`; dependent PRs say "merge #N first" instead of stacking.
+The whole feature ships as one PR (decided 2026-10-25, the user's one-PR-per-change rule), built in the four stages below as separate commits. The PR targets `master`.
 
 1. Core: `BlockPin` / `PinDef` contacts, netlist split + `extract_wire_nets` + consumer switch, `NetPin` / `Net` fields, xref keys, `port.rs` ERC, format 18 with `port_block`. Safe alone: only `execute_commands` / `place_symbol` attrs can create contacts yet.
 2. Run cables: `CoreEnd::Pin.contact`, `connect_cable` port landing, validation key, no-bar drawing (SVG + canvas), wire-list `/contact`.
@@ -247,3 +247,6 @@ None. Mate conduction (a plug/socket pair joining its two nets) was decided on 2
 | 2026-10-25 | The spec is a draft only; no product code yet | The user asked for research and a design first. |
 | 2026-10-25 | User confirmed the spec's own proposals: dotted labels `L.c` tap one contact; 2 to 32 contacts per pin; `connect_cable` refuses a partial core-name match on a port; plain pins join a contact by pin name only | Spec review answer |
 | 2026-10-25 | User decided: mate conduction (plug pin n to socket pin n) is a separate change, not part of this one | It would change the nets of every existing drawing with mates |
+| 2026-10-25 | A core landing on a plug/socket pin inside a port cluster is reported as `erc.cable_core_unassigned` (an extra case beyond §3) | Review ruling F8: a pass-through pin has no contact to take the core, and a silent short net is worse than one more error |
+| 2026-10-25 | §2.4 "a cluster's contact nets sit together in contact order" no longer holds once cores join; the sort key `(wire_ids.is_empty(), min wire id, min (cable_id, core), contact rank)` is taken literally | Task 3: following the key exactly keeps drawings without ports in today's order; contact nets of one cluster can be separated by nets that sort between them |
+| 2026-10-25 | A contact net that joins several port clusters reuses a base a cluster already has (first cluster in net order), never a fresh `Nxxx` (§2.3) | Review ruling F7: one base per joined contact net keeps names stable; auto names shift only in rare drawings |

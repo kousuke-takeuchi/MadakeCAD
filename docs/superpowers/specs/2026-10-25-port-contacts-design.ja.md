@@ -179,7 +179,7 @@ pub struct BlockPin {
 ### 7. 画面
 
 - `BlockPinColumn.vue`: 行ごとに3つ目の入力欄 **接点 / Contacts** を足す。区切りはカンマ (`,`・`、`・`，` のどれでもよい)、見本の文字は `VBUS, D−, D+, GND`。空 = 普通のピン。
-- `blockEditor.ts`: `BlockPinRow` に `contacts: string` (入力の文字) を足す。`pinsOf` は区切って空白を落とし、空のものを捨て、空でないときだけ `contacts` を書く。`draftFromAttrs` は `, ` でつなぐ。`draftIssues` に `contactsTooFew`・`duplicateContact`・`tooManyContacts` を足す (Rust と同じ決まり)。
+- `blockEditor.ts`: `BlockPinRow` に `contacts: string` (入力の文字) を足す。`pinsOf` は区切って空白を落とし、空のものを捨て、空でないときだけ `contacts` を書く (TS の `BlockPinRow.contacts` は省略可。接点のない行はキーを書かない)。`draftFromAttrs` は `, ` でつなぐ。`draftIssues` に `contactsTooFew`・`duplicateContact`・`tooManyContacts` を足す (Rust と同じ決まり)。
 - `dynamicSymbol.ts`: `BlockPin.contacts?: string[]`。`parseBlockSpec` に同じ検証を足し、`blockSymbol` は接点を `PinDef` に写す。`src/ipc.ts` に `PinDef.contacts?: string[]`・`NetPin.contact?`・`Net.contact?`・`Net.contact_labels?`・`CoreEnd` のピンの `contact?` を足す。
 - `PropertiesPanel.vue`: ブロックの要約に、0でなければポートの数を足す (`ポート 2`)。図面の見た目は変わらない。
 - i18n のキーは両方の言語に。MadakeCAD.pen のブロックのピン表の画面にも列を足す。
@@ -215,7 +215,7 @@ Rust のテストは `#[test]` の上に2行の説明 (英語、次に日本語)
 
 ## 進め方
 
-PR はどれも `master` 向け。依存する PR は積み重ねず、「先に #N をマージ」と書く。
+機能全体を PR 1本で出す (2026-10-25 決定。利用者の「変更ごとに PR 1本」の決まり)。下の4段階は別々のコミットにする。PR は `master` 向け。
 
 1. 中核: `BlockPin` / `PinDef` の接点、ネットの分割と `extract_wire_nets` と利用者の切り替え、`NetPin` / `Net` のフィールド、xref の鍵、`port.rs` の ERC、`port_block` 付きの形式18。単独でマージしても安全 (接点を作れるのはまだ `execute_commands` と `place_symbol` の属性だけ)。
 2. 区間ケーブル: `CoreEnd::Pin.contact`、`connect_cable` のポートへの着け方、検証の鍵、横棒なしの描画 (SVG と作図領域)、電線リストの `/接点`。
@@ -247,3 +247,6 @@ PR はどれも `master` 向け。依存する PR は積み重ねず、「先に
 | 2026-10-25 | 今回は設計書の下書きだけで、製品のコードはまだ書かない | 利用者は先に調査と設計を求めた |
 | 2026-10-25 | 設計書が出した案を利用者が承認: 点付きラベル `L.c` で接点1つを取り出す、接点は1本のピンに2〜32、ポートへの `connect_cable` で芯の名前が一部だけ一致するときは断る、普通のピンはピンの名前だけで接点に入る | 設計書のレビューへの回答 |
 | 2026-10-25 | 利用者の決定: かみ合わせの導通 (プラグのピン n とソケットのピン n) は別の変更にし、今回は入れない | かみ合わせのある既存の図面すべてのネットが変わるため |
+| 2026-10-25 | プラグ・ソケットのピンに着いた芯がポートのかたまりの中にある場合は `erc.cable_core_unassigned` で報告する (§3 に無い追加の場合) | レビュー裁定 F8: 素通しのピンには芯を受ける接点が無く、黙って短絡するネットより、エラーが1つ増えるほうがよい |
+| 2026-10-25 | §2.4 の「ポートのかたまりの接点のネットは接点の順に並ぶ」は、芯が加わると成り立たない。並べ替えの鍵 `(wire_ids.is_empty(), 最小の配線 id, 最小の (cable_id, 芯), 接点の順位)` は文字どおりに使う | タスク 3: 鍵をそのまま使えば、ポートの無い図面は今の並びのまま。同じかたまりの接点のネットの間に別のネットが入ることがある |
+| 2026-10-25 | 複数のポートのかたまりに跨る接点のネットは、かたまりがすでに持つ元の名前を使い、新しい `Nxxx` は取らない (§2.3) | レビュー裁定 F7: 繋がった接点のネットに元の名前を1つにして名前を安定させる。自動の名前が変わるのはまれな図面だけ |
