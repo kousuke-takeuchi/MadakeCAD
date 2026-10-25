@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2971仕様項目**。
+全6領域・**2975仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -224,6 +224,10 @@
 - コネクタの種類はどれも snake_case の名前 (usb_a_f … jst_xh_f) で読め、まとめて描くのは端子台と JST だけで、シリーズ名を持つのは JST だけ。 <sub>`every_connector_kind_has_its_json_name`</sub>
 - 同じ種類で同じ名前 (どちらも名前なしを含む) の端子台・JST のピンが続けば1つのコネクタになり、名前・種類が違うか間に別のピンがあれば別のコネクタになる。USB などはいつも1本で1つ。 <sub>`consecutive_pins_with_the_same_kind_and_name_form_one_connector`</sub>
 - JST のコネクタには名前とシリーズ (「J3 PH」、名前が無ければ「XH」だけ)、端子台には名前を書き、名前の無い端子台と USB の口には何も書かない。 <sub>`group_labels_name_the_connector_and_its_series`</sub>
+- 左辺では、どのコネクタの絵も仕様の図そのものになる: メスは辺にまたがる白い口、オスは内側の枠と外へ出る黒い差し込み、端子台と JST の本体はピンをまたいで1つ。 <sub>`every_picture_matches_the_spec_on_the_left_side`</sub>
+- 辺ごとの絵の座標は右辺の座標を時計回りに回したもので、ローカルの点はその辺の向きに写り、弧は時計回りの振れ幅を保つ。 <sub>`side_frames_are_turns_of_the_right_side_frame`</sub>
+- どの辺でも、絵は決まった枠 (辺の内側1.5mmから外側2.5mm、辺に沿って両端のピンから2mm) の外へ出ない。 <sub>`every_picture_stays_inside_its_envelope`</sub>
+- USB-C メスの口は、どの辺でも、ブロックをどう回転・ミラーしても閉じた角丸の穴のまま: 弧の端は口の直線の端に合い、弧は外へふくらむ。 <sub>`the_usb_c_opening_stays_closed_at_every_rotation_and_mirror`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 

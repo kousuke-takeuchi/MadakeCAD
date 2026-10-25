@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2971 specification clauses** across 6 areas.
+**2975 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -224,6 +224,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Every connector kind is read from its snake_case name (usb_a_f … jst_xh_f); only screw terminals and JST sockets are grouped, and only JST has a series. <sub>`every_connector_kind_has_its_json_name`</sub>
 - Consecutive screw or JST pins with the same kind and the same name (or both unnamed) form one connector; a different name, a different kind or a pin in between starts a new one, and USB-like kinds are always one pin each. <sub>`consecutive_pins_with_the_same_kind_and_name_form_one_connector`</sub>
 - A JST connector is labelled with its name and series ("J3 PH", or "XH" alone), a screw terminal block with its name, and an unnamed screw block or a USB socket gets no label. <sub>`group_labels_name_the_connector_and_its_series`</sub>
+- On the left side every connector picture is exactly the drawing of the spec: sockets are an open body across the edge, plugs a housing inside with a black insert outside, and screw and JST bodies span their pins. <sub>`every_picture_matches_the_spec_on_the_left_side`</sub>
+- The picture frame of each side is the right-side frame turned clockwise: a local point lands where the side faces, and an arc keeps its clockwise sweep. <sub>`side_frames_are_turns_of_the_right_side_frame`</sub>
+- No picture ever leaves its envelope (1.5 mm inside to 2.5 mm outside the edge, 2 mm beyond its outer pins along the edge), on any side. <sub>`every_picture_stays_inside_its_envelope`</sub>
+- A USB-C socket's opening stays a closed rounded slot on every side and at every rotation and mirror of the block: each arc ends where a straight edge of the opening ends and bulges outward. <sub>`the_usb_c_opening_stays_closed_at_every_rotation_and_mirror`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 
