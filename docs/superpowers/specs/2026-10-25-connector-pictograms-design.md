@@ -1,6 +1,6 @@
 # Connector pictograms: what kind of connector a block pin is, drawn on the box edge
 
-Date: 2026-10-25 · Status: design decisions approved by the user, spec ready for review
+Date: 2026-10-25 · Status: spec approved by the user, ready for planning
 
 ## Goal
 
