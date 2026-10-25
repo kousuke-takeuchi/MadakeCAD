@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2853仕様項目**。
+全6領域・**2855仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -40,6 +40,8 @@
 - 部品表ではケーブルを型番ごとに数え、全部に長さがあれば合計の長さ、1本でも無ければ本数にする。型番の無いケーブルは載せない。 <sub>`the_bom_counts_cables_per_part_number`</sub>
 - 印刷される図面には、ケーブルの定義線と、シールドがあればシールドの楕円、注記が描かれる。 <sub>`the_printed_sheet_draws_the_definition_line_shield_and_label`</sub>
 - 定義線が2点でない・芯数が0・シートに無い配線を指す芯を持つケーブルは拒否される。 <sub>`a_malformed_cable_is_refused`</sub>
+- 区間ケーブルは、どの芯も両端がこのシートにあれば受け付け、端の無い芯・無いピンや配線を指す芯・同じ配線の使い回し・定義線用の欄を使った芯・2点未満の区間があれば断る。芯の行き先を持つ定義線ケーブルも断る。 <sub>`a_run_cable_is_checked_when_placed`</sub>
+- 区間ケーブルを分岐の配線と着く先の部品と一緒に消してから元に戻すと全部が戻り、やり直すとまた消える (ケーブルは指す相手の後に戻す)。 <sub>`deleting_a_run_cable_with_its_wires_can_be_undone`</sub>
 
 ### Commandエンジン (undo/redo)
 

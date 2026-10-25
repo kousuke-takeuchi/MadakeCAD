@@ -864,8 +864,13 @@ impl Engine {
                         });
                     }
                 }
-                // 復元順は削除の逆順でなくても問題ない(idは独立)が、直感的に逆順にする。
+                // 復元順は削除の逆順にする。ただし参照を持つもの (ケーブル・引き出し線付きの注記・
+                // 銘板・寸法線) は指す相手より後に戻す: 先に戻すと AddEntity の検証が「相手がシートに
+                // 無い」で断り、undo が失敗する
                 inverse.reverse();
+                inverse.sort_by_key(|c| {
+                    matches!(c, Command::AddEntity { entity, .. } if !entity.refs().is_empty())
+                });
                 Ok((ops, inverse))
             }
             Command::MoveEntities {
@@ -1788,21 +1793,31 @@ fn validate_entity(entity: &Entity, sheet: &Sheet) -> Result<()> {
             }
         }
         Entity::Cable(c) => {
-            if c.points.len() != 2 {
-                return Err(CoreError::InvalidCommand(
-                    "a cable definition line needs exactly two points".into(),
-                ));
-            }
             if c.core_count == 0 {
                 return Err(CoreError::InvalidCommand("a cable needs at least one core".into()));
             }
-            for core in &c.cores {
-                if let Some(w) = core.wire {
-                    if !matches!(sheet.entities.get(&w), Some(Entity::Wire(_))) {
+            if c.is_run() {
+                crate::cable::validate_run_cable(sheet, c).map_err(CoreError::InvalidCommand)?;
+            } else {
+                if c.points.len() != 2 {
+                    return Err(CoreError::InvalidCommand(
+                        "a cable definition line needs exactly two points".into(),
+                    ));
+                }
+                for core in &c.cores {
+                    if core.end_a.is_some() || core.end_b.is_some() {
                         return Err(CoreError::InvalidCommand(format!(
-                            "cable core {} points at a wire that is not on this sheet: {w}",
+                            "cable core {} has end_a/end_b but the cable has no run",
                             core.core
                         )));
+                    }
+                    if let Some(w) = core.wire {
+                        if !matches!(sheet.entities.get(&w), Some(Entity::Wire(_))) {
+                            return Err(CoreError::InvalidCommand(format!(
+                                "cable core {} points at a wire that is not on this sheet: {w}",
+                                core.core
+                            )));
+                        }
                     }
                 }
             }

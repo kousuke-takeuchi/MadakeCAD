@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2853 specification clauses** across 6 areas.
+**2855 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -40,6 +40,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - In the BOM, cables are counted per part number: by total length when every cable has a length, otherwise by the number of cables; a cable without a part number is left out. <sub>`the_bom_counts_cables_per_part_number`</sub>
 - The printed sheet draws the cable's definition line, the shield ellipse when it has a shield, and the label. <sub>`the_printed_sheet_draws_the_definition_line_shield_and_label`</sub>
 - A cable whose definition line does not have two points, that has no cores, or whose core points at a wire not on the sheet is refused. <sub>`a_malformed_cable_is_refused`</sub>
+- A run cable is accepted when every core has both ends on this sheet, and refused when a core lacks an end, points at a missing pin or wire, reuses a wire, still uses the definition-line field, or the run has fewer than two points; a definition-line cable with core ends is refused too. <sub>`a_run_cable_is_checked_when_placed`</sub>
+- Deleting a run cable together with its breakout wires and the part it lands on, then undoing, brings all of them back, and redo deletes them again (the cable is restored after what it points at). <sub>`deleting_a_run_cable_with_its_wires_can_be_undone`</sub>
 
 ### Command engine (undo/redo)
 
