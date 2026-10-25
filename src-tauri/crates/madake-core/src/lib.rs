@@ -5,6 +5,7 @@
 
 pub mod block;
 pub mod cable;
+pub mod cable_run;
 pub mod command;
 pub mod dxf;
 pub mod frame_template;

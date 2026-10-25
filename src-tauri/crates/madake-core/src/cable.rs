@@ -72,6 +72,34 @@ pub fn cable_label(c: &Cable) -> String {
     .join("  ")
 }
 
+/// シート上の次のケーブル参照記号 (ケーブルとハーネスの W 番号の続き。作図領域の`nextCableReference`と同じ)。
+pub fn next_cable_reference(sheet: &Sheet) -> String {
+    let prefix = crate::harness::HARNESS_PREFIX;
+    let max = sheet
+        .entities
+        .values()
+        .filter_map(|e| match e {
+            Entity::Cable(c) => Some(c.reference.as_str()),
+            Entity::Harness(h) => Some(h.name.as_str()),
+            _ => None,
+        })
+        .filter_map(|n| n.strip_prefix(prefix))
+        .filter_map(|n| n.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0);
+    format!("{prefix}{}", max + 1)
+}
+
+/// 着いたピンの位置から、部品に着く端の棒の両端 (上→下、同じ高さなら左→右に並べた最初と最後)。
+pub fn bar_ends(positions: &[Point]) -> Option<(Point, Point)> {
+    let order = |a: &&Point, b: &&Point| {
+        (a.y, a.x).partial_cmp(&(b.y, b.x)).unwrap_or(std::cmp::Ordering::Equal)
+    };
+    let first = positions.iter().min_by(order)?;
+    let last = positions.iter().max_by(order)?;
+    Some((*first, *last))
+}
+
 /// 線分 `a-b` と `c-d` の交点の、`a-b` 上の位置 (0〜1)。交わらなければNone。
 fn segment_hit(a: Point, b: Point, c: Point, d: Point) -> Option<f64> {
     let r = (b.x - a.x, b.y - a.y);

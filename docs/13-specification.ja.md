@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2872仕様項目**。
+全6領域・**2877仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -50,6 +50,14 @@
 - 芯数より多い芯を持つ区間ケーブルは、定義線ケーブルと同じ芯数超過のエラーになる。 <sub>`a_run_cable_with_too_many_cores_overflows`</sub>
 - 両端とも未割当の区間ケーブルの芯は「行き先なし」で報告し、浮いたネットや短絡など別の指摘を重ねない。 <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
 - ケーブル一覧は1本線のケーブルの両端の機器 (分岐の配線が行く基板、1本線が着くプラグ) を示し、両端のある芯を使用芯と数える。 <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
+
+### cable_run
+
+- LTEハーネスを計画すると、基板のピンから10mm先の分岐点まで芯ごとに1本ずつ配線を引き、そこからプラグまで1本線を通し、芯をピン順にピンへ対応させる。結果は4ネットになる。 <sub>`plans_the_lte_harness`</sub>
+- 全長1本線で結ぶ2つのコネクタ (3.5mm AUX) は、ピン列の間に1本線が通り、配線は無い。 <sub>`plans_a_single_line_between_two_connectors`</sub>
+- ピンは番号でも名前でも指定でき、ピンの数が芯の数と違う端は、その端と両方の数を示して断る。 <sub>`pins_by_name_and_a_count_mismatch`</sub>
+- 貫通端子台に着く1本線は、芯を端子番号1つずつに対応させ、ふだんは左の接続点、「#2」を付ければ右の接続点に着く。 <sub>`a_single_line_on_a_through_terminal_block`</sub>
+- ピンより後ろに置いた分岐点や、芯の配線の端が別の配線に乗る分岐点は、breakout_at をずらすよう伝えて断る。 <sub>`a_bad_breakout_is_refused`</sub>
 
 ### Commandエンジン (undo/redo)
 

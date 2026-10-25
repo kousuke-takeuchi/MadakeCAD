@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2872 specification clauses** across 6 areas.
+**2877 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -50,6 +50,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A run cable with more cores than its core count is the same core-overflow error as a definition-line cable. <sub>`a_run_cable_with_too_many_cores_overflows`</sub>
 - A run-cable core with both ends unassigned is reported as unassigned, with no extra floating-net or short finding. <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
 - The cable list names the devices at each end of a single-line cable (the board its breakout wires go to, the plug its run lands on) and counts the cores that have both ends as used. <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
+
+### cable_run
+
+- Planning the LTE harness draws one wire per core from the board pins to a breakout 10 mm out, runs one line from there to the plug, and maps the cores to the pins in pin order; the result is four nets. <sub>`plans_the_lte_harness`</sub>
+- Two connectors joined end to end by one line (3.5 mm AUX) get a run between their pin columns and no wires. <sub>`plans_a_single_line_between_two_connectors`</sub>
+- Pins may be given by name as well as number, and a side whose pin count differs from the core count is refused, naming the side and both counts. <sub>`pins_by_name_and_a_count_mismatch`</sub>
+- A single line landing on a through terminal block maps each core to one terminal number, using the left connection points unless "#2" picks the right ones. <sub>`a_single_line_on_a_through_terminal_block`</sub>
+- A breakout placed behind the pins, or whose wire ends would land on another wire, is refused with a hint to move breakout_at. <sub>`a_bad_breakout_is_refused`</sub>
 
 ### Command engine (undo/redo)
 
