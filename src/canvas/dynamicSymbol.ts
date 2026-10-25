@@ -5,16 +5,21 @@
 import type { Point, Primitive, PinDef, SymbolDef, SymbolInstance, TextSlot } from "../ipc";
 import {
   CONNECTOR_IN_MM,
+  CONNECTOR_LABEL_GAP_MM,
+  CONNECTOR_LABEL_INSET_MM,
+  CONNECTOR_LABEL_TOP_MM,
   CONNECTOR_LEAD_MM,
   CONNECTOR_NUM_GAP_MM,
   CONNECTOR_NUM_SIDE_MM,
   CONNECTOR_OUT_MM,
   connectorGroups,
   connectorPrimitives,
+  groupLabel,
   isConnectorKind,
   isGroupedConnector,
   outlineSegments,
   sideOffset as offset,
+  type ConnectorGroup,
   type ConnectorKind,
 } from "./connector";
 import {
@@ -454,6 +459,7 @@ function maxNameWidth(side: BlockPin[]): number {
 
 function captionInset(side: BlockPin[]): number {
   if (side.length === 0) return 0;
+  if (connectorGroups(side).some((g) => groupLabel(g) !== null)) return CONNECTOR_LABEL_INSET_MM;
   return side.some((p) => (p.name ?? "") !== "") ? 7.5 : 5.0;
 }
 
@@ -461,6 +467,21 @@ function captionInset(side: BlockPin[]): number {
 /** 左右の辺の、外形からピン名までの余白 mm (Rust側 side_pad)。 */
 function sidePad(side: BlockPin[]): number {
   return side.some((p) => p.connector != null) ? BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM : BLOCK_TEXT_PAD_MM;
+}
+
+/** 左右の辺の内側に書く文字の最大幅 mm (Rust側 side_text_width)。 */
+function sideTextWidth(side: BlockPin[]): number {
+  let width = maxNameWidth(side);
+  for (const group of connectorGroups(side)) {
+    const label = groupLabel(group);
+    if (label === null) continue;
+    const labelW = nameWidth(label);
+    const name = side[group.start].name ?? "";
+    const need =
+      group.end - group.start >= 2 || name === "" ? labelW : nameWidth(name) + CONNECTOR_LABEL_GAP_MM + labelW;
+    width = Math.max(width, need);
+  }
+  return width;
 }
 
 function sideOf(pins: BlockPins, key: (typeof BLOCK_SIDES)[number]): BlockPin[] {
@@ -601,7 +622,7 @@ export function blockBox(pins: BlockPins, size: { w: number; h: number } | null)
   const bottom = sideOf(pins, "bottom");
   const rows = Math.max(left.length, right.length);
   const cols = Math.max(top.length, bottom.length);
-  const wNames = sidePad(left) + sidePad(right) + maxNameWidth(left) + maxNameWidth(right) + BLOCK_PIN_PITCH_MM;
+  const wNames = sidePad(left) + sidePad(right) + sideTextWidth(left) + sideTextWidth(right) + BLOCK_PIN_PITCH_MM;
   const w = Math.max(BLOCK_MIN_W_MM, wNames, cols * BLOCK_PIN_PITCH_MM + BLOCK_PIN_PITCH_MM);
   const h = Math.max(
     BLOCK_MIN_H_MM,
@@ -622,6 +643,28 @@ function edgePoint(dir: BlockDir, off: number, hw: number, hh: number): Point {
 }
 
 /** 1本のピンの描き位置 (Rust側 pin_layout と同じ式)。 */
+/** コネクタのまとまりの名前の位置 (Rust側 label_at と同じ式)。 */
+function labelAt(side: BlockPin[], group: ConnectorGroup, label: string, dir: BlockDir, hw: number, hh: number): Point {
+  const n = side.length;
+  const first = offset(group.start, n);
+  const labelW = nameWidth(label);
+  const nameIn = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
+  if (dir === "left" || dir === "right") {
+    const count = group.end - group.start;
+    let y = first;
+    let start = nameIn;
+    if (count >= 2) {
+      y = first + BLOCK_PIN_PITCH_MM / 2 + BLOCK_PIN_PITCH_MM * Math.floor((count - 1) / 2);
+    } else {
+      const name = side[group.start].name ?? "";
+      if (name !== "") start = nameIn + nameWidth(name) + CONNECTOR_LABEL_GAP_MM;
+    }
+    return p(dir === "left" ? -hw + start + labelW / 2 : hw - start - labelW / 2, y);
+  }
+  const mid = (first + offset(group.end - 1, n)) / 2;
+  return p(mid, dir === "up" ? -hh + CONNECTOR_LABEL_TOP_MM : hh - CONNECTOR_LABEL_TOP_MM);
+}
+
 function pinLayout(
   bp: BlockPin,
   off: number,
@@ -724,12 +767,16 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
       const bp = side[i];
       const no = (bp.no ?? "").trim();
       const name = bp.name ?? "";
-      // まとまりの最初のピンの前に、そのまとまりの絵を描く
+      // まとまりの最初のピンの前に、そのまとまりの絵と名前を描く
       const group = groups.find((g) => g.start === i);
       if (group) {
         const edges: Point[] = [];
         for (let j = group.start; j < group.end; j++) edges.push(edgePoint(dir, offset(j, n), hw, hh));
         primitives.push(...connectorPrimitives(group.kind, dir, edges));
+        const label = groupLabel(group);
+        if (label !== null) {
+          primitives.push({ type: "text", at: labelAt(side, group, label, dir, hw, hh), text: label, height: BLOCK_PIN_TEXT_MM });
+        }
       }
       const { at, leadFrom, numAt, nameAt } = pinLayout(bp, offset(i, n), dir, hw, hh);
       primitives.push({ type: "line", pts: [leadFrom, at] });

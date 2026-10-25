@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2979仕様項目**。
+全6領域・**2981仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -40,6 +40,8 @@
 - 上辺・下辺では、コネクタのあるピンの番号は外形の外 (絵より先のリードの右) へ出て、名前は普通のピンと同じく内側に残る。 <sub>`top_and_bottom_connector_numbers_sit_beside_the_lead`</sub>
 - コネクタの無いブロックは外形の長方形1つのまま。コネクタのあるブロックは、絵が辺と交わる所だけを空けた線分で外形を描く。 <sub>`the_outline_has_gaps_exactly_at_the_pictures`</sub>
 - 外形の自動寸法は、コネクタのある辺ごとに1.5mm広がる (その辺のピン名は1.5mmではなく3mm内側から書くため)。 <sub>`the_outline_makes_room_for_connector_bodies`</sub>
+- まとまりの名前は空いた所に書く: 2〜3本のまとまりは中ほどのピンの間、1本だけならピン名の後ろ、上辺は7mm内側。JST はシリーズを書き、名前の無い端子台は何も書かない。 <sub>`group_labels_sit_in_the_free_places`</sub>
+- 外形の自動寸法はまとまりの名前の場所も取る: ピン名より広い名前で箱が広がり、まとまりの名前を書く上辺は箱の内側に10mmを取る。 <sub>`the_outline_makes_room_for_group_names`</sub>
 
 ### cable
 

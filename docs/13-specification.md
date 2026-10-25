@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2979 specification clauses** across 6 areas.
+**2981 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -40,6 +40,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - On the top and bottom sides a connector pin's number moves outside the box, right of the lead beyond the picture, while its name stays inside like a plain pin's. <sub>`top_and_bottom_connector_numbers_sit_beside_the_lead`</sub>
 - A block without connectors keeps its single outline rectangle, while a block with connectors draws the outline as lines with a gap exactly where each picture crosses the edge. <sub>`the_outline_has_gaps_exactly_at_the_pictures`</sub>
 - The automatic outline grows by 1.5 mm on each side that has a connector, because the names there start 3 mm inside instead of 1.5 mm. <sub>`the_outline_makes_room_for_connector_bodies`</sub>
+- Group names are drawn where nothing else is: between the middle pins of a 2- or 3-pin group, after the pin name for a 1-pin group, 7 mm inside on the top; JST prints its series and an unnamed screw block prints nothing. <sub>`group_labels_sit_in_the_free_places`</sub>
+- The automatic outline also makes room for group names: a name wider than the pin names widens the box, and a top side that prints a group name keeps 10 mm inside the box. <sub>`the_outline_makes_room_for_group_names`</sub>
 
 ### cable
 

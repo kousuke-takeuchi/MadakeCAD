@@ -16,7 +16,8 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 
 use crate::connector::{
-    connector_groups, connector_primitives, outline_segments, ConnectorKind, CONNECTOR_IN_MM,
+    connector_groups, connector_primitives, group_label, outline_segments, ConnectorGroup, ConnectorKind,
+    CONNECTOR_IN_MM, CONNECTOR_LABEL_GAP_MM, CONNECTOR_LABEL_INSET_MM, CONNECTOR_LABEL_TOP_MM,
     CONNECTOR_LEAD_MM, CONNECTOR_NUM_GAP_MM, CONNECTOR_NUM_SIDE_MM, CONNECTOR_OUT_MM,
 };
 use crate::geometry::Point;
@@ -145,10 +146,13 @@ fn max_name_width(side: &[BlockPin]) -> f64 {
     side.iter().map(|p| name_width(&p.name)).fold(0.0, f64::max)
 }
 
-/// 上辺・下辺のピンが外形の内側で使う高さ (mm)。番号だけなら1行、名前もあれば2行。
+/// 上辺・下辺のピンが外形の内側で使う高さ (mm)。番号だけなら1行、名前もあれば2行、
+/// コネクタのまとまりの名前を書く辺はその下にもう1行。
 fn caption_inset(side: &[BlockPin]) -> f64 {
     if side.is_empty() {
         0.0
+    } else if connector_groups(side).iter().any(|g| group_label(g).is_some()) {
+        CONNECTOR_LABEL_INSET_MM
     } else if side.iter().any(|p| !p.name.is_empty()) {
         7.5
     } else {
@@ -301,6 +305,24 @@ fn side_pad(side: &[BlockPin]) -> f64 {
     }
 }
 
+/// 左右の辺の内側に書く文字の最大幅 (mm): ピン名と、コネクタのまとまりの名前
+/// (1本だけのまとまりはピン名の後ろに続けて書くので、その合計)。
+fn side_text_width(side: &[BlockPin]) -> f64 {
+    let mut width = max_name_width(side);
+    for group in connector_groups(side) {
+        let Some(label) = group_label(&group) else { continue };
+        let label_w = name_width(&label);
+        let name = &side[group.start].name;
+        let need = if group.end - group.start >= 2 || name.is_empty() {
+            label_w
+        } else {
+            name_width(name) + CONNECTOR_LABEL_GAP_MM + label_w
+        };
+        width = width.max(need);
+    }
+    width
+}
+
 /// 外形寸法を決める。明示指定があればそれ、無ければピン数とピン名の長さから自動。
 ///
 /// 自動のときは
@@ -318,8 +340,8 @@ pub fn block_box(spec: &BlockSpec) -> (f64, f64) {
     // コネクタの無いブロックでは 1.5 + 1.5 = 3.0 で、今までの 2.0 × 1.5 と同じ値になる
     let w_names = side_pad(&pins.left)
         + side_pad(&pins.right)
-        + max_name_width(&pins.left)
-        + max_name_width(&pins.right)
+        + side_text_width(&pins.left)
+        + side_text_width(&pins.right)
         + BLOCK_PIN_PITCH_MM;
     let w = BLOCK_MIN_W_MM
         .max(w_names)
@@ -444,6 +466,47 @@ fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64) -> PinLayo
     PinLayout { at, lead_from, num_at, name_at }
 }
 
+/// コネクタのまとまりの名前の位置: 左右の2本以上はまとまりの中ほどのピンの間の空いた行、
+/// 1本だけはピン名の後ろ、上下はまとまりの中央で外形から7mm内側。
+fn label_at(list: &[BlockPin], group: &ConnectorGroup, label: &str, dir: PinDir, hw: f64, hh: f64) -> Point {
+    let n = list.len();
+    let first = offset(group.start, n);
+    let label_w = name_width(label);
+    let name_in = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
+    match dir {
+        PinDir::Left | PinDir::Right => {
+            let count = group.end - group.start;
+            let (y, start) = if count >= 2 {
+                let k = ((count - 1) / 2) as f64;
+                (first + BLOCK_PIN_PITCH_MM / 2.0 + BLOCK_PIN_PITCH_MM * k, name_in)
+            } else {
+                let name = &list[group.start].name;
+                let start = if name.is_empty() {
+                    name_in
+                } else {
+                    name_in + name_width(name) + CONNECTOR_LABEL_GAP_MM
+                };
+                (first, start)
+            };
+            let x = if dir == PinDir::Left {
+                -hw + start + label_w / 2.0
+            } else {
+                hw - start - label_w / 2.0
+            };
+            Point::new(x, y)
+        }
+        PinDir::Up | PinDir::Down => {
+            let mid = (first + offset(group.end - 1, n)) / 2.0;
+            let y = if dir == PinDir::Up {
+                -hh + CONNECTOR_LABEL_TOP_MM
+            } else {
+                hh - CONNECTOR_LABEL_TOP_MM
+            };
+            Point::new(mid, y)
+        }
+    }
+}
+
 fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     let (w, h) = block_box(spec);
     let (hw, hh) = (w / 2.0, h / 2.0);
@@ -464,12 +527,16 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
         let n = list.len();
         let groups = connector_groups(list);
         for (i, bp) in list.iter().enumerate() {
-            // まとまりの最初のピンの前に、そのまとまりの絵を描く
+            // まとまりの最初のピンの前に、そのまとまりの絵と名前を描く
             if let Some(group) = groups.iter().find(|g| g.start == i) {
                 let edges: Vec<Point> = (group.start..group.end)
                     .map(|j| edge_point(dir, offset(j, n), hw, hh))
                     .collect();
                 primitives.extend(connector_primitives(group.kind, dir, &edges));
+                if let Some(label) = group_label(group) {
+                    let at = label_at(list, group, &label, dir, hw, hh);
+                    primitives.push(text(at.x, at.y, &label, BLOCK_PIN_TEXT_MM));
+                }
             }
             let layout = pin_layout(bp, offset(i, n), dir, hw, hh);
             primitives.push(lead(layout.lead_from.x, layout.lead_from.y, layout.at.x, layout.at.y));
@@ -1101,5 +1168,45 @@ mod tests {
             (25.0, 10.0),
             "3 + 1.5 + 6 + 6 + 5 = 21.5 → 25"
         );
+    }
+
+    /// 点が (x, y) にほぼ等しいことを確かめる (文字幅の足し算の丸め誤差を許す)。
+    fn assert_near(p: Point, x: f64, y: f64) {
+        assert!((p.x - x).abs() < 1e-9 && (p.y - y).abs() < 1e-9, "{p:?} は ({x}, {y}) ではない");
+    }
+
+    /// Group names are drawn where nothing else is: between the middle pins of a 2- or 3-pin group, after the pin name for a 1-pin group, 7 mm inside on the top; JST prints its series and an unnamed screw block prints nothing.
+    /// まとまりの名前は空いた所に書く: 2〜3本のまとまりは中ほどのピンの間、1本だけならピン名の後ろ、上辺は7mm内側。JST はシリーズを書き、名前の無い端子台は何も書かない。
+    #[test]
+    fn group_labels_sit_in_the_free_places() {
+        let def = block_symbol(&attrs(&[(
+            "block_pins",
+            r#"{"left":[{"no":"1","name":"SIG","connector":"jst_ph_f","connector_ref":"J9"},
+                {"no":"2","name":"A","connector":"screw","connector_ref":"TB1"},{"no":"3","name":"B","connector":"screw","connector_ref":"TB1"},
+                {"no":"4","name":"X","connector":"jst_xh_f"},{"no":"5","name":"Y","connector":"jst_xh_f"},{"no":"6","name":"Z","connector":"jst_xh_f"},
+                {"no":"7","connector":"screw"},{"no":"8","connector":"screw"}],
+               "right":[{"no":"9","connector":"jst_ph_f"}],
+               "top":[{"no":"T1","connector":"jst_ph_f","connector_ref":"J3"},{"no":"T2","connector":"jst_ph_f","connector_ref":"J3"}]}"#,
+        )]))
+        .expect("ブロック定義");
+        // 外形 25×45 (hw = 12.5, hh = 22.5)。左辺のピンは y = -17.5, -12.5, …, 17.5
+        assert_near(text_at(&def, "J9 PH"), -1.9, -17.5); // 1本: 名前 SIG (3.6mm) の1mm後ろ
+        assert_near(text_at(&def, "TB1"), -7.7, -10.0); // 2本: 1本目と2本目の間
+        assert_near(text_at(&def, "XH"), -8.3, 5.0); // 3本: 2本目と3本目の間
+        assert_near(text_at(&def, "PH"), 8.3, 0.0); // 右辺の1本・名前なし: 3mm内側から
+        assert_near(text_at(&def, "J3 PH"), 0.0, -15.5); // 上辺: まとまりの中央、7mm内側
+        let labels = texts(&def).into_iter().filter(|(t, _)| t.contains("PH") || t.contains("XH") || t.starts_with("TB")).count();
+        assert_eq!(labels, 5, "名前の無い端子台 (7・8) には何も書かない");
+    }
+
+    /// The automatic outline also makes room for group names: a name wider than the pin names widens the box, and a top side that prints a group name keeps 10 mm inside the box.
+    /// 外形の自動寸法はまとまりの名前の場所も取る: ピン名より広い名前で箱が広がり、まとまりの名前を書く上辺は箱の内側に10mmを取る。
+    #[test]
+    fn the_outline_makes_room_for_group_names() {
+        let size = |json: &str| block_box(&parse_block_spec(&attrs(&[("block_pins", json)])).unwrap());
+        assert_eq!(size(r#"{"left":[{"no":"1","name":"SIG","connector":"jst_ph_f","connector_ref":"J9"}]}"#), (25.0, 10.0), "3 + 1.5 + (3.6 + 1 + 6) + 5 = 20.1 → 25");
+        assert_eq!(size(r#"{"left":[{"no":"1","name":"SIG","connector":"jst_ph_f"}]}"#), (20.0, 10.0), "PH だけなら 16.5 → 20");
+        assert_eq!(size(r#"{"top":[{"no":"1","connector":"jst_ph_f"},{"no":"2","connector":"jst_ph_f"}]}"#), (15.0, 15.0));
+        assert_eq!(size(r#"{"top":[{"no":"1"},{"no":"2"}]}"#), (15.0, 10.0));
     }
 }
