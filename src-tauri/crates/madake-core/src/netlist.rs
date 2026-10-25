@@ -539,7 +539,15 @@ fn build(sheet: &Sheet, symbols: &[SymbolDef], split: bool) -> (Vec<Net>, PortRe
                     Some(p) => {
                         let node = &pins[p];
                         let r = roots[pi + p];
-                        if !slots.is_port(r) {
+                        // 指定の接点がこのピンに無い (接点をすべて消したピンも含む)。かみ合わせの片側は下で扱う
+                        let missing = contact
+                            .as_ref()
+                            .filter(|x| !node.contacts.contains(x) && !(node.pass && node.contacts.is_empty() && slots.is_port(r)));
+                        if let Some(x) = missing {
+                            let list = if node.contacts.is_empty() { "なし".to_string() } else { node.contacts.join(", ") };
+                            stray(&mut report, c, core, format!("接点 {x} は {} にありません (接点: {list})", node.label()));
+                            Some(slots.single_or_residual(r))
+                        } else if !slots.is_port(r) {
                             Some(slots.first[&r])
                         } else if node.contacts.is_empty() && node.pass {
                             stray(&mut report, c, core, format!("{} はかみ合わせの片側なので、どの接点か決められません", node.label()));
@@ -552,14 +560,12 @@ fn build(sheet: &Sheet, symbols: &[SymbolDef], split: bool) -> (Vec<Net>, PortRe
                             match found {
                                 Some(s) => Some(s),
                                 None => {
-                                    let why = match contact {
-                                        Some(x) => format!("接点 {x} は {} にありません (接点: {})", node.label(), node.contacts.join(", ")),
-                                        None => format!(
-                                            "{} はポート (接点: {}) ですが、芯に接点の指定が無く、芯の名前もどの接点でもありません",
-                                            node.label(),
-                                            node.contacts.join(", ")
-                                        ),
-                                    };
+                                    // 接点の指定があればここに来る前に報告済み
+                                    let why = format!(
+                                        "{} はポート (接点: {}) ですが、芯に接点の指定が無く、芯の名前もどの接点でもありません",
+                                        node.label(),
+                                        node.contacts.join(", ")
+                                    );
                                     stray(&mut report, c, core, why);
                                     Some(slots.single_or_residual(r))
                                 }

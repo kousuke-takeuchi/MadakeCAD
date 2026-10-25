@@ -191,6 +191,24 @@ mod tests {
         assert_eq!(stray[0].severity, Severity::Error);
     }
 
+    /// A core that names a contact on a pin edited to have no contacts at all is reported as unassigned with that contact named, not silently put on the plain pin.
+    /// 接点をすべて消したピンで、接点を指定している芯は、その接点を名指しで割当て無しと報告される (黙って普通のピンに載せない)。
+    #[test]
+    fn a_core_on_a_pin_without_contacts_is_reported() {
+        let mut lte = crate::cable::test_support::lte_sheet();
+        let Entity::Symbol(mut hub) = crate::block::test_block("39", "", 200.0, 100.0, r#"{"left":[{"no":"U3"}]}"#) else { panic!() };
+        hub.id = lte.usb;
+        lte.sheet.entities.insert(lte.usb, Entity::Symbol(hub));
+        let Entity::Cable(c) = lte.sheet.entities.get_mut(&lte.cable).unwrap() else { panic!() };
+        for core in &mut c.cores {
+            core.end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "U3".into(), index: None, contact: Some(core.core.clone()) });
+        }
+        let diags = check_ports(&lte.sheet);
+        let stray: Vec<&Diagnostic> = diags.iter().filter(|d| d.code == crate::cable::CABLE_CORE_UNASSIGNED).collect();
+        assert_eq!(stray.len(), 4, "{diags:?}");
+        assert!(stray.iter().any(|d| d.message.contains("接点 D-") && d.message.contains("39:U3") && d.message.contains("接点: なし")), "{stray:?}");
+    }
+
     /// A label that is a port label on one sheet but sits on a net without a port on another sheet is a project warning, because those sheets are not joined.
     /// あるシートではポートのラベルなのに、別のシートではポートの無いネットに載っているラベルは、シートが繋がらないのでプロジェクトの警告になる。
     #[test]
