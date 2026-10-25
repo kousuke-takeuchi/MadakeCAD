@@ -206,7 +206,7 @@ Rust tests carry the two doc lines (English, then Japanese) above `#[test]`; Vit
 
 - `netlist.rs`: the LTE harness (4 wires → run → `connector_4p`) gives 4 separate nets, each with one board pin and one plug pin; a run lying along a connector's pin column joins nothing; a connector-to-connector run gives one net per core with no wire; `index` picks one side of a through terminal.
 - `cable.rs` / `verify.rs`: two cores in one net is `erc.cable_cores_shorted` (run cable and definition-line cable); a core without ends or pointing at a deleted wire is `erc.cable_core_unassigned`; a run end far from its part is `erc.cable_run_end_detached`; a breakout wire end is not dangling; pins fed only by a core are not unconnected.
-- `command.rs`: a run cable with a missing pin, a foreign wire or a wire used twice is refused; undo removes the cable and its wires in one step; `remap_refs` keeps core ends in a duplicated sheet.
+- `command.rs`: a run cable with a malformed shape (a wire used by two cores, a pin used twice, duplicate core names, an end of the wrong kind) is refused; a missing target is accepted and reported by ERC, so undo and Properties edits keep working after a target was deleted; undo removes the cable and its wires in one step; `remap_refs` keeps core ends in a duplicated sheet.
 - `reports.rs`: one From-To row per core, end to end, with the `ケーブル芯` column; breakout wires are not in the BOM wire roll-up.
 - `io.rs`: a run cable round-trips; a v16 file opens and keeps its cables; a file newer than the app is refused.
 - `svg.rs`: the run, slash mark with core count, part bar and breakout fan are drawn.
@@ -246,3 +246,4 @@ Each PR targets `master`; dependent PRs say "merge #N first" instead of stacking
 | 2026-10-25 | The spec is a draft only; no product code yet | The user asked for research and a design first. |
 | 2026-10-25 | User decisions: B; per-core wire-list rows with `ケーブル芯`; breakout wires are the cable's own cores and are not counted as loose wire (definition-line double count fixed too); `length_m` = whole cable; no shield-drain core; map by pin order; bar at part ends; same-sheet runs only; no `replace_breakout_block` helper | Answers to the open questions |
 | 2026-10-25 | Run cables are stored as entity kind `run_cable` | The user chose that old builds must refuse such files; serde ignores unknown fields, so only an unknown entity kind makes v0.4.0 and earlier fail to load instead of silently dropping data |
+| 2026-10-25 | Placing or updating a cable checks its structure only; a missing wire/part target is accepted and reported by ERC | Final review: checking target existence made undo lose a cable after separate deletes and blocked Properties edits. Matches §1 ("the end points at nothing; ERC reports it") |
