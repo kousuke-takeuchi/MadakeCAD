@@ -69,6 +69,7 @@ export interface WireNoteLabel {
 /**
  * ワイヤ属性から注記テキストを作る。書式は `{sq}sq {色} {長さ}m`。
  * 欠けている属性はその場ごと省き、全て欠けていれば空文字 (注記を描かない)。
+ * 線径も長さも無い黒 (既定の色) の配線も空文字。
  */
 export function wireNoteText(wire: Wire): string {
   const parts: string[] = [];
@@ -76,6 +77,8 @@ export function wireNoteText(wire: Wire): string {
   const color = (wire.color ?? "").trim();
   if (color) parts.push(colorDisplay(color));
   if (wire.length_m != null && wire.length_m > 0) parts.push(`${num(wire.length_m)}m`);
+  // 線径も長さも無い黒の配線は注記しない (黒は既定の色。wire_note.rsと同ルール)
+  if (parts.length === 1 && !(wire.sq > 0) && colorDisplay(color) === colorJa("black")) return "";
   return parts.join(" ");
 }
 
