@@ -9,7 +9,7 @@
 //!
 //! ベンチマーク: EPLANのケーブル定義 (ケーブル=複数の芯線をまとめた1機器、定義線とシールドで図示)。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::geometry::Point;
 use crate::model::{Cable, CoreEnd, Entity, EntityId, Project, RunEnd, Sheet};
@@ -143,8 +143,13 @@ pub fn cable_list_rows(project: &Project) -> Vec<Vec<String>> {
     for sheet in &project.sheets {
         for e in sheet.entities.values() {
             let Entity::Cable(c) = e else { continue };
-            let wires: Vec<&crate::model::Wire> = live_cores(sheet, c).collect();
-            let used = wires.len();
+            let (from, to) = if c.is_run() {
+                (run_end_devices(sheet, c, RunEnd::A), run_end_devices(sheet, c, RunEnd::B))
+            } else {
+                let wires: Vec<&crate::model::Wire> = live_cores(sheet, c).collect();
+                (end_devices(sheet, &wires, true), end_devices(sheet, &wires, false))
+            };
+            let used = used_cores(sheet, c);
             rows.push((
                 c.reference.clone(),
                 vec![
@@ -153,8 +158,8 @@ pub fn cable_list_rows(project: &Project) -> Vec<Vec<String>> {
                     c.core_count.to_string(),
                     if c.sq > 0.0 { num(c.sq) } else { String::new() },
                     c.length_m.map(num).unwrap_or_default(),
-                    end_devices(sheet, &wires, true),
-                    end_devices(sheet, &wires, false),
+                    from,
+                    to,
                     used.to_string(),
                     c.core_count.saturating_sub(used).to_string(),
                     match &c.shield {
@@ -376,6 +381,87 @@ pub fn breakout_points(sheet: &Sheet) -> Vec<Point> {
         }
     }
     out
+}
+
+/// 分岐の配線の反対側 (部品や端子台へ行く側) の端点。
+pub fn breakout_far_point(sheet: &Sheet, c: &Cable, end: RunEnd, wire: EntityId) -> Option<Point> {
+    let near = breakout_point(sheet, c, end, wire)?;
+    let Some(Entity::Wire(w)) = sheet.entities.get(&wire) else {
+        return None;
+    };
+    let (a, b) = (w.points.first()?, w.points.last()?);
+    Some(if a.distance_to(&near) < 1e-9 { *b } else { *a })
+}
+
+/// 区間ケーブルの分岐の配線 (芯そのもの。電線リストでは芯の行に畳み込む)。
+pub fn breakout_wire_ids(sheet: &Sheet) -> BTreeSet<EntityId> {
+    let mut out = BTreeSet::new();
+    for e in sheet.entities.values() {
+        let Entity::Cable(c) = e else { continue };
+        for core in &c.cores {
+            for end in RunEnd::BOTH {
+                if let Some(CoreEnd::Wire { wire }) = core.end(end) {
+                    out.insert(*wire);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// どれかのケーブルの芯になっている配線 (定義線ケーブルの芯の配線と、区間ケーブルの分岐の配線)。
+/// 部品表の電線集約から除く (ケーブル行がもう数えている)。
+pub fn core_wire_ids(sheet: &Sheet) -> BTreeSet<EntityId> {
+    let mut out = breakout_wire_ids(sheet);
+    out.extend(definition_core_labels(sheet).into_keys());
+    out
+}
+
+/// 定義線ケーブルの芯の配線 → "W1/1" (電線リストの「ケーブル芯」列)。
+pub fn definition_core_labels(sheet: &Sheet) -> BTreeMap<EntityId, String> {
+    let mut out = BTreeMap::new();
+    for e in sheet.entities.values() {
+        let Entity::Cable(c) = e else { continue };
+        for core in &c.cores {
+            if let Some(w) = core.wire {
+                out.insert(w, format!("{}/{}", c.reference, core.core));
+            }
+        }
+    }
+    out
+}
+
+/// 使っている芯の数: 定義線ケーブルは配線が今もある芯、区間ケーブルは両端のある芯。
+fn used_cores(sheet: &Sheet, c: &Cable) -> usize {
+    if c.is_run() {
+        c.cores.iter().filter(|k| k.end_a.is_some() && k.end_b.is_some()).count()
+    } else {
+        live_cores(sheet, c).count()
+    }
+}
+
+/// 区間ケーブルの端`end`側の機器 (ピンの行き先は部品の参照記号、分岐の配線は反対側の端の機器)。
+fn run_end_devices(sheet: &Sheet, c: &Cable, end: RunEnd) -> String {
+    let defs = sheet_symbol_defs(sheet);
+    let mut out: Vec<String> = Vec::new();
+    for core in &c.cores {
+        let device = match core.end(end) {
+            Some(CoreEnd::Pin { part, .. }) => match sheet.entities.get(part) {
+                Some(Entity::Symbol(s)) => s.reference.clone(),
+                _ => String::new(),
+            },
+            Some(CoreEnd::Wire { wire }) => breakout_far_point(sheet, c, end, *wire)
+                .map(|far| endpoint_label(sheet, &defs, &far))
+                .and_then(|label| label.split(':').next().map(|d| d.trim().to_string()))
+                .unwrap_or_default(),
+            None => String::new(),
+        };
+        if !device.is_empty() && !out.contains(&device) {
+            out.push(device);
+        }
+    }
+    out.sort();
+    out.join(", ")
 }
 
 /// `CoreEnd::Pin`が指すピンの用紙上の位置 (`index`番目、省略 = 最初の接続点)。
@@ -981,5 +1067,17 @@ mod tests {
             .filter(|d| ![CABLE_CORE_UNASSIGNED, "erc.unconnected_pin", "erc.dangling_wire"].contains(&d.code.as_str()))
             .collect();
         assert!(other.is_empty(), "{other:?}");
+    }
+
+    /// The cable list names the devices at each end of a single-line cable (the board its breakout wires go to, the plug its run lands on) and counts the cores that have both ends as used.
+    /// ケーブル一覧は1本線のケーブルの両端の機器 (分岐の配線が行く基板、1本線が着くプラグ) を示し、両端のある芯を使用芯と数える。
+    #[test]
+    fn the_cable_list_shows_the_ends_of_a_run_cable() {
+        let lte = test_support::lte_sheet();
+        let project = test_support::project_with(lte.sheet);
+        assert_eq!(
+            cable_list_rows(&project),
+            vec![["W45", "", "4", "0.2", "0.3", "J45", "USB1", "4", "0", "", "Sheet1"].map(String::from).to_vec()]
+        );
     }
 }

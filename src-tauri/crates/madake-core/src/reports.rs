@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::geometry::Point;
-use crate::model::{Entity, Project, Sheet, Wire};
+use crate::model::{Cable, CableCore, CoreEnd, Entity, Project, RunEnd, Sheet, Wire};
 use crate::netlist::{extract_netlist, pin_positions, Net, NetPin, CONNECT_EPS};
 use crate::symbol::{sheet_symbol_defs, SymbolDef};
 
@@ -277,8 +277,13 @@ fn wire_rollup_rows(project: &Project) -> Vec<Vec<String>> {
     let mut unassigned = 0.0_f64;
     let mut has_unassigned = false;
     for sheet in &project.sheets {
+        // ケーブルの芯の配線はケーブル行が数えるので、電線として重ねて足さない
+        let cores = crate::cable::core_wire_ids(sheet);
         for entity in sheet.entities.values() {
             let Entity::Wire(w) = entity else { continue };
+            if cores.contains(&w.id) {
+                continue;
+            }
             let len = w.length_m.unwrap_or(0.0);
             match crate::wire_parts::wire_part_number(project, w) {
                 Some(no) => *totals.entry(no).or_insert(0.0) += len,
@@ -329,7 +334,8 @@ pub fn bom_csv_with(project: &Project, catalog: &BomCatalog) -> String {
 /// **嵌合相手・備考は新設でTo列の直後に入るため、CSVは従来の9列とは非互換**
 /// (旧: シート,From,To,線番,線色,線径sq,長さm,電線品番,ハーネス。列位置で読んでいる
 /// スクリプトは直す必要がある。`docs/05-wire-management.md`参照)。
-pub const WIRE_LIST_COLUMNS: [&str; 11] = [
+/// 末尾の「ケーブル芯」(v17) はケーブルの芯の配線・区間ケーブルの芯の行で "W45/D-" になる。
+pub const WIRE_LIST_COLUMNS: [&str; 12] = [
     "シート",
     "From",
     "To",
@@ -341,6 +347,7 @@ pub const WIRE_LIST_COLUMNS: [&str; 11] = [
     "長さm",
     "電線品番",
     "ハーネス",
+    "ケーブル芯",
 ];
 
 /// ワイヤ端点1つの解決結果。ピンかネットラベルかを区別する (G18: ラベル端をネット越しに
@@ -460,7 +467,12 @@ pub fn wire_from_to(
     let (Some(a), Some(b)) = (wire.points.first(), wire.points.last()) else {
         return (String::new(), String::new(), String::new(), String::new());
     };
-    let kinds = [resolve_endpoint(sheet, defs, a), resolve_endpoint(sheet, defs, b)];
+    from_to(sheet, nets, [resolve_endpoint(sheet, defs, a), resolve_endpoint(sheet, defs, b)])
+}
+
+/// 両端の解決結果から (From, To, 嵌合相手, 備考) を組み立てる ([`wire_from_to`] と区間ケーブルの
+/// 芯の行が共有する。規則は [`wire_from_to`] の説明のとおり)。
+fn from_to(sheet: &Sheet, nets: &[Net], kinds: [EndKind; 2]) -> (String, String, String, String) {
     let mut multi = false;
     let mut no_device = false;
     let mut resolved: Vec<String> = Vec::with_capacity(2);
@@ -505,6 +517,26 @@ pub fn wire_from_to(
     (from, to, mates.join(", "), remark.to_string())
 }
 
+/// 区間ケーブルの芯の端`end`の行き先。ピンの行き先はそのピン、分岐の配線はその配線の反対側の端を
+/// 配線と同じに解決する (ピンかネットラベル)。
+fn core_end_kind(sheet: &Sheet, defs: &[SymbolDef], c: &Cable, core: &CableCore, end: RunEnd) -> EndKind {
+    match core.end(end) {
+        Some(CoreEnd::Pin { part, pin, .. }) => match sheet.entities.get(part) {
+            Some(Entity::Symbol(s)) => EndKind::Pin {
+                entity_id: s.id,
+                reference: s.reference.clone(),
+                pin: pin.clone(),
+            },
+            _ => EndKind::None,
+        },
+        Some(CoreEnd::Wire { wire }) => match crate::cable::breakout_far_point(sheet, c, end, *wire) {
+            Some(far) => resolve_endpoint(sheet, defs, &far),
+            None => EndKind::None,
+        },
+        None => EndKind::None,
+    }
+}
+
 /// From-To電線リストの行 ([`WIRE_LIST_COLUMNS`] と同じ並び)。図面シート化からも使う。
 /// 行はシート順、シート内はFrom→Toの辞書順で決定的に並ぶ。
 pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
@@ -513,11 +545,14 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
         let defs = sheet_symbol_defs(sheet);
         // ネットリストはワイヤごとではなくシートごとに1回だけ作る (G18の解決に全ワイヤが使う)
         let nets = extract_netlist(sheet, &defs);
+        // 区間ケーブルの分岐の配線は芯の行に畳み込む (別の行にしない)
+        let breakout = crate::cable::breakout_wire_ids(sheet);
+        let core_labels = crate::cable::definition_core_labels(sheet);
         let mut sheet_rows: Vec<Vec<String>> = sheet
             .entities
             .values()
             .filter_map(|e| match e {
-                Entity::Wire(w) => Some(w),
+                Entity::Wire(w) if !breakout.contains(&w.id) => Some(w),
                 _ => None,
             })
             .map(|w| {
@@ -534,9 +569,48 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
                     w.length_m.map(fmt_num).unwrap_or_default(),
                     crate::wire_parts::wire_part_number(project, w).unwrap_or_default(),
                     crate::harness::harness_name_of_wire(sheet, w),
+                    core_labels.get(&w.id).cloned().unwrap_or_default(),
                 ]
             })
             .collect();
+        // 区間ケーブルは芯1本につき端から端まで1行 (線色=芯、線径・長さ・型番=ケーブル、ハーネス=ケーブル)
+        for e in sheet.entities.values() {
+            let Entity::Cable(c) = e else { continue };
+            if !c.is_run() {
+                continue;
+            }
+            for core in &c.cores {
+                let kinds = [
+                    core_end_kind(sheet, &defs, c, core, RunEnd::A),
+                    core_end_kind(sheet, &defs, c, core, RunEnd::B),
+                ];
+                let (from, to, mate, remark) = from_to(sheet, &nets, kinds);
+                let wire_no = RunEnd::BOTH
+                    .iter()
+                    .find_map(|&end| match core.end(end) {
+                        Some(CoreEnd::Wire { wire }) => match sheet.entities.get(wire) {
+                            Some(Entity::Wire(w)) => w.net.clone(),
+                            _ => None,
+                        },
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+                sheet_rows.push(vec![
+                    sheet.name.clone(),
+                    from,
+                    to,
+                    mate,
+                    remark,
+                    wire_no,
+                    core.color.clone(),
+                    fmt_num(c.sq),
+                    c.length_m.map(fmt_num).unwrap_or_default(),
+                    c.part_no.clone(),
+                    c.reference.clone(),
+                    format!("{}/{}", c.reference, core.core),
+                ]);
+            }
+        }
         sheet_rows.sort_by(|a, b| (&a[1], &a[2], &a[5]).cmp(&(&b[1], &b[2], &b[5])));
         rows.extend(sheet_rows);
     }
@@ -938,9 +1012,9 @@ mod tests {
         let csv = wire_list_csv(&project);
         assert_eq!(
             csv.lines().next().unwrap(),
-            "シート,From,To,嵌合相手,備考,線番,線色,線径sq,長さm,電線品番,ハーネス"
+            "シート,From,To,嵌合相手,備考,線番,線色,線径sq,長さm,電線品番,ハーネス,ケーブル芯"
         );
-        assert_eq!(WIRE_LIST_COLUMNS.len(), 11);
+        assert_eq!(WIRE_LIST_COLUMNS.len(), 12);
     }
 
     /// An end of a wire that lands on a symbol pin is written as "reference:pin number" (for example K1:A1).
@@ -1418,5 +1492,93 @@ mod tests {
             .map(|r| r[1].clone())
             .collect();
         assert_eq!(froms, vec!["R1:2", "R2:2"]);
+    }
+
+    /// A single-line cable gives one From-To row per core, end to end: the board pin reached through the breakout wire, the plug pin the core lands on, the core colour, the cable gauge, length and part, the cable as harness and the "cable/core" column; its breakout wires get no rows of their own.
+    /// 1本線のケーブルは芯ごとに端から端まで1行になる: 分岐の配線の先の基板のピン、芯が着くプラグのピン、芯の色、ケーブルの線径・長さ・型番、ハーネス列にケーブル、「ケーブル/芯」の列。分岐の配線だけの行は出ない。
+    #[test]
+    fn a_run_cable_gives_one_wire_list_row_per_core() {
+        let lte = crate::cable::test_support::lte_sheet();
+        let project = crate::cable::test_support::project_with(lte.sheet);
+        let rows = wire_list_rows(&project);
+        assert_eq!(rows.len(), 4, "{rows:?}");
+        assert_eq!(
+            rows[0],
+            ["Sheet1", "J45:1", "USB1:1", "", "", "", "red", "0.2", "0.3", "", "W45", "W45/VBUS"]
+                .map(String::from)
+                .to_vec()
+        );
+        assert_eq!(rows[3][11], "W45/GND");
+    }
+
+    /// When a breakout wire ends on a net label and nothing else on the sheet carries that label (the continuation is on another sheet), the core's row shows the label name and the "none" remark.
+    /// 分岐の配線の先がネットラベルで、シート上にそのラベルを持つ他の相手が無いとき (続きは別シート)、芯の行はラベル名と備考「none」を出す。
+    #[test]
+    fn a_breakout_wire_ending_on_a_label_shows_the_label() {
+        let mut lte = crate::cable::test_support::lte_sheet();
+        // VBUS の分岐の配線を J45 から外し、上へ (77.5, 60) まで延ばしてネットラベルで終える
+        // (水平のままだと線分が J45 のピン1 (57.5, 92.5) の上を通り、ピンに繋がってしまう)
+        if let Some(Entity::Wire(w)) = lte.sheet.entities.get_mut(&lte.wires[0]) {
+            w.points = vec![Point::new(77.5, 92.5), Point::new(77.5, 60.0)];
+        }
+        let label = Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(77.5, 60.0),
+            name: "LTE_VBUS".into(),
+            rotation: 0,
+            attrs: Default::default(),
+        });
+        crate::cable::test_support::insert(&mut lte.sheet, label);
+        let project = crate::cable::test_support::project_with(lte.sheet);
+        let rows = wire_list_rows(&project);
+        let vbus = rows.iter().find(|r| r[11] == "W45/VBUS").expect("VBUS の行");
+        assert_eq!(
+            (vbus[1].as_str(), vbus[2].as_str(), vbus[4].as_str()),
+            ("LTE_VBUS", "USB1:1", REMARK_NO_DEVICE)
+        );
+    }
+
+    /// Wires that are cores of a cable (breakout wires of a single-line cable, and wires crossed by a definition line) are not added again to the BOM wire roll-up, since the cable row already counts them.
+    /// ケーブルの芯になっている配線 (1本線のケーブルの分岐の配線と、定義線が横切った配線) は、ケーブル行が数えているので部品表の電線集約に重ねて足さない。
+    #[test]
+    fn cable_core_wires_are_not_counted_as_loose_wire() {
+        let mut lte = crate::cable::test_support::lte_sheet();
+        for id in &lte.wires {
+            if let Some(Entity::Wire(w)) = lte.sheet.entities.get_mut(id) {
+                w.part_no = Some("WIRE-A".into());
+                w.length_m = Some(0.5);
+            }
+        }
+        let mut loose = crate::cable::test_support::wire(&[(10.0, 200.0), (30.0, 200.0)]);
+        loose.part_no = Some("WIRE-A".into());
+        loose.length_m = Some(1.0);
+        let loose_id = crate::cable::test_support::insert(&mut lte.sheet, Entity::Wire(loose));
+        let mut project = crate::cable::test_support::project_with(lte.sheet);
+        let wire_rows = |p: &Project| {
+            bom_rows(p)
+                .into_iter()
+                .filter(|r| r[3] == BOM_WIRE_KIND)
+                .map(|r| r[..5].to_vec())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            wire_rows(&project),
+            vec![vec![String::new(), String::new(), "WIRE-A".into(), BOM_WIRE_KIND.into(), "1.00 m".into()]]
+        );
+        // 定義線ケーブルで遊びの配線を芯1にすると、その配線も数えない
+        let defline = Cable {
+            id: Uuid::new_v4(),
+            reference: "W1".into(),
+            part_no: String::new(),
+            core_count: 1,
+            sq: 0.0,
+            points: vec![Point::new(20.0, 195.0), Point::new(20.0, 205.0)],
+            cores: vec![CableCore { core: "1".into(), wire: Some(loose_id), ..Default::default() }],
+            shield: None,
+            length_m: None,
+            run: Vec::new(),
+        };
+        crate::cable::test_support::insert(&mut project.sheets[0], Entity::Cable(defline));
+        assert!(wire_rows(&project).is_empty(), "{:?}", wire_rows(&project));
     }
 }

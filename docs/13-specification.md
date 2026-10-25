@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2868 specification clauses** across 6 areas.
+**2872 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -49,6 +49,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The breakout ends of a run cable's wires are not dangling; without the cable they would be. <sub>`breakout_ends_are_not_dangling`</sub>
 - A run cable with more cores than its core count is the same core-overflow error as a definition-line cable. <sub>`a_run_cable_with_too_many_cores_overflows`</sub>
 - A run-cable core with both ends unassigned is reported as unassigned, with no extra floating-net or short finding. <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
+- The cable list names the devices at each end of a single-line cable (the board its breakout wires go to, the plug its run lands on) and counts the cores that have both ends as used. <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
 
 ### Command engine (undo/redo)
 
@@ -706,6 +707,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A part number written on the wire itself is kept in the list even when the table says otherwise. <sub>`wire_list_keeps_a_part_number_written_on_the_wire`</sub>
 - A wire with no measured length leaves the length column empty (lengths come back from the 3D routing later). <sub>`wire_list_length_is_empty_until_it_is_known`</sub>
 - Rows are sorted by From then To within each sheet, so exporting the same drawing twice gives byte-identical files. <sub>`rows_are_sorted_by_from_then_to`</sub>
+- A single-line cable gives one From-To row per core, end to end: the board pin reached through the breakout wire, the plug pin the core lands on, the core colour, the cable gauge, length and part, the cable as harness and the "cable/core" column; its breakout wires get no rows of their own. <sub>`a_run_cable_gives_one_wire_list_row_per_core`</sub>
+- When a breakout wire ends on a net label and nothing else on the sheet carries that label (the continuation is on another sheet), the core's row shows the label name and the "none" remark. <sub>`a_breakout_wire_ending_on_a_label_shows_the_label`</sub>
+- Wires that are cores of a cable (breakout wires of a single-line cable, and wires crossed by a definition line) are not added again to the BOM wire roll-up, since the cable row already counts them. <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
 
 ### search
 

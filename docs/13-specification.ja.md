@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2868仕様項目**。
+全6領域・**2872仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -49,6 +49,7 @@
 - 区間ケーブルの芯の配線の分岐側の端は宙ぶらりんにならない (ケーブルが無ければ宙ぶらりん)。 <sub>`breakout_ends_are_not_dangling`</sub>
 - 芯数より多い芯を持つ区間ケーブルは、定義線ケーブルと同じ芯数超過のエラーになる。 <sub>`a_run_cable_with_too_many_cores_overflows`</sub>
 - 両端とも未割当の区間ケーブルの芯は「行き先なし」で報告し、浮いたネットや短絡など別の指摘を重ねない。 <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
+- ケーブル一覧は1本線のケーブルの両端の機器 (分岐の配線が行く基板、1本線が着くプラグ) を示し、両端のある芯を使用芯と数える。 <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
 
 ### Commandエンジン (undo/redo)
 
@@ -706,6 +707,9 @@
 - ワイヤ自身に書かれた品番は、表に別の品番があってもそのまま電線リストに載る。 <sub>`wire_list_keeps_a_part_number_written_on_the_wire`</sub>
 - 長さが決まっていないワイヤの長さ列は空欄になる (長さは後で3D配線から書き戻される)。 <sub>`wire_list_length_is_empty_until_it_is_known`</sub>
 - 行はシートごとにFrom→Toの順に並ぶので、同じ図面を2回出力すると全く同じファイルになる。 <sub>`rows_are_sorted_by_from_then_to`</sub>
+- 1本線のケーブルは芯ごとに端から端まで1行になる: 分岐の配線の先の基板のピン、芯が着くプラグのピン、芯の色、ケーブルの線径・長さ・型番、ハーネス列にケーブル、「ケーブル/芯」の列。分岐の配線だけの行は出ない。 <sub>`a_run_cable_gives_one_wire_list_row_per_core`</sub>
+- 分岐の配線の先がネットラベルで、シート上にそのラベルを持つ他の相手が無いとき (続きは別シート)、芯の行はラベル名と備考「none」を出す。 <sub>`a_breakout_wire_ending_on_a_label_shows_the_label`</sub>
+- ケーブルの芯になっている配線 (1本線のケーブルの分岐の配線と、定義線が横切った配線) は、ケーブル行が数えているので部品表の電線集約に重ねて足さない。 <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
 
 ### search
 

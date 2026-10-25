@@ -1570,7 +1570,7 @@ impl MadakeMcp {
         json_ok(&serde_json::json!({ "written": p.path }))
     }
 
-    #[tool(description = "From-To電線リストCSVを指定パスに書き出す(列: シート/From/To/嵌合相手/備考/線番/線色/線径sq/長さm/電線品番/ハーネス)。export_report(kind=wire-list, format=csv)と同じ中身")]
+    #[tool(description = "From-To電線リストCSVを指定パスに書き出す(列: シート/From/To/嵌合相手/備考/線番/線色/線径sq/長さm/電線品番/ハーネス/ケーブル芯。1本線のケーブルは芯ごとに端から端まで1行)。export_report(kind=wire-list, format=csv)と同じ中身")]
     fn export_wire_list(
         &self,
         Parameters(p): Parameters<ExportPathParams>,
