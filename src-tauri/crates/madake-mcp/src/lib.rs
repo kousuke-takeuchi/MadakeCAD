@@ -1480,7 +1480,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "図面の「整い具合」を数値で返す。crossings=配線の交差数(線分どうしが面で交わっている箇所。端点で出会う接続・T分岐は交差に含まない)、label_overlaps=文字の重なり数(文字が他の文字やシンボル外形に重なっている組の数。辺で接しているだけは数えない)、symbol_overlaps=シンボル外形どうしの重なり数、off_grid=2.5mmグリッドから外れているシンボル原点・配線頂点の数。全て0が理想。整えループの目標値として使う: 整える前に測り、編集したらもう一度測って数値が減ったか確かめ、改善が止まるか3回で終える。**測るシートのsheet_idは必ず指定する** (省略すると先頭シートを測るので、整えバリアントの比較のようにシートが複数あると別のシートの数値を見てしまう)"
+        description = "図面の「整い具合」を数値で返す。crossings=配線の交差数(線分どうしが面で交わっている箇所。端点で出会う接続・T分岐は交差に含まない)、label_overlaps=文字の重なり数(文字が他の文字やシンボル外形に重なっている組の数。辺で接しているだけは数えない)、symbol_overlaps=シンボル外形どうしの重なり数、off_grid=2.5mmグリッドから外れているシンボル原点・配線頂点の数。全て0が理想。整えループの目標値として使う: 整える前に測り、編集したらもう一度測って数値が減ったか確かめ、改善が止まるか3回で終える。**測るシートのsheet_idは必ず指定する** (省略すると先頭シートを測るので、整えバリアントの比較のようにシートが複数あると別のシートの数値を見てしまう)。details=数えた問題の一覧(1件ずつ kind=crossing/label_overlap/symbol_overlap/off_grid・entity_ids・texts=重なっている文字・at=場所。最大50件、省いた件数はdetails_omitted)。直す場所はdetailsで探す"
     )]
     fn get_tidy_metrics(
         &self,
@@ -1492,7 +1492,7 @@ impl MadakeMcp {
             .project()
             .sheet(sheet_id)
             .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
-        json_ok(&madake_core::tidy::tidy_metrics(
+        json_ok(&madake_core::tidy::tidy_report(
             sheet,
             &sheet_symbol_defs(sheet),
         ))

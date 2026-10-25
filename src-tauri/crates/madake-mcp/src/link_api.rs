@@ -713,19 +713,19 @@ async fn get_verify(
     Ok(Json(serde_json::json!(diags)))
 }
 
-/// 図面の整い具合 (配線交差数・ラベル/シンボルの重なり数・グリッド外の点数)。
-/// 整えループが編集の前後で比べる目標値。`sheet_id`省略で先頭シート。
+/// 図面の整い具合 (配線交差数・ラベル/シンボルの重なり数・グリッド外の点数) と、
+/// 数えた問題の一覧 (`details`)。整えループが編集の前後で比べる目標値。`sheet_id`省略で先頭シート。
 async fn get_tidy_metrics(
     State(doc): State<SharedDoc>,
     Query(q): Query<NetlistQuery>,
-) -> Result<Json<madake_core::tidy::TidyMetrics>, ApiError> {
+) -> Result<Json<madake_core::tidy::TidyReport>, ApiError> {
     let engine = doc.engine.lock().unwrap();
     let sheet = match q.sheet_id {
         Some(id) => engine.project().sheet(id),
         None => engine.project().sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    Ok(Json(madake_core::tidy::tidy_metrics(
+    Ok(Json(madake_core::tidy::tidy_report(
         sheet,
         &sheet_symbol_defs(sheet),
     )))
