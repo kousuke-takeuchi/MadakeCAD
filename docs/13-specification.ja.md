@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2981仕様項目**。
+全6領域・**2984仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -42,6 +42,7 @@
 - 外形の自動寸法は、コネクタのある辺ごとに1.5mm広がる (その辺のピン名は1.5mmではなく3mm内側から書くため)。 <sub>`the_outline_makes_room_for_connector_bodies`</sub>
 - まとまりの名前は空いた所に書く: 2〜3本のまとまりは中ほどのピンの間、1本だけならピン名の後ろ、上辺は7mm内側。JST はシリーズを書き、名前の無い端子台は何も書かない。 <sub>`group_labels_sit_in_the_free_places`</sub>
 - 外形の自動寸法はまとまりの名前の場所も取る: ピン名より広い名前で箱が広がり、まとまりの名前を書く上辺は箱の内側に10mmを取る。 <sub>`the_outline_makes_room_for_group_names`</sub>
+- Task 5〜6 の挙動の回帰テスト (最初から通る): 全種類のコネクタ・普通のピン・1〜4文字のピン番号・ピン名・まとまりの名前を並べても、文字同士は重ならず、文字が絵・リード・外形に重ならない (AOGU のハブとアンプも含む)。 <sub>`connector_texts_never_overlap`</sub>
 
 ### cable
 
@@ -848,6 +849,7 @@
 
 - 出力SVGにはJIS図枠・表題欄の文字・配線・参照記号が含まれる。 <sub>`svg_contains_frame_wire_and_symbol`</sub>
 - ブロックシンボルは、インスタンスの属性から外形・ピン番号・ピン名まで描かれる。 <sub>`svg_draws_block_outline_with_pin_numbers_and_names`</sub>
+- Task 5 の挙動の回帰テスト (最初から通る): プラグの黒い差し込みは、コネクタの無い同じブロックより黒く塗った多角形が1つ多い形で描かれるので、この SVG から作る PDF・PNG にも出る。 <sub>`svg_draws_a_plug_insert_as_a_black_polygon`</sub>
 - jis-a3図枠テンプレートで描いた図枠は、これまで出力してきたJIS図枠とSVGの1文字まで同一である(外枠・ゾーン目盛・改訂欄・表題欄の全セル)。 <sub>`the_jis_a3_template_reproduces_the_previous_frame_exactly`</sub>
 - 改訂の無い空のA4シートも従来どおりの図枠を出す(改訂欄は描かれず、表題欄のセルは空欄のまま残る)。 <sub>`an_empty_sheet_reproduces_the_previous_frame_exactly`</sub>
 - A4縦テンプレートでは190×277の図枠が描かれ、110mm幅の表題欄が右下に、ゾーン目盛は同じ4×6で出る。 <sub>`the_a4_portrait_template_draws_a_narrower_frame_and_title_block`</sub>
@@ -1233,6 +1235,7 @@
 - シートの用紙の外に出ているエンティティは、動かしたり消したりせずに`erc.outside_paper`として報告される。 <sub>`an_entity_outside_the_paper_is_reported`</sub>
 - 未接続ピンはシンボルごとに1件の警告として、該当ピン番号を列挙して報告される。 <sub>`unconnected_pins_are_reported_per_symbol`</sub>
 - ブロックの未接続ピンはピン名で列挙されるので、コントローラの未配線入力が番号ではなく名前で分かる。 <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
+- Task 5 の挙動の回帰テスト (最初から通る): 配線済みのピンにコネクタを付けると接続点が2.5mm外へ動き、ERC がそれを知らせる: まっすぐの配線はピンに届いたまま端が浮き、横へ出ていた配線ではピンが未接続として名前で挙がる。 <sub>`a_wired_pin_that_gets_a_connector_is_flagged_by_erc`</sub>
 - 端子台の端子は左右どちらか一方が結線されていれば接続済みとみなす。 <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - 参照記号の未設定・重複は指摘されるが、リレーのコイル+接点が同じ記号を共有するのは正当として許容される。 <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
 - 同じ参照記号を持つプラグとソケットは1つの嵌合コネクタなので重複エラーにならないが、無関係な部品と同じ記号のプラグは指摘される。 <sub>`a_plug_and_socket_may_share_a_designator`</sub>

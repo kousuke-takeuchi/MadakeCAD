@@ -1209,4 +1209,86 @@ mod tests {
         assert_eq!(size(r#"{"top":[{"no":"1","connector":"jst_ph_f"},{"no":"2","connector":"jst_ph_f"}]}"#), (15.0, 15.0));
         assert_eq!(size(r#"{"top":[{"no":"1"},{"no":"2"}]}"#), (15.0, 10.0));
     }
+
+    /// 正の面積で重なるか (辺が触れるだけは重ならない)。幅0の線分の箱にもそのまま使える。
+    fn overlaps(a: (Point, Point), b: (Point, Point)) -> bool {
+        a.0.x < b.1.x - 1e-9 && b.0.x < a.1.x - 1e-9 && a.0.y < b.1.y - 1e-9 && b.0.y < a.1.y - 1e-9
+    }
+
+    /// 仕様 §2.5 の重なりの決まりを1つのブロックで確かめる。
+    fn assert_nothing_overlaps(json: &str) {
+        use crate::connector::primitive_extent;
+        let a = attrs(&[("block_pins", json)]);
+        let spec = parse_block_spec(&a).expect("ピン表");
+        let def = block_symbol(&a).expect("ブロック定義");
+        let (w, h) = block_box(&spec);
+        let (hw, hh) = (w / 2.0, h / 2.0);
+        // 普通のピンの番号は今でも外形をまたぐことがある (仕様 §2.5 (c) の対象外)
+        let plain_numbers: Vec<&str> = spec.pins.all().filter(|p| p.connector.is_none()).map(|p| p.no.trim()).collect();
+        let text_boxes: Vec<(String, (Point, Point))> = def
+            .primitives
+            .iter()
+            .filter_map(|p| match p {
+                Primitive::Text { at, text, height } => {
+                    let half = crate::tidy::text_width(text, *height) / 2.0;
+                    let lo = Point::new(at.x - half, at.y - height / 2.0);
+                    let hi = Point::new(at.x + half, at.y + height / 2.0);
+                    Some((text.clone(), (lo, hi)))
+                }
+                _ => None,
+            })
+            .collect();
+        let mut pictures = Vec::new();
+        for (list, dir) in [
+            (&spec.pins.left, PinDir::Left),
+            (&spec.pins.right, PinDir::Right),
+            (&spec.pins.top, PinDir::Up),
+            (&spec.pins.bottom, PinDir::Down),
+        ] {
+            let n = list.len();
+            for g in connector_groups(list) {
+                let edges: Vec<Point> = (g.start..g.end).map(|j| edge_point(dir, offset(j, n), hw, hh)).collect();
+                let prims = connector_primitives(g.kind, dir, &edges);
+                let (lo, hi) = prims.iter().map(primitive_extent).fold(
+                    (Point::new(f64::INFINITY, f64::INFINITY), Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY)),
+                    |(lo, hi), (a, b)| (Point::new(lo.x.min(a.x), lo.y.min(a.y)), Point::new(hi.x.max(b.x), hi.y.max(b.y))),
+                );
+                pictures.push((lo, hi));
+            }
+        }
+        let leads: Vec<(Point, Point)> = def
+            .pins
+            .iter()
+            .map(|p| {
+                let (from, to) = lead_to(&def, p.at);
+                primitive_extent(&lead(from.x, from.y, to.x, to.y))
+            })
+            .collect();
+        let outline: Vec<(Point, Point)> = outline_segments(&spec.pins, hw, hh).iter().map(primitive_extent).collect();
+        for (i, (ta, a)) in text_boxes.iter().enumerate() {
+            for (tb, b) in &text_boxes[i + 1..] {
+                assert!(!overlaps(*a, *b), "文字 {ta} と {tb} が重なる");
+            }
+            for p in &pictures {
+                assert!(!overlaps(*a, *p), "文字 {ta} が絵 {p:?} に重なる");
+            }
+            for l in &leads {
+                assert!(!overlaps(*a, *l), "文字 {ta} がリード {l:?} に重なる");
+            }
+            if !plain_numbers.contains(&ta.as_str()) {
+                for o in &outline {
+                    assert!(!overlaps(*a, *o), "文字 {ta} が外形 {o:?} に重なる");
+                }
+            }
+        }
+    }
+
+    /// Regression test for Tasks 5-6 (already passes): with connectors of every kind, plain pins, pin numbers of one to four characters, names and group names, no two texts overlap and no text covers a picture, a lead or the box outline (the AOGU hub and amplifier included).
+    /// Task 5〜6 の挙動の回帰テスト (最初から通る): 全種類のコネクタ・普通のピン・1〜4文字のピン番号・ピン名・まとまりの名前を並べても、文字同士は重ならず、文字が絵・リード・外形に重ならない (AOGU のハブとアンプも含む)。
+    #[test]
+    fn connector_texts_never_overlap() {
+        for json in [MIXED, HUB_39, AMP_53, TOP_BOTTOM] {
+            assert_nothing_overlaps(json);
+        }
+    }
 }

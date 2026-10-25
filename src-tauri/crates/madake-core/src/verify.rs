@@ -916,6 +916,30 @@ mod tests {
         assert!(!unconn[0].message.contains("OUT1"), "{}", unconn[0].message);
     }
 
+    /// Regression test for Task 5 (already passes): a wired pin that gets a connector moves 2.5 mm outward and ERC says so: a straight wire still reaches the pin but leaves a dangling end, and a wire that left sideways leaves the pin named as unconnected.
+    /// Task 5 の挙動の回帰テスト (最初から通る): 配線済みのピンにコネクタを付けると接続点が2.5mm外へ動き、ERC がそれを知らせる: まっすぐの配線はピンに届いたまま端が浮き、横へ出ていた配線ではピンが未接続として名前で挙がる。
+    #[test]
+    fn a_wired_pin_that_gets_a_connector_is_flagged_by_erc() {
+        // 幅15mmのブロック: 右ピン OUT1 は普通なら (110, 50)、コネクタ付きなら (112.5, 50)
+        let sheet_of = |pins: &str, points: &[(f64, f64)]| {
+            sheet_with(vec![
+                crate::block::test_block("U1", "", 100.0, 50.0, pins),
+                symbol("resistor", "R1", 150.0, 50.0),
+                wire(points),
+            ])
+        };
+        let has = |sheet: &Sheet, code: &str, needle: &str| run(sheet).iter().any(|d| d.code == code && d.message.contains(needle));
+        let plain = r#"{"right":[{"no":"OUT1"}]}"#;
+        let usb = r#"{"right":[{"no":"OUT1","connector":"usb_a_f"}]}"#;
+        let straight = [(110.0, 50.0), (142.5, 50.0)];
+        let sideways = [(110.0, 50.0), (110.0, 80.0)];
+        assert!(!has(&sheet_of(plain, &straight), "erc.dangling_wire", ""));
+        assert!(!has(&sheet_of(plain, &sideways), "erc.unconnected_pin", "U1: "));
+        assert!(has(&sheet_of(usb, &straight), "erc.dangling_wire", ""));
+        assert!(!has(&sheet_of(usb, &straight), "erc.unconnected_pin", "U1: "), "まっすぐの配線はまだピンに届く");
+        assert!(has(&sheet_of(usb, &sideways), "erc.unconnected_pin", "U1: 未接続のピン: OUT1"));
+    }
+
     /// A terminal-block terminal counts as connected if either its left or right side is wired.
     /// 端子台の端子は左右どちらか一方が結線されていれば接続済みとみなす。
     #[test]

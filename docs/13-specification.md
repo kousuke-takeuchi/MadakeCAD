@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2981 specification clauses** across 6 areas.
+**2984 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -42,6 +42,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The automatic outline grows by 1.5 mm on each side that has a connector, because the names there start 3 mm inside instead of 1.5 mm. <sub>`the_outline_makes_room_for_connector_bodies`</sub>
 - Group names are drawn where nothing else is: between the middle pins of a 2- or 3-pin group, after the pin name for a 1-pin group, 7 mm inside on the top; JST prints its series and an unnamed screw block prints nothing. <sub>`group_labels_sit_in_the_free_places`</sub>
 - The automatic outline also makes room for group names: a name wider than the pin names widens the box, and a top side that prints a group name keeps 10 mm inside the box. <sub>`the_outline_makes_room_for_group_names`</sub>
+- Regression test for Tasks 5-6 (already passes): with connectors of every kind, plain pins, pin numbers of one to four characters, names and group names, no two texts overlap and no text covers a picture, a lead or the box outline (the AOGU hub and amplifier included). <sub>`connector_texts_never_overlap`</sub>
 
 ### cable
 
@@ -848,6 +849,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - The exported SVG contains the JIS frame, the title block text, wires and reference designators. <sub>`svg_contains_frame_wire_and_symbol`</sub>
 - A block symbol is drawn with its outline, its pin numbers and its pin names, taken from the instance attributes. <sub>`svg_draws_block_outline_with_pin_numbers_and_names`</sub>
+- Regression test for Task 5 (already passes): a plug's black insert is drawn as one more black-filled polygon than the same block without the connector, so PDF and PNG, which are made from this SVG, show it too. <sub>`svg_draws_a_plug_insert_as_a_black_polygon`</sub>
 - Drawing the jis-a3 frame template produces exactly the JIS frame this program has always printed, down to the last character of the SVG (frame, zone ticks, revision table and every title-block cell). <sub>`the_jis_a3_template_reproduces_the_previous_frame_exactly`</sub>
 - An empty A4 sheet with no revisions also prints exactly the frame it always did: no revision table, and the title-block cells left blank rather than dropped. <sub>`an_empty_sheet_reproduces_the_previous_frame_exactly`</sub>
 - The A4 portrait template prints a 190x277 frame with its 110 mm title block in the bottom-right corner, and the same 4x6 zone ticks. <sub>`the_a4_portrait_template_draws_a_narrower_frame_and_title_block`</sub>
@@ -1233,6 +1235,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An entity that falls outside the sheet's current paper bounds is reported as `erc.outside_paper`, without being moved or removed from the drawing. <sub>`an_entity_outside_the_paper_is_reported`</sub>
 - Unconnected pins are reported as one warning per symbol, listing the affected pin numbers. <sub>`unconnected_pins_are_reported_per_symbol`</sub>
 - Unconnected pins of a block are listed by their pin names, so a controller's dangling input is named, not numbered. <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
+- Regression test for Task 5 (already passes): a wired pin that gets a connector moves 2.5 mm outward and ERC says so: a straight wire still reaches the pin but leaves a dangling end, and a wire that left sideways leaves the pin named as unconnected. <sub>`a_wired_pin_that_gets_a_connector_is_flagged_by_erc`</sub>
 - A terminal-block terminal counts as connected if either its left or right side is wired. <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - Missing and duplicate reference designators are flagged, but relay coil + contacts legitimately share one designator. <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
 - A plug and a socket that share one designator are one mated connector, so they raise no duplicate error, while a plug sharing a designator with an unrelated part still does. <sub>`a_plug_and_socket_may_share_a_designator`</sub>
