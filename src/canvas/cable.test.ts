@@ -1,7 +1,21 @@
 // 多芯ケーブル (M4 §5) の作図領域側の仕様テスト。芯線割当そのものはRust側のテストが正。
 import { describe, expect, it } from "vitest";
-import type { Cable, Entity, Sheet } from "../ipc";
-import { cableAddCommand, cableHit, cableLabel, cablePoints, coreEndPin, isCable, nextCableReference, shieldEllipse } from "./cable";
+import type { Cable, CableCore, Entity, Sheet } from "../ipc";
+import {
+  cableAddCommand,
+  cableHit,
+  cableLabel,
+  cablePoints,
+  coreEndPin,
+  isCable,
+  nextCableReference,
+  runBars,
+  runCountAt,
+  runFans,
+  runLabelAt,
+  runSlash,
+  shieldEllipse,
+} from "./cable";
 
 function cable(over: Partial<Cable> = {}): Cable {
   return {
@@ -20,6 +34,21 @@ function cable(over: Partial<Cable> = {}): Cable {
 
 function sheet(entities: Sheet["entities"] = {}): Sheet {
   return { id: "s1", name: "Sheet1", entities } as unknown as Sheet;
+}
+
+/** LTEハーネス45 (Rust側 test_support::lte_sheet と同じ座標): J45 のピン x=57.5 から配線4本が x=77.5 まで出て、区間 (80,100)→(192.5,100) が反転した USB1 (ピン x=192.5) に着く。 */
+function lteSheet(): Sheet {
+  const sym = (id: string, reference: string, x: number, mirror: boolean) => ({
+    kind: "symbol", id, symbol_id: "connector_4p", at: { x, y: 100 }, rotation: 0, mirror, reference, value: "", attrs: {},
+  });
+  const entities: Record<string, unknown> = { j45: sym("j45", "J45", 50, false), usb: sym("usb", "USB1", 200, true) };
+  const cores: CableCore[] = ["VBUS", "D-", "D+", "GND"].map((core, i) => {
+    const y = 92.5 + 5 * i;
+    entities[`w${i}`] = { kind: "wire", id: `w${i}`, points: [{ x: 57.5, y }, { x: 77.5, y }], color: "black", sq: 0.3, length_m: null, part_no: null, net: null };
+    return { core, color: "", wire: null, end_a: { kind: "wire" as const, wire: `w${i}` }, end_b: { kind: "pin" as const, part: "usb", pin: String(i + 1) } };
+  });
+  entities.w45 = { kind: "run_cable", ...cable({ id: "w45", reference: "W45", points: [], cores, run: [{ x: 80, y: 100 }, { x: 192.5, y: 100 }] }) };
+  return sheet(entities as Sheet["entities"]);
 }
 
 describe("多芯ケーブル", () => {
@@ -78,5 +107,31 @@ describe("多芯ケーブル", () => {
     expect(coreEndPin(s, { kind: "pin", part: "usb", pin: "2" })).toBe("USB1.2");
     expect(coreEndPin(s, { kind: "pin", part: "gone", pin: "1" })).toBe("?.1");
     expect(coreEndPin(s, { kind: "wire", wire: "w1" })).toBeNull();
+  });
+
+  // ja: 区間ケーブルの印は区間のいちばん長い線分の中点を通る45度の斜線で、芯数の文字・注記・シールドの楕円もそこを基準にする (Rust側と同じ)
+  it("marks a run with a slash through the middle of its longest segment, like the printed sheet", () => {
+    const c = cable({ points: [], run: [{ x: 80, y: 100 }, { x: 192.5, y: 100 }] });
+    expect(runSlash(c)).toEqual([{ x: 134.75, y: 101.5 }, { x: 137.75, y: 98.5 }]);
+    expect(runCountAt(c)).toEqual({ x: 138.25, y: 98 });
+    expect(runLabelAt(c)).toEqual({ x: 139.75, y: 104 });
+    expect(shieldEllipse(c)).toEqual({ center: { x: 136.25, y: 100 }, rx: 3, ry: 2, angle: -Math.PI / 4 });
+  });
+
+  // ja: 部品に着く端は着いたピンの先を結ぶ棒、分岐の端は区間の端から各芯の配線の端への扇になる
+  it("draws a bar across the landed pins and a fan to each breakout wire", () => {
+    const s = lteSheet();
+    const c = s.entities.w45 as Cable;
+    expect(runBars(s, c, new Map())).toEqual([[{ x: 192.5, y: 92.5 }, { x: 192.5, y: 107.5 }]]);
+    const fans = runFans(s, c);
+    expect(fans).toHaveLength(4);
+    expect(fans[1]).toEqual({ from: { x: 80, y: 100 }, to: { x: 77.5, y: 97.5 }, core: "D-" });
+  });
+
+  // ja: 区間ケーブルは区間の線の近くをクリックすると掴める
+  it("is picked by clicking near its run", () => {
+    const c = cable({ points: [], run: [{ x: 80, y: 100 }, { x: 192.5, y: 100 }] });
+    expect(cableHit(c, { x: 120, y: 100.5 }, 1)).toBe(true);
+    expect(cableHit(c, { x: 120, y: 105 }, 1)).toBe(false);
   });
 });

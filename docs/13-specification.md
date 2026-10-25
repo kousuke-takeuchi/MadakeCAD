@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2885 specification clauses** across 6 areas.
+**2888 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1975,6 +1975,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - is picked by clicking near its definition line <sub>`多芯ケーブル`</sub>
 - recognises both cable kinds and lists the points of the run <sub>`多芯ケーブル`</sub>
 - names a pin end by designator and pin, and a breakout wire end as null <sub>`多芯ケーブル`</sub>
+- marks a run with a slash through the middle of its longest segment, like the printed sheet <sub>`多芯ケーブル`</sub>
+- draws a bar across the landed pins and a fan to each breakout wire <sub>`多芯ケーブル`</sub>
+- is picked by clicking near its run <sub>`多芯ケーブル`</sub>
 
 ### deviceTree
 

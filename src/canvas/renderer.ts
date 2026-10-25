@@ -1338,7 +1338,7 @@ export function renderSheet(
     ctx.stroke();
   }
   for (const e of cables) {
-    drawCable(ctx, vp, e, opts.selection.has(e.id));
+    drawCable(ctx, vp, e, opts.selection.has(e.id), sheet, defs);
   }
   for (const e of entities) {
     if (e.kind !== "symbol") continue;
