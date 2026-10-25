@@ -458,7 +458,7 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
     }
     // 参照記号と型番/値をシンボル外形の上に併記(縦長シンボルでも重ならない)
     let top = symbol_top_y(inst, def);
-    if !inst.reference.is_empty() {
+    if inst.shows_reference() {
         text_el(out, inst.at.x, top - REF_LABEL_DY, LABEL_FONT, "#000", "middle", &inst.reference);
     }
     if !inst.value.is_empty() {
@@ -2550,6 +2550,21 @@ mod tests {
         let project = relay_project();
         let svg = sheet_to_svg(&project.sheets[0], &builtin_symbols(), &[]);
         assert!(!svg.contains(">13-14<"), "{svg}");
+    }
+
+    /// A symbol whose "hide_reference" attribute is "true" keeps its designator in the data but does not print it, so one half of a mated plug/socket pair does not draw the same designator twice.
+    /// `hide_reference`属性が`"true"`のシンボルは、参照記号をデータには持ったまま印字しないので、嵌合するプラグ/ソケットの片方が同じ記号を二重に描かない。
+    #[test]
+    fn svg_does_not_print_a_hidden_designator() {
+        let shown = connector_entity("J5", None, 100.0, 50.0);
+        let Entity::Symbol(mut hidden) = connector_entity("J6", None, 150.0, 50.0) else {
+            unreachable!()
+        };
+        hidden.attrs.insert(crate::model::HIDE_REFERENCE_ATTR.into(), "true".into());
+        let sheet = sheet_with(vec![shown, Entity::Symbol(hidden)]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
+        assert!(svg.contains(">J5<"), "{svg}");
+        assert!(!svg.contains(">J6<"), "{svg}");
     }
 
     /// A coil whose "device_block" attribute is "true" is drawn as one outline with its designator, part number and contact image, instead of the small coil symbol and the separate hanging contact map.

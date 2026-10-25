@@ -252,7 +252,7 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                     continue;
                 };
                 let top = crate::svg::symbol_top_y(s, &def);
-                if !s.reference.is_empty() {
+                if s.shows_reference() {
                     boxes.push(TextBox {
                         rect: text_box(
                             s.at.x,
@@ -963,6 +963,20 @@ mod tests {
             wire(&[(50.0, 50.1), (92.6, 50.0)]),
         ]);
         assert_eq!(off_grid_count(&sheet), 3);
+    }
+
+    /// A hidden designator takes no space in the tidy metrics, because it is not printed.
+    /// 印字しない参照記号は、整えメトリクスの文字の当たり判定に入らない。
+    #[test]
+    fn a_hidden_designator_has_no_text_box() {
+        let Entity::Symbol(mut s) = symbol("resistor", (100.0, 100.0), "R1") else {
+            unreachable!()
+        };
+        let shown = text_boxes(&sheet_with(vec![Entity::Symbol(s.clone())]), &builtin_symbols());
+        assert!(shown.iter().any(|b| b.kind == TextKind::Reference));
+        s.attrs.insert(crate::model::HIDE_REFERENCE_ATTR.into(), "true".into());
+        let hidden = text_boxes(&sheet_with(vec![Entity::Symbol(s)]), &builtin_symbols());
+        assert!(!hidden.iter().any(|b| b.kind == TextKind::Reference));
     }
 
     /// An empty sheet is perfectly tidy: every metric is zero.
