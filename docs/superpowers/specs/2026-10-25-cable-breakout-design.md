@@ -1,6 +1,6 @@
 # Cable breakout: one line on one end, separate cores on the other
 
-Date: 2026-10-25 · Status: draft, waiting for the user's answers to the open questions · Japanese: [2026-10-25-cable-breakout-design.ja.md](2026-10-25-cable-breakout-design.ja.md)
+Date: 2026-10-25 · Status: decisions made by the user, awaiting spec review · Japanese: [2026-10-25-cable-breakout-design.ja.md](2026-10-25-cable-breakout-design.ja.md)
 
 ## Goal
 
@@ -154,9 +154,9 @@ Because every netlist consumer goes through `extract_netlist`, ERC `erc.unconnec
 
 ### 4. Wire list, cable list, BOM (`reports.rs`, `cable.rs`)
 
-- **Wire list (From-To)**: one row per core of a run cable, end to end. From/To follow each end: a `Pin` end is `USB1:2`; a `Wire` end is the far end of that wire, resolved as today (pin or net label, G18). Colour from the core, gauge from the cable, harness column = cable reference. The breakout wires do not get their own rows (they are part of the core). New last column `ケーブル芯` (`W45/D-`), appended so scripts that read by column position keep working. *Open question 2.*
+- **Wire list (From-To)**: one row per core of a run cable, end to end. From/To follow each end: a `Pin` end is `USB1:2`; a `Wire` end is the far end of that wire, resolved as today (pin or net label, G18). Colour from the core, gauge from the cable, harness column = cable reference. The breakout wires do not get their own rows (they are part of the core). New last column `ケーブル芯` (`W45/D-`), appended so scripts that read by column position keep working.
 - **Cable list**: From/To devices also come from `Pin` ends; used cores = cores with both ends set.
-- **BOM**: the cable row is unchanged (per part number). Breakout wires of a run cable are **not** added to the wire roll-up (they are the cable's cores). *Open question 3* decides whether the same rule applies to definition-line cables, which are double counted today.
+- **BOM**: the cable row is unchanged (per part number). Breakout wires of a run cable are **not** added to the wire roll-up (they are the cable's cores). The same rule now applies to definition-line cables: a `Wire` that is a core of any cable is left out of the wire roll-up (fixes today's double count).
 
 ### 5. Drawing (`svg.rs`, `src/canvas/cable.ts`)
 
@@ -169,8 +169,8 @@ Because every netlist consumer goes through `extract_netlist`, ERC `erc.unconnec
 ### 6. File format and compatibility
 
 - `FORMAT_VERSION` 17. Old files open unchanged (all new fields default to empty); a file without run cables saves byte-for-byte as before apart from the version number.
-- Add to `load_project`: refuse a file whose `format_version` is **newer than the app** with a clear message. This protects every later format change. Builds released before this change will still open a v17 file and drop the runs silently. *Open question 7.*
-- Converting the fake breakout blocks in the AOGU drawing: an optional MCP helper `replace_breakout_block` (block id → run cable with the same pin mapping). *Open question 8.*
+- Add to `load_project`: refuse a file whose `format_version` is **newer than the app** with a clear message. This protects every later format change. A cable that has a run is stored under a new entity kind `run_cable` (same struct as `cable`), so builds released before this change fail to load the file (unknown entity kind) instead of silently dropping the runs. Cables without a run keep the `cable` kind.
+- Converting the fake breakout blocks in the AOGU drawing: redraw them with `connect_cable` once it exists; no `replace_breakout_block` helper.
 
 ### 7. Agent-facing MCP API
 
@@ -220,25 +220,27 @@ Each PR targets `master`; dependent PRs say "merge #N first" instead of stacking
 3. Drawing: SVG and canvas rendering, run tool, Properties core table.
 4. MCP `connect_cable`, docs (`05-wire-management`, `10-automation-api`), skill update. Then redraw LTE 45/46, debug 58 and amp power 54 in the AOGU drawing.
 
-## Open questions for the user
+## Decisions on the open questions (2026-10-25)
 
-1. **Approach**: extend `Cable` (B, recommended) or add a separate `Bundle` entity (A)?
-2. **Wire list rows**: one end-to-end row per core with the breakout wires folded in (recommended), or keep a row per breakout wire plus a row per core? Is a new last column `ケーブル芯` acceptable?
-3. **Is the breakout wire the same conductor as the core?** In LTE 45/46, are the JST-side wires the USB cable's own cores (jacket stripped back) or separate wires spliced on? This decides whether breakout wires count as loose wire in the BOM. And should the existing definition-line cables stop double counting their core wires in the BOM wire roll-up?
-4. **Length**: does `length_m` mean the whole cable, or only the single-line part, with each breakout tail keeping its own wire length?
-5. **Shield / drain**: should a shield drain be a core (for example `SH` landing on a pin), in addition to the existing shield flag?
-6. **Pin mapping default**: map cores to pins by order (recommended), or by matching core names to pin names when they exist?
-7. **Old builds**: accept that builds older than this change open a v17 file and silently drop the runs, or make run cables a new entity variant so old builds refuse the file?
-8. **Existing fake breakout blocks**: redraw by hand / by agent, or build the `replace_breakout_block` helper?
-9. **Part-end look**: bar across the landed pins (recommended), or the line ending at one point on the part outline?
-10. **Scope**: is "both ends of a run on the same sheet" enough for now (cross-sheet continues through net labels on the breakout wires)?
+1. Approach: B, extend `Cable`.
+2. Wire list: one end-to-end row per core, breakout wires folded in, new last column `ケーブル芯`.
+3. Breakout wires are the cable's own cores (jacket stripped back, e.g. LTE 45/46 crimped into JST XH). They are not counted as loose wire in the BOM, and the existing double count of definition-line cable cores is fixed too.
+4. `length_m` is the whole cable (the length bought and cut), including the breakout tails.
+5. Shield drain as a core: not in this change.
+6. Core-to-pin mapping default: by pin order.
+7. Old builds must not open a file with run cables: run cables use the new entity kind `run_cable`; `load_project` also refuses files newer than the app.
+8. Existing fake breakout blocks: redrawn with `connect_cable`; no helper tool.
+9. Part end: a bar across the landed pins.
+10. Scope: both ends of a run on the same sheet; across sheets continue through net labels on breakout wires.
 
 ## Decision log
 
 | Date | Decision | Why |
 |---|---|---|
 | 2026-10-25 | Core identity across a single line is set by explicit core-to-pin / core-to-wire assignments, never by touching | The netlist joins a pin to any point of a wire, so a single line over a connector's pin column shorts every pin. EPLAN (bundle designations) and KiCad (bus member labels) also avoid geometric joins. |
-| 2026-10-25 | Recommend extending `Cable` (B) over a new `Bundle` entity (A) or a bus wire (C) | One object per physical cable; reuses the cable list, BOM rows and Properties. C cannot land a single line on a plug and depends on labels. Pending the user's answer to question 1. |
+| 2026-10-25 | Recommend extending `Cable` (B) over a new `Bundle` entity (A) or a bus wire (C) | One object per physical cable; reuses the cable list, BOM rows and Properties. C cannot land a single line on a plug and depends on labels. The user chose B. |
 | 2026-10-25 | Nets may exist without a wire (cable core only) | Needed for a connector-to-connector single-line cable; core-only nets are named after wire nets so existing names do not move. |
 | 2026-10-25 | Add a newer-format refusal to `load_project` with format 17 | serde ignores unknown fields, so without it older apps silently drop new data. |
 | 2026-10-25 | The spec is a draft only; no product code yet | The user asked for research and a design first. |
+| 2026-10-25 | User decisions: B; per-core wire-list rows with `ケーブル芯`; breakout wires are the cable's own cores and are not counted as loose wire (definition-line double count fixed too); `length_m` = whole cable; no shield-drain core; map by pin order; bar at part ends; same-sheet runs only; no `replace_breakout_block` helper | Answers to the open questions |
+| 2026-10-25 | Run cables are stored as entity kind `run_cable` | The user chose that old builds must refuse such files; serde ignores unknown fields, so only an unknown entity kind makes v0.4.0 and earlier fail to load instead of silently dropping data |
