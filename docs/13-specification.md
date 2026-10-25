@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3001 specification clauses** across 6 areas.
+**3003 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -362,6 +362,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Exporting a sheet to .kicad_sch and importing it back keeps paper, title block, symbols (id, reference, value, rotation, mirror), wires, junctions, labels and text. <sub>`export_then_import_round_trips_the_sheet`</sub>
 - A wire drawn as a polyline is exported as one two-point KiCad wire per segment. <sub>`polyline_wires_are_split_into_segments`</sub>
 - Every symbol used on the sheet is embedded once in lib_symbols with its graphics and pins, so KiCad opens the file without MadakeCAD libraries. <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
+- Each distinct block shape is its own KiCad lib_symbol (MadakeCAD:block for the template, block_<hash> otherwise) with numbered pins and filled graphics as KiCad fill; equal shapes share one, and a block whose pin table cannot be read is reported as unresolved, not exported as the template box. <sub>`each_block_shape_is_its_own_kicad_lib_symbol`</sub>
+- Our per-shape block lib_symbols import back as blocks that keep their pin table (block_pins) instead of being skipped. <sub>`our_block_lib_symbols_import_back_as_blocks_with_their_pin_table`</sub>
 - A wire number becomes a KiCad label on the numbered net, so the net keeps its name in KiCad and on re-import. <sub>`wire_numbers_become_labels`</sub>
 - A harness boundary is exported as a dashed closed polyline plus a text with its name. <sub>`harness_becomes_dashed_polyline_with_name`</sub>
 - Quotes, backslashes and newlines in text are escaped so the exported file parses and reads back unchanged. <sub>`strings_are_escaped_and_read_back`</sub>

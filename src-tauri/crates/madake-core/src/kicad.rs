@@ -402,10 +402,13 @@ pub fn import_kicad_sch(
             continue;
         }
         // lib_id → symbol_id (自前エクスポートの"MadakeCAD:<id>" → 静的マッピング → コネクタ/端子台の動的ID)
-        let own_id = lib_id
-            .strip_prefix(EXPORT_LIB)
-            .filter(|id| crate::symbol::resolve_symbol(id).is_some())
-            .map(str::to_string);
+        let own_id = lib_id.strip_prefix(EXPORT_LIB).and_then(|id| {
+            if crate::block::is_block_export_id(id) {
+                Some(crate::block::BLOCK_SYMBOL_ID.to_string())
+            } else {
+                crate::symbol::resolve_symbol(id).is_some().then(|| id.to_string())
+            }
+        });
         let symbol_id: Option<String> = match own_id.as_deref().or_else(|| map_lib_id(lib_id)) {
             Some(id) => Some(id.to_string()),
             None => {
@@ -432,6 +435,19 @@ pub fn import_kicad_sch(
                 .push(format!("{lib_id}: 回転角 {angle} を0度に丸めました"));
             0
         };
+        let mut attrs = std::collections::BTreeMap::new();
+        if symbol_id == crate::block::BLOCK_SYMBOL_ID {
+            let opt = |n: &str| Some(prop(n)).filter(|v| !v.is_empty());
+            match crate::block::imported_block_attrs(
+                opt("block_pins").as_deref(),
+                opt("block_size").as_deref(),
+            ) {
+                Some(a) => attrs = a,
+                None => report
+                    .warnings
+                    .push(format!("{}: {}", prop("Reference"), crate::block::BLOCK_UNREADABLE_WARNING)),
+            }
+        }
         push(
             &mut sheet,
             Entity::Symbol(SymbolInstance {
@@ -442,7 +458,7 @@ pub fn import_kicad_sch(
                 mirror: sym.child("mirror").is_some(),
                 reference: prop("Reference"),
                 value: prop("Value"),
-                attrs: Default::default(),
+                attrs,
             }),
         );
         report.symbols += 1;
@@ -690,12 +706,13 @@ pub fn export_kicad_sch(
         }
     }
     // 使われているシンボル定義だけを埋め込む (id順で決定的)
-    let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
-    let mut used: BTreeMap<&str, &SymbolDef> = BTreeMap::new();
+    // ブロックは形ごとに別名の定義 (見本の箱だけ従来の`block`)。同じ形は1つを共有する
+    let index = crate::symbol::DefIndex::new(symbols);
+    let mut used: BTreeMap<String, std::borrow::Cow<SymbolDef>> = BTreeMap::new();
     for e in sheet.entities.values() {
         if let Entity::Symbol(inst) = e {
-            if let Some(def) = defs.get(inst.symbol_id.as_str()) {
-                used.insert(def.id.as_str(), def);
+            if let Some(def) = crate::block::export_def(inst, &index) {
+                used.entry(def.id.clone()).or_insert(def);
             }
         }
     }
@@ -813,14 +830,14 @@ pub fn export_kicad_sch(
     let mut unresolved: BTreeMap<&str, usize> = BTreeMap::new();
     for e in sheet.entities.values() {
         let Entity::Symbol(inst) = e else { continue };
-        let Some(def) = defs.get(inst.symbol_id.as_str()) else {
+        let Some(def) = crate::block::export_def(inst, &index) else {
             // 図形を埋め込めないので書けない。黙って落とさず報告する
             *unresolved.entry(inst.symbol_id.as_str()).or_insert(0) += 1;
             continue;
         };
         out.push_str(&format!(
             "  (symbol (lib_id {}) (at {} {} {})",
-            esc(&format!("{EXPORT_LIB}{}", inst.symbol_id)),
+            esc(&format!("{EXPORT_LIB}{}", def.id)),
             num(inst.at.x),
             num(inst.at.y),
             inst.rotation
@@ -832,7 +849,7 @@ pub fn export_kicad_sch(
             " (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid {})\n",
             esc(&inst.id.to_string())
         ));
-        let top = crate::svg::symbol_top_y(inst, def);
+        let top = crate::svg::symbol_top_y(inst, &def);
         out.push_str(&format!(
             "    (property \"Reference\" {} (at {} {} 0) (effects (font (size 1.27 1.27))))\n",
             esc(&inst.reference),
@@ -1247,6 +1264,104 @@ mod tests {
             .flat_map(|unit| unit.children("pin").collect::<Vec<_>>())
             .count();
         assert_eq!(pins, 6, "端子台3極は左右貫通で6ピン");
+    }
+
+    /// Each distinct block shape is its own KiCad lib_symbol (MadakeCAD:block for the template, block_<hash> otherwise) with numbered pins and filled graphics as KiCad fill; equal shapes share one, and a block whose pin table cannot be read is reported as unresolved, not exported as the template box.
+    /// ブロックは形ごとに別のlib_symbolになる(見本はMadakeCAD:block、他はblock_<ハッシュ>)。ピン番号つきで、塗りはKiCadの塗りになり、同じ形は1つを共有する。ピン表を読めないブロックは見本の箱にせず書けなかったものとして報告する。
+    #[test]
+    fn each_block_shape_is_its_own_kicad_lib_symbol() {
+        let mut sheet = crate::block::export_blocks_sheet();
+        let bad = crate::block::test_block("BX", "", 240.0, 40.0, "not json");
+        sheet.entities.insert(bad.id(), bad);
+        let (text, report) = export_kicad_sch(&sheet, &defs(&sheet));
+        assert!(
+            report.skipped.iter().any(|s| s.starts_with("symbol x1")),
+            "{:?}",
+            report.skipped
+        );
+        let root = parse_sexpr(&text).unwrap();
+        let libs = root.child("lib_symbols").unwrap();
+        let names: Vec<&str> = libs.children("symbol").filter_map(|s| s.arg_str(0)).collect();
+        assert_eq!(names.iter().filter(|n| **n == "MadakeCAD:block").count(), 1, "{names:?}");
+        let shaped: Vec<&&str> = names
+            .iter()
+            .filter(|n| {
+                n.strip_prefix("MadakeCAD:block_").is_some_and(|h| {
+                    h.len() == 16 && h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+                })
+            })
+            .collect();
+        assert_eq!(shaped.len(), 3, "{names:?}");
+        assert_eq!(names.len(), 4, "{names:?}");
+        let tops: Vec<&SExpr> = root.children("symbol").collect();
+        let top = |r: &str| -> &SExpr {
+            tops.iter()
+                .copied()
+                .find(|s| {
+                    s.children("property")
+                        .any(|p| p.arg_str(0) == Some("Reference") && p.arg_str(1) == Some(r))
+                })
+                .unwrap()
+        };
+        let lib_of = |r: &str| top(r).child("lib_id").and_then(|l| l.arg_str(0)).unwrap().to_string();
+        assert_eq!(lib_of("B1"), lib_of("B2"));
+        assert_eq!(lib_of("B0"), "MadakeCAD:block");
+        assert!(lib_of("B1") != lib_of("B8") && lib_of("B1") != lib_of("BU") && lib_of("B8") != lib_of("BU"));
+        assert_eq!(top("B8").children("pin").count(), 8);
+        assert!(!tops.iter().any(|s| s
+            .children("property")
+            .any(|p| p.arg_str(1) == Some("BX"))));
+        let lib = |name: &str| libs.children("symbol").find(|s| s.arg_str(0) == Some(name)).unwrap();
+        let b8 = lib(&lib_of("B8"));
+        let pins: Vec<&SExpr> = b8.children("symbol").flat_map(|u| u.children("pin")).collect();
+        assert_eq!(pins.len(), 8);
+        let mut numbers: Vec<String> = pins
+            .iter()
+            .map(|p| p.child("number").and_then(|n| n.arg_str(0)).unwrap().to_string())
+            .collect();
+        numbers.sort();
+        assert_eq!(numbers, ["1", "2", "3", "4", "5", "6", "7", "8"]);
+        assert!(pins
+            .iter()
+            .any(|p| p.child("name").and_then(|n| n.arg_str(0)) == Some("OUT")));
+        let bu = lib(&lib_of("BU"));
+        let filled = bu
+            .children("symbol")
+            .flat_map(|u| u.children("rectangle"))
+            .any(|r| {
+                r.child("fill").and_then(|f| f.child("type")).and_then(|t| t.arg_str(0)) == Some("outline")
+            });
+        assert!(filled, "コネクタの塗り矩形がoutline塗りで出ていない");
+    }
+
+    /// Our per-shape block lib_symbols import back as blocks that keep their pin table (block_pins) instead of being skipped.
+    /// 自前の形ごとのブロックlib_symbolは、スキップされずにピン表(block_pins)を保ったブロックとして読み戻せる。
+    #[test]
+    fn our_block_lib_symbols_import_back_as_blocks_with_their_pin_table() {
+        let sheet = crate::block::export_blocks_sheet();
+        let (text, _) = export_kicad_sch(&sheet, &defs(&sheet));
+        let (project, report) = import_kicad_sch(&text, "往復").unwrap();
+        assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+        assert_eq!(report.symbols, 5);
+        let syms: Vec<&SymbolInstance> = entities_of(&project.sheets[0])
+            .into_iter()
+            .filter_map(|e| match e {
+                Entity::Symbol(s) => Some(s),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(syms.len(), 5);
+        assert!(syms.iter().all(|s| s.symbol_id == "block"));
+        let b8 = syms.iter().find(|s| s.reference == "B8").unwrap();
+        let orig = sheet
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Symbol(s) if s.reference == "B8" => Some(s),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(b8.attrs["block_pins"], orig.attrs["block_pins"]);
     }
 
     /// A wire number becomes a KiCad label on the numbered net, so the net keeps its name in KiCad and on re-import.

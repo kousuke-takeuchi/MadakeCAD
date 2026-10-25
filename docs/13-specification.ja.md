@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3001仕様項目**。
+全6領域・**3003仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -362,6 +362,8 @@
 - シートを.kicad_schへ書き出して読み戻すと、用紙・表題欄・シンボル(種類・参照記号・型番・回転・ミラー)・配線・ジャンクション・ラベル・注記が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
 - 折れ線で描いた配線は、セグメントごとに2点のKiCad wireとして書き出される。 <sub>`polyline_wires_are_split_into_segments`</sub>
 - シートで使うシンボルは図形とピンごとにlib_symbolsへ1回だけ埋め込まれ、KiCad側にライブラリが無くても開ける。 <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
+- ブロックは形ごとに別のlib_symbolになる(見本はMadakeCAD:block、他はblock_<ハッシュ>)。ピン番号つきで、塗りはKiCadの塗りになり、同じ形は1つを共有する。ピン表を読めないブロックは見本の箱にせず書けなかったものとして報告する。 <sub>`each_block_shape_is_its_own_kicad_lib_symbol`</sub>
+- 自前の形ごとのブロックlib_symbolは、スキップされずにピン表(block_pins)を保ったブロックとして読み戻せる。 <sub>`our_block_lib_symbols_import_back_as_blocks_with_their_pin_table`</sub>
 - 線番はそのネット上のKiCadラベルになり、KiCadでも再インポート後もネット名として残る。 <sub>`wire_numbers_become_labels`</sub>
 - ハーネス境界は破線の閉じた多角形と、その名前の注記として書き出される。 <sub>`harness_becomes_dashed_polyline_with_name`</sub>
 - 注記内の引用符・バックスラッシュ・改行はエスケープされ、書き出したファイルは正しく解釈されて同じ文字列に戻る。 <sub>`strings_are_escaped_and_read_back`</sub>
