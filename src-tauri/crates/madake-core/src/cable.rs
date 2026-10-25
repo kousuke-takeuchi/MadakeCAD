@@ -9,16 +9,25 @@
 //!
 //! ベンチマーク: EPLANのケーブル定義 (ケーブル=複数の芯線をまとめた1機器、定義線とシールドで図示)。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::geometry::Point;
-use crate::model::{Cable, Entity, EntityId, Project, Sheet};
+use crate::model::{Cable, CoreEnd, Entity, EntityId, Project, RunEnd, Sheet};
+use crate::netlist::pin_positions;
 use crate::reports::{csv_row, endpoint_label};
-use crate::symbol::sheet_symbol_defs;
+use crate::symbol::{sheet_symbol_defs, SymbolDef};
 use crate::verify::{Diagnostic, Severity};
 
 /// ERC: ケーブルに割り当てた芯が芯数を超えている。
 pub const CABLE_CORE_OVERFLOW: &str = "erc.cable_core_overflow";
+/// ERC: 1本のケーブルの芯2本が同じネットにある (短絡)。
+pub const CABLE_CORES_SHORTED: &str = "erc.cable_cores_shorted";
+/// ERC: 区間ケーブルの芯の行き先が無い (端が未設定、または指す部品・ピン・配線が消えた)。
+pub const CABLE_CORE_UNASSIGNED: &str = "erc.cable_core_unassigned";
+/// ERC (警告): 芯が着く部品から1本線の端が離れている。
+pub const CABLE_RUN_END_DETACHED: &str = "erc.cable_run_end_detached";
+/// 1本線の端が部品の外形からこれより離れていたら警告する (mm)。
+pub const RUN_END_DETACH_MM: f64 = 2.5;
 
 /// ケーブル一覧の列見出し。
 pub const CABLE_LIST_COLUMNS: [&str; 11] = [
@@ -63,6 +72,103 @@ pub fn cable_label(c: &Cable) -> String {
     .join("  ")
 }
 
+/// シート上の次のケーブル参照記号 (ケーブルとハーネスの W 番号の続き。作図領域の`nextCableReference`と同じ)。
+pub fn next_cable_reference(sheet: &Sheet) -> String {
+    let prefix = crate::harness::HARNESS_PREFIX;
+    let max = sheet
+        .entities
+        .values()
+        .filter_map(|e| match e {
+            Entity::Cable(c) => Some(c.reference.as_str()),
+            Entity::Harness(h) => Some(h.name.as_str()),
+            _ => None,
+        })
+        .filter_map(|n| n.strip_prefix(prefix))
+        .filter_map(|n| n.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0);
+    format!("{prefix}{}", max + 1)
+}
+
+/// 着いたピンの位置から、部品に着く端の棒の両端 (上→下、同じ高さなら左→右に並べた最初と最後)。
+pub fn bar_ends(positions: &[Point]) -> Option<(Point, Point)> {
+    let order = |a: &&Point, b: &&Point| {
+        (a.y, a.x).partial_cmp(&(b.y, b.x)).unwrap_or(std::cmp::Ordering::Equal)
+    };
+    let first = positions.iter().min_by(order)?;
+    let last = positions.iter().max_by(order)?;
+    Some((*first, *last))
+}
+
+/// 区間の線の太さ (mm)。配線 (0.35mm) より太く描く。
+pub const RUN_STROKE_MM: f64 = 0.7;
+/// 区間の斜線の印の半分の長さ (x・y方向それぞれ、mm)。
+pub const RUN_SLASH_HALF_MM: f64 = 1.5;
+/// 分岐の配線の端に添える芯の呼び名の文字高 (mm)。
+pub const CORE_LABEL_MM: f64 = 1.5;
+
+/// 区間のいちばん長い線分の中点 (同じ長さなら後ろの線分)。斜線の印・芯数・注記の基準。
+pub fn run_mid(c: &Cable) -> Option<Point> {
+    c.run
+        .windows(2)
+        .max_by(|a, b| {
+            a[0].distance_to(&a[1])
+                .partial_cmp(&b[0].distance_to(&b[1]))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|s| Point::new((s[0].x + s[1].x) / 2.0, (s[0].y + s[1].y) / 2.0))
+}
+
+/// 単線図の印: 区間の中点を通る45度の短い斜線。
+pub fn run_slash(c: &Cable) -> Option<(Point, Point)> {
+    let m = run_mid(c)?;
+    let h = RUN_SLASH_HALF_MM;
+    Some((Point::new(m.x - h, m.y + h), Point::new(m.x + h, m.y - h)))
+}
+
+/// 芯数の文字の位置 (斜線の右上)。
+pub fn run_count_at(c: &Cable) -> Option<Point> {
+    run_mid(c).map(|m| Point::new(m.x + 2.0, m.y - 2.0))
+}
+
+/// ケーブル注記の位置 (斜線の右下)。
+pub fn run_label_at(c: &Cable) -> Option<Point> {
+    run_mid(c).map(|m| Point::new(m.x + 3.5, m.y + 4.0))
+}
+
+/// 部品に着く端の棒: 端ごとに、着いたピンの先を結ぶ線分 (ピンが1本だけなら描かない)。
+pub fn run_bars(sheet: &Sheet, defs: &[SymbolDef], c: &Cable) -> Vec<(Point, Point)> {
+    RunEnd::BOTH
+        .iter()
+        .filter_map(|&end| {
+            let positions: Vec<Point> = c
+                .cores
+                .iter()
+                .filter_map(|k| k.end(end))
+                .filter_map(|e| pin_end_position(sheet, defs, e))
+                .collect();
+            let (a, b) = bar_ends(&positions)?;
+            (a.distance_to(&b) > 1e-6).then_some((a, b))
+        })
+        .collect()
+}
+
+/// 分岐の扇: 区間の端から各芯の配線の分岐側の端への線と、その芯の呼び名。
+pub fn run_fans(sheet: &Sheet, c: &Cable) -> Vec<(Point, Point, String)> {
+    let mut out = Vec::new();
+    for end in RunEnd::BOTH {
+        let Some(at) = c.run_end(end) else { continue };
+        for core in &c.cores {
+            if let Some(CoreEnd::Wire { wire }) = core.end(end) {
+                if let Some(p) = breakout_point(sheet, c, end, *wire) {
+                    out.push((at, p, core.core.clone()));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// 線分 `a-b` と `c-d` の交点の、`a-b` 上の位置 (0〜1)。交わらなければNone。
 fn segment_hit(a: Point, b: Point, c: Point, d: Point) -> Option<f64> {
     let r = (b.x - a.x, b.y - a.y);
@@ -94,8 +200,12 @@ pub fn crossed_wires(sheet: &Sheet, a: Point, b: Point) -> Vec<(EntityId, String
     hits.into_iter().map(|(_, id, color)| (id, color)).collect()
 }
 
-/// シールドの楕円 (中心, 長半径, 短半径, 定義線の向きの角度 [度])。定義線を少し長めに囲む。
+/// シールドの楕円 (中心, 長半径, 短半径, 向きの角度 [度])。定義線ケーブルは定義線を少し長めに囲み、
+/// 区間ケーブルは区間の斜線の印を囲む。
 pub fn shield_ellipse(c: &Cable) -> Option<(Point, f64, f64, f64)> {
+    if c.is_run() {
+        return run_mid(c).map(|m| (m, 3.0, 2.0, -45.0));
+    }
     let (a, b) = (c.points.first()?, c.points.get(1)?);
     let center = Point::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
     let len = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
@@ -134,8 +244,13 @@ pub fn cable_list_rows(project: &Project) -> Vec<Vec<String>> {
     for sheet in &project.sheets {
         for e in sheet.entities.values() {
             let Entity::Cable(c) = e else { continue };
-            let wires: Vec<&crate::model::Wire> = live_cores(sheet, c).collect();
-            let used = wires.len();
+            let (from, to) = if c.is_run() {
+                (run_end_devices(sheet, c, RunEnd::A), run_end_devices(sheet, c, RunEnd::B))
+            } else {
+                let wires: Vec<&crate::model::Wire> = live_cores(sheet, c).collect();
+                (end_devices(sheet, &wires, true), end_devices(sheet, &wires, false))
+            };
+            let used = used_cores(sheet, c);
             rows.push((
                 c.reference.clone(),
                 vec![
@@ -144,8 +259,8 @@ pub fn cable_list_rows(project: &Project) -> Vec<Vec<String>> {
                     c.core_count.to_string(),
                     if c.sq > 0.0 { num(c.sq) } else { String::new() },
                     c.length_m.map(num).unwrap_or_default(),
-                    end_devices(sheet, &wires, true),
-                    end_devices(sheet, &wires, false),
+                    from,
+                    to,
                     used.to_string(),
                     c.core_count.saturating_sub(used).to_string(),
                     match &c.shield {
@@ -203,33 +318,496 @@ pub fn cable_bom_rows(project: &Project) -> Vec<Vec<String>> {
         .collect()
 }
 
-/// シート上のケーブルのERC: 割り当てた芯が芯数を超えていれば Error。
+/// シート上のケーブルのERC:
+/// - 割り当てた芯が芯数を超えていれば Error ([`CABLE_CORE_OVERFLOW`]。区間ケーブルは芯の数)
+/// - 1本のケーブルの芯2本が同じネットにあれば Error ([`CABLE_CORES_SHORTED`])
+/// - 区間ケーブルの芯の行き先が無ければ Error ([`CABLE_CORE_UNASSIGNED`])
+/// - 芯が着く部品から1本線の端が [`RUN_END_DETACH_MM`] より離れていれば Warning ([`CABLE_RUN_END_DETACHED`])
 pub fn check_cables(sheet: &Sheet) -> Vec<Diagnostic> {
+    let defs = sheet_symbol_defs(sheet);
+    let nets = crate::netlist::extract_netlist(sheet, &defs);
     let mut out = Vec::new();
     for e in sheet.entities.values() {
         let Entity::Cable(c) = e else { continue };
-        let used = live_cores(sheet, c).count();
+        let diag = |severity: Severity, code: &str, message: String| Diagnostic {
+            severity,
+            code: code.into(),
+            message,
+            sheet_id: sheet.id,
+            entity_ids: vec![c.id],
+        };
+        let used = if c.is_run() { c.cores.len() } else { live_cores(sheet, c).count() };
         if used > c.core_count {
-            out.push(Diagnostic {
-                severity: Severity::Error,
-                code: CABLE_CORE_OVERFLOW.into(),
-                message: format!(
+            out.push(diag(
+                Severity::Error,
+                CABLE_CORE_OVERFLOW,
+                format!(
                     "ケーブル {} に {} 本の配線が割り当てられていますが、芯数は {} です",
                     c.reference, used, c.core_count
                 ),
-                sheet_id: sheet.id,
-                entity_ids: vec![c.id],
+            ));
+        }
+        // 芯2本が同じネット = 短絡 (偽の分岐ブロックや、1本の配線を複数のピンに触れさせた図で起こる)
+        let mut by_net: BTreeMap<usize, Vec<&str>> = BTreeMap::new();
+        for core in &c.cores {
+            let net = nets.iter().position(|n| {
+                if c.is_run() {
+                    n.cable_cores.iter().any(|k| k.cable_id == c.id && k.core == core.core)
+                } else {
+                    core.wire.is_some_and(|w| n.wire_ids.contains(&w))
+                }
             });
+            if let Some(i) = net {
+                by_net.entry(i).or_default().push(core.core.as_str());
+            }
+        }
+        for names in by_net.values().filter(|v| v.len() >= 2) {
+            out.push(diag(
+                Severity::Error,
+                CABLE_CORES_SHORTED,
+                format!(
+                    "ケーブル {} の芯 {} が同じネットに繋がっています (短絡)",
+                    c.reference,
+                    names.join(", ")
+                ),
+            ));
+        }
+        if !c.is_run() {
+            continue;
+        }
+        let missing: Vec<&str> = c
+            .cores
+            .iter()
+            .filter(|k| RunEnd::BOTH.iter().any(|&end| !end_is_live(sheet, &defs, k.end(end))))
+            .map(|k| k.core.as_str())
+            .collect();
+        if !missing.is_empty() {
+            out.push(diag(
+                Severity::Error,
+                CABLE_CORE_UNASSIGNED,
+                format!(
+                    "ケーブル {} の芯 {} の行き先がありません (端が未設定か、指す部品・ピン・配線が消えています)",
+                    c.reference,
+                    missing.join(", ")
+                ),
+            ));
+        }
+        for end in RunEnd::BOTH {
+            let Some(at) = c.run_end(end) else { continue };
+            let mut parts: Vec<EntityId> = Vec::new();
+            for core in &c.cores {
+                if let Some(CoreEnd::Pin { part, .. }) = core.end(end) {
+                    if !parts.contains(part) {
+                        parts.push(*part);
+                    }
+                }
+            }
+            for part in parts {
+                let Some(d) = distance_to_part(sheet, &defs, part, at) else { continue };
+                if d > RUN_END_DETACH_MM {
+                    let reference = match sheet.entities.get(&part) {
+                        Some(Entity::Symbol(s)) => s.reference.clone(),
+                        _ => part.to_string(),
+                    };
+                    out.push(diag(
+                        Severity::Warning,
+                        CABLE_RUN_END_DETACHED,
+                        format!(
+                            "ケーブル {} の1本線の端 {} が {} から {:.1}mm 離れています (線がどこへ行くか図から読めません)",
+                            c.reference,
+                            end.letter().to_uppercase(),
+                            reference,
+                            d
+                        ),
+                    ));
+                }
+            }
         }
     }
     out
+}
+
+/// 芯の行き先が今もシートにあるか (配線がある・部品にそのピンがある)。
+fn end_is_live(sheet: &Sheet, defs: &[SymbolDef], end: Option<&CoreEnd>) -> bool {
+    match end {
+        None => false,
+        Some(CoreEnd::Wire { wire }) => matches!(sheet.entities.get(wire), Some(Entity::Wire(_))),
+        Some(pin @ CoreEnd::Pin { .. }) => pin_end_position(sheet, defs, pin).is_some(),
+    }
+}
+
+/// 点から部品の外形 (図形とピンを含む外接矩形) までの距離 mm。部品が無ければNone。
+fn distance_to_part(sheet: &Sheet, defs: &[SymbolDef], part: EntityId, at: Point) -> Option<f64> {
+    let Some(Entity::Symbol(s)) = sheet.entities.get(&part) else {
+        return None;
+    };
+    let def = crate::symbol::instance_symbol_def(s, defs)?;
+    let pins = crate::pin_wiring::part_pins(s, &def);
+    let mut points: Vec<Point> = pins.pins.iter().map(|p| Point::new(p.x, p.y)).collect();
+    if let Some(b) = pins.bbox {
+        points.push(b.min);
+        points.push(b.max);
+    }
+    let first = *points.first()?;
+    let mut rect = crate::tidy::Rect::from_corners(first, first);
+    for p in points {
+        rect.extend(p);
+    }
+    let dx = (rect.min.x - at.x).max(0.0).max(at.x - rect.max.x);
+    let dy = (rect.min.y - at.y).max(0.0).max(at.y - rect.max.y);
+    Some((dx * dx + dy * dy).sqrt())
+}
+
+/// 分岐側の端点: 芯の配線`wire`の端点のうち、区間の端`end`に近い方。配線か区間が無ければNone。
+pub fn breakout_point(sheet: &Sheet, c: &Cable, end: RunEnd, wire: EntityId) -> Option<Point> {
+    let at = c.run_end(end)?;
+    let Some(Entity::Wire(w)) = sheet.entities.get(&wire) else {
+        return None;
+    };
+    let (first, last) = (w.points.first()?, w.points.last()?);
+    Some(if first.distance_to(&at) <= last.distance_to(&at) { *first } else { *last })
+}
+
+/// シート上の区間ケーブルの芯の配線の、分岐側の端点すべて (ERCの宙ぶらりん判定はここを繋がっていると数える)。
+pub fn breakout_points(sheet: &Sheet) -> Vec<Point> {
+    let mut out = Vec::new();
+    for e in sheet.entities.values() {
+        let Entity::Cable(c) = e else { continue };
+        for core in &c.cores {
+            for end in RunEnd::BOTH {
+                if let Some(CoreEnd::Wire { wire }) = core.end(end) {
+                    out.extend(breakout_point(sheet, c, end, *wire));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// 分岐の配線の反対側 (部品や端子台へ行く側) の端点。
+pub fn breakout_far_point(sheet: &Sheet, c: &Cable, end: RunEnd, wire: EntityId) -> Option<Point> {
+    let near = breakout_point(sheet, c, end, wire)?;
+    let Some(Entity::Wire(w)) = sheet.entities.get(&wire) else {
+        return None;
+    };
+    let (a, b) = (w.points.first()?, w.points.last()?);
+    Some(if a.distance_to(&near) < 1e-9 { *b } else { *a })
+}
+
+/// 区間ケーブルの分岐の配線 (芯そのもの。電線リストでは芯の行に畳み込む)。
+pub fn breakout_wire_ids(sheet: &Sheet) -> BTreeSet<EntityId> {
+    let mut out = BTreeSet::new();
+    for e in sheet.entities.values() {
+        let Entity::Cable(c) = e else { continue };
+        for core in &c.cores {
+            for end in RunEnd::BOTH {
+                if let Some(CoreEnd::Wire { wire }) = core.end(end) {
+                    out.insert(*wire);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// どれかのケーブルの芯になっている配線 (定義線ケーブルの芯の配線と、区間ケーブルの分岐の配線)。
+/// 部品表の電線集約から除く (ケーブル行がもう数えている)。
+pub fn core_wire_ids(sheet: &Sheet) -> BTreeSet<EntityId> {
+    let mut out = breakout_wire_ids(sheet);
+    out.extend(definition_core_labels(sheet).into_keys());
+    out
+}
+
+/// 定義線ケーブルの芯の配線 → "W1/1" (電線リストの「ケーブル芯」列)。
+pub fn definition_core_labels(sheet: &Sheet) -> BTreeMap<EntityId, String> {
+    let mut out = BTreeMap::new();
+    for e in sheet.entities.values() {
+        let Entity::Cable(c) = e else { continue };
+        for core in &c.cores {
+            if let Some(w) = core.wire {
+                out.insert(w, format!("{}/{}", c.reference, core.core));
+            }
+        }
+    }
+    out
+}
+
+/// 使っている芯の数: 定義線ケーブルは配線が今もある芯、区間ケーブルは両端のある芯。
+fn used_cores(sheet: &Sheet, c: &Cable) -> usize {
+    if c.is_run() {
+        c.cores.iter().filter(|k| k.end_a.is_some() && k.end_b.is_some()).count()
+    } else {
+        live_cores(sheet, c).count()
+    }
+}
+
+/// 区間ケーブルの端`end`側の機器 (ピンの行き先は部品の参照記号、分岐の配線は反対側の端の機器)。
+fn run_end_devices(sheet: &Sheet, c: &Cable, end: RunEnd) -> String {
+    let defs = sheet_symbol_defs(sheet);
+    let mut out: Vec<String> = Vec::new();
+    for core in &c.cores {
+        let device = match core.end(end) {
+            Some(CoreEnd::Pin { part, .. }) => match sheet.entities.get(part) {
+                Some(Entity::Symbol(s)) => s.reference.clone(),
+                _ => String::new(),
+            },
+            Some(CoreEnd::Wire { wire }) => breakout_far_point(sheet, c, end, *wire)
+                .map(|far| endpoint_label(sheet, &defs, &far))
+                .and_then(|label| label.split(':').next().map(|d| d.trim().to_string()))
+                .unwrap_or_default(),
+            None => String::new(),
+        };
+        if !device.is_empty() && !out.contains(&device) {
+            out.push(device);
+        }
+    }
+    out.sort();
+    out.join(", ")
+}
+
+/// `CoreEnd::Pin`が指すピンの用紙上の位置 (`index`番目、省略 = 最初の接続点)。
+/// 部品・ピンが無いとき、ピンでない行き先のときはNone。
+pub fn pin_end_position(sheet: &Sheet, defs: &[SymbolDef], end: &CoreEnd) -> Option<Point> {
+    let CoreEnd::Pin { part, pin, index } = end else {
+        return None;
+    };
+    let Some(Entity::Symbol(s)) = sheet.entities.get(part) else {
+        return None;
+    };
+    let def = crate::symbol::instance_symbol_def(s, defs)?;
+    pin_positions(s, &def)
+        .into_iter()
+        .filter(|(no, _)| no == pin)
+        .nth(index.unwrap_or(1).saturating_sub(1) as usize)
+        .map(|(_, p)| p)
+}
+
+/// 区間ケーブルの形を調べる ([`crate::command::Engine`]が置く・更新するときに通す)。
+///
+/// 区間が2点以上・どの芯も両端を持つ・芯の`wire` (定義線ケーブルの欄) は使わない・芯の呼び名が
+/// 重ならない・1本の配線/1つのピンを2本の芯で使わない・配線の端が部品を、ピンの端が配線を指さない。
+///
+/// **行き先が今シートにあるかは調べない**: 部品や分岐の配線を先に消してからケーブルを消し、
+/// 両方を元に戻すと、ケーブルは行き先より先に戻る。ここで断ると undo が失敗してケーブルが
+/// 失われる。行き先の無い芯は ERC ([`CABLE_CORE_UNASSIGNED`]) が知らせる (仕様 §1)。
+pub fn validate_run_cable(sheet: &Sheet, c: &Cable) -> Result<(), String> {
+    if c.run.len() < 2 {
+        return Err(format!("cable {} needs a run of at least two points", c.reference));
+    }
+    if let Some(name) = duplicate_core_name(c.cores.iter().map(|k| k.core.as_str())) {
+        return Err(format!("ケーブル {} に芯の呼び名 {name} が2本あります。呼び名は芯ごとに変える", c.reference));
+    }
+    let mut used_wires: Vec<EntityId> = Vec::new();
+    let mut used_pins: Vec<(EntityId, String, u32)> = Vec::new();
+    for core in &c.cores {
+        if core.wire.is_some() {
+            return Err(format!(
+                "cable {} core {}: a run cable assigns cores with end_a/end_b, not wire",
+                c.reference, core.core
+            ));
+        }
+        for end in RunEnd::BOTH {
+            let Some(e) = core.end(end) else {
+                return Err(format!("cable {} core {} has no end_{}", c.reference, core.core, end.letter()));
+            };
+            match e {
+                CoreEnd::Wire { wire } => {
+                    if matches!(sheet.entities.get(wire), Some(other) if !matches!(other, Entity::Wire(_))) {
+                        return Err(format!(
+                            "cable {} core {} end_{} points at {wire}, which is not a wire",
+                            c.reference,
+                            core.core,
+                            end.letter()
+                        ));
+                    }
+                    if used_wires.contains(wire) {
+                        return Err(format!("cable {}: wire {wire} is used by two cores", c.reference));
+                    }
+                    used_wires.push(*wire);
+                }
+                CoreEnd::Pin { part, pin, index } => {
+                    if matches!(sheet.entities.get(part), Some(other) if !matches!(other, Entity::Symbol(_))) {
+                        return Err(format!(
+                            "cable {} core {} end_{} points at {part}, which is not a part",
+                            c.reference,
+                            core.core,
+                            end.letter()
+                        ));
+                    }
+                    let key = (*part, pin.clone(), index.unwrap_or(1));
+                    if used_pins.contains(&key) {
+                        return Err(format!("cable {}: pin {pin} of {part} is used by two cores", c.reference));
+                    }
+                    used_pins.push(key);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 前後の空白を除いて2回出てくる芯の呼び名 (最初に重なったもの)。重なりが無ければNone。
+pub fn duplicate_core_name<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<String> {
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    names.into_iter().map(str::trim).find(|n| !seen.insert(*n)).map(str::to_string)
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    //! 区間ケーブルのテスト用の図面 (model・io・command・netlist・verify・reports・svg・cable_run のテストが共有する)。
+    use crate::command::Engine;
+    use crate::geometry::Point;
+    use crate::model::*;
+    use uuid::Uuid;
+
+    /// `connector_{n}p` のインスタンス。`mirror`ならピンが左向き (x - 7.5) になる。
+    pub(crate) fn connector(n: usize, reference: &str, x: f64, y: f64, mirror: bool) -> SymbolInstance {
+        SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: format!("connector_{n}p"),
+            at: Point::new(x, y),
+            rotation: 0,
+            mirror,
+            reference: reference.into(),
+            value: String::new(),
+            attrs: Default::default(),
+        }
+    }
+
+    /// 黒 0.3sq の配線。
+    pub(crate) fn wire(points: &[(f64, f64)]) -> Wire {
+        Wire {
+            id: Uuid::new_v4(),
+            points: points.iter().map(|&(x, y)| Point::new(x, y)).collect(),
+            color: "black".into(),
+            sq: 0.3,
+            length_m: None,
+            length_source: Default::default(),
+            part_no: None,
+            net: None,
+        }
+    }
+
+    /// エンティティをシートへ入れてidを返す。
+    pub(crate) fn insert(sheet: &mut Sheet, e: Entity) -> EntityId {
+        let id = e.id();
+        sheet.entities.insert(id, e);
+        id
+    }
+
+    /// LTEハーネス45の芯 (呼び名, 線色)。
+    pub(crate) const LTE_CORES: [(&str, &str); 4] =
+        [("VBUS", "red"), ("D-", "white"), ("D+", "green"), ("GND", "black")];
+
+    /// LTEハーネス45の図面とid。
+    pub(crate) struct Lte {
+        pub sheet: Sheet,
+        pub cable: EntityId,
+        pub usb: EntityId,
+        pub wires: Vec<EntityId>,
+    }
+
+    /// 基板 J45 (connector_4p、(50,100)、ピンは x=57.5 の y=92.5/97.5/102.5/107.5 で右向き) から
+    /// 芯ごとの配線4本が x=77.5 まで出て、区間 (80,100)→(192.5,100) が USB1 (connector_4p を
+    /// 反転して (200,100)、ピンは x=192.5 で左向き) に着く。芯は VBUS / D- / D+ / GND をピン順に。
+    pub(crate) fn lte_sheet() -> Lte {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+        insert(&mut sheet, Entity::Symbol(connector(4, "J45", 50.0, 100.0, false)));
+        let usb = insert(&mut sheet, Entity::Symbol(connector(4, "USB1", 200.0, 100.0, true)));
+        let mut wires = Vec::new();
+        let mut cores = Vec::new();
+        for (i, (name, color)) in LTE_CORES.into_iter().enumerate() {
+            let y = 92.5 + 5.0 * i as f64;
+            let mut w = wire(&[(57.5, y), (77.5, y)]);
+            w.color = color.into();
+            let id = insert(&mut sheet, Entity::Wire(w));
+            wires.push(id);
+            cores.push(CableCore {
+                core: name.into(),
+                color: color.into(),
+                wire: None,
+                end_a: Some(CoreEnd::Wire { wire: id }),
+                end_b: Some(CoreEnd::Pin { part: usb, pin: (i + 1).to_string(), index: None }),
+            });
+        }
+        let cable = Cable {
+            id: Uuid::new_v4(),
+            reference: "W45".into(),
+            part_no: String::new(),
+            core_count: 4,
+            sq: 0.2,
+            points: Vec::new(),
+            cores,
+            shield: None,
+            length_m: Some(0.3),
+            run: vec![Point::new(80.0, 100.0), Point::new(192.5, 100.0)],
+        };
+        let cable = insert(&mut sheet, Entity::Cable(cable));
+        Lte { sheet, cable, usb, wires }
+    }
+
+    /// 3.5mm AUXケーブル: J1 (connector_3p、(50,50)、ピン x=57.5 の y=45/50/55) と J2 (反転、(150,50)、
+    /// ピン x=142.5) を全長1本線の区間 (57.5,50)→(142.5,50) で結ぶ。芯 L / R / GND はどちらの端もピン。
+    /// 戻り値は (シート, ケーブルid)。
+    pub(crate) fn aux_sheet() -> (Sheet, EntityId) {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+        let j1 = insert(&mut sheet, Entity::Symbol(connector(3, "J1", 50.0, 50.0, false)));
+        let j2 = insert(&mut sheet, Entity::Symbol(connector(3, "J2", 150.0, 50.0, true)));
+        let cores = ["L", "R", "GND"]
+            .into_iter()
+            .enumerate()
+            .map(|(i, name)| CableCore {
+                core: name.into(),
+                end_a: Some(CoreEnd::Pin { part: j1, pin: (i + 1).to_string(), index: None }),
+                end_b: Some(CoreEnd::Pin { part: j2, pin: (i + 1).to_string(), index: None }),
+                ..Default::default()
+            })
+            .collect();
+        let cable = Cable {
+            id: Uuid::new_v4(),
+            reference: "W58".into(),
+            part_no: String::new(),
+            core_count: 3,
+            sq: 0.0,
+            points: Vec::new(),
+            cores,
+            shield: None,
+            length_m: None,
+            run: vec![Point::new(57.5, 50.0), Point::new(142.5, 50.0)],
+        };
+        let id = insert(&mut sheet, Entity::Cable(cable));
+        (sheet, id)
+    }
+
+    /// シート上のケーブル。
+    pub(crate) fn cable_of(sheet: &Sheet, id: EntityId) -> &Cable {
+        match &sheet.entities[&id] {
+            Entity::Cable(c) => c,
+            other => panic!("ケーブルではない: {other:?}"),
+        }
+    }
+
+    /// シートを1枚だけ持つプロジェクト (シートのidはプロジェクトの先頭シートのものにそろえる)。
+    pub(crate) fn project_with(mut sheet: Sheet) -> Project {
+        let mut project = Project::new("t");
+        sheet.id = project.sheets[0].id;
+        project.sheets[0] = sheet;
+        project
+    }
+
+    /// シートを1枚だけ持つエンジンと、そのシートid。
+    pub(crate) fn engine_with(sheet: Sheet) -> (Engine, SheetId) {
+        let project = project_with(sheet);
+        let id = project.sheets[0].id;
+        (Engine::new(project), id)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::command::{Command, Engine};
-    use crate::model::{CableShield, SymbolInstance, Wire};
+    use crate::model::{CableShield, CoreEnd, SymbolInstance, Wire};
     use crate::report_sheet::{report_bytes, ReportFormat, ReportKind};
     use uuid::Uuid;
 
@@ -281,6 +859,7 @@ mod tests {
             cores: Vec::new(),
             shield: None,
             length_m: Some(12.5),
+            run: Vec::new(),
         }
     }
 
@@ -420,18 +999,333 @@ mod tests {
         assert!(svg.contains("W1  SAMPLE-CBL  4C×1.25sq  12.5m"), "注記");
     }
 
-    /// A cable whose definition line does not have two points, that has no cores, or whose core points at a wire not on the sheet is refused.
-    /// 定義線が2点でない・芯数が0・シートに無い配線を指す芯を持つケーブルは拒否される。
+    /// A cable whose definition line does not have two points or that has no cores is refused; a core whose wire is not on the sheet (deleted earlier) is accepted and left to ERC, so undoing a cable deletion never fails.
+    /// 定義線が2点でない・芯数が0のケーブルは拒否される。芯の配線がシートに無い (先に消された) だけなら受け付けてERCに任せる (ケーブルの削除の取り消しが失敗しないように)。
     #[test]
     fn a_malformed_cable_is_refused() {
         let (mut engine, sheet_id, _) = three_wires();
         let mut one_point = cable(2, (0.0, 0.0), (1.0, 1.0));
         one_point.points.pop();
         let zero = cable(0, (0.0, 0.0), (1.0, 1.0));
-        let mut stray = cable(2, (0.0, 0.0), (1.0, 1.0));
-        stray.cores = vec![crate::model::CableCore { core: "1".into(), color: String::new(), wire: Some(Uuid::new_v4()) }];
-        for c in [one_point, zero, stray] {
+        for c in [one_point, zero] {
             assert!(engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(c) }).is_err());
         }
+        let mut stray = cable(2, (0.0, 0.0), (1.0, 1.0));
+        stray.cores = vec![crate::model::CableCore { core: "1".into(), color: String::new(), wire: Some(Uuid::new_v4()), ..Default::default() }];
+        engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(stray) }).unwrap();
+    }
+
+    /// A definition-line cable whose core wire was deleted still renders in the netlist, ERC, cable list, wire list, BOM and printed sheet without panicking; it can be renamed, and deleting it then undoing twice brings back both the cable and the wire.
+    /// 芯の配線が消えた定義線ケーブルでも、ネットリスト・ERC・ケーブル一覧・電線リスト・部品表・印刷図面は落ちずに作れる。名前も変えられ、ケーブルを消してから2回元に戻すとケーブルも配線も戻る。
+    #[test]
+    fn a_definition_cable_whose_wire_is_gone_still_works() {
+        let (mut engine, sheet_id, wires) = three_wires();
+        engine.execute(Command::AddCable { sheet_id, cable: cable(3, (50.0, 5.0), (50.0, 35.0)) }).unwrap();
+        let before = engine.project().sheet(sheet_id).unwrap().entities.len();
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![wires[1]] }).unwrap();
+        let sheet = engine.project().sheet(sheet_id).unwrap();
+        let defs = sheet_symbol_defs(sheet);
+        let _ = crate::netlist::extract_netlist(sheet, &defs);
+        let _ = check_cables(sheet);
+        let _ = crate::verify::verify_sheet(sheet, &defs);
+        let _ = cable_list_rows(engine.project());
+        let _ = crate::reports::wire_list_csv(engine.project());
+        let _ = cable_bom_rows(engine.project());
+        let _ = crate::svg::project_sheet_to_svg(engine.project(), sheet_id, &defs).unwrap();
+        let mut c = placed(&engine, sheet_id);
+        c.reference = "W2".into();
+        let cable_id = c.id;
+        engine.execute(Command::UpdateEntity { sheet_id, entity: Entity::Cable(c) }).unwrap();
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![cable_id] }).unwrap();
+        engine.undo().unwrap();
+        engine.undo().unwrap();
+        engine.undo().unwrap();
+        assert_eq!(engine.project().sheet(sheet_id).unwrap().entities.len(), before);
+    }
+
+    /// A run cable is refused when a core lacks an end, reuses a wire or a pin, points a wire end at a part or a pin end at a wire, still uses the definition-line field, or the run has fewer than two points; a definition-line cable with core ends is refused too. An end whose wire, part or pin is not on the sheet is accepted (ERC reports it).
+    /// 区間ケーブルは、端の無い芯・同じ配線やピンの使い回し・配線の端が部品を指す/ピンの端が配線を指す芯・定義線用の欄を使った芯・2点未満の区間があれば断る。芯の行き先を持つ定義線ケーブルも断る。行き先の配線・部品・ピンがシートに無いだけなら受け付ける (ERCが知らせる)。
+    #[test]
+    fn a_run_cable_is_checked_when_placed() {
+        let lte = test_support::lte_sheet();
+        let mut sheet = lte.sheet.clone();
+        let cable = test_support::cable_of(&sheet, lte.cable).clone();
+        sheet.entities.remove(&lte.cable);
+        let (mut engine, sheet_id) = test_support::engine_with(sheet);
+        let bad = |f: &dyn Fn(&mut Cable)| {
+            let mut c = cable.clone();
+            c.id = Uuid::new_v4();
+            f(&mut c);
+            c
+        };
+        let refused = [
+            bad(&|c| c.cores[0].end_a = None),
+            bad(&|c| c.cores[3].end_a = Some(CoreEnd::Wire { wire: lte.wires[0] })),
+            bad(&|c| c.cores[3].end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "1".into(), index: None })),
+            bad(&|c| c.cores[1].end_a = Some(CoreEnd::Wire { wire: lte.usb })),
+            bad(&|c| c.cores[1].end_b = Some(CoreEnd::Pin { part: lte.wires[0], pin: "1".into(), index: None })),
+            bad(&|c| c.cores[0].wire = Some(lte.wires[0])),
+            bad(&|c| c.run.truncate(1)),
+            bad(&|c| {
+                c.run.clear();
+                c.points = vec![Point::new(0.0, 0.0), Point::new(1.0, 1.0)];
+            }),
+        ];
+        for c in refused {
+            assert!(
+                engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(c) }).is_err(),
+                "断るはず"
+            );
+        }
+        // 行き先がシートに無い (先に消された) だけの芯は形として正しいので受け付け、ERCが知らせる
+        let gone = [
+            bad(&|c| c.cores[1].end_b = Some(CoreEnd::Pin { part: lte.usb, pin: "9".into(), index: None })),
+            bad(&|c| c.cores[2].end_a = Some(CoreEnd::Wire { wire: Uuid::new_v4() })),
+            bad(&|c| c.cores[2].end_b = Some(CoreEnd::Pin { part: Uuid::new_v4(), pin: "1".into(), index: None })),
+        ];
+        for c in gone {
+            let id = c.id;
+            engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(c) }).unwrap();
+            engine.execute(Command::DeleteEntities { sheet_id, ids: vec![id] }).unwrap();
+        }
+        engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(cable) }).unwrap();
+    }
+
+    /// Two cores of a run cable with the same name (after trimming spaces) are refused when placed, naming the duplicate.
+    /// 区間ケーブルの芯2本が同じ呼び名 (前後の空白を除いて) なら置くときに断り、重なった呼び名を示す。
+    #[test]
+    fn a_run_cable_with_duplicate_core_names_is_refused() {
+        let lte = test_support::lte_sheet();
+        let mut sheet = lte.sheet.clone();
+        let mut cable = test_support::cable_of(&sheet, lte.cable).clone();
+        sheet.entities.remove(&lte.cable);
+        let (mut engine, sheet_id) = test_support::engine_with(sheet);
+        cable.cores[1].core = " GND ".into();
+        let err = engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(cable) }).unwrap_err();
+        assert!(err.to_string().contains("GND"), "{err}");
+        assert!(err.to_string().contains("呼び名"), "{err}");
+    }
+
+    /// Deleting one breakout wire, then the cable as a separate edit, then undoing twice brings back the cable and the wire; redo deletes them again.
+    /// 分岐の配線を1本消し、別の編集でケーブルを消してから2回元に戻すと、ケーブルも配線も戻り、やり直すとまた消える。
+    #[test]
+    fn deleting_a_breakout_wire_then_the_cable_can_be_undone() {
+        let lte = test_support::lte_sheet();
+        let (mut engine, sheet_id) = test_support::engine_with(lte.sheet);
+        let count = |e: &Engine| e.project().sheet(sheet_id).unwrap().entities.len();
+        let before = count(&engine);
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![lte.wires[0]] }).unwrap();
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![lte.cable] }).unwrap();
+        engine.undo().unwrap();
+        assert!(engine.project().sheet(sheet_id).unwrap().entities.contains_key(&lte.cable));
+        engine.undo().unwrap();
+        assert_eq!(count(&engine), before);
+        assert!(check_cables(engine.project().sheet(sheet_id).unwrap()).is_empty());
+        engine.redo().unwrap();
+        engine.redo().unwrap();
+        assert_eq!(count(&engine), before - 2);
+    }
+
+    /// Deleting the part a run cable lands on, then the cable as a separate edit, then undoing twice brings back both; redo deletes them again.
+    /// 区間ケーブルが着く部品を消し、別の編集でケーブルを消してから2回元に戻すと両方が戻り、やり直すとまた消える。
+    #[test]
+    fn deleting_the_landing_part_then_the_cable_can_be_undone() {
+        let lte = test_support::lte_sheet();
+        let (mut engine, sheet_id) = test_support::engine_with(lte.sheet);
+        let count = |e: &Engine| e.project().sheet(sheet_id).unwrap().entities.len();
+        let before = count(&engine);
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![lte.usb] }).unwrap();
+        let diags = check_cables(engine.project().sheet(sheet_id).unwrap());
+        assert!(diags.iter().any(|d| d.code == CABLE_CORE_UNASSIGNED), "{diags:?}");
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![lte.cable] }).unwrap();
+        engine.undo().unwrap();
+        engine.undo().unwrap();
+        assert_eq!(count(&engine), before);
+        engine.redo().unwrap();
+        engine.redo().unwrap();
+        assert_eq!(count(&engine), before - 2);
+    }
+
+    /// A run cable whose breakout wire was deleted can still be updated (renamed); ERC keeps reporting the missing core.
+    /// 分岐の配線が消えた区間ケーブルも更新 (名前の変更) ができ、ERCは行き先の無い芯を知らせ続ける。
+    #[test]
+    fn a_run_cable_whose_wire_is_gone_can_be_updated() {
+        let lte = test_support::lte_sheet();
+        let (mut engine, sheet_id) = test_support::engine_with(lte.sheet);
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![lte.wires[0]] }).unwrap();
+        let mut c = test_support::cable_of(engine.project().sheet(sheet_id).unwrap(), lte.cable).clone();
+        c.reference = "W46".into();
+        engine.execute(Command::UpdateEntity { sheet_id, entity: Entity::Cable(c) }).unwrap();
+        let diags = check_cables(engine.project().sheet(sheet_id).unwrap());
+        let hit = diags.iter().find(|d| d.code == CABLE_CORE_UNASSIGNED).expect("行き先なし");
+        assert!(hit.message.contains("W46") && hit.message.contains("VBUS"), "{}", hit.message);
+    }
+
+    /// Deleting a run cable together with its breakout wires and the part it lands on, then undoing, brings all of them back, and redo deletes them again (the cable is restored after what it points at).
+    /// 区間ケーブルを分岐の配線と着く先の部品と一緒に消してから元に戻すと全部が戻り、やり直すとまた消える (ケーブルは指す相手の後に戻す)。
+    #[test]
+    fn deleting_a_run_cable_with_its_wires_can_be_undone() {
+        let lte = test_support::lte_sheet();
+        let (mut engine, sheet_id) = test_support::engine_with(lte.sheet);
+        let count = |e: &Engine| e.project().sheet(sheet_id).unwrap().entities.len();
+        let before = count(&engine);
+        let mut ids = lte.wires.clone();
+        ids.push(lte.cable);
+        ids.push(lte.usb);
+        engine.execute(Command::DeleteEntities { sheet_id, ids }).unwrap();
+        assert_eq!(count(&engine), before - 6);
+        engine.undo().unwrap();
+        assert_eq!(count(&engine), before);
+        assert!(engine.project().sheet(sheet_id).unwrap().entities.contains_key(&lte.cable));
+        engine.redo().unwrap();
+        assert_eq!(count(&engine), before - 6);
+    }
+    /// The LTE harness drawn with a single-line run passes ERC: no short, no unconnected plug pin, no dangling breakout wire and no cable finding.
+    /// 1本線の区間で描いたLTEハーネスはERCを通る: 短絡も、未接続のプラグのピンも、宙ぶらりんの分岐の配線も、ケーブルの指摘も出ない。
+    #[test]
+    fn the_lte_harness_passes_erc() {
+        let lte = test_support::lte_sheet();
+        let diags = crate::verify::verify_sheet(&lte.sheet, &sheet_symbol_defs(&lte.sheet));
+        let erc: Vec<_> = diags.iter().filter(|d| d.code.starts_with("erc.")).collect();
+        assert!(erc.is_empty(), "{erc:?}");
+    }
+
+    /// Two cores of one cable that end up in the same net are an ERC error naming the cable and both cores, for a run cable and for a definition-line cable alike.
+    /// 1本のケーブルの芯2本が同じネットにあるとERCのエラーになり、ケーブルと両方の芯を示す (区間ケーブルでも定義線ケーブルでも)。
+    #[test]
+    fn two_cores_in_one_net_is_a_short() {
+        let mut lte = test_support::lte_sheet();
+        // J45 のピン1 (VBUS) とピン2 (D-) を配線で直結する
+        test_support::insert(&mut lte.sheet, Entity::Wire(test_support::wire(&[(57.5, 92.5), (57.5, 97.5)])));
+        let diags = check_cables(&lte.sheet);
+        let short: Vec<_> = diags.iter().filter(|d| d.code == CABLE_CORES_SHORTED).collect();
+        assert_eq!(short.len(), 1, "{diags:?}");
+        assert_eq!(short[0].severity, Severity::Error);
+        assert!(short[0].message.contains("W45") && short[0].message.contains("VBUS, D-"), "{}", short[0].message);
+
+        let (mut engine, sheet_id, _) = three_wires();
+        // 黒 (y=10) と白 (y=20) の配線を左端で繋ぐ
+        engine
+            .execute(Command::AddEntity {
+                sheet_id,
+                entity: Entity::Wire(test_support::wire(&[(15.0, 10.0), (15.0, 20.0)])),
+            })
+            .unwrap();
+        engine.execute(Command::AddCable { sheet_id, cable: cable(3, (50.0, 5.0), (50.0, 35.0)) }).unwrap();
+        let diags = check_cables(engine.project().sheet(sheet_id).unwrap());
+        assert!(diags.iter().any(|d| d.code == CABLE_CORES_SHORTED && d.message.contains("1, 2")), "{diags:?}");
+    }
+
+    /// A run-cable core whose wire or part has been deleted is an ERC error naming the cores.
+    /// 区間ケーブルの芯が指す配線や部品が消えているとERCのエラーになり、その芯を示す。
+    #[test]
+    fn a_core_whose_target_is_gone_is_unassigned() {
+        let mut lte = test_support::lte_sheet();
+        lte.sheet.entities.remove(&lte.wires[2]);
+        let diags = check_cables(&lte.sheet);
+        let hit: Vec<_> = diags.iter().filter(|d| d.code == CABLE_CORE_UNASSIGNED).collect();
+        assert_eq!(hit.len(), 1, "{diags:?}");
+        assert_eq!(hit[0].severity, Severity::Error);
+        assert!(hit[0].message.contains("D+"), "{}", hit[0].message);
+        lte.sheet.entities.remove(&lte.usb);
+        let diags = check_cables(&lte.sheet);
+        let hit = diags.iter().find(|d| d.code == CABLE_CORE_UNASSIGNED).expect("未割当");
+        assert!(hit.message.contains("VBUS, D-, D+, GND"), "{}", hit.message);
+    }
+
+    /// A single-line run whose end is far from the part its cores land on is warned about; one that touches the part is not.
+    /// 芯が着く部品から1本線の端が離れていると警告になり、部品に触れていれば警告しない。
+    #[test]
+    fn a_run_end_away_from_its_part_is_warned() {
+        let mut lte = test_support::lte_sheet();
+        assert!(!check_cables(&lte.sheet).iter().any(|d| d.code == CABLE_RUN_END_DETACHED));
+        lte.sheet.entities.get_mut(&lte.usb).unwrap().translate(40.0, 0.0);
+        let diags = check_cables(&lte.sheet);
+        let hit: Vec<_> = diags.iter().filter(|d| d.code == CABLE_RUN_END_DETACHED).collect();
+        assert_eq!(hit.len(), 1, "{diags:?}");
+        assert_eq!(hit[0].severity, Severity::Warning);
+        assert!(hit[0].message.contains("USB1"), "{}", hit[0].message);
+    }
+
+    /// The breakout ends of a run cable's wires are not dangling; without the cable they would be.
+    /// 区間ケーブルの芯の配線の分岐側の端は宙ぶらりんにならない (ケーブルが無ければ宙ぶらりん)。
+    #[test]
+    fn breakout_ends_are_not_dangling() {
+        let mut lte = test_support::lte_sheet();
+        let dangling = |sheet: &Sheet| {
+            crate::verify::verify_sheet(sheet, &sheet_symbol_defs(sheet))
+                .into_iter()
+                .filter(|d| d.code == "erc.dangling_wire")
+                .count()
+        };
+        assert_eq!(dangling(&lte.sheet), 0);
+        lte.sheet.entities.remove(&lte.cable);
+        assert_eq!(dangling(&lte.sheet), 4);
+    }
+
+    /// A run cable with more cores than its core count is the same core-overflow error as a definition-line cable.
+    /// 芯数より多い芯を持つ区間ケーブルは、定義線ケーブルと同じ芯数超過のエラーになる。
+    #[test]
+    fn a_run_cable_with_too_many_cores_overflows() {
+        let mut lte = test_support::lte_sheet();
+        let Some(Entity::Cable(c)) = lte.sheet.entities.get_mut(&lte.cable) else { panic!("ケーブル") };
+        c.core_count = 3;
+        assert!(check_cables(&lte.sheet).iter().any(|d| d.code == CABLE_CORE_OVERFLOW));
+    }
+
+    /// A run-cable core with both ends unassigned is reported as unassigned, with no extra floating-net or short finding.
+    /// 両端とも未割当の区間ケーブルの芯は「行き先なし」で報告し、浮いたネットや短絡など別の指摘を重ねない。
+    #[test]
+    fn a_core_with_both_ends_unassigned_is_only_unassigned() {
+        let mut lte = test_support::lte_sheet();
+        let Some(Entity::Cable(c)) = lte.sheet.entities.get_mut(&lte.cable) else { panic!("ケーブル") };
+        c.cores[0].end_a = None;
+        c.cores[0].end_b = None;
+        let diags = check_cables(&lte.sheet);
+        let hit: Vec<_> = diags.iter().filter(|d| d.code == CABLE_CORE_UNASSIGNED).collect();
+        assert_eq!(hit.len(), 1, "{diags:?}");
+        assert!(hit[0].message.contains("VBUS"), "{}", hit[0].message);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        let all = crate::verify::verify_sheet(&lte.sheet, &sheet_symbol_defs(&lte.sheet));
+        // 芯が無くなった結果の未接続ピン・宙ぶらりんの配線は本当の指摘。それ以外 (浮いたネットや短絡など) は出ない
+        let other: Vec<_> = all
+            .iter()
+            .filter(|d| d.code.starts_with("erc."))
+            .filter(|d| ![CABLE_CORE_UNASSIGNED, "erc.unconnected_pin", "erc.dangling_wire"].contains(&d.code.as_str()))
+            .collect();
+        assert!(other.is_empty(), "{other:?}");
+    }
+
+    /// The cable list names the devices at each end of a single-line cable (the board its breakout wires go to, the plug its run lands on) and counts the cores that have both ends as used.
+    /// ケーブル一覧は1本線のケーブルの両端の機器 (分岐の配線が行く基板、1本線が着くプラグ) を示し、両端のある芯を使用芯と数える。
+    #[test]
+    fn the_cable_list_shows_the_ends_of_a_run_cable() {
+        let lte = test_support::lte_sheet();
+        let project = test_support::project_with(lte.sheet);
+        assert_eq!(
+            cable_list_rows(&project),
+            vec![["W45", "", "4", "0.2", "0.3", "J45", "USB1", "4", "0", "", "Sheet1"].map(String::from).to_vec()]
+        );
+    }
+
+    /// The printed sheet draws a single-line cable as a thick line with a slash, a bar across the plug pins it lands on, fan lines to the breakout wires with the core names, and the cable label.
+    /// 印刷される図面は、1本線のケーブルを太い線と斜線、着いたプラグのピンを横切る棒、分岐の配線への扇と芯の呼び名、注記で描く。
+    #[test]
+    fn the_printed_sheet_draws_a_run_cable() {
+        let lte = test_support::lte_sheet();
+        let project = test_support::project_with(lte.sheet);
+        let sid = project.sheets[0].id;
+        let defs = sheet_symbol_defs(&project.sheets[0]);
+        let svg = crate::svg::project_sheet_to_svg(&project, sid, &defs).unwrap();
+        assert!(
+            svg.contains("<polyline points=\"80,100 192.500,100\" fill=\"none\" stroke=\"#000\" stroke-width=\"0.700\"/>"),
+            "区間"
+        );
+        assert!(svg.contains("x1=\"134.750\" y1=\"101.500\" x2=\"137.750\" y2=\"98.500\""), "斜線");
+        assert!(svg.contains("x1=\"192.500\" y1=\"92.500\" x2=\"192.500\" y2=\"107.500\""), "棒");
+        assert!(svg.contains("x1=\"80\" y1=\"100\" x2=\"77.500\" y2=\"97.500\""), "扇");
+        assert!(svg.contains(">D-</text>"), "芯の呼び名");
+        assert!(svg.contains("W45  4C×0.2sq  0.3m"), "注記");
+        assert!(!svg.contains("<ellipse"), "シールドが無ければ楕円は描かない");
     }
 }

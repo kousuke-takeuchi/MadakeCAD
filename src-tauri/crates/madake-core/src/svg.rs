@@ -1141,6 +1141,41 @@ fn render_wire_legends(out: &mut String, sheet: &Sheet, wire_parts: &[crate::mod
     }
 }
 
+/// 区間ケーブルを描く (形は [`crate::cable`] の `run_*` が決め、作図領域 `src/canvas/cable.ts` と同じ)。
+fn render_run_cable(out: &mut String, sheet: &Sheet, symbols: &[SymbolDef], c: &crate::model::Cable) {
+    let _ = write!(
+        out,
+        "<polyline points=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+        polyline_points(&c.run),
+        n(crate::cable::RUN_STROKE_MM)
+    );
+    if let Some((a, b)) = crate::cable::run_slash(c) {
+        line_el(out, a.x, a.y, b.x, b.y, CABLE_STROKE, "#000");
+    }
+    if let Some(at) = crate::cable::run_count_at(c) {
+        text_el(out, at.x, at.y, 2.0, "#000", "start", &c.core_count.to_string());
+    }
+    for (a, b) in crate::cable::run_bars(sheet, symbols, c) {
+        line_el(out, a.x, a.y, b.x, b.y, crate::cable::RUN_STROKE_MM, "#000");
+    }
+    for (a, b, core) in crate::cable::run_fans(sheet, c) {
+        line_el(out, a.x, a.y, b.x, b.y, WIRE_STROKE, "#000");
+        text_el(out, b.x, b.y - 0.8, crate::cable::CORE_LABEL_MM, "#000", "middle", &core);
+    }
+    if c.shield.is_some() {
+        if let Some((center, rx, ry, angle)) = crate::cable::shield_ellipse(c) {
+            let _ = write!(
+                out,
+                "<ellipse cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\" transform=\"rotate({} {} {})\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
+                n(center.x), n(center.y), n(rx), n(ry), n(angle), n(center.x), n(center.y), n(CABLE_STROKE)
+            );
+        }
+    }
+    if let Some(at) = crate::cable::run_label_at(c) {
+        text_el(out, at.x, at.y, 2.5, "#000", "start", &crate::cable::cable_label(c));
+    }
+}
+
 /// シート1枚を完全なSVG文書として書き出す。座標系はmm 1:1。図枠は既定の`jis-a3`。
 /// シート単体の出力なのでシート間クロスリファレンスは描かない
 /// (描くには [`project_sheet_to_svg`] を使う)。
@@ -1413,6 +1448,8 @@ fn sheet_to_svg_with_xrefs(
             | Entity::Nameplate(_)
             | Entity::Dimension(_)
             | Entity::WireLegend(_) => {}
+            // 1本線の区間を持つケーブル: 太い線・芯数の斜線・部品側の棒・分岐の扇と芯の呼び名・注記
+            Entity::Cable(c) if c.is_run() => render_run_cable(&mut out, sheet, symbols, c),
             // 多芯ケーブル: 定義線 (配線を斜めに横切る線)・シールドの楕円・注記
             Entity::Cable(c) => {
                 if let [a, b, ..] = c.points.as_slice() {

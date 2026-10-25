@@ -172,6 +172,8 @@ export interface Cable {
   shield: CableShield | null;
   /** 長さ m (未設定はnull)。 */
   length_m: number | null;
+  /** 1本線の区間 (format v17)。無ければ定義線ケーブル。区間のあるケーブルは種類 "run_cable" で届く。 */
+  run?: Point[];
 }
 
 /** ケーブルの芯線1本の割当。 */
@@ -180,7 +182,16 @@ export interface CableCore {
   color: string;
   /** 割り当てた配線 (消えていればnull)。 */
   wire: string | null;
+  /** 区間の始点 (run[0]) 側の行き先 (v17)。 */
+  end_a?: CoreEnd | null;
+  /** 区間の終点側の行き先 (v17)。 */
+  end_b?: CoreEnd | null;
 }
+
+/** 区間ケーブルの芯の行き先: 1本線が着く部品のピンか、分岐して続く配線 (madake-coreの`CoreEnd`)。 */
+export type CoreEnd =
+  | { kind: "pin"; part: string; pin: string; index?: number | null }
+  | { kind: "wire"; wire: string };
 
 /** ケーブルのシールド。 */
 export interface CableShield {
@@ -326,6 +337,7 @@ export type Entity =
   | ({ kind: "panel_legend" } & PanelLegend)
   | ({ kind: "wire_legend" } & WireLegend)
   | ({ kind: "cable" } & Cable)
+  | ({ kind: "run_cable" } & Cable)
   | ({ kind: "nameplate" } & Nameplate)
   | ({ kind: "dimension" } & Dimension);
 
@@ -716,6 +728,15 @@ export interface Net {
   label?: string | null;
   /** 線番。ネット内の全Wireで同値。 */
   wire_no?: string | null;
+  /** このネットを通る区間ケーブルの芯 (v17)。 */
+  cable_cores?: NetCableCore[];
+}
+
+/** ネットを通る区間ケーブルの芯1本 (madake-coreの`NetCableCore`)。 */
+export interface NetCableCore {
+  cable_id: string;
+  reference: string;
+  core: string;
 }
 
 /** 端子台チャートの1行 = 端子1個 (madake-coreの`TerminalRow`)。 */

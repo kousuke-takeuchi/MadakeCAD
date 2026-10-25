@@ -5,6 +5,7 @@
 
 pub mod block;
 pub mod cable;
+pub mod cable_run;
 pub mod command;
 pub mod dxf;
 pub mod frame_template;
@@ -78,6 +79,9 @@ pub enum CoreError {
     /// 図面は変更されていない(部分適用しない)。
     #[error("revert conflict: {0}")]
     RevertConflict(String),
+    /// プロジェクトファイルがこのアプリより新しい形式で保存されている ([`crate::io::load_project`])。
+    #[error("this file uses project format {found}, but this MadakeCAD reads up to format {supported}; update MadakeCAD to open it")]
+    NewerFormat { found: u32, supported: u32 },
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("serialization error: {0}")]

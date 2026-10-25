@@ -308,7 +308,7 @@ pub fn plan_connection(
 }
 
 /// 経路の線分上にあるピン (両端のピンと、それと同じ部品の同じ番号のピンは除く)。
-fn pins_on_route(
+pub(crate) fn pins_on_route(
     sheet: &Sheet,
     defs: &[SymbolDef],
     pts: &[Point],

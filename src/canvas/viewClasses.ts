@@ -60,6 +60,7 @@ export function entityViewClass(e: Entity): ViewClass {
       return "texts";
     case "harness":
     case "cable":
+    case "run_cable":
       return "harness";
     case "shape":
       return "shapes";

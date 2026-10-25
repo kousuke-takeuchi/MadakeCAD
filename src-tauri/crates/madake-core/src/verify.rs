@@ -651,6 +651,8 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
             | Entity::Dimension(_) => {}
         }
     }
+    // 区間ケーブルの芯の配線の分岐側の端は、芯の割当てで繋がっている (位置で繋がる相手は無い)
+    let breakouts = crate::cable::breakout_points(sheet);
     for w in &wires {
         let endpoints: Vec<Point> = match (w.points.first(), w.points.last()) {
             (Some(a), Some(b)) => vec![*a, *b],
@@ -662,6 +664,7 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 let attached = pin_points.iter().any(|p| near(p, ep))
                     || junctions.iter().any(|p| near(p, ep))
                     || labels.iter().any(|p| near(p, ep))
+                    || breakouts.iter().any(|p| near(p, ep))
                     || wires.iter().any(|other| {
                         other.id != w.id
                             && [other.points.first(), other.points.last()]

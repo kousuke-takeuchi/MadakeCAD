@@ -521,11 +521,15 @@ impl Engine {
         let Some(entry) = self.undo_stack.pop() else {
             return Ok(None);
         };
-        let mut ops = Vec::new();
-        for inv in &entry.inverse {
-            let (mut o, _) = self.apply(inv)?;
-            ops.append(&mut o);
-        }
+        // 戻せなかったら図面は適用前のまま (apply_all が戻す)、編集も履歴へ戻す。
+        // 取り出したまま返すと、その編集は二度と元に戻せなくなる
+        let ops = match self.apply_all(&entry.inverse) {
+            Ok((ops, _)) => ops,
+            Err(e) => {
+                self.undo_stack.push(entry);
+                return Err(e);
+            }
+        };
         self.redo_stack.push(entry);
         self.revision += 1;
         Ok(Some(Patch {
@@ -538,7 +542,14 @@ impl Engine {
         let Some(entry) = self.redo_stack.pop() else {
             return Ok(None);
         };
-        let (ops, inverse) = self.apply_all(&entry.forward)?;
+        // undo と同じく、やり直せなかった編集は redo 履歴へ戻す
+        let (ops, inverse) = match self.apply_all(&entry.forward) {
+            Ok(applied) => applied,
+            Err(e) => {
+                self.redo_stack.push(entry);
+                return Err(e);
+            }
+        };
         self.undo_stack.push(HistoryEntry {
             forward: entry.forward,
             inverse,
@@ -802,6 +813,7 @@ impl Engine {
                         core: (i + 1).to_string(),
                         color,
                         wire: Some(wire),
+                        ..Default::default()
                     })
                     .collect();
                 if cable.core_count == 0 {
@@ -863,8 +875,13 @@ impl Engine {
                         });
                     }
                 }
-                // 復元順は削除の逆順でなくても問題ない(idは独立)が、直感的に逆順にする。
+                // 復元順は削除の逆順にする。ただし参照を持つもの (ケーブル・引き出し線付きの注記・
+                // 銘板・寸法線) は指す相手より後に戻す: 先に戻すと AddEntity の検証が「相手がシートに
+                // 無い」で断り、undo が失敗する
                 inverse.reverse();
+                inverse.sort_by_key(|c| {
+                    matches!(c, Command::AddEntity { entity, .. } if !entity.refs().is_empty())
+                });
                 Ok((ops, inverse))
             }
             Command::MoveEntities {
@@ -1787,21 +1804,33 @@ fn validate_entity(entity: &Entity, sheet: &Sheet) -> Result<()> {
             }
         }
         Entity::Cable(c) => {
-            if c.points.len() != 2 {
-                return Err(CoreError::InvalidCommand(
-                    "a cable definition line needs exactly two points".into(),
-                ));
-            }
             if c.core_count == 0 {
                 return Err(CoreError::InvalidCommand("a cable needs at least one core".into()));
             }
-            for core in &c.cores {
-                if let Some(w) = core.wire {
-                    if !matches!(sheet.entities.get(&w), Some(Entity::Wire(_))) {
+            if c.is_run() {
+                crate::cable::validate_run_cable(sheet, c).map_err(CoreError::InvalidCommand)?;
+            } else {
+                if c.points.len() != 2 {
+                    return Err(CoreError::InvalidCommand(
+                        "a cable definition line needs exactly two points".into(),
+                    ));
+                }
+                for core in &c.cores {
+                    if core.end_a.is_some() || core.end_b.is_some() {
                         return Err(CoreError::InvalidCommand(format!(
-                            "cable core {} points at a wire that is not on this sheet: {w}",
+                            "cable core {} has end_a/end_b but the cable has no run",
                             core.core
                         )));
+                    }
+                    // 芯の配線が今シートにあるかは調べない (配線を先に消してからケーブルを消し、両方を
+                    // 元に戻すとケーブルが先に戻るため。消えた配線の芯はケーブル一覧で数えないだけ)
+                    if let Some(w) = core.wire {
+                        if matches!(sheet.entities.get(&w), Some(other) if !matches!(other, Entity::Wire(_))) {
+                            return Err(CoreError::InvalidCommand(format!(
+                                "cable core {} points at {w}, which is not a wire",
+                                core.core
+                            )));
+                        }
                     }
                 }
             }
@@ -3022,6 +3051,43 @@ mod tests {
         let (mut engine, _) = test_engine();
         assert!(engine.undo().unwrap().is_none());
         assert!(engine.redo().unwrap().is_none());
+    }
+
+    /// An undo that cannot be applied changes nothing and keeps the edit in the undo history (it is neither half applied nor lost).
+    /// 適用できないundoは図面を何も変えず、その編集をundo履歴に残す (半分だけ戻ることも、失われることもない)。
+    #[test]
+    fn a_failed_undo_keeps_the_edit_in_the_history() {
+        let (mut engine, sheet_id) = test_engine();
+        let target = sample_wire();
+        let target_id = target.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: target }).unwrap();
+        let other = sample_wire();
+        let other_id = other.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: other }).unwrap();
+        let note = Entity::Text(TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(20.0, 20.0),
+            text: "対象あり".into(),
+            height: 2.5,
+            rotation: 0,
+            anchor: TextAnchor::Start,
+            color: None,
+            bold: false,
+            leader_to: Some(target_id),
+        });
+        let note_id = note.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: note }).unwrap();
+        // 引き出し先を先に消し、別の編集で注記ともう1本の配線を消す。後の編集のundoは注記を戻せない
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![target_id] }).unwrap();
+        engine.execute(Command::DeleteEntities { sheet_id, ids: vec![other_id, note_id] }).unwrap();
+        let depth = engine.undo_depth();
+        let before = engine.project().sheet(sheet_id).unwrap().entities.len();
+        assert!(engine.undo().is_err());
+        assert_eq!(engine.undo_depth(), depth, "履歴に残る");
+        assert!(!engine.can_redo());
+        let sheet = engine.project().sheet(sheet_id).unwrap();
+        assert_eq!(sheet.entities.len(), before, "半分だけ戻さない");
+        assert!(!sheet.entities.contains_key(&other_id));
     }
 
     /// A new edit after undo clears the redo history (standard editor behavior).

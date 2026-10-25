@@ -205,3 +205,21 @@ async fn bad_arguments_come_back_with_a_reason() {
         outcome.content
     );
 }
+
+/// The input schema published for execute_commands lists the run_cable entity kind, so an agent can see how a cable with a run is written.
+/// execute_commands の入力スキーマに run_cable の種類が載り、エージェントが区間のあるケーブルの書き方を知れる。
+#[test]
+fn execute_commands_schema_lists_the_run_cable_kind() {
+    let (_doc, _parts, bridge) = fixture();
+    let tool = bridge
+        .tools()
+        .into_iter()
+        .find(|t| t.name == "execute_commands")
+        .expect("execute_commands");
+    let schema = serde_json::to_string(&tool.input_schema).unwrap();
+    // 説明文の言及ではなく、kind の値として載っていること
+    assert!(
+        schema.contains(r#""const":"run_cable""#) || schema.contains(r#""enum":["run_cable"]"#),
+        "kind=run_cable がスキーマにない"
+    );
+}

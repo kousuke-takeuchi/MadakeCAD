@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2848 specification clauses** across 6 areas.
+**2897 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -39,7 +39,32 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The cable list shows each cable with its part, cores, gauge, length, the devices at both ends of its wires, used and spare cores, shield and sheet. <sub>`the_cable_list_shows_ends_used_and_spare_cores`</sub>
 - In the BOM, cables are counted per part number: by total length when every cable has a length, otherwise by the number of cables; a cable without a part number is left out. <sub>`the_bom_counts_cables_per_part_number`</sub>
 - The printed sheet draws the cable's definition line, the shield ellipse when it has a shield, and the label. <sub>`the_printed_sheet_draws_the_definition_line_shield_and_label`</sub>
-- A cable whose definition line does not have two points, that has no cores, or whose core points at a wire not on the sheet is refused. <sub>`a_malformed_cable_is_refused`</sub>
+- A cable whose definition line does not have two points or that has no cores is refused; a core whose wire is not on the sheet (deleted earlier) is accepted and left to ERC, so undoing a cable deletion never fails. <sub>`a_malformed_cable_is_refused`</sub>
+- A definition-line cable whose core wire was deleted still renders in the netlist, ERC, cable list, wire list, BOM and printed sheet without panicking; it can be renamed, and deleting it then undoing twice brings back both the cable and the wire. <sub>`a_definition_cable_whose_wire_is_gone_still_works`</sub>
+- A run cable is refused when a core lacks an end, reuses a wire or a pin, points a wire end at a part or a pin end at a wire, still uses the definition-line field, or the run has fewer than two points; a definition-line cable with core ends is refused too. An end whose wire, part or pin is not on the sheet is accepted (ERC reports it). <sub>`a_run_cable_is_checked_when_placed`</sub>
+- Two cores of a run cable with the same name (after trimming spaces) are refused when placed, naming the duplicate. <sub>`a_run_cable_with_duplicate_core_names_is_refused`</sub>
+- Deleting one breakout wire, then the cable as a separate edit, then undoing twice brings back the cable and the wire; redo deletes them again. <sub>`deleting_a_breakout_wire_then_the_cable_can_be_undone`</sub>
+- Deleting the part a run cable lands on, then the cable as a separate edit, then undoing twice brings back both; redo deletes them again. <sub>`deleting_the_landing_part_then_the_cable_can_be_undone`</sub>
+- A run cable whose breakout wire was deleted can still be updated (renamed); ERC keeps reporting the missing core. <sub>`a_run_cable_whose_wire_is_gone_can_be_updated`</sub>
+- Deleting a run cable together with its breakout wires and the part it lands on, then undoing, brings all of them back, and redo deletes them again (the cable is restored after what it points at). <sub>`deleting_a_run_cable_with_its_wires_can_be_undone`</sub>
+- The LTE harness drawn with a single-line run passes ERC: no short, no unconnected plug pin, no dangling breakout wire and no cable finding. <sub>`the_lte_harness_passes_erc`</sub>
+- Two cores of one cable that end up in the same net are an ERC error naming the cable and both cores, for a run cable and for a definition-line cable alike. <sub>`two_cores_in_one_net_is_a_short`</sub>
+- A run-cable core whose wire or part has been deleted is an ERC error naming the cores. <sub>`a_core_whose_target_is_gone_is_unassigned`</sub>
+- A single-line run whose end is far from the part its cores land on is warned about; one that touches the part is not. <sub>`a_run_end_away_from_its_part_is_warned`</sub>
+- The breakout ends of a run cable's wires are not dangling; without the cable they would be. <sub>`breakout_ends_are_not_dangling`</sub>
+- A run cable with more cores than its core count is the same core-overflow error as a definition-line cable. <sub>`a_run_cable_with_too_many_cores_overflows`</sub>
+- A run-cable core with both ends unassigned is reported as unassigned, with no extra floating-net or short finding. <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
+- The cable list names the devices at each end of a single-line cable (the board its breakout wires go to, the plug its run lands on) and counts the cores that have both ends as used. <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
+- The printed sheet draws a single-line cable as a thick line with a slash, a bar across the plug pins it lands on, fan lines to the breakout wires with the core names, and the cable label. <sub>`the_printed_sheet_draws_a_run_cable`</sub>
+
+### cable_run
+
+- Planning the LTE harness draws one wire per core from the board pins to a breakout 10 mm out, runs one line from there to the plug, and maps the cores to the pins in pin order; the result is four nets. <sub>`plans_the_lte_harness`</sub>
+- Two connectors joined end to end by one line (3.5 mm AUX) get a run between their pin columns and no wires. <sub>`plans_a_single_line_between_two_connectors`</sub>
+- Pins may be given by name as well as number, and a side whose pin count differs from the core count is refused, naming the side and both counts. <sub>`pins_by_name_and_a_count_mismatch`</sub>
+- Planning a cable with two cores of the same name (after trimming spaces) is refused, naming the duplicate. <sub>`duplicate_core_names_are_refused`</sub>
+- A single line landing on a through terminal block maps each core to one terminal number, using the left connection points unless "#2" picks the right ones. <sub>`a_single_line_on_a_through_terminal_block`</sub>
+- A breakout placed behind the pins, or whose wire ends would land on another wire, is refused with a hint to move breakout_at. <sub>`a_bad_breakout_is_refused`</sub>
 
 ### Command engine (undo/redo)
 
@@ -86,6 +111,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Every execute/undo/redo increases the document revision, so clients can discard stale patches. <sub>`revision_increases_monotonically`</sub>
 - Commands targeting a non-existent sheet fail with an error and change nothing. <sub>`unknown_sheet_is_rejected`</sub>
 - Undo with an empty history returns None instead of an error. <sub>`undo_on_empty_history_returns_none`</sub>
+- An undo that cannot be applied changes nothing and keeps the edit in the undo history (it is neither half applied nor lost). <sub>`a_failed_undo_keeps_the_edit_in_the_history`</sub>
 - A new edit after undo clears the redo history (standard editor behavior). <sub>`new_edit_after_undo_clears_redo`</sub>
 - Updating an entity that does not exist fails and does not sneak the new entity into the sheet. <sub>`updating_a_missing_entity_fails_without_inserting_it`</sub>
 - Every history entry records who made the edit; plain execute() counts as a user edit. <sub>`execute_as_records_the_edit_origin`</sub>
@@ -258,7 +284,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 16, the version that added nameplates and associative dimensions to panel sheets. <sub>`the_current_format_version_is_sixteen`</sub>
+- The current file format version is 17, the version that added single-line cable runs (saved as "run_cable"). <sub>`the_current_format_version_is_seventeen`</sub>
+- A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable". <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
+- A "run_cable" entry whose run is empty (for example after hand-editing the file) opens as a plain definition-line cable and is written back with the kind "cable". <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
+- A file saved by a newer MadakeCAD (a higher format version) is refused with a message naming both versions, instead of being opened with parts missing. <sub>`a_file_from_a_newer_app_is_refused`</sub>
 - A cable with its definition line, core assignments, shield and length survives a save and reload unchanged. <sub>`a_cable_round_trips_through_a_saved_file`</sub>
 - A version-13 file, written before PLC drawing settings could be saved, opens with no saved settings. <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - A project file saved before tidy variants existed opens with every sheet an ordinary sheet (no variant mark), and is brought up to the current format version. <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
@@ -335,6 +364,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A variant key must be a single letter from A to Z; an empty key, two letters or a digit is refused. <sub>`a_variant_key_must_be_one_letter`</sub>
 - A placeholder follows a new variant to the symbol with the same designator, so inserting that variant with a value set fills it in too. <sub>`placeholders_follow_a_new_variant_by_designator`</sub>
 - Without a variant key, or when no existing macro is given, saving makes a new macro exactly as before. <sub>`saving_without_a_variant_or_existing_macro_makes_a_new_macro`</sub>
+- A harness copied with the cable selected before its wires and part is saved with the cable last, pastes in one edit, and the pasted cable's cores point at the pasted wires and part. <sub>`a_cable_selected_first_pastes_after_its_wires`</sub>
 
 ### mate
 
@@ -366,6 +396,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The four kinds of shape all travel in snake_case. <sub>`the_shape_kinds_are_serialized_in_snake_case`</sub>
 - A shape sent without the optional look fields opens plain: default colour, hairline stroke, no fill, solid line. <sub>`a_shape_without_look_fields_opens_plain`</sub>
 - Entity::id() returns the inner entity's UUID regardless of the entity kind. <sub>`entity_id_is_uniform_across_kinds`</sub>
+- A run cable lists the wires and parts its cores land on as in-sheet references, and remapping (sheet duplication) points every core end at the copies; ends with no copy are dropped. <sub>`a_run_cable_remaps_its_core_ends`</sub>
+- Moving a run cable moves every point of its single-line run. <sub>`translating_a_run_cable_moves_its_run`</sub>
 
 ### net_tag
 
@@ -396,6 +428,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Pin positions honor the symbol's rotation (clockwise in the Y-down paper coordinate system) and placement. <sub>`pin_positions_apply_rotation_and_translation`</sub>
 - Mirroring flips pins across the vertical axis before rotation is applied. <sub>`pin_positions_apply_mirror_before_rotation`</sub>
 - An arc inside a symbol turns with the symbol, so the contactor's half circle keeps facing its moving contact at every rotation, and mirroring flips it without reversing the drawing direction. <sub>`arc_angles_follow_symbol_rotation_and_mirror`</sub>
+- The LTE harness (four board wires breaking out of a single line that lands on the USB plug) gives four separate nets, each joining one board pin to the matching plug pin through its cable core. <sub>`a_run_cable_keeps_each_core_its_own_net`</sub>
+- A single line lying across every pin of a connector joins none of them: a cable's run never connects by position. <sub>`a_run_over_a_pin_column_joins_nothing`</sub>
+- A single-line cable between two connectors (3.5 mm AUX: L, R, GND) gives one net per core even though no wire is drawn. <sub>`a_connector_to_connector_run_gives_one_net_per_core`</sub>
+- Nets made only of cable cores are named after the nets that have wires, so adding such a cable does not rename existing nets. <sub>`core_only_nets_are_named_after_wire_nets`</sub>
+- Moving the part a single line lands on keeps every core connected to the same pin: connectivity follows the assignment, not the drawing. <sub>`moving_the_landing_part_keeps_core_connectivity`</sub>
 
 ### ngspice runner
 
@@ -687,6 +724,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A part number written on the wire itself is kept in the list even when the table says otherwise. <sub>`wire_list_keeps_a_part_number_written_on_the_wire`</sub>
 - A wire with no measured length leaves the length column empty (lengths come back from the 3D routing later). <sub>`wire_list_length_is_empty_until_it_is_known`</sub>
 - Rows are sorted by From then To within each sheet, so exporting the same drawing twice gives byte-identical files. <sub>`rows_are_sorted_by_from_then_to`</sub>
+- A single-line cable gives one From-To row per core, end to end: the board pin reached through the breakout wire, the plug pin the core lands on, the core colour, the cable gauge, length and part, the cable as harness and the "cable/core" column; its breakout wires get no rows of their own. <sub>`a_run_cable_gives_one_wire_list_row_per_core`</sub>
+- When a breakout wire ends on a net label and nothing else on the sheet carries that label (the continuation is on another sheet), the core's row shows the label name and the "none" remark. <sub>`a_breakout_wire_ending_on_a_label_shows_the_label`</sub>
+- Wires that are cores of a cable (breakout wires of a single-line cable, and wires crossed by a definition line) are not added again to the BOM wire roll-up, since the cable row already counts them. <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
 
 ### search
 
@@ -709,6 +749,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An empty project has no devices, and the tree is ordered by reference designator. <sub>`device_tree_is_ordered_and_can_be_empty`</sub>
 - Every function row knows the sheet and zone to jump to, which is what the navigator and the reference surfer use to reveal it. <sub>`every_function_knows_where_to_jump`</sub>
 - Filter names travel over the API as snake_case strings, and unknown names are rejected rather than guessed. <sub>`filter_names_parse_from_the_api`</sub>
+- A hit on a single-line cable (which has no definition line) is placed at the start of its run, not at the sheet origin. <sub>`a_run_cable_hit_is_at_its_run`</sub>
 
 ### shape
 
@@ -1180,6 +1221,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Without a sheet id every sheet of the project is numbered in sheet order with numbers unique across the whole project. <sub>`numbering_without_a_sheet_covers_the_whole_project`</sub>
 - A single wire number can be edited directly, and undo puts the previous value back. <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - The renumber command is plain JSON ({"type":"renumber_wires","mode":"append","start":1}), so AI agents and the CLI can send it. <sub>`renumber_command_is_plain_json`</sub>
+- Renumbering wires on a sheet with a connector-to-connector single-line cable numbers the drawn wires 1, 2 with no gap left by the cable's wire-less core nets. <sub>`core_only_nets_take_no_wire_number`</sub>
 
 ### wire_note
 
@@ -1270,6 +1312,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - connect_pins takes a list of connections and draws them all in one call that one undo removes, so the agent can wire a whole sheet without one call per wire. <sub>`connect_pins_draws_a_list_of_connections_in_one_edit`</sub>
 - If any connection in the list is wrong, connect_pins names its index and creates none of them. <sub>`connect_pins_list_is_all_or_nothing`</sub>
 - place_mate takes a list of pairs and places them all in one call that one undo removes. <sub>`place_mate_places_a_list_of_pairs_in_one_edit`</sub>
+- connect_cable draws the LTE harness in one call: four board wires to a breakout, one line to the USB plug, cores mapped by pin order; the netlist has four nets, ERC finds no unconnected pin, and one undo removes it all. <sub>`connect_cable_draws_a_breakout_harness_in_one_edit`</sub>
+- If any cable in the list is wrong, connect_cable names its index and draws none of them; a correct list is drawn in one edit. <sub>`connect_cable_list_is_all_or_nothing`</sub>
+- connect_cable's description tells the agent that cores follow pin order and to use it instead of a fake breakout block. <sub>`connect_cable_is_described_for_the_agent`</sub>
 
 ### Frame templates (REST)
 
@@ -1397,6 +1442,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Reading tools work through the bridge too, so the agent can look at the drawing before editing. <sub>`reading_tools_work_through_the_bridge`</sub>
 - A tool name that does not exist comes back as an error result instead of killing the turn. <sub>`an_unknown_tool_name_comes_back_as_an_error_result`</sub>
 - Bad arguments come back as an error result carrying the reason, so the model can correct itself. <sub>`bad_arguments_come_back_with_a_reason`</sub>
+- The input schema published for execute_commands lists the run_cable entity kind, so an agent can see how a cable with a run is written. <sub>`execute_commands_schema_lists_the_run_cable_kind`</sub>
 
 ### tools
 
@@ -1936,6 +1982,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - numbers a new cable after the W numbers of the cables and harnesses on the sheet <sub>`多芯ケーブル`</sub>
 - turns a drag into an add_cable command with no core count, and a mere click into nothing <sub>`多芯ケーブル`</sub>
 - is picked by clicking near its definition line <sub>`多芯ケーブル`</sub>
+- recognises both cable kinds and lists the points of the run <sub>`多芯ケーブル`</sub>
+- names a pin end by designator and pin, and a breakout wire end as null <sub>`多芯ケーブル`</sub>
+- marks a run with a slash through the middle of its longest segment, like the printed sheet <sub>`多芯ケーブル`</sub>
+- draws a bar across the landed pins and a fan to each breakout wire <sub>`多芯ケーブル`</sub>
+- is picked by clicking near its run <sub>`多芯ケーブル`</sub>
 
 ### deviceTree
 
@@ -2633,6 +2684,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - writes part, cores, gauge, shield and length in one update and keeps the core assignments <sub>`cableUpdateCommand`</sub>
 - refuses a core count below one or a gauge or length that is not a number <sub>`cableUpdateCommand`</sub>
 - sends nothing when nothing changed <sub>`cableUpdateCommand`</sub>
+- keeps the kind, run and core ends of a single-line cable <sub>`cableUpdateCommand`</sub>
 - writes text, height, position, following and part in one update without an empty second line <sub>`nameplateUpdateCommand`</sub>
 - sends nothing for a non-positive text height or when nothing changed <sub>`nameplateUpdateCommand`</sub>
 

@@ -196,7 +196,7 @@ pub fn search_project(project: &Project, query: &str, kinds: &[SearchKind]) -> V
                 | Entity::Nameplate(_)
                 | Entity::Dimension(_) => {}
                 Entity::Cable(c) => {
-                    let at = c.points.first().copied().unwrap_or_default();
+                    let at = c.points.first().or(c.run.first()).copied().unwrap_or_default();
                     if want(SearchKind::Reference) && matches(&c.reference, &needle) {
                         push(SearchKind::Reference, &c.reference, &c.part_no, c.id, at);
                     }
@@ -966,5 +966,18 @@ mod tests {
         assert_eq!(SearchKind::parse("text"), Some(SearchKind::Text));
         assert_eq!(SearchKind::parse("colour"), None);
         assert_eq!(SearchKind::ALL.len(), 5);
+    }
+
+    /// A hit on a single-line cable (which has no definition line) is placed at the start of its run, not at the sheet origin.
+    /// 1本線のケーブル (定義線を持たない) のヒットは、用紙の原点ではなく区間の始点の位置になる。
+    #[test]
+    fn a_run_cable_hit_is_at_its_run() {
+        let lte = crate::cable::test_support::lte_sheet();
+        let project = crate::cable::test_support::project_with(lte.sheet);
+        let sheet = &project.sheets[0];
+        let hits = search_project(&project, "W45", &[SearchKind::Reference]);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].zone, zone_at(sheet, Point::new(80.0, 100.0)));
+        assert_ne!(hits[0].zone, zone_at(sheet, Point::new(0.0, 0.0)));
     }
 }

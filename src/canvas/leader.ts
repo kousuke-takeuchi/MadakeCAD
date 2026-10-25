@@ -15,6 +15,7 @@
 // 注記か対象のどちらを動かしても線は追従する。
 
 import type { Entity, Point, Sheet, SymbolDef, TextEntity } from "../ipc";
+import { cablePoints } from "./cable";
 import { symbolBounds, textWidthMm } from "./dynamicSymbol";
 import { harnessBounds } from "./harness";
 import { shapeBounds } from "./shapes";
@@ -80,8 +81,9 @@ export function entityBounds(entity: Entity, defs: Map<string, SymbolDef>): Rect
     case "shape":
       return shapeBounds(entity);
     case "cable":
-      // Rust側 leader.rs と同じ: 定義線の2点の外接矩形
-      return boundsOfPoints(entity.points);
+    case "run_cable":
+      // Rust側 leader.rs と同じ: 定義線と区間の全頂点の外接矩形
+      return boundsOfPoints(cablePoints(entity));
     case "wire_legend":
       // 電線品番凡例ブロックの外形はシート全体の配線から決まる (wireLegend.ts の legendRect)。
       // ここはエンティティ単体からしか外形を求めないので、引き出し線の対象にはしない

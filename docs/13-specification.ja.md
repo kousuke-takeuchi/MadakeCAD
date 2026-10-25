@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2848仕様項目**。
+全6領域・**2897仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -39,7 +39,32 @@
 - ケーブル一覧は、ケーブルごとに型番・芯数・線径・長さ・配線両端の機器・使用芯/予備芯・シールド・シートを並べる。 <sub>`the_cable_list_shows_ends_used_and_spare_cores`</sub>
 - 部品表ではケーブルを型番ごとに数え、全部に長さがあれば合計の長さ、1本でも無ければ本数にする。型番の無いケーブルは載せない。 <sub>`the_bom_counts_cables_per_part_number`</sub>
 - 印刷される図面には、ケーブルの定義線と、シールドがあればシールドの楕円、注記が描かれる。 <sub>`the_printed_sheet_draws_the_definition_line_shield_and_label`</sub>
-- 定義線が2点でない・芯数が0・シートに無い配線を指す芯を持つケーブルは拒否される。 <sub>`a_malformed_cable_is_refused`</sub>
+- 定義線が2点でない・芯数が0のケーブルは拒否される。芯の配線がシートに無い (先に消された) だけなら受け付けてERCに任せる (ケーブルの削除の取り消しが失敗しないように)。 <sub>`a_malformed_cable_is_refused`</sub>
+- 芯の配線が消えた定義線ケーブルでも、ネットリスト・ERC・ケーブル一覧・電線リスト・部品表・印刷図面は落ちずに作れる。名前も変えられ、ケーブルを消してから2回元に戻すとケーブルも配線も戻る。 <sub>`a_definition_cable_whose_wire_is_gone_still_works`</sub>
+- 区間ケーブルは、端の無い芯・同じ配線やピンの使い回し・配線の端が部品を指す/ピンの端が配線を指す芯・定義線用の欄を使った芯・2点未満の区間があれば断る。芯の行き先を持つ定義線ケーブルも断る。行き先の配線・部品・ピンがシートに無いだけなら受け付ける (ERCが知らせる)。 <sub>`a_run_cable_is_checked_when_placed`</sub>
+- 区間ケーブルの芯2本が同じ呼び名 (前後の空白を除いて) なら置くときに断り、重なった呼び名を示す。 <sub>`a_run_cable_with_duplicate_core_names_is_refused`</sub>
+- 分岐の配線を1本消し、別の編集でケーブルを消してから2回元に戻すと、ケーブルも配線も戻り、やり直すとまた消える。 <sub>`deleting_a_breakout_wire_then_the_cable_can_be_undone`</sub>
+- 区間ケーブルが着く部品を消し、別の編集でケーブルを消してから2回元に戻すと両方が戻り、やり直すとまた消える。 <sub>`deleting_the_landing_part_then_the_cable_can_be_undone`</sub>
+- 分岐の配線が消えた区間ケーブルも更新 (名前の変更) ができ、ERCは行き先の無い芯を知らせ続ける。 <sub>`a_run_cable_whose_wire_is_gone_can_be_updated`</sub>
+- 区間ケーブルを分岐の配線と着く先の部品と一緒に消してから元に戻すと全部が戻り、やり直すとまた消える (ケーブルは指す相手の後に戻す)。 <sub>`deleting_a_run_cable_with_its_wires_can_be_undone`</sub>
+- 1本線の区間で描いたLTEハーネスはERCを通る: 短絡も、未接続のプラグのピンも、宙ぶらりんの分岐の配線も、ケーブルの指摘も出ない。 <sub>`the_lte_harness_passes_erc`</sub>
+- 1本のケーブルの芯2本が同じネットにあるとERCのエラーになり、ケーブルと両方の芯を示す (区間ケーブルでも定義線ケーブルでも)。 <sub>`two_cores_in_one_net_is_a_short`</sub>
+- 区間ケーブルの芯が指す配線や部品が消えているとERCのエラーになり、その芯を示す。 <sub>`a_core_whose_target_is_gone_is_unassigned`</sub>
+- 芯が着く部品から1本線の端が離れていると警告になり、部品に触れていれば警告しない。 <sub>`a_run_end_away_from_its_part_is_warned`</sub>
+- 区間ケーブルの芯の配線の分岐側の端は宙ぶらりんにならない (ケーブルが無ければ宙ぶらりん)。 <sub>`breakout_ends_are_not_dangling`</sub>
+- 芯数より多い芯を持つ区間ケーブルは、定義線ケーブルと同じ芯数超過のエラーになる。 <sub>`a_run_cable_with_too_many_cores_overflows`</sub>
+- 両端とも未割当の区間ケーブルの芯は「行き先なし」で報告し、浮いたネットや短絡など別の指摘を重ねない。 <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
+- ケーブル一覧は1本線のケーブルの両端の機器 (分岐の配線が行く基板、1本線が着くプラグ) を示し、両端のある芯を使用芯と数える。 <sub>`the_cable_list_shows_the_ends_of_a_run_cable`</sub>
+- 印刷される図面は、1本線のケーブルを太い線と斜線、着いたプラグのピンを横切る棒、分岐の配線への扇と芯の呼び名、注記で描く。 <sub>`the_printed_sheet_draws_a_run_cable`</sub>
+
+### cable_run
+
+- LTEハーネスを計画すると、基板のピンから10mm先の分岐点まで芯ごとに1本ずつ配線を引き、そこからプラグまで1本線を通し、芯をピン順にピンへ対応させる。結果は4ネットになる。 <sub>`plans_the_lte_harness`</sub>
+- 全長1本線で結ぶ2つのコネクタ (3.5mm AUX) は、ピン列の間に1本線が通り、配線は無い。 <sub>`plans_a_single_line_between_two_connectors`</sub>
+- ピンは番号でも名前でも指定でき、ピンの数が芯の数と違う端は、その端と両方の数を示して断る。 <sub>`pins_by_name_and_a_count_mismatch`</sub>
+- 同じ呼び名 (前後の空白を除いて) の芯が2本あるケーブルの計画は断り、重なった呼び名を示す。 <sub>`duplicate_core_names_are_refused`</sub>
+- 貫通端子台に着く1本線は、芯を端子番号1つずつに対応させ、ふだんは左の接続点、「#2」を付ければ右の接続点に着く。 <sub>`a_single_line_on_a_through_terminal_block`</sub>
+- ピンより後ろに置いた分岐点や、芯の配線の端が別の配線に乗る分岐点は、breakout_at をずらすよう伝えて断る。 <sub>`a_bad_breakout_is_refused`</sub>
 
 ### Commandエンジン (undo/redo)
 
@@ -86,6 +111,7 @@
 - execute/undo/redoのたびにドキュメントrevisionが増加し、クライアントは古いpatchを破棄できる。 <sub>`revision_increases_monotonically`</sub>
 - 存在しないシートへのCommandはエラーになり、何も変更されない。 <sub>`unknown_sheet_is_rejected`</sub>
 - 履歴が空のときのundoはエラーではなくNoneを返す。 <sub>`undo_on_empty_history_returns_none`</sub>
+- 適用できないundoは図面を何も変えず、その編集をundo履歴に残す (半分だけ戻ることも、失われることもない)。 <sub>`a_failed_undo_keeps_the_edit_in_the_history`</sub>
 - undo後に新しい編集をするとredo履歴は消える(一般的なエディタと同じ挙動)。 <sub>`new_edit_after_undo_clears_redo`</sub>
 - 存在しないエンティティの更新は失敗し、その要素がシートへ紛れ込むこともない。 <sub>`updating_a_missing_entity_fails_without_inserting_it`</sub>
 - 履歴の各エントリは編集の由来(誰の編集か)を記録し、通常のexecute()はユーザー編集として扱う。 <sub>`execute_as_records_the_edit_origin`</sub>
@@ -258,7 +284,10 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは16 (盤レイアウトに銘板と関連付き寸法線を追加した版) である。 <sub>`the_current_format_version_is_sixteen`</sub>
+- 現行のファイル形式バージョンは17 (1本線の区間を持つケーブルを追加し、種類「run_cable」で保存する版) である。 <sub>`the_current_format_version_is_seventeen`</sub>
+- 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
+- 区間が空の「run_cable」(ファイルを手で直したときなど) は普通の定義線ケーブルとして開き、書き戻すと種類「cable」になる。 <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
+- 新しいMadakeCADで保存されたファイル (形式の版が大きい) は、一部が欠けたまま開くのではなく、両方の版を示す理由付きで断られる。 <sub>`a_file_from_a_newer_app_is_refused`</sub>
 - 定義線・芯線割当・シールド・長さを持つケーブルは、保存して読み直しても変わらない。 <sub>`a_cable_round_trips_through_a_saved_file`</sub>
 - PLC図面の生成設定を保存できなかった頃 (format_version 13) のファイルは、保存なしの状態で開く。 <sub>`a_version_13_file_opens_without_saved_plc_settings`</sub>
 - 整えバリアントが無かった頃のプロジェクトファイルは、全シートが印のない普通のシートとして開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_no_variant_marks`</sub>
@@ -335,6 +364,7 @@
 - バリアントキーはAからZの1文字でなければならず、空・2文字・数字は拒否される。 <sub>`a_variant_key_must_be_one_letter`</sub>
 - プレースホルダは新しいバリアントでも参照記号が同じシンボルへ結び付くので、そのバリアントを値セット付きで挿入しても値が入る。 <sub>`placeholders_follow_a_new_variant_by_designator`</sub>
 - バリアントキーが無いとき、または既存マクロが無いときは、従来どおり新しいマクロとして保存される。 <sub>`saving_without_a_variant_or_existing_macro_makes_a_new_macro`</sub>
+- ケーブルを配線や部品より先に選んで写したハーネスは、ケーブルを最後にして保存され、1回の編集で貼り付けられ、貼ったケーブルの芯は貼った配線と部品を指す。 <sub>`a_cable_selected_first_pastes_after_its_wires`</sub>
 
 ### mate
 
@@ -366,6 +396,8 @@
 - 4種類の図形はいずれも snake_case でJSONを往復する。 <sub>`the_shape_kinds_are_serialized_in_snake_case`</sub>
 - 見た目の欄を省いて送られた図形は、既定色・細線・塗りなし・実線という素の形で開く。 <sub>`a_shape_without_look_fields_opens_plain`</sub>
 - Entity::id()は種別によらず内側エンティティのUUIDを返す。 <sub>`entity_id_is_uniform_across_kinds`</sub>
+- 区間ケーブルは芯が着く配線と部品をシート内参照として挙げ、写し替え (シート複製) で芯の端がすべて複製先を指す。複製先の無い端は落とす。 <sub>`a_run_cable_remaps_its_core_ends`</sub>
+- 区間ケーブルを動かすと、1本線の区間の全頂点が動く。 <sub>`translating_a_run_cable_moves_its_run`</sub>
 
 ### net_tag
 
@@ -396,6 +428,11 @@
 - ピン座標はシンボルの回転(Y下向き座標系で時計回り)と配置位置を反映する。 <sub>`pin_positions_apply_rotation_and_translation`</sub>
 - ミラーは回転より先に、縦軸に対してピンを反転する。 <sub>`pin_positions_apply_mirror_before_rotation`</sub>
 - シンボル内の弧はシンボルと一緒に回るので、電磁接触器の半円はどの回転角でも可動接点の側を向き続け、ミラーでは描画方向を保ったまま左右が入れ替わる。 <sub>`arc_angles_follow_symbol_rotation_and_mirror`</sub>
+- LTEハーネス (基板側の配線4本が1本線に分岐し、その線がUSBプラグに着く) は別々の4ネットになり、各ネットは芯を通して基板のピン1本とプラグの同じ番号のピンを結ぶ。 <sub>`a_run_cable_keeps_each_core_its_own_net`</sub>
+- コネクタの全ピンの上を通る1本線でも、どのピンも繋がない (ケーブルの区間は位置では繋がらない)。 <sub>`a_run_over_a_pin_column_joins_nothing`</sub>
+- 2つのコネクタを全長1本線で結ぶケーブル (3.5mm AUX の L・R・GND) は、配線が1本も無くても芯ごとに1ネットになる。 <sub>`a_connector_to_connector_run_gives_one_net_per_core`</sub>
+- 芯だけのネットは配線のあるネットの後ろに名前が付くので、そういうケーブルを足しても今あるネットの名前は変わらない。 <sub>`core_only_nets_are_named_after_wire_nets`</sub>
+- 1本線が着く部品を動かしても、どの芯も同じピンに繋がったまま (接続は割当てで決まり、描いた位置では決まらない)。 <sub>`moving_the_landing_part_keeps_core_connectivity`</sub>
 
 ### ngspiceランナー
 
@@ -687,6 +724,9 @@
 - ワイヤ自身に書かれた品番は、表に別の品番があってもそのまま電線リストに載る。 <sub>`wire_list_keeps_a_part_number_written_on_the_wire`</sub>
 - 長さが決まっていないワイヤの長さ列は空欄になる (長さは後で3D配線から書き戻される)。 <sub>`wire_list_length_is_empty_until_it_is_known`</sub>
 - 行はシートごとにFrom→Toの順に並ぶので、同じ図面を2回出力すると全く同じファイルになる。 <sub>`rows_are_sorted_by_from_then_to`</sub>
+- 1本線のケーブルは芯ごとに端から端まで1行になる: 分岐の配線の先の基板のピン、芯が着くプラグのピン、芯の色、ケーブルの線径・長さ・型番、ハーネス列にケーブル、「ケーブル/芯」の列。分岐の配線だけの行は出ない。 <sub>`a_run_cable_gives_one_wire_list_row_per_core`</sub>
+- 分岐の配線の先がネットラベルで、シート上にそのラベルを持つ他の相手が無いとき (続きは別シート)、芯の行はラベル名と備考「none」を出す。 <sub>`a_breakout_wire_ending_on_a_label_shows_the_label`</sub>
+- ケーブルの芯になっている配線 (1本線のケーブルの分岐の配線と、定義線が横切った配線) は、ケーブル行が数えているので部品表の電線集約に重ねて足さない。 <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
 
 ### search
 
@@ -709,6 +749,7 @@
 - 空のプロジェクトにデバイスは無く、ツリーは参照記号の順に並ぶ。 <sub>`device_tree_is_ordered_and_can_be_empty`</sub>
 - 機能の行はジャンプ先のシートとゾーンを持つ。ナビゲータと参照サーフィンはこれを使って図面を表示する。 <sub>`every_function_knows_where_to_jump`</sub>
 - フィルタ名はAPI上ではsnake_caseの文字列で、未知の名前は推測せずに拒否する。 <sub>`filter_names_parse_from_the_api`</sub>
+- 1本線のケーブル (定義線を持たない) のヒットは、用紙の原点ではなく区間の始点の位置になる。 <sub>`a_run_cable_hit_is_at_its_run`</sub>
 
 ### shape
 
@@ -1180,6 +1221,7 @@
 - シートを指定しない採番はプロジェクトの全シートをシート順に処理し、番号は図面全体で重複しない。 <sub>`numbering_without_a_sheet_covers_the_whole_project`</sub>
 - 線番は1本ずつ直接編集でき、undoで以前の値に戻る。 <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - 採番コマンドは素のJSON ({"type":"renumber_wires","mode":"append","start":1}) で表現でき、AIやCLIから送れる。 <sub>`renumber_command_is_plain_json`</sub>
+- コネクタ同士を結ぶ1本線ケーブルがあるシートで線番を振り直しても、配線は1, 2と飛ばずに番号が付く (配線の無い芯のネットは番号を使わない)。 <sub>`core_only_nets_take_no_wire_number`</sub>
 
 ### wire_note
 
@@ -1270,6 +1312,9 @@
 - connect_pins は配線のリストを受け取って1回で全部引き、1回の取り消しで全部消えるので、エージェントは配線1本ごとに呼ばずにシートを配線できる。 <sub>`connect_pins_draws_a_list_of_connections_in_one_edit`</sub>
 - リストの配線のどれか1本でも誤っていれば、connect_pins はその番号を知らせて1本も作らない。 <sub>`connect_pins_list_is_all_or_nothing`</sub>
 - place_mate は組のリストを受け取って1回で全部置き、1回の取り消しで全部消える。 <sub>`place_mate_places_a_list_of_pairs_in_one_edit`</sub>
+- connect_cable は LTE ハーネスを1回で描く: 基板側の配線4本と分岐、USBプラグまでの1本線、ピン順の芯の対応。ネットリストは4ネット、ERC は未接続ピンを出さず、undo 1回で全部消える。 <sub>`connect_cable_draws_a_breakout_harness_in_one_edit`</sub>
+- リストのケーブルのどれか1本でも誤っていれば、connect_cable はその番号を知らせて1本も描かない。正しいリストは1回の編集で描く。 <sub>`connect_cable_list_is_all_or_nothing`</sub>
+- connect_cable の説明は、芯がピン順に対応することと、偽の分岐ブロックの代わりに使うことをエージェントに伝える。 <sub>`connect_cable_is_described_for_the_agent`</sub>
 
 ### 図枠テンプレート (REST)
 
@@ -1397,6 +1442,7 @@
 - 読み取り系のツールも窓口経由で動く(エージェントは編集の前に図面を見られる)。 <sub>`reading_tools_work_through_the_bridge`</sub>
 - 存在しないツール名は、ターンを落とさずにエラーの結果として返る(モデルが言い直せる)。 <sub>`an_unknown_tool_name_comes_back_as_an_error_result`</sub>
 - 引数が間違っているときも理由つきのエラーの結果として返り、モデルが自分で直せる。 <sub>`bad_arguments_come_back_with_a_reason`</sub>
+- execute_commands の入力スキーマに run_cable の種類が載り、エージェントが区間のあるケーブルの書き方を知れる。 <sub>`execute_commands_schema_lists_the_run_cable_kind`</sub>
 
 ### tools
 
@@ -1936,6 +1982,11 @@
 - 新しいケーブルの参照記号は、シート上のケーブルとハーネスのW番号の続きになる <sub>`多芯ケーブル`</sub>
 - 定義線のドラッグは、芯数0 (横切った本数にする) のadd_cableコマンドになり、クリックしただけでは何も作らない <sub>`多芯ケーブル`</sub>
 - 定義線の近くをクリックするとケーブルを掴める <sub>`多芯ケーブル`</sub>
+- isCable は区間の有無にかかわらずケーブル (cable と run_cable) を見分け、cablePoints は定義線と区間の点を両方返す <sub>`多芯ケーブル`</sub>
+- 芯の行き先がピンなら「参照記号.ピン」(部品が消えていれば「?.ピン」)、分岐の配線ならnull <sub>`多芯ケーブル`</sub>
+- 区間ケーブルの印は区間のいちばん長い線分の中点を通る45度の斜線で、芯数の文字・注記・シールドの楕円もそこを基準にする (Rust側と同じ) <sub>`多芯ケーブル`</sub>
+- 部品に着く端は着いたピンの先を結ぶ棒、分岐の端は区間の端から各芯の配線の端への扇になる <sub>`多芯ケーブル`</sub>
+- 区間ケーブルは区間の線の近くをクリックすると掴める <sub>`多芯ケーブル`</sub>
 
 ### deviceTree
 
@@ -2633,6 +2684,7 @@
 - ケーブルのプロパティは型番・芯数・線径・シールド・長さを1回のupdate_entityで書き、芯線割当はそのまま残す <sub>`cableUpdateCommand`</sub>
 - 芯数が1以上の整数でない、線径や長さが数値でない入力は図面を変えない <sub>`cableUpdateCommand`</sub>
 - 何も変えていなければコマンドを送らない <sub>`cableUpdateCommand`</sub>
+- 1本線のケーブル (run_cable) のプロパティを書き換えても、種類・区間・芯の行き先はそのまま残る <sub>`cableUpdateCommand`</sub>
 - 銘板の文字・文字高・位置・追従・型番を1回のupdate_entityで書き、空の2行目は付けない <sub>`nameplateUpdateCommand`</sub>
 - 文字高が正の数でなければ、また何も変えていなければ図面を変えない <sub>`nameplateUpdateCommand`</sub>
 

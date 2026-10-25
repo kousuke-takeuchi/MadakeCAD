@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::geometry::Point;
-use crate::model::{Entity, EntityId, Sheet, SymbolInstance};
+use crate::model::{CoreEnd, Entity, EntityId, Sheet, SymbolInstance};
 use crate::symbol::SymbolDef;
 
 /// 接続判定の座標一致許容誤差 (mm)。
@@ -79,6 +79,19 @@ pub struct Net {
     /// 線番 (`Wire::net`)。ネット内の全Wireで同値になる。
     #[serde(default)]
     pub wire_no: Option<String>,
+    /// このネットを通る区間ケーブルの芯 (v17)。ケーブルid・参照記号・芯の呼びの順に並ぶ。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cable_cores: Vec<NetCableCore>,
+}
+
+/// ネットを通る区間ケーブルの芯1本。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct NetCableCore {
+    pub cable_id: EntityId,
+    /// ケーブルの参照記号 (例 "W45")。
+    pub reference: String,
+    /// 芯の呼び (例 "D-")。
+    pub core: String,
 }
 
 struct DisjointSet {
@@ -185,6 +198,9 @@ pub fn point_is_attached(
 /// - Wire同士は「端点同士の一致」または「一致点上のJunction経由」でのみ接続(交差だけでは非接続)
 /// - シンボルピン・NetLabelはWireの任意の頂点との一致で接続
 /// - 同名NetLabelのネットは統合され、ネット名はラベル名(辞書順最小)になる
+/// - 区間ケーブル ([`crate::model::Cable::run`]) の芯は、芯の行き先 ([`CoreEnd`]) が指すピン・配線と
+///   だけ繋がる。区間の線は位置では何にも繋がらない (ピン列の上を通っても短絡しない)
+/// - 配線か区間ケーブルの芯を1つ以上含むまとまりをネットにする。芯だけのネットは配線のあるネットの後ろ
 /// - 無名ネットは決定的な順序で "N001" から連番
 pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
     let defs = crate::symbol::DefIndex::new(symbols);
@@ -193,12 +209,14 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
     let mut wires = Vec::new();
     let mut junctions = Vec::new();
     let mut labels = Vec::new();
+    let mut cables = Vec::new();
     let mut pins = Vec::new(); // (entity_id, reference, pin_no, pos)
     for entity in sheet.entities.values() {
         match entity {
             Entity::Wire(w) => wires.push(w),
             Entity::Junction(j) => junctions.push(j),
             Entity::NetLabel(l) => labels.push(l),
+            Entity::Cable(c) if c.is_run() => cables.push(c),
             Entity::Symbol(s) => {
                 if let Some(def) = defs.get(s) {
                     for (no, pos) in pin_positions(s, &def) {
@@ -216,7 +234,8 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
             | Entity::Footprint(_)
             | Entity::PanelLegend(_)
             | Entity::WireLegend(_)
-            | Entity::Cable(_) | Entity::Nameplate(_)
+            | Entity::Cable(_)
+            | Entity::Nameplate(_)
             | Entity::Dimension(_) => {}
         }
     }
@@ -226,7 +245,13 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
     let pi = wi + wires.len();
     let ji = pi + pins.len();
     let li = ji + junctions.len();
-    let mut ds = DisjointSet::new(li + labels.len());
+    // 区間ケーブルの芯: 1芯1ノード (ノード番号は labels の後ろ)
+    let ci = li + labels.len();
+    let cores: Vec<(&crate::model::Cable, &crate::model::CableCore)> = cables
+        .iter()
+        .flat_map(|c| c.cores.iter().map(move |k| (*c, k)))
+        .collect();
+    let mut ds = DisjointSet::new(ci + cores.len());
 
     let endpoints = |w: &crate::model::Wire| -> Vec<Point> {
         match (w.points.first(), w.points.last()) {
@@ -290,7 +315,28 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
         }
     }
 
-    // グループ化 (Wireを1本以上含むグループのみネットとする)
+    // 芯 ⇔ 行き先 (割当てだけで結ぶ。区間の線はどの位置判定にも出てこない)
+    for (k, (_, core)) in cores.iter().enumerate() {
+        for end in [&core.end_a, &core.end_b].into_iter().flatten() {
+            match end {
+                CoreEnd::Wire { wire } => {
+                    if let Some(a) = wires.iter().position(|w| w.id == *wire) {
+                        ds.union(ci + k, wi + a);
+                    }
+                }
+                // 同じ番号の接続点は上で内部短絡済みなので、番号の一致だけを見る (index は描画用)
+                CoreEnd::Pin { part, pin, .. } => {
+                    for (p, (eid, _, no, _)) in pins.iter().enumerate() {
+                        if eid == part && no == pin {
+                            ds.union(ci + k, pi + p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // グループ化 (配線か区間ケーブルの芯を1つ以上含むグループだけをネットにする)
     #[derive(Default)]
     struct Group {
         wire_ids: Vec<EntityId>,
@@ -298,6 +344,7 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
         label: Option<String>,
         /// グループ内のWireに書かれた線番 (重複可)。
         wire_nos: Vec<String>,
+        cable_cores: Vec<NetCableCore>,
     }
     let mut groups: BTreeMap<usize, Group> = BTreeMap::new();
     for (a, w) in wires.iter().enumerate() {
@@ -306,6 +353,13 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
         if let Some(no) = w.net.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
             g.wire_nos.push(no.to_string());
         }
+    }
+    for (k, (c, core)) in cores.iter().enumerate() {
+        groups.entry(ds.find(ci + k)).or_default().cable_cores.push(NetCableCore {
+            cable_id: c.id,
+            reference: c.reference.clone(),
+            core: core.core.clone(),
+        });
     }
     for (p, (eid, reference, no, _)) in pins.iter().enumerate() {
         let root = ds.find(pi + p);
@@ -332,13 +386,21 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
 
     // 決定的順序: グループ内最小wire idで整列し、無名ネットへ連番付与
     let mut ordered: Vec<Group> = groups.into_values().collect();
-    ordered.sort_by_key(|g| g.wire_ids.iter().min().copied());
+    // 配線のあるネットが先 (これまでと同じ順・同じ自動名)、芯だけのネットはその後ろにケーブルid・芯の順
+    ordered.sort_by_key(|g| {
+        (
+            g.wire_ids.is_empty(),
+            g.wire_ids.iter().min().copied(),
+            g.cable_cores.iter().map(|c| (c.cable_id, c.core.clone())).min(),
+        )
+    });
     let mut seq = 0;
     ordered
         .into_iter()
         .map(|mut g| {
             g.wire_ids.sort();
             g.pins.sort_by(|a, b| (&a.reference, &a.pin).cmp(&(&b.reference, &b.pin)));
+            g.cable_cores.sort_by(|a, b| (a.cable_id, &a.core).cmp(&(b.cable_id, &b.core)));
             // 線番: 混在時は手動の名前 (数字以外) を優先し、以降は辞書順で決定的に選ぶ
             let wire_no = g
                 .wire_nos
@@ -362,6 +424,7 @@ pub fn extract_netlist(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Net> {
                 wire_ids: g.wire_ids,
                 label: g.label,
                 wire_no,
+                cable_cores: g.cable_cores,
             }
         })
         .collect()
@@ -781,5 +844,93 @@ mod tests {
         // 左右反転: 下向きの椀はそのまま、右向きの半円 (270→450) は左向きになる
         assert_eq!(rotate_arc_angles(0.0, 180.0, 0, true), (0.0, 180.0));
         assert_eq!(rotate_arc_angles(270.0, 450.0, 0, true), (90.0, 270.0));
+    }
+
+    /// The LTE harness (four board wires breaking out of a single line that lands on the USB plug) gives four separate nets, each joining one board pin to the matching plug pin through its cable core.
+    /// LTEハーネス (基板側の配線4本が1本線に分岐し、その線がUSBプラグに着く) は別々の4ネットになり、各ネットは芯を通して基板のピン1本とプラグの同じ番号のピンを結ぶ。
+    #[test]
+    fn a_run_cable_keeps_each_core_its_own_net() {
+        let lte = crate::cable::test_support::lte_sheet();
+        let nets = extract_netlist(&lte.sheet, &crate::symbol::sheet_symbol_defs(&lte.sheet));
+        assert_eq!(nets.len(), 4, "{nets:?}");
+        for (i, (core, _)) in crate::cable::test_support::LTE_CORES.into_iter().enumerate() {
+            let pin = (i + 1).to_string();
+            let net = nets
+                .iter()
+                .find(|n| n.cable_cores.iter().any(|c| c.core == core))
+                .expect(core);
+            let pins: Vec<(String, String)> =
+                net.pins.iter().map(|p| (p.reference.clone(), p.pin.clone())).collect();
+            assert_eq!(pins, vec![("J45".to_string(), pin.clone()), ("USB1".to_string(), pin)]);
+            assert_eq!(net.wire_ids, vec![lte.wires[i]]);
+            assert_eq!(net.cable_cores[0].reference, "W45");
+        }
+    }
+
+    /// A single line lying across every pin of a connector joins none of them: a cable's run never connects by position.
+    /// コネクタの全ピンの上を通る1本線でも、どのピンも繋がない (ケーブルの区間は位置では繋がらない)。
+    #[test]
+    fn a_run_over_a_pin_column_joins_nothing() {
+        let mut lte = crate::cable::test_support::lte_sheet();
+        let Some(Entity::Cable(c)) = lte.sheet.entities.get_mut(&lte.cable) else { panic!("ケーブル") };
+        // USB1 のピン列 (x=192.5、y=92.5〜107.5) に沿って区間を引き直す
+        c.run = vec![
+            Point::new(80.0, 100.0),
+            Point::new(192.5, 100.0),
+            Point::new(192.5, 85.0),
+            Point::new(192.5, 115.0),
+        ];
+        let nets = extract_netlist(&lte.sheet, &crate::symbol::sheet_symbol_defs(&lte.sheet));
+        assert_eq!(nets.len(), 4);
+        assert!(
+            nets.iter().all(|n| n.pins.iter().filter(|p| p.reference == "USB1").count() == 1),
+            "{nets:?}"
+        );
+    }
+
+    /// A single-line cable between two connectors (3.5 mm AUX: L, R, GND) gives one net per core even though no wire is drawn.
+    /// 2つのコネクタを全長1本線で結ぶケーブル (3.5mm AUX の L・R・GND) は、配線が1本も無くても芯ごとに1ネットになる。
+    #[test]
+    fn a_connector_to_connector_run_gives_one_net_per_core() {
+        let (sheet, _) = crate::cable::test_support::aux_sheet();
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        assert_eq!(nets.len(), 3, "{nets:?}");
+        for net in &nets {
+            assert!(net.wire_ids.is_empty());
+            assert_eq!(net.pins.len(), 2);
+            assert_eq!(net.pins[0].pin, net.pins[1].pin);
+        }
+    }
+
+    /// Nets made only of cable cores are named after the nets that have wires, so adding such a cable does not rename existing nets.
+    /// 芯だけのネットは配線のあるネットの後ろに名前が付くので、そういうケーブルを足しても今あるネットの名前は変わらない。
+    #[test]
+    fn core_only_nets_are_named_after_wire_nets() {
+        let (mut sheet, _) = crate::cable::test_support::aux_sheet();
+        for e in [
+            symbol("resistor", "R1", 100.0, 150.0),
+            symbol("resistor", "R2", 150.0, 150.0),
+            wire(&[(107.5, 150.0), (142.5, 150.0)]),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        assert_eq!(nets[0].wire_ids.len(), 1);
+        assert!(nets[1..].iter().all(|n| n.wire_ids.is_empty()));
+        assert_eq!(
+            nets.iter().map(|n| n.name.as_str()).collect::<Vec<_>>(),
+            ["N001", "N002", "N003", "N004"]
+        );
+    }
+
+    /// Moving the part a single line lands on keeps every core connected to the same pin: connectivity follows the assignment, not the drawing.
+    /// 1本線が着く部品を動かしても、どの芯も同じピンに繋がったまま (接続は割当てで決まり、描いた位置では決まらない)。
+    #[test]
+    fn moving_the_landing_part_keeps_core_connectivity() {
+        let mut lte = crate::cable::test_support::lte_sheet();
+        lte.sheet.entities.get_mut(&lte.usb).unwrap().translate(0.0, 40.0);
+        let nets = extract_netlist(&lte.sheet, &crate::symbol::sheet_symbol_defs(&lte.sheet));
+        assert_eq!(nets.len(), 4);
+        assert!(nets.iter().all(|n| n.pins.len() == 2 && n.pins[0].pin == n.pins[1].pin), "{nets:?}");
     }
 }
