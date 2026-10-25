@@ -58,6 +58,8 @@ pub fn legend_rows_with(sheet: &Sheet, wire_parts: &[WirePart]) -> Vec<Vec<Strin
     let mut totals: BTreeMap<(String, String, String), f64> = BTreeMap::new();
     let mut sq_values: BTreeMap<String, f64> = BTreeMap::new();
     for w in wires(sheet) {
+        // 区間ケーブルの分岐の配線は芯の線色・ケーブルの線径・型番で数える (空の行を作らない)
+        let w = &crate::cable::effective_wire(sheet, w);
         // 図面へ印字する色名にそろえてからまとめる (配線注記と同じ表記。`red`と`赤`は同じ行)
         let color = crate::wire_note::color_display(&w.color);
         let sq_text = crate::reports::fmt_num(w.sq);
@@ -128,6 +130,18 @@ mod tests {
             sheet.entities.insert(e.id(), e);
         }
         sheet
+    }
+
+    /// A run-cable breakout wire is counted under its core's colour and the cable's gauge, so it adds no blank row.
+    /// 区間ケーブルの分岐の配線は芯の線色とケーブルの線径で数えるので、空欄の行を増やさない。
+    #[test]
+    fn a_breakout_wire_adds_no_blank_row() {
+        let mut sheet = sheet_with(vec![wire("", 0.0, None, None)]);
+        let id = sheet.entities.keys().copied().next().unwrap();
+        crate::cable::test_support::attach_breakout_core(&mut sheet, id, "green", 0.2, "");
+        let rows = legend_rows_with(&sheet, &[]);
+        assert_eq!(rows.len(), 1);
+        assert_eq!((rows[0][0].as_str(), rows[0][1].as_str()), ("緑", "0.2"));
     }
 
     /// 抵抗器1個 (どこにも繋がっていないので、検証は「未接続のピン」を1件出す)。

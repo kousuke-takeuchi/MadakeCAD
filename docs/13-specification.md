@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2897 specification clauses** across 6 areas.
+**2911 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -65,6 +65,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Planning a cable with two cores of the same name (after trimming spaces) is refused, naming the duplicate. <sub>`duplicate_core_names_are_refused`</sub>
 - A single line landing on a through terminal block maps each core to one terminal number, using the left connection points unless "#2" picks the right ones. <sub>`a_single_line_on_a_through_terminal_block`</sub>
 - A breakout placed behind the pins, or whose wire ends would land on another wire, is refused with a hint to move breakout_at. <sub>`a_bad_breakout_is_refused`</sub>
+- With labels on one side every core gets a 10 mm breakout wire running straight away from the run and ending in a net label of that name; the core ends are those wires, and a second sheet carrying the same labels joins each core to its pins in the project netlist. <sub>`breakout_wires_end_at_net_labels`</sub>
+- Labels with a single line, a wrong label count, labels together with pins, and labels without breakout_at are each refused with a Japanese message. <sub>`bad_label_sides_are_refused`</sub>
+- Breakout wires get no gauge and no colour of their own (the colour stays on the cable core), so they carry no wire note, while the wire list still shows each core's colour. <sub>`breakout_wires_carry_no_note`</sub>
+- When the label wires run vertically the labels sit side by side, so the core pitch grows to the widest label plus a gap and no two labels overlap; the run direction follows the first via point. <sub>`side_by_side_labels_do_not_overlap_and_via_sets_the_direction`</sub>
+- Two labels with the same name (after trimming) on one side are refused naming the duplicate. <sub>`duplicate_label_names_are_refused`</sub>
 
 ### Command engine (undo/redo)
 
@@ -490,6 +495,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### panel_wiring
 
 - The panel wiring lists, for each part on a panel sheet, every wire on its pins in the schematic: pin, wire number, the other end, colour and gauge. <sub>`the_panel_wiring_lists_each_pin_wire_with_its_destination`</sub>
+- A run-cable breakout wire on a pin is listed with its core's colour and the cable's gauge, not blank. <sub>`a_breakout_wire_is_listed_with_the_core_colour_and_cable_gauge`</sub>
 - The panel wiring sheet draws each part with its terminal rows, and is an empty heading page when no panel has parts. <sub>`the_panel_wiring_sheet_draws_parts_or_an_empty_page`</sub>
 
 ### Parts database
@@ -727,6 +733,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A single-line cable gives one From-To row per core, end to end: the board pin reached through the breakout wire, the plug pin the core lands on, the core colour, the cable gauge, length and part, the cable as harness and the "cable/core" column; its breakout wires get no rows of their own. <sub>`a_run_cable_gives_one_wire_list_row_per_core`</sub>
 - When a breakout wire ends on a net label and nothing else on the sheet carries that label (the continuation is on another sheet), the core's row shows the label name and the "none" remark. <sub>`a_breakout_wire_ending_on_a_label_shows_the_label`</sub>
 - Wires that are cores of a cable (breakout wires of a single-line cable, and wires crossed by a definition line) are not added again to the BOM wire roll-up, since the cable row already counts them. <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
+- A static plug or socket carrying a pole number shows it in the wire list (X44A:2) instead of its only pin 1; one without a pole is unchanged. <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
 
 ### search
 
@@ -991,6 +998,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - When a terminal block is laid sideways (90 degrees) its two connection points sit one above the other, and the upper one is taken as the inside. <sub>`a_sideways_terminal_block_takes_the_upper_connection_as_the_inside`</sub>
 - A terminal with no wire on either side stays in the chart as a spare row with both sides empty. <sub>`an_unwired_terminal_stays_as_a_spare_row`</sub>
 - A row shows the wire number written on the wire and the wire itself (color, gauge and part number). <sub>`a_row_shows_the_wire_number_and_the_wire_specification`</sub>
+- A run-cable breakout wire has no colour or gauge of its own, so the row shows the core's colour and the cable's gauge and part number. <sub>`a_breakout_wire_row_shows_the_core_and_cable_specification`</sub>
 - When the wire on the inside differs from the wire on the outside, the row lists both. <sub>`both_wires_are_listed_when_the_inside_and_outside_differ`</sub>
 - Besides the combined wire column, each row keeps the wire of the inside and of the outside separately. <sub>`a_row_keeps_the_wire_of_each_side_separately`</sub>
 - Each row records the harness the wire of that side belongs to, and stays empty for a wire in no harness. <sub>`a_row_records_the_harness_of_each_side`</sub>
@@ -1146,6 +1154,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - tidy_metrics gathers the four counts of one sheet in a single value. <sub>`tidy_metrics_gathers_the_four_counts`</sub>
 - Measuring the same sheet twice gives exactly the same numbers, so the agent can compare before and after. <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
 - tidy_issues lists every counted problem with its kind, the entities involved, the text and where it is, one entry per count, so the agent can find and fix each one. <sub>`tidy_issues_name_each_counted_problem`</sub>
+- A run cable's text (label, core count, fan core names) is measured as text boxes owned by the cable, so a label lying over a block's outline is a label overlap that shows up in the issue details, while an unobstructed one is not. <sub>`run_cable_text_is_measured_and_can_overlap`</sub>
 
 ### Tidy variants (sheet copies / adopt)
 
@@ -1195,6 +1204,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### wire_legend
 
+- A run-cable breakout wire is counted under its core's colour and the cable's gauge, so it adds no blank row. <sub>`a_breakout_wire_adds_no_blank_row`</sub>
 - The netlist of a sheet is the same before and after a legend block is placed on it: the block carries no electrical meaning. <sub>`a_legend_block_does_not_appear_in_the_netlist`</sub>
 - Placing a legend block raises no verification diagnostic of its own, and leaves the sheet's other diagnostics untouched. <sub>`a_legend_block_raises_no_verification_diagnostic`</sub>
 - The BOM is the same before and after a legend block is placed: it is not a component and it adds no wire length. <sub>`a_legend_block_does_not_change_the_bom`</sub>
@@ -1312,7 +1322,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - connect_pins takes a list of connections and draws them all in one call that one undo removes, so the agent can wire a whole sheet without one call per wire. <sub>`connect_pins_draws_a_list_of_connections_in_one_edit`</sub>
 - If any connection in the list is wrong, connect_pins names its index and creates none of them. <sub>`connect_pins_list_is_all_or_nothing`</sub>
 - place_mate takes a list of pairs and places them all in one call that one undo removes. <sub>`place_mate_places_a_list_of_pairs_in_one_edit`</sub>
+- In a place_mate list, mates repeating the same reference without poles are numbered 1, 2, 3 in list order, an explicit pole wins, a lone reference gets none, and both halves carry the pole attribute. <sub>`place_mate_list_numbers_the_poles`</sub>
+- place_mate numbering skips poles given explicitly for the same reference and treats a blank pole as none: [X, X pole "1", X] gets poles 2, 1, 3. <sub>`place_mate_numbering_skips_explicit_poles`</sub>
 - connect_cable draws the LTE harness in one call: four board wires to a breakout, one line to the USB plug, cores mapped by pin order; the netlist has four nets, ERC finds no unconnected pin, and one undo removes it all. <sub>`connect_cable_draws_a_breakout_harness_in_one_edit`</sub>
+- connect_cable with labels on the board side draws a labelled wire per core in one edit, answers the label names as the core ends, joins each core to its label net, refuses labels with single or a wrong count, and its description mentions labels. <sub>`connect_cable_labels_end_the_breakout_wires_at_net_labels`</sub>
 - If any cable in the list is wrong, connect_cable names its index and draws none of them; a correct list is drawn in one edit. <sub>`connect_cable_list_is_all_or_nothing`</sub>
 - connect_cable's description tells the agent that cores follow pin order and to use it instead of a fake breakout block. <sub>`connect_cable_is_described_for_the_agent`</sub>
 
@@ -2536,6 +2549,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### wireLegend
 
+- counts a breakout wire under its core colour and cable gauge instead of a blank row <sub>`wire legend with run-cable breakout wires`</sub>
 - has only the header row for a sheet with no wires <sub>`wire legend block geometry`</sub>
 - sums the length of wires sharing the same colour, gauge and part number into one row <sub>`wire legend block geometry`</sub>
 - sorts rows by colour then by gauge <sub>`wire legend block geometry`</sub>

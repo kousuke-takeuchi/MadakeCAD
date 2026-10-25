@@ -25,6 +25,10 @@ use crate::verify::{Diagnostic, Severity};
 /// `mates_with`宣言を書き込む属性キー。
 pub const MATES_WITH_ATTR: &str = "mates_with";
 
+/// 静的なプラグ・ソケット (1極) の何極目かを書く属性キー。電線リストの表記が `参照記号:ピン1` の
+/// 代わりに `参照記号:極番号` になる (多極コネクタを1極ずつの組で描いたときの区別用)。
+pub const POLE_ATTR: &str = "pole";
+
 /// 極数不一致の診断コード (G14)。
 pub const MATE_POLE_MISMATCH: &str = "erc.mate_pole_mismatch";
 /// 片側宣言の診断コード (G14)。

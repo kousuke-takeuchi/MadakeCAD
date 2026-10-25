@@ -5,7 +5,7 @@
 // 「シールド楕円の形」「描画」「当たり判定」だけを持ち、注記とシールドの形はSVG出力
 // (svg.rs) と同じ規則で作る。
 
-import type { Cable, CableCore, Command, CoreEnd, Entity, Point, Sheet, SymbolDef } from "../ipc";
+import type { Cable, CableCore, Command, CoreEnd, Entity, Point, Sheet, SymbolDef, Wire } from "../ipc";
 import { resolveInstanceDef, transformLocal } from "./dynamicSymbol";
 import { theme } from "./theme";
 import type { Viewport } from "./viewport";
@@ -89,6 +89,29 @@ export function runLabelAt(c: Cable): Point | null {
 export function runEndPoint(c: Cable, end: "a" | "b"): Point | null {
   const run = c.run ?? [];
   return (end === "a" ? run[0] : run[run.length - 1]) ?? null;
+}
+
+/**
+ * 帳票・凡例に載せる配線の仕様 (線色・線径・品番)。区間ケーブルの分岐の配線は自分では持たないので、
+ * 空の項目を芯の線色・ケーブルの線径・型番で補う (Rust `cable::effective_wire`)。
+ */
+export function effectiveWire(sheet: Sheet, w: Wire): Wire {
+  for (const e of Object.values(sheet.entities)) {
+    if (e.kind !== "run_cable" || !isRunCable(e)) continue;
+    for (const core of e.cores) {
+      if (core.end_a?.kind !== "wire" || core.end_a.wire !== w.id) {
+        if (core.end_b?.kind !== "wire" || core.end_b.wire !== w.id) continue;
+      }
+      const own = (w.part_no ?? "").trim();
+      return {
+        ...w,
+        color: (w.color ?? "").trim() ? w.color : core.color,
+        sq: (w.sq ?? 0) > 0 ? w.sq : e.sq,
+        part_no: own || e.part_no.trim() || null,
+      };
+    }
+  }
+  return w;
 }
 
 function coreEnd(core: CableCore, end: "a" | "b"): CoreEnd | null | undefined {
