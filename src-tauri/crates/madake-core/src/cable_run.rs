@@ -140,6 +140,9 @@ pub fn plan_cable_run(sheet: &Sheet, defs: &[SymbolDef], spec: &CableRunSpec) ->
     if spec.cores.is_empty() {
         return Err("cores に芯を1本以上書く".into());
     }
+    if let Some(name) = crate::cable::duplicate_core_name(spec.cores.iter().map(|c| c.name())) {
+        return Err(format!("cores に呼び名 {name} の芯が2本あります。呼び名は芯ごとに変える"));
+    }
     let colors: Vec<String> = spec
         .cores
         .iter()
@@ -494,6 +497,25 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("a 側のピンが 3 本で、芯は 4 本"), "{err}");
+    }
+
+    /// Planning a cable with two cores of the same name (after trimming spaces) is refused, naming the duplicate.
+    /// 同じ呼び名 (前後の空白を除いて) の芯が2本あるケーブルの計画は断り、重なった呼び名を示す。
+    #[test]
+    fn duplicate_core_names_are_refused() {
+        let sheet = board_and_plug();
+        let defs = sheet_symbol_defs(&sheet);
+        let err = plan_cable_run(
+            &sheet,
+            &defs,
+            &spec(serde_json::json!({
+                "cores": ["GND", " GND", "D+", "D-"],
+                "a": {"part": "J45", "style": "multi"},
+                "b": {"part": "USB1", "style": "single"}
+            })),
+        )
+        .unwrap_err();
+        assert!(err.contains("GND") && err.contains("呼び名"), "{err}");
     }
 
     /// A single line landing on a through terminal block maps each core to one terminal number, using the left connection points unless "#2" picks the right ones.

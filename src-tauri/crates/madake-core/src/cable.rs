@@ -584,8 +584,8 @@ pub fn pin_end_position(sheet: &Sheet, defs: &[SymbolDef], end: &CoreEnd) -> Opt
 
 /// 区間ケーブルの形を調べる ([`crate::command::Engine`]が置く・更新するときに通す)。
 ///
-/// 区間が2点以上・どの芯も両端を持つ・芯の`wire` (定義線ケーブルの欄) は使わない・
-/// 1本の配線/1つのピンを2本の芯で使わない・配線の端が部品を、ピンの端が配線を指さない。
+/// 区間が2点以上・どの芯も両端を持つ・芯の`wire` (定義線ケーブルの欄) は使わない・芯の呼び名が
+/// 重ならない・1本の配線/1つのピンを2本の芯で使わない・配線の端が部品を、ピンの端が配線を指さない。
 ///
 /// **行き先が今シートにあるかは調べない**: 部品や分岐の配線を先に消してからケーブルを消し、
 /// 両方を元に戻すと、ケーブルは行き先より先に戻る。ここで断ると undo が失敗してケーブルが
@@ -593,6 +593,9 @@ pub fn pin_end_position(sheet: &Sheet, defs: &[SymbolDef], end: &CoreEnd) -> Opt
 pub fn validate_run_cable(sheet: &Sheet, c: &Cable) -> Result<(), String> {
     if c.run.len() < 2 {
         return Err(format!("cable {} needs a run of at least two points", c.reference));
+    }
+    if let Some(name) = duplicate_core_name(c.cores.iter().map(|k| k.core.as_str())) {
+        return Err(format!("ケーブル {} に芯の呼び名 {name} が2本あります。呼び名は芯ごとに変える", c.reference));
     }
     let mut used_wires: Vec<EntityId> = Vec::new();
     let mut used_pins: Vec<(EntityId, String, u32)> = Vec::new();
@@ -641,6 +644,12 @@ pub fn validate_run_cable(sheet: &Sheet, c: &Cable) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// 前後の空白を除いて2回出てくる芯の呼び名 (最初に重なったもの)。重なりが無ければNone。
+pub fn duplicate_core_name<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<String> {
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    names.into_iter().map(str::trim).find(|n| !seen.insert(*n)).map(str::to_string)
 }
 
 #[cfg(test)]
@@ -1080,6 +1089,21 @@ mod tests {
             engine.execute(Command::DeleteEntities { sheet_id, ids: vec![id] }).unwrap();
         }
         engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(cable) }).unwrap();
+    }
+
+    /// Two cores of a run cable with the same name (after trimming spaces) are refused when placed, naming the duplicate.
+    /// 区間ケーブルの芯2本が同じ呼び名 (前後の空白を除いて) なら置くときに断り、重なった呼び名を示す。
+    #[test]
+    fn a_run_cable_with_duplicate_core_names_is_refused() {
+        let lte = test_support::lte_sheet();
+        let mut sheet = lte.sheet.clone();
+        let mut cable = test_support::cable_of(&sheet, lte.cable).clone();
+        sheet.entities.remove(&lte.cable);
+        let (mut engine, sheet_id) = test_support::engine_with(sheet);
+        cable.cores[1].core = " GND ".into();
+        let err = engine.execute(Command::AddEntity { sheet_id, entity: Entity::Cable(cable) }).unwrap_err();
+        assert!(err.to_string().contains("GND"), "{err}");
+        assert!(err.to_string().contains("呼び名"), "{err}");
     }
 
     /// Deleting one breakout wire, then the cable as a separate edit, then undoing twice brings back the cable and the wire; redo deletes them again.
