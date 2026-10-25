@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2991 specification clauses** across 6 areas.
+**2992 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2922,6 +2922,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - compiles every message in every catalog <sub>`i18n`</sub>
 - keeps the same named placeholders as English in every translation <sub>`i18n`</sub>
 - keeps the same number of plural forms as English in every translation <sub>`i18n`</sub>
+- names every connector kind in every locale <sub>`i18n`</sub>
 - shows each language name as its own endonym <sub>`i18n`</sub>
 - resolves language tags leniently and falls back to English for unknown values <sub>`i18n`</sub>
 

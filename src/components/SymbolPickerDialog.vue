@@ -444,7 +444,7 @@ function placeMacro() {
 }
 /* ピン表エディタを開いているあいだは、左右のピン行+プレビューが入る幅にする */
 .dialog.with-pins {
-  width: min(820px, 96vw);
+  width: min(1080px, 96vw);
   max-height: 88vh;
   overflow-y: auto;
 }

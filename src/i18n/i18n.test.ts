@@ -7,6 +7,7 @@ import zh from "../locales/zh.json";
 import es from "../locales/es.json";
 import fr from "../locales/fr.json";
 import de from "../locales/de.json";
+import { CONNECTOR_KINDS } from "../canvas/connector";
 
 /** 実装済みカタログ (ロケール → カタログ)。 */
 const CATALOGS: Record<string, Record<string, unknown>> = { en, ja, zh, es, fr, de };
@@ -96,6 +97,16 @@ describe("i18n", () => {
         expect((valueAt(catalog, key) as string).split("|").length, `${locale}: ${key}`).toBe(
           enForms,
         );
+      }
+    }
+  });
+
+  // ja: コネクタの13種類はどれも全ロケールに表示名がある (ピン表エディタの選択肢)
+  it("names every connector kind in every locale", () => {
+    for (const [locale, catalog] of Object.entries(CATALOGS)) {
+      const names = ((catalog.blockEditor as Record<string, unknown>).connector ?? {}) as Record<string, unknown>;
+      for (const kind of CONNECTOR_KINDS) {
+        expect(typeof names[kind], `${locale}: ${kind}`).toBe("string");
       }
     }
   });
