@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2798 specification clauses** across 6 areas.
+**2801 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
