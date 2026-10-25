@@ -396,7 +396,8 @@ pub struct MatePair {
     pub second_point: Point,
 }
 
-/// プラグとソケットを [`MATE_GAP`] 離して向かい合わせに並べる。参照記号は両方、値はソケットに付ける。
+/// プラグとソケットを [`MATE_GAP`] 離して向かい合わせに並べる。参照記号は両方に付けるが印字はソケット側だけ
+/// (プラグは[`crate::model::HIDE_REFERENCE_ATTR`])、値はソケットに付ける。
 pub fn mate_pair(
     at: Point,
     orientation: MateOrientation,
@@ -439,7 +440,12 @@ pub fn mate_pair(
             } else {
                 String::new()
             },
-            attrs: Default::default(),
+            // 記号は組で共有し、ソケット側だけに印字する (同じ記号の二重表示を避ける)
+            attrs: if is_socket {
+                Default::default()
+            } else {
+                [(crate::model::HIDE_REFERENCE_ATTR.to_string(), "true".to_string())].into()
+            },
         }
     };
     let first = make(first_spec, at);
@@ -804,6 +810,20 @@ mod tests {
                 for q in [pair.first_point, pair.second_point] {
                     assert!(crate::tidy::is_on_grid(&q), "{q:?}");
                 }
+            }
+        }
+    }
+
+    /// The plug half of a mate pair hides its designator, so the shared designator is printed once, on the socket.
+    /// かみ合わせの組のプラグ側は参照記号を印字しないので、共有する記号はソケット側に1回だけ描かれる。
+    #[test]
+    fn the_plug_hides_the_shared_designator() {
+        for side in [MaleSide::First, MaleSide::Second] {
+            let pair = mate_pair(p(100.0, 50.0), MateOrientation::Horizontal, side, "J1", "");
+            for half in [&pair.first, &pair.second] {
+                let is_plug = half.symbol_id == "connector_plug";
+                assert_eq!(half.shows_reference(), !is_plug, "{side:?} {}", half.symbol_id);
+                assert_eq!(half.reference, "J1");
             }
         }
     }

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2838 specification clauses** across 6 areas.
+**2839 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -525,6 +525,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Wiring a pin to itself is refused, whether it is named by number or by name. <sub>`wiring_a_pin_to_itself_is_refused`</sub>
 - When one part has the same pin number twice (a through terminal), the bare number is refused with both choices, and "#n" picks one. <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
 - A mate pair sits on the 2.5 mm grid and its two halves only touch, so the tidy metrics count no overlap and no off-grid point for it. <sub>`a_mate_pair_is_tidy`</sub>
+- The plug half of a mate pair hides its designator, so the shared designator is printed once, on the socket. <sub>`the_plug_hides_the_shared_designator`</sub>
 
 ### PLC I/O
 
