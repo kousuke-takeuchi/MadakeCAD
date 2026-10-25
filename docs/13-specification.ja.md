@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2933仕様項目**。
+全6領域・**2937仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -616,6 +616,13 @@
 - 同居できるのは同じラダー形式・同じラング間隔で生成したページだけで、違えば次のモジュールは新しいページから始まる。 <sub>`a_page_of_another_style_or_spacing_is_not_shared`</sub>
 - 2.5mmグリッドの正の倍数でないラング間隔は断られるので、生成したページは必ずグリッドに乗る。 <sub>`an_off_grid_rung_spacing_is_refused`</sub>
 - I/Oレポートは各点をアドレス・信号名・接続先・線番・コメントで並べ、プロジェクト全体版では先頭にモジュールの参照記号が付く。 <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
+
+### port
+
+- ポートに繋がった普通のピンで、名前がどの接点とも合わないものは、ピン・ポート・接点を書いた警告になる。接点と同じ名前のピンは警告にならない。 <sub>`a_plain_pin_on_a_port_is_a_warning`</sub>
+- 繋がった2つのポートのうち1つにしか無い接点は情報として知らせる。かみ合わせの片側にだけ繋いだポートでは出さない。 <sub>`a_contact_on_only_one_of_two_ports_is_reported_as_info`</sub>
+- 区間ケーブルの芯の接点がポートのピンからなくなった (後でブロックを直した) ときは、その接点を書いた「芯の行き先なし」として知らせる。 <sub>`a_core_on_a_removed_contact_is_reported`</sub>
+- あるシートではポートのラベルなのに、別のシートではポートの無いネットに載っているラベルは、シートが繋がらないのでプロジェクトの警告になる。 <sub>`a_port_label_without_a_port_on_another_sheet_is_a_warning`</sub>
 
 ### raster
 

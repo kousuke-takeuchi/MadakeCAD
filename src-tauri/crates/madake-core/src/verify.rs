@@ -66,6 +66,8 @@ pub fn verify_project(project: &crate::model::Project) -> Vec<Diagnostic> {
     diags.extend(crate::panel::panel_diagnostics(project));
     // 嵌合コネクタ対 (G14) もmates_withが他シートの参照記号を指しうるので、プロジェクト全体で評価する
     diags.extend(crate::mate::mate_diagnostics(project));
+    // ポートのラベルはシートを跨ぐので、プロジェクト全体で評価する
+    diags.extend(crate::port::port_label_diagnostics(project));
     diags
 }
 
@@ -115,6 +117,7 @@ pub(crate) fn verify_sheet_with(
     diags.extend(electrical(sheet, symbols, sim));
     // 多芯ケーブルの芯数超過 (M4 §5)
     diags.extend(crate::cable::check_cables(sheet));
+    diags.extend(crate::port::check_ports(sheet));
     diags
 }
 

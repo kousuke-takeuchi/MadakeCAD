@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2933 specification clauses** across 6 areas.
+**2937 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -616,6 +616,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Only a page generated with the same ladder style and rung spacing can be shared; otherwise the next module starts a new page. <sub>`a_page_of_another_style_or_spacing_is_not_shared`</sub>
 - A rung spacing that is not a positive multiple of the 2.5 mm grid is refused, so generated pages stay on grid. <sub>`an_off_grid_rung_spacing_is_refused`</sub>
 - The I/O report lists every point as address, signal name, target, wire number and comment, with the module reference in front for the whole project. <sub>`the_io_report_lists_address_signal_target_wire_number_and_comment`</sub>
+
+### port
+
+- A plain pin wired to a port whose name matches no contact is a warning that names the pin, the port and its contacts; a pin named like a contact is not. <sub>`a_plain_pin_on_a_port_is_a_warning`</sub>
+- A contact on only one of two joined ports is reported as info; a port wired only to a mate half gives no such info. <sub>`a_contact_on_only_one_of_two_ports_is_reported_as_info`</sub>
+- A run-cable core whose contact is no longer on the port pin (the block was edited after) is reported as an unassigned core naming the contact. <sub>`a_core_on_a_removed_contact_is_reported`</sub>
+- A label that is a port label on one sheet but sits on a net without a port on another sheet is a project warning, because those sheets are not joined. <sub>`a_port_label_without_a_port_on_another_sheet_is_a_warning`</sub>
 
 ### raster
 
