@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2861 specification clauses** across 6 areas.
+**2868 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -42,6 +42,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A cable whose definition line does not have two points, that has no cores, or whose core points at a wire not on the sheet is refused. <sub>`a_malformed_cable_is_refused`</sub>
 - A run cable is accepted when every core has both ends on this sheet, and refused when a core lacks an end, points at a missing pin or wire, reuses a wire, still uses the definition-line field, or the run has fewer than two points; a definition-line cable with core ends is refused too. <sub>`a_run_cable_is_checked_when_placed`</sub>
 - Deleting a run cable together with its breakout wires and the part it lands on, then undoing, brings all of them back, and redo deletes them again (the cable is restored after what it points at). <sub>`deleting_a_run_cable_with_its_wires_can_be_undone`</sub>
+- The LTE harness drawn with a single-line run passes ERC: no short, no unconnected plug pin, no dangling breakout wire and no cable finding. <sub>`the_lte_harness_passes_erc`</sub>
+- Two cores of one cable that end up in the same net are an ERC error naming the cable and both cores, for a run cable and for a definition-line cable alike. <sub>`two_cores_in_one_net_is_a_short`</sub>
+- A run-cable core whose wire or part has been deleted is an ERC error naming the cores. <sub>`a_core_whose_target_is_gone_is_unassigned`</sub>
+- A single-line run whose end is far from the part its cores land on is warned about; one that touches the part is not. <sub>`a_run_end_away_from_its_part_is_warned`</sub>
+- The breakout ends of a run cable's wires are not dangling; without the cable they would be. <sub>`breakout_ends_are_not_dangling`</sub>
+- A run cable with more cores than its core count is the same core-overflow error as a definition-line cable. <sub>`a_run_cable_with_too_many_cores_overflows`</sub>
+- A run-cable core with both ends unassigned is reported as unassigned, with no extra floating-net or short finding. <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
 
 ### Command engine (undo/redo)
 

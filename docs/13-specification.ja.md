@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2861仕様項目**。
+全6領域・**2868仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -42,6 +42,13 @@
 - 定義線が2点でない・芯数が0・シートに無い配線を指す芯を持つケーブルは拒否される。 <sub>`a_malformed_cable_is_refused`</sub>
 - 区間ケーブルは、どの芯も両端がこのシートにあれば受け付け、端の無い芯・無いピンや配線を指す芯・同じ配線の使い回し・定義線用の欄を使った芯・2点未満の区間があれば断る。芯の行き先を持つ定義線ケーブルも断る。 <sub>`a_run_cable_is_checked_when_placed`</sub>
 - 区間ケーブルを分岐の配線と着く先の部品と一緒に消してから元に戻すと全部が戻り、やり直すとまた消える (ケーブルは指す相手の後に戻す)。 <sub>`deleting_a_run_cable_with_its_wires_can_be_undone`</sub>
+- 1本線の区間で描いたLTEハーネスはERCを通る: 短絡も、未接続のプラグのピンも、宙ぶらりんの分岐の配線も、ケーブルの指摘も出ない。 <sub>`the_lte_harness_passes_erc`</sub>
+- 1本のケーブルの芯2本が同じネットにあるとERCのエラーになり、ケーブルと両方の芯を示す (区間ケーブルでも定義線ケーブルでも)。 <sub>`two_cores_in_one_net_is_a_short`</sub>
+- 区間ケーブルの芯が指す配線や部品が消えているとERCのエラーになり、その芯を示す。 <sub>`a_core_whose_target_is_gone_is_unassigned`</sub>
+- 芯が着く部品から1本線の端が離れていると警告になり、部品に触れていれば警告しない。 <sub>`a_run_end_away_from_its_part_is_warned`</sub>
+- 区間ケーブルの芯の配線の分岐側の端は宙ぶらりんにならない (ケーブルが無ければ宙ぶらりん)。 <sub>`breakout_ends_are_not_dangling`</sub>
+- 芯数より多い芯を持つ区間ケーブルは、定義線ケーブルと同じ芯数超過のエラーになる。 <sub>`a_run_cable_with_too_many_cores_overflows`</sub>
+- 両端とも未割当の区間ケーブルの芯は「行き先なし」で報告し、浮いたネットや短絡など別の指摘を重ねない。 <sub>`a_core_with_both_ends_unassigned_is_only_unassigned`</sub>
 
 ### Commandエンジン (undo/redo)
 
