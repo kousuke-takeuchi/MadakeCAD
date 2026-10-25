@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2996 specification clauses** across 6 areas.
+**3000 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -18,6 +18,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### block
 
+- A block's export name follows its drawn shape only (pins and picture): whitespace in the table does not matter, a different name, pin, connector or size does, and the template keeps the name `block`. <sub>`block_export_id_follows_the_drawn_shape_only`</sub>
 - A block symbol puts its named pins on both sides of a box, 5 mm apart and centred on the 2.5 mm grid, each pointing outwards. <sub>`block_pins_sit_on_both_sides_five_millimetres_apart`</sub>
 - Pin numbers are drawn outside the outline next to the lead, and pin names inside it. <sub>`pin_numbers_are_drawn_outside_and_pin_names_inside`</sub>
 - The box grows automatically with the number of pins and the length of the pin names, always in 5 mm steps. <sub>`auto_size_grows_with_pin_count_and_name_length`</sub>
@@ -240,6 +241,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - The exported DXF is an AutoCAD 2000 (AC1015) file in millimetres with HEADER, TABLES, BLOCKS, ENTITIES and OBJECTS sections and unique entity handles. <sub>`export_writes_a_well_formed_ac1015_file`</sub>
 - Wires are written as one LINE per segment on the WIRES layer with the Y axis flipped to DXF's upward convention. <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
+- Each distinct block shape is its own DXF block (MDK_block for the template, MDK_block_<hash> otherwise); equal shapes share one, the picture is in it, and a block whose pin table cannot be read is reported, not drawn as the template. <sub>`each_block_shape_is_its_own_dxf_block`</sub>
+- Block shapes exported to DXF import back as plain blocks with their pin table restored in block_pins (no upper-case BLOCK_PINS left). <sub>`our_block_shapes_import_back_as_blocks_with_their_pin_table`</sub>
+- A block whose pin table cannot be read on import becomes the template box with a warning naming it. <sub>`an_unreadable_block_pin_table_imports_as_the_template_with_a_warning`</sub>
 - Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with a negative X scale for mirroring and TAG1/CAT/DESC1/RATING1/TERMnn attributes. <sub>`symbols_become_block_inserts_with_attributes`</sub>
 - Wire numbers go to the WIRENO layer, net labels to LABELS, notes to MISC, and a harness becomes a closed dashed polyline on HARNESS with its name. <sub>`texts_and_harness_go_to_their_layers`</sub>
 - Non-ASCII text is written as \U+XXXX escapes and decoded back; MTEXT paragraph breaks and formatting codes are handled on read. <sub>`unicode_is_escaped_and_decoded`</sub>

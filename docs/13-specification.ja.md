@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2996仕様項目**。
+全6領域・**3000仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -18,6 +18,7 @@
 
 ### block
 
+- ブロックの書き出し名は描かれた形(ピンと絵)だけで決まる。表の空白は無関係、名前・ピン・コネクタ・大きさの違いは別名になり、見本は`block`のまま。 <sub>`block_export_id_follows_the_drawn_shape_only`</sub>
 - ブロックシンボルは名前付きピンを箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並べ、ピンはそれぞれ外向きになる。 <sub>`block_pins_sit_on_both_sides_five_millimetres_apart`</sub>
 - ピン番号は外形の外側(リードの脇)に、ピン名は外形の内側に描かれる。 <sub>`pin_numbers_are_drawn_outside_and_pin_names_inside`</sub>
 - 外形はピン数とピン名の長さに応じて自動で大きくなり、寸法は必ず5mm刻みになる。 <sub>`auto_size_grows_with_pin_count_and_name_length`</sub>
@@ -240,6 +241,9 @@
 
 - 書き出したDXFはmm単位のAutoCAD 2000形式(AC1015)で、HEADER/TABLES/BLOCKS/ENTITIES/OBJECTSの各セクションと重複しないハンドルを持つ。 <sub>`export_writes_a_well_formed_ac1015_file`</sub>
 - 配線はセグメントごとに1本のLINEとしてWIRESレイヤに書かれ、Y座標はDXFの上向き座標へ反転される。 <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
+- ブロックは形ごとに別のDXFブロックになる(見本はMDK_block、他はMDK_block_<ハッシュ>)。同じ形は1つを共有し、絵も入る。ピン表を読めないブロックは見本の箱にせず報告する。 <sub>`each_block_shape_is_its_own_dxf_block`</sub>
+- DXFへ書き出したブロックの形は、ピン表をblock_pinsに戻した普通のブロックとして読み戻せる(大文字のBLOCK_PINSは残らない)。 <sub>`our_block_shapes_import_back_as_blocks_with_their_pin_table`</sub>
+- 読み戻すときにピン表が読めないブロックは、名前入りの警告つきで見本の箱になる。 <sub>`an_unreadable_block_pin_table_imports_as_the_template_with_a_warning`</sub>
 - シンボルはMDK_<symbol_id>ブロック(1回だけ定義)のINSERTになり、ミラー(X倍率-1)・TAG1/CAT/DESC1/RATING1/TERMnnの属性を持つ。 <sub>`symbols_become_block_inserts_with_attributes`</sub>
 - 線番はWIRENOレイヤ、ネットラベルはLABELS、注記はMISCに書かれ、ハーネス境界はHARNESSレイヤの閉じた破線多角形と名前になる。 <sub>`texts_and_harness_go_to_their_layers`</sub>
 - 非ASCII文字は\U+XXXXで書かれ読み込み時に戻る。MTEXTの段落区切り(\P)や書式コードも読み込みで処理する。 <sub>`unicode_is_escaped_and_decoded`</sub>

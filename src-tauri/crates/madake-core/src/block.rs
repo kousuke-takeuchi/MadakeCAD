@@ -578,6 +578,61 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     }
 }
 
+/// ブロックのピン表を読めないとき、DXF/KiCadの読み込みが出す警告 (参照の後ろに続ける)。
+pub const BLOCK_UNREADABLE_WARNING: &str = "ブロックのピン表を読めないので見本の箱にしました";
+
+fn shape_key(def: &SymbolDef) -> String {
+    serde_json::to_string(&(&def.primitives, &def.pins)).expect("SymbolDef serialises")
+}
+
+/// ブロックの描かれた形 (図形とピン) の書き出し名。見本と同じ形は`block`、他は`block_`+FNV-1a 64のハッシュ16桁 (DXF/KiCad)。
+pub fn block_export_id(def: &SymbolDef) -> String {
+    let key = shape_key(def);
+    if key == shape_key(&block_template()) {
+        return BLOCK_SYMBOL_ID.to_string();
+    }
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in key.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{BLOCK_SYMBOL_ID}_{h:016x}")
+}
+
+/// `block`、または`block_`+小文字16進16桁か。
+pub fn is_block_export_id(id: &str) -> bool {
+    id == BLOCK_SYMBOL_ID
+        || id.strip_prefix("block_").is_some_and(|h| {
+            h.len() == 16 && h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        })
+}
+
+/// 書き出し用の定義。ブロックは形ごとの名前 ([`block_export_id`]) を`id`に持つ複製、ライブラリのシンボルはそのまま借りる。
+/// 解決できない (ピン表が読めないブロックなど) ときは`None`。
+pub fn export_def<'a>(
+    inst: &crate::model::SymbolInstance,
+    index: &crate::symbol::DefIndex<'a>,
+) -> Option<std::borrow::Cow<'a, SymbolDef>> {
+    let def = index.get(inst)?;
+    if inst.symbol_id != BLOCK_SYMBOL_ID {
+        return Some(def);
+    }
+    let mut def = def.into_owned();
+    def.id = block_export_id(&def);
+    Some(std::borrow::Cow::Owned(def))
+}
+
+/// 読み込んだ`block_pins` / `block_size`の空でない値。ブロックとして読めないときは`None`。
+pub fn imported_block_attrs(pins: Option<&str>, size: Option<&str>) -> Option<BTreeMap<String, String>> {
+    let mut attrs = BTreeMap::new();
+    for (k, v) in [(BLOCK_PINS_ATTR, pins), (BLOCK_SIZE_ATTR, size)] {
+        if let Some(v) = v.filter(|v| !v.is_empty()) {
+            attrs.insert(k.to_string(), v.to_string());
+        }
+    }
+    block_symbol(&attrs).ok().map(|_| attrs)
+}
+
 /// テスト用: `block_pins`を持つブロックのシンボルインスタンス(他モジュールのテストが使う)。
 #[cfg(test)]
 pub(crate) fn test_block(
@@ -599,6 +654,26 @@ pub(crate) fn test_block(
             .into_iter()
             .collect(),
     })
+}
+
+/// テスト用: 形の違うブロックを並べたシート (DXF/KiCad 書き出しのテストが共有する)。
+#[cfg(test)]
+pub(crate) fn export_blocks_sheet() -> crate::model::Sheet {
+    use crate::model::{Orientation, PaperSize, Sheet};
+    let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+    for e in [
+        test_block("B0", "", 40.0, 40.0, "{}"),
+        test_block("B1", "", 80.0, 40.0, r#"{"left":[{"no":"1","name":"IN"}]}"#),
+        test_block("B2", "", 120.0, 40.0, r#"{ "left": [ {"no": "1", "name": "IN"} ] }"#),
+        test_block(
+            "B8", "", 160.0, 40.0,
+            r#"{"left":[{"no":"1"},{"no":"2"},{"no":"3"},{"no":"4"}],"right":[{"no":"5"},{"no":"6"},{"no":"7"},{"no":"8","name":"OUT"}]}"#,
+        ),
+        test_block("BU", "", 200.0, 40.0, r#"{"left":[{"no":"1","name":"USB","connector":"usb_a_m"}]}"#),
+    ] {
+        sheet.entities.insert(e.id(), e);
+    }
+    sheet
 }
 
 /// テスト用: ポート (接点を持つピン) のブロックと、ピンの位置 (他モジュールのテストが共有する)。
@@ -698,6 +773,48 @@ mod tests {
 
     const SAMPLE: &str = r#"{"left":[{"no":"IN1","name":"入力1"},{"no":"IN2","name":"入力2"}],
         "right":[{"no":"OUT1","name":"出力1"}]}"#;
+
+    /// A block's export name follows its drawn shape only (pins and picture): whitespace in the table does not matter, a different name, pin, connector or size does, and the template keeps the name `block`.
+    /// ブロックの書き出し名は描かれた形(ピンと絵)だけで決まる。表の空白は無関係、名前・ピン・コネクタ・大きさの違いは別名になり、見本は`block`のまま。
+    #[test]
+    fn block_export_id_follows_the_drawn_shape_only() {
+        let id = |pins: &str, size: Option<&str>| {
+            let mut a = attrs(&[(BLOCK_PINS_ATTR, pins)]);
+            if let Some(sz) = size {
+                a.insert(BLOCK_SIZE_ATTR.into(), sz.into());
+            }
+            block_export_id(&block_symbol(&a).unwrap())
+        };
+        assert_eq!(block_export_id(&block_template()), "block");
+        let b1 = id(r#"{"left":[{"no":"1","name":"IN"}]}"#, None);
+        assert_eq!(b1, id(r#"{ "left": [ {"no": "1", "name": "IN"} ] }"#, None));
+        let others = [
+            id(r#"{"left":[{"no":"1","name":"IN2"}]}"#, None),
+            id(r#"{"left":[{"no":"1","name":"IN"},{"no":"2"}]}"#, None),
+            id(r#"{"left":[{"no":"1","name":"IN","connector":"usb_a_f"}]}"#, None),
+            id(r#"{"left":[{"no":"1","name":"IN"}]}"#, Some(r#"{"w":30,"h":20}"#)),
+        ];
+        let mut all = vec![b1];
+        all.extend(others);
+        for (i, a) in all.iter().enumerate() {
+            assert!(is_block_export_id(a), "{a}");
+            assert_ne!(a, "block");
+            for b in &all[i + 1..] {
+                assert_ne!(a, b);
+            }
+        }
+        let hex = "0123456789abcdef";
+        assert!(is_block_export_id(&format!("block_{hex}")));
+        for bad in [
+            "block_x".to_string(),
+            format!("block_{}", &hex[..15]),
+            format!("block_{hex}0"),
+            format!("block_{}A", &hex[..15]),
+            "relay_coil".to_string(),
+        ] {
+            assert!(!is_block_export_id(&bad), "{bad}");
+        }
+    }
 
     /// A block symbol puts its named pins on both sides of a box, 5 mm apart and centred on the 2.5 mm grid, each pointing outwards.
     /// ブロックシンボルは名前付きピンを箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並べ、ピンはそれぞれ外向きになる。
