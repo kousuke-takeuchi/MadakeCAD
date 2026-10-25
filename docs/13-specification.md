@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2969 specification clauses** across 6 areas.
+**2971 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -35,6 +35,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A connector name (connector_ref) must not be blank, needs a screw or JST connector and is refused on any other kind, with the pin number in the message. <sub>`a_bad_connector_ref_is_refused`</sub>
 - One connector name may not be used by two separate connectors: on two sides, split by another pin, or with two different kinds. <sub>`a_connector_ref_used_by_two_groups_is_refused`</sub>
 - Unnamed connectors may repeat anywhere, and a named connector may run over several neighbouring pins. <sub>`unnamed_connectors_may_repeat`</sub>
+- Every connector kind on every side, and the AOGU hub and amplifier, are drawn exactly as recorded in the golden file that the TypeScript twin is also checked against (rewrite it with MADAKE_UPDATE_GOLDEN=1). <sub>`connector_blocks_match_the_shared_golden_file`</sub>
 
 ### cable
 
@@ -2113,6 +2114,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - copies block pin contacts into the pin definition and refuses bad contacts like Rust <sub>`captionLineAnchors`</sub>
 - reads a connector kind, treats null as absent and refuses an unknown kind as invalid JSON, like Rust <sub>`blockSymbol connectors`</sub>
 - refuses a bad connector name with the same messages as Rust and lets unnamed connectors repeat <sub>`blockSymbol connectors`</sub>
+- draws every block of the shared golden file exactly like Rust <sub>`connector golden (Rust twin)`</sub>
 
 ### frameEditor
 

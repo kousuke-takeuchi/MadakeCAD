@@ -10,6 +10,7 @@ import {
   resolveSymbolDef,
   symbolBounds,
 } from "./dynamicSymbol";
+import golden from "../../src-tauri/crates/madake-core/tests/golden/connector-blocks.json";
 
 describe("dynamicSymbol", () => {
   // ja: connector_2pは旧静的定義と同一のピン座標を持つ
@@ -456,5 +457,33 @@ describe("blockSymbol connectors", () => {
           '{"left":[{"no":"1","connector":"screw"},{"no":"2"},{"no":"3","connector":"screw"}],"top":[{"no":"4","connector":"jst_xh_f"},{"no":"5","connector":"usb_a_f"},{"no":"6","connector":"usb_a_f"}]}',
       }),
     ).not.toThrow();
+  });
+});
+
+/** 数を 1e-6 に丸め、-0 を 0 にそろえる (Rust側 block.rs の rounded と同じ)。 */
+function rounded(v: unknown): unknown {
+  if (typeof v === "number") {
+    const r = (Math.sign(v) * Math.round(Math.abs(v) * 1e6)) / 1e6;
+    return r === 0 ? 0 : r;
+  }
+  if (Array.isArray(v)) return v.map(rounded);
+  if (v !== null && typeof v === "object") {
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, rounded(x)]));
+  }
+  return v;
+}
+
+describe("connector golden (Rust twin)", () => {
+  // ja: golden ファイルの全例 (全種類×全辺・AOGU の機器・コネクタの無いブロック) で、TS は Rust と同じプリミティブとピンを返す
+  it("draws every block of the shared golden file exactly like Rust", () => {
+    expect(golden.cases.length).toBe(57);
+    for (const c of golden.cases) {
+      const def = blockSymbol(c.attrs);
+      expect({ name: c.name, primitives: rounded(def.primitives), pins: rounded(def.pins) }).toEqual({
+        name: c.name,
+        primitives: c.primitives,
+        pins: c.pins,
+      });
+    }
   });
 });

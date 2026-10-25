@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2969仕様項目**。
+全6領域・**2971仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -35,6 +35,7 @@
 - コネクタの名前 (connector_ref) は空ではいけない・端子台か JST のコネクタが要る・ほかの種類には付けられない。断る文にはピン番号が入る。 <sub>`a_bad_connector_ref_is_refused`</sub>
 - 1つのコネクタの名前を別々の2つのコネクタに使うことはできない (2つの辺に分かれる・別のピンで途切れる・種類が違う)。 <sub>`a_connector_ref_used_by_two_groups_is_refused`</sub>
 - 名前の無いコネクタはどこで繰り返してもよく、名前のあるコネクタは隣り合う数本のピンにまたがってよい。 <sub>`unnamed_connectors_may_repeat`</sub>
+- 全種類のコネクタを全辺に置いた例と AOGU のハブ・アンプは、TS 側も突き合わせる golden ファイルのとおりに描かれる (MADAKE_UPDATE_GOLDEN=1 で書き直す)。 <sub>`connector_blocks_match_the_shared_golden_file`</sub>
 
 ### cable
 
@@ -2113,6 +2114,7 @@
 - ブロックのピンの接点は Rust と同じく空白を落として PinDef に入り、1つだけの接点や重なる接点は同じ理由で断る <sub>`captionLineAnchors`</sub>
 - ピンはコネクタの形を接点と一緒に持て、null は書かなかったのと同じ。知らない種類は Rust と同じく壊れた JSON として断る <sub>`blockSymbol connectors`</sub>
 - コネクタの名前の誤りは Rust と同じ文で断り (空・コネクタなし・まとめない種類・2つのまとまり)、名前の無いコネクタは繰り返してよい <sub>`blockSymbol connectors`</sub>
+- golden ファイルの全例 (全種類×全辺・AOGU の機器・コネクタの無いブロック) で、TS は Rust と同じプリミティブとピンを返す <sub>`connector golden (Rust twin)`</sub>
 
 ### frameEditor
 

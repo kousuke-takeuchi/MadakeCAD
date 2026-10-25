@@ -840,4 +840,81 @@ mod tests {
         )]))
         .expect("通る");
     }
+
+    /// AOGU のハブ 39: 上辺に USB-A メス4つ、下辺に micro-B メスの電源、右辺に OTG ケーブルの micro-B オス。
+    const HUB_39: &str = r#"{"top":[{"no":"U1","connector":"usb_a_f","contacts":["VBUS","D-","D+","GND"]},{"no":"U2","connector":"usb_a_f","contacts":["VBUS","D-","D+","GND"]},{"no":"U3","connector":"usb_a_f","contacts":["VBUS","D-","D+","GND"]},{"no":"U4","connector":"usb_a_f","contacts":["VBUS","D-","D+","GND"]}],"bottom":[{"no":"PWR","connector":"micro_b_f","contacts":["VBUS","GND"]}],"right":[{"no":"OTG","connector":"micro_b_m","contacts":["VBUS","D-","D+","GND"]}]}"#;
+    /// AOGU のアンプ 53: 3.5mm ジャックの入力と、5V・GND の端子台 TB1、スピーカー出力の端子台 TB2。
+    const AMP_53: &str = r#"{"left":[{"no":"IN","connector":"jack35_f","contacts":["L","R","GND"]},{"no":"4","name":"5V","connector":"screw","connector_ref":"TB1"},{"no":"5","name":"GND","connector":"screw","connector_ref":"TB1"}],"right":[{"no":"6","name":"SP+","connector":"screw","connector_ref":"TB2"},{"no":"7","name":"SP-","connector":"screw","connector_ref":"TB2"}]}"#;
+    /// 左右の辺に全種類と普通のピン (番号は1〜4文字、名前あり・なし)、1本と3本の JST、端子台を並べたブロック。
+    const MIXED: &str = r#"{"left":[{"no":"1","name":"VIN"},{"no":"22","name":"USB","connector":"usb_a_f"},{"no":"333","name":"LTE","connector":"usb_a_m"},{"no":"4444","name":"C","connector":"usb_c_f"},{"no":"5","connector":"usb_c_m"},{"no":"6","name":"MIC","connector":"micro_b_f"},{"no":"7","name":"OTG","connector":"micro_b_m"},{"no":"P8","name":"EN"},{"no":"9","name":"SIG","connector":"jst_ph_f","connector_ref":"J9"},{"no":"10","name":"A","connector":"screw","connector_ref":"TB1"},{"no":"11","name":"B","connector":"screw","connector_ref":"TB1"}],"right":[{"no":"20","name":"LINE","connector":"jack35_f"},{"no":"21","connector":"jack35_m"},{"no":"230","name":"DC","connector":"dc_f"},{"no":"24","name":"12V","connector":"dc_m"},{"no":"V+","name":"VCC"},{"no":"31","name":"5V","connector":"jst_xh_f","connector_ref":"J3"},{"no":"32","name":"SDA","connector":"jst_xh_f","connector_ref":"J3"},{"no":"33","name":"GND","connector":"jst_xh_f","connector_ref":"J3"},{"no":"34","name":"L","connector":"screw"},{"no":"35","name":"R","connector":"screw"}]}"#;
+    /// 上辺に名前付きの JST と普通のピンと USB-C、下辺に名前付きの端子台と DC ジャックを並べたブロック。
+    const TOP_BOTTOM: &str = r#"{"top":[{"no":"1","name":"A","connector":"jst_ph_f","connector_ref":"J5"},{"no":"2","name":"B","connector":"jst_ph_f","connector_ref":"J5"},{"no":"3","name":"C"},{"no":"4","connector":"usb_c_f"}],"bottom":[{"no":"5","connector":"screw","connector_ref":"TB3"},{"no":"6","connector":"screw","connector_ref":"TB3"},{"no":"7","name":"D","connector":"dc_f"}]}"#;
+
+    /// Rust と TS が同じ形を返すことを確かめる共有ファイル (`src/canvas/dynamicSymbol.test.ts` も読む)。
+    const CONNECTOR_GOLDEN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/connector-blocks.json");
+
+    /// golden の例: 13種類×4辺 (1本、まとめる種類は名前付きの2本) と、AOGU の機器・重なりの例・コネクタの無いブロック。
+    fn golden_cases() -> Vec<(String, String)> {
+        let mut cases = Vec::new();
+        for kind in ConnectorKind::ALL {
+            let k = kind.name();
+            for side in ["left", "right", "top", "bottom"] {
+                let json = if kind.is_grouped() {
+                    format!(r#"{{"{side}":[{{"no":"1","name":"A","connector":"{k}","connector_ref":"J1"}},{{"no":"2","name":"B","connector":"{k}","connector_ref":"J1"}}]}}"#)
+                } else {
+                    format!(r#"{{"{side}":[{{"no":"1","name":"A","connector":"{k}"}}]}}"#)
+                };
+                cases.push((format!("{k}-{side}"), json));
+            }
+        }
+        for (name, json) in [("aogu-hub-39", HUB_39), ("aogu-amp-53", AMP_53), ("mixed-left-right", MIXED), ("top-bottom", TOP_BOTTOM), ("plain", SAMPLE)] {
+            cases.push((name.to_string(), json.to_string()));
+        }
+        cases
+    }
+
+    /// 数を 1e-6 に丸め、-0 を 0 にそろえる (TS 側も同じ丸めで比べる)。
+    fn rounded(v: serde_json::Value) -> serde_json::Value {
+        match v {
+            serde_json::Value::Number(n) if n.is_f64() => {
+                let r = (n.as_f64().unwrap() * 1e6).round() / 1e6;
+                serde_json::json!(if r == 0.0 { 0.0 } else { r })
+            }
+            serde_json::Value::Array(a) => serde_json::Value::Array(a.into_iter().map(rounded).collect()),
+            serde_json::Value::Object(o) => serde_json::Value::Object(o.into_iter().map(|(k, v)| (k, rounded(v))).collect()),
+            other => other,
+        }
+    }
+
+    fn golden_json() -> serde_json::Value {
+        let cases: Vec<serde_json::Value> = golden_cases()
+            .into_iter()
+            .map(|(name, pins)| {
+                let def = block_symbol(&attrs(&[("block_pins", &pins)])).unwrap_or_else(|e| panic!("{name}: {e}"));
+                serde_json::json!({
+                    "name": name,
+                    "attrs": { "block_pins": pins },
+                    "primitives": rounded(serde_json::to_value(&def.primitives).unwrap()),
+                    "pins": rounded(serde_json::to_value(&def.pins).unwrap()),
+                })
+            })
+            .collect();
+        serde_json::json!({ "cases": cases })
+    }
+
+    /// Every connector kind on every side, and the AOGU hub and amplifier, are drawn exactly as recorded in the golden file that the TypeScript twin is also checked against (rewrite it with MADAKE_UPDATE_GOLDEN=1).
+    /// 全種類のコネクタを全辺に置いた例と AOGU のハブ・アンプは、TS 側も突き合わせる golden ファイルのとおりに描かれる (MADAKE_UPDATE_GOLDEN=1 で書き直す)。
+    #[test]
+    fn connector_blocks_match_the_shared_golden_file() {
+        let want = golden_json();
+        if std::env::var_os("MADAKE_UPDATE_GOLDEN").is_some() {
+            // 1行に1例 (差分が例ごとに読める)
+            let lines: Vec<String> = want["cases"].as_array().unwrap().iter().map(|c| serde_json::to_string(c).unwrap()).collect();
+            std::fs::write(CONNECTOR_GOLDEN, format!("{{\"cases\":[\n{}\n]}}\n", lines.join(",\n"))).expect("golden を書く");
+        }
+        let text = std::fs::read_to_string(CONNECTOR_GOLDEN)
+            .unwrap_or_else(|_| panic!("{CONNECTOR_GOLDEN} が無い: MADAKE_UPDATE_GOLDEN=1 を付けて作る"));
+        let got: serde_json::Value = serde_json::from_str(&text).expect("golden の JSON");
+        assert!(got == want, "golden と違う: MADAKE_UPDATE_GOLDEN=1 で書き直し、git diff で変化を確かめる");
+    }
 }
