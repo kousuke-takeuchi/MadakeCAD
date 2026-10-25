@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::geometry::Point;
 use crate::model::{Cable, CableCore, CoreEnd, Entity, Project, RunEnd, Sheet, Wire};
-use crate::netlist::{extract_netlist, pin_positions, Net, NetPin, CONNECT_EPS};
+use crate::netlist::{extract_wire_nets, pin_positions, Net, NetPin, CONNECT_EPS};
 use crate::symbol::{sheet_symbol_defs, SymbolDef};
 
 /// 電線リスト・From-To帳票の備考欄に立てる、ネットの相手が**複数**あって1つに絞れなかった
@@ -480,7 +480,7 @@ fn reference_of(display: &str) -> Option<&str> {
 ///   多端点で絞れなければ[`REMARK_MULTI_ENDED`] ("multi")、辿る先のデバイスが
 ///   無ければ[`REMARK_NO_DEVICE`] ("none")。両方当てはまるときは"multi"を優先する
 ///
-/// `nets`はこのシートのネットリスト ([`extract_netlist`]) を呼び出し側から渡す
+/// `nets`はこのシートの配線ごとのネットリスト ([`crate::netlist::extract_wire_nets`]) を呼び出し側から渡す
 /// (電線リストは1シートに何十本もワイヤがあるので、シートに1回だけ作る)。
 pub fn wire_from_to(
     sheet: &Sheet,
@@ -571,7 +571,7 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
     for sheet in &project.sheets {
         let defs = sheet_symbol_defs(sheet);
         // ネットリストはワイヤごとではなくシートごとに1回だけ作る (G18の解決に全ワイヤが使う)
-        let nets = extract_netlist(sheet, &defs);
+        let nets = extract_wire_nets(sheet, &defs);
         // 区間ケーブルの分岐の配線は芯の行に畳み込む (別の行にしない)
         let breakout = crate::cable::breakout_wire_ids(sheet);
         let core_labels = crate::cable::definition_core_labels(sheet);
@@ -1648,5 +1648,26 @@ mod tests {
         let rows = wire_list_rows(&project);
         let ends: Vec<String> = rows.iter().map(|r| format!("{} {}", r[1], r[2])).collect();
         assert!(ends.contains(&"39:U3/VBUS J45:1".to_string()) || ends.contains(&"J45:1 39:U3/VBUS".to_string()), "{ends:?}");
+    }
+
+    /// The wire list keeps one row for a wire between two USB ports, from port pin to port pin, with no contact in the text.
+    /// 電線リストでは、2つの USB ポートの間の配線はポートのピンからポートのピンへの1行のまま (接点は書かない)。
+    #[test]
+    fn a_usb_wire_is_one_wire_list_row() {
+        use crate::block::port_fixtures::{pin_at, port_block, USB};
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        let hub = Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB));
+        let dongle = Entity::Symbol(port_block("LTE1", 200.0, 100.0, "left", "P1", &USB));
+        let (h, d) = (hub.id(), dongle.id());
+        sheet.entities.insert(h, hub);
+        sheet.entities.insert(d, dongle);
+        let (a, b) = (pin_at(sheet, h, "U3"), pin_at(sheet, d, "P1"));
+        let w = wire_between((a.x, a.y), (b.x, b.y));
+        sheet.entities.insert(w.id(), w);
+        let rows = wire_list_rows(&project);
+        assert_eq!(rows.len(), 1);
+        assert_eq!((rows[0][1].as_str(), rows[0][2].as_str()), ("39:U3", "LTE1:P1"));
     }
 }

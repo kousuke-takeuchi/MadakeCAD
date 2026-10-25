@@ -1249,7 +1249,7 @@ pub fn sheet_to_dxf_with_frame(
         }
     }
     // 線番
-    for net in crate::netlist::extract_netlist(sheet, symbols) {
+    for net in crate::netlist::extract_wire_nets(sheet, symbols) {
         let Some(no) = net
             .wire_no
             .as_deref()

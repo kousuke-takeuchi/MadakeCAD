@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2927 specification clauses** across 6 areas.
+**2930 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -750,6 +750,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Wires that are cores of a cable (breakout wires of a single-line cable, and wires crossed by a definition line) are not added again to the BOM wire roll-up, since the cable row already counts them. <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
 - A static plug or socket carrying a pole number shows it in the wire list (X44A:2) instead of its only pin 1; one without a pole is unchanged. <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
 - A run-cable core that lands on a port pin shows its contact in the From-To row (39:U3/VBUS). <sub>`a_core_on_a_port_pin_shows_its_contact`</sub>
+- The wire list keeps one row for a wire between two USB ports, from port pin to port pin, with no contact in the text. <sub>`a_usb_wire_is_one_wire_list_row`</sub>
 
 ### search
 
@@ -1217,6 +1218,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A multi-pole breaker conducts pole by pole, so a load fed from an unwired pole is still reported as unreachable from the source. <sub>`multipole_breaker_does_not_connect_its_poles_to_each_other`</sub>
 - A panel-layout sheet is not checked against the schematic rules: it carries no wiring, so nothing there counts as an unconnected pin or a dangling wire. <sub>`a_panel_sheet_is_not_checked_against_the_schematic_rules`</sub>
 - A part placed on the panel whose reference designator is nowhere on the schematic is reported as a warning, and the whole-project check reports it together with the schematic findings. <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
+- Two USB ports joined by one wire have no unconnected pin and no other ERC finding. <sub>`a_wired_usb_link_has_no_erc_findings`</sub>
 
 ### wire_legend
 
@@ -1248,6 +1250,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A single wire number can be edited directly, and undo puts the previous value back. <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - The renumber command is plain JSON ({"type":"renumber_wires","mode":"append","start":1}), so AI agents and the CLI can send it. <sub>`renumber_command_is_plain_json`</sub>
 - Renumbering wires on a sheet with a connector-to-connector single-line cable numbers the drawn wires 1, 2 with no gap left by the cable's wire-less core nets. <sub>`core_only_nets_take_no_wire_number`</sub>
+- A wire between two USB ports carries four contact nets but gets one wire number, and the next wire gets the next number. <sub>`a_usb_wire_between_two_ports_gets_one_wire_number`</sub>
 
 ### wire_note
 

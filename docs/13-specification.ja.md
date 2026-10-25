@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2927仕様項目**。
+全6領域・**2930仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -750,6 +750,7 @@
 - ケーブルの芯になっている配線 (1本線のケーブルの分岐の配線と、定義線が横切った配線) は、ケーブル行が数えているので部品表の電線集約に重ねて足さない。 <sub>`cable_core_wires_are_not_counted_as_loose_wire`</sub>
 - 極番号 (pole) を持つ静的なプラグ・ソケットは、電線リストで唯一のピン1の代わりにその極番号 (X44A:2) で表記される。極番号の無いものは従来どおり。 <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
 - ポートのピンに着く区間ケーブルの芯は、From-To の行に接点を書く (39:U3/VBUS)。 <sub>`a_core_on_a_port_pin_shows_its_contact`</sub>
+- 電線リストでは、2つの USB ポートの間の配線はポートのピンからポートのピンへの1行のまま (接点は書かない)。 <sub>`a_usb_wire_is_one_wire_list_row`</sub>
 
 ### search
 
@@ -1217,6 +1218,7 @@
 - 多極の遮断器は極ごとに導通するため、結線されていない極につながる負荷は電源から到達できないと報告される。 <sub>`multipole_breaker_does_not_connect_its_poles_to_each_other`</sub>
 - 盤レイアウトシートは回路図の規則で検査しない。配線を持たないシートなので、未接続ピンや宙ぶらりんの配線として指摘されるものは無い。 <sub>`a_panel_sheet_is_not_checked_against_the_schematic_rules`</sub>
 - 回路図のどこにも無い参照記号のフットプリントが盤に置かれていると注意として報告され、プロジェクト全体の検証では回路図の指摘と一緒に出る。 <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
+- 配線1本で結んだ2つの USB ポートには、未接続ピンもほかの ERC の指摘も出ない。 <sub>`a_wired_usb_link_has_no_erc_findings`</sub>
 
 ### wire_legend
 
@@ -1248,6 +1250,7 @@
 - 線番は1本ずつ直接編集でき、undoで以前の値に戻る。 <sub>`set_wire_numbers_edits_one_wire_and_is_undoable`</sub>
 - 採番コマンドは素のJSON ({"type":"renumber_wires","mode":"append","start":1}) で表現でき、AIやCLIから送れる。 <sub>`renumber_command_is_plain_json`</sub>
 - コネクタ同士を結ぶ1本線ケーブルがあるシートで線番を振り直しても、配線は1, 2と飛ばずに番号が付く (配線の無い芯のネットは番号を使わない)。 <sub>`core_only_nets_take_no_wire_number`</sub>
+- 2つの USB ポートの間の配線は接点のネットを4つ運ぶが線番は1つで、次の配線には次の番号が付く。 <sub>`a_usb_wire_between_two_ports_gets_one_wire_number`</sub>
 
 ### wire_note
 

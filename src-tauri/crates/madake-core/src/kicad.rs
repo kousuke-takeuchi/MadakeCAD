@@ -776,7 +776,7 @@ pub fn export_kicad_sch(
         }
     }
     // 線番 → ラベル (ラベルの無いネットのみ。最長セグメントの中点)
-    for net in crate::netlist::extract_netlist(sheet, symbols) {
+    for net in crate::netlist::extract_wire_nets(sheet, symbols) {
         if net.label.is_some() {
             continue;
         }

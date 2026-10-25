@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use crate::model::{Entity, EntityId, Sheet};
-use crate::netlist::extract_netlist;
+use crate::netlist::extract_wire_nets;
 use crate::symbol::sheet_symbol_defs;
 
 /// 自動採番の方式 (IEC 62491 / ACADE慣行: 既定は連番)。
@@ -57,7 +57,7 @@ fn net_anchor(sheet: &Sheet, wire_ids: &[EntityId]) -> (f64, f64) {
 /// シートのネットを採番順 (上→下、同じ高さなら左→右) に並べ、
 /// 各ネットが既存の名前・線番を保持するかどうかを判定する。
 pub fn numbering_nets(sheet: &Sheet, mode: RenumberMode) -> Vec<NumberingNet> {
-    let nets = extract_netlist(sheet, &sheet_symbol_defs(sheet));
+    let nets = extract_wire_nets(sheet, &sheet_symbol_defs(sheet));
     let mut ordered: Vec<(f64, f64, EntityId, NumberingNet)> = nets
         .into_iter()
         .map(|net| {
@@ -416,5 +416,21 @@ mod tests {
         renumber(&mut engine, Some(sid), RenumberMode::Renumber, 1);
         assert_eq!(net_of(&engine, sid, id1).as_deref(), Some("1"));
         assert_eq!(net_of(&engine, sid, id2).as_deref(), Some("2"));
+    }
+
+    /// A wire between two USB ports carries four contact nets but gets one wire number, and the next wire gets the next number.
+    /// 2つの USB ポートの間の配線は接点のネットを4つ運ぶが線番は1つで、次の配線には次の番号が付く。
+    #[test]
+    fn a_usb_wire_between_two_ports_gets_one_wire_number() {
+        use crate::block::port_fixtures::{port_block, USB};
+        let hub = Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB));
+        let dongle = Entity::Symbol(port_block("LTE1", 200.0, 100.0, "left", "P1", &USB));
+        // ブロックのピンは外形から 2.5mm 外 (右ピン = x+10、左ピン = x-10)
+        let usb = wire(&[(110.0, 100.0), (190.0, 100.0)], None);
+        let other = wire(&[(0.0, 150.0), (20.0, 150.0)], None);
+        let (mut engine, sheet_id, ids) = engine_with(vec![hub, dongle, usb, other]);
+        renumber(&mut engine, Some(sheet_id), RenumberMode::Renumber, 1);
+        assert_eq!(net_of(&engine, sheet_id, ids[2]).as_deref(), Some("1"));
+        assert_eq!(net_of(&engine, sheet_id, ids[3]).as_deref(), Some("2"));
     }
 }
