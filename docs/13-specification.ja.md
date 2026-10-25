@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3000仕様項目**。
+全6領域・**3001仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -247,6 +247,7 @@
 - シンボルはMDK_<symbol_id>ブロック(1回だけ定義)のINSERTになり、ミラー(X倍率-1)・TAG1/CAT/DESC1/RATING1/TERMnnの属性を持つ。 <sub>`symbols_become_block_inserts_with_attributes`</sub>
 - 線番はWIRENOレイヤ、ネットラベルはLABELS、注記はMISCに書かれ、ハーネス境界はHARNESSレイヤの閉じた破線多角形と名前になる。 <sub>`texts_and_harness_go_to_their_layers`</sub>
 - 非ASCII文字は\U+XXXXで書かれ読み込み時に戻る。MTEXTの段落区切り(\P)や書式コードも読み込みで処理する。 <sub>`unicode_is_escaped_and_decoded`</sub>
+- バックスラッシュや波かっこを含む注記は、逃がし文字なしの素のTEXTで書かれ (他のCADの表示どおり)、読み戻しても変わらない。 <sub>`plain_text_with_backslash_and_braces_is_written_as_is_and_read_back`</sub>
 - シートをDXFへ書き出して読み戻すと、用紙・シンボル(種類・位置・回転・ミラー・参照記号・型番・属性)・配線・ジャンクション・線番・ラベル・注記・ハーネス名が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
 - AutoCAD Electrical流のDXFを読むと、配線レイヤ(WIRES・_MULTI_WIRE_*)の線分が配線になり、WIRENOの文字は最寄りの配線の線番になり、他の線分と未知のブロックはスキップ項目として報告され、文字はデコードされる。 <sub>`imports_acade_style_wires_and_reports_unknown_blocks`</sub>
 - 読み込みオプションで配線レイヤを明示すると、そのレイヤだけが配線になる。 <sub>`explicit_wire_layers_limit_what_becomes_a_wire`</sub>

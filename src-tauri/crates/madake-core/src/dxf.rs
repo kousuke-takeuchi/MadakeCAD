@@ -87,16 +87,12 @@ fn paper_angle(dxf_deg: f64) -> f64 {
     (-dxf_deg).rem_euclid(360.0)
 }
 
-/// 非ASCII文字を `\U+XXXX` にし、`\` `{` `}` を逃がす (AutoCAD 2000形式のテキストの可搬表記)。
+/// 非ASCII文字を `\U+XXXX` にする (AutoCAD 2000形式のテキストの可搬表記)。
 pub fn encode_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         let cp = c as u32;
-        if matches!(c, '\\' | '{' | '}') {
-            // 読み戻しで書式コード・グループとして消えないよう逃がす (ブロックのピン表のJSONが通る)
-            out.push('\\');
-            out.push(c);
-        } else if cp < 0x80 {
+        if cp < 0x80 {
             out.push(c);
         } else if cp <= 0xFFFF {
             let _ = write!(out, "\\U+{cp:04X}");
@@ -111,7 +107,40 @@ pub fn encode_text(s: &str) -> String {
     out
 }
 
-/// `\U+XXXX` / `\P` (改行) を戻す。MTEXTの書式コード (`{`, `}`, `\A1;` 等) は取り除く。
+/// 1行のTEXT・ATTRIB・ATTDEFの値を戻す。`\U+XXXX` だけを文字にし、`\` `{` `}` はそのまま残す
+/// (MTEXTと違い、これらは書式ではなく文字として表示される)。
+pub fn decode_plain_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut units: Vec<u16> = Vec::new();
+    let mut rest = s;
+    while !rest.is_empty() {
+        let b = rest.as_bytes();
+        if b.len() >= 7
+            && b[0] == b'\\'
+            && (b[1] == b'U' || b[1] == b'u')
+            && b[2] == b'+'
+            && rest.is_char_boundary(7)
+        {
+            if let Ok(u) = u16::from_str_radix(&rest[3..7], 16) {
+                units.push(u);
+                rest = &rest[7..];
+                continue;
+            }
+        }
+        if !units.is_empty() {
+            out.extend(char::decode_utf16(units.drain(..)).map(|r| r.unwrap_or('\u{FFFD}')));
+        }
+        let c = rest.chars().next().unwrap();
+        out.push(c);
+        rest = &rest[c.len_utf8()..];
+    }
+    if !units.is_empty() {
+        out.extend(char::decode_utf16(units.drain(..)).map(|r| r.unwrap_or('\u{FFFD}')));
+    }
+    out
+}
+
+/// MTEXTの値を戻す。`\U+XXXX` / `\P` (改行) を戻す。MTEXTの書式コード (`{`, `}`, `\A1;` 等) は取り除く。
 pub fn decode_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut units: Vec<u16> = Vec::new();
@@ -1465,7 +1494,10 @@ impl Record {
         self.get(8).unwrap_or("0").to_string()
     }
     fn text(&self) -> String {
-        // MTEXTは3(続き)+1(末尾)。TEXTは1のみ
+        // MTEXTは3(続き)+1(末尾)で書式つき。TEXT・ATTRIB・ATTDEFは1のみで素の文字
+        if self.kind != "MTEXT" {
+            return decode_plain_text(self.get(1).unwrap_or(""));
+        }
         let mut s: String = self.all(3).collect();
         s.push_str(self.get(1).unwrap_or(""));
         decode_text(&s)
@@ -2487,6 +2519,26 @@ mod tests {
         let sheet = fixture();
         let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
         assert!(!dxf.contains("注記A"), "生のマルチバイトを書かない");
+    }
+
+    /// A note with a backslash or braces is written to DXF as plain TEXT without escape characters (as other CAD programs show it) and imports back unchanged.
+    /// バックスラッシュや波かっこを含む注記は、逃がし文字なしの素のTEXTで書かれ (他のCADの表示どおり)、読み戻しても変わらない。
+    #[test]
+    fn plain_text_with_backslash_and_braces_is_written_as_is_and_read_back() {
+        let mut sheet = fixture();
+        for e in sheet.entities.values_mut() {
+            if let Entity::Text(t) = e {
+                t.text = r"C:\work {x}".into();
+            }
+        }
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
+        assert!(dxf.contains("  1\nC:\\work {x}\n"), "TEXTは素のまま書く");
+        let (project, _) = import_dxf(&dxf, "往復", &DxfImportOptions::default()).unwrap();
+        let Entity::Text(back) = find(&project.sheets[0], |e| matches!(e, Entity::Text(_))) else {
+            unreachable!()
+        };
+        assert_eq!(back.text, r"C:\work {x}");
+        assert_eq!(decode_text(r"{\fArial|b0;C:\\work \{x\}}"), r"C:\work {x}");
     }
 
     /// Exporting a sheet to DXF and importing it back keeps the paper, symbols (id, position, rotation, mirror, reference, value, attributes), wires, junctions, wire numbers, labels, notes and harness names.

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3000 specification clauses** across 6 areas.
+**3001 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -247,6 +247,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with a negative X scale for mirroring and TAG1/CAT/DESC1/RATING1/TERMnn attributes. <sub>`symbols_become_block_inserts_with_attributes`</sub>
 - Wire numbers go to the WIRENO layer, net labels to LABELS, notes to MISC, and a harness becomes a closed dashed polyline on HARNESS with its name. <sub>`texts_and_harness_go_to_their_layers`</sub>
 - Non-ASCII text is written as \U+XXXX escapes and decoded back; MTEXT paragraph breaks and formatting codes are handled on read. <sub>`unicode_is_escaped_and_decoded`</sub>
+- A note with a backslash or braces is written to DXF as plain TEXT without escape characters (as other CAD programs show it) and imports back unchanged. <sub>`plain_text_with_backslash_and_braces_is_written_as_is_and_read_back`</sub>
 - Exporting a sheet to DXF and importing it back keeps the paper, symbols (id, position, rotation, mirror, reference, value, attributes), wires, junctions, wire numbers, labels, notes and harness names. <sub>`export_then_import_round_trips_the_sheet`</sub>
 - Importing an AutoCAD Electrical style DXF reads lines on wire layers (WIRES, _MULTI_WIRE_*) as wires, assigns WIRENO texts to the nearest wire, keeps other lines and unknown blocks as skipped items, and decodes text. <sub>`imports_acade_style_wires_and_reports_unknown_blocks`</sub>
 - When the import options name the wire layers explicitly, only those layers become wires. <sub>`explicit_wire_layers_limit_what_becomes_a_wire`</sub>
