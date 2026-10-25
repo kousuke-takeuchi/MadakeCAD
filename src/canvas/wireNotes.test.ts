@@ -50,6 +50,14 @@ describe("wireNoteText", () => {
     expect(wireNoteText(asWire(wire("w", [[0, 0], [10, 0]], "", 0, null)))).toBe("");
   });
 
+  // ja: 線径も長さも無い黒の配線には注記を付けない (黒は既定の色)。線径か長さのある黒の配線は色名も書く (wire_note.rsと同ルール)
+  it("gives a plain black wire no note", () => {
+    const note = (color: string, sq: number) => wireNoteText(asWire(wire("w", [[0, 0], [10, 0]], color, sq, null)));
+    for (const color of ["black", "Black", "黒", " black "]) expect(note(color, 0)).toBe("");
+    expect(note("black", 0.75)).toBe("0.75sq 黒");
+    expect(note("red", 0)).toBe("赤");
+  });
+
   // ja: 色名は英字の大小と前後の空白を無視して照合される。知っている色は表示用の名前で、知らない色は入力のまま (ただし小文字にそろえて) 書かれる
   it("matches colour names ignoring capitals and surrounding space", () => {
     const note = (color: string) => wireNoteText(asWire(wire("w", [[0, 0], [10, 0]], color, 0.3, null)));

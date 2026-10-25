@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2846仕様項目**。
+全6領域・**2848仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1185,6 +1185,7 @@
 
 - 線径・線色・電線長がそろったワイヤには「0.75sq 白 0.4m」という注記が付く。 <sub>`note_shows_gauge_colour_and_length`</sub>
 - 欠けている属性は注記から省かれ、長さの無いワイヤは「0.75sq 白」と書かれる。 <sub>`note_omits_missing_attributes`</sub>
+- 線径も長さも無い黒の配線には注記を付けない (黒は既定の色で、全ての線に「黒」と書くと図面が埋まるため)。線径か長さのある黒の配線は色名も書く。 <sub>`a_plain_black_wire_gets_no_note`</sub>
 - 線径も色も長さも無いワイヤには、空の注記ではなく注記そのものが付かない。 <sub>`wire_without_attributes_has_no_note`</sub>
 - 色名は英字の大小と前後の空白を無視して照合される。知っている色は表示用の名前で、知らない色は入力のまま (ただし小文字にそろえて) 書かれる。 <sub>`colour_names_are_matched_ignoring_capitals_and_space`</sub>
 - 横向きのワイヤの注記は配線の下に置かれ、上に出る線番とは反対側になる。 <sub>`horizontal_wire_note_sits_below_the_wire`</sub>
@@ -2499,6 +2500,7 @@
 - 線径・線色・電線長がそろったワイヤには「0.75sq 白 0.4m」という注記が付く <sub>`wireNoteText`</sub>
 - 欠けている属性は注記から省かれ、長さの無いワイヤは「0.75sq 白」と書かれる <sub>`wireNoteText`</sub>
 - 線径も色も長さも無いワイヤには、空の注記ではなく注記そのものが付かない <sub>`wireNoteText`</sub>
+- 線径も長さも無い黒の配線には注記を付けない (黒は既定の色)。線径か長さのある黒の配線は色名も書く (wire_note.rsと同ルール) <sub>`wireNoteText`</sub>
 - 色名は英字の大小と前後の空白を無視して照合される。知っている色は表示用の名前で、知らない色は入力のまま (ただし小文字にそろえて) 書かれる <sub>`wireNoteText`</sub>
 - 横向きのワイヤの注記は配線の下に置かれ、上に出る線番とは反対側になる <sub>`wireNoteLabels`</sub>
 - 縦向きのワイヤの注記は配線の右に置かれ、左に出る線番とは反対側になる <sub>`wireNoteLabels`</sub>

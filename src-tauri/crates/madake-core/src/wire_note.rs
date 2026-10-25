@@ -77,6 +77,7 @@ fn num(v: f64) -> String {
 
 /// ワイヤ属性から注記テキストを作る。書式は `{sq}sq {色} {長さ}m`。
 /// 欠けている属性はその場ごと省き、全て欠けていれば`None` (注記を描かない)。
+/// 線径も長さも無い黒 (既定の色) の配線も`None`。
 pub fn wire_note_text(wire: &Wire) -> Option<String> {
     let mut parts: Vec<String> = Vec::new();
     if wire.sq > 0.0 {
@@ -88,6 +89,10 @@ pub fn wire_note_text(wire: &Wire) -> Option<String> {
     }
     if let Some(length) = wire.length_m.filter(|l| *l > 0.0) {
         parts.push(format!("{}m", num(length)));
+    }
+    // 線径も長さも無い黒の配線は注記しない: 黒は既定の色なので、全ての線に「黒」と書くと図面が埋まる
+    if parts.len() == 1 && wire.sq <= 0.0 && color_display(color) == color_ja("black") {
+        return None;
     }
     if parts.is_empty() {
         None
@@ -169,6 +174,20 @@ mod tests {
         assert_eq!(wire_note_text(&w).as_deref(), Some("0.75sq 白"));
         let w = wire(&[(0.0, 0.0), (10.0, 0.0)], "", 0.0, Some(0.4));
         assert_eq!(wire_note_text(&w).as_deref(), Some("0.4m"));
+    }
+
+    /// A plain black wire with no gauge and no length gets no note, because black is the default colour and "黒" on every line only clutters the sheet; a black wire with a gauge or length still names its colour.
+    /// 線径も長さも無い黒の配線には注記を付けない (黒は既定の色で、全ての線に「黒」と書くと図面が埋まるため)。線径か長さのある黒の配線は色名も書く。
+    #[test]
+    fn a_plain_black_wire_gets_no_note() {
+        for color in ["black", "Black", "黒", " black "] {
+            let w = wire(&[(0.0, 0.0), (10.0, 0.0)], color, 0.0, None);
+            assert_eq!(wire_note_text(&w), None, "{color:?}");
+        }
+        let w = wire(&[(0.0, 0.0), (10.0, 0.0)], "black", 0.75, None);
+        assert_eq!(wire_note_text(&w).as_deref(), Some("0.75sq 黒"));
+        let w = wire(&[(0.0, 0.0), (10.0, 0.0)], "red", 0.0, None);
+        assert_eq!(wire_note_text(&w).as_deref(), Some("赤"));
     }
 
     /// A wire with no gauge, no colour and no length gets no note at all instead of an empty one.
