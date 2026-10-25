@@ -1,7 +1,7 @@
 // 多芯ケーブル (M4 §5) の作図領域側の仕様テスト。芯線割当そのものはRust側のテストが正。
 import { describe, expect, it } from "vitest";
-import type { Cable, Sheet } from "../ipc";
-import { cableAddCommand, cableHit, cableLabel, nextCableReference, shieldEllipse } from "./cable";
+import type { Cable, Entity, Sheet } from "../ipc";
+import { cableAddCommand, cableHit, cableLabel, cablePoints, coreEndPin, isCable, nextCableReference, shieldEllipse } from "./cable";
 
 function cable(over: Partial<Cable> = {}): Cable {
   return {
@@ -58,5 +58,25 @@ describe("多芯ケーブル", () => {
   it("is picked by clicking near its definition line", () => {
     expect(cableHit(cable(), { x: 0.5, y: 10 }, 1)).toBe(true);
     expect(cableHit(cable(), { x: 5, y: 10 }, 1)).toBe(false);
+  });
+
+  // ja: isCable は区間の有無にかかわらずケーブル (cable と run_cable) を見分け、cablePoints は定義線と区間の点を両方返す
+  it("recognises both cable kinds and lists the points of the run", () => {
+    const run: Entity = { kind: "run_cable", ...cable({ points: [], run: [{ x: 1, y: 2 }, { x: 3, y: 2 }] }) };
+    const plain: Entity = { kind: "cable", ...cable() };
+    const wire = { kind: "wire", id: "w", points: [], color: "", sq: 0, length_m: null, part_no: null, net: null } as Entity;
+    expect([isCable(run), isCable(plain), isCable(wire), isCable(null)]).toEqual([true, true, false, false]);
+    expect(cablePoints(run as Cable)).toEqual([{ x: 1, y: 2 }, { x: 3, y: 2 }]);
+    expect(cablePoints(plain as Cable)).toEqual([{ x: 0, y: 0 }, { x: 0, y: 30 }]);
+  });
+
+  // ja: 芯の行き先がピンなら「参照記号.ピン」(部品が消えていれば「?.ピン」)、分岐の配線ならnull
+  it("names a pin end by designator and pin, and a breakout wire end as null", () => {
+    const s = sheet({
+      usb: { kind: "symbol", id: "usb", symbol_id: "connector_4p", at: { x: 0, y: 0 }, rotation: 0, mirror: false, reference: "USB1", value: "", attrs: {} },
+    } as unknown as Sheet["entities"]);
+    expect(coreEndPin(s, { kind: "pin", part: "usb", pin: "2" })).toBe("USB1.2");
+    expect(coreEndPin(s, { kind: "pin", part: "gone", pin: "1" })).toBe("?.1");
+    expect(coreEndPin(s, { kind: "wire", wire: "w1" })).toBeNull();
   });
 });

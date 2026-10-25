@@ -9,6 +9,7 @@ import {
 import { MATES_WITH_ATTR, isConnectorInstance } from "../canvas/mate";
 import { DEVICE_BLOCK_ATTR } from "../canvas/relayXref";
 import { FUNCTION_LABEL_ATTR } from "../canvas/textStyle";
+import { isCable } from "../canvas/cable";
 import type { Command, Entity, Sheet, SymbolInstance } from "../ipc";
 
 /**
@@ -178,7 +179,7 @@ export interface CablePatch {
  * 何も変わっていなければnull。
  */
 export function cableUpdateCommand(sheetId: string, entity: Entity, patch: CablePatch): Command | null {
-  if (entity.kind !== "cable") return null;
+  if (!isCable(entity)) return null;
   const cores = Number(patch.core_count);
   if (!Number.isInteger(cores) || cores < 1) return null;
   const optional = (text: string): number | null | undefined => {

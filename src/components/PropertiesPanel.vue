@@ -18,7 +18,8 @@ import { autoWirePartNo } from "../canvas/wireParts";
 import { type NetSite, xrefJumpTarget, xrefSites } from "../canvas/xref";
 import { entityKindLabels } from "./entityKindLabels";
 import { mechLinkText as formatMechLinkText } from "./mechLink";
-import type { Entity, TextAnchor, TextColorToken } from "../ipc";
+import type { CoreEnd, Entity, TextAnchor, TextColorToken } from "../ipc";
+import { coreEndPin, isCable, isRunCable } from "../canvas/cable";
 import { FUNCTION_LABEL_ATTR, TEXT_ANCHORS, TEXT_COLOR_TOKENS } from "../canvas/textStyle";
 import { COIL_SYMBOL_ID, isDeviceBlock } from "../canvas/relayXref";
 import { MATES_WITH_ATTR, isConnectorInstance } from "../canvas/mate";
@@ -53,6 +54,16 @@ const selected = computed<Entity | null>(() => {
   const [id] = [...store.selection];
   return sheet.entities[id] ?? null;
 });
+
+/** 選んでいるのが1本線の区間を持つケーブルか (芯の表に端A・端Bの列を出す)。 */
+const selectedIsRun = computed(() => isCable(selected.value) && isRunCable(selected.value));
+
+/** 芯の行き先の表記 (ピンは "USB1.2"、分岐の配線は「分岐の配線」、無ければ「—」)。 */
+function coreEndText(end: CoreEnd | null | undefined): string {
+  if (!end) return "—";
+  const sheet = store.activeSheet;
+  return (sheet ? coreEndPin(sheet, end) : null) ?? t("cable.endWire");
+}
 
 const wireColors = [
   "red", "black", "white", "blue", "yellow", "green", "orange", "purple", "brown", "gray", "pink", "light_blue",
@@ -205,7 +216,7 @@ watch(
       buf.npPosition = e.position;
       buf.npFollow = e.follow_description;
       buf.part_no = e.part_no;
-    } else if (e.kind === "cable") {
+    } else if (isCable(e)) {
       buf.reference = e.reference;
       buf.part_no = e.part_no;
       buf.cableCores = String(e.core_count);
@@ -382,7 +393,7 @@ async function apply() {
       ui.log(t("panelMarks.nameplate.updatedLog"));
     }
     return;
-  } else if (e.kind === "cable") {
+  } else if (isCable(e)) {
     // ケーブルは型番・芯数・線径・シールド・長さを書き換える (芯線割当は定義線が決めたまま)
     const command = cableUpdateCommand(sheet.id, e, {
       reference: buf.reference,
@@ -692,7 +703,7 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
     </template>
 
     <!-- 多芯ケーブル (M4 §5、.pen「M4残りデザイン④」): 型番・芯数・線径・シールド・長さと芯線割当 -->
-    <template v-else-if="selected?.kind === 'cable'">
+    <template v-else-if="selected?.kind === 'cable' || selected?.kind === 'run_cable'">
       <div class="sec"><ChevronDown :size="10" /> {{ t("cable.kindLabel") }}</div>
       <div class="prow">
         <span class="plabel">{{ t("cable.referenceRow") }}</span>
@@ -724,23 +735,32 @@ const kindLabel = computed<Record<string, string>>(() => entityKindLabels(t));
       <div class="sec"><ChevronDown :size="10" /> {{ t("cable.coresSection") }}</div>
       <table class="cores">
         <thead>
-          <tr><th>{{ t("cable.colCore") }}</th><th>{{ t("cable.colColor") }}</th><th>{{ t("cable.colWire") }}</th></tr>
+          <tr>
+            <th>{{ t("cable.colCore") }}</th>
+            <th>{{ t("cable.colColor") }}</th>
+            <th v-if="!selectedIsRun">{{ t("cable.colWire") }}</th>
+            <th v-if="selectedIsRun">{{ t("cable.colEndA") }}</th>
+            <th v-if="selectedIsRun">{{ t("cable.colEndB") }}</th>
+          </tr>
         </thead>
         <tbody>
           <tr v-for="c in selected.cores" :key="c.core">
             <td class="mono">{{ c.core }}</td>
             <td>{{ c.color }}</td>
-            <td class="mono">{{ c.wire ? t("cable.assigned") : t("cable.spare") }}</td>
+            <td v-if="!selectedIsRun" class="mono">{{ c.wire ? t("cable.assigned") : t("cable.spare") }}</td>
+            <td v-if="selectedIsRun" class="mono">{{ coreEndText(c.end_a) }}</td>
+            <td v-if="selectedIsRun" class="mono">{{ coreEndText(c.end_b) }}</td>
           </tr>
           <tr v-for="n in Math.max(0, selected.core_count - selected.cores.length)" :key="`spare-${n}`" class="spare">
             <td class="mono">{{ selected.cores.length + n }}</td>
             <td>—</td>
             <td>{{ t("cable.spare") }}</td>
+            <td v-if="selectedIsRun">—</td>
           </tr>
         </tbody>
       </table>
       <p v-if="selected.cores.length > selected.core_count" class="cable-hint warn">{{ t("cable.overflowHint") }}</p>
-      <p class="cable-hint">{{ t("cable.hint") }}</p>
+      <p class="cable-hint">{{ selectedIsRun ? t("cable.runHint") : t("cable.hint") }}</p>
     </template>
 
     <!-- 図形 (G10): 電気的な意味を持たない作図要素。見た目だけを編集する -->

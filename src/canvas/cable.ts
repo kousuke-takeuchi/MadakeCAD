@@ -5,7 +5,7 @@
 // 「シールド楕円の形」「描画」「当たり判定」だけを持ち、注記とシールドの形はSVG出力
 // (svg.rs) と同じ規則で作る。
 
-import type { Cable, Command, Point, Sheet } from "../ipc";
+import type { Cable, Command, CoreEnd, Entity, Point, Sheet } from "../ipc";
 import { theme } from "./theme";
 import type { Viewport } from "./viewport";
 import { drawingText, setDrawingFont } from "./textSize";
@@ -16,6 +16,32 @@ export const CABLE_PREFIX = "W";
 const MIN_LENGTH = 2.5;
 /** 注記の文字高 mm (SVGと同じ)。 */
 const CABLE_FONT = 2.5;
+
+/** 多芯ケーブルのエンティティ (区間の無い "cable" と、区間のある "run_cable")。 */
+export type CableEntity = Extract<Entity, { kind: "cable" | "run_cable" }>;
+
+/** ケーブルか (区間の有無を問わない)。 */
+export function isCable(e: Entity | null | undefined): e is CableEntity {
+  return e?.kind === "cable" || e?.kind === "run_cable";
+}
+
+/** 1本線の区間を持つか。 */
+export function isRunCable(c: Cable): boolean {
+  return (c.run?.length ?? 0) > 0;
+}
+
+/** ケーブルの全頂点 (定義線と区間)。範囲選択・外接矩形・移動のプレビューに使う。 */
+export function cablePoints(c: Cable): Point[] {
+  return [...c.points, ...(c.run ?? [])];
+}
+
+/** 芯の行き先がピンなら "USB1.2" (部品が消えていれば "?.2")、分岐の配線ならnull。 */
+export function coreEndPin(sheet: Sheet, end: CoreEnd): string | null {
+  if (end.kind !== "pin") return null;
+  const part = sheet.entities[end.part];
+  const ref = part && part.kind === "symbol" && part.reference ? part.reference : "?";
+  return `${ref}.${end.pin}`;
+}
 
 /** 数値の表記 (小数第2位まで、末尾の0と小数点は書かない)。 */
 function num(v: number): string {
@@ -46,7 +72,7 @@ export function shieldEllipse(c: Cable): { center: Point; rx: number; ry: number
 export function nextCableReference(sheet: Sheet): string {
   let max = 0;
   for (const e of Object.values(sheet.entities)) {
-    const name = e.kind === "cable" ? e.reference : e.kind === "harness" ? e.name : "";
+    const name = isCable(e) ? e.reference : e.kind === "harness" ? e.name : "";
     const m = /^W(\d+)$/.exec(name ?? "");
     if (m) max = Math.max(max, Number(m[1]));
   }

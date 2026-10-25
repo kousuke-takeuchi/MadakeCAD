@@ -5,6 +5,7 @@
 // 専用の描画コードを持たないので、記法の変更が自動でプレビューにも効く。
 
 import type { Command, Entity, Sheet, Template } from "../ipc";
+import { cablePoints, isCable } from "./cable";
 import { Viewport } from "./viewport";
 
 /** テンプレートのCommand列から、そのテンプレートが置くエンティティを取り出す。 */
@@ -50,8 +51,9 @@ export function entityBounds(entities: Entity[]): Bounds | null {
     }
   };
   for (const e of entities) {
-    if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape" || e.kind === "cable")
+    if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape")
       e.points.forEach((p) => consider(p.x, p.y));
+    else if (isCable(e)) cablePoints(e).forEach((p) => consider(p.x, p.y));
     else if (e.kind === "din_rail") {
       consider(e.x1, e.y);
       consider(e.x2, e.y);

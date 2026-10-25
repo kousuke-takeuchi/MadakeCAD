@@ -263,6 +263,22 @@ describe("cableUpdateCommand", () => {
   it("sends nothing when nothing changed", () => {
     expect(cableUpdateCommand("s1", cable(), { reference: "W1", part_no: "", core_count: "3", sq: "", shield: false, grounded: false, length_m: "" })).toBeNull();
   });
+
+  // ja: 1本線のケーブル (run_cable) のプロパティを書き換えても、種類・区間・芯の行き先はそのまま残る
+  it("keeps the kind, run and core ends of a single-line cable", () => {
+    const run: Entity = {
+      ...(cable() as Extract<Entity, { kind: "cable" }>),
+      kind: "run_cable",
+      points: [],
+      run: [{ x: 0, y: 0 }, { x: 20, y: 0 }],
+      cores: [{ core: "VBUS", color: "red", wire: null, end_a: { kind: "wire", wire: "w1" }, end_b: { kind: "pin", part: "p1", pin: "1" } }],
+    };
+    const command = cableUpdateCommand("s1", run, patch);
+    const e = (command as { entity: Entity }).entity;
+    expect(e.kind).toBe("run_cable");
+    expect(e).toMatchObject({ run: [{ x: 0, y: 0 }, { x: 20, y: 0 }], part_no: "SAMPLE-CBL" });
+    expect(e.kind === "run_cable" && e.cores[0].end_b).toEqual({ kind: "pin", part: "p1", pin: "1" });
+  });
 });
 
 describe("nameplateUpdateCommand", () => {

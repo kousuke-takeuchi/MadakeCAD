@@ -28,7 +28,7 @@ import {
 // 循環import防止のため定義はdynamicSymbol.tsへ移した。他モジュールとの互換のため再エクスポートする
 export { symbolBounds, transformLocal } from "./dynamicSymbol";
 import { LEADER_STROKE_MM, leaderFor } from "./leader";
-import { drawCable } from "./cable";
+import { drawCable, isCable } from "./cable";
 import { DIM_FONT, DIM_TICK, dimensionGeometry, nameplateLines, nameplateRect } from "./panelMarks";
 import { HARNESS_DASH, HARNESS_FONT, harnessLabelAt } from "./harness";
 import { MATE_LINE_DASH, mateLinkSegment, type MateLink } from "./mate";
@@ -1316,7 +1316,7 @@ export function renderSheet(
     drawHarness(ctx, vp, e.points, e.name, opts.selection.has(e.id));
   }
   // 多芯ケーブルの定義線は配線の上に重ねて描く (配線を横切る斜線なので後で描く)
-  const cables = entities.filter((e) => e.kind === "cable");
+  const cables = entities.filter(isCable);
   // 嵌合コネクタ対 (G14) の破線も配線・シンボルの背面。シンボルどうしを結ぶ線なので
   // 表示クラスは「シンボル」に属する (シンボルを隠せば線も消える)
   if (!hidden.has("symbols")) {
@@ -1338,7 +1338,7 @@ export function renderSheet(
     ctx.stroke();
   }
   for (const e of cables) {
-    if (e.kind === "cable") drawCable(ctx, vp, e, opts.selection.has(e.id));
+    drawCable(ctx, vp, e, opts.selection.has(e.id));
   }
   for (const e of entities) {
     if (e.kind !== "symbol") continue;

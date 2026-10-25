@@ -1,7 +1,7 @@
 // 対話ツールの状態機械。ドラッグ中はローカルプレビュー、確定時にCommandを発行する。
 
 import { harnessAddCommand, harnessRectPoints, harnessWireCount } from "../canvas/harness";
-import { cableAddCommand, cableHit } from "../canvas/cable";
+import { cableAddCommand, cableHit, cablePoints, isCable, isRunCable } from "../canvas/cable";
 import { dimensionAddCommand, footprintAt, panelMarkHit } from "../canvas/panelMarks";
 import { useNameplatesStore } from "../stores/nameplates";
 import {
@@ -445,7 +445,7 @@ export class EditorController {
     }
     // ケーブル定義線 (配線を横切る斜線そのもの)
     for (const e of entities) {
-      if (e.kind === "cable" && cableHit(e, world, HIT_TOLERANCE)) return e.id;
+      if (isCable(e) && cableHit(e, world, HIT_TOLERANCE)) return e.id;
     }
     // ハーネス境界は最後 (囲みの中身を選びたいことのほうが多い)。破線そのものを掴む
     for (const e of entities) {
@@ -664,11 +664,13 @@ export class EditorController {
             const sel = new Set(this.store.selection);
             for (const e of Object.values(sheet.entities)) {
               const pts: Point[] =
-                e.kind === "wire" || e.kind === "harness" || e.kind === "shape" || e.kind === "cable"
+                e.kind === "wire" || e.kind === "harness" || e.kind === "shape"
                   ? e.points
-                  : "at" in e && e.kind !== "dimension"
-                    ? [e.at]
-                    : [];
+                  : isCable(e)
+                    ? cablePoints(e)
+                    : "at" in e && e.kind !== "dimension"
+                      ? [e.at]
+                      : [];
               if (pts.length && pts.every((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1)) {
                 sel.add(e.id);
               }
@@ -755,17 +757,22 @@ export class EditorController {
     this.store.selection = new Set(entityIds.filter((id) => id in sheet.entities));
     const first = entityIds.map((id) => sheet.entities[id]).find(Boolean);
     if (!first) return;
-    const target: Pt | null =
-      first.kind === "wire" || first.kind === "harness" || first.kind === "shape" || first.kind === "cable"
-        ? first.points.length
-          ? {
-              x: (first.points[0].x + first.points[first.points.length - 1].x) / 2,
-              y: (first.points[0].y + first.points[first.points.length - 1].y) / 2,
-            }
-          : null
-        : "at" in first && first.kind !== "dimension"
-          ? first.at
+    const firstPoints =
+      first.kind === "wire" || first.kind === "harness" || first.kind === "shape"
+        ? first.points
+        : isCable(first)
+          ? cablePoints(first)
           : null;
+    const target: Pt | null = firstPoints
+      ? firstPoints.length
+        ? {
+            x: (firstPoints[0].x + firstPoints[firstPoints.length - 1].x) / 2,
+            y: (firstPoints[0].y + firstPoints[firstPoints.length - 1].y) / 2,
+          }
+        : null
+      : "at" in first && first.kind !== "dimension"
+        ? first.at
+        : null;
     if (target && this.viewSize.w > 0) {
       this.vp.originX = this.viewSize.w / 2 - target.x * this.vp.scale;
       this.vp.originY = this.viewSize.h / 2 - target.y * this.vp.scale;
@@ -1098,9 +1105,9 @@ export class EditorController {
         for (const id of this.store.selection) {
           const e = sheet.entities[id];
           if (!e) continue;
-          if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape" || e.kind === "cable") {
+          if (e.kind === "wire" || e.kind === "harness" || e.kind === "shape" || isCable(e)) {
             ctx.beginPath();
-            e.points.forEach((p, i) => {
+            (isCable(e) && isRunCable(e) ? (e.run ?? []) : e.points).forEach((p, i) => {
               const s = vp.toScreen({ x: p.x + this.moveDelta.x, y: p.y + this.moveDelta.y });
               if (i === 0) ctx.moveTo(s.x, s.y);
               else ctx.lineTo(s.x, s.y);

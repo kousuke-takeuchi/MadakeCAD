@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2882 specification clauses** across 6 areas.
+**2885 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1973,6 +1973,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - numbers a new cable after the W numbers of the cables and harnesses on the sheet <sub>`多芯ケーブル`</sub>
 - turns a drag into an add_cable command with no core count, and a mere click into nothing <sub>`多芯ケーブル`</sub>
 - is picked by clicking near its definition line <sub>`多芯ケーブル`</sub>
+- recognises both cable kinds and lists the points of the run <sub>`多芯ケーブル`</sub>
+- names a pin end by designator and pin, and a breakout wire end as null <sub>`多芯ケーブル`</sub>
 
 ### deviceTree
 
@@ -2670,6 +2672,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - writes part, cores, gauge, shield and length in one update and keeps the core assignments <sub>`cableUpdateCommand`</sub>
 - refuses a core count below one or a gauge or length that is not a number <sub>`cableUpdateCommand`</sub>
 - sends nothing when nothing changed <sub>`cableUpdateCommand`</sub>
+- keeps the kind, run and core ends of a single-line cable <sub>`cableUpdateCommand`</sub>
 - writes text, height, position, following and part in one update without an empty second line <sub>`nameplateUpdateCommand`</sub>
 - sends nothing for a non-positive text height or when nothing changed <sub>`nameplateUpdateCommand`</sub>
 

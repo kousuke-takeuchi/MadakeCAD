@@ -26,6 +26,7 @@ export function entityKindLabels(t: (key: string) => string): Record<EntityKind,
     panel_legend: t("panel.prop.kind.panel_legend"),
     wire_legend: t("wireLegend.kindLabel"),
     cable: t("cable.kindLabel"),
+    run_cable: t("cable.kindLabel"),
     nameplate: t("panelMarks.nameplate.kindLabel"),
     dimension: t("panelMarks.dimension.kindLabel"),
   };
@@ -47,6 +48,7 @@ export const ENTITY_KINDS: EntityKind[] = [
   "panel_legend",
   "wire_legend",
   "cable",
+  "run_cable",
   "nameplate",
   "dimension",
 ];
