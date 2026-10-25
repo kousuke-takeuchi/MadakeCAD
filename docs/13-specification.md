@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2967 specification clauses** across 6 areas.
+**2969 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2111,6 +2111,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - never lets a bracket and its caption lines overlap each other, at any rotation <sub>`captionLineAnchors`</sub>
 - stacks caption lines downwards on the paper, sharing one centre line, at any rotation <sub>`captionLineAnchors`</sub>
 - copies block pin contacts into the pin definition and refuses bad contacts like Rust <sub>`captionLineAnchors`</sub>
+- reads a connector kind, treats null as absent and refuses an unknown kind as invalid JSON, like Rust <sub>`blockSymbol connectors`</sub>
+- refuses a bad connector name with the same messages as Rust and lets unnamed connectors repeat <sub>`blockSymbol connectors`</sub>
 
 ### frameEditor
 

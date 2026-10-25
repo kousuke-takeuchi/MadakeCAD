@@ -3,6 +3,7 @@
 // 同一座標を返すこと(両者は dynamicSymbol.test.ts と Rust側テストで代表値を突き合わせている)。
 
 import type { Point, Primitive, PinDef, SymbolDef, SymbolInstance, TextSlot } from "../ipc";
+import { connectorGroups, isConnectorKind, isGroupedConnector, type ConnectorKind } from "./connector";
 import {
   PIN_GROUPS_ATTR,
   PIN_GROUP_CAPTION_GAP_MM,
@@ -256,6 +257,10 @@ export interface BlockPin {
   name?: string;
   /** ポートの接点 (Rust側 BlockPin::contacts)。 */
   contacts?: string[];
+  /** 外形の辺に描くコネクタの形 (Rust側 BlockPin::connector)。無ければ普通のピン。 */
+  connector?: ConnectorKind;
+  /** まとめて1つの本体に描くコネクタ (端子台・JST) の名前 (Rust側 BlockPin::connector_ref)。 */
+  connector_ref?: string;
 }
 
 /** ブロックのピン配置(辺ごと。左右は上→下、上下は左→右)。 */
@@ -466,6 +471,36 @@ function checkContacts(no: string, contacts: string[]): void {
   }
 }
 
+/** コネクタの名前を調べる (Rust側 check_connectors と同じ順・同じ文)。 */
+function checkConnectors(pins: BlockPins): void {
+  for (const side of BLOCK_SIDES) {
+    for (const pin of sideOf(pins, side)) {
+      if (pin.connector_ref == null) continue;
+      const no = (pin.no ?? "").trim();
+      if (pin.connector_ref.trim() === "") throw new Error(`block pin ${no}: connector_ref must not be empty`);
+      if (pin.connector == null) {
+        throw new Error(`block pin ${no}: connector_ref needs a grouped connector (screw, jst_ph_f, jst_xh_f)`);
+      }
+      if (!isGroupedConnector(pin.connector)) {
+        throw new Error(`block pin ${no}: connector_ref is only for screw, jst_ph_f and jst_xh_f, not ${pin.connector}`);
+      }
+    }
+  }
+  const seen = new Set<string>();
+  for (const side of BLOCK_SIDES) {
+    const list = sideOf(pins, side);
+    for (const group of connectorGroups(list)) {
+      if (group.ref === null) continue;
+      if (seen.has(group.ref)) {
+        throw new Error(
+          `block pin ${(list[group.start].no ?? "").trim()}: connector_ref ${group.ref} is used by another group; its pins must be next to each other on one side`,
+        );
+      }
+      seen.add(group.ref);
+    }
+  }
+}
+
 export function parseBlockSpec(attrs: Record<string, string>): {
   pins: BlockPins;
   size: { w: number; h: number } | null;
@@ -488,6 +523,15 @@ export function parseBlockSpec(attrs: Record<string, string>): {
       }
     }
     pins = parsed as BlockPins;
+    // Rust では serde が読むときに断る (知らない種類・文字でない名前)
+    for (const pin of BLOCK_SIDES.flatMap((s) => sideOf(pins, s))) {
+      if (pin.connector != null && !isConnectorKind(pin.connector)) {
+        throw new Error(`${BLOCK_PINS_ATTR} is not valid JSON: unknown connector ${String(pin.connector)}`);
+      }
+      if (pin.connector_ref != null && typeof pin.connector_ref !== "string") {
+        throw new Error(`${BLOCK_PINS_ATTR} is not valid JSON: connector_ref must be a string`);
+      }
+    }
   }
   const all = BLOCK_SIDES.flatMap((s) => sideOf(pins, s));
   if (all.length > BLOCK_PIN_MAX) {
@@ -501,6 +545,7 @@ export function parseBlockSpec(attrs: Record<string, string>): {
     seen.add(no);
     checkContacts(no, pin.contacts ?? []);
   }
+  checkConnectors(pins);
 
   const rawSize = attrs[BLOCK_SIZE_ATTR];
   let size: { w: number; h: number } | null = null;

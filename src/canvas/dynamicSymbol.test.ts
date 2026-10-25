@@ -410,3 +410,51 @@ describe("captionLineAnchors", () => {
     expect(() => blockSymbol({ block_pins: '{"left":[{"no":"P1","contacts":["A","A"]}]}' })).toThrow("duplicate contact A");
   });
 });
+
+describe("blockSymbol connectors", () => {
+  const message = (json: string): string => {
+    try {
+      blockSymbol({ block_pins: json });
+    } catch (e) {
+      return (e as Error).message;
+    }
+    throw new Error(`断らなかった: ${json}`);
+  };
+
+  // ja: ピンはコネクタの形を接点と一緒に持て、null は書かなかったのと同じ。知らない種類は Rust と同じく壊れた JSON として断る
+  it("reads a connector kind, treats null as absent and refuses an unknown kind as invalid JSON, like Rust", () => {
+    expect(() =>
+      blockSymbol({ block_pins: '{"top":[{"no":"U1","connector":"usb_a_f","contacts":["VBUS","D-","D+","GND"]}]}' }),
+    ).not.toThrow();
+    const nulls = blockSymbol({ block_pins: '{"left":[{"no":"1","connector":null,"connector_ref":null}]}' });
+    expect(nulls.primitives[0].type).toBe("rect");
+    expect(message('{"left":[{"no":"1","connector":"usb_z"}]}')).toMatch(/^block_pins is not valid JSON/);
+  });
+
+  // ja: コネクタの名前の誤りは Rust と同じ文で断り (空・コネクタなし・まとめない種類・2つのまとまり)、名前の無いコネクタは繰り返してよい
+  it("refuses a bad connector name with the same messages as Rust and lets unnamed connectors repeat", () => {
+    expect(message('{"left":[{"no":"P1","connector":"screw","connector_ref":"  "}]}')).toBe(
+      "block pin P1: connector_ref must not be empty",
+    );
+    expect(message('{"left":[{"no":"P1","connector_ref":"J3"}]}')).toBe(
+      "block pin P1: connector_ref needs a grouped connector (screw, jst_ph_f, jst_xh_f)",
+    );
+    expect(message('{"left":[{"no":"P1","connector":"usb_a_f","connector_ref":"J3"}]}')).toBe(
+      "block pin P1: connector_ref is only for screw, jst_ph_f and jst_xh_f, not usb_a_f",
+    );
+    const split = "block pin 2: connector_ref J3 is used by another group; its pins must be next to each other on one side";
+    for (const json of [
+      '{"left":[{"no":"1","connector":"jst_ph_f","connector_ref":"J3"}],"right":[{"no":"2","connector":"jst_ph_f","connector_ref":"J3"}]}',
+      '{"left":[{"no":"1","connector":"jst_ph_f","connector_ref":"J3"},{"no":"X"},{"no":"2","connector":"jst_ph_f","connector_ref":"J3"}]}',
+      '{"left":[{"no":"1","connector":"screw","connector_ref":"J3"},{"no":"2","connector":"jst_ph_f","connector_ref":"J3"}]}',
+    ]) {
+      expect(message(json)).toBe(split);
+    }
+    expect(() =>
+      blockSymbol({
+        block_pins:
+          '{"left":[{"no":"1","connector":"screw"},{"no":"2"},{"no":"3","connector":"screw"}],"top":[{"no":"4","connector":"jst_xh_f"},{"no":"5","connector":"usb_a_f"},{"no":"6","connector":"usb_a_f"}]}',
+      }),
+    ).not.toThrow();
+  });
+});
