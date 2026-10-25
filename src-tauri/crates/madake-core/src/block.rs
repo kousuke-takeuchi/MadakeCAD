@@ -853,17 +853,18 @@ mod tests {
     /// Rust と TS が同じ形を返すことを確かめる共有ファイル (`src/canvas/dynamicSymbol.test.ts` も読む)。
     const CONNECTOR_GOLDEN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/connector-blocks.json");
 
-    /// golden の例: 13種類×4辺 (1本、まとめる種類は名前付きの2本) と、AOGU の機器・重なりの例・コネクタの無いブロック。
+    /// golden の例: 13種類×4辺 (普通のピン2本の間に1本、まとめる種類は名前付きの2本) と、AOGU の機器・重なりの例・コネクタの無いブロック。
     fn golden_cases() -> Vec<(String, String)> {
         let mut cases = Vec::new();
         for kind in ConnectorKind::ALL {
             let k = kind.name();
             for side in ["left", "right", "top", "bottom"] {
-                let json = if kind.is_grouped() {
-                    format!(r#"{{"{side}":[{{"no":"1","name":"A","connector":"{k}","connector_ref":"J1"}},{{"no":"2","name":"B","connector":"{k}","connector_ref":"J1"}}]}}"#)
+                let connector = if kind.is_grouped() {
+                    format!(r#"{{"no":"1","name":"A","connector":"{k}","connector_ref":"J1"}},{{"no":"2","name":"B","connector":"{k}","connector_ref":"J1"}}"#)
                 } else {
-                    format!(r#"{{"{side}":[{{"no":"1","name":"A","connector":"{k}"}}]}}"#)
+                    format!(r#"{{"no":"1","name":"A","connector":"{k}"}}"#)
                 };
+                let json = format!(r#"{{"{side}":[{{"no":"0"}},{connector},{{"no":"9"}}]}}"#);
                 cases.push((format!("{k}-{side}"), json));
             }
         }
