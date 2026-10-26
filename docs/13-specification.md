@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3003 specification clauses** across 6 areas.
+**3004 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -19,6 +19,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### block
 
 - A block's export name follows its drawn shape only (pins and picture): whitespace in the table does not matter, a different name, pin, connector or size does, and the template keeps the name `block`. <sub>`block_export_id_follows_the_drawn_shape_only`</sub>
+- One block's export name is pinned to a literal, so a change to the shape key or its serialisation (which would orphan blocks in files written earlier) fails here. <sub>`block_export_id_is_stable_for_a_known_shape`</sub>
 - A block symbol puts its named pins on both sides of a box, 5 mm apart and centred on the 2.5 mm grid, each pointing outwards. <sub>`block_pins_sit_on_both_sides_five_millimetres_apart`</sub>
 - Pin numbers are drawn outside the outline next to the lead, and pin names inside it. <sub>`pin_numbers_are_drawn_outside_and_pin_names_inside`</sub>
 - The box grows automatically with the number of pins and the length of the pin names, always in 5 mm steps. <sub>`auto_size_grows_with_pin_count_and_name_length`</sub>

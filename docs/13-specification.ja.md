@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3003仕様項目**。
+全6領域・**3004仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -19,6 +19,7 @@
 ### block
 
 - ブロックの書き出し名は描かれた形(ピンと絵)だけで決まる。表の空白は無関係、名前・ピン・コネクタ・大きさの違いは別名になり、見本は`block`のまま。 <sub>`block_export_id_follows_the_drawn_shape_only`</sub>
+- 1つのブロックの書き出し名を文字どおりに固定する。形の鍵や直列化が変わると (前に書いたファイルのブロックが読めなくなるので) ここで失敗する。 <sub>`block_export_id_is_stable_for_a_known_shape`</sub>
 - ブロックシンボルは名前付きピンを箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並べ、ピンはそれぞれ外向きになる。 <sub>`block_pins_sit_on_both_sides_five_millimetres_apart`</sub>
 - ピン番号は外形の外側(リードの脇)に、ピン名は外形の内側に描かれる。 <sub>`pin_numbers_are_drawn_outside_and_pin_names_inside`</sub>
 - 外形はピン数とピン名の長さに応じて自動で大きくなり、寸法は必ず5mm刻みになる。 <sub>`auto_size_grows_with_pin_count_and_name_length`</sub>

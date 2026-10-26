@@ -732,9 +732,10 @@ async fn place_symbol_refuses_a_bad_connector() {
 fn place_symbol_describes_connectors() {
     let tools = tool_descriptions();
     let (_, d) = tools.iter().find(|(n, _)| n == "place_symbol").expect("place_symbol");
-    for needle in ["connector_ref", "usb_a_f", "jst_xh_f", "get_pins", "5mm"] {
+    for needle in ["connector_ref", "usb_a_f", "jst_xh_f", "get_pins", "5mm", "同じ種類の"] {
         assert!(d.contains(needle), "説明に「{needle}」が無い: {d}");
     }
     let schema = serde_json::to_string(&schemars::schema_for!(madake_mcp::PlaceSymbolParams)).unwrap();
     assert!(schema.contains("connector_ref") && schema.contains("jst_xh_f"), "attrs の説明にコネクタが無い");
+    assert!(schema.contains("同じ種類の"), "attrs の説明に connector_ref のピンは同じ種類という条件が無い");
 }

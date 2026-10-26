@@ -108,9 +108,9 @@ specは`docs/superpowers/specs/2026-08-20-madakecad-design.md`、実装経緯は
 |---|---|---|
 | KiCadインポート(.kicad_sch) | ✅ | 自前S式パーサ。用紙・表題欄・配線・ジャンクション・ラベル・テキスト・主要シンボル(マッピング表+Conn/Screw_Terminalのピン数解釈)・電源シンボル→ネットラベル化。未対応はスキップ報告(ImportReport) |
 | KiCadインポートの制限 | ⚠ | ピン形状の違いで接続が崩れ得る(ERCで洗い出す運用)。階層シート・バス未対応 |
-| KiCadエクスポート(.kicad_sch) | ✅ | `kicad.rs::export_kicad_sch`。KiCad 9形式。使用シンボルの図形・ピンを`MadakeCAD:<id>`として`lib_symbols`へ埋め込む(KiCad側にライブラリ不要)。線番はネットのラベル、ハーネスは破線多角形+名前。書き出し→読み戻しで配置が保たれる(インポーターは`MadakeCAD:`接頭辞を直接解決) |
-| DXFエクスポート(ACADE/EPLAN向け) | ✅ | `dxf.rs::sheet_to_dxf`。AutoCAD 2000形式(AC1015)・mm・`\U+XXXX`。配線=`WIRES`レイヤのLINE、線番=`WIRENO`、シンボル=`MDK_<id>`ブロック+属性(TAG1/CAT/DESC1/RATING1/TERMnn)、ジャンクション=`WDDOT`、ラベル=`LABELS`、注記=`MISC`、ハーネス=`HARNESS`(破線)。ACADE/EPLANはDXFをネイティブに読める(`.dwg`/`.elk`は非公開形式のため直接対応しない。仕様: `specs/interop.md`) |
-| DXFインポート | ✅ | `dxf.rs::import_dxf`。配線レイヤ(名前に`WIRE`、または`wire_layers`指定)の線分→配線、`WIRENO`文字→最寄り配線の線番、`MDK_<id>`ブロック→シンボル、`WDDOT`/小円→ジャンクション、インチ→mm換算、外形が収まる最小A判。ACADE/EPLAN固有のブロック名は対応表が無いためスキップ報告(未決事項) |
+| KiCadエクスポート(.kicad_sch) | ✅ | `kicad.rs::export_kicad_sch`。KiCad 9形式。使用シンボルの図形・ピンを`MadakeCAD:<id>`として`lib_symbols`へ埋め込む(KiCad側にライブラリ不要。機器ブロックは形ごとに`MadakeCAD:block_<hex>`)。線番はネットのラベル、ハーネスは破線多角形+名前。書き出し→読み戻しで配置が保たれる(インポーターは`MadakeCAD:`接頭辞を直接解決し、`block_<hex>`はブロックに戻す) |
+| DXFエクスポート(ACADE/EPLAN向け) | ✅ | `dxf.rs::sheet_to_dxf`。AutoCAD 2000形式(AC1015)・mm・`\U+XXXX`。配線=`WIRES`レイヤのLINE、線番=`WIRENO`、シンボル=`MDK_<id>`ブロック(機器ブロックは形ごとに`MDK_block_<hex>`)+属性(TAG1/CAT/DESC1/RATING1/TERMnn)、ジャンクション=`WDDOT`、ラベル=`LABELS`、注記=`MISC`、ハーネス=`HARNESS`(破線)。ACADE/EPLANはDXFをネイティブに読める(`.dwg`/`.elk`は非公開形式のため直接対応しない。仕様: `specs/interop.md`) |
+| DXFインポート | ✅ | `dxf.rs::import_dxf`。配線レイヤ(名前に`WIRE`、または`wire_layers`指定)の線分→配線、`WIRENO`文字→最寄り配線の線番、`MDK_<id>`ブロック→シンボル(`MDK_block_<hex>`はブロックに戻す)、`WDDOT`/小円→ジャンクション、インチ→mm換算、外形が収まる最小A判。ACADE/EPLAN固有のブロック名は対応表が無いためスキップ報告(未決事項) |
 
 ## 7. AI・自動化・外部連携
 

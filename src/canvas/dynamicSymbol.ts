@@ -463,7 +463,6 @@ function captionInset(side: BlockPin[]): number {
   return side.some((p) => (p.name ?? "") !== "") ? 7.5 : 5.0;
 }
 
-
 /** 左右の辺の、外形からピン名までの余白 mm (Rust側 side_pad)。 */
 function sidePad(side: BlockPin[]): number {
   return side.some((p) => p.connector != null) ? BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM : BLOCK_TEXT_PAD_MM;
@@ -642,7 +641,6 @@ function edgePoint(dir: BlockDir, off: number, hw: number, hh: number): Point {
   return p(off, hh);
 }
 
-/** 1本のピンの描き位置 (Rust側 pin_layout と同じ式)。 */
 /** コネクタのまとまりの名前の位置 (Rust側 label_at と同じ式)。 */
 function labelAt(side: BlockPin[], group: ConnectorGroup, label: string, dir: BlockDir, hw: number, hh: number): Point {
   const n = side.length;
@@ -665,6 +663,7 @@ function labelAt(side: BlockPin[], group: ConnectorGroup, label: string, dir: Bl
   return p(mid, dir === "up" ? -hh + CONNECTOR_LABEL_TOP_MM : hh - CONNECTOR_LABEL_TOP_MM);
 }
 
+/** 1本のピンの描き位置 (Rust側 pin_layout と同じ式)。 */
 function pinLayout(
   bp: BlockPin,
   off: number,
@@ -742,7 +741,6 @@ function pinLayout(
     nameAt: p(off, hh - BLOCK_PIN_TEXT_MM - BLOCK_PIN_PITCH_MM / 2),
   };
 }
-
 
 /**
  * 属性からブロックのシンボル定義を作る(Rust側 `block_symbol` と同一座標)。

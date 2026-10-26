@@ -286,7 +286,7 @@ fn system_prompt_states_the_contact_rules() {
 #[test]
 fn system_prompt_explains_connector_pictures() {
     let prompt = system_prompt(&AppSettings::default(), None);
-    for needle in ["`connector`", "`connector_ref`", "`jst_ph_f`", "`_f`(メス)", "`get_pins`で読み直す"] {
+    for needle in ["`connector`", "`connector_ref`", "`jst_ph_f`", "`_f`(メス)", "`get_pins`で読み直す", "同じ種類の"] {
         assert!(prompt.contains(needle), "「{needle}」が無い: {prompt}");
     }
 }

@@ -558,7 +558,6 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     side(&pins_spec.top, PinDir::Up, &mut primitives, &mut pins);
     side(&pins_spec.bottom, PinDir::Down, &mut primitives, &mut pins);
 
-
     SymbolDef {
         id: BLOCK_SYMBOL_ID.into(),
         name: "Block (generic device)".into(),
@@ -814,6 +813,14 @@ mod tests {
         ] {
             assert!(!is_block_export_id(&bad), "{bad}");
         }
+    }
+
+    /// One block's export name is pinned to a literal, so a change to the shape key or its serialisation (which would orphan blocks in files written earlier) fails here.
+    /// 1つのブロックの書き出し名を文字どおりに固定する。形の鍵や直列化が変わると (前に書いたファイルのブロックが読めなくなるので) ここで失敗する。
+    #[test]
+    fn block_export_id_is_stable_for_a_known_shape() {
+        let def = block_symbol(&attrs(&[(BLOCK_PINS_ATTR, r#"{"left":[{"no":"1"}]}"#)])).unwrap();
+        assert_eq!(block_export_id(&def), "block_25f4c16dc8d5fc46");
     }
 
     /// A block symbol puts its named pins on both sides of a box, 5 mm apart and centred on the 2.5 mm grid, each pointing outwards.
@@ -1171,7 +1178,7 @@ mod tests {
     #[test]
     fn connector_blocks_match_the_shared_golden_file() {
         let want = golden_json();
-        if std::env::var_os("MADAKE_UPDATE_GOLDEN").is_some() {
+        if std::env::var("MADAKE_UPDATE_GOLDEN").as_deref() == Ok("1") {
             // 1行に1例 (差分が例ごとに読める)
             let lines: Vec<String> = want["cases"].as_array().unwrap().iter().map(|c| serde_json::to_string(c).unwrap()).collect();
             std::fs::write(CONNECTOR_GOLDEN, format!("{{\"cases\":[\n{}\n]}}\n", lines.join(",\n"))).expect("golden を書く");

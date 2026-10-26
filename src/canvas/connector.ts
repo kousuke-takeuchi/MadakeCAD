@@ -65,7 +65,6 @@ export function sideOffset(i: number, n: number): number {
   return (i - (n - 1) / 2) * 5.0;
 }
 
-
 /** 1辺の中の、1つの絵で描くピンのまとまり (`start`〜`end` の手前までが辺のピン表の添字)。 */
 export interface ConnectorGroup {
   kind: ConnectorKind;
