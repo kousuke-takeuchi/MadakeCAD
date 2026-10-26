@@ -2119,6 +2119,27 @@ mod tests {
         );
     }
 
+    /// A block whose connector table is wrong (a connector name on a USB socket, or a blank name) is refused when added or edited, with the reason.
+    /// コネクタの表が誤っているブロック (USB の口にコネクタの名前、または空の名前) は、追加でも編集でも理由付きで拒否される。
+    #[test]
+    fn a_block_with_a_bad_connector_table_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let bad = crate::block::test_block("U1", "", 100.0, 50.0, r#"{"left":[{"no":"1","connector":"usb_a_f","connector_ref":"J3"}]}"#);
+        let err = engine.execute(Command::AddEntity { sheet_id, entity: bad }).expect_err("断る");
+        assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("connector_ref is only for")), "{err:?}");
+        let good = crate::block::test_block("U1", "", 100.0, 50.0, r#"{"left":[{"no":"1","connector":"usb_a_f"}]}"#);
+        let id = good.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: good }).expect("正しいコネクタは置ける");
+        let Entity::Symbol(mut s) = engine.project().sheet(sheet_id).unwrap().entities[&id].clone() else {
+            unreachable!()
+        };
+        s.attrs.insert("block_pins".into(), r#"{"left":[{"no":"1","connector":"screw","connector_ref":""}]}"#.into());
+        let err = engine
+            .execute(Command::UpdateEntity { sheet_id, entity: Entity::Symbol(s) })
+            .expect_err("空の名前は断る");
+        assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("connector_ref must not be empty")), "{err:?}");
+    }
+
     /// A note whose colour is a name the drawing does not know (a typo, or a raw colour code) is refused instead of being stored and silently drawn in black.
     /// 図面が知らない色名 (打ち間違いや生の色コード) を付けた注記は、黙って黒で描かれるのではなく拒否される。
     #[test]

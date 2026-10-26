@@ -10,6 +10,7 @@ import {
   resolveSymbolDef,
   symbolBounds,
 } from "./dynamicSymbol";
+import golden from "../../src-tauri/crates/madake-core/tests/golden/connector-blocks.json";
 
 describe("dynamicSymbol", () => {
   // ja: connector_2pは旧静的定義と同一のピン座標を持つ
@@ -408,5 +409,81 @@ describe("captionLineAnchors", () => {
     expect(def.pins.find((p) => p.number === "1")!.contacts).toBeUndefined();
     expect(() => blockSymbol({ block_pins: '{"left":[{"no":"P1","contacts":["A"]}]}' })).toThrow("at least two contacts");
     expect(() => blockSymbol({ block_pins: '{"left":[{"no":"P1","contacts":["A","A"]}]}' })).toThrow("duplicate contact A");
+  });
+});
+
+describe("blockSymbol connectors", () => {
+  const message = (json: string): string => {
+    try {
+      blockSymbol({ block_pins: json });
+    } catch (e) {
+      return (e as Error).message;
+    }
+    throw new Error(`断らなかった: ${json}`);
+  };
+
+  // ja: ピンはコネクタの形を接点と一緒に持て、null は書かなかったのと同じ。知らない種類は Rust と同じく壊れた JSON として断る
+  it("reads a connector kind, treats null as absent and refuses an unknown kind as invalid JSON, like Rust", () => {
+    expect(() =>
+      blockSymbol({ block_pins: '{"top":[{"no":"U1","connector":"usb_a_f","contacts":["VBUS","D-","D+","GND"]}]}' }),
+    ).not.toThrow();
+    const nulls = blockSymbol({ block_pins: '{"left":[{"no":"1","connector":null,"connector_ref":null}]}' });
+    expect(nulls.primitives[0].type).toBe("rect");
+    expect(message('{"left":[{"no":"1","connector":"usb_z"}]}')).toMatch(/^block_pins is not valid JSON/);
+  });
+
+  // ja: コネクタの名前の誤りは Rust と同じ文で断り (空・コネクタなし・まとめない種類・2つのまとまり)、名前の無いコネクタは繰り返してよい
+  it("refuses a bad connector name with the same messages as Rust and lets unnamed connectors repeat", () => {
+    expect(message('{"left":[{"no":"P1","connector":"screw","connector_ref":"  "}]}')).toBe(
+      "block pin P1: connector_ref must not be empty",
+    );
+    expect(message('{"left":[{"no":"P1","connector_ref":"J3"}]}')).toBe(
+      "block pin P1: connector_ref needs a grouped connector (screw, jst_ph_f, jst_xh_f)",
+    );
+    expect(message('{"left":[{"no":"P1","connector":"usb_a_f","connector_ref":"J3"}]}')).toBe(
+      "block pin P1: connector_ref is only for screw, jst_ph_f and jst_xh_f, not usb_a_f",
+    );
+    const split = "block pin 2: connector_ref J3 is used by another group; its pins must be next to each other on one side";
+    for (const json of [
+      '{"left":[{"no":"1","connector":"jst_ph_f","connector_ref":"J3"}],"right":[{"no":"2","connector":"jst_ph_f","connector_ref":"J3"}]}',
+      '{"left":[{"no":"1","connector":"jst_ph_f","connector_ref":"J3"},{"no":"X"},{"no":"2","connector":"jst_ph_f","connector_ref":"J3"}]}',
+      '{"left":[{"no":"1","connector":"screw","connector_ref":"J3"},{"no":"2","connector":"jst_ph_f","connector_ref":"J3"}]}',
+    ]) {
+      expect(message(json)).toBe(split);
+    }
+    expect(() =>
+      blockSymbol({
+        block_pins:
+          '{"left":[{"no":"1","connector":"screw"},{"no":"2"},{"no":"3","connector":"screw"}],"top":[{"no":"4","connector":"jst_xh_f"},{"no":"5","connector":"usb_a_f"},{"no":"6","connector":"usb_a_f"}]}',
+      }),
+    ).not.toThrow();
+  });
+});
+
+/** 数を 1e-6 に丸め、-0 を 0 にそろえる (Rust側 block.rs の rounded と同じ)。 */
+function rounded(v: unknown): unknown {
+  if (typeof v === "number") {
+    const r = (Math.sign(v) * Math.round(Math.abs(v) * 1e6)) / 1e6;
+    return r === 0 ? 0 : r;
+  }
+  if (Array.isArray(v)) return v.map(rounded);
+  if (v !== null && typeof v === "object") {
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, rounded(x)]));
+  }
+  return v;
+}
+
+describe("connector golden (Rust twin)", () => {
+  // ja: golden ファイルの全例 (全種類×全辺・AOGU の機器・コネクタの無いブロック) で、TS は Rust と同じプリミティブとピンを返す
+  it("draws every block of the shared golden file exactly like Rust", () => {
+    expect(golden.cases.length).toBe(57);
+    for (const c of golden.cases) {
+      const def = blockSymbol(c.attrs);
+      expect({ name: c.name, primitives: rounded(def.primitives), pins: rounded(def.pins) }).toEqual({
+        name: c.name,
+        primitives: c.primitives,
+        pins: c.pins,
+      });
+    }
   });
 });

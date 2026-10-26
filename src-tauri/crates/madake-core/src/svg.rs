@@ -1542,6 +1542,24 @@ mod tests {
         assert!(svg.contains("polygon"), "外形の長方形が描かれていない");
     }
 
+    /// Regression test for Task 5 (already passes): a plug's black insert is drawn as one more black-filled polygon than the same block without the connector, so PDF and PNG, which are made from this SVG, show it too.
+    /// Task 5 の挙動の回帰テスト (最初から通る): プラグの黒い差し込みは、コネクタの無い同じブロックより黒く塗った多角形が1つ多い形で描かれるので、この SVG から作る PDF・PNG にも出る。
+    #[test]
+    fn svg_draws_a_plug_insert_as_a_black_polygon() {
+        let filled = |pins: &str| {
+            let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+            let block = crate::block::test_block("LTE1", "", 100.0, 50.0, pins);
+            sheet.entities.insert(block.id(), block);
+            let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
+            svg.split("<polygon")
+                .skip(1)
+                .filter(|el| el.split("/>").next().unwrap_or("").contains("fill=\"#000\""))
+                .count()
+        };
+        let plain = filled(r#"{"left":[{"no":"P1"}]}"#);
+        assert_eq!(filled(r#"{"left":[{"no":"P1","connector":"usb_a_m"}]}"#), plain + 1);
+    }
+
     /// 図枠部分だけを取り出す (SVGの外殻と用紙の下地を除いた、図枠・表題欄・改訂欄の行)。
     fn frame_only(svg: &str) -> String {
         let mut out = String::new();

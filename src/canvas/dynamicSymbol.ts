@@ -4,6 +4,25 @@
 
 import type { Point, Primitive, PinDef, SymbolDef, SymbolInstance, TextSlot } from "../ipc";
 import {
+  CONNECTOR_IN_MM,
+  CONNECTOR_LABEL_GAP_MM,
+  CONNECTOR_LABEL_INSET_MM,
+  CONNECTOR_LABEL_TOP_MM,
+  CONNECTOR_LEAD_MM,
+  CONNECTOR_NUM_GAP_MM,
+  CONNECTOR_NUM_SIDE_MM,
+  CONNECTOR_OUT_MM,
+  connectorGroups,
+  connectorPrimitives,
+  groupLabel,
+  isConnectorKind,
+  isGroupedConnector,
+  outlineSegments,
+  sideOffset as offset,
+  type ConnectorGroup,
+  type ConnectorKind,
+} from "./connector";
+import {
   PIN_GROUPS_ATTR,
   PIN_GROUP_CAPTION_GAP_MM,
   PIN_GROUP_CAPTION_LINE_PITCH_MM,
@@ -91,7 +110,6 @@ function plcModuleSymbol(id: string): SymbolDef | null {
 }
 
 const p = (x: number, y: number): Point => ({ x, y });
-const offset = (i: number, n: number) => (i - (n - 1) / 2) * 5.0;
 
 /**
  * `terminal_block_`の後ろを多段端子台の(極数, 段数)にパースする
@@ -256,6 +274,10 @@ export interface BlockPin {
   name?: string;
   /** ポートの接点 (Rust側 BlockPin::contacts)。 */
   contacts?: string[];
+  /** 外形の辺に描くコネクタの形 (Rust側 BlockPin::connector)。無ければ普通のピン。 */
+  connector?: ConnectorKind;
+  /** まとめて1つの本体に描くコネクタ (端子台・JST) の名前 (Rust側 BlockPin::connector_ref)。 */
+  connector_ref?: string;
 }
 
 /** ブロックのピン配置(辺ごと。左右は上→下、上下は左→右)。 */
@@ -437,7 +459,28 @@ function maxNameWidth(side: BlockPin[]): number {
 
 function captionInset(side: BlockPin[]): number {
   if (side.length === 0) return 0;
+  if (connectorGroups(side).some((g) => groupLabel(g) !== null)) return CONNECTOR_LABEL_INSET_MM;
   return side.some((p) => (p.name ?? "") !== "") ? 7.5 : 5.0;
+}
+
+/** 左右の辺の、外形からピン名までの余白 mm (Rust側 side_pad)。 */
+function sidePad(side: BlockPin[]): number {
+  return side.some((p) => p.connector != null) ? BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM : BLOCK_TEXT_PAD_MM;
+}
+
+/** 左右の辺の内側に書く文字の最大幅 mm (Rust側 side_text_width)。 */
+function sideTextWidth(side: BlockPin[]): number {
+  let width = maxNameWidth(side);
+  for (const group of connectorGroups(side)) {
+    const label = groupLabel(group);
+    if (label === null) continue;
+    const labelW = nameWidth(label);
+    const name = side[group.start].name ?? "";
+    const need =
+      group.end - group.start >= 2 || name === "" ? labelW : nameWidth(name) + CONNECTOR_LABEL_GAP_MM + labelW;
+    width = Math.max(width, need);
+  }
+  return width;
 }
 
 function sideOf(pins: BlockPins, key: (typeof BLOCK_SIDES)[number]): BlockPin[] {
@@ -466,6 +509,36 @@ function checkContacts(no: string, contacts: string[]): void {
   }
 }
 
+/** コネクタの名前を調べる (Rust側 check_connectors と同じ順・同じ文)。 */
+function checkConnectors(pins: BlockPins): void {
+  for (const side of BLOCK_SIDES) {
+    for (const pin of sideOf(pins, side)) {
+      if (pin.connector_ref == null) continue;
+      const no = (pin.no ?? "").trim();
+      if (pin.connector_ref.trim() === "") throw new Error(`block pin ${no}: connector_ref must not be empty`);
+      if (pin.connector == null) {
+        throw new Error(`block pin ${no}: connector_ref needs a grouped connector (screw, jst_ph_f, jst_xh_f)`);
+      }
+      if (!isGroupedConnector(pin.connector)) {
+        throw new Error(`block pin ${no}: connector_ref is only for screw, jst_ph_f and jst_xh_f, not ${pin.connector}`);
+      }
+    }
+  }
+  const seen = new Set<string>();
+  for (const side of BLOCK_SIDES) {
+    const list = sideOf(pins, side);
+    for (const group of connectorGroups(list)) {
+      if (group.ref === null) continue;
+      if (seen.has(group.ref)) {
+        throw new Error(
+          `block pin ${(list[group.start].no ?? "").trim()}: connector_ref ${group.ref} is used by another group; its pins must be next to each other on one side`,
+        );
+      }
+      seen.add(group.ref);
+    }
+  }
+}
+
 export function parseBlockSpec(attrs: Record<string, string>): {
   pins: BlockPins;
   size: { w: number; h: number } | null;
@@ -488,6 +561,15 @@ export function parseBlockSpec(attrs: Record<string, string>): {
       }
     }
     pins = parsed as BlockPins;
+    // Rust では serde が読むときに断る (知らない種類・文字でない名前)
+    for (const pin of BLOCK_SIDES.flatMap((s) => sideOf(pins, s))) {
+      if (pin.connector != null && !isConnectorKind(pin.connector)) {
+        throw new Error(`${BLOCK_PINS_ATTR} is not valid JSON: unknown connector ${String(pin.connector)}`);
+      }
+      if (pin.connector_ref != null && typeof pin.connector_ref !== "string") {
+        throw new Error(`${BLOCK_PINS_ATTR} is not valid JSON: connector_ref must be a string`);
+      }
+    }
   }
   const all = BLOCK_SIDES.flatMap((s) => sideOf(pins, s));
   if (all.length > BLOCK_PIN_MAX) {
@@ -501,6 +583,7 @@ export function parseBlockSpec(attrs: Record<string, string>): {
     seen.add(no);
     checkContacts(no, pin.contacts ?? []);
   }
+  checkConnectors(pins);
 
   const rawSize = attrs[BLOCK_SIZE_ATTR];
   let size: { w: number; h: number } | null = null;
@@ -538,8 +621,7 @@ export function blockBox(pins: BlockPins, size: { w: number; h: number } | null)
   const bottom = sideOf(pins, "bottom");
   const rows = Math.max(left.length, right.length);
   const cols = Math.max(top.length, bottom.length);
-  const wNames =
-    2 * BLOCK_TEXT_PAD_MM + maxNameWidth(left) + maxNameWidth(right) + BLOCK_PIN_PITCH_MM;
+  const wNames = sidePad(left) + sidePad(right) + sideTextWidth(left) + sideTextWidth(right) + BLOCK_PIN_PITCH_MM;
   const w = Math.max(BLOCK_MIN_W_MM, wNames, cols * BLOCK_PIN_PITCH_MM + BLOCK_PIN_PITCH_MM);
   const h = Math.max(
     BLOCK_MIN_H_MM,
@@ -547,6 +629,117 @@ export function blockBox(pins: BlockPins, size: { w: number; h: number } | null)
     captionInset(top) + captionInset(bottom) + BLOCK_PIN_PITCH_MM,
   );
   return [snapUp(w, BLOCK_SIZE_STEP_MM), snapUp(h, BLOCK_SIZE_STEP_MM)];
+}
+
+type BlockDir = "left" | "right" | "up" | "down";
+
+/** ピンが外形と交わる点 (Rust側 edge_point)。 */
+function edgePoint(dir: BlockDir, off: number, hw: number, hh: number): Point {
+  if (dir === "left") return p(-hw, off);
+  if (dir === "right") return p(hw, off);
+  if (dir === "up") return p(off, -hh);
+  return p(off, hh);
+}
+
+/** コネクタのまとまりの名前の位置 (Rust側 label_at と同じ式)。 */
+function labelAt(side: BlockPin[], group: ConnectorGroup, label: string, dir: BlockDir, hw: number, hh: number): Point {
+  const n = side.length;
+  const first = offset(group.start, n);
+  const labelW = nameWidth(label);
+  const nameIn = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
+  if (dir === "left" || dir === "right") {
+    const count = group.end - group.start;
+    let y = first;
+    let start = nameIn;
+    if (count >= 2) {
+      y = first + BLOCK_PIN_PITCH_MM / 2 + BLOCK_PIN_PITCH_MM * Math.floor((count - 1) / 2);
+    } else {
+      const name = side[group.start].name ?? "";
+      if (name !== "") start = nameIn + nameWidth(name) + CONNECTOR_LABEL_GAP_MM;
+    }
+    return p(dir === "left" ? -hw + start + labelW / 2 : hw - start - labelW / 2, y);
+  }
+  const mid = (first + offset(group.end - 1, n)) / 2;
+  return p(mid, dir === "up" ? -hh + CONNECTOR_LABEL_TOP_MM : hh - CONNECTOR_LABEL_TOP_MM);
+}
+
+/** 1本のピンの描き位置 (Rust側 pin_layout と同じ式)。 */
+function pinLayout(
+  bp: BlockPin,
+  off: number,
+  dir: BlockDir,
+  hw: number,
+  hh: number,
+): { at: Point; leadFrom: Point; numAt: Point; nameAt: Point } {
+  const leadFrom = edgePoint(dir, off, hw, hh);
+  const name = bp.name ?? "";
+  if (bp.connector == null) {
+    if (dir === "left") {
+      return {
+        at: p(-hw - BLOCK_LEAD_MM, off),
+        leadFrom,
+        numAt: p(-hw - BLOCK_LEAD_MM / 2, off - BLOCK_PIN_TEXT_MM),
+        nameAt: p(-hw + BLOCK_TEXT_PAD_MM + nameWidth(name) / 2, off),
+      };
+    }
+    if (dir === "right") {
+      return {
+        at: p(hw + BLOCK_LEAD_MM, off),
+        leadFrom,
+        numAt: p(hw + BLOCK_LEAD_MM / 2, off - BLOCK_PIN_TEXT_MM),
+        nameAt: p(hw - BLOCK_TEXT_PAD_MM - nameWidth(name) / 2, off),
+      };
+    }
+    if (dir === "up") {
+      return {
+        at: p(off, -hh - BLOCK_LEAD_MM),
+        leadFrom,
+        numAt: p(off, -hh + BLOCK_PIN_TEXT_MM),
+        nameAt: p(off, -hh + BLOCK_PIN_TEXT_MM + BLOCK_PIN_PITCH_MM / 2),
+      };
+    }
+    return {
+      at: p(off, hh + BLOCK_LEAD_MM),
+      leadFrom,
+      numAt: p(off, hh - BLOCK_PIN_TEXT_MM),
+      nameAt: p(off, hh - BLOCK_PIN_TEXT_MM - BLOCK_PIN_PITCH_MM / 2),
+    };
+  }
+  const numW = nameWidth((bp.no ?? "").trim());
+  const nameW = nameWidth(name);
+  const numOut = CONNECTOR_OUT_MM + CONNECTOR_NUM_GAP_MM;
+  const nameIn = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
+  const numTb = (CONNECTOR_OUT_MM + CONNECTOR_LEAD_MM) / 2;
+  if (dir === "left") {
+    return {
+      at: p(-hw - CONNECTOR_LEAD_MM, off),
+      leadFrom: p(-hw - CONNECTOR_OUT_MM, off),
+      numAt: p(-(hw + numOut + numW / 2), off - BLOCK_PIN_TEXT_MM),
+      nameAt: p(-hw + nameIn + nameW / 2, off),
+    };
+  }
+  if (dir === "right") {
+    return {
+      at: p(hw + CONNECTOR_LEAD_MM, off),
+      leadFrom: p(hw + CONNECTOR_OUT_MM, off),
+      numAt: p(hw + numOut + numW / 2, off - BLOCK_PIN_TEXT_MM),
+      nameAt: p(hw - nameIn - nameW / 2, off),
+    };
+  }
+  if (dir === "up") {
+    return {
+      at: p(off, -hh - CONNECTOR_LEAD_MM),
+      leadFrom: p(off, -hh - CONNECTOR_OUT_MM),
+      numAt: p(off + CONNECTOR_NUM_SIDE_MM + numW / 2, -(hh + numTb)),
+      nameAt: p(off, -hh + BLOCK_PIN_TEXT_MM + BLOCK_PIN_PITCH_MM / 2),
+    };
+  }
+  return {
+    at: p(off, hh + CONNECTOR_LEAD_MM),
+    leadFrom: p(off, hh + CONNECTOR_OUT_MM),
+    numAt: p(off + CONNECTOR_NUM_SIDE_MM + numW / 2, hh + numTb),
+    nameAt: p(off, hh - BLOCK_PIN_TEXT_MM - BLOCK_PIN_PITCH_MM / 2),
+  };
 }
 
 /**
@@ -559,43 +752,32 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
   const [w, h] = blockBox(table, size);
   const hw = w / 2;
   const hh = h / 2;
-  const primitives: Primitive[] = [
-    { type: "rect", p1: p(-hw, -hh), p2: p(hw, hh), filled: false },
-  ];
+  // コネクタの無いブロックは今までどおり長方形1つ。あれば絵の所を空けた線分 (Rust側と同じ)
+  const hasConnectors = BLOCK_SIDES.some((s) => sideOf(table, s).some((pin) => pin.connector != null));
+  const primitives: Primitive[] = hasConnectors
+    ? outlineSegments(table, hw, hh)
+    : [{ type: "rect", p1: p(-hw, -hh), p2: p(hw, hh), filled: false }];
   const pins: PinDef[] = [];
-  const push = (side: BlockPin[], dir: "left" | "right" | "up" | "down") => {
+  const push = (side: BlockPin[], dir: BlockDir) => {
     const n = side.length;
+    const groups = connectorGroups(side);
     for (let i = 0; i < n; i++) {
       const bp = side[i];
-      const off = offset(i, n);
       const no = (bp.no ?? "").trim();
       const name = bp.name ?? "";
-      let at: Point;
-      let edge: Point;
-      let numAt: Point;
-      let nameAt: Point;
-      if (dir === "left") {
-        at = p(-hw - BLOCK_LEAD_MM, off);
-        edge = p(-hw, off);
-        numAt = p(-hw - BLOCK_LEAD_MM / 2, off - BLOCK_PIN_TEXT_MM);
-        nameAt = p(-hw + BLOCK_TEXT_PAD_MM + nameWidth(name) / 2, off);
-      } else if (dir === "right") {
-        at = p(hw + BLOCK_LEAD_MM, off);
-        edge = p(hw, off);
-        numAt = p(hw + BLOCK_LEAD_MM / 2, off - BLOCK_PIN_TEXT_MM);
-        nameAt = p(hw - BLOCK_TEXT_PAD_MM - nameWidth(name) / 2, off);
-      } else if (dir === "up") {
-        at = p(off, -hh - BLOCK_LEAD_MM);
-        edge = p(off, -hh);
-        numAt = p(off, -hh + BLOCK_PIN_TEXT_MM);
-        nameAt = p(off, -hh + BLOCK_PIN_TEXT_MM + BLOCK_PIN_PITCH_MM / 2);
-      } else {
-        at = p(off, hh + BLOCK_LEAD_MM);
-        edge = p(off, hh);
-        numAt = p(off, hh - BLOCK_PIN_TEXT_MM);
-        nameAt = p(off, hh - BLOCK_PIN_TEXT_MM - BLOCK_PIN_PITCH_MM / 2);
+      // まとまりの最初のピンの前に、そのまとまりの絵と名前を描く
+      const group = groups.find((g) => g.start === i);
+      if (group) {
+        const edges: Point[] = [];
+        for (let j = group.start; j < group.end; j++) edges.push(edgePoint(dir, offset(j, n), hw, hh));
+        primitives.push(...connectorPrimitives(group.kind, dir, edges));
+        const label = groupLabel(group);
+        if (label !== null) {
+          primitives.push({ type: "text", at: labelAt(side, group, label, dir, hw, hh), text: label, height: BLOCK_PIN_TEXT_MM });
+        }
       }
-      primitives.push({ type: "line", pts: [edge, at] });
+      const { at, leadFrom, numAt, nameAt } = pinLayout(bp, offset(i, n), dir, hw, hh);
+      primitives.push({ type: "line", pts: [leadFrom, at] });
       primitives.push({ type: "text", at: numAt, text: no, height: BLOCK_PIN_TEXT_MM });
       if (name) {
         primitives.push({ type: "text", at: nameAt, text: name, height: BLOCK_PIN_TEXT_MM });

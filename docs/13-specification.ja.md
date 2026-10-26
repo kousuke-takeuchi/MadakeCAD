@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**2959仕様項目**。
+全6領域・**3004仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -18,6 +18,8 @@
 
 ### block
 
+- ブロックの書き出し名は描かれた形(ピンと絵)だけで決まる。表の空白は無関係、名前・ピン・コネクタ・大きさの違いは別名になり、見本は`block`のまま。 <sub>`block_export_id_follows_the_drawn_shape_only`</sub>
+- 1つのブロックの書き出し名を文字どおりに固定する。形の鍵や直列化が変わると (前に書いたファイルのブロックが読めなくなるので) ここで失敗する。 <sub>`block_export_id_is_stable_for_a_known_shape`</sub>
 - ブロックシンボルは名前付きピンを箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並べ、ピンはそれぞれ外向きになる。 <sub>`block_pins_sit_on_both_sides_five_millimetres_apart`</sub>
 - ピン番号は外形の外側(リードの脇)に、ピン名は外形の内側に描かれる。 <sub>`pin_numbers_are_drawn_outside_and_pin_names_inside`</sub>
 - 外形はピン数とピン名の長さに応じて自動で大きくなり、寸法は必ず5mm刻みになる。 <sub>`auto_size_grows_with_pin_count_and_name_length`</sub>
@@ -31,6 +33,18 @@
 - ブロックを回転・ミラーしてもピンは本体と一緒に動くだけで、番号は付け替わらない。 <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
 - ブロックのピンは接点を並べて持てる。接点は前後の空白を落とした順にピン定義へ届き、接点の無いピンは空のまま。 <sub>`contacts_are_trimmed`</sub>
 - 空の接点・1本のピンで重なる接点・1つだけの接点 (導体1本は普通のピン)・32を超える接点は、ピン番号入りの文で断る。 <sub>`bad_contacts_are_refused`</sub>
+- ピンは自分のコネクタの形を書ける (接点と一緒でもよい)。null は書かなかったのと同じ。知らない種類は壊れた JSON として断る。 <sub>`a_connector_kind_is_read_and_an_unknown_one_is_refused`</sub>
+- コネクタの名前 (connector_ref) は空ではいけない・端子台か JST のコネクタが要る・ほかの種類には付けられない。断る文にはピン番号が入る。 <sub>`a_bad_connector_ref_is_refused`</sub>
+- 1つのコネクタの名前を別々の2つのコネクタに使うことはできない (2つの辺に分かれる・別のピンで途切れる・種類が違う)。 <sub>`a_connector_ref_used_by_two_groups_is_refused`</sub>
+- 名前の無いコネクタはどこで繰り返してもよく、名前のあるコネクタは隣り合う数本のピンにまたがってよい。 <sub>`unnamed_connectors_may_repeat`</sub>
+- 全種類のコネクタを全辺に置いた例と AOGU のハブ・アンプは、TS 側も突き合わせる golden ファイルのとおりに描かれる (MADAKE_UPDATE_GOLDEN=1 で書き直す)。 <sub>`connector_blocks_match_the_shared_golden_file`</sub>
+- コネクタのあるピンは外形から5mm外まで伸びる: リードは絵の外端から始まり、番号はリードの上で絵の0.25mm外、名前は3mm内側から書く。同じブロックの普通のピンは今までどおり。 <sub>`a_connector_pin_reaches_five_millimetres_out`</sub>
+- 上辺・下辺では、コネクタのあるピンの番号は外形の外 (絵より先のリードの右) へ出て、名前は普通のピンと同じく内側に残る。 <sub>`top_and_bottom_connector_numbers_sit_beside_the_lead`</sub>
+- コネクタの無いブロックは外形の長方形1つのまま。コネクタのあるブロックは、絵が辺と交わる所だけを空けた線分で外形を描く。 <sub>`the_outline_has_gaps_exactly_at_the_pictures`</sub>
+- 外形の自動寸法は、コネクタのある辺ごとに1.5mm広がる (その辺のピン名は1.5mmではなく3mm内側から書くため)。 <sub>`the_outline_makes_room_for_connector_bodies`</sub>
+- まとまりの名前は空いた所に書く: 2〜3本のまとまりは中ほどのピンの間、1本だけならピン名の後ろ、上辺は7mm内側。JST はシリーズを書き、名前の無い端子台は何も書かない。 <sub>`group_labels_sit_in_the_free_places`</sub>
+- 外形の自動寸法はまとまりの名前の場所も取る: ピン名より広い名前で箱が広がり、まとまりの名前を書く上辺は箱の内側に10mmを取る。 <sub>`the_outline_makes_room_for_group_names`</sub>
+- Task 5〜6 の挙動の回帰テスト (最初から通る): 全種類のコネクタ・普通のピン・1〜4文字のピン番号・ピン名・まとまりの名前を並べても、文字同士は重ならず、文字が絵・リード・外形に重ならない (AOGU のハブとアンプも含む)。 <sub>`connector_texts_never_overlap`</sub>
 
 ### cable
 
@@ -86,6 +100,7 @@
 - 既にある部品を知らないシンボルidへ変更するのも拒否されるので、図面の部品は常に描ける。 <sub>`changing_a_symbol_to_an_unknown_id_is_refused`</sub>
 - ピン表が壊れている(番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。 <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - 正しいブロックを壊れた内容へ編集するのも拒否されるので、図面上のブロックは常に描けるピン表を持つ。 <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
+- コネクタの表が誤っているブロック (USB の口にコネクタの名前、または空の名前) は、追加でも編集でも理由付きで拒否される。 <sub>`a_block_with_a_bad_connector_table_is_refused`</sub>
 - 図面が知らない色名 (打ち間違いや生の色コード) を付けた注記は、黙って黒で描かれるのではなく拒否される。 <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
 - 図面の色トークンを使った注記 (色を指定しない注記も) は受け付けられる。 <sub>`a_note_with_a_known_colour_token_is_accepted`</sub>
 - 既にある注記を知らない色へ変える更新も拒否され、注記は元の色のままになる。 <sub>`recolouring_a_note_to_an_unknown_colour_is_refused`</sub>
@@ -213,13 +228,27 @@
 - 計測した電線長の書き戻しは、各配線の長さを設定して出所を「FreeCAD計測」にする1回の編集になる。何も変わらない書き戻しはundoの段を作らない。 <sub>`wire_lengths_write_back_with_their_source`</sub>
 - シートに無い配線が混ざった書き戻しは何も変えない。同じ一括分の他の配線も元のままで、undoの段もできない。 <sub>`wire_lengths_write_back_is_all_or_nothing`</sub>
 
+### connector
+
+- コネクタの種類はどれも snake_case の名前 (usb_a_f … jst_xh_f) で読め、まとめて描くのは端子台と JST だけで、シリーズ名を持つのは JST だけ。 <sub>`every_connector_kind_has_its_json_name`</sub>
+- 同じ種類で同じ名前 (どちらも名前なしを含む) の端子台・JST のピンが続けば1つのコネクタになり、名前・種類が違うか間に別のピンがあれば別のコネクタになる。USB などはいつも1本で1つ。 <sub>`consecutive_pins_with_the_same_kind_and_name_form_one_connector`</sub>
+- JST のコネクタには名前とシリーズ (「J3 PH」、名前が無ければ「XH」だけ)、端子台には名前を書き、名前の無い端子台と USB の口には何も書かない。 <sub>`group_labels_name_the_connector_and_its_series`</sub>
+- 左辺では、どのコネクタの絵も仕様の図そのものになる: メスは辺にまたがる白い口、オスは内側の枠と外へ出る黒い差し込み、端子台と JST の本体はピンをまたいで1つ。 <sub>`every_picture_matches_the_spec_on_the_left_side`</sub>
+- 辺ごとの絵の座標は右辺の座標を時計回りに回したもので、ローカルの点はその辺の向きに写り、弧は時計回りの振れ幅を保つ。 <sub>`side_frames_are_turns_of_the_right_side_frame`</sub>
+- どの辺でも、絵は決まった枠 (辺の内側1.5mmから外側2.5mm、辺に沿って両端のピンから2mm) の外へ出ない。 <sub>`every_picture_stays_inside_its_envelope`</sub>
+- USB-C メスの口は、どの辺でも、ブロックをどう回転・ミラーしても閉じた角丸の穴のまま: 弧の端は口の直線の端に合い、弧は外へふくらむ。 <sub>`the_usb_c_opening_stays_closed_at_every_rotation_and_mirror`</sub>
+
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 
 - 書き出したDXFはmm単位のAutoCAD 2000形式(AC1015)で、HEADER/TABLES/BLOCKS/ENTITIES/OBJECTSの各セクションと重複しないハンドルを持つ。 <sub>`export_writes_a_well_formed_ac1015_file`</sub>
 - 配線はセグメントごとに1本のLINEとしてWIRESレイヤに書かれ、Y座標はDXFの上向き座標へ反転される。 <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
+- ブロックは形ごとに別のDXFブロックになる(見本はMDK_block、他はMDK_block_<ハッシュ>)。同じ形は1つを共有し、絵も入る。ピン表を読めないブロックは見本の箱にせず報告する。 <sub>`each_block_shape_is_its_own_dxf_block`</sub>
+- DXFへ書き出したブロックの形は、ピン表をblock_pinsに戻した普通のブロックとして読み戻せる(大文字のBLOCK_PINSは残らない)。 <sub>`our_block_shapes_import_back_as_blocks_with_their_pin_table`</sub>
+- 読み戻すときにピン表が読めないブロックは、名前入りの警告つきで見本の箱になる。 <sub>`an_unreadable_block_pin_table_imports_as_the_template_with_a_warning`</sub>
 - シンボルはMDK_<symbol_id>ブロック(1回だけ定義)のINSERTになり、ミラー(X倍率-1)・TAG1/CAT/DESC1/RATING1/TERMnnの属性を持つ。 <sub>`symbols_become_block_inserts_with_attributes`</sub>
 - 線番はWIRENOレイヤ、ネットラベルはLABELS、注記はMISCに書かれ、ハーネス境界はHARNESSレイヤの閉じた破線多角形と名前になる。 <sub>`texts_and_harness_go_to_their_layers`</sub>
 - 非ASCII文字は\U+XXXXで書かれ読み込み時に戻る。MTEXTの段落区切り(\P)や書式コードも読み込みで処理する。 <sub>`unicode_is_escaped_and_decoded`</sub>
+- バックスラッシュや波かっこを含む注記は、逃がし文字なしの素のTEXTで書かれ (他のCADの表示どおり)、読み戻しても変わらない。 <sub>`plain_text_with_backslash_and_braces_is_written_as_is_and_read_back`</sub>
 - シートをDXFへ書き出して読み戻すと、用紙・シンボル(種類・位置・回転・ミラー・参照記号・型番・属性)・配線・ジャンクション・線番・ラベル・注記・ハーネス名が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
 - AutoCAD Electrical流のDXFを読むと、配線レイヤ(WIRES・_MULTI_WIRE_*)の線分が配線になり、WIRENOの文字は最寄りの配線の線番になり、他の線分と未知のブロックはスキップ項目として報告され、文字はデコードされる。 <sub>`imports_acade_style_wires_and_reports_unknown_blocks`</sub>
 - 読み込みオプションで配線レイヤを明示すると、そのレイヤだけが配線になる。 <sub>`explicit_wire_layers_limit_what_becomes_a_wire`</sub>
@@ -296,7 +325,7 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは18 (ブロックのピンにポートの接点を追加し、接点のあるブロックを種類「port_block」で保存する版) である。 <sub>`the_current_format_version_is_eighteen`</sub>
+- 現行のファイル形式バージョンは19 (ブロックのピンにコネクタの絵を追加し、接点かコネクタのあるブロックを種類「port_block」で保存する版) である。 <sub>`the_current_format_version_is_nineteen`</sub>
 - ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_17_file_loads_unchanged`</sub>
 - 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - 区間が空の「run_cable」(ファイルを手で直したときなど) は普通の定義線ケーブルとして開き、書き戻すと種類「cable」になる。 <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
@@ -318,6 +347,8 @@
 - ポートの接点の無いプロジェクトは、serde がそのまま書いたものと1バイトも違わない (キーの並びも変わらない)。普通のブロックは「symbol」のまま。 <sub>`a_project_without_ports_is_written_unchanged`</sub>
 - 接点の無い「port_block」(手で直したファイル) は普通のシンボルとして開く。 <sub>`a_port_block_without_contacts_opens_as_a_symbol`</sub>
 - 接点をすべて消したブロックは種類「symbol」で保存されるので、古いビルドでもまたそのファイルを開ける。 <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
+- 回帰テスト (最初から通る): ポートのブロックを含む形式18のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_18_file_loads_unchanged`</sub>
+- 接点が無くコネクタだけを持つブロックも種類「port_block」で保存され、読み直すとコネクタ付きで戻り、IPC・MCP の JSON は「symbol」のまま。コネクタを消せばまた「symbol」で保存される。 <sub>`a_block_with_connectors_is_saved_as_port_block`</sub>
 
 ### KiCadインポート / エクスポート
 
@@ -332,6 +363,8 @@
 - シートを.kicad_schへ書き出して読み戻すと、用紙・表題欄・シンボル(種類・参照記号・型番・回転・ミラー)・配線・ジャンクション・ラベル・注記が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
 - 折れ線で描いた配線は、セグメントごとに2点のKiCad wireとして書き出される。 <sub>`polyline_wires_are_split_into_segments`</sub>
 - シートで使うシンボルは図形とピンごとにlib_symbolsへ1回だけ埋め込まれ、KiCad側にライブラリが無くても開ける。 <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
+- ブロックは形ごとに別のlib_symbolになる(見本はMadakeCAD:block、他はblock_<ハッシュ>)。ピン番号つきで、塗りはKiCadの塗りになり、同じ形は1つを共有する。ピン表を読めないブロックは見本の箱にせず書けなかったものとして報告する。 <sub>`each_block_shape_is_its_own_kicad_lib_symbol`</sub>
+- 自前の形ごとのブロックlib_symbolは、スキップされずにピン表(block_pins)を保ったブロックとして読み戻せる。 <sub>`our_block_lib_symbols_import_back_as_blocks_with_their_pin_table`</sub>
 - 線番はそのネット上のKiCadラベルになり、KiCadでも再インポート後もネット名として残る。 <sub>`wire_numbers_become_labels`</sub>
 - ハーネス境界は破線の閉じた多角形と、その名前の注記として書き出される。 <sub>`harness_becomes_dashed_polyline_with_name`</sub>
 - 注記内の引用符・バックスラッシュ・改行はエスケープされ、書き出したファイルは正しく解釈されて同じ文字列に戻る。 <sub>`strings_are_escaped_and_read_back`</sub>
@@ -826,6 +859,7 @@
 
 - 出力SVGにはJIS図枠・表題欄の文字・配線・参照記号が含まれる。 <sub>`svg_contains_frame_wire_and_symbol`</sub>
 - ブロックシンボルは、インスタンスの属性から外形・ピン番号・ピン名まで描かれる。 <sub>`svg_draws_block_outline_with_pin_numbers_and_names`</sub>
+- Task 5 の挙動の回帰テスト (最初から通る): プラグの黒い差し込みは、コネクタの無い同じブロックより黒く塗った多角形が1つ多い形で描かれるので、この SVG から作る PDF・PNG にも出る。 <sub>`svg_draws_a_plug_insert_as_a_black_polygon`</sub>
 - jis-a3図枠テンプレートで描いた図枠は、これまで出力してきたJIS図枠とSVGの1文字まで同一である(外枠・ゾーン目盛・改訂欄・表題欄の全セル)。 <sub>`the_jis_a3_template_reproduces_the_previous_frame_exactly`</sub>
 - 改訂の無い空のA4シートも従来どおりの図枠を出す(改訂欄は描かれず、表題欄のセルは空欄のまま残る)。 <sub>`an_empty_sheet_reproduces_the_previous_frame_exactly`</sub>
 - A4縦テンプレートでは190×277の図枠が描かれ、110mm幅の表題欄が右下に、ゾーン目盛は同じ4×6で出る。 <sub>`the_a4_portrait_template_draws_a_narrower_frame_and_title_block`</sub>
@@ -1211,6 +1245,7 @@
 - シートの用紙の外に出ているエンティティは、動かしたり消したりせずに`erc.outside_paper`として報告される。 <sub>`an_entity_outside_the_paper_is_reported`</sub>
 - 未接続ピンはシンボルごとに1件の警告として、該当ピン番号を列挙して報告される。 <sub>`unconnected_pins_are_reported_per_symbol`</sub>
 - ブロックの未接続ピンはピン名で列挙されるので、コントローラの未配線入力が番号ではなく名前で分かる。 <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
+- Task 5 の挙動の回帰テスト (最初から通る): 配線済みのピンにコネクタを付けると接続点が2.5mm外へ動き、ERC がそれを知らせる: まっすぐの配線はピンに届いたまま端が浮き、横へ出ていた配線ではピンが未接続として名前で挙がる。 <sub>`a_wired_pin_that_gets_a_connector_is_flagged_by_erc`</sub>
 - 端子台の端子は左右どちらか一方が結線されていれば接続済みとみなす。 <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - 参照記号の未設定・重複は指摘されるが、リレーのコイル+接点が同じ記号を共有するのは正当として許容される。 <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
 - 同じ参照記号を持つプラグとソケットは1つの嵌合コネクタなので重複エラーにならないが、無関係な部品と同じ記号のプラグは指摘される。 <sub>`a_plug_and_socket_may_share_a_designator`</sub>
@@ -1370,6 +1405,9 @@
 - Tasks 1-8 の挙動の回帰テスト (最初から通る): connect_cable はハーネスをポートのピン1本 ("39.U3") に着ける。芯は同じ名前の接点に対応し、芯ごとに別のネットになる。 <sub>`connect_cable_lands_on_a_port_pin`</sub>
 - ツールの説明は、USB のようなコネクタを接点付きのブロックのピン1本で描くことと、そこへのケーブルの着け方をエージェントに伝える。 <sub>`the_tools_describe_port_contacts`</sub>
 - エージェントが受け取る execute_commands のスキーマはピンの contacts を含むが、ファイル専用の種類 "port_block" は含まない (PortBlock の schemars skip が効いている)。 <sub>`the_agent_schema_hides_port_block`</sub>
+- Tasks 1-8 の挙動の回帰テスト (最初から通る): ブロックのピンに connector を付けた place_symbol は、そのピンを外形から5mmの位置で返し、そのブロックのシート画像も描ける。 <sub>`a_connector_pin_is_placed_five_millimetres_from_the_box`</sub>
+- Tasks 1-8 の挙動の回帰テスト (最初から通る): place_symbol は知らないコネクタの種類と、USB の口に付けたコネクタの名前を理由付きで断る。 <sub>`place_symbol_refuses_a_bad_connector`</sub>
+- place_symbol は説明と attrs のスキーマの両方で、コネクタの種類、端子台・JST を connector_ref でまとめること、ピンの位置を get_pins で読むことをエージェントに伝える。 <sub>`place_symbol_describes_connectors`</sub>
 
 ### 図枠テンプレート (REST)
 
@@ -1683,6 +1721,7 @@
 - システムプロンプトは、描いた後にシート画像を見て確かめるよう指示する(数値だけで見た目を判断しない)。 <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
 - システムプロンプトは、複数の導体を運ぶコネクタ (USB) を接点付きのブロックのピン1本で描くようエージェントに伝える。 <sub>`system_prompt_explains_port_contacts`</sub>
 - システムプロンプトは接点の決まり (1ピンに2〜32個、前後の空白は除き、重ならない) と、ポートへの connect_cable は数が同じときだけ並び順で、名前の一部だけの一致と style multi は断られることを伝える。 <sub>`system_prompt_states_the_contact_rules`</sub>
+- システムプロンプトは、実物のコネクタのピンに connector の種類を付け、端子台・JST は1つの connector_ref でまとめ、導体は contacts に書き、付けた後にピンの位置を読み直すようエージェントに伝える。 <sub>`system_prompt_explains_connector_pictures`</sub>
 
 ### knowledge_docs
 
@@ -2022,6 +2061,10 @@
 - 接点はカンマ (半角・読点・全角) で区切り、前後の空白を落として空のものを捨てる <sub>`pins that are already wired`</sub>
 - 接点を書いた行は block_pins に contacts として入り、読み戻すとカンマ区切りの文字に戻る。接点の無い行の書き出しは今までと同じ <sub>`pins that are already wired`</sub>
 - 接点が1つだけ・同じ接点が2つ・32を超える行は指摘になる <sub>`pins that are already wired`</sub>
+- コネクタとまとめ名を書いた行は block_pins に connector / connector_ref として入り、読み戻すと同じ属性に戻る <sub>`connector columns`</sub>
+- コネクタだけを選んだ行も書き出す行として数える (番号が空なら指摘が出る) <sub>`connector columns`</sub>
+- 端子台・JST 以外のまとめ名と、2つのコネクタに分かれたまとめ名は指摘になる <sub>`connector columns`</sub>
+- 空白だけのまとめ名は書き出さず、指摘にもならない <sub>`connector columns`</sub>
 - 部品挿入で「ブロック(汎用)」を選ぶと、左右1本ずつのピン表が開く <sub>`starting a new block from the insert dialog`</sub>
 - 編集したピン表はそのまま配置に使う属性になる(配置後もこの形で描かれる) <sub>`starting a new block from the insert dialog`</sub>
 - 「手動」に切り替えると、そのときの自動寸法が編集できる初期値として入る <sub>`starting a new block from the insert dialog`</sub>
@@ -2036,6 +2079,7 @@
 - 配線済みのピンを消しても同じ警告が出る <sub>`warning about wired pins`</sub>
 - 配線されていないピンを消しても警告は出ない <sub>`warning about wired pins`</sub>
 - 警告が出ていても適用はできる(承知のうえで直せる) <sub>`warning about wired pins`</sub>
+- コネクタを「なし」かまとめない種類に変えるとまとめ名は消え、端子台・JST のあいだで変えるだけなら残る <sub>`connector columns in the pin table`</sub>
 
 ### cable
 
@@ -2100,6 +2144,9 @@
 - ピングループの部品どうし (括弧と、折り返したキャプションの各行) は全ての回転・ミラーで決して重ならない (Rust側 svg_pin_group_pieces_never_overlap_each_other_at_any_rotation とparity) <sub>`captionLineAnchors`</sub>
 - 文字はシンボルを回しても横書きのままなので、キャプションの行は用紙の上で必ず縦に積まれる (同じ中心線に並び、順に下へ下がる。Rust側 svg_pin_group_caption_lines_stack_downwards_on_paper とparity) <sub>`captionLineAnchors`</sub>
 - ブロックのピンの接点は Rust と同じく空白を落として PinDef に入り、1つだけの接点や重なる接点は同じ理由で断る <sub>`captionLineAnchors`</sub>
+- ピンはコネクタの形を接点と一緒に持て、null は書かなかったのと同じ。知らない種類は Rust と同じく壊れた JSON として断る <sub>`blockSymbol connectors`</sub>
+- コネクタの名前の誤りは Rust と同じ文で断り (空・コネクタなし・まとめない種類・2つのまとまり)、名前の無いコネクタは繰り返してよい <sub>`blockSymbol connectors`</sub>
+- golden ファイルの全例 (全種類×全辺・AOGU の機器・コネクタの無いブロック) で、TS は Rust と同じプリミティブとピンを返す <sub>`connector golden (Rust twin)`</sub>
 
 ### frameEditor
 
@@ -2887,6 +2934,7 @@
 - カタログの文字列はすべて表示できる(`@`などの記号は書き方を誤ると画面が真っ白になる) <sub>`i18n`</sub>
 - 翻訳は英語と同じ名前付きプレースホルダを持つ(`{count}`の欠落・綴り違いを検出) <sub>`i18n`</sub>
 - 複数形の文(`|`区切り)は英語と同じ数の形を持つ <sub>`i18n`</sub>
+- コネクタの13種類はどれも全ロケールに表示名がある (ピン表エディタの選択肢) <sub>`i18n`</sub>
 - 言語名は各言語の自称で表示される(英語に翻訳しない) <sub>`i18n`</sub>
 - 言語タグは大文字・余白があっても解決でき、未知・空の値は英語になる <sub>`i18n`</sub>
 

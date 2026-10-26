@@ -49,7 +49,7 @@ ASCII DXF, `$ACADVER` = AC1015, `$INSUNITS` = 4 (mm), non-ASCII text written as 
 |---|---|---|
 | Wire (each segment) | `LINE` (ACADE recognises LINE entities on a wire layer as wires) | `WIRES` |
 | Wire number | `TEXT` above a horizontal / left of a vertical longest segment | `WIRENO` |
-| Symbol | `INSERT` of block `MDK_<symbol_id>` (rotation = group 50, mirror = X scale −1) with attributes `TAG1` (reference), `CAT` (value / part no.), `DESC1`, `RATING1`, other attrs uppercased, `TERMnn` (pin numbers, invisible) | `SYMS` (block), `TAGS`, `DESC` |
+| Symbol | `INSERT` of block `MDK_<symbol_id>`, or `MDK_block_<hex>` per distinct device-block shape (rotation = group 50, mirror = X scale −1) with attributes `TAG1` (reference), `CAT` (value / part no.), `DESC1`, `RATING1`, other attrs uppercased, `TERMnn` (pin numbers, invisible) | `SYMS` (block), `TAGS`, `DESC` |
 | Symbol block graphics | `LINE`/`LWPOLYLINE`/`CIRCLE`/`ARC`/`SOLID`/`TEXT` in local coordinates, Y flipped; `ATTDEF`s for the attributes above | `SYMS` |
 | Junction | `INSERT` of block `WDDOT` (ACADE's wire-dot block name) | `WIRES` |
 | Net label | `TEXT` | `LABELS` |

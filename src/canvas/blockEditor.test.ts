@@ -292,3 +292,53 @@ describe("pins that are already wired", () => {
     ]);
   });
 });
+
+describe("connector columns", () => {
+  // ja: コネクタとまとめ名を書いた行は block_pins に connector / connector_ref として入り、読み戻すと同じ属性に戻る
+  it("writes the connector and group name into block_pins and reads them back unchanged", () => {
+    const d = draft();
+    d.rows.left[0].connector = "screw";
+    d.rows.left[0].connectorRef = " TB1 ";
+    d.rows.left[1].connector = "screw";
+    d.rows.left[1].connectorRef = "TB1";
+    d.rows.right[0].connector = "usb_a_f";
+    const attrs = attrsFromDraft(d);
+    const pins = JSON.parse(attrs.block_pins);
+    expect(pins.left[0]).toEqual({ no: "IN1", name: "入力1", connector: "screw", connector_ref: "TB1" });
+    expect(pins.right[0]).toEqual({ no: "OUT1", name: "出力1", connector: "usb_a_f" });
+    expect(draftFromAttrs(attrs).rows.left[0]).toEqual({ no: "IN1", name: "入力1", connector: "screw", connectorRef: "TB1" });
+    expect(attrsFromDraft(draftFromAttrs(attrs))).toEqual(attrs);
+  });
+
+  // ja: コネクタだけを選んだ行も書き出す行として数える (番号が空なら指摘が出る)
+  it("counts a row with only a connector as filled, so a missing number is reported", () => {
+    const d = draft();
+    d.rows.right.push({ no: "", name: "", connector: "dc_f" });
+    expect(draftIssues(d)).toEqual([{ code: "emptyNo", side: "right", index: 1 }]);
+  });
+
+  // ja: 端子台・JST 以外のまとめ名と、2つのコネクタに分かれたまとめ名は指摘になる
+  it("flags a group name on a kind that cannot have one and a group name split over two connectors", () => {
+    const d = draft();
+    d.rows.left[0].connector = "usb_a_f";
+    d.rows.left[0].connectorRef = "J3";
+    d.rows.left[1].connector = "jst_ph_f";
+    d.rows.left[1].connectorRef = "J5";
+    d.rows.right[0].connector = "jst_ph_f";
+    d.rows.right[0].connectorRef = "J5";
+    expect(draftIssues(d)).toEqual([
+      { code: "connectorRefNotGrouped", side: "left", index: 0 },
+      { code: "connectorRefSplit", ref: "J5" },
+    ]);
+  });
+
+  // ja: 空白だけのまとめ名は書き出さず、指摘にもならない
+  it("drops a group name made only of spaces without reporting it", () => {
+    const d = draft();
+    d.rows.left[0].connector = "jst_ph_f";
+    d.rows.left[0].connectorRef = "   ";
+    expect(JSON.parse(attrsFromDraft(d).block_pins).left[0]).toEqual({ no: "IN1", name: "入力1", connector: "jst_ph_f" });
+    expect(draftIssues(d)).toEqual([]);
+    expect(draftSymbol(d)).not.toBeNull();
+  });
+});

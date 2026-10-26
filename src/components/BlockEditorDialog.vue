@@ -61,7 +61,7 @@ async function apply() {
   z-index: 100;
 }
 .dialog {
-  width: min(760px, 96vw);
+  width: min(1020px, 96vw);
   max-height: 90vh;
   background: var(--ribbon-bg);
   border: 1px solid var(--ribbon-line);

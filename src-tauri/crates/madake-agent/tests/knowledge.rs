@@ -280,3 +280,13 @@ fn system_prompt_states_the_contact_rules() {
         assert!(prompt.contains(needle), "「{needle}」が無い: {prompt}");
     }
 }
+
+/// The system prompt tells the agent to give real connector pins their connector kind, to group terminal blocks and JST sockets with one connector_ref, to keep conductors in contacts and to re-read pin positions afterwards.
+/// システムプロンプトは、実物のコネクタのピンに connector の種類を付け、端子台・JST は1つの connector_ref でまとめ、導体は contacts に書き、付けた後にピンの位置を読み直すようエージェントに伝える。
+#[test]
+fn system_prompt_explains_connector_pictures() {
+    let prompt = system_prompt(&AppSettings::default(), None);
+    for needle in ["`connector`", "`connector_ref`", "`jst_ph_f`", "`_f`(メス)", "`get_pins`で読み直す", "同じ種類の"] {
+        assert!(prompt.contains(needle), "「{needle}」が無い: {prompt}");
+    }
+}

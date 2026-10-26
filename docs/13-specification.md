@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**2959 specification clauses** across 6 areas.
+**3004 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -18,6 +18,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### block
 
+- A block's export name follows its drawn shape only (pins and picture): whitespace in the table does not matter, a different name, pin, connector or size does, and the template keeps the name `block`. <sub>`block_export_id_follows_the_drawn_shape_only`</sub>
+- One block's export name is pinned to a literal, so a change to the shape key or its serialisation (which would orphan blocks in files written earlier) fails here. <sub>`block_export_id_is_stable_for_a_known_shape`</sub>
 - A block symbol puts its named pins on both sides of a box, 5 mm apart and centred on the 2.5 mm grid, each pointing outwards. <sub>`block_pins_sit_on_both_sides_five_millimetres_apart`</sub>
 - Pin numbers are drawn outside the outline next to the lead, and pin names inside it. <sub>`pin_numbers_are_drawn_outside_and_pin_names_inside`</sub>
 - The box grows automatically with the number of pins and the length of the pin names, always in 5 mm steps. <sub>`auto_size_grows_with_pin_count_and_name_length`</sub>
@@ -31,6 +33,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Rotating or mirroring a block moves its pins with the body but never renumbers them. <sub>`rotating_or_mirroring_keeps_the_pin_numbers`</sub>
 - A block pin may list contacts; they reach the pin definition in order, trimmed, and a pin without contacts has none. <sub>`contacts_are_trimmed`</sub>
 - Contacts that are empty, repeated on one pin, alone (one conductor is a plain pin) or more than 32 are refused with the pin number in the message. <sub>`bad_contacts_are_refused`</sub>
+- A pin may name its physical connector, also together with contacts, and null means no connector; an unknown kind is refused as invalid JSON. <sub>`a_connector_kind_is_read_and_an_unknown_one_is_refused`</sub>
+- A connector name (connector_ref) must not be blank, needs a screw or JST connector and is refused on any other kind, with the pin number in the message. <sub>`a_bad_connector_ref_is_refused`</sub>
+- One connector name may not be used by two separate connectors: on two sides, split by another pin, or with two different kinds. <sub>`a_connector_ref_used_by_two_groups_is_refused`</sub>
+- Unnamed connectors may repeat anywhere, and a named connector may run over several neighbouring pins. <sub>`unnamed_connectors_may_repeat`</sub>
+- Every connector kind on every side, and the AOGU hub and amplifier, are drawn exactly as recorded in the golden file that the TypeScript twin is also checked against (rewrite it with MADAKE_UPDATE_GOLDEN=1). <sub>`connector_blocks_match_the_shared_golden_file`</sub>
+- A pin with a connector reaches 5 mm out of the box: its lead starts at the outer end of the picture, its number sits 0.25 mm beyond the picture above the lead, and its name starts 3 mm inside; a plain pin in the same block is drawn as before. <sub>`a_connector_pin_reaches_five_millimetres_out`</sub>
+- On the top and bottom sides a connector pin's number moves outside the box, right of the lead beyond the picture, while its name stays inside like a plain pin's. <sub>`top_and_bottom_connector_numbers_sit_beside_the_lead`</sub>
+- A block without connectors keeps its single outline rectangle, while a block with connectors draws the outline as lines with a gap exactly where each picture crosses the edge. <sub>`the_outline_has_gaps_exactly_at_the_pictures`</sub>
+- The automatic outline grows by 1.5 mm on each side that has a connector, because the names there start 3 mm inside instead of 1.5 mm. <sub>`the_outline_makes_room_for_connector_bodies`</sub>
+- Group names are drawn where nothing else is: between the middle pins of a 2- or 3-pin group, after the pin name for a 1-pin group, 7 mm inside on the top; JST prints its series and an unnamed screw block prints nothing. <sub>`group_labels_sit_in_the_free_places`</sub>
+- The automatic outline also makes room for group names: a name wider than the pin names widens the box, and a top side that prints a group name keeps 10 mm inside the box. <sub>`the_outline_makes_room_for_group_names`</sub>
+- Regression test for Tasks 5-6 (already passes): with connectors of every kind, plain pins, pin numbers of one to four characters, names and group names, no two texts overlap and no text covers a picture, a lead or the box outline (the AOGU hub and amplifier included). <sub>`connector_texts_never_overlap`</sub>
 
 ### cable
 
@@ -86,6 +100,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Changing an existing symbol to an unknown id is refused too, so a symbol on the sheet can always be drawn. <sub>`changing_a_symbol_to_an_unknown_id_is_refused`</sub>
 - A block whose pin table is broken (duplicate numbers) is refused when added, and the sheet is left untouched. <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - Editing a good block into a broken one is refused too, so a block on the sheet always has a drawable pin table. <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
+- A block whose connector table is wrong (a connector name on a USB socket, or a blank name) is refused when added or edited, with the reason. <sub>`a_block_with_a_bad_connector_table_is_refused`</sub>
 - A note whose colour is a name the drawing does not know (a typo, or a raw colour code) is refused instead of being stored and silently drawn in black. <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
 - A note that uses one of the drawing's colour tokens (or no colour at all) is accepted. <sub>`a_note_with_a_known_colour_token_is_accepted`</sub>
 - Changing an existing note to an unknown colour is refused too, and the note keeps the colour it had. <sub>`recolouring_a_note_to_an_unknown_colour_is_refused`</sub>
@@ -213,13 +228,27 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Writing measured wire lengths back sets each wire's length and marks it as measured by FreeCAD in one undo step; a write-back that changes nothing costs no undo step at all. <sub>`wire_lengths_write_back_with_their_source`</sub>
 - A write-back naming a wire that is not on the sheet changes nothing: the other wires of the same batch keep their lengths and no undo step is created. <sub>`wire_lengths_write_back_is_all_or_nothing`</sub>
 
+### connector
+
+- Every connector kind is read from its snake_case name (usb_a_f … jst_xh_f); only screw terminals and JST sockets are grouped, and only JST has a series. <sub>`every_connector_kind_has_its_json_name`</sub>
+- Consecutive screw or JST pins with the same kind and the same name (or both unnamed) form one connector; a different name, a different kind or a pin in between starts a new one, and USB-like kinds are always one pin each. <sub>`consecutive_pins_with_the_same_kind_and_name_form_one_connector`</sub>
+- A JST connector is labelled with its name and series ("J3 PH", or "XH" alone), a screw terminal block with its name, and an unnamed screw block or a USB socket gets no label. <sub>`group_labels_name_the_connector_and_its_series`</sub>
+- On the left side every connector picture is exactly the drawing of the spec: sockets are an open body across the edge, plugs a housing inside with a black insert outside, and screw and JST bodies span their pins. <sub>`every_picture_matches_the_spec_on_the_left_side`</sub>
+- The picture frame of each side is the right-side frame turned clockwise: a local point lands where the side faces, and an arc keeps its clockwise sweep. <sub>`side_frames_are_turns_of_the_right_side_frame`</sub>
+- No picture ever leaves its envelope (1.5 mm inside to 2.5 mm outside the edge, 2 mm beyond its outer pins along the edge), on any side. <sub>`every_picture_stays_inside_its_envelope`</sub>
+- A USB-C socket's opening stays a closed rounded slot on every side and at every rotation and mirror of the block: each arc ends where a straight edge of the opening ends and bulges outward. <sub>`the_usb_c_opening_stays_closed_at_every_rotation_and_mirror`</sub>
+
 ### DXF interop (AutoCAD Electrical / EPLAN)
 
 - The exported DXF is an AutoCAD 2000 (AC1015) file in millimetres with HEADER, TABLES, BLOCKS, ENTITIES and OBJECTS sections and unique entity handles. <sub>`export_writes_a_well_formed_ac1015_file`</sub>
 - Wires are written as one LINE per segment on the WIRES layer with the Y axis flipped to DXF's upward convention. <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
+- Each distinct block shape is its own DXF block (MDK_block for the template, MDK_block_<hash> otherwise); equal shapes share one, the picture is in it, and a block whose pin table cannot be read is reported, not drawn as the template. <sub>`each_block_shape_is_its_own_dxf_block`</sub>
+- Block shapes exported to DXF import back as plain blocks with their pin table restored in block_pins (no upper-case BLOCK_PINS left). <sub>`our_block_shapes_import_back_as_blocks_with_their_pin_table`</sub>
+- A block whose pin table cannot be read on import becomes the template box with a warning naming it. <sub>`an_unreadable_block_pin_table_imports_as_the_template_with_a_warning`</sub>
 - Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with a negative X scale for mirroring and TAG1/CAT/DESC1/RATING1/TERMnn attributes. <sub>`symbols_become_block_inserts_with_attributes`</sub>
 - Wire numbers go to the WIRENO layer, net labels to LABELS, notes to MISC, and a harness becomes a closed dashed polyline on HARNESS with its name. <sub>`texts_and_harness_go_to_their_layers`</sub>
 - Non-ASCII text is written as \U+XXXX escapes and decoded back; MTEXT paragraph breaks and formatting codes are handled on read. <sub>`unicode_is_escaped_and_decoded`</sub>
+- A note with a backslash or braces is written to DXF as plain TEXT without escape characters (as other CAD programs show it) and imports back unchanged. <sub>`plain_text_with_backslash_and_braces_is_written_as_is_and_read_back`</sub>
 - Exporting a sheet to DXF and importing it back keeps the paper, symbols (id, position, rotation, mirror, reference, value, attributes), wires, junctions, wire numbers, labels, notes and harness names. <sub>`export_then_import_round_trips_the_sheet`</sub>
 - Importing an AutoCAD Electrical style DXF reads lines on wire layers (WIRES, _MULTI_WIRE_*) as wires, assigns WIRENO texts to the nearest wire, keeps other lines and unknown blocks as skipped items, and decodes text. <sub>`imports_acade_style_wires_and_reports_unknown_blocks`</sub>
 - When the import options name the wire layers explicitly, only those layers become wires. <sub>`explicit_wire_layers_limit_what_becomes_a_wire`</sub>
@@ -296,7 +325,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 18, the version that added port contacts on block pins (blocks with contacts are saved as "port_block"). <sub>`the_current_format_version_is_eighteen`</sub>
+- The current file format version is 19, the version that added connector pictures on block pins (blocks with contacts or connectors are saved as "port_block"). <sub>`the_current_format_version_is_nineteen`</sub>
 - A version 17 file without ports loads unchanged apart from being moved up to the current version. <sub>`a_version_17_file_loads_unchanged`</sub>
 - A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable". <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - A "run_cable" entry whose run is empty (for example after hand-editing the file) opens as a plain definition-line cable and is written back with the kind "cable". <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
@@ -318,6 +347,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project without port contacts is written byte for byte as serde writes it (no key reordering), with plain blocks still "symbol". <sub>`a_project_without_ports_is_written_unchanged`</sub>
 - A "port_block" entry without contacts (hand-edited) opens as a plain symbol. <sub>`a_port_block_without_contacts_opens_as_a_symbol`</sub>
 - A block whose contacts were all removed again is saved with the kind "symbol", so older builds can open the file again. <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
+- Regression test (already passes): a version 18 file with a port block opens unchanged apart from being moved up to the current version. <sub>`a_version_18_file_loads_unchanged`</sub>
+- A block whose pins have only connectors (no contacts) is also saved under the kind "port_block" and comes back with its connectors, IPC/MCP JSON still says "symbol", and once its connectors are removed it is saved as "symbol" again. <sub>`a_block_with_connectors_is_saved_as_port_block`</sub>
 
 ### KiCad import / export
 
@@ -332,6 +363,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Exporting a sheet to .kicad_sch and importing it back keeps paper, title block, symbols (id, reference, value, rotation, mirror), wires, junctions, labels and text. <sub>`export_then_import_round_trips_the_sheet`</sub>
 - A wire drawn as a polyline is exported as one two-point KiCad wire per segment. <sub>`polyline_wires_are_split_into_segments`</sub>
 - Every symbol used on the sheet is embedded once in lib_symbols with its graphics and pins, so KiCad opens the file without MadakeCAD libraries. <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
+- Each distinct block shape is its own KiCad lib_symbol (MadakeCAD:block for the template, block_<hash> otherwise) with numbered pins and filled graphics as KiCad fill; equal shapes share one, and a block whose pin table cannot be read is reported as unresolved, not exported as the template box. <sub>`each_block_shape_is_its_own_kicad_lib_symbol`</sub>
+- Our per-shape block lib_symbols import back as blocks that keep their pin table (block_pins) instead of being skipped. <sub>`our_block_lib_symbols_import_back_as_blocks_with_their_pin_table`</sub>
 - A wire number becomes a KiCad label on the numbered net, so the net keeps its name in KiCad and on re-import. <sub>`wire_numbers_become_labels`</sub>
 - A harness boundary is exported as a dashed closed polyline plus a text with its name. <sub>`harness_becomes_dashed_polyline_with_name`</sub>
 - Quotes, backslashes and newlines in text are escaped so the exported file parses and reads back unchanged. <sub>`strings_are_escaped_and_read_back`</sub>
@@ -826,6 +859,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - The exported SVG contains the JIS frame, the title block text, wires and reference designators. <sub>`svg_contains_frame_wire_and_symbol`</sub>
 - A block symbol is drawn with its outline, its pin numbers and its pin names, taken from the instance attributes. <sub>`svg_draws_block_outline_with_pin_numbers_and_names`</sub>
+- Regression test for Task 5 (already passes): a plug's black insert is drawn as one more black-filled polygon than the same block without the connector, so PDF and PNG, which are made from this SVG, show it too. <sub>`svg_draws_a_plug_insert_as_a_black_polygon`</sub>
 - Drawing the jis-a3 frame template produces exactly the JIS frame this program has always printed, down to the last character of the SVG (frame, zone ticks, revision table and every title-block cell). <sub>`the_jis_a3_template_reproduces_the_previous_frame_exactly`</sub>
 - An empty A4 sheet with no revisions also prints exactly the frame it always did: no revision table, and the title-block cells left blank rather than dropped. <sub>`an_empty_sheet_reproduces_the_previous_frame_exactly`</sub>
 - The A4 portrait template prints a 190x277 frame with its 110 mm title block in the bottom-right corner, and the same 4x6 zone ticks. <sub>`the_a4_portrait_template_draws_a_narrower_frame_and_title_block`</sub>
@@ -1211,6 +1245,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An entity that falls outside the sheet's current paper bounds is reported as `erc.outside_paper`, without being moved or removed from the drawing. <sub>`an_entity_outside_the_paper_is_reported`</sub>
 - Unconnected pins are reported as one warning per symbol, listing the affected pin numbers. <sub>`unconnected_pins_are_reported_per_symbol`</sub>
 - Unconnected pins of a block are listed by their pin names, so a controller's dangling input is named, not numbered. <sub>`unconnected_block_pins_are_listed_by_pin_name`</sub>
+- Regression test for Task 5 (already passes): a wired pin that gets a connector moves 2.5 mm outward and ERC says so: a straight wire still reaches the pin but leaves a dangling end, and a wire that left sideways leaves the pin named as unconnected. <sub>`a_wired_pin_that_gets_a_connector_is_flagged_by_erc`</sub>
 - A terminal-block terminal counts as connected if either its left or right side is wired. <sub>`terminal_block_terminal_counts_connected_if_either_side_wired`</sub>
 - Missing and duplicate reference designators are flagged, but relay coil + contacts legitimately share one designator. <sub>`empty_and_duplicate_references_are_flagged_but_relays_allowed`</sub>
 - A plug and a socket that share one designator are one mated connector, so they raise no duplicate error, while a plug sharing a designator with an unrelated part still does. <sub>`a_plug_and_socket_may_share_a_designator`</sub>
@@ -1370,6 +1405,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Regression test for Tasks 1-8 (already passes): connect_cable lands a harness on one port pin ("39.U3"); cores map to the same-named contacts and each core is its own net. <sub>`connect_cable_lands_on_a_port_pin`</sub>
 - The tool descriptions tell the agent to draw a USB-like connector as one block pin with contacts and how to land a cable on it. <sub>`the_tools_describe_port_contacts`</sub>
 - The schema agents get for execute_commands shows pin contacts but never the file-only kind "port_block" (the schemars skip on EntityRepr::PortBlock holds). <sub>`the_agent_schema_hides_port_block`</sub>
+- Regression test for Tasks 1-8 (already passes): place_symbol with a connector on a block pin returns that pin 5 mm from the box edge, and the sheet image of such a block renders. <sub>`a_connector_pin_is_placed_five_millimetres_from_the_box`</sub>
+- Regression test for Tasks 1-8 (already passes): place_symbol refuses an unknown connector kind and a connector name on a USB socket, with the reason. <sub>`place_symbol_refuses_a_bad_connector`</sub>
+- place_symbol tells the agent which connector kinds exist, how to group terminal blocks and JST sockets with connector_ref, and to read pin positions with get_pins, both in its description and in the attrs schema. <sub>`place_symbol_describes_connectors`</sub>
 
 ### Frame templates (REST)
 
@@ -1683,6 +1721,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The system prompt tells the agent to look at the sheet image after drawing, instead of judging the layout by numbers alone. <sub>`system_prompt_tells_the_agent_to_look_at_the_sheet`</sub>
 - The system prompt tells the agent to draw a multi-conductor connector (USB) as one block pin with contacts. <sub>`system_prompt_explains_port_contacts`</sub>
 - The system prompt states the contact rule (2 to 32 per pin, trimmed, unique) and that connect_cable on a port maps by order only with equal counts and refuses a partial name match and style multi. <sub>`system_prompt_states_the_contact_rules`</sub>
+- The system prompt tells the agent to give real connector pins their connector kind, to group terminal blocks and JST sockets with one connector_ref, to keep conductors in contacts and to re-read pin positions afterwards. <sub>`system_prompt_explains_connector_pictures`</sub>
 
 ### knowledge_docs
 
@@ -2022,6 +2061,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - splits contacts on ASCII, Japanese and full-width commas and trims them <sub>`pins that are already wired`</sub>
 - writes contacts into block_pins and reads them back as comma-separated text <sub>`pins that are already wired`</sub>
 - flags a single contact, a repeated contact and too many contacts <sub>`pins that are already wired`</sub>
+- writes the connector and group name into block_pins and reads them back unchanged <sub>`connector columns`</sub>
+- counts a row with only a connector as filled, so a missing number is reported <sub>`connector columns`</sub>
+- flags a group name on a kind that cannot have one and a group name split over two connectors <sub>`connector columns`</sub>
+- drops a group name made only of spaces without reporting it <sub>`connector columns`</sub>
 - opens a pin table with one pin per side when the generic block is picked <sub>`starting a new block from the insert dialog`</sub>
 - hands the edited table to the placement as block attributes <sub>`starting a new block from the insert dialog`</sub>
 - seeds the hand-set size with the automatic one when switching to manual <sub>`starting a new block from the insert dialog`</sub>
@@ -2036,6 +2079,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - warns the same way when a wired pin is deleted <sub>`warning about wired pins`</sub>
 - stays quiet when the deleted pin had no wire on it <sub>`warning about wired pins`</sub>
 - still allows applying the edit, warning and all <sub>`warning about wired pins`</sub>
+- clears the group name when the connector becomes none or a kind that cannot be grouped <sub>`connector columns in the pin table`</sub>
 
 ### cable
 
@@ -2100,6 +2144,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - never lets a bracket and its caption lines overlap each other, at any rotation <sub>`captionLineAnchors`</sub>
 - stacks caption lines downwards on the paper, sharing one centre line, at any rotation <sub>`captionLineAnchors`</sub>
 - copies block pin contacts into the pin definition and refuses bad contacts like Rust <sub>`captionLineAnchors`</sub>
+- reads a connector kind, treats null as absent and refuses an unknown kind as invalid JSON, like Rust <sub>`blockSymbol connectors`</sub>
+- refuses a bad connector name with the same messages as Rust and lets unnamed connectors repeat <sub>`blockSymbol connectors`</sub>
+- draws every block of the shared golden file exactly like Rust <sub>`connector golden (Rust twin)`</sub>
 
 ### frameEditor
 
@@ -2887,6 +2934,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - compiles every message in every catalog <sub>`i18n`</sub>
 - keeps the same named placeholders as English in every translation <sub>`i18n`</sub>
 - keeps the same number of plural forms as English in every translation <sub>`i18n`</sub>
+- names every connector kind in every locale <sub>`i18n`</sub>
 - shows each language name as its own endonym <sub>`i18n`</sub>
 - resolves language tags leniently and falls back to English for unknown values <sub>`i18n`</sub>
 

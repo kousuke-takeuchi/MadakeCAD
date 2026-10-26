@@ -3,15 +3,21 @@
 // デザイン: MadakeCAD.pen「フェーズ5 - 部品挿入 ブロック(ピン表エディタ)」のBP列。
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
-import type { BlockSide } from "../canvas/blockEditor";
+import type { BlockPinRow, BlockSide } from "../canvas/blockEditor";
+import { CONNECTOR_KINDS, isGroupedConnector, type ConnectorKind } from "../canvas/connector";
 import { useBlockEditorStore } from "../stores/blockEditor";
 
 const props = defineProps<{ side: BlockSide }>();
 const editor = useBlockEditorStore();
 const { t } = useI18n();
 
-function edit(index: number, patch: { no?: string; name?: string; contacts?: string }) {
+function edit(index: number, patch: Partial<BlockPinRow>) {
   editor.updateRow(props.side, index, patch);
+}
+
+/** まとめ名を書けるのは端子台・JST の行だけ。 */
+function refEnabled(row: BlockPinRow): boolean {
+  return !!row.connector && isGroupedConnector(row.connector);
 }
 </script>
 
@@ -25,6 +31,8 @@ function edit(index: number, patch: { no?: string; name?: string; contacts?: str
       <span class="lbl no">{{ t("blockEditor.colNo") }}</span>
       <span class="lbl">{{ t("blockEditor.colName") }}</span>
       <span class="lbl">{{ t("blockEditor.colContacts") }}</span>
+      <span class="lbl">{{ t("blockEditor.colConnector") }}</span>
+      <span class="lbl ref">{{ t("blockEditor.colConnectorRef") }}</span>
     </div>
     <div v-for="(row, i) in editor.draft.rows[side]" :key="`${side}-${i}`" class="row">
       <span class="row-no">{{ i + 1 }}</span>
@@ -49,6 +57,26 @@ function edit(index: number, patch: { no?: string; name?: string; contacts?: str
         :placeholder="t('blockEditor.contactsPlaceholder')"
         spellcheck="false"
         @input="edit(i, { contacts: ($event.target as HTMLInputElement).value })"
+      />
+      <select
+        class="cell"
+        :value="row.connector ?? ''"
+        :aria-label="t('blockEditor.colConnector')"
+        @change="edit(i, { connector: ($event.target as HTMLSelectElement).value as ConnectorKind | '' })"
+      >
+        <option value="">{{ t("blockEditor.connectorNone") }}</option>
+        <option v-for="kind in CONNECTOR_KINDS" :key="kind" :value="kind">
+          {{ t(`blockEditor.connector.${kind}`) }}
+        </option>
+      </select>
+      <input
+        class="cell ref mono"
+        :value="row.connectorRef ?? ''"
+        :aria-label="t('blockEditor.colConnectorRef')"
+        :placeholder="t('blockEditor.connectorRefPlaceholder')"
+        :disabled="!refEnabled(row)"
+        spellcheck="false"
+        @input="edit(i, { connectorRef: ($event.target as HTMLInputElement).value })"
       />
       <button class="icon-btn" :title="t('blockEditor.moveUp')" @click="editor.moveRow(side, i, -1)">
         <ChevronUp :size="11" />
@@ -81,6 +109,7 @@ function edit(index: number, patch: { no?: string; name?: string; contacts?: str
 .col-labels { display: flex; gap: 4px; padding-left: 18px; }
 .lbl { flex: 1; font-size: 10px; color: var(--ui-placeholder); }
 .lbl.no { flex: none; width: 58px; }
+.lbl.ref { flex: none; width: 52px; }
 .row { display: flex; align-items: center; gap: 4px; }
 .row-no { width: 14px; flex: none; font-size: 10px; color: var(--ui-muted); }
 .cell {
@@ -95,6 +124,8 @@ function edit(index: number, patch: { no?: string; name?: string; contacts?: str
   outline: none;
 }
 .cell.mono { flex: none; width: 58px; font-family: var(--mono-font); }
+.cell.ref { width: 52px; }
+.cell:disabled { opacity: 0.5; }
 .cell:focus { border-color: var(--acad-blue); }
 .icon-btn {
   width: 20px;

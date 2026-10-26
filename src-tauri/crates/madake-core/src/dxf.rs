@@ -107,7 +107,40 @@ pub fn encode_text(s: &str) -> String {
     out
 }
 
-/// `\U+XXXX` / `\P` (改行) を戻す。MTEXTの書式コード (`{`, `}`, `\A1;` 等) は取り除く。
+/// 1行のTEXT・ATTRIB・ATTDEFの値を戻す。`\U+XXXX` だけを文字にし、`\` `{` `}` はそのまま残す
+/// (MTEXTと違い、これらは書式ではなく文字として表示される)。
+pub fn decode_plain_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut units: Vec<u16> = Vec::new();
+    let mut rest = s;
+    while !rest.is_empty() {
+        let b = rest.as_bytes();
+        if b.len() >= 7
+            && b[0] == b'\\'
+            && (b[1] == b'U' || b[1] == b'u')
+            && b[2] == b'+'
+            && rest.is_char_boundary(7)
+        {
+            if let Ok(u) = u16::from_str_radix(&rest[3..7], 16) {
+                units.push(u);
+                rest = &rest[7..];
+                continue;
+            }
+        }
+        if !units.is_empty() {
+            out.extend(char::decode_utf16(units.drain(..)).map(|r| r.unwrap_or('\u{FFFD}')));
+        }
+        let c = rest.chars().next().unwrap();
+        out.push(c);
+        rest = &rest[c.len_utf8()..];
+    }
+    if !units.is_empty() {
+        out.extend(char::decode_utf16(units.drain(..)).map(|r| r.unwrap_or('\u{FFFD}')));
+    }
+    out
+}
+
+/// MTEXTの値を戻す。`\U+XXXX` / `\P` (改行) を戻す。MTEXTの書式コード (`{`, `}`, `\A1;` 等) は取り除く。
 pub fn decode_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut units: Vec<u16> = Vec::new();
@@ -954,14 +987,14 @@ pub fn sheet_to_dxf_with_frame(
     let (paper_w, paper_h) = sheet.paper_mm();
     let fy = |y: f64| paper_h - y;
     let pt = |p: Point| (p.x, fy(p.y));
-    let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
-    let mut used: BTreeMap<&str, &SymbolDef> = BTreeMap::new();
+    let index = crate::symbol::DefIndex::new(symbols);
+    let mut used: BTreeMap<String, std::borrow::Cow<SymbolDef>> = BTreeMap::new();
     let mut has_junction = false;
     for e in sheet.entities.values() {
         match e {
             Entity::Symbol(inst) => {
-                if let Some(def) = defs.get(inst.symbol_id.as_str()) {
-                    used.insert(def.id.as_str(), def);
+                if let Some(def) = crate::block::export_def(inst, &index) {
+                    used.entry(def.id.clone()).or_insert(def);
                 }
             }
             Entity::Junction(_) => has_junction = true,
@@ -1325,7 +1358,7 @@ pub fn sheet_to_dxf_with_frame(
     let mut unresolved: BTreeMap<&str, usize> = BTreeMap::new();
     for e in sheet.entities.values() {
         let Entity::Symbol(inst) = e else { continue };
-        let Some(def) = defs.get(inst.symbol_id.as_str()) else {
+        let Some(def) = crate::block::export_def(inst, &index) else {
             // 解決できないシンボル定義は描けない。SVGでは出るので黙って落とさず報告する
             *unresolved.entry(inst.symbol_id.as_str()).or_insert(0) += 1;
             continue;
@@ -1333,7 +1366,7 @@ pub fn sheet_to_dxf_with_frame(
         let insert = w.entity("INSERT", ms, LAYER_SYMS);
         w.pair(100, "AcDbBlockReference");
         w.pair(66, 1);
-        w.pair(2, format!("{BLOCK_PREFIX}{}", inst.symbol_id));
+        w.pair(2, format!("{BLOCK_PREFIX}{}", def.id));
         let (x, y) = pt(inst.at);
         w.pair(10, num(x));
         w.pair(20, num(y));
@@ -1342,10 +1375,10 @@ pub fn sheet_to_dxf_with_frame(
         w.pair(42, 1);
         w.pair(43, 1);
         w.pair(50, num(dxf_angle(inst.rotation)));
-        let top = crate::svg::symbol_top_y(inst, def);
-        let (min, max) = crate::svg::symbol_bounds(inst, def);
+        let top = crate::svg::symbol_top_y(inst, &def);
+        let (min, max) = crate::svg::symbol_bounds(inst, &def);
         let cx = (min.x + max.x) / 2.0;
-        for (i, (tag, value, invisible)) in instance_attributes(inst, def).into_iter().enumerate() {
+        for (i, (tag, value, invisible)) in instance_attributes(inst, &def).into_iter().enumerate() {
             let (layer, at) = match tag.as_str() {
                 "TAG1" => (LAYER_TAGS, (cx, fy(top - crate::svg::REF_LABEL_DY))),
                 "CAT" => (LAYER_DESC, (cx, fy(top - crate::svg::VALUE_LABEL_DY))),
@@ -1461,7 +1494,10 @@ impl Record {
         self.get(8).unwrap_or("0").to_string()
     }
     fn text(&self) -> String {
-        // MTEXTは3(続き)+1(末尾)。TEXTは1のみ
+        // MTEXTは3(続き)+1(末尾)で書式つき。TEXT・ATTRIB・ATTDEFは1のみで素の文字
+        if self.kind != "MTEXT" {
+            return decode_plain_text(self.get(1).unwrap_or(""));
+        }
         let mut s: String = self.all(3).collect();
         s.push_str(self.get(1).unwrap_or(""));
         decode_text(&s)
@@ -1545,6 +1581,9 @@ fn segment_distance(p: Point, a: Point, b: Point) -> f64 {
 /// ブロック名 → symbol_id (`MDK_<id>` のみ。ACADE/EPLANの独自ブロック名は対応表が無いので未対応)。
 fn symbol_id_of_block(name: &str) -> Option<String> {
     let id = name.strip_prefix(BLOCK_PREFIX)?;
+    if crate::block::is_block_export_id(id) {
+        return Some(crate::block::BLOCK_SYMBOL_ID.to_string());
+    }
     crate::symbol::resolve_symbol(id).map(|_| id.to_string())
 }
 
@@ -1962,6 +2001,16 @@ pub fn import_dxf(
                             }
                         }
                     }
+                    if symbol_id == crate::block::BLOCK_SYMBOL_ID {
+                        let pins = attrs.remove("BLOCK_PINS");
+                        let size = attrs.remove("BLOCK_SIZE");
+                        match crate::block::imported_block_attrs(pins.as_deref(), size.as_deref()) {
+                            Some(a) => attrs.extend(a),
+                            None => report
+                                .warnings
+                                .push(format!("{reference}: {}", crate::block::BLOCK_UNREADABLE_WARNING)),
+                        }
+                    }
                     push(
                         &mut sheet,
                         Entity::Symbol(SymbolInstance {
@@ -2250,6 +2299,130 @@ mod tests {
         assert_eq!(first.num(11), Some(40.0));
     }
 
+    /// Each distinct block shape is its own DXF block (MDK_block for the template, MDK_block_<hash> otherwise); equal shapes share one, the picture is in it, and a block whose pin table cannot be read is reported, not drawn as the template.
+    /// ブロックは形ごとに別のDXFブロックになる(見本はMDK_block、他はMDK_block_<ハッシュ>)。同じ形は1つを共有し、絵も入る。ピン表を読めないブロックは見本の箱にせず報告する。
+    #[test]
+    fn each_block_shape_is_its_own_dxf_block() {
+        let mut sheet = crate::block::export_blocks_sheet();
+        let bad = crate::block::test_block("BX", "", 240.0, 40.0, "not json");
+        sheet.entities.insert(bad.id(), bad);
+        let (dxf, report) = sheet_to_dxf(&sheet, &defs(&sheet), &[]);
+        let recs = records(&parse_pairs(&dxf).unwrap());
+        let names: Vec<&str> = recs
+            .iter()
+            .filter(|r| r.kind == "BLOCK")
+            .filter_map(|r| r.get(2))
+            .collect();
+        assert_eq!(names.iter().filter(|n| **n == "MDK_block").count(), 1, "{names:?}");
+        let shaped: Vec<&&str> = names
+            .iter()
+            .filter(|n| n.starts_with("MDK_block_"))
+            .collect();
+        assert_eq!(shaped.len(), 3, "{names:?}");
+        let ents = entity_records(&dxf);
+        let block_of = |tag: &str| -> String {
+            let idx = ents
+                .iter()
+                .position(|r| {
+                    r.kind == "ATTRIB" && r.get(2) == Some("TAG1") && r.text() == tag
+                })
+                .unwrap();
+            let ins = ents[..idx].iter().rposition(|r| r.kind == "INSERT").unwrap();
+            ents[ins].get(2).unwrap().to_string()
+        };
+        assert_eq!(block_of("B1"), block_of("B2"));
+        let (b1, b8, bu) = (block_of("B1"), block_of("B8"), block_of("BU"));
+        assert!(b1 != b8 && b1 != bu && b8 != bu);
+        assert_eq!(block_of("B0"), "MDK_block");
+        // BU の定義に塗りつぶし(SOLID)の絵が入っている
+        let start = recs
+            .iter()
+            .position(|r| r.kind == "BLOCK" && r.get(2) == Some(bu.as_str()))
+            .unwrap();
+        let end = start
+            + recs[start..]
+                .iter()
+                .position(|r| r.kind == "ENDBLK")
+                .unwrap();
+        assert!(recs[start..end].iter().any(|r| r.kind == "SOLID"));
+        // B8 の端子属性
+        let at = ents
+            .iter()
+            .position(|r| r.kind == "ATTRIB" && r.text() == "B8")
+            .unwrap();
+        let tags: Vec<String> = ents[at..]
+            .iter()
+            .take_while(|r| r.kind == "ATTRIB")
+            .map(|r| r.get(2).unwrap().to_string())
+            .collect();
+        for n in 1..=8 {
+            assert!(tags.contains(&format!("TERM{n:02}")), "{tags:?}");
+        }
+        // 読めないブロックは見本の箱にせず、書けなかったものとして数える
+        assert!(!ents.iter().any(|r| r.kind == "ATTRIB" && r.text() == "BX"));
+        assert!(
+            report.skipped.iter().any(|m| m.starts_with("symbol x1:")),
+            "{:?}",
+            report.skipped
+        );
+    }
+
+    /// Block shapes exported to DXF import back as plain blocks with their pin table restored in block_pins (no upper-case BLOCK_PINS left).
+    /// DXFへ書き出したブロックの形は、ピン表をblock_pinsに戻した普通のブロックとして読み戻せる(大文字のBLOCK_PINSは残らない)。
+    #[test]
+    fn our_block_shapes_import_back_as_blocks_with_their_pin_table() {
+        let sheet = crate::block::export_blocks_sheet();
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
+        let (project, report) =
+            import_dxf(&dxf, "往復", &DxfImportOptions::default()).unwrap();
+        assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+        assert_eq!(report.symbols, 5);
+        let syms: Vec<&SymbolInstance> = project.sheets[0]
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                Entity::Symbol(s) => Some(s),
+                _ => None,
+            })
+            .collect();
+        assert!(syms.iter().all(|s| s.symbol_id == "block"));
+        let b8 = syms.iter().find(|s| s.reference == "B8").unwrap();
+        let want = r#"{"left":[{"no":"1"},{"no":"2"},{"no":"3"},{"no":"4"}],"right":[{"no":"5"},{"no":"6"},{"no":"7"},{"no":"8","name":"OUT"}]}"#;
+        assert_eq!(
+            b8.attrs.get("block_pins").map(String::as_str),
+            Some(want),
+            "{:?}",
+            b8.attrs
+        );
+        assert!(syms.iter().all(|s| !s.attrs.contains_key("BLOCK_PINS")));
+    }
+
+    /// A block whose pin table cannot be read on import becomes the template box with a warning naming it.
+    /// 読み戻すときにピン表が読めないブロックは、名前入りの警告つきで見本の箱になる。
+    #[test]
+    fn an_unreadable_block_pin_table_imports_as_the_template_with_a_warning() {
+        let sheet = crate::block::export_blocks_sheet();
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
+        let table = encode_text(r#"{"left":[{"no":"1","name":"IN"}]}"#);
+        assert_eq!(dxf.matches(&table).count(), 1);
+        let dxf = dxf.replace(&table, "not json");
+        let (project, report) =
+            import_dxf(&dxf, "往復", &DxfImportOptions::default()).unwrap();
+        let b1 = project.sheets[0]
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Symbol(s) if s.reference == "B1" => Some(s),
+                _ => None,
+            })
+            .expect("B1 imported");
+        assert_eq!(b1.symbol_id, "block");
+        assert!(!b1.attrs.contains_key("block_pins"));
+        let warns: Vec<&String> = report.warnings.iter().filter(|w| w.contains("B1")).collect();
+        assert_eq!(warns.len(), 1, "{:?}", report.warnings);
+        assert!(warns[0].contains("見本の箱"));
+    }
+
     /// Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with a negative X scale for mirroring and TAG1/CAT/DESC1/RATING1/TERMnn attributes.
     /// シンボルはMDK_<symbol_id>ブロック(1回だけ定義)のINSERTになり、ミラー(X倍率-1)・TAG1/CAT/DESC1/RATING1/TERMnnの属性を持つ。
     #[test]
@@ -2346,6 +2519,26 @@ mod tests {
         let sheet = fixture();
         let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
         assert!(!dxf.contains("注記A"), "生のマルチバイトを書かない");
+    }
+
+    /// A note with a backslash or braces is written to DXF as plain TEXT without escape characters (as other CAD programs show it) and imports back unchanged.
+    /// バックスラッシュや波かっこを含む注記は、逃がし文字なしの素のTEXTで書かれ (他のCADの表示どおり)、読み戻しても変わらない。
+    #[test]
+    fn plain_text_with_backslash_and_braces_is_written_as_is_and_read_back() {
+        let mut sheet = fixture();
+        for e in sheet.entities.values_mut() {
+            if let Entity::Text(t) = e {
+                t.text = r"C:\work {x}".into();
+            }
+        }
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
+        assert!(dxf.contains("  1\nC:\\work {x}\n"), "TEXTは素のまま書く");
+        let (project, _) = import_dxf(&dxf, "往復", &DxfImportOptions::default()).unwrap();
+        let Entity::Text(back) = find(&project.sheets[0], |e| matches!(e, Entity::Text(_))) else {
+            unreachable!()
+        };
+        assert_eq!(back.text, r"C:\work {x}");
+        assert_eq!(decode_text(r"{\fArial|b0;C:\\work \{x\}}"), r"C:\work {x}");
     }
 
     /// Exporting a sheet to DXF and importing it back keeps the paper, symbols (id, position, rotation, mirror, reference, value, attributes), wires, junctions, wire numbers, labels, notes and harness names.

@@ -49,7 +49,7 @@ ASCII DXF、`$ACADVER`=AC1015、`$INSUNITS`=4(mm)、非ASCII文字は`\U+XXXX`(�
 |---|---|---|
 | 配線(セグメントごと) | `LINE`(ACADEは配線レイヤのLINEを配線として認識する) | `WIRES` |
 | 線番 | 最長セグメントの上(横線)/左(縦線)の`TEXT` | `WIRENO` |
-| シンボル | ブロック`MDK_<symbol_id>`の`INSERT`(回転=グループ50、ミラー=X倍率−1)+属性`TAG1`(参照記号)・`CAT`(型番/値)・`DESC1`・`RATING1`・その他属性(大文字化)・`TERMnn`(ピン番号、非表示) | `SYMS`(ブロック)・`TAGS`・`DESC` |
+| シンボル | ブロック`MDK_<symbol_id>`、機器ブロックは形ごとに`MDK_block_<16桁>`の`INSERT`(回転=グループ50、ミラー=X倍率−1)+属性`TAG1`(参照記号)・`CAT`(型番/値)・`DESC1`・`RATING1`・その他属性(大文字化)・`TERMnn`(ピン番号、非表示) | `SYMS`(ブロック)・`TAGS`・`DESC` |
 | シンボルブロックの図形 | ローカル座標(Y反転)の`LINE`/`LWPOLYLINE`/`CIRCLE`/`ARC`/`SOLID`/`TEXT`と、上記属性の`ATTDEF` | `SYMS` |
 | ジャンクション | ブロック`WDDOT`(ACADEの結線ドットと同名)の`INSERT` | `WIRES` |
 | ネットラベル | `TEXT` | `LABELS` |

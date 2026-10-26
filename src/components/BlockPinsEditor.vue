@@ -50,8 +50,18 @@ function issueText(issue: BlockIssue): string {
       max: issue.max,
     });
   }
+  if (issue.code === "connectorRefNotGrouped") {
+    return t("blockEditor.issue.connectorRefNotGrouped", {
+      side: t(`blockEditor.side.${issue.side}`),
+      row: issue.index + 1,
+    });
+  }
+  if (issue.code === "connectorRefSplit") return t("blockEditor.issue.connectorRefSplit", { ref: issue.ref });
   return t("blockEditor.issue.sizeTooSmall", { w: issue.w, h: issue.h });
 }
+
+/** 同じ文面は1回だけ出す (まとめ名が3か所に割れると同じ警告が2つ出るため)。 */
+const issueTexts = computed(() => [...new Set(editor.issues.map(issueText))]);
 
 /** 折りたたみの中の上下辺に入っているピンの本数。 */
 const extraCount = computed(() =>
@@ -133,7 +143,7 @@ function setSize(key: "w" | "h", value: number) {
       <span class="extra-spacer" />
     </div>
 
-    <p v-for="(issue, i) in editor.issues" :key="i" class="issue">{{ issueText(issue) }}</p>
+    <p v-for="text in issueTexts" :key="text" class="issue">{{ text }}</p>
     <p v-if="editor.warnings.length" class="warning">
       {{ t("blockEditor.wiredWarning", { pins: editor.warnings.join(", ") }) }}
     </p>

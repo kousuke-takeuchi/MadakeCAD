@@ -697,3 +697,45 @@ fn the_agent_schema_hides_port_block() {
     assert!(!schema.contains("port_block"), "port_block がエージェント向けスキーマに漏れている");
     assert!(!schema.contains("PortBlock"));
 }
+
+// ---- コネクタの絵 (ブロックのピンの connector) ----
+
+/// Regression test for Tasks 1-8 (already passes): place_symbol with a connector on a block pin returns that pin 5 mm from the box edge, and the sheet image of such a block renders.
+/// Tasks 1-8 の挙動の回帰テスト (最初から通る): ブロックのピンに connector を付けた place_symbol は、そのピンを外形から5mmの位置で返し、そのブロックのシート画像も描ける。
+#[tokio::test]
+async fn a_connector_pin_is_placed_five_millimetres_from_the_box() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    // 右辺1本・名前なし: 外形15×10、右辺は x = 107.5、接続点は 112.5
+    let placed = place_block(&bridge, sheet, "39", 100.0, 100.0, r#"{"right":[{"no":"U1","connector":"usb_a_f","contacts":["VBUS","D-","D+","GND"]}]}"#).await;
+    assert_eq!(placed["pins"][0]["x"], 112.5);
+    let image = madake_mcp::sheet_image(&doc, None, None, None).expect("画像");
+    assert_eq!(&image.png[..4], b"\x89PNG");
+}
+
+/// Regression test for Tasks 1-8 (already passes): place_symbol refuses an unknown connector kind and a connector name on a USB socket, with the reason.
+/// Tasks 1-8 の挙動の回帰テスト (最初から通る): place_symbol は知らないコネクタの種類と、USB の口に付けたコネクタの名前を理由付きで断る。
+#[tokio::test]
+async fn place_symbol_refuses_a_bad_connector() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    let place = |pins: &str| json!({"sheet_id": sheet, "symbol_id": "block", "x": 50.0, "y": 50.0, "reference": "U1", "attrs": {"block_pins": pins}});
+    let err = call_err(&bridge, "place_symbol", place(r#"{"left":[{"no":"1","connector":"usb_z"}]}"#)).await;
+    assert!(err.contains("not valid JSON") && err.contains("unknown variant"), "{err}");
+    let err = call_err(&bridge, "place_symbol", place(r#"{"left":[{"no":"1","connector":"usb_a_f","connector_ref":"J3"}]}"#)).await;
+    assert!(err.contains("connector_ref is only for screw, jst_ph_f and jst_xh_f, not usb_a_f"), "{err}");
+}
+
+/// place_symbol tells the agent which connector kinds exist, how to group terminal blocks and JST sockets with connector_ref, and to read pin positions with get_pins, both in its description and in the attrs schema.
+/// place_symbol は説明と attrs のスキーマの両方で、コネクタの種類、端子台・JST を connector_ref でまとめること、ピンの位置を get_pins で読むことをエージェントに伝える。
+#[test]
+fn place_symbol_describes_connectors() {
+    let tools = tool_descriptions();
+    let (_, d) = tools.iter().find(|(n, _)| n == "place_symbol").expect("place_symbol");
+    for needle in ["connector_ref", "usb_a_f", "jst_xh_f", "get_pins", "5mm", "同じ種類の"] {
+        assert!(d.contains(needle), "説明に「{needle}」が無い: {d}");
+    }
+    let schema = serde_json::to_string(&schemars::schema_for!(madake_mcp::PlaceSymbolParams)).unwrap();
+    assert!(schema.contains("connector_ref") && schema.contains("jst_xh_f"), "attrs の説明にコネクタが無い");
+    assert!(schema.contains("同じ種類の"), "attrs の説明に connector_ref のピンは同じ種類という条件が無い");
+}
