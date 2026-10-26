@@ -336,7 +336,28 @@ fn revision_block(out: &mut String, sheet: &Sheet, t: &FrameTemplate, tx: f64, t
 
 /// 配置後のシンボル外形の上端Y(用紙座標)。参照記号・型番の重なり回避用。
 pub(crate) fn symbol_top_y(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> f64 {
-    symbol_bounds(inst, def).0.y
+    caption_bounds(inst, def).0.y
+}
+
+/// 参照記号・型番を上に、機能ラベル・説明・定格を下に置くための外形 (最小点, 最大点)。
+///
+/// 普通のシンボルは [`symbol_bounds`] そのもの。ブロック ([`crate::block::is_block_export_id`]) は、
+/// ピン番号などの文字が基準点だけでなく文字の高さのぶん上下へはみ出す (文字は回転しても横書きで、
+/// 回転すると左右辺のピン番号が上下辺に来る) ので、文字の高さも含める。
+/// 文字は常に横書きなので、上下の範囲に効くのは文字の高さだけ (幅は効かない)。
+pub(crate) fn caption_bounds(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> (Point, Point) {
+    let (mut min, mut max) = symbol_bounds(inst, def);
+    if !crate::block::is_block_export_id(&def.id) {
+        return (min, max);
+    }
+    for prim in &def.primitives {
+        if let Primitive::Text { at, height, .. } = prim {
+            let c = transform_local(*at, inst);
+            min.y = min.y.min(c.y - height / 2.0);
+            max.y = max.y.max(c.y + height / 2.0);
+        }
+    }
+    (min, max)
 }
 
 /// 配置後のシンボル外形の囲み矩形 (最小点, 最大点) を用紙座標で返す。

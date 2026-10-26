@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3004 specification clauses** across 6 areas.
+**3012 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -45,6 +45,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Group names are drawn where nothing else is: between the middle pins of a 2- or 3-pin group, after the pin name for a 1-pin group, 7 mm inside on the top; JST prints its series and an unnamed screw block prints nothing. <sub>`group_labels_sit_in_the_free_places`</sub>
 - The automatic outline also makes room for group names: a name wider than the pin names widens the box, and a top side that prints a group name keeps 10 mm inside the box. <sub>`the_outline_makes_room_for_group_names`</sub>
 - Regression test for Tasks 5-6 (already passes): with connectors of every kind, plain pins, pin numbers of one to four characters, names and group names, no two texts overlap and no text covers a picture, a lead or the box outline (the AOGU hub and amplifier included). <sub>`connector_texts_never_overlap`</sub>
+- With group names on both the left and the right, the box is wide enough that the two names, which share a row, keep the text gap between them (the 20 x 20 mm size of block 44 used to put them on top of each other). <sub>`group_names_on_both_sides_keep_the_text_gap`</sub>
+- A box whose group names are on one side only, or whose names already fit, keeps the size it was given. <sub>`one_sided_group_names_keep_the_given_size`</sub>
+- The reference and value captions sit above, and the function label below, everything the block draws: lead ends, pin numbers (whole text boxes, also when the block is rotated), connector pictures and group names. <sub>`captions_clear_everything_the_pins_draw`</sub>
+- The captions of a block that has no top pins stay exactly where they were (the top of the box plus the usual gaps). <sub>`captions_of_a_block_without_top_pins_do_not_move`</sub>
 
 ### cable
 
@@ -2147,6 +2151,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reads a connector kind, treats null as absent and refuses an unknown kind as invalid JSON, like Rust <sub>`blockSymbol connectors`</sub>
 - refuses a bad connector name with the same messages as Rust and lets unnamed connectors repeat <sub>`blockSymbol connectors`</sub>
 - draws every block of the shared golden file exactly like Rust <sub>`connector golden (Rust twin)`</sub>
+- widens the box so group names on both sides keep the text gap <sub>`block captions and group names (Rust twin)`</sub>
+- keeps the given size when the group names are on one side only or already fit <sub>`block captions and group names (Rust twin)`</sub>
+- places captions above and below the whole text boxes, also when rotated or mirrored <sub>`block captions and group names (Rust twin)`</sub>
+- leaves the caption bounds of a block without top pins and of plain symbols as they were <sub>`block captions and group names (Rust twin)`</sub>
 
 ### frameEditor
 

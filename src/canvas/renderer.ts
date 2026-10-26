@@ -23,6 +23,7 @@ import {
   captionLineAnchors,
   resolveInstanceDef,
   symbolBounds,
+  captionBounds,
   transformLocal,
 } from "./dynamicSymbol";
 // 循環import防止のため定義はdynamicSymbol.tsへ移した。他モジュールとの互換のため再エクスポートする
@@ -554,7 +555,7 @@ export function drawSymbol(
     const slot = functionLabelSlot(def);
     const at = slot
       ? transformLocal(slot.at, inst)
-      : functionLabelFallbackAt(inst, symbolBounds(inst, def));
+      : functionLabelFallbackAt(inst, captionBounds(inst, def));
     const height = slot?.height ?? FUNCTION_LABEL_FONT;
     setDrawingFont(ctx, height, vp.scale, "monospace");
     const p = vp.toScreen(at);
@@ -696,7 +697,7 @@ export function drawDeviceBlock(
 
 /** 配置後のシンボル外形の上端Y(用紙座標)。 */
 export function symbolTopY(inst: SymbolInstance, def: SymbolDef): number {
-  return symbolBounds(inst, def).min.y;
+  return captionBounds(inst, def).min.y;
 }
 
 // --- エージェント編集オーバーレイ -------------------------------------------

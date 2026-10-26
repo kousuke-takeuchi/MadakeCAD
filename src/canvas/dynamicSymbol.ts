@@ -370,6 +370,24 @@ export function symbolBounds(
 }
 
 /**
+ * 参照記号・型番を上に、機能ラベル・説明・定格を下に置くための外形 (Rust側 svg::caption_bounds と同一)。
+ * 普通のシンボルは symbolBounds そのもの。ブロックは、ピン番号などの文字が基準点だけでなく文字の高さの
+ * ぶん上下へはみ出す (文字は回転しても横書きで、回転すると左右辺のピン番号が上下辺に来る) ので、
+ * 文字の高さも含める。文字は常に横書きなので、上下の範囲に効くのは文字の高さだけ。
+ */
+export function captionBounds(inst: SymbolInstance, def: SymbolDef): { min: Point; max: Point } {
+  const { min, max } = symbolBounds(inst, def);
+  if (def.id !== BLOCK_SYMBOL_ID) return { min, max };
+  for (const prim of def.primitives) {
+    if (prim.type !== "text") continue;
+    const c = transformLocal(prim.at, inst);
+    min.y = Math.min(min.y, c.y - prim.height / 2);
+    max.y = Math.max(max.y, c.y + prim.height / 2);
+  }
+  return { min, max };
+}
+
+/**
  * ピングループ括弧 (G8) とキャプションが用紙の上で占める矩形の一覧
  * (Rust側 pin_groups::pin_group_paper_boxes と同一)。文字は回転しても横書きのままなので、
  * キャプションの箱は用紙座標で文字幅・文字高から取る。
@@ -612,9 +630,64 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   return { pins, size };
 }
 
+/** 左右の辺の内側に書く文字の1つ分: 縦の位置・外形の内壁からの張り出し・まとまりの名前か (Rust側 SideText)。 */
+interface SideText {
+  y: number;
+  extent: number;
+  label: boolean;
+}
+
+/** 左右の辺の内側に書く文字 (ピン名とまとまりの名前) の位置 (Rust側 side_texts。pinLayout / labelAt と同じ式)。 */
+function sideTexts(side: BlockPin[]): SideText[] {
+  const n = side.length;
+  const nameIn = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
+  const out: SideText[] = [];
+  side.forEach((pin, i) => {
+    const name = pin.name ?? "";
+    if (name === "") return;
+    const start = pin.connector != null ? nameIn : BLOCK_TEXT_PAD_MM;
+    out.push({ y: offset(i, n), extent: start + nameWidth(name), label: false });
+  });
+  for (const group of connectorGroups(side)) {
+    const label = groupLabel(group);
+    if (label === null) continue;
+    const first = offset(group.start, n);
+    const count = group.end - group.start;
+    let y = first;
+    let start = nameIn;
+    if (count >= 2) {
+      y = first + BLOCK_PIN_PITCH_MM / 2 + BLOCK_PIN_PITCH_MM * Math.floor((count - 1) / 2);
+    } else {
+      const name = side[group.start].name ?? "";
+      if (name !== "") start = nameIn + nameWidth(name) + CONNECTOR_LABEL_GAP_MM;
+    }
+    out.push({ y, extent: start + nameWidth(label), label: true });
+  }
+  return out;
+}
+
+/**
+ * 左右の辺の文字が同じ行 (文字の高さの範囲が重なる) に並び、そのどちらかがまとまりの名前のとき、
+ * 左の文字・文字の間隔・右の文字が収まる幅 mm。そういう行が無ければ0 (Rust側 shared_row_width)。
+ */
+function sharedRowWidth(pins: BlockPins): number {
+  const left = sideTexts(sideOf(pins, "left"));
+  const right = sideTexts(sideOf(pins, "right"));
+  let need = 0;
+  for (const l of left) {
+    for (const r of right) {
+      if ((l.label || r.label) && Math.abs(l.y - r.y) < BLOCK_PIN_TEXT_MM - 1e-9) {
+        need = Math.max(need, l.extent + CONNECTOR_LABEL_GAP_MM + r.extent);
+      }
+    }
+  }
+  return need;
+}
+
 /** ブロックの外形寸法 mm (Rust側 `block_box` と同じ)。 */
 export function blockBox(pins: BlockPins, size: { w: number; h: number } | null): [number, number] {
-  if (size) return [size.w, size.h];
+  // 指定の幅でも、左右のまとまりの名前が同じ行で重なるなら、収まる幅まで広げる
+  if (size) return [Math.max(size.w, snapUp(sharedRowWidth(pins), BLOCK_SIZE_STEP_MM)), size.h];
   const left = sideOf(pins, "left");
   const right = sideOf(pins, "right");
   const top = sideOf(pins, "top");

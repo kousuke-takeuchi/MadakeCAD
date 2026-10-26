@@ -1376,7 +1376,8 @@ pub fn sheet_to_dxf_with_frame(
         w.pair(43, 1);
         w.pair(50, num(dxf_angle(inst.rotation)));
         let top = crate::svg::symbol_top_y(inst, &def);
-        let (min, max) = crate::svg::symbol_bounds(inst, &def);
+        let (min, _) = crate::svg::symbol_bounds(inst, &def);
+        let (_, max) = crate::svg::caption_bounds(inst, &def);
         let cx = (min.x + max.x) / 2.0;
         for (i, (tag, value, invisible)) in instance_attributes(inst, &def).into_iter().enumerate() {
             let (layer, at) = match tag.as_str() {

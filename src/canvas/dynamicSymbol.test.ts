@@ -4,12 +4,15 @@ import { describe, expect, it } from "vitest";
 import type { SymbolDef, SymbolInstance } from "../ipc";
 import {
   blockSymbol,
+  captionBounds,
   dynamicSymbol,
   resolveInstanceDef,
   pinGroupPaperBoxes,
   resolveSymbolDef,
   symbolBounds,
+  transformLocal,
 } from "./dynamicSymbol";
+import { textWidthMm } from "./textWidth";
 import golden from "../../src-tauri/crates/madake-core/tests/golden/connector-blocks.json";
 
 describe("dynamicSymbol", () => {
@@ -476,14 +479,96 @@ function rounded(v: unknown): unknown {
 describe("connector golden (Rust twin)", () => {
   // ja: golden ファイルの全例 (全種類×全辺・AOGU の機器・コネクタの無いブロック) で、TS は Rust と同じプリミティブとピンを返す
   it("draws every block of the shared golden file exactly like Rust", () => {
-    expect(golden.cases.length).toBe(57);
+    expect(golden.cases.length).toBe(59);
     for (const c of golden.cases) {
-      const def = blockSymbol(c.attrs);
+      const def = blockSymbol(c.attrs as Record<string, string>);
       expect({ name: c.name, primitives: rounded(def.primitives), pins: rounded(def.pins) }).toEqual({
         name: c.name,
         primitives: c.primitives,
         pins: c.pins,
       });
     }
+  });
+});
+
+describe("block captions and group names (Rust twin)", () => {
+  const BOARD_44 = JSON.stringify({
+    left: ["VBUS", "D-", "D+", "GND"].map((name, i) => ({ no: String(i + 1), name, connector: "jst_xh_f", connector_ref: "X44B" })),
+    right: ["VBUS", "D-", "D+", "GND"].map((name, i) => ({ no: String(i + 5), name, connector: "jst_xh_f", connector_ref: "X44A" })),
+  });
+  const textBox = (def: SymbolDef, needle: string): { lo: number; hi: number } => {
+    for (const prim of def.primitives) {
+      if (prim.type === "text" && prim.text === needle) {
+        const half = textWidthMm(prim.text, prim.height) / 2;
+        return { lo: prim.at.x - half, hi: prim.at.x + half };
+      }
+    }
+    throw new Error(`文字 ${needle} が描かれていない`);
+  };
+
+  // ja: 左右にまとまりの名前があるときは、同じ行の2つの名前が文字の間隔 (1mm) を空けて収まる幅になる (44 の 20 x 20 指定は広がる)
+  it("widens the box so group names on both sides keep the text gap", () => {
+    const def = blockSymbol({ block_pins: BOARD_44, block_size: '{"w":20,"h":20}' });
+    const left = textBox(def, "X44B XH");
+    const right = textBox(def, "X44A XH");
+    expect(right.lo - left.hi).toBeGreaterThanOrEqual(1 - 1e-9);
+    const rect = def.primitives.flatMap((p) => (p.type === "line" ? p.pts.map((q) => q.x) : []));
+    expect(Math.max(...rect) - Math.min(...rect)).toBeGreaterThan(20);
+  });
+
+  // ja: まとまりの名前が片側だけ、またはもう収まっている箱は指定の大きさのまま
+  it("keeps the given size when the group names are on one side only or already fit", () => {
+    const oneSide =
+      '{"left":[{"no":"1","name":"VBUS","connector":"jst_xh_f","connector_ref":"X44B"},{"no":"2","name":"D-","connector":"jst_xh_f","connector_ref":"X44B"}],"right":[{"no":"5"},{"no":"6"}]}';
+    const fixed = blockSymbol({ block_pins: oneSide, block_size: '{"w":20,"h":20}' });
+    expect(Math.max(...fixed.pins.map((p) => p.at.x))).toBe(12.5);
+    const roomy = blockSymbol({ block_pins: BOARD_44, block_size: '{"w":50,"h":20}' });
+    expect(Math.max(...roomy.pins.map((p) => p.at.x))).toBe(30);
+  });
+
+  const placed = (json: string, rotation: number, mirror: boolean): [SymbolInstance, SymbolDef] => {
+    const inst: SymbolInstance = {
+      id: "i",
+      symbol_id: "block",
+      at: { x: 0, y: 0 },
+      rotation,
+      mirror,
+      reference: "39",
+      value: "USBハブ",
+      attrs: { block_pins: json },
+    };
+    return [inst, blockSymbol(inst.attrs)];
+  };
+
+  // ja: 参照記号・型番は文字の箱まで含めた上端の上、機能ラベルは下端の下に置く (回転・ミラーでも。Rust の captions_clear_everything_the_pins_draw と同じ)
+  it("places captions above and below the whole text boxes, also when rotated or mirrored", () => {
+    const longNumbers =
+      '{"left":[{"no":"4444","connector":"usb_c_f"},{"no":"333","connector":"usb_a_f"}],"right":[{"no":"2222","connector":"usb_a_f"}],"top":[{"no":"U1","connector":"usb_a_f"},{"no":"U2","connector":"usb_a_f"}],"bottom":[{"no":"PWR","connector":"micro_b_f"}]}';
+    for (const rotation of [0, 90, 180, 270]) {
+      for (const mirror of [false, true]) {
+        const [inst, def] = placed(longNumbers, rotation, mirror);
+        const base = symbolBounds(inst, def);
+        let lo = base.min.y;
+        let hi = base.max.y;
+        for (const prim of def.primitives) {
+          if (prim.type !== "text") continue;
+          const c = transformLocal(prim.at, inst);
+          lo = Math.min(lo, c.y - prim.height / 2);
+          hi = Math.max(hi, c.y + prim.height / 2);
+        }
+        const caption = captionBounds(inst, def);
+        expect(caption.min.y).toBeLessThanOrEqual(lo + 1e-9);
+        expect(caption.max.y).toBeGreaterThanOrEqual(hi - 1e-9);
+      }
+    }
+  });
+
+  // ja: 上辺にピンの無いブロックと普通のシンボルの参照記号・型番の位置は今までと同じ
+  it("leaves the caption bounds of a block without top pins and of plain symbols as they were", () => {
+    const [inst, def] = placed('{"left":[{"no":"IN","name":"IN"}],"right":[{"no":"OUT","name":"OUT"}]}', 0, false);
+    expect(captionBounds(inst, def)).toEqual(symbolBounds(inst, def));
+    const terminal = dynamicSymbol("terminal_block_3p")!;
+    const plain = { ...inst, symbol_id: "terminal_block_3p", attrs: {} };
+    expect(captionBounds(plain, terminal)).toEqual(symbolBounds(plain, terminal));
   });
 });

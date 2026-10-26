@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3004仕様項目**。
+全6領域・**3012仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -45,6 +45,10 @@
 - まとまりの名前は空いた所に書く: 2〜3本のまとまりは中ほどのピンの間、1本だけならピン名の後ろ、上辺は7mm内側。JST はシリーズを書き、名前の無い端子台は何も書かない。 <sub>`group_labels_sit_in_the_free_places`</sub>
 - 外形の自動寸法はまとまりの名前の場所も取る: ピン名より広い名前で箱が広がり、まとまりの名前を書く上辺は箱の内側に10mmを取る。 <sub>`the_outline_makes_room_for_group_names`</sub>
 - Task 5〜6 の挙動の回帰テスト (最初から通る): 全種類のコネクタ・普通のピン・1〜4文字のピン番号・ピン名・まとまりの名前を並べても、文字同士は重ならず、文字が絵・リード・外形に重ならない (AOGU のハブとアンプも含む)。 <sub>`connector_texts_never_overlap`</sub>
+- 左右の両方にまとまりの名前があるときは、同じ行に並ぶ2つの名前が文字の間隔を空けて収まる幅になる (ブロック 44 の 20 x 20 mm では名前が重なっていた)。 <sub>`group_names_on_both_sides_keep_the_text_gap`</sub>
+- まとまりの名前が片側だけの箱、または名前がもう収まっている箱は、指定された大きさのまま。 <sub>`one_sided_group_names_keep_the_given_size`</sub>
+- 参照記号・型番は、ブロックが描くもの (リードの先・ピン番号の文字の箱全体 (回転しても)・コネクタの絵・まとまりの名前) の上、機能ラベルは下に置く。 <sub>`captions_clear_everything_the_pins_draw`</sub>
+- 上辺にピンの無いブロックの参照記号・型番は今までと同じ位置 (外形の上端+いつもの間隔) のまま。 <sub>`captions_of_a_block_without_top_pins_do_not_move`</sub>
 
 ### cable
 
@@ -2147,6 +2151,10 @@
 - ピンはコネクタの形を接点と一緒に持て、null は書かなかったのと同じ。知らない種類は Rust と同じく壊れた JSON として断る <sub>`blockSymbol connectors`</sub>
 - コネクタの名前の誤りは Rust と同じ文で断り (空・コネクタなし・まとめない種類・2つのまとまり)、名前の無いコネクタは繰り返してよい <sub>`blockSymbol connectors`</sub>
 - golden ファイルの全例 (全種類×全辺・AOGU の機器・コネクタの無いブロック) で、TS は Rust と同じプリミティブとピンを返す <sub>`connector golden (Rust twin)`</sub>
+- 左右にまとまりの名前があるときは、同じ行の2つの名前が文字の間隔 (1mm) を空けて収まる幅になる (44 の 20 x 20 指定は広がる) <sub>`block captions and group names (Rust twin)`</sub>
+- まとまりの名前が片側だけ、またはもう収まっている箱は指定の大きさのまま <sub>`block captions and group names (Rust twin)`</sub>
+- 参照記号・型番は文字の箱まで含めた上端の上、機能ラベルは下端の下に置く (回転・ミラーでも。Rust の captions_clear_everything_the_pins_draw と同じ) <sub>`block captions and group names (Rust twin)`</sub>
+- 上辺にピンの無いブロックと普通のシンボルの参照記号・型番の位置は今までと同じ <sub>`block captions and group names (Rust twin)`</sub>
 
 ### frameEditor
 
