@@ -323,6 +323,57 @@ fn side_text_width(side: &[BlockPin]) -> f64 {
     width
 }
 
+/// 左右の辺の内側に書く文字の1つ分: 縦の位置 (外形の中心から) と、外形の内壁からの張り出し (mm)。
+struct SideText {
+    y: f64,
+    extent: f64,
+    /// まとまりの名前か (ピン名ではない)。
+    label: bool,
+}
+
+/// 左右の辺の内側に書く文字 (ピン名とまとまりの名前) の位置。[`pin_layout`] と [`label_at`] の式と同じ。
+fn side_texts(side: &[BlockPin]) -> Vec<SideText> {
+    let n = side.len();
+    let name_in = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
+    let mut out = Vec::new();
+    for (i, pin) in side.iter().enumerate() {
+        if !pin.name.is_empty() {
+            let start = if pin.connector.is_some() { name_in } else { BLOCK_TEXT_PAD_MM };
+            out.push(SideText { y: offset(i, n), extent: start + name_width(&pin.name), label: false });
+        }
+    }
+    for group in connector_groups(side) {
+        let Some(label) = group_label(&group) else { continue };
+        let label_w = name_width(&label);
+        let first = offset(group.start, n);
+        let count = group.end - group.start;
+        let (y, start) = if count >= 2 {
+            (first + BLOCK_PIN_PITCH_MM / 2.0 + BLOCK_PIN_PITCH_MM * ((count - 1) / 2) as f64, name_in)
+        } else {
+            let name = &side[group.start].name;
+            (first, if name.is_empty() { name_in } else { name_in + name_width(name) + CONNECTOR_LABEL_GAP_MM })
+        };
+        out.push(SideText { y, extent: start + label_w, label: true });
+    }
+    out
+}
+
+/// 左右の辺の文字が同じ行 (文字の高さの範囲が重なる) に並び、そのどちらかがまとまりの名前のとき、
+/// 左の文字・[`CONNECTOR_LABEL_GAP_MM`]・右の文字が収まる幅 (mm)。そういう行が無ければ0。
+/// ピン名どうしだけが並ぶ行は数えない (今までどおり)。
+fn shared_row_width(pins: &BlockPins) -> f64 {
+    let (left, right) = (side_texts(&pins.left), side_texts(&pins.right));
+    let mut need = 0.0_f64;
+    for l in &left {
+        for r in &right {
+            if (l.label || r.label) && (l.y - r.y).abs() < BLOCK_PIN_TEXT_MM - 1e-9 {
+                need = need.max(l.extent + CONNECTOR_LABEL_GAP_MM + r.extent);
+            }
+        }
+    }
+    need
+}
+
 /// 外形寸法を決める。明示指定があればそれ、無ければピン数とピン名の長さから自動。
 ///
 /// 自動のときは
@@ -332,7 +383,9 @@ fn side_text_width(side: &[BlockPin]) -> f64 {
 /// いずれも5mm刻みへ切り上げるので、外形の四辺は必ず2.5mmグリッドに載る。
 pub fn block_box(spec: &BlockSpec) -> (f64, f64) {
     if let Some(size) = spec.size {
-        return (size.w, size.h);
+        // 指定の幅でも、左右のまとまりの名前が同じ行で重なるなら、収まる幅まで広げる
+        let w = size.w.max(snap_up(shared_row_width(&spec.pins), BLOCK_SIZE_STEP_MM));
+        return (w, size.h);
     }
     let pins = &spec.pins;
     let rows = pins.left.len().max(pins.right.len());
@@ -1124,7 +1177,7 @@ mod tests {
     const CONNECTOR_GOLDEN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/connector-blocks.json");
 
     /// golden の例: 13種類×4辺 (普通のピン2本の間に1本、まとめる種類は名前付きの2本) と、AOGU の機器・重なりの例・コネクタの無いブロック。
-    fn golden_cases() -> Vec<(String, String)> {
+    fn golden_cases() -> Vec<(String, String, Option<&'static str>)> {
         let mut cases = Vec::new();
         for kind in ConnectorKind::ALL {
             let k = kind.name();
@@ -1135,12 +1188,16 @@ mod tests {
                     format!(r#"{{"no":"1","name":"A","connector":"{k}"}}"#)
                 };
                 let json = format!(r#"{{"{side}":[{{"no":"0"}},{connector},{{"no":"9"}}]}}"#);
-                cases.push((format!("{k}-{side}"), json));
+                cases.push((format!("{k}-{side}"), json, None));
             }
         }
         for (name, json) in [("aogu-hub-39", HUB_39), ("aogu-amp-53", AMP_53), ("mixed-left-right", MIXED), ("top-bottom", TOP_BOTTOM), ("plain", SAMPLE)] {
-            cases.push((name.to_string(), json.to_string()));
+            cases.push((name.to_string(), json.to_string(), None));
         }
+        // 上辺にコネクタのあるハブ (外形 40 x 25 の指定) と、左右にまとまりの名前を持つ 44 (外形 20 x 20 の指定は名前が収まる幅へ広がる)
+        let hub_top = r#"{"top":[{"no":"U1","connector":"usb_a_f"},{"no":"U2","connector":"usb_a_f"},{"no":"U3","connector":"usb_a_f"},{"no":"U4","connector":"usb_a_f"}]}"#;
+        cases.push(("hub-top-sized".to_string(), hub_top.to_string(), Some(r#"{"w":40,"h":25}"#)));
+        cases.push(("board-44-both-labels".to_string(), BOARD_44.to_string(), Some(r#"{"w":20,"h":20}"#)));
         cases
     }
 
@@ -1160,11 +1217,15 @@ mod tests {
     fn golden_json() -> serde_json::Value {
         let cases: Vec<serde_json::Value> = golden_cases()
             .into_iter()
-            .map(|(name, pins)| {
-                let def = block_symbol(&attrs(&[("block_pins", &pins)])).unwrap_or_else(|e| panic!("{name}: {e}"));
+            .map(|(name, pins, size)| {
+                let mut a = attrs(&[("block_pins", &pins)]);
+                if let Some(size) = size {
+                    a.insert("block_size".into(), size.into());
+                }
+                let def = block_symbol(&a).unwrap_or_else(|e| panic!("{name}: {e}"));
                 serde_json::json!({
                     "name": name,
-                    "attrs": { "block_pins": pins },
+                    "attrs": a,
                     "primitives": rounded(serde_json::to_value(&def.primitives).unwrap()),
                     "pins": rounded(serde_json::to_value(&def.pins).unwrap()),
                 })
@@ -1341,15 +1402,24 @@ mod tests {
 
     /// 仕様 §2.5 の重なりの決まりを1つのブロックで確かめる。
     fn assert_nothing_overlaps(json: &str) {
+        assert_nothing_overlaps_sized(json, None);
+    }
+
+    /// [`assert_nothing_overlaps`] に、`block_size` の指定と、参照記号・型番の文字も加えたもの。
+    fn assert_nothing_overlaps_sized(json: &str, size: Option<&str>) {
         use crate::connector::primitive_extent;
-        let a = attrs(&[("block_pins", json)]);
+        let mut pairs = vec![("block_pins", json)];
+        if let Some(size) = size {
+            pairs.push(("block_size", size));
+        }
+        let a = attrs(&pairs);
         let spec = parse_block_spec(&a).expect("ピン表");
         let def = block_symbol(&a).expect("ブロック定義");
         let (w, h) = block_box(&spec);
         let (hw, hh) = (w / 2.0, h / 2.0);
         // 普通のピンの番号は今でも外形をまたぐことがある (仕様 §2.5 (c) の対象外)
         let plain_numbers: Vec<&str> = spec.pins.all().filter(|p| p.connector.is_none()).map(|p| p.no.trim()).collect();
-        let text_boxes: Vec<(String, (Point, Point))> = def
+        let mut text_boxes: Vec<(String, (Point, Point))> = def
             .primitives
             .iter()
             .filter_map(|p| match p {
@@ -1362,6 +1432,21 @@ mod tests {
                 _ => None,
             })
             .collect();
+        // 参照記号と型番 (ベースラインは外形の上端から REF_LABEL_DY / VALUE_LABEL_DY 上。文字はベースラインから上へ LABEL_FONT)
+        // 外形の指定もインスタンスに載せる (配置されるブロックと同じ属性)
+        let (mut inst, _) = placed(json, 0, false);
+        if let Some(size) = size {
+            inst.attrs.insert(BLOCK_SIZE_ATTR.into(), size.into());
+        }
+        let top = crate::svg::symbol_top_y(&inst, &def);
+        for (caption, dy) in [("39", crate::svg::REF_LABEL_DY), ("USBハブ", crate::svg::VALUE_LABEL_DY)] {
+            let half = crate::tidy::text_width(caption, crate::svg::LABEL_FONT) / 2.0;
+            let baseline = top - dy;
+            text_boxes.push((
+                format!("キャプション {caption}"),
+                (Point::new(-half, baseline - crate::svg::LABEL_FONT), Point::new(half, baseline)),
+            ));
+        }
         let mut pictures = Vec::new();
         for (list, dir) in [
             (&spec.pins.left, PinDir::Left),
@@ -1413,6 +1498,129 @@ mod tests {
     fn connector_texts_never_overlap() {
         for json in [MIXED, HUB_39, AMP_53, TOP_BOTTOM] {
             assert_nothing_overlaps(json);
+        }
+        // AOGU のハブ 39 の上辺 (外形 40 x 25) と、左右にまとまりの名前を持つ 44 (外形 20 x 20 の指定)
+        assert_nothing_overlaps_sized(HUB_39, Some(r#"{"w":40,"h":25}"#));
+        assert_nothing_overlaps_sized(BOARD_44, Some(r#"{"w":20,"h":20}"#));
+    }
+
+    /// 44: the LTE power board of the AOGU drawing. Pins 1-4 on the left and 5-8 on the right each form a 4-pin JST XH, and both group names are drawn on the same row.
+    const BOARD_44: &str = r#"{"left":[{"no":"1","name":"VBUS","connector":"jst_xh_f","connector_ref":"X44B"},{"no":"2","name":"D-","connector":"jst_xh_f","connector_ref":"X44B"},{"no":"3","name":"D+","connector":"jst_xh_f","connector_ref":"X44B"},{"no":"4","name":"GND","connector":"jst_xh_f","connector_ref":"X44B"}],"right":[{"no":"5","name":"VBUS","connector":"jst_xh_f","connector_ref":"X44A"},{"no":"6","name":"D-","connector":"jst_xh_f","connector_ref":"X44A"},{"no":"7","name":"D+","connector":"jst_xh_f","connector_ref":"X44A"},{"no":"8","name":"GND","connector":"jst_xh_f","connector_ref":"X44A"}]}"#;
+
+    /// The text box (lo, hi) of the text drawn at `needle`.
+    fn text_box(def: &SymbolDef, needle: &str) -> (Point, Point) {
+        def.primitives
+            .iter()
+            .find_map(|p| match p {
+                Primitive::Text { at, text, height } if text == needle => {
+                    let half = crate::tidy::text_width(text, *height) / 2.0;
+                    Some((Point::new(at.x - half, at.y - height / 2.0), Point::new(at.x + half, at.y + height / 2.0)))
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("文字 {needle} が描かれていない"))
+    }
+
+    /// With group names on both the left and the right, the box is wide enough that the two names, which share a row, keep the text gap between them (the 20 x 20 mm size of block 44 used to put them on top of each other).
+    /// 左右の両方にまとまりの名前があるときは、同じ行に並ぶ2つの名前が文字の間隔を空けて収まる幅になる (ブロック 44 の 20 x 20 mm では名前が重なっていた)。
+    #[test]
+    fn group_names_on_both_sides_keep_the_text_gap() {
+        let a = attrs(&[("block_pins", BOARD_44), ("block_size", r#"{"w":20,"h":20}"#)]);
+        let def = block_symbol(&a).expect("ブロック定義");
+        let left = text_box(&def, "X44B XH");
+        let right = text_box(&def, "X44A XH");
+        assert!(
+            right.0.x - left.1.x >= CONNECTOR_LABEL_GAP_MM - 1e-9,
+            "左の名前 {left:?} と右の名前 {right:?} の間が {CONNECTOR_LABEL_GAP_MM}mm に足りない"
+        );
+        let (w, _) = block_box(&parse_block_spec(&a).unwrap());
+        assert!(w > 20.0, "20mm のままでは収まらないので広がる: {w}");
+    }
+
+    /// A box whose group names are on one side only, or whose names already fit, keeps the size it was given.
+    /// まとまりの名前が片側だけの箱、または名前がもう収まっている箱は、指定された大きさのまま。
+    #[test]
+    fn one_sided_group_names_keep_the_given_size() {
+        let size = |json: &str, wh: &str| block_box(&parse_block_spec(&attrs(&[("block_pins", json), ("block_size", wh)])).unwrap());
+        let one_side = r#"{"left":[{"no":"1","name":"VBUS","connector":"jst_xh_f","connector_ref":"X44B"},{"no":"2","name":"D-","connector":"jst_xh_f","connector_ref":"X44B"}],"right":[{"no":"5"},{"no":"6"}]}"#;
+        assert_eq!(size(one_side, r#"{"w":20,"h":20}"#), (20.0, 20.0));
+        assert_eq!(size(BOARD_44, r#"{"w":50,"h":20}"#), (50.0, 20.0));
+    }
+
+    /// 描かれた文字 (文字列, 基準点, 高さ)。
+    fn text_primitives(def: &SymbolDef) -> Vec<(String, Point, f64)> {
+        def.primitives
+            .iter()
+            .filter_map(|p| match p {
+                Primitive::Text { at, text, height } => Some((text.clone(), *at, *height)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// An instance of the block at the origin, `rotation` degrees, optionally mirrored.
+    fn placed(json: &str, rotation: u16, mirror: bool) -> (crate::model::SymbolInstance, SymbolDef) {
+        let crate::model::Entity::Symbol(mut inst) = test_block("39", "USBハブ", 0.0, 0.0, json) else { unreachable!() };
+        inst.rotation = rotation;
+        inst.mirror = mirror;
+        let def = block_symbol(&inst.attrs).expect("ブロック定義");
+        (inst, def)
+    }
+
+    /// The reference and value captions sit above, and the function label below, everything the block draws: lead ends, pin numbers (whole text boxes, also when the block is rotated), connector pictures and group names.
+    /// 参照記号・型番は、ブロックが描くもの (リードの先・ピン番号の文字の箱全体 (回転しても)・コネクタの絵・まとまりの名前) の上、機能ラベルは下に置く。
+    #[test]
+    fn captions_clear_everything_the_pins_draw() {
+        let long_numbers = r#"{"left":[{"no":"4444","connector":"usb_c_f"},{"no":"333","connector":"usb_a_f"}],"right":[{"no":"2222","connector":"usb_a_f"}],"top":[{"no":"U1","connector":"usb_a_f"},{"no":"U2","connector":"usb_a_f"}],"bottom":[{"no":"PWR","connector":"micro_b_f"}]}"#;
+        for json in [HUB_39, TOP_BOTTOM, MIXED, long_numbers] {
+            for rotation in [0, 90, 180, 270] {
+                for mirror in [false, true] {
+                    let (mut inst, def) = placed(json, rotation, mirror);
+                    inst.attrs.insert(crate::text_style::FUNCTION_LABEL_ATTR.into(), "機能".into());
+                    // 描かれたものの上下端: 外形・ピンの先に、文字の箱 (文字は回転しても横書きなので高さだけ) を足す
+                    let (mut lo, mut hi) = crate::svg::symbol_bounds(&inst, &def);
+                    for (_, at, height) in text_primitives(&def) {
+                        let c = crate::netlist::transform_local(at, &inst);
+                        lo.y = lo.y.min(c.y - height / 2.0);
+                        hi.y = hi.y.max(c.y + height / 2.0);
+                    }
+                    let drawn = crate::tidy::Rect { min: lo, max: hi };
+                    let top = crate::svg::symbol_top_y(&inst, &def);
+                    assert!(top <= drawn.min.y + 1e-9, "回転{rotation}・ミラー{mirror}: 型番の基準 {top} が描かれた上端 {} より下", drawn.min.y);
+                    let below = crate::text_style::function_label_placement(&inst, &def).expect("機能ラベル");
+                    assert!(
+                        below.at.y - below.height >= drawn.max.y - 1e-9,
+                        "回転{rotation}・ミラー{mirror}: 機能ラベルの上端 {} が描かれた下端 {} より上",
+                        below.at.y - below.height,
+                        drawn.max.y
+                    );
+                }
+            }
+        }
+    }
+
+    /// The captions of an auto-sized block that has no top pins stay exactly where they were (the top of the box plus the usual gaps).
+    /// 外形が自動で上辺にピンの無いブロックの参照記号・型番は今までと同じ位置 (外形の上端+いつもの間隔) のまま。
+    #[test]
+    fn captions_of_an_auto_sized_block_without_top_pins_do_not_move() {
+        let (inst, def) = placed(AMP_53, 0, false);
+        let (min, _) = crate::svg::symbol_bounds(&inst, &def);
+        assert!((crate::svg::symbol_top_y(&inst, &def) - min.y).abs() < 1e-9);
+    }
+
+    /// A block sized to its minimum height has the number of its first side pin poking 0.5 mm above the box top, so its captions move up 0.5 mm to clear that number even without top pins.
+    /// 最小の高さを指定したブロックは、最初の左右のピン番号が外形の上端から 0.5 mm はみ出すので、上辺にピンが無くても参照記号・型番はその番号を避けて 0.5 mm 上がる。
+    #[test]
+    fn captions_of_a_minimum_height_block_clear_the_side_pin_numbers() {
+        let json = r#"{"left":[{"no":"1"},{"no":"2"}]}"#;
+        let (mut inst, _) = placed(json, 0, false);
+        inst.attrs.insert(BLOCK_SIZE_ATTR.into(), r#"{"w":10,"h":10}"#.into());
+        let def = block_symbol(&inst.attrs).expect("ブロック定義");
+        let (min, _) = crate::svg::symbol_bounds(&inst, &def);
+        let top = crate::svg::symbol_top_y(&inst, &def);
+        assert!((top - (min.y - 0.5)).abs() < 1e-9, "外形の上端 {} から 0.5 mm 上のはず: {top}", min.y);
+        for (text, at, height) in text_primitives(&def) {
+            assert!(top <= at.y - height / 2.0 + 1e-9, "番号 {text} の上端 {} が型番の基準 {top} より上", at.y - height / 2.0);
         }
     }
 }

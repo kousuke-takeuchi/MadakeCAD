@@ -171,6 +171,26 @@ describe("block attributes built from the draft", () => {
     expect(draftSize(d)).toEqual({ w: 40, h: 35 });
   });
 
+  // ja: 手動の外形でも、左右のまとまりの名前が同じ行に並んで広がった幅を表示する (44 の 20 x 20 指定はプレビューと同じ幅になる)
+  it("reports the widened size of a manual outline whose group names on both sides share a row", () => {
+    const row = (no: number, name: string, ref: string) => ({ no: String(no), name, connector: "jst_xh_f" as const, connectorRef: ref });
+    const names = ["VBUS", "D-", "D+", "GND"];
+    const d: BlockDraft = {
+      rows: {
+        left: names.map((n, i) => row(i + 1, n, "X44B")),
+        right: names.map((n, i) => row(i + 5, n, "X44A")),
+        top: [],
+        bottom: [],
+      },
+      size: { w: 20, h: 20 },
+    };
+    // プレビューの箱の幅: 右のピンの先 (外形の右端+リード 5 mm) から求める
+    const def = draftSymbol(d)!;
+    const previewW = 2 * (Math.max(...def.pins.map((p) => p.at.x)) - 5);
+    expect(previewW).toBeGreaterThan(20);
+    expect(draftSize(d)).toEqual({ w: previewW, h: 20 });
+  });
+
   // ja: プレビューは実際に描かれるシンボル定義そのもの(ピンの数だけ接続点がある)
   it("previews the very symbol that will be drawn, with one connection point per pin", () => {
     const def = draftSymbol(draft());

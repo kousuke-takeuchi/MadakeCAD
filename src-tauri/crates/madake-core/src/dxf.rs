@@ -1376,7 +1376,8 @@ pub fn sheet_to_dxf_with_frame(
         w.pair(43, 1);
         w.pair(50, num(dxf_angle(inst.rotation)));
         let top = crate::svg::symbol_top_y(inst, &def);
-        let (min, max) = crate::svg::symbol_bounds(inst, &def);
+        let (min, _) = crate::svg::symbol_bounds(inst, &def);
+        let (_, max) = crate::svg::caption_bounds(inst, &def);
         let cx = (min.x + max.x) / 2.0;
         for (i, (tag, value, invisible)) in instance_attributes(inst, &def).into_iter().enumerate() {
             let (layer, at) = match tag.as_str() {
@@ -3073,6 +3074,43 @@ mod tests {
             .collect::<BTreeMap<String, usize>>()
         );
         assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+    }
+
+    /// The DESC1 attribute of a rotated block whose side pin numbers poke out below its outline sits below the lowest of those number texts, not just below the outline.
+    /// 回転したブロックで左右のピン番号の文字が外形より下へはみ出すとき、DESC1 の属性は外形の下ではなく、いちばん下の番号の文字よりさらに下に置く。
+    #[test]
+    fn the_description_of_a_rotated_block_sits_below_its_pin_numbers() {
+        let json = r#"{"left":[{"no":"4444","connector":"usb_c_f"},{"no":"333","connector":"usb_a_f"}],"right":[{"no":"2222","connector":"usb_a_f"}]}"#;
+        let mut sheet = Sheet::new("S", PaperSize::A3, Orientation::Landscape);
+        let Entity::Symbol(mut inst) = crate::block::test_block("39", "USBハブ", 100.0, 100.0, json) else { unreachable!() };
+        inst.rotation = 90;
+        inst.attrs.insert(crate::symbol::SLOT_DESC.into(), "説明".into());
+        let def = crate::block::block_symbol(&inst.attrs).expect("ブロック定義");
+        // 番号の文字の箱 (回転しても横書き) のいちばん下
+        let lowest = def
+            .primitives
+            .iter()
+            .filter_map(|p| match p {
+                Primitive::Text { at, height, .. } => Some(crate::netlist::transform_local(*at, &inst).y + height / 2.0),
+                _ => None,
+            })
+            .fold(f64::MIN, f64::max);
+        let (_, outline_max) = crate::svg::symbol_bounds(&inst, &def);
+        assert!(lowest > outline_max.y + 1e-9, "この例は番号が外形より下へはみ出す: {lowest} / {}", outline_max.y);
+        sheet.entities.insert(inst.id, Entity::Symbol(inst));
+        let (dxf, _) = sheet_to_dxf(&sheet, &defs(&sheet), &[]);
+        let (_, paper_h) = sheet.paper_mm();
+        let desc = entity_records(&dxf)
+            .into_iter()
+            .find(|r| r.kind == "ATTRIB" && r.get(2) == Some("DESC1"))
+            .expect("DESC1");
+        // DXF の y は上向きなので用紙の y へ戻す。説明の文字 (高さ TEXT_HEIGHT) の上端が番号の下端より下
+        let baseline = paper_h - desc.num(20).expect("DESC1 の y");
+        assert!(
+            baseline - TEXT_HEIGHT >= lowest - 1e-9,
+            "DESC1 の文字の上端 {} がいちばん下の番号の文字 {lowest} より上",
+            baseline - TEXT_HEIGHT
+        );
     }
 
     /// A symbol whose definition cannot be resolved is reported in the export report instead of disappearing without a word.

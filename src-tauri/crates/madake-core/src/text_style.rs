@@ -107,7 +107,7 @@ pub fn function_label_placement(inst: &SymbolInstance, def: &SymbolDef) -> Optio
             height: slot.height,
         },
         None => {
-            let (_, max) = crate::svg::symbol_bounds(inst, def);
+            let (_, max) = crate::svg::caption_bounds(inst, def);
             return function_label_below(inst, inst.at.x, max.y);
         }
     })
