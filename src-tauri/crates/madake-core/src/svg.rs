@@ -339,6 +339,97 @@ pub(crate) fn symbol_top_y(inst: &crate::model::SymbolInstance, def: &SymbolDef)
     caption_bounds(inst, def).0.y
 }
 
+/// 参照記号・型番の置き場所: 文字の寄せ (`end` = 右揃え) の基準X、`top - REF_LABEL_DY` /
+/// `top - VALUE_LABEL_DY` が各行のベースラインになる基準Y。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct CaptionAnchor {
+    pub x: f64,
+    pub top: f64,
+    pub end: bool,
+}
+
+/// 参照記号・型番の置き場所を決める。
+///
+/// 普通は配置基準点の真上に中央揃え (`symbol_top_y` の上)。ただしブロックの描かれた上辺に
+/// ピンがあるときは、そこから出る配線が中央の文字を横切るので、外形の**左上の角の外**
+/// (左辺の [`CORNER_CAPTION_GAP`] 左・上辺の上) に右揃えで置く。ブロックが描く他のもの
+/// (他の辺のリード・番号・コネクタの絵・まとまりの名前) に文字が重なるときは、その上まで上げる。
+pub(crate) fn caption_anchor(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> CaptionAnchor {
+    top_left_corner_anchor(inst, def).unwrap_or(CaptionAnchor {
+        x: inst.at.x,
+        top: symbol_top_y(inst, def),
+        end: false,
+    })
+}
+
+/// 外形の左辺と右揃えの文字の右端との間隔 (mm)。上辺との間隔は型番のベースライン
+/// ([`VALUE_LABEL_DY`]) と同じ 1.0 mm。
+pub(crate) const CORNER_CAPTION_GAP: f64 = 1.0;
+
+fn top_left_corner_anchor(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> Option<CaptionAnchor> {
+    use crate::tidy::Rect;
+    if !crate::block::is_block_export_id(&def.id) {
+        return None;
+    }
+    let spec = crate::block::parse_block_spec(&inst.attrs).ok()?;
+    let (w, h) = crate::block::block_box(&spec);
+    let a = transform_local(Point::new(-w / 2.0, -h / 2.0), inst);
+    let b = transform_local(Point::new(w / 2.0, h / 2.0), inst);
+    let body = Rect::from_corners(a, b);
+    let eps = 1e-6;
+    let has_top_pin = def.pins.iter().any(|pin| {
+        let t = transform_local(pin.at, inst);
+        t.y < body.min.y - eps && t.x > body.min.x - eps && t.x < body.max.x + eps
+    });
+    if !has_top_pin {
+        return None;
+    }
+    let x = body.min.x - CORNER_CAPTION_GAP;
+    // 描かれるもの (図形の外接矩形・文字の箱全体・ピングループの括弧)
+    let mut drawn: Vec<Rect> = Vec::new();
+    for prim in &def.primitives {
+        match prim {
+            Primitive::Text { at, text, height } => {
+                let c = transform_local(*at, inst);
+                let half = crate::tidy::text_width(text, *height) / 2.0;
+                drawn.push(Rect::from_corners(
+                    Point::new(c.x - half, c.y - height / 2.0),
+                    Point::new(c.x + half, c.y + height / 2.0),
+                ));
+            }
+            other => {
+                let (lo, hi) = crate::connector::primitive_extent(other);
+                drawn.push(Rect::from_corners(transform_local(lo, inst), transform_local(hi, inst)));
+            }
+        }
+    }
+    for (lo, hi) in crate::pin_groups::pin_group_paper_boxes(inst, def) {
+        drawn.push(Rect::from_corners(lo, hi));
+    }
+    // 参照記号 (先) と型番の文字の箱 (広いほうの幅)。非表示・空の行は幅に入れない
+    let mut width: f64 = 0.0;
+    if inst.shows_reference() {
+        width = width.max(crate::tidy::text_width(&inst.reference, LABEL_FONT));
+    }
+    if !inst.value.is_empty() {
+        width = width.max(crate::tidy::text_width(&inst.value, LABEL_FONT));
+    }
+    // 上辺の 1.0 mm 上から始め、重なるものの上端が見つかるたびにその上まで上げる
+    let mut top = body.min.y;
+    for _ in 0..=drawn.len() {
+        let caption = Rect::from_corners(
+            Point::new(x - width, top - REF_LABEL_DY - LABEL_FONT),
+            Point::new(x, top - VALUE_LABEL_DY),
+        );
+        match drawn.iter().filter(|r| caption.overlaps(r)).map(|r| r.min.y).reduce(f64::min) {
+            // 型番のベースラインは top - VALUE_LABEL_DY (= 1.0 mm) なので、top = y で文字の箱の下端が y の 1.0 mm 上
+            Some(y) => top = top.min(y),
+            None => break,
+        }
+    }
+    Some(CaptionAnchor { x, top, end: true })
+}
+
 /// 参照記号・型番を上に、機能ラベル・説明・定格を下に置くための外形 (最小点, 最大点)。
 ///
 /// 普通のシンボルは [`symbol_bounds`] そのもの。ブロック ([`crate::block::is_block_export_id`]) は、
@@ -477,13 +568,15 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
             }
         }
     }
-    // 参照記号と型番/値をシンボル外形の上に併記(縦長シンボルでも重ならない)
-    let top = symbol_top_y(inst, def);
+    // 参照記号と型番/値をシンボル外形の上に併記(縦長シンボルでも重ならない)。
+    // 上辺にピンのあるブロックは外形の左上の角 (右揃え) へ逃がす
+    let caption = caption_anchor(inst, def);
+    let anchor = if caption.end { "end" } else { "middle" };
     if inst.shows_reference() {
-        text_el(out, inst.at.x, top - REF_LABEL_DY, LABEL_FONT, "#000", "middle", &inst.reference);
+        text_el(out, caption.x, caption.top - REF_LABEL_DY, LABEL_FONT, "#000", anchor, &inst.reference);
     }
     if !inst.value.is_empty() {
-        text_el(out, inst.at.x, top - VALUE_LABEL_DY, LABEL_FONT, "#000", "middle", &inst.value);
+        text_el(out, caption.x, caption.top - VALUE_LABEL_DY, LABEL_FONT, "#000", anchor, &inst.value);
     }
     // 機能ラベル (G4の第3テキスト欄)。参照記号・型番の反対側=外形の下に置く
     if let Some(label) = crate::text_style::function_label_placement(inst, def) {
@@ -4164,5 +4257,27 @@ mod tests {
         assert_eq!(radii.len(), 2, "分岐点と引き出し線の丸印が1つずつ: {svg}");
         assert_eq!(radii[0], radii[1], "同じ大きさ: {svg}");
         assert_eq!(radii[0], JUNCTION_DOT_R);
+    }
+
+    /// A block with top pins draws its reference and value right-aligned (text-anchor end) at the box's top-left corner; a block without top pins keeps the centred caption.
+    /// 上辺にピンのあるブロックは参照記号・型番を外形の左上の角に右揃え (text-anchor end) で描く。上辺にピンの無いブロックは今まで通り中央揃え。
+    #[test]
+    fn svg_puts_top_pin_block_captions_in_the_top_left_corner() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let top = crate::block::test_block("TOP1", "V1", 100.0, 100.0, r#"{"top":[{"no":"1"}],"left":[{"no":"2"}]}"#);
+        let flat = crate::block::test_block("FLAT1", "V2", 200.0, 100.0, r#"{"left":[{"no":"1"}],"right":[{"no":"2"}]}"#);
+        let (top_id, flat_id) = (top.id(), flat.id());
+        sheet.entities.insert(top_id, top);
+        sheet.entities.insert(flat_id, flat);
+        let svg = sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]);
+        let line_of = |needle: &str| svg.lines().find(|l| l.contains(needle)).unwrap_or_default().to_string();
+        for needle in [">TOP1<", ">V1<"] {
+            let l = line_of(needle);
+            assert!(l.contains("text-anchor=\"end\""), "{needle} は右揃え: {l}");
+        }
+        for needle in [">FLAT1<", ">V2<"] {
+            let l = line_of(needle);
+            assert!(l.contains("text-anchor=\"middle\""), "{needle} は中央揃え: {l}");
+        }
     }
 }

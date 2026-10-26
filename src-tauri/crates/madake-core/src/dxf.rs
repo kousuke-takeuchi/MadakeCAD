@@ -400,6 +400,7 @@ impl Writer {
         tag: &str,
         value: &str,
         invisible: bool,
+        halign: i32,
     ) {
         self.entity("ATTRIB", owner, layer);
         self.pair(100, "AcDbText");
@@ -409,7 +410,7 @@ impl Writer {
         self.pair(40, num(height));
         self.pair(1, encode_text(value));
         self.pair(50, num(rot));
-        self.pair(72, 1);
+        self.pair(72, halign);
         self.pair(11, num(at.0));
         self.pair(21, num(at.1));
         self.pair(31, 0);
@@ -496,6 +497,7 @@ fn write_symbol_block_body(w: &mut Writer, owner: &str, def: &SymbolDef) {
         }
     }
     // 属性定義: 参照記号と型番はシンボル上端の上、説明・定格は下端の下 (SVGと同じ配置)
+    // ブロック定義の ATTDEF は常に中央揃え。上辺にピンのあるブロックの左上の角への右揃えは INSERT 側の ATTRIB だけが持つ (ATTSYNC すると中央へ戻る)
     let (min, max) = crate::symbol::local_bounds(def);
     let cx = (min.x + max.x) / 2.0;
     w.attdef(
@@ -1375,14 +1377,16 @@ pub fn sheet_to_dxf_with_frame(
         w.pair(42, 1);
         w.pair(43, 1);
         w.pair(50, num(dxf_angle(inst.rotation)));
-        let top = crate::svg::symbol_top_y(inst, &def);
+        let caption = crate::svg::caption_anchor(inst, &def);
         let (min, _) = crate::svg::symbol_bounds(inst, &def);
         let (_, max) = crate::svg::caption_bounds(inst, &def);
         let cx = (min.x + max.x) / 2.0;
+        // 上辺にピンのあるブロックの参照記号・型番は外形の左上の角へ右揃え (DXF 水平位置 72 = 2)
+        let (tag_x, tag_halign) = if caption.end { (caption.x, 2) } else { (cx, 1) };
         for (i, (tag, value, invisible)) in instance_attributes(inst, &def).into_iter().enumerate() {
             let (layer, at) = match tag.as_str() {
-                "TAG1" => (LAYER_TAGS, (cx, fy(top - crate::svg::REF_LABEL_DY))),
-                "CAT" => (LAYER_DESC, (cx, fy(top - crate::svg::VALUE_LABEL_DY))),
+                "TAG1" => (LAYER_TAGS, (tag_x, fy(caption.top - crate::svg::REF_LABEL_DY))),
+                "CAT" => (LAYER_DESC, (tag_x, fy(caption.top - crate::svg::VALUE_LABEL_DY))),
                 "DESC1" => (
                     LAYER_DESC,
                     (cx, fy(max.y + crate::svg::VALUE_LABEL_DY + 2.0)),
@@ -1399,6 +1403,7 @@ pub fn sheet_to_dxf_with_frame(
                 &tag,
                 &value,
                 invisible,
+                if matches!(tag.as_str(), "TAG1" | "CAT") { tag_halign } else { 1 },
             );
         }
         w.entity("SEQEND", &insert, LAYER_SYMS);
@@ -3216,6 +3221,27 @@ mod tests {
                     unreachable!()
                 };
                 assert_eq!((back.rotation, back.mirror), (rotation, mirror));
+            }
+        }
+    }
+
+    /// The TAG1/CAT attributes of a block with top pins are right-justified (group 72 = 2) with their anchor left of the box; a block without top pins keeps them centred (72 = 1).
+    /// 上辺にピンのあるブロックの TAG1/CAT 属性は右揃え (72 = 2) で、基準点は外形の左。上辺にピンの無いブロックは今まで通り中央揃え (72 = 1)。
+    #[test]
+    fn top_pin_block_tag_attributes_are_right_justified_left_of_the_box() {
+        for (json, justify, left_of_center) in [
+            (r#"{"top":[{"no":"1"}],"left":[{"no":"2"}]}"#, "2", true),
+            (r#"{"left":[{"no":"1"}],"right":[{"no":"2"}]}"#, "1", false),
+        ] {
+            let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+            let block = crate::block::test_block("B1", "V", 100.0, 100.0, json);
+            sheet.entities.insert(block.id(), block);
+            let dxf = sheet_to_dxf(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[]).0;
+            let ents = entity_records(&dxf);
+            for tag in ["TAG1", "CAT"] {
+                let r = ents.iter().find(|r| r.kind == "ATTRIB" && r.get(2) == Some(tag)).expect("属性");
+                assert_eq!(r.get(72), Some(justify), "{tag}: {json}");
+                assert_eq!(r.num(10).unwrap() < 100.0 - 1.0, left_of_center, "{tag} の基準点X: {json}");
             }
         }
     }

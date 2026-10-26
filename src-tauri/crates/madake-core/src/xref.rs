@@ -341,13 +341,18 @@ pub fn device_xref_at(
     def: &crate::symbol::SymbolDef,
 ) -> Point {
     let (_, max) = crate::svg::symbol_bounds(inst, def);
-    let top = crate::svg::symbol_top_y(inst, def);
-    // 参照記号は配置基準点を中心に描かれるので、右端は中心+幅の半分
-    let label_right = inst.at.x
-        + crate::svg::LABEL_FONT * CHAR_WIDTH_RATIO * inst.reference.chars().count() as f64 / 2.0;
+    let caption = crate::svg::caption_anchor(inst, def);
+    // 参照記号は基準X (中央揃えなら配置基準点) に置かれる: 中央揃えの右端は中心+幅の半分、
+    // 外形の左上の角に右揃えで置くときの右端は基準Xそのもの
+    let label_right = if caption.end {
+        caption.x
+    } else {
+        caption.x
+            + crate::svg::LABEL_FONT * CHAR_WIDTH_RATIO * inst.reference.chars().count() as f64 / 2.0
+    };
     Point::new(
         max.x.max(label_right) + XREF_GAP,
-        top - crate::svg::REF_LABEL_DY,
+        caption.top - crate::svg::REF_LABEL_DY,
     )
 }
 

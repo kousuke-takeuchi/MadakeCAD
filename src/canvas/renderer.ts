@@ -23,6 +23,7 @@ import {
   captionLineAnchors,
   resolveInstanceDef,
   symbolBounds,
+  captionAnchor,
   captionBounds,
   transformLocal,
 } from "./dynamicSymbol";
@@ -536,17 +537,18 @@ export function drawSymbol(
   }
   if (!showLabels) return;
   // 参照記号・型番: シンボル外形の上に併記(縦長シンボルでも重ならない。Rust側svg.rsと同ルール)
-  const top = symbolTopY(inst, def);
+  // 上辺にピンのあるブロックは外形の左上の角へ右揃え (Rust側 svg::caption_anchor と同じ)
+  const caption = captionAnchor(inst, def);
   ctx.fillStyle = colorOverride ?? (selected ? theme.selection : theme.annotation);
   setDrawingFont(ctx, LABEL_FONT, vp.scale, "monospace");
-  ctx.textAlign = "center";
+  ctx.textAlign = caption.end ? "right" : "center";
   // hide_reference="true" は印字しない (嵌合の組の片方。svg.rsのshows_referenceと同ルール)
   if (inst.reference && inst.attrs?.hide_reference !== "true") {
-    const p = vp.toScreen({ x: inst.at.x, y: top - REF_LABEL_DY });
+    const p = vp.toScreen({ x: caption.x, y: caption.top - REF_LABEL_DY });
     drawingText(ctx, inst.reference, p.x, p.y);
   }
   if (inst.value) {
-    const p = vp.toScreen({ x: inst.at.x, y: top - VALUE_LABEL_DY });
+    const p = vp.toScreen({ x: caption.x, y: caption.top - VALUE_LABEL_DY });
     drawingText(ctx, inst.value, p.x, p.y);
   }
   // 機能ラベル (G4の第3テキスト欄): 参照記号・型番の反対側=外形の下 (svg.rsと同ルール)
@@ -558,6 +560,8 @@ export function drawSymbol(
       : functionLabelFallbackAt(inst, captionBounds(inst, def));
     const height = slot?.height ?? FUNCTION_LABEL_FONT;
     setDrawingFont(ctx, height, vp.scale, "monospace");
+    // 参照記号・型番を右揃えにした (ブロックの左上の角) あとでも、機能ラベルは中央揃え
+    ctx.textAlign = "center";
     const p = vp.toScreen(at);
     drawingText(ctx, functionLabel, p.x, p.y);
   }
@@ -1362,7 +1366,7 @@ export function renderSheet(
     const location = opts.relay?.coilLocations?.get(e.id);
     if (location) {
       const at = vp.toScreen(
-        coilLocationAt(e, symbolBounds(e, def), location, wireNotes, noteFont),
+        coilLocationAt(e, symbolBounds(e, def), location, wireNotes, noteFont, captionAnchor(e, def)),
       );
       ctx.fillStyle = theme.xref;
       setDrawingFont(ctx, CONTACT_MAP_FONT, vp.scale, "monospace");
@@ -1371,7 +1375,7 @@ export function renderSheet(
     }
     const deviceXref = opts.deviceXrefs?.get(e.id);
     if (deviceXref) {
-      const at = vp.toScreen(deviceXrefAt(e, symbolBounds(e, def), symbolTopY(e, def)));
+      const at = vp.toScreen(deviceXrefAt(e, symbolBounds(e, def), symbolTopY(e, def), captionAnchor(e, def)));
       ctx.fillStyle = theme.xref;
       setDrawingFont(ctx, XREF_FONT, vp.scale, "monospace");
       ctx.textAlign = "left";

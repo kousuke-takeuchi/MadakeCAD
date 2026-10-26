@@ -290,4 +290,14 @@ describe("G13 device cross-reference", () => {
     expect(labelRight).toBeGreaterThan(bounds.max.x);
     expect(deviceXrefAt(inst, bounds, 47).x).toBeGreaterThanOrEqual(labelRight + 1.0 - 1e-9);
   });
+
+  // ja: 参照記号が外形の左上の角に右揃えで置かれるブロックでは、デバイスXRefは外形の右端から出て、高さは角の参照記号の行に揃う
+  it("places the text right of the outline, level with a corner-anchored designator", () => {
+    const bounds = { min: { x: 92.5, y: 47 }, max: { x: 107.5, y: 53 } };
+    const inst = symbolEntity("e1", "motor", "M1-CONVEYOR-DRIVE", 100, 50);
+    const corner = { x: 91.5, top: 40, end: true };
+    const at = deviceXrefAt(inst, bounds, 47, corner);
+    expect(at.x).toBeCloseTo(bounds.max.x + 1.0, 9);
+    expect(at.y).toBeCloseTo(40 - 4.5, 9);
+  });
 });

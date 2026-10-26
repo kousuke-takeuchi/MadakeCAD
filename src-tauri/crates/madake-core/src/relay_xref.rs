@@ -792,7 +792,7 @@ pub fn coil_location_at(
 /// インスタンス自身の参照記号・型番のラベルが紙面で占める矩形 (空の欄は含まない)。
 /// 位置・文字高はシンボルを描くときと同じ (外形の上に中央揃えで併記する)。
 fn instance_label_rects(inst: &SymbolInstance, def: &SymbolDef) -> Vec<crate::tidy::Rect> {
-    let top = crate::svg::symbol_top_y(inst, def);
+    let caption = crate::svg::caption_anchor(inst, def);
     let font = crate::svg::LABEL_FONT;
     [
         (inst.reference.as_str(), crate::svg::REF_LABEL_DY),
@@ -801,12 +801,14 @@ fn instance_label_rects(inst: &SymbolInstance, def: &SymbolDef) -> Vec<crate::ti
     .into_iter()
     .filter(|(text, _)| !text.is_empty())
     .map(|(text, dy)| {
-        text_rect(
-            Point::new(inst.at.x, top - dy),
-            text_width_at(text, font),
-            font,
-            NoteAlign::Center,
-        )
+        let at = Point::new(caption.x, caption.top - dy);
+        let width = text_width_at(text, font);
+        if caption.end {
+            // 外形の左上の角に右揃え: 基準Xが右端
+            crate::tidy::Rect::from_corners(Point::new(at.x - width, at.y - font), at)
+        } else {
+            text_rect(at, width, font, NoteAlign::Center)
+        }
     })
     .collect()
 }

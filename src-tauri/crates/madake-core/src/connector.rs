@@ -306,8 +306,7 @@ fn edge_segments(out: &mut Vec<Primitive>, half: f64, gaps: &[(f64, f64)], at: i
     }
 }
 
-/// テスト用: プリミティブが占める範囲 (最小, 最大)。円・弧は中心±半径。
-#[cfg(test)]
+/// プリミティブが占める範囲 (最小, 最大)。円・弧は中心±半径。
 pub(crate) fn primitive_extent(p: &Primitive) -> (Point, Point) {
     let pts = match p {
         Primitive::Line { pts } => pts.clone(),

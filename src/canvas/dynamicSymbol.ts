@@ -33,6 +33,7 @@ import {
 // 循環import防止のため定義はtextWidth.tsへ移した。既存のimport元のために再エクスポートする
 import { isDeviceBlock } from "./relayXref";
 import { textWidthMm } from "./textWidth";
+import { LABEL_FONT, REF_LABEL_DY, VALUE_LABEL_DY } from "./textStyle";
 export { textWidthMm } from "./textWidth";
 // 端子番号の読み取りと端子の印の寸法も葉モジュール (terminalNo.ts) へ移した
 // (terminalJumpers.ts の端子番号の対応表をここから使うための循環import防止)。
@@ -385,6 +386,109 @@ export function captionBounds(inst: SymbolInstance, def: SymbolDef): { min: Poin
     max.y = Math.max(max.y, c.y + prim.height / 2);
   }
   return { min, max };
+}
+
+/** 参照記号・型番の置き場所 (Rust側 svg::CaptionAnchor と同一): 基準X・基準Y・右揃えか。
+ * 各行のベースラインは top - REF_LABEL_DY / top - VALUE_LABEL_DY。 */
+export interface CaptionAnchor {
+  x: number;
+  top: number;
+  end: boolean;
+}
+
+/** 外形の左辺と、右揃えにした参照記号・型番の右端との間隔 (mm)。Rust側 svg::CORNER_CAPTION_GAP と同じ。 */
+export const CORNER_CAPTION_GAP = 1.0;
+
+/**
+ * 参照記号・型番の置き場所 (Rust側 svg::caption_anchor と同一)。
+ * 普通は配置基準点の真上に中央揃え。ただしブロックの描かれた上辺 (回転・ミラー後) にピンが
+ * あるときは、そこから出る配線が中央の文字を横切るので、外形の左上の角の外 (左辺の
+ * CORNER_CAPTION_GAP 左・上辺の上) に右揃えで置く。ブロックが描く他のもの (他の辺のリード・番号・
+ * コネクタの絵・まとまりの名前) に文字が重なるときは、その上まで上げる。
+ */
+export function captionAnchor(inst: SymbolInstance, def: SymbolDef): CaptionAnchor {
+  return (
+    topLeftCornerAnchor(inst, def) ?? { x: inst.at.x, top: captionBounds(inst, def).min.y, end: false }
+  );
+}
+
+function topLeftCornerAnchor(inst: SymbolInstance, def: SymbolDef): CaptionAnchor | null {
+  if (def.id !== BLOCK_SYMBOL_ID) return null;
+  let box: [number, number];
+  try {
+    const { pins, size } = parseBlockSpec(inst.attrs ?? {});
+    box = blockBox(pins, size);
+  } catch {
+    return null;
+  }
+  const a = transformLocal({ x: -box[0] / 2, y: -box[1] / 2 }, inst);
+  const b = transformLocal({ x: box[0] / 2, y: box[1] / 2 }, inst);
+  const body = {
+    min: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) },
+    max: { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) },
+  };
+  const eps = 1e-6;
+  const hasTopPin = def.pins.some((pin) => {
+    const t = transformLocal(pin.at, inst);
+    return t.y < body.min.y - eps && t.x > body.min.x - eps && t.x < body.max.x + eps;
+  });
+  if (!hasTopPin) return null;
+  const x = body.min.x - CORNER_CAPTION_GAP;
+  // 描かれるもの (図形の外接矩形・文字の箱全体・ピングループの括弧)
+  const drawn: { min: Point; max: Point }[] = [];
+  const addBox = (p: Point, q: Point) =>
+    drawn.push({
+      min: { x: Math.min(p.x, q.x), y: Math.min(p.y, q.y) },
+      max: { x: Math.max(p.x, q.x), y: Math.max(p.y, q.y) },
+    });
+  for (const prim of def.primitives) {
+    let lo: Point;
+    let hi: Point;
+    switch (prim.type) {
+      case "text": {
+        const c = transformLocal(prim.at, inst);
+        const half = textWidthMm(prim.text, prim.height) / 2;
+        addBox({ x: c.x - half, y: c.y - prim.height / 2 }, { x: c.x + half, y: c.y + prim.height / 2 });
+        continue;
+      }
+      case "line": {
+        const xs = prim.pts.map((q) => q.x);
+        const ys = prim.pts.map((q) => q.y);
+        lo = { x: Math.min(...xs), y: Math.min(...ys) };
+        hi = { x: Math.max(...xs), y: Math.max(...ys) };
+        break;
+      }
+      case "circle":
+      case "arc":
+        lo = { x: prim.center.x - prim.r, y: prim.center.y - prim.r };
+        hi = { x: prim.center.x + prim.r, y: prim.center.y + prim.r };
+        break;
+      case "rect":
+        lo = { x: Math.min(prim.p1.x, prim.p2.x), y: Math.min(prim.p1.y, prim.p2.y) };
+        hi = { x: Math.max(prim.p1.x, prim.p2.x), y: Math.max(prim.p1.y, prim.p2.y) };
+        break;
+    }
+    addBox(transformLocal(lo, inst), transformLocal(hi, inst));
+  }
+  for (const [lo, hi] of pinGroupPaperBoxes(inst, def)) addBox(lo, hi);
+  // 参照記号 (先) と型番の文字の箱 (広いほうの幅)。非表示・空の行は幅に入れない
+  let width = 0;
+  if (inst.reference && inst.attrs?.hide_reference !== "true") {
+    width = Math.max(width, textWidthMm(inst.reference, LABEL_FONT));
+  }
+  if (inst.value) width = Math.max(width, textWidthMm(inst.value, LABEL_FONT));
+  // 上辺の 1.0 mm 上から始め、重なるものの上端が見つかるたびにその上まで上げる
+  let top = body.min.y;
+  for (let i = 0; i <= drawn.length; i++) {
+    const cap = { x0: x - width, x1: x, y0: top - REF_LABEL_DY - LABEL_FONT, y1: top - VALUE_LABEL_DY };
+    // 重なりは Rust側 tidy::Rect::overlaps と同じ (CONNECT_EPS = 0.01 mm を超える食い込み)
+    const hits = drawn.filter(
+      (r) => cap.x0 < r.max.x - 0.01 && r.min.x < cap.x1 - 0.01 && cap.y0 < r.max.y - 0.01 && r.min.y < cap.y1 - 0.01,
+    );
+    if (hits.length === 0) break;
+    top = Math.min(top, ...hits.map((r) => r.min.y));
+  }
+  return { x, top, end: true };
 }
 
 /**

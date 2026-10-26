@@ -1623,4 +1623,198 @@ mod tests {
             assert!(top <= at.y - height / 2.0 + 1e-9, "番号 {text} の上端 {} が型番の基準 {top} より上", at.y - height / 2.0);
         }
     }
+
+    /// The drawn rectangle of the block box in paper coordinates, from its pin table and size.
+    /// ブロックの外形を用紙座標の矩形で返す (ピン表と寸法から)。
+    fn paper_box(inst: &crate::model::SymbolInstance) -> crate::tidy::Rect {
+        let spec = parse_block_spec(&inst.attrs).expect("ピン表");
+        let (w, h) = block_box(&spec);
+        let a = crate::netlist::transform_local(Point::new(-w / 2.0, -h / 2.0), inst);
+        let b = crate::netlist::transform_local(Point::new(w / 2.0, h / 2.0), inst);
+        crate::tidy::Rect::from_corners(a, b)
+    }
+
+    /// Everything the block draws except the pin leads' own end points, as paper rectangles: primitive extents and whole text boxes.
+    /// ブロックが描くもの (図形の外接矩形と文字の箱全体) を用紙座標の矩形で返す。
+    fn drawn_rects(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> Vec<crate::tidy::Rect> {
+        let mut out = Vec::new();
+        for prim in &def.primitives {
+            if let Primitive::Text { at, text, height } = prim {
+                let c = crate::netlist::transform_local(*at, inst);
+                let half = crate::tidy::text_width(text, *height) / 2.0;
+                out.push(crate::tidy::Rect::from_corners(
+                    Point::new(c.x - half, c.y - height / 2.0),
+                    Point::new(c.x + half, c.y + height / 2.0),
+                ));
+            } else {
+                let (lo, hi) = crate::connector::primitive_extent(prim);
+                out.push(crate::tidy::Rect::from_corners(
+                    crate::netlist::transform_local(lo, inst),
+                    crate::netlist::transform_local(hi, inst),
+                ));
+            }
+        }
+        out
+    }
+
+    /// Which side of the pin table ends up drawn on top, written out by hand for the mirror-then-clockwise-rotation convention (Y down).
+    /// ピン表のどの辺が描かれた上辺になるか (ミラー→時計回りの回転、Y下向き) を手で書いた表。
+    fn side_drawn_on_top(rotation: u16, mirror: bool) -> &'static str {
+        match (rotation, mirror) {
+            (0, _) => "top",
+            (90, false) => "left",
+            (90, true) => "right",
+            (180, _) => "bottom",
+            (270, false) => "right",
+            (270, true) => "left",
+            _ => unreachable!("回転 {rotation}"),
+        }
+    }
+
+    /// Whether the pin table JSON has at least one pin on the given side.
+    /// ピン表の JSON がその辺にピンを1本以上持つか。
+    fn json_has_side(json: &str, side: &str) -> bool {
+        let v: serde_json::Value = serde_json::from_str(json).expect("ピン表");
+        v.get(side).and_then(|s| s.as_array()).is_some_and(|a| !a.is_empty())
+    }
+
+    /// The corner placement follows an explicit table for a block with one top pin and one left pin: the corner is used exactly when the top or the left side is drawn on top.
+    /// 上辺と左辺に1本ずつピンのあるブロックは、手で書いた表のとおりに角へ置く (描かれた上辺が上辺か左辺のときだけ角)。
+    #[test]
+    fn corner_placement_follows_the_rotation_table() {
+        let json = r#"{"top":[{"no":"1"}],"left":[{"no":"2"}]}"#;
+        for (rotation, mirror, corner) in [
+            (0, false, true),
+            (0, true, true),
+            (90, false, true),
+            (270, true, true),
+            (90, true, false),
+            (180, false, false),
+            (180, true, false),
+            (270, false, false),
+        ] {
+            let (inst, def) = placed(json, rotation, mirror);
+            assert_eq!(crate::svg::caption_anchor(&inst, &def).end, corner, "回転{rotation}・ミラー{mirror}");
+        }
+    }
+
+    /// A hand-built drawing above-left of the box corner pushes the corner captions up until their text boxes end above it.
+    /// 外形の左上の角の外に描かれたもの (手で足した文字) があると、角の参照記号・型番はその上まで上がる。
+    #[test]
+    fn corner_captions_rise_above_a_drawing_at_the_corner() {
+        let (inst, mut def) = placed(r#"{"top":[{"no":"1"}],"left":[{"no":"2"}]}"#, 0, false);
+        let body = paper_box(&inst);
+        let before = crate::svg::caption_anchor(&inst, &def);
+        // 何も無いときの型番の行の高さに、角の左へ文字を置く
+        let at = Point::new(body.min.x - 4.0, before.top - crate::svg::VALUE_LABEL_DY - 1.0);
+        def.primitives.push(Primitive::Text { at, text: "OBSTACLE".into(), height: 2.5 });
+        let half = crate::tidy::text_width("OBSTACLE", 2.5) / 2.0;
+        let obstacle = crate::tidy::Rect::from_corners(
+            Point::new(at.x - half, at.y - 1.25),
+            Point::new(at.x + half, at.y + 1.25),
+        );
+        let a = crate::svg::caption_anchor(&inst, &def);
+        assert!(a.end);
+        let value_bottom = a.top - crate::svg::VALUE_LABEL_DY;
+        assert!(value_bottom <= obstacle.min.y + 1e-9, "型番の下端 {value_bottom} が文字の上端 {} より下", obstacle.min.y);
+        let font = crate::svg::LABEL_FONT;
+        for (text, dy) in [(inst.reference.as_str(), crate::svg::REF_LABEL_DY), (inst.value.as_str(), crate::svg::VALUE_LABEL_DY)] {
+            let w = crate::tidy::text_width(text, font);
+            let base = a.top - dy;
+            let rect = crate::tidy::Rect::from_corners(Point::new(a.x - w, base - font), Point::new(a.x, base));
+            for d in drawn_rects(&inst, &def) {
+                assert!(!rect.overlaps(&d), "キャプション {text} が描かれたもの {d:?} に重なる");
+            }
+        }
+    }
+
+    /// A block with pins on its drawn top side puts its reference and value right-aligned at the box's top-left corner (1.0 mm left of the left edge, text boxes ending at least 1.0 mm above the top edge) without overlapping anything the block draws; other blocks keep the centred caption.
+    /// 描かれた上辺にピンのあるブロックは、参照記号・型番を外形の左上の角 (左辺の 1.0 mm 左・文字の箱の下端が上辺の 1.0 mm 以上上) に右揃えで置き、ブロックが描くものと重ならない。それ以外のブロックは今までの中央揃え。
+    #[test]
+    fn captions_of_a_block_with_top_pins_sit_at_the_top_left_corner() {
+        let long_top = r#"{"left":[{"no":"4444","connector":"usb_c_f"},{"no":"333","connector":"usb_a_f"}],"top":[{"no":"UUUU","name":"長い名前","connector":"usb_a_f"},{"no":"U2","connector":"usb_a_f"}],"right":[{"no":"2222","connector":"usb_a_f"}]}"#;
+        let (mut with_top, mut without_top) = (0, 0);
+        for json in [HUB_39, TOP_BOTTOM, MIXED, AMP_53, long_top] {
+            for rotation in [0, 90, 180, 270] {
+                for mirror in [false, true] {
+                    let (inst, def) = placed(json, rotation, mirror);
+                    let a = crate::svg::caption_anchor(&inst, &def);
+                    if !json_has_side(json, side_drawn_on_top(rotation, mirror)) {
+                        without_top += 1;
+                        let plain = crate::svg::CaptionAnchor {
+                            x: inst.at.x,
+                            top: crate::svg::symbol_top_y(&inst, &def),
+                            end: false,
+                        };
+                        assert_eq!(a, plain, "上辺にピンの無い回転{rotation}・ミラー{mirror}は今まで通り");
+                        continue;
+                    }
+                    with_top += 1;
+                    let b = paper_box(&inst);
+                    assert!(a.end, "回転{rotation}・ミラー{mirror}: 右揃えのはず");
+                    assert!((a.x - (b.min.x - 1.0)).abs() < 1e-9, "回転{rotation}・ミラー{mirror}: 左辺の 1.0 mm 左のはず: {}", a.x);
+                    let value_bottom = a.top - crate::svg::VALUE_LABEL_DY;
+                    assert!(value_bottom <= b.min.y - 1.0 + 1e-9, "回転{rotation}・ミラー{mirror}: 型番の下端 {value_bottom} が上辺 {} の 1.0 mm 上より下", b.min.y);
+                    let font = crate::svg::LABEL_FONT;
+                    let drawn = drawn_rects(&inst, &def);
+                    for (text, dy) in [("39", crate::svg::REF_LABEL_DY), ("USBハブ", crate::svg::VALUE_LABEL_DY)] {
+                        let w = crate::tidy::text_width(text, font);
+                        let base = a.top - dy;
+                        let rect = crate::tidy::Rect::from_corners(Point::new(a.x - w, base - font), Point::new(a.x, base));
+                        for d in &drawn {
+                            assert!(!rect.overlaps(d), "回転{rotation}・ミラー{mirror}: キャプション {text} が描かれたもの {d:?} に重なる");
+                        }
+                    }
+                }
+            }
+        }
+        assert!(with_top > 0 && without_top > 0, "両方の場合を確かめる: {with_top} / {without_top}");
+    }
+
+    /// Only blocks move their captions: a plain symbol keeps the centred caption above its top edge.
+    /// 参照記号・型番が動くのはブロックだけ。普通のシンボルは今まで通り外形の上に中央揃え。
+    #[test]
+    fn captions_of_a_plain_symbol_keep_the_centred_anchor() {
+        let (inst, _) = placed(HUB_39, 0, false);
+        let def = crate::symbol::resolve_symbol("relay_coil").expect("コイル");
+        let mut plain = inst.clone();
+        plain.symbol_id = "relay_coil".into();
+        plain.attrs.clear();
+        let a = crate::svg::caption_anchor(&plain, &def);
+        assert_eq!(a.x, plain.at.x);
+        assert_eq!(a.top, crate::svg::symbol_top_y(&plain, &def));
+        assert!(!a.end);
+    }
+
+    /// KiCad's Reference/Value, the device XRef and the tidy text boxes all follow the corner placement of a block with top pins: right-justified, left of the box.
+    /// 上辺にピンのあるブロックでは、KiCad の Reference/Value・デバイスXRef・整理用の文字の箱も左上の角 (外形の左・右揃え) に従う。
+    #[test]
+    fn kicad_xref_and_tidy_follow_the_top_left_corner_captions() {
+        let mut sheet = crate::model::Sheet::new("t", crate::model::PaperSize::A3, crate::model::Orientation::Landscape);
+        // 外形より広い参照記号: 中央揃えなら右端が外形の右端を越えるので、XRef のXで新旧が区別できる
+        let block = test_block("M1-CONVEYOR-DRIVE", "USBハブ", 100.0, 100.0, r#"{"top":[{"no":"1"}],"left":[{"no":"2"}]}"#);
+        let crate::model::Entity::Symbol(inst) = block.clone() else { unreachable!() };
+        sheet.entities.insert(block.id(), block);
+        let defs = crate::symbol::sheet_symbol_defs(&sheet);
+        let def = block_symbol(&inst.attrs).expect("ブロック定義");
+        let a = crate::svg::caption_anchor(&inst, &def);
+        assert!(a.end);
+        // KiCad
+        let (sch, _) = crate::kicad::export_kicad_sch(&sheet, &defs);
+        let reference = sch.lines().find(|l| l.contains("(property \"Reference\" \"M1-CONVEYOR-DRIVE\"")).expect("Reference");
+        assert!(reference.contains("(justify right)"), "{reference}");
+        let at_x: f64 = reference.split("(at ").nth(1).and_then(|r| r.split_whitespace().next()).and_then(|v| v.parse().ok()).expect("at のX");
+        assert!((at_x - a.x).abs() < 1e-3, "{reference}");
+        // XRef は右揃えの参照記号の右ではなく、外形の右端から出る
+        let (_, max) = crate::svg::symbol_bounds(&inst, &def);
+        let centred_right = inst.at.x + crate::tidy::text_width(&inst.reference, crate::svg::LABEL_FONT) / 2.0;
+        assert!(centred_right > max.x + 1.0, "参照記号が外形より十分広いこと: {centred_right} / {}", max.x);
+        let x = crate::xref::device_xref_at(&inst, &def);
+        assert!((x.x - (max.x + crate::xref::XREF_GAP)).abs() < 1e-9, "{x:?}");
+        assert!((x.y - (a.top - crate::svg::REF_LABEL_DY)).abs() < 1e-9);
+        // 整理用の文字の箱: 参照記号の箱の右端が基準X
+        let boxes = crate::tidy::text_boxes(&sheet, &defs);
+        let r = boxes.iter().find(|b| b.kind == crate::tidy::TextKind::Reference).expect("参照記号の箱");
+        assert!((r.rect.max.x - a.x).abs() < 1e-9, "{:?}", r.rect);
+    }
 }
