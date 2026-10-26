@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3024仕様項目**。
+全6領域・**3028仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -50,6 +50,8 @@
 - 参照記号・型番は、ブロックが描くもの (リードの先・ピン番号の文字の箱全体 (回転しても)・コネクタの絵・まとまりの名前) の上、機能ラベルは下に置く。 <sub>`captions_clear_everything_the_pins_draw`</sub>
 - 外形が自動で上辺にピンの無いブロックの参照記号・型番は今までと同じ位置 (外形の上端+いつもの間隔) のまま。 <sub>`captions_of_an_auto_sized_block_without_top_pins_do_not_move`</sub>
 - 最小の高さを指定したブロックは、最初の左右のピン番号が外形の上端から 0.5 mm はみ出すので、上辺にピンが無くても参照記号・型番はその番号を避けて 0.5 mm 上がる。 <sub>`captions_of_a_minimum_height_block_clear_the_side_pin_numbers`</sub>
+- 上辺と左辺に1本ずつピンのあるブロックは、手で書いた表のとおりに角へ置く (描かれた上辺が上辺か左辺のときだけ角)。 <sub>`corner_placement_follows_the_rotation_table`</sub>
+- 外形の左上の角の外に描かれたもの (手で足した文字) があると、角の参照記号・型番はその上まで上がる。 <sub>`corner_captions_rise_above_a_drawing_at_the_corner`</sub>
 - 描かれた上辺にピンのあるブロックは、参照記号・型番を外形の左上の角 (左辺の 1.0 mm 左・文字の箱の下端が上辺の 1.0 mm 以上上) に右揃えで置き、ブロックが描くものと重ならない。それ以外のブロックは今までの中央揃え。 <sub>`captions_of_a_block_with_top_pins_sit_at_the_top_left_corner`</sub>
 - 参照記号・型番が動くのはブロックだけ。普通のシンボルは今まで通り外形の上に中央揃え。 <sub>`captions_of_a_plain_symbol_keep_the_centred_anchor`</sub>
 - 上辺にピンのあるブロックでは、KiCad の Reference/Value・デバイスXRef・整理用の文字の箱も左上の角 (外形の左・右揃え) に従う。 <sub>`kicad_xref_and_tidy_follow_the_top_left_corner_captions`</sub>
@@ -2166,6 +2168,8 @@
 - 最小の高さを指定したブロックは最初の左右のピン番号が外形の上端から 0.5 mm はみ出すので、上辺にピンが無くても参照記号・型番は 0.5 mm 上がる (Rust の captions_of_a_minimum_height_block_clear_the_side_pin_numbers と同じ) <sub>`block captions and group names (Rust twin)`</sub>
 - 描かれた上辺にピンのあるブロックは、参照記号・型番を外形の左上の角 (左辺の 1.0 mm 左・型番の箱の下端が上辺の 1.0 mm 以上上) に右揃えで置き、ブロックが描くものと重ならない。それ以外は今まで通り (Rust の captions_of_a_block_with_top_pins_sit_at_the_top_left_corner と同じ) <sub>`block captions and group names (Rust twin)`</sub>
 - 参照記号・型番が動くのはブロックだけ。普通のシンボルは今まで通り中央揃え (Rust の captions_of_a_plain_symbol_keep_the_centred_anchor と同じ) <sub>`block captions and group names (Rust twin)`</sub>
+- 上辺と左辺に1本ずつピンのあるブロックは、手で書いた表のとおりに角へ置く (Rust の corner_placement_follows_the_rotation_table と同じ) <sub>`block captions and group names (Rust twin)`</sub>
+- 外形の左上の角の外に描かれたもの (手で足した文字) があると、角の参照記号・型番はその上まで上がり、重ならない (Rust の corner_captions_rise_above_a_drawing_at_the_corner と同じ) <sub>`block captions and group names (Rust twin)`</sub>
 
 ### frameEditor
 

@@ -591,6 +591,20 @@ describe("block captions and group names (Rust twin)", () => {
     }
   });
 
+  /** ピン表のどの辺が描かれた上辺になるか (ミラー→時計回りの回転、Y下向き) を手で書いた表 (Rust の side_drawn_on_top と同じ)。 */
+  const sideDrawnOnTop = (rotation: number, mirror: boolean): string =>
+    rotation === 0
+      ? "top"
+      : rotation === 180
+        ? "bottom"
+        : rotation === 90
+          ? mirror
+            ? "right"
+            : "left"
+          : mirror
+            ? "left"
+            : "right";
+
   // ja: 描かれた上辺にピンのあるブロックは、参照記号・型番を外形の左上の角 (左辺の 1.0 mm 左・型番の箱の下端が上辺の 1.0 mm 以上上) に右揃えで置き、ブロックが描くものと重ならない。それ以外は今まで通り (Rust の captions_of_a_block_with_top_pins_sit_at_the_top_left_corner と同じ)
   it("puts the captions of a block with top pins at the top-left corner, right-aligned, clear of everything drawn", () => {
     const longTop =
@@ -615,10 +629,8 @@ describe("block captions and group names (Rust twin)", () => {
             maxX: Math.max(c1.x, c2.x),
             minY: Math.min(c1.y, c2.y),
           };
-          const hasTop = def.pins.some((pin) => {
-            const t = transformLocal(pin.at, inst);
-            return t.y < body.minY - 1e-6 && t.x > body.minX - 1e-6 && t.x < body.maxX + 1e-6;
-          });
+          // 描かれた上辺になるピン表の辺は手で書いた表から (実装の判定を写さない)
+          const hasTop = (JSON.parse(json)[sideDrawnOnTop(rotation, mirror)] ?? []).length > 0;
           if (!hasTop) {
             withoutTop += 1;
             expect(a).toEqual({ x: inst.at.x, top: symbolTopY(inst, def), end: false });
@@ -677,5 +689,58 @@ describe("block captions and group names (Rust twin)", () => {
     const terminal = dynamicSymbol("terminal_block_3p")!;
     const plain = { ...inst, symbol_id: "terminal_block_3p", attrs: {} };
     expect(captionAnchor(plain, terminal)).toEqual({ x: plain.at.x, top: symbolTopY(plain, terminal), end: false });
+  });
+
+  // ja: 上辺と左辺に1本ずつピンのあるブロックは、手で書いた表のとおりに角へ置く (Rust の corner_placement_follows_the_rotation_table と同じ)
+  it("follows the explicit rotation table for a block with one top and one left pin", () => {
+    const json = '{"top":[{"no":"1"}],"left":[{"no":"2"}]}';
+    const table: [number, boolean, boolean][] = [
+      [0, false, true],
+      [0, true, true],
+      [90, false, true],
+      [270, true, true],
+      [90, true, false],
+      [180, false, false],
+      [180, true, false],
+      [270, false, false],
+    ];
+    for (const [rotation, mirror, corner] of table) {
+      const [inst, def] = placed(json, rotation, mirror);
+      expect(captionAnchor(inst, def).end, `回転${rotation}・ミラー${mirror}`).toBe(corner);
+    }
+  });
+
+  // ja: 外形の左上の角の外に描かれたもの (手で足した文字) があると、角の参照記号・型番はその上まで上がり、重ならない (Rust の corner_captions_rise_above_a_drawing_at_the_corner と同じ)
+  it("raises the corner captions above a drawing placed at the corner", () => {
+    const [inst, base] = placed('{"top":[{"no":"1"}],"left":[{"no":"2"}]}', 0, false);
+    const { pins, size } = parseBlockSpec(inst.attrs);
+    const [w, h] = blockBox(pins, size);
+    const bodyMinX = transformLocal({ x: -w / 2, y: -h / 2 }, inst).x;
+    const before = captionAnchor(inst, base);
+    // 何も無いときの型番の行の高さに、角の左へ文字を置く
+    const at = { x: bodyMinX - 4, y: before.top - VALUE_LABEL_DY - 1 };
+    const def: SymbolDef = {
+      ...base,
+      primitives: [...base.primitives, { type: "text", at, text: "OBSTACLE", height: 2.5 }],
+    };
+    const half = textWidthMm("OBSTACLE", 2.5) / 2;
+    const obstacle = { x0: at.x - half, x1: at.x + half, y0: at.y - 1.25, y1: at.y + 1.25 };
+    const a = captionAnchor(inst, def);
+    expect(a.end).toBe(true);
+    expect(a.top - VALUE_LABEL_DY).toBeLessThanOrEqual(obstacle.y0 + 1e-9);
+    for (const [text, dy] of [
+      [inst.reference, REF_LABEL_DY],
+      [inst.value, VALUE_LABEL_DY],
+    ] as const) {
+      const cap = { x0: a.x - textWidthMm(text, LABEL_FONT), x1: a.x, y0: a.top - dy - LABEL_FONT, y1: a.top - dy };
+      for (const prim of def.primitives) {
+        if (prim.type !== "text") continue;
+        const c = transformLocal(prim.at, inst);
+        const hw = textWidthMm(prim.text, prim.height) / 2;
+        const r = { x0: c.x - hw, x1: c.x + hw, y0: c.y - prim.height / 2, y1: c.y + prim.height / 2 };
+        const overlap = cap.x0 < r.x1 - 0.01 && r.x0 < cap.x1 - 0.01 && cap.y0 < r.y1 - 0.01 && r.y0 < cap.y1 - 0.01;
+        expect(overlap, `${text} が ${prim.text} に重なる`).toBe(false);
+      }
+    }
   });
 });

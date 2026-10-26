@@ -497,6 +497,7 @@ fn write_symbol_block_body(w: &mut Writer, owner: &str, def: &SymbolDef) {
         }
     }
     // 属性定義: 参照記号と型番はシンボル上端の上、説明・定格は下端の下 (SVGと同じ配置)
+    // ブロック定義の ATTDEF は常に中央揃え。上辺にピンのあるブロックの左上の角への右揃えは INSERT 側の ATTRIB だけが持つ (ATTSYNC すると中央へ戻る)
     let (min, max) = crate::symbol::local_bounds(def);
     let cx = (min.x + max.x) / 2.0;
     w.attdef(

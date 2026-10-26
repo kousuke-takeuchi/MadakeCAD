@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3024 specification clauses** across 6 areas.
+**3028 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -50,6 +50,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The reference and value captions sit above, and the function label below, everything the block draws: lead ends, pin numbers (whole text boxes, also when the block is rotated), connector pictures and group names. <sub>`captions_clear_everything_the_pins_draw`</sub>
 - The captions of an auto-sized block that has no top pins stay exactly where they were (the top of the box plus the usual gaps). <sub>`captions_of_an_auto_sized_block_without_top_pins_do_not_move`</sub>
 - A block sized to its minimum height has the number of its first side pin poking 0.5 mm above the box top, so its captions move up 0.5 mm to clear that number even without top pins. <sub>`captions_of_a_minimum_height_block_clear_the_side_pin_numbers`</sub>
+- The corner placement follows an explicit table for a block with one top pin and one left pin: the corner is used exactly when the top or the left side is drawn on top. <sub>`corner_placement_follows_the_rotation_table`</sub>
+- A hand-built drawing above-left of the box corner pushes the corner captions up until their text boxes end above it. <sub>`corner_captions_rise_above_a_drawing_at_the_corner`</sub>
 - A block with pins on its drawn top side puts its reference and value right-aligned at the box's top-left corner (1.0 mm left of the left edge, text boxes ending at least 1.0 mm above the top edge) without overlapping anything the block draws; other blocks keep the centred caption. <sub>`captions_of_a_block_with_top_pins_sit_at_the_top_left_corner`</sub>
 - Only blocks move their captions: a plain symbol keeps the centred caption above its top edge. <sub>`captions_of_a_plain_symbol_keep_the_centred_anchor`</sub>
 - KiCad's Reference/Value, the device XRef and the tidy text boxes all follow the corner placement of a block with top pins: right-justified, left of the box. <sub>`kicad_xref_and_tidy_follow_the_top_left_corner_captions`</sub>
@@ -2166,6 +2168,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - moves the captions of a minimum-height block up 0.5 mm to clear the side pin numbers <sub>`block captions and group names (Rust twin)`</sub>
 - puts the captions of a block with top pins at the top-left corner, right-aligned, clear of everything drawn <sub>`block captions and group names (Rust twin)`</sub>
 - keeps the centred caption anchor of a plain symbol <sub>`block captions and group names (Rust twin)`</sub>
+- follows the explicit rotation table for a block with one top and one left pin <sub>`block captions and group names (Rust twin)`</sub>
+- raises the corner captions above a drawing placed at the corner <sub>`block captions and group names (Rust twin)`</sub>
 
 ### frameEditor
 
