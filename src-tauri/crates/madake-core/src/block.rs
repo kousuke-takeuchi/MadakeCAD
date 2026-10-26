@@ -1433,7 +1433,11 @@ mod tests {
             })
             .collect();
         // 参照記号と型番 (ベースラインは外形の上端から REF_LABEL_DY / VALUE_LABEL_DY 上。文字はベースラインから上へ LABEL_FONT)
-        let (inst, _) = placed(json, 0, false);
+        // 外形の指定もインスタンスに載せる (配置されるブロックと同じ属性)
+        let (mut inst, _) = placed(json, 0, false);
+        if let Some(size) = size {
+            inst.attrs.insert(BLOCK_SIZE_ATTR.into(), size.into());
+        }
         let top = crate::svg::symbol_top_y(&inst, &def);
         for (caption, dy) in [("39", crate::svg::REF_LABEL_DY), ("USBハブ", crate::svg::VALUE_LABEL_DY)] {
             let half = crate::tidy::text_width(caption, crate::svg::LABEL_FONT) / 2.0;
@@ -1595,12 +1599,28 @@ mod tests {
         }
     }
 
-    /// The captions of a block that has no top pins stay exactly where they were (the top of the box plus the usual gaps).
-    /// 上辺にピンの無いブロックの参照記号・型番は今までと同じ位置 (外形の上端+いつもの間隔) のまま。
+    /// The captions of an auto-sized block that has no top pins stay exactly where they were (the top of the box plus the usual gaps).
+    /// 外形が自動で上辺にピンの無いブロックの参照記号・型番は今までと同じ位置 (外形の上端+いつもの間隔) のまま。
     #[test]
-    fn captions_of_a_block_without_top_pins_do_not_move() {
+    fn captions_of_an_auto_sized_block_without_top_pins_do_not_move() {
         let (inst, def) = placed(AMP_53, 0, false);
         let (min, _) = crate::svg::symbol_bounds(&inst, &def);
         assert!((crate::svg::symbol_top_y(&inst, &def) - min.y).abs() < 1e-9);
+    }
+
+    /// A block sized to its minimum height has the number of its first side pin poking 0.5 mm above the box top, so its captions move up 0.5 mm to clear that number even without top pins.
+    /// 最小の高さを指定したブロックは、最初の左右のピン番号が外形の上端から 0.5 mm はみ出すので、上辺にピンが無くても参照記号・型番はその番号を避けて 0.5 mm 上がる。
+    #[test]
+    fn captions_of_a_minimum_height_block_clear_the_side_pin_numbers() {
+        let json = r#"{"left":[{"no":"1"},{"no":"2"}]}"#;
+        let (mut inst, _) = placed(json, 0, false);
+        inst.attrs.insert(BLOCK_SIZE_ATTR.into(), r#"{"w":10,"h":10}"#.into());
+        let def = block_symbol(&inst.attrs).expect("ブロック定義");
+        let (min, _) = crate::svg::symbol_bounds(&inst, &def);
+        let top = crate::svg::symbol_top_y(&inst, &def);
+        assert!((top - (min.y - 0.5)).abs() < 1e-9, "外形の上端 {} から 0.5 mm 上のはず: {top}", min.y);
+        for (text, at, height) in text_primitives(&def) {
+            assert!(top <= at.y - height / 2.0 + 1e-9, "番号 {text} の上端 {} が型番の基準 {top} より上", at.y - height / 2.0);
+        }
     }
 }

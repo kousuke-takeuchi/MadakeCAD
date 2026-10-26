@@ -220,10 +220,12 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
   return { rows, size };
 }
 
-/** いまの外形寸法 (手動ならその値、自動ならピンから決まる寸法)。 */
+/**
+ * いまの外形寸法 (手動ならその値、自動ならピンから決まる寸法)。手動でも、左右のまとまりの名前が
+ * 同じ行に並んで広がるときは、プレビュー・配置後と同じ広がった寸法を返す。
+ */
 export function draftSize(draft: BlockDraft): BlockSize {
-  if (draft.size) return { ...draft.size };
-  const [w, h] = blockBox(pinsOf(draft), null);
+  const [w, h] = blockBox(pinsOf(draft), draft.size ? { ...draft.size } : null);
   return { w, h };
 }
 

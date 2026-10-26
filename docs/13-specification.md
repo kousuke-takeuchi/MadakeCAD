@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3012 specification clauses** across 6 areas.
+**3016 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -48,7 +48,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - With group names on both the left and the right, the box is wide enough that the two names, which share a row, keep the text gap between them (the 20 x 20 mm size of block 44 used to put them on top of each other). <sub>`group_names_on_both_sides_keep_the_text_gap`</sub>
 - A box whose group names are on one side only, or whose names already fit, keeps the size it was given. <sub>`one_sided_group_names_keep_the_given_size`</sub>
 - The reference and value captions sit above, and the function label below, everything the block draws: lead ends, pin numbers (whole text boxes, also when the block is rotated), connector pictures and group names. <sub>`captions_clear_everything_the_pins_draw`</sub>
-- The captions of a block that has no top pins stay exactly where they were (the top of the box plus the usual gaps). <sub>`captions_of_a_block_without_top_pins_do_not_move`</sub>
+- The captions of an auto-sized block that has no top pins stay exactly where they were (the top of the box plus the usual gaps). <sub>`captions_of_an_auto_sized_block_without_top_pins_do_not_move`</sub>
+- A block sized to its minimum height has the number of its first side pin poking 0.5 mm above the box top, so its captions move up 0.5 mm to clear that number even without top pins. <sub>`captions_of_a_minimum_height_block_clear_the_side_pin_numbers`</sub>
 
 ### cable
 
@@ -267,6 +268,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Symbol block graphics are written in local coordinates with Y flipped; arcs keep their sweep because the clockwise paper-space direction becomes counter-clockwise in DXF. <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
 - The frame goes to the FRAME layer: the border, the zone ticks with their letters and numbers, and the title block cells with their binds resolved (drawing number, title, revision). <sub>`the_frame_and_title_block_go_to_the_frame_layer`</sub>
 - Shapes, the wire part legend and the panel layout entities are exported too, each on its own layer (SHAPES / ANNOTATION / PANEL), and the export report counts what was written per kind. <sub>`shapes_legends_and_panel_layout_are_exported_on_their_own_layers`</sub>
+- The DESC1 attribute of a rotated block whose side pin numbers poke out below its outline sits below the lowest of those number texts, not just below the outline. <sub>`the_description_of_a_rotated_block_sits_below_its_pin_numbers`</sub>
 - A symbol whose definition cannot be resolved is reported in the export report instead of disappearing without a word. <sub>`an_unresolvable_symbol_is_reported_as_skipped`</sub>
 - A rotated or mirrored symbol's pins land on exactly the paper positions the model gives them, so the exported pin still meets the wire drawn to it, and reading the file back gives the same rotation and mirror. <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
 
@@ -2051,6 +2053,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reads a placed block's attributes back into the same table <sub>`block attributes built from the draft`</sub>
 - opens a block with unreadable attributes as an empty table <sub>`block attributes built from the draft`</sub>
 - derives the automatic outline size from the pins, rounded to 5 mm steps <sub>`block attributes built from the draft`</sub>
+- reports the widened size of a manual outline whose group names on both sides share a row <sub>`block attributes built from the draft`</sub>
 - previews the very symbol that will be drawn, with one connection point per pin <sub>`block attributes built from the draft`</sub>
 - reports nothing for a table that is filled in correctly <sub>`checks on the pin table`</sub>
 - reports a pin number that is used twice <sub>`checks on the pin table`</sub>
@@ -2154,7 +2157,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - widens the box so group names on both sides keep the text gap <sub>`block captions and group names (Rust twin)`</sub>
 - keeps the given size when the group names are on one side only or already fit <sub>`block captions and group names (Rust twin)`</sub>
 - places captions above and below the whole text boxes, also when rotated or mirrored <sub>`block captions and group names (Rust twin)`</sub>
-- leaves the caption bounds of a block without top pins and of plain symbols as they were <sub>`block captions and group names (Rust twin)`</sub>
+- leaves the caption bounds of an auto-sized block without top pins and of plain symbols as they were <sub>`block captions and group names (Rust twin)`</sub>
+- moves the captions of a minimum-height block up 0.5 mm to clear the side pin numbers <sub>`block captions and group names (Rust twin)`</sub>
 
 ### frameEditor
 

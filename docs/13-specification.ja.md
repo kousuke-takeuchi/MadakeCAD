@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3012仕様項目**。
+全6領域・**3016仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -48,7 +48,8 @@
 - 左右の両方にまとまりの名前があるときは、同じ行に並ぶ2つの名前が文字の間隔を空けて収まる幅になる (ブロック 44 の 20 x 20 mm では名前が重なっていた)。 <sub>`group_names_on_both_sides_keep_the_text_gap`</sub>
 - まとまりの名前が片側だけの箱、または名前がもう収まっている箱は、指定された大きさのまま。 <sub>`one_sided_group_names_keep_the_given_size`</sub>
 - 参照記号・型番は、ブロックが描くもの (リードの先・ピン番号の文字の箱全体 (回転しても)・コネクタの絵・まとまりの名前) の上、機能ラベルは下に置く。 <sub>`captions_clear_everything_the_pins_draw`</sub>
-- 上辺にピンの無いブロックの参照記号・型番は今までと同じ位置 (外形の上端+いつもの間隔) のまま。 <sub>`captions_of_a_block_without_top_pins_do_not_move`</sub>
+- 外形が自動で上辺にピンの無いブロックの参照記号・型番は今までと同じ位置 (外形の上端+いつもの間隔) のまま。 <sub>`captions_of_an_auto_sized_block_without_top_pins_do_not_move`</sub>
+- 最小の高さを指定したブロックは、最初の左右のピン番号が外形の上端から 0.5 mm はみ出すので、上辺にピンが無くても参照記号・型番はその番号を避けて 0.5 mm 上がる。 <sub>`captions_of_a_minimum_height_block_clear_the_side_pin_numbers`</sub>
 
 ### cable
 
@@ -267,6 +268,7 @@
 - シンボルブロックの図形はY反転したローカル座標で書かれ、弧は用紙座標の時計回りがDXFでは反時計回りになる分だけ角度を入れ替えて向きを保つ。 <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
 - 図枠はFRAMEレイヤに出る: 外枠・ゾーン目盛の英字と数字・バインドを解決した表題欄のセル(図番・品名・改訂)。 <sub>`the_frame_and_title_block_go_to_the_frame_layer`</sub>
 - 図形・電線品番凡例・盤レイアウトのエンティティもそれぞれのレイヤ(SHAPES / ANNOTATION / PANEL)へ書き出され、書き出し結果の内訳が種別ごとの件数を返す。 <sub>`shapes_legends_and_panel_layout_are_exported_on_their_own_layers`</sub>
+- 回転したブロックで左右のピン番号の文字が外形より下へはみ出すとき、DESC1 の属性は外形の下ではなく、いちばん下の番号の文字よりさらに下に置く。 <sub>`the_description_of_a_rotated_block_sits_below_its_pin_numbers`</sub>
 - シンボル定義が見つからないシンボルは、黙って消えるのではなく書き出し結果の内訳で報告される。 <sub>`an_unresolvable_symbol_is_reported_as_skipped`</sub>
 - 回転・ミラーしたシンボルのピンはモデルどおりの用紙座標に着地するので、書き出したDXFでもピンがそのピンへ引いた配線の端と一致し、読み戻すと同じ回転角・ミラーになる。 <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
 
@@ -2051,6 +2053,7 @@
 - 配置済みブロックの属性を読み戻すと、同じピン表と外形の下書きに戻る <sub>`block attributes built from the draft`</sub>
 - 読めない属性のブロックは空のピン表として開く(その場で作り直せる) <sub>`block attributes built from the draft`</sub>
 - 外形が自動のときの寸法はピンの数で決まり、5mm刻みに丸められる <sub>`block attributes built from the draft`</sub>
+- 手動の外形でも、左右のまとまりの名前が同じ行に並んで広がった幅を表示する (44 の 20 x 20 指定はプレビューと同じ幅になる) <sub>`block attributes built from the draft`</sub>
 - プレビューは実際に描かれるシンボル定義そのもの(ピンの数だけ接続点がある) <sub>`block attributes built from the draft`</sub>
 - 正しく埋めたピン表には指摘が出ない <sub>`checks on the pin table`</sub>
 - 同じピン番号が2つあると指摘される(番号は図面内で一意) <sub>`checks on the pin table`</sub>
@@ -2154,7 +2157,8 @@
 - 左右にまとまりの名前があるときは、同じ行の2つの名前が文字の間隔 (1mm) を空けて収まる幅になる (44 の 20 x 20 指定は広がる) <sub>`block captions and group names (Rust twin)`</sub>
 - まとまりの名前が片側だけ、またはもう収まっている箱は指定の大きさのまま <sub>`block captions and group names (Rust twin)`</sub>
 - 参照記号・型番は文字の箱まで含めた上端の上、機能ラベルは下端の下に置く (回転・ミラーでも。Rust の captions_clear_everything_the_pins_draw と同じ) <sub>`block captions and group names (Rust twin)`</sub>
-- 上辺にピンの無いブロックと普通のシンボルの参照記号・型番の位置は今までと同じ <sub>`block captions and group names (Rust twin)`</sub>
+- 外形が自動で上辺にピンの無いブロックと普通のシンボルの参照記号・型番の位置は今までと同じ <sub>`block captions and group names (Rust twin)`</sub>
+- 最小の高さを指定したブロックは最初の左右のピン番号が外形の上端から 0.5 mm はみ出すので、上辺にピンが無くても参照記号・型番は 0.5 mm 上がる (Rust の captions_of_a_minimum_height_block_clear_the_side_pin_numbers と同じ) <sub>`block captions and group names (Rust twin)`</sub>
 
 ### frameEditor
 

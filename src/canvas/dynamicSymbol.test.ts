@@ -12,6 +12,8 @@ import {
   symbolBounds,
   transformLocal,
 } from "./dynamicSymbol";
+import { symbolTopY } from "./renderer";
+import { FUNCTION_LABEL_FONT, functionLabelFallbackAt } from "./textStyle";
 import { textWidthMm } from "./textWidth";
 import golden from "../../src-tauri/crates/madake-core/tests/golden/connector-blocks.json";
 
@@ -556,19 +558,32 @@ describe("block captions and group names (Rust twin)", () => {
           lo = Math.min(lo, c.y - prim.height / 2);
           hi = Math.max(hi, c.y + prim.height / 2);
         }
-        const caption = captionBounds(inst, def);
-        expect(caption.min.y).toBeLessThanOrEqual(lo + 1e-9);
-        expect(caption.max.y).toBeGreaterThanOrEqual(hi - 1e-9);
+        // 描画が使う関数そのもの: 型番の基準は symbolTopY、機能ラベルは functionLabelFallbackAt(captionBounds)
+        expect(symbolTopY(inst, def)).toBeLessThanOrEqual(lo + 1e-9);
+        const below = functionLabelFallbackAt(inst, captionBounds(inst, def));
+        expect(below.y - FUNCTION_LABEL_FONT).toBeGreaterThanOrEqual(hi - 1e-9);
       }
     }
   });
 
-  // ja: 上辺にピンの無いブロックと普通のシンボルの参照記号・型番の位置は今までと同じ
-  it("leaves the caption bounds of a block without top pins and of plain symbols as they were", () => {
+  // ja: 外形が自動で上辺にピンの無いブロックと普通のシンボルの参照記号・型番の位置は今までと同じ
+  it("leaves the caption bounds of an auto-sized block without top pins and of plain symbols as they were", () => {
     const [inst, def] = placed('{"left":[{"no":"IN","name":"IN"}],"right":[{"no":"OUT","name":"OUT"}]}', 0, false);
     expect(captionBounds(inst, def)).toEqual(symbolBounds(inst, def));
     const terminal = dynamicSymbol("terminal_block_3p")!;
     const plain = { ...inst, symbol_id: "terminal_block_3p", attrs: {} };
     expect(captionBounds(plain, terminal)).toEqual(symbolBounds(plain, terminal));
+  });
+
+  // ja: 最小の高さを指定したブロックは最初の左右のピン番号が外形の上端から 0.5 mm はみ出すので、上辺にピンが無くても参照記号・型番は 0.5 mm 上がる (Rust の captions_of_a_minimum_height_block_clear_the_side_pin_numbers と同じ)
+  it("moves the captions of a minimum-height block up 0.5 mm to clear the side pin numbers", () => {
+    const [inst] = placed('{"left":[{"no":"1"},{"no":"2"}]}', 0, false);
+    inst.attrs = { ...inst.attrs, block_size: '{"w":10,"h":10}' };
+    const def = blockSymbol(inst.attrs);
+    const top = symbolTopY(inst, def);
+    expect(top).toBeCloseTo(symbolBounds(inst, def).min.y - 0.5, 9);
+    for (const prim of def.primitives) {
+      if (prim.type === "text") expect(top).toBeLessThanOrEqual(prim.at.y - prim.height / 2 + 1e-9);
+    }
   });
 });
