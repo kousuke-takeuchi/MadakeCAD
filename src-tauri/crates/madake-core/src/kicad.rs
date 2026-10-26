@@ -849,18 +849,22 @@ pub fn export_kicad_sch(
             " (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid {})\n",
             esc(&inst.id.to_string())
         ));
-        let top = crate::svg::symbol_top_y(inst, &def);
+        // 上辺にピンのあるブロックは外形の左上の角へ右揃え (justify right)
+        let caption = crate::svg::caption_anchor(inst, &def);
+        let justify = if caption.end { " (justify right)" } else { "" };
         out.push_str(&format!(
-            "    (property \"Reference\" {} (at {} {} 0) (effects (font (size 1.27 1.27))))\n",
+            "    (property \"Reference\" {} (at {} {} 0) (effects (font (size 1.27 1.27)){}))\n",
             esc(&inst.reference),
-            num(inst.at.x),
-            num(top - 5.0)
+            num(caption.x),
+            num(caption.top - 5.0),
+            justify
         ));
         out.push_str(&format!(
-            "    (property \"Value\" {} (at {} {} 0) (effects (font (size 1.27 1.27))))\n",
+            "    (property \"Value\" {} (at {} {} 0) (effects (font (size 1.27 1.27)){}))\n",
             esc(&inst.value),
-            num(inst.at.x),
-            num(top - 2.5)
+            num(caption.x),
+            num(caption.top - 2.5),
+            justify
         ));
         for (k, v) in &inst.attrs {
             out.push_str(&format!(

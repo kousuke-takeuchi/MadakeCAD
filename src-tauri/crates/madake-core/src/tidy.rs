@@ -253,14 +253,15 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                 let Some(def) = defs.get(s) else {
                     continue;
                 };
-                let top = crate::svg::symbol_top_y(s, &def);
+                let caption = crate::svg::caption_anchor(s, &def);
+                let caption_anchor = if caption.end { Anchor::End } else { Anchor::Middle };
                 if s.shows_reference() {
                     boxes.push(TextBox {
                         rect: text_box(
-                            s.at.x,
-                            top - REF_LABEL_DY,
+                            caption.x,
+                            caption.top - REF_LABEL_DY,
                             LABEL_FONT,
-                            Anchor::Middle,
+                            caption_anchor,
                             &s.reference,
                         ),
                         text: s.reference.clone(),
@@ -271,10 +272,10 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
                 if !s.value.is_empty() {
                     boxes.push(TextBox {
                         rect: text_box(
-                            s.at.x,
-                            top - VALUE_LABEL_DY,
+                            caption.x,
+                            caption.top - VALUE_LABEL_DY,
                             LABEL_FONT,
-                            Anchor::Middle,
+                            caption_anchor,
                             &s.value,
                         ),
                         text: s.value.clone(),

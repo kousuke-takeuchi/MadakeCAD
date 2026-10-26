@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3016 specification clauses** across 6 areas.
+**3024 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -50,6 +50,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The reference and value captions sit above, and the function label below, everything the block draws: lead ends, pin numbers (whole text boxes, also when the block is rotated), connector pictures and group names. <sub>`captions_clear_everything_the_pins_draw`</sub>
 - The captions of an auto-sized block that has no top pins stay exactly where they were (the top of the box plus the usual gaps). <sub>`captions_of_an_auto_sized_block_without_top_pins_do_not_move`</sub>
 - A block sized to its minimum height has the number of its first side pin poking 0.5 mm above the box top, so its captions move up 0.5 mm to clear that number even without top pins. <sub>`captions_of_a_minimum_height_block_clear_the_side_pin_numbers`</sub>
+- A block with pins on its drawn top side puts its reference and value right-aligned at the box's top-left corner (1.0 mm left of the left edge, text boxes ending at least 1.0 mm above the top edge) without overlapping anything the block draws; other blocks keep the centred caption. <sub>`captions_of_a_block_with_top_pins_sit_at_the_top_left_corner`</sub>
+- Only blocks move their captions: a plain symbol keeps the centred caption above its top edge. <sub>`captions_of_a_plain_symbol_keep_the_centred_anchor`</sub>
+- KiCad's Reference/Value, the device XRef and the tidy text boxes all follow the corner placement of a block with top pins: right-justified, left of the box. <sub>`kicad_xref_and_tidy_follow_the_top_left_corner_captions`</sub>
 
 ### cable
 
@@ -271,6 +274,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The DESC1 attribute of a rotated block whose side pin numbers poke out below its outline sits below the lowest of those number texts, not just below the outline. <sub>`the_description_of_a_rotated_block_sits_below_its_pin_numbers`</sub>
 - A symbol whose definition cannot be resolved is reported in the export report instead of disappearing without a word. <sub>`an_unresolvable_symbol_is_reported_as_skipped`</sub>
 - A rotated or mirrored symbol's pins land on exactly the paper positions the model gives them, so the exported pin still meets the wire drawn to it, and reading the file back gives the same rotation and mirror. <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
+- The TAG1/CAT attributes of a block with top pins are right-justified (group 72 = 2) with their anchor left of the box; a block without top pins keeps them centred (72 = 1). <sub>`top_pin_block_tag_attributes_are_right_justified_left_of_the_box`</sub>
 
 ### Frame templates (plot frames)
 
@@ -962,6 +966,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A pin group's caption block sits wholly beyond its bracket: no caption line touches the bracket, and every line is further from the symbol than the bracket bar, at every rotation and mirrored. <sub>`svg_pin_group_caption_block_sits_wholly_beyond_its_bracket`</sub>
 - A coil shown as a device block reserves no room for pin-group brackets even if it carries the attribute, because none are drawn there: its outline, and so its designator and contact map, sit exactly where they would without the attribute. <sub>`a_device_block_coil_reserves_no_room_for_brackets_it_never_draws`</sub>
 - The dot at the target end of a note's leader line is drawn exactly the size of a wire junction dot, so the two read as the same mark. <sub>`svg_leader_dot_is_the_size_of_a_wire_junction_dot`</sub>
+- A block with top pins draws its reference and value right-aligned (text-anchor end) at the box's top-left corner; a block without top pins keeps the centred caption. <sub>`svg_puts_top_pin_block_captions_in_the_top_left_corner`</sub>
 
 ### Symbol library
 
@@ -2159,6 +2164,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - places captions above and below the whole text boxes, also when rotated or mirrored <sub>`block captions and group names (Rust twin)`</sub>
 - leaves the caption bounds of an auto-sized block without top pins and of plain symbols as they were <sub>`block captions and group names (Rust twin)`</sub>
 - moves the captions of a minimum-height block up 0.5 mm to clear the side pin numbers <sub>`block captions and group names (Rust twin)`</sub>
+- puts the captions of a block with top pins at the top-left corner, right-aligned, clear of everything drawn <sub>`block captions and group names (Rust twin)`</sub>
+- keeps the centred caption anchor of a plain symbol <sub>`block captions and group names (Rust twin)`</sub>
 
 ### frameEditor
 
@@ -2739,6 +2746,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - lists every other sheet for a designator on three sheets <sub>`G13 device cross-reference`</sub>
 - places the text right of the symbol outline, level with the designator label <sub>`G13 device cross-reference`</sub>
 - clears a designator label wider than the symbol itself <sub>`G13 device cross-reference`</sub>
+- places the text right of the outline, level with a corner-anchored designator <sub>`G13 device cross-reference`</sub>
 
 ### blocks
 

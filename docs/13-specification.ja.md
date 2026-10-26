@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3016仕様項目**。
+全6領域・**3024仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -50,6 +50,9 @@
 - 参照記号・型番は、ブロックが描くもの (リードの先・ピン番号の文字の箱全体 (回転しても)・コネクタの絵・まとまりの名前) の上、機能ラベルは下に置く。 <sub>`captions_clear_everything_the_pins_draw`</sub>
 - 外形が自動で上辺にピンの無いブロックの参照記号・型番は今までと同じ位置 (外形の上端+いつもの間隔) のまま。 <sub>`captions_of_an_auto_sized_block_without_top_pins_do_not_move`</sub>
 - 最小の高さを指定したブロックは、最初の左右のピン番号が外形の上端から 0.5 mm はみ出すので、上辺にピンが無くても参照記号・型番はその番号を避けて 0.5 mm 上がる。 <sub>`captions_of_a_minimum_height_block_clear_the_side_pin_numbers`</sub>
+- 描かれた上辺にピンのあるブロックは、参照記号・型番を外形の左上の角 (左辺の 1.0 mm 左・文字の箱の下端が上辺の 1.0 mm 以上上) に右揃えで置き、ブロックが描くものと重ならない。それ以外のブロックは今までの中央揃え。 <sub>`captions_of_a_block_with_top_pins_sit_at_the_top_left_corner`</sub>
+- 参照記号・型番が動くのはブロックだけ。普通のシンボルは今まで通り外形の上に中央揃え。 <sub>`captions_of_a_plain_symbol_keep_the_centred_anchor`</sub>
+- 上辺にピンのあるブロックでは、KiCad の Reference/Value・デバイスXRef・整理用の文字の箱も左上の角 (外形の左・右揃え) に従う。 <sub>`kicad_xref_and_tidy_follow_the_top_left_corner_captions`</sub>
 
 ### cable
 
@@ -271,6 +274,7 @@
 - 回転したブロックで左右のピン番号の文字が外形より下へはみ出すとき、DESC1 の属性は外形の下ではなく、いちばん下の番号の文字よりさらに下に置く。 <sub>`the_description_of_a_rotated_block_sits_below_its_pin_numbers`</sub>
 - シンボル定義が見つからないシンボルは、黙って消えるのではなく書き出し結果の内訳で報告される。 <sub>`an_unresolvable_symbol_is_reported_as_skipped`</sub>
 - 回転・ミラーしたシンボルのピンはモデルどおりの用紙座標に着地するので、書き出したDXFでもピンがそのピンへ引いた配線の端と一致し、読み戻すと同じ回転角・ミラーになる。 <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
+- 上辺にピンのあるブロックの TAG1/CAT 属性は右揃え (72 = 2) で、基準点は外形の左。上辺にピンの無いブロックは今まで通り中央揃え (72 = 1)。 <sub>`top_pin_block_tag_attributes_are_right_justified_left_of_the_box`</sub>
 
 ### 図枠テンプレート (プロットフレーム)
 
@@ -962,6 +966,7 @@
 - ピングループのキャプションは塊ごと括弧の外側に出る: どの行も括弧に触れず、シンボルから見て括弧の棒より遠くにある。回転・ミラーでも変わらない。 <sub>`svg_pin_group_caption_block_sits_wholly_beyond_its_bracket`</sub>
 - 実機ブロック表示のコイルは、ピングループの属性を持っていても括弧のための余白を取らない (そこには括弧を描かないため)。外形も、それに従う参照記号・接点マップの位置も、属性が無いときと寸分違わない。 <sub>`a_device_block_coil_reserves_no_room_for_brackets_it_never_draws`</sub>
 - 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える)。 <sub>`svg_leader_dot_is_the_size_of_a_wire_junction_dot`</sub>
+- 上辺にピンのあるブロックは参照記号・型番を外形の左上の角に右揃え (text-anchor end) で描く。上辺にピンの無いブロックは今まで通り中央揃え。 <sub>`svg_puts_top_pin_block_captions_in_the_top_left_corner`</sub>
 
 ### シンボルライブラリ
 
@@ -2159,6 +2164,8 @@
 - 参照記号・型番は文字の箱まで含めた上端の上、機能ラベルは下端の下に置く (回転・ミラーでも。Rust の captions_clear_everything_the_pins_draw と同じ) <sub>`block captions and group names (Rust twin)`</sub>
 - 外形が自動で上辺にピンの無いブロックと普通のシンボルの参照記号・型番の位置は今までと同じ <sub>`block captions and group names (Rust twin)`</sub>
 - 最小の高さを指定したブロックは最初の左右のピン番号が外形の上端から 0.5 mm はみ出すので、上辺にピンが無くても参照記号・型番は 0.5 mm 上がる (Rust の captions_of_a_minimum_height_block_clear_the_side_pin_numbers と同じ) <sub>`block captions and group names (Rust twin)`</sub>
+- 描かれた上辺にピンのあるブロックは、参照記号・型番を外形の左上の角 (左辺の 1.0 mm 左・型番の箱の下端が上辺の 1.0 mm 以上上) に右揃えで置き、ブロックが描くものと重ならない。それ以外は今まで通り (Rust の captions_of_a_block_with_top_pins_sit_at_the_top_left_corner と同じ) <sub>`block captions and group names (Rust twin)`</sub>
+- 参照記号・型番が動くのはブロックだけ。普通のシンボルは今まで通り中央揃え (Rust の captions_of_a_plain_symbol_keep_the_centred_anchor と同じ) <sub>`block captions and group names (Rust twin)`</sub>
 
 ### frameEditor
 
@@ -2739,6 +2746,7 @@
 - 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる <sub>`G13 device cross-reference`</sub>
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる <sub>`G13 device cross-reference`</sub>
 - 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない <sub>`G13 device cross-reference`</sub>
+- 参照記号が外形の左上の角に右揃えで置かれるブロックでは、デバイスXRefは外形の右端から出て、高さは角の参照記号の行に揃う <sub>`G13 device cross-reference`</sub>
 
 ### blocks
 

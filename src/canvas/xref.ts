@@ -272,7 +272,13 @@ export function deviceXrefAt(
   inst: Pick<SymbolInstance, "at" | "reference">,
   bounds: { min: Point; max: Point },
   topY: number,
+  /** 参照記号・型番の置き場所 (dynamicSymbol.captionAnchor)。外形の左上の角に右揃えのとき、
+   * 右端は基準X、高さは基準Yの行。省略または中央揃えなら従来どおり。 */
+  caption?: { x: number; top: number; end: boolean },
 ): Point {
+  if (caption?.end) {
+    return { x: Math.max(bounds.max.x, caption.x) + XREF_GAP, y: caption.top - REF_LABEL_DY };
+  }
   // 参照記号は配置基準点を中心に描かれるので、右端は中心+幅の半分
   const labelRight = inst.at.x + (LABEL_FONT * CHAR_WIDTH_RATIO * [...inst.reference].length) / 2;
   return { x: Math.max(bounds.max.x, labelRight) + XREF_GAP, y: topY - REF_LABEL_DY };

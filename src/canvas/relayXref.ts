@@ -500,7 +500,23 @@ function textWidthAt(text: string, font: number): number {
 function instanceLabelRects(
   inst: Pick<SymbolInstance, "at" | "reference" | "value">,
   bounds: SymbolBounds,
+  caption?: { x: number; top: number; end: boolean },
 ) {
+  if (caption?.end) {
+    // 外形の左上の角に右揃え: 基準Xが右端 (Rust側 relay_xref::instance_label_rects と同じ)
+    return (
+      [
+        [inst.reference, REF_LABEL_DY],
+        [inst.value, VALUE_LABEL_DY],
+      ] as const
+    )
+      .filter(([text]) => !!text)
+      .map(([text, dy]) => {
+        const width = textWidthAt(text, LABEL_FONT);
+        const y = caption.top - dy;
+        return { x0: caption.x - width, y0: y - LABEL_FONT, x1: caption.x, y1: y };
+      });
+  }
   return (
     [
       [inst.reference, REF_LABEL_DY],
@@ -540,6 +556,8 @@ export function coilLocationAt(
   text: string,
   notes: readonly WireNoteLabel[],
   noteFont: number,
+  /** 参照記号・型番の置き場所 (dynamicSymbol.captionAnchor)。省略時は外形の上に中央揃え。 */
+  caption?: { x: number; top: number; end: boolean },
 ): Point {
   const font = CONTACT_MAP_FONT;
   const width = textWidth(text);
@@ -552,7 +570,7 @@ export function coilLocationAt(
     ...notes.map((note) =>
       textRect(note.at, textWidthAt(note.text, noteFont), noteFont, note.align),
     ),
-    ...instanceLabelRects(inst, bounds),
+    ...instanceLabelRects(inst, bounds, caption),
   ];
   for (const at of candidates) {
     const probe = textRect(at, width, font, "left");

@@ -3,9 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import type { SymbolDef, SymbolInstance } from "../ipc";
 import {
+  blockBox,
   blockSymbol,
+  captionAnchor,
   captionBounds,
+  CORNER_CAPTION_GAP,
   dynamicSymbol,
+  parseBlockSpec,
   resolveInstanceDef,
   pinGroupPaperBoxes,
   resolveSymbolDef,
@@ -13,7 +17,7 @@ import {
   transformLocal,
 } from "./dynamicSymbol";
 import { symbolTopY } from "./renderer";
-import { FUNCTION_LABEL_FONT, functionLabelFallbackAt } from "./textStyle";
+import { FUNCTION_LABEL_FONT, functionLabelFallbackAt, LABEL_FONT, REF_LABEL_DY, VALUE_LABEL_DY } from "./textStyle";
 import { textWidthMm } from "./textWidth";
 import golden from "../../src-tauri/crates/madake-core/tests/golden/connector-blocks.json";
 
@@ -585,5 +589,93 @@ describe("block captions and group names (Rust twin)", () => {
     for (const prim of def.primitives) {
       if (prim.type === "text") expect(top).toBeLessThanOrEqual(prim.at.y - prim.height / 2 + 1e-9);
     }
+  });
+
+  // ja: 描かれた上辺にピンのあるブロックは、参照記号・型番を外形の左上の角 (左辺の 1.0 mm 左・型番の箱の下端が上辺の 1.0 mm 以上上) に右揃えで置き、ブロックが描くものと重ならない。それ以外は今まで通り (Rust の captions_of_a_block_with_top_pins_sit_at_the_top_left_corner と同じ)
+  it("puts the captions of a block with top pins at the top-left corner, right-aligned, clear of everything drawn", () => {
+    const longTop =
+      '{"left":[{"no":"4444","connector":"usb_c_f"},{"no":"333","connector":"usb_a_f"}],"top":[{"no":"UUUU","name":"長い名前","connector":"usb_a_f"},{"no":"U2","connector":"usb_a_f"}],"right":[{"no":"2222","connector":"usb_a_f"}]}';
+    const hub =
+      '{"top":[{"no":"U1","connector":"usb_a_f"},{"no":"U2","connector":"usb_a_f"}],"bottom":[{"no":"PWR","connector":"micro_b_f"}],"right":[{"no":"OTG","connector":"micro_b_m"}]}';
+    const flat = '{"left":[{"no":"IN","name":"IN"}],"right":[{"no":"OUT","name":"OUT"}]}';
+    let withTop = 0;
+    let withoutTop = 0;
+    for (const json of [hub, longTop, flat, '{"top":[{"no":"1"}],"left":[{"no":"2"}]}']) {
+      for (const rotation of [0, 90, 180, 270]) {
+        for (const mirror of [false, true]) {
+          const [inst, def] = placed(json, rotation, mirror);
+          const a = captionAnchor(inst, def);
+          // 外形の用紙座標 (ピン表と寸法から)
+          const { pins, size } = parseBlockSpec(inst.attrs);
+          const [w, h] = blockBox(pins, size);
+          const c1 = transformLocal({ x: -w / 2, y: -h / 2 }, inst);
+          const c2 = transformLocal({ x: w / 2, y: h / 2 }, inst);
+          const body = {
+            minX: Math.min(c1.x, c2.x),
+            maxX: Math.max(c1.x, c2.x),
+            minY: Math.min(c1.y, c2.y),
+          };
+          const hasTop = def.pins.some((pin) => {
+            const t = transformLocal(pin.at, inst);
+            return t.y < body.minY - 1e-6 && t.x > body.minX - 1e-6 && t.x < body.maxX + 1e-6;
+          });
+          if (!hasTop) {
+            withoutTop += 1;
+            expect(a).toEqual({ x: inst.at.x, top: symbolTopY(inst, def), end: false });
+            continue;
+          }
+          withTop += 1;
+          expect(a.end).toBe(true);
+          expect(a.x).toBeCloseTo(body.minX - CORNER_CAPTION_GAP, 9);
+          expect(a.top - VALUE_LABEL_DY).toBeLessThanOrEqual(body.minY - 1 + 1e-9);
+          // ブロックが描くもの (図形の外接矩形・文字の箱全体) と、2行の文字の箱が重ならない
+          const rects: { x0: number; y0: number; x1: number; y1: number }[] = [];
+          for (const prim of def.primitives) {
+            if (prim.type === "text") {
+              const c = transformLocal(prim.at, inst);
+              const half = textWidthMm(prim.text, prim.height) / 2;
+              rects.push({ x0: c.x - half, y0: c.y - prim.height / 2, x1: c.x + half, y1: c.y + prim.height / 2 });
+            } else {
+              const pts =
+                prim.type === "line"
+                  ? prim.pts
+                  : prim.type === "rect"
+                    ? [prim.p1, prim.p2]
+                    : [
+                        { x: prim.center.x - prim.r, y: prim.center.y - prim.r },
+                        { x: prim.center.x + prim.r, y: prim.center.y + prim.r },
+                      ];
+              const t = pts.map((q) => transformLocal(q, inst));
+              rects.push({
+                x0: Math.min(...t.map((q) => q.x)),
+                y0: Math.min(...t.map((q) => q.y)),
+                x1: Math.max(...t.map((q) => q.x)),
+                y1: Math.max(...t.map((q) => q.y)),
+              });
+            }
+          }
+          for (const [text, dy] of [
+            [inst.reference, REF_LABEL_DY],
+            [inst.value, VALUE_LABEL_DY],
+          ] as const) {
+            const cap = { x0: a.x - textWidthMm(text, LABEL_FONT), x1: a.x, y0: a.top - dy - LABEL_FONT, y1: a.top - dy };
+            for (const r of rects) {
+              const overlap = cap.x0 < r.x1 - 0.01 && r.x0 < cap.x1 - 0.01 && cap.y0 < r.y1 - 0.01 && r.y0 < cap.y1 - 0.01;
+              expect(overlap, `回転${rotation}・ミラー${mirror}: ${text} が描かれたものに重なる`).toBe(false);
+            }
+          }
+        }
+      }
+    }
+    expect(withTop).toBeGreaterThan(0);
+    expect(withoutTop).toBeGreaterThan(0);
+  });
+
+  // ja: 参照記号・型番が動くのはブロックだけ。普通のシンボルは今まで通り中央揃え (Rust の captions_of_a_plain_symbol_keep_the_centred_anchor と同じ)
+  it("keeps the centred caption anchor of a plain symbol", () => {
+    const [inst] = placed('{"top":[{"no":"1"}]}', 0, false);
+    const terminal = dynamicSymbol("terminal_block_3p")!;
+    const plain = { ...inst, symbol_id: "terminal_block_3p", attrs: {} };
+    expect(captionAnchor(plain, terminal)).toEqual({ x: plain.at.x, top: symbolTopY(plain, terminal), end: false });
   });
 });
