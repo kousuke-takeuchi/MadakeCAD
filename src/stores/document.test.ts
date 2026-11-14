@@ -179,6 +179,22 @@ describe("document store", () => {
     });
     expect(store.project!.frame_template).toBeNull();
   });
+
+  // ja: text_font_changed のパッチで、プロジェクトの書体の設定が切り替わり、undoで元へ戻る
+  it("text_font_changed patches update the mirror both ways (switch and undo)", () => {
+    const store = useDocumentStore();
+    store.project = testProject();
+    store.applyPatch({
+      revision: 1,
+      ops: [{ op: "text_font_changed", text_font: { id: "kst32b", latin: "full" } }],
+    });
+    expect(store.project!.text_font).toEqual({ id: "kst32b", latin: "full" });
+    store.applyPatch({
+      revision: 2,
+      ops: [{ op: "text_font_changed", text_font: null }],
+    });
+    expect(store.project!.text_font).toBeNull();
+  });
 });
 
 /** 一覧に並ぶ図枠テンプレート (中身はレイアウトに関係しない最小限)。 */

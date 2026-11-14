@@ -119,6 +119,12 @@ pub enum Command {
         #[serde(default)]
         frame_template: Option<String>,
     },
+    /// 図面の文字の書体を選ぶ (プロジェクト単位)。nullでシステムの書体へ戻す。同梱していない
+    /// フォントのidは拒否する。逆コマンドは変更前の設定。
+    SetTextFont {
+        #[serde(default)]
+        text_font: Option<crate::model::TextFont>,
+    },
     /// 線番のネット単位自動採番。sheet_id省略時はプロジェクトの全シートが対象。
     RenumberWires {
         #[serde(default)]
@@ -295,6 +301,8 @@ pub enum PatchOp {
     PlcAssignmentsReplaced { assignments: Vec<PlcAssignment> },
     /// 図枠テンプレートが差し替わった (全シートの図枠を描き直す)。
     FrameTemplateChanged { frame_template: Option<String> },
+    /// 図面の文字の書体が変わった (全シートの文字を描き直す)。
+    TextFontChanged { text_font: Option<crate::model::TextFont> },
     /// PLC I/O図面の生成設定 (プロジェクトに保存したもの) が変わった。
     PlcSheetOptionsChanged { options: Option<crate::plc::PlcSheetOptions> },
     /// プロジェクト名・番号が変わった (G16)。表題欄側の変更は各シートの
@@ -957,6 +965,18 @@ impl Engine {
                     vec![Command::SetFrameTemplate {
                         frame_template: old,
                     }],
+                ))
+            }
+            Command::SetTextFont { text_font } => {
+                if let Some(tf) = text_font {
+                    if crate::stroke_font::font(&tf.id).is_none() {
+                        return Err(CoreError::InvalidCommand(format!("同梱していない書体です: {}", tf.id)));
+                    }
+                }
+                let old = std::mem::replace(&mut self.project.text_font, text_font.clone());
+                Ok((
+                    vec![PatchOp::TextFontChanged { text_font: text_font.clone() }],
+                    vec![Command::SetTextFont { text_font: old }],
                 ))
             }
             Command::RenumberWires {
@@ -2762,6 +2782,31 @@ mod tests {
             engine.project().frame_template.as_deref(),
             Some("jis-a4-portrait")
         );
+    }
+
+    /// Selecting the bundled stroke font sets it on the project and reports it in the patch; undo restores the system font.
+    /// 同梱のストロークフォントを選ぶとプロジェクトに設定され、パッチで知らされる。undoでシステムの書体へ戻る。
+    #[test]
+    fn set_text_font_and_undo() {
+        let (mut engine, _) = test_engine();
+        let tf = crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Full };
+        let patch = engine.execute(Command::SetTextFont { text_font: Some(tf.clone()) }).unwrap();
+        assert!(matches!(&patch.ops[0], PatchOp::TextFontChanged { text_font: Some(t) } if *t == tf));
+        assert_eq!(engine.project().text_font.as_ref(), Some(&tf));
+        engine.undo().unwrap().unwrap();
+        assert!(engine.project().text_font.is_none());
+        engine.redo().unwrap().unwrap();
+        assert_eq!(engine.project().text_font.as_ref(), Some(&tf));
+    }
+
+    /// A font id that is not bundled is refused and nothing changes.
+    /// 同梱していないフォントのidは拒否され、何も変わらない。
+    #[test]
+    fn set_text_font_refuses_an_unknown_id() {
+        let (mut engine, _) = test_engine();
+        let bad = crate::model::TextFont { id: "nope".into(), latin: crate::model::Latin::Half };
+        assert!(engine.execute(Command::SetTextFont { text_font: Some(bad) }).is_err());
+        assert!(engine.project().text_font.is_none());
     }
 
     /// SetFrameTemplate accepts an id nobody knows: the drawing keeps printing with the default frame, so a project made elsewhere still opens.

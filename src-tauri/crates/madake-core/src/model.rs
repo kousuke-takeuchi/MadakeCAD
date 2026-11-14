@@ -62,7 +62,9 @@ pub type SheetId = Uuid;
 ///   消さない)。形式17・18のビルドは版番号で断る。コネクタの無いファイルは版番号以外これまでと同じ
 /// - v20: 改訂行の改訂番号・承認・個数 ([`Revision::rev_no`] ほか) と、表題欄の自由な欄 ([`TitleBlock::fields`])。
 ///   形式19のビルドは版番号で断る。新しい項目を使わないファイルは版番号以外これまでと同じ
-pub const FORMAT_VERSION: u32 = 20;
+/// - v21: プロジェクトの書体 ([`Project::text_font`]、同梱のストロークフォント)。形式20のビルドは版番号で断る。
+///   書体を選んでいないファイルは版番号以外これまでと同じ
+pub const FORMAT_VERSION: u32 = 21;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -90,6 +92,9 @@ pub struct Project {
     /// ([`crate::frame_template::DEFAULT_FRAME_TEMPLATE_ID`])。
     #[serde(default)]
     pub frame_template: Option<String>,
+    /// 図面の文字の書体 (同梱のストロークフォント)。`None` はシステムの書体 (従来どおり)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_font: Option<TextFont>,
     /// プロジェクト番号 (G16)。表題欄バインド`{project.no}`の供給元
     /// ([`crate::frame_template::bind_value`])。`Project::name`と違って作成時には決まらないので
     /// 既定は未設定。`set_project_meta`コマンドで設定する。
@@ -156,6 +161,7 @@ impl Project {
             wire_parts: Vec::new(),
             plc_assignments: Vec::new(),
             frame_template: None,
+            text_font: None,
             no: None,
             mech_links: Vec::new(),
             plc_generate: None,
@@ -348,6 +354,19 @@ impl Sheet {
             Orientation::Portrait => (h, w),
         }
     }
+}
+
+/// 図面の文字の書体 (同梱のストロークフォント。[`crate::stroke_font::font`] のid)。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TextFont {
+    pub id: String,
+    /// 英数字を半角・全角どちらの字で描くか (既定は半角)。
+    #[serde(default, skip_serializing_if = "is_half")]
+    pub latin: Latin,
+}
+
+fn is_half(l: &Latin) -> bool {
+    *l == Latin::Half
 }
 
 /// ストロークフォントで英数字 (ASCII) をどの字で描くか。

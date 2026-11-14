@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3123仕様項目**。
+全6領域・**3127仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -136,6 +136,8 @@
 - SetPlcSheetOptionsはPLC I/O図面の生成設定をプロジェクトに保存し、undoで保存前の状態に戻る。 <sub>`set_plc_sheet_options_saves_the_settings_and_undo_restores_them`</sub>
 - SetPlcAssignmentsはプロジェクトのPLC I/O割付表を丸ごと置き換え、undoで以前の表に戻る。 <sub>`set_plc_assignments_is_undoable`</sub>
 - SetFrameTemplateはプロジェクト全体の図枠テンプレートを1回の編集で差し替え、undoで元の図枠へ戻る(最初の差し替えをundoすると未指定=既定の図枠へ戻る)。 <sub>`set_frame_template_is_undoable`</sub>
+- 同梱のストロークフォントを選ぶとプロジェクトに設定され、パッチで知らされる。undoでシステムの書体へ戻る。 <sub>`set_text_font_and_undo`</sub>
+- 同梱していないフォントのidは拒否され、何も変わらない。 <sub>`set_text_font_refuses_an_unknown_id`</sub>
 - SetFrameTemplateは知らないidも受け付ける(図面は既定の図枠で描かれ続けるので、他所で作ったプロジェクトも開ける)。 <sub>`set_frame_template_accepts_an_unknown_id`</sub>
 - ハーネス境界は通常のエンティティ用コマンドで追加・改名・削除でき、どの操作もundoで戻せる。 <sub>`harness_add_rename_delete_are_undoable`</sub>
 - ハーネス境界を移動すると4隅すべてが動き、undoで元の位置に正確に戻る。 <sub>`harness_move_and_undo_restores_every_corner`</sub>
@@ -343,7 +345,7 @@
 
 ### プロジェクトファイルI/O (.mdkproj)
 
-- 形式19のプロジェクトファイルはこのビルドで開け、形式20になる。改訂や表題欄のデータは失われない。 <sub>`a_version_19_project_migrates_to_20`</sub>
+- 形式19のプロジェクトファイルはこのビルドで開け、現行の形式になる。改訂や表題欄のデータは失われない。 <sub>`a_version_19_project_migrates_to_the_current_version`</sub>
 - .mdkprojへ保存して読み直したプロジェクトは、全エンティティを含めて同一である。 <sub>`project_file_roundtrip`</sub>
 - 保存された.mdkprojはformat_version付きの整形JSONで、gitの差分が読みやすい。 <sub>`saved_file_is_pretty_json_with_format_version`</sub>
 - 存在しないファイルの読み込みはパニックせずエラーを返す。 <sub>`loading_missing_file_is_an_error`</sub>
@@ -356,7 +358,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは20 (改訂行に改訂番号・承認・個数を、表題欄に自由な欄を追加した版) である。 <sub>`the_current_format_version_is_twenty`</sub>
+- 現行のファイル形式バージョンは21 (プロジェクトの書体を追加した版) である。 <sub>`the_current_format_version_is_twenty_one`</sub>
+- ストロークフォントを持つプロジェクトはファイルを往復でき、持たないプロジェクトはtext_fontのキーを書かない。 <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
 - ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_17_file_loads_unchanged`</sub>
 - 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - 区間が空の「run_cable」(ファイルを手で直したときなど) は普通の定義線ケーブルとして開き、書き戻すと種類「cable」になる。 <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
@@ -3172,6 +3175,7 @@
 - 古いrevisionのパッチは破棄される(二重配信しても安全) <sub>`document store`</sub>
 - mech_links_replaced パッチでFreeCAD対応付けの一覧が置き換わる <sub>`document store`</sub>
 - 図枠テンプレートを差し替えるパッチはミラーへ反映され、undoでも即座に元へ戻る <sub>`document store`</sub>
+- text_font_changed のパッチで、プロジェクトの書体の設定が切り替わり、undoで元へ戻る <sub>`document store`</sub>
 - 起動時に図枠テンプレートの一覧を読み込み、以降の描画はその定義で行う <sub>`document store: 図枠テンプレートの解決`</sub>
 - 図枠テンプレートの一覧が読めなくても図面は開ける(同梱のjis-a3で描く) <sub>`document store: 図枠テンプレートの解決`</sub>
 - プロジェクトが選んでいる図枠テンプレートの定義が、図面の描画に使われる <sub>`document store: 図枠テンプレートの解決`</sub>

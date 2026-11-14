@@ -92,10 +92,10 @@ mod tests {
     use crate::model::*;
     use uuid::Uuid;
 
-    /// A version 19 project file opens in this build and becomes version 20, with no revision or title block data lost.
-    /// 形式19のプロジェクトファイルはこのビルドで開け、形式20になる。改訂や表題欄のデータは失われない。
+    /// A version 19 project file opens in this build and becomes the current version, with no revision or title block data lost.
+    /// 形式19のプロジェクトファイルはこのビルドで開け、現行の形式になる。改訂や表題欄のデータは失われない。
     #[test]
-    fn a_version_19_project_migrates_to_20() {
+    fn a_version_19_project_migrates_to_the_current_version() {
         let mut project = Project::new("old");
         project.format_version = 19;
         project.sheets[0].revisions.push(Revision { mark: "A".into(), date: "26-08-01".into(), description: "初版".into(), by: "K.T".into(), ..Default::default() });
@@ -107,7 +107,7 @@ mod tests {
         }
         let mut loaded: Project = serde_json::from_str(&old).unwrap();
         migrate(&mut loaded);
-        assert_eq!(loaded.format_version, 20);
+        assert_eq!(loaded.format_version, crate::model::FORMAT_VERSION);
         let rev = &loaded.sheets[0].revisions[0];
         assert_eq!((rev.mark.as_str(), rev.date.as_str(), rev.description.as_str(), rev.by.as_str()), ("A", "26-08-01", "初版", "K.T"));
         assert_eq!((rev.rev_no.as_str(), rev.approved.as_str(), rev.count.as_str()), ("", "", ""));
@@ -413,15 +413,28 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 20, the version that added revision number, approval and count to revision rows and free title block fields.
-    /// 現行のファイル形式バージョンは20 (改訂行に改訂番号・承認・個数を、表題欄に自由な欄を追加した版) である。
+    /// The current file format version is 21, the version that added the project's text font.
+    /// 現行のファイル形式バージョンは21 (プロジェクトの書体を追加した版) である。
     #[test]
-    fn the_current_format_version_is_twenty() {
-        assert_eq!(FORMAT_VERSION, 20);
+    fn the_current_format_version_is_twenty_one() {
+        assert_eq!(FORMAT_VERSION, 21);
         let mut old = Project::new("x");
-        old.format_version = 19;
+        old.format_version = 20;
         migrate(&mut old);
-        assert_eq!(old.format_version, 20);
+        assert_eq!(old.format_version, 21);
+    }
+
+    /// A project with a stroke font round-trips through the file; a project without one writes no text_font key.
+    /// ストロークフォントを持つプロジェクトはファイルを往復でき、持たないプロジェクトはtext_fontのキーを書かない。
+    #[test]
+    fn text_font_round_trips_and_is_omitted_when_unset() {
+        let mut p = Project::new("p");
+        assert!(!serde_json::to_string(&p).unwrap().contains("text_font"));
+        p.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Full });
+        let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(back.text_font, p.text_font);
+        let half = TextFont { id: "kst32b".into(), latin: Latin::Half };
+        assert_eq!(serde_json::to_string(&half).unwrap(), "{\"id\":\"kst32b\"}");
     }
 
     /// A version 17 file without ports loads unchanged apart from being moved up to the current version.

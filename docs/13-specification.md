@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3123 specification clauses** across 6 areas.
+**3127 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -136,6 +136,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - SetPlcSheetOptions saves the PLC I/O drawing settings with the project, and undo puts back what was saved before. <sub>`set_plc_sheet_options_saves_the_settings_and_undo_restores_them`</sub>
 - SetPlcAssignments replaces the whole PLC I/O assignment table of the project; undo restores the previous table. <sub>`set_plc_assignments_is_undoable`</sub>
 - SetFrameTemplate switches the frame template of the whole project in one edit, and undo puts the previous one back (undoing the very first switch returns to the default frame). <sub>`set_frame_template_is_undoable`</sub>
+- Selecting the bundled stroke font sets it on the project and reports it in the patch; undo restores the system font. <sub>`set_text_font_and_undo`</sub>
+- A font id that is not bundled is refused and nothing changes. <sub>`set_text_font_refuses_an_unknown_id`</sub>
 - SetFrameTemplate accepts an id nobody knows: the drawing keeps printing with the default frame, so a project made elsewhere still opens. <sub>`set_frame_template_accepts_an_unknown_id`</sub>
 - A harness boundary is added, renamed and deleted with the ordinary entity commands, and every step can be undone. <sub>`harness_add_rename_delete_are_undoable`</sub>
 - Moving a harness boundary shifts all of its corners, and undo puts them back exactly. <sub>`harness_move_and_undo_restores_every_corner`</sub>
@@ -343,7 +345,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Project file I/O (.mdkproj)
 
-- A version 19 project file opens in this build and becomes version 20, with no revision or title block data lost. <sub>`a_version_19_project_migrates_to_20`</sub>
+- A version 19 project file opens in this build and becomes the current version, with no revision or title block data lost. <sub>`a_version_19_project_migrates_to_the_current_version`</sub>
 - A project saved to .mdkproj and loaded back is identical, including all entities. <sub>`project_file_roundtrip`</sub>
 - The saved .mdkproj file is pretty-printed JSON with a format_version field, so it diffs well in git. <sub>`saved_file_is_pretty_json_with_format_version`</sub>
 - Loading a missing file returns an error instead of panicking. <sub>`loading_missing_file_is_an_error`</sub>
@@ -356,7 +358,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 20, the version that added revision number, approval and count to revision rows and free title block fields. <sub>`the_current_format_version_is_twenty`</sub>
+- The current file format version is 21, the version that added the project's text font. <sub>`the_current_format_version_is_twenty_one`</sub>
+- A project with a stroke font round-trips through the file; a project without one writes no text_font key. <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
 - A version 17 file without ports loads unchanged apart from being moved up to the current version. <sub>`a_version_17_file_loads_unchanged`</sub>
 - A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable". <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - A "run_cable" entry whose run is empty (for example after hand-editing the file) opens as a plain definition-line cable and is written back with the kind "cable". <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
@@ -3172,6 +3175,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - patches with an older revision are discarded (duplicate delivery is safe) <sub>`document store`</sub>
 - a mech_links_replaced patch replaces the FreeCAD link list <sub>`document store`</sub>
 - frame_template_changed patches update the mirror both ways (switch and undo) <sub>`document store`</sub>
+- text_font_changed patches update the mirror both ways (switch and undo) <sub>`document store`</sub>
 - loads the frame template catalogue on bootstrap <sub>`document store: 図枠テンプレートの解決`</sub>
 - still opens the drawing when the frame template catalogue cannot be read <sub>`document store: 図枠テンプレートの解決`</sub>
 - resolves the frame template the project has chosen <sub>`document store: 図枠テンプレートの解決`</sub>

@@ -400,6 +400,17 @@ export interface Project {
   mech_links?: MechLink[];
   /** PLC I/O図面の生成設定 (生成ダイアログで「プロジェクトに保存」したもの。format v14)。 */
   plc_generate?: PlcSheetOptions | null;
+  /** 図面の文字の書体 (同梱ストロークフォント。format v21)。未設定はシステムの書体。 */
+  text_font?: TextFont | null;
+}
+
+/** ストロークフォントで英数字を半角・全角どちらの字で描くか。 */
+export type Latin = "half" | "full";
+
+/** 図面の文字の書体 (Rustの`TextFont`)。 */
+export interface TextFont {
+  id: string;
+  latin?: Latin;
 }
 
 /** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */
@@ -563,6 +574,7 @@ export type PatchOp =
   | { op: "wire_parts_replaced"; wire_parts: WirePart[] }
   | { op: "plc_assignments_replaced"; assignments: PlcAssignment[] }
   | { op: "frame_template_changed"; frame_template: string | null }
+  | { op: "text_font_changed"; text_font: TextFont | null }
   | { op: "plc_sheet_options_changed"; options: PlcSheetOptions | null }
   /** プロジェクト名・番号が変わった (G16)。表題欄側は各シートの`sheet_meta_updated`で届く。 */
   | { op: "project_meta_changed"; name: string; no: string | null }

@@ -251,6 +251,9 @@ export const useDocumentStore = defineStore("document", {
           case "frame_template_changed":
             if (this.project) this.project.frame_template = op.frame_template;
             break;
+          case "text_font_changed":
+            if (this.project) this.project.text_font = op.text_font;
+            break;
           case "plc_sheet_options_changed":
             if (this.project) this.project.plc_generate = op.options;
             break;
