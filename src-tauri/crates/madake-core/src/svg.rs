@@ -229,64 +229,169 @@ fn polyline_points(pts: &[Point]) -> String {
         .join(" ")
 }
 
+/// 裁断マーク・中心マークの線幅 (mm)。
+pub(crate) const MARK_STROKE: f64 = 0.5;
+/// 中心マークの長さの上限 (mm)。裁断線まで伸ばす (`centre_to_trim`) ときは使わない。
+pub(crate) const CENTRE_MARK_MAX: f64 = 10.0;
+/// 中心マークの矢印 (開いたV字) の長さと、片側の幅 (mm)。
+pub(crate) const CENTRE_ARROW_LEN: f64 = 1.9;
+pub(crate) const CENTRE_ARROW_HALF: f64 = 0.5;
+
+/// 裁断マーク (裁断線の四隅のL字) と中心マーク (外枠の各辺の中央から外向き)。
+fn frame_marks(out: &mut String, t: &FrameTemplate, pw: f64, ph: f64) {
+    let ins = t.marks.trim_insets();
+    if t.marks.trim {
+        let arm = t.marks.trim_arm();
+        for (cx, cy, sx, sy) in [
+            (ins.left, ins.top, 1.0, 1.0),
+            (pw - ins.right, ins.top, -1.0, 1.0),
+            (ins.left, ph - ins.bottom, 1.0, -1.0),
+            (pw - ins.right, ph - ins.bottom, -1.0, -1.0),
+        ] {
+            line_el(out, cx, cy, cx + sx * arm, cy, MARK_STROKE, "#000");
+            line_el(out, cx, cy, cx, cy + sy * arm, MARK_STROKE, "#000");
+        }
+    }
+    if t.marks.centre {
+        let (x0, y0, x1, y1) = t.frame_rect(pw, ph);
+        let m = t.margins();
+        let (mx, my) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+        let stroke = t.marks.centre_weight.map(|w| w.stroke()).unwrap_or(MARK_STROKE);
+        // 辺ごとに: 外枠上の始点、外向きの単位ベクトル、余白、裁断線までの距離の差し引き分
+        for (sx, sy, dx, dy, margin, inset) in [
+            (mx, y0, 0.0, -1.0, m.top, ins.top),
+            (mx, y1, 0.0, 1.0, m.bottom, ins.bottom),
+            (x0, my, -1.0, 0.0, m.left, ins.left),
+            (x1, my, 1.0, 0.0, m.right, ins.right),
+        ] {
+            let len = if t.marks.centre_to_trim { margin - inset } else { margin.min(CENTRE_MARK_MAX) };
+            if len <= 0.0 {
+                continue;
+            }
+            let (ex, ey) = (sx + dx * len, sy + dy * len);
+            line_el(out, sx, sy, ex, ey, stroke, "#000");
+            if t.marks.centre_arrow {
+                // 外側の端を先端にした開いたV字。(px, py) は進行方向に直角な単位ベクトル
+                let (bx, by) = (ex - dx * CENTRE_ARROW_LEN, ey - dy * CENTRE_ARROW_LEN);
+                let (px, py) = (-dy, dx);
+                let _ = writeln!(
+                    out,
+                    "<polyline points=\"{},{} {},{} {},{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>",
+                    n(bx + px * CENTRE_ARROW_HALF), n(by + py * CENTRE_ARROW_HALF),
+                    n(ex), n(ey),
+                    n(bx - px * CENTRE_ARROW_HALF), n(by - py * CENTRE_ARROW_HALF),
+                    n(stroke)
+                );
+            }
+        }
+    }
+}
+
+/// 枠付きセル (`boxed`) の、文字の箱から枠までの距離 (mm)。
+pub(crate) const BOX_GAP: f64 = 0.8;
+/// ベースラインより下に出る分 (ディセンダ) ÷ フォントサイズ。枠の下端の見積もりに使う。
+const DESCENT_RATIO: f64 = 0.25;
+
+/// `max_w`に収まるフォントサイズ。収まっていれば`font`のまま (大きくはしない)。
+pub(crate) fn fitted_font(lines: &[&str], font: f64, max_w: Option<f64>) -> f64 {
+    let Some(max_w) = max_w.filter(|w| *w > 0.0) else { return font };
+    let widest = lines.iter().map(|l| crate::tidy::text_width(l, font)).fold(0.0, f64::max);
+    if widest <= max_w { font } else { font * max_w / widest }
+}
+
+/// 表題欄のセル1つ。新しい項目を使わないセルは従来の1要素をそのまま出す。
+fn frame_cell(out: &mut String, t: &FrameTemplate, cell: &crate::frame_template::Cell, value: &str, x: f64, y: f64) {
+    let lines: Vec<&str> = value.split('\n').collect();
+    let base = t.font_size(cell.size);
+    let font = if cell.fit { fitted_font(&lines, base, cell.w) } else { base };
+    let plain = cell.rotation == 0 && !cell.boxed && lines.len() == 1;
+    if plain {
+        text_weight_el(out, x, y, font, "#000", cell.align.anchor(), cell.weight, value);
+        return;
+    }
+    if cell.rotation != 0 {
+        let _ = writeln!(out, "<g transform=\"rotate({} {} {})\">", cell.rotation, n(x), n(y));
+    }
+    let pitch = font * crate::frame_template::LINE_PITCH;
+    for (i, line) in lines.iter().enumerate() {
+        text_weight_el(out, x, y + pitch * i as f64, font, "#000", cell.align.anchor(), cell.weight, line);
+    }
+    // 値が空のセルには囲むものが無いので、枠も描かない
+    if cell.boxed && !value.is_empty() {
+        let w = lines.iter().map(|l| crate::tidy::text_width(l, font)).fold(0.0, f64::max);
+        let left = match cell.align {
+            crate::frame_template::Align::Start => x,
+            crate::frame_template::Align::Middle => x - w / 2.0,
+            crate::frame_template::Align::End => x - w,
+        };
+        let top = y - font;
+        let bottom = y + pitch * (lines.len() as f64 - 1.0) + font * DESCENT_RATIO;
+        rect_el(out, left - BOX_GAP, top - BOX_GAP, w + 2.0 * BOX_GAP, bottom - top + 2.0 * BOX_GAP, "none", "#000", RULE_STROKE);
+    }
+    if cell.rotation != 0 {
+        out.push_str("</g>\n");
+    }
+}
+
 /// 図枠テンプレート ([`crate::frame_template`]) のとおりに図枠・ゾーン目盛・改訂欄・
 /// 表題欄・ロゴ枠を描く。表題欄のセルはバインドを解決してから描く。
 fn frame_and_title_block(out: &mut String, sheet: &Sheet, t: &FrameTemplate, ctx: &BindContext) {
     let (pw, ph) = sheet.paper_mm();
-    let m = t.frame_margin;
-    let (x0, y0) = (m, m);
-    let (x1, y1) = (pw - m, ph - m);
+    let (x0, y0, x1, y1) = t.frame_rect(pw, ph);
     rect_el(out, x0, y0, x1 - x0, y1 - y0, "none", "#000", FRAME_STROKE);
-    // ゾーン目盛。分割数はシートごとの設定 (図枠を替えても図面の住所は変わらない)、
-    // 文字種 (数字/英字) はテンプレートが決める
-    let cols = sheet.zone_cols.max(1) as f64;
-    let rows = sheet.zone_rows.max(1) as f64;
-    let zw = (x1 - x0) / cols;
-    let zh = (y1 - y0) / rows;
-    for i in 0..sheet.zone_cols.max(1) {
-        let cx = x0 + zw * (i as f64 + 0.5);
-        let label = t.zones.col_labels.label(i);
-        text_el(out, cx, y0 - 3.0, 3.0, "#000", "middle", &label);
-        text_el(out, cx, y1 + 6.0, 3.0, "#000", "middle", &label);
-        if i > 0 {
-            let tx = x0 + zw * i as f64;
-            line_el(out, tx, y0 - 2.0, tx, y0, 0.25, "#000");
-            line_el(out, tx, y1, tx, y1 + 2.0, 0.25, "#000");
+    if t.zones.show {
+        // ゾーン目盛。分割数はシートごとの設定 (図枠を替えても図面の住所は変わらない)、
+        // 文字種 (数字/英字) はテンプレートが決める
+        let cols = sheet.zone_cols.max(1) as f64;
+        let rows = sheet.zone_rows.max(1) as f64;
+        let zw = (x1 - x0) / cols;
+        let zh = (y1 - y0) / rows;
+        for i in 0..sheet.zone_cols.max(1) {
+            let cx = x0 + zw * (i as f64 + 0.5);
+            let label = t.zones.col_labels.label(i);
+            text_el(out, cx, y0 - 3.0, 3.0, "#000", "middle", &label);
+            text_el(out, cx, y1 + 6.0, 3.0, "#000", "middle", &label);
+            if i > 0 {
+                let tx = x0 + zw * i as f64;
+                line_el(out, tx, y0 - 2.0, tx, y0, 0.25, "#000");
+                line_el(out, tx, y1, tx, y1 + 2.0, 0.25, "#000");
+            }
+        }
+        for i in 0..sheet.zone_rows.max(1) {
+            let cy = y0 + zh * (i as f64 + 0.5) + 1.0;
+            let label = t.zones.row_labels.label(i);
+            text_el(out, x0 - 3.0, cy, 3.0, "#000", "middle", &label);
+            text_el(out, x1 + 3.0, cy, 3.0, "#000", "middle", &label);
         }
     }
-    for i in 0..sheet.zone_rows.max(1) {
-        let cy = y0 + zh * (i as f64 + 0.5) + 1.0;
-        let label = t.zones.row_labels.label(i);
-        text_el(out, x0 - 3.0, cy, 3.0, "#000", "middle", &label);
-        text_el(out, x1 + 3.0, cy, 3.0, "#000", "middle", &label);
-    }
+    frame_marks(out, t, pw, ph);
     // 表題欄 (テンプレートの基準隅・寸法・セル)
     let def = &t.title_block;
     let (tx, ty) = t.title_block_origin(pw, ph);
     revision_block(out, sheet, t, tx, ty);
     rect_el(out, tx, ty, def.w, def.h, "#fff", "#000", FRAME_STROKE);
     for g in &def.grid_lines {
-        line_el(out, tx + g.x1, ty + g.y1, tx + g.x2, ty + g.y2, RULE_STROKE, "#000");
+        line_el(out, tx + g.x1, ty + g.y1, tx + g.x2, ty + g.y2, g.weight.stroke(), "#000");
     }
     for cell in &def.cells {
         let value = cell.resolve(ctx);
         if cell.omit_if_empty && value.is_empty() {
             continue;
         }
-        text_weight_el(
-            out,
-            tx + cell.x,
-            ty + cell.y,
-            cell.size,
-            "#000",
-            cell.align.anchor(),
-            cell.weight,
-            &value,
-        );
+        frame_cell(out, t, cell, &value, tx + cell.x, ty + cell.y);
     }
-    // ロゴ枠 (画像の埋め込みは未対応。枠だけを描いて置き場所を示す)
+    // ロゴ枠 (画像を読み込めていれば画像、無ければ枠だけで置き場所を示す)
     if let Some(logo) = &t.logo {
-        rect_el(out, logo.x, logo.y, logo.w, logo.h, "none", "#000", RULE_STROKE);
+        match &logo.data_url {
+            Some(url) => {
+                let _ = write!(
+                    out,
+                    "<image x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"xMidYMid meet\" href=\"{}\"/>\n",
+                    n(logo.x), n(logo.y), n(logo.w), n(logo.h), xml_escape(url)
+                );
+            }
+            None => rect_el(out, logo.x, logo.y, logo.w, logo.h, "none", "#000", RULE_STROKE),
+        }
     }
 }
 
@@ -294,6 +399,9 @@ fn frame_and_title_block(out: &mut String, sheet: &Sheet, t: &FrameTemplate, ctx
 /// 最下段を列見出し、その上に古い改訂から順に積む (最新が最上段)。0行なら何も描かない。
 /// 行高・列幅・最大行数は図枠テンプレートが決める。
 fn revision_block(out: &mut String, sheet: &Sheet, t: &FrameTemplate, tx: f64, ty: f64) {
+    if t.uses_extended_revision_table() {
+        return revision_table(out, sheet, t, tx, ty);
+    }
     let rows = visible_revisions_max(&sheet.revisions, t.revision_block.rows_max);
     if rows.is_empty() {
         return;
@@ -330,6 +438,147 @@ fn revision_block(out: &mut String, sheet: &Sheet, t: &FrameTemplate, tx: f64, t
                 continue;
             }
             text_el(out, lefts[c] + CELL_PAD, cy, REV_FONT, "#000", "start", value);
+        }
+    }
+}
+
+/// 記号の三角の中の文字: ベースラインを底辺からどれだけ上げるか ÷ 三角の高さ、文字高の上限 ÷ 三角の高さ。
+pub(crate) const MARK_TEXT_LIFT: f64 = 0.12;
+pub(crate) const MARK_TEXT_MAX: f64 = 0.55;
+/// 同じセルに続けて出す項目 (`suffix`) と、その前のものとの間隔 (mm)。
+pub(crate) const SUFFIX_GAP: f64 = 1.0;
+/// 記号の列で、`suffix`の文字の右に残す余白 (mm)。
+const SUFFIX_RIGHT_PAD: f64 = 0.5;
+
+/// 改訂記号を囲む三角 (頂点が上)。`gap`が0なら閉じた多角形、0より大きければ斜辺の中ほどを空け、
+/// 底辺と合わせて線で描く。
+fn mark_triangle(out: &mut String, cx: f64, by: f64, th: f64, hb: f64, gap: f64) {
+    if gap <= 0.0 {
+        let _ = writeln!(
+            out,
+            "<polygon points=\"{},{} {},{} {},{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>",
+            n(cx), n(by - th), n(cx + hb), n(by), n(cx - hb), n(by), n(RULE_STROKE)
+        );
+        return;
+    }
+    let (a, b) = ((1.0 - gap) / 2.0, (1.0 + gap) / 2.0);
+    for side in [1.0, -1.0] {
+        // 頂点 (cx, by - th) から底辺の角 (cx ± hb, by) へ。割合 0〜a と b〜1 の部分だけを描く
+        let at = |f: f64| (cx + side * hb * f, by - th + th * f);
+        for (f0, f1) in [(0.0, a), (b, 1.0)] {
+            let ((x1, y1), (x2, y2)) = (at(f0), at(f1));
+            line_el(out, x1, y1, x2, y2, RULE_STROKE, "#000");
+        }
+    }
+    line_el(out, cx - hb, by, cx + hb, by, RULE_STROKE, "#000");
+}
+
+/// 改訂欄 (列・見出し・行高・固定行数・記号の形をテンプレートが決める版)。
+fn revision_table(out: &mut String, sheet: &Sheet, t: &FrameTemplate, tx: f64, ty: f64) {
+    use crate::frame_template::{Align, MarkShape, RevisionColumn, RevisionField, LINE_PITCH};
+    let rb = &t.revision_block;
+    let rows = visible_revisions_max(&sheet.revisions, rb.rows_fixed.unwrap_or(rb.rows_max));
+    let n_rows = rb.rows_fixed.unwrap_or(rows.len());
+    if n_rows == 0 {
+        return;
+    }
+    let cols = t.revision_columns();
+    let row_h = t.revision_row_h();
+    let width = t.title_block.w;
+    let h = (n_rows as f64 + 1.0) * row_h;
+    let top = ty - h;
+    rect_el(out, tx, top, width, h, "#fff", "#000", FRAME_STROKE);
+    for r in 1..=n_rows {
+        let ry = top + row_h * r as f64;
+        line_el(out, tx, ry, tx + width, ry, RULE_STROKE, "#000");
+    }
+    let mut lefts = Vec::with_capacity(cols.len());
+    let mut x = tx;
+    for c in &cols {
+        lefts.push(x);
+        x += c.w;
+    }
+    for left in lefts.iter().skip(1) {
+        line_el(out, *left, top, *left, ty, RULE_STROKE, "#000");
+    }
+    // 1セル分の文字 (収めてから、行の中央へ縦に並べる)
+    fn cell_text(out: &mut String, row_h: f64, row_top: f64, left: f64, c: &RevisionColumn, align: Align, base: f64, value: &str) {
+        let lines: Vec<&str> = value.split('\n').collect();
+        let mut font = fitted_font(&lines, base, Some(c.w - 2.0 * CELL_PAD));
+        let m = lines.len() as f64;
+        if m * font * LINE_PITCH > row_h {
+            font *= row_h / (m * font * LINE_PITCH);
+        }
+        let pitch = font * LINE_PITCH;
+        let first = row_top + row_h / 2.0 + font / 2.0 - (m - 1.0) * pitch / 2.0;
+        let x = match align {
+            Align::Start => left + CELL_PAD,
+            Align::Middle => left + c.w / 2.0,
+            Align::End => left + c.w - CELL_PAD,
+        };
+        for (k, line) in lines.iter().enumerate() {
+            text_el(out, x, first + pitch * k as f64, font, "#000", align.anchor(), line);
+        }
+    }
+    let head_top = ty - row_h;
+    for (c, left) in cols.iter().zip(&lefts) {
+        if !c.header.is_empty() {
+            cell_text(out, row_h, head_top, *left, c, c.header_align.unwrap_or(c.align), t.font_size(rb.header_size.unwrap_or(REV_HEADER_FONT)), &c.header);
+        }
+    }
+    let body = t.font_size(rb.text_size.unwrap_or(REV_FONT));
+    // 記号の三角: 高さ・半分の底辺・中心X (列の左端から`pad`の位置が左下の角)
+    let style = rb.mark_style.unwrap_or_default();
+    let triangle = rb.mark_shape == MarkShape::Triangle;
+    let th = style.h * row_h;
+    let hb = th * style.aspect / 2.0;
+    let mark_col = cols.iter().zip(&lefts).find(|(c, _)| c.field == RevisionField::Mark);
+    for (i, rev) in rows.iter().enumerate() {
+        let row_top = ty - (i as f64 + 2.0) * row_h;
+        for (c, left) in cols.iter().zip(&lefts) {
+            let value = c.field.value(rev);
+            let suffix = c.suffix.map(|f| f.value(rev)).unwrap_or("");
+            if c.field == RevisionField::Mark && triangle {
+                if value.is_empty() {
+                    continue;
+                }
+                let cx = left + style.pad + hb;
+                let by = row_top + row_h / 2.0 + th / 2.0;
+                mark_triangle(out, cx, by, th, hb, style.gap);
+                // 記号は三角の中に収める (三角の底辺の半分より広い文字は縮める)
+                let font = fitted_font(&[value], body.min(th * MARK_TEXT_MAX), Some(hb));
+                text_el(out, cx, by - th * MARK_TEXT_LIFT, font, "#000", "middle", value);
+                if !suffix.is_empty() {
+                    // 三角の右の角の横に、ふつうのセルと同じ高さで続ける
+                    let sx = cx + hb + SUFFIX_GAP;
+                    let font = fitted_font(&[suffix], body, Some(left + c.w - SUFFIX_RIGHT_PAD - sx));
+                    text_el(out, sx, row_top + row_h / 2.0 + font / 2.0, font, "#000", "start", suffix);
+                }
+                continue;
+            }
+            // ふつうの列: 主の文字のあとに、空白1つを挟んで続ける
+            let joined;
+            let value = if suffix.is_empty() {
+                value
+            } else if value.is_empty() {
+                suffix
+            } else {
+                joined = format!("{value} {suffix}");
+                &joined
+            };
+            if value.is_empty() {
+                continue;
+            }
+            cell_text(out, row_h, row_top, *left, c, c.align, body, value);
+        }
+    }
+    // 改訂の無い行にも三角だけを描く (刷り込みの記号枠)
+    if triangle && style.in_empty_rows {
+        if let Some((_, left)) = mark_col {
+            for r in rows.len()..n_rows {
+                let row_top = ty - (r as f64 + 2.0) * row_h;
+                mark_triangle(out, left + style.pad + hb, row_top + row_h / 2.0 + th / 2.0, th, hb, style.gap);
+            }
         }
     }
 }
@@ -1674,6 +1923,341 @@ mod tests {
         assert_eq!(filled(r#"{"left":[{"no":"P1","connector":"usb_a_m"}]}"#), plain + 1);
     }
 
+    fn a0_sheet() -> Sheet {
+        let mut s = golden_sheet();
+        s.size = PaperSize::A0;
+        s.revisions.clear();
+        s
+    }
+
+    fn frame_with(edit: impl Fn(&mut FrameTemplate)) -> FrameTemplate {
+        let mut t = crate::frame_template::default_template().clone();
+        edit(&mut t);
+        t
+    }
+
+    fn six_columns() -> FrameTemplate {
+        use crate::frame_template::{Align, RevisionColumn, RevisionField as F};
+        frame_with(|t| {
+            // jis-a3: 表題欄の幅120、左上 (290, 255)
+            t.revision_block.columns = Some(vec![
+                RevisionColumn { field: F::Mark, header: "SYMB".into(), w: 14.0, align: Align::Start, suffix: None, header_align: None },
+                RevisionColumn { field: F::Description, header: "CHANGELOG".into(), w: 56.0, align: Align::Start, suffix: None, header_align: None },
+                RevisionColumn { field: F::RevNo, header: "ECN NO".into(), w: 16.0, align: Align::Middle, suffix: None, header_align: None },
+                RevisionColumn { field: F::Date, header: "DATE".into(), w: 12.0, align: Align::Middle, suffix: None, header_align: None },
+                RevisionColumn { field: F::By, header: "BY".into(), w: 11.0, align: Align::Middle, suffix: None, header_align: None },
+                RevisionColumn { field: F::Approved, header: "OKAY".into(), w: 11.0, align: Align::End, suffix: None, header_align: None },
+            ]);
+            t.revision_block.row_h = Some(7.0);
+        })
+    }
+
+    fn rev6() -> Revision {
+        Revision { mark: "1".into(), date: "24/01".into(), description: "変更".into(), by: "KT".into(),
+                   rev_no: "E-204".into(), approved: "MU".into(), count: "x3".into() }
+    }
+
+    const TXT_TAIL: &str = "fill=\"#000\" text-anchor=\"start\" font-family=\"sans-serif\">";
+
+    /// A revision table with its own columns prints the template's header words and each revision field in its column, with the row height the table states.
+    /// 独自の列を持つ改訂欄は、テンプレートの見出し語と、各列に対応する改訂の項目を、改訂欄が指定する行高で印字する。
+    #[test]
+    fn a_configured_revision_table_prints_its_own_columns() {
+        let mut sheet = golden_sheet();
+        sheet.revisions = vec![rev6()];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &six_columns(), &[]);
+        // 1行 + 見出し = 高さ14、上端 255 - 14 = 241
+        assert!(svg.contains("<rect x=\"290\" y=\"241\" width=\"120\" height=\"14\" fill=\"#fff\""), "{svg}");
+        // 見出し行 (上端 248): 基線 248 + 3.5 + 2.2/2 = 252.6、見出しは縮められない (2.2)
+        for (x, anchor, word) in [
+            ("292", "start", "SYMB"), ("306", "start", "CHANGELOG"), ("368", "middle", "ECN NO"),
+            ("382", "middle", "DATE"), ("393.500", "middle", "BY"), ("408", "end", "OKAY"),
+        ] {
+            let el = format!("<text x=\"{x}\" y=\"252.600\" font-size=\"2.200\" fill=\"#000\" text-anchor=\"{anchor}\" font-family=\"sans-serif\">{word}</text>");
+            assert!(svg.contains(&el), "{el}: {svg}");
+        }
+        assert!(!svg.contains(">記号</text>"), "{svg}");
+        // 改訂行 (上端 241): 基線 241 + 3.5 + 1.25 = 245.75。列の左端は 290, 304, 360, 376, 388, 399
+        for (x, anchor, word) in [
+            ("292", "start", "1"), ("306", "start", "変更"), ("368", "middle", "E-204"),
+            ("382", "middle", "24/01"), ("393.500", "middle", "KT"), ("408", "end", "MU"),
+        ] {
+            let el = format!("<text x=\"{x}\" y=\"245.750\" font-size=\"2.500\" fill=\"#000\" text-anchor=\"{anchor}\" font-family=\"sans-serif\">{word}</text>");
+            assert!(svg.contains(&el), "{el}: {svg}");
+        }
+        // 数量 (count) は列に無いので出ない
+        assert!(!svg.contains(">x3</text>"), "{svg}");
+    }
+
+    /// With a fixed number of rows the table is ruled at full height even without any revision, and shows only the newest rows when there are more.
+    /// 行数を固定すると、改訂が無くても全行の罫線を描き、改訂のほうが多いときは新しい行だけを表示する。
+    #[test]
+    fn fixed_rows_are_ruled_even_when_empty_and_show_the_newest() {
+        let mut t = six_columns();
+        t.revision_block.rows_fixed = Some(3);
+        let mut sheet = golden_sheet();
+        sheet.revisions.clear();
+        let empty = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &t, &[]);
+        // 3行 + 見出し = 28、上端 227
+        assert!(empty.contains("<rect x=\"290\" y=\"227\" width=\"120\" height=\"28\" fill=\"#fff\""), "{empty}");
+        assert!(empty.contains("<text x=\"292\" y=\"252.600\" font-size=\"2.200\" fill=\"#000\" text-anchor=\"start\" font-family=\"sans-serif\">SYMB</text>"), "{empty}");
+        // 罫線: 行の境界 234, 241, 248 (上端の227は外枠)
+        for y in ["234", "241", "248"] {
+            assert!(empty.contains(&format!("<line x1=\"290\" y1=\"{y}\" x2=\"410\" y2=\"{y}\" stroke=\"#000\" stroke-width=\"0.250\"/>")), "{y}: {empty}");
+        }
+        sheet.revisions = (1..=5).map(|i| Revision { mark: format!("R{i}"), ..rev6() }).collect();
+        let full = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &t, &[]);
+        assert!(full.contains("<rect x=\"290\" y=\"227\" width=\"120\" height=\"28\" fill=\"#fff\""), "{full}");
+        // 新しい3件 (R3, R4, R5) が古い順に下から: 基線 245.75 / 238.75 / 231.75
+        for (y, mark) in [("245.750", "R3"), ("238.750", "R4"), ("231.750", "R5")] {
+            let el = format!("<text x=\"292\" y=\"{y}\" font-size=\"2.500\" {TXT_TAIL}{mark}</text>");
+            assert!(full.contains(&el), "{el}: {full}");
+        }
+        assert!(!full.contains(">R1</text>") && !full.contains(">R2</text>"), "{full}");
+    }
+
+    /// When fewer rows are fixed than there are revisions, the table is exactly that many rows plus the header tall and the oldest revisions are left out.
+    /// 固定行数が改訂の数より少ないとき、改訂欄の高さは「固定行数+見出し1行」ちょうどになり、古い改訂は表示されない。
+    #[test]
+    fn fewer_fixed_rows_than_revisions_cut_the_oldest() {
+        let mut t = six_columns();
+        t.revision_block.rows_fixed = Some(2);
+        let mut sheet = golden_sheet();
+        sheet.revisions = (1..=4).map(|i| Revision { mark: format!("R{i}"), ..rev6() }).collect();
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &t, &[]);
+        // (2 + 1) × 7 = 21、上端 234
+        assert!(svg.contains("<rect x=\"290\" y=\"234\" width=\"120\" height=\"21\" fill=\"#fff\""), "{svg}");
+        for (y, mark) in [("245.750", "R3"), ("238.750", "R4")] {
+            let el = format!("<text x=\"292\" y=\"{y}\" font-size=\"2.500\" {TXT_TAIL}{mark}</text>");
+            assert!(svg.contains(&el), "{el}: {svg}");
+        }
+        assert!(!svg.contains(">R1</text>") && !svg.contains(">R2</text>"), "{svg}");
+    }
+
+    /// A description longer than its column is shrunk to the column, and a two-line description is drawn as two lines inside the row.
+    /// 列より長い内容は列幅まで縮められ、2行の内容は行の中に2行で描かれる。
+    #[test]
+    fn long_and_two_line_descriptions_stay_inside_the_cell() {
+        let mut sheet = golden_sheet();
+        sheet.revisions = vec![Revision { description: "あ".repeat(40), ..rev6() }];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &six_columns(), &[]);
+        // 40全角 × 2.5 = 100mm → 列の内側 56 - 4 = 52mm へ: 2.5 × 52 / 100 = 1.3、基線 241 + 3.5 + 0.65
+        let el = format!("<text x=\"306\" y=\"245.150\" font-size=\"1.300\" {TXT_TAIL}{}</text>", "あ".repeat(40));
+        assert!(svg.contains(&el), "{el}: {svg}");
+        sheet.revisions = vec![Revision { description: "一行目\n二行目".into(), ..rev6() }];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &six_columns(), &[]);
+        // 2行: ピッチ 3.125、2行で 6.25 ≤ 7 なので縮めない。最初の基線 241 + 3.5 + 1.25 - 1.5625
+        for (y, line) in [("244.188", "一行目"), ("247.312", "二行目")] {
+            let el = format!("<text x=\"306\" y=\"{y}\" font-size=\"2.500\" {TXT_TAIL}{line}</text>");
+            assert!(svg.contains(&el), "{el}: {svg}");
+        }
+    }
+
+    /// A three-line description that would not fit a 7 mm row is reduced by row height / (lines x font x 1.25), so that the three lines fill exactly the row.
+    /// 7mmの行に収まらない3行の内容は、行高÷(行数×フォント×1.25)の倍率で縮められ、3行がちょうど行の中に収まる。
+    #[test]
+    fn a_three_line_description_is_reduced_to_fit_the_row() {
+        let mut sheet = golden_sheet();
+        sheet.revisions = vec![Revision { description: "a\nb\nc".into(), ..rev6() }];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &six_columns(), &[]);
+        // 3 × 2.5 × 1.25 = 9.375 > 7 → フォント 2.5 × 7 / 9.375 = 1.8667、ピッチ 2.3333
+        // 最初の基線 241 + 3.5 + 0.9333 - 2.3333 = 243.1
+        for (y, line) in [("243.100", "a"), ("245.433", "b"), ("247.767", "c")] {
+            let el = format!("<text x=\"306\" y=\"{y}\" font-size=\"1.867\" {TXT_TAIL}{line}</text>");
+            assert!(svg.contains(&el), "{el}: {svg}");
+        }
+    }
+
+    /// With the triangle mark shape, each revision mark is drawn centred inside an upright triangle.
+    /// 記号の形が三角のとき、改訂記号は上向きの三角の中に中央揃えで描かれる。
+    #[test]
+    fn a_triangle_is_drawn_around_each_revision_mark() {
+        let mut t = six_columns();
+        t.revision_block.mark_shape = crate::frame_template::MarkShape::Triangle;
+        let mut sheet = golden_sheet();
+        sheet.revisions = vec![rev6()];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &t, &[]);
+        assert_eq!(svg.matches("<polygon").count() - sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &six_columns(), &[]).matches("<polygon").count(), 1);
+        // th = 5.6、hb = 3.233、cx = 290 + 2 + 3.233 = 295.233、底辺 by = 241 + 3.5 + 2.8 = 247.3
+        assert!(svg.contains("<polygon points=\"295.233,241.700 298.466,247.300 292,247.300\" fill=\"none\" stroke=\"#000\" stroke-width=\"0.250\"/>"), "{svg}");
+        // 記号は cx に中央揃え、基線 247.3 - 5.6 × 0.12 = 246.628
+        assert!(svg.contains("<text x=\"295.233\" y=\"246.628\" font-size=\"2.500\" fill=\"#000\" text-anchor=\"middle\" font-family=\"sans-serif\">1</text>"), "{svg}");
+    }
+
+    /// A template that only says text sizes are cap heights keeps the classic four columns with their Japanese headers, drawn with every font divided by 0.72.
+    /// 文字の大きさを大文字の高さで指定するだけのテンプレートは、従来の4列と日本語の見出しのまま、すべてのフォントを0.72で割って描く。
+    #[test]
+    fn cap_text_size_alone_draws_the_classic_columns_with_scaled_fonts() {
+        let t = frame_with(|t| t.text_size_is = crate::frame_template::TextSizeIs::Cap);
+        let mut sheet = golden_sheet();
+        sheet.revisions = vec![Revision { mark: "R1".into(), ..rev6() }];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &t, &[]);
+        // 行高 8 (表題欄と同じ)、1行 + 見出し = 16、上端 239。列の左端は 290, 304, 332, 388
+        assert!(svg.contains("<rect x=\"290\" y=\"239\" width=\"120\" height=\"16\" fill=\"#fff\""), "{svg}");
+        // 見出し (上端 247): 2.2 / 0.72 = 3.0556、基線 247 + 4 + 1.5278
+        for (x, word) in [("292", "記号"), ("306", "日付"), ("334", "内容"), ("390", "承認")] {
+            let el = format!("<text x=\"{x}\" y=\"252.528\" font-size=\"3.056\" {TXT_TAIL}{word}</text>");
+            assert!(svg.contains(&el), "{el}: {svg}");
+        }
+        // 本文 (上端 239): 2.5 / 0.72 = 3.4722、基線 239 + 4 + 1.7361
+        for (x, word) in [("292", "R1"), ("306", "24/01"), ("334", "変更"), ("390", "KT")] {
+            let el = format!("<text x=\"{x}\" y=\"244.736\" font-size=\"3.472\" {TXT_TAIL}{word}</text>");
+            assert!(svg.contains(&el), "{el}: {svg}");
+        }
+    }
+
+    /// With margins per side the border is drawn from (left, top) to (paper − right, paper − bottom).
+    /// 辺ごとの余白があるとき、外枠は(左, 上)から(用紙−右, 用紙−下)まで描かれる。
+    #[test]
+    fn margins_per_side_set_the_border_rectangle() {
+        let t = frame_with(|t| t.frame_margins = Some(crate::frame_template::FrameMargins { left: 30.0, right: 15.0, top: 12.0, bottom: 10.0 }));
+        let svg = sheet_to_svg_with_frame(&a0_sheet(), &builtin_symbols(), &t, &[]);
+        assert!(svg.contains("<rect x=\"30\" y=\"12\" width=\"1144\" height=\"819\" fill=\"none\""), "{svg}");
+    }
+
+    /// With zone labels hidden, the frame has no zone letters or digits and no zone ticks.
+    /// ゾーン目盛を隠すと、図枠にゾーンの英字・数字も目盛線も出ない。
+    #[test]
+    fn hidden_zones_draw_no_labels_and_no_ticks() {
+        let shown = sheet_to_svg_with_frame(&a0_sheet(), &builtin_symbols(), &frame_with(|_| {}), &[]);
+        assert!(shown.contains(">A</text>") && shown.contains("stroke-width=\"0.250\""));
+        let t = frame_with(|t| { t.zones.show = false; t.title_block.grid_lines.clear(); });
+        let svg = frame_only(&sheet_to_svg_with_frame(&a0_sheet(), &builtin_symbols(), &t, &[]));
+        assert!(!svg.contains(">A</text>") && !svg.contains(">1</text>"), "{svg}");
+        assert!(!svg.contains("stroke-width=\"0.250\""), "{svg}");
+    }
+
+    /// Trim marks are an L at each paper corner, 4 mm in from the edge with 15 mm arms: eight lines.
+    /// 裁断マークは用紙の四隅のL字で、端から4mm内側、腕15mm。線は8本。
+    #[test]
+    fn trim_marks_are_an_l_at_each_paper_corner() {
+        let t = frame_with(|t| t.marks.trim = true);
+        let svg = sheet_to_svg_with_frame(&a0_sheet(), &builtin_symbols(), &t, &[]);
+        assert!(svg.contains("<line x1=\"4\" y1=\"4\" x2=\"19\" y2=\"4\" stroke=\"#000\" stroke-width=\"0.500\"/>"), "{svg}");
+        assert!(svg.contains("<line x1=\"4\" y1=\"4\" x2=\"4\" y2=\"19\" stroke=\"#000\" stroke-width=\"0.500\"/>"), "{svg}");
+        assert!(svg.contains("<line x1=\"1185\" y1=\"837\" x2=\"1170\" y2=\"837\" stroke=\"#000\" stroke-width=\"0.500\"/>"), "{svg}");
+        let off = sheet_to_svg_with_frame(&a0_sheet(), &builtin_symbols(), &frame_with(|_| {}), &[]);
+        assert_eq!(svg.matches("<line").count() - off.matches("<line").count(), 8);
+    }
+
+    /// Centre marks run outwards from the middle of each border side, as long as that side's margin but at most 10 mm.
+    /// 中心マークは外枠の各辺の中央から外向きに伸び、長さはその辺の余白(最大10mm)。
+    #[test]
+    fn centre_marks_run_outwards_from_the_middle_of_each_side() {
+        let t = frame_with(|t| {
+            t.frame_margins = Some(crate::frame_template::FrameMargins { left: 30.0, right: 15.0, top: 12.0, bottom: 6.0 });
+            t.marks.centre = true;
+        });
+        let svg = sheet_to_svg_with_frame(&a0_sheet(), &builtin_symbols(), &t, &[]);
+        assert!(svg.contains("<line x1=\"602\" y1=\"12\" x2=\"602\" y2=\"2\" stroke=\"#000\" stroke-width=\"0.500\"/>"), "{svg}");
+        assert!(svg.contains("<line x1=\"602\" y1=\"835\" x2=\"602\" y2=\"841\" stroke=\"#000\" stroke-width=\"0.500\"/>"), "{svg}");
+        assert!(svg.contains("<line x1=\"30\" y1=\"423.500\" x2=\"20\" y2=\"423.500\" stroke=\"#000\" stroke-width=\"0.500\"/>"), "{svg}");
+    }
+
+    /// A rule marked medium is drawn 0.5 mm wide and one marked heavy 1 mm wide; unmarked rules stay 0.25 mm.
+    /// mediumの罫線は0.5mm、heavyは1mmで描かれる。指定の無い罫線は0.25mmのまま。
+    #[test]
+    fn rule_weights_set_the_stroke_width() {
+        let t = frame_with(|t| {
+            t.title_block.grid_lines[0].weight = crate::frame_template::LineWeight::Medium;
+            t.title_block.grid_lines[1].weight = crate::frame_template::LineWeight::Heavy;
+        });
+        let svg = sheet_to_svg_with_frame(&golden_sheet(), &builtin_symbols(), &t, &[]);
+        assert!(svg.contains("<line x1=\"290\" y1=\"263\" x2=\"410\" y2=\"263\" stroke=\"#000\" stroke-width=\"0.500\"/>"), "{svg}");
+        assert!(svg.contains("<line x1=\"290\" y1=\"271\" x2=\"410\" y2=\"271\" stroke=\"#000\" stroke-width=\"1\"/>"), "{svg}");
+        assert!(svg.contains("<line x1=\"290\" y1=\"279\" x2=\"410\" y2=\"279\" stroke=\"#000\" stroke-width=\"0.250\"/>"), "{svg}");
+    }
+
+    fn one_cell(edit: impl Fn(&mut crate::frame_template::Cell)) -> FrameTemplate {
+        frame_with(|t| {
+            let mut c = t.title_block.cells[0].clone();
+            c.text = Some("ABCDEFGHIJ".into());
+            c.bind = None;
+            c.x = 10.0; c.y = 20.0; c.size = 3.0; c.w = Some(9.0);
+            edit(&mut c);
+            t.title_block.cells = vec![c];
+            t.title_block.grid_lines.clear();
+        })
+    }
+
+    fn cell_svg(t: &FrameTemplate) -> String {
+        frame_only(&sheet_to_svg_with_frame(&golden_sheet(), &builtin_symbols(), t, &[]))
+    }
+
+    /// A plain cell is written exactly as before: one text element at the cell position with the cell size.
+    /// ふつうのセルはこれまでと全く同じに書かれる(セルの位置に、セルのサイズで、text要素が1つ)。
+    #[test]
+    fn a_plain_cell_is_written_as_before() {
+        let svg = cell_svg(&one_cell(|_| {}));
+        assert!(svg.contains("<text x=\"300\" y=\"275\" font-size=\"3\" fill=\"#000\" text-anchor=\"start\" font-family=\"sans-serif\">ABCDEFGHIJ</text>"), "{svg}");
+    }
+
+    /// With capital-height sizes the font is the size divided by 0.72.
+    /// 大文字高さの指定では、フォントはサイズを0.72で割った値になる。
+    #[test]
+    fn a_capital_height_cell_uses_a_larger_font() {
+        let mut t = one_cell(|c| c.size = 3.6);
+        t.text_size_is = crate::frame_template::TextSizeIs::Cap;
+        assert!(cell_svg(&t).contains("font-size=\"5\""));
+    }
+
+    /// A fitted cell shrinks its font so that the estimated text width equals the cell width; a text that already fits keeps its size.
+    /// fitのセルは、見積もった文字幅がセル幅になるまでフォントを縮める。もともと収まる文字はそのまま。
+    #[test]
+    fn a_fitted_cell_shrinks_long_text_only() {
+        // 10文字 × 0.6 × 3mm = 18mm → 幅9mmへ収めると 1.5mm
+        assert!(cell_svg(&one_cell(|c| c.fit = true)).contains("font-size=\"1.500\""));
+        assert!(cell_svg(&one_cell(|c| { c.fit = true; c.w = Some(40.0); })).contains("<text x=\"300\" y=\"275\" font-size=\"3\" fill=\"#000\" text-anchor=\"start\" font-family=\"sans-serif\">ABCDEFGHIJ</text>"));
+        assert!(cell_svg(&one_cell(|c| { c.fit = true; c.w = None; })).contains("<text x=\"300\" y=\"275\" font-size=\"3\" fill=\"#000\" text-anchor=\"start\" font-family=\"sans-serif\">ABCDEFGHIJ</text>"));
+    }
+
+    /// A fitted two-line cell is shrunk by its widest line, and both lines use the shrunk size.
+    /// fitの2行セルは、いちばん長い行に合わせて縮み、2行とも縮めたサイズで描かれる。
+    #[test]
+    fn a_fitted_two_line_cell_shrinks_by_its_widest_line() {
+        let svg = cell_svg(&one_cell(|c| { c.fit = true; c.text = Some("ABCDEFGHIJ\nAB".into()); }));
+        assert!(svg.contains("<text x=\"300\" y=\"275\" font-size=\"1.500\""), "{svg}");
+        assert!(svg.contains("<text x=\"300\" y=\"276.875\" font-size=\"1.500\""), "{svg}");
+    }
+
+    /// A value with a line break is drawn as two text elements, the second 1.25 font sizes below the first.
+    /// 改行を含む値はtext要素2つで描かれ、2行目は1行目からフォントサイズの1.25倍下になる。
+    #[test]
+    fn a_two_line_cell_is_drawn_as_two_lines() {
+        let svg = cell_svg(&one_cell(|c| c.text = Some("AB\nCD".into())));
+        assert!(svg.contains("<text x=\"300\" y=\"275\" font-size=\"3\""), "{svg}");
+        assert!(svg.contains("<text x=\"300\" y=\"278.750\" font-size=\"3\""), "{svg}");
+    }
+
+    /// A cell rotated by 90 is turned clockwise about its anchor point.
+    /// 90回転のセルは、アンカー点を中心に時計回りに回る。
+    #[test]
+    fn a_rotated_cell_turns_about_its_anchor() {
+        let svg = cell_svg(&one_cell(|c| c.rotation = 90));
+        assert!(svg.contains("<g transform=\"rotate(90 300 275)\">"), "{svg}");
+        assert!(svg.contains("<text x=\"300\" y=\"275\" font-size=\"3\""), "{svg}");
+    }
+
+    /// A boxed cell gets a thin rectangle 0.8 mm outside its estimated text box.
+    /// boxedのセルは、見積もった文字の箱の0.8mm外側に細い矩形が付く。
+    #[test]
+    fn a_boxed_cell_gets_a_rectangle_around_the_text() {
+        let svg = cell_svg(&one_cell(|c| c.boxed = true));
+        // 幅18、ベースライン275、フォント3 → 箱は x 300..318 / y 272..275.75(下へ0.25×フォント)
+        assert!(svg.contains("<rect x=\"299.200\" y=\"271.200\" width=\"19.600\" height=\"5.350\" fill=\"none\" stroke=\"#000\" stroke-width=\"0.250\"/>"), "{svg}");
+    }
+
+    /// A boxed cell with middle or end alignment gets its box around the text, not around the anchor point.
+    /// boxedのセルを中央揃え・右揃えにしても、枠はアンカー点ではなく文字のまわりに付く。
+    #[test]
+    fn a_boxed_cell_follows_the_alignment() {
+        use crate::frame_template::Align;
+        let mid = cell_svg(&one_cell(|c| { c.boxed = true; c.align = Align::Middle; }));
+        assert!(mid.contains("<rect x=\"290.200\" y=\"271.200\" width=\"19.600\""), "{mid}");
+        let end = cell_svg(&one_cell(|c| { c.boxed = true; c.align = Align::End; }));
+        assert!(end.contains("<rect x=\"281.200\" y=\"271.200\" width=\"19.600\""), "{end}");
+    }
+
     /// 図枠部分だけを取り出す (SVGの外殻と用紙の下地を除いた、図枠・表題欄・改訂欄の行)。
     fn frame_only(svg: &str) -> String {
         let mut out = String::new();
@@ -1704,10 +2288,11 @@ mod tests {
             checked: "Y.N".into(),
             approved: "H.I".into(),
             rev: "A".into(),
+            ..Default::default()
         };
         sheet.revisions = vec![
-            Revision { mark: "A".into(), date: "26-08-01".into(), description: "初版".into(), by: "K.T".into() },
-            Revision { mark: "B".into(), date: "26-08-20".into(), description: "端子台追加".into(), by: "K.T".into() },
+            Revision { mark: "A".into(), date: "26-08-01".into(), description: "初版".into(), by: "K.T".into(), ..Default::default() },
+            Revision { mark: "B".into(), date: "26-08-20".into(), description: "端子台追加".into(), by: "K.T".into(), ..Default::default() },
         ];
         sheet
     }
@@ -1832,6 +2417,7 @@ mod tests {
             weight: Weight::Bold,
             align: Align::Middle,
             omit_if_empty: false,
+            rotation: 0, boxed: false, fit: false,
         });
         let svg = sheet_to_svg_with_xrefs(
             &project.sheets[0],
@@ -1848,13 +2434,23 @@ mod tests {
         assert!(svg.contains("font-weight=\"bold\""), "太字指定が効く: {svg}");
     }
 
+    /// A logo with a loaded image is drawn as that image inside the logo box, without the placeholder rectangle.
+    /// 画像を読み込めたロゴは、ロゴ枠の中にその画像として描かれ、置き場所を示す矩形は描かれない。
+    #[test]
+    fn a_loaded_logo_is_drawn_as_an_image() {
+        let t = frame_with(|t| t.logo = Some(crate::frame_template::LogoFrame { x: 15.0, y: 15.0, w: 40.0, h: 20.0, path: Some("l.png".into()), data_url: Some("data:image/png;base64,AAAA".into()) }));
+        let svg = sheet_to_svg_with_frame(&golden_sheet(), &builtin_symbols(), &t, &[]);
+        assert!(svg.contains("<image x=\"15\" y=\"15\" width=\"40\" height=\"20\" preserveAspectRatio=\"xMidYMid meet\" href=\"data:image/png;base64,AAAA\"/>"), "{svg}");
+        assert!(!svg.contains("<rect x=\"15\" y=\"15\" width=\"40\" height=\"20\""), "{svg}");
+    }
+
     /// A frame template with a logo frame draws an empty rectangle where the logo goes, so the space is reserved even before an image is set.
     /// ロゴ枠を持つ図枠テンプレートは、ロゴの位置に空の矩形を描く(画像を入れる前でも場所が確保される)。
     #[test]
     fn a_logo_frame_is_drawn_as_an_empty_rectangle() {
         use crate::frame_template::LogoFrame;
         let mut frame = crate::frame_template::default_template().clone();
-        frame.logo = Some(LogoFrame { x: 15.0, y: 15.0, w: 40.0, h: 20.0, path: None });
+        frame.logo = Some(LogoFrame { x: 15.0, y: 15.0, w: 40.0, h: 20.0, path: None, data_url: None });
         let svg = sheet_to_svg_with_frame(&golden_sheet(), &builtin_symbols(), &frame, &[]);
         assert!(
             svg.contains("<rect x=\"15\" y=\"15\" width=\"40\" height=\"20\" fill=\"none\""),
@@ -1926,6 +2522,7 @@ mod tests {
                 date: format!("26-08-{m}"),
                 description: format!("変更{m}"),
                 by: "K.T".into(),
+                ..Default::default()
             })
             .collect();
         sheet
@@ -4279,5 +4876,181 @@ mod tests {
             let l = line_of(needle);
             assert!(l.contains("text-anchor=\"middle\""), "{needle} は中央揃え: {l}");
         }
+    }
+
+    fn binding_edge_marks() -> FrameTemplate {
+        use crate::frame_template::{FrameMargins, LineWeight, Marks};
+        frame_with(|t| {
+            t.frame_margins = Some(FrameMargins { left: 30.0, right: 20.0, top: 18.0, bottom: 16.0 });
+            t.marks = Marks {
+                trim: true, centre: true,
+                trim_insets: Some(FrameMargins { left: 4.0, right: 6.0, top: 5.0, bottom: 3.0 }),
+                trim_arm: None, centre_to_trim: true, centre_arrow: true, centre_weight: Some(LineWeight::Thin),
+            };
+        })
+    }
+
+    /// Trim marks follow the insets given per side: each corner of the trim rectangle gets its two arms.
+    /// 裁断マークは辺ごとに指定した位置に従う。裁断線の四隅それぞれに腕が2本描かれる。
+    #[test]
+    fn trim_marks_follow_insets_per_side() {
+        let svg = sheet_to_svg_with_frame(&a0_sheet(), &builtin_symbols(), &binding_edge_marks(), &[]);
+        for (x1, y1, x2, y2) in [
+            ("4", "5", "19", "5"), ("4", "5", "4", "20"),
+            ("1183", "5", "1168", "5"), ("1183", "5", "1183", "20"),
+            ("4", "838", "19", "838"), ("4", "838", "4", "823"),
+            ("1183", "838", "1168", "838"), ("1183", "838", "1183", "823"),
+        ] {
+            let line = format!("<line x1=\"{x1}\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y2}\" stroke=\"#000\" stroke-width=\"0.500\"/>");
+            assert!(svg.contains(&line), "{line}");
+        }
+    }
+
+    /// Centre marks that reach the trim line run from the middle of each border side to the trim line, in the stated weight, and end in an open arrow head there.
+    /// 裁断線まで伸ばす中心マークは、外枠の各辺の中央から裁断線まで指定の太さで引かれ、その端に開いた矢印が付く。
+    #[test]
+    fn centre_marks_reach_the_trim_line_with_an_arrow_head() {
+        let svg = sheet_to_svg_with_frame(&a0_sheet(), &builtin_symbols(), &binding_edge_marks(), &[]);
+        for (x1, y1, x2, y2) in [
+            ("599.500", "18", "599.500", "5"),
+            ("599.500", "825", "599.500", "838"),
+            ("30", "421.500", "4", "421.500"),
+            ("1169", "421.500", "1183", "421.500"),
+        ] {
+            let line = format!("<line x1=\"{x1}\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y2}\" stroke=\"#000\" stroke-width=\"0.250\"/>");
+            assert!(svg.contains(&line), "{line}");
+        }
+        for points in [
+            "600,6.900 599.500,5 599,6.900",
+            "599,836.100 599.500,838 600,836.100",
+            "5.900,421 4,421.500 5.900,422",
+            "1181.100,422 1183,421.500 1181.100,421",
+        ] {
+            let head = format!("<polyline points=\"{points}\" fill=\"none\" stroke=\"#000\" stroke-width=\"0.250\"/>");
+            assert!(svg.contains(&head), "{head}");
+        }
+    }
+
+    /// A centre mark on a side without any margin is not drawn at all.
+    /// 余白の無い辺には、中心マークを描かない。
+    #[test]
+    fn a_centre_mark_without_room_is_not_drawn() {
+        let off = sheet_to_svg_with_frame(&a0_sheet(), &builtin_symbols(), &frame_with(|_| {}), &[]);
+        let t = frame_with(|t| {
+            t.frame_margins = Some(crate::frame_template::FrameMargins { left: 10.0, right: 10.0, top: 10.0, bottom: 0.0 });
+            t.marks.centre = true;
+        });
+        let svg = sheet_to_svg_with_frame(&a0_sheet(), &builtin_symbols(), &t, &[]);
+        assert_eq!(svg.matches("<line").count() - off.matches("<line").count(), 3);
+    }
+
+    /// The revision table's own text sizes are used for the rows and the header, and every column boundary is ruled from the top of the table to the title block.
+    /// 改訂欄に指定した文字サイズが改訂行と見出しに使われ、列の境には表の上端から表題欄まで罫線が引かれる。
+    #[test]
+    fn revision_text_sizes_and_column_rules() {
+        let mut t = six_columns();
+        t.revision_block.text_size = Some(2.0);
+        t.revision_block.header_size = Some(1.5);
+        let mut sheet = golden_sheet();
+        sheet.revisions = vec![rev6()];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &t, &[]);
+        assert!(svg.contains("<text x=\"368\" y=\"245.500\" font-size=\"2\" fill=\"#000\" text-anchor=\"middle\" font-family=\"sans-serif\">E-204</text>"), "{svg}");
+        assert!(svg.contains("<text x=\"292\" y=\"252.250\" font-size=\"1.500\" fill=\"#000\" text-anchor=\"start\" font-family=\"sans-serif\">SYMB</text>"), "{svg}");
+        for x in ["304", "360", "376", "388", "399"] {
+            let rule = format!("<line x1=\"{x}\" y1=\"241\" x2=\"{x}\" y2=\"255\" stroke=\"#000\" stroke-width=\"0.250\"/>");
+            assert!(svg.contains(&rule), "{rule}");
+        }
+    }
+
+    fn styled_marks() -> FrameTemplate {
+        use crate::frame_template::{MarkShape, MarkStyle, RevisionField};
+        let mut t = six_columns();
+        t.revision_block.rows_fixed = Some(2);
+        t.revision_block.mark_shape = MarkShape::Triangle;
+        t.revision_block.mark_style = Some(MarkStyle { h: 1.0, aspect: 0.8, gap: 0.5, pad: 0.0, in_empty_rows: true });
+        t.revision_block.columns.as_mut().unwrap()[0].suffix = Some(RevisionField::Count);
+        t
+    }
+
+    /// A styled mark triangle is as high as the row, as wide as its aspect says, starts at the column edge, leaves the middle of its two sides open, and is also drawn in rows without a revision.
+    /// 形を指定した記号の三角は、行と同じ高さ・指定の縦横比で列の左端から始まり、斜辺の中ほどを空け、改訂の無い行にも描かれる。
+    #[test]
+    fn a_styled_mark_triangle_is_drawn_in_every_row() {
+        let mut sheet = golden_sheet();
+        sheet.revisions = vec![Revision { mark: "1".into(), ..rev6() }];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &styled_marks(), &[]);
+        // 改訂行 (241〜248): 頂点 (292.8, 241)、底辺 290〜295.6。斜辺は前後の1/4ずつだけ描く
+        for (x1, y1, x2, y2) in [
+            ("292.800", "241", "293.500", "242.750"), ("294.900", "246.250", "295.600", "248"),
+            ("292.800", "241", "292.100", "242.750"), ("290.700", "246.250", "290", "248"),
+            ("290", "248", "295.600", "248"),
+            // 空行 (234〜241)
+            ("292.800", "234", "293.500", "235.750"), ("290", "241", "295.600", "241"),
+        ] {
+            let line = format!("<line x1=\"{x1}\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y2}\" stroke=\"#000\" stroke-width=\"0.250\"/>");
+            assert!(svg.contains(&line), "{line}\n{svg}");
+        }
+        assert!(svg.contains("<text x=\"292.800\" y=\"247.160\" font-size=\"2.500\" fill=\"#000\" text-anchor=\"middle\" font-family=\"sans-serif\">1</text>"), "{svg}");
+        let plain = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &six_columns(), &[]);
+        assert_eq!(svg.matches("<polygon").count(), plain.matches("<polygon").count(), "切れ目のある三角は線で描く");
+    }
+
+    /// A column's suffix field is printed in the same cell, with no rule between: beside the triangle in the mark column, and after the main text elsewhere.
+    /// 列のsuffixの項目は、罫線を挟まず同じセルに印字される。記号の列では三角の横に、その他の列では主の文字のあとに続く。
+    #[test]
+    fn a_suffix_field_shares_the_cell() {
+        use crate::frame_template::RevisionField;
+        let mut t = styled_marks();
+        {
+            let cols = t.revision_block.columns.as_mut().unwrap();
+            cols.pop();
+            cols[4].w = 22.0;
+            cols[4].suffix = Some(RevisionField::Approved);
+        }
+        let mut sheet = golden_sheet();
+        sheet.revisions = vec![Revision { mark: "1".into(), ..rev6() }];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &t, &[]);
+        assert!(svg.contains("<text x=\"296.600\" y=\"245.750\" font-size=\"2.500\" fill=\"#000\" text-anchor=\"start\" font-family=\"sans-serif\">x3</text>"), "{svg}");
+        assert!(svg.contains("<text x=\"399\" y=\"245.750\" font-size=\"2.500\" fill=\"#000\" text-anchor=\"middle\" font-family=\"sans-serif\">KT MU</text>"), "{svg}");
+        // 個数が空なら何も足さない
+        sheet.revisions = vec![Revision { mark: "1".into(), count: String::new(), approved: String::new(), ..rev6() }];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &t, &[]);
+        assert!(!svg.contains("x=\"296.600\""), "{svg}");
+        assert!(svg.contains("text-anchor=\"middle\" font-family=\"sans-serif\">KT</text>"), "{svg}");
+    }
+
+    /// A mark longer than the triangle is wide is shrunk to fit inside it.
+    /// 三角より長い記号は、三角に収まるまで縮められる。
+    #[test]
+    fn a_long_mark_is_fitted_to_the_triangle() {
+        let mut t = six_columns();
+        t.revision_block.mark_shape = crate::frame_template::MarkShape::Triangle;
+        let mut sheet = golden_sheet();
+        sheet.revisions = vec![Revision { mark: "R100".into(), ..rev6() }];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &t, &[]);
+        // th = 5.6、hb = 3.233。"R100" は 6mm → 2.5 × 3.233 / 6 = 1.347
+        assert!(svg.contains("<text x=\"295.233\" y=\"246.628\" font-size=\"1.347\" fill=\"#000\" text-anchor=\"middle\" font-family=\"sans-serif\">R100</text>"), "{svg}");
+    }
+
+    /// A boxed cell whose value is empty draws no box.
+    /// 値が空の枠付きセルは、枠を描かない。
+    #[test]
+    fn a_boxed_cell_without_text_draws_no_box() {
+        let svg = cell_svg(&one_cell(|c| { c.boxed = true; c.text = Some(String::new()); }));
+        assert!(!svg.contains("width=\"1.600\""), "{svg}");
+    }
+
+    /// A column whose header alignment is given separately prints its header with that alignment and its rows with the column's own.
+    /// 見出しの揃えを別に指定した列は、見出しをその揃えで、改訂行を列の揃えで印字する。
+    #[test]
+    fn a_header_can_be_aligned_apart_from_its_rows() {
+        let mut t = six_columns();
+        t.revision_block.columns.as_mut().unwrap()[1].header_align = Some(crate::frame_template::Align::Middle);
+        let mut sheet = golden_sheet();
+        sheet.revisions = vec![rev6()];
+        let svg = sheet_to_svg_with_frame(&sheet, &builtin_symbols(), &t, &[]);
+        // 内容の列: 左端304、幅56 → 見出しは中央 332、内容は左 306
+        assert!(svg.contains("<text x=\"332\" y=\"252.600\" font-size=\"2.200\" fill=\"#000\" text-anchor=\"middle\" font-family=\"sans-serif\">CHANGELOG</text>"), "{svg}");
+        assert!(svg.contains("<text x=\"306\" y=\"245.750\" font-size=\"2.500\" fill=\"#000\" text-anchor=\"start\" font-family=\"sans-serif\">変更</text>"), "{svg}");
     }
 }

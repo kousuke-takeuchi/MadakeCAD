@@ -674,6 +674,9 @@ impl Engine {
                     .project
                     .sheet_mut(*sheet_id)
                     .ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                if let Some(bad) = title_block.fields.keys().find(|k| !crate::model::valid_field_name(k)) {
+                    return Err(CoreError::InvalidCommand(format!("表題欄の欄の名前「{bad}」は a-z・0-9・_ の1〜32文字で書いてください")));
+                }
                 let old = sheet.title_block.clone();
                 sheet.title_block = title_block.clone();
                 let meta = sheet_meta(sheet);
@@ -2602,12 +2605,23 @@ mod tests {
         assert_eq!(engine.project().sheets[0].title_block.title, "");
     }
 
+    /// Setting a title block with a free field whose name has an upper-case letter is refused and nothing changes.
+    /// 名前に大文字を含む自由な欄を持つ表題欄の設定は拒否され、何も変わらない。
+    #[test]
+    fn set_title_block_refuses_a_bad_field_name() {
+        let (mut engine, sheet_id) = test_engine();
+        let mut tb = TitleBlock::default();
+        tb.fields.insert("Title".into(), "x".into());
+        assert!(engine.execute(Command::SetTitleBlock { sheet_id, title_block: tb }).is_err());
+        assert!(engine.project().sheets[0].title_block.fields.is_empty());
+    }
+
     /// SetRevisions replaces the revision-table rows; undo restores the previous list.
     /// SetRevisionsは改訂欄の行を置き換え、undoで以前のリストに戻る。
     #[test]
     fn set_revisions_is_undoable() {
         let (mut engine, sheet_id) = test_engine();
-        let rev = Revision { mark: "A".into(), date: "2026-08-21".into(), description: "初版".into(), by: "K.T".into() };
+        let rev = Revision { mark: "A".into(), date: "2026-08-21".into(), description: "初版".into(), by: "K.T".into(), ..Default::default() };
         engine.execute(Command::SetRevisions { sheet_id, revisions: vec![rev] }).unwrap();
         assert_eq!(engine.project().sheets[0].revisions.len(), 1);
         engine.undo().unwrap().unwrap();

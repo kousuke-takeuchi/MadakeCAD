@@ -20,3 +20,4 @@ resvg = "0.45"
 # 部品DB (グローバル共有マスタ)。bundledでOS非依存にSQLiteを同梱
 rusqlite = { version = "0.40", features = ["bundled"] }
 dirs = "6"
+base64 = "0.23"

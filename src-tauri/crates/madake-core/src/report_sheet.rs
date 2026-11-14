@@ -1119,6 +1119,7 @@ mod tests {
             date: "2026-01-05".into(),
             description: "初版".into(),
             by: "山田".into(),
+            ..Default::default()
         }];
         let mut s2 = Sheet::new("2 現場配線", PaperSize::A3, Orientation::Landscape);
         s2.title_block.drawing_no = "MDK-002".into();
@@ -1127,6 +1128,7 @@ mod tests {
             date: "2026-03-10".into(),
             description: "端子台追加".into(),
             by: "佐藤".into(),
+            ..Default::default()
         }];
         project.sheets.push(s2);
         let t = texts(&cover_sheet_svg(&project));

@@ -60,7 +60,9 @@ pub type SheetId = Uuid;
 /// - v19: ブロックのピンのコネクタの絵 ([`crate::block::BlockPin::connector`] / `connector_ref`)。コネクタのある
 ///   ブロックも種類`port_block`で書くので、v0.4.0 以前はそのファイルを開けない (知らないキーのブロックを黙って
 ///   消さない)。形式17・18のビルドは版番号で断る。コネクタの無いファイルは版番号以外これまでと同じ
-pub const FORMAT_VERSION: u32 = 19;
+/// - v20: 改訂行の改訂番号・承認・個数 ([`Revision::rev_no`] ほか) と、表題欄の自由な欄 ([`TitleBlock::fields`])。
+///   形式19のビルドは版番号で断る。新しい項目を使わないファイルは版番号以外これまでと同じ
+pub const FORMAT_VERSION: u32 = 20;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -371,6 +373,15 @@ pub struct TitleBlock {
     pub approved: String,
     #[serde(default)]
     pub rev: String,
+    /// 自由な欄 (名前 → 値)。図枠テンプレートは`{field.名前}`でバインドする。
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub fields: std::collections::BTreeMap<String, String>,
+}
+
+/// 表題欄の自由な欄の名前として使えるか (a-z・0-9・_ の1〜32文字)。
+pub fn valid_field_name(name: &str) -> bool {
+    (1..=32).contains(&name.len())
+        && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 /// 改訂欄の1行。
@@ -380,6 +391,15 @@ pub struct Revision {
     pub date: String,
     pub description: String,
     pub by: String,
+    /// 改訂番号 (設計変更通知の番号など)。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub rev_no: String,
+    /// 承認者。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub approved: String,
+    /// 記号の横に出す個数 (例 "x7")。保存した文字をそのまま印字する。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub count: String,
 }
 
 /// シート上に置ける図形要素。
@@ -1258,6 +1278,24 @@ pub struct TextEntity {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Field names are short lower-case identifiers; anything else is refused.
+    /// 欄の名前は短い小文字の識別子で、それ以外は拒否される。
+    #[test]
+    fn free_field_names_are_lower_case_identifiers() {
+        for ok in ["mass", "title_en", "a1"] { assert!(valid_field_name(ok), "{ok}"); }
+        for bad in ["", "Title", "a-b", "名前", &"x".repeat(33)] { assert!(!valid_field_name(bad), "{bad}"); }
+    }
+
+    /// A revision row written before the new fields loads with them empty, and empty ones are not written back.
+    /// 新しい項目より前に書かれた改訂行は、その項目が空で読み込まれ、空のまま書き戻されない。
+    #[test]
+    fn old_revision_rows_load_with_empty_new_fields() {
+        let r: Revision = serde_json::from_str(r#"{"mark":"A","date":"d","description":"x","by":"k"}"#).unwrap();
+        assert_eq!((r.rev_no.as_str(), r.approved.as_str(), r.count.as_str()), ("", "", ""));
+        let json = serde_json::to_string(&r).unwrap();
+        assert!(!json.contains("rev_no") && !json.contains("approved") && !json.contains("count"), "{json}");
+    }
 
     /// Paper sizes follow ISO A-series dimensions, and portrait orientation swaps width and height.
     /// 用紙サイズはISO A列の寸法に従い、縦置きでは幅と高さが入れ替わる。

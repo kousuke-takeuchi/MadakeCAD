@@ -92,6 +92,35 @@ mod tests {
     use crate::model::*;
     use uuid::Uuid;
 
+    /// A version 19 project file opens in this build and becomes version 20, with no revision or title block data lost.
+    /// 形式19のプロジェクトファイルはこのビルドで開け、形式20になる。改訂や表題欄のデータは失われない。
+    #[test]
+    fn a_version_19_project_migrates_to_20() {
+        let mut project = Project::new("old");
+        project.format_version = 19;
+        project.sheets[0].revisions.push(Revision { mark: "A".into(), date: "26-08-01".into(), description: "初版".into(), by: "K.T".into(), ..Default::default() });
+        project.sheets[0].title_block.title = "主回路".into();
+        // 形式19のファイルの文字列そのもの (新しい項目のキーを1つも含まない) から読む
+        let old = serde_json::to_string(&project).unwrap();
+        for key in ["\"rev_no\"", "\"count\"", "\"fields\""] {
+            assert!(!old.contains(key), "{key}");
+        }
+        let mut loaded: Project = serde_json::from_str(&old).unwrap();
+        migrate(&mut loaded);
+        assert_eq!(loaded.format_version, 20);
+        let rev = &loaded.sheets[0].revisions[0];
+        assert_eq!((rev.mark.as_str(), rev.date.as_str(), rev.description.as_str(), rev.by.as_str()), ("A", "26-08-01", "初版", "K.T"));
+        assert_eq!((rev.rev_no.as_str(), rev.approved.as_str(), rev.count.as_str()), ("", "", ""));
+        assert_eq!(loaded.sheets[0].title_block.title, "主回路");
+        assert!(loaded.sheets[0].title_block.fields.is_empty());
+        // 新しい項目を入れて保存し直すと、読み直しても残る
+        loaded.sheets[0].revisions[0].rev_no = "E-204".into();
+        loaded.sheets[0].title_block.fields.insert("title_en".into(), "MAIN".into());
+        let again: Project = serde_json::from_str(&serde_json::to_string(&loaded).unwrap()).unwrap();
+        assert_eq!(again.sheets[0].revisions[0].rev_no, "E-204");
+        assert_eq!(again.sheets[0].title_block.fields.get("title_en").map(String::as_str), Some("MAIN"));
+    }
+
     /// A project saved to .mdkproj and loaded back is identical, including all entities.
     /// .mdkprojへ保存して読み直したプロジェクトは、全エンティティを含めて同一である。
     #[test]
@@ -384,15 +413,15 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 19, the version that added connector pictures on block pins (blocks with contacts or connectors are saved as "port_block").
-    /// 現行のファイル形式バージョンは19 (ブロックのピンにコネクタの絵を追加し、接点かコネクタのあるブロックを種類「port_block」で保存する版) である。
+    /// The current file format version is 20, the version that added revision number, approval and count to revision rows and free title block fields.
+    /// 現行のファイル形式バージョンは20 (改訂行に改訂番号・承認・個数を、表題欄に自由な欄を追加した版) である。
     #[test]
-    fn the_current_format_version_is_nineteen() {
-        assert_eq!(FORMAT_VERSION, 19);
+    fn the_current_format_version_is_twenty() {
+        assert_eq!(FORMAT_VERSION, 20);
         let mut old = Project::new("x");
-        old.format_version = 18;
+        old.format_version = 19;
         migrate(&mut old);
-        assert_eq!(old.format_version, 19);
+        assert_eq!(old.format_version, 20);
     }
 
     /// A version 17 file without ports loads unchanged apart from being moved up to the current version.

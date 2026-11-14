@@ -362,6 +362,7 @@ mod tests {
             date: "2026-09-27".into(),
             description: "初版".into(),
             by: "設計".into(),
+            ..Default::default()
         }];
         sheet.annotation_text_mm = Some(1.4);
         let symbol = Entity::Symbol(SymbolInstance {

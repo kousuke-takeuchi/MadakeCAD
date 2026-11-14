@@ -608,8 +608,8 @@ fn write_rect(w: &mut Writer, ms: &str, layer: &str, min: Point, max: Point, ph:
 fn write_frame(w: &mut Writer, ms: &str, sheet: &Sheet, t: &FrameTemplate, ctx: &BindContext) {
     let (pw, ph) = sheet.paper_mm();
     let fy = |y: f64| ph - y;
-    let m = t.frame_margin;
-    let (x0, y0, x1, y1) = (m, m, pw - m, ph - m);
+    // 図枠の新しい項目のうちDXFへ出すのは辺別の余白だけ (マーク・罫線の太さ・回転文字などは出さない)
+    let (x0, y0, x1, y1) = t.frame_rect(pw, ph);
     write_rect(
         w,
         ms,
@@ -2957,6 +2957,26 @@ mod tests {
             frames.iter().any(|r| r.num(10) == Some(420.0 - 10.0 - 120.0)),
             "表題欄の枠が無い"
         );
+    }
+
+    /// The DXF frame border follows margins given per side.
+    /// DXFの図枠の外枠は、辺ごとの余白に従う。
+    #[test]
+    fn the_dxf_border_follows_margins_per_side() {
+        let sheet = fixture();
+        let mut t = crate::frame_template::default_template().clone();
+        t.frame_margins = Some(crate::frame_template::FrameMargins { left: 30.0, right: 15.0, top: 12.0, bottom: 10.0 });
+        let dxf = sheet_to_dxf_with_frame(&sheet, &defs(&sheet), &t, &BindContext::for_sheet(&sheet), &[]).0;
+        let ents = entity_records(&dxf);
+        // A3横 420x297: 外枠は(30,12)-(405,287)、Y反転後は y=285 と y=10
+        let border = ents
+            .iter()
+            .find(|r| r.kind == "LWPOLYLINE" && r.layer() == LAYER_FRAME && is_closed(r) && r.num(10) == Some(30.0))
+            .expect("外枠が無い");
+        let xs: Vec<f64> = border.all(10).filter_map(|v| v.trim().parse().ok()).collect();
+        let ys: Vec<f64> = border.all(20).filter_map(|v| v.trim().parse().ok()).collect();
+        assert_eq!(xs, vec![30.0, 405.0, 405.0, 30.0]);
+        assert_eq!(ys, vec![285.0, 285.0, 10.0, 10.0]);
     }
 
     /// Shapes, the wire part legend and the panel layout entities are exported too, each on its own layer (SHAPES / ANNOTATION / PANEL), and the export report counts what was written per kind.

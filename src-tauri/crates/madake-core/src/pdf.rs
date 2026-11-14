@@ -283,6 +283,7 @@ mod tests {
             date: "2026-02-01".into(),
             description: "初版".into(),
             by: "山田".into(),
+            ..Default::default()
         }];
         let tb = Entity::Symbol(SymbolInstance {
             id: Uuid::new_v4(),
@@ -504,5 +505,39 @@ mod tests {
         let pages = project_pdf_pages(&project, &options);
         assert_eq!(pages.len(), 3, "回路図1枚 + 盤1枚 + 配置表1枚");
         assert!(pages[2].contains("盤内部品配置表"), "{}", pages[2]);
+    }
+
+    /// A 1x1 PNG, base64-encoded (red pixel).
+    const PNG_1X1: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+
+    fn svg_with_image(href: &str) -> String {
+        format!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100mm\" height=\"50mm\" viewBox=\"0 0 100 50\">\
+             <image x=\"10\" y=\"10\" width=\"40\" height=\"20\" preserveAspectRatio=\"xMidYMid meet\" href=\"{href}\"/></svg>"
+        )
+    }
+
+    /// A PNG embedded in the sheet SVG as a data URI is written into the PDF as an image object.
+    /// シートのSVGへdata URIで埋め込んだPNGは、PDFに画像オブジェクトとして書き出される。
+    #[test]
+    fn an_embedded_png_reaches_the_pdf() {
+        let svg = svg_with_image(&format!("data:image/png;base64,{PNG_1X1}"));
+        let pdf = svgs_to_pdf(&[svg]).expect("pdf");
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(text.contains("/Subtype /Image"), "PDFに画像が無い");
+    }
+
+    /// An SVG image embedded as a data URI is converted too: the PDF is produced and is larger than the same page without the image.
+    /// data URIで埋め込んだSVG画像も変換される。PDFができ、画像の無い同じページより大きい。
+    #[test]
+    fn an_embedded_svg_image_reaches_the_pdf() {
+        use base64::Engine as _;
+        let inner = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><rect width=\"10\" height=\"10\" fill=\"#c00\"/></svg>";
+        let b64 = base64::engine::general_purpose::STANDARD.encode(inner);
+        let with = svgs_to_pdf(&[svg_with_image(&format!("data:image/svg+xml;base64,{b64}"))]).expect("pdf");
+        // 比べる相手は、画像の要素そのものが無い同じ大きさのページ
+        let blank = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100mm\" height=\"50mm\" viewBox=\"0 0 100 50\"></svg>";
+        let without = svgs_to_pdf(&[blank.to_string()]).expect("pdf");
+        assert!(with.len() > without.len(), "{} <= {}", with.len(), without.len());
     }
 }

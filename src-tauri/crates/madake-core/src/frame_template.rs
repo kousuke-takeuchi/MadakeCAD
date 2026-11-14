@@ -51,6 +51,155 @@ const BUNDLED: &[&str] = &[
     include_str!("../../../resources/frame_templates/jis-a4-portrait.json"),
 ];
 
+/// 大文字の高さ ÷ フォントサイズ (`text_size_is: cap` の換算)。
+pub const CAP_HEIGHT_RATIO: f64 = 0.72;
+/// 複数行の文字の行送り ÷ フォントサイズ。
+pub const LINE_PITCH: f64 = 1.25;
+/// ロゴ画像の大きさの上限 (バイト)。
+pub const LOGO_MAX_BYTES: u64 = 2_097_152;
+
+fn yes() -> bool { true }
+fn is_true(v: &bool) -> bool { *v }
+fn is_false(v: &bool) -> bool { !*v }
+fn is_zero(v: &u16) -> bool { *v == 0 }
+fn is_default<T: Default + PartialEq>(v: &T) -> bool { *v == T::default() }
+
+/// 辺ごとの図枠の余白 (mm)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct FrameMargins { pub left: f64, pub right: f64, pub top: f64, pub bottom: f64 }
+
+/// 図枠の外に描くマーク。
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Marks {
+    /// 用紙の四隅の裁断マーク (L字)。
+    #[serde(default)]
+    pub trim: bool,
+    /// 外枠の各辺の中央の中心マーク。
+    #[serde(default)]
+    pub centre: bool,
+    /// 裁断マークの角の位置: 用紙の各辺からの距離 (mm)。無ければ4辺とも4mm。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trim_insets: Option<FrameMargins>,
+    /// 裁断マークの腕の長さ (mm)。無ければ15mm。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trim_arm: Option<f64>,
+    /// 中心マークを外枠から裁断マークの線 (`trim_insets`) まで伸ばす。無ければ余白と10mmの小さいほう。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub centre_to_trim: bool,
+    /// 中心マークの外側の端に矢印 (開いたV字) を付ける。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub centre_arrow: bool,
+    /// 中心マークの線の太さ。無ければ0.5mm (medium)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub centre_weight: Option<LineWeight>,
+}
+
+/// 裁断マークの既定の位置 (用紙の端から mm) と腕の長さ (mm)。
+pub const TRIM_INSET: f64 = 4.0;
+pub const TRIM_ARM: f64 = 15.0;
+
+impl Marks {
+    /// 裁断マークの角の位置 (用紙の各辺からの距離)。
+    pub fn trim_insets(&self) -> FrameMargins {
+        self.trim_insets.unwrap_or(FrameMargins { left: TRIM_INSET, right: TRIM_INSET, top: TRIM_INSET, bottom: TRIM_INSET })
+    }
+
+    /// 裁断マークの腕の長さ。
+    pub fn trim_arm(&self) -> f64 {
+        self.trim_arm.unwrap_or(TRIM_ARM)
+    }
+}
+
+/// 改訂記号を囲む三角の形。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct MarkStyle {
+    /// 三角の高さ ÷ 行高 (既定0.8)。
+    #[serde(default = "mark_h")]
+    pub h: f64,
+    /// 底辺 ÷ 高さ (既定は正三角形の 2/√3)。
+    #[serde(default = "mark_aspect")]
+    pub aspect: f64,
+    /// 斜辺の中ほどを空ける割合 (0〜0.9、既定0 = 切れ目なし)。
+    #[serde(default)]
+    pub gap: f64,
+    /// 列の左端から三角の左下の角までの距離 (mm、既定2)。
+    #[serde(default = "mark_pad")]
+    pub pad: f64,
+    /// 改訂の無い行にも三角を描く (`rows_fixed`の空行)。
+    #[serde(default)]
+    pub in_empty_rows: bool,
+}
+
+fn mark_h() -> f64 { 0.8 }
+fn mark_aspect() -> f64 { 2.0 / 3f64.sqrt() }
+fn mark_pad() -> f64 { 2.0 }
+
+impl Default for MarkStyle {
+    fn default() -> Self {
+        Self { h: mark_h(), aspect: mark_aspect(), gap: 0.0, pad: mark_pad(), in_empty_rows: false }
+    }
+}
+
+/// 罫線の太さ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LineWeight { #[default] Thin, Medium, Heavy }
+
+impl LineWeight {
+    /// 線幅 (mm)。
+    pub fn stroke(&self) -> f64 {
+        match self { LineWeight::Thin => 0.25, LineWeight::Medium => 0.5, LineWeight::Heavy => 1.0 }
+    }
+}
+
+/// `Cell.size`の意味。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TextSizeIs { #[default] Font, Cap }
+
+/// 改訂記号を囲む形。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MarkShape { #[default] None, Triangle }
+
+/// 改訂欄の列が表示する項目。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RevisionField { Mark, Count, Description, RevNo, Date, By, Approved }
+
+impl RevisionField {
+    /// この列に出す値。
+    pub fn value<'a>(&self, rev: &'a crate::model::Revision) -> &'a str {
+        match self {
+            RevisionField::Mark => &rev.mark,
+            RevisionField::Count => &rev.count,
+            RevisionField::Description => &rev.description,
+            RevisionField::RevNo => &rev.rev_no,
+            RevisionField::Date => &rev.date,
+            RevisionField::By => &rev.by,
+            RevisionField::Approved => &rev.approved,
+        }
+    }
+}
+
+/// 改訂欄の1列。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct RevisionColumn {
+    pub field: RevisionField,
+    /// 見出し行に印字する文字。
+    pub header: String,
+    /// 列幅 (mm)。
+    pub w: f64,
+    #[serde(default)]
+    pub align: Align,
+    /// 同じセルの中で、主の項目のあとに続けて出す項目 (例: 記号の横の個数)。間に罫線は入らない。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suffix: Option<RevisionField>,
+    /// 見出しの揃え。無ければ`align`と同じ (内容は左揃え・見出しは中央、のように分けたいときに書く)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header_align: Option<Align>,
+}
+
 /// 図枠テンプレート1件。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct FrameTemplate {
@@ -69,9 +218,16 @@ pub struct FrameTemplate {
     pub paper: PaperMm,
     /// 用紙端から図枠外枠までのマージン (mm)。
     pub frame_margin: f64,
+    /// 辺ごとの余白。あれば`frame_margin`の代わりに使う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_margins: Option<FrameMargins>,
     pub zones: Zones,
     pub title_block: TitleBlockDef,
     pub revision_block: RevisionBlockDef,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub marks: Marks,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub text_size_is: TextSizeIs,
     /// ロゴ枠 (用紙座標mm)。画像が解決できないときは枠だけを描く。
     #[serde(default)]
     pub logo: Option<LogoFrame>,
@@ -99,6 +255,9 @@ pub struct Zones {
     pub col_labels: LabelStyle,
     /// 行の目盛文字 (既定は英字)。
     pub row_labels: LabelStyle,
+    /// ゾーン目盛を描くか (既定: 描く)。
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub show: bool,
 }
 
 /// ゾーン目盛の文字種。
@@ -160,6 +319,8 @@ pub struct GridLine {
     pub y1: f64,
     pub x2: f64,
     pub y2: f64,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub weight: LineWeight,
 }
 
 /// 表題欄のセル1つ。`text`(固定文字)か`bind`(バインド入り)のどちらか一方を持つ。
@@ -188,6 +349,15 @@ pub struct Cell {
     /// 値が空文字になったらセルごと描かない (会社名など、無いときは何も出さない欄)。
     #[serde(default)]
     pub omit_if_empty: bool,
+    /// 回転 (0/90/180/270、画面上で時計回り)。
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rotation: u16,
+    /// 文字を枠で囲む。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub boxed: bool,
+    /// `w`に収まるよう文字を縮める。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fit: bool,
 }
 
 impl Cell {
@@ -236,6 +406,23 @@ pub struct RevisionBlockDef {
     pub rows_max: usize,
     /// 列幅 (記号 / 日付 / 内容 / 承認) mm。合計は表題欄の幅と一致させる。
     pub col_w: Vec<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub columns: Option<Vec<RevisionColumn>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_h: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows_fixed: Option<usize>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub mark_shape: MarkShape,
+    /// 改訂行の文字サイズ (mm)。無ければ2.5。`text_size_is`に従う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_size: Option<f64>,
+    /// 見出し行の文字サイズ (mm)。無ければ2.2。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header_size: Option<f64>,
+    /// 記号を囲む三角の形。無ければ既定 (行高の0.8倍の正三角形、切れ目なし)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark_style: Option<MarkStyle>,
 }
 
 /// ロゴ枠 (用紙座標mm)。`path`はテンプレートフォルダからの相対パス。
@@ -248,14 +435,62 @@ pub struct LogoFrame {
     /// 画像ファイル (テンプレートフォルダ相対)。未指定・未解決なら枠だけを描く。
     #[serde(default)]
     pub path: Option<String>,
+    /// 読み込んだ画像 (data URI)。テンプレートのファイルからは読まず、書きもしない。
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub data_url: Option<String>,
 }
 
 impl FrameTemplate {
     /// 表題欄の左上角の用紙座標 (mm)。用紙寸法とマージンから基準隅で決まる。
+    /// 4辺の余白。`frame_margins`が無ければ`frame_margin`を4辺に使う。
+    pub fn margins(&self) -> FrameMargins {
+        self.frame_margins.unwrap_or(FrameMargins {
+            left: self.frame_margin, right: self.frame_margin,
+            top: self.frame_margin, bottom: self.frame_margin,
+        })
+    }
+
+    /// 外枠の矩形 (x0, y0, x1, y1) 用紙mm。
+    pub fn frame_rect(&self, pw: f64, ph: f64) -> (f64, f64, f64, f64) {
+        let m = self.margins();
+        (m.left, m.top, pw - m.right, ph - m.bottom)
+    }
+
+    /// 描くフォントサイズ。`text_size_is: cap`なら大文字高さから換算する。
+    pub fn font_size(&self, size: f64) -> f64 {
+        match self.text_size_is {
+            TextSizeIs::Font => size,
+            TextSizeIs::Cap => size / CAP_HEIGHT_RATIO,
+        }
+    }
+
+    /// 改訂欄の列。`columns`が無ければ従来の4列 (記号/日付/内容/承認)。
+    pub fn revision_columns(&self) -> Vec<RevisionColumn> {
+        if let Some(cols) = &self.revision_block.columns {
+            return cols.clone();
+        }
+        let fields = [RevisionField::Mark, RevisionField::Date, RevisionField::Description, RevisionField::By];
+        let headers = ["記号", "日付", "内容", "承認"];
+        self.revision_block.col_w.iter().zip(fields).zip(headers)
+            .map(|((w, field), header)| RevisionColumn { field, header: header.into(), w: *w, align: Align::Start, suffix: None, header_align: None })
+            .collect()
+    }
+
+    /// 改訂欄の行高。
+    pub fn revision_row_h(&self) -> f64 {
+        self.revision_block.row_h.unwrap_or(self.title_block.row_h)
+    }
+
+    /// 改訂欄が新しい項目を使っているか (使っていなければ従来の描画を1バイトも変えない)。
+    pub fn uses_extended_revision_table(&self) -> bool {
+        let rb = &self.revision_block;
+        rb.columns.is_some() || rb.row_h.is_some() || rb.rows_fixed.is_some()
+            || rb.mark_shape != MarkShape::None || self.text_size_is != TextSizeIs::Font
+            || rb.text_size.is_some() || rb.header_size.is_some() || rb.mark_style.is_some()
+    }
+
     pub fn title_block_origin(&self, pw: f64, ph: f64) -> (f64, f64) {
-        let m = self.frame_margin;
-        let (x0, y0) = (m, m);
-        let (x1, y1) = (pw - m, ph - m);
+        let (x0, y0, x1, y1) = self.frame_rect(pw, ph);
         let tb = &self.title_block;
         match tb.origin {
             Origin::BottomRight => (x1 - tb.w, y1 - tb.h),
@@ -286,20 +521,38 @@ impl FrameTemplate {
         if self.id.trim().is_empty() {
             return Err("id が空".into());
         }
-        if self.paper.w <= 0.0 || self.paper.h <= 0.0 {
+        // 数値は「有限で、範囲の中」だけを通す (NaN・無限大は比較をすり抜けるので、否定形で確かめる)
+        let pos = |v: f64| v.is_finite() && v > 0.0;
+        let non_neg = |v: f64| v.is_finite() && v >= 0.0;
+        if !pos(self.paper.w) || !pos(self.paper.h) {
             return Err(format!("paper が不正: {:?}", self.paper));
         }
-        if self.frame_margin < 0.0 {
-            return Err(format!("frame_margin が負: {}", self.frame_margin));
+        if !non_neg(self.frame_margin) {
+            return Err(format!("frame_margin が不正: {}", self.frame_margin));
         }
         if self.zones.cols == 0 || self.zones.rows == 0 {
             return Err("zones.cols / zones.rows は1以上".into());
         }
+        if let Some(m) = &self.frame_margins {
+            if [m.left, m.right, m.top, m.bottom].iter().any(|v| !non_neg(*v)) {
+                return Err(format!("frame_margins が不正: {m:?}"));
+            }
+        }
+        if let Some(i) = &self.marks.trim_insets {
+            if [i.left, i.right, i.top, i.bottom].iter().any(|v| !non_neg(*v)) {
+                return Err(format!("marks.trim_insets が不正: {i:?}"));
+            }
+        }
+        if let Some(arm) = self.marks.trim_arm {
+            if !pos(arm) {
+                return Err(format!("marks.trim_arm が不正: {arm}"));
+            }
+        }
         let tb = &self.title_block;
-        if tb.w <= 0.0 || tb.h <= 0.0 {
+        if !pos(tb.w) || !pos(tb.h) {
             return Err(format!("title_block の大きさが不正: {}x{}", tb.w, tb.h));
         }
-        if tb.row_h <= 0.0 {
+        if !pos(tb.row_h) {
             return Err(format!("title_block.row_h が不正: {}", tb.row_h));
         }
         for (i, cell) in tb.cells.iter().enumerate() {
@@ -310,8 +563,11 @@ impl FrameTemplate {
                 (None, None) => return Err(format!("cells[{i}]: text か bind が要る")),
                 _ => {}
             }
-            if cell.size <= 0.0 {
+            if !pos(cell.size) {
                 return Err(format!("cells[{i}]: size が不正: {}", cell.size));
+            }
+            if ![0, 90, 180, 270].contains(&cell.rotation) {
+                return Err(format!("cells[{i}]: rotation は 0/90/180/270: {}", cell.rotation));
             }
         }
         let rb = &self.revision_block;
@@ -327,6 +583,58 @@ impl FrameTemplate {
                 "revision_block.col_w の合計 {sum} が表題欄の幅 {} と違う",
                 tb.w
             ));
+        }
+        if let Some(cols) = &rb.columns {
+            if cols.is_empty() || cols.len() > 8 {
+                return Err(format!("revision_block.columns は1〜8列: {}列", cols.len()));
+            }
+            for (i, c) in cols.iter().enumerate() {
+                if cols[..i].iter().any(|p| p.field == c.field) {
+                    return Err(format!("revision_block.columns: {:?} が2回ある", c.field));
+                }
+                if !pos(c.w) {
+                    return Err(format!("revision_block.columns[{i}].w が不正: {}", c.w));
+                }
+                if c.suffix == Some(c.field) {
+                    return Err(format!("revision_block.columns[{i}].suffix が列の項目と同じ: {:?}", c.field));
+                }
+            }
+            let sum: f64 = cols.iter().map(|c| c.w).sum();
+            if (sum - tb.w).abs() > 0.01 {
+                return Err(format!("revision_block.columns の幅の合計 {sum} が表題欄の幅 {} と違う", tb.w));
+            }
+        }
+        if let Some(h) = rb.row_h {
+            if !pos(h) { return Err(format!("revision_block.row_h が不正: {h}")); }
+        }
+        if let Some(v) = rb.text_size {
+            if !pos(v) { return Err(format!("revision_block.text_size が不正: {v}")); }
+        }
+        if let Some(v) = rb.header_size {
+            if !pos(v) { return Err(format!("revision_block.header_size が不正: {v}")); }
+        }
+        if let Some(st) = &rb.mark_style {
+            if !(pos(st.h) && st.h <= 1.0) {
+                return Err(format!("revision_block.mark_style.h は0より大きく1以下: {}", st.h));
+            }
+            if !pos(st.aspect) {
+                return Err(format!("revision_block.mark_style.aspect が不正: {}", st.aspect));
+            }
+            if !(non_neg(st.gap) && st.gap <= 0.9) {
+                return Err(format!("revision_block.mark_style.gap は0〜0.9: {}", st.gap));
+            }
+            if !non_neg(st.pad) {
+                return Err(format!("revision_block.mark_style.pad が不正: {}", st.pad));
+            }
+        }
+        if rb.rows_fixed == Some(0) {
+            return Err("revision_block.rows_fixed は1以上".into());
+        }
+        if let Some(path) = self.logo.as_ref().and_then(|l| l.path.as_deref()) {
+            let p = std::path::Path::new(path);
+            if p.is_absolute() || p.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+                return Err(format!("logo.path はテンプレートのフォルダの中だけ: {path}"));
+            }
         }
         Ok(())
     }
@@ -403,6 +711,7 @@ pub fn bind_value(name: &str, ctx: &BindContext) -> Option<String> {
         "title_block.checked" => tb.checked.clone(),
         "title_block.approved" | "approver" => tb.approved.clone(),
         "title_block.rev" => tb.rev.clone(),
+        _ if name.starts_with("field.") => tb.fields.get(&name["field.".len()..]).cloned().unwrap_or_default(),
         _ => return None,
     };
     Some(v)
@@ -536,6 +845,36 @@ pub fn for_project(project: &Project) -> FrameTemplate {
     resolve(project.frame_template.as_deref())
 }
 
+/// ロゴ画像のMIME型 (拡張子で決める。大文字小文字は区別しない)。知らない拡張子はNone。
+pub fn logo_mime(path: &str) -> Option<&'static str> {
+    let ext = std::path::Path::new(path).extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "svg" => Some("image/svg+xml"),
+        _ => None,
+    }
+}
+
+/// ロゴ画像を読んで`logo.data_url`へ入れる。読めない・大きすぎる・知らない種類なら何もしない
+/// (図面は枠だけで出る)。
+pub fn load_logo(template: &mut FrameTemplate, dir: &Path) {
+    use base64::Engine as _;
+    let Some(logo) = template.logo.as_mut() else { return };
+    logo.data_url = None;
+    let Some(path) = logo.path.as_deref() else { return };
+    let Some(mime) = logo_mime(path) else { return };
+    let file = dir.join(path);
+    match std::fs::metadata(&file) {
+        Ok(meta) if meta.len() <= LOGO_MAX_BYTES => {}
+        _ => return,
+    }
+    if let Ok(bytes) = std::fs::read(&file) {
+        let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+        logo.data_url = Some(format!("data:{mime};base64,{b64}"));
+    }
+}
+
 /// ディレクトリ内の`*.json`をファイル名順に読む。無いディレクトリは静かに無視する。
 fn read_dir_frames(dir: &Path, builtin: bool, out: &mut FrameTemplateList) {
     for path in crate::templates::json_files(dir) {
@@ -545,6 +884,7 @@ fn read_dir_frames(dir: &Path, builtin: bool, out: &mut FrameTemplateList) {
         match loaded {
             Ok(mut template) => {
                 template.builtin = builtin;
+                load_logo(&mut template, dir);
                 push(&mut out.templates, template);
             }
             Err(message) => out.issues.push(FrameTemplateIssue {
@@ -593,6 +933,9 @@ pub fn save_to(
     if let Some(obj) = value.as_object_mut() {
         // 同梱かどうかは読み込んだ場所で決まるのでファイルには書かない
         obj.remove("builtin");
+        if let Some(logo) = obj.get_mut("logo").and_then(|l| l.as_object_mut()) {
+            logo.remove("data_url");
+        }
     }
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let path = dir.join(format!("{}.json", template.id));
@@ -622,6 +965,126 @@ mod tests {
     use crate::model::{Orientation, PaperSize, Revision, Sheet};
     use uuid::Uuid;
 
+    const PNG_1X1_B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+
+    pub(crate) fn png_1x1() -> Vec<u8> {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD.decode(PNG_1X1_B64).unwrap()
+    }
+
+    pub(crate) fn user_dir_with_logo(file: &str, bytes: &[u8]) -> TempDir {
+        let dir = std::env::temp_dir().join(format!("madake-logo-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(file), bytes).unwrap();
+        let mut t = base();
+        t.id = "with-logo".into();
+        t.logo = Some(LogoFrame { x: 300.0, y: 260.0, w: 40.0, h: 10.0, path: Some(file.into()), data_url: None });
+        let mut v = serde_json::to_value(&t).unwrap();
+        v.as_object_mut().unwrap().remove("builtin");
+        std::fs::write(dir.join("with-logo.json"), serde_json::to_string(&v).unwrap()).unwrap();
+        TempDir(dir)
+    }
+
+    /// テスト用の一時フォルダ。使い終わったら消す。
+    pub(crate) struct TempDir(std::path::PathBuf);
+
+    impl std::ops::Deref for TempDir {
+        type Target = std::path::Path;
+        fn deref(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn loaded_url(dir: &std::path::Path) -> Option<String> {
+        let list = list_from(None, Some(dir));
+        let t = list.templates.iter().find(|t| t.id == "with-logo").expect("listed");
+        t.logo.as_ref().unwrap().data_url.clone()
+    }
+
+    /// A template whose logo names a PNG next to it is listed with the image loaded as a data URI.
+    /// ロゴが隣のPNGを指すテンプレートは、画像がdata URIとして読み込まれた状態で一覧に出る。
+    #[test]
+    fn a_logo_png_next_to_the_template_is_loaded() {
+        let dir = user_dir_with_logo("logo.png", &png_1x1());
+        let url = loaded_url(&dir).expect("loaded");
+        assert!(url.starts_with("data:image/png;base64,iVBOR"), "{url}");
+    }
+
+    /// A logo that is missing, too large or of an unknown type leaves the template listed without an image.
+    /// ロゴが無い・大きすぎる・知らない種類のときも、テンプレートは画像無しで一覧に出る。
+    #[test]
+    fn an_unusable_logo_leaves_the_template_listed_without_an_image() {
+        for (file, bytes) in [("logo.bmp", png_1x1()), ("logo.png", vec![0u8; (LOGO_MAX_BYTES + 1) as usize])] {
+            let dir = user_dir_with_logo(file, &bytes);
+            assert!(loaded_url(&dir).is_none(), "{file}");
+        }
+        let dir = user_dir_with_logo("logo.png", &png_1x1());
+        std::fs::remove_file(dir.join("logo.png")).unwrap();
+        assert!(loaded_url(&dir).is_none());
+    }
+
+    /// A JPEG logo is loaded with the image/jpeg type.
+    /// JPEGのロゴはimage/jpegの種類で読み込まれる。
+    #[test]
+    fn a_jpeg_logo_is_loaded_with_the_jpeg_type() {
+        let dir = user_dir_with_logo("logo.jpg", &[0xFF, 0xD8, 0xFF, 0xD9]);
+        let url = loaded_url(&dir).expect("loaded");
+        assert!(url.starts_with("data:image/jpeg;base64,"), "{url}");
+    }
+
+    /// A logo file name with an upper-case extension (LOGO.PNG) is accepted.
+    /// 拡張子が大文字のロゴ画像 (LOGO.PNG) も受け付ける。
+    #[test]
+    fn an_upper_case_logo_extension_is_accepted() {
+        let dir = user_dir_with_logo("LOGO.PNG", &png_1x1());
+        let url = loaded_url(&dir).expect("loaded");
+        assert!(url.starts_with("data:image/png;base64,"), "{url}");
+    }
+
+    /// A sheet drawn with a template whose logo was loaded from a real PNG file is exported to a PDF that contains the image.
+    /// 実際のPNGファイルから読み込んだロゴを持つテンプレートで描いた図面は、その画像を含むPDFとして書き出される。
+    #[test]
+    fn a_loaded_logo_reaches_the_pdf() {
+        let dir = user_dir_with_logo("logo.png", &png_1x1());
+        let t = list_from(None, Some(&dir)).templates.into_iter().find(|t| t.id == "with-logo").unwrap();
+        let svg = crate::svg::sheet_to_svg_with_frame(&sheet(), &[], &t, &[]);
+        assert!(svg.contains("<image "), "{svg}");
+        let pdf = crate::pdf::svgs_to_pdf(&[svg]).expect("pdf");
+        assert!(String::from_utf8_lossy(&pdf).contains("/Subtype /Image"), "PDFに画像が無い");
+    }
+
+    /// A logo file that has an image extension but is not a readable image does not stop the export: the sheet still becomes a PDF.
+    /// 画像の拡張子を持つが画像として読めないロゴファイルがあっても、書き出しは止まらない。図面はPDFになる。
+    #[test]
+    fn a_broken_logo_image_does_not_stop_the_pdf_export() {
+        for file in ["logo.png", "logo.jpg", "logo.svg"] {
+            let dir = user_dir_with_logo(file, b"not an image");
+            let t = list_from(None, Some(&dir)).templates.into_iter().find(|t| t.id == "with-logo").unwrap();
+            let svg = crate::svg::sheet_to_svg_with_frame(&sheet(), &[], &t, &[]);
+            let pdf = crate::pdf::svgs_to_pdf(&[svg]);
+            assert!(pdf.is_ok(), "{file}: {:?}", pdf.err());
+        }
+    }
+
+    /// Saving a template never writes the loaded image or the built-in flag into the file.
+    /// テンプレートの保存では、読み込んだ画像も同梱フラグもファイルへ書かない。
+    #[test]
+    fn saving_does_not_write_the_loaded_image() {
+        let dir = user_dir_with_logo("logo.png", &png_1x1());
+        let t = list_from(None, Some(&dir)).templates.into_iter().find(|t| t.id == "with-logo").unwrap();
+        let (_, path) = save_to(&dir, &t, &[]).expect("saved");
+        let text = std::fs::read_to_string(path).unwrap();
+        assert!(!text.contains("data_url") && !text.contains("builtin"), "{text}");
+        assert!(text.contains("\"path\": \"logo.png\""), "{text}");
+    }
+
+
     fn sheet() -> Sheet {
         let mut s = Sheet::new("動力回路", PaperSize::A3, Orientation::Landscape);
         s.title_block = TitleBlock {
@@ -635,8 +1098,19 @@ mod tests {
             checked: "Y.N".into(),
             approved: "H.I".into(),
             rev: "A".into(),
+            ..Default::default()
         };
         s
+    }
+
+    /// A free title block field is printed where the template binds `{field.name}`; a name that is not set prints nothing.
+    /// 表題欄の自由な欄は、テンプレートが`{field.名前}`でバインドした場所に印字される。設定の無い名前は何も出ない。
+    #[test]
+    fn free_fields_resolve_through_field_binds() {
+        let mut s = sheet();
+        s.title_block.fields.insert("title_en".into(), "MAIN CIRCUIT".into());
+        let ctx = BindContext::for_sheet(&s);
+        assert_eq!(resolve_binds("{field.title_en}/{field.missing}", &ctx), "MAIN CIRCUIT/");
     }
 
     fn temp_dir(tag: &str) -> PathBuf {
@@ -649,7 +1123,8 @@ mod tests {
     /// 同梱の図枠テンプレートは「JIS A3 横」「JIS A4 縦」の2種がこの順で並び、英語名と日本語名を持ち、どちらも定義として正しい。
     #[test]
     fn the_two_bundled_frame_templates_are_listed_in_both_languages() {
-        let list = list();
+        // ユーザーの図枠は見ない (開発者の ~/MadakeCAD/templates/frames に何があっても結果が変わらない)
+        let list = list_from(bundled_dir().as_deref(), None);
         assert!(list.issues.is_empty(), "同梱図枠は全て読める: {:?}", list.issues);
         let ids: Vec<&str> = list.templates.iter().map(|t| t.id.as_str()).collect();
         assert_eq!(ids, vec!["jis-a3", "jis-a4-portrait"]);
@@ -824,6 +1299,7 @@ mod tests {
             weight: Weight::Normal,
             align: Align::Start,
             omit_if_empty: false,
+            rotation: 0, boxed: false, fit: false,
         };
         assert_eq!(fixed.resolve(&ctx), "{title_block.title}");
         let bound = Cell { text: None, bind: Some("{title_block.title}".into()), ..fixed };
@@ -1029,5 +1505,207 @@ mod tests {
         assert!(save_to(&dir, &bad_id, &[]).is_err());
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0, "何も書かない");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn base() -> FrameTemplate {
+        let mut t = default_template().clone();
+        // `builtin`は読み込み時に決まる値で書き戻さないので、往復比較のため外しておく
+        t.builtin = false;
+        t
+    }
+
+    /// Without the new items a template reports today's values: one margin on all four sides, thin rules, font sizes as written, the four classic revision columns.
+    /// 新しい項目の無いテンプレートは今までどおりの値を返す(4辺同じ余白、細い罫線、書いたとおりの文字サイズ、従来の改訂欄4列)。
+    #[test]
+    fn a_template_without_the_new_items_keeps_todays_values() {
+        let t = base();
+        let m = t.margins();
+        assert_eq!((m.left, m.right, m.top, m.bottom), (10.0, 10.0, 10.0, 10.0));
+        assert_eq!(t.frame_rect(420.0, 297.0), (10.0, 10.0, 410.0, 287.0));
+        assert_eq!(t.font_size(3.0), 3.0);
+        assert!(t.zones.show);
+        assert!(!t.uses_extended_revision_table());
+        let cols = t.revision_columns();
+        assert_eq!(cols.len(), 4);
+        assert_eq!(cols[0].field, RevisionField::Mark);
+        assert_eq!(cols[1].field, RevisionField::Date);
+        assert_eq!(cols[2].field, RevisionField::Description);
+        assert_eq!(cols[3].field, RevisionField::By);
+        assert_eq!(cols.iter().map(|c| c.w).sum::<f64>(), t.title_block.w);
+        assert_eq!(t.revision_row_h(), t.title_block.row_h);
+    }
+
+    /// Margins given per side move the frame and the title block corner; the single margin is then ignored.
+    /// 辺ごとの余白を指定すると外枠と表題欄の隅がそれに従い、1値の余白は無視される。
+    #[test]
+    fn margins_per_side_move_the_frame_and_the_title_block() {
+        let mut t = base();
+        t.frame_margins = Some(FrameMargins { left: 30.0, right: 15.0, top: 12.0, bottom: 10.0 });
+        assert_eq!(t.frame_rect(1189.0, 841.0), (30.0, 12.0, 1174.0, 831.0));
+        let (tx, ty) = t.title_block_origin(1189.0, 841.0);
+        assert_eq!((tx, ty), (1174.0 - t.title_block.w, 831.0 - t.title_block.h));
+        t.title_block.origin = Origin::TopLeft;
+        assert_eq!(t.title_block_origin(1189.0, 841.0), (30.0, 12.0));
+    }
+
+    /// With capital-height sizes, a size of 3.6 mm is drawn with a 5 mm font.
+    /// 文字サイズが大文字高さの指定なら、3.6mmは5mmのフォントで描く。
+    #[test]
+    fn capital_height_sizes_are_converted_to_font_sizes() {
+        let mut t = base();
+        t.text_size_is = TextSizeIs::Cap;
+        assert!((t.font_size(3.6) - 5.0).abs() < 1e-9);
+    }
+
+    /// The new items are optional keys: a template file written before them still loads, and saving a template that does not use them writes none of the new keys.
+    /// 新しい項目は省略できるキーである。追加前のテンプレートファイルはそのまま読め、使っていないテンプレートを保存しても新しいキーは書かれない。
+    #[test]
+    fn old_template_files_load_and_unused_items_are_not_written() {
+        let t = parse(BUNDLED[0]).expect("jis-a3");
+        let json = serde_json::to_string(&t).unwrap();
+        for key in ["\"frame_margins\"", "\"marks\"", "\"text_size_is\"", "\"show\"", "\"weight\":\"thin\"", "\"rotation\"", "\"boxed\"", "\"fit\"", "\"columns\"", "\"rows_fixed\"", "\"mark_shape\"", "\"data_url\""] {
+            assert!(!json.contains(key), "{key} が書かれている: {json}");
+        }
+    }
+
+    /// A template that uses every new item survives a write and a read unchanged.
+    /// 新しい項目を全て使うテンプレートは、書いて読み直しても変わらない。
+    #[test]
+    fn a_template_with_every_new_item_round_trips() {
+        let t = extended();
+        let back: FrameTemplate = serde_json::from_str(&serde_json::to_string(&t).unwrap()).unwrap();
+        assert_eq!(back, t);
+        back.validate().expect("valid");
+    }
+
+    fn extended() -> FrameTemplate {
+        let mut t = base();
+        t.frame_margins = Some(FrameMargins { left: 30.0, right: 15.0, top: 12.0, bottom: 10.0 });
+        t.zones.show = false;
+        t.marks = Marks { trim: true, centre: true, ..Default::default() };
+        t.text_size_is = TextSizeIs::Cap;
+        t.title_block.grid_lines[0].weight = LineWeight::Medium;
+        t.title_block.cells[0].rotation = 90;
+        t.title_block.cells[0].boxed = true;
+        t.title_block.cells[0].fit = true;
+        let w = t.title_block.w;
+        t.revision_block.columns = Some(vec![
+            RevisionColumn { field: RevisionField::Mark, header: "SYMB".into(), w: 14.0, align: Align::Start, suffix: None, header_align: None },
+            RevisionColumn { field: RevisionField::Description, header: "CHANGELOG".into(), w: w - 64.0, align: Align::Start, suffix: None, header_align: None },
+            RevisionColumn { field: RevisionField::RevNo, header: "ECN NO".into(), w: 16.0, align: Align::Middle, suffix: None, header_align: None },
+            RevisionColumn { field: RevisionField::Date, header: "DATE".into(), w: 12.0, align: Align::Middle, suffix: None, header_align: None },
+            RevisionColumn { field: RevisionField::By, header: "BY".into(), w: 11.0, align: Align::Middle, suffix: None, header_align: None },
+            RevisionColumn { field: RevisionField::Approved, header: "OKAY".into(), w: 11.0, align: Align::Middle, suffix: None, header_align: None },
+        ]);
+        t.revision_block.row_h = Some(7.0);
+        t.revision_block.rows_fixed = Some(7);
+        t.revision_block.mark_shape = MarkShape::Triangle;
+        t
+    }
+
+    /// Broken values are refused with a message that names the item.
+    /// 壊れた値は、項目名を示すメッセージで拒否される。
+    #[test]
+    fn invalid_new_items_are_refused_by_name() {
+        let cases: Vec<(&str, Box<dyn Fn(&mut FrameTemplate)>)> = vec![
+            ("frame_margins", Box::new(|t| t.frame_margins = Some(FrameMargins { left: -1.0, right: 0.0, top: 0.0, bottom: 0.0 }))),
+            ("rotation", Box::new(|t| t.title_block.cells[0].rotation = 45)),
+            ("revision_block.columns", Box::new(|t| t.revision_block.columns = Some(vec![]))),
+            ("revision_block.columns", Box::new(|t| {
+                let w = t.title_block.w;
+                t.revision_block.columns = Some(vec![
+                    RevisionColumn { field: RevisionField::Mark, header: "A".into(), w: w / 2.0, align: Align::Start, suffix: None, header_align: None },
+                    RevisionColumn { field: RevisionField::Mark, header: "B".into(), w: w / 2.0, align: Align::Start, suffix: None, header_align: None },
+                ])
+            })),
+            ("revision_block.columns", Box::new(|t| t.revision_block.columns = Some(vec![
+                RevisionColumn { field: RevisionField::Mark, header: "A".into(), w: 1.0, align: Align::Start, suffix: None, header_align: None },
+            ]))),
+            ("revision_block.row_h", Box::new(|t| t.revision_block.row_h = Some(0.0))),
+            ("revision_block.rows_fixed", Box::new(|t| t.revision_block.rows_fixed = Some(0))),
+            ("logo.path", Box::new(|t| t.logo = Some(LogoFrame { x: 0.0, y: 0.0, w: 10.0, h: 5.0, path: Some("../x.png".into()), data_url: None }))),
+            ("logo.path", Box::new(|t| t.logo = Some(LogoFrame { x: 0.0, y: 0.0, w: 10.0, h: 5.0, path: Some("/etc/x.png".into()), data_url: None }))),
+        ];
+        for (name, edit) in cases {
+            let mut t = base();
+            edit(&mut t);
+            let err = t.validate().expect_err(name);
+            assert!(err.contains(name), "{name}: {err}");
+        }
+    }
+
+    /// Values that are not finite numbers, too many columns, a column without width and bad mark or revision styles are refused by name.
+    /// 有限の数でない値、多すぎる列、幅の無い列、記号や改訂欄の不正な形は、項目名つきで拒否される。
+    #[test]
+    fn more_invalid_items_are_refused_by_name() {
+        let col = |field, w| RevisionColumn { field, header: "H".into(), w, align: Align::Start, suffix: None, header_align: None };
+        let cases: Vec<(&str, Box<dyn Fn(&mut FrameTemplate)>)> = vec![
+            ("frame_margin", Box::new(|t| t.frame_margin = f64::NAN)),
+            ("frame_margins", Box::new(|t| t.frame_margins = Some(FrameMargins { left: f64::NAN, right: 0.0, top: 0.0, bottom: 0.0 }))),
+            ("revision_block.row_h", Box::new(|t| t.revision_block.row_h = Some(f64::INFINITY))),
+            ("size", Box::new(|t| t.title_block.cells[0].size = f64::NAN)),
+            ("revision_block.columns", Box::new(move |t| {
+                let w = t.title_block.w / 9.0;
+                use RevisionField::*;
+                // 項目は7種類しかないので、9列にするには重複が要る。列数の検査が先に効くことを確かめる
+                t.revision_block.columns = Some([Mark, Count, Description, RevNo, Date, By, Approved, Mark, Count].into_iter().map(|f| col(f, w)).collect());
+            })),
+            ("revision_block.columns[1].w", Box::new(move |t| {
+                let w = t.title_block.w;
+                t.revision_block.columns = Some(vec![col(RevisionField::Mark, w), col(RevisionField::Date, 0.0)]);
+            })),
+            ("revision_block.columns[0].suffix", Box::new(move |t| {
+                let w = t.title_block.w;
+                t.revision_block.columns = Some(vec![RevisionColumn { suffix: Some(RevisionField::Mark), ..col(RevisionField::Mark, w) }]);
+            })),
+            ("revision_block.text_size", Box::new(|t| t.revision_block.text_size = Some(0.0))),
+            ("revision_block.header_size", Box::new(|t| t.revision_block.header_size = Some(-1.0))),
+            ("revision_block.mark_style.h", Box::new(|t| t.revision_block.mark_style = Some(MarkStyle { h: 0.0, ..Default::default() }))),
+            ("revision_block.mark_style.h", Box::new(|t| t.revision_block.mark_style = Some(MarkStyle { h: 1.5, ..Default::default() }))),
+            ("revision_block.mark_style.aspect", Box::new(|t| t.revision_block.mark_style = Some(MarkStyle { aspect: 0.0, ..Default::default() }))),
+            ("revision_block.mark_style.gap", Box::new(|t| t.revision_block.mark_style = Some(MarkStyle { gap: 0.95, ..Default::default() }))),
+            ("revision_block.mark_style.pad", Box::new(|t| t.revision_block.mark_style = Some(MarkStyle { pad: -1.0, ..Default::default() }))),
+            ("marks.trim_insets", Box::new(|t| t.marks.trim_insets = Some(FrameMargins { left: -1.0, right: 0.0, top: 0.0, bottom: 0.0 }))),
+            ("marks.trim_arm", Box::new(|t| t.marks.trim_arm = Some(0.0))),
+        ];
+        for (name, edit) in cases {
+            let mut t = base();
+            edit(&mut t);
+            let err = t.validate().expect_err(name);
+            assert!(err.contains(name), "{name}: {err}");
+        }
+    }
+
+    /// The mark and revision styles are optional too: defaults are 4 mm trim insets, 15 mm arms and an equilateral triangle 0.8 of the row high, and a template using every style item survives a write and a read.
+    /// 記号と改訂欄の形も省略できる。既定は裁断マークが4mm内側・腕15mm、三角は行高の0.8倍の正三角形で、全ての項目を使うテンプレートは書いて読み直しても変わらない。
+    #[test]
+    fn mark_and_revision_styles_default_and_round_trip() {
+        let t = base();
+        let i = t.marks.trim_insets();
+        assert_eq!((i.left, i.right, i.top, i.bottom, t.marks.trim_arm()), (4.0, 4.0, 4.0, 4.0, 15.0));
+        let st = MarkStyle::default();
+        assert_eq!((st.h, st.gap, st.pad, st.in_empty_rows), (0.8, 0.0, 2.0, false));
+        assert!((st.aspect - 2.0 / 3f64.sqrt()).abs() < 1e-12);
+        let json = serde_json::to_string(&t).unwrap();
+        for key in ["\"trim_insets\"", "\"trim_arm\"", "\"centre_to_trim\"", "\"centre_arrow\"", "\"centre_weight\"", "\"suffix\"", "\"text_size\"", "\"header_size\"", "\"mark_style\""] {
+            assert!(!json.contains(key), "{key} が書かれている");
+        }
+        let mut t = extended();
+        t.marks = Marks {
+            trim: true, centre: true,
+            trim_insets: Some(FrameMargins { left: 4.0, right: 6.0, top: 5.0, bottom: 3.0 }),
+            trim_arm: Some(12.0), centre_to_trim: true, centre_arrow: true, centre_weight: Some(LineWeight::Thin),
+        };
+        t.revision_block.text_size = Some(3.0);
+        t.revision_block.header_size = Some(2.0);
+        t.revision_block.mark_style = Some(MarkStyle { h: 1.0, aspect: 0.75, gap: 0.5, pad: 0.0, in_empty_rows: true });
+        t.revision_block.columns.as_mut().unwrap()[0].suffix = Some(RevisionField::Count);
+        let back: FrameTemplate = serde_json::from_str(&serde_json::to_string(&t).unwrap()).unwrap();
+        assert_eq!(back, t);
+        back.validate().expect("valid");
+        assert!(base().uses_extended_revision_table() == false);
+        let mut only_size = base();
+        only_size.revision_block.text_size = Some(3.0);
+        assert!(only_size.uses_extended_revision_table());
     }
 }
