@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3028仕様項目**。
+全6領域・**3113仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -127,6 +127,7 @@
 - CommandはJSONに往復変換でき、どのクライアントからも送信できる。 <sub>`command_json_roundtrip`</sub>
 - UpdateEntityはエンティティを丸ごと置換し、undoで置換前の状態に戻る。 <sub>`update_entity_undo_restores_previous_version`</sub>
 - SetTitleBlockはシートの表題欄を更新し、undoで以前の内容に戻る。 <sub>`set_title_block_is_undoable`</sub>
+- 名前に大文字を含む自由な欄を持つ表題欄の設定は拒否され、何も変わらない。 <sub>`set_title_block_refuses_a_bad_field_name`</sub>
 - SetRevisionsは改訂欄の行を置き換え、undoで以前のリストに戻る。 <sub>`set_revisions_is_undoable`</sub>
 - シートの注記文字高はコマンドで設定し、undoで以前の高さに戻る。 <sub>`set_sheet_annotation_text_is_undoable`</sub>
 - 注記文字高をnullで消すと、シートは既定の2.0mmに戻る。 <sub>`clearing_the_annotation_text_height_restores_the_default`</sub>
@@ -272,6 +273,7 @@
 - ENTITIESセクションの無いファイルはDXFではないとして拒否され、数値でないグループコードは行番号付きの構文エラーになる。 <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>
 - シンボルブロックの図形はY反転したローカル座標で書かれ、弧は用紙座標の時計回りがDXFでは反時計回りになる分だけ角度を入れ替えて向きを保つ。 <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
 - 図枠はFRAMEレイヤに出る: 外枠・ゾーン目盛の英字と数字・バインドを解決した表題欄のセル(図番・品名・改訂)。 <sub>`the_frame_and_title_block_go_to_the_frame_layer`</sub>
+- DXFの図枠の外枠は、辺ごとの余白に従う。 <sub>`the_dxf_border_follows_margins_per_side`</sub>
 - 図形・電線品番凡例・盤レイアウトのエンティティもそれぞれのレイヤ(SHAPES / ANNOTATION / PANEL)へ書き出され、書き出し結果の内訳が種別ごとの件数を返す。 <sub>`shapes_legends_and_panel_layout_are_exported_on_their_own_layers`</sub>
 - 回転したブロックで左右のピン番号の文字が外形より下へはみ出すとき、DESC1 の属性は外形の下ではなく、いちばん下の番号の文字よりさらに下に置く。 <sub>`the_description_of_a_rotated_block_sits_below_its_pin_numbers`</sub>
 - シンボル定義が見つからないシンボルは、黙って消えるのではなく書き出し結果の内訳で報告される。 <sub>`an_unresolvable_symbol_is_reported_as_skipped`</sub>
@@ -280,6 +282,14 @@
 
 ### 図枠テンプレート (プロットフレーム)
 
+- ロゴが隣のPNGを指すテンプレートは、画像がdata URIとして読み込まれた状態で一覧に出る。 <sub>`a_logo_png_next_to_the_template_is_loaded`</sub>
+- ロゴが無い・大きすぎる・知らない種類のときも、テンプレートは画像無しで一覧に出る。 <sub>`an_unusable_logo_leaves_the_template_listed_without_an_image`</sub>
+- JPEGのロゴはimage/jpegの種類で読み込まれる。 <sub>`a_jpeg_logo_is_loaded_with_the_jpeg_type`</sub>
+- 拡張子が大文字のロゴ画像 (LOGO.PNG) も受け付ける。 <sub>`an_upper_case_logo_extension_is_accepted`</sub>
+- 実際のPNGファイルから読み込んだロゴを持つテンプレートで描いた図面は、その画像を含むPDFとして書き出される。 <sub>`a_loaded_logo_reaches_the_pdf`</sub>
+- 画像の拡張子を持つが画像として読めないロゴファイルがあっても、書き出しは止まらない。図面はPDFになる。 <sub>`a_broken_logo_image_does_not_stop_the_pdf_export`</sub>
+- テンプレートの保存では、読み込んだ画像も同梱フラグもファイルへ書かない。 <sub>`saving_does_not_write_the_loaded_image`</sub>
+- 表題欄の自由な欄は、テンプレートが`{field.名前}`でバインドした場所に印字される。設定の無い名前は何も出ない。 <sub>`free_fields_resolve_through_field_binds`</sub>
 - 同梱の図枠テンプレートは「JIS A3 横」「JIS A4 縦」の2種がこの順で並び、英語名と日本語名を持ち、どちらも定義として正しい。 <sub>`the_two_bundled_frame_templates_are_listed_in_both_languages`</sub>
 - リソースのディレクトリが無い環境でも、ビルドへ埋め込んだ同梱図枠が使える。 <sub>`frame_templates_are_available_without_the_resource_directory`</sub>
 - jis-a3テンプレートは現行のJIS図枠をそのまま表す: マージン10mm、ゾーンは4×6で列が数字・行が英字、表題欄は右下基準の120×32mm。 <sub>`the_jis_a3_template_describes_the_current_jis_frame`</sub>
@@ -304,6 +314,14 @@
 - 図枠エディタはユーザー図枠をユーザーの置き場へ{id}.jsonとして保存し、一覧にはその編集内容がユーザー図枠として並ぶ。 <sub>`the_frame_editor_saves_a_user_frame_that_lists_back`</sub>
 - 同梱の図枠と同じidでの保存は拒否して何も書かない(別名で保存させる)。 <sub>`saving_over_a_bundled_frame_id_is_refused`</sub>
 - 壊れた図枠(改訂欄の列幅の合計が表題欄の幅と違う)や、ファイル名にできないidは拒否して何も書かない。 <sub>`an_invalid_frame_or_id_is_not_saved`</sub>
+- 新しい項目の無いテンプレートは今までどおりの値を返す(4辺同じ余白、細い罫線、書いたとおりの文字サイズ、従来の改訂欄4列)。 <sub>`a_template_without_the_new_items_keeps_todays_values`</sub>
+- 辺ごとの余白を指定すると外枠と表題欄の隅がそれに従い、1値の余白は無視される。 <sub>`margins_per_side_move_the_frame_and_the_title_block`</sub>
+- 文字サイズが大文字高さの指定なら、3.6mmは5mmのフォントで描く。 <sub>`capital_height_sizes_are_converted_to_font_sizes`</sub>
+- 新しい項目は省略できるキーである。追加前のテンプレートファイルはそのまま読め、使っていないテンプレートを保存しても新しいキーは書かれない。 <sub>`old_template_files_load_and_unused_items_are_not_written`</sub>
+- 新しい項目を全て使うテンプレートは、書いて読み直しても変わらない。 <sub>`a_template_with_every_new_item_round_trips`</sub>
+- 壊れた値は、項目名を示すメッセージで拒否される。 <sub>`invalid_new_items_are_refused_by_name`</sub>
+- 有限の数でない値、多すぎる列、幅の無い列、記号や改訂欄の不正な形は、項目名つきで拒否される。 <sub>`more_invalid_items_are_refused_by_name`</sub>
+- 記号と改訂欄の形も省略できる。既定は裁断マークが4mm内側・腕15mm、三角は行高の0.8倍の正三角形で、全ての項目を使うテンプレートは書いて読み直しても変わらない。 <sub>`mark_and_revision_styles_default_and_round_trip`</sub>
 
 ### 座標・ジオメトリ
 
@@ -325,6 +343,7 @@
 
 ### プロジェクトファイルI/O (.mdkproj)
 
+- 形式19のプロジェクトファイルはこのビルドで開け、形式20になる。改訂や表題欄のデータは失われない。 <sub>`a_version_19_project_migrates_to_20`</sub>
 - .mdkprojへ保存して読み直したプロジェクトは、全エンティティを含めて同一である。 <sub>`project_file_roundtrip`</sub>
 - 保存された.mdkprojはformat_version付きの整形JSONで、gitの差分が読みやすい。 <sub>`saved_file_is_pretty_json_with_format_version`</sub>
 - 存在しないファイルの読み込みはパニックせずエラーを返す。 <sub>`loading_missing_file_is_an_error`</sub>
@@ -337,7 +356,7 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは19 (ブロックのピンにコネクタの絵を追加し、接点かコネクタのあるブロックを種類「port_block」で保存する版) である。 <sub>`the_current_format_version_is_nineteen`</sub>
+- 現行のファイル形式バージョンは20 (改訂行に改訂番号・承認・個数を、表題欄に自由な欄を追加した版) である。 <sub>`the_current_format_version_is_twenty`</sub>
 - ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_17_file_loads_unchanged`</sub>
 - 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - 区間が空の「run_cable」(ファイルを手で直したときなど) は普通の定義線ケーブルとして開き、書き戻すと種類「cable」になる。 <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
@@ -442,6 +461,8 @@
 
 ### ドキュメントモデル
 
+- 欄の名前は短い小文字の識別子で、それ以外は拒否される。 <sub>`free_field_names_are_lower_case_identifiers`</sub>
+- 新しい項目より前に書かれた改訂行は、その項目が空で読み込まれ、空のまま書き戻されない。 <sub>`old_revision_rows_load_with_empty_new_fields`</sub>
 - 用紙サイズはISO A列の寸法に従い、縦置きでは幅と高さが入れ替わる。 <sub>`paper_sizes_match_iso_and_orientation_swaps`</sub>
 - 新規プロジェクトは「Sheet1」という1枚のシート・現行のファイル形式バージョン・空のPLC割付表で始まり、図枠テンプレートは未指定(=既定のJIS A3図枠)である。 <sub>`new_project_has_one_default_sheet`</sub>
 - Entity::translateはエンティティの全座標を動かす: ワイヤは全頂点、シンボル/ラベル/テキストは基準点。 <sub>`translate_moves_all_coordinates`</sub>
@@ -599,6 +620,8 @@
 - シートが1枚も無いプロジェクトでも、表紙だけの正しい1ページPDFになる。 <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
 - 盤レイアウトシートも一括出力に含まれ、回路図シートに続けてPDFへ入る。 <sub>`the_pdf_book_includes_the_panel_sheet`</sub>
 - 盤内部品配置表も他の帳票と同じようにPDF一括出力へ綴じられる。 <sub>`the_pdf_book_can_include_the_panel_placement_table`</sub>
+- シートのSVGへdata URIで埋め込んだPNGは、PDFに画像オブジェクトとして書き出される。 <sub>`an_embedded_png_reaches_the_pdf`</sub>
+- data URIで埋め込んだSVG画像も変換される。PDFができ、画像の無い同じページより大きい。 <sub>`an_embedded_svg_image_reaches_the_pdf`</sub>
 
 ### pin_groups
 
@@ -872,12 +895,33 @@
 - 出力SVGにはJIS図枠・表題欄の文字・配線・参照記号が含まれる。 <sub>`svg_contains_frame_wire_and_symbol`</sub>
 - ブロックシンボルは、インスタンスの属性から外形・ピン番号・ピン名まで描かれる。 <sub>`svg_draws_block_outline_with_pin_numbers_and_names`</sub>
 - Task 5 の挙動の回帰テスト (最初から通る): プラグの黒い差し込みは、コネクタの無い同じブロックより黒く塗った多角形が1つ多い形で描かれるので、この SVG から作る PDF・PNG にも出る。 <sub>`svg_draws_a_plug_insert_as_a_black_polygon`</sub>
+- 独自の列を持つ改訂欄は、テンプレートの見出し語と、各列に対応する改訂の項目を、改訂欄が指定する行高で印字する。 <sub>`a_configured_revision_table_prints_its_own_columns`</sub>
+- 行数を固定すると、改訂が無くても全行の罫線を描き、改訂のほうが多いときは新しい行だけを表示する。 <sub>`fixed_rows_are_ruled_even_when_empty_and_show_the_newest`</sub>
+- 固定行数が改訂の数より少ないとき、改訂欄の高さは「固定行数+見出し1行」ちょうどになり、古い改訂は表示されない。 <sub>`fewer_fixed_rows_than_revisions_cut_the_oldest`</sub>
+- 列より長い内容は列幅まで縮められ、2行の内容は行の中に2行で描かれる。 <sub>`long_and_two_line_descriptions_stay_inside_the_cell`</sub>
+- 7mmの行に収まらない3行の内容は、行高÷(行数×フォント×1.25)の倍率で縮められ、3行がちょうど行の中に収まる。 <sub>`a_three_line_description_is_reduced_to_fit_the_row`</sub>
+- 記号の形が三角のとき、改訂記号は上向きの三角の中に中央揃えで描かれる。 <sub>`a_triangle_is_drawn_around_each_revision_mark`</sub>
+- 文字の大きさを大文字の高さで指定するだけのテンプレートは、従来の4列と日本語の見出しのまま、すべてのフォントを0.72で割って描く。 <sub>`cap_text_size_alone_draws_the_classic_columns_with_scaled_fonts`</sub>
+- 辺ごとの余白があるとき、外枠は(左, 上)から(用紙−右, 用紙−下)まで描かれる。 <sub>`margins_per_side_set_the_border_rectangle`</sub>
+- ゾーン目盛を隠すと、図枠にゾーンの英字・数字も目盛線も出ない。 <sub>`hidden_zones_draw_no_labels_and_no_ticks`</sub>
+- 裁断マークは用紙の四隅のL字で、端から4mm内側、腕15mm。線は8本。 <sub>`trim_marks_are_an_l_at_each_paper_corner`</sub>
+- 中心マークは外枠の各辺の中央から外向きに伸び、長さはその辺の余白(最大10mm)。 <sub>`centre_marks_run_outwards_from_the_middle_of_each_side`</sub>
+- mediumの罫線は0.5mm、heavyは1mmで描かれる。指定の無い罫線は0.25mmのまま。 <sub>`rule_weights_set_the_stroke_width`</sub>
+- ふつうのセルはこれまでと全く同じに書かれる(セルの位置に、セルのサイズで、text要素が1つ)。 <sub>`a_plain_cell_is_written_as_before`</sub>
+- 大文字高さの指定では、フォントはサイズを0.72で割った値になる。 <sub>`a_capital_height_cell_uses_a_larger_font`</sub>
+- fitのセルは、見積もった文字幅がセル幅になるまでフォントを縮める。もともと収まる文字はそのまま。 <sub>`a_fitted_cell_shrinks_long_text_only`</sub>
+- fitの2行セルは、いちばん長い行に合わせて縮み、2行とも縮めたサイズで描かれる。 <sub>`a_fitted_two_line_cell_shrinks_by_its_widest_line`</sub>
+- 改行を含む値はtext要素2つで描かれ、2行目は1行目からフォントサイズの1.25倍下になる。 <sub>`a_two_line_cell_is_drawn_as_two_lines`</sub>
+- 90回転のセルは、アンカー点を中心に時計回りに回る。 <sub>`a_rotated_cell_turns_about_its_anchor`</sub>
+- boxedのセルは、見積もった文字の箱の0.8mm外側に細い矩形が付く。 <sub>`a_boxed_cell_gets_a_rectangle_around_the_text`</sub>
+- boxedのセルを中央揃え・右揃えにしても、枠はアンカー点ではなく文字のまわりに付く。 <sub>`a_boxed_cell_follows_the_alignment`</sub>
 - jis-a3図枠テンプレートで描いた図枠は、これまで出力してきたJIS図枠とSVGの1文字まで同一である(外枠・ゾーン目盛・改訂欄・表題欄の全セル)。 <sub>`the_jis_a3_template_reproduces_the_previous_frame_exactly`</sub>
 - 改訂の無い空のA4シートも従来どおりの図枠を出す(改訂欄は描かれず、表題欄のセルは空欄のまま残る)。 <sub>`an_empty_sheet_reproduces_the_previous_frame_exactly`</sub>
 - A4縦テンプレートでは190×277の図枠が描かれ、110mm幅の表題欄が右下に、ゾーン目盛は同じ4×6で出る。 <sub>`the_a4_portrait_template_draws_a_narrower_frame_and_title_block`</sub>
 - 図面は図枠テンプレートに従う: プロジェクトをA4縦へ切り替えると全シートの図枠が変わり、undoで元へ戻る。 <sub>`switching_the_project_frame_template_changes_the_output`</sub>
 - 誰も知らない図枠テンプレートを指しているプロジェクトも、既定のJIS A3図枠で問題なく出力できる。 <sub>`an_unknown_frame_template_still_prints_with_the_default_frame`</sub>
 - 表題欄のセルにはバインドの解決結果が出る: 「何枚中の何枚目」・プロジェクト名・最新改訂がそのまま欄に入る。 <sub>`title_block_cells_print_resolved_binds`</sub>
+- 画像を読み込めたロゴは、ロゴ枠の中にその画像として描かれ、置き場所を示す矩形は描かれない。 <sub>`a_loaded_logo_is_drawn_as_an_image`</sub>
 - ロゴ枠を持つ図枠テンプレートは、ロゴの位置に空の矩形を描く(画像を入れる前でも場所が確保される)。 <sub>`a_logo_frame_is_drawn_as_an_empty_rectangle`</sub>
 - 品名などの特殊文字(<, >, &, 引用符)はSVG内でXMLエスケープされる。 <sub>`svg_escapes_xml_special_chars`</sub>
 - 改訂が2件あると表題欄の真上に改訂表が描かれ、古い行が下・新しい行が上に積まれ、最下段に列見出し(記号/日付/内容/承認)が出る。 <sub>`svg_draws_revision_table_above_title_block`</sub>
@@ -969,6 +1013,15 @@
 - 実機ブロック表示のコイルは、ピングループの属性を持っていても括弧のための余白を取らない (そこには括弧を描かないため)。外形も、それに従う参照記号・接点マップの位置も、属性が無いときと寸分違わない。 <sub>`a_device_block_coil_reserves_no_room_for_brackets_it_never_draws`</sub>
 - 注記の引き出し線の対象端に描く丸印は、配線の分岐点の丸印とぴったり同じ大きさで描かれる (図面上で同じ印に見える)。 <sub>`svg_leader_dot_is_the_size_of_a_wire_junction_dot`</sub>
 - 上辺にピンのあるブロックは参照記号・型番を外形の左上の角に右揃え (text-anchor end) で描く。上辺にピンの無いブロックは今まで通り中央揃え。 <sub>`svg_puts_top_pin_block_captions_in_the_top_left_corner`</sub>
+- 裁断マークは辺ごとに指定した位置に従う。裁断線の四隅それぞれに腕が2本描かれる。 <sub>`trim_marks_follow_insets_per_side`</sub>
+- 裁断線まで伸ばす中心マークは、外枠の各辺の中央から裁断線まで指定の太さで引かれ、その端に開いた矢印が付く。 <sub>`centre_marks_reach_the_trim_line_with_an_arrow_head`</sub>
+- 余白の無い辺には、中心マークを描かない。 <sub>`a_centre_mark_without_room_is_not_drawn`</sub>
+- 改訂欄に指定した文字サイズが改訂行と見出しに使われ、列の境には表の上端から表題欄まで罫線が引かれる。 <sub>`revision_text_sizes_and_column_rules`</sub>
+- 形を指定した記号の三角は、行と同じ高さ・指定の縦横比で列の左端から始まり、斜辺の中ほどを空け、改訂の無い行にも描かれる。 <sub>`a_styled_mark_triangle_is_drawn_in_every_row`</sub>
+- 列のsuffixの項目は、罫線を挟まず同じセルに印字される。記号の列では三角の横に、その他の列では主の文字のあとに続く。 <sub>`a_suffix_field_shares_the_cell`</sub>
+- 三角より長い記号は、三角に収まるまで縮められる。 <sub>`a_long_mark_is_fitted_to_the_triangle`</sub>
+- 値が空の枠付きセルは、枠を描かない。 <sub>`a_boxed_cell_without_text_draws_no_box`</sub>
+- 見出しの揃えを別に指定した列は、見出しをその揃えで、改訂行を列の揃えで印字する。 <sub>`a_header_can_be_aligned_apart_from_its_rows`</sub>
 
 ### シンボルライブラリ
 
@@ -1432,6 +1485,10 @@
 - 設定にグローバル既定が無ければ、新規プロジェクトの図枠は未指定のまま(同梱のJIS A3図枠で描かれる)。 <sub>`a_new_project_without_a_default_setting_keeps_the_frame_unset`</sub>
 - 設定の既定図枠が空欄のときは、未知のidではなく「既定なし」として扱う。 <sub>`a_blank_default_frame_template_setting_is_ignored`</sub>
 - POST /frame-templates/save は同梱の図枠と同じidや、ファイル名にできないidの図枠を400で拒否して何も書かない(エディタは別名を求める)。 <sub>`the_link_api_refuses_to_save_over_a_bundled_frame`</sub>
+
+### frame_templates_logo_api
+
+- キャンバスへ送る図枠テンプレートの一覧は、ユーザーの図枠のロゴ画像をdata URIで運ぶ。 <sub>`the_template_list_carries_the_logo_image_of_a_user_template`</sub>
 
 ### instance_guard
 
@@ -2190,6 +2247,12 @@
 - 知らないプレースホルダと枠外の要素は数えるが、保存は止めない <sub>`frame editor placeholders and pre-save checks`</sub>
 - 改訂欄の列幅の合計が表題欄の幅と違う・文字高が0のセルは保存できない誤りになる <sub>`frame editor placeholders and pre-save checks`</sub>
 - 別名で保存の既定idは元のid+-copyで、使われていれば番号を足す。idは英数字・-・_だけ <sub>`frame editor placeholders and pre-save checks`</sub>
+- 新しい項目を持つテンプレートに無関係な編集(線の追加・セルの移動と変更・線の削除)をしても、新しい項目は失われない <sub>`frame editor and the extended template items`</sub>
+- 列を自分で持つ改訂欄は、列の数・項目の重複・幅・幅の合計で検査される <sub>`frame editor and the extended template items`</sub>
+- 辺ごとの余白は4辺とも0以上でなければならず、外枠の外にある要素は辺ごとの余白で数える <sub>`frame editor and the extended template items`</sub>
+- 行高・固定行数・回転の不正な値は項目名つきで報告される <sub>`frame editor and the extended template items`</sub>
+- 記号の三角・改訂欄の文字サイズ・同じセルに続ける項目・裁断マークの不正な値は項目名つきで報告され、正しい値は通る <sub>`frame editor and the extended template items`</sub>
+- 表題欄の自由な欄 {field.名前} は知らないプレースホルダとして報告されない <sub>`frame editor and the extended template items`</sub>
 - 同梱の図枠を開くと、-copyのidを付けた新しい下書きになる (同梱はそのまま上書きできない) <sub>`frame editor store`</sub>
 - エディタ内の編集は図面のコマンドを送らず、⌘Zで1段ずつ戻り⇧⌘Zでやり直せる <sub>`frame editor store`</sub>
 - 何も変えない編集は段を積まず、新しい編集はやり直しの段を捨てる。段数には上限がある <sub>`frame editor store`</sub>
@@ -2199,11 +2262,18 @@
 - 保存前チェックに誤りがあれば保存しない <sub>`frame editor store`</sub>
 - 未保存の変更があるときに閉じると確認を出し、破棄を選べば閉じる <sub>`frame editor store`</sub>
 
+### frameImages
+
+- 画像を作れない環境(テストやサーバー側)では、画像は無いものとして扱い、例外を出さない <sub>`frame logo images`</sub>
+- 初めての画像は読み込みを始めてnullを返し、読み込みが終わると再描画を頼み、次からはその画像を返す <sub>`frame logo images`</sub>
+- 読み込みに失敗した画像は、その後もnullのままで、再描画も読み直しも起きない <sub>`frame logo images`</sub>
+
 ### 図枠テンプレートの配置計算 (キャンバス)
 
 - 既定の図枠テンプレートは現行のJIS図枠そのもので、マージン10mm・ゾーン4×6・右下の120×32mm表題欄を持つ <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
 - キャンバスが持つ既定の図枠は、同梱のjis-a3.jsonと一字一句同じ内容である(印刷とキャンバスで図枠がずれない) <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
 - ゾーンの目盛文字は数字なら1,2,3…、英字ならA,B,C…でZの次はAへ戻る <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
+- 表題欄の自由な欄は {field.名前} で解決され、無い名前は空文字になる <sub>`表題欄のバインド解決`</sub>
 - 説明書きのバインドはすべて値になる (プロジェクト名・シート番号/総数・シート名・最新改訂・表題欄の全欄) <sub>`表題欄のバインド解決`</sub>
 - {date} {scale} {designer} {approver} は表題欄の日付・尺度・設計・承認の別名として同じ値になる <sub>`表題欄のバインド解決`</sub>
 - 知らないバインドはエラーにならず空文字になる (テンプレートに書き間違いがあっても図面は出せる) <sub>`表題欄のバインド解決`</sub>
@@ -2228,6 +2298,27 @@
 - 情報行は用紙・ゾーン分割・表題欄の大きさ・改訂欄の有無をまとめて示す <sub>`frameTemplateSummary (一覧・情報行の要約)`</sub>
 - 表題欄が使っているバインドを、出てくる順に重複なく並べる(1つのセルに複数書いてもよい) <sub>`bindNames (フィールドバインド表)`</sub>
 - バインドを1つも使わない図枠では表は空になる(見出しだけの図枠も作れる) <sub>`bindNames (フィールドバインド表)`</sub>
+- 新しい項目の無いテンプレートは今までどおりの値を返す(4辺同じ余白、細い罫線、書いたとおりの文字サイズ、従来の改訂欄4列) <sub>`frame template extensions`</sub>
+- 辺ごとの余白を指定すると外枠と表題欄の隅がそれに従い、基準隅が左上ならその隅に置かれる <sub>`frame template extensions`</sub>
+- ゾーン目盛を隠すとレイアウトのshowがfalseになる <sub>`frame template extensions`</sub>
+- 裁断マークは用紙四隅のL字で線8本、中心マークは外枠の各辺の中央から外向きに4本(長さは余白、最大10mm) <sub>`frame template extensions`</sub>
+- 罫線の太さは thin 0.25 / medium 0.5 / heavy 1 mm <sub>`frame template extensions`</sub>
+- 大文字高さの指定ではフォントはサイズ÷0.72。fitのセルは幅に収まるまで縮み、収まる文字と幅の無いセルは縮まない <sub>`frame template extensions`</sub>
+- 改行を含むセルは複数行になり、回転と枠(文字の箱の0.8mm外側、揃えに従う)がレイアウトに入る <sub>`frame template extensions`</sub>
+- 独自の列を持つ改訂欄は、テンプレートの見出しと各列の項目を、指定の行高と揃えで配置する <sub>`frame template extensions`</sub>
+- 行数を固定すると、改訂が無くても表が配置され、改訂のほうが多いときは新しい行だけになり、表の高さは変わらない <sub>`frame template extensions`</sub>
+- 列より長い内容は列幅まで縮み、2行の内容は行の中央に2行で並び、3行の内容は行高に収まるまで縮む <sub>`frame template extensions`</sub>
+- 記号の形が三角なら、記号は上向きの三角の中に中央揃えで置かれる <sub>`frame template extensions`</sub>
+- 大文字高さだけを指定したテンプレートは、従来の4列と日本語の見出しのまま、文字を0.72で割った大きさで配置する <sub>`frame template extensions`</sub>
+- 読み込んだロゴ画像はレイアウトのdataUrlに入り、画像が無ければnullになる <sub>`frame template extensions`</sub>
+- 裁断マークは辺ごとに指定した位置に従い、裁断線の四隅それぞれに腕が2本、線幅0.5で配置される <sub>`mark and revision styles`</sub>
+- 裁断線まで伸ばす中心マークは、外枠の各辺の中央から裁断線まで指定の太さで引かれ、その端に開いた矢印が付く <sub>`mark and revision styles`</sub>
+- 余白の無い辺には中心マークを配置せず、矢印を頼んでいなければ矢印も無い <sub>`mark and revision styles`</sub>
+- 改訂欄に指定した文字サイズが改訂行と見出しに使われる <sub>`mark and revision styles`</sub>
+- 形を指定した記号の三角は、行と同じ高さ・指定の縦横比で列の左端から始まり、斜辺の中ほどを空け、改訂の無い行にも配置される <sub>`mark and revision styles`</sub>
+- 列のsuffixの項目は、記号の列では三角の横に、その他の列では主の文字のあとに続けて同じセルに配置される <sub>`mark and revision styles`</sub>
+- 見出しの揃えを別に指定した列は、見出しをその揃えで、改訂行を列の揃えで配置する <sub>`mark and revision styles`</sub>
+- 三角より長い記号は三角に収まるまで縮み、値が空の枠付きセルには枠が無い <sub>`mark and revision styles`</sub>
 
 ### ハーネス境界
 

@@ -145,6 +145,9 @@ classDiagram
 | 14 | PLC I/O図面の生成設定`Project.plc_generate`(ラダー形式・ラング間隔・先頭スキップ・配置方針・分割の単位。生成ダイアログの「プロジェクトに保存」) | 設定の無いファイルは保存なし(`None`)として開き、生成ダイアログは既定値から始まる |
 | 15 | 多芯ケーブル`cable`エンティティ(定義線2点・参照記号・型番・芯数・線径・芯線割当`cores[{core,color,wire}]`・シールド・長さ) | ケーブルが無いだけでそのまま開く。**逆にケーブルを含む新しいファイルは旧アプリでは開けない**(未知のエンティティ種別) |
 | 16 | 盤の銘板`nameplate`エンティティ(結び付くフットプリント・位置・大きさ・行・文字高・上下・説明追従・型番)と寸法線`dimension`エンティティ(端点`a`/`b`=点かフットプリント・向き・線の位置) | 銘板・寸法線が無いだけでそのまま開く。**逆にそれらを含む新しいファイルは旧アプリでは開けない**(未知のエンティティ種別) |
+| 20 | 改訂行の改訂番号・承認・個数(`Revision.rev_no` / `approved` / `count`)と、表題欄の自由な欄(`TitleBlock.fields`: 名前→値。図枠テンプレートは`{field.名前}`でバインドする。名前は a-z・0-9・_ の1〜32文字) | 新しい項目が空で開く。空の項目は書き出さない(`skip_serializing_if`)ので、使っていないファイルは版番号以外これまでと同じ。形式19のアプリは版番号で断る |
+
+(17〜19の行はこの表にまだ無い。正は`madake-core/src/model.rs`の`FORMAT_VERSION`のコメント。)
 
 `NetLabel.attrs`(方向付きタグ形状)のように**追加するだけで旧アプリも読める**変更は版を上げていない。
 版を上げるのは、旧アプリが読めなくなる要素が入ったとき(6)と、意味のある新フィールドを足したときだけ。
@@ -155,6 +158,27 @@ classDiagram
 (`~/MadakeCAD/templates/frames/*.json`)のJSON。`{ id, name(_ja), paper{w,h}, frame_margin, zones{cols,rows,col_labels,row_labels},
 title_block{origin,w,h,row_h,grid_lines[],cells[{x,y,w,h,text|bind,size,align,weight,omit_if_empty}]}, revision_block{rows_max,col_w[]}, logo? }`。
 セルは`text`(固定文字)か`bind`(バインド入り)のどちらか一方で、知らないバインドは空文字になる。
+
+省略できる項目(2026-11-14追加。省略すれば従来と同じ出力):
+
+| 項目 | 意味 |
+|---|---|
+| `frame_margins{left,right,top,bottom}` | 辺ごとの余白。あれば`frame_margin`の代わりに使う(`frame_margin`は必須のまま) |
+| `zones.show` | `false`でゾーン目盛の文字と目盛線を描かない(既定`true`) |
+| `marks{trim,centre}` | 裁断マーク(用紙四隅のL字、端から4mm・腕15mm)と中心マーク(外枠の各辺中央から外向き、余白と10mmの小さいほう) |
+| `marks.trim_insets{left,right,top,bottom}` / `trim_arm` | 裁断マークの角の位置(用紙の各辺からの距離)と腕の長さ |
+| `marks.centre_to_trim` / `centre_arrow` / `centre_weight` | 中心マークを裁断線まで伸ばす / 外側の端に開いたV字の矢印(長さ1.9mm・片側0.5mm)/ 線の太さ(無ければ0.5mm) |
+| `text_size_is` | `cap`ならセルと改訂欄の文字サイズは大文字の高さ(フォント = サイズ ÷ 0.72)。既定`font` |
+| `grid_lines[].weight` | `thin`(0.25mm、既定)/`medium`(0.5)/`heavy`(1.0) |
+| `cells[].rotation` / `boxed` / `fit` | 回転(0/90/180/270、時計回り、アンカー点が中心)/ 文字を枠で囲む / `w`に収まるまで文字を縮める。値の`\n`は改行(行送り = フォント × 1.25) |
+| `revision_block.columns[{field,header,w,align}]` | 改訂欄の列(1〜8、幅の合計 = 表題欄の幅)。`field`は mark / count / description / rev_no / date / by / approved。無ければ`col_w`の4列 |
+| `revision_block.row_h` / `rows_fixed` / `mark_shape` | 改訂欄の行高 / 改訂が少なくても必ず描く行数 / 記号を囲む形(`triangle`) |
+| `revision_block.text_size` / `header_size` | 改訂行・見出し行の文字サイズ(無ければ2.5 / 2.2) |
+| `revision_block.mark_style{h,aspect,gap,pad,in_empty_rows}` | 記号の三角の形: 高さ÷行高(既定0.8)/ 底辺÷高さ(既定は正三角形)/ 斜辺の中ほどを空ける割合(0〜0.9)/ 列の左端からの距離(既定2mm)/ 改訂の無い行にも描く。記号の文字は三角に収まるまで縮む |
+| `revision_block.columns[].suffix` / `header_align` | 同じセルに続けて出す項目(記号の列では三角の横、他の列では主の文字のあと。罫線は入らない)/ 見出しだけの揃え |
+| `logo.path` | テンプレートと同じフォルダの PNG・JPEG・SVG(2MBまで)。読めれば枠の代わりに画像を描く。一覧(`GET /frame-templates`)は読み込んだ画像を実行時の項目`logo.data_url`で運ぶ(ファイルには書かない) |
+
+描画は`svg.rs`(SVG・PDF)と`src/canvas/frameTemplate.ts`+`renderer.ts`(キャンバス)が同じ規則で行う。DXFへ出すのは辺ごとの余白だけ。図枠エディタはこれらの項目をまだ編集できないが、読み込んだテンプレートから失わない。
 **用紙とゾーン分割はテンプレートで変わらない**(シートが正)。
 
 ### ユーザーシンボルライブラリ(`.mdkproj`の外)

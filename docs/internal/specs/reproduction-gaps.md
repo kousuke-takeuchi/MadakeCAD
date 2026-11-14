@@ -203,6 +203,40 @@ One new finding that was *not* fixed is recorded as **G23**.
 
 ---
 
+## Fifth pass — A0 reference, region 1: frame, title block, revision block (2026-11-14)
+
+A second reference (one A0 landscape sheet) is being reproduced region by region
+(`docs/superpowers/specs/2026-11-14-a0-reference-reproduction-design.md`). The comparison
+is now mechanical: the reference PDF is all vector, so its strokes are extracted to
+segments in A0 millimetres, and the exported sheet is overlaid on the reference per region.
+
+Region 1 was drawn with a **user frame template** only (no source change), including the diagonal lines of the empty cells, a two-line note and a small
+table **outside** the frame (cell and rule coordinates relative to the title block may be
+negative, which is enough for both).
+
+| Element | Result | Note |
+|---|---|---|
+| A0 landscape sheet, PDF export at A0 | ✅ | |
+| Title block cells, rules, diagonals, diamonds, triangle around the revision | ✅ | all template data |
+| Notes and a table outside the frame | ✅ | negative coordinates |
+| Frame margins that differ per side | ✅ | G24 closed |
+| Frame without zone labels, with trim and centre marks | ✅ | G25 and G33 closed |
+| Revision table: six columns, own headers, empty rows, mark in a triangle | ✅ | G26 and G32 closed |
+| Two rule weights inside the title block | ✅ | G27 closed |
+| Vertical note outside the frame | ✅ | G28 closed (four rotated cells, one boxed label) |
+| Second title line and other free fields | ✅ | G29 closed (`{field.title_en}`) |
+| Text height given as capital height; wide lettering | 🔶 | G30 closed for height and fitting; lettering width is the typeface (out of scope) |
+| Logo image | ✅ | G31 closed |
+
+**After the frame template extensions (2026-11-14).** The same region was redrawn with a
+template that uses the new items. The share of the reproduction's ink that lies on the
+reference's ink rose from 0.51 to 0.95; every rule of the border, the title block and the
+revision table now lies on the reference's. G32 and G33, found on that redraw, were closed the same day; after them the trim marks,
+the centre marks with their arrow heads and the mark triangles of every revision row lie
+on the reference's as well. What still differs is the lettering (typeface: glyph shapes
+and widths). The canvas was checked by unit tests of the layout only; no screenshot
+comparison was made.
+
 ## Gaps
 
 Impact levels: **essential** = the reference drawing cannot be reproduced faithfully
@@ -1177,6 +1211,139 @@ that reports a clean sheet, and all three were found by reading the exported SVG
 **Existing spec.** Extends the tidy-metric section; no new entity.
 
 ---
+
+### G24 — The frame has one margin for all four sides · required
+
+**Closed 2026-11-14** (frame template extensions, `docs/superpowers/specs/2026-11-14-frame-template-extensions-design.md`).
+
+**Found on the fifth pass (2026-11-14).**
+
+**Current behaviour (verified).** `FrameTemplate::frame_margin` is one number;
+`title_block_origin` and the frame rectangle in `svg.rs` use it for every side. The A0
+reference has a binding margin: one side is much wider than the other three, and those
+three differ slightly from each other. With one value the whole frame, and the title block
+anchored to its corner, sit off by the difference.
+
+**Proposed.** Optional `frame_margins { left, right, top, bottom }` that overrides
+`frame_margin`; old templates keep working unchanged.
+
+### G25 — Zone labels cannot be switched off, and there are no trim or centre marks · quality
+
+**Closed 2026-11-14** (frame template extensions, `docs/superpowers/specs/2026-11-14-frame-template-extensions-design.md`).
+
+**Current behaviour (verified).** `svg.rs` draws `sheet.zone_cols.max(1)` column labels
+and row labels, so even a 1 × 1 zone grid prints "1" and "A". The reference frame has no
+zone labels; it has corner trim marks outside the frame and short centre marks.
+
+**Proposed.** `zones.show: bool` (default true), and `marks { trim, centre }` in the
+template. A sheet with hidden zones still has addresses for cross references.
+
+### G26 — The revision table has a fixed shape · required
+
+**Closed 2026-11-14** (frame template extensions, `docs/superpowers/specs/2026-11-14-frame-template-extensions-design.md`).
+
+**Current behaviour (verified).** `svg.rs::revision_block` draws four columns
+(mark / date / description / by) with built-in headers, uses the title block's `row_h`,
+draws only as many rows as there are revisions, and does not clip or wrap text (a long
+description runs over the next column). `Revision` has four fields.
+
+The reference table has six columns in another order (mark, description, revision
+number, date, by, approved), its own header words, a fixed number of ruled empty rows, a
+row height different from the title block, a mark drawn in a triangle with a count beside
+it, and two-line cells.
+
+**Proposed.** Describe the table in the template: a list of columns
+(`field`, `header`, `w`, `align`), `row_h`, `rows_fixed`, `mark_shape`; add
+`rev_no`, `approved` and `count` to `Revision` with a format migration; wrap or shrink
+text to the cell.
+
+### G27 — Template rules have one line weight · quality
+
+**Closed 2026-11-14** (frame template extensions, `docs/superpowers/specs/2026-11-14-frame-template-extensions-design.md`).
+
+**Current behaviour (verified).** `GridLine` has only its two end points; every rule is
+drawn with `RULE_STROKE`, the border with `FRAME_STROKE`. The reference uses a medium
+weight for the main divisions and a thin one for sub-divisions and diagonals.
+
+**Proposed.** Optional `weight: thin | medium | heavy` on `GridLine` (default thin).
+
+### G28 — Template text cannot be rotated · quality
+
+**Closed 2026-11-14** (frame template extensions, `docs/superpowers/specs/2026-11-14-frame-template-extensions-design.md`).
+
+**Current behaviour (verified).** `Cell` has `x`, `y`, `size`, `weight`, `align` and no
+rotation. The reference prints a note vertically along one edge, outside the frame, and a
+boxed vertical label beside another.
+
+**Proposed.** Optional `rotation: 0 | 90 | 180 | 270` on `Cell`, and an optional box.
+
+### G29 — The title block has a fixed set of fields · quality
+
+**Closed 2026-11-14** (frame template extensions, `docs/superpowers/specs/2026-11-14-frame-template-extensions-design.md`).
+
+**Current behaviour (verified).** Binds resolve `title_block.*` for ten fields
+(company, title, drawing_no, scale, date, designed, drawn, checked, approved, rev) plus
+project and sheet values. The reference title block also carries a second title line in
+another language, material, mass, treatments and a second designer; the reproduction
+borrowed `{project.name}` for the second title line and left the rest as fixed text.
+
+**Proposed.** A free `fields: map<string, string>` on the title block, bound as
+`{field.<name>}`, edited in the title block dialog from the keys the template uses.
+
+### G30 — Cell text size is a font size, and text cannot be fitted to a cell · minor
+
+**Closed 2026-11-14** (frame template extensions, `docs/superpowers/specs/2026-11-14-frame-template-extensions-design.md`).
+
+**Current behaviour (verified).** `Cell.size` is the font size. Drawings state the
+capital height, so every measured height had to be multiplied by 1.38 by hand. Lettering
+on the reference is also wider than the app's font, so the same string is about a third
+shorter; there is no width factor and no fit-to-cell (`Cell.w` is stored but unused).
+
+**Proposed.** `size_is: font | cap` on the template (default font), and use `Cell.w` to
+shrink text that would overflow. A width factor is left to a later typeface decision.
+
+### G31 — The logo box is drawn empty · quality
+
+**Closed 2026-11-14** (frame template extensions, `docs/superpowers/specs/2026-11-14-frame-template-extensions-design.md`).
+
+**Found on the fifth pass (2026-11-14), by reading the code.**
+
+**Current behaviour (verified).** `LogoFrame` has a `path`, but `svg.rs` draws only the
+rectangle ("image embedding is not supported"), and the canvas does the same. A customer
+title block carries the company logo.
+
+**Proposed.** Read the file named by `logo.path` (PNG, JPEG or SVG, relative to the
+template folder), embed it in the SVG and therefore in the PDF, and send it to the canvas
+with the template list. Keep the empty rectangle when the file cannot be read.
+
+### G32 — Revision mark cell: count beside the mark, triangles in empty rows · minor
+
+**Closed 2026-11-14** (`columns[].suffix`, `mark_style { h, aspect, gap, pad, in_empty_rows }`, `text_size` / `header_size`, `header_align`; the mark text is fitted to the triangle).
+
+**Found on the fifth pass after the extensions (2026-11-14).**
+
+**Current behaviour (verified).** `count` can only be shown in a column of its own, and
+every column gets a vertical rule, so "mark in a triangle with the count beside it in one
+cell" cannot be drawn; the reproduction leaves the count out. The reference also prints a
+small empty triangle in every row of the table, used or not, and its triangle is smaller
+than 0.8 of the row height. The mark text is not fitted to the triangle, so a long mark
+runs outside it.
+
+**Proposed.** Let a column show two fields (`field` plus `suffix_field`) without a rule
+between them; `mark_shape_in_empty_rows: bool`; `mark_shape_h` (ratio of the row height);
+fit the mark text to the triangle.
+
+### G33 — Centre marks stop at 10 mm and have no arrow head; trim mark geometry is fixed · minor
+
+**Closed 2026-11-14** (`marks.trim_insets` / `trim_arm` / `centre_to_trim` / `centre_arrow` / `centre_weight`).
+
+**Current behaviour (verified).** A centre mark is `min(margin, 10 mm)` long. On the
+reference the centre marks run from the border to the trim line and end in an arrow head,
+and the trim marks do not sit at the same distance from the paper edge on every side,
+where the template draws them 4 mm in on all four.
+
+**Proposed.** `marks.centre_length` (`margin` | number), `marks.centre_arrow: bool`,
+`marks.trim_inset { x, y }` and `marks.trim_arm`.
 
 ## Summary by impact
 

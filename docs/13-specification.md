@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3028 specification clauses** across 6 areas.
+**3113 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -127,6 +127,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Commands serialize to JSON and back without loss, so any client can send them over the wire. <sub>`command_json_roundtrip`</sub>
 - UpdateEntity replaces an entity wholesale; undo brings back the previous version. <sub>`update_entity_undo_restores_previous_version`</sub>
 - SetTitleBlock updates the sheet's title block; undo restores the previous fields. <sub>`set_title_block_is_undoable`</sub>
+- Setting a title block with a free field whose name has an upper-case letter is refused and nothing changes. <sub>`set_title_block_refuses_a_bad_field_name`</sub>
 - SetRevisions replaces the revision-table rows; undo restores the previous list. <sub>`set_revisions_is_undoable`</sub>
 - The annotation text height of a sheet is set through a command, and undo puts the previous height back. <sub>`set_sheet_annotation_text_is_undoable`</sub>
 - Clearing the annotation text height with null puts the sheet back to the default 2.0mm. <sub>`clearing_the_annotation_text_height_restores_the_default`</sub>
@@ -272,6 +273,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A file without an ENTITIES section is rejected as not a DXF, and a group code that is not a number is a syntax error with its line number. <sub>`rejects_non_dxf_and_reports_syntax_errors`</sub>
 - Symbol block graphics are written in local coordinates with Y flipped; arcs keep their sweep because the clockwise paper-space direction becomes counter-clockwise in DXF. <sub>`block_graphics_are_y_flipped_and_arcs_keep_direction`</sub>
 - The frame goes to the FRAME layer: the border, the zone ticks with their letters and numbers, and the title block cells with their binds resolved (drawing number, title, revision). <sub>`the_frame_and_title_block_go_to_the_frame_layer`</sub>
+- The DXF frame border follows margins given per side. <sub>`the_dxf_border_follows_margins_per_side`</sub>
 - Shapes, the wire part legend and the panel layout entities are exported too, each on its own layer (SHAPES / ANNOTATION / PANEL), and the export report counts what was written per kind. <sub>`shapes_legends_and_panel_layout_are_exported_on_their_own_layers`</sub>
 - The DESC1 attribute of a rotated block whose side pin numbers poke out below its outline sits below the lowest of those number texts, not just below the outline. <sub>`the_description_of_a_rotated_block_sits_below_its_pin_numbers`</sub>
 - A symbol whose definition cannot be resolved is reported in the export report instead of disappearing without a word. <sub>`an_unresolvable_symbol_is_reported_as_skipped`</sub>
@@ -280,6 +282,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Frame templates (plot frames)
 
+- A template whose logo names a PNG next to it is listed with the image loaded as a data URI. <sub>`a_logo_png_next_to_the_template_is_loaded`</sub>
+- A logo that is missing, too large or of an unknown type leaves the template listed without an image. <sub>`an_unusable_logo_leaves_the_template_listed_without_an_image`</sub>
+- A JPEG logo is loaded with the image/jpeg type. <sub>`a_jpeg_logo_is_loaded_with_the_jpeg_type`</sub>
+- A logo file name with an upper-case extension (LOGO.PNG) is accepted. <sub>`an_upper_case_logo_extension_is_accepted`</sub>
+- A sheet drawn with a template whose logo was loaded from a real PNG file is exported to a PDF that contains the image. <sub>`a_loaded_logo_reaches_the_pdf`</sub>
+- A logo file that has an image extension but is not a readable image does not stop the export: the sheet still becomes a PDF. <sub>`a_broken_logo_image_does_not_stop_the_pdf_export`</sub>
+- Saving a template never writes the loaded image or the built-in flag into the file. <sub>`saving_does_not_write_the_loaded_image`</sub>
+- A free title block field is printed where the template binds `{field.name}`; a name that is not set prints nothing. <sub>`free_fields_resolve_through_field_binds`</sub>
 - The two bundled frame templates (JIS A3 landscape and JIS A4 portrait) are listed in that order with English and Japanese names, and both are valid. <sub>`the_two_bundled_frame_templates_are_listed_in_both_languages`</sub>
 - Even without the resource directory, the frame templates compiled into the build are still available. <sub>`frame_templates_are_available_without_the_resource_directory`</sub>
 - The jis-a3 template describes the current JIS frame: 10 mm margin, 4x6 zones with numeric columns and alphabetic rows, and a 120x32 mm title block anchored at the bottom-right corner. <sub>`the_jis_a3_template_describes_the_current_jis_frame`</sub>
@@ -304,6 +314,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The frame editor saves a user frame as {id}.json in the user folder, and the list then shows it as a user frame with the edits. <sub>`the_frame_editor_saves_a_user_frame_that_lists_back`</sub>
 - Saving under the id of a bundled frame is refused and nothing is written, so the user must save under another name. <sub>`saving_over_a_bundled_frame_id_is_refused`</sub>
 - A broken frame (revision columns not adding up to the title block width) or an id that cannot be a file name is refused and nothing is written. <sub>`an_invalid_frame_or_id_is_not_saved`</sub>
+- Without the new items a template reports today's values: one margin on all four sides, thin rules, font sizes as written, the four classic revision columns. <sub>`a_template_without_the_new_items_keeps_todays_values`</sub>
+- Margins given per side move the frame and the title block corner; the single margin is then ignored. <sub>`margins_per_side_move_the_frame_and_the_title_block`</sub>
+- With capital-height sizes, a size of 3.6 mm is drawn with a 5 mm font. <sub>`capital_height_sizes_are_converted_to_font_sizes`</sub>
+- The new items are optional keys: a template file written before them still loads, and saving a template that does not use them writes none of the new keys. <sub>`old_template_files_load_and_unused_items_are_not_written`</sub>
+- A template that uses every new item survives a write and a read unchanged. <sub>`a_template_with_every_new_item_round_trips`</sub>
+- Broken values are refused with a message that names the item. <sub>`invalid_new_items_are_refused_by_name`</sub>
+- Values that are not finite numbers, too many columns, a column without width and bad mark or revision styles are refused by name. <sub>`more_invalid_items_are_refused_by_name`</sub>
+- The mark and revision styles are optional too: defaults are 4 mm trim insets, 15 mm arms and an equilateral triangle 0.8 of the row high, and a template using every style item survives a write and a read. <sub>`mark_and_revision_styles_default_and_round_trip`</sub>
 
 ### Geometry & coordinates
 
@@ -325,6 +343,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Project file I/O (.mdkproj)
 
+- A version 19 project file opens in this build and becomes version 20, with no revision or title block data lost. <sub>`a_version_19_project_migrates_to_20`</sub>
 - A project saved to .mdkproj and loaded back is identical, including all entities. <sub>`project_file_roundtrip`</sub>
 - The saved .mdkproj file is pretty-printed JSON with a format_version field, so it diffs well in git. <sub>`saved_file_is_pretty_json_with_format_version`</sub>
 - Loading a missing file returns an error instead of panicking. <sub>`loading_missing_file_is_an_error`</sub>
@@ -337,7 +356,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 19, the version that added connector pictures on block pins (blocks with contacts or connectors are saved as "port_block"). <sub>`the_current_format_version_is_nineteen`</sub>
+- The current file format version is 20, the version that added revision number, approval and count to revision rows and free title block fields. <sub>`the_current_format_version_is_twenty`</sub>
 - A version 17 file without ports loads unchanged apart from being moved up to the current version. <sub>`a_version_17_file_loads_unchanged`</sub>
 - A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable". <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
 - A "run_cable" entry whose run is empty (for example after hand-editing the file) opens as a plain definition-line cable and is written back with the kind "cable". <sub>`a_run_cable_without_a_run_opens_as_a_plain_cable`</sub>
@@ -442,6 +461,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Document model
 
+- Field names are short lower-case identifiers; anything else is refused. <sub>`free_field_names_are_lower_case_identifiers`</sub>
+- A revision row written before the new fields loads with them empty, and empty ones are not written back. <sub>`old_revision_rows_load_with_empty_new_fields`</sub>
 - Paper sizes follow ISO A-series dimensions, and portrait orientation swaps width and height. <sub>`paper_sizes_match_iso_and_orientation_swaps`</sub>
 - A new project starts with one sheet named "Sheet1", the current file format version, an empty PLC assignment table and no explicit frame template (so it uses the default JIS A3 frame). <sub>`new_project_has_one_default_sheet`</sub>
 - Entity::translate moves every coordinate of the entity: all wire points, or the anchor of symbols/labels/text. <sub>`translate_moves_all_coordinates`</sub>
@@ -599,6 +620,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A book of a project with no sheet at all still produces a valid one-page PDF (the cover). <sub>`pdf_book_of_an_empty_project_is_just_the_cover`</sub>
 - A panel-layout sheet is part of the book: exporting the project puts it in the PDF right after the schematic sheets. <sub>`the_pdf_book_includes_the_panel_sheet`</sub>
 - The panel placement table can be bound into the PDF book like any other report. <sub>`the_pdf_book_can_include_the_panel_placement_table`</sub>
+- A PNG embedded in the sheet SVG as a data URI is written into the PDF as an image object. <sub>`an_embedded_png_reaches_the_pdf`</sub>
+- An SVG image embedded as a data URI is converted too: the PDF is produced and is larger than the same page without the image. <sub>`an_embedded_svg_image_reaches_the_pdf`</sub>
 
 ### pin_groups
 
@@ -872,12 +895,33 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The exported SVG contains the JIS frame, the title block text, wires and reference designators. <sub>`svg_contains_frame_wire_and_symbol`</sub>
 - A block symbol is drawn with its outline, its pin numbers and its pin names, taken from the instance attributes. <sub>`svg_draws_block_outline_with_pin_numbers_and_names`</sub>
 - Regression test for Task 5 (already passes): a plug's black insert is drawn as one more black-filled polygon than the same block without the connector, so PDF and PNG, which are made from this SVG, show it too. <sub>`svg_draws_a_plug_insert_as_a_black_polygon`</sub>
+- A revision table with its own columns prints the template's header words and each revision field in its column, with the row height the table states. <sub>`a_configured_revision_table_prints_its_own_columns`</sub>
+- With a fixed number of rows the table is ruled at full height even without any revision, and shows only the newest rows when there are more. <sub>`fixed_rows_are_ruled_even_when_empty_and_show_the_newest`</sub>
+- When fewer rows are fixed than there are revisions, the table is exactly that many rows plus the header tall and the oldest revisions are left out. <sub>`fewer_fixed_rows_than_revisions_cut_the_oldest`</sub>
+- A description longer than its column is shrunk to the column, and a two-line description is drawn as two lines inside the row. <sub>`long_and_two_line_descriptions_stay_inside_the_cell`</sub>
+- A three-line description that would not fit a 7 mm row is reduced by row height / (lines x font x 1.25), so that the three lines fill exactly the row. <sub>`a_three_line_description_is_reduced_to_fit_the_row`</sub>
+- With the triangle mark shape, each revision mark is drawn centred inside an upright triangle. <sub>`a_triangle_is_drawn_around_each_revision_mark`</sub>
+- A template that only says text sizes are cap heights keeps the classic four columns with their Japanese headers, drawn with every font divided by 0.72. <sub>`cap_text_size_alone_draws_the_classic_columns_with_scaled_fonts`</sub>
+- With margins per side the border is drawn from (left, top) to (paper − right, paper − bottom). <sub>`margins_per_side_set_the_border_rectangle`</sub>
+- With zone labels hidden, the frame has no zone letters or digits and no zone ticks. <sub>`hidden_zones_draw_no_labels_and_no_ticks`</sub>
+- Trim marks are an L at each paper corner, 4 mm in from the edge with 15 mm arms: eight lines. <sub>`trim_marks_are_an_l_at_each_paper_corner`</sub>
+- Centre marks run outwards from the middle of each border side, as long as that side's margin but at most 10 mm. <sub>`centre_marks_run_outwards_from_the_middle_of_each_side`</sub>
+- A rule marked medium is drawn 0.5 mm wide and one marked heavy 1 mm wide; unmarked rules stay 0.25 mm. <sub>`rule_weights_set_the_stroke_width`</sub>
+- A plain cell is written exactly as before: one text element at the cell position with the cell size. <sub>`a_plain_cell_is_written_as_before`</sub>
+- With capital-height sizes the font is the size divided by 0.72. <sub>`a_capital_height_cell_uses_a_larger_font`</sub>
+- A fitted cell shrinks its font so that the estimated text width equals the cell width; a text that already fits keeps its size. <sub>`a_fitted_cell_shrinks_long_text_only`</sub>
+- A fitted two-line cell is shrunk by its widest line, and both lines use the shrunk size. <sub>`a_fitted_two_line_cell_shrinks_by_its_widest_line`</sub>
+- A value with a line break is drawn as two text elements, the second 1.25 font sizes below the first. <sub>`a_two_line_cell_is_drawn_as_two_lines`</sub>
+- A cell rotated by 90 is turned clockwise about its anchor point. <sub>`a_rotated_cell_turns_about_its_anchor`</sub>
+- A boxed cell gets a thin rectangle 0.8 mm outside its estimated text box. <sub>`a_boxed_cell_gets_a_rectangle_around_the_text`</sub>
+- A boxed cell with middle or end alignment gets its box around the text, not around the anchor point. <sub>`a_boxed_cell_follows_the_alignment`</sub>
 - Drawing the jis-a3 frame template produces exactly the JIS frame this program has always printed, down to the last character of the SVG (frame, zone ticks, revision table and every title-block cell). <sub>`the_jis_a3_template_reproduces_the_previous_frame_exactly`</sub>
 - An empty A4 sheet with no revisions also prints exactly the frame it always did: no revision table, and the title-block cells left blank rather than dropped. <sub>`an_empty_sheet_reproduces_the_previous_frame_exactly`</sub>
 - The A4 portrait template prints a 190x277 frame with its 110 mm title block in the bottom-right corner, and the same 4x6 zone ticks. <sub>`the_a4_portrait_template_draws_a_narrower_frame_and_title_block`</sub>
 - The frame template is what the drawing follows: switching the project to A4 portrait changes every sheet's frame, and it goes back on undo. <sub>`switching_the_project_frame_template_changes_the_output`</sub>
 - A project pointing at a frame template nobody knows still prints, using the default JIS A3 frame. <sub>`an_unknown_frame_template_still_prints_with_the_default_frame`</sub>
 - Title-block cells print the resolved binds: the sheet number out of the total, the project name and the latest revision all land in the block. <sub>`title_block_cells_print_resolved_binds`</sub>
+- A logo with a loaded image is drawn as that image inside the logo box, without the placeholder rectangle. <sub>`a_loaded_logo_is_drawn_as_an_image`</sub>
 - A frame template with a logo frame draws an empty rectangle where the logo goes, so the space is reserved even before an image is set. <sub>`a_logo_frame_is_drawn_as_an_empty_rectangle`</sub>
 - Special characters in titles (<, >, &, quotes) are XML-escaped in the SVG. <sub>`svg_escapes_xml_special_chars`</sub>
 - Two revisions draw a table right above the title block, oldest at the bottom and newest on top, with a column header row. <sub>`svg_draws_revision_table_above_title_block`</sub>
@@ -969,6 +1013,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A coil shown as a device block reserves no room for pin-group brackets even if it carries the attribute, because none are drawn there: its outline, and so its designator and contact map, sit exactly where they would without the attribute. <sub>`a_device_block_coil_reserves_no_room_for_brackets_it_never_draws`</sub>
 - The dot at the target end of a note's leader line is drawn exactly the size of a wire junction dot, so the two read as the same mark. <sub>`svg_leader_dot_is_the_size_of_a_wire_junction_dot`</sub>
 - A block with top pins draws its reference and value right-aligned (text-anchor end) at the box's top-left corner; a block without top pins keeps the centred caption. <sub>`svg_puts_top_pin_block_captions_in_the_top_left_corner`</sub>
+- Trim marks follow the insets given per side: each corner of the trim rectangle gets its two arms. <sub>`trim_marks_follow_insets_per_side`</sub>
+- Centre marks that reach the trim line run from the middle of each border side to the trim line, in the stated weight, and end in an open arrow head there. <sub>`centre_marks_reach_the_trim_line_with_an_arrow_head`</sub>
+- A centre mark on a side without any margin is not drawn at all. <sub>`a_centre_mark_without_room_is_not_drawn`</sub>
+- The revision table's own text sizes are used for the rows and the header, and every column boundary is ruled from the top of the table to the title block. <sub>`revision_text_sizes_and_column_rules`</sub>
+- A styled mark triangle is as high as the row, as wide as its aspect says, starts at the column edge, leaves the middle of its two sides open, and is also drawn in rows without a revision. <sub>`a_styled_mark_triangle_is_drawn_in_every_row`</sub>
+- A column's suffix field is printed in the same cell, with no rule between: beside the triangle in the mark column, and after the main text elsewhere. <sub>`a_suffix_field_shares_the_cell`</sub>
+- A mark longer than the triangle is wide is shrunk to fit inside it. <sub>`a_long_mark_is_fitted_to_the_triangle`</sub>
+- A boxed cell whose value is empty draws no box. <sub>`a_boxed_cell_without_text_draws_no_box`</sub>
+- A column whose header alignment is given separately prints its header with that alignment and its rows with the column's own. <sub>`a_header_can_be_aligned_apart_from_its_rows`</sub>
 
 ### Symbol library
 
@@ -1432,6 +1485,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Without a global default in the settings a new project leaves the frame unset, so it is drawn with the bundled JIS A3 frame. <sub>`a_new_project_without_a_default_setting_keeps_the_frame_unset`</sub>
 - A blank default frame template in the settings is treated as "no default" instead of an unknown id. <sub>`a_blank_default_frame_template_setting_is_ignored`</sub>
 - POST /frame-templates/save refuses with 400 a frame that reuses a bundled frame's id or whose id cannot be a file name, and writes nothing (the editor then asks for another name). <sub>`the_link_api_refuses_to_save_over_a_bundled_frame`</sub>
+
+### frame_templates_logo_api
+
+- The frame template list sent to the canvas carries the logo image of a user template as a data URI. <sub>`the_template_list_carries_the_logo_image_of_a_user_template`</sub>
 
 ### instance_guard
 
@@ -2190,6 +2247,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - counts unknown placeholders and items outside the frame without blocking the save <sub>`frame editor placeholders and pre-save checks`</sub>
 - reports revision widths that do not add up and a zero text height as blocking errors <sub>`frame editor placeholders and pre-save checks`</sub>
 - suggests an unused -copy id and accepts only file-name-safe ids <sub>`frame editor placeholders and pre-save checks`</sub>
+- keeps the new items through unrelated edits <sub>`frame editor and the extended template items`</sub>
+- checks a table with its own columns by count, duplicates and the sum of widths <sub>`frame editor and the extended template items`</sub>
+- checks margins per side and counts outside items against them <sub>`frame editor and the extended template items`</sub>
+- reports a bad row height, fixed row count and rotation by name <sub>`frame editor and the extended template items`</sub>
+- reports bad mark, revision text and trim values by name <sub>`frame editor and the extended template items`</sub>
+- does not report a free field bind as unknown <sub>`frame editor and the extended template items`</sub>
 - opens a bundled frame as a new draft with a -copy id <sub>`frame editor store`</sub>
 - undoes and redoes editor edits step by step without sending any drawing command <sub>`frame editor store`</sub>
 - skips no-op edits, drops the redo steps on a new edit and caps the history <sub>`frame editor store`</sub>
@@ -2199,11 +2262,18 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - does not save while the pre-save check reports an error <sub>`frame editor store`</sub>
 - asks before discarding unsaved changes and closes when told to discard <sub>`frame editor store`</sub>
 
+### frameImages
+
+- returns no image where images cannot be created <sub>`frame logo images`</sub>
+- starts loading on first use, asks for a redraw when loaded, then returns the image <sub>`frame logo images`</sub>
+- keeps returning no image for one that failed to load <sub>`frame logo images`</sub>
+
 ### Frame template layout (canvas)
 
 - mirrors the JIS frame the drawings have always used: 10 mm margin, 4x6 zones and a 120x32 mm bottom-right title block <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
 - is a byte-for-byte copy of the bundled jis-a3.json, so the canvas and the print output never drift apart <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
 - numbers zone columns 1,2,3 and letters zone rows A,B,C, wrapping back to A after Z <sub>`図枠テンプレート (jis-a3の既定値)`</sub>
+- resolves a free title block field through {field.name}, and a missing name to empty text <sub>`表題欄のバインド解決`</sub>
 - resolves every documented bind to its value <sub>`表題欄のバインド解決`</sub>
 - treats {date}, {scale}, {designer} and {approver} as aliases of the title-block fields <sub>`表題欄のバインド解決`</sub>
 - turns an unknown bind into an empty string instead of failing <sub>`表題欄のバインド解決`</sub>
@@ -2228,6 +2298,27 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - summarises the paper, the zone grid, the title block size and the revision table <sub>`frameTemplateSummary (一覧・情報行の要約)`</sub>
 - lists the binds the title block uses once each, in the order they appear <sub>`bindNames (フィールドバインド表)`</sub>
 - comes back empty for a frame whose title block holds only fixed text <sub>`bindNames (フィールドバインド表)`</sub>
+- keeps today's values for a template without the new items <sub>`frame template extensions`</sub>
+- moves the frame and the title block corner with margins per side <sub>`frame template extensions`</sub>
+- reports hidden zone labels <sub>`frame template extensions`</sub>
+- lays out eight trim mark lines and four centre mark lines <sub>`frame template extensions`</sub>
+- gives each rule its stroke width <sub>`frame template extensions`</sub>
+- converts capital heights and shrinks fitted cells only when they overflow <sub>`frame template extensions`</sub>
+- splits lines and carries rotation and the box <sub>`frame template extensions`</sub>
+- lays out a configured revision table <sub>`frame template extensions`</sub>
+- keeps a fixed number of rows <sub>`frame template extensions`</sub>
+- fits long, two-line and three-line descriptions inside the cell <sub>`frame template extensions`</sub>
+- adds a triangle around each mark when the mark shape is a triangle <sub>`frame template extensions`</sub>
+- lays out the classic four columns with capital-height sizes <sub>`frame template extensions`</sub>
+- carries the loaded logo image <sub>`frame template extensions`</sub>
+- lays out trim marks at the insets given per side <sub>`mark and revision styles`</sub>
+- runs centre marks to the trim line with an open arrow head <sub>`mark and revision styles`</sub>
+- lays out no centre mark where there is no room, and no heads unless asked <sub>`mark and revision styles`</sub>
+- uses the revision table's own text sizes <sub>`mark and revision styles`</sub>
+- lays out a styled mark triangle in every row <sub>`mark and revision styles`</sub>
+- puts a suffix field in the same cell <sub>`mark and revision styles`</sub>
+- aligns a header apart from its rows <sub>`mark and revision styles`</sub>
+- fits a long mark to the triangle and draws no box around an empty cell <sub>`mark and revision styles`</sub>
 
 ### Harness boundaries
 
