@@ -2,9 +2,10 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
 import { onFrameImageLoaded } from "../canvas/frameImages";
+import { setActiveStrokeFont } from "../canvas/strokeFont";
 import { AgentOverlay, patchOverlayTargets } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
-import type { Patch } from "../ipc";
+import { ipc, type Patch, type StrokeFontData } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useChatStore, type ChatToolCall } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
@@ -226,6 +227,32 @@ onBeforeUnmount(() => {
 store.$subscribe(() => scheduleDraw());
 // 表示クラス (レイヤ) の切替でも再描画する
 watch(() => [...ui.hiddenViewClasses], () => scheduleDraw());
+
+// プロジェクトの書体 (ストロークフォント)。字形は1つのidにつき1回だけ受け取り、読めたら描き直す。
+// 読み込み前・失敗時はシステムの書体で描く (図面の中身は変わらない)。
+const strokeFonts = new Map<string, Promise<StrokeFontData | null>>();
+watch(
+  () => store.project?.text_font ?? null,
+  async (tf) => {
+    if (!tf) {
+      setActiveStrokeFont(null, "half");
+      scheduleDraw();
+      return;
+    }
+    let pending = strokeFonts.get(tf.id);
+    if (!pending) {
+      pending = ipc.getStrokeFont(tf.id).catch(() => null);
+      strokeFonts.set(tf.id, pending);
+    }
+    const data = await pending;
+    // 待っている間に設定が変わっていたら、新しい設定の呼び出しに任せる
+    const now = store.project?.text_font;
+    if (!now || now.id !== tf.id || (now.latin ?? "half") !== (tf.latin ?? "half")) return;
+    setActiveStrokeFont(data, tf.latin ?? "half");
+    scheduleDraw();
+  },
+  { immediate: true, deep: true },
+);
 watch(() => store.activeSheetId, () => {
   const canvas = canvasRef.value;
   if (canvas && store.activeSheet) {

@@ -17,7 +17,11 @@ export function textPx(mm: number, scale: number): number {
   return px < MIN_TEXT_PX ? 0 : px;
 }
 
+import { activeStrokeFont, layoutStroke, strokeWidth } from "./strokeFont";
+
 const hidden = new WeakMap<object, boolean>();
+/** 直前の `setDrawingFont` の大きさ (画面 px) と太字かどうか (ストロークフォントで描くときに使う)。 */
+const sized = new WeakMap<object, { px: number; bold: boolean }>();
 
 /**
  * 図面の文字のフォントを設定する。読めないほど小さいときはフォントを変えず、
@@ -32,12 +36,38 @@ export function setDrawingFont(
 ): number {
   const px = textPx(mm, scale);
   hidden.set(ctx, px === 0);
+  sized.set(ctx, { px, bold: /\bbold\b/.test(prefix) });
   if (px > 0) ctx.font = `${prefix}${px}px ${family}`;
   return px;
 }
 
-/** 図面の文字を描く (直前の `setDrawingFont` が小さすぎると判断していれば描かない)。 */
-export function drawingText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number): void {
+/**
+ * 図面の文字を描く (直前の `setDrawingFont` が小さすぎると判断していれば描かない)。
+ * プロジェクトの書体 (ストロークフォント) が有効で字が全てあれば、文字の色の丸い線で描く。
+ * `spacing` はストロークフォントのときだけ効く字間。
+ */
+export function drawingText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, spacing = 1): void {
   if (hidden.get(ctx)) return;
-  ctx.fillText(text, x, y);
+  const active = activeStrokeFont();
+  const size = sized.get(ctx);
+  const t = active && size ? layoutStroke(active.font, text, size.px, active.latin, spacing) : null;
+  if (!t || !size) {
+    ctx.fillText(text, x, y);
+    return;
+  }
+  if (t.polylines.length === 0) return;
+  const align = ctx.textAlign;
+  const dx = align === "center" ? -t.width / 2 : align === "right" || align === "end" ? -t.width : 0;
+  ctx.strokeStyle = ctx.fillStyle;
+  ctx.lineWidth = Math.max(1, strokeWidth(size.px, size.bold));
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  for (const line of t.polylines) {
+    line.forEach(([px, py], i) => {
+      if (i === 0) ctx.moveTo(x + dx + px, y + py);
+      else ctx.lineTo(x + dx + px, y + py);
+    });
+  }
+  ctx.stroke();
 }

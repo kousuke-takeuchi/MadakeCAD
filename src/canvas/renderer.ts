@@ -4,6 +4,7 @@
 import type { Point, Shape, Sheet, SymbolDef, SymbolInstance, WireLegend as WireLegendEntity, WirePart } from "../ipc";
 import type { Region } from "./agentOverlay";
 import { frameImage } from "./frameImages";
+import { withLatin } from "./strokeFont";
 import {
   DEFAULT_FRAME_TEMPLATE,
   LINE_PITCH,
@@ -258,6 +259,17 @@ function drawFrame(
   frame: FrameTemplate = DEFAULT_FRAME_TEMPLATE,
   bind: BindContext = bindContextForSheet(sheet),
 ) {
+  // 図枠の文字は、テンプレートが英数字の字 (半角・全角) を決めていればそれで描く
+  withLatin(frame.text_latin, () => drawFrameInner(ctx, vp, sheet, frame, bind));
+}
+
+function drawFrameInner(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  sheet: Sheet,
+  frame: FrameTemplate,
+  bind: BindContext,
+) {
   const l: FrameLayout = frameLayout(sheet, frame, bind);
   const { w: pw, h: ph } = l.paper;
   const { x0, y0, x1, y1 } = l.frame;
@@ -362,7 +374,7 @@ function drawFrame(
     }
     cell.lines.forEach((text, i) => {
       const q = vp.toScreen({ x: cell.x, y: cell.y + cell.size * LINE_PITCH * i });
-      drawingText(ctx, text, q.x, q.y);
+      drawingText(ctx, text, q.x, q.y, cell.spacing);
     });
     if (cell.box) {
       const a = vp.toScreen({ x: cell.box.x, y: cell.box.y });

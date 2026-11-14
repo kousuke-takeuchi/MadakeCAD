@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import type { StrokeFontData } from "../ipc";
+import { setActiveStrokeFont } from "./strokeFont";
 import { MIN_TEXT_PX, drawingText, setDrawingFont, textPx } from "./textSize";
 
 describe("drawing text size on screen", () => {
@@ -22,5 +24,51 @@ describe("drawing text size on screen", () => {
     drawingText(ctx, "読める", 0, 0);
     expect(ctx.font).toBe("600 10px monospace");
     expect(drawn).toEqual(["読める"]);
+  });
+
+  afterEach(() => setActiveStrokeFont(null, "half"));
+
+  // 線の記録だけをする作り物の描画先
+  function strokeCtx(align: CanvasTextAlign = "left") {
+    const log: string[] = [];
+    const ctx = {
+      font: "10px sans-serif",
+      textAlign: align,
+      fillStyle: "#123456",
+      strokeStyle: "#000",
+      lineWidth: 1,
+      lineCap: "butt",
+      lineJoin: "miter",
+      fillText: (t: string) => log.push(`text ${t}`),
+      beginPath: () => log.push("begin"),
+      moveTo: (x: number, y: number) => log.push(`M ${x.toFixed(2)} ${y.toFixed(2)}`),
+      lineTo: (x: number, y: number) => log.push(`L ${x.toFixed(2)} ${y.toFixed(2)}`),
+      stroke: () => log.push("stroke"),
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, raw: ctx, log };
+  }
+  const font: StrokeFontData = { id: "t", baseline: 0, cap_top: 25, glyphs: { I: { wide: false, strokes: [[2, 0, 2, 25]] } } };
+
+  // ja: ストロークフォントが有効なら、文字は文字の色・サイズに応じた太さの丸い線で、揃えに合わせた位置に描かれる
+  it("strokes the text with the active stroke font, in the text colour, aligned like the text", () => {
+    setActiveStrokeFont(font, "half");
+    const { ctx, raw, log } = strokeCtx("right");
+    setDrawingFont(ctx, 2.5, 4, "sans-serif", "bold ");
+    drawingText(ctx, "I", 100, 50);
+    // 10px: 単位 = 7.2/25 = 0.288、幅 = 15 × 0.288 = 4.32 → 右揃えで x0 = 95.68、縦線は x = 95.68 + 0.576
+    expect(log).toEqual(["begin", "M 96.26 50.00", "L 96.26 42.80", "stroke"]);
+    expect(raw.strokeStyle).toBe("#123456");
+    expect(raw.lineWidth).toBeCloseTo(1.05, 9);
+    expect(raw.lineCap).toBe("round");
+  });
+
+  // ja: フォントに無い字を含む文字列と、ストロークフォントが無いときは、従来どおり文字として描く
+  it("falls back to filled text for missing glyphs and without a stroke font", () => {
+    const { ctx, log } = strokeCtx();
+    setDrawingFont(ctx, 2.5, 4, "sans-serif");
+    drawingText(ctx, "I", 0, 0);
+    setActiveStrokeFont(font, "half");
+    drawingText(ctx, "IX", 0, 0);
+    expect(log).toEqual(["text I", "text IX"]);
   });
 });

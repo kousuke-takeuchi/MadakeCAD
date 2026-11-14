@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3136仕様項目**。
+全6領域・**3147仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2347,6 +2347,8 @@
 - 列のsuffixの項目は、記号の列では三角の横に、その他の列では主の文字のあとに続けて同じセルに配置される <sub>`mark and revision styles`</sub>
 - 見出しの揃えを別に指定した列は、見出しをその揃えで、改訂行を列の揃えで配置する <sub>`mark and revision styles`</sub>
 - 三角より長い記号は三角に収まるまで縮み、値が空の枠付きセルには枠が無い <sub>`mark and revision styles`</sub>
+- 幅に収めるセルは、ストロークフォントの線の幅と字間で縮み、フォントを外すと見積もりの幅で縮む <sub>`frame layout with a stroke font`</sub>
+- 英数字を全角にするテンプレートは、図枠の文字だけを全角の字の幅で測る <sub>`frame layout with a stroke font`</sub>
 
 ### ハーネス境界
 
@@ -2632,6 +2634,16 @@
 - 種別を書いていない古いシートは回路図シートとして扱う。 <sub>`sheet kind (schematic / panel)`</sub>
 - 図面タブの「シート種別」の表示は種別ごとの文言になる。 <sub>`sheet kind (schematic / panel)`</sub>
 
+### strokeFont
+
+- 半角の大文字の高さはフォントサイズの0.72倍、送りは0.432倍。全角の字は2倍送る <sub>`stroke font layout`</sub>
+- 英数字を全角にするとASCIIは全角の字で描かれ、全角の字が無い文字は半角の字で描く <sub>`stroke font layout`</sub>
+- 字間は文字の間だけを広げ、最後の字の後ろは広げない。空白は線なしで送る <sub>`stroke font layout`</sub>
+- フォントに無い字を1つでも含む文字列は配置しない <sub>`stroke font layout`</sub>
+- 線の太さはフォントサイズの0.07倍で0.13より細くならず、太字は1.5倍 <sub>`stroke font layout`</sub>
+- 文字の幅は、フォントが有効な間だけ線の幅になり、外すと見積もりの幅へ戻る <sub>`stroke font layout`</sub>
+- withLatin は有効なフォントの英数字の字を一時的に上書きし、終わると元へ戻す <sub>`stroke font layout`</sub>
+
 ### surfer
 
 - 参照記号のあるシンボルをAlt+クリックすると、同じデバイスの全機能が所在つきで並ぶ <sub>`参照サーフィン (Surfer)`</sub>
@@ -2758,6 +2770,8 @@
 
 - 図面の文字は図形と同じ割合で拡大・縮小し、画面上で小さすぎて読めない大きさになったら描かない (大きさ 0) <sub>`drawing text size on screen`</sub>
 - 読めないほど小さい文字はフォントを変えずに描かない。0px を指定すると WebKit は無視して直前の大きさで描くため <sub>`drawing text size on screen`</sub>
+- ストロークフォントが有効なら、文字は文字の色・サイズに応じた太さの丸い線で、揃えに合わせた位置に描かれる <sub>`drawing text size on screen`</sub>
+- フォントに無い字を含む文字列と、ストロークフォントが無いときは、従来どおり文字として描く <sub>`drawing text size on screen`</sub>
 
 ### textStyle
 

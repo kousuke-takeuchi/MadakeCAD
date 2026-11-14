@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3136 specification clauses** across 6 areas.
+**3147 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2347,6 +2347,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - puts a suffix field in the same cell <sub>`mark and revision styles`</sub>
 - aligns a header apart from its rows <sub>`mark and revision styles`</sub>
 - fits a long mark to the triangle and draws no box around an empty cell <sub>`mark and revision styles`</sub>
+- fits a cell by the stroke width and its spacing <sub>`frame layout with a stroke font`</sub>
+- measures frame text with full-width Latin letters when the template asks for them <sub>`frame layout with a stroke font`</sub>
 
 ### Harness boundaries
 
@@ -2632,6 +2634,16 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - treats a sheet with no kind as a schematic sheet <sub>`sheet kind (schematic / panel)`</sub>
 - labels the sheet kind shown next to the drawing tabs <sub>`sheet kind (schematic / panel)`</sub>
 
+### strokeFont
+
+- scales glyphs so that capitals are 0.72 of the size <sub>`stroke font layout`</sub>
+- uses full-width forms for Latin letters and falls back to half width <sub>`stroke font layout`</sub>
+- widens only the gaps with spacing, and spaces advance without strokes <sub>`stroke font layout`</sub>
+- returns null when any character is missing <sub>`stroke font layout`</sub>
+- computes the stroke width from the size <sub>`stroke font layout`</sub>
+- measures with the stroke font only while it is active <sub>`stroke font layout`</sub>
+- overrides the Latin form for a while and restores it <sub>`stroke font layout`</sub>
+
 ### surfer
 
 - Alt-clicking a symbol lists every function of that device with its location <sub>`参照サーフィン (Surfer)`</sub>
@@ -2758,6 +2770,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - scales drawing text with the zoom like the shapes, and drops it once it is too small to read <sub>`drawing text size on screen`</sub>
 - skips unreadably small text without setting a 0px font, which WebKit ignores and would draw at the previous size <sub>`drawing text size on screen`</sub>
+- strokes the text with the active stroke font, in the text colour, aligned like the text <sub>`drawing text size on screen`</sub>
+- falls back to filled text for missing glyphs and without a stroke font <sub>`drawing text size on screen`</sub>
 
 ### textStyle
 

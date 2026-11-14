@@ -7,8 +7,8 @@
 // ここに持つ DEFAULT_FRAME_TEMPLATE は、まだ一覧を読んでいないときに使う
 // 同梱jis-a3の写し (Rust側 jis-a3.json と一致させること)。
 
-import type { Project, Revision, Sheet, TitleBlock } from "../ipc";
-import { textWidthMm } from "./textWidth";
+import type { Latin, Project, Revision, Sheet, TitleBlock } from "../ipc";
+import { textAdvanceMm, withLatin } from "./strokeFont";
 
 // ---- Rust側 (frame_template.rs / svg.rs) と共有する数値。変えるときは両方を変える ----
 /** 大文字の高さ ÷ フォントサイズ (`text_size_is: cap` の換算)。 */
@@ -75,6 +75,8 @@ export interface FrameCell {
   boxed?: boolean;
   /** `w`に収まるよう文字を縮める。 */
   fit?: boolean;
+  /** 字間 (字の送りに掛ける倍率、既定1)。ストロークフォントのときだけ効く。 */
+  spacing?: number | null;
 }
 
 /** 罫線の太さ (thin 0.25 / medium 0.5 / heavy 1 mm)。 */
@@ -164,6 +166,8 @@ export interface FrameTemplate {
   };
   /** セルの`size`の意味 (font = フォントサイズ / cap = 大文字の高さ)。 */
   text_size_is?: "font" | "cap";
+  /** ストロークフォントのとき、図枠の文字の英数字を半角・全角どちらで描くか (無ければプロジェクトの設定)。 */
+  text_latin?: Latin | null;
   title_block: {
     origin: FrameOrigin;
     w: number;
@@ -503,9 +507,10 @@ export function fontSize(t: FrameTemplate, size: number): number {
 }
 
 /** `maxW`に収まるフォントサイズ。収まっていれば`font`のまま (大きくはしない)。 */
-export function fittedFont(lines: string[], font: number, maxW?: number | null): number {
+export function fittedFont(lines: string[], font: number, maxW?: number | null, spacing = 1): number {
   if (maxW == null || !(maxW > 0)) return font;
-  const widest = lines.reduce((w, l) => Math.max(w, textWidthMm(l, font)), 0);
+  // 幅はストロークフォントが有効ならその線の幅 (Rust側 fitted_font_spaced と同じ)
+  const widest = lines.reduce((w, l) => Math.max(w, textAdvanceMm(l, font, spacing)), 0);
   return widest <= maxW ? font : (font * maxW) / widest;
 }
 
@@ -610,6 +615,10 @@ export function revisionLayout(
   sheet: Sheet,
   t: FrameTemplate = DEFAULT_FRAME_TEMPLATE,
 ): RevisionLayout | null {
+  return withLatin(t.text_latin, () => revisionLayoutInner(sheet, t));
+}
+
+function revisionLayoutInner(sheet: Sheet, t: FrameTemplate): RevisionLayout | null {
   const rb = t.revision_block;
   const rows = visibleRevisions(sheet.revisions ?? [], rb.rows_fixed ?? rb.rows_max);
   const nRows = rb.rows_fixed ?? rows.length;
@@ -765,6 +774,8 @@ export interface CellLayout {
   lines: string[];
   /** 回転 (度、時計回り、(x, y) が中心)。 */
   rotation: number;
+  /** 字間 (ストロークフォントのときだけ効く)。 */
+  spacing: number;
   /** 文字を囲む枠 (回転前の用紙mm)。枠の無いセルはnull。 */
   box: { x: number; y: number; w: number; h: number } | null;
 }
@@ -883,6 +894,11 @@ export function frameLayout(
   t: FrameTemplate = DEFAULT_FRAME_TEMPLATE,
   ctx: BindContext = bindContextForSheet(sheet),
 ): FrameLayout {
+  // 図枠の文字は、テンプレートが英数字の字 (半角・全角) を決めていればそれで測る (Rust側 latin_scope と同じ)
+  return withLatin(t.text_latin, () => frameLayoutInner(sheet, t, ctx));
+}
+
+function frameLayoutInner(sheet: Sheet, t: FrameTemplate, ctx: BindContext): FrameLayout {
   const { w: pw, h: ph } = paperSizeMm(sheet);
   const frame = frameRect(t, pw, ph);
   const marks = frameMarks(t, pw, ph);
@@ -896,14 +912,15 @@ export function frameLayout(
     // Rust側 svg.rs の frame_cell と同じ: 大文字高さの換算 → 幅への収め → 行分け → 枠
     const lines = text.split("\n");
     const base = fontSize(t, cell.size);
-    const size = cell.fit ? fittedFont(lines, base, cell.w) : base;
+    const spacing = cell.spacing ?? 1;
+    const size = cell.fit ? fittedFont(lines, base, cell.w, spacing) : base;
     const align = cell.align ?? "start";
     const cx = tx + cell.x;
     const cy = ty + cell.y;
     let box: CellLayout["box"] = null;
     // 値が空のセルには囲むものが無いので、枠も作らない
     if (cell.boxed && text !== "") {
-      const w = lines.reduce((m, l) => Math.max(m, textWidthMm(l, size)), 0);
+      const w = lines.reduce((m, l) => Math.max(m, textAdvanceMm(l, size, spacing)), 0);
       const left = align === "middle" ? cx - w / 2 : align === "end" ? cx - w : cx;
       const top = cy - size;
       const bottom = cy + size * LINE_PITCH * (lines.length - 1) + size * DESCENT_RATIO;
@@ -919,6 +936,7 @@ export function frameLayout(
       lines,
       rotation: cell.rotation ?? 0,
       box,
+      spacing,
     });
   }
   return {

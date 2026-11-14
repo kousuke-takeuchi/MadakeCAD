@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import jisA3 from "../../src-tauri/resources/frame_templates/jis-a3.json";
 import jisA4Portrait from "../../src-tauri/resources/frame_templates/jis-a4-portrait.json";
-import type { Project, Revision, Sheet } from "../ipc";
+import type { Project, Revision, Sheet, StrokeFontData } from "../ipc";
+import { setActiveStrokeFont } from "./strokeFont";
 import {
   DEFAULT_FRAME_TEMPLATE,
   bindContextForProject,
@@ -711,3 +712,38 @@ describe("mark and revision styles", () => {
     expect(frameLayout(sheet(), t).titleBlock.cells[0].box).toBeNull();
   });
 });
+
+// ストロークフォントが有効なときの図枠 (Rust側 svg.rs の text_advance / latin_scope と同じ)
+describe("frame layout with a stroke font", () => {
+  const base = (): FrameTemplate => structuredClone(jisA3) as unknown as FrameTemplate;
+  // 作り物のフォント: 半角 "A" "B" と、その全角 "Ａ" "Ｂ"
+  const g = (wide: boolean) => ({ wide, strokes: [[1, 0, 1, 25]] });
+  const font: StrokeFontData = { id: "t", baseline: 0, cap_top: 25, glyphs: { A: g(false), B: g(false), "Ａ": g(true), "Ｂ": g(true) } };
+  const cellOf = (t: FrameTemplate) => frameLayout(sheet(), t).titleBlock.cells[0];
+
+  // ja: 幅に収めるセルは、ストロークフォントの線の幅と字間で縮み、フォントを外すと見積もりの幅で縮む
+  it("fits a cell by the stroke width and its spacing", () => {
+    const t = base();
+    t.title_block.cells = [{ x: 10, y: 20, w: 5.4, text: "AB", size: 10, fit: true, spacing: 1.5 }];
+    setActiveStrokeFont(font, "half");
+    // 幅 = 4.32 × 1.5 + 4.32 = 10.8 → 5.4 に収めると 5
+    expect(cellOf(t).size).toBeCloseTo(5, 9);
+    expect(cellOf(t).spacing).toBe(1.5);
+    setActiveStrokeFont(null, "half");
+    // 見積もり: 2 × 0.6 × 10 = 12 → 5.4/12 × 10 = 4.5
+    expect(cellOf(t).size).toBeCloseTo(4.5, 9);
+  });
+
+  // ja: 英数字を全角にするテンプレートは、図枠の文字だけを全角の字の幅で測る
+  it("measures frame text with full-width Latin letters when the template asks for them", () => {
+    const t = base();
+    t.title_block.cells = [{ x: 10, y: 20, w: 9, text: "AB", size: 10, fit: true }];
+    setActiveStrokeFont(font, "half");
+    expect(cellOf(t).size).toBe(10);
+    t.text_latin = "full";
+    // 全角の幅 = 17.28 → 9 に収めると 10 × 9 / 17.28
+    expect(cellOf(t).size).toBeCloseTo((10 * 9) / 17.28, 9);
+    setActiveStrokeFont(null, "half");
+  });
+});
+
