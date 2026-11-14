@@ -132,6 +132,12 @@ fn list_frame_templates() -> madake_core::frame_template::FrameTemplateList {
     madake_core::frame_template::list()
 }
 
+/// 同梱ストロークフォントの字形 (Link API `GET /stroke-fonts/{id}` と同じもの)。
+#[tauri::command]
+fn get_stroke_font(id: String) -> Result<madake_core::stroke_font::StrokeFontData, String> {
+    madake_core::stroke_font::font(&id).map(|f| f.data()).ok_or_else(|| format!("同梱していない書体です: {id}"))
+}
+
 /// 図枠エディタの保存: ユーザー図枠を`~/MadakeCAD/templates/frames/{id}.json`へ書く。
 /// 検証に落ちたもの・同梱の図枠とidがぶつかるものは何も書かずに理由を返す。
 /// 図枠はファイルのドメインなので**undo履歴には乗らない**。
@@ -1018,6 +1024,7 @@ pub fn run() {
             apply_template,
             open_templates_folder,
             list_frame_templates,
+            get_stroke_font,
             save_frame_template,
             unplaced_components,
             open_frame_templates_folder,

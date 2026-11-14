@@ -221,6 +221,16 @@ async fn get_frame_templates() -> Json<madake_core::frame_template::FrameTemplat
     Json(madake_core::frame_template::list())
 }
 
+/// 同梱ストロークフォントの字形 (文字 → 線)。キャンバスがプロジェクトの書体で文字を描くのに使う。
+/// 同梱していないidは404。
+async fn get_stroke_font(
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<madake_core::stroke_font::StrokeFontData>, ApiError> {
+    madake_core::stroke_font::font(&id)
+        .map(|f| Json(f.data()))
+        .ok_or((StatusCode::NOT_FOUND, format!("同梱していない書体です: {id}")))
+}
+
 /// 図枠エディタの保存: ユーザー図枠を`~/MadakeCAD/templates/frames/{id}.json`へ書く。
 /// 検証に落ちたもの・同梱の図枠とidがぶつかるものは**何も書かず**400で理由を返す。
 /// 図枠はファイルのドメインなので、この保存は図面のundo履歴に乗らない。
@@ -1352,6 +1362,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/templates", get(get_templates))
         .route("/api/v1/templates/apply", post(post_apply_template))
         .route("/api/v1/frame-templates", get(get_frame_templates))
+        .route("/api/v1/stroke-fonts/{id}", get(get_stroke_font))
         .route("/api/v1/frame-templates/save", post(post_save_frame_template))
         .route("/api/v1/macros", get(get_macros))
         .route("/api/v1/macros/build", post(post_build_macro))

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3135仕様項目**。
+全6領域・**3136仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1591,6 +1591,10 @@
 - シート画像は既定で 4 px/mm のシート全体のPNGで、mm で範囲を指定すると一部を拡大できる。 <sub>`the_sheet_image_is_a_png_of_the_sheet_or_a_region`</sub>
 - ツール結果の画像を表示できない経路 (ツール窓口を通るAPI系) には、巨大なbase64の代わりに短い説明を返す。 <sub>`the_bridge_replaces_the_image_with_a_short_note`</sub>
 - ツールの説明には、編集した後に図面を目で確かめるよう書かれている。 <sub>`the_image_tool_tells_the_agent_to_look_after_editing`</sub>
+
+### stroke_fonts_api
+
+- Link APIは同梱ストロークフォントの字形をidで返し、同梱していないフォントには404を返す。 <sub>`stroke_fonts_are_served_by_id`</sub>
 
 ### ユーザーシンボルライブラリ (REST)
 

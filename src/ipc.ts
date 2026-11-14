@@ -407,6 +407,15 @@ export interface Project {
 /** ストロークフォントで英数字を半角・全角どちらの字で描くか。 */
 export type Latin = "half" | "full";
 
+/** 同梱ストロークフォントの字形 (Rustの`StrokeFontData`)。線は x, y の並びに平らにしてある。 */
+export interface StrokeFontData {
+  id: string;
+  /** 半角の大文字が立つ格子の行と、届く行。 */
+  baseline: number;
+  cap_top: number;
+  glyphs: Record<string, { wide: boolean; strokes: number[][] }>;
+}
+
 /** 図面の文字の書体 (Rustの`TextFont`)。 */
 export interface TextFont {
   id: string;
@@ -1208,6 +1217,8 @@ interface Ipc {
   openTemplatesFolder(): Promise<string>;
   /** 使える図枠テンプレートの一覧 (同梱+ユーザーの`~/MadakeCAD/templates/frames`)。 */
   listFrameTemplates(): Promise<FrameTemplateList>;
+  /** 同梱ストロークフォントの字形 (プロジェクトの書体で文字を描くのに使う)。 */
+  getStrokeFont(id: string): Promise<StrokeFontData>;
   /** ユーザー図枠の置き場をOSのファイラで開く (無ければ作る)。戻り値=そのパス。 */
   openFrameTemplatesFolder(): Promise<string>;
   /**
@@ -1351,6 +1362,7 @@ const tauriIpc: Ipc = {
     invoke<Patch>("apply_template", { templateId, sheetId }),
   openTemplatesFolder: () => invoke<string>("open_templates_folder"),
   listFrameTemplates: () => invoke<FrameTemplateList>("list_frame_templates"),
+  getStrokeFont: (id: string) => invoke<StrokeFontData>("get_stroke_font", { id }),
   openFrameTemplatesFolder: () => invoke<string>("open_frame_templates_folder"),
   saveFrameTemplate: (template) =>
     invoke<{ template: FrameTemplate; path: string }>("save_frame_template", { template }),
@@ -1501,6 +1513,7 @@ const httpIpc: Ipc = {
   // ブラウザ検証モードではOSのファイラを開けない (呼び出し側がパスを案内する)
   openTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
   listFrameTemplates: () => http<FrameTemplateList>("/frame-templates"),
+  getStrokeFont: (id: string) => http<StrokeFontData>(`/stroke-fonts/${encodeURIComponent(id)}`),
   openFrameTemplatesFolder: () => Promise.reject(new Error("browser mode: not supported")),
   // ブラウザ検証モードはアプリ本体ではないので更新の対象外
   updateSupport: () => Promise.resolve("unsupported"),

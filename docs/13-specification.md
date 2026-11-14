@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3135 specification clauses** across 6 areas.
+**3136 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1591,6 +1591,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The sheet image is a PNG of the whole sheet at 4 px/mm by default, and a region in millimetres zooms into part of it. <sub>`the_sheet_image_is_a_png_of_the_sheet_or_a_region`</sub>
 - Backends that cannot show tool images (API and Copilot routes through the tool bridge) get a short note instead of a huge base64 string. <sub>`the_bridge_replaces_the_image_with_a_short_note`</sub>
 - The tool tells the agent to look at the drawing after editing it. <sub>`the_image_tool_tells_the_agent_to_look_after_editing`</sub>
+
+### stroke_fonts_api
+
+- The Link API serves the bundled stroke font's glyphs by id, and answers 404 for a font that is not bundled. <sub>`stroke_fonts_are_served_by_id`</sub>
 
 ### User symbol library (REST)
 
