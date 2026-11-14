@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3117仕様項目**。
+全6領域・**3123仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -896,6 +896,12 @@
 - フォントの行は16進の番地で読み、注釈の行は飛ばす。同梱フォントの行は7514件。 <sub>`kst_records_are_read_by_address`</sub>
 - 番地は文字に対応する。ASCIIと半角カナは半角、ISO 8859-15は専用の領域、JIS X 0208の区点は全角。3区の空きは同じ位置のASCII記号の全角の字。 <sub>`addresses_map_to_unicode`</sub>
 - 同梱フォントはkst32bとして登録され、第1・第2水準の漢字、かな、英字と空白を持つ。大文字は3行目に立ち28行目に届く。 <sub>`the_bundled_font_is_registered`</sub>
+- 半角の大文字の高さはフォントサイズの0.72倍、送りは0.432倍。全角の字は2倍送る。 <sub>`layout_scales_glyphs_to_the_font_size`</sub>
+- 英数字を全角にするとASCIIはフォントの全角の字で描かれる。字間は文字の間だけを広げ、最後の字の後ろは広げない。 <sub>`full_width_latin_and_spacing`</sub>
+- 全角の字形が無い文字は、文字列ごと諦めずに半角の字形で描く。 <sub>`full_width_falls_back_to_half_width`</sub>
+- フォントに無い字を1つでも含む文字列は配置しない。空の文字列と空白は線なしで配置する。 <sub>`missing_characters_and_empty_strings`</sub>
+- 線の太さはフォントサイズの0.07倍で、0.13mmより細くならない。太字はその1.5倍。 <sub>`stroke_width_follows_the_size`</sub>
+- キャンバスへ送る字形データは、全ての字形を文字をキーに持ち、線は x, y の並びに平らにしてある。 <sub>`glyph_data_for_the_canvas`</sub>
 
 ### SVG出力 (JIS図枠)
 

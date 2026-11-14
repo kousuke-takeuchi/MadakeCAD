@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3117 specification clauses** across 6 areas.
+**3123 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -896,6 +896,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Font records are read by their hexadecimal address, comment lines are skipped, and the bundled font has 7514 records. <sub>`kst_records_are_read_by_address`</sub>
 - Addresses map to characters: ASCII and half-width kana are half width, ISO 8859-15 is shifted into its own block, JIS X 0208 cells are full width, and the free cells of row 3 hold the full-width forms of the ASCII symbols at the same position. <sub>`addresses_map_to_unicode`</sub>
 - The bundled font is registered as kst32b, covers JIS level 1 and level 2 kanji, kana and Latin letters, and has a space; capitals stand on row 3 and reach row 28. <sub>`the_bundled_font_is_registered`</sub>
+- A half-width capital is 0.72 of the font size high and advances 0.432 of it; a full-width character advances twice as far. <sub>`layout_scales_glyphs_to_the_font_size`</sub>
+- With full-width Latin letters ASCII is drawn with the font's full-width forms; spacing widens the gaps between letters but not after the last one. <sub>`full_width_latin_and_spacing`</sub>
+- A character whose full-width form the font lacks is drawn with its half-width glyph instead of failing the string. <sub>`full_width_falls_back_to_half_width`</sub>
+- A string with any character the font does not have is not laid out at all; an empty string and spaces are laid out without strokes. <sub>`missing_characters_and_empty_strings`</sub>
+- The stroke is 0.07 of the font size thick but never thinner than 0.13 mm, and bold is half as thick again. <sub>`stroke_width_follows_the_size`</sub>
+- The glyph data sent to the canvas holds every glyph keyed by its character, with the strokes flattened to x, y pairs. <sub>`glyph_data_for_the_canvas`</sub>
 
 ### SVG output (JIS frame)
 

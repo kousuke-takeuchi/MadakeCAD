@@ -350,6 +350,17 @@ impl Sheet {
     }
 }
 
+/// ストロークフォントで英数字 (ASCII) をどの字で描くか。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Latin {
+    /// フォントの半角の字 (送りは全角の半分)。
+    #[default]
+    Half,
+    /// フォントの全角の字 (全角の無い字は半角の字)。
+    Full,
+}
+
 /// JIS表題欄。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TitleBlock {

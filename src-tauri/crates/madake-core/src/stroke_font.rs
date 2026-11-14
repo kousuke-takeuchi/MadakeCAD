@@ -156,6 +156,100 @@ fn kst32b() -> &'static StrokeFont {
     FONT.get_or_init(|| build("kst32b", "KST32B 3.0", KST32B))
 }
 
+/// 半角の大文字の高さ ÷ フォントサイズ (図枠の`text_size_is: cap`と同じ比)。
+pub const CAP_HEIGHT_RATIO: f64 = 0.72;
+/// 半角・全角の字の送り (格子の単位)。
+pub const HALF_ADVANCE: f64 = 15.0;
+pub const FULL_ADVANCE: f64 = 30.0;
+/// 線の太さ ÷ フォントサイズ、線の太さの下限 (mm)、太字の倍率。
+const STROKE_RATIO: f64 = 0.07;
+const STROKE_MIN: f64 = 0.13;
+const BOLD_FACTOR: f64 = 1.5;
+
+/// 配置した文字列。座標はベースラインの書き出し位置が原点、y は下向き (用紙と同じ)。
+#[derive(Debug, Clone, PartialEq)]
+pub struct StrokeText {
+    pub polylines: Vec<Vec<(f64, f64)>>,
+    /// 文字列の幅 (最後の字の後ろの字間は含めない)。
+    pub width: f64,
+}
+
+/// 文字サイズに応じた線の太さ (mm)。
+pub fn stroke_width(size: f64, bold: bool) -> f64 {
+    (STROKE_RATIO * size).max(STROKE_MIN) * if bold { BOLD_FACTOR } else { 1.0 }
+}
+
+/// 英数字を全角の字で描くときの文字 (空白は全角の空白)。
+fn full_width(c: char) -> char {
+    match c {
+        ' ' => '\u{3000}',
+        '!'..='~' => char::from_u32(c as u32 - 0x21 + 0xFF01).unwrap_or(c),
+        _ => c,
+    }
+}
+
+/// キャンバスへ送る字形1つ (線は x, y の並びに平らにする)。
+#[derive(Debug, Clone, serde::Serialize, schemars::JsonSchema)]
+pub struct GlyphData {
+    pub wide: bool,
+    pub strokes: Vec<Vec<u8>>,
+}
+
+/// キャンバスへ送るフォント (文字 → 字形)。配置の規則は [`StrokeFont::layout`] と同じものをフロントエンドが持つ。
+#[derive(Debug, Clone, serde::Serialize, schemars::JsonSchema)]
+pub struct StrokeFontData {
+    pub id: String,
+    pub baseline: u8,
+    pub cap_top: u8,
+    pub glyphs: BTreeMap<String, GlyphData>,
+}
+
+impl StrokeFont {
+    /// 文字列を配置する。フォントに無い字が1つでもあればNone (呼び出し側はシステムの書体で描く)。
+    /// `spacing`は字の送りに掛ける倍率 (字の間だけを広げる)。
+    pub fn layout(&self, text: &str, size: f64, latin: crate::model::Latin, spacing: f64) -> Option<StrokeText> {
+        let unit = CAP_HEIGHT_RATIO * size / f64::from(self.cap_top.saturating_sub(self.baseline).max(1));
+        let base = f64::from(self.baseline);
+        let (mut pen, mut last) = (0.0, 0.0);
+        let mut polylines = Vec::new();
+        for c in text.chars() {
+            let glyph = match latin {
+                crate::model::Latin::Full => self.glyphs.get(&full_width(c)).or_else(|| self.glyphs.get(&c)),
+                crate::model::Latin::Half => self.glyphs.get(&c),
+            }?;
+            for stroke in &glyph.strokes {
+                polylines.push(
+                    stroke
+                        .iter()
+                        .map(|&(x, y)| (pen + f64::from(x) * unit, -(f64::from(y) - base) * unit))
+                        .collect(),
+                );
+            }
+            last = if glyph.wide { FULL_ADVANCE } else { HALF_ADVANCE } * unit;
+            pen += last * spacing;
+        }
+        let width = if text.is_empty() { 0.0 } else { pen - last * (spacing - 1.0) };
+        Some(StrokeText { polylines, width })
+    }
+
+    /// キャンバスへ送る形にする。
+    pub fn data(&self) -> StrokeFontData {
+        StrokeFontData {
+            id: self.id.to_string(),
+            baseline: self.baseline,
+            cap_top: self.cap_top,
+            glyphs: self
+                .glyphs
+                .iter()
+                .map(|(c, g)| {
+                    let strokes = g.strokes.iter().map(|s| s.iter().flat_map(|&(x, y)| [x, y]).collect()).collect();
+                    (c.to_string(), GlyphData { wide: g.wide, strokes })
+                })
+                .collect(),
+        }
+    }
+}
+
 /// 同梱のストロークフォントの一覧。
 pub fn fonts() -> Vec<&'static StrokeFont> {
     vec![kst32b()]
@@ -169,6 +263,7 @@ pub fn font(id: &str) -> Option<&'static StrokeFont> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::Latin;
 
     /// Each kind of CSF/1 command moves or draws the pen as the format describes, and a space ends the definition.
     /// CSF/1の各命令は形式のとおりにペンを動かすか線を引き、空白で定義が終わる。
@@ -225,5 +320,78 @@ mod tests {
         assert!(f.glyphs.len() >= 7200, "{}", f.glyphs.len());
         assert!(!f.glyphs[&'A'].wide && f.glyphs[&'亜'].wide);
         assert_eq!((f.baseline, f.cap_top), (3, 28));
+    }
+
+    /// A half-width capital is 0.72 of the font size high and advances 0.432 of it; a full-width character advances twice as far.
+    /// 半角の大文字の高さはフォントサイズの0.72倍、送りは0.432倍。全角の字は2倍送る。
+    #[test]
+    fn layout_scales_glyphs_to_the_font_size() {
+        let f = font("kst32b").unwrap();
+        let t = f.layout("H", 10.0, Latin::Half, 1.0).unwrap();
+        let ys: Vec<f64> = t.polylines.iter().flatten().map(|p| p.1).collect();
+        let (lo, hi) = ys.iter().fold((f64::MAX, f64::MIN), |(a, b), y| (a.min(*y), b.max(*y)));
+        assert!((lo + 7.2).abs() < 1e-9 && hi.abs() < 1e-9, "{lo} {hi}");
+        assert!((t.width - 4.32).abs() < 1e-9);
+        assert!((f.layout("亜", 10.0, Latin::Half, 1.0).unwrap().width - 8.64).abs() < 1e-9);
+        assert!((f.layout("AB", 10.0, Latin::Half, 1.0).unwrap().width - 8.64).abs() < 1e-9);
+    }
+
+    /// With full-width Latin letters ASCII is drawn with the font's full-width forms; spacing widens the gaps between letters but not after the last one.
+    /// 英数字を全角にするとASCIIはフォントの全角の字で描かれる。字間は文字の間だけを広げ、最後の字の後ろは広げない。
+    #[test]
+    fn full_width_latin_and_spacing() {
+        let f = font("kst32b").unwrap();
+        assert!((f.layout("AB", 10.0, Latin::Full, 1.0).unwrap().width - 17.28).abs() < 1e-9);
+        assert!((f.layout("A B", 10.0, Latin::Full, 1.0).unwrap().width - 25.92).abs() < 1e-9);
+        assert!((f.layout("AB", 10.0, Latin::Half, 1.5).unwrap().width - (4.32 * 1.5 + 4.32)).abs() < 1e-9);
+        let full = f.layout("A", 10.0, Latin::Full, 1.0).unwrap();
+        let half = f.layout("A", 10.0, Latin::Half, 1.0).unwrap();
+        assert_ne!(full.polylines, half.polylines);
+    }
+
+    /// A character whose full-width form the font lacks is drawn with its half-width glyph instead of failing the string.
+    /// 全角の字形が無い文字は、文字列ごと諦めずに半角の字形で描く。
+    #[test]
+    fn full_width_falls_back_to_half_width() {
+        let mut f = build("t", "t", b"0041 &\xA9k\xD9\n");
+        assert!(!f.glyphs.contains_key(&'Ａ'));
+        f.baseline = 0;
+        f.cap_top = 25;
+        let t = f.layout("A", 10.0, Latin::Full, 1.0).unwrap();
+        assert!((t.width - 4.32).abs() < 1e-9);
+    }
+
+    /// A string with any character the font does not have is not laid out at all; an empty string and spaces are laid out without strokes.
+    /// フォントに無い字を1つでも含む文字列は配置しない。空の文字列と空白は線なしで配置する。
+    #[test]
+    fn missing_characters_and_empty_strings() {
+        let f = font("kst32b").unwrap();
+        assert!(f.layout("A😀", 10.0, Latin::Half, 1.0).is_none());
+        let e = f.layout("", 10.0, Latin::Half, 1.0).unwrap();
+        assert!(e.polylines.is_empty() && e.width == 0.0);
+        let s = f.layout("  ", 10.0, Latin::Half, 1.0).unwrap();
+        assert!(s.polylines.is_empty() && (s.width - 8.64).abs() < 1e-9);
+    }
+
+    /// The stroke is 0.07 of the font size thick but never thinner than 0.13 mm, and bold is half as thick again.
+    /// 線の太さはフォントサイズの0.07倍で、0.13mmより細くならない。太字はその1.5倍。
+    #[test]
+    fn stroke_width_follows_the_size() {
+        assert!((stroke_width(10.0, false) - 0.7).abs() < 1e-9);
+        assert!((stroke_width(1.0, false) - 0.13).abs() < 1e-9);
+        assert!((stroke_width(10.0, true) - 1.05).abs() < 1e-9);
+    }
+
+    /// The glyph data sent to the canvas holds every glyph keyed by its character, with the strokes flattened to x, y pairs.
+    /// キャンバスへ送る字形データは、全ての字形を文字をキーに持ち、線は x, y の並びに平らにしてある。
+    #[test]
+    fn glyph_data_for_the_canvas() {
+        let f = font("kst32b").unwrap();
+        let d = f.data();
+        assert_eq!((d.id.as_str(), d.baseline, d.cap_top, d.glyphs.len()), ("kst32b", f.baseline, f.cap_top, f.glyphs.len()));
+        let a = &d.glyphs["A"];
+        assert_eq!(a.strokes.len(), f.glyphs[&'A'].strokes.len());
+        assert_eq!(a.strokes[0].len(), f.glyphs[&'A'].strokes[0].len() * 2);
+        assert!(!a.wide && d.glyphs["亜"].wide);
     }
 }
