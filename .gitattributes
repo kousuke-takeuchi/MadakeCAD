@@ -2,3 +2,7 @@
 # (include_str! in madake-core svg tests). Keep them LF on every OS, so a Windows
 # checkout with core.autocrlf=true does not turn them into CRLF.
 src-tauri/crates/madake-core/tests/golden/** text eol=lf
+
+# Bundled stroke font files are byte-exact copies of the original archive
+# (cp932 text with CRLF/LF as shipped). Never convert line endings.
+src-tauri/resources/stroke_fonts/** -text

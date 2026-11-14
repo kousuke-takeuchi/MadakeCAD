@@ -37,6 +37,7 @@ pub mod search;
 pub mod shape;
 pub mod sim;
 pub mod spice;
+pub mod stroke_font;
 pub mod svg;
 pub mod symbol;
 pub mod symbol_library;

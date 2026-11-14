@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3113仕様項目**。
+全6領域・**3117仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -889,6 +889,13 @@
 - 離れた場所の同名ネットラベルはmΩ抵抗で橋渡しされ、論理接続が保たれる。 <sub>`same_name_labels_are_bridged`</sub>
 - 電源の無い図面は変換できない(明示的なNoSourceエラー)。 <sub>`no_battery_is_an_error`</sub>
 - デッキ出力は毎回同一(決定的)で、GNDノード0はbatteryの負極ピンになる。 <sub>`node_names_are_deterministic_and_ground_is_battery_minus`</sub>
+
+### stroke_font
+
+- CSF/1の各命令は形式のとおりにペンを動かすか線を引き、空白で定義が終わる。 <sub>`csf1_commands_move_and_draw_the_pen`</sub>
+- フォントの行は16進の番地で読み、注釈の行は飛ばす。同梱フォントの行は7514件。 <sub>`kst_records_are_read_by_address`</sub>
+- 番地は文字に対応する。ASCIIと半角カナは半角、ISO 8859-15は専用の領域、JIS X 0208の区点は全角。3区の空きは同じ位置のASCII記号の全角の字。 <sub>`addresses_map_to_unicode`</sub>
+- 同梱フォントはkst32bとして登録され、第1・第2水準の漢字、かな、英字と空白を持つ。大文字は3行目に立ち28行目に届く。 <sub>`the_bundled_font_is_registered`</sub>
 
 ### SVG出力 (JIS図枠)
 

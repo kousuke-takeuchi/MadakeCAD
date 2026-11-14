@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3113 specification clauses** across 6 areas.
+**3117 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -889,6 +889,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Same-named net labels in different places are bridged with a milliohm resistor, preserving their logical connection. <sub>`same_name_labels_are_bridged`</sub>
 - A drawing without a power source cannot be converted (explicit NoSource error). <sub>`no_battery_is_an_error`</sub>
 - Deck output is deterministic across runs, and the ground node 0 is the battery's minus pin. <sub>`node_names_are_deterministic_and_ground_is_battery_minus`</sub>
+
+### stroke_font
+
+- Each kind of CSF/1 command moves or draws the pen as the format describes, and a space ends the definition. <sub>`csf1_commands_move_and_draw_the_pen`</sub>
+- Font records are read by their hexadecimal address, comment lines are skipped, and the bundled font has 7514 records. <sub>`kst_records_are_read_by_address`</sub>
+- Addresses map to characters: ASCII and half-width kana are half width, ISO 8859-15 is shifted into its own block, JIS X 0208 cells are full width, and the free cells of row 3 hold the full-width forms of the ASCII symbols at the same position. <sub>`addresses_map_to_unicode`</sub>
+- The bundled font is registered as kst32b, covers JIS level 1 and level 2 kanji, kana and Latin letters, and has a space; capitals stand on row 3 and reach row 28. <sub>`the_bundled_font_is_registered`</sub>
 
 ### SVG output (JIS frame)
 

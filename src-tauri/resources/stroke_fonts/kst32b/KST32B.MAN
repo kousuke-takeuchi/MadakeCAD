@@ -1,0 +1,95 @@
+          K S T 3 2 B  (KST32B ver 3.0)  UsersManual    KST32B.MAN
+ 
+         COPYRIGHT (C) 2017 by Saka.N (Saka.N.06@b3.mnx.ne.jp)
+         FREEWARE(free to copy,change..; NO RESPONSIBILITY)
+         NO-WHARRANTY,NO-RESPONSIBILITY !  :  FREEWARE
+ 
+                         for KST32B ver 3.000 : 2017/07//01   by Saka.N
+
+ 
+ 
+ <<  1 : DESCRIPTION  >>
+ 
+   KST32B(File=KST32B.TXT) is KST('Kanji'-StrokeTable:FontDefine) of
+  Model of JIS(JapanIndustrialStandard) defined Chinese and other
+  character.
+ 
+   This version include,
+   a: ASCII (8bit) char :                             0020--007E,
+   b: Japanse-Kana 8bit char :                        00A1--00DF,
+   c: ISO 8859-15 8bit char(except 0xAD) :           (00A0--00FF),
+      BUT, it(=c) is Mapped to                        1A20--1A7F,
+   d: JIS Level-1 Non-'Kanji' 16bit char :            2121--2E34,
+   e: JIS Level-1 'Kanji' set(about 3000ch) :         3021--4F7E,
+   f: JIS Level-2 'Kanji' char :                      5021--7426.
+ 
+   SPECIFICATION of this KST(CSF/1-format) is described in Header-
+  Comment of KST file(Line 1 to 22,etc.); That is, CSF/1-format is pure
+  Plain-Text (0x20--7E,A1--DF) format!
+   Format name CSF/1 mean CompactStrokeFontFormat/ver1; It's merit is
+  very compact in byte-size(160KB: Except JIS Level-2).  But not best
+  quality.
+   KST32B font is based on JIS/C6226 and JIS/X0208. But not strictly.
+
+   
+ 
+ 
+ <<  2 : FILE LIST  >>
+ 
+    KST32B.MAN  : THIS FILE : Brief manual text
+    KST32B.RDM  : Japanese Manual
+    KST32B.TXT  : KST Font data(7724 line 8bit char text)
+ 
+  
+ 
+ 
+ <<  3 : NOTICE  >>
+ 
+  (3.1)  Relation TOOL : 
+     Perhaps, this font cannot use generally!  Because, FontFormat
+    (=CSF/1) is not general type.
+     KST-Tool(KST-Viewer,print,conversion,update) is available on 
+    Vector-Web-site. Name is 'KSTool'. It is mainly for Unix(Linux) &
+    X-Window.  But, minimum(=simplest) viewer KSTVW1 for MS-Windows
+    (95,98,98se,Me,2000,Xp,etc.) and NEC/PC-9801 is included.
+ 
+  (3.2)  Bitmap Expand Size : 
+     In case of expand to Bitmap(= Draw to Pixmap), this KST asuume
+    12--150 pixel height.  Most suitable size is 30x32(=XY) pixel.
+     Line width assume 1.1--1.9, at 30x32pixel case.  But not so wrong,
+    if width is more fat.  Cap-form(type) of draw line is recomend to
+    circle type.
+ 
+  (3.3)  Version_Up History : 
+   (3.3.1) KST32A  : 1999/10
+     1st Open(Vector-Web-site); JIS Level-1 char, created on 1992/06
+    by about 2 mounth.
+   (3.3.2) KST32B ver 1.0 : 2001/03
+     Add small part of JIS Level-2 char, also add 8bit-ASCII, 8bit-
+    Japanese-Kana.   Change expression of part of 'Kanji' char, from
+    JIS/C6226 to X0208. etc.
+   (3.3.3) KST32B ver 2.0 : 2004/01
+     Add almost part(80%) of JIS Level-2 'Kanji', and Add ISO 8859-15
+    char.  Look again JIS Level-1 'Kanji' expression.  Add 16bit Euro
+    currency sign, at 0x2921(temporary). etc.
+   (3.3.4) KST32B ver 3.0 : 2017/07
+     Finally completed JIS Level-2 'Kanji' input!
+ 
+  (3.4)  Address space of 8bit char : 
+     CSF/1 have 30x32 address space. It is used to 16bit(wide) char.
+     Case of 8bit char, KST32B use it's left-half space(15x32).
+ 
+  (3.5) ISO88599 Address offset :
+     Code area of ISO8859 and JIS-Kana is overlapping. So, according 
+    to store both font in single file, former code is offset +0x1980.
+     Original 0xA1 to FF is mapped to 0x1A21 to 1A7F.
+
+  (3.6)  0x5C as Japanese Yen-sign extension :
+     This font defined 0x5C code as Back Slash(=ASCII). If case of 
+    treated Yen-sign, then copy ISO8859 Yen-sign(code 0xA5: internal  
+    code 1A25 in this KST).
+   (3.6.1) Comment out('*') 005C ... line.
+   (3.6.2) Copy 1A25 ... line and rewrite 1A25 to 005C.
+ 
+ 
+ ---  F I N  ---
