@@ -8,6 +8,44 @@
 // 同梱jis-a3の写し (Rust側 jis-a3.json と一致させること)。
 
 import type { Project, Revision, Sheet, TitleBlock } from "../ipc";
+import { textWidthMm } from "./textWidth";
+
+// ---- Rust側 (frame_template.rs / svg.rs) と共有する数値。変えるときは両方を変える ----
+/** 大文字の高さ ÷ フォントサイズ (`text_size_is: cap` の換算)。 */
+export const CAP_HEIGHT_RATIO = 0.72;
+/** 複数行の文字の行送り ÷ フォントサイズ。 */
+export const LINE_PITCH = 1.25;
+/** 罫線の線幅 (mm)。 */
+export const LINE_STROKE = { thin: 0.25, medium: 0.5, heavy: 1 } as const;
+/** 裁断マーク・中心マークの線幅 (mm)。 */
+export const MARK_STROKE = 0.5;
+/** 中心マークの長さの上限 (mm)。 */
+export const CENTRE_MARK_MAX = 10;
+/** 枠付きセル (`boxed`) の、文字の箱から枠までの距離 (mm)。 */
+export const BOX_GAP = 0.8;
+/** 改訂記号を囲む三角の既定の形: 高さ ÷ 行高、底辺 ÷ 高さ (正三角形)、列の左端からの距離 (mm)。 */
+export const MARK_TRIANGLE_H = 0.8;
+export const MARK_TRIANGLE_ASPECT = 2 / Math.sqrt(3);
+export const MARK_TRIANGLE_PAD = 2;
+/** 三角の中の記号: ベースラインを底辺から上げる量 ÷ 三角の高さ、文字高の上限 ÷ 三角の高さ。 */
+export const MARK_TEXT_LIFT = 0.12;
+export const MARK_TEXT_MAX = 0.55;
+/** 同じセルに続けて出す項目 (`suffix`) と前のものとの間隔、記号の列で右に残す余白 (mm)。 */
+export const SUFFIX_GAP = 1;
+const SUFFIX_RIGHT_PAD = 0.5;
+/** 裁断マークの既定の位置 (用紙の端から mm) と腕の長さ (mm)。 */
+export const TRIM_INSET = 4;
+export const TRIM_ARM = 15;
+/** 中心マークの矢印 (開いたV字) の長さと、片側の幅 (mm)。 */
+export const CENTRE_ARROW_LEN = 1.9;
+export const CENTRE_ARROW_HALF = 0.5;
+/** ベースラインより下に出る分 ÷ フォントサイズ (枠の下端の見積もり)。 */
+const DESCENT_RATIO = 0.25;
+/** セル内テキストの左右の余白 (mm)。 */
+const CELL_PAD = 2;
+/** 改訂欄の本文・列見出しの文字高さ (mm)。 */
+const REV_FONT = 2.5;
+const REV_HEADER_FONT = 2.2;
 
 /** ゾーン目盛の文字種。 */
 export type LabelStyle = "numeric" | "alpha";
@@ -31,13 +69,62 @@ export interface FrameCell {
   align?: CellAlign;
   /** 値が空なら描かない (会社名など)。 */
   omit_if_empty?: boolean;
+  /** 回転 (0/90/180/270、画面上で時計回り、アンカー点が中心)。 */
+  rotation?: number;
+  /** 文字を枠で囲む。 */
+  boxed?: boolean;
+  /** `w`に収まるよう文字を縮める。 */
+  fit?: boolean;
 }
+
+/** 罫線の太さ (thin 0.25 / medium 0.5 / heavy 1 mm)。 */
+export type LineWeight = "thin" | "medium" | "heavy";
 
 export interface FrameGridLine {
   x1: number;
   y1: number;
   x2: number;
   y2: number;
+  weight?: LineWeight;
+}
+
+/** 辺ごとの図枠の余白 (mm)。 */
+export interface FrameMargins {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** 改訂欄の列が表示する項目。 */
+export type RevisionField = "mark" | "count" | "description" | "rev_no" | "date" | "by" | "approved";
+
+/** 改訂欄の1列。 */
+export interface RevisionColumn {
+  field: RevisionField;
+  /** 見出し行に印字する文字。 */
+  header: string;
+  /** 列幅 (mm)。 */
+  w: number;
+  align?: CellAlign;
+  /** 同じセルの中で、主の項目のあとに続けて出す項目 (例: 記号の横の個数)。間に罫線は入らない。 */
+  suffix?: RevisionField | null;
+  /** 見出しの揃え。無ければ`align`と同じ。 */
+  header_align?: CellAlign | null;
+}
+
+/** 改訂記号を囲む三角の形 (省略した項目は既定値)。 */
+export interface MarkStyle {
+  /** 三角の高さ ÷ 行高 (既定0.8)。 */
+  h?: number;
+  /** 底辺 ÷ 高さ (既定は正三角形)。 */
+  aspect?: number;
+  /** 斜辺の中ほどを空ける割合 (0〜0.9、既定0)。 */
+  gap?: number;
+  /** 列の左端から三角の左下の角までの距離 (mm、既定2)。 */
+  pad?: number;
+  /** 改訂の無い行にも三角を描く。 */
+  in_empty_rows?: boolean;
 }
 
 export interface FrameTemplate {
@@ -49,13 +136,34 @@ export interface FrameTemplate {
   /** 想定用紙 (mm)。描画はシートの用紙を使うので、図枠を替えても用紙は変わらない。 */
   paper: { w: number; h: number };
   frame_margin: number;
+  /** 辺ごとの余白。あれば`frame_margin`の代わりに使う。 */
+  frame_margins?: FrameMargins | null;
   zones: {
     /** 新しいシートの既定値。描画は各シートのzone_cols/zone_rowsを使う。 */
     cols: number;
     rows: number;
     col_labels: LabelStyle;
     row_labels: LabelStyle;
+    /** ゾーン目盛を描くか (既定: 描く)。 */
+    show?: boolean;
   };
+  /** 図枠の外に描くマーク (用紙四隅の裁断マーク / 外枠の各辺中央の中心マーク)。 */
+  marks?: {
+    trim?: boolean;
+    centre?: boolean;
+    /** 裁断マークの角の位置 (用紙の各辺からの距離 mm)。無ければ4辺とも4mm。 */
+    trim_insets?: FrameMargins | null;
+    /** 裁断マークの腕の長さ (mm)。無ければ15mm。 */
+    trim_arm?: number | null;
+    /** 中心マークを外枠から裁断マークの線まで伸ばす。 */
+    centre_to_trim?: boolean;
+    /** 中心マークの外側の端に矢印 (開いたV字) を付ける。 */
+    centre_arrow?: boolean;
+    /** 中心マークの線の太さ。無ければ0.5mm。 */
+    centre_weight?: LineWeight | null;
+  };
+  /** セルの`size`の意味 (font = フォントサイズ / cap = 大文字の高さ)。 */
+  text_size_is?: "font" | "cap";
   title_block: {
     origin: FrameOrigin;
     w: number;
@@ -67,8 +175,29 @@ export interface FrameTemplate {
   revision_block: {
     rows_max: number;
     col_w: number[];
+    /** 列の定義。無ければ従来の4列 (記号/日付/内容/承認)。 */
+    columns?: RevisionColumn[] | null;
+    /** 改訂欄の行高。無ければ表題欄の`row_h`。 */
+    row_h?: number | null;
+    /** 改訂が少なくても必ず描く行数。 */
+    rows_fixed?: number | null;
+    /** 改訂記号を囲む形。 */
+    mark_shape?: "none" | "triangle";
+    /** 改訂行・見出し行の文字サイズ (mm)。無ければ2.5 / 2.2。 */
+    text_size?: number | null;
+    header_size?: number | null;
+    /** 記号を囲む三角の形。 */
+    mark_style?: MarkStyle | null;
   };
-  logo?: { x: number; y: number; w: number; h: number; path?: string | null } | null;
+  logo?: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    path?: string | null;
+    /** 読み込んだ画像 (data URI)。テンプレートのファイルには書かれない実行時の項目。 */
+    data_url?: string | null;
+  } | null;
   builtin?: boolean;
 }
 
@@ -311,6 +440,7 @@ export function bindValue(name: string, ctx: BindContext): string | undefined {
     case "title_block.rev":
       return tb.rev ?? "";
     default:
+      if (name.startsWith("field.")) return tb.fields?.[name.slice("field.".length)] ?? "";
       return undefined;
   }
 }
@@ -355,10 +485,79 @@ export function effectiveRev(sheet: Sheet): string {
   return sheet.title_block?.rev || "-";
 }
 
+/** 4辺の余白。`frame_margins`が無ければ`frame_margin`を4辺に使う。 */
+export function frameMargins(t: FrameTemplate): FrameMargins {
+  const m = t.frame_margin;
+  return t.frame_margins ?? { left: m, right: m, top: m, bottom: m };
+}
+
+/** 外枠の矩形 (用紙mm)。 */
+export function frameRect(t: FrameTemplate, pw: number, ph: number): { x0: number; y0: number; x1: number; y1: number } {
+  const m = frameMargins(t);
+  return { x0: m.left, y0: m.top, x1: pw - m.right, y1: ph - m.bottom };
+}
+
+/** 描くフォントサイズ。`text_size_is: cap`なら大文字高さから換算する。 */
+export function fontSize(t: FrameTemplate, size: number): number {
+  return t.text_size_is === "cap" ? size / CAP_HEIGHT_RATIO : size;
+}
+
+/** `maxW`に収まるフォントサイズ。収まっていれば`font`のまま (大きくはしない)。 */
+export function fittedFont(lines: string[], font: number, maxW?: number | null): number {
+  if (maxW == null || !(maxW > 0)) return font;
+  const widest = lines.reduce((w, l) => Math.max(w, textWidthMm(l, font)), 0);
+  return widest <= maxW ? font : (font * maxW) / widest;
+}
+
+/** 改訂欄の列。`columns`が無ければ従来の4列 (記号/日付/内容/承認)。 */
+export function revisionColumns(t: FrameTemplate): RevisionColumn[] {
+  if (t.revision_block.columns) return t.revision_block.columns;
+  const fields: RevisionField[] = ["mark", "date", "description", "by"];
+  return t.revision_block.col_w.slice(0, fields.length).map((w, i) => ({
+    field: fields[i],
+    header: REV_HEADERS[i],
+    w,
+    align: "start" as const,
+  }));
+}
+
+/** 改訂欄が新しい項目を使っているか (Rust側 uses_extended_revision_table と同じ判定)。 */
+export function usesExtendedRevisionTable(t: FrameTemplate): boolean {
+  const rb = t.revision_block;
+  return (
+    rb.columns != null ||
+    rb.row_h != null ||
+    rb.rows_fixed != null ||
+    (rb.mark_shape ?? "none") !== "none" ||
+    (t.text_size_is ?? "font") !== "font" ||
+    rb.text_size != null ||
+    rb.header_size != null ||
+    rb.mark_style != null
+  );
+}
+
+/** 改訂欄のセル1つ (見出しまたは本文) の文字の配置。空のセルは`lines`が空。 */
+export interface RevisionText {
+  /** アンカーX (揃えに応じて左端・中央・右端)。 */
+  x: number;
+  align: CellAlign;
+  /** 収めたあとのフォントサイズ (mm)。 */
+  size: number;
+  lines: string[];
+  /** 各行のベースラインY。 */
+  baselines: number[];
+}
+
 /** 改訂欄1行分の配置。topは行上端の用紙Y (mm)。 */
 export interface RevisionRowLayout {
   rev: Revision;
   top: number;
+  /** 列ごとの文字 (列の並び順)。 */
+  cells: RevisionText[];
+  /** 記号を囲む三角の3頂点 (頂点・右下・左下)。三角を描かない行はnull。描く線は`markShapes`にある。 */
+  triangle: [number, number][] | null;
+  /** 同じセルに続けて出す文字 (記号の列の`suffix`。三角の横に置く)。 */
+  extras: RevisionText[];
 }
 
 /** 改訂欄の配置 (用紙mm)。表題欄の直上・同じ右端・同じ幅。 */
@@ -375,6 +574,12 @@ export interface RevisionLayout {
   headerTop: number;
   /** 改訂行(古い順)。古い行ほど下、新しい行ほど上。 */
   rows: RevisionRowLayout[];
+  /** 列ごとの左端・幅・揃え・見出しの文字。 */
+  columns: { left: number; w: number; align: CellAlign; header: RevisionText }[];
+  /** 行の間の横罫線のY (最上段の上は外枠なので含まない)。 */
+  ruleYs: number[];
+  /** 記号の三角を描く図形: 切れ目の無い三角は多角形、切れ目のある三角は線 (空行のぶんも含む)。 */
+  markShapes: { polygons: [number, number][][]; lines: { x1: number; y1: number; x2: number; y2: number }[] };
 }
 
 /** 表題欄の左上角の用紙座標 (mm)。 */
@@ -383,10 +588,8 @@ export function titleBlockOrigin(
   pw: number,
   ph: number,
 ): { x: number; y: number } {
-  const m = t.frame_margin;
   const tb = t.title_block;
-  const [x0, y0] = [m, m];
-  const [x1, y1] = [pw - m, ph - m];
+  const { x0, y0, x1, y1 } = frameRect(t, pw, ph);
   switch (tb.origin) {
     case "bottom_left":
       return { x: x0, y: y1 - tb.h };
@@ -407,28 +610,145 @@ export function revisionLayout(
   sheet: Sheet,
   t: FrameTemplate = DEFAULT_FRAME_TEMPLATE,
 ): RevisionLayout | null {
-  const rows = visibleRevisions(sheet.revisions ?? [], t.revision_block.rows_max);
-  if (rows.length === 0) return null;
+  const rb = t.revision_block;
+  const rows = visibleRevisions(sheet.revisions ?? [], rb.rows_fixed ?? rb.rows_max);
+  const nRows = rb.rows_fixed ?? rows.length;
+  if (nRows === 0) return null;
   const { w: pw, h: ph } = paperSizeMm(sheet);
   const { x: tx, y: ty } = titleBlockOrigin(t, pw, ph);
-  const rowH = t.title_block.row_h;
-  const h = (rows.length + 1) * rowH;
+  const extended = usesExtendedRevisionTable(t);
+  const rowH = rb.row_h ?? t.title_block.row_h;
+  const h = (nRows + 1) * rowH;
+  const top = ty - h;
+  const cols = revisionColumns(t);
   const colLefts: number[] = [];
   let x = tx;
-  for (const w of t.revision_block.col_w) {
+  for (const c of cols) {
     colLefts.push(x);
-    x += w;
+    x += c.w;
   }
+  // 1セル分の文字。従来の表は左揃え・収めなし、新しい表は列幅と行高に収める
+  // (Rust側 svg.rs の revision_block / revision_table の cell_text と同じ)。
+  const cellText = (
+    rowTop: number,
+    left: number,
+    c: RevisionColumn,
+    base: number,
+    value: string,
+    colAlign: CellAlign = c.align ?? "start",
+  ): RevisionText => {
+    const align = extended ? colAlign : "start";
+    const ax = align === "middle" ? left + c.w / 2 : align === "end" ? left + c.w - CELL_PAD : left + CELL_PAD;
+    if (value === "") return { x: ax, align, size: base, lines: [], baselines: [] };
+    if (!extended) {
+      return { x: ax, align, size: base, lines: [value], baselines: [rowTop + rowH / 2 + base / 2] };
+    }
+    const lines = value.split("\n");
+    let font = fittedFont(lines, base, c.w - 2 * CELL_PAD);
+    const m = lines.length;
+    if (m * font * LINE_PITCH > rowH) font *= rowH / (m * font * LINE_PITCH);
+    const pitch = font * LINE_PITCH;
+    const first = rowTop + rowH / 2 + font / 2 - ((m - 1) * pitch) / 2;
+    return { x: ax, align, size: font, lines, baselines: lines.map((_, k) => first + pitch * k) };
+  };
+  const emptyRowTriangles = () => {
+    // 改訂の無い行にも三角だけを置く (刷り込みの記号枠)。行の三角のあとに足す (Rust側と同じ順)
+    const j = cols.findIndex((c) => c.field === "mark");
+    if (!triangleMarks || !style.in_empty_rows || j < 0) return;
+    for (let r = rows.length; r < nRows; r++) {
+      const rowTop = ty - (r + 2) * rowH;
+      addTriangle(colLefts[j] + pad + hb, rowTop + rowH / 2 + th / 2);
+    }
+  };
+  const headerFont = extended ? fontSize(t, rb.header_size ?? REV_HEADER_FONT) : REV_HEADER_FONT;
+  const body = extended ? fontSize(t, rb.text_size ?? REV_FONT) : REV_FONT;
+  const headerTop = ty - rowH;
+  const triangleMarks = extended && rb.mark_shape === "triangle";
+  // 記号の三角 (Rust側 svg.rs の mark_triangle と同じ): 高さ・半分の底辺・切れ目
+  const style = rb.mark_style ?? {};
+  const th = (style.h ?? MARK_TRIANGLE_H) * rowH;
+  const hb = (th * (style.aspect ?? MARK_TRIANGLE_ASPECT)) / 2;
+  const pad = style.pad ?? MARK_TRIANGLE_PAD;
+  const gap = style.gap ?? 0;
+  const markShapes: RevisionLayout["markShapes"] = { polygons: [], lines: [] };
+  const addTriangle = (cx: number, by: number): [number, number][] => {
+    const points: [number, number][] = [
+      [cx, by - th],
+      [cx + hb, by],
+      [cx - hb, by],
+    ];
+    if (gap <= 0) {
+      markShapes.polygons.push(points);
+    } else {
+      const [a, b] = [(1 - gap) / 2, (1 + gap) / 2];
+      for (const side of [1, -1]) {
+        const at = (f: number) => [cx + side * hb * f, by - th + th * f];
+        for (const [f0, f1] of [
+          [0, a],
+          [b, 1],
+        ]) {
+          const [x1, y1] = at(f0);
+          const [x2, y2] = at(f1);
+          markShapes.lines.push({ x1, y1, x2, y2 });
+        }
+      }
+      markShapes.lines.push({ x1: cx - hb, y1: by, x2: cx + hb, y2: by });
+    }
+    return points;
+  };
+  // 古い行 (rows[0]) が列見出しの直上、新しい行ほど上へ
+  const rowLayouts: RevisionRowLayout[] = rows.map((rev, i) => {
+    const rowTop = ty - (i + 2) * rowH;
+    let triangle: [number, number][] | null = null;
+    const extras: RevisionText[] = [];
+    const cells = cols.map((c, j) => {
+      const value = (rev[c.field] ?? "") as string;
+      const suffix = extended && c.suffix ? ((rev[c.suffix] ?? "") as string) : "";
+      if (c.field === "mark" && triangleMarks) {
+        if (value === "") return cellText(rowTop, colLefts[j], c, body, "");
+        const cx = colLefts[j] + pad + hb;
+        const by = rowTop + rowH / 2 + th / 2;
+        triangle = addTriangle(cx, by);
+        // 記号は三角の中に収める (三角の底辺の半分より広い文字は縮める)
+        const mark: RevisionText = {
+          x: cx,
+          align: "middle",
+          size: fittedFont([value], Math.min(body, th * MARK_TEXT_MAX), hb),
+          lines: [value],
+          baselines: [by - th * MARK_TEXT_LIFT],
+        };
+        if (suffix !== "") {
+          // 三角の右の角の横に、ふつうのセルと同じ高さで続ける
+          const sx = cx + hb + SUFFIX_GAP;
+          const size = fittedFont([suffix], body, colLefts[j] + c.w - SUFFIX_RIGHT_PAD - sx);
+          extras.push({ x: sx, align: "start", size, lines: [suffix], baselines: [rowTop + rowH / 2 + size / 2] });
+        }
+        return mark;
+      }
+      // ふつうの列: 主の文字のあとに、空白1つを挟んで続ける
+      const joined = suffix === "" ? value : value === "" ? suffix : `${value} ${suffix}`;
+      return cellText(rowTop, colLefts[j], c, body, joined);
+    });
+    return { rev, top: rowTop, cells, triangle, extras };
+  });
+  emptyRowTriangles();
   return {
     x: tx,
-    y: ty - h,
+    y: top,
     w: t.title_block.w,
     h,
     rowH,
     colLefts,
-    headerTop: ty - rowH,
-    // 古い行 (rows[0]) が列見出しの直上、新しい行ほど上へ
-    rows: rows.map((rev, i) => ({ rev, top: ty - (i + 2) * rowH })),
+    headerTop,
+    rows: rowLayouts,
+    columns: cols.map((c, j) => ({
+      left: colLefts[j],
+      w: c.w,
+      align: extended ? (c.align ?? "start") : "start",
+      header: cellText(headerTop, colLefts[j], c, headerFont, c.header, c.header_align ?? c.align ?? "start"),
+    })),
+    ruleYs: Array.from({ length: nRows }, (_, r) => top + rowH * (r + 1)),
+    markShapes,
   };
 }
 
@@ -436,10 +756,17 @@ export function revisionLayout(
 export interface CellLayout {
   x: number;
   y: number;
+  /** 描くフォントサイズ (大文字高さの換算と、幅への収めを済ませた値)。 */
   size: number;
   align: CellAlign;
   weight: CellWeight;
   text: string;
+  /** 改行で分けた行。2行目以降はベースラインから `size × LINE_PITCH` ずつ下へ。 */
+  lines: string[];
+  /** 回転 (度、時計回り、(x, y) が中心)。 */
+  rotation: number;
+  /** 文字を囲む枠 (回転前の用紙mm)。枠の無いセルはnull。 */
+  box: { x: number; y: number; w: number; h: number } | null;
 }
 
 /** 図枠1枚分の配置 (すべて用紙mm)。SVG出力・キャンバス描画が共有する。 */
@@ -455,20 +782,95 @@ export interface FrameLayout {
     zh: number;
     colLabels: string[];
     rowLabels: string[];
+    /** ゾーン目盛 (文字と目盛線) を描くか。 */
+    show: boolean;
   };
+  /** 裁断マーク・中心マークの線 (用紙mm) と、その線幅 (mm)。 */
+  marks: FrameMarkLine[];
+  /** 中心マークの端の矢印 (開いたV字の折れ線) と、その線幅 (mm)。 */
+  markHeads: { points: [number, number][]; stroke: number }[];
   titleBlock: {
     x: number;
     y: number;
     w: number;
     h: number;
     rowH: number;
-    /** 用紙座標へ移した罫線。 */
-    gridLines: FrameGridLine[];
+    /** 用紙座標へ移した罫線と、その線幅 (mm)。 */
+    gridLines: (FrameGridLine & { stroke: number })[];
     /** 空欄で省くセルを除いた、描くセルだけ。 */
     cells: CellLayout[];
   };
   revision: RevisionLayout | null;
-  logo: { x: number; y: number; w: number; h: number } | null;
+  /** ロゴ枠。`dataUrl`があれば画像を描き、無ければ置き場所を示す枠だけを描く。 */
+  logo: { x: number; y: number; w: number; h: number; dataUrl: string | null } | null;
+}
+
+/** 裁断マーク・中心マークの線1本 (用紙mm) と、その線幅 (mm)。 */
+export interface FrameMarkLine {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  stroke: number;
+}
+
+/** 裁断マーク (裁断線の四隅のL字) と中心マーク (外枠の各辺の中央から外向き)。Rust側 frame_marks と同じ順。 */
+function frameMarks(
+  t: FrameTemplate,
+  pw: number,
+  ph: number,
+): { lines: FrameMarkLine[]; heads: FrameLayout["markHeads"] } {
+  const lines: FrameMarkLine[] = [];
+  const heads: FrameLayout["markHeads"] = [];
+  const marks = t.marks ?? {};
+  const ins = marks.trim_insets ?? { left: TRIM_INSET, right: TRIM_INSET, top: TRIM_INSET, bottom: TRIM_INSET };
+  if (marks.trim) {
+    const arm = marks.trim_arm ?? TRIM_ARM;
+    const corners: [number, number, number, number][] = [
+      [ins.left, ins.top, 1, 1],
+      [pw - ins.right, ins.top, -1, 1],
+      [ins.left, ph - ins.bottom, 1, -1],
+      [pw - ins.right, ph - ins.bottom, -1, -1],
+    ];
+    for (const [cx, cy, sx, sy] of corners) {
+      lines.push({ x1: cx, y1: cy, x2: cx + sx * arm, y2: cy, stroke: MARK_STROKE });
+      lines.push({ x1: cx, y1: cy, x2: cx, y2: cy + sy * arm, stroke: MARK_STROKE });
+    }
+  }
+  if (marks.centre) {
+    const { x0, y0, x1, y1 } = frameRect(t, pw, ph);
+    const m = frameMargins(t);
+    const mx = (x0 + x1) / 2;
+    const my = (y0 + y1) / 2;
+    const stroke = marks.centre_weight ? LINE_STROKE[marks.centre_weight] : MARK_STROKE;
+    // 辺ごとに: 外枠上の始点、外向きの単位ベクトル、余白、裁断線までの距離の差し引き分
+    const sides: [number, number, number, number, number, number][] = [
+      [mx, y0, 0, -1, m.top, ins.top],
+      [mx, y1, 0, 1, m.bottom, ins.bottom],
+      [x0, my, -1, 0, m.left, ins.left],
+      [x1, my, 1, 0, m.right, ins.right],
+    ];
+    for (const [sx, sy, dx, dy, margin, inset] of sides) {
+      const len = marks.centre_to_trim ? margin - inset : Math.min(margin, CENTRE_MARK_MAX);
+      if (len <= 0) continue;
+      const [ex, ey] = [sx + dx * len, sy + dy * len];
+      lines.push({ x1: sx, y1: sy, x2: ex, y2: ey, stroke });
+      if (marks.centre_arrow) {
+        // 外側の端を先端にした開いたV字。(px, py) は進行方向に直角な単位ベクトル
+        const [bx, by] = [ex - dx * CENTRE_ARROW_LEN, ey - dy * CENTRE_ARROW_LEN];
+        const [px, py] = [-dy, dx];
+        heads.push({
+          points: [
+            [bx + px * CENTRE_ARROW_HALF, by + py * CENTRE_ARROW_HALF],
+            [ex, ey],
+            [bx - px * CENTRE_ARROW_HALF, by - py * CENTRE_ARROW_HALF],
+          ],
+          stroke,
+        });
+      }
+    }
+  }
+  return { lines, heads };
 }
 
 /**
@@ -482,8 +884,8 @@ export function frameLayout(
   ctx: BindContext = bindContextForSheet(sheet),
 ): FrameLayout {
   const { w: pw, h: ph } = paperSizeMm(sheet);
-  const m = t.frame_margin;
-  const frame = { x0: m, y0: m, x1: pw - m, y1: ph - m };
+  const frame = frameRect(t, pw, ph);
+  const marks = frameMarks(t, pw, ph);
   const cols = Math.max(1, sheet.zone_cols);
   const rows = Math.max(1, sheet.zone_rows);
   const { x: tx, y: ty } = titleBlockOrigin(t, pw, ph);
@@ -491,13 +893,32 @@ export function frameLayout(
   for (const cell of t.title_block.cells) {
     const text = cellText(cell, ctx);
     if (cell.omit_if_empty && text === "") continue;
+    // Rust側 svg.rs の frame_cell と同じ: 大文字高さの換算 → 幅への収め → 行分け → 枠
+    const lines = text.split("\n");
+    const base = fontSize(t, cell.size);
+    const size = cell.fit ? fittedFont(lines, base, cell.w) : base;
+    const align = cell.align ?? "start";
+    const cx = tx + cell.x;
+    const cy = ty + cell.y;
+    let box: CellLayout["box"] = null;
+    // 値が空のセルには囲むものが無いので、枠も作らない
+    if (cell.boxed && text !== "") {
+      const w = lines.reduce((m, l) => Math.max(m, textWidthMm(l, size)), 0);
+      const left = align === "middle" ? cx - w / 2 : align === "end" ? cx - w : cx;
+      const top = cy - size;
+      const bottom = cy + size * LINE_PITCH * (lines.length - 1) + size * DESCENT_RATIO;
+      box = { x: left - BOX_GAP, y: top - BOX_GAP, w: w + 2 * BOX_GAP, h: bottom - top + 2 * BOX_GAP };
+    }
     cells.push({
-      x: tx + cell.x,
-      y: ty + cell.y,
-      size: cell.size,
-      align: cell.align ?? "start",
+      x: cx,
+      y: cy,
+      size,
+      align,
       weight: cell.weight ?? "normal",
       text,
+      lines,
+      rotation: cell.rotation ?? 0,
+      box,
     });
   }
   return {
@@ -510,7 +931,10 @@ export function frameLayout(
       zh: (frame.y1 - frame.y0) / rows,
       colLabels: Array.from({ length: cols }, (_, i) => zoneLabel(t.zones.col_labels, i)),
       rowLabels: Array.from({ length: rows }, (_, i) => zoneLabel(t.zones.row_labels, i)),
+      show: t.zones.show ?? true,
     },
+    marks: marks.lines,
+    markHeads: marks.heads,
     titleBlock: {
       x: tx,
       y: ty,
@@ -522,10 +946,13 @@ export function frameLayout(
         y1: ty + g.y1,
         x2: tx + g.x2,
         y2: ty + g.y2,
+        stroke: LINE_STROKE[g.weight ?? "thin"],
       })),
       cells,
     },
     revision: revisionLayout(sheet, t),
-    logo: t.logo ? { x: t.logo.x, y: t.logo.y, w: t.logo.w, h: t.logo.h } : null,
+    logo: t.logo
+      ? { x: t.logo.x, y: t.logo.y, w: t.logo.w, h: t.logo.h, dataUrl: t.logo.data_url ?? null }
+      : null,
   };
 }

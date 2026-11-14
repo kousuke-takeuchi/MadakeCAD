@@ -13,7 +13,7 @@
 // ここの`frameChecks`は同じ規則を画面に先に見せるための写し。
 
 import type { FrameCell, FrameGridLine, FrameTemplate } from "./frameTemplate";
-import { titleBlockOrigin } from "./frameTemplate";
+import { frameRect, titleBlockOrigin } from "./frameTemplate";
 
 export interface Pt {
   x: number;
@@ -278,6 +278,8 @@ export function updateLine(t: FrameTemplate, index: number, patch: Partial<Frame
 
 /** 改訂欄の列数 (記号/日付/内容/承認)。Rust `REVISION_COLUMNS`。 */
 export const REVISION_COLUMNS = 4;
+/** 列を自分で持つ改訂欄 (`revision_block.columns`) の列数の上限。Rust validateと同じ。 */
+export const REVISION_COLUMNS_MAX = 8;
 
 /** 保存前チェックの結果。`errors`があると保存できない (Rust validateと同じ規則)。 */
 export interface FrameChecks {
@@ -294,6 +296,8 @@ export function frameChecks(t: FrameTemplate): FrameChecks {
   if (!t.id.trim()) errors.push("id");
   if (!(t.paper.w > 0 && t.paper.h > 0)) errors.push("paper");
   if (!(t.frame_margin >= 0)) errors.push("frame_margin");
+  const fm = t.frame_margins;
+  if (fm && !(fm.left >= 0 && fm.right >= 0 && fm.top >= 0 && fm.bottom >= 0)) errors.push("frame_margins");
   if (!(t.zones.cols >= 1 && t.zones.rows >= 1)) errors.push("zones");
   const tb = t.title_block;
   if (!(tb.w > 0 && tb.h > 0)) errors.push("title_block");
@@ -303,20 +307,52 @@ export function frameChecks(t: FrameTemplate): FrameChecks {
     const hasBind = c.bind != null;
     if (hasText === hasBind) errors.push(`cells[${i}]`);
     if (!(c.size > 0)) errors.push(`cells[${i}].size`);
+    if (![0, 90, 180, 270].includes(c.rotation ?? 0)) errors.push(`cells[${i}].rotation`);
   });
+  // 従来の4列 (`col_w`) は、列を自分で持つテンプレートでも必須のまま (Rust validateと同じ)
   const cols = t.revision_block.col_w;
   if (cols.length !== REVISION_COLUMNS) errors.push("revision_block.col_w");
   else if (Math.abs(cols.reduce((a, b) => a + b, 0) - tb.w) > 1e-6) errors.push("revision_block.col_w");
+  const rb = t.revision_block;
+  if (rb.columns) {
+    const fields = rb.columns.map((c) => c.field);
+    const ok =
+      rb.columns.length >= 1 &&
+      rb.columns.length <= REVISION_COLUMNS_MAX &&
+      new Set(fields).size === fields.length &&
+      rb.columns.every((c) => c.w > 0) &&
+      Math.abs(rb.columns.reduce((a, c) => a + c.w, 0) - tb.w) <= 0.01;
+    if (!ok) errors.push("revision_block.columns");
+  }
+  if (rb.columns?.some((c) => c.suffix != null && c.suffix === c.field)) errors.push("revision_block.columns.suffix");
+  if (rb.row_h != null && !(rb.row_h > 0)) errors.push("revision_block.row_h");
+  if (rb.text_size != null && !(rb.text_size > 0)) errors.push("revision_block.text_size");
+  if (rb.header_size != null && !(rb.header_size > 0)) errors.push("revision_block.header_size");
+  const ms = rb.mark_style;
+  if (ms) {
+    const bad =
+      (ms.h != null && !(ms.h > 0 && ms.h <= 1)) ||
+      (ms.aspect != null && !(ms.aspect > 0)) ||
+      (ms.gap != null && !(ms.gap >= 0 && ms.gap <= 0.9)) ||
+      (ms.pad != null && !(ms.pad >= 0));
+    if (bad) errors.push("revision_block.mark_style");
+  }
+  const ti = t.marks?.trim_insets;
+  if (ti && !(ti.left >= 0 && ti.right >= 0 && ti.top >= 0 && ti.bottom >= 0)) errors.push("marks.trim_insets");
+  if (t.marks?.trim_arm != null && !(t.marks.trim_arm > 0)) errors.push("marks.trim_arm");
+  if (rb.rows_fixed != null && !(rb.rows_fixed >= 1)) errors.push("revision_block.rows_fixed");
 
   const unknownBinds: string[] = [];
   for (const c of tb.cells) {
     for (const name of bindsIn(c.bind ?? "")) {
-      if (!KNOWN_BINDS.has(name) && !unknownBinds.includes(name)) unknownBinds.push(name);
+      // 表題欄の自由な欄 `{field.名前}` は図面ごとに決まるので、知らない名前として扱わない
+      const known = KNOWN_BINDS.has(name) || name.startsWith("field.");
+      if (!known && !unknownBinds.includes(name)) unknownBinds.push(name);
     }
   }
 
-  const m = t.frame_margin;
-  const within = (p: Pt) => p.x >= m - 1e-6 && p.x <= t.paper.w - m + 1e-6 && p.y >= m - 1e-6 && p.y <= t.paper.h - m + 1e-6;
+  const f = frameRect(t, t.paper.w, t.paper.h);
+  const within = (p: Pt) => p.x >= f.x0 - 1e-6 && p.x <= f.x1 + 1e-6 && p.y >= f.y0 - 1e-6 && p.y <= f.y1 + 1e-6;
   let outside = 0;
   for (const g of tb.grid_lines) {
     if (!within(fromTb(t, { x: g.x1, y: g.y1 })) || !within(fromTb(t, { x: g.x2, y: g.y2 }))) outside++;

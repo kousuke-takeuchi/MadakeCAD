@@ -3,8 +3,10 @@
 
 import type { Point, Shape, Sheet, SymbolDef, SymbolInstance, WireLegend as WireLegendEntity, WirePart } from "../ipc";
 import type { Region } from "./agentOverlay";
+import { frameImage } from "./frameImages";
 import {
   DEFAULT_FRAME_TEMPLATE,
+  LINE_PITCH,
   REV_HEADERS,
   bindContextForSheet,
   effectiveRev,
@@ -18,6 +20,7 @@ import {
   type FrameTemplate,
   type RevisionLayout,
   type RevisionRowLayout,
+  type RevisionText,
 } from "./frameTemplate";
 import {
   captionLineAnchors,
@@ -115,8 +118,6 @@ import {
 import { GRID_PITCH, type Viewport } from "./viewport";
 import { drawingText, setDrawingFont } from "./textSize";
 
-/** セル内テキストの左余白 (mm)。 */
-const CELL_PAD = 2;
 /** シンボル本体・ピングループ括弧の線幅 (mm)。svg.rsのSYMBOL_STROKEと一致。 */
 export const SYMBOL_STROKE_MM = 0.3;
 /**
@@ -133,9 +134,6 @@ const FOOTPRINT_PART_NO_DY = 3;
 export const REV_COL_W = DEFAULT_FRAME_TEMPLATE.revision_block.col_w;
 /** 改訂欄に描く最大行数。溢れた分は古い行から省略する (データは保持)。 */
 export const REV_MAX_ROWS = DEFAULT_FRAME_TEMPLATE.revision_block.rows_max;
-/** 改訂欄の本文・列見出しの文字高さ (mm)。 */
-const REV_FONT = 2.5;
-const REV_HEADER_FONT = 2.2;
 
 // 図枠の寸法・表題欄のセルは図枠テンプレート (frameTemplate.ts) が持つ。
 // 既存の呼び出し元のために、そこから再輸出する。
@@ -280,33 +278,55 @@ function drawFrame(
   const f1 = vp.toScreen({ x: x1, y: y1 });
   ctx.strokeRect(f0.x, f0.y, f1.x - f0.x, f1.y - f0.y);
 
-  // ゾーン目盛 (分割数はシート、文字種はテンプレート)
-  ctx.fillStyle = theme.dim;
-  setDrawingFont(ctx, 3, vp.scale, "sans-serif");
-  ctx.textAlign = "center";
-  const { zw, zh, colLabels, rowLabels } = l.zones;
-  ctx.beginPath();
-  colLabels.forEach((label, i) => {
-    const cx = x0 + zw * (i + 0.5);
-    const top = vp.toScreen({ x: cx, y: y0 - 4 });
-    const bottom = vp.toScreen({ x: cx, y: y1 + 6.5 });
-    drawingText(ctx, label, top.x, top.y);
-    drawingText(ctx, label, bottom.x, bottom.y);
-    if (i > 0) {
-      line(ctx, vp, { x: x0 + zw * i, y: y0 - 2 }, { x: x0 + zw * i, y: y0 });
-      line(ctx, vp, { x: x0 + zw * i, y: y1 }, { x: x0 + zw * i, y: y1 + 2 });
-    }
-  });
-  rowLabels.forEach((label, i) => {
-    const cy = y0 + zh * (i + 0.5) + 1;
-    const left = vp.toScreen({ x: x0 - 4, y: cy });
-    const right = vp.toScreen({ x: x1 + 4, y: cy });
-    drawingText(ctx, label, left.x, left.y);
-    drawingText(ctx, label, right.x, right.y);
-  });
-  ctx.strokeStyle = theme.dim;
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  // ゾーン目盛 (分割数はシート、文字種はテンプレート)。テンプレートが隠していれば描かない
+  if (l.zones.show) {
+    ctx.fillStyle = theme.dim;
+    setDrawingFont(ctx, 3, vp.scale, "sans-serif");
+    ctx.textAlign = "center";
+    const { zw, zh, colLabels, rowLabels } = l.zones;
+    ctx.beginPath();
+    colLabels.forEach((label, i) => {
+      const cx = x0 + zw * (i + 0.5);
+      const top = vp.toScreen({ x: cx, y: y0 - 4 });
+      const bottom = vp.toScreen({ x: cx, y: y1 + 6.5 });
+      drawingText(ctx, label, top.x, top.y);
+      drawingText(ctx, label, bottom.x, bottom.y);
+      if (i > 0) {
+        line(ctx, vp, { x: x0 + zw * i, y: y0 - 2 }, { x: x0 + zw * i, y: y0 });
+        line(ctx, vp, { x: x0 + zw * i, y: y1 }, { x: x0 + zw * i, y: y1 + 2 });
+      }
+    });
+    rowLabels.forEach((label, i) => {
+      const cy = y0 + zh * (i + 0.5) + 1;
+      const left = vp.toScreen({ x: x0 - 4, y: cy });
+      const right = vp.toScreen({ x: x1 + 4, y: cy });
+      drawingText(ctx, label, left.x, left.y);
+      drawingText(ctx, label, right.x, right.y);
+    });
+    ctx.strokeStyle = theme.dim;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // 裁断マーク・中心マーク (図枠の外)
+  ctx.strokeStyle = theme.line;
+  for (const m of l.marks) {
+    ctx.lineWidth = Math.max(1, m.stroke * vp.scale);
+    ctx.beginPath();
+    line(ctx, vp, { x: m.x1, y: m.y1 }, { x: m.x2, y: m.y2 });
+    ctx.stroke();
+  }
+  // 中心マークの矢印 (開いたV字)
+  for (const head of l.markHeads) {
+    ctx.lineWidth = Math.max(1, head.stroke * vp.scale);
+    ctx.beginPath();
+    head.points.forEach(([x, y], i) => {
+      const p = vp.toScreen({ x, y });
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+  }
 
   // 改訂欄 (表題欄の直上)
   drawRevisionBlock(ctx, vp, l.revision);
@@ -316,30 +336,60 @@ function drawFrame(
   const t0 = vp.toScreen({ x: tb.x, y: tb.y });
   const t1 = vp.toScreen({ x: tb.x + tb.w, y: tb.y + tb.h });
   ctx.strokeStyle = theme.line;
+  ctx.lineWidth = Math.max(1, 0.5 * vp.scale);
   ctx.strokeRect(t0.x, t0.y, t1.x - t0.x, t1.y - t0.y);
-  ctx.beginPath();
+  // 罫線は太さごとに1本ずつ描く (細線は従来どおり画面上1px以上)
   for (const g of tb.gridLines) {
+    ctx.lineWidth = Math.max(1, g.stroke * vp.scale);
+    ctx.beginPath();
     line(ctx, vp, { x: g.x1, y: g.y1 }, { x: g.x2, y: g.y2 });
+    ctx.stroke();
   }
   ctx.lineWidth = 1;
-  ctx.stroke();
   ctx.fillStyle = theme.line;
   for (const cell of tb.cells) {
     ctx.textAlign = canvasAlign(cell.align);
     const bold = cell.weight === "bold" ? "bold " : "";
     setDrawingFont(ctx, cell.size, vp.scale, "sans-serif", bold);
     const p = vp.toScreen({ x: cell.x, y: cell.y });
-    drawingText(ctx, cell.text, p.x, p.y);
+    const turned = cell.rotation !== 0;
+    if (turned) {
+      // アンカー点を中心に時計回り (Rust側の rotate(θ x y) と同じ)
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate((cell.rotation * Math.PI) / 180);
+      ctx.translate(-p.x, -p.y);
+    }
+    cell.lines.forEach((text, i) => {
+      const q = vp.toScreen({ x: cell.x, y: cell.y + cell.size * LINE_PITCH * i });
+      drawingText(ctx, text, q.x, q.y);
+    });
+    if (cell.box) {
+      const a = vp.toScreen({ x: cell.box.x, y: cell.box.y });
+      const b = vp.toScreen({ x: cell.box.x + cell.box.w, y: cell.box.y + cell.box.h });
+      ctx.strokeStyle = theme.line;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+    }
+    if (turned) ctx.restore();
   }
   ctx.textAlign = "left";
 
-  // ロゴ枠 (画像は未対応。場所を示す枠だけ)
+  // ロゴ: 画像を読めていれば枠の中に縦横比を保って中央に描く。無ければ置き場所を示す枠だけ
   if (l.logo) {
     const a = vp.toScreen({ x: l.logo.x, y: l.logo.y });
     const b = vp.toScreen({ x: l.logo.x + l.logo.w, y: l.logo.y + l.logo.h });
-    ctx.strokeStyle = theme.dim;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+    const image = l.logo.dataUrl ? frameImage(l.logo.dataUrl) : null;
+    const [iw, ih] = image ? [image.naturalWidth || image.width, image.naturalHeight || image.height] : [0, 0];
+    if (image && iw > 0 && ih > 0) {
+      const k = Math.min((b.x - a.x) / iw, (b.y - a.y) / ih);
+      const [dw, dh] = [iw * k, ih * k];
+      ctx.drawImage(image, a.x + (b.x - a.x - dw) / 2, a.y + (b.y - a.y - dh) / 2, dw, dh);
+    } else {
+      ctx.strokeStyle = theme.dim;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+    }
   }
 }
 
@@ -364,43 +414,52 @@ function drawRevisionBlock(
   const b = vp.toScreen({ x: right, y: bottom });
   ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
 
-  // 罫線 (行境界+列境界)
+  // 罫線 (行境界+列境界)。固定行数の表は、改訂の無い行にも罫線を引く
   ctx.beginPath();
-  for (let r = 1; r <= l.rows.length; r++) {
-    const ry = l.y + l.rowH * r;
+  for (const ry of l.ruleYs) {
     line(ctx, vp, { x: l.x, y: ry }, { x: right, y: ry });
   }
-  for (const cx of l.colLefts.slice(1)) {
-    line(ctx, vp, { x: cx, y: l.y }, { x: cx, y: bottom });
+  for (const col of l.columns.slice(1)) {
+    line(ctx, vp, { x: col.left, y: l.y }, { x: col.left, y: bottom });
   }
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  ctx.textAlign = "left";
+  // 文字の配置 (揃え・収めたサイズ・行ごとのベースライン) はレイアウトが決めている
+  const drawText = (t: RevisionText) => {
+    ctx.textAlign = canvasAlign(t.align);
+    setDrawingFont(ctx, t.size, vp.scale, "sans-serif");
+    t.lines.forEach((text, i) => {
+      const p = vp.toScreen({ x: t.x, y: t.baselines[i] });
+      drawingText(ctx, text, p.x, p.y);
+    });
+  };
   // 列見出し (最下段、表題欄側)
   ctx.fillStyle = theme.dim;
-  setDrawingFont(ctx, REV_HEADER_FONT, vp.scale, "sans-serif");
-  REV_HEADERS.forEach((label, i) => {
-    const p = vp.toScreen({
-      x: l.colLefts[i] + CELL_PAD,
-      y: l.headerTop + l.rowH / 2 + REV_HEADER_FONT / 2,
-    });
-    drawingText(ctx, label, p.x, p.y);
-  });
+  for (const col of l.columns) drawText(col.header);
   // 改訂行
   ctx.fillStyle = theme.line;
-  setDrawingFont(ctx, REV_FONT, vp.scale, "sans-serif");
   for (const row of l.rows) {
-    const cells = [row.rev.mark, row.rev.date, row.rev.description, row.rev.by];
-    cells.forEach((value, c) => {
-      if (!value) return;
-      const p = vp.toScreen({
-        x: l.colLefts[c] + CELL_PAD,
-        y: row.top + l.rowH / 2 + REV_FONT / 2,
-      });
-      drawingText(ctx, value, p.x, p.y);
-    });
+    row.cells.forEach(drawText);
+    row.extras.forEach(drawText);
   }
+  // 記号を囲む三角 (切れ目の無いものは多角形、切れ目のあるものと空行のぶんは線)
+  ctx.strokeStyle = theme.line;
+  ctx.lineWidth = 1;
+  for (const polygon of l.markShapes.polygons) {
+    ctx.beginPath();
+    polygon.forEach(([x, y], i) => {
+      const p = vp.toScreen({ x, y });
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  for (const s of l.markShapes.lines) line(ctx, vp, { x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 });
+  ctx.stroke();
+  ctx.textAlign = "left";
 }
 
 /** シンボル1個を描画する。colorOverride指定時は配置プレビュー等のゴースト描画用。 */

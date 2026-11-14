@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
+import { onFrameImageLoaded } from "../canvas/frameImages";
 import { AgentOverlay, patchOverlayTargets } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
 import type { Patch } from "../ipc";
@@ -209,6 +210,8 @@ async function onPointerDown(ev: PointerEvent) {
 
 onMounted(() => {
   controller.requestRedraw = scheduleDraw;
+  // 図枠のロゴ画像は非同期に読み込まれる。読めたら描き直す
+  onFrameImageLoaded(scheduleDraw);
   observer = new ResizeObserver(resize);
   if (wrapRef.value) observer.observe(wrapRef.value);
   resize();

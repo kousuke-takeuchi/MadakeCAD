@@ -23,6 +23,7 @@ export interface TitleBlock {
   checked?: string;
   approved?: string;
   rev?: string;
+  fields?: Record<string, string>;
 }
 
 export interface Revision {
@@ -30,6 +31,9 @@ export interface Revision {
   date: string;
   description: string;
   by: string;
+  rev_no?: string;
+  approved?: string;
+  count?: string;
 }
 
 export interface SymbolInstance {

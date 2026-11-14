@@ -152,3 +152,117 @@ describe("frame editor placeholders and pre-save checks", () => {
     expect(isValidFrameId("../x")).toBe(false);
   });
 });
+
+// 図枠テンプレートの拡張項目 (辺別余白・マーク・罫線の太さ・回転文字・改訂欄の列など)。
+// エディタはこれらを編集する画面をまだ持たないが、読み込んだテンプレートから失ってはならない。
+describe("frame editor and the extended template items", () => {
+  const extended = () => {
+    const t = base();
+    t.frame_margins = { left: 30, right: 15, top: 12, bottom: 10 };
+    t.zones.show = false;
+    t.marks = { trim: true, centre: true };
+    t.text_size_is = "cap";
+    t.title_block.grid_lines[0].weight = "medium";
+    t.title_block.cells[0] = { ...t.title_block.cells[0], rotation: 90, boxed: true, fit: true };
+    t.revision_block.columns = [
+      { field: "mark", header: "SYMB", w: 14 },
+      { field: "description", header: "CHANGELOG", w: t.title_block.w - 14 },
+    ];
+    t.revision_block.row_h = 7;
+    t.revision_block.rows_fixed = 7;
+    t.revision_block.mark_shape = "triangle";
+    t.logo = { x: 40, y: 40, w: 40, h: 10, path: "logo.png", data_url: "data:image/png;base64,AAAA" };
+    return t;
+  };
+
+  // ja: 新しい項目を持つテンプレートに無関係な編集(線の追加・セルの移動と変更・線の削除)をしても、新しい項目は失われない
+  it("keeps the new items through unrelated edits", () => {
+    const before = extended();
+    let t = addLine(before, { x: 300, y: 260 }, { x: 340, y: 260 });
+    t = moveItem(t, { kind: "cell", index: 0 }, 5, 0);
+    t = updateCell(t, 0, { size: 4 });
+    t = deleteItem(t, { kind: "line", index: t.title_block.grid_lines.length - 1 });
+    expect(t.frame_margins).toEqual(before.frame_margins);
+    expect(t.zones.show).toBe(false);
+    expect(t.marks).toEqual(before.marks);
+    expect(t.text_size_is).toBe("cap");
+    expect(t.title_block.grid_lines[0].weight).toBe("medium");
+    expect(t.title_block.cells[0]).toMatchObject({ rotation: 90, boxed: true, fit: true, size: 4 });
+    expect(t.revision_block).toMatchObject({ row_h: 7, rows_fixed: 7, mark_shape: "triangle" });
+    expect(t.revision_block.columns).toEqual(before.revision_block.columns);
+    expect(t.logo).toEqual(before.logo);
+  });
+
+  // ja: 列を自分で持つ改訂欄は、列の数・項目の重複・幅・幅の合計で検査される
+  it("checks a table with its own columns by count, duplicates and the sum of widths", () => {
+    expect(frameChecks(extended()).errors).toEqual([]);
+    const short = extended();
+    short.revision_block.columns![1].w -= 5;
+    expect(frameChecks(short).errors).toEqual(["revision_block.columns"]);
+    const twice = extended();
+    twice.revision_block.columns![1].field = "mark";
+    expect(frameChecks(twice).errors).toEqual(["revision_block.columns"]);
+    const none = extended();
+    none.revision_block.columns = [];
+    expect(frameChecks(none).errors).toEqual(["revision_block.columns"]);
+    const zero = extended();
+    zero.revision_block.columns![0].w = 0;
+    expect(frameChecks(zero).errors).toEqual(["revision_block.columns"]);
+  });
+
+  // ja: 辺ごとの余白は4辺とも0以上でなければならず、外枠の外にある要素は辺ごとの余白で数える
+  it("checks margins per side and counts outside items against them", () => {
+    const bad = extended();
+    bad.frame_margins = { left: -1, right: 20, top: 19, bottom: 18 };
+    expect(frameChecks(bad).errors).toEqual(["frame_margins"]);
+    const t = base();
+    t.title_block.cells = [];
+    t.title_block.grid_lines = [];
+    // A3 (420×297)。左余白34だと x=20 は外、10だと中
+    t.logo = { x: 20, y: 100, w: 30, h: 10 };
+    expect(frameChecks(t).outside).toBe(0);
+    t.frame_margins = { left: 30, right: 10, top: 10, bottom: 10 };
+    expect(frameChecks(t).outside).toBe(1);
+  });
+
+  // ja: 行高・固定行数・回転の不正な値は項目名つきで報告される
+  it("reports a bad row height, fixed row count and rotation by name", () => {
+    const t = extended();
+    t.revision_block.row_h = 0;
+    t.revision_block.rows_fixed = 0;
+    t.title_block.cells[0].rotation = 45;
+    expect(frameChecks(t).errors).toEqual(["cells[0].rotation", "revision_block.row_h", "revision_block.rows_fixed"]);
+  });
+
+  // ja: 記号の三角・改訂欄の文字サイズ・同じセルに続ける項目・裁断マークの不正な値は項目名つきで報告され、正しい値は通る
+  it("reports bad mark, revision text and trim values by name", () => {
+    const good = extended();
+    good.marks = { trim: true, centre: true, trim_insets: { left: 4, right: 6, top: 5, bottom: 3 }, trim_arm: 12, centre_to_trim: true, centre_arrow: true, centre_weight: "thin" };
+    good.revision_block.text_size = 3;
+    good.revision_block.header_size = 2;
+    good.revision_block.mark_style = { h: 1, aspect: 0.75, gap: 0.5, pad: 0, in_empty_rows: true };
+    good.revision_block.columns![0].suffix = "count";
+    expect(frameChecks(good).errors).toEqual([]);
+    const bad = extended();
+    bad.marks = { trim_insets: { left: -1, right: 0, top: 0, bottom: 0 }, trim_arm: 0 };
+    bad.revision_block.text_size = 0;
+    bad.revision_block.header_size = -1;
+    bad.revision_block.mark_style = { h: 1.5 };
+    bad.revision_block.columns![0].suffix = "mark";
+    expect(frameChecks(bad).errors).toEqual([
+      "revision_block.columns.suffix",
+      "revision_block.text_size",
+      "revision_block.header_size",
+      "revision_block.mark_style",
+      "marks.trim_insets",
+      "marks.trim_arm",
+    ]);
+  });
+
+  // ja: 表題欄の自由な欄 {field.名前} は知らないプレースホルダとして報告されない
+  it("does not report a free field bind as unknown", () => {
+    const t = base();
+    t.title_block.cells[0] = { x: 2, y: 5, bind: "{field.title_en} {nonsense}", size: 3 };
+    expect(frameChecks(t).unknownBinds).toEqual(["nonsense"]);
+  });
+});
