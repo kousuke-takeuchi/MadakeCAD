@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3127仕様項目**。
+全6領域・**3135仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1038,6 +1038,14 @@
 - 三角より長い記号は、三角に収まるまで縮められる。 <sub>`a_long_mark_is_fitted_to_the_triangle`</sub>
 - 値が空の枠付きセルは、枠を描かない。 <sub>`a_boxed_cell_without_text_draws_no_box`</sub>
 - 見出しの揃えを別に指定した列は、見出しをその揃えで、改訂行を列の揃えで印字する。 <sub>`a_header_can_be_aligned_apart_from_its_rows`</sub>
+- ストロークフォントでは、図枠と表題欄を含むシートの全ての文字が線のパスになり、text要素は残らない。 <sub>`a_stroke_font_turns_all_text_into_paths`</sub>
+- ストロークフォントを選んでも変わるのは文字だけで、書き出したシートの他の要素は全て同じである。 <sub>`a_stroke_font_moves_no_geometry`</sub>
+- 線にした文字はアンカーから始まり、大文字がフォントサイズの0.72倍になる縮尺で、文字の色と、サイズに応じた線幅で描かれる。 <sub>`a_stroked_text_sits_on_its_anchor`</sub>
+- 太字は1.5倍の太さの線で描かれる。 <sub>`bold_stroked_text_is_thicker`</sub>
+- フォントに無い字を含む文字列はtext要素のまま残り、空の文字列は何も書かず、有効な書体はその範囲の外へ持ち越されない。 <sub>`missing_glyphs_fall_back_and_the_scope_ends`</sub>
+- 文字を収めるときの幅は、ストロークフォントが有効ならその線の幅、そうでなければ見積もりの幅になる。 <sub>`text_advance_follows_the_active_font`</sub>
+- 英数字を全角にする図枠テンプレートは、セルを全角の字で描き、シートの他の文字はプロジェクトの設定のまま。 <sub>`a_frame_template_can_use_full_width_latin`</sub>
+- セルの字間は文字の間を広げ、幅に収める処理はその字間を含めたストロークの幅を使う。 <sub>`cell_spacing_and_fitting_use_the_stroke_width`</sub>
 
 ### シンボルライブラリ
 

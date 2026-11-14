@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3127 specification clauses** across 6 areas.
+**3135 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1038,6 +1038,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A mark longer than the triangle is wide is shrunk to fit inside it. <sub>`a_long_mark_is_fitted_to_the_triangle`</sub>
 - A boxed cell whose value is empty draws no box. <sub>`a_boxed_cell_without_text_draws_no_box`</sub>
 - A column whose header alignment is given separately prints its header with that alignment and its rows with the column's own. <sub>`a_header_can_be_aligned_apart_from_its_rows`</sub>
+- With a stroke font every text of the sheet, frame and title block included, becomes a stroked path and no text element is left. <sub>`a_stroke_font_turns_all_text_into_paths`</sub>
+- Selecting a stroke font changes nothing but the text: every other element of the exported sheet is identical. <sub>`a_stroke_font_moves_no_geometry`</sub>
+- A stroked text starts at its anchor, scaled so that capitals are 0.72 of the font size, in the text colour and with the stroke width of the size. <sub>`a_stroked_text_sits_on_its_anchor`</sub>
+- Bold text is stroked half as thick again. <sub>`bold_stroked_text_is_thicker`</sub>
+- Text with a character the font lacks keeps its text element, an empty text writes nothing, and the active font does not outlive its scope. <sub>`missing_glyphs_fall_back_and_the_scope_ends`</sub>
+- The width used to fit text is the stroke width while a stroke font is active, and the estimate otherwise. <sub>`text_advance_follows_the_active_font`</sub>
+- A frame template that asks for full-width Latin letters draws its cells with them, while the rest of the sheet keeps the project's setting. <sub>`a_frame_template_can_use_full_width_latin`</sub>
+- Letter spacing on a cell widens the gaps between its letters, and fitting uses the stroke width with that spacing. <sub>`cell_spacing_and_fitting_use_the_stroke_width`</sub>
 
 ### Symbol library
 

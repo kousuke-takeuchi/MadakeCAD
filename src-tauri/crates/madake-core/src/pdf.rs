@@ -117,6 +117,8 @@ pub fn project_pdf_pages_with(
     options: &PdfBookOptions,
     catalog: &crate::reports::BomCatalog,
 ) -> Vec<String> {
+    // 表紙・帳票のページもプロジェクトの書体で描く
+    let _font = crate::svg::text_font_scope(project.text_font.as_ref());
     let mut pages = Vec::new();
     if options.cover {
         pages.push(crate::report_sheet::cover_sheet_svg(project));

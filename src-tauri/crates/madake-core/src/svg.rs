@@ -144,6 +144,82 @@ pub fn color_hex(color: &str) -> &str {
     }
 }
 
+/// いま有効なストロークフォント (プロジェクトの書体)。[`text_font_scope`] の範囲だけ有効。
+#[derive(Clone, Copy)]
+struct ActiveFont {
+    font: &'static crate::stroke_font::StrokeFont,
+    latin: crate::model::Latin,
+}
+
+thread_local! {
+    static TEXT_FONT: std::cell::Cell<Option<ActiveFont>> = const { std::cell::Cell::new(None) };
+}
+
+/// 書体の有効範囲。落とすと (早期returnでも) 前の状態へ戻す。
+pub struct TextFontScope {
+    previous: Option<ActiveFont>,
+}
+
+impl Drop for TextFontScope {
+    fn drop(&mut self) {
+        TEXT_FONT.with(|c| c.set(self.previous));
+    }
+}
+
+/// プロジェクトの書体を、戻り値を持っている間だけ有効にする。`None`や知らないidはシステムの書体。
+pub fn text_font_scope(text_font: Option<&crate::model::TextFont>) -> TextFontScope {
+    let next = text_font.and_then(|tf| crate::stroke_font::font(&tf.id).map(|font| ActiveFont { font, latin: tf.latin }));
+    TextFontScope { previous: TEXT_FONT.with(|c| c.replace(next)) }
+}
+
+/// ストロークフォントが有効な間だけ、英数字の字 (半角・全角) を上書きする。`None`ならそのまま。
+fn latin_scope(latin: Option<crate::model::Latin>) -> TextFontScope {
+    let previous = TEXT_FONT.with(|c| c.get());
+    if let (Some(active), Some(latin)) = (previous, latin) {
+        TEXT_FONT.with(|c| c.set(Some(ActiveFont { latin, ..active })));
+    }
+    TextFontScope { previous }
+}
+
+/// 文字列の幅 (mm)。ストロークフォントが有効でその字が全てあれば線の幅、そうでなければ見積もり
+/// ([`crate::tidy::text_width`]。システムの書体では字間は効かない)。
+pub(crate) fn text_advance(s: &str, size: f64, spacing: f64) -> f64 {
+    TEXT_FONT
+        .with(|c| c.get())
+        .and_then(|f| f.font.layout(s, size, f.latin, spacing))
+        .map(|t| t.width)
+        .unwrap_or_else(|| crate::tidy::text_width(s, size))
+}
+
+/// ストロークフォントが有効なら文字列を線の`<path>`で書いて true を返す。空の文字列は何も書かない。
+/// 書体が無い・フォントに無い字を含むときは何も書かずに false (呼び出し側が`<text>`を書く)。
+fn stroke_text_el(out: &mut String, x: f64, y: f64, size: f64, fill: &str, anchor: &str, bold: bool, spacing: f64, s: &str) -> bool {
+    let Some(active) = TEXT_FONT.with(|c| c.get()) else { return false };
+    let Some(t) = active.font.layout(s, size, active.latin, spacing) else { return false };
+    if t.polylines.is_empty() {
+        return true;
+    }
+    let dx = match anchor {
+        "middle" => -t.width / 2.0,
+        "end" => -t.width,
+        _ => 0.0,
+    };
+    let mut d = String::new();
+    for line in &t.polylines {
+        for (i, (px, py)) in line.iter().enumerate() {
+            let _ = write!(d, "{}{} {} ", if i == 0 { "M" } else { "L" }, n(x + dx + px), n(y + py));
+        }
+    }
+    let _ = writeln!(
+        out,
+        "<path d=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+        d.trim_end(),
+        fill,
+        n(crate::stroke_font::stroke_width(size, bold))
+    );
+    true
+}
+
 fn text_family_el(
     out: &mut String,
     x: f64,
@@ -154,6 +230,9 @@ fn text_family_el(
     family: &str,
     s: &str,
 ) {
+    if stroke_text_el(out, x, y, size, fill, anchor, false, 1.0, s) {
+        return;
+    }
     let _ = write!(
         out,
         "<text x=\"{}\" y=\"{}\" font-size=\"{}\" fill=\"{}\" text-anchor=\"{}\" font-family=\"{}\">{}</text>\n",
@@ -185,6 +264,25 @@ fn text_weight_el(
     weight: Weight,
     s: &str,
 ) {
+    text_cell_el(out, x, y, size, fill, anchor, weight, 1.0, s);
+}
+
+/// 表題欄のセル1行。`spacing`はストロークフォントのときだけ効く字間。
+#[allow(clippy::too_many_arguments)]
+fn text_cell_el(
+    out: &mut String,
+    x: f64,
+    y: f64,
+    size: f64,
+    fill: &str,
+    anchor: &str,
+    weight: Weight,
+    spacing: f64,
+    s: &str,
+) {
+    if stroke_text_el(out, x, y, size, fill, anchor, weight == Weight::Bold, spacing, s) {
+        return;
+    }
     if weight == Weight::Normal {
         text_el(out, x, y, size, fill, anchor, s);
         return;
@@ -294,8 +392,13 @@ const DESCENT_RATIO: f64 = 0.25;
 
 /// `max_w`に収まるフォントサイズ。収まっていれば`font`のまま (大きくはしない)。
 pub(crate) fn fitted_font(lines: &[&str], font: f64, max_w: Option<f64>) -> f64 {
+    fitted_font_spaced(lines, font, max_w, 1.0)
+}
+
+/// [`fitted_font`] の字間つき (幅はストロークフォントが有効ならその線の幅)。
+pub(crate) fn fitted_font_spaced(lines: &[&str], font: f64, max_w: Option<f64>, spacing: f64) -> f64 {
     let Some(max_w) = max_w.filter(|w| *w > 0.0) else { return font };
-    let widest = lines.iter().map(|l| crate::tidy::text_width(l, font)).fold(0.0, f64::max);
+    let widest = lines.iter().map(|l| text_advance(l, font, spacing)).fold(0.0, f64::max);
     if widest <= max_w { font } else { font * max_w / widest }
 }
 
@@ -303,10 +406,11 @@ pub(crate) fn fitted_font(lines: &[&str], font: f64, max_w: Option<f64>) -> f64 
 fn frame_cell(out: &mut String, t: &FrameTemplate, cell: &crate::frame_template::Cell, value: &str, x: f64, y: f64) {
     let lines: Vec<&str> = value.split('\n').collect();
     let base = t.font_size(cell.size);
-    let font = if cell.fit { fitted_font(&lines, base, cell.w) } else { base };
+    let spacing = cell.spacing.unwrap_or(1.0);
+    let font = if cell.fit { fitted_font_spaced(&lines, base, cell.w, spacing) } else { base };
     let plain = cell.rotation == 0 && !cell.boxed && lines.len() == 1;
     if plain {
-        text_weight_el(out, x, y, font, "#000", cell.align.anchor(), cell.weight, value);
+        text_cell_el(out, x, y, font, "#000", cell.align.anchor(), cell.weight, spacing, value);
         return;
     }
     if cell.rotation != 0 {
@@ -314,11 +418,11 @@ fn frame_cell(out: &mut String, t: &FrameTemplate, cell: &crate::frame_template:
     }
     let pitch = font * crate::frame_template::LINE_PITCH;
     for (i, line) in lines.iter().enumerate() {
-        text_weight_el(out, x, y + pitch * i as f64, font, "#000", cell.align.anchor(), cell.weight, line);
+        text_cell_el(out, x, y + pitch * i as f64, font, "#000", cell.align.anchor(), cell.weight, spacing, line);
     }
     // 値が空のセルには囲むものが無いので、枠も描かない
     if cell.boxed && !value.is_empty() {
-        let w = lines.iter().map(|l| crate::tidy::text_width(l, font)).fold(0.0, f64::max);
+        let w = lines.iter().map(|l| text_advance(l, font, spacing)).fold(0.0, f64::max);
         let left = match cell.align {
             crate::frame_template::Align::Start => x,
             crate::frame_template::Align::Middle => x - w / 2.0,
@@ -336,6 +440,8 @@ fn frame_cell(out: &mut String, t: &FrameTemplate, cell: &crate::frame_template:
 /// 図枠テンプレート ([`crate::frame_template`]) のとおりに図枠・ゾーン目盛・改訂欄・
 /// 表題欄・ロゴ枠を描く。表題欄のセルはバインドを解決してから描く。
 fn frame_and_title_block(out: &mut String, sheet: &Sheet, t: &FrameTemplate, ctx: &BindContext) {
+    // 図枠の文字は、テンプレートが英数字の字 (半角・全角) を決めていればそれに従う
+    let _latin = latin_scope(t.text_latin);
     let (pw, ph) = sheet.paper_mm();
     let (x0, y0, x1, y1) = t.frame_rect(pw, ph);
     rect_el(out, x0, y0, x1 - x0, y1 - y0, "none", "#000", FRAME_STROKE);
@@ -1605,6 +1711,8 @@ pub fn project_sheet_to_svg(
     sheet_id: crate::model::SheetId,
     symbols: &[SymbolDef],
 ) -> Option<String> {
+    // 図面の文字はプロジェクトの書体で描く (書き出しの間だけ有効)
+    let _font = text_font_scope(project.text_font.as_ref());
     let sheet = project.sheet(sheet_id)?;
     let xrefs = crate::xref::sheet_xrefs(project, sheet_id);
     let device_xrefs = crate::xref::sheet_device_xrefs(project, sheet_id);
@@ -2417,7 +2525,7 @@ mod tests {
             weight: Weight::Bold,
             align: Align::Middle,
             omit_if_empty: false,
-            rotation: 0, boxed: false, fit: false,
+            rotation: 0, boxed: false, fit: false, spacing: None,
         });
         let svg = sheet_to_svg_with_xrefs(
             &project.sheets[0],
@@ -5052,5 +5160,149 @@ mod tests {
         // 内容の列: 左端304、幅56 → 見出しは中央 332、内容は左 306
         assert!(svg.contains("<text x=\"332\" y=\"252.600\" font-size=\"2.200\" fill=\"#000\" text-anchor=\"middle\" font-family=\"sans-serif\">CHANGELOG</text>"), "{svg}");
         assert!(svg.contains("<text x=\"306\" y=\"245.750\" font-size=\"2.500\" fill=\"#000\" text-anchor=\"start\" font-family=\"sans-serif\">変更</text>"), "{svg}");
+    }
+
+    fn kst(latin: crate::model::Latin) -> crate::model::TextFont {
+        crate::model::TextFont { id: "kst32b".into(), latin }
+    }
+
+    /// 文字を持つ要素をひととおり置いたプロジェクト (リレー2枚組 + 注記付き配線 + ネットラベル + 表題欄)。
+    fn text_rich_project() -> Project {
+        let mut p = relay_project();
+        p.sheets[0].title_block = golden_sheet().title_block;
+        for e in sheet_with_annotated_wire().entities.into_values().chain(sheet_with_net_label(Some("right")).entities.into_values()) {
+            p.sheets[0].entities.insert(e.id(), e);
+        }
+        p
+    }
+
+    /// With a stroke font every text of the sheet, frame and title block included, becomes a stroked path and no text element is left.
+    /// ストロークフォントでは、図枠と表題欄を含むシートの全ての文字が線のパスになり、text要素は残らない。
+    #[test]
+    fn a_stroke_font_turns_all_text_into_paths() {
+        let mut p = text_rich_project();
+        let plain = project_sheet_to_svg(&p, p.sheets[0].id, &builtin_symbols()).unwrap();
+        assert!(plain.contains("<text"));
+        p.text_font = Some(kst(crate::model::Latin::Half));
+        let svg = project_sheet_to_svg(&p, p.sheets[0].id, &builtin_symbols()).unwrap();
+        let left: Vec<&str> = svg.lines().filter(|l| l.contains("<text")).collect();
+        assert!(left.is_empty(), "{left:?}");
+        assert!(svg.contains("stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"));
+    }
+
+    /// Selecting a stroke font changes nothing but the text: every other element of the exported sheet is identical.
+    /// ストロークフォントを選んでも変わるのは文字だけで、書き出したシートの他の要素は全て同じである。
+    #[test]
+    fn a_stroke_font_moves_no_geometry() {
+        let mut p = text_rich_project();
+        let not_text = |svg: &str| -> Vec<String> {
+            svg.lines()
+                .filter(|l| !l.contains("<text") && !l.contains("stroke-linejoin=\"round\"/>"))
+                .map(str::to_string)
+                .collect()
+        };
+        let plain = not_text(&project_sheet_to_svg(&p, p.sheets[0].id, &builtin_symbols()).unwrap());
+        p.text_font = Some(kst(crate::model::Latin::Half));
+        let stroked = not_text(&project_sheet_to_svg(&p, p.sheets[0].id, &builtin_symbols()).unwrap());
+        assert_eq!(plain, stroked);
+    }
+
+    /// A stroked text starts at its anchor, scaled so that capitals are 0.72 of the font size, in the text colour and with the stroke width of the size.
+    /// 線にした文字はアンカーから始まり、大文字がフォントサイズの0.72倍になる縮尺で、文字の色と、サイズに応じた線幅で描かれる。
+    #[test]
+    fn a_stroked_text_sits_on_its_anchor() {
+        let _f = text_font_scope(Some(&kst(crate::model::Latin::Half)));
+        let mut out = String::new();
+        text_el(&mut out, 100.0, 50.0, 10.0, "#c00000", "end", "H");
+        let nums: Vec<f64> = out
+            .split("d=\"").nth(1).unwrap()
+            .split('"').next().unwrap()
+            .split(|c: char| c == ' ' || c == 'M' || c == 'L')
+            .filter_map(|t| t.parse().ok())
+            .collect();
+        let xs: Vec<f64> = nums.iter().step_by(2).copied().collect();
+        let ys: Vec<f64> = nums.iter().skip(1).step_by(2).copied().collect();
+        let (x0, x1) = xs.iter().fold((f64::MAX, f64::MIN), |(a, b), v| (a.min(*v), b.max(*v)));
+        let (y0, y1) = ys.iter().fold((f64::MAX, f64::MIN), |(a, b), v| (a.min(*v), b.max(*v)));
+        assert!(x0 >= 95.68 - 1e-9 && x1 <= 100.0 + 1e-9, "{x0} {x1}");
+        assert!((y0 - 42.8).abs() < 1e-3 && (y1 - 50.0).abs() < 1e-3, "{y0} {y1}");
+        assert!(out.contains("fill=\"none\" stroke=\"#c00000\" stroke-width=\"0.700\""), "{out}");
+    }
+
+    /// Bold text is stroked half as thick again.
+    /// 太字は1.5倍の太さの線で描かれる。
+    #[test]
+    fn bold_stroked_text_is_thicker() {
+        let _f = text_font_scope(Some(&kst(crate::model::Latin::Half)));
+        let mut out = String::new();
+        text_weight_el(&mut out, 0.0, 0.0, 10.0, "#000", "start", Weight::Bold, "A");
+        assert!(out.contains("stroke-width=\"1.050\""), "{out}");
+    }
+
+    /// Text with a character the font lacks keeps its text element, an empty text writes nothing, and the active font does not outlive its scope.
+    /// フォントに無い字を含む文字列はtext要素のまま残り、空の文字列は何も書かず、有効な書体はその範囲の外へ持ち越されない。
+    #[test]
+    fn missing_glyphs_fall_back_and_the_scope_ends() {
+        {
+            let _f = text_font_scope(Some(&kst(crate::model::Latin::Half)));
+            let mut out = String::new();
+            text_el(&mut out, 0.0, 0.0, 3.0, "#000", "start", "A😀");
+            assert!(out.starts_with("<text"), "{out}");
+            let mut empty = String::new();
+            text_el(&mut empty, 0.0, 0.0, 3.0, "#000", "start", "");
+            assert!(empty.is_empty(), "{empty}");
+            {
+                let _none = text_font_scope(None);
+                let mut inner = String::new();
+                text_el(&mut inner, 0.0, 0.0, 3.0, "#000", "start", "A");
+                assert!(inner.starts_with("<text"), "{inner}");
+            }
+            let mut back = String::new();
+            text_el(&mut back, 0.0, 0.0, 3.0, "#000", "start", "A");
+            assert!(back.starts_with("<path"), "{back}");
+        }
+        let mut out = String::new();
+        text_el(&mut out, 0.0, 0.0, 3.0, "#000", "start", "A");
+        assert!(out.starts_with("<text"), "{out}");
+    }
+
+    /// The width used to fit text is the stroke width while a stroke font is active, and the estimate otherwise.
+    /// 文字を収めるときの幅は、ストロークフォントが有効ならその線の幅、そうでなければ見積もりの幅になる。
+    #[test]
+    fn text_advance_follows_the_active_font() {
+        assert!((text_advance("AB", 10.0, 1.0) - crate::tidy::text_width("AB", 10.0)).abs() < 1e-9);
+        let _f = text_font_scope(Some(&kst(crate::model::Latin::Half)));
+        assert!((text_advance("AB", 10.0, 1.0) - 8.64).abs() < 1e-9);
+        assert!((text_advance("AB", 10.0, 1.5) - 10.8).abs() < 1e-9);
+    }
+
+    /// A frame template that asks for full-width Latin letters draws its cells with them, while the rest of the sheet keeps the project's setting.
+    /// 英数字を全角にする図枠テンプレートは、セルを全角の字で描き、シートの他の文字はプロジェクトの設定のまま。
+    #[test]
+    fn a_frame_template_can_use_full_width_latin() {
+        let cell_span = |latin: Option<crate::model::Latin>| {
+            let mut t = one_cell(|c| { c.text = Some("AB".into()); c.size = 10.0; c.w = None; });
+            t.text_latin = latin;
+            let _f = text_font_scope(Some(&kst(crate::model::Latin::Half)));
+            let svg = frame_only(&sheet_to_svg_with_frame(&golden_sheet(), &builtin_symbols(), &t, &[]));
+            let line = svg.lines().find(|l| l.contains("stroke-width=\"0.700\"")).expect("セルの線").to_string();
+            let xs: Vec<f64> = line.split("d=\"").nth(1).unwrap().split('"').next().unwrap()
+                .split(|c: char| c == ' ' || c == 'M' || c == 'L').filter_map(|v| v.parse().ok()).step_by(2).collect();
+            xs.iter().fold(f64::MIN, |a, v| a.max(*v)) - 300.0
+        };
+        assert!(cell_span(None) <= 8.64 + 1e-9);
+        let full = cell_span(Some(crate::model::Latin::Full));
+        assert!(full > 8.64 && full <= 17.28 + 1e-9, "{full}");
+    }
+
+    /// Letter spacing on a cell widens the gaps between its letters, and fitting uses the stroke width with that spacing.
+    /// セルの字間は文字の間を広げ、幅に収める処理はその字間を含めたストロークの幅を使う。
+    #[test]
+    fn cell_spacing_and_fitting_use_the_stroke_width() {
+        let _f = text_font_scope(Some(&kst(crate::model::Latin::Half)));
+        // "AB" size 10, spacing 1.5 → width 10.8; fit to 5.4 → size 5 (stroke 0.35)
+        let t = one_cell(|c| { c.text = Some("AB".into()); c.size = 10.0; c.w = Some(5.4); c.fit = true; c.spacing = Some(1.5); });
+        let svg = frame_only(&sheet_to_svg_with_frame(&golden_sheet(), &builtin_symbols(), &t, &[]));
+        assert!(svg.contains("stroke-width=\"0.350\""), "{svg}");
     }
 }

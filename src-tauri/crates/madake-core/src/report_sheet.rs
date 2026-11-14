@@ -208,6 +208,8 @@ pub fn report_bytes_with(
     entity_id: Option<EntityId>,
     catalog: &BomCatalog,
 ) -> Result<(Vec<u8>, usize), ReportError> {
+    // 帳票のPDFもプロジェクトの書体で描く
+    let _font = crate::svg::text_font_scope(project.text_font.as_ref());
     match format {
         ReportFormat::Csv => {
             let csv = report_csv_with(project, kind, entity_id, catalog)?;

@@ -228,6 +228,10 @@ pub struct FrameTemplate {
     pub marks: Marks,
     #[serde(default, skip_serializing_if = "is_default")]
     pub text_size_is: TextSizeIs,
+    /// ストロークフォントのとき、図枠の文字 (表題欄のセル・改訂欄) の英数字を半角・全角どちらで描くか。
+    /// 無ければプロジェクトの設定に従う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_latin: Option<crate::model::Latin>,
     /// ロゴ枠 (用紙座標mm)。画像が解決できないときは枠だけを描く。
     #[serde(default)]
     pub logo: Option<LogoFrame>,
@@ -358,6 +362,9 @@ pub struct Cell {
     /// `w`に収まるよう文字を縮める。
     #[serde(default, skip_serializing_if = "is_false")]
     pub fit: bool,
+    /// 字間 (字の送りに掛ける倍率、既定1)。ストロークフォントのときだけ効く。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spacing: Option<f64>,
 }
 
 impl Cell {
@@ -565,6 +572,11 @@ impl FrameTemplate {
             }
             if !pos(cell.size) {
                 return Err(format!("cells[{i}]: size が不正: {}", cell.size));
+            }
+            if let Some(sp) = cell.spacing {
+                if !pos(sp) {
+                    return Err(format!("cells[{i}].spacing が不正: {sp}"));
+                }
             }
             if ![0, 90, 180, 270].contains(&cell.rotation) {
                 return Err(format!("cells[{i}]: rotation は 0/90/180/270: {}", cell.rotation));
@@ -1299,7 +1311,7 @@ mod tests {
             weight: Weight::Normal,
             align: Align::Start,
             omit_if_empty: false,
-            rotation: 0, boxed: false, fit: false,
+            rotation: 0, boxed: false, fit: false, spacing: None,
         };
         assert_eq!(fixed.resolve(&ctx), "{title_block.title}");
         let bound = Cell { text: None, bind: Some("{title_block.title}".into()), ..fixed };
@@ -1658,6 +1670,8 @@ mod tests {
                 let w = t.title_block.w;
                 t.revision_block.columns = Some(vec![RevisionColumn { suffix: Some(RevisionField::Mark), ..col(RevisionField::Mark, w) }]);
             })),
+            ("cells[0].spacing", Box::new(|t| t.title_block.cells[0].spacing = Some(0.0))),
+            ("cells[0].spacing", Box::new(|t| t.title_block.cells[0].spacing = Some(f64::NAN))),
             ("revision_block.text_size", Box::new(|t| t.revision_block.text_size = Some(0.0))),
             ("revision_block.header_size", Box::new(|t| t.revision_block.header_size = Some(-1.0))),
             ("revision_block.mark_style.h", Box::new(|t| t.revision_block.mark_style = Some(MarkStyle { h: 0.0, ..Default::default() }))),
@@ -1687,7 +1701,7 @@ mod tests {
         assert_eq!((st.h, st.gap, st.pad, st.in_empty_rows), (0.8, 0.0, 2.0, false));
         assert!((st.aspect - 2.0 / 3f64.sqrt()).abs() < 1e-12);
         let json = serde_json::to_string(&t).unwrap();
-        for key in ["\"trim_insets\"", "\"trim_arm\"", "\"centre_to_trim\"", "\"centre_arrow\"", "\"centre_weight\"", "\"suffix\"", "\"text_size\"", "\"header_size\"", "\"mark_style\""] {
+        for key in ["\"text_latin\"", "\"spacing\"", "\"trim_insets\"", "\"trim_arm\"", "\"centre_to_trim\"", "\"centre_arrow\"", "\"centre_weight\"", "\"suffix\"", "\"text_size\"", "\"header_size\"", "\"mark_style\""] {
             assert!(!json.contains(key), "{key} が書かれている");
         }
         let mut t = extended();
@@ -1696,6 +1710,8 @@ mod tests {
             trim_insets: Some(FrameMargins { left: 4.0, right: 6.0, top: 5.0, bottom: 3.0 }),
             trim_arm: Some(12.0), centre_to_trim: true, centre_arrow: true, centre_weight: Some(LineWeight::Thin),
         };
+        t.text_latin = Some(crate::model::Latin::Full);
+        t.title_block.cells[1].spacing = Some(1.2);
         t.revision_block.text_size = Some(3.0);
         t.revision_block.header_size = Some(2.0);
         t.revision_block.mark_style = Some(MarkStyle { h: 1.0, aspect: 0.75, gap: 0.5, pad: 0.0, in_empty_rows: true });
