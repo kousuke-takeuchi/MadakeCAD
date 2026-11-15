@@ -9,7 +9,7 @@ import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-vue-next";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { BLOCK_EXTRA_SIDES, type BlockIssue, type BlockSide } from "../canvas/blockEditor";
-import { BLOCK_SIZE_STEP_MM } from "../canvas/dynamicSymbol";
+import { blockSizeStep, sideNeed } from "../canvas/dynamicSymbol";
 import { useBlockEditorStore } from "../stores/blockEditor";
 import BlockPinColumn from "./BlockPinColumn.vue";
 import SymbolPreview from "./SymbolPreview.vue";
@@ -68,10 +68,13 @@ const extraCount = computed(() =>
   BLOCK_EXTRA_SIDES.reduce((n, side) => n + (editor.draft?.rows[side].length ?? 0), 0),
 );
 
-/** 外形寸法は5mm刻み (2.5mmグリッドに載るように)。 */
+/** 外形寸法はブロックの刻みで増減する (5mm間隔は5mm刻み、2.5mm間隔は2.5mm刻み。最小は5mm)。 */
+const sizeStep = computed(() => blockSizeStep(editor.pitch));
+
 function setSize(key: "w" | "h", value: number) {
-  const steps = Math.round((Number(value) || 0) / BLOCK_SIZE_STEP_MM);
-  editor.setSize({ [key]: Math.max(BLOCK_SIZE_STEP_MM, steps * BLOCK_SIZE_STEP_MM) });
+  const step = sizeStep.value;
+  const steps = Math.round((Number(value) || 0) / step);
+  editor.setSize({ [key]: Math.max(sideNeed(0, editor.pitch), steps * step) });
 }
 </script>
 
@@ -102,7 +105,7 @@ function setSize(key: "w" | "h", value: number) {
             <button
               class="step"
               :disabled="editor.sizeMode === 'auto'"
-              @click="setSize(key, editor.size[key] - BLOCK_SIZE_STEP_MM)"
+              @click="setSize(key, editor.size[key] - sizeStep)"
             >
               <Minus :size="11" />
             </button>
@@ -115,7 +118,7 @@ function setSize(key: "w" | "h", value: number) {
             <button
               class="step"
               :disabled="editor.sizeMode === 'auto'"
-              @click="setSize(key, editor.size[key] + BLOCK_SIZE_STEP_MM)"
+              @click="setSize(key, editor.size[key] + sizeStep)"
             >
               <Plus :size="11" />
             </button>

@@ -161,6 +161,21 @@ describe("editing a block that is already on the drawing", () => {
     expect((sent[0] as { entity: { attrs: Record<string, string> } }).entity.attrs.current_a).toBe("5");
   });
 
+  // ja: 2.5mm間隔・番号内側のブロックを編集して適用しても、2つの属性は残り、大きさの刻みは2.5mmになる
+  it("keeps block_pitch and block_numbers on apply, and steps the size by 2.5 mm", async () => {
+    const attrs = { block_pins: '{"left":[{"no":"1"},{"no":"2"}]}', block_pitch: "2.5", block_numbers: "inside" };
+    seed([block(attrs)]);
+    const sent = spyExecute();
+    const editor = useBlockEditorStore();
+    editor.startEdit(block(attrs) as Entity);
+    expect(editor.pitch).toBe("fine");
+    editor.addRow("left");
+    expect(await editor.apply()).toBe(true);
+    const out = (sent[0] as { entity: { attrs: Record<string, string> } }).entity.attrs;
+    expect(out.block_pitch).toBe("2.5");
+    expect(out.block_numbers).toBe("inside");
+  });
+
   // ja: 外形を自動へ戻して適用すると、手動寸法の属性が消える
   it("drops the hand-set size attribute when the outline goes back to automatic", async () => {
     const withSize = block({ block_pins: PINS, block_size: '{"w":40,"h":30}' });

@@ -19,6 +19,7 @@ import {
   wiredPinNumbers,
   type BlockDraft,
 } from "./blockEditor";
+import { blockSymbol } from "./dynamicSymbol";
 import type { Entity, Sheet, SymbolInstance } from "../ipc";
 
 /** 左右にピンを持つ下書き (ピン名つき)。 */
@@ -34,6 +35,8 @@ function draft(): BlockDraft {
       bottom: [],
     },
     size: null,
+    pitch: "coarse",
+    numbers: "outside",
   };
 }
 
@@ -165,6 +168,8 @@ describe("block attributes built from the draft", () => {
         bottom: [],
       },
       size: null,
+      pitch: "coarse",
+      numbers: "outside",
     };
     expect(draftSize(d)).toEqual({ w: 15, h: 30 });
     d.size = { w: 40, h: 35 };
@@ -183,6 +188,8 @@ describe("block attributes built from the draft", () => {
         bottom: [],
       },
       size: { w: 20, h: 20 },
+      pitch: "coarse",
+      numbers: "outside",
     };
     // プレビューの箱の幅: 右のピンの先 (外形の右端+リード 5 mm) から求める
     const def = draftSymbol(d)!;
@@ -360,5 +367,36 @@ describe("connector columns", () => {
     expect(JSON.parse(attrsFromDraft(d).block_pins).left[0]).toEqual({ no: "IN1", name: "入力1", connector: "jst_ph_f" });
     expect(draftIssues(d)).toEqual([]);
     expect(draftSymbol(d)).not.toBeNull();
+  });
+});
+
+describe("block pin pitch and number placement in the editor", () => {
+  // ja: 2.5mm間隔・番号内側のブロックを編集して書き戻しても、2つの属性は残る
+  it("keeps block_pitch and block_numbers through an edit", () => {
+    const attrs = { block_pins: '{"left":[{"no":"1"}]}', block_pitch: "2.5", block_numbers: "inside", block_size: '{"w":5,"h":5}' };
+    const out = attrsFromDraft(draftFromAttrs(attrs));
+    expect(out.block_pitch).toBe("2.5");
+    expect(out.block_numbers).toBe("inside");
+  });
+
+  // ja: 属性の無いブロックを編集して書き戻しても、2つの属性は増えない
+  it("does not add the attributes to a block that has none", () => {
+    const out = attrsFromDraft(draftFromAttrs({ block_pins: '{"left":[{"no":"1"}]}' }));
+    expect("block_pitch" in out).toBe(false);
+    expect("block_numbers" in out).toBe(false);
+  });
+
+  // ja: 2.5mm間隔のブロックでピンが収まらないとき、必要な大きさは2.5mm間隔の規則で出る (左に3本なら高さ10mm)
+  it("reports the needed size of a fine block with the fine rule", () => {
+    const d = draftFromAttrs({ block_pins: '{"left":[{"no":"1"},{"no":"2"},{"no":"3"}]}', block_pitch: "2.5" });
+    d.size = { w: 5, h: 7.5 };
+    expect(draftIssues(d)).toEqual([{ code: "sizeTooSmall", w: 5, h: 10 }]);
+  });
+
+  // ja: 2.5mm間隔の下書きのプレビューは、配置後に描かれるシンボルと同じ (左2本・大きさ自動)
+  it("previews a fine draft exactly as the placed block is drawn", () => {
+    const d = draftFromAttrs({ block_pins: '{"left":[{"no":"1"},{"no":"2"}]}', block_pitch: "2.5", block_numbers: "inside" });
+    expect(draftSymbol(d)).toEqual(blockSymbol(attrsFromDraft(d)));
+    expect(draftSize(d).h).toBe(7.5);
   });
 });

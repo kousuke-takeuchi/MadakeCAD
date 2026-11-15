@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3199 specification clauses** across 6 areas.
+**3204 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2193,6 +2193,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - counts a row with only a connector as filled, so a missing number is reported <sub>`connector columns`</sub>
 - flags a group name on a kind that cannot have one and a group name split over two connectors <sub>`connector columns`</sub>
 - drops a group name made only of spaces without reporting it <sub>`connector columns`</sub>
+- keeps block_pitch and block_numbers through an edit <sub>`block pin pitch and number placement in the editor`</sub>
+- does not add the attributes to a block that has none <sub>`block pin pitch and number placement in the editor`</sub>
+- reports the needed size of a fine block with the fine rule <sub>`block pin pitch and number placement in the editor`</sub>
+- previews a fine draft exactly as the placed block is drawn <sub>`block pin pitch and number placement in the editor`</sub>
 - opens a pin table with one pin per side when the generic block is picked <sub>`starting a new block from the insert dialog`</sub>
 - hands the edited table to the placement as block attributes <sub>`starting a new block from the insert dialog`</sub>
 - seeds the hand-set size with the automatic one when switching to manual <sub>`starting a new block from the insert dialog`</sub>
@@ -2200,6 +2204,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - loads the pin table of the selected block <sub>`editing a block that is already on the drawing`</sub>
 - applies the table as a single update_entity, keeping the tag, part number and position <sub>`editing a block that is already on the drawing`</sub>
 - keeps attributes that are not part of the pin table <sub>`editing a block that is already on the drawing`</sub>
+- keeps block_pitch and block_numbers on apply, and steps the size by 2.5 mm <sub>`editing a block that is already on the drawing`</sub>
 - drops the hand-set size attribute when the outline goes back to automatic <sub>`editing a block that is already on the drawing`</sub>
 - sends no command when the table was not changed <sub>`editing a block that is already on the drawing`</sub>
 - throws the draft away when the editor is closed <sub>`editing a block that is already on the drawing`</sub>

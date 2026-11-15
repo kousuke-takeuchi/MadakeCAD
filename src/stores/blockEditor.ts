@@ -27,7 +27,12 @@ import {
   type BlockSide,
   type BlockSize,
 } from "../canvas/blockEditor";
-import { BLOCK_PINS_ATTR, BLOCK_SIZE_ATTR, resolveInstanceDef } from "../canvas/dynamicSymbol";
+import {
+  BLOCK_PINS_ATTR,
+  BLOCK_SIZE_ATTR,
+  resolveInstanceDef,
+  type BlockPitch,
+} from "../canvas/dynamicSymbol";
 import type { Entity, SymbolDef } from "../ipc";
 import { useDocumentStore } from "./document";
 
@@ -98,6 +103,11 @@ export const useBlockEditorStore = defineStore("blockEditor", {
     /** ピンから決まる外形寸法 (「自動」の表示と、手動へ切り替えたときの初期値)。 */
     autoSize(state): BlockSize {
       return state.draft ? draftSize({ ...state.draft, size: null }) : { w: 0, h: 0 };
+    },
+
+    /** ブロックのピン間隔 (外形寸法の刻みを決める)。 */
+    pitch(state): BlockPitch {
+      return state.draft?.pitch ?? "coarse";
     },
 
     /** いまの外形寸法 (手動ならその値)。 */

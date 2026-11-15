@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3199仕様項目**。
+全6領域・**3204仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2193,6 +2193,10 @@
 - コネクタだけを選んだ行も書き出す行として数える (番号が空なら指摘が出る) <sub>`connector columns`</sub>
 - 端子台・JST 以外のまとめ名と、2つのコネクタに分かれたまとめ名は指摘になる <sub>`connector columns`</sub>
 - 空白だけのまとめ名は書き出さず、指摘にもならない <sub>`connector columns`</sub>
+- 2.5mm間隔・番号内側のブロックを編集して書き戻しても、2つの属性は残る <sub>`block pin pitch and number placement in the editor`</sub>
+- 属性の無いブロックを編集して書き戻しても、2つの属性は増えない <sub>`block pin pitch and number placement in the editor`</sub>
+- 2.5mm間隔のブロックでピンが収まらないとき、必要な大きさは2.5mm間隔の規則で出る (左に3本なら高さ10mm) <sub>`block pin pitch and number placement in the editor`</sub>
+- 2.5mm間隔の下書きのプレビューは、配置後に描かれるシンボルと同じ (左2本・大きさ自動) <sub>`block pin pitch and number placement in the editor`</sub>
 - 部品挿入で「ブロック(汎用)」を選ぶと、左右1本ずつのピン表が開く <sub>`starting a new block from the insert dialog`</sub>
 - 編集したピン表はそのまま配置に使う属性になる(配置後もこの形で描かれる) <sub>`starting a new block from the insert dialog`</sub>
 - 「手動」に切り替えると、そのときの自動寸法が編集できる初期値として入る <sub>`starting a new block from the insert dialog`</sub>
@@ -2200,6 +2204,7 @@
 - プロパティの「ピン表を編集…」は、そのブロックのピン表を読み込んで開く <sub>`editing a block that is already on the drawing`</sub>
 - 適用するとupdate_entityコマンドが1回だけ実行され、参照記号・型番・位置は変わらない <sub>`editing a block that is already on the drawing`</sub>
 - ブロック以外の属性(定格など)は編集しても残る <sub>`editing a block that is already on the drawing`</sub>
+- 2.5mm間隔・番号内側のブロックを編集して適用しても、2つの属性は残り、大きさの刻みは2.5mmになる <sub>`editing a block that is already on the drawing`</sub>
 - 外形を自動へ戻して適用すると、手動寸法の属性が消える <sub>`editing a block that is already on the drawing`</sub>
 - 何も変えずに適用したときはコマンドを送らない(履歴を汚さない) <sub>`editing a block that is already on the drawing`</sub>
 - 閉じると下書きを捨てる(図面は変わらない) <sub>`editing a block that is already on the drawing`</sub>

@@ -10,13 +10,17 @@ import {
   BLOCK_CONTACT_MAX,
   BLOCK_PINS_ATTR,
   BLOCK_PIN_MAX,
-  BLOCK_PIN_PITCH_MM,
+  BLOCK_NUMBERS_ATTR,
+  BLOCK_PITCH_ATTR,
   BLOCK_SIZE_ATTR,
   blockBox,
   blockSymbol,
   parseBlockSpec,
+  sideNeed,
+  type BlockNumbers,
   type BlockPin,
   type BlockPins,
+  type BlockPitch,
 } from "./dynamicSymbol";
 import { connectorGroups, isGroupedConnector, type ConnectorKind } from "./connector";
 import { transformLocal } from "./renderer";
@@ -53,6 +57,10 @@ export interface BlockPinRow {
 export interface BlockDraft {
   rows: Record<BlockSide, BlockPinRow[]>;
   size: BlockSize | null;
+  /** ピン間隔 (coarse = 5mm、fine = 2.5mm)。属性が無いブロックは coarse。 */
+  pitch: BlockPitch;
+  /** ピン番号の位置。属性が無いブロックは outside。 */
+  numbers: BlockNumbers;
 }
 
 /** ピン表の指摘 (これがある間は配置・適用できない)。 */
@@ -88,6 +96,8 @@ export function blankDraft(): BlockDraft {
   return {
     rows: { ...emptyRows(), left: [{ no: "1", name: "" }], right: [{ no: "2", name: "" }] },
     size: null,
+    pitch: "coarse",
+    numbers: "outside",
   };
 }
 
@@ -193,6 +203,8 @@ export function attrsFromDraft(draft: BlockDraft): Record<string, string> {
     attrs[BLOCK_PINS_ATTR] = JSON.stringify(pins);
   }
   if (draft.size) attrs[BLOCK_SIZE_ATTR] = JSON.stringify(draft.size);
+  if (draft.pitch === "fine") attrs[BLOCK_PITCH_ATTR] = "2.5";
+  if (draft.numbers === "inside") attrs[BLOCK_NUMBERS_ATTR] = "inside";
   return attrs;
 }
 
@@ -200,12 +212,22 @@ export function attrsFromDraft(draft: BlockDraft): Record<string, string> {
 export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
   let pins: BlockPins = {};
   let size: BlockSize | null = null;
+  let pitch: BlockPitch = "coarse";
+  let numbers: BlockNumbers = "outside";
   try {
     const spec = parseBlockSpec(attrs);
     pins = spec.pins;
     size = spec.size;
+    pitch = spec.pitch;
+    numbers = spec.numbers;
   } catch {
-    return { rows: emptyRows(), size: null };
+    // 読めない属性は空のピン表。間隔と番号の位置は、値が正しければ生の属性から残す
+    return {
+      rows: emptyRows(),
+      size: null,
+      pitch: attrs[BLOCK_PITCH_ATTR] === "2.5" ? "fine" : "coarse",
+      numbers: attrs[BLOCK_NUMBERS_ATTR] === "inside" ? "inside" : "outside",
+    };
   }
   const rows = emptyRows();
   for (const side of BLOCK_SIDES) {
@@ -217,7 +239,7 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
       ...(p.connector_ref ? { connectorRef: p.connector_ref } : {}),
     }));
   }
-  return { rows, size };
+  return { rows, size, pitch, numbers };
 }
 
 /**
@@ -225,7 +247,12 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
  * 同じ行に並んで広がるときは、プレビュー・配置後と同じ広がった寸法を返す。
  */
 export function draftSize(draft: BlockDraft): BlockSize {
-  const [w, h] = blockBox(pinsOf(draft), draft.size ? { ...draft.size } : null);
+  const [w, h] = blockBox(
+    pinsOf(draft),
+    draft.size ? { ...draft.size } : null,
+    draft.pitch,
+    draft.numbers,
+  );
   return { w, h };
 }
 
@@ -281,8 +308,8 @@ export function draftIssues(draft: BlockDraft): BlockIssue[] {
   if (draft.size) {
     const rows = Math.max(pins.left?.length ?? 0, pins.right?.length ?? 0);
     const cols = Math.max(pins.top?.length ?? 0, pins.bottom?.length ?? 0);
-    const w = Math.max(cols * BLOCK_PIN_PITCH_MM, BLOCK_PIN_PITCH_MM);
-    const h = Math.max(rows * BLOCK_PIN_PITCH_MM, BLOCK_PIN_PITCH_MM);
+    const w = sideNeed(cols, draft.pitch);
+    const h = sideNeed(rows, draft.pitch);
     if (draft.size.w < w - 1e-9 || draft.size.h < h - 1e-9) {
       issues.push({ code: "sizeTooSmall", w, h });
     }
