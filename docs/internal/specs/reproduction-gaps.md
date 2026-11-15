@@ -230,6 +230,7 @@ negative, which is enough for both).
 | Dense harness wiring: pins closer than 5 mm, small connector boxes with the numbers inside | ✅ | G34 closed (`block_pitch`, `block_numbers`; format 22) |
 | A connector box passes a conductor through: the same pole has a wire on each side | ✅ | G35 closed (one pin number on two opposite sides; format 23) |
 | Captions inside the box, thick wires without colour words, part numbers written along vertical wires | ✅ | G36-G39 closed (`block_caption`, sheet wire style, rotated notes; format 24) |
+| Heavy outlines, pure wire colours, wires running straight to the box, per-part caption places, one text pen, dashed bus lines, arrows on leaders | ✅ | G40-G46 closed (line and lettering style; format 25) |
 
 **After the frame template extensions (2026-11-14).** The same region was redrawn with a
 template that uses the new items. The share of the reproduction's ink that lies on the
@@ -1429,6 +1430,25 @@ it horizontally. Text along a vertical wire could not be drawn.
 
 **What closed it.** Notes with a rotation of 90, 180 or 270 degrees are drawn turned clockwise
 about their anchor point, in all three renderers.
+
+### G40-G46 — Line and lettering style · quality
+
+**Closed 2026-11-16** (format 25).
+
+**Current behaviour (verified).** Side by side with a harness drawing the sheet still looked
+different although parts and wires were in place: outlines were thin, wire colours were the
+muted paper colours, a thin lead joined every wire to its box, references and values had one
+size and one place, text strokes grew with the text size, a bus could not be dashed, and a
+leader line had no arrow.
+
+**What closed it.**
+- G40: outline weight of symbols and blocks per sheet (`symbol_weight_mm`).
+- G41: pure wire colours per sheet (`vivid_wire_colors`); the colour names are unchanged.
+- G42: blocks without leads (`block_leads: "none"`): pins sit on the outline.
+- G43: caption layout per part (`caption_layout`): place, size, alignment, hide, per line.
+- G44: one text pen for the project font (`pen_mm`).
+- G45: dashed wires with their own weight (`dashed`, `weight_mm`).
+- G46: arrow at the end of a line shape (`arrow_end`).
 
 ## Summary by impact
 
