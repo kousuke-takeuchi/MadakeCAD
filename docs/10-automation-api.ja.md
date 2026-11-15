@@ -15,7 +15,7 @@ UIでできることはすべてスクリプト化できる。3つの入口が�
 コネクタの絵: `block_pins` のピンには `connector`(`usb_a_f usb_a_m usb_c_f usb_c_m micro_b_f micro_b_m jack35_f jack35_m dc_f dc_m screw jst_ph_f jst_xh_f` のどれか。`_f` はメス、`_m` はオス)も書け、`screw`・`jst_ph_f`・`jst_xh_f` には `connector_ref` も書ける(同じ ref の続くピンは1つの本体になり、`J3 PH`・`TB1` と書く)。知らない種類・空の ref・ほかの種類の ref・2つのまとまりに使う ref は断る。コネクタのあるピンの接続点は外形から5mmなので、位置は `get_pins` で読む。`get_pins` とネットリストは種類を返さない。
 細かい間隔: `place_symbol` の `attrs.block_pitch: "2.5"`(既定は `"5"`)でブロックのピン間隔を2.5mm、大きさの刻みを2.5mm、最小を5×5mmにできる。ピンn本の辺は(n+1)×2.5mm以上が要る。ピンと外形の辺が2.5mmの格子に乗るよう、外形とピンの列は必要に応じて1.25mmずらすので、位置は `get_pins` で読む。`attrs.block_numbers: "inside"`(既定は `"outside"`)はピン番号を外形の内側に描き、ピン名は描かないので、信号名は配線のネットラベルで出す。ほかの値は断り、2.5mmのブロックにも番号を内側に描くブロックにもコネクタの絵(`connector`)を使えない。
 
-図面の見た目: `execute_commands` の `set_sheet_wire_style`(`sheet_id`、`weight_mm` は0.18〜1.0mm、nullで既定の0.35mm。`hide_notes` が true なら配線注記 = 線径・色名・長さを描かない。線の色はそのまま)。`place_symbol` の `attrs.block_caption: "inside"`(既定は `"above"`)で、参照記号と型番をブロックの外形の上ではなく中央に書く。注記(`text` エンティティ)の `rotation` が 90・180・270 のとき、基準点を中心に時計回りへ回して描く。
+図面の見た目: `execute_commands` の `set_sheet_wire_style`(`sheet_id`、`weight_mm` は0.18〜1.0mm、nullで既定の0.35mm。`hide_notes` が true なら配線注記 = 線径・色名・長さを描かない。線の色はそのまま)。2つの値は必ず一緒に設定され、`hide_notes` を省いた呼び出しは注記を再び描く。分岐点の丸は太い配線に合わせて大きくなり(半径は太さの0.9倍、0.6mmを下回らない)、ケーブルの芯線の分かれ目の線も同じ太さになる。`place_symbol` の `attrs.block_caption: "inside"`(既定は `"above"`)で、参照記号と型番をブロックの外形の上ではなく中央に書く(他のものは避けないので、中央の行が空いている箱で使う。中央の行にあるピン名や内側の番号とは重なる)。注記(`text` エンティティ)の `rotation` が 90・180・270 のとき、基準点を中心に時計回りへ回して描く。選択範囲と引き出し線も、回した文字に合う。
 Claude Codeはリポジトリの`.mcp.json`で自動接続。
 
 ### Link API(REST+SSE、外部ツール向け)
