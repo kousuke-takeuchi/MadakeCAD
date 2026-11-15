@@ -72,9 +72,70 @@ export function layoutStroke(
 /** いまキャンバスで有効な書体 (プロジェクトの`text_font`。未設定・読み込み前は null)。 */
 let active: { font: StrokeFontData; latin: Latin } | null = null;
 
-/** 有効な書体を切り替える (null でシステムの書体へ戻す)。 */
+/** 有効な書体を切り替える (null でシステムの書体へ戻す)。キャンバス用の配置のキャッシュも捨てる。 */
 export function setActiveStrokeFont(font: StrokeFontData | null, latin: Latin): void {
   active = font ? { font, latin } : null;
+  unitCache.clear();
+}
+
+/**
+ * キャンバス用に、大きさ1で配置した文字列 (描くときは文字の大きさ倍に拡大する)。
+ * `lines` は線ごとの x, y の並び、`descent` はベースラインから字の格子の下端までの高さ。
+ * `path` は Path2D が使える環境でだけ作る (テストの node には無い)。
+ */
+export interface UnitStroke {
+  width: number;
+  descent: number;
+  lines: number[][];
+  path: Path2D | null;
+}
+
+/** キャッシュに残す文字列の数の上限 (超えたら古いものから捨てる)。 */
+export const UNIT_CACHE_MAX = 4096;
+const unitCache = new Map<string, UnitStroke | null>();
+
+/** いまキャッシュにある文字列の数 (テスト用)。 */
+export function unitStrokeCacheSize(): number {
+  return unitCache.size;
+}
+
+/**
+ * 有効な書体で文字列を大きさ1で配置する (書体・英数字の字・字間・文字列ごとにキャッシュする)。
+ * 書体が無い・フォントに無い字を含むときは null。
+ */
+export function activeUnitStroke(text: string, spacing = 1): UnitStroke | null {
+  if (!active) return null;
+  const key = `${active.font.id}\u0000${active.latin}\u0000${spacing}\u0000${text}`;
+  const hit = unitCache.get(key);
+  if (hit !== undefined) {
+    // 最近使ったものを後ろへ (上限を超えたとき先頭の古いものから捨てる)
+    unitCache.delete(key);
+    unitCache.set(key, hit);
+    return hit;
+  }
+  const t = layoutStroke(active.font, text, 1, active.latin, spacing);
+  let entry: UnitStroke | null = null;
+  if (t) {
+    const unit = CAP_HEIGHT_RATIO / Math.max(1, active.font.cap_top - active.font.baseline);
+    const lines = t.polylines.map((l) => l.flat());
+    let path: Path2D | null = null;
+    if (typeof Path2D !== "undefined" && lines.length > 0) {
+      path = new Path2D();
+      for (const l of lines) {
+        for (let i = 0; i + 1 < l.length; i += 2) {
+          if (i === 0) path.moveTo(l[i], l[i + 1]);
+          else path.lineTo(l[i], l[i + 1]);
+        }
+      }
+    }
+    entry = { width: t.width, descent: active.font.baseline * unit, lines, path };
+  }
+  unitCache.set(key, entry);
+  if (unitCache.size > UNIT_CACHE_MAX) {
+    const oldest = unitCache.keys().next().value;
+    if (oldest !== undefined) unitCache.delete(oldest);
+  }
+  return entry;
 }
 
 export function activeStrokeFont(): { font: StrokeFontData; latin: Latin } | null {
@@ -100,4 +161,39 @@ export function withLatin<T>(latin: Latin | null | undefined, fn: () => T): T {
 export function textAdvanceMm(text: string, size: number, spacing = 1): number {
   const t = active ? layoutStroke(active.font, text, size, active.latin, spacing) : null;
   return t ? t.width : textWidthMm(text, size);
+}
+
+/**
+ * `fn` の間だけシステムの書体で描く (プレビューのキャンバス用。spec: 図枠テンプレート等のプレビューは
+ * システムの書体のまま)。終わると (例外でも) 元の書体へ戻す。キャッシュは書体ごとなので捨てない。
+ */
+export function withSystemFont<T>(fn: () => T): T {
+  const previous = active;
+  active = null;
+  try {
+    return fn();
+  } finally {
+    active = previous;
+  }
+}
+
+/**
+ * 字形の取得を1つのidにつき1回にまとめる関数を作る。失敗は null を返して覚えない
+ * (セッションの間ずっとシステムの書体のままにせず、次に読み込むときに取り直す)。
+ */
+export function strokeFontLoader(
+  fetch: (id: string) => Promise<StrokeFontData>,
+): (id: string) => Promise<StrokeFontData | null> {
+  const loaded = new Map<string, Promise<StrokeFontData | null>>();
+  return (id) => {
+    let pending = loaded.get(id);
+    if (!pending) {
+      pending = fetch(id).catch(() => {
+        loaded.delete(id);
+        return null;
+      });
+      loaded.set(id, pending);
+    }
+    return pending;
+  };
 }

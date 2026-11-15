@@ -1,5 +1,5 @@
 // 改訂欄 (ISO 7200 / JIS Z 8311) のレイアウト計算。Rust側 svg.rs と同一ルールであること。
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { Entity, Point, Primitive, Revision, Sheet, SymbolDef, SymbolInstance } from "../ipc";
 import { dynamicSymbol, TERMINAL_MARK_R, TERMINAL_NUMBER_HEIGHT } from "./dynamicSymbol";
@@ -26,6 +26,7 @@ import {
   deviceBlockTexts,
   type DeviceBlock,
 } from "./relayXref";
+import { setActiveStrokeFont } from "./strokeFont";
 import { theme } from "./theme";
 import { JUMPER_BAR_STROKE_MM } from "./terminalJumpers";
 import type { ViewClass } from "./viewClasses";
@@ -1078,3 +1079,95 @@ describe("hidden designator", () => {
   });
 });
 
+
+describe("note weight", () => {
+  afterEach(() => setActiveStrokeFont(null, "half"));
+
+  /** 注記の文字の描き方 (フォント指定・線の太さ) を記録するキャンバス。 */
+  function noteRecorder() {
+    const fonts: string[] = [];
+    const strokes: number[] = [];
+    let k = 1;
+    const stack: number[] = [];
+    const ctx = {
+      canvas: { width: 800, height: 600 },
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 0,
+      font: "",
+      textAlign: "" as CanvasTextAlign,
+      textBaseline: "alphabetic" as CanvasTextBaseline,
+      save: () => stack.push(k),
+      restore: () => {
+        k = stack.pop() ?? 1;
+      },
+      translate() {},
+      scale: (s: number) => {
+        k *= s;
+      },
+      beginPath() {},
+      moveTo() {},
+      lineTo() {},
+      arcTo() {},
+      rect() {},
+      closePath() {},
+      stroke() {
+        if (k !== 1) strokes.push(ctx.lineWidth * k);
+      },
+      fill() {},
+      fillRect() {},
+      strokeRect() {},
+      setLineDash() {},
+      arc() {},
+      measureText: (t: string) => ({ width: t.length * 6 }),
+      fillText() {
+        fonts.push(ctx.font);
+      },
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, fonts, strokes };
+  }
+
+  function noteSheet(): Sheet {
+    const note = (id: string, bold: boolean) => ({
+      kind: "text",
+      id,
+      at: { x: 50, y: bold ? 80 : 60 },
+      text: "I",
+      height: 10,
+      rotation: 0,
+      anchor: "start",
+      color: null,
+      bold,
+      leader_to: null,
+    });
+    return {
+      id: "s1",
+      name: "S1",
+      size: "A3",
+      orientation: "Landscape",
+      zone_cols: 4,
+      zone_rows: 6,
+      title_block: {},
+      revisions: [],
+      entities: { t1: note("t1", false), t2: note("t2", true) },
+    } as unknown as Sheet;
+  }
+
+  // ja: 太字の注記はキャンバスでも SVG と同じ bold の太さで描き、ストロークフォントでは線が通常の注記の1.5倍の太さになる
+  it("draws a bold note with the bold weight, and with a stroke font 1.5 times as thick", () => {
+    const vp = new Viewport();
+    vp.scale = 4;
+    // 注記だけを描く
+    const hidden = new Set<ViewClass>(["wires", "symbols", "refs", "net_labels", "wire_numbers", "wire_notes", "harness", "shapes", "panel", "frame", "grid"]);
+    const plain = noteRecorder();
+    renderSheet(plain.ctx, noteSheet(), [], vp, { selection: new Set(), cursor: null, hidden });
+    expect(plain.fonts).toEqual(["40px sans-serif", "bold 40px sans-serif"]);
+
+    setActiveStrokeFont({ id: "t", baseline: 0, cap_top: 25, glyphs: { I: { wide: false, strokes: [[2, 0, 2, 25]] } } }, "half");
+    const stroked = noteRecorder();
+    renderSheet(stroked.ctx, noteSheet(), [], vp, { selection: new Set(), cursor: null, hidden });
+    expect(stroked.fonts).toEqual([]);
+    // 10mm: 0.7mm × 4 = 2.8px、太字は 4.2px
+    expect(stroked.strokes.map((w) => Number(w.toFixed(6)))).toEqual([2.8, 4.2]);
+  });
+});

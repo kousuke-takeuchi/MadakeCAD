@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3147仕様項目**。
+全6領域・**3160仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2570,6 +2570,7 @@
 - 凡例ブロックは列見出しと、シートの配線から導出した行 (色・線径・品番・使用長) を表として描く <sub>`wire legend block drawing`</sub>
 - 選択中の凡例ブロックは、外形の矩形を選択色で描く <sub>`wire legend block drawing`</sub>
 - hide_reference="true" のシンボルは参照記号を画面に描かない (嵌合の組の片方が同じ記号を二重に描かない。svg.rsと同ルール) <sub>`hidden designator`</sub>
+- 太字の注記はキャンバスでも SVG と同じ bold の太さで描き、ストロークフォントでは線が通常の注記の1.5倍の太さになる <sub>`note weight`</sub>
 
 ### search
 
@@ -2643,6 +2644,13 @@
 - 線の太さはフォントサイズの0.07倍で0.13より細くならず、太字は1.5倍 <sub>`stroke font layout`</sub>
 - 文字の幅は、フォントが有効な間だけ線の幅になり、外すと見積もりの幅へ戻る <sub>`stroke font layout`</sub>
 - withLatin は有効なフォントの英数字の字を一時的に上書きし、終わると元へ戻す <sub>`stroke font layout`</sub>
+- キャンバス用の配置は大きさ1で一度だけ求めて覚え、同じ文字列・字間なら同じものを返す。フォントに無い字を含む文字列も「無い」と覚える <sub>`canvas layout cache`</sub>
+- 英数字の字 (半角・全角) が違えば別の配置になる <sub>`canvas layout cache`</sub>
+- 書体を切り替えると覚えた配置を捨てる (同じidで中身の違うフォントでも古い線を描かない) <sub>`canvas layout cache`</sub>
+- 覚える文字列の数には上限があり、超えると古いものから捨てる <sub>`canvas layout cache`</sub>
+- プレビューの描画の間だけはシステムの書体で描き (線の字にしない)、終わると (例外でも) プロジェクトの書体へ戻す <sub>`system font for previews`</sub>
+- 字形は1つのidにつき1回だけ取りに行き、成功した結果を使い回す <sub>`glyph loading`</sub>
+- 取得に失敗したら null を返し、その失敗は覚えない (次に読み込むときにまた取りに行く) <sub>`glyph loading`</sub>
 
 ### surfer
 
@@ -2771,7 +2779,12 @@
 - 図面の文字は図形と同じ割合で拡大・縮小し、画面上で小さすぎて読めない大きさになったら描かない (大きさ 0) <sub>`drawing text size on screen`</sub>
 - 読めないほど小さい文字はフォントを変えずに描かない。0px を指定すると WebKit は無視して直前の大きさで描くため <sub>`drawing text size on screen`</sub>
 - ストロークフォントが有効なら、文字は文字の色・サイズに応じた太さの丸い線で、揃えに合わせた位置に描かれる <sub>`drawing text size on screen`</sub>
+- ストロークフォントで描いた後も、線の色・太さ・端の形は描く前のまま残る (後に描く記号や配線の線が文字の線にならない) <sub>`drawing text size on screen`</sub>
+- 線の太さは図面の mm で決まり (0.07 × 文字の高さ、0.13 mm 以上)、画面ではそれを拡大率倍した太さ (1px 未満にはしない)。SVG と同じ太さになる <sub>`drawing text size on screen`</sub>
+- 線を1.5倍の太さにするのは bold の指定だけ。画面の文字だけを少し太くする 600 は、SVG と同じく線の太さを変えない <sub>`drawing text size on screen`</sub>
+- 文字の縦の基準 (textBaseline) に合わせて線の字の位置を変える: middle は大文字の高さの中央、top は大文字の上端、bottom は字の格子の下端が指定の y に来る <sub>`drawing text size on screen`</sub>
 - フォントに無い字を含む文字列と、ストロークフォントが無いときは、従来どおり文字として描く <sub>`drawing text size on screen`</sub>
+- Path2D が使える画面では、同じ文字列の線の形を一度だけ作り、大きさや位置が違っても使い回す <sub>`drawing text size on screen`</sub>
 
 ### textStyle
 

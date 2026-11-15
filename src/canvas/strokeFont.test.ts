@@ -3,12 +3,17 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { StrokeFontData } from "../ipc";
 import {
+  UNIT_CACHE_MAX,
   activeStrokeFont,
+  activeUnitStroke,
   layoutStroke,
   setActiveStrokeFont,
+  strokeFontLoader,
   strokeWidth,
   textAdvanceMm,
+  unitStrokeCacheSize,
   withLatin,
+  withSystemFont,
 } from "./strokeFont";
 import { textWidthMm } from "./textWidth";
 
@@ -92,5 +97,95 @@ describe("stroke font layout", () => {
     expect(inside).toBeCloseTo(8.64, 9);
     expect(activeStrokeFont()?.latin).toBe("half");
     expect(withLatin(undefined, () => textAdvanceMm("H", 10))).toBeCloseTo(4.32, 9);
+  });
+});
+
+describe("canvas layout cache", () => {
+  // ja: キャンバス用の配置は大きさ1で一度だけ求めて覚え、同じ文字列・字間なら同じものを返す。フォントに無い字を含む文字列も「無い」と覚える
+  it("lays a string out once at size 1 and returns the same entry again", () => {
+    expect(activeUnitStroke("H")).toBeNull();
+    setActiveStrokeFont(font, "half");
+    const a = activeUnitStroke("HH")!;
+    expect(a.width).toBeCloseTo(0.864, 9);
+    expect(a.lines[0]).toEqual([expect.closeTo(2 * 0.0288, 9), expect.closeTo(0, 9), expect.closeTo(2 * 0.0288, 9), expect.closeTo(-0.72, 9)]);
+    expect(activeUnitStroke("HH")).toBe(a);
+    expect(activeUnitStroke("HH", 1.5)).not.toBe(a);
+    expect(activeUnitStroke("H😀")).toBeNull();
+    expect(unitStrokeCacheSize()).toBe(3);
+  });
+
+  // ja: 英数字の字 (半角・全角) が違えば別の配置になる
+  it("keeps half- and full-width Latin layouts apart", () => {
+    setActiveStrokeFont(font, "half");
+    const half = activeUnitStroke("H")!;
+    const full = withLatin("full", () => activeUnitStroke("H"))!;
+    expect(half.width).toBeCloseTo(0.432, 9);
+    expect(full.width).toBeCloseTo(0.864, 9);
+  });
+
+  // ja: 書体を切り替えると覚えた配置を捨てる (同じidで中身の違うフォントでも古い線を描かない)
+  it("forgets the cached layouts when the active font changes", () => {
+    setActiveStrokeFont(font, "half");
+    activeUnitStroke("H");
+    expect(unitStrokeCacheSize()).toBe(1);
+    const narrow: StrokeFontData = { ...font, glyphs: { H: { wide: false, strokes: [[1, 0, 1, 25]] } } };
+    setActiveStrokeFont(narrow, "half");
+    expect(unitStrokeCacheSize()).toBe(0);
+    expect(activeUnitStroke("H")!.lines[0][0]).toBeCloseTo(0.0288, 9);
+  });
+
+  // ja: 覚える文字列の数には上限があり、超えると古いものから捨てる
+  it("bounds the cache and drops the oldest entries first", () => {
+    setActiveStrokeFont(font, "half");
+    const first = activeUnitStroke("H");
+    for (let i = 0; i < UNIT_CACHE_MAX + 10; i++) activeUnitStroke("H".repeat((i % 50) + 2) + " ".repeat(Math.floor(i / 50)));
+    expect(unitStrokeCacheSize()).toBe(UNIT_CACHE_MAX);
+    expect(activeUnitStroke("H")).not.toBe(first);
+  });
+});
+
+describe("system font for previews", () => {
+  // ja: プレビューの描画の間だけはシステムの書体で描き (線の字にしない)、終わると (例外でも) プロジェクトの書体へ戻す
+  it("draws with the system font inside withSystemFont and restores the font afterwards", () => {
+    setActiveStrokeFont(font, "half");
+    expect(withSystemFont(() => [activeStrokeFont(), activeUnitStroke("H"), textAdvanceMm("HH", 10)])).toEqual([
+      null,
+      null,
+      textWidthMm("HH", 10),
+    ]);
+    expect(activeStrokeFont()?.font.id).toBe("t");
+    expect(() =>
+      withSystemFont(() => {
+        throw new Error("x");
+      }),
+    ).toThrow("x");
+    expect(activeStrokeFont()?.font.id).toBe("t");
+  });
+});
+
+describe("glyph loading", () => {
+  // ja: 字形は1つのidにつき1回だけ取りに行き、成功した結果を使い回す
+  it("fetches the glyphs of a font once and reuses them", async () => {
+    let calls = 0;
+    const load = strokeFontLoader(async () => {
+      calls++;
+      return font;
+    });
+    expect(await load("t")).toBe(font);
+    expect(await load("t")).toBe(font);
+    expect(calls).toBe(1);
+  });
+
+  // ja: 取得に失敗したら null を返し、その失敗は覚えない (次に読み込むときにまた取りに行く)
+  it("returns null for a failed fetch and tries again next time", async () => {
+    let calls = 0;
+    const load = strokeFontLoader(async () => {
+      calls++;
+      if (calls === 1) throw new Error("offline");
+      return font;
+    });
+    expect(await load("t")).toBeNull();
+    expect(await load("t")).toBe(font);
+    expect(calls).toBe(2);
   });
 });

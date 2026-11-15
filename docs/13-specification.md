@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3147 specification clauses** across 6 areas.
+**3160 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2570,6 +2570,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - draws the header row and the rows derived from the sheet's wires <sub>`wire legend block drawing`</sub>
 - outlines the legend block in the selection colour while it is selected <sub>`wire legend block drawing`</sub>
 - does not draw the designator when hide_reference is true <sub>`hidden designator`</sub>
+- draws a bold note with the bold weight, and with a stroke font 1.5 times as thick <sub>`note weight`</sub>
 
 ### search
 
@@ -2643,6 +2644,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - computes the stroke width from the size <sub>`stroke font layout`</sub>
 - measures with the stroke font only while it is active <sub>`stroke font layout`</sub>
 - overrides the Latin form for a while and restores it <sub>`stroke font layout`</sub>
+- lays a string out once at size 1 and returns the same entry again <sub>`canvas layout cache`</sub>
+- keeps half- and full-width Latin layouts apart <sub>`canvas layout cache`</sub>
+- forgets the cached layouts when the active font changes <sub>`canvas layout cache`</sub>
+- bounds the cache and drops the oldest entries first <sub>`canvas layout cache`</sub>
+- draws with the system font inside withSystemFont and restores the font afterwards <sub>`system font for previews`</sub>
+- fetches the glyphs of a font once and reuses them <sub>`glyph loading`</sub>
+- returns null for a failed fetch and tries again next time <sub>`glyph loading`</sub>
 
 ### surfer
 
@@ -2771,7 +2779,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - scales drawing text with the zoom like the shapes, and drops it once it is too small to read <sub>`drawing text size on screen`</sub>
 - skips unreadably small text without setting a 0px font, which WebKit ignores and would draw at the previous size <sub>`drawing text size on screen`</sub>
 - strokes the text with the active stroke font, in the text colour, aligned like the text <sub>`drawing text size on screen`</sub>
+- leaves the line style of the context as it was after stroking text <sub>`drawing text size on screen`</sub>
+- computes the stroke width in mm like the SVG and then scales it to the screen <sub>`drawing text size on screen`</sub>
+- thickens strokes only for bold, as the SVG does, not for the screen-only weight 600 <sub>`drawing text size on screen`</sub>
+- places stroked text by the text baseline of the context <sub>`drawing text size on screen`</sub>
 - falls back to filled text for missing glyphs and without a stroke font <sub>`drawing text size on screen`</sub>
+- builds the outline of a string once and reuses it at other sizes and places when Path2D exists <sub>`drawing text size on screen`</sub>
 
 ### textStyle
 

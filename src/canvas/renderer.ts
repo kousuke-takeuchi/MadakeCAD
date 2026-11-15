@@ -1499,7 +1499,8 @@ export function renderSheet(
       // 注記の装飾 (G4): 色トークン・基準位置・太字 (紙の色は text_style.rs が持つ)
       const s = vp.toScreen(e.at);
       ctx.fillStyle = noteColor(e.color, opts.selection.has(e.id));
-      const weight = e.bold ? "600 " : "";
+      // SVG の font-weight="bold" と同じ太さ (ストロークフォントでは線が1.5倍になる)
+      const weight = e.bold ? "bold " : "";
       setDrawingFont(ctx, e.height, vp.scale, "sans-serif", weight);
       ctx.textAlign = canvasTextAlign(e.anchor);
       drawingText(ctx, e.text, s.x, s.y);
