@@ -173,6 +173,18 @@ describe("editing a block that is already on the drawing", () => {
     expect(editor.canApply).toBe(false);
   });
 
+  // ja: 番号を内側に描くブロックにコネクタの絵を付けると、5mm間隔でも適用できなくなる
+  it("refuses to apply a connector picture on a block with numbers inside", () => {
+    const attrs = { block_pins: '{"left":[{"no":"1"},{"no":"2"}]}', block_numbers: "inside" };
+    seed([block(attrs)]);
+    const editor = useBlockEditorStore();
+    editor.startEdit(block(attrs) as Entity);
+    expect(editor.canApply).toBe(true);
+    editor.updateRow("left", 1, { connector: "jst_xh_f" });
+    expect(editor.issues).toContainEqual({ code: "connectorOnInside", no: "2" });
+    expect(editor.canApply).toBe(false);
+  });
+
   // ja: 2.5mm間隔・番号内側のブロックを編集して適用しても、2つの属性は残り、間隔は2.5mmと読まれる
   it("keeps block_pitch and block_numbers on apply and reports the fine pitch", async () => {
     const attrs = { block_pins: '{"left":[{"no":"1"},{"no":"2"}]}', block_pitch: "2.5", block_numbers: "inside" };

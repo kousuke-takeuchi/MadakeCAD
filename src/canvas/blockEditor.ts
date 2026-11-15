@@ -85,7 +85,9 @@ export type BlockIssue =
   /** 1つのまとめ名が2つのコネクタに分かれている。 */
   | { code: "connectorRefSplit"; ref: string }
   /** 2.5mm間隔のブロックではコネクタの絵を使えない。 */
-  | { code: "connectorOnFine"; no: string };
+  | { code: "connectorOnFine"; no: string }
+  /** 番号を内側に描くブロックではコネクタの絵を使えない。 */
+  | { code: "connectorOnInside"; no: string };
 
 /** 配線が接続点に載っているとみなす距離 (mm)。Rust側 netlist::CONNECT_EPS と同じ。 */
 const CONNECT_EPS = 0.01;
@@ -315,6 +317,11 @@ export function draftIssues(draft: BlockDraft): BlockIssue[] {
   if (draft.pitch === "fine") {
     for (const row of allRows(draft).filter(isFilled)) {
       if (row.connector) issues.push({ code: "connectorOnFine", no: row.no.trim() });
+    }
+  }
+  if (draft.numbers === "inside") {
+    for (const row of allRows(draft).filter(isFilled)) {
+      if (row.connector) issues.push({ code: "connectorOnInside", no: row.no.trim() });
     }
   }
   const count = allRows(draft).filter(isFilled).length;

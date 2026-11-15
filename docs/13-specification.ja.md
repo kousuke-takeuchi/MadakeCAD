@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3208仕様項目**。
+全6領域・**3212仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -61,6 +61,7 @@
 - 2.5mm間隔のブロックでは、ピンがn本の辺は (n + 1) × 2.5mm (最小5mm) 必要。それより小さい block_size は断り、必要な大きさをメッセージに出す。 <sub>`a_fine_block_size_must_hold_its_pins`</sub>
 - 2.5mm間隔のブロックの block_size は次の2.5mmへ切り上げる。5mm間隔のブロックはこれまでどおり5mmへ切り上げる。 <sub>`block_size_is_rounded_up_to_the_step_of_the_pitch`</sub>
 - 2.5mm間隔のブロックは、コネクタの絵を持つピンを断り、そのピン番号を示す。 <sub>`a_fine_block_refuses_connector_pictures`</sub>
+- 番号を内側に描くブロックは、5mm間隔でも、コネクタの絵を持つピンを断り、そのピン番号を示す。 <sub>`a_block_with_numbers_inside_refuses_connector_pictures`</sub>
 - block_size が無い2.5mm間隔・番号内側のブロックは、ピンが許す最小の大きさになる: 1本なら5×5mm、左に2本なら5×7.5mm。 <sub>`a_fine_block_sizes_itself_to_its_pins`</sub>
 - 2.5mm間隔のブロックの外形とピンは設計の表のとおりになる: 高さが2.5mmの奇数倍なら外形が1.25mm下へ寄り、グリッドから外れるピンの列は1.25mm下へ寄る。 <sub>`a_fine_block_shifts_its_outline_and_rows_onto_the_grid`</sub>
 - 2.5mm間隔のブロックのピンと外形の辺は、5〜20mmのどの大きさ・収まるどのピン数・四辺のどれでも、向かい合う辺のピン数が違っても、2.5mmグリッドに乗る。 <sub>`every_fine_block_is_on_the_grid`</sub>
@@ -2198,6 +2199,7 @@
 - 2.5mm間隔のブロックでピンが収まらないとき、必要な大きさは2.5mm間隔の規則で出る (左に3本なら高さ10mm) <sub>`block pin pitch and number placement in the editor`</sub>
 - 2.5mm間隔の下書きのプレビューは、配置後に描かれるシンボルと同じ (左2本・大きさ自動) <sub>`block pin pitch and number placement in the editor`</sub>
 - 2.5mm間隔のブロックでピンにコネクタの絵を付けると指摘される (間隔が5mmのブロックでは指摘されない) <sub>`connector pictures on a fine block and size snapping`</sub>
+- 番号を内側に描くブロックでピンにコネクタの絵を付けると、5mm間隔でも指摘される (番号が外側のブロックでは指摘されない) <sub>`connector pictures on a fine block and size snapping`</sub>
 - 2.5mm間隔のブロックの大きさは2.5mm刻みに丸められ、5mm未満にはならない <sub>`connector pictures on a fine block and size snapping`</sub>
 - 5mm間隔のブロックの大きさは5mm刻みに丸められ、5mm未満にはならない <sub>`connector pictures on a fine block and size snapping`</sub>
 - 部品挿入で「ブロック(汎用)」を選ぶと、左右1本ずつのピン表が開く <sub>`starting a new block from the insert dialog`</sub>
@@ -2208,6 +2210,7 @@
 - 適用するとupdate_entityコマンドが1回だけ実行され、参照記号・型番・位置は変わらない <sub>`editing a block that is already on the drawing`</sub>
 - ブロック以外の属性(定格など)は編集しても残る <sub>`editing a block that is already on the drawing`</sub>
 - 2.5mm間隔のブロックにコネクタの絵を付けると、適用できなくなる <sub>`editing a block that is already on the drawing`</sub>
+- 番号を内側に描くブロックにコネクタの絵を付けると、5mm間隔でも適用できなくなる <sub>`editing a block that is already on the drawing`</sub>
 - 2.5mm間隔・番号内側のブロックを編集して適用しても、2つの属性は残り、間隔は2.5mmと読まれる <sub>`editing a block that is already on the drawing`</sub>
 - 外形を自動へ戻して適用すると、手動寸法の属性が消える <sub>`editing a block that is already on the drawing`</sub>
 - 何も変えずに適用したときはコマンドを送らない(履歴を汚さない) <sub>`editing a block that is already on the drawing`</sub>
@@ -2298,6 +2301,7 @@
 - 間隔と番号の属性の誤りは Rust と同じ文言で断る <sub>`fine pitch blocks (Rust twin)`</sub>
 - 2.5mm間隔のブロックで、ピンが2本の辺に高さ5mmは小さすぎ、必要な大きさ 5x7.5 をメッセージに出す <sub>`fine pitch blocks (Rust twin)`</sub>
 - 2.5mm間隔のブロックは、コネクタの絵を持つピンを断る <sub>`fine pitch blocks (Rust twin)`</sub>
+- 番号を内側に描くブロックは、5mm間隔でも、コネクタの絵を持つピンを Rust と同じ文言で断る (番号が外側なら使える) <sub>`fine pitch blocks (Rust twin)`</sub>
 - 2.5mm間隔の大きさは2.5mm刻みに切り上げ、5mm間隔は今までどおり5mm刻み <sub>`fine pitch blocks (Rust twin)`</sub>
 - 幅も高さも2.5mmの奇数倍の2.5mm間隔ブロックでは、外形・ピン・文字の置き場所が1.25mmずれ、blockOutline は描かれた長方形と同じ <sub>`fine pitch blocks (Rust twin)`</sub>
 - ピンも属性も無い5mm間隔のブロックは、これまでどおり原点中心で、文字の置き場所もずれない <sub>`fine pitch blocks (Rust twin)`</sub>

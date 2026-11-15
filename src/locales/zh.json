@@ -697,7 +697,8 @@
       "tooManyContacts": "{side}第{row}行触点过多：{count}（最多 {max}）",
       "connectorRefNotGrouped": "{side}第{row}行有组名：只有螺钉端子和 JST 插座可以有组名",
       "connectorRefSplit": "组名 {ref} 被两个连接器使用：请把它的引脚放在同一边并相邻，且类型相同",
-      "connectorOnFine": "2.5mm间距的方块不能使用连接器图形（引脚 {no}）"
+      "connectorOnFine": "2.5mm间距的方块不能使用连接器图形（引脚 {no}）",
+      "connectorOnInside": "引脚编号画在内侧的方块不能使用连接器图形（引脚 {no}）"
     },
     "wiredWarning": "Pins {pins} are wired: renumbering or deleting them disconnects those wires",
     "placeHint": "Place puts a ghost on the cursor (R rotates, Esc cancels)",

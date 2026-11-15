@@ -415,6 +415,16 @@ describe("connector pictures on a fine block and size snapping", () => {
     expect(draftIssues(coarse).some((i) => i.code === "connectorOnFine")).toBe(false);
   });
 
+  // ja: 番号を内側に描くブロックでピンにコネクタの絵を付けると、5mm間隔でも指摘される (番号が外側のブロックでは指摘されない)
+  it("reports a connector picture on a block with numbers inside but not with numbers outside", () => {
+    const inside = draftFromAttrs({ block_pins: fineRows, block_numbers: "inside" });
+    inside.rows.left[1].connector = "jst_xh_f";
+    expect(draftIssues(inside)).toContainEqual({ code: "connectorOnInside", no: "2" });
+    const outside = draftFromAttrs({ block_pins: fineRows });
+    outside.rows.left[1].connector = "jst_xh_f";
+    expect(draftIssues(outside).some((i) => i.code === "connectorOnInside")).toBe(false);
+  });
+
   // ja: 2.5mm間隔のブロックの大きさは2.5mm刻みに丸められ、5mm未満にはならない
   it("snaps a fine block size to 2.5 mm steps, never below 5 mm", () => {
     expect(snapSize(7, "fine")).toBe(7.5);

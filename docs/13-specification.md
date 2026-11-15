@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3208 specification clauses** across 6 areas.
+**3212 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -61,6 +61,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - On a 2.5 mm block a side with n pins needs (n + 1) x 2.5 mm, at least 5 mm; a smaller block_size is refused and the message names the needed size. <sub>`a_fine_block_size_must_hold_its_pins`</sub>
 - On a 2.5 mm block block_size is rounded up to the next 2.5 mm; on a 5 mm block it is still rounded up to 5 mm. <sub>`block_size_is_rounded_up_to_the_step_of_the_pitch`</sub>
 - A 2.5 mm block refuses a pin with a connector picture, naming the pin. <sub>`a_fine_block_refuses_connector_pictures`</sub>
+- A block with numbers inside refuses a pin with a connector picture, on a 5 mm block too, naming the pin. <sub>`a_block_with_numbers_inside_refuses_connector_pictures`</sub>
 - Without block_size a 2.5 mm block with pin numbers inside is as small as its pins allow: one pin gives 5 x 5 mm, two pins on the left give 5 x 7.5 mm. <sub>`a_fine_block_sizes_itself_to_its_pins`</sub>
 - The outline and the pins of a 2.5 mm block follow the table of the design: a height that is an odd multiple of 2.5 mm moves the outline down by 1.25 mm, and a row of pins that would miss the grid moves down by 1.25 mm. <sub>`a_fine_block_shifts_its_outline_and_rows_onto_the_grid`</sub>
 - Every pin and every outline edge of a 2.5 mm block is on the 2.5 mm grid, for every size from 5 to 20 mm and every pin count that fits, on all four sides, also when the two opposite sides have different pin counts. <sub>`every_fine_block_is_on_the_grid`</sub>
@@ -2198,6 +2199,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reports the needed size of a fine block with the fine rule <sub>`block pin pitch and number placement in the editor`</sub>
 - previews a fine draft exactly as the placed block is drawn <sub>`block pin pitch and number placement in the editor`</sub>
 - reports a connector picture on a fine block but not on a coarse one <sub>`connector pictures on a fine block and size snapping`</sub>
+- reports a connector picture on a block with numbers inside but not with numbers outside <sub>`connector pictures on a fine block and size snapping`</sub>
 - snaps a fine block size to 2.5 mm steps, never below 5 mm <sub>`connector pictures on a fine block and size snapping`</sub>
 - snaps a coarse block size to 5 mm steps, never below 5 mm <sub>`connector pictures on a fine block and size snapping`</sub>
 - opens a pin table with one pin per side when the generic block is picked <sub>`starting a new block from the insert dialog`</sub>
@@ -2208,6 +2210,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - applies the table as a single update_entity, keeping the tag, part number and position <sub>`editing a block that is already on the drawing`</sub>
 - keeps attributes that are not part of the pin table <sub>`editing a block that is already on the drawing`</sub>
 - refuses to apply a connector picture on a fine block <sub>`editing a block that is already on the drawing`</sub>
+- refuses to apply a connector picture on a block with numbers inside <sub>`editing a block that is already on the drawing`</sub>
 - keeps block_pitch and block_numbers on apply and reports the fine pitch <sub>`editing a block that is already on the drawing`</sub>
 - drops the hand-set size attribute when the outline goes back to automatic <sub>`editing a block that is already on the drawing`</sub>
 - sends no command when the table was not changed <sub>`editing a block that is already on the drawing`</sub>
@@ -2298,6 +2301,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - words the pitch and numbers errors exactly like Rust <sub>`fine pitch blocks (Rust twin)`</sub>
 - refuses a fine block_size that is too small and names the needed size <sub>`fine pitch blocks (Rust twin)`</sub>
 - refuses a connector picture on a fine block <sub>`fine pitch blocks (Rust twin)`</sub>
+- refuses a connector picture on a block with numbers inside, worded like Rust <sub>`fine pitch blocks (Rust twin)`</sub>
 - rounds a block_size up to the pitch step <sub>`fine pitch blocks (Rust twin)`</sub>
 - shifts an odd-multiple fine block by 1.25 mm and blockOutline matches the drawn rectangle <sub>`fine pitch blocks (Rust twin)`</sub>
 - keeps a plain block centred on the origin with unshifted slots <sub>`fine pitch blocks (Rust twin)`</sub>

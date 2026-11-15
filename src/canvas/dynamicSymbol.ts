@@ -790,6 +790,15 @@ export function parseBlockSpec(attrs: Record<string, string>): {
       );
     }
   }
+  // コネクタのピンは番号を絵の外に描き、内側の番号の幅も絵の深さを数えないので、組み合わせない (Rust側と同じ)
+  if (numbers === "inside") {
+    const pin = all.find((q) => q.connector != null);
+    if (pin) {
+      throw new Error(
+        `block pin ${(pin.no ?? "").trim()}: a connector picture cannot be used with ${BLOCK_NUMBERS_ATTR} inside`,
+      );
+    }
+  }
 
   const rawSize = attrs[BLOCK_SIZE_ATTR];
   let size: { w: number; h: number } | null = null;

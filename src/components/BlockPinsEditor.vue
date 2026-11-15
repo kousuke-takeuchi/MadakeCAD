@@ -57,6 +57,7 @@ function issueText(issue: BlockIssue): string {
     });
   }
   if (issue.code === "connectorOnFine") return t("blockEditor.issue.connectorOnFine", { no: issue.no });
+  if (issue.code === "connectorOnInside") return t("blockEditor.issue.connectorOnInside", { no: issue.no });
   if (issue.code === "connectorRefSplit") return t("blockEditor.issue.connectorRefSplit", { ref: issue.ref });
   return t("blockEditor.issue.sizeTooSmall", { w: issue.w, h: issue.h });
 }

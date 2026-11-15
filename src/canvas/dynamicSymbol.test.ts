@@ -789,6 +789,15 @@ describe("fine pitch blocks (Rust twin)", () => {
     expect(() => parseBlockSpec(attrs)).toThrow("block pin U1: a connector picture cannot be used with block_pitch 2.5");
   });
 
+  // ja: 番号を内側に描くブロックは、5mm間隔でも、コネクタの絵を持つピンを Rust と同じ文言で断る (番号が外側なら使える)
+  it("refuses a connector picture on a block with numbers inside, worded like Rust", () => {
+    const pins = '{"left":[{"no":"1"},{"no":"J2","connector":"jst_xh_f"}]}';
+    expect(() => parseBlockSpec({ block_pins: pins, block_numbers: "inside" })).toThrow(
+      "block pin J2: a connector picture cannot be used with block_numbers inside",
+    );
+    expect(() => parseBlockSpec({ block_pins: pins, block_numbers: "outside" })).not.toThrow();
+  });
+
   // ja: 2.5mm間隔の大きさは2.5mm刻みに切り上げ、5mm間隔は今までどおり5mm刻み
   it("rounds a block_size up to the pitch step", () => {
     const pins = '{"left":[{"no":"1"}]}';

@@ -243,8 +243,10 @@ fn caption_inset(side: &[BlockPin]) -> f64 {
 ///
 /// - `block_pins`が無ければピン0本(注記だけの箱)
 /// - JSONが壊れている・知らないキーがある・ピン番号が空または重複・ピンが多すぎる → エラー
-/// - `block_size`は5mm刻みへ切り上げ、ピンが収まらない大きさならエラー
+/// - `block_pitch` / `block_numbers` が知らない値 → エラー
+/// - `block_size`はピン間隔の刻み (5mmまたは2.5mm) へ切り上げ、ピンが収まらない大きさならエラー
 /// - `connector_ref` が空・まとめない種類に付いている・2つのまとまりに使われている → エラー ([`check_connectors`])
+/// - `block_pitch` 2.5 または `block_numbers` inside のブロックに、コネクタの絵を持つピンがある → エラー
 pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, String> {
     let pins: BlockPins = match attrs.get(BLOCK_PINS_ATTR) {
         Some(raw) if !raw.trim().is_empty() => serde_json::from_str(raw)
@@ -284,6 +286,15 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
         if let Some(pin) = pins.all().find(|p| p.connector.is_some()) {
             return Err(format!(
                 "block pin {}: a connector picture cannot be used with {BLOCK_PITCH_ATTR} 2.5",
+                pin.no.trim()
+            ));
+        }
+    }
+    // コネクタのピンは番号を絵の外に描き、内側の番号の幅も絵の深さを数えないので、組み合わせない
+    if numbers == BlockNumbers::Inside {
+        if let Some(pin) = pins.all().find(|p| p.connector.is_some()) {
+            return Err(format!(
+                "block pin {}: a connector picture cannot be used with {BLOCK_NUMBERS_ATTR} inside",
                 pin.no.trim()
             ));
         }
@@ -2124,6 +2135,18 @@ mod tests {
     fn a_fine_block_refuses_connector_pictures() {
         let err = parse_block_spec(&fine(r#"{"left":[{"no":"U1","connector":"usb_a_f"}]}"#, None)).unwrap_err();
         assert!(err.contains("U1") && err.contains(BLOCK_PITCH_ATTR), "{err}");
+    }
+
+    /// A block with numbers inside refuses a pin with a connector picture, on a 5 mm block too, naming the pin.
+    /// 番号を内側に描くブロックは、5mm間隔でも、コネクタの絵を持つピンを断り、そのピン番号を示す。
+    #[test]
+    fn a_block_with_numbers_inside_refuses_connector_pictures() {
+        let pins = r#"{"left":[{"no":"1"},{"no":"J2","connector":"jst_xh_f"}]}"#;
+        let mut a = attrs(&[(BLOCK_PINS_ATTR, pins), (BLOCK_NUMBERS_ATTR, "inside")]);
+        let err = parse_block_spec(&a).unwrap_err();
+        assert_eq!(err, "block pin J2: a connector picture cannot be used with block_numbers inside");
+        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "outside".to_string());
+        assert!(parse_block_spec(&a).is_ok(), "番号が外側なら使える");
     }
 
     /// Without block_size a 2.5 mm block with pin numbers inside is as small as its pins allow: one pin gives 5 x 5 mm, two pins on the left give 5 x 7.5 mm.
