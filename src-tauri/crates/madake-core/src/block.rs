@@ -827,8 +827,8 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     }
 }
 
-/// ブロックのピン表を読めないとき、DXF/KiCadの読み込みが出す警告 (参照の後ろに続ける)。
-pub const BLOCK_UNREADABLE_WARNING: &str = "ブロックのピン表を読めないので見本の箱にしました";
+/// ブロックの属性 (ピン表・大きさ・間隔・番号の位置のどれか) を読めないとき、DXF/KiCadの読み込みが出す警告 (参照の後ろに続ける)。
+pub const BLOCK_UNREADABLE_WARNING: &str = "ブロックの属性を読めないので見本の箱にしました";
 
 fn shape_key(def: &SymbolDef) -> String {
     serde_json::to_string(&(&def.primitives, &def.pins)).expect("SymbolDef serialises")
@@ -2044,6 +2044,16 @@ mod tests {
             coarse.at = Point::new(100.3, 50.0);
             assert_eq!(crate::svg::caption_anchor(&coarse, &def).x, 100.3, "5mm間隔は配置点のまま");
         }
+    }
+
+    /// The import warning for a block that cannot be read speaks of the block's attributes in general, because the unreadable value can be the pitch or the number position as well as the pin table, and says a sample box was used.
+    /// 読めないブロックの取り込みの警告は、読めない値がピン表だけでなく間隔や番号の位置のこともあるので、ブロックの属性全体のこととして書き、見本の箱にしたことを伝える。
+    #[test]
+    fn the_unreadable_block_warning_names_the_attributes() {
+        assert!(BLOCK_UNREADABLE_WARNING.contains("属性"), "{BLOCK_UNREADABLE_WARNING}");
+        assert!(!BLOCK_UNREADABLE_WARNING.contains("ピン表"), "{BLOCK_UNREADABLE_WARNING}");
+        assert!(BLOCK_UNREADABLE_WARNING.contains("見本の箱"), "{BLOCK_UNREADABLE_WARNING}");
+        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, Some("3"), None).is_none(), "間隔が読めないときも警告の対象");
     }
 
     fn placed_fine(pins: &str, size: &str) -> (crate::model::SymbolInstance, SymbolDef) {

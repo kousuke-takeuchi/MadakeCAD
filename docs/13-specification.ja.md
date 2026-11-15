@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3214仕様項目**。
+全6領域・**3215仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -55,6 +55,7 @@
 - 描かれた上辺にピンのあるブロックは、参照記号・型番を外形の左上の角 (左辺の 1.0 mm 左・文字の箱の下端が上辺の 1.0 mm 以上上) に右揃えで置き、ブロックが描くものと重ならない。それ以外のブロックは今までの中央揃え。 <sub>`captions_of_a_block_with_top_pins_sit_at_the_top_left_corner`</sub>
 - 幅も高さも2.5mmの奇数倍で上辺にピンのある2.5mm間隔のブロックでは、左上の角の参照記号・型番は、グリッドへずらして描いた外形の左辺の1.0mm左・上辺の位置から始まる。 <sub>`corner_captions_of_a_fine_block_follow_the_shifted_outline`</sub>
 - 上辺にピンが無く幅も高さも2.5mmの奇数倍の2.5mm間隔のブロックでは、参照記号・型番は配置点ではなく、回転・ミラーの後の描かれた外形の中央にそろう。5mm間隔のブロックは配置点ちょうどのまま。 <sub>`centred_captions_of_a_fine_block_follow_the_shifted_outline`</sub>
+- 読めないブロックの取り込みの警告は、読めない値がピン表だけでなく間隔や番号の位置のこともあるので、ブロックの属性全体のこととして書き、見本の箱にしたことを伝える。 <sub>`the_unreadable_block_warning_names_the_attributes`</sub>
 - 参照記号・型番が動くのはブロックだけ。普通のシンボルは今まで通り外形の上に中央揃え。 <sub>`captions_of_a_plain_symbol_keep_the_centred_anchor`</sub>
 - 上辺にピンのあるブロックでは、KiCad の Reference/Value・デバイスXRef・整理用の文字の箱も左上の角 (外形の左・右揃え) に従う。 <sub>`kicad_xref_and_tidy_follow_the_top_left_corner_captions`</sub>
 - 間隔と番号の属性が無いブロックは、これまでどおり5mm間隔・番号は外側のブロックになる。 <sub>`a_block_without_the_new_attributes_is_coarse_with_numbers_outside`</sub>
