@@ -302,8 +302,12 @@ pub fn import_kicad_sch(
         push(
             &mut sheet,
             Entity::Wire(Wire {
-                dashed: false,
-                weight_mm: None,
+                dashed: wire.child("stroke").and_then(|s| s.child("type")).and_then(|t| t.arg_str(0)) == Some("dash"),
+                weight_mm: wire
+                    .child("stroke")
+                    .and_then(|s| s.child("width"))
+                    .and_then(|w| w.arg_num(0))
+                    .filter(|w| *w >= crate::model::MIN_WIRE_WEIGHT_MM && *w <= crate::model::MAX_WIRE_OWN_WEIGHT_MM),
                 id: Uuid::new_v4(),
                 points,
                 color: "black".into(),
@@ -366,6 +370,7 @@ pub fn import_kicad_sch(
                 color: None,
                 bold: false,
             leader_to: None,
+            spacing: None,
             }),
         );
         report.texts += 1;
@@ -748,7 +753,7 @@ pub fn export_kicad_sch(
                     "  (wire (pts {} {}) {} (uuid {}))\n",
                     xy(seg[0]),
                     xy(seg[1]),
-                    stroke(0.0, false),
+                    stroke(w.weight_mm.unwrap_or(0.0), w.dashed),
                     esc(&format!("{}-{i}", w.id))
                 ));
             }
@@ -1130,6 +1135,7 @@ mod tests {
             bold: false,
             color: None,
             leader_to: None,
+            spacing: None,
         }));
         push(Entity::Harness(Harness {
             id: Uuid::new_v4(),
@@ -1497,5 +1503,41 @@ mod tests {
             .collect();
         assert_eq!(ids, vec!["connector_12p"]);
         assert_eq!(report.skipped, vec!["MadakeCAD:no_such_symbol x1"]);
+    }
+
+    /// A dashed wire with its own weight exports to KiCad as a dashed stroke of that width and imports back dashed with the same weight; a plain wire stays solid with no weight of its own.
+    /// 自分の太さを持つ破線の配線は、KiCadへその太さの破線として書き出され、読み戻しても破線・同じ太さになる。普通の配線は実線・太さなしのまま。
+    #[test]
+    fn a_dashed_wire_survives_a_kicad_round_trip() {
+        let mut sheet = Sheet::new("S", PaperSize::A3, Orientation::Landscape);
+        let wire = |y: f64, dashed: bool, weight: Option<f64>| {
+            Entity::Wire(Wire {
+                id: uuid::Uuid::new_v4(),
+                points: vec![crate::geometry::Point::new(50.0, y), crate::geometry::Point::new(100.0, y)],
+                color: "black".into(),
+                sq: 0.0,
+                length_m: None,
+                length_source: Default::default(),
+                part_no: None,
+                net: None,
+                dashed,
+                weight_mm: weight,
+            })
+        };
+        for e in [wire(50.0, true, Some(2.0)), wire(60.0, false, None)] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let (text, _) = export_kicad_sch(&sheet, &defs(&sheet));
+        assert!(text.contains("(stroke (width 2) (type dash))"), "{text}");
+        let (project, _) = import_kicad_sch(&text, "往復").unwrap();
+        let mut wires: Vec<(f64, bool, Option<f64>)> = entities_of(&project.sheets[0])
+            .into_iter()
+            .filter_map(|e| match e {
+                Entity::Wire(w) => Some((w.points[0].y, w.dashed, w.weight_mm)),
+                _ => None,
+            })
+            .collect();
+        wires.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        assert_eq!(wires, vec![(50.0, true, Some(2.0)), (60.0, false, None)]);
     }
 }

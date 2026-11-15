@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Sheet } from "../ipc";
 import { junctionDotRMm } from "./renderer";
-import { DEFAULT_WIRE_WEIGHT_MM, hidesWireNotes, symbolWeightMm, vividWireColor, wireWeightMm, wireWeightOf } from "./wireStyle";
+import { DEFAULT_WIRE_WEIGHT_MM, hidesWireNotes, symbolWeightMm, vividWireColor, vividWireColorScreen, wireWeightMm, wireWeightOf } from "./wireStyle";
 
 const sheet = (extra: Record<string, unknown>): Sheet => ({ entities: {}, ...extra }) as unknown as Sheet;
 
@@ -71,3 +71,16 @@ describe("outline weight, own wire weight and vivid colours", () => {
     expect(vividWireColor("#123456")).toBeNull();
   });
 });
+
+describe("vivid colours on the dark canvas", () => {
+  // ja: キャンバスでは、暗い背景で見えにくい純色 (青・茶・紫) は使わず、いつもの画面用の色で描く。黄・緑・水色・桃・赤・橙は純色で描く
+  it("keeps the screen colour for blue, brown and purple and uses pure colours for the rest", () => {
+    for (const dark of ["blue", "青", "brown", "purple"]) expect(vividWireColorScreen(dark), dark).toBeNull();
+    expect(vividWireColorScreen("yellow")).toBe("#ffff00");
+    expect(vividWireColorScreen("light_blue")).toBe("#00ffff");
+    expect(vividWireColorScreen("pink")).toBe("#ff00ff");
+    expect(vividWireColorScreen("red")).toBe("#ff0000");
+    expect(vividWireColorScreen("black")).toBeNull();
+  });
+});
+

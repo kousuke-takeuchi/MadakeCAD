@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import shared from "../../src-tauri/crates/madake-core/tests/fixtures/stroke_layout_cases.json";
 import type { Latin, StrokeFontData } from "../ipc";
-import { textPenOf, textStrokeWidth } from "./strokeFont";
+import { textPenOf, textSpacingOf, textStrokeWidth, withTextSpacing } from "./strokeFont";
 import {
   UNIT_CACHE_MAX,
   activeStrokeFont,
@@ -240,3 +240,29 @@ describe("text pen", () => {
     expect(textPenOf(null)).toBeNull();
   });
 });
+
+describe("letter spacing of the font and of a note", () => {
+  const tiny: StrokeFontData = { id: "t", baseline: 0, cap_top: 25, glyphs: { I: { wide: false, strokes: [[2, 0, 2, 25]] } } };
+
+  // ja: 書体の字間は全ての文字の送りに掛かり、注記の字間はさらにそれに掛かる。字間1のときの幅を基準に、送りの分だけ幅が変わる
+  it("multiplies the advance by the font spacing and then by the note spacing", () => {
+    setActiveStrokeFont(tiny, "half");
+    const base = textAdvanceMm("III", 10);
+    setActiveStrokeFont(tiny, "half", null, 0.5);
+    const tight = textAdvanceMm("III", 10);
+    expect(tight).toBeLessThan(base);
+    const noteWide = withTextSpacing(2, () => textAdvanceMm("III", 10));
+    expect(noteWide).toBeCloseTo(base, 9);
+    expect(textAdvanceMm("III", 10)).toBeCloseTo(tight, 9);
+    expect(withTextSpacing(1, () => textAdvanceMm("III", 10))).toBeCloseTo(tight, 9);
+  });
+
+  // ja: 字間は0.3〜3だけを使う。範囲外・未設定は1として扱う
+  it("reads a spacing only inside 0.3 to 3", () => {
+    expect(textSpacingOf({ spacing: 0.65 })).toBe(0.65);
+    expect(textSpacingOf({ spacing: 0.1 })).toBe(1);
+    expect(textSpacingOf({ spacing: null })).toBe(1);
+    expect(textSpacingOf(null)).toBe(1);
+  });
+});
+

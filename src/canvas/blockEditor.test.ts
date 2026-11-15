@@ -509,3 +509,27 @@ describe("connector pictures on a fine block and size snapping", () => {
     expect(snapSize(1, "coarse")).toBe(5);
   });
 });
+
+describe("leadless and caption attributes in the editor draft", () => {
+  // ja: リード線なし・参照記号を中に書くブロックを編集して書き戻しても、2つの属性は残り、プレビューも同じ形で描く。属性の無いブロックには増えない
+  it("keeps block_leads and block_caption through an edit and in the preview", () => {
+    const attrs = {
+      block_pins: '{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}',
+      block_pitch: "2.5",
+      block_numbers: "inside",
+      block_leads: "none",
+      block_caption: "inside",
+      block_size: '{"w":5,"h":7.5}',
+    };
+    const draft = draftFromAttrs(attrs);
+    const out = attrsFromDraft(draft);
+    expect(out.block_leads).toBe("none");
+    expect(out.block_caption).toBe("inside");
+    const preview = draftSymbol(draft);
+    expect(preview?.pins.map((q) => q.at.x)).toEqual([-2.5, -2.5, 2.5, 2.5]);
+    const plain = attrsFromDraft(draftFromAttrs({ block_pins: '{"left":[{"no":"1"}]}' }));
+    expect("block_leads" in plain).toBe(false);
+    expect("block_caption" in plain).toBe(false);
+  });
+});
+

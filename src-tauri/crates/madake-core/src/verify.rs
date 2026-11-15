@@ -1074,6 +1074,7 @@ mod tests {
             color: None,
             bold: false,
             leader_to: None,
+            spacing: None,
         };
         note.leader_to = Some(Uuid::new_v4()); // 既に消えたエンティティのid
         let sheet = sheet_with(vec![Entity::Text(note)]);

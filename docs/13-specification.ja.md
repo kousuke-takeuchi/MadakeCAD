@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3306仕様項目**。
+全6領域・**3314仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -290,6 +290,7 @@
 - 線ごとの太さが0.18〜2.0mmの外の配線は断る。破線で太さ2.0mmの配線は受け付け、2つの設定を保つ。 <sub>`a_wire_keeps_its_dash_and_weight_and_refuses_a_bad_weight`</sub>
 - ペンの太さ付きの書体は0.1〜1.0mmなら受け付け、範囲の外は断る。ペンの太さはプロジェクトに保存され、元に戻すと消える。 <sub>`set_text_font_takes_a_pen_width_in_range`</sub>
 - caption_layout を読めないシンボルは断り、図面は変わらない。読めるものは、ブロックに限らずどのシンボルでも受け付ける。 <sub>`a_symbol_with_a_bad_caption_layout_is_refused`</sub>
+- 0.3〜3 の外の字間は、書体でも注記でも断る。範囲内の値は保存される。 <sub>`letter_spacing_is_checked_on_the_font_and_on_notes`</sub>
 
 ### connector
 
@@ -462,6 +463,7 @@
 - ハーネス境界は破線の閉じた多角形と、その名前の注記として書き出される。 <sub>`harness_becomes_dashed_polyline_with_name`</sub>
 - 注記内の引用符・バックスラッシュ・改行はエスケープされ、書き出したファイルは正しく解釈されて同じ文字列に戻る。 <sub>`strings_are_escaped_and_read_back`</sub>
 - MadakeCADが書き出した回路図の"MadakeCAD:<id>"ライブラリidは、端子台・コネクタの動的シンボルも含めそのまま同じシンボルに戻る。 <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
+- 自分の太さを持つ破線の配線は、KiCadへその太さの破線として書き出され、読み戻しても破線・同じ太さになる。普通の配線は実線・太さなしのまま。 <sub>`a_dashed_wire_survives_a_kicad_round_trip`</sub>
 
 ### leader
 
@@ -1130,6 +1132,8 @@
 - 終点に矢印のある線の図形は、線と同じ色で塗った三角と一緒に描かれる。矢印の無い同じ線には三角は無い。 <sub>`a_line_shape_can_end_in_an_arrow`</sub>
 - 書体にペンの太さがあると、文字は大きさによらずその太さで描かれ、太字は1.5倍になる。ペンの太さが無ければ、太さは文字の大きさに比例する。 <sub>`a_text_pen_fixes_the_stroke_width`</sub>
 - caption_layout を持つシンボルは、参照記号を配置点からの指定のずれ・大きさ・寄せで書く。指定の無い型番の行はこれまでの場所のまま。非表示にした行は書かない。 <sub>`a_caption_layout_places_each_line`</sub>
+- 書体の字間は全ての文字を詰め、注記の字間はそれに掛かる: 書体が0.5で注記が2.0なら、字間なしの文字と同じ幅になる。 <sub>`font_and_note_spacing_multiply`</sub>
+- 矢印のある線は、三角の先端ではなく付け根で止まる。太い線の角が先端の横からはみ出さない。 <sub>`the_line_of_an_arrow_stops_at_the_base_of_the_head`</sub>
 
 ### シンボルライブラリ
 
@@ -2264,6 +2268,7 @@
 - 番号を内側に描くブロックでピンにコネクタの絵を付けると、5mm間隔でも指摘される (番号が外側のブロックでは指摘されない) <sub>`connector pictures on a fine block and size snapping`</sub>
 - 2.5mm間隔のブロックの大きさは2.5mm刻みに丸められ、5mm未満にはならない <sub>`connector pictures on a fine block and size snapping`</sub>
 - 5mm間隔のブロックの大きさは5mm刻みに丸められ、5mm未満にはならない <sub>`connector pictures on a fine block and size snapping`</sub>
+- リード線なし・参照記号を中に書くブロックを編集して書き戻しても、2つの属性は残り、プレビューも同じ形で描く。属性の無いブロックには増えない <sub>`leadless and caption attributes in the editor draft`</sub>
 - 部品挿入で「ブロック(汎用)」を選ぶと、左右1本ずつのピン表が開く <sub>`starting a new block from the insert dialog`</sub>
 - 編集したピン表はそのまま配置に使う属性になる(配置後もこの形で描かれる) <sub>`starting a new block from the insert dialog`</sub>
 - 「手動」に切り替えると、そのときの自動寸法が編集できる初期値として入る <sub>`starting a new block from the insert dialog`</sub>
@@ -2792,6 +2797,8 @@
 - 配置は Rust 側と共有のケース表のとおりの幅と最初の点になる (二つの描画で字の位置が食い違わない) <sub>`shared layout cases`</sub>
 - 書体にペンの太さがあると、文字は大きさによらずその太さで描かれ、太字は1.5倍になる。無ければ太さは大きさに比例する <sub>`text pen`</sub>
 - 書体の設定のペンの太さは0.1〜1.0mmだけを使う。範囲外・未設定は無いものとして扱う <sub>`text pen`</sub>
+- 書体の字間は全ての文字の送りに掛かり、注記の字間はさらにそれに掛かる。字間1のときの幅を基準に、送りの分だけ幅が変わる <sub>`letter spacing of the font and of a note`</sub>
+- 字間は0.3〜3だけを使う。範囲外・未設定は1として扱う <sub>`letter spacing of the font and of a note`</sub>
 
 ### surfer
 
@@ -3027,6 +3034,7 @@
 - シンボルの外形は、太さを設定していないシートでは0.3mm、設定したシートではその太さになる。範囲外は0.3mm <sub>`outline weight, own wire weight and vivid colours`</sub>
 - 配線は自分の太さ (0.18〜2.0mm) があればそれ、無ければシートの太さで描く <sub>`outline weight, own wire weight and vivid colours`</sub>
 - 鮮やかな色は純色の表で決まる。知らない色名・黒・#始まりは表に無い (いつもの色を使う) <sub>`outline weight, own wire weight and vivid colours`</sub>
+- キャンバスでは、暗い背景で見えにくい純色 (青・茶・紫) は使わず、いつもの画面用の色で描く。黄・緑・水色・桃・赤・橙は純色で描く <sub>`vivid colours on the dark canvas`</sub>
 
 ### xref
 

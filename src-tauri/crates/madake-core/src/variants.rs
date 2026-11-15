@@ -398,6 +398,7 @@ mod tests {
             color: None,
             bold: false,
             leader_to: Some(symbol_id),
+            spacing: None,
         });
         let shape = Entity::Shape(Shape {
             id: Uuid::new_v4(),
@@ -705,6 +706,7 @@ mod tests {
             color: None,
             bold: false,
             leader_to: Some(variant.id_map[&orig_symbol]),
+            spacing: None,
         });
         engine
             .execute_batch(

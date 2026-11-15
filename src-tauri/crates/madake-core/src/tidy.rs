@@ -700,6 +700,7 @@ mod tests {
             color: None,
             bold: false,
             leader_to: None,
+            spacing: None,
         })
     }
 

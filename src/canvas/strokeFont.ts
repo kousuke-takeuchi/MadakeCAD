@@ -70,7 +70,29 @@ export function layoutStroke(
 }
 
 /** いまキャンバスで有効な書体 (プロジェクトの`text_font`。未設定・読み込み前は null)。 */
-let active: { font: StrokeFontData; latin: Latin; pen: number | null } | null = null;
+let active: { font: StrokeFontData; latin: Latin; pen: number | null; spacing: number } | null = null;
+
+/** 字間の倍率の範囲。Rust 側 model.rs の MIN/MAX_TEXT_SPACING と同じ。 */
+export const MIN_TEXT_SPACING = 0.3;
+export const MAX_TEXT_SPACING = 3.0;
+
+/** 字間の倍率を読む。未設定・範囲外は1。 */
+export function textSpacingOf(v: { spacing?: number | null } | null | undefined): number {
+  const k = v?.spacing;
+  return typeof k === "number" && Number.isFinite(k) && k >= MIN_TEXT_SPACING && k <= MAX_TEXT_SPACING ? k : 1;
+}
+
+/** `fn` の間だけ、有効な書体の字間にさらに倍率を掛ける (注記の字間)。1 ならそのまま。終わると元へ戻す。 */
+export function withTextSpacing<T>(k: number, fn: () => T): T {
+  if (!active || k === 1) return fn();
+  const previous = active;
+  active = { ...active, spacing: active.spacing * k };
+  try {
+    return fn();
+  } finally {
+    active = previous;
+  }
+}
 
 /** 文字のペンの太さの範囲 (mm)。Rust 側 model.rs の MIN/MAX_TEXT_PEN_MM と同じ。 */
 export const MIN_TEXT_PEN_MM = 0.1;
@@ -89,8 +111,8 @@ export function textStrokeWidth(size: number, bold: boolean): number {
 }
 
 /** 有効な書体を切り替える (null でシステムの書体へ戻す)。キャンバス用の配置のキャッシュも捨てる。 */
-export function setActiveStrokeFont(font: StrokeFontData | null, latin: Latin, pen: number | null = null): void {
-  active = font ? { font, latin, pen } : null;
+export function setActiveStrokeFont(font: StrokeFontData | null, latin: Latin, pen: number | null = null, spacing = 1): void {
+  active = font ? { font, latin, pen, spacing } : null;
   unitCache.clear();
 }
 
@@ -119,8 +141,10 @@ export function unitStrokeCacheSize(): number {
  * 有効な書体で文字列を大きさ1で配置する (書体・英数字の字・字間・文字列ごとにキャッシュする)。
  * 書体が無い・フォントに無い字を含むときは null。
  */
-export function activeUnitStroke(text: string, spacing = 1): UnitStroke | null {
+export function activeUnitStroke(text: string, cellSpacing = 1): UnitStroke | null {
   if (!active) return null;
+  // 書体 (と注記) の字間を掛ける。キャッシュの鍵にも掛けたあとの値を使う
+  const spacing = cellSpacing * active.spacing;
   const key = `${active.font.id}\u0000${active.latin}\u0000${spacing}\u0000${text}`;
   const hit = unitCache.get(key);
   if (hit !== undefined) {
@@ -175,7 +199,7 @@ export function withLatin<T>(latin: Latin | null | undefined, fn: () => T): T {
  * (`textWidthMm`。システムの書体では字間は効かない)。Rust側`svg::text_advance`と同じ。
  */
 export function textAdvanceMm(text: string, size: number, spacing = 1): number {
-  const t = active ? layoutStroke(active.font, text, size, active.latin, spacing) : null;
+  const t = active ? layoutStroke(active.font, text, size, active.latin, spacing * active.spacing) : null;
   return t ? t.width : textWidthMm(text, size);
 }
 

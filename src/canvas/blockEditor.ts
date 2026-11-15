@@ -10,6 +10,10 @@ import {
   BLOCK_CONTACT_MAX,
   BLOCK_PINS_ATTR,
   BLOCK_PIN_MAX,
+  BLOCK_CAPTION_ATTR,
+  BLOCK_LEADS_ATTR,
+  type BlockCaption,
+  type BlockLeads,
   BLOCK_NUMBERS_ATTR,
   BLOCK_PITCH_ATTR,
   BLOCK_SIZE_ATTR,
@@ -62,6 +66,10 @@ export interface BlockDraft {
   pitch: BlockPitch;
   /** ピン番号の位置。属性が無いブロックは outside。 */
   numbers: BlockNumbers;
+  /** リード線の有無。省略・属性が無いブロックは lead。エディタに操作は無いが、プレビューと書き戻しで保つ。 */
+  leads?: BlockLeads;
+  /** 参照記号の位置。省略・属性が無いブロックは above。 */
+  caption?: BlockCaption;
 }
 
 /** ピン表の指摘 (これがある間は配置・適用できない)。 */
@@ -214,6 +222,8 @@ export function attrsFromDraft(draft: BlockDraft): Record<string, string> {
   if (draft.size) attrs[BLOCK_SIZE_ATTR] = JSON.stringify(draft.size);
   if (draft.pitch === "fine") attrs[BLOCK_PITCH_ATTR] = "2.5";
   if (draft.numbers === "inside") attrs[BLOCK_NUMBERS_ATTR] = "inside";
+  if (draft.leads === "none") attrs[BLOCK_LEADS_ATTR] = "none";
+  if (draft.caption === "inside") attrs[BLOCK_CAPTION_ATTR] = "inside";
   return attrs;
 }
 
@@ -223,12 +233,16 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
   let size: BlockSize | null = null;
   let pitch: BlockPitch = "coarse";
   let numbers: BlockNumbers = "outside";
+  let leads: BlockLeads = "lead";
+  let caption: BlockCaption = "above";
   try {
     const spec = parseBlockSpec(attrs);
     pins = spec.pins;
     size = spec.size;
     pitch = spec.pitch;
     numbers = spec.numbers;
+    leads = spec.leads;
+    caption = spec.caption;
   } catch {
     // 読めない属性は空のピン表。間隔と番号の位置は、値が正しければ生の属性から残す
     return {
@@ -236,6 +250,8 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
       size: null,
       pitch: attrs[BLOCK_PITCH_ATTR] === "2.5" ? "fine" : "coarse",
       numbers: attrs[BLOCK_NUMBERS_ATTR] === "inside" ? "inside" : "outside",
+      ...(attrs[BLOCK_LEADS_ATTR] === "none" ? { leads: "none" as const } : {}),
+      ...(attrs[BLOCK_CAPTION_ATTR] === "inside" ? { caption: "inside" as const } : {}),
     };
   }
   const rows = emptyRows();
@@ -248,7 +264,15 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
       ...(p.connector_ref ? { connectorRef: p.connector_ref } : {}),
     }));
   }
-  return { rows, size, pitch, numbers };
+  // 既定値 (リード線あり・参照記号は上) は下書きに持たない: 属性の無いブロックの下書きはこれまでと同じ形
+  return {
+    rows,
+    size,
+    pitch,
+    numbers,
+    ...(leads === "none" ? { leads } : {}),
+    ...(caption === "inside" ? { caption } : {}),
+  };
 }
 
 /**

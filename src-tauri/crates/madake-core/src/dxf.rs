@@ -1265,7 +1265,7 @@ pub fn sheet_to_dxf_with_frame(
     for e in sheet.entities.values() {
         if let Entity::Wire(wire) = e {
             for seg in wire.points.windows(2) {
-                w.line(ms, LAYER_WIRES, pt(seg[0]), pt(seg[1]));
+                w.line_styled(ms, LAYER_WIRES, pt(seg[0]), pt(seg[1]), wire.dashed);
             }
             report.count("wire");
         }
@@ -1938,6 +1938,7 @@ pub fn import_dxf(
                             bold: false,
                             color: None,
                             leader_to: None,
+                            spacing: None,
                         }),
                     );
                     report.texts += 1;
@@ -2104,6 +2105,7 @@ pub fn import_dxf(
                         bold: false,
                         color: None,
                         leader_to: None,
+                        spacing: None,
                     }),
                 );
                 report.texts += 1;
@@ -2144,6 +2146,7 @@ pub fn import_dxf(
                         bold: false,
                         color: None,
                         leader_to: None,
+                        spacing: None,
                     }),
                 );
                 report.texts += 1;
@@ -2234,6 +2237,7 @@ mod tests {
             bold: false,
             color: None,
             leader_to: None,
+            spacing: None,
         }));
         push(Entity::Harness(Harness {
             id: Uuid::new_v4(),

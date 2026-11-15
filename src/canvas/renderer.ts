@@ -101,9 +101,10 @@ import {
 } from "./textStyle";
 import { wireNumberFont, wireNumberLabels } from "./wireNumbers";
 import { wireNoteFont, wireNoteLabels } from "./wireNotes";
-import { symbolWeightMm, vividWireColor, WIRE_DASH, wireWeightMm, wireWeightOf } from "./wireStyle";
+import { symbolWeightMm, vividWireColorScreen, WIRE_DASH, wireWeightMm, wireWeightOf } from "./wireStyle";
 import { captionLayoutOf, type CaptionLine } from "./caption";
 import { arrowHead } from "./shapes";
+import { textSpacingOf, withTextSpacing } from "./strokeFont";
 import { TAG_FONT, netTag } from "./netTag";
 import { XREF_FONT, deviceXrefAt, xrefTextAt } from "./xref";
 import { annotationScale } from "./annotationText";
@@ -1039,8 +1040,12 @@ export function drawShape(
     }
     case "line":
     case "polyline": {
+      // 矢印のある線は、三角の付け根の中央で止める (太い線の角が先端からはみ出さない。svg.rs と同じ)
+      const head0 = arrowHead(shape);
+      const last = shape.points.length - 1;
       shape.points.forEach((p, i) => {
-        const s = vp.toScreen(p);
+        const q = head0 && i === last ? { x: (head0[1].x + head0[2].x) / 2, y: (head0[1].y + head0[2].y) / 2 } : p;
+        const s = vp.toScreen(q);
         if (i === 0) ctx.moveTo(s.x, s.y);
         else ctx.lineTo(s.x, s.y);
       });
@@ -1441,7 +1446,7 @@ export function renderSheet(
   for (const e of entities) {
     if (e.kind !== "wire") continue;
     const selected = opts.selection.has(e.id);
-    const vivid = sheet.vivid_wire_colors ? vividWireColor(e.color) : null;
+    const vivid = sheet.vivid_wire_colors ? vividWireColorScreen(e.color) : null;
     ctx.strokeStyle = selected ? theme.selection : (vivid ?? wireColorScreen(e.color));
     ctx.lineWidth = Math.max(1.2, wireWeightOf(sheet, e) * vp.scale) + (selected ? 1.5 : 0);
     ctx.setLineDash(e.dashed ? WIRE_DASH.map((d) => Math.max(2, d * vp.scale)) : []);
@@ -1546,15 +1551,17 @@ export function renderSheet(
       ctx.textAlign = canvasTextAlign(e.anchor);
       // 回転 (90・180・270、時計回り) は基準点を中心に回す (svg.rs と同じ)。0 は従来どおり
       const turn = noteTurnDeg(e.rotation);
-      if (turn) {
-        ctx.save();
-        ctx.translate(s.x, s.y);
-        ctx.rotate((turn * Math.PI) / 180);
-        drawingText(ctx, e.text, 0, 0);
-        ctx.restore();
-      } else {
-        drawingText(ctx, e.text, s.x, s.y);
-      }
+      withTextSpacing(textSpacingOf(e), () => {
+        if (turn) {
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.rotate((turn * Math.PI) / 180);
+          drawingText(ctx, e.text, 0, 0);
+          ctx.restore();
+        } else {
+          drawingText(ctx, e.text, s.x, s.y);
+        }
+      });
       ctx.textAlign = "left";
       // 引き出し線 (G20): 対象がシート上に実在すれば、注記の辺から対象の外形まで
       // 毎回求め直して引く (位置は保存しないので、どちらを動かしても追従する)

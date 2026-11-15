@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3306 specification clauses** across 6 areas.
+**3314 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -290,6 +290,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A wire whose own weight is outside 0.18 to 2.0 mm is refused; a dashed wire 2.0 mm wide is accepted and keeps both settings. <sub>`a_wire_keeps_its_dash_and_weight_and_refuses_a_bad_weight`</sub>
 - A text font with a pen width is accepted between 0.1 and 1.0 mm and refused outside; the pen is saved with the project and removed again by undo. <sub>`set_text_font_takes_a_pen_width_in_range`</sub>
 - A symbol whose caption_layout cannot be read is refused and the document is not changed; a readable one is accepted on any symbol, not only on blocks. <sub>`a_symbol_with_a_bad_caption_layout_is_refused`</sub>
+- A letter spacing outside 0.3 to 3 is refused on the text font and on a note; a value inside is kept and saved. <sub>`letter_spacing_is_checked_on_the_font_and_on_notes`</sub>
 
 ### connector
 
@@ -462,6 +463,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A harness boundary is exported as a dashed closed polyline plus a text with its name. <sub>`harness_becomes_dashed_polyline_with_name`</sub>
 - Quotes, backslashes and newlines in text are escaped so the exported file parses and reads back unchanged. <sub>`strings_are_escaped_and_read_back`</sub>
 - Importing a schematic exported by MadakeCAD resolves "MadakeCAD:<id>" library ids directly, including parametric terminal blocks and connectors. <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
+- A dashed wire with its own weight exports to KiCad as a dashed stroke of that width and imports back dashed with the same weight; a plain wire stays solid with no weight of its own. <sub>`a_dashed_wire_survives_a_kicad_round_trip`</sub>
 
 ### leader
 
@@ -1130,6 +1132,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A line shape with an arrow at its end is drawn with a filled triangle in the line's colour; the same line without the arrow has none. <sub>`a_line_shape_can_end_in_an_arrow`</sub>
 - With a text pen set on the font, every text is stroked at that width whatever its size, and bold text at 1.5 times it; without a pen the width follows the size. <sub>`a_text_pen_fixes_the_stroke_width`</sub>
 - A symbol with a caption layout writes its reference at the given offset from the placement point, with the given size and alignment; the value line, which the layout leaves out, stays where it was; a hidden line is not written. <sub>`a_caption_layout_places_each_line`</sub>
+- The letter spacing of the font tightens every text, and a note's own spacing multiplies it: with the font at 0.5 a note at 2.0 is as wide as plain text. <sub>`font_and_note_spacing_multiply`</sub>
+- The line of an arrow stops at the base of the triangle, not at its tip, so a thick line does not stick out beside the tip. <sub>`the_line_of_an_arrow_stops_at_the_base_of_the_head`</sub>
 
 ### Symbol library
 
@@ -2264,6 +2268,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reports a connector picture on a block with numbers inside but not with numbers outside <sub>`connector pictures on a fine block and size snapping`</sub>
 - snaps a fine block size to 2.5 mm steps, never below 5 mm <sub>`connector pictures on a fine block and size snapping`</sub>
 - snaps a coarse block size to 5 mm steps, never below 5 mm <sub>`connector pictures on a fine block and size snapping`</sub>
+- keeps block_leads and block_caption through an edit and in the preview <sub>`leadless and caption attributes in the editor draft`</sub>
 - opens a pin table with one pin per side when the generic block is picked <sub>`starting a new block from the insert dialog`</sub>
 - hands the edited table to the placement as block attributes <sub>`starting a new block from the insert dialog`</sub>
 - seeds the hand-set size with the automatic one when switching to manual <sub>`starting a new block from the insert dialog`</sub>
@@ -2792,6 +2797,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - gives the numbers of the case file shared with the Rust layout <sub>`shared layout cases`</sub>
 - strokes every text at the pen width when the font has one <sub>`text pen`</sub>
 - reads a pen width only inside 0.1 to 1.0 mm <sub>`text pen`</sub>
+- multiplies the advance by the font spacing and then by the note spacing <sub>`letter spacing of the font and of a note`</sub>
+- reads a spacing only inside 0.3 to 3 <sub>`letter spacing of the font and of a note`</sub>
 
 ### surfer
 
@@ -3027,6 +3034,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - uses 0.3 mm for outlines unless the sheet sets a weight in range <sub>`outline weight, own wire weight and vivid colours`</sub>
 - draws a wire at its own weight when it has one, else at the sheet's <sub>`outline weight, own wire weight and vivid colours`</sub>
 - maps colour names to pure colours and leaves unknown names alone <sub>`outline weight, own wire weight and vivid colours`</sub>
+- keeps the screen colour for blue, brown and purple and uses pure colours for the rest <sub>`vivid colours on the dark canvas`</sub>
 
 ### xref
 

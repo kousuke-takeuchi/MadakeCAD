@@ -157,6 +157,7 @@ mod tests {
             color: None,
             bold: false,
             leader_to,
+            spacing: None,
         }
     }
 
@@ -328,6 +329,7 @@ mod tests {
             color: None,
             bold: false,
             leader_to: None,
+            spacing: None,
         };
         let w = crate::tidy::text_width("ABCD", 2.5);
         let b = text_bounds(&note);

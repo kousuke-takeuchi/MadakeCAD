@@ -90,3 +90,22 @@ export function vividWireColor(color: string): string | null {
       return null;
   }
 }
+
+/**
+ * キャンバス (暗い作図領域) で使う鮮やかな色。純色のうち暗い背景で見えにくいもの (青・茶・紫) は
+ * null を返し、いつもの画面用の色 (theme.wireColorScreen) で描く。紙の出力は svg.rs の純色のまま。
+ */
+export function vividWireColorScreen(color: string): string | null {
+  switch (color) {
+    case "blue":
+    case "青":
+    case "brown":
+    case "茶":
+    case "purple":
+    case "紫":
+      return null;
+    default:
+      return vividWireColor(color);
+  }
+}
+

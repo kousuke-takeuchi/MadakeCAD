@@ -146,6 +146,7 @@ mod tests {
             color: color.map(|c| c.to_string()),
             bold: false,
             leader_to: None,
+            spacing: None,
         }
     }
 

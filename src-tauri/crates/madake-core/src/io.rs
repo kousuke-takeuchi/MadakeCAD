@@ -502,10 +502,10 @@ mod tests {
     fn text_font_round_trips_and_is_omitted_when_unset() {
         let mut p = Project::new("p");
         assert!(!serde_json::to_string(&p).unwrap().contains("text_font"));
-        p.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Full, pen_mm: None, });
+        p.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Full, pen_mm: None, spacing: None, });
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(back.text_font, p.text_font);
-        let half = TextFont { id: "kst32b".into(), latin: Latin::Half, pen_mm: None, };
+        let half = TextFont { id: "kst32b".into(), latin: Latin::Half, pen_mm: None, spacing: None, };
         assert_eq!(serde_json::to_string(&half).unwrap(), "{\"id\":\"kst32b\"}");
     }
 

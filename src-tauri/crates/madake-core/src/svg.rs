@@ -181,6 +181,17 @@ struct ActiveFont {
     latin: crate::model::Latin,
     /// 文字のペンの太さ (mm)。あれば大きさによらずこの太さ (太字は1.5倍)。
     pen: Option<f64>,
+    /// 字間の倍率 (書体の字間 × 注記などの字間)。セルの字間にはさらにこれを掛ける。
+    spacing: f64,
+}
+
+/// ストロークフォントが有効な間だけ、字間にさらに倍率を掛ける (注記の字間)。`None`・1・範囲外ならそのまま。
+fn spacing_scope(spacing: Option<f64>) -> TextFontScope {
+    let previous = TEXT_FONT.with(|c| c.get());
+    if let (Some(active), Some(k)) = (previous, spacing.filter(|v| crate::model::is_text_spacing(*v))) {
+        TEXT_FONT.with(|c| c.set(Some(ActiveFont { spacing: active.spacing * k, ..active })));
+    }
+    TextFontScope { previous }
 }
 
 /// いま有効な書体での文字の線の太さ (mm)。ペンの太さが決まっていればそれ (太字は1.5倍)、無ければ大きさに比例。
@@ -208,7 +219,7 @@ impl Drop for TextFontScope {
 
 /// プロジェクトの書体を、戻り値を持っている間だけ有効にする。`None`や知らないidはシステムの書体。
 pub fn text_font_scope(text_font: Option<&crate::model::TextFont>) -> TextFontScope {
-    let next = text_font.and_then(|tf| crate::stroke_font::font(&tf.id).map(|font| ActiveFont { font, latin: tf.latin, pen: tf.pen() }));
+    let next = text_font.and_then(|tf| crate::stroke_font::font(&tf.id).map(|font| ActiveFont { font, latin: tf.latin, pen: tf.pen(), spacing: tf.spacing() }));
     TextFontScope { previous: TEXT_FONT.with(|c| c.replace(next)) }
 }
 
@@ -226,7 +237,7 @@ fn latin_scope(latin: Option<crate::model::Latin>) -> TextFontScope {
 pub(crate) fn text_advance(s: &str, size: f64, spacing: f64) -> f64 {
     TEXT_FONT
         .with(|c| c.get())
-        .and_then(|f| f.font.layout(s, size, f.latin, spacing))
+        .and_then(|f| f.font.layout(s, size, f.latin, spacing * f.spacing))
         .map(|t| t.width)
         .unwrap_or_else(|| crate::tidy::text_width(s, size))
 }
@@ -235,7 +246,7 @@ pub(crate) fn text_advance(s: &str, size: f64, spacing: f64) -> f64 {
 /// 書体が無い・フォントに無い字を含むときは何も書かずに false (呼び出し側が`<text>`を書く)。
 fn stroke_text_el(out: &mut String, x: f64, y: f64, size: f64, fill: &str, anchor: &str, bold: bool, spacing: f64, s: &str) -> bool {
     let Some(active) = TEXT_FONT.with(|c| c.get()) else { return false };
-    let Some(t) = active.font.layout(s, size, active.latin, spacing) else { return false };
+    let Some(t) = active.font.layout(s, size, active.latin, spacing * active.spacing) else { return false };
     if t.polylines.is_empty() {
         return true;
     }
@@ -1359,7 +1370,7 @@ fn render_shapes(out: &mut String, sheet: &Sheet) {
                 );
             }
             ShapeKind::Line => {
-                let (a, b) = (shape.points[0], shape.points[1]);
+                let (a, b) = (shape.points[0], arrow_base(shape).unwrap_or(shape.points[1]));
                 let _ = write!(
                     out,
                     "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"{stroke}\" stroke-width=\"{width}\"{dash}/>\n",
@@ -1380,7 +1391,14 @@ fn render_shapes(out: &mut String, sheet: &Sheet) {
                 let _ = write!(
                     out,
                     "<polyline points=\"{}\" {fill} stroke=\"{stroke}\" stroke-width=\"{width}\"{dash}/>\n",
-                    polyline_points(&shape.points)
+                    polyline_points(&match arrow_base(shape) {
+                        Some(base) => {
+                            let mut pts = shape.points.clone();
+                            *pts.last_mut().expect("折れ線は2点以上") = base;
+                            pts
+                        }
+                        None => shape.points.clone(),
+                    })
                 );
             }
         }
@@ -1392,6 +1410,11 @@ fn render_shapes(out: &mut String, sheet: &Sheet) {
             );
         }
     }
+}
+
+/// 矢印のある線の、線を止める点 (三角の付け根の中央)。太い線の角が先端からはみ出さないよう、線はここまで描く。
+fn arrow_base(shape: &crate::model::Shape) -> Option<Point> {
+    crate::shape::arrow_head(shape).map(|[_, a, b]| Point::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0))
 }
 
 /// 図形の塗りのSVG属性。塗り無しは`fill="none"` (面を持たない線・折れ線もこれ)。
@@ -2000,6 +2023,7 @@ fn sheet_to_svg_with_xrefs(
             Entity::Text(t) => {
                 // 注記の装飾 (G4): 基準位置・色トークン・太字。既定の注記は従来と同じ出力。
                 // 回転 (90・180・270、時計回り) は基準点を中心に回す。0 のときは何も足さない
+                let _note_spacing = spacing_scope(t.spacing);
                 let turned = matches!(t.rotation % 360, 90 | 180 | 270);
                 if turned {
                     let _ = write!(
@@ -2876,6 +2900,7 @@ mod tests {
             color: None,
             bold: false,
             leader_to: None,
+            spacing: None,
         }
     }
 
@@ -5087,6 +5112,7 @@ mod tests {
             color: None,
             bold: false,
             leader_to: None,
+            spacing: None,
         };
         note.leader_to = Some(target_id);
         sheet.entities.insert(target_id, target);
@@ -5301,7 +5327,7 @@ mod tests {
     }
 
     fn kst(latin: crate::model::Latin) -> crate::model::TextFont {
-        crate::model::TextFont { id: "kst32b".into(), latin, pen_mm: None }
+        crate::model::TextFont { id: "kst32b".into(), latin, pen_mm: None, spacing: None }
     }
 
     /// 文字を持つ要素をひととおり置いたプロジェクト: リレー2枚組 + 注記付き配線 + ネットラベル + 表題欄 +
@@ -5716,7 +5742,7 @@ mod tests {
     /// 書体にペンの太さがあると、文字は大きさによらずその太さで描かれ、太字は1.5倍になる。ペンの太さが無ければ、太さは文字の大きさに比例する。
     #[test]
     fn a_text_pen_fixes_the_stroke_width() {
-        let font = |pen| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: pen };
+        let font = |pen| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: pen, spacing: None, };
         {
             let _scope = text_font_scope(Some(&font(None)));
             assert!((text_stroke_width(10.0, false) - 0.7).abs() < 1e-9);
@@ -5763,5 +5789,42 @@ mod tests {
         inst.attrs.insert(crate::caption::CAPTION_LAYOUT_ATTR.into(), "{".into());
         let svg = sheet_to_svg(&sheet_with(vec![Entity::Symbol(inst)]), &builtin_symbols(), &[]);
         assert_eq!(svg.lines().find(|l| l.contains(">U1<")), base.lines().find(|l| l.contains(">U1<")));
+    }
+
+    /// The letter spacing of the font tightens every text, and a note's own spacing multiplies it: with the font at 0.5 a note at 2.0 is as wide as plain text.
+    /// 書体の字間は全ての文字を詰め、注記の字間はそれに掛かる: 書体が0.5で注記が2.0なら、字間なしの文字と同じ幅になる。
+    #[test]
+    fn font_and_note_spacing_multiply() {
+        let font = |spacing| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: None, spacing };
+        let plain = {
+            let _scope = text_font_scope(Some(&font(None)));
+            text_advance("ABCDE", 5.0, 1.0)
+        };
+        let _scope = text_font_scope(Some(&font(Some(0.5))));
+        let tight = text_advance("ABCDE", 5.0, 1.0);
+        assert!(tight < plain, "{tight} < {plain}");
+        {
+            let _note = spacing_scope(Some(2.0));
+            assert!((text_advance("ABCDE", 5.0, 1.0) - plain).abs() < 1e-9);
+        }
+        assert!((text_advance("ABCDE", 5.0, 1.0) - tight).abs() < 1e-9, "注記の範囲を出ると戻る");
+        {
+            let _bad = spacing_scope(Some(10.0));
+            assert!((text_advance("ABCDE", 5.0, 1.0) - tight).abs() < 1e-9, "範囲外の字間は使わない");
+        }
+    }
+
+    /// The line of an arrow stops at the base of the triangle, not at its tip, so a thick line does not stick out beside the tip.
+    /// 矢印のある線は、三角の先端ではなく付け根で止まる。太い線の角が先端の横からはみ出さない。
+    #[test]
+    fn the_line_of_an_arrow_stops_at_the_base_of_the_head() {
+        let mut line = crate::shape::new_shape(ShapeKind::Line, vec![Point::new(10.0, 20.0), Point::new(30.0, 20.0)]);
+        line.arrow_end = true;
+        line.stroke_width_mm = 1.0;
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Shape(line)]), &builtin_symbols(), &[]);
+        let drawn = svg.lines().find(|l| l.starts_with("<line") && l.contains("x1=\"10\"") && l.contains("y1=\"20\"")).unwrap_or_else(|| panic!("{svg}"));
+        let len = crate::shape::ARROW_LEN_MM + 2.0;
+        assert_eq!(attr(drawn, "x2"), Some(30.0 - len), "{drawn}");
+        assert!(svg.lines().any(|l| l.starts_with("<polygon") && l.contains("30,20")), "三角の先端は終点のまま");
     }
 }

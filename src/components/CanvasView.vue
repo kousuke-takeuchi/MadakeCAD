@@ -2,7 +2,7 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
 import { onFrameImageLoaded } from "../canvas/frameImages";
-import { setActiveStrokeFont, strokeFontLoader, textPenOf } from "../canvas/strokeFont";
+import { setActiveStrokeFont, strokeFontLoader, textPenOf, textSpacingOf } from "../canvas/strokeFont";
 import { AgentOverlay, patchOverlayTargets } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
 import { ipc, type Patch } from "../ipc";
@@ -248,8 +248,8 @@ watch(
     // 待っている間に閉じられた・設定が変わっていたら、何もしない (新しい設定の呼び出しに任せる)
     if (unmounted) return;
     const now = store.project?.text_font;
-    if (!now || now.id !== tf.id || (now.latin ?? "half") !== (tf.latin ?? "half") || textPenOf(now) !== textPenOf(tf)) return;
-    setActiveStrokeFont(data, tf.latin ?? "half", textPenOf(tf));
+    if (!now || now.id !== tf.id || (now.latin ?? "half") !== (tf.latin ?? "half") || textPenOf(now) !== textPenOf(tf) || textSpacingOf(now) !== textSpacingOf(tf)) return;
+    setActiveStrokeFont(data, tf.latin ?? "half", textPenOf(tf), textSpacingOf(tf));
     scheduleDraw();
   },
   { immediate: true, deep: true },

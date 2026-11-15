@@ -121,6 +121,8 @@ export interface TextEntity {
    * (canvas/leader.ts leaderFor)。null/未指定なら引き出し線は描かない。
    */
   leader_to?: string | null;
+  /** 字間 (字の送りに掛ける倍率)。ストロークフォントのときだけ効き、書体の字間に掛ける。未設定は1。 */
+  spacing?: number | null;
 }
 
 /**
@@ -436,6 +438,8 @@ export interface TextFont {
   latin?: Latin;
   /** 文字のペンの太さ (mm)。あれば大きさによらずこの太さで描く (太字は1.5倍)。 */
   pen_mm?: number | null;
+  /** 字間 (字の送りに掛ける倍率、0.3〜3)。図面の全ての文字に効く。未設定は1。 */
+  spacing?: number | null;
 }
 
 /** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */

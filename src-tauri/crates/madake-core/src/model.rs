@@ -93,6 +93,14 @@ pub const DEFAULT_SYMBOL_WEIGHT_MM: f64 = 0.3;
 /// 文字のペンの太さの下限・上限 (mm)。
 pub const MIN_TEXT_PEN_MM: f64 = 0.1;
 pub const MAX_TEXT_PEN_MM: f64 = 1.0;
+/// 字間の倍率の下限・上限。
+pub const MIN_TEXT_SPACING: f64 = 0.3;
+pub const MAX_TEXT_SPACING: f64 = 3.0;
+
+/// 字間の倍率として使える値か (有限で範囲内)。
+pub fn is_text_spacing(v: f64) -> bool {
+    v.is_finite() && (MIN_TEXT_SPACING..=MAX_TEXT_SPACING).contains(&v)
+}
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -433,12 +441,21 @@ pub struct TextFont {
     /// `None` は大きさに比例した太さ (従来どおり)。範囲は [`MIN_TEXT_PEN_MM`]〜[`MAX_TEXT_PEN_MM`]。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pen_mm: Option<f64>,
+    /// 字間 (字の送りに掛ける倍率)。図面の全ての文字に効く。`None` は1。全角の字形を詰めて書く図面で1より小さくする。
+    /// 範囲は [`MIN_TEXT_SPACING`]〜[`MAX_TEXT_SPACING`]。図枠のセルや注記が自分の字間を持つときは、この値に掛ける。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spacing: Option<f64>,
 }
 
 impl TextFont {
     /// 文字のペンの太さ (mm)。未設定・範囲外なら None (大きさに比例した太さ)。
     pub fn pen(&self) -> Option<f64> {
         self.pen_mm.filter(|v| v.is_finite() && *v >= MIN_TEXT_PEN_MM && *v <= MAX_TEXT_PEN_MM)
+    }
+
+    /// 字間の倍率。未設定・範囲外なら1。
+    pub fn spacing(&self) -> f64 {
+        self.spacing.filter(|v| is_text_spacing(*v)).unwrap_or(1.0)
     }
 }
 
@@ -1390,6 +1407,9 @@ pub struct TextEntity {
     /// 線は追従する。存在しないIDは[`crate::command::Engine::execute`]が拒否する。
     #[serde(default)]
     pub leader_to: Option<EntityId>,
+    /// 字間 (字の送りに掛ける倍率)。ストロークフォントのときだけ効き、書体の字間 ([`TextFont::spacing`]) に掛ける。`None` は1。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spacing: Option<f64>,
 }
 
 #[cfg(test)]
@@ -1650,6 +1670,7 @@ mod tests {
             color: Some("warning".into()),
             bold: true,
             leader_to: None,
+            spacing: None,
         });
         let json = serde_json::to_string(&entity).unwrap();
         let Entity::Text(back) = serde_json::from_str::<Entity>(&json).unwrap() else {

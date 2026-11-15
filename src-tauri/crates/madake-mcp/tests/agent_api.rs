@@ -213,6 +213,7 @@ fn add_text(doc: &SharedDoc, id: Uuid, label: &str) -> madake_core::Command {
             color: None,
             bold: false,
             leader_to: None,
+            spacing: None,
         }),
     }
 }
@@ -312,6 +313,7 @@ async fn undo_turn_refuses_a_conflicting_rollback() {
             color: None,
             bold: false,
             leader_to: None,
+            spacing: None,
         }),
     })
     .unwrap();
