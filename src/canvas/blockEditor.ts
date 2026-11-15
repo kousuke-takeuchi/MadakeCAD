@@ -66,8 +66,12 @@ export interface BlockDraft {
 
 /** ピン表の指摘 (これがある間は配置・適用できない)。 */
 export type BlockIssue =
-  /** 同じピン番号が2つ以上ある。 */
+  /** 同じピン番号が、向かい合う辺に1回ずつ (貫通ピン) の形ではなく重なっている。 */
   | { code: "duplicate"; no: string }
+  /** 貫通ピンの両側でピン名が違う。 */
+  | { code: "feedthroughName"; no: string }
+  /** 貫通ピンに接点またはコネクタの絵が付いている。 */
+  | { code: "feedthroughPicture"; no: string }
   /** ピン名だけ書いて番号が空。 */
   | { code: "emptyNo"; side: BlockSide; index: number }
   /** ピンが多すぎる。 */
@@ -279,7 +283,9 @@ export function snapSize(value: number, pitch: BlockPitch): number {
 /** ピン表の指摘 (重複番号・番号なし・ピン過多・外形不足)。 */
 export function draftIssues(draft: BlockDraft): BlockIssue[] {
   const issues: BlockIssue[] = [];
-  const seen = new Set<string>();
+  // 同じ番号は向かい合う辺に1回ずつだけ置ける貫通ピン (Rust側 parse_block_spec と同じ決まり)
+  const seen = new Map<string, { side: number; row: BlockPinRow; paired: boolean }>();
+  const hasPicture = (r: BlockPinRow) => splitContacts(r.contacts ?? "").length > 0 || (r.connector ?? "") !== "";
   for (const side of BLOCK_SIDES) {
     draft.rows[side].forEach((row, index) => {
       if (!isFilled(row)) return;
@@ -288,8 +294,17 @@ export function draftIssues(draft: BlockDraft): BlockIssue[] {
         issues.push({ code: "emptyNo", side, index });
         return;
       }
-      if (seen.has(no)) issues.push({ code: "duplicate", no });
-      seen.add(no);
+      const sideNo = BLOCK_SIDES.indexOf(side);
+      const first = seen.get(no);
+      if (!first) {
+        seen.set(no, { side: sideNo, row, paired: false });
+      } else if (first.paired || Math.floor(first.side / 2) !== Math.floor(sideNo / 2) || first.side === sideNo) {
+        issues.push({ code: "duplicate", no });
+      } else {
+        first.paired = true;
+        if (first.row.name.trim() !== row.name.trim()) issues.push({ code: "feedthroughName", no });
+        if (hasPicture(first.row) || hasPicture(row)) issues.push({ code: "feedthroughPicture", no });
+      }
       const contacts = splitContacts(row.contacts ?? "");
       if (contacts.length > BLOCK_CONTACT_MAX) {
         issues.push({ code: "tooManyContacts", side, index, count: contacts.length, max: BLOCK_CONTACT_MAX });
@@ -349,13 +364,13 @@ function segmentDistance(p: Point, a: Point, b: Point): number {
 
 /**
  * いま配線が届いているピンの番号 (図面の見たままで判定する。Rust側のネットリストと
- * 同じく、接続点に配線が触れていれば接続とみなす)。
+ * 同じく、接続点に配線が触れていれば接続とみなす)。貫通ピン (向かい合う辺の同じ番号) は
+ * 両側に配線があれば番号が2回挙がる (片側を消す編集で外れる配線を数えるため)。
  */
 export function wiredPinNumbers(sheet: Sheet, inst: SymbolInstance, def: SymbolDef): string[] {
   const wires = Object.values(sheet.entities).filter((e) => e.kind === "wire");
   const wired: string[] = [];
   for (const pin of def.pins) {
-    if (wired.includes(pin.number)) continue;
     const at = transformLocal(pin.at, inst);
     const touched = wires.some((w) =>
       w.kind === "wire" && w.points.length === 1
@@ -372,9 +387,20 @@ export function wiredPinNumbers(sheet: Sheet, inst: SymbolInstance, def: SymbolD
 
 /**
  * 編集後のピン表から消えてしまう配線済みピン (接続が外れる = 警告を出す)。
- * 番号を書き換えた場合も、そのピンは消えたものとして挙がる。
+ * 番号を書き換えた場合も、そのピンは消えたものとして挙がる。貫通ピンは、配線のある本数より
+ * 表に残る行が少なければ (片側の行を消した) 番号が挙がる。番号は1回ずつ。
  */
 export function droppedWiredPins(wired: readonly string[], draft: BlockDraft): string[] {
-  const kept = new Set(allRows(draft).filter(isFilled).map((row) => row.no.trim()));
-  return wired.filter((no) => !kept.has(no));
+  const left = new Map<string, number>();
+  for (const row of allRows(draft).filter(isFilled)) {
+    const no = row.no.trim();
+    left.set(no, (left.get(no) ?? 0) + 1);
+  }
+  const dropped: string[] = [];
+  for (const no of wired) {
+    const n = left.get(no) ?? 0;
+    if (n > 0) left.set(no, n - 1);
+    else if (!dropped.includes(no)) dropped.push(no);
+  }
+  return dropped;
 }

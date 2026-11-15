@@ -1145,6 +1145,50 @@ mod tests {
         assert_eq!(nets[0].pins[0].pin, "1");
     }
 
+    /// Nets of a block whose pins are laid out as feed-through pairs: a wire on each pin, pointing away from the block.
+    /// 貫通ピンの組を持つブロックの各ピンに、ブロックから離れる向きの配線を1本ずつ付けた図面のネット。
+    fn feedthrough_block_nets(pins_json: &str) -> Vec<Net> {
+        let block = crate::block::test_block("U1", "", 100.0, 50.0, pins_json);
+        let Entity::Symbol(inst) = &block else { panic!("ブロックはシンボル") };
+        let def = crate::block::block_symbol(&inst.attrs).expect("ブロック定義");
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        sheet.entities.insert(block.id(), block.clone());
+        for (_, at) in pin_positions(inst, &def) {
+            let out = if at.x < 100.0 { -10.0 } else { 10.0 };
+            let w = wire(&[(at.x, at.y), (at.x + out, at.y)]);
+            sheet.entities.insert(w.id(), w);
+        }
+        extract_netlist(&sheet, &[def])
+    }
+
+    /// A block with a feed-through pin 1 and a plain pin 2: the wires on the left and right of pin 1 are one net that names pin 1 once, and pin 2 is not in it.
+    /// 貫通ピン1と普通のピン2を持つブロックでは、ピン1の左右の配線は1つのネットになりピン1は1回だけ載り、ピン2はそのネットに入らない。
+    #[test]
+    fn a_block_feedthrough_pin_joins_its_two_wires_into_one_net() {
+        let nets = feedthrough_block_nets(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"}]}"#);
+        assert_eq!(nets.len(), 2, "{nets:?}");
+        let one = nets.iter().find(|n| n.wire_ids.len() == 2).expect("ピン1の左右の配線は1ネット");
+        assert_eq!(one.pins.len(), 1);
+        assert_eq!(one.pins[0].pin, "1");
+        let two = nets.iter().find(|n| n.wire_ids.len() == 1).expect("ピン2は別ネット");
+        assert_eq!(two.pins.len(), 1);
+        assert_eq!(two.pins[0].pin, "2");
+    }
+
+    /// A block with feed-through pins 1 and 2: each pair is its own net, so the two pairs are never shorted together.
+    /// 貫通ピン1と2を持つブロックでは、組ごとに別のネットになり、2つの組どうしは短絡しない。
+    #[test]
+    fn two_block_feedthrough_pins_make_two_separate_nets() {
+        let nets = feedthrough_block_nets(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}"#);
+        assert_eq!(nets.len(), 2, "{nets:?}");
+        let mut names: Vec<&str> = nets.iter().map(|n| n.pins[0].pin.as_str()).collect();
+        names.sort();
+        assert_eq!(names, vec!["1", "2"]);
+        for n in &nets {
+            assert_eq!((n.wire_ids.len(), n.pins.len()), (2, 1), "{n:?}");
+        }
+    }
+
     /// A multi-level terminal block never shorts its levels together: level a and level b of the same pole end up on two separate nets, even though each level's own left and right connection points are still shorted internally (through-terminal).
     /// 多段端子台は段どうしを決して短絡しない: 同じ極でも段aと段bは別々のネットになる(各段自身の左右接続点は貫通端子として今までどおり内部短絡される)。
     #[test]

@@ -779,14 +779,31 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   if (all.length > BLOCK_PIN_MAX) {
     throw new Error(`block has too many pins: ${all.length} (max ${BLOCK_PIN_MAX})`);
   }
-  const seen = new Set<string>();
-  for (const pin of all) {
-    const no = (pin.no ?? "").trim();
-    if (!no) throw new Error("block pin number must not be empty");
-    if (seen.has(no)) throw new Error(`duplicate block pin number: ${no}`);
-    seen.add(no);
-    checkContacts(no, pin.contacts ?? []);
-  }
+  // 同じ番号は、向かい合う辺に1回ずつだけ置ける (貫通ピン、Rust側 parse_block_spec と同じ決まり)。辺は左・右・上・下の順
+  const seen = new Map<string, { side: number; pin: BlockPin; paired: boolean }>();
+  BLOCK_SIDES.forEach((key, side) => {
+    for (const pin of sideOf(pins, key)) {
+      const no = (pin.no ?? "").trim();
+      if (!no) throw new Error("block pin number must not be empty");
+      const first = seen.get(no);
+      if (!first) {
+        seen.set(no, { side, pin, paired: false });
+      } else {
+        if (first.paired || Math.floor(first.side / 2) !== Math.floor(side / 2) || first.side === side) {
+          throw new Error(`duplicate block pin number: ${no}`);
+        }
+        if ((first.pin.name ?? "").trim() !== (pin.name ?? "").trim()) {
+          throw new Error(`block pin ${no}: both sides of a feed-through pin must have the same name`);
+        }
+        const plain = (q: BlockPin) => (q.contacts ?? []).length === 0 && q.connector == null;
+        if (!plain(first.pin) || !plain(pin)) {
+          throw new Error(`block pin ${no}: a feed-through pin cannot have contacts or a connector picture`);
+        }
+        first.paired = true;
+      }
+      checkContacts(no, pin.contacts ?? []);
+    }
+  });
   checkConnectors(pins);
 
   const rawPitch = attrs[BLOCK_PITCH_ATTR]?.trim();

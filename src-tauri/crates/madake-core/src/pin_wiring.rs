@@ -797,6 +797,26 @@ mod tests {
         assert!(resolve_pin(&sheet, &defs, "TB1.1#3").is_err());
     }
 
+    /// On a block with a feed-through pin, the bare number is refused with both choices; "#1" is the left pin and "#2" the right pin.
+    /// 貫通ピンを持つブロックでは、番号だけの指定は両方の候補つきで断られ、「#1」は左のピン、「#2」は右のピンになる。
+    #[test]
+    fn a_block_feedthrough_pin_is_chosen_with_an_occurrence() {
+        let mut cn = inst("block", 50.0, 50.0, 0, false, "CN1");
+        cn.attrs.insert(
+            "block_pins".into(),
+            r#"{"left":[{"no":"1","name":"P"}],"right":[{"no":"1","name":"P"}]}"#.into(),
+        );
+        let sheet = sheet_with(vec![cn]);
+        let defs = sheet_symbol_defs(&sheet);
+        let err = resolve_pin(&sheet, &defs, "CN1.1").unwrap_err();
+        assert!(err.contains("CN1.1#1") && err.contains("CN1.1#2"), "{err}");
+        let left = resolve_pin(&sheet, &defs, "CN1.1#1").unwrap();
+        let right = resolve_pin(&sheet, &defs, "CN1.1#2").unwrap();
+        assert_eq!(left.pin.dir, PinDir::Left);
+        assert_eq!(right.pin.dir, PinDir::Right);
+        assert!(left.pin.x < right.pin.x);
+    }
+
     /// A mate pair sits on the 2.5 mm grid and its two halves only touch, so the tidy metrics count no overlap and no off-grid point for it.
     /// かみ合わせの組は2.5mmグリッドにのり、2つは接するだけなので、整頓指標は組を重なりにもグリッド外にも数えない。
     #[test]

@@ -241,7 +241,7 @@ describe("blockSymbol", () => {
 
   // ja: 番号の重複・空番号・小さすぎる寸法・壊れたピン表はエラーになる(黙って描かない)
   it("rejects duplicate or empty pin numbers, a size too small, and a malformed pin table", () => {
-    expect(() => blockSymbol({ block_pins: '{"left":[{"no":"A"}],"right":[{"no":"A"}]}' })).toThrow(
+    expect(() => blockSymbol({ block_pins: '{"left":[{"no":"A"},{"no":"A"}]}' })).toThrow(
       /duplicate/,
     );
     expect(() => blockSymbol({ block_pins: '{"left":[{"no":" "}]}' })).toThrow(/empty/);
@@ -750,7 +750,7 @@ describe("block captions and group names (Rust twin)", () => {
 describe("fine pitch blocks (Rust twin)", () => {
   // ja: golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブ・ピン・属性の置き場所を返す
   it("draws every block of the fine-pitch golden file exactly like Rust", () => {
-    expect(fineGolden.cases.length).toBe(14);
+    expect(fineGolden.cases.length).toBe(16);
     for (const c of fineGolden.cases) {
       const def = blockSymbol(c.attrs as Record<string, string>);
       expect({
@@ -897,6 +897,76 @@ describe("fine pitch blocks (Rust twin)", () => {
       expect(a.top).toBe(captionBounds(fine, fineDef).min.y);
       const coarse = at(100.3, coarseAttrs);
       expect(captionAnchor(coarse, blockSymbol(coarseAttrs)).x).toBe(100.3);
+    }
+  });
+});
+
+describe("feed-through block pins (Rust twin)", () => {
+  const msg = (pins: string) => {
+    try {
+      parseBlockSpec({ block_pins: pins });
+    } catch (e) {
+      return (e as Error).message;
+    }
+    return null;
+  };
+
+  // ja: 同じピン番号を左と右、または上と下に1回ずつ置ける。辺ごとにピンが1本ずつできる
+  it("accepts one pin number on each of two opposite sides and draws a pin per side", () => {
+    const lr = blockSymbol({ block_pins: '{"left":[{"no":"1"}],"right":[{"no":"1"}]}' });
+    const ones = lr.pins.filter((p) => p.number === "1");
+    expect(ones.length).toBe(2);
+    expect(ones[0].at.x).toBeLessThan(0);
+    expect(ones[1].at.x).toBeGreaterThan(0);
+    const tb = blockSymbol({ block_pins: '{"top":[{"no":"A"}],"bottom":[{"no":"A"}]}' });
+    const aa = tb.pins.filter((p) => p.number === "A");
+    expect(aa.length).toBe(2);
+    expect(aa[0].at.y).toBeLessThan(0);
+    expect(aa[1].at.y).toBeGreaterThan(0);
+  });
+
+  // ja: 同じ辺に2回・隣り合う辺・3回置いた同じ番号は、これまでどおり断られる
+  it("still refuses a pin number twice on one side, on neighbouring sides, or three times", () => {
+    for (const pins of [
+      '{"left":[{"no":"1"},{"no":"1"}]}',
+      '{"left":[{"no":"1"}],"top":[{"no":"1"}]}',
+      '{"right":[{"no":"1"}],"bottom":[{"no":"1"}]}',
+      '{"left":[{"no":"1"}],"right":[{"no":"1"},{"no":"1"}]}',
+      '{"left":[{"no":"1"}],"right":[{"no":"1"}],"top":[{"no":"1"}]}',
+    ]) {
+      expect(msg(pins), pins).toBe("duplicate block pin number: 1");
+    }
+  });
+
+  // ja: 貫通ピンの両側は同じ名前 (前後の空白は無視、両方空なら同じ)
+  it("needs the same name on both sides of a feed-through pin", () => {
+    const want = "block pin 1: both sides of a feed-through pin must have the same name";
+    expect(msg('{"left":[{"no":"1","name":"P"}],"right":[{"no":"1","name":"N"}]}')).toBe(want);
+    expect(msg('{"left":[{"no":"1","name":"P"}],"right":[{"no":"1"}]}')).toBe(want);
+    expect(msg('{"left":[{"no":"1","name":"P"}],"right":[{"no":"1","name":" P "}]}')).toBeNull();
+    expect(msg('{"top":[{"no":"1"}],"bottom":[{"no":"1"}]}')).toBeNull();
+  });
+
+  // ja: 貫通ピンには、どちらの辺にも接点やコネクタの絵を付けられない
+  it("refuses contacts or a connector picture on either side of a feed-through pin", () => {
+    const want = "block pin 1: a feed-through pin cannot have contacts or a connector picture";
+    expect(msg('{"left":[{"no":"1","contacts":["A","B"]}],"right":[{"no":"1"}]}')).toBe(want);
+    expect(msg('{"left":[{"no":"1"}],"right":[{"no":"1","contacts":["A","B"]}]}')).toBe(want);
+    expect(msg('{"left":[{"no":"1","connector":"usb_a_m"}],"right":[{"no":"1"}]}')).toBe(want);
+    expect(msg('{"left":[{"no":"1"}],"right":[{"no":"1","connector":"usb_a_m"}]}')).toBe(want);
+  });
+
+  // ja: 2.5mm間隔で番号を内側に書くブロックでも貫通ピンの組を置け、4本のピンは2.5mmのグリッドに乗る
+  it("accepts feed-through pins on a fine block with numbers inside, all on the 2.5 mm grid", () => {
+    const def = blockSymbol({
+      block_pins: '{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}',
+      block_pitch: "2.5",
+      block_numbers: "inside",
+    });
+    expect(def.pins.length).toBe(4);
+    for (const p of def.pins) {
+      expect(Math.abs(p.at.x / 2.5 - Math.round(p.at.x / 2.5))).toBeLessThan(1e-9);
+      expect(Math.abs(p.at.y / 2.5 - Math.round(p.at.y / 2.5))).toBeLessThan(1e-9);
     }
   });
 });

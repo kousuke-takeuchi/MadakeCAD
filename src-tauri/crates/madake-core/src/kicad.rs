@@ -1390,6 +1390,36 @@ mod tests {
         assert_eq!(crate::block::drawn_like(&back.attrs), crate::block::drawn_like(&orig));
     }
 
+    /// A block with feed-through pins (one number on opposite sides) exports to KiCad with both pins and imports back as the same block.
+    /// 貫通ピン (向かい合う辺に同じ番号) を持つブロックは、KiCadへ2本のピンとして書き出され、読み戻しても同じブロックに戻る。
+    #[test]
+    fn a_feedthrough_block_survives_a_kicad_round_trip() {
+        let mut sheet = Sheet::new("S", PaperSize::A3, Orientation::Landscape);
+        let block = crate::block::test_block(
+            "CN1",
+            "",
+            60.0,
+            50.0,
+            r#"{"left":[{"no":"1","name":"P"},{"no":"2","name":"N"}],"right":[{"no":"1","name":"P"},{"no":"2","name":"N"}]}"#,
+        );
+        let Entity::Symbol(orig) = &block else { panic!("ブロックはシンボル") };
+        let orig = orig.clone();
+        sheet.entities.insert(block.id(), block);
+        let (text, _) = export_kicad_sch(&sheet, &defs(&sheet));
+        let (project, report) = import_kicad_sch(&text, "往復").unwrap();
+        assert!(report.skipped.is_empty(), "{report:?}");
+        let back = entities_of(&project.sheets[0])
+            .into_iter()
+            .find_map(|e| match e {
+                Entity::Symbol(s) => Some(s),
+                _ => None,
+            })
+            .expect("ブロックが読み戻される");
+        assert_eq!(crate::block::drawn_like(&back.attrs), crate::block::drawn_like(&orig.attrs));
+        let def = crate::block::block_symbol(&back.attrs).unwrap();
+        assert_eq!(def.pins.iter().filter(|p| p.number == "1").count(), 2);
+    }
+
     /// The KiCad export of a block without the pitch and number attributes does not mention them.
     /// 間隔と番号の属性を持たないブロックのKiCad書き出しには、その2つの属性は現れない。
     #[test]

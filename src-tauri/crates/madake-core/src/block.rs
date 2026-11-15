@@ -243,6 +243,7 @@ fn caption_inset(side: &[BlockPin]) -> f64 {
 ///
 /// - `block_pins`が無ければピン0本(注記だけの箱)
 /// - JSONが壊れている・知らないキーがある・ピン番号が空または重複・ピンが多すぎる → エラー
+///   (同じ番号は向かい合う辺に1回ずつだけ置ける貫通ピン。両側で同じ名前にし、接点・コネクタの絵は付けない)
 /// - `block_pitch` / `block_numbers` が知らない値 → エラー
 /// - `block_size`はピン間隔の刻み (5mmまたは2.5mm) へ切り上げ、ピンが収まらない大きさならエラー
 /// - `connector_ref` が空・まとめない種類に付いている・2つのまとまりに使われている → エラー ([`check_connectors`])
@@ -259,16 +260,40 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
             "block has too many pins: {count} (max {BLOCK_PIN_MAX})"
         ));
     }
-    let mut seen: std::collections::BTreeSet<&str> = Default::default();
-    for pin in pins.all() {
-        let no = pin.no.trim();
-        if no.is_empty() {
-            return Err("block pin number must not be empty".into());
+    // 同じ番号は、向かい合う辺に1回ずつだけ置ける (貫通ピン)。辺は左・右・上・下の順
+    let sides: [&Vec<BlockPin>; 4] = [&pins.left, &pins.right, &pins.top, &pins.bottom];
+    let mut seen: std::collections::BTreeMap<&str, (usize, &BlockPin, bool)> = Default::default();
+    for (side, list) in sides.iter().enumerate() {
+        for pin in list.iter() {
+            let no = pin.no.trim();
+            if no.is_empty() {
+                return Err("block pin number must not be empty".into());
+            }
+            match seen.get_mut(no) {
+                None => {
+                    seen.insert(no, (side, pin, false));
+                }
+                // 2本目は、1本目と向かい合う辺 (左右・上下) で、まだ3本目でないときだけ通す
+                Some((first_side, first, paired)) => {
+                    if *paired || *first_side / 2 != side / 2 || *first_side == side {
+                        return Err(format!("duplicate block pin number: {no}"));
+                    }
+                    if first.name.trim() != pin.name.trim() {
+                        return Err(format!(
+                            "block pin {no}: both sides of a feed-through pin must have the same name"
+                        ));
+                    }
+                    let plain = |p: &BlockPin| p.contacts.is_empty() && p.connector.is_none();
+                    if !plain(first) || !plain(pin) {
+                        return Err(format!(
+                            "block pin {no}: a feed-through pin cannot have contacts or a connector picture"
+                        ));
+                    }
+                    *paired = true;
+                }
+            }
+            check_contacts(no, &pin.contacts)?;
         }
-        if !seen.insert(no) {
-            return Err(format!("duplicate block pin number: {no}"));
-        }
-        check_contacts(no, &pin.contacts)?;
     }
     check_connectors(&pins)?;
 
@@ -1206,19 +1231,92 @@ mod tests {
         assert_eq!(pin_at(&def, "1"), Point::new(-12.5, 0.0));
     }
 
-    /// Two pins with the same number, or a pin with an empty number, are rejected instead of silently drawn.
-    /// 同じピン番号が2つある、またはピン番号が空のブロックは、黙って描かれずにエラーになる。
+    /// Two pins with the same number on one side, or a pin with an empty number, are rejected instead of silently drawn.
+    /// 同じ辺に同じピン番号が2つある、またはピン番号が空のブロックは、黙って描かれずにエラーになる。
     #[test]
     fn duplicate_or_empty_pin_numbers_are_rejected() {
         let dup = block_symbol(&attrs(&[(
             "block_pins",
-            r#"{"left":[{"no":"IN1"}],"right":[{"no":"IN1"}]}"#,
+            r#"{"left":[{"no":"IN1"},{"no":"IN1"}]}"#,
         )]))
         .expect_err("重複は拒否");
         assert!(dup.contains("duplicate"), "{dup}");
         let empty = block_symbol(&attrs(&[("block_pins", r#"{"left":[{"no":"  "}]}"#)]))
             .expect_err("空番号は拒否");
         assert!(empty.contains("empty"), "{empty}");
+    }
+
+    fn feedthrough_err(pins: &str) -> String {
+        block_symbol(&attrs(&[("block_pins", pins)])).expect_err("拒否されること")
+    }
+
+    /// A pin number may appear once on the left and once on the right, or once on the top and once on the bottom; each side gets its own pin.
+    /// 同じピン番号を左と右に1回ずつ、または上と下に1回ずつ置ける。辺ごとにピンが1本ずつできる。
+    #[test]
+    fn a_pin_number_may_be_on_two_opposite_sides() {
+        let lr = block_symbol(&attrs(&[("block_pins", r#"{"left":[{"no":"1"}],"right":[{"no":"1"}]}"#)])).expect("左右は通る");
+        let ones: Vec<&crate::symbol::PinDef> = lr.pins.iter().filter(|p| p.number == "1").collect();
+        assert_eq!(ones.len(), 2);
+        assert!(ones[0].at.x < 0.0 && ones[1].at.x > 0.0, "左のピンが先、右のピンが後: {ones:?}");
+        let tb = block_symbol(&attrs(&[("block_pins", r#"{"top":[{"no":"A"}],"bottom":[{"no":"A"}]}"#)])).expect("上下は通る");
+        let aa: Vec<&crate::symbol::PinDef> = tb.pins.iter().filter(|p| p.number == "A").collect();
+        assert_eq!(aa.len(), 2);
+        assert!(aa[0].at.y < 0.0 && aa[1].at.y > 0.0, "上のピンが先、下のピンが後: {aa:?}");
+    }
+
+    /// The same pin number twice on one side, on two neighbouring sides, or three times is still refused.
+    /// 同じ辺に2回、隣り合う辺に1回ずつ、または3回置いた同じピン番号は、これまでどおり断られる。
+    #[test]
+    fn a_pin_number_on_the_same_side_neighbouring_sides_or_three_times_is_refused() {
+        for pins in [
+            r#"{"left":[{"no":"1"},{"no":"1"}]}"#,
+            r#"{"left":[{"no":"1"}],"top":[{"no":"1"}]}"#,
+            r#"{"right":[{"no":"1"}],"bottom":[{"no":"1"}]}"#,
+            r#"{"left":[{"no":"1"}],"right":[{"no":"1"},{"no":"1"}]}"#,
+            r#"{"left":[{"no":"1"}],"right":[{"no":"1"}],"top":[{"no":"1"}]}"#,
+        ] {
+            assert_eq!(feedthrough_err(pins), "duplicate block pin number: 1", "{pins}");
+        }
+    }
+
+    /// Both sides of a feed-through pin must have the same name once spaces are trimmed; two empty names are the same.
+    /// 貫通ピンは両側で同じ名前にする (前後の空白は無視)。名前が両方空なら同じとみなす。
+    #[test]
+    fn both_sides_of_a_feedthrough_pin_need_the_same_name() {
+        assert_eq!(
+            feedthrough_err(r#"{"left":[{"no":"1","name":"P"}],"right":[{"no":"1","name":"N"}]}"#),
+            "block pin 1: both sides of a feed-through pin must have the same name"
+        );
+        assert_eq!(
+            feedthrough_err(r#"{"left":[{"no":"1","name":"P"}],"right":[{"no":"1"}]}"#),
+            "block pin 1: both sides of a feed-through pin must have the same name"
+        );
+        assert!(block_symbol(&attrs(&[("block_pins", r#"{"left":[{"no":"1","name":"P"}],"right":[{"no":"1","name":" P "}]}"#)])).is_ok());
+        assert!(block_symbol(&attrs(&[("block_pins", r#"{"top":[{"no":"1"}],"bottom":[{"no":"1"}]}"#)])).is_ok());
+    }
+
+    /// A feed-through pin cannot carry contacts or a connector picture on either side.
+    /// 貫通ピンは、どちらの辺にも接点やコネクタの絵を付けられない。
+    #[test]
+    fn a_feedthrough_pin_cannot_have_contacts_or_a_connector() {
+        let msg = "block pin 1: a feed-through pin cannot have contacts or a connector picture";
+        assert_eq!(feedthrough_err(r#"{"left":[{"no":"1","contacts":["A","B"]}],"right":[{"no":"1"}]}"#), msg);
+        assert_eq!(feedthrough_err(r#"{"left":[{"no":"1"}],"right":[{"no":"1","contacts":["A","B"]}]}"#), msg);
+        assert_eq!(feedthrough_err(r#"{"left":[{"no":"1","connector":"usb_a_m"}],"right":[{"no":"1"}]}"#), msg);
+        assert_eq!(feedthrough_err(r#"{"left":[{"no":"1"}],"right":[{"no":"1","connector":"usb_a_m"}]}"#), msg);
+    }
+
+    /// A fine-pitch block with numbers inside accepts a feed-through pair and keeps all four pins on the 2.5 mm grid.
+    /// 2.5mm間隔で番号を内側に書くブロックでも貫通ピンの組を置け、4本のピンはすべて2.5mmのグリッドに乗る。
+    #[test]
+    fn a_fine_block_with_numbers_inside_accepts_feedthrough_pins() {
+        let mut a = fine(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}"#, None);
+        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let def = block_symbol(&a).expect("通る");
+        assert_eq!(def.pins.len(), 4);
+        for p in &def.pins {
+            assert!(is_grid(p.at.x) && is_grid(p.at.y), "{p:?}");
+        }
     }
 
     /// A size too small for the pins is rejected, and so is a pin table that is not valid JSON or uses an unknown side.
@@ -2397,6 +2495,15 @@ mod tests {
         cases.push(("fine-top-bottom-names".into(), fine(top_bottom, None)));
         let left_right = r#"{"left":[{"no":"1","name":"IN"},{"no":"2","name":"EN"}],"right":[{"no":"3","name":"OUT"}]}"#;
         cases.push(("fine-left-right-names".into(), fine(left_right, None)));
+        let mut feed_coarse = BTreeMap::new();
+        feed_coarse.insert(
+            BLOCK_PINS_ATTR.to_string(),
+            r#"{"left":[{"no":"1","name":"P"},{"no":"2","name":"N"}],"right":[{"no":"1","name":"P"},{"no":"2","name":"N"}]}"#.to_string(),
+        );
+        cases.push(("feedthrough-coarse".into(), feed_coarse));
+        let mut feed_fine = fine(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}"#, Some(r#"{"w":7.5,"h":7.5}"#));
+        feed_fine.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        cases.push(("feedthrough-fine-inside".into(), feed_fine));
         cases
     }
 

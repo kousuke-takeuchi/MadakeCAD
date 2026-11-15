@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3220仕様項目**。
+全6領域・**3240仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -26,7 +26,12 @@
 - ピン表がまったく無いブロックも、最小サイズの空の箱として有効に作られる。 <sub>`a_block_without_a_pin_table_is_an_empty_box`</sub>
 - 上辺・下辺のピンは左から右へ並び、文字を縦向きに描けないので番号・名前は箱の内側に置かれる。 <sub>`top_and_bottom_pins_run_left_to_right`</sub>
 - 外形寸法を明示しても5mm刻みへ切り上げられ、外形はグリッド上に載ったままになる。 <sub>`an_explicit_size_is_rounded_up_to_the_grid`</sub>
-- 同じピン番号が2つある、またはピン番号が空のブロックは、黙って描かれずにエラーになる。 <sub>`duplicate_or_empty_pin_numbers_are_rejected`</sub>
+- 同じ辺に同じピン番号が2つある、またはピン番号が空のブロックは、黙って描かれずにエラーになる。 <sub>`duplicate_or_empty_pin_numbers_are_rejected`</sub>
+- 同じピン番号を左と右に1回ずつ、または上と下に1回ずつ置ける。辺ごとにピンが1本ずつできる。 <sub>`a_pin_number_may_be_on_two_opposite_sides`</sub>
+- 同じ辺に2回、隣り合う辺に1回ずつ、または3回置いた同じピン番号は、これまでどおり断られる。 <sub>`a_pin_number_on_the_same_side_neighbouring_sides_or_three_times_is_refused`</sub>
+- 貫通ピンは両側で同じ名前にする (前後の空白は無視)。名前が両方空なら同じとみなす。 <sub>`both_sides_of_a_feedthrough_pin_need_the_same_name`</sub>
+- 貫通ピンは、どちらの辺にも接点やコネクタの絵を付けられない。 <sub>`a_feedthrough_pin_cannot_have_contacts_or_a_connector`</sub>
+- 2.5mm間隔で番号を内側に書くブロックでも貫通ピンの組を置け、4本のピンはすべて2.5mmのグリッドに乗る。 <sub>`a_fine_block_with_numbers_inside_accepts_feedthrough_pins`</sub>
 - ピンが収まらない寸法は拒否され、JSONとして壊れたピン表や知らない辺名も同じく拒否される。 <sub>`a_size_too_small_or_a_malformed_pin_table_is_rejected`</sub>
 - ブロックのピン数には上限があり、桁違いのピン表ははっきりエラーになる。 <sub>`too_many_pins_are_rejected`</sub>
 - 属性スロット(参照記号・型番・機能・定格)は箱の中央に縦に積まれる。 <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
@@ -381,7 +386,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは22 (ブロックのピン間隔と番号の位置を追加した版) である。 <sub>`the_current_format_version_is_twenty_two`</sub>
+- 現行のファイル形式バージョンは23 (ブロックの貫通ピンを追加した版) である。 <sub>`the_current_format_version_is_twenty_three`</sub>
+- 形式22のプロジェクトファイルはこのビルドで開け、形式23になる。ブロックの属性とピンはそのまま残る。 <sub>`a_version_22_file_opens_as_version_23`</sub>
 - 形式21のプロジェクトファイルはこのビルドで開け、形式22になる。ブロックの属性と5mm間隔のピンはそのまま残る。 <sub>`a_version_21_file_opens_as_version_22`</sub>
 - ストロークフォントを持つプロジェクトはファイルを往復でき、持たないプロジェクトはtext_fontのキーを書かない。 <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
 - ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_17_file_loads_unchanged`</sub>
@@ -424,6 +430,7 @@
 - ブロックは形ごとに別のlib_symbolになる(見本はMadakeCAD:block、他はblock_<ハッシュ>)。ピン番号つきで、塗りはKiCadの塗りになり、同じ形は1つを共有する。ピン表を読めないブロックは見本の箱にせず書けなかったものとして報告する。 <sub>`each_block_shape_is_its_own_kicad_lib_symbol`</sub>
 - 自前の形ごとのブロックlib_symbolは、スキップされずにピン表(block_pins)を保ったブロックとして読み戻せる。 <sub>`our_block_lib_symbols_import_back_as_blocks_with_their_pin_table`</sub>
 - 番号を内側に描く2.5mm間隔のブロックは、KiCadへ書き出して読み戻しても間隔と番号の位置を保ち、ピンの位置も変わらない。 <sub>`a_fine_block_survives_a_kicad_round_trip`</sub>
+- 貫通ピン (向かい合う辺に同じ番号) を持つブロックは、KiCadへ2本のピンとして書き出され、読み戻しても同じブロックに戻る。 <sub>`a_feedthrough_block_survives_a_kicad_round_trip`</sub>
 - 間隔と番号の属性を持たないブロックのKiCad書き出しには、その2つの属性は現れない。 <sub>`a_plain_block_kicad_export_does_not_mention_pitch_or_numbers`</sub>
 - 線番はそのネット上のKiCadラベルになり、KiCadでも再インポート後もネット名として残る。 <sub>`wire_numbers_become_labels`</sub>
 - ハーネス境界は破線の閉じた多角形と、その名前の注記として書き出される。 <sub>`harness_becomes_dashed_polyline_with_name`</sub>
@@ -535,6 +542,8 @@
 - ネットリストが使う載り判定は、配線の頂点上・線分の途中・シンボルのピン上のラベルを載っていると認め、わずかでも浮いたラベルは認めない。 <sub>`the_label_attachment_test_accepts_vertices_segments_and_pins`</sub>
 - 無名ネットには決定的な連番名(N001, N002, …)が付く。 <sub>`unnamed_nets_get_deterministic_sequential_names`</sub>
 - 同一シンボルで同じピン番号を持つ2つの接続点(貫通端子)は内部短絡され、ネットのピン一覧には1回だけ載る。 <sub>`same_pin_number_points_short_internally`</sub>
+- 貫通ピン1と普通のピン2を持つブロックでは、ピン1の左右の配線は1つのネットになりピン1は1回だけ載り、ピン2はそのネットに入らない。 <sub>`a_block_feedthrough_pin_joins_its_two_wires_into_one_net`</sub>
+- 貫通ピン1と2を持つブロックでは、組ごとに別のネットになり、2つの組どうしは短絡しない。 <sub>`two_block_feedthrough_pins_make_two_separate_nets`</sub>
 - 多段端子台は段どうしを決して短絡しない: 同じ極でも段aと段bは別々のネットになる(各段自身の左右接続点は貫通端子として今までどおり内部短絡される)。 <sub>`each_level_of_a_multilevel_terminal_block_is_an_independent_net`</sub>
 - ワイヤに書かれた線番は、ネットラベルが無いネットの表示名になる。 <sub>`wire_number_names_a_net_without_a_label`</sub>
 - ネットラベルは常に線番より優先され、線番は自動名 (N001) より優先される。 <sub>`net_name_prefers_label_then_wire_number_then_auto_name`</sub>
@@ -689,6 +698,7 @@
 - 経路が別のピンの上を通るとネットリスト上そのピンもつながってしまうので断り、どのピンかを知らせる。 <sub>`a_route_that_passes_over_another_pin_is_refused`</sub>
 - 同じピンどうしの配線は、番号で書いても名前で書いても断られる。 <sub>`wiring_a_pin_to_itself_is_refused`</sub>
 - 1つの部品に同じピン番号が2つある(貫通端子)ときは、番号だけの指定を両方の候補つきで断り、「#n」で片方を選べる。 <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
+- 貫通ピンを持つブロックでは、番号だけの指定は両方の候補つきで断られ、「#1」は左のピン、「#2」は右のピンになる。 <sub>`a_block_feedthrough_pin_is_chosen_with_an_occurrence`</sub>
 - かみ合わせの組は2.5mmグリッドにのり、2つは接するだけなので、整頓指標は組を重なりにもグリッド外にも数えない。 <sub>`a_mate_pair_is_tidy`</sub>
 - かみ合わせの組のプラグ側は参照記号を印字しないので、共有する記号はソケット側に1回だけ描かれる。 <sub>`the_plug_hides_the_shared_designator`</sub>
 - get_pins はポートのピンの接点を出し、普通のピンには出さない。 <sub>`part_pins_show_contacts`</sub>
@@ -2184,7 +2194,11 @@
 - 手動の外形でも、左右のまとまりの名前が同じ行に並んで広がった幅を表示する (44 の 20 x 20 指定はプレビューと同じ幅になる) <sub>`block attributes built from the draft`</sub>
 - プレビューは実際に描かれるシンボル定義そのもの(ピンの数だけ接続点がある) <sub>`block attributes built from the draft`</sub>
 - 正しく埋めたピン表には指摘が出ない <sub>`checks on the pin table`</sub>
-- 同じピン番号が2つあると指摘される(番号は図面内で一意) <sub>`checks on the pin table`</sub>
+- 同じ辺に同じピン番号が2つあると指摘される <sub>`checks on the pin table`</sub>
+- 向かい合う辺に1回ずつ (名前が同じ) なら貫通ピンとして指摘されない <sub>`checks on the pin table`</sub>
+- 隣り合う辺に同じ番号を置いたとき、貫通ピンの組が3本になったときは重複として指摘される <sub>`checks on the pin table`</sub>
+- 貫通ピンの両側で名前が違うと指摘される <sub>`checks on the pin table`</sub>
+- 貫通ピンに接点やコネクタの絵を付けると指摘される <sub>`checks on the pin table`</sub>
 - ピン名だけ書いて番号が空の行は指摘される <sub>`checks on the pin table`</sub>
 - 手動の外形がピンの並びより小さいと指摘される(必要な寸法つき) <sub>`checks on the pin table`</sub>
 - ピンが多すぎる(200本超)ブロックは指摘される <sub>`checks on the pin table`</sub>
@@ -2193,6 +2207,7 @@
 - 配線が1本も届いていないブロックには配線済みピンが無い <sub>`pins that are already wired`</sub>
 - 配線済みのピンを消す・番号を変えると、そのピンが「接続が外れる」として挙がる <sub>`pins that are already wired`</sub>
 - 配線済みのピンをそのまま残す編集では警告は出ない <sub>`pins that are already wired`</sub>
+- 貫通ピンは左右の両方に配線があれば番号が2回挙がり、片側の行を消す編集では接続が外れるピンとして1回だけ挙がる <sub>`pins that are already wired`</sub>
 - 接点はカンマ (半角・読点・全角) で区切り、前後の空白を落として空のものを捨てる <sub>`pins that are already wired`</sub>
 - 接点を書いた行は block_pins に contacts として入り、読み戻すとカンマ区切りの文字に戻る。接点の無い行の書き出しは今までと同じ <sub>`pins that are already wired`</sub>
 - 接点が1つだけ・同じ接点が2つ・32を超える行は指摘になる <sub>`pins that are already wired`</sub>
@@ -2211,7 +2226,7 @@
 - 部品挿入で「ブロック(汎用)」を選ぶと、左右1本ずつのピン表が開く <sub>`starting a new block from the insert dialog`</sub>
 - 編集したピン表はそのまま配置に使う属性になる(配置後もこの形で描かれる) <sub>`starting a new block from the insert dialog`</sub>
 - 「手動」に切り替えると、そのときの自動寸法が編集できる初期値として入る <sub>`starting a new block from the insert dialog`</sub>
-- ピン番号が重なっているあいだは配置できない(指摘が出る) <sub>`starting a new block from the insert dialog`</sub>
+- 同じ辺でピン番号が重なっているあいだは配置できない(指摘が出る) <sub>`starting a new block from the insert dialog`</sub>
 - プロパティの「ピン表を編集…」は、そのブロックのピン表を読み込んで開く <sub>`editing a block that is already on the drawing`</sub>
 - 適用するとupdate_entityコマンドが1回だけ実行され、参照記号・型番・位置は変わらない <sub>`editing a block that is already on the drawing`</sub>
 - ブロック以外の属性(定格など)は編集しても残る <sub>`editing a block that is already on the drawing`</sub>
@@ -2314,6 +2329,11 @@
 - ピンも属性も無い5mm間隔のブロックは、これまでどおり原点中心で、文字の置き場所もずれない <sub>`fine pitch blocks (Rust twin)`</sub>
 - 幅も高さも2.5mmの奇数倍で上辺にピンのある2.5mm間隔のブロックでは、左上の角の参照記号・型番は、グリッドへずらして描いた外形の左辺の1.0mm左・上辺の位置から始まる (Rust の corner_captions_of_a_fine_block_follow_the_shifted_outline と同じ) <sub>`fine pitch blocks (Rust twin)`</sub>
 - 上辺にピンが無く幅も高さも2.5mmの奇数倍の2.5mm間隔のブロックでは、参照記号・型番は回転・ミラーの後の描かれた外形の中央にそろい、5mm間隔のブロックは配置点ちょうどのまま (Rust の centred_captions_of_a_fine_block_follow_the_shifted_outline と同じ数) <sub>`fine pitch blocks (Rust twin)`</sub>
+- 同じピン番号を左と右、または上と下に1回ずつ置ける。辺ごとにピンが1本ずつできる <sub>`feed-through block pins (Rust twin)`</sub>
+- 同じ辺に2回・隣り合う辺・3回置いた同じ番号は、これまでどおり断られる <sub>`feed-through block pins (Rust twin)`</sub>
+- 貫通ピンの両側は同じ名前 (前後の空白は無視、両方空なら同じ) <sub>`feed-through block pins (Rust twin)`</sub>
+- 貫通ピンには、どちらの辺にも接点やコネクタの絵を付けられない <sub>`feed-through block pins (Rust twin)`</sub>
+- 2.5mm間隔で番号を内側に書くブロックでも貫通ピンの組を置け、4本のピンは2.5mmのグリッドに乗る <sub>`feed-through block pins (Rust twin)`</sub>
 
 ### frameEditor
 

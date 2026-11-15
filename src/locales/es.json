@@ -698,7 +698,9 @@
       "connectorRefNotGrouped": "La fila {row} del {side} tiene un nombre de grupo: solo los bornes de tornillo y los zócalos JST pueden tenerlo",
       "connectorRefSplit": "El nombre de grupo {ref} lo usan dos conectores: coloque sus pines juntos en un mismo lado y del mismo tipo",
       "connectorOnFine": "Un bloque de 2,5 mm no puede usar una imagen de conector (pin {no})",
-      "connectorOnInside": "Un bloque con los números dentro no puede usar una imagen de conector (pin {no})"
+      "connectorOnInside": "Un bloque con los números dentro no puede usar una imagen de conector (pin {no})",
+      "feedthroughName": "El pin pasante {no} necesita el mismo nombre en ambos lados",
+      "feedthroughPicture": "El pin pasante {no} no puede tener contactos ni imagen de conector"
     },
     "wiredWarning": "Pins {pins} are wired: renumbering or deleting them disconnects those wires",
     "placeHint": "Place puts a ghost on the cursor (R rotates, Esc cancels)",

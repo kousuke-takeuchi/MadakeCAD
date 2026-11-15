@@ -212,11 +212,49 @@ describe("checks on the pin table", () => {
     expect(draftIssues(draft())).toEqual([]);
   });
 
-  // ja: 同じピン番号が2つあると指摘される(番号は図面内で一意)
-  it("reports a pin number that is used twice", () => {
+  // ja: 同じ辺に同じピン番号が2つあると指摘される
+  it("reports a pin number that is used twice on one side", () => {
     const d = draft();
-    d.rows.right[0].no = "IN1";
+    d.rows.left[1].no = "IN1";
     expect(draftIssues(d)).toEqual([{ code: "duplicate", no: "IN1" }]);
+  });
+
+  // ja: 向かい合う辺に1回ずつ (名前が同じ) なら貫通ピンとして指摘されない
+  it("accepts one pin number on each of two opposite sides with the same name", () => {
+    const d = draft();
+    d.rows.right[0] = { no: "IN1", name: "入力1" };
+    expect(draftIssues(d)).toEqual([]);
+    const tb = draftFromAttrs({ block_pins: '{"top":[{"no":"1"}],"bottom":[{"no":"1"}]}' });
+    expect(draftIssues(tb)).toEqual([]);
+  });
+
+  // ja: 隣り合う辺に同じ番号を置いたとき、貫通ピンの組が3本になったときは重複として指摘される
+  it("reports a pin number on neighbouring sides or three times as a duplicate", () => {
+    const adjacent = draft();
+    adjacent.rows.top = [{ no: "IN1", name: "入力1" }];
+    expect(draftIssues(adjacent)).toEqual([{ code: "duplicate", no: "IN1" }]);
+    const three = draft();
+    three.rows.right[0] = { no: "IN1", name: "入力1" };
+    three.rows.bottom = [{ no: "IN1", name: "入力1" }];
+    expect(draftIssues(three)).toEqual([{ code: "duplicate", no: "IN1" }]);
+  });
+
+  // ja: 貫通ピンの両側で名前が違うと指摘される
+  it("reports a feed-through pin whose two sides have different names", () => {
+    const d = draft();
+    d.rows.right[0] = { no: "IN1", name: " 別名 " };
+    expect(draftIssues(d)).toEqual([{ code: "feedthroughName", no: "IN1" }]);
+  });
+
+  // ja: 貫通ピンに接点やコネクタの絵を付けると指摘される
+  it("reports contacts or a connector picture on a feed-through pin", () => {
+    const withContacts = draft();
+    withContacts.rows.right[0] = { no: "IN1", name: "入力1" };
+    withContacts.rows.left[0].contacts = "A, B";
+    expect(draftIssues(withContacts)).toEqual([{ code: "feedthroughPicture", no: "IN1" }]);
+    const withConnector = draft();
+    withConnector.rows.right[0] = { no: "IN1", name: "入力1", connector: "usb_a_m" };
+    expect(draftIssues(withConnector)).toEqual([{ code: "feedthroughPicture", no: "IN1" }]);
   });
 
   // ja: ピン名だけ書いて番号が空の行は指摘される
@@ -286,6 +324,24 @@ describe("pins that are already wired", () => {
     const d = draft();
     d.rows.left[0].name = "運転指令";
     expect(droppedWiredPins(["IN1", "OUT1"], d)).toEqual([]);
+  });
+
+  // ja: 貫通ピンは左右の両方に配線があれば番号が2回挙がり、片側の行を消す編集では接続が外れるピンとして1回だけ挙がる
+  it("counts both wired sides of a feed-through pin and flags the pin when one side row is deleted", () => {
+    const fa = { block_pins: '{"left":[{"no":"1"}],"right":[{"no":"1"}]}' };
+    const inst = blockAt(fa);
+    const def = blockSymbol(fa);
+    const wires = def.pins.map((pin, i) => {
+      const at = { x: inst.at.x + pin.at.x, y: inst.at.y + pin.at.y };
+      return wire(`w${i}`, [{ x: at.x - 20, y: at.y }, at]);
+    });
+    expect(wiredPinNumbers(sheetWith(wires), inst, def)).toEqual(["1", "1"]);
+    const keepBoth = draftFromAttrs(fa);
+    expect(droppedWiredPins(["1", "1"], keepBoth)).toEqual([]);
+    const oneSide = draftFromAttrs(fa);
+    removeRow(oneSide, "right", 0);
+    expect(droppedWiredPins(["1", "1"], oneSide)).toEqual(["1"]);
+    expect(droppedWiredPins(["1"], oneSide)).toEqual([]);
   });
 
   // ja: 接点はカンマ (半角・読点・全角) で区切り、前後の空白を落として空のものを捨てる

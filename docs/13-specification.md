@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3220 specification clauses** across 6 areas.
+**3240 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -26,7 +26,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block with no pin table at all is still a valid, minimum-sized empty box. <sub>`a_block_without_a_pin_table_is_an_empty_box`</sub>
 - Top and bottom pins run left to right, and their captions stay inside the box because text cannot be drawn sideways. <sub>`top_and_bottom_pins_run_left_to_right`</sub>
 - An explicit size is rounded up to the 5 mm step so the outline keeps sitting on the grid. <sub>`an_explicit_size_is_rounded_up_to_the_grid`</sub>
-- Two pins with the same number, or a pin with an empty number, are rejected instead of silently drawn. <sub>`duplicate_or_empty_pin_numbers_are_rejected`</sub>
+- Two pins with the same number on one side, or a pin with an empty number, are rejected instead of silently drawn. <sub>`duplicate_or_empty_pin_numbers_are_rejected`</sub>
+- A pin number may appear once on the left and once on the right, or once on the top and once on the bottom; each side gets its own pin. <sub>`a_pin_number_may_be_on_two_opposite_sides`</sub>
+- The same pin number twice on one side, on two neighbouring sides, or three times is still refused. <sub>`a_pin_number_on_the_same_side_neighbouring_sides_or_three_times_is_refused`</sub>
+- Both sides of a feed-through pin must have the same name once spaces are trimmed; two empty names are the same. <sub>`both_sides_of_a_feedthrough_pin_need_the_same_name`</sub>
+- A feed-through pin cannot carry contacts or a connector picture on either side. <sub>`a_feedthrough_pin_cannot_have_contacts_or_a_connector`</sub>
+- A fine-pitch block with numbers inside accepts a feed-through pair and keeps all four pins on the 2.5 mm grid. <sub>`a_fine_block_with_numbers_inside_accepts_feedthrough_pins`</sub>
 - A size too small for the pins is rejected, and so is a pin table that is not valid JSON or uses an unknown side. <sub>`a_size_too_small_or_a_malformed_pin_table_is_rejected`</sub>
 - A block cannot exceed the pin limit, so a runaway pin table fails loudly. <sub>`too_many_pins_are_rejected`</sub>
 - The attribute slots (tag, part number, function, rating) stack at the centre of the box. <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
@@ -381,7 +386,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 22, the version that added the block pin pitch and number position. <sub>`the_current_format_version_is_twenty_two`</sub>
+- The current file format version is 23, the version that added feed-through block pins. <sub>`the_current_format_version_is_twenty_three`</sub>
+- A version 22 project file opens in this build and becomes version 23; its blocks keep their attributes and pins unchanged. <sub>`a_version_22_file_opens_as_version_23`</sub>
 - A version 21 project file opens in this build and becomes version 22; its blocks keep their attributes and their 5 mm pins. <sub>`a_version_21_file_opens_as_version_22`</sub>
 - A project with a stroke font round-trips through the file; a project without one writes no text_font key. <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
 - A version 17 file without ports loads unchanged apart from being moved up to the current version. <sub>`a_version_17_file_loads_unchanged`</sub>
@@ -424,6 +430,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Each distinct block shape is its own KiCad lib_symbol (MadakeCAD:block for the template, block_<hash> otherwise) with numbered pins and filled graphics as KiCad fill; equal shapes share one, and a block whose pin table cannot be read is reported as unresolved, not exported as the template box. <sub>`each_block_shape_is_its_own_kicad_lib_symbol`</sub>
 - Our per-shape block lib_symbols import back as blocks that keep their pin table (block_pins) instead of being skipped. <sub>`our_block_lib_symbols_import_back_as_blocks_with_their_pin_table`</sub>
 - A 2.5 mm block with numbers inside exported to KiCad imports back with its pitch and number position, and its pins are where they were. <sub>`a_fine_block_survives_a_kicad_round_trip`</sub>
+- A block with feed-through pins (one number on opposite sides) exports to KiCad with both pins and imports back as the same block. <sub>`a_feedthrough_block_survives_a_kicad_round_trip`</sub>
 - The KiCad export of a block without the pitch and number attributes does not mention them. <sub>`a_plain_block_kicad_export_does_not_mention_pitch_or_numbers`</sub>
 - A wire number becomes a KiCad label on the numbered net, so the net keeps its name in KiCad and on re-import. <sub>`wire_numbers_become_labels`</sub>
 - A harness boundary is exported as a dashed closed polyline plus a text with its name. <sub>`harness_becomes_dashed_polyline_with_name`</sub>
@@ -535,6 +542,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The attachment test used by the netlist accepts a label on a wire vertex, in the middle of a wire segment, or on a symbol pin, and rejects one that floats even slightly off. <sub>`the_label_attachment_test_accepts_vertices_segments_and_pins`</sub>
 - Unnamed nets receive deterministic sequential names (N001, N002, ...). <sub>`unnamed_nets_get_deterministic_sequential_names`</sub>
 - Two connection points of the same symbol sharing a pin number (a feed-through terminal) are internally shorted, and appear once in the net's pin list. <sub>`same_pin_number_points_short_internally`</sub>
+- A block with a feed-through pin 1 and a plain pin 2: the wires on the left and right of pin 1 are one net that names pin 1 once, and pin 2 is not in it. <sub>`a_block_feedthrough_pin_joins_its_two_wires_into_one_net`</sub>
+- A block with feed-through pins 1 and 2: each pair is its own net, so the two pairs are never shorted together. <sub>`two_block_feedthrough_pins_make_two_separate_nets`</sub>
 - A multi-level terminal block never shorts its levels together: level a and level b of the same pole end up on two separate nets, even though each level's own left and right connection points are still shorted internally (through-terminal). <sub>`each_level_of_a_multilevel_terminal_block_is_an_independent_net`</sub>
 - A wire number written on the wires becomes the net's displayed name when the net has no net label. <sub>`wire_number_names_a_net_without_a_label`</sub>
 - A net label always wins over the wire number, which in turn wins over the automatic N001 name. <sub>`net_name_prefers_label_then_wire_number_then_auto_name`</sub>
@@ -689,6 +698,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A route that would run over a third pin is refused, because the netlist would join that pin to the wire; the message names the pin. <sub>`a_route_that_passes_over_another_pin_is_refused`</sub>
 - Wiring a pin to itself is refused, whether it is named by number or by name. <sub>`wiring_a_pin_to_itself_is_refused`</sub>
 - When one part has the same pin number twice (a through terminal), the bare number is refused with both choices, and "#n" picks one. <sub>`a_through_terminal_side_is_chosen_with_an_occurrence`</sub>
+- On a block with a feed-through pin, the bare number is refused with both choices; "#1" is the left pin and "#2" the right pin. <sub>`a_block_feedthrough_pin_is_chosen_with_an_occurrence`</sub>
 - A mate pair sits on the 2.5 mm grid and its two halves only touch, so the tidy metrics count no overlap and no off-grid point for it. <sub>`a_mate_pair_is_tidy`</sub>
 - The plug half of a mate pair hides its designator, so the shared designator is printed once, on the socket. <sub>`the_plug_hides_the_shared_designator`</sub>
 - get_pins shows a port pin's contacts and leaves them out for plain pins. <sub>`part_pins_show_contacts`</sub>
@@ -2184,7 +2194,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reports the widened size of a manual outline whose group names on both sides share a row <sub>`block attributes built from the draft`</sub>
 - previews the very symbol that will be drawn, with one connection point per pin <sub>`block attributes built from the draft`</sub>
 - reports nothing for a table that is filled in correctly <sub>`checks on the pin table`</sub>
-- reports a pin number that is used twice <sub>`checks on the pin table`</sub>
+- reports a pin number that is used twice on one side <sub>`checks on the pin table`</sub>
+- accepts one pin number on each of two opposite sides with the same name <sub>`checks on the pin table`</sub>
+- reports a pin number on neighbouring sides or three times as a duplicate <sub>`checks on the pin table`</sub>
+- reports a feed-through pin whose two sides have different names <sub>`checks on the pin table`</sub>
+- reports contacts or a connector picture on a feed-through pin <sub>`checks on the pin table`</sub>
 - reports a row that has a name but no pin number <sub>`checks on the pin table`</sub>
 - reports a hand-set outline that is too small for its pins <sub>`checks on the pin table`</sub>
 - reports a block with more than 200 pins <sub>`checks on the pin table`</sub>
@@ -2193,6 +2207,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - finds no wired pins on a block that nothing is connected to <sub>`pins that are already wired`</sub>
 - flags a wired pin that the edit deletes or renumbers <sub>`pins that are already wired`</sub>
 - stays quiet when the wired pins survive the edit <sub>`pins that are already wired`</sub>
+- counts both wired sides of a feed-through pin and flags the pin when one side row is deleted <sub>`pins that are already wired`</sub>
 - splits contacts on ASCII, Japanese and full-width commas and trims them <sub>`pins that are already wired`</sub>
 - writes contacts into block_pins and reads them back as comma-separated text <sub>`pins that are already wired`</sub>
 - flags a single contact, a repeated contact and too many contacts <sub>`pins that are already wired`</sub>
@@ -2211,7 +2226,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - opens a pin table with one pin per side when the generic block is picked <sub>`starting a new block from the insert dialog`</sub>
 - hands the edited table to the placement as block attributes <sub>`starting a new block from the insert dialog`</sub>
 - seeds the hand-set size with the automatic one when switching to manual <sub>`starting a new block from the insert dialog`</sub>
-- refuses to place while two pins share a number <sub>`starting a new block from the insert dialog`</sub>
+- refuses to place while two pins on one side share a number <sub>`starting a new block from the insert dialog`</sub>
 - loads the pin table of the selected block <sub>`editing a block that is already on the drawing`</sub>
 - applies the table as a single update_entity, keeping the tag, part number and position <sub>`editing a block that is already on the drawing`</sub>
 - keeps attributes that are not part of the pin table <sub>`editing a block that is already on the drawing`</sub>
@@ -2314,6 +2329,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps a plain block centred on the origin with unshifted slots <sub>`fine pitch blocks (Rust twin)`</sub>
 - puts the corner captions of a fine block by the shifted outline <sub>`fine pitch blocks (Rust twin)`</sub>
 - centres the captions of a fine block on the shifted outline <sub>`fine pitch blocks (Rust twin)`</sub>
+- accepts one pin number on each of two opposite sides and draws a pin per side <sub>`feed-through block pins (Rust twin)`</sub>
+- still refuses a pin number twice on one side, on neighbouring sides, or three times <sub>`feed-through block pins (Rust twin)`</sub>
+- needs the same name on both sides of a feed-through pin <sub>`feed-through block pins (Rust twin)`</sub>
+- refuses contacts or a connector picture on either side of a feed-through pin <sub>`feed-through block pins (Rust twin)`</sub>
+- accepts feed-through pins on a fine block with numbers inside, all on the 2.5 mm grid <sub>`feed-through block pins (Rust twin)`</sub>
 
 ### frameEditor
 

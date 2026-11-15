@@ -99,12 +99,13 @@ describe("starting a new block from the insert dialog", () => {
     expect(editor.draft?.size).toBeNull();
   });
 
-  // ja: ピン番号が重なっているあいだは配置できない(指摘が出る)
-  it("refuses to place while two pins share a number", () => {
+  // ja: 同じ辺でピン番号が重なっているあいだは配置できない(指摘が出る)
+  it("refuses to place while two pins on one side share a number", () => {
     seed([]);
     const editor = useBlockEditorStore();
     editor.startInsert();
-    editor.updateRow("right", 0, { no: "1" });
+    editor.addRow("left");
+    editor.updateRow("left", 1, { no: "1" });
     expect(editor.issues).toEqual([{ code: "duplicate", no: "1" }]);
     expect(editor.canApply).toBe(false);
   });

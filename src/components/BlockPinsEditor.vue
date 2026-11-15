@@ -56,6 +56,8 @@ function issueText(issue: BlockIssue): string {
       row: issue.index + 1,
     });
   }
+  if (issue.code === "feedthroughName") return t("blockEditor.issue.feedthroughName", { no: issue.no });
+  if (issue.code === "feedthroughPicture") return t("blockEditor.issue.feedthroughPicture", { no: issue.no });
   if (issue.code === "connectorOnFine") return t("blockEditor.issue.connectorOnFine", { no: issue.no });
   if (issue.code === "connectorOnInside") return t("blockEditor.issue.connectorOnInside", { no: issue.no });
   if (issue.code === "connectorRefSplit") return t("blockEditor.issue.connectorRefSplit", { ref: issue.ref });

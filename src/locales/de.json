@@ -698,7 +698,9 @@
       "connectorRefNotGrouped": "Zeile {row} der {side} hat einen Gruppennamen: nur Schraubklemmen und JST-Buchsen können einen haben",
       "connectorRefSplit": "Der Gruppenname {ref} wird von zwei Steckverbindern verwendet: die Pins müssen nebeneinander auf einer Seite liegen und von einer Art sein",
       "connectorOnFine": "Ein 2,5-mm-Block kann kein Steckverbinderbild verwenden (Pin {no})",
-      "connectorOnInside": "Ein Block mit innen liegenden Nummern kann kein Steckverbinderbild verwenden (Pin {no})"
+      "connectorOnInside": "Ein Block mit innen liegenden Nummern kann kein Steckverbinderbild verwenden (Pin {no})",
+      "feedthroughName": "Durchgangs-Pin {no} braucht auf beiden Seiten denselben Namen",
+      "feedthroughPicture": "Durchgangs-Pin {no} kann keine Kontakte oder kein Steckverbinderbild haben"
     },
     "wiredWarning": "Pins {pins} are wired: renumbering or deleting them disconnects those wires",
     "placeHint": "Place puts a ghost on the cursor (R rotates, Esc cancels)",
