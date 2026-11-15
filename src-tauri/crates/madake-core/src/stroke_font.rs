@@ -394,4 +394,78 @@ mod tests {
         assert_eq!(a.strokes[0].len(), f.glyphs[&'A'].strokes[0].len() * 2);
         assert!(!a.wide && d.glyphs["亜"].wide);
     }
+
+    /// The reserved bytes 0x27, 0x5C and 0x5D end a definition as a space does, and nothing after them is read.
+    /// 予約の値 0x27・0x5C・0x5D は空白と同じく定義を終わらせ、その後ろは読まない。
+    #[test]
+    fn reserved_bytes_end_a_definition() {
+        for t in [0x27u8, 0x5C, 0x5D] {
+            let def = [b'&', 0xA9, b'J', t, b'K', 0xC0];
+            assert_eq!(parse_csf1(&def), vec![vec![(5, 9), (10, 9)]], "{t:#x}");
+        }
+    }
+
+    /// 0x7E moves the pen to row 0 and takes a pending x like the other y moves.
+    /// 0x7E はペンを0行目へ移動し、他のyの移動と同じく先に指定したxを使う。
+    #[test]
+    fn tilde_moves_to_row_zero_with_a_pending_x() {
+        // move y9 → (0,9); next x5 then 0x7E → move to (5,0); draw x10 → (10,0)
+        assert_eq!(parse_csf1(b"\xA9e~J"), vec![vec![(5, 0), (10, 0)]]);
+    }
+
+    /// The layout gives the numbers listed in the shared case file, which the canvas layout is checked against too.
+    /// 配置は共有のケース表 (キャンバスの配置も同じ表で確かめる) のとおりの幅と最初の点になる。
+    #[test]
+    fn layout_matches_the_shared_cases() {
+        let file: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/stroke_layout_cases.json")).expect("ケース表");
+        let f = &file["font"];
+        let glyphs = f["glyphs"]
+            .as_object()
+            .expect("字形")
+            .iter()
+            .map(|(c, g)| {
+                let strokes = g["strokes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|s| {
+                        let v: Vec<u8> = s.as_array().unwrap().iter().map(|n| n.as_u64().unwrap() as u8).collect();
+                        v.chunks(2).map(|p| (p[0], p[1])).collect()
+                    })
+                    .collect();
+                (c.chars().next().unwrap(), Glyph { strokes, wide: g["wide"].as_bool().unwrap() })
+            })
+            .collect();
+        let font = StrokeFont {
+            id: "shared",
+            name: "shared",
+            glyphs,
+            baseline: f["baseline"].as_u64().unwrap() as u8,
+            cap_top: f["cap_top"].as_u64().unwrap() as u8,
+            address_count: 0,
+        };
+        let cases = file["cases"].as_array().expect("ケース");
+        assert!(cases.len() >= 10);
+        for case in cases {
+            let text = case["text"].as_str().unwrap();
+            let latin: Latin = serde_json::from_value(case["latin"].clone()).unwrap();
+            let t = font.layout(text, case["size"].as_f64().unwrap(), latin, case["spacing"].as_f64().unwrap());
+            match case["width"].as_f64() {
+                None => assert!(t.is_none(), "{text:?}"),
+                Some(w) => {
+                    let t = t.unwrap_or_else(|| panic!("{text:?}"));
+                    assert!((t.width - w).abs() < 1e-9, "{text:?}: {} != {w}", t.width);
+                    let first = t.polylines.first().and_then(|l| l.first()).copied();
+                    match case["first"].as_array() {
+                        None => assert_eq!(first, None, "{text:?}"),
+                        Some(p) => {
+                            let (x, y) = first.unwrap_or_else(|| panic!("{text:?}"));
+                            assert!((x - p[0].as_f64().unwrap()).abs() < 1e-9 && (y - p[1].as_f64().unwrap()).abs() < 1e-9, "{text:?}: ({x}, {y})");
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

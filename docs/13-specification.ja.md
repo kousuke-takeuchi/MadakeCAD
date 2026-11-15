@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3166仕様項目**。
+全6領域・**3170仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -909,6 +909,9 @@
 - フォントに無い字を1つでも含む文字列は配置しない。空の文字列と空白は線なしで配置する。 <sub>`missing_characters_and_empty_strings`</sub>
 - 線の太さはフォントサイズの0.07倍で、0.13mmより細くならない。太字はその1.5倍。 <sub>`stroke_width_follows_the_size`</sub>
 - キャンバスへ送る字形データは、全ての字形を文字をキーに持ち、線は x, y の並びに平らにしてある。 <sub>`glyph_data_for_the_canvas`</sub>
+- 予約の値 0x27・0x5C・0x5D は空白と同じく定義を終わらせ、その後ろは読まない。 <sub>`reserved_bytes_end_a_definition`</sub>
+- 0x7E はペンを0行目へ移動し、他のyの移動と同じく先に指定したxを使う。 <sub>`tilde_moves_to_row_zero_with_a_pending_x`</sub>
+- 配置は共有のケース表 (キャンバスの配置も同じ表で確かめる) のとおりの幅と最初の点になる。 <sub>`layout_matches_the_shared_cases`</sub>
 
 ### SVG出力 (JIS図枠)
 
@@ -2657,6 +2660,7 @@
 - プレビューの描画の間だけはシステムの書体で描き (線の字にしない)、終わると (例外でも) プロジェクトの書体へ戻す <sub>`system font for previews`</sub>
 - 字形は1つのidにつき1回だけ取りに行き、成功した結果を使い回す <sub>`glyph loading`</sub>
 - 取得に失敗したら null を返し、その失敗は覚えない (次に読み込むときにまた取りに行く) <sub>`glyph loading`</sub>
+- 配置は Rust 側と共有のケース表のとおりの幅と最初の点になる (二つの描画で字の位置が食い違わない) <sub>`shared layout cases`</sub>
 
 ### surfer
 

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3166 specification clauses** across 6 areas.
+**3170 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -909,6 +909,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A string with any character the font does not have is not laid out at all; an empty string and spaces are laid out without strokes. <sub>`missing_characters_and_empty_strings`</sub>
 - The stroke is 0.07 of the font size thick but never thinner than 0.13 mm, and bold is half as thick again. <sub>`stroke_width_follows_the_size`</sub>
 - The glyph data sent to the canvas holds every glyph keyed by its character, with the strokes flattened to x, y pairs. <sub>`glyph_data_for_the_canvas`</sub>
+- The reserved bytes 0x27, 0x5C and 0x5D end a definition as a space does, and nothing after them is read. <sub>`reserved_bytes_end_a_definition`</sub>
+- 0x7E moves the pen to row 0 and takes a pending x like the other y moves. <sub>`tilde_moves_to_row_zero_with_a_pending_x`</sub>
+- The layout gives the numbers listed in the shared case file, which the canvas layout is checked against too. <sub>`layout_matches_the_shared_cases`</sub>
 
 ### SVG output (JIS frame)
 
@@ -2657,6 +2660,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - draws with the system font inside withSystemFont and restores the font afterwards <sub>`system font for previews`</sub>
 - fetches the glyphs of a font once and reuses them <sub>`glyph loading`</sub>
 - returns null for a failed fetch and tries again next time <sub>`glyph loading`</sub>
+- gives the numbers of the case file shared with the Rust layout <sub>`shared layout cases`</sub>
 
 ### surfer
 

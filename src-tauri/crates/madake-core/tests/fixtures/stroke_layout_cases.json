@@ -1,0 +1,29 @@
+{
+  "about": "Shared layout cases for the stroke font: read by stroke_font.rs (Rust) and strokeFont.test.ts (TypeScript), so both layouts give the same numbers. Invented glyphs; width null means the text cannot be laid out (a glyph is missing); first null means the text has no strokes.",
+  "font": {
+    "id": "shared",
+    "baseline": 2,
+    "cap_top": 27,
+    "glyphs": {
+      "H": { "wide": false, "strokes": [[2, 2, 2, 27], [12, 2, 12, 27], [2, 14, 12, 14]] },
+      "A": { "wide": false, "strokes": [[1, 2, 7, 27, 13, 2]] },
+      "y": { "wide": false, "strokes": [[3, 0, 8, 10], [5, 14, 8, 10, 11, 14]] },
+      "亜": { "wide": true, "strokes": [[1, 3, 29, 3, 29, 29, 1, 29, 1, 3]] },
+      "Ｈ": { "wide": true, "strokes": [[4, 2, 4, 27]] },
+      " ": { "wide": false, "strokes": [] },
+      "　": { "wide": true, "strokes": [] }
+    }
+  },
+  "cases": [
+    { "text": "H", "size": 10, "latin": "half", "spacing": 1, "width": 4.32, "first": [0.576, 0] },
+    { "text": "HH", "size": 10, "latin": "half", "spacing": 1.5, "width": 10.8, "first": [0.576, 0] },
+    { "text": "亜H", "size": 5, "latin": "half", "spacing": 1, "width": 6.48, "first": [0.144, -0.144] },
+    { "text": "y", "size": 10, "latin": "half", "spacing": 1, "width": 4.32, "first": [0.864, 0.576] },
+    { "text": "H", "size": 10, "latin": "full", "spacing": 1, "width": 8.64, "first": [1.152, 0] },
+    { "text": "A", "size": 10, "latin": "full", "spacing": 1, "width": 4.32, "first": [0.288, 0] },
+    { "text": "H H", "size": 2.5, "latin": "full", "spacing": 1.2, "width": 7.344, "first": [0.288, 0] },
+    { "text": "  ", "size": 10, "latin": "half", "spacing": 1, "width": 8.64, "first": null },
+    { "text": "", "size": 10, "latin": "half", "spacing": 1, "width": 0, "first": null },
+    { "text": "H😀", "size": 10, "latin": "half", "spacing": 1, "width": null, "first": null }
+  ]
+}

@@ -1,7 +1,8 @@
 // ストロークフォントの配置 (Rust側 stroke_font.rs の layout と同じ規則・同じ数値)。
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { StrokeFontData } from "../ipc";
+import shared from "../../src-tauri/crates/madake-core/tests/fixtures/stroke_layout_cases.json";
+import type { Latin, StrokeFontData } from "../ipc";
 import {
   UNIT_CACHE_MAX,
   activeStrokeFont,
@@ -187,5 +188,29 @@ describe("glyph loading", () => {
     expect(await load("t")).toBeNull();
     expect(await load("t")).toBe(font);
     expect(calls).toBe(2);
+  });
+});
+
+describe("shared layout cases", () => {
+  // ja: 配置は Rust 側と共有のケース表のとおりの幅と最初の点になる (二つの描画で字の位置が食い違わない)
+  it("gives the numbers of the case file shared with the Rust layout", () => {
+    const f = shared.font as StrokeFontData;
+    expect(shared.cases.length).toBeGreaterThanOrEqual(10);
+    for (const c of shared.cases) {
+      const t = layoutStroke(f, c.text, c.size, c.latin as Latin, c.spacing);
+      if (c.width === null) {
+        expect(t, c.text).toBeNull();
+        continue;
+      }
+      expect(t, c.text).not.toBeNull();
+      expect(t!.width, c.text).toBeCloseTo(c.width, 9);
+      const first = t!.polylines[0]?.[0] ?? null;
+      if (c.first === null) {
+        expect(first, c.text).toBeNull();
+      } else {
+        expect(first![0], c.text).toBeCloseTo(c.first[0], 9);
+        expect(first![1], c.text).toBeCloseTo(c.first[1], 9);
+      }
+    }
   });
 });
