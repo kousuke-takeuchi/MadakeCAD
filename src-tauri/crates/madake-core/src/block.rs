@@ -31,6 +31,54 @@ pub const BLOCK_PINS_ATTR: &str = "block_pins";
 /// 外形寸法を持つ属性キー(JSON `{"w":mm,"h":mm}`)。
 pub const BLOCK_SIZE_ATTR: &str = "block_size";
 
+/// ピン間隔を持つ属性キー (`"5"` か `"2.5"`。無ければ5)。
+pub const BLOCK_PITCH_ATTR: &str = "block_pitch";
+/// ピン番号を外形の外に描くか内に描くかを持つ属性キー (`"outside"` か `"inside"`。無ければ外)。
+pub const BLOCK_NUMBERS_ATTR: &str = "block_numbers";
+/// 細かいピン間隔 (mm)。グリッドと同じ。
+pub const BLOCK_FINE_PITCH_MM: f64 = 2.5;
+/// 細かい間隔のブロックの最小の外形 (mm、幅・高さとも)。
+pub const BLOCK_FINE_MIN_MM: f64 = 5.0;
+/// 番号を内側に描くとき、左右の番号のあいだに空けるすき間 (mm)。
+pub const BLOCK_INSIDE_GAP_MM: f64 = 1.0;
+
+/// ブロックのピン間隔。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BlockPitch {
+    /// 5mm (これまでどおり)。
+    #[default]
+    Coarse,
+    /// 2.5mm。
+    Fine,
+}
+
+impl BlockPitch {
+    /// ピン間隔 (mm)。
+    pub fn mm(self) -> f64 {
+        match self {
+            BlockPitch::Coarse => BLOCK_PIN_PITCH_MM,
+            BlockPitch::Fine => BLOCK_FINE_PITCH_MM,
+        }
+    }
+    /// 外形寸法の刻み (mm)。
+    pub fn size_step(self) -> f64 {
+        match self {
+            BlockPitch::Coarse => BLOCK_SIZE_STEP_MM,
+            BlockPitch::Fine => BLOCK_FINE_PITCH_MM,
+        }
+    }
+}
+
+/// ピン番号を描く場所 (左右の辺)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BlockNumbers {
+    /// 外形の外、リードの上 (これまでどおり)。
+    #[default]
+    Outside,
+    /// 外形の内側、辺のすぐ内。ピン名は描かない。
+    Inside,
+}
+
 /// ピンの並びピッチ (mm)。2.5mmグリッドの倍数。
 pub const BLOCK_PIN_PITCH_MM: f64 = 5.0;
 /// 外形からピン接続点までのリード長 (mm)。
@@ -100,6 +148,10 @@ pub struct BlockSpec {
     pub pins: BlockPins,
     /// 明示指定の外形寸法(5mm刻みへ切り上げ済み)。未指定なら`None`。
     pub size: Option<BlockSize>,
+    /// ピン間隔。
+    pub pitch: BlockPitch,
+    /// ピン番号を描く場所。
+    pub numbers: BlockNumbers,
 }
 
 impl BlockSpec {
@@ -191,6 +243,25 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
     }
     check_connectors(&pins)?;
 
+    let pitch = match attrs.get(BLOCK_PITCH_ATTR).map(|s| s.trim()) {
+        None | Some("5") => BlockPitch::Coarse,
+        Some("2.5") => BlockPitch::Fine,
+        Some(other) => return Err(format!("{BLOCK_PITCH_ATTR} must be \"5\" or \"2.5\": {other:?}")),
+    };
+    let numbers = match attrs.get(BLOCK_NUMBERS_ATTR).map(|s| s.trim()) {
+        None | Some("outside") => BlockNumbers::Outside,
+        Some("inside") => BlockNumbers::Inside,
+        Some(other) => return Err(format!("{BLOCK_NUMBERS_ATTR} must be \"outside\" or \"inside\": {other:?}")),
+    };
+    if pitch == BlockPitch::Fine {
+        if let Some(pin) = pins.all().find(|p| p.connector.is_some()) {
+            return Err(format!(
+                "block pin {}: a connector picture cannot be used with {BLOCK_PITCH_ATTR} 2.5",
+                pin.no.trim()
+            ));
+        }
+    }
+
     let size = match attrs.get(BLOCK_SIZE_ATTR) {
         Some(raw) if !raw.trim().is_empty() => {
             let s: BlockSize = serde_json::from_str(raw)
@@ -199,14 +270,14 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
                 return Err("block_size must be positive".into());
             }
             Some(BlockSize {
-                w: snap_up(s.w, BLOCK_SIZE_STEP_MM),
-                h: snap_up(s.h, BLOCK_SIZE_STEP_MM),
+                w: snap_up(s.w, pitch.size_step()),
+                h: snap_up(s.h, pitch.size_step()),
             })
         }
         _ => None,
     };
     if let Some(size) = size {
-        let (need_w, need_h) = min_size(&pins);
+        let (need_w, need_h) = min_size(&pins, pitch);
         if size.w < need_w - 1e-9 || size.h < need_h - 1e-9 {
             return Err(format!(
                 "block_size {}x{}mm is too small for its pins (needs at least {}x{}mm)",
@@ -214,7 +285,7 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
             ));
         }
     }
-    Ok(BlockSpec { pins, size })
+    Ok(BlockSpec { pins, size, pitch, numbers })
 }
 
 /// ピン`no`の接点を調べる: 空でない・ピンの中で重ならない・2つ以上・[`BLOCK_CONTACT_MAX`]まで。
@@ -286,14 +357,33 @@ fn check_connectors(pins: &BlockPins) -> Result<(), String> {
     Ok(())
 }
 
-/// ピンが収まる最小の外形寸法 (mm)。辺のピン数×ピッチ(両端に半ピッチの余白)。
-fn min_size(pins: &BlockPins) -> (f64, f64) {
+/// ピンがn本の辺に要る長さ (mm)。5mm間隔は n×5 (最小5)、2.5mm間隔は (n+1)×2.5 (最小5)。
+fn side_need(n: usize, pitch: BlockPitch) -> f64 {
+    match pitch {
+        BlockPitch::Coarse => (n as f64 * BLOCK_PIN_PITCH_MM).max(BLOCK_SIZE_STEP_MM),
+        BlockPitch::Fine => ((n + 1) as f64 * BLOCK_FINE_PITCH_MM).max(BLOCK_FINE_MIN_MM),
+    }
+}
+
+/// ピンが収まる最小の外形寸法 (mm)。
+fn min_size(pins: &BlockPins, pitch: BlockPitch) -> (f64, f64) {
     let rows = pins.left.len().max(pins.right.len());
     let cols = pins.top.len().max(pins.bottom.len());
-    (
-        (cols as f64 * BLOCK_PIN_PITCH_MM).max(BLOCK_SIZE_STEP_MM),
-        (rows as f64 * BLOCK_PIN_PITCH_MM).max(BLOCK_SIZE_STEP_MM),
-    )
+    (side_need(cols, pitch), side_need(rows, pitch))
+}
+
+/// 辺のピン番号のうち一番長いものの幅 (mm)。
+fn max_number_width(side: &[BlockPin]) -> f64 {
+    side.iter().map(|p| name_width(p.no.trim())).fold(0.0, f64::max)
+}
+
+/// 番号を内側に描くとき、左右の番号が収まる幅 (mm)。
+fn inside_numbers_width(pins: &BlockPins) -> f64 {
+    let both = !pins.left.is_empty() && !pins.right.is_empty();
+    2.0 * BLOCK_TEXT_PAD_MM
+        + max_number_width(&pins.left)
+        + max_number_width(&pins.right)
+        + if both { BLOCK_INSIDE_GAP_MM } else { 0.0 }
 }
 
 /// 左右の辺の、外形からピン名までの余白 (mm)。コネクタのある辺は絵の内側の深さぶん広い。
@@ -384,27 +474,47 @@ fn shared_row_width(pins: &BlockPins) -> f64 {
 pub fn block_box(spec: &BlockSpec) -> (f64, f64) {
     if let Some(size) = spec.size {
         // 指定の幅でも、左右のまとまりの名前が同じ行で重なるなら、収まる幅まで広げる
-        let w = size.w.max(snap_up(shared_row_width(&spec.pins), BLOCK_SIZE_STEP_MM));
+        let step = spec.pitch.size_step();
+        let mut w = size.w.max(snap_up(shared_row_width(&spec.pins), step));
+        if spec.numbers == BlockNumbers::Inside {
+            w = w.max(snap_up(inside_numbers_width(&spec.pins), step));
+        }
         return (w, size.h);
     }
     let pins = &spec.pins;
     let rows = pins.left.len().max(pins.right.len());
     let cols = pins.top.len().max(pins.bottom.len());
     // コネクタの無いブロックでは 1.5 + 1.5 = 3.0 で、今までの 2.0 × 1.5 と同じ値になる
-    let w_names = side_pad(&pins.left)
-        + side_pad(&pins.right)
-        + side_text_width(&pins.left)
-        + side_text_width(&pins.right)
-        + BLOCK_PIN_PITCH_MM;
-    let w = BLOCK_MIN_W_MM
-        .max(w_names)
-        .max(cols as f64 * BLOCK_PIN_PITCH_MM + BLOCK_PIN_PITCH_MM);
-    let h = BLOCK_MIN_H_MM
-        .max(rows as f64 * BLOCK_PIN_PITCH_MM + BLOCK_PIN_PITCH_MM)
-        .max(caption_inset(&pins.top) + caption_inset(&pins.bottom) + BLOCK_PIN_PITCH_MM);
+    let p = spec.pitch.mm();
+    let (min_w, min_h) = match spec.pitch {
+        BlockPitch::Coarse => (BLOCK_MIN_W_MM, BLOCK_MIN_H_MM),
+        BlockPitch::Fine => (BLOCK_FINE_MIN_MM, BLOCK_FINE_MIN_MM),
+    };
+    let w_text = match spec.numbers {
+        BlockNumbers::Outside => {
+            side_pad(&pins.left)
+                + side_pad(&pins.right)
+                + side_text_width(&pins.left)
+                + side_text_width(&pins.right)
+                + p
+        }
+        BlockNumbers::Inside => inside_numbers_width(pins),
+    };
+    let need_cols = match spec.pitch {
+        BlockPitch::Coarse => cols as f64 * p + p,
+        BlockPitch::Fine => side_need(cols, spec.pitch),
+    };
+    let need_rows = match spec.pitch {
+        BlockPitch::Coarse => rows as f64 * p + p,
+        BlockPitch::Fine => side_need(rows, spec.pitch),
+    };
+    let w = min_w.max(w_text).max(need_cols);
+    let h = min_h
+        .max(need_rows)
+        .max(caption_inset(&pins.top) + caption_inset(&pins.bottom) + p);
     (
-        snap_up(w, BLOCK_SIZE_STEP_MM),
-        snap_up(h, BLOCK_SIZE_STEP_MM),
+        snap_up(w, spec.pitch.size_step()),
+        snap_up(h, spec.pitch.size_step()),
     )
 }
 
@@ -1816,5 +1926,84 @@ mod tests {
         let boxes = crate::tidy::text_boxes(&sheet, &defs);
         let r = boxes.iter().find(|b| b.kind == crate::tidy::TextKind::Reference).expect("参照記号の箱");
         assert!((r.rect.max.x - a.x).abs() < 1e-9, "{:?}", r.rect);
+    }
+
+    fn fine(pins: &str, size: Option<&str>) -> BTreeMap<String, String> {
+        let mut a = BTreeMap::new();
+        a.insert(BLOCK_PINS_ATTR.to_string(), pins.to_string());
+        a.insert(BLOCK_PITCH_ATTR.to_string(), "2.5".to_string());
+        if let Some(s) = size {
+            a.insert(BLOCK_SIZE_ATTR.to_string(), s.to_string());
+        }
+        a
+    }
+
+    /// A block without the pitch and number attributes is a 5 mm block with numbers outside, as before.
+    /// 間隔と番号の属性が無いブロックは、これまでどおり5mm間隔・番号は外側のブロックになる。
+    #[test]
+    fn a_block_without_the_new_attributes_is_coarse_with_numbers_outside() {
+        let spec = parse_block_spec(&BTreeMap::new()).unwrap();
+        assert_eq!((spec.pitch, spec.numbers), (BlockPitch::Coarse, BlockNumbers::Outside));
+    }
+
+    /// block_pitch accepts only "5" and "2.5", and block_numbers only "outside" and "inside"; anything else is refused with the attribute name in the message.
+    /// block_pitch は "5" と "2.5" だけ、block_numbers は "outside" と "inside" だけを受け付ける。それ以外は属性名を含むメッセージで断る。
+    #[test]
+    fn unknown_pitch_and_number_values_are_refused() {
+        for (key, bad) in [(BLOCK_PITCH_ATTR, "3"), (BLOCK_PITCH_ATTR, "fine"), (BLOCK_NUMBERS_ATTR, "in"), (BLOCK_NUMBERS_ATTR, "")] {
+            let mut a = BTreeMap::new();
+            a.insert(key.to_string(), bad.to_string());
+            let err = parse_block_spec(&a).unwrap_err();
+            assert!(err.contains(key), "{key}={bad}: {err}");
+        }
+        let mut a = BTreeMap::new();
+        a.insert(BLOCK_PITCH_ATTR.to_string(), " 2.5 ".to_string());
+        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let spec = parse_block_spec(&a).unwrap();
+        assert_eq!((spec.pitch, spec.numbers), (BlockPitch::Fine, BlockNumbers::Inside));
+    }
+
+    /// On a 2.5 mm block a side with n pins needs (n + 1) x 2.5 mm, at least 5 mm; a smaller block_size is refused and the message names the needed size.
+    /// 2.5mm間隔のブロックでは、ピンがn本の辺は (n + 1) × 2.5mm (最小5mm) 必要。それより小さい block_size は断り、必要な大きさをメッセージに出す。
+    #[test]
+    fn a_fine_block_size_must_hold_its_pins() {
+        let two = r#"{"left":[{"no":"1"},{"no":"2"}]}"#;
+        assert!(parse_block_spec(&fine(two, Some(r#"{"w":5,"h":7.5}"#))).is_ok());
+        let err = parse_block_spec(&fine(two, Some(r#"{"w":5,"h":5}"#))).unwrap_err();
+        assert!(err.contains("5x7.5"), "{err}");
+        let top3 = r#"{"top":[{"no":"1"},{"no":"2"},{"no":"3"}]}"#;
+        let err = parse_block_spec(&fine(top3, Some(r#"{"w":7.5,"h":5}"#))).unwrap_err();
+        assert!(err.contains("10x5"), "{err}");
+    }
+
+    /// On a 2.5 mm block block_size is rounded up to the next 2.5 mm; on a 5 mm block it is still rounded up to 5 mm.
+    /// 2.5mm間隔のブロックの block_size は次の2.5mmへ切り上げる。5mm間隔のブロックはこれまでどおり5mmへ切り上げる。
+    #[test]
+    fn block_size_is_rounded_up_to_the_step_of_the_pitch() {
+        let spec = parse_block_spec(&fine(r#"{"left":[{"no":"1"}]}"#, Some(r#"{"w":6,"h":8}"#))).unwrap();
+        assert_eq!(spec.size, Some(BlockSize { w: 7.5, h: 10.0 }));
+        let mut a = BTreeMap::new();
+        a.insert(BLOCK_SIZE_ATTR.to_string(), r#"{"w":16,"h":11}"#.to_string());
+        assert_eq!(parse_block_spec(&a).unwrap().size, Some(BlockSize { w: 20.0, h: 15.0 }));
+    }
+
+    /// A 2.5 mm block refuses a pin with a connector picture, naming the pin.
+    /// 2.5mm間隔のブロックは、コネクタの絵を持つピンを断り、そのピン番号を示す。
+    #[test]
+    fn a_fine_block_refuses_connector_pictures() {
+        let err = parse_block_spec(&fine(r#"{"left":[{"no":"U1","connector":"usb_a_f"}]}"#, None)).unwrap_err();
+        assert!(err.contains("U1") && err.contains(BLOCK_PITCH_ATTR), "{err}");
+    }
+
+    /// Without block_size a 2.5 mm block with pin numbers inside is as small as its pins allow: one pin gives 5 x 5 mm, two pins on the left give 5 x 7.5 mm.
+    /// block_size が無い2.5mm間隔・番号内側のブロックは、ピンが許す最小の大きさになる: 1本なら5×5mm、左に2本なら5×7.5mm。
+    #[test]
+    fn a_fine_block_sizes_itself_to_its_pins() {
+        let mut a = fine(r#"{"left":[{"no":"1"}]}"#, None);
+        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        assert_eq!(block_box(&parse_block_spec(&a).unwrap()), (5.0, 5.0));
+        let mut a = fine(r#"{"left":[{"no":"1"},{"no":"2"}]}"#, None);
+        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        assert_eq!(block_box(&parse_block_spec(&a).unwrap()), (5.0, 7.5));
     }
 }

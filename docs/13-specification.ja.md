@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3170仕様項目**。
+全6領域・**3176仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -55,6 +55,12 @@
 - 描かれた上辺にピンのあるブロックは、参照記号・型番を外形の左上の角 (左辺の 1.0 mm 左・文字の箱の下端が上辺の 1.0 mm 以上上) に右揃えで置き、ブロックが描くものと重ならない。それ以外のブロックは今までの中央揃え。 <sub>`captions_of_a_block_with_top_pins_sit_at_the_top_left_corner`</sub>
 - 参照記号・型番が動くのはブロックだけ。普通のシンボルは今まで通り外形の上に中央揃え。 <sub>`captions_of_a_plain_symbol_keep_the_centred_anchor`</sub>
 - 上辺にピンのあるブロックでは、KiCad の Reference/Value・デバイスXRef・整理用の文字の箱も左上の角 (外形の左・右揃え) に従う。 <sub>`kicad_xref_and_tidy_follow_the_top_left_corner_captions`</sub>
+- 間隔と番号の属性が無いブロックは、これまでどおり5mm間隔・番号は外側のブロックになる。 <sub>`a_block_without_the_new_attributes_is_coarse_with_numbers_outside`</sub>
+- block_pitch は "5" と "2.5" だけ、block_numbers は "outside" と "inside" だけを受け付ける。それ以外は属性名を含むメッセージで断る。 <sub>`unknown_pitch_and_number_values_are_refused`</sub>
+- 2.5mm間隔のブロックでは、ピンがn本の辺は (n + 1) × 2.5mm (最小5mm) 必要。それより小さい block_size は断り、必要な大きさをメッセージに出す。 <sub>`a_fine_block_size_must_hold_its_pins`</sub>
+- 2.5mm間隔のブロックの block_size は次の2.5mmへ切り上げる。5mm間隔のブロックはこれまでどおり5mmへ切り上げる。 <sub>`block_size_is_rounded_up_to_the_step_of_the_pitch`</sub>
+- 2.5mm間隔のブロックは、コネクタの絵を持つピンを断り、そのピン番号を示す。 <sub>`a_fine_block_refuses_connector_pictures`</sub>
+- block_size が無い2.5mm間隔・番号内側のブロックは、ピンが許す最小の大きさになる: 1本なら5×5mm、左に2本なら5×7.5mm。 <sub>`a_fine_block_sizes_itself_to_its_pins`</sub>
 
 ### cable
 

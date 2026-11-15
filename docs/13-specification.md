@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3170 specification clauses** across 6 areas.
+**3176 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -55,6 +55,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block with pins on its drawn top side puts its reference and value right-aligned at the box's top-left corner (1.0 mm left of the left edge, text boxes ending at least 1.0 mm above the top edge) without overlapping anything the block draws; other blocks keep the centred caption. <sub>`captions_of_a_block_with_top_pins_sit_at_the_top_left_corner`</sub>
 - Only blocks move their captions: a plain symbol keeps the centred caption above its top edge. <sub>`captions_of_a_plain_symbol_keep_the_centred_anchor`</sub>
 - KiCad's Reference/Value, the device XRef and the tidy text boxes all follow the corner placement of a block with top pins: right-justified, left of the box. <sub>`kicad_xref_and_tidy_follow_the_top_left_corner_captions`</sub>
+- A block without the pitch and number attributes is a 5 mm block with numbers outside, as before. <sub>`a_block_without_the_new_attributes_is_coarse_with_numbers_outside`</sub>
+- block_pitch accepts only "5" and "2.5", and block_numbers only "outside" and "inside"; anything else is refused with the attribute name in the message. <sub>`unknown_pitch_and_number_values_are_refused`</sub>
+- On a 2.5 mm block a side with n pins needs (n + 1) x 2.5 mm, at least 5 mm; a smaller block_size is refused and the message names the needed size. <sub>`a_fine_block_size_must_hold_its_pins`</sub>
+- On a 2.5 mm block block_size is rounded up to the next 2.5 mm; on a 5 mm block it is still rounded up to 5 mm. <sub>`block_size_is_rounded_up_to_the_step_of_the_pitch`</sub>
+- A 2.5 mm block refuses a pin with a connector picture, naming the pin. <sub>`a_fine_block_refuses_connector_pictures`</sub>
+- Without block_size a 2.5 mm block with pin numbers inside is as small as its pins allow: one pin gives 5 x 5 mm, two pins on the left give 5 x 7.5 mm. <sub>`a_fine_block_sizes_itself_to_its_pins`</sub>
 
 ### cable
 
