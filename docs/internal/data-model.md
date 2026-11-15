@@ -1,6 +1,6 @@
 # データ設計書
 
-作成: 2026-08-21。更新: 2026-11-15(ブロックの細かいピン間隔: format_version 22・`attrs`の`block_pitch`/`block_numbers`)。その前の更新: 2026-11-15(プロジェクトの書体: format_version 21・`Project.text_font`、図枠テンプレートの`text_latin`と`cells[].spacing`)。その前の更新: 2026-10-15(盤の銘板・寸法線: format_version 16・`Entity::Nameplate`/`Entity::Dimension`。同日に多芯ケーブル: format_version 15・`Entity::Cable`。同日にPLC I/O図面の生成設定のプロジェクト保存: format_version 14・`Project.plc_generate`)。その前の更新: 2026-09-28(整えバリアントの複製シートの印: format_version 13・`Sheet.variant_of`)。その前: 2026-09-28(クラウド側のFreeCAD連携M5-1〜3を統合: format_version 12・`Project.mech_links`・`MechLink.placement`・`Wire.length_source`。クラウド側の暫定番号3/4はこの12へ畳んだ)。フェーズ6タスク6: format_version 11・電線品番凡例ブロックエンティティ`WireLegend`(G9残)。フェーズ6タスク5: `.mdkproj` format_version 10・`Project.no`(G16、プロジェクト番号)。フェーズ6タスク4: format_version 9・`TextEntity.leader_to`(G20、注記の引き出し線)。フェーズ6: format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
+作成: 2026-08-21。更新: 2026-11-15(ブロックの貫通ピン: format_version 23・向かい合う辺に同じピン番号を1回ずつ)。その前の更新: 2026-11-15(ブロックの細かいピン間隔: format_version 22・`attrs`の`block_pitch`/`block_numbers`)。その前の更新: 2026-11-15(プロジェクトの書体: format_version 21・`Project.text_font`、図枠テンプレートの`text_latin`と`cells[].spacing`)。その前の更新: 2026-10-15(盤の銘板・寸法線: format_version 16・`Entity::Nameplate`/`Entity::Dimension`。同日に多芯ケーブル: format_version 15・`Entity::Cable`。同日にPLC I/O図面の生成設定のプロジェクト保存: format_version 14・`Project.plc_generate`)。その前の更新: 2026-09-28(整えバリアントの複製シートの印: format_version 13・`Sheet.variant_of`)。その前: 2026-09-28(クラウド側のFreeCAD連携M5-1〜3を統合: format_version 12・`Project.mech_links`・`MechLink.placement`・`Wire.length_source`。クラウド側の暫定番号3/4はこの12へ畳んだ)。フェーズ6タスク6: format_version 11・電線品番凡例ブロックエンティティ`WireLegend`(G9残)。フェーズ6タスク5: `.mdkproj` format_version 10・`Project.no`(G16、プロジェクト番号)。フェーズ6タスク4: format_version 9・`TextEntity.leader_to`(G20、注記の引き出し線)。フェーズ6: format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
 
 MadakeCADの永続データは3系統ある:
 
@@ -12,7 +12,7 @@ MadakeCADの永続データは3系統ある:
 
 ## 1. 図面ドキュメント(.mdkproj)
 
-`format_version: 22`(旧版は既定値で開ける。版ごとの変更は下の履歴表)。構造(mermaid classDiagram):
+`format_version: 23`(旧版は既定値で開ける。版ごとの変更は下の履歴表)。構造(mermaid classDiagram):
 
 ```mermaid
 classDiagram
@@ -68,7 +68,7 @@ classDiagram
       mirror: bool
       reference: String  %% "K1"
       value: String      %% 型番
-      attrs: Map~String,String~  %% current_a / jumpers / block_pins / block_size / block_pitch / block_numbers等
+      attrs: Map~String,String~  %% current_a / jumpers / block_pins / block_size / block_pitch / block_numbers等。ブロックのピン番号は、向かい合う辺(左と右、上と下)に1回ずつだけ重ねられる(貫通ピン。両側は同じ名前で、接点・コネクタの絵は付けない。同じ辺・隣り合う辺・3回目は重複として断る)
     }
     class Wire {
       id: Uuid
@@ -149,6 +149,7 @@ classDiagram
 | 20 | 改訂行の改訂番号・承認・個数(`Revision.rev_no` / `approved` / `count`)と、表題欄の自由な欄(`TitleBlock.fields`: 名前→値。図枠テンプレートは`{field.名前}`でバインドする。名前は a-z・0-9・_ の1〜32文字) | 新しい項目が空で開く。空の項目は書き出さない(`skip_serializing_if`)ので、使っていないファイルは版番号以外これまでと同じ。形式19のアプリは版番号で断る |
 | 21 | プロジェクトの書体`Project.text_font`(`{id, latin}`。`id`は同梱のストロークフォント、いまは`kst32b`だけ。`latin`は英数字を半角`half`(既定)か全角`full`のどちらの字で描くか)。`set_text_font`コマンドで設定し、同梱していないidは断る | 書体未設定(`None`)で開く=システムの書体で従来どおりに描く。未設定のときは書き出さない(`skip_serializing_if`)ので、書体を選んでいないファイルは版番号以外これまでと同じ。形式20のアプリは版番号で断る |
 | 22 | ブロックの細かいピン間隔。ブロックシンボルの`attrs`に`block_pitch`(`"5"`が既定、`"2.5"`でピン間隔2.5mm・大きさの刻み2.5mm・最小5×5mm。ピンn本の辺は(n+1)×2.5mm以上。外形とピンの列は、ピンと辺が2.5mmの格子に乗るよう必要に応じて1.25mmずらす。コネクタの絵は使えない)と`block_numbers`(`"outside"`が既定、`"inside"`でピン番号を外形の内側に描き、ピン名は描かない。コネクタの絵は使えない)を足した。それ以外の値は断る | 新しいデータ型は無く、属性が無いブロックは従来どおり(5mm間隔・番号は外側)に開く。使っていないファイルは版番号以外これまでと同じ。KiCad・DXFの書き出しと取り込みは属性を保つ。**形式21のアプリは版番号で断る** |
+| 23 | ブロックの貫通ピン。ブロックのピン表で、同じピン番号を向かい合う辺(左と右、または上と下)に1回ずつ置ける。2つの接続点は1つのノードで(ネットリストの貫通端子の規則)、ネットのピン一覧には1回だけ載る。両側のピン名は前後の空白を除いて同じにし、どちらにも`contacts`・`connector`は付けない。同じ辺に2回・隣り合う辺・3回以上は従来どおり重複として断る。`REF.NO`は曖昧で、`REF.NO#1`は左・右・上・下の順で最初、`REF.NO#2`は2番目 | 新しいデータ型は無く、貫通ピンを使っていないファイルは版番号以外これまでと同じ。**形式22のアプリは版番号で断る**(貫通ピンを持つブロックを読めず見本の箱にしてしまうため) |
 
 (17〜19の行はこの表にまだ無い。正は`madake-core/src/model.rs`の`FORMAT_VERSION`のコメント。)
 

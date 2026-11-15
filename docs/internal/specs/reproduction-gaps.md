@@ -228,6 +228,7 @@ negative, which is enough for both).
 | Text height given as capital height; wide lettering | ✅ | G30 closed for height and fitting; the lettering is closed by the bundled stroke font (2026-11-15, below) |
 | Logo image | ✅ | G31 closed |
 | Dense harness wiring: pins closer than 5 mm, small connector boxes with the numbers inside | ✅ | G34 closed (`block_pitch`, `block_numbers`; format 22) |
+| A connector box passes a conductor through: the same pole has a wire on each side | ✅ | G35 closed (one pin number on two opposite sides; format 23) |
 
 **After the frame template extensions (2026-11-14).** The same region was redrawn with a
 template that uses the new items. The share of the reproduction's ink that lies on the
@@ -1373,6 +1374,19 @@ and uses small connector boxes with the pin numbers inside, could not be reprodu
 **What closed it.** Two block attributes. `block_pitch: "2.5"` gives a 2.5 mm pin pitch and
 a 2.5 mm size step; `block_numbers: "inside"` draws the pin numbers inside the outline.
 The block editor keeps both attributes but has no control for them yet.
+
+### G35 — A block cannot carry the same pin number on two opposite sides · required
+
+**Closed 2026-11-15** (one pin number on two opposite sides of a block, format 23).
+
+**Current behaviour (verified).** A block symbol refused a repeated pin number. Connector
+boxes in harness drawings pass a conductor through: the same pole has a wire on each side.
+Such a box could not be drawn as one block.
+
+**What closed it.** A pin number may appear once on each of two opposite sides (left and
+right, or top and bottom). The two points are one electrical node, and `REF.NO#1` /
+`REF.NO#2` address them. Both sides need the same name and carry no contacts or connector
+picture; every other repetition is still refused.
 
 ## Summary by impact
 
