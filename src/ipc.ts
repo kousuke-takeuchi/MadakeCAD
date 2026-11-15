@@ -667,6 +667,8 @@ export interface SymbolDef {
   primitives: Primitive[];
   pins: PinDef[];
   text_slots?: TextSlot[];
+  /** 接続点を2.5mmグリッドに縛らない (ユーザーシンボルだけの指定)。省略時はグリッド上に限る。 */
+  free_pins?: boolean;
 }
 
 /** ユーザーシンボルの分類 (部品挿入ダイアログの「ユーザー」グループ)。 */

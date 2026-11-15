@@ -20,6 +20,10 @@ pub struct SymbolDef {
     /// 属性スロット(M4 §7)。配置時に実値(参照記号・型番・説明・定格)が流し込まれる位置。
     #[serde(default)]
     pub text_slots: Vec<TextSlot>,
+    /// 接続点を2.5mmグリッドに縛らない (ユーザーシンボルだけの指定)。既定は false = グリッド上に限る。
+    /// グリッドに乗らない他の図面を写すとき、ピン間隔をその図面のとおりにするために使う。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub free_pins: bool,
 }
 
 /// 属性スロットのキー: 参照記号(TAG1相当)。
@@ -230,6 +234,7 @@ fn sym(
         primitives,
         pins,
         text_slots,
+        free_pins: false,
     }
 }
 

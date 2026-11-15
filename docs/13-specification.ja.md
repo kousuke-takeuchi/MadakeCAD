@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3314仕様項目**。
+全6領域・**3318仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -594,6 +594,7 @@
 - 接点の組が違う2つのポートは共通の接点だけが繋がる。それ以外は自分のポートだけのネットになり、残りのネットは出ず、報告に載る。 <sub>`ports_with_different_contacts_join_only_the_shared_ones`</sub>
 - 芯が2つのポートのかたまりを繋ぐと、接点のネットは前のネットで付いた元の名前をそのまま使い、新しい番号は使わない。 <sub>`a_contact_net_across_two_port_clusters_reuses_the_earlier_base`</sub>
 - ネットのピンは「参照記号:ピン」と書き、ポートの接点を運ぶなら「/接点」を添える。 <sub>`a_net_pin_prints_with_its_contact`</sub>
+- free_pins のシンボルのグリッド外の接続点へ引いた配線はつながる: 3.3mm 離れた2つの接続点に終わる2本の配線は、それぞれそのシンボルのピンを持つ別々のネットになる。 <sub>`wires_connect_to_off_grid_pins_of_a_free_pin_symbol`</sub>
 
 ### ngspiceランナー
 
@@ -1221,6 +1222,9 @@
 - 存在しないシンボルの複製は、空のシンボルを作らずにエラーになる。 <sub>`duplicating_an_unknown_symbol_fails`</sub>
 - ユーザーシンボルを削除するとフォルダからファイルが消える。知らないidの削除はエラーになり、何も消えない。 <sub>`deleting_a_user_symbol_removes_its_file`</sub>
 - 使用数は、そのシンボルがプロジェクト全体(全シート)で何個置かれているかを返す。削除の前に警告を出すために使う。 <sub>`the_usage_count_counts_placements_across_every_sheet`</sub>
+- free_pins を付けたユーザーシンボルは、接続点を2.5mmグリッドの外に置け、ほかのシンボルと同じように一覧に出る。指定が無ければ、同じシンボルはグリッド外の接続点を理由に断られる。 <sub>`a_free_pin_symbol_may_leave_the_grid`</sub>
+- free_pins のシンボルでも座標は数でなければならない: 有限の数でない接続点は断る。 <sub>`a_free_pin_symbol_still_needs_finite_coordinates`</sub>
+- free_pins を使わないシンボルは、その指定を書き出さない。これまでのシンボルファイルは変わらない。 <sub>`free_pins_is_written_only_when_set`</sub>
 
 ### 開始テンプレート
 

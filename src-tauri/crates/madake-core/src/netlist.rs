@@ -1128,6 +1128,7 @@ mod tests {
                 },
             ],
             text_slots: vec![],
+            free_pins: false,
         };
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         for e in [
@@ -1658,5 +1659,62 @@ mod tests {
         assert_eq!(p.to_string(), "39:U3");
         p.contact = Some("VBUS".into());
         assert_eq!(p.to_string(), "39:U3/VBUS");
+    }
+
+    /// Wires drawn to the off-grid connection points of a free-pin symbol connect: two wires ending on its two points 3.3 mm apart give two separate nets, each with that symbol's pin.
+    /// free_pins のシンボルのグリッド外の接続点へ引いた配線はつながる: 3.3mm 離れた2つの接続点に終わる2本の配線は、それぞれそのシンボルのピンを持つ別々のネットになる。
+    #[test]
+    fn wires_connect_to_off_grid_pins_of_a_free_pin_symbol() {
+        use crate::symbol::{PinDef, PinDir, Primitive, SymbolDef};
+        let def = SymbolDef {
+            id: "user_free_conn".into(),
+            name: "Free connector".into(),
+            name_ja: "自由ピンのコネクタ".into(),
+            category: "user".into(),
+            ref_prefix: "CN".into(),
+            keywords: vec![],
+            primitives: vec![Primitive::Rect { p1: Point::new(-1.95, -2.0), p2: Point::new(1.95, 5.3), filled: false }],
+            pins: vec![
+                PinDef { number: "1".into(), name: String::new(), at: Point::new(-1.95, 0.0), dir: PinDir::Left, contacts: vec![] },
+                PinDef { number: "2".into(), name: String::new(), at: Point::new(-1.95, 3.3), dir: PinDir::Left, contacts: vec![] },
+            ],
+            text_slots: vec![],
+            free_pins: true,
+        };
+        let mut sheet = Sheet::new("S", crate::model::PaperSize::A3, crate::model::Orientation::Landscape);
+        let inst = Entity::Symbol(crate::model::SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: def.id.clone(),
+            at: Point::new(120.65, 63.1),
+            rotation: 0,
+            mirror: false,
+            reference: "CN9".into(),
+            value: String::new(),
+            attrs: Default::default(),
+        });
+        sheet.entities.insert(inst.id(), inst);
+        for y in [63.1, 66.4] {
+            let w = Entity::Wire(Wire {
+                id: Uuid::new_v4(),
+                points: vec![Point::new(60.0, y), Point::new(118.7, y)],
+                color: String::new(),
+                sq: 0.0,
+                length_m: None,
+                length_source: Default::default(),
+                part_no: None,
+                net: None,
+                dashed: false,
+                weight_mm: None,
+            });
+            sheet.entities.insert(w.id(), w);
+        }
+        let nets = extract_netlist(&sheet, std::slice::from_ref(&def));
+        let with_pins: Vec<Vec<String>> = nets
+            .iter()
+            .map(|n| n.pins.iter().map(|p| format!("{}.{}", p.reference, p.pin)).collect::<Vec<_>>())
+            .filter(|p| !p.is_empty())
+            .collect();
+        assert_eq!(with_pins.len(), 2, "{nets:?}");
+        assert!(with_pins.contains(&vec!["CN9.1".to_string()]) && with_pins.contains(&vec!["CN9.2".to_string()]), "{with_pins:?}");
     }
 }

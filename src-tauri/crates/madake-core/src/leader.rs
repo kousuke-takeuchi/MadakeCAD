@@ -244,6 +244,7 @@ mod tests {
             ],
             pins: vec![],
             text_slots: vec![],
+            free_pins: false,
         };
         let inst = Entity::Symbol(SymbolInstance {
             id: Uuid::new_v4(),

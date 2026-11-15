@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3314 specification clauses** across 6 areas.
+**3318 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -594,6 +594,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Two ports with different contact sets join only the shared contacts; the others stay alone on their port, with no residual net, and the report lists them. <sub>`ports_with_different_contacts_join_only_the_shared_ones`</sub>
 - When a core joins two port clusters, the contact net takes the base name a cluster already has from an earlier net, and no new number is used for it. <sub>`a_contact_net_across_two_port_clusters_reuses_the_earlier_base`</sub>
 - A net pin prints as REF:PIN, with /CONTACT added when it carries a port contact. <sub>`a_net_pin_prints_with_its_contact`</sub>
+- Wires drawn to the off-grid connection points of a free-pin symbol connect: two wires ending on its two points 3.3 mm apart give two separate nets, each with that symbol's pin. <sub>`wires_connect_to_off_grid_pins_of_a_free_pin_symbol`</sub>
 
 ### ngspice runner
 
@@ -1221,6 +1222,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Duplicating a symbol that does not exist fails instead of creating an empty one. <sub>`duplicating_an_unknown_symbol_fails`</sub>
 - Deleting a user symbol removes its file from the folder; deleting an unknown id fails and touches nothing. <sub>`deleting_a_user_symbol_removes_its_file`</sub>
 - The usage count tells how many placements of a symbol the project has, across every sheet, so the UI can warn before a symbol is deleted. <sub>`the_usage_count_counts_placements_across_every_sheet`</sub>
+- A user symbol marked free_pins may place its connection points off the 2.5 mm grid and is listed like any other; without the mark the same symbol is refused for its off-grid point. <sub>`a_free_pin_symbol_may_leave_the_grid`</sub>
+- A free-pin symbol still needs real coordinates: a connection point that is not a finite number is refused. <sub>`a_free_pin_symbol_still_needs_finite_coordinates`</sub>
+- A symbol that does not use free_pins is saved without the mark, so existing symbol files stay as they are. <sub>`free_pins_is_written_only_when_set`</sub>
 
 ### Start templates
 

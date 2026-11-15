@@ -316,7 +316,15 @@ pub fn validate(def: &SymbolDef) -> Vec<SymbolError> {
             ));
             continue;
         }
-        if !on_grid(pin.at.x) || !on_grid(pin.at.y) {
+        // free_pins のシンボルは接続点をグリッドに縛らない (有限の数であることだけ確かめる)
+        if def.free_pins {
+            if !pin.at.x.is_finite() || !pin.at.y.is_finite() {
+                errors.push(SymbolError::new(
+                    code::PIN_OFF_GRID,
+                    format!("接続点{number}の座標が数ではありません"),
+                ));
+            }
+        } else if !on_grid(pin.at.x) || !on_grid(pin.at.y) {
             errors.push(SymbolError::new(
                 code::PIN_OFF_GRID,
                 format!(
@@ -532,6 +540,7 @@ mod tests {
                 at: Point::new(0.0, -7.5),
                 height: 2.5,
             }],
+            free_pins: false,
         }
     }
 
@@ -885,5 +894,44 @@ mod tests {
         }
         assert_eq!(usage_count(&project, "my_contactor"), 3);
         assert_eq!(usage_count(&project, "relay_coil"), 0);
+    }
+
+    /// A user symbol marked free_pins may place its connection points off the 2.5 mm grid and is listed like any other; without the mark the same symbol is refused for its off-grid point.
+    /// free_pins を付けたユーザーシンボルは、接続点を2.5mmグリッドの外に置け、ほかのシンボルと同じように一覧に出る。指定が無ければ、同じシンボルはグリッド外の接続点を理由に断られる。
+    #[test]
+    fn a_free_pin_symbol_may_leave_the_grid() {
+        let mut def = sample();
+        def.pins[0].at = Point::new(-1.95, 3.3);
+        let errors = validate(&def);
+        assert!(errors.iter().any(|e| e.code == code::PIN_OFF_GRID), "{errors:?}");
+        def.free_pins = true;
+        assert!(validate(&def).is_empty(), "{:?}", validate(&def));
+        let dir = tmp("free-pins");
+        std::fs::write(dir.join(format!("{}.json", def.id)), serde_json::to_string(&def).unwrap()).unwrap();
+        let library = list_from(Some(&dir));
+        assert!(library.issues.is_empty(), "{:?}", library.issues);
+        assert_eq!(library.symbols.len(), 1);
+        assert!(library.symbols[0].free_pins);
+        assert_eq!(library.symbols[0].pins[0].at, Point::new(-1.95, 3.3));
+    }
+
+    /// A free-pin symbol still needs real coordinates: a connection point that is not a finite number is refused.
+    /// free_pins のシンボルでも座標は数でなければならない: 有限の数でない接続点は断る。
+    #[test]
+    fn a_free_pin_symbol_still_needs_finite_coordinates() {
+        let mut def = sample();
+        def.free_pins = true;
+        def.pins[0].at = Point::new(f64::NAN, 0.0);
+        assert!(validate(&def).iter().any(|e| e.code == code::PIN_OFF_GRID));
+    }
+
+    /// A symbol that does not use free_pins is saved without the mark, so existing symbol files stay as they are.
+    /// free_pins を使わないシンボルは、その指定を書き出さない。これまでのシンボルファイルは変わらない。
+    #[test]
+    fn free_pins_is_written_only_when_set() {
+        let mut def = sample();
+        assert!(!serde_json::to_string(&def).unwrap().contains("free_pins"));
+        def.free_pins = true;
+        assert!(serde_json::to_string(&def).unwrap().contains("\"free_pins\":true"));
     }
 }
