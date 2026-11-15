@@ -452,7 +452,7 @@ fn same_line_pairs(a: &[BlockPin], b: &[BlockPin], size: f64, pitch: BlockPitch)
 
 /// 番号を内側に描くとき、左右の番号が収まる幅 (mm)。左右に同じ線上で向かい合う貫通ピンの組の番号は
 /// 外形の中央に1つだけ描くので、その最大幅 (`merged`) と、残りの左の最大幅+残りの右の最大幅+間 (両方あるとき)
-/// の大きいほうが収まればよい。`h`は外形の高さ (組が同じ線上かは高さで決まる)。
+/// の大きいほうが収まればよい (上下にピンがあるブロックは組をまとめない)。`h`は外形の高さ (組が同じ線上かは高さで決まる)。
 fn inside_numbers_width(pins: &BlockPins, h: f64, pitch: BlockPitch) -> f64 {
     let pairs = same_line_pairs(&pins.left, &pins.right, h, pitch);
     // 組にならなかったピンの、番号の最大幅と本数
@@ -811,9 +811,12 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     let pins_spec = &spec.pins;
     // 番号を内側に描くとき、同じ線上で向かい合う貫通ピンの組は番号を1つだけ外形の中央に描く (組の最初のピンが描き、2本目は描かない)
     let (lr_pairs, tb_pairs) = if numbers == BlockNumbers::Inside {
+        // 交わる辺 (左右の組なら上下、上下の組なら左右) にピンがあると中央の1つが他の番号と重なるので、そのときはまとめない
+        let lr_free = pins_spec.top.is_empty() && pins_spec.bottom.is_empty();
+        let tb_free = pins_spec.left.is_empty() && pins_spec.right.is_empty();
         (
-            same_line_pairs(&pins_spec.left, &pins_spec.right, h, spec.pitch),
-            same_line_pairs(&pins_spec.top, &pins_spec.bottom, w, spec.pitch),
+            if lr_free { same_line_pairs(&pins_spec.left, &pins_spec.right, h, spec.pitch) } else { Vec::new() },
+            if tb_free { same_line_pairs(&pins_spec.top, &pins_spec.bottom, w, spec.pitch) } else { Vec::new() },
         )
     } else {
         (Vec::new(), Vec::new())
@@ -1363,7 +1366,7 @@ mod tests {
     }
 
     fn number_texts(def: &SymbolDef) -> Vec<(String, Point)> {
-        texts(def).into_iter().filter(|(t, _)| t.chars().all(|c| c.is_ascii_digit())).collect()
+        texts(def).into_iter().filter(|(t, _)| t.chars().all(|c| c.is_ascii_alphanumeric())).collect()
     }
 
     /// With numbers inside, a feed-through pair on one line draws its number once, centred between the left and right edges at the pins' height, so the block fits in 5 mm.
@@ -1404,6 +1407,29 @@ mod tests {
         assert_eq!(nums.len(), 1, "{nums:?}");
         assert!((nums[0].1.y - (p1.y + p2.y) / 2.0).abs() < 1e-9, "{nums:?}");
         assert!(def.pins.iter().all(|p| (p.at.x - nums[0].1.x).abs() < 1e-9), "{nums:?} {:?}", def.pins);
+    }
+
+    /// With numbers inside, a feed-through pair is drawn once only when the sides that cross its line have no pins; otherwise every pin keeps its own number and no two numbers share a place.
+    /// 番号を内側に描くとき、貫通ピンの番号を1つにまとめるのは、その線と交わる辺にピンが無いときだけ。あるときは各ピンが自分の番号を描き、番号どうしは同じ場所に重ならない。
+    #[test]
+    fn an_inside_feedthrough_pair_keeps_both_numbers_when_a_crossing_side_has_pins() {
+        for (pins, fine_pitch, want) in [
+            (r#"{"left":[{"no":"1"}],"right":[{"no":"1"}],"top":[{"no":"2"}],"bottom":[{"no":"2"}]}"#, false, 4),
+            (r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}],"top":[{"no":"T"}]}"#, true, 5),
+            (r#"{"left":[{"no":"1"}],"top":[{"no":"7"}],"bottom":[{"no":"7"}]}"#, true, 3),
+        ] {
+            let mut a = if fine_pitch { fine(pins, None) } else { attrs(&[("block_pins", pins)]) };
+            a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+            let def = block_symbol(&a).unwrap_or_else(|e| panic!("{pins}: {e}"));
+            let nums = number_texts(&def);
+            let texts: Vec<&str> = nums.iter().map(|(t, _)| t.as_str()).collect();
+            assert_eq!(nums.len(), want, "{pins}: {texts:?}");
+            for (i, (_, a)) in nums.iter().enumerate() {
+                for (_, b) in &nums[i + 1..] {
+                    assert!(a.distance_to(b) > 0.5, "{pins}: 番号が重なる {nums:?}");
+                }
+            }
+        }
     }
 
     /// With numbers outside, a feed-through pair draws a number on each side's lead as before: four numbers for two pairs.
@@ -2602,6 +2628,9 @@ mod tests {
         let mut feed_offset = fine(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"2"}]}"#, None);
         feed_offset.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
         cases.push(("feedthrough-inside-offset".into(), feed_offset));
+        let mut feed_cross = fine(r#"{"left":[{"no":"1"}],"top":[{"no":"7"}],"bottom":[{"no":"7"}]}"#, None);
+        feed_cross.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        cases.push(("feedthrough-inside-crossing".into(), feed_cross));
         cases
     }
 

@@ -750,7 +750,7 @@ describe("block captions and group names (Rust twin)", () => {
 describe("fine pitch blocks (Rust twin)", () => {
   // ja: golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブ・ピン・属性の置き場所を返す
   it("draws every block of the fine-pitch golden file exactly like Rust", () => {
-    expect(fineGolden.cases.length).toBe(17);
+    expect(fineGolden.cases.length).toBe(18);
     for (const c of fineGolden.cases) {
       const def = blockSymbol(c.attrs as Record<string, string>);
       expect({
@@ -970,7 +970,7 @@ describe("feed-through block pins (Rust twin)", () => {
     }
   });
   const numberTexts = (def: SymbolDef) =>
-    def.primitives.flatMap((q) => (q.type === "text" && /^[0-9]+$/.test(q.text) ? [q] : []));
+    def.primitives.flatMap((q) => (q.type === "text" && /^[0-9A-Z]+$/.test(q.text) ? [q] : []));
 
   // ja: 番号を内側に描くとき、同じ高さで向かい合う貫通ピンの組は番号を左右の辺の中央に1つだけ描くので、幅5mmの箱に収まる
   it("draws an inside feed-through pair's number once at the centre, so the block fits in 5 mm", () => {
@@ -1002,6 +1002,25 @@ describe("feed-through block pins (Rust twin)", () => {
     const nums = numberTexts(blockSymbol(attrs));
     expect(nums.length).toBe(1);
     expect(nums[0].at.y).toBeCloseTo((c1.y + c2.y) / 2, 9);
+  });
+
+  // ja: 番号を内側に描くとき、貫通ピンの番号を1つにまとめるのは交わる辺にピンが無いときだけ。あるときは各ピンが番号を描き、番号どうしは重ならない
+  it("keeps both numbers of a feed-through pair when a crossing side has pins, and no two numbers overlap", () => {
+    for (const [pins, fine, want] of [
+      ['{"left":[{"no":"1"}],"right":[{"no":"1"}],"top":[{"no":"2"}],"bottom":[{"no":"2"}]}', false, 4],
+      ['{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}],"top":[{"no":"T"}]}', true, 5],
+      ['{"left":[{"no":"1"}],"top":[{"no":"7"}],"bottom":[{"no":"7"}]}', true, 3],
+    ] as [string, boolean, number][]) {
+      const attrs: Record<string, string> = { block_pins: pins, block_numbers: "inside" };
+      if (fine) attrs.block_pitch = "2.5";
+      const nums = numberTexts(blockSymbol(attrs));
+      expect(nums.length, pins).toBe(want);
+      for (let i = 0; i < nums.length; i++) {
+        for (let j = i + 1; j < nums.length; j++) {
+          expect(Math.hypot(nums[i].at.x - nums[j].at.x, nums[i].at.y - nums[j].at.y), pins).toBeGreaterThan(0.5);
+        }
+      }
+    }
   });
 
   // ja: 番号を外側に描くときは、貫通ピンも各辺のリードの上に番号を描く (2組で4つ)

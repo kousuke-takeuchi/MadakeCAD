@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3247 specification clauses** across 6 areas.
+**3249 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -34,6 +34,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A fine-pitch block with numbers inside accepts a feed-through pair and keeps all four pins on the 2.5 mm grid. <sub>`a_fine_block_with_numbers_inside_accepts_feedthrough_pins`</sub>
 - With numbers inside, a feed-through pair on one line draws its number once, centred between the left and right edges at the pins' height, so the block fits in 5 mm. <sub>`an_inside_feedthrough_pair_draws_its_number_once_at_the_centre`</sub>
 - A top and bottom pair with numbers inside draws its number once at the vertical centre, above the pin's column. <sub>`an_inside_top_bottom_pair_draws_its_number_once_at_the_vertical_centre`</sub>
+- With numbers inside, a feed-through pair is drawn once only when the sides that cross its line have no pins; otherwise every pin keeps its own number and no two numbers share a place. <sub>`an_inside_feedthrough_pair_keeps_both_numbers_when_a_crossing_side_has_pins`</sub>
 - With numbers outside, a feed-through pair draws a number on each side's lead as before: four numbers for two pairs. <sub>`an_outside_feedthrough_pair_draws_a_number_on_each_side`</sub>
 - A size too small for the pins is rejected, and so is a pin table that is not valid JSON or uses an unknown side. <sub>`a_size_too_small_or_a_malformed_pin_table_is_rejected`</sub>
 - A block cannot exceed the pin limit, so a runaway pin table fails loudly. <sub>`too_many_pins_are_rejected`</sub>
@@ -2340,6 +2341,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - accepts feed-through pins on a fine block with numbers inside, all on the 2.5 mm grid <sub>`feed-through block pins (Rust twin)`</sub>
 - draws an inside feed-through pair's number once at the centre, so the block fits in 5 mm <sub>`feed-through block pins (Rust twin)`</sub>
 - draws an inside top/bottom pair's number once at the vertical centre <sub>`feed-through block pins (Rust twin)`</sub>
+- keeps both numbers of a feed-through pair when a crossing side has pins, and no two numbers overlap <sub>`feed-through block pins (Rust twin)`</sub>
 - draws a number on each side of a feed-through pair when numbers are outside <sub>`feed-through block pins (Rust twin)`</sub>
 
 ### frameEditor

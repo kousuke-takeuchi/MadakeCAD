@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3247仕様項目**。
+全6領域・**3249仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -34,6 +34,7 @@
 - 2.5mm間隔で番号を内側に書くブロックでも貫通ピンの組を置け、4本のピンはすべて2.5mmのグリッドに乗る。 <sub>`a_fine_block_with_numbers_inside_accepts_feedthrough_pins`</sub>
 - 番号を内側に描くとき、同じ高さで向かい合う貫通ピンの組は、番号を左右の辺の中央に1つだけ描くので、幅5mmの箱に収まる。 <sub>`an_inside_feedthrough_pair_draws_its_number_once_at_the_centre`</sub>
 - 番号を内側に描く上下の貫通ピンの組は、番号を上下の辺の中央に1つだけ、ピンと同じ列の位置に描く。 <sub>`an_inside_top_bottom_pair_draws_its_number_once_at_the_vertical_centre`</sub>
+- 番号を内側に描くとき、貫通ピンの番号を1つにまとめるのは、その線と交わる辺にピンが無いときだけ。あるときは各ピンが自分の番号を描き、番号どうしは同じ場所に重ならない。 <sub>`an_inside_feedthrough_pair_keeps_both_numbers_when_a_crossing_side_has_pins`</sub>
 - 番号を外側に描くときは、貫通ピンも今までどおり各辺のリードの上に番号を描く: 2組で4つ。 <sub>`an_outside_feedthrough_pair_draws_a_number_on_each_side`</sub>
 - ピンが収まらない寸法は拒否され、JSONとして壊れたピン表や知らない辺名も同じく拒否される。 <sub>`a_size_too_small_or_a_malformed_pin_table_is_rejected`</sub>
 - ブロックのピン数には上限があり、桁違いのピン表ははっきりエラーになる。 <sub>`too_many_pins_are_rejected`</sub>
@@ -2340,6 +2341,7 @@
 - 2.5mm間隔で番号を内側に書くブロックでも貫通ピンの組を置け、4本のピンは2.5mmのグリッドに乗る <sub>`feed-through block pins (Rust twin)`</sub>
 - 番号を内側に描くとき、同じ高さで向かい合う貫通ピンの組は番号を左右の辺の中央に1つだけ描くので、幅5mmの箱に収まる <sub>`feed-through block pins (Rust twin)`</sub>
 - 番号を内側に描く上下の貫通ピンの組は、番号を上下の辺の中央に1つだけ描く <sub>`feed-through block pins (Rust twin)`</sub>
+- 番号を内側に描くとき、貫通ピンの番号を1つにまとめるのは交わる辺にピンが無いときだけ。あるときは各ピンが番号を描き、番号どうしは重ならない <sub>`feed-through block pins (Rust twin)`</sub>
 - 番号を外側に描くときは、貫通ピンも各辺のリードの上に番号を描く (2組で4つ) <sub>`feed-through block pins (Rust twin)`</sub>
 
 ### frameEditor

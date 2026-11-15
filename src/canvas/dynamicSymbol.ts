@@ -699,7 +699,8 @@ function sameLinePairs(a: BlockPin[], b: BlockPin[], size: number, pitch: BlockP
 function insideNumbersWidth(pins: BlockPins, h: number, pitch: BlockPitch): number {
   const left = sideOf(pins, "left");
   const right = sideOf(pins, "right");
-  const pairs = sameLinePairs(left, right, h, pitch);
+  const pairs =
+    sideOf(pins, "top").length === 0 && sideOf(pins, "bottom").length === 0 ? sameLinePairs(left, right, h, pitch) : [];
   const rest = (list: BlockPin[], second: boolean): [number, number] => {
     let widest = 0;
     let count = 0;
@@ -1164,8 +1165,13 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
     : [{ type: "rect", p1: p(-hw, -hh), p2: p(hw, hh), filled: false }];
   const pins: PinDef[] = [];
   // 番号を内側に描くとき、同じ線上で向かい合う貫通ピンの組は番号を1つだけ外形の中央に描く (組の最初のピンが描き、2本目は描かない)
-  const lrPairs = numbers === "inside" ? sameLinePairs(sideOf(table, "left"), sideOf(table, "right"), h, pitch) : [];
-  const tbPairs = numbers === "inside" ? sameLinePairs(sideOf(table, "top"), sideOf(table, "bottom"), w, pitch) : [];
+  // 交わる辺 (左右の組なら上下、上下の組なら左右) にピンがあると中央の1つが他の番号と重なるので、そのときはまとめない
+  const lrFree = sideOf(table, "top").length === 0 && sideOf(table, "bottom").length === 0;
+  const tbFree = sideOf(table, "left").length === 0 && sideOf(table, "right").length === 0;
+  const lrPairs =
+    numbers === "inside" && lrFree ? sameLinePairs(sideOf(table, "left"), sideOf(table, "right"), h, pitch) : [];
+  const tbPairs =
+    numbers === "inside" && tbFree ? sameLinePairs(sideOf(table, "top"), sideOf(table, "bottom"), w, pitch) : [];
   const push = (side: BlockPin[], dir: BlockDir) => {
     const n = side.length;
     const offs = rowOffsets(n, dir === "left" || dir === "right" ? h : w, pitch);

@@ -1386,7 +1386,7 @@ Such a box could not be drawn as one block.
 **What closed it.** A pin number may appear once on each of two opposite sides (left and
 right, or top and bottom). The two points are one electrical node, and `REF.NO#1` /
 `REF.NO#2` address them. Both sides need the same name and carry no contacts or connector
-picture; every other repetition is still refused. With numbers drawn inside the box, a pair whose two pins lie on one line shows its number once, in the middle.
+picture; every other repetition is still refused. With numbers drawn inside the box, a pair whose two pins lie on one line shows its number once, in the middle, when the sides crossing that line have no pins.
 
 ## Summary by impact
 
