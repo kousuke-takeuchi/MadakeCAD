@@ -919,6 +919,52 @@ mod tests {
         assert_eq!(refs, vec!["CTRL1:OUT1", "R1:1"]);
     }
 
+    /// Wires drawn to the pins of a 2.5 mm block connect: two blocks placed on the grid, one of them turned 90 degrees, joined pin to pin by two wires, give two nets with two pins each and no unconnected pin.
+    /// 2.5mm間隔のブロックのピンへ引いた配線はつながる: グリッドに置いた2つのブロック (片方は90度回転) をピンどうし2本の配線で結ぶと、2ピンずつのネットが2つでき、未接続のピンは無い。
+    #[test]
+    fn wires_to_the_pins_of_a_fine_block_connect() {
+        let attrs: std::collections::BTreeMap<String, String> = [
+            ("block_pins", r#"{"left":[{"no":"1"},{"no":"2"}]}"#),
+            ("block_pitch", "2.5"),
+            ("block_size", r#"{"w":5,"h":7.5}"#),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        let block = |reference: &str, x: f64, rotation: u16| SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: crate::block::BLOCK_SYMBOL_ID.into(),
+            at: Point::new(x, 50.0),
+            rotation,
+            mirror: false,
+            reference: reference.into(),
+            value: String::new(),
+            attrs: attrs.clone(),
+        };
+        let (a, b) = (block("A", 50.0, 0), block("B", 100.0, 90));
+        let def = crate::block::block_symbol(&attrs).unwrap();
+        let (pa, pb) = (pin_positions(&a, &def), pin_positions(&b, &def));
+        for (_, p) in pa.iter().chain(pb.iter()) {
+            let on_grid = |v: f64| ((v / 2.5) - (v / 2.5).round()).abs() < 1e-9;
+            assert!(on_grid(p.x) && on_grid(p.y), "ピンがグリッドに乗る: {p:?}");
+        }
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let mut entities = vec![Entity::Symbol(a.clone()), Entity::Symbol(b.clone())];
+        for ((_, from), (_, to)) in pa.iter().zip(pb.iter()) {
+            // L字: Aのピンから横へ、Bのピンの桁まで行き、縦へ上る (2本は交差するだけで端点は触れない)
+            entities.push(wire(&[(from.x, from.y), (to.x, from.y), (to.x, to.y)]));
+        }
+        for e in entities {
+            sheet.entities.insert(e.id(), e);
+        }
+        let defs = crate::symbol::sheet_symbol_defs(&sheet);
+        let nets = extract_netlist(&sheet, &defs);
+        assert_eq!(nets.len(), 2, "{nets:?}");
+        assert!(nets.iter().all(|n| n.pins.len() == 2), "{nets:?}");
+        let diags = crate::verify::verify_sheet(&sheet, &defs);
+        assert!(diags.iter().all(|d| d.code != "erc.unconnected_pin"), "{diags:?}");
+    }
+
     /// Wires that merely cross do NOT connect; a net label attached to a wire names its net.
     /// 単に交差しただけのワイヤは接続されない。ワイヤに付いたネットラベルはそのネットの名前になる。
     #[test]

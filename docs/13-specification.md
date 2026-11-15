@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3176 specification clauses** across 6 areas.
+**3184 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -61,6 +61,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - On a 2.5 mm block block_size is rounded up to the next 2.5 mm; on a 5 mm block it is still rounded up to 5 mm. <sub>`block_size_is_rounded_up_to_the_step_of_the_pitch`</sub>
 - A 2.5 mm block refuses a pin with a connector picture, naming the pin. <sub>`a_fine_block_refuses_connector_pictures`</sub>
 - Without block_size a 2.5 mm block with pin numbers inside is as small as its pins allow: one pin gives 5 x 5 mm, two pins on the left give 5 x 7.5 mm. <sub>`a_fine_block_sizes_itself_to_its_pins`</sub>
+- The outline and the pins of a 2.5 mm block follow the table of the design: a height that is an odd multiple of 2.5 mm moves the outline down by 1.25 mm, and a row of pins that would miss the grid moves down by 1.25 mm. <sub>`a_fine_block_shifts_its_outline_and_rows_onto_the_grid`</sub>
+- Every pin and every outline edge of a 2.5 mm block is on the 2.5 mm grid, for every size from 5 to 20 mm and every pin count that fits, on all four sides, also when the two opposite sides have different pin counts. <sub>`every_fine_block_is_on_the_grid`</sub>
+- With numbers inside, the number of a left or right pin is drawn inside the outline next to its edge at the height of the pin, and pin names are not drawn. <sub>`numbers_inside_are_drawn_inside_and_names_are_not_drawn`</sub>
+- A 5 mm wide block with long numbers inside on both sides is widened until the numbers fit, and its pins stay on the grid. <sub>`a_narrow_block_with_numbers_inside_is_widened`</sub>
+- Numbers inside also work on a 5 mm block, whose pins stay where they were. <sub>`numbers_inside_work_on_a_coarse_block_without_moving_pins`</sub>
+- A 2.5 mm block and a 5 mm block with the same pins get different export names, and the sample block keeps the name "block". <sub>`fine_and_coarse_blocks_get_different_export_ids`</sub>
+- The 2.5 mm blocks and the blocks with numbers inside are drawn exactly as recorded in the golden file that the TypeScript twin is also checked against (rewrite it with MADAKE_UPDATE_GOLDEN=1). <sub>`fine_blocks_match_the_shared_golden_file`</sub>
 
 ### cable
 
@@ -508,6 +515,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - A wire whose endpoints touch two symbol pins joins those pins into one net. <sub>`wires_connect_symbol_pins_into_one_net`</sub>
 - A wire that meets a block pin joins that pin to the net under the pin's own name, not a number. <sub>`block_pins_join_nets_under_their_own_names`</sub>
+- Wires drawn to the pins of a 2.5 mm block connect: two blocks placed on the grid, one of them turned 90 degrees, joined pin to pin by two wires, give two nets with two pins each and no unconnected pin. <sub>`wires_to_the_pins_of_a_fine_block_connect`</sub>
 - Wires that merely cross do NOT connect; a net label attached to a wire names its net. <sub>`crossing_without_junction_stays_separate_and_label_names_net`</sub>
 - A junction dot connects crossing wires, and same-named labels merge distant nets into one. <sub>`junction_connects_crossing_wires_and_same_labels_merge`</sub>
 - A net label placed exactly on a symbol pin connects that pin to the net of the same name elsewhere, without a wire stub. <sub>`a_label_on_a_pin_joins_that_pin_to_the_net_of_the_same_name`</sub>

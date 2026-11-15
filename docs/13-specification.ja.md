@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3176仕様項目**。
+全6領域・**3184仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -61,6 +61,13 @@
 - 2.5mm間隔のブロックの block_size は次の2.5mmへ切り上げる。5mm間隔のブロックはこれまでどおり5mmへ切り上げる。 <sub>`block_size_is_rounded_up_to_the_step_of_the_pitch`</sub>
 - 2.5mm間隔のブロックは、コネクタの絵を持つピンを断り、そのピン番号を示す。 <sub>`a_fine_block_refuses_connector_pictures`</sub>
 - block_size が無い2.5mm間隔・番号内側のブロックは、ピンが許す最小の大きさになる: 1本なら5×5mm、左に2本なら5×7.5mm。 <sub>`a_fine_block_sizes_itself_to_its_pins`</sub>
+- 2.5mm間隔のブロックの外形とピンは設計の表のとおりになる: 高さが2.5mmの奇数倍なら外形が1.25mm下へ寄り、グリッドから外れるピンの列は1.25mm下へ寄る。 <sub>`a_fine_block_shifts_its_outline_and_rows_onto_the_grid`</sub>
+- 2.5mm間隔のブロックのピンと外形の辺は、5〜20mmのどの大きさ・収まるどのピン数・四辺のどれでも、向かい合う辺のピン数が違っても、2.5mmグリッドに乗る。 <sub>`every_fine_block_is_on_the_grid`</sub>
+- 番号を内側に描くブロックでは、左右のピンの番号は外形の内側の辺のそばに、ピンと同じ高さで描かれ、ピン名は描かれない。 <sub>`numbers_inside_are_drawn_inside_and_names_are_not_drawn`</sub>
+- 幅5mmのブロックの両側に長い番号を内側へ描くと、番号が収まる幅まで広がり、ピンはグリッドに乗ったままになる。 <sub>`a_narrow_block_with_numbers_inside_is_widened`</sub>
+- 番号の内側表示は5mm間隔のブロックでも使え、ピンの位置は変わらない。 <sub>`numbers_inside_work_on_a_coarse_block_without_moving_pins`</sub>
+- 同じピンを持つ2.5mm間隔と5mm間隔のブロックは書き出し名が違い、見本のブロックの名前は "block" のまま。 <sub>`fine_and_coarse_blocks_get_different_export_ids`</sub>
+- 2.5mm間隔のブロックと番号内側のブロックは、TS 側も突き合わせる golden ファイルのとおりに描かれる (MADAKE_UPDATE_GOLDEN=1 で書き直す)。 <sub>`fine_blocks_match_the_shared_golden_file`</sub>
 
 ### cable
 
@@ -508,6 +515,7 @@
 
 - 両端がシンボルのピンに一致するワイヤは、それらのピンを1つのネットに結合する。 <sub>`wires_connect_symbol_pins_into_one_net`</sub>
 - ブロックのピンに届いた配線は、そのピンを番号ではなくピン名(例 "OUT1")でネットに参加させる。 <sub>`block_pins_join_nets_under_their_own_names`</sub>
+- 2.5mm間隔のブロックのピンへ引いた配線はつながる: グリッドに置いた2つのブロック (片方は90度回転) をピンどうし2本の配線で結ぶと、2ピンずつのネットが2つでき、未接続のピンは無い。 <sub>`wires_to_the_pins_of_a_fine_block_connect`</sub>
 - 単に交差しただけのワイヤは接続されない。ワイヤに付いたネットラベルはそのネットの名前になる。 <sub>`crossing_without_junction_stays_separate_and_label_names_net`</sub>
 - ジャンクションは交差ワイヤを接続し、同名ラベルは離れたネットを1つに統合する。 <sub>`junction_connects_crossing_wires_and_same_labels_merge`</sub>
 - シンボルのピンにぴったり置いたネットラベルは、配線を引かなくても同じ名前のネットへそのピンを繋ぐ。 <sub>`a_label_on_a_pin_joins_that_pin_to_the_net_of_the_same_name`</sub>

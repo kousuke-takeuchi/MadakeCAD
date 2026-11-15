@@ -146,7 +146,7 @@ pub struct BlockSize {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct BlockSpec {
     pub pins: BlockPins,
-    /// 明示指定の外形寸法(5mm刻みへ切り上げ済み)。未指定なら`None`。
+    /// 明示指定の外形寸法(ピン間隔の刻みへ切り上げ済み: 5mm間隔は5mm刻み、2.5mm間隔は2.5mm刻み)。未指定なら`None`。
     pub size: Option<BlockSize>,
     /// ピン間隔。
     pub pitch: BlockPitch,
@@ -186,6 +186,33 @@ fn snap_up(v: f64, step: f64) -> f64 {
 /// 他の動的シンボル([`crate::symbol::dynamic_symbol`])と同じ規則。
 pub(crate) fn offset(i: usize, n: usize) -> f64 {
     (i as f64 - (n - 1) as f64 / 2.0) * BLOCK_PIN_PITCH_MM
+}
+
+fn is_grid(v: f64) -> bool {
+    let k = v / BLOCK_FINE_PITCH_MM;
+    (k - k.round()).abs() < 1e-9
+}
+
+/// 外形をその軸でずらす量 (mm)。2.5mm間隔で、大きさが2.5mmの奇数倍のとき1.25、ほかは0。
+/// ずらすと、原点がグリッドにあるかぎり外形の両端がグリッドに乗る。
+fn axis_shift(size: f64, pitch: BlockPitch) -> f64 {
+    if pitch == BlockPitch::Fine && !is_grid(size / 2.0) {
+        BLOCK_FINE_PITCH_MM / 2.0
+    } else {
+        0.0
+    }
+}
+
+/// 辺のピンn本の、外形の中心から測ったオフセット (mm)。中央揃えにしたあと、
+/// 外形のずれを足してもグリッドに乗らない列は、列ごと1.25mm (下または右へ) 寄せる。
+/// 5mm間隔のブロックでは寄せることが無く、これまでの `offset` と同じ値になる。
+fn row_offsets(n: usize, size: f64, pitch: BlockPitch) -> Vec<f64> {
+    if n == 0 {
+        return Vec::new();
+    }
+    let first = -((n - 1) as f64) / 2.0 * pitch.mm();
+    let nudge = if is_grid(first + axis_shift(size, pitch)) { 0.0 } else { BLOCK_FINE_PITCH_MM / 2.0 };
+    (0..n).map(|i| first + i as f64 * pitch.mm() + nudge).collect()
 }
 
 /// 文字列を[`BLOCK_PIN_TEXT_MM`]の高さで描いたときの幅 (mm)。全角は半角の約1.7倍。
@@ -467,10 +494,11 @@ fn shared_row_width(pins: &BlockPins) -> f64 {
 /// 外形寸法を決める。明示指定があればそれ、無ければピン数とピン名の長さから自動。
 ///
 /// 自動のときは
-/// - 高さ = 左右のピン数の多い方 × 5mm + 5mm(上下の余白)。上下辺のピン名ぶんも足す
-/// - 幅 = 左右のピン名の最大幅 + 内側余白 + 中央の空き5mm。上下辺のピン数×5mm+5mmも下回らない
+/// - 高さ = 左右のピン数の多い方 × ピン間隔 + ピン間隔(上下の余白)。上下辺のピン名ぶんも足す
+/// - 幅 = 左右のピン名の最大幅 + 内側余白 + 中央の空き(ピン間隔)。上下辺のピン数×ピン間隔+ピン間隔も下回らない
 ///
-/// いずれも5mm刻みへ切り上げるので、外形の四辺は必ず2.5mmグリッドに載る。
+/// ピン間隔の刻み (5mm間隔は5mm、2.5mm間隔は2.5mm。2.5mm間隔の最小は5×5mm) へ切り上げるので、
+/// 大きさは必ずその刻みの倍数になる。外形がグリッドに載るようにずらすのは [`axis_shift`]。
 pub fn block_box(spec: &BlockSpec) -> (f64, f64) {
     if let Some(size) = spec.size {
         // 指定の幅でも、左右のまとまりの名前が同じ行で重なるなら、収まる幅まで広げる
@@ -568,29 +596,39 @@ struct PinLayout {
 
 /// ピンの描き位置。コネクタの無いピンは今までどおり。コネクタのあるピンは接続点が外形から5mm、
 /// リードは絵の外端から、番号は絵の外 (左右はリードの上、上下はリードの右)、左右の名前は3mm内側から。
-fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64) -> PinLayout {
+fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64, numbers: BlockNumbers, pitch_mm: f64) -> PinLayout {
     let edge = edge_point(dir, off, hw, hh);
     if bp.connector.is_none() {
+        let inside = numbers == BlockNumbers::Inside;
+        let num_w = name_width(bp.no.trim());
         let (at, num_at, name_at) = match dir {
             PinDir::Left => (
                 Point::new(-hw - BLOCK_LEAD_MM, off),
-                Point::new(-hw - BLOCK_LEAD_MM / 2.0, off - BLOCK_PIN_TEXT_MM),
+                if inside {
+                    Point::new(-hw + BLOCK_TEXT_PAD_MM + num_w / 2.0, off)
+                } else {
+                    Point::new(-hw - BLOCK_LEAD_MM / 2.0, off - BLOCK_PIN_TEXT_MM)
+                },
                 Point::new(-hw + BLOCK_TEXT_PAD_MM + name_width(&bp.name) / 2.0, off),
             ),
             PinDir::Right => (
                 Point::new(hw + BLOCK_LEAD_MM, off),
-                Point::new(hw + BLOCK_LEAD_MM / 2.0, off - BLOCK_PIN_TEXT_MM),
+                if inside {
+                    Point::new(hw - BLOCK_TEXT_PAD_MM - num_w / 2.0, off)
+                } else {
+                    Point::new(hw + BLOCK_LEAD_MM / 2.0, off - BLOCK_PIN_TEXT_MM)
+                },
                 Point::new(hw - BLOCK_TEXT_PAD_MM - name_width(&bp.name) / 2.0, off),
             ),
             PinDir::Up => (
                 Point::new(off, -hh - BLOCK_LEAD_MM),
                 Point::new(off, -hh + BLOCK_PIN_TEXT_MM),
-                Point::new(off, -hh + BLOCK_PIN_TEXT_MM + BLOCK_PIN_PITCH_MM / 2.0),
+                Point::new(off, -hh + BLOCK_PIN_TEXT_MM + pitch_mm / 2.0),
             ),
             PinDir::Down => (
                 Point::new(off, hh + BLOCK_LEAD_MM),
                 Point::new(off, hh - BLOCK_PIN_TEXT_MM),
-                Point::new(off, hh - BLOCK_PIN_TEXT_MM - BLOCK_PIN_PITCH_MM / 2.0),
+                Point::new(off, hh - BLOCK_PIN_TEXT_MM - pitch_mm / 2.0),
             ),
         };
         return PinLayout { at, lead_from: edge, num_at, name_at };
@@ -617,13 +655,13 @@ fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64) -> PinLayo
             Point::new(off, -hh - CONNECTOR_LEAD_MM),
             Point::new(off, -hh - CONNECTOR_OUT_MM),
             Point::new(off + CONNECTOR_NUM_SIDE_MM + num_w / 2.0, -(hh + num_tb)),
-            Point::new(off, -hh + BLOCK_PIN_TEXT_MM + BLOCK_PIN_PITCH_MM / 2.0),
+            Point::new(off, -hh + BLOCK_PIN_TEXT_MM + pitch_mm / 2.0),
         ),
         PinDir::Down => (
             Point::new(off, hh + CONNECTOR_LEAD_MM),
             Point::new(off, hh + CONNECTOR_OUT_MM),
             Point::new(off + CONNECTOR_NUM_SIDE_MM + num_w / 2.0, hh + num_tb),
-            Point::new(off, hh - BLOCK_PIN_TEXT_MM - BLOCK_PIN_PITCH_MM / 2.0),
+            Point::new(off, hh - BLOCK_PIN_TEXT_MM - pitch_mm / 2.0),
         ),
     };
     PinLayout { at, lead_from, num_at, name_at }
@@ -631,9 +669,8 @@ fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64) -> PinLayo
 
 /// コネクタのまとまりの名前の位置: 左右の2本以上はまとまりの中ほどのピンの間の空いた行、
 /// 1本だけはピン名の後ろ、上下はまとまりの中央で外形から7mm内側。
-fn label_at(list: &[BlockPin], group: &ConnectorGroup, label: &str, dir: PinDir, hw: f64, hh: f64) -> Point {
-    let n = list.len();
-    let first = offset(group.start, n);
+fn label_at(list: &[BlockPin], offs: &[f64], group: &ConnectorGroup, label: &str, dir: PinDir, hw: f64, hh: f64, pitch_mm: f64) -> Point {
+    let first = offs[group.start];
     let label_w = name_width(label);
     let name_in = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
     match dir {
@@ -641,7 +678,7 @@ fn label_at(list: &[BlockPin], group: &ConnectorGroup, label: &str, dir: PinDir,
             let count = group.end - group.start;
             let (y, start) = if count >= 2 {
                 let k = ((count - 1) / 2) as f64;
-                (first + BLOCK_PIN_PITCH_MM / 2.0 + BLOCK_PIN_PITCH_MM * k, name_in)
+                (first + pitch_mm / 2.0 + pitch_mm * k, name_in)
             } else {
                 let name = &list[group.start].name;
                 let start = if name.is_empty() {
@@ -659,7 +696,7 @@ fn label_at(list: &[BlockPin], group: &ConnectorGroup, label: &str, dir: PinDir,
             Point::new(x, y)
         }
         PinDir::Up | PinDir::Down => {
-            let mid = (first + offset(group.end - 1, n)) / 2.0;
+            let mid = (first + offs[group.end - 1]) / 2.0;
             let y = if dir == PinDir::Up {
                 -hh + CONNECTOR_LABEL_TOP_MM
             } else {
@@ -670,9 +707,26 @@ fn label_at(list: &[BlockPin], group: &ConnectorGroup, label: &str, dir: PinDir,
     }
 }
 
+/// 図形のすべての点を (dx, dy) だけ動かす。図形の種類を増やしたらここがコンパイルエラーになる。
+fn translate_primitive(p: &mut Primitive, dx: f64, dy: f64) {
+    let mv = |pt: &mut Point| *pt = Point::new(pt.x + dx, pt.y + dy);
+    match p {
+        Primitive::Line { pts } => pts.iter_mut().for_each(mv),
+        Primitive::Circle { center, .. } => mv(center),
+        Primitive::Arc { center, .. } => mv(center),
+        Primitive::Rect { p1, p2, .. } => {
+            mv(p1);
+            mv(p2);
+        }
+        Primitive::Text { at, .. } => mv(at),
+    }
+}
+
 fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     let (w, h) = block_box(spec);
     let (hw, hh) = (w / 2.0, h / 2.0);
+    let (sx, sy) = (axis_shift(w, spec.pitch), axis_shift(h, spec.pitch));
+    let (pitch_mm, numbers) = (spec.pitch.mm(), spec.numbers);
     // コネクタの無いブロックは今までどおり長方形1つ。あれば絵の所を空けた線分 (白い口に見せる)
     let mut primitives = if spec.has_connectors() {
         outline_segments(&spec.pins, hw, hh)
@@ -687,24 +741,25 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     let pins_spec = &spec.pins;
 
     let side = |list: &[BlockPin], dir: PinDir, primitives: &mut Vec<Primitive>, pins: &mut Vec<PinDef>| {
-        let n = list.len();
+        let vertical = matches!(dir, PinDir::Left | PinDir::Right);
+        let offs = row_offsets(list.len(), if vertical { h } else { w }, spec.pitch);
         let groups = connector_groups(list);
         for (i, bp) in list.iter().enumerate() {
             // まとまりの最初のピンの前に、そのまとまりの絵と名前を描く
             if let Some(group) = groups.iter().find(|g| g.start == i) {
                 let edges: Vec<Point> = (group.start..group.end)
-                    .map(|j| edge_point(dir, offset(j, n), hw, hh))
+                    .map(|j| edge_point(dir, offs[j], hw, hh))
                     .collect();
                 primitives.extend(connector_primitives(group.kind, dir, &edges));
                 if let Some(label) = group_label(group) {
-                    let at = label_at(list, group, &label, dir, hw, hh);
+                    let at = label_at(list, &offs, group, &label, dir, hw, hh, pitch_mm);
                     primitives.push(text(at.x, at.y, &label, BLOCK_PIN_TEXT_MM));
                 }
             }
-            let layout = pin_layout(bp, offset(i, n), dir, hw, hh);
+            let layout = pin_layout(bp, offs[i], dir, hw, hh, numbers, pitch_mm);
             primitives.push(lead(layout.lead_from.x, layout.lead_from.y, layout.at.x, layout.at.y));
             primitives.push(text(layout.num_at.x, layout.num_at.y, bp.no.trim(), BLOCK_PIN_TEXT_MM));
-            if !bp.name.is_empty() {
+            if !bp.name.is_empty() && numbers == BlockNumbers::Outside {
                 primitives.push(text(layout.name_at.x, layout.name_at.y, &bp.name, BLOCK_PIN_TEXT_MM));
             }
             pins.push(PinDef {
@@ -721,6 +776,19 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     side(&pins_spec.top, PinDir::Up, &mut primitives, &mut pins);
     side(&pins_spec.bottom, PinDir::Down, &mut primitives, &mut pins);
 
+    let mut text_slots = center_slots();
+    if (sx, sy) != (0.0, 0.0) {
+        for p in &mut primitives {
+            translate_primitive(p, sx, sy);
+        }
+        for pin in &mut pins {
+            pin.at = Point::new(pin.at.x + sx, pin.at.y + sy);
+        }
+        for slot in &mut text_slots {
+            slot.at = Point::new(slot.at.x + sx, slot.at.y + sy);
+        }
+    }
+
     SymbolDef {
         id: BLOCK_SYMBOL_ID.into(),
         name: "Block (generic device)".into(),
@@ -736,7 +804,7 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
         .collect(),
         primitives,
         pins,
-        text_slots: center_slots(),
+        text_slots,
     }
 }
 
@@ -2005,5 +2073,190 @@ mod tests {
         let mut a = fine(r#"{"left":[{"no":"1"},{"no":"2"}]}"#, None);
         a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
         assert_eq!(block_box(&parse_block_spec(&a).unwrap()), (5.0, 7.5));
+    }
+
+    fn on_grid(v: f64) -> bool {
+        let k = v / 2.5;
+        (k - k.round()).abs() < 1e-9
+    }
+
+    fn outline_of(def: &SymbolDef) -> (f64, f64, f64, f64) {
+        match &def.primitives[0] {
+            Primitive::Rect { p1, p2, .. } => (p1.x, p1.y, p2.x, p2.y),
+            other => panic!("先頭が外形でない: {other:?}"),
+        }
+    }
+
+    fn left_pins(n: usize) -> String {
+        let pins: Vec<String> = (1..=n).map(|i| format!(r#"{{"no":"{i}"}}"#)).collect();
+        format!(r#"{{"left":[{}]}}"#, pins.join(","))
+    }
+
+    /// The outline and the pins of a 2.5 mm block follow the table of the design: a height that is an odd multiple of 2.5 mm moves the outline down by 1.25 mm, and a row of pins that would miss the grid moves down by 1.25 mm.
+    /// 2.5mm間隔のブロックの外形とピンは設計の表のとおりになる: 高さが2.5mmの奇数倍なら外形が1.25mm下へ寄り、グリッドから外れるピンの列は1.25mm下へ寄る。
+    #[test]
+    fn a_fine_block_shifts_its_outline_and_rows_onto_the_grid() {
+        // (高さ, ピン数, 外形の上, 外形の下, ピンのy)
+        let table: [(f64, usize, f64, f64, &[f64]); 6] = [
+            (5.0, 1, -2.5, 2.5, &[0.0]),
+            (7.5, 2, -2.5, 5.0, &[0.0, 2.5]),
+            (7.5, 1, -2.5, 5.0, &[2.5]),
+            (10.0, 3, -5.0, 5.0, &[-2.5, 0.0, 2.5]),
+            (10.0, 2, -5.0, 5.0, &[0.0, 2.5]),
+            (12.5, 4, -5.0, 7.5, &[-2.5, 0.0, 2.5, 5.0]),
+        ];
+        for (h, n, top, bottom, ys) in table {
+            let size = format!(r#"{{"w":5,"h":{h}}}"#);
+            let def = block_symbol(&fine(&left_pins(n), Some(&size))).unwrap();
+            let (x1, y1, x2, y2) = outline_of(&def);
+            assert_eq!((x1, y1, x2, y2), (-2.5, top, 2.5, bottom), "h={h} n={n}");
+            let got: Vec<f64> = def.pins.iter().map(|p| p.at.y).collect();
+            assert_eq!(got, ys, "h={h} n={n}");
+            assert!(def.pins.iter().all(|p| p.at.x == -5.0), "接続点は外形から2.5mm: h={h} n={n}");
+        }
+    }
+
+    /// Every pin and every outline edge of a 2.5 mm block is on the 2.5 mm grid, for every size from 5 to 20 mm and every pin count that fits, on all four sides, also when the two opposite sides have different pin counts.
+    /// 2.5mm間隔のブロックのピンと外形の辺は、5〜20mmのどの大きさ・収まるどのピン数・四辺のどれでも、向かい合う辺のピン数が違っても、2.5mmグリッドに乗る。
+    #[test]
+    fn every_fine_block_is_on_the_grid() {
+        let sizes: Vec<f64> = (2..=8).map(|k| k as f64 * 2.5).collect();
+        let side = |name: &str, n: usize, tag: &str| {
+            let pins: Vec<String> = (1..=n).map(|i| format!(r#"{{"no":"{tag}{i}"}}"#)).collect();
+            format!(r#""{name}":[{}]"#, pins.join(","))
+        };
+        let mut checked = 0;
+        for &w in &sizes {
+            for &h in &sizes {
+                let max_rows = (h / 2.5) as usize - 1;
+                let max_cols = (w / 2.5) as usize - 1;
+                for (l, r) in [(0, max_rows), (max_rows, 0), (max_rows, max_rows.saturating_sub(1)), (1, max_rows)] {
+                    for (t, b) in [(0, max_cols), (max_cols, max_cols.saturating_sub(1))] {
+                        let json = format!("{{{},{},{},{}}}", side("left", l, "L"), side("right", r, "R"), side("top", t, "T"), side("bottom", b, "B"));
+                        let size = format!(r#"{{"w":{w},"h":{h}}}"#);
+                        let mut a = fine(&json, Some(&size));
+                        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+                        let def = block_symbol(&a).unwrap_or_else(|e| panic!("{w}x{h} {json}: {e}"));
+                        let (x1, y1, x2, y2) = outline_of(&def);
+                        for v in [x1, y1, x2, y2] {
+                            assert!(on_grid(v), "外形 {v}: {w}x{h} {json}");
+                        }
+                        for p in &def.pins {
+                            assert!(on_grid(p.at.x) && on_grid(p.at.y), "ピン {:?}: {w}x{h} {json}", p.at);
+                            assert!(p.at.x < x1 || p.at.x > x2 || p.at.y < y1 || p.at.y > y2, "ピンが外形の中: {:?}", p.at);
+                        }
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(checked > 300, "{checked}");
+    }
+
+    /// With numbers inside, the number of a left or right pin is drawn inside the outline next to its edge at the height of the pin, and pin names are not drawn.
+    /// 番号を内側に描くブロックでは、左右のピンの番号は外形の内側の辺のそばに、ピンと同じ高さで描かれ、ピン名は描かれない。
+    #[test]
+    fn numbers_inside_are_drawn_inside_and_names_are_not_drawn() {
+        let mut a = fine(r#"{"left":[{"no":"1","name":"VCC"}],"right":[{"no":"2","name":"GND"}]}"#, Some(r#"{"w":10,"h":5}"#));
+        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let def = block_symbol(&a).unwrap();
+        let texts: Vec<(&str, f64, f64)> = def.primitives.iter().filter_map(|p| match p {
+            Primitive::Text { at, text, .. } => Some((text.as_str(), at.x, at.y)),
+            _ => None,
+        }).collect();
+        assert_eq!(texts.iter().map(|t| t.0).collect::<Vec<_>>(), ["1", "2"]);
+        let (x1, _, x2, _) = outline_of(&def);
+        assert!(texts[0].1 > x1 && texts[0].1 < 0.0 && texts[0].2 == 0.0, "{texts:?}");
+        assert!(texts[1].1 < x2 && texts[1].1 > 0.0 && texts[1].2 == 0.0, "{texts:?}");
+        assert_eq!(def.pins[0].name, "VCC", "名前はデータに残る");
+    }
+
+    /// A 5 mm wide block with long numbers inside on both sides is widened until the numbers fit, and its pins stay on the grid.
+    /// 幅5mmのブロックの両側に長い番号を内側へ描くと、番号が収まる幅まで広がり、ピンはグリッドに乗ったままになる。
+    #[test]
+    fn a_narrow_block_with_numbers_inside_is_widened() {
+        let mut a = fine(r#"{"left":[{"no":"1234"}],"right":[{"no":"5678"}]}"#, Some(r#"{"w":5,"h":5}"#));
+        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let def = block_symbol(&a).unwrap();
+        let (x1, _, x2, _) = outline_of(&def);
+        assert!(x2 - x1 > 5.0);
+        assert!(on_grid(x1) && on_grid(x2) && def.pins.iter().all(|p| on_grid(p.at.x)));
+    }
+
+    /// Numbers inside also work on a 5 mm block, whose pins stay where they were.
+    /// 番号の内側表示は5mm間隔のブロックでも使え、ピンの位置は変わらない。
+    #[test]
+    fn numbers_inside_work_on_a_coarse_block_without_moving_pins() {
+        let pins = r#"{"left":[{"no":"1"},{"no":"2"}]}"#;
+        let mut plain = BTreeMap::new();
+        plain.insert(BLOCK_PINS_ATTR.to_string(), pins.to_string());
+        plain.insert(BLOCK_SIZE_ATTR.to_string(), r#"{"w":15,"h":10}"#.to_string());
+        let mut inside = plain.clone();
+        inside.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let (a, b) = (block_symbol(&plain).unwrap(), block_symbol(&inside).unwrap());
+        assert_eq!(a.pins.iter().map(|p| p.at).collect::<Vec<_>>(), b.pins.iter().map(|p| p.at).collect::<Vec<_>>());
+    }
+
+    /// A 2.5 mm block and a 5 mm block with the same pins get different export names, and the sample block keeps the name "block".
+    /// 同じピンを持つ2.5mm間隔と5mm間隔のブロックは書き出し名が違い、見本のブロックの名前は "block" のまま。
+    #[test]
+    fn fine_and_coarse_blocks_get_different_export_ids() {
+        let pins = r#"{"left":[{"no":"1"}]}"#;
+        let mut coarse = BTreeMap::new();
+        coarse.insert(BLOCK_PINS_ATTR.to_string(), pins.to_string());
+        assert_ne!(block_export_id(&block_symbol(&coarse).unwrap()), block_export_id(&block_symbol(&fine(pins, None)).unwrap()));
+        assert_eq!(block_export_id(&block_template()), "block");
+    }
+
+    const FINE_GOLDEN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/fine-blocks.json");
+
+    /// (名前, 属性) の例: 表の6例、四辺にピンのある例、左右のピン数の偶奇が違う例、番号内側、5mm間隔で番号内側、名前あり。
+    fn fine_cases() -> Vec<(String, BTreeMap<String, String>)> {
+        let mut cases = Vec::new();
+        for (h, n) in [(5.0, 1), (7.5, 2), (7.5, 1), (10.0, 3), (10.0, 2), (12.5, 4)] {
+            cases.push((format!("left-{n}-h{h}"), fine(&left_pins(n), Some(&format!(r#"{{"w":5,"h":{h}}}"#)))));
+        }
+        let four = r#"{"left":[{"no":"L1","name":"IN"},{"no":"L2"}],"right":[{"no":"R1"},{"no":"R2"},{"no":"R3"}],"top":[{"no":"T1"}],"bottom":[{"no":"B1"},{"no":"B2"}]}"#;
+        cases.push(("four-sides-auto".into(), fine(four, None)));
+        cases.push(("four-sides-sized".into(), fine(four, Some(r#"{"w":17.5,"h":12.5}"#))));
+        let mut inside = fine(four, None);
+        inside.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        cases.push(("four-sides-inside".into(), inside));
+        let mut narrow = fine(r#"{"left":[{"no":"1234"}],"right":[{"no":"5678"}]}"#, Some(r#"{"w":5,"h":5}"#));
+        narrow.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        cases.push(("inside-widened".into(), narrow));
+        let mut coarse_inside = BTreeMap::new();
+        coarse_inside.insert(BLOCK_PINS_ATTR.to_string(), four.to_string());
+        coarse_inside.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        cases.push(("coarse-inside".into(), coarse_inside));
+        cases
+    }
+
+    /// The 2.5 mm blocks and the blocks with numbers inside are drawn exactly as recorded in the golden file that the TypeScript twin is also checked against (rewrite it with MADAKE_UPDATE_GOLDEN=1).
+    /// 2.5mm間隔のブロックと番号内側のブロックは、TS 側も突き合わせる golden ファイルのとおりに描かれる (MADAKE_UPDATE_GOLDEN=1 で書き直す)。
+    #[test]
+    fn fine_blocks_match_the_shared_golden_file() {
+        let cases: Vec<serde_json::Value> = fine_cases()
+            .into_iter()
+            .map(|(name, a)| {
+                let def = block_symbol(&a).unwrap_or_else(|e| panic!("{name}: {e}"));
+                serde_json::json!({
+                    "name": name,
+                    "attrs": a,
+                    "primitives": rounded(serde_json::to_value(&def.primitives).unwrap()),
+                    "pins": rounded(serde_json::to_value(&def.pins).unwrap()),
+                })
+            })
+            .collect();
+        let want = serde_json::json!({ "cases": cases });
+        if std::env::var("MADAKE_UPDATE_GOLDEN").as_deref() == Ok("1") {
+            // 1行に1例 (差分が例ごとに読める)
+            let lines: Vec<String> = want["cases"].as_array().unwrap().iter().map(|c| serde_json::to_string(c).unwrap()).collect();
+            std::fs::write(FINE_GOLDEN, format!("{{\"cases\":[\n{}\n]}}\n", lines.join(",\n"))).expect("golden を書く");
+        }
+        let text = std::fs::read_to_string(FINE_GOLDEN)
+            .unwrap_or_else(|_| panic!("{FINE_GOLDEN} が無い: MADAKE_UPDATE_GOLDEN=1 を付けて作る"));
+        let got: serde_json::Value = serde_json::from_str(&text).expect("golden の JSON");
+        assert!(got == want, "golden と違う: MADAKE_UPDATE_GOLDEN=1 で書き直し、git diff で変化を確かめる");
     }
 }
