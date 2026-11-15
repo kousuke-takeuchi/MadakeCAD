@@ -227,6 +227,7 @@ negative, which is enough for both).
 | Second title line and other free fields | ✅ | G29 closed (`{field.title_en}`) |
 | Text height given as capital height; wide lettering | ✅ | G30 closed for height and fitting; the lettering is closed by the bundled stroke font (2026-11-15, below) |
 | Logo image | ✅ | G31 closed |
+| Dense harness wiring: pins closer than 5 mm, small connector boxes with the numbers inside | ✅ | G34 closed (`block_pitch`, `block_numbers`; format 22) |
 
 **After the frame template extensions (2026-11-14).** The same region was redrawn with a
 template that uses the new items. The share of the reproduction's ink that lies on the
@@ -1360,6 +1361,18 @@ where the template draws them 4 mm in on all four.
 
 **Proposed.** `marks.centre_length` (`margin` | number), `marks.centre_arrow: bool`,
 `marks.trim_inset { x, y }` and `marks.trim_arm`.
+
+### G34 — Block pins are 5 mm apart and the outline cannot be smaller than 15 x 10 mm · required
+
+**Closed 2026-11-15** (`block_pitch` = `"2.5"` and `block_numbers` = `"inside"`, format 22; `docs/superpowers/specs/2026-11-15-block-fine-pitch-design.md`).
+
+**Current behaviour (verified).** A block symbol puts its pins 5 mm apart and its outline
+has a minimum size, so a dense harness drawing, which places conductors closer than 5 mm
+and uses small connector boxes with the pin numbers inside, could not be reproduced.
+
+**What closed it.** Two block attributes. `block_pitch: "2.5"` gives a 2.5 mm pin pitch and
+a 2.5 mm size step; `block_numbers: "inside"` draws the pin numbers inside the outline.
+The block editor keeps both attributes but has no control for them yet.
 
 ## Summary by impact
 

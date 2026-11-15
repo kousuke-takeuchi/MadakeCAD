@@ -475,6 +475,7 @@ pub struct PlaceSymbolParams {
     /// 追加属性。ブロック(`symbol_id="block"`)は
     /// `block_pins` = `{"left":[{"no":"IN1","name":"入力1"}],"right":[…]}`(任意で`top`/`bottom`)、
     /// 任意で `block_size` = `{"w":40,"h":30}` を渡して名前付きピンの機器を1回で作る。
+    /// `block_pitch` = `"2.5"` でピン間隔を2.5mmにでき(既定は `"5"`)、`block_numbers` = `"inside"` でピン番号を外形の内側に描ける(既定は `"outside"`)。
     /// ピンに `contacts` (例 `["VBUS","D-","D+","GND"]`) を書くと、1本のピンで複数の導体を運ぶポートになる
     /// (ネットリストは接点ごとに分かれる)。接点は1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない。
     /// ピンに `connector` (`usb_a_f` `usb_a_m` `usb_c_f` `usb_c_m` `micro_b_f` `micro_b_m` `jack35_f` `jack35_m`
@@ -1243,7 +1244,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "シンボルをシートに配置する。作成されたエンティティidと、置いた部品のピン(pins: 番号・名前・用紙座標x/y・向きdir)を返す。配線はこの座標を使うかconnect_pinsでピン名を指定する。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る。USB・3.5mmオーディオ・DCジャックのように複数の導体を運ぶコネクタは、導体ごとのピンにせず block_pins のピンに contacts (例 {\"no\":\"U3\",\"name\":\"USB-A メス\",\"contacts\":[\"VBUS\",\"D-\",\"D+\",\"GND\"]}) を付けたポートのピン1本で描く (接点は1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない)。ピンに connector (usb_a_f usb_a_m usb_c_f usb_c_m micro_b_f micro_b_m jack35_f jack35_m dc_f dc_m screw jst_ph_f jst_xh_f。_f=メス、_m=オス) を付けると外形の辺にそのコネクタの絵を描く (絵だけで、導体は contacts に書く)。続けて並ぶ同じ種類の screw / jst_ph_f / jst_xh_f のピンに同じ connector_ref (例 J3) を付けると1つの本体になる。コネクタのあるピンの接続点は外形から5mmなので、位置は get_pins で読む"
+        description = "シンボルをシートに配置する。作成されたエンティティidと、置いた部品のピン(pins: 番号・名前・用紙座標x/y・向きdir)を返す。配線はこの座標を使うかconnect_pinsでピン名を指定する。多ピンの機器は symbol_id=\"block\" + attrs.block_pins で名前付きピンのブロックとして作る。USB・3.5mmオーディオ・DCジャックのように複数の導体を運ぶコネクタは、導体ごとのピンにせず block_pins のピンに contacts (例 {\"no\":\"U3\",\"name\":\"USB-A メス\",\"contacts\":[\"VBUS\",\"D-\",\"D+\",\"GND\"]}) を付けたポートのピン1本で描く (接点は1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない)。ピンに connector (usb_a_f usb_a_m usb_c_f usb_c_m micro_b_f micro_b_m jack35_f jack35_m dc_f dc_m screw jst_ph_f jst_xh_f。_f=メス、_m=オス) を付けると外形の辺にそのコネクタの絵を描く (絵だけで、導体は contacts に書く)。続けて並ぶ同じ種類の screw / jst_ph_f / jst_xh_f のピンに同じ connector_ref (例 J3) を付けると1つの本体になる。コネクタのあるピンの接続点は外形から5mmなので、位置は get_pins で読む。狭い間隔の機器・小さいコネクタは attrs.block_pitch=\"2.5\" で2.5mm間隔にできる (外形は2.5mm刻み、最小5×5mm、ピンn本の辺は(n+1)×2.5mm以上、connector の絵は使えない)。attrs.block_numbers=\"inside\" でピン番号を外形の内側に描く (ピン名は描かないので、信号名は配線のネットラベルで出す)"
     )]
     fn place_symbol(
         &self,
