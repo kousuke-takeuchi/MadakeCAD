@@ -94,7 +94,7 @@ These are invoked as separate processes and are never linked into or redistribut
 
 | Font | Author | Version | Licence (quoted from its documentation) | Files |
 |---|---|---|---|---|
-| KST32B (CAD stroke font: ASCII, half-width kana, ISO 8859-15, JIS X 0208 level 1 and 2) | Saka.N | 3.0 (2017-07-01) | Freeware. `KST32B.MAN`: "FREEWARE (free to copy, change..; NO RESPONSIBILITY)". `KST32B.RDM`: 「KST32Bはフリーウェアですので無保証で,使用,配付改変,再配付等は自由ですが,使用した結果のいかなる影響についても,責任及び賠償責任は,一切負いかねます.」 | `src-tauri/resources/stroke_fonts/kst32b/` (`KST32B.TXT`, `KST32B.RDM`, `KST32B.MAN`, unmodified copies of the distributed archive `KST32Bv3.zip`) |
+| KST32B (CAD stroke font: ASCII, half-width kana, ISO 8859-15, JIS X 0208 level 1 and 2) | Saka.N | 3.0 (2017-07-01) | Freeware. `KST32B.MAN`: "FREEWARE(free to copy,change..; NO RESPONSIBILITY)". `KST32B.RDM`: 「KST32Bはフリーウェアですので無保証で,使用,配付改変,再配付等は自由ですが,使用した結果のいかなる影響についても,責任及び賠償責任は,一切負いかねます.」 | `src-tauri/resources/stroke_fonts/kst32b/` (`KST32B.TXT`, `KST32B.RDM`, `KST32B.MAN`, unmodified copies of the distributed archive `KST32Bv3.zip`) |
 
 ## Full inventory
 

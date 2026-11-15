@@ -236,7 +236,7 @@ def render() -> str:
     w("| Font | Author | Version | Licence (quoted from its documentation) | Files |")
     w("|---|---|---|---|---|")
     w("| KST32B (CAD stroke font: ASCII, half-width kana, ISO 8859-15, JIS X 0208 level 1 and 2) | Saka.N | 3.0 (2017-07-01) "
-      "| Freeware. `KST32B.MAN`: \"FREEWARE (free to copy, change..; NO RESPONSIBILITY)\". `KST32B.RDM`: "
+      "| Freeware. `KST32B.MAN`: \"FREEWARE(free to copy,change..; NO RESPONSIBILITY)\". `KST32B.RDM`: "
       "「KST32Bはフリーウェアですので無保証で,使用,配付改変,再配付等は自由ですが,使用した結果のいかなる影響についても,"
       "責任及び賠償責任は,一切負いかねます.」 "
       f"| `{STROKE_FONT_DIR}/` ({', '.join(f'`{n}`' for n in STROKE_FONT_FILES)}, unmodified copies of the distributed archive `KST32Bv3.zip`) |")
