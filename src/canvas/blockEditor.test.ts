@@ -16,6 +16,7 @@ import {
   portPinCount,
   splitContacts,
   removeRow,
+  snapSize,
   wiredPinNumbers,
   type BlockDraft,
 } from "./blockEditor";
@@ -398,5 +399,32 @@ describe("block pin pitch and number placement in the editor", () => {
     const d = draftFromAttrs({ block_pins: '{"left":[{"no":"1"},{"no":"2"}]}', block_pitch: "2.5", block_numbers: "inside" });
     expect(draftSymbol(d)).toEqual(blockSymbol(attrsFromDraft(d)));
     expect(draftSize(d).h).toBe(7.5);
+  });
+});
+
+describe("connector pictures on a fine block and size snapping", () => {
+  const fineRows = '{"left":[{"no":"1"},{"no":"2"}]}';
+
+  // ja: 2.5mm間隔のブロックでピンにコネクタの絵を付けると指摘される (間隔が5mmのブロックでは指摘されない)
+  it("reports a connector picture on a fine block but not on a coarse one", () => {
+    const fine = draftFromAttrs({ block_pins: fineRows, block_pitch: "2.5" });
+    fine.rows.left[1].connector = "jst_xh_f";
+    expect(draftIssues(fine)).toContainEqual({ code: "connectorOnFine", no: "2" });
+    const coarse = draftFromAttrs({ block_pins: fineRows });
+    coarse.rows.left[1].connector = "jst_xh_f";
+    expect(draftIssues(coarse).some((i) => i.code === "connectorOnFine")).toBe(false);
+  });
+
+  // ja: 2.5mm間隔のブロックの大きさは2.5mm刻みに丸められ、5mm未満にはならない
+  it("snaps a fine block size to 2.5 mm steps, never below 5 mm", () => {
+    expect(snapSize(7, "fine")).toBe(7.5);
+    expect(snapSize(1, "fine")).toBe(5);
+    expect(snapSize(6.2, "fine")).toBe(5);
+  });
+
+  // ja: 5mm間隔のブロックの大きさは5mm刻みに丸められ、5mm未満にはならない
+  it("snaps a coarse block size to 5 mm steps, never below 5 mm", () => {
+    expect(snapSize(12, "coarse")).toBe(10);
+    expect(snapSize(1, "coarse")).toBe(5);
   });
 });

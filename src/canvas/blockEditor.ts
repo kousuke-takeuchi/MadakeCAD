@@ -14,6 +14,7 @@ import {
   BLOCK_PITCH_ATTR,
   BLOCK_SIZE_ATTR,
   blockBox,
+  blockSizeStep,
   blockSymbol,
   parseBlockSpec,
   sideNeed,
@@ -82,7 +83,9 @@ export type BlockIssue =
   /** まとめ名は端子台・JST にしか付けられない。 */
   | { code: "connectorRefNotGrouped"; side: BlockSide; index: number }
   /** 1つのまとめ名が2つのコネクタに分かれている。 */
-  | { code: "connectorRefSplit"; ref: string };
+  | { code: "connectorRefSplit"; ref: string }
+  /** 2.5mm間隔のブロックではコネクタの絵を使えない。 */
+  | { code: "connectorOnFine"; no: string };
 
 /** 配線が接続点に載っているとみなす距離 (mm)。Rust側 netlist::CONNECT_EPS と同じ。 */
 const CONNECT_EPS = 0.01;
@@ -265,6 +268,12 @@ export function draftSymbol(draft: BlockDraft): SymbolDef | null {
   }
 }
 
+/** 手動の外形寸法をブロックの刻みへ丸める (最小は5mm)。 */
+export function snapSize(value: number, pitch: BlockPitch): number {
+  const step = blockSizeStep(pitch);
+  return Math.max(sideNeed(0, pitch), Math.round((Number(value) || 0) / step) * step);
+}
+
 /** ピン表の指摘 (重複番号・番号なし・ピン過多・外形不足)。 */
 export function draftIssues(draft: BlockDraft): BlockIssue[] {
   const issues: BlockIssue[] = [];
@@ -301,6 +310,11 @@ export function draftIssues(draft: BlockDraft): BlockIssue[] {
       if (group.ref === null || !isGroupedConnector(group.kind)) continue;
       if (seenRefs.has(group.ref)) issues.push({ code: "connectorRefSplit", ref: group.ref });
       seenRefs.add(group.ref);
+    }
+  }
+  if (draft.pitch === "fine") {
+    for (const row of allRows(draft).filter(isFilled)) {
+      if (row.connector) issues.push({ code: "connectorOnFine", no: row.no.trim() });
     }
   }
   const count = allRows(draft).filter(isFilled).length;

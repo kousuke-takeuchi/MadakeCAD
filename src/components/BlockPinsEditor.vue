@@ -8,8 +8,8 @@
 import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-vue-next";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { BLOCK_EXTRA_SIDES, type BlockIssue, type BlockSide } from "../canvas/blockEditor";
-import { blockSizeStep, sideNeed } from "../canvas/dynamicSymbol";
+import { BLOCK_EXTRA_SIDES, snapSize, type BlockIssue, type BlockSide } from "../canvas/blockEditor";
+import { blockSizeStep } from "../canvas/dynamicSymbol";
 import { useBlockEditorStore } from "../stores/blockEditor";
 import BlockPinColumn from "./BlockPinColumn.vue";
 import SymbolPreview from "./SymbolPreview.vue";
@@ -56,6 +56,7 @@ function issueText(issue: BlockIssue): string {
       row: issue.index + 1,
     });
   }
+  if (issue.code === "connectorOnFine") return t("blockEditor.issue.connectorOnFine", { no: issue.no });
   if (issue.code === "connectorRefSplit") return t("blockEditor.issue.connectorRefSplit", { ref: issue.ref });
   return t("blockEditor.issue.sizeTooSmall", { w: issue.w, h: issue.h });
 }
@@ -72,9 +73,7 @@ const extraCount = computed(() =>
 const sizeStep = computed(() => blockSizeStep(editor.pitch));
 
 function setSize(key: "w" | "h", value: number) {
-  const step = sizeStep.value;
-  const steps = Math.round((Number(value) || 0) / step);
-  editor.setSize({ [key]: Math.max(sideNeed(0, editor.pitch), steps * step) });
+  editor.setSize({ [key]: snapSize(value, editor.pitch) });
 }
 </script>
 

@@ -696,7 +696,8 @@
       "duplicateContact": "Row {row} of the {side} lists contact {contact} twice",
       "tooManyContacts": "Row {row} of the {side} has too many contacts: {count} (at most {max})",
       "connectorRefNotGrouped": "Row {row} of the {side} has a group name: only screw terminals and JST sockets can have one",
-      "connectorRefSplit": "Group name {ref} is used by two connectors: put its pins next to each other on one side, all of one kind"
+      "connectorRefSplit": "Group name {ref} is used by two connectors: put its pins next to each other on one side, all of one kind",
+      "connectorOnFine": "A 2.5 mm block cannot use a connector picture (pin {no})"
     },
     "wiredWarning": "Pins {pins} are wired: renumbering or deleting them disconnects those wires",
     "placeHint": "Place puts a ghost on the cursor (R rotates, Esc cancels)",

@@ -161,8 +161,20 @@ describe("editing a block that is already on the drawing", () => {
     expect((sent[0] as { entity: { attrs: Record<string, string> } }).entity.attrs.current_a).toBe("5");
   });
 
-  // ja: 2.5mm間隔・番号内側のブロックを編集して適用しても、2つの属性は残り、大きさの刻みは2.5mmになる
-  it("keeps block_pitch and block_numbers on apply, and steps the size by 2.5 mm", async () => {
+  // ja: 2.5mm間隔のブロックにコネクタの絵を付けると、適用できなくなる
+  it("refuses to apply a connector picture on a fine block", () => {
+    const attrs = { block_pins: '{"left":[{"no":"1"},{"no":"2"}]}', block_pitch: "2.5" };
+    seed([block(attrs)]);
+    const editor = useBlockEditorStore();
+    editor.startEdit(block(attrs) as Entity);
+    expect(editor.canApply).toBe(true);
+    editor.updateRow("left", 1, { connector: "jst_xh_f" });
+    expect(editor.issues).toContainEqual({ code: "connectorOnFine", no: "2" });
+    expect(editor.canApply).toBe(false);
+  });
+
+  // ja: 2.5mm間隔・番号内側のブロックを編集して適用しても、2つの属性は残り、間隔は2.5mmと読まれる
+  it("keeps block_pitch and block_numbers on apply and reports the fine pitch", async () => {
     const attrs = { block_pins: '{"left":[{"no":"1"},{"no":"2"}]}', block_pitch: "2.5", block_numbers: "inside" };
     seed([block(attrs)]);
     const sent = spyExecute();

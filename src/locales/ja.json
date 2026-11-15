@@ -696,7 +696,8 @@
       "duplicateContact": "{side}の{row}行目で接点 {contact} が2回あります",
       "tooManyContacts": "{side}の{row}行目の接点が多すぎます: {count} (最大 {max})",
       "connectorRefNotGrouped": "{side}の{row}行目にまとめ名があります。まとめ名を付けられるのは端子台と JST だけです",
-      "connectorRefSplit": "まとめ名 {ref} が2つのコネクタに使われています。同じ辺に隣り合わせて並べ、種類をそろえてください"
+      "connectorRefSplit": "まとめ名 {ref} が2つのコネクタに使われています。同じ辺に隣り合わせて並べ、種類をそろえてください",
+      "connectorOnFine": "2.5mm間隔のブロックではコネクタの絵を使えません (ピン {no})"
     },
     "wiredWarning": "ピン {pins} は配線済みです。番号を変える・削除すると接続が外れます",
     "placeHint": "「配置」でカーソルにゴーストが付きます (Rで回転・Escで解除)",

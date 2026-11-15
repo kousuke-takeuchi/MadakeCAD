@@ -696,7 +696,8 @@
       "duplicateContact": "Zeile {row} der {side} nennt den Kontakt {contact} zweimal",
       "tooManyContacts": "Zeile {row} der {side} hat zu viele Kontakte: {count} (höchstens {max})",
       "connectorRefNotGrouped": "Zeile {row} der {side} hat einen Gruppennamen: nur Schraubklemmen und JST-Buchsen können einen haben",
-      "connectorRefSplit": "Der Gruppenname {ref} wird von zwei Steckverbindern verwendet: die Pins müssen nebeneinander auf einer Seite liegen und von einer Art sein"
+      "connectorRefSplit": "Der Gruppenname {ref} wird von zwei Steckverbindern verwendet: die Pins müssen nebeneinander auf einer Seite liegen und von einer Art sein",
+      "connectorOnFine": "Ein 2,5-mm-Block kann kein Steckverbinderbild verwenden (Pin {no})"
     },
     "wiredWarning": "Pins {pins} are wired: renumbering or deleting them disconnects those wires",
     "placeHint": "Place puts a ghost on the cursor (R rotates, Esc cancels)",
