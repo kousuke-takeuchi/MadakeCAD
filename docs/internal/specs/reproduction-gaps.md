@@ -1446,7 +1446,7 @@ leader line had no arrow.
 - G41: pure wire colours per sheet (`vivid_wire_colors`); the colour names are unchanged.
 - G42: blocks without leads (`block_leads: "none"`): pins sit on the outline.
 - G43: caption layout per part (`caption_layout`): place, size, alignment, hide, per line.
-- G44: one text pen for the project font (`pen_mm`).
+- G44: one text pen for the project font (`pen_mm`) and a letter spacing for all text (`spacing`), with a per-note factor.
 - G45: dashed wires with their own weight (`dashed`, `weight_mm`).
 - G46: arrow at the end of a line shape (`arrow_end`).
 
