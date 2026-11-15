@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3164 specification clauses** across 6 areas.
+**3166 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1599,6 +1599,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### stroke_fonts_api
 
 - The Link API serves the bundled stroke font's glyphs by id, and answers 404 for a font that is not bundled. <sub>`stroke_fonts_are_served_by_id`</sub>
+- Through POST /commands, set_text_font selects a bundled stroke font for the project and answers with the text_font_changed patch. <sub>`set_text_font_runs_through_the_commands_endpoint`</sub>
+- Through POST /commands, set_text_font with a font that is not bundled is refused and the project keeps the system font. <sub>`set_text_font_with_an_unknown_id_is_refused_through_the_commands_endpoint`</sub>
 
 ### User symbol library (REST)
 

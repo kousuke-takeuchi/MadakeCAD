@@ -462,6 +462,7 @@ export type Command =
   /** PLC I/O割付表の置換 (プロジェクト単位)。 */
   | { type: "set_plc_assignments"; assignments: PlcAssignment[] }
   | { type: "set_frame_template"; frame_template: string | null }
+  | { type: "set_text_font"; text_font: TextFont | null }
   | { type: "set_plc_sheet_options"; options: PlcSheetOptions | null }
   | { type: "add_cable"; sheet_id: string; cable: Cable }
   | { type: "align_footprints"; sheet_id: string; ids: string[]; mode: AlignMode }

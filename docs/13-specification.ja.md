@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3164仕様項目**。
+全6領域・**3166仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1599,6 +1599,8 @@
 ### stroke_fonts_api
 
 - Link APIは同梱ストロークフォントの字形をidで返し、同梱していないフォントには404を返す。 <sub>`stroke_fonts_are_served_by_id`</sub>
+- POST /commands の set_text_font で同梱のストロークフォントをプロジェクトの書体に選べ、応答に text_font_changed のパッチが返る。 <sub>`set_text_font_runs_through_the_commands_endpoint`</sub>
+- POST /commands の set_text_font に同梱していない書体を渡すと拒否され、プロジェクトはシステムの書体のまま。 <sub>`set_text_font_with_an_unknown_id_is_refused_through_the_commands_endpoint`</sub>
 
 ### ユーザーシンボルライブラリ (REST)
 
