@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3184 specification clauses** across 6 areas.
+**3185 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -53,6 +53,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The corner placement follows an explicit table for a block with one top pin and one left pin: the corner is used exactly when the top or the left side is drawn on top. <sub>`corner_placement_follows_the_rotation_table`</sub>
 - A hand-built drawing above-left of the box corner pushes the corner captions up until their text boxes end above it. <sub>`corner_captions_rise_above_a_drawing_at_the_corner`</sub>
 - A block with pins on its drawn top side puts its reference and value right-aligned at the box's top-left corner (1.0 mm left of the left edge, text boxes ending at least 1.0 mm above the top edge) without overlapping anything the block draws; other blocks keep the centred caption. <sub>`captions_of_a_block_with_top_pins_sit_at_the_top_left_corner`</sub>
+- On a 2.5 mm block with a top pin and an odd-multiple width and height, the corner caption sits 1.0 mm left of the drawn left edge and starts from the drawn top edge, where the outline was moved onto the grid. <sub>`corner_captions_of_a_fine_block_follow_the_shifted_outline`</sub>
 - Only blocks move their captions: a plain symbol keeps the centred caption above its top edge. <sub>`captions_of_a_plain_symbol_keep_the_centred_anchor`</sub>
 - KiCad's Reference/Value, the device XRef and the tidy text boxes all follow the corner placement of a block with top pins: right-justified, left of the box. <sub>`kicad_xref_and_tidy_follow_the_top_left_corner_captions`</sub>
 - A block without the pitch and number attributes is a 5 mm block with numbers outside, as before. <sub>`a_block_without_the_new_attributes_is_coarse_with_numbers_outside`</sub>

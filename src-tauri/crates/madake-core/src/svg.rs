@@ -727,9 +727,9 @@ fn top_left_corner_anchor(inst: &crate::model::SymbolInstance, def: &SymbolDef) 
         return None;
     }
     let spec = crate::block::parse_block_spec(&inst.attrs).ok()?;
-    let (w, h) = crate::block::block_box(&spec);
-    let a = transform_local(Point::new(-w / 2.0, -h / 2.0), inst);
-    let b = transform_local(Point::new(w / 2.0, h / 2.0), inst);
+    let (lo, hi) = crate::block::block_outline(&spec);
+    let a = transform_local(lo, inst);
+    let b = transform_local(hi, inst);
     let body = Rect::from_corners(a, b);
     let eps = 1e-6;
     let has_top_pin = def.pins.iter().any(|pin| {

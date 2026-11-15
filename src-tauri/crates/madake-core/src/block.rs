@@ -722,6 +722,14 @@ fn translate_primitive(p: &mut Primitive, dx: f64, dy: f64) {
     }
 }
 
+/// 描かれる外形の2つの角 (シンボルのローカル座標)。2.5mm間隔で大きさが2.5mmの奇数倍の軸は [`axis_shift`] だけずれる。
+/// 参照記号の置き場所など、外形を知りたいコードは [`block_box`] から作らずこれを使う。
+pub(crate) fn block_outline(spec: &BlockSpec) -> (Point, Point) {
+    let (w, h) = block_box(spec);
+    let (sx, sy) = (axis_shift(w, spec.pitch), axis_shift(h, spec.pitch));
+    (Point::new(-w / 2.0 + sx, -h / 2.0 + sy), Point::new(w / 2.0 + sx, h / 2.0 + sy))
+}
+
 fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     let (w, h) = block_box(spec);
     let (hw, hh) = (w / 2.0, h / 2.0);
@@ -1806,9 +1814,9 @@ mod tests {
     /// ブロックの外形を用紙座標の矩形で返す (ピン表と寸法から)。
     fn paper_box(inst: &crate::model::SymbolInstance) -> crate::tidy::Rect {
         let spec = parse_block_spec(&inst.attrs).expect("ピン表");
-        let (w, h) = block_box(&spec);
-        let a = crate::netlist::transform_local(Point::new(-w / 2.0, -h / 2.0), inst);
-        let b = crate::netlist::transform_local(Point::new(w / 2.0, h / 2.0), inst);
+        let (lo, hi) = block_outline(&spec);
+        let a = crate::netlist::transform_local(lo, inst);
+        let b = crate::netlist::transform_local(hi, inst);
         crate::tidy::Rect::from_corners(a, b)
     }
 
@@ -1947,6 +1955,27 @@ mod tests {
             }
         }
         assert!(with_top > 0 && without_top > 0, "両方の場合を確かめる: {with_top} / {without_top}");
+    }
+
+    /// On a 2.5 mm block with a top pin and an odd-multiple width and height, the corner caption sits 1.0 mm left of the drawn left edge and starts from the drawn top edge, where the outline was moved onto the grid.
+    /// 幅も高さも2.5mmの奇数倍で上辺にピンのある2.5mm間隔のブロックでは、左上の角の参照記号・型番は、グリッドへずらして描いた外形の左辺の1.0mm左・上辺の位置から始まる。
+    #[test]
+    fn corner_captions_of_a_fine_block_follow_the_shifted_outline() {
+        let (inst, def) = placed_fine(r#"{"left":[{"no":"1"}],"top":[{"no":"T1"}]}"#, r#"{"w":17.5,"h":12.5}"#);
+        assert_eq!(outline_of(&def), (-7.5, -5.0, 10.0, 7.5));
+        let (lo, hi) = block_outline(&parse_block_spec(&inst.attrs).unwrap());
+        assert_eq!((lo.x, lo.y, hi.x, hi.y), outline_of(&def), "block_outline は描かれた外形と同じ");
+        let a = crate::svg::caption_anchor(&inst, &def);
+        assert!(a.end);
+        assert!((a.x - (-7.5 - 1.0)).abs() < 1e-9, "{a:?}");
+        assert!((a.top - (-5.0)).abs() < 1e-9, "{a:?}");
+    }
+
+    fn placed_fine(pins: &str, size: &str) -> (crate::model::SymbolInstance, SymbolDef) {
+        let crate::model::Entity::Symbol(mut inst) = test_block("39", "USBハブ", 0.0, 0.0, pins) else { unreachable!() };
+        inst.attrs = fine(pins, Some(size));
+        let def = block_symbol(&inst.attrs).expect("ブロック定義");
+        (inst, def)
     }
 
     /// Only blocks move their captions: a plain symbol keeps the centred caption above its top edge.
