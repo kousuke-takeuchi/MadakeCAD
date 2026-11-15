@@ -225,7 +225,7 @@ negative, which is enough for both).
 | Two rule weights inside the title block | ✅ | G27 closed |
 | Vertical note outside the frame | ✅ | G28 closed (four rotated cells, one boxed label) |
 | Second title line and other free fields | ✅ | G29 closed (`{field.title_en}`) |
-| Text height given as capital height; wide lettering | 🔶 | G30 closed for height and fitting; lettering width is the typeface (out of scope) |
+| Text height given as capital height; wide lettering | ✅ | G30 closed for height and fitting; the lettering is closed by the bundled stroke font (2026-11-15, below) |
 | Logo image | ✅ | G31 closed |
 
 **After the frame template extensions (2026-11-14).** The same region was redrawn with a
@@ -236,6 +236,19 @@ the centre marks with their arrow heads and the mark triangles of every revision
 on the reference's as well. What still differs is the lettering (typeface: glyph shapes
 and widths). The canvas was checked by unit tests of the layout only; no screenshot
 comparison was made.
+
+**After the stroke font (2026-11-15).** The lettering is no longer out of scope. A project
+can select the bundled CAD stroke font KST32B (`set_text_font`, format 21,
+`docs/superpowers/specs/2026-11-14-stroke-font-design.md`); SVG, PDF and the canvas then
+draw every text as lines. The frame template chooses half-width or full-width Latin
+letters for the frame text (`text_latin`) and a letter spacing per cell (`spacing`). The
+region was exported again with the font selected, and the lettering of the title block,
+the revision table and the notes now overlays the reference closely. With the template unchanged the
+share rose from 0.95 to 0.96; after the sizes, spacings and anchors of the title block
+cells were tuned against a per-cell measurement of the text extents it is 0.97, and the
+tuned cells are within a few percent of the reference's width. What still differs is
+small: a few cells whose letter spacing is not uniform on the reference, and offsets of
+a few tenths of a millimetre. The canvas is still checked by unit tests only.
 
 ## Gaps
 
@@ -1301,6 +1314,9 @@ shorter; there is no width factor and no fit-to-cell (`Cell.w` is stored but unu
 
 **Proposed.** `size_is: font | cap` on the template (default font), and use `Cell.w` to
 shrink text that would overflow. A width factor is left to a later typeface decision.
+
+**Typeface decided 2026-11-15.** The bundled stroke font gives the lettering its width;
+`Cell.spacing` is the width factor (it scales the advance, stroke font only).
 
 ### G31 — The logo box is drawn empty · quality
 

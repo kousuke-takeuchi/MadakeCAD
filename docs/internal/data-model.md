@@ -1,6 +1,6 @@
 # データ設計書
 
-作成: 2026-08-21。更新: 2026-10-15(盤の銘板・寸法線: format_version 16・`Entity::Nameplate`/`Entity::Dimension`。同日に多芯ケーブル: format_version 15・`Entity::Cable`。同日にPLC I/O図面の生成設定のプロジェクト保存: format_version 14・`Project.plc_generate`)。その前の更新: 2026-09-28(整えバリアントの複製シートの印: format_version 13・`Sheet.variant_of`)。その前: 2026-09-28(クラウド側のFreeCAD連携M5-1〜3を統合: format_version 12・`Project.mech_links`・`MechLink.placement`・`Wire.length_source`。クラウド側の暫定番号3/4はこの12へ畳んだ)。フェーズ6タスク6: format_version 11・電線品番凡例ブロックエンティティ`WireLegend`(G9残)。フェーズ6タスク5: `.mdkproj` format_version 10・`Project.no`(G16、プロジェクト番号)。フェーズ6タスク4: format_version 9・`TextEntity.leader_to`(G20、注記の引き出し線)。フェーズ6: format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
+作成: 2026-08-21。更新: 2026-11-15(プロジェクトの書体: format_version 21・`Project.text_font`、図枠テンプレートの`text_latin`と`cells[].spacing`)。その前の更新: 2026-10-15(盤の銘板・寸法線: format_version 16・`Entity::Nameplate`/`Entity::Dimension`。同日に多芯ケーブル: format_version 15・`Entity::Cable`。同日にPLC I/O図面の生成設定のプロジェクト保存: format_version 14・`Project.plc_generate`)。その前の更新: 2026-09-28(整えバリアントの複製シートの印: format_version 13・`Sheet.variant_of`)。その前: 2026-09-28(クラウド側のFreeCAD連携M5-1〜3を統合: format_version 12・`Project.mech_links`・`MechLink.placement`・`Wire.length_source`。クラウド側の暫定番号3/4はこの12へ畳んだ)。フェーズ6タスク6: format_version 11・電線品番凡例ブロックエンティティ`WireLegend`(G9残)。フェーズ6タスク5: `.mdkproj` format_version 10・`Project.no`(G16、プロジェクト番号)。フェーズ6タスク4: format_version 9・`TextEntity.leader_to`(G20、注記の引き出し線)。フェーズ6: format_version 8・図形エンティティ`Shape`(G10)、format_version 7・`Sheet.annotation_text_mm`。M4フェーズ4: format_version 6・盤レイアウトの4エンティティ+凡例表・`Sheet.kind`・`Project.frame_template`・部品DB スキーマv6)。実装の正は`madake-core/src/model.rs`(ドキュメント)と`madake-core/src/parts.rs`(部品DB)。
 
 MadakeCADの永続データは3系統ある:
 
@@ -12,7 +12,7 @@ MadakeCADの永続データは3系統ある:
 
 ## 1. 図面ドキュメント(.mdkproj)
 
-`format_version: 16`(旧版は既定値で開ける。版ごとの変更は下の履歴表)。構造(mermaid classDiagram):
+`format_version: 21`(旧版は既定値で開ける。版ごとの変更は下の履歴表)。構造(mermaid classDiagram):
 
 ```mermaid
 classDiagram
@@ -42,6 +42,7 @@ classDiagram
       name: String
       no: String?  %% プロジェクト番号(G16)。表題欄バインド{project.no}の供給元。未設定=空
       frame_template: String?  %% 図枠テンプレートid。未指定=jis-a3
+      text_font: TextFont?  %% 書体 {id, latin: half|full}。未設定=システムの書体
     }
     class Sheet {
       id: Uuid
@@ -146,6 +147,7 @@ classDiagram
 | 15 | 多芯ケーブル`cable`エンティティ(定義線2点・参照記号・型番・芯数・線径・芯線割当`cores[{core,color,wire}]`・シールド・長さ) | ケーブルが無いだけでそのまま開く。**逆にケーブルを含む新しいファイルは旧アプリでは開けない**(未知のエンティティ種別) |
 | 16 | 盤の銘板`nameplate`エンティティ(結び付くフットプリント・位置・大きさ・行・文字高・上下・説明追従・型番)と寸法線`dimension`エンティティ(端点`a`/`b`=点かフットプリント・向き・線の位置) | 銘板・寸法線が無いだけでそのまま開く。**逆にそれらを含む新しいファイルは旧アプリでは開けない**(未知のエンティティ種別) |
 | 20 | 改訂行の改訂番号・承認・個数(`Revision.rev_no` / `approved` / `count`)と、表題欄の自由な欄(`TitleBlock.fields`: 名前→値。図枠テンプレートは`{field.名前}`でバインドする。名前は a-z・0-9・_ の1〜32文字) | 新しい項目が空で開く。空の項目は書き出さない(`skip_serializing_if`)ので、使っていないファイルは版番号以外これまでと同じ。形式19のアプリは版番号で断る |
+| 21 | プロジェクトの書体`Project.text_font`(`{id, latin}`。`id`は同梱のストロークフォント、いまは`kst32b`だけ。`latin`は英数字を半角`half`(既定)か全角`full`のどちらの字で描くか)。`set_text_font`コマンドで設定し、同梱していないidは断る | 書体未設定(`None`)で開く=システムの書体で従来どおりに描く。未設定のときは書き出さない(`skip_serializing_if`)ので、書体を選んでいないファイルは版番号以外これまでと同じ。形式20のアプリは版番号で断る |
 
 (17〜19の行はこの表にまだ無い。正は`madake-core/src/model.rs`の`FORMAT_VERSION`のコメント。)
 
@@ -169,6 +171,8 @@ title_block{origin,w,h,row_h,grid_lines[],cells[{x,y,w,h,text|bind,size,align,we
 | `marks.trim_insets{left,right,top,bottom}` / `trim_arm` | 裁断マークの角の位置(用紙の各辺からの距離)と腕の長さ |
 | `marks.centre_to_trim` / `centre_arrow` / `centre_weight` | 中心マークを裁断線まで伸ばす / 外側の端に開いたV字の矢印(長さ1.9mm・片側0.5mm)/ 線の太さ(無ければ0.5mm) |
 | `text_size_is` | `cap`ならセルと改訂欄の文字サイズは大文字の高さ(フォント = サイズ ÷ 0.72)。既定`font` |
+| `text_latin` | プロジェクトの書体がストロークフォントのとき、図枠の文字(表題欄のセル・改訂欄)の英数字を半角`half`か全角`full`のどちらで描くか。無ければプロジェクトの`text_font.latin`に従う |
+| `cells[].spacing` | 字間(字の送りに掛ける倍率、既定1)。ストロークフォントのときだけ効く |
 | `grid_lines[].weight` | `thin`(0.25mm、既定)/`medium`(0.5)/`heavy`(1.0) |
 | `cells[].rotation` / `boxed` / `fit` | 回転(0/90/180/270、時計回り、アンカー点が中心)/ 文字を枠で囲む / `w`に収まるまで文字を縮める。値の`\n`は改行(行送り = フォント × 1.25) |
 | `revision_block.columns[{field,header,w,align}]` | 改訂欄の列(1〜8、幅の合計 = 表題欄の幅)。`field`は mark / count / description / rev_no / date / by / approved。無ければ`col_w`の4列 |
