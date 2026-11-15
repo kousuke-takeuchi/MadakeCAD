@@ -5,6 +5,7 @@
 // 値が空になる表題欄の欄には、そこへ何が入るかを`{バインド}`の青字で重ねる。
 import { onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
+import { withSystemFont } from "../canvas/strokeFont";
 import { bindOverlays, paperSizeMm, type BindContext, type FrameTemplate } from "../canvas/frameTemplate";
 import { theme } from "../canvas/theme";
 import { VIEW_CLASSES, type ViewClass } from "../canvas/viewClasses";
@@ -31,7 +32,12 @@ const HIDDEN: ReadonlySet<ViewClass> = new Set(
   VIEW_CLASSES.map((v) => v.id).filter((id) => id !== "frame"),
 );
 
+// プレビューはプロジェクトの書体 (ストロークフォント) を使わずシステムの書体で描く (spec)
 function draw() {
+  withSystemFont(drawPreview);
+}
+
+function drawPreview() {
   const ctx = canvasRef.value?.getContext("2d");
   if (!ctx) return;
   const { w, h } = paperSizeMm(props.sheet);

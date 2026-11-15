@@ -5,6 +5,7 @@ import { onMounted, ref, watch } from "vue";
 import { fitPreview } from "../canvas/templatePreview";
 import { macroEntities, macroSheet } from "../canvas/macroPreview";
 import { renderSheet } from "../canvas/renderer";
+import { withSystemFont } from "../canvas/strokeFont";
 import type { Macro } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 
@@ -23,7 +24,12 @@ const props = withDefaults(
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const doc = useDocumentStore();
 
+// プレビューはプロジェクトの書体 (ストロークフォント) を使わずシステムの書体で描く (spec)
 function draw() {
+  withSystemFont(drawPreview);
+}
+
+function drawPreview() {
   const ctx = canvasRef.value?.getContext("2d");
   if (!ctx) return;
   ctx.clearRect(0, 0, props.width, props.height);

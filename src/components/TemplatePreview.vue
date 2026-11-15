@@ -3,6 +3,7 @@
 // 図面キャンバスと同じレンダラで描くので、図面記法を変えるとプレビューにも効く。
 import { onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
+import { withSystemFont } from "../canvas/strokeFont";
 import { fitPreview, templateEntities, templateSheet } from "../canvas/templatePreview";
 import type { Template } from "../ipc";
 import { useDocumentStore } from "../stores/document";
@@ -20,7 +21,12 @@ const props = withDefaults(
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const doc = useDocumentStore();
 
+// プレビューはプロジェクトの書体 (ストロークフォント) を使わずシステムの書体で描く (spec)
 function draw() {
+  withSystemFont(drawPreview);
+}
+
+function drawPreview() {
   const ctx = canvasRef.value?.getContext("2d");
   if (!ctx) return;
   const sheet = templateSheet(props.template);

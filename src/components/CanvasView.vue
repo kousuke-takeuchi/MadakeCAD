@@ -2,10 +2,10 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { renderSheet } from "../canvas/renderer";
 import { onFrameImageLoaded } from "../canvas/frameImages";
-import { setActiveStrokeFont } from "../canvas/strokeFont";
+import { setActiveStrokeFont, strokeFontLoader } from "../canvas/strokeFont";
 import { AgentOverlay, patchOverlayTargets } from "../canvas/agentOverlay";
 import type { EditorController } from "../tools/controller";
-import { ipc, type Patch, type StrokeFontData } from "../ipc";
+import { ipc, type Patch } from "../ipc";
 import { useDocumentStore } from "../stores/document";
 import { useChatStore, type ChatToolCall } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
@@ -219,6 +219,9 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  // 書体はキャンバスの外 (プレビュー等) へ持ち越さない
+  unmounted = true;
+  setActiveStrokeFont(null, "half");
   observer?.disconnect();
   if (raf) cancelAnimationFrame(raf);
   if (overlayRaf) cancelAnimationFrame(overlayRaf);
@@ -229,8 +232,9 @@ store.$subscribe(() => scheduleDraw());
 watch(() => [...ui.hiddenViewClasses], () => scheduleDraw());
 
 // プロジェクトの書体 (ストロークフォント)。字形は1つのidにつき1回だけ受け取り、読めたら描き直す。
-// 読み込み前・失敗時はシステムの書体で描く (図面の中身は変わらない)。
-const strokeFonts = new Map<string, Promise<StrokeFontData | null>>();
+// 読み込み前・失敗時はシステムの書体で描く (図面の中身は変わらない)。失敗した取得は覚えず、次の変更で取り直す。
+const loadStrokeFont = strokeFontLoader((id) => ipc.getStrokeFont(id));
+let unmounted = false;
 watch(
   () => store.project?.text_font ?? null,
   async (tf) => {
@@ -239,13 +243,10 @@ watch(
       scheduleDraw();
       return;
     }
-    let pending = strokeFonts.get(tf.id);
-    if (!pending) {
-      pending = ipc.getStrokeFont(tf.id).catch(() => null);
-      strokeFonts.set(tf.id, pending);
-    }
+    const pending = loadStrokeFont(tf.id);
     const data = await pending;
-    // 待っている間に設定が変わっていたら、新しい設定の呼び出しに任せる
+    // 待っている間に閉じられた・設定が変わっていたら、何もしない (新しい設定の呼び出しに任せる)
+    if (unmounted) return;
     const now = store.project?.text_font;
     if (!now || now.id !== tf.id || (now.latin ?? "half") !== (tf.latin ?? "half")) return;
     setActiveStrokeFont(data, tf.latin ?? "half");
