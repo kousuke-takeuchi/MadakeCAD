@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3215仕様項目**。
+全6領域・**3220仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -61,12 +61,14 @@
 - 間隔と番号の属性が無いブロックは、これまでどおり5mm間隔・番号は外側のブロックになる。 <sub>`a_block_without_the_new_attributes_is_coarse_with_numbers_outside`</sub>
 - block_pitch は "5" と "2.5" だけ、block_numbers は "outside" と "inside" だけを受け付ける。それ以外は属性名を含むメッセージで断る。 <sub>`unknown_pitch_and_number_values_are_refused`</sub>
 - 2.5mm間隔のブロックでは、ピンがn本の辺は (n + 1) × 2.5mm (最小5mm) 必要。それより小さい block_size は断り、必要な大きさをメッセージに出す。 <sub>`a_fine_block_size_must_hold_its_pins`</sub>
+- 2.5mmの倍数でない2.5mm間隔の block_size は、先に切り上げてから確かめる: 左に3本で5×6mmは5×7.5mmになり、5×10mm要るので断る。 <sub>`a_fine_block_size_is_rounded_before_it_is_checked`</sub>
+- 番号を内側に描くブロックを広げたあと、左右の番号の間は、どの長さの番号でも、どちらの間隔でも1.0mm以上空く。 <sub>`widened_inside_numbers_keep_a_gap_between_left_and_right`</sub>
 - 2.5mm間隔のブロックの block_size は次の2.5mmへ切り上げる。5mm間隔のブロックはこれまでどおり5mmへ切り上げる。 <sub>`block_size_is_rounded_up_to_the_step_of_the_pitch`</sub>
 - 2.5mm間隔のブロックは、コネクタの絵を持つピンを断り、そのピン番号を示す。 <sub>`a_fine_block_refuses_connector_pictures`</sub>
 - 番号を内側に描くブロックは、5mm間隔でも、コネクタの絵を持つピンを断り、そのピン番号を示す。 <sub>`a_block_with_numbers_inside_refuses_connector_pictures`</sub>
 - block_size が無い2.5mm間隔・番号内側のブロックは、ピンが許す最小の大きさになる: 1本なら5×5mm、左に2本なら5×7.5mm。 <sub>`a_fine_block_sizes_itself_to_its_pins`</sub>
 - 2.5mm間隔のブロックの外形とピンは設計の表のとおりになる: 高さが2.5mmの奇数倍なら外形が1.25mm下へ寄り、グリッドから外れるピンの列は1.25mm下へ寄る。 <sub>`a_fine_block_shifts_its_outline_and_rows_onto_the_grid`</sub>
-- 2.5mm間隔のブロックのピンと外形の辺は、5〜20mmのどの大きさ・収まるどのピン数・四辺のどれでも、向かい合う辺のピン数が違っても、2.5mmグリッドに乗る。 <sub>`every_fine_block_is_on_the_grid`</sub>
+- 2.5mm間隔のブロックのピンと外形の辺は、5〜20mmのどの大きさ・収まるどのピン数・四辺のどれでも、向かい合う辺のピン数が違っても、2.5mmグリッドに乗り、どのピンも辺の両端から2.5mm以上離れる。 <sub>`every_fine_block_is_on_the_grid`</sub>
 - 番号を内側に描くブロックでは、左右のピンの番号は外形の内側の辺のそばに、ピンと同じ高さで描かれ、ピン名は描かれない。 <sub>`numbers_inside_are_drawn_inside_and_names_are_not_drawn`</sub>
 - 幅5mmのブロックの両側に長い番号を内側へ描くと、番号が収まる幅まで広がり、ピンはグリッドに乗ったままになる。 <sub>`a_narrow_block_with_numbers_inside_is_widened`</sub>
 - 番号の内側表示は5mm間隔のブロックでも使え、ピンの位置は変わらない。 <sub>`numbers_inside_work_on_a_coarse_block_without_moving_pins`</sub>
@@ -128,6 +130,8 @@
 - ピン表が壊れている(番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。 <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - 正しいブロックを壊れた内容へ編集するのも拒否されるので、図面上のブロックは常に描けるピン表を持つ。 <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
 - コネクタの表が誤っているブロック (USB の口にコネクタの名前、または空の名前) は、追加でも編集でも理由付きで拒否される。 <sub>`a_block_with_a_bad_connector_table_is_refused`</sub>
+- 知らないピン間隔 ("3") のブロックは、追加でも、既にあるブロックをその値へ編集しても断られ、図面はまったく変わらない。 <sub>`a_block_with_an_unknown_pitch_is_refused_and_changes_nothing`</sub>
+- エンジンで0・90・180・270度、そのままとミラーで置いた2.5mm間隔のブロックは、ピンを2.5mmグリッド上に報告し、その点から引いてラベルを付けた配線は、各ピンを回していない同じブロックの同じピンへつなぐ: ピンごとに2ピンのネットが1つでき、未接続のピンは無い。 <sub>`a_turned_fine_block_reports_grid_pins_that_wires_connect_to`</sub>
 - 図面が知らない色名 (打ち間違いや生の色コード) を付けた注記は、黙って黒で描かれるのではなく拒否される。 <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
 - 図面の色トークンを使った注記 (色を指定しない注記も) は受け付けられる。 <sub>`a_note_with_a_known_colour_token_is_accepted`</sub>
 - 既にある注記を知らない色へ変える更新も拒否され、注記は元の色のままになる。 <sub>`recolouring_a_note_to_an_unknown_colour_is_refused`</sub>
@@ -2298,10 +2302,11 @@
 - 参照記号・型番が動くのはブロックだけ。普通のシンボルは今まで通り中央揃え (Rust の captions_of_a_plain_symbol_keep_the_centred_anchor と同じ) <sub>`block captions and group names (Rust twin)`</sub>
 - 上辺と左辺に1本ずつピンのあるブロックは、手で書いた表のとおりに角へ置く (Rust の corner_placement_follows_the_rotation_table と同じ) <sub>`block captions and group names (Rust twin)`</sub>
 - 外形の左上の角の外に描かれたもの (手で足した文字) があると、角の参照記号・型番はその上まで上がり、重ならない (Rust の corner_captions_rise_above_a_drawing_at_the_corner と同じ) <sub>`block captions and group names (Rust twin)`</sub>
-- golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブとピンを返す <sub>`fine pitch blocks (Rust twin)`</sub>
+- golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブ・ピン・属性の置き場所を返す <sub>`fine pitch blocks (Rust twin)`</sub>
 - block_pitch は "5" と "2.5" だけ、block_numbers は "outside" と "inside" だけを受け付ける <sub>`fine pitch blocks (Rust twin)`</sub>
 - 間隔と番号の属性の誤りは Rust と同じ文言で断る <sub>`fine pitch blocks (Rust twin)`</sub>
 - 2.5mm間隔のブロックで、ピンが2本の辺に高さ5mmは小さすぎ、必要な大きさ 5x7.5 をメッセージに出す <sub>`fine pitch blocks (Rust twin)`</sub>
+- 2.5mmの倍数でない2.5mm間隔の block_size は先に切り上げてから確かめる: 左に3本で5×6mmは5×7.5mmになり、5×10mm要るので断る <sub>`fine pitch blocks (Rust twin)`</sub>
 - 2.5mm間隔のブロックは、コネクタの絵を持つピンを断る <sub>`fine pitch blocks (Rust twin)`</sub>
 - 番号を内側に描くブロックは、5mm間隔でも、コネクタの絵を持つピンを Rust と同じ文言で断る (番号が外側なら使える) <sub>`fine pitch blocks (Rust twin)`</sub>
 - 2.5mm間隔の大きさは2.5mm刻みに切り上げ、5mm間隔は今までどおり5mm刻み <sub>`fine pitch blocks (Rust twin)`</sub>

@@ -444,6 +444,10 @@ mod tests {
         let Entity::Symbol(s) = &loaded.sheets[0].entities[&id] else { panic!("ブロックが残ること") };
         assert_eq!(s.attrs, attrs);
         assert!(!s.attrs.contains_key("block_pitch"));
+        let def = crate::block::block_symbol(&s.attrs).unwrap();
+        let ys: Vec<f64> = def.pins.iter().map(|p| p.at.y).collect();
+        assert_eq!(ys.len(), 2);
+        assert!((ys[1] - ys[0] - 5.0).abs() < 1e-9, "2本のピンは5mm離れたまま: {ys:?}");
         std::fs::remove_dir_all(&dir).ok();
     }
 

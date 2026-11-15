@@ -2158,6 +2158,32 @@ mod tests {
         assert!(err.contains("10x5"), "{err}");
     }
 
+    /// A 2.5 mm block_size that is not a multiple of 2.5 mm is first rounded up and then checked: 5 x 6 mm with three left pins becomes 5 x 7.5 mm, which is refused because it needs 5 x 10 mm.
+    /// 2.5mmの倍数でない2.5mm間隔の block_size は、先に切り上げてから確かめる: 左に3本で5×6mmは5×7.5mmになり、5×10mm要るので断る。
+    #[test]
+    fn a_fine_block_size_is_rounded_before_it_is_checked() {
+        let err = parse_block_spec(&fine(&left_pins(3), Some(r#"{"w":5,"h":6}"#))).unwrap_err();
+        assert!(err.contains("5x7.5mm") && err.contains("5x10"), "{err}");
+    }
+
+    /// After a block with numbers inside is widened, the numbers of the left and right side keep at least 1.0 mm between them, for numbers of every length on both pitches.
+    /// 番号を内側に描くブロックを広げたあと、左右の番号の間は、どの長さの番号でも、どちらの間隔でも1.0mm以上空く。
+    #[test]
+    fn widened_inside_numbers_keep_a_gap_between_left_and_right() {
+        for pitch in ["5", "2.5"] {
+            for left in ["1", "12", "123", "1234", "12345678"] {
+                for right in ["9", "98", "9876", "98765"] {
+                    let json = format!(r#"{{"left":[{{"no":"{left}"}}],"right":[{{"no":"{right}"}}]}}"#);
+                    let a = attrs(&[(BLOCK_PINS_ATTR, &json), (BLOCK_PITCH_ATTR, pitch), (BLOCK_NUMBERS_ATTR, "inside"), (BLOCK_SIZE_ATTR, r#"{"w":5,"h":5}"#)]);
+                    let def = block_symbol(&a).unwrap();
+                    let (l, r) = (text_at(&def, left), text_at(&def, right));
+                    let gap = (r.x - name_width(right) / 2.0) - (l.x + name_width(left) / 2.0);
+                    assert!(gap >= 1.0 - 1e-9, "{pitch} {left}/{right}: {gap}");
+                }
+            }
+        }
+    }
+
     /// On a 2.5 mm block block_size is rounded up to the next 2.5 mm; on a 5 mm block it is still rounded up to 5 mm.
     /// 2.5mm間隔のブロックの block_size は次の2.5mmへ切り上げる。5mm間隔のブロックはこれまでどおり5mmへ切り上げる。
     #[test]
@@ -2242,8 +2268,8 @@ mod tests {
         }
     }
 
-    /// Every pin and every outline edge of a 2.5 mm block is on the 2.5 mm grid, for every size from 5 to 20 mm and every pin count that fits, on all four sides, also when the two opposite sides have different pin counts.
-    /// 2.5mm間隔のブロックのピンと外形の辺は、5〜20mmのどの大きさ・収まるどのピン数・四辺のどれでも、向かい合う辺のピン数が違っても、2.5mmグリッドに乗る。
+    /// Every pin and every outline edge of a 2.5 mm block is on the 2.5 mm grid, for every size from 5 to 20 mm and every pin count that fits, on all four sides, also when the two opposite sides have different pin counts, and every pin is at least 2.5 mm from both ends of its side.
+    /// 2.5mm間隔のブロックのピンと外形の辺は、5〜20mmのどの大きさ・収まるどのピン数・四辺のどれでも、向かい合う辺のピン数が違っても、2.5mmグリッドに乗り、どのピンも辺の両端から2.5mm以上離れる。
     #[test]
     fn every_fine_block_is_on_the_grid() {
         let sizes: Vec<f64> = (2..=8).map(|k| k as f64 * 2.5).collect();
@@ -2270,6 +2296,9 @@ mod tests {
                         for p in &def.pins {
                             assert!(on_grid(p.at.x) && on_grid(p.at.y), "ピン {:?}: {w}x{h} {json}", p.at);
                             assert!(p.at.x < x1 || p.at.x > x2 || p.at.y < y1 || p.at.y > y2, "ピンが外形の中: {:?}", p.at);
+                            // 辺に沿って測り、辺の両端から2.5mm以上離れる
+                            let (along, lo, hi) = if p.at.x < x1 || p.at.x > x2 { (p.at.y, y1, y2) } else { (p.at.x, x1, x2) };
+                            assert!(along - lo >= 2.5 - 1e-9 && hi - along >= 2.5 - 1e-9, "ピン {:?} が辺の端に近い: {w}x{h} {json}", p.at);
                         }
                         checked += 1;
                     }
@@ -2336,7 +2365,8 @@ mod tests {
 
     const FINE_GOLDEN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/fine-blocks.json");
 
-    /// (名前, 属性) の例: 表の6例、四辺にピンのある例、左右のピン数の偶奇が違う例、番号内側、5mm間隔で番号内側、名前あり。
+    /// (名前, 属性) の例: 表の6例、四辺にピンのある例、左右のピン数の偶奇が違う例、番号内側、5mm間隔で番号内側、名前あり、
+    /// 5mm間隔で大きさ指定・番号内側、上下に名前、左右に名前。
     fn fine_cases() -> Vec<(String, BTreeMap<String, String>)> {
         let mut cases = Vec::new();
         for (h, n) in [(5.0, 1), (7.5, 2), (7.5, 1), (10.0, 3), (10.0, 2), (12.5, 4)] {
@@ -2355,6 +2385,15 @@ mod tests {
         coarse_inside.insert(BLOCK_PINS_ATTR.to_string(), four.to_string());
         coarse_inside.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
         cases.push(("coarse-inside".into(), coarse_inside));
+        let mut coarse_inside_sized = BTreeMap::new();
+        coarse_inside_sized.insert(BLOCK_PINS_ATTR.to_string(), r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"3"}]}"#.to_string());
+        coarse_inside_sized.insert(BLOCK_SIZE_ATTR.to_string(), r#"{"w":20,"h":15}"#.to_string());
+        coarse_inside_sized.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        cases.push(("coarse-inside-sized".into(), coarse_inside_sized));
+        let top_bottom = r#"{"top":[{"no":"1","name":"A"},{"no":"2","name":"B"}],"bottom":[{"no":"3","name":"C"}]}"#;
+        cases.push(("fine-top-bottom-names".into(), fine(top_bottom, None)));
+        let left_right = r#"{"left":[{"no":"1","name":"IN"},{"no":"2","name":"EN"}],"right":[{"no":"3","name":"OUT"}]}"#;
+        cases.push(("fine-left-right-names".into(), fine(left_right, None)));
         cases
     }
 
@@ -2371,6 +2410,7 @@ mod tests {
                     "attrs": a,
                     "primitives": rounded(serde_json::to_value(&def.primitives).unwrap()),
                     "pins": rounded(serde_json::to_value(&def.pins).unwrap()),
+                    "text_slots": rounded(serde_json::to_value(&def.text_slots).unwrap()),
                 })
             })
             .collect();

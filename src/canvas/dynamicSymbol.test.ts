@@ -748,15 +748,21 @@ describe("block captions and group names (Rust twin)", () => {
 });
 
 describe("fine pitch blocks (Rust twin)", () => {
-  // ja: golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブとピンを返す
+  // ja: golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブ・ピン・属性の置き場所を返す
   it("draws every block of the fine-pitch golden file exactly like Rust", () => {
-    expect(fineGolden.cases.length).toBe(11);
+    expect(fineGolden.cases.length).toBe(14);
     for (const c of fineGolden.cases) {
       const def = blockSymbol(c.attrs as Record<string, string>);
-      expect({ name: c.name, primitives: rounded(def.primitives), pins: rounded(def.pins) }).toEqual({
+      expect({
+        name: c.name,
+        primitives: rounded(def.primitives),
+        pins: rounded(def.pins),
+        text_slots: rounded(def.text_slots),
+      }).toEqual({
         name: c.name,
         primitives: c.primitives,
         pins: c.pins,
+        text_slots: c.text_slots,
       });
     }
   });
@@ -780,6 +786,16 @@ describe("fine pitch blocks (Rust twin)", () => {
   it("refuses a fine block_size that is too small and names the needed size", () => {
     const attrs = { block_pins: '{"left":[{"no":"1"},{"no":"2"}]}', block_pitch: "2.5", block_size: '{"w":5,"h":5}' };
     expect(() => parseBlockSpec(attrs)).toThrow(/5x7\.5/);
+  });
+
+  // ja: 2.5mmの倍数でない2.5mm間隔の block_size は先に切り上げてから確かめる: 左に3本で5×6mmは5×7.5mmになり、5×10mm要るので断る
+  it("rounds a fine block_size up before checking it against the pins", () => {
+    const attrs = {
+      block_pins: '{"left":[{"no":"1"},{"no":"2"},{"no":"3"}]}',
+      block_pitch: "2.5",
+      block_size: '{"w":5,"h":6}',
+    };
+    expect(() => parseBlockSpec(attrs)).toThrow("block_size 5x7.5mm is too small for its pins (needs at least 5x10mm)");
   });
 
   // ja: 2.5mm間隔のブロックは、コネクタの絵を持つピンを断る

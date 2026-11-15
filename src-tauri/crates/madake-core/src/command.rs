@@ -2163,6 +2163,95 @@ mod tests {
         assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("connector_ref must not be empty")), "{err:?}");
     }
 
+    /// A block with an unknown pin pitch ("3") is refused when added and when an existing block is edited to it, and the document is left exactly as it was.
+    /// 知らないピン間隔 ("3") のブロックは、追加でも、既にあるブロックをその値へ編集しても断られ、図面はまったく変わらない。
+    #[test]
+    fn a_block_with_an_unknown_pitch_is_refused_and_changes_nothing() {
+        let (mut engine, sheet_id) = test_engine();
+        let pins = r#"{"left":[{"no":"1"}]}"#;
+        let Entity::Symbol(mut bad) = crate::block::test_block("U1", "", 100.0, 50.0, pins) else { unreachable!() };
+        bad.attrs.insert(crate::block::BLOCK_PITCH_ATTR.into(), "3".into());
+        let before = serde_json::to_string(engine.project()).unwrap();
+        let err = engine
+            .execute(Command::AddEntity { sheet_id, entity: Entity::Symbol(bad) })
+            .expect_err("知らない間隔は断る");
+        assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("block_pitch")), "{err:?}");
+        assert_eq!(serde_json::to_string(engine.project()).unwrap(), before, "追加を断ったのに図面が変わった");
+
+        let good = crate::block::test_block("U2", "", 150.0, 50.0, pins);
+        let id = good.id();
+        engine.execute(Command::AddEntity { sheet_id, entity: good }).expect("正しいブロックは置ける");
+        let before = serde_json::to_string(engine.project()).unwrap();
+        let Entity::Symbol(mut edited) = engine.project().sheet(sheet_id).unwrap().entities[&id].clone() else { unreachable!() };
+        edited.attrs.insert(crate::block::BLOCK_PITCH_ATTR.into(), "3".into());
+        let err = engine
+            .execute(Command::UpdateEntity { sheet_id, entity: Entity::Symbol(edited) })
+            .expect_err("知らない間隔への編集は断る");
+        assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("block_pitch")), "{err:?}");
+        assert_eq!(serde_json::to_string(engine.project()).unwrap(), before, "編集を断ったのに図面が変わった");
+    }
+
+    /// A 2.5 mm block placed through the engine at 0, 90, 180 and 270 degrees, plain and mirrored, reports its pins on the 2.5 mm grid, and wires drawn from those reported points to labels connect each pin to the same pin of an unturned twin: one two-pin net per pin and no unconnected pin.
+    /// エンジンで0・90・180・270度、そのままとミラーで置いた2.5mm間隔のブロックは、ピンを2.5mmグリッド上に報告し、その点から引いてラベルを付けた配線は、各ピンを回していない同じブロックの同じピンへつなぐ: ピンごとに2ピンのネットが1つでき、未接続のピンは無い。
+    #[test]
+    fn a_turned_fine_block_reports_grid_pins_that_wires_connect_to() {
+        use crate::symbol::PinDir;
+        let (mut engine, sheet_id) = test_engine();
+        // 左2本・右1本・上1本 (左右の偶奇が違う)、大きさ自動 = 7.5 x 7.5 で外形は両軸ともずれる
+        let pins = r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"3"}],"top":[{"no":"4"}]}"#;
+        let on_grid = |v: f64| ((v / 2.5) - (v / 2.5).round()).abs() < 1e-9;
+        let placements = [(0, false), (90, false), (180, false), (270, false), (0, true), (90, true), (180, true), (270, true)];
+        for (i, &(rotation, mirror)) in placements.iter().enumerate() {
+            let x = 50.0 + 40.0 * i as f64;
+            for (row, (turn, flip)) in [(rotation, mirror), (0, false)].into_iter().enumerate() {
+                let Entity::Symbol(mut s) = crate::block::test_block(&format!("{}{i}", ["A", "B"][row]), "", x, 50.0 + 70.0 * row as f64, pins) else { unreachable!() };
+                s.attrs.insert(crate::block::BLOCK_PITCH_ATTR.into(), "2.5".into());
+                s.rotation = turn;
+                s.mirror = flip;
+                let id = s.id;
+                engine.execute(Command::AddEntity { sheet_id, entity: Entity::Symbol(s) }).expect("置ける");
+                let reported = crate::pin_wiring::sheet_part_pins(engine.project().sheet(sheet_id).unwrap(), id).expect("ピン");
+                assert_eq!(reported.pins.len(), 4);
+                for pin in &reported.pins {
+                    assert!(on_grid(pin.x) && on_grid(pin.y), "回転{turn}・ミラー{flip}: ピン{} ({}, {})", pin.number, pin.x, pin.y);
+                    // 報告された点から電線の出る向きへ5mm引き、その先に同じピン番号どうしの名前のラベル
+                    let (dx, dy) = match pin.dir {
+                        PinDir::Left => (-5.0, 0.0),
+                        PinDir::Right => (5.0, 0.0),
+                        PinDir::Up => (0.0, -5.0),
+                        PinDir::Down => (0.0, 5.0),
+                    };
+                    let end = Point::new(pin.x + dx, pin.y + dy);
+                    let mut wire = sample_wire();
+                    if let Entity::Wire(w) = &mut wire {
+                        w.points = vec![Point::new(pin.x, pin.y), end];
+                    }
+                    engine.execute(Command::AddEntity { sheet_id, entity: wire }).expect("配線");
+                    let label = Entity::NetLabel(NetLabel {
+                        id: Uuid::new_v4(),
+                        at: end,
+                        name: format!("N{i}-{}", pin.number),
+                        rotation: 0,
+                        attrs: Default::default(),
+                    });
+                    engine.execute(Command::AddEntity { sheet_id, entity: label }).expect("ラベル");
+                }
+            }
+        }
+        let sheet = engine.project().sheet(sheet_id).unwrap();
+        let defs = crate::symbol::sheet_symbol_defs(sheet);
+        let nets = crate::netlist::extract_netlist(sheet, &defs);
+        assert_eq!(nets.len(), placements.len() * 4, "{nets:?}");
+        for net in &nets {
+            let mut got: Vec<String> = net.pins.iter().map(|p| format!("{}:{}", p.reference, p.pin)).collect();
+            got.sort();
+            let (i, no) = net.name.trim_start_matches('N').split_once('-').expect("ラベル名");
+            assert_eq!(got, vec![format!("A{i}:{no}"), format!("B{i}:{no}")], "{}", net.name);
+        }
+        let diags = crate::verify::verify_sheet(sheet, &defs);
+        assert!(diags.iter().all(|d| d.code != "erc.unconnected_pin"), "{diags:?}");
+    }
+
     /// A note whose colour is a name the drawing does not know (a typo, or a raw colour code) is refused instead of being stored and silently drawn in black.
     /// 図面が知らない色名 (打ち間違いや生の色コード) を付けた注記は、黙って黒で描かれるのではなく拒否される。
     #[test]

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3215 specification clauses** across 6 areas.
+**3220 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -61,12 +61,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block without the pitch and number attributes is a 5 mm block with numbers outside, as before. <sub>`a_block_without_the_new_attributes_is_coarse_with_numbers_outside`</sub>
 - block_pitch accepts only "5" and "2.5", and block_numbers only "outside" and "inside"; anything else is refused with the attribute name in the message. <sub>`unknown_pitch_and_number_values_are_refused`</sub>
 - On a 2.5 mm block a side with n pins needs (n + 1) x 2.5 mm, at least 5 mm; a smaller block_size is refused and the message names the needed size. <sub>`a_fine_block_size_must_hold_its_pins`</sub>
+- A 2.5 mm block_size that is not a multiple of 2.5 mm is first rounded up and then checked: 5 x 6 mm with three left pins becomes 5 x 7.5 mm, which is refused because it needs 5 x 10 mm. <sub>`a_fine_block_size_is_rounded_before_it_is_checked`</sub>
+- After a block with numbers inside is widened, the numbers of the left and right side keep at least 1.0 mm between them, for numbers of every length on both pitches. <sub>`widened_inside_numbers_keep_a_gap_between_left_and_right`</sub>
 - On a 2.5 mm block block_size is rounded up to the next 2.5 mm; on a 5 mm block it is still rounded up to 5 mm. <sub>`block_size_is_rounded_up_to_the_step_of_the_pitch`</sub>
 - A 2.5 mm block refuses a pin with a connector picture, naming the pin. <sub>`a_fine_block_refuses_connector_pictures`</sub>
 - A block with numbers inside refuses a pin with a connector picture, on a 5 mm block too, naming the pin. <sub>`a_block_with_numbers_inside_refuses_connector_pictures`</sub>
 - Without block_size a 2.5 mm block with pin numbers inside is as small as its pins allow: one pin gives 5 x 5 mm, two pins on the left give 5 x 7.5 mm. <sub>`a_fine_block_sizes_itself_to_its_pins`</sub>
 - The outline and the pins of a 2.5 mm block follow the table of the design: a height that is an odd multiple of 2.5 mm moves the outline down by 1.25 mm, and a row of pins that would miss the grid moves down by 1.25 mm. <sub>`a_fine_block_shifts_its_outline_and_rows_onto_the_grid`</sub>
-- Every pin and every outline edge of a 2.5 mm block is on the 2.5 mm grid, for every size from 5 to 20 mm and every pin count that fits, on all four sides, also when the two opposite sides have different pin counts. <sub>`every_fine_block_is_on_the_grid`</sub>
+- Every pin and every outline edge of a 2.5 mm block is on the 2.5 mm grid, for every size from 5 to 20 mm and every pin count that fits, on all four sides, also when the two opposite sides have different pin counts, and every pin is at least 2.5 mm from both ends of its side. <sub>`every_fine_block_is_on_the_grid`</sub>
 - With numbers inside, the number of a left or right pin is drawn inside the outline next to its edge at the height of the pin, and pin names are not drawn. <sub>`numbers_inside_are_drawn_inside_and_names_are_not_drawn`</sub>
 - A 5 mm wide block with long numbers inside on both sides is widened until the numbers fit, and its pins stay on the grid. <sub>`a_narrow_block_with_numbers_inside_is_widened`</sub>
 - Numbers inside also work on a 5 mm block, whose pins stay where they were. <sub>`numbers_inside_work_on_a_coarse_block_without_moving_pins`</sub>
@@ -128,6 +130,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block whose pin table is broken (duplicate numbers) is refused when added, and the sheet is left untouched. <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - Editing a good block into a broken one is refused too, so a block on the sheet always has a drawable pin table. <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
 - A block whose connector table is wrong (a connector name on a USB socket, or a blank name) is refused when added or edited, with the reason. <sub>`a_block_with_a_bad_connector_table_is_refused`</sub>
+- A block with an unknown pin pitch ("3") is refused when added and when an existing block is edited to it, and the document is left exactly as it was. <sub>`a_block_with_an_unknown_pitch_is_refused_and_changes_nothing`</sub>
+- A 2.5 mm block placed through the engine at 0, 90, 180 and 270 degrees, plain and mirrored, reports its pins on the 2.5 mm grid, and wires drawn from those reported points to labels connect each pin to the same pin of an unturned twin: one two-pin net per pin and no unconnected pin. <sub>`a_turned_fine_block_reports_grid_pins_that_wires_connect_to`</sub>
 - A note whose colour is a name the drawing does not know (a typo, or a raw colour code) is refused instead of being stored and silently drawn in black. <sub>`a_note_with_an_unknown_colour_is_refused`</sub>
 - A note that uses one of the drawing's colour tokens (or no colour at all) is accepted. <sub>`a_note_with_a_known_colour_token_is_accepted`</sub>
 - Changing an existing note to an unknown colour is refused too, and the note keeps the colour it had. <sub>`recolouring_a_note_to_an_unknown_colour_is_refused`</sub>
@@ -2302,6 +2306,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - accepts only "5" / "2.5" for block_pitch and "outside" / "inside" for block_numbers <sub>`fine pitch blocks (Rust twin)`</sub>
 - words the pitch and numbers errors exactly like Rust <sub>`fine pitch blocks (Rust twin)`</sub>
 - refuses a fine block_size that is too small and names the needed size <sub>`fine pitch blocks (Rust twin)`</sub>
+- rounds a fine block_size up before checking it against the pins <sub>`fine pitch blocks (Rust twin)`</sub>
 - refuses a connector picture on a fine block <sub>`fine pitch blocks (Rust twin)`</sub>
 - refuses a connector picture on a block with numbers inside, worded like Rust <sub>`fine pitch blocks (Rust twin)`</sub>
 - rounds a block_size up to the pitch step <sub>`fine pitch blocks (Rust twin)`</sub>
