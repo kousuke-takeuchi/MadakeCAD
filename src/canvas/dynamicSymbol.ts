@@ -676,17 +676,45 @@ function sideOf(pins: BlockPins, key: (typeof BLOCK_SIDES)[number]): BlockPin[] 
   return pins[key] ?? [];
 }
 
-/** 辺のピン番号のうち一番長いものの幅 mm (Rust側 max_number_width)。 */
-function maxNumberWidth(side: BlockPin[]): number {
-  return side.reduce((w, pin) => Math.max(w, nameWidth((pin.no ?? "").trim())), 0);
+/**
+ * 向かい合う2辺 (a と b) の貫通ピンの組のうち、2本が同じ線上 (辺に沿ったオフセットが同じ) に並ぶものの
+ * [a の添字, b の添字] (Rust側 same_line_pairs)。size はその辺に沿った外形の寸法。
+ */
+function sameLinePairs(a: BlockPin[], b: BlockPin[], size: number, pitch: BlockPitch): [number, number][] {
+  const oa = rowOffsets(a.length, size, pitch);
+  const ob = rowOffsets(b.length, size, pitch);
+  const pairs: [number, number][] = [];
+  a.forEach((pa, i) => {
+    const j = b.findIndex((pb) => (pb.no ?? "").trim() === (pa.no ?? "").trim());
+    if (j >= 0 && Math.abs(oa[i] - ob[j]) < 1e-9) pairs.push([i, j]);
+  });
+  return pairs;
 }
 
-/** 番号を内側に描くとき、左右の番号が収まる幅 mm (Rust側 inside_numbers_width)。 */
-function insideNumbersWidth(pins: BlockPins): number {
+/**
+ * 番号を内側に描くとき、左右の番号が収まる幅 mm (Rust側 inside_numbers_width)。同じ線上で向かい合う
+ * 貫通ピンの組の番号は中央に1つだけ描くので、その最大幅と、残りの左の最大幅+残りの右の最大幅+間
+ * (両方あるとき) の大きいほうが収まればよい。h は外形の高さ。
+ */
+function insideNumbersWidth(pins: BlockPins, h: number, pitch: BlockPitch): number {
   const left = sideOf(pins, "left");
   const right = sideOf(pins, "right");
-  const both = left.length > 0 && right.length > 0;
-  return 2 * BLOCK_TEXT_PAD_MM + maxNumberWidth(left) + maxNumberWidth(right) + (both ? BLOCK_INSIDE_GAP_MM : 0);
+  const pairs = sameLinePairs(left, right, h, pitch);
+  const rest = (list: BlockPin[], second: boolean): [number, number] => {
+    let widest = 0;
+    let count = 0;
+    list.forEach((pin, i) => {
+      if (pairs.some((q) => q[second ? 1 : 0] === i)) return;
+      widest = Math.max(widest, nameWidth((pin.no ?? "").trim()));
+      count++;
+    });
+    return [widest, count];
+  };
+  const [lw, ln] = rest(left, false);
+  const [rw, rn] = rest(right, true);
+  const merged = pairs.reduce((m, [i]) => Math.max(m, nameWidth((left[i].no ?? "").trim())), 0);
+  const sides = lw + rw + (ln > 0 && rn > 0 ? BLOCK_INSIDE_GAP_MM : 0);
+  return 2 * BLOCK_TEXT_PAD_MM + Math.max(merged, sides);
 }
 
 /**
@@ -926,7 +954,7 @@ export function blockBox(
   if (size) {
     // 指定の幅でも、左右のまとまりの名前が同じ行で重なるなら、収まる幅まで広げる
     let w = Math.max(size.w, snapUp(sharedRowWidth(pins), step));
-    if (numbers === "inside") w = Math.max(w, snapUp(insideNumbersWidth(pins), step));
+    if (numbers === "inside") w = Math.max(w, snapUp(insideNumbersWidth(pins, size.h, pitch), step));
     return [w, size.h];
   }
   const left = sideOf(pins, "left");
@@ -938,15 +966,15 @@ export function blockBox(
   const pm = blockPitchMm(pitch);
   const minW = pitch === "fine" ? BLOCK_FINE_MIN_MM : BLOCK_MIN_W_MM;
   const minH = pitch === "fine" ? BLOCK_FINE_MIN_MM : BLOCK_MIN_H_MM;
-  const wText =
-    numbers === "inside"
-      ? insideNumbersWidth(pins)
-      : sidePad(left) + sidePad(right) + sideTextWidth(left) + sideTextWidth(right) + pm;
   const needCols = pitch === "fine" ? sideNeed(cols, pitch) : cols * pm + pm;
   const needRows = pitch === "fine" ? sideNeed(rows, pitch) : rows * pm + pm;
+  const h = snapUp(Math.max(minH, needRows, captionInset(top) + captionInset(bottom) + pm), step);
+  const wText =
+    numbers === "inside"
+      ? insideNumbersWidth(pins, h, pitch)
+      : sidePad(left) + sidePad(right) + sideTextWidth(left) + sideTextWidth(right) + pm;
   const w = Math.max(minW, wText, needCols);
-  const h = Math.max(minH, needRows, captionInset(top) + captionInset(bottom) + pm);
-  return [snapUp(w, step), snapUp(h, step)];
+  return [snapUp(w, step), h];
 }
 
 /**
@@ -1135,6 +1163,9 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
     ? outlineSegments(table, hw, hh)
     : [{ type: "rect", p1: p(-hw, -hh), p2: p(hw, hh), filled: false }];
   const pins: PinDef[] = [];
+  // 番号を内側に描くとき、同じ線上で向かい合う貫通ピンの組は番号を1つだけ外形の中央に描く (組の最初のピンが描き、2本目は描かない)
+  const lrPairs = numbers === "inside" ? sameLinePairs(sideOf(table, "left"), sideOf(table, "right"), h, pitch) : [];
+  const tbPairs = numbers === "inside" ? sameLinePairs(sideOf(table, "top"), sideOf(table, "bottom"), w, pitch) : [];
   const push = (side: BlockPin[], dir: BlockDir) => {
     const n = side.length;
     const offs = rowOffsets(n, dir === "left" || dir === "right" ? h : w, pitch);
@@ -1156,7 +1187,15 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
       }
       const { at, leadFrom, numAt, nameAt } = pinLayout(bp, offs[i], dir, hw, hh, numbers, pitchMm);
       primitives.push({ type: "line", pts: [leadFrom, at] });
-      primitives.push({ type: "text", at: numAt, text: no, height: BLOCK_PIN_TEXT_MM });
+      const vertical = dir === "left" || dir === "right";
+      const pairs = vertical ? lrPairs : tbPairs;
+      const isFirst = (dir === "left" || dir === "up") && pairs.some((q) => q[0] === i);
+      const isSecond = (dir === "right" || dir === "down") && pairs.some((q) => q[1] === i);
+      if (isFirst) {
+        primitives.push({ type: "text", at: vertical ? p(0, offs[i]) : p(offs[i], 0), text: no, height: BLOCK_PIN_TEXT_MM });
+      } else if (!isSecond) {
+        primitives.push({ type: "text", at: numAt, text: no, height: BLOCK_PIN_TEXT_MM });
+      }
       if (name && numbers === "outside") {
         primitives.push({ type: "text", at: nameAt, text: name, height: BLOCK_PIN_TEXT_MM });
       }

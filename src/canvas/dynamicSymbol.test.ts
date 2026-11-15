@@ -750,7 +750,7 @@ describe("block captions and group names (Rust twin)", () => {
 describe("fine pitch blocks (Rust twin)", () => {
   // ja: golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブ・ピン・属性の置き場所を返す
   it("draws every block of the fine-pitch golden file exactly like Rust", () => {
-    expect(fineGolden.cases.length).toBe(16);
+    expect(fineGolden.cases.length).toBe(17);
     for (const c of fineGolden.cases) {
       const def = blockSymbol(c.attrs as Record<string, string>);
       expect({
@@ -968,5 +968,48 @@ describe("feed-through block pins (Rust twin)", () => {
       expect(Math.abs(p.at.x / 2.5 - Math.round(p.at.x / 2.5))).toBeLessThan(1e-9);
       expect(Math.abs(p.at.y / 2.5 - Math.round(p.at.y / 2.5))).toBeLessThan(1e-9);
     }
+  });
+  const numberTexts = (def: SymbolDef) =>
+    def.primitives.flatMap((q) => (q.type === "text" && /^[0-9]+$/.test(q.text) ? [q] : []));
+
+  // ja: 番号を内側に描くとき、同じ高さで向かい合う貫通ピンの組は番号を左右の辺の中央に1つだけ描くので、幅5mmの箱に収まる
+  it("draws an inside feed-through pair's number once at the centre, so the block fits in 5 mm", () => {
+    const attrs = {
+      block_pins: '{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}',
+      block_pitch: "2.5",
+      block_numbers: "inside",
+      block_size: '{"w":5,"h":7.5}',
+    };
+    const spec = parseBlockSpec(attrs);
+    const [c1, c2] = blockOutline(spec.pins, spec.size, spec.pitch, spec.numbers);
+    expect(c2.x - c1.x).toBeCloseTo(5, 9);
+    const def = blockSymbol(attrs);
+    expect(def.pins.length).toBe(4);
+    const nums = numberTexts(def);
+    expect(nums.map((q) => q.text)).toEqual(["1", "2"]);
+    for (const q of nums) {
+      expect(q.at.x).toBeCloseTo((c1.x + c2.x) / 2, 9);
+      const pin = def.pins.find((r) => r.number === q.text)!;
+      expect(q.at.y).toBeCloseTo(pin.at.y, 9);
+    }
+  });
+
+  // ja: 番号を内側に描く上下の貫通ピンの組は、番号を上下の辺の中央に1つだけ描く
+  it("draws an inside top/bottom pair's number once at the vertical centre", () => {
+    const attrs = { block_pins: '{"top":[{"no":"7"}],"bottom":[{"no":"7"}]}', block_numbers: "inside" };
+    const spec = parseBlockSpec(attrs);
+    const [c1, c2] = blockOutline(spec.pins, spec.size, spec.pitch, spec.numbers);
+    const nums = numberTexts(blockSymbol(attrs));
+    expect(nums.length).toBe(1);
+    expect(nums[0].at.y).toBeCloseTo((c1.y + c2.y) / 2, 9);
+  });
+
+  // ja: 番号を外側に描くときは、貫通ピンも各辺のリードの上に番号を描く (2組で4つ)
+  it("draws a number on each side of a feed-through pair when numbers are outside", () => {
+    const def = blockSymbol({
+      block_pins: '{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}',
+      block_pitch: "2.5",
+    });
+    expect(numberTexts(def).length).toBe(4);
   });
 });

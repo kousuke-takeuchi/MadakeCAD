@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3241仕様項目**。
+全6領域・**3247仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -32,6 +32,9 @@
 - 貫通ピンは両側で同じ名前にする (前後の空白は無視)。名前が両方空なら同じとみなす。 <sub>`both_sides_of_a_feedthrough_pin_need_the_same_name`</sub>
 - 貫通ピンは、どちらの辺にも接点やコネクタの絵を付けられない。 <sub>`a_feedthrough_pin_cannot_have_contacts_or_a_connector`</sub>
 - 2.5mm間隔で番号を内側に書くブロックでも貫通ピンの組を置け、4本のピンはすべて2.5mmのグリッドに乗る。 <sub>`a_fine_block_with_numbers_inside_accepts_feedthrough_pins`</sub>
+- 番号を内側に描くとき、同じ高さで向かい合う貫通ピンの組は、番号を左右の辺の中央に1つだけ描くので、幅5mmの箱に収まる。 <sub>`an_inside_feedthrough_pair_draws_its_number_once_at_the_centre`</sub>
+- 番号を内側に描く上下の貫通ピンの組は、番号を上下の辺の中央に1つだけ、ピンと同じ列の位置に描く。 <sub>`an_inside_top_bottom_pair_draws_its_number_once_at_the_vertical_centre`</sub>
+- 番号を外側に描くときは、貫通ピンも今までどおり各辺のリードの上に番号を描く: 2組で4つ。 <sub>`an_outside_feedthrough_pair_draws_a_number_on_each_side`</sub>
 - ピンが収まらない寸法は拒否され、JSONとして壊れたピン表や知らない辺名も同じく拒否される。 <sub>`a_size_too_small_or_a_malformed_pin_table_is_rejected`</sub>
 - ブロックのピン数には上限があり、桁違いのピン表ははっきりエラーになる。 <sub>`too_many_pins_are_rejected`</sub>
 - 属性スロット(参照記号・型番・機能・定格)は箱の中央に縦に積まれる。 <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
@@ -2335,6 +2338,9 @@
 - 貫通ピンの両側は同じ名前 (前後の空白は無視、両方空なら同じ) <sub>`feed-through block pins (Rust twin)`</sub>
 - 貫通ピンには、どちらの辺にも接点やコネクタの絵を付けられない <sub>`feed-through block pins (Rust twin)`</sub>
 - 2.5mm間隔で番号を内側に書くブロックでも貫通ピンの組を置け、4本のピンは2.5mmのグリッドに乗る <sub>`feed-through block pins (Rust twin)`</sub>
+- 番号を内側に描くとき、同じ高さで向かい合う貫通ピンの組は番号を左右の辺の中央に1つだけ描くので、幅5mmの箱に収まる <sub>`feed-through block pins (Rust twin)`</sub>
+- 番号を内側に描く上下の貫通ピンの組は、番号を上下の辺の中央に1つだけ描く <sub>`feed-through block pins (Rust twin)`</sub>
+- 番号を外側に描くときは、貫通ピンも各辺のリードの上に番号を描く (2組で4つ) <sub>`feed-through block pins (Rust twin)`</sub>
 
 ### frameEditor
 

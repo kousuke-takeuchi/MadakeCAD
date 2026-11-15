@@ -435,18 +435,43 @@ fn min_size(pins: &BlockPins, pitch: BlockPitch) -> (f64, f64) {
     (side_need(cols, pitch), side_need(rows, pitch))
 }
 
-/// 辺のピン番号のうち一番長いものの幅 (mm)。
-fn max_number_width(side: &[BlockPin]) -> f64 {
-    side.iter().map(|p| name_width(p.no.trim())).fold(0.0, f64::max)
+/// 向かい合う2辺 (`a`と`b`) の貫通ピンの組のうち、2本が同じ線上 (辺に沿ったオフセットが同じ) に並ぶものの
+/// (aの添字, bの添字)。`size`はその辺に沿った外形の寸法。番号を内側に描くとき、この組の番号は1つだけ描く。
+fn same_line_pairs(a: &[BlockPin], b: &[BlockPin], size: f64, pitch: BlockPitch) -> Vec<(usize, usize)> {
+    let (oa, ob) = (row_offsets(a.len(), size, pitch), row_offsets(b.len(), size, pitch));
+    let mut pairs = Vec::new();
+    for (i, pa) in a.iter().enumerate() {
+        if let Some(j) = b.iter().position(|pb| pb.no.trim() == pa.no.trim()) {
+            if (oa[i] - ob[j]).abs() < 1e-9 {
+                pairs.push((i, j));
+            }
+        }
+    }
+    pairs
 }
 
-/// 番号を内側に描くとき、左右の番号が収まる幅 (mm)。
-fn inside_numbers_width(pins: &BlockPins) -> f64 {
-    let both = !pins.left.is_empty() && !pins.right.is_empty();
-    2.0 * BLOCK_TEXT_PAD_MM
-        + max_number_width(&pins.left)
-        + max_number_width(&pins.right)
-        + if both { BLOCK_INSIDE_GAP_MM } else { 0.0 }
+/// 番号を内側に描くとき、左右の番号が収まる幅 (mm)。左右に同じ線上で向かい合う貫通ピンの組の番号は
+/// 外形の中央に1つだけ描くので、その最大幅 (`merged`) と、残りの左の最大幅+残りの右の最大幅+間 (両方あるとき)
+/// の大きいほうが収まればよい。`h`は外形の高さ (組が同じ線上かは高さで決まる)。
+fn inside_numbers_width(pins: &BlockPins, h: f64, pitch: BlockPitch) -> f64 {
+    let pairs = same_line_pairs(&pins.left, &pins.right, h, pitch);
+    // 組にならなかったピンの、番号の最大幅と本数
+    let rest = |list: &[BlockPin], second: bool| -> (f64, usize) {
+        let mut widest = 0.0_f64;
+        let mut count = 0;
+        for (i, p) in list.iter().enumerate() {
+            if pairs.iter().any(|q| if second { q.1 == i } else { q.0 == i }) {
+                continue;
+            }
+            widest = widest.max(name_width(p.no.trim()));
+            count += 1;
+        }
+        (widest, count)
+    };
+    let ((lw, ln), (rw, rn)) = (rest(&pins.left, false), rest(&pins.right, true));
+    let merged = pairs.iter().map(|&(i, _)| name_width(pins.left[i].no.trim())).fold(0.0, f64::max);
+    let sides = lw + rw + if ln > 0 && rn > 0 { BLOCK_INSIDE_GAP_MM } else { 0.0 };
+    2.0 * BLOCK_TEXT_PAD_MM + merged.max(sides)
 }
 
 /// 左右の辺の、外形からピン名までの余白 (mm)。コネクタのある辺は絵の内側の深さぶん広い。
@@ -541,7 +566,7 @@ pub fn block_box(spec: &BlockSpec) -> (f64, f64) {
         let step = spec.pitch.size_step();
         let mut w = size.w.max(snap_up(shared_row_width(&spec.pins), step));
         if spec.numbers == BlockNumbers::Inside {
-            w = w.max(snap_up(inside_numbers_width(&spec.pins), step));
+            w = w.max(snap_up(inside_numbers_width(&spec.pins, size.h, spec.pitch), step));
         }
         return (w, size.h);
     }
@@ -554,6 +579,14 @@ pub fn block_box(spec: &BlockSpec) -> (f64, f64) {
         BlockPitch::Coarse => (BLOCK_MIN_W_MM, BLOCK_MIN_H_MM),
         BlockPitch::Fine => (BLOCK_FINE_MIN_MM, BLOCK_FINE_MIN_MM),
     };
+    let need_rows = match spec.pitch {
+        BlockPitch::Coarse => rows as f64 * p + p,
+        BlockPitch::Fine => side_need(rows, spec.pitch),
+    };
+    let h = snap_up(
+        min_h.max(need_rows).max(caption_inset(&pins.top) + caption_inset(&pins.bottom) + p),
+        spec.pitch.size_step(),
+    );
     let w_text = match spec.numbers {
         BlockNumbers::Outside => {
             side_pad(&pins.left)
@@ -562,24 +595,14 @@ pub fn block_box(spec: &BlockSpec) -> (f64, f64) {
                 + side_text_width(&pins.right)
                 + p
         }
-        BlockNumbers::Inside => inside_numbers_width(pins),
+        BlockNumbers::Inside => inside_numbers_width(pins, h, spec.pitch),
     };
     let need_cols = match spec.pitch {
         BlockPitch::Coarse => cols as f64 * p + p,
         BlockPitch::Fine => side_need(cols, spec.pitch),
     };
-    let need_rows = match spec.pitch {
-        BlockPitch::Coarse => rows as f64 * p + p,
-        BlockPitch::Fine => side_need(rows, spec.pitch),
-    };
     let w = min_w.max(w_text).max(need_cols);
-    let h = min_h
-        .max(need_rows)
-        .max(caption_inset(&pins.top) + caption_inset(&pins.bottom) + p);
-    (
-        snap_up(w, spec.pitch.size_step()),
-        snap_up(h, spec.pitch.size_step()),
-    )
+    (snap_up(w, spec.pitch.size_step()), h)
 }
 
 /// 属性からブロックのシンボル定義を生成する。
@@ -786,6 +809,15 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     };
     let mut pins: Vec<PinDef> = Vec::new();
     let pins_spec = &spec.pins;
+    // 番号を内側に描くとき、同じ線上で向かい合う貫通ピンの組は番号を1つだけ外形の中央に描く (組の最初のピンが描き、2本目は描かない)
+    let (lr_pairs, tb_pairs) = if numbers == BlockNumbers::Inside {
+        (
+            same_line_pairs(&pins_spec.left, &pins_spec.right, h, spec.pitch),
+            same_line_pairs(&pins_spec.top, &pins_spec.bottom, w, spec.pitch),
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    };
 
     let side = |list: &[BlockPin], dir: PinDir, primitives: &mut Vec<Primitive>, pins: &mut Vec<PinDef>| {
         let vertical = matches!(dir, PinDir::Left | PinDir::Right);
@@ -805,7 +837,18 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
             }
             let layout = pin_layout(bp, offs[i], dir, hw, hh, numbers, pitch_mm);
             primitives.push(lead(layout.lead_from.x, layout.lead_from.y, layout.at.x, layout.at.y));
-            primitives.push(text(layout.num_at.x, layout.num_at.y, bp.no.trim(), BLOCK_PIN_TEXT_MM));
+            let (is_first, is_second) = match dir {
+                PinDir::Left => (lr_pairs.iter().any(|p| p.0 == i), false),
+                PinDir::Right => (false, lr_pairs.iter().any(|p| p.1 == i)),
+                PinDir::Up => (tb_pairs.iter().any(|p| p.0 == i), false),
+                PinDir::Down => (false, tb_pairs.iter().any(|p| p.1 == i)),
+            };
+            if is_first {
+                let centre = if vertical { Point::new(0.0, offs[i]) } else { Point::new(offs[i], 0.0) };
+                primitives.push(text(centre.x, centre.y, bp.no.trim(), BLOCK_PIN_TEXT_MM));
+            } else if !is_second {
+                primitives.push(text(layout.num_at.x, layout.num_at.y, bp.no.trim(), BLOCK_PIN_TEXT_MM));
+            }
             if !bp.name.is_empty() && numbers == BlockNumbers::Outside {
                 primitives.push(text(layout.name_at.x, layout.name_at.y, &bp.name, BLOCK_PIN_TEXT_MM));
             }
@@ -1317,6 +1360,58 @@ mod tests {
         for p in &def.pins {
             assert!(is_grid(p.at.x) && is_grid(p.at.y), "{p:?}");
         }
+    }
+
+    fn number_texts(def: &SymbolDef) -> Vec<(String, Point)> {
+        texts(def).into_iter().filter(|(t, _)| t.chars().all(|c| c.is_ascii_digit())).collect()
+    }
+
+    /// With numbers inside, a feed-through pair on one line draws its number once, centred between the left and right edges at the pins' height, so the block fits in 5 mm.
+    /// 番号を内側に描くとき、同じ高さで向かい合う貫通ピンの組は、番号を左右の辺の中央に1つだけ描くので、幅5mmの箱に収まる。
+    #[test]
+    fn an_inside_feedthrough_pair_draws_its_number_once_at_the_centre() {
+        let mut a = fine(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}"#, Some(r#"{"w":5,"h":7.5}"#));
+        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let spec = parse_block_spec(&a).expect("5mm幅でも通る");
+        let (p1, p2) = block_outline(&spec);
+        assert!((p2.x - p1.x - 5.0).abs() < 1e-9, "幅5mm: {p1:?} {p2:?}");
+        let def = block_symbol(&a).unwrap();
+        assert_eq!(def.pins.len(), 4);
+        for p in &def.pins {
+            assert!(is_grid(p.at.x) && is_grid(p.at.y), "{p:?}");
+        }
+        let nums = number_texts(&def);
+        assert_eq!(nums.len(), 2, "{nums:?}");
+        let cx = (p1.x + p2.x) / 2.0;
+        for (t, at) in &nums {
+            assert!((at.x - cx).abs() < 1e-9, "{t} は箱の左右の中央: {at:?}");
+            let pin = def.pins.iter().find(|p| &p.number == t).unwrap();
+            assert!((at.y - pin.at.y).abs() < 1e-9, "{t} はピンと同じ高さ: {at:?} {pin:?}");
+        }
+        assert_eq!(nums.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>(), ["1", "2"]);
+    }
+
+    /// A top and bottom pair with numbers inside draws its number once at the vertical centre, above the pin's column.
+    /// 番号を内側に描く上下の貫通ピンの組は、番号を上下の辺の中央に1つだけ、ピンと同じ列の位置に描く。
+    #[test]
+    fn an_inside_top_bottom_pair_draws_its_number_once_at_the_vertical_centre() {
+        let mut a = attrs(&[("block_pins", r#"{"top":[{"no":"7"}],"bottom":[{"no":"7"}]}"#)]);
+        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let spec = parse_block_spec(&a).unwrap();
+        let (p1, p2) = block_outline(&spec);
+        let def = block_symbol(&a).unwrap();
+        let nums = number_texts(&def);
+        assert_eq!(nums.len(), 1, "{nums:?}");
+        assert!((nums[0].1.y - (p1.y + p2.y) / 2.0).abs() < 1e-9, "{nums:?}");
+        assert!(def.pins.iter().all(|p| (p.at.x - nums[0].1.x).abs() < 1e-9), "{nums:?} {:?}", def.pins);
+    }
+
+    /// With numbers outside, a feed-through pair draws a number on each side's lead as before: four numbers for two pairs.
+    /// 番号を外側に描くときは、貫通ピンも今までどおり各辺のリードの上に番号を描く: 2組で4つ。
+    #[test]
+    fn an_outside_feedthrough_pair_draws_a_number_on_each_side() {
+        let a = fine(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}"#, None);
+        assert_eq!(number_texts(&block_symbol(&a).unwrap()).len(), 4);
     }
 
     /// A size too small for the pins is rejected, and so is a pin table that is not valid JSON or uses an unknown side.
@@ -2501,9 +2596,12 @@ mod tests {
             r#"{"left":[{"no":"1","name":"P"},{"no":"2","name":"N"}],"right":[{"no":"1","name":"P"},{"no":"2","name":"N"}]}"#.to_string(),
         );
         cases.push(("feedthrough-coarse".into(), feed_coarse));
-        let mut feed_fine = fine(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}"#, Some(r#"{"w":7.5,"h":7.5}"#));
+        let mut feed_fine = fine(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}"#, Some(r#"{"w":5,"h":7.5}"#));
         feed_fine.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
         cases.push(("feedthrough-fine-inside".into(), feed_fine));
+        let mut feed_offset = fine(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"2"}]}"#, None);
+        feed_offset.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        cases.push(("feedthrough-inside-offset".into(), feed_offset));
         cases
     }
 

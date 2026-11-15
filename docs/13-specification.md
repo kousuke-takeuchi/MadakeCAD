@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3241 specification clauses** across 6 areas.
+**3247 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -32,6 +32,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Both sides of a feed-through pin must have the same name once spaces are trimmed; two empty names are the same. <sub>`both_sides_of_a_feedthrough_pin_need_the_same_name`</sub>
 - A feed-through pin cannot carry contacts or a connector picture on either side. <sub>`a_feedthrough_pin_cannot_have_contacts_or_a_connector`</sub>
 - A fine-pitch block with numbers inside accepts a feed-through pair and keeps all four pins on the 2.5 mm grid. <sub>`a_fine_block_with_numbers_inside_accepts_feedthrough_pins`</sub>
+- With numbers inside, a feed-through pair on one line draws its number once, centred between the left and right edges at the pins' height, so the block fits in 5 mm. <sub>`an_inside_feedthrough_pair_draws_its_number_once_at_the_centre`</sub>
+- A top and bottom pair with numbers inside draws its number once at the vertical centre, above the pin's column. <sub>`an_inside_top_bottom_pair_draws_its_number_once_at_the_vertical_centre`</sub>
+- With numbers outside, a feed-through pair draws a number on each side's lead as before: four numbers for two pairs. <sub>`an_outside_feedthrough_pair_draws_a_number_on_each_side`</sub>
 - A size too small for the pins is rejected, and so is a pin table that is not valid JSON or uses an unknown side. <sub>`a_size_too_small_or_a_malformed_pin_table_is_rejected`</sub>
 - A block cannot exceed the pin limit, so a runaway pin table fails loudly. <sub>`too_many_pins_are_rejected`</sub>
 - The attribute slots (tag, part number, function, rating) stack at the centre of the box. <sub>`attribute_slots_stack_at_the_centre_of_the_box`</sub>
@@ -2335,6 +2338,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - needs the same name on both sides of a feed-through pin <sub>`feed-through block pins (Rust twin)`</sub>
 - refuses contacts or a connector picture on either side of a feed-through pin <sub>`feed-through block pins (Rust twin)`</sub>
 - accepts feed-through pins on a fine block with numbers inside, all on the 2.5 mm grid <sub>`feed-through block pins (Rust twin)`</sub>
+- draws an inside feed-through pair's number once at the centre, so the block fits in 5 mm <sub>`feed-through block pins (Rust twin)`</sub>
+- draws an inside top/bottom pair's number once at the vertical centre <sub>`feed-through block pins (Rust twin)`</sub>
+- draws a number on each side of a feed-through pair when numbers are outside <sub>`feed-through block pins (Rust twin)`</sub>
 
 ### frameEditor
 
