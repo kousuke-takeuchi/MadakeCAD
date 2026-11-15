@@ -709,12 +709,27 @@ pub(crate) struct CaptionAnchor {
 /// ピンがあるときは、そこから出る配線が中央の文字を横切るので、外形の**左上の角の外**
 /// (左辺の [`CORNER_CAPTION_GAP`] 左・上辺の上) に右揃えで置く。ブロックが描く他のもの
 /// (他の辺のリード・番号・コネクタの絵・まとまりの名前) に文字が重なるときは、その上まで上げる。
+///
+/// 中央揃えのとき、ブロックは描かれた外形 ([`crate::block::block_outline`]) の中央 (回転・ミラーの後) にそろえる。
+/// 2.5mm間隔で幅が2.5mmの奇数倍のブロックは外形が配置点から1.25mmずれるため。5mm間隔のブロックはずれが0なので配置点のまま。
 pub(crate) fn caption_anchor(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> CaptionAnchor {
-    top_left_corner_anchor(inst, def).unwrap_or(CaptionAnchor {
-        x: inst.at.x,
+    top_left_corner_anchor(inst, def).unwrap_or_else(|| CaptionAnchor {
+        x: centred_caption_x(inst, def),
         top: symbol_top_y(inst, def),
         end: false,
     })
+}
+
+/// 中央揃えの参照記号・型番の基準X。普通は配置点、ブロックは外形の中心 (ローカルの中心を変換するので、ずれが0なら配置点ちょうど)。
+fn centred_caption_x(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> f64 {
+    if !crate::block::is_block_export_id(&def.id) {
+        return inst.at.x;
+    }
+    let Ok(spec) = crate::block::parse_block_spec(&inst.attrs) else {
+        return inst.at.x;
+    };
+    let (lo, hi) = crate::block::block_outline(&spec);
+    transform_local(Point::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0), inst).x
 }
 
 /// 外形の左辺と右揃えの文字の右端との間隔 (mm)。上辺との間隔は型番のベースライン

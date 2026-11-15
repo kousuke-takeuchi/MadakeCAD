@@ -458,8 +458,25 @@ export const CORNER_CAPTION_GAP = 1.0;
  */
 export function captionAnchor(inst: SymbolInstance, def: SymbolDef): CaptionAnchor {
   return (
-    topLeftCornerAnchor(inst, def) ?? { x: inst.at.x, top: captionBounds(inst, def).min.y, end: false }
+    topLeftCornerAnchor(inst, def) ?? { x: centredCaptionX(inst, def), top: captionBounds(inst, def).min.y, end: false }
   );
+}
+
+/**
+ * 中央揃えの参照記号・型番の基準X (Rust側 svg::centred_caption_x)。普通は配置点、ブロックは描かれた外形の
+ * 中心 (回転・ミラーの後)。2.5mm間隔で幅が2.5mmの奇数倍のブロックは外形が1.25mmずれるため。
+ * ローカルの中心を変換するので、5mm間隔のブロック (ずれ0) は配置点ちょうどのまま。
+ */
+function centredCaptionX(inst: SymbolInstance, def: SymbolDef): number {
+  if (def.id !== BLOCK_SYMBOL_ID) return inst.at.x;
+  let corners: [Point, Point];
+  try {
+    const { pins, size, pitch, numbers } = parseBlockSpec(inst.attrs ?? {});
+    corners = blockOutline(pins, size, pitch, numbers);
+  } catch {
+    return inst.at.x;
+  }
+  return transformLocal(p((corners[0].x + corners[1].x) / 2, (corners[0].y + corners[1].y) / 2), inst).x;
 }
 
 function topLeftCornerAnchor(inst: SymbolInstance, def: SymbolDef): CaptionAnchor | null {

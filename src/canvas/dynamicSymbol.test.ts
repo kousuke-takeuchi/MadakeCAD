@@ -847,4 +847,40 @@ describe("fine pitch blocks (Rust twin)", () => {
     expect(a.x).toBeCloseTo(-7.5 - 1.0, 9);
     expect(a.top).toBeCloseTo(-5.0, 9);
   });
+
+  // ja: 上辺にピンが無く幅も高さも2.5mmの奇数倍の2.5mm間隔のブロックでは、参照記号・型番は回転・ミラーの後の描かれた外形の中央にそろい、5mm間隔のブロックは配置点ちょうどのまま (Rust の centred_captions_of_a_fine_block_follow_the_shifted_outline と同じ数)
+  it("centres the captions of a fine block on the shifted outline", () => {
+    const fineAttrs = { block_pins: "{}", block_pitch: "2.5", block_size: '{"w":7.5,"h":7.5}' };
+    const coarseAttrs = { block_pins: "{}" };
+    const cases: [number, boolean, number][] = [
+      [0, false, 101.25],
+      [90, false, 98.75],
+      [180, false, 98.75],
+      [270, false, 101.25],
+      [0, true, 98.75],
+      [90, true, 98.75],
+      [180, true, 101.25],
+      [270, true, 101.25],
+    ];
+    for (const [rotation, mirror, x] of cases) {
+      const at = (ax: number, attrs: Record<string, string>): SymbolInstance => ({
+        id: "i",
+        symbol_id: "block",
+        at: { x: ax, y: 50 },
+        rotation,
+        mirror,
+        reference: "39",
+        value: "USBハブ",
+        attrs,
+      });
+      const fine = at(100, fineAttrs);
+      const fineDef = blockSymbol(fineAttrs);
+      const a = captionAnchor(fine, fineDef);
+      expect(a.end, `回転${rotation}・ミラー${mirror}`).toBe(false);
+      expect(a.x, `回転${rotation}・ミラー${mirror}`).toBeCloseTo(x, 9);
+      expect(a.top).toBe(captionBounds(fine, fineDef).min.y);
+      const coarse = at(100.3, coarseAttrs);
+      expect(captionAnchor(coarse, blockSymbol(coarseAttrs)).x).toBe(100.3);
+    }
+  });
 });

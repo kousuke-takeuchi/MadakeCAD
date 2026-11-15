@@ -2016,6 +2016,36 @@ mod tests {
         assert!((a.top - (-5.0)).abs() < 1e-9, "{a:?}");
     }
 
+    /// A 2.5 mm block without top pins whose width and height are odd multiples of 2.5 mm has its captions centred on the drawn outline, after rotation and mirroring, not on the placement point; a 5 mm block keeps them exactly on the placement point.
+    /// 上辺にピンが無く幅も高さも2.5mmの奇数倍の2.5mm間隔のブロックでは、参照記号・型番は配置点ではなく、回転・ミラーの後の描かれた外形の中央にそろう。5mm間隔のブロックは配置点ちょうどのまま。
+    #[test]
+    fn centred_captions_of_a_fine_block_follow_the_shifted_outline() {
+        // 外形はローカルで (-2.5,-2.5)..(5,5)、中心 (1.25, 1.25)。配置点 (100, 50)
+        let cases = [
+            (0, false, 101.25),
+            (90, false, 98.75),
+            (180, false, 98.75),
+            (270, false, 101.25),
+            (0, true, 98.75),
+            (90, true, 98.75),
+            (180, true, 101.25),
+            (270, true, 101.25),
+        ];
+        for (rotation, mirror, x) in cases {
+            let (mut inst, def) = placed_fine("{}", r#"{"w":7.5,"h":7.5}"#);
+            inst.at = Point::new(100.0, 50.0);
+            inst.rotation = rotation;
+            inst.mirror = mirror;
+            let a = crate::svg::caption_anchor(&inst, &def);
+            assert!(!a.end, "回転{rotation}・ミラー{mirror}");
+            assert!((a.x - x).abs() < 1e-9, "回転{rotation}・ミラー{mirror}: {a:?}");
+            assert_eq!(a.top, crate::svg::symbol_top_y(&inst, &def));
+            let (mut coarse, def) = placed("{}", rotation, mirror);
+            coarse.at = Point::new(100.3, 50.0);
+            assert_eq!(crate::svg::caption_anchor(&coarse, &def).x, 100.3, "5mm間隔は配置点のまま");
+        }
+    }
+
     fn placed_fine(pins: &str, size: &str) -> (crate::model::SymbolInstance, SymbolDef) {
         let crate::model::Entity::Symbol(mut inst) = test_block("39", "USBハブ", 0.0, 0.0, pins) else { unreachable!() };
         inst.attrs = fine(pins, Some(size));
