@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3194 specification clauses** across 6 areas.
+**3195 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -372,7 +372,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 21, the version that added the project's text font. <sub>`the_current_format_version_is_twenty_one`</sub>
+- The current file format version is 22, the version that added the block pin pitch and number position. <sub>`the_current_format_version_is_twenty_two`</sub>
+- A version 21 project file opens in this build and becomes version 22; its blocks keep their attributes and their 5 mm pins. <sub>`a_version_21_file_opens_as_version_22`</sub>
 - A project with a stroke font round-trips through the file; a project without one writes no text_font key. <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
 - A version 17 file without ports loads unchanged apart from being moved up to the current version. <sub>`a_version_17_file_loads_unchanged`</sub>
 - A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable". <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>

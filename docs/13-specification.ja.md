@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3194仕様項目**。
+全6領域・**3195仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -372,7 +372,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは21 (プロジェクトの書体を追加した版) である。 <sub>`the_current_format_version_is_twenty_one`</sub>
+- 現行のファイル形式バージョンは22 (ブロックのピン間隔と番号の位置を追加した版) である。 <sub>`the_current_format_version_is_twenty_two`</sub>
+- 形式21のプロジェクトファイルはこのビルドで開け、形式22になる。ブロックの属性と5mm間隔のピンはそのまま残る。 <sub>`a_version_21_file_opens_as_version_22`</sub>
 - ストロークフォントを持つプロジェクトはファイルを往復でき、持たないプロジェクトはtext_fontのキーを書かない。 <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
 - ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_17_file_loads_unchanged`</sub>
 - 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
