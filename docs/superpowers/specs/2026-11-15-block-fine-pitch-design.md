@@ -16,7 +16,7 @@ Success means:
 
 - Any pitch other than 5 mm and 2.5 mm. Off-grid pins are not allowed.
 - A control in the block editor for choosing the pitch or the number position. The editor keeps the attributes and steps the size correctly; the control is designed in `MadakeCAD.pen` in the later editor sub-project.
-- Connector pictures (`connector` on a pin) on a fine-pitch block. The picture body is 4 mm along the edge and does not fit; the combination is refused.
+- Connector pictures (`connector` on a pin) on a fine-pitch block or on a block with numbers inside. The picture body is 4 mm along the edge and does not fit the fine pitch, and a connector pin keeps its number outside the picture; both combinations are refused.
 - Plug/socket mate symbols at a finer pitch. A small connector is drawn as a fine-pitch block.
 - Moving existing entities. Nothing is migrated except the format version.
 
@@ -38,7 +38,7 @@ Success means:
 | `block_pitch` | `"5"`, `"2.5"` | `"5"` |
 | `block_numbers` | `"outside"`, `"inside"` | `"outside"` |
 
-Any other value is an error from `parse_block_spec` (the same error path as a bad `block_pins`). The attributes are independent: `block_numbers: inside` also works on a 5 mm block.
+Any other value is an error from `parse_block_spec` (the same error path as a bad `block_pins`). The attributes are independent of each other: `block_numbers: inside` also works on a 5 mm block. Neither can be combined with a connector picture (section 5).
 
 `BlockSpec` gains `pitch: BlockPitch` (`Coarse` | `Fine`) and `numbers: BlockNumbers` (`Outside` | `Inside`). All geometry reads the pitch from the spec; the constant `BLOCK_PIN_PITCH_MM` stays as the coarse value.
 
@@ -82,6 +82,7 @@ With `block_numbers: inside`:
 ### 5. Refusals
 
 - `block_pitch: 2.5` together with any pin that has `connector`: error naming the pin.
+- `block_numbers: inside` together with any pin that has `connector`, on either pitch: error naming the pin (`block pin {no}: a connector picture cannot be used with block_numbers inside`). A connector pin draws its number outside the picture, and the inside-number width does not count the picture depth or the group names, so the outline would come out too narrow.
 - Unknown value of either attribute: error.
 - `block_size` too small for the pins under the rules of section 3: error with the needed size.
 
