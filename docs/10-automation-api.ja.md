@@ -14,6 +14,8 @@ UIでできることはすべてスクリプト化できる。3つの入口が�
 貫通ピン: `block_pins` のブロックでは、同じピン番号を向かい合う辺に1回ずつ置ける(左と右、または上と下。同じ極の両側に配線がある形)。両側のピン名は前後の空白を除いて同じにし、どちらにも `contacts`・`connector` は付けられない。同じ辺に2回・隣り合う辺・3回以上は `duplicate block pin number` で断る。2つの接続点は1つのノードで、ネットのピン一覧には1回だけ載る。`get_pins` は両方を返し、`U1.1` だけの指定は曖昧なので `U1.1#1` か `U1.1#2` で選ぶ。#1・#2 はブロックのピン表の定義順(左・右・上・下の順。回転・反転の前)で、画面で見た辺ではない。反転したブロックでは `U1.1#1` が画面の右に描かれる。`block_numbers: "inside"` のとき、2本が同じ線上に並ぶ貫通ピンの番号は、その線と交わる辺(左右の組なら上下、上下の組なら左右)にピンが無いときだけ、箱の中央に1つ描く(あるときは各ピンが自分の番号を描く)。ファイル形式23。
 コネクタの絵: `block_pins` のピンには `connector`(`usb_a_f usb_a_m usb_c_f usb_c_m micro_b_f micro_b_m jack35_f jack35_m dc_f dc_m screw jst_ph_f jst_xh_f` のどれか。`_f` はメス、`_m` はオス)も書け、`screw`・`jst_ph_f`・`jst_xh_f` には `connector_ref` も書ける(同じ ref の続くピンは1つの本体になり、`J3 PH`・`TB1` と書く)。知らない種類・空の ref・ほかの種類の ref・2つのまとまりに使う ref は断る。コネクタのあるピンの接続点は外形から5mmなので、位置は `get_pins` で読む。`get_pins` とネットリストは種類を返さない。
 細かい間隔: `place_symbol` の `attrs.block_pitch: "2.5"`(既定は `"5"`)でブロックのピン間隔を2.5mm、大きさの刻みを2.5mm、最小を5×5mmにできる。ピンn本の辺は(n+1)×2.5mm以上が要る。ピンと外形の辺が2.5mmの格子に乗るよう、外形とピンの列は必要に応じて1.25mmずらすので、位置は `get_pins` で読む。`attrs.block_numbers: "inside"`(既定は `"outside"`)はピン番号を外形の内側に描き、ピン名は描かないので、信号名は配線のネットラベルで出す。ほかの値は断り、2.5mmのブロックにも番号を内側に描くブロックにもコネクタの絵(`connector`)を使えない。
+
+図面の見た目: `execute_commands` の `set_sheet_wire_style`(`sheet_id`、`weight_mm` は0.18〜1.0mm、nullで既定の0.35mm。`hide_notes` が true なら配線注記 = 線径・色名・長さを描かない。線の色はそのまま)。`place_symbol` の `attrs.block_caption: "inside"`(既定は `"above"`)で、参照記号と型番をブロックの外形の上ではなく中央に書く。注記(`text` エンティティ)の `rotation` が 90・180・270 のとき、基準点を中心に時計回りへ回して描く。
 Claude Codeはリポジトリの`.mcp.json`で自動接続。
 
 ### Link API(REST+SSE、外部ツール向け)

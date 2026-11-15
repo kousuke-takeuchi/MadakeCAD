@@ -229,6 +229,7 @@ negative, which is enough for both).
 | Logo image | ✅ | G31 closed |
 | Dense harness wiring: pins closer than 5 mm, small connector boxes with the numbers inside | ✅ | G34 closed (`block_pitch`, `block_numbers`; format 22) |
 | A connector box passes a conductor through: the same pole has a wire on each side | ✅ | G35 closed (one pin number on two opposite sides; format 23) |
+| Captions inside the box, thick wires without colour words, part numbers written along vertical wires | ✅ | G36-G39 closed (`block_caption`, sheet wire style, rotated notes; format 24) |
 
 **After the frame template extensions (2026-11-14).** The same region was redrawn with a
 template that uses the new items. The share of the reproduction's ink that lies on the
@@ -1387,6 +1388,47 @@ Such a box could not be drawn as one block.
 right, or top and bottom). The two points are one electrical node, and `REF.NO#1` /
 `REF.NO#2` address them. Both sides need the same name and carry no contacts or connector
 picture; every other repetition is still refused. With numbers drawn inside the box, a pair whose two pins lie on one line shows its number once, in the middle, when the sides crossing that line have no pins.
+
+### G36 — A block writes its reference and value above the outline only · quality
+
+**Closed 2026-11-15** (`block_caption: "inside"`, format 24).
+
+**Current behaviour (verified).** The reference and the value of a block were written above
+its outline (or at its top-left corner when the top side has pins). Harness drawings often
+write them inside the box.
+
+**What closed it.** The block attribute `block_caption` (`above`, the default, or `inside`).
+Inside, the lines are centred on the middle of the drawn outline.
+
+### G37 — Every coloured wire carries a colour word · quality
+
+**Closed 2026-11-15** (`Sheet.hide_wire_notes`, format 24).
+
+**Current behaviour (verified).** A wire with a colour, a gauge or a length always got a wire
+note. A drawing that states the wire by a part number written beside it has no such notes.
+
+**What closed it.** A sheet setting that stops drawing the wire notes; the wires keep their
+colour. Set with `set_sheet_wire_style`.
+
+### G38 — Wires have one fixed line weight · quality
+
+**Closed 2026-11-15** (`Sheet.wire_weight_mm`, format 24).
+
+**Current behaviour (verified).** Wires were always 0.35 mm wide. Harness drawings draw the
+conductors with a heavier line than the outlines.
+
+**What closed it.** A sheet setting for the wire line weight (0.18 to 1.0 mm), set with
+`set_sheet_wire_style`.
+
+### G39 — A rotated note is drawn unrotated · quality
+
+**Closed 2026-11-15** (no data change).
+
+**Current behaviour (verified).** A note has a `rotation`, but SVG, PDF and the canvas wrote
+it horizontally. Text along a vertical wire could not be drawn.
+
+**What closed it.** Notes with a rotation of 90, 180 or 270 degrees are drawn turned clockwise
+about their anchor point, in all three renderers.
 
 ## Summary by impact
 
