@@ -562,6 +562,9 @@ pub fn block_box(spec: &BlockSpec) -> (f64, f64) {
 /// 外形は原点中心の長方形。ピンは辺ごとに中央揃え・5mmピッチで並び、
 /// **ピン番号は外形の外側(リードの上)・ピン名は外形の内側**に描く
 /// (上下辺は縦に書けないので番号・名前とも内側に置く)。
+/// `block_pitch` = "2.5" ならピン間隔2.5mm・大きさの刻み2.5mmで、大きさが2.5mmの奇数倍の軸は外形を1.25mm (右・下へ)、
+/// グリッドから外れるピンの列も1.25mmずらす ([`axis_shift`]・[`row_offsets`])。
+/// `block_numbers` = "inside" なら左右の番号を外形の内側に描き、ピン名は描かない。
 /// ピンに `connector` があると、そのピンは外形から5mmまで伸び、外形の辺にコネクタの絵を描く ([`crate::connector`])。
 pub fn block_symbol(attrs: &BTreeMap<String, String>) -> Result<SymbolDef, String> {
     let spec = parse_block_spec(attrs)?;

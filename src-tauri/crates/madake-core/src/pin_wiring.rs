@@ -32,7 +32,7 @@ pub struct PartPins {
     pub entity_id: EntityId,
     pub reference: String,
     pub symbol_id: String,
-    /// 用紙上の外接矩形 (ブロックは5mm丸めの後)。図形の無いシンボルはnull。
+    /// 用紙上の外接矩形 (ブロックはピン間隔の刻み (5mmまたは2.5mm) で丸めた後)。図形の無いシンボルはnull。
     pub bbox: Option<Rect>,
     pub pins: Vec<PinInfo>,
 }

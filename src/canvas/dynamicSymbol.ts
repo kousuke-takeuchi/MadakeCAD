@@ -1100,6 +1100,9 @@ function translatePrimitive(prim: Primitive, dx: number, dy: number): Primitive 
  * 属性からブロックのシンボル定義を作る(Rust側 `block_symbol` と同一座標)。
  * 外形は原点中心の長方形。ピンは辺ごとに中央揃え・5mmピッチで、
  * ピン番号は外形の外側、ピン名は内側に描く(上下辺は番号・名前とも内側)。
+ * block_pitch = "2.5" ならピン間隔2.5mm・大きさの刻み2.5mmで、大きさが2.5mmの奇数倍の軸は外形を1.25mm (右・下へ)、
+ * グリッドから外れるピンの列も1.25mmずらす (axisShift・rowOffsets)。
+ * block_numbers = "inside" なら左右の番号を外形の内側に描き、ピン名は描かない。
  */
 export function blockSymbol(attrs: Record<string, string>): SymbolDef {
   const { pins: table, size, pitch, numbers } = parseBlockSpec(attrs);

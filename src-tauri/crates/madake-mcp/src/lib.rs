@@ -1312,7 +1312,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "配置済み部品のピンを返す。reference(参照記号)かentity_idで指定する。部品ごとにentity_id・参照記号・symbol_id・外形bbox(ブロックは5mm丸めの後)と、各ピンの番号・名前・用紙座標x/y・向きdir(回転と反転の後。電線が出ていく向き)を返す。ピン座標は自分で計算せずこのツールで読む。ポートのピンは contacts (接点の並び) も返す"
+        description = "配置済み部品のピンを返す。reference(参照記号)かentity_idで指定する。部品ごとにentity_id・参照記号・symbol_id・外形bbox(ブロックはピン間隔の刻み (5mm間隔は5mm、2.5mm間隔は2.5mm) で丸めた後)と、各ピンの番号・名前・用紙座標x/y・向きdir(回転と反転の後。電線が出ていく向き)を返す。ピン座標は自分で計算せずこのツールで読む。ポートのピンは contacts (接点の並び) も返す"
     )]
     fn get_pins(&self, Parameters(p): Parameters<GetPinsParams>) -> Result<String, ErrorData> {
         let key = match (p.reference, p.entity_id) {

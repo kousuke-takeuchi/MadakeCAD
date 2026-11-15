@@ -104,7 +104,7 @@ With `block_numbers: inside`:
 
 ### 9. Entry points
 
-Attributes travel through the existing commands (`place_symbol`, `set_symbol_attrs`), IPC, Link API and MCP. The MCP tool descriptions and `docs/10-automation-api(.ja).md` describe the two attributes. The drawing helper outside the repository gets `pitch=` and `numbers=` arguments.
+Attributes travel through the existing entry points: the MCP tool `place_symbol`, and the commands `add_entity` and `update_entity` (sent through IPC, the Link API `POST /api/v1/commands` and the MCP tool `execute_commands`). No new command is added. The MCP tool descriptions and `docs/10-automation-api(.ja).md` describe the two attributes. The drawing helper outside the repository gets `pitch=` and `numbers=` arguments.
 
 ## Testing
 
@@ -128,5 +128,6 @@ Rust (`block.rs`) and Vitest (`dynamicSymbol.test.ts`), each with the bilingual 
 ## Risks
 
 - Text overlap at 2.5 mm pitch: pin text is 2.0 mm high, so rows almost touch. Accepted; it matches dense drawings. Verified visually on the canvas and in the PDF during the reproduction.
+- Top and bottom sides at 2.5 mm pitch: numbers (and names, when numbers are outside) are written horizontally, so a number of two or more characters, and any name, touches or overlaps its neighbour. Not fixed: dense top or bottom pins need one-character numbers until vertical text exists.
 - Code that assumes a centred outline (`hw`, `hh`). Mitigation: build the block centred as today, then translate outline, pins and texts by the shift in one place at the end, on both sides.
 - Hidden users of the 5 mm constant. Mitigation: the plan lists every use found by search (`block.rs`, `connector.rs`, `dynamicSymbol.ts`, `blockEditor.ts`, `BlockPinsEditor.vue`) and each gets a test.
