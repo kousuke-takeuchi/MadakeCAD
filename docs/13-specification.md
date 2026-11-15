@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3278 specification clauses** across 6 areas.
+**3306 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -87,6 +87,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - block_caption does not change what the block itself draws: outline, pins and numbers are the same with and without it. <sub>`block_caption_does_not_change_the_drawn_block`</sub>
 - A block's caption place survives being imported back from an exported file: the importer keeps block_caption with the pin table. <sub>`imported_block_attrs_keep_the_caption_place`</sub>
 - When a left/right feed-through pair is not merged because the top side has a pin, the box is wide enough for both numbers: with four-character numbers it is as wide as the same block without the feed-through rule. <sub>`an_unmerged_feedthrough_pair_gets_room_for_both_numbers`</sub>
+- A block with block_leads "none" puts its pins on the outline itself and draws no lead lines, so a wire runs straight to the box; the outline and the numbers are the same as with leads. <sub>`a_leadless_block_puts_its_pins_on_the_outline`</sub>
+- block_leads accepts only "lead" and "none", and "none" is refused unless the numbers are drawn inside (a number outside sits on the lead). <sub>`block_leads_accepts_lead_and_none_and_needs_numbers_inside`</sub>
 
 ### cable
 
@@ -133,6 +135,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A side may land on one port pin: cores named like the contacts map by name, the line ends at the pin with no bar, and the netlist gives one net per core. <sub>`a_side_lands_on_one_port_pin_by_contact_name`</sub>
 - Breakout labels named <port label>.<contact> join each core to that contact of the port net, so a labels-side cable can feed a port drawn elsewhere on the sheet with no ERC finding. <sub>`breakout_labels_named_like_port_contacts_join_them`</sub>
 - Cores whose names are none of the contacts map by order when the counts match; a partial name match, a count mismatch or style multi on a port is refused, listing the contacts. <sub>`port_landing_by_order_and_refusals`</sub>
+
+### caption
+
+- A symbol without caption_layout, or with an empty one, has no caption layout: its reference and value stay where they were. <sub>`no_attribute_means_no_layout`</sub>
+- A caption line gives an offset from the placement point, a text size, an alignment and a hide switch; what is left out gets its default (offset 0, the usual size, centred, shown). <sub>`a_line_reads_offset_size_alignment_and_hide`</sub>
+- Broken JSON, an unknown key, a text size outside 0.5 to 20 mm and a non-number offset are refused with the attribute name in the message. <sub>`bad_layouts_are_refused`</sub>
 
 ### Command engine (undo/redo)
 
@@ -278,6 +286,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A wire weight outside 0.18 to 1.0 mm, or one that is not a number, is refused and the sheet is not changed. <sub>`set_sheet_wire_style_refuses_a_weight_out_of_range`</sub>
 - A sheet that never set a wire style is saved without the two settings, so its file looks as it did before they existed. <sub>`an_unset_wire_style_is_not_written_to_the_file`</sub>
 - A block whose block_caption is neither "above" nor "inside" is refused and the document is not changed. <sub>`a_block_with_an_unknown_caption_place_is_refused`</sub>
+- The sheet wire style also stores the outline weight of symbols and the vivid wire colours, and undo puts all four values back. <sub>`set_sheet_wire_style_stores_outline_weight_and_vivid_colours`</sub>
+- A wire whose own weight is outside 0.18 to 2.0 mm is refused; a dashed wire 2.0 mm wide is accepted and keeps both settings. <sub>`a_wire_keeps_its_dash_and_weight_and_refuses_a_bad_weight`</sub>
+- A text font with a pen width is accepted between 0.1 and 1.0 mm and refused outside; the pen is saved with the project and removed again by undo. <sub>`set_text_font_takes_a_pen_width_in_range`</sub>
+- A symbol whose caption_layout cannot be read is refused and the document is not changed; a readable one is accepted on any symbol, not only on blocks. <sub>`a_symbol_with_a_bad_caption_layout_is_refused`</sub>
 
 ### connector
 
@@ -398,8 +410,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 24, the version that added the sheet wire style and the block caption place. <sub>`the_current_format_version_is_twenty_four`</sub>
-- A version 23 project file opens in this build and becomes version 24; its sheets get the default wire weight and still show their wire notes. <sub>`a_version_23_file_opens_as_version_24`</sub>
+- The current file format version is 25, the version that added line and lettering styles (outline weight, vivid wire colours, per-wire dash and weight, arrows, text pen, leadless blocks, caption layout). <sub>`the_current_format_version_is_twenty_five`</sub>
+- A version 23 project file opens in this build and becomes the current version; its sheets get the default wire weight and still show their wire notes. <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - A version 22 project file opens in this build and becomes the current version; its blocks keep their attributes and pins unchanged. <sub>`a_version_22_file_opens_as_the_current_version`</sub>
 - A version 21 project file opens in this build and becomes the current version; its blocks keep their attributes and their 5 mm pins. <sub>`a_version_21_file_opens_as_the_current_version`</sub>
 - A project with a stroke font round-trips through the file; a project without one writes no text_font key. <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
@@ -426,6 +438,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block whose contacts were all removed again is saved with the kind "symbol", so older builds can open the file again. <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
 - Regression test (already passes): a version 18 file with a port block opens unchanged apart from being moved up to the current version. <sub>`a_version_18_file_loads_unchanged`</sub>
 - A block whose pins have only connectors (no contacts) is also saved under the kind "port_block" and comes back with its connectors, IPC/MCP JSON still says "symbol", and once its connectors are removed it is saved as "symbol" again. <sub>`a_block_with_connectors_is_saved_as_port_block`</sub>
+- A version 24 project file opens in this build and becomes version 25; wires stay solid at the sheet's weight, outlines keep their weight and the text font has no fixed pen. <sub>`a_version_24_file_opens_as_version_25`</sub>
 
 ### KiCad import / export
 
@@ -932,6 +945,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Shapes never appear in the parts list or the wire list, and a wire inside a shape keeps an empty harness column — which is why an enclosure is drawn with a shape and not with a harness boundary (G11). <sub>`shapes_never_reach_the_parts_list_or_the_wire_list`</sub>
 - Shapes are left out of the tidy metrics, so drawing an annotation off the grid never counts against the drawing. <sub>`shapes_are_left_out_of_the_tidy_metrics`</sub>
 - Listing the shapes of a sheet returns only shapes, never wires, notes or harness boundaries. <sub>`only_shapes_are_listed`</sub>
+- A line or polyline with an arrow at its end gets a triangle whose tip is the last point and which points along the last segment; its length is 2 mm plus twice the stroke width. Without the switch, and on rectangles and circles, there is no arrow. <sub>`an_arrow_sits_at_the_end_of_a_line`</sub>
 
 ### DC simulation
 
@@ -1110,6 +1124,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block with block_caption "inside" writes its reference and its value centred inside the outline, the two lines centred on the middle of the box; without the attribute they stay above the box. <sub>`a_block_can_write_its_caption_inside_the_outline`</sub>
 - With only a reference, or only a value, the single line of an inside caption is centred on the middle of the box. <sub>`a_single_inside_caption_line_is_centred`</sub>
 - The junction dot keeps its 0.6 mm radius at the default wire weight and grows to 0.9 times the weight on a sheet with thick wires, so it stays visible. <sub>`the_junction_dot_grows_with_a_thick_wire`</sub>
+- The outline of a symbol is drawn 0.3 mm wide on a sheet that set no outline weight, and at the sheet's weight once it is set. <sub>`symbol_outlines_are_drawn_at_the_weight_of_the_sheet`</sub>
+- A sheet with vivid wire colours draws a yellow wire in pure yellow; without the switch it uses the darker paper colour. The colour name of the wire is not changed. <sub>`a_sheet_can_draw_wires_in_vivid_colours`</sub>
+- A wire can be dashed and can have its own weight: such a wire is drawn with a dash pattern and at its own weight, while a plain wire on the same sheet stays solid at the sheet's weight. <sub>`a_wire_can_be_dashed_with_its_own_weight`</sub>
+- A line shape with an arrow at its end is drawn with a filled triangle in the line's colour; the same line without the arrow has none. <sub>`a_line_shape_can_end_in_an_arrow`</sub>
+- With a text pen set on the font, every text is stroked at that width whatever its size, and bold text at 1.5 times it; without a pen the width follows the size. <sub>`a_text_pen_fixes_the_stroke_width`</sub>
+- A symbol with a caption layout writes its reference at the given offset from the placement point, with the given size and alignment; the value line, which the layout leaves out, stays where it was; a hidden line is not written. <sub>`a_caption_layout_places_each_line`</sub>
 
 ### Symbol library
 
@@ -2277,6 +2297,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - is picked by clicking near its run <sub>`多芯ケーブル`</sub>
 - draws no bar when every core of a side lands on one port pin <sub>`多芯ケーブル`</sub>
 
+### caption
+
+- has no layout without the attribute <sub>`caption layout`</sub>
+- reads offset, size, alignment and hide, with defaults for what is left out <sub>`caption layout`</sub>
+- refuses bad layouts with the attribute name in the message <sub>`caption layout`</sub>
+
 ### deviceTree
 
 - an expanded device is followed by one row per function <sub>`デバイスツリーの整形`</sub>
@@ -2363,6 +2389,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - puts the caption of an inside block at the centre of the outline <sub>`block caption place (Rust twin)`</sub>
 - centres a single inside caption line on the middle of the box <sub>`block caption place (Rust twin)`</sub>
 - does not change what the block itself draws <sub>`block caption place (Rust twin)`</sub>
+- puts the pins of a leadless block on the outline and draws no leads <sub>`leadless blocks (Rust twin)`</sub>
+- accepts only "lead" and "none <sub>`leadless blocks (Rust twin)`</sub>
 
 ### frameEditor
 
@@ -2733,6 +2761,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - lists only the shapes of a sheet <sub>`shape commands`</sub>
 - maps each drawing tool to one kind of shape <sub>`shape commands`</sub>
 - keeps a shape out of the harness column of the wire list <sub>`shapes and the reports`</sub>
+- puts a triangle at the last point along the last segment <sub>`arrow at the end of a line`</sub>
 
 ### sheets
 
@@ -2761,6 +2790,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - fetches the glyphs of a font once and reuses them <sub>`glyph loading`</sub>
 - returns null for a failed fetch and tries again next time <sub>`glyph loading`</sub>
 - gives the numbers of the case file shared with the Rust layout <sub>`shared layout cases`</sub>
+- strokes every text at the pen width when the font has one <sub>`text pen`</sub>
+- reads a pen width only inside 0.1 to 1.0 mm <sub>`text pen`</sub>
 
 ### surfer
 
@@ -2993,6 +3024,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - falls back to 0.35 mm for a weight outside 0.18 to 1.0 mm or not a number <sub>`sheet wire style`</sub>
 - hides wire notes only when the sheet says so <sub>`sheet wire style`</sub>
 - keeps 0.6 mm at the default weight and grows to 0.9 times a thick wire <sub>`junction dot on thick wires`</sub>
+- uses 0.3 mm for outlines unless the sheet sets a weight in range <sub>`outline weight, own wire weight and vivid colours`</sub>
+- draws a wire at its own weight when it has one, else at the sheet's <sub>`outline weight, own wire weight and vivid colours`</sub>
+- maps colour names to pure colours and leaves unknown names alone <sub>`outline weight, own wire weight and vivid colours`</sub>
 
 ### xref
 

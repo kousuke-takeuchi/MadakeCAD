@@ -70,11 +70,27 @@ export function layoutStroke(
 }
 
 /** いまキャンバスで有効な書体 (プロジェクトの`text_font`。未設定・読み込み前は null)。 */
-let active: { font: StrokeFontData; latin: Latin } | null = null;
+let active: { font: StrokeFontData; latin: Latin; pen: number | null } | null = null;
+
+/** 文字のペンの太さの範囲 (mm)。Rust 側 model.rs の MIN/MAX_TEXT_PEN_MM と同じ。 */
+export const MIN_TEXT_PEN_MM = 0.1;
+export const MAX_TEXT_PEN_MM = 1.0;
+
+/** 書体の設定からペンの太さを読む。未設定・範囲外は null (大きさに比例した太さ)。 */
+export function textPenOf(textFont: { pen_mm?: number | null } | null | undefined): number | null {
+  const v = textFont?.pen_mm;
+  return typeof v === "number" && Number.isFinite(v) && v >= MIN_TEXT_PEN_MM && v <= MAX_TEXT_PEN_MM ? v : null;
+}
+
+/** いま有効な書体での文字の線の太さ (mm)。ペンの太さが決まっていればそれ (太字は1.5倍)、無ければ大きさに比例。 */
+export function textStrokeWidth(size: number, bold: boolean): number {
+  const pen = active?.pen ?? null;
+  return pen !== null ? pen * (bold ? BOLD_FACTOR : 1) : strokeWidth(size, bold);
+}
 
 /** 有効な書体を切り替える (null でシステムの書体へ戻す)。キャンバス用の配置のキャッシュも捨てる。 */
-export function setActiveStrokeFont(font: StrokeFontData | null, latin: Latin): void {
-  active = font ? { font, latin } : null;
+export function setActiveStrokeFont(font: StrokeFontData | null, latin: Latin, pen: number | null = null): void {
+  active = font ? { font, latin, pen } : null;
   unitCache.clear();
 }
 

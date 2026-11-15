@@ -1008,6 +1008,7 @@ mod tests {
                 length_source: Default::default(),
                 part_no: None,
                 net: net.map(|s| s.to_string()),
+                dashed: false, weight_mm: None,
             }),
         )
     }

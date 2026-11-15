@@ -555,6 +555,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: no.map(str::to_string),
+            dashed: false, weight_mm: None,
         })
     }
 

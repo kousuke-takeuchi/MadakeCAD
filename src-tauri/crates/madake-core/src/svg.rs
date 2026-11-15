@@ -149,11 +149,46 @@ pub fn color_hex(color: &str) -> &str {
     }
 }
 
+/// 線色名→鮮やかな表示色 (純色)。[`crate::model::Sheet::vivid_wire_colors`] のシートで配線に使う。
+/// 知らない色名と `#` 始まりは [`color_hex`] と同じ。白は紙に見えるよう灰色のまま。
+pub fn color_hex_vivid(color: &str) -> &str {
+    match color {
+        "red" | "赤" => "#ff0000",
+        "blue" | "青" => "#0000ff",
+        "yellow" | "黄" => "#ffff00",
+        "green" | "緑" => "#00ff00",
+        "orange" | "橙" => "#ff8000",
+        "purple" | "紫" => "#8000ff",
+        "brown" | "茶" => "#800000",
+        "pink" | "桃" => "#ff00ff",
+        "light_blue" | "sky" | "水" | "水色" => "#00ffff",
+        other => color_hex(other),
+    }
+}
+
+/// シートの設定に合わせた配線の表示色。
+pub fn wire_color_hex<'a>(sheet: &Sheet, color: &'a str) -> &'a str {
+    if sheet.vivid_wire_colors { color_hex_vivid(color) } else { color_hex(color) }
+}
+
+/// 破線の配線の線と空きの長さ (mm)。
+pub const WIRE_DASH: (f64, f64) = (4.0, 2.5);
+
 /// いま有効なストロークフォント (プロジェクトの書体)。[`text_font_scope`] の範囲だけ有効。
 #[derive(Clone, Copy)]
 struct ActiveFont {
     font: &'static crate::stroke_font::StrokeFont,
     latin: crate::model::Latin,
+    /// 文字のペンの太さ (mm)。あれば大きさによらずこの太さ (太字は1.5倍)。
+    pen: Option<f64>,
+}
+
+/// いま有効な書体での文字の線の太さ (mm)。ペンの太さが決まっていればそれ (太字は1.5倍)、無ければ大きさに比例。
+fn text_stroke_width(size: f64, bold: bool) -> f64 {
+    match TEXT_FONT.with(|c| c.get()).and_then(|f| f.pen) {
+        Some(pen) => pen * if bold { crate::stroke_font::BOLD_FACTOR } else { 1.0 },
+        None => crate::stroke_font::stroke_width(size, bold),
+    }
 }
 
 thread_local! {
@@ -173,7 +208,7 @@ impl Drop for TextFontScope {
 
 /// プロジェクトの書体を、戻り値を持っている間だけ有効にする。`None`や知らないidはシステムの書体。
 pub fn text_font_scope(text_font: Option<&crate::model::TextFont>) -> TextFontScope {
-    let next = text_font.and_then(|tf| crate::stroke_font::font(&tf.id).map(|font| ActiveFont { font, latin: tf.latin }));
+    let next = text_font.and_then(|tf| crate::stroke_font::font(&tf.id).map(|font| ActiveFont { font, latin: tf.latin, pen: tf.pen() }));
     TextFontScope { previous: TEXT_FONT.with(|c| c.replace(next)) }
 }
 
@@ -220,7 +255,7 @@ fn stroke_text_el(out: &mut String, x: f64, y: f64, size: f64, fill: &str, ancho
         "<path d=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
         d.trim_end(),
         fill,
-        n(crate::stroke_font::stroke_width(size, bold))
+        n(text_stroke_width(size, bold))
     );
     true
 }
@@ -900,7 +935,7 @@ pub fn symbol_bounds(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> (P
     (min, max)
 }
 
-fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &SymbolDef) {
+fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &SymbolDef, weight: f64) {
     // 端子番号の上書き (Task 2, spec §1.1): シンボル定義に焼き込まれた生のピン番号の
     // テキストを、このインスタンスの表示ラベルへ差し替える。上書きが無ければNoneで、
     // 差し替えは起きない (端子台以外のシンボルも含めて、いつもどおりの描画になる)。
@@ -914,7 +949,7 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
                     out,
                     "<polyline points=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
                     polyline_points(&tp),
-                    n(SYMBOL_STROKE)
+                    n(weight)
                 );
             }
             Primitive::Circle { center, r, filled } => {
@@ -924,7 +959,7 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
                     "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"{}\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
                     n(c.x), n(c.y), n(*r),
                     if *filled { "#000" } else { "none" },
-                    n(SYMBOL_STROKE)
+                    n(weight)
                 );
             }
             Primitive::Arc { center, r, start_deg, end_deg } => {
@@ -943,7 +978,7 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
                 let _ = write!(
                     out,
                     "<path d=\"M {} {} A {} {} 0 {} 1 {} {}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
-                    n(sx), n(sy), n(*r), n(*r), large, n(ex), n(ey), n(SYMBOL_STROKE)
+                    n(sx), n(sy), n(*r), n(*r), large, n(ex), n(ey), n(weight)
                 );
             }
             Primitive::Rect { p1, p2, filled } => {
@@ -959,7 +994,7 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
                     "<polygon points=\"{}\" fill=\"{}\" stroke=\"#000\" stroke-width=\"{}\"/>\n",
                     polyline_points(&tp),
                     if *filled { "#000" } else { "none" },
-                    n(SYMBOL_STROKE)
+                    n(weight)
                 );
             }
             Primitive::Text { at, text, height } => {
@@ -978,11 +1013,26 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
     // 上辺にピンのあるブロックは外形の左上の角 (右揃え) へ逃がす
     let caption = caption_anchor(inst, def);
     let anchor = if caption.end { "end" } else { "middle" };
+    // 部品ごとの置き場所 (属性 caption_layout) があれば、その行はそこへ書く。無い行はこれまでの場所
+    let layout = crate::caption::layout_of(&inst.attrs).unwrap_or_default();
+    let mut line = |custom: Option<crate::caption::CaptionLine>, default_y: f64, text: &str| match custom {
+        Some(l) if l.hide => {}
+        Some(l) => text_el(
+            out,
+            inst.at.x + l.x,
+            inst.at.y + l.y,
+            l.h.unwrap_or(LABEL_FONT),
+            "#000",
+            crate::text_style::svg_anchor(l.anchor),
+            text,
+        ),
+        None => text_el(out, caption.x, default_y, LABEL_FONT, "#000", anchor, text),
+    };
     if inst.shows_reference() {
-        text_el(out, caption.x, caption.top - REF_LABEL_DY, LABEL_FONT, "#000", anchor, &inst.reference);
+        line(layout.reference, caption.top - REF_LABEL_DY, &inst.reference);
     }
     if !inst.value.is_empty() {
-        text_el(out, caption.x, caption.top - VALUE_LABEL_DY, LABEL_FONT, "#000", anchor, &inst.value);
+        line(layout.value, caption.top - VALUE_LABEL_DY, &inst.value);
     }
     // 機能ラベル (G4の第3テキスト欄)。参照記号・型番の反対側=外形の下に置く
     if let Some(label) = crate::text_style::function_label_placement(inst, def) {
@@ -1333,6 +1383,13 @@ fn render_shapes(out: &mut String, sheet: &Sheet) {
                     polyline_points(&shape.points)
                 );
             }
+        }
+        if let Some(head) = crate::shape::arrow_head(shape) {
+            let _ = write!(
+                out,
+                "<polygon points=\"{}\" fill=\"{stroke}\" stroke=\"none\"/>\n",
+                polyline_points(&head)
+            );
         }
     }
 }
@@ -1836,12 +1893,18 @@ fn sheet_to_svg_with_xrefs(
     for entity in sheet.entities.values() {
         match entity {
             Entity::Wire(w) => {
+                let dash = if w.dashed {
+                    format!(" stroke-dasharray=\"{} {}\"", n(WIRE_DASH.0), n(WIRE_DASH.1))
+                } else {
+                    String::new()
+                };
                 let _ = write!(
                     out,
-                    "<polyline points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{}\"/>\n",
+                    "<polyline points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{}\"{}/>\n",
                     polyline_points(&w.points),
-                    color_hex(&w.color),
-                    n(sheet.wire_weight_mm())
+                    wire_color_hex(sheet, &w.color),
+                    n(sheet.weight_of(w)),
+                    dash
                 );
             }
             Entity::Symbol(s) => {
@@ -1850,7 +1913,7 @@ fn sheet_to_svg_with_xrefs(
                         // 実機ブロック表示 (G7): コイル自身の小さな図形の代わりにこれを描く
                         render_device_block(&mut out, s, &def, block);
                     } else {
-                        render_symbol(&mut out, s, &def);
+                        render_symbol(&mut out, s, &def, sheet.symbol_weight_mm());
                         render_jumper_bars(&mut out, s, &def);
                         render_pin_group_brackets(&mut out, s, &def);
                         // コイル⇔接点クロスリファレンス (M4 §4、分散配置のコイルだけ)
@@ -2033,6 +2096,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: None,
+            dashed: false, weight_mm: None,
         });
         let s = Entity::Symbol(SymbolInstance {
             id: Uuid::new_v4(),
@@ -2779,6 +2843,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: net.map(|s| s.to_string()),
+            dashed: false, weight_mm: None,
         })
     }
 
@@ -3320,6 +3385,7 @@ mod tests {
             part_no: None,
             net: None,
             length_source: crate::model::LengthSource::Manual,
+            dashed: false, weight_mm: None,
         });
         let sheet = sheet_with(vec![
             wire,
@@ -3368,6 +3434,7 @@ mod tests {
                 length_source: Default::default(),
                 part_no: None,
                 net: None,
+                dashed: false, weight_mm: None,
             });
             let l = Entity::NetLabel(NetLabel {
                 id: Uuid::new_v4(),
@@ -3874,6 +3941,7 @@ mod tests {
             part_no: Some("SAMPLE0001".into()),
             net: None,
             length_source: crate::model::LengthSource::Manual,
+            dashed: false, weight_mm: None,
         });
         sheet.entities.insert(w.id(), w);
         let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: legend_at });
@@ -3927,6 +3995,7 @@ mod tests {
             part_no: None,
             net: None,
             length_source: crate::model::LengthSource::Manual,
+            dashed: false, weight_mm: None,
         });
         sheet.entities.insert(w.id(), w);
         let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: Point::new(10.0, 10.0) });
@@ -3957,6 +4026,7 @@ mod tests {
             part_no: None,
             net: None,
             length_source: crate::model::LengthSource::Manual,
+            dashed: false, weight_mm: None,
         });
         sheet.entities.insert(w.id(), w);
         let legend = Entity::WireLegend(WireLegend { id: Uuid::new_v4(), at: Point::new(10.0, 10.0) });
@@ -3982,6 +4052,7 @@ mod tests {
             part_no: None,
             net: None,
             length_source: crate::model::LengthSource::Manual,
+            dashed: false, weight_mm: None,
         });
         sheet.entities.insert(w.id(), w);
         sheet
@@ -4032,6 +4103,7 @@ mod tests {
             part_no: None,
             net: None,
             length_source: crate::model::LengthSource::Manual,
+            dashed: false, weight_mm: None,
         });
         sheet.entities.insert(w.id(), w);
         let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
@@ -4088,6 +4160,7 @@ mod tests {
             part_no: None,
             net: Some("12".into()),
             length_source: crate::model::LengthSource::Manual,
+            dashed: false, weight_mm: None,
         });
         sheet.entities.insert(w.id(), w);
         let default_svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
@@ -5228,7 +5301,7 @@ mod tests {
     }
 
     fn kst(latin: crate::model::Latin) -> crate::model::TextFont {
-        crate::model::TextFont { id: "kst32b".into(), latin }
+        crate::model::TextFont { id: "kst32b".into(), latin, pen_mm: None }
     }
 
     /// 文字を持つ要素をひととおり置いたプロジェクト: リレー2枚組 + 注記付き配線 + ネットラベル + 表題欄 +
@@ -5449,6 +5522,7 @@ mod tests {
             part_no: None,
             net: None,
             length_source: crate::model::LengthSource::Manual,
+            dashed: false, weight_mm: None,
         })
     }
 
@@ -5576,5 +5650,118 @@ mod tests {
         let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
         let dot = svg.lines().find(|l| l.starts_with("<circle") && l.contains("cx=\"70\"")).expect("丸が描かれる");
         assert_eq!(attr(dot, "r"), Some(0.9), "{dot}");
+    }
+
+    /// The outline of a symbol is drawn 0.3 mm wide on a sheet that set no outline weight, and at the sheet's weight once it is set.
+    /// シンボルの外形は、太さを設定していないシートでは0.3mm、設定したシートではその太さで描かれる。
+    #[test]
+    fn symbol_outlines_are_drawn_at_the_weight_of_the_sheet() {
+        let mut sheet = sheet_with(vec![Entity::Symbol(captioned_block(None, "U1", ""))]);
+        let outline = |svg: &str| -> String {
+            svg.lines().find(|l| l.starts_with("<polygon") && l.contains("90,75")).unwrap_or_else(|| panic!("外形が無い: {svg}")).to_string()
+        };
+        assert_eq!(attr(&outline(&sheet_to_svg(&sheet, &builtin_symbols(), &[])), "stroke-width"), Some(0.3));
+        sheet.symbol_weight_mm = Some(1.0);
+        assert_eq!(attr(&outline(&sheet_to_svg(&sheet, &builtin_symbols(), &[])), "stroke-width"), Some(1.0));
+    }
+
+    /// A sheet with vivid wire colours draws a yellow wire in pure yellow; without the switch it uses the darker paper colour. The colour name of the wire is not changed.
+    /// 鮮やかな配線の色のシートは、黄の配線を純色の黄で描く。設定が無ければ紙で見やすい濃い色で描く。配線の色名は変わらない。
+    #[test]
+    fn a_sheet_can_draw_wires_in_vivid_colours() {
+        let mut sheet = sheet_with(vec![coloured_wire()]);
+        assert!(wire_line(&sheet_to_svg(&sheet, &builtin_symbols(), &[])).contains("stroke=\"#b89000\""));
+        sheet.vivid_wire_colors = true;
+        assert!(wire_line(&sheet_to_svg(&sheet, &builtin_symbols(), &[])).contains("stroke=\"#ffff00\""));
+        assert_eq!(color_hex_vivid("light_blue"), "#00ffff");
+        assert_eq!(color_hex_vivid("桃"), "#ff00ff");
+        assert_eq!(color_hex_vivid("black"), "#000000");
+        assert_eq!(color_hex_vivid("#123456"), "#123456");
+        let Entity::Wire(w) = sheet.entities.values().next().unwrap() else { unreachable!() };
+        assert_eq!(w.color, "yellow");
+    }
+
+    /// A wire can be dashed and can have its own weight: such a wire is drawn with a dash pattern and at its own weight, while a plain wire on the same sheet stays solid at the sheet's weight.
+    /// 配線は破線にでき、その線だけの太さを持てる: その配線は破線・自分の太さで描かれ、同じシートの普通の配線は実線・シートの太さのまま。
+    #[test]
+    fn a_wire_can_be_dashed_with_its_own_weight() {
+        let Entity::Wire(mut bus) = coloured_wire() else { unreachable!() };
+        bus.points = vec![Point::new(50.0, 80.0), Point::new(90.0, 80.0)];
+        bus.dashed = true;
+        bus.weight_mm = Some(2.0);
+        let mut sheet = sheet_with(vec![coloured_wire(), Entity::Wire(bus)]);
+        sheet.wire_weight_mm = Some(0.7);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
+        let plain = wire_line(&svg);
+        assert!(!plain.contains("stroke-dasharray") && attr(&plain, "stroke-width") == Some(0.7), "{plain}");
+        let dashed = svg.lines().find(|l| l.starts_with("<polyline") && l.contains("50,80 90,80")).unwrap();
+        assert!(dashed.contains("stroke-dasharray=\"4 2.500\""), "{dashed}");
+        assert_eq!(attr(dashed, "stroke-width"), Some(2.0));
+    }
+
+    /// A line shape with an arrow at its end is drawn with a filled triangle in the line's colour; the same line without the arrow has none.
+    /// 終点に矢印のある線の図形は、線と同じ色で塗った三角と一緒に描かれる。矢印の無い同じ線には三角は無い。
+    #[test]
+    fn a_line_shape_can_end_in_an_arrow() {
+        let mut line = crate::shape::new_shape(ShapeKind::Line, vec![Point::new(10.0, 20.0), Point::new(30.0, 20.0)]);
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Shape(line.clone())]), &builtin_symbols(), &[]);
+        assert!(!svg.lines().any(|l| l.starts_with("<polygon") && l.contains("30,20")), "{svg}");
+        line.arrow_end = true;
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Shape(line)]), &builtin_symbols(), &[]);
+        let head = svg.lines().find(|l| l.starts_with("<polygon") && l.contains("30,20")).unwrap_or_else(|| panic!("矢印が無い: {svg}"));
+        assert!(head.contains("stroke=\"none\"") && !head.contains("fill=\"none\""), "{head}");
+    }
+
+    /// With a text pen set on the font, every text is stroked at that width whatever its size, and bold text at 1.5 times it; without a pen the width follows the size.
+    /// 書体にペンの太さがあると、文字は大きさによらずその太さで描かれ、太字は1.5倍になる。ペンの太さが無ければ、太さは文字の大きさに比例する。
+    #[test]
+    fn a_text_pen_fixes_the_stroke_width() {
+        let font = |pen| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: pen };
+        {
+            let _scope = text_font_scope(Some(&font(None)));
+            assert!((text_stroke_width(10.0, false) - 0.7).abs() < 1e-9);
+            assert!((text_stroke_width(2.0, false) - 0.14).abs() < 1e-9);
+        }
+        {
+            let _scope = text_font_scope(Some(&font(Some(0.35))));
+            assert_eq!(text_stroke_width(10.0, false), 0.35);
+            assert_eq!(text_stroke_width(2.0, false), 0.35);
+            assert!((text_stroke_width(2.0, true) - 0.525).abs() < 1e-9);
+            let mut out = String::new();
+            assert!(stroke_text_el(&mut out, 10.0, 10.0, 5.0, "#000", "start", false, 1.0, "A"));
+            assert!(out.contains("stroke-width=\"0.350\""), "{out}");
+        }
+        {
+            // 範囲外のペンは無いものとして扱う
+            let _scope = text_font_scope(Some(&font(Some(5.0))));
+            assert!((text_stroke_width(10.0, false) - 0.7).abs() < 1e-9);
+        }
+        assert!((text_stroke_width(10.0, false) - 0.7).abs() < 1e-9, "範囲の外へ漏れない");
+    }
+
+    /// A symbol with a caption layout writes its reference at the given offset from the placement point, with the given size and alignment; the value line, which the layout leaves out, stays where it was; a hidden line is not written.
+    /// caption_layout を持つシンボルは、参照記号を配置点からの指定のずれ・大きさ・寄せで書く。指定の無い型番の行はこれまでの場所のまま。非表示にした行は書かない。
+    #[test]
+    fn a_caption_layout_places_each_line() {
+        let plain = captioned_block(None, "U1", "AMP");
+        let base = sheet_to_svg(&sheet_with(vec![Entity::Symbol(plain.clone())]), &builtin_symbols(), &[]);
+        let value_line = |svg: &str| svg.lines().find(|l| l.contains(">AMP<")).map(str::to_string);
+        let mut inst = plain.clone();
+        inst.attrs.insert(crate::caption::CAPTION_LAYOUT_ATTR.into(), r#"{"ref":{"x":-12,"y":-6,"h":2.0,"anchor":"start"}}"#.into());
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Symbol(inst.clone())]), &builtin_symbols(), &[]);
+        let line = svg.lines().find(|l| l.contains(">U1<")).unwrap();
+        assert_eq!((attr(line, "x"), attr(line, "y"), attr(line, "font-size")), (Some(88.0), Some(74.0), Some(2.0)), "{line}");
+        assert!(!line.contains("text-anchor=\"middle\""), "{line}");
+        assert_eq!(value_line(&svg), value_line(&base), "指定の無い行は動かない");
+        inst.attrs.insert(crate::caption::CAPTION_LAYOUT_ATTR.into(), r#"{"ref":{"hide":true},"value":{"x":0,"y":8,"anchor":"end"}}"#.into());
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Symbol(inst.clone())]), &builtin_symbols(), &[]);
+        assert!(!svg.contains(">U1<"), "非表示の行が出ている");
+        let line = value_line(&svg).unwrap();
+        assert_eq!((attr(&line, "x"), attr(&line, "y")), (Some(100.0), Some(88.0)));
+        assert!(line.contains("text-anchor=\"end\""), "{line}");
+        // 壊れた属性は無いものとして、これまでの場所に書く
+        inst.attrs.insert(crate::caption::CAPTION_LAYOUT_ATTR.into(), "{".into());
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Symbol(inst)]), &builtin_symbols(), &[]);
+        assert_eq!(svg.lines().find(|l| l.contains(">U1<")), base.lines().find(|l| l.contains(">U1<")));
     }
 }

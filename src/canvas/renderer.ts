@@ -101,7 +101,9 @@ import {
 } from "./textStyle";
 import { wireNumberFont, wireNumberLabels } from "./wireNumbers";
 import { wireNoteFont, wireNoteLabels } from "./wireNotes";
-import { wireWeightMm } from "./wireStyle";
+import { symbolWeightMm, vividWireColor, WIRE_DASH, wireWeightMm, wireWeightOf } from "./wireStyle";
+import { captionLayoutOf, type CaptionLine } from "./caption";
+import { arrowHead } from "./shapes";
 import { TAG_FONT, netTag } from "./netTag";
 import { XREF_FONT, deviceXrefAt, xrefTextAt } from "./xref";
 import { annotationScale } from "./annotationText";
@@ -492,10 +494,12 @@ export function drawSymbol(
   colorOverride?: string,
   /** falseで参照記号・型番の注記を描かない (表示クラス "refs")。 */
   showLabels = true,
+  /** 外形の線の太さ (mm)。シートの設定 (wireStyle.symbolWeightMm)。省略時は既定の0.3mm。 */
+  weightMm: number = SYMBOL_STROKE_MM,
 ) {
   ctx.strokeStyle = colorOverride ?? (selected ? theme.selection : theme.line);
   ctx.fillStyle = ctx.strokeStyle;
-  ctx.lineWidth = Math.max(1, SYMBOL_STROKE_MM * vp.scale);
+  ctx.lineWidth = Math.max(1, weightMm * vp.scale);
   // 端子番号の上書き (Task 2, spec §1.1): シンボル定義に焼き込まれた生のピン番号のテキストを
   // このインスタンスの表示ラベルへ差し替える。上書きが無ければnullで、差し替えは起きない
   // (SVG出力 svg.rs::render_symbol の双子)。
@@ -620,15 +624,28 @@ export function drawSymbol(
   const caption = captionAnchor(inst, def);
   ctx.fillStyle = colorOverride ?? (selected ? theme.selection : theme.annotation);
   setDrawingFont(ctx, LABEL_FONT, vp.scale, "monospace");
-  ctx.textAlign = caption.end ? "right" : "center";
+  // 部品ごとの置き場所 (属性 caption_layout) があれば、その行はそこへ書く。無い行はこれまでの場所 (svg.rs と同じ)
+  const layout = captionLayoutOf(inst.attrs);
+  const line = (custom: CaptionLine | null | undefined, defaultY: number, text: string) => {
+    if (custom?.hide) return;
+    if (custom) {
+      setDrawingFont(ctx, custom.h ?? LABEL_FONT, vp.scale, "monospace");
+      ctx.textAlign = custom.anchor === "start" ? "left" : custom.anchor === "end" ? "right" : "center";
+      const p = vp.toScreen({ x: inst.at.x + custom.x, y: inst.at.y + custom.y });
+      drawingText(ctx, text, p.x, p.y);
+      setDrawingFont(ctx, LABEL_FONT, vp.scale, "monospace");
+      return;
+    }
+    ctx.textAlign = caption.end ? "right" : "center";
+    const p = vp.toScreen({ x: caption.x, y: defaultY });
+    drawingText(ctx, text, p.x, p.y);
+  };
   // hide_reference="true" は印字しない (嵌合の組の片方。svg.rsのshows_referenceと同ルール)
   if (inst.reference && inst.attrs?.hide_reference !== "true") {
-    const p = vp.toScreen({ x: caption.x, y: caption.top - REF_LABEL_DY });
-    drawingText(ctx, inst.reference, p.x, p.y);
+    line(layout?.ref, caption.top - REF_LABEL_DY, inst.reference);
   }
   if (inst.value) {
-    const p = vp.toScreen({ x: caption.x, y: caption.top - VALUE_LABEL_DY });
-    drawingText(ctx, inst.value, p.x, p.y);
+    line(layout?.value, caption.top - VALUE_LABEL_DY, inst.value);
   }
   // 機能ラベル (G4の第3テキスト欄): 参照記号・型番の反対側=外形の下 (svg.rsと同ルール)
   const functionLabel = functionLabelText(inst);
@@ -1036,6 +1053,19 @@ export function drawShape(
   }
   ctx.stroke();
   ctx.setLineDash([]);
+  // 終点の矢印 (線と同じ色の塗り。svg.rs と同じ三角)
+  const head = arrowHead(shape);
+  if (head) {
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.beginPath();
+    head.forEach((q, i) => {
+      const s = vp.toScreen(q);
+      if (i === 0) ctx.moveTo(s.x, s.y);
+      else ctx.lineTo(s.x, s.y);
+    });
+    ctx.closePath();
+    ctx.fill();
+  }
 }
 
 /** 用紙座標の矩形をスクリーンへ変換して塗る/描く (盤レイアウト用の共通処理)。 */
@@ -1411,8 +1441,10 @@ export function renderSheet(
   for (const e of entities) {
     if (e.kind !== "wire") continue;
     const selected = opts.selection.has(e.id);
-    ctx.strokeStyle = selected ? theme.selection : wireColorScreen(e.color);
-    ctx.lineWidth = Math.max(1.2, wireWeightMm(sheet) * vp.scale) + (selected ? 1.5 : 0);
+    const vivid = sheet.vivid_wire_colors ? vividWireColor(e.color) : null;
+    ctx.strokeStyle = selected ? theme.selection : (vivid ?? wireColorScreen(e.color));
+    ctx.lineWidth = Math.max(1.2, wireWeightOf(sheet, e) * vp.scale) + (selected ? 1.5 : 0);
+    ctx.setLineDash(e.dashed ? WIRE_DASH.map((d) => Math.max(2, d * vp.scale)) : []);
     ctx.beginPath();
     e.points.forEach((p, i) => {
       const s = vp.toScreen(p);
@@ -1420,6 +1452,7 @@ export function renderSheet(
       else ctx.lineTo(s.x, s.y);
     });
     ctx.stroke();
+    ctx.setLineDash([]);
   }
   for (const e of cables) {
     drawCable(ctx, vp, e, opts.selection.has(e.id), sheet, defs);
@@ -1434,7 +1467,7 @@ export function renderSheet(
       // 「機器イメージ」は分散配置の接点マップと同じ表示クラス「参照記号」に属する
       drawDeviceBlock(ctx, vp, e, def, block, opts.selection.has(e.id), !hidden.has("refs"));
     } else {
-      drawSymbol(ctx, vp, e, def, opts.selection.has(e.id), undefined, !hidden.has("refs"));
+      drawSymbol(ctx, vp, e, def, opts.selection.has(e.id), undefined, !hidden.has("refs"), symbolWeightMm(sheet));
     }
     // コイル⇔接点クロスリファレンス・デバイス単位XRef (表示クラスは「参照記号」に含める)
     if (hidden.has("refs")) continue;

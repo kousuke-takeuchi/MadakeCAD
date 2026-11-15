@@ -36,6 +36,7 @@ fn wire(points: &[(f64, f64)]) -> Entity {
         length_source: Default::default(),
         part_no: None,
         net: None,
+        dashed: false, weight_mm: None,
     })
 }
 

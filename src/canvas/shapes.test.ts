@@ -5,6 +5,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 
 import type { Entity, Point, Project, Sheet, ShapeKind } from "../ipc";
+import { ARROW_HALF_WIDTH_RATIO, ARROW_LEN_MM, arrowHead } from "./shapes";
 import {
   DEFAULT_SHAPE_COLOR,
   DEFAULT_SHAPE_STROKE_MM,
@@ -256,5 +257,24 @@ describe("shapes and the reports", () => {
     expect(
       Object.values(project.sheets[0].entities).some((e) => e.kind === "harness"),
     ).toBe(false);
+  });
+});
+
+describe("arrow at the end of a line", () => {
+  // ja: 終点に矢印を付けた線・折れ線には三角が付く。先端は最後の点で、最後の区間の向きを向き、長さは2mm+線幅の2倍。指定が無いとき・矩形・長さ0の線には付かない
+  it("puts a triangle at the last point along the last segment", () => {
+    const base = { shape: "line" as const, points: [{ x: 10, y: 20 }, { x: 30, y: 20 }], stroke_width_mm: 0.25 };
+    expect(arrowHead({ ...base })).toBeNull();
+    const head = arrowHead({ ...base, arrow_end: true })!;
+    expect(head[0]).toEqual({ x: 30, y: 20 });
+    const len = ARROW_LEN_MM + 0.5;
+    expect(head[1].x).toBeCloseTo(30 - len, 9);
+    expect(head[1].y).toBeCloseTo(20 + len * ARROW_HALF_WIDTH_RATIO, 9);
+    expect(head[2].y).toBeCloseTo(20 - len * ARROW_HALF_WIDTH_RATIO, 9);
+    const up = arrowHead({ shape: "polyline", points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: -10 }], stroke_width_mm: 0.25, arrow_end: true })!;
+    expect(up[0]).toEqual({ x: 10, y: -10 });
+    expect(up[1].y).toBeGreaterThan(-10);
+    expect(arrowHead({ shape: "rect", points: [{ x: 0, y: 0 }, { x: 10, y: 10 }], stroke_width_mm: 0.25, arrow_end: true })).toBeNull();
+    expect(arrowHead({ shape: "line", points: [{ x: 5, y: 5 }, { x: 5, y: 5 }], stroke_width_mm: 0.25, arrow_end: true })).toBeNull();
   });
 });

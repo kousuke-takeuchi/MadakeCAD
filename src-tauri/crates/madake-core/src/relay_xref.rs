@@ -1527,6 +1527,7 @@ mod tests {
             part_no: None,
             net: None,
             length_source: crate::model::LengthSource::Manual,
+            dashed: false, weight_mm: None,
         });
         sheet.entities.insert(wire.id(), wire);
         let notes = crate::wire_note::wire_notes(&sheet);

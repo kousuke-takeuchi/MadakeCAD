@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import shared from "../../src-tauri/crates/madake-core/tests/fixtures/stroke_layout_cases.json";
 import type { Latin, StrokeFontData } from "../ipc";
+import { textPenOf, textStrokeWidth } from "./strokeFont";
 import {
   UNIT_CACHE_MAX,
   activeStrokeFont,
@@ -212,5 +213,30 @@ describe("shared layout cases", () => {
         expect(first![1], c.text).toBeCloseTo(c.first[1], 9);
       }
     }
+  });
+});
+
+describe("text pen", () => {
+  const tiny: StrokeFontData = { id: "t", baseline: 0, cap_top: 25, glyphs: { I: { wide: false, strokes: [[2, 0, 2, 25]] } } };
+
+  // ja: 書体にペンの太さがあると、文字は大きさによらずその太さで描かれ、太字は1.5倍になる。無ければ太さは大きさに比例する
+  it("strokes every text at the pen width when the font has one", () => {
+    setActiveStrokeFont(tiny, "half");
+    expect(textStrokeWidth(10, false)).toBeCloseTo(0.7, 9);
+    setActiveStrokeFont(tiny, "half", 0.35);
+    expect(textStrokeWidth(10, false)).toBe(0.35);
+    expect(textStrokeWidth(2, false)).toBe(0.35);
+    expect(textStrokeWidth(2, true)).toBeCloseTo(0.525, 9);
+    setActiveStrokeFont(null, "half");
+    expect(textStrokeWidth(10, false)).toBeCloseTo(0.7, 9);
+  });
+
+  // ja: 書体の設定のペンの太さは0.1〜1.0mmだけを使う。範囲外・未設定は無いものとして扱う
+  it("reads a pen width only inside 0.1 to 1.0 mm", () => {
+    expect(textPenOf({ pen_mm: 0.35 })).toBe(0.35);
+    expect(textPenOf({ pen_mm: 5 })).toBeNull();
+    expect(textPenOf({ pen_mm: null })).toBeNull();
+    expect(textPenOf({})).toBeNull();
+    expect(textPenOf(null)).toBeNull();
   });
 });

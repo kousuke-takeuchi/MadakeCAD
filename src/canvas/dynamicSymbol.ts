@@ -261,6 +261,13 @@ const BLOCK_INSIDE_GAP_MM = 1.0;
 export type BlockPitch = "coarse" | "fine";
 /** ピン番号を描く場所 (Rust側 BlockNumbers)。 */
 export type BlockNumbers = "outside" | "inside";
+/** リード線を描くかを持つ属性キー ("lead" か "none")。Rust の BLOCK_LEADS_ATTR と同じ。 */
+export const BLOCK_LEADS_ATTR = "block_leads";
+export type BlockLeads = "lead" | "none";
+/** 外形からピン接続点までの長さ (mm)。 */
+export function blockLeadMm(leads: BlockLeads): number {
+  return leads === "none" ? 0 : BLOCK_LEAD_MM;
+}
 /** 参照記号・型番を外形の上に描くか中に描くかを持つ属性キー。Rust の BLOCK_CAPTION_ATTR と同じ。 */
 export const BLOCK_CAPTION_ATTR = "block_caption";
 export type BlockCaption = "above" | "inside";
@@ -804,6 +811,7 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   pitch: BlockPitch;
   numbers: BlockNumbers;
   caption: BlockCaption;
+  leads: BlockLeads;
 } {
   const rawPins = attrs[BLOCK_PINS_ATTR];
   let pins: BlockPins = {};
@@ -921,7 +929,15 @@ export function parseBlockSpec(attrs: Record<string, string>): {
       );
     }
   }
-  return { pins, size, pitch, numbers, caption };
+  const rawLeads = attrs[BLOCK_LEADS_ATTR]?.trim();
+  let leads: BlockLeads;
+  if (rawLeads === undefined || rawLeads === "lead") leads = "lead";
+  else if (rawLeads === "none") leads = "none";
+  else throw new Error(`${BLOCK_LEADS_ATTR} must be "lead" or "none": ${JSON.stringify(rawLeads)}`);
+  if (leads === "none" && numbers !== "inside") {
+    throw new Error(`${BLOCK_LEADS_ATTR} none needs ${BLOCK_NUMBERS_ATTR} inside`);
+  }
+  return { pins, size, pitch, numbers, caption, leads };
 }
 
 /** 左右の辺の内側に書く文字の1つ分: 縦の位置・外形の内壁からの張り出し・まとまりの名前か (Rust側 SideText)。 */
@@ -1077,6 +1093,7 @@ function pinLayout(
   hh: number,
   numbers: BlockNumbers = "outside",
   pitchMm: number = BLOCK_PIN_PITCH_MM,
+  leadMm: number = BLOCK_LEAD_MM,
 ): { at: Point; leadFrom: Point; numAt: Point; nameAt: Point } {
   const leadFrom = edgePoint(dir, off, hw, hh);
   const name = bp.name ?? "";
@@ -1085,34 +1102,34 @@ function pinLayout(
     const numW = nameWidth((bp.no ?? "").trim());
     if (dir === "left") {
       return {
-        at: p(-hw - BLOCK_LEAD_MM, off),
+        at: p(-hw - leadMm, off),
         leadFrom,
         numAt: inside
           ? p(-hw + BLOCK_TEXT_PAD_MM + numW / 2, off)
-          : p(-hw - BLOCK_LEAD_MM / 2, off - BLOCK_PIN_TEXT_MM),
+          : p(-hw - leadMm / 2, off - BLOCK_PIN_TEXT_MM),
         nameAt: p(-hw + BLOCK_TEXT_PAD_MM + nameWidth(name) / 2, off),
       };
     }
     if (dir === "right") {
       return {
-        at: p(hw + BLOCK_LEAD_MM, off),
+        at: p(hw + leadMm, off),
         leadFrom,
         numAt: inside
           ? p(hw - BLOCK_TEXT_PAD_MM - numW / 2, off)
-          : p(hw + BLOCK_LEAD_MM / 2, off - BLOCK_PIN_TEXT_MM),
+          : p(hw + leadMm / 2, off - BLOCK_PIN_TEXT_MM),
         nameAt: p(hw - BLOCK_TEXT_PAD_MM - nameWidth(name) / 2, off),
       };
     }
     if (dir === "up") {
       return {
-        at: p(off, -hh - BLOCK_LEAD_MM),
+        at: p(off, -hh - leadMm),
         leadFrom,
         numAt: p(off, -hh + BLOCK_PIN_TEXT_MM),
         nameAt: p(off, -hh + BLOCK_PIN_TEXT_MM + pitchMm / 2),
       };
     }
     return {
-      at: p(off, hh + BLOCK_LEAD_MM),
+      at: p(off, hh + leadMm),
       leadFrom,
       numAt: p(off, hh - BLOCK_PIN_TEXT_MM),
       nameAt: p(off, hh - BLOCK_PIN_TEXT_MM - pitchMm / 2),
@@ -1185,7 +1202,8 @@ function translatePrimitive(prim: Primitive, dx: number, dy: number): Primitive 
  * block_numbers = "inside" なら左右の番号を外形の内側に描き、ピン名は描かない。
  */
 export function blockSymbol(attrs: Record<string, string>): SymbolDef {
-  const { pins: table, size, pitch, numbers } = parseBlockSpec(attrs);
+  const { pins: table, size, pitch, numbers, leads } = parseBlockSpec(attrs);
+  const leadMm = blockLeadMm(leads);
   const [w, h] = blockBox(table, size, pitch, numbers);
   const hw = w / 2;
   const hh = h / 2;
@@ -1225,8 +1243,11 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
           primitives.push({ type: "text", at: labelAt(side, offs, group, label, dir, hw, hh, pitchMm), text: label, height: BLOCK_PIN_TEXT_MM });
         }
       }
-      const { at, leadFrom, numAt, nameAt } = pinLayout(bp, offs[i], dir, hw, hh, numbers, pitchMm);
-      primitives.push({ type: "line", pts: [leadFrom, at] });
+      const { at, leadFrom, numAt, nameAt } = pinLayout(bp, offs[i], dir, hw, hh, numbers, pitchMm, leadMm);
+      // リード線なしのブロックは線を描かない (ピン接続点が外形の辺の上)
+      if (Math.abs(leadFrom.x - at.x) > 1e-9 || Math.abs(leadFrom.y - at.y) > 1e-9) {
+        primitives.push({ type: "line", pts: [leadFrom, at] });
+      }
       const vertical = dir === "left" || dir === "right";
       const pairs = vertical ? lrPairs : tbPairs;
       const isFirst = (dir === "left" || dir === "up") && pairs.some((q) => q[0] === i);

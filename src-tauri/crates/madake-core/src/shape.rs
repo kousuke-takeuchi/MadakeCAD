@@ -42,6 +42,7 @@ pub fn new_shape(kind: ShapeKind, points: Vec<Point>) -> Shape {
         stroke_width_mm: DEFAULT_SHAPE_STROKE_MM,
         fill: None,
         dashed: false,
+        arrow_end: false,
     }
 }
 
@@ -168,6 +169,33 @@ pub fn stroke_print_color(shape: &Shape) -> &'static str {
 /// 塗りを紙へ描くときの色。塗り無し・知らない名前はNone (塗らない)。
 pub fn fill_print_color(shape: &Shape) -> Option<&'static str> {
     shape.fill.as_deref().and_then(text_print_color)
+}
+
+/// 矢印の長さ (mm) = この値 + 線の太さ × 2。
+pub const ARROW_LEN_MM: f64 = 2.0;
+/// 矢印の幅の半分 ÷ 長さ。
+pub const ARROW_HALF_WIDTH_RATIO: f64 = 0.28;
+
+/// 終点に矢印を付ける線・折れ線の、矢印の三角 (先端, 左, 右)。矢印なし・線以外・長さ0の最後の区間は None。
+pub fn arrow_head(shape: &Shape) -> Option<[Point; 3]> {
+    if !shape.arrow_end || !matches!(shape.shape, ShapeKind::Line | ShapeKind::Polyline) {
+        return None;
+    }
+    let n = shape.points.len();
+    if n < 2 {
+        return None;
+    }
+    let (tip, from) = (shape.points[n - 1], shape.points[n - 2]);
+    let (dx, dy) = (tip.x - from.x, tip.y - from.y);
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 1e-9 {
+        return None;
+    }
+    let (ux, uy) = (dx / len, dy / len);
+    let l = ARROW_LEN_MM + 2.0 * shape.stroke_width_mm;
+    let h = l * ARROW_HALF_WIDTH_RATIO;
+    let (bx, by) = (tip.x - ux * l, tip.y - uy * l);
+    Some([tip, Point::new(bx - uy * h, by + ux * h), Point::new(bx + uy * h, by - ux * h)])
 }
 
 #[cfg(test)]
@@ -329,6 +357,7 @@ mod tests {
             part_no: None,
             net: None,
             length_source: crate::model::LengthSource::Manual,
+            dashed: false, weight_mm: None,
         });
         for e in [coil, wire] {
             sheet.entities.insert(e.id(), e);
@@ -428,5 +457,32 @@ mod tests {
         let ids: Vec<_> = shapes(&sheet).map(|s| s.id).collect();
         assert_eq!(ids.len(), 2);
         assert!(ids.contains(&rect.id) && ids.contains(&line.id));
+    }
+
+    /// A line or polyline with an arrow at its end gets a triangle whose tip is the last point and which points along the last segment; its length is 2 mm plus twice the stroke width. Without the switch, and on rectangles and circles, there is no arrow.
+    /// 終点に矢印を付けた線・折れ線には三角が付く。先端は最後の点で、最後の区間の向きを向く。長さは2mm+線幅の2倍。指定が無いとき、矩形や円には矢印は付かない。
+    #[test]
+    fn an_arrow_sits_at_the_end_of_a_line() {
+        let mut line = shape(ShapeKind::Line, &[(10.0, 20.0), (30.0, 20.0)]);
+        assert_eq!(arrow_head(&line), None);
+        line.arrow_end = true;
+        line.stroke_width_mm = 0.25;
+        let [tip, a, b] = arrow_head(&line).unwrap();
+        assert_eq!(tip, Point::new(30.0, 20.0));
+        let len = ARROW_LEN_MM + 0.5;
+        assert!((a.x - (30.0 - len)).abs() < 1e-9 && (b.x - (30.0 - len)).abs() < 1e-9, "{a:?} {b:?}");
+        assert!((a.y - 20.0 - len * ARROW_HALF_WIDTH_RATIO).abs() < 1e-9 && (b.y - 20.0 + len * ARROW_HALF_WIDTH_RATIO).abs() < 1e-9);
+        // 折れ線は最後の区間の向き (ここでは上向き)
+        let mut poly = shape(ShapeKind::Polyline, &[(0.0, 0.0), (10.0, 0.0), (10.0, -10.0)]);
+        poly.arrow_end = true;
+        let [tip, a, b] = arrow_head(&poly).unwrap();
+        assert_eq!(tip, Point::new(10.0, -10.0));
+        assert!(a.y > tip.y && b.y > tip.y && (a.x - 10.0).abs() > 0.1, "{a:?} {b:?}");
+        let mut rect = shape(ShapeKind::Rect, &[(0.0, 0.0), (10.0, 10.0)]);
+        rect.arrow_end = true;
+        assert_eq!(arrow_head(&rect), None);
+        let mut dot = shape(ShapeKind::Line, &[(5.0, 5.0), (5.0, 5.0)]);
+        dot.arrow_end = true;
+        assert_eq!(arrow_head(&dot), None, "長さ0の線には向きが無い");
     }
 }

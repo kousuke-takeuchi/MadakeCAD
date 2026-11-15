@@ -1844,6 +1844,8 @@ pub fn import_dxf(
                     push(
                         &mut sheet,
                         Entity::Wire(Wire {
+                            dashed: false,
+                            weight_mm: None,
                             id: Uuid::new_v4(),
                             points,
                             color: "black".into(),
@@ -2013,12 +2015,14 @@ pub fn import_dxf(
                         let pitch = attrs.remove("BLOCK_PITCH");
                         let numbers = attrs.remove("BLOCK_NUMBERS");
                         let caption = attrs.remove("BLOCK_CAPTION");
+                        let leads = attrs.remove("BLOCK_LEADS");
                         match crate::block::imported_block_attrs(
                             pins.as_deref(),
                             size.as_deref(),
                             pitch.as_deref(),
                             numbers.as_deref(),
                             caption.as_deref(),
+                            leads.as_deref(),
                         ) {
                             Some(a) => attrs.extend(a),
                             None => report
@@ -2207,6 +2211,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: Some("101".into()),
+            dashed: false, weight_mm: None,
         }));
         push(Entity::Junction(Junction {
             id: Uuid::new_v4(),
@@ -3039,6 +3044,7 @@ mod tests {
             stroke_width_mm: 0.25,
             fill: None,
             dashed: true,
+            arrow_end: false,
         }));
         push(Entity::Shape(crate::model::Shape {
             id: Uuid::new_v4(),
@@ -3048,6 +3054,7 @@ mod tests {
             stroke_width_mm: 0.25,
             fill: None,
             dashed: false,
+            arrow_end: false,
         }));
         push(Entity::WireLegend(WireLegend {
             id: Uuid::new_v4(),
@@ -3239,6 +3246,7 @@ mod tests {
                     length_source: Default::default(),
                     part_no: None,
                     net: None,
+                    dashed: false, weight_mm: None,
                 };
                 sheet.entities.insert(wire.id, Entity::Wire(wire));
                 sheet.entities.insert(inst.id, Entity::Symbol(inst));

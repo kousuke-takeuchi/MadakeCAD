@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3278仕様項目**。
+全6領域・**3306仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -87,6 +87,8 @@
 - block_caption はブロック自身の絵を変えない: 外形・ピン・番号は属性の有無で同じ。 <sub>`block_caption_does_not_change_the_drawn_block`</sub>
 - ブロックの参照記号の置き場所は、書き出したファイルを読み戻しても残る: 取り込みは block_caption をピン表と一緒に保つ。 <sub>`imported_block_attrs_keep_the_caption_place`</sub>
 - 上辺にピンがあって左右の貫通ピンの番号をまとめないとき、箱は左右2つの番号が収まる幅になる: 4文字の番号なら、貫通でない同じ形のブロックと同じ幅になる。 <sub>`an_unmerged_feedthrough_pair_gets_room_for_both_numbers`</sub>
+- block_leads が "none" のブロックは、ピンを外形の辺の上に置き、リード線を描かない。配線は箱へ直接つながる。外形と番号はリード線ありと同じ。 <sub>`a_leadless_block_puts_its_pins_on_the_outline`</sub>
+- block_leads は "lead" と "none" だけを受け付ける。"none" は番号を内側に描くブロックでなければ断る (外側の番号はリード線の上に書くため)。 <sub>`block_leads_accepts_lead_and_none_and_needs_numbers_inside`</sub>
 
 ### cable
 
@@ -133,6 +135,12 @@
 - 片側をポートのピン1本に着けられる。接点と同じ名前の芯は名前で対応し、1本線はそのピンで終わり (横棒なし)、ネットリストは芯ごとに1ネットになる。 <sub>`a_side_lands_on_one_port_pin_by_contact_name`</sub>
 - 「<ポートのラベル>.<接点>」という名前の分岐のラベルは、芯をポートのネットのその接点に繋ぐ。labels 側のケーブルで、シートの別の場所に描いたポートへ ERC の指摘なしに給電できる。 <sub>`breakout_labels_named_like_port_contacts_join_them`</sub>
 - 芯の名前がどれも接点でなく数が同じなら並び順で対応する。名前の一部だけの一致・数の違い・ポートへの style multi は、接点を並べて断る。 <sub>`port_landing_by_order_and_refusals`</sub>
+
+### caption
+
+- caption_layout の無い (または空の) シンボルには置き場所の指定が無い: 参照記号と型番はこれまでの場所のまま。 <sub>`no_attribute_means_no_layout`</sub>
+- 行の指定は、配置点からのずれ・文字サイズ・寄せ・非表示を持つ。省いたものは既定になる (ずれ0、いつもの大きさ、中央寄せ、表示)。 <sub>`a_line_reads_offset_size_alignment_and_hide`</sub>
+- 壊れた JSON・知らないキー・0.5〜20mm の外の文字サイズ・数でないずれは断り、メッセージに属性名を出す。 <sub>`bad_layouts_are_refused`</sub>
 
 ### Commandエンジン (undo/redo)
 
@@ -278,6 +286,10 @@
 - 0.18〜1.0mm の外の太さや数でない太さは断り、シートは変わらない。 <sub>`set_sheet_wire_style_refuses_a_weight_out_of_range`</sub>
 - 配線の描き方を設定していないシートは、2つの設定を書き出さない。ファイルはこの設定ができる前と同じ形になる。 <sub>`an_unset_wire_style_is_not_written_to_the_file`</sub>
 - block_caption が "above" でも "inside" でもないブロックは断り、図面は変わらない。 <sub>`a_block_with_an_unknown_caption_place_is_refused`</sub>
+- シートの配線の描き方は、シンボルの外形の太さと鮮やかな配線の色も保存し、元に戻すと4つの値がすべて前に戻る。 <sub>`set_sheet_wire_style_stores_outline_weight_and_vivid_colours`</sub>
+- 線ごとの太さが0.18〜2.0mmの外の配線は断る。破線で太さ2.0mmの配線は受け付け、2つの設定を保つ。 <sub>`a_wire_keeps_its_dash_and_weight_and_refuses_a_bad_weight`</sub>
+- ペンの太さ付きの書体は0.1〜1.0mmなら受け付け、範囲の外は断る。ペンの太さはプロジェクトに保存され、元に戻すと消える。 <sub>`set_text_font_takes_a_pen_width_in_range`</sub>
+- caption_layout を読めないシンボルは断り、図面は変わらない。読めるものは、ブロックに限らずどのシンボルでも受け付ける。 <sub>`a_symbol_with_a_bad_caption_layout_is_refused`</sub>
 
 ### connector
 
@@ -398,8 +410,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは24 (シートの配線の描き方とブロックの参照記号の位置を追加した版) である。 <sub>`the_current_format_version_is_twenty_four`</sub>
-- 形式23のプロジェクトファイルはこのビルドで開け、形式24になる。シートの配線は既定の太さで、配線注記も出たままになる。 <sub>`a_version_23_file_opens_as_version_24`</sub>
+- 現行のファイル形式バージョンは25 (線と文字の描き方 = 外形の太さ・鮮やかな配線の色・配線ごとの破線と太さ・矢印・文字のペン・リード線なしのブロック・参照記号の配置を追加した版) である。 <sub>`the_current_format_version_is_twenty_five`</sub>
+- 形式23のプロジェクトファイルはこのビルドで開け、現行の形式になる。シートの配線は既定の太さで、配線注記も出たままになる。 <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - 形式22のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性とピンはそのまま残る。 <sub>`a_version_22_file_opens_as_the_current_version`</sub>
 - 形式21のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性と5mm間隔のピンはそのまま残る。 <sub>`a_version_21_file_opens_as_the_current_version`</sub>
 - ストロークフォントを持つプロジェクトはファイルを往復でき、持たないプロジェクトはtext_fontのキーを書かない。 <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
@@ -426,6 +438,7 @@
 - 接点をすべて消したブロックは種類「symbol」で保存されるので、古いビルドでもまたそのファイルを開ける。 <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
 - 回帰テスト (最初から通る): ポートのブロックを含む形式18のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_18_file_loads_unchanged`</sub>
 - 接点が無くコネクタだけを持つブロックも種類「port_block」で保存され、読み直すとコネクタ付きで戻り、IPC・MCP の JSON は「symbol」のまま。コネクタを消せばまた「symbol」で保存される。 <sub>`a_block_with_connectors_is_saved_as_port_block`</sub>
+- 形式24のプロジェクトファイルはこのビルドで開け、形式25になる。配線は実線・シートの太さのまま、外形の太さも変わらず、書体のペンの太さは未設定になる。 <sub>`a_version_24_file_opens_as_version_25`</sub>
 
 ### KiCadインポート / エクスポート
 
@@ -932,6 +945,7 @@
 - 図形は部品表にも電線リストにも出ず、図形の中に入った配線のハーネス列は空のままである (筐体の囲みをハーネスではなく図形で描く理由)。 <sub>`shapes_never_reach_the_parts_list_or_the_wire_list`</sub>
 - 図形は整頓メトリクスの対象外なので、注記の枠をグリッドから外して描いても図面の点数は下がらない。 <sub>`shapes_are_left_out_of_the_tidy_metrics`</sub>
 - シートの図形を数えると図形だけが返り、配線・注記・ハーネス境界は混ざらない。 <sub>`only_shapes_are_listed`</sub>
+- 終点に矢印を付けた線・折れ線には三角が付く。先端は最後の点で、最後の区間の向きを向く。長さは2mm+線幅の2倍。指定が無いとき、矩形や円には矢印は付かない。 <sub>`an_arrow_sits_at_the_end_of_a_line`</sub>
 
 ### DCシミュレーション
 
@@ -1110,6 +1124,12 @@
 - block_caption が "inside" のブロックは、参照記号と型番を外形の中に中央揃えで書き、2行のまとまりを箱の中央の高さにそろえる。属性が無ければ箱の上のまま。 <sub>`a_block_can_write_its_caption_inside_the_outline`</sub>
 - 参照記号だけ、または型番だけのとき、中に書く1行は箱の中央の高さにそろう。 <sub>`a_single_inside_caption_line_is_centred`</sub>
 - 分岐点の丸は、既定の配線の太さでは半径0.6mmのまま、太い配線のシートでは太さの0.9倍になり、線に埋もれない。 <sub>`the_junction_dot_grows_with_a_thick_wire`</sub>
+- シンボルの外形は、太さを設定していないシートでは0.3mm、設定したシートではその太さで描かれる。 <sub>`symbol_outlines_are_drawn_at_the_weight_of_the_sheet`</sub>
+- 鮮やかな配線の色のシートは、黄の配線を純色の黄で描く。設定が無ければ紙で見やすい濃い色で描く。配線の色名は変わらない。 <sub>`a_sheet_can_draw_wires_in_vivid_colours`</sub>
+- 配線は破線にでき、その線だけの太さを持てる: その配線は破線・自分の太さで描かれ、同じシートの普通の配線は実線・シートの太さのまま。 <sub>`a_wire_can_be_dashed_with_its_own_weight`</sub>
+- 終点に矢印のある線の図形は、線と同じ色で塗った三角と一緒に描かれる。矢印の無い同じ線には三角は無い。 <sub>`a_line_shape_can_end_in_an_arrow`</sub>
+- 書体にペンの太さがあると、文字は大きさによらずその太さで描かれ、太字は1.5倍になる。ペンの太さが無ければ、太さは文字の大きさに比例する。 <sub>`a_text_pen_fixes_the_stroke_width`</sub>
+- caption_layout を持つシンボルは、参照記号を配置点からの指定のずれ・大きさ・寄せで書く。指定の無い型番の行はこれまでの場所のまま。非表示にした行は書かない。 <sub>`a_caption_layout_places_each_line`</sub>
 
 ### シンボルライブラリ
 
@@ -2277,6 +2297,12 @@
 - 区間ケーブルは区間の線の近くをクリックすると掴める <sub>`多芯ケーブル`</sub>
 - 区間の片側の芯が全部1つのポートのピンに着くと、その側には横棒を描かない (Rust の run_bars と同じ) <sub>`多芯ケーブル`</sub>
 
+### caption
+
+- caption_layout の無い (または空の) シンボルには置き場所の指定が無い <sub>`caption layout`</sub>
+- 行の指定は、配置点からのずれ・文字サイズ・寄せ・非表示を持つ。省いたものは既定になる (ずれ0、いつもの大きさ、中央寄せ、表示) <sub>`caption layout`</sub>
+- 壊れた JSON・知らないキー・0.5〜20mm の外の文字サイズ・数でないずれは断り、メッセージに属性名を出す。描画は壊れた属性を無いものとして扱う <sub>`caption layout`</sub>
+
 ### deviceTree
 
 - 展開中のデバイスは、見出しの下に機能の行が続く <sub>`デバイスツリーの整形`</sub>
@@ -2363,6 +2389,8 @@
 - block_caption が "inside" のブロックは、参照記号と型番を箱の中央に置く。2行のまとまりの中心が箱の中心の高さになる。属性が無ければ箱の上のまま <sub>`block caption place (Rust twin)`</sub>
 - 参照記号だけ、または型番だけのとき、中に書く1行は箱の中央の高さにそろう <sub>`block caption place (Rust twin)`</sub>
 - block_caption はブロック自身の絵を変えない: 図形とピンは属性の有無で同じ <sub>`block caption place (Rust twin)`</sub>
+- block_leads が "none" のブロックは、ピンを外形の辺の上に置き、リード線を描かない。外形と番号はリード線ありと同じ <sub>`leadless blocks (Rust twin)`</sub>
+- block_leads は "lead" と "none" だけを受け付け、"none" は番号を内側に描くブロックでなければ断る <sub>`leadless blocks (Rust twin)`</sub>
 
 ### frameEditor
 
@@ -2733,6 +2761,7 @@
 - シートの図形を数えると図形だけが返る(ハーネス境界は混ざらない) <sub>`shape commands`</sub>
 - 作図ツールのidは4種の図形にひとつずつ対応する <sub>`shape commands`</sub>
 - 図形は電線リストのハーネス列を汚さない(筐体をハーネスで囲まなくてよくなる理由) <sub>`shapes and the reports`</sub>
+- 終点に矢印を付けた線・折れ線には三角が付く。先端は最後の点で、最後の区間の向きを向き、長さは2mm+線幅の2倍。指定が無いとき・矩形・長さ0の線には付かない <sub>`arrow at the end of a line`</sub>
 
 ### sheets
 
@@ -2761,6 +2790,8 @@
 - 字形は1つのidにつき1回だけ取りに行き、成功した結果を使い回す <sub>`glyph loading`</sub>
 - 取得に失敗したら null を返し、その失敗は覚えない (次に読み込むときにまた取りに行く) <sub>`glyph loading`</sub>
 - 配置は Rust 側と共有のケース表のとおりの幅と最初の点になる (二つの描画で字の位置が食い違わない) <sub>`shared layout cases`</sub>
+- 書体にペンの太さがあると、文字は大きさによらずその太さで描かれ、太字は1.5倍になる。無ければ太さは大きさに比例する <sub>`text pen`</sub>
+- 書体の設定のペンの太さは0.1〜1.0mmだけを使う。範囲外・未設定は無いものとして扱う <sub>`text pen`</sub>
 
 ### surfer
 
@@ -2993,6 +3024,9 @@
 - 0.18〜1.0mm の外の太さや数でない太さは使わず、既定の0.35mmで描く <sub>`sheet wire style`</sub>
 - 配線注記を描かない設定は、シートが true を持つときだけ有効になる <sub>`sheet wire style`</sub>
 - 分岐点の丸は、既定の配線の太さでは半径0.6mmのまま、太い配線のシートでは太さの0.9倍になる <sub>`junction dot on thick wires`</sub>
+- シンボルの外形は、太さを設定していないシートでは0.3mm、設定したシートではその太さになる。範囲外は0.3mm <sub>`outline weight, own wire weight and vivid colours`</sub>
+- 配線は自分の太さ (0.18〜2.0mm) があればそれ、無ければシートの太さで描く <sub>`outline weight, own wire weight and vivid colours`</sub>
+- 鮮やかな色は純色の表で決まる。知らない色名・黒・#始まりは表に無い (いつもの色を使う) <sub>`outline weight, own wire weight and vivid colours`</sub>
 
 ### xref
 

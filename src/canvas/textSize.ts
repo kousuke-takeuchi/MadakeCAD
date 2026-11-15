@@ -17,7 +17,7 @@ export function textPx(mm: number, scale: number): number {
   return px < MIN_TEXT_PX ? 0 : px;
 }
 
-import { CAP_HEIGHT_RATIO, activeUnitStroke, strokeWidth, type UnitStroke } from "./strokeFont";
+import { CAP_HEIGHT_RATIO, activeUnitStroke, textStrokeWidth, type UnitStroke } from "./strokeFont";
 
 const hidden = new WeakMap<object, boolean>();
 /** 直前の `setDrawingFont` の大きさ (図面 mm と拡大率) と太字かどうか (ストロークフォントで描くときに使う)。 */
@@ -91,7 +91,7 @@ export function drawingText(ctx: CanvasRenderingContext2D, text: string, x: numb
     ctx.translate(dx, dy);
     ctx.strokeStyle = ctx.fillStyle;
     // 太さは図面の mm で決めて (SVG と同じ) 画面へ拡大し、他の線と同じく 1px 未満にはしない
-    ctx.lineWidth = Math.max(1, strokeWidth(size.mm, size.bold) * size.scale) / px;
+    ctx.lineWidth = Math.max(1, textStrokeWidth(size.mm, size.bold) * size.scale) / px;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     if (t.path) {

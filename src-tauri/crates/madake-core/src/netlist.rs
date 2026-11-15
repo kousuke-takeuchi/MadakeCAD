@@ -839,6 +839,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: None,
+            dashed: false, weight_mm: None,
         })
     }
 

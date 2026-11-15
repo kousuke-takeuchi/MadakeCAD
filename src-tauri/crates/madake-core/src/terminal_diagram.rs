@@ -619,6 +619,7 @@ mod tests {
             length_source: Default::default(),
             part_no: part.map(str::to_string),
             net: None,
+            dashed: false, weight_mm: None,
         })
     }
 

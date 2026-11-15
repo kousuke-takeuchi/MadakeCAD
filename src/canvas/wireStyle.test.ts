@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Sheet } from "../ipc";
 import { junctionDotRMm } from "./renderer";
-import { DEFAULT_WIRE_WEIGHT_MM, hidesWireNotes, wireWeightMm } from "./wireStyle";
+import { DEFAULT_WIRE_WEIGHT_MM, hidesWireNotes, symbolWeightMm, vividWireColor, wireWeightMm, wireWeightOf } from "./wireStyle";
 
 const sheet = (extra: Record<string, unknown>): Sheet => ({ entities: {}, ...extra }) as unknown as Sheet;
 
@@ -44,3 +44,30 @@ describe("junction dot on thick wires", () => {
   });
 });
 
+describe("outline weight, own wire weight and vivid colours", () => {
+  // ja: シンボルの外形は、太さを設定していないシートでは0.3mm、設定したシートではその太さになる。範囲外は0.3mm
+  it("uses 0.3 mm for outlines unless the sheet sets a weight in range", () => {
+    expect(symbolWeightMm(sheet({}))).toBe(0.3);
+    expect(symbolWeightMm(sheet({ symbol_weight_mm: 1.0 }))).toBe(1.0);
+    expect(symbolWeightMm(sheet({ symbol_weight_mm: 3 }))).toBe(0.3);
+  });
+
+  // ja: 配線は自分の太さ (0.18〜2.0mm) があればそれ、無ければシートの太さで描く
+  it("draws a wire at its own weight when it has one, else at the sheet's", () => {
+    const s = sheet({ wire_weight_mm: 0.7 });
+    expect(wireWeightOf(s, {})).toBe(0.7);
+    expect(wireWeightOf(s, { weight_mm: null })).toBe(0.7);
+    expect(wireWeightOf(s, { weight_mm: 2.0 })).toBe(2.0);
+    expect(wireWeightOf(s, { weight_mm: 2.5 })).toBe(0.7);
+    expect(wireWeightOf(null, { weight_mm: 0.18 })).toBe(0.18);
+  });
+
+  // ja: 鮮やかな色は純色の表で決まる。知らない色名・黒・#始まりは表に無い (いつもの色を使う)
+  it("maps colour names to pure colours and leaves unknown names alone", () => {
+    expect(vividWireColor("yellow")).toBe("#ffff00");
+    expect(vividWireColor("light_blue")).toBe("#00ffff");
+    expect(vividWireColor("桃")).toBe("#ff00ff");
+    expect(vividWireColor("black")).toBeNull();
+    expect(vividWireColor("#123456")).toBeNull();
+  });
+});

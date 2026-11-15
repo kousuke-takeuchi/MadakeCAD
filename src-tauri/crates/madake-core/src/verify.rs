@@ -792,6 +792,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: None,
+            dashed: false, weight_mm: None,
         })
     }
 
@@ -1173,6 +1174,7 @@ mod tests {
                 length_source: Default::default(),
                 part_no: None,
                 net: None,
+                dashed: false, weight_mm: None,
             })
         };
         entities.push(mk_wire(&[(67.5, 100.0), (92.5, 100.0)]));

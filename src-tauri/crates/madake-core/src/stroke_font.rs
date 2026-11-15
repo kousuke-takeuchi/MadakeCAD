@@ -164,7 +164,7 @@ pub const FULL_ADVANCE: f64 = 30.0;
 /// 線の太さ ÷ フォントサイズ、線の太さの下限 (mm)、太字の倍率。
 const STROKE_RATIO: f64 = 0.07;
 const STROKE_MIN: f64 = 0.13;
-const BOLD_FACTOR: f64 = 1.5;
+pub(crate) const BOLD_FACTOR: f64 = 1.5;
 
 /// 配置した文字列。座標はベースラインの書き出し位置が原点、y は下向き (用紙と同じ)。
 #[derive(Debug, Clone, PartialEq)]

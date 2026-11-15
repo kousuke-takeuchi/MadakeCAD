@@ -302,6 +302,8 @@ pub fn import_kicad_sch(
         push(
             &mut sheet,
             Entity::Wire(Wire {
+                dashed: false,
+                weight_mm: None,
                 id: Uuid::new_v4(),
                 points,
                 color: "black".into(),
@@ -444,6 +446,7 @@ pub fn import_kicad_sch(
                 opt("block_pitch").as_deref(),
                 opt("block_numbers").as_deref(),
                 opt("block_caption").as_deref(),
+                opt("block_leads").as_deref(),
             ) {
                 Some(a) => attrs = a,
                 None => report
@@ -1107,6 +1110,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: Some("101".into()),
+            dashed: false, weight_mm: None,
         }));
         push(Entity::Junction(Junction { id: Uuid::new_v4(), at: Point::new(40.0, 10.0) }));
         push(Entity::NetLabel(NetLabel {
@@ -1163,6 +1167,7 @@ mod tests {
             stroke_width_mm: 0.25,
             fill: None,
             dashed: false,
+            arrow_end: false,
         }));
         push(Entity::WireLegend(WireLegend {
             id: Uuid::new_v4(),

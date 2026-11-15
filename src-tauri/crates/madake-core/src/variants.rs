@@ -385,6 +385,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: Some("101".into()),
+            dashed: false, weight_mm: None,
         });
         // 引き出し線つき注記 (G20): 対象はシンボル。複製で写し替えが要る唯一のフィールド
         let note = Entity::Text(TextEntity {
@@ -406,6 +407,7 @@ mod tests {
             stroke_width_mm: 0.25,
             fill: None,
             dashed: true,
+            arrow_end: false,
         });
         let legend = Entity::WireLegend(WireLegend {
             id: Uuid::new_v4(),

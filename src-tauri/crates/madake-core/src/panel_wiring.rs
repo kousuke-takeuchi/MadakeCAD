@@ -235,6 +235,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: Some("101".into()),
+            dashed: false, weight_mm: None,
         });
         sch.entities.insert(w.id(), w);
         let mut panel = Sheet::new_kind("盤 CP-1", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);

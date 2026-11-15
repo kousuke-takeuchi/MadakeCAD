@@ -35,6 +35,9 @@ pub const BLOCK_SIZE_ATTR: &str = "block_size";
 pub const BLOCK_PITCH_ATTR: &str = "block_pitch";
 /// ピン番号を外形の外に描くか内に描くかを持つ属性キー (`"outside"` か `"inside"`。無ければ外)。
 pub const BLOCK_NUMBERS_ATTR: &str = "block_numbers";
+/// リード線 (外形からピン接続点までの線) を描くかを持つ属性キー (`"lead"` か `"none"`。無ければ描く)。
+/// `"none"` はピンを外形の辺の上に置く: 配線が箱に直接つながる。番号を内側に描くブロックだけで使える。
+pub const BLOCK_LEADS_ATTR: &str = "block_leads";
 /// 参照記号・型番を外形の上に描くか中に描くかを持つ属性キー (`"above"` か `"inside"`。無ければ上)。
 pub const BLOCK_CAPTION_ATTR: &str = "block_caption";
 /// 細かいピン間隔 (mm)。グリッドと同じ。
@@ -67,6 +70,26 @@ impl BlockPitch {
         match self {
             BlockPitch::Coarse => BLOCK_SIZE_STEP_MM,
             BlockPitch::Fine => BLOCK_FINE_PITCH_MM,
+        }
+    }
+}
+
+/// リード線の有無。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BlockLeads {
+    /// 外形から [`BLOCK_LEAD_MM`] のリード線を描き、その先がピン接続点 (これまでどおり)。
+    #[default]
+    Lead,
+    /// リード線なし。ピン接続点は外形の辺の上。
+    None,
+}
+
+impl BlockLeads {
+    /// 外形からピン接続点までの長さ (mm)。
+    pub fn mm(self) -> f64 {
+        match self {
+            BlockLeads::Lead => BLOCK_LEAD_MM,
+            BlockLeads::None => 0.0,
         }
     }
 }
@@ -166,6 +189,8 @@ pub struct BlockSpec {
     pub numbers: BlockNumbers,
     /// 参照記号・型番を描く場所。
     pub caption: BlockCaption,
+    /// リード線の有無。
+    pub leads: BlockLeads,
 }
 
 impl BlockSpec {
@@ -367,7 +392,15 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
             ));
         }
     }
-    Ok(BlockSpec { pins, size, pitch, numbers, caption })
+    let leads = match attrs.get(BLOCK_LEADS_ATTR).map(|s| s.trim()) {
+        None | Some("lead") => BlockLeads::Lead,
+        Some("none") => BlockLeads::None,
+        Some(other) => return Err(format!("{BLOCK_LEADS_ATTR} must be \"lead\" or \"none\": {other:?}")),
+    };
+    if leads == BlockLeads::None && numbers != BlockNumbers::Inside {
+        return Err(format!("{BLOCK_LEADS_ATTR} none needs {BLOCK_NUMBERS_ATTR} inside"));
+    }
+    Ok(BlockSpec { pins, size, pitch, numbers, caption, leads })
 }
 
 /// ピン`no`の接点を調べる: 空でない・ピンの中で重ならない・2つ以上・[`BLOCK_CONTACT_MAX`]まで。
@@ -682,37 +715,37 @@ struct PinLayout {
 
 /// ピンの描き位置。コネクタの無いピンは今までどおり。コネクタのあるピンは接続点が外形から5mm、
 /// リードは絵の外端から、番号は絵の外 (左右はリードの上、上下はリードの右)、左右の名前は3mm内側から。
-fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64, numbers: BlockNumbers, pitch_mm: f64) -> PinLayout {
+fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64, numbers: BlockNumbers, pitch_mm: f64, lead_mm: f64) -> PinLayout {
     let edge = edge_point(dir, off, hw, hh);
     if bp.connector.is_none() {
         let inside = numbers == BlockNumbers::Inside;
         let num_w = name_width(bp.no.trim());
         let (at, num_at, name_at) = match dir {
             PinDir::Left => (
-                Point::new(-hw - BLOCK_LEAD_MM, off),
+                Point::new(-hw - lead_mm, off),
                 if inside {
                     Point::new(-hw + BLOCK_TEXT_PAD_MM + num_w / 2.0, off)
                 } else {
-                    Point::new(-hw - BLOCK_LEAD_MM / 2.0, off - BLOCK_PIN_TEXT_MM)
+                    Point::new(-hw - lead_mm / 2.0, off - BLOCK_PIN_TEXT_MM)
                 },
                 Point::new(-hw + BLOCK_TEXT_PAD_MM + name_width(&bp.name) / 2.0, off),
             ),
             PinDir::Right => (
-                Point::new(hw + BLOCK_LEAD_MM, off),
+                Point::new(hw + lead_mm, off),
                 if inside {
                     Point::new(hw - BLOCK_TEXT_PAD_MM - num_w / 2.0, off)
                 } else {
-                    Point::new(hw + BLOCK_LEAD_MM / 2.0, off - BLOCK_PIN_TEXT_MM)
+                    Point::new(hw + lead_mm / 2.0, off - BLOCK_PIN_TEXT_MM)
                 },
                 Point::new(hw - BLOCK_TEXT_PAD_MM - name_width(&bp.name) / 2.0, off),
             ),
             PinDir::Up => (
-                Point::new(off, -hh - BLOCK_LEAD_MM),
+                Point::new(off, -hh - lead_mm),
                 Point::new(off, -hh + BLOCK_PIN_TEXT_MM),
                 Point::new(off, -hh + BLOCK_PIN_TEXT_MM + pitch_mm / 2.0),
             ),
             PinDir::Down => (
-                Point::new(off, hh + BLOCK_LEAD_MM),
+                Point::new(off, hh + lead_mm),
                 Point::new(off, hh - BLOCK_PIN_TEXT_MM),
                 Point::new(off, hh - BLOCK_PIN_TEXT_MM - pitch_mm / 2.0),
             ),
@@ -821,6 +854,7 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
     let (hw, hh) = (w / 2.0, h / 2.0);
     let (sx, sy) = (axis_shift(w, spec.pitch), axis_shift(h, spec.pitch));
     let (pitch_mm, numbers) = (spec.pitch.mm(), spec.numbers);
+    let lead_mm = spec.leads.mm();
     // コネクタの無いブロックは今までどおり長方形1つ。あれば絵の所を空けた線分 (白い口に見せる)
     let mut primitives = if spec.has_connectors() {
         outline_segments(&spec.pins, hw, hh)
@@ -862,8 +896,11 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
                     primitives.push(text(at.x, at.y, &label, BLOCK_PIN_TEXT_MM));
                 }
             }
-            let layout = pin_layout(bp, offs[i], dir, hw, hh, numbers, pitch_mm);
-            primitives.push(lead(layout.lead_from.x, layout.lead_from.y, layout.at.x, layout.at.y));
+            let layout = pin_layout(bp, offs[i], dir, hw, hh, numbers, pitch_mm, lead_mm);
+            // リード線なしのブロックは線を描かない (ピン接続点が外形の辺の上)
+            if (layout.lead_from.x - layout.at.x).abs() > 1e-9 || (layout.lead_from.y - layout.at.y).abs() > 1e-9 {
+                primitives.push(lead(layout.lead_from.x, layout.lead_from.y, layout.at.x, layout.at.y));
+            }
             let (is_first, is_second) = match dir {
                 PinDir::Left => (lr_pairs.iter().any(|p| p.0 == i), false),
                 PinDir::Right => (false, lr_pairs.iter().any(|p| p.1 == i)),
@@ -976,6 +1013,7 @@ pub fn imported_block_attrs(
     pitch: Option<&str>,
     numbers: Option<&str>,
     caption: Option<&str>,
+    leads: Option<&str>,
 ) -> Option<BTreeMap<String, String>> {
     let mut attrs = BTreeMap::new();
     for (k, v) in [
@@ -984,6 +1022,7 @@ pub fn imported_block_attrs(
         (BLOCK_PITCH_ATTR, pitch),
         (BLOCK_NUMBERS_ATTR, numbers),
         (BLOCK_CAPTION_ATTR, caption),
+        (BLOCK_LEADS_ATTR, leads),
     ] {
         if let Some(v) = v.filter(|v| !v.is_empty()) {
             attrs.insert(k.to_string(), v.to_string());
@@ -2301,7 +2340,7 @@ mod tests {
         assert!(BLOCK_UNREADABLE_WARNING.contains("属性"), "{BLOCK_UNREADABLE_WARNING}");
         assert!(!BLOCK_UNREADABLE_WARNING.contains("ピン表"), "{BLOCK_UNREADABLE_WARNING}");
         assert!(BLOCK_UNREADABLE_WARNING.contains("見本の箱"), "{BLOCK_UNREADABLE_WARNING}");
-        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, Some("3"), None, None).is_none(), "間隔が読めないときも警告の対象");
+        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, Some("3"), None, None, None).is_none(), "間隔が読めないときも警告の対象");
     }
 
     fn placed_fine(pins: &str, size: &str) -> (crate::model::SymbolInstance, SymbolDef) {
@@ -2660,6 +2699,15 @@ mod tests {
         let mut feed_top = fine(r#"{"left":[{"no":"1234"}],"right":[{"no":"1234"}],"top":[{"no":"T"}]}"#, None);
         feed_top.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
         cases.push(("feedthrough-inside-pair-with-top".into(), feed_top));
+        let mut bare = fine(r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}"#, Some(r#"{"w":5,"h":7.5}"#));
+        bare.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        bare.insert(BLOCK_LEADS_ATTR.to_string(), "none".to_string());
+        cases.push(("leadless-feedthrough".into(), bare));
+        let mut bare_tb = BTreeMap::new();
+        bare_tb.insert(BLOCK_PINS_ATTR.to_string(), r#"{"left":[{"no":"A"}],"top":[{"no":"1"}],"bottom":[{"no":"2"}]}"#.to_string());
+        bare_tb.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        bare_tb.insert(BLOCK_LEADS_ATTR.to_string(), "none".to_string());
+        cases.push(("leadless-coarse-three-sides".into(), bare_tb));
         cases
     }
 
@@ -2725,10 +2773,10 @@ mod tests {
     /// ブロックの参照記号の置き場所は、書き出したファイルを読み戻しても残る: 取り込みは block_caption をピン表と一緒に保つ。
     #[test]
     fn imported_block_attrs_keep_the_caption_place() {
-        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("inside")).unwrap();
+        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("inside"), None).unwrap();
         assert_eq!(attrs[BLOCK_CAPTION_ATTR], "inside");
-        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("below")).is_none());
-        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, None).unwrap();
+        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("below"), None).is_none());
+        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, None, None).unwrap();
         assert!(!attrs.contains_key(BLOCK_CAPTION_ATTR));
     }
 
@@ -2751,5 +2799,59 @@ mod tests {
         merged.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
         let (mx1, _, mx2, _) = outline_of(&block_symbol(&merged).unwrap());
         assert!(mx2 - mx1 < ax2 - ax1, "{} < {}", mx2 - mx1, ax2 - ax1);
+    }
+
+    fn leadless(pins: &str, size: Option<&str>) -> BTreeMap<String, String> {
+        let mut a = fine(pins, size);
+        a.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        a.insert(BLOCK_LEADS_ATTR.to_string(), "none".to_string());
+        a
+    }
+
+    /// A block with block_leads "none" puts its pins on the outline itself and draws no lead lines, so a wire runs straight to the box; the outline and the numbers are the same as with leads.
+    /// block_leads が "none" のブロックは、ピンを外形の辺の上に置き、リード線を描かない。配線は箱へ直接つながる。外形と番号はリード線ありと同じ。
+    #[test]
+    fn a_leadless_block_puts_its_pins_on_the_outline() {
+        let pins = r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}"#;
+        let size = Some(r#"{"w":5,"h":7.5}"#);
+        let mut with_leads = fine(pins, size);
+        with_leads.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let (a, b) = (block_symbol(&with_leads).unwrap(), block_symbol(&leadless(pins, size)).unwrap());
+        assert_eq!(outline_of(&a), outline_of(&b));
+        let (x1, _, x2, _) = outline_of(&b);
+        let xs: Vec<f64> = b.pins.iter().map(|p| p.at.x).collect();
+        assert_eq!(xs, [x1, x1, x2, x2], "ピンは外形の左右の辺の上");
+        assert_eq!(a.pins.iter().map(|p| p.at.y).collect::<Vec<_>>(), b.pins.iter().map(|p| p.at.y).collect::<Vec<_>>());
+        let lines = |d: &SymbolDef| d.primitives.iter().filter(|p| matches!(p, Primitive::Line { .. })).count();
+        let texts = |d: &SymbolDef| d.primitives.iter().filter(|p| matches!(p, Primitive::Text { .. })).count();
+        assert_eq!((lines(&a), lines(&b)), (4, 0), "リード線は描かない");
+        assert_eq!(texts(&a), texts(&b), "番号は同じ");
+        assert!(b.pins.iter().all(|p| on_grid(p.at.x) && on_grid(p.at.y)));
+        // 上下のピンも辺の上
+        let tb = block_symbol(&leadless(r#"{"top":[{"no":"1"}],"bottom":[{"no":"2"}]}"#, Some(r#"{"w":5,"h":5}"#))).unwrap();
+        let (_, y1, _, y2) = outline_of(&tb);
+        assert_eq!(tb.pins.iter().map(|p| p.at.y).collect::<Vec<_>>(), [y1, y2]);
+    }
+
+    /// block_leads accepts only "lead" and "none", and "none" is refused unless the numbers are drawn inside (a number outside sits on the lead).
+    /// block_leads は "lead" と "none" だけを受け付ける。"none" は番号を内側に描くブロックでなければ断る (外側の番号はリード線の上に書くため)。
+    #[test]
+    fn block_leads_accepts_lead_and_none_and_needs_numbers_inside() {
+        let pins = r#"{"left":[{"no":"1"}]}"#;
+        assert_eq!(parse_block_spec(&fine(pins, None)).unwrap().leads, BlockLeads::Lead);
+        assert_eq!(parse_block_spec(&leadless(pins, None)).unwrap().leads, BlockLeads::None);
+        let mut explicit = fine(pins, None);
+        explicit.insert(BLOCK_LEADS_ATTR.to_string(), " lead ".to_string());
+        assert_eq!(parse_block_spec(&explicit).unwrap().leads, BlockLeads::Lead);
+        let mut outside = fine(pins, None);
+        outside.insert(BLOCK_LEADS_ATTR.to_string(), "none".to_string());
+        let err = parse_block_spec(&outside).unwrap_err();
+        assert_eq!(err, "block_leads none needs block_numbers inside");
+        let mut bad = leadless(pins, None);
+        bad.insert(BLOCK_LEADS_ATTR.to_string(), "short".to_string());
+        assert!(parse_block_spec(&bad).unwrap_err().contains(BLOCK_LEADS_ATTR));
+        // 取り込みも保つ
+        let kept = imported_block_attrs(Some(pins), None, Some("2.5"), Some("inside"), None, Some("none")).unwrap();
+        assert_eq!(kept[BLOCK_LEADS_ATTR], "none");
     }
 }

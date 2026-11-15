@@ -150,6 +150,7 @@ mod tests {
             length_source: crate::model::LengthSource::Manual,
             part_no: None,
             net: None,
+            dashed: false, weight_mm: None,
         }
     }
 

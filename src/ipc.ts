@@ -57,6 +57,10 @@ export interface Wire {
   length_source?: LengthSource;
   part_no: string | null;
   net: string | null;
+  /** 破線で描く (母線など)。省略時は実線。 */
+  dashed?: boolean;
+  /** この配線だけの線の太さ (mm)。省略時はシートの太さ。 */
+  weight_mm?: number | null;
 }
 
 /** 電線長の出所 (Rustの`LengthSource`)。 */
@@ -238,6 +242,8 @@ export interface Shape {
   fill?: TextColorToken | null;
   /** 破線で描くか (既定 false = 実線)。 */
   dashed: boolean;
+  /** 線・折れ線の終点に矢印を付ける。 */
+  arrow_end?: boolean;
 }
 
 /** 盤の外形 (筐体) と取付板。盤レイアウトシート専用 (M4 §8)。 */
@@ -368,6 +374,10 @@ export interface Sheet {
   wire_weight_mm?: number | null;
   /** 配線注記 (線径・色名・長さ) を描かない。未設定は描く。 */
   hide_wire_notes?: boolean;
+  /** シンボル・ブロックの外形の線の太さ (mm)。未設定は既定の0.3mm。 */
+  symbol_weight_mm?: number | null;
+  /** 配線を鮮やかな色 (純色) で描く。色名は変えない。 */
+  vivid_wire_colors?: boolean;
   /**
    * 整えバリアントの複製なら、その元シートのid (madake-coreの`Sheet::variant_of`)。
    *
@@ -424,6 +434,8 @@ export interface StrokeFontData {
 export interface TextFont {
   id: string;
   latin?: Latin;
+  /** 文字のペンの太さ (mm)。あれば大きさによらずこの太さで描く (太字は1.5倍)。 */
+  pen_mm?: number | null;
 }
 
 /** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */
@@ -452,7 +464,14 @@ export type Command =
   | { type: "set_revisions"; sheet_id: string; revisions: Revision[] }
   /** シートの注記文字高 (mm) の設定。nullで既定 (2.0mm) へ戻す。範囲は1.0〜3.5mm。 */
   | { type: "set_sheet_annotation_text"; sheet_id: string; height_mm: number | null }
-  | { type: "set_sheet_wire_style"; sheet_id: string; weight_mm: number | null; hide_notes: boolean }
+  | {
+      type: "set_sheet_wire_style";
+      sheet_id: string;
+      weight_mm: number | null;
+      hide_notes: boolean;
+      symbol_weight_mm?: number | null;
+      vivid_colors?: boolean;
+    }
   /**
    * シートの用紙サイズ・向きの変更 (G15)。既存エンティティの座標はそのまま
    * (動かない・消えない)。新しい用紙の外に出たエンティティはERC警告

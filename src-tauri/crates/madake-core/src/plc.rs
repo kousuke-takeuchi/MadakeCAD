@@ -977,6 +977,8 @@ fn ladder_entities(
 
 fn wire(points: Vec<Point>) -> Entity {
     Entity::Wire(Wire {
+        dashed: false,
+        weight_mm: None,
         id: Uuid::new_v4(),
         points,
         color: String::new(),
@@ -1230,6 +1232,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: Some("101".into()),
+            dashed: false, weight_mm: None,
         });
         let sheet = project.sheet_mut(sid).unwrap();
         for e in [r1, wire] {

@@ -222,6 +222,8 @@ async fn simulate_op_returns_result() {
         attrs,
     });
     let w1 = madake_core::Entity::Wire(madake_core::Wire {
+        dashed: false,
+        weight_mm: None,
         id: uuid::Uuid::new_v4(),
         points: vec![madake_core::Point::new(67.5, 100.0), madake_core::Point::new(102.5, 100.0)],
         color: "red".into(),
@@ -232,6 +234,8 @@ async fn simulate_op_returns_result() {
         net: None,
     });
     let w2 = madake_core::Entity::Wire(madake_core::Wire {
+        dashed: false,
+        weight_mm: None,
         id: uuid::Uuid::new_v4(),
         points: vec![
             madake_core::Point::new(117.5, 100.0),

@@ -49,12 +49,19 @@ pub enum Command {
     /// シートの配線の描き方の設定。`weight_mm` は配線の線の太さ (nullなら既定の
     /// [`crate::model::DEFAULT_WIRE_WEIGHT_MM`]、範囲は [`crate::model::MIN_WIRE_WEIGHT_MM`]〜
     /// [`crate::model::MAX_WIRE_WEIGHT_MM`])。`hide_notes` が true なら配線注記 (線径・色名・長さ) を描かない。
+    /// `symbol_weight_mm` はシンボル・ブロックの外形の線の太さ (nullなら既定の
+    /// [`crate::model::DEFAULT_SYMBOL_WEIGHT_MM`]、範囲は配線と同じ)。`vivid_colors` が true なら配線を鮮やかな色で描く。
+    /// 4つの値は必ず一緒に設定する (省いた値は既定へ戻る)。
     SetSheetWireStyle {
         sheet_id: SheetId,
         #[serde(default)]
         weight_mm: Option<f64>,
         #[serde(default)]
         hide_notes: bool,
+        #[serde(default)]
+        symbol_weight_mm: Option<f64>,
+        #[serde(default)]
+        vivid_colors: bool,
     },
     /// シートの用紙サイズ・向きの変更 (G15)。既存エンティティの座標はそのまま
     /// (動かない・消えない)。ゾーン分割 (`zone_cols`/`zone_rows`) も**変えない**
@@ -751,17 +758,19 @@ impl Engine {
                     }],
                 ))
             }
-            Command::SetSheetWireStyle { sheet_id, weight_mm, hide_notes } => {
-                if let Some(w) = weight_mm {
-                    if !w.is_finite()
-                        || *w < crate::model::MIN_WIRE_WEIGHT_MM
-                        || *w > crate::model::MAX_WIRE_WEIGHT_MM
-                    {
-                        return Err(CoreError::InvalidCommand(format!(
-                            "wire weight out of range: {w} (expected {}..{} mm)",
-                            crate::model::MIN_WIRE_WEIGHT_MM,
-                            crate::model::MAX_WIRE_WEIGHT_MM
-                        )));
+            Command::SetSheetWireStyle { sheet_id, weight_mm, hide_notes, symbol_weight_mm, vivid_colors } => {
+                for (what, value) in [("wire weight", weight_mm), ("symbol weight", symbol_weight_mm)] {
+                    if let Some(w) = value {
+                        if !w.is_finite()
+                            || *w < crate::model::MIN_WIRE_WEIGHT_MM
+                            || *w > crate::model::MAX_WIRE_WEIGHT_MM
+                        {
+                            return Err(CoreError::InvalidCommand(format!(
+                                "{what} out of range: {w} (expected {}..{} mm)",
+                                crate::model::MIN_WIRE_WEIGHT_MM,
+                                crate::model::MAX_WIRE_WEIGHT_MM
+                            )));
+                        }
                     }
                 }
                 let sheet = self
@@ -769,8 +778,11 @@ impl Engine {
                     .sheet_mut(*sheet_id)
                     .ok_or(CoreError::SheetNotFound(*sheet_id))?;
                 let (old_weight, old_hide) = (sheet.wire_weight_mm, sheet.hide_wire_notes);
+                let (old_symbol, old_vivid) = (sheet.symbol_weight_mm, sheet.vivid_wire_colors);
                 sheet.wire_weight_mm = *weight_mm;
                 sheet.hide_wire_notes = *hide_notes;
+                sheet.symbol_weight_mm = *symbol_weight_mm;
+                sheet.vivid_wire_colors = *vivid_colors;
                 let meta = sheet_meta(sheet);
                 Ok((
                     vec![PatchOp::SheetMetaUpdated { sheet: meta }],
@@ -778,6 +790,8 @@ impl Engine {
                         sheet_id: *sheet_id,
                         weight_mm: old_weight,
                         hide_notes: old_hide,
+                        symbol_weight_mm: old_symbol,
+                        vivid_colors: old_vivid,
                     }],
                 ))
             }
@@ -1011,6 +1025,15 @@ impl Engine {
                 if let Some(tf) = text_font {
                     if crate::stroke_font::font(&tf.id).is_none() {
                         return Err(CoreError::InvalidCommand(format!("同梱していない書体です: {}", tf.id)));
+                    }
+                    if let Some(pen) = tf.pen_mm {
+                        if !pen.is_finite() || pen < crate::model::MIN_TEXT_PEN_MM || pen > crate::model::MAX_TEXT_PEN_MM {
+                            return Err(CoreError::InvalidCommand(format!(
+                                "text pen out of range: {pen} (expected {}..{} mm)",
+                                crate::model::MIN_TEXT_PEN_MM,
+                                crate::model::MAX_TEXT_PEN_MM
+                            )));
+                        }
                     }
                 }
                 let old = std::mem::replace(&mut self.project.text_font, text_font.clone());
@@ -1841,6 +1864,26 @@ fn validate_symbol_id(id: &str) -> Result<()> {
 fn validate_entity(entity: &Entity, sheet: &Sheet) -> Result<()> {
     let is_footprint = |id: &EntityId| matches!(sheet.entities.get(id), Some(Entity::Footprint(_)));
     match entity {
+        Entity::Symbol(s) => {
+            crate::caption::parse_layout(&s.attrs).map_err(CoreError::InvalidCommand)?;
+        }
+        Entity::Wire(w) => {
+            if let Some(weight) = w.weight_mm {
+                if !weight.is_finite()
+                    || weight < crate::model::MIN_WIRE_WEIGHT_MM
+                    || weight > crate::model::MAX_WIRE_OWN_WEIGHT_MM
+                {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "wire weight out of range: {weight} (expected {}..{} mm)",
+                        crate::model::MIN_WIRE_WEIGHT_MM,
+                        crate::model::MAX_WIRE_OWN_WEIGHT_MM
+                    )));
+                }
+            }
+        }
+        _ => {}
+    }
+    match entity {
         Entity::Nameplate(n) => {
             if !(n.w > 0.0 && n.h > 0.0 && n.text_mm > 0.0) {
                 return Err(CoreError::InvalidCommand(
@@ -1967,6 +2010,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: None,
+            dashed: false, weight_mm: None,
         })
     }
 
@@ -2918,7 +2962,7 @@ mod tests {
     #[test]
     fn set_text_font_and_undo() {
         let (mut engine, _) = test_engine();
-        let tf = crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Full };
+        let tf = crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Full, pen_mm: None, };
         let patch = engine.execute(Command::SetTextFont { text_font: Some(tf.clone()) }).unwrap();
         assert!(matches!(&patch.ops[0], PatchOp::TextFontChanged { text_font: Some(t) } if *t == tf));
         assert_eq!(engine.project().text_font.as_ref(), Some(&tf));
@@ -2933,7 +2977,7 @@ mod tests {
     #[test]
     fn set_text_font_refuses_an_unknown_id() {
         let (mut engine, _) = test_engine();
-        let bad = crate::model::TextFont { id: "nope".into(), latin: crate::model::Latin::Half };
+        let bad = crate::model::TextFont { id: "nope".into(), latin: crate::model::Latin::Half, pen_mm: None, };
         assert!(engine.execute(Command::SetTextFont { text_font: Some(bad) }).is_err());
         assert!(engine.project().text_font.is_none());
     }
@@ -4217,6 +4261,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: None,
+            dashed: false, weight_mm: None,
         };
         let id = w.id;
         engine.execute(Command::AddEntity { sheet_id, entity: Entity::Wire(w) }).unwrap();
@@ -5296,7 +5341,7 @@ mod tests {
         assert_eq!(engine.project().sheets[0].wire_weight_mm, None);
         assert!((engine.project().sheets[0].wire_weight_mm() - 0.35).abs() < 1e-9, "既定は0.35mm");
         engine
-            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(0.7), hide_notes: true })
+            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(0.7), hide_notes: true, symbol_weight_mm: None, vivid_colors: false })
             .unwrap();
         let sheet = &engine.project().sheets[0];
         assert_eq!((sheet.wire_weight_mm, sheet.hide_wire_notes), (Some(0.7), true));
@@ -5313,13 +5358,13 @@ mod tests {
         let (mut engine, sheet_id) = test_engine();
         for bad in [0.0, 0.1, 1.5, -0.35, f64::NAN, f64::INFINITY] {
             let err = engine
-                .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(bad), hide_notes: false })
+                .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(bad), hide_notes: false, symbol_weight_mm: None, vivid_colors: false })
                 .expect_err("範囲外は断る");
             assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("wire weight")), "{bad}: {err:?}");
         }
         assert_eq!(engine.project().sheets[0].wire_weight_mm, None, "書き換わらない");
         for ok in [0.18, 1.0] {
-            engine.execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(ok), hide_notes: false }).unwrap();
+            engine.execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(ok), hide_notes: false, symbol_weight_mm: None, vivid_colors: false }).unwrap();
         }
     }
 
@@ -5330,7 +5375,7 @@ mod tests {
         let (mut engine, sheet_id) = test_engine();
         let json = serde_json::to_string(engine.project()).unwrap();
         assert!(!json.contains("wire_weight_mm") && !json.contains("hide_wire_notes"), "{json}");
-        engine.execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(0.5), hide_notes: true }).unwrap();
+        engine.execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(0.5), hide_notes: true, symbol_weight_mm: None, vivid_colors: false }).unwrap();
         let json = serde_json::to_string(engine.project()).unwrap();
         assert!(json.contains("\"wire_weight_mm\":0.5") && json.contains("\"hide_wire_notes\":true"), "{json}");
     }
@@ -5348,5 +5393,105 @@ mod tests {
             .expect_err("知らない置き場所は断る");
         assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("block_caption")), "{err:?}");
         assert_eq!(serde_json::to_string(engine.project()).unwrap(), before);
+    }
+
+    /// The sheet wire style also stores the outline weight of symbols and the vivid wire colours, and undo puts all four values back.
+    /// シートの配線の描き方は、シンボルの外形の太さと鮮やかな配線の色も保存し、元に戻すと4つの値がすべて前に戻る。
+    #[test]
+    fn set_sheet_wire_style_stores_outline_weight_and_vivid_colours() {
+        let (mut engine, sheet_id) = test_engine();
+        engine
+            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(1.0), hide_notes: true, symbol_weight_mm: Some(0.9), vivid_colors: true })
+            .unwrap();
+        let sheet = &engine.project().sheets[0];
+        assert_eq!((sheet.symbol_weight_mm, sheet.vivid_wire_colors), (Some(0.9), true));
+        assert!((sheet.symbol_weight_mm() - 0.9).abs() < 1e-9);
+        engine.undo().unwrap();
+        let sheet = &engine.project().sheets[0];
+        assert_eq!((sheet.wire_weight_mm, sheet.hide_wire_notes, sheet.symbol_weight_mm, sheet.vivid_wire_colors), (None, false, None, false));
+        assert!((sheet.symbol_weight_mm() - 0.3).abs() < 1e-9, "既定は0.3mm");
+        let err = engine
+            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: None, hide_notes: false, symbol_weight_mm: Some(3.0), vivid_colors: false })
+            .expect_err("範囲外の外形の太さは断る");
+        assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("symbol weight")), "{err:?}");
+    }
+
+    /// A wire whose own weight is outside 0.18 to 2.0 mm is refused; a dashed wire 2.0 mm wide is accepted and keeps both settings.
+    /// 線ごとの太さが0.18〜2.0mmの外の配線は断る。破線で太さ2.0mmの配線は受け付け、2つの設定を保つ。
+    #[test]
+    fn a_wire_keeps_its_dash_and_weight_and_refuses_a_bad_weight() {
+        let (mut engine, sheet_id) = test_engine();
+        let wire = |weight: Option<f64>| Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(10.0, 10.0), Point::new(10.0, 50.0)],
+            color: String::new(),
+            sq: 0.0,
+            length_m: None,
+            length_source: Default::default(),
+            part_no: None,
+            net: None,
+            dashed: true,
+            weight_mm: weight,
+        };
+        for bad in [0.1, 2.5, f64::NAN] {
+            let err = engine
+                .execute(Command::AddEntity { sheet_id, entity: Entity::Wire(wire(Some(bad))) })
+                .expect_err("範囲外は断る");
+            assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("wire weight")), "{bad}: {err:?}");
+        }
+        let ok = wire(Some(2.0));
+        let id = ok.id;
+        engine.execute(Command::AddEntity { sheet_id, entity: Entity::Wire(ok) }).unwrap();
+        let Entity::Wire(w) = &engine.project().sheets[0].entities[&id] else { panic!() };
+        assert_eq!((w.dashed, w.weight_mm), (true, Some(2.0)));
+        let json = serde_json::to_string(engine.project()).unwrap();
+        assert!(json.contains("\"dashed\":true") && json.contains("\"weight_mm\":2.0"), "{json}");
+    }
+
+    /// A text font with a pen width is accepted between 0.1 and 1.0 mm and refused outside; the pen is saved with the project and removed again by undo.
+    /// ペンの太さ付きの書体は0.1〜1.0mmなら受け付け、範囲の外は断る。ペンの太さはプロジェクトに保存され、元に戻すと消える。
+    #[test]
+    fn set_text_font_takes_a_pen_width_in_range() {
+        let (mut engine, _) = test_engine();
+        let font = |pen| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: pen };
+        for bad in [0.05, 1.5, f64::NAN] {
+            let err = engine.execute(Command::SetTextFont { text_font: Some(font(Some(bad))) }).expect_err("範囲外は断る");
+            assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("text pen")), "{bad}: {err:?}");
+        }
+        engine.execute(Command::SetTextFont { text_font: Some(font(Some(0.35))) }).unwrap();
+        assert_eq!(engine.project().text_font.as_ref().and_then(|f| f.pen_mm), Some(0.35));
+        assert!(serde_json::to_string(engine.project()).unwrap().contains("\"pen_mm\":0.35"));
+        engine.undo().unwrap();
+        assert!(engine.project().text_font.is_none());
+        engine.execute(Command::SetTextFont { text_font: Some(font(None)) }).unwrap();
+        assert!(!serde_json::to_string(engine.project()).unwrap().contains("pen_mm"), "未設定のペンは書き出さない");
+    }
+
+    /// A symbol whose caption_layout cannot be read is refused and the document is not changed; a readable one is accepted on any symbol, not only on blocks.
+    /// caption_layout を読めないシンボルは断り、図面は変わらない。読めるものは、ブロックに限らずどのシンボルでも受け付ける。
+    #[test]
+    fn a_symbol_with_a_bad_caption_layout_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let symbol = |layout: &str| {
+            let mut attrs = std::collections::BTreeMap::new();
+            attrs.insert(crate::caption::CAPTION_LAYOUT_ATTR.to_string(), layout.to_string());
+            Entity::Symbol(SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: "fuse".into(),
+                at: Point::new(50.0, 50.0),
+                rotation: 0,
+                mirror: false,
+                reference: "F1".into(),
+                value: "1A".into(),
+                attrs,
+            })
+        };
+        let before = serde_json::to_string(engine.project()).unwrap();
+        let err = engine
+            .execute(Command::AddEntity { sheet_id, entity: symbol(r#"{"ref":{"h":99}}"#) })
+            .expect_err("読めない置き場所は断る");
+        assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("caption_layout")), "{err:?}");
+        assert_eq!(serde_json::to_string(engine.project()).unwrap(), before);
+        engine.execute(Command::AddEntity { sheet_id, entity: symbol(r#"{"ref":{"x":0,"y":-4,"h":2}}"#) }).unwrap();
     }
 }

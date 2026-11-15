@@ -750,7 +750,7 @@ describe("block captions and group names (Rust twin)", () => {
 describe("fine pitch blocks (Rust twin)", () => {
   // ja: golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブ・ピン・属性の置き場所を返す
   it("draws every block of the fine-pitch golden file exactly like Rust", () => {
-    expect(fineGolden.cases.length).toBe(19);
+    expect(fineGolden.cases.length).toBe(21);
     for (const c of fineGolden.cases) {
       const def = blockSymbol(c.attrs as Record<string, string>);
       expect({
@@ -1081,5 +1081,32 @@ describe("block caption place (Rust twin)", () => {
     const [, b] = captioned("inside", "U1", "AMP");
     expect(b.primitives).toEqual(a.primitives);
     expect(b.pins).toEqual(a.pins);
+  });
+});
+
+describe("leadless blocks (Rust twin)", () => {
+  const pins = '{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"1"},{"no":"2"}]}';
+  const base = { block_pins: pins, block_pitch: "2.5", block_numbers: "inside", block_size: '{"w":5,"h":7.5}' };
+
+  // ja: block_leads が "none" のブロックは、ピンを外形の辺の上に置き、リード線を描かない。外形と番号はリード線ありと同じ
+  it("puts the pins of a leadless block on the outline and draws no leads", () => {
+    const a = blockSymbol(base);
+    const b = blockSymbol({ ...base, block_leads: "none" });
+    const rect = (d: SymbolDef) => d.primitives.find((q) => q.type === "rect");
+    expect(rect(b)).toEqual(rect(a));
+    expect(b.pins.map((q) => q.at.x)).toEqual([-2.5, -2.5, 2.5, 2.5]);
+    expect(b.pins.map((q) => q.at.y)).toEqual(a.pins.map((q) => q.at.y));
+    expect(a.primitives.filter((q) => q.type === "line").length).toBe(4);
+    expect(b.primitives.filter((q) => q.type === "line").length).toBe(0);
+    expect(b.primitives.filter((q) => q.type === "text")).toEqual(a.primitives.filter((q) => q.type === "text"));
+  });
+
+  // ja: block_leads は "lead" と "none" だけを受け付け、"none" は番号を内側に描くブロックでなければ断る
+  it('accepts only "lead" and "none", and "none" needs numbers inside', () => {
+    expect(parseBlockSpec(base).leads).toBe("lead");
+    expect(parseBlockSpec({ ...base, block_leads: " lead " }).leads).toBe("lead");
+    expect(parseBlockSpec({ ...base, block_leads: "none" }).leads).toBe("none");
+    expect(() => parseBlockSpec({ block_pins: pins, block_leads: "none" })).toThrow("block_leads none needs block_numbers inside");
+    expect(() => parseBlockSpec({ ...base, block_leads: "short" })).toThrow(/block_leads must be "lead" or "none"/);
   });
 });

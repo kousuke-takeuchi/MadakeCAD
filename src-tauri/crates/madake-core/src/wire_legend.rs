@@ -121,6 +121,7 @@ mod tests {
             length_source: crate::model::LengthSource::Manual,
             part_no: part_no.map(|s| s.to_string()),
             net: None,
+            dashed: false, weight_mm: None,
         })
     }
 

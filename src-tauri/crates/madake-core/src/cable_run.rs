@@ -376,6 +376,8 @@ fn plan_side(
                 }
                 taken.push(end);
                 let wire = Wire {
+                    dashed: false,
+                    weight_mm: None,
                     id: Uuid::new_v4(),
                     points,
                     // 分岐の配線は線径も線色も持たない (芯とケーブルが持つので、配線注記が重複して出ない)
@@ -536,6 +538,7 @@ fn plan_label_side(
             length_source: Default::default(),
             part_no: None,
             net: None,
+            dashed: false, weight_mm: None,
         };
         ends.push(CoreEnd::Wire { wire: wire.id });
         net_labels.push(NetLabel {

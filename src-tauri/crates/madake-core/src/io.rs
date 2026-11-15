@@ -413,21 +413,21 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 24, the version that added the sheet wire style and the block caption place.
-    /// 現行のファイル形式バージョンは24 (シートの配線の描き方とブロックの参照記号の位置を追加した版) である。
+    /// The current file format version is 25, the version that added line and lettering styles (outline weight, vivid wire colours, per-wire dash and weight, arrows, text pen, leadless blocks, caption layout).
+    /// 現行のファイル形式バージョンは25 (線と文字の描き方 = 外形の太さ・鮮やかな配線の色・配線ごとの破線と太さ・矢印・文字のペン・リード線なしのブロック・参照記号の配置を追加した版) である。
     #[test]
-    fn the_current_format_version_is_twenty_four() {
-        assert_eq!(FORMAT_VERSION, 24);
+    fn the_current_format_version_is_twenty_five() {
+        assert_eq!(FORMAT_VERSION, 25);
         let mut old = Project::new("x");
-        old.format_version = 23;
+        old.format_version = 24;
         migrate(&mut old);
-        assert_eq!(old.format_version, 24);
+        assert_eq!(old.format_version, 25);
     }
 
-    /// A version 23 project file opens in this build and becomes version 24; its sheets get the default wire weight and still show their wire notes.
-    /// 形式23のプロジェクトファイルはこのビルドで開け、形式24になる。シートの配線は既定の太さで、配線注記も出たままになる。
+    /// A version 23 project file opens in this build and becomes the current version; its sheets get the default wire weight and still show their wire notes.
+    /// 形式23のプロジェクトファイルはこのビルドで開け、現行の形式になる。シートの配線は既定の太さで、配線注記も出たままになる。
     #[test]
-    fn a_version_23_file_opens_as_version_24() {
+    fn a_version_23_file_opens_as_the_current_version() {
         let mut project = Project::new("old");
         project.format_version = 23;
         let dir = std::env::temp_dir().join(format!("madake-io-v23-{}", std::process::id()));
@@ -437,7 +437,7 @@ mod tests {
         assert!(!text.contains("wire_weight_mm") && !text.contains("hide_wire_notes"), "{text}");
         std::fs::write(&path, text).unwrap();
         let loaded = load_project(&path).unwrap();
-        assert_eq!(loaded.format_version, 24);
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
         let sheet = &loaded.sheets[0];
         assert_eq!((sheet.wire_weight_mm, sheet.hide_wire_notes), (None, false));
         assert!((sheet.wire_weight_mm() - 0.35).abs() < 1e-9);
@@ -502,10 +502,10 @@ mod tests {
     fn text_font_round_trips_and_is_omitted_when_unset() {
         let mut p = Project::new("p");
         assert!(!serde_json::to_string(&p).unwrap().contains("text_font"));
-        p.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Full });
+        p.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Full, pen_mm: None, });
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(back.text_font, p.text_font);
-        let half = TextFont { id: "kst32b".into(), latin: Latin::Half };
+        let half = TextFont { id: "kst32b".into(), latin: Latin::Half, pen_mm: None, };
         assert_eq!(serde_json::to_string(&half).unwrap(), "{\"id\":\"kst32b\"}");
     }
 
@@ -1008,5 +1008,43 @@ mod tests {
         let (text, path) = save_text(&project, "connector-removed");
         assert!(text.contains("\"kind\": \"symbol\"") && !text.contains("port_block"), "{text}");
         std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    /// A version 24 project file opens in this build and becomes version 25; wires stay solid at the sheet's weight, outlines keep their weight and the text font has no fixed pen.
+    /// 形式24のプロジェクトファイルはこのビルドで開け、形式25になる。配線は実線・シートの太さのまま、外形の太さも変わらず、書体のペンの太さは未設定になる。
+    #[test]
+    fn a_version_24_file_opens_as_version_25() {
+        let mut project = Project::new("old");
+        project.format_version = 24;
+        let wire = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(10.0, 10.0), Point::new(30.0, 10.0)],
+            color: "red".into(),
+            sq: 0.0,
+            length_m: None,
+            length_source: Default::default(),
+            part_no: None,
+            net: None,
+            dashed: false,
+            weight_mm: None,
+        });
+        let id = wire.id();
+        project.sheets[0].entities.insert(id, wire);
+        let dir = std::env::temp_dir().join(format!("madake-io-v24-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.mdkproj");
+        let text = serde_json::to_string_pretty(&project).unwrap();
+        for key in ["dashed", "weight_mm", "symbol_weight_mm", "vivid_wire_colors", "pen_mm", "arrow_end"] {
+            assert!(!text.contains(key), "未設定の {key} が書き出されている");
+        }
+        std::fs::write(&path, text).unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.format_version, 25);
+        let sheet = &loaded.sheets[0];
+        let Entity::Wire(w) = &sheet.entities[&id] else { panic!("配線が残ること") };
+        assert_eq!((w.dashed, w.weight_mm), (false, None));
+        assert!((sheet.weight_of(w) - 0.35).abs() < 1e-9 && (sheet.symbol_weight_mm() - 0.3).abs() < 1e-9);
+        assert!(!sheet.vivid_wire_colors);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

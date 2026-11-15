@@ -253,3 +253,29 @@ export function shapeUpdateCommand(
   if (unchanged) return null;
   return { type: "update_entity", sheet_id: sheetId, entity: next };
 }
+
+/** 矢印の長さ (mm) = この値 + 線の太さ × 2。Rust 側 shape.rs の ARROW_LEN_MM と同じ。 */
+export const ARROW_LEN_MM = 2.0;
+/** 矢印の幅の半分 ÷ 長さ。 */
+export const ARROW_HALF_WIDTH_RATIO = 0.28;
+
+/** 終点に矢印を付ける線・折れ線の、矢印の三角 (先端, 左, 右)。矢印なし・線以外・長さ0の最後の区間は null。 */
+export function arrowHead(shape: Pick<Shape, "shape" | "points" | "stroke_width_mm" | "arrow_end">): [Point, Point, Point] | null {
+  if (!shape.arrow_end || (shape.shape !== "line" && shape.shape !== "polyline")) return null;
+  const n = shape.points.length;
+  if (n < 2) return null;
+  const tip = shape.points[n - 1];
+  const from = shape.points[n - 2];
+  const dx = tip.x - from.x;
+  const dy = tip.y - from.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9) return null;
+  const ux = dx / len;
+  const uy = dy / len;
+  const l = ARROW_LEN_MM + 2 * shape.stroke_width_mm;
+  const h = l * ARROW_HALF_WIDTH_RATIO;
+  const bx = tip.x - ux * l;
+  const by = tip.y - uy * l;
+  return [tip, { x: bx - uy * h, y: by + ux * h }, { x: bx + uy * h, y: by - ux * h }];
+}
+

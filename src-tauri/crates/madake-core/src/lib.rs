@@ -6,6 +6,7 @@
 pub mod block;
 pub mod cable;
 pub mod cable_run;
+pub mod caption;
 pub mod command;
 pub mod connector;
 pub mod dxf;

@@ -714,6 +714,7 @@ pub(crate) mod test_support {
             length_source: Default::default(),
             part_no: None,
             net: None,
+            dashed: false, weight_mm: None,
         }
     }
 
@@ -893,6 +894,7 @@ mod tests {
                 length_source: Default::default(),
                 part_no: None,
                 net: None,
+                dashed: false, weight_mm: None,
             };
             wires.push(w.id);
             engine.execute(Command::AddEntity { sheet_id, entity: Entity::Wire(w) }).unwrap();

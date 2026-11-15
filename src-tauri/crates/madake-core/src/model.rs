@@ -70,7 +70,11 @@ pub type SheetId = Uuid;
 ///   (貫通ピンを持つブロックを読めず見本の箱にしてしまうため)。使っていないファイルは版番号以外これまでと同じ
 /// - v24: シートの配線の線の太さ ([`Sheet::wire_weight_mm`])・配線注記を描かない設定 ([`Sheet::hide_wire_notes`])、
 ///   ブロックの参照記号の位置 (属性 `block_caption`)。形式23のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
-pub const FORMAT_VERSION: u32 = 24;
+/// - v25: 図面の線と文字の描き方: シートの外形の線の太さ ([`Sheet::symbol_weight_mm`])・鮮やかな配線の色
+///   ([`Sheet::vivid_wire_colors`])、配線ごとの破線と太さ ([`Wire::dashed`] / [`Wire::weight_mm`])、図形の線の矢印
+///   ([`Shape::arrow_end`])、書体のペンの太さ ([`TextFont::pen_mm`])、ブロックの属性 `block_leads`、シンボルの属性
+///   `caption_layout`。形式24のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
+pub const FORMAT_VERSION: u32 = 25;
 
 fn is_false(b: &bool) -> bool {
     !*b
@@ -82,6 +86,13 @@ pub const DEFAULT_WIRE_WEIGHT_MM: f64 = 0.35;
 pub const MIN_WIRE_WEIGHT_MM: f64 = 0.18;
 /// 配線の線の太さの上限 (mm)。
 pub const MAX_WIRE_WEIGHT_MM: f64 = 1.0;
+/// 配線1本ごとに指定する太さの上限 (mm)。母線は普通の配線より太く描く。
+pub const MAX_WIRE_OWN_WEIGHT_MM: f64 = 2.0;
+/// シンボル・ブロックの外形の線の太さの既定値 (mm)。この設定が無かった頃の太さ。
+pub const DEFAULT_SYMBOL_WEIGHT_MM: f64 = 0.3;
+/// 文字のペンの太さの下限・上限 (mm)。
+pub const MIN_TEXT_PEN_MM: f64 = 0.1;
+pub const MAX_TEXT_PEN_MM: f64 = 1.0;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -303,6 +314,13 @@ pub struct Sheet {
     /// 配線注記 (線径・色名・長さ) を描かない。線の色はそのまま。品番を文字で別に書く図面で使う。
     #[serde(default, skip_serializing_if = "is_false")]
     pub hide_wire_notes: bool,
+    /// シンボル・ブロックの外形の線の太さ (mm)。`None` は既定 ([`DEFAULT_SYMBOL_WEIGHT_MM`])。
+    /// 範囲は配線と同じ [`MIN_WIRE_WEIGHT_MM`]〜[`MAX_WIRE_WEIGHT_MM`]。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol_weight_mm: Option<f64>,
+    /// 配線を鮮やかな色 (純色) で描く。色名は変えない (品番の引き当ては同じ)。既定は紙で見やすい落ち着いた色。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub vivid_wire_colors: bool,
     /// 整えバリアントの複製なら、その元シートのid ([`crate::variants`])。
     ///
     /// 比較のために一時的に増えるシートで、比較が終われば消える。**図面全体を見渡す
@@ -343,6 +361,8 @@ impl Sheet {
             annotation_text_mm: None,
             wire_weight_mm: None,
             hide_wire_notes: false,
+            symbol_weight_mm: None,
+            vivid_wire_colors: false,
             variant_of: None,
             entities: BTreeMap::new(),
         }
@@ -372,6 +392,20 @@ impl Sheet {
             .unwrap_or(DEFAULT_WIRE_WEIGHT_MM)
     }
 
+    /// このシートのシンボル・ブロックの外形の線の太さ (mm)。未設定・範囲外なら既定。
+    pub fn symbol_weight_mm(&self) -> f64 {
+        self.symbol_weight_mm
+            .filter(|v| v.is_finite() && *v >= MIN_WIRE_WEIGHT_MM && *v <= MAX_WIRE_WEIGHT_MM)
+            .unwrap_or(DEFAULT_SYMBOL_WEIGHT_MM)
+    }
+
+    /// この配線を描く太さ (mm): 配線自身の太さがあればそれ、無ければシートの太さ。
+    pub fn weight_of(&self, wire: &Wire) -> f64 {
+        wire.weight_mm
+            .filter(|v| v.is_finite() && *v >= MIN_WIRE_WEIGHT_MM && *v <= MAX_WIRE_OWN_WEIGHT_MM)
+            .unwrap_or_else(|| self.wire_weight_mm())
+    }
+
     /// 注記の層 (配線注記・線番・ネットタグ) にかける倍率。1.0 = 既定の大きさ。
     /// 文字高さも配線からの逃がし量も、この倍率で一緒に縮む・伸びる。
     pub fn annotation_scale(&self) -> f64 {
@@ -389,12 +423,23 @@ impl Sheet {
 }
 
 /// 図面の文字の書体 (同梱のストロークフォント。[`crate::stroke_font::font`] のid)。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TextFont {
     pub id: String,
     /// 英数字を半角・全角どちらの字で描くか (既定は半角)。
     #[serde(default, skip_serializing_if = "is_half")]
     pub latin: Latin,
+    /// 文字のペンの太さ (mm)。あれば文字の大きさによらずこの太さで描く (太字は1.5倍)。
+    /// `None` は大きさに比例した太さ (従来どおり)。範囲は [`MIN_TEXT_PEN_MM`]〜[`MAX_TEXT_PEN_MM`]。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pen_mm: Option<f64>,
+}
+
+impl TextFont {
+    /// 文字のペンの太さ (mm)。未設定・範囲外なら None (大きさに比例した太さ)。
+    pub fn pen(&self) -> Option<f64> {
+        self.pen_mm.filter(|v| v.is_finite() && *v >= MIN_TEXT_PEN_MM && *v <= MAX_TEXT_PEN_MM)
+    }
 }
 
 fn is_half(l: &Latin) -> bool {
@@ -1169,6 +1214,13 @@ pub struct Wire {
     /// ネット名(明示指定時のみ。通常はネットリスト抽出で導出)。
     #[serde(default)]
     pub net: Option<String>,
+    /// 破線で描くか (既定=false = 実線)。母線のように線種で区別する配線に使う。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub dashed: bool,
+    /// この配線だけの線の太さ (mm)。`None` はシートの太さ ([`Sheet::wire_weight_mm`])。
+    /// 範囲は [`MIN_WIRE_WEIGHT_MM`]〜[`MAX_WIRE_OWN_WEIGHT_MM`]。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weight_mm: Option<f64>,
 }
 
 /// 1本のワイヤへの線番の割り当て (`set_wire_numbers` コマンドの要素)。
@@ -1277,6 +1329,9 @@ pub struct Shape {
     /// 破線で描くか (既定=false = 実線)。
     #[serde(default)]
     pub dashed: bool,
+    /// 線・折れ線の終点に矢印を付けるか (既定=false)。矢印は線と同じ色の塗りつぶし。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub arrow_end: bool,
 }
 
 fn default_shape_stroke() -> String {
@@ -1398,6 +1453,7 @@ mod tests {
             length_source: Default::default(),
             part_no: None,
             net: None,
+            dashed: false, weight_mm: None,
         });
         wire.translate(5.0, 2.5);
         let Entity::Wire(w) = &wire else { panic!() };
@@ -1616,6 +1672,7 @@ mod tests {
             stroke_width_mm: 0.25,
             fill: None,
             dashed: true,
+            arrow_end: false,
         });
         rect.translate(5.0, -2.5);
         let Entity::Shape(s) = &rect else { panic!() };
@@ -1631,6 +1688,7 @@ mod tests {
             stroke_width_mm: 0.25,
             fill: None,
             dashed: false,
+            arrow_end: false,
         });
         poly.translate(1.0, 1.0);
         let Entity::Shape(s) = &poly else { panic!() };
@@ -1650,6 +1708,7 @@ mod tests {
             stroke_width_mm: 0.5,
             fill: Some("muted".into()),
             dashed: true,
+            arrow_end: false,
         });
         let json = serde_json::to_string(&entity).unwrap();
         assert!(json.contains("\"kind\":\"shape\""), "{json}");
