@@ -122,6 +122,23 @@ describe("document store", () => {
     expect(store.project!.sheets[0].entities["e1"]).toBeTruthy();
   });
 
+  // ja: シートメタ更新のパッチに無い項目は消える。配線の太さと配線注記の非表示を元に戻すと、キャンバスも既定へ戻る
+  it("sheet-meta patches drop the settings that are no longer set", () => {
+    const store = useDocumentStore();
+    store.project = testProject();
+    const base = testProject().sheets[0];
+    const styled = { ...base, wire_weight_mm: 0.7, hide_wire_notes: true, entities: {} } as Sheet;
+    store.applyPatch({ revision: 6, ops: [{ op: "sheet_meta_updated", sheet: styled }] });
+    expect(store.project!.sheets[0].wire_weight_mm).toBe(0.7);
+    expect(store.project!.sheets[0].hide_wire_notes).toBe(true);
+    // 元に戻したあとのパッチ: 未設定の項目は書き出されないので現れない
+    const reset: Sheet = { ...base, entities: {} };
+    store.applyPatch({ revision: 7, ops: [{ op: "sheet_meta_updated", sheet: reset }] });
+    expect("wire_weight_mm" in store.project!.sheets[0]).toBe(false);
+    expect("hide_wire_notes" in store.project!.sheets[0]).toBe(false);
+    expect(store.project!.sheets[0].id).toBe(base.id);
+  });
+
   // ja: 古いrevisionのパッチは破棄される(二重配信しても安全)
   it("patches with an older revision are discarded (duplicate delivery is safe)", () => {
     const store = useDocumentStore();

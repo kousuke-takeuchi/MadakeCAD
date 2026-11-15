@@ -62,9 +62,22 @@ export function noteBounds(note: TextEntity): { min: Point; max: Point } {
   const w = textWidthMm(note.text, note.height);
   const anchor = note.anchor ?? "start";
   const left = anchor === "middle" ? note.at.x - w / 2 : anchor === "end" ? note.at.x - w : note.at.x;
+  const a = { x: left, y: note.at.y - note.height };
+  const b = { x: left + w, y: note.at.y + note.height * DESCENDER_RATIO };
+  // 回した注記 (90・180・270、時計回り) は、箱も基準点を中心に回す (描画と同じ)
+  const deg = noteTurnDeg(note.rotation);
+  const turn = (q: Point): Point => {
+    const dx = q.x - note.at.x;
+    const dy = q.y - note.at.y;
+    if (deg === 90) return { x: note.at.x - dy, y: note.at.y + dx };
+    if (deg === 180) return { x: note.at.x - dx, y: note.at.y - dy };
+    if (deg === 270) return { x: note.at.x + dy, y: note.at.y - dx };
+    return q;
+  };
+  const [p1, p2] = [turn(a), turn(b)];
   return {
-    min: { x: left, y: note.at.y - note.height },
-    max: { x: left + w, y: note.at.y + note.height * DESCENDER_RATIO },
+    min: { x: Math.min(p1.x, p2.x), y: Math.min(p1.y, p2.y) },
+    max: { x: Math.max(p1.x, p2.x), y: Math.max(p1.y, p2.y) },
   };
 }
 

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3272 specification clauses** across 6 areas.
+**3278 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -86,6 +86,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - block_caption accepts only "above" and "inside"; a block without it writes its caption above, as before. <sub>`block_caption_accepts_only_above_and_inside`</sub>
 - block_caption does not change what the block itself draws: outline, pins and numbers are the same with and without it. <sub>`block_caption_does_not_change_the_drawn_block`</sub>
 - A block's caption place survives being imported back from an exported file: the importer keeps block_caption with the pin table. <sub>`imported_block_attrs_keep_the_caption_place`</sub>
+- When a left/right feed-through pair is not merged because the top side has a pin, the box is wide enough for both numbers: with four-character numbers it is as wide as the same block without the feed-through rule. <sub>`an_unmerged_feedthrough_pair_gets_room_for_both_numbers`</sub>
 
 ### cable
 
@@ -458,6 +459,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A leader aimed at a symbol ends on exactly the outline the drawing shows: the placement point is always inside it, and a text mark inside the symbol counts as its own reference point, not as a box of letters. <sub>`a_leader_targets_exactly_the_outline_the_drawing_shows`</sub>
 - A leader aimed at a symbol carrying pin-group brackets stops outside the caption beside them, not on the symbol body, because the brackets and captions are drawn with the symbol and a line ending on top of them would be harder to read. <sub>`a_leader_stops_outside_a_symbols_pin_group_caption`</sub>
 - entity_bounds resolves a symbol instance's bounding box from its definition, so a leader can target a symbol. <sub>`entity_bounds_resolves_a_symbol_instance`</sub>
+- The box of a note turned 90, 180 or 270 degrees is turned about its anchor with the text, so selection and leaders follow what is drawn; an unturned note keeps its box. <sub>`the_box_of_a_turned_note_turns_about_its_anchor`</sub>
 
 ### Circuit macros
 
@@ -1107,6 +1109,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A note turned 90, 180 or 270 degrees is drawn inside a rotation about its own anchor point; a note that is not turned is written exactly as before, with no rotation around it. <sub>`a_turned_note_is_rotated_about_its_anchor`</sub>
 - A block with block_caption "inside" writes its reference and its value centred inside the outline, the two lines centred on the middle of the box; without the attribute they stay above the box. <sub>`a_block_can_write_its_caption_inside_the_outline`</sub>
 - With only a reference, or only a value, the single line of an inside caption is centred on the middle of the box. <sub>`a_single_inside_caption_line_is_centred`</sub>
+- The junction dot keeps its 0.6 mm radius at the default wire weight and grows to 0.9 times the weight on a sheet with thick wires, so it stays visible. <sub>`the_junction_dot_grows_with_a_thick_wire`</sub>
 
 ### Symbol library
 
@@ -2908,6 +2911,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - places the label just below the outline when the definition has no slot <sub>`function label`</sub>
 - follows the FUNCTION slot when the symbol definition defines one <sub>`function label`</sub>
 - draws only 90, 180 and 270 degree turns of a note <sub>`note rotation`</sub>
+- turns the box of a rotated note about its anchor <sub>`box of a turned note`</sub>
 
 ### viewClasses
 
@@ -2988,6 +2992,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - uses 0.35 mm when the sheet sets no wire weight, and the sheet's weight when it does <sub>`sheet wire style`</sub>
 - falls back to 0.35 mm for a weight outside 0.18 to 1.0 mm or not a number <sub>`sheet wire style`</sub>
 - hides wire notes only when the sheet says so <sub>`sheet wire style`</sub>
+- keeps 0.6 mm at the default weight and grows to 0.9 times a thick wire <sub>`junction dot on thick wires`</sub>
 
 ### xref
 
@@ -3326,6 +3331,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - project_replaced swaps the whole mirrored project <sub>`document store`</sub>
 - sheet add/remove patches keep sheet order <sub>`document store`</sub>
 - sheet-meta patches never touch the entities <sub>`document store`</sub>
+- sheet-meta patches drop the settings that are no longer set <sub>`document store`</sub>
 - patches with an older revision are discarded (duplicate delivery is safe) <sub>`document store`</sub>
 - a mech_links_replaced patch replaces the FreeCAD link list <sub>`document store`</sub>
 - frame_template_changed patches update the mirror both ways (switch and undo) <sub>`document store`</sub>

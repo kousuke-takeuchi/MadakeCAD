@@ -164,3 +164,30 @@ describe("note rotation", () => {
     expect(noteTurnDeg(450)).toBe(90);
   });
 });
+
+describe("box of a turned note", () => {
+  const turned = (rotation: number) =>
+    ({ id: "t", kind: "text", at: { x: 40, y: 60 }, text: "ABCD", height: 2.5, rotation, anchor: "start", color: null, bold: false, leader_to: null }) as unknown as Parameters<typeof noteBounds>[0];
+
+  // ja: 90・180・270度回した注記の箱は、文字と一緒に基準点を中心に回る。回していない注記の箱は変わらない
+  it("turns the box of a rotated note about its anchor", () => {
+    const flat = noteBounds(turned(0));
+    const w = flat.max.x - flat.min.x;
+    const up = flat.min.y - 60; // -2.5
+    const down = flat.max.y - 60;
+    expect(flat.min.x).toBe(40);
+    const r90 = noteBounds(turned(90)); // 下へ読む
+    expect(r90.min).toEqual({ x: 40 - down, y: 60 });
+    expect(r90.max.x).toBeCloseTo(40 - up, 9);
+    expect(r90.max.y).toBeCloseTo(60 + w, 9);
+    const r180 = noteBounds(turned(180));
+    expect(r180.min.x).toBeCloseTo(40 - w, 9);
+    expect(r180.max).toEqual({ x: 40, y: 60 - up });
+    const r270 = noteBounds(turned(270)); // 上へ読む
+    expect(r270.min.x).toBeCloseTo(40 + up, 9);
+    expect(r270.min.y).toBeCloseTo(60 - w, 9);
+    expect(r270.max.y).toBe(60);
+    expect(noteBounds(turned(45))).toEqual(flat);
+  });
+});
+

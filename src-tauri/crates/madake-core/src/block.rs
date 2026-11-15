@@ -473,7 +473,12 @@ fn same_line_pairs(a: &[BlockPin], b: &[BlockPin], size: f64, pitch: BlockPitch)
 /// 外形の中央に1つだけ描くので、その最大幅 (`merged`) と、残りの左の最大幅+残りの右の最大幅+間 (両方あるとき)
 /// の大きいほうが収まればよい (上下にピンがあるブロックは組をまとめない)。`h`は外形の高さ (組が同じ線上かは高さで決まる)。
 fn inside_numbers_width(pins: &BlockPins, h: f64, pitch: BlockPitch) -> f64 {
-    let pairs = same_line_pairs(&pins.left, &pins.right, h, pitch);
+    // 上下にピンがあるブロックは組をまとめない (番号は左右それぞれに描く) ので、幅も左右の番号ぶん要る
+    let pairs = if pins.top.is_empty() && pins.bottom.is_empty() {
+        same_line_pairs(&pins.left, &pins.right, h, pitch)
+    } else {
+        Vec::new()
+    };
     // 組にならなかったピンの、番号の最大幅と本数
     let rest = |list: &[BlockPin], second: bool| -> (f64, usize) {
         let mut widest = 0.0_f64;
@@ -2652,6 +2657,9 @@ mod tests {
         let mut feed_cross = fine(r#"{"left":[{"no":"1"}],"top":[{"no":"7"}],"bottom":[{"no":"7"}]}"#, None);
         feed_cross.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
         cases.push(("feedthrough-inside-crossing".into(), feed_cross));
+        let mut feed_top = fine(r#"{"left":[{"no":"1234"}],"right":[{"no":"1234"}],"top":[{"no":"T"}]}"#, None);
+        feed_top.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        cases.push(("feedthrough-inside-pair-with-top".into(), feed_top));
         cases
     }
 
@@ -2722,5 +2730,26 @@ mod tests {
         assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("below")).is_none());
         let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, None).unwrap();
         assert!(!attrs.contains_key(BLOCK_CAPTION_ATTR));
+    }
+
+    /// When a left/right feed-through pair is not merged because the top side has a pin, the box is wide enough for both numbers: with four-character numbers it is as wide as the same block without the feed-through rule.
+    /// 上辺にピンがあって左右の貫通ピンの番号をまとめないとき、箱は左右2つの番号が収まる幅になる: 4文字の番号なら、貫通でない同じ形のブロックと同じ幅になる。
+    #[test]
+    fn an_unmerged_feedthrough_pair_gets_room_for_both_numbers() {
+        let mut pair = fine(r#"{"left":[{"no":"1234"}],"right":[{"no":"1234"}],"top":[{"no":"T"}]}"#, None);
+        pair.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let mut plain = fine(r#"{"left":[{"no":"1234"}],"right":[{"no":"5678"}],"top":[{"no":"T"}]}"#, None);
+        plain.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let (a, b) = (block_symbol(&pair).unwrap(), block_symbol(&plain).unwrap());
+        let (ax1, _, ax2, _) = outline_of(&a);
+        let (bx1, _, bx2, _) = outline_of(&b);
+        assert_eq!((ax1, ax2), (bx1, bx2), "貫通の組も、まとめないなら同じ幅");
+        let xs = |d: &SymbolDef| -> Vec<f64> { d.pins.iter().map(|p| p.at.x).collect() };
+        assert_eq!(xs(&a), xs(&b), "ピンの位置も同じ");
+        // 上辺のピンを外すと番号は1つにまとまり、箱は狭くなる
+        let mut merged = fine(r#"{"left":[{"no":"1234"}],"right":[{"no":"1234"}]}"#, None);
+        merged.insert(BLOCK_NUMBERS_ATTR.to_string(), "inside".to_string());
+        let (mx1, _, mx2, _) = outline_of(&block_symbol(&merged).unwrap());
+        assert!(mx2 - mx1 < ax2 - ax1, "{} < {}", mx2 - mx1, ax2 - ax1);
     }
 }

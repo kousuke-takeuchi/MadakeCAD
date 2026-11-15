@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Sheet } from "../ipc";
+import { junctionDotRMm } from "./renderer";
 import { DEFAULT_WIRE_WEIGHT_MM, hidesWireNotes, wireWeightMm } from "./wireStyle";
 
 const sheet = (extra: Record<string, unknown>): Sheet => ({ entities: {}, ...extra }) as unknown as Sheet;
@@ -33,3 +34,13 @@ describe("sheet wire style", () => {
     expect(hidesWireNotes(undefined)).toBe(false);
   });
 });
+
+describe("junction dot on thick wires", () => {
+  // ja: 分岐点の丸は、既定の配線の太さでは半径0.6mmのまま、太い配線のシートでは太さの0.9倍になる
+  it("keeps 0.6 mm at the default weight and grows to 0.9 times a thick wire", () => {
+    expect(junctionDotRMm(sheet({}))).toBe(0.6);
+    expect(junctionDotRMm(sheet({ wire_weight_mm: 0.5 }))).toBe(0.6);
+    expect(junctionDotRMm(sheet({ wire_weight_mm: 1.0 }))).toBeCloseTo(0.9, 9);
+  });
+});
+

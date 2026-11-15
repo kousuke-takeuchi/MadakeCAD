@@ -750,7 +750,7 @@ describe("block captions and group names (Rust twin)", () => {
 describe("fine pitch blocks (Rust twin)", () => {
   // ja: golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブ・ピン・属性の置き場所を返す
   it("draws every block of the fine-pitch golden file exactly like Rust", () => {
-    expect(fineGolden.cases.length).toBe(18);
+    expect(fineGolden.cases.length).toBe(19);
     for (const c of fineGolden.cases) {
       const def = blockSymbol(c.attrs as Record<string, string>);
       expect({

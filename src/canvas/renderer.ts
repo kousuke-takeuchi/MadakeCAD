@@ -128,6 +128,12 @@ export const SYMBOL_STROKE_MM = 0.3;
  * 引き出し線 (G20) の対象端に同じ大きさで描く。
  */
 export const JUNCTION_DOT_R_MM = 0.6;
+/** 太い配線のシートで分岐点の丸が線に埋もれないための倍率 (半径 ÷ 配線の太さ)。svg.rs の JUNCTION_DOT_PER_WEIGHT と一致。 */
+export const JUNCTION_DOT_PER_WEIGHT = 0.9;
+/** シートの配線の分岐点の丸の半径 (mm)。svg.rs の junction_dot_r と同じ。 */
+export function junctionDotRMm(sheet: Sheet | null | undefined): number {
+  return Math.max(JUNCTION_DOT_R_MM, JUNCTION_DOT_PER_WEIGHT * wireWeightMm(sheet));
+}
 /** 盤の名前を外形の上端からどれだけ上に置くか (mm)。svg.rsのPANEL_LABEL_DYと一致。 */
 const PANEL_LABEL_DY = 1.5;
 /** フットプリントの型番の文字高さ (mm) と、参照記号からの送り (mm)。svg.rsと一致。 */
@@ -1460,7 +1466,7 @@ export function renderSheet(
       const s = vp.toScreen(e.at);
       ctx.fillStyle = theme.line;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, Math.max(2, JUNCTION_DOT_R_MM * vp.scale), 0, Math.PI * 2);
+      ctx.arc(s.x, s.y, Math.max(2, junctionDotRMm(sheet) * vp.scale), 0, Math.PI * 2);
       ctx.fill();
     } else if (e.kind === "net_label") {
       // 方向付きタグ (G3/G19)。attrs.tagがある時だけ旗の枠で囲む (Rust側 net_tag.rs と同形)

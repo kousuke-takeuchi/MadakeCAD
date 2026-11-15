@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3272仕様項目**。
+全6領域・**3278仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -86,6 +86,7 @@
 - block_caption は "above" と "inside" だけを受け付ける。属性の無いブロックは、これまでどおり上に書く。 <sub>`block_caption_accepts_only_above_and_inside`</sub>
 - block_caption はブロック自身の絵を変えない: 外形・ピン・番号は属性の有無で同じ。 <sub>`block_caption_does_not_change_the_drawn_block`</sub>
 - ブロックの参照記号の置き場所は、書き出したファイルを読み戻しても残る: 取り込みは block_caption をピン表と一緒に保つ。 <sub>`imported_block_attrs_keep_the_caption_place`</sub>
+- 上辺にピンがあって左右の貫通ピンの番号をまとめないとき、箱は左右2つの番号が収まる幅になる: 4文字の番号なら、貫通でない同じ形のブロックと同じ幅になる。 <sub>`an_unmerged_feedthrough_pair_gets_room_for_both_numbers`</sub>
 
 ### cable
 
@@ -458,6 +459,7 @@
 - シンボルを指す引き出し線は、図面に描かれている外形ちょうどで止まる: 配置基準点は必ず外形の内側に入り、シンボルの中の文字は文字の箱ではなく基準点1点として数える。 <sub>`a_leader_targets_exactly_the_outline_the_drawing_shows`</sub>
 - ピングループ括弧の付いたシンボルを指す引き出し線は、シンボル本体ではなく括弧の脇のキャプションの外側で止まる。括弧もキャプションもそのシンボルと一緒に描かれるので、その上に重ねて終わると読みにくいため。 <sub>`a_leader_stops_outside_a_symbols_pin_group_caption`</sub>
 - entity_boundsはシンボルの外形をその定義から求めるので、引き出し線はシンボルも対象にできる。 <sub>`entity_bounds_resolves_a_symbol_instance`</sub>
+- 90・180・270度回した注記の箱は、文字と一緒に基準点を中心に回る。選択も引き出し線も描かれた文字に合う。回していない注記の箱は変わらない。 <sub>`the_box_of_a_turned_note_turns_about_its_anchor`</sub>
 
 ### 回路マクロ
 
@@ -1107,6 +1109,7 @@
 - 90・180・270度回した注記は、自分の基準点を中心にした回転の中に描かれる。回していない注記は回転を付けず、これまでと同じに書かれる。 <sub>`a_turned_note_is_rotated_about_its_anchor`</sub>
 - block_caption が "inside" のブロックは、参照記号と型番を外形の中に中央揃えで書き、2行のまとまりを箱の中央の高さにそろえる。属性が無ければ箱の上のまま。 <sub>`a_block_can_write_its_caption_inside_the_outline`</sub>
 - 参照記号だけ、または型番だけのとき、中に書く1行は箱の中央の高さにそろう。 <sub>`a_single_inside_caption_line_is_centred`</sub>
+- 分岐点の丸は、既定の配線の太さでは半径0.6mmのまま、太い配線のシートでは太さの0.9倍になり、線に埋もれない。 <sub>`the_junction_dot_grows_with_a_thick_wire`</sub>
 
 ### シンボルライブラリ
 
@@ -2908,6 +2911,7 @@
 - スロットを持たない同梱シンボルでは、機能ラベルは外形のすぐ下・基準点を中心に置かれる <sub>`function label`</sub>
 - シンボル定義がFUNCTIONスロットを持つ場合は、そのスロットの位置と文字高さに従う <sub>`function label`</sub>
 - 注記の回転は90・180・270度だけを描く。0度・90度刻みでない値・値なしは回さない <sub>`note rotation`</sub>
+- 90・180・270度回した注記の箱は、文字と一緒に基準点を中心に回る。回していない注記の箱は変わらない <sub>`box of a turned note`</sub>
 
 ### viewClasses
 
@@ -2988,6 +2992,7 @@
 - 配線の太さを設定していないシートは0.35mm、設定したシートはその太さになる <sub>`sheet wire style`</sub>
 - 0.18〜1.0mm の外の太さや数でない太さは使わず、既定の0.35mmで描く <sub>`sheet wire style`</sub>
 - 配線注記を描かない設定は、シートが true を持つときだけ有効になる <sub>`sheet wire style`</sub>
+- 分岐点の丸は、既定の配線の太さでは半径0.6mmのまま、太い配線のシートでは太さの0.9倍になる <sub>`junction dot on thick wires`</sub>
 
 ### xref
 
@@ -3326,6 +3331,7 @@
 - project_replacedでミラーのプロジェクト全体が置き換わる <sub>`document store`</sub>
 - シート追加・削除のパッチは並び順を保つ <sub>`document store`</sub>
 - シートメタ更新のパッチはエンティティに触れない <sub>`document store`</sub>
+- シートメタ更新のパッチに無い項目は消える。配線の太さと配線注記の非表示を元に戻すと、キャンバスも既定へ戻る <sub>`document store`</sub>
 - 古いrevisionのパッチは破棄される(二重配信しても安全) <sub>`document store`</sub>
 - mech_links_replaced パッチでFreeCAD対応付けの一覧が置き換わる <sub>`document store`</sub>
 - 図枠テンプレートを差し替えるパッチはミラーへ反映され、undoでも即座に元へ戻る <sub>`document store`</sub>

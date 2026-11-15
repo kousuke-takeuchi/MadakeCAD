@@ -225,6 +225,11 @@ export const useDocumentStore = defineStore("document", {
           case "sheet_meta_updated": {
             const sheet = this.project?.sheets.find((s) => s.id === op.sheet.id);
             if (sheet) {
+              // 未設定へ戻った項目 (配線の太さなど) はパッチに現れないので、パッチに無いキーは消す
+              const target = sheet as unknown as Record<string, unknown>;
+              for (const key of Object.keys(target)) {
+                if (key !== "entities" && !(key in op.sheet)) delete target[key];
+              }
               Object.assign(sheet, { ...op.sheet, entities: sheet.entities });
             }
             break;

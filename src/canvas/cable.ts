@@ -5,6 +5,7 @@
 // 「シールド楕円の形」「描画」「当たり判定」だけを持ち、注記とシールドの形はSVG出力
 // (svg.rs) と同じ規則で作る。
 
+import { wireWeightMm } from "./wireStyle";
 import type { Cable, CableCore, Command, CoreEnd, Entity, Point, Sheet, SymbolDef, Wire } from "../ipc";
 import { resolveInstanceDef, transformLocal } from "./dynamicSymbol";
 import { theme } from "./theme";
@@ -340,7 +341,7 @@ function drawRun(
   for (const [a, b] of runBars(sheet, c, defs)) line(a, b, RUN_STROKE);
   ctx.textBaseline = "alphabetic";
   for (const fan of runFans(sheet, c)) {
-    line(fan.from, fan.to, 0.35);
+    line(fan.from, fan.to, wireWeightMm(sheet));
     const at = vp.toScreen({ x: fan.to.x, y: fan.to.y - 0.8 });
     setDrawingFont(ctx, CORE_LABEL, vp.scale, "monospace");
     ctx.textAlign = "center";

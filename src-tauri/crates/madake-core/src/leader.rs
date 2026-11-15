@@ -31,7 +31,18 @@ pub fn text_bounds(text: &TextEntity) -> Rect {
         TextAnchor::Middle => text.at.x - w / 2.0,
         TextAnchor::End => text.at.x - w,
     };
-    Rect::from_corners(Point::new(x0, text.at.y - text.height), Point::new(x0 + w, text.at.y))
+    let (a, b) = (Point::new(x0, text.at.y - text.height), Point::new(x0 + w, text.at.y));
+    // 回した注記 (90・180・270、時計回り) は、箱も基準点を中心に回す (描画と同じ)
+    let turn = |p: Point| -> Point {
+        let (dx, dy) = (p.x - text.at.x, p.y - text.at.y);
+        match text.rotation % 360 {
+            90 => Point::new(text.at.x - dy, text.at.y + dx),
+            180 => Point::new(text.at.x - dx, text.at.y - dy),
+            270 => Point::new(text.at.x + dy, text.at.y - dx),
+            _ => p,
+        }
+    };
+    Rect::from_corners(turn(a), turn(b))
 }
 
 /// 任意のエンティティの外接矩形 (用紙座標)。求まらない種類 (盤レイアウト専用など) や
@@ -301,5 +312,34 @@ mod tests {
         let def = crate::symbol::resolve_symbol("relay_coil").unwrap();
         let defs = DefIndex::new(std::slice::from_ref(&def));
         assert!(entity_bounds(&inst, &defs).is_some());
+    }
+
+    /// The box of a note turned 90, 180 or 270 degrees is turned about its anchor with the text, so selection and leaders follow what is drawn; an unturned note keeps its box.
+    /// 90・180・270度回した注記の箱は、文字と一緒に基準点を中心に回る。選択も引き出し線も描かれた文字に合う。回していない注記の箱は変わらない。
+    #[test]
+    fn the_box_of_a_turned_note_turns_about_its_anchor() {
+        let mut note = TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(40.0, 60.0),
+            text: "ABCD".into(),
+            height: 2.5,
+            rotation: 0,
+            anchor: TextAnchor::Start,
+            color: None,
+            bold: false,
+            leader_to: None,
+        };
+        let w = crate::tidy::text_width("ABCD", 2.5);
+        let b = text_bounds(&note);
+        assert_eq!((b.min, b.max), (Point::new(40.0, 57.5), Point::new(40.0 + w, 60.0)));
+        note.rotation = 90; // 下へ読む: 幅が下へ、高さが右へ
+        let b = text_bounds(&note);
+        assert_eq!((b.min, b.max), (Point::new(40.0, 60.0), Point::new(42.5, 60.0 + w)));
+        note.rotation = 180;
+        let b = text_bounds(&note);
+        assert_eq!((b.min, b.max), (Point::new(40.0 - w, 60.0), Point::new(40.0, 62.5)));
+        note.rotation = 270; // 上へ読む: 幅が上へ、高さが左へ
+        let b = text_bounds(&note);
+        assert_eq!((b.min, b.max), (Point::new(37.5, 60.0 - w), Point::new(40.0, 60.0)));
     }
 }

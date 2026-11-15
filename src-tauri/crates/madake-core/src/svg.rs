@@ -15,8 +15,6 @@ use crate::symbol::{Primitive, SymbolDef};
 /// この定数は帳票シート ([`crate::report_sheet`]) やゾーン住所の計算 ([`crate::xref`]) が
 /// 使う、JIS標準どおりの既定値。
 pub const FRAME_MARGIN: f64 = 10.0;
-/// 配線の線幅 (mm)。
-const WIRE_STROKE: f64 = 0.35;
 /// シンボルの線幅 (mm)。
 const SYMBOL_STROKE: f64 = 0.3;
 // ジャンパバー (G5) の見た目はキャンバス描画と共通なので、端子台チャート側に置いてある。
@@ -69,6 +67,13 @@ const CABLE_STROKE: f64 = 0.35;
 /// 丸印の半径 (mm)。配線の分岐点 (ジャンクション) と、引き出し線 (G20) の対象端に
 /// 同じ大きさで描く。図面上で「ここに繋がっている」を表す印は1種類だけにする。
 pub const JUNCTION_DOT_R: f64 = 0.6;
+/// 配線を太くしたシートで、分岐点の丸が線に埋もれないための倍率 (半径 ÷ 配線の太さ)。
+pub const JUNCTION_DOT_PER_WEIGHT: f64 = 0.9;
+
+/// シートの配線の分岐点の丸の半径 (mm)。既定の太さでは [`JUNCTION_DOT_R`]、太い配線では太さの0.9倍。
+pub fn junction_dot_r(sheet: &Sheet) -> f64 {
+    JUNCTION_DOT_R.max(JUNCTION_DOT_PER_WEIGHT * sheet.wire_weight_mm())
+}
 /// ピングループ括弧 (G8) の線幅 (mm)。シンボル本体の線と同じ太さ。
 const PIN_GROUP_BRACKET_STROKE: f64 = SYMBOL_STROKE;
 /// ハーネス名の文字高さ (mm)。
@@ -1674,7 +1679,7 @@ fn render_run_cable(out: &mut String, sheet: &Sheet, symbols: &[SymbolDef], c: &
         line_el(out, a.x, a.y, b.x, b.y, crate::cable::RUN_STROKE_MM, "#000");
     }
     for (a, b, core) in crate::cable::run_fans(sheet, c) {
-        line_el(out, a.x, a.y, b.x, b.y, WIRE_STROKE, "#000");
+        line_el(out, a.x, a.y, b.x, b.y, sheet.wire_weight_mm(), "#000");
         text_el(out, b.x, b.y - 0.8, crate::cable::CORE_LABEL_MM, "#000", "middle", &core);
     }
     if c.shield.is_some() {
@@ -1887,7 +1892,7 @@ fn sheet_to_svg_with_xrefs(
                 let _ = write!(
                     out,
                     "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"#000\"/>\n",
-                    n(j.at.x), n(j.at.y), n(JUNCTION_DOT_R)
+                    n(j.at.x), n(j.at.y), n(junction_dot_r(sheet))
                 );
             }
             Entity::NetLabel(l) => {
@@ -5554,5 +5559,22 @@ mod tests {
         let svg = sheet_to_svg(&sheet_with(vec![Entity::Symbol(captioned_block(Some("inside"), "", "AMP"))]), &builtin_symbols(), &[]);
         let (_, y) = caption_y(&svg, "AMP");
         assert!((y - cap / 2.0 - 80.0).abs() < 1e-6, "{y}");
+    }
+
+    /// The junction dot keeps its 0.6 mm radius at the default wire weight and grows to 0.9 times the weight on a sheet with thick wires, so it stays visible.
+    /// 分岐点の丸は、既定の配線の太さでは半径0.6mmのまま、太い配線のシートでは太さの0.9倍になり、線に埋もれない。
+    #[test]
+    fn the_junction_dot_grows_with_a_thick_wire() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        assert_eq!(junction_dot_r(&sheet), 0.6);
+        sheet.wire_weight_mm = Some(0.5);
+        assert_eq!(junction_dot_r(&sheet), 0.6);
+        sheet.wire_weight_mm = Some(1.0);
+        assert!((junction_dot_r(&sheet) - 0.9).abs() < 1e-9);
+        let j = Entity::Junction(crate::model::Junction { id: Uuid::new_v4(), at: Point::new(70.0, 60.0) });
+        sheet.entities.insert(j.id(), j);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
+        let dot = svg.lines().find(|l| l.starts_with("<circle") && l.contains("cx=\"70\"")).expect("丸が描かれる");
+        assert_eq!(attr(dot, "r"), Some(0.9), "{dot}");
     }
 }
