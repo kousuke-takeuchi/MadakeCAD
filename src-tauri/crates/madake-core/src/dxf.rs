@@ -2010,7 +2010,14 @@ pub fn import_dxf(
                     if symbol_id == crate::block::BLOCK_SYMBOL_ID {
                         let pins = attrs.remove("BLOCK_PINS");
                         let size = attrs.remove("BLOCK_SIZE");
-                        match crate::block::imported_block_attrs(pins.as_deref(), size.as_deref()) {
+                        let pitch = attrs.remove("BLOCK_PITCH");
+                        let numbers = attrs.remove("BLOCK_NUMBERS");
+                        match crate::block::imported_block_attrs(
+                            pins.as_deref(),
+                            size.as_deref(),
+                            pitch.as_deref(),
+                            numbers.as_deref(),
+                        ) {
                             Some(a) => attrs.extend(a),
                             None => report
                                 .warnings
@@ -2401,6 +2408,41 @@ mod tests {
             b8.attrs
         );
         assert!(syms.iter().all(|s| !s.attrs.contains_key("BLOCK_PINS")));
+    }
+
+    /// A 2.5 mm block with numbers inside exported to DXF imports back with its pitch and number position, and its pins are where they were.
+    /// 番号を内側に描く2.5mm間隔のブロックは、DXFへ書き出して読み戻しても間隔と番号の位置を保ち、ピンの位置も変わらない。
+    #[test]
+    fn a_fine_block_survives_a_dxf_round_trip() {
+        let (sheet, orig) = crate::block::fine_block_sheet();
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
+        let (project, report) =
+            import_dxf(&dxf, "往復", &DxfImportOptions::default()).unwrap();
+        assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+        let back = project.sheets[0]
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Symbol(s) => Some(s),
+                _ => None,
+            })
+            .expect("ブロックが読み戻される");
+        assert_eq!(back.attrs["block_pitch"], "2.5");
+        assert_eq!(back.attrs["block_numbers"], "inside");
+        assert!(!back.attrs.contains_key("BLOCK_PITCH") && !back.attrs.contains_key("BLOCK_NUMBERS"));
+        assert_eq!(crate::block::drawn_like(&back.attrs), crate::block::drawn_like(&orig));
+    }
+
+    /// The DXF export of a block without the pitch and number attributes does not mention them.
+    /// 間隔と番号の属性を持たないブロックのDXF書き出しには、その2つの属性は現れない。
+    #[test]
+    fn a_plain_block_dxf_export_does_not_mention_pitch_or_numbers() {
+        let sheet = crate::block::export_blocks_sheet();
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
+        assert!(dxf.contains("BLOCK_PINS"));
+        for word in ["BLOCK_PITCH", "BLOCK_NUMBERS", "block_pitch", "block_numbers"] {
+            assert!(!dxf.contains(word), "{word}");
+        }
     }
 
     /// A block whose pin table cannot be read on import becomes the template box with a warning naming it.

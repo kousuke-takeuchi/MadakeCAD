@@ -860,10 +860,20 @@ pub fn export_def<'a>(
     Some(std::borrow::Cow::Owned(def))
 }
 
-/// 読み込んだ`block_pins` / `block_size`の空でない値。ブロックとして読めないときは`None`。
-pub fn imported_block_attrs(pins: Option<&str>, size: Option<&str>) -> Option<BTreeMap<String, String>> {
+/// 読み込んだ`block_pins` / `block_size` / `block_pitch` / `block_numbers`の空でない値。ブロックとして読めないときは`None`。
+pub fn imported_block_attrs(
+    pins: Option<&str>,
+    size: Option<&str>,
+    pitch: Option<&str>,
+    numbers: Option<&str>,
+) -> Option<BTreeMap<String, String>> {
     let mut attrs = BTreeMap::new();
-    for (k, v) in [(BLOCK_PINS_ATTR, pins), (BLOCK_SIZE_ATTR, size)] {
+    for (k, v) in [
+        (BLOCK_PINS_ATTR, pins),
+        (BLOCK_SIZE_ATTR, size),
+        (BLOCK_PITCH_ATTR, pitch),
+        (BLOCK_NUMBERS_ATTR, numbers),
+    ] {
         if let Some(v) = v.filter(|v| !v.is_empty()) {
             attrs.insert(k.to_string(), v.to_string());
         }
@@ -912,6 +922,30 @@ pub(crate) fn export_blocks_sheet() -> crate::model::Sheet {
         sheet.entities.insert(e.id(), e);
     }
     sheet
+}
+
+/// テスト用: 2.5mm間隔・番号を内側に描くブロック1つだけの用紙と、そのブロックの属性 (往復の試験が共有する)。
+#[cfg(test)]
+pub(crate) fn fine_block_sheet() -> (crate::model::Sheet, BTreeMap<String, String>) {
+    use crate::model::{Orientation, PaperSize, Sheet};
+    let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+    let e = test_block("BF", "", 60.0, 60.0, r#"{"left":[{"no":"1"},{"no":"2"}],"right":[{"no":"3"}]}"#);
+    let crate::model::Entity::Symbol(mut inst) = e else { unreachable!() };
+    inst.attrs.insert(BLOCK_PITCH_ATTR.into(), "2.5".into());
+    inst.attrs.insert(BLOCK_NUMBERS_ATTR.into(), "inside".into());
+    inst.attrs.insert(BLOCK_SIZE_ATTR.into(), r#"{"w":7.5,"h":7.5}"#.into());
+    let attrs = inst.attrs.clone();
+    let e = crate::model::Entity::Symbol(inst);
+    sheet.entities.insert(e.id(), e);
+    (sheet, attrs)
+}
+
+/// テスト用: ブロックの属性から引いた、ピンの (番号, 位置) と外形の図形 (往復の前後の比較に使う)。
+#[cfg(test)]
+pub(crate) fn drawn_like(attrs: &BTreeMap<String, String>) -> (Vec<String>, String) {
+    let def = block_symbol(attrs).expect("ブロック定義");
+    let pins = def.pins.iter().map(|p| format!("{}@{:?}", p.number, p.at)).collect();
+    (pins, format!("{:?}", def.primitives))
 }
 
 /// テスト用: ポート (接点を持つピン) のブロックと、ピンの位置 (他モジュールのテストが共有する)。

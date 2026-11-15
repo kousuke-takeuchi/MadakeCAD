@@ -441,6 +441,8 @@ pub fn import_kicad_sch(
             match crate::block::imported_block_attrs(
                 opt("block_pins").as_deref(),
                 opt("block_size").as_deref(),
+                opt("block_pitch").as_deref(),
+                opt("block_numbers").as_deref(),
             ) {
                 Some(a) => attrs = a,
                 None => report
@@ -1366,6 +1368,38 @@ mod tests {
             })
             .unwrap();
         assert_eq!(b8.attrs["block_pins"], orig.attrs["block_pins"]);
+    }
+
+    /// A 2.5 mm block with numbers inside exported to KiCad imports back with its pitch and number position, and its pins are where they were.
+    /// 番号を内側に描く2.5mm間隔のブロックは、KiCadへ書き出して読み戻しても間隔と番号の位置を保ち、ピンの位置も変わらない。
+    #[test]
+    fn a_fine_block_survives_a_kicad_round_trip() {
+        let (sheet, orig) = crate::block::fine_block_sheet();
+        let (text, _) = export_kicad_sch(&sheet, &defs(&sheet));
+        let (project, report) = import_kicad_sch(&text, "往復").unwrap();
+        assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+        let back = entities_of(&project.sheets[0])
+            .into_iter()
+            .find_map(|e| match e {
+                Entity::Symbol(s) => Some(s),
+                _ => None,
+            })
+            .expect("ブロックが読み戻される");
+        assert_eq!(back.attrs["block_pitch"], "2.5");
+        assert_eq!(back.attrs["block_numbers"], "inside");
+        assert_eq!(crate::block::drawn_like(&back.attrs), crate::block::drawn_like(&orig));
+    }
+
+    /// The KiCad export of a block without the pitch and number attributes does not mention them.
+    /// 間隔と番号の属性を持たないブロックのKiCad書き出しには、その2つの属性は現れない。
+    #[test]
+    fn a_plain_block_kicad_export_does_not_mention_pitch_or_numbers() {
+        let sheet = crate::block::export_blocks_sheet();
+        let (text, _) = export_kicad_sch(&sheet, &defs(&sheet));
+        assert!(text.contains("block_pins"));
+        for word in ["block_pitch", "block_numbers"] {
+            assert!(!text.contains(word), "{word}");
+        }
     }
 
     /// A wire number becomes a KiCad label on the numbered net, so the net keeps its name in KiCad and on re-import.

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3195 specification clauses** across 6 areas.
+**3199 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -271,6 +271,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Wires are written as one LINE per segment on the WIRES layer with the Y axis flipped to DXF's upward convention. <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
 - Each distinct block shape is its own DXF block (MDK_block for the template, MDK_block_<hash> otherwise); equal shapes share one, the picture is in it, and a block whose pin table cannot be read is reported, not drawn as the template. <sub>`each_block_shape_is_its_own_dxf_block`</sub>
 - Block shapes exported to DXF import back as plain blocks with their pin table restored in block_pins (no upper-case BLOCK_PINS left). <sub>`our_block_shapes_import_back_as_blocks_with_their_pin_table`</sub>
+- A 2.5 mm block with numbers inside exported to DXF imports back with its pitch and number position, and its pins are where they were. <sub>`a_fine_block_survives_a_dxf_round_trip`</sub>
+- The DXF export of a block without the pitch and number attributes does not mention them. <sub>`a_plain_block_dxf_export_does_not_mention_pitch_or_numbers`</sub>
 - A block whose pin table cannot be read on import becomes the template box with a warning naming it. <sub>`an_unreadable_block_pin_table_imports_as_the_template_with_a_warning`</sub>
 - Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with a negative X scale for mirroring and TAG1/CAT/DESC1/RATING1/TERMnn attributes. <sub>`symbols_become_block_inserts_with_attributes`</sub>
 - Wire numbers go to the WIRENO layer, net labels to LABELS, notes to MISC, and a harness becomes a closed dashed polyline on HARNESS with its name. <sub>`texts_and_harness_go_to_their_layers`</sub>
@@ -414,6 +416,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Every symbol used on the sheet is embedded once in lib_symbols with its graphics and pins, so KiCad opens the file without MadakeCAD libraries. <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
 - Each distinct block shape is its own KiCad lib_symbol (MadakeCAD:block for the template, block_<hash> otherwise) with numbered pins and filled graphics as KiCad fill; equal shapes share one, and a block whose pin table cannot be read is reported as unresolved, not exported as the template box. <sub>`each_block_shape_is_its_own_kicad_lib_symbol`</sub>
 - Our per-shape block lib_symbols import back as blocks that keep their pin table (block_pins) instead of being skipped. <sub>`our_block_lib_symbols_import_back_as_blocks_with_their_pin_table`</sub>
+- A 2.5 mm block with numbers inside exported to KiCad imports back with its pitch and number position, and its pins are where they were. <sub>`a_fine_block_survives_a_kicad_round_trip`</sub>
+- The KiCad export of a block without the pitch and number attributes does not mention them. <sub>`a_plain_block_kicad_export_does_not_mention_pitch_or_numbers`</sub>
 - A wire number becomes a KiCad label on the numbered net, so the net keeps its name in KiCad and on re-import. <sub>`wire_numbers_become_labels`</sub>
 - A harness boundary is exported as a dashed closed polyline plus a text with its name. <sub>`harness_becomes_dashed_polyline_with_name`</sub>
 - Quotes, backslashes and newlines in text are escaped so the exported file parses and reads back unchanged. <sub>`strings_are_escaped_and_read_back`</sub>

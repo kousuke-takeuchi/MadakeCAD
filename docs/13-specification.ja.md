@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3195仕様項目**。
+全6領域・**3199仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -271,6 +271,8 @@
 - 配線はセグメントごとに1本のLINEとしてWIRESレイヤに書かれ、Y座標はDXFの上向き座標へ反転される。 <sub>`wires_become_lines_on_the_wires_layer_with_y_flipped`</sub>
 - ブロックは形ごとに別のDXFブロックになる(見本はMDK_block、他はMDK_block_<ハッシュ>)。同じ形は1つを共有し、絵も入る。ピン表を読めないブロックは見本の箱にせず報告する。 <sub>`each_block_shape_is_its_own_dxf_block`</sub>
 - DXFへ書き出したブロックの形は、ピン表をblock_pinsに戻した普通のブロックとして読み戻せる(大文字のBLOCK_PINSは残らない)。 <sub>`our_block_shapes_import_back_as_blocks_with_their_pin_table`</sub>
+- 番号を内側に描く2.5mm間隔のブロックは、DXFへ書き出して読み戻しても間隔と番号の位置を保ち、ピンの位置も変わらない。 <sub>`a_fine_block_survives_a_dxf_round_trip`</sub>
+- 間隔と番号の属性を持たないブロックのDXF書き出しには、その2つの属性は現れない。 <sub>`a_plain_block_dxf_export_does_not_mention_pitch_or_numbers`</sub>
 - 読み戻すときにピン表が読めないブロックは、名前入りの警告つきで見本の箱になる。 <sub>`an_unreadable_block_pin_table_imports_as_the_template_with_a_warning`</sub>
 - シンボルはMDK_<symbol_id>ブロック(1回だけ定義)のINSERTになり、ミラー(X倍率-1)・TAG1/CAT/DESC1/RATING1/TERMnnの属性を持つ。 <sub>`symbols_become_block_inserts_with_attributes`</sub>
 - 線番はWIRENOレイヤ、ネットラベルはLABELS、注記はMISCに書かれ、ハーネス境界はHARNESSレイヤの閉じた破線多角形と名前になる。 <sub>`texts_and_harness_go_to_their_layers`</sub>
@@ -414,6 +416,8 @@
 - シートで使うシンボルは図形とピンごとにlib_symbolsへ1回だけ埋め込まれ、KiCad側にライブラリが無くても開ける。 <sub>`used_symbols_are_embedded_in_lib_symbols`</sub>
 - ブロックは形ごとに別のlib_symbolになる(見本はMadakeCAD:block、他はblock_<ハッシュ>)。ピン番号つきで、塗りはKiCadの塗りになり、同じ形は1つを共有する。ピン表を読めないブロックは見本の箱にせず書けなかったものとして報告する。 <sub>`each_block_shape_is_its_own_kicad_lib_symbol`</sub>
 - 自前の形ごとのブロックlib_symbolは、スキップされずにピン表(block_pins)を保ったブロックとして読み戻せる。 <sub>`our_block_lib_symbols_import_back_as_blocks_with_their_pin_table`</sub>
+- 番号を内側に描く2.5mm間隔のブロックは、KiCadへ書き出して読み戻しても間隔と番号の位置を保ち、ピンの位置も変わらない。 <sub>`a_fine_block_survives_a_kicad_round_trip`</sub>
+- 間隔と番号の属性を持たないブロックのKiCad書き出しには、その2つの属性は現れない。 <sub>`a_plain_block_kicad_export_does_not_mention_pitch_or_numbers`</sub>
 - 線番はそのネット上のKiCadラベルになり、KiCadでも再インポート後もネット名として残る。 <sub>`wire_numbers_become_labels`</sub>
 - ハーネス境界は破線の閉じた多角形と、その名前の注記として書き出される。 <sub>`harness_becomes_dashed_polyline_with_name`</sub>
 - 注記内の引用符・バックスラッシュ・改行はエスケープされ、書き出したファイルは正しく解釈されて同じ文字列に戻る。 <sub>`strings_are_escaped_and_read_back`</sub>
