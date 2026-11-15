@@ -2070,8 +2070,8 @@ mod tests {
         assert_eq!(kept.symbol_id, "resistor", "元の部品のまま");
     }
 
-    /// A block whose pin table is broken (duplicate numbers) is refused when added, and the sheet is left untouched.
-    /// ピン表が壊れている(番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。
+    /// A block whose pin table is broken (a duplicate number on one side) is refused when added, and the sheet is left untouched.
+    /// ピン表が壊れている(同じ辺で番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。
     #[test]
     fn a_block_with_a_broken_pin_table_is_refused_and_changes_nothing() {
         let (mut engine, sheet_id) = test_engine();
@@ -2080,7 +2080,7 @@ mod tests {
             "MainController",
             100.0,
             50.0,
-            r#"{"left":[{"no":"IN1"}],"right":[{"no":"IN1"}]}"#,
+            r#"{"left":[{"no":"IN1"},{"no":"IN1"}]}"#,
         );
         let err = engine
             .execute(Command::AddEntity {

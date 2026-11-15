@@ -132,7 +132,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A parametric symbol asked for outside its pole range (0 poles, or more than the limit) is refused with a message that says the range. <sub>`a_pole_count_outside_the_range_is_refused`</sub>
 - Every ordinary placement still goes through: bundled symbols, parametric symbols inside their range, and a block defined by its attributes. <sub>`valid_symbol_ids_are_still_accepted`</sub>
 - Changing an existing symbol to an unknown id is refused too, so a symbol on the sheet can always be drawn. <sub>`changing_a_symbol_to_an_unknown_id_is_refused`</sub>
-- A block whose pin table is broken (duplicate numbers) is refused when added, and the sheet is left untouched. <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
+- A block whose pin table is broken (a duplicate number on one side) is refused when added, and the sheet is left untouched. <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - Editing a good block into a broken one is refused too, so a block on the sheet always has a drawable pin table. <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
 - A block whose connector table is wrong (a connector name on a USB socket, or a blank name) is refused when added or edited, with the reason. <sub>`a_block_with_a_bad_connector_table_is_refused`</sub>
 - A block with an unknown pin pitch ("3") is refused when added and when an existing block is edited to it, and the document is left exactly as it was. <sub>`a_block_with_an_unknown_pitch_is_refused_and_changes_nothing`</sub>
@@ -388,7 +388,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
 - The current file format version is 23, the version that added feed-through block pins. <sub>`the_current_format_version_is_twenty_three`</sub>
 - A version 22 project file opens in this build and becomes version 23; its blocks keep their attributes and pins unchanged. <sub>`a_version_22_file_opens_as_version_23`</sub>
-- A version 21 project file opens in this build and becomes version 22; its blocks keep their attributes and their 5 mm pins. <sub>`a_version_21_file_opens_as_version_22`</sub>
+- A version 21 project file opens in this build and becomes version 23; its blocks keep their attributes and their 5 mm pins. <sub>`a_version_21_file_opens_as_version_23`</sub>
 - A project with a stroke font round-trips through the file; a project without one writes no text_font key. <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
 - A version 17 file without ports loads unchanged apart from being moved up to the current version. <sub>`a_version_17_file_loads_unchanged`</sub>
 - A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable". <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>

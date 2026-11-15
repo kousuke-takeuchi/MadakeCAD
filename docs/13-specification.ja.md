@@ -132,7 +132,7 @@
 - 極数可変シンボルを範囲外の極数 (0極や上限超え) で頼むと、使える範囲を書いたメッセージで拒否される。 <sub>`a_pole_count_outside_the_range_is_refused`</sub>
 - ふつうの配置はこれまでどおり通る: 同梱シンボル・範囲内の極数可変シンボル・属性で形が決まるブロック。 <sub>`valid_symbol_ids_are_still_accepted`</sub>
 - 既にある部品を知らないシンボルidへ変更するのも拒否されるので、図面の部品は常に描ける。 <sub>`changing_a_symbol_to_an_unknown_id_is_refused`</sub>
-- ピン表が壊れている(番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。 <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
+- ピン表が壊れている(同じ辺で番号が重複した)ブロックは追加時に拒否され、図面は何も変わらない。 <sub>`a_block_with_a_broken_pin_table_is_refused_and_changes_nothing`</sub>
 - 正しいブロックを壊れた内容へ編集するのも拒否されるので、図面上のブロックは常に描けるピン表を持つ。 <sub>`editing_a_block_into_a_broken_one_is_refused`</sub>
 - コネクタの表が誤っているブロック (USB の口にコネクタの名前、または空の名前) は、追加でも編集でも理由付きで拒否される。 <sub>`a_block_with_a_bad_connector_table_is_refused`</sub>
 - 知らないピン間隔 ("3") のブロックは、追加でも、既にあるブロックをその値へ編集しても断られ、図面はまったく変わらない。 <sub>`a_block_with_an_unknown_pitch_is_refused_and_changes_nothing`</sub>
@@ -388,7 +388,7 @@
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
 - 現行のファイル形式バージョンは23 (ブロックの貫通ピンを追加した版) である。 <sub>`the_current_format_version_is_twenty_three`</sub>
 - 形式22のプロジェクトファイルはこのビルドで開け、形式23になる。ブロックの属性とピンはそのまま残る。 <sub>`a_version_22_file_opens_as_version_23`</sub>
-- 形式21のプロジェクトファイルはこのビルドで開け、形式22になる。ブロックの属性と5mm間隔のピンはそのまま残る。 <sub>`a_version_21_file_opens_as_version_22`</sub>
+- 形式21のプロジェクトファイルはこのビルドで開け、形式23になる。ブロックの属性と5mm間隔のピンはそのまま残る。 <sub>`a_version_21_file_opens_as_version_23`</sub>
 - ストロークフォントを持つプロジェクトはファイルを往復でき、持たないプロジェクトはtext_fontのキーを書かない。 <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
 - ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_17_file_loads_unchanged`</sub>
 - 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>

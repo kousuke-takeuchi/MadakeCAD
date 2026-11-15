@@ -449,10 +449,10 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// A version 21 project file opens in this build and becomes version 22; its blocks keep their attributes and their 5 mm pins.
-    /// 形式21のプロジェクトファイルはこのビルドで開け、形式22になる。ブロックの属性と5mm間隔のピンはそのまま残る。
+    /// A version 21 project file opens in this build and becomes version 23; its blocks keep their attributes and their 5 mm pins.
+    /// 形式21のプロジェクトファイルはこのビルドで開け、形式23になる。ブロックの属性と5mm間隔のピンはそのまま残る。
     #[test]
-    fn a_version_21_file_opens_as_version_22() {
+    fn a_version_21_file_opens_as_version_23() {
         let mut project = Project::new("old");
         let block = crate::block::test_block("U1", "", 50.0, 50.0, r#"{"left":[{"no":"1"},{"no":"2"}]}"#);
         let id = block.id();
@@ -465,7 +465,7 @@ mod tests {
         let path = dir.join("p.mdkproj");
         std::fs::write(&path, serde_json::to_string_pretty(&project).unwrap()).unwrap();
         let loaded = load_project(&path).unwrap();
-        assert_eq!(loaded.format_version, 22);
+        assert_eq!(loaded.format_version, 23);
         let Entity::Symbol(s) = &loaded.sheets[0].entities[&id] else { panic!("ブロックが残ること") };
         assert_eq!(s.attrs, attrs);
         assert!(!s.attrs.contains_key("block_pitch"));
