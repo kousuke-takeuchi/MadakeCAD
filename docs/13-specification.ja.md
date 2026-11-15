@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3185仕様項目**。
+全6領域・**3194仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2279,6 +2279,15 @@
 - 参照記号・型番が動くのはブロックだけ。普通のシンボルは今まで通り中央揃え (Rust の captions_of_a_plain_symbol_keep_the_centred_anchor と同じ) <sub>`block captions and group names (Rust twin)`</sub>
 - 上辺と左辺に1本ずつピンのあるブロックは、手で書いた表のとおりに角へ置く (Rust の corner_placement_follows_the_rotation_table と同じ) <sub>`block captions and group names (Rust twin)`</sub>
 - 外形の左上の角の外に描かれたもの (手で足した文字) があると、角の参照記号・型番はその上まで上がり、重ならない (Rust の corner_captions_rise_above_a_drawing_at_the_corner と同じ) <sub>`block captions and group names (Rust twin)`</sub>
+- golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブとピンを返す <sub>`fine pitch blocks (Rust twin)`</sub>
+- block_pitch は "5" と "2.5" だけ、block_numbers は "outside" と "inside" だけを受け付ける <sub>`fine pitch blocks (Rust twin)`</sub>
+- 間隔と番号の属性の誤りは Rust と同じ文言で断る <sub>`fine pitch blocks (Rust twin)`</sub>
+- 2.5mm間隔のブロックで、ピンが2本の辺に高さ5mmは小さすぎ、必要な大きさ 5x7.5 をメッセージに出す <sub>`fine pitch blocks (Rust twin)`</sub>
+- 2.5mm間隔のブロックは、コネクタの絵を持つピンを断る <sub>`fine pitch blocks (Rust twin)`</sub>
+- 2.5mm間隔の大きさは2.5mm刻みに切り上げ、5mm間隔は今までどおり5mm刻み <sub>`fine pitch blocks (Rust twin)`</sub>
+- 幅も高さも2.5mmの奇数倍の2.5mm間隔ブロックでは、外形・ピン・文字の置き場所が1.25mmずれ、blockOutline は描かれた長方形と同じ <sub>`fine pitch blocks (Rust twin)`</sub>
+- ピンも属性も無い5mm間隔のブロックは、これまでどおり原点中心で、文字の置き場所もずれない <sub>`fine pitch blocks (Rust twin)`</sub>
+- 幅も高さも2.5mmの奇数倍で上辺にピンのある2.5mm間隔のブロックでは、左上の角の参照記号・型番は、グリッドへずらして描いた外形の左辺の1.0mm左・上辺の位置から始まる (Rust の corner_captions_of_a_fine_block_follow_the_shifted_outline と同じ) <sub>`fine pitch blocks (Rust twin)`</sub>
 
 ### frameEditor
 

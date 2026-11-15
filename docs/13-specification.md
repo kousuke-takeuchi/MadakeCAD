@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3185 specification clauses** across 6 areas.
+**3194 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2279,6 +2279,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps the centred caption anchor of a plain symbol <sub>`block captions and group names (Rust twin)`</sub>
 - follows the explicit rotation table for a block with one top and one left pin <sub>`block captions and group names (Rust twin)`</sub>
 - raises the corner captions above a drawing placed at the corner <sub>`block captions and group names (Rust twin)`</sub>
+- draws every block of the fine-pitch golden file exactly like Rust <sub>`fine pitch blocks (Rust twin)`</sub>
+- accepts only "5" / "2.5" for block_pitch and "outside" / "inside" for block_numbers <sub>`fine pitch blocks (Rust twin)`</sub>
+- words the pitch and numbers errors exactly like Rust <sub>`fine pitch blocks (Rust twin)`</sub>
+- refuses a fine block_size that is too small and names the needed size <sub>`fine pitch blocks (Rust twin)`</sub>
+- refuses a connector picture on a fine block <sub>`fine pitch blocks (Rust twin)`</sub>
+- rounds a block_size up to the pitch step <sub>`fine pitch blocks (Rust twin)`</sub>
+- shifts an odd-multiple fine block by 1.25 mm and blockOutline matches the drawn rectangle <sub>`fine pitch blocks (Rust twin)`</sub>
+- keeps a plain block centred on the origin with unshifted slots <sub>`fine pitch blocks (Rust twin)`</sub>
+- puts the corner captions of a fine block by the shifted outline <sub>`fine pitch blocks (Rust twin)`</sub>
 
 ### frameEditor
 
