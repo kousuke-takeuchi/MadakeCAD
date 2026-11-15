@@ -68,7 +68,20 @@ pub type SheetId = Uuid;
 ///   (2.5mm間隔のブロックを5mmで描くとピンが動き、配線が外れるため)。使っていないファイルは版番号以外これまでと同じ
 /// - v23: ブロックの貫通ピン (向かい合う辺に同じピン番号を1回ずつ)。形式22のビルドは版番号で断る
 ///   (貫通ピンを持つブロックを読めず見本の箱にしてしまうため)。使っていないファイルは版番号以外これまでと同じ
-pub const FORMAT_VERSION: u32 = 23;
+/// - v24: シートの配線の線の太さ ([`Sheet::wire_weight_mm`])・配線注記を描かない設定 ([`Sheet::hide_wire_notes`])、
+///   ブロックの参照記号の位置 (属性 `block_caption`)。形式23のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
+pub const FORMAT_VERSION: u32 = 24;
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// 配線の線の太さの既定値 (mm)。この設定が無かった頃の太さ。
+pub const DEFAULT_WIRE_WEIGHT_MM: f64 = 0.35;
+/// 配線の線の太さの下限 (mm)。
+pub const MIN_WIRE_WEIGHT_MM: f64 = 0.18;
+/// 配線の線の太さの上限 (mm)。
+pub const MAX_WIRE_WEIGHT_MM: f64 = 1.0;
 
 /// 注記文字高の既定値 (mm)。この設定が無かった頃の配線注記の文字高さで、
 /// 未設定のシートはこの高さで描かれる (旧ファイルの見た目が変わらない)。
@@ -284,6 +297,12 @@ pub struct Sheet {
     /// 注記の層全体が小さくなる ([`Sheet::annotation_scale`])。
     #[serde(default)]
     pub annotation_text_mm: Option<f64>,
+    /// 配線の線の太さ (mm)。`None` は既定 ([`DEFAULT_WIRE_WEIGHT_MM`])。太い線で描くハーネス図面で上げる。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wire_weight_mm: Option<f64>,
+    /// 配線注記 (線径・色名・長さ) を描かない。線の色はそのまま。品番を文字で別に書く図面で使う。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hide_wire_notes: bool,
     /// 整えバリアントの複製なら、その元シートのid ([`crate::variants`])。
     ///
     /// 比較のために一時的に増えるシートで、比較が終われば消える。**図面全体を見渡す
@@ -322,6 +341,8 @@ impl Sheet {
             title_block: TitleBlock::default(),
             revisions: Vec::new(),
             annotation_text_mm: None,
+            wire_weight_mm: None,
+            hide_wire_notes: false,
             variant_of: None,
             entities: BTreeMap::new(),
         }
@@ -342,6 +363,13 @@ impl Sheet {
         self.annotation_text_mm
             .filter(|v| v.is_finite() && *v > 0.0)
             .unwrap_or(DEFAULT_ANNOTATION_TEXT_MM)
+    }
+
+    /// このシートの配線の線の太さ (mm)。未設定・範囲外なら既定 ([`DEFAULT_WIRE_WEIGHT_MM`])。
+    pub fn wire_weight_mm(&self) -> f64 {
+        self.wire_weight_mm
+            .filter(|v| v.is_finite() && *v >= MIN_WIRE_WEIGHT_MM && *v <= MAX_WIRE_WEIGHT_MM)
+            .unwrap_or(DEFAULT_WIRE_WEIGHT_MM)
     }
 
     /// 注記の層 (配線注記・線番・ネットタグ) にかける倍率。1.0 = 既定の大きさ。

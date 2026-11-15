@@ -35,6 +35,8 @@ pub const BLOCK_SIZE_ATTR: &str = "block_size";
 pub const BLOCK_PITCH_ATTR: &str = "block_pitch";
 /// ピン番号を外形の外に描くか内に描くかを持つ属性キー (`"outside"` か `"inside"`。無ければ外)。
 pub const BLOCK_NUMBERS_ATTR: &str = "block_numbers";
+/// 参照記号・型番を外形の上に描くか中に描くかを持つ属性キー (`"above"` か `"inside"`。無ければ上)。
+pub const BLOCK_CAPTION_ATTR: &str = "block_caption";
 /// 細かいピン間隔 (mm)。グリッドと同じ。
 pub const BLOCK_FINE_PITCH_MM: f64 = 2.5;
 /// 細かい間隔のブロックの最小の外形 (mm、幅・高さとも)。
@@ -67,6 +69,16 @@ impl BlockPitch {
             BlockPitch::Fine => BLOCK_FINE_PITCH_MM,
         }
     }
+}
+
+/// 参照記号・型番を描く場所。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BlockCaption {
+    /// 外形の上 (これまでどおり。上辺にピンがあれば左上の角)。
+    #[default]
+    Above,
+    /// 外形の中央。
+    Inside,
 }
 
 /// ピン番号を描く場所 (左右の辺)。
@@ -152,6 +164,8 @@ pub struct BlockSpec {
     pub pitch: BlockPitch,
     /// ピン番号を描く場所。
     pub numbers: BlockNumbers,
+    /// 参照記号・型番を描く場所。
+    pub caption: BlockCaption,
 }
 
 impl BlockSpec {
@@ -307,6 +321,11 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
         Some("inside") => BlockNumbers::Inside,
         Some(other) => return Err(format!("{BLOCK_NUMBERS_ATTR} must be \"outside\" or \"inside\": {other:?}")),
     };
+    let caption = match attrs.get(BLOCK_CAPTION_ATTR).map(|s| s.trim()) {
+        None | Some("above") => BlockCaption::Above,
+        Some("inside") => BlockCaption::Inside,
+        Some(other) => return Err(format!("{BLOCK_CAPTION_ATTR} must be \"above\" or \"inside\": {other:?}")),
+    };
     if pitch == BlockPitch::Fine {
         if let Some(pin) = pins.all().find(|p| p.connector.is_some()) {
             return Err(format!(
@@ -348,7 +367,7 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
             ));
         }
     }
-    Ok(BlockSpec { pins, size, pitch, numbers })
+    Ok(BlockSpec { pins, size, pitch, numbers, caption })
 }
 
 /// ピン`no`の接点を調べる: 空でない・ピンの中で重ならない・2つ以上・[`BLOCK_CONTACT_MAX`]まで。
@@ -951,6 +970,7 @@ pub fn imported_block_attrs(
     size: Option<&str>,
     pitch: Option<&str>,
     numbers: Option<&str>,
+    caption: Option<&str>,
 ) -> Option<BTreeMap<String, String>> {
     let mut attrs = BTreeMap::new();
     for (k, v) in [
@@ -958,6 +978,7 @@ pub fn imported_block_attrs(
         (BLOCK_SIZE_ATTR, size),
         (BLOCK_PITCH_ATTR, pitch),
         (BLOCK_NUMBERS_ATTR, numbers),
+        (BLOCK_CAPTION_ATTR, caption),
     ] {
         if let Some(v) = v.filter(|v| !v.is_empty()) {
             attrs.insert(k.to_string(), v.to_string());
@@ -2275,7 +2296,7 @@ mod tests {
         assert!(BLOCK_UNREADABLE_WARNING.contains("属性"), "{BLOCK_UNREADABLE_WARNING}");
         assert!(!BLOCK_UNREADABLE_WARNING.contains("ピン表"), "{BLOCK_UNREADABLE_WARNING}");
         assert!(BLOCK_UNREADABLE_WARNING.contains("見本の箱"), "{BLOCK_UNREADABLE_WARNING}");
-        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, Some("3"), None).is_none(), "間隔が読めないときも警告の対象");
+        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, Some("3"), None, None).is_none(), "間隔が読めないときも警告の対象");
     }
 
     fn placed_fine(pins: &str, size: &str) -> (crate::model::SymbolInstance, SymbolDef) {
@@ -2661,5 +2682,45 @@ mod tests {
             .unwrap_or_else(|_| panic!("{FINE_GOLDEN} が無い: MADAKE_UPDATE_GOLDEN=1 を付けて作る"));
         let got: serde_json::Value = serde_json::from_str(&text).expect("golden の JSON");
         assert!(got == want, "golden と違う: MADAKE_UPDATE_GOLDEN=1 で書き直し、git diff で変化を確かめる");
+    }
+
+    /// block_caption accepts only "above" and "inside"; a block without it writes its caption above, as before.
+    /// block_caption は "above" と "inside" だけを受け付ける。属性の無いブロックは、これまでどおり上に書く。
+    #[test]
+    fn block_caption_accepts_only_above_and_inside() {
+        assert_eq!(parse_block_spec(&BTreeMap::new()).unwrap().caption, BlockCaption::Above);
+        for (value, want) in [("above", BlockCaption::Above), (" inside ", BlockCaption::Inside)] {
+            let mut a = BTreeMap::new();
+            a.insert(BLOCK_CAPTION_ATTR.to_string(), value.to_string());
+            assert_eq!(parse_block_spec(&a).unwrap().caption, want);
+        }
+        for bad in ["below", "", "INSIDE"] {
+            let mut a = BTreeMap::new();
+            a.insert(BLOCK_CAPTION_ATTR.to_string(), bad.to_string());
+            let err = parse_block_spec(&a).unwrap_err();
+            assert!(err.contains(BLOCK_CAPTION_ATTR), "{bad}: {err}");
+        }
+    }
+
+    /// block_caption does not change what the block itself draws: outline, pins and numbers are the same with and without it.
+    /// block_caption はブロック自身の絵を変えない: 外形・ピン・番号は属性の有無で同じ。
+    #[test]
+    fn block_caption_does_not_change_the_drawn_block() {
+        let mut plain = BTreeMap::new();
+        plain.insert(BLOCK_PINS_ATTR.to_string(), r#"{"left":[{"no":"1","name":"IN"}],"right":[{"no":"2"}]}"#.to_string());
+        let mut inside = plain.clone();
+        inside.insert(BLOCK_CAPTION_ATTR.to_string(), "inside".to_string());
+        assert_eq!(block_export_id(&block_symbol(&plain).unwrap()), block_export_id(&block_symbol(&inside).unwrap()));
+    }
+
+    /// A block's caption place survives being imported back from an exported file: the importer keeps block_caption with the pin table.
+    /// ブロックの参照記号の置き場所は、書き出したファイルを読み戻しても残る: 取り込みは block_caption をピン表と一緒に保つ。
+    #[test]
+    fn imported_block_attrs_keep_the_caption_place() {
+        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("inside")).unwrap();
+        assert_eq!(attrs[BLOCK_CAPTION_ATTR], "inside");
+        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("below")).is_none());
+        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, None).unwrap();
+        assert!(!attrs.contains_key(BLOCK_CAPTION_ATTR));
     }
 }

@@ -713,11 +713,42 @@ pub(crate) struct CaptionAnchor {
 /// 中央揃えのとき、ブロックは描かれた外形 ([`crate::block::block_outline`]) の中央 (回転・ミラーの後) にそろえる。
 /// 2.5mm間隔で幅が2.5mmの奇数倍のブロックは外形が配置点から1.25mmずれるため。5mm間隔のブロックはずれが0なので配置点のまま。
 pub(crate) fn caption_anchor(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> CaptionAnchor {
+    if let Some(inside) = inside_caption_anchor(inst, def) {
+        return inside;
+    }
     top_left_corner_anchor(inst, def).unwrap_or_else(|| CaptionAnchor {
         x: centred_caption_x(inst, def),
         top: symbol_top_y(inst, def),
         end: false,
     })
+}
+
+/// 大文字の高さ ÷ 文字サイズ (参照記号・型番の行を外形の中央へそろえる計算に使う)。
+pub(crate) const CAPTION_CAP_RATIO: f64 = 0.72;
+
+/// `block_caption: inside` のブロックの置き場所: 参照記号・型番を、描かれた外形 (回転・ミラーの後) の中央に置く。
+/// 2行あれば2行のまとまりの中心を、1行だけならその行の大文字の中心を、外形の中心の高さにそろえる。
+/// ブロックでない・属性が無い・読めないときは None (これまでの置き場所)。
+fn inside_caption_anchor(inst: &crate::model::SymbolInstance, def: &SymbolDef) -> Option<CaptionAnchor> {
+    if !crate::block::is_block_export_id(&def.id) {
+        return None;
+    }
+    let spec = crate::block::parse_block_spec(&inst.attrs).ok()?;
+    if spec.caption != crate::block::BlockCaption::Inside {
+        return None;
+    }
+    let (lo, hi) = crate::block::block_outline(&spec);
+    let c = transform_local(Point::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0), inst);
+    let cap = CAPTION_CAP_RATIO * LABEL_FONT;
+    let has_ref = inst.shows_reference();
+    let has_value = !inst.value.is_empty();
+    // 各行のベースラインは top - REF_LABEL_DY / top - VALUE_LABEL_DY
+    let top = match (has_ref, has_value) {
+        (true, false) => c.y + cap / 2.0 + REF_LABEL_DY,
+        (false, _) => c.y + cap / 2.0 + VALUE_LABEL_DY,
+        (true, true) => c.y + (REF_LABEL_DY + cap + VALUE_LABEL_DY) / 2.0,
+    };
+    Some(CaptionAnchor { x: c.x, top, end: false })
 }
 
 /// 中央揃えの参照記号・型番の基準X。普通は配置点、ブロックは外形の中心 (ローカルの中心を変換するので、ずれが0なら配置点ちょうど)。
@@ -1805,7 +1836,7 @@ fn sheet_to_svg_with_xrefs(
                     "<polyline points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{}\"/>\n",
                     polyline_points(&w.points),
                     color_hex(&w.color),
-                    n(WIRE_STROKE)
+                    n(sheet.wire_weight_mm())
                 );
             }
             Entity::Symbol(s) => {
@@ -1899,7 +1930,18 @@ fn sheet_to_svg_with_xrefs(
                 }
             }
             Entity::Text(t) => {
-                // 注記の装飾 (G4): 基準位置・色トークン・太字。既定の注記は従来と同じ出力
+                // 注記の装飾 (G4): 基準位置・色トークン・太字。既定の注記は従来と同じ出力。
+                // 回転 (90・180・270、時計回り) は基準点を中心に回す。0 のときは何も足さない
+                let turned = matches!(t.rotation % 360, 90 | 180 | 270);
+                if turned {
+                    let _ = write!(
+                        out,
+                        "<g transform=\"rotate({} {} {})\">\n",
+                        t.rotation % 360,
+                        n(t.at.x),
+                        n(t.at.y)
+                    );
+                }
                 text_weight_el(
                     &mut out,
                     t.at.x,
@@ -1910,6 +1952,9 @@ fn sheet_to_svg_with_xrefs(
                     if t.bold { Weight::Bold } else { Weight::Normal },
                     &t.text,
                 );
+                if turned {
+                    out.push_str("</g>\n");
+                }
                 // 引き出し線 (G20): 対象がシート上に実在すれば、注記の辺から対象の外形まで
                 // 毎回求め直して引く (位置は保存しないので、どちらを動かしても追従する)
                 if let Some((start, end)) = crate::leader::leader_for(sheet, t, &defs) {
@@ -5387,5 +5432,127 @@ mod tests {
         let t = one_cell(|c| { c.text = Some("AB".into()); c.size = 10.0; c.w = Some(5.4); c.fit = true; c.spacing = Some(1.5); });
         let svg = frame_only(&sheet_to_svg_with_frame(&golden_sheet(), &builtin_symbols(), &t, &[]));
         assert!(svg.contains("stroke-width=\"0.350\""), "{svg}");
+    }
+
+    fn coloured_wire() -> Entity {
+        Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: vec![Point::new(50.0, 60.0), Point::new(90.0, 60.0)],
+            color: "yellow".into(),
+            sq: 0.0,
+            length_m: None,
+            part_no: None,
+            net: None,
+            length_source: crate::model::LengthSource::Manual,
+        })
+    }
+
+    fn wire_line(svg: &str) -> String {
+        svg.lines()
+            .find(|l| l.starts_with("<polyline") && l.contains("50,60 90,60"))
+            .unwrap_or_else(|| panic!("配線が描かれていない: {svg}"))
+            .to_string()
+    }
+
+    /// Wires are drawn 0.35 mm wide on a sheet that set no wire weight, and at the sheet's weight once it is set.
+    /// 配線は、太さを設定していないシートでは0.35mm、設定したシートではその太さで描かれる。
+    #[test]
+    fn wires_are_drawn_at_the_weight_of_the_sheet() {
+        let mut sheet = sheet_with(vec![coloured_wire()]);
+        let line = wire_line(&sheet_to_svg(&sheet, &builtin_symbols(), &[]));
+        assert_eq!(attr(&line, "stroke-width"), Some(0.35), "{line}");
+        sheet.wire_weight_mm = Some(0.7);
+        let line = wire_line(&sheet_to_svg(&sheet, &builtin_symbols(), &[]));
+        assert_eq!(attr(&line, "stroke-width"), Some(0.7), "{line}");
+    }
+
+    /// A sheet that hides wire notes draws a coloured wire in its colour but without the colour word; the same sheet without the switch writes the word.
+    /// 配線注記を描かないシートは、色付きの配線を色のまま描くが色名は書かない。同じシートでこの設定を外すと色名が出る。
+    #[test]
+    fn a_sheet_can_hide_the_wire_notes() {
+        let mut sheet = sheet_with(vec![coloured_wire()]);
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
+        assert!(svg.contains(">黄<"), "既定では色名が出る: {svg}");
+        sheet.hide_wire_notes = true;
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
+        assert!(!svg.contains(">黄<"), "色名が残っている: {svg}");
+        assert!(wire_line(&svg).contains(color_hex("yellow")), "線の色は変わらない");
+        assert!(crate::wire_note::wire_notes(&sheet).is_empty());
+    }
+
+    /// A note turned 90, 180 or 270 degrees is drawn inside a rotation about its own anchor point; a note that is not turned is written exactly as before, with no rotation around it.
+    /// 90・180・270度回した注記は、自分の基準点を中心にした回転の中に描かれる。回していない注記は回転を付けず、これまでと同じに書かれる。
+    #[test]
+    fn a_turned_note_is_rotated_about_its_anchor() {
+        let plain = plain_note("ABC");
+        let before = sheet_to_svg(&sheet_with(vec![Entity::Text(plain.clone())]), &builtin_symbols(), &[]);
+        assert!(!before.contains("rotate("), "{before}");
+        for deg in [90u16, 180, 270] {
+            let mut note = plain.clone();
+            note.rotation = deg;
+            let svg = sheet_to_svg(&sheet_with(vec![Entity::Text(note)]), &builtin_symbols(), &[]);
+            let open = format!("<g transform=\"rotate({deg} 40 60)\">");
+            let at = svg.find(&open).unwrap_or_else(|| panic!("{deg}度の回転が無い: {svg}"));
+            let rest = &svg[at + open.len()..];
+            let close = rest.find("</g>").expect("回転を閉じる");
+            assert!(rest[..close].contains(">ABC<"), "回転の中に文字が無い: {}", &rest[..close]);
+            assert_eq!(svg.replace(&open, "").replacen("</g>\n", "", 1).len() + open.len() + 5, svg.len());
+        }
+        let mut odd = plain.clone();
+        odd.rotation = 45;
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Text(odd)]), &builtin_symbols(), &[]);
+        assert!(!svg.contains("rotate("), "90度刻みでない回転は描かない: {svg}");
+    }
+
+    fn captioned_block(caption: Option<&str>, reference: &str, value: &str) -> crate::model::SymbolInstance {
+        let Entity::Symbol(mut inst) = crate::block::test_block(reference, value, 100.0, 80.0, r#"{"left":[{"no":"1"}],"right":[{"no":"2"}]}"#) else {
+            unreachable!()
+        };
+        inst.attrs.insert(crate::block::BLOCK_SIZE_ATTR.into(), r#"{"w":20,"h":10}"#.into());
+        if let Some(c) = caption {
+            inst.attrs.insert(crate::block::BLOCK_CAPTION_ATTR.into(), c.into());
+        }
+        inst
+    }
+
+    fn caption_y(svg: &str, text: &str) -> (f64, f64) {
+        let line = svg
+            .lines()
+            .find(|l| l.contains(&format!(">{text}<")))
+            .unwrap_or_else(|| panic!("「{text}」が描かれていない: {svg}"));
+        assert!(line.contains("text-anchor=\"middle\""), "{line}");
+        (attr(line, "x").unwrap(), attr(line, "y").unwrap())
+    }
+
+    /// A block with block_caption "inside" writes its reference and its value centred inside the outline, the two lines centred on the middle of the box; without the attribute they stay above the box.
+    /// block_caption が "inside" のブロックは、参照記号と型番を外形の中に中央揃えで書き、2行のまとまりを箱の中央の高さにそろえる。属性が無ければ箱の上のまま。
+    #[test]
+    fn a_block_can_write_its_caption_inside_the_outline() {
+        let above = sheet_to_svg(&sheet_with(vec![Entity::Symbol(captioned_block(None, "U1", "AMP"))]), &builtin_symbols(), &[]);
+        let (_, y_ref) = caption_y(&above, "U1");
+        assert!(y_ref < 75.0, "属性が無ければ箱 (上端75) の上: {y_ref}");
+
+        let inside = sheet_to_svg(&sheet_with(vec![Entity::Symbol(captioned_block(Some("inside"), "U1", "AMP"))]), &builtin_symbols(), &[]);
+        let (x_ref, y_ref) = caption_y(&inside, "U1");
+        let (x_val, y_val) = caption_y(&inside, "AMP");
+        assert_eq!((x_ref, x_val), (100.0, 100.0));
+        assert!((y_val - y_ref - (REF_LABEL_DY - VALUE_LABEL_DY)).abs() < 1e-9, "行の間隔は変わらない");
+        let cap = CAPTION_CAP_RATIO * LABEL_FONT;
+        let middle = (y_ref - cap + y_val) / 2.0;
+        assert!((middle - 80.0).abs() < 1e-6, "2行のまとまりの中心が箱の中心 (80): {middle}");
+        assert!(y_ref - cap > 75.0 && y_val < 85.0, "箱 (75..85) に収まる: {y_ref} {y_val}");
+    }
+
+    /// With only a reference, or only a value, the single line of an inside caption is centred on the middle of the box.
+    /// 参照記号だけ、または型番だけのとき、中に書く1行は箱の中央の高さにそろう。
+    #[test]
+    fn a_single_inside_caption_line_is_centred() {
+        let cap = CAPTION_CAP_RATIO * LABEL_FONT;
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Symbol(captioned_block(Some("inside"), "U1", ""))]), &builtin_symbols(), &[]);
+        let (_, y) = caption_y(&svg, "U1");
+        assert!((y - cap / 2.0 - 80.0).abs() < 1e-6, "{y}");
+        let svg = sheet_to_svg(&sheet_with(vec![Entity::Symbol(captioned_block(Some("inside"), "", "AMP"))]), &builtin_symbols(), &[]);
+        let (_, y) = caption_y(&svg, "AMP");
+        assert!((y - cap / 2.0 - 80.0).abs() < 1e-6, "{y}");
     }
 }

@@ -2012,11 +2012,13 @@ pub fn import_dxf(
                         let size = attrs.remove("BLOCK_SIZE");
                         let pitch = attrs.remove("BLOCK_PITCH");
                         let numbers = attrs.remove("BLOCK_NUMBERS");
+                        let caption = attrs.remove("BLOCK_CAPTION");
                         match crate::block::imported_block_attrs(
                             pins.as_deref(),
                             size.as_deref(),
                             pitch.as_deref(),
                             numbers.as_deref(),
+                            caption.as_deref(),
                         ) {
                             Some(a) => attrs.extend(a),
                             None => report

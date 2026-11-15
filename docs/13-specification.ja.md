@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3249仕様項目**。
+全6領域・**3272仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -83,6 +83,9 @@
 - 番号の内側表示は5mm間隔のブロックでも使え、ピンの位置は変わらない。 <sub>`numbers_inside_work_on_a_coarse_block_without_moving_pins`</sub>
 - 同じピンを持つ2.5mm間隔と5mm間隔のブロックは書き出し名が違い、見本のブロックの名前は "block" のまま。 <sub>`fine_and_coarse_blocks_get_different_export_ids`</sub>
 - 2.5mm間隔のブロックと番号内側のブロックは、TS 側も突き合わせる golden ファイルのとおりに描かれる (MADAKE_UPDATE_GOLDEN=1 で書き直す)。 <sub>`fine_blocks_match_the_shared_golden_file`</sub>
+- block_caption は "above" と "inside" だけを受け付ける。属性の無いブロックは、これまでどおり上に書く。 <sub>`block_caption_accepts_only_above_and_inside`</sub>
+- block_caption はブロック自身の絵を変えない: 外形・ピン・番号は属性の有無で同じ。 <sub>`block_caption_does_not_change_the_drawn_block`</sub>
+- ブロックの参照記号の置き場所は、書き出したファイルを読み戻しても残る: 取り込みは block_caption をピン表と一緒に保つ。 <sub>`imported_block_attrs_keep_the_caption_place`</sub>
 
 ### cable
 
@@ -270,6 +273,10 @@
 - FreeCAD対応付けを登録するとentity idをキーに保存され、再登録で置き換わり、解除で消える。各操作はundoで直前の一覧に戻る。 <sub>`mech_links_are_upserted_removed_and_undone`</sub>
 - 計測した電線長の書き戻しは、各配線の長さを設定して出所を「FreeCAD計測」にする1回の編集になる。何も変わらない書き戻しはundoの段を作らない。 <sub>`wire_lengths_write_back_with_their_source`</sub>
 - シートに無い配線が混ざった書き戻しは何も変えない。同じ一括分の他の配線も元のままで、undoの段もできない。 <sub>`wire_lengths_write_back_is_all_or_nothing`</sub>
+- シートの配線の描き方を設定すると、線の太さと「配線注記を描かない」が保存され、元に戻すと両方とも前の値に戻る。 <sub>`set_sheet_wire_style_stores_weight_and_hidden_notes_and_undoes`</sub>
+- 0.18〜1.0mm の外の太さや数でない太さは断り、シートは変わらない。 <sub>`set_sheet_wire_style_refuses_a_weight_out_of_range`</sub>
+- 配線の描き方を設定していないシートは、2つの設定を書き出さない。ファイルはこの設定ができる前と同じ形になる。 <sub>`an_unset_wire_style_is_not_written_to_the_file`</sub>
+- block_caption が "above" でも "inside" でもないブロックは断り、図面は変わらない。 <sub>`a_block_with_an_unknown_caption_place_is_refused`</sub>
 
 ### connector
 
@@ -390,9 +397,10 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは23 (ブロックの貫通ピンを追加した版) である。 <sub>`the_current_format_version_is_twenty_three`</sub>
-- 形式22のプロジェクトファイルはこのビルドで開け、形式23になる。ブロックの属性とピンはそのまま残る。 <sub>`a_version_22_file_opens_as_version_23`</sub>
-- 形式21のプロジェクトファイルはこのビルドで開け、形式23になる。ブロックの属性と5mm間隔のピンはそのまま残る。 <sub>`a_version_21_file_opens_as_version_23`</sub>
+- 現行のファイル形式バージョンは24 (シートの配線の描き方とブロックの参照記号の位置を追加した版) である。 <sub>`the_current_format_version_is_twenty_four`</sub>
+- 形式23のプロジェクトファイルはこのビルドで開け、形式24になる。シートの配線は既定の太さで、配線注記も出たままになる。 <sub>`a_version_23_file_opens_as_version_24`</sub>
+- 形式22のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性とピンはそのまま残る。 <sub>`a_version_22_file_opens_as_the_current_version`</sub>
+- 形式21のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性と5mm間隔のピンはそのまま残る。 <sub>`a_version_21_file_opens_as_the_current_version`</sub>
 - ストロークフォントを持つプロジェクトはファイルを往復でき、持たないプロジェクトはtext_fontのキーを書かない。 <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
 - ポートの無い形式17のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_17_file_loads_unchanged`</sub>
 - 1本線の区間を持つケーブルは種類「run_cable」で保存され、読み直すと区間と芯の端が戻る。そのファイルに種類「cable」のエンティティは無い。 <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
@@ -1094,6 +1102,11 @@
 - 文字を収めるときの幅は、ストロークフォントが有効ならその線の幅、そうでなければ見積もりの幅になる。 <sub>`text_advance_follows_the_active_font`</sub>
 - 英数字を全角にする図枠テンプレートは、セルを全角の字で描き、シートの他の文字はプロジェクトの設定のまま。 <sub>`a_frame_template_can_use_full_width_latin`</sub>
 - セルの字間は文字の間を広げ、幅に収める処理はその字間を含めたストロークの幅を使う。 <sub>`cell_spacing_and_fitting_use_the_stroke_width`</sub>
+- 配線は、太さを設定していないシートでは0.35mm、設定したシートではその太さで描かれる。 <sub>`wires_are_drawn_at_the_weight_of_the_sheet`</sub>
+- 配線注記を描かないシートは、色付きの配線を色のまま描くが色名は書かない。同じシートでこの設定を外すと色名が出る。 <sub>`a_sheet_can_hide_the_wire_notes`</sub>
+- 90・180・270度回した注記は、自分の基準点を中心にした回転の中に描かれる。回していない注記は回転を付けず、これまでと同じに書かれる。 <sub>`a_turned_note_is_rotated_about_its_anchor`</sub>
+- block_caption が "inside" のブロックは、参照記号と型番を外形の中に中央揃えで書き、2行のまとまりを箱の中央の高さにそろえる。属性が無ければ箱の上のまま。 <sub>`a_block_can_write_its_caption_inside_the_outline`</sub>
+- 参照記号だけ、または型番だけのとき、中に書く1行は箱の中央の高さにそろう。 <sub>`a_single_inside_caption_line_is_centred`</sub>
 
 ### シンボルライブラリ
 
@@ -2343,6 +2356,10 @@
 - 番号を内側に描く上下の貫通ピンの組は、番号を上下の辺の中央に1つだけ描く <sub>`feed-through block pins (Rust twin)`</sub>
 - 番号を内側に描くとき、貫通ピンの番号を1つにまとめるのは交わる辺にピンが無いときだけ。あるときは各ピンが番号を描き、番号どうしは重ならない <sub>`feed-through block pins (Rust twin)`</sub>
 - 番号を外側に描くときは、貫通ピンも各辺のリードの上に番号を描く (2組で4つ) <sub>`feed-through block pins (Rust twin)`</sub>
+- block_caption は "above" と "inside" だけを受け付ける。属性の無いブロックは上に書く <sub>`block caption place (Rust twin)`</sub>
+- block_caption が "inside" のブロックは、参照記号と型番を箱の中央に置く。2行のまとまりの中心が箱の中心の高さになる。属性が無ければ箱の上のまま <sub>`block caption place (Rust twin)`</sub>
+- 参照記号だけ、または型番だけのとき、中に書く1行は箱の中央の高さにそろう <sub>`block caption place (Rust twin)`</sub>
+- block_caption はブロック自身の絵を変えない: 図形とピンは属性の有無で同じ <sub>`block caption place (Rust twin)`</sub>
 
 ### frameEditor
 
@@ -2659,6 +2676,7 @@
 - 選択中の凡例ブロックは、外形の矩形を選択色で描く <sub>`wire legend block drawing`</sub>
 - hide_reference="true" のシンボルは参照記号を画面に描かない (嵌合の組の片方が同じ記号を二重に描かない。svg.rsと同ルール) <sub>`hidden designator`</sub>
 - 太字の注記はキャンバスでも SVG と同じ bold の太さで描き、ストロークフォントでは線が通常の注記の1.5倍の太さになる <sub>`note weight`</sub>
+- 90・180・270度回した注記は、キャンバスでも基準点を中心に時計回りへ回して描く。回していない注記は回さない <sub>`note weight`</sub>
 
 ### search
 
@@ -2889,6 +2907,7 @@
 - 空白だけの機能ラベルは「無し」と同じ扱いになり、前後の空白は取り除かれる <sub>`function label`</sub>
 - スロットを持たない同梱シンボルでは、機能ラベルは外形のすぐ下・基準点を中心に置かれる <sub>`function label`</sub>
 - シンボル定義がFUNCTIONスロットを持つ場合は、そのスロットの位置と文字高さに従う <sub>`function label`</sub>
+- 注記の回転は90・180・270度だけを描く。0度・90度刻みでない値・値なしは回さない <sub>`note rotation`</sub>
 
 ### viewClasses
 
@@ -2930,6 +2949,7 @@
 - 属性の無いワイヤは注記の一覧に現れない <sub>`wireNoteLabels`</sub>
 - 注記文字高を設定していないシートは、これまでどおり2.0mmの注記で描かれる <sub>`annotation text height`</sub>
 - シートの注記文字高を1.4mmにすると、配線注記はちょうどその高さで描かれ配線にも寄る <sub>`annotation text height`</sub>
+- 配線注記を描かないシートは、色付きの配線があっても注記を1つも返さない。設定を外すと注記が出る <sub>`hidden wire notes`</sub>
 
 ### wireNumbers
 
@@ -2962,6 +2982,12 @@
 - ワイヤの英語の色名と表の日本語の色名は同じ電線を指す <sub>`wirePartNo`</sub>
 - 線色が空・線径が0のワイヤは引き当てない <sub>`wirePartNo`</sub>
 - 同じ線色+線径の行が2つあるときは先に書いた行が勝つ <sub>`wirePartNo`</sub>
+
+### wireStyle
+
+- 配線の太さを設定していないシートは0.35mm、設定したシートはその太さになる <sub>`sheet wire style`</sub>
+- 0.18〜1.0mm の外の太さや数でない太さは使わず、既定の0.35mmで描く <sub>`sheet wire style`</sub>
+- 配線注記を描かない設定は、シートが true を持つときだけ有効になる <sub>`sheet wire style`</sub>
 
 ### xref
 

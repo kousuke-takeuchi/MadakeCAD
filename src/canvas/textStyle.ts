@@ -121,3 +121,12 @@ export function functionLabelFallbackAt(
 export function functionLabelBelow(centerX: number, bottomY: number): Point {
   return { x: centerX, y: bottomY + FUNCTION_LABEL_DY };
 }
+
+/** 注記の回転 (度)。90・180・270 だけを描く。それ以外 (0 や 90 度刻みでない値) は 0 = 回さない。svg.rs と同じ。 */
+export function noteTurnDeg(rotation: number | null | undefined): 0 | 90 | 180 | 270 {
+  const r = ((Number(rotation) || 0) % 360 + 360) % 360;
+  return r === 90 || r === 180 || r === 270 ? r : 0;
+}
+
+/** 大文字の高さ ÷ 文字サイズ。svg.rs の CAPTION_CAP_RATIO と同じ。 */
+export const CAPTION_CAP_RATIO = 0.72;

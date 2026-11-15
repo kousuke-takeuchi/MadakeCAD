@@ -413,21 +413,41 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 23, the version that added feed-through block pins.
-    /// 現行のファイル形式バージョンは23 (ブロックの貫通ピンを追加した版) である。
+    /// The current file format version is 24, the version that added the sheet wire style and the block caption place.
+    /// 現行のファイル形式バージョンは24 (シートの配線の描き方とブロックの参照記号の位置を追加した版) である。
     #[test]
-    fn the_current_format_version_is_twenty_three() {
-        assert_eq!(FORMAT_VERSION, 23);
+    fn the_current_format_version_is_twenty_four() {
+        assert_eq!(FORMAT_VERSION, 24);
         let mut old = Project::new("x");
-        old.format_version = 22;
+        old.format_version = 23;
         migrate(&mut old);
-        assert_eq!(old.format_version, 23);
+        assert_eq!(old.format_version, 24);
     }
 
-    /// A version 22 project file opens in this build and becomes version 23; its blocks keep their attributes and pins unchanged.
-    /// 形式22のプロジェクトファイルはこのビルドで開け、形式23になる。ブロックの属性とピンはそのまま残る。
+    /// A version 23 project file opens in this build and becomes version 24; its sheets get the default wire weight and still show their wire notes.
+    /// 形式23のプロジェクトファイルはこのビルドで開け、形式24になる。シートの配線は既定の太さで、配線注記も出たままになる。
     #[test]
-    fn a_version_22_file_opens_as_version_23() {
+    fn a_version_23_file_opens_as_version_24() {
+        let mut project = Project::new("old");
+        project.format_version = 23;
+        let dir = std::env::temp_dir().join(format!("madake-io-v23-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.mdkproj");
+        let text = serde_json::to_string_pretty(&project).unwrap();
+        assert!(!text.contains("wire_weight_mm") && !text.contains("hide_wire_notes"), "{text}");
+        std::fs::write(&path, text).unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.format_version, 24);
+        let sheet = &loaded.sheets[0];
+        assert_eq!((sheet.wire_weight_mm, sheet.hide_wire_notes), (None, false));
+        assert!((sheet.wire_weight_mm() - 0.35).abs() < 1e-9);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A version 22 project file opens in this build and becomes the current version; its blocks keep their attributes and pins unchanged.
+    /// 形式22のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性とピンはそのまま残る。
+    #[test]
+    fn a_version_22_file_opens_as_the_current_version() {
         let mut project = Project::new("old");
         let block = crate::block::test_block("U1", "", 50.0, 50.0, r#"{"left":[{"no":"1"},{"no":"2"}],"top":[{"no":"3"}]}"#);
         let id = block.id();
@@ -441,7 +461,7 @@ mod tests {
         let path = dir.join("p.mdkproj");
         std::fs::write(&path, serde_json::to_string_pretty(&project).unwrap()).unwrap();
         let loaded = load_project(&path).unwrap();
-        assert_eq!(loaded.format_version, 23);
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
         let Entity::Symbol(s) = &loaded.sheets[0].entities[&id] else { panic!("ブロックが残ること") };
         assert_eq!(s.attrs, attrs);
         let after = crate::block::block_symbol(&s.attrs).unwrap();
@@ -449,10 +469,10 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// A version 21 project file opens in this build and becomes version 23; its blocks keep their attributes and their 5 mm pins.
-    /// 形式21のプロジェクトファイルはこのビルドで開け、形式23になる。ブロックの属性と5mm間隔のピンはそのまま残る。
+    /// A version 21 project file opens in this build and becomes the current version; its blocks keep their attributes and their 5 mm pins.
+    /// 形式21のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性と5mm間隔のピンはそのまま残る。
     #[test]
-    fn a_version_21_file_opens_as_version_23() {
+    fn a_version_21_file_opens_as_the_current_version() {
         let mut project = Project::new("old");
         let block = crate::block::test_block("U1", "", 50.0, 50.0, r#"{"left":[{"no":"1"},{"no":"2"}]}"#);
         let id = block.id();
@@ -465,7 +485,7 @@ mod tests {
         let path = dir.join("p.mdkproj");
         std::fs::write(&path, serde_json::to_string_pretty(&project).unwrap()).unwrap();
         let loaded = load_project(&path).unwrap();
-        assert_eq!(loaded.format_version, 23);
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
         let Entity::Symbol(s) = &loaded.sheets[0].entities[&id] else { panic!("ブロックが残ること") };
         assert_eq!(s.attrs, attrs);
         assert!(!s.attrs.contains_key("block_pitch"));

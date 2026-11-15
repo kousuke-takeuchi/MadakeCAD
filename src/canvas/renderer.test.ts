@@ -1087,6 +1087,7 @@ describe("note weight", () => {
   function noteRecorder() {
     const fonts: string[] = [];
     const strokes: number[] = [];
+    const turns: number[] = [];
     let k = 1;
     const stack: number[] = [];
     const ctx = {
@@ -1102,6 +1103,9 @@ describe("note weight", () => {
         k = stack.pop() ?? 1;
       },
       translate() {},
+      rotate: (a: number) => {
+        turns.push(a);
+      },
       scale: (s: number) => {
         k *= s;
       },
@@ -1124,7 +1128,7 @@ describe("note weight", () => {
         fonts.push(ctx.font);
       },
     };
-    return { ctx: ctx as unknown as CanvasRenderingContext2D, fonts, strokes };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, fonts, strokes, turns };
   }
 
   function noteSheet(): Sheet {
@@ -1169,5 +1173,22 @@ describe("note weight", () => {
     expect(stroked.fonts).toEqual([]);
     // 10mm: 0.7mm × 4 = 2.8px、太字は 4.2px
     expect(stroked.strokes.map((w) => Number(w.toFixed(6)))).toEqual([2.8, 4.2]);
+  });
+
+  // ja: 90・180・270度回した注記は、キャンバスでも基準点を中心に時計回りへ回して描く。回していない注記は回さない
+  it("turns a rotated note clockwise about its anchor, and leaves an unrotated note alone", () => {
+    const vp = new Viewport();
+    vp.scale = 4;
+    const hidden = new Set<ViewClass>(["wires", "symbols", "refs", "net_labels", "wire_numbers", "wire_notes", "harness", "shapes", "panel", "frame", "grid"]);
+    const plain = noteRecorder();
+    renderSheet(plain.ctx, noteSheet(), [], vp, { selection: new Set(), cursor: null, hidden });
+    expect(plain.turns).toEqual([]);
+    for (const deg of [90, 180, 270]) {
+      const sheet = noteSheet();
+      (sheet.entities.t1 as unknown as { rotation: number }).rotation = deg;
+      const rec = noteRecorder();
+      renderSheet(rec.ctx, sheet, [], vp, { selection: new Set(), cursor: null, hidden });
+      expect(rec.turns.map((a) => Number(a.toFixed(9))), `${deg}度`).toEqual([Number(((deg * Math.PI) / 180).toFixed(9))]);
+    }
   });
 });

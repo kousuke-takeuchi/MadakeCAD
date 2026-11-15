@@ -19,6 +19,7 @@ import {
   noteBounds,
   noteColor,
   textScreenColor,
+  noteTurnDeg,
 } from "./textStyle";
 
 function symbol(functionLabel?: string): SymbolInstance {
@@ -152,5 +153,14 @@ describe("function label", () => {
     const slot = functionLabelSlot(def({ at: { x: 0, y: -12 }, height: 3 }));
     expect(slot?.at).toEqual({ x: 0, y: -12 });
     expect(slot?.height).toBe(3);
+  });
+});
+
+describe("note rotation", () => {
+  // ja: 注記の回転は90・180・270度だけを描く。0度・90度刻みでない値・値なしは回さない
+  it("draws only 90, 180 and 270 degree turns of a note", () => {
+    expect([90, 180, 270].map(noteTurnDeg)).toEqual([90, 180, 270]);
+    expect([0, 45, 360, 1, null, undefined].map((r) => noteTurnDeg(r as number))).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(noteTurnDeg(450)).toBe(90);
   });
 });

@@ -364,6 +364,10 @@ export interface Sheet {
    * (canvas/annotationText.ts)。未設定 (旧ファイル) は既定の2.0mm。
    */
   annotation_text_mm?: number | null;
+  /** 配線の線の太さ (mm)。未設定は既定の0.35mm (canvas/wireStyle.ts)。 */
+  wire_weight_mm?: number | null;
+  /** 配線注記 (線径・色名・長さ) を描かない。未設定は描く。 */
+  hide_wire_notes?: boolean;
   /**
    * 整えバリアントの複製なら、その元シートのid (madake-coreの`Sheet::variant_of`)。
    *
@@ -448,6 +452,7 @@ export type Command =
   | { type: "set_revisions"; sheet_id: string; revisions: Revision[] }
   /** シートの注記文字高 (mm) の設定。nullで既定 (2.0mm) へ戻す。範囲は1.0〜3.5mm。 */
   | { type: "set_sheet_annotation_text"; sheet_id: string; height_mm: number | null }
+  | { type: "set_sheet_wire_style"; sheet_id: string; weight_mm: number | null; hide_notes: boolean }
   /**
    * シートの用紙サイズ・向きの変更 (G15)。既存エンティティの座標はそのまま
    * (動かない・消えない)。新しい用紙の外に出たエンティティはERC警告

@@ -104,6 +104,9 @@ pub fn wire_note_text(wire: &Wire) -> Option<String> {
 /// シートの配線注記を、ワイヤid順 (決定的) に返す。属性の無いワイヤは含まない。
 pub fn wire_notes(sheet: &Sheet) -> Vec<WireNote> {
     let mut out = Vec::new();
+    if sheet.hide_wire_notes {
+        return out;
+    }
     // 注記文字高を下げたシートでは、配線からの逃がしも同じ比率で詰める (注記の層ごと小さくする)
     let gap = WIRE_NOTE_GAP * sheet.annotation_scale();
     for (id, entity) in &sheet.entities {

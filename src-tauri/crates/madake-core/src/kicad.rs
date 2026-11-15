@@ -443,6 +443,7 @@ pub fn import_kicad_sch(
                 opt("block_size").as_deref(),
                 opt("block_pitch").as_deref(),
                 opt("block_numbers").as_deref(),
+                opt("block_caption").as_deref(),
             ) {
                 Some(a) => attrs = a,
                 None => report

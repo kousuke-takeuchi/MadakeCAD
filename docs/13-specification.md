@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3249 specification clauses** across 6 areas.
+**3272 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -83,6 +83,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Numbers inside also work on a 5 mm block, whose pins stay where they were. <sub>`numbers_inside_work_on_a_coarse_block_without_moving_pins`</sub>
 - A 2.5 mm block and a 5 mm block with the same pins get different export names, and the sample block keeps the name "block". <sub>`fine_and_coarse_blocks_get_different_export_ids`</sub>
 - The 2.5 mm blocks and the blocks with numbers inside are drawn exactly as recorded in the golden file that the TypeScript twin is also checked against (rewrite it with MADAKE_UPDATE_GOLDEN=1). <sub>`fine_blocks_match_the_shared_golden_file`</sub>
+- block_caption accepts only "above" and "inside"; a block without it writes its caption above, as before. <sub>`block_caption_accepts_only_above_and_inside`</sub>
+- block_caption does not change what the block itself draws: outline, pins and numbers are the same with and without it. <sub>`block_caption_does_not_change_the_drawn_block`</sub>
+- A block's caption place survives being imported back from an exported file: the importer keeps block_caption with the pin table. <sub>`imported_block_attrs_keep_the_caption_place`</sub>
 
 ### cable
 
@@ -270,6 +273,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Registering a FreeCAD link stores it under the entity id, registering again replaces it, removing it takes it away, and each step undoes back to the previous list. <sub>`mech_links_are_upserted_removed_and_undone`</sub>
 - Writing measured wire lengths back sets each wire's length and marks it as measured by FreeCAD in one undo step; a write-back that changes nothing costs no undo step at all. <sub>`wire_lengths_write_back_with_their_source`</sub>
 - A write-back naming a wire that is not on the sheet changes nothing: the other wires of the same batch keep their lengths and no undo step is created. <sub>`wire_lengths_write_back_is_all_or_nothing`</sub>
+- Setting a sheet's wire style stores the line weight and the "hide wire notes" switch, and undo puts both back. <sub>`set_sheet_wire_style_stores_weight_and_hidden_notes_and_undoes`</sub>
+- A wire weight outside 0.18 to 1.0 mm, or one that is not a number, is refused and the sheet is not changed. <sub>`set_sheet_wire_style_refuses_a_weight_out_of_range`</sub>
+- A sheet that never set a wire style is saved without the two settings, so its file looks as it did before they existed. <sub>`an_unset_wire_style_is_not_written_to_the_file`</sub>
+- A block whose block_caption is neither "above" nor "inside" is refused and the document is not changed. <sub>`a_block_with_an_unknown_caption_place_is_refused`</sub>
 
 ### connector
 
@@ -390,9 +397,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 23, the version that added feed-through block pins. <sub>`the_current_format_version_is_twenty_three`</sub>
-- A version 22 project file opens in this build and becomes version 23; its blocks keep their attributes and pins unchanged. <sub>`a_version_22_file_opens_as_version_23`</sub>
-- A version 21 project file opens in this build and becomes version 23; its blocks keep their attributes and their 5 mm pins. <sub>`a_version_21_file_opens_as_version_23`</sub>
+- The current file format version is 24, the version that added the sheet wire style and the block caption place. <sub>`the_current_format_version_is_twenty_four`</sub>
+- A version 23 project file opens in this build and becomes version 24; its sheets get the default wire weight and still show their wire notes. <sub>`a_version_23_file_opens_as_version_24`</sub>
+- A version 22 project file opens in this build and becomes the current version; its blocks keep their attributes and pins unchanged. <sub>`a_version_22_file_opens_as_the_current_version`</sub>
+- A version 21 project file opens in this build and becomes the current version; its blocks keep their attributes and their 5 mm pins. <sub>`a_version_21_file_opens_as_the_current_version`</sub>
 - A project with a stroke font round-trips through the file; a project without one writes no text_font key. <sub>`text_font_round_trips_and_is_omitted_when_unset`</sub>
 - A version 17 file without ports loads unchanged apart from being moved up to the current version. <sub>`a_version_17_file_loads_unchanged`</sub>
 - A cable with a single-line run is saved under the entity kind "run_cable" and comes back with its run and core ends; such a file has no entity of kind "cable". <sub>`a_run_cable_is_saved_as_run_cable_and_round_trips`</sub>
@@ -1094,6 +1102,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The width used to fit text is the stroke width while a stroke font is active, and the estimate otherwise. <sub>`text_advance_follows_the_active_font`</sub>
 - A frame template that asks for full-width Latin letters draws its cells with them, while the rest of the sheet keeps the project's setting. <sub>`a_frame_template_can_use_full_width_latin`</sub>
 - Letter spacing on a cell widens the gaps between its letters, and fitting uses the stroke width with that spacing. <sub>`cell_spacing_and_fitting_use_the_stroke_width`</sub>
+- Wires are drawn 0.35 mm wide on a sheet that set no wire weight, and at the sheet's weight once it is set. <sub>`wires_are_drawn_at_the_weight_of_the_sheet`</sub>
+- A sheet that hides wire notes draws a coloured wire in its colour but without the colour word; the same sheet without the switch writes the word. <sub>`a_sheet_can_hide_the_wire_notes`</sub>
+- A note turned 90, 180 or 270 degrees is drawn inside a rotation about its own anchor point; a note that is not turned is written exactly as before, with no rotation around it. <sub>`a_turned_note_is_rotated_about_its_anchor`</sub>
+- A block with block_caption "inside" writes its reference and its value centred inside the outline, the two lines centred on the middle of the box; without the attribute they stay above the box. <sub>`a_block_can_write_its_caption_inside_the_outline`</sub>
+- With only a reference, or only a value, the single line of an inside caption is centred on the middle of the box. <sub>`a_single_inside_caption_line_is_centred`</sub>
 
 ### Symbol library
 
@@ -2343,6 +2356,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - draws an inside top/bottom pair's number once at the vertical centre <sub>`feed-through block pins (Rust twin)`</sub>
 - keeps both numbers of a feed-through pair when a crossing side has pins, and no two numbers overlap <sub>`feed-through block pins (Rust twin)`</sub>
 - draws a number on each side of a feed-through pair when numbers are outside <sub>`feed-through block pins (Rust twin)`</sub>
+- accepts only "above" and "inside" for block_caption <sub>`block caption place (Rust twin)`</sub>
+- puts the caption of an inside block at the centre of the outline <sub>`block caption place (Rust twin)`</sub>
+- centres a single inside caption line on the middle of the box <sub>`block caption place (Rust twin)`</sub>
+- does not change what the block itself draws <sub>`block caption place (Rust twin)`</sub>
 
 ### frameEditor
 
@@ -2659,6 +2676,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - outlines the legend block in the selection colour while it is selected <sub>`wire legend block drawing`</sub>
 - does not draw the designator when hide_reference is true <sub>`hidden designator`</sub>
 - draws a bold note with the bold weight, and with a stroke font 1.5 times as thick <sub>`note weight`</sub>
+- turns a rotated note clockwise about its anchor, and leaves an unrotated note alone <sub>`note weight`</sub>
 
 ### search
 
@@ -2889,6 +2907,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - treats a blank function label as no label and trims the surrounding spaces <sub>`function label`</sub>
 - places the label just below the outline when the definition has no slot <sub>`function label`</sub>
 - follows the FUNCTION slot when the symbol definition defines one <sub>`function label`</sub>
+- draws only 90, 180 and 270 degree turns of a note <sub>`note rotation`</sub>
 
 ### viewClasses
 
@@ -2930,6 +2949,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - skips wires that carry no attributes <sub>`wireNoteLabels`</sub>
 - keeps the default 2.0mm note height on a sheet with no setting <sub>`annotation text height`</sub>
 - draws the wire notes at the sheet's annotation text height and moves them closer <sub>`annotation text height`</sub>
+- returns no wire note on a sheet that hides them, and the note again without the switch <sub>`hidden wire notes`</sub>
 
 ### wireNumbers
 
@@ -2962,6 +2982,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - treats the English and the Japanese name of a colour as the same wire <sub>`wirePartNo`</sub>
 - does not look up a wire without a colour or a gauge <sub>`wirePartNo`</sub>
 - takes the first of two rows for the same colour and gauge <sub>`wirePartNo`</sub>
+
+### wireStyle
+
+- uses 0.35 mm when the sheet sets no wire weight, and the sheet's weight when it does <sub>`sheet wire style`</sub>
+- falls back to 0.35 mm for a weight outside 0.18 to 1.0 mm or not a number <sub>`sheet wire style`</sub>
+- hides wire notes only when the sheet says so <sub>`sheet wire style`</sub>
 
 ### xref
 

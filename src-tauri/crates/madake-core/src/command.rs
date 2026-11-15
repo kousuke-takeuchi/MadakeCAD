@@ -46,6 +46,16 @@ pub enum Command {
         #[serde(default)]
         height_mm: Option<f64>,
     },
+    /// シートの配線の描き方の設定。`weight_mm` は配線の線の太さ (nullなら既定の
+    /// [`crate::model::DEFAULT_WIRE_WEIGHT_MM`]、範囲は [`crate::model::MIN_WIRE_WEIGHT_MM`]〜
+    /// [`crate::model::MAX_WIRE_WEIGHT_MM`])。`hide_notes` が true なら配線注記 (線径・色名・長さ) を描かない。
+    SetSheetWireStyle {
+        sheet_id: SheetId,
+        #[serde(default)]
+        weight_mm: Option<f64>,
+        #[serde(default)]
+        hide_notes: bool,
+    },
     /// シートの用紙サイズ・向きの変更 (G15)。既存エンティティの座標はそのまま
     /// (動かない・消えない)。ゾーン分割 (`zone_cols`/`zone_rows`) も**変えない**
     /// (シートが正。図枠テンプレートの差し替えと同じで、クロスリファレンスの
@@ -738,6 +748,36 @@ impl Engine {
                     vec![Command::SetSheetAnnotationText {
                         sheet_id: *sheet_id,
                         height_mm: old,
+                    }],
+                ))
+            }
+            Command::SetSheetWireStyle { sheet_id, weight_mm, hide_notes } => {
+                if let Some(w) = weight_mm {
+                    if !w.is_finite()
+                        || *w < crate::model::MIN_WIRE_WEIGHT_MM
+                        || *w > crate::model::MAX_WIRE_WEIGHT_MM
+                    {
+                        return Err(CoreError::InvalidCommand(format!(
+                            "wire weight out of range: {w} (expected {}..{} mm)",
+                            crate::model::MIN_WIRE_WEIGHT_MM,
+                            crate::model::MAX_WIRE_WEIGHT_MM
+                        )));
+                    }
+                }
+                let sheet = self
+                    .project
+                    .sheet_mut(*sheet_id)
+                    .ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let (old_weight, old_hide) = (sheet.wire_weight_mm, sheet.hide_wire_notes);
+                sheet.wire_weight_mm = *weight_mm;
+                sheet.hide_wire_notes = *hide_notes;
+                let meta = sheet_meta(sheet);
+                Ok((
+                    vec![PatchOp::SheetMetaUpdated { sheet: meta }],
+                    vec![Command::SetSheetWireStyle {
+                        sheet_id: *sheet_id,
+                        weight_mm: old_weight,
+                        hide_notes: old_hide,
                     }],
                 ))
             }
@@ -5246,5 +5286,67 @@ mod tests {
         let Entity::Wire(w) = &engine.project().sheets[0].entities[&wire_id] else { panic!() };
         assert_eq!((w.length_m, w.length_source), (Some(0.4), LengthSource::Manual));
         assert_eq!((engine.revision(), engine.history_origins().len()), (revision, history));
+    }
+
+    /// Setting a sheet's wire style stores the line weight and the "hide wire notes" switch, and undo puts both back.
+    /// シートの配線の描き方を設定すると、線の太さと「配線注記を描かない」が保存され、元に戻すと両方とも前の値に戻る。
+    #[test]
+    fn set_sheet_wire_style_stores_weight_and_hidden_notes_and_undoes() {
+        let (mut engine, sheet_id) = test_engine();
+        assert_eq!(engine.project().sheets[0].wire_weight_mm, None);
+        assert!((engine.project().sheets[0].wire_weight_mm() - 0.35).abs() < 1e-9, "既定は0.35mm");
+        engine
+            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(0.7), hide_notes: true })
+            .unwrap();
+        let sheet = &engine.project().sheets[0];
+        assert_eq!((sheet.wire_weight_mm, sheet.hide_wire_notes), (Some(0.7), true));
+        assert!((sheet.wire_weight_mm() - 0.7).abs() < 1e-9);
+        engine.undo().unwrap();
+        let sheet = &engine.project().sheets[0];
+        assert_eq!((sheet.wire_weight_mm, sheet.hide_wire_notes), (None, false), "設定前へ戻る");
+    }
+
+    /// A wire weight outside 0.18 to 1.0 mm, or one that is not a number, is refused and the sheet is not changed.
+    /// 0.18〜1.0mm の外の太さや数でない太さは断り、シートは変わらない。
+    #[test]
+    fn set_sheet_wire_style_refuses_a_weight_out_of_range() {
+        let (mut engine, sheet_id) = test_engine();
+        for bad in [0.0, 0.1, 1.5, -0.35, f64::NAN, f64::INFINITY] {
+            let err = engine
+                .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(bad), hide_notes: false })
+                .expect_err("範囲外は断る");
+            assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("wire weight")), "{bad}: {err:?}");
+        }
+        assert_eq!(engine.project().sheets[0].wire_weight_mm, None, "書き換わらない");
+        for ok in [0.18, 1.0] {
+            engine.execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(ok), hide_notes: false }).unwrap();
+        }
+    }
+
+    /// A sheet that never set a wire style is saved without the two settings, so its file looks as it did before they existed.
+    /// 配線の描き方を設定していないシートは、2つの設定を書き出さない。ファイルはこの設定ができる前と同じ形になる。
+    #[test]
+    fn an_unset_wire_style_is_not_written_to_the_file() {
+        let (mut engine, sheet_id) = test_engine();
+        let json = serde_json::to_string(engine.project()).unwrap();
+        assert!(!json.contains("wire_weight_mm") && !json.contains("hide_wire_notes"), "{json}");
+        engine.execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(0.5), hide_notes: true }).unwrap();
+        let json = serde_json::to_string(engine.project()).unwrap();
+        assert!(json.contains("\"wire_weight_mm\":0.5") && json.contains("\"hide_wire_notes\":true"), "{json}");
+    }
+
+    /// A block whose block_caption is neither "above" nor "inside" is refused and the document is not changed.
+    /// block_caption が "above" でも "inside" でもないブロックは断り、図面は変わらない。
+    #[test]
+    fn a_block_with_an_unknown_caption_place_is_refused() {
+        let (mut engine, sheet_id) = test_engine();
+        let Entity::Symbol(mut bad) = crate::block::test_block("U1", "", 100.0, 50.0, r#"{"left":[{"no":"1"}]}"#) else { unreachable!() };
+        bad.attrs.insert(crate::block::BLOCK_CAPTION_ATTR.into(), "below".into());
+        let before = serde_json::to_string(engine.project()).unwrap();
+        let err = engine
+            .execute(Command::AddEntity { sheet_id, entity: Entity::Symbol(bad) })
+            .expect_err("知らない置き場所は断る");
+        assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("block_caption")), "{err:?}");
+        assert_eq!(serde_json::to_string(engine.project()).unwrap(), before);
     }
 }

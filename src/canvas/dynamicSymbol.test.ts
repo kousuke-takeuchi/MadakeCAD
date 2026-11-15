@@ -1032,3 +1032,54 @@ describe("feed-through block pins (Rust twin)", () => {
     expect(numberTexts(def).length).toBe(4);
   });
 });
+
+
+describe("block caption place (Rust twin)", () => {
+  const captioned = (caption: string | null, reference: string, value: string): [SymbolInstance, SymbolDef] => {
+    const attrs: Record<string, string> = {
+      block_pins: '{"left":[{"no":"1"}],"right":[{"no":"2"}]}',
+      block_size: '{"w":20,"h":10}',
+    };
+    if (caption !== null) attrs.block_caption = caption;
+    const inst: SymbolInstance = { id: "i", symbol_id: "block", at: { x: 100, y: 80 }, rotation: 0, mirror: false, reference, value, attrs };
+    return [inst, blockSymbol(attrs)];
+  };
+
+  // ja: block_caption は "above" と "inside" だけを受け付ける。属性の無いブロックは上に書く
+  it('accepts only "above" and "inside" for block_caption', () => {
+    expect(parseBlockSpec({}).caption).toBe("above");
+    expect(parseBlockSpec({ block_caption: "above" }).caption).toBe("above");
+    expect(parseBlockSpec({ block_caption: " inside " }).caption).toBe("inside");
+    for (const bad of ["below", "", "INSIDE"]) {
+      expect(() => parseBlockSpec({ block_caption: bad }), bad).toThrow(/block_caption must be "above" or "inside"/);
+    }
+  });
+
+  // ja: block_caption が "inside" のブロックは、参照記号と型番を箱の中央に置く。2行のまとまりの中心が箱の中心の高さになる。属性が無ければ箱の上のまま
+  it("puts the caption of an inside block at the centre of the outline", () => {
+    const [plain, plainDef] = captioned(null, "U1", "AMP");
+    expect(captionAnchor(plain, plainDef).top).toBeLessThanOrEqual(75);
+    const [inst, def] = captioned("inside", "U1", "AMP");
+    const a = captionAnchor(inst, def);
+    expect(a.end).toBe(false);
+    expect(a.x).toBe(100);
+    // Rust: top = 80 + (4.5 + 0.72 × 2.5 + 1.0) / 2
+    expect(a.top).toBeCloseTo(83.65, 9);
+  });
+
+  // ja: 参照記号だけ、または型番だけのとき、中に書く1行は箱の中央の高さにそろう
+  it("centres a single inside caption line on the middle of the box", () => {
+    const [onlyRef, d1] = captioned("inside", "U1", "");
+    expect(captionAnchor(onlyRef, d1).top).toBeCloseTo(80 + 0.9 + 4.5, 9);
+    const [onlyValue, d2] = captioned("inside", "", "AMP");
+    expect(captionAnchor(onlyValue, d2).top).toBeCloseTo(80 + 0.9 + 1.0, 9);
+  });
+
+  // ja: block_caption はブロック自身の絵を変えない: 図形とピンは属性の有無で同じ
+  it("does not change what the block itself draws", () => {
+    const [, a] = captioned(null, "U1", "AMP");
+    const [, b] = captioned("inside", "U1", "AMP");
+    expect(b.primitives).toEqual(a.primitives);
+    expect(b.pins).toEqual(a.pins);
+  });
+});

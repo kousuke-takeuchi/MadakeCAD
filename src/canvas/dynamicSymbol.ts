@@ -33,7 +33,7 @@ import {
 // 循環import防止のため定義はtextWidth.tsへ移した。既存のimport元のために再エクスポートする
 import { isDeviceBlock } from "./relayXref";
 import { textWidthMm } from "./textWidth";
-import { LABEL_FONT, REF_LABEL_DY, VALUE_LABEL_DY } from "./textStyle";
+import { CAPTION_CAP_RATIO, LABEL_FONT, REF_LABEL_DY, VALUE_LABEL_DY } from "./textStyle";
 export { textWidthMm } from "./textWidth";
 // 端子番号の読み取りと端子の印の寸法も葉モジュール (terminalNo.ts) へ移した
 // (terminalJumpers.ts の端子番号の対応表をここから使うための循環import防止)。
@@ -261,6 +261,9 @@ const BLOCK_INSIDE_GAP_MM = 1.0;
 export type BlockPitch = "coarse" | "fine";
 /** ピン番号を描く場所 (Rust側 BlockNumbers)。 */
 export type BlockNumbers = "outside" | "inside";
+/** 参照記号・型番を外形の上に描くか中に描くかを持つ属性キー。Rust の BLOCK_CAPTION_ATTR と同じ。 */
+export const BLOCK_CAPTION_ATTR = "block_caption";
+export type BlockCaption = "above" | "inside";
 /** ピンの並びピッチ mm。 */
 export const BLOCK_PIN_PITCH_MM = 5.0;
 /** 外形からピン接続点までのリード長 mm。 */
@@ -458,6 +461,7 @@ export const CORNER_CAPTION_GAP = 1.0;
  */
 export function captionAnchor(inst: SymbolInstance, def: SymbolDef): CaptionAnchor {
   return (
+    insideCaptionAnchor(inst, def) ??
     topLeftCornerAnchor(inst, def) ?? { x: centredCaptionX(inst, def), top: captionBounds(inst, def).min.y, end: false }
   );
 }
@@ -467,6 +471,30 @@ export function captionAnchor(inst: SymbolInstance, def: SymbolDef): CaptionAnch
  * 中心 (回転・ミラーの後)。2.5mm間隔で幅が2.5mmの奇数倍のブロックは外形が1.25mmずれるため。
  * ローカルの中心を変換するので、5mm間隔のブロック (ずれ0) は配置点ちょうどのまま。
  */
+/** block_caption = "inside" のブロックの置き場所: 描かれた外形 (回転・ミラーの後) の中央。
+ * 2行あれば2行のまとまりの中心を、1行だけならその行の大文字の中心を、外形の中心の高さにそろえる。
+ * Rust 側 svg::inside_caption_anchor と同じ。 */
+function insideCaptionAnchor(inst: SymbolInstance, def: SymbolDef): CaptionAnchor | null {
+  if (def.id !== BLOCK_SYMBOL_ID) return null;
+  let corners: [Point, Point];
+  try {
+    const spec = parseBlockSpec(inst.attrs ?? {});
+    if (spec.caption !== "inside") return null;
+    corners = blockOutline(spec.pins, spec.size, spec.pitch, spec.numbers);
+  } catch {
+    return null;
+  }
+  const c = transformLocal(p((corners[0].x + corners[1].x) / 2, (corners[0].y + corners[1].y) / 2), inst);
+  const cap = CAPTION_CAP_RATIO * LABEL_FONT;
+  const hasRef = !!inst.reference && inst.attrs?.hide_reference !== "true";
+  const hasValue = !!inst.value;
+  let top: number;
+  if (hasRef && hasValue) top = c.y + (REF_LABEL_DY + cap + VALUE_LABEL_DY) / 2;
+  else if (hasRef) top = c.y + cap / 2 + REF_LABEL_DY;
+  else top = c.y + cap / 2 + VALUE_LABEL_DY;
+  return { x: c.x, top, end: false };
+}
+
 function centredCaptionX(inst: SymbolInstance, def: SymbolDef): number {
   if (def.id !== BLOCK_SYMBOL_ID) return inst.at.x;
   let corners: [Point, Point];
@@ -775,6 +803,7 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   size: { w: number; h: number } | null;
   pitch: BlockPitch;
   numbers: BlockNumbers;
+  caption: BlockCaption;
 } {
   const rawPins = attrs[BLOCK_PINS_ATTR];
   let pins: BlockPins = {};
@@ -845,6 +874,11 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   if (rawNumbers === undefined || rawNumbers === "outside") numbers = "outside";
   else if (rawNumbers === "inside") numbers = "inside";
   else throw new Error(`${BLOCK_NUMBERS_ATTR} must be "outside" or "inside": ${JSON.stringify(rawNumbers)}`);
+  const rawCaption = attrs[BLOCK_CAPTION_ATTR]?.trim();
+  let caption: BlockCaption;
+  if (rawCaption === undefined || rawCaption === "above") caption = "above";
+  else if (rawCaption === "inside") caption = "inside";
+  else throw new Error(`${BLOCK_CAPTION_ATTR} must be "above" or "inside": ${JSON.stringify(rawCaption)}`);
   if (pitch === "fine") {
     const pin = all.find((q) => q.connector != null);
     if (pin) {
@@ -887,7 +921,7 @@ export function parseBlockSpec(attrs: Record<string, string>): {
       );
     }
   }
-  return { pins, size, pitch, numbers };
+  return { pins, size, pitch, numbers, caption };
 }
 
 /** 左右の辺の内側に書く文字の1つ分: 縦の位置・外形の内壁からの張り出し・まとまりの名前か (Rust側 SideText)。 */

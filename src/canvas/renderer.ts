@@ -89,6 +89,7 @@ import { agentRgba, panelTheme, theme, wireColorScreen } from "./theme";
 import {
   FUNCTION_LABEL_FONT,
   LABEL_FONT,
+  noteTurnDeg,
   REF_LABEL_DY,
   VALUE_LABEL_DY,
   canvasTextAlign,
@@ -100,6 +101,7 @@ import {
 } from "./textStyle";
 import { wireNumberFont, wireNumberLabels } from "./wireNumbers";
 import { wireNoteFont, wireNoteLabels } from "./wireNotes";
+import { wireWeightMm } from "./wireStyle";
 import { TAG_FONT, netTag } from "./netTag";
 import { XREF_FONT, deviceXrefAt, xrefTextAt } from "./xref";
 import { annotationScale } from "./annotationText";
@@ -1404,7 +1406,7 @@ export function renderSheet(
     if (e.kind !== "wire") continue;
     const selected = opts.selection.has(e.id);
     ctx.strokeStyle = selected ? theme.selection : wireColorScreen(e.color);
-    ctx.lineWidth = Math.max(1.2, 0.35 * vp.scale) + (selected ? 1.5 : 0);
+    ctx.lineWidth = Math.max(1.2, wireWeightMm(sheet) * vp.scale) + (selected ? 1.5 : 0);
     ctx.beginPath();
     e.points.forEach((p, i) => {
       const s = vp.toScreen(p);
@@ -1503,7 +1505,17 @@ export function renderSheet(
       const weight = e.bold ? "bold " : "";
       setDrawingFont(ctx, e.height, vp.scale, "sans-serif", weight);
       ctx.textAlign = canvasTextAlign(e.anchor);
-      drawingText(ctx, e.text, s.x, s.y);
+      // 回転 (90・180・270、時計回り) は基準点を中心に回す (svg.rs と同じ)。0 は従来どおり
+      const turn = noteTurnDeg(e.rotation);
+      if (turn) {
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate((turn * Math.PI) / 180);
+        drawingText(ctx, e.text, 0, 0);
+        ctx.restore();
+      } else {
+        drawingText(ctx, e.text, s.x, s.y);
+      }
       ctx.textAlign = "left";
       // 引き出し線 (G20): 対象がシート上に実在すれば、注記の辺から対象の外形まで
       // 毎回求め直して引く (位置は保存しないので、どちらを動かしても追従する)

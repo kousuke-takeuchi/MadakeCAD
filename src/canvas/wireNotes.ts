@@ -3,6 +3,7 @@
 // 2.5mm (グリッドピッチ) 逃がす。線番がネット単位なのに対し、注記は電線長が1本ごとに
 // 違うのでワイヤ単位で描く。
 
+import { hidesWireNotes } from "./wireStyle";
 import type { Point, Sheet, Wire } from "../ipc";
 import { annotationScale } from "./annotationText";
 
@@ -105,6 +106,7 @@ function longestSegment(points: Point[]): [Point, Point] | null {
 /** シートの配線注記を、ワイヤid順 (決定的) に返す。属性の無いワイヤは含まない。 */
 export function wireNoteLabels(sheet: Sheet): WireNoteLabel[] {
   const out: WireNoteLabel[] = [];
+  if (hidesWireNotes(sheet)) return out;
   // 注記文字高を下げたシートでは、配線からの逃がしも同じ比率で詰める
   const gap = WIRE_NOTE_GAP * annotationScale(sheet);
   for (const entity of Object.values(sheet.entities)) {

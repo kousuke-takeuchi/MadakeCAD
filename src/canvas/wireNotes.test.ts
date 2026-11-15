@@ -130,3 +130,13 @@ describe("annotation text height", () => {
     expect(wireNoteLabels(s)[0].at.y).toBeCloseTo(20 + WIRE_NOTE_GAP * 0.7, 9);
   });
 });
+
+describe("hidden wire notes", () => {
+  // ja: 配線注記を描かないシートは、色付きの配線があっても注記を1つも返さない。設定を外すと注記が出る
+  it("returns no wire note on a sheet that hides them, and the note again without the switch", () => {
+    const s = sheetOf([wire("w1", [[50, 60], [90, 60]], "yellow", 0, null)]);
+    expect(wireNoteLabels(s).map((n) => n.text)).toEqual(["黄"]);
+    (s as unknown as { hide_wire_notes: boolean }).hide_wire_notes = true;
+    expect(wireNoteLabels(s)).toEqual([]);
+  });
+});
