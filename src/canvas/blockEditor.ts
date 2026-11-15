@@ -362,14 +362,23 @@ function segmentDistance(p: Point, a: Point, b: Point): number {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
+/** 配線が届いているピン: ピン表のどの辺の、どの番号か。 */
+export interface WiredPin {
+  side: BlockSide;
+  no: string;
+}
+
+/** ピンの引き出しの向きから、ピン表の辺 (回転・反転の前) を求める。 */
+const SIDE_OF_DIR: Record<string, BlockSide> = { left: "left", right: "right", up: "top", down: "bottom" };
+
 /**
- * いま配線が届いているピンの番号 (図面の見たままで判定する。Rust側のネットリストと
- * 同じく、接続点に配線が触れていれば接続とみなす)。貫通ピン (向かい合う辺の同じ番号) は
- * 両側に配線があれば番号が2回挙がる (片側を消す編集で外れる配線を数えるため)。
+ * いま配線が届いているピン (図面の見たままで判定する。Rust側のネットリストと
+ * 同じく、接続点に配線が触れていれば接続とみなす)。辺はピン表の辺 (回転・反転の前)。
+ * 貫通ピン (向かい合う辺の同じ番号) は、配線のある側ごとに1つ挙がる。
  */
-export function wiredPinNumbers(sheet: Sheet, inst: SymbolInstance, def: SymbolDef): string[] {
+export function wiredPinNumbers(sheet: Sheet, inst: SymbolInstance, def: SymbolDef): WiredPin[] {
   const wires = Object.values(sheet.entities).filter((e) => e.kind === "wire");
-  const wired: string[] = [];
+  const wired: WiredPin[] = [];
   for (const pin of def.pins) {
     const at = transformLocal(pin.at, inst);
     const touched = wires.some((w) =>
@@ -380,27 +389,21 @@ export function wiredPinNumbers(sheet: Sheet, inst: SymbolInstance, def: SymbolD
             (_, i) => i + 1 < w.points.length && segmentDistance(at, w.points[i], w.points[i + 1]) < CONNECT_EPS,
           ),
     );
-    if (touched) wired.push(pin.number);
+    if (touched) wired.push({ side: SIDE_OF_DIR[pin.dir ?? "left"] ?? "left", no: pin.number });
   }
   return wired;
 }
 
 /**
  * 編集後のピン表から消えてしまう配線済みピン (接続が外れる = 警告を出す)。
- * 番号を書き換えた場合も、そのピンは消えたものとして挙がる。貫通ピンは、配線のある本数より
- * 表に残る行が少なければ (片側の行を消した) 番号が挙がる。番号は1回ずつ。
+ * 番号を書き換えた場合も、そのピンは消えたものとして挙がる。貫通ピンは、配線のある側の
+ * 行がその番号で残っていなければ挙がる (もう片側の行が残っていても)。番号は1回ずつ。
  */
-export function droppedWiredPins(wired: readonly string[], draft: BlockDraft): string[] {
-  const left = new Map<string, number>();
-  for (const row of allRows(draft).filter(isFilled)) {
-    const no = row.no.trim();
-    left.set(no, (left.get(no) ?? 0) + 1);
-  }
+export function droppedWiredPins(wired: readonly WiredPin[], draft: BlockDraft): string[] {
   const dropped: string[] = [];
-  for (const no of wired) {
-    const n = left.get(no) ?? 0;
-    if (n > 0) left.set(no, n - 1);
-    else if (!dropped.includes(no)) dropped.push(no);
+  for (const { side, no } of wired) {
+    const kept = draft.rows[side].some((row) => isFilled(row) && row.no.trim() === no);
+    if (!kept && !dropped.includes(no)) dropped.push(no);
   }
   return dropped;
 }

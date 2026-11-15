@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3240 specification clauses** across 6 areas.
+**3241 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2207,7 +2207,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - finds no wired pins on a block that nothing is connected to <sub>`pins that are already wired`</sub>
 - flags a wired pin that the edit deletes or renumbers <sub>`pins that are already wired`</sub>
 - stays quiet when the wired pins survive the edit <sub>`pins that are already wired`</sub>
-- counts both wired sides of a feed-through pin and flags the pin when one side row is deleted <sub>`pins that are already wired`</sub>
+- lists each wired side of a feed-through pin and warns once when one side row is deleted <sub>`pins that are already wired`</sub>
+- warns when the wired side of a feed-through pin is deleted or renumbered, but not the unwired side <sub>`pins that are already wired`</sub>
 - splits contacts on ASCII, Japanese and full-width commas and trims them <sub>`pins that are already wired`</sub>
 - writes contacts into block_pins and reads them back as comma-separated text <sub>`pins that are already wired`</sub>
 - flags a single contact, a repeated contact and too many contacts <sub>`pins that are already wired`</sub>

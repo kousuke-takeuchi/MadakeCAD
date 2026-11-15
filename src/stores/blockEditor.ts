@@ -21,6 +21,7 @@ import {
   patchRow,
   removeRow,
   wiredPinNumbers,
+  type WiredPin,
   type BlockDraft,
   type BlockIssue,
   type BlockPinRow,
@@ -56,7 +57,7 @@ interface BlockEditorState {
   /** 開いた時点の属性 (変更の有無の判定に使う)。 */
   clean: string | null;
   /** 開いた時点で配線が届いていたピンの番号。 */
-  wiredPins: string[];
+  wiredPins: WiredPin[];
   /** 上下辺の行を開いているか (既定は折りたたみ)。 */
   extraSidesOpen: boolean;
   saving: boolean;

@@ -290,7 +290,7 @@ describe("pins that are already wired", () => {
     const pin = def.pins.find((p) => p.number === "IN1")!;
     const at = { x: inst.at.x + pin.at.x, y: inst.at.y + pin.at.y };
     const sheet = sheetWith([wire("w1", [{ x: at.x - 20, y: at.y }, at])]);
-    expect(wiredPinNumbers(sheet, inst, def)).toEqual(["IN1"]);
+    expect(wiredPinNumbers(sheet, inst, def)).toEqual([{ side: "left", no: "IN1" }]);
   });
 
   // ja: 回転して置いたブロックでも、回転後の接続点で配線済みかを見る
@@ -301,7 +301,7 @@ describe("pins that are already wired", () => {
     // 90度回転: (x, y) → (-y, x)
     const at = { x: inst.at.x - pin.at.y, y: inst.at.y + pin.at.x };
     const sheet = sheetWith([wire("w1", [at, { x: at.x, y: at.y + 20 }])]);
-    expect(wiredPinNumbers(sheet, inst, def)).toEqual(["OUT1"]);
+    expect(wiredPinNumbers(sheet, inst, def)).toEqual([{ side: "right", no: "OUT1" }]);
   });
 
   // ja: 配線が1本も届いていないブロックには配線済みピンが無い
@@ -316,18 +316,18 @@ describe("pins that are already wired", () => {
     const d = draft();
     d.rows.left[0].no = "A1";
     removeRow(d, "right", 0);
-    expect(droppedWiredPins(["IN1", "IN2", "OUT1"], d)).toEqual(["IN1", "OUT1"]);
+    expect(droppedWiredPins([{ side: "left", no: "IN1" }, { side: "left", no: "IN2" }, { side: "right", no: "OUT1" }], d)).toEqual(["IN1", "OUT1"]);
   });
 
   // ja: 配線済みのピンをそのまま残す編集では警告は出ない
   it("stays quiet when the wired pins survive the edit", () => {
     const d = draft();
     d.rows.left[0].name = "運転指令";
-    expect(droppedWiredPins(["IN1", "OUT1"], d)).toEqual([]);
+    expect(droppedWiredPins([{ side: "left", no: "IN1" }, { side: "right", no: "OUT1" }], d)).toEqual([]);
   });
 
-  // ja: 貫通ピンは左右の両方に配線があれば番号が2回挙がり、片側の行を消す編集では接続が外れるピンとして1回だけ挙がる
-  it("counts both wired sides of a feed-through pin and flags the pin when one side row is deleted", () => {
+  // ja: 貫通ピンは配線のある側ごとに辺つきで挙がり、両側に配線があって片側の行を消すと接続が外れるピンとして1回だけ警告される
+  it("lists each wired side of a feed-through pin and warns once when one side row is deleted", () => {
     const fa = { block_pins: '{"left":[{"no":"1"}],"right":[{"no":"1"}]}' };
     const inst = blockAt(fa);
     const def = blockSymbol(fa);
@@ -335,13 +335,28 @@ describe("pins that are already wired", () => {
       const at = { x: inst.at.x + pin.at.x, y: inst.at.y + pin.at.y };
       return wire(`w${i}`, [{ x: at.x - 20, y: at.y }, at]);
     });
-    expect(wiredPinNumbers(sheetWith(wires), inst, def)).toEqual(["1", "1"]);
-    const keepBoth = draftFromAttrs(fa);
-    expect(droppedWiredPins(["1", "1"], keepBoth)).toEqual([]);
+    const both = wiredPinNumbers(sheetWith(wires), inst, def);
+    expect(both).toEqual([{ side: "left", no: "1" }, { side: "right", no: "1" }]);
+    expect(droppedWiredPins(both, draftFromAttrs(fa))).toEqual([]);
     const oneSide = draftFromAttrs(fa);
     removeRow(oneSide, "right", 0);
-    expect(droppedWiredPins(["1", "1"], oneSide)).toEqual(["1"]);
-    expect(droppedWiredPins(["1"], oneSide)).toEqual([]);
+    expect(droppedWiredPins(both, oneSide)).toEqual(["1"]);
+  });
+
+  // ja: 貫通ピンの片側だけに配線があるとき、その側の行を消す・番号を変えると警告され、配線の無い側の行を消しても警告されない
+  it("warns when the wired side of a feed-through pin is deleted or renumbered, but not the unwired side", () => {
+    const fa = { block_pins: '{"left":[{"no":"1"}],"right":[{"no":"1"}]}' };
+    const rightWired = [{ side: "right" as const, no: "1" }];
+    const deleted = draftFromAttrs(fa);
+    removeRow(deleted, "right", 0);
+    expect(droppedWiredPins(rightWired, deleted)).toEqual(["1"]);
+    const renumbered = draftFromAttrs(fa);
+    renumbered.rows.right[0].no = "3";
+    expect(droppedWiredPins(rightWired, renumbered)).toEqual(["1"]);
+    const otherDeleted = draftFromAttrs(fa);
+    removeRow(otherDeleted, "left", 0);
+    expect(droppedWiredPins(rightWired, otherDeleted)).toEqual([]);
+    expect(droppedWiredPins(rightWired, draftFromAttrs(fa))).toEqual([]);
   });
 
   // ja: 接点はカンマ (半角・読点・全角) で区切り、前後の空白を落として空のものを捨てる

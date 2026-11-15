@@ -264,7 +264,7 @@ describe("warning about wired pins", () => {
     seed(wiredSheet());
     const editor = useBlockEditorStore();
     editor.startEdit(block() as Entity);
-    expect(editor.wiredPins).toEqual(["IN1"]);
+    expect(editor.wiredPins).toEqual([{ side: "left", no: "IN1" }]);
     expect(editor.warnings).toEqual([]);
     editor.updateRow("left", 0, { no: "A1" });
     expect(editor.warnings).toEqual(["IN1"]);

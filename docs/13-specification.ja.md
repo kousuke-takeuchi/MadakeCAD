@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3240仕様項目**。
+全6領域・**3241仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2207,7 +2207,8 @@
 - 配線が1本も届いていないブロックには配線済みピンが無い <sub>`pins that are already wired`</sub>
 - 配線済みのピンを消す・番号を変えると、そのピンが「接続が外れる」として挙がる <sub>`pins that are already wired`</sub>
 - 配線済みのピンをそのまま残す編集では警告は出ない <sub>`pins that are already wired`</sub>
-- 貫通ピンは左右の両方に配線があれば番号が2回挙がり、片側の行を消す編集では接続が外れるピンとして1回だけ挙がる <sub>`pins that are already wired`</sub>
+- 貫通ピンは配線のある側ごとに辺つきで挙がり、両側に配線があって片側の行を消すと接続が外れるピンとして1回だけ警告される <sub>`pins that are already wired`</sub>
+- 貫通ピンの片側だけに配線があるとき、その側の行を消す・番号を変えると警告され、配線の無い側の行を消しても警告されない <sub>`pins that are already wired`</sub>
 - 接点はカンマ (半角・読点・全角) で区切り、前後の空白を落として空のものを捨てる <sub>`pins that are already wired`</sub>
 - 接点を書いた行は block_pins に contacts として入り、読み戻すとカンマ区切りの文字に戻る。接点の無い行の書き出しは今までと同じ <sub>`pins that are already wired`</sub>
 - 接点が1つだけ・同じ接点が2つ・32を超える行は指摘になる <sub>`pins that are already wired`</sub>
