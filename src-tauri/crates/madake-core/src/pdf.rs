@@ -542,4 +542,70 @@ mod tests {
         let without = svgs_to_pdf(&[blank.to_string()]).expect("pdf");
         assert!(with.len() > without.len(), "{} <= {}", with.len(), without.len());
     }
+
+    /// 表紙・回路図2枚・盤シート (外形とフットプリント) と、全種類の帳票を綴じる設定。
+    fn full_book() -> (Project, PdfBookOptions) {
+        let mut project = book_project();
+        let mut panel = Sheet::new_kind("盤", PaperSize::A3, Orientation::Landscape, SheetKind::Panel);
+        for e in [
+            Entity::PanelOutline(PanelOutline { id: Uuid::new_v4(), at: Point::new(40.0, 40.0), w: 200.0, h: 150.0, name: "制御盤".into() }),
+            Entity::Footprint(Footprint {
+                id: Uuid::new_v4(),
+                at: Point::new(100.0, 100.0),
+                w: 20.0,
+                h: 40.0,
+                rotation: 0,
+                reference: "K1".into(),
+                part_no: "MDK-RLY-24V".into(),
+                item_no: Some(1),
+            }),
+        ] {
+            panel.entities.insert(e.id(), e);
+        }
+        project.sheets.push(panel);
+        let options = PdfBookOptions {
+            include_reports: vec![
+                ReportKind::WireList,
+                ReportKind::TerminalChart,
+                ReportKind::TerminalDiagram,
+                ReportKind::Bom,
+                ReportKind::Xref,
+                ReportKind::PlcIo,
+                ReportKind::PanelPlacement,
+                ReportKind::CableList,
+                ReportKind::PanelWiring,
+            ],
+            cover: true,
+        };
+        (project, options)
+    }
+
+    /// With a stroke font every page of the PDF book (the cover, every sheet and every kind of report) is lettered with strokes and keeps no text element.
+    /// ストロークフォントを選ぶと、PDF一括出力の全ページ (表紙・全シート・全種類の帳票) の文字が線で描かれ、text要素は1つも残らない。
+    #[test]
+    fn every_page_of_the_pdf_book_uses_the_stroke_font() {
+        let (mut project, options) = full_book();
+        project.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Half });
+        let pages = project_pdf_pages(&project, &options);
+        // 表紙1 + 回路2 + 盤1 + 帳票9種 (どれも1枚以上)
+        assert!(pages.len() >= 13, "{}", pages.len());
+        for (i, page) in pages.iter().enumerate() {
+            let left: Vec<&str> = page.lines().filter(|l| l.contains("<text")).collect();
+            assert!(left.is_empty(), "page {i}: {left:?}");
+            assert!(page.contains("stroke-linejoin=\"round\"/>"), "page {i}");
+        }
+    }
+
+    /// After exporting the book of a project with a stroke font, the book of a project without one is exactly what it would be on its own.
+    /// ストロークフォントのプロジェクトを一括出力した後でも、書体の無いプロジェクトの一括出力は単独で書いたときと1バイトも変わらない。
+    #[test]
+    fn the_stroke_font_of_one_book_does_not_leak_into_the_next() {
+        let (plain, options) = full_book();
+        let fresh = project_pdf_pages(&plain, &options);
+        assert!(fresh.iter().any(|p| p.contains("<text")));
+        let mut stroked = plain.clone();
+        stroked.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Half });
+        assert_ne!(project_pdf_pages(&stroked, &options), fresh);
+        assert_eq!(project_pdf_pages(&plain, &options), fresh);
+    }
 }

@@ -208,8 +208,6 @@ pub fn report_bytes_with(
     entity_id: Option<EntityId>,
     catalog: &BomCatalog,
 ) -> Result<(Vec<u8>, usize), ReportError> {
-    // 帳票のPDFもプロジェクトの書体で描く
-    let _font = crate::svg::text_font_scope(project.text_font.as_ref());
     match format {
         ReportFormat::Csv => {
             let csv = report_csv_with(project, kind, entity_id, catalog)?;
@@ -284,6 +282,8 @@ pub fn report_pages_with(
     entity_id: Option<EntityId>,
     catalog: &BomCatalog,
 ) -> Result<Vec<String>, ReportError> {
+    // 帳票のページ (PDFの元) もプロジェクトの書体で描く
+    let _font = crate::svg::text_font_scope(project.text_font.as_ref());
     match (kind, entity_id) {
         (ReportKind::TerminalChart, Some(id)) => {
             terminal_chart_sheet_svg(project, id).ok_or(ReportError::TerminalBlockNotFound)
@@ -1370,5 +1370,63 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    /// Every report kind, in the order the PDF book lists them.
+    const ALL_KINDS: [ReportKind; 9] = [
+        ReportKind::WireList,
+        ReportKind::TerminalChart,
+        ReportKind::TerminalDiagram,
+        ReportKind::Bom,
+        ReportKind::Xref,
+        ReportKind::PlcIo,
+        ReportKind::PanelPlacement,
+        ReportKind::CableList,
+        ReportKind::PanelWiring,
+    ];
+
+    /// 端子台と抵抗のシートに盤シートを足した、どの帳票にも行が出るプロジェクト。
+    fn report_rich_project() -> Project {
+        let (mut project, _) = tb_project();
+        project.sheets.extend(placement_project().sheets.into_iter().filter(|s| s.kind == SheetKind::Panel));
+        project
+    }
+
+    fn kst32b() -> TextFont {
+        TextFont { id: "kst32b".into(), latin: Latin::Half }
+    }
+
+    /// With a stroke font every report page, of every kind, is lettered with strokes and keeps no text element.
+    /// ストロークフォントを選ぶと、どの種類の帳票ページも文字が線で描かれ、text要素は1つも残らない。
+    #[test]
+    fn every_report_page_uses_the_stroke_font() {
+        let mut project = report_rich_project();
+        project.text_font = Some(kst32b());
+        for kind in ALL_KINDS {
+            let pages = report_pages_with(&project, kind, None, &BomCatalog::new()).expect("帳票");
+            assert!(!pages.is_empty(), "{kind:?}");
+            for page in &pages {
+                let left: Vec<&str> = page.lines().filter(|l| l.contains("<text")).collect();
+                assert!(left.is_empty(), "{kind:?}: {left:?}");
+                assert!(page.contains("stroke-linejoin=\"round\"/>"), "{kind:?}");
+            }
+        }
+    }
+
+    /// After writing the reports of a project with a stroke font, the reports of a project without one are exactly what they would be on their own.
+    /// ストロークフォントのプロジェクトの帳票を書いた後でも、書体の無いプロジェクトの帳票は単独で書いたときと1バイトも変わらない。
+    #[test]
+    fn the_stroke_font_of_one_project_does_not_leak_into_the_next_reports() {
+        let plain = report_rich_project();
+        let all = |p: &Project| -> Vec<Vec<String>> {
+            ALL_KINDS.iter().map(|k| report_pages_with(p, *k, None, &BomCatalog::new()).expect("帳票")).collect()
+        };
+        let fresh = all(&plain);
+        let mut stroked = plain.clone();
+        stroked.text_font = Some(kst32b());
+        assert_ne!(all(&stroked), fresh);
+        let (bytes, _) = report_bytes_with(&stroked, ReportKind::WireList, ReportFormat::Pdf, None, &BomCatalog::new()).expect("PDF");
+        assert!(bytes.starts_with(b"%PDF-"));
+        assert_eq!(all(&plain), fresh);
     }
 }

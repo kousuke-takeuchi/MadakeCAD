@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3160 specification clauses** across 6 areas.
+**3164 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -625,6 +625,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The panel placement table can be bound into the PDF book like any other report. <sub>`the_pdf_book_can_include_the_panel_placement_table`</sub>
 - A PNG embedded in the sheet SVG as a data URI is written into the PDF as an image object. <sub>`an_embedded_png_reaches_the_pdf`</sub>
 - An SVG image embedded as a data URI is converted too: the PDF is produced and is larger than the same page without the image. <sub>`an_embedded_svg_image_reaches_the_pdf`</sub>
+- With a stroke font every page of the PDF book (the cover, every sheet and every kind of report) is lettered with strokes and keeps no text element. <sub>`every_page_of_the_pdf_book_uses_the_stroke_font`</sub>
+- After exporting the book of a project with a stroke font, the book of a project without one is exactly what it would be on its own. <sub>`the_stroke_font_of_one_book_does_not_leak_into_the_next`</sub>
 
 ### pin_groups
 
@@ -790,6 +792,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The panel placement table can be written as CSV, one row per footprint with its item number, position and rail. <sub>`the_panel_placement_table_is_available_as_csv`</sub>
 - The panel placement table also comes as a framed A4 drawing sheet, so it can be bound with the drawings. <sub>`the_panel_placement_table_is_available_as_a_drawing_sheet`</sub>
 - A project with no panel sheet still produces the placement table, with the column headings and no rows. <sub>`the_panel_placement_table_of_a_project_without_panels_is_empty`</sub>
+- With a stroke font every report page, of every kind, is lettered with strokes and keeps no text element. <sub>`every_report_page_uses_the_stroke_font`</sub>
+- After writing the reports of a project with a stroke font, the reports of a project without one are exactly what they would be on their own. <sub>`the_stroke_font_of_one_project_does_not_leak_into_the_next_reports`</sub>
 
 ### Reports (BOM / wire list)
 

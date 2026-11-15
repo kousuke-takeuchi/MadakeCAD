@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3160仕様項目**。
+全6領域・**3164仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -625,6 +625,8 @@
 - 盤内部品配置表も他の帳票と同じようにPDF一括出力へ綴じられる。 <sub>`the_pdf_book_can_include_the_panel_placement_table`</sub>
 - シートのSVGへdata URIで埋め込んだPNGは、PDFに画像オブジェクトとして書き出される。 <sub>`an_embedded_png_reaches_the_pdf`</sub>
 - data URIで埋め込んだSVG画像も変換される。PDFができ、画像の無い同じページより大きい。 <sub>`an_embedded_svg_image_reaches_the_pdf`</sub>
+- ストロークフォントを選ぶと、PDF一括出力の全ページ (表紙・全シート・全種類の帳票) の文字が線で描かれ、text要素は1つも残らない。 <sub>`every_page_of_the_pdf_book_uses_the_stroke_font`</sub>
+- ストロークフォントのプロジェクトを一括出力した後でも、書体の無いプロジェクトの一括出力は単独で書いたときと1バイトも変わらない。 <sub>`the_stroke_font_of_one_book_does_not_leak_into_the_next`</sub>
 
 ### pin_groups
 
@@ -790,6 +792,8 @@
 - 盤内部品配置表はCSVで出せる。フットプリント1つにつき1行で、アイテム番号・位置・レールが並ぶ。 <sub>`the_panel_placement_table_is_available_as_csv`</sub>
 - 盤内部品配置表は図枠付きのA4図面ページとしても出せるので、図面と一緒に綴じられる。 <sub>`the_panel_placement_table_is_available_as_a_drawing_sheet`</sub>
 - 盤シートが1枚も無いプロジェクトでも配置表は出る(列見出しだけで本文が空になる)。 <sub>`the_panel_placement_table_of_a_project_without_panels_is_empty`</sub>
+- ストロークフォントを選ぶと、どの種類の帳票ページも文字が線で描かれ、text要素は1つも残らない。 <sub>`every_report_page_uses_the_stroke_font`</sub>
+- ストロークフォントのプロジェクトの帳票を書いた後でも、書体の無いプロジェクトの帳票は単独で書いたときと1バイトも変わらない。 <sub>`the_stroke_font_of_one_project_does_not_leak_into_the_next_reports`</sub>
 
 ### 帳票 (部品表 / 電線リスト)
 

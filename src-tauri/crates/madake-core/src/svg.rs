@@ -5166,13 +5166,67 @@ mod tests {
         crate::model::TextFont { id: "kst32b".into(), latin }
     }
 
-    /// 文字を持つ要素をひととおり置いたプロジェクト (リレー2枚組 + 注記付き配線 + ネットラベル + 表題欄)。
+    /// 文字を持つ要素をひととおり置いたプロジェクト: リレー2枚組 + 注記付き配線 + ネットラベル + 表題欄 +
+    /// 改訂表 + 注記 (通常・太字) + ハーネス + ケーブル、と盤シート (バルーン付きの部品・凡例表・寸法・銘板)。
     fn text_rich_project() -> Project {
         let mut p = relay_project();
         p.sheets[0].title_block = golden_sheet().title_block;
-        for e in sheet_with_annotated_wire().entities.into_values().chain(sheet_with_net_label(Some("right")).entities.into_values()) {
+        p.sheets[0].revisions = sheet_with_revisions(&["A", "B"]).revisions;
+        let mut bold = plain_note("太字の注記 BOLD");
+        bold.bold = true;
+        bold.at = Point::new(40.0, 70.0);
+        let cable = Entity::Cable(Cable {
+            id: Uuid::new_v4(),
+            reference: "W1".into(),
+            part_no: "MDK-CBL-3C".into(),
+            core_count: 3,
+            sq: 0.75,
+            points: vec![Point::new(200.0, 150.0), Point::new(210.0, 170.0)],
+            cores: Vec::new(),
+            shield: None,
+            length_m: Some(2.5),
+            run: Vec::new(),
+        });
+        let extra = [
+            Entity::Text(plain_note("注記 NOTE-1")),
+            Entity::Text(bold),
+            harness_entity("HN-1", 180.0, 120.0, 230.0, 180.0),
+            cable,
+        ];
+        for e in sheet_with_annotated_wire()
+            .entities
+            .into_values()
+            .chain(sheet_with_net_label(Some("right")).entities.into_values())
+            .chain(extra)
+        {
             p.sheets[0].entities.insert(e.id(), e);
         }
+        let mut panel = panel_sheet_with(Some(1), Some(Point::new(300.0, 200.0)));
+        let fp = *panel.entities.keys().next().expect("部品");
+        for e in [
+            Entity::Dimension(Dimension {
+                id: Uuid::new_v4(),
+                a: DimAnchor::Footprint { id: fp },
+                b: DimAnchor::Point { at: Point::new(180.0, 100.0) },
+                axis: DimAxis::Horizontal,
+                at: 70.0,
+            }),
+            Entity::Nameplate(Nameplate {
+                id: Uuid::new_v4(),
+                footprint: None,
+                at: Point::new(250.0, 60.0),
+                w: 30.0,
+                h: 10.0,
+                lines: vec!["主電源 MAIN".into()],
+                text_mm: 3.0,
+                position: Default::default(),
+                follow_description: false,
+                part_no: String::new(),
+            }),
+        ] {
+            panel.entities.insert(e.id(), e);
+        }
+        p.sheets.push(panel);
         p
     }
 
@@ -5181,13 +5235,26 @@ mod tests {
     #[test]
     fn a_stroke_font_turns_all_text_into_paths() {
         let mut p = text_rich_project();
-        let plain = project_sheet_to_svg(&p, p.sheets[0].id, &builtin_symbols()).unwrap();
-        assert!(plain.contains("<text"));
+        let ids: Vec<SheetId> = p.sheets.iter().map(|s| s.id).collect();
+        for id in &ids {
+            let plain = project_sheet_to_svg(&p, *id, &builtin_symbols()).unwrap();
+            assert!(plain.contains("<text"));
+        }
+        let plain_main = project_sheet_to_svg(&p, ids[0], &builtin_symbols()).unwrap();
+        for s in ["NOTE-1", "BOLD", "HN-1", "W1", "変更A"] {
+            assert!(plain_main.contains(s), "固定の図面に{s}がある");
+        }
+        let plain_panel = project_sheet_to_svg(&p, *ids.last().unwrap(), &builtin_symbols()).unwrap();
+        for s in ["参照記号", "MDK-RLY-24V", "MAIN"] {
+            assert!(plain_panel.contains(s), "盤シートに{s}がある");
+        }
         p.text_font = Some(kst(crate::model::Latin::Half));
-        let svg = project_sheet_to_svg(&p, p.sheets[0].id, &builtin_symbols()).unwrap();
-        let left: Vec<&str> = svg.lines().filter(|l| l.contains("<text")).collect();
-        assert!(left.is_empty(), "{left:?}");
-        assert!(svg.contains("stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"));
+        for id in &ids {
+            let svg = project_sheet_to_svg(&p, *id, &builtin_symbols()).unwrap();
+            let left: Vec<&str> = svg.lines().filter(|l| l.contains("<text")).collect();
+            assert!(left.is_empty(), "{left:?}");
+            assert!(svg.contains("stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"));
+        }
     }
 
     /// Selecting a stroke font changes nothing but the text: every other element of the exported sheet is identical.
@@ -5201,9 +5268,10 @@ mod tests {
                 .map(str::to_string)
                 .collect()
         };
-        let plain = not_text(&project_sheet_to_svg(&p, p.sheets[0].id, &builtin_symbols()).unwrap());
+        let ids: Vec<SheetId> = p.sheets.iter().map(|s| s.id).collect();
+        let plain: Vec<Vec<String>> = ids.iter().map(|id| not_text(&project_sheet_to_svg(&p, *id, &builtin_symbols()).unwrap())).collect();
         p.text_font = Some(kst(crate::model::Latin::Half));
-        let stroked = not_text(&project_sheet_to_svg(&p, p.sheets[0].id, &builtin_symbols()).unwrap());
+        let stroked: Vec<Vec<String>> = ids.iter().map(|id| not_text(&project_sheet_to_svg(&p, *id, &builtin_symbols()).unwrap())).collect();
         assert_eq!(plain, stroked);
     }
 
